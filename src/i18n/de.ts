@@ -1,5 +1,6 @@
 export const de = {
-  'app.tagline': 'Stickdichte-Heatmap für DST- und PES-Dateien. Alles läuft lokal im Browser.',
+  'app.tagline': 'Stickdichte prüfen und korrigieren für DST- und PES-Dateien',
+  'app.docs': 'Anleitung',
   'files.title': 'Dateien',
   'files.drop': 'DST/PES hierher ziehen oder klicken',
   'files.empty': 'Noch keine Datei geladen.',

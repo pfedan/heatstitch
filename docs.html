@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>heatstitch guide: how the stitch density check works</title>
+    <meta name="description" content="How heatstitch reads DST and PES embroidery files, measures thread density, checks it against fabric and thread weight, corrects dense areas and saves the result." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://pfedan.github.io/heatstitch/docs.html" />
+    <meta name="theme-color" content="#1b1026" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="heatstitch" />
+    <meta property="og:url" content="https://pfedan.github.io/heatstitch/docs.html" />
+    <meta property="og:title" content="heatstitch guide: how the stitch density check works" />
+    <meta property="og:description" content="Heatmap, material checks, automatic and manual correction, DST and PES export, explained in a few minutes." />
+    <meta property="og:image" content="https://pfedan.github.io/heatstitch/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="https://pfedan.github.io/heatstitch/og-image.png" />
+  </head>
+  <body>
+    <header class="doc-top">
+      <a class="doc-brand" href="./">
+        <img src="/favicon.svg" alt="" width="26" height="26" />
+        <span>heatstitch</span>
+      </a>
+      <nav>
+        <a class="doc-open" href="./"><span lang="de">App öffnen</span><span lang="en">Open the app</span></a>
+        <select id="lang" aria-label="Language">
+          <option value="de">Deutsch</option>
+          <option value="en">English</option>
+        </select>
+      </nav>
+    </header>
+
+    <main class="doc">
+      <!-- ============================== English ============================== -->
+      <article lang="en">
+        <h1>How heatstitch works</h1>
+        <p class="lead">
+          heatstitch opens machine embroidery files, shows how much thread lands on every square millimeter
+          and tells you where a design is too dense for the fabric and thread you plan to use. You can fix
+          those spots automatically or by hand and save the result as DST or PES.
+        </p>
+
+        <nav class="toc" aria-label="Contents">
+          <a href="#en-start">Quick start</a>
+          <a href="#en-heatmap">Heatmap</a>
+          <a href="#en-check">Check</a>
+          <a href="#en-correct">Correction</a>
+          <a href="#en-save">Save and export</a>
+          <a href="#en-keys">Shortcuts</a>
+          <a href="#en-limits">Limits</a>
+        </nav>
+
+        <h2 id="en-start">Quick start</h2>
+        <ol>
+          <li>Drop one or more <b>DST</b> (Tajima) or <b>PES</b> (Brother) files on the file box, or use <i>Load example</i>.</li>
+          <li>Pick the <b>fabric</b> and <b>thread weight</b> under <i>Material</i>.</li>
+          <li>Read the verdict in the <i>Findings</i> column: <span class="lv safe">Looks fine</span>, <span class="lv caution">Caution</span> or <span class="lv critical">Critical</span>. Click a zone to zoom to it.</li>
+          <li>Use <i>Correction</i> to fix the zones, compare with the original and save.</li>
+        </ol>
+        <p>Loaded files and your edits stay in this browser and come back after a reload. <b>×</b> in the file list removes a file.</p>
+
+        <h2 id="en-heatmap">Heatmap</h2>
+        <dl>
+          <dt>Thread length (mm/mm²)</dt>
+          <dd>Every stitch is split exactly over the grid cells it crosses. This is what makes embroidery stiff, puckered or bulletproof. One fill layer at 0.4 mm spacing gives 2.5 mm/mm².</dd>
+          <dt>Penetrations (1/mm²)</dt>
+          <dd>Needle holes per area. Matters for leather, vinyl and delicate fabric.</dd>
+          <dt>Grid cell, smoothing, scale maximum</dt>
+          <dd>Change only the picture, never the check. The color scale is absolute, so two files with the same maximum can be compared directly.</dd>
+          <dt>Stitch plan</dt>
+          <dd>Draws the stitches in thread colors on top of the heatmap. <i>Realistic threads</i> renders round, twisted threads with shadows (WebGL2), as wide as the chosen thread weight.</dd>
+        </dl>
+
+        <h2 id="en-check">Check</h2>
+        <p>
+          The check runs as soon as a file is loaded. Limits are set for 40 wt on stable woven fabric and
+          scaled for the chosen material: knits, terry, delicate fabric and leather allow less, fine thread
+          allows a bit more, heavy thread much less. The <i>Material</i> panel shows the active limits and
+          the recommended stitch spacing.
+        </p>
+        <table>
+          <thead><tr><th>Check</th><th>What it catches</th><th>Caution / Critical (woven, 40 wt)</th></tr></thead>
+          <tbody>
+            <tr><td>Thread density</td><td>Too many stacked layers</td><td>7.0 / 9.5 mm/mm² for fill, up to 11 / 12 for pure satin</td></tr>
+            <tr><td>Short-stitch clusters</td><td>Thread pile-ups, knots</td><td>Critical from 8 stitches under 1 mm in one cell</td></tr>
+            <tr><td>Perforation (leather only)</td><td>Holes close enough to cut the material</td><td>6 / 9 holes within 1 mm</td></tr>
+          </tbody>
+        </table>
+        <p>
+          Density is measured on a fine grid and every 1 mm cell takes its peak, so narrow columns like
+          lettering are not averaged away. Touching flagged cells form a <b>zone</b>; its level is that of
+          its worst cell. Hover a cell to see its check value and the limits that apply there. Each check
+          can be switched off under <i>Checks</i>.
+        </p>
+
+        <h2 id="en-correct">Correction</h2>
+        <h3>Automatic</h3>
+        <p>
+          Choose the goal (<i>No warnings</i> or <i>Critical only</i>) and press <i>Correct automatically</i>, optionally with <i>Selected zone
+          only</i>. heatstitch aims 10 % below the limit and re-checks after each round, up to four rounds.
+        </p>
+        <ul>
+          <li><b>Thin dense rows</b> finds fills and satins by their regular back and forth turns and removes whole rows evenly. This is the only fix that really lowers the thread per area.</li>
+          <li><b>Clean up short stitches</b> removes stitches that do not move and merges chains of tiny stitches.</li>
+          <li><b>Separate same-hole stitches</b> (off by default) nudges needle points of different layers apart by up to 0.3 mm.</li>
+        </ul>
+        <p>Tie-in and tie-off stitches, trims and color changes are kept.</p>
+        <h3>By hand</h3>
+        <p>
+          <i>Edit stitches</i> (<kbd>e</kbd>) shows the needle points once you zoom in. Click to select,
+          <kbd>Shift</kbd>+drag for a box, then drag, nudge with the arrow keys, delete, or thin the selection by
+          25, 33 or 50 %. Every change can be undone.
+        </p>
+        <h3>Compare</h3>
+        <p>
+          <i>Compare with original</i> (<kbd>c</kbd>) splits the view: original on the left, current version on
+          the right, with a movable divider and a table of stitches, thread length, flagged area and peak density.
+        </p>
+
+        <h2 id="en-save">Save and export</h2>
+        <ul>
+          <li><b>Save: As DST / As PES</b> writes the current stitches and colors. Edited files get the suffix <code>-corrected</code>. Objects and hoop settings from embroidery software are not kept.</li>
+          <li>DST has no colors; PES colors keep their palette slot, DST colors get the nearest one.</li>
+          <li><b>Export PNG</b> saves the current view with its legend.</li>
+        </ul>
+
+        <h2 id="en-keys">Shortcuts</h2>
+        <table class="keys">
+          <tbody>
+            <tr><td><kbd>Wheel</kbd> / pinch, drag</td><td>Zoom, pan</td></tr>
+            <tr><td><kbd>f</kbd> or double-click</td><td>Fit to view</td></tr>
+            <tr><td><kbd>↑</kbd> <kbd>↓</kbd> or <kbd>k</kbd> <kbd>j</kbd></td><td>Previous / next file</td></tr>
+            <tr><td><kbd>n</kbd> / <kbd>Shift</kbd>+<kbd>n</kbd></td><td>Next / previous zone</td></tr>
+            <tr><td><kbd>v</kbd></td><td>Show or hide zone markings</td></tr>
+            <tr><td><kbd>e</kbd></td><td>Edit stitches</td></tr>
+            <tr><td><kbd>c</kbd></td><td>Compare with original</td></tr>
+            <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd></td><td>Undo / redo</td></tr>
+            <tr><td><kbd>Esc</kbd></td><td>Clear zone or selection, leave edit mode</td></tr>
+          </tbody>
+        </table>
+
+        <h2 id="en-limits">Limits</h2>
+        <ul>
+          <li>The limits come from digitizing guidelines and synthetic test layouts, not yet from real sew-outs. Treat them as a well founded hint, not a guarantee.</li>
+          <li>Without object data, thinning leaves fill rows in pairs and does not re-space them.</li>
+          <li>PES: colors come from the PEC palette; RGB thread lists of newer versions are not read yet.</li>
+          <li>heatstitch can be installed as an app and works offline after the first visit. On desktop it can open .dst and .pes files directly.</li>
+        </ul>
+        <p class="more">More detail: <a href="https://github.com/pfedan/heatstitch#readme">README on GitHub</a></p>
+      </article>
+
+      <!-- ============================== Deutsch ============================== -->
+      <article lang="de">
+        <h1>So funktioniert heatstitch</h1>
+        <p class="lead">
+          heatstitch öffnet Stickdateien, zeigt, wie viel Garn auf jedem Quadratmillimeter landet, und sagt
+          dir, wo ein Motiv für deinen Stoff und dein Garn zu dicht ist. Diese Stellen kannst du automatisch
+          oder von Hand korrigieren und das Ergebnis als DST oder PES speichern.
+        </p>
+
+        <nav class="toc" aria-label="Inhalt">
+          <a href="#de-start">Schnellstart</a>
+          <a href="#de-heatmap">Heatmap</a>
+          <a href="#de-check">Prüfung</a>
+          <a href="#de-correct">Korrektur</a>
+          <a href="#de-save">Speichern und Export</a>
+          <a href="#de-keys">Tastenkürzel</a>
+          <a href="#de-limits">Grenzen</a>
+        </nav>
+
+        <h2 id="de-start">Schnellstart</h2>
+        <ol>
+          <li>Eine oder mehrere <b>DST</b>- (Tajima) oder <b>PES</b>-Dateien (Brother) auf das Dateifeld ziehen oder <i>Beispiel laden</i> drücken.</li>
+          <li>Unter <i>Material</i> <b>Stoff</b> und <b>Garnstärke</b> wählen.</li>
+          <li>Das Urteil in der Spalte <i>Befunde</i> lesen: <span class="lv safe">Unauffällig</span>, <span class="lv caution">Vorsicht</span> oder <span class="lv critical">Kritisch</span>. Ein Klick auf eine Zone zoomt hin.</li>
+          <li>Mit <i>Korrektur</i> die Zonen beheben, mit dem Original vergleichen und speichern.</li>
+        </ol>
+        <p>Geladene Dateien und deine Änderungen bleiben in diesem Browser gespeichert und sind nach dem Neuladen wieder da. <b>×</b> in der Dateiliste entfernt eine Datei.</p>
+
+        <h2 id="de-heatmap">Heatmap</h2>
+        <dl>
+          <dt>Garnlänge (mm/mm²)</dt>
+          <dd>Jeder Stich wird exakt auf die Rasterzellen verteilt, die er durchläuft. Zu viel davon macht Stickereien steif, wellig oder brettartig. Eine Füllstichlage mit 0,4 mm Abstand hat 2,5 mm/mm².</dd>
+          <dt>Einstiche (1/mm²)</dt>
+          <dd>Nadellöcher pro Fläche. Wichtig bei Leder, Kunstleder und empfindlichen Stoffen.</dd>
+          <dt>Rasterzelle, Glättung, Skala-Maximum</dt>
+          <dd>Ändern nur das Bild, nie die Prüfung. Die Farbskala ist absolut, zwei Dateien mit gleichem Maximum lassen sich direkt vergleichen.</dd>
+          <dt>Stichplan</dt>
+          <dd>Zeichnet die Stiche in Garnfarben über die Heatmap. <i>Realistische Fäden</i> zeigt runde, gedrehte Fäden mit Schatten (WebGL2), so breit wie die gewählte Garnstärke.</dd>
+        </dl>
+
+        <h2 id="de-check">Prüfung</h2>
+        <p>
+          Die Prüfung läuft, sobald eine Datei geladen ist. Die Grenzen gelten für 40 wt auf stabiler Webware
+          und werden für das gewählte Material skaliert: Strick, Frottee, empfindliche Stoffe und Leder
+          vertragen weniger, feines Garn etwas mehr, dickes Garn deutlich weniger. Das Panel <i>Material</i>
+          zeigt die aktiven Grenzen und den empfohlenen Stichabstand.
+        </p>
+        <table>
+          <thead><tr><th>Prüfung</th><th>Erkennt</th><th>Vorsicht / Kritisch (Webware, 40 wt)</th></tr></thead>
+          <tbody>
+            <tr><td>Garndichte</td><td>Zu viele übereinanderliegende Lagen</td><td>7,0 / 9,5 mm/mm² bei Füllstich, bis 11 / 12 bei reinem Satin</td></tr>
+            <tr><td>Kurzstich-Häufung</td><td>Garnknäuel, Knoten</td><td>Kritisch ab 8 Stichen unter 1 mm in einer Zelle</td></tr>
+            <tr><td>Perforation (nur Leder)</td><td>Löcher so dicht, dass sie das Material schneiden</td><td>6 / 9 Löcher im Umkreis von 1 mm</td></tr>
+          </tbody>
+        </table>
+        <p>
+          Die Dichte wird auf einem feinen Raster gemessen, jede 1-mm-Zelle übernimmt den Spitzenwert. So
+          werden schmale Säulen wie Schrift nicht weggemittelt. Zusammenhängende markierte Zellen bilden eine
+          <b>Zone</b>, ihre Stufe ist die der schlimmsten Zelle. Beim Überfahren zeigt der Tooltip den Prüfwert
+          und die dort geltenden Grenzen. Jede Prüfung lässt sich unter <i>Prüfungen</i> abschalten.
+        </p>
+
+        <h2 id="de-correct">Korrektur</h2>
+        <h3>Automatisch</h3>
+        <p>
+          Ziel wählen (<i>Keine Warnung</i> oder <i>Nur Kritisch</i>) und <i>Automatisch korrigieren</i> drücken, wahlweise mit
+          <i>Nur gewählte Zone</i>. heatstitch zielt 10 % unter die Grenze und misst nach jeder Runde neu, bis
+          zu vier Runden.
+        </p>
+        <ul>
+          <li><b>Dichte Reihen ausdünnen</b> erkennt Füllungen und Satins an ihren regelmäßigen Wendepunkten und entfernt ganze Reihen gleichmäßig verteilt. Nur diese Korrektur senkt die Garnmenge pro Fläche wirklich.</li>
+          <li><b>Kurzstiche bereinigen</b> entfernt Stiche ohne Bewegung und fasst Ketten winziger Stiche zusammen.</li>
+          <li><b>Gleiche Einstichlöcher trennen</b> (standardmäßig aus) schiebt Einstiche verschiedener Lagen um höchstens 0,3 mm auseinander.</li>
+        </ul>
+        <p>Vernähstiche, Schnitte und Farbwechsel bleiben erhalten.</p>
+        <h3>Von Hand</h3>
+        <p>
+          <i>Stiche bearbeiten</i> (<kbd>e</kbd>) zeigt beim Hineinzoomen die Einstiche. Klick wählt aus,
+          <kbd>Umschalt</kbd>+Ziehen wählt ein Rechteck. Dann ziehen, mit den Pfeiltasten verschieben, löschen
+          oder die Auswahl um 25, 33 oder 50 % ausdünnen. Jede Änderung lässt sich rückgängig machen.
+        </p>
+        <h3>Vergleich</h3>
+        <p>
+          <i>Mit Original vergleichen</i> (<kbd>c</kbd>) teilt die Ansicht: links das Original, rechts die
+          aktuelle Fassung, mit verschiebbarer Trennlinie und einer Tabelle mit Stichen, Garnlänge, markierter
+          Fläche und Spitzendichte.
+        </p>
+
+        <h2 id="de-save">Speichern und Export</h2>
+        <ul>
+          <li><b>Speichern: Als DST / Als PES</b> schreibt die aktuellen Stiche und Farben. Geänderte Dateien bekommen den Zusatz <code>-corrected</code>. Objekte und Rahmeneinstellungen aus der Sticksoftware gehen verloren.</li>
+          <li>DST kennt keine Farben; PES-Farben behalten ihren Paletten-Platz, Farben aus DST bekommen den nächstgelegenen.</li>
+          <li><b>PNG exportieren</b> speichert die aktuelle Ansicht mit Legende.</li>
+        </ul>
+
+        <h2 id="de-keys">Tastenkürzel</h2>
+        <table class="keys">
+          <tbody>
+            <tr><td><kbd>Mausrad</kbd> / Pinch, Ziehen</td><td>Zoomen, verschieben</td></tr>
+            <tr><td><kbd>f</kbd> oder Doppelklick</td><td>Einpassen</td></tr>
+            <tr><td><kbd>↑</kbd> <kbd>↓</kbd> oder <kbd>k</kbd> <kbd>j</kbd></td><td>Vorherige / nächste Datei</td></tr>
+            <tr><td><kbd>n</kbd> / <kbd>Umschalt</kbd>+<kbd>n</kbd></td><td>Nächste / vorherige Zone</td></tr>
+            <tr><td><kbd>v</kbd></td><td>Zonen-Markierungen ein/aus</td></tr>
+            <tr><td><kbd>e</kbd></td><td>Stiche bearbeiten</td></tr>
+            <tr><td><kbd>c</kbd></td><td>Mit Original vergleichen</td></tr>
+            <tr><td><kbd>Strg</kbd>+<kbd>Z</kbd> / <kbd>Strg</kbd>+<kbd>Umschalt</kbd>+<kbd>Z</kbd></td><td>Rückgängig / wiederholen</td></tr>
+            <tr><td><kbd>Esc</kbd></td><td>Zone oder Auswahl aufheben, Bearbeiten beenden</td></tr>
+          </tbody>
+        </table>
+
+        <h2 id="de-limits">Grenzen</h2>
+        <ul>
+          <li>Die Grenzwerte stammen aus Digitalisier-Richtwerten und synthetischen Testaufbauten, noch nicht aus echten Probestickungen. Sie sind ein gut begründeter Hinweis, keine Garantie.</li>
+          <li>Ohne Objektdaten bleiben ausgedünnte Füllreihen paarweise stehen, der Abstand wird nicht neu verteilt.</li>
+          <li>PES: Farben kommen aus der PEC-Palette, die RGB-Garnlisten neuerer Versionen werden noch nicht gelesen.</li>
+          <li>heatstitch lässt sich als App installieren und funktioniert nach dem ersten Besuch offline. Am Desktop öffnet es .dst- und .pes-Dateien direkt.</li>
+        </ul>
+        <p class="more">Mehr Details: <a href="https://github.com/pfedan/heatstitch#readme">README auf GitHub</a></p>
+      </article>
+    </main>
+    <script type="module" src="/src/docs.ts"></script>
+  </body>
+</html>

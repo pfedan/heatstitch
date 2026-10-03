@@ -21,6 +21,7 @@ Stickdichte-Heatmap für Stickdateien, komplett im Browser (kein Backend, keine 
 - **Speichern als DST oder PES** (eigene Writer, kein pyembroidery)
 - Deutsch / Englisch
 - PWA: installierbar, offline nutzbar, "Öffnen mit" für .dst/.pes
+- Kurzanleitung auf Deutsch und Englisch (`docs.html`, Link "Anleitung" oben rechts)
 
 ## Validierung
 
@@ -205,4 +206,6 @@ src/render/    Viewport, Farbskala, Heatmap, Stichplan, Legende
 src/ui/        Dateiliste, Validierung, Korrektur-Panel, Stich-Editor, Controls, Statistik, Tooltip, Export
 src/i18n/      Übersetzungen DE/EN
 public/examples/  Beispiel-Stickdateien (per Knopf ladbar)
+docs.html      Kurzanleitung DE/EN (src/docs.ts, src/docs.css)
+public/og-image.png, robots.txt, sitemap.xml  Vorschaubild für Social Media, Crawler
 ```

@@ -1,25 +1,84 @@
 <!doctype html>
-<html lang="de">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Stitch density heatmap for DST and PES embroidery files, running fully in the browser." />
+    <title>heatstitch: stitch density heatmap, check and fix for DST and PES embroidery files</title>
+    <meta name="description" content="Free web app for machine embroidery: open DST or PES files, see thread density as a heatmap, find areas that are too dense for your fabric and thread, fix them automatically or by hand, and save as DST or PES." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://pfedan.github.io/heatstitch/" />
+    <meta name="application-name" content="heatstitch" />
+    <meta name="apple-mobile-web-app-title" content="heatstitch" />
     <meta name="theme-color" content="#1b1026" />
+    <meta name="color-scheme" content="light dark" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <title>heatstitch</title>
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="heatstitch" />
+    <meta property="og:url" content="https://pfedan.github.io/heatstitch/" />
+    <meta property="og:title" content="heatstitch: check and fix stitch density in embroidery files" />
+    <meta property="og:description" content="Open DST or PES files, see thread density as a heatmap, find spots that are too dense for your fabric, fix them and save again." />
+    <meta property="og:image" content="https://pfedan.github.io/heatstitch/og-image.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="heatstitch showing an embroidered cat as a stitch density heatmap next to its thread view" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:locale:alternate" content="de_DE" />
+
+    <!-- Twitter / X -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="heatstitch: check and fix stitch density in embroidery files" />
+    <meta name="twitter:description" content="Open DST or PES files, see thread density as a heatmap, find spots that are too dense for your fabric, fix them and save again." />
+    <meta name="twitter:image" content="https://pfedan.github.io/heatstitch/og-image.png" />
+    <meta name="twitter:image:alt" content="heatstitch showing an embroidered cat as a stitch density heatmap next to its thread view" />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "heatstitch",
+        "url": "https://pfedan.github.io/heatstitch/",
+        "image": "https://pfedan.github.io/heatstitch/og-image.png",
+        "description": "Stitch density heatmap, validation and correction for DST and PES machine embroidery files.",
+        "applicationCategory": "DesignApplication",
+        "operatingSystem": "Any (web browser)",
+        "browserRequirements": "Requires JavaScript. WebGL2 for the realistic thread view.",
+        "inLanguage": ["en", "de"],
+        "isAccessibleForFree": true,
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
+        "softwareHelp": { "@type": "CreativeWork", "url": "https://pfedan.github.io/heatstitch/docs.html" },
+        "featureList": [
+          "Opens Tajima DST and Brother PES embroidery files",
+          "Thread length and needle penetration density heatmaps",
+          "Checks density, short-stitch clusters and perforation for fabric and thread weight",
+          "Automatic and manual stitch correction with undo and side by side comparison",
+          "Saves corrected designs as DST or PES",
+          "Realistic thread preview",
+          "Installable, works offline"
+        ]
+      }
+    </script>
   </head>
   <body>
+    <noscript>
+      <p class="noscript">heatstitch needs JavaScript. <a href="docs.html">Read the guide</a> to see what it does.</p>
+    </noscript>
     <header class="topbar">
       <div class="brand">
         <img src="/favicon.svg" alt="" width="28" height="28" />
         <h1>heatstitch</h1>
-        <span class="tagline" data-i18n="app.tagline"></span>
+        <span class="tagline" data-i18n="app.tagline">Check and fix stitch density in DST and PES files</span>
       </div>
-      <select id="lang" aria-label="Language">
-        <option value="de">Deutsch</option>
-        <option value="en">English</option>
-      </select>
+      <nav class="topbar-end">
+        <a class="doc-link" id="doc-link" href="docs.html" data-i18n="app.docs">Guide</a>
+        <select id="lang" aria-label="Language">
+          <option value="de">Deutsch</option>
+          <option value="en">English</option>
+        </select>
+      </nav>
     </header>
 
     <main class="layout" id="layout">

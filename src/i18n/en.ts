@@ -1,7 +1,8 @@
 import type { de } from './de';
 
 export const en: Record<keyof typeof de, string> = {
-  'app.tagline': 'Stitch density heatmap for DST and PES files. Everything runs locally in your browser.',
+  'app.tagline': 'Check and fix stitch density in DST and PES files',
+  'app.docs': 'Guide',
   'files.title': 'Files',
   'files.drop': 'Drop DST/PES files here or click',
   'files.empty': 'No file loaded yet.',
