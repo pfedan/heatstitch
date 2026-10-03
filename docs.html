@@ -91,7 +91,7 @@
           <thead><tr><th>Check</th><th>What it catches</th><th>Caution / Critical (woven, 40 wt)</th></tr></thead>
           <tbody>
             <tr><td>Thread density</td><td>Too many stacked layers</td><td>7.0 / 9.5 mm/mm² for fill, up to 11 / 12 for pure satin</td></tr>
-            <tr><td>Short-stitch clusters</td><td>Thread pile-ups, knots</td><td>Critical from 8 stitches under 1 mm in one cell</td></tr>
+            <tr><td>Short-stitch clusters</td><td>Thread pile-ups, knots</td><td>8 stitches under 1 mm in one cell: Caution on woven and caps, Critical on other fabrics</td></tr>
             <tr><td>Perforation (leather only)</td><td>Holes close enough to weaken the material</td><td>6 / 9 holes within 1 mm</td></tr>
           </tbody>
         </table>
@@ -101,6 +101,13 @@
           its worst cell. Hover a cell to see its check value and the limits that apply there. Each check
           can be switched off under <i>Checks</i>.
         </p>
+        <p>
+          Some findings are <b>normal in practice</b>: small spots (satin ends, joins, turns), compact satin
+          joins where two columns meet, and short-stitch clusters on woven fabric and caps. They stay in the
+          list and are drawn grey, but do not count towards the verdict, and the correction leaves them
+          alone. <i>Check anyway</i> counts one again. Any other zone can be <i>acknowledged</i> if you
+          want to keep it as it is. Perforation always counts.
+        </p>
 
         <h2 id="en-correct">Correction (beta)</h2>
         <p>
@@ -109,15 +116,19 @@
         </p>
         <h3>Automatic</h3>
         <p>
-          Choose the goal (<i>No warnings</i> or <i>Critical only</i>) and press <i>Correct automatically</i>, optionally with <i>Selected zone
-          only</i>. heatstitch aims 10 % below the limit and re-checks after each round, up to four rounds.
+          Choose the goal (<i>Critical only</i>, the default, or <i>No warnings</i>) and the focus (<i>Both</i>, <i>Thread density</i>
+          or <i>Hole density</i>), then press <i>Correct automatically</i>, optionally with <i>Selected zone only</i>.
+          The correction works like a digitizer: it only changes what does not show, and each step is kept only if it
+          does not make the result worse.
         </p>
         <ul>
-          <li><b>Thin dense rows</b> finds fills and satins by their regular back and forth turns and removes whole rows evenly. This is the only fix that really lowers the thread per area.</li>
-          <li><b>Clean up short stitches</b> removes stitches that do not move and merges chains of tiny stitches.</li>
-          <li><b>Separate same-hole stitches</b> (off by default) nudges needle points of different layers apart by up to 0.3 mm.</li>
+          <li><b>Pull fills back</b> where they reach far under a satin border, to the usual overlap of about a third of the border width.</li>
+          <li><b>Short stitches in satin curves</b>: on the tight inner side every second stitch ends a bit early.</li>
+          <li><b>Thin hidden rows</b> (thread density) that lie completely under a later layer.</li>
+          <li><b>Re-space evenly</b>: fills and satins that are still too dense are rebuilt with an even, slightly wider spacing, never wider than recommended for the material.</li>
+          <li><b>Separate same-hole stitches</b> (hole density, and on leather) by up to 0.3 mm.</li>
         </ul>
-        <p>Tie-in and tie-off stitches, trims and color changes are kept.</p>
+        <p>Zones that are normal in practice or acknowledged, tie-in and tie-off stitches, trims and color changes are kept. What is left is listed as needing a look: mostly stacked layers, a design decision.</p>
         <h3>By hand</h3>
         <p>
           <i>Edit stitches</i> (<kbd>e</kbd>) shows the needle points once you zoom in. Click to select,
@@ -155,7 +166,6 @@
         <h2 id="en-limits">Limits</h2>
         <ul>
           <li>The limits come from digitizing guidelines and synthetic test layouts, not yet from real sew-outs. Treat them as a well founded hint, not a guarantee.</li>
-          <li>Without object data, thinning leaves fill rows in pairs and does not re-space them.</li>
           <li>PES: colors come from the PEC palette; RGB thread lists of newer versions are not read yet.</li>
           <li>heatstitch can be installed as an app and works offline after the first visit. On desktop it can open .dst and .pes files directly. When a new version is out, a small notice offers to reload; your open files stay.</li>
         </ul>
@@ -213,7 +223,7 @@
           <thead><tr><th>Prüfung</th><th>Erkennt</th><th>Vorsicht / Kritisch (Webware, 40 wt)</th></tr></thead>
           <tbody>
             <tr><td>Garndichte</td><td>Zu viele übereinanderliegende Lagen</td><td>7,0 / 9,5 mm/mm² bei Füllstich, bis 11 / 12 bei reinem Satin</td></tr>
-            <tr><td>Kurzstich-Häufung</td><td>Garnknäuel, Knoten</td><td>Kritisch ab 8 Stichen unter 1 mm in einer Zelle</td></tr>
+            <tr><td>Kurzstich-Häufung</td><td>Garnknäuel, Knoten</td><td>8 Stiche unter 1 mm in einer Zelle: Vorsicht auf Webware und Caps, Kritisch auf anderen Stoffen</td></tr>
             <tr><td>Perforation (nur Leder)</td><td>Löcher so dicht, dass sie das Material schwächen</td><td>6 / 9 Löcher im Umkreis von 1 mm</td></tr>
           </tbody>
         </table>
@@ -223,6 +233,13 @@
           <b>Zone</b>, ihre Stufe ist die der schlimmsten Zelle. Beim Überfahren zeigt der Tooltip den Prüfwert
           und die dort geltenden Grenzen. Jede Prüfung lässt sich unter <i>Prüfungen</i> abschalten.
         </p>
+        <p>
+          Manche Funde sind <b>praxisüblich</b>: kleine Stellen (Satin-Enden, Übergänge, Wendepunkte),
+          kompakte Satin-Übergänge, wo zwei Säulen sich treffen, und Kurzstich-Häufungen auf Webware und Caps.
+          Sie bleiben in der Liste und sind grau markiert, zählen aber nicht zum Urteil, und die Korrektur
+          lässt sie in Ruhe. <i>Trotzdem prüfen</i> zählt eine davon wieder mit. Jede andere Zone lässt sich
+          <i>quittieren</i>, wenn sie so bleiben soll. Perforation zählt immer.
+        </p>
 
         <h2 id="de-correct">Korrektur (Beta)</h2>
         <p>
@@ -231,16 +248,19 @@
         </p>
         <h3>Automatisch</h3>
         <p>
-          Ziel wählen (<i>Keine Warnung</i> oder <i>Nur Kritisch</i>) und <i>Automatisch korrigieren</i> drücken, wahlweise mit
-          <i>Nur gewählte Zone</i>. heatstitch zielt 10 % unter die Grenze und misst nach jeder Runde neu, bis
-          zu vier Runden.
+          Ziel (<i>Nur Kritisch</i>, der Standard, oder <i>Keine Warnung</i>) und Fokus (<i>Beides</i>, <i>Fadendichte</i> oder
+          <i>Lochdichte</i>) wählen und <i>Automatisch korrigieren</i> drücken, wahlweise mit <i>Nur gewählte Zone</i>.
+          Die Korrektur arbeitet wie ein Digitalisierer: Sie ändert nur, was nicht auffällt, und behält jeden Schritt
+          nur, wenn das Ergebnis dadurch nicht schlechter wird.
         </p>
         <ul>
-          <li><b>Dichte Reihen ausdünnen</b> erkennt Füllungen und Satins an ihren regelmäßigen Wendepunkten und entfernt ganze Reihen gleichmäßig verteilt. Nur diese Korrektur senkt die Garnmenge pro Fläche wirklich.</li>
-          <li><b>Kurzstiche bereinigen</b> entfernt Stiche ohne Bewegung und fasst Ketten winziger Stiche zusammen.</li>
-          <li><b>Gleiche Einstichlöcher trennen</b> (standardmäßig aus) schiebt Einstiche verschiedener Lagen um höchstens 0,3 mm auseinander.</li>
+          <li><b>Füllung zurückziehen</b>, wo sie weit unter eine Satinkante reicht, auf die übliche Überlappung von etwa einem Drittel der Kantenbreite.</li>
+          <li><b>Kurzstiche in Satinkurven</b>: Auf der engen Innenseite endet jeder zweite Stich etwas früher.</li>
+          <li><b>Verdeckte Reihen ausdünnen</b> (Fadendichte), die komplett unter einer späteren Lage liegen.</li>
+          <li><b>Gleichmäßig neu verteilen</b>: Noch zu dichte Füllungen und Satins werden mit gleichmäßig etwas größerem Abstand neu aufgebaut, nie weiter als für das Material empfohlen.</li>
+          <li><b>Gleiche Einstichlöcher trennen</b> (Lochdichte und bei Leder) um höchstens 0,3 mm.</li>
         </ul>
-        <p>Vernähstiche, Schnitte und Farbwechsel bleiben erhalten.</p>
+        <p>Praxisübliche und quittierte Zonen, Vernähstiche, Schnitte und Farbwechsel bleiben erhalten. Was übrig bleibt, wird als „von Hand prüfen“ gemeldet: meist gestapelte Lagen, also eine Designentscheidung.</p>
         <h3>Von Hand</h3>
         <p>
           <i>Stiche bearbeiten</i> (<kbd>e</kbd>) zeigt beim Hineinzoomen die Einstiche. Klick wählt aus,
@@ -279,7 +299,6 @@
         <h2 id="de-limits">Grenzen</h2>
         <ul>
           <li>Die Grenzwerte stammen aus Digitalisier-Richtwerten und synthetischen Testaufbauten, noch nicht aus echten Probestickungen. Sie sind ein gut begründeter Hinweis, keine Garantie.</li>
-          <li>Ohne Objektdaten bleiben ausgedünnte Füllreihen paarweise stehen, der Abstand wird nicht neu verteilt.</li>
           <li>PES: Farben kommen aus der PEC-Palette, die RGB-Garnlisten neuerer Versionen werden noch nicht gelesen.</li>
           <li>heatstitch lässt sich als App installieren und funktioniert nach dem ersten Besuch offline. Am Desktop öffnet es .dst- und .pes-Dateien direkt. Gibt es eine neue Version, bietet ein kleiner Hinweis das Neuladen an; offene Dateien bleiben erhalten.</li>
         </ul>

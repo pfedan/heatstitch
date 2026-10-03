@@ -13,8 +13,12 @@ import { writeDst } from '../src/writers/dst';
 import { writePes } from '../src/writers/pes';
 import { Shape } from './helpers/shapes';
 
+/** Correct caution zones too (the default only corrects critical ones). */
+const FULL = { ...DEFAULT_CORRECTION, goal: 'caution' as const };
 const WOVEN: Profile = { fabric: 'woven', thread: '40' };
 const LEATHER: Profile = { fabric: 'leather', thread: '40' };
+/** Short-stitch clusters are only critical on fabrics that are not stable. */
+const KNIT: Profile = { fabric: 'knit', thread: '40' };
 const thread = (p: Pattern) => patternStats(p).threadLength;
 const stitchCount = (p: Pattern) => p.cmd.filter((c) => c === STITCH).length;
 const layers = (n: number, s = new Shape()) => {
@@ -164,34 +168,37 @@ describe('nudging', () => {
 });
 
 describe('automatic correction', () => {
-  it('clears critical density from four stacked fills', () => {
+  it('clears critical density from four stacked fills without thinning them unevenly', () => {
     const p = layers(4).build();
-    const r = autoCorrect(p, WOVEN, DEFAULT_CORRECTION);
+    const r = autoCorrect(p, WOVEN, FULL);
     expect(r.report.before.worst).toBe(CRITICAL);
     expect(r.report.after.worst).toBeLessThan(CRITICAL);
-    expect(r.report.after.cautionCells).toBeLessThan(r.report.before.criticalCells / 2);
-    expect(r.report.threadAfter).toBeLessThan(r.report.threadBefore * 0.75);
+    expect(r.report.respaced).toBeGreaterThan(0);
+    expect(r.report.threadAfter).toBeLessThan(r.report.threadBefore * 0.9);
+    // What is left needs a look: four stacked layers are a design decision.
+    expect(r.report.manual).toBeGreaterThan(0);
   });
 
   it('clears a short-stitch cluster in a narrow zigzag column', () => {
     const p = zigzag(20, 0.7, 0.1).build();
-    const r = autoCorrect(p, WOVEN, DEFAULT_CORRECTION);
+    const r = autoCorrect(p, KNIT, FULL);
     expect(r.report.before.worst).toBe(CRITICAL);
     expect(r.report.after.worst).toBe(SAFE);
   });
 
-  it('with goal "critical" leaves caution areas untouched', () => {
+  it('by default corrects only critical areas and leaves caution areas untouched', () => {
+    expect(DEFAULT_CORRECTION.goal).toBe('critical');
     const p = layers(3).build();
-    const r = autoCorrect(p, WOVEN, { ...DEFAULT_CORRECTION, goal: 'critical', nudge: false });
+    const r = autoCorrect(p, WOVEN, DEFAULT_CORRECTION);
     expect(r.report.before.worst).toBe(CAUTION);
-    expect(r.report.thinned).toBe(0);
+    expect(r.pattern).toBe(p);
   });
 
   it('only touches the given region', () => {
     const s = new Shape();
     for (const cx of [20, 60]) for (let i = 0; i < 4; i++) s.fillAt(cx, 20, 10, i * 0.8 + 0.2);
     const p = s.build();
-    const r = autoCorrect(p, WOVEN, { ...DEFAULT_CORRECTION, region: { minX: 5, minY: 5, maxX: 35, maxY: 35 } });
+    const r = autoCorrect(p, WOVEN, { ...FULL, region: { minX: 5, minY: 5, maxX: 35, maxY: 35 } });
     const v = classify(r.measurement, WOVEN);
     const critical = v.zones.filter((z) => z.level === CRITICAL);
     expect(critical.length).toBeGreaterThan(0);
@@ -202,13 +209,13 @@ describe('automatic correction', () => {
 
   it('relieves perforation on leather by thinning a dense satin', () => {
     const p = new Shape().satin(0, 0, 20, 4, 0.2).build(); // holes every 0.2 mm on each edge
-    const r = autoCorrect(p, LEATHER, DEFAULT_CORRECTION);
+    const r = autoCorrect(p, LEATHER, FULL);
     expect(r.report.before.worst).toBeGreaterThan(SAFE);
     expect(r.report.after.worst).toBe(SAFE);
   });
 
   it('writes corrected designs that read back unchanged', () => {
-    const p = autoCorrect(layers(4).build(), WOVEN, DEFAULT_CORRECTION).pattern;
+    const p = autoCorrect(layers(4).build(), WOVEN, FULL).pattern;
     const pts = (q: Pattern) => Array.from(q.cmd).flatMap((c, i) => (c === STITCH ? [q.x[i], q.y[i]] : []));
     expect(pts(parseDst(writeDst(p)))).toEqual(pts(p));
     expect(pts(parsePes(writePes(p)))).toEqual(pts(p));

@@ -1088,6 +1088,42 @@ button.link:hover {
   }
 }
 
+/* Acknowledged findings stay listed, dimmed, with a link to reopen them. */
+.val-zones li {
+  position: relative;
+}
+
+.val-zone.acked {
+  opacity: 0.55;
+  border-left-style: dashed;
+}
+
+.val-zone .meta {
+  padding-right: 84px;
+}
+
+.z-ack {
+  position: absolute;
+  right: 6px;
+  bottom: 4px;
+  font-size: 11px;
+  padding: 1px 4px;
+  background: none;
+  border: none;
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.z-ack:hover,
+.z-ack:focus-visible {
+  text-decoration-thickness: 2px;
+}
+
+.val-zone .meta.note {
+  font-style: italic;
+}
+
 /* New version notice: bottom centre, above everything, never blocks the canvas for long. */
 .update-notice {
   position: fixed;

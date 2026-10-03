@@ -18,9 +18,19 @@ export interface Zone {
   maxHoles: number;
   /** Most non-exempt short stitches in one cell of the zone. */
   maxShorts: number;
+  /** Mean share of satin thread over the zone's cells (0 to 1). */
+  satinShare: number;
   /** Bounding box in mm (world coordinates, y down). */
   bbox: { minX: number; minY: number; maxX: number; maxY: number };
+  /** Set when the finding is normal in practice and does not count towards the verdict. */
+  practice?: PracticeNote;
 }
+
+/**
+ * Findings that digitizers accept as they are: small spots at satin ends, joins and turns, the
+ * overlap where two satin columns meet, and short-stitch clusters on stable fabric.
+ */
+export type PracticeNote = 'smallSpot' | 'satinJoin' | 'shortsStable';
 
 export interface ZoneInput {
   level: Uint8Array;
@@ -28,6 +38,7 @@ export interface ZoneInput {
   density: Float32Array;
   holes: Uint8Array;
   shorts: Uint16Array;
+  satin: Float32Array;
   cols: number;
   rows: number;
   originX: number;
@@ -37,11 +48,14 @@ export interface ZoneInput {
 
 /**
  * Groups all non-safe cells into 8-connected zones. A zone's level is its worst cell, so a Critical
- * core with a Caution rim counts as one Critical zone.
+ * core with a Caution rim counts as one Critical zone. `zoneOf`, when given, receives the index of
+ * each cell's zone in the returned list (-1 for safe cells).
  */
-export function findZones(g: ZoneInput): Zone[] {
+export function findZones(g: ZoneInput, zoneOf?: Int32Array): Zone[] {
   const { level, cols, rows, cellMm } = g;
   const seen = new Uint8Array(level.length);
+  const id = zoneOf ?? new Int32Array(level.length);
+  id.fill(-1);
   const zones: Zone[] = [];
   const stack: number[] = [];
   for (let start = 0; start < level.length; start++) {
@@ -54,6 +68,7 @@ export function findZones(g: ZoneInput): Zone[] {
     let maxDensity = 0;
     let maxHoles = 0;
     let maxShorts = 0;
+    let satin = 0;
     let minCx = Infinity;
     let minCy = Infinity;
     let maxCx = -Infinity;
@@ -63,6 +78,8 @@ export function findZones(g: ZoneInput): Zone[] {
       const cx = i % cols;
       const cy = (i - cx) / cols;
       cells++;
+      id[i] = zones.length;
+      satin += g.satin[i];
       zLevel = Math.max(zLevel, level[i]);
       bits |= g.reasons[i];
       maxDensity = Math.max(maxDensity, g.density[i]);
@@ -93,6 +110,7 @@ export function findZones(g: ZoneInput): Zone[] {
       maxDensity,
       maxHoles,
       maxShorts,
+      satinShare: satin / cells,
       bbox: {
         minX: g.originX + minCx * cellMm,
         minY: g.originY + minCy * cellMm,
@@ -102,5 +120,9 @@ export function findZones(g: ZoneInput): Zone[] {
     });
   }
   // Worst first, then largest.
-  return zones.sort((a, b) => b.level - a.level || b.cells - a.cells);
+  const order = zones.map((_, k) => k).sort((a, b) => zones[b].level - zones[a].level || zones[b].cells - zones[a].cells);
+  const rank = new Int32Array(zones.length);
+  order.forEach((k, r) => (rank[k] = r));
+  for (let i = 0; i < id.length; i++) if (id[i] >= 0) id[i] = rank[id[i]];
+  return order.map((k) => zones[k]);
 }

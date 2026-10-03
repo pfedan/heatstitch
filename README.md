@@ -17,7 +17,7 @@ Stickdichte-Heatmap für Stickdateien, komplett im Browser (kein Backend, keine 
 - Statistik: Stiche, Sprünge, Schnitte, Farbwechsel, Größe, Garnlänge, Max-Dichte
 - Mehrere Dateien laden und umschalten (auch per Pfeiltasten oder j/k, `f` = Einpassen)
 - PNG-Export der aktuellen Ansicht inkl. Legende
-- **Korrektur:** automatisch (Reihen ausdünnen, Kurzstiche bereinigen, gleiche Einstichlöcher trennen) und von Hand (Einstiche wählen, verschieben, löschen, Auswahl ausdünnen), mit Rückgängig/Wiederholen und Vergleichsansicht Original/korrigiert, siehe unten
+- **Korrektur:** automatisch nach Digitalisier-Praxis (Füllung unter Kanten zurückziehen, Kurzstiche in Satinkurven, gleichmäßig neu verteilen, Fokus Fadendichte oder Lochdichte, praxisübliche Funde und quittierte Zonen bleiben unangetastet) und von Hand (Einstiche wählen, verschieben, löschen, Auswahl ausdünnen), mit Rückgängig/Wiederholen und Vergleichsansicht Original/korrigiert, siehe unten
 - **Speichern als DST oder PES** (eigene Writer, kein pyembroidery)
 - Deutsch / Englisch
 - PWA: installierbar, offline nutzbar, "Öffnen mit" für .dst/.pes
@@ -53,7 +53,7 @@ skaliert (Verhältnis des empfohlenen Stichabstands zur Referenz 0,40 mm).
 |---|---|---|
 | Garnlänge pro Fläche, Füllstich | ab 7,0 mm/mm² (ca. 3 Lagen) | ab 9,5 mm/mm² (4 Lagen) |
 | Garnlänge pro Fläche, reiner Satin | ab 11 mm/mm² | ab 12 mm/mm² |
-| Kurzstich-Häufung | | ≥ 8 Stiche unter 1 mm in einer Zelle |
+| Kurzstich-Häufung | ≥ 8 Stiche unter 1 mm in einer Zelle (Webware, Caps) | ≥ 8 (alle anderen Stoffe) |
 | Perforation (nur Leder) | ≥ 6 Einstiche im Umkreis von 1 mm | ≥ 9 |
 
 Dichtewerte jeweils × Profilfaktor. Eine Füllstichlage mit 0,4 mm Abstand hat 2,5 mm/mm², ein Satin
@@ -77,7 +77,20 @@ mit 0,4 mm Abstand (zwischen Einstichen auf derselben Seite) 5,0 mm/mm².
   0,33 mm, 10 bei 0,2 mm. Gestapelte Kanten und enge Innenkurven addieren sich.
 - **Zonen:** zusammenhängende (8er-Nachbarschaft) markierte Zellen bilden eine Zone; ihre Stufe ist
   die der schlimmsten Zelle. Klick (oder `n` / Umschalt+`n`) zoomt hin, Überfahren rahmt sie ein,
-  `v` blendet die Markierungen ein und aus.
+  `v` blendet die Markierungen ein und aus. Bei kritischen Dichte-Zonen steht dabei, wie viel
+  Prozent der Spitzenwert über der Grenze liegt, damit knappe Fälle erkennbar sind.
+- **Praxisübliche Funde** (`src/validation/practice.ts`) bleiben in der Liste, zählen aber nicht
+  zum Gesamturteil, und die Korrektur lässt sie aus. Perforation zählt immer.
+  - *Kleine Stelle:* Vorsicht bis 3 mm² oder eine einzelne kritische Zelle (Satin-Enden,
+    Objektübergänge, Wendepunkte, Vernähknoten).
+  - *Satin-Übergang:* überwiegend Satin, kompakt (höchstens 16 mm², Seitenverhältnis bis 2,5) und
+    höchstens 30 % über der Grenze, also zwei Satinlagen, wo Säulen sich treffen oder kreuzen.
+    Zwei Säulen übereinander der Länge nach ergeben eine lange Zone und bleiben ein Befund.
+  - *Kurzstiche auf stabilem Stoff:* reine Kurzstich-Zonen auf Webware und Caps.
+
+  Mit *Trotzdem prüfen* zählt eine solche Zone wieder mit; *Quittieren* nimmt jede andere Zone aus
+  dem Urteil. Beides wird mit der Datei gespeichert und verfällt, wenn die Zone durch eine Änderung
+  verschwindet oder deutlich wächst.
 - **Tooltip:** zeigt neben dem Anzeigewert den Prüfwert der Zelle und die für sie geltenden Grenzen.
 - API: `measurePattern(pattern)` (profilunabhängig) und `classify(measurement, profile)` in
   `src/validation/validate.ts`. Schwellen in `src/validation/thresholds.ts`, Profile in
@@ -95,33 +108,46 @@ führt dann zurück zum Original. Das Original selbst wird nie überschrieben, u
 
 ### Automatisch
 
-*Ziel* ist entweder „keine Warnung“ (Vorsicht und Kritisch beheben) oder „nur Kritisch“. Die
-Korrektur zielt 10 % unter die jeweilige Grenze, misst nach jeder Runde neu (bis zu 4 Runden) und
-läuft im Web Worker. *Nur gewählte Zone* beschränkt sie auf die Zone, die in der Liste gewählt ist.
+Die Korrektur arbeitet wie ein Digitalisierer von Hand: Sie verändert Stiche nur dort, wo es im
+fertigen Stick nicht auffällt, und lässt Stellen, die in der Praxis normal sind, in Ruhe. *Ziel* ist
+entweder „keine Warnung“ (Vorsicht und Kritisch beheben) oder „nur Kritisch“ (Standard). *Nur gewählte Zone*
+beschränkt sie auf die Zone, die in der Liste gewählt ist. Sie läuft im Web Worker, und jeder
+Schritt wird nur übernommen, wenn das Ergebnis im Bereich dadurch nicht schlechter wird.
 
-- **Reihen ausdünnen** (`src/correct/thin.ts`): Füllungen und Satins sind Hin-und-her-Bahnen. Ohne
-  Objektdaten erkennt heatstitch sie an den Wendepunkten eines Stichzugs, die periodisch
-  wiederkehren (Satin: jeder zweite Wendepunkt liegt auf derselben Kante, Füllung mit
-  Verbindungsstich: jeder vierte). Entfernt wird jeweils ein Zyklus (zwei Füllreihen bzw. ein Zick
-  und ein Zack), die Enden verbindet ein kurzer Stich. Wie viele Zyklen fallen, ergibt sich je Zelle
-  aus dem Überschuss von Dichte, Kurzstichen oder Perforation; die Entfernungen werden gleichmäßig
-  verteilt. Mindestens 60 % des entfernten Garns müssen in markierten Zellen liegen (in späteren
-  Runden 30 %), damit eine lange Füllreihe nicht wegen eines kleinen Flecks verschwindet. Das ist die
-  einzige Korrektur, die die Garnmenge pro Fläche wirklich senkt.
-- **Kurzstiche bereinigen** (`src/correct/shorts.ts`): entfernt Stiche ohne Bewegung (überall) und
-  fasst in Zellen mit Kurzstich-Häufung Ketten kurzer Stiche zusammen, solange kein Punkt mehr als
-  0,3 mm vom neuen Stich abweicht. Schmale Zickzack-Säulen bleiben dabei unverändert und werden
-  stattdessen ausgedünnt.
-- **Gleiche Einstichlöcher trennen** (`src/correct/nudge.ts`, standardmäßig aus): schiebt Einstiche
-  verschiedener Lagen, die näher als 0,2 mm beieinander liegen, um höchstens 0,3 mm auseinander, bei
-  Leder auch Einstiche in Perforationszonen. Senkt die Dichte nicht. Aus, weil echte Dateien Löcher
-  oft absichtlich wiederverwenden (nachgezogene Konturen, gemeinsame Objektkanten).
-- Vernähstiche am Anfang und Ende eines Blocks werden nie entfernt; Sprünge, Schnitte und
-  Farbwechsel behalten ihre Ankerstiche.
+*Fokus* legt fest, welche Regel Stiche einspart:
 
-Was übrig bleibt, meldet das Panel; meist sind das kleine Flecken, in denen lange Reihen nur kurz
-durch eine dichte Stelle laufen. Ausgedünnte Füllungen haben ihre Reihen paarweise (zwei Reihen
-bleiben, zwei fallen weg), der Abstand wird nicht neu verteilt.
+- **Beides** (Standard): Fadendichte, Kurzstich-Häufungen und bei Leder die Perforation.
+- **Fadendichte**: nur zu viel Garn pro Fläche. Verdeckte Füllreihen werden ausgedünnt.
+- **Lochdichte**: nur Einstiche (Kurzstiche, Perforation); zusätzlich werden Einstiche
+  verschiedener Lagen, die im selben Loch landen, um höchstens 0,3 mm getrennt.
+
+Die Schritte, in dieser Reihenfolge:
+
+1. **Aufräumen** (`src/correct/shorts.ts`): Stiche ohne Bewegung fallen weg, Ketten winziger Stiche
+   werden zusammengefasst, solange kein Punkt mehr als 0,3 mm abweicht.
+2. **Füllung unter der Kante zurückziehen** (`src/correct/pullback.ts`): Reicht eine Füllung weit
+   unter eine später gestickte Satinkante, wird das Reihenende auf die übliche Überlappung von etwa
+   30 % der Kantenbreite zurückgenommen (unter einer Füllung 0,6 mm). Die Kante verdeckt das
+   Reihenende ohnehin, gespart wird doppelte Lage am Rand.
+3. **Kurzstiche in Satinkurven** (`src/correct/satinShort.ts`): Auf der Innenseite enger Kurven
+   drängen sich die Einstiche. Wie in Digitalisierprogrammen endet dort jeder zweite Stich ein
+   Viertel der Säulenbreite vor der Kante; die Kontur bleibt geschlossen.
+4. **Verdeckte Reihen ausdünnen** (nur Fadendichte, `src/correct/thin.ts`): Füllreihen, die
+   vollständig unter mindestens einer vollen späteren Lage liegen, werden paarweise entfernt. Man
+   sieht sie nicht, Streifen entstehen also nicht.
+5. **Gleichmäßig neu verteilen** (`src/correct/respace.ts`): Ist eine Füllung oder ein Satin danach
+   noch zu dicht, wird die ganze Bahn mit gleichmäßig größerem Reihen- bzw. Stichabstand neu
+   aufgebaut statt einzelne Reihen herauszunehmen. Kontur, Stichversatz und Bahnrichtung bleiben,
+   und der Abstand wird nie größer als der für das Material empfohlene (Webware 40er: 0,45 mm).
+   Schmale Details und schon ungleichmäßige Bahnen bleiben unverändert.
+6. **Einstiche trennen** (`src/correct/nudge.ts`): bei Fokus Lochdichte und bei Perforation auf
+   Leder; verschoben werden nur Einstiche zwischen zwei ausreichend langen Stichen.
+
+Vernähstiche, Sprünge, Schnitte und Farbwechsel bleiben unverändert.
+
+**Was in Ruhe bleibt:** praxisübliche und quittierte Zonen (siehe Validierung) fasst die Korrektur
+nicht an; sie sorgt nur dafür, dass sie nicht schlimmer werden. Was danach noch übrig ist, meldet
+das Panel als „von Hand prüfen“: meist mehrere gestapelte Lagen, also eine Designentscheidung.
 
 ### Von Hand
 
@@ -200,7 +226,7 @@ src/parsers/   DST- und PES-Parser, PEC-Palette
 src/model/     Pattern-Datenmodell, Garnsegmente, Statistik, Bearbeitungsfunktionen
 src/density/   Dichteraster, Gauss-Blur, Web Worker
 src/validation/  Messung, Profile, Stufen, Satin-Erkennung, Kurzstich- und Perforationsregel, Zonen
-src/correct/   Automatische Korrektur: Ausdünnen, Kurzstiche, Einstiche trennen
+src/correct/   Automatische Korrektur: Rückzug unter Kanten, Satin-Kurzstiche, Neuverteilen, Ausdünnen, Einstiche trennen
 src/writers/   DST- und PES-Writer (PEC-Block, Vorschaubilder)
 src/render/    Viewport, Farbskala, Heatmap, Stichplan, Legende
 src/ui/        Dateiliste, Validierung, Korrektur-Panel, Stich-Editor, Controls, Statistik, Tooltip, Export

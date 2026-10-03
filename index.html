@@ -191,10 +191,14 @@
               <label><input type="radio" name="fix-goal" value="critical" /><span data-i18n="correct.goal.critical"></span></label>
             </div>
           </div>
-          <div class="checks fix-options">
-            <label class="check"><input type="checkbox" id="fix-thin" /><span><span data-i18n="correct.thin"></span><small data-i18n="correct.thin.hint"></small></span></label>
-            <label class="check"><input type="checkbox" id="fix-shorts" /><span><span data-i18n="correct.shorts"></span><small data-i18n="correct.shorts.hint"></small></span></label>
-            <label class="check"><input type="checkbox" id="fix-nudge" /><span><span data-i18n="correct.nudge"></span><small data-i18n="correct.nudge.hint"></small></span></label>
+          <div class="field">
+            <span class="label" data-i18n="correct.focus"></span>
+            <div class="segmented" role="radiogroup">
+              <label><input type="radio" name="fix-focus" value="both" /><span data-i18n="correct.focus.both"></span></label>
+              <label><input type="radio" name="fix-focus" value="thread" /><span data-i18n="correct.focus.thread"></span></label>
+              <label><input type="radio" name="fix-focus" value="holes" /><span data-i18n="correct.focus.holes"></span></label>
+            </div>
+            <p class="muted small" id="fix-focus-hint"></p>
           </div>
           <div class="buttons">
             <button type="button" id="fix-all" class="primary" data-i18n="correct.all"></button>

@@ -1,4 +1,4 @@
-import type { CorrectionReport } from '../correct/auto';
+import type { CorrectionFocus, CorrectionReport } from '../correct/auto';
 import { formatNumber, getLang, t, type Key } from '../i18n';
 import { patternStats, type Pattern, type PatternStats } from '../model/pattern';
 import type { ValidationResult } from '../validation/validate';
@@ -44,9 +44,8 @@ export interface CorrectState {
 /** Correction options, auto-fix, manual edit tools, undo and save. */
 export class CorrectPanel {
   private goal = document.querySelectorAll<HTMLInputElement>('input[name="fix-goal"]');
-  private thin = $<HTMLInputElement>('fix-thin');
-  private shorts = $<HTMLInputElement>('fix-shorts');
-  private nudge = $<HTMLInputElement>('fix-nudge');
+  private focus = document.querySelectorAll<HTMLInputElement>('input[name="fix-focus"]');
+  private focusHint = $<HTMLElement>('fix-focus-hint');
   private fixAll = $<HTMLButtonElement>('fix-all');
   private fixZone = $<HTMLButtonElement>('fix-zone');
   private report = $<HTMLElement>('fix-report');
@@ -79,18 +78,14 @@ export class CorrectPanel {
         hooks.optionsChanged();
       });
     });
-    for (const [box, key] of [
-      [this.thin, 'thin'],
-      [this.shorts, 'shorts'],
-      [this.nudge, 'nudge'],
-    ] as const) {
-      box.checked = c[key];
-      box.addEventListener('change', () => {
-        c[key] = box.checked;
+    this.focus.forEach((r) => {
+      r.checked = r.value === c.focus;
+      r.addEventListener('change', () => {
+        if (r.checked) c.focus = r.value as CorrectionFocus;
         hooks.optionsChanged();
         if (this.last) this.update(this.last);
       });
-    }
+    });
     this.fixAll.addEventListener('click', () => hooks.autoFix('all'));
     this.fixZone.addEventListener('click', () => hooks.autoFix('zone'));
     this.editToggle.addEventListener('click', () => hooks.toggleEdit());
@@ -109,9 +104,14 @@ export class CorrectPanel {
     const f = st.file;
     const loaded = !!f?.pattern;
     const busy = st.message?.kind === 'busy';
-    const anyFix = this.s.correction.thin || this.s.correction.shorts || this.s.correction.nudge;
-    this.fixAll.disabled = !loaded || busy || !anyFix;
-    this.fixZone.disabled = !loaded || busy || !anyFix || !st.zoneSelected;
+    this.fixAll.disabled = !loaded || busy;
+    this.fixZone.disabled = !loaded || busy || !st.zoneSelected;
+    const hint: Record<CorrectionFocus, Key> = {
+      both: 'correct.focus.both.hint',
+      thread: 'correct.focus.thread.hint',
+      holes: 'correct.focus.holes.hint',
+    };
+    this.focusHint.textContent = t(hint[this.s.correction.focus]);
     this.fixAll.textContent = busy ? t('correct.running') : t('correct.all');
 
     this.editToggle.disabled = !loaded;
@@ -191,8 +191,8 @@ export class CorrectPanel {
     if (m.kind === 'busy') return [p(t('correct.running'), 'muted pending')];
     if (m.kind === 'text') return [p(m.text)];
     const r = m.report;
-    const removed = r.stitchesBefore - r.stitchesAfter;
-    if (!removed && !r.moved) {
+    const changed = r.stitchesBefore !== r.stitchesAfter || r.pulledBack + r.shortened + r.moved + r.respaced > 0;
+    if (!changed && !r.practice && !r.acknowledged) {
       const clean = r.before.criticalZones + r.before.cautionZones === 0;
       return [p(t(clean ? 'correct.nothing' : 'correct.noChange'))];
     }
@@ -207,20 +207,30 @@ export class CorrectPanel {
         }),
         'strong',
       ),
-      p(
-        t('correct.removed', {
-          n: formatNumber(removed),
-          thin: formatNumber(r.thinned),
-          short: formatNumber(r.merged),
-          zero: formatNumber(r.zeroLength),
-          moved: formatNumber(r.moved),
-        }),
-      ),
-      p(t('correct.thread', { a: formatNumber(r.threadBefore / 1000, 1), b: formatNumber(r.threadAfter / 1000, 1) })),
     ];
-    const goalCaution = this.s.correction.goal === 'caution';
-    const left = r.after.criticalZones + (goalCaution ? r.after.cautionZones : 0);
-    if (left) out.push(p(t('correct.left'), 'muted small'));
+    const items: [Key, number][] = [
+      ['correct.item.pull', r.pulledBack],
+      ['correct.item.short', r.shortened],
+      ['correct.item.resp', r.respaced],
+      ['correct.item.hidden', r.hiddenRows],
+      ['correct.item.clean', r.zeroLength + r.merged],
+      ['correct.item.moved', r.moved],
+    ];
+    const list = items.filter(([, n]) => n > 0).map(([k, n]) => t(k, { n: formatNumber(n) }));
+    if (list.length) out.push(p(t('correct.changes', { list: list.join(', ') })));
+    if (changed) {
+      out.push(
+        p(
+          `${t('correct.stitches', { a: formatNumber(r.stitchesBefore), b: formatNumber(r.stitchesAfter) })} ${t('correct.thread', {
+            a: formatNumber(r.threadBefore / 1000, 1),
+            b: formatNumber(r.threadAfter / 1000, 1),
+          })}`,
+        ),
+      );
+    }
+    if (r.practice) out.push(p(t('correct.practice', { n: r.practice }), 'muted small'));
+    if (r.acknowledged) out.push(p(t('correct.acknowledged', { n: r.acknowledged }), 'muted small'));
+    if (r.manual) out.push(p(t('correct.left', { n: r.manual }), 'muted small'));
     return out;
   }
 }

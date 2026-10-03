@@ -12,6 +12,7 @@ import {
   type Level,
   type Thresholds,
 } from './thresholds';
+import { practiceNote, stableFabric } from './practice';
 import { findZones, REASON_BITS, type Zone } from './zones';
 
 /** Cells with at least this much thread count as stitched area (for the flagged share). */
@@ -47,6 +48,8 @@ export interface ValidationResult {
   /** Reason bits per non-safe cell, see REASON_BITS. */
   reasons: Uint8Array;
   zones: Zone[];
+  /** Index into `zones` per cell, -1 for safe cells. */
+  zoneOf: Int32Array;
   /** Highest level of any cell. */
   worst: Level;
   maxDensity: number;
@@ -69,13 +72,15 @@ export function classify(m: Measurement, profile: Profile, checks: Checks = ALL_
   let stitchedCells = 0;
   let cautionCells = 0;
   let criticalCells = 0;
+  // Short-stitch clusters are a caution on stable fabric, where they rarely cause trouble.
+  const shortsLevel = stableFabric(profile) ? CAUTION : CRITICAL;
   for (let i = 0; i < n; i++) {
     const d = m.density[i];
     if (d > maxDensity) maxDensity = d;
     if (d >= STITCHED_MM) stitchedCells++;
     const byDensity = checks.density ? classifyDensity(d, m.satin[i], th) : SAFE;
     const byHoles = checks.perforation ? classifyHoles(m.holes[i], th) : SAFE;
-    const byShorts = checks.shortStitches && m.shorts[i] >= SHORT_STITCH_COUNT ? CRITICAL : SAFE;
+    const byShorts = checks.shortStitches && m.shorts[i] >= SHORT_STITCH_COUNT ? shortsLevel : SAFE;
     const l = Math.max(byDensity, byHoles, byShorts) as Level;
     level[i] = l;
     if (l === SAFE) continue;
@@ -86,7 +91,9 @@ export function classify(m: Measurement, profile: Profile, checks: Checks = ALL_
       (byShorts ? REASON_BITS.shortStitches : 0) |
       (byHoles ? REASON_BITS.perforation : 0);
   }
-  const zones = findZones({ ...m, level, reasons });
+  const zoneOf = new Int32Array(n);
+  const zones = findZones({ ...m, level, reasons }, zoneOf);
+  for (const z of zones) z.practice = practiceNote(z, profile, th);
   return {
     profile,
     checks: { ...checks },
@@ -95,6 +102,7 @@ export function classify(m: Measurement, profile: Profile, checks: Checks = ALL_
     level,
     reasons,
     zones,
+    zoneOf,
     worst: criticalCells ? CRITICAL : cautionCells ? CAUTION : SAFE,
     maxDensity,
     stitchedCells,

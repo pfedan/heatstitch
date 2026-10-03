@@ -38,6 +38,8 @@ export interface ThinOptions {
   protect?: Uint8Array;
   /** Share of a removal's thread that must lie where `needAt` is positive (default MIN_SHARE). */
   minShare?: number;
+  /** Count a stitch as asked for only if `needAt` is positive at both of its ends (default: either). */
+  strict?: boolean;
 }
 
 export interface ThinResult {
@@ -50,8 +52,8 @@ export interface ThinResult {
 
 const dist = (p: Pattern, a: number, b: number) => Math.hypot(p.x[b] - p.x[a], p.y[b] - p.y[a]);
 
-/** Turning points of the stitch run [s, e], including both ends. */
-export function turningPoints(p: Pattern, s: number, e: number): number[] {
+/** Turning points of the stitch run [s, e], including both ends, at turns with cosine below `turnCos`. */
+export function turningPoints(p: Pattern, s: number, e: number, turnCos = TURN_COS): number[] {
   const t = [s];
   let prev = s; // last point with a distinct position
   for (let i = s + 1; i < e; i++) {
@@ -64,7 +66,7 @@ export function turningPoints(p: Pattern, s: number, e: number): number[] {
     const oy = p.y[next] - p.y[i];
     if (ox || oy) {
       const cos = (ix * ox + iy * oy) / (Math.hypot(ix, iy) * Math.hypot(ox, oy));
-      if (cos < TURN_COS) t.push(i);
+      if (cos < turnCos) t.push(i);
     }
     prev = i;
   }
@@ -120,9 +122,11 @@ function candidate(p: Pattern, t: number[], k: number, removed: Uint8Array, opts
           break;
         }
         const len = dist(p, r - 1, r);
-        const need = (opts.needAt(r - 1) + opts.needAt(r)) / 2;
+        const n0 = opts.needAt(r - 1);
+        const n1 = opts.needAt(r);
+        const need = (n0 + n1) / 2;
         thread += len;
-        if (need > 0) wanted += len;
+        if (opts.strict ? n0 > 0 && n1 > 0 : need > 0) wanted += len;
         needSum += need * len;
         if (len > longest) longest = len;
       }

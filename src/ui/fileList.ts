@@ -2,16 +2,19 @@ import { t } from '../i18n';
 import { patternStats, type Pattern, type PatternStats } from '../model/pattern';
 import { parsePattern, SUPPORTED_EXTENSIONS } from '../parsers';
 import {
+  acksOf,
   deleteFile,
   fromStored,
   listFiles,
   loadActiveKey,
   putFile,
+  saveAcks,
   saveActiveKey,
   saveWorking,
   toStored,
   type StoredPattern,
 } from '../storage/fileStore';
+import { liveAcknowledgements, openWorst, type Acknowledgement } from '../validation/acks';
 import type { Profile } from '../validation/profiles';
 import {
   CAUTION,
@@ -42,6 +45,8 @@ export interface LoadedFile {
   redo: Pattern[];
   /** Key of the stored copy that survives page reloads. */
   storeKey?: number;
+  /** Findings the user (or the correction) accepted as they are. */
+  acks: Acknowledgement[];
 }
 
 interface FileData {
@@ -49,6 +54,7 @@ interface FileData {
   data: ArrayBuffer;
   storeKey?: number;
   working?: StoredPattern;
+  acks?: Acknowledgement[];
 }
 
 /** Versions kept per file for undo. */
@@ -100,7 +106,7 @@ export class FileList {
   async restore(): Promise<void> {
     const stored = await listFiles();
     if (!stored.length) return;
-    const first = await this.addData(stored.map(({ key, name, data, working }) => ({ name, data, storeKey: key, working })), false);
+    const first = await this.addData(stored.map((rec) => ({ name: rec.name, data: rec.data, storeKey: rec.key, working: rec.working, acks: acksOf(rec) })), false);
     // Files the user added while we were reading storage keep the focus.
     if (this.activeId !== null) return this.render();
     const activeKey = loadActiveKey();
@@ -111,8 +117,8 @@ export class FileList {
 
   private async addData(list: FileData[], persist: boolean): Promise<LoadedFile | null> {
     let first: LoadedFile | null = null;
-    for (const { name, data, storeKey, working } of list) {
-      const entry: LoadedFile = { id: this.nextId++, fileName: name, storeKey, undo: [], redo: [] };
+    for (const { name, data, storeKey, working, acks } of list) {
+      const entry: LoadedFile = { id: this.nextId++, fileName: name, storeKey, undo: [], redo: [], acks: acks ?? [] };
       try {
         const original = parsePattern(new Uint8Array(data), name);
         entry.original = original;
@@ -202,10 +208,28 @@ export class FileList {
     }
   }
 
+  /** Replaces the file's acknowledgements and stores them with the file. */
+  setAcks(f: LoadedFile, acks: Acknowledgement[]): void {
+    f.acks = acks;
+    if (f.storeKey !== undefined) void saveAcks(f.storeKey, acks);
+    this.render();
+  }
+
+  /** Highest level among the findings that are not acknowledged; null while measuring. */
+  static openWorst(f: LoadedFile): number | null {
+    return f.validation ? openWorst(f.validation.zones, f.acks) : null;
+  }
+
   /** Sets the measurement of `p`, the file's current pattern; the original's is kept for comparing. */
   private store(f: LoadedFile, p: Pattern, m: Measurement): void {
     f.measurement = m;
     f.validation = classify(m, this.profile, this.checks);
+    // Acknowledgements of zones an edit removed would otherwise match a new zone there later.
+    const live = liveAcknowledgements(f.validation.zones, f.acks);
+    if (live.length !== f.acks.length) {
+      f.acks = live;
+      if (f.storeKey !== undefined) void saveAcks(f.storeKey, live);
+    }
     if (p === f.original) {
       f.originalMeasurement = m;
       f.originalValidation = f.validation;
@@ -298,7 +322,7 @@ export class FileList {
         ed.textContent = t('files.edited');
         li.append(ed);
       }
-      const worst = f.validation ? f.validation.worst : null;
+      const worst = FileList.openWorst(f);
       const dot = document.createElement('span');
       dot.className = `dot ${worst === CRITICAL ? 'critical' : worst === CAUTION ? 'caution' : worst === null ? 'pending' : 'safe'}`;
       dot.title = t(

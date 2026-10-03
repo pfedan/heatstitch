@@ -1,4 +1,5 @@
 import { formatNumber, t, type Key } from '../i18n';
+import { JOIN_MAX_EXCESS, JOIN_MAX_MM2, SMALL_CAUTION_MM2 } from '../validation/practice';
 import type { Settings } from '../settings';
 import {
   FABRICS,
@@ -102,7 +103,14 @@ export function bindProfile(s: Settings, onChange: () => void): { refresh: () =>
       }),
     ];
     if (th.holes) items.push(t('validation.explain.perforation', { caution: HOLES_CAUTION, critical: HOLES_CRITICAL }));
-    items.push(t('validation.explain.note'));
+    items.push(
+      t('validation.explain.practice', {
+        small: SMALL_CAUTION_MM2,
+        join: JOIN_MAX_MM2,
+        excess: Math.round((JOIN_MAX_EXCESS - 1) * 100),
+      }),
+      t('validation.explain.note'),
+    );
     explain.replaceChildren(...items.map((text) => Object.assign(document.createElement('li'), { textContent: text })));
   };
 

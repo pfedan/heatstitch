@@ -1,4 +1,4 @@
-import { DEFAULT_CORRECTION, type CorrectionOptions } from './correct/auto';
+import { DEFAULT_CORRECTION, normalizeCorrection, type CorrectionOptions } from './correct/auto';
 import type { Metric } from './density/grid';
 import type { Lang } from './i18n';
 import { DEFAULT_PROFILE, normalizeProfile, threadWidthMm, type Profile } from './validation/profiles';
@@ -76,7 +76,7 @@ export function loadSettings(): Settings {
       profile,
       threadMm: typeof s.threadMm === 'number' && s.threadMm > 0 ? s.threadMm : threadWidthMm(profile),
       checks: normalizeChecks(s.checks),
-      correction: { ...DEFAULT_CORRECTION, ...s.correction },
+      correction: normalizeCorrection(s.correction),
     };
   } catch {
     return structuredClone(DEFAULTS);

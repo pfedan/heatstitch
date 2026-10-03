@@ -7,7 +7,7 @@ import { drawEditOverlay } from './editOverlay';
 import { drawHeatmap } from './heatmap';
 import { drawStitches } from './stitches';
 import { drawThreads } from './threads';
-import { drawValidation, drawZoneHighlight } from './validationOverlay';
+import { drawValidation, drawZoneHighlight, type Counted } from './validationOverlay';
 import type { Viewport } from './viewport';
 
 export interface Scene {
@@ -17,6 +17,8 @@ export interface Scene {
   gridImg: HTMLCanvasElement | null;
   validation: ValidationResult | null;
   validationImg: HTMLCanvasElement | null;
+  /** Per zone: whether it counts (zones normal in practice or acknowledged are drawn faintly). */
+  counted: Counted;
   /** Zone hovered in the list or selected, framed on the canvas. */
   highlight: Zone | null;
   settings: Settings;
@@ -31,7 +33,7 @@ export function drawScene(ctx: CanvasRenderingContext2D, w: number, h: number, s
   ctx.fillRect(0, 0, w, h);
   const { pattern, grid, gridImg, validation, validationImg, settings: s, vp } = scene;
   if (grid && gridImg) drawHeatmap(ctx, vp, grid, gridImg, s.blurMm > 0);
-  if (s.showValidation && validation && validationImg) drawValidation(ctx, vp, validation, validationImg);
+  if (s.showValidation && validation && validationImg) drawValidation(ctx, vp, validation, validationImg, scene.counted);
   // While editing, the stitch plan is always shown so the penetrations have context.
   const edit = scene.edit;
   const opacity = edit ? Math.max(0.85, s.overlay ? s.opacity : 0) : s.overlay ? s.opacity : 0;

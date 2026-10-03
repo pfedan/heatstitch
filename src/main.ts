@@ -18,6 +18,7 @@ import { bindProfile } from './ui/profilePanel';
 import { renderStats } from './ui/stats';
 import { updateTooltip } from './ui/tooltip';
 import { ValidationPanel } from './ui/validationPanel';
+import { acknowledgementOf, settledBy, type Acknowledgement } from './validation/acks';
 import type { ValidationResult, Zone } from './validation/validate';
 import { POINTS_MIN_SCALE } from './render/editOverlay';
 import { DIVIDER_GRAB_PX, drawDivider } from './render/compare';
@@ -52,7 +53,7 @@ let origGrid: DensityGrid | null = null;
 let origKey: { p: Pattern; opts: string } | null = null;
 let origGridImg: HTMLCanvasElement | null = null;
 /** Original validation overlay, cached like `validationImg`. */
-let origValidationImg: { v: ValidationResult; img: HTMLCanvasElement } | null = null;
+let origValidationImg: { v: ValidationResult; acks: Acknowledgement[]; img: HTMLCanvasElement } | null = null;
 let densitySeq = 0;
 let grid: DensityGrid | null = null;
 let gridImg: HTMLCanvasElement | null = null;
@@ -63,7 +64,7 @@ let stageH = 0;
 const stageBg = () => getComputedStyle(stage).backgroundColor;
 
 /** Validation overlay image, rebuilt when the active file's classification changes. */
-let validationImg: { v: ValidationResult; img: HTMLCanvasElement } | null = null;
+let validationImg: { v: ValidationResult; acks: Acknowledgement[]; img: HTMLCanvasElement } | null = null;
 /** Zone hovered in the list (wins) or last jumped to; both are framed on the canvas. */
 let hoverZone: Zone | null = null;
 let selectedZone: Zone | null = null;
@@ -90,10 +91,15 @@ const files = new FileList(
   settings.checks,
 );
 
+/** Per zone of `v`: whether it still counts with the active file's decisions. */
+const countedFor = (v: ValidationResult | null | undefined): boolean[] | null =>
+  v ? v.zones.map((z) => !settledBy(z, files.active?.acks)) : null;
+
 function activeValidationImg(): HTMLCanvasElement | null {
-  const v = files.active?.validation;
-  if (!v) return null;
-  if (validationImg?.v !== v) validationImg = { v, img: validationToCanvas(v) };
+  const f = files.active;
+  const v = f?.validation;
+  if (!f || !v) return null;
+  if (validationImg?.v !== v || validationImg.acks !== f.acks) validationImg = { v, acks: f.acks, img: validationToCanvas(v, countedFor(v)) };
   return validationImg.img;
 }
 
@@ -103,6 +109,7 @@ const scene = (): Scene => ({
   gridImg,
   validation: files.active?.validation ?? null,
   validationImg: activeValidationImg(),
+  counted: countedFor(files.active?.validation),
   highlight: settings.showValidation ? (hoverZone ?? selectedZone) : null,
   settings,
   vp,
@@ -116,13 +123,16 @@ const showCompare = () => comparing && FileList.edited(files.active);
 function originalScene(): Scene {
   const f = files.active!;
   const v = f.originalValidation ?? null;
-  if (v && origValidationImg?.v !== v) origValidationImg = { v, img: validationToCanvas(v) };
+  if (v && (origValidationImg?.v !== v || origValidationImg.acks !== f.acks)) {
+    origValidationImg = { v, acks: f.acks, img: validationToCanvas(v, countedFor(v)) };
+  }
   return {
     pattern: f.original ?? null,
     grid: origGrid,
     gridImg: origGridImg,
     validation: v,
     validationImg: v ? origValidationImg!.img : null,
+    counted: countedFor(v),
     highlight: null,
     settings,
     vp,
@@ -137,6 +147,15 @@ const panel = new ValidationPanel($('validation'), $('findings-open'), {
     redraw();
   },
   onStep: (dir) => stepZone(dir),
+  onDecide: (z, d) => {
+    const f = files.active;
+    if (!f) return;
+    // One decision per zone: the new one replaces whatever was stored for it.
+    const rest = f.acks.filter((a) => a !== acknowledgementOf(z, f.acks));
+    const bbox = { ...z.bbox };
+    files.setAcks(f, d === 'ack' ? [...rest, { bbox, reason: 'manual' }] : d === 'reopen' ? [...rest, { bbox, reason: 'reopened' }] : rest);
+    redraw();
+  },
 });
 
 /** Shows or hides the findings (the Correction panel stays in the column); while hidden a chip on the canvas reopens them. */
@@ -341,7 +360,7 @@ async function autoFix(scope: 'all' | 'zone'): Promise<void> {
   correctMessage = { kind: 'busy' };
   redraw();
   try {
-    const r = await validator.correct(p, settings.profile, settings.checks, { ...settings.correction, region });
+    const r = await validator.correct(p, settings.profile, settings.checks, { ...settings.correction, region, acks: f.acks });
     if (files.active !== f || f.pattern !== p) return; // the user moved on meanwhile
     correctMessage = { kind: 'report', report: r.report };
     editor.reset();
