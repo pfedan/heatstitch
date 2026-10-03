@@ -52,7 +52,7 @@ function draw(): void {
     $('tgl').textContent = `${(performance.now() - t).toFixed(1)} ms`;
   }
   $('info').textContent = pattern
-    ? `${pattern.name}: ${gl?.stitchCount ?? '?'} stitches, ${(vp.scale * 0.4).toFixed(1)} px thread`
+    ? `${pattern.name}: ${gl?.stitchCount ?? '?'} stitches, ${(vp.scale * opt.threadMm).toFixed(1)} px WebGL thread`
     : '';
 }
 
@@ -137,6 +137,12 @@ for (const k of ['twist', 'shadow', 'fabric'] as const) {
     request();
   });
 }
+// Only the WebGL side follows the width; the app's renderer has it fixed at 0.4 mm.
+$<HTMLInputElement>('width').addEventListener('input', (e) => {
+  opt.threadMm = Number((e.target as HTMLInputElement).value);
+  $('widthOut').textContent = `${opt.threadMm.toFixed(2)} mm`;
+  request();
+});
 $<HTMLSelectElement>('bg').addEventListener('change', (e) => {
   opt.background = (e.target as HTMLSelectElement).value.split(',').map(Number) as [number, number, number];
   request();
