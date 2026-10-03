@@ -624,3 +624,4 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', red
 
 files.render();
 redraw();
+void files.restore();
