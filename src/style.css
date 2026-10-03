@@ -69,6 +69,29 @@ body {
   letter-spacing: 0.02em;
 }
 
+.topbar-end {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+}
+
+.doc-link {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.doc-link:hover {
+  text-decoration: underline;
+}
+
+.noscript {
+  margin: 0;
+  padding: 10px 16px;
+  background: var(--panel);
+}
+
 .tagline {
   color: var(--muted);
   white-space: nowrap;

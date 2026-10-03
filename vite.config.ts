@@ -10,7 +10,7 @@ export default defineConfig({
       manifest: {
         name: 'heatstitch',
         short_name: 'heatstitch',
-        description: 'Stitch density heatmap for DST and PES embroidery files',
+        description: 'Check and fix stitch density in DST and PES embroidery files',
         theme_color: '#1b1026',
         background_color: '#141118',
         display: 'standalone',
@@ -28,8 +28,15 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,webmanifest,pes}'],
+        // Only crawlers and link previews fetch the social image.
+        globIgnores: ['og-image.png'],
       },
     }),
   ],
+  build: {
+    rollupOptions: {
+      input: { main: 'index.html', docs: 'docs.html' },
+    },
+  },
   worker: { format: 'es' },
 });
