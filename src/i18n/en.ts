@@ -20,7 +20,7 @@ export const en: Record<keyof typeof de, string> = {
   'controls.overlay': 'Show stitch plan',
   'controls.opacity': 'Opacity',
   'controls.realistic': 'Realistic threads',
-  'controls.realistic.hint': 'Shaded threads with shadows; flat lines when zoomed far out',
+  'controls.realistic.hint': 'Round, twisted threads with shadows, as wide as the profile thread weight; flat lines when zoomed far out',
   'controls.showJumps': 'Show jumps as dashed lines',
   'controls.fit': 'Fit',
   'controls.export': 'Export PNG',

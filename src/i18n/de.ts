@@ -18,7 +18,7 @@ export const de = {
   'controls.overlay': 'Stichplan einblenden',
   'controls.opacity': 'Deckkraft',
   'controls.realistic': 'Realistische Fäden',
-  'controls.realistic.hint': 'Schattierte Fäden mit Schatten; flache Linien bei starkem Herauszoomen',
+  'controls.realistic.hint': 'Runde, gezwirnte Fäden mit Schatten, so breit wie die Garnstärke im Profil; flache Linien bei starkem Herauszoomen',
   'controls.showJumps': 'Sprünge gestrichelt zeigen',
   'controls.fit': 'Einpassen',
   'controls.export': 'PNG exportieren',
