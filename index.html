@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Stitch density heatmap for DST and PES embroidery files, running fully in the browser." />
+    <meta name="theme-color" content="#1b1026" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <title>heatstitch</title>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <img src="/favicon.svg" alt="" width="28" height="28" />
+        <h1>heatstitch</h1>
+        <span class="tagline" data-i18n="app.tagline"></span>
+      </div>
+      <select id="lang" aria-label="Language">
+        <option value="de">Deutsch</option>
+        <option value="en">English</option>
+      </select>
+    </header>
+
+    <main class="layout">
+      <aside class="sidebar">
+        <section class="panel">
+          <h2 data-i18n="files.title"></h2>
+          <label class="dropzone" id="dropzone">
+            <input type="file" id="file-input" accept=".dst,.pes,.DST,.PES" multiple hidden />
+            <span data-i18n="files.drop"></span>
+          </label>
+          <ul id="file-list" class="file-list"></ul>
+        </section>
+
+        <section class="panel">
+          <h2 data-i18n="controls.title"></h2>
+          <div class="field">
+            <span class="label" data-i18n="controls.metric"></span>
+            <div class="segmented" role="radiogroup">
+              <label><input type="radio" name="metric" value="thread" /><span data-i18n="metric.thread"></span></label>
+              <label><input type="radio" name="metric" value="penetrations" /><span data-i18n="metric.penetrations"></span></label>
+            </div>
+          </div>
+          <label class="field">
+            <span class="label"><span data-i18n="controls.cell"></span> <output id="cell-out"></output></span>
+            <input type="range" id="cell" min="0.5" max="5" step="0.25" />
+          </label>
+          <label class="field">
+            <span class="label"><span data-i18n="controls.blur"></span> <output id="blur-out"></output></span>
+            <input type="range" id="blur" min="0" max="3" step="0.1" />
+          </label>
+          <div class="field row">
+            <label>
+              <span class="label"><span data-i18n="controls.max"></span></span>
+              <input type="number" id="max" min="0.1" step="0.5" />
+            </label>
+            <label>
+              <span class="label warn-label"><span data-i18n="controls.warn"></span></span>
+              <input type="number" id="warn" min="0" step="0.5" />
+            </label>
+          </div>
+          <span class="unit-hint" id="unit-hint"></span>
+          <label class="check"><input type="checkbox" id="include-jumps" /><span data-i18n="controls.jumps"></span></label>
+          <label class="check"><input type="checkbox" id="overlay" /><span data-i18n="controls.overlay"></span></label>
+          <label class="field indent">
+            <span class="label"><span data-i18n="controls.opacity"></span> <output id="opacity-out"></output></span>
+            <input type="range" id="opacity" min="0.05" max="1" step="0.05" />
+          </label>
+          <label class="check"><input type="checkbox" id="show-jumps" /><span data-i18n="controls.showJumps"></span></label>
+          <div class="buttons">
+            <button type="button" id="fit" data-i18n="controls.fit"></button>
+            <button type="button" id="export" class="primary" data-i18n="controls.export"></button>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2 data-i18n="stats.title"></h2>
+          <dl id="stats" class="stats"></dl>
+          <div id="swatches" class="swatches"></div>
+        </section>
+      </aside>
+
+      <section class="stage" id="stage">
+        <canvas id="canvas"></canvas>
+        <canvas id="legend" class="legend" width="260" height="46"></canvas>
+        <div id="tooltip" class="tooltip" hidden></div>
+        <p class="empty" id="empty" data-i18n="canvas.empty"></p>
+        <p class="hint" data-i18n="canvas.hint"></p>
+      </section>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
