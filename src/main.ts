@@ -64,6 +64,7 @@ const files = new FileList(
     if (f === files.active) redraw();
   },
   settings.profile,
+  settings.checks,
 );
 
 function activeValidationImg(): HTMLCanvasElement | null {
@@ -210,7 +211,7 @@ const controls = bindControls(settings, (kind: ChangeKind) => {
 const profile = bindProfile(settings, () => {
   saveSettings(settings);
   // Classification is cheap: every file is re-checked instantly against the new limits.
-  files.setProfile(settings.profile);
+  files.setProfile(settings.profile, settings.checks);
   hoverZone = selectedZone = null;
   tooltip.hidden = true;
   redraw();

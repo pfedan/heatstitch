@@ -17,8 +17,28 @@ import { findZones, REASON_BITS, type Zone } from './zones';
 /** Cells with at least this much thread count as stitched area (for the flagged share). */
 const STITCHED_MM = 0.5;
 
+/** Which rules take part in the classification. Measurements are always taken. */
+export interface Checks {
+  density: boolean;
+  shortStitches: boolean;
+  /** Only applies to perforation-sensitive fabrics. */
+  perforation: boolean;
+}
+
+export const ALL_CHECKS: Readonly<Checks> = { density: true, shortStitches: true, perforation: true };
+
+/** Returns a valid set of checks, falling back to enabled for missing entries. */
+export function normalizeChecks(c: Partial<Checks> | undefined): Checks {
+  return {
+    density: c?.density !== false,
+    shortStitches: c?.shortStitches !== false,
+    perforation: c?.perforation !== false,
+  };
+}
+
 export interface ValidationResult {
   profile: Profile;
+  checks: Checks;
   thresholds: Thresholds;
   /** The profile-independent measurement this result classifies. */
   measurement: Measurement;
@@ -36,8 +56,11 @@ export interface ValidationResult {
   criticalCells: number;
 }
 
-/** Applies a profile's thresholds to a measurement. Cheap, so it runs on the main thread. */
-export function classify(m: Measurement, profile: Profile): ValidationResult {
+/**
+ * Applies a profile's thresholds and the enabled checks to a measurement. Cheap, so it runs on
+ * the main thread.
+ */
+export function classify(m: Measurement, profile: Profile, checks: Checks = ALL_CHECKS): ValidationResult {
   const th = thresholdsFor(profile);
   const n = m.cols * m.rows;
   const level = new Uint8Array(n);
@@ -50,9 +73,9 @@ export function classify(m: Measurement, profile: Profile): ValidationResult {
     const d = m.density[i];
     if (d > maxDensity) maxDensity = d;
     if (d >= STITCHED_MM) stitchedCells++;
-    const byDensity = classifyDensity(d, m.satin[i], th);
-    const byHoles = classifyHoles(m.holes[i], th);
-    const byShorts = m.shorts[i] >= SHORT_STITCH_COUNT ? CRITICAL : SAFE;
+    const byDensity = checks.density ? classifyDensity(d, m.satin[i], th) : SAFE;
+    const byHoles = checks.perforation ? classifyHoles(m.holes[i], th) : SAFE;
+    const byShorts = checks.shortStitches && m.shorts[i] >= SHORT_STITCH_COUNT ? CRITICAL : SAFE;
     const l = Math.max(byDensity, byHoles, byShorts) as Level;
     level[i] = l;
     if (l === SAFE) continue;
@@ -66,6 +89,7 @@ export function classify(m: Measurement, profile: Profile): ValidationResult {
   const zones = findZones({ ...m, level, reasons });
   return {
     profile,
+    checks: { ...checks },
     thresholds: th,
     measurement: m,
     level,
@@ -80,8 +104,8 @@ export function classify(m: Measurement, profile: Profile): ValidationResult {
 }
 
 /** Measures and classifies in one go. */
-export function validatePattern(p: Pattern, profile: Profile): ValidationResult {
-  return classify(measurePattern(p), profile);
+export function validatePattern(p: Pattern, profile: Profile, checks: Checks = ALL_CHECKS): ValidationResult {
+  return classify(measurePattern(p), profile, checks);
 }
 
 export { measurePattern, type Measurement } from './measure';

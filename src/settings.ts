@@ -1,6 +1,7 @@
 import type { Metric } from './density/grid';
 import type { Lang } from './i18n';
 import { DEFAULT_PROFILE, normalizeProfile, type Profile } from './validation/profiles';
+import { ALL_CHECKS, normalizeChecks, type Checks } from './validation/validate';
 
 export interface Scale {
   max: number;
@@ -18,6 +19,8 @@ export interface Settings {
   showValidation: boolean;
   /** Material the validation thresholds are scaled for. */
   profile: Profile;
+  /** Validation rules that are switched on. */
+  checks: Checks;
   scales: Record<Metric, Scale>;
   lang: Lang | null;
 }
@@ -36,6 +39,7 @@ export const DEFAULTS: Settings = {
   showJumps: false,
   showValidation: true,
   profile: DEFAULT_PROFILE,
+  checks: { ...ALL_CHECKS },
   scales: {
     thread: { max: 12 },
     penetrations: { max: 4 },
@@ -56,6 +60,7 @@ export function loadSettings(): Settings {
       ...s,
       scales: { ...structuredClone(DEFAULTS.scales), ...s.scales },
       profile: normalizeProfile(s.profile),
+      checks: normalizeChecks(s.checks),
     };
   } catch {
     return structuredClone(DEFAULTS);
