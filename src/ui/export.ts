@@ -1,6 +1,8 @@
 import { drawLegend, LEGEND_HEIGHT } from '../render/legend';
 import { drawScene, type Scene } from '../render/scene';
+import { t } from '../i18n';
 import { legendSpec } from './legendSpec';
+import { fabricLabel, threadLabel } from './profilePanel';
 
 /** Renders the current view (plus legend) at device resolution and downloads it as PNG. */
 export function exportPng(scene: Scene, w: number, h: number, background: string, fileName: string): void {
@@ -16,10 +18,14 @@ export function exportPng(scene: Scene, w: number, h: number, background: string
   const lw = Math.min(260, w - 24);
   const lx = w - lw - 12;
   const ly = h - LEGEND_HEIGHT - 20;
+  const caption = 18; // profile line above the legend
   ctx.fillStyle = 'rgba(13, 11, 16, 0.7)';
   ctx.beginPath();
-  ctx.roundRect(lx - 10, ly - 8, lw + 20, LEGEND_HEIGHT + 14, 8);
+  ctx.roundRect(lx - 10, ly - 8 - caption, lw + 20, LEGEND_HEIGHT + 14 + caption, 8);
   ctx.fill();
+  ctx.fillStyle = '#a49cb0';
+  ctx.font = '11px system-ui, sans-serif';
+  ctx.fillText(t('export.profile', { fabric: fabricLabel(s.profile), thread: threadLabel(s.profile) }), lx, ly - 6, lw);
   drawLegend(ctx, lx, ly, lw, legendSpec(s));
 
   c.toBlob((blob) => {

@@ -48,11 +48,38 @@ export class Shape {
     return this;
   }
 
-  /** Satin column along x: zigzag between y0 and y0 + width, `spacing` mm between stitches. */
+  /**
+   * One fill layer over the square centred at (cx, cy) with half size `half`, rows at `angle`
+   * radians. Stitch ends are staggered per row like a tatami fill.
+   */
+  fillAt(cx: number, cy: number, half: number, angle: number, spacing = 0.4, stitch = 3.5): this {
+    const ca = Math.cos(angle);
+    const sa = Math.sin(angle);
+    const at = (u: number, v: number): [number, number] => [cx + u * ca - v * sa, cy + u * sa + v * ca];
+    const rows = Math.round((2 * half) / spacing);
+    const steps = Math.ceil((2 * half) / stitch);
+    this.trim().jump(...at(-half, -half)).to(...at(-half, -half));
+    for (let r = 0; r <= rows; r++) {
+      const v = -half + r * spacing;
+      for (let k = 0; k <= steps; k++) {
+        const t = r % 2 ? 1 - k / steps : k / steps;
+        const stagger = k > 0 && k < steps ? ((r % 4) - 1.5) * 0.3 : 0;
+        this.to(...at(-half + 2 * half * t + stagger, v));
+      }
+    }
+    return this;
+  }
+
+  /**
+   * Satin column along x: zigzag between y0 and y0 + width. `spacing` is the distance between
+   * penetrations on the same side (the usual digitizing definition), so a satin at 0.4 mm has
+   * 2 / 0.4 = 5 mm thread per mm².
+   */
   satin(x0: number, y0: number, length: number, width: number, spacing: number): this {
     this.trim().jump(x0, y0).to(x0, y0);
-    const n = Math.round(length / spacing);
-    for (let i = 1; i <= n; i++) this.to(x0 + i * spacing, i % 2 ? y0 + width : y0);
+    const step = spacing / 2;
+    const n = Math.round(length / step);
+    for (let i = 1; i <= n; i++) this.to(x0 + i * step, i % 2 ? y0 + width : y0);
     return this;
   }
 

@@ -69,10 +69,11 @@ export function addSegment(
 }
 
 /**
- * Builds the density grid. `segmentFilter` (thread metric only) receives the record index a
- * thread piece ends at and can exclude it, e.g. to measure satin thread separately.
+ * Builds the density grid. `filter` receives a record index and can exclude it: for the thread
+ * metric the record a thread piece ends at (e.g. to measure satin thread separately), for
+ * penetrations the stitch record itself.
  */
-export function computeDensity(p: Pattern, opt: DensityOptions, segmentFilter?: (end: number) => boolean): DensityGrid {
+export function computeDensity(p: Pattern, opt: DensityOptions, filter?: (index: number) => boolean): DensityGrid {
   const cell = opt.cellMm;
   const sigmaCells = opt.blurMm > 0 ? opt.blurMm / cell : 0;
   const pad = Math.ceil(3 * sigmaCells) + 1;
@@ -88,14 +89,14 @@ export function computeDensity(p: Pattern, opt: DensityOptions, segmentFilter?: 
 
   if (opt.metric === 'thread') {
     forEachThreadSegment(p, opt.includeJumps, (x0, y0, x1, y1, end) => {
-      if (segmentFilter && !segmentFilter(end)) return;
+      if (filter && !filter(end)) return;
       const len = Math.hypot(x1 - x0, y1 - y0) / 10;
       if (len === 0) return;
       addSegment(data, cols, rows, toCell(x0, originX), toCell(y0, originY), toCell(x1, originX), toCell(y1, originY), len);
     });
   } else {
     for (let i = 0; i < p.cmd.length; i++) {
-      if (p.cmd[i] !== STITCH) continue;
+      if (p.cmd[i] !== STITCH || (filter && !filter(i))) continue;
       const cx = Math.floor(toCell(p.x[i], originX));
       const cy = Math.floor(toCell(p.y[i], originY));
       if (cx >= 0 && cy >= 0 && cx < cols && cy < rows) data[cy * cols + cx] += 1;

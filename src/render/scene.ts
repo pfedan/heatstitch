@@ -1,10 +1,10 @@
 import type { DensityGrid } from '../density/grid';
 import type { Pattern } from '../model/pattern';
 import type { Settings } from '../settings';
-import type { ValidationResult } from '../validation/validate';
+import type { ValidationResult, Zone } from '../validation/validate';
 import { drawHeatmap } from './heatmap';
 import { drawStitches } from './stitches';
-import { drawValidation } from './validationOverlay';
+import { drawValidation, drawZoneHighlight } from './validationOverlay';
 import type { Viewport } from './viewport';
 
 export interface Scene {
@@ -14,6 +14,8 @@ export interface Scene {
   gridImg: HTMLCanvasElement | null;
   validation: ValidationResult | null;
   validationImg: HTMLCanvasElement | null;
+  /** Zone hovered in the list or selected, framed on the canvas. */
+  highlight: Zone | null;
   settings: Settings;
   vp: Viewport;
 }
@@ -26,4 +28,5 @@ export function drawScene(ctx: CanvasRenderingContext2D, w: number, h: number, s
   if (grid && gridImg) drawHeatmap(ctx, vp, grid, gridImg, s.blurMm > 0);
   if (s.showValidation && validation && validationImg) drawValidation(ctx, vp, validation, validationImg);
   if (pattern && (s.overlay || s.showJumps)) drawStitches(ctx, vp, pattern, s.overlay ? s.opacity : 0, s.showJumps);
+  if (scene.highlight) drawZoneHighlight(ctx, vp, scene.highlight);
 }

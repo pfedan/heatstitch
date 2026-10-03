@@ -2,17 +2,18 @@ import { t } from '../i18n';
 import type { LegendSpec } from '../render/legend';
 import { CAUTION_COLOR, CRITICAL_COLOR } from '../render/validationOverlay';
 import type { Settings } from '../settings';
-import { CAUTION_MM, CRITICAL_MM } from '../validation/thresholds';
+import { thresholdsFor } from '../validation/thresholds';
 
-/** Legend for the current metric; the thread metric shows the validation thresholds as ticks. */
+/** Legend for the current metric; the thread metric shows the profile's density limits as ticks. */
 export function legendSpec(s: Settings): LegendSpec {
   const thread = s.metric === 'thread';
+  const th = thresholdsFor(s.profile);
   return {
     max: s.scales[s.metric].max,
     ticks: thread
       ? [
-          { value: CAUTION_MM, color: CAUTION_COLOR },
-          { value: CRITICAL_MM, color: CRITICAL_COLOR },
+          { value: th.caution, color: CAUTION_COLOR },
+          { value: th.critical, color: CRITICAL_COLOR },
         ]
       : [],
     unit: t(thread ? 'unit.thread' : 'unit.penetrations'),

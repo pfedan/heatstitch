@@ -13,9 +13,11 @@ import { bindControls, type ChangeKind } from './ui/controls';
 import { exportPng } from './ui/export';
 import { FileList, type LoadedFile } from './ui/fileList';
 import { legendSpec } from './ui/legendSpec';
+import { bindProfile } from './ui/profilePanel';
 import { renderStats } from './ui/stats';
 import { updateTooltip } from './ui/tooltip';
-import { renderValidation } from './ui/validationPanel';
+import { ValidationPanel } from './ui/validationPanel';
+import type { ValidationResult, Zone } from './validation/validate';
 
 registerSW({ immediate: true });
 
@@ -42,27 +44,32 @@ let stageH = 0;
 
 const stageBg = () => getComputedStyle(stage).backgroundColor;
 
-/** Validation overlay image, rebuilt when the active file or its validation changes. */
-let validationImg: { file: LoadedFile; img: HTMLCanvasElement } | null = null;
+/** Validation overlay image, rebuilt when the active file's classification changes. */
+let validationImg: { v: ValidationResult; img: HTMLCanvasElement } | null = null;
+/** Zone hovered in the list (wins) or last jumped to; both are framed on the canvas. */
+let hoverZone: Zone | null = null;
+let selectedZone: Zone | null = null;
 
 const files = new FileList(
   $<HTMLUListElement>('file-list'),
   (f) => {
     grid = null;
     gridImg = null;
+    hoverZone = selectedZone = null;
     if (f?.pattern) fitView(f);
     recompute();
   },
-  (p) => validator.validate(p),
+  (p) => validator.measure(p),
   (f) => {
     if (f === files.active) redraw();
   },
+  settings.profile,
 );
 
 function activeValidationImg(): HTMLCanvasElement | null {
-  const f = files.active;
-  if (!f?.validation) return null;
-  if (validationImg?.file !== f) validationImg = { file: f, img: validationToCanvas(f.validation) };
+  const v = files.active?.validation;
+  if (!v) return null;
+  if (validationImg?.v !== v) validationImg = { v, img: validationToCanvas(v) };
   return validationImg.img;
 }
 
@@ -72,8 +79,17 @@ const scene = (): Scene => ({
   gridImg,
   validation: files.active?.validation ?? null,
   validationImg: activeValidationImg(),
+  highlight: settings.showValidation ? (hoverZone ?? selectedZone) : null,
   settings,
   vp,
+});
+
+const panel = new ValidationPanel($('validation'), {
+  onZone: (z) => selectZone(z),
+  onHover: (z) => {
+    hoverZone = z;
+    redraw();
+  },
 });
 
 // Rendering ------------------------------------------------------------------
@@ -91,7 +107,7 @@ function redraw(): void {
     exportBtn.disabled = !active?.pattern;
     drawLegendCanvas();
     renderStats($('stats'), $('swatches'), active, grid, settings, computing);
-    renderValidation($('validation'), active, zoomToZone);
+    panel.update(active, selectedZone);
   });
 }
 
@@ -140,11 +156,25 @@ function recompute(): void {
   }, 60);
 }
 
-function zoomToZone(z: { bbox: { minX: number; minY: number; maxX: number; maxY: number } }): void {
+function selectZone(z: Zone): void {
   const pad = 4; // mm of context around the zone
   const b = z.bbox;
+  selectedZone = z;
+  if (!settings.showValidation) {
+    settings.showValidation = true;
+    saveSettings(settings);
+    controls.refresh();
+  }
   vp.fit(b.minX - pad, b.minY - pad, b.maxX + pad, b.maxY + pad, stageW, stageH);
   redraw();
+}
+
+/** Jumps to the next (dir 1) or previous (dir -1) zone of the active file, worst first. */
+function stepZone(dir: 1 | -1): void {
+  const zones = files.active?.validation?.zones;
+  if (!zones?.length) return;
+  const i = selectedZone ? zones.indexOf(selectedZone) : -1;
+  selectZone(zones[i < 0 ? (dir > 0 ? 0 : zones.length - 1) : (i + dir + zones.length) % zones.length]);
 }
 
 function fitView(f: LoadedFile | null = files.active): void {
@@ -177,11 +207,21 @@ const controls = bindControls(settings, (kind: ChangeKind) => {
   }
 });
 
+const profile = bindProfile(settings, () => {
+  saveSettings(settings);
+  // Classification is cheap: every file is re-checked instantly against the new limits.
+  files.setProfile(settings.profile);
+  hoverZone = selectedZone = null;
+  tooltip.hidden = true;
+  redraw();
+});
+
 const langSelect = $<HTMLSelectElement>('lang');
 const applyLang = (l: Lang) => {
   setLang(l);
   langSelect.value = l;
   controls.refresh();
+  profile.refresh();
   files.render();
   redraw();
 };
@@ -238,9 +278,21 @@ launchQueue?.setConsumer(async (params) => {
 
 window.addEventListener('keydown', (e) => {
   if ((e.target as HTMLElement).closest('input, select, textarea')) return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.key === 'ArrowDown' || e.key === 'j') files.step(1);
   else if (e.key === 'ArrowUp' || e.key === 'k') files.step(-1);
   else if (e.key === 'f') fitView();
+  else if (e.key === 'n') stepZone(1);
+  else if (e.key === 'N') stepZone(-1);
+  else if (e.key === 'v') {
+    settings.showValidation = !settings.showValidation;
+    saveSettings(settings);
+    controls.refresh();
+    redraw();
+  } else if (e.key === 'Escape' && selectedZone) {
+    selectedZone = null;
+    redraw();
+  }
 });
 
 // Zoom, pan, pinch, tooltip ---------------------------------------------------
