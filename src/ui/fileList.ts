@@ -21,7 +21,15 @@ export interface LoadedFile {
   /** The measurement classified with the current profile. */
   validation?: ValidationResult;
   error?: string;
+  /** The pattern as loaded; `pattern` differs once it was corrected or edited. */
+  original?: Pattern;
+  /** Earlier versions (undo) and undone versions (redo), most recent last. */
+  undo: Pattern[];
+  redo: Pattern[];
 }
+
+/** Versions kept per file for undo. */
+const HISTORY = 50;
 
 export class FileList {
   files: LoadedFile[] = [];
@@ -57,10 +65,11 @@ export class FileList {
     let first: LoadedFile | null = null;
     for (const file of list) {
       if (!SUPPORTED_EXTENSIONS.some((ext) => file.name.toLowerCase().endsWith(ext))) continue;
-      const entry: LoadedFile = { id: this.nextId++, fileName: file.name };
+      const entry: LoadedFile = { id: this.nextId++, fileName: file.name, undo: [], redo: [] };
       try {
         const pattern = parsePattern(new Uint8Array(await file.arrayBuffer()), file.name);
         entry.pattern = pattern;
+        entry.original = pattern;
         entry.stats = patternStats(pattern);
         first ??= entry;
       } catch (err) {
@@ -74,16 +83,72 @@ export class FileList {
   }
 
   private async runValidation(f: LoadedFile, p: Pattern): Promise<void> {
+    let m: Measurement;
     try {
-      f.measurement = await this.measure(p);
-      f.validation = classify(f.measurement, this.profile, this.checks);
+      m = await this.measure(p);
     } catch (err) {
       console.error(err);
       return;
     }
-    if (!this.files.includes(f)) return;
+    // An edit made while measuring supersedes this result.
+    if (!this.files.includes(f) || f.pattern !== p) return;
+    f.measurement = m;
+    f.validation = classify(m, this.profile, this.checks);
     this.render();
     this.onValidated(f);
+  }
+
+  /**
+   * Replaces a file's pattern with an edited version and re-validates it. `measurement` (of the new
+   * pattern) skips the worker round trip when it is already known. With `record`, the previous
+   * version goes onto the undo stack.
+   */
+  setPattern(f: LoadedFile, p: Pattern, opts: { record?: boolean; measurement?: Measurement } = {}): void {
+    if (!f.pattern || p === f.pattern) return;
+    if (opts.record !== false) {
+      f.undo.push(f.pattern);
+      if (f.undo.length > HISTORY) f.undo.shift();
+      f.redo = [];
+    }
+    f.pattern = p;
+    f.stats = patternStats(p);
+    if (opts.measurement) {
+      f.measurement = opts.measurement;
+      f.validation = classify(opts.measurement, this.profile, this.checks);
+      this.render();
+      this.onValidated(f);
+    } else {
+      f.measurement = undefined;
+      f.validation = undefined;
+      this.render();
+      this.runValidation(f, p);
+    }
+  }
+
+  undo(f: LoadedFile): boolean {
+    const prev = f.undo.pop();
+    if (!prev || !f.pattern) return false;
+    f.redo.push(f.pattern);
+    this.setPattern(f, prev, { record: false });
+    return true;
+  }
+
+  redo(f: LoadedFile): boolean {
+    const next = f.redo.pop();
+    if (!next || !f.pattern) return false;
+    f.undo.push(f.pattern);
+    this.setPattern(f, next, { record: false });
+    return true;
+  }
+
+  /** Back to the pattern as loaded; this step can be undone too. */
+  revert(f: LoadedFile): void {
+    if (f.original) this.setPattern(f, f.original);
+  }
+
+  /** True once the pattern differs from the loaded one. */
+  static edited(f: LoadedFile | null): boolean {
+    return !!f?.pattern && f.pattern !== f.original;
   }
 
   activate(id: number | null): void {
@@ -138,6 +203,12 @@ export class FileList {
       fmt.className = 'fmt';
       fmt.textContent = f.pattern!.format;
       li.append(fmt);
+      if (FileList.edited(f)) {
+        const ed = document.createElement('span');
+        ed.className = 'edited';
+        ed.textContent = t('files.edited');
+        li.append(ed);
+      }
       const worst = f.validation ? f.validation.worst : null;
       const dot = document.createElement('span');
       dot.className = `dot ${worst === CRITICAL ? 'critical' : worst === CAUTION ? 'caution' : worst === null ? 'pending' : 'safe'}`;

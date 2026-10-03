@@ -112,7 +112,11 @@ export function nudgePenetrations(p: Pattern, opts: NudgeOptions): { pattern: Pa
   return { pattern: withRecords(p, x, y, p.cmd.slice()), moved };
 }
 
-/** Penetrations that share a hole (closer than `within`, 0.1 mm) with a stitch that is not their direct neighbour. */
+/**
+ * Penetrations that share a hole (closer than `within`, 0.1 mm) with a penetration more than four
+ * stitches away in the same run, or in another run. Lock stitches and bean stitches revisit their
+ * holes within a few stitches on purpose and are skipped.
+ */
 export function sameHoleStitches(p: Pattern, within = 2): Uint8Array {
   const n = p.cmd.length;
   const out = new Uint8Array(n);
@@ -125,7 +129,7 @@ export function sameHoleStitches(p: Pattern, within = 2): Uint8Array {
     for (let dy = -1; dy <= 1; dy++) {
       for (let dx = -1; dx <= 1; dx++) {
         for (const j of buckets.get((bx + dx) * 1_000_003 + by + dy) ?? []) {
-          if (i - j <= 2 && p.cmd.subarray(j, i + 1).every((c) => c === STITCH)) continue; // same stitch sequence
+          if (i - j <= 4 && p.cmd.subarray(j, i + 1).every((c) => c === STITCH)) continue;
           if (Math.hypot(p.x[i] - p.x[j], p.y[i] - p.y[j]) < within) out[i] = out[j] = 1;
         }
       }

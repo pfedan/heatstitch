@@ -20,10 +20,10 @@ import { STITCH, type Pattern } from '../model/pattern';
 
 /** Turning points closer than this to their counterpart one period later (0.1 mm) count as periodic. */
 const GAP_MAX = 20;
-/** Passes must be at least this much longer than the period gap to count as a sweep. */
-const PASS_TO_GAP = 2;
+/** Passes must be at least as long as the period gap to count as a sweep (narrow zigzags qualify). */
+const PASS_TO_GAP = 1;
 /** Minimum average pass length (0.1 mm). */
-const PASS_MIN = 5;
+const PASS_MIN = 3;
 /** Direction change (cosine) at which a stitch point becomes a turning point. */
 const TURN_COS = 0.5;
 /** A cross removal must keep the direction of the row it replaces. */
@@ -86,16 +86,18 @@ interface Candidate {
 function candidate(p: Pattern, t: number[], k: number, removed: Uint8Array, opts: ThinOptions): Candidate | null {
   const a = t[k];
   for (const period of [2, 4]) {
-    // Periodic neighbourhood: turning points one period apart lie close together.
-    let checks = 0;
-    for (let j = Math.max(0, k - period); j <= k + period && j + period < t.length; j++) {
-      if (dist(p, t[j], t[j + period]) > GAP_MAX) {
-        checks = -1;
-        break;
-      }
-      checks++;
+    // Periodic neighbourhood: this turning point and at least one of its counterparts one
+    // period before or after lie close to the point one period further on. Real fills mix
+    // connector rows and direct turns, so not every neighbour has to match.
+    if (k + period >= t.length || dist(p, a, t[k + period]) > GAP_MAX) continue;
+    let others = 0;
+    let matching = 0;
+    for (const j of [k - period, k + period]) {
+      if (j < 0 || j + period >= t.length) continue;
+      others++;
+      if (dist(p, t[j], t[j + period]) <= GAP_MAX) matching++;
     }
-    if (checks < period + 1) continue;
+    if (others && !matching) continue;
     const gap = dist(p, a, t[k + period]);
     let passes = 0;
     for (let j = k; j < k + period && j + 1 < t.length; j++) passes += dist(p, t[j], t[j + 1]);

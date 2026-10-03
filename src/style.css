@@ -708,3 +708,62 @@ button.link:hover {
 .tooltip[data-level='2'] .check b {
   color: #ff5050;
 }
+
+/* Correction and editing */
+
+.panel h3 {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  margin: 16px 0 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.fix-options {
+  border: none;
+  padding: 0;
+  margin: 4px 0 0;
+}
+
+.fix-report {
+  margin-top: 8px;
+  font-size: 13px;
+}
+
+.fix-report p {
+  margin: 0 0 4px;
+}
+
+.fix-report p.strong {
+  font-weight: 600;
+}
+
+.edit-tools {
+  margin-top: 6px;
+}
+
+.edit-tools p {
+  margin: 0 0 6px;
+}
+
+.edit-tools .sel-info {
+  font-size: 13px;
+}
+
+.edit-tools select {
+  flex: 0 0 auto;
+}
+
+.file-list .edited {
+  font-size: 11px;
+  color: var(--accent);
+}
+
+.stage.editing canvas#canvas {
+  cursor: crosshair;
+}
+
+.stage.editing canvas#canvas.panning {
+  cursor: grabbing;
+}

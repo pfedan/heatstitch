@@ -2,7 +2,7 @@ import './style.css';
 import { registerSW } from 'virtual:pwa-register';
 import { WorkerClient } from './density/client';
 import type { DensityGrid } from './density/grid';
-import { applyI18n, detectLang, setLang, type Lang } from './i18n';
+import { applyI18n, detectLang, setLang, t, type Lang } from './i18n';
 import { gridToCanvas } from './render/heatmap';
 import { drawLegend } from './render/legend';
 import { drawScene, type Scene } from './render/scene';
@@ -10,6 +10,8 @@ import { validationToCanvas } from './render/validationOverlay';
 import { Viewport } from './render/viewport';
 import { loadSettings, saveSettings } from './settings';
 import { bindControls, type ChangeKind } from './ui/controls';
+import { CorrectPanel, type CorrectMessage } from './ui/correctPanel';
+import { Editor } from './ui/editor';
 import { exportPng } from './ui/export';
 import { FileList, type LoadedFile } from './ui/fileList';
 import { legendSpec } from './ui/legendSpec';
@@ -18,6 +20,10 @@ import { renderStats } from './ui/stats';
 import { updateTooltip } from './ui/tooltip';
 import { ValidationPanel } from './ui/validationPanel';
 import type { ValidationResult, Zone } from './validation/validate';
+import { POINTS_MIN_SCALE } from './render/editOverlay';
+import type { Pattern } from './model/pattern';
+import type { Measurement } from './validation/measure';
+import { downloadPattern, outputFileName } from './writers';
 
 registerSW({ immediate: true });
 
@@ -32,9 +38,10 @@ const exportBtn = $<HTMLButtonElement>('export');
 
 const settings = loadSettings();
 const vp = new Viewport();
-// Two workers so a long validation never delays heatmap updates.
+// Two workers so a long validation never delays heatmap updates; corrections share the validator.
 const density = new WorkerClient();
 const validator = new WorkerClient();
+let correctMessage: CorrectMessage = null;
 let densitySeq = 0;
 let grid: DensityGrid | null = null;
 let gridImg: HTMLCanvasElement | null = null;
@@ -56,6 +63,8 @@ const files = new FileList(
     grid = null;
     gridImg = null;
     hoverZone = selectedZone = null;
+    correctMessage = null;
+    editor.reset();
     if (f?.pattern) fitView(f);
     recompute();
   },
@@ -75,7 +84,7 @@ function activeValidationImg(): HTMLCanvasElement | null {
 }
 
 const scene = (): Scene => ({
-  pattern: files.active?.pattern ?? null,
+  pattern: editor.preview ?? files.active?.pattern ?? null,
   grid,
   gridImg,
   validation: files.active?.validation ?? null,
@@ -83,6 +92,7 @@ const scene = (): Scene => ({
   highlight: settings.showValidation ? (hoverZone ?? selectedZone) : null,
   settings,
   vp,
+  edit: editor.active ? editor : null,
 });
 
 const panel = new ValidationPanel($('validation'), {
@@ -109,6 +119,14 @@ function redraw(): void {
     drawLegendCanvas();
     renderStats($('stats'), $('swatches'), active, grid, settings, computing);
     panel.update(active, selectedZone);
+    correctPanel.update({
+      file: active,
+      zoneSelected: !!selectedZone,
+      editing: editor.active,
+      selection: editor.selection.size,
+      pointsVisible: vp.scale >= POINTS_MIN_SCALE,
+      message: correctMessage,
+    });
   });
 }
 
@@ -197,6 +215,84 @@ function resize(): void {
 }
 new ResizeObserver(resize).observe(stage);
 
+// Correction and editing -----------------------------------------------------
+
+/** Stores an edited pattern for the active file (one undo step) and refreshes everything. */
+function applyEdit(p: Pattern, measurement?: Measurement): void {
+  const f = files.active;
+  if (!f?.pattern) return;
+  hoverZone = selectedZone = null;
+  files.setPattern(f, p, { measurement });
+  recompute();
+}
+
+const editor = new Editor({
+  pattern: () => files.active?.pattern ?? null,
+  commit: (p) => applyEdit(p),
+  redraw,
+  changed: redraw,
+});
+
+function setEditing(on: boolean): void {
+  editor.setActive(on);
+  stage.classList.toggle('editing', on);
+  redraw();
+}
+
+/** Undo, redo or revert: indices change, so the selection is dropped. */
+function history(step: 'undo' | 'redo' | 'revert'): void {
+  const f = files.active;
+  if (!f) return;
+  if (step === 'undo') files.undo(f);
+  else if (step === 'redo') files.redo(f);
+  else files.revert(f);
+  editor.reset();
+  hoverZone = selectedZone = null;
+  correctMessage = null;
+  recompute();
+}
+
+async function autoFix(scope: 'all' | 'zone'): Promise<void> {
+  const f = files.active;
+  const p = f?.pattern;
+  if (!f || !p || correctMessage?.kind === 'busy') return;
+  const z = selectedZone;
+  const pad = 1; // mm around the zone
+  const region = scope === 'zone' && z
+    ? { minX: z.bbox.minX - pad, minY: z.bbox.minY - pad, maxX: z.bbox.maxX + pad, maxY: z.bbox.maxY + pad }
+    : undefined;
+  correctMessage = { kind: 'busy' };
+  redraw();
+  try {
+    const r = await validator.correct(p, settings.profile, settings.checks, { ...settings.correction, region });
+    if (files.active !== f || f.pattern !== p) return; // the user moved on meanwhile
+    correctMessage = { kind: 'report', report: r.report };
+    editor.reset();
+    if (r.pattern !== p) applyEdit(r.pattern, r.measurement);
+  } catch (err) {
+    correctMessage = { kind: 'text', text: t('correct.error', { msg: err instanceof Error ? err.message : String(err) }) };
+  }
+  redraw();
+}
+
+const correctPanel = new CorrectPanel(settings, {
+  autoFix: (scope) => void autoFix(scope),
+  toggleEdit: () => setEditing(!editor.active),
+  deleteSelection: () => editor.deleteSelection(),
+  thinSelection: (share) => {
+    if (!editor.thinSelection(share)) correctMessage = { kind: 'text', text: t('edit.thin.none') };
+    redraw();
+  },
+  undo: () => history('undo'),
+  redo: () => history('redo'),
+  revert: () => history('revert'),
+  save: (format) => {
+    const f = files.active;
+    if (f?.pattern) downloadPattern(f.pattern, format, outputFileName(f.fileName, format, FileList.edited(f)));
+  },
+  optionsChanged: () => saveSettings(settings),
+});
+
 // Controls, language, export --------------------------------------------------
 
 const controls = bindControls(settings, (kind: ChangeKind) => {
@@ -237,7 +333,7 @@ applyI18n(document.body);
 $('fit').addEventListener('click', () => fitView());
 exportBtn.addEventListener('click', () => {
   const p = files.active?.pattern;
-  if (p) exportPng(scene(), stageW, stageH, stageBg(), p.name || 'pattern');
+  if (p) exportPng({ ...scene(), edit: null }, stageW, stageH, stageBg(), p.name || 'pattern');
 });
 
 // File input and drag & drop --------------------------------------------------
@@ -279,10 +375,46 @@ launchQueue?.setConsumer(async (params) => {
 
 window.addEventListener('keydown', (e) => {
   if ((e.target as HTMLElement).closest('input, select, textarea')) return;
-  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const mod = e.ctrlKey || e.metaKey;
+  if (mod && !e.altKey && ['z', 'Z', 'y'].includes(e.key)) {
+    e.preventDefault();
+    history(e.key === 'y' || e.shiftKey ? 'redo' : 'undo');
+    return;
+  }
+  if (mod && e.key === 'a' && editor.active) {
+    e.preventDefault();
+    editor.selectAll();
+    return;
+  }
+  if (mod || e.altKey) return;
+  if (editor.active && editor.selection.size) {
+    const step = e.shiftKey ? 5 : 1; // 0.1 mm, with Shift 0.5 mm
+    const arrows: Record<string, [number, number]> = {
+      ArrowLeft: [-step, 0],
+      ArrowRight: [step, 0],
+      ArrowUp: [0, -step],
+      ArrowDown: [0, step],
+    };
+    if (e.key in arrows) {
+      e.preventDefault();
+      editor.nudge(...arrows[e.key]);
+      return;
+    }
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      e.preventDefault();
+      editor.deleteSelection();
+      return;
+    }
+    if (e.key === 'Escape') {
+      editor.selection.clear();
+      redraw();
+      return;
+    }
+  }
   if (e.key === 'ArrowDown' || e.key === 'j') files.step(1);
   else if (e.key === 'ArrowUp' || e.key === 'k') files.step(-1);
   else if (e.key === 'f') fitView();
+  else if (e.key === 'e') setEditing(!editor.active);
   else if (e.key === 'n') stepZone(1);
   else if (e.key === 'N') stepZone(-1);
   else if (e.key === 'v') {
@@ -293,7 +425,7 @@ window.addEventListener('keydown', (e) => {
   } else if (e.key === 'Escape' && selectedZone) {
     selectedZone = null;
     redraw();
-  }
+  } else if (e.key === 'Escape' && editor.active) setEditing(false);
 });
 
 // Zoom, pan, pinch, tooltip ---------------------------------------------------
@@ -321,20 +453,29 @@ let pinchDist = 0;
 
 canvas.addEventListener('pointerdown', (e) => {
   canvas.setPointerCapture(e.pointerId);
-  pointers.set(e.pointerId, local(e));
-  canvas.classList.add('panning');
+  const pos = local(e);
+  pointers.set(e.pointerId, pos);
+  let mode: 'move' | 'band' | 'pan' = 'pan';
+  if (pointers.size === 1 && e.button === 0) {
+    const [wx, wy] = vp.toWorld(pos[0], pos[1]);
+    mode = editor.down(wx, wy, pos[0], pos[1], e.shiftKey, vp.scale);
+  }
+  if (mode === 'pan') canvas.classList.add('panning');
   if (pointers.size === 2) {
+    editor.cancel();
     const [a, b] = [...pointers.values()];
     pinchDist = Math.hypot(a[0] - b[0], a[1] - b[1]);
   }
+  redraw();
 });
 
 canvas.addEventListener('pointermove', (e) => {
   const pos = local(e);
   const prev = pointers.get(e.pointerId);
+  const [wx, wy] = vp.toWorld(pos[0], pos[1]);
   if (prev) {
     if (pointers.size === 1) {
-      vp.pan(pos[0] - prev[0], pos[1] - prev[1]);
+      if (!editor.dragTo(wx, wy, pos[0], pos[1])) vp.pan(pos[0] - prev[0], pos[1] - prev[1]);
     } else if (pointers.size === 2) {
       pointers.set(e.pointerId, pos);
       const [a, b] = [...pointers.values()];
@@ -344,19 +485,25 @@ canvas.addEventListener('pointermove', (e) => {
     }
     pointers.set(e.pointerId, pos);
     redraw();
-  }
+  } else if (editor.hoverAt(wx, wy, vp.scale)) redraw();
   if (e.pointerType === 'mouse' || pointers.size <= 1) updateTooltip(tooltip, pos[0], pos[1], stageW, vp, grid, settings, files.active?.validation ?? null);
 });
 
 const endPointer = (e: PointerEvent) => {
+  if (pointers.size === 1 && pointers.has(e.pointerId)) editor.up();
   pointers.delete(e.pointerId);
   pinchDist = 0;
   if (!pointers.size) canvas.classList.remove('panning');
 };
 canvas.addEventListener('pointerup', endPointer);
-canvas.addEventListener('pointercancel', endPointer);
+canvas.addEventListener('pointercancel', (e) => {
+  editor.cancel();
+  endPointer(e);
+});
 canvas.addEventListener('pointerleave', () => (tooltip.hidden = true));
-canvas.addEventListener('dblclick', () => fitView());
+canvas.addEventListener('dblclick', () => {
+  if (!editor.active) fitView();
+});
 
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', redraw);
 

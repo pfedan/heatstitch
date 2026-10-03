@@ -1,4 +1,7 @@
+import type { CorrectionOptions, CorrectionResult } from '../correct/auto';
 import type { Pattern } from '../model/pattern';
+import type { Profile } from '../validation/profiles';
+import type { Checks } from '../validation/validate';
 import type { Measurement } from '../validation/measure';
 import type { DensityGrid, DensityOptions } from './grid';
 import type { WorkerRequest, WorkerResponse } from './worker';
@@ -39,5 +42,11 @@ export class WorkerClient {
   /** Profile-independent validation measurements; classification happens on the main thread. */
   async measure(pattern: Pattern): Promise<Measurement> {
     return (await this.call({ type: 'measure', pattern })).measurement!;
+  }
+
+  /** Automatic correction (measures several times, so it runs off the main thread). */
+  async correct(pattern: Pattern, profile: Profile, checks: Checks, options: CorrectionOptions): Promise<CorrectionResult> {
+    const r = await this.call({ type: 'correct', pattern, profile, checks, options });
+    return { pattern: r.pattern!, measurement: r.measurement!, report: r.report! };
   }
 }

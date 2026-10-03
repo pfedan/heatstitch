@@ -3,7 +3,7 @@ import { measurePattern, type Measurement } from '../validation/measure';
 import type { Profile } from '../validation/profiles';
 import { tagShortStitches, TIE } from '../validation/shortStitches';
 import { densityLimits, SHORT_STITCH_COUNT } from '../validation/thresholds';
-import { CAUTION, classify, CRITICAL, type Level, type ValidationResult } from '../validation/validate';
+import { ALL_CHECKS, CAUTION, classify, CRITICAL, type Checks, type Level, type ValidationResult } from '../validation/validate';
 import { REASON_BITS } from '../validation/zones';
 import { nudgePenetrations, sameHoleStitches } from './nudge';
 import { mergeShortStitches, removeZeroLength } from './shorts';
@@ -34,7 +34,11 @@ export interface CorrectionOptions {
   region?: { minX: number; minY: number; maxX: number; maxY: number };
 }
 
-export const DEFAULT_CORRECTION: CorrectionOptions = { goal: 'caution', thin: true, shorts: true, nudge: true };
+/**
+ * Nudging is off by default: real designs reuse holes on purpose (retraced outlines, shared
+ * object edges), and moving them rarely helps on woven fabric.
+ */
+export const DEFAULT_CORRECTION: CorrectionOptions = { goal: 'caution', thin: true, shorts: true, nudge: false };
 
 export interface LevelSummary {
   worst: Level;
@@ -148,12 +152,17 @@ const stitchCount = (p: Pattern) => p.cmd.reduce((a, c) => a + (c === STITCH ? 1
  * rounds merges short-stitch chains and thins sweeps in the flagged cells and re-measures, and
  * finally pushes stacked penetrations apart. Cells that none of these can fix (for example an area
  * where a long fill row only crosses a small dense spot) stay flagged and are left to manual
- * editing.
+ * editing. Only the enabled checks are corrected.
  */
-export function autoCorrect(input: Pattern, profile: Profile, opts: CorrectionOptions): CorrectionResult {
+export function autoCorrect(
+  input: Pattern,
+  profile: Profile,
+  opts: CorrectionOptions,
+  checks: Checks = ALL_CHECKS,
+): CorrectionResult {
   let p = input;
   let m = measurePattern(p);
-  let v = classify(m, profile);
+  let v = classify(m, profile, checks);
   const before = summary(v);
   const threadBefore = patternStats(p).threadLength;
   const stitchesBefore = stitchCount(p);
@@ -173,7 +182,7 @@ export function autoCorrect(input: Pattern, profile: Profile, opts: CorrectionOp
   }
   if (changed) {
     m = measurePattern(p);
-    v = classify(m, profile);
+    v = classify(m, profile, checks);
   }
 
   for (; rounds < ROUNDS; rounds++) {
@@ -215,7 +224,7 @@ export function autoCorrect(input: Pattern, profile: Profile, opts: CorrectionOp
     }
     if (!roundChanged) break;
     m = measurePattern(p);
-    v = classify(m, profile);
+    v = classify(m, profile, checks);
   }
 
   if (opts.nudge) {
@@ -245,7 +254,7 @@ export function autoCorrect(input: Pattern, profile: Profile, opts: CorrectionOp
     }
     if (moved) {
       m = measurePattern(p);
-      v = classify(m, profile);
+      v = classify(m, profile, checks);
     }
   }
 
