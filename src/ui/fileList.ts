@@ -1,6 +1,7 @@
 import { t } from '../i18n';
 import { patternStats, type Pattern, type PatternStats } from '../model/pattern';
 import { parsePattern, SUPPORTED_EXTENSIONS } from '../parsers';
+import { deleteFile, listFiles, loadActiveKey, putFile, saveActiveKey } from '../storage/fileStore';
 import type { Profile } from '../validation/profiles';
 import {
   CAUTION,
@@ -21,6 +22,14 @@ export interface LoadedFile {
   /** The measurement classified with the current profile. */
   validation?: ValidationResult;
   error?: string;
+  /** Key of the stored copy that survives page reloads. */
+  storeKey?: number;
+}
+
+interface FileData {
+  name: string;
+  data: ArrayBuffer;
+  storeKey?: number;
 }
 
 export class FileList {
@@ -50,27 +59,49 @@ export class FileList {
     return this.files.find((f) => f.id === this.activeId) ?? null;
   }
 
-  /** Parses the given files, adds them and activates the first successfully parsed one. */
+  /** Parses the given files, stores them, adds them and activates the first successfully parsed one. */
   async add(files: Iterable<File>): Promise<void> {
     // Copy first: an input's FileList is live and gets cleared while we await.
-    const list = Array.from(files);
+    const list = Array.from(files).filter((file) =>
+      SUPPORTED_EXTENSIONS.some((ext) => file.name.toLowerCase().endsWith(ext)),
+    );
+    const data = await Promise.all(list.map(async (file) => ({ name: file.name, data: await file.arrayBuffer() })));
+    const first = await this.addData(data, true);
+    if (first) this.activate(first.id);
+    else this.render();
+  }
+
+  /** Re-adds the files stored by an earlier visit and activates the one that was active then. */
+  async restore(): Promise<void> {
+    const stored = await listFiles();
+    if (!stored.length) return;
+    const first = await this.addData(stored.map(({ key, name, data }) => ({ name, data, storeKey: key })), false);
+    // Files the user added while we were reading storage keep the focus.
+    if (this.activeId !== null) return this.render();
+    const activeKey = loadActiveKey();
+    const active = this.files.find((f) => f.pattern && f.storeKey === activeKey) ?? first;
+    if (active) this.activate(active.id);
+    else this.render();
+  }
+
+  private async addData(list: FileData[], persist: boolean): Promise<LoadedFile | null> {
     let first: LoadedFile | null = null;
-    for (const file of list) {
-      if (!SUPPORTED_EXTENSIONS.some((ext) => file.name.toLowerCase().endsWith(ext))) continue;
-      const entry: LoadedFile = { id: this.nextId++, fileName: file.name };
+    for (const { name, data, storeKey } of list) {
+      const entry: LoadedFile = { id: this.nextId++, fileName: name, storeKey };
       try {
-        const pattern = parsePattern(new Uint8Array(await file.arrayBuffer()), file.name);
+        const pattern = parsePattern(new Uint8Array(data), name);
         entry.pattern = pattern;
         entry.stats = patternStats(pattern);
         first ??= entry;
+        // Only parseable files are kept; a broken file would just show up again as an error.
+        if (persist) entry.storeKey = (await putFile(name, data)) ?? undefined;
       } catch (err) {
         entry.error = err instanceof Error ? err.message : String(err);
       }
       this.files.push(entry);
       if (entry.pattern) this.runValidation(entry, entry.pattern);
     }
-    if (first) this.activate(first.id);
-    else this.render();
+    return first;
   }
 
   private async runValidation(f: LoadedFile, p: Pattern): Promise<void> {
@@ -88,6 +119,7 @@ export class FileList {
 
   activate(id: number | null): void {
     this.activeId = id;
+    saveActiveKey(this.active?.storeKey ?? null);
     this.render();
     this.onActivate(this.active);
   }
@@ -95,7 +127,8 @@ export class FileList {
   remove(id: number): void {
     const idx = this.files.findIndex((f) => f.id === id);
     if (idx < 0) return;
-    this.files.splice(idx, 1);
+    const [removed] = this.files.splice(idx, 1);
+    if (removed.storeKey !== undefined) void deleteFile(removed.storeKey);
     if (this.activeId === id) {
       const next = this.files.slice(idx).find((f) => f.pattern) ?? [...this.files].reverse().find((f) => f.pattern);
       this.activate(next?.id ?? null);
