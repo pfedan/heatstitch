@@ -5,9 +5,16 @@ export const CAUTION_COLOR = '#FFA500';
 export const CRITICAL_COLOR = '#FF0000';
 const CAUTION_RGBA = [255, 165, 0, 115]; // ~45 %
 const CRITICAL_RGBA = [255, 0, 0, 140]; // ~55 %
+/** Zones that do not count (normal in practice or acknowledged): a faint grey wash, no outline. */
+const SETTLED_RGBA = [220, 220, 220, 60];
+
+/** Per zone of `v`: whether it counts towards the verdict. Missing means every zone counts. */
+export type Counted = readonly boolean[] | null;
+
+const counts = (v: ValidationResult, counted: Counted, i: number) => !counted || v.zoneOf[i] < 0 || counted[v.zoneOf[i]];
 
 /** One pixel per 1 mm validation cell, Safe cells transparent. */
-export function validationToCanvas(v: ValidationResult): HTMLCanvasElement {
+export function validationToCanvas(v: ValidationResult, counted: Counted = null): HTMLCanvasElement {
   const { cols, rows } = v.measurement;
   const c = document.createElement('canvas');
   c.width = cols;
@@ -15,7 +22,13 @@ export function validationToCanvas(v: ValidationResult): HTMLCanvasElement {
   const ctx = c.getContext('2d')!;
   const img = ctx.createImageData(cols, rows);
   for (let i = 0; i < v.level.length; i++) {
-    const rgba = v.level[i] === CRITICAL ? CRITICAL_RGBA : v.level[i] === CAUTION ? CAUTION_RGBA : null;
+    const rgba = !v.level[i]
+      ? null
+      : !counts(v, counted, i)
+        ? SETTLED_RGBA
+        : v.level[i] === CRITICAL
+          ? CRITICAL_RGBA
+          : CAUTION_RGBA;
     if (rgba) img.data.set(rgba, i * 4);
   }
   ctx.putImageData(img, 0, 0);
@@ -28,6 +41,7 @@ export function drawValidation(
   vp: Viewport,
   v: ValidationResult,
   img: HTMLCanvasElement,
+  counted: Counted = null,
 ): void {
   const m = v.measurement;
   const [ox, oy] = vp.toScreen(m.originX, m.originY);
@@ -44,7 +58,7 @@ export function drawValidation(
     [CRITICAL, CRITICAL_COLOR],
   ] as const) {
     const inside = (cx: number, cy: number) =>
-      cx >= 0 && cy >= 0 && cx < cols && cy < rows && level[cy * cols + cx] >= min;
+      cx >= 0 && cy >= 0 && cx < cols && cy < rows && level[cy * cols + cx] >= min && counts(v, counted, cy * cols + cx);
     ctx.beginPath();
     for (let cy = 0; cy < rows; cy++) {
       for (let cx = 0; cx < cols; cx++) {

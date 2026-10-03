@@ -1,12 +1,13 @@
 import type { Zone } from './zones';
 
 /**
- * An acknowledged finding: the user (or the automatic correction, for small caution spots) decided
- * the zone is fine as it is. Stored by its box in mm, since zones are recomputed after every edit.
+ * The user's decision about a finding, stored by its box in mm, since zones are recomputed after
+ * every edit: 'manual' acknowledges it (fine as it is), 'reopened' counts a finding that is normal
+ * in practice (see practice.ts) after all.
  */
 export interface Acknowledgement {
   bbox: Zone['bbox'];
-  reason: 'small' | 'manual';
+  reason: 'manual' | 'reopened';
 }
 
 /**
@@ -24,10 +25,18 @@ export function acknowledgementOf(z: Zone, acks: readonly Acknowledgement[] | un
   );
 }
 
-/** Highest level among zones that are not acknowledged. */
+/** Why a zone does not count towards the verdict, or undefined if it does. */
+export function settledBy(z: Zone, acks: readonly Acknowledgement[] | undefined): 'manual' | 'practice' | undefined {
+  const a = acknowledgementOf(z, acks);
+  if (a?.reason === 'manual') return 'manual';
+  if (a?.reason === 'reopened' || !z.practice) return undefined;
+  return 'practice';
+}
+
+/** Highest level among zones that still count (neither acknowledged nor normal in practice). */
 export function openWorst(zones: readonly Zone[], acks: readonly Acknowledgement[] | undefined): number {
   let w = 0;
-  for (const z of zones) if (z.level > w && !acknowledgementOf(z, acks)) w = z.level;
+  for (const z of zones) if (z.level > w && !settledBy(z, acks)) w = z.level;
   return w;
 }
 
@@ -41,6 +50,6 @@ export function isAcknowledgement(a: unknown): a is Acknowledgement {
   return (
     !!b &&
     [b.minX, b.minY, b.maxX, b.maxY].every((v) => typeof v === 'number' && Number.isFinite(v)) &&
-    ((a as Acknowledgement).reason === 'small' || (a as Acknowledgement).reason === 'manual')
+    ((a as Acknowledgement).reason === 'manual' || (a as Acknowledgement).reason === 'reopened')
   );
 }

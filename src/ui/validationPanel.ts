@@ -1,5 +1,6 @@
 import { formatNumber, getLang, t, type Key } from '../i18n';
-import { acknowledgementOf, openWorst } from '../validation/acks';
+import { openWorst, settledBy } from '../validation/acks';
+import { densityExcess } from '../validation/practice';
 import { fabricOf } from '../validation/profiles';
 import { CAUTION, CRITICAL, type Level, type Reason, type ValidationResult, type Zone } from '../validation/validate';
 import type { LoadedFile } from './fileList';
@@ -24,10 +25,15 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, className = '', text 
   return e;
 };
 
-/** The key figure per reason, e.g. "max 9.8 mm/mm²". */
-function figures(z: Zone): string[] {
+/** The key figure per reason, e.g. "max 9.8 mm/mm²", and how far the density lies over its limit. */
+function figures(z: Zone, v: ValidationResult): string[] {
   return z.reasons.map((r) => {
-    if (r === 'density') return t('validation.fig.density', { v: formatNumber(z.maxDensity, 1) });
+    if (r === 'density') {
+      const fig = t('validation.fig.density', { v: formatNumber(z.maxDensity, 1) });
+      // Critical zones only: how close a call it is.
+      const pct = Math.round(densityExcess(z, v.thresholds) * 100);
+      return z.level === CRITICAL && pct >= 0 ? `${fig} (${t('validation.fig.excess', { v: `+${pct}` })})` : fig;
+    }
     if (r === 'shortStitches') return t('validation.fig.shortStitches', { v: z.maxShorts });
     return t('validation.fig.perforation', { v: z.maxHoles });
   });
@@ -37,14 +43,20 @@ function figures(z: Zone): string[] {
 const applicableChecks = (v: ValidationResult): Reason[] =>
   (Object.keys(REASON_KEY) as Reason[]).filter((r) => r !== 'perforation' || fabricOf(v.profile).perforation);
 
-function share(v: ValidationResult): string {
+/** Share of the stitched area in zones that still count. */
+function share(v: ValidationResult, counted: boolean[]): string {
   if (!v.stitchedCells) return '';
-  const pct = ((v.cautionCells + v.criticalCells) / v.stitchedCells) * 100;
+  let flagged = 0;
+  for (let i = 0; i < v.zoneOf.length; i++) if (v.zoneOf[i] >= 0 && counted[v.zoneOf[i]]) flagged++;
+  const pct = (flagged / v.stitchedCells) * 100;
   return t('validation.share', { pct: pct > 0 && pct < 1 ? '< 1' : formatNumber(pct) });
 }
 
-/** Which zones the list shows: all, the open ones of one level, or the acknowledged ones. */
-export type ZoneFilter = 'all' | typeof CAUTION | typeof CRITICAL | 'acked';
+/** Which zones the list shows: all, the open ones of one level, or those that do not count. */
+export type ZoneFilter = 'all' | typeof CAUTION | typeof CRITICAL | 'settled';
+
+/** What the user decided about a zone from the list. */
+export type ZoneDecision = 'ack' | 'unack' | 'reopen' | 'keep';
 
 export interface PanelHooks {
   /** A zone was clicked. */
@@ -53,8 +65,8 @@ export interface PanelHooks {
   onHover: (z: Zone | null) => void;
   /** Previous (-1) or next (1) zone within the current filter. */
   onStep: (dir: 1 | -1) => void;
-  /** Acknowledge (true) or reopen (false) a zone. */
-  onAck: (z: Zone, ack: boolean) => void;
+  /** Acknowledge a zone or undo that, or count a zone that is normal in practice after all or undo that. */
+  onDecide: (z: Zone, d: ZoneDecision) => void;
 }
 
 /**
@@ -75,10 +87,12 @@ export class ValidationPanel {
 
   /** The zones the list shows, in list order; stepping with n / Shift+n walks these. */
   visible(zones: Zone[]): Zone[] {
-    if (this.filter === 'all') return zones;
     const acks = this.file?.acks;
-    if (this.filter === 'acked') return zones.filter((z) => acknowledgementOf(z, acks));
-    return zones.filter((z) => z.level === this.filter && !acknowledgementOf(z, acks));
+    const settled = (z: Zone) => !!settledBy(z, acks);
+    // Open zones first; those that do not count follow, dimmed.
+    if (this.filter === 'all') return [...zones.filter((z) => !settled(z)), ...zones.filter(settled)];
+    if (this.filter === 'settled') return zones.filter(settled);
+    return zones.filter((z) => z.level === this.filter && !settled(z));
   }
 
   update(file: LoadedFile | null, selected: Zone | null): void {
@@ -104,7 +118,7 @@ export class ValidationPanel {
       this.chip.replaceChildren(t('findings.title'));
       return;
     }
-    const open = v.zones.filter((z) => !acknowledgementOf(z, file!.acks));
+    const open = v.zones.filter((z) => !settledBy(z, file!.acks));
     const critical = open.filter((z) => z.level === CRITICAL).length;
     const caution = open.length - critical;
     const worst = openWorst(v.zones, file!.acks) as Level;
@@ -124,17 +138,22 @@ export class ValidationPanel {
     const off = applicable.filter((r) => !v.checks[r]);
     if (off.length === applicable.length) return [el('p', 'muted', t('validation.noChecks'))];
 
-    // Acknowledged findings no longer count towards the verdict.
+    // Findings that are normal in practice or acknowledged do not count towards the verdict.
     const worst = openWorst(v.zones, file.acks) as Level;
-    const acked = v.zones.filter((z) => acknowledgementOf(z, file.acks)).length;
+    const by = v.zones.map((z) => settledBy(z, file.acks));
+    const practice = by.filter((b) => b === 'practice').length;
+    const acked = by.filter((b) => b === 'manual').length;
     const verdict = el('div', `verdict ${LEVEL_CLASS[worst]}`);
     const head = el('div', 'verdict-head');
     head.append(el('strong', '', t(VERDICT_KEY[worst])));
-    if (worst) head.append(el('span', '', share(v)));
-    verdict.append(head, el('p', '', t(MSG_KEY[worst])));
-    if (acked) {
-      const n = acked;
-      verdict.append(el('p', 'counts', t(acked === v.zones.length ? 'validation.allAcked' : 'validation.someAcked', { n })));
+    if (worst) head.append(el('span', '', share(v, by.map((b) => !b))));
+    verdict.append(head, el('p', '', t(worst === 0 && v.zones.length ? 'validation.msg.safeSettled' : MSG_KEY[worst])));
+    if (practice || acked) {
+      const list = [
+        ...(practice ? [t('validation.practiceN', { n: practice })] : []),
+        ...(acked ? [t('validation.ackedN', { n: acked })] : []),
+      ].join(', ');
+      verdict.append(el('p', 'counts', t('validation.notCounted', { list })));
     }
     if (off.length) {
       const list = off.map((r) => t(REASON_KEY[r])).join(', ');
@@ -151,8 +170,9 @@ export class ValidationPanel {
     }
     const list = el('ol', 'val-zones');
     for (const z of shown) {
-      const ack = acknowledgementOf(z, file.acks);
-      const btn = el('button', `val-zone ${LEVEL_CLASS[z.level]}${ack ? ' acked' : ''}${z === selected ? ' selected' : ''}`);
+      const settled = settledBy(z, file.acks);
+      const reopened = !settled && !!z.practice;
+      const btn = el('button', `val-zone ${LEVEL_CLASS[z.level]}${settled ? ' acked' : ''}${z === selected ? ' selected' : ''}`);
       btn.type = 'button';
       const top = el('span', 'z-top');
       top.append(
@@ -161,18 +181,30 @@ export class ValidationPanel {
         el('span', 'why', z.reasons.map((r) => t(REASON_KEY[r])).join(', ')),
         el('span', 'num', `#${v.zones.indexOf(z) + 1}`),
       );
-      const meta = [`${formatNumber(z.areaMm2)} mm²`, ...figures(z)];
-      if (ack) meta.push(`${t('findings.acked')} (${t(ack.reason === 'small' ? 'findings.ack.small' : 'findings.ack.manual')})`);
+      const meta = [`${formatNumber(z.areaMm2)} mm²`, ...figures(z, v)];
       btn.append(top, el('span', 'meta', meta.join(' · ')));
+      if (z.practice || settled) {
+        const note = settled === 'manual' ? t('findings.manual') : t(`findings.practice.${z.practice!}` as Key);
+        btn.append(el('span', 'meta note', reopened ? `${note} · ${t('findings.reopened')}` : note));
+      }
       btn.addEventListener('click', () => this.hooks.onZone(z));
       btn.addEventListener('pointerenter', () => this.hooks.onHover(z));
       btn.addEventListener('pointerleave', () => this.hooks.onHover(null));
       btn.addEventListener('focus', () => this.hooks.onHover(z));
       btn.addEventListener('blur', () => this.hooks.onHover(null));
-      const toggle = el('button', 'z-ack', t(ack ? 'findings.unack' : 'findings.ack'));
+      // Manual acknowledgement wins; a zone that is normal in practice can be reopened instead.
+      const [d, label, hint]: [ZoneDecision, Key, Key] =
+        settled === 'manual'
+          ? ['unack', 'findings.unack', 'findings.unack']
+          : settled === 'practice'
+            ? ['reopen', 'findings.reopen', 'findings.reopen.hint']
+            : reopened
+              ? ['keep', 'findings.keep', 'findings.keep']
+              : ['ack', 'findings.ack', 'findings.ack.hint'];
+      const toggle = el('button', 'z-ack', t(label));
       toggle.type = 'button';
-      toggle.title = ack ? t('findings.unack') : t('findings.ack.hint');
-      toggle.addEventListener('click', () => this.hooks.onAck(z, !ack));
+      toggle.title = t(hint);
+      toggle.addEventListener('click', () => this.hooks.onDecide(z, d));
       const li = el('li');
       li.append(btn, toggle);
       list.append(li);
@@ -186,22 +218,22 @@ export class ValidationPanel {
     const bar = el('div', 'findings-bar');
     const chips = el('div', 'f-chips');
     chips.setAttribute('role', 'radiogroup');
-    const open = zones.filter((z) => !acknowledgementOf(z, file.acks));
-    const acked = zones.length - open.length;
+    const open = zones.filter((z) => !settledBy(z, file.acks));
+    const settled = zones.length - open.length;
     const options: [ZoneFilter, string, number][] = [
       ['all', t('findings.all'), zones.length],
       [CRITICAL, t('level.critical'), open.filter((z) => z.level === CRITICAL).length],
       [CAUTION, t('level.caution'), open.filter((z) => z.level === CAUTION).length],
     ];
-    if (acked || this.filter === 'acked') options.push(['acked', t('findings.acked'), acked]);
+    if (settled || this.filter === 'settled') options.push(['settled', t('findings.settled'), settled]);
     for (const [f, label, n] of options) {
-      const b = el('button', `f-chip${f === 'all' ? '' : f === 'acked' ? ' acked' : ` ${LEVEL_CLASS[f]}`}`);
+      const b = el('button', `f-chip${f === 'all' ? '' : f === 'settled' ? ' acked' : ` ${LEVEL_CLASS[f]}`}`);
       b.type = 'button';
       b.dataset.level = String(f);
       b.setAttribute('role', 'radio');
       b.setAttribute('aria-checked', String(f === this.filter));
       b.disabled = !n && f !== this.filter;
-      if (f !== 'all' && f !== 'acked') b.append(el('span', 'dot'));
+      if (f !== 'all' && f !== 'settled') b.append(el('span', 'dot'));
       b.append(label, el('span', 'n', String(n)));
       b.addEventListener('click', () => {
         this.filter = f;

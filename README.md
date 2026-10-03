@@ -17,7 +17,7 @@ Stickdichte-Heatmap für Stickdateien, komplett im Browser (kein Backend, keine 
 - Statistik: Stiche, Sprünge, Schnitte, Farbwechsel, Größe, Garnlänge, Max-Dichte
 - Mehrere Dateien laden und umschalten (auch per Pfeiltasten oder j/k, `f` = Einpassen)
 - PNG-Export der aktuellen Ansicht inkl. Legende
-- **Korrektur:** automatisch nach Digitalisier-Praxis (Füllung unter Kanten zurückziehen, Kurzstiche in Satinkurven, gleichmäßig neu verteilen, Fokus Fadendichte oder Lochdichte, kleine Stellen quittieren) und von Hand (Einstiche wählen, verschieben, löschen, Auswahl ausdünnen), mit Rückgängig/Wiederholen und Vergleichsansicht Original/korrigiert, siehe unten
+- **Korrektur:** automatisch nach Digitalisier-Praxis (Füllung unter Kanten zurückziehen, Kurzstiche in Satinkurven, gleichmäßig neu verteilen, Fokus Fadendichte oder Lochdichte, praxisübliche Funde und quittierte Zonen bleiben unangetastet) und von Hand (Einstiche wählen, verschieben, löschen, Auswahl ausdünnen), mit Rückgängig/Wiederholen und Vergleichsansicht Original/korrigiert, siehe unten
 - **Speichern als DST oder PES** (eigene Writer, kein pyembroidery)
 - Deutsch / Englisch
 - PWA: installierbar, offline nutzbar, "Öffnen mit" für .dst/.pes
@@ -52,7 +52,7 @@ skaliert (Verhältnis des empfohlenen Stichabstands zur Referenz 0,40 mm).
 |---|---|---|
 | Garnlänge pro Fläche, Füllstich | ab 7,0 mm/mm² (ca. 3 Lagen) | ab 9,5 mm/mm² (4 Lagen) |
 | Garnlänge pro Fläche, reiner Satin | ab 11 mm/mm² | ab 12 mm/mm² |
-| Kurzstich-Häufung | | ≥ 8 Stiche unter 1 mm in einer Zelle |
+| Kurzstich-Häufung | ≥ 8 Stiche unter 1 mm in einer Zelle (Webware, Caps) | ≥ 8 (alle anderen Stoffe) |
 | Perforation (nur Leder) | ≥ 6 Einstiche im Umkreis von 1 mm | ≥ 9 |
 
 Dichtewerte jeweils × Profilfaktor. Eine Füllstichlage mit 0,4 mm Abstand hat 2,5 mm/mm², ein Satin
@@ -76,7 +76,20 @@ mit 0,4 mm Abstand (zwischen Einstichen auf derselben Seite) 5,0 mm/mm².
   0,33 mm, 10 bei 0,2 mm. Gestapelte Kanten und enge Innenkurven addieren sich.
 - **Zonen:** zusammenhängende (8er-Nachbarschaft) markierte Zellen bilden eine Zone; ihre Stufe ist
   die der schlimmsten Zelle. Klick (oder `n` / Umschalt+`n`) zoomt hin, Überfahren rahmt sie ein,
-  `v` blendet die Markierungen ein und aus.
+  `v` blendet die Markierungen ein und aus. Bei kritischen Dichte-Zonen steht dabei, wie viel
+  Prozent der Spitzenwert über der Grenze liegt, damit knappe Fälle erkennbar sind.
+- **Praxisübliche Funde** (`src/validation/practice.ts`) bleiben in der Liste, zählen aber nicht
+  zum Gesamturteil, und die Korrektur lässt sie aus. Perforation zählt immer.
+  - *Kleine Stelle:* Vorsicht bis 3 mm² oder eine einzelne kritische Zelle (Satin-Enden,
+    Objektübergänge, Wendepunkte, Vernähknoten).
+  - *Satin-Übergang:* überwiegend Satin, kompakt (höchstens 16 mm², Seitenverhältnis bis 2,5) und
+    höchstens 30 % über der Grenze, also zwei Satinlagen, wo Säulen sich treffen oder kreuzen.
+    Zwei Säulen übereinander der Länge nach ergeben eine lange Zone und bleiben ein Befund.
+  - *Kurzstiche auf stabilem Stoff:* reine Kurzstich-Zonen auf Webware und Caps.
+
+  Mit *Trotzdem prüfen* zählt eine solche Zone wieder mit; *Quittieren* nimmt jede andere Zone aus
+  dem Urteil. Beides wird mit der Datei gespeichert und verfällt, wenn die Zone durch eine Änderung
+  verschwindet oder deutlich wächst.
 - **Tooltip:** zeigt neben dem Anzeigewert den Prüfwert der Zelle und die für sie geltenden Grenzen.
 - API: `measurePattern(pattern)` (profilunabhängig) und `classify(measurement, profile)` in
   `src/validation/validate.ts`. Schwellen in `src/validation/thresholds.ts`, Profile in
@@ -131,15 +144,9 @@ Die Schritte, in dieser Reihenfolge:
 
 Vernähstiche, Sprünge, Schnitte und Farbwechsel bleiben unverändert.
 
-**Was in Ruhe bleibt:** Kleine Vorsicht-Stellen bis 3 mm² ohne Perforation (Satin-Enden,
-Objektübergänge, Wendepunkte) sind in echten Designs normal; die Korrektur fasst sie nicht an und
-quittiert sie. Was danach noch übrig ist, meldet das Panel als „von Hand prüfen“: meist mehrere
-gestapelte Lagen, also eine Designentscheidung.
-
-**Quittieren:** Jede Zone in der Befundliste lässt sich quittieren („so lassen“). Quittierte Zonen
-bleiben gedimmt in der Liste (Filter *Quittiert*), zählen aber nicht mehr zum Gesamturteil und zum
-Punkt in der Dateiliste, und die automatische Korrektur lässt sie aus. Die Quittungen werden mit der
-Datei gespeichert und verfallen, wenn ihre Zone durch eine Änderung verschwindet.
+**Was in Ruhe bleibt:** praxisübliche und quittierte Zonen (siehe Validierung) fasst die Korrektur
+nicht an; sie sorgt nur dafür, dass sie nicht schlimmer werden. Was danach noch übrig ist, meldet
+das Panel als „von Hand prüfen“: meist mehrere gestapelte Lagen, also eine Designentscheidung.
 
 ### Von Hand
 

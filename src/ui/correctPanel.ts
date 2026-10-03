@@ -192,7 +192,7 @@ export class CorrectPanel {
     if (m.kind === 'text') return [p(m.text)];
     const r = m.report;
     const changed = r.stitchesBefore !== r.stitchesAfter || r.pulledBack + r.shortened + r.moved + r.respaced > 0;
-    if (!changed && !r.accepted.length) {
+    if (!changed && !r.practice && !r.acknowledged) {
       const clean = r.before.criticalZones + r.before.cautionZones === 0;
       return [p(t(clean ? 'correct.nothing' : 'correct.noChange'))];
     }
@@ -228,7 +228,8 @@ export class CorrectPanel {
         ),
       );
     }
-    if (r.accepted.length) out.push(p(t('correct.accepted', { n: r.accepted.length }), 'muted small'));
+    if (r.practice) out.push(p(t('correct.practice', { n: r.practice }), 'muted small'));
+    if (r.acknowledged) out.push(p(t('correct.acknowledged', { n: r.acknowledged }), 'muted small'));
     if (r.manual) out.push(p(t('correct.left', { n: r.manual }), 'muted small'));
     return out;
   }

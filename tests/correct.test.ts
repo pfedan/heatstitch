@@ -15,6 +15,8 @@ import { Shape } from './helpers/shapes';
 
 const WOVEN: Profile = { fabric: 'woven', thread: '40' };
 const LEATHER: Profile = { fabric: 'leather', thread: '40' };
+/** Short-stitch clusters are only critical on fabrics that are not stable. */
+const KNIT: Profile = { fabric: 'knit', thread: '40' };
 const thread = (p: Pattern) => patternStats(p).threadLength;
 const stitchCount = (p: Pattern) => p.cmd.filter((c) => c === STITCH).length;
 const layers = (n: number, s = new Shape()) => {
@@ -177,7 +179,7 @@ describe('automatic correction', () => {
 
   it('clears a short-stitch cluster in a narrow zigzag column', () => {
     const p = zigzag(20, 0.7, 0.1).build();
-    const r = autoCorrect(p, WOVEN, DEFAULT_CORRECTION);
+    const r = autoCorrect(p, KNIT, DEFAULT_CORRECTION);
     expect(r.report.before.worst).toBe(CRITICAL);
     expect(r.report.after.worst).toBe(SAFE);
   });

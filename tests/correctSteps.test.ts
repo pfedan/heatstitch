@@ -5,15 +5,17 @@ import { respaceFills, respaceSatins } from '../src/correct/respace';
 import { shortenSatinCurves } from '../src/correct/satinShort';
 import { satinColumns, ZIGZAG_MIN } from '../src/correct/structure';
 import { COLOR_CHANGE, patternStats, STITCH, type Pattern } from '../src/model/pattern';
-import { acknowledgementOf, liveAcknowledgements, openWorst, type Acknowledgement } from '../src/validation/acks';
+import { acknowledgementOf, liveAcknowledgements, openWorst, settledBy, type Acknowledgement } from '../src/validation/acks';
 import type { Profile } from '../src/validation/profiles';
 import { satinMask } from '../src/validation/satin';
-import { CAUTION, CRITICAL, SAFE } from '../src/validation/validate';
+import { measurePattern } from '../src/validation/measure';
+import { CAUTION, classify, CRITICAL, SAFE } from '../src/validation/validate';
 import type { Zone } from '../src/validation/zones';
 import { letterDesign } from './helpers/designs';
 import { Shape } from './helpers/shapes';
 
 const WOVEN: Profile = { fabric: 'woven', thread: '40' };
+const KNIT: Profile = { fabric: 'knit', thread: '40' };
 const thread = (p: Pattern) => patternStats(p).threadLength;
 const stitches = (p: Pattern) => p.cmd.filter((c) => c === STITCH).length;
 /** Thread of the first color block (the fill of the letter design). */
@@ -43,6 +45,7 @@ const zone = (minX: number, minY: number, maxX: number, maxY: number, level = CA
   maxDensity: 8,
   maxHoles: 0,
   maxShorts: 0,
+  satinShare: 0,
   bbox: { minX, minY, maxX, maxY },
 });
 
@@ -120,9 +123,9 @@ describe('correction focus', () => {
 
   it('leaves short-stitch clusters alone with the thread focus and clears them with the hole focus', () => {
     const p = column();
-    const thread = autoCorrect(p, WOVEN, { ...DEFAULT_CORRECTION, focus: 'thread' });
+    const thread = autoCorrect(p, KNIT, { ...DEFAULT_CORRECTION, focus: 'thread' });
     expect(thread.report.after.worst).toBe(CRITICAL);
-    const holes = autoCorrect(p, WOVEN, { ...DEFAULT_CORRECTION, focus: 'holes' });
+    const holes = autoCorrect(p, KNIT, { ...DEFAULT_CORRECTION, focus: 'holes' });
     expect(holes.report.after.worst).toBe(SAFE);
   });
 
@@ -141,9 +144,12 @@ describe('acknowledged findings', () => {
     const s = new Shape();
     for (let i = 0; i < 4; i++) s.fillAt(20, 20, 10, i * 0.8 + 0.2);
     const p = s.build();
-    const r = autoCorrect(p, WOVEN, { ...DEFAULT_CORRECTION, skip: [{ minX: 5, minY: 5, maxX: 35, maxY: 35 }] });
+    const zones = classify(measurePattern(p), WOVEN).zones;
+    const acks: Acknowledgement[] = zones.map((z) => ({ bbox: z.bbox, reason: 'manual' }));
+    const r = autoCorrect(p, WOVEN, { ...DEFAULT_CORRECTION, acks });
     expect(r.pattern).toBe(p);
     expect(r.report.manual).toBe(0);
+    expect(r.report.acknowledged).toBe(zones.length);
   });
 
   it('matches zones that moved a little after an edit', () => {
@@ -156,9 +162,64 @@ describe('acknowledged findings', () => {
 
   it('do not count towards the verdict and expire with their zone', () => {
     const zones = [zone(10, 10, 12, 12, CRITICAL), zone(30, 30, 31, 31, CAUTION)];
-    const acks: Acknowledgement[] = [{ bbox: zones[0].bbox, reason: 'manual' }, { bbox: { minX: 50, minY: 50, maxX: 51, maxY: 51 }, reason: 'small' }];
+    const acks: Acknowledgement[] = [{ bbox: zones[0].bbox, reason: 'manual' }, { bbox: { minX: 50, minY: 50, maxX: 51, maxY: 51 }, reason: 'manual' }];
     expect(openWorst(zones, [])).toBe(CRITICAL);
     expect(openWorst(zones, acks)).toBe(CAUTION);
     expect(liveAcknowledgements(zones, acks)).toEqual([acks[0]]);
+  });
+});
+
+describe('findings that are normal in practice', () => {
+  const column = () => {
+    const s = new Shape().trim().jump(0, 0).to(0, 0);
+    for (let i = 1; i * 0.1 <= 20; i++) s.to(i * 0.1, i % 2 ? 0.7 : 0);
+    return s.build();
+  };
+
+  it('count short-stitch clusters on stable fabric as normal, on knits as critical', () => {
+    const woven = classify(measurePattern(column()), WOVEN);
+    expect(woven.worst).toBe(CAUTION);
+    expect(woven.zones.every((z) => z.practice === 'shortsStable' || z.practice === 'smallSpot')).toBe(true);
+    expect(openWorst(woven.zones, [])).toBe(SAFE);
+    const knit = classify(measurePattern(column()), KNIT);
+    expect(knit.worst).toBe(CRITICAL);
+    expect(knit.zones.some((z) => !z.practice)).toBe(true);
+  });
+
+  it('accept the patch where two satin columns cross, but not a large stack', () => {
+    const cross = new Shape().satin(0, 10, 20, 4, 0.3);
+    // A second column across the first one.
+    cross.trim().jump(8, 0).to(8, 0);
+    for (let i = 1; i * 0.15 <= 24; i++) cross.to(i % 2 ? 12 : 8, i * 0.15);
+    const v = classify(measurePattern(cross.build()), WOVEN);
+    const flagged = v.zones.filter((z) => z.level === CRITICAL);
+    expect(flagged.length).toBeGreaterThan(0);
+    expect(flagged.every((z) => z.practice === 'satinJoin')).toBe(true);
+
+    // Two dense columns on top of each other along their length.
+    const stacked = new Shape().satin(0, 10, 20, 4, 0.3).satin(0, 10, 20, 4, 0.3).build();
+    const long = classify(measurePattern(stacked), WOVEN).zones.filter((z) => z.level === CRITICAL);
+    expect(long.length).toBeGreaterThan(0);
+    expect(long.every((z) => !z.practice)).toBe(true);
+
+    const s = new Shape();
+    for (let i = 0; i < 4; i++) s.fillAt(20, 20, 10, i * 0.8 + 0.2);
+    const fills = classify(measurePattern(s.build()), WOVEN);
+    expect(fills.zones.find((z) => z.level === CRITICAL)?.practice).toBeUndefined();
+  });
+
+  it('can be counted again from the list', () => {
+    const z = { ...zone(10, 10, 11, 11), practice: 'smallSpot' as const };
+    expect(settledBy(z, [])).toBe('practice');
+    expect(settledBy(z, [{ bbox: z.bbox, reason: 'reopened' }])).toBeUndefined();
+    expect(settledBy(z, [{ bbox: z.bbox, reason: 'manual' }])).toBe('manual');
+    expect(openWorst([z], [{ bbox: z.bbox, reason: 'reopened' }])).toBe(CAUTION);
+  });
+
+  it('are left alone by the correction', () => {
+    const p = column();
+    const r = autoCorrect(p, WOVEN, DEFAULT_CORRECTION);
+    expect(r.pattern).toBe(p);
+    expect(r.report.practice).toBeGreaterThan(0);
   });
 });

@@ -5,7 +5,7 @@ import { recommendedSpacing, type Profile } from '../validation/profiles';
 import { tagShortStitches, TIE } from '../validation/shortStitches';
 import { densityLimits, SHORT_STITCH_COUNT } from '../validation/thresholds';
 import { ALL_CHECKS, CAUTION, classify, CRITICAL, type Checks, type Level, type ValidationResult } from '../validation/validate';
-import { acknowledgementOf } from '../validation/acks';
+import { settledBy, type Acknowledgement } from '../validation/acks';
 import { REASON_BITS, type Zone } from '../validation/zones';
 import { walkCovered } from './cover';
 import { nudgePenetrations, sameHoleStitches } from './nudge';
@@ -29,11 +29,10 @@ import { thinSweeps } from './thin';
  *    never wider than the material's recommended range.
  * 5. Penetration focus: stacked holes are pushed apart by at most 0.3 mm.
  *
- * Small caution spots (satin ends, joins, turns) are normal in real designs and are left alone from
- * the start, as are zones the user acknowledged. Each step is kept only if it does not make the
- * result worse anywhere in the region. What is left afterwards is sorted: small spots are reported
- * as acknowledged, the rest is left for manual editing. Nothing is thinned in a way that would show
- * on the fabric.
+ * Findings that are normal in practice (small spots, satin joins, short stitches on stable fabric,
+ * see validation/practice.ts) are left alone, as are zones the user acknowledged. Each step is kept
+ * only if it does not make the result worse anywhere in the region. Nothing is thinned in a way
+ * that would show on the fabric.
  */
 
 /** Corrections aim this far below the limit, so a fixed cell does not sit right on it. */
@@ -53,8 +52,6 @@ const PERFORATION_RADIUS = 10;
 const PERFORATION_SHIFT = 3;
 /** Penetrations only move if both their stitches are at least this long (0.1 mm). */
 const NUDGE_MIN_STITCH = 15;
-/** Caution zones up to this size (mm²) are acknowledged instead of corrected. */
-export const ACCEPT_MAX_MM2 = 3;
 
 /**
  * 'thread' lowers the thread per area, 'holes' only moves penetrations (no thread is removed
@@ -68,8 +65,11 @@ export interface CorrectionOptions {
   focus: CorrectionFocus;
   /** Only touch cells inside this rectangle (mm, world coordinates), e.g. one zone. */
   region?: { minX: number; minY: number; maxX: number; maxY: number };
-  /** Boxes of acknowledged zones (mm): their cells are not corrected, only kept from getting worse. */
-  skip?: Zone['bbox'][];
+  /**
+   * The user's decisions about findings. Zones that are acknowledged or normal in practice (and not
+   * reopened) are not corrected, only kept from getting worse.
+   */
+  acks?: Acknowledgement[];
 }
 
 export const DEFAULT_CORRECTION: CorrectionOptions = { goal: 'caution', focus: 'both' };
@@ -90,12 +90,6 @@ export interface LevelSummary {
   cautionZones: number;
   criticalCells: number;
   cautionCells: number;
-}
-
-/** A remaining zone that is normal in practice and was acknowledged rather than corrected. */
-export interface AcceptedZone {
-  bbox: Zone['bbox'];
-  reason: 'small';
 }
 
 export interface CorrectionReport {
@@ -119,8 +113,9 @@ export interface CorrectionReport {
   /** Thread length of real stitches, mm. */
   threadBefore: number;
   threadAfter: number;
-  /** Remaining zones acknowledged as normal, and how many still need a look. */
-  accepted: AcceptedZone[];
+  /** Remaining zones that are normal in practice, acknowledged by the user, or still need a look. */
+  practice: number;
+  acknowledged: number;
   manual: number;
 }
 
@@ -154,7 +149,7 @@ interface Field {
   any: boolean;
 }
 
-function field(v: ValidationResult, opts: CorrectionOptions, leave: Leave[]): Field {
+function field(v: ValidationResult, opts: CorrectionOptions): Field {
   const m = v.measurement;
   const th = v.thresholds;
   const n = m.cols * m.rows;
@@ -164,6 +159,8 @@ function field(v: ValidationResult, opts: CorrectionOptions, leave: Leave[]): Fi
   const perforation = new Uint8Array(n);
   const minLevel = opts.goal === 'caution' ? CAUTION : CRITICAL;
   const r = opts.region;
+  // Findings that are normal in practice or acknowledged are left as they are.
+  const settled = v.zones.map((z) => !!settledBy(z, opts.acks));
   let any = false;
   for (let i = 0; i < n; i++) {
     if (v.level[i] < minLevel) continue;
@@ -172,7 +169,7 @@ function field(v: ValidationResult, opts: CorrectionOptions, leave: Leave[]): Fi
       const cy = m.originY + (Math.floor(i / m.cols) + 0.5) * m.cellMm;
       if (cx < r.minX || cx > r.maxX || cy < r.minY || cy > r.maxY) continue;
     }
-    if (isLeft(v, leave, i)) continue;
+    if (v.zoneOf[i] >= 0 && settled[v.zoneOf[i]]) continue;
     any = true;
     flagged[i] = 1;
     const reasons = v.reasons[i];
@@ -312,7 +309,8 @@ export function autoCorrect(input: Pattern, profile: Profile, opts: CorrectionOp
     stitchesAfter: 0,
     threadBefore: patternStats(p).threadLength,
     threadAfter: 0,
-    accepted: [],
+    practice: 0,
+    acknowledged: 0,
     manual: 0,
   };
   const thread = opts.focus !== 'holes';
@@ -332,13 +330,12 @@ export function autoCorrect(input: Pattern, profile: Profile, opts: CorrectionOp
     return true;
   };
 
-  const leave = leftAlone(v, opts);
-  if (field(v, opts, leave).any) {
+  if (field(v, opts).any) {
     // 1. Clean-up.
     const z = removeZeroLength(p, (i) => inRegion(p, opts, i));
     if (attempt(z.pattern)) report.zeroLength = z.removed;
 
-    let f = field(v, opts, leave);
+    let f = field(v, opts);
     if (f.any) {
       const cur = p;
       const r = mergeShortStitches(cur, (i) => {
@@ -349,7 +346,7 @@ export function autoCorrect(input: Pattern, profile: Profile, opts: CorrectionOp
     }
 
     // 2. Fills under satin borders.
-    f = field(v, opts, leave);
+    f = field(v, opts);
     if (f.any) {
       const cur = p;
       const r = pullBackFills(cur, { wanted: (i) => near(cur, f, f.flagged, i) });
@@ -357,7 +354,7 @@ export function autoCorrect(input: Pattern, profile: Profile, opts: CorrectionOp
     }
 
     // 3. Short stitches in satin curves.
-    f = field(v, opts, leave);
+    f = field(v, opts);
     if (f.any) {
       const cur = p;
       const r = shortenSatinCurves(cur, { wanted: (i) => near(cur, f, f.flagged, i) });
@@ -368,7 +365,7 @@ export function autoCorrect(input: Pattern, profile: Profile, opts: CorrectionOp
     //    focus), then fills and satins re-spaced evenly within the material's recommended range.
     const maxSpacing = recommendedSpacing(profile)[1] * 10;
     for (let round = 0; round < ROUNDS; round++) {
-      f = field(v, opts, leave);
+      f = field(v, opts);
       if (!f.any) break;
       let changed = false;
       const needAt = (q: Pattern) => (i: number) => {
@@ -384,7 +381,7 @@ export function autoCorrect(input: Pattern, profile: Profile, opts: CorrectionOp
         if (attempt(h.pattern)) {
           report.hiddenRows += h.cycles;
           changed = true;
-          f = field(v, opts, leave);
+          f = field(v, opts);
         }
       }
       let cur = p;
@@ -393,7 +390,7 @@ export function autoCorrect(input: Pattern, profile: Profile, opts: CorrectionOp
         report.respaced += fills.sweeps;
         report.respacedRows += fills.rows;
         changed = true;
-        f = field(v, opts, leave);
+        f = field(v, opts);
       }
       cur = p;
       const satins = respaceSatins(cur, { needAt: needAt(cur), maxSpacing }, satinColumns(cur, undefined, satinMask(cur, ZIGZAG_MIN)));
@@ -408,7 +405,7 @@ export function autoCorrect(input: Pattern, profile: Profile, opts: CorrectionOp
     // 5. Penetrations: stacked holes (penetration focus only: designs reuse holes on purpose, and
     //    in fine details a 0.3 mm shift changes the look), perforation relief on leather.
     if (holes) {
-      f = field(v, opts, leave);
+      f = field(v, opts);
       if (f.any) {
         const tags = tagShortStitches(p);
         const cur = p;
@@ -438,14 +435,14 @@ export function autoCorrect(input: Pattern, profile: Profile, opts: CorrectionOp
     }
   }
 
-  // What is left: small caution spots are normal, the rest needs a look.
+  // What is left: findings that are normal in practice or acknowledged, and those that need a look.
   const minLevel = opts.goal === 'caution' ? CAUTION : CRITICAL;
-  const skipped = opts.skip?.map((bbox) => ({ bbox, reason: 'manual' as const }));
   for (const z of v.zones) {
     if (z.level < minLevel) continue;
     if (opts.region && !overlaps(z.bbox, opts.region)) continue;
-    if (acknowledgementOf(z, skipped)) continue;
-    if (acceptable(z)) report.accepted.push({ bbox: z.bbox, reason: 'small' });
+    const by = settledBy(z, opts.acks);
+    if (by === 'practice') report.practice++;
+    else if (by === 'manual') report.acknowledged++;
     else report.manual++;
   }
   report.after = summary(v);
@@ -453,39 +450,6 @@ export function autoCorrect(input: Pattern, profile: Profile, opts: CorrectionOp
   report.threadAfter = patternStats(p).threadLength;
   return { pattern: p, measurement: m, report };
 }
-
-interface Leave {
-  bbox: Zone['bbox'];
-  /** Only the zone's caution cells: a small spot never contains critical ones of its own. */
-  onlyCaution: boolean;
-}
-
-/**
- * What is left as it is: the caution cells of small spots that are normal in practice (found on the
- * design as given), and every cell of an acknowledged zone.
- */
-const leftAlone = (v: ValidationResult, opts: CorrectionOptions): Leave[] => [
-  ...v.zones.filter(acceptable).map((z) => ({ bbox: z.bbox, onlyCaution: true })),
-  ...(opts.skip ?? []).map((bbox) => ({ bbox, onlyCaution: false })),
-];
-
-/** True if cell i of the measurement is left alone. */
-function isLeft(v: ValidationResult, leave: Leave[], i: number): boolean {
-  if (!leave.length) return false;
-  const m = v.measurement;
-  const cx = m.originX + ((i % m.cols) + 0.5) * m.cellMm;
-  const cy = m.originY + (Math.floor(i / m.cols) + 0.5) * m.cellMm;
-  return leave.some(
-    (l) => (!l.onlyCaution || v.level[i] === CAUTION) && cx > l.bbox.minX && cx < l.bbox.maxX && cy > l.bbox.minY && cy < l.bbox.maxY,
-  );
-}
-
-/**
- * Small caution spots without perforation risk: satin column ends, object joins and turns. Digitizers
- * accept these; correcting them would change more than it gains.
- */
-export const acceptable = (z: Zone): boolean =>
-  z.level === CAUTION && z.areaMm2 <= ACCEPT_MAX_MM2 && !z.reasons.includes('perforation');
 
 const overlaps = (a: Zone['bbox'], b: NonNullable<CorrectionOptions['region']>) =>
   a.minX < b.maxX && a.maxX > b.minX && a.minY < b.maxY && a.maxY > b.minY;

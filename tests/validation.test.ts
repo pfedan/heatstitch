@@ -17,6 +17,8 @@ import { Shape } from './helpers/shapes';
 
 const WOVEN: Profile = DEFAULT_PROFILE;
 const LEATHER: Profile = { fabric: 'leather', thread: '40' };
+/** Short-stitch clusters are Critical on fabrics that are not stable, such as knits. */
+const KNIT: Profile = { fabric: 'knit', thread: '40' };
 
 /** Levels of all cells whose centre lies inside the rectangle (x0, y0) .. (x1, y1). */
 function levelsIn(r: ValidationResult, x0: number, y0: number, x1: number, y1: number): Level[] {
@@ -199,7 +201,7 @@ describe('short-stitch clusters', () => {
     for (let k = 1; k <= n; k++) s.to(k % 2 ? 10.6 : 10.2, 10.5);
     if (mode === 'beforeTrim') s.trim().jump(30, 10.5).to(30, 10.5);
     for (let x = 13; x <= 25; x += 3) s.to(x, 10.5);
-    return validatePattern(s.build(), WOVEN);
+    return validatePattern(s.build(), KNIT);
   };
 
   it('flags 10 short stitches in the middle of a run as CRITICAL', () => {
@@ -209,6 +211,12 @@ describe('short-stitch clusters', () => {
     expect(crit[0].reasons).toContain('shortStitches');
     expect(crit[0].maxShorts).toBe(10);
     expect(crit[0].bbox.minX).toBeCloseTo(9.95, 5); // cells start 0.05 mm before whole millimetres
+  });
+
+  it('counts the same cluster as Caution on stable woven fabric', () => {
+    const r = classify(line(10, 'middle').measurement, WOVEN);
+    expect(r.criticalCells).toBe(0);
+    expect(r.cautionCells).toBe(1);
   });
 
   it('ignores tie-offs before a trim and tie-ins after a jump', () => {
@@ -226,7 +234,7 @@ describe('short-stitch clusters', () => {
 
   it('flags nothing when the short-stitch check is off', () => {
     const off = { density: true, shortStitches: false, perforation: true };
-    const r = classify(line(10, 'middle').measurement, WOVEN, off);
+    const r = classify(line(10, 'middle').measurement, KNIT, off);
     expect(r.criticalCells).toBe(0);
   });
 });
