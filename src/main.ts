@@ -248,6 +248,17 @@ input.addEventListener('change', () => {
   input.value = '';
 });
 
+const EXAMPLE_FILE = 'cat-60mm.pes';
+$('load-example').addEventListener('click', async () => {
+  try {
+    const res = await fetch(`${import.meta.env.BASE_URL}examples/${EXAMPLE_FILE}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    await files.add([new File([await res.blob()], EXAMPLE_FILE)]);
+  } catch (err) {
+    console.error('Loading the example failed', err);
+  }
+});
+
 let dragDepth = 0;
 window.addEventListener('dragenter', (e) => {
   e.preventDefault();
