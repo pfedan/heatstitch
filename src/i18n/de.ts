@@ -5,6 +5,7 @@ export const de = {
   'files.empty': 'Noch keine Datei geladen.',
   'files.remove': 'Entfernen',
   'files.error': 'Fehler',
+  'files.example': 'Beispiel laden (Katze)',
   'controls.title': 'Darstellung',
   'controls.metric': 'Metrik',
   'metric.thread': 'Garnlänge',

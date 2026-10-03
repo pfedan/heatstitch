@@ -7,6 +7,7 @@ export const en: Record<keyof typeof de, string> = {
   'files.empty': 'No file loaded yet.',
   'files.remove': 'Remove',
   'files.error': 'Error',
+  'files.example': 'Load example (cat)',
   'controls.title': 'Display',
   'controls.metric': 'Metric',
   'metric.thread': 'Thread length',

@@ -95,7 +95,8 @@ dass die Summe des Rasters exakt der Gesamtgarnlänge bzw. Stichzahl entspricht.
 
 ## Beispieldateien
 
-`examples/` enthält echte Stickdateien zum Ausprobieren, z. B. `cat-60mm.pes` (Katze, 60 mm, PES v6).
+`public/examples/` enthält echte Stickdateien zum Ausprobieren, z. B. `cat-60mm.pes` (Katze, 60 mm, PES v6).
+Der Knopf "Beispiel laden" unter dem Dateifeld lädt sie direkt in die App.
 
 ## Deployment
 
@@ -120,5 +121,5 @@ src/validation/  Messung, Profile, Stufen, Satin-Erkennung, Kurzstich- und Perfo
 src/render/    Viewport, Farbskala, Heatmap, Stichplan, Legende
 src/ui/        Dateiliste, Validierung, Controls, Statistik, Tooltip, Export
 src/i18n/      Übersetzungen DE/EN
-examples/      Beispiel-Stickdateien
+public/examples/  Beispiel-Stickdateien (per Knopf ladbar)
 ```
