@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WebGL Thread Test</title>
+    <style>
+      :root {
+        --bg: #141118;
+        --panel: #1d1922;
+        --text: #ece8f1;
+        --muted: #a79fb2;
+        --line: #342d3c;
+        --accent: #c58cff;
+        color-scheme: dark;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font: 14px/1.4 system-ui, sans-serif;
+        display: flex;
+        flex-direction: column;
+      }
+      header {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 16px;
+        align-items: center;
+        padding: 10px 16px;
+        border-bottom: 1px solid var(--line);
+        background: var(--panel);
+      }
+      header h1 { font-size: 15px; margin: 0 8px 0 0; }
+      header label { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); }
+      button, select {
+        background: var(--bg);
+        color: var(--text);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 4px 10px;
+        font: inherit;
+        cursor: pointer;
+      }
+      button:hover { border-color: var(--accent); }
+      #panels { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); min-height: 0; }
+      .panel { position: relative; background: #2a2530; overflow: hidden; touch-action: none; }
+      .panel canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; }
+      .tag {
+        position: absolute; left: 10px; top: 10px; padding: 3px 8px; border-radius: 6px;
+        background: rgba(13, 11, 16, 0.8); font-size: 12px; pointer-events: none;
+      }
+      .tag small { color: var(--muted); margin-left: 6px; }
+      #info { color: var(--muted); font-size: 12px; margin-left: auto; }
+      @media (max-width: 700px) {
+        #panels { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>WebGL thread test</h1>
+      <button id="fit">Fit</button>
+      <button id="zoom">Zoom on detail</button>
+      <label><input type="checkbox" id="twist" checked /> Twist</label>
+      <label><input type="checkbox" id="shadow" checked /> Shadows</label>
+      <label><input type="checkbox" id="fabric" /> Fabric</label>
+      <label>Background
+        <select id="bg">
+          <option value="42,37,48">Stage</option>
+          <option value="236,232,224">Light cotton</option>
+          <option value="28,32,44">Navy</option>
+        </select>
+      </label>
+      <label>Open <input type="file" id="file" accept=".pes,.dst" /></label>
+      <span id="info"></span>
+    </header>
+    <div id="panels">
+      <div class="panel"><canvas id="c2d"></canvas><span class="tag">Current: canvas 2D<small id="t2d"></small></span></div>
+      <div class="panel"><canvas id="cgl"></canvas><span class="tag">WebGL test<small id="tgl"></small></span></div>
+    </div>
+    <script type="module" src="/src/webgl/main.ts"></script>
+  </body>
+</html>
