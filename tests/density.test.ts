@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { gaussianBlur } from '../src/density/blur';
-import { addSegment, areaAbove, computeDensity } from '../src/density/grid';
+import { addSegment, computeDensity } from '../src/density/grid';
 import { patternStats } from '../src/model/pattern';
 import { parseDst } from '../src/parsers/dst';
 import { encodeDst, type Op } from './helpers/encode';
@@ -62,11 +62,10 @@ describe('computeDensity', () => {
     expect(len(true)).toBeCloseTo(6, 5);
   });
 
-  it('reports the area above a threshold', () => {
-    const g = computeDensity(p, { metric: 'thread', cellMm: 1, blurMm: 0, includeJumps: false });
-    const all = areaAbove(g, 0);
-    expect(all.fraction).toBe(1);
-    expect(areaAbove(g, g.max).areaMm2).toBe(0);
+  it('applies a segment filter by end record index', () => {
+    const g = computeDensity(p, { metric: 'thread', cellMm: 1, blurMm: 0, includeJumps: false }, (end) => end <= 10);
+    const tenSegments = Math.hypot(0.4, 5) * 10;
+    expect(sum(g.data)).toBeCloseTo(tenSegments, 3);
   });
 });
 

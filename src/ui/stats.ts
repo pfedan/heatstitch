@@ -1,4 +1,4 @@
-import { areaAbove, type DensityGrid } from '../density/grid';
+import type { DensityGrid } from '../density/grid';
 import { formatNumber, t, type Key } from '../i18n';
 import type { LoadedFile } from './fileList';
 import type { Settings } from '../settings';
@@ -11,7 +11,7 @@ export function renderStats(
   s: Settings,
   computing: boolean,
 ): void {
-  const rows: [Key, string, boolean?][] = [];
+  const rows: [Key, string][] = [];
   const st = file?.stats;
   if (st) {
     rows.push(
@@ -23,28 +23,17 @@ export function renderStats(
       ['stats.thread', `${formatNumber(st.threadLength / 1000, 2)} m`],
     );
     const unit = t(s.metric === 'thread' ? 'unit.thread' : 'unit.penetrations');
-    if (computing || !grid) {
-      rows.push(['stats.maxDensity', t('stats.computing')]);
-    } else {
-      const warn = s.scales[s.metric].warn;
-      const above = areaAbove(grid, warn);
-      rows.push(
-        ['stats.maxDensity', `${formatNumber(grid.max, 2)} ${unit}`, grid.max > warn],
-        [
-          'stats.aboveWarn',
-          `${formatNumber(above.areaMm2, 0)} mm² (${formatNumber(above.fraction * 100, 1)} %)`,
-          above.areaMm2 > 0,
-        ],
-      );
-    }
+    rows.push([
+      'stats.maxDensity',
+      computing || !grid ? t('stats.computing') : `${formatNumber(grid.max, 2)} ${unit}`,
+    ]);
   }
   dl.replaceChildren(
-    ...rows.flatMap(([k, v, warn]) => {
+    ...rows.flatMap(([k, v]) => {
       const dt = document.createElement('dt');
       dt.textContent = t(k);
       const dd = document.createElement('dd');
       dd.textContent = v;
-      if (warn) dd.className = 'warn';
       return [dt, dd];
     }),
   );

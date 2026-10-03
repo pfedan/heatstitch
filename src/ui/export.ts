@@ -1,6 +1,6 @@
-import { t } from '../i18n';
 import { drawLegend, LEGEND_HEIGHT } from '../render/legend';
 import { drawScene, type Scene } from '../render/scene';
+import { legendSpec } from './legendSpec';
 
 /** Renders the current view (plus legend) at device resolution and downloads it as PNG. */
 export function exportPng(scene: Scene, w: number, h: number, background: string, fileName: string): void {
@@ -20,12 +20,7 @@ export function exportPng(scene: Scene, w: number, h: number, background: string
   ctx.beginPath();
   ctx.roundRect(lx - 10, ly - 8, lw + 20, LEGEND_HEIGHT + 14, 8);
   ctx.fill();
-  drawLegend(ctx, lx, ly, lw, {
-    ...s.scales[s.metric],
-    unit: t(s.metric === 'thread' ? 'unit.thread' : 'unit.penetrations'),
-    title: t(s.metric === 'thread' ? 'metric.thread' : 'metric.penetrations'),
-    ink: '#ece8f1',
-  });
+  drawLegend(ctx, lx, ly, lw, legendSpec(s));
 
   c.toBlob((blob) => {
     if (!blob) return;

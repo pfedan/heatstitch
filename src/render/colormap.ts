@@ -40,5 +40,3 @@ export function lutCss(t: number): string {
   const i = Math.round(Math.min(1, Math.max(0, t)) * (LUT_SIZE - 1)) * 4;
   return `rgb(${LUT[i]}, ${LUT[i + 1]}, ${LUT[i + 2]})`;
 }
-
-export const WARN_COLOR = '#00e5ff';

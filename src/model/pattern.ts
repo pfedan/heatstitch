@@ -97,7 +97,8 @@ export interface PatternStats {
 }
 
 /**
- * Calls `cb` for every straight piece of thread lying on the fabric (0.1 mm coords).
+ * Calls `cb` for every straight piece of thread lying on the fabric (0.1 mm coords);
+ * `end` is the index of the stitch record the piece ends at.
  * A stitch following a stitch is thread. A run of jumps between two stitches leaves a
  * straight thread from the last to the next penetration, unless the run contains a trim
  * or color change; such segments are reported only when `includeJumps` is set.
@@ -105,7 +106,7 @@ export interface PatternStats {
 export function forEachThreadSegment(
   p: Pattern,
   includeJumps: boolean,
-  cb: (x0: number, y0: number, x1: number, y1: number) => void,
+  cb: (x0: number, y0: number, x1: number, y1: number, end: number) => void,
 ): void {
   let hasLast = false;
   let lastX = 0;
@@ -116,8 +117,8 @@ export function forEachThreadSegment(
     const c = p.cmd[i];
     if (c === STITCH) {
       if (hasLast) {
-        if (prevCmd === STITCH) cb(lastX, lastY, p.x[i], p.y[i]);
-        else if (includeJumps && !cut) cb(lastX, lastY, p.x[i], p.y[i]);
+        if (prevCmd === STITCH) cb(lastX, lastY, p.x[i], p.y[i], i);
+        else if (includeJumps && !cut) cb(lastX, lastY, p.x[i], p.y[i], i);
       }
       hasLast = true;
       lastX = p.x[i];

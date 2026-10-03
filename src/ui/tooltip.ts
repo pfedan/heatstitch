@@ -1,10 +1,14 @@
 import type { DensityGrid } from '../density/grid';
-import { formatNumber, t } from '../i18n';
+import { formatNumber, t, type Key } from '../i18n';
 import { sampleGrid } from '../render/heatmap';
+import { sampleLevel } from '../render/validationOverlay';
 import type { Viewport } from '../render/viewport';
 import type { Settings } from '../settings';
+import { CAUTION, CRITICAL, type ValidationResult } from '../validation/validate';
 
-/** Shows world position and density under the cursor; hides when outside the grid. */
+const LEVEL_KEY: Record<number, Key> = { [CAUTION]: 'level.caution', [CRITICAL]: 'level.critical' };
+
+/** Shows the displayed density, the validation level and the world position under the cursor. */
 export function updateTooltip(
   el: HTMLElement,
   sx: number,
@@ -13,6 +17,7 @@ export function updateTooltip(
   vp: Viewport,
   grid: DensityGrid | null,
   s: Settings,
+  validation: ValidationResult | null,
 ): void {
   if (!grid) {
     el.hidden = true;
@@ -25,10 +30,12 @@ export function updateTooltip(
     return;
   }
   const unit = t(s.metric === 'thread' ? 'unit.thread' : 'unit.penetrations');
-  const warn = v > s.scales[s.metric].warn ? ' ⚠' : '';
-  el.textContent = `${formatNumber(v, 2)} ${unit}${warn} · ${t('tooltip.pos')} ${formatNumber(x, 1)} / ${formatNumber(y, 1)} mm`;
+  const level = validation ? sampleLevel(validation, x, y) : null;
+  const levelText = level !== null && LEVEL_KEY[level] ? ` · ${t(LEVEL_KEY[level])}` : '';
+  el.textContent = `${formatNumber(v, 2)} ${unit}${levelText} · ${t('tooltip.pos')} ${formatNumber(x, 1)} / ${formatNumber(y, 1)} mm`;
+  el.dataset.level = String(level ?? 0);
   el.hidden = false;
-  const flip = sx > stageW - 260;
+  const flip = sx > stageW - 300;
   el.style.left = `${flip ? sx - 12 - el.offsetWidth : sx + 14}px`;
   el.style.top = `${sy + 14}px`;
 }

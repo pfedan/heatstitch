@@ -1,5 +1,5 @@
 import type { DensityGrid } from '../density/grid';
-import { LUT, LUT_SIZE, WARN_COLOR } from './colormap';
+import { LUT, LUT_SIZE } from './colormap';
 import type { Viewport } from './viewport';
 
 /** Rasterises the grid into a canvas with one pixel per cell, mapping 0..max onto the LUT. */
@@ -31,31 +31,6 @@ export function drawHeatmap(ctx: CanvasRenderingContext2D, vp: Viewport, g: Dens
   ctx.save();
   ctx.imageSmoothingEnabled = smooth;
   ctx.drawImage(img, x, y, g.cols * g.cellMm * vp.scale, g.rows * g.cellMm * vp.scale);
-  ctx.restore();
-}
-
-/** Outlines the cells above `threshold` (boundary edges only). */
-export function drawThresholdContour(ctx: CanvasRenderingContext2D, vp: Viewport, g: DensityGrid, threshold: number): void {
-  const { cols, rows, data, cellMm } = g;
-  const above = (cx: number, cy: number) => cx >= 0 && cy >= 0 && cx < cols && cy < rows && data[cy * cols + cx] > threshold;
-  const s = cellMm * vp.scale;
-  const [ox, oy] = vp.toScreen(g.originX, g.originY);
-  ctx.save();
-  ctx.beginPath();
-  for (let cy = 0; cy < rows; cy++) {
-    for (let cx = 0; cx < cols; cx++) {
-      if (!above(cx, cy)) continue;
-      const x0 = ox + cx * s;
-      const y0 = oy + cy * s;
-      if (!above(cx, cy - 1)) (ctx.moveTo(x0, y0), ctx.lineTo(x0 + s, y0));
-      if (!above(cx, cy + 1)) (ctx.moveTo(x0, y0 + s), ctx.lineTo(x0 + s, y0 + s));
-      if (!above(cx - 1, cy)) (ctx.moveTo(x0, y0), ctx.lineTo(x0, y0 + s));
-      if (!above(cx + 1, cy)) (ctx.moveTo(x0 + s, y0), ctx.lineTo(x0 + s, y0 + s));
-    }
-  }
-  ctx.strokeStyle = WARN_COLOR;
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
   ctx.restore();
 }
 

@@ -3,7 +3,6 @@ import type { Lang } from './i18n';
 
 export interface Scale {
   max: number;
-  warn: number;
 }
 
 export interface Settings {
@@ -14,14 +13,15 @@ export interface Settings {
   overlay: boolean;
   opacity: number;
   showJumps: boolean;
+  /** Orange/red overlay of the fixed 3-tier validation. */
+  showValidation: boolean;
   scales: Record<Metric, Scale>;
   lang: Lang | null;
 }
 
 /**
- * Starting values, to be calibrated with real files. Thread: two layers of fill at
- * 0.4 mm row spacing give ~5 mm/mm². Penetrations: dense satin reaches ~2.5 /mm².
- * A 1 mm blur suppresses aliasing between typical 0.4 mm row spacing and the grid.
+ * A 1 mm blur suppresses aliasing between typical 0.4 mm row spacing and the grid. The thread
+ * scale tops out at 12 mm/mm² so both validation thresholds (6 and 10) are visible.
  */
 export const DEFAULTS: Settings = {
   metric: 'thread',
@@ -31,14 +31,16 @@ export const DEFAULTS: Settings = {
   overlay: false,
   opacity: 0.6,
   showJumps: false,
+  showValidation: true,
   scales: {
-    thread: { max: 8, warn: 5 },
-    penetrations: { max: 4, warn: 2.5 },
+    thread: { max: 12 },
+    penetrations: { max: 4 },
   },
   lang: null,
 };
 
-const KEY = 'heatstitch.settings.v1';
+// v2: warning threshold replaced by the fixed validation tiers.
+const KEY = 'heatstitch.settings.v2';
 
 export function loadSettings(): Settings {
   try {

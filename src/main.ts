@@ -1,18 +1,21 @@
 import './style.css';
 import { registerSW } from 'virtual:pwa-register';
-import { DensityClient } from './density/client';
+import { WorkerClient } from './density/client';
 import type { DensityGrid } from './density/grid';
-import { applyI18n, detectLang, setLang, t, type Lang } from './i18n';
+import { applyI18n, detectLang, setLang, type Lang } from './i18n';
 import { gridToCanvas } from './render/heatmap';
 import { drawLegend } from './render/legend';
 import { drawScene, type Scene } from './render/scene';
+import { validationToCanvas } from './render/validationOverlay';
 import { Viewport } from './render/viewport';
 import { loadSettings, saveSettings } from './settings';
 import { bindControls, type ChangeKind } from './ui/controls';
 import { exportPng } from './ui/export';
 import { FileList, type LoadedFile } from './ui/fileList';
+import { legendSpec } from './ui/legendSpec';
 import { renderStats } from './ui/stats';
 import { updateTooltip } from './ui/tooltip';
+import { renderValidation } from './ui/validationPanel';
 
 registerSW({ immediate: true });
 
@@ -27,7 +30,10 @@ const exportBtn = $<HTMLButtonElement>('export');
 
 const settings = loadSettings();
 const vp = new Viewport();
-const density = new DensityClient();
+// Two workers so a long validation never delays heatmap updates.
+const density = new WorkerClient();
+const validator = new WorkerClient();
+let densitySeq = 0;
 let grid: DensityGrid | null = null;
 let gridImg: HTMLCanvasElement | null = null;
 let computing = false;
@@ -36,14 +42,39 @@ let stageH = 0;
 
 const stageBg = () => getComputedStyle(stage).backgroundColor;
 
-const files = new FileList($<HTMLUListElement>('file-list'), (f) => {
-  grid = null;
-  gridImg = null;
-  if (f?.pattern) fitView(f);
-  recompute();
-});
+/** Validation overlay image, rebuilt when the active file or its validation changes. */
+let validationImg: { file: LoadedFile; img: HTMLCanvasElement } | null = null;
 
-const scene = (): Scene => ({ pattern: files.active?.pattern ?? null, grid, gridImg, settings, vp });
+const files = new FileList(
+  $<HTMLUListElement>('file-list'),
+  (f) => {
+    grid = null;
+    gridImg = null;
+    if (f?.pattern) fitView(f);
+    recompute();
+  },
+  (p) => validator.validate(p),
+  (f) => {
+    if (f === files.active) redraw();
+  },
+);
+
+function activeValidationImg(): HTMLCanvasElement | null {
+  const f = files.active;
+  if (!f?.validation) return null;
+  if (validationImg?.file !== f) validationImg = { file: f, img: validationToCanvas(f.validation) };
+  return validationImg.img;
+}
+
+const scene = (): Scene => ({
+  pattern: files.active?.pattern ?? null,
+  grid,
+  gridImg,
+  validation: files.active?.validation ?? null,
+  validationImg: activeValidationImg(),
+  settings,
+  vp,
+});
 
 // Rendering ------------------------------------------------------------------
 
@@ -60,6 +91,7 @@ function redraw(): void {
     exportBtn.disabled = !active?.pattern;
     drawLegendCanvas();
     renderStats($('stats'), $('swatches'), active, grid, settings, computing);
+    renderValidation($('validation'), active, zoomToZone);
   });
 }
 
@@ -72,13 +104,7 @@ function drawLegendCanvas(): void {
   const lctx = legend.getContext('2d')!;
   lctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   lctx.clearRect(0, 0, w, h);
-  const s = settings;
-  drawLegend(lctx, 10, 2, w - 20, {
-    ...s.scales[s.metric],
-    unit: t(s.metric === 'thread' ? 'unit.thread' : 'unit.penetrations'),
-    title: t(s.metric === 'thread' ? 'metric.thread' : 'metric.penetrations'),
-    ink: '#ece8f1',
-  });
+  drawLegend(lctx, 10, 2, w - 20, legendSpec(settings));
 }
 
 function rebuildGridImage(): void {
@@ -98,9 +124,11 @@ function recompute(): void {
   redraw();
   debounce = window.setTimeout(async () => {
     const { metric, cellMm, blurMm, includeJumps } = settings;
+    const seq = ++densitySeq;
     try {
-      const g = await density.compute(pattern, { metric, cellMm, blurMm, includeJumps });
-      if (!g || files.active?.pattern !== pattern) return;
+      const g = await density.density(pattern, { metric, cellMm, blurMm, includeJumps });
+      // A newer request or another file supersedes this result.
+      if (seq !== densitySeq || files.active?.pattern !== pattern) return;
       grid = g;
       computing = false;
       rebuildGridImage();
@@ -110,6 +138,13 @@ function recompute(): void {
     }
     redraw();
   }, 60);
+}
+
+function zoomToZone(z: { bbox: { minX: number; minY: number; maxX: number; maxY: number } }): void {
+  const pad = 4; // mm of context around the zone
+  const b = z.bbox;
+  vp.fit(b.minX - pad, b.minY - pad, b.maxX + pad, b.maxY + pad, stageW, stageH);
+  redraw();
 }
 
 function fitView(f: LoadedFile | null = files.active): void {
@@ -222,7 +257,7 @@ canvas.addEventListener(
     const [sx, sy] = local(e);
     const delta = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
     vp.zoomAt(sx, sy, Math.exp(-delta * 0.0015));
-    updateTooltip(tooltip, sx, sy, stageW, vp, grid, settings);
+    updateTooltip(tooltip, sx, sy, stageW, vp, grid, settings, files.active?.validation ?? null);
     redraw();
   },
   { passive: false },
@@ -257,7 +292,7 @@ canvas.addEventListener('pointermove', (e) => {
     pointers.set(e.pointerId, pos);
     redraw();
   }
-  if (e.pointerType === 'mouse' || pointers.size <= 1) updateTooltip(tooltip, pos[0], pos[1], stageW, vp, grid, settings);
+  if (e.pointerType === 'mouse' || pointers.size <= 1) updateTooltip(tooltip, pos[0], pos[1], stageW, vp, grid, settings, files.active?.validation ?? null);
 });
 
 const endPointer = (e: PointerEvent) => {
