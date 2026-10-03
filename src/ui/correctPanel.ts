@@ -1,5 +1,7 @@
 import type { CorrectionReport } from '../correct/auto';
-import { formatNumber, t } from '../i18n';
+import { formatNumber, getLang, t, type Key } from '../i18n';
+import { patternStats, type Pattern, type PatternStats } from '../model/pattern';
+import type { ValidationResult } from '../validation/validate';
 import type { Settings } from '../settings';
 import type { OutputFormat } from '../writers';
 import { FileList, type LoadedFile } from './fileList';
@@ -10,6 +12,7 @@ export interface CorrectHooks {
   /** Run the automatic correction on the whole design or the selected zone. */
   autoFix: (scope: 'all' | 'zone') => void;
   toggleEdit: () => void;
+  toggleCompare: () => void;
   deleteSelection: () => void;
   thinSelection: (share: number) => void;
   undo: () => void;
@@ -31,6 +34,7 @@ export interface CorrectState {
   file: LoadedFile | null;
   zoneSelected: boolean;
   editing: boolean;
+  comparing: boolean;
   selection: number;
   /** Penetrations are visible at the current zoom. */
   pointsVisible: boolean;
@@ -57,7 +61,11 @@ export class CorrectPanel {
   private revertBtn = $<HTMLButtonElement>('revert');
   private saveDst = $<HTMLButtonElement>('save-dst');
   private savePes = $<HTMLButtonElement>('save-pes');
+  private compareToggle = $<HTMLButtonElement>('compare-toggle');
+  private compareTable = $<HTMLTableElement>('compare-table');
   private last: CorrectState | null = null;
+  private stats = new WeakMap<Pattern, PatternStats>();
+  private compareKey: unknown[] = [];
 
   constructor(
     private s: Settings,
@@ -86,6 +94,7 @@ export class CorrectPanel {
     this.fixAll.addEventListener('click', () => hooks.autoFix('all'));
     this.fixZone.addEventListener('click', () => hooks.autoFix('zone'));
     this.editToggle.addEventListener('click', () => hooks.toggleEdit());
+    this.compareToggle.addEventListener('click', () => hooks.toggleCompare());
     this.selDelete.addEventListener('click', () => hooks.deleteSelection());
     this.selThin.addEventListener('click', () => hooks.thinSelection(Number(this.thinShare.value)));
     this.undoBtn.addEventListener('click', () => hooks.undo());
@@ -124,6 +133,56 @@ export class CorrectPanel {
     this.saveDst.disabled = this.savePes.disabled = !loaded || busy;
 
     this.report.replaceChildren(...this.message(st.message));
+
+    const edited = FileList.edited(f);
+    this.compareToggle.disabled = !edited;
+    this.compareToggle.textContent = t(st.comparing && edited ? 'compare.stop' : 'compare.start');
+    this.compareToggle.setAttribute('aria-pressed', String(st.comparing && edited));
+    this.compareToggle.classList.toggle('primary', st.comparing && edited);
+    this.compareTable.hidden = !edited;
+    const key = [f, f?.pattern, f?.validation, f?.originalValidation, getLang()];
+    if (key.some((k, i) => k !== this.compareKey[i])) {
+      this.compareKey = key;
+      if (edited && f) this.renderComparison(f);
+      else this.compareTable.replaceChildren();
+    }
+  }
+
+  private statsOf(p: Pattern): PatternStats {
+    let s = this.stats.get(p);
+    if (!s) this.stats.set(p, (s = patternStats(p)));
+    return s;
+  }
+
+  /** Key figures of the original next to the current version; lower is better except for stitches. */
+  private renderComparison(f: LoadedFile): void {
+    const a = this.statsOf(f.original!);
+    const b = this.statsOf(f.pattern!);
+    const va: ValidationResult | undefined = f.originalValidation;
+    const vb: ValidationResult | undefined = f.validation;
+    const rows: [Key, number | undefined, number | undefined, number, string, boolean][] = [
+      ['compare.stitches', a.stitches, b.stitches, 0, '', false],
+      ['compare.thread', a.threadLength / 1000, b.threadLength / 1000, 2, ' m', true],
+      ['compare.critical', va?.criticalCells, vb?.criticalCells, 0, ' mm²', true],
+      ['compare.caution', va?.cautionCells, vb?.cautionCells, 0, ' mm²', true],
+      ['compare.maxDensity', va?.maxDensity, vb?.maxDensity, 1, ' mm/mm²', true],
+    ];
+    const cell = (tag: 'th' | 'td', text: string, cls = '') => Object.assign(document.createElement(tag), { textContent: text, className: cls });
+    const head = document.createElement('thead');
+    const hr = document.createElement('tr');
+    hr.append(cell('th', ''), cell('th', t('compare.original')), cell('th', t('compare.current')));
+    head.append(hr);
+    const body = document.createElement('tbody');
+    for (const [key, x, y, digits, unit, lowerBetter] of rows) {
+      const fmt = (v: number | undefined) => (v === undefined ? t('compare.pending') : formatNumber(v, digits) + unit);
+      const tr = document.createElement('tr');
+      const cls = !lowerBetter || x === undefined || y === undefined || Math.abs(x - y) < 10 ** -digits / 2 ? '' : y < x ? 'better' : 'worse';
+      tr.append(cell('th', t(key)), cell('td', fmt(x)), cell('td', fmt(y), cls));
+      body.append(tr);
+    }
+    const caption = document.createElement('caption');
+    caption.textContent = t('compare.hint');
+    this.compareTable.replaceChildren(caption, head, body);
   }
 
   private message(m: CorrectMessage): HTMLElement[] {

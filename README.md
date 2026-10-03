@@ -17,7 +17,7 @@ Stickdichte-Heatmap für Stickdateien, komplett im Browser (kein Backend, keine 
 - Statistik: Stiche, Sprünge, Schnitte, Farbwechsel, Größe, Garnlänge, Max-Dichte
 - Mehrere Dateien laden und umschalten (auch per Pfeiltasten oder j/k, `f` = Einpassen)
 - PNG-Export der aktuellen Ansicht inkl. Legende
-- **Korrektur:** automatisch (Reihen ausdünnen, Kurzstiche bereinigen, gleiche Einstichlöcher trennen) und von Hand (Einstiche wählen, verschieben, löschen, Auswahl ausdünnen), mit Rückgängig/Wiederholen, siehe unten
+- **Korrektur:** automatisch (Reihen ausdünnen, Kurzstiche bereinigen, gleiche Einstichlöcher trennen) und von Hand (Einstiche wählen, verschieben, löschen, Auswahl ausdünnen), mit Rückgängig/Wiederholen und Vergleichsansicht Original/korrigiert, siehe unten
 - **Speichern als DST oder PES** (eigene Writer, kein pyembroidery)
 - Deutsch / Englisch
 - PWA: installierbar, offline nutzbar, "Öffnen mit" für .dst/.pes
@@ -128,6 +128,14 @@ bleiben, zwei fallen weg), der Abstand wird nicht neu verteilt.
 - Entf / Rücktaste löscht; die Nachbarn werden durch einen Stich verbunden.
 - *Ausdünnen* entfernt 25, 33 oder 50 % der Zyklen in Füllungen und Zickzacks, die überwiegend in
   der Auswahl liegen.
+
+### Vergleich
+
+*Mit Original vergleichen* (`c`, sobald die Datei geändert wurde) teilt die Ansicht: links das
+Original, rechts die aktuelle Fassung, jeweils mit eigener Heatmap, Markierungen und Stichplan. Die
+Trennlinie lässt sich ziehen, Zoom und Verschieben gelten für beide Seiten, der Tooltip zeigt die
+Werte der Seite unter dem Zeiger. Darunter stehen Stiche, Garnlänge, kritische und Vorsicht-Fläche
+und maximale Dichte beider Fassungen nebeneinander.
 
 ### Speichern
 

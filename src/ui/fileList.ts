@@ -23,6 +23,9 @@ export interface LoadedFile {
   error?: string;
   /** The pattern as loaded; `pattern` differs once it was corrected or edited. */
   original?: Pattern;
+  /** Measurement and classification of `original`, kept for the comparison view. */
+  originalMeasurement?: Measurement;
+  originalValidation?: ValidationResult;
   /** Earlier versions (undo) and undone versions (redo), most recent last. */
   undo: Pattern[];
   redo: Pattern[];
@@ -50,7 +53,10 @@ export class FileList {
   setProfile(profile: Profile, checks: Checks): void {
     this.profile = profile;
     this.checks = checks;
-    for (const f of this.files) if (f.measurement) f.validation = classify(f.measurement, profile, checks);
+    for (const f of this.files) {
+      if (f.measurement) f.validation = classify(f.measurement, profile, checks);
+      if (f.originalMeasurement) f.originalValidation = classify(f.originalMeasurement, profile, checks);
+    }
     this.render();
   }
 
@@ -92,8 +98,7 @@ export class FileList {
     }
     // An edit made while measuring supersedes this result.
     if (!this.files.includes(f) || f.pattern !== p) return;
-    f.measurement = m;
-    f.validation = classify(m, this.profile, this.checks);
+    this.store(f, p, m);
     this.render();
     this.onValidated(f);
   }
@@ -113,8 +118,7 @@ export class FileList {
     f.pattern = p;
     f.stats = patternStats(p);
     if (opts.measurement) {
-      f.measurement = opts.measurement;
-      f.validation = classify(opts.measurement, this.profile, this.checks);
+      this.store(f, p, opts.measurement);
       this.render();
       this.onValidated(f);
     } else {
@@ -122,6 +126,16 @@ export class FileList {
       f.validation = undefined;
       this.render();
       this.runValidation(f, p);
+    }
+  }
+
+  /** Sets the measurement of `p`, the file's current pattern; the original's is kept for comparing. */
+  private store(f: LoadedFile, p: Pattern, m: Measurement): void {
+    f.measurement = m;
+    f.validation = classify(m, this.profile, this.checks);
+    if (p === f.original) {
+      f.originalMeasurement = m;
+      f.originalValidation = f.validation;
     }
   }
 

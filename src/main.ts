@@ -21,6 +21,7 @@ import { updateTooltip } from './ui/tooltip';
 import { ValidationPanel } from './ui/validationPanel';
 import type { ValidationResult, Zone } from './validation/validate';
 import { POINTS_MIN_SCALE } from './render/editOverlay';
+import { DIVIDER_GRAB_PX, drawDivider } from './render/compare';
 import type { Pattern } from './model/pattern';
 import type { Measurement } from './validation/measure';
 import { downloadPattern, outputFileName } from './writers';
@@ -42,6 +43,17 @@ const vp = new Viewport();
 const density = new WorkerClient();
 const validator = new WorkerClient();
 let correctMessage: CorrectMessage = null;
+/** Comparison view: original left of the divider, current version right of it. */
+let comparing = false;
+/** Divider position as a share of the stage width. */
+let split = 0.5;
+let splitDrag = false;
+let origGrid: DensityGrid | null = null;
+/** Pattern and options `origGrid` was computed for. */
+let origKey: { p: Pattern; opts: string } | null = null;
+let origGridImg: HTMLCanvasElement | null = null;
+/** Original validation overlay, cached like `validationImg`. */
+let origValidationImg: { v: ValidationResult; img: HTMLCanvasElement } | null = null;
 let densitySeq = 0;
 let grid: DensityGrid | null = null;
 let gridImg: HTMLCanvasElement | null = null;
@@ -62,6 +74,9 @@ const files = new FileList(
   (f) => {
     grid = null;
     gridImg = null;
+    origGrid = null;
+    origGridImg = null;
+    origKey = null;
     hoverZone = selectedZone = null;
     correctMessage = null;
     editor.reset();
@@ -95,6 +110,27 @@ const scene = (): Scene => ({
   edit: editor.active ? editor : null,
 });
 
+/** True while the comparison view has something to compare. */
+const showCompare = () => comparing && FileList.edited(files.active);
+
+/** The original pattern with its own heatmap and markings, for the left side of the divider. */
+function originalScene(): Scene {
+  const f = files.active!;
+  const v = f.originalValidation ?? null;
+  if (v && origValidationImg?.v !== v) origValidationImg = { v, img: validationToCanvas(v) };
+  return {
+    pattern: f.original ?? null,
+    grid: origGrid,
+    gridImg: origGridImg,
+    validation: v,
+    validationImg: v ? origValidationImg!.img : null,
+    highlight: null,
+    settings,
+    vp,
+    edit: null,
+  };
+}
+
 const panel = new ValidationPanel($('validation'), {
   onZone: (z) => selectZone(z),
   onHover: (z) => {
@@ -113,6 +149,16 @@ function redraw(): void {
     const dpr = window.devicePixelRatio || 1;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     drawScene(ctx, stageW, stageH, scene(), stageBg());
+    if (showCompare()) {
+      const x = Math.round(split * stageW);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, 0, x, stageH);
+      ctx.clip();
+      drawScene(ctx, stageW, stageH, originalScene(), stageBg());
+      ctx.restore();
+      drawDivider(ctx, x, stageH, t('compare.original'), t('compare.current'));
+    }
     const active = files.active;
     empty.hidden = !!active?.pattern;
     exportBtn.disabled = !active?.pattern;
@@ -123,6 +169,7 @@ function redraw(): void {
       file: active,
       zoneSelected: !!selectedZone,
       editing: editor.active,
+      comparing,
       selection: editor.selection.size,
       pointsVisible: vp.scale >= POINTS_MIN_SCALE,
       message: correctMessage,
@@ -143,7 +190,9 @@ function drawLegendCanvas(): void {
 }
 
 function rebuildGridImage(): void {
-  gridImg = grid ? gridToCanvas(grid, settings.scales[settings.metric].max) : null;
+  const max = settings.scales[settings.metric].max;
+  gridImg = grid ? gridToCanvas(grid, max) : null;
+  origGridImg = origGrid ? gridToCanvas(origGrid, max) : null;
 }
 
 let debounce = 0;
@@ -165,6 +214,15 @@ function recompute(): void {
       // A newer request or another file supersedes this result.
       if (seq !== densitySeq || files.active?.pattern !== pattern) return;
       grid = g;
+      // The comparison needs the original's heatmap with the same settings.
+      const f = files.active;
+      const opts = JSON.stringify([metric, cellMm, blurMm, includeJumps]);
+      if (showCompare() && f?.original && (origKey?.p !== f.original || origKey.opts !== opts)) {
+        const og = await density.density(f.original, { metric, cellMm, blurMm, includeJumps });
+        if (seq !== densitySeq || files.active !== f) return;
+        origGrid = og;
+        origKey = { p: f.original, opts };
+      }
       computing = false;
       rebuildGridImage();
     } catch (err) {
@@ -233,6 +291,12 @@ const editor = new Editor({
   changed: redraw,
 });
 
+function setComparing(on: boolean): void {
+  comparing = on;
+  if (on) recompute();
+  redraw();
+}
+
 function setEditing(on: boolean): void {
   editor.setActive(on);
   stage.classList.toggle('editing', on);
@@ -278,6 +342,7 @@ async function autoFix(scope: 'all' | 'zone'): Promise<void> {
 const correctPanel = new CorrectPanel(settings, {
   autoFix: (scope) => void autoFix(scope),
   toggleEdit: () => setEditing(!editor.active),
+  toggleCompare: () => setComparing(!comparing),
   deleteSelection: () => editor.deleteSelection(),
   thinSelection: (share) => {
     if (!editor.thinSelection(share)) correctMessage = { kind: 'text', text: t('edit.thin.none') };
@@ -415,6 +480,7 @@ window.addEventListener('keydown', (e) => {
   else if (e.key === 'ArrowUp' || e.key === 'k') files.step(-1);
   else if (e.key === 'f') fitView();
   else if (e.key === 'e') setEditing(!editor.active);
+  else if (e.key === 'c' && FileList.edited(files.active)) setComparing(!comparing);
   else if (e.key === 'n') stepZone(1);
   else if (e.key === 'N') stepZone(-1);
   else if (e.key === 'v') {
@@ -442,11 +508,20 @@ canvas.addEventListener(
     const [sx, sy] = local(e);
     const delta = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
     vp.zoomAt(sx, sy, Math.exp(-delta * 0.0015));
-    updateTooltip(tooltip, sx, sy, stageW, vp, grid, settings, files.active?.validation ?? null);
+    showTooltip(sx, sy);
     redraw();
   },
   { passive: false },
 );
+
+/** Tooltip for the side of the divider the pointer is on. */
+function showTooltip(sx: number, sy: number): void {
+  const left = showCompare() && sx < split * stageW;
+  const f = files.active;
+  updateTooltip(tooltip, sx, sy, stageW, vp, left ? origGrid : grid, settings, (left ? f?.originalValidation : f?.validation) ?? null);
+}
+
+const nearDivider = (sx: number) => showCompare() && Math.abs(sx - split * stageW) <= DIVIDER_GRAB_PX;
 
 const pointers = new Map<number, [number, number]>();
 let pinchDist = 0;
@@ -456,6 +531,11 @@ canvas.addEventListener('pointerdown', (e) => {
   const pos = local(e);
   pointers.set(e.pointerId, pos);
   let mode: 'move' | 'band' | 'pan' = 'pan';
+  if (pointers.size === 1 && e.button === 0 && nearDivider(pos[0])) {
+    splitDrag = true;
+    stage.classList.add('splitting');
+    return;
+  }
   if (pointers.size === 1 && e.button === 0) {
     const [wx, wy] = vp.toWorld(pos[0], pos[1]);
     mode = editor.down(wx, wy, pos[0], pos[1], e.shiftKey, vp.scale);
@@ -473,6 +553,12 @@ canvas.addEventListener('pointermove', (e) => {
   const pos = local(e);
   const prev = pointers.get(e.pointerId);
   const [wx, wy] = vp.toWorld(pos[0], pos[1]);
+  if (splitDrag) {
+    split = Math.min(0.98, Math.max(0.02, pos[0] / stageW));
+    redraw();
+    return;
+  }
+  canvas.classList.toggle('on-divider', !prev && nearDivider(pos[0]));
   if (prev) {
     if (pointers.size === 1) {
       if (!editor.dragTo(wx, wy, pos[0], pos[1])) vp.pan(pos[0] - prev[0], pos[1] - prev[1]);
@@ -486,10 +572,14 @@ canvas.addEventListener('pointermove', (e) => {
     pointers.set(e.pointerId, pos);
     redraw();
   } else if (editor.hoverAt(wx, wy, vp.scale)) redraw();
-  if (e.pointerType === 'mouse' || pointers.size <= 1) updateTooltip(tooltip, pos[0], pos[1], stageW, vp, grid, settings, files.active?.validation ?? null);
+  if (e.pointerType === 'mouse' || pointers.size <= 1) showTooltip(pos[0], pos[1]);
 });
 
 const endPointer = (e: PointerEvent) => {
+  if (splitDrag) {
+    splitDrag = false;
+    stage.classList.remove('splitting');
+  }
   if (pointers.size === 1 && pointers.has(e.pointerId)) editor.up();
   pointers.delete(e.pointerId);
   pinchDist = 0;
