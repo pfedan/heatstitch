@@ -1,5 +1,5 @@
 import type { Pattern } from '../model/pattern';
-import type { ValidationResult } from '../validation/validate';
+import type { Measurement } from '../validation/measure';
 import type { DensityGrid, DensityOptions } from './grid';
 import type { WorkerRequest, WorkerResponse } from './worker';
 
@@ -36,7 +36,8 @@ export class WorkerClient {
     return (await this.call({ type: 'density', pattern, options })).grid!;
   }
 
-  async validate(pattern: Pattern): Promise<ValidationResult> {
-    return (await this.call({ type: 'validate', pattern })).validation!;
+  /** Profile-independent validation measurements; classification happens on the main thread. */
+  async measure(pattern: Pattern): Promise<Measurement> {
+    return (await this.call({ type: 'measure', pattern })).measurement!;
   }
 }

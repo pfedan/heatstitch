@@ -1,122 +1,89 @@
-import { computeDensity } from '../density/grid';
 import type { Pattern } from '../model/pattern';
-import { satinMask } from './satin';
-import { shortStitchCounts } from './shortStitches';
-import { CAUTION, classify, CRITICAL, SHORT_STITCH_COUNT, type Level } from './thresholds';
-import { findZones, type Zone } from './zones';
+import { measurePattern, type Measurement } from './measure';
+import type { Profile } from './profiles';
+import {
+  CAUTION,
+  classifyDensity,
+  classifyHoles,
+  CRITICAL,
+  SAFE,
+  SHORT_STITCH_COUNT,
+  thresholdsFor,
+  type Level,
+  type Thresholds,
+} from './thresholds';
+import { findZones, REASON_BITS, type Zone } from './zones';
 
-/** Validation always uses 1 mm cells, independent of the display settings. */
-export const VALIDATION_CELL_MM = 1;
-/**
- * Density is computed on 1/SUB mm sub-cells, smoothed, then averaged into 1 mm cells. 0.2 mm
- * sub-cells divide the 0.1 mm file resolution evenly, so regular row spacings do not alias.
- */
-const SUB = 5;
-/** Shifts the grid by half the file resolution so no stitch coordinate sits on a cell edge. */
-const SHIFT_MM = -0.05;
-const BLUR_MM = 0.5;
-/** A cell is satin if at least this share of its thread is satin. */
-const SATIN_SHARE = 0.5;
+/** Cells with at least this much thread count as stitched area (for the flagged share). */
+const STITCHED_MM = 0.5;
 
 export interface ValidationResult {
-  /** World position (mm) of the top-left corner of cell (0, 0). */
-  originX: number;
-  originY: number;
-  cols: number;
-  rows: number;
-  cellMm: number;
-  /** Thread density per cell, mm/mm². */
-  density: Float32Array;
+  profile: Profile;
+  thresholds: Thresholds;
+  /** The profile-independent measurement this result classifies. */
+  measurement: Measurement;
   /** Level per cell (SAFE / CAUTION / CRITICAL). */
   level: Uint8Array;
-  /** Flat [cx, cy, cx, cy, ...] cell coordinates per state. */
-  caution: Int32Array;
-  critical: Int32Array;
+  /** Reason bits per non-safe cell, see REASON_BITS. */
+  reasons: Uint8Array;
   zones: Zone[];
+  /** Highest level of any cell. */
+  worst: Level;
   maxDensity: number;
+  /** Cells carrying thread, and how many of them are Caution / Critical. */
+  stitchedCells: number;
+  cautionCells: number;
+  criticalCells: number;
 }
 
-interface CellGrid {
-  data: Float32Array;
-  cols: number;
-  rows: number;
-  originX: number;
-  originY: number;
-}
-
-/**
- * Thread density on 1 mm cells, free of the aliasing between ~0.4 mm row spacing and the cell size:
- * computed on 0.2 mm sub-cells with a 0.5 mm Gaussian, then box-averaged. Cells start at whole
- * millimetres minus SHIFT_MM.
- */
-function thread1mm(p: Pattern, filter?: (end: number) => boolean): CellGrid {
-  const g = computeDensity(
-    p,
-    {
-      metric: 'thread',
-      cellMm: VALIDATION_CELL_MM / SUB,
-      blurMm: BLUR_MM,
-      includeJumps: false,
-      alignMm: VALIDATION_CELL_MM,
-      shiftMm: SHIFT_MM,
-    },
-    filter,
-  );
-  const cols = Math.ceil(g.cols / SUB);
-  const rows = Math.ceil(g.rows / SUB);
-  const data = new Float32Array(cols * rows);
-  for (let y = 0; y < g.rows; y++) {
-    const row = Math.floor(y / SUB) * cols;
-    for (let x = 0; x < g.cols; x++) data[row + Math.floor(x / SUB)] += g.data[y * g.cols + x];
-  }
-  for (let i = 0; i < data.length; i++) data[i] /= SUB * SUB;
-  return { data, cols, rows, originX: g.originX, originY: g.originY };
-}
-
-export function validatePattern(p: Pattern): ValidationResult {
-  const total = thread1mm(p);
-  const mask = satinMask(p);
-  const satin = thread1mm(p, (end) => mask[end] === 1);
-  const { cols, rows, originX, originY, data: density } = total;
-  const shorts = shortStitchCounts(p, originX, originY, cols, rows);
-
-  const level = new Uint8Array(cols * rows);
-  const densityLevel = new Uint8Array(cols * rows);
-  const shortFlag = new Uint8Array(cols * rows);
-  const caution: number[] = [];
-  const critical: number[] = [];
+/** Applies a profile's thresholds to a measurement. Cheap, so it runs on the main thread. */
+export function classify(m: Measurement, profile: Profile): ValidationResult {
+  const th = thresholdsFor(profile);
+  const n = m.cols * m.rows;
+  const level = new Uint8Array(n);
+  const reasons = new Uint8Array(n);
   let maxDensity = 0;
-  for (let i = 0; i < level.length; i++) {
-    const v = density[i];
-    if (v > maxDensity) maxDensity = v;
-    const isSatin = v > 0 && satin.data[i] >= SATIN_SHARE * v;
-    let l: Level = classify(v, isSatin);
-    densityLevel[i] = l;
-    if (shorts[i] >= SHORT_STITCH_COUNT) {
-      shortFlag[i] = 1;
-      l = CRITICAL;
-    }
+  let stitchedCells = 0;
+  let cautionCells = 0;
+  let criticalCells = 0;
+  for (let i = 0; i < n; i++) {
+    const d = m.density[i];
+    if (d > maxDensity) maxDensity = d;
+    if (d >= STITCHED_MM) stitchedCells++;
+    const byDensity = classifyDensity(d, m.satin[i], th);
+    const byHoles = classifyHoles(m.holes[i], th);
+    const byShorts = m.shorts[i] >= SHORT_STITCH_COUNT ? CRITICAL : SAFE;
+    const l = Math.max(byDensity, byHoles, byShorts) as Level;
     level[i] = l;
-    const cx = i % cols;
-    const cy = (i - cx) / cols;
-    if (l === CAUTION) caution.push(cx, cy);
-    else if (l === CRITICAL) critical.push(cx, cy);
+    if (l === SAFE) continue;
+    if (l === CAUTION) cautionCells++;
+    else criticalCells++;
+    reasons[i] =
+      (byDensity ? REASON_BITS.density : 0) |
+      (byShorts ? REASON_BITS.shortStitches : 0) |
+      (byHoles ? REASON_BITS.perforation : 0);
   }
-
+  const zones = findZones({ ...m, level, reasons });
   return {
-    originX,
-    originY,
-    cols,
-    rows,
-    cellMm: VALIDATION_CELL_MM,
-    density,
+    profile,
+    thresholds: th,
+    measurement: m,
     level,
-    caution: Int32Array.from(caution),
-    critical: Int32Array.from(critical),
-    zones: findZones(level, density, shortFlag, densityLevel, cols, rows, originX, originY, VALIDATION_CELL_MM),
+    reasons,
+    zones,
+    worst: criticalCells ? CRITICAL : cautionCells ? CAUTION : SAFE,
     maxDensity,
+    stitchedCells,
+    cautionCells,
+    criticalCells,
   };
 }
 
-export { CAUTION, CRITICAL, SAFE, classify, type Level } from './thresholds';
+/** Measures and classifies in one go. */
+export function validatePattern(p: Pattern, profile: Profile): ValidationResult {
+  return classify(measurePattern(p), profile);
+}
+
+export { measurePattern, type Measurement } from './measure';
+export { CAUTION, CRITICAL, SAFE, type Level, type Thresholds } from './thresholds';
 export type { Reason, Zone } from './zones';

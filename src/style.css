@@ -473,66 +473,129 @@ input[type='range'] {
   background: #ff0000;
 }
 
-.val-counts {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
+/* Material profile */
+
+.profile select {
+  width: 100%;
 }
 
-.val-count {
-  border-radius: 8px;
-  padding: 8px 10px;
+.profile .field {
+  margin-bottom: 8px;
+}
+
+.profile-info {
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--line);
+  gap: 2px;
+  margin: 2px 0 12px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 12px;
 }
 
-.val-count strong {
-  font-size: 22px;
-  line-height: 1.1;
+.profile-info span:nth-child(2) {
+  color: var(--ink);
   font-variant-numeric: tabular-nums;
 }
 
-.val-count span {
-  font-size: 12px;
-  color: var(--muted);
+/* Verdict */
+
+.pending {
+  animation: pulse 1.2s ease-in-out infinite;
 }
 
-.val-count.critical:not(.zero) {
-  border-color: #ff0000;
-  background: color-mix(in srgb, #ff0000 10%, transparent);
+@keyframes pulse {
+  50% {
+    opacity: 0.45;
+  }
 }
 
-.val-count.caution:not(.zero) {
+.verdict {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid;
+  border-left-width: 4px;
+}
+
+.verdict.safe {
+  border-color: #3fb27f;
+  background: color-mix(in srgb, #3fb27f 10%, transparent);
+}
+
+.verdict.caution {
   border-color: #ffa500;
   background: color-mix(in srgb, #ffa500 12%, transparent);
 }
 
-.val-count.zero strong {
-  color: var(--muted);
+.verdict.critical {
+  border-color: #ff0000;
+  background: color-mix(in srgb, #ff0000 10%, transparent);
 }
 
-.val-msg {
-  margin: 10px 0 0;
-  padding: 8px 10px;
-  border-radius: 6px;
-  border-left: 3px solid;
+.verdict-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.verdict-head strong {
+  font-size: 16px;
+}
+
+.verdict-head span {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.verdict p {
+  margin: 4px 0 0;
   font-size: 13px;
 }
 
-.val-msg.critical {
-  border-color: #ff0000;
-  background: color-mix(in srgb, #ff0000 8%, transparent);
+.verdict p.counts {
+  color: var(--muted);
+  font-size: 12px;
 }
 
-.val-msg.caution {
-  border-color: #ffa500;
-  background: color-mix(in srgb, #ffa500 10%, transparent);
+.val-toggle {
+  margin: 10px 0 0;
 }
 
-.val-msg.safe {
-  border-color: #3fb27f;
-  background: color-mix(in srgb, #3fb27f 10%, transparent);
+button.link {
+  border: none;
+  background: none;
+  padding: 4px 0;
+  margin-top: 4px;
+  color: var(--accent);
+  font-size: 12px;
+}
+
+button.link:hover {
+  text-decoration: underline;
+}
+
+.explain {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.explain summary {
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.explain ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .val-zones {
@@ -547,27 +610,67 @@ input[type='range'] {
 .val-zone {
   width: 100%;
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  gap: 1px;
   text-align: left;
   background: none;
   border: 1px solid var(--line);
+  border-left: 3px solid var(--line);
   padding: 5px 8px;
 }
 
-.val-zone:hover {
+.val-zone.caution {
+  border-left-color: #ffa500;
+}
+
+.val-zone.critical {
+  border-left-color: #ff0000;
+}
+
+.val-zone:hover,
+.val-zone:focus-visible,
+.val-zone.selected {
   border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  outline: none;
+}
+
+.val-zone .z-top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.val-zone .z-top .dot {
+  align-self: center;
 }
 
 .val-zone .lvl {
   font-weight: 600;
 }
 
+.val-zone .why {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .val-zone .meta {
   color: var(--muted);
   font-size: 12px;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  padding-left: 17px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tooltip .check {
+  color: #d9d3e2;
+  margin-top: 2px;
+}
+
+.tooltip[data-level='1'] .check b {
+  color: #ffa500;
+}
+
+.tooltip[data-level='2'] .check b {
+  color: #ff5050;
 }

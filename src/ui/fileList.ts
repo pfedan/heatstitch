@@ -1,14 +1,17 @@
 import { t } from '../i18n';
 import { patternStats, type Pattern, type PatternStats } from '../model/pattern';
 import { parsePattern, SUPPORTED_EXTENSIONS } from '../parsers';
-import { CAUTION, CRITICAL, type ValidationResult } from '../validation/validate';
+import type { Profile } from '../validation/profiles';
+import { CAUTION, classify, CRITICAL, type Measurement, type ValidationResult } from '../validation/validate';
 
 export interface LoadedFile {
   id: number;
   fileName: string;
   pattern?: Pattern;
   stats?: PatternStats;
-  /** Set once the worker has validated the file. */
+  /** Set once the worker has measured the file. */
+  measurement?: Measurement;
+  /** The measurement classified with the current profile. */
   validation?: ValidationResult;
   error?: string;
 }
@@ -21,10 +24,18 @@ export class FileList {
   constructor(
     private list: HTMLUListElement,
     private onActivate: (f: LoadedFile | null) => void,
-    /** Runs the validation for a newly parsed file (in a worker). */
-    private validate: (p: Pattern) => Promise<ValidationResult>,
+    /** Measures a newly parsed file (in a worker). */
+    private measure: (p: Pattern) => Promise<Measurement>,
     private onValidated: (f: LoadedFile) => void,
+    private profile: Profile,
   ) {}
+
+  /** Re-classifies every measured file for a new profile. */
+  setProfile(profile: Profile): void {
+    this.profile = profile;
+    for (const f of this.files) if (f.measurement) f.validation = classify(f.measurement, profile);
+    this.render();
+  }
 
   get active(): LoadedFile | null {
     return this.files.find((f) => f.id === this.activeId) ?? null;
@@ -55,7 +66,8 @@ export class FileList {
 
   private async runValidation(f: LoadedFile, p: Pattern): Promise<void> {
     try {
-      f.validation = await this.validate(p);
+      f.measurement = await this.measure(p);
+      f.validation = classify(f.measurement, this.profile);
     } catch (err) {
       console.error(err);
       return;
@@ -117,7 +129,7 @@ export class FileList {
       fmt.className = 'fmt';
       fmt.textContent = f.pattern!.format;
       li.append(fmt);
-      const worst = f.validation ? Math.max(0, ...f.validation.zones.map((z) => z.level)) : null;
+      const worst = f.validation ? f.validation.worst : null;
       const dot = document.createElement('span');
       dot.className = `dot ${worst === CRITICAL ? 'critical' : worst === CAUTION ? 'caution' : worst === null ? 'pending' : 'safe'}`;
       dot.title = t(

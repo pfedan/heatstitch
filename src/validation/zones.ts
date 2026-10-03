@@ -1,6 +1,10 @@
 import { SAFE, type Level } from './thresholds';
 
-export type Reason = 'density' | 'shortStitches';
+export type Reason = 'density' | 'shortStitches' | 'perforation';
+
+/** Reason bits stored per cell. */
+export const REASON_BITS: Record<Reason, number> = { density: 1, shortStitches: 2, perforation: 4 };
+const REASONS = Object.keys(REASON_BITS) as Reason[];
 
 export interface Zone {
   /** Highest level of any cell in the zone. */
@@ -8,26 +12,35 @@ export interface Zone {
   reasons: Reason[];
   cells: number;
   areaMm2: number;
+  /** Highest measured thread density in the zone, mm/mm². */
   maxDensity: number;
+  /** Most neighbouring penetrations within 1 mm of one penetration in the zone. */
+  maxHoles: number;
+  /** Most non-exempt short stitches in one cell of the zone. */
+  maxShorts: number;
   /** Bounding box in mm (world coordinates, y down). */
   bbox: { minX: number; minY: number; maxX: number; maxY: number };
+}
+
+export interface ZoneInput {
+  level: Uint8Array;
+  reasons: Uint8Array;
+  density: Float32Array;
+  holes: Uint8Array;
+  shorts: Uint16Array;
+  cols: number;
+  rows: number;
+  originX: number;
+  originY: number;
+  cellMm: number;
 }
 
 /**
  * Groups all non-safe cells into 8-connected zones. A zone's level is its worst cell, so a Critical
  * core with a Caution rim counts as one Critical zone.
  */
-export function findZones(
-  level: Uint8Array,
-  density: Float32Array,
-  shortFlag: Uint8Array,
-  densityLevel: Uint8Array,
-  cols: number,
-  rows: number,
-  originX: number,
-  originY: number,
-  cellMm: number,
-): Zone[] {
+export function findZones(g: ZoneInput): Zone[] {
+  const { level, cols, rows, cellMm } = g;
   const seen = new Uint8Array(level.length);
   const zones: Zone[] = [];
   const stack: number[] = [];
@@ -37,9 +50,10 @@ export function findZones(
     stack.push(start);
     let zLevel = 0;
     let cells = 0;
+    let bits = 0;
     let maxDensity = 0;
-    let byDensity = false;
-    let byShort = false;
+    let maxHoles = 0;
+    let maxShorts = 0;
     let minCx = Infinity;
     let minCy = Infinity;
     let maxCx = -Infinity;
@@ -50,13 +64,14 @@ export function findZones(
       const cy = (i - cx) / cols;
       cells++;
       zLevel = Math.max(zLevel, level[i]);
-      maxDensity = Math.max(maxDensity, density[i]);
+      bits |= g.reasons[i];
+      maxDensity = Math.max(maxDensity, g.density[i]);
+      maxHoles = Math.max(maxHoles, g.holes[i]);
+      maxShorts = Math.max(maxShorts, g.shorts[i]);
       minCx = Math.min(minCx, cx);
       maxCx = Math.max(maxCx, cx);
       minCy = Math.min(minCy, cy);
       maxCy = Math.max(maxCy, cy);
-      if (shortFlag[i]) byShort = true;
-      if (densityLevel[i] !== SAFE) byDensity = true;
       for (let dy = -1; dy <= 1; dy++) {
         for (let dx = -1; dx <= 1; dx++) {
           const nx = cx + dx;
@@ -70,20 +85,19 @@ export function findZones(
         }
       }
     }
-    const reasons: Reason[] = [];
-    if (byDensity) reasons.push('density');
-    if (byShort) reasons.push('shortStitches');
     zones.push({
       level: zLevel as Level,
-      reasons,
+      reasons: REASONS.filter((r) => bits & REASON_BITS[r]),
       cells,
       areaMm2: cells * cellMm * cellMm,
       maxDensity,
+      maxHoles,
+      maxShorts,
       bbox: {
-        minX: originX + minCx * cellMm,
-        minY: originY + minCy * cellMm,
-        maxX: originX + (maxCx + 1) * cellMm,
-        maxY: originY + (maxCy + 1) * cellMm,
+        minX: g.originX + minCx * cellMm,
+        minY: g.originY + minCy * cellMm,
+        maxX: g.originX + (maxCx + 1) * cellMm,
+        maxY: g.originY + (maxCy + 1) * cellMm,
       },
     });
   }

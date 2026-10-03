@@ -1,4 +1,4 @@
-import { CAUTION, CRITICAL, type ValidationResult } from '../validation/validate';
+import { CAUTION, CRITICAL, type ValidationResult, type Zone } from '../validation/validate';
 import type { Viewport } from './viewport';
 
 export const CAUTION_COLOR = '#FFA500';
@@ -8,11 +8,12 @@ const CRITICAL_RGBA = [255, 0, 0, 140]; // ~55 %
 
 /** One pixel per 1 mm validation cell, Safe cells transparent. */
 export function validationToCanvas(v: ValidationResult): HTMLCanvasElement {
+  const { cols, rows } = v.measurement;
   const c = document.createElement('canvas');
-  c.width = v.cols;
-  c.height = v.rows;
+  c.width = cols;
+  c.height = rows;
   const ctx = c.getContext('2d')!;
-  const img = ctx.createImageData(v.cols, v.rows);
+  const img = ctx.createImageData(cols, rows);
   for (let i = 0; i < v.level.length; i++) {
     const rgba = v.level[i] === CRITICAL ? CRITICAL_RGBA : v.level[i] === CAUTION ? CAUTION_RGBA : null;
     if (rgba) img.data.set(rgba, i * 4);
@@ -28,14 +29,16 @@ export function drawValidation(
   v: ValidationResult,
   img: HTMLCanvasElement,
 ): void {
-  const [ox, oy] = vp.toScreen(v.originX, v.originY);
-  const s = v.cellMm * vp.scale;
+  const m = v.measurement;
+  const [ox, oy] = vp.toScreen(m.originX, m.originY);
+  const s = m.cellMm * vp.scale;
   ctx.save();
   ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(img, ox, oy, v.cols * s, v.rows * s);
+  ctx.drawImage(img, ox, oy, m.cols * s, m.rows * s);
 
   // Outline each level in its own colour over a dark halo, so Caution stays visible on orange heat.
-  const { cols, rows, level } = v;
+  const { cols, rows } = m;
+  const { level } = v;
   for (const [min, color] of [
     [CAUTION, CAUTION_COLOR],
     [CRITICAL, CRITICAL_COLOR],
@@ -65,10 +68,27 @@ export function drawValidation(
   ctx.restore();
 }
 
-/** Level of the validation cell at a world position (mm), or null outside the grid. */
-export function sampleLevel(v: ValidationResult, x: number, y: number): number | null {
-  const cx = Math.floor((x - v.originX) / v.cellMm);
-  const cy = Math.floor((y - v.originY) / v.cellMm);
-  if (cx < 0 || cy < 0 || cx >= v.cols || cy >= v.rows) return null;
-  return v.level[cy * v.cols + cx];
+/** Dashed frame around a zone (hovered in the list or selected), with some breathing room. */
+export function drawZoneHighlight(ctx: CanvasRenderingContext2D, vp: Viewport, z: Zone): void {
+  const pad = 1.5; // mm
+  const [x0, y0] = vp.toScreen(z.bbox.minX - pad, z.bbox.minY - pad);
+  const [x1, y1] = vp.toScreen(z.bbox.maxX + pad, z.bbox.maxY + pad);
+  ctx.save();
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.75)';
+  ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
+  ctx.setLineDash([6, 4]);
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#ffffff';
+  ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
+  ctx.restore();
+}
+
+/** Index of the validation cell at a world position (mm), or null outside the grid. */
+export function sampleCell(v: ValidationResult, x: number, y: number): number | null {
+  const m = v.measurement;
+  const cx = Math.floor((x - m.originX) / m.cellMm);
+  const cy = Math.floor((y - m.originY) / m.cellMm);
+  if (cx < 0 || cy < 0 || cx >= m.cols || cy >= m.rows) return null;
+  return cy * m.cols + cx;
 }

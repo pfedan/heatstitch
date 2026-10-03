@@ -35,7 +35,23 @@
 
         <section class="panel" id="validation-panel">
           <h2 data-i18n="validation.title"></h2>
-          <div id="validation"></div>
+          <div class="profile">
+            <label class="field">
+              <span class="label" data-i18n="profile.fabric"></span>
+              <select id="fabric"></select>
+            </label>
+            <label class="field">
+              <span class="label" data-i18n="profile.thread"></span>
+              <select id="thread"></select>
+            </label>
+            <p class="profile-info" id="profile-info"></p>
+          </div>
+          <div id="validation" aria-live="polite"></div>
+          <label class="check val-toggle"><input type="checkbox" id="show-validation" /><span data-i18n="validation.overlay"></span></label>
+          <details class="explain">
+            <summary data-i18n="validation.explain"></summary>
+            <ul id="explain"></ul>
+          </details>
         </section>
 
         <section class="panel">
@@ -60,7 +76,6 @@
             <input type="number" id="max" min="0.1" step="0.5" />
           </label>
           <span class="unit-hint" id="unit-hint"></span>
-          <label class="check"><input type="checkbox" id="show-validation" /><span data-i18n="controls.validation"></span></label>
           <label class="check"><input type="checkbox" id="include-jumps" /><span data-i18n="controls.jumps"></span></label>
           <label class="check"><input type="checkbox" id="overlay" /><span data-i18n="controls.overlay"></span></label>
           <label class="field indent">

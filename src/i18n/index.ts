@@ -22,8 +22,9 @@ export function getLang(): Lang {
   return lang;
 }
 
-export function t(key: Key): string {
-  return dicts[lang][key];
+export function t(key: Key, vars?: Record<string, string | number>): string {
+  const s = dicts[lang][key];
+  return vars ? s.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m)) : s;
 }
 
 /** Fills every element carrying data-i18n="key" (text) or data-i18n-title="key" (title attribute). */

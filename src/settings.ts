@@ -1,5 +1,6 @@
 import type { Metric } from './density/grid';
 import type { Lang } from './i18n';
+import { DEFAULT_PROFILE, normalizeProfile, type Profile } from './validation/profiles';
 
 export interface Scale {
   max: number;
@@ -13,15 +14,17 @@ export interface Settings {
   overlay: boolean;
   opacity: number;
   showJumps: boolean;
-  /** Orange/red overlay of the fixed 3-tier validation. */
+  /** Orange/red overlay of the 3-tier validation. */
   showValidation: boolean;
+  /** Material the validation thresholds are scaled for. */
+  profile: Profile;
   scales: Record<Metric, Scale>;
   lang: Lang | null;
 }
 
 /**
  * A 1 mm blur suppresses aliasing between typical 0.4 mm row spacing and the grid. The thread
- * scale tops out at 12 mm/mm² so both validation thresholds (6 and 10) are visible.
+ * scale tops out at 12 mm/mm² so both reference thresholds (7 and 9.5) are visible.
  */
 export const DEFAULTS: Settings = {
   metric: 'thread',
@@ -32,6 +35,7 @@ export const DEFAULTS: Settings = {
   opacity: 0.6,
   showJumps: false,
   showValidation: true,
+  profile: DEFAULT_PROFILE,
   scales: {
     thread: { max: 12 },
     penetrations: { max: 4 },
@@ -39,8 +43,8 @@ export const DEFAULTS: Settings = {
   lang: null,
 };
 
-// v2: warning threshold replaced by the fixed validation tiers.
-const KEY = 'heatstitch.settings.v2';
+// v3: material profiles.
+const KEY = 'heatstitch.settings.v3';
 
 export function loadSettings(): Settings {
   try {
@@ -51,6 +55,7 @@ export function loadSettings(): Settings {
       ...structuredClone(DEFAULTS),
       ...s,
       scales: { ...structuredClone(DEFAULTS.scales), ...s.scales },
+      profile: normalizeProfile(s.profile),
     };
   } catch {
     return structuredClone(DEFAULTS);
