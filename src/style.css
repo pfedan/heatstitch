@@ -500,6 +500,40 @@ input[type='range'] {
   font-variant-numeric: tabular-nums;
 }
 
+.checks {
+  margin: 0 0 12px;
+  padding: 0;
+  border: none;
+}
+
+.checks legend {
+  padding: 0;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.checks .check {
+  margin-bottom: 6px;
+}
+
+.checks .check span {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.checks .check small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.checks .check.na {
+  cursor: default;
+  opacity: 0.55;
+}
+
 /* Verdict */
 
 .pending {

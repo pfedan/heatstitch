@@ -1,4 +1,5 @@
 import { formatNumber, getLang, t, type Key } from '../i18n';
+import { fabricOf } from '../validation/profiles';
 import { CAUTION, CRITICAL, type Level, type Reason, type ValidationResult, type Zone } from '../validation/validate';
 import type { LoadedFile } from './fileList';
 
@@ -32,6 +33,10 @@ function figures(z: Zone): string[] {
     return t('validation.fig.perforation', { v: z.maxHoles });
   });
 }
+
+/** Checks that apply to the material: perforation only on perforation-sensitive fabrics. */
+const applicableChecks = (v: ValidationResult): Reason[] =>
+  (Object.keys(REASON_KEY) as Reason[]).filter((r) => r !== 'perforation' || fabricOf(v.profile).perforation);
 
 function share(v: ValidationResult): string {
   if (!v.stitchedCells) return '';
@@ -68,6 +73,10 @@ export class ValidationPanel {
     const v = file.validation;
     if (!v) return [el('p', 'muted pending', t('validation.pending'))];
 
+    const applicable = applicableChecks(v);
+    const off = applicable.filter((r) => !v.checks[r]);
+    if (off.length === applicable.length) return [el('p', 'muted', t('validation.noChecks'))];
+
     const critical = v.zones.filter((z) => z.level === CRITICAL).length;
     const caution = v.zones.filter((z) => z.level === CAUTION).length;
     const verdict = el('div', `verdict ${LEVEL_CLASS[v.worst]}`);
@@ -76,6 +85,10 @@ export class ValidationPanel {
     if (v.worst) head.append(el('span', '', share(v)));
     verdict.append(head, el('p', '', t(MSG_KEY[v.worst])));
     if (v.zones.length) verdict.append(el('p', 'counts', t('validation.counts', { critical, caution })));
+    if (off.length) {
+      const list = off.map((r) => t(REASON_KEY[r])).join(', ');
+      verdict.append(el('p', 'counts', t('validation.checksOff', { list })));
+    }
     const parts: HTMLElement[] = [verdict];
     if (!v.zones.length) return parts;
 
