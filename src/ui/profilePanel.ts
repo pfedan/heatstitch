@@ -18,6 +18,9 @@ import {
   SHORT_STITCH_MM,
   thresholdsFor,
 } from '../validation/thresholds';
+import type { Checks } from '../validation/validate';
+
+const CHECK_IDS = ['density', 'shortStitches', 'perforation'] as const satisfies readonly (keyof Checks)[];
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -25,7 +28,8 @@ export const fabricLabel = (p: Profile) => t(`fabric.${p.fabric}` as Key);
 export const threadLabel = (p: Profile) => t(`thread.${p.thread}` as Key);
 
 /**
- * Fabric and thread pickers, the resulting limits and the "how it works" explanation.
+ * Fabric and thread pickers, the resulting limits, the check switches and the "how it works"
+ * explanation.
  * `refresh` re-renders texts after a language change.
  */
 export function bindProfile(s: Settings, onChange: () => void): { refresh: () => void } {
@@ -33,6 +37,34 @@ export function bindProfile(s: Settings, onChange: () => void): { refresh: () =>
   const thread = $<HTMLSelectElement>('thread');
   const info = $<HTMLElement>('profile-info');
   const explain = $<HTMLUListElement>('explain');
+  const checks = $<HTMLElement>('checks');
+
+  const renderChecks = () => {
+    const perforationApplies = fabricOf(s.profile).perforation;
+    checks.replaceChildren(
+      ...CHECK_IDS.map((id) => {
+        const na = id === 'perforation' && !perforationApplies;
+        const box = Object.assign(document.createElement('input'), {
+          type: 'checkbox',
+          checked: s.checks[id] && !na,
+          disabled: na,
+        });
+        box.addEventListener('change', () => {
+          s.checks = { ...s.checks, [id]: box.checked };
+          onChange();
+        });
+        const hint =
+          id === 'shortStitches'
+            ? t('checks.shortStitches.hint', { count: SHORT_STITCH_COUNT, len: formatNumber(SHORT_STITCH_MM, 1) })
+            : t(na ? 'checks.perforation.na' : (`checks.${id}.hint` as Key));
+        const text = document.createElement('span');
+        text.append(t(`checks.${id}` as Key), Object.assign(document.createElement('small'), { textContent: hint }));
+        const label = Object.assign(document.createElement('label'), { className: na ? 'check na' : 'check' });
+        label.append(box, text);
+        return label;
+      }),
+    );
+  };
 
   const refresh = () => {
     fabric.replaceChildren(...FABRICS.map((f) => new Option(t(`fabric.${f.id}` as Key), f.id)));
@@ -49,6 +81,7 @@ export function bindProfile(s: Settings, onChange: () => void): { refresh: () =>
     ];
     if (fabricOf(s.profile).perforation) lines.push(t('profile.perforation'));
     info.replaceChildren(...lines.map((l) => Object.assign(document.createElement('span'), { textContent: l })));
+    renderChecks();
 
     const items: string[] = [
       t('validation.explain.metric'),

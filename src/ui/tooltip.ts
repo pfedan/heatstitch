@@ -45,12 +45,12 @@ export function updateTooltip(
     level = validation.level[i];
     if (m.density[i] > 0.05 || level) {
       const [caution, critical] = densityLimits(validation.thresholds, m.satin[i]);
-      const parts = [
-        t('tooltip.check', { v: formatNumber(m.density[i], 1) }),
-        t('tooltip.limits', { caution: formatNumber(caution, 1), critical: formatNumber(critical, 1) }),
-      ];
-      if (validation.thresholds.holes && m.holes[i]) parts.push(t('tooltip.holes', { v: m.holes[i] }));
-      if (m.shorts[i]) parts.push(t('tooltip.shorts', { v: m.shorts[i] }));
+      const parts = [t('tooltip.check', { v: formatNumber(m.density[i], 1) })];
+      if (validation.checks.density) {
+        parts.push(t('tooltip.limits', { caution: formatNumber(caution, 1), critical: formatNumber(critical, 1) }));
+      }
+      if (validation.checks.perforation && validation.thresholds.holes && m.holes[i]) parts.push(t('tooltip.holes', { v: m.holes[i] }));
+      if (validation.checks.shortStitches && m.shorts[i]) parts.push(t('tooltip.shorts', { v: m.shorts[i] }));
       const check = line(parts.join(' · '), 'check');
       if (LEVEL_KEY[level]) check.prepend(Object.assign(document.createElement('b'), { textContent: `${t(LEVEL_KEY[level])} ` }));
       lines.push(check);

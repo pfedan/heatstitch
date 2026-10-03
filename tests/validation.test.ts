@@ -7,6 +7,7 @@ import {
   classify,
   CRITICAL,
   measurePattern,
+  normalizeChecks,
   SAFE,
   validatePattern,
   type Level,
@@ -221,5 +222,34 @@ describe('short-stitch clusters', () => {
 
   it('ignores fewer than 8 short stitches', () => {
     expect(line(7, 'middle').criticalCells).toBe(0);
+  });
+
+  it('flags nothing when the short-stitch check is off', () => {
+    const off = { density: true, shortStitches: false, perforation: true };
+    const r = classify(line(10, 'middle').measurement, WOVEN, off);
+    expect(r.criticalCells).toBe(0);
+  });
+});
+
+describe('switching checks off', () => {
+  const four = measurePattern(layers(4).build());
+  const satin = measurePattern(new Shape().satin(10, 18, 20, 4, 0.15).build());
+
+  it('defaults every check to on, also for old stored settings', () => {
+    expect(normalizeChecks(undefined)).toEqual({ density: true, shortStitches: true, perforation: true });
+    const partial = normalizeChecks({ shortStitches: false });
+    expect(partial).toEqual({ density: true, shortStitches: false, perforation: true });
+  });
+
+  it('drops density zones when the density check is off', () => {
+    expect(classify(four, WOVEN).worst).toBe(CRITICAL);
+    const r = classify(four, WOVEN, { density: false, shortStitches: true, perforation: true });
+    expect(r.zones.flatMap((z) => z.reasons)).not.toContain('density');
+  });
+
+  it('drops perforation zones when the perforation check is off', () => {
+    expect(classify(satin, LEATHER).zones.flatMap((z) => z.reasons)).toContain('perforation');
+    const r = classify(satin, LEATHER, { density: true, shortStitches: true, perforation: false });
+    expect(r.zones.flatMap((z) => z.reasons)).not.toContain('perforation');
   });
 });

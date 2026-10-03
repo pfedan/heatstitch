@@ -2,7 +2,14 @@ import { t } from '../i18n';
 import { patternStats, type Pattern, type PatternStats } from '../model/pattern';
 import { parsePattern, SUPPORTED_EXTENSIONS } from '../parsers';
 import type { Profile } from '../validation/profiles';
-import { CAUTION, classify, CRITICAL, type Measurement, type ValidationResult } from '../validation/validate';
+import {
+  CAUTION,
+  classify,
+  CRITICAL,
+  type Checks,
+  type Measurement,
+  type ValidationResult,
+} from '../validation/validate';
 
 export interface LoadedFile {
   id: number;
@@ -28,12 +35,14 @@ export class FileList {
     private measure: (p: Pattern) => Promise<Measurement>,
     private onValidated: (f: LoadedFile) => void,
     private profile: Profile,
+    private checks: Checks,
   ) {}
 
-  /** Re-classifies every measured file for a new profile. */
-  setProfile(profile: Profile): void {
+  /** Re-classifies every measured file for a new profile or set of checks. */
+  setProfile(profile: Profile, checks: Checks): void {
     this.profile = profile;
-    for (const f of this.files) if (f.measurement) f.validation = classify(f.measurement, profile);
+    this.checks = checks;
+    for (const f of this.files) if (f.measurement) f.validation = classify(f.measurement, profile, checks);
     this.render();
   }
 
@@ -67,7 +76,7 @@ export class FileList {
   private async runValidation(f: LoadedFile, p: Pattern): Promise<void> {
     try {
       f.measurement = await this.measure(p);
-      f.validation = classify(f.measurement, this.profile);
+      f.validation = classify(f.measurement, this.profile, this.checks);
     } catch (err) {
       console.error(err);
       return;
