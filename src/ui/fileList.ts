@@ -1,7 +1,17 @@
 import { t } from '../i18n';
 import { patternStats, type Pattern, type PatternStats } from '../model/pattern';
 import { parsePattern, SUPPORTED_EXTENSIONS } from '../parsers';
-import { deleteFile, listFiles, loadActiveKey, putFile, saveActiveKey } from '../storage/fileStore';
+import {
+  deleteFile,
+  fromStored,
+  listFiles,
+  loadActiveKey,
+  putFile,
+  saveActiveKey,
+  saveWorking,
+  toStored,
+  type StoredPattern,
+} from '../storage/fileStore';
 import type { Profile } from '../validation/profiles';
 import {
   CAUTION,
@@ -38,6 +48,7 @@ interface FileData {
   name: string;
   data: ArrayBuffer;
   storeKey?: number;
+  working?: StoredPattern;
 }
 
 /** Versions kept per file for undo. */
@@ -89,7 +100,7 @@ export class FileList {
   async restore(): Promise<void> {
     const stored = await listFiles();
     if (!stored.length) return;
-    const first = await this.addData(stored.map(({ key, name, data }) => ({ name, data, storeKey: key })), false);
+    const first = await this.addData(stored.map(({ key, name, data, working }) => ({ name, data, storeKey: key, working })), false);
     // Files the user added while we were reading storage keep the focus.
     if (this.activeId !== null) return this.render();
     const activeKey = loadActiveKey();
@@ -100,13 +111,24 @@ export class FileList {
 
   private async addData(list: FileData[], persist: boolean): Promise<LoadedFile | null> {
     let first: LoadedFile | null = null;
-    for (const { name, data, storeKey } of list) {
+    for (const { name, data, storeKey, working } of list) {
       const entry: LoadedFile = { id: this.nextId++, fileName: name, storeKey, undo: [], redo: [] };
       try {
-        const pattern = parsePattern(new Uint8Array(data), name);
-        entry.pattern = pattern;
-        entry.original = pattern;
-        entry.stats = patternStats(pattern);
+        const original = parsePattern(new Uint8Array(data), name);
+        entry.original = original;
+        entry.pattern = original;
+        if (working) {
+          const edited = fromStored(original, working);
+          if (edited) {
+            entry.pattern = edited;
+            // One undo step leads back to the original.
+            entry.undo.push(original);
+          } else {
+            console.warn('Stored working copy of', name, 'is unreadable; using the original');
+            if (storeKey !== undefined) void saveWorking(storeKey, null);
+          }
+        }
+        entry.stats = patternStats(entry.pattern);
         first ??= entry;
         // Only parseable files are kept; a broken file would just show up again as an error.
         if (persist) entry.storeKey = (await putFile(name, data)) ?? undefined;
@@ -115,6 +137,7 @@ export class FileList {
       }
       this.files.push(entry);
       if (entry.pattern) this.runValidation(entry, entry.pattern);
+      if (entry.original && entry.pattern !== entry.original) this.measureOriginal(entry);
     }
     return first;
   }
@@ -134,6 +157,23 @@ export class FileList {
     this.onValidated(f);
   }
 
+  /** Measures the original of an edited file for the comparison view. */
+  private async measureOriginal(f: LoadedFile): Promise<void> {
+    const p = f.original!;
+    let m: Measurement;
+    try {
+      m = await this.measure(p);
+    } catch (err) {
+      console.error(err);
+      return;
+    }
+    if (!this.files.includes(f) || f.original !== p) return;
+    f.originalMeasurement = m;
+    f.originalValidation = classify(m, this.profile, this.checks);
+    this.render();
+    this.onValidated(f);
+  }
+
   /**
    * Replaces a file's pattern with an edited version and re-validates it. `measurement` (of the new
    * pattern) skips the worker round trip when it is already known. With `record`, the previous
@@ -148,6 +188,8 @@ export class FileList {
     }
     f.pattern = p;
     f.stats = patternStats(p);
+    // The working copy is saved next to the original on every change, so a reload restores it.
+    if (f.storeKey !== undefined) void saveWorking(f.storeKey, p === f.original ? null : toStored(p));
     if (opts.measurement) {
       this.store(f, p, opts.measurement);
       this.render();

@@ -88,6 +88,10 @@ Das Panel *Korrektur* steht in der rechten Spalte unter den Befunden und arbeite
 Material und den eingeschalteten Prüfungen. Jede Änderung ist ein Rückgängig-Schritt (Strg+Z /
 Strg+Umschalt+Z), *Original* stellt die geladene Datei wieder her.
 
+Die bearbeitete Fassung wird bei jeder Änderung im Browser neben dem unveränderten Original
+gespeichert (IndexedDB) und nach dem Neuladen der Seite wiederhergestellt; ein Rückgängig-Schritt
+führt dann zurück zum Original. Das Original selbst wird nie überschrieben, und *×* entfernt beide.
+
 ### Automatisch
 
 *Ziel* ist entweder „keine Warnung“ (Vorsicht und Kritisch beheben) oder „nur Kritisch“. Die
