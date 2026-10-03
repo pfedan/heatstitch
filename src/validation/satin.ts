@@ -11,9 +11,10 @@ const MAX_RATIO = 2;
 /**
  * Marks satin segments: mask[i] = 1 if the stitch segment ending at record i belongs to a run of
  * at least SATIN_MIN_RUN consecutive stitch-to-stitch segments that zigzag back and forth with
- * similar lengths (a column stitch).
+ * similar lengths (a column stitch). `minLen` (0.1 mm) lowers the shortest segment that counts, to
+ * also find narrow zigzag columns.
  */
-export function satinMask(p: Pattern): Uint8Array {
+export function satinMask(p: Pattern, minLen = MIN_LEN): Uint8Array {
   const n = p.cmd.length;
   const mask = new Uint8Array(n);
   const len = new Float64Array(n);
@@ -22,7 +23,7 @@ export function satinMask(p: Pattern): Uint8Array {
       len[i] = Math.hypot(p.x[i] - p.x[i - 1], p.y[i] - p.y[i - 1]);
     }
   }
-  const valid = (i: number) => len[i] >= MIN_LEN && len[i] <= MAX_LEN;
+  const valid = (i: number) => len[i] >= minLen && len[i] <= MAX_LEN;
   const zigzag = (i: number) => {
     // segment i follows segment i - 1 directly
     if (!valid(i) || !valid(i - 1)) return false;

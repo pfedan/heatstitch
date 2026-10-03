@@ -19,6 +19,7 @@ import { bindProfile } from './ui/profilePanel';
 import { renderStats } from './ui/stats';
 import { updateTooltip } from './ui/tooltip';
 import { ValidationPanel } from './ui/validationPanel';
+import { acknowledgementOf } from './validation/acks';
 import type { ValidationResult, Zone } from './validation/validate';
 import { POINTS_MIN_SCALE } from './render/editOverlay';
 import { DIVIDER_GRAB_PX, drawDivider } from './render/compare';
@@ -138,6 +139,12 @@ const panel = new ValidationPanel($('validation'), $('findings-open'), {
     redraw();
   },
   onStep: (dir) => stepZone(dir),
+  onAck: (z, ack) => {
+    const f = files.active;
+    if (!f) return;
+    files.setAcks(f, ack ? [...f.acks, { bbox: { ...z.bbox }, reason: 'manual' }] : f.acks.filter((a) => a !== acknowledgementOf(z, f.acks)));
+    redraw();
+  },
 });
 
 /** Shows or hides the findings (the Correction panel stays in the column); while hidden a chip on the canvas reopens them. */
@@ -342,11 +349,14 @@ async function autoFix(scope: 'all' | 'zone'): Promise<void> {
   correctMessage = { kind: 'busy' };
   redraw();
   try {
-    const r = await validator.correct(p, settings.profile, settings.checks, { ...settings.correction, region });
+    const r = await validator.correct(p, settings.profile, settings.checks, { ...settings.correction, region, skip: f.acks.map((a) => a.bbox) });
     if (files.active !== f || f.pattern !== p) return; // the user moved on meanwhile
     correctMessage = { kind: 'report', report: r.report };
     editor.reset();
     if (r.pattern !== p) applyEdit(r.pattern, r.measurement);
+    // Small caution spots the correction left on purpose count as acknowledged.
+    const fresh = r.report.accepted.filter((a) => !f.acks.some((b) => JSON.stringify(a.bbox) === JSON.stringify(b.bbox)));
+    if (fresh.length) files.setAcks(f, [...f.acks, ...fresh.map((a) => ({ bbox: a.bbox, reason: a.reason }))]);
   } catch (err) {
     correctMessage = { kind: 'text', text: t('correct.error', { msg: err instanceof Error ? err.message : String(err) }) };
   }

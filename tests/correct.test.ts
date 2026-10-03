@@ -164,13 +164,15 @@ describe('nudging', () => {
 });
 
 describe('automatic correction', () => {
-  it('clears critical density from four stacked fills', () => {
+  it('clears critical density from four stacked fills without thinning them unevenly', () => {
     const p = layers(4).build();
     const r = autoCorrect(p, WOVEN, DEFAULT_CORRECTION);
     expect(r.report.before.worst).toBe(CRITICAL);
     expect(r.report.after.worst).toBeLessThan(CRITICAL);
-    expect(r.report.after.cautionCells).toBeLessThan(r.report.before.criticalCells / 2);
-    expect(r.report.threadAfter).toBeLessThan(r.report.threadBefore * 0.75);
+    expect(r.report.respaced).toBeGreaterThan(0);
+    expect(r.report.threadAfter).toBeLessThan(r.report.threadBefore * 0.9);
+    // What is left needs a look: four stacked layers are a design decision.
+    expect(r.report.manual).toBeGreaterThan(0);
   });
 
   it('clears a short-stitch cluster in a narrow zigzag column', () => {
@@ -182,9 +184,9 @@ describe('automatic correction', () => {
 
   it('with goal "critical" leaves caution areas untouched', () => {
     const p = layers(3).build();
-    const r = autoCorrect(p, WOVEN, { ...DEFAULT_CORRECTION, goal: 'critical', nudge: false });
+    const r = autoCorrect(p, WOVEN, { ...DEFAULT_CORRECTION, goal: 'critical' });
     expect(r.report.before.worst).toBe(CAUTION);
-    expect(r.report.thinned).toBe(0);
+    expect(r.pattern).toBe(p);
   });
 
   it('only touches the given region', () => {

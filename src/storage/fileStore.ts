@@ -8,6 +8,7 @@
  */
 
 import { computeBounds, type Pattern, type ThreadColor } from '../model/pattern';
+import { isAcknowledgement, type Acknowledgement } from '../validation/acks';
 
 /** The records of an edited pattern; name, format and bounds come from the original. */
 export interface StoredPattern {
@@ -23,6 +24,8 @@ export interface StoredFile {
   data: ArrayBuffer;
   /** Working copy of an edited file; absent while the file is unchanged. */
   working?: StoredPattern;
+  /** Findings the user acknowledged. */
+  acks?: Acknowledgement[];
 }
 
 const DB_NAME = 'heatstitch';
@@ -77,8 +80,29 @@ const pending = new Map<number, Promise<void>>();
  * Writes for one file run in order, so the last edit always wins.
  */
 export function saveWorking(key: number, working: StoredPattern | null): Promise<void> {
+  return queue(key, (rec) => {
+    if (working) rec.working = working;
+    else delete rec.working;
+  });
+}
+
+/** Stores the acknowledged findings of file `key`. */
+export function saveAcks(key: number, acks: Acknowledgement[]): Promise<void> {
+  return queue(key, (rec) => {
+    if (acks.length) rec.acks = acks;
+    else delete rec.acks;
+  });
+}
+
+/** Reads the stored acknowledgements, dropping malformed entries. */
+export function acksOf(rec: StoredFile): Acknowledgement[] {
+  return Array.isArray(rec.acks) ? rec.acks.filter(isAcknowledgement) : [];
+}
+
+/** Applies `change` to the record of file `key`; changes for one file run in order. */
+function queue(key: number, change: (rec: StoredFile) => void): Promise<void> {
   const prev = pending.get(key) ?? Promise.resolve();
-  const next = prev.then(() => writeWorking(key, working));
+  const next = prev.then(() => updateRecord(key, change));
   pending.set(key, next);
   void next.then(() => {
     if (pending.get(key) === next) pending.delete(key);
@@ -86,7 +110,7 @@ export function saveWorking(key: number, working: StoredPattern | null): Promise
   return next;
 }
 
-async function writeWorking(key: number, working: StoredPattern | null): Promise<void> {
+async function updateRecord(key: number, change: (rec: StoredFile) => void): Promise<void> {
   try {
     const db = await open();
     await new Promise<void>((resolve, reject) => {
@@ -97,8 +121,7 @@ async function writeWorking(key: number, working: StoredPattern | null): Promise
         const rec = get.result as StoredFile | undefined;
         // The file was removed meanwhile; nothing to attach the copy to.
         if (!rec) return;
-        if (working) rec.working = working;
-        else delete rec.working;
+        change(rec);
         store.put(rec);
       };
       tx.oncomplete = () => resolve();
@@ -106,7 +129,7 @@ async function writeWorking(key: number, working: StoredPattern | null): Promise
       tx.onabort = () => reject(tx.error);
     });
   } catch (err) {
-    console.warn('Could not store working copy', err);
+    console.warn('Could not update stored file', err);
   }
 }
 

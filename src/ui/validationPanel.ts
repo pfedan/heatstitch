@@ -1,4 +1,5 @@
 import { formatNumber, getLang, t, type Key } from '../i18n';
+import { acknowledgementOf, openWorst } from '../validation/acks';
 import { fabricOf } from '../validation/profiles';
 import { CAUTION, CRITICAL, type Level, type Reason, type ValidationResult, type Zone } from '../validation/validate';
 import type { LoadedFile } from './fileList';
@@ -42,8 +43,8 @@ function share(v: ValidationResult): string {
   return t('validation.share', { pct: pct > 0 && pct < 1 ? '< 1' : formatNumber(pct) });
 }
 
-/** Which zones the list shows: all, or one level only. */
-export type ZoneFilter = 'all' | typeof CAUTION | typeof CRITICAL;
+/** Which zones the list shows: all, the open ones of one level, or the acknowledged ones. */
+export type ZoneFilter = 'all' | typeof CAUTION | typeof CRITICAL | 'acked';
 
 export interface PanelHooks {
   /** A zone was clicked. */
@@ -52,6 +53,8 @@ export interface PanelHooks {
   onHover: (z: Zone | null) => void;
   /** Previous (-1) or next (1) zone within the current filter. */
   onStep: (dir: 1 | -1) => void;
+  /** Acknowledge (true) or reopen (false) a zone. */
+  onAck: (z: Zone, ack: boolean) => void;
 }
 
 /**
@@ -72,7 +75,10 @@ export class ValidationPanel {
 
   /** The zones the list shows, in list order; stepping with n / Shift+n walks these. */
   visible(zones: Zone[]): Zone[] {
-    return this.filter === 'all' ? zones : zones.filter((z) => z.level === this.filter);
+    if (this.filter === 'all') return zones;
+    const acks = this.file?.acks;
+    if (this.filter === 'acked') return zones.filter((z) => acknowledgementOf(z, acks));
+    return zones.filter((z) => z.level === this.filter && !acknowledgementOf(z, acks));
   }
 
   update(file: LoadedFile | null, selected: Zone | null): void {
@@ -80,7 +86,7 @@ export class ValidationPanel {
     if (file !== this.file) this.filter = 'all';
     this.file = file;
     this.selected = selected;
-    const key = [file, file?.pattern, file?.validation, getLang(), this.filter, selected];
+    const key = [file, file?.pattern, file?.validation, file?.acks, getLang(), this.filter, selected];
     if (key.length === this.last.length && key.every((k, i) => k === this.last[i])) return;
     this.last = key;
     // Keep the list where the user scrolled it; the selected entry is scrolled into view below.
@@ -98,12 +104,14 @@ export class ValidationPanel {
       this.chip.replaceChildren(t('findings.title'));
       return;
     }
-    const critical = v.zones.filter((z) => z.level === CRITICAL).length;
-    const caution = v.zones.length - critical;
+    const open = v.zones.filter((z) => !acknowledgementOf(z, file!.acks));
+    const critical = open.filter((z) => z.level === CRITICAL).length;
+    const caution = open.length - critical;
+    const worst = openWorst(v.zones, file!.acks) as Level;
     this.chip.replaceChildren(
-      el('span', `dot ${LEVEL_CLASS[v.worst]}`),
-      el('strong', '', t(VERDICT_KEY[v.worst])),
-      ...(v.zones.length ? [el('span', '', t('validation.counts', { critical, caution }))] : []),
+      el('span', `dot ${LEVEL_CLASS[worst]}`),
+      el('strong', '', t(VERDICT_KEY[worst])),
+      ...(open.length ? [el('span', '', t('validation.counts', { critical, caution }))] : []),
     );
   }
 
@@ -116,11 +124,18 @@ export class ValidationPanel {
     const off = applicable.filter((r) => !v.checks[r]);
     if (off.length === applicable.length) return [el('p', 'muted', t('validation.noChecks'))];
 
-    const verdict = el('div', `verdict ${LEVEL_CLASS[v.worst]}`);
+    // Acknowledged findings no longer count towards the verdict.
+    const worst = openWorst(v.zones, file.acks) as Level;
+    const acked = v.zones.filter((z) => acknowledgementOf(z, file.acks)).length;
+    const verdict = el('div', `verdict ${LEVEL_CLASS[worst]}`);
     const head = el('div', 'verdict-head');
-    head.append(el('strong', '', t(VERDICT_KEY[v.worst])));
-    if (v.worst) head.append(el('span', '', share(v)));
-    verdict.append(head, el('p', '', t(MSG_KEY[v.worst])));
+    head.append(el('strong', '', t(VERDICT_KEY[worst])));
+    if (worst) head.append(el('span', '', share(v)));
+    verdict.append(head, el('p', '', t(MSG_KEY[worst])));
+    if (acked) {
+      const n = acked;
+      verdict.append(el('p', 'counts', t(acked === v.zones.length ? 'validation.allAcked' : 'validation.someAcked', { n })));
+    }
     if (off.length) {
       const list = off.map((r) => t(REASON_KEY[r])).join(', ');
       verdict.append(el('p', 'counts', t('validation.checksOff', { list })));
@@ -128,7 +143,7 @@ export class ValidationPanel {
     const parts: HTMLElement[] = [verdict];
     if (!v.zones.length) return parts;
 
-    parts.push(this.toolbar(v.zones, selected));
+    parts.push(this.toolbar(v.zones, file, selected));
     const shown = this.visible(v.zones);
     if (!shown.length) {
       parts.push(el('p', 'muted small', t('findings.empty')));
@@ -136,7 +151,8 @@ export class ValidationPanel {
     }
     const list = el('ol', 'val-zones');
     for (const z of shown) {
-      const btn = el('button', `val-zone ${LEVEL_CLASS[z.level]}${z === selected ? ' selected' : ''}`);
+      const ack = acknowledgementOf(z, file.acks);
+      const btn = el('button', `val-zone ${LEVEL_CLASS[z.level]}${ack ? ' acked' : ''}${z === selected ? ' selected' : ''}`);
       btn.type = 'button';
       const top = el('span', 'z-top');
       top.append(
@@ -145,14 +161,20 @@ export class ValidationPanel {
         el('span', 'why', z.reasons.map((r) => t(REASON_KEY[r])).join(', ')),
         el('span', 'num', `#${v.zones.indexOf(z) + 1}`),
       );
-      btn.append(top, el('span', 'meta', [`${formatNumber(z.areaMm2)} mm²`, ...figures(z)].join(' · ')));
+      const meta = [`${formatNumber(z.areaMm2)} mm²`, ...figures(z)];
+      if (ack) meta.push(`${t('findings.acked')} (${t(ack.reason === 'small' ? 'findings.ack.small' : 'findings.ack.manual')})`);
+      btn.append(top, el('span', 'meta', meta.join(' · ')));
       btn.addEventListener('click', () => this.hooks.onZone(z));
       btn.addEventListener('pointerenter', () => this.hooks.onHover(z));
       btn.addEventListener('pointerleave', () => this.hooks.onHover(null));
       btn.addEventListener('focus', () => this.hooks.onHover(z));
       btn.addEventListener('blur', () => this.hooks.onHover(null));
+      const toggle = el('button', 'z-ack', t(ack ? 'findings.unack' : 'findings.ack'));
+      toggle.type = 'button';
+      toggle.title = ack ? t('findings.unack') : t('findings.ack.hint');
+      toggle.addEventListener('click', () => this.hooks.onAck(z, !ack));
       const li = el('li');
-      li.append(btn);
+      li.append(btn, toggle);
       list.append(li);
     }
     parts.push(list, el('p', 'muted small', t('validation.zoneHint')));
@@ -160,23 +182,26 @@ export class ValidationPanel {
   }
 
   /** Level filter chips with counts, and the previous / position / next stepper. */
-  private toolbar(zones: Zone[], selected: Zone | null): HTMLElement {
+  private toolbar(zones: Zone[], file: LoadedFile, selected: Zone | null): HTMLElement {
     const bar = el('div', 'findings-bar');
     const chips = el('div', 'f-chips');
     chips.setAttribute('role', 'radiogroup');
+    const open = zones.filter((z) => !acknowledgementOf(z, file.acks));
+    const acked = zones.length - open.length;
     const options: [ZoneFilter, string, number][] = [
       ['all', t('findings.all'), zones.length],
-      [CRITICAL, t('level.critical'), zones.filter((z) => z.level === CRITICAL).length],
-      [CAUTION, t('level.caution'), zones.filter((z) => z.level === CAUTION).length],
+      [CRITICAL, t('level.critical'), open.filter((z) => z.level === CRITICAL).length],
+      [CAUTION, t('level.caution'), open.filter((z) => z.level === CAUTION).length],
     ];
+    if (acked || this.filter === 'acked') options.push(['acked', t('findings.acked'), acked]);
     for (const [f, label, n] of options) {
-      const b = el('button', `f-chip${f === 'all' ? '' : ` ${LEVEL_CLASS[f]}`}`);
+      const b = el('button', `f-chip${f === 'all' ? '' : f === 'acked' ? ' acked' : ` ${LEVEL_CLASS[f]}`}`);
       b.type = 'button';
       b.dataset.level = String(f);
       b.setAttribute('role', 'radio');
       b.setAttribute('aria-checked', String(f === this.filter));
       b.disabled = !n && f !== this.filter;
-      if (f !== 'all') b.append(el('span', 'dot'));
+      if (f !== 'all' && f !== 'acked') b.append(el('span', 'dot'));
       b.append(label, el('span', 'n', String(n)));
       b.addEventListener('click', () => {
         this.filter = f;
