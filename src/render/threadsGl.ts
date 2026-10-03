@@ -1,32 +1,14 @@
 import type { Pattern } from '../model/pattern';
-import { colorRuns } from '../render/threads';
-import type { Viewport } from '../render/viewport';
+import { colorRuns } from './threads';
+import type { Viewport } from './viewport';
 
 /**
- * Experimental WebGL2 thread renderer. Every stitch is one instanced quad; the fragment shader
+ * WebGL2 thread renderer for the realistic view. Every stitch is one instanced quad; the fragment shader
  * treats it as a round thread lying on the fabric (a capsule whose ends dive into the needle
  * holes), lights it with a diffuse term and a Kajiya-Kay fiber highlight, and optionally adds
  * the diagonal ridges of a twisted ply. Each stitch is drawn twice in sewing order, first its
  * soft shadow and then the thread, so every stitch darkens what was sewn before it.
  */
-
-export interface GlOptions {
-  /** Thread width in mm; a 40 wt thread lies about 0.4 mm wide. */
-  threadMm: number;
-  twist: boolean;
-  shadow: boolean;
-  fabric: boolean;
-  /** Fabric or stage color, 0..255 sRGB. */
-  background: [number, number, number];
-}
-
-export const DEFAULT_GL_OPTIONS: GlOptions = {
-  threadMm: 0.4,
-  twist: true,
-  shadow: true,
-  fabric: false,
-  background: [42, 37, 48],
-};
 
 const THREAD_VS = `#version 300 es
 layout(location = 0) in vec2 a_corner;
@@ -74,8 +56,6 @@ in vec4 v_color;
 flat in int v_pass;
 flat in vec2 v_dir;
 uniform float u_halfw;
-uniform float u_twist;
-uniform float u_shadow;
 uniform vec2 u_light;
 out vec4 o;
 
@@ -87,7 +67,6 @@ void main() {
   float t = v_local.x;
   float a = v_local.y;
   if (v_pass == 0) {
-    if (u_shadow < 0.5) discard;
     float dt = t - clamp(t, 0.0, v_len);
     float d = length(vec2(dt, a));
     float s = 1.0 - smoothstep(hw * 0.3, hw * 1.7, d);
@@ -115,7 +94,7 @@ void main() {
   // Twisted ply: ridges running diagonally across the thread, as on a real two ply thread.
   float seed = v_color.a;
   float pitch = hw * 2.0;
-  float twistVis = u_twist * smoothstep(4.0, 9.0, pitch);
+  float twistVis = smoothstep(4.0, 9.0, pitch);
   float phase = (t + a * 0.9) / pitch * 6.2831853 + seed * 40.0;
   float ridge = sin(phase);
   float groove = 1.0 - twistVis * 0.28 * (0.5 - 0.5 * cos(phase)) * (1.0 - r2 * 0.5);
@@ -150,39 +129,6 @@ void main() {
 
   float alpha = cover;
   o = vec4(toSrgb(col) * alpha, alpha);
-}`;
-
-const FABRIC_VS = `#version 300 es
-layout(location = 0) in vec2 a_corner;
-out vec2 v_px;
-uniform vec2 u_res;
-void main() {
-  v_px = a_corner * u_res;
-  gl_Position = vec4(a_corner.x * 2.0 - 1.0, 1.0 - a_corner.y * 2.0, 0.0, 1.0);
-}`;
-
-const FABRIC_FS = `#version 300 es
-precision highp float;
-in vec2 v_px;
-uniform float u_scale;
-uniform vec2 u_offset;
-uniform vec3 u_bg;
-uniform float u_fabric;
-out vec4 o;
-void main() {
-  if (u_fabric < 0.5) { o = vec4(u_bg, 1.0); return; }
-  // World position in 0.1 mm; a plain weave with roughly 0.3 mm yarn spacing.
-  vec2 w = (v_px - u_offset) / u_scale / 3.0;
-  vec2 cell = floor(w);
-  vec2 f = fract(w) - 0.5;
-  bool over = mod(cell.x + cell.y, 2.0) < 1.0;
-  float across = over ? f.y : f.x;
-  float along = over ? f.x : f.y;
-  float yarn = sqrt(max(1.0 - 4.0 * across * across, 0.0));
-  float shade = 0.72 + 0.28 * yarn - 0.12 * abs(along) * 2.0;
-  float px = 3.0 * u_scale;
-  shade = mix(0.9, shade, smoothstep(1.5, 4.0, px));
-  o = vec4(u_bg * shade, 1.0);
 }`;
 
 function compile(gl: WebGL2RenderingContext, vs: string, fs: string): WebGLProgram {
@@ -223,38 +169,31 @@ export function buildInstances(p: Pattern): { segs: Float32Array; colors: Float3
 }
 
 export class GlThreadRenderer {
+  readonly canvas: HTMLCanvasElement | OffscreenCanvas;
   readonly gl: WebGL2RenderingContext;
-  private thread: WebGLProgram;
-  private fabric: WebGLProgram;
-  private threadVao: WebGLVertexArrayObject;
-  private fabricVao: WebGLVertexArrayObject;
+  private prog: WebGLProgram;
+  private vao: WebGLVertexArrayObject;
   private segBuf: WebGLBuffer;
   private colBuf: WebGLBuffer;
+  private u: Record<string, WebGLUniformLocation | null>;
   private count = 0;
   private pattern: Pattern | null = null;
 
-  constructor(canvas: HTMLCanvasElement) {
-    const gl = canvas.getContext('webgl2', { antialias: true, premultipliedAlpha: true, preserveDrawingBuffer: true });
+  /** Throws when WebGL2 is not available. */
+  constructor(canvas: HTMLCanvasElement | OffscreenCanvas) {
+    this.canvas = canvas;
+    const gl = canvas.getContext('webgl2', { antialias: true, premultipliedAlpha: true }) as WebGL2RenderingContext | null;
     if (!gl) throw new Error('WebGL2 is not available');
     this.gl = gl;
-    this.thread = compile(gl, THREAD_VS, THREAD_FS);
-    this.fabric = compile(gl, FABRIC_VS, FABRIC_FS);
+    const prog = (this.prog = compile(gl, THREAD_VS, THREAD_FS));
+    this.u = Object.fromEntries(
+      ['u_scale', 'u_offset', 'u_res', 'u_halfw', 'u_light'].map((n) => [n, gl.getUniformLocation(prog, n)]),
+    );
 
-    const quad = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+    this.vao = gl.createVertexArray()!;
+    gl.bindVertexArray(this.vao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, -1, 1, -1, 0, 1, 1, 1]), gl.STATIC_DRAW);
-    const screen = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, screen);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]), gl.STATIC_DRAW);
-
-    this.fabricVao = gl.createVertexArray()!;
-    gl.bindVertexArray(this.fabricVao);
-    gl.enableVertexAttribArray(0);
-    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-
-    this.threadVao = gl.createVertexArray()!;
-    gl.bindVertexArray(this.threadVao);
-    gl.bindBuffer(gl.ARRAY_BUFFER, quad);
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
     this.segBuf = gl.createBuffer()!;
@@ -271,7 +210,11 @@ export class GlThreadRenderer {
     gl.bindVertexArray(null);
   }
 
-  setPattern(p: Pattern): void {
+  get lost(): boolean {
+    return this.gl.isContextLost();
+  }
+
+  private setPattern(p: Pattern): void {
     if (this.pattern === p) return;
     this.pattern = p;
     const { segs, colors, count } = buildInstances(p);
@@ -283,45 +226,30 @@ export class GlThreadRenderer {
     this.count = count;
   }
 
-  get stitchCount(): number {
-    return this.count;
-  }
-
-  /** Draws into the full canvas; `vp` is in CSS pixels and `dpr` maps them to device pixels. */
-  draw(vp: Viewport, dpr: number, opt: GlOptions): void {
+  /**
+   * Draws `p` onto a transparent canvas of w x h device pixels. `vp` is in CSS pixels and
+   * `dpr` maps them to device pixels; `threadMm` is the visual thread width.
+   */
+  draw(p: Pattern, vp: Viewport, dpr: number, w: number, h: number, threadMm: number): void {
     const gl = this.gl;
-    const w = gl.canvas.width;
-    const h = gl.canvas.height;
+    if (this.canvas.width !== w || this.canvas.height !== h) {
+      this.canvas.width = w;
+      this.canvas.height = h;
+    }
+    this.setPattern(p);
     gl.viewport(0, 0, w, h);
-    const scale = (vp.scale / 10) * dpr;
-    const ox = vp.offsetX * dpr;
-    const oy = vp.offsetY * dpr;
-    const bg = opt.background.map((c) => c / 255) as [number, number, number];
-
-    gl.disable(gl.BLEND);
-    gl.useProgram(this.fabric);
-    gl.uniform2f(gl.getUniformLocation(this.fabric, 'u_res'), w, h);
-    gl.uniform1f(gl.getUniformLocation(this.fabric, 'u_scale'), scale);
-    gl.uniform2f(gl.getUniformLocation(this.fabric, 'u_offset'), ox, oy);
-    gl.uniform3f(gl.getUniformLocation(this.fabric, 'u_bg'), ...bg);
-    gl.uniform1f(gl.getUniformLocation(this.fabric, 'u_fabric'), opt.fabric ? 1 : 0);
-    gl.bindVertexArray(this.fabricVao);
-    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
     if (!this.count) return;
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-    const pr = this.thread;
-    gl.useProgram(pr);
-    const hw = Math.max(0.5, (opt.threadMm * vp.scale * dpr) / 2);
-    gl.uniform1f(gl.getUniformLocation(pr, 'u_scale'), scale);
-    gl.uniform2f(gl.getUniformLocation(pr, 'u_offset'), ox, oy);
-    gl.uniform2f(gl.getUniformLocation(pr, 'u_res'), w, h);
-    gl.uniform1f(gl.getUniformLocation(pr, 'u_halfw'), hw);
-    gl.uniform2f(gl.getUniformLocation(pr, 'u_light'), -0.55, -0.65);
-    gl.uniform1f(gl.getUniformLocation(pr, 'u_twist'), opt.twist ? 1 : 0);
-    gl.uniform1f(gl.getUniformLocation(pr, 'u_shadow'), opt.shadow ? 1 : 0);
-    gl.bindVertexArray(this.threadVao);
+    gl.useProgram(this.prog);
+    gl.uniform1f(this.u.u_scale, (vp.scale / 10) * dpr);
+    gl.uniform2f(this.u.u_offset, vp.offsetX * dpr, vp.offsetY * dpr);
+    gl.uniform2f(this.u.u_res, w, h);
+    gl.uniform1f(this.u.u_halfw, Math.max(0.5, (threadMm * vp.scale * dpr) / 2));
+    gl.uniform2f(this.u.u_light, -0.55, -0.65);
+    gl.bindVertexArray(this.vao);
     gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, this.count * 2);
     gl.bindVertexArray(null);
   }
