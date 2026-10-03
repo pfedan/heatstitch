@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { COLOR_CHANGE, JUMP, PatternBuilder, STITCH } from '../src/model/pattern';
-import { colorRuns, threadWidthMm } from '../src/render/threads';
+import { colorRuns } from '../src/render/threads';
+import { threadWidthMm } from '../src/validation/profiles';
 import { buildInstances } from '../src/render/threadsGl';
 
 describe('colorRuns', () => {

@@ -5,6 +5,7 @@ import {
   fabricOf,
   recommendedSpacing,
   THREADS,
+  threadWidthMm,
   type FabricId,
   type Profile,
   type ThreadId,
@@ -106,7 +107,10 @@ export function bindProfile(s: Settings, onChange: () => void): { refresh: () =>
   };
 
   const update = () => {
-    s.profile = { fabric: fabric.value as FabricId, thread: thread.value as ThreadId };
+    const next: ThreadId = thread.value as ThreadId;
+    // A new thread weight moves the width slider to that weight; it can be adjusted afterwards.
+    if (next !== s.profile.thread) s.threadMm = threadWidthMm({ ...s.profile, thread: next });
+    s.profile = { fabric: fabric.value as FabricId, thread: next };
     refresh();
     onChange();
   };

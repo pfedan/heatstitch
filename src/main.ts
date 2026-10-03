@@ -387,6 +387,7 @@ const profile = bindProfile(settings, () => {
   saveSettings(settings);
   // Classification is cheap: every file is re-checked instantly against the new limits.
   files.setProfile(settings.profile, settings.checks);
+  controls.refresh();
   hoverZone = selectedZone = null;
   tooltip.hidden = true;
   redraw();

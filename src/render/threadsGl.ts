@@ -56,6 +56,8 @@ in vec4 v_color;
 flat in int v_pass;
 flat in vec2 v_dir;
 uniform float u_halfw;
+// Below half a pixel the thread stays one pixel wide and fades instead, so thin threads still read as thin.
+uniform float u_thin;
 uniform vec2 u_light;
 out vec4 o;
 
@@ -70,7 +72,7 @@ void main() {
     float dt = t - clamp(t, 0.0, v_len);
     float d = length(vec2(dt, a));
     float s = 1.0 - smoothstep(hw * 0.3, hw * 1.7, d);
-    float alpha = 0.42 * s * s;
+    float alpha = 0.42 * s * s * u_thin;
     o = vec4(0.0, 0.0, 0.0, alpha);
     return;
   }
@@ -127,7 +129,7 @@ void main() {
   float detail = smoothstep(0.8, 2.0, hw);
   col = mix(base * 0.95, col, detail);
 
-  float alpha = cover;
+  float alpha = cover * u_thin;
   o = vec4(toSrgb(col) * alpha, alpha);
 }`;
 
@@ -187,7 +189,7 @@ export class GlThreadRenderer {
     this.gl = gl;
     const prog = (this.prog = compile(gl, THREAD_VS, THREAD_FS));
     this.u = Object.fromEntries(
-      ['u_scale', 'u_offset', 'u_res', 'u_halfw', 'u_light'].map((n) => [n, gl.getUniformLocation(prog, n)]),
+      ['u_scale', 'u_offset', 'u_res', 'u_halfw', 'u_thin', 'u_light'].map((n) => [n, gl.getUniformLocation(prog, n)]),
     );
 
     this.vao = gl.createVertexArray()!;
@@ -247,7 +249,9 @@ export class GlThreadRenderer {
     gl.uniform1f(this.u.u_scale, (vp.scale / 10) * dpr);
     gl.uniform2f(this.u.u_offset, vp.offsetX * dpr, vp.offsetY * dpr);
     gl.uniform2f(this.u.u_res, w, h);
-    gl.uniform1f(this.u.u_halfw, Math.max(0.5, (threadMm * vp.scale * dpr) / 2));
+    const hw = (threadMm * vp.scale * dpr) / 2;
+    gl.uniform1f(this.u.u_halfw, Math.max(0.5, hw));
+    gl.uniform1f(this.u.u_thin, Math.min(1, hw / 0.5));
     gl.uniform2f(this.u.u_light, -0.55, -0.65);
     gl.bindVertexArray(this.vao);
     gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, this.count * 2);
