@@ -1,7 +1,8 @@
 import type { de } from './de';
 
 export const en: Record<keyof typeof de, string> = {
-  'app.tagline': 'Stitch density heatmap for DST and PES files. Everything runs locally in your browser.',
+  'app.tagline': 'Check and fix stitch density in DST and PES files',
+  'app.docs': 'Guide',
   'files.title': 'Files',
   'files.drop': 'Drop DST/PES files here or click',
   'files.empty': 'No file loaded yet.',
@@ -20,7 +21,9 @@ export const en: Record<keyof typeof de, string> = {
   'controls.overlay': 'Show stitch plan',
   'controls.opacity': 'Opacity',
   'controls.realistic': 'Realistic threads',
-  'controls.realistic.hint': 'Shaded threads with shadows; flat lines when zoomed far out',
+  'controls.realistic.hint': 'Round, twisted threads with shadows',
+  'controls.threadWidth': 'Thread width',
+  'controls.threadWidth.hint': 'Visual width of the realistic threads. Changing the thread weight in the profile resets it to that weight.',
   'controls.showJumps': 'Show jumps as dashed lines',
   'controls.fit': 'Fit',
   'controls.export': 'Export PNG',
@@ -140,6 +143,8 @@ export const en: Record<keyof typeof de, string> = {
   'unit.penetrations': '1/mm²',
   'files.edited': 'edited',
   'correct.title': 'Correction',
+  'correct.beta': 'Beta',
+  'correct.beta.hint': 'Beta feature: the correction is still being improved. Check the result in the compare view and do a test stitch-out before production.',
   'correct.goal': 'Goal',
   'correct.goal.caution': 'No warnings',
   'correct.goal.critical': 'Critical only',
@@ -201,4 +206,7 @@ export const en: Record<keyof typeof de, string> = {
   'compare.caution': 'Caution area',
   'compare.maxDensity': 'Max density',
   'compare.pending': '…',
+  'update.text': 'New version available. Your files are kept.',
+  'update.reload': 'Reload',
+  'update.dismiss': 'Later',
 };
