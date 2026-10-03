@@ -177,4 +177,7 @@ export const en: Record<keyof typeof de, string> = {
   'compare.caution': 'Caution area',
   'compare.maxDensity': 'Max density',
   'compare.pending': '…',
+  'update.text': 'New version available. Your files are kept.',
+  'update.reload': 'Reload',
+  'update.dismiss': 'Later',
 };

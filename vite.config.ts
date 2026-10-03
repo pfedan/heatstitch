@@ -5,7 +5,8 @@ export default defineConfig({
   base: '/heatstitch/',
   plugins: [
     VitePWA({
-      registerType: 'autoUpdate',
+      // The app asks before switching to a new version (see src/ui/updateNotice.ts).
+      registerType: 'prompt',
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
         name: 'heatstitch',
@@ -27,6 +28,8 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // A first visit is controlled right away, so the reload button can swap versions in it too.
+        clientsClaim: true,
         globPatterns: ['**/*.{js,css,html,svg,png,webmanifest,pes}'],
         // Only crawlers and link previews fetch the social image.
         globIgnores: ['og-image.png'],

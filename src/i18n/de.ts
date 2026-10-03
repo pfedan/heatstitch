@@ -175,4 +175,7 @@ export const de = {
   'compare.caution': 'Vorsicht-Fläche',
   'compare.maxDensity': 'Max. Dichte',
   'compare.pending': '…',
+  'update.text': 'Neue Version verfügbar. Deine Dateien bleiben erhalten.',
+  'update.reload': 'Neu laden',
+  'update.dismiss': 'Später',
 } as const;
