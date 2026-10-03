@@ -6,6 +6,7 @@ import type { ValidationResult, Zone } from '../validation/validate';
 import { drawEditOverlay } from './editOverlay';
 import { drawHeatmap } from './heatmap';
 import { drawStitches } from './stitches';
+import { drawThreads, realisticVisible } from './threads';
 import { drawValidation, drawZoneHighlight } from './validationOverlay';
 import type { Viewport } from './viewport';
 
@@ -31,9 +32,15 @@ export function drawScene(ctx: CanvasRenderingContext2D, w: number, h: number, s
   const { pattern, grid, gridImg, validation, validationImg, settings: s, vp } = scene;
   if (grid && gridImg) drawHeatmap(ctx, vp, grid, gridImg, s.blurMm > 0);
   if (s.showValidation && validation && validationImg) drawValidation(ctx, vp, validation, validationImg);
+  // While editing, the stitch plan is always shown so the penetrations have context.
   const edit = scene.edit;
   const opacity = edit ? Math.max(0.85, s.overlay ? s.opacity : 0) : s.overlay ? s.opacity : 0;
-  if (pattern && (opacity > 0 || s.showJumps)) drawStitches(ctx, vp, pattern, opacity, s.showJumps);
+  if (pattern && opacity > 0 && s.realistic && realisticVisible(vp)) {
+    drawThreads(ctx, vp, pattern, opacity);
+    if (s.showJumps) drawStitches(ctx, vp, pattern, 0, true);
+  } else if (pattern && (opacity > 0 || s.showJumps)) {
+    drawStitches(ctx, vp, pattern, opacity, s.showJumps);
+  }
   if (scene.highlight) drawZoneHighlight(ctx, vp, scene.highlight);
   if (pattern && edit) drawEditOverlay(ctx, vp, pattern, edit, w, h);
 }

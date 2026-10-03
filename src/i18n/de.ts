@@ -17,6 +17,8 @@ export const de = {
   'controls.jumps': 'Ungetrimmte Sprünge als Garn zählen',
   'controls.overlay': 'Stichplan einblenden',
   'controls.opacity': 'Deckkraft',
+  'controls.realistic': 'Realistische Fäden',
+  'controls.realistic.hint': 'Schattierte Fäden mit Schatten; flache Linien bei starkem Herauszoomen',
   'controls.showJumps': 'Sprünge gestrichelt zeigen',
   'controls.fit': 'Einpassen',
   'controls.export': 'PNG exportieren',
