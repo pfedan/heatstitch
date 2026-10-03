@@ -84,9 +84,9 @@ mit 0,4 mm Abstand (zwischen Einstichen auf derselben Seite) 5,0 mm/mm².
 
 ## Korrektur
 
-Das Panel *Korrektur* arbeitet mit dem gewählten Material und den eingeschalteten Prüfungen. Jede
-Änderung ist ein Rückgängig-Schritt (Strg+Z / Strg+Umschalt+Z), *Original* stellt die geladene Datei
-wieder her.
+Das Panel *Korrektur* steht in der rechten Spalte unter den Befunden und arbeitet mit dem gewählten
+Material und den eingeschalteten Prüfungen. Jede Änderung ist ein Rückgängig-Schritt (Strg+Z /
+Strg+Umschalt+Z), *Original* stellt die geladene Datei wieder her.
 
 ### Automatisch
 
@@ -170,6 +170,11 @@ npm run preview   # Build lokal ansehen: http://localhost:4173/heatstitch/
 Die Tests erzeugen ihre DST/PES-Fixtures synthetisch (`tests/helpers/encode.ts`) und prüfen u.a.,
 dass die Summe des Rasters exakt der Gesamtgarnlänge bzw. Stichzahl entspricht.
 
+## Beispieldateien
+
+`public/examples/` enthält echte Stickdateien zum Ausprobieren, z. B. `cat-60mm.pes` (Katze, 60 mm, PES v6).
+Der Knopf "Beispiel laden" unter dem Dateifeld lädt sie direkt in die App.
+
 ## Deployment
 
 `.github/workflows/deploy.yml` testet und baut jeden Push; Pushes auf `main` werden auf
@@ -195,4 +200,5 @@ src/writers/   DST- und PES-Writer (PEC-Block, Vorschaubilder)
 src/render/    Viewport, Farbskala, Heatmap, Stichplan, Legende
 src/ui/        Dateiliste, Validierung, Korrektur-Panel, Stich-Editor, Controls, Statistik, Tooltip, Export
 src/i18n/      Übersetzungen DE/EN
+public/examples/  Beispiel-Stickdateien (per Knopf ladbar)
 ```

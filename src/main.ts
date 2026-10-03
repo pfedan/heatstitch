@@ -131,13 +131,25 @@ function originalScene(): Scene {
   };
 }
 
-const panel = new ValidationPanel($('validation'), {
+const panel = new ValidationPanel($('validation'), $('findings-open'), {
   onZone: (z) => selectZone(z),
   onHover: (z) => {
     hoverZone = z;
     redraw();
   },
+  onStep: (dir) => stepZone(dir),
 });
+
+/** Shows or hides the findings (the Correction panel stays in the column); while hidden a chip on the canvas reopens them. */
+function setFindingsOpen(open: boolean): void {
+  settings.findingsOpen = open;
+  saveSettings(settings);
+  $('layout').classList.toggle('findings-closed', !open);
+  $('findings-open').hidden = open;
+}
+$('findings-close').addEventListener('click', () => setFindingsOpen(false));
+$('findings-open').addEventListener('click', () => setFindingsOpen(true));
+setFindingsOpen(settings.findingsOpen);
 
 // Rendering ------------------------------------------------------------------
 
@@ -246,10 +258,12 @@ function selectZone(z: Zone): void {
   redraw();
 }
 
-/** Jumps to the next (dir 1) or previous (dir -1) zone of the active file, worst first. */
+/** Jumps to the next (dir 1) or previous (dir -1) zone the findings list shows, worst first. */
 function stepZone(dir: 1 | -1): void {
-  const zones = files.active?.validation?.zones;
-  if (!zones?.length) return;
+  const all = files.active?.validation?.zones;
+  if (!all) return;
+  const zones = panel.visible(all);
+  if (!zones.length) return;
   const i = selectedZone ? zones.indexOf(selectedZone) : -1;
   selectZone(zones[i < 0 ? (dir > 0 ? 0 : zones.length - 1) : (i + dir + zones.length) % zones.length]);
 }
@@ -407,6 +421,17 @@ const input = $<HTMLInputElement>('file-input');
 input.addEventListener('change', () => {
   if (input.files) void files.add(input.files);
   input.value = '';
+});
+
+const EXAMPLE_FILE = 'cat-60mm.pes';
+$('load-example').addEventListener('click', async () => {
+  try {
+    const res = await fetch(`${import.meta.env.BASE_URL}examples/${EXAMPLE_FILE}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    await files.add([new File([await res.blob()], EXAMPLE_FILE)]);
+  } catch (err) {
+    console.error('Loading the example failed', err);
+  }
 });
 
 let dragDepth = 0;
