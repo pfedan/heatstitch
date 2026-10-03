@@ -70,8 +70,33 @@ const PEC: [number, number, number, string][] = [
 ];
 
 export function pecColor(index: number): ThreadColor {
-  const [r, g, b, name] = PEC[index >= 0 && index < PEC.length ? index : 0];
-  return { r, g, b, name };
+  const i = index >= 0 && index < PEC.length ? index : 0;
+  const [r, g, b, name] = PEC[i];
+  return { r, g, b, name, pecIndex: i };
+}
+
+/** Perceptual color distance ("red mean", compuphase.com/cmetric.htm), as pyembroidery uses. */
+function distance(r1: number, g1: number, b1: number, r2: number, g2: number, b2: number): number {
+  const rm = (r1 + r2) / 2;
+  const r = r1 - r2;
+  const g = g1 - g2;
+  const b = b1 - b2;
+  return ((512 + rm) * r * r) / 256 + 4 * g * g + ((767 - rm) * b * b) / 256;
+}
+
+/** The color's own PEC index if it has one, otherwise the nearest palette entry (never 0, "unknown"). */
+export function pecIndexOf(c: ThreadColor): number {
+  if (c.pecIndex !== undefined && c.pecIndex >= 0 && c.pecIndex < PEC.length) return c.pecIndex;
+  let best = 1;
+  let bestD = Infinity;
+  for (let i = 1; i < PEC.length; i++) {
+    const d = distance(c.r, c.g, c.b, PEC[i][0], PEC[i][1], PEC[i][2]);
+    if (d < bestD) {
+      bestD = d;
+      best = i;
+    }
+  }
+  return best;
 }
 
 /** Distinct colors for formats without color info (DST). */

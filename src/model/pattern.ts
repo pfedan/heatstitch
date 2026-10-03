@@ -12,6 +12,8 @@ export interface ThreadColor {
   g: number;
   b: number;
   name?: string;
+  /** Index in the Brother PEC palette, kept so PES files save with their original thread slots. */
+  pecIndex?: number;
 }
 
 export interface Bounds {

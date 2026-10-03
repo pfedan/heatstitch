@@ -118,6 +118,63 @@
           </div>
           <div id="validation" class="findings-body" aria-live="polite"></div>
         </section>
+
+        <section class="panel" id="correct-panel">
+          <h2 data-i18n="correct.title"></h2>
+          <div class="field">
+            <span class="label" data-i18n="correct.goal"></span>
+            <div class="segmented" role="radiogroup">
+              <label><input type="radio" name="fix-goal" value="caution" /><span data-i18n="correct.goal.caution"></span></label>
+              <label><input type="radio" name="fix-goal" value="critical" /><span data-i18n="correct.goal.critical"></span></label>
+            </div>
+          </div>
+          <div class="checks fix-options">
+            <label class="check"><input type="checkbox" id="fix-thin" /><span><span data-i18n="correct.thin"></span><small data-i18n="correct.thin.hint"></small></span></label>
+            <label class="check"><input type="checkbox" id="fix-shorts" /><span><span data-i18n="correct.shorts"></span><small data-i18n="correct.shorts.hint"></small></span></label>
+            <label class="check"><input type="checkbox" id="fix-nudge" /><span><span data-i18n="correct.nudge"></span><small data-i18n="correct.nudge.hint"></small></span></label>
+          </div>
+          <div class="buttons">
+            <button type="button" id="fix-all" class="primary" data-i18n="correct.all"></button>
+            <button type="button" id="fix-zone" data-i18n="correct.zone"></button>
+          </div>
+          <div id="fix-report" class="fix-report" aria-live="polite"></div>
+
+          <h3 data-i18n="edit.title"></h3>
+          <div class="buttons">
+            <button type="button" id="edit-toggle" aria-pressed="false" data-i18n="edit.start"></button>
+          </div>
+          <div id="edit-tools" class="edit-tools" hidden>
+            <p class="muted small" data-i18n="edit.hint"></p>
+            <p class="sel-info" id="sel-info"></p>
+            <div class="buttons">
+              <button type="button" id="sel-delete" data-i18n="edit.delete"></button>
+              <button type="button" id="sel-thin" data-i18n="edit.thin"></button>
+              <select id="thin-share" aria-label="">
+                <option value="0.25">25 %</option>
+                <option value="0.34" selected>33 %</option>
+                <option value="0.5">50 %</option>
+              </select>
+            </div>
+          </div>
+          <div class="buttons">
+            <button type="button" id="undo" data-i18n="edit.undo" data-i18n-title="edit.undo.key"></button>
+            <button type="button" id="redo" data-i18n="edit.redo" data-i18n-title="edit.redo.key"></button>
+            <button type="button" id="revert" data-i18n="edit.revert"></button>
+          </div>
+
+          <h3 data-i18n="compare.title"></h3>
+          <div class="buttons">
+            <button type="button" id="compare-toggle" aria-pressed="false" data-i18n="compare.start"></button>
+          </div>
+          <table class="compare-table" id="compare-table" hidden></table>
+
+          <h3 data-i18n="save.title"></h3>
+          <div class="buttons">
+            <button type="button" id="save-dst" data-i18n="save.dst"></button>
+            <button type="button" id="save-pes" data-i18n="save.pes"></button>
+          </div>
+          <p class="muted small" data-i18n="save.note"></p>
+        </section>
       </aside>
     </main>
     <script type="module" src="/src/main.ts"></script>

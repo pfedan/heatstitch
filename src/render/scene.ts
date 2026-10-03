@@ -1,7 +1,9 @@
 import type { DensityGrid } from '../density/grid';
 import type { Pattern } from '../model/pattern';
 import type { Settings } from '../settings';
+import type { EditView } from '../ui/editor';
 import type { ValidationResult, Zone } from '../validation/validate';
+import { drawEditOverlay } from './editOverlay';
 import { drawHeatmap } from './heatmap';
 import { drawStitches } from './stitches';
 import { drawThreads, realisticVisible } from './threads';
@@ -19,6 +21,8 @@ export interface Scene {
   highlight: Zone | null;
   settings: Settings;
   vp: Viewport;
+  /** Stitch editor state; the stitch plan and needle penetrations are shown while it is set. */
+  edit?: EditView | null;
 }
 
 /** Draws heatmap, validation overlay and optional stitch overlay in CSS pixel coordinates. */
@@ -28,11 +32,15 @@ export function drawScene(ctx: CanvasRenderingContext2D, w: number, h: number, s
   const { pattern, grid, gridImg, validation, validationImg, settings: s, vp } = scene;
   if (grid && gridImg) drawHeatmap(ctx, vp, grid, gridImg, s.blurMm > 0);
   if (s.showValidation && validation && validationImg) drawValidation(ctx, vp, validation, validationImg);
-  if (pattern && s.overlay && s.realistic && realisticVisible(vp)) {
-    drawThreads(ctx, vp, pattern, s.opacity);
+  // While editing, the stitch plan is always shown so the penetrations have context.
+  const edit = scene.edit;
+  const opacity = edit ? Math.max(0.85, s.overlay ? s.opacity : 0) : s.overlay ? s.opacity : 0;
+  if (pattern && opacity > 0 && s.realistic && realisticVisible(vp)) {
+    drawThreads(ctx, vp, pattern, opacity);
     if (s.showJumps) drawStitches(ctx, vp, pattern, 0, true);
-  } else if (pattern && (s.overlay || s.showJumps)) {
-    drawStitches(ctx, vp, pattern, s.overlay ? s.opacity : 0, s.showJumps);
+  } else if (pattern && (opacity > 0 || s.showJumps)) {
+    drawStitches(ctx, vp, pattern, opacity, s.showJumps);
   }
   if (scene.highlight) drawZoneHighlight(ctx, vp, scene.highlight);
+  if (pattern && edit) drawEditOverlay(ctx, vp, pattern, edit, w, h);
 }

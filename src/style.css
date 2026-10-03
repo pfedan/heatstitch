@@ -110,12 +110,8 @@ button:disabled {
   min-height: 0;
 }
 
-.layout.findings-closed {
-  grid-template-columns: 300px 1fr;
-  grid-template-areas: 'side stage';
-}
-
-.layout.findings-closed .inspector {
+/* The Correction panel shares the column, so closing the findings hides only them. */
+.layout.findings-closed .findings {
   display: none;
 }
 
@@ -134,10 +130,6 @@ button:disabled {
 @media (max-width: 1100px) {
   .layout {
     grid-template-columns: 260px 1fr 280px;
-  }
-
-  .layout.findings-closed {
-    grid-template-columns: 260px 1fr;
   }
 }
 
@@ -644,8 +636,8 @@ input[type='range'] {
 }
 
 .findings {
-  flex: 1 1 auto;
-  min-height: 0;
+  flex: 1 1 0;
+  min-height: 240px;
   display: flex;
   flex-direction: column;
 }
@@ -916,6 +908,122 @@ button.link:hover {
   color: #ff5050;
 }
 
+/* Correction and editing */
+
+/* Shares the column with the findings; each half scrolls on its own. */
+#correct-panel {
+  flex: 1 1 0;
+  min-height: 240px;
+  overflow-y: auto;
+  font-size: 12px;
+}
+
+.panel h3 {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  margin: 16px 0 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.fix-options {
+  border: none;
+  padding: 0;
+  margin: 4px 0 0;
+}
+
+.fix-report {
+  margin-top: 8px;
+  font-size: 13px;
+}
+
+.fix-report p {
+  margin: 0 0 4px;
+}
+
+.fix-report p.strong {
+  font-weight: 600;
+}
+
+.edit-tools {
+  margin-top: 6px;
+}
+
+.edit-tools p {
+  margin: 0 0 6px;
+}
+
+.edit-tools .sel-info {
+  font-size: 13px;
+}
+
+.edit-tools select {
+  flex: 0 0 auto;
+}
+
+.file-list .edited {
+  font-size: 11px;
+  color: var(--accent);
+}
+
+.stage.editing canvas#canvas {
+  cursor: crosshair;
+}
+
+.stage.editing canvas#canvas.panning {
+  cursor: grabbing;
+}
+
+.compare-table {
+  width: 100%;
+  margin-top: 8px;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.compare-table th,
+.compare-table td {
+  padding: 3px 0;
+  text-align: right;
+  border-bottom: 1px solid var(--line);
+}
+
+.compare-table th:first-child,
+.compare-table td:first-child {
+  text-align: left;
+  color: var(--muted);
+  font-weight: normal;
+}
+
+.compare-table thead th {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.compare-table td.better {
+  color: #2e9d5b;
+}
+
+.compare-table td.worse {
+  color: #d64545;
+}
+
+.compare-table caption {
+  caption-side: bottom;
+  text-align: left;
+  font-size: 11px;
+  color: var(--muted);
+  padding-top: 6px;
+}
+
+.stage.splitting canvas#canvas,
+.stage canvas#canvas.on-divider {
+  cursor: col-resize;
+}
+
 @media (max-width: 760px) {
   .inspector {
     border-left: none;
@@ -932,5 +1040,10 @@ button.link:hover {
 
   .val-zones {
     max-height: 50vh;
+  }
+
+  #correct-panel {
+    flex: none;
+    overflow: visible;
   }
 }

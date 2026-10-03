@@ -1,3 +1,4 @@
+import { DEFAULT_CORRECTION, type CorrectionOptions } from './correct/auto';
 import type { Metric } from './density/grid';
 import type { Lang } from './i18n';
 import { DEFAULT_PROFILE, normalizeProfile, type Profile } from './validation/profiles';
@@ -25,6 +26,8 @@ export interface Settings {
   profile: Profile;
   /** Validation rules that are switched on. */
   checks: Checks;
+  /** Automatic correction options (the region is chosen per run). */
+  correction: Omit<CorrectionOptions, 'region'>;
   scales: Record<Metric, Scale>;
   lang: Lang | null;
 }
@@ -46,6 +49,7 @@ export const DEFAULTS: Settings = {
   findingsOpen: true,
   profile: DEFAULT_PROFILE,
   checks: { ...ALL_CHECKS },
+  correction: { ...DEFAULT_CORRECTION },
   scales: {
     thread: { max: 12 },
     penetrations: { max: 4 },
@@ -67,6 +71,7 @@ export function loadSettings(): Settings {
       scales: { ...structuredClone(DEFAULTS.scales), ...s.scales },
       profile: normalizeProfile(s.profile),
       checks: normalizeChecks(s.checks),
+      correction: { ...DEFAULT_CORRECTION, ...s.correction },
     };
   } catch {
     return structuredClone(DEFAULTS);

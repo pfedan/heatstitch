@@ -17,6 +17,8 @@ Stickdichte-Heatmap für Stickdateien, komplett im Browser (kein Backend, keine 
 - Statistik: Stiche, Sprünge, Schnitte, Farbwechsel, Größe, Garnlänge, Max-Dichte
 - Mehrere Dateien laden und umschalten (auch per Pfeiltasten oder j/k, `f` = Einpassen)
 - PNG-Export der aktuellen Ansicht inkl. Legende
+- **Korrektur:** automatisch (Reihen ausdünnen, Kurzstiche bereinigen, gleiche Einstichlöcher trennen) und von Hand (Einstiche wählen, verschieben, löschen, Auswahl ausdünnen), mit Rückgängig/Wiederholen und Vergleichsansicht Original/korrigiert, siehe unten
+- **Speichern als DST oder PES** (eigene Writer, kein pyembroidery)
 - Deutsch / Englisch
 - PWA: installierbar, offline nutzbar, "Öffnen mit" für .dst/.pes
 
@@ -80,6 +82,85 @@ mit 0,4 mm Abstand (zwischen Einstichen auf derselben Seite) 5,0 mm/mm².
   `src/validation/validate.ts`. Schwellen in `src/validation/thresholds.ts`, Profile in
   `src/validation/profiles.ts`.
 
+## Korrektur
+
+Das Panel *Korrektur* steht in der rechten Spalte unter den Befunden und arbeitet mit dem gewählten
+Material und den eingeschalteten Prüfungen. Jede Änderung ist ein Rückgängig-Schritt (Strg+Z /
+Strg+Umschalt+Z), *Original* stellt die geladene Datei wieder her.
+
+Die bearbeitete Fassung wird bei jeder Änderung im Browser neben dem unveränderten Original
+gespeichert (IndexedDB) und nach dem Neuladen der Seite wiederhergestellt; ein Rückgängig-Schritt
+führt dann zurück zum Original. Das Original selbst wird nie überschrieben, und *×* entfernt beide.
+
+### Automatisch
+
+*Ziel* ist entweder „keine Warnung“ (Vorsicht und Kritisch beheben) oder „nur Kritisch“. Die
+Korrektur zielt 10 % unter die jeweilige Grenze, misst nach jeder Runde neu (bis zu 4 Runden) und
+läuft im Web Worker. *Nur gewählte Zone* beschränkt sie auf die Zone, die in der Liste gewählt ist.
+
+- **Reihen ausdünnen** (`src/correct/thin.ts`): Füllungen und Satins sind Hin-und-her-Bahnen. Ohne
+  Objektdaten erkennt heatstitch sie an den Wendepunkten eines Stichzugs, die periodisch
+  wiederkehren (Satin: jeder zweite Wendepunkt liegt auf derselben Kante, Füllung mit
+  Verbindungsstich: jeder vierte). Entfernt wird jeweils ein Zyklus (zwei Füllreihen bzw. ein Zick
+  und ein Zack), die Enden verbindet ein kurzer Stich. Wie viele Zyklen fallen, ergibt sich je Zelle
+  aus dem Überschuss von Dichte, Kurzstichen oder Perforation; die Entfernungen werden gleichmäßig
+  verteilt. Mindestens 60 % des entfernten Garns müssen in markierten Zellen liegen (in späteren
+  Runden 30 %), damit eine lange Füllreihe nicht wegen eines kleinen Flecks verschwindet. Das ist die
+  einzige Korrektur, die die Garnmenge pro Fläche wirklich senkt.
+- **Kurzstiche bereinigen** (`src/correct/shorts.ts`): entfernt Stiche ohne Bewegung (überall) und
+  fasst in Zellen mit Kurzstich-Häufung Ketten kurzer Stiche zusammen, solange kein Punkt mehr als
+  0,3 mm vom neuen Stich abweicht. Schmale Zickzack-Säulen bleiben dabei unverändert und werden
+  stattdessen ausgedünnt.
+- **Gleiche Einstichlöcher trennen** (`src/correct/nudge.ts`, standardmäßig aus): schiebt Einstiche
+  verschiedener Lagen, die näher als 0,2 mm beieinander liegen, um höchstens 0,3 mm auseinander, bei
+  Leder auch Einstiche in Perforationszonen. Senkt die Dichte nicht. Aus, weil echte Dateien Löcher
+  oft absichtlich wiederverwenden (nachgezogene Konturen, gemeinsame Objektkanten).
+- Vernähstiche am Anfang und Ende eines Blocks werden nie entfernt; Sprünge, Schnitte und
+  Farbwechsel behalten ihre Ankerstiche.
+
+Was übrig bleibt, meldet das Panel; meist sind das kleine Flecken, in denen lange Reihen nur kurz
+durch eine dichte Stelle laufen. Ausgedünnte Füllungen haben ihre Reihen paarweise (zwei Reihen
+bleiben, zwei fallen weg), der Abstand wird nicht neu verteilt.
+
+### Von Hand
+
+*Stiche bearbeiten* (`e`) blendet Stichplan und, ab etwa 6 px/mm Zoom, die Einstiche ein.
+
+- Klick wählt einen Einstich, Umschalt+Klick erweitert, Umschalt+Ziehen wählt ein Rechteck,
+  Strg+A alles. Klick ins Leere hebt die Auswahl auf, Ziehen im Leeren verschiebt die Ansicht.
+- Gewählte Einstiche ziehen oder mit den Pfeiltasten verschieben (0,1 mm, mit Umschalt 0,5 mm).
+- Entf / Rücktaste löscht; die Nachbarn werden durch einen Stich verbunden.
+- *Ausdünnen* entfernt 25, 33 oder 50 % der Zyklen in Füllungen und Zickzacks, die überwiegend in
+  der Auswahl liegen.
+
+### Vergleich
+
+*Mit Original vergleichen* (`c`, sobald die Datei geändert wurde) teilt die Ansicht: links das
+Original, rechts die aktuelle Fassung, jeweils mit eigener Heatmap, Markierungen und Stichplan. Die
+Trennlinie lässt sich ziehen, Zoom und Verschieben gelten für beide Seiten, der Tooltip zeigt die
+Werte der Seite unter dem Zeiger. Darunter stehen Stiche, Garnlänge, kritische und Vorsicht-Fläche
+und maximale Dichte beider Fassungen nebeneinander.
+
+### Speichern
+
+*Als DST* / *Als PES* schreibt das aktuelle Muster (`src/writers/`). Nach einer Änderung heißt die
+Datei `name-corrected.dst`. Gespeichert werden nur Stiche und Farben: PE-Design-Objekte und
+Rahmeneinstellungen des Originals gehen verloren.
+
+- **DST:** Ein Schnitt wird als Folge von 3 Sprüngen geschrieben, aber nur, wenn die Sprungfolge danach
+  nicht schon lang genug ist. Schnitte wachsen deshalb beim wiederholten Speichern nicht (anders als
+  bei pyembroidery). Ungetrimmte Sprungfolgen, die sonst als Schnitt gelesen würden, werden
+  zusammengefasst. Lange Stiche werden in Sprünge plus einen Stich zerlegt (keine zusätzlichen
+  Einstiche). Sprünge über 36 mm brauchen 3 oder mehr Datensätze und werden beim Lesen zum Schnitt;
+  das ist eine Eigenschaft des Formats. DST enthält keine Farben.
+- **PES:** Version 1 mit CEmbOne/CSewSeg-Objekt für Designsoftware und PEC-Block mit
+  Vorschaubildern für Maschinen. Nur Sprünge nach einem Schnitt tragen das Schnitt-Flag (pyembroidery
+  markiert jeden Sprung). Farben behalten ihren PEC-Paletten-Platz; Farben aus DST bekommen den
+  nächstgelegenen.
+- Die Tests (`tests/writers.test.ts`) prüfen Lesen → Schreiben → Lesen für DST, PES und beide
+  Konvertierungen auf Datensatz-Gleichheit. Die geschriebenen Dateien wurden außerdem mit
+  pyembroidery 1.5.1 gegengelesen.
+
 ## Entwicklung
 
 ```sh
@@ -115,11 +196,13 @@ GitHub Pages veröffentlicht. Einmalig nötig: *Settings → Pages → Source: G
 
 ```
 src/parsers/   DST- und PES-Parser, PEC-Palette
-src/model/     Pattern-Datenmodell, Garnsegmente, Statistik
+src/model/     Pattern-Datenmodell, Garnsegmente, Statistik, Bearbeitungsfunktionen
 src/density/   Dichteraster, Gauss-Blur, Web Worker
 src/validation/  Messung, Profile, Stufen, Satin-Erkennung, Kurzstich- und Perforationsregel, Zonen
+src/correct/   Automatische Korrektur: Ausdünnen, Kurzstiche, Einstiche trennen
+src/writers/   DST- und PES-Writer (PEC-Block, Vorschaubilder)
 src/render/    Viewport, Farbskala, Heatmap, Stichplan, Legende
-src/ui/        Dateiliste, Validierung, Controls, Statistik, Tooltip, Export
+src/ui/        Dateiliste, Validierung, Korrektur-Panel, Stich-Editor, Controls, Statistik, Tooltip, Export
 src/i18n/      Übersetzungen DE/EN
 public/examples/  Beispiel-Stickdateien (per Knopf ladbar)
 ```
