@@ -14,6 +14,8 @@ export interface Settings {
   includeJumps: boolean;
   overlay: boolean;
   opacity: number;
+  /** Stitch plan drawn as shaded threads with shadows instead of flat lines. */
+  realistic: boolean;
   showJumps: boolean;
   /** Orange/red overlay of the 3-tier validation. */
   showValidation: boolean;
@@ -38,6 +40,7 @@ export const DEFAULTS: Settings = {
   includeJumps: false,
   overlay: false,
   opacity: 0.6,
+  realistic: false,
   showJumps: false,
   showValidation: true,
   findingsOpen: true,

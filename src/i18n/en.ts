@@ -19,6 +19,8 @@ export const en: Record<keyof typeof de, string> = {
   'controls.jumps': 'Count untrimmed jumps as thread',
   'controls.overlay': 'Show stitch plan',
   'controls.opacity': 'Opacity',
+  'controls.realistic': 'Realistic threads',
+  'controls.realistic.hint': 'Shaded threads with shadows; flat lines when zoomed far out',
   'controls.showJumps': 'Show jumps as dashed lines',
   'controls.fit': 'Fit',
   'controls.export': 'Export PNG',

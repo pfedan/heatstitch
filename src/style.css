@@ -268,7 +268,8 @@ body.dragging .dropzone {
   width: 100%;
 }
 
-.field.indent {
+.field.indent,
+.check.indent {
   margin-left: 24px;
 }
 
