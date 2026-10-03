@@ -110,7 +110,7 @@ führt dann zurück zum Original. Das Original selbst wird nie überschrieben, u
 
 Die Korrektur arbeitet wie ein Digitalisierer von Hand: Sie verändert Stiche nur dort, wo es im
 fertigen Stick nicht auffällt, und lässt Stellen, die in der Praxis normal sind, in Ruhe. *Ziel* ist
-entweder „keine Warnung“ (Vorsicht und Kritisch beheben) oder „nur Kritisch“. *Nur gewählte Zone*
+entweder „keine Warnung“ (Vorsicht und Kritisch beheben) oder „nur Kritisch“ (Standard). *Nur gewählte Zone*
 beschränkt sie auf die Zone, die in der Liste gewählt ist. Sie läuft im Web Worker, und jeder
 Schritt wird nur übernommen, wenn das Ergebnis im Bereich dadurch nicht schlechter wird.
 

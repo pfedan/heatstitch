@@ -72,14 +72,14 @@ export interface CorrectionOptions {
   acks?: Acknowledgement[];
 }
 
-export const DEFAULT_CORRECTION: CorrectionOptions = { goal: 'caution', focus: 'both' };
+export const DEFAULT_CORRECTION: CorrectionOptions = { goal: 'critical', focus: 'both' };
 
 const FOCI: readonly CorrectionFocus[] = ['thread', 'holes', 'both'];
 
 /** Valid options from stored settings (older versions stored separate switches). */
 export function normalizeCorrection(c: Partial<CorrectionOptions> | undefined): Omit<CorrectionOptions, 'region'> {
   return {
-    goal: c?.goal === 'critical' ? 'critical' : 'caution',
+    goal: c?.goal === 'caution' ? 'caution' : 'critical',
     focus: FOCI.includes(c?.focus as CorrectionFocus) ? c!.focus! : DEFAULT_CORRECTION.focus,
   };
 }

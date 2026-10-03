@@ -14,6 +14,8 @@ import type { Zone } from '../src/validation/zones';
 import { letterDesign } from './helpers/designs';
 import { Shape } from './helpers/shapes';
 
+/** Correct caution zones too (the default only corrects critical ones). */
+const FULL = { ...DEFAULT_CORRECTION, goal: 'caution' as const };
 const WOVEN: Profile = { fabric: 'woven', thread: '40' };
 const KNIT: Profile = { fabric: 'knit', thread: '40' };
 const thread = (p: Pattern) => patternStats(p).threadLength;
@@ -218,7 +220,7 @@ describe('findings that are normal in practice', () => {
 
   it('are left alone by the correction', () => {
     const p = column();
-    const r = autoCorrect(p, WOVEN, DEFAULT_CORRECTION);
+    const r = autoCorrect(p, WOVEN, FULL);
     expect(r.pattern).toBe(p);
     expect(r.report.practice).toBeGreaterThan(0);
   });
