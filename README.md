@@ -95,7 +95,7 @@ dass die Summe des Rasters exakt der Gesamtgarnlänge bzw. Stichzahl entspricht.
 
 ## Beispieldateien
 
-`examples/` enthält echte Stickdateien zum Ausprobieren, z. B. `katze_60mm_v5.pes` (Katze, 60 mm, PES v6).
+`examples/` enthält echte Stickdateien zum Ausprobieren, z. B. `cat-60mm.pes` (Katze, 60 mm, PES v6).
 
 ## Deployment
 
