@@ -1,18 +1,7 @@
 import { COLOR_CHANGE, STITCH, type Pattern, type ThreadColor } from '../model/pattern';
-import { threadOf, type Profile } from '../validation/profiles';
 import { GlThreadRenderer } from './threadsGl';
 import type { Viewport } from './viewport';
 
-/** Below this on-screen thread width the shading is invisible, so the flat renderer is used. */
-export const MIN_REALISTIC_PX = 2;
-
-/**
- * Visual thread width in mm for the profile's thread weight: 0.4 mm for 40 wt, scaled like the
- * recommended stitch spacing (60 wt 0.35, 30 wt 0.5, 12 wt 0.8 mm).
- */
-export function threadWidthMm(profile: Profile): number {
-  return 0.4 / threadOf(profile).factor;
-}
 
 export interface ColorRun {
   color: ThreadColor;
@@ -87,9 +76,4 @@ export function drawThreads(
   ctx.drawImage(r.canvas, 0, 0);
   ctx.restore();
   return true;
-}
-
-/** True when threads are drawn wide enough on screen for the realistic shading to show. */
-export function realisticVisible(vp: Viewport, threadMm: number): boolean {
-  return threadMm * vp.scale >= MIN_REALISTIC_PX;
 }

@@ -1,7 +1,7 @@
 import { DEFAULT_CORRECTION, type CorrectionOptions } from './correct/auto';
 import type { Metric } from './density/grid';
 import type { Lang } from './i18n';
-import { DEFAULT_PROFILE, normalizeProfile, type Profile } from './validation/profiles';
+import { DEFAULT_PROFILE, normalizeProfile, threadWidthMm, type Profile } from './validation/profiles';
 import { ALL_CHECKS, normalizeChecks, type Checks } from './validation/validate';
 
 export interface Scale {
@@ -17,6 +17,8 @@ export interface Settings {
   opacity: number;
   /** Stitch plan drawn as shaded threads with shadows instead of flat lines. */
   realistic: boolean;
+  /** Visual thread width of the realistic view in mm; reset to the thread weight's width when the profile thread changes. */
+  threadMm: number;
   showJumps: boolean;
   /** Orange/red overlay of the 3-tier validation. */
   showValidation: boolean;
@@ -44,6 +46,7 @@ export const DEFAULTS: Settings = {
   overlay: false,
   opacity: 0.6,
   realistic: false,
+  threadMm: threadWidthMm(DEFAULT_PROFILE),
   showJumps: false,
   showValidation: true,
   findingsOpen: true,
@@ -65,11 +68,13 @@ export function loadSettings(): Settings {
     const raw = localStorage.getItem(KEY);
     if (!raw) return structuredClone(DEFAULTS);
     const s = JSON.parse(raw) as Partial<Settings>;
+    const profile = normalizeProfile(s.profile);
     return {
       ...structuredClone(DEFAULTS),
       ...s,
       scales: { ...structuredClone(DEFAULTS.scales), ...s.scales },
-      profile: normalizeProfile(s.profile),
+      profile,
+      threadMm: typeof s.threadMm === 'number' && s.threadMm > 0 ? s.threadMm : threadWidthMm(profile),
       checks: normalizeChecks(s.checks),
       correction: { ...DEFAULT_CORRECTION, ...s.correction },
     };

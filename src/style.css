@@ -265,6 +265,10 @@ body.dragging .dropzone {
   margin-left: 24px;
 }
 
+.field.indent2 {
+  margin-left: 48px;
+}
+
 .label {
   color: var(--muted);
   font-size: 12px;
