@@ -1087,3 +1087,27 @@ button.link:hover {
     overflow: visible;
   }
 }
+
+/* New version notice: bottom centre, above everything, never blocks the canvas for long. */
+.update-notice {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100vw - 32px);
+  padding: 8px 8px 8px 14px;
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgb(0 0 0 / 0.25);
+  font-size: 13px;
+}
+
+.update-notice[hidden] {
+  display: none;
+}

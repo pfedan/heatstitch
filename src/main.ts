@@ -1,5 +1,4 @@
 import './style.css';
-import { registerSW } from 'virtual:pwa-register';
 import { WorkerClient } from './density/client';
 import type { DensityGrid } from './density/grid';
 import { applyI18n, detectLang, setLang, t, type Lang } from './i18n';
@@ -24,11 +23,11 @@ import { POINTS_MIN_SCALE } from './render/editOverlay';
 import { DIVIDER_GRAB_PX, drawDivider } from './render/compare';
 import type { Pattern } from './model/pattern';
 import type { Measurement } from './validation/measure';
+import { initUpdateNotice } from './ui/updateNotice';
 import { downloadPattern, outputFileName } from './writers';
 
-registerSW({ immediate: true });
-
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+initUpdateNotice($('update-notice'));
 const stage = $<HTMLElement>('stage');
 const canvas = $<HTMLCanvasElement>('canvas');
 const ctx = canvas.getContext('2d')!;
