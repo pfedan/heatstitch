@@ -12,7 +12,7 @@ Stickdichte-Heatmap für Stickdateien, komplett im Browser (kein Backend, keine 
 - Absolute Farbskala mit einstellbarem Maximum
 - **Validierung** jeder geladenen Datei (Sicher / Vorsicht / Kritisch) für ein wählbares Material (Stoff × Garnstärke), mit orange/rotem Overlay, Gesamturteil und Zonenliste, siehe unten
 - Ungetrimmte Sprünge optional als Garn zählen
-- Stichplan-Overlay in Garnfarben, Sprünge gestrichelt
+- Stichplan-Overlay in Garnfarben, wahlweise als realistische Fäden mit Schattierung und Schatten, Sprünge gestrichelt
 - Zoom (Mausrad, Pinch), Verschieben, Tooltip mit Dichte und Position
 - Statistik: Stiche, Sprünge, Schnitte, Farbwechsel, Größe, Garnlänge, Max-Dichte
 - Mehrere Dateien laden und umschalten (auch per Pfeiltasten oder j/k, `f` = Einpassen)

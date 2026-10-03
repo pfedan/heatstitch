@@ -16,6 +16,7 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
   const includeJumps = $<HTMLInputElement>('include-jumps');
   const overlay = $<HTMLInputElement>('overlay');
   const opacity = $<HTMLInputElement>('opacity');
+  const realistic = $<HTMLInputElement>('realistic');
   const showJumps = $<HTMLInputElement>('show-jumps');
 
   const refresh = () => {
@@ -30,6 +31,8 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
     overlay.checked = s.overlay;
     opacity.value = String(s.opacity);
     opacity.disabled = !s.overlay;
+    realistic.checked = s.realistic;
+    realistic.disabled = !s.overlay;
     showJumps.checked = s.showJumps;
     $('cell-out').textContent = `${formatNumber(s.cellMm, 2)} mm`;
     $('blur-out').textContent = s.blurMm > 0 ? `${formatNumber(s.blurMm, 1)} mm` : t('controls.off');
@@ -61,6 +64,7 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
   on(showValidation, 'change', () => ((s.showValidation = showValidation.checked), 'render'));
   on(overlay, 'change', () => ((s.overlay = overlay.checked), 'render'));
   on(opacity, 'input', () => ((s.opacity = Number(opacity.value)), 'render'));
+  on(realistic, 'change', () => ((s.realistic = realistic.checked), 'render'));
   on(showJumps, 'change', () => ((s.showJumps = showJumps.checked), 'render'));
 
   refresh();

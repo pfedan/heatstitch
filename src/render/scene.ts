@@ -4,6 +4,7 @@ import type { Settings } from '../settings';
 import type { ValidationResult, Zone } from '../validation/validate';
 import { drawHeatmap } from './heatmap';
 import { drawStitches } from './stitches';
+import { drawThreads, realisticVisible } from './threads';
 import { drawValidation, drawZoneHighlight } from './validationOverlay';
 import type { Viewport } from './viewport';
 
@@ -27,6 +28,11 @@ export function drawScene(ctx: CanvasRenderingContext2D, w: number, h: number, s
   const { pattern, grid, gridImg, validation, validationImg, settings: s, vp } = scene;
   if (grid && gridImg) drawHeatmap(ctx, vp, grid, gridImg, s.blurMm > 0);
   if (s.showValidation && validation && validationImg) drawValidation(ctx, vp, validation, validationImg);
-  if (pattern && (s.overlay || s.showJumps)) drawStitches(ctx, vp, pattern, s.overlay ? s.opacity : 0, s.showJumps);
+  if (pattern && s.overlay && s.realistic && realisticVisible(vp)) {
+    drawThreads(ctx, vp, pattern, s.opacity);
+    if (s.showJumps) drawStitches(ctx, vp, pattern, 0, true);
+  } else if (pattern && (s.overlay || s.showJumps)) {
+    drawStitches(ctx, vp, pattern, s.overlay ? s.opacity : 0, s.showJumps);
+  }
   if (scene.highlight) drawZoneHighlight(ctx, vp, scene.highlight);
 }
