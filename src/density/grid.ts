@@ -11,6 +11,10 @@ export interface DensityOptions {
   blurMm: number;
   /** Count untrimmed jump threads as thread (thread metric only). */
   includeJumps: boolean;
+  /** Snap the grid origin to multiples of this (mm); defaults to the cell size. */
+  alignMm?: number;
+  /** Added to the snapped origin (mm), e.g. to keep 0.1 mm stitch coordinates off cell edges. */
+  shiftMm?: number;
 }
 
 export interface DensityGrid {
@@ -64,20 +68,27 @@ export function addSegment(
   }
 }
 
-export function computeDensity(p: Pattern, opt: DensityOptions): DensityGrid {
+/**
+ * Builds the density grid. `segmentFilter` (thread metric only) receives the record index a
+ * thread piece ends at and can exclude it, e.g. to measure satin thread separately.
+ */
+export function computeDensity(p: Pattern, opt: DensityOptions, segmentFilter?: (end: number) => boolean): DensityGrid {
   const cell = opt.cellMm;
   const sigmaCells = opt.blurMm > 0 ? opt.blurMm / cell : 0;
   const pad = Math.ceil(3 * sigmaCells) + 1;
   const b = p.bounds;
-  const originX = Math.floor(b.minX / 10 / cell) * cell - pad * cell;
-  const originY = Math.floor(b.minY / 10 / cell) * cell - pad * cell;
+  const align = opt.alignMm ?? cell;
+  const padMm = Math.ceil((pad * cell) / align - 1e-9) * align;
+  const originX = Math.floor(b.minX / 10 / align) * align - padMm + (opt.shiftMm ?? 0);
+  const originY = Math.floor(b.minY / 10 / align) * align - padMm + (opt.shiftMm ?? 0);
   const cols = Math.floor((b.maxX / 10 - originX) / cell) + 1 + pad;
   const rows = Math.floor((b.maxY / 10 - originY) / cell) + 1 + pad;
   let data: Float32Array = new Float32Array(cols * rows);
   const toCell = (v: number, o: number) => (v / 10 - o) / cell;
 
   if (opt.metric === 'thread') {
-    forEachThreadSegment(p, opt.includeJumps, (x0, y0, x1, y1) => {
+    forEachThreadSegment(p, opt.includeJumps, (x0, y0, x1, y1, end) => {
+      if (segmentFilter && !segmentFilter(end)) return;
       const len = Math.hypot(x1 - x0, y1 - y0) / 10;
       if (len === 0) return;
       addSegment(data, cols, rows, toCell(x0, originX), toCell(y0, originY), toCell(x1, originX), toCell(y1, originY), len);
@@ -98,16 +109,4 @@ export function computeDensity(p: Pattern, opt: DensityOptions): DensityGrid {
   let max = 0;
   for (let i = 0; i < data.length; i++) if (data[i] > max) max = data[i];
   return { data, cols, rows, originX, originY, cellMm: cell, max };
-}
-
-/** Share of non-empty area whose density exceeds `threshold` (0..1), plus the absolute area in mm². */
-export function areaAbove(g: DensityGrid, threshold: number): { fraction: number; areaMm2: number } {
-  let filled = 0;
-  let above = 0;
-  for (let i = 0; i < g.data.length; i++) {
-    const v = g.data[i];
-    if (v > 1e-6) filled++;
-    if (v > threshold) above++;
-  }
-  return { fraction: filled ? above / filled : 0, areaMm2: above * g.cellMm * g.cellMm };
 }

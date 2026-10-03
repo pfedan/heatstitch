@@ -1,12 +1,15 @@
 import { t } from '../i18n';
 import { patternStats, type Pattern, type PatternStats } from '../model/pattern';
 import { parsePattern, SUPPORTED_EXTENSIONS } from '../parsers';
+import { CAUTION, CRITICAL, type ValidationResult } from '../validation/validate';
 
 export interface LoadedFile {
   id: number;
   fileName: string;
   pattern?: Pattern;
   stats?: PatternStats;
+  /** Set once the worker has validated the file. */
+  validation?: ValidationResult;
   error?: string;
 }
 
@@ -18,6 +21,9 @@ export class FileList {
   constructor(
     private list: HTMLUListElement,
     private onActivate: (f: LoadedFile | null) => void,
+    /** Runs the validation for a newly parsed file (in a worker). */
+    private validate: (p: Pattern) => Promise<ValidationResult>,
+    private onValidated: (f: LoadedFile) => void,
   ) {}
 
   get active(): LoadedFile | null {
@@ -41,9 +47,22 @@ export class FileList {
         entry.error = err instanceof Error ? err.message : String(err);
       }
       this.files.push(entry);
+      if (entry.pattern) this.runValidation(entry, entry.pattern);
     }
     if (first) this.activate(first.id);
     else this.render();
+  }
+
+  private async runValidation(f: LoadedFile, p: Pattern): Promise<void> {
+    try {
+      f.validation = await this.validate(p);
+    } catch (err) {
+      console.error(err);
+      return;
+    }
+    if (!this.files.includes(f)) return;
+    this.render();
+    this.onValidated(f);
   }
 
   activate(id: number | null): void {
@@ -98,6 +117,13 @@ export class FileList {
       fmt.className = 'fmt';
       fmt.textContent = f.pattern!.format;
       li.append(fmt);
+      const worst = f.validation ? Math.max(0, ...f.validation.zones.map((z) => z.level)) : null;
+      const dot = document.createElement('span');
+      dot.className = `dot ${worst === CRITICAL ? 'critical' : worst === CAUTION ? 'caution' : worst === null ? 'pending' : 'safe'}`;
+      dot.title = t(
+        worst === CRITICAL ? 'level.critical' : worst === CAUTION ? 'level.caution' : worst === null ? 'validation.pending' : 'level.safe',
+      );
+      li.append(dot);
       li.addEventListener('click', () => this.activate(f.id));
     }
     const rm = document.createElement('button');

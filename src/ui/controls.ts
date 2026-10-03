@@ -12,7 +12,7 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
   const cell = $<HTMLInputElement>('cell');
   const blur = $<HTMLInputElement>('blur');
   const max = $<HTMLInputElement>('max');
-  const warn = $<HTMLInputElement>('warn');
+  const showValidation = $<HTMLInputElement>('show-validation');
   const includeJumps = $<HTMLInputElement>('include-jumps');
   const overlay = $<HTMLInputElement>('overlay');
   const opacity = $<HTMLInputElement>('opacity');
@@ -22,9 +22,9 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
     metricInputs.forEach((i) => (i.checked = i.value === s.metric));
     cell.value = String(s.cellMm);
     blur.value = String(s.blurMm);
-    // Leave a number field alone while the user is typing in it.
+    // Leave the number field alone while the user is typing in it.
     if (document.activeElement !== max) max.value = String(s.scales[s.metric].max);
-    if (document.activeElement !== warn) warn.value = String(s.scales[s.metric].warn);
+    showValidation.checked = s.showValidation;
     includeJumps.checked = s.includeJumps;
     includeJumps.disabled = s.metric !== 'thread';
     overlay.checked = s.overlay;
@@ -58,11 +58,7 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
     if (v > 0) s.scales[s.metric].max = v;
     return 'render';
   });
-  on(warn, 'input', () => {
-    const v = Number(warn.value);
-    if (v >= 0) s.scales[s.metric].warn = v;
-    return 'render';
-  });
+  on(showValidation, 'change', () => ((s.showValidation = showValidation.checked), 'render'));
   on(overlay, 'change', () => ((s.overlay = overlay.checked), 'render'));
   on(opacity, 'input', () => ((s.opacity = Number(opacity.value)), 'render'));
   on(showJumps, 'change', () => ((s.showJumps = showJumps.checked), 'render'));
