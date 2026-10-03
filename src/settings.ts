@@ -17,6 +17,8 @@ export interface Settings {
   showJumps: boolean;
   /** Orange/red overlay of the 3-tier validation. */
   showValidation: boolean;
+  /** Findings column next to the canvas is shown (else only a chip on the canvas). */
+  findingsOpen: boolean;
   /** Material the validation thresholds are scaled for. */
   profile: Profile;
   /** Validation rules that are switched on. */
@@ -38,6 +40,7 @@ export const DEFAULTS: Settings = {
   opacity: 0.6,
   showJumps: false,
   showValidation: true,
+  findingsOpen: true,
   profile: DEFAULT_PROFILE,
   checks: { ...ALL_CHECKS },
   scales: {
