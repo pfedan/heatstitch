@@ -124,6 +124,8 @@ export const en: Record<keyof typeof de, string> = {
   'unit.penetrations': '1/mm²',
   'files.edited': 'edited',
   'correct.title': 'Correction',
+  'correct.beta': 'Beta',
+  'correct.beta.hint': 'Beta feature: the correction is still being improved. Check the result in the compare view and do a test stitch-out before production.',
   'correct.goal': 'Goal',
   'correct.goal.caution': 'No warnings',
   'correct.goal.critical': 'Critical only',

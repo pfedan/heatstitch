@@ -180,6 +180,19 @@ button:disabled {
   margin: 0 0 10px;
 }
 
+.beta-badge {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 1px 6px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  color: var(--accent);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  vertical-align: 1px;
+  cursor: help;
+}
+
 .dropzone {
   display: block;
   border: 2px dashed var(--line);

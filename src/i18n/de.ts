@@ -122,6 +122,8 @@ export const de = {
   'unit.penetrations': '1/mm²',
   'files.edited': 'bearbeitet',
   'correct.title': 'Korrektur',
+  'correct.beta': 'Beta',
+  'correct.beta.hint': 'Beta-Funktion: Die Korrektur wird noch verbessert. Ergebnis im Vergleich prüfen und vor dem Sticken einen Probestick machen.',
   'correct.goal': 'Ziel',
   'correct.goal.caution': 'Keine Warnung',
   'correct.goal.critical': 'Nur Kritisch',
