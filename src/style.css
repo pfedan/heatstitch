@@ -105,8 +105,40 @@ button:disabled {
 .layout {
   flex: 1;
   display: grid;
-  grid-template-columns: 300px 1fr;
+  grid-template-columns: 300px 1fr 320px;
+  grid-template-areas: 'side stage findings';
   min-height: 0;
+}
+
+.layout.findings-closed {
+  grid-template-columns: 300px 1fr;
+  grid-template-areas: 'side stage';
+}
+
+.layout.findings-closed .inspector {
+  display: none;
+}
+
+.sidebar {
+  grid-area: side;
+}
+
+.stage {
+  grid-area: stage;
+}
+
+.inspector {
+  grid-area: findings;
+}
+
+@media (max-width: 1100px) {
+  .layout {
+    grid-template-columns: 260px 1fr 280px;
+  }
+
+  .layout.findings-closed {
+    grid-template-columns: 260px 1fr;
+  }
 }
 
 .sidebar {
@@ -418,9 +450,11 @@ input[type='range'] {
 }
 
 @media (max-width: 760px) {
-  .layout {
+  .layout,
+  .layout.findings-closed {
     grid-template-columns: 1fr;
-    grid-template-rows: auto minmax(60vh, 1fr);
+    grid-template-rows: auto minmax(60vh, 1fr) auto;
+    grid-template-areas: 'side' 'stage' 'findings';
   }
 
   .sidebar {
@@ -596,8 +630,165 @@ input[type='range'] {
   font-size: 12px;
 }
 
+/* Findings column ------------------------------------------------------------ */
+
+.inspector {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  overflow-y: auto;
+  border-left: 1px solid var(--line);
+}
+
+.findings {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.findings-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.findings-head h2 {
+  flex: 1;
+  margin: 0;
+}
+
 .val-toggle {
-  margin: 10px 0 0;
+  margin: 0;
+  align-items: center;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.val-toggle input {
+  margin: 0;
+}
+
+button.icon {
+  border: none;
+  background: none;
+  padding: 2px 7px;
+  color: var(--muted);
+  line-height: 1.2;
+}
+
+button.icon:not(:disabled):hover {
+  color: var(--ink);
+  background: var(--bg);
+}
+
+.findings-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.findings-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.f-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.f-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: none;
+}
+
+.f-chip .n {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.f-chip[aria-checked='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.f-chip[aria-checked='true'] .n {
+  color: inherit;
+  opacity: 0.8;
+}
+
+.f-chip .dot,
+.findings-chip .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.f-chip.caution .dot {
+  background: #ffa500;
+}
+
+.f-chip.critical .dot {
+  background: #ff0000;
+}
+
+.f-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.f-nav button.icon {
+  font-size: 18px;
+  padding: 0 8px;
+}
+
+.f-nav .pos {
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.findings-chip {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(13, 11, 16, 0.8);
+  color: #fff;
+  font-size: 13px;
+}
+
+.findings-chip span:last-child:not(.dot) {
+  color: #d9d3e2;
+  font-size: 12px;
+}
+
+.findings-chip:hover {
+  background: rgba(13, 11, 16, 0.95);
 }
 
 button.link {
@@ -634,11 +825,19 @@ button.link:hover {
 
 .val-zones {
   list-style: none;
-  margin: 10px 0 0;
-  padding: 0;
+  margin: 8px -4px 0;
+  padding: 0 4px;
   display: flex;
   flex-direction: column;
   gap: 4px;
+  flex: 1 1 auto;
+  min-height: 120px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.val-zones li {
+  flex: none;
 }
 
 .val-zone {
@@ -689,6 +888,13 @@ button.link:hover {
   font-size: 12px;
 }
 
+.val-zone .num {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
 .val-zone .meta {
   color: var(--muted);
   font-size: 12px;
@@ -707,4 +913,23 @@ button.link:hover {
 
 .tooltip[data-level='2'] .check b {
   color: #ff5050;
+}
+
+@media (max-width: 760px) {
+  .inspector {
+    border-left: none;
+    border-top: 1px solid var(--line);
+    overflow: visible;
+  }
+
+  /* The page scrolls here, so the column sizes to its content and only the list scrolls. */
+  .findings,
+  .findings-body,
+  .val-zones {
+    flex: none;
+  }
+
+  .val-zones {
+    max-height: 50vh;
+  }
 }

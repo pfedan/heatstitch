@@ -22,7 +22,7 @@
       </select>
     </header>
 
-    <main class="layout">
+    <main class="layout" id="layout">
       <aside class="sidebar">
         <section class="panel">
           <h2 data-i18n="files.title"></h2>
@@ -34,8 +34,8 @@
           <ul id="file-list" class="file-list"></ul>
         </section>
 
-        <section class="panel" id="validation-panel">
-          <h2 data-i18n="validation.title"></h2>
+        <section class="panel" id="material-panel">
+          <h2 data-i18n="profile.title"></h2>
           <div class="profile">
             <label class="field">
               <span class="label" data-i18n="profile.fabric"></span>
@@ -51,8 +51,6 @@
             <legend data-i18n="checks.title"></legend>
             <div id="checks"></div>
           </fieldset>
-          <div id="validation" aria-live="polite"></div>
-          <label class="check val-toggle"><input type="checkbox" id="show-validation" /><span data-i18n="validation.overlay"></span></label>
           <details class="explain">
             <summary data-i18n="validation.explain"></summary>
             <ul id="explain"></ul>
@@ -107,7 +105,19 @@
         <div id="tooltip" class="tooltip" hidden></div>
         <p class="empty" id="empty" data-i18n="canvas.empty"></p>
         <p class="hint" data-i18n="canvas.hint"></p>
+        <button type="button" id="findings-open" class="findings-chip" hidden></button>
       </section>
+
+      <aside class="inspector" id="inspector">
+        <section class="panel findings" id="findings-panel">
+          <div class="findings-head">
+            <h2 data-i18n="findings.title"></h2>
+            <label class="check val-toggle" data-i18n-title="validation.overlay.key"><input type="checkbox" id="show-validation" /><span data-i18n="validation.overlay"></span></label>
+            <button type="button" id="findings-close" class="icon" data-i18n-title="findings.hide"><span aria-hidden="true">&#x2715;</span></button>
+          </div>
+          <div id="validation" class="findings-body" aria-live="polite"></div>
+        </section>
+      </aside>
     </main>
     <script type="module" src="/src/main.ts"></script>
   </body>

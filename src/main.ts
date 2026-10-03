@@ -85,13 +85,25 @@ const scene = (): Scene => ({
   vp,
 });
 
-const panel = new ValidationPanel($('validation'), {
+const panel = new ValidationPanel($('validation'), $('findings-open'), {
   onZone: (z) => selectZone(z),
   onHover: (z) => {
     hoverZone = z;
     redraw();
   },
+  onStep: (dir) => stepZone(dir),
 });
+
+/** Shows or hides the findings column; while hidden a chip on the canvas reopens it. */
+function setFindingsOpen(open: boolean): void {
+  settings.findingsOpen = open;
+  saveSettings(settings);
+  $('layout').classList.toggle('findings-closed', !open);
+  $('findings-open').hidden = open;
+}
+$('findings-close').addEventListener('click', () => setFindingsOpen(false));
+$('findings-open').addEventListener('click', () => setFindingsOpen(true));
+setFindingsOpen(settings.findingsOpen);
 
 // Rendering ------------------------------------------------------------------
 
@@ -170,10 +182,12 @@ function selectZone(z: Zone): void {
   redraw();
 }
 
-/** Jumps to the next (dir 1) or previous (dir -1) zone of the active file, worst first. */
+/** Jumps to the next (dir 1) or previous (dir -1) zone the findings list shows, worst first. */
 function stepZone(dir: 1 | -1): void {
-  const zones = files.active?.validation?.zones;
-  if (!zones?.length) return;
+  const all = files.active?.validation?.zones;
+  if (!all) return;
+  const zones = panel.visible(all);
+  if (!zones.length) return;
   const i = selectedZone ? zones.indexOf(selectedZone) : -1;
   selectZone(zones[i < 0 ? (dir > 0 ? 0 : zones.length - 1) : (i + dir + zones.length) % zones.length]);
 }
