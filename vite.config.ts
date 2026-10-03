@@ -32,7 +32,7 @@ export default defineConfig({
         clientsClaim: true,
         globPatterns: ['**/*.{js,css,html,svg,png,webmanifest,pes}'],
         // Only crawlers and link previews fetch the social image.
-        globIgnores: ['og-image.png'],
+        globIgnores: ['og-image.jpg'],
       },
     }),
   ],

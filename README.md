@@ -207,5 +207,5 @@ src/ui/        Dateiliste, Validierung, Korrektur-Panel, Stich-Editor, Controls,
 src/i18n/      Übersetzungen DE/EN
 public/examples/  Beispiel-Stickdateien (per Knopf ladbar)
 docs.html      Kurzanleitung DE/EN (src/docs.ts, src/docs.css)
-public/og-image.png, robots.txt, sitemap.xml  Vorschaubild für Social Media, Crawler
+public/og-image.jpg, robots.txt, sitemap.xml  Vorschaubild für Social Media, Crawler
 ```
