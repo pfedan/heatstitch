@@ -180,7 +180,7 @@ export const en: Record<keyof typeof de, string> = {
   'correct.acknowledged': '{n} acknowledged zones skipped.',
   'correct.error': 'Correction failed: {msg}',
   'edit.title': 'Edit by hand',
-  'edit.hint': 'Click picks a penetration, Shift+click adds to the selection, Shift+drag selects a rectangle. Drag selected penetrations or move them with the arrow keys (0.1 mm, with Shift 0.5 mm). Delete removes them.',
+  'edit.hint': 'Click picks a penetration, Shift+click adds to the selection, Shift+drag selects a rectangle. Drag selected penetrations or move them with the arrow keys (0.1 mm, with Shift 0.5 mm). Double-click a stitch to insert a penetration, Delete removes them.',
   'edit.selection': '{n} penetrations selected',
   'edit.selection.one': '1 penetration selected',
   'edit.none': 'Nothing selected',

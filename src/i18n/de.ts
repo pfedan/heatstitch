@@ -178,7 +178,7 @@ export const de = {
   'correct.acknowledged': '{n} quittierte Zonen ausgelassen.',
   'correct.error': 'Korrektur fehlgeschlagen: {msg}',
   'edit.title': 'Von Hand bearbeiten',
-  'edit.hint': 'Klick wählt einen Einstich, Umschalt+Klick erweitert, Umschalt+Ziehen wählt ein Rechteck. Gewählte Einstiche ziehen oder mit den Pfeiltasten verschieben (0,1 mm, mit Umschalt 0,5 mm). Entf löscht.',
+  'edit.hint': 'Klick wählt einen Einstich, Umschalt+Klick erweitert, Umschalt+Ziehen wählt ein Rechteck. Gewählte Einstiche ziehen oder mit den Pfeiltasten verschieben (0,1 mm, mit Umschalt 0,5 mm). Doppelklick auf einen Stich fügt einen Einstich ein, Entf löscht.',
   'edit.selection': '{n} Einstiche gewählt',
   'edit.selection.one': '1 Einstich gewählt',
   'edit.none': 'Nichts gewählt',
