@@ -53,7 +53,7 @@ const STAGGERS = 4;
 
 const dist = (p: Pt, q: Pt) => Math.hypot(p[0] - q[0], p[1] - q[1]);
 
-class Grid {
+export class Grid {
   cell: number;
   gw: number;
   gh: number;
@@ -401,7 +401,95 @@ function rowStitches(p: Piece, len: number): Pt[] {
  */
 export function flowFill(r: Region, graph: Graph | null, orient: Orientation, p: FillParams, start: Pt): FlowResult | null {
   const g = new Grid(r);
-  const { c, s } = field(r, g, graph, orient);
+  return fieldFill(r, g, field(r, g, graph, orient), p, start);
+}
+
+/** A direction field over a region, as doubled-angle vectors per cell of its grid. */
+export interface DirField {
+  g: Grid;
+  c: Float32Array;
+  s: Float32Array;
+}
+
+/**
+ * Field of rows that run along the outline (contour fill): at every cell the direction across the
+ * gradient of the distance to the edge, so rows form rings inside the shape.
+ */
+export function contourField(r: Region): DirField {
+  const g = new Grid(r);
+  const n = g.gw * g.gh;
+  const c = new Float32Array(n);
+  const s = new Float32Array(n);
+  for (let j = 1; j < g.gh - 1; j++) {
+    for (let i = 1; i < g.gw - 1; i++) {
+      const k = j * g.gw + i;
+      if (!g.dom[k]) continue;
+      const dx = g.sdf[k + 1] - g.sdf[k - 1];
+      const dy = g.sdf[k + g.gw] - g.sdf[k - g.gw];
+      const l = Math.hypot(dx, dy);
+      if (l < 1e-6) continue;
+      // Along the edge: the gradient turned by 90 degrees, which flips the doubled angle.
+      const ca = dx / l;
+      const sa = dy / l;
+      c[k] = -(ca * ca - sa * sa);
+      s[k] = -(2 * ca * sa);
+    }
+  }
+  const rad = Math.max(1, Math.round(0.6 / g.cell));
+  return { g, c: blurDomain(c, g, rad), s: blurDomain(s, g, rad) };
+}
+
+/**
+ * Field of the directions of given stitches (rows as sewn), spread over the whole region: keeps
+ * the look of curved rows when they are sewn anew at another spacing.
+ */
+export function stitchField(r: Region, lines: [Pt, Pt][]): DirField {
+  const g = new Grid(r);
+  const n = g.gw * g.gh;
+  const c = new Float32Array(n);
+  const s = new Float32Array(n);
+  const w = new Float32Array(n);
+  for (const [a, b] of lines) {
+    const l = dist(a, b);
+    if (l < 1e-6) continue;
+    const t = Math.atan2(b[1] - a[1], b[0] - a[0]);
+    const cc = Math.cos(2 * t);
+    const ss = Math.sin(2 * t);
+    const steps = Math.max(1, Math.ceil(l / (g.cell / 2)));
+    for (let q = 0; q <= steps; q++) {
+      const k = g.index([a[0] + ((b[0] - a[0]) * q) / steps, a[1] + ((b[1] - a[1]) * q) / steps]);
+      if (k < 0 || !g.dom[k]) continue;
+      c[k] += cc;
+      s[k] += ss;
+      w[k] += 1;
+    }
+  }
+  const rad = Math.max(1, Math.round(SMOOTH_MM / g.cell / 1.7));
+  const bc = blurDomain(c, g, rad);
+  const bs = blurDomain(s, g, rad);
+  const bw = blurDomain(w, g, rad);
+  for (let k = 0; k < n; k++) {
+    bc[k] = bw[k] > 1e-6 ? bc[k] / bw[k] : 0;
+    bs[k] = bw[k] > 1e-6 ? bs[k] / bw[k] : 0;
+  }
+  return { g, c: bc, s: bs };
+}
+
+/**
+ * Fill along a direction field: straight tatami rows when the field has nearly one direction
+ * (unless `curvedOnly`), else curved rows; null when there is no direction or the rows fail the
+ * checks. `peak` is the highest density allowed anywhere, in times the nominal 1 / spacing.
+ */
+export function fieldFill(
+  r: Region,
+  g: Grid,
+  f: { c: Float32Array; s: Float32Array },
+  p: FillParams,
+  start: Pt,
+  curvedOnly = false,
+  peak = FLOW_PEAK,
+): FlowResult | null {
+  const { c, s } = f;
   let sc = 0;
   let ss = 0;
   let sm = 0;
@@ -415,7 +503,7 @@ export function flowFill(r: Region, graph: Graph | null, orient: Orientation, p:
   }
   if (!cells || sm / cells < WEAK) return null;
   const mean = (Math.atan2(ss, sc) / 2) * (180 / Math.PI);
-  if (Math.hypot(sc, ss) / sm > UNIFORM) {
+  if (!curvedOnly && Math.hypot(sc, ss) / sm > UNIFORM) {
     const res = fillRegion(r, { ...p, angle: mean }, start);
     return res && { ...res, curved: false };
   }
@@ -424,10 +512,10 @@ export function flowFill(r: Region, graph: Graph | null, orient: Orientation, p:
   const rows = streamlines(r, g, c, s, p.spacing).map((line) => lengthen(simplify(line, 0.02), p.pull));
   if (!rows.length) return null;
   // The rows must not crowd or leave gaps; checked before anything is sewn.
-  if (peakDensity(rows) > FLOW_PEAK / p.spacing || coverage(r, rows, p.spacing * 0.75) < FLOW_COVER) return null;
+  if (peakDensity(rows) > peak / p.spacing || coverage(r, rows, p.spacing * 0.75) < FLOW_COVER) return null;
 
   const runs: Pt[][] = [];
-  const grid = new TravelGrid(r);
+  const grid = new TravelGrid(p.travel ?? r);
   let pos = p.underlay ? sewUnderlay(r, mean + 90, p.spacing, start, grid, runs) : start;
   let cur: Pt[] | null = runs.length ? runs[runs.length - 1] : null;
   const todo = rows.slice();

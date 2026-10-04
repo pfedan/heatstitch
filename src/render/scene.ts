@@ -5,7 +5,7 @@ import type { Settings } from '../settings';
 import type { EditView } from '../ui/editor';
 import type { ValidationResult, Zone } from '../validation/validate';
 import { drawEditOverlay } from './editOverlay';
-import { drawFlatStitches, drawJumps, drawMarkers, drawNeedle, drawTransition, type StitchStyle } from './flow';
+import { drawFlatStitches, drawJumps, drawMarkers, drawNeedle, drawOutlines, drawTransition, type StitchStyle } from './flow';
 import { drawHeatmap } from './heatmap';
 import { drawStitches } from './stitches';
 import { drawThreads } from './threads';
@@ -13,6 +13,13 @@ import { drawValidation, drawZoneHighlight, type Counted } from './validationOve
 import type { Viewport } from './viewport';
 
 /** What the Ablauf mode adds: per-stitch colors and visibility, symbols, the jump in focus. */
+/** Fill area of a selected object, as recognized (mm polylines). */
+export interface ShapeOutline {
+  lines: [number, number][][];
+  /** Its edges are a guess (drawn in amber). */
+  approximate: boolean;
+}
+
 export interface FlowScene {
   style: StitchStyle;
   markers: Markers;
@@ -21,6 +28,8 @@ export interface FlowScene {
   selected: Transition | null;
   /** Record the needle is at while the player stands before the end, else -1. */
   needle: number;
+  /** Fill areas of the selected objects. */
+  outlines?: ShapeOutline[];
 }
 
 export interface Scene {
@@ -60,6 +69,7 @@ export function drawScene(ctx: CanvasRenderingContext2D, w: number, h: number, s
     drawMarkers(ctx, vp, pattern, { markers: flow.markers, marks: s.marks, limit: st.limit, alpha: st.alpha }, w, h);
     if (flow.hover && flow.hover !== flow.selected) drawTransition(ctx, vp, pattern, flow.hover, false);
     if (flow.selected) drawTransition(ctx, vp, pattern, flow.selected, true);
+    if (flow.outlines?.length) drawOutlines(ctx, vp, flow.outlines);
     if (flow.needle >= 0) drawNeedle(ctx, vp, pattern, flow.needle);
     return;
   }

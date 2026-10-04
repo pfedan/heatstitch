@@ -142,16 +142,21 @@ export function patternStats(p: Pattern): PatternStats {
   forEachThreadSegment(p, false, (x0, y0, x1, y1) => {
     len += Math.hypot(x1 - x0, y1 - y0);
   });
+  // A move can carry its trim on several records (PES marks every jump of a trimmed move); the
+  // machine cuts once per move, and not before the first stitch.
+  let cutSince = true;
   for (let i = 0; i < p.cmd.length; i++) {
     switch (p.cmd[i]) {
       case STITCH:
         stitches++;
+        cutSince = false;
         break;
       case JUMP:
         jumps++;
         break;
       case TRIM:
-        trims++;
+        if (!cutSince) trims++;
+        cutSince = true;
         break;
       case COLOR_CHANGE:
         colorChanges++;

@@ -56,6 +56,8 @@ export interface Settings {
   playSpeed: number;
   /** Jumps from this length (mm) on are cut by "cut from this length". */
   trimMm: number;
+  /** What "Optimize order" may do. */
+  order: { combineColors: boolean; shortestWays: boolean };
   metric: Metric;
   cellMm: number;
   blurMm: number;
@@ -95,6 +97,7 @@ export const DEFAULTS: Settings = {
   machineSpm: 800,
   playSpeed: 50,
   trimMm: 3,
+  order: { combineColors: true, shortestWays: true },
   metric: 'thread',
   cellMm: 1,
   blurMm: 1,
@@ -142,6 +145,10 @@ export function loadSettings(): Settings {
       machineSpm: typeof s.machineSpm === 'number' && s.machineSpm > 0 ? s.machineSpm : DEFAULTS.machineSpm,
       playSpeed: typeof s.playSpeed === 'number' && s.playSpeed > 0 ? s.playSpeed : DEFAULTS.playSpeed,
       trimMm: typeof s.trimMm === 'number' && s.trimMm > 0 ? s.trimMm : DEFAULTS.trimMm,
+      order: {
+        combineColors: typeof s.order?.combineColors === 'boolean' ? s.order.combineColors : true,
+        shortestWays: typeof s.order?.shortestWays === 'boolean' ? s.order.shortestWays : true,
+      },
       scales: { ...structuredClone(DEFAULTS.scales), ...s.scales },
       profile,
       threadMm: typeof s.threadMm === 'number' && s.threadMm > 0 ? s.threadMm : threadWidthMm(profile),

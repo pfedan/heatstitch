@@ -10,13 +10,13 @@ import type { Transition } from './sequence';
 /** Length of a lock stitch (0.1 mm); short enough to hide under the following stitches. */
 const TIE_LEN = 7;
 
-interface Rec {
+export interface Rec {
   x: number;
   y: number;
   cmd: number;
 }
 
-const recs = (p: Pattern, a: number, b: number): Rec[] => {
+export const recs = (p: Pattern, a: number, b: number): Rec[] => {
   const out: Rec[] = [];
   for (let i = a; i < b; i++) out.push({ x: p.x[i], y: p.y[i], cmd: p.cmd[i] });
   return out;
@@ -30,7 +30,7 @@ function dir(p: Pattern, a: number, b: number): [number, number] {
   return l > 0 ? [dx / l, dy / l] : [1, 0];
 }
 
-function build(p: Pattern, list: Rec[]): Pattern {
+export function build(p: Pattern, list: Rec[]): Pattern {
   const x = Int32Array.from(list, (r) => r.x);
   const y = Int32Array.from(list, (r) => r.y);
   const cmd = Uint8Array.from(list, (r) => r.cmd);
@@ -41,7 +41,7 @@ function build(p: Pattern, list: Rec[]): Pattern {
  * Tie-off: back and forth along the last stitch, ending where it ended, so the thread is locked
  * before the trim. Tie-in: forth and back along the next stitch, which then covers it.
  */
-function tieOff(p: Pattern, at: number): Rec[] {
+export function tieOff(p: Pattern, at: number): Rec[] {
   const prev = at > 0 && p.cmd[at - 1] === STITCH ? at - 1 : at;
   const seg = Math.hypot(p.x[at] - p.x[prev], p.y[at] - p.y[prev]);
   const [ux, uy] = prev === at ? [1, 0] : dir(p, at, prev);
@@ -51,7 +51,7 @@ function tieOff(p: Pattern, at: number): Rec[] {
   return [back, home, { ...back }, { ...home }];
 }
 
-function tieIn(p: Pattern, at: number): Rec[] {
+export function tieIn(p: Pattern, at: number): Rec[] {
   const next = at + 1 < p.cmd.length && p.cmd[at + 1] === STITCH ? at + 1 : at;
   const seg = Math.hypot(p.x[next] - p.x[at], p.y[next] - p.y[at]);
   const [ux, uy] = next === at ? [1, 0] : dir(p, at, next);

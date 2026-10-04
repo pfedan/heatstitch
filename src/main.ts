@@ -22,7 +22,7 @@ import { acknowledgementOf, settledBy, type Acknowledgement } from './validation
 import type { ValidationResult, Zone } from './validation/validate';
 import { POINTS_MIN_SCALE } from './render/editOverlay';
 import { DIVIDER_GRAB_PX, drawDivider } from './render/compare';
-import type { Pattern } from './model/pattern';
+import type { Pattern, ThreadColor } from './model/pattern';
 import type { Measurement } from './validation/measure';
 import { initUpdateNotice } from './ui/updateNotice';
 import { downloadPattern, outputFileName, writePattern } from './writers';
@@ -48,12 +48,19 @@ import {
   type Transition,
 } from './model/sequence';
 import { recolor } from './model/recolor';
-import { COLOR_CHANGE, TRIM } from './model/pattern';
+import { COLOR_CHANGE, patternStats, STITCH, TRIM } from './model/pattern';
 import { stitchAlpha, stitchAt, stitchColors, transitionAt, type StitchStyle } from './render/flow';
-import type { FlowScene } from './render/scene';
+import type { FlowScene, ShapeOutline } from './render/scene';
 import type { Mode } from './settings';
 import { JumpsPanel } from './ui/jumpsPanel';
-import { LayersPanel } from './ui/layersPanel';
+import { type Blocked, kindLabel, LayersPanel } from './ui/layersPanel';
+import { ObjectPanel, OrderCard } from './ui/objectPanel';
+import { StitchPanel, type StitchInfo } from './ui/stitchPanel';
+import { analyze, measureFill, measureRun, measureSatin, remember, remembered, restitch, shapeTrust, type Settings as RestitchSettings, type ShapeTrust } from './model/restitch';
+import { outline } from './digitize/region';
+import { recommendedSpacing } from './validation/profiles';
+import { numberInColor, overlaps, sewObjects, type SewObject } from './model/objects';
+import { conflicts, moveStats, optimizeOrder, reorder, violations } from './model/order';
 import { Player } from './ui/player';
 import type { Key } from './i18n';
 
@@ -135,7 +142,7 @@ function activeValidationImg(): HTMLCanvasElement | null {
 }
 
 const scene = (): Scene => ({
-  pattern: editor.preview ?? files.active?.pattern ?? null,
+  pattern: (settings.mode === 'flow' ? flowPreview : null) ?? editor.preview ?? files.active?.pattern ?? null,
   flow: flowScene(),
   markers: settings.mode === 'density' && files.active?.pattern && !editor.preview ? seq(files.active.pattern).markers : null,
   grid,
@@ -219,6 +226,11 @@ interface Sequence {
   colorsAt: number[];
   /** Jumps without a trim, built the first time they are drawn as thread. */
   carried?: CarriedJumps;
+  objects: SewObject[];
+  /** Objects each object lies on (built when first needed). */
+  over?: number[][];
+  /** Object of each record (-1 between objects). */
+  objectAt: Int32Array;
 }
 const seqCache = new WeakMap<Pattern, Sequence>();
 function seq(p: Pattern): Sequence {
@@ -227,13 +239,22 @@ function seq(p: Pattern): Sequence {
   const numbers = stitchNumbers(p);
   const trimsAt: number[] = [];
   const colorsAt: number[] = [];
+  let cut = true;
   for (let i = 0; i < p.cmd.length; i++) {
-    if (p.cmd[i] === TRIM) trimsAt.push(numbers[i]);
+    if (p.cmd[i] === TRIM && !cut) trimsAt.push(numbers[i]);
     else if (p.cmd[i] === COLOR_CHANGE) colorsAt.push(numbers[i]);
+    if (p.cmd[i] === TRIM) cut = true;
+    else if (p.cmd[i] === STITCH) cut = false;
   }
+  const kinds = stitchKinds(p);
+  const objects = sewObjects(p, kinds);
+  const objectAt = new Int32Array(p.cmd.length).fill(-1);
+  for (const o of objects) objectAt.fill(o.index, o.first, o.last + 1);
   q = {
     blocks: colorBlocks(p),
-    kinds: stitchKinds(p),
+    kinds,
+    objects,
+    objectAt,
     markers: findMarkers(p),
     transitions: transitions(p),
     numbers,
@@ -252,11 +273,27 @@ let focusBlock: number | null = null;
 let hoverBlock: number | null = null;
 let selectedJump: number | null = null;
 let hoverJump: number | null = null;
-let alphaCache: { p: Pattern; hidden: ReadonlySet<number>; focus: number | null; a: Float32Array } | null = null;
+let alphaCache: { p: Pattern; hidden: ReadonlySet<number>; focus: number | null; objects: ReadonlySet<number> | null; a: Float32Array } | null = null;
+/** Selected objects (by index in sewing order) and the one hovered in the list. */
+let selectedObjects: ReadonlySet<number> = new Set();
+/** Counts selections made by the user; the stitch settings are measured again for each. */
+let selectionKey = 0;
+/** New stitches shown while a stitch setting is being dragged, not applied yet. */
+let flowPreview: Pattern | null = null;
+let hoverObject: number | null = null;
+/** One empty list, so the colors list is not rebuilt on every redraw (it compares by identity). */
+const NO_COLORS: readonly ThreadColor[] = [];
+
+const overOf = (q: Sequence, p: Pattern) => (q.over ??= overlaps(p, q.objects));
 
 function resetFlow(): void {
   hiddenBlocks = new Set();
-  focusBlock = hoverBlock = selectedJump = hoverJump = null;
+  focusBlock = hoverBlock = selectedJump = hoverJump = hoverObject = null;
+  selectedObjects = new Set();
+  selectionKey++;
+  flowPreview = null;
+  layers.collapse();
+  orderCard.close(false);
   player.pause();
   const p = files.active?.pattern;
   player.setModel(playerModel(p ?? null));
@@ -289,8 +326,15 @@ function styleFor(p: Pattern): StitchStyle {
   const q = seq(p);
   const rgb = (q.colors[settings.colorBy] ??= stitchColors(p, settings.colorBy, q.kinds));
   const focus = hoverBlock ?? focusBlock;
-  if (alphaCache?.p !== p || alphaCache.hidden !== hiddenBlocks || alphaCache.focus !== focus) {
-    alphaCache = { p, hidden: hiddenBlocks, focus, a: stitchAlpha(p, hiddenBlocks, focus) };
+  // A hovered object wins over the selection, the selection over a highlighted color.
+  const shown = hoverObject !== null ? new Set([hoverObject]) : selectedObjects.size ? selectedObjects : null;
+  const objKey = shown && hoverObject !== null ? `h${hoverObject}` : shown;
+  if (alphaCache?.p !== p || alphaCache.hidden !== hiddenBlocks || alphaCache.focus !== focus || (alphaCache.objects as unknown) !== objKey) {
+    const a = stitchAlpha(p, hiddenBlocks, shown ? null : focus);
+    if (shown) {
+      for (let i = 0; i < a.length; i++) if (a[i] > 0 && !shown.has(q.objectAt[i])) a[i] = 0.15;
+    }
+    alphaCache = { p, hidden: hiddenBlocks, focus, objects: objKey as ReadonlySet<number> | null, a };
   }
   const limit = player.complete ? p.cmd.length - 1 : recordOfStitch(q.numbers, player.pos);
   const carried = settings.marks.threads ? (q.carried ??= carriedJumps(p, q.transitions)) : null;
@@ -298,7 +342,7 @@ function styleFor(p: Pattern): StitchStyle {
 }
 
 function flowScene(): FlowScene | null {
-  const p = files.active?.pattern;
+  const p = flowPreview ?? files.active?.pattern;
   if (settings.mode !== 'flow' || !p) return null;
   const q = seq(p);
   const style = styleFor(p);
@@ -308,6 +352,8 @@ function flowScene(): FlowScene | null {
     hover: hoverJump !== null ? (q.transitions[hoverJump] ?? null) : null,
     selected: selectedJump !== null ? (q.transitions[selectedJump] ?? null) : null,
     needle: player.complete ? -1 : style.limit,
+    // The areas as recognized on the file itself, also while a change is previewed.
+    outlines: files.active?.pattern && selectedObjects.size ? stitchInfo(files.active.pattern, seq(files.active.pattern)).outlines : undefined,
   };
 }
 
@@ -341,6 +387,236 @@ const layers = new LayersPanel({
     const f = files.active;
     if (f?.pattern) applyEdit(recolor(f.pattern, b, color), f.measurement);
   },
+  select: (objs, toggle) => selectObjects(objs, toggle),
+  hover: (o) => {
+    if (hoverObject === o) return;
+    hoverObject = o;
+    redraw();
+  },
+  move: (order, moved) => moveObjects(order, moved),
+});
+
+/** Name of an object as the list shows it: kind and number within its color. */
+function objectName(q: Sequence, i: number): string {
+  const o = q.objects[i];
+  const k = numberInColor(q.objects, o);
+  return `${kindLabel(o.kind)} ${k} (${o.block + 1}. ${o.color.name || t('layers.unnamed', { n: o.block + 1 })})`;
+}
+
+function selectObjects(objs: number[], toggle: boolean): void {
+  let next: Set<number>;
+  if (toggle) {
+    next = new Set(selectedObjects);
+    for (const o of objs) if (!next.delete(o)) next.add(o);
+  } else next = new Set(objs);
+  selectedObjects = next;
+  selectionKey++;
+  flowPreview = null;
+  if (next.size) focusBlock = null;
+  layers.reveal([...next]);
+  redraw();
+  if (next.size) requestAnimationFrame(() => $('object-panel').scrollIntoView({ block: 'nearest' }));
+}
+
+/**
+ * Sews the objects in `order` (an edit that can be undone), unless that puts an object before
+ * something it lies on; then the reason is returned. The moved objects stay selected.
+ */
+function moveObjects(order: number[], moved: number[], force = false): Blocked | null {
+  const f = files.active;
+  const p = f?.pattern;
+  if (!f || !p) return null;
+  const q = seq(p);
+  const over = overOf(q, p);
+  const bad = force ? [] : violations(order, over);
+  if (bad.length) {
+    const movedSet = new Set(moved);
+    const a = order[bad.find((k) => movedSet.has(order[k])) ?? bad[0]];
+    const c = conflicts(order, over, a)[0];
+    const blocked = (text: string): Blocked => ({ text, force: () => void moveObjects(order, moved, true) });
+    if (c === undefined) return blocked(t('object.blocked', { a: objectName(q, a), b: '?' }));
+    // The two objects are shown, so it is clear where they overlap.
+    selectedObjects = new Set([a, c]);
+    selectionKey++;
+    focusBlock = null;
+    layers.reveal([a, c]);
+    redraw();
+    return blocked(over[a].includes(c) ? t('object.blocked', { a: objectName(q, a), b: objectName(q, c) }) : t('object.blockedUnder', { a: objectName(q, a), b: objectName(q, c) }));
+  }
+  const starts: number[] = [];
+  const next = reorder(p, q.objects, order, settings.trimMm, starts);
+  if (next === p) return null;
+  const keepHidden = hiddenBlocks.size;
+  applyEdit(next, f.measurement);
+  if (keepHidden) hiddenBlocks = new Set();
+  // The moved objects stay selected: found again by their first stitch.
+  const nq = seq(next);
+  const movedSet = new Set(moved);
+  selectedObjects = new Set(order.flatMap((o, k) => (movedSet.has(o) ? [nq.objectAt[recordOfStitch(nq.numbers, starts[k] + 1)]] : [])).filter((o) => o >= 0));
+  layers.reveal([...selectedObjects]);
+  layers.say(t('object.moved'));
+  redraw();
+  return null;
+}
+
+const objectPanel = new ObjectPanel({
+  step: (dir) => {
+    const p = files.active?.pattern;
+    if (!p || selectedObjects.size !== 1) return null;
+    const o = [...selectedObjects][0];
+    const n = seq(p).objects.length;
+    const k = o + dir;
+    if (k < 0 || k >= n) return null;
+    const order = Array.from({ length: n }, (_, i) => i);
+    order[o] = k;
+    order[k] = o;
+    return moveObjects(order, [o]);
+  },
+  clear: () => {
+    selectedObjects = new Set();
+    selectionKey++;
+    flowPreview = null;
+    redraw();
+  },
+});
+
+/** Parts of each object, measured stitch settings per selection (cached per pattern and selection). */
+let stitchCache: { p: Pattern; key: number; info: StitchInfo } | null = null;
+
+function stitchInfo(p: Pattern, q: Sequence): StitchInfo {
+  if (stitchCache?.p === p && stitchCache.key === selectionKey) return stitchCache.info;
+  const measured: StitchInfo['measured'] = {};
+  const counts: StitchInfo['counts'] = {};
+  const shapes: ShapeOutline[] = [];
+  let worst: ShapeTrust | undefined;
+  const rank: Record<ShapeTrust, number> = { kept: 0, good: 1, approximate: 2 };
+  for (const o of [...selectedObjects].sort((a, b) => a - b)) {
+    const obj = q.objects[o];
+    if (!obj) continue;
+    const seen = new Set<string>();
+    const an = analyze(p, obj, q.kinds);
+    for (const pt of an.parts) {
+      if (!seen.has(pt.kind)) counts[pt.kind] = (counts[pt.kind] ?? 0) + 1;
+      seen.add(pt.kind);
+      if (pt.kind === 'fill') measured.fill ??= remembered(p, obj)?.fill ?? measureFill(p, an);
+      else if (pt.kind === 'satin') measured.satin ??= measureSatin(p, pt, q.kinds);
+      else measured.run ??= measureRun(p, pt);
+    }
+    if (an.fill) {
+      const trust = shapeTrust(p, obj, an, (remembered(p, obj)?.fill ?? measureFill(p, an)).spacing);
+      if (!worst || rank[trust] > rank[worst]) worst = trust;
+      shapes.push({ lines: outline(an.fill), approximate: trust === 'approximate' });
+    }
+  }
+  const info: StitchInfo = { key: selectionKey, measured, counts, recommended: recommendedSpacing(settings.profile), shape: worst, outlines: shapes };
+  stitchCache = { p, key: selectionKey, info };
+  return info;
+}
+
+/** The active pattern with new stitches for the selected objects. */
+function restitched(s: RestitchSettings) {
+  const p = files.active?.pattern;
+  if (!p || !selectedObjects.size) return null;
+  const q = seq(p);
+  return restitch(p, q.objects, [...selectedObjects].sort((a, b) => a - b), s, q.kinds, settings.trimMm);
+}
+
+const stitchPanel = new StitchPanel($('object-stitches'), {
+  preview: (s) => {
+    flowPreview = s ? (restitched(s)?.pattern ?? null) : null;
+    redraw();
+  },
+  apply: (s) => {
+    const f = files.active;
+    const r = restitched(s);
+    flowPreview = null;
+    if (!f || !r) return redraw();
+    const say = () => {
+      if (!r.failed.length) return;
+      const pat = s.kind === 'fill' ? s.s.pattern : null;
+      const msg = pat === 'spiral' ? 'stitch.failedSpiral' : pat === 'contour' || pat === 'follow' ? 'stitch.failedCurved' : 'stitch.failed';
+      layers.say(t(msg, { n: r.failed.length }), true);
+    };
+    if (!r.starts.length) {
+      // Nothing could be sewn this way: the panel goes back to what the objects have.
+      selectionKey++;
+      say();
+      return redraw();
+    }
+    const key = selectionKey;
+    applyEdit(r.pattern);
+    // The same objects stay selected (found by their first stitch), and the settings stay as set.
+    const nq = seq(r.pattern);
+    // An object can come out in several pieces (new trims inside): all of them stay selected.
+    const sel = new Set<number>();
+    r.starts.forEach((a, k) => {
+      const pieces = new Set<number>();
+      for (let n = a + 1; n <= r.ends[k]; n++) {
+        const o = nq.objectAt[recordOfStitch(nq.numbers, n)];
+        if (o >= 0) pieces.add(o);
+      }
+      for (const o of pieces) sel.add(o);
+      // An object that stayed one keeps its shape and fill settings for the next edit.
+      if (pieces.size === 1) {
+        const o = nq.objects[[...pieces][0]];
+        remember(r.pattern, o, { region: r.regions[k], fill: s.kind === 'fill' ? { ...s.s } : undefined });
+      }
+    });
+    if (sel.size) selectedObjects = sel;
+    selectionKey = key;
+    stitchCache = stitchCache ? { ...stitchCache, p: r.pattern } : null;
+    say();
+    redraw();
+  },
+});
+
+/** Color changes and trims as the statistics count them, travel between objects. */
+function orderStats(p: Pattern) {
+  const st = patternStats(p);
+  return { colorChanges: st.colorChanges, trims: st.trims, travelMm: moveStats(p).travelMm };
+}
+
+/** The order "Optimize order" found for the active pattern, kept while its card is open. */
+let pendingOrder: { p: Pattern; order: number[] } | null = null;
+
+const orderCard = new OrderCard(settings, {
+  preview: () => {
+    const p = files.active?.pattern;
+    if (!p) return null;
+    const q = seq(p);
+    const order = optimizeOrder(p, q.objects, overOf(q, p), { ...settings.order, trimMm: settings.trimMm });
+    const changed = order.some((o, k) => o !== k);
+    const next = changed ? reorder(p, q.objects, order, settings.trimMm) : p;
+    pendingOrder = changed ? { p, order } : null;
+    const before = orderStats(p);
+    const after = orderStats(next);
+    const secs = (x: Pattern, c: typeof before) => sewingSeconds(seq(x).total, c.trims, c.colorChanges, settings.machineSpm);
+    return { before, after, beforeSeconds: secs(p, before), afterSeconds: secs(next, after), changed: changed && next !== p };
+  },
+  apply: () => {
+    const f = files.active;
+    const p = f?.pattern;
+    if (!f || !p || pendingOrder?.p !== p) return;
+    const before = orderStats(p);
+    const next = reorder(p, seq(p).objects, pendingOrder.order, settings.trimMm);
+    pendingOrder = null;
+    selectedObjects = new Set();
+    hiddenBlocks = new Set();
+    focusBlock = null;
+    applyEdit(next, f.measurement);
+    const after = orderStats(next);
+    const parts: string[] = [];
+    const dc = before.colorChanges - after.colorChanges;
+    const dt = before.trims - after.trims;
+    if (dc > 0) parts.push(t(dc === 1 ? 'order.fewerColors.one' : 'order.fewerColors', { n: dc }));
+    if (dt > 0) parts.push(t(dt === 1 ? 'order.fewerTrims.one' : 'order.fewerTrims', { n: dt }));
+    if (!parts.length) parts.push(t('order.shorterTravel'));
+    layers.say(t('order.applied', { what: parts.join(', ') }));
+  },
+  cancel: () => {
+    pendingOrder = null;
+  },
+  saved: () => saveSettings(settings),
 });
 
 /** Frames the jump with a few millimetres around it. */
@@ -456,6 +732,17 @@ document.querySelectorAll<HTMLInputElement>('input[name="mode"]').forEach((i) =>
   }),
 );
 
+function objectInfo(p: Pattern, q: Sequence) {
+  const over = overOf(q, p);
+  const selected = [...selectedObjects].sort((a, b) => a - b);
+  return {
+    objects: q.objects,
+    selected,
+    layering: selected.map((o) => ({ below: over[o].length, above: over.filter((l) => l.includes(o)).length })),
+    numbers: selected.map((o) => numberInColor(q.objects, q.objects[o])),
+  };
+}
+
 // Rendering ------------------------------------------------------------------
 
 let frame = 0;
@@ -495,15 +782,20 @@ function redraw(): void {
       layers.update(
         {
           blocks: q?.blocks ?? [],
+          objects: q?.objects ?? [],
+          selected: selectedObjects,
           hidden: hiddenBlocks,
           focus: focusBlock,
           current,
-          original: active?.original?.colors ?? [],
+          original: active?.original?.colors ?? NO_COLORS,
           format: active?.pattern?.format ?? 'pes',
         },
         getLang(),
       );
       jumpsPanel.update({ list: q?.transitions ?? [], selected: selectedJump, lang: getLang() });
+      objectPanel.update(p && q && selectedObjects.size ? objectInfo(p, q) : null, getLang());
+      stitchPanel.update(p && q && selectedObjects.size ? stitchInfo(p, q) : null);
+      $<HTMLButtonElement>('order-optimize').disabled = !q || q.objects.length < 2;
     }
     panel.update(active, selectedZone);
     correctPanel.update({
@@ -639,6 +931,10 @@ function syncPlayer(): void {
   hoverJump = null;
   if (selectedJump !== null && selectedJump >= (files.active?.pattern ? seq(files.active.pattern).transitions.length : 0)) selectedJump = null;
   const blocks = files.active?.pattern ? seq(files.active.pattern).blocks.length : 0;
+  const objs = files.active?.pattern ? seq(files.active.pattern).objects.length : 0;
+  if ([...selectedObjects].some((o) => o >= objs)) selectedObjects = new Set();
+  hoverObject = null;
+  if (orderCard.isOpen) orderCard.close(true);
   if ([...hiddenBlocks].some((b) => b >= blocks) || (focusBlock ?? -1) >= blocks) {
     hiddenBlocks = new Set();
     focusBlock = null;
@@ -964,7 +1260,9 @@ window.addEventListener('keydown', (e) => {
     else if (e.key === 'ArrowUp' || e.key === 'k') files.step(-1);
     else if (e.key === 'f') fitView();
     else if (e.key === 'Escape') {
-      selectedJump = focusBlock = null;
+      if (orderCard.isOpen) orderCard.close(true);
+      else if (selectedObjects.size) selectedObjects = new Set();
+      else selectedJump = focusBlock = null;
       redraw();
     }
     return;
@@ -1109,10 +1407,21 @@ const endPointer = (e: PointerEvent) => {
   if (pressAt && e.type === 'pointerup' && settings.mode === 'flow' && Math.hypot(pos[0] - pressAt[0], pos[1] - pressAt[1]) < 4) {
     const p = files.active?.pattern;
     if (p) {
-      const k = transitionAt(p, seq(p).transitions, vp, pos[0], pos[1]);
+      const q = seq(p);
+      const k = transitionAt(p, q.transitions, vp, pos[0], pos[1]);
       if (k >= 0 || selectedJump !== null) {
         selectedJump = k >= 0 ? k : null;
         redraw();
+      }
+      if (k < 0) {
+        // A click on stitches selects their object, a click beside them clears the selection.
+        const st = styleFor(p);
+        const [x, y] = vp.toWorld(pos[0], pos[1]);
+        const i = stitchAt(p, x * 10, y * 10, Math.max(3, 60 / vp.scale), st.limit, st.alpha);
+        const o = i >= 0 ? q.objectAt[i] : -1;
+        const add = e.shiftKey || e.ctrlKey || e.metaKey;
+        if (o >= 0) selectObjects([o], add);
+        else if (!add && selectedObjects.size) selectObjects([], false);
       }
     }
   }

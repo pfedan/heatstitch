@@ -15,7 +15,11 @@ Switch at the top of the page, or with the keys `1`, `2` and `3`.
 highlight), stitches can be colored by thread color, order, stitch type or stitch length, markers show
 jumps, trims, color changes, start and end and needle penetrations. A player steps through the design
 with an estimated sewing time, and the list of jumps lets you trim and tie them one by one or all at
-once by length, or leave them untrimmed.
+once by length, or leave them untrimmed. Each color opens to its objects (what is sewn between two
+trims), which can be reordered by drag or by *Optimize order*, and sewn anew with other settings: fill
+pattern (tatami, gradient, contour, spiral or as sewn), spacing, angle, stitch length, edges, underlay,
+satin width and running stitch length. This works for any DST or PES file as well as for designs from
+the Image mode.
 
 ![Sequence mode with the cat example, realistic threads, color list and jump list](public/guide/cat-en.jpg)
 
@@ -64,6 +68,8 @@ sends the picture anywhere.
 - **Examples dropdown** under the file field: the cat, overlapping circles and a confetti design with
   jumps load straight into the app
 - **Jump editing** in Sequence mode: trim and tie, or remove trims, one jump at a time or by length
+- **Objects** in Sequence mode: order optimization without changing what lies on top, drag to
+  reorder, per-object fill patterns, density and satin settings with a live preview
 - PNG export of the current view including legend
 - **Correction (beta):** automatic, following digitizing practice, and by hand, with undo/redo and an
   original/corrected compare view, see below
