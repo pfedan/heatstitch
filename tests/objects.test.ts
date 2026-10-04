@@ -3,8 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { digitize, digitizeDefaults } from '../src/digitize/digitize';
 import { DEFAULT_PREPARE, Preparer } from '../src/image/prepare';
 import { rememberObjects, sewObjects } from '../src/model/objects';
+import { BLUE } from './helpers/images';
 import { STITCH, TRIM, type Pattern } from '../src/model/pattern';
-import { analyze, measureFill, measureSatin, rememberedIn, restitch, restoreRemembered } from '../src/model/restitch';
+import { analyze, measureFill, measureSatin, remember, remembered, rememberedIn, rememberShapes, restitch, restoreRemembered, shapeTrust } from '../src/model/restitch';
 import { stitchKinds } from '../src/model/sequence';
 import { parsePattern } from '../src/parsers';
 import { DEFAULT_PROFILE } from '../src/validation/profiles';
@@ -128,5 +129,93 @@ describe('objects made of several sections', () => {
     expect(r.regions[0]!.areaMm2).toBeGreaterThan(1000);
     rememberObjects(r.pattern, [r.starts[0]], r.ends[0]);
     expect(sewObjects(r.pattern).length).toBe(1);
+  });
+});
+
+/** A red area with a blue stripe `stripe` mm wide across it, sewn after the red. */
+function striped(stripe: number) {
+  const mm = 50;
+  const img = shape(mm * 10, mm * 10, (x, y) => {
+    const X = x / 10;
+    const Y = y / 10;
+    if (X > 24 - stripe / 2 && X < 24 + stripe / 2 && Y > 5 && Y < 45) return BLUE;
+    return X > 5 && X < 45 && Y > 10 && Y < 40 ? RED : null;
+  }, WHITE);
+  const prep = new Preparer(img).run({ ...DEFAULT_PREPARE, widthMm: mm });
+  return digitize(prep, digitizeDefaults(DEFAULT_PROFILE), 's');
+}
+
+describe('shapes that stay as they are', () => {
+  it('fills an area cut by a narrow detail sewn later as one, under the detail', () => {
+    const d = striped(1.5);
+    const red = d.objects.filter((o) => o.areaMm2 > 300);
+    expect(red.length).toBe(1);
+    // Rows run on under the stripe.
+    const p = d.pattern;
+    let under = 0;
+    for (let i = 0; i < p.cmd.length; i++) if (p.cmd[i] === STITCH && Math.abs(p.x[i] / 10 - (24 - 25)) < 0.5 && Math.abs(p.y[i] / 10) < 10) under++;
+    expect(under).toBeGreaterThan(10);
+  });
+
+  it('keeps areas apart where the detail between them is wide', () => {
+    const d = striped(5);
+    expect(d.objects.filter((o) => o.areaMm2 > 300).length).toBe(2);
+  });
+
+  it('keeps the exact areas of the Image mode when taken over', () => {
+    const d = uShape();
+    const p = parsePattern(writePattern(d.pattern, 'pes'), 'u.pes');
+    rememberObjects(p, d.starts);
+    const kinds = stitchKinds(p);
+    const objs = sewObjects(p, kinds);
+    rememberShapes(p, objs, d.starts, d.objects.map((o) => o.shape));
+    const known = remembered(p, objs[0]);
+    expect(known?.fill?.spacing).toBe(d.objects[0].shape!.fill.spacing);
+    const an = analyze(p, objs[0], kinds);
+    expect(shapeTrust(p, objs[0], an, known!.fill!.spacing)).toBe('kept');
+    // The U is 40 x 40 mm less a 14 x 30 mm notch; the kept area reaches a little further (pull).
+    expect(an.fill!.areaMm2).toBeGreaterThan(1180);
+    expect(an.fill!.areaMm2).toBeLessThan(1180 * 1.06);
+    // Its stitches lie on the kept area.
+    let off = 0;
+    let all = 0;
+    for (let i = objs[0].first; i <= objs[0].last; i++) {
+      if (p.cmd[i] !== STITCH) continue;
+      all++;
+      const x = p.x[i] / 10 + 25;
+      const y = p.y[i] / 10 + 25;
+      if (x < 4.4 || x > 45.6 || y < 4.4 || y > 45.6) off++;
+    }
+    expect(off).toBeLessThan(all * 0.01);
+  });
+
+  it('keeps the rails of a satin, so a wider edge does not add up from edit to edit', () => {
+    let p = load('demos/letters.pes');
+    const width = (q: Pattern, i: number) => {
+      const o = sewObjects(q)[i];
+      return (o.maxX - o.minX) / 10;
+    };
+    const i = sewObjects(p).findIndex((o) => o.kind === 'satin');
+    const widths: number[] = [];
+    for (let step = 0; step < 3; step++) {
+      const kinds = stitchKinds(p);
+      const objs = sewObjects(p, kinds);
+      const o = objs[i];
+      const pt = analyze(p, o, kinds).parts.find((x) => x.kind === 'satin')!;
+      const m = remembered(p, o)?.satin ?? measureSatin(p, pt, kinds);
+      const r = restitch(p, objs, [i], { kind: 'satin', s: { ...m, edge: 0.3 } }, kinds, 3);
+      rememberObjects(r.pattern, [r.starts[0]], r.ends[0]);
+      remember(r.pattern, sewObjects(r.pattern)[i], r.memory[0]);
+      p = r.pattern;
+      widths.push(width(p, i));
+    }
+    expect(widths[0]).toBeGreaterThan(width(load('demos/letters.pes'), i));
+    expect(Math.abs(widths[2] - widths[0])).toBeLessThan(0.05);
+    // Stored with the file and read again.
+    const stored = rememberedIn(p, sewObjects(p)).find((s) => s.columns);
+    expect(stored?.satin?.edge).toBe(0.3);
+    const again = JSON.parse(JSON.stringify(stored));
+    expect(restoreRemembered([again])).toBe(1);
+    expect(remembered(p, sewObjects(p)[i])?.columns?.[0]?.[0]?.left.length).toBe(stored!.columns![0][0].left.length / 2);
   });
 });

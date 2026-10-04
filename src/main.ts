@@ -58,7 +58,7 @@ import { JumpsPanel } from './ui/jumpsPanel';
 import { type Blocked, kindLabel, LayersPanel } from './ui/layersPanel';
 import { ObjectPanel, OrderCard } from './ui/objectPanel';
 import { StitchPanel, type StitchInfo } from './ui/stitchPanel';
-import { analyze, measureFill, measureRun, measureSatin, remember, remembered, rememberedIn, restitch, shapeTrust, type Settings as RestitchSettings, type ShapeTrust } from './model/restitch';
+import { analyze, measureFill, measureRun, measureSatin, remember, remembered, rememberedIn, rememberShapes, restitch, shapeTrust, type Settings as RestitchSettings, type ShapeTrust } from './model/restitch';
 import { outline } from './digitize/region';
 import { recommendedSpacing } from './validation/profiles';
 import { numberInColor, overlaps, rememberObjects, sewObjects, type SewObject } from './model/objects';
@@ -503,7 +503,7 @@ function stitchInfo(p: Pattern, q: Sequence): StitchInfo {
       if (!seen.has(pt.kind)) counts[pt.kind] = (counts[pt.kind] ?? 0) + 1;
       seen.add(pt.kind);
       if (pt.kind === 'fill') measured.fill ??= remembered(p, obj)?.fill ?? measureFill(p, an);
-      else if (pt.kind === 'satin') measured.satin ??= measureSatin(p, pt, q.kinds);
+      else if (pt.kind === 'satin') measured.satin ??= remembered(p, obj)?.satin ?? measureSatin(p, pt, q.kinds);
       else measured.run ??= measureRun(p, pt);
     }
     if (an.fill) {
@@ -562,11 +562,8 @@ const stitchPanel = new StitchPanel($('object-stitches'), {
         if (o >= 0) pieces.add(o);
       }
       for (const o of pieces) sel.add(o);
-      // An object that stayed one keeps its shape and fill settings for the next edit.
-      if (pieces.size === 1) {
-        const o = nq.objects[[...pieces][0]];
-        remember(r.pattern, o, { region: r.regions[k], fill: s.kind === 'fill' ? { ...s.s } : undefined });
-      }
+      // An object that stayed one keeps its shape and settings for the next edit.
+      if (pieces.size === 1) remember(r.pattern, nq.objects[[...pieces][0]], r.memory[k]);
     });
     files.setObjects(f, rememberedIn(r.pattern, nq.objects));
     if (sel.size) selectedObjects = sel;
@@ -1061,12 +1058,15 @@ const imageMode = new ImageMode({
     else if (settings.realistic && settings.liveLight && settings.image.view === 'stitches') sweep(redraw);
   },
   validate: async (p) => classify(await validator.measure(p), settings.profile, settings.checks),
-  takeOver: async (p, name, starts) => {
-    // The objects as the Image mode sewed them (it trims inside some, between pieces of a fill).
-    const data = writePattern(p, 'pes');
+  takeOver: async (d, name) => {
+    // The objects as the Image mode sewed them (it trims inside some, between pieces of a fill),
+    // with the exact areas of its fills.
+    const data = writePattern(d.pattern, 'pes');
     const added = parsePattern(data, `${name}.pes`);
-    rememberObjects(added, starts);
-    await files.addWithObjects(`${name}.pes`, data.slice().buffer, rememberedIn(added, sewObjects(added)));
+    rememberObjects(added, d.starts);
+    const objs = sewObjects(added);
+    rememberShapes(added, objs, d.starts, d.objects.map((o) => o.shape));
+    await files.addWithObjects(`${name}.pes`, data.slice().buffer, rememberedIn(added, objs));
     setMode('flow');
   },
 });

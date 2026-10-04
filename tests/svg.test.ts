@@ -81,8 +81,8 @@ describe('svg regions', () => {
     const p = prep.run({ ...DEFAULT_PREPARE, widthMm: 80, threads: false }, [], [], exact);
     const d = digitize(p, digitizeDefaults(DEFAULT_PROFILE));
     expect(d.pattern.colors.length).toBe(4);
-    // The line cuts the middle band in two; the outer bands reach round its ends.
-    expect(d.objects.filter((o) => o.kind === 'fill').length).toBe(4);
+    // The line crosses the middle band, which is filled as one under it; the outer bands reach round its ends.
+    expect(d.objects.filter((o) => o.kind === 'fill').length).toBe(3);
     expect(d.objects.filter((o) => o.kind === 'run').map((o) => o.label)).toEqual([3]);
   });
 

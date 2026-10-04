@@ -1,3 +1,4 @@
+import type { KeptShape } from '../digitize/digitize';
 import { fillRegion, type FillParams } from '../digitize/fill';
 import { contourField, fieldFill, stitchField } from '../digitize/flow';
 import { spiralFill } from '../digitize/spiral';
@@ -102,10 +103,23 @@ const OPEN = 0.36;
  */
 // What objects were last sewn with ------------------------------------------------------------
 
-/** The shape an object was filled with and the fill settings, kept for the next edit. */
+/** The two sides of a satin column: its penetrations, left and right in turn (mm). */
+export interface Rails {
+  left: Pt[];
+  right: Pt[];
+}
+
+/**
+ * The shape of an object and its settings, kept for the next edit: the fill area and fill
+ * settings, the rails of its satin columns (per satin part) and satin settings. The next edit
+ * starts from these instead of reading them again from the stitches of the last one, which would
+ * let the shape drift a little with every change.
+ */
 export interface Remembered {
   region: Region | null;
   fill?: FillSettings;
+  satin?: SatinSettings;
+  columns?: Rails[][];
 }
 
 /**
@@ -141,6 +155,9 @@ export interface StoredObject {
   key: string;
   region: { x0: number; y0: number; w: number; h: number; pxMm: number; mask: Uint8Array; areaMm2: number } | null;
   fill?: FillSettings;
+  satin?: SatinSettings;
+  /** Rails per satin part and column, as flat x, y lists. */
+  columns?: { left: number[]; right: number[] }[][];
   join?: boolean;
 }
 
@@ -156,6 +173,8 @@ export function rememberedIn(p: Pattern, objects: SewObject[]): StoredObject[] {
       key,
       region: g && { x0: g.x0, y0: g.y0, w: g.w, h: g.h, pxMm: g.pxMm, mask: g.mask, areaMm2: g.areaMm2 },
       ...(r.fill ? { fill: { ...r.fill } } : {}),
+      ...(r.satin ? { satin: { ...r.satin } } : {}),
+      ...(r.columns ? { columns: r.columns.map((part) => part.map((c) => ({ left: c.left.flat(), right: c.right.flat() }))) } : {}),
     });
   }
   for (const j of joinsIn(p)) out.push({ key: j.key, region: null, join: j.join });
@@ -176,6 +195,65 @@ function isFill(f: unknown): f is FillSettings {
   );
 }
 
+function isSatin(f: unknown): f is SatinSettings {
+  const s = f as SatinSettings | null;
+  return !!s && [s.spacing, s.edge].every(finite) && typeof s.short === 'boolean' && typeof s.underlay === 'boolean' && (s.tolerance === undefined || finite(s.tolerance));
+}
+
+/** Stored rails back as points, or undefined when malformed. */
+function railsFrom(list: unknown): Rails[][] | undefined {
+  if (!Array.isArray(list)) return undefined;
+  const pts = (v: unknown): Pt[] | null => {
+    if (!Array.isArray(v) || v.length % 2 || v.length < 4 || !v.every(finite)) return null;
+    const out: Pt[] = [];
+    for (let i = 0; i < v.length; i += 2) out.push([v[i], v[i + 1]]);
+    return out;
+  };
+  const out: Rails[][] = [];
+  for (const part of list) {
+    if (!Array.isArray(part)) return undefined;
+    const cols: Rails[] = [];
+    for (const c of part) {
+      const left = pts(c?.left);
+      const right = pts(c?.right);
+      if (!left || !right) return undefined;
+      cols.push({ left, right });
+    }
+    out.push(cols);
+  }
+  return out;
+}
+
+/** A region from its pixels (null when malformed). */
+function regionFrom(g: NonNullable<StoredObject['region']>): Region | null {
+  const { x0, y0, w, h, pxMm, mask, areaMm2 } = g;
+  if (![x0, y0, w, h, pxMm, areaMm2].every(finite) || !(mask instanceof Uint8Array)) return null;
+  if (w < 1 || h < 1 || pxMm <= 0 || mask.length !== w * h) return null;
+  const sdf = signedField(mask, w, h, pxMm);
+  return { label: 0, x0, y0, w, h, pxMm, mask, inside: distanceInside(mask, w, h), sdf, sdfBase: sdf, areaMm2 };
+}
+
+/**
+ * Remembers the exact areas the Image mode filled (`shapes`, by object, as `starts`: the number
+ * of each object's first stitch), so editing them starts from those instead of the stitches.
+ */
+export function rememberShapes(p: Pattern, objs: SewObject[], starts: number[], shapes: (KeptShape | undefined)[]): void {
+  const at = new Map<number, SewObject>();
+  let n = 0;
+  let k = 0;
+  for (let i = 0; i < p.cmd.length && k < objs.length; i++) {
+    if (i === objs[k].first) at.set(n, objs[k++]);
+    if (p.cmd[i] === STITCH) n++;
+  }
+  starts.forEach((s, j) => {
+    const shape = shapes[j];
+    const o = at.get(s);
+    if (!shape || !o) return;
+    const region = regionFrom(shape);
+    if (region) remember(p, o, { region, fill: { ...shape.fill } });
+  });
+}
+
 /** Remembers stored objects again (from storage or a project file); malformed entries are skipped. */
 export function restoreRemembered(list: unknown): number {
   if (!Array.isArray(list)) return 0;
@@ -187,17 +265,14 @@ export function restoreRemembered(list: unknown): number {
       continue;
     }
     if (typeof e?.key !== 'string' || (e.fill !== undefined && !isFill(e.fill))) continue;
-    let region: Region | null = null;
-    const g = e.region;
-    if (g) {
-      const { x0, y0, w, h, pxMm, mask, areaMm2 } = g;
-      if (![x0, y0, w, h, pxMm, areaMm2].every(finite) || !(mask instanceof Uint8Array)) continue;
-      if (w < 1 || h < 1 || pxMm <= 0 || mask.length !== w * h) continue;
-      const sdf = signedField(mask, w, h, pxMm);
-      region = { label: 0, x0, y0, w, h, pxMm, mask, inside: distanceInside(mask, w, h), sdf, sdfBase: sdf, areaMm2 };
-    }
+    const region = e.region ? regionFrom(e.region) : null;
+    if (e.region && !region) continue;
     // Files from before the tolerance existed have none.
-    rememberKey(e.key, { region, fill: e.fill && { ...e.fill, tolerance: e.fill.tolerance ?? TOLERANCE } });
+    const r: Remembered = { region, fill: e.fill && { ...e.fill, tolerance: e.fill.tolerance ?? TOLERANCE } };
+    if (isSatin(e.satin)) r.satin = { ...e.satin, tolerance: e.satin.tolerance ?? TOLERANCE };
+    const columns = railsFrom(e.columns);
+    if (columns) r.columns = columns;
+    rememberKey(e.key, r);
     n++;
   }
   return n;
@@ -502,14 +577,18 @@ const pt10 = (p: Pattern, i: number): Pt => [p.x[i] / 10, p.y[i] / 10];
 const dist = (a: Pt, b: Pt) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 
 /** Rails of a satin column from its penetrations, filled in between so the spacing can get finer. */
-function railsOf(p: Pattern, c: { s: number; e: number }): Column | null {
+function railsOf(p: Pattern, c: { s: number; e: number }): Rails | null {
   const left: Pt[] = [];
   const right: Pt[] = [];
   for (let i = c.s; i + 1 <= c.e; i += 2) {
     left.push(pt10(p, i));
     right.push(pt10(p, i + 1));
   }
-  if (left.length < 2) return null;
+  return left.length < 2 ? null : { left, right };
+}
+
+/** A satin column between two rails, filled in between so the spacing can get finer. */
+function columnOf({ left, right }: Rails): Column {
   const L: Pt[] = [];
   const R: Pt[] = [];
   const C: Pt[] = [];
@@ -565,11 +644,15 @@ function newFill(p: Pattern, o: SewObject, a: Analysis, s: FillSettings): Pt[][]
   return res?.runs.filter((run) => run.length > 1) ?? null;
 }
 
-function newSatin(p: Pattern, pt: Part, s: SatinSettings, kinds: Uint8Array): Pt[][] | null {
+/**
+ * New satin for a part, along `known` rails (kept from an earlier edit) or the rails its stitches
+ * have now. Returns the stitches and the rails used.
+ */
+function newSatin(p: Pattern, pt: Part, s: SatinSettings, kinds: Uint8Array, known?: Rails[]): { runs: Pt[][]; rails: Rails[] } | null {
   const runs: Pt[][] = [];
-  for (const c of satinColumns(p, pt, kinds)) {
-    const col = railsOf(p, c);
-    if (!col) continue;
+  const rails = known ?? satinColumns(p, pt, kinds).map((c) => railsOf(p, c)).filter((r): r is Rails => !!r);
+  for (const r of rails) {
+    const col = columnOf(r);
     const ps = pairs(col, { spacing: s.spacing, pull: s.edge, splitMm: 12, short: s.short });
     if (ps.length < 2) continue;
     if (s.underlay) {
@@ -579,7 +662,7 @@ function newSatin(p: Pattern, pt: Part, s: SatinSettings, kinds: Uint8Array): Pt
       runs.push([...under, ...satinStitches(pairs(rev, { spacing: s.spacing, pull: s.edge, splitMm: 12, short: s.short }), { spacing: s.spacing, pull: 0, splitMm: 12 })]);
     } else runs.push(satinStitches(ps, { spacing: s.spacing, pull: 0, splitMm: 12 }));
   }
-  return runs.length ? runs : null;
+  return runs.length ? { runs, rails } : null;
 }
 
 function newRun(p: Pattern, pt: Part, s: RunSettings, kinds: Uint8Array): Pt[][] | null {
@@ -636,6 +719,8 @@ export interface RestitchResult {
   failed: number[];
   /** Fill area of each changed object (as `starts`). */
   regions: (Region | null)[];
+  /** What to remember about each changed object for the next edit (as `starts`). */
+  memory: Remembered[];
 }
 
 /**
@@ -649,6 +734,7 @@ export function restitch(p: Pattern, objs: SewObject[], which: number[], setting
   const ends: number[] = [];
   const failed: number[] = [];
   const regions: (Region | null)[] = [];
+  const memory: Remembered[] = [];
   let sewn = 0;
   let counted = 0;
   const count = () => {
@@ -660,8 +746,13 @@ export function restitch(p: Pattern, objs: SewObject[], which: number[], setting
   let i = 0;
   for (const o of objs) {
     if (!set.has(o.index)) continue;
-    const an = analyze(p, o, kinds);
+    const known = remembered(p, o);
+    const an = analyze(p, o, kinds, known);
     const parts = an.parts;
+    // Satin columns kept from an earlier edit, if the object still has as many satin parts.
+    const satinParts = parts.filter((pt) => pt.kind === 'satin');
+    const keptRails = known?.columns?.length === satinParts.length ? known.columns : undefined;
+    const rails: Rails[][] = [];
     // All fill parts are one area, filled anew where the first of them was sewn.
     const fill = settings.kind === 'fill' ? newFill(p, o, an, settings.s) : null;
     const firstFill = parts.findIndex((pt) => pt.kind === 'fill');
@@ -672,7 +763,11 @@ export function restitch(p: Pattern, objs: SewObject[], which: number[], setting
       if (fill && pt.kind === 'run' && k > firstFill && k < lastFill) return 'skip';
       if (pt.kind !== settings.kind) return null;
       if (settings.kind === 'fill') return !fill ? null : k === firstFill ? fill : 'skip';
-      if (settings.kind === 'satin') return newSatin(p, pt, settings.s, kinds);
+      if (settings.kind === 'satin') {
+        const sat = newSatin(p, pt, settings.s, kinds, keptRails?.[satinParts.indexOf(pt)]);
+        if (sat) rails.push(sat.rails);
+        return sat?.runs ?? null;
+      }
       return newRun(p, pt, settings.s, kinds);
     });
     if (fresh.every((f) => !f)) {
@@ -698,6 +793,12 @@ export function restitch(p: Pattern, objs: SewObject[], which: number[], setting
         count();
         starts.push(sewn);
         regions.push(an.fill);
+        memory.push({
+          region: an.fill,
+          fill: settings.kind === 'fill' ? { ...settings.s } : known?.fill,
+          satin: settings.kind === 'satin' ? { ...settings.s } : known?.satin,
+          columns: settings.kind === 'satin' ? (rails.length === satinParts.length ? rails : undefined) : known?.columns,
+        });
         if (run && startsWithNew) out.push(...lockAt(run, false));
         else emitPoint(q);
         first = false;
@@ -748,5 +849,5 @@ export function restitch(p: Pattern, objs: SewObject[], which: number[], setting
   const x = Int32Array.from(out, (r) => r.x);
   const y = Int32Array.from(out, (r) => r.y);
   const cmd = Uint8Array.from(out, (r) => r.cmd);
-  return { pattern: tidy(withRecords(p, x, y, cmd)), starts, ends, failed, regions };
+  return { pattern: tidy(withRecords(p, x, y, cmd)), starts, ends, failed, regions, memory };
 }

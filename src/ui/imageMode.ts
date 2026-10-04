@@ -37,8 +37,8 @@ export interface ImageHooks {
   /** The first stitches of a newly opened image are there; `first` for the very first image. */
   reveal: (first: boolean) => void;
   validate: (p: Pattern) => Promise<ValidationResult>;
-  /** Adds the design to the file list; `starts` are the numbers of the first stitch of its objects. */
-  takeOver: (p: Pattern, name: string, starts: number[]) => Promise<void>;
+  /** Adds the design to the file list, with what is known about its objects. */
+  takeOver: (d: Digitized, name: string) => Promise<void>;
 }
 
 type Tool = 'none' | 'paint' | 'erase';
@@ -236,7 +236,7 @@ export class ImageMode {
     $('image-take').addEventListener('click', async () => {
       const d = this.result;
       if (!d) return;
-      await h.takeOver(d.pattern, this.name || 'image', d.starts);
+      await h.takeOver(d, this.name || 'image');
     });
     this.render();
   }

@@ -1,4 +1,5 @@
-import { components } from '../image/labels';
+import { distanceToSeeds } from '../image/edt';
+import { components, type Components } from '../image/labels';
 import { NONE, type Prepared } from '../image/prepare';
 import { COLOR_CHANGE, END, JUMP, PatternBuilder, STITCH, TRIM, type Pattern, type ThreadColor } from '../model/pattern';
 import { fabricOf, recommendedSpacing, type Profile } from '../validation/profiles';
@@ -9,6 +10,7 @@ import { buildRegion, type Region } from './region';
 import { runStitch, TOLERANCE } from './run';
 import { column, pairs, satinStitches, underlay, type Column, type SatinParams } from './satin';
 import { reverse, skeleton, type Branch, type Graph, type Pt } from './skeleton';
+import type { FillSettings } from '../model/restitch';
 
 /**
  * From a prepared label map to a stitch pattern.
@@ -90,6 +92,20 @@ export interface DigitizedObject {
   angle?: number;
   /** Fill rows curve with the image's direction. */
   curved?: boolean;
+  /** Fills: the exact area (in pattern coordinates, grown by the pull compensation) and how it was filled. */
+  shape?: KeptShape;
+}
+
+/** An area as pixels, in pattern coordinates (0.1 mm records / 10), and the fill it was sewn with. */
+export interface KeptShape {
+  x0: number;
+  y0: number;
+  w: number;
+  h: number;
+  pxMm: number;
+  mask: Uint8Array;
+  areaMm2: number;
+  fill: FillSettings;
 }
 
 export interface Digitized {
@@ -266,12 +282,15 @@ export function digitize(prep: Prepared, o: DigitizeOptions, name = 'image'): Di
   const rank = new Array(palette.length).fill(-1);
   order.forEach((l, k) => (rank[l] = k));
 
+  const bridged = bridge(labels, comps, w, h, pxMm, rank);
   const byColor = new Map<number, Obj[]>();
   for (let c = 0; c < comps.label.length; c++) {
     const label = comps.label[c];
-    if (label === NONE || comps.area[c] < 2) continue;
-    const bbox = { minX: comps.minX[c], minY: comps.minY[c], maxX: comps.maxX[c], maxY: comps.maxY[c] };
-    const region = buildRegion(comps.comp, labels, w, c, label, bbox, h, pxMm, o.overlap, (l) => l !== NONE && rank[l] > rank[label]);
+    if (label === NONE || comps.area[c] < 2 || bridged.into.has(c)) continue;
+    const merged = bridged.boxes.get(c);
+    const bbox = merged ?? { minX: comps.minX[c], minY: comps.minY[c], maxX: comps.maxX[c], maxY: comps.maxY[c] };
+    const map = merged ? bridged.comp : comps.comp;
+    const region = buildRegion(map, labels, w, c, label, bbox, h, pxMm, o.overlap, (l) => l !== NONE && rank[l] > rank[label]);
     const graph = skeleton(region);
     const kind = classify(graph, o);
     const obj: Obj = { info: { kind, label, areaMm2: region.areaMm2 }, region, graph, probe: probes(region) };
@@ -332,6 +351,7 @@ export function digitize(prep: Prepared, o: DigitizeOptions, name = 'image'): Di
       if (obj.info.kind === 'run' && obj.graph?.branches.length) out = sewRun(obj, pos, o.tolerance);
       out = out.filter((r) => r.length > 1);
       if (!out.length) continue;
+      if (obj.info.kind === 'fill') obj.info.shape = keep(obj, o, w, h);
       runs.push(...out);
       for (const _ of out) owners.push(objects.length);
       objects.push(obj.info);
@@ -341,7 +361,135 @@ export function digitize(prep: Prepared, o: DigitizeOptions, name = 'image'): Di
     if (runs.length) blocks.push({ color: palette[label].thread, runs, owners });
   }
   const starts: number[] = [];
-  return { pattern: assemble(blocks, w * pxMm, h * pxMm, o.trimMm, name, starts), objects, starts };
+  return { pattern: assemble(blocks, Math.floor(w / 2) * pxMm, Math.floor(h / 2) * pxMm, o.trimMm, name, starts), objects, starts };
+}
+
+/**
+ * The area a fill was sewn in, moved to pattern coordinates (the design is centered on a whole
+ * pixel, see assemble): the region grown under later colors, and by the pull compensation, so
+ * rows that end at its edge reach as far as they did.
+ */
+function keep(obj: Obj, o: DigitizeOptions, imgW: number, imgH: number): KeptShape {
+  const r = obj.region;
+  const mask = Uint8Array.from(r.sdf, (d) => (d < o.pull ? 1 : 0));
+  let area = 0;
+  for (const m of mask) area += m;
+  const spacing = o.spacing;
+  return {
+    x0: r.x0 - Math.floor(imgW / 2),
+    y0: r.y0 - Math.floor(imgH / 2),
+    w: r.w,
+    h: r.h,
+    pxMm: r.pxMm,
+    mask,
+    areaMm2: area * r.pxMm * r.pxMm,
+    fill: {
+      pattern: obj.info.curved ? 'follow' : 'tatami',
+      spacing,
+      spacingEnd: Math.min(1.2, round2(spacing * 2.5)),
+      offset: 0.25,
+      angle: Math.round(((((obj.info.angle ?? 0) % 180) + 180) % 180)) % 180,
+      stitch: o.stitch,
+      underlay: o.underlay,
+      edge: 0,
+      tolerance: o.tolerance,
+    },
+  };
+}
+
+/** Pieces of one color apart by no more than this, with only later colors between them, are one area (mm). */
+const BRIDGE = 2.5;
+
+interface Bridged {
+  /** Components per pixel, with merged pieces and the pixels between them under the first piece. */
+  comp: Int32Array;
+  /** Pieces merged into another one. */
+  into: Set<number>;
+  /** Bounding boxes of the merged areas, by their first piece. */
+  boxes: Map<number, { minX: number; minY: number; maxX: number; maxY: number }>;
+}
+
+/**
+ * Pieces of one color that a narrow detail sewn later (a line, a stripe) cuts apart are filled as
+ * one area, under the detail: the rows go on underneath it, and the detail is sewn on top, as
+ * digitizers do. Only gaps up to BRIDGE wide that are all later colors are bridged (a closing of
+ * the color's pixels), never background or colors sewn before.
+ */
+function bridge(labels: Uint8Array, comps: Components, w: number, h: number, pxMm: number, rank: number[]): Bridged {
+  const out: Bridged = { comp: comps.comp, into: new Set(), boxes: new Map() };
+  const byLabel = new Map<number, number[]>();
+  comps.label.forEach((l, c) => {
+    if (l === NONE || comps.area[c] < 2) return;
+    if (!byLabel.has(l)) byLabel.set(l, []);
+    byLabel.get(l)!.push(c);
+  });
+  const r = BRIDGE / 2 / pxMm;
+  const pad = Math.ceil(r) + 2;
+  for (const [label, cs] of byLabel) {
+    if (cs.length < 2) continue;
+    const x0 = Math.max(0, Math.min(...cs.map((c) => comps.minX[c])) - pad);
+    const y0 = Math.max(0, Math.min(...cs.map((c) => comps.minY[c])) - pad);
+    const x1 = Math.min(w - 1, Math.max(...cs.map((c) => comps.maxX[c])) + pad);
+    const y1 = Math.min(h - 1, Math.max(...cs.map((c) => comps.maxY[c])) + pad);
+    const W = x1 - x0 + 1;
+    const H = y1 - y0 + 1;
+    const own = new Uint8Array(W * H);
+    const member = new Set(cs);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (member.has(comps.comp[(y + y0) * w + x + x0])) own[y * W + x] = 1;
+    const near = distanceToSeeds(own, W, H);
+    const notNear = Uint8Array.from(near, (d) => (d > r ? 1 : 0));
+    const far = distanceToSeeds(notNear, W, H, true);
+    // In the closing of the color, between its pieces, and a color sewn later.
+    const between = new Uint8Array(W * H);
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const i = y * W + x;
+        const l = labels[(y + y0) * w + x + x0];
+        if (!own[i] && near[i] <= r && far[i] > r && l !== NONE && rank[l] > rank[label]) between[i] = 1;
+      }
+    }
+    // Which pieces the pixels between connect.
+    const parent = new Int32Array(W * H).map((_, i) => i);
+    const find = (i: number): number => {
+      while (parent[i] !== i) i = parent[i] = parent[parent[i]];
+      return i;
+    };
+    const inSet = (i: number) => own[i] || between[i];
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const i = y * W + x;
+        if (!inSet(i)) continue;
+        if (x > 0 && inSet(i - 1)) parent[find(i)] = find(i - 1);
+        if (y > 0 && inSet(i - W)) parent[find(i)] = find(i - W);
+      }
+    }
+    const pieces = new Map<number, Set<number>>();
+    for (let i = 0; i < W * H; i++) {
+      if (!own[i]) continue;
+      const root = find(i);
+      if (!pieces.has(root)) pieces.set(root, new Set());
+      pieces.get(root)!.add(comps.comp[(Math.floor(i / W) + y0) * w + (i % W) + x0]);
+    }
+    for (const [root, set] of pieces) {
+      if (set.size < 2) continue;
+      if (out.comp === comps.comp) out.comp = comps.comp.slice();
+      const first = Math.min(...set);
+      const box = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+      for (let i = 0; i < W * H; i++) {
+        if (!inSet(i) || find(i) !== root) continue;
+        const x = (i % W) + x0;
+        const y = Math.floor(i / W) + y0;
+        out.comp[y * w + x] = first;
+        box.minX = Math.min(box.minX, x);
+        box.minY = Math.min(box.minY, y);
+        box.maxX = Math.max(box.maxX, x);
+        box.maxY = Math.max(box.maxY, y);
+      }
+      for (const c of set) if (c !== first) out.into.add(c);
+      out.boxes.set(first, box);
+    }
+  }
+  return out;
 }
 
 /** Whether the windows of two regions overlap and their pixels touch. */
@@ -389,13 +537,11 @@ interface Block {
 }
 
 /**
- * Builds the records, centered on the design; coordinates in 0.1 mm. `starts` gets the number of
- * the first stitch of each object.
+ * Builds the records with (cx, cy) mm of the image as their origin; coordinates in 0.1 mm.
+ * `starts` gets the number of the first stitch of each object.
  */
-function assemble(blocks: Block[], wMm: number, hMm: number, trimMm: number, name: string, starts: number[]): Pattern {
+function assemble(blocks: Block[], cx: number, cy: number, trimMm: number, name: string, starts: number[]): Pattern {
   const b = new PatternBuilder();
-  const cx = wMm / 2;
-  const cy = hMm / 2;
   let X = 0;
   let Y = 0;
   let last: Pt | null = null;
