@@ -2,6 +2,7 @@ import { JUMP, STITCH, type Pattern, type ThreadColor } from '../model/pattern';
 import { blockIndex, FILL, RUNNING, SATIN, stitchKinds, TIE_STITCH, type CarriedJumps, type Markers, type Transition } from '../model/sequence';
 import type { ColorBy, Marks } from '../settings';
 import { SHORT_STITCH_MM } from '../validation/thresholds';
+import type { ShapeOutline } from './scene';
 import type { Viewport } from './viewport';
 
 /**
@@ -387,4 +388,26 @@ export function stitchAt(p: Pattern, x: number, y: number, maxDist: number, limi
     }
   }
   return best;
+}
+
+/** Fill areas of selected objects: a dashed line with a dark halo, amber where the shape is a guess. */
+export function drawOutlines(ctx: CanvasRenderingContext2D, vp: Viewport, shapes: ShapeOutline[]): void {
+  const s = vp.scale;
+  ctx.save();
+  ctx.lineJoin = 'round';
+  for (const shape of shapes) {
+    ctx.beginPath();
+    for (const line of shape.lines) {
+      line.forEach(([x, y], i) => (i ? ctx.lineTo(x * s + vp.offsetX, y * s + vp.offsetY) : ctx.moveTo(x * s + vp.offsetX, y * s + vp.offsetY)));
+    }
+    ctx.setLineDash([]);
+    ctx.strokeStyle = 'rgba(13, 11, 16, 0.75)';
+    ctx.lineWidth = 3.5;
+    ctx.stroke();
+    ctx.setLineDash([6, 4]);
+    ctx.strokeStyle = shape.approximate ? '#ffb347' : '#ffffff';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+  ctx.restore();
 }
