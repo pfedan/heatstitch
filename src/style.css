@@ -2224,6 +2224,14 @@ body[data-mode='flow'] .stage .hint {
   flex: 1;
 }
 
+.row-buttons {
+  flex-wrap: wrap;
+}
+
+.row-buttons .wide {
+  flex-basis: 100%;
+}
+
 .layer .chev {
   width: 16px;
   padding: 0;

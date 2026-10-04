@@ -1,4 +1,4 @@
-import { formatNumber, t } from '../i18n';
+import { formatNumber, t, type Key } from '../i18n';
 import type { SewObject } from '../model/objects';
 import type { OrderCost } from '../model/order';
 import type { Settings } from '../settings';
@@ -12,11 +12,17 @@ export interface ObjectInfo {
   layering: { below: number; above: number }[];
   /** Number of each selected object within its color block (1-based). */
   numbers: number[];
+  /** Why the selected objects cannot be sewn as one (several selected), or null. */
+  mergeBlocked: Key | null;
 }
 
 export interface ObjectHooks {
   /** Sew the selected object one place earlier (-1) or later (1); returns why not, or null. */
   step: (dir: -1 | 1) => Blocked | null;
+  /** Sew the selected objects as one; returns why not, or null. */
+  merge: () => Blocked | null;
+  /** Show the selected object as its pieces, each one an object. */
+  split: () => void;
   clear: () => void;
 }
 
@@ -98,6 +104,16 @@ export class ObjectPanel {
         return b;
       };
       actions.append(btn(t('object.earlier'), -1, o.index === 0), btn(t('object.later'), 1, o.index === info.objects.length - 1));
+      if (o.sections > 1) {
+        const b = Object.assign(document.createElement('button'), { type: 'button', className: 'wide', textContent: t('object.split'), title: t('object.split.hint') });
+        b.addEventListener('click', () => this.hooks.split());
+        actions.append(b);
+      }
+    } else {
+      const why = info.mergeBlocked;
+      const b = Object.assign(document.createElement('button'), { type: 'button', textContent: t('object.merge'), title: t(why ?? 'object.merge.hint'), disabled: !!why });
+      b.addEventListener('click', () => showBlocked(this.msg, this.hooks.merge()));
+      actions.append(b);
     }
     const hint = Object.assign(document.createElement('p'), {
       className: 'muted small',

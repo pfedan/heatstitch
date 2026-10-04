@@ -58,11 +58,11 @@ import { JumpsPanel } from './ui/jumpsPanel';
 import { type Blocked, kindLabel, LayersPanel } from './ui/layersPanel';
 import { ObjectPanel, OrderCard } from './ui/objectPanel';
 import { StitchPanel, type StitchInfo } from './ui/stitchPanel';
-import { analyze, measureFill, measureRun, measureSatin, remember, remembered, rememberedIn, rememberShapes, restitch, shapeTrust, type Settings as RestitchSettings, type ShapeTrust, type RestitchResult } from './model/restitch';
+import { analyze, measureFill, measureRun, measureSatin, remember, remembered, rememberedIn, rememberShapes, restitch, shapeTrust, unionRegion, type Settings as RestitchSettings, type ShapeTrust, type RestitchResult } from './model/restitch';
 import { outline } from './digitize/region';
 import { digitizeDefaults, isStroke, SATIN_MAX } from './digitize/digitize';
 import { recommendedSpacing } from './validation/profiles';
-import { numberInColor, overlaps, rememberObjects, sewObjects, type SewObject } from './model/objects';
+import { numberInColor, overlaps, rememberObjects, sewObjects, splitObject, type SewObject } from './model/objects';
 import { conflicts, moveStats, optimizeOrder, reorder, violations } from './model/order';
 import { Player } from './ui/player';
 import type { Key } from './i18n';
@@ -464,7 +464,88 @@ function moveObjects(order: number[], moved: number[], force = false): Blocked |
   return null;
 }
 
+/**
+ * Sews the selected objects as one: they move to where the first one is sewn (if the layers allow
+ * it, as when moving them), and fills become one area, sewn anew with the first one's settings.
+ */
+function mergeObjects(force = false): Blocked | null {
+  const f = files.active;
+  const p = f?.pattern;
+  if (!f || !p || selectedObjects.size < 2) return null;
+  const q = seq(p);
+  const sel = [...selectedObjects].sort((a, b) => a - b);
+  const objs = sel.map((o) => q.objects[o]);
+  if (mergeBlocked(objs)) return null;
+  const set = new Set(sel);
+  const order = [...q.objects.keys()].filter((o) => o < sel[0] || (o > sel[0] && !set.has(o)));
+  order.splice(sel[0], 0, ...sel);
+  const over = overOf(q, p);
+  const bad = force ? [] : violations(order, over);
+  if (bad.length) {
+    const a = order[bad.find((k) => set.has(order[k])) ?? bad[0]];
+    const c = conflicts(order, over, a)[0];
+    const text = c === undefined ? t('object.blocked', { a: objectName(q, a), b: '?' }) : over[a].includes(c) ? t('object.blocked', { a: objectName(q, a), b: objectName(q, c) }) : t('object.blockedUnder', { a: objectName(q, a), b: objectName(q, c) });
+    return { text, force: () => void mergeObjects(true) };
+  }
+  const starts: number[] = [];
+  const next = reorder(p, q.objects, order, settings.trimMm, starts);
+  // A new pattern also when nothing moved: undo goes back to the one that shows them apart.
+  const target: Pattern = next === p ? { ...p } : next;
+  const k = sel[0];
+  rememberObjects(target, [starts[k]], starts[k + sel.length] ?? Infinity);
+  const nq = seq(target);
+  const merged = nq.objectAt[recordOfStitch(nq.numbers, starts[k] + 1)];
+  const fills = objs.every((o) => o.kind === 'fill');
+  const fill = fills ? (remembered(p, objs[0])?.fill ?? measureFill(p, analyze(p, objs[0], q.kinds))) : null;
+  const area = fills ? unionRegion(objs.flatMap((o) => remembered(p, o)?.region ?? analyze(p, o, q.kinds).fill ?? [])) : null;
+  if (merged >= 0 && fill && area) {
+    remember(target, nq.objects[merged], { region: area, fill });
+    const r = restitch(target, nq.objects, [merged], { kind: 'fill', s: fill }, nq.kinds, settings.trimMm);
+    if (r.starts.length) {
+      selectedObjects = new Set([merged]);
+      applyRestitched(r, 'stitch.failed', true);
+      layers.say(t('object.merged', { n: sel.length }));
+      return null;
+    }
+  }
+  applyEdit(target);
+  if (merged >= 0) selectedObjects = new Set([merged]);
+  selectionKey++;
+  layers.say(t('object.merged', { n: sel.length }));
+  redraw();
+  return null;
+}
+
+/** Why the objects cannot be sewn as one, or null. */
+function mergeBlocked(objs: SewObject[]): Key | null {
+  if (objs.some((o) => o.block !== objs[0].block)) return 'object.merge.color';
+  const together = objs.every((o, k) => !k || o.index === objs[k - 1].index + 1);
+  if (!together && objs.some((o) => o.kind !== 'fill')) return 'object.merge.kind';
+  return null;
+}
+
+/** Shows the selected object as its sections, each one an object. */
+function splitSelected(): void {
+  const f = files.active;
+  const p = f?.pattern;
+  if (!f || !p || selectedObjects.size !== 1) return;
+  const o = seq(p).objects[[...selectedObjects][0]];
+  if (!o || o.sections < 2) return;
+  // A copy of the stitches: undo goes back to the pattern that still shows one object.
+  const next: Pattern = { ...p };
+  splitObject(next, o);
+  applyEdit(next);
+  const nq = seq(next);
+  selectedObjects = new Set(nq.objects.flatMap((x, i) => (x.first >= o.first && x.last <= o.last ? [i] : [])));
+  selectionKey++;
+  layers.reveal([...selectedObjects]);
+  layers.say(t('object.splitDone', { n: selectedObjects.size }));
+  redraw();
+}
+
 const objectPanel = new ObjectPanel({
+  merge: () => mergeObjects(),
+  split: splitSelected,
   step: (dir) => {
     const p = files.active?.pattern;
     if (!p || selectedObjects.size !== 1) return null;
@@ -777,6 +858,7 @@ function objectInfo(p: Pattern, q: Sequence) {
     selected,
     layering: selected.map((o) => ({ below: over[o].length, above: over.filter((l) => l.includes(o)).length })),
     numbers: selected.map((o) => numberInColor(q.objects, q.objects[o])),
+    mergeBlocked: selected.length > 1 ? mergeBlocked(selected.map((o) => q.objects[o])) : null,
   };
 }
 

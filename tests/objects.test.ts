@@ -2,10 +2,10 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { digitize, digitizeDefaults } from '../src/digitize/digitize';
 import { DEFAULT_PREPARE, Preparer } from '../src/image/prepare';
-import { rememberObjects, sewObjects } from '../src/model/objects';
+import { joinObjects, rememberObjects, sewObjects, splitObject } from '../src/model/objects';
 import { BLUE } from './helpers/images';
 import { STITCH, TRIM, type Pattern } from '../src/model/pattern';
-import { analyze, carryOver, measureFill, measureSatin, remember, remembered, rememberedIn, rememberShapes, restitch, restoreRemembered, shapeTrust } from '../src/model/restitch';
+import { analyze, carryOver, unionRegion, measureFill, measureSatin, remember, remembered, rememberedIn, rememberShapes, restitch, restoreRemembered, shapeTrust } from '../src/model/restitch';
 import { stitchKinds } from '../src/model/sequence';
 import { parsePattern } from '../src/parsers';
 import { DEFAULT_PROFILE } from '../src/validation/profiles';
@@ -279,5 +279,32 @@ describe('changing the kind of an object', () => {
     const after = sewObjects(moved);
     expect(after.length).toBe(1);
     expect(remembered(moved, after[0])?.region).toBe(r.memory[0].region);
+  });
+
+  it('splits an object into its pieces and joins them again', () => {
+    const p = load('demos/letters.pes');
+    const objs = sewObjects(p);
+    const i = objs.findIndex((o) => o.sections > 1);
+    const o = objs[i];
+    const q: Pattern = { ...p };
+    splitObject(q, o);
+    const split = sewObjects(q);
+    expect(split.length).toBe(objs.length + o.sections - 1);
+    const pieces = split.filter((x) => x.first >= o.first && x.last <= o.last);
+    expect(pieces.length).toBe(o.sections);
+    const r: Pattern = { ...q };
+    joinObjects(r, pieces);
+    expect(sewObjects(r).length).toBe(objs.length);
+  });
+
+  it('puts areas together', () => {
+    const p = load('demos/letters.pes');
+    const kinds = stitchKinds(p);
+    const objs = sewObjects(p, kinds).filter((o) => o.kind === 'fill');
+    const a = analyze(p, objs[0], kinds).fill!;
+    const b = analyze(p, objs[1], kinds).fill!;
+    const u = unionRegion([a, b])!;
+    expect(u.areaMm2).toBeGreaterThan(Math.max(a.areaMm2, b.areaMm2));
+    expect(u.areaMm2).toBeLessThan((a.areaMm2 + b.areaMm2) * 1.05);
   });
 });

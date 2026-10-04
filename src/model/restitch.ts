@@ -255,6 +255,46 @@ function regionFrom(g: NonNullable<StoredObject['region']>): Region | null {
   return { label: 0, x0, y0, w, h, pxMm, mask, inside: distanceInside(mask, w, h), sdf, sdfBase: sdf, areaMm2 };
 }
 
+/** The areas together, as one region (on the finest grid among them). */
+export function unionRegion(rs: Region[]): Region | null {
+  if (!rs.length) return null;
+  if (rs.length === 1) return rs[0];
+  const pxMm = Math.min(...rs.map((r) => r.pxMm));
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const r of rs) {
+    minX = Math.min(minX, r.x0 * r.pxMm);
+    minY = Math.min(minY, r.y0 * r.pxMm);
+    maxX = Math.max(maxX, (r.x0 + r.w) * r.pxMm);
+    maxY = Math.max(maxY, (r.y0 + r.h) * r.pxMm);
+  }
+  const x0 = Math.floor(minX / pxMm) - MARGIN;
+  const y0 = Math.floor(minY / pxMm) - MARGIN;
+  const w = Math.ceil(maxX / pxMm) + MARGIN - x0;
+  const h = Math.ceil(maxY / pxMm) + MARGIN - y0;
+  const mask = new Uint8Array(w * h);
+  let area = 0;
+  for (let y = 0; y < h; y++) {
+    const yMm = (y + y0 + 0.5) * pxMm;
+    for (let x = 0; x < w; x++) {
+      const xMm = (x + x0 + 0.5) * pxMm;
+      for (const r of rs) {
+        const u = Math.floor(xMm / r.pxMm) - r.x0;
+        const v = Math.floor(yMm / r.pxMm) - r.y0;
+        if (u >= 0 && v >= 0 && u < r.w && v < r.h && r.mask[v * r.w + u]) {
+          mask[y * w + x] = 1;
+          area++;
+          break;
+        }
+      }
+    }
+  }
+  const sdf = signedField(mask, w, h, pxMm);
+  return { label: 0, x0, y0, w, h, pxMm, mask, inside: distanceInside(mask, w, h), sdf, sdfBase: sdf, areaMm2: area * pxMm * pxMm };
+}
+
 /**
  * Remembers the exact areas the Image mode filled (`shapes`, by object, as `starts`: the number
  * of each object's first stitch), so editing them starts from those instead of the stitches.
