@@ -32,7 +32,9 @@ jobs:
         env:
           BASE_PATH: ${{ github.event_name == 'pull_request' && format('/heatstitch/pr-preview/pr-{0}/', github.event.number) || '' }}
       # Without it, Pages runs Jekyll over the branch and drops files starting with an underscore.
-      - run: touch dist/.nojekyll
+      # The one at the root covers the previews too; a copy in a preview would outlive its removal.
+      - if: github.event_name != 'pull_request'
+        run: touch dist/.nojekyll
       - if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
         uses: actions/upload-artifact@v4
         with:
