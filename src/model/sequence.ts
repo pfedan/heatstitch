@@ -1,4 +1,4 @@
-import { fillRowEnds, stitchRuns } from '../correct/structure';
+import { fillRowEnds, stitchRuns, ZIGZAG_MIN } from '../correct/structure';
 import { satinMask } from '../validation/satin';
 import { tagShortStitches, TIE } from '../validation/shortStitches';
 import { COLOR_CHANGE, JUMP, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
@@ -72,8 +72,10 @@ export function stitchKinds(p: Pattern): Uint8Array {
   const n = p.cmd.length;
   const out = new Uint8Array(n);
   const satin = satinMask(p);
+  // Narrow satin outlines count as satin too, down to 0.3 mm wide.
+  const narrow = satinMask(p, ZIGZAG_MIN);
   const runs = stitchRuns(p);
-  for (let i = 1; i < n; i++) if (p.cmd[i] === STITCH && p.cmd[i - 1] === STITCH) out[i] = satin[i] ? SATIN : RUNNING;
+  for (let i = 1; i < n; i++) if (p.cmd[i] === STITCH && p.cmd[i - 1] === STITCH) out[i] = narrow[i] ? SATIN : RUNNING;
   for (const e of fillRowEnds(p, runs, satin)) {
     for (const r of e.rows) {
       const a = Math.min(e.at, r);

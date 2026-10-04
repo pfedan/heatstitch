@@ -290,7 +290,7 @@ export const en: Record<keyof typeof de, string> = {
   'player.blockNext': 'To the next color',
   'player.pos': 'Position in the sewing sequence',
   'player.speed': 'Speed, as a multiple of the machine speed',
-  'player.info': 'Stitch {i} / {n} · Color {b} / {nb} · {time}',
+  'player.info': 'Stitch {i} / {n} · {time}',
   'canvas.hint.flow': 'Wheel: zoom · Drag: pan · Space: play · n: next jump',
   'canvas.empty.flow': 'Load an embroidery file to see its sewing sequence.',
   'tooltip.stitch': 'Stitch {i} · {kind} · {len} mm',

@@ -1435,7 +1435,7 @@ button.tool:disabled {
 
 .player input[type='range'] {
   flex: 1;
-  min-width: 80px;
+  min-width: 120px;
 }
 
 .player-info {
@@ -1775,7 +1775,7 @@ body[data-mode='flow'] .stage .hint {
   background: rgba(13, 11, 16, 0.6);
 }
 
-@media (max-width: 1100px) {
+@media (max-width: 1400px) {
   body[data-mode='flow'] .stage .hint {
     display: none;
   }

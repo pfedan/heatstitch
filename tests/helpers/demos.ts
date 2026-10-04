@@ -1,4 +1,6 @@
+import { setTrims } from '../../src/model/jumps';
 import { type Pattern, type ThreadColor } from '../../src/model/pattern';
+import { transitions } from '../../src/model/sequence';
 import { fill, letterDesign, satinBorder, Writer, type Pt } from './designs';
 
 /**
@@ -106,9 +108,39 @@ export function leatherDesign(): Pattern {
   return w.b.build('patch', 'dst', [BLACK, WHITE]);
 }
 
+/**
+ * Confetti: two rows of dots in two colors. The digitizer carried the thread across the long gaps
+ * (loose thread on the fabric) and trimmed even between dots that almost touch (wasted time).
+ */
+export function confettiDesign(): Pattern {
+  const w = new Writer();
+  const rows: [Pt[], Pt[]] = [
+    [
+      [6, 6],
+      [24, 8],
+      [29, 5],
+      [46, 7],
+    ],
+    [
+      [8, 20],
+      [12.5, 22],
+      [30, 19],
+      [47, 21],
+    ],
+  ];
+  rows.forEach((row, i) => {
+    if (i) w.color();
+    row.forEach((c, k) => fill(w, circle(c[0], c[1], 2.2 + (k % 2) * 0.4, 32), { angle: 0.6 + k }));
+  });
+  const p = w.b.build('confetti', 'pes', [RED, BLUE]);
+  const long = transitions(p).filter((t) => t.lengthMm >= 10);
+  return setTrims(p, long, false);
+}
+
 export const DEMOS: { file: string; build: () => Pattern }[] = [
   { file: 'overlap.pes', build: overlapDesign },
   { file: 'letters.pes', build: satinOverlapDesign },
   { file: 'sun.dst', build: shortStitchDesign },
   { file: 'leather-patch.dst', build: leatherDesign },
+  { file: 'confetti.pes', build: confettiDesign },
 ];

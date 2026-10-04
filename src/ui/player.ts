@@ -137,13 +137,10 @@ export class Player {
     const m = this.model;
     this.slider.value = String(this.pos);
     this.slider.disabled = !m.total;
-    const b = m.blockStarts.filter((s) => s <= Math.max(1, this.pos)).length || 1;
     this.info.textContent = m.total
       ? t('player.info', {
           i: formatNumber(this.pos),
           n: formatNumber(m.total),
-          b,
-          nb: m.blockStarts.length,
           time: `${clock(m.timeAt(this.pos))} / ${clock(m.timeAt(m.total))}`,
         })
       : '';

@@ -288,7 +288,7 @@ export const de = {
   'player.blockNext': 'Zur nächsten Farbe',
   'player.pos': 'Position im Nähablauf',
   'player.speed': 'Tempo, als Vielfaches des Maschinentempos',
-  'player.info': 'Stich {i} / {n} · Farbe {b} / {nb} · {time}',
+  'player.info': 'Stich {i} / {n} · {time}',
   'canvas.hint.flow': 'Mausrad: Zoom · Ziehen: Verschieben · Leertaste: Abspielen · n: nächster Sprung',
   'canvas.empty.flow': 'Stickdatei laden, um den Nähablauf zu sehen.',
   'tooltip.stitch': 'Stich {i} · {kind} · {len} mm',
