@@ -758,12 +758,15 @@ input.addEventListener('change', () => {
   input.value = '';
 });
 
-const EXAMPLE_FILE = 'cat-60mm.pes';
-$('load-example').addEventListener('click', async () => {
+const exampleSelect = $<HTMLSelectElement>('load-example');
+exampleSelect.addEventListener('change', async () => {
+  const path = exampleSelect.value;
+  exampleSelect.value = '';
+  if (!path) return;
   try {
-    const res = await fetch(`${import.meta.env.BASE_URL}examples/${EXAMPLE_FILE}`);
+    const res = await fetch(`${import.meta.env.BASE_URL}${path}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    await files.add([new File([await res.blob()], EXAMPLE_FILE)]);
+    await files.add([new File([await res.blob()], path.split('/').pop()!)]);
   } catch (err) {
     console.error('Loading the example failed', err);
   }
