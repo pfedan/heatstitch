@@ -2460,6 +2460,11 @@ body[data-mode='flow'] .stage .hint {
   pointer-events: none;
 }
 
+.layer.drop-own[data-drop]::after {
+  right: auto;
+  left: 4px;
+}
+
 .layer.drop-after[data-drop]::after {
   top: auto;
   bottom: -10px;
