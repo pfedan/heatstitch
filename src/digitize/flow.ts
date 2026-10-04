@@ -1,8 +1,8 @@
 import type { Orientation } from '../image/orientation';
-import { fillRegion, pathLength, sewUnderlay, TRAVEL_STITCH, TravelGrid, type FillParams, type FillResult } from './fill';
+import { fillRegion, pathLength, sewUnderlay, TRAVEL_STITCH, TRAVEL_TOLERANCE, TravelGrid, type FillParams, type FillResult } from './fill';
 import { coverage, peakDensity } from './measure';
 import { sample, type Region } from './region';
-import { runStitch, simplify } from './run';
+import { MIN_CURVE_STITCH, Path, runStitch, simplify, TOLERANCE } from './run';
 import type { Graph, Pt } from './skeleton';
 
 /**
@@ -358,39 +358,29 @@ function lengthen(pts: Pt[], d: number): Pt[] {
 
 /**
  * Stitches along a row: needle points every `len` of arc length, shifted by a quarter stitch from
- * level to level (stagger). Where the row bends between two of them by more than 0.15 mm, a
- * straight stitch would cut the curve, so that stretch gets shorter stitches.
+ * level to level (stagger). Where the row bends between two of them by more than `tol`, a straight
+ * stitch would cut the curve, so that stretch is divided into shorter stitches until each keeps
+ * within `tol` (not shorter than MIN_CURVE_STITCH).
  */
-function rowStitches(p: Piece, len: number): Pt[] {
-  const pts = p.pts;
-  const cum = [0];
-  for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + dist(pts[i - 1], pts[i]));
-  const total = cum[cum.length - 1];
-  const at = (s: number): Pt => {
-    let i = 1;
-    while (i < pts.length - 1 && cum[i] < s) i++;
-    const t = (s - cum[i - 1]) / (cum[i] - cum[i - 1] || 1);
-    return [pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * t, pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * t];
-  };
+function rowStitches(p: Piece, len: number, tol: number): Pt[] {
+  const path = new Path(p.pts);
+  const total = path.total;
   const phase = ((((p.k % STAGGERS) + STAGGERS) % STAGGERS) / STAGGERS) * len;
   const margin = Math.min(0.6, len / 4);
   const marks = [0];
   for (let s = phase; s < total - margin; s += len) if (s >= margin) marks.push(s);
   marks.push(total);
-  const out: Pt[] = [pts[0]];
+  const out: Pt[] = [p.pts[0]];
   for (let m = 1; m < marks.length; m++) {
     const s0 = marks[m - 1];
     const s1 = marks[m];
-    const a = at(s0);
-    const b = at(s1);
-    const l = dist(a, b) || 1;
-    let bend = 0;
-    for (let i = 0; i < pts.length; i++) {
-      if (cum[i] <= s0 || cum[i] >= s1) continue;
-      bend = Math.max(bend, Math.abs((pts[i][0] - a[0]) * (b[1] - a[1]) - (pts[i][1] - a[1]) * (b[0] - a[0])) / l);
-    }
-    const parts = bend > 0.15 ? Math.ceil((s1 - s0) / (len / 2)) : 1;
-    for (let q = 1; q <= parts; q++) out.push(at(s0 + ((s1 - s0) * q) / parts));
+    const fits = (n: number) => {
+      for (let q = 1; q <= n; q++) if (path.deviation(s0 + ((s1 - s0) * (q - 1)) / n, s0 + ((s1 - s0) * q) / n) > tol) return false;
+      return true;
+    };
+    let parts = 1;
+    while (!fits(parts) && (s1 - s0) / (parts + 1) >= MIN_CURVE_STITCH) parts++;
+    for (let q = 1; q <= parts; q++) out.push(path.at(s0 + ((s1 - s0) * q) / parts));
   }
   return out;
 }
@@ -564,11 +554,11 @@ export function fieldFill(
       group.push(take(ni, nrev));
     }
     const pts: Pt[] = [];
-    for (const row of group) pts.push(...rowStitches({ k: count++, pts: row }, p.stitch));
+    for (const row of group) pts.push(...rowStitches({ k: count++, pts: row }, p.stitch, p.tolerance ?? TOLERANCE));
     let travel: Pt[] | null = null;
     if (cur && bd > 1) {
       const path = grid.path(pos, pts[0], true);
-      if (path && pathLength(path) < 2 * bd + 6) travel = runStitch(path, TRAVEL_STITCH);
+      if (path && pathLength(path) < 2 * bd + 6) travel = runStitch(path, TRAVEL_STITCH, TRAVEL_TOLERANCE);
     } else if (cur) travel = [pos, pts[0]];
     if (cur && travel) cur.push(...travel.slice(1), ...pts.slice(1));
     else {
