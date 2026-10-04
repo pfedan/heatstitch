@@ -1,0 +1,94 @@
+name: Fork previews
+
+# Pull requests from forks only get a read-only token, so "CI and Pages" can build them but
+# not publish the preview. This workflow does that part with this repository's token, once
+# the fork's run has been approved and its build passed. It never runs code from the fork:
+# it only copies the built site to gh-pages under pr-preview/pr-N/.
+
+on:
+  workflow_run:
+    workflows: [CI and Pages]
+    types: [completed]
+  pull_request_target:
+    types: [closed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fork-preview
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name != github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+      pull-requests: write
+    steps:
+      # GitHub does not link fork runs to their pull request, so look it up by the fork's
+      # branch and only go on while that pull request is open and still at the built commit.
+      - id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD: ${{ github.event.workflow_run.head_repository.owner.login }}:${{ github.event.workflow_run.head_branch }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          number=$(gh api -X GET "repos/$GITHUB_REPOSITORY/pulls" -f state=open -f head="$HEAD" \
+            --jq "map(select(.head.sha == \"$SHA\")) | .[0].number // empty")
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+          echo "Pull request: ${number:-none open at $SHA}"
+      # The action pushes with git, so it needs a checkout. This is our own main branch.
+      - if: steps.pr.outputs.number
+        uses: actions/checkout@v4
+      - if: steps.pr.outputs.number
+        uses: actions/download-artifact@v4
+        with:
+          name: site
+          path: dist
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+      - if: steps.pr.outputs.number
+        id: preview
+        uses: rossjrw/pr-preview-action@v1
+        with:
+          source-dir: dist
+          preview-branch: gh-pages
+          umbrella-dir: pr-preview
+          action: deploy
+          pr-number: ${{ steps.pr.outputs.number }}
+          deploy-commit-message: Deploy preview for PR ${{ steps.pr.outputs.number }}
+          # Its own comment looks the pull request up in the event, which a workflow_run lacks.
+          comment: false
+      - if: steps.pr.outputs.number
+        uses: marocchino/sticky-pull-request-comment@67d0dec7b07ed060a405f9b2a64b8ab319fdd7db # v2.9.2
+        with:
+          header: pr-preview
+          number: ${{ steps.pr.outputs.number }}
+          message: |
+            :rocket: Preview: ${{ steps.preview.outputs.preview-url }}
+
+            Built to [`gh-pages`](${{ github.server_url }}/${{ github.repository }}/tree/gh-pages) at ${{ steps.preview.outputs.action-start-time }}. It is ready once the [Pages deployment](${{ github.server_url }}/${{ github.repository }}/deployments) is done.
+
+  remove:
+    if: >-
+      github.event_name == 'pull_request_target' &&
+      github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      # pull_request_target checks out our own base branch, never the fork.
+      - uses: actions/checkout@v4
+      - uses: rossjrw/pr-preview-action@v1
+        with:
+          preview-branch: gh-pages
+          umbrella-dir: pr-preview
+          action: remove
