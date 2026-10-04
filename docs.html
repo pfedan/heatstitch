@@ -55,6 +55,7 @@
         <nav class="toc" aria-label="Contents">
           <a href="#en-start">Quick start</a>
           <a href="#en-sequence">Sequence</a>
+          <a href="#en-objects">Objects and stitches</a>
           <a href="#en-jumps">Jumps and trims</a>
           <a href="#en-heatmap">Heatmap</a>
           <a href="#en-check">Check</a>
@@ -66,8 +67,8 @@
         </nav>
 
         <figure>
-          <img src="/guide/cat-en.jpg" width="1280" height="800" alt="The example cat in the Sequence mode, sewn about two thirds of the way, with the colors and the jump list on the right" />
-          <figcaption>The cat from <i>Load example</i> in the <i>Sequence</i> mode: the player stands at two thirds, the crosshair marks the needle. Files and settings on the left, colors and jumps on the right.</figcaption>
+          <img src="/guide/cat-en.jpg" width="1280" height="800" alt="The example cat in the Sequence mode, sewn about two thirds of the way, with the colors and objects and the jump list on the right" />
+          <figcaption>The cat from <i>Load example</i> in the <i>Sequence</i> mode: the player stands at two thirds, the crosshair marks the needle. Files and settings on the left; on the right the colors, each opening to its objects, and the jumps.</figcaption>
         </figure>
 
         <h2 id="en-start">Quick start</h2>
@@ -99,8 +100,8 @@
 
         <h2 id="en-sequence">Sequence mode</h2>
         <dl>
-          <dt>Colors</dt>
-          <dd>The color blocks in sewing order, with their stitch count (more in the tooltip). The eye hides a color; a click highlights it and fades the rest; hovering previews that. <i>Show all</i> undoes both. While the player runs, a dot marks the color being sewn. A click on the color square changes the thread color: one of the Brother threads that PES files store, or a custom color. This is an edit like any other and can be undone.</dd>
+          <dt>Colors and objects</dt>
+          <dd>The color blocks in sewing order, with their stitch count (more in the tooltip). The arrow opens a color to the objects sewn in it (see <a href="#en-objects">Objects and stitches</a>). The eye hides a color; a click highlights it and fades the rest; hovering previews that. <i>Show all</i> undoes both. While the player runs, a dot marks the color being sewn. A click on the color square changes the thread color: one of the Brother threads that PES files store, or a custom color. This is an edit like any other and can be undone.</dd>
           <dt>Color stitches by</dt>
           <dd><i>Thread</i> shows the file's colors. <i>Order</i> runs from dark blue (sewn first) to yellow (sewn last). <i>Stitch type</i> tells satin, fill, running stitch and tie stitches apart; it is worked out from the stitch path, since DST and PES store no objects. <i>Length</i> marks short stitches under 1 mm, long ones over 7 mm and very long ones over 12.1 mm, which machines split.</dd>
           <dt>Player</dt>
@@ -111,6 +112,35 @@
         <figure>
           <img src="/guide/kinds.jpg" width="660" height="700" loading="lazy" alt="The cat colored by stitch type: satin outlines blue, fills green, running stitches and underlay yellow" />
           <figcaption>Colored by stitch type: satin blue, fill green, running stitch and underlay yellow, tie stitches grey.</figcaption>
+        </figure>
+
+        <h2 id="en-objects">Objects and stitches</h2>
+        <p>
+          DST and PES files store only stitches, not the objects they were digitized from. heatstitch finds them
+          again: an <b>object</b> is everything the machine sews between two trims, such as a fill with its
+          underlay, a satin column or an outline. Each one is a fill, satin or running stitch, recognized from
+          its stitches. This works the same for your own files and for designs taken over from the
+          <a href="#en-image">Image mode</a>.
+        </p>
+        <figure>
+          <img src="/guide/objects-en.jpg" width="1280" height="800" loading="lazy" alt="The cat with an orange fill object selected and outlined, the Object panel on the right with its stitch settings" />
+          <figcaption>An orange fill of the cat selected: the rest of the design fades, the dashed line shows the area recognized for it. On the right the object with its place in the order and its stitch settings.</figcaption>
+        </figure>
+        <dl>
+          <dt>Select</dt>
+          <dd>Click an object in the list or on the canvas. <kbd>Shift</kbd> or <kbd>Ctrl</kbd> adds more; <kbd>Esc</kbd> or a click on empty canvas clears the selection. The <i>Object</i> panel shows the stitches, the thread, the size, its place in the order and how many objects it lies on or under.</dd>
+          <dt>Order</dt>
+          <dd>Drag an object or a whole color in the list to another place, or use <i>Sew earlier</i> and <i>Sew later</i>. An object is never sewn before something it lies on, since that would change what is seen; such a move is refused and both objects are selected so you can see where they overlap. <i>Optimize order</i> above the list looks for an order with fewer color changes, trims and travel, and shows what it saves before anything changes. <i>Apply</i> makes it one step you can undo. Moves that get longer than the trim length get tie stitches and a trim.</dd>
+          <dt>Stitches</dt>
+          <dd>The settings start at the values the stitches have now. <b>Fill</b>: pattern, spacing (the green mark is the range recommended for the material under <i>Material</i>), angle, stitch length, edges (pull compensation) and underlay. <b>Satin</b>: spacing, width, short stitches in curves and underlay. <b>Running stitch</b>: stitch length and triple stitch. Moving a slider shows the new stitches at once; letting go applies them. An object with several kinds of stitches has a tab for each; changes apply to all selected objects.</dd>
+          <dt>Fill patterns</dt>
+          <dd><i>Tatami</i> sews straight rows; <i>Offset</i> shifts the needle points from row to row by 1/2 (a brick pattern) to 1/5 of a stitch, or at random to hide lines. <i>Gradient</i> opens the rows from one spacing to another across the shape, for shading and soft edges. <i>Contour</i> runs the rows along the outline, ring inside ring. <i>Spiral</i> winds one line from the edge to the middle of a round shape. <i>As sewn</i> keeps the directions and curves of the rows sewn now; fills from the Image mode that follow the picture, and objects sewn at several angles, start with it.</dd>
+          <dt>Shape</dt>
+          <dd>The area of a fill is recognized from its rows: they are drawn thick enough to touch and closed into a shape. While an object is selected, the dashed line on the canvas shows that area. Where the rows are too open or patchy to tell the edges, the line is amber and the panel says the shape is approximate. Once heatstitch has sewn an object anew, it keeps that exact shape and pattern for the next change.</dd>
+        </dl>
+        <figure>
+          <img src="/guide/patterns.jpg" width="1280" height="320" loading="lazy" alt="The red circle of the overlap demo sewn four ways: tatami with a brick offset, gradient, contour and spiral" />
+          <figcaption>The red circle of <a href="examples/demos/overlap.pes" download>overlap.pes</a> sewn as tatami with brick offset, gradient, contour and spiral.</figcaption>
         </figure>
 
         <h2 id="en-jumps">Jumps and trims</h2>
@@ -278,6 +308,7 @@
             <tr><td><kbd>e</kbd></td><td>Edit stitches</td></tr>
             <tr><td><kbd>c</kbd></td><td>Compare with original</td></tr>
             <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd></td><td>Undo / redo</td></tr>
+            <tr><td><kbd>Shift</kbd> / <kbd>Ctrl</kbd>+click</td><td>Add objects to the selection (Sequence)</td></tr>
             <tr><td><kbd>Esc</kbd></td><td>Clear zone or selection, leave edit mode</td></tr>
           </tbody>
         </table>
@@ -306,6 +337,7 @@
         <nav class="toc" aria-label="Inhalt">
           <a href="#de-start">Schnellstart</a>
           <a href="#de-sequence">Ablauf</a>
+          <a href="#de-objects">Objekte und Stiche</a>
           <a href="#de-jumps">Sprünge und Schnitte</a>
           <a href="#de-heatmap">Heatmap</a>
           <a href="#de-check">Prüfung</a>
@@ -317,8 +349,8 @@
         </nav>
 
         <figure>
-          <img src="/guide/cat-de.jpg" width="1280" height="800" alt="Die Beispielkatze im Modus Ablauf, etwa zu zwei Dritteln gestickt, rechts Farben und Sprungliste" />
-          <figcaption>Die Katze aus <i>Beispiel laden</i> im Modus <i>Ablauf</i>: Der Player steht bei zwei Dritteln, das Fadenkreuz zeigt die Nadel. Links Dateien und Einstellungen, rechts Farben und Sprünge.</figcaption>
+          <img src="/guide/cat-de.jpg" width="1280" height="800" alt="Die Beispielkatze im Modus Ablauf, etwa zu zwei Dritteln gestickt, rechts Farben und Objekte und die Sprungliste" />
+          <figcaption>Die Katze aus <i>Beispiel laden</i> im Modus <i>Ablauf</i>: Der Player steht bei zwei Dritteln, das Fadenkreuz zeigt die Nadel. Links Dateien und Einstellungen, rechts die Farben, die sich zu ihren Objekten aufklappen lassen, und die Sprünge.</figcaption>
         </figure>
 
         <h2 id="de-start">Schnellstart</h2>
@@ -350,8 +382,8 @@
 
         <h2 id="de-sequence">Modus Ablauf</h2>
         <dl>
-          <dt>Farben</dt>
-          <dd>Die Farbblöcke in Stickreihenfolge mit ihrer Stichzahl (mehr im Tooltip). Das Auge blendet eine Farbe aus; ein Klick hebt sie hervor und blendet die übrigen ab, Darüberfahren zeigt das als Vorschau. <i>Alle zeigen</i> hebt beides auf. Läuft der Player, markiert ein Punkt die Farbe, die gerade gestickt wird. Ein Klick auf das Farbquadrat ändert die Garnfarbe: eines der Brother-Garne, die PES-Dateien speichern, oder eine eigene Farbe. Das ist eine Bearbeitung wie jede andere und lässt sich rückgängig machen.</dd>
+          <dt>Farben und Objekte</dt>
+          <dd>Die Farbblöcke in Stickreihenfolge mit ihrer Stichzahl (mehr im Tooltip). Der Pfeil klappt eine Farbe zu den Objekten auf, die in ihr gestickt werden (siehe <a href="#de-objects">Objekte und Stiche</a>). Das Auge blendet eine Farbe aus; ein Klick hebt sie hervor und blendet die übrigen ab, Darüberfahren zeigt das als Vorschau. <i>Alle zeigen</i> hebt beides auf. Läuft der Player, markiert ein Punkt die Farbe, die gerade gestickt wird. Ein Klick auf das Farbquadrat ändert die Garnfarbe: eines der Brother-Garne, die PES-Dateien speichern, oder eine eigene Farbe. Das ist eine Bearbeitung wie jede andere und lässt sich rückgängig machen.</dd>
           <dt>Stiche färben nach</dt>
           <dd><i>Garnfarbe</i> zeigt die Farben der Datei. <i>Reihenfolge</i> verläuft von Dunkelblau (zuerst gestickt) bis Gelb (zuletzt). <i>Stichart</i> unterscheidet Satin, Füllung, Steppstich und Vernähstiche; sie wird aus dem Stichverlauf erkannt, denn DST und PES speichern keine Objekte. <i>Stichlänge</i> markiert kurze Stiche unter 1 mm, lange über 7 mm und sehr lange über 12,1 mm, die Maschinen teilen.</dd>
           <dt>Player</dt>
@@ -362,6 +394,35 @@
         <figure>
           <img src="/guide/kinds.jpg" width="660" height="700" loading="lazy" alt="Die Katze nach Stichart gefärbt: Satinkonturen blau, Füllungen grün, Steppstiche und Unterlage gelb" />
           <figcaption>Nach Stichart gefärbt: Satin blau, Füllung grün, Steppstich und Unterlage gelb, Vernähstiche grau.</figcaption>
+        </figure>
+
+        <h2 id="de-objects">Objekte und Stiche</h2>
+        <p>
+          DST- und PES-Dateien speichern nur Stiche, nicht die Objekte, aus denen sie digitalisiert wurden.
+          heatstitch findet sie wieder: Ein <b>Objekt</b> ist alles, was die Maschine zwischen zwei Fadenschnitten
+          stickt, etwa eine Füllung mit ihrer Unterlage, eine Satinsäule oder eine Kontur. Jedes ist Füllung,
+          Satin oder Steppstich, erkannt aus seinen Stichen. Das gilt für eigene Dateien genauso wie für Motive,
+          die aus dem <a href="#de-image">Modus Bild</a> übernommen wurden.
+        </p>
+        <figure>
+          <img src="/guide/objects-de.jpg" width="1280" height="800" loading="lazy" alt="Die Katze mit einer ausgewählten und umrandeten orangen Füllung, rechts das Objekt mit seinen Stich-Einstellungen" />
+          <figcaption>Eine orange Füllung der Katze ist ausgewählt: Der Rest des Motivs tritt zurück, die gestrichelte Linie zeigt die dafür erkannte Fläche. Rechts das Objekt mit seinem Platz in der Reihenfolge und seinen Stich-Einstellungen.</figcaption>
+        </figure>
+        <dl>
+          <dt>Auswählen</dt>
+          <dd>Ein Objekt in der Liste oder auf der Leinwand anklicken. <kbd>Umschalt</kbd> oder <kbd>Strg</kbd> fügt weitere hinzu; <kbd>Esc</kbd> oder ein Klick auf eine leere Stelle hebt die Auswahl auf. Das Feld <i>Objekt</i> zeigt Stiche, Garn, Größe, den Platz in der Reihenfolge und auf oder unter wie vielen Objekten es liegt.</dd>
+          <dt>Reihenfolge</dt>
+          <dd>Ein Objekt oder eine ganze Farbe in der Liste an eine andere Stelle ziehen, oder <i>Früher sticken</i> und <i>Später sticken</i> verwenden. Ein Objekt wird nie vor etwas gestickt, auf dem es liegt, denn das würde ändern, was zu sehen ist; so ein Zug wird abgelehnt, und beide Objekte werden ausgewählt, damit die Überlappung zu sehen ist. <i>Reihenfolge optimieren</i> über der Liste sucht eine Reihenfolge mit weniger Farbwechseln, Schnitten und Wegen und zeigt vorher, was sie spart. <i>Übernehmen</i> macht daraus einen Schritt, der sich rückgängig machen lässt. Wege, die länger als die Schnittlänge werden, bekommen Vernähstiche und einen Schnitt.</dd>
+          <dt>Stiche</dt>
+          <dd>Die Einstellungen beginnen bei den Werten, die die Stiche jetzt haben. <b>Füllung</b>: Muster, Abstand (die grüne Markierung ist der für das Material unter <i>Material</i> empfohlene Bereich), Winkel, Stichlänge, Kanten (Zugausgleich) und Unterlage. <b>Satin</b>: Abstand, Breite, kurze Stiche in Kurven und Unterlage. <b>Steppstich</b>: Stichlänge und Dreifachstich. Ein Regler zeigt die neuen Stiche sofort; beim Loslassen werden sie übernommen. Ein Objekt mit mehreren Sticharten hat für jede einen Reiter; Änderungen gelten für alle ausgewählten Objekte.</dd>
+          <dt>Füllmuster</dt>
+          <dd><i>Tatami</i> stickt gerade Reihen; <i>Versatz</i> verschiebt die Einstichpunkte von Reihe zu Reihe um 1/2 (ein Ziegelmuster) bis 1/5 Stich oder zufällig, um Linien zu verbergen. <i>Verlauf</i> öffnet die Reihen quer über die Form von einem Abstand zum anderen, für Schattierung und weiche Kanten. <i>Kontur</i> führt die Reihen entlang des Umrisses, Ring in Ring. <i>Spirale</i> windet eine Linie vom Rand zur Mitte einer runden Form. <i>Wie bisher</i> behält Richtungen und Bögen der jetzigen Reihen; Füllungen aus dem Modus Bild, die dem Bild folgen, und Objekte mit mehreren Winkeln beginnen damit.</dd>
+          <dt>Form</dt>
+          <dd>Die Fläche einer Füllung wird aus ihren Reihen erkannt: Sie werden so dick gezeichnet, dass sie sich berühren, und zu einer Form geschlossen. Solange ein Objekt ausgewählt ist, zeigt die gestrichelte Linie auf der Leinwand diese Fläche. Wo die Reihen zu locker oder lückenhaft sind, um die Kanten zu erkennen, ist die Linie orange, und das Feld sagt, dass die Form ungefähr ist. Hat heatstitch ein Objekt neu gestickt, behält es genau diese Form und dieses Muster für die nächste Änderung.</dd>
+        </dl>
+        <figure>
+          <img src="/guide/patterns.jpg" width="1280" height="320" loading="lazy" alt="Der rote Kreis der Überlappungs-Demo auf vier Arten gestickt: Tatami mit Ziegelversatz, Verlauf, Kontur und Spirale" />
+          <figcaption>Der rote Kreis aus <a href="examples/demos/overlap.pes" download>overlap.pes</a> als Tatami mit Ziegelversatz, Verlauf, Kontur und Spirale.</figcaption>
         </figure>
 
         <h2 id="de-jumps">Sprünge und Schnitte</h2>
@@ -530,6 +591,7 @@
             <tr><td><kbd>e</kbd></td><td>Stiche bearbeiten</td></tr>
             <tr><td><kbd>c</kbd></td><td>Mit Original vergleichen</td></tr>
             <tr><td><kbd>Strg</kbd>+<kbd>Z</kbd> / <kbd>Strg</kbd>+<kbd>Umschalt</kbd>+<kbd>Z</kbd></td><td>Rückgängig / wiederholen</td></tr>
+            <tr><td><kbd>Umschalt</kbd> / <kbd>Strg</kbd>+Klick</td><td>Objekte zur Auswahl hinzufügen (Ablauf)</td></tr>
             <tr><td><kbd>Esc</kbd></td><td>Zone oder Auswahl aufheben, Bearbeiten beenden</td></tr>
           </tbody>
         </table>

@@ -1,6 +1,7 @@
 import { formatNumber, t, type Key } from '../i18n';
 import type { ObjectKind } from '../model/objects';
-import type { FillPattern, FillSettings, RunSettings, SatinSettings, Settings } from '../model/restitch';
+import type { FillPattern, FillSettings, RunSettings, SatinSettings, Settings, ShapeTrust } from '../model/restitch';
+import type { ShapeOutline } from '../render/scene';
 import { KIND_ICON, kindLabel } from './layersPanel';
 
 /**
@@ -18,6 +19,10 @@ export interface StitchInfo {
   recommended: [number, number];
   /** How many selected objects have stitches of each kind. */
   counts: Partial<Record<ObjectKind, number>>;
+  /** How far the fill areas can be trusted (the least of the selected objects). */
+  shape?: ShapeTrust;
+  /** Fill areas, drawn on the canvas. */
+  outlines: ShapeOutline[];
 }
 
 export interface StitchHooks {
@@ -36,6 +41,11 @@ const PATTERN_ICON: Record<FillPattern, string> = {
   contour: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="5"/><rect x="7" y="7" width="10" height="10" rx="2.5"/><path d="M11 11h2v2h-2z"/></svg>',
   spiral: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M12 12c0-1 1.5-1.2 2-.2.8 1.6-1 3.2-2.6 3-2.6-.3-3.4-3.6-1.8-5.6 2.2-2.8 6.6-1.8 7.6 1.4 1.3 4-2.2 7.6-6 7.2-4.4-.4-7-5-5.6-9C7 5 11.6 3 15.6 4.2"/></svg>',
   follow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 6c5-3 9 3 18 0M3 11c5-3 9 3 18 0M3 16c5-3 9 3 18 0M3 21c5-3 9 3 18 0"/></svg>',
+};
+
+const TRUST_ICON = {
+  ok: '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"/></svg>',
+  warn: '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5l6 11H2z"/><path d="M8 6.5v3.2M8 11.8v.1"/></svg>',
 };
 
 /** Longest stitch for contour and spiral rows (mm). */
@@ -143,8 +153,16 @@ export class StitchPanel {
     }
     const n = info.counts[this.kind] ?? 0;
     if (n > 1) parts.push(Object.assign(document.createElement('p'), { className: 'muted small', textContent: t('stitch.many', { n }) }));
+    if (this.kind === 'fill' && info.shape) {
+      const trust = document.createElement('p');
+      trust.className = `shape-trust ${info.shape}`;
+      trust.setAttribute('role', 'status');
+      trust.innerHTML = info.shape === 'approximate' ? TRUST_ICON.warn : TRUST_ICON.ok;
+      trust.append(Object.assign(document.createElement('span'), { textContent: t(`stitch.shape.${info.shape}`) }));
+      parts.push(trust);
+    }
     parts.push(...this.controls());
-    const note = Object.assign(document.createElement('p'), { className: 'muted small stitch-note', textContent: t('stitch.note') });
+    const note = Object.assign(document.createElement('p'), { className: 'muted small stitch-note', textContent: t(this.kind === 'fill' && info.shape ? 'stitch.undo' : 'stitch.note') });
     parts.push(note);
     this.root.replaceChildren(...parts);
   }

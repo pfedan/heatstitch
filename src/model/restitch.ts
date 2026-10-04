@@ -1,6 +1,7 @@
 import { fillRegion, type FillParams } from '../digitize/fill';
 import { contourField, fieldFill, stitchField } from '../digitize/flow';
 import { spiralFill } from '../digitize/spiral';
+import { coverage } from '../digitize/measure';
 import { sample, signedField, type Region } from '../digitize/region';
 import { runStitch } from '../digitize/run';
 import { pairs, satinStitches, underlay as satinUnderlay, type Column } from '../digitize/satin';
@@ -137,6 +138,39 @@ export function remember(p: Pattern, o: SewObject, r: Remembered): void {
 
 export function remembered(p: Pattern, o: SewObject): Remembered | undefined {
   return memory.get(objectKey(p, o));
+}
+
+/**
+ * How far the fill area of an object can be trusted: `kept` when it is the shape the object was
+ * sewn with here, `good` when the rows recognized cover it closely, `approximate` when they are too
+ * open to close into an area or leave parts of it uncovered (its edges are a guess).
+ */
+export type ShapeTrust = 'kept' | 'good' | 'approximate';
+
+/** Rows further apart than this do not close into an area reliably (mm). */
+const OPEN_ROWS = 0.6;
+/** Share of the traced area the old rows must cover. */
+const COVERED = 0.93;
+
+export function shapeTrust(p: Pattern, o: SewObject, a: Analysis, spacing: number): ShapeTrust {
+  if (!a.fill) return 'approximate';
+  if (remembered(p, o)?.region === a.fill) return 'kept';
+  if (spacing > OPEN_ROWS) return 'approximate';
+  const runs: Pt[][] = [];
+  for (const pt of a.parts) {
+    if (pt.kind !== 'fill') continue;
+    let run: Pt[] = [];
+    for (let i = pt.s; i <= pt.e; i++) {
+      if (p.cmd[i] !== STITCH) continue;
+      if (i > pt.s && p.cmd[i - 1] !== STITCH && run.length) {
+        runs.push(run);
+        run = [];
+      }
+      run.push(pt10(p, i));
+    }
+    if (run.length) runs.push(run);
+  }
+  return coverage(a.fill, runs, Math.max(0.3, spacing * 0.75)) >= COVERED ? 'good' : 'approximate';
 }
 
 export function analyze(p: Pattern, o: SewObject, kinds: Uint8Array, known = remembered(p, o)): Analysis {

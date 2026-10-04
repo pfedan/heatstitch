@@ -2538,6 +2538,39 @@ body[data-mode='flow'] .stage .hint {
   background: var(--accent);
 }
 
+.shape-trust {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 2px 0 8px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
+.shape-trust svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-top: 1px;
+}
+
+.shape-trust.good svg,
+.shape-trust.kept svg {
+  color: #2f9e5b;
+}
+
+.shape-trust.approximate {
+  color: var(--ink);
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: color-mix(in srgb, #ffb347 14%, transparent);
+}
+
+.shape-trust.approximate svg {
+  color: #ffb347;
+}
+
 .stitch-note {
   margin: 2px 0 0;
 }

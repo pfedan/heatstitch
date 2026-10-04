@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { fillRegion, pathLength } from '../src/digitize/fill';
 import { contourField, fieldFill } from '../src/digitize/flow';
 import { coverage } from '../src/digitize/measure';
-import { buildRegion, type Region } from '../src/digitize/region';
+import { buildRegion, outline, type Region } from '../src/digitize/region';
 import { spiralFill } from '../src/digitize/spiral';
 import type { Pt } from '../src/digitize/skeleton';
 
@@ -84,5 +84,13 @@ describe('fill patterns', () => {
     expect(thread(res.runs) / disk.areaMm2).toBeCloseTo(1 / 0.4, 0);
     expect(coverage(disk, res.runs, 0.3)).toBeGreaterThan(0.95);
     expect(spiralFill(ell, params, [5, 5])).toBeNull();
+  });
+
+  it('outlines a region as one closed line along its edge', () => {
+    const lines = outline(disk);
+    expect(lines).toHaveLength(1);
+    const line = lines[0];
+    expect(line[0]).toEqual(line[line.length - 1]);
+    expect(Math.abs(pathLength(line) / (2 * Math.PI * 10) - 1)).toBeLessThan(0.02);
   });
 });

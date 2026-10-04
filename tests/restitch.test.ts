@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { sewObjects, type SewObject } from '../src/model/objects';
 import { STITCH, TRIM, type Pattern } from '../src/model/pattern';
-import { analyze, measureFill, measureRun, measureSatin, remember, remembered, restitch } from '../src/model/restitch';
+import { analyze, measureFill, measureRun, measureSatin, remember, remembered, restitch, shapeTrust } from '../src/model/restitch';
 import { stitchKinds } from '../src/model/sequence';
 import { parsePattern } from '../src/parsers';
 
@@ -109,6 +109,16 @@ describe('restitching objects', () => {
     expect(now.kind).toBe('fill');
     remember(q, now, { region: r.regions[0], fill: { ...m, pattern: 'spiral' } });
     expect(remembered(q, now)?.fill?.pattern).toBe('spiral');
-    expect(analyze(q, now, stitchKinds(q)).fill).toBe(r.regions[0]);
+    const again = analyze(q, now, stitchKinds(q));
+    expect(again.fill).toBe(r.regions[0]);
+    expect(shapeTrust(q, now, again, 0.4)).toBe('kept');
+  });
+
+  it('trusts shapes of dense rows, not of open ones', () => {
+    const { p, kinds, objs } = setup('demos/letters.pes');
+    const o = firstOf(objs, 'fill');
+    const an = analyze(p, o, kinds);
+    expect(shapeTrust(p, o, an, measureFill(p, an).spacing)).toBe('good');
+    expect(shapeTrust(p, o, an, 0.8)).toBe('approximate');
   });
 });

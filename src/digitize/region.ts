@@ -149,3 +149,76 @@ export function sample(r: Region, field: Float32Array, xMm: number, yMm: number)
 
 /** Image mm coordinates of the center of window pixel (x, y). */
 export const pixelMm = (r: Region, x: number, y: number): [number, number] => [(x + r.x0 + 0.5) * r.pxMm, (y + r.y0 + 0.5) * r.pxMm];
+
+/**
+ * Outline of a region: the zero level of its own signed distance, as closed polylines in mm
+ * (marching squares between pixel centers, the crossings interpolated).
+ */
+export function outline(r: Region): [number, number][][] {
+  const { w, h, sdfBase: f } = r;
+  // Edges between neighbouring pixel centers carry the crossing points: horizontal edge (x, y)
+  // to (x + 1, y) has id 2 * (y * w + x), vertical edge (x, y) to (x, y + 1) the id after it.
+  const point = (id: number): [number, number] => {
+    const k = id >> 1;
+    const x = k % w;
+    const y = (k - x) / w;
+    const a = f[k];
+    const b = id & 1 ? f[k + w] : f[k + 1];
+    const t = a === b ? 0.5 : a / (a - b);
+    const px = id & 1 ? x : x + t;
+    const py = id & 1 ? y + t : y;
+    return [(px + r.x0 + 0.5) * r.pxMm, (py + r.y0 + 0.5) * r.pxMm];
+  };
+  const next = new Map<number, number[]>();
+  const link = (a: number, b: number) => {
+    next.set(a, [...(next.get(a) ?? []), b]);
+    next.set(b, [...(next.get(b) ?? []), a]);
+  };
+  for (let y = 0; y < h - 1; y++) {
+    for (let x = 0; x < w - 1; x++) {
+      const k = y * w + x;
+      const c = (f[k] < 0 ? 1 : 0) | (f[k + 1] < 0 ? 2 : 0) | (f[k + w + 1] < 0 ? 4 : 0) | (f[k + w] < 0 ? 8 : 0);
+      if (c === 0 || c === 15) continue;
+      const top = 2 * k;
+      const bottom = 2 * (k + w);
+      const left = 2 * k + 1;
+      const right = 2 * (k + 1) + 1;
+      // Edges whose two ends lie on different sides, paired around the cell.
+      const cut = [top, right, bottom, left].filter((_, e) => {
+        const corners = [
+          [1, 2],
+          [2, 4],
+          [8, 4],
+          [1, 8],
+        ][e];
+        return !(c & corners[0]) !== !(c & corners[1]);
+      });
+      if (cut.length === 2) link(cut[0], cut[1]);
+      else if (cut.length === 4) {
+        link(cut[0], cut[1]);
+        link(cut[2], cut[3]);
+      }
+    }
+  }
+  const out: [number, number][][] = [];
+  const seen = new Set<number>();
+  for (const start of next.keys()) {
+    if (seen.has(start)) continue;
+    const line: [number, number][] = [];
+    let prev = -1;
+    let cur = start;
+    while (cur !== undefined && !seen.has(cur)) {
+      seen.add(cur);
+      line.push(point(cur));
+      const n: number[] = next.get(cur) ?? [];
+      const to = n[0] !== prev ? n[0] : n[1];
+      prev = cur;
+      cur = to;
+    }
+    if (line.length > 2) {
+      line.push(line[0]);
+      out.push(line);
+    }
+  }
+  return out;
+}

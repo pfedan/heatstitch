@@ -50,13 +50,14 @@ import {
 import { recolor } from './model/recolor';
 import { COLOR_CHANGE, patternStats, STITCH, TRIM } from './model/pattern';
 import { stitchAlpha, stitchAt, stitchColors, transitionAt, type StitchStyle } from './render/flow';
-import type { FlowScene } from './render/scene';
+import type { FlowScene, ShapeOutline } from './render/scene';
 import type { Mode } from './settings';
 import { JumpsPanel } from './ui/jumpsPanel';
 import { kindLabel, LayersPanel } from './ui/layersPanel';
 import { ObjectPanel, OrderCard } from './ui/objectPanel';
 import { StitchPanel, type StitchInfo } from './ui/stitchPanel';
-import { analyze, measureFill, measureRun, measureSatin, remember, remembered, restitch, type Settings as RestitchSettings } from './model/restitch';
+import { analyze, measureFill, measureRun, measureSatin, remember, remembered, restitch, shapeTrust, type Settings as RestitchSettings, type ShapeTrust } from './model/restitch';
+import { outline } from './digitize/region';
 import { recommendedSpacing } from './validation/profiles';
 import { numberInColor, overlaps, sewObjects, type SewObject } from './model/objects';
 import { conflicts, moveStats, optimizeOrder, reorder, violations } from './model/order';
@@ -348,6 +349,8 @@ function flowScene(): FlowScene | null {
     hover: hoverJump !== null ? (q.transitions[hoverJump] ?? null) : null,
     selected: selectedJump !== null ? (q.transitions[selectedJump] ?? null) : null,
     needle: player.complete ? -1 : style.limit,
+    // The areas as recognized on the file itself, also while a change is previewed.
+    outlines: files.active?.pattern && selectedObjects.size ? stitchInfo(files.active.pattern, seq(files.active.pattern)).outlines : undefined,
   };
 }
 
@@ -480,6 +483,9 @@ function stitchInfo(p: Pattern, q: Sequence): StitchInfo {
   if (stitchCache?.p === p && stitchCache.key === selectionKey) return stitchCache.info;
   const measured: StitchInfo['measured'] = {};
   const counts: StitchInfo['counts'] = {};
+  const shapes: ShapeOutline[] = [];
+  let worst: ShapeTrust | undefined;
+  const rank: Record<ShapeTrust, number> = { kept: 0, good: 1, approximate: 2 };
   for (const o of [...selectedObjects].sort((a, b) => a - b)) {
     const obj = q.objects[o];
     if (!obj) continue;
@@ -492,8 +498,13 @@ function stitchInfo(p: Pattern, q: Sequence): StitchInfo {
       else if (pt.kind === 'satin') measured.satin ??= measureSatin(p, pt, q.kinds);
       else measured.run ??= measureRun(p, pt);
     }
+    if (an.fill) {
+      const trust = shapeTrust(p, obj, an, (remembered(p, obj)?.fill ?? measureFill(p, an)).spacing);
+      if (!worst || rank[trust] > rank[worst]) worst = trust;
+      shapes.push({ lines: outline(an.fill), approximate: trust === 'approximate' });
+    }
   }
-  const info: StitchInfo = { key: selectionKey, measured, counts, recommended: recommendedSpacing(settings.profile) };
+  const info: StitchInfo = { key: selectionKey, measured, counts, recommended: recommendedSpacing(settings.profile), shape: worst, outlines: shapes };
   stitchCache = { p, key: selectionKey, info };
   return info;
 }
