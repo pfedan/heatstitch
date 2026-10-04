@@ -7,7 +7,7 @@ import { COLOR_CHANGE, JUMP, PatternBuilder, STITCH, TRIM, type Command, type Pa
  */
 export type Pt = [number, number];
 
-class Writer {
+export class Writer {
   b = new PatternBuilder();
   x = 0;
   y = 0;
@@ -77,11 +77,11 @@ function perimeter(poly: Pt[], step: number, smooth: number): { p: Pt; n: Pt }[]
 }
 
 /** Polygon offset by `d` mm outwards (negative: inwards), using smoothed vertex normals. */
-function offset(poly: Pt[], d: number): Pt[] {
+export function offset(poly: Pt[], d: number): Pt[] {
   return perimeter(poly, 0.5, 0.5).map(({ p, n }) => [p[0] + n[0] * d, p[1] + n[1] * d] as Pt);
 }
 
-function runAround(w: Writer, poly: Pt[], stitch: number): void {
+export function runAround(w: Writer, poly: Pt[], stitch: number): void {
   const pts = perimeter(poly, stitch, 0).map((q) => q.p);
   w.start(pts[0]);
   for (let i = 1; i < pts.length; i++) w.to(pts[i]);
@@ -97,7 +97,7 @@ export interface FillOpts {
 }
 
 /** Tatami fill of a polygon: boustrophedon rows split into sweeps wherever the shape branches. */
-function fill(w: Writer, poly: Pt[], o: FillOpts = {}): void {
+export function fill(w: Writer, poly: Pt[], o: FillOpts = {}): void {
   const angle = o.angle ?? 0;
   const spacing = o.spacing ?? 0.4;
   const L = o.stitch ?? 3.5;
@@ -176,7 +176,7 @@ export interface SatinOpts {
 }
 
 /** Satin border centred on a closed polygon outline. */
-function satinBorder(w: Writer, poly: Pt[], o: SatinOpts = {}): void {
+export function satinBorder(w: Writer, poly: Pt[], o: SatinOpts = {}): void {
   const width = o.width ?? 2.5;
   const spacing = o.spacing ?? 0.4;
   if (o.underlay !== false) runAround(w, poly, 2);
