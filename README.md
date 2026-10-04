@@ -1,256 +1,297 @@
 # heatstitch
 
-Stickdateien ansehen, prüfen und korrigieren, komplett im Browser (kein Backend, keine Uploads).
+View, check and fix embroidery files right in the browser. No backend, no uploads: your files never
+leave your machine.
 
-Zwei Modi, oben umschaltbar (Tasten 1 und 2):
+**Try it: <https://pfedan.github.io/heatstitch/>** (guide: [docs.html](https://pfedan.github.io/heatstitch/docs.html))
 
-- **Ablauf**: wie die Maschine die Datei abarbeitet. Farbblöcke als Ebenen (ausblenden, hervorheben),
-  Stiche färben nach Garnfarbe, Reihenfolge, Stichart oder Stichlänge, Markierungen für Sprünge,
-  Fadenschnitte, Farbwechsel, Start/Ende und Einstiche, ein Player mit geschätzter Nähzeit, und eine
-  Liste der Sprünge, die sich einzeln oder nach Länge schneiden und vernähen oder ohne Schnitt
-  mitziehen lassen.
-- **Dichte**: Heatmap, Prüfung für Stoff und Garn, Korrektur (alles unten Beschriebene).
+![heatstitch: density heatmap with findings next to the realistic thread view](public/og-image.jpg)
 
-## Funktionen
+## Two modes
 
-- **Formate:** DST (Tajima) und PES (Brother, liest den PEC-Block)
-- **Zwei Dichtemetriken**, per Umschalter:
-  - *Garnlänge* in mm/mm²: jedes Stichsegment wird exakt auf die Rasterzellen verteilt, die es durchläuft
-  - *Einstiche* in 1/mm²: Nadeleinstiche pro Fläche (Perforationsrisiko)
-- Rasterzelle 0,5 bis 5 mm, optionale Gauss-Glättung
-- Absolute Farbskala mit einstellbarem Maximum
-- **Validierung** jeder geladenen Datei (Sicher / Vorsicht / Kritisch) für ein wählbares Material (Stoff × Garnstärke), mit orange/rotem Overlay, Gesamturteil und Zonenliste, siehe unten
-- Ungetrimmte Sprünge optional als Garn zählen
-- Stichplan-Overlay in Garnfarben, wahlweise als realistische Fäden mit Schattierung und Schatten, Sprünge gestrichelt
-- Zoom (Mausrad, Pinch), Verschieben, Tooltip mit Dichte und Position
-- Statistik: Stiche, Sprünge, Schnitte, Farbwechsel, Größe, Garnlänge, Max-Dichte
-- Mehrere Dateien laden und umschalten (auch per Pfeiltasten oder j/k, `f` = Einpassen)
-- PNG-Export der aktuellen Ansicht inkl. Legende
-- **Korrektur:** automatisch nach Digitalisier-Praxis (Füllung unter Kanten zurückziehen, Kurzstiche in Satinkurven, gleichmäßig neu verteilen, Fokus Fadendichte oder Lochdichte, praxisübliche Funde und quittierte Zonen bleiben unangetastet) und von Hand (Einstiche wählen, verschieben, löschen, Auswahl ausdünnen), mit Rückgängig/Wiederholen und Vergleichsansicht Original/korrigiert, siehe unten
-- **Speichern als DST oder PES** (eigene Writer, kein pyembroidery)
-- Deutsch / Englisch
-- PWA: installierbar, offline nutzbar, "Öffnen mit" für .dst/.pes
-- Kurzanleitung auf Deutsch und Englisch (`docs.html`, Link "Anleitung" oben rechts)
+Switch at the top of the page, or with the keys `1` and `2`.
 
-## Validierung
+**Sequence** shows how the machine works through the file. Color blocks act as layers (hide,
+highlight), stitches can be colored by thread color, order, stitch type or stitch length, markers show
+jumps, trims, color changes, start and end and needle penetrations. A player steps through the design
+with an estimated sewing time, and the list of jumps lets you trim and tie them one by one or all at
+once by length, or leave them untrimmed.
 
-Läuft automatisch, sobald eine Datei geladen ist, unabhängig von den Darstellungsreglern. Die Messung
-(Web Worker) hängt nicht vom Material ab; die Einstufung schon, sie ist billig und läuft beim Wechsel
-von Stoff oder Garn sofort für alle geladenen Dateien neu.
+![Sequence mode with the cat example, realistic threads, color list and jump list](public/guide/cat-en.jpg)
 
-### Materialprofile
+**Density** shows the heatmap, checks the file for the chosen fabric and thread and offers the
+correction (all described below).
 
-Die Grenzwerte gelten für 40 wt auf stabiler Webware und werden mit einem Faktor aus Stoff und Garn
-skaliert (Verhältnis des empfohlenen Stichabstands zur Referenz 0,40 mm).
+![Density mode with a critical zone where three fills overlap](public/guide/heatmap-en.jpg)
 
-| Stoff | Faktor | empf. Abstand (40 wt) |
+## Features
+
+- **Formats:** DST (Tajima) and PES (Brother, reads the PEC block)
+- **Two density metrics**, switchable:
+  - *Thread length* in mm/mm²: every stitch segment is distributed exactly over the grid cells it crosses
+  - *Penetrations* in 1/mm²: needle penetrations per area (perforation risk)
+- Grid cell 0.5 to 5 mm, optional Gaussian smoothing
+- Absolute color scale with adjustable maximum
+- **Validation** of every loaded file (Safe / Caution / Critical) for a chosen material (fabric × thread
+  weight), with orange/red overlay, overall verdict and zone list, see below
+- Optionally count untrimmed jumps as thread
+- Stitch plan overlay in thread colors, jumps dashed
+- **Realistic view:** round, twisted threads with shading and shadows, rendered with WebGL, with
+  adjustable thread width
+- Zoom (wheel, pinch), pan, tooltip with density and position
+- Statistics: stitches, jumps, trims, color changes, size, thread length, max density
+- Load several files and switch between them (also with arrow keys or j/k, `f` = fit)
+- **Examples dropdown** under the file field: the cat, overlapping circles and a confetti design with
+  jumps load straight into the app
+- **Jump editing** in Sequence mode: trim and tie, or remove trims, one jump at a time or by length
+- PNG export of the current view including legend
+- **Correction (beta):** automatic, following digitizing practice, and by hand, with undo/redo and an
+  original/corrected compare view, see below
+- **Save as DST or PES** (own writers, no pyembroidery)
+- English / German
+- PWA: installable, works offline, "Open with" for .dst/.pes
+- Short guide in English and German (`docs.html`, "Guide" link at the top right)
+
+![Realistic thread rendering of overlapping fills](public/guide/stitchplan.jpg)
+
+### Jumps and trims
+
+Sequence mode lists every jump with its length and whether it is trimmed and tied. Long jumps
+without a trim are flagged because the thread lies loose on the fabric. *Trim from this length*
+and *Do not trim shorter* apply a length rule to all jumps at once; each change is an undo step.
+
+![Jump list for the confetti example: untrimmed long jumps flagged, one jump selected](public/guide/jumps-en.jpg)
+
+## Validation
+
+Runs automatically once a file is loaded, independent of the display settings. The measurement
+(Web Worker) does not depend on the material; the classification does. It is cheap and reruns
+instantly for all loaded files when you change fabric or thread.
+
+### Material profiles
+
+The limits apply to 40 wt on stable woven fabric and are scaled by a factor from fabric and thread
+(ratio of the recommended stitch spacing to the 0.40 mm reference).
+
+| Fabric | Factor | Recommended spacing (40 wt) |
 |---|---|---|
-| Webware, stabil (Twill, Canvas, Denim) | 1,0 | 0,40 bis 0,45 mm |
-| Kappe, strukturiert | 0,9 | 0,40 bis 0,50 mm |
-| Strick, Fleece (Piqué, Jersey) | 0,85 | 0,42 bis 0,50 mm |
-| Frottee, Flor | 0,65 | 0,55 bis 0,70 mm |
-| Leicht, empfindlich (Seide, Batist) | 0,6 | 0,60 bis 0,70 mm |
-| Leder, Kunstleder (+ Perforationsprüfung) | 0,7 | 0,50 bis 0,80 mm |
+| Stable woven (twill, canvas, denim) | 1.0 | 0.40 to 0.45 mm |
+| Cap, structured | 0.9 | 0.40 to 0.50 mm |
+| Knit, fleece (piqué, jersey) | 0.85 | 0.42 to 0.50 mm |
+| Terry, pile | 0.65 | 0.55 to 0.70 mm |
+| Light, delicate (silk, batiste) | 0.6 | 0.60 to 0.70 mm |
+| Leather, faux leather (+ perforation check) | 0.7 | 0.50 to 0.80 mm |
 
-| Garn | 60 wt | 40 wt | 30 wt | 12 wt |
+| Thread | 60 wt | 40 wt | 30 wt | 12 wt |
 |---|---|---|---|---|
-| Faktor (nach Madeira-Abstandstabelle) | 1,15 | 1,0 | 0,8 | 0,5 |
+| Factor (after the Madeira spacing table) | 1.15 | 1.0 | 0.8 | 0.5 |
 
-### Regeln
+### Rules
 
-| Regel | Vorsicht | Kritisch |
+| Rule | Caution | Critical |
 |---|---|---|
-| Garnlänge pro Fläche, Füllstich | ab 7,0 mm/mm² (ca. 3 Lagen) | ab 9,5 mm/mm² (4 Lagen) |
-| Garnlänge pro Fläche, reiner Satin | ab 11 mm/mm² | ab 12 mm/mm² |
-| Kurzstich-Häufung | ≥ 8 Stiche unter 1 mm in einer Zelle (Webware, Caps) | ≥ 8 (alle anderen Stoffe) |
-| Perforation (nur Leder) | ≥ 6 Einstiche im Umkreis von 1 mm | ≥ 9 |
+| Thread length per area, fill | from 7.0 mm/mm² (about 3 layers) | from 9.5 mm/mm² (4 layers) |
+| Thread length per area, pure satin | from 11 mm/mm² | from 12 mm/mm² |
+| Short-stitch cluster | ≥ 8 stitches under 1 mm in one cell (woven, caps) | ≥ 8 (all other fabrics) |
+| Perforation (leather only) | ≥ 6 penetrations within 1 mm | ≥ 9 |
 
-Dichtewerte jeweils × Profilfaktor. Eine Füllstichlage mit 0,4 mm Abstand hat 2,5 mm/mm², ein Satin
-mit 0,4 mm Abstand (zwischen Einstichen auf derselben Seite) 5,0 mm/mm².
+Density values are multiplied by the profile factor. One fill layer at 0.4 mm spacing has 2.5 mm/mm²,
+a satin at 0.4 mm spacing (between penetrations on the same side) 5.0 mm/mm².
 
-- **Raster:** feste 1-mm-Zellen. Die Dichte wird auf 0,2-mm-Unterzellen berechnet, mit σ = 0,6 mm
-  geglättet; jede Zelle bekommt den **Spitzenwert** ihrer Unterzellen. So werden schmale Säulen
-  (Schrift, Ränder) nicht mit ihrer leeren Umgebung weggemittelt; gleichmäßige Füllflächen lesen
-  sich höchstens etwa 7 % über ihrem Nennwert.
-- **Schwellen liegen zwischen typischen Aufbauten**, damit nicht die Rasterlage entscheidet: zwei
-  Füllflächen mit Unterlage erreichen bis 6,4, drei Lagen ab 7,4, vier Lagen ab 9,95, ein Satinrand
-  über einer Füllfläche (beide mit Unterlage) bis 9,0.
-- **Satin:** liegt oben auf und sticht nur an den Kanten ein. Die Grenzen einer Zelle werden linear
-  nach ihrem Satinanteil zwischen Füllstich- und Satinwerten interpoliert (Satin = Zickzack-Stiche
-  1 bis 12,1 mm, nahezu gegenläufig).
-- **Kurzstich-Häufung:** bis zu 6 kurze Stiche direkt nach Blockbeginn (Vernähen nach Sprung,
-  Schnitt, Farbwechsel oder Designstart) bzw. direkt vor Blockende zählen nicht. Längere Ketten
-  kurzer Stiche zählen ab dem siebten Stich.
-- **Perforation:** pro Einstich die Zahl der anderen Einstiche im Umkreis von 1 mm (Vernähstiche
-  ausgenommen). Eine Lochreihe mit Abstand p ergibt 2 × ⌊1/p⌋: 4 bei 0,35 bis 0,5 mm, 6 bei
-  0,33 mm, 10 bei 0,2 mm. Gestapelte Kanten und enge Innenkurven addieren sich.
-- **Zonen:** zusammenhängende (8er-Nachbarschaft) markierte Zellen bilden eine Zone; ihre Stufe ist
-  die der schlimmsten Zelle. Klick (oder `n` / Umschalt+`n`) zoomt hin, Überfahren rahmt sie ein,
-  `v` blendet die Markierungen ein und aus. Bei kritischen Dichte-Zonen steht dabei, wie viel
-  Prozent der Spitzenwert über der Grenze liegt, damit knappe Fälle erkennbar sind.
-- **Praxisübliche Funde** (`src/validation/practice.ts`) bleiben in der Liste, zählen aber nicht
-  zum Gesamturteil, und die Korrektur lässt sie aus. Perforation zählt immer.
-  - *Kleine Stelle:* Vorsicht bis 3 mm² oder eine einzelne kritische Zelle (Satin-Enden,
-    Objektübergänge, Wendepunkte, Vernähknoten).
-  - *Satin-Übergang:* überwiegend Satin, kompakt (höchstens 16 mm², Seitenverhältnis bis 2,5) und
-    höchstens 30 % über der Grenze, also zwei Satinlagen, wo Säulen sich treffen oder kreuzen.
-    Zwei Säulen übereinander der Länge nach ergeben eine lange Zone und bleiben ein Befund.
-  - *Kurzstiche auf stabilem Stoff:* reine Kurzstich-Zonen auf Webware und Caps.
+- **Grid:** fixed 1 mm cells. Density is computed on 0.2 mm subcells and smoothed with σ = 0.6 mm;
+  each cell gets the **peak** of its subcells. That way narrow columns (lettering, borders) are not
+  averaged away with their empty surroundings; even fills read at most about 7 % above their nominal
+  value.
+- **Thresholds sit between typical builds**, so the grid position does not decide: two fills with
+  underlay reach up to 6.4, three layers from 7.4, four layers from 9.95, a satin border over a fill
+  (both with underlay) up to 9.0.
+- **Satin** lies on top and only penetrates at the edges. A cell's limits are interpolated linearly
+  between fill and satin values by its satin share (satin = zigzag stitches 1 to 12.1 mm, nearly
+  opposite in direction).
+- **Short-stitch cluster:** up to 6 short stitches right after a block starts (tie-in after a jump,
+  trim, color change or design start) or right before it ends do not count. Longer chains of short
+  stitches count from the seventh stitch.
+- **Perforation:** for each penetration, the number of other penetrations within 1 mm (tie stitches
+  excluded). A row of holes with spacing p gives 2 × ⌊1/p⌋: 4 at 0.35 to 0.5 mm, 6 at 0.33 mm, 10 at
+  0.2 mm. Stacked edges and tight inner curves add up.
+- **Zones:** connected (8-neighborhood) flagged cells form a zone; its level is that of its worst
+  cell. Click (or `n` / Shift+`n`) zooms to it, hovering outlines it, `v` toggles the markings. For
+  critical density zones the list shows how many percent the peak is over the limit, so close calls
+  are visible.
+- **Normal in practice** (`src/validation/practice.ts`): these findings stay in the list but do not
+  count towards the verdict, and the correction leaves them alone. Perforation always counts.
+  - *Small spot:* Caution up to 3 mm² or a single critical cell (satin ends, object joins, turning
+    points, tie-off knots).
+  - *Satin join:* mostly satin, compact (at most 16 mm², aspect ratio up to 2.5) and at most 30 %
+    over the limit, i.e. two satin layers where columns meet or cross. Two columns stacked
+    lengthwise give a long zone and remain a finding.
+  - *Short stitches on stable fabric:* pure short-stitch zones on woven fabric and caps.
 
-  Mit *Trotzdem prüfen* zählt eine solche Zone wieder mit; *Quittieren* nimmt jede andere Zone aus
-  dem Urteil. Beides wird mit der Datei gespeichert und verfällt, wenn die Zone durch eine Änderung
-  verschwindet oder deutlich wächst.
-- **Tooltip:** zeigt neben dem Anzeigewert den Prüfwert der Zelle und die für sie geltenden Grenzen.
-- API: `measurePattern(pattern)` (profilunabhängig) und `classify(measurement, profile)` in
-  `src/validation/validate.ts`. Schwellen in `src/validation/thresholds.ts`, Profile in
+  *Check anyway* counts such a zone again; *Acknowledge* takes any other zone out of the verdict.
+  Both are saved with the file and expire when the zone disappears or grows noticeably after an edit.
+- **Tooltip:** shows the cell's check value and the limits that apply to it next to the displayed value.
+- API: `measurePattern(pattern)` (profile independent) and `classify(measurement, profile)` in
+  `src/validation/validate.ts`. Thresholds in `src/validation/thresholds.ts`, profiles in
   `src/validation/profiles.ts`.
 
-## Korrektur
+![Findings list with verdict and zones](public/guide/findings-en.jpg)
 
-Das Panel *Korrektur* steht in der rechten Spalte unter den Befunden und arbeitet mit dem gewählten
-Material und den eingeschalteten Prüfungen. Jede Änderung ist ein Rückgängig-Schritt (Strg+Z /
-Strg+Umschalt+Z), *Original* stellt die geladene Datei wieder her.
+## Correction (beta)
 
-Die bearbeitete Fassung wird bei jeder Änderung im Browser neben dem unveränderten Original
-gespeichert (IndexedDB) und nach dem Neuladen der Seite wiederhergestellt; ein Rückgängig-Schritt
-führt dann zurück zum Original. Das Original selbst wird nie überschrieben, und *×* entfernt beide.
+The *Correction* panel sits in the right column below the findings and works with the chosen
+material and the enabled checks. It is marked beta: check the result in the compare view and do a
+test stitch-out before production. Every change is an undo step (Ctrl+Z / Ctrl+Shift+Z), *Original*
+restores the loaded file.
 
-### Automatisch
+The edited version is stored in the browser next to the unchanged original (IndexedDB) on every
+change and restored after a page reload; one undo step then leads back to the original. The original
+itself is never overwritten, and *×* removes both.
 
-Die Korrektur arbeitet wie ein Digitalisierer von Hand: Sie verändert Stiche nur dort, wo es im
-fertigen Stick nicht auffällt, und lässt Stellen, die in der Praxis normal sind, in Ruhe. *Ziel* ist
-entweder „keine Warnung“ (Vorsicht und Kritisch beheben) oder „nur Kritisch“ (Standard). *Nur gewählte Zone*
-beschränkt sie auf die Zone, die in der Liste gewählt ist. Sie läuft im Web Worker, und jeder
-Schritt wird nur übernommen, wenn das Ergebnis im Bereich dadurch nicht schlechter wird.
+### Automatic
 
-*Fokus* legt fest, welche Regel Stiche einspart:
+The correction works like a digitizer by hand: it only changes stitches where it won't show in the
+finished embroidery, and leaves spots alone that are normal in practice. The *goal* is either
+"no warnings" (fix Caution and Critical) or "critical only" (default). *Selected zone only* limits it
+to the zone selected in the list. It runs in a Web Worker, and each step is only kept if the result
+in that area does not get worse.
 
-- **Beides** (Standard): Fadendichte, Kurzstich-Häufungen und bei Leder die Perforation.
-- **Fadendichte**: nur zu viel Garn pro Fläche. Verdeckte Füllreihen werden ausgedünnt.
-- **Lochdichte**: nur Einstiche (Kurzstiche, Perforation); zusätzlich werden Einstiche
-  verschiedener Lagen, die im selben Loch landen, um höchstens 0,3 mm getrennt.
+*Focus* sets which rule saves stitches:
 
-Die Schritte, in dieser Reihenfolge:
+- **Both** (default): thread density, short-stitch clusters and, on leather, perforation.
+- **Thread density**: only too much thread per area. Covered fill rows are thinned out.
+- **Penetrations**: only needle penetrations (short stitches, perforation); in addition,
+  penetrations from different layers landing in the same hole are moved apart by at most 0.3 mm.
 
-1. **Aufräumen** (`src/correct/shorts.ts`): Stiche ohne Bewegung fallen weg, Ketten winziger Stiche
-   werden zusammengefasst, solange kein Punkt mehr als 0,3 mm abweicht.
-2. **Füllung unter der Kante zurückziehen** (`src/correct/pullback.ts`): Reicht eine Füllung weit
-   unter eine später gestickte Satinkante, wird das Reihenende auf die übliche Überlappung von etwa
-   30 % der Kantenbreite zurückgenommen (unter einer Füllung 0,6 mm). Die Kante verdeckt das
-   Reihenende ohnehin, gespart wird doppelte Lage am Rand.
-3. **Kurzstiche in Satinkurven** (`src/correct/satinShort.ts`): Auf der Innenseite enger Kurven
-   drängen sich die Einstiche. Wie in Digitalisierprogrammen endet dort jeder zweite Stich ein
-   Viertel der Säulenbreite vor der Kante; die Kontur bleibt geschlossen.
-4. **Verdeckte Reihen ausdünnen** (nur Fadendichte, `src/correct/thin.ts`): Füllreihen, die
-   vollständig unter mindestens einer vollen späteren Lage liegen, werden paarweise entfernt. Man
-   sieht sie nicht, Streifen entstehen also nicht.
-5. **Gleichmäßig neu verteilen** (`src/correct/respace.ts`): Ist eine Füllung oder ein Satin danach
-   noch zu dicht, wird die ganze Bahn mit gleichmäßig größerem Reihen- bzw. Stichabstand neu
-   aufgebaut statt einzelne Reihen herauszunehmen. Kontur, Stichversatz und Bahnrichtung bleiben,
-   und der Abstand wird nie größer als der für das Material empfohlene (Webware 40er: 0,45 mm).
-   Schmale Details und schon ungleichmäßige Bahnen bleiben unverändert.
-6. **Einstiche trennen** (`src/correct/nudge.ts`): bei Fokus Lochdichte und bei Perforation auf
-   Leder; verschoben werden nur Einstiche zwischen zwei ausreichend langen Stichen.
+The steps, in this order:
 
-Vernähstiche, Sprünge, Schnitte und Farbwechsel bleiben unverändert.
+1. **Clean up** (`src/correct/shorts.ts`): stitches without movement are dropped, chains of tiny
+   stitches are merged as long as no point moves more than 0.3 mm.
+2. **Pull fills back under borders** (`src/correct/pullback.ts`): if a fill reaches far under a
+   satin border stitched later, the row end is pulled back to the usual overlap of about 30 % of the
+   border width (0.6 mm under a fill). The border covers the row end anyway; the double layer at the
+   edge is saved.
+3. **Short stitches in satin curves** (`src/correct/satinShort.ts`): on the inside of tight curves
+   the penetrations crowd together. As in digitizing software, every other stitch ends a quarter of
+   the column width before the edge; the outline stays closed.
+4. **Thin out covered rows** (thread density only, `src/correct/thin.ts`): fill rows lying entirely
+   under at least one full later layer are removed in pairs. They are not visible, so no stripes
+   appear.
+5. **Respace evenly** (`src/correct/respace.ts`): if a fill or satin is still too dense, the whole
+   run is rebuilt with evenly wider row or stitch spacing instead of removing single rows. Outline,
+   stitch offset and direction stay, and the spacing never exceeds the one recommended for the
+   material (woven, 40 wt: 0.45 mm). Narrow details and already uneven runs stay unchanged.
+6. **Separate penetrations** (`src/correct/nudge.ts`): with focus on penetrations and for
+   perforation on leather; only penetrations between two long enough stitches are moved.
 
-**Was in Ruhe bleibt:** praxisübliche und quittierte Zonen (siehe Validierung) fasst die Korrektur
-nicht an; sie sorgt nur dafür, dass sie nicht schlimmer werden. Was danach noch übrig ist, meldet
-das Panel als „von Hand prüfen“: meist mehrere gestapelte Lagen, also eine Designentscheidung.
+Tie stitches, jumps, trims and color changes stay unchanged.
 
-### Von Hand
+**What is left alone:** zones that are normal in practice or acknowledged (see Validation) are not
+touched; the correction only makes sure they don't get worse. Whatever remains afterwards is reported
+by the panel as "check by hand": usually several stacked layers, i.e. a design decision.
 
-*Stiche bearbeiten* (`e`) blendet Stichplan und, ab etwa 6 px/mm Zoom, die Einstiche ein.
+![Correction panel with goal, focus and result](public/guide/correct-en.jpg)
 
-- Klick wählt einen Einstich, Umschalt+Klick erweitert, Umschalt+Ziehen wählt ein Rechteck,
-  Strg+A alles. Klick ins Leere hebt die Auswahl auf, Ziehen im Leeren verschiebt die Ansicht.
-- Gewählte Einstiche ziehen oder mit den Pfeiltasten verschieben (0,1 mm, mit Umschalt 0,5 mm).
-- Entf / Rücktaste löscht; die Nachbarn werden durch einen Stich verbunden.
-- *Ausdünnen* entfernt 25, 33 oder 50 % der Zyklen in Füllungen und Zickzacks, die überwiegend in
-  der Auswahl liegen.
+### By hand
 
-### Vergleich
+*Edit stitches* (`e`) shows the stitch plan and, from about 6 px/mm zoom, the penetrations.
 
-*Mit Original vergleichen* (`c`, sobald die Datei geändert wurde) teilt die Ansicht: links das
-Original, rechts die aktuelle Fassung, jeweils mit eigener Heatmap, Markierungen und Stichplan. Die
-Trennlinie lässt sich ziehen, Zoom und Verschieben gelten für beide Seiten, der Tooltip zeigt die
-Werte der Seite unter dem Zeiger. Darunter stehen Stiche, Garnlänge, kritische und Vorsicht-Fläche
-und maximale Dichte beider Fassungen nebeneinander.
+- Click selects a penetration, Shift+click extends, Shift+drag selects a rectangle, Ctrl+A selects
+  all. Clicking empty space clears the selection, dragging in empty space pans the view.
+- Drag selected penetrations or move them with the arrow keys (0.1 mm, with Shift 0.5 mm).
+- Delete / Backspace removes them; the neighbors are joined by one stitch.
+- *Thin out* removes 25, 33 or 50 % of the cycles in fills and zigzags that lie mostly inside the
+  selection.
 
-### Speichern
+### Compare
 
-*Als DST* / *Als PES* schreibt das aktuelle Muster (`src/writers/`). Nach einer Änderung heißt die
-Datei `name-corrected.dst`. Gespeichert werden nur Stiche und Farben: PE-Design-Objekte und
-Rahmeneinstellungen des Originals gehen verloren.
+*Compare with original* (`c`, once the file has been changed) splits the view: the original on the
+left, the current version on the right, each with its own heatmap, markings and stitch plan. The
+divider can be dragged, zoom and pan apply to both sides, and the tooltip shows the values of the
+side under the pointer. Below, stitches, thread length, critical and caution area and max density of
+both versions are shown side by side.
 
-- **DST:** Ein Schnitt wird als Folge von 3 Sprüngen geschrieben, aber nur, wenn die Sprungfolge danach
-  nicht schon lang genug ist. Schnitte wachsen deshalb beim wiederholten Speichern nicht (anders als
-  bei pyembroidery). Ungetrimmte Sprungfolgen, die sonst als Schnitt gelesen würden, werden
-  zusammengefasst. Lange Stiche werden in Sprünge plus einen Stich zerlegt (keine zusätzlichen
-  Einstiche). Sprünge über 36 mm brauchen 3 oder mehr Datensätze und werden beim Lesen zum Schnitt;
-  das ist eine Eigenschaft des Formats. DST enthält keine Farben.
-- **PES:** Version 1 mit CEmbOne/CSewSeg-Objekt für Designsoftware und PEC-Block mit
-  Vorschaubildern für Maschinen. Nur Sprünge nach einem Schnitt tragen das Schnitt-Flag (pyembroidery
-  markiert jeden Sprung). Farben behalten ihren PEC-Paletten-Platz; Farben aus DST bekommen den
-  nächstgelegenen.
-- Die Tests (`tests/writers.test.ts`) prüfen Lesen → Schreiben → Lesen für DST, PES und beide
-  Konvertierungen auf Datensatz-Gleichheit. Die geschriebenen Dateien wurden außerdem mit
-  pyembroidery 1.5.1 gegengelesen.
+![Compare view: original left, corrected right, with the numbers of both](public/guide/compare-en.jpg)
 
-## Entwicklung
+### Saving
+
+*As DST* / *As PES* writes the current pattern (`src/writers/`). After a change the file is called
+`name-corrected.dst`. Only stitches and colors are saved: PE-Design objects and hoop settings of the
+original are lost.
+
+- **DST:** a trim is written as a sequence of 3 jumps, but only if the following jump sequence is not
+  already long enough. That way trims don't grow on repeated saves (unlike pyembroidery). Untrimmed
+  jump sequences that would otherwise read as a trim are merged. Long stitches are split into jumps
+  plus one stitch (no extra penetrations). Jumps over 36 mm need 3 or more records and read back as a
+  trim; that is a property of the format. DST has no colors.
+- **PES:** version 1 with a CEmbOne/CSewSeg object for design software and a PEC block with preview
+  images for machines. Only jumps after a trim carry the trim flag (pyembroidery flags every jump).
+  Colors keep their PEC palette slot; colors from DST get the nearest one.
+- The tests (`tests/writers.test.ts`) check read → write → read for DST, PES and both conversions for
+  record equality. The written files were also read back with pyembroidery 1.5.1.
+
+## Development
 
 ```sh
 npm install
-npm run dev       # Dev-Server
-npm test          # Unit-Tests (Vitest)
-npm run build     # Typecheck + Produktionsbuild nach dist/
-npm run preview   # Build lokal ansehen: http://localhost:4173/heatstitch/
+npm run dev       # dev server
+npm test          # unit tests (Vitest)
+npm run build     # typecheck + production build into dist/
+npm run preview   # view the build locally: http://localhost:4173/heatstitch/
 ```
 
-Die Tests erzeugen ihre DST/PES-Fixtures synthetisch (`tests/helpers/encode.ts`) und prüfen u.a.,
-dass die Summe des Rasters exakt der Gesamtgarnlänge bzw. Stichzahl entspricht.
+The tests generate their DST/PES fixtures synthetically (`tests/helpers/encode.ts`) and check, among
+other things, that the grid sums exactly to the total thread length or stitch count.
 
-## Beispieldateien
+## Example files
 
-`public/examples/` enthält echte Stickdateien zum Ausprobieren, z. B. `cat-60mm.pes` (Katze, 60 mm, PES v6).
-Der Knopf "Beispiel laden" unter dem Dateifeld lädt sie direkt in die App.
+`public/examples/` holds real embroidery files to try out, e.g. `cat-60mm.pes` (cat, 60 mm, PES v6).
+The *Load example* dropdown under the file field loads the cat, the overlapping circles and the
+confetti design straight into the app.
 
-`public/examples/demos/` enthält kleine synthetische Demos für die Anleitung, jede mit einem Befund:
-`overlap.pes` (gestapelte Füllungen), `letters.pes` (Füllung unter Satin), `sun.dst` (Kurzstiche auf
-Strick), `leather-patch.dst` (Perforation auf Leder) und `confetti.pes` (lange Sprünge ohne Schnitt,
-kurze mit Schnitt). Sie entstehen mit den App-eigenen Writern aus
-`tests/helpers/demos.ts`; `tests/demos.test.ts` prüft, dass sie aktuell sind und den beschriebenen
-Befund zeigen. Nach Änderungen an Designs oder Writern: `UPDATE_DEMOS=1 npm test`. Die Bilder der
-Anleitung liegen in `public/guide/` und werden nicht vorab gecacht.
+`public/examples/demos/` holds small synthetic demos for the guide, each with one finding:
+`overlap.pes` (stacked fills), `letters.pes` (fill under satin), `sun.dst` (short stitches on knit),
+`leather-patch.dst` (perforation on leather) and `confetti.pes` (long jumps without trims, short ones
+with trims). They are built with the app's own writers from `tests/helpers/demos.ts`;
+`tests/demos.test.ts` checks that they are up to date and show the described finding. After changing
+designs or writers: `UPDATE_DEMOS=1 npm test`. The guide images live in `public/guide/` and are not
+precached.
 
 ## Deployment
 
-`.github/workflows/deploy.yml` testet und baut jeden Push; Pushes auf `main` werden auf
-GitHub Pages veröffentlicht. Einmalig nötig: *Settings → Pages → Source: GitHub Actions*.
+`.github/workflows/deploy.yml` tests and builds every push. The site is served from the `gh-pages`
+branch: pushes to `main` go to its root at <https://pfedan.github.io/heatstitch/>, and every pull
+request gets a preview under `pr-preview/pr-N/` (linked in a PR comment) that is removed again when
+the PR closes. Previews only run for branches in this repository, not for forks. One-time setup:
+*Settings → Pages → Source: Deploy from a branch*, `gh-pages`, `/ (root)`.
 
-## Hinweise zu den Formaten
+## Format notes
 
-- **DST** kennt keinen expliziten Fadenschnitt. Wie bei pyembroidery gilt eine Folge von
-  mindestens 3 Sprüngen als Schnitt (`DST_TRIM_JUMP_COUNT` in `src/parsers/dst.ts`). DST enthält
-  außerdem keine Garnfarben; die Farbblöcke bekommen Ersatzfarben.
-- **PES**: Farben kommen aus der PEC-Palette. Die RGB-Garnlisten neuerer PES-Versionen werden noch nicht gelesen.
-- Die Validierungsschwellen sind aus Digitalisier-Richtwerten hergeleitet und an synthetischen Aufbauten kalibriert; ein Abgleich mit echten Probestickungen steht noch aus.
+- **DST** has no explicit trim. As in pyembroidery, a sequence of at least 3 jumps counts as a trim
+  (`DST_TRIM_JUMP_COUNT` in `src/parsers/dst.ts`). DST also has no thread colors; color blocks get
+  substitute colors.
+- **PES:** colors come from the PEC palette. The RGB thread lists of newer PES versions are not read
+  yet.
+- The validation thresholds are derived from digitizing guidelines and calibrated on synthetic
+  builds; a comparison with real test stitch-outs is still pending.
 
-## Aufbau
+## Structure
 
 ```
-src/parsers/   DST- und PES-Parser, PEC-Palette
-src/model/     Pattern-Datenmodell, Garnsegmente, Statistik, Bearbeitungsfunktionen,
-               Ablauf (Farbblöcke, Sticharten, Sprünge, Marker), Sprünge schneiden/mitziehen
-src/density/   Dichteraster, Gauss-Blur, Web Worker
-src/validation/  Messung, Profile, Stufen, Satin-Erkennung, Kurzstich- und Perforationsregel, Zonen
-src/correct/   Automatische Korrektur: Rückzug unter Kanten, Satin-Kurzstiche, Neuverteilen, Ausdünnen, Einstiche trennen
-src/writers/   DST- und PES-Writer (PEC-Block, Vorschaubilder)
-src/render/    Viewport, Farbskala, Heatmap, Stichplan, Legende, Ablauf-Darstellung (Färbung, Marker, Nadel)
-src/ui/        Dateiliste, Validierung, Korrektur-Panel, Stich-Editor, Controls, Statistik, Tooltip, Export,
-               Farben-Liste, Sprung-Liste, Player
-src/i18n/      Übersetzungen DE/EN
-public/examples/  Beispiel-Stickdateien (per Knopf ladbar)
-docs.html      Kurzanleitung DE/EN (src/docs.ts, src/docs.css)
-public/og-image.jpg, robots.txt, sitemap.xml  Vorschaubild für Social Media, Crawler
+src/parsers/     DST and PES parsers, PEC palette
+src/model/       Pattern data model, thread segments, statistics, edit functions,
+                 sequence (color blocks, stitch types, jumps, markers), trimming/untrimming jumps
+src/density/     Density grid, Gaussian blur, Web Worker
+src/validation/  Measurement, profiles, levels, satin detection, short-stitch and perforation rules, zones
+src/correct/     Automatic correction: pullback under borders, satin short stitches, respacing,
+                 thinning, separating penetrations
+src/writers/     DST and PES writers (PEC block, preview images)
+src/render/      Viewport, color scale, heatmap, stitch plan, realistic threads (WebGL), legend,
+                 sequence rendering (coloring, markers, needle)
+src/ui/          File list, validation, correction panel, stitch editor, controls, statistics,
+                 tooltip, export, color list, jump list, player
+src/i18n/        Translations EN/DE
+public/examples/ Example embroidery files (loadable from the dropdown)
+public/guide/    Screenshots for the guide
+docs.html        Short guide EN/DE (src/docs.ts, src/docs.css)
+public/og-image.jpg, robots.txt, sitemap.xml  Social media preview image, crawlers
 ```
