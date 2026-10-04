@@ -390,7 +390,21 @@
             <h2 data-i18n="layers.title"></h2>
             <button type="button" class="link" id="layers-reset" data-i18n="layers.showAll" hidden></button>
           </div>
+          <div class="order-bar">
+            <button type="button" id="order-optimize" aria-expanded="false" aria-controls="order-card" data-i18n-title="order.button.hint"><span aria-hidden="true">⇅</span> <span data-i18n="order.button"></span></button>
+          </div>
+          <div class="order-card" id="order-card" role="group" data-i18n-aria="order.button" hidden></div>
           <ul class="layer-list" id="layer-list"></ul>
+          <p class="layer-note" id="layer-note" role="status" hidden></p>
+        </section>
+
+        <section class="panel object-panel" id="object-panel" data-mode="flow" hidden>
+          <div class="panel-head">
+            <h2 data-i18n="object.title"></h2>
+            <button type="button" id="object-close" class="icon" data-i18n-title="object.clear"><span aria-hidden="true">&#x2715;</span></button>
+          </div>
+          <div id="object-body"></div>
+          <p class="layer-note error" id="object-msg" role="status" hidden></p>
         </section>
 
         <section class="panel jumps" id="jumps-panel" data-mode="flow">
