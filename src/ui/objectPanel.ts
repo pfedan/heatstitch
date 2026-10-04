@@ -1,4 +1,4 @@
-import { formatNumber, t } from '../i18n';
+import { formatNumber, t, type Key } from '../i18n';
 import type { SewObject } from '../model/objects';
 import type { OrderCost } from '../model/order';
 import type { Settings } from '../settings';
@@ -16,16 +16,23 @@ export interface ObjectInfo {
   hand: number[];
   /** Its points are being edited (one object), and how many of them are selected. */
   editing: { selection: number } | null;
+  /** Why the selected objects cannot be sewn as one (several selected), or null. */
+  mergeBlocked: Key | null;
 }
 
 export interface ObjectHooks {
   /** Sew the selected object one place earlier (-1) or later (1); returns why not, or null. */
   step: (dir: -1 | 1) => Blocked | null;
+  /** Sew the selected objects as one; returns why not, or null. */
+  merge: () => Blocked | null;
+  /** Show the selected object as its pieces, each one an object. */
+  split: () => void;
   clear: () => void;
   /** Start or stop editing the points of the selected object. */
   editStitches: (on: boolean) => void;
   deleteSelection: () => void;
-  split: () => void;
+  /** Split the stitch to the selected point in two. */
+  splitStitch: () => void;
 }
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -107,6 +114,16 @@ export class ObjectPanel {
         return b;
       };
       actions.append(btn(t('object.earlier'), -1, o.index === 0), btn(t('object.later'), 1, o.index === info.objects.length - 1));
+      if (o.sections > 1) {
+        const b = Object.assign(document.createElement('button'), { type: 'button', className: 'wide', textContent: t('object.split'), title: t('object.split.hint') });
+        b.addEventListener('click', () => this.hooks.split());
+        actions.append(b);
+      }
+    } else {
+      const why = info.mergeBlocked;
+      const b = Object.assign(document.createElement('button'), { type: 'button', textContent: t('object.merge'), title: t(why ?? 'object.merge.hint'), disabled: !!why });
+      b.addEventListener('click', () => showBlocked(this.msg, this.hooks.merge()));
+      actions.append(b);
     }
     const hint = Object.assign(document.createElement('p'), {
       className: 'muted small',
@@ -138,7 +155,7 @@ export class ObjectPanel {
     row.className = 'row-buttons';
     row.append(
       button(t('edit.delete'), () => this.hooks.deleteSelection(), { disabled: !ed.selection }),
-      button(t('edit.split'), () => this.hooks.split(), { disabled: ed.selection !== 1, title: t('edit.split.hint') }),
+      button(t('edit.split'), () => this.hooks.splitStitch(), { disabled: ed.selection !== 1, title: t('edit.split.hint') }),
       button(t('object.editDone'), () => this.hooks.editStitches(false), { primary: true }),
     );
     box.append(row);

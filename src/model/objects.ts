@@ -177,6 +177,34 @@ export function rememberObjects(p: Pattern, starts: number[], end = Infinity): v
   }
 }
 
+/** Number of stitches before each record. */
+function stitchesBefore(p: Pattern): Int32Array {
+  const number = new Int32Array(p.cmd.length + 1);
+  let n = 0;
+  for (let i = 0; i < p.cmd.length; i++) {
+    number[i] = n;
+    if (p.cmd[i] === STITCH) n++;
+  }
+  number[p.cmd.length] = n;
+  return number;
+}
+
+/** Sews the objects `objs` (one after the other in one color) as one object from now on. */
+export function joinObjects(p: Pattern, objs: SewObject[]): void {
+  if (!objs.length) return;
+  const number = stitchesBefore(p);
+  rememberObjects(p, [number[objs[0].first]], number[objs[objs.length - 1].last + 1]);
+}
+
+/** Shows object `o` as its sections from now on, each one an object. */
+export function splitObject(p: Pattern, o: SewObject): void {
+  const number = stitchesBefore(p);
+  const starts = sections(p, stitchKinds(p))
+    .filter((s) => s.first >= o.first && s.last <= o.last)
+    .map((s) => number[s.first]);
+  rememberObjects(p, starts, number[o.last + 1]);
+}
+
 /** What is remembered about the sections of `p`, to store it with the file. */
 export function joinsIn(p: Pattern): { key: string; join: boolean }[] {
   const out: { key: string; join: boolean }[] = [];

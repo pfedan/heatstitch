@@ -2,10 +2,10 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { digitize, digitizeDefaults } from '../src/digitize/digitize';
 import { DEFAULT_PREPARE, Preparer } from '../src/image/prepare';
-import { rememberObjects, sewObjects } from '../src/model/objects';
+import { joinObjects, rememberObjects, sewObjects, splitObject } from '../src/model/objects';
 import { BLUE } from './helpers/images';
 import { STITCH, TRIM, type Pattern } from '../src/model/pattern';
-import { analyze, measureFill, measureSatin, remember, remembered, rememberedIn, rememberShapes, restitch, restoreRemembered, shapeTrust } from '../src/model/restitch';
+import { analyze, carryOver, unionRegion, measureFill, measureSatin, remember, remembered, rememberedIn, rememberShapes, restitch, restoreRemembered, shapeTrust } from '../src/model/restitch';
 import { stitchKinds } from '../src/model/sequence';
 import { parsePattern } from '../src/parsers';
 import { DEFAULT_PROFILE } from '../src/validation/profiles';
@@ -217,5 +217,94 @@ describe('shapes that stay as they are', () => {
     const again = JSON.parse(JSON.stringify(stored));
     expect(restoreRemembered([again])).toBe(1);
     expect(remembered(p, sewObjects(p)[i])?.columns?.[0]?.[0]?.left.length).toBe(stored!.columns![0][0].left.length / 2);
+  });
+});
+
+describe('changing the kind of an object', () => {
+  const satinS = { spacing: 0.4, edge: 0, short: true, underlay: true, tolerance: 0.15 };
+  const fillS = { pattern: 'tatami' as const, spacing: 0.4, spacingEnd: 1, offset: 0.25, angle: NaN, stitch: 4, underlay: true, edge: 0, tolerance: 0.15 };
+
+  it('turns a satin border into a fill and back, on the same area', () => {
+    let p = load('demos/letters.pes');
+    let kinds = stitchKinds(p);
+    let objs = sewObjects(p, kinds);
+    const i = objs.findIndex((o) => o.kind === 'satin');
+    const before = objs[i];
+    const r = restitch(p, objs, [i], { kind: 'fill', s: fillS }, kinds, 3, 'satin');
+    expect(r.failed).toEqual([]);
+    expect(Number.isFinite(r.memory[0].fill!.angle)).toBe(true);
+    rememberObjects(r.pattern, [r.starts[0]], r.ends[0]);
+    p = r.pattern;
+    kinds = stitchKinds(p);
+    objs = sewObjects(p, kinds);
+    remember(p, objs[i], r.memory[0]);
+    expect(objs[i].kind).toBe('fill');
+    expect(Math.abs((objs[i].maxX - objs[i].minX) - (before.maxX - before.minX))).toBeLessThan(10);
+    const back = restitch(p, objs, [i], { kind: 'satin', s: satinS }, kinds, 3, 'fill');
+    expect(back.failed).toEqual([]);
+    rememberObjects(back.pattern, [back.starts[0]], back.ends[0]);
+    const again = sewObjects(back.pattern)[i];
+    expect(again.kind).toBe('satin');
+    expect(Math.abs((again.maxX - again.minX) - (before.maxX - before.minX))).toBeLessThan(10);
+  });
+
+  it('does not turn a wide area into satin', () => {
+    const d = uShape();
+    const p = d.pattern;
+    rememberObjects(p, d.starts);
+    const kinds = stitchKinds(p);
+    const objs = sewObjects(p, kinds);
+    const r = restitch(p, objs, [0], { kind: 'satin', s: satinS }, kinds, 3, 'fill');
+    expect(r.failed).toEqual([0]);
+    expect(r.pattern).toBeDefined();
+  });
+
+  it('keeps an object and its shape when a stitch is moved by hand', () => {
+    const d = uShape();
+    const p = d.pattern;
+    rememberObjects(p, d.starts);
+    const kinds = stitchKinds(p);
+    const objs = sewObjects(p, kinds);
+    expect(objs.length).toBe(1);
+    const r = restitch(p, objs, [0], { kind: 'fill', s: { ...fillS, angle: 0 } }, kinds, 3);
+    rememberObjects(r.pattern, [r.starts[0]], r.ends[0]);
+    const q = r.pattern;
+    const o = sewObjects(q)[0];
+    remember(q, o, r.memory[0]);
+    const moved: Pattern = { ...q, x: q.x.slice(), y: q.y.slice() };
+    const k = o.first + Math.floor((o.last - o.first) / 2);
+    moved.x[k] += 3;
+    expect(remembered(moved, o)).toBeUndefined();
+    carryOver(q, o, moved, o.first, o.last);
+    const after = sewObjects(moved);
+    expect(after.length).toBe(1);
+    expect(remembered(moved, after[0])?.region).toBe(r.memory[0].region);
+  });
+
+  it('splits an object into its pieces and joins them again', () => {
+    const p = load('demos/letters.pes');
+    const objs = sewObjects(p);
+    const i = objs.findIndex((o) => o.sections > 1);
+    const o = objs[i];
+    const q: Pattern = { ...p };
+    splitObject(q, o);
+    const split = sewObjects(q);
+    expect(split.length).toBe(objs.length + o.sections - 1);
+    const pieces = split.filter((x) => x.first >= o.first && x.last <= o.last);
+    expect(pieces.length).toBe(o.sections);
+    const r: Pattern = { ...q };
+    joinObjects(r, pieces);
+    expect(sewObjects(r).length).toBe(objs.length);
+  });
+
+  it('puts areas together', () => {
+    const p = load('demos/letters.pes');
+    const kinds = stitchKinds(p);
+    const objs = sewObjects(p, kinds).filter((o) => o.kind === 'fill');
+    const a = analyze(p, objs[0], kinds).fill!;
+    const b = analyze(p, objs[1], kinds).fill!;
+    const u = unionRegion([a, b])!;
+    expect(u.areaMm2).toBeGreaterThan(Math.max(a.areaMm2, b.areaMm2));
+    expect(u.areaMm2).toBeLessThan((a.areaMm2 + b.areaMm2) * 1.05);
   });
 });

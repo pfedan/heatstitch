@@ -266,6 +266,29 @@ const SATIN_PEAK = 2.4;
 /** Satin that leaves more of its region bare than this share is filled instead. */
 const SATIN_COVER = 0.95;
 
+/** Widest satin column (mm) when an area is turned into satin. */
+export const SATIN_MAX = 7;
+
+/**
+ * Satin for an area, as the Image mode would sew it: null when the area is no stroke (wider than
+ * `satinMax`, uneven, or short and branched), or when satin would pile up (more than `peak` times
+ * its density somewhere) or leave it bare.
+ */
+export function satinForArea(r: Region, start: Pt, p: SatinParams, underlay: boolean, tol: number, satinMax = SATIN_MAX, peak = SATIN_PEAK): Pt[][] | null {
+  const graph = isStroke(r, satinMax);
+  if (!graph) return null;
+  const obj: Obj = { info: { kind: 'satin', label: r.label, areaMm2: r.areaMm2 }, region: r, graph, probe: [] };
+  const out = sewSatin(obj, start, p, underlay, tol).filter((run) => run.length > 1);
+  if (!out.length || peakDensity(out) > (peak * 2) / p.spacing || coverage(r, out) < SATIN_COVER) return null;
+  return out;
+}
+
+/** The skeleton of an area that can be sewn as satin, or null. */
+export function isStroke(r: Region, satinMax = SATIN_MAX): Graph | null {
+  const graph = skeleton(r);
+  return classify(graph, { satinMax, satinMin: 0 } as DigitizeOptions) === 'satin' ? graph : null;
+}
+
 function sewRun(o: Obj, start: Pt, tol: number): Pt[][] {
   const line = (b: Branch, fa: boolean, fb: boolean) => runStitch(column(o.region, b, fa, fb).center, 2, tol);
   const run = walk(o.graph!, start, line, (b, fa, fb) => line(b, fa, fb).reverse());

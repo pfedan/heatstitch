@@ -25,11 +25,15 @@ export interface StitchInfo {
   outlines: ShapeOutline[];
   /** Points changed by hand in the selected objects (new settings replace them). */
   hand?: number;
+  /** Whether the fill areas are strokes that can be sewn as satin. */
+  toSatin: boolean;
 }
 
 export interface StitchHooks {
   preview: (s: Settings | null) => void;
   apply: (s: Settings) => void;
+  /** Sews the selected objects of the other kind (fill to satin or satin to fill). */
+  convert: (to: 'fill' | 'satin') => void;
 }
 
 const KINDS: ObjectKind[] = ['fill', 'satin', 'run'];
@@ -171,6 +175,7 @@ export class StitchPanel {
       hand.append(Object.assign(document.createElement('span'), { textContent: t('stitch.hand', { n: formatNumber(info.hand) }) }));
       parts.push(hand);
     }
+    if (this.kind === 'fill' || this.kind === 'satin') parts.push(this.kindSwitch(this.kind));
     parts.push(...this.controls());
     const note = Object.assign(document.createElement('p'), { className: 'muted small stitch-note', textContent: t(this.kind === 'fill' && info.shape ? 'stitch.undo' : 'stitch.note') });
     parts.push(note);
@@ -228,6 +233,40 @@ export class StitchPanel {
       this.toleranceSlider(s),
       this.check('stitch.triple', 'stitch.triple.hint', () => s.triple, (v) => (s.triple = v)),
     ];
+  }
+
+  /** Fill or satin: picking the other one sews the objects anew in that kind. */
+  private kindSwitch(now: 'fill' | 'satin'): HTMLElement {
+    const wrap = document.createElement('div');
+    wrap.className = 'field stitch-field';
+    const label = Object.assign(document.createElement('span'), { className: 'label', textContent: t('stitch.kind') });
+    const row = document.createElement('div');
+    row.className = 'segmented kind-switch';
+    row.setAttribute('role', 'radiogroup');
+    row.setAttribute('aria-label', t('stitch.kind'));
+    const blocked = now === 'fill' && !this.info!.toSatin;
+    for (const k of ['fill', 'satin'] as const) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = k === now ? 'active' : '';
+      b.setAttribute('role', 'radio');
+      b.setAttribute('aria-checked', String(k === now));
+      b.innerHTML = `<span class="kind-icon">${KIND_ICON[k]}</span>`;
+      b.append(kindLabel(k));
+      if (k !== now && k === 'satin' && blocked) {
+        b.disabled = true;
+        b.title = t('stitch.kind.noSatin');
+      } else if (k !== now) b.title = t(k === 'satin' ? 'stitch.kind.toSatin' : 'stitch.kind.toFill');
+      b.addEventListener('click', () => {
+        if (k === now) return;
+        this.hooks.preview(null);
+        this.hooks.convert(k);
+      });
+      row.append(b);
+    }
+    wrap.append(label, row);
+    if (blocked) wrap.append(Object.assign(document.createElement('span'), { className: 'muted small', textContent: t('stitch.kind.noSatin') }));
+    return wrap;
   }
 
   /** Max. deviation from the line; remembered for the next objects. */

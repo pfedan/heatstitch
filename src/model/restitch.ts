@@ -1,5 +1,5 @@
-import type { KeptShape } from '../digitize/digitize';
-import { fillRegion, type FillParams } from '../digitize/fill';
+import { SATIN_MAX, satinForArea, type KeptShape } from '../digitize/digitize';
+import { chooseAngle, fillRegion, type FillParams } from '../digitize/fill';
 import { contourField, fieldFill, stitchField } from '../digitize/flow';
 import { spiralFill } from '../digitize/spiral';
 import { coverage } from '../digitize/measure';
@@ -9,7 +9,7 @@ import { pairs, satinStitches, underlay as satinUnderlay, type Column } from '..
 import type { Pt } from '../digitize/skeleton';
 import { distanceInside, distanceToSeeds } from '../image/edt';
 import { tidy, withRecords } from './edit';
-import { joinsIn, restoreJoin, stitchKey, type ObjectKind, type SewObject } from './objects';
+import { joinsIn, rememberObjects, restoreJoin, stitchKey, type ObjectKind, type SewObject } from './objects';
 import { JUMP, STITCH, TRIM, type Pattern } from './pattern';
 import { SATIN, TIE_STITCH } from './sequence';
 
@@ -124,6 +124,8 @@ export interface Remembered {
   hand?: number;
   /** The shape was read from the stitches when they were first changed by hand (not exact). */
   read?: boolean;
+  /** The area of an object whose kind was changed here, so changing it back gives the same area. */
+  shape?: Region;
 }
 
 /**
@@ -165,6 +167,23 @@ export function keepShape(p: Pattern, o: SewObject, kinds: Uint8Array): Remember
 }
 
 /**
+ * Keeps an object what it was after its stitches were changed by hand: the stitches from record
+ * `first` to `last` of `after` are object `o` of `before`. Its sections stay one object, and its
+ * shape, kind and settings move to the new stitches (the shape is not read from them again).
+ */
+export function carryOver(before: Pattern, o: SewObject, after: Pattern, first: number, last: number): void {
+  let a = 0;
+  let n = 0;
+  for (let i = 0; i <= last && i < after.cmd.length; i++) {
+    if (i === first) a = n;
+    if (after.cmd[i] === STITCH) n++;
+  }
+  rememberObjects(after, [a], n);
+  const r = remembered(before, o);
+  if (r) rememberKey(stitchKey(after, first, last), r);
+}
+
+/**
  * A remembered object as it is stored: the shape as its pixels only (the rest is rebuilt from
  * them). Entries with `join` are sections instead: whether they continue the object before.
  */
@@ -177,6 +196,8 @@ export interface StoredObject {
   columns?: { left: number[]; right: number[] }[][];
   hand?: number;
   read?: boolean;
+  /** The area of an object whose kind was changed, as `region`. */
+  shape?: StoredObject['region'];
   join?: boolean;
 }
 
@@ -187,10 +208,11 @@ export function rememberedIn(p: Pattern, objects: SewObject[]): StoredObject[] {
     const key = objectKey(p, o);
     const r = memory.get(key);
     if (!r) continue;
-    const g = r.region;
+    const pixels = (g: Region | null) => g && { x0: g.x0, y0: g.y0, w: g.w, h: g.h, pxMm: g.pxMm, mask: g.mask, areaMm2: g.areaMm2 };
     out.push({
       key,
-      region: g && { x0: g.x0, y0: g.y0, w: g.w, h: g.h, pxMm: g.pxMm, mask: g.mask, areaMm2: g.areaMm2 },
+      region: pixels(r.region),
+      ...(r.shape ? { shape: pixels(r.shape) } : {}),
       ...(r.fill ? { fill: { ...r.fill } } : {}),
       ...(r.satin ? { satin: { ...r.satin } } : {}),
       ...(r.columns ? { columns: r.columns.map((part) => part.map((c) => ({ left: c.left.flat(), right: c.right.flat() }))) } : {}),
@@ -254,6 +276,46 @@ function regionFrom(g: NonNullable<StoredObject['region']>): Region | null {
   return { label: 0, x0, y0, w, h, pxMm, mask, inside: distanceInside(mask, w, h), sdf, sdfBase: sdf, areaMm2 };
 }
 
+/** The areas together, as one region (on the finest grid among them). */
+export function unionRegion(rs: Region[]): Region | null {
+  if (!rs.length) return null;
+  if (rs.length === 1) return rs[0];
+  const pxMm = Math.min(...rs.map((r) => r.pxMm));
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const r of rs) {
+    minX = Math.min(minX, r.x0 * r.pxMm);
+    minY = Math.min(minY, r.y0 * r.pxMm);
+    maxX = Math.max(maxX, (r.x0 + r.w) * r.pxMm);
+    maxY = Math.max(maxY, (r.y0 + r.h) * r.pxMm);
+  }
+  const x0 = Math.floor(minX / pxMm) - MARGIN;
+  const y0 = Math.floor(minY / pxMm) - MARGIN;
+  const w = Math.ceil(maxX / pxMm) + MARGIN - x0;
+  const h = Math.ceil(maxY / pxMm) + MARGIN - y0;
+  const mask = new Uint8Array(w * h);
+  let area = 0;
+  for (let y = 0; y < h; y++) {
+    const yMm = (y + y0 + 0.5) * pxMm;
+    for (let x = 0; x < w; x++) {
+      const xMm = (x + x0 + 0.5) * pxMm;
+      for (const r of rs) {
+        const u = Math.floor(xMm / r.pxMm) - r.x0;
+        const v = Math.floor(yMm / r.pxMm) - r.y0;
+        if (u >= 0 && v >= 0 && u < r.w && v < r.h && r.mask[v * r.w + u]) {
+          mask[y * w + x] = 1;
+          area++;
+          break;
+        }
+      }
+    }
+  }
+  const sdf = signedField(mask, w, h, pxMm);
+  return { label: 0, x0, y0, w, h, pxMm, mask, inside: distanceInside(mask, w, h), sdf, sdfBase: sdf, areaMm2: area * pxMm * pxMm };
+}
+
 /**
  * Remembers the exact areas the Image mode filled (`shapes`, by object, as `starts`: the number
  * of each object's first stitch), so editing them starts from those instead of the stitches.
@@ -295,6 +357,8 @@ export function restoreRemembered(list: unknown): number {
     if (columns) r.columns = columns;
     if (finite(e.hand) && e.hand > 0) r.hand = Math.round(e.hand);
     if (e.read === true) r.read = true;
+    const shape = e.shape ? regionFrom(e.shape) : null;
+    if (shape) r.shape = shape;
     rememberKey(e.key, r);
     n++;
   }
@@ -636,6 +700,30 @@ function columnOf({ left, right }: Rails): Column {
 
 const lerp = (a: Pt, b: Pt, t: number): Pt => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
 
+/** Highest satin density allowed when a fill is turned into satin, in times the nominal. */
+const CONVERT_PEAK = 3;
+
+/** The area the stitches of `parts` cover: drawn thick enough that satin stitches close into it. */
+function coveredBy(p: Pattern, parts: Part[]): Region | null {
+  const segs: number[] = [];
+  for (const pt of parts) for (let i = pt.s + 1; i <= pt.e; i++) if (p.cmd[i] === STITCH && p.cmd[i - 1] === STITCH) segs.push(i);
+  return segs.length > 4 ? traceRegion(p, segs, REACH) : null;
+}
+
+/** New stitches of kind `s.kind` for the parts of kind `src` of an object, on `area`. */
+function convert(p: Pattern, o: SewObject, parts: Part[], src: ObjectKind, area: Region | null, s: Settings): Pt[][] | null {
+  const first = parts.find((pt) => pt.kind === src);
+  if (!area || !first) return null;
+  const start = pt10(p, first.s);
+  if (s.kind === 'satin') {
+    // Asked for by hand: corners a little denser than the Image mode allows are fine.
+    return satinForArea(area, start, { spacing: s.s.spacing, pull: s.s.edge, splitMm: SATIN_MAX }, s.s.underlay, s.s.tolerance, SATIN_MAX, CONVERT_PEAK);
+  }
+  if (s.kind !== 'fill') return null;
+  const a: Analysis = { parts: parts.map((pt) => (pt.kind === src ? { ...pt, kind: 'fill' } : pt)), fill: area };
+  return newFill(p, o, a, s.s);
+}
+
 function newFill(p: Pattern, o: SewObject, a: Analysis, s: FillSettings): Pt[][] | null {
   const first = a.parts.find((pt) => pt.kind === 'fill');
   if (!a.fill || !first) return null;
@@ -748,10 +836,12 @@ export interface RestitchResult {
 }
 
 /**
- * New stitches for the parts of kind `settings.kind` in the objects `which`. Moves inside an object
- * up to 1 mm are stitched, up to `trimMm` jumped, longer ones trimmed with lock stitches.
+ * New stitches for the parts of kind `settings.kind` in the objects `which`, or, with `from`, the
+ * parts of kind `from` turned into `settings.kind` (satin into fill or fill into satin, on the
+ * area they cover). Moves inside an object up to 1 mm are stitched, up to `trimMm` jumped, longer
+ * ones trimmed with lock stitches.
  */
-export function restitch(p: Pattern, objs: SewObject[], which: number[], settings: Settings, kinds: Uint8Array, trimMm: number): RestitchResult {
+export function restitch(p: Pattern, objs: SewObject[], which: number[], given: Settings, kinds: Uint8Array, trimMm: number, from?: ObjectKind): RestitchResult {
   const set = new Set(which);
   const out: Rec[] = [];
   const starts: number[] = [];
@@ -777,16 +867,29 @@ export function restitch(p: Pattern, objs: SewObject[], which: number[], setting
     const satinParts = parts.filter((pt) => pt.kind === 'satin');
     const keptRails = known?.columns?.length === satinParts.length ? known.columns : undefined;
     const rails: Rails[][] = [];
-    // All fill parts are one area, filled anew where the first of them was sewn.
-    const fill = settings.kind === 'fill' ? newFill(p, o, an, settings.s) : null;
-    const firstFill = parts.findIndex((pt) => pt.kind === 'fill');
-    let lastFill = -1;
-    parts.forEach((pt, k) => pt.kind === 'fill' && (lastFill = k));
+    const src = from ?? given.kind;
+    const converting = src !== given.kind;
+    // The area of the parts that change: the fill area, or for a change of kind the area kept
+    // from before or the one the parts cover.
+    let area = an.fill;
+    if (converting) area = known?.shape ?? (src === 'fill' ? an.fill : coveredBy(p, parts.filter((pt) => pt.kind === src)));
+    // A fill made from satin gets rows across the area in the direction with the fewest sections.
+    const settings: Settings =
+      converting && given.kind === 'fill' && area
+        ? { kind: 'fill', s: { ...given.s, pattern: given.s.pattern === 'follow' ? 'tatami' : given.s.pattern, angle: Number.isFinite(given.s.angle) ? given.s.angle : chooseAngle(area, given.s.spacing, []) } }
+        : given;
+    // All fill parts are one area, filled anew where the first of them was sewn; so are the parts
+    // changing kind.
+    const together = converting || settings.kind === 'fill';
+    const whole = !together ? null : converting ? convert(p, o, parts, src, area, settings) : newFill(p, o, an, settings.s as FillSettings);
+    const firstPart = parts.findIndex((pt) => pt.kind === src);
+    let lastPart = -1;
+    parts.forEach((pt, k) => pt.kind === src && (lastPart = k));
     const fresh: (Pt[][] | null | 'skip')[] = parts.map((pt, k) => {
-      // Running stitch between the old fill patches was travel; the new fill travels its own way.
-      if (fill && pt.kind === 'run' && k > firstFill && k < lastFill) return 'skip';
-      if (pt.kind !== settings.kind) return null;
-      if (settings.kind === 'fill') return !fill ? null : k === firstFill ? fill : 'skip';
+      // Running stitch between the old patches was travel; the new stitches travel their own way.
+      if (whole && pt.kind === 'run' && k > firstPart && k < lastPart) return 'skip';
+      if (pt.kind !== src) return null;
+      if (together) return !whole ? null : k === firstPart ? whole : 'skip';
       if (settings.kind === 'satin') {
         const sat = newSatin(p, pt, settings.s, kinds, keptRails?.[satinParts.indexOf(pt)]);
         if (sat) rails.push(sat.rails);
@@ -795,9 +898,23 @@ export function restitch(p: Pattern, objs: SewObject[], which: number[], setting
       return newRun(p, pt, settings.s, kinds);
     });
     if (fresh.every((f) => !f)) {
-      if (parts.some((pt) => pt.kind === settings.kind)) failed.push(o.index);
+      if (parts.some((pt) => pt.kind === src)) failed.push(o.index);
       continue;
     }
+    // What the object is made of afterwards, for the next edit.
+    const newFillS = settings.kind === 'fill' ? { ...settings.s } : undefined;
+    const newSatinS = settings.kind === 'satin' ? { ...settings.s } : undefined;
+    const after: Remembered = converting
+      ? newFillS
+        ? { region: area, fill: newFillS, shape: area ?? undefined }
+        : { region: null, satin: newSatinS, shape: area ?? undefined }
+      : {
+          region: an.fill,
+          fill: newFillS ?? known?.fill,
+          satin: newSatinS ?? known?.satin,
+          columns: settings.kind === 'satin' ? (rails.length === satinParts.length ? rails : undefined) : known?.columns,
+          shape: known?.shape,
+        };
     // Up to the object: everything as it was, except the jumps that lead to its first stitch.
     let lead = o.first;
     while (lead - 1 >= i && p.cmd[lead - 1] === JUMP) lead--;
@@ -816,13 +933,8 @@ export function restitch(p: Pattern, objs: SewObject[], which: number[], setting
         out.push({ x: Math.round(q[0] * 10), y: Math.round(q[1] * 10), cmd: JUMP });
         count();
         starts.push(sewn);
-        regions.push(an.fill);
-        memory.push({
-          region: an.fill,
-          fill: settings.kind === 'fill' ? { ...settings.s } : known?.fill,
-          satin: settings.kind === 'satin' ? { ...settings.s } : known?.satin,
-          columns: settings.kind === 'satin' ? (rails.length === satinParts.length ? rails : undefined) : known?.columns,
-        });
+        regions.push(after.region);
+        memory.push(after);
         if (run && startsWithNew) out.push(...lockAt(run, false));
         else emitPoint(q);
         first = false;
