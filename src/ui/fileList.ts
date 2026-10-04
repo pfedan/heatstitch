@@ -108,6 +108,13 @@ export class FileList {
     else this.render();
   }
 
+  /** Adds one file with what is known about its objects, and activates it. */
+  async addWithObjects(name: string, data: ArrayBuffer, objects: StoredObject[]): Promise<void> {
+    const first = await this.addData([{ name, data, objects }], true);
+    if (first) this.activate(first.id);
+    else this.render();
+  }
+
   /** Re-adds the files stored by an earlier visit and activates the one that was active then. */
   async restore(): Promise<void> {
     const stored = await listFiles();

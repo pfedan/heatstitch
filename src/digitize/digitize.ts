@@ -95,6 +95,8 @@ export interface DigitizedObject {
 export interface Digitized {
   pattern: Pattern;
   objects: DigitizedObject[];
+  /** Number of the first stitch of each object (counting stitch records from 0), in sewing order. */
+  starts: number[];
 }
 
 interface Obj {
@@ -279,7 +281,7 @@ export function digitize(prep: Prepared, o: DigitizeOptions, name = 'image'): Di
   }
 
   const satin: SatinParams = { spacing: o.satinSpacing, pull: o.pull, splitMm: Math.max(7, o.satinMax) };
-  const blocks: { color: ThreadColor; runs: Pt[][] }[] = [];
+  const blocks: Block[] = [];
   const objects: DigitizedObject[] = [];
   let pos: Pt = [0, 0];
   const angles: { obj: Obj; angle: number }[] = [];
@@ -287,6 +289,7 @@ export function digitize(prep: Prepared, o: DigitizeOptions, name = 'image'): Di
     const objs = byColor.get(label);
     if (!objs?.length) continue;
     const runs: Pt[][] = [];
+    const owners: number[] = [];
     const rankOf = (x: Obj) => (x.info.kind === 'fill' ? 0 : 1);
     const todo = objs.slice();
     while (todo.length) {
@@ -330,13 +333,15 @@ export function digitize(prep: Prepared, o: DigitizeOptions, name = 'image'): Di
       out = out.filter((r) => r.length > 1);
       if (!out.length) continue;
       runs.push(...out);
+      for (const _ of out) owners.push(objects.length);
       objects.push(obj.info);
       const last = out[out.length - 1];
       pos = last[last.length - 1];
     }
-    if (runs.length) blocks.push({ color: palette[label].thread, runs });
+    if (runs.length) blocks.push({ color: palette[label].thread, runs, owners });
   }
-  return { pattern: assemble(blocks, w * pxMm, h * pxMm, o.trimMm, name), objects };
+  const starts: number[] = [];
+  return { pattern: assemble(blocks, w * pxMm, h * pxMm, o.trimMm, name, starts), objects, starts };
 }
 
 /** Whether the windows of two regions overlap and their pixels touch. */
@@ -376,18 +381,30 @@ function along(run: Pt[], d: number, fromEnd: boolean): Pt {
   return pts[pts.length - 1];
 }
 
-/** Builds the records, centered on the design; coordinates in 0.1 mm. */
-function assemble(blocks: { color: ThreadColor; runs: Pt[][] }[], wMm: number, hMm: number, trimMm: number, name: string): Pattern {
+/** The runs of one thread, and the object each of them belongs to. */
+interface Block {
+  color: ThreadColor;
+  runs: Pt[][];
+  owners: number[];
+}
+
+/**
+ * Builds the records, centered on the design; coordinates in 0.1 mm. `starts` gets the number of
+ * the first stitch of each object.
+ */
+function assemble(blocks: Block[], wMm: number, hMm: number, trimMm: number, name: string, starts: number[]): Pattern {
   const b = new PatternBuilder();
   const cx = wMm / 2;
   const cy = hMm / 2;
   let X = 0;
   let Y = 0;
   let last: Pt | null = null;
+  let sewn = 0;
   const emit = (p: Pt, cmd: typeof STITCH | typeof JUMP) => {
     const nx = Math.round((p[0] - cx) * 10);
     const ny = Math.round((p[1] - cy) * 10);
     b.add(nx - X, ny - Y, cmd);
+    if (cmd === STITCH) sewn++;
     X = nx;
     Y = ny;
     last = p;
@@ -408,10 +425,17 @@ function assemble(blocks: { color: ThreadColor; runs: Pt[][] }[], wMm: number, h
   };
   const colors: ThreadColor[] = [];
   let prev = null as Pt[] | null;
+  let owner = -1;
   blocks.forEach((block, bi) => {
     colors.push(block.color);
     block.runs.forEach((run, ri) => {
       const start = run[0];
+      // Where a new object begins: right before its first stitch.
+      const mark = () => {
+        if (block.owners[ri] === owner) return;
+        owner = block.owners[ri];
+        starts.push(sewn);
+      };
       const gap = prev ? dist(prev[prev.length - 1], start) : Infinity;
       if (!prev || ri === 0) {
         if (prev) {
@@ -420,17 +444,21 @@ function assemble(blocks: { color: ThreadColor; runs: Pt[][] }[], wMm: number, h
           if (bi > 0) b.mark(COLOR_CHANGE);
         }
         emit(start, JUMP);
+        mark();
         emit(start, STITCH);
         tieIn(run);
       } else if (gap <= 1) {
+        mark();
         stitch(start);
       } else if (gap <= trimMm) {
         emit(start, JUMP);
+        mark();
         emit(start, STITCH);
       } else {
         tieOff(prev);
         b.mark(TRIM);
         emit(start, JUMP);
+        mark();
         emit(start, STITCH);
         tieIn(run);
       }

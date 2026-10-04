@@ -147,10 +147,11 @@ describe('max. deviation in Image mode and stitch settings', () => {
   });
 
   it('restitches running stitch with more stitches for a smaller tolerance', () => {
-    const p = parsePattern(readFileSync(new URL('../public/examples/demos/letters.pes', import.meta.url)), 'letters.pes');
+    // An outline of the cat (the underlays of the demo letters are parts of their fills and satins).
+    const p = parsePattern(readFileSync(new URL('../public/examples/cat-60mm.pes', import.meta.url)), 'cat-60mm.pes');
     const kinds = stitchKinds(p);
     const objs = sewObjects(p, kinds);
-    const o = objs.find((x) => x.kind === 'run')!;
+    const o = objs.find((x) => x.kind === 'run' && x.stitches > 40)!;
     const m = measureRun(p, analyze(p, o, kinds).parts[0]);
     expect(m.tolerance).toBe(TOLERANCE);
     const n = (tolerance: number) => {

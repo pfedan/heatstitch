@@ -77,6 +77,7 @@ export class ObjectPanel {
       row(t('object.stitches'), formatNumber(o.stitches));
       row(t('object.thread'), `${formatNumber(o.threadMm / 1000, 2)} m`);
       row(t('object.size'), `${formatNumber(w, 1)} × ${formatNumber(h, 1)} mm`);
+      if (o.sections > 1) row(t('object.sections'), t('object.sectionsValue', { n: o.sections }));
       row(t('object.position'), t('object.positionOf', { k: o.index + 1, n: info.objects.length }));
       const l = info.layering[0];
       row(t('object.layering'), l.below || l.above ? t('object.layeringValue', { below: l.below, above: l.above }) : t('object.layeringNone'));

@@ -8,7 +8,7 @@ import { pairs, satinStitches, underlay as satinUnderlay, type Column } from '..
 import type { Pt } from '../digitize/skeleton';
 import { distanceInside, distanceToSeeds } from '../image/edt';
 import { tidy, withRecords } from './edit';
-import type { ObjectKind, SewObject } from './objects';
+import { joinsIn, restoreJoin, stitchKey, type ObjectKind, type SewObject } from './objects';
 import { JUMP, STITCH, TRIM, type Pattern } from './pattern';
 import { SATIN, TIE_STITCH } from './sequence';
 
@@ -116,24 +116,8 @@ export interface Remembered {
 const memory = new Map<string, Remembered>();
 const MEMORY_SIZE = 400;
 
-/** A key for an object's stitches (FNV-1a over their coordinates). */
-export function objectKey(p: Pattern, o: SewObject): string {
-  let h = 0x811c9dc5;
-  let n = 0;
-  const mix = (v: number) => {
-    h ^= v & 0xffff;
-    h = Math.imul(h, 0x01000193);
-    h ^= (v >>> 16) & 0xffff;
-    h = Math.imul(h, 0x01000193);
-  };
-  for (let i = o.first; i <= o.last; i++) {
-    if (p.cmd[i] !== STITCH) continue;
-    mix(p.x[i]);
-    mix(p.y[i]);
-    n++;
-  }
-  return `${n}:${(h >>> 0).toString(36)}`;
-}
+/** A key for an object's stitches. */
+export const objectKey = (p: Pattern, o: SewObject): string => stitchKey(p, o.first, o.last);
 
 export function remember(p: Pattern, o: SewObject, r: Remembered): void {
   rememberKey(objectKey(p, o), r);
@@ -149,11 +133,15 @@ export function remembered(p: Pattern, o: SewObject): Remembered | undefined {
   return memory.get(objectKey(p, o));
 }
 
-/** A remembered object as it is stored: the shape as its pixels only (the rest is rebuilt from them). */
+/**
+ * A remembered object as it is stored: the shape as its pixels only (the rest is rebuilt from
+ * them). Entries with `join` are sections instead: whether they continue the object before.
+ */
 export interface StoredObject {
   key: string;
   region: { x0: number; y0: number; w: number; h: number; pxMm: number; mask: Uint8Array; areaMm2: number } | null;
   fill?: FillSettings;
+  join?: boolean;
 }
 
 /** What is remembered about the objects of `p`, to store it with the file. */
@@ -170,6 +158,7 @@ export function rememberedIn(p: Pattern, objects: SewObject[]): StoredObject[] {
       ...(r.fill ? { fill: { ...r.fill } } : {}),
     });
   }
+  for (const j of joinsIn(p)) out.push({ key: j.key, region: null, join: j.join });
   return out;
 }
 
@@ -192,6 +181,11 @@ export function restoreRemembered(list: unknown): number {
   if (!Array.isArray(list)) return 0;
   let n = 0;
   for (const e of list as StoredObject[]) {
+    if (typeof e?.key === 'string' && typeof e.join === 'boolean') {
+      restoreJoin(e.key, e.join);
+      n++;
+      continue;
+    }
     if (typeof e?.key !== 'string' || (e.fill !== undefined && !isFill(e.fill))) continue;
     let region: Region | null = null;
     const g = e.region;
@@ -287,6 +281,18 @@ export function analyze(p: Pattern, o: SewObject, kinds: Uint8Array, known = rem
       last.kind = r.kind;
       last.b = r.b;
     } else merged.push({ ...r });
+  }
+  // Running stitch under a satin column (its underlay, also when trimmed off from it) is part of it.
+  const satinSegs: number[] = [];
+  for (let k = 1; k < idx.length; k++) if (kindAt[k] === 'satin' && sewnSeg(k)) satinSegs.push(idx[k]);
+  const column = satinSegs.length > 4 ? traceRegion(p, satinSegs, REACH) : null;
+  if (column) {
+    for (const r of merged) {
+      if (r.kind !== 'run') continue;
+      let inside = 0;
+      for (let k = r.a; k <= r.b; k++) if (sample(column, column.sdfBase, p.x[idx[k]] / 10, p.y[idx[k]] / 10) < 0.2) inside++;
+      if (inside >= (r.b - r.a + 1) * 0.8) r.kind = 'satin';
+    }
   }
   const parts: Part[] = [];
   for (const r of merged) {
@@ -726,11 +732,9 @@ export function restitch(p: Pattern, objs: SewObject[], which: number[], setting
       for (let j = pt.s; j <= pt.e; j++) if (p.cmd[j] === STITCH) run.push(pt10(p, j));
       moveTo(run[0], run);
       for (let j = pt.s + 1; j <= pt.e; j++) {
-        if (p.cmd[j] === STITCH) {
-          if (p.cmd[j - 1] !== STITCH) out.push({ x: p.x[j], y: p.y[j], cmd: JUMP });
-          out.push({ x: p.x[j], y: p.y[j], cmd: STITCH });
-          last = pt10(p, j);
-        }
+        // Jumps and trims inside it stay as they are (an object can be sewn in trimmed pieces).
+        if (p.cmd[j] === STITCH || p.cmd[j] === JUMP || p.cmd[j] === TRIM) out.push({ x: p.x[j], y: p.y[j], cmd: p.cmd[j] });
+        if (p.cmd[j] === STITCH) last = pt10(p, j);
       }
       prevRun = run;
     });

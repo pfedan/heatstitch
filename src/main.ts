@@ -27,6 +27,7 @@ import type { Measurement } from './validation/measure';
 import { initUpdateNotice } from './ui/updateNotice';
 import { toStored } from './storage/fileStore';
 import { downloadPattern, outputFileName, writePattern } from './writers';
+import { parsePattern } from './parsers';
 import { ImageMode } from './ui/imageMode';
 import { lightFromPointer, lightFromTilt, sweep } from './render/light';
 import { classify } from './validation/validate';
@@ -60,7 +61,7 @@ import { StitchPanel, type StitchInfo } from './ui/stitchPanel';
 import { analyze, measureFill, measureRun, measureSatin, remember, remembered, rememberedIn, restitch, shapeTrust, type Settings as RestitchSettings, type ShapeTrust } from './model/restitch';
 import { outline } from './digitize/region';
 import { recommendedSpacing } from './validation/profiles';
-import { numberInColor, overlaps, sewObjects, type SewObject } from './model/objects';
+import { numberInColor, overlaps, rememberObjects, sewObjects, type SewObject } from './model/objects';
 import { conflicts, moveStats, optimizeOrder, reorder, violations } from './model/order';
 import { Player } from './ui/player';
 import type { Key } from './i18n';
@@ -547,6 +548,8 @@ const stitchPanel = new StitchPanel($('object-stitches'), {
       return redraw();
     }
     const key = selectionKey;
+    // Each object stays one, also where its new stitches are trimmed inside.
+    r.starts.forEach((a, k) => rememberObjects(r.pattern, [a], r.ends[k]));
     applyEdit(r.pattern);
     // The same objects stay selected (found by their first stitch), and the settings stay as set.
     const nq = seq(r.pattern);
@@ -1058,8 +1061,12 @@ const imageMode = new ImageMode({
     else if (settings.realistic && settings.liveLight && settings.image.view === 'stitches') sweep(redraw);
   },
   validate: async (p) => classify(await validator.measure(p), settings.profile, settings.checks),
-  takeOver: async (p, name) => {
-    await files.add([new File([writePattern(p, 'pes') as BlobPart], `${name}.pes`)]);
+  takeOver: async (p, name, starts) => {
+    // The objects as the Image mode sewed them (it trims inside some, between pieces of a fill).
+    const data = writePattern(p, 'pes');
+    const added = parsePattern(data, `${name}.pes`);
+    rememberObjects(added, starts);
+    await files.addWithObjects(`${name}.pes`, data.slice().buffer, rememberedIn(added, sewObjects(added)));
     setMode('flow');
   },
 });
