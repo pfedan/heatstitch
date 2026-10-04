@@ -25,6 +25,7 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
   const opacity = $<HTMLInputElement>('opacity');
   const realistic = $<HTMLInputElement>('realistic');
   const threadWidth = $<HTMLInputElement>('thread-width');
+  const liveLight = $<HTMLInputElement>('live-light');
   const spm = $<HTMLSelectElement>('machine-spm');
   const key = $<HTMLElement>('color-key');
 
@@ -88,6 +89,8 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
     realistic.checked = s.realistic;
     threadWidth.value = String(s.threadMm);
     threadWidth.disabled = !s.realistic;
+    liveLight.checked = s.liveLight;
+    liveLight.disabled = !s.realistic;
     spm.value = String(s.machineSpm);
     $('cell-out').textContent = `${formatNumber(s.cellMm, 2)} mm`;
     $('blur-out').textContent = s.blurMm > 0 ? `${formatNumber(s.blurMm, 1)} mm` : t('controls.off');
@@ -125,6 +128,7 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
   on(opacity, 'input', () => ((s.opacity = Number(opacity.value)), 'render'));
   on(realistic, 'change', () => ((s.realistic = realistic.checked), 'render'));
   on(threadWidth, 'input', () => ((s.threadMm = Number(threadWidth.value)), 'render'));
+  on(liveLight, 'change', () => ((s.liveLight = liveLight.checked), 'render'));
   on(spm, 'change', () => ((s.machineSpm = Number(spm.value)), 'render'));
 
   // Collapsible sidebar sections remember whether they are open.

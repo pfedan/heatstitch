@@ -1173,9 +1173,10 @@ button.link:hover {
 
 /* Modes ---------------------------------------------------------------------- */
 
-/* Each mode shows only its own settings and work area. */
-body[data-mode='flow'] [data-mode='density'],
-body[data-mode='density'] [data-mode='flow'] {
+/* Each mode shows only its own settings and work area (data-mode lists the modes, space separated). */
+body[data-mode='flow'] [data-mode]:not([data-mode~='flow']),
+body[data-mode='density'] [data-mode]:not([data-mode~='density']),
+body[data-mode='image'] [data-mode]:not([data-mode~='image']) {
   display: none !important;
 }
 
@@ -1399,6 +1400,162 @@ details.panel.section[open] > summary {
 
 .stage-tools-end {
   right: 10px;
+}
+.stage-tools-center {
+  left: 50%;
+  transform: translateX(-50%);
+  gap: 0;
+  background: var(--panel);
+  border-radius: 8px;
+}
+
+/* Bild mode ------------------------------------------------------------------ */
+
+.image-status {
+  position: absolute;
+  top: 52px;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 3px 10px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--panel) 85%, transparent);
+  color: var(--muted);
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.image-status:empty {
+  display: none;
+}
+
+body[data-mode='image'] .stage.painting canvas#canvas {
+  cursor: none;
+}
+
+#image-info.error {
+  color: #c23a3a;
+}
+
+.ai-prep {
+  margin-top: 4px;
+}
+
+.ai-prep summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 13px;
+}
+
+.ai-prep ol {
+  margin: 4px 0;
+  padding-left: 18px;
+}
+
+.ai-prompt {
+  width: 100%;
+  font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: inherit;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 8px;
+  resize: vertical;
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.field-row input {
+  width: 100%;
+}
+
+.image-palette {
+  list-style: none;
+  margin: 0 -4px;
+  padding: 0 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.image-color {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 4px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.image-color:hover {
+  background: var(--bg);
+}
+
+.image-color.brush {
+  border-color: var(--accent);
+}
+
+.image-color.skipped .image-color-text,
+.image-color.skipped .sw {
+  opacity: 0.45;
+}
+
+.image-color .sw {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  cursor: pointer;
+}
+
+.image-color .sw:hover,
+.image-color .sw:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.image-color-text {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  column-gap: 6px;
+  line-height: 1.25;
+}
+
+.image-color-meta,
+.image-color-warn {
+  grid-row: 2;
+}
+
+.image-color-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.image-color-meta {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.image-color-warn {
+  color: #c9822b;
+  font-weight: 700;
+  cursor: help;
+}
+
+.image-color select {
+  padding: 2px 4px;
+  width: 3.4em;
 }
 
 button.tool {

@@ -1,15 +1,15 @@
 # heatstitch
 
-View, check and fix embroidery files right in the browser. No backend, no uploads: your files never
-leave your machine.
+View, check and fix embroidery files right in the browser, and turn pictures into new ones. No
+backend, no uploads: your files never leave your machine.
 
 **Try it: <https://pfedan.github.io/heatstitch/>** (guide: [docs.html](https://pfedan.github.io/heatstitch/docs.html))
 
 ![heatstitch: density heatmap with findings next to the realistic thread view](public/og-image.jpg)
 
-## Two modes
+## Three modes
 
-Switch at the top of the page, or with the keys `1` and `2`.
+Switch at the top of the page, or with the keys `1`, `2` and `3`.
 
 **Sequence** shows how the machine works through the file. Color blocks act as layers (hide,
 highlight), stitches can be colored by thread color, order, stitch type or stitch length, markers show
@@ -24,6 +24,12 @@ correction (all described below).
 
 ![Density mode with a critical zone where three fills overlap](public/guide/heatmap-en.jpg)
 
+**Image** turns any picture or photo into an embroidery file: it reduces the colors to thread colors,
+lets you fix them with a color list and a brush, and generates fill, satin and running stitches (see
+[Image to embroidery](#image-to-embroidery)).
+
+![Image mode with the example flower: fill, satin and running stitches over the prepared image](public/guide/image-en.jpg)
+
 ## Privacy
 
 Embroidery files never leave your computer. heatstitch parses, checks, corrects and writes them with
@@ -32,6 +38,11 @@ The site is a set of static files served by GitHub Pages, and the only requests 
 that same site (the app itself, the example files and the check for a new version). Loaded files and
 edits are kept in the browser's IndexedDB so they survive a reload, and removing a file from the list
 deletes it there. After the first visit the app also works offline.
+
+The same holds for pictures in Image mode: they are decoded, prepared and converted in the browser
+and kept in IndexedDB together with your color edits and brush strokes. The optional *Prepare the
+image with AI* workflow only suggests a prompt for an AI chat of your choice; heatstitch itself never
+sends the picture anywhere.
 
 ## Features
 
@@ -46,7 +57,7 @@ deletes it there. After the first visit the app also works offline.
 - Optionally count untrimmed jumps as thread
 - Stitch plan overlay in thread colors, jumps dashed
 - **Realistic view:** round, twisted threads with shading and shadows, rendered with WebGL, with
-  adjustable thread width
+  adjustable thread width; the light follows the pointer or the tilt of a phone
 - Zoom (wheel, pinch), pan, tooltip with density and position
 - Statistics: stitches, jumps, trims, color changes, size, thread length, max density
 - Load several files and switch between them (also with arrow keys or j/k, `f` = fit)
@@ -57,8 +68,10 @@ deletes it there. After the first visit the app also works offline.
 - **Correction (beta):** automatic, following digitizing practice, and by hand, with undo/redo and an
   original/corrected compare view, see below
 - **Save as DST or PES** (own writers, no pyembroidery)
+- **Image to embroidery:** PNG, JPG, WebP, SVG; preparation for photos, Brother thread colors, brush,
+  tatami fill whose rows follow the image, satin columns and running stitch, without external libraries
 - English / German
-- PWA: installable, works offline, "Open with" for .dst/.pes
+- PWA: installable, works offline, "Open with" for .dst/.pes and images
 - Short guide in English and German (`docs.html`, "Guide" link at the top right)
 
 ![Realistic thread rendering of overlapping fills](public/guide/stitchplan.jpg)
@@ -238,6 +251,129 @@ original are lost.
 - The tests (`tests/writers.test.ts`) check read → write → read for DST, PES and both conversions for
   record equality. The written files were also read back with pyembroidery 1.5.1.
 
+## Image to embroidery
+
+Image mode (key `3`) turns a picture into an embroidery file in two steps, both in a Web Worker
+(`src/digitize/worker.ts`). Every change starts a new run; whatever changes during a run is computed
+afterwards with the latest settings. The picture, color edits and brush strokes stay in the browser
+(IndexedDB, `src/storage/imageStore.ts`). The canvas shows the *Original*, the *Prepared* image or the
+*Stitches*.
+
+The methods were chosen after research into papers, vendor manuals and the source of open-source
+digitizers. Ink/Stitch and PEmbroider are GPL; only their methods were re-implemented, no code was
+copied.
+
+### Preparation (`src/image/`)
+
+1. **Working resolution:** 0.1 mm per pixel (coarser for designs over 120 mm, at most about 1200
+   pixels), area averaging when shrinking, transparency kept.
+2. **Simplify** (photos only, detected on load: if the 16 most frequent colors cover less than 85 %
+   of the pixels, it is a photo): bilateral filter in CIELAB (Tomasi & Manduchi 1998), separated into
+   rows and columns and iterated as in Winnemöller et al. 2006. Areas become flat, edges stay.
+3. **Color reduction:** weighted k-means on a Lab histogram, which does best at small color counts
+   (Celebi, *Improving the performance of k-means for color quantization*, 2011) and keeps small,
+   distinct areas such as eyes, where median cut and Wu lose them. A pixel weighs more the more it
+   stands out from its surroundings and the more saturated it is. Nearly equal colors (CIEDE2000 under
+   6) are merged, tiny inconspicuous ones (under 0.4 % of the area and no further than 22 from any
+   other color) are dropped.
+4. **Thread colors:** the nearest thread of the Brother palette by CIEDE2000 (Sharma, Wu & Dalal 2005,
+   tested against their reference data); colors that land on the same thread become one. The color
+   list shows ≠ when no thread is close (ΔE over 10).
+5. **Edits by hand:** per color another thread, merge into another color, or leave out; brush strokes
+   (paint, erase) are applied before and after the clean-up, so they hold.
+6. **Clean-up:** 3×3 majority filter; anti-aliasing seams (at most 0.5 mm wide, color between the two
+   neighbors) go to the neighbors; the background (the color of at least 60 % of the border and three
+   corners) is dropped where it is connected to the border; areas under *Smallest area* merge into the
+   neighbor with the longest shared border (as in Goldman's patent US 6,836,695 and in Wilcom).
+
+### Stitches (`src/digitize/`)
+
+Every connected area becomes one object. Instead of tracing outlines, everything works on a signed
+distance field per area (exact distance transform after Felzenszwalb & Huttenlocher 2012, slightly
+smoothed). Its zero line lies halfway between pixels, so neighboring areas share the same border:
+fill rows end there, satin edges are found there, underlay lies on a contour inside.
+
+- **Kind:** the skeleton (thinning in order of distance, side branches shorter than 1.5 radii pruned)
+  gives the widths. Under 1 mm (terry 1.5 mm): running stitch. Up to *Satin up to width* (7 mm), even
+  in width (widest point within three standard deviations, as in Goldman's patent), long compared to
+  its width and with few branches: satin. Otherwise fill. Generated satin is measured: if it reaches
+  more than 2.4 times its nominal density anywhere (tight curves fan out) or leaves more than 5 % of
+  the area bare (columns radiating from a center), the area is filled instead.
+- **Fill (tatami):** rows on a lattice aligned to the design's origin, penetrations offset by a quarter
+  of the stitch length (4 mm) as in Ink/Stitch, so neighboring areas join seamlessly. The rows are
+  split into sections that can be sewn back and forth in one go (boustrophedon decomposition, Choset
+  2000). Without a fixed angle, each area takes the one of 16 angles with the fewest sections
+  (Goldman's patent), preferably 30° apart from touching areas. Underlay: rows turned by 90°, three
+  times the spacing, 0.4 mm inside the edge. Between sections the thread travels the shortest way
+  inside, under rows not sewn yet (like Ink/Stitch's underpath); where it would lie on sewn rows for
+  more than 2 mm, it jumps instead.
+- **Fill rows follow the image** (default; `src/digitize/flow.ts`, `src/image/orientation.ts`): a
+  direction field from the structure tensor of the original picture (Förstner & Gülch 1987, Bigün &
+  Granlund 1987; as in coherence-enhancing abstraction, Weickert 1999, and Coherent Line Drawing, Kang
+  et al. 2007), weighted by coherence, i.e. how clear the direction is: fur, hair and strokes set the
+  direction. An area's own outline does not count (only from 1.2 mm inside). In flat areas the
+  centerline sets the direction if the shape is elongated (fully from three widths of length). If the
+  direction is nearly uniform in an area, the rows are laid straight in exactly that direction;
+  otherwise they curve as evenly spaced streamlines of the field (Jobard & Lefer 1997): each row
+  follows the field, new rows start one spacing beside existing ones, a row ends where it comes closer
+  than half a spacing to another. Rows are joined back and forth, gaps between groups are bridged as
+  in the straight fill. Before sewing, the rows are measured; where they crowd (over 2.2 times the
+  nominal density) or leave gaps, the straight fill is used. Research found no embroidery program that
+  derives the stitch direction from the picture's own structure (some align fills to a shape's long
+  axis); the research prototype of Liu et al. (Eurographics 2023) needs directions given by hand.
+  *Fill direction* swaps it for straight rows or a fixed angle.
+- **Satin:** the edges are measured from the centerline at right angles to the border (the "stroke
+  normals" of Goldman's patent). 0.4 mm between penetrations on the same side, measured on the side
+  that advances more; on the inside of curves every penetration that comes too close (under 0.25 mm)
+  moves 15 % of the width inwards. Pull compensation by fabric (woven 0.2 mm, knit 0.35, terry 0.4 per
+  side), stitches over 7 mm are split. A network of columns is sewn in one go: each branch out as
+  underlay (center walk, zigzag from 4 mm width) and back as satin, like Ink/Stitch's auto-satin. At
+  junctions the first column covers, the others reach 0.3 mm into it.
+- **Order:** colors by area, the largest first; within a color fills before satin and lines, each time
+  the nearest object. Objects sewn earlier reach 0.2 mm under later neighbors. Up to 1 mm apart a
+  stitch, up to 3 mm a jump, beyond that a tie-off (0, 0.5, 1, 0.5, 0 mm along the thread), trim, jump
+  and tie-in; the same at color changes.
+- **Defaults** by material (`digitizeDefaults`): spacing from the profile's recommendation (woven
+  40 wt: 0.40 mm between neighboring rows, as measured in the example cat), pull compensation by
+  fabric (Wilcom table). Everything can be overridden in the *Stitches* panel.
+
+The generated stitches go through the same check as loaded files. *Take over as embroidery file* adds
+them to the file list as a PES file, where they can be corrected and saved as DST or PES. For
+comparison on woven fabric with 40 wt:
+
+| Design | Stitches | Caution zones | Critical zones | Trims |
+|---|---|---|---|---|
+| Cat photo (80 × 107 mm, 5 colors), rows follow the image (18 of 32 fills curved) | 17,800 | 10 | 3 | 157 |
+| Same photo, straight rows | 16,400 | 16 | 3 | 131 |
+| Example cat (professionally digitized) | 9,200 | 15 | 2 | 89 |
+
+The findings mostly sit where satin overlaps the edge of a fill; the correction in Density mode can
+take them on afterwards.
+
+### Prepare the image with AI
+
+heatstitch has no AI built in. Below the image box, *Prepare the image with AI* suggests a workflow
+instead: upload the picture to your own AI chat that can edit images, paste a ready-made prompt, load
+the result here. The prompt follows the width and color count under *Preparation*: a flat graphic with
+at most that many colors, no gradients or textures, nothing narrower than 1 mm in the embroidery (as a
+share of the picture's width), white background. A note says that the picture goes to the AI's
+provider when you do this.
+
+### Living thread
+
+In the realistic thread view the light follows the pointer or the tilt of a phone
+(`src/render/light.ts`; on iPhones after a one-time permission). Thread shines across its fibers, so
+satin columns and fill rows light up or darken by their stitch direction, like turning an embroidered
+patch in your hand, and the shadows move along. On the first converted picture, Image mode switches to
+the realistic view and sweeps the light once around the design; every new picture does it again
+(not with the system setting to reduce motion). *✦ As sewn* on the canvas shows it at any time. Research into Wilcom,
+Hatch, PE-Design, Embird, Ink/Stitch, mySewnet and online converters found only fixed light settings in
+dialogs. *Light follows pointer and tilt* under *Display* switches it off in all modes.
+
+**Limits:** photos are sewn as flat areas (posterized), not shaded with variable density as in
+photo-stitch methods. Wide shapes with narrow arms are filled as a whole instead of being split into
+fill and satin. The color list only offers the Brother palette.
+
 ## Development
 
 ```sh
@@ -255,7 +391,8 @@ other things, that the grid sums exactly to the total thread length or stitch co
 
 `public/examples/` holds real embroidery files to try out, e.g. `cat-60mm.pes` (cat, 60 mm, PES v6).
 The *Load example* dropdown under the file field loads the cat, the overlapping circles and the
-confetti design straight into the app.
+confetti design straight into the app. `image-example.svg` is the example picture of Image mode
+(fills, satin widths, fine lines), loaded by *Load example image* in that mode.
 
 `public/examples/demos/` holds small synthetic demos for the guide, each with one finding:
 `overlap.pes` (stacked fills), `letters.pes` (fill under satin), `sun.dst` (short stitches on knit),
@@ -294,10 +431,14 @@ src/validation/  Measurement, profiles, levels, satin detection, short-stitch an
 src/correct/     Automatic correction: pullback under borders, satin short stitches, respacing,
                  thinning, separating penetrations
 src/writers/     DST and PES writers (PEC block, preview images)
-src/render/      Viewport, color scale, heatmap, stitch plan, realistic threads (WebGL), legend,
-                 sequence rendering (coloring, markers, needle)
+src/image/       Image preparation: color spaces, CIEDE2000, filters, color reduction, distance
+                 transform, orientation, clean-up
+src/digitize/    Stitches from images: distance fields, skeleton, fill, flow fill, satin, running
+                 stitch, sequencing, Web Worker
+src/render/      Viewport, color scale, heatmap, stitch plan, realistic threads (WebGL), light,
+                 legend, sequence rendering (coloring, markers, needle)
 src/ui/          File list, validation, correction panel, stitch editor, controls, statistics,
-                 tooltip, export, color list, jump list, player
+                 tooltip, export, color list, jump list, player, Image mode, thread picker
 src/i18n/        Translations EN/DE
 public/examples/ Example embroidery files (loadable from the dropdown)
 public/guide/    Screenshots for the guide

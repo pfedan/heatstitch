@@ -1,6 +1,7 @@
 import { STITCH, type Pattern } from '../model/pattern';
 import type { StitchStyle } from './flow';
 import { stitchColors } from './flow';
+import { lightDir } from './light';
 import type { Viewport } from './viewport';
 
 /**
@@ -305,7 +306,7 @@ export class GlThreadRenderer {
     const hw = (threadMm * vp.scale * dpr) / 2;
     gl.uniform1f(this.u.u_halfw, Math.max(0.5, hw));
     gl.uniform1f(this.u.u_thin, Math.min(1, hw / 0.5));
-    gl.uniform2f(this.u.u_light, -0.55, -0.65);
+    gl.uniform2f(this.u.u_light, ...lightDir());
     gl.bindVertexArray(this.vao);
     gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, count * 2);
     gl.bindVertexArray(null);
