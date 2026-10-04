@@ -138,9 +138,10 @@ export function tidyRungs(rungs: Rung[], la: number, lb: number): Rung[] {
 /**
  * Rungs that give about the directions the column has now (one pair of penetrations per stitch,
  * `left[k]` with `right[k]`): rungs are added where interpolating between the ones there would
- * turn a stitch by more than `maxDeg` (as a line is simplified, by its worst point).
+ * turn a stitch by more than `maxDeg` (as a line is simplified, by its worst point), but not
+ * closer together than about three column widths.
  */
-export function seedRungs(left: Pt[], right: Pt[], maxDeg = 8): Rung[] {
+export function seedRungs(left: Pt[], right: Pt[], maxDeg = 10): Rung[] {
   const n = Math.min(left.length, right.length);
   if (n < 3) return [];
   const cl = cumulative(left);
@@ -151,6 +152,9 @@ export function seedRungs(left: Pt[], right: Pt[], maxDeg = 8): Rung[] {
   while (stack.length) {
     const [i, j] = stack.pop()!;
     if (j - i < 2) continue;
+    // Not closer than about three column widths: the direction cannot turn much faster than that anyway.
+    const w = (dist(left[i], right[i]) + dist(left[j], right[j])) / 2;
+    if (cl[j] - cl[i] < 3 * w && cr[j] - cr[i] < 3 * w) continue;
     const da = cl[j] - cl[i];
     const db = cr[j] - cr[i];
     let worst = -1;
