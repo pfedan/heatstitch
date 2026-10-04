@@ -3,7 +3,7 @@ import { contourField, fieldFill, stitchField } from '../digitize/flow';
 import { spiralFill } from '../digitize/spiral';
 import { coverage } from '../digitize/measure';
 import { sample, signedField, type Region } from '../digitize/region';
-import { runStitch } from '../digitize/run';
+import { runStitch, TOLERANCE } from '../digitize/run';
 import { pairs, satinStitches, underlay as satinUnderlay, type Column } from '../digitize/satin';
 import type { Pt } from '../digitize/skeleton';
 import { distanceInside, distanceToSeeds } from '../image/edt';
@@ -47,6 +47,8 @@ export interface FillSettings {
   underlay: boolean;
   /** Rows reach this much further (+) or less far (-) than now at both ends (mm). */
   edge: number;
+  /** Largest distance of a curved row's stitches from its line (mm); see TOLERANCE. */
+  tolerance: number;
 }
 
 export interface SatinSettings {
@@ -56,12 +58,16 @@ export interface SatinSettings {
   edge: number;
   short: boolean;
   underlay: boolean;
+  /** Largest distance of the underlay's stitches from the column's middle (mm). */
+  tolerance: number;
 }
 
 export interface RunSettings {
   stitch: number;
   /** Every stitch sewn three times (bean stitch). */
   triple: boolean;
+  /** Largest distance of a stitch from the path (mm): stitches get shorter on curves. */
+  tolerance: number;
 }
 
 export type Settings = { kind: 'fill'; s: FillSettings } | { kind: 'satin'; s: SatinSettings } | { kind: 'run'; s: RunSettings };
@@ -176,6 +182,7 @@ function isFill(f: unknown): f is FillSettings {
     !!s &&
     PATTERNS.includes(s.pattern) &&
     [s.spacing, s.spacingEnd, s.offset, s.angle, s.stitch, s.edge].every(finite) &&
+    (s.tolerance === undefined || finite(s.tolerance)) &&
     typeof s.underlay === 'boolean'
   );
 }
@@ -195,7 +202,8 @@ export function restoreRemembered(list: unknown): number {
       const sdf = signedField(mask, w, h, pxMm);
       region = { label: 0, x0, y0, w, h, pxMm, mask, inside: distanceInside(mask, w, h), sdf, sdfBase: sdf, areaMm2 };
     }
-    rememberKey(e.key, { region, fill: e.fill && { ...e.fill } });
+    // Files from before the tolerance existed have none.
+    rememberKey(e.key, { region, fill: e.fill && { ...e.fill, tolerance: e.fill.tolerance ?? TOLERANCE } });
     n++;
   }
   return n;
@@ -440,6 +448,7 @@ export function measureFill(p: Pattern, a: Analysis): FillSettings {
     stitch: Math.round((percentile(rows.map((g) => g.l), 0.8) || 4) * 10) / 10,
     underlay: before > rowThread * 0.06,
     edge: 0,
+    tolerance: TOLERANCE,
   };
 }
 
@@ -467,7 +476,7 @@ export function measureSatin(p: Pattern, pt: Part, kinds: Uint8Array): SatinSett
     else if (kinds[i] !== TIE_STITCH) other += seg(p, i);
   }
   const spacing = Math.round(Math.min(1.5, Math.max(0.15, percentile(steps, 0.5) || 0.4)) * 100) / 100;
-  return { spacing, edge: 0, short: true, underlay: other > satin * 0.03 };
+  return { spacing, edge: 0, short: true, underlay: other > satin * 0.03, tolerance: TOLERANCE };
 }
 
 export function measureRun(p: Pattern, pt: Part): RunSettings {
@@ -478,7 +487,7 @@ export function measureRun(p: Pattern, pt: Part): RunSettings {
     lens.push(seg(p, i));
     if (i >= 2 && p.x[i] === p.x[i - 2] && p.y[i] === p.y[i - 2]) back++;
   }
-  return { stitch: Math.round((percentile(lens, 0.6) || 2.5) * 10) / 10, triple: back > lens.length * 0.4 };
+  return { stitch: Math.round((percentile(lens, 0.6) || 2.5) * 10) / 10, triple: back > lens.length * 0.4, tolerance: TOLERANCE };
 }
 
 // New stitches -----------------------------------------------------------------------------------
@@ -526,7 +535,7 @@ function newFill(p: Pattern, o: SewObject, a: Analysis, s: FillSettings): Pt[][]
   const segs: number[] = [];
   for (let i = o.first + 1; i <= o.last; i++) if (p.cmd[i] === STITCH && p.cmd[i - 1] === STITCH) segs.push(i);
   const travel = traceRegion(p, segs, TRAVEL_REACH, 0, false) ?? undefined;
-  const fp: FillParams = { spacing: s.spacing, stitch: s.stitch, angle: s.angle, pull: s.edge, underlay: s.underlay, travel };
+  const fp: FillParams = { spacing: s.spacing, stitch: s.stitch, angle: s.angle, pull: s.edge, underlay: s.underlay, travel, tolerance: s.tolerance };
   const start = pt10(p, first.s);
   const r = a.fill;
   let res;
@@ -559,7 +568,7 @@ function newSatin(p: Pattern, pt: Part, s: SatinSettings, kinds: Uint8Array): Pt
     if (ps.length < 2) continue;
     if (s.underlay) {
       // Underlay out along the column, satin back.
-      const under = satinUnderlay(col);
+      const under = satinUnderlay(col, s.tolerance);
       const rev: Column = { center: col.center.slice().reverse(), left: col.right.slice().reverse(), right: col.left.slice().reverse(), width: col.width };
       runs.push([...under, ...satinStitches(pairs(rev, { spacing: s.spacing, pull: s.edge, splitMm: 12, short: s.short }), { spacing: s.spacing, pull: 0, splitMm: 12 })]);
     } else runs.push(satinStitches(ps, { spacing: s.spacing, pull: 0, splitMm: 12 }));
@@ -580,7 +589,7 @@ function newRun(p: Pattern, pt: Part, s: RunSettings, kinds: Uint8Array): Pt[][]
     if (!path.length || dist(q, path[path.length - 1]) > 0.05) path.push(q);
   }
   if (path.length < 2) return null;
-  const pts = runStitch(path, s.stitch);
+  const pts = runStitch(path, s.stitch, s.tolerance);
   if (!s.triple) return [pts];
   const out: Pt[] = [pts[0]];
   for (let i = 1; i < pts.length; i++) out.push(pts[i], pts[i - 1], pts[i]);

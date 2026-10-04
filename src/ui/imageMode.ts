@@ -145,6 +145,7 @@ export class ImageMode {
     num('image-min-area', (v) => (s.prepare.minAreaMm2 = v), 'prepare');
     num('image-spacing', (v) => (s.stitch.spacing = s.stitch.satinSpacing = Math.min(1.5, Math.max(0.2, v))), 'stitches');
     num('image-satin-max', (v) => (s.stitch.satinMax = v), 'stitches');
+    num('image-tolerance', (v) => (s.stitch.tolerance = v), 'stitches');
     num('image-pull', (v) => (s.stitch.pull = Math.min(1, Math.max(0, v))), 'stitches');
     const check = (id: string, read: (v: boolean) => void, kind: 'prepare' | 'stitches') => {
       const el = $<HTMLInputElement>(id);
@@ -577,6 +578,8 @@ export class ImageMode {
     setVal('image-pull', o.pull);
     setVal('image-satin-max', o.satinMax);
     out('image-satin-max-out', `${formatNumber(o.satinMax, 1)} mm`);
+    setVal('image-tolerance', o.tolerance);
+    out('image-tolerance-out', `${formatNumber(o.tolerance, 2)} mm`);
     $<HTMLInputElement>('image-underlay').checked = o.underlay;
     const angle = $<HTMLSelectElement>('image-angle');
     if (!angle.options.length) {
