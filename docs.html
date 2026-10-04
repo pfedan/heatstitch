@@ -59,6 +59,11 @@
           <a href="#en-limits">Limits</a>
         </nav>
 
+        <figure>
+          <img src="/guide/cat-en.jpg" width="980" height="909" alt="The example cat with realistic threads over the heatmap and the findings column on the right" />
+          <figcaption>The example from <i>Load example</i>: realistic threads over the heatmap, zones outlined, verdict and findings on the right.</figcaption>
+        </figure>
+
         <h2 id="en-start">Quick start</h2>
         <ol>
           <li>Drop one or more <b>DST</b> (Tajima) or <b>PES</b> (Brother) files on the file box, or use <i>Load example</i>.</li>
@@ -67,6 +72,17 @@
           <li>Use <i>Correction</i> to fix the zones, compare with the original and save.</li>
         </ol>
         <p>Loaded files and your edits stay in this browser and come back after a reload. <b>×</b> in the file list removes a file.</p>
+        <figure>
+          <img src="/guide/heatmap-en.jpg" width="1280" height="960" loading="lazy" alt="The app with three overlapping fill circles: the middle where four layers meet is marked critical" />
+          <figcaption><a href="examples/demos/overlap.pes" download>overlap.pes</a>: three fill circles and a dot on top. One or two layers are fine; where all four meet, the check marks a critical zone.</figcaption>
+        </figure>
+        <p class="demos">
+          <b>Try it with the demo files</b> used for the pictures in this guide, each showing one finding:
+          <a href="examples/demos/overlap.pes" download>overlap.pes</a> (stacked fills),
+          <a href="examples/demos/letters.pes" download>letters.pes</a> (fill under satin),
+          <a href="examples/demos/sun.dst" download>sun.dst</a> (short stitches) and
+          <a href="examples/demos/leather-patch.dst" download>leather-patch.dst</a> (perforation).
+        </p>
 
         <h2 id="en-heatmap">Heatmap</h2>
         <dl>
@@ -79,6 +95,10 @@
           <dt>Stitch plan</dt>
           <dd>Draws the stitches in thread colors on top of the heatmap. <i>Realistic threads</i> renders round, twisted threads with shadows (WebGL2), as wide as the chosen thread weight.</dd>
         </dl>
+        <figure>
+          <img src="/guide/stitchplan.jpg" width="660" height="700" loading="lazy" alt="Realistic threads of the three circles drawn over the heatmap" />
+          <figcaption>The same file with <i>Stitch plan</i> and <i>Realistic threads</i>: you see which layer lies on top.</figcaption>
+        </figure>
 
         <h2 id="en-check">Check</h2>
         <p>
@@ -108,6 +128,20 @@
           alone. <i>Check anyway</i> counts one again. Any other zone can be <i>acknowledged</i> if you
           want to keep it as it is. Perforation always counts.
         </p>
+        <figure>
+          <img src="/guide/findings-en.jpg" width="980" height="909" loading="lazy" alt="Lettering MAKE with critical zones on the inside of the letters and grey zones along the borders" />
+          <figcaption><a href="examples/demos/letters.pes" download>letters.pes</a>: the fill reaches far under the satin border. Red and orange zones count; the grey spots at corners and joins are normal in practice.</figcaption>
+        </figure>
+        <div class="fig-pair">
+          <figure>
+            <img src="/guide/shorts.jpg" width="660" height="790" loading="lazy" alt="Sun design on knit fabric: the tight spiral in the middle is a critical short-stitch cluster" />
+            <figcaption><a href="examples/demos/sun.dst" download>sun.dst</a> on knit: the spiral of 0.3 mm stitches piles up thread. On woven fabric the same spot is only normal in practice.</figcaption>
+          </figure>
+          <figure>
+            <img src="/guide/leather.jpg" width="660" height="520" loading="lazy" alt="Leather patch in the penetrations view: the frame and the tight letter H are critical, the wider bars are not" />
+            <figcaption><a href="examples/demos/leather-patch.dst" download>leather-patch.dst</a> on leather, shown as penetrations: satin at 0.25 mm perforates, the right bars at 0.5 mm are fine.</figcaption>
+          </figure>
+        </div>
 
         <h2 id="en-correct">Correction (beta)</h2>
         <p>
@@ -129,6 +163,10 @@
           <li><b>Separate same-hole stitches</b> (hole density, and on leather) by up to 0.3 mm.</li>
         </ul>
         <p>Zones that are normal in practice or acknowledged, tie-in and tie-off stitches, trims and color changes are kept. What is left is listed as needing a look: mostly stacked layers, a design decision.</p>
+        <figure>
+          <img src="/guide/correct-en.jpg" width="980" height="909" loading="lazy" alt="The letters after automatic correction: no critical zone left, the report lists the changes" />
+          <figcaption>After <i>Correct automatically</i> on letters.pes: the fill ends were pulled back from under the border, no critical zone is left.</figcaption>
+        </figure>
         <h3>By hand</h3>
         <p>
           <i>Edit stitches</i> (<kbd>e</kbd>) shows the needle points once you zoom in. Click to select,
@@ -140,6 +178,10 @@
           <i>Compare with original</i> (<kbd>c</kbd>) splits the view: original on the left, current version on
           the right, with a movable divider and a table of stitches, thread length, flagged area and peak density.
         </p>
+        <figure>
+          <img src="/guide/compare-en.jpg" width="980" height="909" loading="lazy" alt="Split view of the letters, original on the left and corrected on the right, with the comparison table" />
+          <figcaption>Compare view with realistic threads: the stitches look the same, the table shows what changed.</figcaption>
+        </figure>
 
         <h2 id="en-save">Save and export</h2>
         <ul>
@@ -191,6 +233,11 @@
           <a href="#de-limits">Grenzen</a>
         </nav>
 
+        <figure>
+          <img src="/guide/cat-de.jpg" width="980" height="909" alt="Die Beispielkatze mit realistischen Fäden über der Heatmap und der Befundspalte rechts" />
+          <figcaption>Das Beispiel aus <i>Beispiel laden</i>: realistische Fäden über der Heatmap, Zonen umrandet, rechts Urteil und Befunde.</figcaption>
+        </figure>
+
         <h2 id="de-start">Schnellstart</h2>
         <ol>
           <li>Eine oder mehrere <b>DST</b>- (Tajima) oder <b>PES</b>-Dateien (Brother) auf das Dateifeld ziehen oder <i>Beispiel laden</i> drücken.</li>
@@ -199,6 +246,17 @@
           <li>Mit <i>Korrektur</i> die Zonen beheben, mit dem Original vergleichen und speichern.</li>
         </ol>
         <p>Geladene Dateien und deine Änderungen bleiben in diesem Browser gespeichert und sind nach dem Neuladen wieder da. <b>×</b> in der Dateiliste entfernt eine Datei.</p>
+        <figure>
+          <img src="/guide/heatmap-de.jpg" width="1280" height="960" loading="lazy" alt="Die App mit drei überlappenden Füllkreisen: die Mitte, wo vier Lagen liegen, ist kritisch markiert" />
+          <figcaption><a href="examples/demos/overlap.pes" download>overlap.pes</a>: drei Füllkreise und ein Punkt obendrauf. Eine oder zwei Lagen sind unkritisch; wo alle vier liegen, meldet die Prüfung eine kritische Zone.</figcaption>
+        </figure>
+        <p class="demos">
+          <b>Zum Ausprobieren</b> gibt es die Demo-Dateien, aus denen die Bilder dieser Anleitung stammen, jede mit einem Befund:
+          <a href="examples/demos/overlap.pes" download>overlap.pes</a> (gestapelte Füllungen),
+          <a href="examples/demos/letters.pes" download>letters.pes</a> (Füllung unter Satin),
+          <a href="examples/demos/sun.dst" download>sun.dst</a> (Kurzstiche) und
+          <a href="examples/demos/leather-patch.dst" download>leather-patch.dst</a> (Perforation).
+        </p>
 
         <h2 id="de-heatmap">Heatmap</h2>
         <dl>
@@ -211,6 +269,10 @@
           <dt>Stichplan</dt>
           <dd>Zeichnet die Stiche in Garnfarben über die Heatmap. <i>Realistische Fäden</i> zeigt runde, gedrehte Fäden mit Schatten (WebGL2), so breit wie die gewählte Garnstärke.</dd>
         </dl>
+        <figure>
+          <img src="/guide/stitchplan.jpg" width="660" height="700" loading="lazy" alt="Realistische Fäden der drei Kreise über der Heatmap" />
+          <figcaption>Dieselbe Datei mit <i>Stichplan</i> und <i>Realistische Fäden</i>: Man sieht, welche Lage oben liegt.</figcaption>
+        </figure>
 
         <h2 id="de-check">Prüfung</h2>
         <p>
@@ -240,6 +302,20 @@
           lässt sie in Ruhe. <i>Trotzdem prüfen</i> zählt eine davon wieder mit. Jede andere Zone lässt sich
           <i>quittieren</i>, wenn sie so bleiben soll. Perforation zählt immer.
         </p>
+        <figure>
+          <img src="/guide/findings-de.jpg" width="980" height="909" loading="lazy" alt="Schriftzug MAKE mit kritischen Zonen im Inneren der Buchstaben und grauen Zonen an den Rändern" />
+          <figcaption><a href="examples/demos/letters.pes" download>letters.pes</a>: Die Füllung reicht weit unter die Satinkante. Rote und orange Zonen zählen, die grauen Stellen an Ecken und Übergängen sind praxisüblich.</figcaption>
+        </figure>
+        <div class="fig-pair">
+          <figure>
+            <img src="/guide/shorts.jpg" width="660" height="790" loading="lazy" alt="Sonnenmotiv auf Strickware: die enge Spirale in der Mitte ist eine kritische Kurzstich-Häufung" />
+            <figcaption><a href="examples/demos/sun.dst" download>sun.dst</a> auf Strick: Die Spirale aus 0,3-mm-Stichen häuft Garn an. Auf Webware ist dieselbe Stelle nur praxisüblich.</figcaption>
+          </figure>
+          <figure>
+            <img src="/guide/leather.jpg" width="660" height="520" loading="lazy" alt="Lederpatch in der Einstich-Ansicht: Rahmen und das enge H sind kritisch, die breiteren Balken nicht" />
+            <figcaption><a href="examples/demos/leather-patch.dst" download>leather-patch.dst</a> auf Leder, als Einstiche: Satin mit 0,25 mm perforiert, die rechten Balken mit 0,5 mm sind unkritisch.</figcaption>
+          </figure>
+        </div>
 
         <h2 id="de-correct">Korrektur (Beta)</h2>
         <p>
@@ -261,6 +337,10 @@
           <li><b>Gleiche Einstichlöcher trennen</b> (Lochdichte und bei Leder) um höchstens 0,3 mm.</li>
         </ul>
         <p>Praxisübliche und quittierte Zonen, Vernähstiche, Schnitte und Farbwechsel bleiben erhalten. Was übrig bleibt, wird als „von Hand prüfen“ gemeldet: meist gestapelte Lagen, also eine Designentscheidung.</p>
+        <figure>
+          <img src="/guide/correct-de.jpg" width="980" height="909" loading="lazy" alt="Der Schriftzug nach der automatischen Korrektur: keine kritische Zone mehr, der Bericht nennt die Änderungen" />
+          <figcaption>Nach <i>Automatisch korrigieren</i> mit letters.pes: Die Füllenden wurden unter der Kante zurückgezogen, keine kritische Zone bleibt.</figcaption>
+        </figure>
         <h3>Von Hand</h3>
         <p>
           <i>Stiche bearbeiten</i> (<kbd>e</kbd>) zeigt beim Hineinzoomen die Einstiche. Klick wählt aus,
@@ -273,6 +353,10 @@
           aktuelle Fassung, mit verschiebbarer Trennlinie und einer Tabelle mit Stichen, Garnlänge, markierter
           Fläche und Spitzendichte.
         </p>
+        <figure>
+          <img src="/guide/compare-de.jpg" width="980" height="909" loading="lazy" alt="Geteilte Ansicht des Schriftzugs, links Original, rechts korrigiert, mit Vergleichstabelle" />
+          <figcaption>Vergleich mit realistischen Fäden: Die Stiche sehen gleich aus, die Tabelle zeigt, was sich geändert hat.</figcaption>
+        </figure>
 
         <h2 id="de-save">Speichern und Export</h2>
         <ul>

@@ -206,6 +206,13 @@ dass die Summe des Rasters exakt der Gesamtgarnlänge bzw. Stichzahl entspricht.
 `public/examples/` enthält echte Stickdateien zum Ausprobieren, z. B. `cat-60mm.pes` (Katze, 60 mm, PES v6).
 Der Knopf "Beispiel laden" unter dem Dateifeld lädt sie direkt in die App.
 
+`public/examples/demos/` enthält kleine synthetische Demos für die Anleitung, jede mit einem Befund:
+`overlap.pes` (gestapelte Füllungen), `letters.pes` (Füllung unter Satin), `sun.dst` (Kurzstiche auf
+Strick) und `leather-patch.dst` (Perforation auf Leder). Sie entstehen mit den App-eigenen Writern aus
+`tests/helpers/demos.ts`; `tests/demos.test.ts` prüft, dass sie aktuell sind und den beschriebenen
+Befund zeigen. Nach Änderungen an Designs oder Writern: `UPDATE_DEMOS=1 npm test`. Die Bilder der
+Anleitung liegen in `public/guide/` und werden nicht vorab gecacht.
+
 ## Deployment
 
 `.github/workflows/deploy.yml` testet und baut jeden Push; Pushes auf `main` werden auf
