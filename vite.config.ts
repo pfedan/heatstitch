@@ -25,7 +25,7 @@ export default defineConfig({
       manifest: {
         name: 'heatstitch',
         short_name: 'heatstitch',
-        description: 'Check and fix stitch density in DST and PES embroidery files, and turn images into embroidery files',
+        description: 'View, edit and check DST and PES embroidery files, and turn pictures into stitches',
         theme_color: '#1b1026',
         background_color: '#141118',
         display: 'standalone',
