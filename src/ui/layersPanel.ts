@@ -307,21 +307,21 @@ export class LayersPanel {
 
   private clearDrop(): void {
     this.list.querySelectorAll<HTMLElement>('.drop-before, .drop-after').forEach((el) => {
-      el.classList.remove('drop-before', 'drop-after');
+      el.classList.remove('drop-before', 'drop-after', 'drop-own');
       delete el.dataset.drop;
       el.style.removeProperty('--drop-color');
     });
   }
 
   /**
-   * The color block whose thread the dragged objects take when dropped on this row: a drop
-   * between the objects of a color (or at its start) sews them as part of it, in its thread. A
-   * drop on a color row's edge, between two colors, keeps their own thread. Alt keeps it too.
+   * The color block of another thread the dragged objects are dropped into on this row: a drop
+   * between the objects of a color (or at its start) is in it. A drop on a color row's edge,
+   * between two colors, is in none.
    */
-  private intoBlock(row: HTMLElement, lowerHalf: boolean, alt: boolean): number | null {
+  private intoBlock(row: HTMLElement, lowerHalf: boolean): number | null {
     const st = this.st;
     const d = this.drag;
-    if (!st || !d || d.block !== null || alt) return null;
+    if (!st || !d || d.block !== null) return null;
     let b: number | null = null;
     if (row.dataset.object !== undefined) b = st.objects[Number(row.dataset.object)].block;
     else if (lowerHalf && this.open.has(Number(row.dataset.block))) b = Number(row.dataset.block);
@@ -332,15 +332,20 @@ export class LayersPanel {
 
   /**
    * Where a drop at this pointer position puts the dragged objects: before which object (by
-   * index; objects.length for the end), the row the line is drawn at, and the color block whose
-   * thread they take (null: their own).
+   * index; objects.length for the end), the row the line is drawn at, the color block of another
+   * thread it lies in (`among`), and the one whose thread they take (`into`, null: their own).
+   * Among another color they take its thread, unless dropped in the front third of the list or
+   * with Alt: then they are sewn there in their own.
    */
-  private target(e: DragEvent): { before: number; row: HTMLElement; after: boolean; into: number | null } | null {
+  private target(e: DragEvent): { before: number; row: HTMLElement; after: boolean; among: number | null; into: number | null } | null {
     const tg = this.place(e);
     if (!tg) return null;
     const row = (e.target as HTMLElement).closest<HTMLElement>('.layer')!;
     const lower = e.clientY > row.getBoundingClientRect().top + row.getBoundingClientRect().height / 2;
-    return { ...tg, into: this.intoBlock(row, lower, e.altKey) };
+    const among = this.intoBlock(row, lower);
+    const list = this.list.getBoundingClientRect();
+    const keep = e.altKey || e.clientX < list.left + list.width / 3;
+    return { ...tg, among, into: keep ? null : among };
   }
 
   private place(e: DragEvent): { before: number; row: HTMLElement; after: boolean } | null {
@@ -395,10 +400,12 @@ export class LayersPanel {
       const b = st.blocks[tg.into];
       tg.row.dataset.drop = t('layers.dropInto', { color: blockName(b) });
       tg.row.style.setProperty('--drop-color', css(b.color));
-    } else if (e.altKey && this.drag.block === null) {
+    } else if (tg.among !== null) {
       tg.row.dataset.drop = t('layers.dropOwn', { color: ownColors.size === 1 ? blockName(st.blocks[own.block]) : t('layers.dropOwnMany') });
       tg.row.style.setProperty('--drop-color', css(own.color));
     }
+    // The label sits on the side that chooses it: front third own thread, further right the new one.
+    tg.row.classList.toggle('drop-own', tg.among !== null && tg.into === null);
   }
 
   private dropped(e: DragEvent): void {
