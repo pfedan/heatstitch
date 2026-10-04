@@ -5,7 +5,8 @@ import { parsePattern } from '../src/parsers';
 import { CRITICAL, SAFE, validatePattern } from '../src/validation/validate';
 import type { Profile } from '../src/validation/profiles';
 import { writePattern } from '../src/writers';
-import { DEMOS, leatherDesign, overlapDesign, satinOverlapDesign, shortStitchDesign } from './helpers/demos';
+import { transitions } from '../src/model/sequence';
+import { confettiDesign, DEMOS, leatherDesign, overlapDesign, satinOverlapDesign, shortStitchDesign } from './helpers/demos';
 
 /** Demo files for the guide. `UPDATE_DEMOS=1 npm test` rewrites them after a change to the designs or writers. */
 const DIR = new URL('../public/examples/demos/', import.meta.url);
@@ -51,5 +52,10 @@ describe('demo files', () => {
     expect(worst(patch, WOVEN)).toBe(SAFE);
     expect(worst(patch, LEATHER)).toBe(CRITICAL);
     expect(counted(patch, LEATHER).flatMap((z) => z.reasons)).toContain('perforation');
+    // Jumps: long ones carried without a trim, short ones trimmed, also after a PES round trip.
+    const jumps = transitions(parsePattern(writePattern(confettiDesign(), 'pes'), 'confetti.pes'));
+    expect(jumps.filter((t) => t.lengthMm >= 10).every((t) => !t.trimmed)).toBe(true);
+    expect(jumps.filter((t) => t.lengthMm < 10).every((t) => t.trimmed)).toBe(true);
+    expect(jumps.filter((t) => t.lengthMm < 10).length).toBeGreaterThan(0);
   });
 });

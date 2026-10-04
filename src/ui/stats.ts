@@ -1,11 +1,11 @@
 import type { DensityGrid } from '../density/grid';
 import { formatNumber, t, type Key } from '../i18n';
 import type { LoadedFile } from './fileList';
+import { sewingSeconds } from '../model/sequence';
 import type { Settings } from '../settings';
 
 export function renderStats(
   dl: HTMLElement,
-  swatches: HTMLElement,
   file: LoadedFile | null,
   grid: DensityGrid | null,
   s: Settings,
@@ -21,12 +21,12 @@ export function renderStats(
       ['stats.colors', formatNumber(st.colorChanges)],
       ['stats.size', `${formatNumber(st.widthMm, 1)} × ${formatNumber(st.heightMm, 1)} mm`],
       ['stats.thread', `${formatNumber(st.threadLength / 1000, 2)} m`],
+      ['stats.time', t('stats.minutes', { m: formatNumber(sewingSeconds(st.stitches, st.trims, st.colorChanges, s.machineSpm) / 60) })],
     );
-    const unit = t(s.metric === 'thread' ? 'unit.thread' : 'unit.penetrations');
-    rows.push([
-      'stats.maxDensity',
-      computing || !grid ? t('stats.computing') : `${formatNumber(grid.max, 2)} ${unit}`,
-    ]);
+    if (s.mode === 'density') {
+      const unit = t(s.metric === 'thread' ? 'unit.thread' : 'unit.penetrations');
+      rows.push(['stats.maxDensity', computing || !grid ? t('stats.computing') : `${formatNumber(grid.max, 2)} ${unit}`]);
+    }
   }
   dl.replaceChildren(
     ...rows.flatMap(([k, v]) => {
@@ -35,14 +35,6 @@ export function renderStats(
       const dd = document.createElement('dd');
       dd.textContent = v;
       return [dt, dd];
-    }),
-  );
-  swatches.replaceChildren(
-    ...(file?.pattern?.colors ?? []).map((c) => {
-      const sp = document.createElement('span');
-      sp.style.background = `rgb(${c.r}, ${c.g}, ${c.b})`;
-      sp.title = c.name ?? '';
-      return sp;
     }),
   );
 }

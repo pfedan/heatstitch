@@ -1,7 +1,7 @@
 import './style.css';
 import { WorkerClient } from './density/client';
 import type { DensityGrid } from './density/grid';
-import { applyI18n, detectLang, setLang, t, type Lang } from './i18n';
+import { applyI18n, detectLang, formatNumber, getLang, setLang, t, type Lang } from './i18n';
 import { gridToCanvas } from './render/heatmap';
 import { drawLegend } from './render/legend';
 import { drawScene, type Scene } from './render/scene';
@@ -26,6 +26,33 @@ import type { Pattern } from './model/pattern';
 import type { Measurement } from './validation/measure';
 import { initUpdateNotice } from './ui/updateNotice';
 import { downloadPattern, outputFileName } from './writers';
+import { setTrims } from './model/jumps';
+import {
+  colorBlocks,
+  markers as findMarkers,
+  recordOfStitch,
+  sewingSeconds,
+  stitchKinds,
+  stitchNumbers,
+  transitions,
+  FILL,
+  SATIN,
+  TIE_STITCH,
+  carriedJumps,
+  type CarriedJumps,
+  type ColorBlock,
+  type Markers,
+  type Transition,
+} from './model/sequence';
+import { recolor } from './model/recolor';
+import { COLOR_CHANGE, TRIM } from './model/pattern';
+import { stitchAlpha, stitchAt, stitchColors, transitionAt, type StitchStyle } from './render/flow';
+import type { FlowScene } from './render/scene';
+import type { Mode } from './settings';
+import { JumpsPanel } from './ui/jumpsPanel';
+import { LayersPanel } from './ui/layersPanel';
+import { Player } from './ui/player';
+import type { Key } from './i18n';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 initUpdateNotice($('update-notice'));
@@ -80,6 +107,7 @@ const files = new FileList(
     hoverZone = selectedZone = null;
     correctMessage = null;
     editor.reset();
+    resetFlow();
     if (f?.pattern) fitView(f);
     recompute();
   },
@@ -105,6 +133,8 @@ function activeValidationImg(): HTMLCanvasElement | null {
 
 const scene = (): Scene => ({
   pattern: editor.preview ?? files.active?.pattern ?? null,
+  flow: flowScene(),
+  markers: settings.mode === 'density' && files.active?.pattern && !editor.preview ? seq(files.active.pattern).markers : null,
   grid,
   gridImg,
   validation: files.active?.validation ?? null,
@@ -169,6 +199,256 @@ $('findings-close').addEventListener('click', () => setFindingsOpen(false));
 $('findings-open').addEventListener('click', () => setFindingsOpen(true));
 setFindingsOpen(settings.findingsOpen);
 
+
+// Ablauf mode ------------------------------------------------------------------
+
+/** Everything the Ablauf mode derives from one pattern, computed once per version. */
+interface Sequence {
+  blocks: ColorBlock[];
+  kinds: Uint8Array;
+  markers: Markers;
+  transitions: Transition[];
+  numbers: Uint32Array;
+  total: number;
+  colors: Partial<Record<string, Uint8Array>>;
+  /** Trims and color changes up to each stitch number, for the time estimate. */
+  trimsAt: number[];
+  colorsAt: number[];
+  /** Jumps without a trim, built the first time they are drawn as thread. */
+  carried?: CarriedJumps;
+}
+const seqCache = new WeakMap<Pattern, Sequence>();
+function seq(p: Pattern): Sequence {
+  let q = seqCache.get(p);
+  if (q) return q;
+  const numbers = stitchNumbers(p);
+  const trimsAt: number[] = [];
+  const colorsAt: number[] = [];
+  for (let i = 0; i < p.cmd.length; i++) {
+    if (p.cmd[i] === TRIM) trimsAt.push(numbers[i]);
+    else if (p.cmd[i] === COLOR_CHANGE) colorsAt.push(numbers[i]);
+  }
+  q = {
+    blocks: colorBlocks(p),
+    kinds: stitchKinds(p),
+    markers: findMarkers(p),
+    transitions: transitions(p),
+    numbers,
+    total: numbers.length ? numbers[numbers.length - 1] : 0,
+    colors: {},
+    trimsAt,
+    colorsAt,
+  };
+  seqCache.set(p, q);
+  return q;
+}
+
+/** Color blocks hidden or highlighted in the list (cleared for another file). */
+let hiddenBlocks: ReadonlySet<number> = new Set();
+let focusBlock: number | null = null;
+let hoverBlock: number | null = null;
+let selectedJump: number | null = null;
+let hoverJump: number | null = null;
+let alphaCache: { p: Pattern; hidden: ReadonlySet<number>; focus: number | null; a: Float32Array } | null = null;
+
+function resetFlow(): void {
+  hiddenBlocks = new Set();
+  focusBlock = hoverBlock = selectedJump = hoverJump = null;
+  player.pause();
+  const p = files.active?.pattern;
+  player.setModel(playerModel(p ?? null));
+}
+
+const count = (sorted: number[], k: number) => {
+  let n = 0;
+  for (const v of sorted) if (v <= k) n++;
+  return n;
+};
+
+function playerModel(p: Pattern | null) {
+  if (!p) return { total: 0, blockStarts: [], sections: [], timeAt: () => 0 };
+  const q = seq(p);
+  let at = 0;
+  const sections = q.blocks.map((b) => {
+    const start = at;
+    at += b.stitches;
+    return { start, end: at, color: `rgb(${b.color.r}, ${b.color.g}, ${b.color.b})` };
+  });
+  return {
+    total: q.total,
+    sections,
+    blockStarts: q.markers.colorStarts.map((i) => q.numbers[i]),
+    timeAt: (k: number) => sewingSeconds(k, count(q.trimsAt, k), count(q.colorsAt, k), settings.machineSpm),
+  };
+}
+
+function styleFor(p: Pattern): StitchStyle {
+  const q = seq(p);
+  const rgb = (q.colors[settings.colorBy] ??= stitchColors(p, settings.colorBy, q.kinds));
+  const focus = hoverBlock ?? focusBlock;
+  if (alphaCache?.p !== p || alphaCache.hidden !== hiddenBlocks || alphaCache.focus !== focus) {
+    alphaCache = { p, hidden: hiddenBlocks, focus, a: stitchAlpha(p, hiddenBlocks, focus) };
+  }
+  const limit = player.complete ? p.cmd.length - 1 : recordOfStitch(q.numbers, player.pos);
+  const carried = settings.marks.threads ? (q.carried ??= carriedJumps(p, q.transitions)) : null;
+  return { rgb, alpha: alphaCache.a, limit, carried };
+}
+
+function flowScene(): FlowScene | null {
+  const p = files.active?.pattern;
+  if (settings.mode !== 'flow' || !p) return null;
+  const q = seq(p);
+  const style = styleFor(p);
+  return {
+    style,
+    markers: q.markers,
+    hover: hoverJump !== null ? (q.transitions[hoverJump] ?? null) : null,
+    selected: selectedJump !== null ? (q.transitions[selectedJump] ?? null) : null,
+    needle: player.complete ? -1 : style.limit,
+  };
+}
+
+const player = new Player(settings, () => {
+  saveSettings(settings);
+  redraw();
+});
+
+const layers = new LayersPanel({
+  toggle: (b) => {
+    const next = new Set(hiddenBlocks);
+    if (!next.delete(b)) next.add(b);
+    hiddenBlocks = next;
+    if (focusBlock === b) focusBlock = null;
+    redraw();
+  },
+  focus: (b, sticky) => {
+    if (sticky) {
+      focusBlock = b;
+      hoverBlock = null;
+    } else hoverBlock = b;
+    redraw();
+  },
+  showAll: () => {
+    hiddenBlocks = new Set();
+    focusBlock = hoverBlock = null;
+    redraw();
+  },
+  // Only the colors change, so the density measurement still holds.
+  recolor: (b, color) => {
+    const f = files.active;
+    if (f?.pattern) applyEdit(recolor(f.pattern, b, color), f.measurement);
+  },
+});
+
+/** Frames the jump with a few millimetres around it. */
+function showJump(k: number): void {
+  const p = files.active?.pattern;
+  const j = p && seq(p).transitions[k];
+  if (!p || !j) return;
+  // At least 25 mm across, so the jump is seen in its surroundings.
+  const cx = (p.x[j.from] + p.x[j.to]) / 20;
+  const cy = (p.y[j.from] + p.y[j.to]) / 20;
+  const half = Math.max(12.5, Math.abs(p.x[j.from] - p.x[j.to]) / 20 + 4, Math.abs(p.y[j.from] - p.y[j.to]) / 20 + 4);
+  vp.fit(cx - half, cy - half, cx + half, cy + half, stageW, stageH);
+}
+
+function selectJump(k: number | null): void {
+  selectedJump = k;
+  if (k !== null) showJump(k);
+  redraw();
+}
+
+const jumpsPanel = new JumpsPanel(settings, {
+  select: selectJump,
+  hover: (k) => {
+    hoverJump = k;
+    redraw();
+  },
+  step: (dir) => stepJump(dir),
+  apply: (indices, cut) => {
+    const f = files.active;
+    const p = f?.pattern;
+    if (!f || !p) return;
+    const list = seq(p).transitions;
+    const next = setTrims(p, indices.map((i) => list[i]), cut);
+    if (next === p) return;
+    const keep = selectedJump;
+    applyEdit(next);
+    // The jumps stay the same ones in the same order, so the selection carries over.
+    selectedJump = keep;
+    redraw();
+  },
+  limitChanged: () => {
+    saveSettings(settings);
+    redraw();
+  },
+});
+
+function stepJump(dir: 1 | -1): void {
+  const p = files.active?.pattern;
+  if (!p) return;
+  const shown = jumpsPanel.visible(seq(p).transitions);
+  if (!shown.length) return;
+  const i = selectedJump !== null ? shown.indexOf(selectedJump) : -1;
+  selectJump(shown[i < 0 ? (dir > 0 ? 0 : shown.length - 1) : (i + dir + shown.length) % shown.length]);
+}
+
+const KIND_KEY: Record<number, Key> = { [SATIN]: 'kind.satin', [FILL]: 'kind.fill', [TIE_STITCH]: 'kind.tie' };
+
+/** Ablauf tooltip: number, kind and length of the stitch under the pointer. */
+function flowTooltip(sx: number, sy: number): void {
+  const p = files.active?.pattern;
+  if (!p) {
+    tooltip.hidden = true;
+    return;
+  }
+  const st = styleFor(p);
+  const [x, y] = vp.toWorld(sx, sy);
+  const i = stitchAt(p, x * 10, y * 10, Math.max(3, 60 / vp.scale), st.limit, st.alpha);
+  if (i < 0) {
+    tooltip.hidden = true;
+    return;
+  }
+  const q = seq(p);
+  const len = Math.hypot(p.x[i] - p.x[i - 1], p.y[i] - p.y[i - 1]) / 10;
+  const kind = t(KIND_KEY[q.kinds[i]] ?? 'kind.running');
+  tooltip.replaceChildren(
+    Object.assign(document.createElement('div'), {
+      textContent: t('tooltip.stitch', { i: formatNumber(q.numbers[i]), kind, len: formatNumber(len, 1) }),
+    }),
+  );
+  tooltip.dataset.level = '0';
+  tooltip.hidden = false;
+  const flip = sx > stageW - tooltip.offsetWidth - 30;
+  tooltip.style.left = `${flip ? sx - 12 - tooltip.offsetWidth : sx + 14}px`;
+  tooltip.style.top = `${sy + 14}px`;
+}
+
+function setMode(mode: Mode): void {
+  settings.mode = mode;
+  saveSettings(settings);
+  document.body.dataset.mode = mode;
+  document.querySelectorAll<HTMLInputElement>('input[name="mode"]').forEach((i) => (i.checked = i.value === mode));
+  if (mode === 'flow') {
+    if (editor.active) setEditing(false);
+    comparing = false;
+    hoverZone = null;
+  } else {
+    player.pause();
+    if (!player.complete) player.set(Number.MAX_SAFE_INTEGER);
+  }
+  controls.refresh();
+  $('canvas-hint').textContent = t(mode === 'flow' ? 'canvas.hint.flow' : 'canvas.hint');
+  empty.textContent = t(mode === 'flow' ? 'canvas.empty.flow' : 'canvas.empty');
+  tooltip.hidden = true;
+  recompute();
+}
+document.querySelectorAll<HTMLInputElement>('input[name="mode"]').forEach((i) =>
+  i.addEventListener('change', () => {
+    if (i.checked) setMode(i.value as Mode);
+  }),
+);
+
 // Rendering ------------------------------------------------------------------
 
 let frame = 0;
@@ -192,8 +472,27 @@ function redraw(): void {
     const active = files.active;
     empty.hidden = !!active?.pattern;
     exportBtn.disabled = !active?.pattern;
-    drawLegendCanvas();
-    renderStats($('stats'), $('swatches'), active, grid, settings, computing);
+    $('file-actions').hidden = !active?.pattern;
+    if (settings.mode === 'density') drawLegendCanvas();
+    renderStats($('stats'), active, grid, settings, computing);
+    const p = active?.pattern ?? null;
+    const q = p ? seq(p) : null;
+    $('player').hidden = !p;
+    if (settings.mode === 'flow') {
+      const current = p && !player.complete ? seq(p).markers.colorStarts.filter((i) => q!.numbers[i] <= Math.max(1, player.pos)).length - 1 : null;
+      layers.update(
+        {
+          blocks: q?.blocks ?? [],
+          hidden: hiddenBlocks,
+          focus: focusBlock,
+          current,
+          original: active?.original?.colors ?? [],
+          format: active?.pattern?.format ?? 'pes',
+        },
+        getLang(),
+      );
+      jumpsPanel.update({ list: q?.transitions ?? [], selected: selectedJump, lang: getLang() });
+    }
     panel.update(active, selectedZone);
     correctPanel.update({
       file: active,
@@ -229,7 +528,7 @@ let debounce = 0;
 function recompute(): void {
   clearTimeout(debounce);
   const pattern = files.active?.pattern;
-  if (!pattern) {
+  if (!pattern || settings.mode !== 'density') {
     computing = false;
     redraw();
     return;
@@ -313,7 +612,20 @@ function applyEdit(p: Pattern, measurement?: Measurement): void {
   if (!f?.pattern) return;
   hoverZone = selectedZone = null;
   files.setPattern(f, p, { measurement });
+  syncPlayer();
   recompute();
+}
+
+/** After an edit, undo or redo: the player follows the new version and stays where it was. */
+function syncPlayer(): void {
+  player.setModel(playerModel(files.active?.pattern ?? null), true);
+  hoverJump = null;
+  if (selectedJump !== null && selectedJump >= (files.active?.pattern ? seq(files.active.pattern).transitions.length : 0)) selectedJump = null;
+  const blocks = files.active?.pattern ? seq(files.active.pattern).blocks.length : 0;
+  if ([...hiddenBlocks].some((b) => b >= blocks) || (focusBlock ?? -1) >= blocks) {
+    hiddenBlocks = new Set();
+    focusBlock = null;
+  }
 }
 
 const editor = new Editor({
@@ -345,6 +657,7 @@ function history(step: 'undo' | 'redo' | 'revert'): void {
   editor.reset();
   hoverZone = selectedZone = null;
   correctMessage = null;
+  syncPlayer();
   recompute();
 }
 
@@ -395,6 +708,7 @@ const correctPanel = new CorrectPanel(settings, {
 const controls = bindControls(settings, (kind: ChangeKind) => {
   saveSettings(settings);
   if (kind === 'density') recompute();
+  else if (kind === 'style') redraw();
   else {
     rebuildGridImage();
     redraw();
@@ -418,6 +732,8 @@ const applyLang = (l: Lang) => {
   controls.refresh();
   profile.refresh();
   files.render();
+  player.render();
+  setMode(settings.mode);
   redraw();
 };
 langSelect.addEventListener('change', () => {
@@ -520,6 +836,29 @@ window.addEventListener('keydown', (e) => {
       return;
     }
   }
+  if (e.key === '1' || e.key === '2') {
+    setMode(e.key === '1' ? 'flow' : 'density');
+    return;
+  }
+  if (settings.mode === 'flow') {
+    if ((e.target as HTMLElement).closest('button') && (e.key === ' ' || e.key === 'Enter')) return;
+    if (e.key === ' ') {
+      e.preventDefault();
+      player.toggle();
+    } else if (e.key === ',' || e.key === '.') player.step((e.key === '.' ? 1 : -1) * (e.shiftKey ? 100 : 1));
+    else if (e.key === 'Home') player.set(0);
+    else if (e.key === 'End') player.set(Number.MAX_SAFE_INTEGER);
+    else if (e.key === 'n') stepJump(1);
+    else if (e.key === 'N') stepJump(-1);
+    else if (e.key === 'ArrowDown' || e.key === 'j') files.step(1);
+    else if (e.key === 'ArrowUp' || e.key === 'k') files.step(-1);
+    else if (e.key === 'f') fitView();
+    else if (e.key === 'Escape') {
+      selectedJump = focusBlock = null;
+      redraw();
+    }
+    return;
+  }
   if (e.key === 'ArrowDown' || e.key === 'j') files.step(1);
   else if (e.key === 'ArrowUp' || e.key === 'k') files.step(-1);
   else if (e.key === 'f') fitView();
@@ -560,6 +899,7 @@ canvas.addEventListener(
 
 /** Tooltip for the side of the divider the pointer is on. */
 function showTooltip(sx: number, sy: number): void {
+  if (settings.mode === 'flow') return flowTooltip(sx, sy);
   const left = showCompare() && sx < split * stageW;
   const f = files.active;
   updateTooltip(tooltip, sx, sy, stageW, vp, left ? origGrid : grid, settings, (left ? f?.originalValidation : f?.validation) ?? null);
@@ -569,11 +909,14 @@ const nearDivider = (sx: number) => showCompare() && Math.abs(sx - split * stage
 
 const pointers = new Map<number, [number, number]>();
 let pinchDist = 0;
+/** Where a one-finger or mouse press started, to tell a click from a drag. */
+let pressAt: [number, number] | null = null;
 
 canvas.addEventListener('pointerdown', (e) => {
   canvas.setPointerCapture(e.pointerId);
   const pos = local(e);
   pointers.set(e.pointerId, pos);
+  pressAt = pointers.size === 1 ? pos : null;
   let mode: 'move' | 'band' | 'pan' = 'pan';
   if (pointers.size === 1 && e.button === 0 && nearDivider(pos[0])) {
     splitDrag = true;
@@ -620,6 +963,18 @@ canvas.addEventListener('pointermove', (e) => {
 });
 
 const endPointer = (e: PointerEvent) => {
+  const pos = local(e);
+  if (pressAt && e.type === 'pointerup' && settings.mode === 'flow' && Math.hypot(pos[0] - pressAt[0], pos[1] - pressAt[1]) < 4) {
+    const p = files.active?.pattern;
+    if (p) {
+      const k = transitionAt(p, seq(p).transitions, vp, pos[0], pos[1]);
+      if (k >= 0 || selectedJump !== null) {
+        selectedJump = k >= 0 ? k : null;
+        redraw();
+      }
+    }
+  }
+  pressAt = null;
   if (splitDrag) {
     splitDrag = false;
     stage.classList.remove('splitting');

@@ -1,6 +1,15 @@
 # heatstitch
 
-Stickdichte-Heatmap für Stickdateien, komplett im Browser (kein Backend, keine Uploads).
+Stickdateien ansehen, prüfen und korrigieren, komplett im Browser (kein Backend, keine Uploads).
+
+Zwei Modi, oben umschaltbar (Tasten 1 und 2):
+
+- **Ablauf**: wie die Maschine die Datei abarbeitet. Farbblöcke als Ebenen (ausblenden, hervorheben),
+  Stiche färben nach Garnfarbe, Reihenfolge, Stichart oder Stichlänge, Markierungen für Sprünge,
+  Fadenschnitte, Farbwechsel, Start/Ende und Einstiche, ein Player mit geschätzter Nähzeit, und eine
+  Liste der Sprünge, die sich einzeln oder nach Länge schneiden und vernähen oder ohne Schnitt
+  mitziehen lassen.
+- **Dichte**: Heatmap, Prüfung für Stoff und Garn, Korrektur (alles unten Beschriebene).
 
 ## Funktionen
 
@@ -208,7 +217,8 @@ Der Knopf "Beispiel laden" unter dem Dateifeld lädt sie direkt in die App.
 
 `public/examples/demos/` enthält kleine synthetische Demos für die Anleitung, jede mit einem Befund:
 `overlap.pes` (gestapelte Füllungen), `letters.pes` (Füllung unter Satin), `sun.dst` (Kurzstiche auf
-Strick) und `leather-patch.dst` (Perforation auf Leder). Sie entstehen mit den App-eigenen Writern aus
+Strick), `leather-patch.dst` (Perforation auf Leder) und `confetti.pes` (lange Sprünge ohne Schnitt,
+kurze mit Schnitt). Sie entstehen mit den App-eigenen Writern aus
 `tests/helpers/demos.ts`; `tests/demos.test.ts` prüft, dass sie aktuell sind und den beschriebenen
 Befund zeigen. Nach Änderungen an Designs oder Writern: `UPDATE_DEMOS=1 npm test`. Die Bilder der
 Anleitung liegen in `public/guide/` und werden nicht vorab gecacht.
@@ -230,13 +240,15 @@ GitHub Pages veröffentlicht. Einmalig nötig: *Settings → Pages → Source: G
 
 ```
 src/parsers/   DST- und PES-Parser, PEC-Palette
-src/model/     Pattern-Datenmodell, Garnsegmente, Statistik, Bearbeitungsfunktionen
+src/model/     Pattern-Datenmodell, Garnsegmente, Statistik, Bearbeitungsfunktionen,
+               Ablauf (Farbblöcke, Sticharten, Sprünge, Marker), Sprünge schneiden/mitziehen
 src/density/   Dichteraster, Gauss-Blur, Web Worker
 src/validation/  Messung, Profile, Stufen, Satin-Erkennung, Kurzstich- und Perforationsregel, Zonen
 src/correct/   Automatische Korrektur: Rückzug unter Kanten, Satin-Kurzstiche, Neuverteilen, Ausdünnen, Einstiche trennen
 src/writers/   DST- und PES-Writer (PEC-Block, Vorschaubilder)
-src/render/    Viewport, Farbskala, Heatmap, Stichplan, Legende
-src/ui/        Dateiliste, Validierung, Korrektur-Panel, Stich-Editor, Controls, Statistik, Tooltip, Export
+src/render/    Viewport, Farbskala, Heatmap, Stichplan, Legende, Ablauf-Darstellung (Färbung, Marker, Nadel)
+src/ui/        Dateiliste, Validierung, Korrektur-Panel, Stich-Editor, Controls, Statistik, Tooltip, Export,
+               Farben-Liste, Sprung-Liste, Player
 src/i18n/      Übersetzungen DE/EN
 public/examples/  Beispiel-Stickdateien (per Knopf ladbar)
 docs.html      Kurzanleitung DE/EN (src/docs.ts, src/docs.css)

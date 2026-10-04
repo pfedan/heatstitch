@@ -1147,3 +1147,810 @@ button.link:hover {
 .update-notice[hidden] {
   display: none;
 }
+
+/* Modes ---------------------------------------------------------------------- */
+
+/* Each mode shows only its own settings and work area. */
+body[data-mode='flow'] [data-mode='density'],
+body[data-mode='density'] [data-mode='flow'] {
+  display: none !important;
+}
+
+.topbar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+}
+
+.topbar-end {
+  justify-self: end;
+}
+
+.modes {
+  min-width: 260px;
+  border-radius: 8px;
+}
+
+.modes span {
+  padding: 6px 14px;
+  font-weight: 600;
+}
+
+.modes > label > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.modes span span {
+  padding: 0;
+}
+
+.modes kbd {
+  font: 10px/1 system-ui, sans-serif;
+  padding: 2px 4px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  opacity: 0.5;
+}
+
+.segmented.wrap {
+  flex-wrap: wrap;
+}
+
+.segmented.wrap label {
+  flex: 1 1 45%;
+}
+
+/* Collapsible sidebar sections */
+
+details.section > summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+details.section > summary::-webkit-details-marker {
+  display: none;
+}
+
+details.section > summary::before {
+  content: '▸';
+  color: var(--muted);
+  font-size: 11px;
+  transition: transform 0.15s;
+}
+
+details.section[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+details.panel.section > summary h2 {
+  margin: 0;
+}
+
+details.panel.section[open] > summary {
+  margin-bottom: 10px;
+}
+
+.panel details.section > summary {
+  font-size: 12px;
+  color: var(--ink);
+}
+
+.panel details.section[open] > summary {
+  margin-bottom: 8px;
+}
+
+/* Files: save and revert under the list */
+
+.file-actions {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.file-actions .buttons {
+  margin-top: 4px;
+}
+
+.file-actions .muted.small {
+  font-size: 11px;
+}
+
+/* Coloring key */
+
+.color-key ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.color-key li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sw {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  border: 1px solid color-mix(in srgb, var(--ink) 25%, transparent);
+  flex: none;
+}
+
+.gradient {
+  height: 10px;
+  border-radius: 5px;
+}
+
+.gradient-ends {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 3px;
+}
+
+/* Marker legend icons next to the switches */
+
+.marks {
+  margin: 6px 0 0;
+  padding: 0;
+  border: none;
+}
+
+.marks legend {
+  padding: 0;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.marks .check > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mk {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 16px;
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 600;
+  color: #fff;
+  background: #2a2530;
+  border-radius: 8px;
+  flex: none;
+}
+
+.mk.mk-jump {
+  background: repeating-linear-gradient(90deg, #9a92a6 0 4px, transparent 4px 7px) center / 100% 1px no-repeat, #2a2530;
+}
+
+.mk.mk-thread {
+  background: linear-gradient(160deg, transparent 6px, #d9a441 6px 8.5px, transparent 8.5px), #2a2530;
+}
+
+.mk.mk-num {
+  background: #b5317a;
+}
+
+.mk.mk-start {
+  background: #2e9e5b;
+}
+
+.mk.mk-point {
+  background: radial-gradient(circle, #0a080e 0 2.5px, #fff 2.5px 3.5px, #2a2530 3.5px);
+}
+
+.speed {
+  margin: 10px 0 0;
+}
+
+/* Canvas tools ----------------------------------------------------------------- */
+
+.stage-tools {
+  position: absolute;
+  top: 10px;
+  display: flex;
+  gap: 6px;
+  z-index: 2;
+}
+
+.stage-tools-start {
+  left: 10px;
+}
+
+.stage-tools-end {
+  right: 10px;
+}
+
+button.tool {
+  background: rgba(13, 11, 16, 0.72);
+  color: #ece8f1;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  padding: 4px 9px;
+  font-size: 13px;
+  line-height: 1.2;
+  backdrop-filter: blur(4px);
+}
+
+button.tool:not(:disabled):hover {
+  background: rgba(13, 11, 16, 0.9);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+button.tool.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+button.tool:disabled {
+  opacity: 0.35;
+}
+
+/* Player ------------------------------------------------------------------------ */
+
+.player {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  background: rgba(13, 11, 16, 0.78);
+  color: #ece8f1;
+  border-radius: 10px;
+  backdrop-filter: blur(4px);
+}
+
+.player-buttons {
+  display: flex;
+  gap: 4px;
+  flex: none;
+}
+
+.player button.tool {
+  min-width: 30px;
+  padding: 3px 6px;
+}
+
+.player button.play {
+  min-width: 38px;
+}
+
+/* The bar: color blocks in their thread colors under a bare slider, the part not sewn yet dimmed.
+   The sections are inset by half the thumb so the thumb center meets the block borders. */
+.player-track {
+  position: relative;
+  flex: 1;
+  min-width: 120px;
+  height: 22px;
+  --thumb: 14px;
+}
+
+.player-sections {
+  position: absolute;
+  left: calc(var(--thumb) / 2);
+  right: calc(var(--thumb) / 2);
+  top: 50%;
+  height: 8px;
+  margin-top: -4px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+.player-sections > div {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+}
+
+.player-sections > div + div:not(.rest) {
+  box-shadow: inset 1px 0 0 rgba(13, 11, 16, 0.7);
+}
+
+.player-sections > .rest {
+  right: 0;
+  background: rgba(13, 11, 16, 0.62);
+}
+
+.player-track input[type='range'] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  background: transparent;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+
+.player-track input[type='range']::-webkit-slider-runnable-track {
+  background: transparent;
+  height: 100%;
+}
+
+.player-track input[type='range']::-moz-range-track {
+  background: transparent;
+}
+
+.player-track input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: var(--thumb);
+  height: var(--thumb);
+  margin-top: 4px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--accent);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+}
+
+.player-track input[type='range']::-moz-range-thumb {
+  width: var(--thumb);
+  height: var(--thumb);
+  box-sizing: border-box;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid var(--accent);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+}
+
+.player-track input[type='range']:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.player-track input[type='range']:disabled {
+  cursor: default;
+}
+
+.player-info {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: #c9c2d4;
+}
+
+.player select {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: #ece8f1;
+  padding: 3px 4px;
+  font-size: 12px;
+}
+
+/* Work area of the Ablauf mode ----------------------------------------------- */
+
+.panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.panel-head h2 {
+  margin: 0;
+}
+
+.panel-head button.link {
+  margin: 0;
+  padding: 0;
+}
+
+.layers {
+  flex: 0 1 auto;
+  max-height: 45%;
+  display: flex;
+  flex-direction: column;
+  min-height: 120px;
+}
+
+.layer-list,
+.jump-list {
+  list-style: none;
+  margin: 0 -4px;
+  padding: 0 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.layer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px 4px 2px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.layer:hover {
+  background: var(--bg);
+}
+
+.layer.focused {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.layer.current .layer-name::after {
+  content: ' ●';
+  color: var(--accent);
+}
+
+.layer.hidden-layer .sw,
+.layer.hidden-layer .layer-text {
+  opacity: 0.4;
+}
+
+.layer .eye {
+  font-size: 14px;
+  padding: 0 4px;
+}
+
+.layer .sw {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  cursor: pointer;
+}
+
+.layer .sw:hover,
+.layer .sw:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Thread color picker next to a layer's swatch */
+.color-pop {
+  position: fixed;
+  z-index: 50;
+  width: 260px;
+  max-width: calc(100vw - 16px);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+}
+
+.color-pop-head {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.color-pop-orig,
+.color-pop-own {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.color-pop-orig {
+  text-align: left;
+  padding: 4px 6px;
+}
+
+.color-grid {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 3px;
+}
+
+.color-grid .pick {
+  aspect-ratio: 1;
+  min-width: 0;
+  padding: 0;
+  border-radius: 4px;
+  border: 1px solid color-mix(in srgb, var(--ink) 20%, transparent);
+  cursor: pointer;
+}
+
+.color-grid .pick:hover,
+.color-grid .pick:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  position: relative;
+  z-index: 1;
+}
+
+.color-grid .pick[aria-current] {
+  box-shadow: inset 0 0 0 2px var(--panel), 0 0 0 2px var(--ink);
+}
+
+.color-pop-own input[type='color'] {
+  width: 28px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: none;
+  cursor: pointer;
+}
+
+.color-pop p {
+  margin: 0;
+}
+
+.layer-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.layer-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.layer-meta {
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.jumps {
+  flex: 1 1 0;
+  min-height: 260px;
+  display: flex;
+  flex-direction: column;
+}
+
+.jumps-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+.jumps-summary {
+  margin: 0 0 6px;
+  font-weight: 600;
+}
+
+.jumps-warn {
+  margin: 0 0 8px;
+  padding: 6px 8px;
+  border-left: 3px solid #ffa500;
+  background: color-mix(in srgb, #ffa500 12%, transparent);
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.jumps-rule {
+  padding: 8px;
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.jumps-rule .row-inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+
+.jumps-rule input {
+  width: 70px;
+}
+
+.jumps-rule .buttons button {
+  font-size: 12px;
+}
+
+.jump-list {
+  margin-top: 8px;
+  flex: 1 1 auto;
+  min-height: 100px;
+}
+
+.jump {
+  border: 1px solid var(--line);
+  border-left: 3px solid #ffa500;
+  border-radius: 6px;
+  padding: 5px 8px;
+  cursor: pointer;
+}
+
+.jump.cut {
+  border-left-color: #6fd3ff;
+}
+
+.jump:hover,
+.jump.selected {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.jump.cut:hover,
+.jump.cut.selected {
+  border-left-color: #6fd3ff;
+}
+
+.j-top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.j-icon {
+  width: 14px;
+  text-align: center;
+}
+
+.j-name {
+  font-weight: 600;
+}
+
+.jump .num {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.jump .meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.j-actions button {
+  font-size: 12px;
+}
+
+@media (max-width: 760px) {
+  .topbar {
+    grid-template-columns: auto 1fr;
+    grid-template-areas: 'brand end' 'modes modes';
+    row-gap: 8px;
+  }
+
+  .brand {
+    grid-area: brand;
+  }
+
+  .topbar-end {
+    grid-area: end;
+  }
+
+  .modes {
+    grid-area: modes;
+    min-width: 0;
+  }
+
+  .layers,
+  .jumps,
+  .jump-list {
+    flex: none;
+    max-height: none;
+  }
+
+  .jump-list,
+  .layer-list {
+    max-height: 50vh;
+  }
+
+  .player {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .player-track {
+    order: 3;
+    flex-basis: 100%;
+  }
+}
+
+.save-label {
+  cursor: help;
+}
+
+.save-label .info {
+  font-size: 11px;
+}
+
+.marks .check:has(input:disabled) {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.layer-text {
+  flex: 1;
+}
+
+.layer .layer-meta {
+  margin-left: auto;
+  flex: none;
+}
+
+.layer {
+  padding-top: 3px;
+  padding-bottom: 3px;
+}
+
+.jumps-summary {
+  font-weight: 500;
+}
+
+.jumps-rule > summary {
+  font-size: 12px;
+}
+
+.jumps-rule[open] > summary {
+  margin-bottom: 8px;
+}
+
+.jumps .f-chip {
+  padding: 2px 7px;
+}
+
+.jumps-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.jumps-head .jumps-summary {
+  margin: 0;
+}
+
+.jumps .findings-bar {
+  margin-top: 8px;
+}
+
+.jumps .f-chip {
+  white-space: nowrap;
+}
+
+/* In the Ablauf mode the player takes the bottom edge; the hint moves to the top. */
+body[data-mode='flow'] .stage .hint {
+  top: 14px;
+  bottom: auto;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(13, 11, 16, 0.6);
+}
+
+@media (max-width: 1400px) {
+  body[data-mode='flow'] .stage .hint {
+    display: none;
+  }
+}

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>heatstitch guide: how the stitch density check works</title>
+    <title>heatstitch guide: sewing sequence, jumps and the stitch density check</title>
     <meta name="description" content="How heatstitch reads DST and PES embroidery files, measures thread density, checks it against fabric and thread weight, corrects dense areas and saves the result." />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://pfedan.github.io/heatstitch/docs.html" />
@@ -44,13 +44,17 @@
       <article lang="en">
         <h1>How heatstitch works</h1>
         <p class="lead">
-          heatstitch opens machine embroidery files, shows how much thread lands on every square millimeter
-          and tells you where a design is too dense for the fabric and thread you plan to use. You can fix
-          those spots automatically or by hand and save the result as DST or PES.
+          heatstitch opens machine embroidery files and has two modes. <b>Sequence</b> shows how the machine
+          works through the design: colors, order, jumps and trims, stitch by stitch, and lets you decide which
+          jumps get trimmed. <b>Density</b> shows how much thread lands on every square millimeter and tells you
+          where a design is too dense for the fabric and thread you plan to use. You can fix those spots
+          automatically or by hand and save the result as DST or PES.
         </p>
 
         <nav class="toc" aria-label="Contents">
           <a href="#en-start">Quick start</a>
+          <a href="#en-sequence">Sequence</a>
+          <a href="#en-jumps">Jumps and trims</a>
           <a href="#en-heatmap">Heatmap</a>
           <a href="#en-check">Check</a>
           <a href="#en-correct">Correction</a>
@@ -60,17 +64,23 @@
         </nav>
 
         <figure>
-          <img src="/guide/cat-en.jpg" width="980" height="909" alt="The example cat with realistic threads over the heatmap and the findings column on the right" />
-          <figcaption>The example from <i>Load example</i>: realistic threads over the heatmap, zones outlined, verdict and findings on the right.</figcaption>
+          <img src="/guide/cat-en.jpg" width="1280" height="800" alt="The example cat in the Sequence mode, sewn about two thirds of the way, with the colors and the jump list on the right" />
+          <figcaption>The example from <i>Load example</i> in the <i>Sequence</i> mode: the player stands at two thirds, the crosshair marks the needle. Files and settings on the left, colors and jumps on the right.</figcaption>
         </figure>
 
         <h2 id="en-start">Quick start</h2>
         <ol>
           <li>Drop one or more <b>DST</b> (Tajima) or <b>PES</b> (Brother) files on the file box, or use <i>Load example</i>.</li>
-          <li>Pick the <b>fabric</b> and <b>thread weight</b> under <i>Material</i>.</li>
+          <li>Pick the mode at the top: <i>Sequence</i> (<kbd>1</kbd>) to see how the design is sewn, <i>Density</i> (<kbd>2</kbd>) to check it.</li>
+          <li>In <i>Density</i>, pick the <b>fabric</b> and <b>thread weight</b> under <i>Material</i>.</li>
           <li>Read the verdict in the <i>Findings</i> column: <span class="lv safe">Looks fine</span>, <span class="lv caution">Caution</span> or <span class="lv critical">Critical</span>. Click a zone to zoom to it.</li>
           <li>Use <i>Correction</i> to fix the zones, compare with the original and save.</li>
         </ol>
+        <p>
+          The screen has three parts. On the left: your <b>files</b> with saving, the <b>settings of the mode</b>,
+          and the <b>display</b> (realistic threads, thread width, markers) that applies to both modes. In the
+          middle the canvas with undo, redo, fit and PNG export. On the right the <b>work area</b> of the mode.
+        </p>
         <p>Loaded files and your edits stay in this browser and come back after a reload. <b>×</b> in the file list removes a file.</p>
         <figure>
           <img src="/guide/heatmap-en.jpg" width="1280" height="960" loading="lazy" alt="The app with three overlapping fill circles: the middle where four layers meet is marked critical" />
@@ -80,20 +90,55 @@
           <b>Try it with the demo files</b> used for the pictures in this guide, each showing one finding:
           <a href="examples/demos/overlap.pes" download>overlap.pes</a> (stacked fills),
           <a href="examples/demos/letters.pes" download>letters.pes</a> (fill under satin),
-          <a href="examples/demos/sun.dst" download>sun.dst</a> (short stitches) and
-          <a href="examples/demos/leather-patch.dst" download>leather-patch.dst</a> (perforation).
+          <a href="examples/demos/sun.dst" download>sun.dst</a> (short stitches),
+          <a href="examples/demos/leather-patch.dst" download>leather-patch.dst</a> (perforation) and
+          <a href="examples/demos/confetti.pes" download>confetti.pes</a> (jumps and trims).
         </p>
 
+        <h2 id="en-sequence">Sequence mode</h2>
+        <dl>
+          <dt>Colors</dt>
+          <dd>The color blocks in sewing order, with their stitch count (more in the tooltip). The eye hides a color; a click highlights it and fades the rest; hovering previews that. <i>Show all</i> undoes both. While the player runs, a dot marks the color being sewn. A click on the color square changes the thread color: one of the Brother threads that PES files store, or a custom color. This is an edit like any other and can be undone.</dd>
+          <dt>Color stitches by</dt>
+          <dd><i>Thread</i> shows the file's colors. <i>Order</i> runs from dark blue (sewn first) to yellow (sewn last). <i>Stitch type</i> tells satin, fill, running stitch and tie stitches apart; it is worked out from the stitch path, since DST and PES store no objects. <i>Length</i> marks short stitches under 1 mm, long ones over 7 mm and very long ones over 12.1 mm, which machines split.</dd>
+          <dt>Player</dt>
+          <dd>The bar under the canvas sews the design up to a stitch: play and pause (<kbd>Space</kbd>), one stitch back or on (<kbd>,</kbd> <kbd>.</kbd>), to the start of the color or the next one. The speed is a multiple of the machine speed; the time shows how long the machine needs up to here, estimated from the machine speed under <i>Statistics</i> plus a few seconds per trim and color change. The bar shows the colors in their thread color; what is not sewn yet is dimmed.</dd>
+          <dt>Markers</dt>
+          <dd>Under <i>Display</i>: jumps as dashed lines, <i>Loose jump threads</i> (jumps without a trim, drawn the way the thread then lies across the fabric), trims (✂), numbered color changes, start and end, and needle points once you zoom in. In the <i>Density</i> mode they come with the stitch plan.</dd>
+        </dl>
+        <figure>
+          <img src="/guide/kinds.jpg" width="660" height="700" loading="lazy" alt="The cat colored by stitch type: satin outlines blue, fills green, running stitches and underlay yellow" />
+          <figcaption>Colored by stitch type: satin blue, fill green, running stitch and underlay yellow, tie stitches grey.</figcaption>
+        </figure>
+
+        <h2 id="en-jumps">Jumps and trims</h2>
+        <p>
+          The list on the right shows every jump between two stitch runs of one color, with its length and whether
+          the machine trims there. Color changes are not listed, the machine stops there anyway. Click a jump in the
+          list or on the canvas to see it; <kbd>n</kbd> and <kbd>Shift</kbd>+<kbd>n</kbd> step through them.
+        </p>
+        <ul>
+          <li><b>Trim and tie</b>: a few tie stitches lock the thread before the jump, the thread is trimmed, and tie-in stitches start the next run. Tie stitches that are already there are recognised and not doubled.</li>
+          <li><b>Do not trim</b>: the trim and the tie stitches around the jump go away, the machine carries the thread across. That saves time on short jumps that are covered later.</li>
+          <li><b>All at once by length</b>: <i>Trim from this length</i> trims every untrimmed jump from the chosen length on, <i>Do not trim shorter</i> removes the trims below it. A note warns when long jumps are not trimmed, because the thread then lies loose on the fabric.</li>
+        </ul>
+        <p>Every change can be undone. DST writes a trim as three jumps, PES with its trim flag; both read back the same.</p>
+        <figure>
+          <img src="/guide/jumps-en.jpg" width="1280" height="800" loading="lazy" alt="Confetti demo: a 20 mm jump without a trim is selected and highlighted, the list offers Trim and tie" />
+          <figcaption><a href="examples/demos/confetti.pes" download>confetti.pes</a>: the long jumps between the dots are not trimmed, the very short ones inside each dot are. The selected jump is drawn in orange.</figcaption>
+        </figure>
+
         <h2 id="en-heatmap">Heatmap</h2>
+        <p>The heatmap, the check and the correction make up the <i>Density</i> mode.</p>
         <dl>
           <dt>Thread length (mm/mm²)</dt>
           <dd>Every stitch is split exactly over the grid cells it crosses. This is what makes embroidery stiff, puckered or bulletproof. One fill layer at 0.4 mm spacing gives 2.5 mm/mm².</dd>
           <dt>Penetrations (1/mm²)</dt>
           <dd>Needle holes per area. Matters for leather, vinyl and delicate fabric.</dd>
           <dt>Grid cell, smoothing, scale maximum</dt>
-          <dd>Change only the picture, never the check. The color scale is absolute, so two files with the same maximum can be compared directly.</dd>
+          <dd>Under <i>Fine tuning</i>. They change only the picture, never the check. The color scale is absolute, so two files with the same maximum can be compared directly.</dd>
           <dt>Stitch plan</dt>
-          <dd>Draws the stitches in thread colors on top of the heatmap. <i>Realistic threads</i> renders round, twisted threads with shadows (WebGL2), as wide as the chosen thread weight.</dd>
+          <dd>Under <i>Display</i>, draws the stitches in thread colors on top of the heatmap. <i>Realistic threads</i> renders round, twisted threads with shadows (WebGL2), as wide as the chosen thread weight.</dd>
         </dl>
         <figure>
           <img src="/guide/stitchplan.jpg" width="660" height="700" loading="lazy" alt="Realistic threads of the three circles drawn over the heatmap" />
@@ -185,19 +230,21 @@
 
         <h2 id="en-save">Save and export</h2>
         <ul>
-          <li><b>Save: As DST / As PES</b> writes the current stitches and colors. Edited files get the suffix <code>-corrected</code>. Objects and hoop settings from embroidery software are not kept.</li>
+          <li><b>Save: As DST / As PES</b> under the file list writes the current stitches and colors. <i>Back to the original</i> appears there once a file is changed. Edited files get the suffix <code>-corrected</code>. Objects and hoop settings from embroidery software are not kept.</li>
           <li>DST has no colors; PES colors keep their palette slot, DST colors get the nearest one.</li>
-          <li><b>Export PNG</b> saves the current view with its legend.</li>
+          <li><b>PNG</b> on the canvas saves the current view, in the <i>Density</i> mode with its legend.</li>
         </ul>
 
         <h2 id="en-keys">Shortcuts</h2>
         <table class="keys">
           <tbody>
+            <tr><td><kbd>1</kbd> / <kbd>2</kbd></td><td>Sequence / Density mode</td></tr>
             <tr><td><kbd>Wheel</kbd> / pinch, drag</td><td>Zoom, pan</td></tr>
             <tr><td><kbd>f</kbd> or double-click</td><td>Fit to view</td></tr>
             <tr><td><kbd>↑</kbd> <kbd>↓</kbd> or <kbd>k</kbd> <kbd>j</kbd></td><td>Previous / next file</td></tr>
-            <tr><td><kbd>n</kbd> / <kbd>Shift</kbd>+<kbd>n</kbd></td><td>Next / previous zone</td></tr>
-            <tr><td><kbd>v</kbd></td><td>Show or hide zone markings</td></tr>
+            <tr><td><kbd>n</kbd> / <kbd>Shift</kbd>+<kbd>n</kbd></td><td>Next / previous zone, in the Sequence mode jump</td></tr>
+            <tr><td><kbd>Space</kbd>, <kbd>,</kbd> <kbd>.</kbd>, <kbd>Home</kbd> <kbd>End</kbd></td><td>Player: play or pause, one stitch back or on (with <kbd>Shift</kbd> 100), to the start or end</td></tr>
+            <tr><td><kbd>v</kbd></td><td>Show or hide zone markings (Density)</td></tr>
             <tr><td><kbd>e</kbd></td><td>Edit stitches</td></tr>
             <tr><td><kbd>c</kbd></td><td>Compare with original</td></tr>
             <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd></td><td>Undo / redo</td></tr>
@@ -218,13 +265,17 @@
       <article lang="de">
         <h1>So funktioniert heatstitch</h1>
         <p class="lead">
-          heatstitch öffnet Stickdateien, zeigt, wie viel Garn auf jedem Quadratmillimeter landet, und sagt
+          heatstitch öffnet Stickdateien und hat zwei Modi. <b>Ablauf</b> zeigt, wie die Maschine das Motiv
+          abarbeitet: Farben, Reihenfolge, Sprünge und Fadenschnitte, Stich für Stich, und lässt dich entscheiden,
+          wo geschnitten wird. <b>Dichte</b> zeigt, wie viel Garn auf jedem Quadratmillimeter landet, und sagt
           dir, wo ein Motiv für deinen Stoff und dein Garn zu dicht ist. Diese Stellen kannst du automatisch
           oder von Hand korrigieren und das Ergebnis als DST oder PES speichern.
         </p>
 
         <nav class="toc" aria-label="Inhalt">
           <a href="#de-start">Schnellstart</a>
+          <a href="#de-sequence">Ablauf</a>
+          <a href="#de-jumps">Sprünge und Schnitte</a>
           <a href="#de-heatmap">Heatmap</a>
           <a href="#de-check">Prüfung</a>
           <a href="#de-correct">Korrektur</a>
@@ -234,17 +285,23 @@
         </nav>
 
         <figure>
-          <img src="/guide/cat-de.jpg" width="980" height="909" alt="Die Beispielkatze mit realistischen Fäden über der Heatmap und der Befundspalte rechts" />
-          <figcaption>Das Beispiel aus <i>Beispiel laden</i>: realistische Fäden über der Heatmap, Zonen umrandet, rechts Urteil und Befunde.</figcaption>
+          <img src="/guide/cat-de.jpg" width="1280" height="800" alt="Die Beispielkatze im Modus Ablauf, etwa zu zwei Dritteln gestickt, rechts Farben und Sprungliste" />
+          <figcaption>Das Beispiel aus <i>Beispiel laden</i> im Modus <i>Ablauf</i>: Der Player steht bei zwei Dritteln, das Fadenkreuz zeigt die Nadel. Links Dateien und Einstellungen, rechts Farben und Sprünge.</figcaption>
         </figure>
 
         <h2 id="de-start">Schnellstart</h2>
         <ol>
           <li>Eine oder mehrere <b>DST</b>- (Tajima) oder <b>PES</b>-Dateien (Brother) auf das Dateifeld ziehen oder <i>Beispiel laden</i> drücken.</li>
-          <li>Unter <i>Material</i> <b>Stoff</b> und <b>Garnstärke</b> wählen.</li>
+          <li>Oben den Modus wählen: <i>Ablauf</i> (<kbd>1</kbd>), um zu sehen, wie das Motiv gestickt wird, <i>Dichte</i> (<kbd>2</kbd>), um es zu prüfen.</li>
+          <li>Im Modus <i>Dichte</i> unter <i>Material</i> <b>Stoff</b> und <b>Garnstärke</b> wählen.</li>
           <li>Das Urteil in der Spalte <i>Befunde</i> lesen: <span class="lv safe">Unauffällig</span>, <span class="lv caution">Vorsicht</span> oder <span class="lv critical">Kritisch</span>. Ein Klick auf eine Zone zoomt hin.</li>
           <li>Mit <i>Korrektur</i> die Zonen beheben, mit dem Original vergleichen und speichern.</li>
         </ol>
+        <p>
+          Der Bildschirm hat drei Teile. Links deine <b>Dateien</b> mit Speichern, die <b>Einstellungen des Modus</b>
+          und die <b>Anzeige</b> (realistische Fäden, Fadenbreite, Markierungen), die für beide Modi gilt. In der
+          Mitte die Leinwand mit Rückgängig, Wiederholen, Einpassen und PNG-Export. Rechts der <b>Arbeitsbereich</b> des Modus.
+        </p>
         <p>Geladene Dateien und deine Änderungen bleiben in diesem Browser gespeichert und sind nach dem Neuladen wieder da. <b>×</b> in der Dateiliste entfernt eine Datei.</p>
         <figure>
           <img src="/guide/heatmap-de.jpg" width="1280" height="960" loading="lazy" alt="Die App mit drei überlappenden Füllkreisen: die Mitte, wo vier Lagen liegen, ist kritisch markiert" />
@@ -254,20 +311,55 @@
           <b>Zum Ausprobieren</b> gibt es die Demo-Dateien, aus denen die Bilder dieser Anleitung stammen, jede mit einem Befund:
           <a href="examples/demos/overlap.pes" download>overlap.pes</a> (gestapelte Füllungen),
           <a href="examples/demos/letters.pes" download>letters.pes</a> (Füllung unter Satin),
-          <a href="examples/demos/sun.dst" download>sun.dst</a> (Kurzstiche) und
-          <a href="examples/demos/leather-patch.dst" download>leather-patch.dst</a> (Perforation).
+          <a href="examples/demos/sun.dst" download>sun.dst</a> (Kurzstiche),
+          <a href="examples/demos/leather-patch.dst" download>leather-patch.dst</a> (Perforation) und
+          <a href="examples/demos/confetti.pes" download>confetti.pes</a> (Sprünge und Schnitte).
         </p>
 
+        <h2 id="de-sequence">Modus Ablauf</h2>
+        <dl>
+          <dt>Farben</dt>
+          <dd>Die Farbblöcke in Stickreihenfolge mit ihrer Stichzahl (mehr im Tooltip). Das Auge blendet eine Farbe aus; ein Klick hebt sie hervor und blendet die übrigen ab, Darüberfahren zeigt das als Vorschau. <i>Alle zeigen</i> hebt beides auf. Läuft der Player, markiert ein Punkt die Farbe, die gerade gestickt wird. Ein Klick auf das Farbquadrat ändert die Garnfarbe: eines der Brother-Garne, die PES-Dateien speichern, oder eine eigene Farbe. Das ist eine Bearbeitung wie jede andere und lässt sich rückgängig machen.</dd>
+          <dt>Stiche färben nach</dt>
+          <dd><i>Garnfarbe</i> zeigt die Farben der Datei. <i>Reihenfolge</i> verläuft von Dunkelblau (zuerst gestickt) bis Gelb (zuletzt). <i>Stichart</i> unterscheidet Satin, Füllung, Steppstich und Vernähstiche; sie wird aus dem Stichverlauf erkannt, denn DST und PES speichern keine Objekte. <i>Stichlänge</i> markiert kurze Stiche unter 1 mm, lange über 7 mm und sehr lange über 12,1 mm, die Maschinen teilen.</dd>
+          <dt>Player</dt>
+          <dd>Die Leiste unter der Leinwand stickt das Motiv bis zu einem Stich: Abspielen und Anhalten (<kbd>Leertaste</kbd>), ein Stich zurück oder vor (<kbd>,</kbd> <kbd>.</kbd>), zum Anfang der Farbe oder zur nächsten. Das Tempo ist ein Vielfaches des Maschinentempos; die Zeit zeigt, wie lange die Maschine bis hierher braucht, geschätzt aus dem Maschinentempo unter <i>Statistik</i> plus einige Sekunden je Schnitt und Farbwechsel. Der Balken zeigt die Farben in ihrer Garnfarbe; was noch nicht gestickt ist, ist abgedunkelt.</dd>
+          <dt>Markierungen</dt>
+          <dd>Unter <i>Anzeige</i>: Sprünge gestrichelt, <i>Lose Sprungfäden</i> (Sprünge ohne Schnitt, gezeichnet wie der Faden dann über dem Stoff liegt), Fadenschnitte (✂), nummerierte Farbwechsel, Start und Ende sowie Einstiche, sobald weit genug hineingezoomt ist. Im Modus <i>Dichte</i> erscheinen sie zusammen mit dem Stichplan.</dd>
+        </dl>
+        <figure>
+          <img src="/guide/kinds.jpg" width="660" height="700" loading="lazy" alt="Die Katze nach Stichart gefärbt: Satinkonturen blau, Füllungen grün, Steppstiche und Unterlage gelb" />
+          <figcaption>Nach Stichart gefärbt: Satin blau, Füllung grün, Steppstich und Unterlage gelb, Vernähstiche grau.</figcaption>
+        </figure>
+
+        <h2 id="de-jumps">Sprünge und Schnitte</h2>
+        <p>
+          Die Liste rechts zeigt jeden Sprung zwischen zwei Stichfolgen einer Farbe, mit Länge und ob die Maschine dort
+          schneidet. Farbwechsel stehen nicht darin, dort hält die Maschine ohnehin. Ein Klick auf einen Sprung in der
+          Liste oder auf der Leinwand zeigt ihn; <kbd>n</kbd> und <kbd>Umschalt</kbd>+<kbd>n</kbd> gehen sie durch.
+        </p>
+        <ul>
+          <li><b>Schneiden und vernähen</b>: Einige Vernähstiche sichern den Faden vor dem Sprung, der Faden wird geschnitten, und Anstiche beginnen die nächste Folge. Vorhandene Vernähstiche werden erkannt und nicht doppelt gesetzt.</li>
+          <li><b>Nicht schneiden</b>: Schnitt und Vernähstiche um den Sprung entfallen, die Maschine zieht den Faden mit. Das spart Zeit bei kurzen Sprüngen, die später überstickt werden.</li>
+          <li><b>Alle auf einmal nach Länge</b>: <i>Ab Grenze schneiden</i> schneidet jeden ungeschnittenen Sprung ab der gewählten Länge, <i>Darunter nicht schneiden</i> entfernt die Schnitte darunter. Ein Hinweis warnt, wenn lange Sprünge nicht geschnitten werden, denn dann liegt der Faden lose auf dem Stoff.</li>
+        </ul>
+        <p>Jede Änderung lässt sich rückgängig machen. DST schreibt einen Schnitt als drei Sprünge, PES mit seinem Schnitt-Flag; beide lesen sich gleich zurück.</p>
+        <figure>
+          <img src="/guide/jumps-de.jpg" width="1280" height="800" loading="lazy" alt="Konfetti-Demo: ein 20-mm-Sprung ohne Schnitt ist ausgewählt und hervorgehoben, die Liste bietet Schneiden und vernähen an" />
+          <figcaption><a href="examples/demos/confetti.pes" download>confetti.pes</a>: Die langen Sprünge zwischen den Punkten werden nicht geschnitten, die ganz kurzen innerhalb der Punkte schon. Der gewählte Sprung ist orange gezeichnet.</figcaption>
+        </figure>
+
         <h2 id="de-heatmap">Heatmap</h2>
+        <p>Heatmap, Prüfung und Korrektur bilden den Modus <i>Dichte</i>.</p>
         <dl>
           <dt>Garnlänge (mm/mm²)</dt>
           <dd>Jeder Stich wird exakt auf die Rasterzellen verteilt, die er durchläuft. Zu viel davon macht Stickereien steif, wellig oder brettartig. Eine Füllstichlage mit 0,4 mm Abstand hat 2,5 mm/mm².</dd>
           <dt>Einstiche (1/mm²)</dt>
           <dd>Nadellöcher pro Fläche. Wichtig bei Leder, Kunstleder und empfindlichen Stoffen.</dd>
           <dt>Rasterzelle, Glättung, Skala-Maximum</dt>
-          <dd>Ändern nur das Bild, nie die Prüfung. Die Farbskala ist absolut, zwei Dateien mit gleichem Maximum lassen sich direkt vergleichen.</dd>
+          <dd>Unter <i>Feineinstellungen</i>. Sie ändern nur das Bild, nie die Prüfung. Die Farbskala ist absolut, zwei Dateien mit gleichem Maximum lassen sich direkt vergleichen.</dd>
           <dt>Stichplan</dt>
-          <dd>Zeichnet die Stiche in Garnfarben über die Heatmap. <i>Realistische Fäden</i> zeigt runde, gedrehte Fäden mit Schatten (WebGL2), so breit wie die gewählte Garnstärke.</dd>
+          <dd>Unter <i>Anzeige</i>, zeichnet die Stiche in Garnfarben über die Heatmap. <i>Realistische Fäden</i> zeigt runde, gedrehte Fäden mit Schatten (WebGL2), so breit wie die gewählte Garnstärke.</dd>
         </dl>
         <figure>
           <img src="/guide/stitchplan.jpg" width="660" height="700" loading="lazy" alt="Realistische Fäden der drei Kreise über der Heatmap" />
@@ -360,19 +452,21 @@
 
         <h2 id="de-save">Speichern und Export</h2>
         <ul>
-          <li><b>Speichern: Als DST / Als PES</b> schreibt die aktuellen Stiche und Farben. Geänderte Dateien bekommen den Zusatz <code>-corrected</code>. Objekte und Rahmeneinstellungen aus der Sticksoftware gehen verloren.</li>
+          <li><b>Speichern: Als DST / Als PES</b> unter der Dateiliste schreibt die aktuellen Stiche und Farben. <i>Zurück zum Original</i> erscheint dort, sobald eine Datei geändert ist. Geänderte Dateien bekommen den Zusatz <code>-corrected</code>. Objekte und Rahmeneinstellungen aus der Sticksoftware gehen verloren.</li>
           <li>DST kennt keine Farben; PES-Farben behalten ihren Paletten-Platz, Farben aus DST bekommen den nächstgelegenen.</li>
-          <li><b>PNG exportieren</b> speichert die aktuelle Ansicht mit Legende.</li>
+          <li><b>PNG</b> auf der Leinwand speichert die aktuelle Ansicht, im Modus <i>Dichte</i> mit Legende.</li>
         </ul>
 
         <h2 id="de-keys">Tastenkürzel</h2>
         <table class="keys">
           <tbody>
+            <tr><td><kbd>1</kbd> / <kbd>2</kbd></td><td>Modus Ablauf / Dichte</td></tr>
             <tr><td><kbd>Mausrad</kbd> / Pinch, Ziehen</td><td>Zoomen, verschieben</td></tr>
             <tr><td><kbd>f</kbd> oder Doppelklick</td><td>Einpassen</td></tr>
             <tr><td><kbd>↑</kbd> <kbd>↓</kbd> oder <kbd>k</kbd> <kbd>j</kbd></td><td>Vorherige / nächste Datei</td></tr>
-            <tr><td><kbd>n</kbd> / <kbd>Umschalt</kbd>+<kbd>n</kbd></td><td>Nächste / vorherige Zone</td></tr>
-            <tr><td><kbd>v</kbd></td><td>Zonen-Markierungen ein/aus</td></tr>
+            <tr><td><kbd>n</kbd> / <kbd>Umschalt</kbd>+<kbd>n</kbd></td><td>Nächste / vorherige Zone, im Modus Ablauf Sprung</td></tr>
+            <tr><td><kbd>Leertaste</kbd>, <kbd>,</kbd> <kbd>.</kbd>, <kbd>Pos1</kbd> <kbd>Ende</kbd></td><td>Player: abspielen oder anhalten, ein Stich zurück oder vor (mit <kbd>Umschalt</kbd> 100), zum Anfang oder Ende</td></tr>
+            <tr><td><kbd>v</kbd></td><td>Zonen-Markierungen ein/aus (Dichte)</td></tr>
             <tr><td><kbd>e</kbd></td><td>Stiche bearbeiten</td></tr>
             <tr><td><kbd>c</kbd></td><td>Mit Original vergleichen</td></tr>
             <tr><td><kbd>Strg</kbd>+<kbd>Z</kbd> / <kbd>Strg</kbd>+<kbd>Umschalt</kbd>+<kbd>Z</kbd></td><td>Rückgängig / wiederholen</td></tr>

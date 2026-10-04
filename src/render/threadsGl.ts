@@ -1,5 +1,6 @@
-import type { Pattern } from '../model/pattern';
-import { colorRuns } from './threads';
+import { STITCH, type Pattern } from '../model/pattern';
+import type { StitchStyle } from './flow';
+import { stitchColors } from './flow';
 import type { Viewport } from './viewport';
 
 /**
@@ -14,6 +15,7 @@ const THREAD_VS = `#version 300 es
 layout(location = 0) in vec2 a_corner;
 layout(location = 1) in vec4 a_seg;
 layout(location = 2) in vec4 a_color;
+layout(location = 3) in float a_alpha;
 uniform float u_scale;
 uniform vec2 u_offset;
 uniform vec2 u_res;
@@ -22,6 +24,7 @@ uniform vec2 u_light;
 out vec2 v_local;
 out float v_len;
 out vec4 v_color;
+out float v_alpha;
 flat out int v_pass;
 flat out vec2 v_dir;
 void main() {
@@ -42,6 +45,7 @@ void main() {
   v_local = vec2(along, across);
   v_len = len;
   v_color = a_color;
+  v_alpha = a_alpha;
   v_pass = pass;
   v_dir = u;
   vec2 clip = pos / u_res * 2.0 - 1.0;
@@ -53,6 +57,7 @@ precision highp float;
 in vec2 v_local;
 in float v_len;
 in vec4 v_color;
+in float v_alpha;
 flat in int v_pass;
 flat in vec2 v_dir;
 uniform float u_halfw;
@@ -72,7 +77,7 @@ void main() {
     float dt = t - clamp(t, 0.0, v_len);
     float d = length(vec2(dt, a));
     float s = 1.0 - smoothstep(hw * 0.3, hw * 1.7, d);
-    float alpha = 0.42 * s * s * u_thin;
+    float alpha = 0.42 * s * s * u_thin * v_alpha;
     o = vec4(0.0, 0.0, 0.0, alpha);
     return;
   }
@@ -129,7 +134,7 @@ void main() {
   float detail = smoothstep(0.8, 2.0, hw);
   col = mix(base * 0.95, col, detail);
 
-  float alpha = cover * u_thin;
+  float alpha = cover * u_thin * v_alpha;
   o = vec4(toSrgb(col) * alpha, alpha);
 }`;
 
@@ -150,24 +155,59 @@ function compile(gl: WebGL2RenderingContext, vs: string, fs: string): WebGLProgr
   return prog;
 }
 
-/** Per stitch: x1, y1, x2, y2 (0.1 mm) and r, g, b (0..1), seed, in sewing order. */
-export function buildInstances(p: Pattern): { segs: Float32Array; colors: Float32Array; count: number } {
-  const runs = colorRuns(p);
-  const count = runs.reduce((n, r) => n + r.segs.length / 4, 0);
+/**
+ * Per stitch in sewing order: x1, y1, x2, y2 (0.1 mm), r, g, b (0..1) and seed, opacity, and the
+ * record the stitch ends at (for drawing only up to the player position).
+ */
+export function buildInstances(
+  p: Pattern,
+  rgb: Uint8Array = stitchColors(p, 'thread'),
+  alpha?: Float32Array,
+  carried?: Int32Array,
+): { segs: Float32Array; colors: Float32Array; alpha: Float32Array; records: Int32Array; count: number } {
+  let count = 0;
+  // A stitch, or the thread of a jump without a trim, which lies on top just like one.
+  const start = (i: number) =>
+    p.cmd[i] !== STITCH ? -1
+    : carried && carried[i] >= 0 ? carried[i]
+    : p.cmd[i - 1] === STITCH && (p.x[i] !== p.x[i - 1] || p.y[i] !== p.y[i - 1]) ? i - 1
+    : -1;
+  const drawn = (i: number) => start(i) >= 0;
+  for (let i = 1; i < p.cmd.length; i++) if (drawn(i)) count++;
   const segs = new Float32Array(count * 4);
   const colors = new Float32Array(count * 4);
+  const alphas = new Float32Array(count);
+  const records = new Int32Array(count);
   let k = 0;
-  for (const { color, segs: s } of runs) {
-    for (let i = 0; i < s.length; i += 4, k++) {
-      segs.set(s.subarray(i, i + 4), k * 4);
-      colors[k * 4] = color.r / 255;
-      colors[k * 4 + 1] = color.g / 255;
-      colors[k * 4 + 2] = color.b / 255;
-      // Cheap hash so each stitch gets its own twist phase and a slight brightness change.
-      colors[k * 4 + 3] = ((k * 2654435761) >>> 0) / 4294967296;
-    }
+  for (let i = 1; i < p.cmd.length; i++) {
+    const j = start(i);
+    if (j < 0) continue;
+    segs[k * 4] = p.x[j];
+    segs[k * 4 + 1] = p.y[j];
+    segs[k * 4 + 2] = p.x[i];
+    segs[k * 4 + 3] = p.y[i];
+    colors[k * 4] = rgb[i * 3] / 255;
+    colors[k * 4 + 1] = rgb[i * 3 + 1] / 255;
+    colors[k * 4 + 2] = rgb[i * 3 + 2] / 255;
+    // Cheap hash so each stitch gets its own twist phase and a slight brightness change.
+    colors[k * 4 + 3] = ((k * 2654435761) >>> 0) / 4294967296;
+    alphas[k] = alpha ? alpha[i] : 1;
+    records[k] = i;
+    k++;
   }
-  return { segs, colors, count };
+  return { segs, colors, alpha: alphas, records, count };
+}
+
+/** Number of instances whose record is at most `limit`. */
+function countUpTo(records: Int32Array, limit: number): number {
+  let lo = 0;
+  let hi = records.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (records[mid] <= limit) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
 }
 
 export class GlThreadRenderer {
@@ -177,9 +217,11 @@ export class GlThreadRenderer {
   private vao: WebGLVertexArrayObject;
   private segBuf: WebGLBuffer;
   private colBuf: WebGLBuffer;
+  private alphaBuf: WebGLBuffer;
+  private records: Int32Array = new Int32Array(0);
+  private built: unknown[] = [];
   private u: Record<string, WebGLUniformLocation | null>;
   private count = 0;
-  private pattern: Pattern | null = null;
 
   /** Throws when WebGL2 is not available. */
   constructor(canvas: HTMLCanvasElement | OffscreenCanvas) {
@@ -209,6 +251,11 @@ export class GlThreadRenderer {
     gl.enableVertexAttribArray(2);
     gl.vertexAttribPointer(2, 4, gl.FLOAT, false, 0, 0);
     gl.vertexAttribDivisor(2, 2);
+    this.alphaBuf = gl.createBuffer()!;
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.alphaBuf);
+    gl.enableVertexAttribArray(3);
+    gl.vertexAttribPointer(3, 1, gl.FLOAT, false, 0, 0);
+    gl.vertexAttribDivisor(3, 2);
     gl.bindVertexArray(null);
   }
 
@@ -216,33 +263,39 @@ export class GlThreadRenderer {
     return this.gl.isContextLost();
   }
 
-  private setPattern(p: Pattern): void {
-    if (this.pattern === p) return;
-    this.pattern = p;
-    const { segs, colors, count } = buildInstances(p);
+  private setPattern(p: Pattern, style?: StitchStyle): void {
+    const key = [p, style?.rgb, style?.alpha, style?.carried];
+    if (key.every((k, i) => k === this.built[i])) return;
+    this.built = key;
+    const { segs, colors, alpha, records, count } = buildInstances(p, style?.rgb, style?.alpha, style?.carried?.from);
+    this.records = records;
     const gl = this.gl;
     gl.bindBuffer(gl.ARRAY_BUFFER, this.segBuf);
     gl.bufferData(gl.ARRAY_BUFFER, segs, gl.STATIC_DRAW);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.colBuf);
     gl.bufferData(gl.ARRAY_BUFFER, colors, gl.STATIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.alphaBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, alpha, gl.STATIC_DRAW);
     this.count = count;
   }
 
   /**
    * Draws `p` onto a transparent canvas of w x h device pixels. `vp` is in CSS pixels and
-   * `dpr` maps them to device pixels; `threadMm` is the visual thread width.
+   * `dpr` maps them to device pixels; `threadMm` is the visual thread width. `style` sets colors,
+   * opacity and how far the design is sewn; without it all stitches show in their thread color.
    */
-  draw(p: Pattern, vp: Viewport, dpr: number, w: number, h: number, threadMm: number): void {
+  draw(p: Pattern, vp: Viewport, dpr: number, w: number, h: number, threadMm: number, style?: StitchStyle): void {
     const gl = this.gl;
     if (this.canvas.width !== w || this.canvas.height !== h) {
       this.canvas.width = w;
       this.canvas.height = h;
     }
-    this.setPattern(p);
+    this.setPattern(p, style);
+    const count = style ? countUpTo(this.records, style.limit) : this.count;
     gl.viewport(0, 0, w, h);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
-    if (!this.count) return;
+    if (!count) return;
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.useProgram(this.prog);
@@ -254,7 +307,7 @@ export class GlThreadRenderer {
     gl.uniform1f(this.u.u_thin, Math.min(1, hw / 0.5));
     gl.uniform2f(this.u.u_light, -0.55, -0.65);
     gl.bindVertexArray(this.vao);
-    gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, this.count * 2);
+    gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, count * 2);
     gl.bindVertexArray(null);
   }
 }

@@ -4,7 +4,7 @@ import { t } from '../i18n';
 import { legendSpec } from './legendSpec';
 import { fabricLabel, threadLabel } from './profilePanel';
 
-/** Renders the current view (plus legend) at device resolution and downloads it as PNG. */
+/** Renders the current view (plus the heatmap legend in the density mode) at device resolution and downloads it as PNG. */
 export function exportPng(scene: Scene, w: number, h: number, background: string, fileName: string): void {
   const dpr = window.devicePixelRatio || 1;
   const c = document.createElement('canvas');
@@ -13,8 +13,9 @@ export function exportPng(scene: Scene, w: number, h: number, background: string
   const ctx = c.getContext('2d')!;
   ctx.scale(dpr, dpr);
   drawScene(ctx, w, h, scene, background);
-
   const s = scene.settings;
+  if (scene.flow) return download(c, `${fileName}-sequence.png`);
+
   const lw = Math.min(260, w - 24);
   const lx = w - lw - 12;
   const ly = h - LEGEND_HEIGHT - 20;
@@ -28,11 +29,15 @@ export function exportPng(scene: Scene, w: number, h: number, background: string
   ctx.fillText(t('export.profile', { fabric: fabricLabel(s.profile), thread: threadLabel(s.profile) }), lx, ly - 6, lw);
   drawLegend(ctx, lx, ly, lw, legendSpec(s));
 
+  download(c, `${fileName}-${s.metric}-density.png`);
+}
+
+function download(c: HTMLCanvasElement, name: string): void {
   c.toBlob((blob) => {
     if (!blob) return;
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `${fileName}-${s.metric}-density.png`;
+    a.download = name;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }, 'image/png');

@@ -52,6 +52,8 @@
         "softwareHelp": { "@type": "CreativeWork", "url": "https://pfedan.github.io/heatstitch/docs.html" },
         "featureList": [
           "Opens Tajima DST and Brother PES embroidery files",
+          "Sewing sequence player with color layers, stitch type and order coloring",
+          "Trim or carry jumps, with tie-off and tie-in stitches",
           "Thread length and needle penetration density heatmaps",
           "Checks density, short-stitch clusters and perforation for fabric and thread weight",
           "Automatic and manual stitch correction with undo and side by side comparison",
@@ -70,7 +72,10 @@
       <div class="brand">
         <img src="/favicon.svg" alt="" width="28" height="28" />
         <h1>heatstitch</h1>
-        <span class="tagline" data-i18n="app.tagline">Check and fix stitch density in DST and PES files</span>
+      </div>
+      <div class="modes segmented" role="radiogroup" id="modes" data-i18n-aria="mode.label">
+        <label data-i18n-title="mode.flow.hint"><input type="radio" name="mode" value="flow" /><span><span data-i18n="mode.flow"></span><kbd>1</kbd></span></label>
+        <label data-i18n-title="mode.density.hint"><input type="radio" name="mode" value="density" /><span><span data-i18n="mode.density"></span><kbd>2</kbd></span></label>
       </div>
       <nav class="topbar-end">
         <a class="doc-link" id="doc-link" href="docs.html" data-i18n="app.docs">Guide</a>
@@ -91,9 +96,33 @@
           </label>
           <button type="button" id="load-example" class="link" data-i18n="files.example"></button>
           <ul id="file-list" class="file-list"></ul>
+          <div class="file-actions" id="file-actions" hidden>
+            <span class="label save-label" data-i18n-title="save.note"><span data-i18n="save.title"></span> <span class="info" aria-hidden="true">ⓘ</span></span>
+            <div class="buttons">
+              <button type="button" id="save-dst" data-i18n="save.dst"></button>
+              <button type="button" id="save-pes" data-i18n="save.pes"></button>
+            </div>
+            <button type="button" id="revert" class="link" data-i18n="edit.revert" hidden></button>
+          </div>
         </section>
 
-        <section class="panel" id="material-panel">
+        <!-- Ablauf: what the colors mean -->
+        <section class="panel" data-mode="flow">
+          <h2 data-i18n="flow.settings"></h2>
+          <div class="field">
+            <span class="label" data-i18n="colorBy.title"></span>
+            <div class="segmented wrap" role="radiogroup">
+              <label><input type="radio" name="color-by" value="thread" /><span data-i18n="colorBy.thread"></span></label>
+              <label><input type="radio" name="color-by" value="order" /><span data-i18n="colorBy.order"></span></label>
+              <label><input type="radio" name="color-by" value="kind" /><span data-i18n="colorBy.kind"></span></label>
+              <label><input type="radio" name="color-by" value="length" /><span data-i18n="colorBy.length"></span></label>
+            </div>
+          </div>
+          <div id="color-key" class="color-key"></div>
+        </section>
+
+        <!-- Dichte: material, checks and heatmap -->
+        <section class="panel" id="material-panel" data-mode="density">
           <h2 data-i18n="profile.title"></h2>
           <div class="profile">
             <label class="field">
@@ -116,64 +145,130 @@
           </details>
         </section>
 
-        <section class="panel">
-          <h2 data-i18n="controls.title"></h2>
+        <section class="panel" data-mode="density">
+          <h2 data-i18n="heatmap.title"></h2>
           <div class="field">
             <span class="label" data-i18n="controls.metric"></span>
             <div class="segmented" role="radiogroup">
               <label><input type="radio" name="metric" value="thread" /><span data-i18n="metric.thread"></span></label>
               <label><input type="radio" name="metric" value="penetrations" /><span data-i18n="metric.penetrations"></span></label>
             </div>
+            <span class="unit-hint" id="unit-hint"></span>
           </div>
-          <label class="field">
-            <span class="label"><span data-i18n="controls.cell"></span> <output id="cell-out"></output></span>
-            <input type="range" id="cell" min="0.5" max="5" step="0.25" />
-          </label>
-          <label class="field">
-            <span class="label"><span data-i18n="controls.blur"></span> <output id="blur-out"></output></span>
-            <input type="range" id="blur" min="0" max="3" step="0.1" />
-          </label>
-          <label class="field">
-            <span class="label" data-i18n="controls.max"></span>
-            <input type="number" id="max" min="0.1" step="0.5" />
-          </label>
-          <span class="unit-hint" id="unit-hint"></span>
-          <label class="check"><input type="checkbox" id="include-jumps" /><span data-i18n="controls.jumps"></span></label>
-          <label class="check"><input type="checkbox" id="overlay" /><span data-i18n="controls.overlay"></span></label>
-          <label class="field indent">
-            <span class="label"><span data-i18n="controls.opacity"></span> <output id="opacity-out"></output></span>
-            <input type="range" id="opacity" min="0.05" max="1" step="0.05" />
-          </label>
-          <label class="check indent" data-i18n-title="controls.realistic.hint"><input type="checkbox" id="realistic" /><span data-i18n="controls.realistic"></span></label>
-          <label class="field indent2" data-i18n-title="controls.threadWidth.hint">
+          <details class="section" data-section="advanced">
+            <summary data-i18n="heatmap.advanced"></summary>
+            <label class="field">
+              <span class="label"><span data-i18n="controls.cell"></span> <output id="cell-out"></output></span>
+              <input type="range" id="cell" min="0.5" max="5" step="0.25" />
+            </label>
+            <label class="field">
+              <span class="label"><span data-i18n="controls.blur"></span> <output id="blur-out"></output></span>
+              <input type="range" id="blur" min="0" max="3" step="0.1" />
+            </label>
+            <label class="field">
+              <span class="label" data-i18n="controls.max"></span>
+              <input type="number" id="max" min="0.1" step="0.5" />
+            </label>
+            <label class="check"><input type="checkbox" id="include-jumps" /><span data-i18n="controls.jumps"></span></label>
+          </details>
+        </section>
+
+        <!-- Both modes: what is drawn and how -->
+        <details class="panel section" data-section="display">
+          <summary><h2 data-i18n="display.title"></h2></summary>
+          <div data-mode="density">
+            <label class="check"><input type="checkbox" id="overlay" /><span data-i18n="controls.overlay"></span></label>
+            <label class="field indent">
+              <span class="label"><span data-i18n="controls.opacity"></span> <output id="opacity-out"></output></span>
+              <input type="range" id="opacity" min="0.05" max="1" step="0.05" />
+            </label>
+          </div>
+          <label class="check" data-i18n-title="controls.realistic.hint"><input type="checkbox" id="realistic" /><span data-i18n="controls.realistic"></span></label>
+          <label class="field indent" data-i18n-title="controls.threadWidth.hint">
             <span class="label"><span data-i18n="controls.threadWidth"></span> <output id="thread-width-out"></output></span>
             <input type="range" id="thread-width" min="0.02" max="1" step="0.01" />
           </label>
-          <label class="check"><input type="checkbox" id="show-jumps" /><span data-i18n="controls.showJumps"></span></label>
-          <div class="buttons">
-            <button type="button" id="fit" data-i18n="controls.fit"></button>
-            <button type="button" id="export" class="primary" data-i18n="controls.export"></button>
-          </div>
-        </section>
+          <fieldset class="marks">
+            <legend data-i18n="marks.title"></legend>
+            <label class="check"><input type="checkbox" data-mark="jumps" /><span><i class="mk mk-jump" aria-hidden="true"></i><span data-i18n="marks.jumps"></span></span></label>
+            <label class="check" data-mode="flow" data-i18n-title="marks.threads.hint"><input type="checkbox" data-mark="threads" /><span><i class="mk mk-thread" aria-hidden="true"></i><span data-i18n="marks.threads"></span></span></label>
+            <label class="check"><input type="checkbox" data-mark="trims" /><span><i class="mk" aria-hidden="true">✂</i><span data-i18n="marks.trims"></span></span></label>
+            <label class="check"><input type="checkbox" data-mark="colors" /><span><i class="mk mk-num" aria-hidden="true">1</i><span data-i18n="marks.colors"></span></span></label>
+            <label class="check"><input type="checkbox" data-mark="ends" /><span><i class="mk mk-start" aria-hidden="true">S</i><span data-i18n="marks.ends"></span></span></label>
+            <label class="check" data-i18n-title="marks.points.hint"><input type="checkbox" data-mark="points" /><span><i class="mk mk-point" aria-hidden="true"></i><span data-i18n="marks.points"></span></span></label>
+          </fieldset>
+        </details>
 
-        <section class="panel">
-          <h2 data-i18n="stats.title"></h2>
+        <details class="panel section" data-section="stats">
+          <summary><h2 data-i18n="stats.title"></h2></summary>
           <dl id="stats" class="stats"></dl>
-          <div id="swatches" class="swatches"></div>
-        </section>
+          <label class="field speed">
+            <span class="label" data-i18n="stats.speed"></span>
+            <select id="machine-spm">
+              <option value="400">400</option>
+              <option value="600">600</option>
+              <option value="800">800</option>
+              <option value="1000">1000</option>
+              <option value="1200">1200</option>
+            </select>
+          </label>
+        </details>
       </aside>
 
       <section class="stage" id="stage">
         <canvas id="canvas"></canvas>
-        <canvas id="legend" class="legend" width="260" height="46"></canvas>
+        <div class="stage-tools stage-tools-start">
+          <button type="button" id="undo" class="tool" data-i18n-title="edit.undo.key" data-i18n-aria="edit.undo"><span aria-hidden="true">↶</span></button>
+          <button type="button" id="redo" class="tool" data-i18n-title="edit.redo.key" data-i18n-aria="edit.redo"><span aria-hidden="true">↷</span></button>
+        </div>
+        <div class="stage-tools stage-tools-end">
+          <button type="button" id="fit" class="tool" data-i18n-title="controls.fit.key"><span aria-hidden="true">⤢</span> <span data-i18n="controls.fit"></span></button>
+          <button type="button" id="export" class="tool" data-i18n-title="controls.export.hint"><span aria-hidden="true">⤓</span> PNG</button>
+        </div>
+        <canvas id="legend" class="legend" width="260" height="46" data-mode="density"></canvas>
         <div id="tooltip" class="tooltip" hidden></div>
         <p class="empty" id="empty" data-i18n="canvas.empty"></p>
-        <p class="hint" data-i18n="canvas.hint"></p>
-        <button type="button" id="findings-open" class="findings-chip" hidden></button>
+        <p class="hint" id="canvas-hint"></p>
+        <button type="button" id="findings-open" class="findings-chip" data-mode="density" hidden></button>
+        <div class="player" id="player" data-mode="flow" hidden>
+          <div class="player-buttons">
+            <button type="button" class="tool" data-play="block-prev" data-i18n-title="player.blockPrev"><span aria-hidden="true">⏮</span></button>
+            <button type="button" class="tool" data-play="prev" data-i18n-title="player.prev"><span aria-hidden="true">◂</span></button>
+            <button type="button" class="tool play" data-play="toggle" data-i18n-title="player.play"><span aria-hidden="true">▶</span></button>
+            <button type="button" class="tool" data-play="next" data-i18n-title="player.next"><span aria-hidden="true">▸</span></button>
+            <button type="button" class="tool" data-play="block-next" data-i18n-title="player.blockNext"><span aria-hidden="true">⏭</span></button>
+          </div>
+          <div class="player-track">
+            <div class="player-sections" id="player-sections" aria-hidden="true"></div>
+            <input type="range" id="player-pos" min="0" max="1" step="1" value="1" data-i18n-aria="player.pos" />
+          </div>
+          <span class="player-info" id="player-info"></span>
+          <select id="player-speed" data-i18n-title="player.speed" data-i18n-aria="player.speed">
+            <option value="1">1×</option>
+            <option value="10">10×</option>
+            <option value="50">50×</option>
+            <option value="250">250×</option>
+          </select>
+        </div>
       </section>
 
       <aside class="inspector" id="inspector">
-        <section class="panel findings" id="findings-panel">
+        <!-- Ablauf -->
+        <section class="panel layers" id="layers-panel" data-mode="flow">
+          <div class="panel-head">
+            <h2 data-i18n="layers.title"></h2>
+            <button type="button" class="link" id="layers-reset" data-i18n="layers.showAll" hidden></button>
+          </div>
+          <ul class="layer-list" id="layer-list"></ul>
+        </section>
+
+        <section class="panel jumps" id="jumps-panel" data-mode="flow">
+          <h2 data-i18n="jumps.title"></h2>
+          <div id="jumps" class="jumps-body" aria-live="polite"></div>
+        </section>
+
+        <!-- Dichte -->
+        <section class="panel findings" id="findings-panel" data-mode="density">
           <div class="findings-head">
             <h2 data-i18n="findings.title"></h2>
             <label class="check val-toggle" data-i18n-title="validation.overlay.key"><input type="checkbox" id="show-validation" /><span data-i18n="validation.overlay"></span></label>
@@ -182,7 +277,7 @@
           <div id="validation" class="findings-body" aria-live="polite"></div>
         </section>
 
-        <section class="panel" id="correct-panel">
+        <section class="panel" id="correct-panel" data-mode="density">
           <h2><span data-i18n="correct.title"></span> <span class="beta-badge" data-i18n="correct.beta" data-i18n-title="correct.beta.hint"></span></h2>
           <div class="field">
             <span class="label" data-i18n="correct.goal"></span>
@@ -223,24 +318,12 @@
               </select>
             </div>
           </div>
-          <div class="buttons">
-            <button type="button" id="undo" data-i18n="edit.undo" data-i18n-title="edit.undo.key"></button>
-            <button type="button" id="redo" data-i18n="edit.redo" data-i18n-title="edit.redo.key"></button>
-            <button type="button" id="revert" data-i18n="edit.revert"></button>
-          </div>
 
           <h3 data-i18n="compare.title"></h3>
           <div class="buttons">
             <button type="button" id="compare-toggle" aria-pressed="false" data-i18n="compare.start"></button>
           </div>
           <table class="compare-table" id="compare-table" hidden></table>
-
-          <h3 data-i18n="save.title"></h3>
-          <div class="buttons">
-            <button type="button" id="save-dst" data-i18n="save.dst"></button>
-            <button type="button" id="save-pes" data-i18n="save.pes"></button>
-          </div>
-          <p class="muted small" data-i18n="save.note"></p>
         </section>
       </aside>
     </main>
