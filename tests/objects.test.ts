@@ -5,7 +5,7 @@ import { DEFAULT_PREPARE, Preparer } from '../src/image/prepare';
 import { rememberObjects, sewObjects } from '../src/model/objects';
 import { BLUE } from './helpers/images';
 import { STITCH, TRIM, type Pattern } from '../src/model/pattern';
-import { analyze, measureFill, measureSatin, remember, remembered, rememberedIn, rememberShapes, restitch, restoreRemembered, shapeTrust } from '../src/model/restitch';
+import { analyze, carryOver, measureFill, measureSatin, remember, remembered, rememberedIn, rememberShapes, restitch, restoreRemembered, shapeTrust } from '../src/model/restitch';
 import { stitchKinds } from '../src/model/sequence';
 import { parsePattern } from '../src/parsers';
 import { DEFAULT_PROFILE } from '../src/validation/profiles';
@@ -257,5 +257,27 @@ describe('changing the kind of an object', () => {
     const r = restitch(p, objs, [0], { kind: 'satin', s: satinS }, kinds, 3, 'fill');
     expect(r.failed).toEqual([0]);
     expect(r.pattern).toBeDefined();
+  });
+
+  it('keeps an object and its shape when a stitch is moved by hand', () => {
+    const d = uShape();
+    const p = d.pattern;
+    rememberObjects(p, d.starts);
+    const kinds = stitchKinds(p);
+    const objs = sewObjects(p, kinds);
+    expect(objs.length).toBe(1);
+    const r = restitch(p, objs, [0], { kind: 'fill', s: { ...fillS, angle: 0 } }, kinds, 3);
+    rememberObjects(r.pattern, [r.starts[0]], r.ends[0]);
+    const q = r.pattern;
+    const o = sewObjects(q)[0];
+    remember(q, o, r.memory[0]);
+    const moved: Pattern = { ...q, x: q.x.slice(), y: q.y.slice() };
+    const k = o.first + Math.floor((o.last - o.first) / 2);
+    moved.x[k] += 3;
+    expect(remembered(moved, o)).toBeUndefined();
+    carryOver(q, o, moved, o.first, o.last);
+    const after = sewObjects(moved);
+    expect(after.length).toBe(1);
+    expect(remembered(moved, after[0])?.region).toBe(r.memory[0].region);
   });
 });

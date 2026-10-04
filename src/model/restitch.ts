@@ -9,7 +9,7 @@ import { pairs, satinStitches, underlay as satinUnderlay, type Column } from '..
 import type { Pt } from '../digitize/skeleton';
 import { distanceInside, distanceToSeeds } from '../image/edt';
 import { tidy, withRecords } from './edit';
-import { joinsIn, restoreJoin, stitchKey, type ObjectKind, type SewObject } from './objects';
+import { joinsIn, rememberObjects, restoreJoin, stitchKey, type ObjectKind, type SewObject } from './objects';
 import { JUMP, STITCH, TRIM, type Pattern } from './pattern';
 import { SATIN, TIE_STITCH } from './sequence';
 
@@ -147,6 +147,23 @@ function rememberKey(key: string, r: Remembered): void {
 
 export function remembered(p: Pattern, o: SewObject): Remembered | undefined {
   return memory.get(objectKey(p, o));
+}
+
+/**
+ * Keeps an object what it was after its stitches were changed by hand: the stitches from record
+ * `first` to `last` of `after` are object `o` of `before`. Its sections stay one object, and its
+ * shape, kind and settings move to the new stitches (the shape is not read from them again).
+ */
+export function carryOver(before: Pattern, o: SewObject, after: Pattern, first: number, last: number): void {
+  let a = 0;
+  let n = 0;
+  for (let i = 0; i <= last && i < after.cmd.length; i++) {
+    if (i === first) a = n;
+    if (after.cmd[i] === STITCH) n++;
+  }
+  rememberObjects(after, [a], n);
+  const r = remembered(before, o);
+  if (r) rememberKey(stitchKey(after, first, last), r);
 }
 
 /**
