@@ -7,6 +7,11 @@ import type { Lang } from './i18n';
 import { DEFAULT_PROFILE, normalizeProfile, threadWidthMm, type Profile } from './validation/profiles';
 import { ALL_CHECKS, normalizeChecks, type Checks } from './validation/validate';
 
+export interface PanelWidths {
+  side: number | null;
+  inspector: number | null;
+}
+
 export interface Scale {
   max: number;
 }
@@ -74,6 +79,8 @@ export interface Settings {
   showValidation: boolean;
   /** Findings column next to the canvas is shown (else only a chip on the canvas). */
   findingsOpen: boolean;
+  /** Widths of the side columns in px set by dragging their edges; null follows the window width. */
+  panels: PanelWidths;
   /** Material the validation thresholds are scaled for. */
   profile: Profile;
   /** Validation rules that are switched on. */
@@ -109,6 +116,7 @@ export const DEFAULTS: Settings = {
   liveLight: true,
   showValidation: true,
   findingsOpen: true,
+  panels: { side: null, inspector: null },
   profile: DEFAULT_PROFILE,
   checks: { ...ALL_CHECKS },
   correction: { ...DEFAULT_CORRECTION },
@@ -153,6 +161,7 @@ export function loadSettings(): Settings {
       profile,
       threadMm: typeof s.threadMm === 'number' && s.threadMm > 0 ? s.threadMm : threadWidthMm(profile),
       liveLight: typeof s.liveLight === 'boolean' ? s.liveLight : DEFAULTS.liveLight,
+      panels: { side: width(s.panels?.side), inspector: width(s.panels?.inspector) },
       checks: normalizeChecks(s.checks),
       correction: normalizeCorrection(s.correction),
       image: normalizeImage(s.image),
@@ -161,6 +170,8 @@ export function loadSettings(): Settings {
     return structuredClone(DEFAULTS);
   }
 }
+
+const width = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.round(v) : null);
 
 const num = (v: unknown, lo: number, hi: number, fallback: number) =>
   typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : fallback;

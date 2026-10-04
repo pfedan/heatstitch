@@ -66,6 +66,7 @@ import { recommendedSpacing } from './validation/profiles';
 import { numberInColor, overlaps, rememberObjects, sewObjects, splitObject, type SewObject } from './model/objects';
 import { conflicts, moveStats, optimizeOrder, reorder, violations } from './model/order';
 import { Player } from './ui/player';
+import { installPanelResize } from './ui/panelResize';
 import type { Key } from './i18n';
 import { decodeProject, encodeProject, isProjectName, PROJECT_EXT, PROJECT_MIME, projectSettings, ProjectError, type Project, type ProjectSettings } from './storage/project';
 import { threadWidthMm } from './validation/profiles';
@@ -214,6 +215,7 @@ function setFindingsOpen(open: boolean): void {
 $('findings-close').addEventListener('click', () => setFindingsOpen(false));
 $('findings-open').addEventListener('click', () => setFindingsOpen(true));
 setFindingsOpen(settings.findingsOpen);
+installPanelResize($('layout'), settings.panels, () => saveSettings(settings));
 
 
 // Ablauf mode ------------------------------------------------------------------
