@@ -30,7 +30,7 @@ export interface Region {
 
 const MARGIN = 6;
 
-function signedField(mask: Uint8Array, w: number, h: number, pxMm: number): Float32Array {
+export function signedField(mask: Uint8Array, w: number, h: number, pxMm: number): Float32Array {
   const dIn = distanceInside(mask, w, h);
   const dOut = distanceToSeeds(mask, w, h);
   const f = new Float32Array(w * h);

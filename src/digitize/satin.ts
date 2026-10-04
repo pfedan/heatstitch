@@ -23,6 +23,8 @@ export interface SatinParams {
   pull: number;
   /** Longer stitches are split (mm). */
   splitMm: number;
+  /** Short stitches on the inside of curves (default on). */
+  short?: boolean;
 }
 
 export interface Column {
@@ -163,7 +165,7 @@ export function pairs(c: Column, p: SatinParams, ends?: ColumnEnds): [Pt, Pt][] 
     return [[a[0] + u[0] * p.pull, a[1] + u[1] * p.pull], [b[0] - u[0] * p.pull, b[1] - u[1] * p.pull]];
   });
   // Short stitches on the inside of curves.
-  for (const side of [0, 1] as const) {
+  for (const side of p.short === false ? [] : ([0, 1] as const)) {
     let ref = comp.length ? comp[0][side] : null;
     for (let i = 1; i < comp.length; i++) {
       const q = comp[i][side];

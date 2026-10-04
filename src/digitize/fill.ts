@@ -29,6 +29,8 @@ export interface FillParams {
   /** Rows are lengthened at both ends by this (mm). */
   pull: number;
   underlay: boolean;
+  /** Where travel between sections may run; the region itself by default. */
+  travel?: Region;
 }
 
 export interface FillResult {
@@ -455,7 +457,7 @@ export function fillRegion(r: Region, p: FillParams, start: Pt, neighbours: numb
   const top = rows(r, r.sdf, f, p.spacing, 0);
   if (!top.length) return null;
   const runs: Pt[][] = [];
-  const grid = new TravelGrid(r);
+  const grid = new TravelGrid(p.travel ?? r);
   const pos = p.underlay ? sewUnderlay(r, angle + 90, p.spacing, start, grid, runs) : start;
   sewAll(f, sections(r, r.sdf, f, top, p.spacing), p.spacing, p.stitch, p.pull, pos, grid, true, runs);
   return { runs, angle };

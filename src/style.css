@@ -2357,3 +2357,112 @@ body[data-mode='flow'] .stage .hint {
   flex: 1 1 0;
   min-height: 220px;
 }
+
+/* Stitch settings of the selected objects ------------------------------------- */
+
+.object-stitches:not(:empty) {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.stitch-head h3 {
+  margin: 0;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.stitch-head .kind-icon {
+  color: var(--accent);
+}
+
+.stitch-tabs button {
+  flex: 1;
+  border: none;
+  border-radius: 0;
+  padding: 5px 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  font-size: 12px;
+}
+
+.stitch-tabs .kind-icon {
+  padding: 0;
+  display: inline-flex;
+}
+
+.stitch-tabs button.active {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.stitch-tabs button.active .kind-icon {
+  color: var(--accent-ink);
+}
+
+.stitch-field {
+  margin-bottom: 0;
+}
+
+.stitch-field output {
+  float: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.band-track {
+  position: relative;
+  display: block;
+}
+
+.band-track input {
+  display: block;
+  margin: 0;
+}
+
+.band-track .band {
+  position: absolute;
+  bottom: -3px;
+  height: 3px;
+  border-radius: 2px;
+  background: #2f9e5b;
+  pointer-events: none;
+}
+
+.angle-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.angle-dial {
+  position: relative;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: repeating-linear-gradient(0deg, transparent 0 3px, transparent 3px 6px);
+}
+
+.angle-dial span {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  top: 50%;
+  height: 2px;
+  margin-top: -1px;
+  border-radius: 1px;
+  background: var(--accent);
+}
+
+.stitch-note {
+  margin: 2px 0 0;
+}
