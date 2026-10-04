@@ -129,7 +129,8 @@ export class CorrectPanel {
 
     this.undoBtn.disabled = !f?.undo.length || busy;
     this.redoBtn.disabled = !f?.redo.length || busy;
-    this.revertBtn.disabled = !FileList.edited(f) || busy;
+    this.revertBtn.disabled = busy;
+    this.revertBtn.hidden = !FileList.edited(f);
     this.saveDst.disabled = this.savePes.disabled = !loaded || busy;
 
     this.report.replaceChildren(...this.message(st.message));

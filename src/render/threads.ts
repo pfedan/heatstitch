@@ -1,4 +1,5 @@
 import { COLOR_CHANGE, STITCH, type Pattern, type ThreadColor } from '../model/pattern';
+import type { StitchStyle } from './flow';
 import { GlThreadRenderer } from './threadsGl';
 import type { Viewport } from './viewport';
 
@@ -65,11 +66,12 @@ export function drawThreads(
   p: Pattern,
   opacity: number,
   threadMm: number,
+  style?: StitchStyle,
 ): boolean {
   const r = renderer();
   if (!r) return false;
   const { width: cw, height: ch } = ctx.canvas;
-  r.draw(p, vp, ctx.getTransform().a, cw, ch, threadMm);
+  r.draw(p, vp, ctx.getTransform().a, cw, ch, threadMm, style);
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.globalAlpha = opacity;

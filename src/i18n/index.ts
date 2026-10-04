@@ -27,13 +27,16 @@ export function t(key: Key, vars?: Record<string, string | number>): string {
   return vars ? s.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m)) : s;
 }
 
-/** Fills every element carrying data-i18n="key" (text) or data-i18n-title="key" (title attribute). */
+/** Fills every element carrying data-i18n="key" (text), data-i18n-title="key" (title) or data-i18n-aria="key" (aria-label). */
 export function applyI18n(root: ParentNode): void {
   root.querySelectorAll<HTMLElement>('[data-i18n]').forEach((el) => {
     el.textContent = t(el.dataset.i18n as Key);
   });
   root.querySelectorAll<HTMLElement>('[data-i18n-title]').forEach((el) => {
     el.title = t(el.dataset.i18nTitle as Key);
+  });
+  root.querySelectorAll<HTMLElement>('[data-i18n-aria]').forEach((el) => {
+    el.setAttribute('aria-label', t(el.dataset.i18nAria as Key));
   });
 }
 
