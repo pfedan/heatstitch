@@ -25,7 +25,10 @@ import { DIVIDER_GRAB_PX, drawDivider } from './render/compare';
 import type { Pattern } from './model/pattern';
 import type { Measurement } from './validation/measure';
 import { initUpdateNotice } from './ui/updateNotice';
-import { downloadPattern, outputFileName } from './writers';
+import { downloadPattern, outputFileName, writePattern } from './writers';
+import { ImageMode } from './ui/imageMode';
+import { lightFromPointer, lightFromTilt, sweep } from './render/light';
+import { classify } from './validation/validate';
 import { setTrims } from './model/jumps';
 import {
   colorBlocks,
@@ -425,22 +428,26 @@ function flowTooltip(sx: number, sy: number): void {
 }
 
 function setMode(mode: Mode): void {
+  const previous = document.body.dataset.mode;
   settings.mode = mode;
   saveSettings(settings);
   document.body.dataset.mode = mode;
   document.querySelectorAll<HTMLInputElement>('input[name="mode"]').forEach((i) => (i.checked = i.value === mode));
-  if (mode === 'flow') {
+  if (mode !== 'density') {
     if (editor.active) setEditing(false);
     comparing = false;
     hoverZone = null;
-  } else {
+  }
+  if (mode !== 'flow') {
     player.pause();
     if (!player.complete) player.set(Number.MAX_SAFE_INTEGER);
   }
   controls.refresh();
-  $('canvas-hint').textContent = t(mode === 'flow' ? 'canvas.hint.flow' : 'canvas.hint');
-  empty.textContent = t(mode === 'flow' ? 'canvas.empty.flow' : 'canvas.empty');
+  $('canvas-hint').textContent = t(mode === 'flow' ? 'canvas.hint.flow' : mode === 'image' ? 'canvas.hint.image' : 'canvas.hint');
+  empty.textContent = t(mode === 'flow' ? 'canvas.empty.flow' : mode === 'image' ? 'canvas.empty.image' : 'canvas.empty');
   tooltip.hidden = true;
+  // The image and the loaded file have their own place on the stage.
+  if ((previous === 'image') !== (mode === 'image')) fitView();
   recompute();
 }
 document.querySelectorAll<HTMLInputElement>('input[name="mode"]').forEach((i) =>
@@ -458,6 +465,11 @@ function redraw(): void {
     frame = 0;
     const dpr = window.devicePixelRatio || 1;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (settings.mode === 'image') {
+      imageMode.draw(ctx, stageW, stageH, vp, stageBg());
+      empty.hidden = imageMode.hasImage;
+      return;
+    }
     drawScene(ctx, stageW, stageH, scene(), stageBg());
     if (showCompare()) {
       const x = Math.round(split * stageW);
@@ -586,6 +598,11 @@ function stepZone(dir: 1 | -1): void {
 }
 
 function fitView(f: LoadedFile | null = files.active): void {
+  if (settings.mode === 'image') {
+    imageMode.fit(vp, stageW, stageH);
+    redraw();
+    return;
+  }
   const b = f?.pattern?.bounds;
   if (!b) return;
   vp.fit(b.minX / 10, b.minY / 10, b.maxX / 10, b.maxY / 10, stageW, stageH);
@@ -649,6 +666,11 @@ function setEditing(on: boolean): void {
 
 /** Undo, redo or revert: indices change, so the selection is dropped. */
 function history(step: 'undo' | 'redo' | 'revert'): void {
+  if (settings.mode === 'image') {
+    if (step === 'undo') imageMode.undo();
+    else if (step === 'redo') imageMode.redo();
+    return;
+  }
   const f = files.active;
   if (!f) return;
   if (step === 'undo') files.undo(f);
@@ -719,10 +741,76 @@ const profile = bindProfile(settings, () => {
   saveSettings(settings);
   // Classification is cheap: every file is re-checked instantly against the new limits.
   files.setProfile(settings.profile, settings.checks);
+  imageMode.profileChanged();
   controls.refresh();
   hoverZone = selectedZone = null;
   tooltip.hidden = true;
   redraw();
+});
+
+const imageMode = new ImageMode({
+  settings,
+  save: () => saveSettings(settings),
+  redraw,
+  fit: () => fitView(),
+  reveal: (first) => {
+    if (first) shine();
+    else if (settings.realistic && settings.liveLight && settings.image.view === 'stitches') sweep(redraw);
+  },
+  validate: async (p) => classify(await validator.measure(p), settings.profile, settings.checks),
+  takeOver: async (p, name) => {
+    await files.add([new File([writePattern(p, 'pes') as BlobPart], `${name}.pes`)]);
+    setMode('flow');
+  },
+});
+
+// Living thread: the light of the realistic view follows the pointer or the tilt of a phone -------
+
+/** Whether the canvas shows realistic threads right now. */
+const threadsShown = () =>
+  settings.realistic &&
+  (settings.mode === 'flow' || (settings.mode === 'density' && (settings.overlay || editor.active)) || (settings.mode === 'image' && settings.image.view === 'stitches'));
+
+let tiltListening = false;
+function listenTilt(): void {
+  if (tiltListening) return;
+  tiltListening = true;
+  window.addEventListener('deviceorientation', (e) => {
+    if (e.beta === null || e.gamma === null || !settings.liveLight || !threadsShown()) return;
+    lightFromTilt(e.beta, e.gamma);
+    redraw();
+  });
+}
+/** iOS asks before a page may read the tilt, and only from a tap. */
+const tiltPermission = (window.DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<string> } | undefined)?.requestPermission;
+async function allowTilt(): Promise<void> {
+  if (!tiltPermission) return listenTilt();
+  try {
+    if ((await tiltPermission.call(window.DeviceOrientationEvent)) === 'granted') {
+      listenTilt();
+      $('allow-tilt').hidden = true;
+    }
+  } catch {
+    // Refused or not over HTTPS: the pointer still moves the light.
+  }
+}
+if ('DeviceOrientationEvent' in window && !tiltPermission) listenTilt();
+$('allow-tilt').hidden = !tiltPermission;
+$('allow-tilt').addEventListener('click', () => void allowTilt());
+
+/** Shows the converted image as sewn thread and lets the light go round once. */
+function shine(): void {
+  settings.realistic = true;
+  settings.liveLight = true;
+  settings.image.view = 'stitches';
+  saveSettings(settings);
+  controls.refresh();
+  imageMode.render();
+  sweep(redraw);
+}
+$('image-shine').addEventListener('click', () => {
+  void allowTilt();
+  shine();
 });
 
 const langSelect = $<HTMLSelectElement>('lang');
@@ -733,6 +821,7 @@ const applyLang = (l: Lang) => {
   profile.refresh();
   files.render();
   player.render();
+  imageMode.render();
   setMode(settings.mode);
   redraw();
 };
@@ -754,9 +843,23 @@ exportBtn.addEventListener('click', () => {
 
 const input = $<HTMLInputElement>('file-input');
 input.addEventListener('change', () => {
-  if (input.files) void files.add(input.files);
+  if (input.files) void openFiles(input.files);
   input.value = '';
 });
+
+const IMAGE_FILE = /\.(png|jpe?g|gif|webp|bmp|svg|avif)$/i;
+
+/** Embroidery files go to the file list, an image to the Bild mode. */
+function openFiles(list: Iterable<File>): Promise<void> {
+  const all = [...list];
+  const image = all.find((f) => f.type.startsWith('image/') || IMAGE_FILE.test(f.name));
+  const rest = all.filter((f) => f !== image && !f.type.startsWith('image/') && !IMAGE_FILE.test(f.name));
+  if (image) {
+    setMode('image');
+    void imageMode.load(image);
+  }
+  return rest.length ? files.add(rest) : Promise.resolve();
+}
 
 const exampleSelect = $<HTMLSelectElement>('load-example');
 exampleSelect.addEventListener('change', async () => {
@@ -788,7 +891,7 @@ window.addEventListener('drop', (e) => {
   e.preventDefault();
   dragDepth = 0;
   document.body.classList.remove('dragging');
-  if (e.dataTransfer?.files.length) void files.add(e.dataTransfer.files);
+  if (e.dataTransfer?.files.length) void openFiles(e.dataTransfer.files);
 });
 
 // Installed PWA opened via "Open with" on a .dst/.pes file (manifest file_handlers).
@@ -798,7 +901,7 @@ interface LaunchParams {
 const launchQueue = (window as unknown as { launchQueue?: { setConsumer(cb: (p: LaunchParams) => void): void } })
   .launchQueue;
 launchQueue?.setConsumer(async (params) => {
-  if (params.files.length) void files.add(await Promise.all(params.files.map((h) => h.getFile())));
+  if (params.files.length) void openFiles(await Promise.all(params.files.map((h) => h.getFile())));
 });
 
 window.addEventListener('keydown', (e) => {
@@ -839,8 +942,12 @@ window.addEventListener('keydown', (e) => {
       return;
     }
   }
-  if (e.key === '1' || e.key === '2') {
-    setMode(e.key === '1' ? 'flow' : 'density');
+  if (e.key === '1' || e.key === '2' || e.key === '3') {
+    setMode(e.key === '1' ? 'flow' : e.key === '2' ? 'density' : 'image');
+    return;
+  }
+  if (settings.mode === 'image') {
+    if (e.key === 'f') fitView();
     return;
   }
   if (settings.mode === 'flow') {
@@ -902,6 +1009,7 @@ canvas.addEventListener(
 
 /** Tooltip for the side of the divider the pointer is on. */
 function showTooltip(sx: number, sy: number): void {
+  if (settings.mode === 'image') return;
   if (settings.mode === 'flow') return flowTooltip(sx, sy);
   const left = showCompare() && sx < split * stageW;
   const f = files.active;
@@ -914,6 +1022,8 @@ const pointers = new Map<number, [number, number]>();
 let pinchDist = 0;
 /** Where a one-finger or mouse press started, to tell a click from a drag. */
 let pressAt: [number, number] | null = null;
+/** Pointer painting a brush stroke in the Bild mode, or null. */
+let painting: number | null = null;
 
 canvas.addEventListener('pointerdown', (e) => {
   canvas.setPointerCapture(e.pointerId);
@@ -921,6 +1031,16 @@ canvas.addEventListener('pointerdown', (e) => {
   pointers.set(e.pointerId, pos);
   pressAt = pointers.size === 1 ? pos : null;
   let mode: 'move' | 'band' | 'pan' = 'pan';
+  if (settings.mode === 'image' && imageMode.painting && pointers.size === 1 && e.button === 0) {
+    painting = e.pointerId;
+    imageMode.paintDown(...vp.toWorld(pos[0], pos[1]));
+    return;
+  }
+  // A second finger while painting means zooming: the stroke is dropped.
+  if (painting !== null) {
+    painting = null;
+    imageMode.paintCancel();
+  }
   if (pointers.size === 1 && e.button === 0 && nearDivider(pos[0])) {
     splitDrag = true;
     stage.classList.add('splitting');
@@ -943,6 +1063,18 @@ canvas.addEventListener('pointermove', (e) => {
   const pos = local(e);
   const prev = pointers.get(e.pointerId);
   const [wx, wy] = vp.toWorld(pos[0], pos[1]);
+  if (settings.mode === 'image') {
+    if (painting === e.pointerId) {
+      imageMode.paintMove(wx, wy);
+      return;
+    }
+    imageMode.hover(wx, wy);
+    if (!prev && imageMode.painting) redraw();
+  }
+  if (settings.liveLight && e.pointerType === 'mouse' && threadsShown()) {
+    lightFromPointer(pos[0], pos[1], stageW, stageH);
+    redraw();
+  }
   if (splitDrag) {
     split = Math.min(0.98, Math.max(0.02, pos[0] / stageW));
     redraw();
@@ -967,6 +1099,13 @@ canvas.addEventListener('pointermove', (e) => {
 
 const endPointer = (e: PointerEvent) => {
   const pos = local(e);
+  if (painting === e.pointerId) {
+    painting = null;
+    pointers.delete(e.pointerId);
+    if (e.type === 'pointerup') imageMode.paintUp();
+    else imageMode.paintCancel();
+    return;
+  }
   if (pressAt && e.type === 'pointerup' && settings.mode === 'flow' && Math.hypot(pos[0] - pressAt[0], pos[1] - pressAt[1]) < 4) {
     const p = files.active?.pattern;
     if (p) {
@@ -992,7 +1131,17 @@ canvas.addEventListener('pointercancel', (e) => {
   editor.cancel();
   endPointer(e);
 });
-canvas.addEventListener('pointerleave', () => (tooltip.hidden = true));
+canvas.addEventListener('pointerleave', () => {
+  tooltip.hidden = true;
+  if (settings.mode === 'image') {
+    imageMode.leave();
+    redraw();
+  }
+});
+// The right button pans while painting.
+canvas.addEventListener('contextmenu', (e) => {
+  if (settings.mode === 'image') e.preventDefault();
+});
 canvas.addEventListener('dblclick', () => {
   if (!editor.active) fitView();
 });
@@ -1002,3 +1151,4 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', red
 files.render();
 redraw();
 void files.restore();
+void imageMode.restore();

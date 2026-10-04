@@ -25,7 +25,7 @@ export default defineConfig({
       manifest: {
         name: 'heatstitch',
         short_name: 'heatstitch',
-        description: 'Check and fix stitch density in DST and PES embroidery files',
+        description: 'Check and fix stitch density in DST and PES embroidery files, and turn images into embroidery files',
         theme_color: '#1b1026',
         background_color: '#141118',
         display: 'standalone',
@@ -37,7 +37,13 @@ export default defineConfig({
         file_handlers: [
           {
             action: base,
-            accept: { 'application/octet-stream': ['.dst', '.pes'] },
+            accept: {
+              'application/octet-stream': ['.dst', '.pes'],
+              'image/png': ['.png'],
+              'image/jpeg': ['.jpg', '.jpeg'],
+              'image/webp': ['.webp'],
+              'image/svg+xml': ['.svg'],
+            },
           },
         ],
       },

@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400">
+  <!-- Example for the Bild mode: fills, satin-width strokes and fine lines. -->
+  <circle cx="200" cy="200" r="182" fill="#f4e4bc" stroke="#2f5d3a" stroke-width="18"/>
+  <path d="M200 330 C196 280 204 240 200 196" fill="none" stroke="#3f8a43" stroke-width="10" stroke-linecap="round"/>
+  <path d="M199 292 C160 290 132 262 128 236 C166 238 194 262 199 292 Z" fill="#5aa84f"/>
+  <path d="M201 262 C238 258 262 232 266 206 C230 210 204 234 201 262 Z" fill="#5aa84f"/>
+  <path d="M199 292 C170 280 150 262 136 244" fill="none" stroke="#2f5d3a" stroke-width="2.5"/>
+  <path d="M201 262 C226 252 244 236 258 216" fill="none" stroke="#2f5d3a" stroke-width="2.5"/>
+  <g transform="translate(200 150)">
+    <g fill="#e2557d">
+      <ellipse rx="34" ry="62" transform="rotate(0) translate(0 -58)"/>
+      <ellipse rx="34" ry="62" transform="rotate(72) translate(0 -58)"/>
+      <ellipse rx="34" ry="62" transform="rotate(144) translate(0 -58)"/>
+      <ellipse rx="34" ry="62" transform="rotate(216) translate(0 -58)"/>
+      <ellipse rx="34" ry="62" transform="rotate(288) translate(0 -58)"/>
+    </g>
+    <g fill="none" stroke="#a8264f" stroke-width="2.5" stroke-linecap="round">
+      <path d="M0 -40 L0 -96" transform="rotate(0)"/>
+      <path d="M0 -40 L0 -96" transform="rotate(72)"/>
+      <path d="M0 -40 L0 -96" transform="rotate(144)"/>
+      <path d="M0 -40 L0 -96" transform="rotate(216)"/>
+      <path d="M0 -40 L0 -96" transform="rotate(288)"/>
+    </g>
+    <circle r="34" fill="#f6c431" stroke="#d9822b" stroke-width="8"/>
+  </g>
+</svg>

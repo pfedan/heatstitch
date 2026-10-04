@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>heatstitch: stitch density heatmap, check and fix for DST and PES embroidery files</title>
-    <meta name="description" content="Free web app for machine embroidery: open DST or PES files, see thread density as a heatmap, find areas that are too dense for your fabric and thread, fix them automatically or by hand, and save as DST or PES." />
+    <meta name="description" content="Free web app for machine embroidery: open DST or PES files, see thread density as a heatmap, find areas that are too dense for your fabric and thread, fix them automatically or by hand, and save as DST or PES. Turns images and photos into embroidery files with fill, satin and running stitch." />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://pfedan.github.io/heatstitch/" />
     <meta name="application-name" content="heatstitch" />
@@ -58,6 +58,7 @@
           "Checks density, short-stitch clusters and perforation for fabric and thread weight",
           "Automatic and manual stitch correction with undo and side by side comparison",
           "Saves corrected designs as DST or PES",
+          "Turns images and photos into embroidery files: color reduction to thread colors, brush touch-up, fill, satin and running stitch",
           "Realistic thread preview",
           "Installable, works offline"
         ]
@@ -76,6 +77,7 @@
       <div class="modes segmented" role="radiogroup" id="modes" data-i18n-aria="mode.label">
         <label data-i18n-title="mode.flow.hint"><input type="radio" name="mode" value="flow" /><span><span data-i18n="mode.flow"></span><kbd>1</kbd></span></label>
         <label data-i18n-title="mode.density.hint"><input type="radio" name="mode" value="density" /><span><span data-i18n="mode.density"></span><kbd>2</kbd></span></label>
+        <label data-i18n-title="mode.image.hint"><input type="radio" name="mode" value="image" /><span><span data-i18n="mode.image"></span><kbd>3</kbd></span></label>
       </div>
       <nav class="topbar-end">
         <a class="doc-link" id="doc-link" href="docs.html" data-i18n="app.docs">Guide</a>
@@ -88,7 +90,7 @@
 
     <main class="layout" id="layout">
       <aside class="sidebar">
-        <section class="panel">
+        <section class="panel" data-mode="flow density">
           <h2 data-i18n="files.title"></h2>
           <label class="dropzone" id="dropzone">
             <input type="file" id="file-input" accept=".dst,.pes,.DST,.PES" multiple hidden />
@@ -115,6 +117,82 @@
           </div>
         </section>
 
+        <!-- Bild: the image and how it is prepared -->
+        <section class="panel" data-mode="image">
+          <h2 data-i18n="image.title"></h2>
+          <label class="dropzone" id="image-drop">
+            <input type="file" id="image-input" accept="image/*" hidden />
+            <span data-i18n="image.drop"></span>
+          </label>
+          <p class="privacy-note" data-i18n-title="files.privacy.detail">
+            <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path d="M4.5 7V5a3.5 3.5 0 0 1 7 0v2" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="2.5" y="7" width="11" height="8" rx="1.5" fill="currentColor"/></svg>
+            <span data-i18n="files.privacy"></span>
+          </p>
+          <button type="button" id="image-example" class="link" data-i18n="image.example"></button>
+          <p class="muted small" id="image-info"></p>
+          <details class="ai-prep" data-section="aiPrep">
+            <summary data-i18n="image.ai.title"></summary>
+            <p class="small" data-i18n="image.ai.intro"></p>
+            <ol class="small">
+              <li data-i18n="image.ai.step1"></li>
+              <li data-i18n="image.ai.step2"></li>
+              <li data-i18n="image.ai.step3"></li>
+            </ol>
+            <textarea id="image-ai-prompt" class="ai-prompt" rows="9" readonly data-i18n-aria="image.ai.prompt"></textarea>
+            <div class="buttons">
+              <button type="button" id="image-ai-copy" data-i18n="image.ai.copy"></button>
+            </div>
+            <p class="muted small" data-i18n="image.ai.note"></p>
+          </details>
+        </section>
+
+        <section class="panel" data-mode="image">
+          <h2 data-i18n="image.prep"></h2>
+          <label class="field">
+            <span class="label"><span data-i18n="image.width"></span> <output id="image-height"></output></span>
+            <input type="number" id="image-width" min="10" max="400" step="1" />
+          </label>
+          <label class="field" data-i18n-title="image.colors.hint">
+            <span class="label"><span data-i18n="image.colors"></span> <output id="image-colors-out"></output></span>
+            <input type="range" id="image-colors" min="2" max="16" step="1" />
+          </label>
+          <label class="field" data-i18n-title="image.smooth.hint">
+            <span class="label"><span data-i18n="image.smooth"></span> <output id="image-smooth-out"></output></span>
+            <input type="range" id="image-smooth" min="0" max="5" step="1" />
+          </label>
+          <label class="field" data-i18n-title="image.minArea.hint">
+            <span class="label"><span data-i18n="image.minArea"></span> <output id="image-min-area-out"></output></span>
+            <input type="range" id="image-min-area" min="0.5" max="20" step="0.5" />
+          </label>
+          <label class="check" data-i18n-title="image.background.hint"><input type="checkbox" id="image-background" /><span data-i18n="image.background"></span></label>
+          <label class="check" data-i18n-title="image.threads.hint"><input type="checkbox" id="image-threads" /><span data-i18n="image.threads"></span></label>
+        </section>
+
+        <section class="panel" data-mode="image">
+          <h2 data-i18n="image.stitch"></h2>
+          <p class="muted small" id="image-material"></p>
+          <div class="field-row">
+            <label class="field" data-i18n-title="image.spacing.hint">
+              <span class="label" data-i18n="image.spacing"></span>
+              <input type="number" id="image-spacing" min="0.2" max="1.5" step="0.05" />
+            </label>
+            <label class="field" data-i18n-title="image.pull.hint">
+              <span class="label" data-i18n="image.pull"></span>
+              <input type="number" id="image-pull" min="0" max="1" step="0.05" />
+            </label>
+          </div>
+          <label class="field" data-i18n-title="image.angle.hint">
+            <span class="label" data-i18n="image.angle"></span>
+            <select id="image-angle"></select>
+          </label>
+          <label class="field" data-i18n-title="image.satinMax.hint">
+            <span class="label"><span data-i18n="image.satinMax"></span> <output id="image-satin-max-out"></output></span>
+            <input type="range" id="image-satin-max" min="3" max="10" step="0.5" />
+          </label>
+          <label class="check" data-i18n-title="image.underlay.hint"><input type="checkbox" id="image-underlay" /><span data-i18n="image.underlay"></span></label>
+          <button type="button" id="image-stitch-reset" class="link" data-i18n="image.stitch.reset" hidden></button>
+        </section>
+
         <!-- Ablauf: what the colors mean -->
         <section class="panel" data-mode="flow">
           <h2 data-i18n="flow.settings"></h2>
@@ -131,7 +209,7 @@
         </section>
 
         <!-- Dichte: material, checks and heatmap -->
-        <section class="panel" id="material-panel" data-mode="density">
+        <section class="panel" id="material-panel" data-mode="density image">
           <h2 data-i18n="profile.title"></h2>
           <div class="profile">
             <label class="field">
@@ -144,11 +222,11 @@
             </label>
             <p class="profile-info" id="profile-info"></p>
           </div>
-          <fieldset class="checks">
+          <fieldset class="checks" data-mode="density">
             <legend data-i18n="checks.title"></legend>
             <div id="checks"></div>
           </fieldset>
-          <details class="explain">
+          <details class="explain" data-mode="density">
             <summary data-i18n="validation.explain"></summary>
             <ul id="explain"></ul>
           </details>
@@ -197,7 +275,9 @@
             <span class="label"><span data-i18n="controls.threadWidth"></span> <output id="thread-width-out"></output></span>
             <input type="range" id="thread-width" min="0.02" max="1" step="0.01" />
           </label>
-          <fieldset class="marks">
+          <label class="check indent" data-i18n-title="controls.liveLight.hint"><input type="checkbox" id="live-light" /><span data-i18n="controls.liveLight"></span></label>
+          <button type="button" id="allow-tilt" class="link indent" data-i18n="controls.tilt" hidden></button>
+          <fieldset class="marks" data-mode="flow density">
             <legend data-i18n="marks.title"></legend>
             <label class="check"><input type="checkbox" data-mark="jumps" /><span><i class="mk mk-jump" aria-hidden="true"></i><span data-i18n="marks.jumps"></span></span></label>
             <label class="check" data-mode="flow" data-i18n-title="marks.threads.hint"><input type="checkbox" data-mark="threads" /><span><i class="mk mk-thread" aria-hidden="true"></i><span data-i18n="marks.threads"></span></span></label>
@@ -208,7 +288,7 @@
           </fieldset>
         </details>
 
-        <details class="panel section" data-section="stats">
+        <details class="panel section" data-section="stats" data-mode="flow density">
           <summary><h2 data-i18n="stats.title"></h2></summary>
           <dl id="stats" class="stats"></dl>
           <label class="field speed">
@@ -226,14 +306,21 @@
 
       <section class="stage" id="stage">
         <canvas id="canvas"></canvas>
-        <div class="stage-tools stage-tools-start">
+        <div class="stage-tools stage-tools-start" data-mode="flow density">
           <button type="button" id="undo" class="tool" data-i18n-title="edit.undo.key" data-i18n-aria="edit.undo"><span aria-hidden="true">↶</span></button>
           <button type="button" id="redo" class="tool" data-i18n-title="edit.redo.key" data-i18n-aria="edit.redo"><span aria-hidden="true">↷</span></button>
         </div>
         <div class="stage-tools stage-tools-end">
+          <button type="button" id="image-shine" class="tool primary" data-mode="image" data-i18n-title="image.shine.hint" hidden><span aria-hidden="true">✦</span> <span data-i18n="image.shine"></span></button>
           <button type="button" id="fit" class="tool" data-i18n-title="controls.fit.key"><span aria-hidden="true">⤢</span> <span data-i18n="controls.fit"></span></button>
-          <button type="button" id="export" class="tool" data-i18n-title="controls.export.hint"><span aria-hidden="true">⤓</span> PNG</button>
+          <button type="button" id="export" class="tool" data-mode="flow density" data-i18n-title="controls.export.hint"><span aria-hidden="true">⤓</span> PNG</button>
         </div>
+        <div class="stage-tools stage-tools-center segmented" role="radiogroup" data-mode="image" data-i18n-aria="image.view">
+          <label><input type="radio" name="image-view" value="original" /><span data-i18n="image.view.original"></span></label>
+          <label><input type="radio" name="image-view" value="prepared" /><span data-i18n="image.view.prepared"></span></label>
+          <label><input type="radio" name="image-view" value="stitches" /><span data-i18n="image.view.stitches"></span></label>
+        </div>
+        <p class="image-status" id="image-status" data-mode="image" aria-live="polite"></p>
         <canvas id="legend" class="legend" width="260" height="46" data-mode="density"></canvas>
         <div id="tooltip" class="tooltip" hidden></div>
         <p class="empty" id="empty" data-i18n="canvas.empty"></p>
@@ -262,6 +349,41 @@
       </section>
 
       <aside class="inspector" id="inspector">
+        <!-- Bild -->
+        <section class="panel" data-mode="image">
+          <h2 data-i18n="image.palette"></h2>
+          <ul class="image-palette" id="image-palette"></ul>
+          <p class="muted small" data-i18n="image.palette.hint"></p>
+        </section>
+
+        <section class="panel" data-mode="image">
+          <h2 data-i18n="image.brush"></h2>
+          <div class="segmented" role="radiogroup">
+            <label><input type="radio" name="image-tool" value="none" checked /><span data-i18n="image.tool.none"></span></label>
+            <label><input type="radio" name="image-tool" value="paint" /><span data-i18n="image.tool.paint"></span></label>
+            <label><input type="radio" name="image-tool" value="erase" /><span data-i18n="image.tool.erase"></span></label>
+          </div>
+          <label class="field">
+            <span class="label"><span data-i18n="image.brushSize"></span> <output id="image-brush-out"></output></span>
+            <input type="range" id="image-brush" min="0.5" max="20" step="0.5" />
+          </label>
+          <p class="muted small" id="image-brush-hint"></p>
+          <div class="buttons">
+            <button type="button" id="image-strokes-undo" data-i18n="image.undo"></button>
+            <button type="button" id="image-strokes-clear" data-i18n="image.strokes.clear"></button>
+          </div>
+        </section>
+
+        <section class="panel" data-mode="image">
+          <h2 data-i18n="image.result"></h2>
+          <dl id="image-result" class="stats"></dl>
+          <div id="image-verdict"></div>
+          <div class="buttons">
+            <button type="button" id="image-take" class="primary" data-i18n="image.take"></button>
+          </div>
+          <p class="muted small" data-i18n="image.take.hint"></p>
+        </section>
+
         <!-- Ablauf -->
         <section class="panel layers" id="layers-panel" data-mode="flow">
           <div class="panel-head">
