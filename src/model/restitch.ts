@@ -130,7 +130,10 @@ export function objectKey(p: Pattern, o: SewObject): string {
 }
 
 export function remember(p: Pattern, o: SewObject, r: Remembered): void {
-  const key = objectKey(p, o);
+  rememberKey(objectKey(p, o), r);
+}
+
+function rememberKey(key: string, r: Remembered): void {
   memory.delete(key);
   memory.set(key, r);
   if (memory.size > MEMORY_SIZE) memory.delete(memory.keys().next().value!);
@@ -138,6 +141,64 @@ export function remember(p: Pattern, o: SewObject, r: Remembered): void {
 
 export function remembered(p: Pattern, o: SewObject): Remembered | undefined {
   return memory.get(objectKey(p, o));
+}
+
+/** A remembered object as it is stored: the shape as its pixels only (the rest is rebuilt from them). */
+export interface StoredObject {
+  key: string;
+  region: { x0: number; y0: number; w: number; h: number; pxMm: number; mask: Uint8Array; areaMm2: number } | null;
+  fill?: FillSettings;
+}
+
+/** What is remembered about the objects of `p`, to store it with the file. */
+export function rememberedIn(p: Pattern, objects: SewObject[]): StoredObject[] {
+  const out: StoredObject[] = [];
+  for (const o of objects) {
+    const key = objectKey(p, o);
+    const r = memory.get(key);
+    if (!r) continue;
+    const g = r.region;
+    out.push({
+      key,
+      region: g && { x0: g.x0, y0: g.y0, w: g.w, h: g.h, pxMm: g.pxMm, mask: g.mask, areaMm2: g.areaMm2 },
+      ...(r.fill ? { fill: { ...r.fill } } : {}),
+    });
+  }
+  return out;
+}
+
+const PATTERNS: FillPattern[] = ['tatami', 'gradient', 'contour', 'spiral', 'follow'];
+const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+
+function isFill(f: unknown): f is FillSettings {
+  const s = f as FillSettings | null;
+  return (
+    !!s &&
+    PATTERNS.includes(s.pattern) &&
+    [s.spacing, s.spacingEnd, s.offset, s.angle, s.stitch, s.edge].every(finite) &&
+    typeof s.underlay === 'boolean'
+  );
+}
+
+/** Remembers stored objects again (from storage or a project file); malformed entries are skipped. */
+export function restoreRemembered(list: unknown): number {
+  if (!Array.isArray(list)) return 0;
+  let n = 0;
+  for (const e of list as StoredObject[]) {
+    if (typeof e?.key !== 'string' || (e.fill !== undefined && !isFill(e.fill))) continue;
+    let region: Region | null = null;
+    const g = e.region;
+    if (g) {
+      const { x0, y0, w, h, pxMm, mask, areaMm2 } = g;
+      if (![x0, y0, w, h, pxMm, areaMm2].every(finite) || !(mask instanceof Uint8Array)) continue;
+      if (w < 1 || h < 1 || pxMm <= 0 || mask.length !== w * h) continue;
+      const sdf = signedField(mask, w, h, pxMm);
+      region = { label: 0, x0, y0, w, h, pxMm, mask, inside: distanceInside(mask, w, h), sdf, sdfBase: sdf, areaMm2 };
+    }
+    rememberKey(e.key, { region, fill: e.fill && { ...e.fill } });
+    n++;
+  }
+  return n;
 }
 
 /**

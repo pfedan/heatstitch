@@ -1281,6 +1281,11 @@ details.panel.section[open] > summary {
   margin-top: 4px;
 }
 
+.file-actions .save-project {
+  width: 100%;
+  margin-top: 6px;
+}
+
 .file-actions .muted.small {
   font-size: 11px;
 }
