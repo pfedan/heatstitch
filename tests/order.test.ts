@@ -103,6 +103,23 @@ describe('sewing order', () => {
     expect(sewObjects(q)).toHaveLength(3);
   });
 
+  it('moves an object out of its color into a color of its own', () => {
+    const p = load('cat-60mm.pes');
+    const objs = sewObjects(p);
+    // A Tangerine fill sewn after Dark Brown, even though Dark Brown lies on it (a forced move).
+    const darkBrown = objs.filter((o) => o.block === 5).at(-1)!.index;
+    const order = objs.map((o) => o.index).filter((i) => i !== 2);
+    order.splice(order.indexOf(darkBrown) + 1, 0, 2);
+    expect(violations(order, overlaps(p, objs)).length).toBeGreaterThan(0);
+    const q = reorder(p, objs, order, 3);
+    const after = new Set(stitchesByColor(q));
+    expect(stitchesByColor(p).every((s) => after.has(s))).toBe(true);
+    const moved = sewObjects(q).filter((o) => o.block === 6);
+    expect(moved).toHaveLength(1);
+    expect(moved[0].color.name).toBe(objs[2].color.name);
+    expect(q.colors.length).toBe(p.colors.length + 1);
+  });
+
   it.each(FILES)('never breaks layering or loses stitches: %s', (f) => {
     const p = load(f);
     const objs = sewObjects(p);

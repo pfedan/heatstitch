@@ -2574,3 +2574,8 @@ body[data-mode='flow'] .stage .hint {
 .stitch-note {
   margin: 2px 0 0;
 }
+
+.layer-note button.link {
+  display: block;
+  margin-top: 2px;
+}

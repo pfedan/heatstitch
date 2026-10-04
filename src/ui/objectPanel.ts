@@ -2,7 +2,7 @@ import { formatNumber, t } from '../i18n';
 import type { SewObject } from '../model/objects';
 import type { OrderCost } from '../model/order';
 import type { Settings } from '../settings';
-import { KIND_ICON, kindLabel } from './layersPanel';
+import { type Blocked, KIND_ICON, kindLabel, showBlocked } from './layersPanel';
 import { cssColor } from './threadPicker';
 
 export interface ObjectInfo {
@@ -16,7 +16,7 @@ export interface ObjectInfo {
 
 export interface ObjectHooks {
   /** Sew the selected object one place earlier (-1) or later (1); returns why not, or null. */
-  step: (dir: -1 | 1) => string | null;
+  step: (dir: -1 | 1) => Blocked | null;
   clear: () => void;
 }
 
@@ -92,9 +92,7 @@ export class ObjectPanel {
       const btn = (label: string, dir: -1 | 1, disabled: boolean) => {
         const b = Object.assign(document.createElement('button'), { type: 'button', textContent: label, disabled });
         b.addEventListener('click', () => {
-          const err = this.hooks.step(dir);
-          this.msg.hidden = !err;
-          this.msg.textContent = err ?? '';
+          showBlocked(this.msg, this.hooks.step(dir));
         });
         return b;
       };

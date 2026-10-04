@@ -22,7 +22,7 @@ import { acknowledgementOf, settledBy, type Acknowledgement } from './validation
 import type { ValidationResult, Zone } from './validation/validate';
 import { POINTS_MIN_SCALE } from './render/editOverlay';
 import { DIVIDER_GRAB_PX, drawDivider } from './render/compare';
-import type { Pattern } from './model/pattern';
+import type { Pattern, ThreadColor } from './model/pattern';
 import type { Measurement } from './validation/measure';
 import { initUpdateNotice } from './ui/updateNotice';
 import { downloadPattern, outputFileName, writePattern } from './writers';
@@ -53,7 +53,7 @@ import { stitchAlpha, stitchAt, stitchColors, transitionAt, type StitchStyle } f
 import type { FlowScene, ShapeOutline } from './render/scene';
 import type { Mode } from './settings';
 import { JumpsPanel } from './ui/jumpsPanel';
-import { kindLabel, LayersPanel } from './ui/layersPanel';
+import { type Blocked, kindLabel, LayersPanel } from './ui/layersPanel';
 import { ObjectPanel, OrderCard } from './ui/objectPanel';
 import { StitchPanel, type StitchInfo } from './ui/stitchPanel';
 import { analyze, measureFill, measureRun, measureSatin, remember, remembered, restitch, shapeTrust, type Settings as RestitchSettings, type ShapeTrust } from './model/restitch';
@@ -281,6 +281,9 @@ let selectionKey = 0;
 /** New stitches shown while a stitch setting is being dragged, not applied yet. */
 let flowPreview: Pattern | null = null;
 let hoverObject: number | null = null;
+/** One empty list, so the colors list is not rebuilt on every redraw (it compares by identity). */
+const NO_COLORS: readonly ThreadColor[] = [];
+
 const overOf = (q: Sequence, p: Pattern) => (q.over ??= overlaps(p, q.objects));
 
 function resetFlow(): void {
@@ -419,25 +422,26 @@ function selectObjects(objs: number[], toggle: boolean): void {
  * Sews the objects in `order` (an edit that can be undone), unless that puts an object before
  * something it lies on; then the reason is returned. The moved objects stay selected.
  */
-function moveObjects(order: number[], moved: number[]): string | null {
+function moveObjects(order: number[], moved: number[], force = false): Blocked | null {
   const f = files.active;
   const p = f?.pattern;
   if (!f || !p) return null;
   const q = seq(p);
   const over = overOf(q, p);
-  const bad = violations(order, over);
+  const bad = force ? [] : violations(order, over);
   if (bad.length) {
     const movedSet = new Set(moved);
     const a = order[bad.find((k) => movedSet.has(order[k])) ?? bad[0]];
     const c = conflicts(order, over, a)[0];
-    if (c === undefined) return t('object.blocked', { a: objectName(q, a), b: '?' });
+    const blocked = (text: string): Blocked => ({ text, force: () => void moveObjects(order, moved, true) });
+    if (c === undefined) return blocked(t('object.blocked', { a: objectName(q, a), b: '?' }));
     // The two objects are shown, so it is clear where they overlap.
     selectedObjects = new Set([a, c]);
     selectionKey++;
     focusBlock = null;
     layers.reveal([a, c]);
     redraw();
-    return over[a].includes(c) ? t('object.blocked', { a: objectName(q, a), b: objectName(q, c) }) : t('object.blockedUnder', { a: objectName(q, a), b: objectName(q, c) });
+    return blocked(over[a].includes(c) ? t('object.blocked', { a: objectName(q, a), b: objectName(q, c) }) : t('object.blockedUnder', { a: objectName(q, a), b: objectName(q, c) }));
   }
   const starts: number[] = [];
   const next = reorder(p, q.objects, order, settings.trimMm, starts);
@@ -783,7 +787,7 @@ function redraw(): void {
           hidden: hiddenBlocks,
           focus: focusBlock,
           current,
-          original: active?.original?.colors ?? [],
+          original: active?.original?.colors ?? NO_COLORS,
           format: active?.pattern?.format ?? 'pes',
         },
         getLang(),

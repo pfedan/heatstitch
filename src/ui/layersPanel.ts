@@ -18,7 +18,29 @@ export interface LayerHooks {
   /** Object under the pointer in the list (null: none). */
   hover: (object: number | null) => void;
   /** Sew the objects in this order; returns why not, or null when done. */
-  move: (order: number[], moved: number[]) => string | null;
+  move: (order: number[], moved: number[]) => Blocked | null;
+}
+
+/** A move the layering refuses: why, and how to make it anyway. */
+export interface Blocked {
+  text: string;
+  force: () => void;
+}
+
+/**
+ * Shows a refused move in `el`: the reason and a button to sew it there anyway, for when the
+ * overlap is only a shared edge or the user wants the other part on top.
+ */
+export function showBlocked(el: HTMLElement, b: Blocked | null): void {
+  el.hidden = !b;
+  if (!b) return;
+  const btn = Object.assign(document.createElement('button'), { type: 'button', className: 'link', textContent: t('object.force') });
+  btn.title = t('object.forceHint');
+  btn.addEventListener('click', () => {
+    el.hidden = true;
+    b.force();
+  });
+  el.replaceChildren(document.createTextNode(`${b.text} `), btn);
 }
 
 export interface LayerState {
@@ -66,6 +88,10 @@ export class LayersPanel {
   private open = new Set<number>();
   private st: LayerState | null = null;
   private drag: Drag | null = null;
+  /** Objects to show at the next update. */
+  private revealing: number[] | null = null;
+  /** The last update that came during a drag. */
+  private pending: [LayerState, string] | null = null;
   private noteTimer = 0;
 
   constructor(private hooks: LayerHooks) {
@@ -81,23 +107,12 @@ export class LayersPanel {
     this.list.addEventListener('drop', (e) => this.dropped(e));
   }
 
-  /** Opens the color blocks of these objects and scrolls the first into view. */
+  /**
+   * Opens the color blocks of these objects and scrolls the first into view, at the next update:
+   * after an edit the objects are only known by their new indices then.
+   */
   reveal(objects: number[]): void {
-    const st = this.st;
-    if (!st || !objects.length) return;
-    let changed = false;
-    for (const o of objects) {
-      const b = st.objects[o]?.block;
-      if (b !== undefined && !this.open.has(b)) {
-        this.open.add(b);
-        changed = true;
-      }
-    }
-    if (changed) {
-      this.key = [];
-      this.update(st, '');
-    }
-    this.list.querySelector<HTMLElement>(`[data-object="${objects[0]}"]`)?.scrollIntoView({ block: 'nearest' });
+    this.revealing = objects.length ? objects : null;
   }
 
   /** Forgets which colors were open (another file). */
@@ -116,6 +131,21 @@ export class LayersPanel {
   }
 
   update(st: LayerState, lang: string): void {
+    // Rebuilding the rows while one is dragged would take the drag away; it waits for the drop.
+    if (this.drag) {
+      this.pending = [st, lang];
+      return;
+    }
+    const show = this.revealing;
+    this.revealing = null;
+    for (const o of show ?? []) {
+      const b = st.objects[o]?.block;
+      if (b !== undefined && !this.open.has(b)) {
+        this.open.add(b);
+        this.key = [];
+      }
+    }
+    if (show) requestAnimationFrame(() => this.list.querySelector<HTMLElement>(`[data-object="${show[0]}"]`)?.scrollIntoView({ block: 'nearest' }));
     const key = [st.blocks, st.objects, st.selected, st.hidden, st.focus, st.current, lang, st.original];
     if (key.every((k, i) => k === this.key[i])) return;
     this.key = key;
@@ -268,6 +298,9 @@ export class LayersPanel {
   private dragEnd(): void {
     this.drag = null;
     this.list.classList.remove('drag-active');
+    const pending = this.pending;
+    this.pending = null;
+    if (pending) this.update(...pending);
     this.list.querySelectorAll('.dragging').forEach((el) => el.classList.remove('dragging'));
     this.clearDrop();
   }
@@ -335,7 +368,11 @@ export class LayersPanel {
     e.preventDefault();
     if (!order) return;
     const err = this.hooks.move(order, d.objects);
-    if (err) this.say(err, true);
+    if (err) {
+      window.clearTimeout(this.noteTimer);
+      this.note.classList.add('error');
+      showBlocked(this.note, err);
+    }
   }
 
   closePicker(): void {
