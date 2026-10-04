@@ -50,21 +50,22 @@ import {
   type Markers,
   type Transition,
 } from './model/sequence';
-import { recolor } from './model/recolor';
+import { recolor, sameColor } from './model/recolor';
 import { COLOR_CHANGE, patternStats, STITCH, TRIM } from './model/pattern';
 import { stitchAlpha, stitchAt, stitchColors, transitionAt, type StitchStyle } from './render/flow';
 import type { FlowScene, ShapeOutline } from './render/scene';
 import type { Mode } from './settings';
 import { JumpsPanel } from './ui/jumpsPanel';
-import { type Blocked, kindLabel, LayersPanel } from './ui/layersPanel';
+import { blockName, kindLabel, LayersPanel } from './ui/layersPanel';
 import { ObjectPanel, OrderCard } from './ui/objectPanel';
 import { StitchPanel, type StitchInfo } from './ui/stitchPanel';
-import { analyze, measureFill, measureRun, measureSatin, remember, remembered, rememberedIn, rememberShapes, restitch, shapeTrust, unionRegion, type Settings as RestitchSettings, type ShapeTrust, type RestitchResult } from './model/restitch';
+import { analyze, measureFill, measureRun, measureSatin, remember, remembered, rememberedIn, rememberShapes, restitch, shapeTrust, unionRegion, type Remembered, type Settings as RestitchSettings, type ShapeTrust, type RestitchResult } from './model/restitch';
 import { outline } from './digitize/region';
 import { digitizeDefaults, isStroke, SATIN_MAX } from './digitize/digitize';
 import { recommendedSpacing } from './validation/profiles';
 import { numberInColor, overlaps, rememberObjects, sewObjects, splitObject, type SewObject } from './model/objects';
-import { conflicts, moveStats, optimizeOrder, reorder, violations } from './model/order';
+import { conflicts, moveStats, optimizePlan, reorder, violations, weigh } from './model/order';
+import { autoReversible, reverseObjects, reversible } from './model/reverse';
 import { Player } from './ui/player';
 import { installPanelResize } from './ui/panelResize';
 import type { Key } from './i18n';
@@ -405,14 +406,34 @@ const layers = new LayersPanel({
     hoverObject = o;
     redraw();
   },
-  move: (order, moved) => moveObjects(order, moved),
+  move: (order, moved, into) => moveObjects(order, moved, into),
 });
 
 /** Name of an object as the list shows it: kind and number within its color. */
 function objectName(q: Sequence, i: number): string {
   const o = q.objects[i];
   const k = numberInColor(q.objects, o);
-  return `${kindLabel(o.kind)} ${k} (${o.block + 1}. ${o.color.name || t('layers.unnamed', { n: o.block + 1 })})`;
+  return `${kindLabel(o.kind)} ${k} (${blockName({ index: o.block, color: o.color })})`;
+}
+
+/**
+ * What a new order puts on top that lay underneath before (null: nothing): the first moved object
+ * sewn before something it lies on, or after something lying on it, and whether it is covered now.
+ */
+function coverConflict(q: Sequence, p: Pattern, order: number[], moved: ReadonlySet<number>): { a: number; c: number; covered: boolean } | null {
+  const over = overOf(q, p);
+  const bad = violations(order, over);
+  if (!bad.length) return null;
+  const a = order[bad.find((k) => moved.has(order[k])) ?? bad[0]];
+  const c = conflicts(order, over, a)[0];
+  // `a` lies on `c` but now comes first: `c` covers it. Otherwise `a` now covers `c`.
+  return c === undefined ? null : { a, c, covered: over[a].includes(c) };
+}
+
+/** The warning for a conflict, with the objects named by `name` (as the list shows them after the edit). */
+function coverWarning(w: { a: number; c: number; covered: boolean } | null, name: (o: number) => string): string | null {
+  if (!w) return null;
+  return t(w.covered ? 'object.coveredBy' : 'object.covers', { a: name(w.a), b: name(w.c) });
 }
 
 function selectObjects(objs: number[], toggle: boolean): void {
@@ -440,69 +461,76 @@ function selectObjects(objs: number[], toggle: boolean): void {
 }
 
 /**
- * Sews the objects in `order` (an edit that can be undone), unless that puts an object before
- * something it lies on; then the reason is returned. The moved objects stay selected.
+ * Sews the objects in `order` (an edit that can be undone). With `into`, the moved objects take
+ * the thread of that color block. Also a place where an object comes to lie over what lay on it
+ * is taken (a shared edge often is all of it): the message says so, undo goes back. The moved
+ * objects stay selected.
  */
-function moveObjects(order: number[], moved: number[], force = false): Blocked | null {
+function moveObjects(order: number[], moved: number[], into: number | null = null): void {
   const f = files.active;
   const p = f?.pattern;
-  if (!f || !p) return null;
+  if (!f || !p) return;
   const q = seq(p);
-  const over = overOf(q, p);
-  const bad = force ? [] : violations(order, over);
-  if (bad.length) {
-    const movedSet = new Set(moved);
-    const a = order[bad.find((k) => movedSet.has(order[k])) ?? bad[0]];
-    const c = conflicts(order, over, a)[0];
-    const blocked = (text: string): Blocked => ({ text, force: () => void moveObjects(order, moved, true) });
-    if (c === undefined) return blocked(t('object.blocked', { a: objectName(q, a), b: '?' }));
-    // The two objects are shown, so it is clear where they overlap.
-    selectedObjects = new Set([a, c]);
-    selectionKey++;
-    focusBlock = null;
-    layers.reveal([a, c]);
-    redraw();
-    return blocked(over[a].includes(c) ? t('object.blocked', { a: objectName(q, a), b: objectName(q, c) }) : t('object.blockedUnder', { a: objectName(q, a), b: objectName(q, c) }));
-  }
+  const movedSet = new Set(moved);
+  const target = into === null ? undefined : q.blocks[into];
+  const recolored = target ? moved.filter((o) => !sameColor(q.objects[o].color, target.color)) : [];
   const starts: number[] = [];
-  const next = reorder(p, q.objects, order, settings.trimMm, starts);
-  if (next === p) return null;
+  const next = reorder(p, q.objects, order, settings.trimMm, starts, { into: new Map(recolored.map((o) => [o, into!])) });
+  if (next === p) return;
+  const conflict = coverConflict(q, p, order, movedSet);
   const keepHidden = hiddenBlocks.size;
   applyEdit(next, f.measurement);
   if (keepHidden) hiddenBlocks = new Set();
-  // The moved objects stay selected: found again by their first stitch.
+  // The objects are found again by their first stitch; the moved ones stay selected.
   const nq = seq(next);
-  const movedSet = new Set(moved);
-  selectedObjects = new Set(order.flatMap((o, k) => (movedSet.has(o) ? [nq.objectAt[recordOfStitch(nq.numbers, starts[k] + 1)]] : [])).filter((o) => o >= 0));
+  const now = (o: number) => nq.objectAt[recordOfStitch(nq.numbers, starts[order.indexOf(o)] + 1)];
+  const nameNow = (o: number) => (now(o) >= 0 ? objectName(nq, now(o)) : objectName(q, o));
+  const warning = coverWarning(conflict, nameNow);
+  selectedObjects = new Set(moved.map(now).filter((o) => o >= 0));
+  selectionKey++;
   layers.reveal([...selectedObjects]);
-  layers.say(t('object.moved'));
+  const undo = t('object.undo');
+  if (target && recolored.length) {
+    const own = q.objects[recolored[0]];
+    const ownColors = new Set(recolored.map((o) => q.objects[o].block));
+    const one = now(recolored[0]);
+    const what = recolored.length > 1 ? t('object.many', { n: recolored.length }) : one >= 0 ? `${kindLabel(nq.objects[one].kind)} ${numberInColor(nq.objects, nq.objects[one])}` : objectName(q, recolored[0]);
+    layers.say({
+      text: [warning, t('object.movedInto', { a: what, color: blockName(target) }), undo].filter(Boolean).join(' ') + ' ',
+      warn: !!warning,
+      // The other way to read the drop: sewn at that time, but in its own thread.
+      action: {
+        label: ownColors.size === 1 ? t('object.keepColor', { color: blockName({ index: own.block, color: own.color }) }) : t('object.keepColors'),
+        title: t('object.keepColor.hint'),
+        run: () => {
+          if (files.active !== f || f.pattern !== next) return;
+          history('undo');
+          moveObjects(order, moved, null);
+        },
+      },
+    });
+  } else layers.say({ text: [warning, t(warning ? 'object.movedAnyway' : 'object.moved'), undo].filter(Boolean).join(' '), warn: !!warning });
   redraw();
-  return null;
 }
 
 /**
- * Sews the selected objects as one: they move to where the first one is sewn (if the layers allow
- * it, as when moving them), and fills become one area, sewn anew with the first one's settings.
+ * Sews the selected objects as one: they move to where the first one is sewn (as when moving
+ * them, also where that puts one over what lay on it, with a warning), and fills become one area,
+ * sewn anew with the first one's settings.
  */
-function mergeObjects(force = false): Blocked | null {
+function mergeObjects(): void {
   const f = files.active;
   const p = f?.pattern;
-  if (!f || !p || selectedObjects.size < 2) return null;
+  if (!f || !p || selectedObjects.size < 2) return;
   const q = seq(p);
   const sel = [...selectedObjects].sort((a, b) => a - b);
   const objs = sel.map((o) => q.objects[o]);
-  if (mergeBlocked(objs)) return null;
+  if (mergeBlocked(objs)) return;
   const set = new Set(sel);
   const order = [...q.objects.keys()].filter((o) => o < sel[0] || (o > sel[0] && !set.has(o)));
   order.splice(sel[0], 0, ...sel);
-  const over = overOf(q, p);
-  const bad = force ? [] : violations(order, over);
-  if (bad.length) {
-    const a = order[bad.find((k) => set.has(order[k])) ?? bad[0]];
-    const c = conflicts(order, over, a)[0];
-    const text = c === undefined ? t('object.blocked', { a: objectName(q, a), b: '?' }) : over[a].includes(c) ? t('object.blocked', { a: objectName(q, a), b: objectName(q, c) }) : t('object.blockedUnder', { a: objectName(q, a), b: objectName(q, c) });
-    return { text, force: () => void mergeObjects(true) };
-  }
+  const warning = coverWarning(coverConflict(q, p, order, set), (o) => objectName(q, o));
+  const done = (n: number) => layers.say({ text: [warning, t('object.merged', { n })].filter(Boolean).join(' '), warn: !!warning });
   const starts: number[] = [];
   const next = reorder(p, q.objects, order, settings.trimMm, starts);
   // A new pattern also when nothing moved: undo goes back to the one that shows them apart.
@@ -520,16 +548,44 @@ function mergeObjects(force = false): Blocked | null {
     if (r.starts.length) {
       selectedObjects = new Set([merged]);
       applyRestitched(r, 'stitch.failed', true);
-      layers.say(t('object.merged', { n: sel.length }));
-      return null;
+      done(sel.length);
+      return;
     }
   }
   applyEdit(target);
   if (merged >= 0) selectedObjects = new Set([merged]);
   selectionKey++;
-  layers.say(t('object.merged', { n: sel.length }));
+  done(sel.length);
   redraw();
-  return null;
+}
+
+/**
+ * Sews the selected satins and fills from the other side (new stitches, an edit that can be
+ * undone), and says what that saved in trims or travel.
+ */
+function reverseSelected(): void {
+  const f = files.active;
+  const p = f?.pattern;
+  if (!f || !p || !selectedObjects.size) return;
+  const q = seq(p);
+  const which = [...selectedObjects].sort((a, b) => a - b).filter((o) => reversible(q.objects[o]));
+  if (!which.length) return;
+  const r = reverseObjects(p, q.objects, which, q.kinds, settings.trimMm);
+  const failed = r.failed.length;
+  const failText = failed ? t(failed === 1 ? 'object.reverse.failed.one' : 'object.reverse.failed', { n: failed }) : null;
+  if (!r.starts.length) {
+    layers.say(failText ?? '', true);
+    return;
+  }
+  const before = orderStats(p);
+  applyRestitched({ ...r, failed: [] }, 'stitch.failed');
+  const now = files.active?.pattern;
+  if (!now) return;
+  const after = orderStats(now);
+  const dt = before.trims - after.trims;
+  const saved = dt > 0 ? t(dt === 1 ? 'order.fewerTrims.one' : 'order.fewerTrims', { n: dt }) : after.travelMm < before.travelMm - 1 ? t('order.shorterTravel') : null;
+  const done = saved ? t('object.reversedSaves', { what: saved }) : t('object.reversed');
+  layers.say({ text: [failText, done, t('object.undo')].filter(Boolean).join(' '), warn: !!failText });
 }
 
 /** Why the objects cannot be sewn as one, or null. */
@@ -564,16 +620,17 @@ const objectPanel = new ObjectPanel({
   split: splitSelected,
   step: (dir) => {
     const p = files.active?.pattern;
-    if (!p || selectedObjects.size !== 1) return null;
+    if (!p || selectedObjects.size !== 1) return;
     const o = [...selectedObjects][0];
     const n = seq(p).objects.length;
     const k = o + dir;
-    if (k < 0 || k >= n) return null;
+    if (k < 0 || k >= n) return;
     const order = Array.from({ length: n }, (_, i) => i);
     order[o] = k;
     order[k] = o;
-    return moveObjects(order, [o]);
+    moveObjects(order, [o]);
   },
+  reverse: () => reverseSelected(),
   clear: () => {
     if (editor.active) setEditing(false);
     selectedObjects = new Set();
@@ -715,34 +772,75 @@ function orderStats(p: Pattern) {
   return { colorChanges: st.colorChanges, trims: st.trims, travelMm: moveStats(p).travelMm };
 }
 
-/** The order "Optimize order" found for the active pattern, kept while its card is open. */
-let pendingOrder: { p: Pattern; order: number[] } | null = null;
+/**
+ * The pattern "Optimize order" found for the active one, kept while its card is open, with the
+ * objects sewn from the other side in it (what to remember about their new stitches).
+ */
+let pendingOrder: { p: Pattern; next: Pattern; reversed: { start: number; end: number; memory: Remembered }[] } | null = null;
+
+/**
+ * The best order for `p` with the options of the card. With "Reverse direction", satins and fills
+ * may also be sewn from the other side; that plan is taken when its real result (after the new
+ * stitches) is better than the best order without it.
+ */
+function bestOrder(p: Pattern): NonNullable<typeof pendingOrder> | null {
+  const q = seq(p);
+  const over = overOf(q, p);
+  const opts = { ...settings.order, trimMm: settings.trimMm };
+  const plain = optimizePlan(p, q.objects, over, opts);
+  const plainNext = plain.order.some((o, k) => o !== k) ? reorder(p, q.objects, plain.order, settings.trimMm) : p;
+  const best = plainNext === p ? null : { p, next: plainNext, reversed: [] };
+  if (!settings.order.reverse) return best;
+  const may = q.objects.map((o) => autoReversible(p, o));
+  // Objects that turn out not to be reversible (stitches outside their shape) are planned without.
+  for (let round = 0; round < 3; round++) {
+    const plan = optimizePlan(p, q.objects, over, opts, may);
+    if (!plan.flip.length) return best;
+    const r = reverseObjects(p, q.objects, plan.flip, q.kinds, settings.trimMm, plan.order);
+    if (r.pattern === p) {
+      if (!r.failed.length) return best;
+      for (const o of r.failed) may[o] = false;
+      continue;
+    }
+    // Taken only for a real saving: the new stitches change more than the order does.
+    if (weigh(orderStats(r.pattern)) >= weigh(orderStats(plainNext)) - 2) return best;
+    return { p, next: r.pattern, reversed: r.starts.map((start, k) => ({ start, end: r.ends[k], memory: r.memory[k] })) };
+  }
+  return best;
+}
 
 const orderCard = new OrderCard(settings, {
   preview: () => {
     const p = files.active?.pattern;
     if (!p) return null;
-    const q = seq(p);
-    const order = optimizeOrder(p, q.objects, overOf(q, p), { ...settings.order, trimMm: settings.trimMm });
-    const changed = order.some((o, k) => o !== k);
-    const next = changed ? reorder(p, q.objects, order, settings.trimMm) : p;
-    pendingOrder = changed ? { p, order } : null;
+    pendingOrder = bestOrder(p);
+    const next = pendingOrder?.next ?? p;
     const before = orderStats(p);
     const after = orderStats(next);
     const secs = (x: Pattern, c: typeof before) => sewingSeconds(seq(x).total, c.trims, c.colorChanges, settings.machineSpm);
-    return { before, after, beforeSeconds: secs(p, before), afterSeconds: secs(next, after), changed: changed && next !== p };
+    return { before, after, beforeSeconds: secs(p, before), afterSeconds: secs(next, after), changed: next !== p, reversed: pendingOrder?.reversed.length ?? 0 };
   },
   apply: () => {
     const f = files.active;
     const p = f?.pattern;
     if (!f || !p || pendingOrder?.p !== p) return;
     const before = orderStats(p);
-    const next = reorder(p, seq(p).objects, pendingOrder.order, settings.trimMm);
+    const { next, reversed } = pendingOrder;
     pendingOrder = null;
+    // Objects sewn anew from the other side remember their shape and settings, as after any new stitches.
+    if (reversed.length) {
+      const nq = seq(next);
+      for (const r of reversed) {
+        const o = nq.objectAt[recordOfStitch(nq.numbers, r.start + 1)];
+        if (o >= 0) remember(next, nq.objects[o], r.memory);
+      }
+      files.setObjects(f, rememberedIn(next, nq.objects));
+    }
     selectedObjects = new Set();
     hiddenBlocks = new Set();
     focusBlock = null;
-    applyEdit(next, f.measurement);
+    // New stitches need a new density measurement; a new order alone does not.
+    applyEdit(next, reversed.length ? undefined : f.measurement);
     const after = orderStats(next);
     const parts: string[] = [];
     const dc = before.colorChanges - after.colorChanges;
@@ -884,6 +982,7 @@ function objectInfo(p: Pattern, q: Sequence) {
     hand: selected.map((o) => remembered(p, q.objects[o])?.hand ?? 0),
     editing: editor.active && editObject !== null && selected.length === 1 && selected[0] === editObject ? { selection: editor.selection.size } : null,
     mergeBlocked: selected.length > 1 ? mergeBlocked(selected.map((o) => q.objects[o])) : null,
+    reversible: selected.some((o) => reversible(q.objects[o])),
   };
 }
 
@@ -1439,6 +1538,7 @@ function applyProjectSettings(s: ProjectSettings, withImage: boolean): void {
   Object.assign(settings.order, s.order);
   settings.trimMm = s.trimMm;
   settings.machineSpm = s.machineSpm;
+  if (s.background !== undefined) settings.background = s.background;
   if (withImage) {
     Object.assign(settings.image.prepare, s.image.prepare);
     for (const k of Object.keys(settings.image.stitch)) delete settings.image.stitch[k as keyof typeof settings.image.stitch];

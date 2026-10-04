@@ -69,6 +69,10 @@ export class ThreadPicker {
       btn.setAttribute('aria-label', btn.title);
       if (current) btn.setAttribute('aria-current', 'true');
       btn.addEventListener('click', () => pick(c));
+      // The name shows at once under the colors (the tooltip comes only after a while).
+      const show = () => (name.textContent = btn.title);
+      btn.addEventListener('pointerenter', show);
+      btn.addEventListener('focus', show);
       return btn;
     };
 
@@ -92,13 +96,19 @@ export class ThreadPicker {
 
     const grid = document.createElement('div');
     grid.className = 'color-grid';
+    const currentName = o.current.name ?? hexColor(o.current);
+    const name = document.createElement('div');
+    name.className = 'color-pop-name';
+    name.setAttribute('aria-hidden', 'true');
+    name.textContent = currentName;
     let marked = false;
     for (const c of pecThreads()) {
       const cur: boolean = !marked && c.r === o.current.r && c.g === o.current.g && c.b === o.current.b;
       marked ||= cur;
       grid.append(swatch(c, cur));
     }
-    pop.append(grid);
+    pop.append(grid, name);
+    grid.addEventListener('pointerleave', () => (name.textContent = currentName));
 
     const own = document.createElement('label');
     own.className = 'color-pop-own';

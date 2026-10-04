@@ -62,7 +62,7 @@ export interface Settings {
   /** Jumps from this length (mm) on are cut by "cut from this length". */
   trimMm: number;
   /** What "Optimize order" may do. */
-  order: { combineColors: boolean; shortestWays: boolean };
+  order: { combineColors: boolean; shortestWays: boolean; reverse: boolean };
   metric: Metric;
   cellMm: number;
   blurMm: number;
@@ -71,6 +71,8 @@ export interface Settings {
   opacity: number;
   /** Stitch plan drawn as shaded threads with shadows instead of flat lines. */
   realistic: boolean;
+  /** Color behind the stitches (the fabric), as #rrggbb; null follows the light or dark theme. */
+  background: string | null;
   /** Visual thread width of the realistic view in mm; reset to the thread weight's width when the profile thread changes. */
   threadMm: number;
   /** In the realistic view the light follows the pointer and the tilt of a phone. */
@@ -104,7 +106,7 @@ export const DEFAULTS: Settings = {
   machineSpm: 800,
   playSpeed: 50,
   trimMm: 3,
-  order: { combineColors: true, shortestWays: true },
+  order: { combineColors: true, shortestWays: true, reverse: true },
   metric: 'thread',
   cellMm: 1,
   blurMm: 1,
@@ -112,6 +114,7 @@ export const DEFAULTS: Settings = {
   overlay: false,
   opacity: 0.6,
   realistic: false,
+  background: null,
   threadMm: threadWidthMm(DEFAULT_PROFILE),
   liveLight: true,
   showValidation: true,
@@ -156,10 +159,12 @@ export function loadSettings(): Settings {
       order: {
         combineColors: typeof s.order?.combineColors === 'boolean' ? s.order.combineColors : true,
         shortestWays: typeof s.order?.shortestWays === 'boolean' ? s.order.shortestWays : true,
+        reverse: typeof s.order?.reverse === 'boolean' ? s.order.reverse : true,
       },
       scales: { ...structuredClone(DEFAULTS.scales), ...s.scales },
       profile,
       threadMm: typeof s.threadMm === 'number' && s.threadMm > 0 ? s.threadMm : threadWidthMm(profile),
+      background: hexColor(s.background),
       liveLight: typeof s.liveLight === 'boolean' ? s.liveLight : DEFAULTS.liveLight,
       panels: { side: width(s.panels?.side), inspector: width(s.panels?.inspector) },
       checks: normalizeChecks(s.checks),
@@ -170,6 +175,9 @@ export function loadSettings(): Settings {
     return structuredClone(DEFAULTS);
   }
 }
+
+/** A color as #rrggbb (lower case), or null for anything else. */
+export const hexColor = (v: unknown): string | null => (typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v) ? v.toLowerCase() : null);
 
 const width = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.round(v) : null);
 

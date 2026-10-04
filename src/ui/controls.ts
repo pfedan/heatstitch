@@ -11,6 +11,17 @@ export type ChangeKind = 'density' | 'style' | 'render';
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const rgb = (c: { r: number; g: number; b: number }) => `rgb(${c.r}, ${c.g}, ${c.b})`;
 
+/** Fabric colors offered for the background; null is the theme's own. */
+const BACKGROUNDS: [string | null, Key][] = [
+  [null, 'bg.default'],
+  ['#ffffff', 'bg.white'],
+  ['#ece4d4', 'bg.natural'],
+  ['#b9b9bd', 'bg.gray'],
+  ['#1b1b1d', 'bg.black'],
+  ['#1f2b47', 'bg.navy'],
+  ['#9b2430', 'bg.red'],
+];
+
 /** Heatmap, coloring, display and marker controls of the sidebar. */
 export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void): { refresh: () => void } {
   const metricInputs = document.querySelectorAll<HTMLInputElement>('input[name="metric"]');
@@ -28,6 +39,32 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
   const liveLight = $<HTMLInputElement>('live-light');
   const spm = $<HTMLSelectElement>('machine-spm');
   const key = $<HTMLElement>('color-key');
+  const stage = $<HTMLElement>('stage');
+  const bgBox = $<HTMLElement>('bg-swatches');
+  const bgButtons = BACKGROUNDS.map(([color, label]) => {
+    const b = Object.assign(document.createElement('button'), { type: 'button', className: 'bg-sw', title: t(label) });
+    b.dataset.i18nTitle = b.dataset.i18nAria = label;
+    b.setAttribute('aria-label', t(label));
+    if (color) b.style.background = color;
+    else b.classList.add('bg-theme');
+    b.addEventListener('click', () => {
+      s.background = color;
+      refresh();
+      onChange('render');
+    });
+    return [color, b] as const;
+  });
+  const bgOwn = Object.assign(document.createElement('input'), { type: 'color', className: 'bg-own' });
+  bgOwn.dataset.i18nTitle = bgOwn.dataset.i18nAria = 'bg.own';
+  bgOwn.title = t('bg.own');
+  bgOwn.setAttribute('aria-label', t('bg.own'));
+  // While the color is chosen the stage follows; it is saved when the picker closes.
+  bgOwn.addEventListener('input', () => {
+    s.background = bgOwn.value.toLowerCase();
+    refresh();
+    onChange('render');
+  });
+  bgBox.append(...bgButtons.map(([, b]) => b), bgOwn);
 
   const renderKey = () => {
     const item = (color: string, text: string) => {
@@ -95,6 +132,17 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
     $('cell-out').textContent = `${formatNumber(s.cellMm, 2)} mm`;
     $('blur-out').textContent = s.blurMm > 0 ? `${formatNumber(s.blurMm, 1)} mm` : t('controls.off');
     $('thread-width-out').textContent = `${formatNumber(s.threadMm, 2)} mm`;
+    stage.style.setProperty('--stage', s.background ?? '');
+    if (!s.background) stage.style.removeProperty('--stage');
+    let named: Key | null = null;
+    for (const [color, b] of bgButtons) {
+      const pressed = color === s.background;
+      b.setAttribute('aria-pressed', String(pressed));
+      if (pressed) named = BACKGROUNDS.find(([c]) => c === color)![1];
+    }
+    bgOwn.classList.toggle('on', !named);
+    if (s.background) bgOwn.value = s.background;
+    $('bg-out').textContent = named ? t(named) : (s.background ?? '');
     $('opacity-out').textContent = `${Math.round(s.opacity * 100)} %`;
     $('unit-hint').textContent = t(s.metric === 'thread' ? 'unit.thread' : 'unit.penetrations');
     renderKey();

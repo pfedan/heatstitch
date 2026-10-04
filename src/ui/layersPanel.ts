@@ -17,30 +17,18 @@ export interface LayerHooks {
   select: (objects: number[], toggle: boolean) => void;
   /** Object under the pointer in the list (null: none). */
   hover: (object: number | null) => void;
-  /** Sew the objects in this order; returns why not, or null when done. */
-  move: (order: number[], moved: number[]) => Blocked | null;
+  /**
+   * Sew the objects in this order; with `into`, the moved objects take the thread of that color
+   * block (they are sewn as part of it), otherwise they keep their own.
+   */
+  move: (order: number[], moved: number[], into: number | null) => void;
 }
 
-/** A move the layering refuses: why, and how to make it anyway. */
-export interface Blocked {
+/** A message under the list: what happened, as a warning or not, and an action that goes with it. */
+export interface Notice {
   text: string;
-  force: () => void;
-}
-
-/**
- * Shows a refused move in `el`: the reason and a button to sew it there anyway, for when the
- * overlap is only a shared edge or the user wants the other part on top.
- */
-export function showBlocked(el: HTMLElement, b: Blocked | null): void {
-  el.hidden = !b;
-  if (!b) return;
-  const btn = Object.assign(document.createElement('button'), { type: 'button', className: 'link', textContent: t('object.force') });
-  btn.title = t('object.forceHint');
-  btn.addEventListener('click', () => {
-    el.hidden = true;
-    b.force();
-  });
-  el.replaceChildren(document.createTextNode(`${b.text} `), btn);
+  warn?: boolean;
+  action?: { label: string; title?: string; run: () => void };
 }
 
 export interface LayerState {
@@ -67,6 +55,9 @@ export const KIND_ICON: Record<ObjectKind, string> = {
 };
 
 export const kindLabel = (k: ObjectKind) => t(KIND_KEY[k]);
+
+/** A color block as the list names it: its number and thread name. */
+export const blockName = (b: Pick<ColorBlock, 'index' | 'color'>) => `${b.index + 1}. ${b.color.name || t('layers.unnamed', { n: b.index + 1 })}`;
 
 /** What is dragged in the list: one object (or the selection it belongs to), or a whole color block. */
 type Drag = { objects: number[]; block: number | null };
@@ -121,13 +112,23 @@ export class LayersPanel {
     this.key = [];
   }
 
-  /** A short message under the list, gone after a while. */
-  say(text: string, error = false): void {
+  /** A short message under the list, gone after a while (longer with an action to take). */
+  say(n: string | Notice, error = false): void {
+    const notice: Notice = typeof n === 'string' ? { text: n, warn: error } : n;
     window.clearTimeout(this.noteTimer);
-    this.note.textContent = text;
-    this.note.classList.toggle('error', error);
-    this.note.hidden = !text;
-    if (text) this.noteTimer = window.setTimeout(() => (this.note.hidden = true), error ? 9000 : 6000);
+    this.note.replaceChildren(document.createTextNode(notice.text));
+    const a = notice.action;
+    if (a) {
+      const btn = Object.assign(document.createElement('button'), { type: 'button', className: 'link', textContent: a.label, title: a.title ?? '' });
+      btn.addEventListener('click', () => {
+        this.note.hidden = true;
+        a.run();
+      });
+      this.note.append(btn);
+    }
+    this.note.classList.toggle('error', !!notice.warn);
+    this.note.hidden = !notice.text;
+    if (notice.text) this.noteTimer = window.setTimeout(() => (this.note.hidden = true), a ? 15000 : notice.warn ? 9000 : 6000);
   }
 
   update(st: LayerState, lang: string): void {
@@ -180,7 +181,6 @@ export class LayersPanel {
     const chev = document.createElement('button');
     chev.type = 'button';
     chev.className = 'icon chev';
-    chev.textContent = '▸';
     chev.title = t(isOpen ? 'layers.close' : 'layers.open', { n: objs.length });
     chev.setAttribute('aria-expanded', String(isOpen));
     chev.setAttribute('aria-label', chev.title);
@@ -218,7 +218,7 @@ export class LayersPanel {
     text.className = 'layer-text';
     const name = document.createElement('span');
     name.className = 'layer-name';
-    name.textContent = `${b.index + 1}. ${b.color.name || t('layers.unnamed', { n: b.index + 1 })}`;
+    name.textContent = blockName(b);
     const sub = document.createElement('span');
     sub.className = 'layer-sub';
     sub.textContent = t(objs.length === 1 ? 'layers.objects.one' : 'layers.objects', { n: objs.length });
@@ -306,14 +306,44 @@ export class LayersPanel {
   }
 
   private clearDrop(): void {
-    this.list.querySelectorAll('.drop-before, .drop-after').forEach((el) => el.classList.remove('drop-before', 'drop-after', 'drop-bad'));
+    this.list.querySelectorAll<HTMLElement>('.drop-before, .drop-after').forEach((el) => {
+      el.classList.remove('drop-before', 'drop-after');
+      delete el.dataset.drop;
+      el.style.removeProperty('--drop-color');
+    });
+  }
+
+  /**
+   * The color block whose thread the dragged objects take when dropped on this row: a drop
+   * between the objects of a color (or at its start) sews them as part of it, in its thread. A
+   * drop on a color row's edge, between two colors, keeps their own thread. Alt keeps it too.
+   */
+  private intoBlock(row: HTMLElement, lowerHalf: boolean, alt: boolean): number | null {
+    const st = this.st;
+    const d = this.drag;
+    if (!st || !d || d.block !== null || alt) return null;
+    let b: number | null = null;
+    if (row.dataset.object !== undefined) b = st.objects[Number(row.dataset.object)].block;
+    else if (lowerHalf && this.open.has(Number(row.dataset.block))) b = Number(row.dataset.block);
+    if (b === null) return null;
+    const color = st.blocks[b]?.color;
+    return color && d.objects.some((o) => !sameColor(st.objects[o].color, color)) ? b : null;
   }
 
   /**
    * Where a drop at this pointer position puts the dragged objects: before which object (by
-   * index; objects.length for the end), and the row the line is drawn at.
+   * index; objects.length for the end), the row the line is drawn at, and the color block whose
+   * thread they take (null: their own).
    */
-  private target(e: DragEvent): { before: number; row: HTMLElement; after: boolean } | null {
+  private target(e: DragEvent): { before: number; row: HTMLElement; after: boolean; into: number | null } | null {
+    const tg = this.place(e);
+    if (!tg) return null;
+    const row = (e.target as HTMLElement).closest<HTMLElement>('.layer')!;
+    const lower = e.clientY > row.getBoundingClientRect().top + row.getBoundingClientRect().height / 2;
+    return { ...tg, into: this.intoBlock(row, lower, e.altKey) };
+  }
+
+  private place(e: DragEvent): { before: number; row: HTMLElement; after: boolean } | null {
     const st = this.st;
     const d = this.drag;
     if (!st || !d) return null;
@@ -357,6 +387,18 @@ export class LayersPanel {
     e.preventDefault();
     if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
     tg.row.classList.add(tg.after ? 'drop-after' : 'drop-before');
+    // Says on the line which thread the dropped objects are sewn in.
+    const st = this.st!;
+    const own = st.objects[this.drag.objects[0]];
+    const ownColors = new Set(this.drag.objects.map((o) => st.objects[o].block));
+    if (tg.into !== null) {
+      const b = st.blocks[tg.into];
+      tg.row.dataset.drop = t('layers.dropInto', { color: blockName(b) });
+      tg.row.style.setProperty('--drop-color', css(b.color));
+    } else if (e.altKey && this.drag.block === null) {
+      tg.row.dataset.drop = t('layers.dropOwn', { color: ownColors.size === 1 ? blockName(st.blocks[own.block]) : t('layers.dropOwnMany') });
+      tg.row.style.setProperty('--drop-color', css(own.color));
+    }
   }
 
   private dropped(e: DragEvent): void {
@@ -366,13 +408,8 @@ export class LayersPanel {
     this.dragEnd();
     if (!tg || !d) return;
     e.preventDefault();
-    if (!order) return;
-    const err = this.hooks.move(order, d.objects);
-    if (err) {
-      window.clearTimeout(this.noteTimer);
-      this.note.classList.add('error');
-      showBlocked(this.note, err);
-    }
+    if (!order && tg.into === null) return;
+    this.hooks.move(order ?? this.st!.objects.map((o) => o.index), d.objects, tg.into);
   }
 
   closePicker(): void {
