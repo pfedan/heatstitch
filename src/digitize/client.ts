@@ -1,4 +1,4 @@
-import type { ColorEdit, PrepareOptions, Prepared, Stroke } from '../image/prepare';
+import type { ColorEdit, ExactLabels, PrepareOptions, Prepared, Stroke } from '../image/prepare';
 import type { Raster } from '../image/raster';
 import type { DigitizeOptions, Digitized } from './digitize';
 import type { ImageRequest, ImageResponse } from './worker';
@@ -34,8 +34,9 @@ export class ImageClient {
     return (await this.call({ type: 'load', raster })).photo ?? false;
   }
 
-  async prepare(options: PrepareOptions, edits: ColorEdit[], strokes: Stroke[]): Promise<Prepared> {
-    return (await this.call({ type: 'prepare', options, edits, strokes })).prepared!;
+  /** Prepares the loaded image; `exact` gives the regions and colors of a vector image. */
+  async prepare(options: PrepareOptions, edits: ColorEdit[], strokes: Stroke[], exact?: ExactLabels): Promise<Prepared> {
+    return (await this.call({ type: 'prepare', options, edits, strokes, exact })).prepared!;
   }
 
   /** Stitches for the last prepared image. */

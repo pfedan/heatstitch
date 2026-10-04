@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 import { looksLikePhoto } from '../image/filters';
-import { Preparer, type ColorEdit, type PrepareOptions, type Prepared, type Stroke } from '../image/prepare';
+import { Preparer, type ColorEdit, type ExactLabels, type PrepareOptions, type Prepared, type Stroke } from '../image/prepare';
 import type { Raster } from '../image/raster';
 import { digitize, type DigitizeOptions, type Digitized } from './digitize';
 
@@ -12,7 +12,7 @@ import { digitize, type DigitizeOptions, type Digitized } from './digitize';
 
 export type ImageRequest =
   | { id: number; type: 'load'; raster: Raster }
-  | { id: number; type: 'prepare'; options: PrepareOptions; edits: ColorEdit[]; strokes: Stroke[] }
+  | { id: number; type: 'prepare'; options: PrepareOptions; edits: ColorEdit[]; strokes: Stroke[]; exact?: ExactLabels }
   | { id: number; type: 'digitize'; options: DigitizeOptions; name: string };
 
 export interface ImageResponse {
@@ -36,7 +36,7 @@ ctx.onmessage = (e: MessageEvent<ImageRequest>) => {
       ctx.postMessage({ id: req.id, photo: looksLikePhoto(req.raster) } satisfies ImageResponse);
     } else if (req.type === 'prepare') {
       if (!preparer) throw new Error('No image loaded');
-      prepared = preparer.run(req.options, req.edits, req.strokes);
+      prepared = preparer.run(req.options, req.edits, req.strokes, req.exact);
       // A copy goes to the page (without the direction field, which only the stitches need); the
       // worker keeps its own for the stitches.
       const { orient: _, ...rest } = prepared;

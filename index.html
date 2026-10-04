@@ -93,7 +93,7 @@
         <section class="panel" data-mode="flow density">
           <h2 data-i18n="files.title"></h2>
           <label class="dropzone" id="dropzone">
-            <input type="file" id="file-input" accept=".dst,.pes,.DST,.PES" multiple hidden />
+            <input type="file" id="file-input" accept=".dst,.pes,.svg,.DST,.PES,.SVG" multiple hidden />
             <span data-i18n="files.drop"></span>
           </label>
           <p class="privacy-note" data-i18n-title="files.privacy.detail">
@@ -121,7 +121,7 @@
         <section class="panel" data-mode="image">
           <h2 data-i18n="image.title"></h2>
           <label class="dropzone" id="image-drop">
-            <input type="file" id="image-input" accept="image/*" hidden />
+            <input type="file" id="image-input" accept="image/*,.svg" hidden />
             <span data-i18n="image.drop"></span>
           </label>
           <p class="privacy-note" data-i18n-title="files.privacy.detail">
@@ -152,11 +152,12 @@
             <span class="label"><span data-i18n="image.width"></span> <output id="image-height"></output></span>
             <input type="number" id="image-width" min="10" max="400" step="1" />
           </label>
-          <label class="field" data-i18n-title="image.colors.hint">
+          <p class="muted small" id="image-svg-note" data-i18n="image.svg.note" hidden></p>
+          <label class="field" id="image-colors-field" data-i18n-title="image.colors.hint">
             <span class="label"><span data-i18n="image.colors"></span> <output id="image-colors-out"></output></span>
             <input type="range" id="image-colors" min="2" max="16" step="1" />
           </label>
-          <label class="field" data-i18n-title="image.smooth.hint">
+          <label class="field" id="image-smooth-field" data-i18n-title="image.smooth.hint">
             <span class="label"><span data-i18n="image.smooth"></span> <output id="image-smooth-out"></output></span>
             <input type="range" id="image-smooth" min="0" max="5" step="1" />
           </label>
