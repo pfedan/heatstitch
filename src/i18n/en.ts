@@ -5,6 +5,8 @@ export const en: Record<keyof typeof de, string> = {
   'app.docs': 'Guide',
   'files.title': 'Files',
   'files.drop': 'Drop DST/PES files here or click',
+  'files.privacy': 'Your files never leave your device.',
+  'files.privacy.detail': 'Everything is read, checked and saved in your browser. No server receives your files, and there is no tracking.',
   'files.empty': 'No file loaded yet.',
   'files.remove': 'Remove',
   'files.error': 'Error',

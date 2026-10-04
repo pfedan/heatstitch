@@ -24,6 +24,15 @@ correction (all described below).
 
 ![Density mode with a critical zone where three fills overlap](public/guide/heatmap-en.jpg)
 
+## Privacy
+
+Embroidery files never leave your computer. heatstitch parses, checks, corrects and writes them with
+JavaScript in your browser; there is no backend, no account, no analytics and no third-party script.
+The site is a set of static files served by GitHub Pages, and the only requests it makes go back to
+that same site (the app itself, the example files and the check for a new version). Loaded files and
+edits are kept in the browser's IndexedDB so they survive a reload, and removing a file from the list
+deletes it there. After the first visit the app also works offline.
+
 ## Features
 
 - **Formats:** DST (Tajima) and PES (Brother, reads the PEC block)
