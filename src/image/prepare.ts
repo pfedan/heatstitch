@@ -94,6 +94,24 @@ export function workingPxMm(widthMm: number, heightMm: number): number {
   return Math.max(0.1, Math.max(widthMm, heightMm) / 1200);
 }
 
+/** Size of the working image in pixels and mm per pixel, for a source of `srcW` × `srcH`. */
+export function workingSize(widthMm: number, srcW: number, srcH: number): { w: number; h: number; pxMm: number } {
+  const heightMm = (widthMm * srcH) / srcW;
+  const pxMm = workingPxMm(widthMm, heightMm);
+  return { w: Math.max(1, Math.round(widthMm / pxMm)), h: Math.max(1, Math.round(heightMm / pxMm)), pxMm };
+}
+
+/**
+ * Colors and regions known exactly, from a vector image (see svg.ts): the palette index per pixel
+ * at the working size, and the colors themselves. They replace smoothing and quantizing.
+ */
+export interface ExactLabels {
+  width: number;
+  height: number;
+  labels: Uint8Array;
+  colors: Rgb[];
+}
+
 const THREADS = pecThreads().map((t) => ({ t, lab: rgbToLab(t.r, t.g, t.b) }));
 
 /** Nearest Brother thread by CIEDE2000. */
@@ -179,12 +197,11 @@ export class Preparer {
 
   constructor(private source: Raster) {}
 
-  run(o: PrepareOptions, edits: ColorEdit[] = [], strokes: Stroke[] = []): Prepared {
+  run(o: PrepareOptions, edits: ColorEdit[] = [], strokes: Stroke[] = [], exact?: ExactLabels): Prepared {
     const src = this.source;
-    const heightMm = (o.widthMm * src.height) / src.width;
-    const pxMm = workingPxMm(o.widthMm, heightMm);
-    const w = Math.max(1, Math.round(o.widthMm / pxMm));
-    const h = Math.max(1, Math.round(heightMm / pxMm));
+    const { w, h, pxMm } = workingSize(o.widthMm, src.width, src.height);
+    // Vector images are flat already: no smoothing.
+    if (exact) o = { ...o, smooth: 0 };
 
     const smoothKey = `${w}x${h}:${o.smooth}`;
     if (this.smoothed?.key !== smoothKey) {
@@ -198,6 +215,12 @@ export class Preparer {
       this.quantized = null;
     }
     const img = this.smoothed.img;
+    if (exact && exact.width === w && exact.height === h) {
+      const centers = exact.colors.map((c) => rgbToLab(...c));
+      // Flat shapes have no structure of their own (the edges the tensor finds are those of other
+      // shapes, and rows bent around them look restless): rows run straight.
+      return finish(img, pxMm, centers, exact.labels, o, edits, strokes, exact.colors);
+    }
     const qKey = `${o.maxColors}`;
     if (this.quantized?.key !== qKey) this.quantized = { key: qKey, q: quantize(img, { maxColors: o.maxColors }) };
     const { centers, labels: raw } = this.quantized.q;
@@ -213,13 +236,16 @@ function finish(
   o: PrepareOptions,
   edits: ColorEdit[],
   strokes: Stroke[],
+  /** Exact colors of a vector image (one per center): no anti-aliasing to clean up. */
+  sources?: Rgb[],
 ): Prepared {
   const { width: w, height: h } = img;
+  const exact = !!sources;
   // Clusters, then thread matching: clusters that land on the same thread become one color.
   let palette: PaletteEntry[] = [];
   const map = new Uint8Array(256).fill(NONE);
   centers.forEach((lab, k) => {
-    const source = labToRgb(...lab);
+    const source = sources?.[k] ?? labToRgb(...lab);
     let entry: PaletteEntry;
     if (o.threads) {
       const { thread, deltaE } = nearestThread(lab);
@@ -266,18 +292,21 @@ function finish(
   // Painted strokes count before the cleanup (so regions form around them) and after it (so they win).
   const paintLabels = painted.map((l) => (l === NONE ? NONE : resolve(l)));
   paint(labels, w, h, strokes, paintLabels);
-  labels = modeFilter(labels, w, h);
-  const labOf = (k: number) => (k === NONE ? null : palette[k].lab);
-  // Seams of anti-aliasing: at most 0.5 mm wide, colored between their two neighbours.
-  labels = removeSeams(labels, w, h, 0.5 / pxMm, (s, a, b) => {
-    const [ls, la, lb] = [labOf(s), labOf(a), labOf(b)];
-    if (!ls || !la || !lb) return false;
-    return distanceToSegment(ls, la, lb) < 12;
-  });
+  // Exact regions have neither jagged edges nor seams; the filters would only eat fine lines.
+  if (!exact) {
+    labels = modeFilter(labels, w, h);
+    const labOf = (k: number) => (k === NONE ? null : palette[k].lab);
+    // Seams of anti-aliasing: at most 0.5 mm wide, colored between their two neighbours.
+    labels = removeSeams(labels, w, h, 0.5 / pxMm, (s, a, b) => {
+      const [ls, la, lb] = [labOf(s), labOf(a), labOf(b)];
+      if (!ls || !la || !lb) return false;
+      return distanceToSegment(ls, la, lb) < 12;
+    });
+  }
   // After the seams, so the seams along the background's edge go too.
   if (o.background) labels = removeBackground(labels, w, h);
   labels = mergeSmall(labels, w, h, Math.max(1, o.minAreaMm2 / (pxMm * pxMm)));
-  labels = modeFilter(labels, w, h);
+  if (!exact) labels = modeFilter(labels, w, h);
   if (strokes.length) paint(labels, w, h, strokes, paintLabels);
 
   // Areas, then the colors that are not sewn.

@@ -1,7 +1,8 @@
 import { ImageClient } from '../digitize/client';
 import { digitizeDefaults, type DigitizeOptions, type Digitized } from '../digitize/digitize';
 import { formatNumber, t, type Key } from '../i18n';
-import { NONE, type ColorEdit, type Prepared, type Stroke } from '../image/prepare';
+import { NONE, workingSize, type ColorEdit, type ExactLabels, type Prepared, type Stroke } from '../image/prepare';
+import { readSvg, type SvgDesign } from '../image/svg';
 import type { Raster } from '../image/raster';
 import type { Rgb } from '../image/color';
 import { patternStats, type Pattern, type ThreadColor } from '../model/pattern';
@@ -55,6 +56,24 @@ const ANGLES = [0, 15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165];
 const rgbOf = (c: ThreadColor): Rgb => [c.r, c.g, c.b];
 const same = (a: Rgb, b: Rgb) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
 
+const isSvg = (file: File) => file.type === 'image/svg+xml' || /\.svg$/i.test(file.name);
+
+/**
+ * An SVG file as shapes with exact colors (see svg.ts), drawn SOURCE_MAX on its longer side for the
+ * original view; null when it is better treated as a picture.
+ */
+async function decodeSvg(file: File): Promise<{ canvas: HTMLCanvasElement; svg: SvgDesign } | null> {
+  const svg = await readSvg(await file.text());
+  if (!svg) return null;
+  const [w, h] = svg.aspect <= 1 ? [SOURCE_MAX, SOURCE_MAX * svg.aspect] : [SOURCE_MAX / svg.aspect, SOURCE_MAX];
+  try {
+    return { canvas: await svg.picture(Math.max(1, Math.round(w)), Math.max(1, Math.round(h))), svg };
+  } catch (err) {
+    svg.dispose();
+    throw err;
+  }
+}
+
 /** Draws the image into a canvas, at most SOURCE_MAX on its longer side (vector images at that size). */
 async function decode(file: Blob): Promise<HTMLCanvasElement> {
   const url = URL.createObjectURL(file);
@@ -83,6 +102,10 @@ export class ImageMode {
   private client = new ImageClient();
   private picker = new ThreadPicker('.image-color .sw');
   private source: HTMLCanvasElement | null = null;
+  /** The image as shapes and colors, for SVG files. */
+  private svg: SvgDesign | null = null;
+  /** Its regions at the last working size. */
+  private exact: ExactLabels | null = null;
   private name = '';
   /** The image file as opened, for project files. */
   private file: StoredImage | null = null;
@@ -264,10 +287,17 @@ export class ImageMode {
   async load(file: File, work?: Work): Promise<void> {
     const token = ++this.loads;
     let canvas: HTMLCanvasElement;
+    let svg: SvgDesign | null = null;
     let bytes: ArrayBuffer;
     try {
-      [canvas, bytes] = await Promise.all([decode(file), file.arrayBuffer()]);
-      if (token !== this.loads) return;
+      const [vector, data] = await Promise.all([isSvg(file) ? decodeSvg(file) : null, file.arrayBuffer()]);
+      canvas = vector?.canvas ?? (await decode(file));
+      svg = vector?.svg ?? null;
+      bytes = data;
+      if (token !== this.loads) {
+        svg?.dispose();
+        return;
+      }
     } catch (err) {
       if (token !== this.loads) return;
       this.error = t('image.error.load', { msg: err instanceof Error ? err.message : String(err) });
@@ -276,6 +306,9 @@ export class ImageMode {
     }
     this.generation++;
     this.source = canvas;
+    this.svg?.dispose();
+    this.svg = svg;
+    this.exact = null;
     this.file = { name: file.name, type: file.type, data: bytes };
     this.revealPending = !work;
     this.name = file.name.replace(/\.[^.]+$/, '') || 'image';
@@ -294,6 +327,8 @@ export class ImageMode {
       photo = await this.client.load(raster);
     } catch (err) {
       this.source = null;
+      this.svg?.dispose();
+      this.svg = null;
       this.error = t('image.error.load', { msg: err instanceof Error ? err.message : String(err) });
       this.render();
       this.h.redraw();
@@ -301,7 +336,9 @@ export class ImageMode {
     }
     if (!work) {
       // Photos need smoothing to form regions; graphics keep their edges.
-      this.h.settings.image.prepare.smooth = photo ? 3 : 0;
+      this.h.settings.image.prepare.smooth = photo && !svg ? 3 : 0;
+      // An SVG with a size in mm, cm or inches is sewn at that size.
+      if (svg?.widthMm) this.h.settings.image.prepare.widthMm = Math.round(Math.min(400, Math.max(10, svg.widthMm)) * 10) / 10;
       this.h.save();
       void saveImage({ name: file.name, type: file.type, data: bytes });
     }
@@ -350,7 +387,9 @@ export class ImageMode {
       while (!stale() && (this.needPrepare || this.needStitches)) {
         if (this.needPrepare) {
           this.needPrepare = false;
-          const p = await this.client.prepare(this.h.settings.image.prepare, this.work.edits, this.work.strokes);
+          const exact = await this.exactLabels();
+          if (stale() || this.needPrepare) continue;
+          const p = await this.client.prepare(this.h.settings.image.prepare, this.work.edits, this.work.strokes, exact);
           if (stale() || this.needPrepare) continue;
           this.prepared = p;
           this.preparedImg = labelsToCanvas(p);
@@ -392,6 +431,17 @@ export class ImageMode {
       // A new image arrived while this one was computed.
       if (this.needPrepare || this.needStitches) void this.pump();
     }
+  }
+
+  /** The SVG's regions at the current working size (drawn again when the size changes). */
+  private async exactLabels(): Promise<ExactLabels | undefined> {
+    const svg = this.svg;
+    if (!svg || !this.source) return undefined;
+    const { w, h, pxMm } = workingSize(this.h.settings.image.prepare.widthMm, this.source.width, this.source.height);
+    if (this.exact?.width === w && this.exact.height === h) return this.exact;
+    const exact = await svg.labels(w, h, pxMm);
+    if (this.svg === svg) this.exact = exact;
+    return exact;
   }
 
   /** Changes edits or strokes as one undo step. */
@@ -587,7 +637,9 @@ export class ImageMode {
     }
     angle.options[0].text = t('image.angle.flow');
     angle.options[1].text = t('image.angle.auto');
-    angle.value = o.angle !== null ? String(o.angle) : o.flow ? 'flow' : 'auto';
+    // Shapes of an SVG are flat, without structure to follow: their rows run straight.
+    angle.options[0].hidden = !!this.svg;
+    angle.value = o.angle !== null ? String(o.angle) : o.flow && !this.svg ? 'flow' : 'auto';
     $('image-stitch-reset').hidden = !Object.keys(s.stitch).length;
     $('image-material').textContent = t('image.material', { fabric: fabricLabel(this.h.settings.profile), thread: threadLabel(this.h.settings.profile) });
     document.querySelectorAll<HTMLInputElement>('input[name="image-view"]').forEach((el) => (el.checked = el.value === s.view));
@@ -604,8 +656,17 @@ export class ImageMode {
     });
     $('image-brush-hint').textContent = t(this.tool === 'none' ? 'image.brush.hint' : this.tool === 'paint' ? 'image.brush.paint' : 'image.brush.erase');
 
+    // Colors and regions of an SVG come from the file: nothing to reduce or smooth.
+    $('image-svg-note').hidden = !this.svg;
+    $('image-colors-field').hidden = $('image-smooth-field').hidden = !!this.svg;
     const info = $('image-info');
-    info.textContent = this.error || (this.source ? t('image.info', { name: this.name, w: this.source.width, h: this.source.height }) : '');
+    info.textContent =
+      this.error ||
+      (this.svg
+        ? t('image.info.svg', { name: this.name, n: this.svg.colors.length })
+        : this.source
+          ? t('image.info', { name: this.name, w: this.source.width, h: this.source.height })
+          : '');
     info.classList.toggle('error', !!this.error);
     $('image-save-project').hidden = !this.source;
     this.renderPalette();
