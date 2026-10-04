@@ -9,6 +9,7 @@
 
 import { computeBounds, type Pattern, type ThreadColor } from '../model/pattern';
 import { isAcknowledgement, type Acknowledgement } from '../validation/acks';
+import { STORAGE_NS } from './namespace';
 
 /** The records of an edited pattern; name, format and bounds come from the original. */
 export interface StoredPattern {
@@ -28,9 +29,9 @@ export interface StoredFile {
   acks?: Acknowledgement[];
 }
 
-const DB_NAME = 'heatstitch';
+const DB_NAME = STORAGE_NS;
 const STORE = 'files';
-const ACTIVE_KEY = 'heatstitch.activeFile';
+const ACTIVE_KEY = `${STORAGE_NS}.activeFile`;
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 

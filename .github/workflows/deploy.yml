@@ -1,23 +1,25 @@
 name: CI and Pages
 
+# The site is served from the gh-pages branch: main goes to its root, every pull request
+# gets a preview under pr-preview/pr-N/ that is removed again when the PR closes.
+
 on:
   push:
     branches: ['**']
   pull_request:
+    types: [opened, reopened, synchronize, closed]
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: pages-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
   build:
+    if: github.event.action != 'closed'
     runs-on: ubuntu-latest
+    concurrency:
+      group: build-${{ github.ref }}
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -27,18 +29,60 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
-      - if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-        uses: actions/upload-pages-artifact@v3
+        env:
+          BASE_PATH: ${{ github.event_name == 'pull_request' && format('/heatstitch/pr-preview/pr-{0}/', github.event.number) || '' }}
+      # Without it, Pages runs Jekyll over the branch and drops files starting with an underscore.
+      - run: touch dist/.nojekyll
+      - if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
         with:
+          name: site
           path: dist
+          include-hidden-files: true
 
   deploy:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      contents: write
+    concurrency:
+      group: deploy-main
+      cancel-in-progress: false
     steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
+      # The deploy action pushes with git, so it needs a checkout. Both it and the preview
+      # action retry when the other one pushed to gh-pages in the meantime.
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: site
+          path: dist
+      - uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: dist
+          branch: gh-pages
+          clean-exclude: pr-preview/
+
+  preview:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && !cancelled() && !failure()
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    concurrency:
+      group: preview-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      # The action pushes with git, so it needs a checkout too.
+      - uses: actions/checkout@v4
+      - if: github.event.action != 'closed'
+        uses: actions/download-artifact@v4
+        with:
+          name: site
+          path: dist
+      - uses: rossjrw/pr-preview-action@v1
+        with:
+          source-dir: dist
+          preview-branch: gh-pages
+          umbrella-dir: pr-preview
