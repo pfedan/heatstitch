@@ -11,7 +11,6 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 export interface CorrectHooks {
   /** Run the automatic correction on the whole design or the selected zone. */
   autoFix: (scope: 'all' | 'zone') => void;
-  toggleEdit: () => void;
   toggleCompare: () => void;
   deleteSelection: () => void;
   thinSelection: (share: number) => void;
@@ -49,7 +48,7 @@ export class CorrectPanel {
   private fixAll = $<HTMLButtonElement>('fix-all');
   private fixZone = $<HTMLButtonElement>('fix-zone');
   private report = $<HTMLElement>('fix-report');
-  private editToggle = $<HTMLButtonElement>('edit-toggle');
+  private editOff = $<HTMLElement>('edit-off-hint');
   private tools = $<HTMLElement>('edit-tools');
   private selInfo = $<HTMLElement>('sel-info');
   private selDelete = $<HTMLButtonElement>('sel-delete');
@@ -88,7 +87,6 @@ export class CorrectPanel {
     });
     this.fixAll.addEventListener('click', () => hooks.autoFix('all'));
     this.fixZone.addEventListener('click', () => hooks.autoFix('zone'));
-    this.editToggle.addEventListener('click', () => hooks.toggleEdit());
     this.compareToggle.addEventListener('click', () => hooks.toggleCompare());
     this.selDelete.addEventListener('click', () => hooks.deleteSelection());
     this.selThin.addEventListener('click', () => hooks.thinSelection(Number(this.thinShare.value)));
@@ -120,15 +118,12 @@ export class CorrectPanel {
     this.focusHint.textContent = t(hint[this.s.correction.focus]);
     this.fixAll.textContent = busy ? t('correct.running') : t('correct.all');
 
-    this.editToggle.disabled = !loaded;
-    this.editToggle.textContent = t(st.editing ? 'edit.stop' : 'edit.start');
-    this.editToggle.setAttribute('aria-pressed', String(st.editing));
-    this.editToggle.classList.toggle('primary', st.editing);
+    this.editOff.hidden = st.editing;
     this.tools.hidden = !st.editing;
     this.selInfo.textContent = !st.pointsVisible
       ? t('edit.zoom')
       : st.selection
-        ? t('edit.selection', { n: formatNumber(st.selection) })
+        ? t(st.selection === 1 ? 'edit.selection.one' : 'edit.selection', { n: formatNumber(st.selection) })
         : t('edit.none');
     this.selDelete.disabled = this.selThin.disabled = !st.selection || busy;
     this.thinShare.setAttribute('aria-label', t('edit.thin'));
