@@ -173,6 +173,13 @@ function rememberKey(key: string, r: Remembered): void {
   if (memory.size > MEMORY_SIZE) memory.delete(memory.keys().next().value!);
 }
 
+/** Forgets what was remembered for an object's stitches (or puts back `r`). */
+export function forget(p: Pattern, o: SewObject, r?: Remembered): void {
+  const key = objectKey(p, o);
+  if (r) rememberKey(key, r);
+  else memory.delete(key);
+}
+
 export function remembered(p: Pattern, o: SewObject): Remembered | undefined {
   return memory.get(objectKey(p, o));
 }
@@ -494,6 +501,9 @@ export function analyze(p: Pattern, o: SewObject, kinds: Uint8Array, known = rem
       if (inside >= (r.b - r.a + 1) * 0.8) r.kind = 'satin';
     }
   }
+  // A satin made here is satin all along: where rungs slant its stitches far, they are split and
+  // look like fill rows to the recognizer.
+  if (known?.satin && known.columns && !known.fill) for (const r of merged) if (r.kind === 'fill') r.kind = 'satin';
   const parts: Part[] = [];
   for (const r of merged) {
     const last = parts[parts.length - 1];

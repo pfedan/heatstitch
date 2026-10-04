@@ -194,3 +194,19 @@ describe('rungs and new stitches', () => {
     expect(m.spacing).toBeCloseTo(2.5, 0);
   });
 });
+
+describe('satin along rungs drawn across a shape', () => {
+  it('needs the shape to end soon after the first and the last rung', () => {
+    // An L-shaped area: rungs only across the foot leave the long leg beyond the last one.
+    const loop: Pt[] = [[0, 0], [30, 0], [30, 6], [6, 6], [6, 30], [0, 30]];
+    expect(railsFromOutline(loop, [[[20, -1], [20, 7]], [[26, -1], [26, 7]]])).toBeNull();
+    // Rungs at both ends of the L and one across its corner give a strip that turns.
+    const r = railsFromOutline(loop, [
+      [[-1, 25], [7, 25]],
+      [[-1, -1], [7, 7]],
+      [[25, -1], [25, 7]],
+    ]);
+    expect(r).not.toBeNull();
+    expect(r!.rungs).toHaveLength(3);
+  });
+});

@@ -2853,3 +2853,66 @@ body[data-mode='flow'] .stage .hint {
   height: 15px;
   flex: none;
 }
+
+/* Satin pattern and underlay choice: buttons in a row, wrapping when the column is narrow. */
+.choice-row {
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+.choice-row button {
+  flex: 1 1 auto;
+  border: none;
+  border-radius: 0;
+  padding: 4px 6px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.choice-row.small button {
+  font-size: 11px;
+  padding: 4px 4px;
+}
+
+.choice-row button.active {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.choice-row button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* Rungs: the direction of a satin, and lines drawn across a fill. */
+.direction-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.direction-field.on {
+  border-left: 2px solid var(--accent);
+  padding-left: 8px;
+}
+
+.direction-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.direction-buttons button {
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
+.stage.rungs canvas#canvas {
+  cursor: crosshair;
+}
+
+.stage.rungs canvas#canvas.panning {
+  cursor: grabbing;
+}

@@ -335,8 +335,8 @@ export function reversedRungs(rungs: Rung[], la: number, lb: number): Rung[] {
  * Rails of a satin column for a shape (its outline, a closed line) cut across by rungs drawn on
  * it: each rung meets the outline twice; going round the outline the ends must come in the
  * order 1, 2 … n on one side and n … 2, 1 on the other (the rungs cut the shape into a strip).
- * Beyond the first and the last rung the rails meet in the middle of the outline there. Returns
- * null when the rungs do not cut the shape into a strip.
+ * Beyond the first and the last rung the rails meet in the middle of the outline there (the shape
+ * has to end soon after them). Returns null when the rungs do not cut the shape into a strip.
  */
 export function railsFromOutline(loop: Pt[], lines: [Pt, Pt][]): { left: Pt[]; right: Pt[]; rungs: Rung[] } | null {
   const n = lines.length;
@@ -367,6 +367,9 @@ export function railsFromOutline(loop: Pt[], lines: [Pt, Pt][]): { left: Pt[]; r
   const at = (i: number) => ends[(start + i) % m].u;
   const fwd = (u0: number, u1: number) => (u1 - u0 + total) % total;
   // Middle of the outline beyond the first rung (from its B end round to its A end) and beyond the last.
+  // Beyond the first and the last rung the shape has to end soon (a round or pointed end), not go on.
+  const capLen = (u0: number, u1: number) => fwd(u0, u1) <= 4 * dist(pointAt(ring, cum, u0), pointAt(ring, cum, u1)) + 2;
+  if (!capLen(at(m - 1), at(0)) || !capLen(at(n - 1), at(n))) return null;
   const capA = (at(m - 1) + fwd(at(m - 1), at(0)) / 2) % total;
   const capB = (at(n - 1) + fwd(at(n - 1), at(n)) / 2) % total;
   // The outline from u0 on for `len` mm: the point there, the outline's own points on the way, the end.
