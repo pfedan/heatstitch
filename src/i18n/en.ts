@@ -1,7 +1,7 @@
 import type { de } from './de';
 
 export const en: Record<keyof typeof de, string> = {
-  'app.tagline': 'Check and fix stitch density in DST and PES files',
+  'app.tagline': 'View, edit and check embroidery files',
   'app.docs': 'Guide',
   'files.title': 'Files',
   'files.drop': 'Drop DST, PES, SVG or project files here or click',

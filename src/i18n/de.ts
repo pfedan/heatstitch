@@ -1,5 +1,5 @@
 export const de = {
-  'app.tagline': 'Stickdichte prüfen und korrigieren für DST- und PES-Dateien',
+  'app.tagline': 'Stickdateien ansehen, bearbeiten und prüfen',
   'app.docs': 'Anleitung',
   'files.title': 'Dateien',
   'files.drop': 'DST, PES, SVG oder Projekt hierher ziehen oder klicken',

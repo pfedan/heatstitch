@@ -5,7 +5,7 @@ backend, no uploads: your files never leave your machine.
 
 **Try it: <https://pfedan.github.io/heatstitch/>** (guide: [docs.html](https://pfedan.github.io/heatstitch/docs.html))
 
-![heatstitch: density heatmap with findings next to the realistic thread view](public/og-image.jpg)
+![heatstitch: an embroidered cat as realistic threads, in sewing order and as a density heatmap](public/og-image.jpg)
 
 ## Three modes
 
