@@ -126,11 +126,56 @@ button:disabled {
 }
 
 .layout {
+  /* Dragged widths are set inline; the caps keep the canvas usable in a narrower window. */
+  --side-w: 300px;
+  --insp-w: 320px;
   flex: 1;
   display: grid;
-  grid-template-columns: 300px 1fr 320px;
+  grid-template-columns: min(var(--side-w), 32vw) minmax(0, 1fr) min(var(--insp-w), 32vw);
+  grid-template-rows: minmax(0, 1fr);
   grid-template-areas: 'side stage findings';
   min-height: 0;
+}
+
+/* Edges between the side columns and the canvas, laid over the canvas border. */
+.resizer {
+  grid-area: stage;
+  z-index: 5;
+  width: 9px;
+  cursor: col-resize;
+  touch-action: none;
+  outline: none;
+}
+
+.resizer[data-panel='side'] {
+  justify-self: start;
+  margin-left: -5px;
+}
+
+.resizer[data-panel='inspector'] {
+  justify-self: end;
+  margin-right: -5px;
+}
+
+.resizer::after {
+  content: '';
+  display: block;
+  width: 3px;
+  height: 100%;
+  margin: 0 auto;
+  background: transparent;
+  transition: background 0.15s;
+}
+
+.resizer:hover::after,
+.resizer:focus-visible::after,
+.resizer.dragging::after {
+  background: var(--accent);
+}
+
+body.resizing {
+  cursor: col-resize;
+  user-select: none;
 }
 
 /* The Correction panel shares the column, so closing the findings hides only them. */
@@ -152,8 +197,16 @@ button:disabled {
 
 @media (max-width: 1100px) {
   .layout {
-    grid-template-columns: 260px 1fr 280px;
+    --side-w: 260px;
+    --insp-w: 280px;
   }
+}
+
+/* Positioned so nothing inside (such as the hidden radios of a segmented control) can reach past
+   the column and make the whole page scroll. */
+.sidebar,
+.inspector {
+  position: relative;
 }
 
 .sidebar {
@@ -343,6 +396,7 @@ input[type='range'] {
 }
 
 .segmented {
+  position: relative;
   display: flex;
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -509,6 +563,10 @@ input[type='range'] {
     border-right: none;
     border-bottom: 1px solid var(--line);
     overflow: visible;
+  }
+
+  .resizer {
+    display: none;
   }
 
   .tagline {
