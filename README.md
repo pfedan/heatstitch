@@ -295,3 +295,12 @@ public/guide/    Screenshots for the guide
 docs.html        Short guide EN/DE (src/docs.ts, src/docs.css)
 public/og-image.jpg, robots.txt, sitemap.xml  Social media preview image, crawlers
 ```
+
+## Contributing
+
+Bug reports, example files and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for
+setup, tests, pull request previews and the English/German conventions.
+
+## License
+
+[MIT](LICENSE) © Daniel Pfeffer
