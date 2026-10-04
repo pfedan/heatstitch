@@ -89,8 +89,8 @@ describe('restitching objects', () => {
   });
 
   it('shortens running stitches', () => {
-    const { p, kinds, objs } = setup('demos/letters.pes');
-    const o = firstOf(objs, 'run');
+    const { p, kinds, objs } = setup('cat-60mm.pes');
+    const o = objs.find((x) => x.kind === 'run' && x.stitches > 40)!;
     const pt = analyze(p, o, kinds).parts[0];
     const m = measureRun(p, pt);
     const r = restitch(p, objs, [o.index], { kind: 'run', s: { ...m, stitch: m.stitch / 2 } }, kinds, 7);
