@@ -833,6 +833,14 @@ button.link {
   font-size: 12px;
 }
 
+.example-select {
+  display: block;
+  margin-top: 6px;
+  padding: 2px 6px;
+  font-size: 12px;
+  color: var(--accent);
+}
+
 button.link:hover {
   text-decoration: underline;
 }

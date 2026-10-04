@@ -94,7 +94,12 @@
             <input type="file" id="file-input" accept=".dst,.pes,.DST,.PES" multiple hidden />
             <span data-i18n="files.drop"></span>
           </label>
-          <button type="button" id="load-example" class="link" data-i18n="files.example"></button>
+          <select id="load-example" class="example-select" data-i18n-aria="files.example">
+            <option value="" data-i18n="files.example" selected hidden></option>
+            <option value="examples/cat-60mm.pes" data-i18n="files.example.cat"></option>
+            <option value="examples/demos/overlap.pes" data-i18n="files.example.overlap"></option>
+            <option value="examples/demos/confetti.pes" data-i18n="files.example.confetti"></option>
+          </select>
           <ul id="file-list" class="file-list"></ul>
           <div class="file-actions" id="file-actions" hidden>
             <span class="label save-label" data-i18n-title="save.note"><span data-i18n="save.title"></span> <span class="info" aria-hidden="true">ⓘ</span></span>
