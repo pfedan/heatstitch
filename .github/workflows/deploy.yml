@@ -65,6 +65,7 @@ jobs:
           branch: gh-pages
           clean-exclude: pr-preview/
 
+  # Fork pull requests only get a read-only token here; fork-preview.yml publishes theirs.
   preview:
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && !cancelled() && !failure()
     needs: build
