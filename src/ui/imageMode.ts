@@ -37,7 +37,8 @@ export interface ImageHooks {
   /** The first stitches of a newly opened image are there; `first` for the very first image. */
   reveal: (first: boolean) => void;
   validate: (p: Pattern) => Promise<ValidationResult>;
-  takeOver: (p: Pattern, name: string) => Promise<void>;
+  /** Adds the design to the file list, with what is known about its objects. */
+  takeOver: (d: Digitized, name: string) => Promise<void>;
 }
 
 type Tool = 'none' | 'paint' | 'erase';
@@ -233,9 +234,9 @@ export class ImageMode {
       setTimeout(() => (copy.textContent = t('image.ai.copy')), 2500);
     });
     $('image-take').addEventListener('click', async () => {
-      const p = this.result?.pattern;
-      if (!p) return;
-      await h.takeOver(p, this.name || 'image');
+      const d = this.result;
+      if (!d) return;
+      await h.takeOver(d, this.name || 'image');
     });
     this.render();
   }
