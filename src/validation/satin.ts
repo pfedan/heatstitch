@@ -53,3 +53,35 @@ export function satinMask(p: Pattern, minLen = MIN_LEN): Uint8Array {
   close(n - 1);
   return mask;
 }
+
+/**
+ * Marks E stitches (blanket stitch, sewn along appliqué edges): a stitch across, the stitch back
+ * into the same hole and a step on along the edge, square to it, at least three times in a row.
+ * They cover an edge like a satin column, so they count as one.
+ */
+export function eStitchMask(p: Pattern): Uint8Array {
+  const n = p.cmd.length;
+  const mask = new Uint8Array(n);
+  const sewn = (i: number) => i > 0 && i < n && p.cmd[i] === STITCH && p.cmd[i - 1] === STITCH;
+  /** Spoke out ending at record i, back at i + 1, the step on at i + 2. */
+  const spoke = (i: number) => {
+    if (!sewn(i) || !sewn(i + 1) || !sewn(i + 2)) return false;
+    if (p.x[i + 1] !== p.x[i - 1] || p.y[i + 1] !== p.y[i - 1]) return false;
+    const sx = p.x[i] - p.x[i - 1];
+    const sy = p.y[i] - p.y[i - 1];
+    const tx = p.x[i + 2] - p.x[i + 1];
+    const ty = p.y[i + 2] - p.y[i + 1];
+    const ls = Math.hypot(sx, sy);
+    const lt = Math.hypot(tx, ty);
+    if (ls < 8 || ls > MAX_LEN || lt < 3 || lt > 80) return false;
+    return Math.abs(sx * tx + sy * ty) / (ls * lt) < 0.6;
+  };
+  for (let i = 1; i < n; i++) {
+    let k = i;
+    while (spoke(k)) k += 3;
+    const count = (k - i) / 3;
+    if (count >= 3) mask.fill(1, i, k);
+    if (count) i = k - 1;
+  }
+  return mask;
+}

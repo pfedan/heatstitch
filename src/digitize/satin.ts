@@ -25,6 +25,12 @@ export interface SatinParams {
   splitMm: number;
   /** Short stitches on the inside of curves (default on). */
   short?: boolean;
+  /** Added to the right side instead of `pull` (mm); the sides can differ. */
+  pullB?: number;
+  /** Added to each side in proportion to the column's width there (0.1 = 10 %). */
+  pullShare?: number;
+  /** Split stitches staggered from stitch to stitch, so the split points do not line up into a groove. */
+  stagger?: boolean;
 }
 
 export interface Column {
@@ -159,10 +165,18 @@ export function pairs(c: Column, p: SatinParams, ends?: ColumnEnds): [Pt, Pt][] 
     out.push([c.left[i], c.right[i]]);
     last = i;
   }
-  // Pull compensation: each pair widened outwards from its middle.
+  // Pull compensation: each pair widened outwards from its middle (never turned inside out).
   const comp = out.map(([a, b]): [Pt, Pt] => {
     const u = norm(sub(a, b));
-    return [[a[0] + u[0] * p.pull, a[1] + u[1] * p.pull], [b[0] - u[0] * p.pull, b[1] - u[1] * p.pull]];
+    const w = dist(a, b);
+    let ea = p.pull + w * (p.pullShare ?? 0);
+    let eb = (p.pullB ?? p.pull) + w * (p.pullShare ?? 0);
+    if (ea + eb < -w * 0.8) {
+      const k = (-w * 0.8) / (ea + eb);
+      ea *= k;
+      eb *= k;
+    }
+    return [[a[0] + u[0] * ea, a[1] + u[1] * ea], [b[0] - u[0] * eb, b[1] - u[1] * eb]];
   });
   // Short stitches on the inside of curves.
   for (const side of p.short === false ? [] : ([0, 1] as const)) {
@@ -184,16 +198,60 @@ function split(a: Pt, b: Pt, max: number): Pt[] {
   return out;
 }
 
+/** Split points of stitch number `row` staggered: no two neighbours split at the same place. */
+const STAGGERS = 4;
+/** No split point closer to a rail than this (mm): it would make a stitch too short to sew. */
+const SPLIT_END = 1;
+
+/**
+ * Splits a stitch across the column from a to b (`fromA` measured from a, else from b, so a
+ * stitch and the one back share their grid): at a fourth of the length further on from stitch
+ * to stitch, every `max - 1` mm, never nearer than 1 mm to a rail. Returns the points after a.
+ */
+function splitStaggered(a: Pt, b: Pt, max: number, row: number, fromA: boolean): Pt[] {
+  const d = dist(a, b);
+  if (d <= max) return [b];
+  const step = Math.max(1, max - SPLIT_END);
+  const ts: number[] = [];
+  for (let x = ((row % STAGGERS) / STAGGERS) * step; x < d; x += step) if (x >= SPLIT_END && x <= d - SPLIT_END) ts.push(x);
+  const along = (fromA ? ts : ts.map((x) => d - x).reverse()).map((x) => lerp(a, b, x / d));
+  return [...along, b];
+}
+
 /** Needle points of the satin: left, right, left, right ... along the pairs. */
 export function satinStitches(ps: [Pt, Pt][], p: SatinParams): Pt[] {
   const out: Pt[] = [];
+  let row = 0;
+  const cross = (a: Pt, b: Pt, fromA: boolean) => (p.stagger ? splitStaggered(a, b, p.splitMm, row++, fromA) : split(a, b, p.splitMm));
   for (const [a, b] of ps) {
     if (!out.length) out.push(a);
-    else out.push(...split(out[out.length - 1], a, p.splitMm));
-    out.push(...split(a, b, p.splitMm));
+    else out.push(...cross(out[out.length - 1], a, false));
+    out.push(...cross(a, b, true));
   }
   return out;
 }
+
+/**
+ * Needle points of an E stitch (blanket stitch, for appliqué edges): a running stitch along the
+ * left rail, at each pair a stitch across to the right rail and back on the same holes.
+ */
+export function eStitches(ps: [Pt, Pt][], p: SatinParams): Pt[] {
+  const out: Pt[] = [];
+  let row = 0;
+  for (const [a, b] of ps) {
+    if (!out.length) out.push(a);
+    else out.push(...split(out[out.length - 1], a, p.splitMm));
+    const there = p.stagger ? splitStaggered(a, b, p.splitMm, row++, true) : split(a, b, p.splitMm);
+    out.push(...there, ...[a, ...there.slice(0, -1)].reverse());
+  }
+  return out;
+}
+
+/** Kinds of satin underlay: by the column's width, along the middle, along both rails, zigzag, rails and zigzag. */
+export type UnderlayKind = 'auto' | 'center' | 'contour' | 'zigzag' | 'both';
+
+/** Inset of the contour and zigzag underlay from the rails (mm), at most a fourth of the width. */
+const INSET = 0.4;
 
 /**
  * Underlay sewn on the way out along the column (the satin follows on the way back): a center walk
@@ -202,7 +260,19 @@ export function satinStitches(ps: [Pt, Pt][], p: SatinParams): Pt[] {
  * within `tol` of the centerline, so it stays under the satin in tight curves.
  */
 export function underlay(c: Column, tol = TOLERANCE): Pt[] {
-  if (c.width <= 4) return runStitch(c.center, 2.5, tol);
+  return c.width <= 4 ? centerWalk(c, tol) : zigzag(c);
+}
+
+function centerWalk(c: Column, tol: number): Pt[] {
+  return runStitch(c.center, 2.5, tol);
+}
+
+const inset = (a: Pt, b: Pt) => {
+  const w = dist(a, b);
+  return Math.min(INSET, w / 4) / Math.max(w, 1e-6);
+};
+
+function zigzag(c: Column): Pt[] {
   const out: Pt[] = [];
   let lastS = -Infinity;
   let s = 0;
@@ -212,11 +282,29 @@ export function underlay(c: Column, tol = TOLERANCE): Pt[] {
     if (s - lastS < 1.5 && i < c.center.length - 1) continue;
     const a = c.left[i];
     const b = c.right[i];
-    const w = dist(a, b);
-    const inset = Math.min(0.4, w / 4) / Math.max(w, 1e-6);
-    out.push(side === 0 ? lerp(a, b, inset) : lerp(b, a, inset));
+    const k = inset(a, b);
+    out.push(side === 0 ? lerp(a, b, k) : lerp(b, a, k));
     side = 1 - side;
     lastS = s;
   }
   return out;
+}
+
+/** Out along the left rail and back along the right one, both inset. */
+function contour(c: Column, tol: number): Pt[] {
+  const l = c.left.map((a, i) => lerp(a, c.right[i], inset(a, c.right[i])));
+  const r = c.right.map((b, i) => lerp(b, c.left[i], inset(b, c.left[i])));
+  return [...runStitch(l, 2, tol), ...runStitch(r.reverse(), 2, tol)];
+}
+
+/**
+ * The underlay of `kind` for the column, and whether it ends at the column's far end (then the
+ * satin comes back over it) or back where it started (then the satin goes out over it).
+ */
+export function underlayOf(c: Column, kind: UnderlayKind, tol = TOLERANCE): { pts: Pt[]; atEnd: boolean } {
+  if (kind === 'center') return { pts: centerWalk(c, tol), atEnd: true };
+  if (kind === 'zigzag') return { pts: zigzag(c), atEnd: true };
+  if (kind === 'contour') return { pts: contour(c, tol), atEnd: false };
+  if (kind === 'both') return { pts: [...contour(c, tol), ...zigzag(c)], atEnd: true };
+  return { pts: underlay(c, tol), atEnd: true };
 }
