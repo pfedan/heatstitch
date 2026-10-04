@@ -56,7 +56,7 @@ import { JumpsPanel } from './ui/jumpsPanel';
 import { kindLabel, LayersPanel } from './ui/layersPanel';
 import { ObjectPanel, OrderCard } from './ui/objectPanel';
 import { StitchPanel, type StitchInfo } from './ui/stitchPanel';
-import { analyze, measureFill, measureRun, measureSatin, restitch, type Settings as RestitchSettings } from './model/restitch';
+import { analyze, measureFill, measureRun, measureSatin, remember, remembered, restitch, type Settings as RestitchSettings } from './model/restitch';
 import { recommendedSpacing } from './validation/profiles';
 import { numberInColor, overlaps, sewObjects, type SewObject } from './model/objects';
 import { conflicts, moveStats, optimizeOrder, reorder, violations } from './model/order';
@@ -488,7 +488,7 @@ function stitchInfo(p: Pattern, q: Sequence): StitchInfo {
     for (const pt of an.parts) {
       if (!seen.has(pt.kind)) counts[pt.kind] = (counts[pt.kind] ?? 0) + 1;
       seen.add(pt.kind);
-      if (pt.kind === 'fill') measured.fill ??= measureFill(p, an);
+      if (pt.kind === 'fill') measured.fill ??= remembered(p, obj)?.fill ?? measureFill(p, an);
       else if (pt.kind === 'satin') measured.satin ??= measureSatin(p, pt, q.kinds);
       else measured.run ??= measureRun(p, pt);
     }
@@ -516,6 +516,18 @@ const stitchPanel = new StitchPanel($('object-stitches'), {
     const r = restitched(s);
     flowPreview = null;
     if (!f || !r) return redraw();
+    const say = () => {
+      if (!r.failed.length) return;
+      const pat = s.kind === 'fill' ? s.s.pattern : null;
+      const msg = pat === 'spiral' ? 'stitch.failedSpiral' : pat === 'contour' || pat === 'follow' ? 'stitch.failedCurved' : 'stitch.failed';
+      layers.say(t(msg, { n: r.failed.length }), true);
+    };
+    if (!r.starts.length) {
+      // Nothing could be sewn this way: the panel goes back to what the objects have.
+      selectionKey++;
+      say();
+      return redraw();
+    }
     const key = selectionKey;
     applyEdit(r.pattern);
     // The same objects stay selected (found by their first stitch), and the settings stay as set.
@@ -523,15 +535,22 @@ const stitchPanel = new StitchPanel($('object-stitches'), {
     // An object can come out in several pieces (new trims inside): all of them stay selected.
     const sel = new Set<number>();
     r.starts.forEach((a, k) => {
+      const pieces = new Set<number>();
       for (let n = a + 1; n <= r.ends[k]; n++) {
         const o = nq.objectAt[recordOfStitch(nq.numbers, n)];
-        if (o >= 0) sel.add(o);
+        if (o >= 0) pieces.add(o);
+      }
+      for (const o of pieces) sel.add(o);
+      // An object that stayed one keeps its shape and fill settings for the next edit.
+      if (pieces.size === 1) {
+        const o = nq.objects[[...pieces][0]];
+        remember(r.pattern, o, { region: r.regions[k], fill: s.kind === 'fill' ? { ...s.s } : undefined });
       }
     });
     if (sel.size) selectedObjects = sel;
     selectionKey = key;
     stitchCache = stitchCache ? { ...stitchCache, p: r.pattern } : null;
-    if (r.failed.length) layers.say(t('stitch.failed', { n: r.failed.length }), true);
+    say();
     redraw();
   },
 });

@@ -29,6 +29,13 @@ export interface FillParams {
   /** Rows are lengthened at both ends by this (mm). */
   pull: number;
   underlay: boolean;
+  /**
+   * Shift of the needle points from row to row, as a fraction of the stitch length: 1/4 repeats
+   * every 4 rows (the usual tatami), 1/2 gives a brick pattern; 0 shifts them at random.
+   */
+  offset?: number;
+  /** Spacing on the far side of the rows (gradient fill): it changes evenly across the shape. */
+  spacingEnd?: number;
   /** Where travel between sections may run; the region itself by default. */
   travel?: Region;
 }
@@ -57,10 +64,21 @@ const RAD = Math.PI / 180;
 
 const dist = (p: Pt, q: Pt) => Math.hypot(p[0] - q[0], p[1] - q[1]);
 
+/**
+ * Rows at an angle: u runs along them, v across. Row k lies at v(k): k * spacing, or for a gradient
+ * at spacings that change evenly from `spacing` to `end` across the extent set by `layout`.
+ */
 class Frame {
   e: Pt;
   n: Pt;
-  constructor(angleDeg: number) {
+  private vs: number[] | null = null;
+  private k0 = 0;
+  constructor(
+    angleDeg: number,
+    public spacing: number,
+    private end = spacing,
+    private offset = 1 / STAGGERS,
+  ) {
     const a = angleDeg * RAD;
     this.e = [Math.cos(a), Math.sin(a)];
     this.n = [-Math.sin(a), Math.cos(a)];
@@ -68,10 +86,43 @@ class Frame {
   at(u: number, v: number): Pt {
     return [u * this.e[0] + v * this.n[0], u * this.e[1] + v * this.n[1]];
   }
+  get gradient(): boolean {
+    return Math.abs(this.end - this.spacing) >= 1e-3;
+  }
+  /** Sets the extent across the rows; returns the first and last row index. */
+  layout(vmin: number, vmax: number): [number, number] {
+    if (!this.gradient) return [Math.ceil(vmin / this.spacing), Math.floor(vmax / this.spacing)];
+    const vs: number[] = [];
+    const span = Math.max(1e-6, vmax - vmin);
+    for (let v = vmin + this.spacing / 2; v <= vmax; ) {
+      vs.push(v);
+      v += this.spacing + ((this.end - this.spacing) * (v - vmin)) / span;
+    }
+    this.vs = vs;
+    this.k0 = 0;
+    return [0, vs.length - 1];
+  }
+  v(k: number): number {
+    if (!this.vs) return k * this.spacing;
+    const i = k - this.k0;
+    if (i < 0) return this.vs[0] + i * this.spacing;
+    if (i >= this.vs.length) return this.vs[this.vs.length - 1] + (i - this.vs.length + 1) * this.end;
+    return this.vs[i];
+  }
+  /** Needle point phase of row k (fraction of the stitch length). */
+  phase(k: number): number {
+    if (this.offset <= 0) {
+      // Random but repeatable: a hash of the row index.
+      const x = Math.sin(k * 12.9898 + 78.233) * 43758.5453;
+      return x - Math.floor(x);
+    }
+    const t = k * this.offset;
+    return t - Math.floor(t);
+  }
 }
 
-/** Row segments inside the field (value below -inset) on the lattice v = k * spacing. */
-function rows(r: Region, field: Float32Array, f: Frame, spacing: number, inset: number): Seg[][] {
+/** Row segments inside the field (value below -inset) on the frame's rows. */
+function rows(r: Region, field: Float32Array, f: Frame, inset: number): Seg[][] {
   const xs = [r.x0 * r.pxMm, (r.x0 + r.w) * r.pxMm];
   const ys = [r.y0 * r.pxMm, (r.y0 + r.h) * r.pxMm];
   let umin = Infinity;
@@ -90,8 +141,23 @@ function rows(r: Region, field: Float32Array, f: Frame, spacing: number, inset: 
   }
   const step = r.pxMm / 2;
   const out: Seg[][] = [];
-  for (let k = Math.ceil(vmin / spacing); k * spacing <= vmax; k++) {
-    const v = k * spacing;
+  // A gradient runs across the shape itself, not across the window around it.
+  let [lo, hi] = [vmin, vmax];
+  if (f.gradient) {
+    [lo, hi] = [Infinity, -Infinity];
+    for (let y = 0; y < r.h; y++) {
+      for (let x = 0; x < r.w; x++) {
+        if (!r.mask[y * r.w + x]) continue;
+        const v = (x + r.x0 + 0.5) * r.pxMm * f.n[0] + (y + r.y0 + 0.5) * r.pxMm * f.n[1];
+        lo = Math.min(lo, v);
+        hi = Math.max(hi, v);
+      }
+    }
+    if (!Number.isFinite(lo)) [lo, hi] = [vmin, vmax];
+  }
+  const [k0, k1] = f.layout(lo, hi);
+  for (let k = k0; k <= k1; k++) {
+    const v = f.v(k);
     const segs: Seg[] = [];
     let prevU = umin;
     let prev = sample(r, field, ...f.at(umin, v)) + inset;
@@ -115,11 +181,11 @@ function rows(r: Region, field: Float32Array, f: Frame, spacing: number, inset: 
 }
 
 /** Groups rows into sections that can each be sewn back and forth without leaving the shape. */
-function sections(r: Region, field: Float32Array, f: Frame, rowList: Seg[][], spacing: number): Section[] {
+function sections(r: Region, field: Float32Array, f: Frame, rowList: Seg[][]): Section[] {
   const all: Section[] = [];
   let open: Section[] = [];
   const overlaps = (a: Seg, b: Seg) => a.u0 < b.u1 && b.u0 < a.u1;
-  const inside = (u: number, v: number) => sample(r, field, ...f.at(u, v)) < spacing / 2;
+  const inside = (u: number, v: number) => sample(r, field, ...f.at(u, v)) < Math.max(f.spacing, f.v(1) - f.v(0)) / 2;
   for (const segs of rowList) {
     const k = segs[0].k;
     const live = open.filter((s) => s[s.length - 1].k === k - 1);
@@ -131,7 +197,7 @@ function sections(r: Region, field: Float32Array, f: Frame, rowList: Seg[][], sp
         const c = cands[0];
         const last = c[c.length - 1];
         const exclusive = segs.filter((o) => overlaps(last, o)).length === 1;
-        const vMid = (k - 0.5) * spacing;
+        const vMid = (f.v(k - 1) + f.v(k)) / 2;
         if (exclusive && inside((last.u0 + seg.u0) / 2, vMid) && inside((last.u1 + seg.u1) / 2, vMid)) {
           c.push(seg);
           next.push(c);
@@ -152,7 +218,7 @@ function sections(r: Region, field: Float32Array, f: Frame, rowList: Seg[][], sp
 /** Points of one row from u `from` to `to` (row index k for the stagger). */
 function rowStitches(f: Frame, k: number, v: number, from: number, to: number, len: number): Pt[] {
   const dir = to >= from ? 1 : -1;
-  const phase = (((k % STAGGERS) + STAGGERS) % STAGGERS) / STAGGERS;
+  const phase = f.phase(k);
   const lo = Math.min(from, to);
   const hi = Math.max(from, to);
   const margin = Math.min(0.6, len / 4);
@@ -163,27 +229,27 @@ function rowStitches(f: Frame, k: number, v: number, from: number, to: number, l
 }
 
 /** Stitches of a section, entered at its first or last row and at the start or end of that row. */
-function sewSection(f: Frame, s: Section, spacing: number, len: number, pull: number, reversed: boolean, flip: boolean): Pt[] {
+function sewSection(f: Frame, s: Section, len: number, pull: number, reversed: boolean, flip: boolean): Pt[] {
   const list = reversed ? s.slice().reverse() : s;
   const out: Pt[] = [];
   list.forEach((seg, i) => {
     const fwd = (i % 2 === 0) !== flip;
     const a = fwd ? seg.u0 - pull : seg.u1 + pull;
     const b = fwd ? seg.u1 + pull : seg.u0 - pull;
-    out.push(...rowStitches(f, seg.k, seg.k * spacing, a, b, len));
+    out.push(...rowStitches(f, seg.k, f.v(seg.k), a, b, len));
   });
   return out;
 }
 
 /** The four ways into a section: [reversed, flip] with the entry point. */
-function entries(f: Frame, s: Section, spacing: number, pull: number): { reversed: boolean; flip: boolean; p: Pt }[] {
+function entries(f: Frame, s: Section, pull: number): { reversed: boolean; flip: boolean; p: Pt }[] {
   const first = s[0];
   const last = s[s.length - 1];
   return [
-    { reversed: false, flip: false, p: f.at(first.u0 - pull, first.k * spacing) },
-    { reversed: false, flip: true, p: f.at(first.u1 + pull, first.k * spacing) },
-    { reversed: true, flip: false, p: f.at(last.u0 - pull, last.k * spacing) },
-    { reversed: true, flip: true, p: f.at(last.u1 + pull, last.k * spacing) },
+    { reversed: false, flip: false, p: f.at(first.u0 - pull, f.v(first.k)) },
+    { reversed: false, flip: true, p: f.at(first.u1 + pull, f.v(first.k)) },
+    { reversed: true, flip: false, p: f.at(last.u0 - pull, f.v(last.k)) },
+    { reversed: true, flip: true, p: f.at(last.u1 + pull, f.v(last.k)) },
   ];
 }
 
@@ -368,9 +434,8 @@ class MinHeap {
 
 /** Number of sections at a coarse spacing: the score for choosing the fill angle. */
 function sectionCount(r: Region, angle: number, spacing: number): number {
-  const f = new Frame(angle);
-  const list = rows(r, r.sdf, f, spacing * 2, 0);
-  return sections(r, r.sdf, f, list, spacing * 2).length;
+  const f = new Frame(angle, spacing * 2);
+  return sections(r, r.sdf, f, rows(r, r.sdf, f, 0)).length;
 }
 
 /**
@@ -400,7 +465,6 @@ export function chooseAngle(r: Region, spacing: number, neighbours: number[]): n
 function sewAll(
   f: Frame,
   secs: Section[],
-  spacing: number,
   len: number,
   pull: number,
   start: Pt,
@@ -413,10 +477,10 @@ function sewAll(
   let cur: Pt[] | null = runs.length ? runs[runs.length - 1] : null;
   while (todo.length) {
     let bi = 0;
-    let be = entries(f, todo[0], spacing, pull)[0];
+    let be = entries(f, todo[0], pull)[0];
     let bd = Infinity;
     todo.forEach((s, i) => {
-      for (const e of entries(f, s, spacing, pull)) {
+      for (const e of entries(f, s, pull)) {
         const d = dist(pos, e.p);
         if (d < bd) {
           bd = d;
@@ -426,7 +490,7 @@ function sewAll(
       }
     });
     const s = todo.splice(bi, 1)[0];
-    const pts = sewSection(f, s, spacing, len, pull, be.reversed, be.flip);
+    const pts = sewSection(f, s, len, pull, be.reversed, be.flip);
     // Travel to the entry: straight when close, else along the inside of the shape.
     let travel: Pt[] | null = null;
     if (cur && bd > 1) {
@@ -438,7 +502,7 @@ function sewAll(
       cur = pts;
       runs.push(cur);
     }
-    for (const seg of s) grid.cover(f.at(seg.u0, seg.k * spacing), f.at(seg.u1, seg.k * spacing), spacing / 2);
+    for (const seg of s) grid.cover(f.at(seg.u0, f.v(seg.k)), f.at(seg.u1, f.v(seg.k)), f.spacing / 2);
     pos = pts[pts.length - 1];
   }
   return pos;
@@ -453,13 +517,13 @@ export function pathLength(p: Pt[]): number {
 /** Fill stitches for the region, starting near `start`. Null if no row fits into the region. */
 export function fillRegion(r: Region, p: FillParams, start: Pt, neighbours: number[] = []): FillResult | null {
   const angle = p.angle ?? chooseAngle(r, p.spacing, neighbours);
-  const f = new Frame(angle);
-  const top = rows(r, r.sdf, f, p.spacing, 0);
+  const f = new Frame(angle, p.spacing, p.spacingEnd ?? p.spacing, p.offset ?? 1 / STAGGERS);
+  const top = rows(r, r.sdf, f, 0);
   if (!top.length) return null;
   const runs: Pt[][] = [];
   const grid = new TravelGrid(p.travel ?? r);
   const pos = p.underlay ? sewUnderlay(r, angle + 90, p.spacing, start, grid, runs) : start;
-  sewAll(f, sections(r, r.sdf, f, top, p.spacing), p.spacing, p.stitch, p.pull, pos, grid, true, runs);
+  sewAll(f, sections(r, r.sdf, f, top), p.stitch, p.pull, pos, grid, true, runs);
   return { runs, angle };
 }
 
@@ -468,10 +532,10 @@ export function fillRegion(r: Region, p: FillParams, start: Pt, neighbours: numb
  * edge; appended to `runs`. Returns where the needle ends.
  */
 export function sewUnderlay(r: Region, angle: number, spacing: number, start: Pt, grid: TravelGrid, runs: Pt[][]): Pt {
-  const uf = new Frame(angle);
   const us = Math.max(1.2, 3 * spacing);
-  const under = rows(r, r.sdf, uf, us, UNDERLAY_INSET);
-  const pos = under.length ? sewAll(uf, sections(r, r.sdf, uf, under, us), us, UNDERLAY_STITCH, 0, start, grid, false, runs) : start;
+  const uf = new Frame(angle, us);
+  const under = rows(r, r.sdf, uf, UNDERLAY_INSET);
+  const pos = under.length ? sewAll(uf, sections(r, r.sdf, uf, under), UNDERLAY_STITCH, 0, start, grid, false, runs) : start;
   grid.covered.fill(0);
   return pos;
 }

@@ -2407,6 +2407,81 @@ body[data-mode='flow'] .stage .hint {
   color: var(--accent-ink);
 }
 
+.pattern-tiles {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+  margin: 4px 0;
+}
+
+.pattern-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 1px 5px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.1;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.pattern-tile svg {
+  width: 22px;
+  height: 22px;
+}
+
+.pattern-tile span {
+  max-width: 100%;
+  text-align: center;
+  letter-spacing: -0.2px;
+}
+
+.pattern-tile:hover {
+  color: var(--ink);
+  border-color: var(--muted);
+}
+
+.pattern-tile.active {
+  border-color: var(--accent);
+  color: var(--ink);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.pattern-tile.active svg {
+  color: var(--accent);
+}
+
+.pattern-tile:focus-visible,
+.offset-buttons button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.offset-buttons {
+  margin-top: 4px;
+}
+
+.offset-buttons button {
+  flex: 1;
+  border: none;
+  border-radius: 0;
+  padding: 4px 2px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.offset-buttons button.active {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
 .stitch-field {
   margin-bottom: 0;
 }

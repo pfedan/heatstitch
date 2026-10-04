@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { sewObjects, type SewObject } from '../src/model/objects';
 import { STITCH, TRIM, type Pattern } from '../src/model/pattern';
-import { analyze, measureFill, measureRun, measureSatin, restitch } from '../src/model/restitch';
+import { analyze, measureFill, measureRun, measureSatin, remember, remembered, restitch } from '../src/model/restitch';
 import { stitchKinds } from '../src/model/sequence';
 import { parsePattern } from '../src/parsers';
 
@@ -58,7 +58,7 @@ describe('restitching objects', () => {
     const { p, kinds, objs } = setup('cat-60mm.pes');
     const o = objs[1];
     const before = measureFill(p, analyze(p, o, kinds));
-    const r = restitch(p, objs, [o.index], { kind: 'fill', s: { ...before, spacing: 0.6, angle: 90 } }, kinds, 7);
+    const r = restitch(p, objs, [o.index], { kind: 'fill', s: { ...before, pattern: 'tatami', spacing: 0.6, angle: 90 } }, kinds, 7);
     expect(r.failed).toEqual([]);
     const q = r.pattern;
     const a = recordOf(q, r.starts[0] + 1);
@@ -95,5 +95,20 @@ describe('restitching objects', () => {
     const m = measureRun(p, pt);
     const r = restitch(p, objs, [o.index], { kind: 'run', s: { ...m, stitch: m.stitch / 2 } }, kinds, 7);
     expect(r.ends[0] - r.starts[0]).toBeGreaterThan(o.stitches * 1.5);
+  });
+
+  it('keeps a spiral an object of fill, with its shape for the next edit', () => {
+    const { p, kinds, objs } = setup('demos/overlap.pes');
+    const o = firstOf(objs, 'fill');
+    const an = analyze(p, o, kinds);
+    const m = measureFill(p, an);
+    const r = restitch(p, objs, [o.index], { kind: 'fill', s: { ...m, pattern: 'spiral', stitch: 2.5 } }, kinds, 7);
+    expect(r.failed).toEqual([]);
+    const q = r.pattern;
+    const now = sewObjects(q).find((x) => x.first === recordOf(q, r.starts[0] + 1))!;
+    expect(now.kind).toBe('fill');
+    remember(q, now, { region: r.regions[0], fill: { ...m, pattern: 'spiral' } });
+    expect(remembered(q, now)?.fill?.pattern).toBe('spiral');
+    expect(analyze(q, now, stitchKinds(q)).fill).toBe(r.regions[0]);
   });
 });

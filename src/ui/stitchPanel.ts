@@ -1,6 +1,6 @@
 import { formatNumber, t, type Key } from '../i18n';
 import type { ObjectKind } from '../model/objects';
-import type { FillSettings, RunSettings, SatinSettings, Settings } from '../model/restitch';
+import type { FillPattern, FillSettings, RunSettings, SatinSettings, Settings } from '../model/restitch';
 import { KIND_ICON, kindLabel } from './layersPanel';
 
 /**
@@ -26,6 +26,27 @@ export interface StitchHooks {
 }
 
 const KINDS: ObjectKind[] = ['fill', 'satin', 'run'];
+
+const PATTERNS: FillPattern[] = ['tatami', 'gradient', 'contour', 'spiral', 'follow'];
+
+/** Small pictures of the fill patterns (24 × 24, drawn with the current color). */
+const PATTERN_ICON: Record<FillPattern, string> = {
+  tatami: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 5h7m3 0h8M3 9.5h4m3 0h11M3 14h9m3 0h6M3 18.5h2m3 0h13"/></svg>',
+  gradient: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 3.5h18M3 6h18M3 9h18M3 13h18M3 18.5h18"/></svg>',
+  contour: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="5"/><rect x="7" y="7" width="10" height="10" rx="2.5"/><path d="M11 11h2v2h-2z"/></svg>',
+  spiral: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M12 12c0-1 1.5-1.2 2-.2.8 1.6-1 3.2-2.6 3-2.6-.3-3.4-3.6-1.8-5.6 2.2-2.8 6.6-1.8 7.6 1.4 1.3 4-2.2 7.6-6 7.2-4.4-.4-7-5-5.6-9C7 5 11.6 3 15.6 4.2"/></svg>',
+  follow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 6c5-3 9 3 18 0M3 11c5-3 9 3 18 0M3 16c5-3 9 3 18 0M3 21c5-3 9 3 18 0"/></svg>',
+};
+
+/** Longest stitch for contour and spiral rows (mm). */
+const CURVED_STITCH = 2.5;
+
+const OFFSETS: [number, string][] = [
+  [0.5, '1/2'],
+  [1 / 3, '1/3'],
+  [0.25, '1/4'],
+  [0.2, '1/5'],
+];
 
 interface SliderDef {
   label: Key;
@@ -133,24 +154,34 @@ export class StitchPanel {
     const signed = (v: number) => `${v > 0 ? '+' : v < 0 ? '−' : '±'}${formatNumber(Math.abs(v), 2)} mm`;
     if (this.kind === 'fill') {
       const s = this.draft.fill!;
-      return [
+      const density = (label: Key, get: () => number, set: (v: number) => void) =>
         this.slider({
-          label: 'stitch.density',
+          label,
           hint: 'stitch.density.hint',
           min: 0.2,
           max: 1.2,
           step: 0.01,
-          get: () => s.spacing,
-          set: (v) => (s.spacing = v),
+          get,
+          set,
           fmt: mm(2),
           band: this.info!.recommended,
           note: (v) => t('stitch.densityNote', { d: formatNumber(1 / v, 1) }),
-        }),
-        this.angle(s),
-        this.slider({ label: 'stitch.length', hint: 'stitch.length.hint', min: 1.5, max: 7, step: 0.1, get: () => s.stitch, set: (v) => (s.stitch = v), fmt: mm(1) }),
+        });
+      const out: HTMLElement[] = [this.patterns(s)];
+      if (s.pattern === 'gradient') {
+        out.push(
+          density('stitch.densityFrom', () => s.spacing, (v) => (s.spacing = v)),
+          density('stitch.densityTo', () => s.spacingEnd, (v) => (s.spacingEnd = v)),
+        );
+      } else out.push(density('stitch.density', () => s.spacing, (v) => (s.spacing = v)));
+      if (s.pattern === 'tatami' || s.pattern === 'gradient') out.push(this.angle(s));
+      out.push(this.slider({ label: 'stitch.length', hint: 'stitch.length.hint', min: 1.5, max: 7, step: 0.1, get: () => s.stitch, set: (v) => (s.stitch = v), fmt: mm(1) }));
+      if (s.pattern === 'tatami') out.push(this.offsets(s));
+      out.push(
         this.slider({ label: 'stitch.edge', hint: 'stitch.edge.hint', min: -0.4, max: 0.6, step: 0.05, get: () => s.edge, set: (v) => (s.edge = v), fmt: signed }),
         this.check('stitch.underlay', 'stitch.underlay.fill', () => s.underlay, (v) => (s.underlay = v)),
-      ];
+      );
+      return out;
     }
     if (this.kind === 'satin') {
       const s = this.draft.satin!;
@@ -204,6 +235,70 @@ export class StitchPanel {
     label.append(top, track);
     if (d.note) label.append(note);
     return label;
+  }
+
+  /** The fill patterns as small pictures; picking one applies it. */
+  private patterns(s: FillSettings): HTMLElement {
+    const wrap = document.createElement('div');
+    wrap.className = 'field';
+    const label = Object.assign(document.createElement('span'), { className: 'label', textContent: t('stitch.pattern') });
+    const row = document.createElement('div');
+    row.className = 'pattern-tiles';
+    row.setAttribute('role', 'radiogroup');
+    row.setAttribute('aria-label', t('stitch.pattern'));
+    for (const pat of PATTERNS) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'pattern-tile' + (pat === s.pattern ? ' active' : '');
+      b.setAttribute('role', 'radio');
+      b.setAttribute('aria-checked', String(pat === s.pattern));
+      b.title = t(`stitch.pattern.${pat}.hint` as Key);
+      b.innerHTML = PATTERN_ICON[pat];
+      b.append(Object.assign(document.createElement('span'), { textContent: t(`stitch.pattern.${pat}` as Key) }));
+      b.addEventListener('click', () => {
+        if (s.pattern === pat) return;
+        s.pattern = pat;
+        // Rings and spirals bend all the way: shorter stitches follow the curve without cutting it.
+        if (pat === 'contour' || pat === 'spiral') s.stitch = Math.min(s.stitch, CURVED_STITCH);
+        this.render();
+        this.changed(true);
+      });
+      row.append(b);
+    }
+    const hint = Object.assign(document.createElement('span'), { className: 'muted small', textContent: t(`stitch.pattern.${s.pattern}.hint` as Key) });
+    wrap.append(label, row, hint);
+    return wrap;
+  }
+
+  /** Tatami offset: how far the needle points shift from row to row. */
+  private offsets(s: FillSettings): HTMLElement {
+    const wrap = document.createElement('div');
+    wrap.className = 'field stitch-field';
+    wrap.title = t('stitch.offset.hint');
+    const label = Object.assign(document.createElement('span'), { className: 'label', textContent: t('stitch.offset') });
+    const row = document.createElement('div');
+    row.className = 'segmented offset-buttons';
+    row.setAttribute('role', 'radiogroup');
+    row.setAttribute('aria-label', t('stitch.offset'));
+    const options: [number, string][] = [...OFFSETS, [0, t('stitch.offset.random')]];
+    for (const [v, text] of options) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      const on = Math.abs(s.offset - v) < 1e-3;
+      b.className = on ? 'active' : '';
+      b.setAttribute('role', 'radio');
+      b.setAttribute('aria-checked', String(on));
+      b.textContent = text;
+      b.addEventListener('click', () => {
+        if (Math.abs(s.offset - v) < 1e-3) return;
+        s.offset = v;
+        this.render();
+        this.changed(true);
+      });
+      row.append(b);
+    }
+    wrap.append(label, row);
+    return wrap;
   }
 
   /** Angle: a dial that shows the row direction, and a slider. */

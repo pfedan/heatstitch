@@ -74,8 +74,10 @@ export function sewObjects(p: Pattern, kinds = stitchKinds(p), tags = tagShortSt
     const fill = len[FILL] ?? 0;
     const satin = len[SATIN] ?? 0;
     let kind: ObjectKind = fill >= thread * 0.3 && fill >= satin ? 'fill' : satin >= thread * 0.3 ? 'satin' : 'run';
-    // Back and forth along a line (a double run) looks like rows to the recognizer, but covers no area.
-    if (kind === 'fill' && !coversArea(p, i, j)) kind = 'run';
+    // Back and forth along a line (a double run) looks like rows to the recognizer, but covers no area;
+    // a line that winds closely over an area (a spiral or contour fill) does.
+    if (kind === 'fill' && coverShare(p, i, j) < AREA) kind = 'run';
+    else if (kind === 'run' && stitches > 30 && coverShare(p, i, j) >= DENSE_AREA) kind = 'fill';
     out.push({
       index: out.length,
       block,
@@ -97,11 +99,16 @@ export function sewObjects(p: Pattern, kinds = stitchKinds(p), tags = tagShortSt
   return out;
 }
 
+/** Share of covered cells inside the covered area above which stitches cover an area. */
+const AREA = 0.2;
+/** Running stitch that covers this much is a fill sewn as one line. */
+const DENSE_AREA = 0.5;
+
 /**
- * Whether the stitches from record a to b cover an area rather than a line: a good share of the
- * 0.5 mm cells they pass through have all four neighbours covered too.
+ * How much the stitches from record a to b cover an area rather than a line: the share of the
+ * 0.5 mm cells they pass through that have all four neighbours covered too (0 when too few).
  */
-function coversArea(p: Pattern, a: number, b: number): boolean {
+function coverShare(p: Pattern, a: number, b: number): number {
   const seen = new Set<number>();
   const key = (cx: number, cy: number) => cx * 100003 + cy;
   for (let k = a + 1; k <= b; k++) {
@@ -119,7 +126,7 @@ function coversArea(p: Pattern, a: number, b: number): boolean {
     const cy = c - cx * 100003;
     if (seen.has(key(cx + 1, cy)) && seen.has(key(cx - 1, cy)) && seen.has(key(cx, cy + 1)) && seen.has(key(cx, cy - 1))) inner++;
   }
-  return inner >= Math.max(4, seen.size * 0.2);
+  return inner >= 4 ? inner / seen.size : 0;
 }
 
 /** Number of an object among the objects of its kind in its color block (1-based), for its name. */

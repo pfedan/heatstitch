@@ -1,4 +1,6 @@
-import { fillRegion } from '../digitize/fill';
+import { fillRegion, type FillParams } from '../digitize/fill';
+import { contourField, fieldFill, stitchField } from '../digitize/flow';
+import { spiralFill } from '../digitize/spiral';
 import { sample, signedField, type Region } from '../digitize/region';
 import { runStitch } from '../digitize/run';
 import { pairs, satinStitches, underlay as satinUnderlay, type Column } from '../digitize/satin';
@@ -22,10 +24,22 @@ import { SATIN, TIE_STITCH } from './sequence';
  * trim keeps its stitches when the fill changes).
  */
 
+/**
+ * How the rows of a fill run: straight (tatami), straight with a spacing that changes across the
+ * shape (gradient), along the outline (contour), as one line winding to the middle (spiral), or
+ * with the directions and curves of the rows sewn now (follow).
+ */
+export type FillPattern = 'tatami' | 'gradient' | 'contour' | 'spiral' | 'follow';
+
 export interface FillSettings {
-  /** Row spacing (mm). */
+  pattern: FillPattern;
+  /** Row spacing (mm); for a gradient where it starts. */
   spacing: number;
-  /** Degrees, 0 to 180. */
+  /** Gradient: spacing on the far side (mm). */
+  spacingEnd: number;
+  /** Tatami: shift of the needle points from row to row (fraction of a stitch; 0 at random). */
+  offset: number;
+  /** Direction of the rows, degrees 0 to 180 (tatami and gradient). */
   angle: number;
   /** Stitch length (mm). */
   stitch: number;
@@ -67,6 +81,8 @@ export interface Analysis {
 
 /** Fill rows touch when drawn this thick (mm on each side); travel lines vanish when opened by `OPEN`. */
 const REACH = 0.3;
+/** Highest density allowed for curved rows, in times the nominal (where rows meet). */
+const CONTOUR_PEAK = 3;
 /** Half width of the band along the old thread that new travel may follow (mm). */
 const TRAVEL_REACH = 0.5;
 const OPEN = 0.36;
@@ -77,7 +93,53 @@ const OPEN = 0.36;
  * (thin lines like travel and outlines drop out of it), and every stitch inside that area is fill:
  * rows, underlay and travel under the rows. What lies outside is running stitch of its own.
  */
-export function analyze(p: Pattern, o: SewObject, kinds: Uint8Array): Analysis {
+// What objects were last sewn with ------------------------------------------------------------
+
+/** The shape an object was filled with and the fill settings, kept for the next edit. */
+export interface Remembered {
+  region: Region | null;
+  fill?: FillSettings;
+}
+
+/**
+ * Objects given new stitches here, by their stitches: the next edit starts from the exact shape
+ * and the chosen pattern instead of recognizing them again from the stitches (an open gradient
+ * or a spiral would not give its shape back as well as dense rows do).
+ */
+const memory = new Map<string, Remembered>();
+const MEMORY_SIZE = 400;
+
+/** A key for an object's stitches (FNV-1a over their coordinates). */
+export function objectKey(p: Pattern, o: SewObject): string {
+  let h = 0x811c9dc5;
+  let n = 0;
+  const mix = (v: number) => {
+    h ^= v & 0xffff;
+    h = Math.imul(h, 0x01000193);
+    h ^= (v >>> 16) & 0xffff;
+    h = Math.imul(h, 0x01000193);
+  };
+  for (let i = o.first; i <= o.last; i++) {
+    if (p.cmd[i] !== STITCH) continue;
+    mix(p.x[i]);
+    mix(p.y[i]);
+    n++;
+  }
+  return `${n}:${(h >>> 0).toString(36)}`;
+}
+
+export function remember(p: Pattern, o: SewObject, r: Remembered): void {
+  const key = objectKey(p, o);
+  memory.delete(key);
+  memory.set(key, r);
+  if (memory.size > MEMORY_SIZE) memory.delete(memory.keys().next().value!);
+}
+
+export function remembered(p: Pattern, o: SewObject): Remembered | undefined {
+  return memory.get(objectKey(p, o));
+}
+
+export function analyze(p: Pattern, o: SewObject, kinds: Uint8Array, known = remembered(p, o)): Analysis {
   const idx: number[] = [];
   for (let i = o.first; i <= o.last; i++) if (p.cmd[i] === STITCH) idx.push(i);
   if (idx.length < 3) return { parts: [{ kind: o.kind === 'fill' ? 'run' : o.kind, s: o.first, e: o.last }], fill: null };
@@ -96,7 +158,7 @@ export function analyze(p: Pattern, o: SewObject, kinds: Uint8Array): Analysis {
   });
   const others: number[] = [];
   for (let k = 1; k < idx.length; k++) if (sewnSeg(k) && !satin[k]) others.push(idx[k]);
-  const region = others.length > 4 ? traceRegion(p, others, REACH, OPEN) : null;
+  const region = known?.region ?? (others.length > 4 ? traceRegion(p, others, REACH, OPEN) : null);
   const inFill = (k: number) => {
     if (!region) return false;
     const i = idx[k];
@@ -269,8 +331,16 @@ export function measureFill(p: Pattern, a: Analysis): FillSettings {
     for (let i = pt.s + 1; i <= Math.min(pt.e, firstRow - 1); i++) if (p.cmd[i] === STITCH && p.cmd[i - 1] === STITCH) before += seg(p, i);
   }
   const angle = Math.round(((((main * 180) / Math.PI) % 180) + 180) % 180);
+  // Rows that do not keep one direction are curved or turn from patch to patch (fills that follow an image, several angles).
+  let all = 0;
+  for (const g of segs) all += g.l;
+  const curved = segs.length > 10 && rowThread < all * 0.75;
+  const sp = Math.round(spacing * 100) / 100;
   return {
-    spacing: Math.round(spacing * 100) / 100,
+    pattern: curved ? 'follow' : 'tatami',
+    spacing: sp,
+    spacingEnd: Math.min(1.2, Math.round(sp * 2.5 * 100) / 100),
+    offset: 0.25,
     angle: angle === 180 ? 0 : angle,
     stitch: Math.round((percentile(rows.map((g) => g.l), 0.8) || 4) * 10) / 10,
     underlay: before > rowThread * 0.06,
@@ -361,7 +431,27 @@ function newFill(p: Pattern, o: SewObject, a: Analysis, s: FillSettings): Pt[][]
   const segs: number[] = [];
   for (let i = o.first + 1; i <= o.last; i++) if (p.cmd[i] === STITCH && p.cmd[i - 1] === STITCH) segs.push(i);
   const travel = traceRegion(p, segs, TRAVEL_REACH, 0, false) ?? undefined;
-  const res = fillRegion(a.fill, { spacing: s.spacing, stitch: s.stitch, angle: s.angle, pull: s.edge, underlay: s.underlay, travel }, pt10(p, first.s));
+  const fp: FillParams = { spacing: s.spacing, stitch: s.stitch, angle: s.angle, pull: s.edge, underlay: s.underlay, travel };
+  const start = pt10(p, first.s);
+  const r = a.fill;
+  let res;
+  if (s.pattern === 'gradient') {
+    res = fillRegion(r, { ...fp, spacingEnd: s.spacingEnd }, start);
+  } else if (s.pattern === 'contour') {
+    const f = contourField(r);
+    // Rings meet where the shape narrows to its middle: a little denser there is the nature of
+    // a contour fill.
+    res = fieldFill(r, f.g, f, fp, start, true, CONTOUR_PEAK);
+  } else if (s.pattern === 'spiral') res = spiralFill(r, fp, start);
+  else if (s.pattern === 'follow') {
+    const lines: [Pt, Pt][] = [];
+    for (const pt of a.parts) {
+      if (pt.kind !== 'fill') continue;
+      for (let i = pt.s + 1; i <= pt.e; i++) if (p.cmd[i] === STITCH && p.cmd[i - 1] === STITCH && seg(p, i) >= 0.8) lines.push([pt10(p, i - 1), pt10(p, i)]);
+    }
+    const f = stitchField(r, lines);
+    res = fieldFill(r, f.g, f, fp, start, false, CONTOUR_PEAK);
+  } else res = fillRegion(r, { ...fp, offset: s.offset }, start);
   return res?.runs.filter((run) => run.length > 1) ?? null;
 }
 
@@ -434,6 +524,8 @@ export interface RestitchResult {
   ends: number[];
   /** Objects that could not be given new stitches (no shape found). */
   failed: number[];
+  /** Fill area of each changed object (as `starts`). */
+  regions: (Region | null)[];
 }
 
 /**
@@ -446,6 +538,7 @@ export function restitch(p: Pattern, objs: SewObject[], which: number[], setting
   const starts: number[] = [];
   const ends: number[] = [];
   const failed: number[] = [];
+  const regions: (Region | null)[] = [];
   let sewn = 0;
   let counted = 0;
   const count = () => {
@@ -494,6 +587,7 @@ export function restitch(p: Pattern, objs: SewObject[], which: number[], setting
         out.push({ x: Math.round(q[0] * 10), y: Math.round(q[1] * 10), cmd: JUMP });
         count();
         starts.push(sewn);
+        regions.push(an.fill);
         if (run && startsWithNew) out.push(...lockAt(run, false));
         else emitPoint(q);
         first = false;
@@ -546,5 +640,5 @@ export function restitch(p: Pattern, objs: SewObject[], which: number[], setting
   const x = Int32Array.from(out, (r) => r.x);
   const y = Int32Array.from(out, (r) => r.y);
   const cmd = Uint8Array.from(out, (r) => r.cmd);
-  return { pattern: tidy(withRecords(p, x, y, cmd)), starts, ends, failed };
+  return { pattern: tidy(withRecords(p, x, y, cmd)), starts, ends, failed, regions };
 }
