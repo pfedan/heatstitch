@@ -77,6 +77,8 @@ sends the picture anywhere.
   everything DST and PES drop
 - **Image to embroidery:** PNG, JPG, WebP, SVG; preparation for photos, Brother thread colors, brush,
   tatami fill whose rows follow the image, satin columns and running stitch, without external libraries
+- **SVG import:** the file's own colors (one thread each), exact shapes with hidden parts left out,
+  the size in mm from the file, fine lines as running stitch
 - English / German
 - PWA: installable, works offline, "Open with" for .dst/.pes/.heatstitch and images
 - Short guide in English and German (`docs.html`, "Guide" link at the top right)
