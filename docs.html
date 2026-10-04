@@ -269,11 +269,13 @@
         </p>
         <figure>
           <img src="/guide/image-en.jpg" width="1280" height="800" loading="lazy" alt="The example flower in the Image mode: fill, satin and running stitches over the prepared image, colors and result on the right" />
-          <figcaption>The example image as stitches: fills with underlay, satin for the ring and the stem, running stitch for the leaf veins. On the right the thread colors, the brush and the result with the check for the material.</figcaption>
+          <figcaption>The example SVG as stitches: fills with underlay, satin for the ring and the stem, running stitch for the leaf and petal veins. On the right the thread colors, the brush and the result with the check for the material.</figcaption>
         </figure>
         <dl>
           <dt>Preparation</dt>
           <dd>The image is reduced to a few thread colors (<i>Most colors</i>): similar colors are merged, small but distinct ones such as eyes are kept. <i>Simplify</i> smooths photos into flat regions while keeping their edges; it is switched on by itself for photos. Regions smaller than <i>Smallest area</i> join their neighbour, thin seams of anti-aliasing disappear, and the background at the image border is left out. With <i>Brother thread colors</i> every color becomes the nearest thread of the palette.</dd>
+          <dt>SVG files</dt>
+          <dd>An SVG is read as shapes, not as pixels: every color of the file becomes one thread (a gradient its mean color), shapes keep their exact outline, and parts hidden under other shapes are left out. A size given in mm, cm or inches becomes the width. Lines become running stitch or satin by their width; lines thinner than 0.4 mm are sewn as running stitch instead of getting lost. Fill rows run straight, at angles that differ between neighbours. <i>Most colors</i> and <i>Simplify</i> are not needed and hidden. An SVG dropped on the file list opens here too. SVGs with embedded photos or patterns, or more than 48 colors (as from auto-tracing), are treated like a picture.</dd>
           <dt>Colors and brush</dt>
           <dd>In the color list a check box leaves a color out, the swatch picks another thread and <i>→</i> merges it into another color. A ≠ warns that no thread is close to the image color. Click a color and paint with the <i>Brush</i> to recolor regions by hand, or erase where nothing should be sewn. Every change can be undone; the image and your changes stay after a reload.</dd>
           <dt>Stitches</dt>
@@ -553,11 +555,13 @@
         </p>
         <figure>
           <img src="/guide/image-de.jpg" width="1280" height="800" loading="lazy" alt="Die Beispielblume im Modus Bild: Füll-, Satin- und Steppstiche über dem vorbereiteten Bild, rechts Farben und Ergebnis" />
-          <figcaption>Das Beispielbild als Stiche: Füllungen mit Unterlage, Satin für Ring und Stiel, Steppstich für die Blattadern. Rechts die Garnfarben, der Pinsel und das Ergebnis mit der Prüfung für das Material.</figcaption>
+          <figcaption>Das Beispiel-SVG als Stiche: Füllungen mit Unterlage, Satin für Ring und Stiel, Steppstich für die Adern von Blättern und Blüte. Rechts die Garnfarben, der Pinsel und das Ergebnis mit der Prüfung für das Material.</figcaption>
         </figure>
         <dl>
           <dt>Vorbereitung</dt>
           <dd>Das Bild wird auf wenige Garnfarben reduziert (<i>Höchstens Farben</i>): Ähnliche Farben werden zusammengelegt, kleine auffällige wie Augen bleiben. <i>Vereinfachen</i> glättet Fotos zu Flächen und erhält dabei die Kanten; bei Fotos schaltet es sich von selbst ein. Flächen unter <i>Kleinste Fläche</i> gehen in der Nachbarfläche auf, dünne Säume der Kantenglättung verschwinden, und der Hintergrund am Bildrand wird weggelassen. Mit <i>Brother-Garnfarben</i> wird jede Farbe zum nächstliegenden Garn der Palette.</dd>
+          <dt>SVG-Dateien</dt>
+          <dd>Eine SVG wird als Formen gelesen, nicht als Pixel: Jede Farbe der Datei wird ein Garn (ein Verlauf seine mittlere Farbe), Formen behalten ihren genauen Umriss, und was unter anderen Formen verdeckt liegt, wird weggelassen. Eine Größe in mm, cm oder Zoll wird zur Breite. Linien werden je nach Breite Steppstich oder Satin; Linien dünner als 0,4 mm werden als Steppstich gestickt, statt verloren zu gehen. Die Füllreihen laufen gerade, mit Winkeln, die sich bei Nachbarn unterscheiden. <i>Höchstens Farben</i> und <i>Vereinfachen</i> braucht es nicht, sie sind ausgeblendet. Auch eine auf die Dateiliste gezogene SVG öffnet sich hier. SVGs mit eingebetteten Fotos oder Mustern oder mehr als 48 Farben (wie aus automatischem Nachzeichnen) werden wie ein Bild behandelt.</dd>
           <dt>Farben und Pinsel</dt>
           <dd>In der Farbliste lässt das Häkchen eine Farbe weg, das Farbfeld wählt ein anderes Garn und <i>→</i> legt sie mit einer anderen Farbe zusammen. Ein ≠ warnt, dass kein Garn nah an der Bildfarbe liegt. Eine Farbe anklicken und mit dem <i>Pinsel</i> Flächen von Hand umfärben, oder radieren, wo nichts gestickt werden soll. Jede Änderung lässt sich rückgängig machen; Bild und Änderungen bleiben nach dem Neuladen erhalten.</dd>
           <dt>Stiche</dt>
