@@ -236,6 +236,8 @@ export const de = {
   'display.title': 'Anzeige',
   'marks.title': 'Markierungen',
   'marks.jumps': 'Sprünge',
+  'marks.threads': 'Lose Sprungfäden',
+  'marks.threads.hint': 'Sprünge ohne Fadenschnitt so zeichnen, wie der Faden dann über dem Stoff liegt.',
   'marks.trims': 'Fadenschnitte',
   'marks.colors': 'Farbwechsel',
   'marks.ends': 'Start und Ende',

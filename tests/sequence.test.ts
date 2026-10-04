@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { setTrims } from '../src/model/jumps';
 import { COLOR_CHANGE, STITCH, TRIM, type Pattern } from '../src/model/pattern';
 import {
+  carriedJumps,
   colorBlocks,
   FILL,
   markers,
@@ -50,6 +51,17 @@ describe('sequence analysis', () => {
     const n = (k: number) => kinds.reduce((a, v) => a + (v === k ? 1 : 0), 0);
     expect(n(SATIN)).toBeGreaterThan(40);
     expect(n(FILL)).toBeGreaterThan(40);
+  });
+
+  it('draws only jumps without a trim as thread, from the last stitch to the next', () => {
+    const p = twoLines();
+    const c = carriedJumps(p, transitions(p));
+    const t = transitions(p)[0];
+    expect(c.from[t.to]).toBe(t.from);
+    expect([...c.from].filter((v) => v >= 0)).toHaveLength(1);
+    expect(c.jumps.reduce((n, v) => n + v, 0)).toBeGreaterThan(0);
+    const cut = setTrims(p, transitions(p), true);
+    expect([...carriedJumps(cut, transitions(cut)).from].every((v) => v < 0)).toBe(true);
   });
 
   it('maps stitch numbers to records', () => {

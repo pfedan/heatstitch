@@ -21,6 +21,8 @@ export interface Marks {
   colors: boolean;
   ends: boolean;
   points: boolean;
+  /** Jumps without a trim drawn as the thread lying on the fabric (Ablauf mode). */
+  threads: boolean;
 }
 
 export interface Settings {
@@ -66,7 +68,7 @@ export interface Settings {
 export const DEFAULTS: Settings = {
   mode: 'flow',
   colorBy: 'thread',
-  marks: { jumps: true, trims: true, colors: false, ends: false, points: false },
+  marks: { jumps: true, trims: true, colors: false, ends: false, points: false, threads: false },
   sections: { display: true, stats: false, advanced: false },
   machineSpm: 800,
   playSpeed: 50,

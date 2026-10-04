@@ -38,6 +38,8 @@ import {
   FILL,
   SATIN,
   TIE_STITCH,
+  carriedJumps,
+  type CarriedJumps,
   type ColorBlock,
   type Markers,
   type Transition,
@@ -211,6 +213,8 @@ interface Sequence {
   /** Trims and color changes up to each stitch number, for the time estimate. */
   trimsAt: number[];
   colorsAt: number[];
+  /** Jumps without a trim, built the first time they are drawn as thread. */
+  carried?: CarriedJumps;
 }
 const seqCache = new WeakMap<Pattern, Sequence>();
 function seq(p: Pattern): Sequence {
@@ -261,10 +265,17 @@ const count = (sorted: number[], k: number) => {
 };
 
 function playerModel(p: Pattern | null) {
-  if (!p) return { total: 0, blockStarts: [], timeAt: () => 0 };
+  if (!p) return { total: 0, blockStarts: [], sections: [], timeAt: () => 0 };
   const q = seq(p);
+  let at = 0;
+  const sections = q.blocks.map((b) => {
+    const start = at;
+    at += b.stitches;
+    return { start, end: at, color: `rgb(${b.color.r}, ${b.color.g}, ${b.color.b})` };
+  });
   return {
     total: q.total,
+    sections,
     blockStarts: q.markers.colorStarts.map((i) => q.numbers[i]),
     timeAt: (k: number) => sewingSeconds(k, count(q.trimsAt, k), count(q.colorsAt, k), settings.machineSpm),
   };
@@ -278,7 +289,8 @@ function styleFor(p: Pattern): StitchStyle {
     alphaCache = { p, hidden: hiddenBlocks, focus, a: stitchAlpha(p, hiddenBlocks, focus) };
   }
   const limit = player.complete ? p.cmd.length - 1 : recordOfStitch(q.numbers, player.pos);
-  return { rgb, alpha: alphaCache.a, limit };
+  const carried = settings.marks.threads ? (q.carried ??= carriedJumps(p, q.transitions)) : null;
+  return { rgb, alpha: alphaCache.a, limit, carried };
 }
 
 function flowScene(): FlowScene | null {

@@ -163,9 +163,16 @@ export function buildInstances(
   p: Pattern,
   rgb: Uint8Array = stitchColors(p, 'thread'),
   alpha?: Float32Array,
+  carried?: Int32Array,
 ): { segs: Float32Array; colors: Float32Array; alpha: Float32Array; records: Int32Array; count: number } {
   let count = 0;
-  const drawn = (i: number) => p.cmd[i] === STITCH && p.cmd[i - 1] === STITCH && (p.x[i] !== p.x[i - 1] || p.y[i] !== p.y[i - 1]);
+  // A stitch, or the thread of a jump without a trim, which lies on top just like one.
+  const start = (i: number) =>
+    p.cmd[i] !== STITCH ? -1
+    : carried && carried[i] >= 0 ? carried[i]
+    : p.cmd[i - 1] === STITCH && (p.x[i] !== p.x[i - 1] || p.y[i] !== p.y[i - 1]) ? i - 1
+    : -1;
+  const drawn = (i: number) => start(i) >= 0;
   for (let i = 1; i < p.cmd.length; i++) if (drawn(i)) count++;
   const segs = new Float32Array(count * 4);
   const colors = new Float32Array(count * 4);
@@ -173,9 +180,10 @@ export function buildInstances(
   const records = new Int32Array(count);
   let k = 0;
   for (let i = 1; i < p.cmd.length; i++) {
-    if (!drawn(i)) continue;
-    segs[k * 4] = p.x[i - 1];
-    segs[k * 4 + 1] = p.y[i - 1];
+    const j = start(i);
+    if (j < 0) continue;
+    segs[k * 4] = p.x[j];
+    segs[k * 4 + 1] = p.y[j];
     segs[k * 4 + 2] = p.x[i];
     segs[k * 4 + 3] = p.y[i];
     colors[k * 4] = rgb[i * 3] / 255;
@@ -256,10 +264,10 @@ export class GlThreadRenderer {
   }
 
   private setPattern(p: Pattern, style?: StitchStyle): void {
-    const key = [p, style?.rgb, style?.alpha];
+    const key = [p, style?.rgb, style?.alpha, style?.carried];
     if (key.every((k, i) => k === this.built[i])) return;
     this.built = key;
-    const { segs, colors, alpha, records, count } = buildInstances(p, style?.rgb, style?.alpha);
+    const { segs, colors, alpha, records, count } = buildInstances(p, style?.rgb, style?.alpha, style?.carried?.from);
     this.records = records;
     const gl = this.gl;
     gl.bindBuffer(gl.ARRAY_BUFFER, this.segBuf);

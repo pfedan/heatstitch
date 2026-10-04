@@ -144,6 +144,27 @@ export function transitions(p: Pattern, tags = tagShortStitches(p)): Transition[
   return out;
 }
 
+/**
+ * Jumps the machine moves without cutting, so the thread lies on top of the fabric from one
+ * stitch to the next. `from[i]` is the stitch the thread comes from for the stitch at record i
+ * (-1 for all others); `jumps` marks the JUMP records of those moves.
+ */
+export interface CarriedJumps {
+  from: Int32Array;
+  jumps: Uint8Array;
+}
+
+export function carriedJumps(p: Pattern, list: Transition[]): CarriedJumps {
+  const from = new Int32Array(p.cmd.length).fill(-1);
+  const jumps = new Uint8Array(p.cmd.length);
+  for (const t of list) {
+    if (t.trimmed || (p.x[t.from] === p.x[t.to] && p.y[t.from] === p.y[t.to])) continue;
+    from[t.to] = t.from;
+    for (let i = t.from + 1; i < t.to; i++) if (p.cmd[i] === JUMP) jumps[i] = 1;
+  }
+  return { from, jumps };
+}
+
 /** Records where the machine trims (the last stitch before the trim), and where each color block starts. */
 export interface Markers {
   trims: number[];

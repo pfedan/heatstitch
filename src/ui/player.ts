@@ -6,6 +6,8 @@ export interface PlayerModel {
   total: number;
   /** Stitch numbers (1-based) where each color block starts. */
   blockStarts: number[];
+  /** Color blocks as stitch ranges [start, end) with their thread color, drawn on the bar. */
+  sections: { start: number; end: number; color: string }[];
   /** Estimated sewing time in seconds up to stitch k. */
   timeAt: (k: number) => number;
 }
@@ -28,7 +30,9 @@ export class Player {
   private info = $<HTMLElement>('player-info');
   private speed = $<HTMLSelectElement>('player-speed');
   private toggleBtn = this.root.querySelector<HTMLButtonElement>('[data-play="toggle"]')!;
-  private model: PlayerModel = { total: 0, blockStarts: [], timeAt: () => 0 };
+  private sections = $<HTMLElement>('player-sections');
+  private rest = document.createElement('div');
+  private model: PlayerModel = { total: 0, blockStarts: [], sections: [], timeAt: () => 0 };
   /** Stitches shown; equal to total when the design is complete. */
   pos = 0;
   private playing = false;
@@ -73,6 +77,18 @@ export class Player {
     if (!keep || wasComplete) this.pos = m.total;
     else this.pos = Math.min(this.pos, m.total);
     if (!m.total) this.pause();
+    // The bar shows each color block in its thread color; what is not sewn yet is dimmed.
+    this.rest.className = 'rest';
+    this.sections.replaceChildren(
+      ...m.sections.map((sec) => {
+        const d = document.createElement('div');
+        d.style.left = `${(sec.start / m.total) * 100}%`;
+        d.style.width = `${((sec.end - sec.start) / m.total) * 100}%`;
+        d.style.background = sec.color;
+        return d;
+      }),
+      this.rest,
+    );
     this.render();
   }
 
@@ -136,6 +152,7 @@ export class Player {
   render(): void {
     const m = this.model;
     this.slider.value = String(this.pos);
+    this.rest.style.left = `${m.total ? (this.pos / m.total) * 100 : 0}%`;
     this.slider.disabled = !m.total;
     this.info.textContent = m.total
       ? t('player.info', {

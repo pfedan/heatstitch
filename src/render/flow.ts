@@ -1,5 +1,5 @@
 import { JUMP, STITCH, type Pattern, type ThreadColor } from '../model/pattern';
-import { blockIndex, FILL, RUNNING, SATIN, stitchKinds, TIE_STITCH, type Markers, type Transition } from '../model/sequence';
+import { blockIndex, FILL, RUNNING, SATIN, stitchKinds, TIE_STITCH, type CarriedJumps, type Markers, type Transition } from '../model/sequence';
 import type { ColorBy, Marks } from '../settings';
 import { SHORT_STITCH_MM } from '../validation/thresholds';
 import type { Viewport } from './viewport';
@@ -15,6 +15,8 @@ export interface StitchStyle {
   alpha: Float32Array;
   /** Last record that is sewn; later records are not drawn (player). */
   limit: number;
+  /** Jumps without a trim to draw as thread; without it they are left out. */
+  carried?: CarriedJumps | null;
 }
 
 /** Stitches longer than this (mm) are long; from the DST maximum on, machines split them. */
@@ -56,6 +58,8 @@ export function orderColor(t: number): ThreadColor {
 export const ORDER_CSS = `linear-gradient(90deg, ${ORDER_STOPS.map((c) => `rgb(${c.join(',')})`).join(', ')})`;
 
 const GREY: ThreadColor = { r: 128, g: 128, b: 128 };
+/** Jump threads in the kind and length colorings, which have no color of their own for them. */
+const JUMP_THREAD: ThreadColor = { r: 128, g: 122, b: 138 };
 
 /** Colors of every stitch for one way of coloring; cached by the caller per pattern. */
 export function stitchColors(p: Pattern, by: ColorBy, kinds?: Uint8Array): Uint8Array {
@@ -79,11 +83,16 @@ export function stitchColors(p: Pattern, by: ColorBy, kinds?: Uint8Array): Uint8
     }
   } else if (by === 'kind') {
     const kk = kinds ?? stitchKinds(p);
-    for (let i = 0; i < n; i++) set(i, KIND_COLORS[kk[i]] ?? KIND_COLORS[RUNNING]);
+    for (let i = 0; i < n; i++) set(i, KIND_COLORS[kk[i]] ?? JUMP_THREAD);
   } else {
     const kk = kinds ?? stitchKinds(p);
     for (let i = 1; i < n; i++) {
-      if (p.cmd[i] !== STITCH || p.cmd[i - 1] !== STITCH) continue;
+      if (p.cmd[i] !== STITCH) continue;
+      // The first stitch after a jump: only drawn as the thread of a jump that is not cut.
+      if (p.cmd[i - 1] !== STITCH) {
+        set(i, JUMP_THREAD);
+        continue;
+      }
       const mm = Math.hypot(p.x[i] - p.x[i - 1], p.y[i] - p.y[i - 1]) / 10;
       const c =
         kk[i] === TIE_STITCH ? LENGTH_COLORS.tie
@@ -126,14 +135,17 @@ export function drawFlatStitches(ctx: CanvasRenderingContext2D, vp: Viewport, p:
     open = false;
   };
   const end = Math.min(st.limit, p.cmd.length - 1);
+  const carried = st.carried?.from;
   for (let i = 1; i <= end; i++) {
-    if (p.cmd[i] !== STITCH || p.cmd[i - 1] !== STITCH) continue;
+    const jumpFrom = carried ? carried[i] : -1;
+    if (p.cmd[i] !== STITCH || (p.cmd[i - 1] !== STITCH && jumpFrom < 0)) continue;
     const a = st.alpha[i];
     if (a <= 0) continue;
     const k = (st.rgb[i * 3] << 16) | (st.rgb[i * 3 + 1] << 8) | st.rgb[i * 3 + 2];
     const kk = k * 8 + Math.round(a * 7);
-    const x0 = p.x[i - 1] * s + ox;
-    const y0 = p.y[i - 1] * s + oy;
+    const j = jumpFrom >= 0 ? jumpFrom : i - 1;
+    const x0 = p.x[j] * s + ox;
+    const y0 = p.y[j] * s + oy;
     if (kk !== key) {
       flush();
       key = kk;
@@ -142,15 +154,22 @@ export function drawFlatStitches(ctx: CanvasRenderingContext2D, vp: Viewport, p:
       ctx.beginPath();
       ctx.moveTo(x0, y0);
       open = true;
-    } else if (p.cmd[i - 2] !== STITCH || st.alpha[i - 1] <= 0) ctx.moveTo(x0, y0);
+    } else if (jumpFrom >= 0 || p.cmd[i - 2] !== STITCH || st.alpha[i - 1] <= 0) ctx.moveTo(x0, y0);
     ctx.lineTo(p.x[i] * s + ox, p.y[i] * s + oy);
   }
   flush();
   ctx.restore();
 }
 
-/** Jump moves as dashed lines; trimmed ones lighter. */
-export function drawJumps(ctx: CanvasRenderingContext2D, vp: Viewport, p: Pattern, limit: number, alpha?: Float32Array): void {
+/** Jump moves as dashed lines; `skip` leaves out the ones already drawn as thread. */
+export function drawJumps(
+  ctx: CanvasRenderingContext2D,
+  vp: Viewport,
+  p: Pattern,
+  limit: number,
+  alpha?: Float32Array,
+  skip?: Uint8Array,
+): void {
   const s = vp.scale / 10;
   const ox = vp.offsetX;
   const oy = vp.offsetY;
@@ -162,7 +181,7 @@ export function drawJumps(ctx: CanvasRenderingContext2D, vp: Viewport, p: Patter
   ctx.beginPath();
   const end = Math.min(limit, p.cmd.length - 1);
   for (let i = 1; i <= end; i++) {
-    if (p.cmd[i] !== JUMP || (alpha && alpha[i] <= 0)) continue;
+    if (p.cmd[i] !== JUMP || (alpha && alpha[i] <= 0) || skip?.[i]) continue;
     ctx.moveTo(p.x[i - 1] * s + ox, p.y[i - 1] * s + oy);
     ctx.lineTo(p.x[i] * s + ox, p.y[i] * s + oy);
   }

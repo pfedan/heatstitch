@@ -191,6 +191,7 @@
           <fieldset class="marks">
             <legend data-i18n="marks.title"></legend>
             <label class="check"><input type="checkbox" data-mark="jumps" /><span><i class="mk mk-jump" aria-hidden="true"></i><span data-i18n="marks.jumps"></span></span></label>
+            <label class="check" data-mode="flow" data-i18n-title="marks.threads.hint"><input type="checkbox" data-mark="threads" /><span><i class="mk mk-thread" aria-hidden="true"></i><span data-i18n="marks.threads"></span></span></label>
             <label class="check"><input type="checkbox" data-mark="trims" /><span><i class="mk" aria-hidden="true">✂</i><span data-i18n="marks.trims"></span></span></label>
             <label class="check"><input type="checkbox" data-mark="colors" /><span><i class="mk mk-num" aria-hidden="true">1</i><span data-i18n="marks.colors"></span></span></label>
             <label class="check"><input type="checkbox" data-mark="ends" /><span><i class="mk mk-start" aria-hidden="true">S</i><span data-i18n="marks.ends"></span></span></label>
@@ -237,7 +238,10 @@
             <button type="button" class="tool" data-play="next" data-i18n-title="player.next"><span aria-hidden="true">▸</span></button>
             <button type="button" class="tool" data-play="block-next" data-i18n-title="player.blockNext"><span aria-hidden="true">⏭</span></button>
           </div>
-          <input type="range" id="player-pos" min="0" max="1" step="1" value="1" data-i18n-aria="player.pos" />
+          <div class="player-track">
+            <div class="player-sections" id="player-sections" aria-hidden="true"></div>
+            <input type="range" id="player-pos" min="0" max="1" step="1" value="1" data-i18n-aria="player.pos" />
+          </div>
           <span class="player-info" id="player-info"></span>
           <select id="player-speed" data-i18n-title="player.speed" data-i18n-aria="player.speed">
             <option value="1">1×</option>

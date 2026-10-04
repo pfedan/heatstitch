@@ -56,7 +56,7 @@ export function drawScene(ctx: CanvasRenderingContext2D, w: number, h: number, s
     if (!pattern) return;
     const st = flow.style;
     if (!s.realistic || !drawThreads(ctx, vp, pattern, 1, s.threadMm, st)) drawFlatStitches(ctx, vp, pattern, st, 1);
-    if (s.marks.jumps) drawJumps(ctx, vp, pattern, st.limit, st.alpha);
+    if (s.marks.jumps) drawJumps(ctx, vp, pattern, st.limit, st.alpha, st.carried?.jumps);
     drawMarkers(ctx, vp, pattern, { markers: flow.markers, marks: s.marks, limit: st.limit, alpha: st.alpha }, w, h);
     if (flow.hover && flow.hover !== flow.selected) drawTransition(ctx, vp, pattern, flow.hover, false);
     if (flow.selected) drawTransition(ctx, vp, pattern, flow.selected, true);

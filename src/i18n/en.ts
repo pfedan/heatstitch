@@ -238,6 +238,8 @@ export const en: Record<keyof typeof de, string> = {
   'display.title': 'Display',
   'marks.title': 'Markers',
   'marks.jumps': 'Jumps',
+  'marks.threads': 'Loose jump threads',
+  'marks.threads.hint': 'Draw jumps without a trim the way the thread then lies across the fabric.',
   'marks.trims': 'Trims',
   'marks.colors': 'Color changes',
   'marks.ends': 'Start and end',
