@@ -1,3 +1,4 @@
+import { STORAGE_NS } from './storage/namespace';
 import { DEFAULT_CORRECTION, normalizeCorrection, type CorrectionOptions } from './correct/auto';
 import type { Metric } from './density/grid';
 import type { Lang } from './i18n';
@@ -91,7 +92,7 @@ export const DEFAULTS: Settings = {
 };
 
 // v3: material profiles. The modes (v4 fields) are added to v3 settings on load.
-const KEY = 'heatstitch.settings.v3';
+const KEY = `${STORAGE_NS}.settings.v3`;
 
 const MODES: Mode[] = ['flow', 'density'];
 const COLOR_BY: ColorBy[] = ['thread', 'order', 'kind', 'length'];
