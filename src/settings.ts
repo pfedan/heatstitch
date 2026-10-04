@@ -1,3 +1,4 @@
+import { STORAGE_NS } from './storage/namespace';
 import { DEFAULT_CORRECTION, normalizeCorrection, type CorrectionOptions } from './correct/auto';
 import type { Metric } from './density/grid';
 import type { Lang } from './i18n';
@@ -61,7 +62,7 @@ export const DEFAULTS: Settings = {
 };
 
 // v3: material profiles.
-const KEY = 'heatstitch.settings.v3';
+const KEY = `${STORAGE_NS}.settings.v3`;
 
 export function loadSettings(): Settings {
   try {
