@@ -38,6 +38,8 @@ export interface FillParams {
   spacingEnd?: number;
   /** Where travel between sections may run; the region itself by default. */
   travel?: Region;
+  /** Curved rows keep this close to their line (mm); TOLERANCE by default. */
+  tolerance?: number;
 }
 
 export interface FillResult {
@@ -58,6 +60,8 @@ const STAGGERS = 4;
 const UNDERLAY_STITCH = 3;
 const UNDERLAY_INSET = 0.4;
 export const TRAVEL_STITCH = 2.5;
+/** Travel lies under the rows: it may cut its way's curves further than visible stitches (mm). */
+export const TRAVEL_TOLERANCE = 0.4;
 /** Travel may run on top of sewn rows for this long (mm); a longer way becomes a jump. */
 const SEWN_CROSSING = 2;
 const RAD = Math.PI / 180;
@@ -495,7 +499,7 @@ function sewAll(
     let travel: Pt[] | null = null;
     if (cur && bd > 1) {
       const path = grid.path(pos, pts[0], avoidSewn);
-      if (path && pathLength(path) < 2 * bd + 6) travel = runStitch(path, TRAVEL_STITCH);
+      if (path && pathLength(path) < 2 * bd + 6) travel = runStitch(path, TRAVEL_STITCH, TRAVEL_TOLERANCE);
     } else if (cur) travel = [pos, pts[0]];
     if (cur && travel) cur.push(...travel.slice(1), ...pts.slice(1));
     else {

@@ -1,5 +1,6 @@
 import { sewUnderlay, TravelGrid, type FillParams, type FillResult } from './fill';
 import { sample, type Region } from './region';
+import { MIN_CURVE_STITCH, TOLERANCE } from './run';
 import type { Pt } from './skeleton';
 
 /**
@@ -52,11 +53,16 @@ export function spiralFill(r: Region, p: FillParams, start: Pt): FillResult | nu
     return [cx + Math.cos(a * 2 * Math.PI) * rr, cy + Math.sin(a * 2 * Math.PI) * rr];
   };
   // Per turn as many needle points as fit at the stitch length, shifted from turn to turn by the
-  // golden ratio of a stitch: needle points would otherwise line up into spokes or a twill.
+  // golden ratio of a stitch: needle points would otherwise line up into spokes or a twill. A
+  // stitch of length L cuts a turn of radius R by L² / 8R: where the turn is tighter than the
+  // tolerance allows, the stitches get shorter (measured where the edge bends most).
+  const tol = p.tolerance ?? TOLERANCE;
+  const narrowest = tightest(radius) * Math.min(...radius) / mean;
   pts.push(point(0));
   for (let k = 0; k < total; k++) {
     const rr = mean * (1 - (k + 0.5) / total);
-    const m = Math.max(3, Math.round((2 * Math.PI * rr) / p.stitch));
+    const len = Math.min(p.stitch, Math.max(MIN_CURVE_STITCH, Math.sqrt(8 * rr * narrowest * tol)));
+    const m = Math.max(3, Math.round((2 * Math.PI * rr) / len));
     const phase = (k * 0.618034) % 1;
     for (let j = 0; j < m; j++) {
       const s = k + (j + phase) / m;
@@ -69,4 +75,29 @@ export function spiralFill(r: Region, p: FillParams, start: Pt): FillResult | nu
   if (runs.length) runs[runs.length - 1].push(...pts);
   else runs.push(pts);
   return { runs, angle: 0 };
+}
+
+/**
+ * Smallest radius of curvature of the outline r(θ), as a share of r there: 1 for a circle, less
+ * where the edge bends more tightly than a circle round the middle would (the ends of an oval).
+ */
+function tightest(radius: number[]): number {
+  const n = radius.length;
+  const h = (2 * Math.PI) / n;
+  const r = (i: number) => {
+    // Over a few degrees, so the steps of the traced edge do not count as bends.
+    let sum = 0;
+    for (let j = -3; j <= 3; j++) sum += radius[(((i + j) % n) + n) % n];
+    return sum / 7;
+  };
+  let low = 1;
+  for (let i = 0; i < n; i += 2) {
+    const r0 = r(i);
+    const d1 = (r(i + 4) - r(i - 4)) / (8 * h);
+    const d2 = (r(i + 4) - 2 * r0 + r(i - 4)) / (16 * h * h);
+    const den = Math.abs(r0 * r0 + 2 * d1 * d1 - r0 * d2);
+    if (den < 1e-9 || r0 <= 0) continue;
+    low = Math.min(low, (r0 * r0 + d1 * d1) ** 1.5 / den / r0);
+  }
+  return Math.max(0.1, low);
 }

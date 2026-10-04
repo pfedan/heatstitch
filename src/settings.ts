@@ -171,7 +171,7 @@ export function normalizeImage(i: Partial<ImageSettings> | undefined): ImageSett
   const st: Record<string, unknown> = { ...i?.stitch };
   // Only known numeric or boolean stitch options survive; anything else follows the material again.
   const stitch: Partial<DigitizeOptions> = {};
-  for (const k of ['spacing', 'satinSpacing', 'stitch', 'satinMax', 'satinMin', 'pull', 'overlap', 'trimMm'] as const) {
+  for (const k of ['spacing', 'satinSpacing', 'stitch', 'satinMax', 'satinMin', 'pull', 'overlap', 'trimMm', 'tolerance'] as const) {
     if (typeof st[k] === 'number' && Number.isFinite(st[k]) && (st[k] as number) >= 0) stitch[k] = st[k] as number;
   }
   if (typeof st.underlay === 'boolean') stitch.underlay = st.underlay;

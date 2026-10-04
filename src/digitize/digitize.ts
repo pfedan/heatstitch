@@ -6,7 +6,7 @@ import { fillRegion } from './fill';
 import { flowFill } from './flow';
 import { coverage, peakDensity } from './measure';
 import { buildRegion, type Region } from './region';
-import { runStitch } from './run';
+import { runStitch, TOLERANCE } from './run';
 import { column, pairs, satinStitches, underlay, type Column, type SatinParams } from './satin';
 import { reverse, skeleton, type Branch, type Graph, type Pt } from './skeleton';
 
@@ -49,6 +49,11 @@ export interface DigitizeOptions {
   underlay: boolean;
   /** Jumps longer than this are trimmed (mm). */
   trimMm: number;
+  /**
+   * Largest distance of a stitch from the line or edge it follows (mm): running stitches and
+   * curved rows get shorter stitches where a curve is tighter.
+   */
+  tolerance: number;
 }
 
 /** Pull compensation per fabric (mm per side): Wilcom's table, more for stretchy and pile fabrics. */
@@ -70,6 +75,7 @@ export function digitizeDefaults(profile: Profile): DigitizeOptions {
     overlap: 0.2,
     underlay: true,
     trimMm: 3,
+    tolerance: TOLERANCE,
   };
 }
 
@@ -211,7 +217,7 @@ function columns(r: Region): (b: Branch, freeFrom: boolean, freeTo: boolean) => 
 /** Satin columns overlap a junction they end at by this much once another column has covered it (mm). */
 const JOIN_OVERLAP = 0.3;
 
-function sewSatin(o: Obj, start: Pt, p: SatinParams, withUnderlay: boolean): Pt[][] {
+function sewSatin(o: Obj, start: Pt, p: SatinParams, withUnderlay: boolean, tol: number): Pt[][] {
   const col = columns(o.region);
   const g = o.graph!;
   // The first column to reach a junction covers it; the others stop at its edge.
@@ -222,7 +228,7 @@ function sewSatin(o: Obj, start: Pt, p: SatinParams, withUnderlay: boolean): Pt[
     start,
     (b, fa, fb) => {
       const c = col(b, fa, fb);
-      return withUnderlay ? underlay(c) : runStitch(c.center, 2.5);
+      return withUnderlay ? underlay(c, tol) : runStitch(c.center, 2.5, tol);
     },
     (b, fa, fb) => {
       // Back from the far end: the same column reversed.
@@ -242,8 +248,8 @@ const SATIN_PEAK = 2.4;
 /** Satin that leaves more of its region bare than this share is filled instead. */
 const SATIN_COVER = 0.95;
 
-function sewRun(o: Obj, start: Pt): Pt[][] {
-  const line = (b: Branch, fa: boolean, fb: boolean) => runStitch(column(o.region, b, fa, fb).center, 2);
+function sewRun(o: Obj, start: Pt, tol: number): Pt[][] {
+  const line = (b: Branch, fa: boolean, fb: boolean) => runStitch(column(o.region, b, fa, fb).center, 2, tol);
   const run = walk(o.graph!, start, line, (b, fa, fb) => line(b, fa, fb).reverse());
   return run.length ? [run] : [];
 }
@@ -299,7 +305,7 @@ export function digitize(prep: Prepared, o: DigitizeOptions, name = 'image'): Di
       const obj = todo.splice(bi, 1)[0];
       let out: Pt[][] = [];
       if (obj.info.kind === 'satin') {
-        out = sewSatin(obj, pos, satin, o.underlay);
+        out = sewSatin(obj, pos, satin, o.underlay, o.tolerance);
         if (peakDensity(out) > (SATIN_PEAK * 2) / o.satinSpacing || coverage(obj.region, out) < SATIN_COVER) {
           obj.info.kind = 'fill';
           out = [];
@@ -308,7 +314,7 @@ export function digitize(prep: Prepared, o: DigitizeOptions, name = 'image'): Di
       if (obj.info.kind === 'fill') {
         // Fill angles of touching regions sewn already, so neighbours differ.
         const near = angles.filter((a) => touches(a.obj.region, obj.region)).map((a) => a.angle);
-        const fp = { spacing: o.spacing, stitch: o.stitch, angle: o.angle, pull: o.pull, underlay: o.underlay };
+        const fp = { spacing: o.spacing, stitch: o.stitch, angle: o.angle, pull: o.pull, underlay: o.underlay, tolerance: o.tolerance };
         const flow = o.flow && o.angle === null && prep.orient ? flowFill(obj.region, obj.graph, prep.orient, fp, pos) : null;
         const res = flow ?? fillRegion(obj.region, fp, pos, near);
         if (res) {
@@ -320,7 +326,7 @@ export function digitize(prep: Prepared, o: DigitizeOptions, name = 'image'): Di
           obj.info.kind = 'run';
         }
       }
-      if (obj.info.kind === 'run' && obj.graph?.branches.length) out = sewRun(obj, pos);
+      if (obj.info.kind === 'run' && obj.graph?.branches.length) out = sewRun(obj, pos, o.tolerance);
       out = out.filter((r) => r.length > 1);
       if (!out.length) continue;
       runs.push(...out);

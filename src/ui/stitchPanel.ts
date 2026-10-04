@@ -48,9 +48,6 @@ const TRUST_ICON = {
   warn: '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5l6 11H2z"/><path d="M8 6.5v3.2M8 11.8v.1"/></svg>',
 };
 
-/** Longest stitch for contour and spiral rows (mm). */
-const CURVED_STITCH = 2.5;
-
 const OFFSETS: [number, string][] = [
   [0.5, '1/2'],
   [1 / 3, '1/3'],
@@ -79,6 +76,8 @@ export class StitchPanel {
   private draft: Partial<{ fill: FillSettings; satin: SatinSettings; run: RunSettings }> = {};
   private info: StitchInfo | null = null;
   private frame = 0;
+  /** Max. deviation chosen last: the next objects start with it (they cannot be measured for it). */
+  private tolerance: number | null = null;
 
   constructor(
     private root: HTMLElement,
@@ -95,6 +94,7 @@ export class StitchPanel {
     if (info.key === this.key) return;
     this.key = info.key;
     this.draft = structuredClone(info.measured);
+    if (this.tolerance !== null) for (const k of KINDS) if (this.draft[k]) this.draft[k]!.tolerance = this.tolerance;
     if (!info.measured[this.kind]) this.kind = KINDS.find((k) => info.measured[k])!;
     this.render();
   }
@@ -195,6 +195,8 @@ export class StitchPanel {
       if (s.pattern === 'tatami' || s.pattern === 'gradient') out.push(this.angle(s));
       out.push(this.slider({ label: 'stitch.length', hint: 'stitch.length.hint', min: 1.5, max: 7, step: 0.1, get: () => s.stitch, set: (v) => (s.stitch = v), fmt: mm(1) }));
       if (s.pattern === 'tatami') out.push(this.offsets(s));
+      // Straight rows cannot stray from their line; curved ones get shorter stitches in tight bends.
+      if (s.pattern === 'contour' || s.pattern === 'spiral' || s.pattern === 'follow') out.push(this.toleranceSlider(s));
       out.push(
         this.slider({ label: 'stitch.edge', hint: 'stitch.edge.hint', min: -0.4, max: 0.6, step: 0.05, get: () => s.edge, set: (v) => (s.edge = v), fmt: signed }),
         this.check('stitch.underlay', 'stitch.underlay.fill', () => s.underlay, (v) => (s.underlay = v)),
@@ -213,8 +215,24 @@ export class StitchPanel {
     const s = this.draft.run!;
     return [
       this.slider({ label: 'stitch.length', hint: 'stitch.runLength.hint', min: 1, max: 6, step: 0.1, get: () => s.stitch, set: (v) => (s.stitch = v), fmt: mm(1) }),
+      this.toleranceSlider(s),
       this.check('stitch.triple', 'stitch.triple.hint', () => s.triple, (v) => (s.triple = v)),
     ];
+  }
+
+  /** Max. deviation from the line; remembered for the next objects. */
+  private toleranceSlider(s: { tolerance: number }): HTMLElement {
+    return this.slider({
+      label: 'stitch.tolerance',
+      hint: 'stitch.tolerance.hint',
+      min: 0.05,
+      max: 0.5,
+      step: 0.05,
+      get: () => s.tolerance,
+      set: (v) => (s.tolerance = this.tolerance = v),
+      fmt: (v) => `${formatNumber(v, 2)} mm`,
+      note: () => t('stitch.toleranceNote'),
+    });
   }
 
   private slider(d: SliderDef): HTMLElement {
@@ -276,8 +294,6 @@ export class StitchPanel {
       b.addEventListener('click', () => {
         if (s.pattern === pat) return;
         s.pattern = pat;
-        // Rings and spirals bend all the way: shorter stitches follow the curve without cutting it.
-        if (pat === 'contour' || pat === 'spiral') s.stitch = Math.min(s.stitch, CURVED_STITCH);
         this.render();
         this.changed(true);
       });

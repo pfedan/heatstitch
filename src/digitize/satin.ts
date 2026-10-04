@@ -1,5 +1,5 @@
 import { sample, type Region } from './region';
-import { runStitch } from './run';
+import { runStitch, TOLERANCE } from './run';
 import type { Branch, Pt } from './skeleton';
 
 /**
@@ -198,10 +198,11 @@ export function satinStitches(ps: [Pt, Pt][], p: SatinParams): Pt[] {
 /**
  * Underlay sewn on the way out along the column (the satin follows on the way back): a center walk
  * for columns up to 4 mm, a zigzag inset 0.4 mm from both rails with 3 mm between penetrations on
- * the same side for wider ones (Wilcom and Ink/Stitch use these by width).
+ * the same side for wider ones (Wilcom and Ink/Stitch use these by width). The center walk keeps
+ * within `tol` of the centerline, so it stays under the satin in tight curves.
  */
-export function underlay(c: Column): Pt[] {
-  if (c.width <= 4) return runStitch(c.center, 2.5);
+export function underlay(c: Column, tol = TOLERANCE): Pt[] {
+  if (c.width <= 4) return runStitch(c.center, 2.5, tol);
   const out: Pt[] = [];
   let lastS = -Infinity;
   let s = 0;
