@@ -44,6 +44,7 @@ import {
   type Markers,
   type Transition,
 } from './model/sequence';
+import { recolor } from './model/recolor';
 import { COLOR_CHANGE, TRIM } from './model/pattern';
 import { stitchAlpha, stitchAt, stitchColors, transitionAt, type StitchStyle } from './render/flow';
 import type { FlowScene } from './render/scene';
@@ -332,6 +333,11 @@ const layers = new LayersPanel({
     focusBlock = hoverBlock = null;
     redraw();
   },
+  // Only the colors change, so the density measurement still holds.
+  recolor: (b, color) => {
+    const f = files.active;
+    if (f?.pattern) applyEdit(recolor(f.pattern, b, color), f.measurement);
+  },
 });
 
 /** Frames the jump with a few millimetres around it. */
@@ -474,7 +480,17 @@ function redraw(): void {
     $('player').hidden = !p;
     if (settings.mode === 'flow') {
       const current = p && !player.complete ? seq(p).markers.colorStarts.filter((i) => q!.numbers[i] <= Math.max(1, player.pos)).length - 1 : null;
-      layers.update({ blocks: q?.blocks ?? [], hidden: hiddenBlocks, focus: focusBlock, current }, getLang());
+      layers.update(
+        {
+          blocks: q?.blocks ?? [],
+          hidden: hiddenBlocks,
+          focus: focusBlock,
+          current,
+          original: active?.original?.colors ?? [],
+          format: active?.pattern?.format ?? 'pes',
+        },
+        getLang(),
+      );
       jumpsPanel.update({ list: q?.transitions ?? [], selected: selectedJump, lang: getLang() });
     }
     panel.update(active, selectedZone);

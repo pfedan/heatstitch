@@ -75,6 +75,19 @@ export function pecColor(index: number): ThreadColor {
   return { r, g, b, name, pecIndex: i };
 }
 
+/** The palette as thread colors (without "unknown"), each color once, for choosing a thread. */
+export function pecThreads(): ThreadColor[] {
+  const seen = new Set<string>();
+  const out: ThreadColor[] = [];
+  for (let i = 1; i < PEC.length; i++) {
+    const key = PEC[i].slice(0, 3).join(',');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(pecColor(i));
+  }
+  return out;
+}
+
 /** Perceptual color distance ("red mean", compuphase.com/cmetric.htm), as pyembroidery uses. */
 function distance(r1: number, g1: number, b1: number, r2: number, g2: number, b2: number): number {
   const rm = (r1 + r2) / 2;
