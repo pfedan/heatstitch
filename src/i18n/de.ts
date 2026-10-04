@@ -3,6 +3,8 @@ export const de = {
   'app.docs': 'Anleitung',
   'files.title': 'Dateien',
   'files.drop': 'DST/PES hierher ziehen oder klicken',
+  'files.privacy': 'Deine Dateien verlassen nie dein Gerät.',
+  'files.privacy.detail': 'Alles wird in deinem Browser gelesen, geprüft und gespeichert. Es gibt keinen Server, der Dateien empfängt, und kein Tracking.',
   'files.empty': 'Noch keine Datei geladen.',
   'files.remove': 'Entfernen',
   'files.error': 'Fehler',
