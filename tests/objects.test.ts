@@ -219,3 +219,43 @@ describe('shapes that stay as they are', () => {
     expect(remembered(p, sewObjects(p)[i])?.columns?.[0]?.[0]?.left.length).toBe(stored!.columns![0][0].left.length / 2);
   });
 });
+
+describe('changing the kind of an object', () => {
+  const satinS = { spacing: 0.4, edge: 0, short: true, underlay: true, tolerance: 0.15 };
+  const fillS = { pattern: 'tatami' as const, spacing: 0.4, spacingEnd: 1, offset: 0.25, angle: NaN, stitch: 4, underlay: true, edge: 0, tolerance: 0.15 };
+
+  it('turns a satin border into a fill and back, on the same area', () => {
+    let p = load('demos/letters.pes');
+    let kinds = stitchKinds(p);
+    let objs = sewObjects(p, kinds);
+    const i = objs.findIndex((o) => o.kind === 'satin');
+    const before = objs[i];
+    const r = restitch(p, objs, [i], { kind: 'fill', s: fillS }, kinds, 3, 'satin');
+    expect(r.failed).toEqual([]);
+    expect(Number.isFinite(r.memory[0].fill!.angle)).toBe(true);
+    rememberObjects(r.pattern, [r.starts[0]], r.ends[0]);
+    p = r.pattern;
+    kinds = stitchKinds(p);
+    objs = sewObjects(p, kinds);
+    remember(p, objs[i], r.memory[0]);
+    expect(objs[i].kind).toBe('fill');
+    expect(Math.abs((objs[i].maxX - objs[i].minX) - (before.maxX - before.minX))).toBeLessThan(10);
+    const back = restitch(p, objs, [i], { kind: 'satin', s: satinS }, kinds, 3, 'fill');
+    expect(back.failed).toEqual([]);
+    rememberObjects(back.pattern, [back.starts[0]], back.ends[0]);
+    const again = sewObjects(back.pattern)[i];
+    expect(again.kind).toBe('satin');
+    expect(Math.abs((again.maxX - again.minX) - (before.maxX - before.minX))).toBeLessThan(10);
+  });
+
+  it('does not turn a wide area into satin', () => {
+    const d = uShape();
+    const p = d.pattern;
+    rememberObjects(p, d.starts);
+    const kinds = stitchKinds(p);
+    const objs = sewObjects(p, kinds);
+    const r = restitch(p, objs, [0], { kind: 'satin', s: satinS }, kinds, 3, 'fill');
+    expect(r.failed).toEqual([0]);
+    expect(r.pattern).toBeDefined();
+  });
+});

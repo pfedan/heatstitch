@@ -58,8 +58,9 @@ import { JumpsPanel } from './ui/jumpsPanel';
 import { type Blocked, kindLabel, LayersPanel } from './ui/layersPanel';
 import { ObjectPanel, OrderCard } from './ui/objectPanel';
 import { StitchPanel, type StitchInfo } from './ui/stitchPanel';
-import { analyze, measureFill, measureRun, measureSatin, remember, remembered, rememberedIn, rememberShapes, restitch, shapeTrust, type Settings as RestitchSettings, type ShapeTrust } from './model/restitch';
+import { analyze, measureFill, measureRun, measureSatin, remember, remembered, rememberedIn, rememberShapes, restitch, shapeTrust, type Settings as RestitchSettings, type ShapeTrust, type RestitchResult } from './model/restitch';
 import { outline } from './digitize/region';
+import { digitizeDefaults, isStroke, SATIN_MAX } from './digitize/digitize';
 import { recommendedSpacing } from './validation/profiles';
 import { numberInColor, overlaps, rememberObjects, sewObjects, type SewObject } from './model/objects';
 import { conflicts, moveStats, optimizeOrder, reorder, violations } from './model/order';
@@ -494,12 +495,15 @@ function stitchInfo(p: Pattern, q: Sequence): StitchInfo {
   const shapes: ShapeOutline[] = [];
   let worst: ShapeTrust | undefined;
   const rank: Record<ShapeTrust, number> = { kept: 0, good: 1, approximate: 2 };
+  let stroke = true;
   for (const o of [...selectedObjects].sort((a, b) => a - b)) {
     const obj = q.objects[o];
     if (!obj) continue;
     const seen = new Set<string>();
     const an = analyze(p, obj, q.kinds);
-    for (const pt of an.parts) {
+    for (const [j, pt] of an.parts.entries()) {
+      // A run between two fill pieces is travel inside the fill, not a run of its own.
+      if (pt.kind === 'run' && an.parts[j - 1]?.kind === 'fill' && an.parts[j + 1]?.kind === 'fill') continue;
       if (!seen.has(pt.kind)) counts[pt.kind] = (counts[pt.kind] ?? 0) + 1;
       seen.add(pt.kind);
       if (pt.kind === 'fill') measured.fill ??= remembered(p, obj)?.fill ?? measureFill(p, an);
@@ -510,9 +514,11 @@ function stitchInfo(p: Pattern, q: Sequence): StitchInfo {
       const trust = shapeTrust(p, obj, an, (remembered(p, obj)?.fill ?? measureFill(p, an)).spacing);
       if (!worst || rank[trust] > rank[worst]) worst = trust;
       shapes.push({ lines: outline(an.fill), approximate: trust === 'approximate' });
+      // Satin needs a stroke: narrow, about even in width (the same test as in Image mode).
+      if (stroke && an.parts.some((pt) => pt.kind === 'fill')) stroke = !!isStroke(remembered(p, obj)?.shape ?? an.fill, SATIN_MAX);
     }
   }
-  const info: StitchInfo = { key: selectionKey, measured, counts, recommended: recommendedSpacing(settings.profile), shape: worst, outlines: shapes };
+  const info: StitchInfo = { key: selectionKey, measured, counts, recommended: recommendedSpacing(settings.profile), shape: worst, outlines: shapes, toSatin: stroke };
   stitchCache = { p, key: selectionKey, info };
   return info;
 }
@@ -525,52 +531,79 @@ function restitched(s: RestitchSettings) {
   return restitch(p, q.objects, [...selectedObjects].sort((a, b) => a - b), s, q.kinds, settings.trimMm);
 }
 
+/**
+ * Takes over new stitches for the selected objects; `failed` is said for objects left as they
+ * were. With `remeasure` (another kind of stitch), the panel measures the objects again.
+ */
+function applyRestitched(r: RestitchResult | null, failed: Key, remeasure = false): void {
+  const f = files.active;
+  flowPreview = null;
+  if (!f || !r) return redraw();
+  const say = () => {
+    if (r.failed.length) layers.say(t(failed, { n: r.failed.length }), true);
+  };
+  if (!r.starts.length) {
+    // Nothing could be sewn this way: the panel goes back to what the objects have.
+    selectionKey++;
+    say();
+    return redraw();
+  }
+  const key = selectionKey;
+  // Each object stays one, also where its new stitches are trimmed inside.
+  r.starts.forEach((a, k) => rememberObjects(r.pattern, [a], r.ends[k]));
+  applyEdit(r.pattern);
+  // The same objects stay selected (found by their first stitch), and the settings stay as set.
+  const nq = seq(r.pattern);
+  // An object can come out in several pieces (new trims inside): all of them stay selected.
+  const sel = new Set<number>();
+  r.starts.forEach((a, k) => {
+    const pieces = new Set<number>();
+    for (let n = a + 1; n <= r.ends[k]; n++) {
+      const o = nq.objectAt[recordOfStitch(nq.numbers, n)];
+      if (o >= 0) pieces.add(o);
+    }
+    for (const o of pieces) sel.add(o);
+    // An object that stayed one keeps its shape and settings for the next edit.
+    if (pieces.size === 1) remember(r.pattern, nq.objects[[...pieces][0]], r.memory[k]);
+  });
+  files.setObjects(f, rememberedIn(r.pattern, nq.objects));
+  if (sel.size) selectedObjects = sel;
+  selectionKey = remeasure ? key + 1 : key;
+  stitchCache = stitchCache && !remeasure ? { ...stitchCache, p: r.pattern } : null;
+  say();
+  redraw();
+}
+
+/** Settings to start from when the selected objects change from one kind of stitch to the other. */
+function convertSettings(to: 'fill' | 'satin', info: StitchInfo): RestitchSettings | null {
+  if (to === 'satin') {
+    const f = info.measured.fill;
+    if (!f) return null;
+    return { kind: 'satin', s: { spacing: f.spacing, edge: digitizeDefaults(settings.profile).pull, short: true, underlay: f.underlay, tolerance: f.tolerance } };
+  }
+  const s = info.measured.satin;
+  if (!s) return null;
+  const spacing = s.spacing;
+  return { kind: 'fill', s: { pattern: 'tatami', spacing, spacingEnd: Math.min(1.2, Math.round(spacing * 250) / 100), offset: 0.25, angle: NaN, stitch: 4, underlay: s.underlay, edge: 0, tolerance: s.tolerance } };
+}
+
 const stitchPanel = new StitchPanel($('object-stitches'), {
   preview: (s) => {
     flowPreview = s ? (restitched(s)?.pattern ?? null) : null;
     redraw();
   },
   apply: (s) => {
-    const f = files.active;
-    const r = restitched(s);
-    flowPreview = null;
-    if (!f || !r) return redraw();
-    const say = () => {
-      if (!r.failed.length) return;
-      const pat = s.kind === 'fill' ? s.s.pattern : null;
-      const msg = pat === 'spiral' ? 'stitch.failedSpiral' : pat === 'contour' || pat === 'follow' ? 'stitch.failedCurved' : 'stitch.failed';
-      layers.say(t(msg, { n: r.failed.length }), true);
-    };
-    if (!r.starts.length) {
-      // Nothing could be sewn this way: the panel goes back to what the objects have.
-      selectionKey++;
-      say();
-      return redraw();
-    }
-    const key = selectionKey;
-    // Each object stays one, also where its new stitches are trimmed inside.
-    r.starts.forEach((a, k) => rememberObjects(r.pattern, [a], r.ends[k]));
-    applyEdit(r.pattern);
-    // The same objects stay selected (found by their first stitch), and the settings stay as set.
-    const nq = seq(r.pattern);
-    // An object can come out in several pieces (new trims inside): all of them stay selected.
-    const sel = new Set<number>();
-    r.starts.forEach((a, k) => {
-      const pieces = new Set<number>();
-      for (let n = a + 1; n <= r.ends[k]; n++) {
-        const o = nq.objectAt[recordOfStitch(nq.numbers, n)];
-        if (o >= 0) pieces.add(o);
-      }
-      for (const o of pieces) sel.add(o);
-      // An object that stayed one keeps its shape and settings for the next edit.
-      if (pieces.size === 1) remember(r.pattern, nq.objects[[...pieces][0]], r.memory[k]);
-    });
-    files.setObjects(f, rememberedIn(r.pattern, nq.objects));
-    if (sel.size) selectedObjects = sel;
-    selectionKey = key;
-    stitchCache = stitchCache ? { ...stitchCache, p: r.pattern } : null;
-    say();
-    redraw();
+    const pat = s.kind === 'fill' ? s.s.pattern : null;
+    applyRestitched(restitched(s), pat === 'spiral' ? 'stitch.failedSpiral' : pat === 'contour' || pat === 'follow' ? 'stitch.failedCurved' : 'stitch.failed');
+  },
+  convert: (to) => {
+    const p = files.active?.pattern;
+    if (!p || !selectedObjects.size) return;
+    const s = convertSettings(to, stitchInfo(p, seq(p)));
+    if (!s) return;
+    const q = seq(p);
+    const r = restitch(p, q.objects, [...selectedObjects].sort((a, b) => a - b), s, q.kinds, settings.trimMm, to === 'satin' ? 'fill' : 'satin');
+    applyRestitched(r, to === 'satin' ? 'stitch.toSatin.failed' : 'stitch.failed', true);
   },
 });
 

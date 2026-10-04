@@ -2386,7 +2386,8 @@ body[data-mode='flow'] .stage .hint {
   color: var(--accent);
 }
 
-.stitch-tabs button {
+.stitch-tabs button,
+.kind-switch button {
   flex: 1;
   border: none;
   border-radius: 0;
@@ -2398,18 +2399,31 @@ body[data-mode='flow'] .stage .hint {
   font-size: 12px;
 }
 
-.stitch-tabs .kind-icon {
+.stitch-tabs .kind-icon,
+.kind-switch .kind-icon {
   padding: 0;
   display: inline-flex;
 }
 
-.stitch-tabs button.active {
+.stitch-tabs button.active,
+.kind-switch button.active {
   background: var(--accent);
   color: var(--accent-ink);
 }
 
-.stitch-tabs button.active .kind-icon {
+.stitch-tabs button.active .kind-icon,
+.kind-switch button.active .kind-icon {
   color: var(--accent-ink);
+}
+
+.kind-switch {
+  display: flex;
+  margin: 4px 0;
+}
+
+.kind-switch button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .pattern-tiles {
