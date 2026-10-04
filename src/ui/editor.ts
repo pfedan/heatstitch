@@ -1,6 +1,8 @@
 import { thinSweeps } from '../correct/thin';
-import { moveRecords, nearestStitch, removeStitches, stitchesInRect } from '../model/edit';
-import { type Pattern } from '../model/pattern';
+import { formatNumber } from '../i18n';
+import { insertStitch, moveRecords, nearestSegment, nearestStitch, removeStitches, stitchesInRect, type RecordRange } from '../model/edit';
+import type { HandChange } from '../model/handEdit';
+import { STITCH, type Pattern } from '../model/pattern';
 import { POINTS_MIN_SCALE } from '../render/editOverlay';
 import { tagShortStitches, TIE } from '../validation/shortStitches';
 
@@ -13,13 +15,21 @@ export interface EditView {
   hover: number;
   /** Rubber band in world mm while selecting a rectangle. */
   band: { x0: number; y0: number; x1: number; y1: number } | null;
+  /** Records editing is limited to (the object worked on), or null for all. */
+  range: RecordRange | null;
+  /** Penetration whose stitch lengths are labelled (the one dragged, or the only one selected), or -1. */
+  grab: number;
+  /** A length in mm as the label shows it. */
+  formatMm: (mm: number) => string;
 }
 
 export interface EditorHooks {
   /** The active file's pattern. */
   pattern: () => Pattern | null;
-  /** Stores an edited pattern (one undo step). */
-  commit: (p: Pattern) => void;
+  /** Stores an edited pattern (one undo step); `change` is null for edits not made point by point. */
+  commit: (p: Pattern, change: HandChange | null) => void;
+  /** Records editing is limited to, or null for all. */
+  range: () => RecordRange | null;
   redraw: () => void;
   /** Selection or mode changed (panel texts). */
   changed: () => void;
@@ -41,6 +51,7 @@ export class Editor implements EditView {
   band: EditView['band'] = null;
   /** Pattern shown while a drag is in progress. */
   preview: Pattern | null = null;
+  private grabbed = -1;
   private drag: Drag | null = null;
 
   constructor(private hooks: EditorHooks) {}
@@ -60,10 +71,25 @@ export class Editor implements EditView {
     this.hooks.changed();
   }
 
-  /** Stitch under the pointer; only once the penetrations are drawn (zoomed in far enough). */
+  formatMm = (mm: number): string => `${formatNumber(mm, 1)} mm`;
+
+  get range(): RecordRange | null {
+    return this.active ? this.hooks.range() : null;
+  }
+
+  get grab(): number {
+    if (this.drag?.mode === 'move') return this.grabbed;
+    return this.selection.size === 1 ? [...this.selection][0] : -1;
+  }
+
+  /**
+   * Stitch under the pointer; only where the penetrations are drawn (zoomed in far enough, or
+   * always within an object).
+   */
   private pick(x: number, y: number, scale: number): number {
     const p = this.hooks.pattern();
-    return p && scale >= POINTS_MIN_SCALE ? nearestStitch(p, x * 10, y * 10, (PICK_PX / scale) * 10) : -1;
+    const range = this.range;
+    return p && (range || scale >= POINTS_MIN_SCALE) ? nearestStitch(p, x * 10, y * 10, (PICK_PX / scale) * 10, range) : -1;
   }
 
   /** Abandons a drag (a second finger started a pinch). */
@@ -86,6 +112,7 @@ export class Editor implements EditView {
         this.selection = new Set([hit]);
       }
       this.hooks.changed();
+      this.grabbed = hit;
       this.drag = { mode: 'move', x, y, base: p, indices: [...this.selection] };
       return 'move';
     }
@@ -125,12 +152,12 @@ export class Editor implements EditView {
     if (d.mode === 'move' && this.preview) {
       const p = this.preview;
       this.preview = null;
-      this.hooks.commit(p);
+      this.hooks.commit(p, { moved: d.indices });
     } else if (d.mode === 'band' && this.band) {
       const p = this.hooks.pattern();
       const b = this.band;
       this.band = null;
-      if (p) for (const i of stitchesInRect(p, b.x0 * 10, b.y0 * 10, b.x1 * 10, b.y1 * 10)) this.selection.add(i);
+      if (p) for (const i of stitchesInRect(p, b.x0 * 10, b.y0 * 10, b.x1 * 10, b.y1 * 10, this.range)) this.selection.add(i);
       this.hooks.changed();
     } else if (d.mode === 'pan' && !d.moved && this.selection.size) {
       this.selection.clear();
@@ -151,7 +178,53 @@ export class Editor implements EditView {
   nudge(dx: number, dy: number): void {
     const p = this.hooks.pattern();
     if (!p || !this.selection.size) return;
-    this.hooks.commit(moveRecords(p, this.selection, dx, dy));
+    this.hooks.commit(moveRecords(p, this.selection, dx, dy), { moved: [...this.selection] });
+  }
+
+  /**
+   * A new penetration on the stitch nearest to world (x, y): the stitch is split there and the new
+   * point selected. Returns false when no stitch is near.
+   */
+  insertAt(x: number, y: number, scale: number): boolean {
+    const p = this.hooks.pattern();
+    if (!this.active || !p) return false;
+    const hit = nearestSegment(p, x * 10, y * 10, (PICK_PX / scale) * 10, this.range);
+    if (!hit) return false;
+    const next = insertStitch(p, hit.at, hit.x, hit.y);
+    this.hooks.commit(next, { inserted: hit.at });
+    this.selection = new Set([hit.at]);
+    this.hooks.changed();
+    return true;
+  }
+
+  /** Splits the stitch ending at the only selected penetration in the middle. */
+  splitSelected(): boolean {
+    const p = this.hooks.pattern();
+    if (!p || this.selection.size !== 1) return false;
+    const i = [...this.selection][0];
+    if (i < 1 || p.cmd[i - 1] !== STITCH || p.cmd[i] !== STITCH) return false;
+    const next = insertStitch(p, i, Math.round((p.x[i - 1] + p.x[i]) / 2), Math.round((p.y[i - 1] + p.y[i]) / 2));
+    this.hooks.commit(next, { inserted: i });
+    this.selection = new Set([i]);
+    this.hooks.changed();
+    return true;
+  }
+
+  /** Selects the penetration before or after the selected one in sewing order (within the range). */
+  step(dir: number): number {
+    const p = this.hooks.pattern();
+    if (!p) return -1;
+    const range = this.range;
+    const lo = range?.first ?? 0;
+    const hi = Math.min(range?.last ?? p.cmd.length - 1, p.cmd.length - 1);
+    const sel = [...this.selection];
+    let i = sel.length ? (dir > 0 ? Math.max(...sel) : Math.min(...sel)) : dir > 0 ? lo - 1 : hi + 1;
+    do i += dir;
+    while (i >= lo && i <= hi && p.cmd[i] !== STITCH);
+    if (i < lo || i > hi) return -1;
+    this.selection = new Set([i]);
+    this.hooks.changed();
+    return i;
   }
 
   deleteSelection(): void {
@@ -160,8 +233,9 @@ export class Editor implements EditView {
     const mask = new Uint8Array(p.cmd.length);
     for (const i of this.selection) mask[i] = 1;
     const next = removeStitches(p, mask);
+    const removed = [...this.selection];
     this.selection.clear();
-    this.hooks.commit(next);
+    this.hooks.commit(next, { removed });
     this.hooks.changed();
   }
 
@@ -180,7 +254,7 @@ export class Editor implements EditView {
     });
     if (r.removed) {
       this.selection.clear();
-      this.hooks.commit(r.pattern);
+      this.hooks.commit(r.pattern, null);
       this.hooks.changed();
     }
     return r.removed;
@@ -189,7 +263,7 @@ export class Editor implements EditView {
   selectAll(): void {
     const p = this.hooks.pattern();
     if (!p) return;
-    this.selection = new Set(stitchesInRect(p, -1e9, -1e9, 1e9, 1e9));
+    this.selection = new Set(stitchesInRect(p, -1e9, -1e9, 1e9, 1e9, this.range));
     this.hooks.changed();
     this.hooks.redraw();
   }

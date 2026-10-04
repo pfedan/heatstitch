@@ -316,6 +316,11 @@
         <div class="stage-tools stage-tools-start" data-mode="flow density">
           <button type="button" id="undo" class="tool" data-i18n-title="edit.undo.key" data-i18n-aria="edit.undo"><span aria-hidden="true">↶</span></button>
           <button type="button" id="redo" class="tool" data-i18n-title="edit.redo.key" data-i18n-aria="edit.redo"><span aria-hidden="true">↷</span></button>
+          <div class="segmented level-switch" role="radiogroup" data-i18n-aria="level.label">
+            <label data-i18n-title="level.objects.hint"><input type="radio" name="level" value="objects" checked /><span data-i18n="level.objects"></span></label>
+            <label data-i18n-title="level.stitches.hint"><input type="radio" name="level" value="stitches" /><span data-i18n="level.stitches"></span></label>
+          </div>
+          <span class="edit-crumb" id="edit-crumb" hidden></span>
         </div>
         <div class="stage-tools stage-tools-end">
           <button type="button" id="image-shine" class="tool primary" data-mode="image" data-i18n-title="image.shine.hint" hidden><span aria-hidden="true">✦</span> <span data-i18n="image.shine"></span></button>
@@ -455,9 +460,7 @@
           <div id="fix-report" class="fix-report" aria-live="polite"></div>
 
           <h3 data-i18n="edit.title"></h3>
-          <div class="buttons">
-            <button type="button" id="edit-toggle" aria-pressed="false" data-i18n="edit.start"></button>
-          </div>
+          <p class="muted small" id="edit-off-hint" data-i18n="edit.panelHint"></p>
           <div id="edit-tools" class="edit-tools" hidden>
             <p class="muted small" data-i18n="edit.hint"></p>
             <p class="sel-info" id="sel-info"></p>

@@ -11,6 +11,7 @@ import { loadSettings, saveSettings } from './settings';
 import { bindControls, type ChangeKind } from './ui/controls';
 import { CorrectPanel, type CorrectMessage } from './ui/correctPanel';
 import { Editor } from './ui/editor';
+import { keepObjects, type HandChange } from './model/handEdit';
 import { exportPng } from './ui/export';
 import { FileList, type LoadedFile } from './ui/fileList';
 import { legendSpec } from './ui/legendSpec';
@@ -286,6 +287,10 @@ let selectionKey = 0;
 /** New stitches shown while a stitch setting is being dragged, not applied yet. */
 let flowPreview: Pattern | null = null;
 let hoverObject: number | null = null;
+/** Object whose penetrations are edited in the Ablauf mode (the level "Stitches"), or null. */
+let editObject: number | null = null;
+/** Nothing to pick: in the Ablauf mode the first click on the stitches chooses the object. */
+const NO_RANGE = { first: 0, last: -1 };
 /** One empty list, so the colors list is not rebuilt on every redraw (it compares by identity). */
 const NO_COLORS: readonly ThreadColor[] = [];
 
@@ -293,7 +298,7 @@ const overOf = (q: Sequence, p: Pattern) => (q.over ??= overlaps(p, q.objects));
 
 function resetFlow(): void {
   hiddenBlocks = new Set();
-  focusBlock = hoverBlock = selectedJump = hoverJump = hoverObject = null;
+  focusBlock = hoverBlock = selectedJump = hoverJump = hoverObject = editObject = null;
   selectedObjects = new Set();
   selectionKey++;
   flowPreview = null;
@@ -418,6 +423,15 @@ function selectObjects(objs: number[], toggle: boolean): void {
   selectionKey++;
   flowPreview = null;
   if (next.size) focusBlock = null;
+  // While editing points, choosing another object (in the list too) goes on with that one.
+  if (editor.active && settings.mode === 'flow') {
+    const one = next.size === 1 ? [...next][0] : null;
+    if (one !== editObject) {
+      editor.reset();
+      editObject = one;
+      updateLevel();
+    }
+  }
   layers.reveal([...next]);
   redraw();
   if (next.size) requestAnimationFrame(() => $('object-panel').scrollIntoView({ block: 'nearest' }));
@@ -559,11 +573,15 @@ const objectPanel = new ObjectPanel({
     return moveObjects(order, [o]);
   },
   clear: () => {
+    if (editor.active) setEditing(false);
     selectedObjects = new Set();
     selectionKey++;
     flowPreview = null;
     redraw();
   },
+  editStitches: (on) => setEditing(on),
+  deleteSelection: () => editor.deleteSelection(),
+  splitStitch: () => editor.splitSelected(),
 });
 
 /** Parts of each object, measured stitch settings per selection (cached per pattern and selection). */
@@ -599,7 +617,8 @@ function stitchInfo(p: Pattern, q: Sequence): StitchInfo {
       if (stroke && an.parts.some((pt) => pt.kind === 'fill')) stroke = !!isStroke(remembered(p, obj)?.shape ?? an.fill, SATIN_MAX);
     }
   }
-  const info: StitchInfo = { key: selectionKey, measured, counts, recommended: recommendedSpacing(settings.profile), shape: worst, outlines: shapes, toSatin: stroke };
+  const hand = [...selectedObjects].reduce((a, o) => a + (q.objects[o] ? (remembered(p, q.objects[o])?.hand ?? 0) : 0), 0);
+  const info: StitchInfo = { key: selectionKey, hand, measured, counts, recommended: recommendedSpacing(settings.profile), shape: worst, outlines: shapes, toSatin: stroke };
   stitchCache = { p, key: selectionKey, info };
   return info;
 }
@@ -827,8 +846,10 @@ function setMode(mode: Mode): void {
   saveSettings(settings);
   document.body.dataset.mode = mode;
   document.querySelectorAll<HTMLInputElement>('input[name="mode"]').forEach((i) => (i.checked = i.value === mode));
+  // The level (objects or stitches) stays when switching between Ablauf and Dichte.
+  if (mode === 'image' && editor.active) setEditing(false);
+  else editor.reset();
   if (mode !== 'density') {
-    if (editor.active) setEditing(false);
     comparing = false;
     hoverZone = null;
   }
@@ -837,7 +858,7 @@ function setMode(mode: Mode): void {
     if (!player.complete) player.set(Number.MAX_SAFE_INTEGER);
   }
   controls.refresh();
-  $('canvas-hint').textContent = t(mode === 'flow' ? 'canvas.hint.flow' : mode === 'image' ? 'canvas.hint.image' : 'canvas.hint');
+  updateLevel();
   empty.textContent = t(mode === 'flow' ? 'canvas.empty.flow' : mode === 'image' ? 'canvas.empty.image' : 'canvas.empty');
   tooltip.hidden = true;
   // The image and the loaded file have their own place on the stage.
@@ -858,6 +879,8 @@ function objectInfo(p: Pattern, q: Sequence) {
     selected,
     layering: selected.map((o) => ({ below: over[o].length, above: over.filter((l) => l.includes(o)).length })),
     numbers: selected.map((o) => numberInColor(q.objects, q.objects[o])),
+    hand: selected.map((o) => remembered(p, q.objects[o])?.hand ?? 0),
+    editing: editor.active && editObject !== null && selected.length === 1 && selected[0] === editObject ? { selection: editor.selection.size } : null,
     mergeBlocked: selected.length > 1 ? mergeBlocked(selected.map((o) => q.objects[o])) : null,
   };
 }
@@ -1052,6 +1075,7 @@ function syncPlayer(): void {
   const blocks = files.active?.pattern ? seq(files.active.pattern).blocks.length : 0;
   const objs = files.active?.pattern ? seq(files.active.pattern).objects.length : 0;
   if ([...selectedObjects].some((o) => o >= objs)) selectedObjects = new Set();
+  if (editObject !== null && editObject >= objs) editObject = null;
   hoverObject = null;
   if (orderCard.isOpen) orderCard.close(true);
   if ([...hiddenBlocks].some((b) => b >= blocks) || (focusBlock ?? -1) >= blocks) {
@@ -1062,10 +1086,92 @@ function syncPlayer(): void {
 
 const editor = new Editor({
   pattern: () => files.active?.pattern ?? null,
-  commit: (p) => applyEdit(p),
+  commit: (p, change) => commitHand(p, change),
+  range: () => {
+    if (settings.mode !== 'flow') return null;
+    const p = files.active?.pattern;
+    const o = p && editObject !== null ? seq(p).objects[editObject] : undefined;
+    return o ? { first: o.first, last: o.last } : NO_RANGE;
+  },
   redraw,
   changed: redraw,
 });
+
+/** An edit made point by point: the objects it touched keep what they remember (see keepObjects). */
+function commitHand(next: Pattern, change: HandChange | null): void {
+  const f = files.active;
+  const p = f?.pattern;
+  if (!f || !p) return;
+  if (!change) return applyEdit(next);
+  const moved = keepObjects(p, next, change, seq);
+  const editing = editObject !== null && moved.has(editObject) ? moved.get(editObject)! : editObject;
+  applyEdit(next);
+  files.setObjects(f, rememberedIn(next, seq(next).objects));
+  if (editObject !== null) {
+    editObject = editing !== null && editing >= 0 ? editing : null;
+    selectedObjects = editObject !== null ? new Set([editObject]) : new Set();
+  }
+  selectionKey++;
+  updateLevel();
+  redraw();
+}
+
+/** The penetrations of object `o` are edited (Ablauf). `fit` zooms in when it is small on the stage. */
+function enterObject(o: number, fit: boolean): void {
+  const p = files.active?.pattern;
+  const obj = p ? seq(p).objects[o] : undefined;
+  if (!obj) return;
+  if (!editor.active) editor.setActive(true);
+  else editor.reset();
+  editObject = o;
+  if (!selectedObjects.has(o) || selectedObjects.size !== 1) selectObjects([o], false);
+  if (fit) {
+    const w = ((obj.maxX - obj.minX) / 10) * vp.scale;
+    const h = ((obj.maxY - obj.minY) / 10) * vp.scale;
+    if (Math.max(w / stageW, h / stageH) < 0.4) vp.fit(obj.minX / 10, obj.minY / 10, obj.maxX / 10, obj.maxY / 10, stageW, stageH, 60);
+  }
+  updateLevel();
+  redraw();
+}
+
+/** Pans so that record `i` is on the stage (not under the tools or the player). */
+function revealRecord(i: number): void {
+  const p = files.active?.pattern;
+  if (!p) return;
+  const [sx, sy] = vp.toScreen(p.x[i] / 10, p.y[i] / 10);
+  const m = 80;
+  const dx = sx < m ? m - sx : sx > stageW - m ? stageW - m - sx : 0;
+  const dy = sy < m ? m - sy : sy > stageH - m ? stageH - m - sy : 0;
+  if (dx || dy) vp.pan(dx, dy);
+  redraw();
+}
+
+function setEditing(on: boolean): void {
+  if (on && settings.mode === 'flow' && selectedObjects.size === 1) return enterObject([...selectedObjects][0], true);
+  editor.setActive(on);
+  editObject = null;
+  updateLevel();
+  redraw();
+}
+
+/** Level switch, where the user is and what the keys do. */
+function updateLevel(): void {
+  const on = editor.active;
+  stage.classList.toggle('editing', on);
+  document.querySelectorAll<HTMLInputElement>('input[name="level"]').forEach((i) => (i.checked = (i.value === 'stitches') === on));
+  const crumb = $('edit-crumb');
+  const p = files.active?.pattern;
+  const flow = settings.mode === 'flow';
+  crumb.hidden = !on || !flow;
+  if (on && flow) {
+    const q = p ? seq(p) : null;
+    crumb.textContent = q && editObject !== null && q.objects[editObject] ? t('level.in', { name: objectName(q, editObject) }) : t('level.pick');
+  }
+  const mode = settings.mode;
+  $('canvas-hint').textContent = t(
+    mode === 'image' ? 'canvas.hint.image' : on ? (flow ? 'canvas.hint.flowEdit' : 'canvas.hint.edit') : flow ? 'canvas.hint.flow' : 'canvas.hint',
+  );
+}
 
 function setComparing(on: boolean): void {
   comparing = on;
@@ -1073,11 +1179,6 @@ function setComparing(on: boolean): void {
   redraw();
 }
 
-function setEditing(on: boolean): void {
-  editor.setActive(on);
-  stage.classList.toggle('editing', on);
-  redraw();
-}
 
 /** Undo, redo or revert: indices change, so the selection is dropped. */
 function history(step: 'undo' | 'redo' | 'revert'): void {
@@ -1123,7 +1224,6 @@ async function autoFix(scope: 'all' | 'zone'): Promise<void> {
 
 const correctPanel = new CorrectPanel(settings, {
   autoFix: (scope) => void autoFix(scope),
-  toggleEdit: () => setEditing(!editor.active),
   toggleCompare: () => setComparing(!comparing),
   deleteSelection: () => editor.deleteSelection(),
   thinSelection: (share) => {
@@ -1256,6 +1356,11 @@ applyLang(detectLang(settings.lang));
 applyI18n(document.body);
 
 $('fit').addEventListener('click', () => fitView());
+document.querySelectorAll<HTMLInputElement>('input[name="level"]').forEach((i) =>
+  i.addEventListener('change', () => {
+    if (i.checked) setEditing(i.value === 'stitches');
+  }),
+);
 exportBtn.addEventListener('click', () => {
   const p = files.active?.pattern;
   if (p) exportPng({ ...scene(), edit: null }, stageW, stageH, stageBg(), p.name || 'pattern');
@@ -1444,6 +1549,10 @@ window.addEventListener('keydown', (e) => {
       redraw();
       return;
     }
+    if (e.key === 'i') {
+      editor.splitSelected();
+      return;
+    }
   }
   if (e.key === '1' || e.key === '2' || e.key === '3') {
     setMode(e.key === '1' ? 'flow' : e.key === '2' ? 'density' : 'image');
@@ -1455,6 +1564,16 @@ window.addEventListener('keydown', (e) => {
   }
   if (settings.mode === 'flow') {
     if ((e.target as HTMLElement).closest('button') && (e.key === ' ' || e.key === 'Enter')) return;
+    if (e.key === 'e') return setEditing(!editor.active);
+    if (editor.active) {
+      if (e.key === 'Escape') return setEditing(false);
+      if (e.key === ',' || e.key === '.') {
+        e.preventDefault();
+        const i = editor.step(e.key === '.' ? 1 : -1);
+        if (i >= 0) revealRecord(i);
+        return;
+      }
+    } else if (e.key === 'Enter' && selectedObjects.size === 1) return enterObject([...selectedObjects][0], true);
     if (e.key === ' ') {
       e.preventDefault();
       player.toggle();
@@ -1527,6 +1646,8 @@ const pointers = new Map<number, [number, number]>();
 let pinchDist = 0;
 /** Where a one-finger or mouse press started, to tell a click from a drag. */
 let pressAt: [number, number] | null = null;
+/** What the press started as: a point drag, a rectangle or panning (a click when it did not move). */
+let pressMode: 'move' | 'band' | 'pan' = 'pan';
 /** Pointer painting a brush stroke in the Bild mode, or null. */
 let painting: number | null = null;
 
@@ -1555,6 +1676,7 @@ canvas.addEventListener('pointerdown', (e) => {
     const [wx, wy] = vp.toWorld(pos[0], pos[1]);
     mode = editor.down(wx, wy, pos[0], pos[1], e.shiftKey, vp.scale);
   }
+  pressMode = mode;
   if (mode === 'pan') canvas.classList.add('panning');
   if (pointers.size === 2) {
     editor.cancel();
@@ -1611,9 +1733,18 @@ const endPointer = (e: PointerEvent) => {
     else imageMode.paintCancel();
     return;
   }
-  if (pressAt && e.type === 'pointerup' && settings.mode === 'flow' && Math.hypot(pos[0] - pressAt[0], pos[1] - pressAt[1]) < 4) {
+  if (pressAt && e.type === 'pointerup' && settings.mode === 'flow' && pressMode === 'pan' && Math.hypot(pos[0] - pressAt[0], pos[1] - pressAt[1]) < 4) {
     const p = files.active?.pattern;
-    if (p) {
+    if (p && editor.active) {
+      // Editing stitches: a click on another object goes on with that one, a click beside the
+      // stitches (with no point selected) goes back to the objects.
+      const st = styleFor(p);
+      const [x, y] = vp.toWorld(pos[0], pos[1]);
+      const i = stitchAt(p, x * 10, y * 10, Math.max(3, 60 / vp.scale), st.limit, st.alpha);
+      const o = i >= 0 ? seq(p).objectAt[i] : -1;
+      if (o >= 0 && o !== editObject) enterObject(o, editObject === null);
+      else if (o < 0 && !editor.selection.size) setEditing(false);
+    } else if (p) {
       const q = seq(p);
       const k = transitionAt(p, q.transitions, vp, pos[0], pos[1]);
       if (k >= 0 || selectedJump !== null) {
@@ -1658,8 +1789,22 @@ canvas.addEventListener('pointerleave', () => {
 canvas.addEventListener('contextmenu', (e) => {
   if (settings.mode === 'image') e.preventDefault();
 });
-canvas.addEventListener('dblclick', () => {
-  if (!editor.active) fitView();
+canvas.addEventListener('dblclick', (e) => {
+  const pos = local(e);
+  const [x, y] = vp.toWorld(pos[0], pos[1]);
+  if (editor.active) {
+    editor.insertAt(x, y, vp.scale);
+    return;
+  }
+  const p = files.active?.pattern;
+  if (settings.mode === 'flow' && p) {
+    // A double-click on an object opens its stitches.
+    const st = styleFor(p);
+    const i = stitchAt(p, x * 10, y * 10, Math.max(3, 60 / vp.scale), st.limit, st.alpha);
+    const o = i >= 0 ? seq(p).objectAt[i] : -1;
+    if (o >= 0) return enterObject(o, true);
+  }
+  fitView();
 });
 
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', redraw);

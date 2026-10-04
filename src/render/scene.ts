@@ -71,6 +71,7 @@ export function drawScene(ctx: CanvasRenderingContext2D, w: number, h: number, s
     if (flow.selected) drawTransition(ctx, vp, pattern, flow.selected, true);
     if (flow.outlines?.length) drawOutlines(ctx, vp, flow.outlines);
     if (flow.needle >= 0) drawNeedle(ctx, vp, pattern, flow.needle);
+    if (scene.edit) drawEditOverlay(ctx, vp, pattern, scene.edit, w, h);
     return;
   }
 

@@ -23,6 +23,8 @@ export interface StitchInfo {
   shape?: ShapeTrust;
   /** Fill areas, drawn on the canvas. */
   outlines: ShapeOutline[];
+  /** Points changed by hand in the selected objects (new settings replace them). */
+  hand?: number;
   /** Whether the fill areas are strokes that can be sewn as satin. */
   toSatin: boolean;
 }
@@ -164,6 +166,14 @@ export class StitchPanel {
       trust.innerHTML = info.shape === 'approximate' ? TRUST_ICON.warn : TRUST_ICON.ok;
       trust.append(Object.assign(document.createElement('span'), { textContent: t(`stitch.shape.${info.shape}`) }));
       parts.push(trust);
+    }
+    if (info.hand) {
+      const hand = document.createElement('p');
+      hand.className = 'shape-trust approximate';
+      hand.setAttribute('role', 'status');
+      hand.innerHTML = TRUST_ICON.warn;
+      hand.append(Object.assign(document.createElement('span'), { textContent: t('stitch.hand', { n: formatNumber(info.hand) }) }));
+      parts.push(hand);
     }
     if (this.kind === 'fill' || this.kind === 'satin') parts.push(this.kindSwitch(this.kind));
     parts.push(...this.controls());
