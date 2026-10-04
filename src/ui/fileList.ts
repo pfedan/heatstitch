@@ -10,10 +10,13 @@ import {
   putFile,
   saveAcks,
   saveActiveKey,
+  saveObjects,
   saveWorking,
   toStored,
   type StoredPattern,
 } from '../storage/fileStore';
+import { restoreRemembered, type StoredObject } from '../model/restitch';
+import type { ProjectFile } from '../storage/project';
 import { liveAcknowledgements, openWorst, type Acknowledgement } from '../validation/acks';
 import type { Profile } from '../validation/profiles';
 import {
@@ -28,6 +31,8 @@ import {
 export interface LoadedFile {
   id: number;
   fileName: string;
+  /** The bytes as loaded, kept for project files. */
+  data?: Uint8Array;
   pattern?: Pattern;
   stats?: PatternStats;
   /** Set once the worker has measured the file. */
@@ -55,6 +60,7 @@ interface FileData {
   storeKey?: number;
   working?: StoredPattern;
   acks?: Acknowledgement[];
+  objects?: StoredObject[];
 }
 
 /** Versions kept per file for undo. */
@@ -106,7 +112,10 @@ export class FileList {
   async restore(): Promise<void> {
     const stored = await listFiles();
     if (!stored.length) return;
-    const first = await this.addData(stored.map((rec) => ({ name: rec.name, data: rec.data, storeKey: rec.key, working: rec.working, acks: acksOf(rec) })), false);
+    const first = await this.addData(
+      stored.map((rec) => ({ name: rec.name, data: rec.data, storeKey: rec.key, working: rec.working, acks: acksOf(rec), objects: rec.objects })),
+      false,
+    );
     // Files the user added while we were reading storage keep the focus.
     if (this.activeId !== null) return this.render();
     const activeKey = loadActiveKey();
@@ -115,10 +124,39 @@ export class FileList {
     else this.render();
   }
 
+  /**
+   * Adds the files of a project with their edits, decisions and object shapes, and activates the
+   * one that was active when it was saved (else the first).
+   */
+  async addProject(list: ProjectFile[], active: number | null): Promise<void> {
+    const before = this.files.length;
+    const first = await this.addData(
+      list.map((f) => ({ name: f.name, data: f.data.slice().buffer, working: f.working, acks: f.acks, objects: f.objects })),
+      true,
+    );
+    const wanted = active !== null ? this.files[before + active] : undefined;
+    const target = wanted?.pattern ? wanted : first;
+    if (target) this.activate(target.id);
+    else this.render();
+  }
+
+  /** Shows a file that could not be opened, with the reason. */
+  addError(name: string, error: string): void {
+    this.files.push({ id: this.nextId++, fileName: name, undo: [], redo: [], acks: [], error });
+    this.render();
+  }
+
+  /** Stores what is remembered about the objects of a file's current version. */
+  setObjects(f: LoadedFile, objects: StoredObject[]): void {
+    if (f.storeKey !== undefined) void saveObjects(f.storeKey, objects);
+  }
+
   private async addData(list: FileData[], persist: boolean): Promise<LoadedFile | null> {
     let first: LoadedFile | null = null;
-    for (const { name, data, storeKey, working, acks } of list) {
-      const entry: LoadedFile = { id: this.nextId++, fileName: name, storeKey, undo: [], redo: [], acks: acks ?? [] };
+    for (const { name, data, storeKey, working, acks, objects } of list) {
+      const entry: LoadedFile = { id: this.nextId++, fileName: name, data: new Uint8Array(data), storeKey, undo: [], redo: [], acks: acks ?? [] };
+      // Remembered by their stitches, so they apply to whichever version has these objects.
+      if (objects) restoreRemembered(objects);
       try {
         const original = parsePattern(new Uint8Array(data), name);
         entry.original = original;
@@ -137,7 +175,15 @@ export class FileList {
         entry.stats = patternStats(entry.pattern);
         first ??= entry;
         // Only parseable files are kept; a broken file would just show up again as an error.
-        if (persist) entry.storeKey = (await putFile(name, data)) ?? undefined;
+        if (persist) {
+          entry.storeKey = (await putFile(name, data)) ?? undefined;
+          const key = entry.storeKey;
+          if (key !== undefined) {
+            if (entry.pattern !== original) void saveWorking(key, toStored(entry.pattern));
+            if (entry.acks.length) void saveAcks(key, entry.acks);
+            if (objects?.length) void saveObjects(key, objects);
+          }
+        }
       } catch (err) {
         entry.error = err instanceof Error ? err.message : String(err);
       }

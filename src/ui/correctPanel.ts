@@ -99,6 +99,12 @@ export class CorrectPanel {
     this.savePes.addEventListener('click', () => hooks.save('pes'));
   }
 
+  /** Shows the correction options again after they were changed elsewhere (a project was opened). */
+  sync(): void {
+    this.goal.forEach((r) => (r.checked = r.value === this.s.correction.goal));
+    this.focus.forEach((r) => (r.checked = r.value === this.s.correction.focus));
+  }
+
   update(st: CorrectState): void {
     this.last = st;
     const f = st.file;

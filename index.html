@@ -93,7 +93,7 @@
         <section class="panel" data-mode="flow density">
           <h2 data-i18n="files.title"></h2>
           <label class="dropzone" id="dropzone">
-            <input type="file" id="file-input" accept=".dst,.pes,.DST,.PES" multiple hidden />
+            <input type="file" id="file-input" accept=".dst,.pes,.DST,.PES,.heatstitch" multiple hidden />
             <span data-i18n="files.drop"></span>
           </label>
           <p class="privacy-note" data-i18n-title="files.privacy.detail">
@@ -113,6 +113,7 @@
               <button type="button" id="save-dst" data-i18n="save.dst"></button>
               <button type="button" id="save-pes" data-i18n="save.pes"></button>
             </div>
+            <button type="button" id="save-project" class="save-project" data-i18n="save.project" data-i18n-title="save.project.hint"></button>
             <button type="button" id="revert" class="link" data-i18n="edit.revert" hidden></button>
           </div>
         </section>
@@ -130,6 +131,7 @@
           </p>
           <button type="button" id="image-example" class="link" data-i18n="image.example"></button>
           <p class="muted small" id="image-info"></p>
+          <button type="button" id="image-save-project" class="link" data-i18n="image.saveProject" data-i18n-title="save.project.hint" hidden></button>
           <details class="ai-prep" data-section="aiPrep">
             <summary data-i18n="image.ai.title"></summary>
             <p class="small" data-i18n="image.ai.intro"></p>
