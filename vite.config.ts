@@ -39,6 +39,7 @@ export default defineConfig({
             action: base,
             accept: {
               'application/octet-stream': ['.dst', '.pes'],
+              'application/x-heatstitch-project': ['.heatstitch'],
               'image/png': ['.png'],
               'image/jpeg': ['.jpg', '.jpeg'],
               'image/webp': ['.webp'],

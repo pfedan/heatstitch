@@ -25,6 +25,7 @@ import { DIVIDER_GRAB_PX, drawDivider } from './render/compare';
 import type { Pattern, ThreadColor } from './model/pattern';
 import type { Measurement } from './validation/measure';
 import { initUpdateNotice } from './ui/updateNotice';
+import { toStored } from './storage/fileStore';
 import { downloadPattern, outputFileName, writePattern } from './writers';
 import { ImageMode } from './ui/imageMode';
 import { lightFromPointer, lightFromTilt, sweep } from './render/light';
@@ -56,13 +57,15 @@ import { JumpsPanel } from './ui/jumpsPanel';
 import { type Blocked, kindLabel, LayersPanel } from './ui/layersPanel';
 import { ObjectPanel, OrderCard } from './ui/objectPanel';
 import { StitchPanel, type StitchInfo } from './ui/stitchPanel';
-import { analyze, measureFill, measureRun, measureSatin, remember, remembered, restitch, shapeTrust, type Settings as RestitchSettings, type ShapeTrust } from './model/restitch';
+import { analyze, measureFill, measureRun, measureSatin, remember, remembered, rememberedIn, restitch, shapeTrust, type Settings as RestitchSettings, type ShapeTrust } from './model/restitch';
 import { outline } from './digitize/region';
 import { recommendedSpacing } from './validation/profiles';
 import { numberInColor, overlaps, sewObjects, type SewObject } from './model/objects';
 import { conflicts, moveStats, optimizeOrder, reorder, violations } from './model/order';
 import { Player } from './ui/player';
 import type { Key } from './i18n';
+import { decodeProject, encodeProject, isProjectName, PROJECT_EXT, PROJECT_MIME, projectSettings, ProjectError, type Project, type ProjectSettings } from './storage/project';
+import { threadWidthMm } from './validation/profiles';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 initUpdateNotice($('update-notice'));
@@ -562,6 +565,7 @@ const stitchPanel = new StitchPanel($('object-stitches'), {
         remember(r.pattern, o, { region: r.regions[k], fill: s.kind === 'fill' ? { ...s.s } : undefined });
       }
     });
+    files.setObjects(f, rememberedIn(r.pattern, nq.objects));
     if (sel.size) selectedObjects = sel;
     selectionKey = key;
     stitchCache = stitchCache ? { ...stitchCache, p: r.pattern } : null;
@@ -1145,16 +1149,97 @@ input.addEventListener('change', () => {
 
 const IMAGE_FILE = /\.(png|jpe?g|gif|webp|bmp|svg|avif)$/i;
 
-/** Embroidery files go to the file list, an image to the Bild mode. */
-function openFiles(list: Iterable<File>): Promise<void> {
+/** Embroidery files go to the file list, an image to the Bild mode, a project opens everything it holds. */
+async function openFiles(list: Iterable<File>): Promise<void> {
   const all = [...list];
+  for (const f of all.filter((f) => isProjectName(f.name))) await openProject(f);
   const image = all.find((f) => f.type.startsWith('image/') || IMAGE_FILE.test(f.name));
-  const rest = all.filter((f) => f !== image && !f.type.startsWith('image/') && !IMAGE_FILE.test(f.name));
+  const rest = all.filter((f) => f !== image && !isProjectName(f.name) && !f.type.startsWith('image/') && !IMAGE_FILE.test(f.name));
   if (image) {
     setMode('image');
     void imageMode.load(image);
   }
   return rest.length ? files.add(rest) : Promise.resolve();
+}
+
+// Project files ---------------------------------------------------------------
+
+/** Name of the project file: after the active design, else the image. */
+function projectName(): string {
+  const base = files.active?.fileName.replace(/\.[^.]+$/, '') || imageMode.snapshot()?.image.name.replace(/\.[^.]+$/, '') || 'heatstitch';
+  return `${base}${PROJECT_EXT}`;
+}
+
+/** Everything open in the app as a project: the files with their edits, the image and the design settings. */
+function currentProject(): Project {
+  const list = files.files.filter((f) => f.pattern && f.data);
+  const active = list.findIndex((f) => f === files.active);
+  const snap = imageMode.snapshot();
+  return {
+    files: list.map((f) => ({
+      name: f.fileName,
+      data: f.data!,
+      ...(FileList.edited(f) ? { working: toStored(f.pattern!) } : {}),
+      acks: f.acks,
+      objects: rememberedIn(f.pattern!, seq(f.pattern!).objects),
+    })),
+    active: active >= 0 ? active : null,
+    image: snap && { name: snap.image.name, type: snap.image.type, data: new Uint8Array(snap.image.data), work: snap.work },
+    settings: projectSettings(settings),
+  };
+}
+
+async function saveProject(): Promise<void> {
+  const bytes = await encodeProject(currentProject());
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([bytes as BlobPart], { type: PROJECT_MIME }));
+  a.download = projectName();
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+$('save-project').addEventListener('click', () => void saveProject());
+$('image-save-project').addEventListener('click', () => void saveProject());
+
+/** Takes over the material, checks, correction and order options of a project (and its image's, if it has one). */
+function applyProjectSettings(s: ProjectSettings, withImage: boolean): void {
+  if (s.profile.thread !== settings.profile.thread) settings.threadMm = threadWidthMm(s.profile);
+  settings.profile = s.profile;
+  settings.checks = s.checks;
+  // The panels keep these objects, so they change in place.
+  Object.assign(settings.correction, s.correction);
+  Object.assign(settings.order, s.order);
+  settings.trimMm = s.trimMm;
+  settings.machineSpm = s.machineSpm;
+  if (withImage) {
+    Object.assign(settings.image.prepare, s.image.prepare);
+    for (const k of Object.keys(settings.image.stitch)) delete settings.image.stitch[k as keyof typeof settings.image.stitch];
+    Object.assign(settings.image.stitch, s.image.stitch);
+  }
+  saveSettings(settings);
+  files.setProfile(settings.profile, settings.checks);
+  profile.refresh();
+  controls.refresh();
+  correctPanel.sync();
+  imageMode.profileChanged();
+}
+
+async function openProject(file: File): Promise<void> {
+  let project: Project;
+  try {
+    project = await decodeProject(new Uint8Array(await file.arrayBuffer()));
+  } catch (err) {
+    console.warn('Could not open the project', err);
+    files.addError(file.name, t(err instanceof ProjectError && err.reason === 'newer' ? 'project.error.newer' : 'project.error.invalid'));
+    if (settings.mode === 'image') setMode('flow');
+    return;
+  }
+  applyProjectSettings(project.settings, !!project.image);
+  if (project.image) await imageMode.open({ ...project.image, data: project.image.data.slice().buffer }, project.image.work);
+  if (project.files.length) {
+    await files.addProject(project.files, project.active);
+    if (settings.mode === 'image') setMode('flow');
+  } else if (project.image) setMode('image');
+  redraw();
 }
 
 const exampleSelect = $<HTMLSelectElement>('load-example');

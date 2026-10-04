@@ -13,7 +13,7 @@ import type { Viewport } from '../render/viewport';
 import type { ImageView, Settings } from '../settings';
 import { CAUTION, CRITICAL, type ValidationResult } from '../validation/validate';
 import { fabricLabel, threadLabel } from './profilePanel';
-import { loadImage, saveImage, saveWork } from '../storage/imageStore';
+import { loadImage, saveImage, saveWork, type StoredImage, type StoredWork } from '../storage/imageStore';
 import { cssColor, ThreadPicker } from './threadPicker';
 
 /**
@@ -107,6 +107,8 @@ export class ImageMode {
   /** Its regions at the last working size. */
   private exact: ExactLabels | null = null;
   private name = '';
+  /** The image file as opened, for project files. */
+  private file: StoredImage | null = null;
   private work: Work = { edits: [], strokes: [] };
   private undoStack: Work[] = [];
   private redoStack: Work[] = [];
@@ -268,15 +270,29 @@ export class ImageMode {
     await this.load(new File([image.data], image.name, { type: image.type }), work);
   }
 
+  /** The image with its color changes and brush strokes, or null without an image. */
+  snapshot(): { image: StoredImage; work: StoredWork } | null {
+    return this.source && this.file ? { image: this.file, work: structuredClone(this.work) } : null;
+  }
+
+  /** Opens the image of a project with its changes; it replaces the current one, also in storage. */
+  async open(image: StoredImage, work: StoredWork): Promise<void> {
+    await saveImage(image);
+    await saveWork(work);
+    await this.load(new File([image.data], image.name, { type: image.type }), work);
+  }
+
   /** Opens an image; `work` restores stored changes (and keeps the stored settings). */
   async load(file: File, work?: Work): Promise<void> {
     const token = ++this.loads;
     let canvas: HTMLCanvasElement;
     let svg: SvgDesign | null = null;
+    let bytes: ArrayBuffer;
     try {
-      const vector = isSvg(file) ? await decodeSvg(file) : null;
+      const [vector, data] = await Promise.all([isSvg(file) ? decodeSvg(file) : null, file.arrayBuffer()]);
       canvas = vector?.canvas ?? (await decode(file));
       svg = vector?.svg ?? null;
+      bytes = data;
       if (token !== this.loads) {
         svg?.dispose();
         return;
@@ -292,6 +308,7 @@ export class ImageMode {
     this.svg?.dispose();
     this.svg = svg;
     this.exact = null;
+    this.file = { name: file.name, type: file.type, data: bytes };
     this.revealPending = !work;
     this.name = file.name.replace(/\.[^.]+$/, '') || 'image';
     this.work = work ?? { edits: [], strokes: [] };
@@ -322,7 +339,7 @@ export class ImageMode {
       // An SVG with a size in mm, cm or inches is sewn at that size.
       if (svg?.widthMm) this.h.settings.image.prepare.widthMm = Math.round(Math.min(400, Math.max(10, svg.widthMm)) * 10) / 10;
       this.h.save();
-      void saveImage({ name: file.name, type: file.type, data: await file.arrayBuffer() });
+      void saveImage({ name: file.name, type: file.type, data: bytes });
     }
     this.render();
     this.h.fit();
@@ -648,6 +665,7 @@ export class ImageMode {
           ? t('image.info', { name: this.name, w: this.source.width, h: this.source.height })
           : '');
     info.classList.toggle('error', !!this.error);
+    $('image-save-project').hidden = !this.source;
     this.renderPalette();
     this.renderResult();
   }

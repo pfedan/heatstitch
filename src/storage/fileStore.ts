@@ -8,6 +8,7 @@
  */
 
 import { computeBounds, type Pattern, type ThreadColor } from '../model/pattern';
+import type { StoredObject } from '../model/restitch';
 import { isAcknowledgement, type Acknowledgement } from '../validation/acks';
 import { STORAGE_NS } from './namespace';
 
@@ -27,6 +28,8 @@ export interface StoredFile {
   working?: StoredPattern;
   /** Findings the user acknowledged. */
   acks?: Acknowledgement[];
+  /** Shapes and fill settings of objects given new stitches, so the next edit starts from them. */
+  objects?: StoredObject[];
 }
 
 const DB_NAME = STORAGE_NS;
@@ -92,6 +95,14 @@ export function saveAcks(key: number, acks: Acknowledgement[]): Promise<void> {
   return queue(key, (rec) => {
     if (acks.length) rec.acks = acks;
     else delete rec.acks;
+  });
+}
+
+/** Stores what is remembered about the objects of file `key`. */
+export function saveObjects(key: number, objects: StoredObject[]): Promise<void> {
+  return queue(key, (rec) => {
+    if (objects.length) rec.objects = objects;
+    else delete rec.objects;
   });
 }
 
