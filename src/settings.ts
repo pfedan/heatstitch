@@ -165,7 +165,7 @@ export function loadSettings(): Settings {
 const num = (v: unknown, lo: number, hi: number, fallback: number) =>
   typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : fallback;
 
-function normalizeImage(i: Partial<ImageSettings> | undefined): ImageSettings {
+export function normalizeImage(i: Partial<ImageSettings> | undefined): ImageSettings {
   const d = DEFAULTS.image;
   const p: Partial<PrepareOptions> = i?.prepare ?? {};
   const st: Record<string, unknown> = { ...i?.stitch };

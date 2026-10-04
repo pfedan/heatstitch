@@ -12,7 +12,7 @@ import type { Viewport } from '../render/viewport';
 import type { ImageView, Settings } from '../settings';
 import { CAUTION, CRITICAL, type ValidationResult } from '../validation/validate';
 import { fabricLabel, threadLabel } from './profilePanel';
-import { loadImage, saveImage, saveWork } from '../storage/imageStore';
+import { loadImage, saveImage, saveWork, type StoredImage, type StoredWork } from '../storage/imageStore';
 import { cssColor, ThreadPicker } from './threadPicker';
 
 /**
@@ -84,6 +84,8 @@ export class ImageMode {
   private picker = new ThreadPicker('.image-color .sw');
   private source: HTMLCanvasElement | null = null;
   private name = '';
+  /** The image file as opened, for project files. */
+  private file: StoredImage | null = null;
   private work: Work = { edits: [], strokes: [] };
   private undoStack: Work[] = [];
   private redoStack: Work[] = [];
@@ -245,12 +247,25 @@ export class ImageMode {
     await this.load(new File([image.data], image.name, { type: image.type }), work);
   }
 
+  /** The image with its color changes and brush strokes, or null without an image. */
+  snapshot(): { image: StoredImage; work: StoredWork } | null {
+    return this.source && this.file ? { image: this.file, work: structuredClone(this.work) } : null;
+  }
+
+  /** Opens the image of a project with its changes; it replaces the current one, also in storage. */
+  async open(image: StoredImage, work: StoredWork): Promise<void> {
+    await saveImage(image);
+    await saveWork(work);
+    await this.load(new File([image.data], image.name, { type: image.type }), work);
+  }
+
   /** Opens an image; `work` restores stored changes (and keeps the stored settings). */
   async load(file: File, work?: Work): Promise<void> {
     const token = ++this.loads;
     let canvas: HTMLCanvasElement;
+    let bytes: ArrayBuffer;
     try {
-      canvas = await decode(file);
+      [canvas, bytes] = await Promise.all([decode(file), file.arrayBuffer()]);
       if (token !== this.loads) return;
     } catch (err) {
       if (token !== this.loads) return;
@@ -260,6 +275,7 @@ export class ImageMode {
     }
     this.generation++;
     this.source = canvas;
+    this.file = { name: file.name, type: file.type, data: bytes };
     this.revealPending = !work;
     this.name = file.name.replace(/\.[^.]+$/, '') || 'image';
     this.work = work ?? { edits: [], strokes: [] };
@@ -286,7 +302,7 @@ export class ImageMode {
       // Photos need smoothing to form regions; graphics keep their edges.
       this.h.settings.image.prepare.smooth = photo ? 3 : 0;
       this.h.save();
-      void saveImage({ name: file.name, type: file.type, data: await file.arrayBuffer() });
+      void saveImage({ name: file.name, type: file.type, data: bytes });
     }
     this.render();
     this.h.fit();
@@ -588,6 +604,7 @@ export class ImageMode {
     const info = $('image-info');
     info.textContent = this.error || (this.source ? t('image.info', { name: this.name, w: this.source.width, h: this.source.height }) : '');
     info.classList.toggle('error', !!this.error);
+    $('image-save-project').hidden = !this.source;
     this.renderPalette();
     this.renderResult();
   }

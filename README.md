@@ -73,11 +73,12 @@ sends the picture anywhere.
 - PNG export of the current view including legend
 - **Correction (beta):** automatic, following digitizing practice, and by hand, with undo/redo and an
   original/corrected compare view, see below
-- **Save as DST or PES** (own writers, no pyembroidery)
+- **Save as DST or PES** (own writers, no pyembroidery), or as a **heatstitch project** that keeps
+  everything DST and PES drop
 - **Image to embroidery:** PNG, JPG, WebP, SVG; preparation for photos, Brother thread colors, brush,
   tatami fill whose rows follow the image, satin columns and running stitch, without external libraries
 - English / German
-- PWA: installable, works offline, "Open with" for .dst/.pes and images
+- PWA: installable, works offline, "Open with" for .dst/.pes/.heatstitch and images
 - Short guide in English and German (`docs.html`, "Guide" link at the top right)
 
 ![Realistic thread rendering of overlapping fills](public/guide/stitchplan.jpg)
@@ -256,6 +257,24 @@ original are lost.
   Colors keep their PEC palette slot; colors from DST get the nearest one.
 - The tests (`tests/writers.test.ts`) check read → write → read for DST, PES and both conversions for
   record equality. The written files were also read back with pyembroidery 1.5.1.
+
+### Project files
+
+*As project (.heatstitch)* saves the whole workspace in one file (`src/storage/project.ts`), and
+dropping it on the app opens it again. It holds what DST and PES cannot:
+
+- every loaded file as its original bytes plus the working copy (records and exact RGB thread colors),
+- acknowledged and reopened findings,
+- shapes and fill settings of objects given new stitches (kept by a hash of their stitches; the shape
+  is stored as its pixel mask, the distance fields are rebuilt on opening),
+- the image of Image mode with its color changes and brush strokes,
+- material profile, checks, correction and order options, trim length, machine speed and the image
+  preparation and stitch options.
+
+The file is gzip-compressed JSON (`{"format": "heatstitch-project", "version": 1, ...}`); binary data
+is base64 of little-endian bytes tagged with its array type. A project from a newer version is
+refused with a message instead of being misread. Undo history and view settings are not saved.
+Object shapes are now also kept in IndexedDB with the file, so they survive a reload.
 
 ## Image to embroidery
 
@@ -443,6 +462,7 @@ src/digitize/    Stitches from images: distance fields, skeleton, fill, flow fil
                  stitch, sequencing, Web Worker
 src/render/      Viewport, color scale, heatmap, stitch plan, realistic threads (WebGL), light,
                  legend, sequence rendering (coloring, markers, needle)
+src/storage/     IndexedDB stores for files and the image, project files (.heatstitch)
 src/ui/          File list, validation, correction panel, stitch editor, controls, statistics,
                  tooltip, export, color list, jump list, player, Image mode, thread picker
 src/i18n/        Translations EN/DE
