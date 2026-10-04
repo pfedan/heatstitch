@@ -120,6 +120,10 @@ export interface Remembered {
   fill?: FillSettings;
   satin?: SatinSettings;
   columns?: Rails[][];
+  /** Penetrations moved, added or removed by hand since the object was last given new stitches. */
+  hand?: number;
+  /** The shape was read from the stitches when they were first changed by hand (not exact). */
+  read?: boolean;
 }
 
 /**
@@ -148,6 +152,19 @@ export function remembered(p: Pattern, o: SewObject): Remembered | undefined {
 }
 
 /**
+ * What an object remembers, or its shape as read from its stitches now (fill area, satin rails),
+ * so it can be kept fixed before its stitches are changed by hand.
+ */
+export function keepShape(p: Pattern, o: SewObject, kinds: Uint8Array): Remembered {
+  const known = remembered(p, o);
+  if (known) return known;
+  const an = analyze(p, o, kinds);
+  const satin = an.parts.filter((pt) => pt.kind === 'satin');
+  const columns = satin.map((pt) => satinColumns(p, pt, kinds).map((c) => railsOf(p, c)).filter((r): r is Rails => !!r));
+  return { region: an.fill, read: true, ...(satin.length && columns.every((c) => c.length) ? { columns } : {}) };
+}
+
+/**
  * A remembered object as it is stored: the shape as its pixels only (the rest is rebuilt from
  * them). Entries with `join` are sections instead: whether they continue the object before.
  */
@@ -158,6 +175,8 @@ export interface StoredObject {
   satin?: SatinSettings;
   /** Rails per satin part and column, as flat x, y lists. */
   columns?: { left: number[]; right: number[] }[][];
+  hand?: number;
+  read?: boolean;
   join?: boolean;
 }
 
@@ -175,6 +194,8 @@ export function rememberedIn(p: Pattern, objects: SewObject[]): StoredObject[] {
       ...(r.fill ? { fill: { ...r.fill } } : {}),
       ...(r.satin ? { satin: { ...r.satin } } : {}),
       ...(r.columns ? { columns: r.columns.map((part) => part.map((c) => ({ left: c.left.flat(), right: c.right.flat() }))) } : {}),
+      ...(r.hand ? { hand: r.hand } : {}),
+      ...(r.read ? { read: true } : {}),
     });
   }
   for (const j of joinsIn(p)) out.push({ key: j.key, region: null, join: j.join });
@@ -272,6 +293,8 @@ export function restoreRemembered(list: unknown): number {
     if (isSatin(e.satin)) r.satin = { ...e.satin, tolerance: e.satin.tolerance ?? TOLERANCE };
     const columns = railsFrom(e.columns);
     if (columns) r.columns = columns;
+    if (finite(e.hand) && e.hand > 0) r.hand = Math.round(e.hand);
+    if (e.read === true) r.read = true;
     rememberKey(e.key, r);
     n++;
   }
@@ -292,7 +315,8 @@ const COVERED = 0.93;
 
 export function shapeTrust(p: Pattern, o: SewObject, a: Analysis, spacing: number): ShapeTrust {
   if (!a.fill) return 'approximate';
-  if (remembered(p, o)?.region === a.fill) return 'kept';
+  const known = remembered(p, o);
+  if (known?.region === a.fill && !known.read) return 'kept';
   if (spacing > OPEN_ROWS) return 'approximate';
   const runs: Pt[][] = [];
   for (const pt of a.parts) {

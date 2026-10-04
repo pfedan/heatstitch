@@ -115,11 +115,18 @@ export function tidy(p: Pattern): Pattern {
   return withRecords(p, x, y, cmd, colors.length ? colors : p.colors.slice(0, 1));
 }
 
+/** Records `first` to `last`: where picking and selecting are limited to (an object). */
+export interface RecordRange {
+  first: number;
+  last: number;
+}
+
 /** Index of the STITCH record nearest to (x, y) (0.1 mm) within `maxDist`, or -1. */
-export function nearestStitch(p: Pattern, x: number, y: number, maxDist: number): number {
+export function nearestStitch(p: Pattern, x: number, y: number, maxDist: number, range?: RecordRange | null): number {
   let best = -1;
   let bestD = maxDist * maxDist;
-  for (let i = 0; i < p.cmd.length; i++) {
+  const end = range ? Math.min(range.last, p.cmd.length - 1) : p.cmd.length - 1;
+  for (let i = range?.first ?? 0; i <= end; i++) {
     if (p.cmd[i] !== STITCH) continue;
     const dx = p.x[i] - x;
     const dy = p.y[i] - y;
@@ -133,12 +140,58 @@ export function nearestStitch(p: Pattern, x: number, y: number, maxDist: number)
 }
 
 /** STITCH records inside the rectangle (0.1 mm). */
-export function stitchesInRect(p: Pattern, x0: number, y0: number, x1: number, y1: number): number[] {
+export function stitchesInRect(p: Pattern, x0: number, y0: number, x1: number, y1: number, range?: RecordRange | null): number[] {
   const [ax, bx] = x0 < x1 ? [x0, x1] : [x1, x0];
   const [ay, by] = y0 < y1 ? [y0, y1] : [y1, y0];
   const out: number[] = [];
-  for (let i = 0; i < p.cmd.length; i++) {
+  const end = range ? Math.min(range.last, p.cmd.length - 1) : p.cmd.length - 1;
+  for (let i = range?.first ?? 0; i <= end; i++) {
     if (p.cmd[i] === STITCH && p.x[i] >= ax && p.x[i] <= bx && p.y[i] >= ay && p.y[i] <= by) out.push(i);
   }
   return out;
+}
+
+/**
+ * The sewn stitch (from record i - 1 to record i, both STITCH) nearest to (x, y) within `maxDist`
+ * (0.1 mm): its record `i` and the point on it, or null.
+ */
+export function nearestSegment(p: Pattern, x: number, y: number, maxDist: number, range?: RecordRange | null): { at: number; x: number; y: number } | null {
+  let best: { at: number; x: number; y: number } | null = null;
+  let bestD = maxDist * maxDist;
+  const end = range ? Math.min(range.last, p.cmd.length - 1) : p.cmd.length - 1;
+  for (let i = Math.max(1, range ? range.first + 1 : 1); i <= end; i++) {
+    if (p.cmd[i] !== STITCH || p.cmd[i - 1] !== STITCH) continue;
+    const ax = p.x[i - 1];
+    const ay = p.y[i - 1];
+    const dx = p.x[i] - ax;
+    const dy = p.y[i] - ay;
+    const l2 = dx * dx + dy * dy;
+    const t = l2 ? Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / l2)) : 0;
+    const qx = ax + dx * t;
+    const qy = ay + dy * t;
+    const d = (qx - x) ** 2 + (qy - y) ** 2;
+    if (d <= bestD) {
+      bestD = d;
+      best = { at: i, x: Math.round(qx), y: Math.round(qy) };
+    }
+  }
+  return best;
+}
+
+/** A new STITCH record at (x, y) (0.1 mm) before record `at`: the stitch ending there is split in two. */
+export function insertStitch(p: Pattern, at: number, x: number, y: number): Pattern {
+  const n = p.cmd.length;
+  const nx = new Int32Array(n + 1);
+  const ny = new Int32Array(n + 1);
+  const nc = new Uint8Array(n + 1);
+  nx.set(p.x.subarray(0, at));
+  ny.set(p.y.subarray(0, at));
+  nc.set(p.cmd.subarray(0, at));
+  nx[at] = x;
+  ny[at] = y;
+  nc[at] = STITCH;
+  nx.set(p.x.subarray(at), at + 1);
+  ny.set(p.y.subarray(at), at + 1);
+  nc.set(p.cmd.subarray(at), at + 1);
+  return withRecords(p, nx, ny, nc);
 }

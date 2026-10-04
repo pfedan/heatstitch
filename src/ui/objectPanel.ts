@@ -12,12 +12,20 @@ export interface ObjectInfo {
   layering: { below: number; above: number }[];
   /** Number of each selected object within its color block (1-based). */
   numbers: number[];
+  /** Per selected object: points changed by hand since it was last given new stitches. */
+  hand: number[];
+  /** Its points are being edited (one object), and how many of them are selected. */
+  editing: { selection: number } | null;
 }
 
 export interface ObjectHooks {
   /** Sew the selected object one place earlier (-1) or later (1); returns why not, or null. */
   step: (dir: -1 | 1) => Blocked | null;
   clear: () => void;
+  /** Start or stop editing the points of the selected object. */
+  editStitches: (on: boolean) => void;
+  deleteSelection: () => void;
+  split: () => void;
 }
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -40,7 +48,7 @@ export class ObjectPanel {
   }
 
   update(info: ObjectInfo | null, lang: string): void {
-    const key = [info?.objects, info?.selected.join(), lang];
+    const key = [info?.objects, info?.selected.join(), info?.hand.join(), info?.editing?.selection ?? -1, lang];
     if (key.every((k, i) => k === this.key[i])) return;
     this.key = key;
     this.msg.hidden = true;
@@ -78,6 +86,7 @@ export class ObjectPanel {
       row(t('object.thread'), `${formatNumber(o.threadMm / 1000, 2)} m`);
       row(t('object.size'), `${formatNumber(w, 1)} × ${formatNumber(h, 1)} mm`);
       if (o.sections > 1) row(t('object.sections'), t('object.sectionsValue', { n: o.sections }));
+      if (info.hand[0]) row(t('object.hand'), t(info.hand[0] === 1 ? 'object.handValue.one' : 'object.handValue', { n: formatNumber(info.hand[0]) }));
       row(t('object.position'), t('object.positionOf', { k: o.index + 1, n: info.objects.length }));
       const l = info.layering[0];
       row(t('object.layering'), l.below || l.above ? t('object.layeringValue', { below: l.below, above: l.above }) : t('object.layeringNone'));
@@ -101,9 +110,39 @@ export class ObjectPanel {
     }
     const hint = Object.assign(document.createElement('p'), {
       className: 'muted small',
-      textContent: t(sel.length === 1 ? 'object.hint' : 'object.hintMany'),
+      textContent: t(info.editing ? 'object.editHint' : sel.length === 1 ? 'object.hint' : 'object.hintMany'),
     });
-    this.body.replaceChildren(head, dl, ...(actions.childElementCount ? [actions] : []), hint);
+    this.body.replaceChildren(head, dl, ...(actions.childElementCount ? [actions] : []), ...(sel.length === 1 ? [this.stitchTools(info)] : []), hint);
+  }
+
+  /** Editing the points of the one selected object: start, what is selected, delete, split, done. */
+  private stitchTools(info: ObjectInfo): HTMLElement {
+    const box = document.createElement('div');
+    box.className = 'object-edit';
+    const button = (label: string, run: () => void, opts: { primary?: boolean; disabled?: boolean; title?: string } = {}) => {
+      const b = Object.assign(document.createElement('button'), { type: 'button', textContent: label, disabled: !!opts.disabled, title: opts.title ?? '' });
+      if (opts.primary) b.className = 'primary';
+      b.addEventListener('click', run);
+      return b;
+    };
+    const ed = info.editing;
+    if (!ed) {
+      const row = document.createElement('div');
+      row.className = 'row-buttons';
+      row.append(button(t('object.editStitches'), () => this.hooks.editStitches(true), { title: t('level.stitches.hint') }));
+      box.append(row);
+      return box;
+    }
+    box.append(Object.assign(document.createElement('p'), { className: 'sel-info', textContent: ed.selection ? t(ed.selection === 1 ? 'edit.selection.one' : 'edit.selection', { n: formatNumber(ed.selection) }) : t('edit.none') }));
+    const row = document.createElement('div');
+    row.className = 'row-buttons';
+    row.append(
+      button(t('edit.delete'), () => this.hooks.deleteSelection(), { disabled: !ed.selection }),
+      button(t('edit.split'), () => this.hooks.split(), { disabled: ed.selection !== 1, title: t('edit.split.hint') }),
+      button(t('object.editDone'), () => this.hooks.editStitches(false), { primary: true }),
+    );
+    box.append(row);
+    return box;
   }
 }
 

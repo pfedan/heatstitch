@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest';
+import type { RecordRange } from '../src/model/edit';
 import { STITCH, type Pattern } from '../src/model/pattern';
 import { Editor } from '../src/ui/editor';
 import { Shape } from './helpers/shapes';
 
 /** An editor on a mutable "file" that records commits like the file list's undo stack. */
-function setup(p: Pattern) {
+function setup(p: Pattern, range: RecordRange | null = null) {
   const state = { pattern: p, commits: [] as Pattern[] };
   const editor = new Editor({
     pattern: () => state.pattern,
+    range: () => range,
     commit: (q) => {
       state.commits.push(state.pattern);
       state.pattern = q;
@@ -67,5 +69,29 @@ describe('stitch editor', () => {
     editor.down(50, 50, 0, 0, false, SCALE);
     editor.up();
     expect(editor.selection.size).toBe(0);
+  });
+
+  it('picks only within the object worked on, at any zoom', () => {
+    const p = new Shape().to(0, 0).to(5, 0).to(10, 0).to(15, 0).build();
+    const { editor } = setup(p, { first: 2, last: 3 });
+    expect(editor.down(5, 0, 0, 0, false, SCALE)).toBe('pan');
+    editor.up();
+    expect(editor.down(10, 0, 0, 0, false, 1)).toBe('move');
+    editor.up();
+    editor.selectAll();
+    expect([...editor.selection].sort()).toEqual([2, 3]);
+  });
+
+  it('steps through the penetrations in sewing order and splits a stitch', () => {
+    const { state, editor } = setup(new Shape().to(0, 0).to(4, 0).to(8, 0).build());
+    expect(editor.step(1)).toBe(0);
+    expect(editor.step(1)).toBe(1);
+    expect(editor.step(-1)).toBe(0);
+    editor.step(1);
+    expect(editor.splitSelected()).toBe(true);
+    expect(Array.from(state.pattern.x)).toEqual([0, 20, 40, 80]);
+    expect([...editor.selection]).toEqual([1]);
+    expect(editor.insertAt(6, 0.1, SCALE)).toBe(true);
+    expect(Array.from(state.pattern.x)).toEqual([0, 20, 40, 60, 80]);
   });
 });

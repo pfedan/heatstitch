@@ -23,6 +23,8 @@ export interface StitchInfo {
   shape?: ShapeTrust;
   /** Fill areas, drawn on the canvas. */
   outlines: ShapeOutline[];
+  /** Points changed by hand in the selected objects (new settings replace them). */
+  hand?: number;
 }
 
 export interface StitchHooks {
@@ -160,6 +162,14 @@ export class StitchPanel {
       trust.innerHTML = info.shape === 'approximate' ? TRUST_ICON.warn : TRUST_ICON.ok;
       trust.append(Object.assign(document.createElement('span'), { textContent: t(`stitch.shape.${info.shape}`) }));
       parts.push(trust);
+    }
+    if (info.hand) {
+      const hand = document.createElement('p');
+      hand.className = 'shape-trust approximate';
+      hand.setAttribute('role', 'status');
+      hand.innerHTML = TRUST_ICON.warn;
+      hand.append(Object.assign(document.createElement('span'), { textContent: t('stitch.hand', { n: formatNumber(info.hand) }) }));
+      parts.push(hand);
     }
     parts.push(...this.controls());
     const note = Object.assign(document.createElement('p'), { className: 'muted small stitch-note', textContent: t(this.kind === 'fill' && info.shape ? 'stitch.undo' : 'stitch.note') });

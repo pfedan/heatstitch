@@ -1589,6 +1589,38 @@ button.tool:disabled {
   opacity: 0.35;
 }
 
+/* Level switch on the canvas: whole objects or their single points. */
+.level-switch {
+  margin-left: 4px;
+  background: rgba(13, 11, 16, 0.72);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #ece8f1;
+  font-size: 13px;
+  backdrop-filter: blur(4px);
+}
+
+.level-switch span {
+  padding: 4px 10px;
+  line-height: 1.2;
+}
+
+.level-switch label:not(:has(input:checked)):hover span {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.edit-crumb {
+  align-self: center;
+  padding: 3px 9px;
+  border-radius: 6px;
+  background: rgba(13, 11, 16, 0.72);
+  color: #ece8f1;
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 34ch;
+}
+
 /* Player ------------------------------------------------------------------------ */
 
 .player {
@@ -2122,19 +2154,21 @@ button.tool:disabled {
   white-space: nowrap;
 }
 
-/* In the Ablauf mode the player takes the bottom edge; the hint moves to the top. */
+/* In the Ablauf mode the player takes the bottom edge; the hint sits just above it. */
 body[data-mode='flow'] .stage .hint {
-  top: 14px;
-  bottom: auto;
+  bottom: 62px;
   left: 50%;
   transform: translateX(-50%);
   white-space: nowrap;
+  max-width: calc(100% - 24px);
+  overflow: hidden;
+  text-overflow: ellipsis;
   padding: 3px 8px;
   border-radius: 6px;
   background: rgba(13, 11, 16, 0.6);
 }
 
-@media (max-width: 1400px) {
+@media (max-width: 900px) {
   body[data-mode='flow'] .stage .hint {
     display: none;
   }
