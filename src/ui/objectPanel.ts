@@ -125,11 +125,16 @@ export class ObjectPanel {
       b.addEventListener('click', () => showBlocked(this.msg, this.hooks.merge()));
       actions.append(b);
     }
+    const hand = info.hand.reduce((x, y) => x + y, 0);
+    const handNote =
+      sel.length > 1 && hand && !info.mergeBlocked
+        ? [Object.assign(document.createElement('p'), { className: 'muted small', textContent: t('object.mergeHand', { n: formatNumber(hand) }) })]
+        : [];
     const hint = Object.assign(document.createElement('p'), {
       className: 'muted small',
       textContent: t(info.editing ? 'object.editHint' : sel.length === 1 ? 'object.hint' : 'object.hintMany'),
     });
-    this.body.replaceChildren(head, dl, ...(actions.childElementCount ? [actions] : []), ...(sel.length === 1 ? [this.stitchTools(info)] : []), hint);
+    this.body.replaceChildren(head, dl, ...(actions.childElementCount ? [actions] : []), ...handNote, ...(sel.length === 1 ? [this.stitchTools(info)] : []), hint);
   }
 
   /** Editing the points of the one selected object: start, what is selected, delete, split, done. */
