@@ -52,6 +52,8 @@ export interface FillResult {
   /** Continuous stitch runs; a jump lies between two runs. */
   runs: Pt[][];
   angle: number;
+  /** The first this many points of `runs` are the underlay. */
+  under?: number;
 }
 
 interface Seg {
@@ -573,6 +575,8 @@ function sewAll(
   return pos;
 }
 
+export const pointCount = (runs: Pt[][]) => runs.reduce((a, r) => a + r.length, 0);
+
 export function pathLength(p: Pt[]): number {
   let l = 0;
   for (let i = 1; i < p.length; i++) l += dist(p[i - 1], p[i]);
@@ -588,8 +592,9 @@ export function fillRegion(r: Region, p: FillParams, start: Pt, neighbours: numb
   const runs: Pt[][] = [];
   const grid = new TravelGrid(p.travel ?? r);
   const pos = p.underlay ? sewUnderlay(r, angle, p, start, grid, runs) : start;
+  const under = pointCount(runs);
   sewAll(f, sections(r, r.sdf, f, top), p.stitch, p.pull, pos, grid, true, runs, p.end);
-  return { runs, angle };
+  return { runs, angle, under };
 }
 
 /**

@@ -2947,6 +2947,48 @@ body[data-mode='flow'] .stage .hint {
   cursor: grabbing;
 }
 
+/* Border thread: a swatch button with the thread's name */
+.border-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.border-thread {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 4px 10px 4px 6px;
+}
+
+.border-thread .sw {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+  flex: none;
+}
+
+/* A fill's border: a block of its own below the fill's settings */
+.border-group {
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.border-group h4 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.border-group > p {
+  margin: -6px 0 0;
+}
+
 /* Lettering: the text tool and the card of a lettering. */
 .tool-glyph {
   font-family: Georgia, 'Times New Roman', serif;

@@ -6,9 +6,17 @@ import type { ShapeOutline } from '../render/scene';
 import { UNDERLAY_INSET } from '../digitize/fill';
 import type { Pt } from '../digitize/skeleton';
 import { KIND_ICON, kindLabel } from './layersPanel';
+import { BORDER_STITCH, BORDER_WIDTH, type BorderType } from '../digitize/border';
+import type { ThreadColor } from '../model/pattern';
+import { newLink } from '../model/border';
+import { autoUnder, type PathStitch } from '../model/along';
+import { cssColor, hexColor, ThreadPicker } from './threadPicker';
 
 type FillUnder = 'off' | 'single' | 'cross';
 const FILL_UNDERS: FillUnder[] = ['off', 'single', 'cross'];
+type BorderChoice = 'off' | BorderType;
+const BORDERS: BorderChoice[] = ['off', 'run', 'triple', 'satin'];
+const sameColor = (a: ThreadColor, b: ThreadColor) => a.r === b.r && a.g === b.g && a.b === b.b;
 
 /**
  * Stitch settings of the selected objects: per kind of stitch the values that matter for it. The
@@ -39,6 +47,10 @@ export interface StitchInfo {
   draw?: { tool: boolean; lines: number; single: boolean };
   /** Guide lines of the one selected fill: whether their tool is on. */
   guide?: { tool: boolean; single: boolean };
+  /** Thread of the first selected fill (its border is sewn in it unless it has its own). */
+  color?: ThreadColor;
+  /** The one selected object is the border of a fill in its own thread (the fill's number, or null when gone). */
+  outline?: { fill: number | null };
 }
 
 export interface StitchHooks {
@@ -52,6 +64,10 @@ export interface StitchHooks {
   draw: (action: 'tool' | 'sew') => void;
   /** Guide lines on a fill: their tool on or off (`off` only closes it). */
   guide: (action: 'tool' | 'off') => void;
+  /** The pointer or focus on the underlay settings (true) or away from them: its stitches are shown. */
+  underlay: (on: boolean) => void;
+  /** A border object: select its fill, or make it an object of its own (no longer following the fill). */
+  outline: (action: 'fill' | 'detach') => void;
 }
 
 const KINDS: ObjectKind[] = ['fill', 'satin', 'run'];
@@ -107,6 +123,9 @@ export class StitchPanel {
   private tools = '';
   /** Left and right width set apart. */
   private sides = false;
+  private picker = new ThreadPicker('.border-thread');
+  /** Whether the underlay is shown now (the pointer or focus on its settings). */
+  private underOn = false;
 
   constructor(
     private root: HTMLElement,
@@ -187,6 +206,19 @@ export class StitchPanel {
       h.append(Object.assign(document.createElement('span'), { className: 'kind-icon', innerHTML: KIND_ICON[this.kind] }), t('stitch.titleOf', { kind: kindLabel(this.kind) }));
     }
     const n = info.counts[this.kind] ?? 0;
+    if (info.outline) {
+      // Its settings are the fill's: changed there, it follows.
+      h.innerHTML = '';
+      h.append(Object.assign(document.createElement('span'), { className: 'kind-icon', innerHTML: KIND_ICON[this.kind] }), t('stitch.outline.title'));
+      const row = document.createElement('div');
+      row.className = 'direction-buttons';
+      if (info.outline.fill !== null) row.append(this.button('stitch.outline.fill', 'stitch.outline.fill.hint', () => this.hooks.outline('fill'), true));
+      row.append(this.button('stitch.outline.detach', 'stitch.outline.detach.hint', () => this.hooks.outline('detach')));
+      parts.push(Object.assign(document.createElement('p'), { className: 'muted small', textContent: t('stitch.outline.text') }), row);
+      this.picker.close();
+      this.root.replaceChildren(...parts);
+      return;
+    }
     if (n > 1) parts.push(Object.assign(document.createElement('p'), { className: 'muted small', textContent: t('stitch.many', { n }) }));
     if (this.kind === 'fill' && info.shape) {
       const trust = document.createElement('p');
@@ -210,7 +242,30 @@ export class StitchPanel {
     parts.push(...this.controls());
     const note = Object.assign(document.createElement('p'), { className: 'muted small stitch-note', textContent: t(this.kind === 'fill' && info.shape ? 'stitch.undo' : 'stitch.note') });
     parts.push(note);
+    this.picker.close();
     this.root.replaceChildren(...parts);
+    // Its settings went away under the pointer (underlay off): nothing to show any more.
+    if (this.underOn && !this.root.querySelector('.under-field')) this.showUnder(false);
+  }
+
+  private showUnder(on: boolean): void {
+    if (on === this.underOn) return;
+    this.underOn = on;
+    this.hooks.underlay(on);
+  }
+
+  /** Marks settings of the underlay: while the pointer or focus is on them, the underlay is shown on the canvas. */
+  private under(el: HTMLElement): HTMLElement {
+    el.classList.add('under-field');
+    el.addEventListener('pointerenter', () => this.showUnder(true));
+    el.addEventListener('pointerleave', () => {
+      if (!el.contains(document.activeElement)) this.showUnder(false);
+    });
+    el.addEventListener('focusin', () => this.showUnder(true));
+    el.addEventListener('focusout', (e) => {
+      if (!el.contains(e.relatedTarget as Node | null) && !el.matches(':hover')) this.showUnder(false);
+    });
+    return el;
   }
 
   private controls(): HTMLElement[] {
@@ -247,14 +302,26 @@ export class StitchPanel {
       out.push(
         this.slider({ label: 'stitch.edge', hint: 'stitch.edge.hint', min: -0.4, max: 0.6, step: 0.05, get: () => s.edge, set: (v) => (s.edge = v), fmt: signed }),
         this.slider({ label: 'stitch.expand', hint: 'stitch.expand.hint', min: -3, max: 3, step: 0.05, get: () => s.expand ?? 0, set: (v) => (s.expand = v), fmt: signed }),
-        this.choice<FillUnder>('stitch.underlay', FILL_UNDERS, !s.underlay ? 'off' : s.underCross ? 'cross' : 'single', (v) => `stitch.fillUnder.${v}` as Key, (v) => {
-          s.underlay = v !== 'off';
-          s.underCross = v === 'cross';
-        }),
+        this.under(
+          this.choice<FillUnder>(
+            'stitch.underlay',
+            FILL_UNDERS,
+            !s.underlay ? 'off' : s.underCross ? 'cross' : 'single',
+            (v) => `stitch.fillUnder.${v}` as Key,
+            (v) => {
+              s.underlay = v !== 'off';
+              s.underCross = v === 'cross';
+            },
+            false,
+            // Pointing at another kind shows it on the canvas before it is picked.
+            (v) => this.hooks.preview(v === null ? null : { kind: 'fill', s: { ...s, underlay: v !== 'off', underCross: v === 'cross' } }),
+          ),
+        ),
       );
       if (s.underlay) {
-        out.push(this.slider({ label: 'stitch.underInset', hint: 'stitch.underInset.hint', min: 0, max: 1.5, step: 0.05, get: () => s.underInset ?? UNDERLAY_INSET, set: (v) => (s.underInset = v), fmt: mm(2) }));
+        out.push(this.under(this.slider({ label: 'stitch.underInset', hint: 'stitch.underInset.hint', min: 0, max: 1.5, step: 0.05, get: () => s.underInset ?? UNDERLAY_INSET, set: (v) => (s.underInset = v), fmt: mm(2) })));
       }
+      out.push(this.borderGroup(s));
       return out;
     }
     if (this.kind === 'satin') {
@@ -301,12 +368,14 @@ export class StitchPanel {
       out.push(
         this.slider({ label: 'stitch.split', hint: 'stitch.split.hint', min: 4, max: SATIN_SPLIT, step: 0.5, get: () => s.split ?? SATIN_SPLIT, set: (v) => (s.split = v), fmt: mm(1) }),
         this.check('stitch.stagger', 'stitch.stagger.hint', () => s.stagger ?? true, (v) => (s.stagger = v)),
-        this.check('stitch.underlay', 'stitch.underlay.satin', () => s.underlay, (v) => {
-          s.underlay = v;
-          this.render();
-        }),
+        this.under(
+          this.check('stitch.underlay', 'stitch.underlay.satin', () => s.underlay, (v) => {
+            s.underlay = v;
+            this.render();
+          }),
+        ),
       );
-      if (s.underlay) out.push(this.choice<UnderlayKind>('stitch.under.kind', UNDERLAYS, s.under ?? 'auto', (v) => `stitch.under.${v}` as Key, (v) => (s.under = v), true));
+      if (s.underlay) out.push(this.under(this.choice<UnderlayKind>('stitch.under.kind', UNDERLAYS, s.under ?? 'auto', (v) => `stitch.under.${v}` as Key, (v) => (s.under = v), true)));
       return out;
     }
     const s = this.draft.run!;
@@ -511,7 +580,7 @@ export class StitchPanel {
   }
 
   /** A row of buttons, one per value; picking one applies it. With `hints`, each has `<label>.hint` as its title. */
-  private choice<T extends string>(label: Key, values: readonly T[], now: T, text: (v: T) => Key, set: (v: T) => void, small = false): HTMLElement {
+  private choice<T extends string>(label: Key, values: readonly T[], now: T, text: (v: T) => Key, set: (v: T) => void, small = false, peek?: (v: T | null) => void): HTMLElement {
     const wrap = document.createElement('div');
     wrap.className = 'field stitch-field';
     const head = Object.assign(document.createElement('span'), { className: 'label', textContent: t(label) });
@@ -533,6 +602,10 @@ export class StitchPanel {
         this.render();
         this.changed(true);
       });
+      if (peek && v !== now) {
+        b.addEventListener('pointerenter', () => peek(v));
+        b.addEventListener('pointerleave', () => peek(null));
+      }
       row.append(b);
     }
     wrap.append(head, row);
@@ -621,6 +694,117 @@ export class StitchPanel {
         Object.assign(document.createElement('span'), { className: 'muted small', textContent: t('stitch.draw.help') }),
       );
     }
+    return wrap;
+  }
+
+  /**
+   * Settings of stitches along a line (see along.ts): the kind, Aus first when `off` is allowed,
+   * then what that kind needs. The same fields for a fill's border and for a line of its own;
+   * `offset` adds where the line lies to the edge (borders only).
+   */
+  pathStitch(st: PathStitch | undefined, set: (v: PathStitch | undefined) => void, off = true, offset = false): HTMLElement[] {
+    const mm = (d: number) => (v: number) => `${formatNumber(v, d)} mm`;
+    const kinds = off ? BORDERS : BORDERS.filter((v) => v !== 'off');
+    const out = [
+      this.choice<BorderChoice>('stitch.borderType', kinds, st?.type ?? 'off', (v) => `stitch.border.${v}` as Key, (v) => {
+        set(v === 'off' ? undefined : { ...st, type: v, width: st?.width ?? BORDER_WIDTH });
+      }),
+    ];
+    if (!st) return out;
+    const change = (f: (s: PathStitch) => void) => (v: number) => {
+      f(st);
+      set(st);
+      void v;
+    };
+    if (offset) {
+      out.push(
+        this.slider({
+          label: 'stitch.borderOffset',
+          hint: 'stitch.borderOffset.hint',
+          min: -3,
+          max: 3,
+          step: 0.05,
+          get: () => st.offset ?? 0,
+          set: (v) => change((s) => (s.offset = v || undefined))(v),
+          fmt: (v) => (v ? `${v > 0 ? '+' : '−'}${formatNumber(Math.abs(v), 2)} mm ${t(v > 0 ? 'stitch.borderOffset.out' : 'stitch.borderOffset.in')}` : t('stitch.borderOffset.edge')),
+        }),
+      );
+    }
+    if (st.type !== 'satin') {
+      out.push(this.slider({ label: 'stitch.length', hint: 'stitch.runLength.hint', min: 1, max: 6, step: 0.1, get: () => st.length ?? BORDER_STITCH, set: (v) => change((s) => (s.length = v))(v), fmt: mm(1) }));
+      return out;
+    }
+    out.push(
+      this.slider({ label: 'stitch.borderWidth', hint: 'stitch.borderWidth.hint', min: 0.8, max: 6, step: 0.1, get: () => st.width, set: (v) => change((s) => (s.width = v))(v), fmt: mm(1) }),
+      this.slider({ label: 'stitch.density', hint: 'stitch.satinDensity.hint', min: 0.2, max: 1, step: 0.01, get: () => st.spacing ?? 0.4, set: (v) => change((s) => (s.spacing = v))(v), fmt: mm(2) }),
+      this.slider({ label: 'stitch.borderPull', hint: 'stitch.borderPull.hint', min: 0, max: 0.6, step: 0.05, get: () => st.pull ?? 0, set: (v) => change((s) => (s.pull = v || undefined))(v), fmt: mm(2) }),
+      this.choice<UnderlayKind | 'off'>('stitch.under.kind', ['off', ...UNDERLAYS], autoUnder(st), (v) => (v === 'off' ? 'stitch.borderUnder.off' : (`stitch.under.${v}` as Key)), (v) => {
+        st.under = v;
+        set(st);
+      }, true),
+    );
+    return out;
+  }
+
+  /** A fill's border, as a block of its own: what it is, its stitches, its thread. */
+  private borderGroup(s: FillSettings): HTMLElement {
+    const box = document.createElement('section');
+    box.className = 'border-group';
+    box.append(
+      Object.assign(document.createElement('h4'), { textContent: t('stitch.border') }),
+      Object.assign(document.createElement('p'), { className: 'muted small', textContent: t('stitch.border.intro') }),
+      ...this.pathStitch(
+        s.border,
+        (b) => {
+          if (b) s.border = Object.assign(s.border ?? b, b);
+          else delete s.border;
+        },
+        true,
+        true,
+      ),
+    );
+    if (s.border) box.append(this.borderThread(s.border));
+    return box;
+  }
+
+  /**
+   * The border's thread: the fill's, or one of its own (then it is sewn as an object of its own in
+   * that thread, right after the fill's color, and follows the fill's shape).
+   */
+  private borderThread(b: NonNullable<FillSettings['border']>): HTMLElement {
+    const fill = this.info!.color;
+    const wrap = document.createElement('div');
+    wrap.className = 'field stitch-field border-field';
+    const head = Object.assign(document.createElement('span'), { className: 'label', textContent: t('stitch.borderThread') });
+    const row = document.createElement('div');
+    row.className = 'border-row';
+    const now = b.color ?? fill;
+    const btn = Object.assign(document.createElement('button'), { type: 'button', className: 'border-thread', title: t('stitch.borderThread.hint') });
+    const sw = Object.assign(document.createElement('span'), { className: 'sw' });
+    if (now) sw.style.background = cssColor(now);
+    btn.append(sw, b.color ? (b.color.name ?? hexColor(b.color)) : t('stitch.borderThread.same'));
+    btn.addEventListener('click', () => {
+      if (!fill) return;
+      this.picker.toggle(btn, {
+        key: 'border',
+        title: t('stitch.borderThread'),
+        current: now ?? fill,
+        original: { color: fill, label: t('stitch.borderThread.same') },
+        note: t('stitch.borderThread.note'),
+        onPick: (c) => {
+          if (sameColor(c, fill)) delete b.color;
+          else {
+            b.color = c;
+            b.link ??= newLink();
+          }
+          this.render();
+          this.changed(true);
+        },
+      });
+    });
+    row.append(btn);
+    wrap.append(head, row);
+    if (b.color) wrap.append(Object.assign(document.createElement('span'), { className: 'muted small', textContent: t('stitch.borderThread.own') }));
     return wrap;
   }
 

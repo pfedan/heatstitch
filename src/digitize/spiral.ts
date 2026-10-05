@@ -1,4 +1,4 @@
-import { sewUnderlay, TravelGrid, type FillParams, type FillResult } from './fill';
+import { pointCount, sewUnderlay, TravelGrid, type FillParams, type FillResult } from './fill';
 import { sample, type Region } from './region';
 import { MIN_CURVE_STITCH, TOLERANCE } from './run';
 import type { Pt } from './skeleton';
@@ -72,9 +72,10 @@ export function spiralFill(r: Region, p: FillParams, start: Pt): FillResult | nu
   pts.push(point(total));
   const runs: Pt[][] = [];
   if (p.underlay) sewUnderlay(r, -45, p, start, new TravelGrid(r), runs);
+  const under = pointCount(runs);
   if (runs.length) runs[runs.length - 1].push(...pts);
   else runs.push(pts);
-  return { runs, angle: 0 };
+  return { runs, angle: 0, under };
 }
 
 /**
