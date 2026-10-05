@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>heatstitch: view, edit and check DST and PES embroidery files in your browser</title>
-    <meta name="description" content="Free embroidery editor in your browser: open DST, PES or SVG, edit sewing order, fill patterns and single stitches, check stitch density and save as DST or PES." />
+    <meta name="description" content="Free embroidery editor in your browser: open PES, DST, JEF, VP3, EXP or SVG, edit sewing order, fill patterns and single stitches, check stitch density and save for your machine." />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://pfedan.github.io/heatstitch/" />
     <meta name="application-name" content="heatstitch" />
@@ -98,7 +98,7 @@
         <section class="panel" data-mode="flow density">
           <h2 data-i18n="files.title"></h2>
           <label class="dropzone" id="dropzone">
-            <input type="file" id="file-input" accept=".dst,.pes,.svg,.DST,.PES,.SVG,.heatstitch" multiple hidden />
+            <input type="file" id="file-input" accept=".dst,.pes,.pec,.jef,.exp,.vp3,.svg,.DST,.PES,.PEC,.JEF,.EXP,.VP3,.SVG,.heatstitch" multiple hidden />
             <span data-i18n="files.drop"></span>
           </label>
           <p class="privacy-note" data-i18n-title="files.privacy.detail">
@@ -120,9 +120,20 @@
           <ul id="file-list" class="file-list"></ul>
           <div class="file-actions" id="file-actions" hidden>
             <span class="label save-label" data-i18n-title="save.note"><span data-i18n="save.title"></span> <span class="info" aria-hidden="true">ⓘ</span></span>
-            <div class="buttons">
-              <button type="button" id="save-dst" data-i18n="save.dst"></button>
-              <button type="button" id="save-pes" data-i18n="save.pes"></button>
+            <select class="save-format" id="save-format" data-i18n-aria="save.format">
+              <option value="pes" data-i18n="save.fmt.pes"></option>
+              <option value="dst" data-i18n="save.fmt.dst"></option>
+              <option value="jef" data-i18n="save.fmt.jef"></option>
+              <option value="vp3" data-i18n="save.fmt.vp3"></option>
+              <option value="exp" data-i18n="save.fmt.exp"></option>
+              <option value="pec" data-i18n="save.fmt.pec"></option>
+            </select>
+            <div class="save-file">
+              <label class="save-name">
+                <input type="text" id="save-name" spellcheck="false" autocomplete="off" data-i18n-aria="save.name" />
+                <span id="save-ext">.pes</span>
+              </label>
+              <button type="button" id="save-file" data-i18n="save.file"></button>
             </div>
             <button type="button" id="save-project" class="save-project" data-i18n="save.project" data-i18n-title="save.project.hint"></button>
             <button type="button" id="revert" class="link" data-i18n="edit.revert" hidden></button>
@@ -306,6 +317,10 @@
             <span class="label"><span data-i18n="controls.background"></span> <output id="bg-out"></output></span>
             <div class="bg-swatches" id="bg-swatches"></div>
           </div>
+          <label class="field" data-i18n-title="controls.fabric.hint">
+            <span class="label" data-i18n="controls.fabric"></span>
+            <select id="fabric-look"></select>
+          </label>
           <fieldset class="marks" data-mode="flow density">
             <legend data-i18n="marks.title"></legend>
             <label class="check"><input type="checkbox" data-mark="jumps" /><span><i class="mk mk-jump" aria-hidden="true"></i><span data-i18n="marks.jumps"></span></span></label>

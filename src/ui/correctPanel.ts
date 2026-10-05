@@ -9,7 +9,7 @@ import { formatNumber, getLang, t, type Key } from '../i18n';
 import { patternStats, type Pattern, type PatternStats } from '../model/pattern';
 import type { ValidationResult } from '../validation/validate';
 import type { Settings } from '../settings';
-import type { OutputFormat } from '../writers';
+import { cleanName, isOutputFormat, suggestedName, type OutputFormat } from '../writers';
 import { FileList, type LoadedFile } from './fileList';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -33,7 +33,8 @@ export interface CorrectHooks {
   undo: () => void;
   redo: () => void;
   revert: () => void;
-  save: (format: OutputFormat) => void;
+  /** Saves the open file; `name` is the file name without extension (also the design name in the header). */
+  save: (format: OutputFormat, name: string) => void;
   /** Correction options changed (settings need saving). */
   optionsChanged: () => void;
 }
@@ -113,8 +114,12 @@ export class CorrectPanel {
   private undoBtn = $<HTMLButtonElement>('undo');
   private redoBtn = $<HTMLButtonElement>('redo');
   private revertBtn = $<HTMLButtonElement>('revert');
-  private saveDst = $<HTMLButtonElement>('save-dst');
-  private savePes = $<HTMLButtonElement>('save-pes');
+  private saveFormat = $<HTMLSelectElement>('save-format');
+  private saveFile = $<HTMLButtonElement>('save-file');
+  private saveName = $<HTMLInputElement>('save-name');
+  private saveExt = $<HTMLElement>('save-ext');
+  /** Names typed per file; other files show the suggestion. */
+  private names = new WeakMap<object, string>();
   private compareToggle = $<HTMLButtonElement>('compare-toggle');
   private compareTable = $<HTMLTableElement>('compare-table');
   private last: CorrectState | null = null;
@@ -152,8 +157,26 @@ export class CorrectPanel {
     this.undoBtn.addEventListener('click', () => hooks.undo());
     this.redoBtn.addEventListener('click', () => hooks.redo());
     this.revertBtn.addEventListener('click', () => hooks.revert());
-    this.saveDst.addEventListener('click', () => hooks.save('dst'));
-    this.savePes.addEventListener('click', () => hooks.save('pes'));
+    // The choice is remembered: someone with a Janome machine saves JEF every time.
+    this.saveFormat.addEventListener('change', () => {
+      if (isOutputFormat(this.saveFormat.value)) s.saveFormat = this.saveFormat.value;
+      this.saveExt.textContent = `.${this.saveFormat.value}`;
+      hooks.optionsChanged();
+    });
+    this.saveName.addEventListener('input', () => {
+      const f = this.last?.file;
+      if (f) this.names.set(f, this.saveName.value);
+    });
+    const save = () => {
+      const f = this.last?.file;
+      if (!f || !isOutputFormat(this.saveFormat.value)) return;
+      const name = cleanName(this.saveName.value) || suggestedName(f.fileName, FileList.edited(f));
+      hooks.save(this.saveFormat.value, name);
+    };
+    this.saveFile.addEventListener('click', save);
+    this.saveName.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') save();
+    });
   }
 
   /** Shows the correction options again after they were changed elsewhere (a project was opened). */
@@ -191,7 +214,13 @@ export class CorrectPanel {
     this.redoBtn.disabled = !f?.redo.length || busy;
     this.revertBtn.disabled = busy;
     this.revertBtn.hidden = !FileList.edited(f);
-    this.saveDst.disabled = this.savePes.disabled = !loaded || busy;
+    this.saveFile.disabled = this.saveFormat.disabled = this.saveName.disabled = !loaded || busy;
+    // Until a format was chosen, the open file's own format is offered.
+    const own = f?.pattern?.format;
+    this.saveFormat.value = this.s.saveFormat ?? (isOutputFormat(own) ? own : 'pes');
+    this.saveExt.textContent = `.${this.saveFormat.value}`;
+    const name = f ? (this.names.get(f) ?? suggestedName(f.fileName, FileList.edited(f))) : '';
+    if (document.activeElement !== this.saveName && this.saveName.value !== name) this.saveName.value = name;
 
     // Drawn anew only when the message changed: the canvas redraws while the pointer is on a row.
     const shown = [st.message, getLang()];

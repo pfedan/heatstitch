@@ -4,7 +4,7 @@ import { rasterize } from '../shape/rasterize';
 import { coversOver, cutAway, SATIN_SHARE } from './covers';
 import { rememberObjects, sewObjects, type SewObject } from './objects';
 import type { Pattern } from './pattern';
-import { remember, remembered, rememberRange, type RestitchResult } from './restitch';
+import { remember, remembered, rememberRange, type Remembered, type RestitchResult } from './restitch';
 import { reshapeFill } from './reshape';
 import { stitchKinds } from './sequence';
 import { stitchesBefore } from './transform';
@@ -33,11 +33,26 @@ export function wholeArea(form: Form, pxMm = 0.1): Region | null {
   return r;
 }
 
+/** Areas with parts left out, and the whole area they were cut from. */
+const cutFrom = new WeakMap<Region, Region>();
+
 /** The area to sew for `form` as object `o`: whole, or without what later fills and satins cover. */
 export function sewnArea(p: Pattern, objs: SewObject[], o: SewObject, form: Form, knockout: boolean, pxMm = 0.1): Region | null {
   const whole = wholeArea(form, pxMm);
   if (!whole || !knockout) return whole;
-  return cutAway(whole, coversOver(p, objs, o, pxMm, remembered(p, o)?.overlapShare ?? SATIN_SHARE));
+  const cut = cutAway(whole, coversOver(p, objs, o, pxMm, remembered(p, o)?.overlapShare ?? SATIN_SHARE));
+  if (cut && cut !== whole) cutFrom.set(cut, whole);
+  return cut;
+}
+
+/**
+ * The whole area a sewn area `r` was cut from by shapes on top (its edges there are not the
+ * shape's own), or null when nothing of it was left out. `m` is what the object remembers.
+ */
+export function wholeOf(r: Region, m?: Remembered | null): Region | null {
+  // After a reload only the shape is known: its whole area, for the area remembered with it.
+  const w = cutFrom.get(r) ?? (m?.form && m.knockout && m.region === r ? wholeArea(m.form, r.pxMm) : null);
+  return w && w !== r ? w : null;
 }
 
 /** A name for an area, the same for the same pixels (FNV-1a over its window and mask). */

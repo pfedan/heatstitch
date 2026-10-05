@@ -125,6 +125,12 @@ function padded(r: Region, mm: number): Region {
  * that line is narrower (inside a corner), so the rails do not fold over at corners.
  */
 export function borderRails(r: Region, loop: Pt[], w: number, level = 0): { left: Pt[]; right: Pt[] } {
+  const { left, right } = railsAlong(r, loop, w, level);
+  return { left, right };
+}
+
+/** borderRails, with the points of the line they are centered on (one per rail point). */
+function railsAlong(r: Region, loop: Pt[], w: number, level: number): { left: Pt[]; right: Pt[]; center: Pt[] } {
   const half = w / 2;
   const f = padded(r, half * 1.7 + 0.5 + Math.max(0, level));
   const center = smoothLoop(resample(loop, 0.2), 3);
@@ -162,7 +168,57 @@ export function borderRails(r: Region, loop: Pt[], w: number, level = 0): { left
     left.push([open[k][0] + nn[0] * L[k], open[k][1] + nn[1] * L[k]]);
     right.push([open[k][0] - nn[0] * R[k], open[k][1] - nn[1] * R[k]]);
   }
-  return { left, right };
+  return { left, right, center };
+}
+
+/**
+ * Index ranges of a closed line's n points where `keep` holds, in order along it: [0, n] (the
+ * whole line) when it holds everywhere; ranges may run past n (wrap around).
+ */
+function keptRanges(n: number, keep: (i: number) => boolean, closedLen: number): [number, number][] {
+  const flags = Array.from({ length: n }, (_, i) => keep(i));
+  if (flags.every(Boolean)) return [[0, closedLen]];
+  if (!flags.some(Boolean)) return [];
+  // From the first point dropped, so no piece runs over the line's start.
+  const s0 = flags.indexOf(false);
+  const out: [number, number][] = [];
+  let from = -1;
+  for (let k = 1; k <= n; k++) {
+    const i = (s0 + k) % n;
+    if (flags[i] && from < 0) from = s0 + k;
+    if ((!flags[i] || k === n) && from >= 0) {
+      out.push([from, s0 + k - (flags[i] ? 0 : 1)]);
+      from = -1;
+    }
+  }
+  return out;
+}
+
+/** Points i..j (inclusive, wrapping around the closed line's n distinct points). */
+const span = <T>(pts: T[], n: number, a: number, b: number): T[] => Array.from({ length: b - a + 1 }, (_, k) => pts[(a + k) % n]);
+
+const lengthOf = (l: Pt[]) => l.reduce((s, q, i) => (i ? s + dist(l[i - 1], q) : 0), 0);
+
+/**
+ * The parts of a closed edge line to sew where `keep` holds (checked every 0.2 mm): the whole
+ * loop, closed, when it holds everywhere, else open lines.
+ */
+export function keptLines(loop: Pt[], keep: (q: Pt) => boolean): { line: Pt[]; closed: boolean }[] {
+  const pts = resample(loop, 0.2);
+  const n = pts.length - 1;
+  return keptRanges(n, (i) => keep(pts[i]), n)
+    .map(([a, b]) => (b - a === n ? { line: loop, closed: true } : { line: span(pts, n, a, b), closed: false }))
+    .filter((l) => l.closed || lengthOf(l.line) >= MIN_LOOP);
+}
+
+/** borderRails cut where `keep` does not hold at the line they are centered on: one rails pair per piece. */
+export function keptRails(r: Region, loop: Pt[], w: number, level: number, keep: (q: Pt) => boolean): { left: Pt[]; right: Pt[] }[] {
+  const { left, right, center } = railsAlong(r, loop, w, level);
+  const n = center.length - 1;
+  return keptRanges(n, (i) => keep(center[i]), n)
+    .map(([a, b]) => (b - a === n ? { left, right, len: Infinity } : { left: span(left, n, a, b), right: span(right, n, a, b), len: lengthOf(span(center, n, a, b)) }))
+    .filter((c) => c.len >= MIN_LOOP)
+    .map(({ left, right }) => ({ left, right }));
 }
 
 /** An open line smoothed by a moving average; the ends stay where they are. */

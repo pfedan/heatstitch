@@ -1,5 +1,6 @@
 import { SATIN_MAX, satinForArea, type KeptShape } from '../digitize/digitize';
 import { borderStitches, type PathStitch } from './along';
+import { wholeOf } from './knockout';
 import { lineStitches, runAsLine } from './line';
 import { chooseAngle, fillRegion, type FillParams } from '../digitize/fill';
 import { contourFill, fieldFill, guideField, stitchField } from '../digitize/flow';
@@ -1210,7 +1211,7 @@ function newFill(p: Pattern, o: SewObject, a: Analysis, s: FillSettings, reverse
   // where the fill ends.
   if (s.border && !s.border.color && runs.length) {
     const end = runs[runs.length - 1];
-    runs.push(...borderStitches(a.fill, s.border, end[end.length - 1]));
+    runs.push(...borderStitches(a.fill, s.border, end[end.length - 1], wholeOf(a.fill, remembered(p, o))));
   }
   return { runs, under, border };
 }

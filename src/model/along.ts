@@ -1,5 +1,5 @@
-import { borderLoops, borderRails, borderRun, lineRails, orderLoops, type BorderType } from '../digitize/border';
-import type { Region } from '../digitize/region';
+import { borderLoops, borderRails, borderRun, keptLines, keptRails, lineRails, orderLoops, type BorderType } from '../digitize/border';
+import { sample, type Region } from '../digitize/region';
 import { TOLERANCE } from '../digitize/run';
 import type { Pt } from '../digitize/skeleton';
 import type { UnderlayKind } from '../digitize/satin';
@@ -65,13 +65,59 @@ export function sewAlong(line: Pt[], closed: boolean, s: PathStitch, start?: Pt,
   return satinRuns([rails], satinOf(s));
 }
 
-/** The stitches of a border on the edge of `r` (or `s.offset` from it), loop by loop, starting near `from`. */
-export function borderStitches(r: Region, s: PathStitch, from: Pt): Pt[][] {
-  const loops = orderLoops(borderLoops(r, s.offset ?? 0), from);
-  if (s.type !== 'satin') return loops.flatMap((l) => sewAlong(l, true, s, undefined, r));
+/**
+ * Cut edges (where a later shape covers the fill) lie this far inside the whole shape at least
+ * before they lose their border (mm): where they meet the shape's own edge the border runs on a
+ * little, under the shape on top, so no gap shows.
+ */
+const CUT_EDGE = 0.3;
+
+/**
+ * Whether a point of a border line `offset` from the edge of `r` lies on the shape's own edge, not
+ * on an edge cut by shapes on top: `whole` is the area before they were left out.
+ */
+export function onOwnEdge(whole: Region | null | undefined, offset: number): ((q: Pt) => boolean) | null {
+  if (!whole) return null;
+  return (q) => sample(whole, whole.sdfBase, q[0], q[1]) >= offset - CUT_EDGE;
+}
+
+/**
+ * The lines a border on the edge of `r` (or `offset` from it) lies on, without the edges that
+ * shapes on top cut (with `whole`, the area before they were left out): closed loops, or open
+ * pieces where a part of the edge is covered.
+ */
+export function borderLines(r: Region, offset: number, whole?: Region | null): { line: Pt[]; closed: boolean }[] {
+  const keep = onOwnEdge(whole, offset);
+  const loops = borderLoops(r, offset);
+  return keep ? loops.flatMap((l) => keptLines(l, keep)) : loops.map((line) => ({ line, closed: true }));
+}
+
+/**
+ * The stitches of a border on the edge of `r` (or `s.offset` from it), loop by loop, starting near
+ * `from`. With `whole` (the area before shapes on top were left out), edges they cut get none: it
+ * would be hidden under them.
+ */
+export function borderStitches(r: Region, s: PathStitch, from: Pt, whole?: Region | null): Pt[][] {
+  const off = s.offset ?? 0;
+  const loops = orderLoops(borderLoops(r, off), from);
+  const keep = onOwnEdge(whole, off);
+  if (s.type !== 'satin') {
+    if (!keep) return loops.flatMap((l) => sewAlong(l, true, s, undefined, r));
+    const out: Pt[][] = [];
+    let at = from;
+    for (const l of loops) {
+      for (const k of keptLines(l, keep)) {
+        const runs = sewAlong(k.line, k.closed, s, k.closed ? undefined : at, r);
+        out.push(...runs);
+        const last = runs[runs.length - 1];
+        if (last) at = last[last.length - 1];
+      }
+    }
+    return out;
+  }
   // One satin over all loops: its underlay first, then the satin, as satinRuns sews them.
   return satinRuns(
-    loops.map((l) => borderRails(r, l, s.width, s.offset ?? 0)),
+    loops.flatMap((l) => (keep ? keptRails(r, l, s.width, off, keep) : [borderRails(r, l, s.width, off)])),
     satinOf(s),
   );
 }

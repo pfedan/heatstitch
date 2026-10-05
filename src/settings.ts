@@ -6,6 +6,7 @@ import { DEFAULT_PREPARE, type PrepareOptions } from './image/prepare';
 import type { Lang } from './i18n';
 import { DEFAULT_PROFILE, normalizeProfile, threadWidthMm, type Profile } from './validation/profiles';
 import { ALL_CHECKS, normalizeChecks, type Checks } from './validation/validate';
+import { isOutputFormat, type OutputFormat } from './writers';
 
 export interface PanelWidths {
   side: number | null;
@@ -75,6 +76,8 @@ export interface Settings {
   shapesView: boolean;
   /** Color behind the stitches (the fabric), as #rrggbb; null follows the light or dark theme. */
   background: string | null;
+  /** In the realistic view the background shows the profile's fabric (weave, knit, leather) in that color. */
+  fabricLook: boolean;
   /** Visual thread width of the realistic view in mm; reset to the thread weight's width when the profile thread changes. */
   threadMm: number;
   /** In the realistic view the light follows the pointer and the tilt of a phone. */
@@ -91,6 +94,8 @@ export interface Settings {
   checks: Checks;
   /** Automatic correction options (the region is chosen per run). */
   correction: Omit<CorrectionOptions, 'region'>;
+  /** Embroidery file format last chosen for saving; null follows the format of the open file. */
+  saveFormat: OutputFormat | null;
   scales: Record<Metric, Scale>;
   image: ImageSettings;
   lang: Lang | null;
@@ -118,6 +123,7 @@ export const DEFAULTS: Settings = {
   realistic: false,
   shapesView: false,
   background: null,
+  fabricLook: true,
   threadMm: threadWidthMm(DEFAULT_PROFILE),
   liveLight: true,
   showValidation: true,
@@ -126,6 +132,7 @@ export const DEFAULTS: Settings = {
   profile: DEFAULT_PROFILE,
   checks: { ...ALL_CHECKS },
   correction: { ...DEFAULT_CORRECTION },
+  saveFormat: null,
   scales: {
     thread: { max: 12 },
     penetrations: { max: 4 },
@@ -169,9 +176,11 @@ export function loadSettings(): Settings {
       threadMm: typeof s.threadMm === 'number' && s.threadMm > 0 ? s.threadMm : threadWidthMm(profile),
       background: hexColor(s.background),
       liveLight: typeof s.liveLight === 'boolean' ? s.liveLight : DEFAULTS.liveLight,
+      fabricLook: typeof s.fabricLook === 'boolean' ? s.fabricLook : DEFAULTS.fabricLook,
       panels: { side: width(s.panels?.side), inspector: width(s.panels?.inspector) },
       checks: normalizeChecks(s.checks),
       correction: normalizeCorrection(s.correction),
+      saveFormat: isOutputFormat(s.saveFormat) ? s.saveFormat : null,
       image: normalizeImage(s.image),
     };
   } catch {

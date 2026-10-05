@@ -4,6 +4,7 @@ import { tidy, withRecords } from './edit';
 import { rememberObjects, sewObjects, type SewObject } from './objects';
 import { COLOR_CHANGE, END, JUMP, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
 import { borderStitches } from './along';
+import { wholeOf } from './knockout';
 import { lockAt, remember, remembered, type BorderSettings, type Rec, type Remembered } from './restitch';
 import { stitchKinds } from './sequence';
 
@@ -103,7 +104,7 @@ export function syncBorders(p: Pattern, trimMm: number, drop: ReadonlySet<string
     const same = target && cur?.border && sameColor(target.color, b.color);
     if (same && sameRegion(cur!.region, m.region) && sameBorder(cur!.border!, b)) return;
     const from: Pt = [p.x[o.last] / 10, p.y[o.last] / 10];
-    const runs = borderStitches(m.region, b, from);
+    const runs = borderStitches(m.region, b, from, wholeOf(m.region, m));
     if (!runs.length) return;
     const memory: Remembered = { region: m.region, outline: b.link, border: stitchOf(b) };
     const recs = runRecords(runs, trimMm);

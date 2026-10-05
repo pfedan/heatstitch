@@ -31,7 +31,7 @@ import type { Pattern, ThreadColor } from './model/pattern';
 import type { Measurement } from './validation/measure';
 import { initUpdateNotice } from './ui/updateNotice';
 import { toStored } from './storage/fileStore';
-import { downloadPattern, outputFileName, writePattern } from './writers';
+import { downloadPattern, writePattern } from './writers';
 import { parsePattern } from './parsers';
 import { digitizeSvg, ImageMode } from './ui/imageMode';
 import { lightFromPointer, lightFromTilt, sweep } from './render/light';
@@ -64,7 +64,6 @@ import { blockName, kindLabel, LayersPanel } from './ui/layersPanel';
 import { ObjectPanel, OrderCard } from './ui/objectPanel';
 import { StitchPanel, type Highlight, type StitchInfo } from './ui/stitchPanel';
 import { borderRanges, syncBorders } from './model/border';
-import { borderLoops } from './digitize/border';
 import { analyze, forget, holdMemory, keepShape, openOnPurpose, objectKey, measureFill, measureRun, measureSatin, remember, remembered, type Rails, rememberedIn, rememberShapes, restitch, shapeTrust, unionRegion, underlayRanges, type Remembered, type Settings as RestitchSettings, type ShapeTrust, type RestitchResult } from './model/restitch';
 import { outline } from './digitize/region';
 import { railsFromOutline } from './digitize/rungs';
@@ -79,13 +78,13 @@ import { AsidePanel } from './ui/asidePanel';
 import type { LeftOut } from './ui/imageMode';
 import { addShape, type NewShape } from './model/addShape';
 import { lineOf, lineSettings, resewLine } from './model/line';
-import type { PathStitch } from './model/along';
+import { borderLines, type PathStitch } from './model/along';
 import { asideOf, dropAside, sewAgain, setAside, setAsideRole, storeAside, type AsideRole, type AsideShape } from './model/aside';
 import { deleteObjects, duplicateObject, mirrorMatrix, recolorObjects, subtractTop, unionForm } from './model/shapeOps';
 import { stitchesBefore } from './model/transform';
 import { FrameTool } from './ui/frameTool';
 import { formOf, reshapeFill, scaleBlocked, transformSewObject } from './model/reshape';
-import { isCovered, overlapsIn, refreshKnockouts, setKnockout, setOverlapShare, wholeArea } from './model/knockout';
+import { isCovered, overlapsIn, refreshKnockouts, setKnockout, setOverlapShare, wholeArea, wholeOf } from './model/knockout';
 import { transformObject } from './model/transform';
 import { apply, translation, type Form, type Mat } from './shape/path';
 import { fontNow, loadCatalog, loadFont, type Catalog } from './lettering/font';
@@ -428,7 +427,8 @@ function contourLines(p: Pattern): Pt[][] | null {
     if (!region) continue;
     // While a change is previewed, the border where it would go.
     const b = r ? r.memory[0]?.fill?.border : m?.fill?.border;
-    out.push(...borderLoops(region, b?.offset ?? 0));
+    // Without the edges shapes on top cut: no border goes there.
+    out.push(...borderLines(region, b?.offset ?? 0, wholeOf(region, m)).map((l) => l.line));
   }
   contourCache = { p, key: selectionKey, r, lines: out.length ? out : null };
   return contourCache.lines;
@@ -3241,9 +3241,9 @@ const correctPanel = new CorrectPanel(settings, {
   undo: () => history('undo'),
   redo: () => history('redo'),
   revert: () => history('revert'),
-  save: (format) => {
+  save: (format, name) => {
     const f = files.active;
-    if (f?.pattern) downloadPattern(f.pattern, format, outputFileName(f.fileName, format, FileList.edited(f)));
+    if (f?.pattern) downloadPattern({ ...f.pattern, name }, format, `${name}.${format}`);
   },
   optionsChanged: () => saveSettings(settings),
 });
@@ -3439,9 +3439,11 @@ async function openFiles(list: Iterable<File>): Promise<void> {
 // Project files ---------------------------------------------------------------
 
 /** Name of the project file: after the active design, else the image. */
+/** A project holds every open file, so it is named by the day, not by one of them: "2026-10-05-heatstitch-projekt". */
 function projectName(): string {
-  const base = files.active?.fileName.replace(/\.[^.]+$/, '') || imageMode.snapshot()?.image.name.replace(/\.[^.]+$/, '') || 'heatstitch';
-  return `${base}${PROJECT_EXT}`;
+  const d = new Date();
+  const day = [d.getFullYear(), d.getMonth() + 1, d.getDate()].map((v) => String(v).padStart(2, '0')).join('-');
+  return `${day}-${t('save.project.file')}${PROJECT_EXT}`;
 }
 
 /** Everything open in the app as a project: the files with their edits, the image and the design settings. */
