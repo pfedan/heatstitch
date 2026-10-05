@@ -1,5 +1,5 @@
 import { t } from '../i18n';
-import { patternStats, type Pattern, type PatternStats } from '../model/pattern';
+import { patternStats, STITCH, type Pattern, type PatternStats } from '../model/pattern';
 import { parsePattern, SUPPORTED_EXTENSIONS } from '../parsers';
 import {
   acksOf,
@@ -114,9 +114,9 @@ export class FileList {
     else this.render();
   }
 
-  /** Adds one file with what is known about its objects, and activates it. */
-  async addWithObjects(name: string, data: ArrayBuffer, objects: StoredObject[], aside: StoredAside[] = []): Promise<void> {
-    const first = await this.addData([{ name, data, objects, aside }], true);
+  /** Adds one file with what is known about its objects (and its own material, else the last used), and activates it. */
+  async addWithObjects(name: string, data: ArrayBuffer, objects: StoredObject[], aside: StoredAside[] = [], material?: Material): Promise<void> {
+    const first = await this.addData([{ name, data, objects, aside, material }], true);
     if (first) this.activate(first.id);
     else this.render();
   }
@@ -346,6 +346,11 @@ export class FileList {
   /** True once the pattern differs from the loaded one. */
   static edited(f: LoadedFile | null): boolean {
     return !!f?.pattern && f.pattern !== f.original;
+  }
+
+  /** A design started empty with "Neu": it has no original stitches to go back to. */
+  static blank(f: LoadedFile | null): boolean {
+    return !!f?.original && !f.original.cmd.includes(STITCH);
   }
 
   activate(id: number | null): void {
