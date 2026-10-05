@@ -16,6 +16,7 @@ import { drawHeatmap } from './heatmap';
 import { drawStitches } from './stitches';
 import { drawThreads } from './threads';
 import { drawFabric } from './fabricGl';
+import { drawHoop } from './hoop';
 import { drawValidation, drawZoneHighlight, type Counted } from './validationOverlay';
 import type { Viewport } from './viewport';
 
@@ -101,6 +102,7 @@ export function drawScene(ctx: CanvasRenderingContext2D, w: number, h: number, s
     if (!s.realistic || !drawThreads(ctx, vp, pattern, 1, s.threadMm, st)) drawFlatStitches(ctx, vp, pattern, st, 1);
     if (s.marks.jumps) drawJumps(ctx, vp, pattern, st.limit, st.alpha, st.carried?.jumps);
     drawMarkers(ctx, vp, pattern, { markers: flow.markers, marks: s.marks, limit: st.limit, alpha: st.alpha }, w, h);
+    if (s.hoop) drawHoop(ctx, vp, pattern.bounds, s.hoop);
     if (flow.hover && flow.hover !== flow.selected) drawTransition(ctx, vp, pattern, flow.hover, false);
     if (flow.selected) drawTransition(ctx, vp, pattern, flow.selected, true);
     if (flow.outlines?.length) drawOutlines(ctx, vp, flow.outlines);
@@ -140,6 +142,7 @@ export function drawScene(ctx: CanvasRenderingContext2D, w: number, h: number, s
       drawPoints(ctx, vp, f.pattern);
     }
   }
+  if (pattern && s.hoop) drawHoop(ctx, vp, pattern.bounds, s.hoop);
   if (scene.highlight) drawZoneHighlight(ctx, vp, scene.highlight);
   if (pattern && edit) drawEditOverlay(ctx, vp, pattern, edit, w, h);
 }

@@ -1,3 +1,4 @@
+import type { Hoop } from '../model/hoop';
 import type { Pattern } from '../model/pattern';
 import { writeDst } from './dst';
 import { writeExp } from './exp';
@@ -14,17 +15,23 @@ export function isOutputFormat(v: unknown): v is OutputFormat {
   return OUTPUT_FORMATS.includes(v as OutputFormat);
 }
 
-const WRITERS: Record<OutputFormat, (p: Pattern) => Uint8Array> = {
-  pes: writePes,
+/** What the file should know beyond the stitches. */
+export interface WriteOptions {
+  /** The chosen hoop, for formats that store one (PES, JEF). */
+  hoop?: Hoop | null;
+}
+
+const WRITERS: Record<OutputFormat, (p: Pattern, o: WriteOptions) => Uint8Array> = {
+  pes: (p, o) => writePes(p, o.hoop ?? null),
   dst: writeDst,
-  jef: (p) => writeJef(p),
+  jef: (p, o) => writeJef(p, new Date(), o.hoop ?? null),
   exp: writeExp,
   vp3: writeVp3,
   pec: writePecFile,
 };
 
-export function writePattern(p: Pattern, format: OutputFormat): Uint8Array {
-  return WRITERS[format](p);
+export function writePattern(p: Pattern, format: OutputFormat, options: WriteOptions = {}): Uint8Array {
+  return WRITERS[format](p, options);
 }
 
 /** Suggested name without extension: "design.pes" after edits becomes "design-corrected". */
@@ -48,8 +55,8 @@ export function outputFileName(fileName: string, format: OutputFormat, edited: b
 }
 
 /** Offers the file as a download. */
-export function downloadPattern(p: Pattern, format: OutputFormat, fileName: string): void {
-  const data = writePattern(p, format);
+export function downloadPattern(p: Pattern, format: OutputFormat, fileName: string, options: WriteOptions = {}): void {
+  const data = writePattern(p, format, options);
   const blob = new Blob([data as BlobPart], { type: 'application/octet-stream' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);

@@ -17,6 +17,7 @@ import type { ImageView, Settings } from '../settings';
 import { CAUTION, CRITICAL, type ValidationResult } from '../validation/validate';
 import { fabricLabel, threadLabel } from './profilePanel';
 import { clearImage, loadImage, saveImage, saveWork, type StoredImage, type StoredWork } from '../storage/imageStore';
+import { hoopShort } from './hoopPanel';
 import { cssColor, ThreadPicker } from './threadPicker';
 
 /**
@@ -747,7 +748,9 @@ export class ImageMode {
     const out = (id: string, text: string) => ($<HTMLOutputElement>(id).textContent = text);
     setVal('image-width', s.prepare.widthMm);
     const [W, H] = this.sizeMm();
-    out('image-height', this.source ? t('image.size', { w: formatNumber(W, 0), h: formatNumber(H, 0) }) : '');
+    const over = this.source ? hoopShort(W, H, this.h.settings.hoop) : '';
+    out('image-height', this.source ? t('image.size', { w: formatNumber(W, 0), h: formatNumber(H, 0) }) + (over ? ` · ${over}` : '') : '');
+    $('image-height').classList.toggle('hoop-over', !!over);
     setVal('image-colors', s.prepare.maxColors);
     out('image-colors-out', String(s.prepare.maxColors));
     setVal('image-smooth', s.prepare.smooth);
