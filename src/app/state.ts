@@ -86,4 +86,6 @@ export const ui = {
   highlight: null as Highlight | null,
   /** The restitch behind `flowPreview` (it knows where the new underlay ends). */
   previewResult: null as RestitchResult | null,
+  /** The color under the pointer in the layer list: shown alone while the pointer stays. */
+  hoverBlock: null as number | null,
 };
