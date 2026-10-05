@@ -175,8 +175,8 @@ export function drawJumps(
   const ox = vp.offsetX;
   const oy = vp.offsetY;
   ctx.save();
-  ctx.lineWidth = 1;
-  ctx.setLineDash([4, 4]);
+  ctx.lineWidth = 1.75;
+  ctx.setLineDash([5, 4]);
   ctx.strokeStyle = '#9a92a6';
   ctx.globalAlpha = 0.85;
   ctx.beginPath();
@@ -343,12 +343,25 @@ export function drawTransition(ctx: CanvasRenderingContext2D, vp: Viewport, p: P
   ctx.restore();
 }
 
-/** Index of the transition whose line passes within `px` screen pixels of (sx, sy), or -1. */
-export function transitionAt(p: Pattern, list: Transition[], vp: Viewport, sx: number, sy: number, px = 8): number {
+/**
+ * Whether the line of a transition is on the canvas: as loose thread, or as a dashed jump while
+ * `jumps` are shown. Only lines that can be seen can be clicked.
+ */
+export function transitionShown(p: Pattern, t: Transition, jumps: boolean, st: Pick<StitchStyle, 'limit' | 'alpha' | 'carried'>): boolean {
+  if (st.carried && st.carried.from[t.to] === t.from) return t.to <= st.limit && (!st.alpha || st.alpha[t.to] > 0);
+  if (!jumps) return false;
+  const end = Math.min(t.to, st.limit);
+  for (let i = t.from + 1; i <= end; i++) if (p.cmd[i] === JUMP && (!st.alpha || st.alpha[i] > 0)) return true;
+  return false;
+}
+
+/** Index of the transition whose line passes within `px` screen pixels of (sx, sy), or -1; `shown` leaves out the others. */
+export function transitionAt(p: Pattern, list: Transition[], vp: Viewport, sx: number, sy: number, px = 8, shown?: (t: Transition) => boolean): number {
   const s = vp.scale / 10;
   let best = -1;
   let bestD = px;
   list.forEach((t, k) => {
+    if (shown && !shown(t)) return;
     const ax = p.x[t.from] * s + vp.offsetX;
     const ay = p.y[t.from] * s + vp.offsetY;
     const bx = p.x[t.to] * s + vp.offsetX;

@@ -28,6 +28,8 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
   const metricInputs = document.querySelectorAll<HTMLInputElement>('input[name="metric"]');
   const colorBy = document.querySelectorAll<HTMLInputElement>('input[name="color-by"]');
   const markInputs = document.querySelectorAll<HTMLInputElement>('input[data-mark]');
+  const marksToggle = $<HTMLButtonElement>('marks-toggle');
+  const marksBox = document.querySelector<HTMLElement>('fieldset.marks')!;
   const cell = $<HTMLInputElement>('cell');
   const blur = $<HTMLInputElement>('blur');
   const max = $<HTMLInputElement>('max');
@@ -116,6 +118,9 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
       // On the heatmap the markers come with the stitch plan.
       i.disabled = s.mode === 'density' && !s.overlay;
     });
+    marksToggle.setAttribute('aria-pressed', String(s.marksOn));
+    marksBox.classList.toggle('all-off', !s.marksOn);
+    marksBox.querySelector('legend')!.dataset.off = t('marks.allOff');
     cell.value = String(s.cellMm);
     blur.value = String(s.blurMm);
     // Leave the number field alone while the user is typing in it.
@@ -172,7 +177,15 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
     }),
   );
   colorBy.forEach((i) => on(i, 'change', () => ((s.colorBy = i.value as ColorBy), 'style')));
-  markInputs.forEach((i) => on(i, 'change', () => ((s.marks = { ...s.marks, [i.dataset.mark as keyof Marks]: i.checked }), 'render')));
+  markInputs.forEach((i) =>
+    on(i, 'change', () => {
+      s.marks = { ...s.marks, [i.dataset.mark as keyof Marks]: i.checked };
+      // Choosing a marker shows it, so the global switch comes back on.
+      if (i.checked) s.marksOn = true;
+      return 'render';
+    }),
+  );
+  on(marksToggle, 'click', () => ((s.marksOn = !s.marksOn), 'render'));
   on(cell, 'input', () => ((s.cellMm = Number(cell.value)), 'density'));
   on(blur, 'input', () => ((s.blurMm = Number(blur.value)), 'density'));
   on(includeJumps, 'change', () => ((s.includeJumps = includeJumps.checked), 'density'));
