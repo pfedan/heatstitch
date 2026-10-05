@@ -10,7 +10,7 @@ const same = (a: RungPick | null, col: number, i: number) => !!a && a.col === co
 /**
  * The rung tool on the canvas: the rails of the satin as thin lines, each rung as a line across
  * with a handle at both ends (dashed while they are only suggested from the stitches), the
- * selected one in the accent color; for a fill the lines drawn across it.
+ * selected one in the accent color; for a fill the lines drawn across it or the guide lines on it.
  */
 export function drawRungOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, view: RungView): void {
   const S = (p: Pt) => vp.toScreen(p[0], p[1]);
@@ -61,6 +61,27 @@ export function drawRungOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, vie
   };
   view.columns.forEach((c, k) => c.rungs.forEach((r, i) => rung(pointAt(c.left, c.cl, r[0]), pointAt(c.right, c.cr, r[1]), k, i, !c.own)));
   view.lines.forEach(([a, b], i) => rung(a, b, -1, i, false));
+  // Guide lines in the same colors.
+  view.guides.forEach((g, i) => {
+    const sel = same(view.selected, -1, i);
+    const hov = same(view.hover, -1, i);
+    path(g);
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.lineWidth = sel || hov ? 5.5 : 4.5;
+    ctx.stroke();
+    ctx.strokeStyle = sel ? ACCENT : hov ? '#ffffff' : 'rgba(255, 214, 102, 0.95)';
+    ctx.lineWidth = sel || hov ? 3 : 2.5;
+    ctx.stroke();
+  });
+  if (view.sketch && view.sketch.length > 1) {
+    ctx.setLineDash([6, 4]);
+    path(view.sketch);
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
   if (view.draft) {
     const [a, b] = view.draft;
     ctx.setLineDash([6, 4]);

@@ -136,6 +136,39 @@ describe('project files', () => {
     expect(shapeTrust(q, now, an, 0.4)).toBe('kept');
   }, 30_000);
 
+  it('sews a fill along guide lines and keeps them with its underlay', async () => {
+    const data = bytesOf('demos/overlap.pes');
+    const p = parsePattern(data, 'overlap.pes');
+    const kinds = stitchKinds(p);
+    const objs = sewObjects(p, kinds);
+    const o = objs.find((x) => x.kind === 'fill')!;
+    const an = analyze(p, o, kinds);
+    const m = measureFill(p, an);
+    const a = an.fill!;
+    const [x0, y0, x1, y1] = [a.x0 * a.pxMm, a.y0 * a.pxMm, (a.x0 + a.w) * a.pxMm, (a.y0 + a.h) * a.pxMm];
+    const ym = (y0 + y1) / 2;
+    const guide: [number, number][] = [
+      [x0, ym],
+      [(x0 + x1) / 2, ym - (y1 - y0) / 6],
+      [x1, ym],
+    ];
+    const s = { ...m, pattern: 'guided' as const, guides: [guide], underlay: true, underCross: true, underInset: 0.8 };
+    const r = restitch(p, objs, [o.index], { kind: 'fill', s }, kinds, 7);
+    expect(r.failed).toEqual([]);
+    const q = r.pattern;
+    const now = sewObjects(q).find((x) => x.first === firstRecord(q, r.starts[0] + 1))!;
+    remember(q, now, { region: r.regions[0], fill: s });
+    const back = await decodeProject(
+      await encodeProject({ files: [{ name: 'overlap.pes', data, working: toStored(q), acks: [], objects: rememberedIn(q, sewObjects(q)) }], active: 0, image: null, settings: projectSettings(DEFAULTS) }),
+    );
+    expect(restoreRemembered(back.files[0].objects)).toBe(1);
+    const again = remembered(q, now)!.fill!;
+    expect(again.pattern).toBe('guided');
+    expect(again.guides).toEqual([guide]);
+    expect(again.underCross).toBe(true);
+    expect(again.underInset).toBe(0.8);
+  }, 30_000);
+
   it('skips stored objects that do not hold together', () => {
     expect(restoreRemembered([{ key: 'a', region: { x0: 0, y0: 0, w: 2, h: 2, pxMm: 0.1, mask: new Uint8Array(3), areaMm2: 1 } }])).toBe(0);
     expect(restoreRemembered([{ key: 'b', region: null, fill: { pattern: 'zigzag' } }])).toBe(0);

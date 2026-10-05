@@ -71,7 +71,7 @@ export function spiralFill(r: Region, p: FillParams, start: Pt): FillResult | nu
   }
   pts.push(point(total));
   const runs: Pt[][] = [];
-  if (p.underlay) sewUnderlay(r, 45, p.spacing, start, new TravelGrid(r), runs);
+  if (p.underlay) sewUnderlay(r, -45, p, start, new TravelGrid(r), runs);
   if (runs.length) runs[runs.length - 1].push(...pts);
   else runs.push(pts);
   return { runs, angle: 0 };
