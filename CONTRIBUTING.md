@@ -78,6 +78,19 @@ bytes, regenerate them and commit the result:
 UPDATE_DEMOS=1 npm test
 ```
 
+### Fonts
+
+The lettering fonts in `public/fonts/` are converted from the Ink/Stitch font repository, at a fixed
+commit, by `tools/fonts/convert.mjs`. It checks each font's license, skips what heatstitch cannot sew
+yet and writes the fonts, their licenses and the catalog `index.json`. To update them:
+
+```sh
+git clone https://github.com/inkstitch/embroidery-fonts /tmp/embroidery-fonts
+node tools/fonts/convert.mjs /tmp/embroidery-fonts/src <commit>
+```
+
+Ink/Stitch's code is GPL: read it to understand the font format, but never copy from it.
+
 ## Pull request previews
 
 Every pull request from a branch in this repository is built and deployed to

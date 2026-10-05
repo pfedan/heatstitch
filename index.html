@@ -337,6 +337,7 @@
         <div class="stage-tools stage-tools-start" data-mode="flow density">
           <button type="button" id="undo" class="tool" data-i18n-title="edit.undo.key" data-i18n-aria="edit.undo"><span aria-hidden="true">↶</span></button>
           <button type="button" id="redo" class="tool" data-i18n-title="edit.redo.key" data-i18n-aria="edit.redo"><span aria-hidden="true">↷</span></button>
+          <button type="button" id="lettering-new" class="tool" data-mode="flow" data-i18n-title="lettering.tool.hint"><span class="tool-glyph" aria-hidden="true">T</span> <span data-i18n="lettering.tool"></span></button>
           <div class="segmented level-switch" role="radiogroup" data-i18n-aria="level.label">
             <label data-i18n-title="level.objects.hint"><input type="radio" name="level" value="objects" checked /><span data-i18n="level.objects"></span></label>
             <label data-i18n-title="level.shape.hint" data-mode="flow"><input type="radio" name="level" value="shape" /><span data-i18n="level.shape"></span></label>
@@ -440,6 +441,14 @@
           <div id="object-body"></div>
           <div id="object-stitches" class="object-stitches"></div>
           <p class="layer-note error" id="object-msg" role="status" hidden></p>
+        </section>
+
+        <section class="panel lettering-panel" id="lettering-panel" data-mode="flow" hidden>
+          <div class="panel-head">
+            <h2 data-i18n="lettering.title"></h2>
+            <button type="button" id="lettering-close" class="icon" data-i18n-title="lettering.close"><span aria-hidden="true">&#x2715;</span></button>
+          </div>
+          <div id="lettering-body"></div>
         </section>
 
         <section class="panel jumps" id="jumps-panel" data-mode="flow">

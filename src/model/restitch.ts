@@ -16,6 +16,8 @@ import { tidy, withRecords } from './edit';
 import { joinsIn, rememberObjects, restoreJoin, stitchKey, type ObjectKind, type SewObject } from './objects';
 import { END, JUMP, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
 import { SATIN, TIE_STITCH } from './sequence';
+import { letteringFrom } from '../lettering/stored';
+import type { Lettering } from '../lettering/layout';
 
 /**
  * New stitches for the objects of a design, with other settings: density, angle, stitch length,
@@ -196,6 +198,8 @@ export interface Remembered {
   outline?: string;
   /** A border object: the settings it was sewn with (its `region` is the fill's area it was sewn on). */
   border?: BorderSettings;
+  /** The lettering the object belongs to (it is sewn anew from its text, see lettering/). */
+  lettering?: Lettering;
 }
 
 /**
@@ -287,6 +291,7 @@ export interface StoredObject {
   asSatin?: { left: number[]; right: number[]; rungs?: number[] }[];
   outline?: string;
   border?: BorderSettings;
+  lettering?: Lettering;
   join?: boolean;
 }
 
@@ -313,6 +318,7 @@ export function rememberedIn(p: Pattern, objects: SewObject[]): StoredObject[] {
       ...(r.asSatin ? { asSatin: r.asSatin.map((c) => ({ left: c.left.flat(), right: c.right.flat(), ...(c.rungs ? { rungs: c.rungs.flat() } : {}) })) } : {}),
       ...(r.outline ? { outline: r.outline } : {}),
       ...(r.border ? { border: { ...r.border } } : {}),
+      ...(r.lettering ? { lettering: r.lettering } : {}),
     });
   }
   for (const j of joinsIn(p)) out.push({ key: j.key, region: null, join: j.join });
@@ -489,6 +495,8 @@ export function restoreRemembered(list: unknown): number {
     if (asSatin?.length) r.asSatin = asSatin;
     if (typeof e.outline === 'string') r.outline = e.outline;
     if (isBorder(e.border)) r.border = { ...e.border };
+    const lettering = e.lettering === undefined ? null : letteringFrom(e.lettering);
+    if (lettering) r.lettering = lettering;
     rememberKey(e.key, r);
     n++;
   }
@@ -1283,6 +1291,7 @@ export function restitch(
           ...(known?.asSatin && !newArea ? { asSatin: known.asSatin } : {}),
           ...(known?.outline ? { outline: known.outline, border: known.border } : {}),
         };
+    if (known?.lettering) after.lettering = known.lettering;
     // Up to the object: everything as it was, except the jumps that lead to its first stitch.
     let lead = o.first;
     while (lead - 1 >= i && p.cmd[lead - 1] === JUMP) lead--;
