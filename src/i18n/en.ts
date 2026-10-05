@@ -221,7 +221,7 @@ export const en: Record<keyof typeof de, string> = {
   'plan.locked': '{n} locked objects left out.',
   'plan.head': 'Proposals for {n} changes',
   'plan.result': 'With all proposals: critical area {c0} → {c1} mm², caution {w0} → {w1} mm².',
-  'plan.hover': 'Point at a proposal to see before and after. Click its name to hold it: the dividing line then follows mouse or finger.',
+  'plan.hover': 'Point at a proposal to see before and after; moving sideways over its row moves the dividing line. Click its name to hold it, then the line also follows mouse or finger on the canvas.',
   'plan.before': 'Before',
   'plan.after': 'After',
   'plan.all': 'Select all',

@@ -3007,7 +3007,6 @@ let planDrag = false;
 /** Holds the proposals `ids` for comparing, or lets go (null). */
 function pinPlan(ids: number[] | null): void {
   planPin = ids;
-  planSplit = 0.5;
   planHover = ids && proposalsBox(ids);
   showPlanPreview(ids);
   planMessage();
@@ -3212,9 +3211,12 @@ const correctPanel = new CorrectPanel(settings, {
   hoverProposal: (ids) => {
     // Away from the list, the held proposal comes back.
     const show = ids ?? planPin;
-    if (ids && planPin?.join() !== ids.join()) planSplit = 0.5;
     planHover = show && proposalsBox(show);
     showPlanPreview(show);
+    redraw();
+  },
+  splitProposal: (at) => {
+    planSplit = Math.min(0.97, Math.max(0.03, at));
     redraw();
   },
   showProposal: (ids) => {
