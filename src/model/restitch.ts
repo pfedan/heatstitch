@@ -18,7 +18,7 @@ import { tidy, withRecords } from './edit';
 import { coversOver, cutAway, type Cover } from './covers';
 import { forgetJoins, holdJoins, joinsIn, knowKinds, rememberObjects, restoreJoin, stitchKey, type ObjectKind, type SewObject } from './objects';
 import { END, JUMP, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
-import { SATIN, TIE_STITCH } from './sequence';
+import { SATIN, stitchKinds, TIE_STITCH } from './sequence';
 import { letteringFrom } from '../lettering/stored';
 import type { Lettering } from '../lettering/layout';
 
@@ -394,6 +394,12 @@ export function forgetAll(): void {
   forgetJoins();
 }
 
+/** The object's shape and stitch type are only guessed from its stitches (a file from elsewhere), not known. */
+export function isGuessed(p: Pattern, o: SewObject): boolean {
+  const r = remembered(p, o);
+  return !r || !!r.read;
+}
+
 export function remembered(p: Pattern, o: SewObject): Remembered | undefined {
   return memory.get(objectKey(p, o));
 }
@@ -735,6 +741,7 @@ export function unionRegion(rs: Region[]): Region | null {
  */
 export function rememberShapes(p: Pattern, objs: SewObject[], starts: number[], shapes: (KeptShape | undefined)[], forms: ({ form?: Form; knockout?: boolean; path?: Form; line?: PathStitch } | undefined)[] = []): void {
   const at = new Map<number, SewObject>();
+  let kinds: Uint8Array | undefined;
   let n = 0;
   let k = 0;
   for (let i = 0; i < p.cmd.length && k < objs.length; i++) {
@@ -746,10 +753,16 @@ export function rememberShapes(p: Pattern, objs: SewObject[], starts: number[], 
     const o = at.get(s);
     const line = forms[j]?.path;
     if (o && line) return remember(p, o, { region: null, path: line, ...(forms[j]?.line ? { line: { ...forms[j]!.line! } } : {}) });
+    if (!o) return;
     const f = forms[j];
     // A satin from a vector file keeps its shape: its rails lie on the shape's edge.
-    if (!shape && o && f?.form) return remember(p, o, { region: null, form: f.form });
-    if (!shape || !o) return;
+    if (!shape && f?.form) return remember(p, o, { region: null, form: f.form });
+    // A satin made here (a narrow area): its rails, read from its fresh stitches, so it is known as
+    // made here and not recognized again from its stitches later.
+    if (!shape) {
+      const { read: _read, ...known } = keepShape(p, o, (kinds ??= stitchKinds(p)));
+      return remember(p, o, known);
+    }
     const region = regionFrom(shape);
     if (region) remember(p, o, { region, fill: { ...shape.fill }, ...(f?.form ? { form: f.form, ...(f.knockout ? { knockout: true } : {}) } : {}) });
   });

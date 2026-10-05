@@ -38,7 +38,7 @@ import {
 } from './model/sequence';
 import { stitchAt } from './render/flow';
 import type { Mode } from './settings';
-import { openOnPurpose, remembered, rememberedIn, rememberShapes } from './model/restitch';
+import { isGuessed, openOnPurpose, remembered, rememberedIn, rememberShapes } from './model/restitch';
 import { drawAside, drawDrawing } from './render/shapeOverlay';
 import type { LeftOut } from './ui/imageMode';
 import { asideOf, storeAside, type AsideShape } from './model/aside';
@@ -781,6 +781,7 @@ function redraw(): void {
           blank: !!p && !q!.objects.length,
           format: active?.pattern?.format ?? 'pes',
           names: p && q ? letteringNames(p, q) : undefined,
+          guessed: p && q ? (q.guessed ??= new Set(q.objects.filter((o) => isGuessed(p, o)).map((o) => o.index))) : undefined,
         },
         getLang(),
       );
