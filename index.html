@@ -291,6 +291,7 @@
               <input type="range" id="opacity" min="0.05" max="1" step="0.05" />
             </label>
           </div>
+          <label class="check" data-mode="flow" data-i18n-title="display.shapes.hint"><input type="checkbox" id="shapes-view" /><span data-i18n="display.shapes"></span></label>
           <label class="check" data-i18n-title="controls.realistic.hint"><input type="checkbox" id="realistic" /><span data-i18n="controls.realistic"></span></label>
           <label class="field indent" data-i18n-title="controls.threadWidth.hint">
             <span class="label"><span data-i18n="controls.threadWidth"></span> <output id="thread-width-out"></output></span>
@@ -442,6 +443,10 @@
             </div>
           </div>
           <ul class="layer-list" id="layer-list"></ul>
+          <details class="aside-block" id="aside-block" hidden>
+            <summary></summary>
+            <ul class="layer-list aside-list"></ul>
+          </details>
           <p class="layer-note" id="layer-note" role="status" hidden></p>
         </section>
 

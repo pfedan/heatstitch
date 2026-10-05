@@ -4,6 +4,8 @@ import { segment, segments, type Form } from '../shape/path';
 import { corners, TURN_PX, type FrameView } from '../ui/frameTool';
 import type { ShapePick, ShapeView } from '../ui/shapeTool';
 import type { Viewport } from './viewport';
+import type { AsideShape } from '../model/aside';
+import { STITCH } from '../model/pattern';
 
 const ACCENT = '#e0559e';
 
@@ -224,6 +226,87 @@ export function drawDrawing(ctx: CanvasRenderingContext2D, vp: Viewport, form: F
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(text, lx, ly);
+  }
+  ctx.restore();
+}
+
+/**
+ * Shapes that are not sewn: switched off as a thin outline in their thread color, guides dashed
+ * and light; the one hovered in the list in the accent color. Shapes known only by their stitches
+ * show those, thin.
+ */
+export function drawAside(ctx: CanvasRenderingContext2D, vp: Viewport, list: AsideShape[], hover: number | null): void {
+  const S = (p: Pt) => vp.toScreen(p[0], p[1]);
+  ctx.save();
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  for (const a of list) {
+    ctx.beginPath();
+    if (a.form) {
+      for (const p of a.form.paths) {
+        if (!p.nodes.length) continue;
+        ctx.moveTo(...S(p.nodes[0].p));
+        for (let k = 0; k < segments(p); k++) {
+          const [, b, c, e] = segment(p, k);
+          ctx.bezierCurveTo(...S(b), ...S(c), ...S(e));
+        }
+        if (p.closed) ctx.closePath();
+      }
+    } else if (a.records) {
+      let pen = false;
+      for (const r of a.records) {
+        if (r.cmd !== STITCH) {
+          pen = false;
+          continue;
+        }
+        const [x, y] = vp.toScreen(r.x / 10, r.y / 10);
+        if (pen) ctx.lineTo(x, y);
+        else ctx.moveTo(x, y);
+        pen = true;
+      }
+    }
+    const on = a.id === hover;
+    ctx.setLineDash(a.role === 'guide' ? [6, 4] : []);
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.45)';
+    ctx.lineWidth = on ? 4 : 3;
+    ctx.stroke();
+    ctx.strokeStyle = on ? ACCENT : a.role === 'guide' ? 'rgba(235, 232, 240, 0.85)' : `rgba(${a.color.r}, ${a.color.g}, ${a.color.b}, 0.8)`;
+    ctx.lineWidth = on ? 2 : 1.2;
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** An object shown as its shape: a flat area of its thread color. */
+export interface FlatArea {
+  form: Form;
+  color: { r: number; g: number; b: number };
+  alpha: number;
+}
+
+/** Objects as flat areas of their thread color, in sewing order, with a thin darker edge. */
+export function drawAreas(ctx: CanvasRenderingContext2D, vp: Viewport, areas: FlatArea[]): void {
+  const S = (p: Pt) => vp.toScreen(p[0], p[1]);
+  ctx.save();
+  ctx.lineJoin = 'round';
+  for (const a of areas) {
+    if (a.alpha <= 0) continue;
+    ctx.beginPath();
+    for (const p of a.form.paths) {
+      if (!p.nodes.length) continue;
+      ctx.moveTo(...S(p.nodes[0].p));
+      for (let k = 0; k < segments(p); k++) {
+        const [, b, c, e] = segment(p, k);
+        ctx.bezierCurveTo(...S(b), ...S(c), ...S(e));
+      }
+      ctx.closePath();
+    }
+    ctx.globalAlpha = a.alpha;
+    ctx.fillStyle = `rgb(${a.color.r}, ${a.color.g}, ${a.color.b})`;
+    ctx.fill(a.form.nonzero ? 'nonzero' : 'evenodd');
+    ctx.strokeStyle = `rgb(${Math.round(a.color.r * 0.6)}, ${Math.round(a.color.g * 0.6)}, ${Math.round(a.color.b * 0.6)})`;
+    ctx.lineWidth = 1;
+    ctx.stroke();
   }
   ctx.restore();
 }

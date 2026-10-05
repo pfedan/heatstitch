@@ -3,6 +3,7 @@ import type { Form } from '../shape/path';
 import { build, recs, type Rec } from './jumps';
 import { rememberObjects, sewObjects } from './objects';
 import { reorder } from './order';
+import { stitchesBefore } from './transform';
 import { COLOR_CHANGE, END, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
 import { rememberShapes } from './restitch';
 
@@ -37,51 +38,51 @@ function body(p: Pattern): Rec[] {
 export function addShape(p: Pattern, shape: NewShape, color: ThreadColor, after: number | null, options: DigitizeOptions): Added | null {
   const d = digitizeShapes([{ color: 0, ...shape }], [color], options, { w: 0, h: 0 }, false, 'shape');
   if (!d.objects.length || !stitches(d.pattern)) return null;
+  const r = insertObject(p, body(d.pattern), d.pattern.colors[0], after, options.trimMm);
+  if (!r) return null;
+  rememberShapes(r.pattern, sewObjects(r.pattern), [r.start], [d.objects[0].shape], [d.objects[0]]);
+  return r;
+}
+
+const same = (a: ThreadColor, b: ThreadColor) => a.r === b.r && a.g === b.g && a.b === b.b;
+
+/**
+ * Stitches `records` (one object, from its first stitch on) sewn into `p` in `color`: right after
+ * object `after` (-1: before all others; null: at the end), in the thread of a neighbour of the
+ * same color, else as a color of its own. Null when it did not come out as one object.
+ */
+export function insertObject(p: Pattern, records: Rec[], color: ThreadColor, after: number | null, trimMm: number): Added | null {
   const before = stitches(p);
   let joined: Pattern;
-  if (!before) joined = d.pattern;
+  if (!before) joined = build({ ...p, colors: [color] }, [...records, { ...records[records.length - 1], cmd: END }]);
   else {
     const out = body(p);
     const last = out[out.length - 1];
     // Its own color block at the end first; reorder moves it where it belongs.
-    out.push({ x: last.x, y: last.y, cmd: TRIM }, { x: last.x, y: last.y, cmd: COLOR_CHANGE }, ...body(d.pattern));
+    out.push({ x: last.x, y: last.y, cmd: TRIM }, { x: last.x, y: last.y, cmd: COLOR_CHANGE }, ...records);
     const end = out[out.length - 1];
     out.push({ x: end.x, y: end.y, cmd: END });
-    joined = build({ ...p, colors: [...p.colors, ...d.pattern.colors] }, out);
+    joined = build({ ...p, colors: [...p.colors, color] }, out);
   }
   const total = stitches(joined);
   // The objects as they were, and the new one as one object.
   const objsBefore = before ? sewObjects(p) : [];
-  const startsBefore = objsBefore.map((o) => {
-    let n = 0;
-    for (let i = 0; i < o.first; i++) if (p.cmd[i] === STITCH) n++;
-    return n;
-  });
+  const startsBefore = objsBefore.map((o) => stitchesBefore(p, o.first));
   rememberObjects(joined, [...startsBefore, before], total);
-  let objs = sewObjects(joined);
-  const mine = objs.findIndex((o) => {
-    let n = 0;
-    for (let i = 0; i < o.first; i++) if (joined.cmd[i] === STITCH) n++;
-    return n === before;
-  });
+  const objs = sewObjects(joined);
+  const mine = objs.findIndex((o) => stitchesBefore(joined, o.first) === before);
   if (mine < 0) return null;
-  let result = joined;
-  let start = before;
-  if (after !== null && objs[after] && after !== mine - 1) {
-    const order = objs.map((o) => o.index).filter((i) => i !== mine);
-    order.splice(order.indexOf(after) + 1, 0, mine);
-    const starts: number[] = [];
-    result = reorder(joined, objs, order, options.trimMm, starts, { into: new Map([[mine, objs[after].block]]) });
-    rememberObjects(result, starts);
-    start = starts[order.indexOf(mine)];
-  } else if (after !== null && objs[after] && objs[after].block !== objs[mine].block) {
-    // Right after `after` already, but in its own block: into that thread.
-    const starts: number[] = [];
-    result = reorder(joined, objs, objs.map((o) => o.index), options.trimMm, starts, { into: new Map([[mine, objs[after].block]]) });
-    rememberObjects(result, starts);
-    start = starts[mine];
-  }
-  objs = sewObjects(result);
-  rememberShapes(result, objs, [start], [d.objects[0].shape], [d.objects[0]]);
-  return { pattern: result, start };
+  if (after === null || !objsBefore.length) return { pattern: joined, start: before };
+  const at = Math.max(-1, Math.min(after, mine - 1));
+  const prev = objs[at];
+  const next = objs[at + 1] !== objs[mine] ? objs[at + 1] : undefined;
+  // Into the thread of a neighbour of the same color.
+  const host = prev && same(prev.color, color) ? prev : next && same(next.color, color) ? next : null;
+  if (at === mine - 1 && (!host || host.block === objs[mine].block)) return { pattern: joined, start: before };
+  const order = objs.map((o) => o.index).filter((i) => i !== mine);
+  order.splice(at + 1, 0, mine);
+  const starts: number[] = [];
+  const result = reorder(joined, objs, order, trimMm, starts, host ? { into: new Map([[mine, host.block]]) } : {});
+  rememberObjects(result, starts);
+  return { pattern: result, start: starts[order.indexOf(mine)] };
 }

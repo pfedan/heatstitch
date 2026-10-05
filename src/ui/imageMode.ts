@@ -1,8 +1,10 @@
 import { ImageClient } from '../digitize/client';
-import { digitizeDefaults, type DigitizeOptions, type Digitized } from '../digitize/digitize';
+import { digitizeDefaults, shapesOrigin, type DigitizeOptions, type Digitized } from '../digitize/digitize';
 import { formatNumber, t, type Key } from '../i18n';
 import { nearestThread, NONE, workingSize, type ColorEdit, type PrepareOptions, type ExactLabels, type Prepared, type Stroke } from '../image/prepare';
-import { readSvg, type SvgDesign } from '../image/svg';
+import { readSvg, type SvgDesign, type SvgShape } from '../image/svg';
+import { transformForm, type Form } from '../shape/path';
+import { rasterize } from '../shape/rasterize';
 import type { Raster } from '../image/raster';
 import { rgbToLab, type Rgb } from '../image/color';
 import { patternStats, type Pattern, type ThreadColor } from '../model/pattern';
@@ -120,7 +122,45 @@ function threadsFor(colors: Rgb[], brother: boolean): { threads: ThreadColor[]; 
  * shapes at their size in the file, the stitch settings of the material. A worker of its own runs
  * it, so an image open in the Bild mode stays as it is.
  */
-export async function digitizeSvg(file: File, prepare: PrepareOptions, options: DigitizeOptions): Promise<Digitized> {
+/** A shape of a file that is not sewn when it comes in (a background), with its thread. */
+export interface LeftOut {
+  form: Form;
+  color: ThreadColor;
+  reason: 'background';
+}
+
+/** Share of the whole design a background covers, and how fully it fills its own box. */
+const BACKGROUND_COVER = 0.9;
+const BACKGROUND_SOLID = 0.9;
+
+/**
+ * The shape at the very back when it is a background: a fill under everything else that covers
+ * nearly the whole design and is (nearly) a plain rectangle, as many drawing programs export.
+ * Sewing it would put a dense, stiff area under the whole design. -1 when there is none.
+ */
+export function backgroundOf(shapes: SvgShape[]): number {
+  if (shapes.length < 2 || shapes[0].kind !== 'fill') return -1;
+  const box = (f: Form) => {
+    const pts = f.paths.flatMap((p) => p.nodes.map((n) => n.p));
+    const xs = pts.map((q) => q[0]);
+    const ys = pts.map((q) => q[1]);
+    return { minX: Math.min(...xs), minY: Math.min(...ys), maxX: Math.max(...xs), maxY: Math.max(...ys) };
+  };
+  const all = shapes.map((s) => box(s.form));
+  const total = {
+    minX: Math.min(...all.map((b) => b.minX)),
+    minY: Math.min(...all.map((b) => b.minY)),
+    maxX: Math.max(...all.map((b) => b.maxX)),
+    maxY: Math.max(...all.map((b) => b.maxY)),
+  };
+  const size = (b: typeof total) => Math.max(0, b.maxX - b.minX) * Math.max(0, b.maxY - b.minY);
+  const own = all[0];
+  if (size(own) < BACKGROUND_COVER * size(total)) return -1;
+  const area = rasterize(shapes[0].form, 0.5)?.areaMm2 ?? 0;
+  return area >= BACKGROUND_SOLID * size(own) ? 0 : -1;
+}
+
+export async function digitizeSvg(file: File, prepare: PrepareOptions, options: DigitizeOptions): Promise<Digitized & { leftOut?: LeftOut[] }> {
   const vector = await decodeSvg(file);
   if (!vector) throw new Error('not an SVG of shapes');
   const { canvas, svg } = vector;
@@ -131,11 +171,20 @@ export async function digitizeSvg(file: File, prepare: PrepareOptions, options: 
     await client.load({ width: data.width, height: data.height, data: data.data });
     const name = file.name.replace(/\.[^.]+$/, '');
     // A file of plain shapes is sewn shape by shape, each whole; the rest goes the way of pictures.
-    const shapes = svg.shapes(widthMm);
-    if (shapes?.length) {
+    const all = svg.shapes(widthMm);
+    if (all?.length) {
       const { threads, index } = threadsFor(svg.colors, prepare.threads);
+      // A background is kept aside, not sewn (it can be sewn from the list "Not sewn").
+      const bg = backgroundOf(all);
+      const shapes = bg >= 0 ? all.filter((_, k) => k !== bg) : all;
       const mapped = shapes.map((s) => ({ ...s, color: index[s.color] }));
-      return await client.digitizeShapes(mapped, threads, options, { w: widthMm, h: widthMm * svg.aspect }, false, name);
+      const size = { w: widthMm, h: widthMm * svg.aspect };
+      const d = await client.digitizeShapes(mapped, threads, options, size, false, name);
+      if (bg < 0) return d;
+      const [cx, cy] = shapesOrigin(size);
+      // Its threads are only those of the shapes sewn; the background keeps its own color.
+      const color = threadsFor([svg.colors[all[bg].color]], prepare.threads).threads[0];
+      return { ...d, leftOut: [{ form: transformForm(all[bg].form, [1, 0, 0, 1, -cx, -cy]), color, reason: 'background' }] };
     }
     const { w, h, pxMm } = workingSize(widthMm, canvas.width, canvas.height);
     const exact = await svg.labels(w, h, pxMm);

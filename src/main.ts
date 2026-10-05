@@ -68,8 +68,11 @@ import { ShapeTool } from './ui/shapeTool';
 import { DrawTool, type DrawKind } from './ui/drawTool';
 import { nearestThread } from './image/prepare';
 import { rgbToLab } from './image/color';
-import { drawDrawing } from './render/shapeOverlay';
+import { drawAside, drawDrawing, type FlatArea } from './render/shapeOverlay';
+import { AsidePanel } from './ui/asidePanel';
+import type { LeftOut } from './ui/imageMode';
 import { addShape, type NewShape } from './model/addShape';
+import { asideOf, dropAside, sewAgain, setAside, setAsideRole, storeAside, type AsideRole, type AsideShape } from './model/aside';
 import { deleteObjects, duplicateObject, mirrorMatrix, subtractTop, unionForm } from './model/shapeOps';
 import { stitchesBefore } from './model/transform';
 import { FrameTool } from './ui/frameTool';
@@ -370,13 +373,47 @@ function styleFor(p: Pattern): StitchStyle {
   return { rgb, alpha: alphaCache.a, limit, carried };
 }
 
+/** Fills with a known shape, per pattern: drawn as flat areas in the view "Shapes instead of stitches". */
+const shapeCache = new WeakMap<Pattern, { o: SewObject; form: Form }[]>();
+function shapesOf(p: Pattern): { o: SewObject; form: Form }[] {
+  let list = shapeCache.get(p);
+  if (!list) {
+    const q = seq(p);
+    list = [];
+    for (const o of q.objects) {
+      if (o.kind !== 'fill') continue;
+      const form = formOf(p, o, q.kinds);
+      if (form?.paths.some((x) => x.closed)) list.push({ o, form });
+    }
+    shapeCache.set(p, list);
+  }
+  return list;
+}
+
+let flatAlpha: { from: Float32Array; a: Float32Array } | null = null;
+
+/** The style with the stitches of objects shown as areas left out, and those areas. */
+function asAreas(p: Pattern, style: StitchStyle): { style: StitchStyle; areas: FlatArea[] } {
+  const list = shapesOf(p);
+  if (flatAlpha?.from !== style.alpha) {
+    const a = style.alpha.slice();
+    for (const { o } of list) a.fill(0, o.first, o.last + 1);
+    flatAlpha = { from: style.alpha, a };
+  }
+  const areas = list.filter(({ o }) => o.first <= style.limit).map(({ o, form }) => ({ form, color: o.color, alpha: style.alpha[o.first] }));
+  return { style: { ...style, alpha: flatAlpha.a }, areas };
+}
+
 function flowScene(): FlowScene | null {
   const p = flowPreview ?? files.active?.pattern;
   if (settings.mode !== 'flow' || !p) return null;
   const q = seq(p);
-  const style = styleFor(p);
+  const plain = styleFor(p);
+  const flat = settings.shapesView ? asAreas(p, plain) : null;
+  const style = flat?.style ?? plain;
   return {
     style,
+    areas: flat?.areas ?? null,
     markers: q.markers,
     hover: hoverJump !== null ? (q.transitions[hoverJump] ?? null) : null,
     selected: selectedJump !== null ? (q.transitions[selectedJump] ?? null) : null,
@@ -657,6 +694,7 @@ const objectPanel = new ObjectPanel({
   mirror: (axis) => mirrorSelected(axis),
   subtract: () => subtractSelected(),
   remove: () => deleteSelected(),
+  aside: (role) => putAside(role),
   split: splitSelected,
   step: (dir) => {
     const p = files.active?.pattern;
@@ -1222,6 +1260,55 @@ function subtractSelected(): void {
   layers.say([list ? t('object.subtracted', { list }) : '', r.covered ? t('object.subtracted.covered') : ''].filter(Boolean).join(' '));
 }
 
+// Shapes not sewn: switched off or guides ---------------------------------------
+
+/** Shape aside hovered in its list, shown on the canvas. */
+let hoverAside: number | null = null;
+let asideShown: AsideShape[] | null = null;
+
+const asidePanel = new AsidePanel({
+  sew: (id) => {
+    const p = files.active?.pattern;
+    if (!p) return;
+    const r = sewAgain(p, id, { ...digitizeDefaults(settings.profile), trimMm: settings.trimMm });
+    if (!r) return layers.say(t('aside.failed'), true);
+    const mine = seq(r.pattern).objects.findIndex((o) => stitchesBefore(r.pattern, o.first) === r.start);
+    hoverAside = null;
+    takeShapes(r.pattern, mine >= 0 ? [mine] : []);
+    layers.say(t('aside.done.sewn'));
+  },
+  role: (id, role) => {
+    const p = files.active?.pattern;
+    const next = p && setAsideRole(p, id, role);
+    if (next) applyEdit(next);
+  },
+  drop: (id) => {
+    const p = files.active?.pattern;
+    const next = p && dropAside(p, id);
+    if (!next) return;
+    hoverAside = null;
+    applyEdit(next);
+    layers.say(t('aside.done.dropped'));
+  },
+  hover: (id) => {
+    if (hoverAside === id) return;
+    hoverAside = id;
+    redraw();
+  },
+});
+
+/** The selected objects kept, but not sewn. */
+function putAside(role: AsideRole): void {
+  const p = files.active?.pattern;
+  const sel = frameObjects();
+  if (!p || !sel.length) return;
+  const next = setAside(p, sel, role, settings.trimMm);
+  if (!next) return layers.say(t('aside.last'), true);
+  takeShapes(next, []);
+  const one = sel.length === 1;
+  layers.say(role === 'guide' ? (one ? t('aside.done.guide') : t('aside.done.guideMany', { n: sel.length })) : one ? t('aside.done.off') : t('aside.done.offMany', { n: sel.length }));
+}
+
 // Drawing new shapes ---------------------------------------------------------
 
 /** A thread for the first shape of a new design: a Brother orange, clear on dark and light fabric. */
@@ -1661,6 +1748,12 @@ function redraw(): void {
     syncShape();
     syncFrame();
     drawScene(ctx, stageW, stageH, scene(), stageBg());
+    const aside = settings.mode === 'flow' ? asideOf(files.active?.pattern) : [];
+    if (aside.length) drawAside(ctx, vp, aside, hoverAside);
+    if (asideShown !== aside) {
+      asideShown = aside;
+      asidePanel.update(aside);
+    }
     if (drawTool.preview && settings.mode === 'flow')
       drawDrawing(ctx, vp, drawTool.preview, { nodes: drawTool.kind === 'pen' ? drawTool.count : 0, closing: drawTool.closing, size: drawTool.size });
     if (showCompare()) {
@@ -2056,13 +2149,16 @@ const imageMode = new ImageMode({
  * Adds stitches made from an image to the file list, with the objects as the Image mode sewed them
  * (it trims inside some, between pieces of a fill) and the exact areas of its fills.
  */
-async function addDigitized(d: Digitized, name: string): Promise<void> {
+async function addDigitized(d: Digitized & { leftOut?: LeftOut[] }, name: string): Promise<void> {
   const data = writePattern(d.pattern, 'pes');
   const added = parsePattern(data, `${name}.pes`);
   rememberObjects(added, d.starts);
   const objs = sewObjects(added);
   rememberShapes(added, objs, d.starts, d.objects.map((o) => o.shape), d.objects);
-  await files.addWithObjects(`${name}.pes`, data.slice().buffer, rememberedIn(added, objs));
+  // Shapes left out on the way in wait under "Not sewn", where it was: at the very back.
+  const aside: AsideShape[] = (d.leftOut ?? []).map((s, k) => ({ id: k + 1, role: 'off', kind: 'fill', color: s.color, after: -1, form: s.form, reason: s.reason }));
+  await files.addWithObjects(`${name}.pes`, data.slice().buffer, rememberedIn(added, objs), storeAside(aside));
+  if (aside.some((a) => a.reason === 'background')) layers.say(t('aside.backgroundFound'));
 }
 
 // Living thread: the light of the realistic view follows the pointer or the tilt of a phone -------
@@ -2130,6 +2226,8 @@ langSelect.addEventListener('change', () => {
   settings.lang = langSelect.value as Lang;
   saveSettings(settings);
   applyLang(settings.lang);
+  asideShown = null;
+  redraw();
 });
 applyLang(detectLang(settings.lang));
 applyI18n(document.body);
@@ -2214,6 +2312,7 @@ function currentProject(): Project {
       ...(FileList.edited(f) ? { working: toStored(f.pattern!) } : {}),
       acks: f.acks,
       objects: rememberedIn(f.pattern!, seq(f.pattern!).objects),
+      ...(asideOf(f.pattern).length ? { aside: storeAside(asideOf(f.pattern)) } : {}),
     })),
     active: active >= 0 ? active : null,
     image: snap && { name: snap.image.name, type: snap.image.type, data: new Uint8Array(snap.image.data), work: snap.work },

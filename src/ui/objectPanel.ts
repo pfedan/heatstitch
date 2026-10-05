@@ -58,6 +58,8 @@ export interface ObjectHooks {
   subtract: () => void;
   /** The selected objects deleted. */
   remove: () => void;
+  /** The selected objects kept but not sewn: switched off, or as guides. */
+  aside: (role: 'off' | 'guide') => void;
 }
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -71,6 +73,8 @@ const SHAPE_ICONS = {
   mirrorY: icon('<path d="M1.5 8h13" stroke-dasharray="1.5 1.5"/><path d="M4 6l8-4v4zM4 10l8 4v-4z"/>'),
   subtract: icon('<path d="M2.5 2.5h8v3.2a4.5 4.5 0 0 0-4.8 4.8H2.5z"/><circle cx="10" cy="10" r="3.5" stroke-dasharray="1.5 1.5"/>'),
   remove: icon('<path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.7 9h5.6l.7-9"/>'),
+  off: icon('<path d="M11.5 1.5L4.5 14.5"/><ellipse cx="10.6" cy="3.2" rx="0.5" ry="1"/><path d="M2 2l12 12"/>'),
+  guide: icon('<path d="M2 13L14 3" stroke-dasharray="2.4 2"/>'),
 };
 
 const REVERSE_ICON =
@@ -187,7 +191,11 @@ export class ObjectPanel {
       if (info.subtractable) add(SHAPE_ICONS.subtract, t('object.subtract'), t('object.subtract.hint'), () => this.hooks.subtract());
       add(SHAPE_ICONS.mirrorX, t('object.mirrorX'), t('object.mirrorX'), () => this.hooks.mirror('x'));
       add(SHAPE_ICONS.mirrorY, t('object.mirrorY'), t('object.mirrorY'), () => this.hooks.mirror('y'));
-      if (info.objects.length > sel.length) add(SHAPE_ICONS.remove, t('object.delete'), t('object.delete.hint'), () => this.hooks.remove());
+      if (info.objects.length > sel.length) {
+        add(SHAPE_ICONS.off, t('object.off'), t('object.off.hint'), () => this.hooks.aside('off'));
+        add(SHAPE_ICONS.guide, t('object.guide'), t('object.guide.hint'), () => this.hooks.aside('guide'));
+        add(SHAPE_ICONS.remove, t('object.delete'), t('object.delete.hint'), () => this.hooks.remove());
+      }
       extraRows.push(shapeRow);
     }
     const handNote =

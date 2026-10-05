@@ -678,10 +678,14 @@ const SPECK_MM2 = 0.3;
  * shows between). A shape joins an earlier color block of its thread when no shape painted in
  * between touches it, which saves color changes without changing what lies on top.
  */
+/** Where the middle of a design of `sizeMm` lands in pattern coordinates: at 0, on the pixel grid. */
+export function shapesOrigin(sizeMm: { w: number; h: number }, pxMm = 0.1): [number, number] {
+  return [Math.round(sizeMm.w / 2 / pxMm) * pxMm, Math.round(sizeMm.h / 2 / pxMm) * pxMm];
+}
+
 export function digitizeShapes(shapes: ShapeInput[], threads: ThreadColor[], o: DigitizeOptions, sizeMm: { w: number; h: number }, knockout: boolean, name = 'image', pxMm = 0.1): Digitized {
   // Pattern coordinates: the middle of the design at 0, on the pixel grid.
-  const cx = Math.round(sizeMm.w / 2 / pxMm) * pxMm;
-  const cy = Math.round(sizeMm.h / 2 / pxMm) * pxMm;
+  const [cx, cy] = shapesOrigin(sizeMm, pxMm);
   const items: { sh: ShapeInput; form: Form; whole: Region }[] = [];
   for (const sh of shapes) {
     const form = transformForm(sh.form, [1, 0, 0, 1, -cx, -cy]);
