@@ -3,6 +3,7 @@ import { formatNumber, t, type Key } from '../i18n';
 import { FILL, RUNNING, SATIN, TIE_STITCH } from '../model/sequence';
 import { KIND_COLORS, LENGTH_COLORS, LONG_MM, MAX_MM, ORDER_CSS } from '../render/flow';
 import type { ColorBy, Marks, Settings } from '../settings';
+import { FABRICS } from '../validation/profiles';
 import { SHORT_STITCH_MM } from '../validation/thresholds';
 
 /** 'density' needs a recompute in the worker, 'style' new stitch colors, 'render' only a redraw. */
@@ -38,7 +39,7 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
   const shapesView = $<HTMLInputElement>('shapes-view');
   const threadWidth = $<HTMLInputElement>('thread-width');
   const liveLight = $<HTMLInputElement>('live-light');
-  const fabricLook = $<HTMLInputElement>('fabric-look');
+  const fabricLook = $<HTMLSelectElement>('fabric-look');
   const spm = $<HTMLSelectElement>('machine-spm');
   const key = $<HTMLElement>('color-key');
   const stage = $<HTMLElement>('stage');
@@ -131,9 +132,12 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
     threadWidth.disabled = !s.realistic;
     liveLight.checked = s.liveLight;
     liveLight.disabled = !s.realistic;
-    fabricLook.checked = s.fabricLook;
+    fabricLook.replaceChildren(
+      new Option(t('controls.fabric.flat'), 'flat'),
+      ...FABRICS.map((f) => new Option(t(`fabric.${f.id}` as Key), f.id)),
+    );
+    fabricLook.value = s.fabricLook ? s.profile.fabric : 'flat';
     fabricLook.disabled = !s.realistic;
-    $('fabric-out').textContent = `(${t(`fabric.${s.profile.fabric}` as Key)})`;
     spm.value = String(s.machineSpm);
     $('cell-out').textContent = `${formatNumber(s.cellMm, 2)} mm`;
     $('blur-out').textContent = s.blurMm > 0 ? `${formatNumber(s.blurMm, 1)} mm` : t('controls.off');
@@ -184,7 +188,18 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
   on(shapesView, 'change', () => ((s.shapesView = shapesView.checked), 'render'));
   on(threadWidth, 'input', () => ((s.threadMm = Number(threadWidth.value)), 'render'));
   on(liveLight, 'change', () => ((s.liveLight = liveLight.checked), 'render'));
-  on(fabricLook, 'change', () => ((s.fabricLook = fabricLook.checked), 'render'));
+  fabricLook.addEventListener('change', () => {
+    s.fabricLook = fabricLook.value !== 'flat';
+    if (s.fabricLook && fabricLook.value !== s.profile.fabric) {
+      // The fabric shown is the material of the profile: picking one here switches the profile (and so
+      // the checks and stitch defaults) just like the picker in the Dichte mode.
+      const profileFabric = $<HTMLSelectElement>('fabric');
+      profileFabric.value = fabricLook.value;
+      profileFabric.dispatchEvent(new Event('change'));
+    }
+    refresh();
+    onChange('render');
+  });
   on(spm, 'change', () => ((s.machineSpm = Number(spm.value)), 'render'));
 
   // Collapsible sidebar sections remember whether they are open.

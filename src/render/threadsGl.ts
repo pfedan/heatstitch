@@ -65,7 +65,17 @@ uniform float u_halfw;
 // Below half a pixel the thread stays one pixel wide and fades instead, so thin threads still read as thin.
 uniform float u_thin;
 uniform vec2 u_light;
+// Strength of the sheen (1 as before) and of the single fibers in the yarn (0 none).
+uniform float u_gloss;
+uniform float u_fibers;
 out vec4 o;
+
+float hash2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float noise(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  vec2 w = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash2(i), hash2(i + vec2(1, 0)), w.x), mix(hash2(i + vec2(0, 1)), hash2(i + vec2(1, 1)), w.x), w.y);
+}
 
 vec3 toLinear(vec3 c) { return pow(c, vec3(2.2)); }
 vec3 toSrgb(vec3 c) { return pow(clamp(c, 0.0, 1.0), vec3(1.0 / 2.2)); }
@@ -89,7 +99,9 @@ void main() {
   vec2 q = vec2(t - tc, a);
   float d = length(q);
   float aa = 0.75;
-  float cover = 1.0 - smoothstep(hw - aa, hw + aa, d);
+  // Fiber ends stick out a little from the edge of a spun thread.
+  float fuzz = u_fibers * smoothstep(3.0, 8.0, hw) * hw * 0.1 * (noise(vec2(t / hw * 2.5, v_color.a * 50.0 + sign(a) * 9.0)) - 0.5);
+  float cover = 1.0 - smoothstep(hw + fuzz - aa, hw + fuzz + aa, d);
   if (cover <= 0.0) discard;
 
   // Normal of the round thread in screen space (x right, y down, z towards the viewer).
@@ -119,6 +131,11 @@ void main() {
   vec3 H = normalize(L + V);
 
   vec3 base = toLinear(v_color.rgb) * (0.94 + 0.12 * fract(seed * 13.7));
+  // Single fibers: fine streaks along the twist, some lighter, some darker, each catching the light on its own.
+  float fiberVis = u_fibers * smoothstep(3.0, 9.0, hw);
+  float fq = a / hw + (t / hw) * 0.55 * twistVis;
+  float fib = noise(vec2(fq * 11.0 + seed * 50.0, t / hw * 0.7)) * 0.65 + noise(vec2(fq * 23.0 + seed * 17.0, t / hw * 1.3)) * 0.35;
+  base *= 1.0 + fiberVis * 0.8 * (fib - 0.5);
   float ndl = max(dot(N, L), 0.0);
   // Edges roll into the fabric and the neighbours, so they get less ambient light.
   float occl = mix(0.35, 1.0, smoothstep(0.0, 0.75, N.z));
@@ -126,9 +143,9 @@ void main() {
 
   float th = dot(T, H);
   float sinTH = sqrt(max(1.0 - th * th, 0.0));
-  float spec1 = pow(sinTH, 90.0) * 0.32;
-  float spec2 = pow(sinTH, 14.0) * 0.12;
-  float specMask = smoothstep(0.0, 0.25, N.z) * groove;
+  float spec1 = pow(sinTH, 90.0) * 0.32 * u_gloss;
+  float spec2 = pow(sinTH, 14.0) * 0.12 * mix(1.0, u_gloss, 0.5);
+  float specMask = smoothstep(0.0, 0.25, N.z) * groove * mix(1.0, smoothstep(0.25, 0.75, fib) * 1.6, fiberVis);
   col += (mix(base, vec3(1.0), 0.6) * spec1 + base * spec2 * 2.0) * specMask;
 
   // Far out the shading is smaller than a pixel: fade to the plain thread color to avoid shimmer.
@@ -232,7 +249,7 @@ export class GlThreadRenderer {
     this.gl = gl;
     const prog = (this.prog = compile(gl, THREAD_VS, THREAD_FS));
     this.u = Object.fromEntries(
-      ['u_scale', 'u_offset', 'u_res', 'u_halfw', 'u_thin', 'u_light'].map((n) => [n, gl.getUniformLocation(prog, n)]),
+      ['u_scale', 'u_offset', 'u_res', 'u_halfw', 'u_thin', 'u_light', 'u_gloss', 'u_fibers'].map((n) => [n, gl.getUniformLocation(prog, n)]),
     );
 
     this.vao = gl.createVertexArray()!;
@@ -307,6 +324,10 @@ export class GlThreadRenderer {
     gl.uniform1f(this.u.u_halfw, Math.max(0.5, hw));
     gl.uniform1f(this.u.u_thin, Math.min(1, hw / 0.5));
     gl.uniform2f(this.u.u_light, ...lightDir());
+    // TEMP: look variants for choosing (screenshot series); removed once one is picked.
+    const look = (globalThis as { __threadLook?: [number, number] }).__threadLook ?? [1, 0];
+    gl.uniform1f(this.u.u_gloss, look[0]);
+    gl.uniform1f(this.u.u_fibers, look[1]);
     gl.bindVertexArray(this.vao);
     gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, count * 2);
     gl.bindVertexArray(null);
