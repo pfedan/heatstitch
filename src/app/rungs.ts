@@ -8,7 +8,7 @@ import type { Settings } from '../settings';
 import type { StitchInfo, StitchPanel } from '../ui/stitchPanel';
 import { RungTool } from '../ui/rungTool';
 import { outline } from '../digitize/region';
-import { railsFromOutline } from '../digitize/rungs';
+import { railsFromOutline, stripsOfOutline } from '../digitize/rungs';
 import { t, type Key } from '../i18n';
 import { type Rails, analyze, remembered, keepShape, remember, restitch, measureSatin, forget, type RestitchResult, type Settings as RestitchSettings } from '../model/restitch';
 import { ui } from './state';
@@ -91,7 +91,7 @@ export function bindRungs(app: RungsApp) {
       const here = on && rungTool.mode === 'satin' ? rungTool.spacingHere : undefined;
       out.direction = { tool: on && rungTool.mode === 'satin', rungs, single, cuts, cutMode: rungTool.cutMode, ...(here !== undefined ? { spacingHere: here } : {}) };
     }
-    if (info.measured.fill && !info.measured.satin) out.draw = { tool: on && rungTool.mode === 'fill', lines: on ? rungTool.lines.length : 0, single };
+    if (info.measured.fill && !info.measured.satin) out.draw = { tool: on && rungTool.mode === 'fill', lines: on ? rungTool.lines.length : 0, single, cuts: on ? rungTool.cutLines.length : 0, cutMode: rungTool.cutMode };
     if (info.measured.fill) out.guide = { tool: on && rungTool.mode === 'guide', single };
     return out;
   }
@@ -240,13 +240,25 @@ export function bindRungs(app: RungsApp) {
     if (!area) return;
     const loops = outline(area);
     const loop = loops.reduce((a, b) => (b.length > a.length ? b : a), [] as [number, number][]) as Pt[];
-    const rails = railsFromOutline(loop, rungTool.lines);
-    if (!rails) return app.layers.say(t('stitch.draw.notStrip'), true);
+    let columns: Rails[];
+    if (rungTool.cutLines.length) {
+      // Cut into parts: each its own column, sewn on one into the next without a trim.
+      const made = stripsOfOutline(loop, rungTool.lines, rungTool.cutLines);
+      if (made.bad >= 0) {
+        rungTool.showBad(made.parts[made.bad]);
+        return app.layers.say(t('stitch.draw.notStripPart'), true);
+      }
+      columns = made.strips.map((r) => ({ ...r, chain: 0 }));
+    } else {
+      const rails = railsFromOutline(loop, rungTool.lines);
+      if (!rails) return app.layers.say(t('stitch.draw.notStrip'), true);
+      columns = [rails];
+    }
     const s = app.convertSettings('satin', app.stitchInfo(p, q));
     if (!s) return;
     const o = ui.rungObject;
     closeRungs();
-    const r = restitch(p, q.objects, [o], s, q.kinds, app.settings.trimMm, 'fill', false, new Map([[o, [rails]]]));
+    const r = restitch(p, q.objects, [o], s, q.kinds, app.settings.trimMm, 'fill', false, new Map([[o, columns]]));
     app.applyRestitched(r, 'stitch.toSatin.failed', true);
   }
 

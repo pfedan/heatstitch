@@ -59,7 +59,7 @@ export interface StitchInfo {
     spacingHere?: number | null;
   };
   /** Rungs drawn across the one selected fill to sew it as satin. */
-  draw?: { tool: boolean; lines: number; single: boolean };
+  draw?: { tool: boolean; lines: number; single: boolean; cuts?: number; cutMode?: boolean };
   /** Guide lines of the one selected fill: whether their tool is on. */
   guide?: { tool: boolean; single: boolean };
   /**
@@ -870,7 +870,7 @@ export class StitchPanel {
     return wrap;
   }
 
-  /** What a line drawn across the satin makes: a rung or a cut line. */
+  /** What a line drawn across the satin or the fill makes: a rung or a cut line. */
   private penSwitch(cut: boolean): HTMLElement {
     const l = Object.assign(document.createElement('div'), { className: 'pen-switch' });
     const row = document.createElement('div');
@@ -941,14 +941,15 @@ export class StitchPanel {
     if (!d.tool) row.append(this.button('stitch.draw', 'stitch.draw.hint', () => this.hooks.draw('tool')));
     else {
       row.append(
-        this.button('stitch.draw.sew', 'stitch.draw.hint', () => this.hooks.draw('sew'), true, d.lines < 2),
+        this.button('stitch.draw.sew', 'stitch.draw.hint', () => this.hooks.draw('sew'), true, d.lines < (d.cuts ? 1 : 2)),
         this.button('stitch.draw.cancel', 'stitch.draw.hint', () => this.hooks.draw('tool')),
       );
     }
     wrap.append(row);
     if (d.tool) {
       wrap.append(
-        Object.assign(document.createElement('span'), { className: 'small', textContent: t('stitch.draw.count', { n: d.lines }) }),
+        this.penSwitch(!!d.cutMode),
+        Object.assign(document.createElement('span'), { className: 'small', textContent: t('stitch.draw.count', { n: d.lines }) + (d.cuts ? ' ' + t('stitch.draw.parts', { n: d.cuts + 1 }) : '') }),
         Object.assign(document.createElement('span'), { className: 'muted small', textContent: t('stitch.draw.help') }),
       );
     }

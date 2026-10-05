@@ -134,5 +134,6 @@ function mapRails(m: Parameters<typeof mapPts>[0], s: number, c: Rails): Rails {
     ...(c.cuts ? { cuts: c.cuts.map(([a, b]) => [a * s, b * s] as [number, number]) } : {}),
     ...(c.spacings ? { spacings: c.spacings.map(([a, v]) => [a * s, v] as [number, number]) } : {}),
     ...(c.spans ? { spans: c.spans.map((f) => mapPts(m, f) as [Pt, Pt]) } : {}),
+    ...(c.chain !== undefined ? { chain: c.chain } : {}),
   };
 }

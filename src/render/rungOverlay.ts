@@ -96,6 +96,16 @@ export function drawRungOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, vie
   view.columns.forEach((c, k) => c.spans.forEach(([a, b], i) => rung(a, b, k, i, false, false, '', true)));
   view.columns.forEach((c, k) => c.cuts.forEach((r, i) => rung(pointAt(c.left, c.cl, r[0]), pointAt(c.right, c.cr, r[1]), k, i, false, true)));
   view.lines.forEach(([a, b], i) => rung(a, b, -1, i, false));
+  view.cutLines.forEach(([a, b], i) => rung(a, b, -1, i, false, true));
+  // The part of the fill that made no column.
+  if (view.bad) {
+    ctx.setLineDash([5, 4]);
+    path(view.bad);
+    ctx.strokeStyle = '#ff5a5a';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
   // Guide lines in the same colors.
   view.guides.forEach((g, i) => {
     const sel = same(view.selected, -1, i);

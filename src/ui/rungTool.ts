@@ -53,6 +53,10 @@ export interface RungView {
   columns: RungColumn[];
   /** Lines drawn across a fill. */
   lines: [Pt, Pt][];
+  /** Cut lines drawn across a fill: its parts become columns of their own. */
+  cutLines: [Pt, Pt][];
+  /** The part of the fill that made no column, shown until the lines change. */
+  bad: Pt[] | null;
   /** Guide lines drawn on a fill (its rows follow them). */
   guides: Pt[][];
   /** The guide line being drawn. */
@@ -92,6 +96,8 @@ export class RungTool implements RungView {
   /** Which satin part each column belongs to, to give the columns back per part. */
   private parts: number[] = [];
   lines: [Pt, Pt][] = [];
+  cutLines: [Pt, Pt][] = [];
+  bad: Pt[] | null = null;
   guides: Pt[][] = [];
   sketch: Pt[] | null = null;
   /** Pick radius of the last press, to thin the sketch. */
@@ -102,7 +108,7 @@ export class RungTool implements RungView {
   hover: RungPick | null = null;
   draft: [Pt, Pt] | null = null;
   draftCut = false;
-  /** Lines drawn across a satin are cut lines (Shift draws the other kind). */
+  /** Lines drawn across a satin or a fill are cut lines (Shift draws the other kind). */
   cutMode = false;
   private drag: Drag = null;
 
@@ -124,6 +130,8 @@ export class RungTool implements RungView {
     this.columns = [];
     this.parts = [];
     this.lines = [];
+    this.cutLines = [];
+    this.bad = null;
     this.loop = loop;
     this.selected = null;
   }
@@ -144,6 +152,8 @@ export class RungTool implements RungView {
     this.active = false;
     this.columns = [];
     this.lines = [];
+    this.cutLines = [];
+    this.bad = null;
     this.guides = [];
     this.sketch = null;
     this.selected = this.hover = null;
@@ -181,6 +191,23 @@ export class RungTool implements RungView {
     return s.cut ? c.cuts : s.span ? c.spans : c.rungs;
   }
 
+  /** The list of lines across a fill a pick is in. */
+  private fillList(s: RungPick): [Pt, Pt][] {
+    return s.cut ? this.cutLines : this.lines;
+  }
+
+  /** Shows the part of the fill that made no column. */
+  showBad(ring: Pt[]): void {
+    this.bad = ring;
+    this.hooks.redraw();
+  }
+
+  /** The lines across the fill changed. */
+  private linesChanged(): void {
+    this.bad = null;
+    this.hooks.lines();
+  }
+
   /** How many rungs set the direction (null: the stitches' own, nothing set). */
   get count(): number | null {
     if (!this.columns.some((c) => c.own)) return null;
@@ -206,6 +233,7 @@ export class RungTool implements RungView {
       if (c.cuts.length) base.cuts = c.cuts.map((r) => [r[0], r[1]] as Rung);
       if (c.spacings.length) base.spacings = c.spacings.map((r) => [r[0], r[1]] as [number, number]);
       if (c.spans.length) base.spans = c.spans.map(([a, b]) => [a, b] as [Pt, Pt]);
+      if (c.rails.chain !== undefined) base.chain = c.rails.chain;
       (out[this.parts[k]] ??= []).push(base);
     });
     return out;
@@ -236,7 +264,10 @@ export class RungTool implements RungView {
       this.columns.forEach((c, k) => c.spans.forEach(([a, b], i) => consider(k, i, a, b, false, true)));
       this.columns.forEach((c, k) => c.cuts.forEach((r, i) => consider(k, i, ...this.ends(c, r), true)));
     }
-    else if (this.mode === 'fill') this.lines.forEach(([a, b], i) => consider(-1, i, a, b));
+    else if (this.mode === 'fill') {
+      this.lines.forEach(([a, b], i) => consider(-1, i, a, b));
+      this.cutLines.forEach(([a, b], i) => consider(-1, i, a, b, true));
+    }
     else {
       this.guides.forEach((g, i) => {
         for (let k = 1; k < g.length; k++) {
@@ -304,7 +335,7 @@ export class RungTool implements RungView {
       this.sketchStep = 3 / scale;
       return 'move';
     }
-    this.drag = { kind: 'draw', cut: cut && this.mode === 'satin' };
+    this.drag = { kind: 'draw', cut };
     this.draftCut = this.drag.cut;
     this.draft = [
       [x, y],
@@ -323,7 +354,7 @@ export class RungTool implements RungView {
       if (Math.hypot(x - l[0], y - l[1]) >= this.sketchStep) this.sketch.push([x, y]);
     } else if (d.kind === 'end') {
       const { col, i, end } = d.pick;
-      if (this.mode === 'fill') this.lines[i][end as 0 | 1] = [x, y];
+      if (this.mode === 'fill') this.fillList(d.pick)[i][end as 0 | 1] = [x, y];
       else if (d.pick.span && d.loop) {
         // Slid along the section's outline, wherever it goes.
         const c = this.columns[col];
@@ -354,7 +385,7 @@ export class RungTool implements RungView {
     if (!d) return;
     if (d.kind === 'end') {
       if (this.mode === 'satin') this.hooks.change(this.result(), true);
-      else this.hooks.lines();
+      else this.linesChanged();
     } else if (d.kind === 'sketch' && this.sketch) {
       const line = simplify(this.sketch, this.sketchStep / 3);
       this.sketch = null;
@@ -368,9 +399,10 @@ export class RungTool implements RungView {
       this.draftCut = false;
       if (Math.hypot(b[0] - a[0], b[1] - a[1]) < 0.3) return this.hooks.redraw();
       if (this.mode === 'fill') {
-        this.lines.push([a, b]);
-        this.selected = { col: -1, i: this.lines.length - 1, end: -1 };
-        this.hooks.lines();
+        const list = d.cut ? this.cutLines : this.lines;
+        list.push([a, b]);
+        this.selected = { col: -1, i: list.length - 1, end: -1, ...(d.cut ? { cut: true } : {}) };
+        this.linesChanged();
       } else this.addFromLine(a, b, d.cut);
     }
     this.hooks.redraw();
@@ -484,8 +516,8 @@ export class RungTool implements RungView {
     if (!s) return false;
     this.selected = null;
     if (this.mode === 'fill') {
-      this.lines.splice(s.i, 1);
-      this.hooks.lines();
+      this.fillList(s).splice(s.i, 1);
+      this.linesChanged();
     } else if (this.mode === 'guide') {
       this.guides.splice(s.i, 1);
       this.hooks.guides(this.guides.map((g) => g.slice()));
@@ -593,7 +625,7 @@ export class RungTool implements RungView {
   /** Back to the direction of the stitches (no rungs set). */
   follow(): void {
     const out: Rails[][] = [];
-    this.columns.forEach((c, k) => (out[this.parts[k]] ??= []).push({ left: c.left, right: c.right, ...(c.cuts.length ? { cuts: c.cuts } : {}) }));
+    this.columns.forEach((c, k) => (out[this.parts[k]] ??= []).push({ left: c.left, right: c.right, ...(c.cuts.length ? { cuts: c.cuts } : {}), ...(c.rails.chain !== undefined ? { chain: c.rails.chain } : {}) }));
     this.selected = null;
     this.hooks.change(out, true);
   }
