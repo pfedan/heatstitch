@@ -4,6 +4,7 @@ import { vectorize } from '../shape/vectorize';
 import { takeOver, wholeArea } from './knockout';
 import { rememberObjects, sewObjects } from './objects';
 import { insertObject } from './addShape';
+import { syncBorders } from './border';
 import { recs } from './jumps';
 import { reorder } from './order';
 import { recolor, sameColor } from './recolor';
@@ -39,7 +40,8 @@ export function duplicateObject(p: Pattern, o: number, trimMm: number, offset = 
   const order = objs.map((x) => x.index);
   order.splice(o + 1, 0, o);
   const starts: number[] = [];
-  const doubled = reorder(p, objs, order, trimMm, starts);
+  // Trimmed off the original, so it stays an object of its own even when it starts where that ends.
+  const doubled = reorder(p, objs, order, trimMm, starts, { apart: new Set([o + 1]) });
   // The copy has the same stitches, so it remembers the same (its key is its stitches).
   rememberObjects(doubled, starts);
   const kinds = stitchKinds(doubled);
@@ -47,7 +49,9 @@ export function duplicateObject(p: Pattern, o: number, trimMm: number, offset = 
   const copy = nobjs[o + 1];
   if (!copy) return null;
   const r = transformSewObject(doubled, nobjs, copy, kinds, translation(offset, offset), trimMm);
-  return r ? { pattern: r.pattern, index: o + 1 } : null;
+  // A fill's border of its own thread is copied with it (sewn after the color block, so the copy
+  // keeps its number); a copied border becomes a line of its own.
+  return r ? { pattern: syncBorders(r.pattern, trimMm), index: o + 1 } : null;
 }
 
 /** Mirrored left to right (`x`) or top to bottom (`y`) around its own middle. */

@@ -71,6 +71,8 @@ export interface StitchInfo {
    * is sewn along its curve. `traced`: its curve is read from its stitches (none was drawn).
    */
   path?: { st: PathStitch; traced: boolean };
+  /** The one selected fill was a wide line, and can be one again. */
+  asLine?: boolean;
   /** How deep the selected fills reach at their deepest point (mm; the shallowest of them): an underlay inset beyond it leaves none. */
   depth?: number;
   /** Thread of the first selected fill (its border is sewn in it unless it has its own). */
@@ -91,7 +93,8 @@ export interface StitchHooks {
   preview: (s: Settings | null) => void;
   apply: (s: Settings) => void;
   /** Sews the selected objects of the other kind (fill to satin or satin to fill). */
-  convert: (to: 'fill' | 'satin') => void;
+  /** Sews the selection anew as another kind: fill or satin, a wide line as a fill and back. */
+  convert: (to: 'fill' | 'satin' | 'line') => void;
   /** Rungs of a satin: the tool on or off, corners suggested, all removed, back to the stitches' own direction. */
   direction: (action: 'tool' | 'corners' | 'sections' | 'even' | 'follow') => void;
   /** The spacing at the selected rung (null: as the column). */
@@ -333,7 +336,8 @@ export class StitchPanel {
       return;
     }
     if (this.kind === 'fill' && info.knockout) parts.push(this.knockoutSwitch(info.knockout));
-    if (this.kind === 'fill' || this.kind === 'satin') parts.push(this.kindSwitch(this.kind));
+    if (this.kind === 'fill' && info.asLine) parts.push(this.kindSwitch('fill', ['fill', 'line']));
+    else if (this.kind === 'fill' || this.kind === 'satin') parts.push(this.kindSwitch(this.kind));
     if (this.kind === 'fill' && info.draw?.single) parts.push(this.drawTool(info.draw));
     if (this.kind === 'satin' && info.direction) parts.push(this.directionTool(info.direction));
     parts.push(...this.controls());
@@ -592,7 +596,7 @@ export class StitchPanel {
   }
 
   /** Fill or satin: picking the other one sews the objects anew in that kind. */
-  private kindSwitch(now: 'fill' | 'satin'): HTMLElement {
+  private kindSwitch(now: 'fill' | 'satin' | 'line', kinds: ('fill' | 'satin' | 'line')[] = ['fill', 'satin']): HTMLElement {
     const wrap = document.createElement('div');
     wrap.className = 'field stitch-field';
     const label = Object.assign(document.createElement('span'), { className: 'label', textContent: t('stitch.kind') });
@@ -600,19 +604,19 @@ export class StitchPanel {
     row.className = 'segmented kind-switch';
     row.setAttribute('role', 'radiogroup');
     row.setAttribute('aria-label', t('stitch.kind'));
-    const blocked = now === 'fill' && !this.info!.toSatin;
-    for (const k of ['fill', 'satin'] as const) {
+    const blocked = now === 'fill' && kinds.includes('satin') && !this.info!.toSatin;
+    for (const k of kinds) {
       const b = document.createElement('button');
       b.type = 'button';
       b.className = k === now ? 'active' : '';
       b.setAttribute('role', 'radio');
       b.setAttribute('aria-checked', String(k === now));
-      b.innerHTML = `<span class="kind-icon">${KIND_ICON[k]}</span>`;
-      b.append(kindLabel(k));
+      b.innerHTML = `<span class="kind-icon">${KIND_ICON[k === 'line' ? 'satin' : k]}</span>`;
+      b.append(k === 'line' ? t('stitch.kind.line') : kindLabel(k));
       if (k !== now && k === 'satin' && blocked) {
         b.disabled = true;
         b.title = t('stitch.kind.noSatin');
-      } else if (k !== now) b.title = t(k === 'satin' ? 'stitch.kind.toSatin' : 'stitch.kind.toFill');
+      } else if (k !== now) b.title = t(k === 'satin' ? 'stitch.kind.toSatin' : k === 'line' ? 'stitch.kind.toLine' : now === 'line' ? 'stitch.kind.lineToFill' : 'stitch.kind.toFill');
       b.addEventListener('click', () => {
         if (k === now) return;
         this.hooks.preview(null);
@@ -965,6 +969,8 @@ export class StitchPanel {
       hand.append(Object.assign(document.createElement('span'), { textContent: t('stitch.hand', { n: formatNumber(info.hand) }) }));
       out.push(hand);
     }
+    // A wide line can also be sewn as a fill of its area.
+    if (st.type === 'satin' && !info.path!.traced) out.push(this.kindSwitch('line', ['line', 'fill']));
     out.push(
       ...this.pathStitch(
         st,

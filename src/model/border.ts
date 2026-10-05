@@ -36,6 +36,9 @@ const sameBorder = (a: BorderSettings, b: BorderSettings) => {
   return [...new Set([...Object.keys(x), ...Object.keys(y)])].every((k) => x[k] === y[k]);
 };
 
+/** What a border object remembers without its link to the fill (a line of its own then). */
+const withoutLink = ({ outline: _o, border: _b, ...rest }: Remembered): Remembered => rest;
+
 /** A new link between a fill and its border object. */
 export const newLink = () => Math.random().toString(36).slice(2, 10);
 
@@ -90,7 +93,20 @@ export function syncBorders(p: Pattern, trimMm: number, drop: ReadonlySet<string
   const objs = sewObjects(p, kinds);
   const mem = objs.map((o) => remembered(p, o));
   const byLink = new Map<string, number>();
-  mem.forEach((m, k) => m?.outline && byLink.set(m.outline, k));
+  mem.forEach((m, k) => {
+    if (!m?.outline) return;
+    // A copy of a border is a line of its own: only the first object with a link is the border.
+    if (!byLink.has(m.outline)) byLink.set(m.outline, k);
+    else remember(p, objs[k], (mem[k] = withoutLink(m)));
+  });
+  // A copy of a fill gets a border of its own: the first fill keeps the link, later ones a new one.
+  const claimed = new Set<string>();
+  mem.forEach((m, k) => {
+    const b = m?.fill?.border;
+    if (!m?.fill || !b?.color || !b.link) return;
+    if (!claimed.has(b.link)) return void claimed.add(b.link);
+    remember(p, objs[k], (mem[k] = { ...m, fill: { ...m.fill, border: { ...b, link: newLink() } } }));
+  });
   const changes: Change[] = [];
   const wanted = new Set<string>();
   objs.forEach((o, k) => {
