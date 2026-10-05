@@ -58,8 +58,9 @@ import type { Mode } from './settings';
 import { JumpsPanel } from './ui/jumpsPanel';
 import { blockName, kindLabel, LayersPanel } from './ui/layersPanel';
 import { ObjectPanel, OrderCard } from './ui/objectPanel';
-import { StitchPanel, type StitchInfo } from './ui/stitchPanel';
-import { syncBorders } from './model/border';
+import { StitchPanel, type Highlight, type StitchInfo } from './ui/stitchPanel';
+import { borderRanges, syncBorders } from './model/border';
+import { borderLoops } from './digitize/border';
 import { analyze, forget, keepShape, objectKey, measureFill, measureRun, measureSatin, remember, remembered, type Rails, rememberedIn, rememberShapes, restitch, shapeTrust, unionRegion, underlayRanges, type Remembered, type Settings as RestitchSettings, type ShapeTrust, type RestitchResult } from './model/restitch';
 import { outline } from './digitize/region';
 import { railsFromOutline } from './digitize/rungs';
@@ -323,11 +324,11 @@ let selectionKey = 0;
 /** New stitches shown while a stitch setting is being dragged, not applied yet. */
 let flowPreview: Pattern | null = null;
 let hoverObject: number | null = null;
-/** The pointer is on the underlay settings: the selected objects' underlay is shown. */
-let showUnder = false;
+/** The pointer is on the underlay or border settings: that part of the selected objects is shown. */
+let highlight: Highlight | null = null;
 /** The restitch behind `flowPreview` (it knows where the new underlay ends). */
 let previewResult: RestitchResult | null = null;
-let underCache: { p: Pattern; key: number; mask: Uint8Array | null } | null = null;
+let underCache: { p: Pattern; key: number; what: Highlight; mask: Uint8Array | null } | null = null;
 /** Object whose penetrations are edited in the Ablauf mode (the level "Stitches"), or null. */
 let editObject: number | null = null;
 /** Nothing to pick: in the Ablauf mode the first click on the stitches chooses the object. */
@@ -373,33 +374,60 @@ function playerModel(p: Pattern | null) {
   };
 }
 
-/** The underlay of the selected objects, per record (null while it is not shown). */
+/** The underlay or the border of the selected objects, per record (null while it is not shown). */
 function underMask(p: Pattern): Uint8Array | null {
-  if (!showUnder || !selectedObjects.size) return null;
-  if (underCache?.p === p && underCache.key === selectionKey) return underCache.mask;
+  if (!highlight || !selectedObjects.size) return null;
+  if (underCache?.p === p && underCache.key === selectionKey && underCache.what === highlight) return underCache.mask;
   const q = seq(p);
   const mask = new Uint8Array(p.cmd.length);
   const r = previewResult?.pattern === p ? previewResult : null;
   if (r) {
     // A preview: the new stitches of each object, its first `under` of them.
+    // A preview: the new stitches of each object, its first `under` of them, or the ones from
+    // where its border starts.
     r.starts.forEach((a, k) => {
-      const n = r.memory[k]?.under ?? 0;
-      if (!n) return;
-      const from = recordOfStitch(q.numbers, a + 1);
-      const to = recordOfStitch(q.numbers, a + n);
+      const m = r.memory[k];
+      const skip = m?.underFrom ?? 0;
+      const [s, e] = highlight === 'under' ? [skip + 1, skip + (m?.under ?? 0)] : [(m?.borderAt ?? Infinity) + 1, r.ends[k] - a];
+      if (!(e >= s)) return;
+      const from = recordOfStitch(q.numbers, a + s);
+      const to = recordOfStitch(q.numbers, a + e);
       for (let i = from; i <= to; i++) mask[i] = 1;
     });
   } else {
     for (const o of selectedObjects) {
       const obj = q.objects[o];
       if (!obj) continue;
-      for (const [a, b] of underlayRanges(p, obj, q.kinds)) for (let i = a; i <= b; i++) mask[i] = 1;
+      const ranges = highlight === 'under' ? underlayRanges(p, obj, q.kinds) : borderRanges(p, q.objects, obj);
+      for (const [a, b] of ranges) for (let i = a; i <= b; i++) mask[i] = 1;
     }
   }
   // Nothing to show (no underlay): the stitches stay as they are.
   const any = mask.includes(1) ? mask : null;
-  underCache = { p, key: selectionKey, mask: any };
+  underCache = { p, key: selectionKey, what: highlight, mask: any };
   return any;
+}
+
+/** The line the border of each selected fill lies on (mm), while the border settings are pointed at. */
+let contourCache: { p: Pattern; key: number; r: RestitchResult | null; lines: Pt[][] | null } | null = null;
+function contourLines(p: Pattern): Pt[][] | null {
+  const r = previewResult?.pattern === p ? previewResult : null;
+  if (contourCache?.p === p && contourCache.key === selectionKey && contourCache.r === r) return contourCache.lines;
+  const q = seq(p);
+  const out: Pt[][] = [];
+  for (const o of selectedObjects) {
+    const obj = q.objects[o];
+    if (!obj || obj.kind !== 'fill') continue;
+    const m = remembered(p, obj);
+    // A fill read from the file: its area as recognized.
+    const region = m?.region ?? analyze(p, obj, q.kinds).fill;
+    if (!region) continue;
+    // While a change is previewed, the border where it would go.
+    const b = r ? r.memory[0]?.fill?.border : m?.fill?.border;
+    out.push(...borderLoops(region, b?.offset ?? 0));
+  }
+  contourCache = { p, key: selectionKey, r, lines: out.length ? out : null };
+  return contourCache.lines;
 }
 
 function styleFor(p: Pattern): StitchStyle {
@@ -473,6 +501,7 @@ function flowScene(): FlowScene | null {
     // their shape is edited or the object is dragged: those show their own outline).
     outlines: files.active?.pattern && selectedObjects.size && !shapeTool.active && frameTool.dragging === null ? stitchInfo(files.active.pattern, seq(files.active.pattern)).outlines : undefined,
     under: hoverObject === null ? underMask(p) : null,
+    contour: hoverObject === null && highlight === 'border' ? contourLines(p) : null,
     rungs: rungTool.active ? rungTool : null,
     shape: shapeTool.active ? { view: shapeTool, handles: shapeTool.handles() } : null,
     frame: frameTool.active ? { view: frameTool, mapped: frameTool.mappedCorners() } : null,
@@ -977,8 +1006,8 @@ const stitchPanel = new StitchPanel($('object-stitches'), {
     if (selectedObjects.size === 1) sewLine([...selectedObjects][0], null, st, final);
   },
   knockout: (on) => knockoutObjects([...selectedObjects].sort((a, b) => a - b), on),
-  underlay: (on) => {
-    showUnder = on;
+  highlight: (what) => {
+    highlight = what;
     redraw();
   },
   outline: (a) => {

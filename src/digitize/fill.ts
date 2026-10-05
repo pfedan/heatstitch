@@ -33,6 +33,8 @@ export interface FillParams {
   underCross?: boolean;
   /** Underlay stays this far inside the edge (mm); UNDERLAY_INSET by default. */
   underInset?: number;
+  /** Underlay stays further inside by this share of the shape's width where it is (0.1 = 10 %). */
+  underInsetShare?: number;
   /**
    * Shift of the needle points from row to row, as a fraction of the stitch length: 1/4 repeats
    * every 4 rows (the usual tatami), 1/2 gives a brick pattern; 0 shifts them at random.
@@ -598,16 +600,75 @@ export function fillRegion(r: Region, p: FillParams, start: Pt, neighbours: numb
 }
 
 /**
+ * Half the width of the area at each pixel (mm): the radius of the largest circle inside the area
+ * that covers the pixel, 0 outside. Spread from each pixel's own distance to the edge in two
+ * sweeps, so it is close but not exact.
+ */
+export function localThickness(r: Region): Float32Array {
+  const { w, h, pxMm } = r;
+  const t = new Float32Array(w * h);
+  // The center of the circle each pixel took its value from (pixels).
+  const cx = new Float32Array(w * h);
+  const cy = new Float32Array(w * h);
+  for (let i = 0; i < t.length; i++) {
+    t[i] = Math.max(0, -r.sdf[i]);
+    cx[i] = i % w;
+    cy[i] = Math.floor(i / w);
+  }
+  const take = (i: number, x: number, y: number, n: number) => {
+    if (t[n] > t[i] && Math.hypot(x - cx[n], y - cy[n]) * pxMm <= t[n]) {
+      t[i] = t[n];
+      cx[i] = cx[n];
+      cy[i] = cy[n];
+    }
+  };
+  for (let pass = 0; pass < 2; pass++) {
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = y * w + x;
+        if (!t[i]) continue;
+        if (x > 0) take(i, x, y, i - 1);
+        if (y > 0) {
+          take(i, x, y, i - w);
+          if (x > 0) take(i, x, y, i - w - 1);
+          if (x < w - 1) take(i, x, y, i - w + 1);
+        }
+      }
+    }
+    for (let y = h - 1; y >= 0; y--) {
+      for (let x = w - 1; x >= 0; x--) {
+        const i = y * w + x;
+        if (!t[i]) continue;
+        if (x < w - 1) take(i, x, y, i + 1);
+        if (y < h - 1) {
+          take(i, x, y, i + w);
+          if (x < w - 1) take(i, x, y, i + w + 1);
+          if (x > 0) take(i, x, y, i + w - 1);
+        }
+      }
+    }
+  }
+  return t;
+}
+
+/**
  * Underlay for top rows at `angle`: rows across them (or two layers crossing at ±45 degrees), three
  * times the top spacing apart (at least 1.2 mm), inset from the edge; appended to `runs`. Returns
  * where the needle ends.
  */
-export function sewUnderlay(r: Region, angle: number, p: Pick<FillParams, 'spacing' | 'underCross' | 'underInset'>, start: Pt, grid: TravelGrid, runs: Pt[][]): Pt {
+export function sewUnderlay(r: Region, angle: number, p: Pick<FillParams, 'spacing' | 'underCross' | 'underInset' | 'underInsetShare'>, start: Pt, grid: TravelGrid, runs: Pt[][]): Pt {
   const us = Math.max(1.2, 3 * p.spacing);
   let pos = start;
+  // The edge the underlay keeps to: the fixed inset, and a share of the width where it is.
+  const inset = p.underInset ?? UNDERLAY_INSET;
+  let field = r.sdf;
+  if (p.underInsetShare) {
+    const t = localThickness(r);
+    field = r.sdf.map((v, i) => v + inset + p.underInsetShare! * 2 * t[i]);
+  }
   for (const a of p.underCross ? [angle - 45, angle + 45] : [angle + 90]) {
     const uf = new Frame(a, us);
-    const under = rows(r, r.sdf, uf, p.underInset ?? UNDERLAY_INSET);
+    const under = rows(r, field, uf, field === r.sdf ? inset : 0);
     if (under.length) pos = sewAll(uf, sections(r, r.sdf, uf, under), UNDERLAY_STITCH, 0, pos, grid, false, runs);
   }
   grid.covered.fill(0);
