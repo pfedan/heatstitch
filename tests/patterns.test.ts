@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fillRegion, pathLength } from '../src/digitize/fill';
+import { fillRegion, localThickness, pathLength } from '../src/digitize/fill';
 import { contourField, contourFill, fieldFill, guideField } from '../src/digitize/flow';
 import { coverage } from '../src/digitize/measure';
 import { buildRegion, expandRegion, outline, type Region } from '../src/digitize/region';
@@ -92,6 +92,33 @@ describe('fill patterns', () => {
       expect(n).toBeGreaterThan(100);
       expect(off).toBeLessThan(n * 0.1);
     }
+  });
+
+  it('knows the width of the area where it is', () => {
+    // The L: arms 6 mm wide; in the middle of an arm, half the width is 3 mm also near its edge.
+    const t = localThickness(ell);
+    const at = (x: number, y: number) => t[Math.floor(y / PX - ell.y0) * ell.w + Math.floor(x / PX - ell.x0)];
+    expect(at(6, 12)).toBeGreaterThan(2.7);
+    expect(at(6, 12)).toBeLessThan(3.3);
+    expect(at(3.5, 12)).toBeGreaterThan(2.5);
+  });
+
+  it('keeps the underlay further inside by a share of the width', () => {
+    // How far the underlay's needle points keep from the edge of the disk, most of them (the
+    // travel from the start on the edge left aside).
+    const edgeOf = (share: number) => {
+      const res = fillRegion(disk, { ...params, underlay: true, underInset: 0.4, underInsetShare: share }, [5, 15])!;
+      const d = res.runs
+        .flat()
+        .slice(0, res.under!)
+        .map(([x, y]) => 10 - Math.hypot(x - 15, y - 15))
+        .sort((a, b) => a - b);
+      expect(d.length).toBeGreaterThan(20);
+      return d[Math.floor(d.length * 0.1)];
+    };
+    expect(edgeOf(0)).toBeGreaterThan(0.3);
+    // 10 % of the 20 mm wide disk: 2 mm more.
+    expect(edgeOf(0.1)).toBeGreaterThan(edgeOf(0) + 1.5);
   });
 
   it('fills a disk with rings along the outline', () => {

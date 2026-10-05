@@ -434,6 +434,8 @@ export const en: Record<keyof typeof de, string> = {
   'stitch.expand.hint': 'Grow (+) or shrink (−) the area on all sides before it is filled: closes gaps to outlines and neighbours or keeps away from them. The shape itself stays.',
   'stitch.underInset': 'Underlay inset',
   'stitch.underInset.hint': 'The underlay stays this far inside the edge so it does not peek out',
+  'stitch.underInsetShare': 'Inset by width',
+  'stitch.underInsetShare.hint': 'Further inside by this share of the area’s width where it is: narrow parts stay near the edge, wide areas get more room',
   'stitch.offset': 'Offset',
   'stitch.offset.hint': 'How far the needle points shift from row to row, as a part of the stitch length. 1/4 is the usual tatami; 1/2 gives a brick pattern; random hides lines.',
   'stitch.offset.random': 'Random',

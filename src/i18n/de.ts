@@ -432,6 +432,8 @@ export const de = {
   'stitch.expand.hint': 'Die Fläche rundum größer (+) oder kleiner (−) machen, bevor sie gefüllt wird: schließt Lücken zu Steppstichen und Nachbarn oder hält Abstand zu ihnen. Die Form selbst bleibt.',
   'stitch.underInset': 'Einzug der Unterlage',
   'stitch.underInset.hint': 'So weit bleibt die Unterlage innerhalb des Rands, damit sie nicht hervorschaut',
+  'stitch.underInsetShare': 'Einzug anteilig',
+  'stitch.underInsetShare.hint': 'Zusätzlich so viel Prozent der örtlichen Breite der Fläche weiter innen: schmale Stellen bleiben fast am Rand, breite Flächen bekommen mehr Abstand',
   'stitch.offset': 'Versatz',
   'stitch.offset.hint': 'Wie weit die Einstichpunkte von Reihe zu Reihe versetzt sind, als Anteil der Stichlänge. 1/4 ist das übliche Tatami, 1/2 ergibt ein Ziegelmuster, Zufall verbirgt Linien.',
   'stitch.offset.random': 'Zufall',
