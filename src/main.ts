@@ -60,7 +60,6 @@ import { blockName, kindLabel, LayersPanel } from './ui/layersPanel';
 import { ObjectPanel, OrderCard } from './ui/objectPanel';
 import { StitchPanel, type Highlight, type StitchInfo } from './ui/stitchPanel';
 import { borderRanges, syncBorders } from './model/border';
-import { borderLoops } from './digitize/border';
 import { analyze, forget, keepShape, objectKey, measureFill, measureRun, measureSatin, remember, remembered, type Rails, rememberedIn, rememberShapes, restitch, shapeTrust, unionRegion, underlayRanges, type Remembered, type Settings as RestitchSettings, type ShapeTrust, type RestitchResult } from './model/restitch';
 import { outline } from './digitize/region';
 import { railsFromOutline } from './digitize/rungs';
@@ -75,13 +74,13 @@ import { AsidePanel } from './ui/asidePanel';
 import type { LeftOut } from './ui/imageMode';
 import { addShape, type NewShape } from './model/addShape';
 import { lineOf, lineSettings, resewLine } from './model/line';
-import type { PathStitch } from './model/along';
+import { borderLines, type PathStitch } from './model/along';
 import { asideOf, dropAside, sewAgain, setAside, setAsideRole, storeAside, type AsideRole, type AsideShape } from './model/aside';
 import { deleteObjects, duplicateObject, mirrorMatrix, recolorObjects, subtractTop, unionForm } from './model/shapeOps';
 import { stitchesBefore } from './model/transform';
 import { FrameTool } from './ui/frameTool';
 import { formOf, reshapeFill, scaleBlocked, transformSewObject } from './model/reshape';
-import { isCovered, overlapsIn, refreshKnockouts, setKnockout, wholeArea } from './model/knockout';
+import { isCovered, overlapsIn, refreshKnockouts, setKnockout, wholeArea, wholeOf } from './model/knockout';
 import { transformObject } from './model/transform';
 import { apply, translation, type Form, type Mat } from './shape/path';
 import { fontNow, loadCatalog, loadFont, type Catalog } from './lettering/font';
@@ -424,7 +423,8 @@ function contourLines(p: Pattern): Pt[][] | null {
     if (!region) continue;
     // While a change is previewed, the border where it would go.
     const b = r ? r.memory[0]?.fill?.border : m?.fill?.border;
-    out.push(...borderLoops(region, b?.offset ?? 0));
+    // Without the edges shapes on top cut: no border goes there.
+    out.push(...borderLines(region, b?.offset ?? 0, wholeOf(region, m)).map((l) => l.line));
   }
   contourCache = { p, key: selectionKey, r, lines: out.length ? out : null };
   return contourCache.lines;
