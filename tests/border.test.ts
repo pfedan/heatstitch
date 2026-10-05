@@ -7,7 +7,9 @@ import { stitchKinds } from '../src/model/sequence';
 import { parsePattern } from '../src/parsers';
 import { sample } from '../src/digitize/region';
 import { syncBorders } from '../src/model/border';
-import { sewAlong } from '../src/model/along';
+import { borderLines, borderStitches, sewAlong } from '../src/model/along';
+import { regionOf } from '../src/shape/rasterize';
+import type { Pt } from '../src/digitize/skeleton';
 
 const load = (f: string) => parsePattern(readFileSync(new URL(`../public/examples/${f}`, import.meta.url)), f);
 
@@ -231,3 +233,39 @@ it('shows only the underlay of a fill, not the running stitch sewn before it in 
   expect(r[0]).toBeGreaterThan(run.e - 1);
   expect(stitches(a.q, r[0], r[1])).toBe(a.memory.under);
 }, 30000);
+
+describe('border on a fill with parts left out', () => {
+  // A 20 mm square, and the same without a disk on top of its right edge (as knockout cuts it).
+  const grid = (inside: (x: number, y: number) => boolean) => {
+    const W = 300;
+    const mask = new Uint8Array(W * W);
+    for (let y = 0; y < W; y++) for (let x = 0; x < W; x++) mask[y * W + x] = inside((x + 0.5) * 0.1, (y + 0.5) * 0.1) ? 1 : 0;
+    return regionOf(mask, 0, 0, W, W, 0.1)!;
+  };
+  const sq = (x: number, y: number) => x > 5 && x < 25 && y > 5 && y < 25;
+  const whole = grid(sq);
+  const cut = grid((x, y) => sq(x, y) && Math.hypot(x - 25, y - 15) > 5);
+  const deep = (runs: Pt[][]) => runs.flat().filter(([x, y]) => sample(whole, whole.sdfBase, x, y) < -1).length;
+
+  for (const type of ['run', 'satin'] as const) {
+    it(`leaves out the edges shapes on top cut (${type})`, () => {
+      const s = { type, width: 1.5 };
+      // Without knowing the whole area, the cut edge gets a border too.
+      expect(deep(borderStitches(cut, s, [5, 5]))).toBeGreaterThan(5);
+      const runs = borderStitches(cut, s, [5, 5], whole);
+      expect(deep(runs)).toBe(0);
+      // The rest of the edge keeps its border: around three sides and most of the fourth.
+      const len = runs.reduce((a, r) => a + r.slice(1).reduce((b, q, i) => b + Math.hypot(q[0] - r[i][0], q[1] - r[i][1]), 0), 0);
+      expect(len).toBeGreaterThan(type === 'run' ? 65 : 100);
+    });
+  }
+
+  it('keeps a border that is not cut whole and closed', () => {
+    const lines = borderLines(whole, 0, whole);
+    expect(lines).toHaveLength(1);
+    expect(lines[0].closed).toBe(true);
+    const open = borderLines(cut, 0, whole);
+    expect(open).toHaveLength(1);
+    expect(open[0].closed).toBe(false);
+  });
+});
