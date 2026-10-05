@@ -129,8 +129,10 @@ will polish it.
 - Keys are dotted and grouped by area (`files.example.cat`, `controls.metric`). Add new keys next to
   related ones in both files, in the same order.
 - Placeholders use `{name}` and must appear in both languages.
-- Use the established terms. German: *Sprung, Schnitt, Einstich, Füllung, Satin, Unterlage, Ablauf,
-  Dichte*; English: *jump, trim, penetration, fill, satin, underlay, Sequence, Density*.
+- Use the established terms. German: *Stickmuster, Objekt, Form, Sprung, Fadenschnitt, Einstich,
+  Füllung, Satin, Steppstich, Unterlage, Ablauf, Dichte*; English: *design, object, shape, jump,
+  trim, needle point, fill, satin, running stitch, underlay, Sequence, Density*. The full list with
+  the reasons is in [docs/terms.md](docs/terms.md).
 
 ### Guide (`docs.html`)
 
@@ -142,6 +144,25 @@ will polish it.
   `loading="lazy"` except for the first one.
 - Take screenshots from the realistic thread view where it helps, and from the demo files, so they
   can be reproduced.
+- `tools/guide-shots.mjs` takes the per-language screenshots with Playwright from the built app
+  (1280 px wide, dark scheme). After a UI change, rebuild, start the preview and run it; it writes
+  straight into `public/guide/`. Shots are named like the files they produce, so one or more names
+  limit the run:
+
+  ```sh
+  npm run build && npm run preview &
+  node tools/guide-shots.mjs            # all shots
+  node tools/guide-shots.mjs cat hoop   # only these
+  ```
+
+  It needs Playwright with Chromium (`npm i -g playwright && npx playwright install chromium`, or
+  point `PLAYWRIGHT_CHROMIUM` at a Chrome binary). Look at every new image before committing it;
+  the composite images (`patterns.jpg`, `guided.jpg`, `tolerance-*.jpg`) are assembled by hand.
+- Use the terms of [docs/terms.md](docs/terms.md), as they appear in the app: German
+  *Stickmuster* (the design), *Stickdatei* (the file), *Objekt*, *Form*, *Umriss*, *Stichart*,
+  *Steppstich*, *Konturfüllung*, *Randlauf*, *Umrandung*, *Querlinie*, *Leitlinie*, *Stickrahmen*;
+  English *design*, *embroidery file*, *object*, *shape*, *outline*, *stitch type*, *running
+  stitch*, *contour fill*, *edge run*, *border*, *rung*, *guide line*, *hoop*. No long dashes.
 
 ### README
 
