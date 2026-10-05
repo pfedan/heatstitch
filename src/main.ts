@@ -34,7 +34,7 @@ import { bindFileIo } from './app/fileIo';
 import { downloadPattern, writePattern } from './writers';
 import { parsePattern } from './parsers';
 import { ImageMode } from './ui/imageMode';
-import { lightFromTilt, sweep } from './render/light';
+import { sweep } from './render/light';
 import { classify } from './validation/validate';
 import { setTrims } from './model/jumps';
 import {
@@ -99,6 +99,7 @@ import { ui } from './app/state';
 import { bindRungs } from './app/rungs';
 import { bindPointer } from './app/pointer';
 import { bindKeys } from './app/keys';
+import { bindLight } from './app/light';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -3065,51 +3066,22 @@ async function addDigitized(d: Digitized & { leftOut?: LeftOut[] }, name: string
 
 // Living thread: the light of the realistic view follows the pointer or the tilt of a phone -------
 
-/** Whether the canvas shows realistic threads right now. */
-const threadsShown = () =>
-  settings.realistic &&
-  (settings.mode === 'flow' || (settings.mode === 'density' && (settings.overlay || editor.active)) || (settings.mode === 'image' && settings.image.view === 'stitches'));
-
-let tiltListening = false;
-function listenTilt(): void {
-  if (tiltListening) return;
-  tiltListening = true;
-  window.addEventListener('deviceorientation', (e) => {
-    if (e.beta === null || e.gamma === null || !settings.liveLight || !threadsShown()) return;
-    lightFromTilt(e.beta, e.gamma);
-    redraw();
-  });
-}
-/** iOS asks before a page may read the tilt, and only from a tap. */
-const tiltPermission = (window.DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<string> } | undefined)?.requestPermission;
-async function allowTilt(): Promise<void> {
-  if (!tiltPermission) return listenTilt();
-  try {
-    if ((await tiltPermission.call(window.DeviceOrientationEvent)) === 'granted') {
-      listenTilt();
-      $('allow-tilt').hidden = true;
-    }
-  } catch {
-    // Refused or not over HTTPS: the pointer still moves the light.
-  }
-}
-if ('DeviceOrientationEvent' in window && !tiltPermission) listenTilt();
-$('allow-tilt').hidden = !tiltPermission;
-$('allow-tilt').addEventListener('click', () => void allowTilt());
-
-/** Shows the converted image as sewn thread and lets the light go round once. */
-function shine(): void {
-  settings.realistic = true;
-  settings.liveLight = true;
-  settings.image.view = 'stitches';
-  saveSettings(settings);
-  controls.refresh();
-  imageMode.render();
-  sweep(redraw);
-}
-$('image-shine').addEventListener('click', () => {
-  void allowTilt();
-  shine();
+const { shine, threadsShown } = bindLight({
+  get controls() {
+    return controls;
+  },
+  get editor() {
+    return editor;
+  },
+  get imageMode() {
+    return imageMode;
+  },
+  get redraw() {
+    return redraw;
+  },
+  get settings() {
+    return settings;
+  },
 });
 
 const langSelect = $<HTMLSelectElement>('lang');
