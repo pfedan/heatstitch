@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { fillRegion, pathLength } from '../src/digitize/fill';
-import { contourField, fieldFill, guideField } from '../src/digitize/flow';
+import { contourField, contourFill, fieldFill, guideField } from '../src/digitize/flow';
 import { coverage } from '../src/digitize/measure';
 import { buildRegion, expandRegion, outline, type Region } from '../src/digitize/region';
 import { spiralFill } from '../src/digitize/spiral';
@@ -68,6 +68,30 @@ describe('fill patterns', () => {
     // Every second row has its needle points in the same places.
     expect(brick[2][0]).toBeCloseTo(brick[0][0], 5);
     expect(Math.abs(brick[1][0] - brick[0][0]) % 3).toBeCloseTo(1.5, 5);
+  });
+
+  it('sews contour rings evenly spaced, also in a corner', () => {
+    for (const r of [disk, ell]) {
+      const res = contourFill(r, { ...params, spacing: 0.5 }, [5, 15])!;
+      expect(res).not.toBeNull();
+      expect(coverage(r, res.runs, 0.3)).toBeGreaterThan(0.95);
+      // Every needle point lies on a ring: its distance to the edge is a whole number of spacings.
+      let off = 0;
+      let n = 0;
+      for (const run of res.runs) {
+        for (const [x, y] of run) {
+          const ix = Math.floor(x / PX - r.x0);
+          const iy = Math.floor(y / PX - r.y0);
+          const d = -r.sdf[iy * r.w + ix] - 0.25;
+          if (d < 0.5 || !Number.isFinite(d)) continue;
+          n++;
+          const m = Math.abs(d / 0.5 - Math.round(d / 0.5));
+          if (m > 0.3) off++;
+        }
+      }
+      expect(n).toBeGreaterThan(100);
+      expect(off).toBeLessThan(n * 0.1);
+    }
   });
 
   it('fills a disk with rings along the outline', () => {
