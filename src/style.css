@@ -3452,3 +3452,22 @@ button.mini-sw.thread-sw {
 .lettering-release {
   display: block;
 }
+
+.shape-trust.free {
+  color: var(--ink);
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.shape-trust.free svg {
+  color: var(--accent);
+}
+
+.free-block .direction-buttons {
+  margin-bottom: 6px;
+}
+
+.object-stitches .free-row {
+  margin-top: 6px;
+}

@@ -69,6 +69,8 @@ export interface StitchInfo {
   outline?: { fill: number | null };
   /** Left out of the correction (`mixed`: only some of the selected objects). */
   lock: boolean | 'mixed';
+  /** Stitches loosed from their shape (`mixed`: only some), and whether any selected object has a shape to loose them from. */
+  free?: { on: boolean | 'mixed'; can: boolean };
   /** What the correction changed on the one selected object. */
   fixed?: Fixed[];
   /** Pull compensation by the fabric for the first selected fill and satin (see pullFor). */
@@ -98,6 +100,8 @@ export interface StitchHooks {
   outline: (action: 'fill' | 'detach') => void;
   /** The selected objects left out of the correction, or not. */
   lock: (on: boolean) => void;
+  /** The selected objects' stitches loosed from their shape (true), or sewn from it again (false). */
+  free: (on: boolean) => void;
 }
 
 const KINDS: ObjectKind[] = ['fill', 'satin', 'run'];
@@ -118,6 +122,10 @@ const TRUST_ICON = {
   ok: '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"/></svg>',
   warn: '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5l6 11H2z"/><path d="M8 6.5v3.2M8 11.8v.1"/></svg>',
 };
+
+/** Stitches loosed from their shape: a dashed shape beside free stitches. */
+const FREE_ICON =
+  '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="1.5" y="1.5" width="8" height="8" rx="1.5" stroke-dasharray="2 2"/><path d="M7 14.5l2.5-4 2 3 3-5"/></svg>';
 
 const OFFSETS: [number, string][] = [
   [0.5, '1/2'],
@@ -173,7 +181,7 @@ export class StitchPanel {
     }
     if (info.key === this.key) {
       // The rung tool changes without a new selection: only its part is drawn anew.
-      const tools = JSON.stringify([info.direction, info.draw, info.guide, info.knockout]);
+      const tools = JSON.stringify([info.direction, info.draw, info.guide, info.knockout, info.free]);
       if (tools !== this.tools) this.render();
       return;
     }
@@ -206,7 +214,7 @@ export class StitchPanel {
 
   private render(): void {
     const info = this.info!;
-    this.tools = JSON.stringify([info.direction, info.draw, info.guide, info.knockout]);
+    this.tools = JSON.stringify([info.direction, info.draw, info.guide, info.knockout, info.free]);
     const head = document.createElement('div');
     head.className = 'stitch-head';
     const h = Object.assign(document.createElement('h3'), { textContent: t('stitch.title') });
@@ -252,7 +260,7 @@ export class StitchPanel {
       return;
     }
     if (n > 1) parts.push(Object.assign(document.createElement('p'), { className: 'muted small', textContent: t('stitch.many', { n }) }));
-    if (this.kind === 'fill' && info.shape) {
+    if (this.kind === 'fill' && info.shape && !info.free?.on) {
       const trust = document.createElement('p');
       trust.className = `shape-trust ${info.shape}`;
       trust.setAttribute('role', 'status');
@@ -274,12 +282,26 @@ export class StitchPanel {
       fixed.textContent = t('plan.fixed', { list: info.fixed.map(fixText).join(', ') });
       parts.push(fixed);
     }
+    if (info.free?.on) {
+      // Loosed stitches: no setting sews them anew, they are edited as stitches.
+      parts.push(this.freeBlock(info.free.on), this.lockSwitch(info.lock));
+      this.picker.close();
+      this.root.replaceChildren(...parts);
+      if (this.underOn) this.showUnder(false);
+      return;
+    }
     if (this.kind === 'fill' && info.knockout) parts.push(this.knockoutSwitch(info.knockout));
     if (this.kind === 'fill' || this.kind === 'satin') parts.push(this.kindSwitch(this.kind));
     if (this.kind === 'fill' && info.draw?.single) parts.push(this.drawTool(info.draw));
     if (this.kind === 'satin' && info.direction) parts.push(this.directionTool(info.direction));
     parts.push(...this.controls());
     parts.push(this.lockSwitch(info.lock));
+    if (info.free?.can) {
+      const row = document.createElement('div');
+      row.className = 'direction-buttons free-row';
+      row.append(this.button('free.loose', 'free.loose.hint', () => this.hooks.free(true)));
+      parts.push(row);
+    }
     const note = Object.assign(document.createElement('p'), { className: 'muted small stitch-note', textContent: t(this.kind === 'fill' && info.shape ? 'stitch.undo' : this.kind === 'run' && info.line ? 'stitch.lineNote' : 'stitch.note') });
     parts.push(note);
     this.picker.close();
@@ -772,6 +794,23 @@ export class StitchPanel {
         Object.assign(document.createElement('span'), { className: 'muted small', textContent: t('stitch.draw.help') }),
       );
     }
+    return wrap;
+  }
+
+  /** Stitches loosed from their shape: what that means, and the way back. */
+  private freeBlock(on: true | 'mixed'): HTMLElement {
+    const wrap = document.createElement('div');
+    wrap.className = 'free-block';
+    const status = document.createElement('p');
+    status.className = 'shape-trust free';
+    status.setAttribute('role', 'status');
+    status.innerHTML = FREE_ICON;
+    status.append(Object.assign(document.createElement('span'), { textContent: t(on === 'mixed' ? 'free.someText' : 'free.text') }));
+    const row = document.createElement('div');
+    row.className = 'direction-buttons';
+    row.append(this.button('free.back', 'free.back.hint', () => this.hooks.free(false)));
+    if (on === 'mixed') row.append(this.button('free.looseAll', 'free.loose.hint', () => this.hooks.free(true)));
+    wrap.append(status, row, Object.assign(document.createElement('p'), { className: 'muted small', textContent: t('free.edit') }));
     return wrap;
   }
 

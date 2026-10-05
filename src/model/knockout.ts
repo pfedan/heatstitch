@@ -85,7 +85,7 @@ export function setKnockout(p: Pattern, which: number[], on: boolean, trimMm: nu
     const objs = sewObjects(cur);
     const o = objs[index];
     const known = o && remembered(cur, o);
-    if (!known?.form || !!known.knockout === on) continue;
+    if (!known?.form || known.free || !!known.knockout === on) continue;
     const next = sewAgain(cur, index, on, trimMm);
     if (!next) continue;
     cur = next;
@@ -105,7 +105,7 @@ export function setOverlapShare(p: Pattern, which: number[], share: number, trim
     const objs = sewObjects(cur);
     const o = objs[index];
     const known = o && remembered(cur, o);
-    if (!known?.form || (known.overlapShare ?? SATIN_SHARE) === share) continue;
+    if (!known?.form || known.free || (known.overlapShare ?? SATIN_SHARE) === share) continue;
     remember(cur, o, { ...known, overlapShare: share });
     changed++;
     if (!known.knockout) continue;
@@ -127,7 +127,7 @@ export function refreshKnockouts(p: Pattern, trimMm: number): { pattern: Pattern
     const objs = sewObjects(cur);
     const o = objs[index];
     const known = o && remembered(cur, o);
-    if (!known?.form || !known.knockout) continue;
+    if (!known?.form || known.free || !known.knockout) continue;
     const area = sewnArea(cur, objs, o, known.form, true, known.region?.pxMm ?? 0.1);
     if (cutKey(area) === known.cut) continue;
     const next = sewAgain(cur, index, true, trimMm);

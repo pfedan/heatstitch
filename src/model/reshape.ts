@@ -127,7 +127,8 @@ export interface Transformed {
  * What the object remembers goes along. Null when scaling did not work.
  */
 export function transformSewObject(p: Pattern, objs: SewObject[], o: SewObject, kinds: Uint8Array, m: Mat, trimMm: number): Transformed | null {
-  const rigid = isRigid(m);
+  // Stitches loosed from their shape go along as they are, also scaled (the resting shape with them).
+  const rigid = isRigid(m) || !!remembered(p, o)?.free;
   const known = rigid ? remembered(p, o) : keepShape(p, o, kinds);
   // Settings as the object has them now (measured after scaling, the rows would be wider apart).
   const given = rigid ? null : settingsOf(p, o, kinds);

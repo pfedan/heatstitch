@@ -24,6 +24,8 @@ export interface ShapeOutline {
   lines: [number, number][][];
   /** Its edges are a guess (drawn in amber). */
   approximate: boolean;
+  /** The stitches are loosed from it: it rests (drawn thin and grey). */
+  resting?: boolean;
 }
 
 export interface FlowScene {

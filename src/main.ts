@@ -12,7 +12,7 @@ import { bindControls, type ChangeKind } from './ui/controls';
 import { cssColor } from './ui/threadPicker';
 import { SATIN_SHARE } from './model/covers';
 import { CorrectPanel, type Cells, type CorrectMessage, type PlanRow, type PlanView } from './ui/correctPanel';
-import { applyProposals, fineZones, planCorrection, planFabric, wanted, type Box, type Plan } from './correct/plan';
+import { applyProposals, currentSettings, fineZones, planCorrection, planFabric, wanted, type Box, type Plan } from './correct/plan';
 import type { CorrectionReport } from './correct/auto';
 import { Editor } from './ui/editor';
 import { keepObjects, type HandChange } from './model/handEdit';
@@ -833,7 +833,7 @@ function stitchInfo(p: Pattern, q: Sequence): StitchInfo {
     if (an.fill) {
       const trust = shapeTrust(p, obj, an, (remembered(p, obj)?.fill ?? measureFill(p, an)).spacing);
       if (!worst || rank[trust] > rank[worst]) worst = trust;
-      shapes.push({ lines: outline(an.fill), approximate: trust === 'approximate' });
+      shapes.push({ lines: outline(an.fill), approximate: trust === 'approximate', resting: !!remembered(p, obj)?.free });
       // Satin needs a stroke: narrow, about even in width (the same test as in Image mode).
       if (stroke && an.parts.some((pt) => pt.kind === 'fill')) stroke = !!isStroke(remembered(p, obj)?.shape ?? an.fill, SATIN_MAX);
     }
@@ -848,6 +848,7 @@ function stitchInfo(p: Pattern, q: Sequence): StitchInfo {
     : undefined;
   const locks = new Set([...selectedObjects].map((o) => !!(q.objects[o] && remembered(p, q.objects[o])?.lock)));
   const lock = locks.size > 1 ? 'mixed' : locks.has(true);
+  const free = freeOf(p, q);
   const fixed = selectedObjects.size === 1 && q.objects[[...selectedObjects][0]] ? remembered(p, q.objects[[...selectedObjects][0]])?.fixed : undefined;
   const firstOf = (k: string) => [...selectedObjects].sort((a, b) => a - b).map((o) => q.objects[o]).find((obj) => obj?.kind === k);
   const fillObj = firstOf('fill');
@@ -855,7 +856,7 @@ function stitchInfo(p: Pattern, q: Sequence): StitchInfo {
     fill: fillObj ? pullFor(settings.profile, 'fill', analyze(p, fillObj, q.kinds).fill?.areaMm2).edge : undefined,
     satin: pullFor(settings.profile, 'satin'),
   };
-  const info: StitchInfo = { key: selectionKey, lock, fixed, fabricPull, hand, measured, counts, recommended: recommendedSpacing(settings.profile), shape: worst, outlines: shapes, toSatin: stroke, knockout, color: q.objects[firstFill]?.color };
+  const info: StitchInfo = { key: selectionKey, lock, free, fixed, fabricPull, hand, measured, counts, recommended: recommendedSpacing(settings.profile), shape: worst, outlines: shapes, toSatin: stroke, knockout, color: q.objects[firstFill]?.color };
   const runs = [...selectedObjects].map((o) => q.objects[o]).filter((obj) => obj?.kind === 'run');
   if (runs.length && runs.every((obj) => remembered(p, obj)?.path)) info.line = true;
   const link = selectedObjects.size === 1 && q.objects[firstFill] ? remembered(p, q.objects[firstFill])?.outline : undefined;
@@ -865,6 +866,54 @@ function stitchInfo(p: Pattern, q: Sequence): StitchInfo {
   }
   stitchCache = { p, key: selectionKey, info };
   return info;
+}
+
+/** Whether an object has a shape of its own its stitches can be loosed from (and sewn from again). */
+const loosable = (m: Remembered | undefined): boolean => !!m && !m.read && !m.lettering && !m.outline && !!(m.region || m.form || m.path || m.columns);
+
+/**
+ * The selected objects loosed from their shape (`on`), or sewn from their resting shape again with
+ * their own settings. The stitches loosed stay loosed for undo.
+ */
+function looseObjects(on: boolean): void {
+  const f = files.active;
+  const p = f?.pattern;
+  if (!f || !p) return;
+  const q = seq(p);
+  const objs = [...selectedObjects].sort((a, b) => a - b).flatMap((o) => (q.objects[o] ? [q.objects[o]] : []));
+  if (on) {
+    let n = 0;
+    for (const obj of objs) {
+      const mem = remembered(p, obj);
+      if (!mem || mem.free || !loosable(mem)) continue;
+      remember(p, obj, { ...mem, free: true });
+      n++;
+    }
+    if (!n) return;
+    closeRungs();
+    files.setObjects(f, rememberedIn(p, q.objects));
+    selectionKey++;
+    stitchCache = null;
+    layers.say(t('free.done', { n }));
+    return redraw();
+  }
+  const freed = objs.flatMap((obj) => {
+    const mem = remembered(p, obj);
+    return mem?.free ? [{ obj, mem }] : [];
+  });
+  if (!freed.length) return;
+  for (const { obj, mem } of freed) remember(p, obj, { ...mem, free: undefined });
+  const r = restitch(p, q.objects, freed.map((x) => x.obj.index), (o) => currentSettings(p, o, q.kinds), q.kinds, settings.trimMm);
+  // The loosed stitches stay loosed: undo brings them back as they were.
+  for (const { obj, mem } of freed) remember(p, obj, mem);
+  applyRestitched(r, 'free.failed', true);
+}
+
+/** Whether the selected objects' stitches are loosed from their shape, and whether any can be. */
+function freeOf(p: Pattern, q: Sequence): StitchInfo['free'] {
+  const mems = [...selectedObjects].map((o) => (q.objects[o] ? remembered(p, q.objects[o]) : undefined));
+  const frees = new Set(mems.map((m) => !!m?.free));
+  return { on: frees.size > 1 ? 'mixed' : frees.has(true), can: mems.some(loosable) };
 }
 
 /** The active pattern with new stitches for the selected objects. */
@@ -924,7 +973,8 @@ function applyRestitched(r: RestitchResult | null, failed: Key, remeasure = fals
   files.setObjects(f, rememberedIn(p, seq(p).objects));
   if (selNow.size) selectedObjects = selNow;
   selectionKey = remeasure ? key + 1 : key;
-  stitchCache = stitchCache && !remeasure && p === r.pattern ? { ...stitchCache, p } : null;
+  // New stitches have a shape they can be loosed from.
+  stitchCache = stitchCache && !remeasure && p === r.pattern ? { ...stitchCache, p, info: { ...stitchCache.info, free: freeOf(p, seq(p)) } } : null;
   say();
   redraw();
 }
@@ -998,6 +1048,7 @@ const stitchPanel = new StitchPanel($('object-stitches'), {
     stitchCache = null;
     redraw();
   },
+  free: (on) => looseObjects(on),
   lock: (on) => {
     const p = files.active?.pattern;
     if (!p) return;
@@ -1281,7 +1332,9 @@ const shapeTool = new ShapeTool({
 /** The one selected object of the Ablauf mode, when it has a fill whose outline can be edited, or is a drawn line. */
 function shapeTarget(p: Pattern, q: Sequence, o: number): Form | null {
   const obj = q.objects[o];
-  return obj ? (remembered(p, obj)?.path ?? formOf(p, obj, q.kinds)) : null;
+  // Stitches loosed from their shape are edited as stitches; the shape rests.
+  if (!obj || remembered(p, obj)?.free) return null;
+  return remembered(p, obj)?.path ?? formOf(p, obj, q.kinds);
 }
 
 /** Edits the outline of object `o` (level Form); objects without a fill go to their stitches. */
@@ -2320,7 +2373,7 @@ function objectInfo(p: Pattern, q: Sequence) {
     numbers: selected.map((o) => numberInColor(q.objects, q.objects[o])),
     hand: selected.map((o) => remembered(p, q.objects[o])?.hand ?? 0),
     editing: editor.active && editObject !== null && selected.length === 1 && selected[0] === editObject ? { selection: editor.selection.size } : null,
-    shapeable: selected.length === 1 && !!stitchInfo(p, q).measured.fill,
+    shapeable: selected.length === 1 && !!stitchInfo(p, q).measured.fill && !stitchInfo(p, q).free?.on,
     shaping: shapeTool.active && selected.length === 1 && selected[0] === shapeObject ? { nodes: shapeTool.count, smooth: shapeTool.selectedSmooth } : null,
     frame: frameTool.active ? { canScale: frameTool.canScale } : null,
     mergeBlocked: selected.length > 1 ? mergeBlocked(selected.map((o) => q.objects[o])) : null,

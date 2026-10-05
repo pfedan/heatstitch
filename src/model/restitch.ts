@@ -229,6 +229,11 @@ export interface Remembered {
   lettering?: Lettering;
   /** The correction leaves the object as it is (set by hand). */
   lock?: boolean;
+  /**
+   * Its stitches are loosed from its shape (by hand): they are never sewn anew, the shape rests
+   * until the object is sewn from it again.
+   */
+  free?: boolean;
   /** What the correction changed when it last gave the object new stitches (gone with the next change by hand). */
   fixed?: Fixed[];
 }
@@ -353,6 +358,7 @@ export interface StoredObject {
   border?: BorderSettings;
   lettering?: Lettering;
   lock?: boolean;
+  free?: boolean;
   fixed?: Fixed[];
   join?: boolean;
 }
@@ -403,6 +409,7 @@ export function rememberedIn(p: Pattern, objects: SewObject[]): StoredObject[] {
       ...(r.border ? { border: { ...r.border } } : {}),
       ...(r.lettering ? { lettering: r.lettering } : {}),
       ...(r.lock ? { lock: true } : {}),
+      ...(r.free ? { free: true } : {}),
       ...(r.fixed?.length ? { fixed: r.fixed.map((x) => ({ ...x })) } : {}),
     });
   }
@@ -604,6 +611,7 @@ export function restoreRemembered(list: unknown): number {
     const lettering = e.lettering === undefined ? null : letteringFrom(e.lettering);
     if (lettering) r.lettering = lettering;
     if (e.lock === true) r.lock = true;
+    if (e.free === true) r.free = true;
     const fixed = Array.isArray(e.fixed) ? e.fixed.filter(isFixed).map((x) => ({ ...x })) : [];
     if (fixed.length) r.fixed = fixed;
     rememberKey(e.key, r);
@@ -1471,6 +1479,11 @@ export function restitch(
   for (const o of objs) {
     if (!set.has(o.index)) continue;
     const known = remembered(p, o);
+    // Loosed from its shape: its stitches stay as they are.
+    if (known?.free) {
+      failed.push(o.index);
+      continue;
+    }
     let an = analyze(p, o, kinds, known);
     // A new area (its shape changed): the old stitches are told apart by the old one, the fill is made in the new one.
     const newArea = areas?.get(o.index);
