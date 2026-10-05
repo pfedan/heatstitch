@@ -12,7 +12,7 @@ import { eStitches, pairs, satinStitches, underlayOf, type Column, type SatinPar
 import { columnFromRungs, cumulative, pointAt, reversedRungs, tidyRungs, type Rung } from '../digitize/rungs';
 import type { Pt } from '../digitize/skeleton';
 import { formFrom, storeForm, type Form, type StoredPath } from '../shape/path';
-import { rasterize } from '../shape/rasterize';
+import { rasterize, rasterizeStroke, type LineCap } from '../shape/rasterize';
 import { distanceInside, distanceToSeeds } from '../image/edt';
 import { tidy, withRecords } from './edit';
 import { coversOver, cutAway, type Cover } from './covers';
@@ -73,6 +73,9 @@ export interface FillSettings {
   underInsetShare?: number;
   /** Distance between the underlay rows (mm); three times the spacing, at least 1.2 mm, when not set. */
   underSpacing?: number;
+  /** A fill along a line (Remembered.asLine): the width of the line (mm) and how its ends are drawn. */
+  lineWidth?: number;
+  lineCap?: LineCap;
   /** The area grown (+) or shrunk (-) on all sides before it is filled (mm); 0 when not set. */
   expand?: number;
   /** A border sewn on the edge after the fill; none when not set. */
@@ -234,8 +237,11 @@ export interface Remembered {
    * satin back instead of one found anew on the area.
    */
   asSatin?: Rails[];
-  /** A fill that was a wide line here: the line and how it was sewn, to make it a line again. */
-  asLine?: { path: Form; line: PathStitch };
+  /**
+   * A fill along a line: the line is its shape (the area is always made from it, in the fill's
+   * lineWidth and lineCap), and how it was sewn as a line, to make it a line again.
+   */
+  asLine?: LineFill;
   /** The object is the border of a fill in its own thread: the fill's `border.link`. */
   outline?: string;
   /** A border object: the settings it was sewn with (its `region` is the fill's area it was sewn on). */
@@ -371,7 +377,7 @@ export interface StoredObject {
   underFrom?: number;
   borderAt?: number;
   asSatin?: StoredRails[];
-  asLine?: { path: StoredPath[]; line: PathStitch };
+  asLine?: { path: StoredPath[]; line: PathStitch; cap?: LineCap };
   outline?: string;
   border?: BorderSettings;
   lettering?: Lettering;
@@ -425,7 +431,7 @@ export function rememberedIn(p: Pattern, objects: SewObject[]): StoredObject[] {
       ...(r.underFrom ? { underFrom: r.underFrom } : {}),
       ...(r.borderAt ? { borderAt: r.borderAt } : {}),
       ...(r.asSatin ? { asSatin: r.asSatin.map(storeRails) } : {}),
-      ...(r.asLine ? { asLine: { path: storeForm(r.asLine.path), line: { ...r.asLine.line } } } : {}),
+      ...(r.asLine ? { asLine: { path: storeForm(r.asLine.path), line: { ...r.asLine.line }, cap: r.asLine.cap } } : {}),
       ...(r.outline ? { outline: r.outline } : {}),
       ...(r.border ? { border: { ...r.border } } : {}),
       ...(r.lettering ? { lettering: r.lettering } : {}),
@@ -636,7 +642,7 @@ export function restoreRemembered(list: unknown): number {
     const asSatin = railsFrom([e.asSatin])?.[0];
     if (asSatin?.length) r.asSatin = asSatin;
     const asLine = e.asLine && formFrom(e.asLine.path);
-    if (asLine && isLineStitch(e.asLine!.line)) r.asLine = { path: asLine, line: { ...e.asLine!.line } };
+    if (asLine && isLineStitch(e.asLine!.line)) r.asLine = { path: asLine, line: { ...e.asLine!.line }, cap: e.asLine!.cap === 'round' ? 'round' : 'flat' };
     if (typeof e.outline === 'string') r.outline = e.outline;
     if (isBorder(e.border)) r.border = { ...e.border };
     const lettering = e.lettering === undefined ? null : letteringFrom(e.lettering);
@@ -1544,6 +1550,9 @@ export function restitch(
     if (newArea && an.fill) an = { ...an, fill: newArea };
     const given = typeof settingsFor === 'function' ? settingsFor(o, an, known) : settingsFor;
     if (!given) continue;
+    // A fill along a line: its area is always made from the line, never kept or traced.
+    const byLine = !newArea && known?.asLine && given.kind === 'fill' ? lineFillArea(known.asLine, given.s) : null;
+    if (byLine && an.fill) an = { ...an, fill: byLine };
     if (reverse) {
       // Turned around as a whole: its underlay and travel are made anew with it.
       const whole = wholeObject(p, o, an, given.kind);
@@ -1568,7 +1577,7 @@ export function restitch(
     const satinRails =
       converting && src === 'satin' ? (known?.columns?.flat() ?? satinParts.flatMap((pt) => satinColumns(p, pt, kinds).map((c) => railsOf(p, c)).filter((r): r is Rails => !!r))) : undefined;
     // The drawn form is the source of the area when there is one, never traced back from stitches.
-    if (converting) area = (known?.form ? rasterize(known.form) : null) ?? known?.shape ?? (src === 'fill' ? an.fill : (railsArea(satinRails ?? []) ?? coveredBy(p, parts.filter((pt) => pt.kind === src))));
+    if (converting) area = newArea ?? (known?.form ? rasterize(known.form) : null) ?? known?.shape ?? (src === 'fill' ? an.fill : (railsArea(satinRails ?? []) ?? coveredBy(p, parts.filter((pt) => pt.kind === src))));
     // A fill made from satin gets rows across the area in the direction with the fewest sections.
     const settings: Settings =
       converting && given.kind === 'fill' && area
@@ -1630,7 +1639,7 @@ export function restitch(
           ...(known?.borderAt && !filled ? { borderAt: known.borderAt } : {}),
           // Its shape changed: the satin it was no longer fits.
           ...(known?.asSatin && !newArea ? { asSatin: known.asSatin } : {}),
-          ...(known?.asLine && !newArea ? { asLine: known.asLine } : {}),
+          ...(known?.asLine && settings.kind === 'fill' ? { asLine: lineFillOf(known.asLine, settings.s) } : {}),
           ...(known?.outline ? { outline: known.outline, border: known.border } : {}),
         };
     if (known?.lettering) after.lettering = known.lettering;
@@ -1737,4 +1746,22 @@ export function restitch(
   const y = Int32Array.from(out, (r) => r.y);
   const cmd = Uint8Array.from(out, (r) => r.cmd);
   return { pattern: tidy(withRecords(p, x, y, cmd)), starts, ends, failed, regions, memory };
+}
+
+/** What a fill along a line remembers of it: the line with the width and ends the fill sets. */
+export interface LineFill {
+  path: Form;
+  line: PathStitch;
+  cap?: LineCap;
+}
+
+/** The line of a fill along it, with the width and ends from the fill's settings. */
+export function lineFillOf(l: LineFill, s: FillSettings): LineFill {
+  return { path: l.path, line: { ...l.line, width: s.lineWidth ?? l.line.width }, cap: s.lineCap ?? l.cap ?? 'flat' };
+}
+
+/** The area of a fill along a line: the line in its width, with its ends. */
+export function lineFillArea(l: LineFill, s?: FillSettings): Region | null {
+  const x = s ? lineFillOf(l, s) : l;
+  return rasterizeStroke(x.path, x.line.width, 0.1, x.cap ?? 'flat');
 }

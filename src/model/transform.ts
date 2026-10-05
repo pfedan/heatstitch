@@ -113,8 +113,8 @@ export function transformRemembered(r: Remembered, m: Mat): Remembered {
     );
   }
   if (r.asSatin) out.asSatin = r.asSatin.map((c) => mapRails(m, s, c));
-  if (r.asLine) out.asLine = { path: transformForm(r.asLine.path, m), line: { ...r.asLine.line, width: r.asLine.line.width * s } };
-  if (r.fill) out.fill = { ...r.fill, angle: mapAngle(m, r.fill.angle), ...(r.fill.guides ? { guides: r.fill.guides.map((g) => mapPts(m, g)) } : {}) };
+  if (r.asLine) out.asLine = { ...r.asLine, path: transformForm(r.asLine.path, m), line: { ...r.asLine.line, width: r.asLine.line.width * s } };
+  if (r.fill) out.fill = { ...r.fill, ...(r.fill.lineWidth ? { lineWidth: r.fill.lineWidth * s } : {}), angle: mapAngle(m, r.fill.angle), ...(r.fill.guides ? { guides: r.fill.guides.map((g) => mapPts(m, g)) } : {}) };
   return out;
 }
 

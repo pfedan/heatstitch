@@ -941,8 +941,11 @@ function applyRestitched(r: RestitchResult | null, failed: Key, remeasure = fals
   files.setObjects(f, rememberedIn(p, seq(p).objects));
   if (selNow.size) ui.selectedObjects = selNow;
   ui.selectionKey = remeasure ? key + 1 : key;
-  // New stitches have a shape they can be loosed from.
-  ui.stitchCache = ui.stitchCache && !remeasure && p === r.pattern ? { ...ui.stitchCache, p, info: { ...ui.stitchCache.info, free: freeOf(p, seq(p)) } } : null;
+  // New stitches have a shape they can be loosed from; the outlines follow a changed area (a
+  // fill along a line gets wider), the measured values stay as set in the panel.
+  const kept = ui.stitchCache && !remeasure && p === r.pattern ? ui.stitchCache.info : null;
+  ui.stitchCache = null;
+  if (kept) ui.stitchCache = { p, key: ui.selectionKey, info: { ...kept, free: freeOf(p, seq(p)), outlines: stitchInfo(p, seq(p)).outlines } };
   say();
   redraw();
 }

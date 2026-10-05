@@ -2,14 +2,13 @@ import { BORDER_STITCH, BORDER_WIDTH } from '../digitize/border';
 import { TOLERANCE } from '../digitize/run';
 import type { Pt } from '../digitize/skeleton';
 import { flatten, type Form, type Node } from '../shape/path';
-import { fitCubic, vectorize } from '../shape/vectorize';
+import { fitCubic } from '../shape/vectorize';
 import { sewAlong, type PathStitch } from './along';
 import { runRecords } from './border';
 import { tidy, withRecords } from './edit';
 import { rememberObjects, sewObjects, type SewObject } from './objects';
 import { JUMP, STITCH, type Pattern } from './pattern';
-import { remember, remembered, restitch, type FillSettings, type Rec, type Remembered, type RestitchResult, type RunSettings } from './restitch';
-import { rasterizeStroke } from '../shape/rasterize';
+import { lineFillArea, lineFillOf, remember, remembered, restitch, type FillSettings, type LineFill, type Rec, type Remembered, type RestitchResult, type RunSettings } from './restitch';
 import { stitchKinds, TIE_STITCH } from './sequence';
 
 /**
@@ -194,8 +193,9 @@ function stitchesUpTo(p: Pattern, record: number): number {
 }
 
 /**
- * A wide line sewn as a fill of the area it covers (its curve in its width). The fill keeps the
- * line (`asLine`), so it can be a line again. Null when the line has no area or nothing was sewn.
+ * A wide line sewn as a fill of the area it covers. The line stays its shape (`asLine`): the area
+ * is made from it each time (in the fill's lineWidth, with flat or round ends), its curve is what
+ * is edited, and it can be a line again. Null when the line has no area.
  */
 export function lineToFill(p: Pattern, index: number, s: FillSettings, trimMm: number): RestitchResult | null {
   const kinds = stitchKinds(p);
@@ -203,14 +203,29 @@ export function lineToFill(p: Pattern, index: number, s: FillSettings, trimMm: n
   const o = objs[index];
   const known = o && remembered(p, o);
   if (!o || !known?.path || !known.line) return null;
-  const area = rasterizeStroke(known.path, known.line.width);
+  const asLine: LineFill = { path: known.path, line: { ...known.line }, cap: 'flat' };
+  const fill: FillSettings = { ...s, lineWidth: known.line.width, lineCap: 'flat' };
+  const area = lineFillArea(asLine, fill);
   if (!area) return null;
-  const r = restitch(p, objs, [index], { kind: 'fill', s }, kinds, trimMm, o.kind, false, undefined, new Map([[index, area]]));
-  if (!r.starts.length) return r;
-  const form = vectorize(area);
-  const asLine = { path: known.path, line: { ...known.line } };
+  const r = restitch(p, objs, [index], { kind: 'fill', s: fill }, kinds, trimMm, o.kind, false, undefined, new Map([[index, area]]));
   r.memory.forEach((m) => {
-    if (form.paths.length) m.form = form;
+    delete m.form;
+    m.asLine = asLine;
+  });
+  return r;
+}
+
+/** A fill along a line sewn along `path` now (its line edited on the level Shape, or scaled with `width`). */
+export function reshapeLineFill(p: Pattern, objs: SewObject[], o: SewObject, kinds: Uint8Array, path: Form, trimMm: number, width?: number): RestitchResult | null {
+  const known = remembered(p, o);
+  if (!known?.asLine || !known.fill) return null;
+  const fill: FillSettings = width === undefined ? known.fill : { ...known.fill, lineWidth: width };
+  const asLine: LineFill = { ...lineFillOf(known.asLine, fill), path };
+  const area = lineFillArea(asLine);
+  if (!area) return null;
+  const r = restitch(p, objs, [o.index], { kind: 'fill', s: fill }, kinds, trimMm, undefined, false, undefined, new Map([[o.index, area]]));
+  r.memory.forEach((m) => {
+    delete m.form;
     m.asLine = asLine;
   });
   return r;
@@ -219,7 +234,8 @@ export function lineToFill(p: Pattern, index: number, s: FillSettings, trimMm: n
 /** A fill that was a line (lineToFill) sewn as that line again; null when it was none. */
 export function fillToLine(p: Pattern, index: number, trimMm: number): { pattern: Pattern; first: number; last: number } | null {
   const o = sewObjects(p)[index];
-  const was = o && remembered(p, o)?.asLine;
+  const known0 = o && remembered(p, o);
+  const was = known0?.asLine && (known0.fill ? lineFillOf(known0.asLine, known0.fill) : known0.asLine);
   if (!was) return null;
   const r = resewLine(p, index, was.path, was.line, trimMm);
   if (!r) return null;
