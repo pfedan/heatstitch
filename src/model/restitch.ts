@@ -202,6 +202,24 @@ export interface Rails {
    * between them, like the sections of one column (a fill cut into strips by Trennlinien).
    */
   chain?: number;
+  /**
+   * The order the column's sections are sewn in (see sectionsOf), each from its start or turned
+   * round, and where a trim comes before one. Not set: as sectionRun sews them. Only used while
+   * the column has as many sections as the plan has steps.
+   */
+  plan?: SectionStep[];
+}
+
+/** One section of a column in the order its satin is sewn: which, turned round, trimmed before. */
+export interface SectionStep {
+  sec: number;
+  flip: boolean;
+  trim: boolean;
+}
+
+/** Whether a plan fits a column of n sections: each section once. */
+export function planFits(plan: SectionStep[] | undefined, n: number): plan is SectionStep[] {
+  return !!plan && plan.length === n && new Set(plan.map((x) => x.sec)).size === n && plan.every((x) => Number.isInteger(x.sec) && x.sec >= 0 && x.sec < n);
 }
 
 /**
@@ -473,6 +491,8 @@ export interface StoredRails {
   /** Free rungs: x, y of one end, then of the other. */
   spans?: number[];
   chain?: number;
+  /** Plan: section, turned round (0/1), trimmed before (0/1) for each step. */
+  plan?: number[];
 }
 
 const storeRails = (c: Rails): StoredRails => ({
@@ -483,6 +503,7 @@ const storeRails = (c: Rails): StoredRails => ({
   ...(c.spacings?.length ? { spacings: c.spacings.flat() } : {}),
   ...(c.spans?.length ? { spans: c.spans.flat(2) } : {}),
   ...(c.chain !== undefined ? { chain: c.chain } : {}),
+  ...(c.plan?.length ? { plan: c.plan.flatMap((x) => [x.sec, +x.flip, +x.trim]) } : {}),
 });
 
 /** What is remembered about the objects of `p`, to store it with the file. */
@@ -615,6 +636,11 @@ function railsFrom(list: unknown): Rails[][] | undefined {
       if (c?.chain !== undefined) {
         if (!Number.isInteger(c.chain)) return undefined;
         rails.chain = c.chain;
+      }
+      const plan = c?.plan;
+      if (plan !== undefined) {
+        if (!Array.isArray(plan) || plan.length % 3 || !plan.every((v) => Number.isInteger(v))) return undefined;
+        if (plan.length) rails.plan = Array.from({ length: plan.length / 3 }, (_, k) => ({ sec: plan[3 * k], flip: !!plan[3 * k + 1], trim: !!plan[3 * k + 2] }));
       }
       cols.push(rails);
     }
@@ -1366,6 +1392,15 @@ export function reversedRails(r: Rails): Rails {
   if (r.cuts) out.cuts = reversedRungs(r.cuts, la, lb);
   if (r.spans) out.spans = r.spans.map(([a, b]) => [a, b] as [Pt, Pt]);
   if (r.chain !== undefined) out.chain = r.chain;
+  // Walked the other way: the last step first, each section numbered from the other end; a trim
+  // stays between the same two steps.
+  if (r.plan) {
+    const n = r.plan.length;
+    out.plan = r.plan
+      .slice()
+      .reverse()
+      .map((x, j) => ({ sec: n - 1 - x.sec, flip: x.flip, trim: j > 0 && r.plan![n - j].trim }));
+  }
   if (r.spacings) {
     // Kept at their rung: measured along the other rail from its other end.
     const at = (s: number) => {
@@ -1570,6 +1605,10 @@ export function satinRuns(rails: Rails[], s: SatinSettings): Pt[][] {
       continue;
     }
     const parts = sectionsOf(whole);
+    if (parts.length > 1 && planFits(whole.plan, parts.length)) {
+      runs.push(...plannedRuns(parts, whole.plan, s, sew, along));
+      continue;
+    }
     if (parts.length > 1) {
       const run = sectionRun(parts, s, sew, along);
       if (run.length) runs.push(run);
@@ -1608,6 +1647,51 @@ const reversedColumn = (col: Column): Column => ({ center: col.center.slice().re
  * that ends at the far end, all underlays go out first and the sections come back one by one
  * (the last first); otherwise each section brings its own underlay and goes out.
  */
+/** Whether sections of a column that follow one another do not meet (one sewn as a column of its own). */
+function apartOf(parts: Rails[]): boolean {
+  return parts.some((r, k) => {
+    const n = parts[k + 1];
+    return !!n && dist(r.left[r.left.length - 1], n.left[0]) + dist(r.right[r.right.length - 1], n.right[0]) > 1;
+  });
+}
+
+/** Whether sectionRun sews the satin of these sections back: the last first, each from its end. */
+function sewnBack(parts: Rails[], s: SatinSettings): boolean {
+  if (apartOf(parts)) return true;
+  return s.underlay && parts.every((r) => underlayOf(columnOf(r), s.under ?? 'auto', s.tolerance, underInset(s)).atEnd);
+}
+
+/** The steps a column's sections are sewn in: its plan, or as sectionRun sews them. */
+export function sectionPlan(r: Rails, s: SatinSettings): SectionStep[] {
+  const secs = sectionsOf(r);
+  if (planFits(r.plan, secs.length)) return r.plan.map((x) => ({ ...x }));
+  const back = secs.length > 1 && sewnBack(secs, s);
+  return secs.map((_, i) => (back ? { sec: secs.length - 1 - i, flip: true, trim: false } : { sec: i, flip: false, trim: false }));
+}
+
+/**
+ * Sections sewn as `plan` says: their satin in its order and directions, a run for each stretch
+ * between trims. Each stretch is handed to sectionRun so that what it sews back comes out in
+ * the order of the plan.
+ */
+function plannedRuns(secs: Rails[], plan: SectionStep[], s: SatinSettings, sew: (ps: [Pt, Pt][]) => Pt[], along: (col: Column, r: Rails, q: SatinParams) => SatinParams): Pt[][] {
+  const runs: Pt[][] = [];
+  let group: Rails[] = [];
+  const flush = () => {
+    if (!group.length) return;
+    const feed = sewnBack(group, s) ? group.slice().reverse().map(reversedRails) : group;
+    const run = sectionRun(feed, s, sew, along);
+    if (run.length) runs.push(run);
+    group = [];
+  };
+  plan.forEach((x, i) => {
+    if (x.trim && i) flush();
+    group.push(x.flip ? reversedRails(secs[x.sec]) : secs[x.sec]);
+  });
+  flush();
+  return runs;
+}
+
 function sectionRun(parts: Rails[], s: SatinSettings, sew: (ps: [Pt, Pt][]) => Pt[], along: (col: Column, r: Rails, q: SatinParams) => SatinParams): Pt[] {
   const sp = satinParams(s);
   const cols = parts.map(columnOf);
@@ -1625,10 +1709,7 @@ function sectionRun(parts: Rails[], s: SatinSettings, sew: (ps: [Pt, Pt][]) => P
   const kind = s.under ?? 'auto';
   // A section sewn as a column of its own may end away from where the next one starts: then all
   // go out first (underlay, or a run along the middle) and the satin comes back over the way.
-  const apart = parts.some((r, k) => {
-    const n = parts[k + 1];
-    return !!n && dist(r.left[r.left.length - 1], n.left[0]) + dist(r.right[r.right.length - 1], n.right[0]) > 1;
-  });
+  const apart = apartOf(parts);
   if (!s.underlay && !apart) {
     parts.forEach((r, k) => push(sew(pairs(cols[k], along(cols[k], r, sp)))));
     return out;

@@ -2,7 +2,7 @@ import { addRung, chordOf, cornerCuts, cornerRungs, cumulative, pointAt, project
 import { pathLength } from '../digitize/fill';
 import { simplify } from '../digitize/run';
 import type { Pt } from '../digitize/skeleton';
-import { reversedRails, spanSection, sectionLoops, sectionOfRung, type Rails, type SectionLoop } from '../model/restitch';
+import { reversedRails, sectionPlan, sectionsOf, spanSection, sectionLoops, sectionOfRung, type Rails, type SatinSettings, type SectionLoop, type SectionStep } from '../model/restitch';
 
 /** Pick radius around the pointer for rung ends, CSS pixels; the line itself a little less. */
 const PICK_END_PX = 10;
@@ -14,10 +14,15 @@ const PICK_LINE_PX = 6;
  */
 export const BADGE = { number: -16, arrow: 9, scissors: 19, r: 8 };
 
-/** A column of a chain (see Rails.chain) as the tool shows it: its place in the order and its controls. */
+/**
+ * A piece sewn on its own as the tool shows it, with its place in the order and its controls: a
+ * column of a chain (see Rails.chain) or a section of a column (see Rails.plan).
+ */
 export interface PieceBadge {
   /** The column (index in `columns`). */
   col: number;
+  /** The section's step in the column's plan (a section, not a chained column). */
+  step?: number;
   /** Place in the order the part's columns are sewn, from 1. */
   n: number;
   /** Where its satin starts, and the direction it goes from there (unit). */
@@ -27,7 +32,7 @@ export interface PieceBadge {
   trim: boolean | null;
 }
 
-export type BadgeHit = { col: number; what: 'number' | 'arrow' | 'scissors' };
+export type BadgeHit = { col: number; step?: number; what: 'number' | 'arrow' | 'scissors' };
 
 /**
  * A free rung is taken when the section's two new rails differ in length by at most this much (or
@@ -49,6 +54,8 @@ export interface RungColumn {
   spacings: [number, number][];
   /** Rungs drawn anywhere across a section, as world points (see Rails.spans). */
   spans: [Pt, Pt][];
+  /** Order, directions and trims of its sections (see Rails.plan). */
+  plan?: SectionStep[];
   /** The rungs are the column's own (false: suggested from its stitches, nothing set yet). */
   own: boolean;
   /** The column as it came, to give back what was not changed. */
@@ -134,6 +141,8 @@ export class RungTool implements RungView {
   draft: [Pt, Pt] | null = null;
   draftCut = false;
   badgeHover: BadgeHit | null = null;
+  /** The satin settings of the object (how its sections are sewn when no order is set). */
+  satin: SatinSettings | null = null;
   /** Lines drawn across a satin or a fill are cut lines (Shift draws the other kind). */
   cutMode = false;
   private drag: Drag = null;
@@ -203,6 +212,7 @@ export class RungTool implements RungView {
           cuts: (r.cuts ?? []).map((x) => [x[0], x[1]] as Rung),
           spacings: (r.spacings ?? []).map((x) => [x[0], x[1]] as [number, number]),
           spans: (r.spans ?? []).map(([a, b]) => [a, b] as [Pt, Pt]),
+          ...(r.plan ? { plan: r.plan.map((x) => ({ ...x })) } : {}),
           own: !!r.rungs,
           rails: r,
         });
@@ -262,6 +272,27 @@ export class RungTool implements RungView {
         out.push({ col: k, n: i + 1, at, dir: [d[0] / l, d[1] / l], trim: i ? this.columns[ks[i - 1]].rails.chain !== c.rails.chain : null });
       });
     }
+    // Sections of a column: where the satin of each starts, in the order they are sewn.
+    if (this.satin) {
+      const res = this.result().flat();
+      this.columns.forEach((c, k) => {
+        if (c.rails.chain !== undefined || !c.cuts.length) return;
+        const secs = sectionsOf(res[k]);
+        if (secs.length < 2) return;
+        sectionPlan(res[k], this.satin!).forEach((x, i, plan) => {
+          const r = secs[x.sec];
+          if (!r) return;
+          const [a, b] = x.flip ? [r.left.slice().reverse(), r.right.slice().reverse()] : [r.left, r.right];
+          const at = mid(a[0], b[0]);
+          const ca = cumulative(a);
+          const cb = cumulative(b);
+          const inward = mid(pointAt(a, ca, Math.min(1, ca[ca.length - 1])), pointAt(b, cb, Math.min(1, cb[cb.length - 1])));
+          const d = sub(inward, at);
+          const l = Math.hypot(d[0], d[1]) || 1;
+          out.push({ col: k, step: i, n: i + 1, at, dir: [d[0] / l, d[1] / l], trim: i ? plan[i].trim : null });
+        });
+      });
+    }
     return out;
   }
 
@@ -272,15 +303,17 @@ export class RungTool implements RungView {
       const [nx, ny] = [-b.dir[1], b.dir[0]];
       const spot = (along: number, across: number): Pt => [b.at[0] + (b.dir[0] * along + nx * across) / scale, b.at[1] + (b.dir[1] * along + ny * across) / scale];
       const near = (p: Pt) => Math.hypot(p[0] - x, p[1] - y) <= r;
-      if (near(spot(BADGE.number, 0))) return { col: b.col, what: 'number' };
-      if (near(spot(BADGE.arrow, 0))) return { col: b.col, what: 'arrow' };
-      if (b.trim !== null && near(spot(BADGE.number, BADGE.scissors))) return { col: b.col, what: 'scissors' };
+      const at = b.step === undefined ? { col: b.col } : { col: b.col, step: b.step };
+      if (near(spot(BADGE.number, 0))) return { ...at, what: 'number' };
+      if (near(spot(BADGE.arrow, 0))) return { ...at, what: 'arrow' };
+      if (b.trim !== null && near(spot(BADGE.number, BADGE.scissors))) return { ...at, what: 'scissors' };
     }
     return null;
   }
 
   /** A control clicked: the column turned round, sewn one place earlier, or a trim before it set or taken away. */
   private useBadge(h: BadgeHit): void {
+    if (h.step !== undefined) return this.useSectionBadge(h, h.step);
     const out = this.result();
     const part = this.parts[h.col];
     const cols = out[part];
@@ -300,6 +333,25 @@ export class RungTool implements RungView {
     this.selected = null;
     this.setColumns(out);
     this.hooks.change(out, true);
+  }
+
+  /** A section's control clicked: its step turned round, one place earlier, or trimmed before. */
+  private useSectionBadge(h: BadgeHit, i: number): void {
+    const c = this.columns[h.col];
+    const r = this.result().flat()[h.col];
+    if (!this.satin || !r) return;
+    const plan = sectionPlan(r, this.satin);
+    if (h.what === 'arrow') plan[i].flip = !plan[i].flip;
+    else if (h.what === 'number') {
+      if (i === 0) return;
+      // The trims stay between the same places in the order.
+      const [a, b] = [plan[i - 1], plan[i]];
+      plan[i - 1] = { ...b, trim: a.trim };
+      plan[i] = { ...a, trim: b.trim };
+    } else if (i > 0) plan[i].trim = !plan[i].trim;
+    c.plan = plan;
+    this.selected = null;
+    this.hooks.change(this.result(), true);
   }
 
   /** Lines drawn across a satin from now on are cut lines (true) or rungs. */
@@ -322,6 +374,8 @@ export class RungTool implements RungView {
       if (c.spacings.length) base.spacings = c.spacings.map((r) => [r[0], r[1]] as [number, number]);
       if (c.spans.length) base.spans = c.spans.map(([a, b]) => [a, b] as [Pt, Pt]);
       if (c.rails.chain !== undefined) base.chain = c.rails.chain;
+      // A plan for as many sections as there are now; with a cut line more or less it is made anew.
+      if (c.plan && c.plan.length === c.cuts.length + 1) base.plan = c.plan.map((x) => ({ ...x }));
       (out[this.parts[k]] ??= []).push(base);
     });
     return out;

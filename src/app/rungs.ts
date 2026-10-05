@@ -10,7 +10,7 @@ import { RungTool } from '../ui/rungTool';
 import { outline } from '../digitize/region';
 import { railsFromOutline, stripsOfOutline } from '../digitize/rungs';
 import { t, type Key } from '../i18n';
-import { type Rails, analyze, remembered, keepShape, remember, restitch, measureSatin, forget, type RestitchResult, type Settings as RestitchSettings } from '../model/restitch';
+import { type Rails, type SatinSettings, analyze, remembered, keepShape, remember, restitch, measureSatin, forget, type RestitchResult, type Settings as RestitchSettings } from '../model/restitch';
 import { ui } from './state';
 
 /** What bindRungs needs from the rest of the app. */
@@ -141,6 +141,7 @@ export function bindRungs(app: RungsApp) {
       const columns = keepShape(p, obj, q.kinds).columns;
       if (!columns?.length) return app.layers.say(t('stitch.direction.miss'), true);
       rungTool.openSatin(columns);
+      rungTool.satin = satinOf(p, q, obj);
     } else {
       const an = analyze(p, obj, q.kinds);
       const area = remembered(p, obj)?.shape ?? an.fill;
@@ -167,6 +168,14 @@ export function bindRungs(app: RungsApp) {
     app.redraw();
   }
 
+  /** The satin settings an object is sewn with (as withRungs sews it). */
+  function satinOf(p: Pattern, q: Sequence, obj: Sequence['objects'][number]): SatinSettings | null {
+    const known = remembered(p, obj)?.satin;
+    if (known) return known;
+    const part = analyze(p, obj, q.kinds).parts.find((pt) => pt.kind === 'satin');
+    return part ? measureSatin(p, part, q.kinds) : null;
+  }
+
   /** Keeps the rung tool on its object: after new stitches its columns are read again; it closes when the object is gone. */
   function syncRungs(): void {
     if (!rungTool.active) return;
@@ -189,6 +198,7 @@ export function bindRungs(app: RungsApp) {
     const columns = obj && rungTool.mode === 'satin' ? keepShape(p, obj, q.kinds).columns : null;
     if (!columns?.length) return closeRungs();
     rungTool.setColumns(columns);
+    rungTool.satin = satinOf(p, q, obj);
     ui.rungObject = o;
     rungPattern = p;
   }
