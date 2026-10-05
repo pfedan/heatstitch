@@ -33,7 +33,6 @@ import { parsePattern } from './parsers';
 import { ImageMode } from './ui/imageMode';
 import { sweep } from './render/light';
 import { classify } from './validation/validate';
-import { setTrims } from './model/jumps';
 import {
   colorBlocks,
   markers as findMarkers,
@@ -48,13 +47,12 @@ import {
   carriedJumps,
 } from './model/sequence';
 import { recolor, sameColor } from './model/recolor';
-import { COLOR_CHANGE, patternStats, STITCH, TRIM } from './model/pattern';
+import { COLOR_CHANGE, STITCH, TRIM } from './model/pattern';
 import { stitchAlpha, stitchAt, stitchColors, type StitchStyle } from './render/flow';
 import type { FlowScene, ShapeOutline } from './render/scene';
 import type { Mode } from './settings';
-import { JumpsPanel } from './ui/jumpsPanel';
 import { blockName, kindLabel, LayersPanel } from './ui/layersPanel';
-import { ObjectPanel, OrderCard } from './ui/objectPanel';
+import { ObjectPanel } from './ui/objectPanel';
 import { StitchPanel, type Highlight, type StitchInfo } from './ui/stitchPanel';
 import { borderRanges, syncBorders } from './model/border';
 import { analyze, openOnPurpose, objectKey, measureFill, measureRun, measureSatin, remember, remembered, rememberedIn, rememberShapes, restitch, shapeTrust, unionRegion, underlayRanges, type Remembered, type Settings as RestitchSettings, type ShapeTrust, type RestitchResult } from './model/restitch';
@@ -72,8 +70,8 @@ import { type Form } from './shape/path';
 import { digitizeDefaults, isStroke, pullFor, SATIN_MAX, type Digitized } from './digitize/digitize';
 import { recommendedSpacing } from './validation/profiles';
 import { numberInColor, overlaps, rememberObjects, sewObjects, splitObject, type SewObject } from './model/objects';
-import { conflicts, moveStats, optimizePlan, reorder, violations, weigh } from './model/order';
-import { autoReversible, reverseObjects, reversible } from './model/reverse';
+import { conflicts, reorder, violations } from './model/order';
+import { reverseObjects, reversible } from './model/reverse';
 import { Player } from './ui/player';
 import { installPanelResize } from './ui/panelResize';
 import type { Key } from './i18n';
@@ -88,6 +86,7 @@ import { bindDrawing } from './app/drawing';
 import { bindAside } from './app/aside';
 import { bindLettering } from './app/lettering';
 import { bindCorrection } from './app/correction';
+import { bindOrder } from './app/order';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -1318,150 +1317,34 @@ const { drawLetterBoxes, letterDown, letterDragTo, letterMoved, letterUp, letter
   },
 });
 
-// Stitch order, jumps, the Ablauf tooltip and the modes ---------------------------
+// Stitch order and jumps: src/app/order.ts; then the Ablauf tooltip and the modes ----------
 
-/** Color changes and trims as the statistics count them, travel between objects. */
-function orderStats(p: Pattern) {
-  const st = patternStats(p);
-  return { colorChanges: st.colorChanges, trims: st.trims, travelMm: moveStats(p).travelMm };
-}
-
-/**
- * The pattern "Optimize order" found for the active one, kept while its card is open, with the
- * objects sewn from the other side in it (what to remember about their new stitches).
- */
-let pendingOrder: { p: Pattern; next: Pattern; reversed: { start: number; end: number; memory: Remembered }[] } | null = null;
-
-/**
- * The best order for `p` with the options of the card. With "Reverse direction", satins and fills
- * may also be sewn from the other side; that plan is taken when its real result (after the new
- * stitches) is better than the best order without it.
- */
-function bestOrder(p: Pattern): NonNullable<typeof pendingOrder> | null {
-  const q = seq(p);
-  const over = overOf(q, p);
-  const opts = { ...settings.order, trimMm: settings.trimMm };
-  const plain = optimizePlan(p, q.objects, over, opts);
-  const plainNext = plain.order.some((o, k) => o !== k) ? reorder(p, q.objects, plain.order, settings.trimMm) : p;
-  const best = plainNext === p ? null : { p, next: plainNext, reversed: [] };
-  if (!settings.order.reverse) return best;
-  const may = q.objects.map((o) => autoReversible(p, o));
-  // Objects that turn out not to be reversible (stitches outside their shape) are planned without.
-  for (let round = 0; round < 3; round++) {
-    const plan = optimizePlan(p, q.objects, over, opts, may);
-    if (!plan.flip.length) return best;
-    const r = reverseObjects(p, q.objects, plan.flip, q.kinds, settings.trimMm, plan.order);
-    if (r.pattern === p) {
-      if (!r.failed.length) return best;
-      for (const o of r.failed) may[o] = false;
-      continue;
-    }
-    // Taken only for a real saving: the new stitches change more than the order does.
-    if (weigh(orderStats(r.pattern)) >= weigh(orderStats(plainNext)) - 2) return best;
-    return { p, next: r.pattern, reversed: r.starts.map((start, k) => ({ start, end: r.ends[k], memory: r.memory[k] })) };
-  }
-  return best;
-}
-
-const orderCard = new OrderCard(settings, {
-  preview: () => {
-    const p = files.active?.pattern;
-    if (!p) return null;
-    pendingOrder = bestOrder(p);
-    const next = pendingOrder?.next ?? p;
-    const before = orderStats(p);
-    const after = orderStats(next);
-    const secs = (x: Pattern, c: typeof before) => sewingSeconds(seq(x).total, c.trims, c.colorChanges, settings.machineSpm);
-    return { before, after, beforeSeconds: secs(p, before), afterSeconds: secs(next, after), changed: next !== p, reversed: pendingOrder?.reversed.length ?? 0 };
+const { jumpsPanel, orderCard, orderStats, stepJump } = bindOrder({
+  get applyEdit() {
+    return applyEdit;
   },
-  apply: () => {
-    const f = files.active;
-    const p = f?.pattern;
-    if (!f || !p || pendingOrder?.p !== p) return;
-    const before = orderStats(p);
-    const { next, reversed } = pendingOrder;
-    pendingOrder = null;
-    // Objects sewn anew from the other side remember their shape and settings, as after any new stitches.
-    if (reversed.length) {
-      const nq = seq(next);
-      for (const r of reversed) {
-        const o = nq.objectAt[recordOfStitch(nq.numbers, r.start + 1)];
-        if (o >= 0) remember(next, nq.objects[o], r.memory);
-      }
-      files.setObjects(f, rememberedIn(next, nq.objects));
-    }
-    ui.selectedObjects = new Set();
-    ui.hiddenBlocks = new Set();
-    ui.focusBlock = null;
-    // New stitches need a new density measurement; a new order alone does not.
-    applyEdit(next, reversed.length ? undefined : f.measurement);
-    const after = orderStats(next);
-    const parts: string[] = [];
-    const dc = before.colorChanges - after.colorChanges;
-    const dt = before.trims - after.trims;
-    if (dc > 0) parts.push(t(dc === 1 ? 'order.fewerColors.one' : 'order.fewerColors', { n: dc }));
-    if (dt > 0) parts.push(t(dt === 1 ? 'order.fewerTrims.one' : 'order.fewerTrims', { n: dt }));
-    if (!parts.length) parts.push(t('order.shorterTravel'));
-    layers.say(t('order.applied', { what: parts.join(', ') }));
+  get files() {
+    return files;
   },
-  cancel: () => {
-    pendingOrder = null;
+  get layers() {
+    return layers;
   },
-  saved: () => saveSettings(settings),
-});
-
-/** Frames the jump with a few millimetres around it. */
-function showJump(k: number): void {
-  const p = files.active?.pattern;
-  const j = p && seq(p).transitions[k];
-  if (!p || !j) return;
-  // At least 25 mm across, so the jump is seen in its surroundings.
-  const cx = (p.x[j.from] + p.x[j.to]) / 20;
-  const cy = (p.y[j.from] + p.y[j.to]) / 20;
-  const half = Math.max(12.5, Math.abs(p.x[j.from] - p.x[j.to]) / 20 + 4, Math.abs(p.y[j.from] - p.y[j.to]) / 20 + 4);
-  vp.fit(cx - half, cy - half, cx + half, cy + half, ui.stageW, ui.stageH);
-}
-
-function selectJump(k: number | null): void {
-  ui.selectedJump = k;
-  if (k !== null) showJump(k);
-  redraw();
-}
-
-const jumpsPanel = new JumpsPanel(settings, {
-  select: selectJump,
-  hover: (k) => {
-    ui.hoverJump = k;
-    redraw();
+  get overOf() {
+    return overOf;
   },
-  step: (dir) => stepJump(dir),
-  apply: (indices, cut) => {
-    const f = files.active;
-    const p = f?.pattern;
-    if (!f || !p) return;
-    const list = seq(p).transitions;
-    const next = setTrims(p, indices.map((i) => list[i]), cut);
-    if (next === p) return;
-    const keep = ui.selectedJump;
-    applyEdit(next);
-    // The jumps stay the same ones in the same order, so the selection carries over.
-    ui.selectedJump = keep;
-    redraw();
+  get redraw() {
+    return redraw;
   },
-  limitChanged: () => {
-    saveSettings(settings);
-    redraw();
+  get seq() {
+    return seq;
+  },
+  get settings() {
+    return settings;
+  },
+  get vp() {
+    return vp;
   },
 });
-
-function stepJump(dir: 1 | -1): void {
-  const p = files.active?.pattern;
-  if (!p) return;
-  const shown = jumpsPanel.visible(seq(p).transitions);
-  if (!shown.length) return;
-  const i = ui.selectedJump !== null ? shown.indexOf(ui.selectedJump) : -1;
-  selectJump(shown[i < 0 ? (dir > 0 ? 0 : shown.length - 1) : (i + dir + shown.length) % shown.length]);
-}
 
 const KIND_KEY: Record<number, Key> = { [SATIN]: 'kind.satin', [FILL]: 'kind.fill', [TIE_STITCH]: 'kind.tie' };
 
