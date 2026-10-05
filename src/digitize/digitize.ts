@@ -11,6 +11,9 @@ import { runStitch, TOLERANCE } from './run';
 import { column, pairs, satinStitches, underlay, type Column, type SatinParams } from './satin';
 import { reverse, skeleton, type Branch, type Graph, type Pt } from './skeleton';
 import type { FillSettings } from '../model/restitch';
+import type { Orientation } from '../image/orientation';
+import { transformForm, type Form } from '../shape/path';
+import { knockOut, rasterize, rasterizeStroke, sharedArea, unionOf } from '../shape/rasterize';
 
 /**
  * From a prepared label map to a stitch pattern.
@@ -94,6 +97,12 @@ export interface DigitizedObject {
   curved?: boolean;
   /** Fills: the exact area (in pattern coordinates, grown by the pull compensation) and how it was filled. */
   shape?: KeptShape;
+  /** Shapes of a vector file: the whole shape as curves (pattern coordinates), also where others cover it. */
+  form?: Form;
+  /** The parts later shapes cover are left out of the stitches (computed from `form`). */
+  knockout?: boolean;
+  /** A drawn line, sewn along these curves (see model/line.ts). */
+  path?: Form;
 }
 
 /** An area as pixels, in pattern coordinates (0.1 mm records / 10), and the fill it was sewn with. */
@@ -295,6 +304,39 @@ function sewRun(o: Obj, start: Pt, tol: number): Pt[][] {
   return run.length ? [run] : [];
 }
 
+/**
+ * Stitches for one object starting near `pos`: satin that would pile up or leave its region bare is
+ * filled instead, a region too thin to fill becomes running stitch. Fills note their angle in
+ * `angles`, so touching fills sewn later run another way. Runs of fewer than two points are left out.
+ */
+function sewOne(obj: Obj, pos: Pt, o: DigitizeOptions, satin: SatinParams, angles: { obj: Obj; angle: number }[], orient?: Orientation): Pt[][] {
+  let out: Pt[][] = [];
+  if (obj.info.kind === 'satin') {
+    out = sewSatin(obj, pos, satin, o.underlay, o.tolerance);
+    if (peakDensity(out) > (SATIN_PEAK * 2) / o.satinSpacing || coverage(obj.region, out) < SATIN_COVER) {
+      obj.info.kind = 'fill';
+      out = [];
+    }
+  }
+  if (obj.info.kind === 'fill') {
+    // Fill angles of touching regions sewn already, so neighbours differ.
+    const near = angles.filter((a) => touches(a.obj.region, obj.region)).map((a) => a.angle);
+    const fp = { spacing: o.spacing, stitch: o.stitch, angle: o.angle, pull: o.pull, underlay: o.underlay, tolerance: o.tolerance };
+    const flow = o.flow && o.angle === null && orient ? flowFill(obj.region, obj.graph, orient, fp, pos) : null;
+    const res = flow ?? fillRegion(obj.region, fp, pos, near);
+    if (res) {
+      out = res.runs;
+      obj.info.angle = res.angle;
+      if (flow?.curved) obj.info.curved = true;
+      angles.push({ obj, angle: res.angle });
+    } else if (obj.graph?.branches.length) {
+      obj.info.kind = 'run';
+    }
+  }
+  if (obj.info.kind === 'run' && obj.graph?.branches.length) out = sewRun(obj, pos, o.tolerance);
+  return out.filter((r) => r.length > 1);
+}
+
 export function digitize(prep: Prepared, o: DigitizeOptions, name = 'image'): Digitized {
   const { width: w, height: h, pxMm, labels, palette } = prep;
   const comps = components(labels, w, h);
@@ -348,31 +390,7 @@ export function digitize(prep: Prepared, o: DigitizeOptions, name = 'image'): Di
         }
       });
       const obj = todo.splice(bi, 1)[0];
-      let out: Pt[][] = [];
-      if (obj.info.kind === 'satin') {
-        out = sewSatin(obj, pos, satin, o.underlay, o.tolerance);
-        if (peakDensity(out) > (SATIN_PEAK * 2) / o.satinSpacing || coverage(obj.region, out) < SATIN_COVER) {
-          obj.info.kind = 'fill';
-          out = [];
-        }
-      }
-      if (obj.info.kind === 'fill') {
-        // Fill angles of touching regions sewn already, so neighbours differ.
-        const near = angles.filter((a) => touches(a.obj.region, obj.region)).map((a) => a.angle);
-        const fp = { spacing: o.spacing, stitch: o.stitch, angle: o.angle, pull: o.pull, underlay: o.underlay, tolerance: o.tolerance };
-        const flow = o.flow && o.angle === null && prep.orient ? flowFill(obj.region, obj.graph, prep.orient, fp, pos) : null;
-        const res = flow ?? fillRegion(obj.region, fp, pos, near);
-        if (res) {
-          out = res.runs;
-          obj.info.angle = res.angle;
-          if (flow?.curved) obj.info.curved = true;
-          angles.push({ obj, angle: res.angle });
-        } else if (obj.graph?.branches.length) {
-          obj.info.kind = 'run';
-        }
-      }
-      if (obj.info.kind === 'run' && obj.graph?.branches.length) out = sewRun(obj, pos, o.tolerance);
-      out = out.filter((r) => r.length > 1);
+      const out = sewOne(obj, pos, o, satin, angles, prep.orient);
       if (!out.length) continue;
       if (obj.info.kind === 'fill') obj.info.shape = keep(obj, o, w, h);
       runs.push(...out);
@@ -392,6 +410,7 @@ export function digitize(prep: Prepared, o: DigitizeOptions, name = 'image'): Di
  * pixel, see assemble): the region grown under later colors, and by the pull compensation, so
  * rows that end at its edge reach as far as they did.
  */
+/** The kept shape of a fill; the region's pixels are shifted by half the image (0 for regions in pattern coordinates). */
 function keep(obj: Obj, o: DigitizeOptions, imgW: number, imgH: number): KeptShape {
   const r = obj.region;
   const mask = Uint8Array.from(r.sdf, (d) => (d < o.pull ? 1 : 0));
@@ -641,4 +660,108 @@ function assemble(blocks: Block[], cx: number, cy: number, trimMm: number, name:
   }
   b.mark(END);
   return b.build(name, 'pes', colors.length ? colors : [{ r: 0, g: 0, b: 0 }]);
+}
+
+/** A painted part of a vector file (see svg.ts): a fill area or a line of a width, in mm from the top left. */
+export interface ShapeInput {
+  color: number;
+  kind: 'fill' | 'stroke';
+  form: Form;
+  width?: number;
+}
+
+/** Shapes smaller than this (mm²) are left out, as specks. */
+const SPECK_MM2 = 0.3;
+
+/**
+ * Stitches for the shapes of a vector file, one object per shape, sewn in the order they are
+ * painted. Each shape stays whole: where a later shape covers it, it is sewn underneath as well,
+ * unless `knockout` leaves those parts out (reaching `overlap` under the shape on top, so no fabric
+ * shows between). A shape joins an earlier color block of its thread when no shape painted in
+ * between touches it, which saves color changes without changing what lies on top.
+ */
+/** Where the middle of a design of `sizeMm` lands in pattern coordinates: at 0, on the pixel grid. */
+export function shapesOrigin(sizeMm: { w: number; h: number }, pxMm = 0.1): [number, number] {
+  return [Math.round(sizeMm.w / 2 / pxMm) * pxMm, Math.round(sizeMm.h / 2 / pxMm) * pxMm];
+}
+
+export function digitizeShapes(shapes: ShapeInput[], threads: ThreadColor[], o: DigitizeOptions, sizeMm: { w: number; h: number }, knockout: boolean, name = 'image', pxMm = 0.1): Digitized {
+  // Pattern coordinates: the middle of the design at 0, on the pixel grid.
+  const [cx, cy] = shapesOrigin(sizeMm, pxMm);
+  const items: { sh: ShapeInput; form: Form; whole: Region }[] = [];
+  for (const sh of shapes) {
+    const form = transformForm(sh.form, [1, 0, 0, 1, -cx, -cy]);
+    const whole = sh.kind === 'fill' ? rasterize(form, pxMm) : rasterizeStroke(form, sh.width ?? 0.4, pxMm);
+    if (!whole) continue;
+    // Lines of one color painted one after the other that touch are one network (a star of strokes).
+    const prev = items[items.length - 1];
+    if (prev && sh.kind === 'stroke' && prev.sh.kind === 'stroke' && prev.sh.color === sh.color && sharedArea(prev.whole, whole) > 0) {
+      prev.whole = unionOf([prev.whole, whole])!;
+      continue;
+    }
+    items.push({ sh, form, whole });
+  }
+  for (let k = items.length - 1; k >= 0; k--) if (items[k].whole.areaMm2 < SPECK_MM2) items.splice(k, 1);
+  const satin: SatinParams = { spacing: o.satinSpacing, pull: o.pull, splitMm: Math.max(7, o.satinMax) };
+  // Blocks of one thread, each a list of item indices.
+  const blocks: { color: number; items: number[] }[] = [];
+  const overlaps = (a: number, b: number) => sharedArea(items[a].whole, items[b].whole) > 0;
+  items.forEach((it, k) => {
+    let target = blocks.length - 1;
+    if (target < 0 || blocks[target].color !== it.sh.color) {
+      target = -1;
+      for (let b = blocks.length - 1; b >= 0; b--) {
+        if (blocks[b].color === it.sh.color) {
+          target = b;
+          break;
+        }
+        if (blocks[b].items.some((j) => overlaps(j, k))) break;
+      }
+    }
+    if (target < 0) blocks.push({ color: it.sh.color, items: [k] });
+    else blocks[target].items.push(k);
+  });
+  // Sewn order of the items, for what lies on top.
+  const sewnAt = new Map<number, number>();
+  let n = 0;
+  for (const b of blocks) for (const k of b.items) sewnAt.set(k, n++);
+
+  const out: Block[] = [];
+  const objects: DigitizedObject[] = [];
+  const angles: { obj: Obj; angle: number }[] = [];
+  let pos: Pt = [0, 0];
+  for (const b of blocks) {
+    const runs: Pt[][] = [];
+    const owners: number[] = [];
+    for (const k of b.items) {
+      const it = items[k];
+      let region = it.whole;
+      const isFill = it.sh.kind === 'fill';
+      if (knockout && isFill) {
+        const covers = items.filter((x, j) => x.sh.kind === 'fill' && sewnAt.get(j)! > sewnAt.get(k)!).map((x) => x.whole);
+        const left = knockOut(region, covers, o.overlap);
+        if (!left || left.areaMm2 < SPECK_MM2) continue;
+        region = left;
+      }
+      const graph = skeleton(region);
+      const obj: Obj = { info: { kind: classify(graph, o), label: it.sh.color, areaMm2: region.areaMm2 }, region, graph, probe: [] };
+      const sewn = sewOne(obj, pos, o, satin, angles);
+      if (!sewn.length) continue;
+      if (obj.info.kind === 'fill') {
+        obj.info.shape = keep(obj, o, 0, 0);
+        if (isFill) {
+          obj.info.form = it.form;
+          obj.info.knockout = knockout;
+        }
+      }
+      runs.push(...sewn);
+      for (const _ of sewn) owners.push(objects.length);
+      objects.push(obj.info);
+      const last = sewn[sewn.length - 1];
+      pos = last[last.length - 1];
+    }
+    if (runs.length) out.push({ color: threads[b.color], runs, owners });
+  }
+  const starts: number[] = [];
+  return { pattern: assemble(out, 0, 0, o.trimMm, name, starts), objects, starts };
 }

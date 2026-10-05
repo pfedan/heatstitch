@@ -10,12 +10,14 @@ import {
   putFile,
   saveAcks,
   saveActiveKey,
+  saveAside,
   saveObjects,
   saveWorking,
   toStored,
   type StoredPattern,
 } from '../storage/fileStore';
 import { restoreRemembered, type StoredObject } from '../model/restitch';
+import { asideFrom, asideOf, inheritAside, setAsideOf, storeAside, type StoredAside } from '../model/aside';
 import type { ProjectFile } from '../storage/project';
 import { liveAcknowledgements, openWorst, type Acknowledgement } from '../validation/acks';
 import type { Profile } from '../validation/profiles';
@@ -61,6 +63,7 @@ interface FileData {
   working?: StoredPattern;
   acks?: Acknowledgement[];
   objects?: StoredObject[];
+  aside?: StoredAside[];
 }
 
 /** Versions kept per file for undo. */
@@ -109,8 +112,8 @@ export class FileList {
   }
 
   /** Adds one file with what is known about its objects, and activates it. */
-  async addWithObjects(name: string, data: ArrayBuffer, objects: StoredObject[]): Promise<void> {
-    const first = await this.addData([{ name, data, objects }], true);
+  async addWithObjects(name: string, data: ArrayBuffer, objects: StoredObject[], aside: StoredAside[] = []): Promise<void> {
+    const first = await this.addData([{ name, data, objects, aside }], true);
     if (first) this.activate(first.id);
     else this.render();
   }
@@ -120,7 +123,7 @@ export class FileList {
     const stored = await listFiles();
     if (!stored.length) return;
     const first = await this.addData(
-      stored.map((rec) => ({ name: rec.name, data: rec.data, storeKey: rec.key, working: rec.working, acks: acksOf(rec), objects: rec.objects })),
+      stored.map((rec) => ({ name: rec.name, data: rec.data, storeKey: rec.key, working: rec.working, acks: acksOf(rec), objects: rec.objects, aside: rec.aside })),
       false,
     );
     // Files the user added while we were reading storage keep the focus.
@@ -138,7 +141,7 @@ export class FileList {
   async addProject(list: ProjectFile[], active: number | null): Promise<void> {
     const before = this.files.length;
     const first = await this.addData(
-      list.map((f) => ({ name: f.name, data: f.data.slice().buffer, working: f.working, acks: f.acks, objects: f.objects })),
+      list.map((f) => ({ name: f.name, data: f.data.slice().buffer, working: f.working, acks: f.acks, objects: f.objects, aside: f.aside })),
       true,
     );
     const wanted = active !== null ? this.files[before + active] : undefined;
@@ -160,7 +163,7 @@ export class FileList {
 
   private async addData(list: FileData[], persist: boolean): Promise<LoadedFile | null> {
     let first: LoadedFile | null = null;
-    for (const { name, data, storeKey, working, acks, objects } of list) {
+    for (const { name, data, storeKey, working, acks, objects, aside } of list) {
       const entry: LoadedFile = { id: this.nextId++, fileName: name, data: new Uint8Array(data), storeKey, undo: [], redo: [], acks: acks ?? [] };
       // Remembered by their stitches, so they apply to whichever version has these objects.
       if (objects) restoreRemembered(objects);
@@ -179,6 +182,9 @@ export class FileList {
             if (storeKey !== undefined) void saveWorking(storeKey, null);
           }
         }
+        // Shapes aside belong to the working copy (to the original only while there is none).
+        setAsideOf(original, entry.pattern === original ? asideFrom(aside) : []);
+        if (entry.pattern !== original) setAsideOf(entry.pattern, asideFrom(aside));
         entry.stats = patternStats(entry.pattern);
         first ??= entry;
         // Only parseable files are kept; a broken file would just show up again as an error.
@@ -189,6 +195,7 @@ export class FileList {
             if (entry.pattern !== original) void saveWorking(key, toStored(entry.pattern));
             if (entry.acks.length) void saveAcks(key, entry.acks);
             if (objects?.length) void saveObjects(key, objects);
+            if (aside?.length) void saveAside(key, aside);
           }
         }
       } catch (err) {
@@ -245,10 +252,15 @@ export class FileList {
       if (f.undo.length > HISTORY) f.undo.shift();
       f.redo = [];
     }
+    // A new version keeps the shapes aside of the one before; undo and redo bring back their own.
+    inheritAside(f.pattern, p);
     f.pattern = p;
     f.stats = patternStats(p);
     // The working copy is saved next to the original on every change, so a reload restores it.
-    if (f.storeKey !== undefined) void saveWorking(f.storeKey, p === f.original ? null : toStored(p));
+    if (f.storeKey !== undefined) {
+      void saveWorking(f.storeKey, p === f.original ? null : toStored(p));
+      void saveAside(f.storeKey, storeAside(asideOf(p)));
+    }
     if (opts.measurement) {
       this.store(f, p, opts.measurement);
       this.render();

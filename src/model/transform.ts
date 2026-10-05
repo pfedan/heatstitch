@@ -104,6 +104,7 @@ export function transformRemembered(r: Remembered, m: Mat): Remembered {
     out.form = transformForm(form, m);
     out.region = rasterize(out.form, r.region?.pxMm ?? 0.1);
   }
+  if (r.path) out.path = transformForm(r.path, m);
   if (r.shape) out.shape = shiftRegion(r.shape, m) ?? rasterize(transformForm(vectorize(r.shape), m), r.shape.pxMm) ?? undefined;
   const s = scaleOf(m);
   if (r.columns) {

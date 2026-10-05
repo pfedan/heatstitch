@@ -388,7 +388,7 @@ export interface ReorderOptions {
  */
 export function reorder(p: Pattern, objs: SewObject[], order: number[], trimMm: number, starts?: number[], opts: ReorderOptions = {}): Pattern {
   const { into, fresh } = opts;
-  if (order.every((o, k) => o === k) && !into?.size && !fresh?.size) {
+  if (order.length === objs.length && order.every((o, k) => o === k) && !into?.size && !fresh?.size) {
     starts?.push(...objs.map((o) => stitchesBefore(p, o.first)));
     return p;
   }

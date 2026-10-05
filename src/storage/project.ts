@@ -10,6 +10,7 @@
  */
 
 import { normalizeCorrection } from '../correct/auto';
+import type { StoredAside } from '../model/aside';
 import type { StoredObject } from '../model/restitch';
 import { DEFAULTS, hexColor, normalizeImage, type ImageSettings, type Settings } from '../settings';
 import { isAcknowledgement, type Acknowledgement } from '../validation/acks';
@@ -32,6 +33,8 @@ export interface ProjectFile {
   working?: StoredPattern;
   acks: Acknowledgement[];
   objects: StoredObject[];
+  /** Shapes of the working copy that are not sewn (absent in older projects). */
+  aside?: StoredAside[];
 }
 
 export interface ProjectImage {
@@ -181,6 +184,8 @@ export async function decodeProject(bytes: Uint8Array): Promise<Project> {
         acks: Array.isArray(e.acks) ? e.acks.filter(isAcknowledgement) : [],
         // Checked when they are remembered again (restoreRemembered).
         objects: Array.isArray(e.objects) ? e.objects : [],
+        // Checked when they are read (asideFrom).
+        ...(Array.isArray(e.aside) && e.aside.length ? { aside: e.aside } : {}),
       },
     ];
   });

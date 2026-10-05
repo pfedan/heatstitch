@@ -71,6 +71,8 @@ export interface Settings {
   opacity: number;
   /** Stitch plan drawn as shaded threads with shadows instead of flat lines. */
   realistic: boolean;
+  /** Ablauf: objects with a known shape drawn as flat areas of their color instead of stitches. */
+  shapesView: boolean;
   /** Color behind the stitches (the fabric), as #rrggbb; null follows the light or dark theme. */
   background: string | null;
   /** Visual thread width of the realistic view in mm; reset to the thread weight's width when the profile thread changes. */
@@ -114,6 +116,7 @@ export const DEFAULTS: Settings = {
   overlay: false,
   opacity: 0.6,
   realistic: false,
+  shapesView: false,
   background: null,
   threadMm: threadWidthMm(DEFAULT_PROFILE),
   liveLight: true,

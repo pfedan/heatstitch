@@ -3,7 +3,8 @@ import type { SewObject } from '../model/objects';
 import type { OrderCost } from '../model/order';
 import type { Settings } from '../settings';
 import { KIND_ICON, kindLabel } from './layersPanel';
-import { cssColor } from './threadPicker';
+import { cssColor, ThreadPicker } from './threadPicker';
+import type { ThreadColor } from '../model/pattern';
 
 export interface ObjectInfo {
   objects: SewObject[];
@@ -26,6 +27,8 @@ export interface ObjectInfo {
   mergeBlocked: Key | null;
   /** Some of the selected objects can be sewn from the other side (satins and fills). */
   reversible: boolean;
+  /** Several fills are selected: the one on top can be cut out of the others. */
+  subtractable: boolean;
 }
 
 export interface ObjectHooks {
@@ -48,11 +51,35 @@ export interface ObjectHooks {
   deleteSelection: () => void;
   /** Split the stitch to the selected point in two. */
   splitStitch: () => void;
+  /** The selected object once more, beside it. */
+  duplicate: () => void;
+  /** The selected objects mirrored left to right (x) or top to bottom (y). */
+  mirror: (axis: 'x' | 'y') => void;
+  /** The top one of the selected fills cut out of the others. */
+  subtract: () => void;
+  /** The selected objects deleted. */
+  remove: () => void;
+  /** The selected objects sewn in another thread. */
+  thread: (c: ThreadColor) => void;
+  /** The selected objects kept but not sewn: switched off, or as guides. */
+  aside: (role: 'off' | 'guide') => void;
 }
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
 /** Two arrows in opposite directions: start and end swap. */
+const icon = (path: string) =>
+  `<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`;
+const SHAPE_ICONS = {
+  duplicate: icon('<rect x="2.5" y="2.5" width="8" height="8" rx="1"/><rect x="5.5" y="5.5" width="8" height="8" rx="1"/>'),
+  mirrorX: icon('<path d="M8 1.5v13" stroke-dasharray="1.5 1.5"/><path d="M6 4L2 12h4zM10 4l4 8h-4z"/>'),
+  mirrorY: icon('<path d="M1.5 8h13" stroke-dasharray="1.5 1.5"/><path d="M4 6l8-4v4zM4 10l8 4v-4z"/>'),
+  subtract: icon('<path d="M2.5 2.5h8v3.2a4.5 4.5 0 0 0-4.8 4.8H2.5z"/><circle cx="10" cy="10" r="3.5" stroke-dasharray="1.5 1.5"/>'),
+  remove: icon('<path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.7 9h5.6l.7-9"/>'),
+  off: icon('<path d="M11.5 1.5L4.5 14.5"/><ellipse cx="10.6" cy="3.2" rx="0.5" ry="1"/><path d="M2 2l12 12"/>'),
+  guide: icon('<path d="M2 13L14 3" stroke-dasharray="2.4 2"/>'),
+};
+
 const REVERSE_ICON =
   '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 5.5h10M10 3l2.5 2.5L10 8M13.5 10.5h-10M6 8l-2.5 2.5L6 13"/></svg>';
 
@@ -68,6 +95,7 @@ export class ObjectPanel {
   private body = $<HTMLElement>('object-body');
   private msg = $<HTMLElement>('object-msg');
   private key: unknown[] = [];
+  private picker = new ThreadPicker('.thread-sw');
 
   constructor(private hooks: ObjectHooks) {
     $('object-close').addEventListener('click', () => hooks.clear());
@@ -99,9 +127,18 @@ export class ObjectPanel {
       icon.className = `kind-icon kind-${o.kind}`;
       icon.innerHTML = KIND_ICON[o.kind];
       const title = Object.assign(document.createElement('strong'), { textContent: `${kindLabel(o.kind)} ${info.numbers[0]}` });
-      const sw = document.createElement('span');
-      sw.className = 'mini-sw';
+      const sw = Object.assign(document.createElement('button'), { type: 'button', className: 'mini-sw thread-sw', title: t('object.thread.hint') });
+      sw.setAttribute('aria-label', t('object.thread.hint'));
       sw.style.background = cssColor(o.color);
+      sw.addEventListener('click', () =>
+        this.picker.toggle(sw, {
+          key: `object-${o.index}`,
+          title: t('object.thread.hint'),
+          current: o.color,
+          note: t('object.thread.note'),
+          onPick: (c) => this.hooks.thread(c),
+        }),
+      );
       const color = Object.assign(document.createElement('span'), {
         className: 'muted',
         textContent: `${o.block + 1}. ${o.color.name || t('layers.unnamed', { n: o.block + 1 })}`,
@@ -123,6 +160,7 @@ export class ObjectPanel {
     }
     const actions = document.createElement('div');
     actions.className = 'row-buttons';
+    const extraRows: HTMLElement[] = [];
     if (sel.length === 1) {
       const o = sel[0];
       const btn = (label: string, dir: -1 | 1, disabled: boolean) => {
@@ -151,6 +189,28 @@ export class ObjectPanel {
       b.addEventListener('click', () => this.hooks.reverse());
       actions.append(b);
     }
+    if (!info.editing && !info.shaping) {
+      const shapeRow = document.createElement('div');
+      shapeRow.className = 'row-buttons shape-actions';
+      const add = (svg: string, label: string, hint: string, run: () => void, labelled = false) => {
+        const b = Object.assign(document.createElement('button'), { type: 'button', title: hint });
+        b.innerHTML = svg;
+        if (labelled) b.append(label);
+        else b.setAttribute('aria-label', label);
+        b.addEventListener('click', run);
+        shapeRow.append(b);
+      };
+      if (sel.length === 1) add(SHAPE_ICONS.duplicate, t('object.duplicate'), t('object.duplicate.hint'), () => this.hooks.duplicate());
+      if (info.subtractable) add(SHAPE_ICONS.subtract, t('object.subtract'), t('object.subtract.hint'), () => this.hooks.subtract());
+      add(SHAPE_ICONS.mirrorX, t('object.mirrorX'), t('object.mirrorX'), () => this.hooks.mirror('x'));
+      add(SHAPE_ICONS.mirrorY, t('object.mirrorY'), t('object.mirrorY'), () => this.hooks.mirror('y'));
+      if (info.objects.length > sel.length) {
+        add(SHAPE_ICONS.off, t('object.off'), t('object.off.hint'), () => this.hooks.aside('off'));
+        add(SHAPE_ICONS.guide, t('object.guide'), t('object.guide.hint'), () => this.hooks.aside('guide'));
+        add(SHAPE_ICONS.remove, t('object.delete'), t('object.delete.hint'), () => this.hooks.remove());
+      }
+      extraRows.push(shapeRow);
+    }
     const handNote =
       sel.length > 1 && hand && !info.mergeBlocked
         ? [Object.assign(document.createElement('p'), { className: 'muted small', textContent: t('object.mergeHand', { n: formatNumber(hand) }) })]
@@ -163,7 +223,7 @@ export class ObjectPanel {
       ? [Object.assign(document.createElement('p'), { className: 'muted small', textContent: info.frame.canScale ? t('object.frameHint') : `${t('object.frameHint')} ${t('object.frameMixed')}` })]
       : [];
     const tools = sel.length !== 1 ? [] : info.shaping ? [this.shapeTools(info.shaping)] : [this.stitchTools(info)];
-    this.body.replaceChildren(head, dl, ...(actions.childElementCount ? [actions] : []), ...handNote, ...tools, ...frameHint, hint);
+    this.body.replaceChildren(head, dl, ...(actions.childElementCount ? [actions] : []), ...extraRows, ...handNote, ...tools, ...frameHint, hint);
   }
 
   /** Editing the outline of the one selected object: nodes, delete, corner or round, done. */

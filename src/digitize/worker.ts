@@ -2,7 +2,8 @@
 import { looksLikePhoto } from '../image/filters';
 import { Preparer, type ColorEdit, type ExactLabels, type PrepareOptions, type Prepared, type Stroke } from '../image/prepare';
 import type { Raster } from '../image/raster';
-import { digitize, type DigitizeOptions, type Digitized } from './digitize';
+import { digitize, digitizeShapes, type DigitizeOptions, type Digitized, type ShapeInput } from './digitize';
+import type { ThreadColor } from '../model/pattern';
 
 /**
  * Image conversion off the main thread. The worker keeps the loaded image and the cached stages of
@@ -13,7 +14,8 @@ import { digitize, type DigitizeOptions, type Digitized } from './digitize';
 export type ImageRequest =
   | { id: number; type: 'load'; raster: Raster }
   | { id: number; type: 'prepare'; options: PrepareOptions; edits: ColorEdit[]; strokes: Stroke[]; exact?: ExactLabels }
-  | { id: number; type: 'digitize'; options: DigitizeOptions; name: string };
+  | { id: number; type: 'digitize'; options: DigitizeOptions; name: string }
+  | { id: number; type: 'shapes'; shapes: ShapeInput[]; threads: ThreadColor[]; options: DigitizeOptions; size: { w: number; h: number }; knockout: boolean; name: string };
 
 export interface ImageResponse {
   id: number;
@@ -42,6 +44,8 @@ ctx.onmessage = (e: MessageEvent<ImageRequest>) => {
       const { orient: _, ...rest } = prepared;
       const copy = { ...rest, labels: prepared.labels.slice() };
       ctx.postMessage({ id: req.id, prepared: copy } satisfies ImageResponse, [copy.labels.buffer]);
+    } else if (req.type === 'shapes') {
+      ctx.postMessage({ id: req.id, digitized: digitizeShapes(req.shapes, req.threads, req.options, req.size, req.knockout, req.name) } satisfies ImageResponse);
     } else {
       if (!prepared) throw new Error('No prepared image');
       ctx.postMessage({ id: req.id, digitized: digitize(prepared, req.options, req.name) } satisfies ImageResponse);

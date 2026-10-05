@@ -7,7 +7,7 @@ import type { ValidationResult, Zone } from '../validation/validate';
 import { drawEditOverlay } from './editOverlay';
 import { drawRungOverlay } from './rungOverlay';
 import type { RungView } from '../ui/rungTool';
-import { drawFrame, drawShapeOverlay } from './shapeOverlay';
+import { drawAreas, drawFrame, drawShapeOverlay, type FlatArea } from './shapeOverlay';
 import type { ShapeView } from '../ui/shapeTool';
 import type { FrameView } from '../ui/frameTool';
 import type { Pt } from '../digitize/skeleton';
@@ -44,6 +44,8 @@ export interface FlowScene {
   shape?: { view: ShapeView; handles: { path: number; i: number; part: 'a' | 'b' }[] } | null;
   /** The frame around the one selected object (level Objects), with its corners as dragged. */
   frame?: { view: FrameView; mapped: Pt[] } | null;
+  /** Objects drawn as flat areas instead of their stitches (their stitches have alpha 0). */
+  areas?: FlatArea[] | null;
 }
 
 export interface Scene {
@@ -78,6 +80,7 @@ export function drawScene(ctx: CanvasRenderingContext2D, w: number, h: number, s
   if (flow) {
     if (!pattern) return;
     const st = flow.style;
+    if (flow.areas?.length) drawAreas(ctx, vp, flow.areas);
     if (!s.realistic || !drawThreads(ctx, vp, pattern, 1, s.threadMm, st)) drawFlatStitches(ctx, vp, pattern, st, 1);
     if (s.marks.jumps) drawJumps(ctx, vp, pattern, st.limit, st.alpha, st.carried?.jumps);
     drawMarkers(ctx, vp, pattern, { markers: flow.markers, marks: s.marks, limit: st.limit, alpha: st.alpha }, w, h);
