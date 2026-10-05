@@ -385,7 +385,6 @@
         <div id="tooltip" class="tooltip" hidden></div>
         <p class="empty" id="empty" data-i18n="canvas.empty"></p>
         <p class="hint" id="canvas-hint"></p>
-        <button type="button" id="findings-open" class="findings-chip" data-mode="density" hidden></button>
         <div class="player" id="player" data-mode="flow" hidden>
           <div class="player-buttons">
             <button type="button" class="tool" data-play="block-prev" data-i18n-title="player.blockPrev"><span aria-hidden="true">⏮</span></button>
@@ -493,14 +492,11 @@
         </section>
 
         <!-- Dichte -->
-        <section class="panel findings" id="findings-panel" data-mode="density">
-          <div class="findings-head">
-            <h2 data-i18n="findings.title"></h2>
-            <label class="check val-toggle" data-i18n-title="validation.overlay.key"><input type="checkbox" id="show-validation" /><span data-i18n="validation.overlay"></span></label>
-            <button type="button" id="findings-close" class="icon" data-i18n-title="findings.hide"><span aria-hidden="true">&#x2715;</span></button>
-          </div>
+        <details class="panel section findings" id="findings-panel" data-mode="density" data-section="findings">
+          <summary><h2 data-i18n="findings.title"></h2><span id="findings-sum" class="findings-sum"></span></summary>
+          <label class="check val-toggle" data-i18n-title="validation.overlay.key"><input type="checkbox" id="show-validation" /><span data-i18n="validation.overlay"></span></label>
           <div id="validation" class="findings-body" aria-live="polite"></div>
-        </section>
+        </details>
 
         <section class="panel" id="correct-panel" data-mode="density">
           <h2><span data-i18n="correct.title"></span> <span class="beta-badge" data-i18n="correct.beta" data-i18n-title="correct.beta.hint"></span></h2>

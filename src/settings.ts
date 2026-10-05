@@ -84,8 +84,6 @@ export interface Settings {
   liveLight: boolean;
   /** Orange/red overlay of the 3-tier validation. */
   showValidation: boolean;
-  /** Findings column next to the canvas is shown (else only a chip on the canvas). */
-  findingsOpen: boolean;
   /** Widths of the side columns in px set by dragging their edges; null follows the window width. */
   panels: PanelWidths;
   /** Material the validation thresholds are scaled for. */
@@ -109,7 +107,7 @@ export const DEFAULTS: Settings = {
   mode: 'flow',
   colorBy: 'thread',
   marks: { jumps: true, trims: true, colors: false, ends: false, points: false, threads: false },
-  sections: { display: true, stats: false, advanced: false },
+  sections: { display: true, stats: false, advanced: false, findings: true },
   machineSpm: 800,
   playSpeed: 50,
   trimMm: 3,
@@ -127,7 +125,6 @@ export const DEFAULTS: Settings = {
   threadMm: threadWidthMm(DEFAULT_PROFILE),
   liveLight: true,
   showValidation: true,
-  findingsOpen: true,
   panels: { side: null, inspector: null },
   profile: DEFAULT_PROFILE,
   checks: { ...ALL_CHECKS },
@@ -152,9 +149,9 @@ export function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return structuredClone(DEFAULTS);
-    const s = JSON.parse(raw) as Partial<Settings> & { showJumps?: boolean };
+    const s = JSON.parse(raw) as Partial<Settings> & { showJumps?: boolean; findingsOpen?: boolean };
     const profile = normalizeProfile(s.profile);
-    const { showJumps, ...rest } = s;
+    const { showJumps, findingsOpen, ...rest } = s;
     return {
       ...structuredClone(DEFAULTS),
       ...rest,
@@ -162,7 +159,8 @@ export function loadSettings(): Settings {
       mode: MODES.includes(s.mode as Mode) ? s.mode! : 'density',
       colorBy: COLOR_BY.includes(s.colorBy as ColorBy) ? s.colorBy! : 'thread',
       marks: { ...DEFAULTS.marks, ...(showJumps !== undefined ? { jumps: showJumps } : {}), ...s.marks },
-      sections: { ...DEFAULTS.sections, ...s.sections },
+      // Findings closed with the old × stay closed as a collapsed section.
+      sections: { ...DEFAULTS.sections, ...(findingsOpen === false ? { findings: false } : {}), ...s.sections },
       machineSpm: typeof s.machineSpm === 'number' && s.machineSpm > 0 ? s.machineSpm : DEFAULTS.machineSpm,
       playSpeed: typeof s.playSpeed === 'number' && s.playSpeed > 0 ? s.playSpeed : DEFAULTS.playSpeed,
       trimMm: typeof s.trimMm === 'number' && s.trimMm > 0 ? s.trimMm : DEFAULTS.trimMm,
