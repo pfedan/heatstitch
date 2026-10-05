@@ -307,6 +307,9 @@ const { applyRestitched, convertSettings, stitchInfo, stitchPanel } = bindStitch
   get applyEdit() {
     return applyEdit;
   },
+  get takeShapes() {
+    return takeShapes;
+  },
   get closeRungs() {
     return closeRungs;
   },

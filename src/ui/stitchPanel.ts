@@ -1,6 +1,6 @@
 import { formatNumber, t, type Key } from '../i18n';
 import type { ObjectKind } from '../model/objects';
-import { SATIN_SPLIT, UNDERLAYS, type FillPattern, type FillSettings, type RunSettings, type SatinSettings, type SatinType, type Settings, type ShapeTrust, type Fixed } from '../model/restitch';
+import { DECO_DEFAULTS, isOpenPattern, OPEN_SIZE, OPEN_SIZE_RANGE, SATIN_SPLIT, UNDERLAYS, type DecoSettings, type FillPattern, type FillSettings, type OpenPattern, type RunSettings, type SatinSettings, type SatinType, type Settings, type ShapeTrust, type Fixed } from '../model/restitch';
 import { fixText } from './fixText';
 import type { UnderlayKind } from '../digitize/satin';
 import type { ShapeOutline } from '../render/scene';
@@ -14,6 +14,7 @@ import type { ThreadColor } from '../model/pattern';
 import { newLink } from '../model/border';
 import { autoUnder, type PathStitch } from '../model/along';
 import { cssColor, hexColor, ThreadPicker } from './threadPicker';
+import { CROSS_KINDS, GRID_KINDS, MOTIFS, type CrossKind, type GridKind, type Motif } from '../digitize/deco';
 
 type FillUnder = 'off' | 'single' | 'cross';
 const FILL_UNDERS: FillUnder[] = ['off', 'single', 'cross'];
@@ -121,20 +122,62 @@ export interface StitchHooks {
   lock: (on: boolean) => void;
   /** The selected objects' stitches loosed from their shape (true), or sewn from it again (false). */
   free: (on: boolean) => void;
+  /** The one selected fill fades out, and a copy in `color` fades in on the same area: a color blend. */
+  blend: (color: ThreadColor) => void;
 }
 
 const KINDS: ObjectKind[] = ['fill', 'satin', 'run'];
 
-const PATTERNS: FillPattern[] = ['tatami', 'gradient', 'contour', 'spiral', 'follow', 'guided'];
+/**
+ * The fill patterns as tiles in three groups: classic rows, decorative fills that still cover the
+ * area, and open patterns (one line, the fabric showing). `emboss` is tatami with a motif in its
+ * needle points: a tile of its own so it is found among the decorative ones.
+ */
+type Tile = FillPattern | 'emboss' | 'fade';
+type TileGroup = 'classic' | 'decor' | 'open';
+const GROUPS: Record<TileGroup, Tile[]> = {
+  classic: ['tatami', 'gradient', 'contour', 'spiral', 'follow', 'guided'],
+  decor: ['emboss', 'fade', 'waves', 'grain', 'rays', 'swirl'],
+  open: ['meander', 'maze', 'grid', 'echo', 'cross'],
+};
+const TILE_GROUPS: TileGroup[] = ['classic', 'decor', 'open'];
+const tileOf = (s: FillSettings): Tile => (s.pattern === 'tatami' && s.deco?.emboss ? 'emboss' : s.pattern === 'gradient' && s.deco?.fade ? 'fade' : s.pattern);
+const groupOf = (t: Tile): TileGroup => TILE_GROUPS.find((g) => GROUPS[g].includes(t))!;
+/** Patterns whose rows bend: their stitches get shorter in tight bends. */
+const CURVED: FillPattern[] = ['contour', 'spiral', 'follow', 'waves', 'grain', 'rays', 'swirl'];
+/** Patterns with a row direction to set. */
+const ANGLED: FillPattern[] = ['tatami', 'gradient', 'waves', 'grain'];
+/** Where rays start, as shares of the shape's width and height: a 3 × 3 grid. */
+const FOCI: Pt[] = [0, 0.5, 1].flatMap((y) => [0, 0.5, 1].map((x) => [x, y] as Pt));
 
 /** Small pictures of the fill patterns (24 × 24, drawn with the current color). */
-const PATTERN_ICON: Record<FillPattern, string> = {
-  tatami: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 5h7m3 0h8M3 9.5h4m3 0h11M3 14h9m3 0h6M3 18.5h2m3 0h13"/></svg>',
-  gradient: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 3.5h18M3 6h18M3 9h18M3 13h18M3 18.5h18"/></svg>',
-  contour: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="5"/><rect x="7" y="7" width="10" height="10" rx="2.5"/><path d="M11 11h2v2h-2z"/></svg>',
-  spiral: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M12 12c0-1 1.5-1.2 2-.2.8 1.6-1 3.2-2.6 3-2.6-.3-3.4-3.6-1.8-5.6 2.2-2.8 6.6-1.8 7.6 1.4 1.3 4-2.2 7.6-6 7.2-4.4-.4-7-5-5.6-9C7 5 11.6 3 15.6 4.2"/></svg>',
-  follow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 6c5-3 9 3 18 0M3 11c5-3 9 3 18 0M3 16c5-3 9 3 18 0M3 21c5-3 9 3 18 0"/></svg>',
+const SVG = (body: string, w = 1.6) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
+const PATTERN_ICON: Record<Tile, string> = {
+  tatami: SVG('<path d="M3 5h7m3 0h8M3 9.5h4m3 0h11M3 14h9m3 0h6M3 18.5h2m3 0h13"/>'),
+  gradient: SVG('<path d="M3 3.5h18M3 6h18M3 9h18M3 13h18M3 18.5h18"/>'),
+  contour: SVG('<rect x="3" y="3" width="18" height="18" rx="5"/><rect x="7" y="7" width="10" height="10" rx="2.5"/><path d="M11 11h2v2h-2z"/>'),
+  spiral: SVG('<path d="M12 12c0-1 1.5-1.2 2-.2.8 1.6-1 3.2-2.6 3-2.6-.3-3.4-3.6-1.8-5.6 2.2-2.8 6.6-1.8 7.6 1.4 1.3 4-2.2 7.6-6 7.2-4.4-.4-7-5-5.6-9C7 5 11.6 3 15.6 4.2"/>'),
+  follow: SVG('<path d="M3 6c5-3 9 3 18 0M3 11c5-3 9 3 18 0M3 16c5-3 9 3 18 0M3 21c5-3 9 3 18 0"/>'),
   guided: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path stroke-width="1.2" opacity=".6" d="M4 4c3 0 5 5 8 5s5-4 8-4M4 15c3 0 5 5 8 5s5-4 8-4"/><path stroke-width="2.4" d="M4 9.5c3 0 5 5 8 5s5-4 8-4"/></svg>',
+  emboss: SVG('<path opacity=".45" d="M3 4.5h18M3 9h18M3 13.5h18M3 18h18"/><path stroke-width="2" d="M12 3.5l6.5 8.5-6.5 8.5-6.5-8.5z"/>', 1.4),
+  fade: SVG('<path d="M3 3.5h18M3 5.5h18M3 8h18M3 11h18M3 15h18M3 20.5h18"/><path opacity=".5" stroke-dasharray="2 2" d="M3 7h18M3 13h18M3 17.5h18M3 19.5h18"/>', 1.3),
+  waves: SVG('<path d="M3 7c3-3 6 3 9 0s6-3 9 0M3 12c3-3 6 3 9 0s6-3 9 0M3 17c3-3 6 3 9 0s6-3 9 0"/>'),
+  grain: SVG('<path d="M3 5.5c4 1.5 6-2 10-1s6 2 8 .5M3 10.5c3-1.5 7 2 10 0s5-2 8-.5M3 15.5c4 2 6-1.5 9 0s6 2 9 0M3 20c4-1.5 7 1 18-.5"/>'),
+  rays: SVG('<path d="M12 21L3 7M12 21L6.5 3.5M12 21V3M12 21l5.5-17.5M12 21l9-14"/>'),
+  swirl: SVG('<path d="M12 12.5c.8-.6.3-2-.8-1.8-1.6.3-1.6 2.7-.2 3.4 2.2 1.1 4.4-1.1 3.8-3.5-.8-3-4.6-3.8-6.8-1.8-3 2.7-1.7 7.8 2.2 8.6 4.6.9 8.2-3.4 7.2-7.9"/><path d="M3 6c2.5-2.2 6-3 9-2.4"/>'),
+  meander: SVG('<path d="M4 20c-1.5-3 2-4 .5-7S2.6 8 4.6 6.5 8 7.4 8.3 10s-1.5 4.5.4 6 4.1-.3 4.2-2.6-2.3-4.2-1.3-6.4 4-2.5 5.4-.6.2 4.4 1.7 6.3 3.5.9 3.3 3.3S18 20 16 20"/>'),
+  maze: SVG('<path d="M3 3h18v18H3zM7 3v10h5M7 17h10V7M12 7v6"/>'),
+  grid: SVG('<path d="M7 2.8l4 2.3v4.6l-4 2.3-4-2.3V5.1zM17 2.8l4 2.3v4.6l-4 2.3-4-2.3V5.1zM12 11.6l4 2.3v4.6L12 20.8l-4-2.3v-4.6z"/>', 1.4),
+  echo: SVG('<path d="M12 20.5S3 15 3 9.3a4.6 4.6 0 0 1 9-1.4 4.6 4.6 0 0 1 9 1.4C21 15 12 20.5 12 20.5z"/><path d="M12 15.6s-4.4-2.8-4.4-5.6a2.2 2.2 0 0 1 4.4-.7 2.2 2.2 0 0 1 4.4.7c0 2.8-4.4 5.6-4.4 5.6z"/>', 1.4),
+  cross: SVG('<path d="M4 4l6 6M10 4l-6 6M14 4l6 6M20 4l-6 6M4 14l6 6M10 14l-6 6M14 14l6 6M20 14l-6 6"/>'),
+};
+
+/** The motifs of embossing as small pictures. */
+const MOTIF_ICON: Record<Motif, string> = {
+  diamonds: SVG('<path d="M12 3l6 9-6 9-6-9z"/>'),
+  waves: SVG('<path d="M8 3c-3 3 3 6 0 9s3 6 0 9M16 3c-3 3 3 6 0 9s3 6 0 9"/>'),
+  stars: SVG('<path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4l-5.3 3 1.2-6-4.5-4.1 6-.7z"/>'),
+  hearts: SVG('<path d="M12 20S4 14.8 4 9.5a4 4 0 0 1 8-1.3 4 4 0 0 1 8 1.3C20 14.8 12 20 12 20z"/>'),
 };
 
 const TRUST_ICON = {
@@ -189,6 +232,8 @@ export class StitchPanel {
   private picker = new ThreadPicker('.border-thread');
   /** Whether the underlay is shown now (the pointer or focus on its settings). */
   private lit: Highlight | null = null;
+  /** The tab of fill patterns looked at; the one holding the pattern now when not set. */
+  private group: TileGroup | null = null;
 
   constructor(
     private root: HTMLElement,
@@ -209,6 +254,7 @@ export class StitchPanel {
       return;
     }
     this.key = info.key;
+    this.group = null;
     this.draft = structuredClone(info.measured);
     this.lineDraft = info.path ? structuredClone(info.path.st) : null;
     if (this.tolerance !== null) for (const k of KINDS) if (this.draft[k]) this.draft[k]!.tolerance = this.tolerance;
@@ -397,18 +443,49 @@ export class StitchPanel {
           note: (v) => t('stitch.densityNote', { d: formatNumber(1 / v, 1) }),
         });
       const out: HTMLElement[] = [this.patterns(s)];
+      // An open pattern is one line: no density, edges or underlay to set.
+      if (isOpenPattern(s.pattern)) {
+        out.push(
+          ...this.openControls(s),
+          this.slider({ label: 'stitch.expand', hint: 'stitch.expand.hint', min: -3, max: 3, step: 0.05, get: () => s.expand ?? 0, set: (v) => (s.expand = v), fmt: signed }),
+          this.borderGroup(s),
+        );
+        return out;
+      }
+      const d = this.deco(s);
+      if (tileOf(s) === 'emboss') out.push(...this.embossControls(s));
       if (s.pattern === 'guided') out.push(this.guideTool(s, this.info!.guide));
-      if (s.pattern === 'gradient') {
+      if (tileOf(s) === 'fade') {
+        out.push(
+          density('stitch.density', () => s.spacing, (v) => (s.spacing = v)),
+          this.choice<'out' | 'in'>('stitch.fade', ['out', 'in'], d.fade ?? 'out', (v) => `stitch.fade.${v}` as Key, (v) => (d.fade = v)),
+          this.blendField(),
+        );
+      } else if (s.pattern === 'gradient') {
         out.push(
           density('stitch.densityFrom', () => s.spacing, (v) => (s.spacing = v)),
           density('stitch.densityTo', () => s.spacingEnd, (v) => (s.spacingEnd = v)),
         );
       } else out.push(density('stitch.density', () => s.spacing, (v) => (s.spacing = v)));
-      if (s.pattern === 'tatami' || s.pattern === 'gradient') out.push(this.angle(s));
+      if (ANGLED.includes(s.pattern)) out.push(this.angle(s));
+      if (s.pattern === 'waves') {
+        out.push(
+          this.slider({ label: 'stitch.waveHeight', hint: 'stitch.waveHeight.hint', min: 0.5, max: 8, step: 0.1, get: () => d.height ?? DECO_DEFAULTS.height, set: (v) => (d.height = v), fmt: mm(1) }),
+          this.slider({ label: 'stitch.waveLength', hint: 'stitch.waveLength.hint', min: 6, max: 50, step: 0.5, get: () => d.length ?? DECO_DEFAULTS.length, set: (v) => (d.length = v), fmt: mm(1) }),
+        );
+      }
+      if (s.pattern === 'grain') {
+        out.push(
+          this.slider({ label: 'stitch.grainStrength', hint: 'stitch.grainStrength.hint', min: 0.1, max: 1, step: 0.05, get: () => d.strength ?? DECO_DEFAULTS.strength, set: (v) => (d.strength = v), fmt: (v) => `${formatNumber(v * 100, 0)} %` }),
+          this.reroll(s),
+        );
+      }
+      if (s.pattern === 'rays') out.push(this.focusPicker(s));
+      if (s.pattern === 'swirl') out.push(this.reroll(s));
       out.push(this.slider({ label: 'stitch.length', hint: 'stitch.length.hint', min: 1.5, max: 7, step: 0.1, get: () => s.stitch, set: (v) => (s.stitch = v), fmt: mm(1) }));
       if (s.pattern === 'tatami') out.push(this.offsets(s));
       // Straight rows cannot stray from their line; curved ones get shorter stitches in tight bends.
-      if (s.pattern === 'contour' || s.pattern === 'spiral' || s.pattern === 'follow') out.push(this.toleranceSlider(s));
+      if (CURVED.includes(s.pattern)) out.push(this.toleranceSlider(s));
       out.push(
         this.slider({ label: 'stitch.edge', hint: 'stitch.edge.hint', min: -0.4, max: 0.6, step: 0.05, get: () => s.edge, set: (v) => ((s.edge = v), delete s.edgeAuto), fmt: signed }),
         this.check('stitch.edgeAuto', 'stitch.edgeAuto.hint', () => !!s.edgeAuto, (v) => {
@@ -694,45 +771,227 @@ export class StitchPanel {
     return label;
   }
 
-  /** The fill patterns as small pictures; picking one applies it. */
+  /**
+   * The fill patterns as small pictures under three tabs (classic, decorative, open); picking one
+   * applies it, pointing at one shows it on the canvas first.
+   */
   private patterns(s: FillSettings): HTMLElement {
     const wrap = document.createElement('div');
     wrap.className = 'field';
     const label = Object.assign(document.createElement('span'), { className: 'label', textContent: t('stitch.pattern') });
+    const now = tileOf(s);
+    const group = this.group ?? groupOf(now);
+    const tabs = document.createElement('div');
+    tabs.className = 'pattern-groups';
+    tabs.setAttribute('role', 'tablist');
+    tabs.setAttribute('aria-label', t('stitch.pattern'));
+    for (const g of TILE_GROUPS) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = (g === group ? 'active' : '') + (g === groupOf(now) ? ' holds' : '');
+      b.setAttribute('role', 'tab');
+      b.setAttribute('aria-selected', String(g === group));
+      b.textContent = t(`stitch.group.${g}` as Key);
+      b.title = t(`stitch.group.${g}.hint` as Key);
+      b.addEventListener('click', () => {
+        if (g === group) return;
+        this.group = g;
+        this.render();
+      });
+      tabs.append(b);
+    }
     const row = document.createElement('div');
     row.className = 'pattern-tiles';
     row.setAttribute('role', 'radiogroup');
-    row.setAttribute('aria-label', t('stitch.pattern'));
-    for (const pat of PATTERNS) {
+    row.setAttribute('aria-label', t(`stitch.group.${group}` as Key));
+    const apply = (to: FillSettings, tile: Tile) => {
+      const { emboss, fade, ...rest } = to.deco ?? {};
+      to.pattern = tile === 'emboss' ? 'tatami' : tile === 'fade' ? 'gradient' : tile;
+      to.deco = { ...rest, ...(tile === 'emboss' ? { emboss: emboss ?? 'diamonds' } : {}), ...(tile === 'fade' ? { fade: fade ?? 'out' } : {}) };
+    };
+    for (const tile of GROUPS[group]) {
       const b = document.createElement('button');
       b.type = 'button';
-      b.className = 'pattern-tile' + (pat === s.pattern ? ' active' : '');
+      b.className = 'pattern-tile' + (tile === now ? ' active' : '');
       b.setAttribute('role', 'radio');
-      b.setAttribute('aria-checked', String(pat === s.pattern));
-      b.title = t(`stitch.pattern.${pat}.hint` as Key);
-      b.innerHTML = PATTERN_ICON[pat];
-      b.append(Object.assign(document.createElement('span'), { textContent: t(`stitch.pattern.${pat}` as Key) }));
+      b.setAttribute('aria-checked', String(tile === now));
+      b.title = t(`stitch.pattern.${tile}.hint` as Key);
+      b.innerHTML = PATTERN_ICON[tile];
+      b.append(Object.assign(document.createElement('span'), { textContent: t(`stitch.pattern.${tile}` as Key) }));
       // Guide lines belong to one object.
-      const blocked = pat === 'guided' && !this.info!.guide?.single;
+      const blocked = tile === 'guided' && !this.info!.guide?.single;
       if (blocked) {
         b.disabled = true;
         b.title = t('stitch.guide.single');
       }
       b.addEventListener('click', () => {
-        if (s.pattern === pat) return;
-        s.pattern = pat;
+        if (tileOf(s) === tile) return;
+        this.hooks.preview(null);
+        apply(s, tile);
         this.render();
         // Without guide lines there is nothing to follow yet: their tool opens, and the stitches
         // change with the first line.
-        if (pat === 'guided' && !s.guides?.length) return this.hooks.guide('tool');
-        if (pat !== 'guided' && this.info!.guide?.tool) this.hooks.guide('off');
+        if (tile === 'guided' && !s.guides?.length) return this.hooks.guide('tool');
+        if (tile !== 'guided' && this.info!.guide?.tool) this.hooks.guide('off');
+        this.changed(true);
+      });
+      // Pointing at a pattern shows it on the canvas before it is picked (guided needs its lines first).
+      if (tile !== now && tile !== 'guided' && !blocked) {
+        b.addEventListener('pointerenter', () => {
+          const peek = structuredClone(s);
+          apply(peek, tile);
+          this.hooks.preview({ kind: 'fill', s: peek });
+        });
+        b.addEventListener('pointerleave', () => this.hooks.preview(null));
+      }
+      row.append(b);
+    }
+    const hint = Object.assign(document.createElement('span'), { className: 'muted small', textContent: t(`stitch.pattern.${now}.hint` as Key) });
+    wrap.append(label, tabs, row, hint);
+    return wrap;
+  }
+
+  /** A second thread fading in the other way on the same area: a color blend (one selected fill only). */
+  private blendField(): HTMLElement {
+    const fill = this.info!.color;
+    const wrap = document.createElement('div');
+    wrap.className = 'field stitch-field border-field';
+    const head = Object.assign(document.createElement('span'), { className: 'label', textContent: t('stitch.blend') });
+    const btn = Object.assign(document.createElement('button'), { type: 'button', className: 'border-thread', title: t('stitch.blend.hint') });
+    btn.append(t('stitch.blend.pick'));
+    const one = (this.info!.counts.fill ?? 0) === 1;
+    btn.disabled = !one || !fill;
+    btn.addEventListener('click', () => {
+      if (!fill) return;
+      this.picker.toggle(btn, {
+        key: 'blend',
+        title: t('stitch.blend'),
+        current: fill,
+        onPick: (c) => {
+          this.picker.close();
+          if (!sameColor(c, fill)) this.hooks.blend(c);
+        },
+      });
+    });
+    wrap.append(head, btn, Object.assign(document.createElement('span'), { className: 'muted small', textContent: t(one ? 'stitch.blend.note' : 'stitch.blend.one') }));
+    return wrap;
+  }
+
+  /** The settings of decorative and open patterns, made when first set. */
+  private deco(s: FillSettings): DecoSettings {
+    return (s.deco ??= {});
+  }
+
+  /** A new random variant of grain, swirls, meander and maze. */
+  private reroll(s: FillSettings): HTMLElement {
+    const wrap = document.createElement('div');
+    wrap.className = 'field stitch-field reroll-row';
+    const b = this.button('stitch.reroll', 'stitch.reroll.hint', () => {
+      const d = this.deco(s);
+      let seed = d.seed ?? DECO_DEFAULTS.seed;
+      while (seed === (d.seed ?? DECO_DEFAULTS.seed)) seed = 1 + Math.floor(Math.random() * 99999);
+      d.seed = seed;
+      this.changed(true);
+    });
+    b.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="2" y="2" width="12" height="12" rx="2.5"/><circle cx="5.5" cy="5.5" r=".9" fill="currentColor"/><circle cx="10.5" cy="10.5" r=".9" fill="currentColor"/><circle cx="8" cy="8" r=".9" fill="currentColor"/></svg>';
+    b.append(t('stitch.reroll'));
+    wrap.append(b);
+    return wrap;
+  }
+
+  /** Embossing: the motif as small pictures, and its size. */
+  private embossControls(s: FillSettings): HTMLElement[] {
+    const d = this.deco(s);
+    const wrap = document.createElement('div');
+    wrap.className = 'field stitch-field';
+    const head = Object.assign(document.createElement('span'), { className: 'label', textContent: t('stitch.motif') });
+    const row = document.createElement('div');
+    row.className = 'segmented motif-row';
+    row.setAttribute('role', 'radiogroup');
+    row.setAttribute('aria-label', t('stitch.motif'));
+    for (const m of MOTIFS) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      const on = (d.emboss ?? 'diamonds') === m;
+      b.className = on ? 'active' : '';
+      b.setAttribute('role', 'radio');
+      b.setAttribute('aria-checked', String(on));
+      b.title = t(`stitch.motif.${m}` as Key);
+      b.innerHTML = MOTIF_ICON[m];
+      b.append(Object.assign(document.createElement('span'), { textContent: t(`stitch.motif.${m}` as Key) }));
+      b.addEventListener('click', () => {
+        if (on) return;
+        d.emboss = m;
+        this.render();
         this.changed(true);
       });
       row.append(b);
     }
-    const hint = Object.assign(document.createElement('span'), { className: 'muted small', textContent: t(`stitch.pattern.${s.pattern}.hint` as Key) });
-    wrap.append(label, row, hint);
+    wrap.append(head, row);
+    return [
+      wrap,
+      this.slider({ label: 'stitch.motifSize', hint: 'stitch.motifSize.hint', min: 4, max: 30, step: 0.5, get: () => d.embossSize ?? DECO_DEFAULTS.embossSize, set: (v) => (d.embossSize = v), fmt: (v) => `${formatNumber(v, 1)} mm` }),
+    ];
+  }
+
+  /** Rays: where they start, on a 3 × 3 grid over the shape. */
+  private focusPicker(s: FillSettings): HTMLElement {
+    const d = this.deco(s);
+    const now = d.focus ?? DECO_DEFAULTS.focus;
+    const wrap = document.createElement('div');
+    wrap.className = 'field stitch-field';
+    wrap.title = t('stitch.focus.hint');
+    const head = Object.assign(document.createElement('span'), { className: 'label', textContent: t('stitch.focus') });
+    const grid = document.createElement('div');
+    grid.className = 'focus-grid';
+    grid.setAttribute('role', 'radiogroup');
+    grid.setAttribute('aria-label', t('stitch.focus'));
+    FOCI.forEach((f, i) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      const on = Math.abs(now[0] - f[0]) < 0.01 && Math.abs(now[1] - f[1]) < 0.01;
+      b.className = on ? 'active' : '';
+      b.setAttribute('role', 'radio');
+      b.setAttribute('aria-checked', String(on));
+      b.setAttribute('aria-label', t(`stitch.focus.${i}` as Key));
+      b.title = t(`stitch.focus.${i}` as Key);
+      b.addEventListener('click', () => {
+        if (on) return;
+        d.focus = [f[0], f[1]];
+        this.render();
+        this.changed(true);
+      });
+      grid.append(b);
+    });
+    wrap.append(head, grid);
     return wrap;
+  }
+
+  /** Open patterns: distance of the lines (or size of a cell), their kind, the stitch. */
+  private openControls(s: FillSettings): HTMLElement[] {
+    const pat = s.pattern as OpenPattern;
+    const d = this.deco(s);
+    const [lo, hi] = OPEN_SIZE_RANGE[pat];
+    const cells = pat === 'grid' || pat === 'cross';
+    const out: HTMLElement[] = [];
+    if (pat === 'grid') out.push(this.choice<GridKind>('stitch.grid', GRID_KINDS, d.grid ?? DECO_DEFAULTS.grid, (v) => `stitch.grid.${v}` as Key, (v) => (d.grid = v)));
+    if (pat === 'cross') out.push(this.choice<CrossKind>('stitch.cross', CROSS_KINDS, d.cross ?? DECO_DEFAULTS.cross, (v) => `stitch.cross.${v}` as Key, (v) => (d.cross = v)));
+    out.push(
+      this.slider({
+        label: cells ? 'stitch.openCell' : 'stitch.openSize',
+        hint: cells ? 'stitch.openCell.hint' : 'stitch.openSize.hint',
+        min: lo,
+        max: hi,
+        step: 0.1,
+        get: () => Math.min(hi, Math.max(lo, d.size ?? OPEN_SIZE[pat])),
+        set: (v) => (d.size = v),
+        fmt: (v) => `${formatNumber(v, 1)} mm`,
+      }),
+    );
+    if (pat !== 'cross') out.push(this.slider({ label: 'stitch.length', hint: 'stitch.openLength.hint', min: 1, max: 3, step: 0.1, get: () => Math.min(3, s.stitch), set: (v) => (s.stitch = v), fmt: (v) => `${formatNumber(v, 1)} mm` }));
+    out.push(this.check('stitch.triple', 'stitch.openTriple.hint', () => !!d.triple, (v) => (d.triple = v)));
+    if (pat === 'meander' || pat === 'maze') out.push(this.reroll(s));
+    return out;
   }
 
   /** Tatami offset: how far the needle points shift from row to row. */

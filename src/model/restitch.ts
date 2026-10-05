@@ -4,6 +4,7 @@ import { wholeOf } from './knockout';
 import { lineStitches, runAsLine } from './line';
 import { chooseAngle, fillRegion, type FillParams } from '../digitize/fill';
 import { contourFill, fieldFill, guideField, stitchField } from '../digitize/flow';
+import { atShare, crossFill, CROSS_KINDS, echoFill, grainField, GRID_KINDS, gridFill, mazeFill, meanderFill, MOTIFS, rayField, regionBox, swirlField, waveField, type CrossKind, type GridKind, type Motif, type OpenParams } from '../digitize/deco';
 import { spiralFill } from '../digitize/spiral';
 import { coverage } from '../digitize/measure';
 import { expandRegion, sample, signedField, type Region } from '../digitize/region';
@@ -40,7 +41,63 @@ import type { Lettering } from '../lettering/layout';
  * shape (gradient), along the outline (contour), as one line winding to the middle (spiral), with
  * the directions and curves of the rows sewn now (follow), or along lines drawn on it (guided).
  */
-export type FillPattern = 'tatami' | 'gradient' | 'contour' | 'spiral' | 'follow' | 'guided';
+export type FillPattern = 'tatami' | 'gradient' | 'contour' | 'spiral' | 'follow' | 'guided' | DecoPattern | OpenPattern;
+/** Dense fills with curved rows laid on a field drawn from a few numbers (see deco.ts). */
+export type DecoPattern = 'waves' | 'grain' | 'rays' | 'swirl';
+/** One line through the area, the fabric showing between (see deco.ts). */
+export type OpenPattern = 'meander' | 'maze' | 'grid' | 'echo' | 'cross';
+export const OPEN_PATTERNS: OpenPattern[] = ['meander', 'maze', 'grid', 'echo', 'cross'];
+export const DECO_PATTERNS: DecoPattern[] = ['waves', 'grain', 'rays', 'swirl'];
+export const isOpenPattern = (p: FillPattern): p is OpenPattern => (OPEN_PATTERNS as FillPattern[]).includes(p);
+
+/** Settings of the decorative patterns; each falls back to DECO_DEFAULTS when not set. */
+export interface DecoSettings {
+  /** Tatami: needle points on the lines of this motif (embossing). */
+  emboss?: Motif;
+  /** Size of one motif (mm). */
+  embossSize?: number;
+  /** Waves: from the middle to a crest, and from crest to crest (mm). */
+  height?: number;
+  length?: number;
+  /** Grain: how far the rows wander from their direction, 0 to 1. */
+  strength?: number;
+  /** Rays: where they start, as a share (0 to 1) of the shape's width and height. */
+  focus?: Pt;
+  /** Grain, swirls, meander and maze: which of the random ones. */
+  seed?: number;
+  /** Open patterns: distance between the lines, or the size of a cell (mm). */
+  size?: number;
+  /** Open patterns: every stitch three times. */
+  triple?: boolean;
+  grid?: GridKind;
+  cross?: CrossKind;
+  /** Gradient: the density falls evenly to nearly nothing (out) or rises from it (in), for color blends. */
+  fade?: 'out' | 'in';
+}
+
+export const DECO_DEFAULTS = {
+  embossSize: 14,
+  height: 2,
+  length: 16,
+  strength: 0.5,
+  focus: [0.5, 0.5] as Pt,
+  seed: 1,
+  triple: false,
+  grid: 'hex' as GridKind,
+  cross: 'full' as CrossKind,
+};
+
+/** Open patterns: distance between lines or cell size when none is set (mm). */
+export const OPEN_SIZE: Record<OpenPattern, number> = { meander: 2.5, maze: 2.5, grid: 6, echo: 3, cross: 2.5 };
+/** Open patterns: the range of `size` (mm). */
+export const OPEN_SIZE_RANGE: Record<OpenPattern, [number, number]> = { meander: [1.2, 8], maze: [1.2, 8], grid: [3, 20], echo: [1.2, 10], cross: [1.5, 6] };
+/**
+ * Decorative fields may crowd rows more than a plain curved fill before they give up (in times the
+ * nominal density): rows meet at the start of rays and wind tight at the eye of a swirl, as in the
+ * radial and spiral fills of commercial software.
+ */
+const DECO_PEAK = 3;
+const DECO_PEAK_POINT = 5;
 
 export interface FillSettings {
   pattern: FillPattern;
@@ -80,6 +137,8 @@ export interface FillSettings {
   expand?: number;
   /** A border sewn on the edge after the fill; none when not set. */
   border?: BorderSettings;
+  /** Settings of the decorative patterns and of embossing. */
+  deco?: DecoSettings;
 }
 
 /**
@@ -495,7 +554,7 @@ const isValue = (v: unknown) => finite(v) || typeof v === 'boolean' || typeof v 
 const isFixed = (x: unknown): x is Fixed => !!x && typeof (x as Fixed).field === 'string' && isValue((x as Fixed).from) && isValue((x as Fixed).to);
 /** Underlay is left out only this far inside what covers it (mm), so its edge stays held. */
 const UNDER_COVER_MARGIN = 0.5;
-const PATTERNS: FillPattern[] = ['tatami', 'gradient', 'contour', 'spiral', 'follow', 'guided'];
+const PATTERNS: FillPattern[] = ['tatami', 'gradient', 'contour', 'spiral', 'follow', 'guided', ...DECO_PATTERNS, ...OPEN_PATTERNS];
 const isLine = (l: unknown) => Array.isArray(l) && l.length >= 2 && l.every((q) => Array.isArray(q) && q.length === 2 && q.every(finite));
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
@@ -513,7 +572,23 @@ function isFill(f: unknown): f is FillSettings {
     (s.underSpacing === undefined || (finite(s.underSpacing) && s.underSpacing > 0)) &&
     (s.expand === undefined || finite(s.expand)) &&
     (s.border === undefined || isBorder(s.border)) &&
+    (s.deco === undefined || isDeco(s.deco)) &&
     typeof s.underlay === 'boolean'
+  );
+}
+
+function isDeco(d: unknown): d is DecoSettings {
+  const s = d as DecoSettings | null;
+  return (
+    !!s &&
+    typeof s === 'object' &&
+    (s.emboss === undefined || MOTIFS.includes(s.emboss)) &&
+    [s.embossSize, s.height, s.length, s.strength, s.seed, s.size].every((v) => v === undefined || finite(v)) &&
+    (s.focus === undefined || (Array.isArray(s.focus) && s.focus.length === 2 && s.focus.every(finite))) &&
+    (s.triple === undefined || typeof s.triple === 'boolean') &&
+    (s.grid === undefined || GRID_KINDS.includes(s.grid)) &&
+    (s.cross === undefined || CROSS_KINDS.includes(s.cross)) &&
+    (s.fade === undefined || s.fade === 'out' || s.fade === 'in')
   );
 }
 
@@ -711,7 +786,8 @@ export function restoreRemembered(list: unknown): number {
 export function openOnPurpose(p: Pattern, objs: SewObject[]): Uint8Array | null {
   let out: Uint8Array | null = null;
   for (const o of objs) {
-    if (remembered(p, o)?.fill?.pattern !== 'gradient') continue;
+    const pat = remembered(p, o)?.fill?.pattern;
+    if (pat !== 'gradient' && !(pat && isOpenPattern(pat))) continue;
     out ??= new Uint8Array(p.cmd.length);
     out.fill(1, o.first, o.last + 1);
   }
@@ -1244,7 +1320,7 @@ function newFill(p: Pattern, o: SewObject, a: Analysis, s: FillSettings, reverse
   if (!reverse && a.parts.filter((pt) => !pt.border).pop() === last && next < p.cmd.length && p.cmd[next] === STITCH) fp.end = pt10(p, next);
   let res;
   if (s.pattern === 'gradient') {
-    res = fillRegion(r, { ...fp, spacingEnd: s.spacingEnd }, start);
+    res = fillRegion(r, { ...fp, spacingEnd: s.spacingEnd, ...(s.deco?.fade ? { fade: s.deco.fade } : {}) }, start);
   } else if (s.pattern === 'contour') {
     res = contourFill(r, fp, start);
   } else if (s.pattern === 'spiral') res = spiralFill(r, fp, start);
@@ -1260,7 +1336,14 @@ function newFill(p: Pattern, o: SewObject, a: Analysis, s: FillSettings, reverse
     if (!s.guides?.length) return null;
     const f = guideField(r, s.guides);
     res = fieldFill(r, f.g, f, fp, start, false, CONTOUR_PEAK);
-  } else res = fillRegion(r, { ...fp, offset: s.offset }, start);
+  } else if ((DECO_PATTERNS as FillPattern[]).includes(s.pattern)) {
+    res = decoFill(r, s, fp, start);
+  } else if (isOpenPattern(s.pattern)) {
+    res = openFill(r, s, start);
+  } else {
+    const d = s.deco;
+    res = fillRegion(r, { ...fp, offset: s.offset, ...(s.pattern === 'tatami' && d?.emboss ? { emboss: { motif: d.emboss, size: d.embossSize ?? DECO_DEFAULTS.embossSize } } : {}) }, start);
+  }
   if (!res) return null;
   // Underlay points in runs too short to sew are not sewn either.
   let under = 0;
@@ -1279,6 +1362,34 @@ function newFill(p: Pattern, o: SewObject, a: Analysis, s: FillSettings, reverse
     runs.push(...borderStitches(a.fill, s.border, end[end.length - 1], wholeOf(a.fill, remembered(p, o))));
   }
   return { runs, under, border };
+}
+
+/** A dense fill with curved rows on one of the decorative fields. */
+function decoFill(r: Region, s: FillSettings, fp: FillParams, start: Pt) {
+  const d = { ...DECO_DEFAULTS, ...s.deco };
+  const angle = Number.isFinite(s.angle) ? s.angle : 0;
+  const f =
+    s.pattern === 'waves'
+      ? waveField(r, angle, d.height, d.length)
+      : s.pattern === 'grain'
+        ? grainField(r, angle, d.strength, d.seed, 18)
+        : s.pattern === 'rays'
+          ? rayField(r, atShare(regionBox(r), d.focus))
+          : swirlField(r, d.seed);
+  return fieldFill(r, f.g, f, fp, start, true, s.pattern === 'rays' || s.pattern === 'swirl' ? DECO_PEAK_POINT : DECO_PEAK);
+}
+
+/** One of the open patterns: no underlay, no pull, one line. */
+function openFill(r: Region, s: FillSettings, start: Pt) {
+  const pat = s.pattern as OpenPattern;
+  const d = { ...DECO_DEFAULTS, ...s.deco };
+  const [lo, hi] = OPEN_SIZE_RANGE[pat];
+  const p: OpenParams = { size: Math.min(hi, Math.max(lo, d.size ?? OPEN_SIZE[pat])), stitch: Math.min(s.stitch, 3), seed: d.seed, triple: d.triple };
+  if (pat === 'meander') return meanderFill(r, p, start);
+  if (pat === 'maze') return mazeFill(r, p, start);
+  if (pat === 'echo') return echoFill(r, p, start);
+  if (pat === 'grid') return gridFill(r, p, d.grid, start);
+  return crossFill(r, p, d.cross, start);
 }
 
 /** Satin of a border: about the density of a satin column, with a walk along the middle under it when wide enough. */

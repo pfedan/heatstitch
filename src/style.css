@@ -2840,6 +2840,130 @@ body[data-mode='flow'] .stage .hint {
   cursor: not-allowed;
 }
 
+/* Fill patterns: three tabs over the tiles (classic, decorative, open). */
+.pattern-groups {
+  display: flex;
+  gap: 2px;
+  margin: 4px 0 2px;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  overflow: visible;
+}
+
+.pattern-groups button {
+  position: relative;
+  flex: 1;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  border-radius: 0;
+  padding: 5px 2px 4px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.pattern-groups button:hover {
+  color: var(--ink);
+}
+
+.pattern-groups button.active {
+  color: var(--ink);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+
+/* The tab that holds the pattern sewn now, when another one is looked at. */
+.pattern-groups button.holds:not(.active)::after {
+  content: '';
+  position: absolute;
+  top: 5px;
+  margin-left: 3px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.pattern-groups button:focus-visible,
+.motif-row button:focus-visible,
+.focus-grid button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.motif-row {
+  margin-top: 4px;
+}
+
+.motif-row button {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  border: none;
+  border-radius: 0;
+  padding: 4px 2px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.motif-row button svg {
+  width: 18px;
+  height: 18px;
+}
+
+.motif-row button.active {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.focus-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 22px);
+  grid-template-rows: repeat(3, 22px);
+  gap: 3px;
+  margin-top: 4px;
+  padding: 4px;
+  width: max-content;
+  border: 1px dashed var(--line);
+  border-radius: 6px;
+}
+
+.focus-grid button {
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+}
+
+.focus-grid button:hover {
+  border-color: var(--muted);
+}
+
+.focus-grid button.active {
+  border-color: var(--accent);
+  background: var(--accent);
+  box-shadow: inset 0 0 0 4px var(--panel, transparent);
+}
+
+.reroll-row button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.reroll-row button svg {
+  width: 15px;
+  height: 15px;
+}
+
 .pattern-tiles {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
