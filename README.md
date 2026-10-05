@@ -247,7 +247,9 @@ both versions are shown side by side.
 ### Saving
 
 *Save* writes the current pattern in the chosen format (`src/writers/`); the choice is remembered,
-until then the open file's format is offered. After a change the file is called `name-corrected.dst`. Only stitches and colors are saved: PE-Design objects and hoop settings of the
+until then the open file's format is offered. The name field suggests the file's name, after a change
+`name-corrected`; the typed name also becomes the design name in the file header. A project file is
+named by the day, e.g. `2026-10-05-heatstitch-project.heatstitch`. Only stitches and colors are saved: PE-Design objects and hoop settings of the
 original are lost.
 
 - **DST:** a trim is written as a sequence of 3 jumps, but only if the following jump sequence is not

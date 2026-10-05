@@ -120,15 +120,19 @@
           <ul id="file-list" class="file-list"></ul>
           <div class="file-actions" id="file-actions" hidden>
             <span class="label save-label" data-i18n-title="save.note"><span data-i18n="save.title"></span> <span class="info" aria-hidden="true">ⓘ</span></span>
+            <select class="save-format" id="save-format" data-i18n-aria="save.format">
+              <option value="pes" data-i18n="save.fmt.pes"></option>
+              <option value="dst" data-i18n="save.fmt.dst"></option>
+              <option value="jef" data-i18n="save.fmt.jef"></option>
+              <option value="vp3" data-i18n="save.fmt.vp3"></option>
+              <option value="exp" data-i18n="save.fmt.exp"></option>
+              <option value="pec" data-i18n="save.fmt.pec"></option>
+            </select>
             <div class="save-file">
-              <select id="save-format" data-i18n-aria="save.format">
-                <option value="pes" data-i18n="save.fmt.pes"></option>
-                <option value="dst" data-i18n="save.fmt.dst"></option>
-                <option value="jef" data-i18n="save.fmt.jef"></option>
-                <option value="vp3" data-i18n="save.fmt.vp3"></option>
-                <option value="exp" data-i18n="save.fmt.exp"></option>
-                <option value="pec" data-i18n="save.fmt.pec"></option>
-              </select>
+              <label class="save-name">
+                <input type="text" id="save-name" spellcheck="false" autocomplete="off" data-i18n-aria="save.name" />
+                <span id="save-ext">.pes</span>
+              </label>
               <button type="button" id="save-file" data-i18n="save.file"></button>
             </div>
             <button type="button" id="save-project" class="save-project" data-i18n="save.project" data-i18n-title="save.project.hint"></button>

@@ -27,7 +27,7 @@ import type { Pattern, ThreadColor } from './model/pattern';
 import type { Measurement } from './validation/measure';
 import { initUpdateNotice } from './ui/updateNotice';
 import { toStored } from './storage/fileStore';
-import { downloadPattern, outputFileName, writePattern } from './writers';
+import { downloadPattern, writePattern } from './writers';
 import { parsePattern } from './parsers';
 import { digitizeSvg, ImageMode } from './ui/imageMode';
 import { lightFromPointer, lightFromTilt, sweep } from './render/light';
@@ -2765,9 +2765,9 @@ const correctPanel = new CorrectPanel(settings, {
   undo: () => history('undo'),
   redo: () => history('redo'),
   revert: () => history('revert'),
-  save: (format) => {
+  save: (format, name) => {
     const f = files.active;
-    if (f?.pattern) downloadPattern(f.pattern, format, outputFileName(f.fileName, format, FileList.edited(f)));
+    if (f?.pattern) downloadPattern({ ...f.pattern, name }, format, `${name}.${format}`);
   },
   optionsChanged: () => saveSettings(settings),
 });
@@ -2961,9 +2961,11 @@ async function openFiles(list: Iterable<File>): Promise<void> {
 // Project files ---------------------------------------------------------------
 
 /** Name of the project file: after the active design, else the image. */
+/** A project holds every open file, so it is named by the day, not by one of them: "2026-10-05-heatstitch-projekt". */
 function projectName(): string {
-  const base = files.active?.fileName.replace(/\.[^.]+$/, '') || imageMode.snapshot()?.image.name.replace(/\.[^.]+$/, '') || 'heatstitch';
-  return `${base}${PROJECT_EXT}`;
+  const d = new Date();
+  const day = [d.getFullYear(), d.getMonth() + 1, d.getDate()].map((v) => String(v).padStart(2, '0')).join('-');
+  return `${day}-${t('save.project.file')}${PROJECT_EXT}`;
 }
 
 /** Everything open in the app as a project: the files with their edits, the image and the design settings. */

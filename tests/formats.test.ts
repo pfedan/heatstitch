@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { COLOR_CHANGE, STITCH, TRIM, type Pattern } from '../src/model/pattern';
 import { parsePattern, SUPPORTED_EXTENSIONS } from '../src/parsers';
 import { jefColor } from '../src/parsers/jefPalette';
-import { OUTPUT_FORMATS, outputFileName, writePattern, type OutputFormat } from '../src/writers';
+import { cleanName, OUTPUT_FORMATS, outputFileName, writePattern, type OutputFormat } from '../src/writers';
 import { writeJef } from '../src/writers/jef';
 import { Shape } from './helpers/shapes';
 
@@ -149,5 +149,11 @@ describe('writers', () => {
   it('names the file after the chosen format', () => {
     expect(outputFileName('sun.dst', 'vp3', false)).toBe('sun.vp3');
     expect(outputFileName('sun.pes', 'jef', true)).toBe('sun-corrected.jef');
+  });
+
+  it('cleans a typed name for the file system', () => {
+    expect(cleanName('  Sonne: für/Oma?.pes ')).toBe('Sonne fürOma');
+    expect(cleanName('a.b.jef')).toBe('a.b');
+    expect(cleanName('<>')).toBe('');
   });
 });

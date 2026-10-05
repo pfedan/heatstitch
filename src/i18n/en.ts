@@ -214,6 +214,8 @@ export const en: Record<keyof typeof de, string> = {
   'save.title': 'Save',
   'save.format': 'Embroidery file format',
   'save.file': 'Save',
+  'save.name': 'File name, also the design name inside the file',
+  'save.project.file': 'heatstitch-project',
   'save.fmt.pes': 'PES · Brother, Babylock',
   'save.fmt.dst': 'DST · Tajima, industrial',
   'save.fmt.jef': 'JEF · Janome, Elna',

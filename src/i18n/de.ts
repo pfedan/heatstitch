@@ -212,6 +212,8 @@ export const de = {
   'save.title': 'Speichern',
   'save.format': 'Format der Stickdatei',
   'save.file': 'Speichern',
+  'save.name': 'Dateiname, auch der Name des Stickmusters in der Datei',
+  'save.project.file': 'heatstitch-projekt',
   'save.fmt.pes': 'PES · Brother, Babylock',
   'save.fmt.dst': 'DST · Tajima, Profimaschinen',
   'save.fmt.jef': 'JEF · Janome, Elna',
