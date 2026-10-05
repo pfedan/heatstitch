@@ -614,6 +614,11 @@ export function fillRegion(r: Region, p: FillParams, start: Pt, neighbours: numb
  * sweeps, so it is close but not exact.
  */
 export function localThickness(r: Region): Float32Array {
+  return largestCircles(r).t;
+}
+
+/** For each pixel the largest circle inside the area that covers it: radius `t` (mm), center (`cx`, `cy`, pixels). */
+function largestCircles(r: Region): { t: Float32Array; cx: Float32Array; cy: Float32Array } {
   const { w, h, pxMm } = r;
   const t = new Float32Array(w * h);
   // The center of the circle each pixel took its value from (pixels).
@@ -657,57 +662,125 @@ export function localThickness(r: Region): Float32Array {
       }
     }
   }
-  return t;
+  return { t, cx, cy };
 }
 
-/** The width of the area around each pixel (mm): its local thickness, evened out over about 1.5 mm. */
-function smoothWidth(r: Region): Float32Array {
-  const { w, h } = r;
-  const t = localThickness(r);
-  const on = new Float32Array(w * h);
-  for (let i = 0; i < on.length; i++) on[i] = r.sdf[i] < 0 ? 1 : 0;
-  // Box blur along rows then columns, twice, of the thickness and of the inside (to divide by).
-  const rad = Math.max(1, Math.round(1.5 / r.pxMm));
-  const blur = (a: Float32Array) => {
-    const out = new Float32Array(a.length);
-    const line = new Float32Array(Math.max(w, h) + 1);
-    for (const [n, m, step, stride] of [[h, w, w, 1], [w, h, 1, w]] as const) {
-      for (let a0 = 0; a0 < n; a0++) {
-        const base = a0 * step;
-        line[0] = 0;
-        for (let b = 0; b < m; b++) line[b + 1] = line[b] + a[base + b * stride];
-        for (let b = 0; b < m; b++) out[base + b * stride] = line[Math.min(m, b + rad + 1)] - line[Math.max(0, b - rad)];
+/**
+ * The area inside by `share` of its width (0.1: 10 %): the union of the largest circles inside it,
+ * each shrunk by `share` of its diameter. A wide part loses more at its edge than a narrow one,
+ * and what is left stays one piece along the middle (corners get no islands of their own).
+ */
+function insetByShare(r: Region, share: number): Uint8Array {
+  const { w, h, pxMm } = r;
+  const d = r.sdf.map((v) => Math.max(0, -v));
+  const k = Math.max(0, 1 - 2 * share);
+  // The largest circles: those around pixels whose circle (as far as the edge) no other circle
+  // nearby holds. A circle held by another lies along a straight way to its center, as deep as
+  // that way is long; 15 % short of that counts as held, for the steps of the pixel grid.
+  const offs: [number, number, number][] = [];
+  for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) if ((dx || dy) && dx * dx + dy * dy <= 16) offs.push([dx, dy, 0.85 * Math.hypot(dx, dy) * pxMm]);
+  // The circle that reaches furthest past each pixel (shrunk radius less the distance to its center).
+  const bx = new Float32Array(w * h);
+  const by = new Float32Array(w * h);
+  const br = new Float32Array(w * h).fill(-1);
+  const reach = new Float32Array(w * h).fill(-Infinity);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      if (!d[i]) continue;
+      let held = false;
+      for (const [dx, dy, l] of offs) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx >= 0 && ny >= 0 && nx < w && ny < h && d[ny * w + nx] >= d[i] + l) {
+          held = true;
+          break;
+        }
       }
-      a.set(out);
+      if (held) continue;
+      bx[i] = x;
+      by[i] = y;
+      br[i] = k * d[i];
+      reach[i] = br[i];
     }
-    return a;
-  };
-  for (let i = 0; i < t.length; i++) t[i] *= on[i];
-  for (let k = 0; k < 2; k++) {
-    blur(t);
-    blur(on);
   }
-  for (let i = 0; i < t.length; i++) t[i] = on[i] > 0 ? (2 * t[i]) / on[i] : 0;
-  return t;
+  const take = (i: number, x: number, y: number, n: number) => {
+    if (br[n] < 0) return;
+    const v = br[n] - Math.hypot(x - bx[n], y - by[n]) * pxMm;
+    if (v > reach[i]) {
+      reach[i] = v;
+      bx[i] = bx[n];
+      by[i] = by[n];
+      br[i] = br[n];
+    }
+  };
+  for (let pass = 0; pass < 2; pass++) {
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = y * w + x;
+        if (!d[i]) continue;
+        if (x > 0) take(i, x, y, i - 1);
+        if (y > 0) {
+          take(i, x, y, i - w);
+          if (x > 0) take(i, x, y, i - w - 1);
+          if (x < w - 1) take(i, x, y, i - w + 1);
+        }
+      }
+    }
+    for (let y = h - 1; y >= 0; y--) {
+      for (let x = w - 1; x >= 0; x--) {
+        const i = y * w + x;
+        if (!d[i]) continue;
+        if (x < w - 1) take(i, x, y, i + 1);
+        if (y < h - 1) {
+          take(i, x, y, i + w);
+          if (x < w - 1) take(i, x, y, i + w + 1);
+          if (x > 0) take(i, x, y, i + w - 1);
+        }
+      }
+    }
+  }
+  const t = d;
+  const raw = new Uint8Array(w * h);
+  for (let i = 0; i < raw.length; i++) raw[i] = t[i] > 0 && reach[i] >= 0 ? 1 : 0;
+  // Circles near the edge that are not the largest there leave specks of their own: of each piece
+  // of the area, only the part around its deepest point is kept.
+  const piece = new Int32Array(w * h).fill(-1);
+  const mask = new Uint8Array(w * h);
+  const flood = (seed: number, inside: (i: number) => boolean, mark: (i: number) => void) => {
+    const stack = [seed];
+    mark(seed);
+    while (stack.length) {
+      const i = stack.pop()!;
+      const x = i % w;
+      for (const n of [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i - w, i + w]) {
+        if (n < 0 || n >= w * h || !inside(n)) continue;
+        mark(n);
+        stack.push(n);
+      }
+    }
+  };
+  for (let i = 0; i < piece.length; i++) {
+    if (!(t[i] > 0) || piece[i] >= 0) continue;
+    let deepest = i;
+    flood(i, (n) => t[n] > 0 && piece[n] < 0, (n) => {
+      piece[n] = i;
+      if (r.sdf[n] < r.sdf[deepest]) deepest = n;
+    });
+    if (raw[deepest]) flood(deepest, (n) => raw[n] === 1 && !mask[n], (n) => (mask[n] = 1));
+  }
+  return mask;
 }
 
 /**
  * The area the underlay keeps to: the fill's area shrunk by the inset in mm, or by `share` of its
- * width where it is (smoothed, and without slivers too thin to sew). Null when nothing is left.
+ * width where it is (without slivers too thin to sew). Null when nothing is left.
  */
 export function underlayArea(r: Region, inset: number, share?: number): Region | null {
   if (share === undefined) return expandRegion(r, -inset);
   if (share <= 0) return r;
-  const wd = smoothWidth(r);
-  const mask = new Uint8Array(r.w * r.h);
-  let any = false;
-  for (let i = 0; i < mask.length; i++) {
-    if (r.sdf[i] < 0 && r.sdf[i] + share * wd[i] < 0) {
-      mask[i] = 1;
-      any = true;
-    }
-  }
-  if (!any) return null;
+  const mask = insetByShare(r, share);
+  if (!mask.some(Boolean)) return null;
   const sdf = signedField(mask, r.w, r.h, r.pxMm);
   // Open it: shrink and grow back, which drops teeth and threads thinner than 1 mm.
   const shrunk = expandRegion({ ...r, mask, sdf, sdfBase: sdf }, -0.5);
