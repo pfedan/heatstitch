@@ -266,6 +266,8 @@ function seq(p: Pattern): Sequence {
   }
   const kinds = stitchKinds(p);
   const objects = sewObjects(p, kinds);
+  // A fill with a satin border in its thread has more satin than fill thread, and stays a fill.
+  for (const o of objects) if (o.kind === 'satin' && remembered(p, o)?.borderAt) o.kind = 'fill';
   const objectAt = new Int32Array(p.cmd.length).fill(-1);
   for (const o of objects) objectAt.fill(o.index, o.first, o.last + 1);
   q = {
@@ -799,6 +801,8 @@ function applyRestitched(r: RestitchResult | null, failed: Key, remeasure = fals
     // An object that stayed one keeps its shape and settings for the next edit.
     if (pieces.size === 1) remember(r.pattern, nq.objects[[...pieces][0]], r.memory[k]);
   });
+  // What the objects remember can change their kind (a fill with a satin border).
+  seqCache.delete(r.pattern);
   // Borders in a thread of their own follow their fills; the selection is found again by its stitches.
   const p = syncBorders(r.pattern, settings.trimMm, dropLinks);
   dropLinks = new Set();

@@ -1262,8 +1262,10 @@ export function restitch(
       continue;
     }
     // What the object is made of afterwards, for the next edit.
-    const newFillS = settings.kind === 'fill' ? { ...settings.s } : undefined;
-    const newSatinS = settings.kind === 'satin' ? (reverse ? swappedSides(settings.s) : { ...settings.s }) : undefined;
+    // Copies all the way down: the panel goes on changing its settings (a border's thread, guides)
+    // in place, and what the object remembers must not change with them.
+    const newFillS = settings.kind === 'fill' ? structuredClone(settings.s) : undefined;
+    const newSatinS = settings.kind === 'satin' ? structuredClone(reverse ? swappedSides(settings.s) : settings.s) : undefined;
     const after: Remembered = converting
       ? newFillS
         ? { region: area, fill: newFillS, shape: area ?? undefined, ...(known?.form ? { form: known.form } : {}), ...(satinRails?.length ? { asSatin: satinRails } : {}) }

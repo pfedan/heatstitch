@@ -197,3 +197,18 @@ describe('stitches along a drawn line', () => {
     expect(far).toBeLessThan(1.7);
   });
 });
+
+it('remembers its border apart from the settings it was sewn with, which the panel goes on changing', () => {
+  const p = load('cat-60mm.pes');
+  const kinds = stitchKinds(p);
+  const o = sewObjects(p, kinds)[1];
+  const s = { ...measureFill(p, analyze(p, o, kinds)), pattern: 'tatami' as const, border: { type: 'satin' as const, width: 2 } as FillSettings['border'] };
+  const a = apply(p, o.index, s);
+  // The thread is picked in the panel: its settings change in place.
+  s.border!.color = { r: 1, g: 2, b: 3 };
+  expect(remembered(a.q, a.o)?.fill?.border?.color).toBeUndefined();
+  // So the next change finds the border in the fill and moves it to its own thread.
+  const b = apply(a.q, a.o.index, { ...s, border: { ...s.border!, link: 'k' } });
+  const plain = apply(p, o.index, { ...s, border: undefined });
+  expect(Math.abs(stitches(b.q, b.o.first, b.o.last) - stitches(plain.q, plain.o.first, plain.o.last))).toBeLessThan(60);
+}, 30000);
