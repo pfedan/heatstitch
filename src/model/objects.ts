@@ -463,6 +463,33 @@ const DENSE_AREA = 0.5;
  * 0.5 mm cells they pass through that have all four neighbours covered too (0 when too few).
  */
 function coverShare(p: Pattern, a: number, b: number): number {
+  // The same stitches come back with every new version of a design: worked out once for them.
+  const id = rangeKey(p, a, b);
+  let share = shares.get(id);
+  if (share === undefined) {
+    share = workOutCoverShare(p, a, b);
+    shares.set(id, share);
+    if (shares.size > SHARES_SIZE) shares.delete(shares.keys().next().value!);
+  }
+  return share;
+}
+
+/** Cover shares by the records they were worked out from (oldest first, at most SHARES_SIZE). */
+const shares = new Map<string, number>();
+const SHARES_SIZE = 4000;
+
+/** A key for the records from a to b (FNV-1a over commands and coordinates). */
+function rangeKey(p: Pattern, a: number, b: number): string {
+  let h = 0x811c9dc5;
+  for (let i = a; i <= b; i++) {
+    h = Math.imul(h ^ p.cmd[i], 0x01000193);
+    h = Math.imul(h ^ p.x[i], 0x01000193);
+    h = Math.imul(h ^ p.y[i], 0x01000193);
+  }
+  return `${b - a}:${h >>> 0}`;
+}
+
+function workOutCoverShare(p: Pattern, a: number, b: number): number {
   const seen = new Set<number>();
   const key = (cx: number, cy: number) => cx * 100003 + cy;
   for (let k = a + 1; k <= b; k++) {

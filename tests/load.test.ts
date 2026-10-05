@@ -102,11 +102,11 @@ describe.skipIf(!on)('load test: 120 objects', () => {
   });
 
   it('leaves out what lies on top, for all fills at once', async () => {
-    const k = await within('Aussparen für 100 Füllungen an', 45_000, () => setKnockout(p, fills, true, T));
+    const k = await within('Aussparen für 100 Füllungen an', 20_000, () => setKnockout(p, fills, true, T));
     expect(k?.changed).toBe(fills.length);
     p = k!.pattern;
     keepVersion(p);
-  }, 120_000);
+  }, 60_000);
 
   it('finds nothing to sew anew when nothing changed', async () => {
     expect(await within('Aussparungen prüfen, nichts geändert', 1500, () => refreshKnockouts(p, T))).toBeNull();
