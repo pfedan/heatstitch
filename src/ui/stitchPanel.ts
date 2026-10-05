@@ -1,6 +1,7 @@
 import { formatNumber, t, type Key } from '../i18n';
 import type { ObjectKind } from '../model/objects';
-import type { FillPattern, FillSettings, RunSettings, SatinSettings, Settings, ShapeTrust } from '../model/restitch';
+import { SATIN_SPLIT, UNDERLAYS, type FillPattern, type FillSettings, type RunSettings, type SatinSettings, type SatinType, type Settings, type ShapeTrust } from '../model/restitch';
+import type { UnderlayKind } from '../digitize/satin';
 import type { ShapeOutline } from '../render/scene';
 import { KIND_ICON, kindLabel } from './layersPanel';
 
@@ -27,6 +28,10 @@ export interface StitchInfo {
   hand?: number;
   /** Whether the fill areas are strokes that can be sewn as satin. */
   toSatin: boolean;
+  /** Rungs of the one selected satin: whether the tool is on, how many (null: the stitches' own direction). */
+  direction?: { tool: boolean; rungs: number | null; single: boolean };
+  /** Rungs drawn across the one selected fill to sew it as satin. */
+  draw?: { tool: boolean; lines: number; single: boolean };
 }
 
 export interface StitchHooks {
@@ -34,6 +39,10 @@ export interface StitchHooks {
   apply: (s: Settings) => void;
   /** Sews the selected objects of the other kind (fill to satin or satin to fill). */
   convert: (to: 'fill' | 'satin') => void;
+  /** Rungs of a satin: the tool on or off, corners suggested, all removed, back to the stitches' own direction. */
+  direction: (action: 'tool' | 'corners' | 'even' | 'follow') => void;
+  /** Rungs drawn across a fill: the tool on or off, sewn as satin along them. */
+  draw: (action: 'tool' | 'sew') => void;
 }
 
 const KINDS: ObjectKind[] = ['fill', 'satin', 'run'];
@@ -84,6 +93,10 @@ export class StitchPanel {
   private frame = 0;
   /** Max. deviation chosen last: the next objects start with it (they cannot be measured for it). */
   private tolerance: number | null = null;
+  /** The rung tools as last drawn. */
+  private tools = '';
+  /** Left and right width set apart. */
+  private sides = false;
 
   constructor(
     private root: HTMLElement,
@@ -97,7 +110,12 @@ export class StitchPanel {
       this.key = -1;
       return;
     }
-    if (info.key === this.key) return;
+    if (info.key === this.key) {
+      // The rung tool changes without a new selection: only its part is drawn anew.
+      const tools = JSON.stringify([info.direction, info.draw]);
+      if (tools !== this.tools) this.render();
+      return;
+    }
     this.key = info.key;
     this.draft = structuredClone(info.measured);
     if (this.tolerance !== null) for (const k of KINDS) if (this.draft[k]) this.draft[k]!.tolerance = this.tolerance;
@@ -127,6 +145,7 @@ export class StitchPanel {
 
   private render(): void {
     const info = this.info!;
+    this.tools = JSON.stringify([info.direction, info.draw]);
     const head = document.createElement('div');
     head.className = 'stitch-head';
     const h = Object.assign(document.createElement('h3'), { textContent: t('stitch.title') });
@@ -176,6 +195,8 @@ export class StitchPanel {
       parts.push(hand);
     }
     if (this.kind === 'fill' || this.kind === 'satin') parts.push(this.kindSwitch(this.kind));
+    if (this.kind === 'fill' && info.draw?.single) parts.push(this.drawTool(info.draw));
+    if (this.kind === 'satin' && info.direction) parts.push(this.directionTool(info.direction));
     parts.push(...this.controls());
     const note = Object.assign(document.createElement('p'), { className: 'muted small stitch-note', textContent: t(this.kind === 'fill' && info.shape ? 'stitch.undo' : 'stitch.note') });
     parts.push(note);
@@ -220,12 +241,55 @@ export class StitchPanel {
     }
     if (this.kind === 'satin') {
       const s = this.draft.satin!;
-      return [
-        this.slider({ label: 'stitch.density', hint: 'stitch.satinDensity.hint', min: 0.2, max: 1, step: 0.01, get: () => s.spacing, set: (v) => (s.spacing = v), fmt: mm(2), band: this.info!.recommended }),
-        this.slider({ label: 'stitch.width', hint: 'stitch.width.hint', min: -0.4, max: 0.6, step: 0.05, get: () => s.edge, set: (v) => (s.edge = v), fmt: signed }),
-        this.check('stitch.short', 'stitch.short.hint', () => s.short, (v) => (s.short = v)),
-        this.check('stitch.underlay', 'stitch.underlay.satin', () => s.underlay, (v) => (s.underlay = v)),
+      const e = s.type === 'e';
+      const width = (label: Key, get: () => number, set: (v: number) => void) =>
+        this.slider({ label, hint: 'stitch.width.hint', min: -0.4, max: 0.6, step: 0.05, get, set, fmt: signed });
+      this.sides ||= s.edgeB !== undefined && s.edgeB !== s.edge;
+      const out: HTMLElement[] = [
+        this.choice<SatinType>('stitch.satinType', ['satin', 'e'], s.type ?? 'satin', (v) => `stitch.satinType.${v}` as Key, (v) => {
+          s.type = v;
+          // An E stitch has its stitches across a few mm apart, a satin a fraction of a mm.
+          s.spacing = v === 'e' ? Math.max(s.spacing, 2.5) : Math.min(s.spacing, 0.4);
+        }),
+        e
+          ? this.slider({ label: 'stitch.density', hint: 'stitch.eSpacing.hint', min: 1, max: 6, step: 0.1, get: () => s.spacing, set: (v) => (s.spacing = v), fmt: mm(1) })
+          : this.slider({ label: 'stitch.density', hint: 'stitch.satinDensity.hint', min: 0.2, max: 1, step: 0.01, get: () => s.spacing, set: (v) => (s.spacing = v), fmt: mm(2), band: this.info!.recommended }),
       ];
+      if (this.sides) {
+        out.push(
+          width('stitch.widthLeft', () => s.edge, (v) => (s.edge = v)),
+          width('stitch.widthRight', () => s.edgeB ?? s.edge, (v) => (s.edgeB = v)),
+        );
+      } else out.push(width('stitch.width', () => s.edge, (v) => ((s.edge = v), delete s.edgeB)));
+      out.push(
+        this.check('stitch.sides', 'stitch.sides.hint', () => this.sides, (v) => {
+          this.sides = v;
+          if (v) s.edgeB = s.edge;
+          else delete s.edgeB;
+          this.render();
+        }),
+        this.slider({
+          label: 'stitch.widthShare',
+          hint: 'stitch.widthShare.hint',
+          min: 0,
+          max: 0.2,
+          step: 0.01,
+          get: () => s.edgeShare ?? 0,
+          set: (v) => (s.edgeShare = v),
+          fmt: (v) => `+${formatNumber(v * 100, 0)} %`,
+        }),
+      );
+      if (!e) out.push(this.check('stitch.short', 'stitch.short.hint', () => s.short, (v) => (s.short = v)));
+      out.push(
+        this.slider({ label: 'stitch.split', hint: 'stitch.split.hint', min: 4, max: SATIN_SPLIT, step: 0.5, get: () => s.split ?? SATIN_SPLIT, set: (v) => (s.split = v), fmt: mm(1) }),
+        this.check('stitch.stagger', 'stitch.stagger.hint', () => s.stagger ?? true, (v) => (s.stagger = v)),
+        this.check('stitch.underlay', 'stitch.underlay.satin', () => s.underlay, (v) => {
+          s.underlay = v;
+          this.render();
+        }),
+      );
+      if (s.underlay) out.push(this.choice<UnderlayKind>('stitch.under.kind', UNDERLAYS, s.under ?? 'auto', (v) => `stitch.under.${v}` as Key, (v) => (s.under = v), true));
+      return out;
     }
     const s = this.draft.run!;
     return [
@@ -415,6 +479,90 @@ export class StitchPanel {
     input.addEventListener('change', () => this.changed(true));
     row.append(dial, input);
     wrap.append(top, row);
+    return wrap;
+  }
+
+  /** A row of buttons, one per value; picking one applies it. With `hints`, each has `<label>.hint` as its title. */
+  private choice<T extends string>(label: Key, values: readonly T[], now: T, text: (v: T) => Key, set: (v: T) => void, small = false): HTMLElement {
+    const wrap = document.createElement('div');
+    wrap.className = 'field stitch-field';
+    const head = Object.assign(document.createElement('span'), { className: 'label', textContent: t(label) });
+    const row = document.createElement('div');
+    row.className = 'segmented choice-row' + (small ? ' small' : '');
+    row.setAttribute('role', 'radiogroup');
+    row.setAttribute('aria-label', t(label));
+    for (const v of values) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = v === now ? 'active' : '';
+      b.setAttribute('role', 'radio');
+      b.setAttribute('aria-checked', String(v === now));
+      b.textContent = t(text(v));
+      b.title = t(`${text(v)}.hint` as Key);
+      b.addEventListener('click', () => {
+        if (v === now) return;
+        set(v);
+        this.render();
+        this.changed(true);
+      });
+      row.append(b);
+    }
+    wrap.append(head, row);
+    return wrap;
+  }
+
+  /** A small button for the rung tools. */
+  private button(text: Key, hint: Key, on: () => void, primary = false, disabled = false): HTMLButtonElement {
+    const b = Object.assign(document.createElement('button'), { type: 'button', className: primary ? 'primary small' : 'small', textContent: t(text), title: t(hint), disabled });
+    b.addEventListener('click', on);
+    return b;
+  }
+
+  /** Direction of a satin: what sets it now, and the rung tool. */
+  private directionTool(d: NonNullable<StitchInfo['direction']>): HTMLElement {
+    const wrap = document.createElement('div');
+    wrap.className = 'field stitch-field direction-field' + (d.tool ? ' on' : '');
+    const head = Object.assign(document.createElement('span'), { className: 'label', textContent: t('stitch.direction') });
+    const state = d.rungs === null ? t('stitch.direction.follow') : d.rungs === 0 ? t('stitch.direction.even') : t(d.rungs === 1 ? 'stitch.direction.rungs.one' : 'stitch.direction.rungs', { n: d.rungs });
+    const line = Object.assign(document.createElement('span'), { className: 'muted small', textContent: d.single ? state : t('stitch.direction.single') });
+    wrap.append(head, line);
+    if (!d.single) return wrap;
+    const row = document.createElement('div');
+    row.className = 'direction-buttons';
+    row.append(this.button(d.tool ? 'stitch.direction.done' : 'stitch.direction.tool', 'stitch.direction.tool.hint', () => this.hooks.direction('tool'), !d.tool));
+    if (d.tool) {
+      row.append(
+        this.button('stitch.direction.corners', 'stitch.direction.corners.hint', () => this.hooks.direction('corners')),
+        this.button('stitch.direction.even.button', 'stitch.direction.even.hint', () => this.hooks.direction('even'), false, d.rungs === 0),
+        this.button('stitch.direction.follow.button', 'stitch.direction.follow.hint', () => this.hooks.direction('follow'), false, d.rungs === null),
+      );
+    }
+    wrap.append(row);
+    if (d.tool) wrap.append(Object.assign(document.createElement('span'), { className: 'muted small', textContent: t('stitch.direction.help') }));
+    return wrap;
+  }
+
+  /** Rungs drawn across a fill, to sew it as satin along them. */
+  private drawTool(d: NonNullable<StitchInfo['draw']>): HTMLElement {
+    const wrap = document.createElement('div');
+    wrap.className = 'field stitch-field direction-field' + (d.tool ? ' on' : '');
+    if (!d.single) return wrap;
+    const row = document.createElement('div');
+    row.className = 'direction-buttons';
+    if (!d.tool) row.append(this.button('stitch.draw', 'stitch.draw.hint', () => this.hooks.draw('tool')));
+    else {
+      row.append(
+        this.button('stitch.draw.sew', 'stitch.draw.hint', () => this.hooks.draw('sew'), true, d.lines < 2),
+        this.button('stitch.draw.cancel', 'stitch.draw.hint', () => this.hooks.draw('tool')),
+      );
+    }
+    wrap.append(row);
+    if (d.tool) {
+      wrap.append(
+        Object.assign(document.createElement('span'), { className: 'small', textContent: t('stitch.draw.count', { n: d.lines }) }),
+        Object.assign(document.createElement('span'), { className: 'muted small', textContent: t('stitch.draw.help') }),
+      );
+    }
     return wrap;
   }
 
