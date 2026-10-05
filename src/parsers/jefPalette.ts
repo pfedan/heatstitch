@@ -1,0 +1,114 @@
+import type { ThreadColor } from '../model/pattern';
+
+/** Janome JEF thread palette as pyembroidery knows it; index 0 means "stop" (same thread again). */
+const JEF: ([number, number, number, string] | null)[] = [
+  null,
+  [0, 0, 0, 'Black'],
+  [255, 255, 255, 'White'],
+  [255, 255, 23, 'Yellow'],
+  [255, 102, 0, 'Orange'],
+  [47, 89, 51, 'Olive Green'],
+  [35, 115, 54, 'Green'],
+  [101, 194, 200, 'Sky'],
+  [171, 90, 150, 'Purple'],
+  [246, 105, 160, 'Pink'],
+  [255, 0, 0, 'Red'],
+  [177, 112, 78, 'Brown'],
+  [11, 47, 132, 'Blue'],
+  [228, 195, 93, 'Gold'],
+  [72, 26, 5, 'Dark Brown'],
+  [172, 156, 199, 'Pale Violet'],
+  [252, 242, 148, 'Pale Yellow'],
+  [249, 153, 183, 'Pale Pink'],
+  [250, 179, 129, 'Peach'],
+  [201, 164, 128, 'Beige'],
+  [151, 5, 51, 'Wine Red'],
+  [160, 184, 204, 'Pale Sky'],
+  [127, 194, 28, 'Yellow Green'],
+  [229, 229, 229, 'Silver Gray'],
+  [136, 155, 155, 'Gray'],
+  [152, 214, 189, 'Pale Aqua'],
+  [178, 225, 227, 'Baby Blue'],
+  [54, 139, 160, 'Powder Blue'],
+  [79, 131, 171, 'Bright Blue'],
+  [56, 106, 145, 'Slate Blue'],
+  [7, 22, 80, 'Navy Blue'],
+  [249, 153, 162, 'Salmon Pink'],
+  [249, 103, 107, 'Coral'],
+  [227, 49, 31, 'Burnt Orange'],
+  [226, 161, 136, 'Cinnamon'],
+  [181, 148, 116, 'Umber'],
+  [228, 207, 153, 'Blond'],
+  [255, 203, 0, 'Sunflower'],
+  [225, 173, 212, 'Orchid Pink'],
+  [195, 0, 126, 'Peony Purple'],
+  [128, 0, 75, 'Burgundy'],
+  [84, 5, 113, 'Royal Purple'],
+  [177, 5, 37, 'Cardinal Red'],
+  [202, 224, 192, 'Opal Green'],
+  [137, 152, 86, 'Moss Green'],
+  [92, 148, 26, 'Meadow Green'],
+  [0, 49, 20, 'Dark Green'],
+  [93, 174, 148, 'Aquamarine'],
+  [76, 191, 143, 'Emerald Green'],
+  [0, 119, 114, 'Peacock Green'],
+  [89, 91, 97, 'Dark Gray'],
+  [255, 255, 242, 'Ivory White'],
+  [177, 88, 24, 'Hazel'],
+  [203, 138, 7, 'Toast'],
+  [152, 108, 128, 'Salmon'],
+  [152, 105, 45, 'Cocoa Brown'],
+  [77, 52, 25, 'Sienna'],
+  [76, 51, 11, 'Sepia'],
+  [51, 32, 10, 'Dark Sepia'],
+  [82, 58, 151, 'Violet Blue'],
+  [13, 33, 126, 'Blue Ink'],
+  [30, 119, 172, 'Sola Blue'],
+  [178, 221, 83, 'Green Dust'],
+  [243, 54, 137, 'Crimson'],
+  [222, 100, 158, 'Floral Pink'],
+  [152, 65, 97, 'Wine'],
+  [76, 86, 18, 'Olive Drab'],
+  [76, 136, 31, 'Meadow'],
+  [228, 222, 121, 'Mustard'],
+  [203, 138, 26, 'Yellow Ocher'],
+  [203, 162, 28, 'Old Gold'],
+  [255, 152, 5, 'Honey Dew'],
+  [252, 178, 87, 'Tangerine'],
+  [255, 229, 5, 'Canary Yellow'],
+  [240, 51, 31, 'Vermilion'],
+  [26, 132, 45, 'Bright Green'],
+  [56, 108, 174, 'Ocean Blue'],
+  [227, 196, 180, 'Beige Gray'],
+  [227, 172, 129, 'Bamboo'],
+];
+
+export function jefColor(index: number): ThreadColor {
+  const e = JEF[index % JEF.length] ?? JEF[1]!;
+  return { r: e[0], g: e[1], b: e[2], name: e[3] };
+}
+
+/** Perceptual color distance ("red mean"), as pyembroidery uses. */
+function distance(r1: number, g1: number, b1: number, r2: number, g2: number, b2: number): number {
+  const rm = Math.round((r1 + r2) / 2);
+  const r = r1 - r2;
+  const g = g1 - g2;
+  const b = b1 - b2;
+  return (((512 + rm) * r * r) >> 8) + 4 * g * g + (((767 - rm) * b * b) >> 8);
+}
+
+/** Nearest palette entry (never 0, "stop"), optionally skipping one index. */
+export function jefIndexOf(c: ThreadColor, skip = -1): number {
+  let best = 1;
+  let bestD = Infinity;
+  for (let i = 1; i < JEF.length; i++) {
+    const e = JEF[i];
+    if (!e || i === skip) continue;
+    const d = distance(c.r, c.g, c.b, e[0], e[1], e[2]);
+    if (d <= bestD) {
+      bestD = d;
+      best = i;
+    }
+  }
+  return best;
+}

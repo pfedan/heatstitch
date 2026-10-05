@@ -1350,8 +1350,15 @@ details.panel.section[open] > summary {
   border-top: 1px solid var(--line);
 }
 
-.file-actions .buttons {
+.file-actions .save-file {
+  display: flex;
+  gap: 6px;
   margin-top: 4px;
+}
+
+.file-actions .save-file select {
+  flex: 1;
+  min-width: 0;
 }
 
 .file-actions .save-project {

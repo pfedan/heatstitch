@@ -18,7 +18,7 @@ with an estimated sewing time, and the list of jumps lets you trim and tie them 
 once by length, or leave them untrimmed. Each color opens to its objects (what is sewn between two
 trims), which can be reordered by drag or by *Optimize order*, and sewn anew with other settings: fill
 pattern (tatami, gradient, contour, spiral or as sewn), spacing, angle, stitch length, edges, underlay,
-satin width and running stitch length. This works for any DST or PES file as well as for designs from
+satin width and running stitch length. This works for any embroidery file as well as for designs from
 the Image mode.
 
 ![Sequence mode with the cat example, realistic threads, color list and jump list](public/guide/cat-en.jpg)
@@ -50,7 +50,8 @@ sends the picture anywhere.
 
 ## Features
 
-- **Formats:** DST (Tajima) and PES (Brother, reads the PEC block)
+- **Formats:** read and write PES and PEC (Brother), DST (Tajima), JEF (Janome), VP3 (Pfaff, Husqvarna
+  Viking) and EXP (Melco); PES reads the thread list of versions 5 to 10
 - **Two density metrics**, switchable:
   - *Thread length* in mm/mm²: every stitch segment is distributed exactly over the grid cells it crosses
   - *Penetrations* in 1/mm²: needle penetrations per area (perforation risk)
@@ -73,8 +74,8 @@ sends the picture anywhere.
 - PNG export of the current view including legend
 - **Correction (beta):** automatic, following digitizing practice, and by hand, with undo/redo and an
   original/corrected compare view, see below
-- **Save as DST or PES** (own writers, no pyembroidery), or as a **heatstitch project** that keeps
-  everything DST and PES drop
+- **Save as PES, DST, JEF, VP3, EXP or PEC** (own writers, no pyembroidery), or as a **heatstitch
+  project** that keeps everything embroidery files drop
 - **Image to embroidery:** PNG, JPG, WebP, SVG; preparation for photos, Brother thread colors, brush,
   tatami fill whose rows follow the image, satin columns and running stitch, without external libraries
 - **SVG import:** the file's own colors (one thread each), exact shapes with hidden parts left out,
@@ -245,8 +246,8 @@ both versions are shown side by side.
 
 ### Saving
 
-*As DST* / *As PES* writes the current pattern (`src/writers/`). After a change the file is called
-`name-corrected.dst`. Only stitches and colors are saved: PE-Design objects and hoop settings of the
+*Save* writes the current pattern in the chosen format (`src/writers/`); the choice is remembered,
+until then the open file's format is offered. After a change the file is called `name-corrected.dst`. Only stitches and colors are saved: PE-Design objects and hoop settings of the
 original are lost.
 
 - **DST:** a trim is written as a sequence of 3 jumps, but only if the following jump sequence is not
@@ -257,8 +258,19 @@ original are lost.
 - **PES:** version 1 with a CEmbOne/CSewSeg object for design software and a PEC block with preview
   images for machines. Only jumps after a trim carry the trim flag (pyembroidery flags every jump).
   Colors keep their PEC palette slot; colors from DST get the nearest one.
-- The tests (`tests/writers.test.ts`) check read → write → read for DST, PES and both conversions for
-  record equality. The written files were also read back with pyembroidery 1.5.1.
+- **PEC:** the same PEC block behind a `#PEC0001` signature, for older Brother machines.
+- **JEF:** no trim command; Janome machines (and pyembroidery) cut before moves over 3 mm, so a TRIM is
+  not written and a trim before a shorter move is lost. Stitches over 12.7 mm are split into equal
+  stitches, since long jumps would read as cuts; after a cut the way is jumps. Colors go to the
+  Janome palette; neighboring blocks that would get the same thread get the next nearest.
+- **VP3:** no jumps; each color block starts at its first stitch, a move is a (long) stitch, a trim
+  is written explicitly and at the end of every block. Colors are exact, with name, brand and
+  catalog number. A block never starts at x or y exactly 0, because pyembroidery (and Ink/Stitch)
+  skips such a start.
+- **EXP:** two bytes per stitch, explicit trims and color changes, no colors.
+- The tests (`tests/writers.test.ts`, `tests/formats.test.ts`) check read → write → read for every
+  format. `tests/fixtures/pyembroidery/` holds files written by pyembroidery 1.5.1 and what it reads
+  back; heatstitch's readers must agree. The written files were also read back with pyembroidery.
 
 ### Project files
 
@@ -458,22 +470,23 @@ the PR closes. Previews only run for branches in this repository, not for forks.
 - **DST** has no explicit trim. As in pyembroidery, a sequence of at least 3 jumps counts as a trim
   (`DST_TRIM_JUMP_COUNT` in `src/parsers/dst.ts`). DST also has no thread colors; color blocks get
   substitute colors.
-- **PES:** colors come from the PEC palette. The RGB thread lists of newer PES versions are not read
-  yet.
+- **PES:** colors come from the PEC palette, replaced by the thread list of the PES header for
+  versions 5 to 10 (real RGB, name, brand, catalog number) like pyembroidery reads it.
+- **JEF** cuts are read where a move is longer than 3 mm, as pyembroidery does.
 - The validation thresholds are derived from digitizing guidelines and calibrated on synthetic
   builds; a comparison with real test stitch-outs is still pending.
 
 ## Structure
 
 ```
-src/parsers/     DST and PES parsers, PEC palette
+src/parsers/     DST, PES, PEC, JEF, VP3 and EXP parsers, PEC and Janome palettes
 src/model/       Pattern data model, thread segments, statistics, edit functions,
                  sequence (color blocks, stitch types, jumps, markers), trimming/untrimming jumps
 src/density/     Density grid, Gaussian blur, Web Worker
 src/validation/  Measurement, profiles, levels, satin detection, short-stitch and perforation rules, zones
 src/correct/     Automatic correction: pullback under borders, satin short stitches, respacing,
                  thinning, separating penetrations
-src/writers/     DST and PES writers (PEC block, preview images)
+src/writers/     DST, PES, PEC, JEF, VP3 and EXP writers (PEC block, preview images)
 src/image/       Image preparation: color spaces, CIEDE2000, filters, color reduction, distance
                  transform, orientation, clean-up
 src/digitize/    Stitches from images: distance fields, skeleton, fill, flow fill, satin, running
