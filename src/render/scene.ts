@@ -4,7 +4,7 @@ import type { Markers, Transition } from '../model/sequence';
 import type { Settings } from '../settings';
 import type { EditView } from '../ui/editor';
 import type { ValidationResult, Zone } from '../validation/validate';
-import { drawEditOverlay } from './editOverlay';
+import { drawBand, drawEditOverlay } from './editOverlay';
 import { drawRungOverlay } from './rungOverlay';
 import type { RungView } from '../ui/rungTool';
 import { drawAreas, drawFrame, drawShapeOverlay, type FlatArea } from './shapeOverlay';
@@ -52,6 +52,8 @@ export interface FlowScene {
   frame?: { view: FrameView; mapped: Pt[] } | null;
   /** Objects drawn as flat areas instead of their stitches (their stitches have alpha 0). */
   areas?: FlatArea[] | null;
+  /** Rubber band (mm) selecting the objects inside it, while it is dragged. */
+  band?: { x0: number; y0: number; x1: number; y1: number } | null;
 }
 
 /** The stitches of one object on their own, and which records are its underlay. */
@@ -112,6 +114,7 @@ export function drawScene(ctx: CanvasRenderingContext2D, w: number, h: number, s
     if (flow.frame) drawFrame(ctx, vp, flow.frame.view, flow.frame.mapped);
     if (flow.shape) drawShapeOverlay(ctx, vp, flow.shape.view, flow.shape.handles);
     if (flow.needle >= 0) drawNeedle(ctx, vp, pattern, flow.needle);
+    if (flow.band) drawBand(ctx, vp, flow.band);
     if (scene.edit) drawEditOverlay(ctx, vp, pattern, scene.edit, w, h);
     return;
   }

@@ -6,7 +6,8 @@ import type { LoadedFile } from '../ui/fileList';
 import type { Pattern } from '../model/pattern';
 import type { Plan, Box } from '../correct/plan';
 import type { PlanPreview } from './types';
-import type { StitchInfo } from '../ui/stitchPanel';
+import type { Highlight, StitchInfo } from '../ui/stitchPanel';
+import type { RestitchResult } from '../model/restitch';
 import type { Zone } from '../validation/validate';
 
 /**
@@ -40,6 +41,8 @@ export const ui = {
   hoverJump: null as number | null,
   /** Selected objects (by index in sewing order) and the one hovered in the list. */
   selectedObjects: new Set() as ReadonlySet<number>,
+  /** Rubber band (world mm) being dragged to select the objects inside it, or null. */
+  objectBand: null as { x0: number; y0: number; x1: number; y1: number } | null,
   /** Counts selections made by the user; the stitch settings are measured again for each. */
   selectionKey: 0,
   /** New stitches shown while a stitch setting is being dragged, not applied yet. */
@@ -81,4 +84,10 @@ export const ui = {
   /** The proposals held for comparing (their name was clicked): shown while the pointer is elsewhere. */
   planPin: null as number[] | null,
   planDrag: false,
+  /** The pointer is on the underlay or border settings: that part of the selected objects is shown. */
+  highlight: null as Highlight | null,
+  /** The restitch behind `flowPreview` (it knows where the new underlay ends). */
+  previewResult: null as RestitchResult | null,
+  /** The color under the pointer in the layer list: shown alone while the pointer stays. */
+  hoverBlock: null as number | null,
 };

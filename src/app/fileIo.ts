@@ -10,6 +10,7 @@ import type { CorrectPanel } from '../ui/correctPanel';
 import { FileList, type LoadedFile } from '../ui/fileList';
 import { digitizeSvg, type ImageMode, type LeftOut } from '../ui/imageMode';
 import { threadWidthMm } from '../validation/profiles';
+import { writePattern } from '../writers';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -166,6 +167,28 @@ export function bindFileIo(app: FileIoApp) {
     } else if (project.image) app.setMode('image');
     app.redraw();
   }
+
+  // A new, empty design: it takes the material used last, opens in Ablauf and waits for shapes and text.
+  const EMPTY = { name: '', format: 'pes', x: new Int32Array(0), y: new Int32Array(0), cmd: new Uint8Array(0), colors: [], bounds: { minX: 0, minY: 0, maxX: 0, maxY: 0 } } satisfies Pattern;
+
+  /** "Neues Stickmuster", or "Neues Stickmuster 2" and so on when that name is taken. */
+  function newName(): string {
+    const base = t('draw.newName');
+    const taken = new Set(app.files.files.map((f) => f.fileName.replace(/\.[^.]+$/, '')));
+    let name = base;
+    for (let k = 2; taken.has(name); k++) name = `${base} ${k}`;
+    return name;
+  }
+
+  $('new-design').addEventListener('click', async () => {
+    const name = newName();
+    const data = writePattern({ ...EMPTY, name }, 'pes');
+    // Without a hoop there would be nothing to draw into: the common 10 x 10 cm one stands in.
+    const material = materialOf(app.settings);
+    material.hoop ??= { w: 100, h: 100 };
+    await app.files.addWithObjects(`${name}.pes`, data.slice().buffer, [], [], material);
+    app.setMode('flow');
+  });
 
   const exampleSelect = $<HTMLSelectElement>('load-example');
   exampleSelect.addEventListener('change', async () => {

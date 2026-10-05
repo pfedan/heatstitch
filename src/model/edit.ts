@@ -152,6 +152,25 @@ export function stitchesInRect(p: Pattern, x0: number, y0: number, x1: number, y
 }
 
 /**
+ * The objects (record ranges) with all their stitches inside the rectangle (0.1 mm), for selecting
+ * with a rubber band; `shown(o)` leaves out hidden ones.
+ */
+export function objectsInRect<O extends RecordRange>(p: Pattern, objs: readonly O[], x0: number, y0: number, x1: number, y1: number, shown: (o: O) => boolean = () => true): O[] {
+  const [ax, bx] = x0 < x1 ? [x0, x1] : [x1, x0];
+  const [ay, by] = y0 < y1 ? [y0, y1] : [y1, y0];
+  return objs.filter((o) => {
+    if (!shown(o)) return false;
+    let any = false;
+    for (let i = o.first; i <= o.last; i++) {
+      if (p.cmd[i] !== STITCH) continue;
+      if (p.x[i] < ax || p.x[i] > bx || p.y[i] < ay || p.y[i] > by) return false;
+      any = true;
+    }
+    return any;
+  });
+}
+
+/**
  * The sewn stitch (from record i - 1 to record i, both STITCH) nearest to (x, y) within `maxDist`
  * (0.1 mm): its record `i` and the point on it, or null.
  */
