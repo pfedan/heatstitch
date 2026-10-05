@@ -4,7 +4,7 @@ import type { LayersPanel } from '../ui/layersPanel';
 import type { Measurement } from '../validation/measure';
 import type { Mode, Settings } from '../settings';
 import type { Sequence } from './types';
-import type { ThreadColor, Pattern } from '../model/pattern';
+import { STITCH, type ThreadColor, type Pattern } from '../model/pattern';
 import type { Viewport } from '../render/viewport';
 import { LetteringPanel } from '../ui/letteringPanel';
 import { letteringOf, placeLettering, letteringObjects, withoutObjects } from '../lettering/place';
@@ -148,8 +148,10 @@ export function bindLettering(app: LetteringApp) {
     const f = app.files.active;
     const p = f?.pattern ?? null;
     const height = Math.max(font.min * font.cap, Math.min(15, font.max * font.cap));
-    const b = p?.bounds;
-    const colors = p?.colors ?? [];
+    // A new, empty design has no stitches yet: the text goes in the middle, in the lettering red.
+    const sewnYet = !!p?.cmd.includes(STITCH);
+    const b = sewnYet ? p!.bounds : undefined;
+    const colors = sewnYet ? p!.colors : [];
     const l: Lettering = {
       ...LETTERING_DEFAULTS,
       id: `L${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
