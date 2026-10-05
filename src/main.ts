@@ -1,6 +1,5 @@
 import './style.css';
 import { WorkerClient } from './density/client';
-import type { DensityGrid } from './density/grid';
 import { applyI18n, detectLang, formatNumber, getLang, setLang, t, type Lang } from './i18n';
 import { gridToCanvas } from './render/heatmap';
 import { drawLegend } from './render/legend';
@@ -12,7 +11,7 @@ import { loadSettings, materialOf, saveSettings } from './settings';
 import { bindControls, type ChangeKind } from './ui/controls';
 import { cssColor } from './ui/threadPicker';
 import { SATIN_SHARE } from './model/covers';
-import { CorrectPanel, type Cells, type CorrectMessage, type PlanRow, type PlanView } from './ui/correctPanel';
+import { CorrectPanel, type Cells, type PlanRow, type PlanView } from './ui/correctPanel';
 import { applyProposals, currentSettings, fineZones, planCorrection, planFabric, wanted, type Box, type Plan } from './correct/plan';
 import type { CorrectionReport } from './correct/auto';
 import { Editor } from './ui/editor';
@@ -51,10 +50,6 @@ import {
   SATIN,
   TIE_STITCH,
   carriedJumps,
-  type CarriedJumps,
-  type ColorBlock,
-  type Markers,
-  type Transition,
 } from './model/sequence';
 import { recolor, sameColor } from './model/recolor';
 import { COLOR_CHANGE, computeBounds, patternStats, STITCH, TRIM } from './model/pattern';
@@ -67,11 +62,9 @@ import { ObjectMenu } from './ui/objectMenu';
 import { ObjectPanel, OrderCard } from './ui/objectPanel';
 import { StitchPanel, type Highlight, type StitchInfo } from './ui/stitchPanel';
 import { borderRanges, syncBorders } from './model/border';
-import { analyze, forget, holdMemory, keepShape, openOnPurpose, objectKey, measureFill, measureRun, measureSatin, remember, remembered, type Rails, rememberedIn, rememberShapes, restitch, shapeTrust, unionRegion, underlayRanges, type Remembered, type Settings as RestitchSettings, type ShapeTrust, type RestitchResult } from './model/restitch';
+import { analyze, holdMemory, openOnPurpose, objectKey, measureFill, measureRun, measureSatin, remember, remembered, rememberedIn, rememberShapes, restitch, shapeTrust, unionRegion, underlayRanges, type Remembered, type Settings as RestitchSettings, type ShapeTrust, type RestitchResult } from './model/restitch';
 import { outline } from './digitize/region';
-import { railsFromOutline } from './digitize/rungs';
 import type { Pt } from './digitize/skeleton';
-import { RungTool } from './ui/rungTool';
 import { ShapeTool } from './ui/shapeTool';
 import { DrawTool, type DrawKind } from './ui/drawTool';
 import { nearestThread } from './image/prepare';
@@ -103,82 +96,12 @@ import { autoReversible, reverseObjects, reversible } from './model/reverse';
 import { Player } from './ui/player';
 import { installPanelResize } from './ui/panelResize';
 import type { Key } from './i18n';
+import type { PlanPreview, Sequence } from './app/types';
+import { ui } from './app/state';
+import { bindRungs } from './app/rungs';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
-/**
- * State several parts of the app read and change: selection, hover, the views on the stage and what
- * is being edited. One object, so the parts can live in their own modules (plans/stabilitaet.md).
- */
-const ui = {
-  correctMessage: null as CorrectMessage,
-  /** Comparison view: original left of the divider, current version right of it. */
-  comparing: false,
-  /** Divider position as a share of the stage width. */
-  split: 0.5,
-  splitDrag: false,
-  origGrid: null as DensityGrid | null,
-  /** Pattern and options `origGrid` was computed for. */
-  origKey: null as { p: Pattern; opts: string } | null,
-  origGridImg: null as HTMLCanvasElement | null,
-  densitySeq: 0,
-  grid: null as DensityGrid | null,
-  gridImg: null as HTMLCanvasElement | null,
-  computing: false,
-  stageW: 0,
-  stageH: 0,
-  /** Zone hovered in the list (wins) or last jumped to; both are framed on the canvas. */
-  hoverZone: null as Zone | null,
-  selectedZone: null as Zone | null,
-  /** Color blocks hidden or highlighted in the list (cleared for another file). */
-  hiddenBlocks: new Set() as ReadonlySet<number>,
-  focusBlock: null as number | null,
-  selectedJump: null as number | null,
-  hoverJump: null as number | null,
-  /** Selected objects (by index in sewing order) and the one hovered in the list. */
-  selectedObjects: new Set() as ReadonlySet<number>,
-  /** Counts selections made by the user; the stitch settings are measured again for each. */
-  selectionKey: 0,
-  /** New stitches shown while a stitch setting is being dragged, not applied yet. */
-  flowPreview: null as Pattern | null,
-  hoverObject: null as number | null,
-  /** Object whose penetrations are edited in the Ablauf mode (the level "Stitches"), or null. */
-  editObject: null as number | null,
-  /** Parts of each object, measured stitch settings per selection (cached per pattern and selection). */
-  stitchCache: null as { p: Pattern; key: number; info: StitchInfo } | null,
-  /** The object the rung tool works on, and the pattern its columns were read from. */
-  rungObject: null as number | null,
-  /** The object whose fill outline is edited (level Form), and the pattern its form was read from. */
-  shapeObject: null as number | null,
-  shapePattern: null as Pattern | null,
-  /** Shape aside hovered in its list, shown on the canvas. */
-  hoverAside: null as number | null,
-  asideShown: null as AsideShape[] | null,
-  /** The next file opened keeps the view (a design started by drawing stays where it was drawn). */
-  keepView: false,
-  /**
-   * The lettering chosen (all its objects are selected), as last set: while its font is still
-   * loading, ahead of its stitches. `recorded`: this edit already has its undo step; `sewn`: the
-   * settings its stitches were made with.
-   */
-  lettering: null as { l: Lettering; f: LoadedFile; recorded: boolean; sewn: string } | null,
-  /** Moving single letters (the letter level), and the letter chosen there (its place in the text). */
-  letterMode: false,
-  letterAt: null as number | null,
-  /** A letter being dragged: its place, where the drag started (mm) and its offset then. */
-  letterDrag: null as { at: number; from: [number, number]; dx: number; dy: number; moved: boolean } | null,
-  /** The text field gets the focus once the card shows (a new lettering). */
-  focusText: false,
-  /** Proposals worked out for the active file, until they are taken over or the file changes. */
-  planState: null as { file: LoadedFile; pattern: Pattern; plan: Plan; checked: Set<number>; fine: Box[]; fineOn: boolean; view: PlanView } | null,
-  /** The object of the proposal under the pointer (mm), outlined on the canvas. */
-  planHover: null as Box | null,
-  /** The preview shown on the canvas now (the pointer is on its row, or it is held). */
-  planPreview: null as PlanPreview | null,
-  /** The proposals held for comparing (their name was clicked): shown while the pointer is elsewhere. */
-  planPin: null as number[] | null,
-  planDrag: false,
-};
 initUpdateNotice($('update-notice'));
 const stage = $<HTMLElement>('stage');
 const canvas = $<HTMLCanvasElement>('canvas');
@@ -297,30 +220,6 @@ installPanelResize($('layout'), settings.panels, () => saveSettings(settings));
 
 // Ablauf mode ------------------------------------------------------------------
 
-/** Everything the Ablauf mode derives from one pattern, computed once per version. */
-interface Sequence {
-  blocks: ColorBlock[];
-  kinds: Uint8Array;
-  markers: Markers;
-  transitions: Transition[];
-  numbers: Uint32Array;
-  total: number;
-  colors: Partial<Record<string, Uint8Array>>;
-  /** Trims and color changes up to each stitch number, for the time estimate. */
-  trimsAt: number[];
-  colorsAt: number[];
-  /** Jumps without a trim, built the first time they are drawn as thread. */
-  carried?: CarriedJumps;
-  objects: SewObject[];
-  /** Objects each object lies on (built when first needed). */
-  over?: number[][];
-  /** Object of each record (-1 between objects). */
-  objectAt: Int32Array;
-  /** The lettering each object belongs to (built when first needed). */
-  letterings?: (Lettering | undefined)[];
-  /** Their names in the list, per language. */
-  letteringNames?: { lang: string; names: ReadonlyMap<number, string> | undefined };
-}
 const seqCache = new WeakMap<Pattern, Sequence>();
 function seq(p: Pattern): Sequence {
   let q = seqCache.get(p);
@@ -1182,220 +1081,44 @@ const stitchPanel = new StitchPanel($('object-stitches'), {
 
 // Rungs -------------------------------------------------------------------------------------------
 
-let rungPattern: Pattern | null = null;
-
-const rungTool = new RungTool({
-  change: (columns, final) => {
-    if (final) applyRungs(columns);
-    else if (!rungFrame) {
-      rungFrame = requestAnimationFrame(() => {
-        rungFrame = 0;
-        ui.flowPreview = rungTool.active ? (withRungs(rungTool.mode === 'satin' ? pendingColumns : null)?.pattern ?? null) : null;
-        redraw();
-      });
-    }
-    if (!final) pendingColumns = columns;
+const { closeRungs, rungInfo, rungTool, sewAlongLines, syncRungs, toggleGuides, toggleRungs } = bindRungs({
+  get applyRestitched() {
+    return applyRestitched;
   },
-  lines: () => redraw(),
-  guides: (g) => stitchPanel.setGuides(g),
-  redraw: () => redraw(),
-  say: (key) => {
-    layers.say(t(key), true);
-    redraw();
+  get convertSettings() {
+    return convertSettings;
+  },
+  get editor() {
+    return editor;
+  },
+  get files() {
+    return files;
+  },
+  get layers() {
+    return layers;
+  },
+  get redraw() {
+    return redraw;
+  },
+  get seq() {
+    return seq;
+  },
+  get setEditing() {
+    return setEditing;
+  },
+  get settings() {
+    return settings;
+  },
+  get stage() {
+    return stage;
+  },
+  get stitchInfo() {
+    return stitchInfo;
+  },
+  get stitchPanel() {
+    return stitchPanel;
   },
 });
-let rungFrame = 0;
-let pendingColumns: Rails[][] | null = null;
-
-/** The one selected object, if the rung tool can work on it: a satin with columns, or a fill with an area. */
-function rungTarget(p: Pattern, q: Sequence): { o: number; mode: 'satin' | 'fill' } | null {
-  if (settings.mode !== 'flow' || ui.selectedObjects.size !== 1) return null;
-  const o = [...ui.selectedObjects][0];
-  const obj = q.objects[o];
-  if (!obj) return null;
-  const an = analyze(p, obj, q.kinds);
-  if (an.parts.some((pt) => pt.kind === 'satin')) return { o, mode: 'satin' };
-  if (an.fill) return { o, mode: 'fill' };
-  return null;
-}
-
-/** What the stitch panel shows about the rung tool. */
-function rungInfo(p: Pattern, q: Sequence): Pick<StitchInfo, 'direction' | 'draw' | 'guide'> {
-  const single = ui.selectedObjects.size === 1;
-  const on = rungTool.active && ui.rungObject !== null && ui.selectedObjects.has(ui.rungObject);
-  const out: Pick<StitchInfo, 'direction' | 'draw' | 'guide'> = {};
-  const info = stitchInfo(p, q);
-  if (info.measured.satin) {
-    let rungs: number | null = null;
-    if (on && rungTool.mode === 'satin') rungs = rungTool.count;
-    else if (single) {
-      const cols = remembered(p, q.objects[[...ui.selectedObjects][0]])?.columns?.flat() ?? [];
-      rungs = cols.some((c) => c.rungs) ? cols.reduce((a, c) => a + (c.rungs?.length ?? 0), 0) : null;
-    }
-    let cuts = 0;
-    if (on && rungTool.mode === 'satin') cuts = rungTool.columns.reduce((a, c) => a + c.cuts.length, 0);
-    else if (single) cuts = (remembered(p, q.objects[[...ui.selectedObjects][0]])?.columns?.flat() ?? []).reduce((a, c) => a + (c.cuts?.length ?? 0), 0);
-    const here = on && rungTool.mode === 'satin' ? rungTool.spacingHere : undefined;
-    out.direction = { tool: on && rungTool.mode === 'satin', rungs, single, cuts, ...(here !== undefined ? { spacingHere: here } : {}) };
-  }
-  if (info.measured.fill && !info.measured.satin) out.draw = { tool: on && rungTool.mode === 'fill', lines: on ? rungTool.lines.length : 0, single };
-  if (info.measured.fill) out.guide = { tool: on && rungTool.mode === 'guide', single };
-  return out;
-}
-
-/** Outline of the one selected object's fill (its longest loop), or null when it has no fill. */
-function fillLoop(p: Pattern, q: Sequence, o: number): Pt[] | null {
-  const obj = q.objects[o];
-  const an = obj && analyze(p, obj, q.kinds);
-  if (!an?.fill) return null;
-  const area = remembered(p, obj)?.shape ?? an.fill;
-  const loops = outline(area);
-  return loops.reduce((a, b) => (b.length > a.length ? b : a), [] as [number, number][]) as Pt[];
-}
-
-/** The guide line tool on or off for the one selected fill (key G). */
-function toggleGuides(): void {
-  if (rungTool.active) {
-    const was = rungTool.mode;
-    closeRungs();
-    if (was === 'guide') return;
-  }
-  const p = files.active?.pattern;
-  if (!p || settings.mode !== 'flow' || ui.selectedObjects.size !== 1) return;
-  const q = seq(p);
-  const o = [...ui.selectedObjects][0];
-  const loop = fillLoop(p, q, o);
-  if (!loop) return;
-  if (editor.active) setEditing(false);
-  rungTool.openGuides(loop, remembered(p, q.objects[o])?.fill?.guides ?? []);
-  ui.rungObject = o;
-  rungPattern = p;
-  stage.classList.add('rungs');
-  redraw();
-}
-
-/** The rung tool on or off for the selected object (key R). */
-function toggleRungs(): void {
-  if (rungTool.active) return closeRungs();
-  const p = files.active?.pattern;
-  if (!p) return;
-  const q = seq(p);
-  const target = rungTarget(p, q);
-  if (!target) return;
-  if (editor.active) setEditing(false);
-  const obj = q.objects[target.o];
-  if (target.mode === 'satin') {
-    const columns = keepShape(p, obj, q.kinds).columns;
-    if (!columns?.length) return layers.say(t('stitch.direction.miss'), true);
-    rungTool.openSatin(columns);
-  } else {
-    const an = analyze(p, obj, q.kinds);
-    const area = remembered(p, obj)?.shape ?? an.fill;
-    if (!area) return;
-    // The longest outline is the outside; holes are covered by the satin anyway.
-    const loops = outline(area);
-    const loop = loops.reduce((a, b) => (b.length > a.length ? b : a), [] as [number, number][]);
-    rungTool.openFill(loop as Pt[]);
-  }
-  ui.rungObject = target.o;
-  rungPattern = p;
-  stage.classList.add('rungs');
-  redraw();
-}
-
-function closeRungs(): void {
-  if (!rungTool.active) return;
-  rungTool.close();
-  ui.rungObject = null;
-  rungPattern = null;
-  pendingColumns = null;
-  ui.flowPreview = null;
-  stage.classList.remove('rungs');
-  redraw();
-}
-
-/** Keeps the rung tool on its object: after new stitches its columns are read again; it closes when the object is gone. */
-function syncRungs(): void {
-  if (!rungTool.active) return;
-  const p = files.active?.pattern;
-  if (!p || settings.mode !== 'flow' || ui.selectedObjects.size !== 1) return closeRungs();
-  if (p === rungPattern) return;
-  const q = seq(p);
-  const o = [...ui.selectedObjects][0];
-  if (rungTool.mode === 'guide') {
-    // The fill sewn anew along the guide lines: the tool stays on it.
-    if (!q.objects[o] || !fillLoop(p, q, o)) return closeRungs();
-    // After an undo the lines are the ones the stitches were made with.
-    const guides = remembered(p, q.objects[o])?.fill?.guides;
-    if (guides) rungTool.guides = guides.map((g) => g.slice());
-    ui.rungObject = o;
-    rungPattern = p;
-    return;
-  }
-  const obj = q.objects[o];
-  const columns = obj && rungTool.mode === 'satin' ? keepShape(p, obj, q.kinds).columns : null;
-  if (!columns?.length) return closeRungs();
-  rungTool.setColumns(columns);
-  ui.rungObject = o;
-  rungPattern = p;
-}
-
-/**
- * New stitches for the rung tool's object along `columns` (rails with their rungs), in its own
- * satin settings; with `keep`, the columns stay remembered for the old stitches (to show them
- * while dragging, they are put back).
- */
-function withRungs(columns: Rails[][] | null, keep = false) {
-  const p = files.active?.pattern;
-  if (!p || ui.rungObject === null || !columns) return null;
-  const q = seq(p);
-  const obj = q.objects[ui.rungObject];
-  if (!obj) return null;
-  const before = remembered(p, obj);
-  const shape = keepShape(p, obj, q.kinds);
-  remember(p, obj, { ...shape, columns, read: false });
-  const r = restitch(
-    p,
-    q.objects,
-    [ui.rungObject],
-    (_o, an, known) => {
-      const part = an.parts.find((pt) => pt.kind === 'satin');
-      return part ? { kind: 'satin', s: known?.satin ?? measureSatin(p, part, q.kinds) } : null;
-    },
-    q.kinds,
-    settings.trimMm,
-  );
-  if (!keep || !r.starts.length) forget(p, obj, before);
-  return r;
-}
-
-function applyRungs(columns: Rails[][]): void {
-  pendingColumns = null;
-  cancelAnimationFrame(rungFrame);
-  rungFrame = 0;
-  applyRestitched(withRungs(columns, true), 'stitch.failed');
-}
-
-/** Sews the selected fill as satin along the lines drawn across it. */
-function sewAlongLines(): void {
-  const p = files.active?.pattern;
-  if (!p || ui.rungObject === null || rungTool.mode !== 'fill') return;
-  const q = seq(p);
-  const obj = q.objects[ui.rungObject];
-  const an = obj && analyze(p, obj, q.kinds);
-  const area = an && (remembered(p, obj)?.shape ?? an.fill);
-  if (!area) return;
-  const loops = outline(area);
-  const loop = loops.reduce((a, b) => (b.length > a.length ? b : a), [] as [number, number][]) as Pt[];
-  const rails = railsFromOutline(loop, rungTool.lines);
-  if (!rails) return layers.say(t('stitch.draw.notStrip'), true);
-  const s = convertSettings('satin', stitchInfo(p, q));
-  if (!s) return;
-  const o = ui.rungObject;
-  closeRungs();
-  const r = restitch(p, q.objects, [o], s, q.kinds, settings.trimMm, 'fill', false, new Map([[o, [rails]]]));
-  applyRestitched(r, 'stitch.toSatin.failed', true);
-}
 
 // Shapes and the frame ---------------------------------------------------------------------------
 
@@ -3028,14 +2751,6 @@ function objectStitches(p: Pattern, which: number[], under: boolean): FocusStitc
   });
 }
 
-/** A proposal taken over only for a look: its stitches and their heatmap (once worked out). */
-interface PlanPreview {
-  pattern: Pattern;
-  img: HTMLCanvasElement | null;
-  /** The stitches of the objects it changes, each on its own: as they are and as they would be. */
-  before: FocusStitches[];
-  focus: FocusStitches[];
-}
 /** Previews of the proposals by their ids, for the plan they belong to. */
 let planPreviews: { plan: Plan; byIds: Map<string, PlanPreview | null> } | null = null;
 /** Where the line between before and after lies in the object's frame (0 left, 1 right). */
