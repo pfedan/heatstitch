@@ -60,7 +60,7 @@ import { blockName, kindLabel, LayersPanel } from './ui/layersPanel';
 import { ObjectPanel, OrderCard } from './ui/objectPanel';
 import { StitchPanel, type StitchInfo } from './ui/stitchPanel';
 import { syncBorders } from './model/border';
-import { analyze, forget, keepShape, objectKey, measureFill, measureRun, measureSatin, remember, remembered, type Rails, rememberedIn, rememberShapes, restitch, shapeTrust, unionRegion, underlayRanges, type Remembered, type Settings as RestitchSettings, type ShapeTrust, type RestitchResult } from './model/restitch';
+import { analyze, forget, keepShape, openOnPurpose, objectKey, measureFill, measureRun, measureSatin, remember, remembered, type Rails, rememberedIn, rememberShapes, restitch, shapeTrust, unionRegion, underlayRanges, type Remembered, type Settings as RestitchSettings, type ShapeTrust, type RestitchResult } from './model/restitch';
 import { outline } from './digitize/region';
 import { railsFromOutline } from './digitize/rungs';
 import type { Pt } from './digitize/skeleton';
@@ -154,7 +154,7 @@ const files = new FileList(
     if (f?.pattern && !keepView) fitView(f);
     recompute();
   },
-  (p) => validator.measure(p),
+  (p) => validator.measure(p, openOnPurpose(p, seq(p).objects) ?? undefined),
   (f) => {
     if (f === files.active) redraw();
   },
@@ -2715,7 +2715,7 @@ const imageMode = new ImageMode({
     if (first) shine();
     else if (settings.realistic && settings.liveLight && settings.image.view === 'stitches') sweep(redraw);
   },
-  validate: async (p) => classify(await validator.measure(p), settings.profile, settings.checks),
+  validate: async (p) => classify(await validator.measure(p, openOnPurpose(p, seq(p).objects) ?? undefined), settings.profile, settings.checks),
   takeOver: async (d, name) => {
     await addDigitized(d, name);
     setMode('flow');

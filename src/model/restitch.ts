@@ -526,6 +526,20 @@ export function restoreRemembered(list: unknown): number {
 }
 
 /**
+ * Records of the fills sewn open on purpose (gradients), which the coverage check leaves out; null
+ * when there are none.
+ */
+export function openOnPurpose(p: Pattern, objs: SewObject[]): Uint8Array | null {
+  let out: Uint8Array | null = null;
+  for (const o of objs) {
+    if (remembered(p, o)?.fill?.pattern !== 'gradient') continue;
+    out ??= new Uint8Array(p.cmd.length);
+    out.fill(1, o.first, o.last + 1);
+  }
+  return out;
+}
+
+/**
  * How far the fill area of an object can be trusted: `kept` when it is the shape the object was
  * sewn with here, `good` when the rows recognized cover it closely, `approximate` when they are too
  * open to close into an area or leave parts of it uncovered (its edges are a guess).

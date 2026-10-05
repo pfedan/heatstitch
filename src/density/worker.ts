@@ -8,7 +8,7 @@ import { computeDensity, type DensityGrid, type DensityOptions } from './grid';
 
 export type WorkerRequest =
   | { id: number; type: 'density'; pattern: Pattern; options: DensityOptions }
-  | { id: number; type: 'measure'; pattern: Pattern }
+  | { id: number; type: 'measure'; pattern: Pattern; skipCover?: Uint8Array }
   | { id: number; type: 'correct'; pattern: Pattern; profile: Profile; checks: Checks; options: CorrectionOptions };
 
 export interface WorkerResponse {
@@ -32,7 +32,7 @@ ctx.onmessage = (e: MessageEvent<WorkerRequest>) => {
       const r = autoCorrect(req.pattern, req.profile, req.options, req.checks);
       ctx.postMessage({ id: req.id, pattern: r.pattern, measurement: r.measurement, report: r.report } satisfies WorkerResponse);
     } else {
-      const m = measurePattern(req.pattern);
+      const m = measurePattern(req.pattern, req.skipCover);
       ctx.postMessage({ id: req.id, measurement: m } satisfies WorkerResponse, measurementBuffers(m));
     }
   } catch (err) {

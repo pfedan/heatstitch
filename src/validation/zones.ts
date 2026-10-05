@@ -1,9 +1,9 @@
 import { SAFE, type Level } from './thresholds';
 
-export type Reason = 'density' | 'shortStitches' | 'perforation';
+export type Reason = 'density' | 'shortStitches' | 'perforation' | 'sparse' | 'gap' | 'long';
 
 /** Reason bits stored per cell. */
-export const REASON_BITS: Record<Reason, number> = { density: 1, shortStitches: 2, perforation: 4 };
+export const REASON_BITS: Record<Reason, number> = { density: 1, shortStitches: 2, perforation: 4, sparse: 8, gap: 16, long: 32 };
 const REASONS = Object.keys(REASON_BITS) as Reason[];
 
 export interface Zone {
@@ -18,6 +18,10 @@ export interface Zone {
   maxHoles: number;
   /** Most non-exempt short stitches in one cell of the zone. */
   maxShorts: number;
+  /** Lowest mean density of a cell in the zone flagged as too open (mm/mm²), or 0. */
+  minCover: number;
+  /** Longest stitch in the zone (mm), when long stitches are a reason. */
+  maxLong: number;
   /** Mean share of satin thread over the zone's cells (0 to 1). */
   satinShare: number;
   /** Bounding box in mm (world coordinates, y down). */
@@ -39,6 +43,9 @@ export interface ZoneInput {
   holes: Uint8Array;
   shorts: Uint16Array;
   satin: Float32Array;
+  /** Mean density of too open cells and longest stitches (0.1 mm), when those are checked. */
+  cover?: Float32Array;
+  longest?: Uint16Array;
   cols: number;
   rows: number;
   originX: number;
@@ -68,6 +75,8 @@ export function findZones(g: ZoneInput, zoneOf?: Int32Array): Zone[] {
     let maxDensity = 0;
     let maxHoles = 0;
     let maxShorts = 0;
+    let minCover = Infinity;
+    let maxLong = 0;
     let satin = 0;
     let minCx = Infinity;
     let minCy = Infinity;
@@ -85,6 +94,8 @@ export function findZones(g: ZoneInput, zoneOf?: Int32Array): Zone[] {
       maxDensity = Math.max(maxDensity, g.density[i]);
       maxHoles = Math.max(maxHoles, g.holes[i]);
       maxShorts = Math.max(maxShorts, g.shorts[i]);
+      if (g.reasons[i] & REASON_BITS.sparse && g.cover) minCover = Math.min(minCover, g.cover[i]);
+      if (g.reasons[i] & REASON_BITS.long && g.longest) maxLong = Math.max(maxLong, g.longest[i] / 10);
       minCx = Math.min(minCx, cx);
       maxCx = Math.max(maxCx, cx);
       minCy = Math.min(minCy, cy);
@@ -110,6 +121,8 @@ export function findZones(g: ZoneInput, zoneOf?: Int32Array): Zone[] {
       maxDensity,
       maxHoles,
       maxShorts,
+      minCover: Number.isFinite(minCover) ? minCover : 0,
+      maxLong,
       satinShare: satin / cells,
       bbox: {
         minX: g.originX + minCx * cellMm,

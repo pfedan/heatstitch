@@ -7,7 +7,9 @@ import {
   classifyHoles,
   CRITICAL,
   SAFE,
+  GAP_PIXELS,
   SHORT_STITCH_COUNT,
+  sparseLimit,
   thresholdsFor,
   type Level,
   type Thresholds,
@@ -24,9 +26,13 @@ export interface Checks {
   shortStitches: boolean;
   /** Only applies to perforation-sensitive fabrics. */
   perforation: boolean;
+  /** Fabric showing through and gaps where the thread pulls the fabric in (Caution only). */
+  coverage: boolean;
+  /** Stitches long enough to snag (Caution only). */
+  longStitches: boolean;
 }
 
-export const ALL_CHECKS: Readonly<Checks> = { density: true, shortStitches: true, perforation: true };
+export const ALL_CHECKS: Readonly<Checks> = { density: true, shortStitches: true, perforation: true, coverage: true, longStitches: true };
 
 /** Returns a valid set of checks, falling back to enabled for missing entries. */
 export function normalizeChecks(c: Partial<Checks> | undefined): Checks {
@@ -34,6 +40,8 @@ export function normalizeChecks(c: Partial<Checks> | undefined): Checks {
     density: c?.density !== false,
     shortStitches: c?.shortStitches !== false,
     perforation: c?.perforation !== false,
+    coverage: c?.coverage !== false,
+    longStitches: c?.longStitches !== false,
   };
 }
 
@@ -81,7 +89,11 @@ export function classify(m: Measurement, profile: Profile, checks: Checks = ALL_
     const byDensity = checks.density ? classifyDensity(d, m.satin[i], th) : SAFE;
     const byHoles = checks.perforation ? classifyHoles(m.holes[i], th) : SAFE;
     const byShorts = checks.shortStitches && m.shorts[i] >= SHORT_STITCH_COUNT ? shortsLevel : SAFE;
-    const l = Math.max(byDensity, byHoles, byShorts) as Level;
+    // Lower limits: never more than Caution.
+    const sparse = checks.coverage && m.cover[i] > 0 && m.cover[i] < sparseLimit(th, m.satin[i]);
+    const gap = checks.coverage && (th.pull === 'high' ? m.gapsHigh : m.gapsLow)[i] >= GAP_PIXELS;
+    const long = checks.longStitches && m.longest[i] > th.long;
+    const l = Math.max(byDensity, byHoles, byShorts, sparse || gap || long ? CAUTION : SAFE) as Level;
     level[i] = l;
     if (l === SAFE) continue;
     if (l === CAUTION) cautionCells++;
@@ -89,7 +101,10 @@ export function classify(m: Measurement, profile: Profile, checks: Checks = ALL_
     reasons[i] =
       (byDensity ? REASON_BITS.density : 0) |
       (byShorts ? REASON_BITS.shortStitches : 0) |
-      (byHoles ? REASON_BITS.perforation : 0);
+      (byHoles ? REASON_BITS.perforation : 0) |
+      (sparse ? REASON_BITS.sparse : 0) |
+      (gap ? REASON_BITS.gap : 0) |
+      (long ? REASON_BITS.long : 0);
   }
   const zoneOf = new Int32Array(n);
   const zones = findZones({ ...m, level, reasons }, zoneOf);

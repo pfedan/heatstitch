@@ -40,8 +40,8 @@ export class WorkerClient {
   }
 
   /** Profile-independent validation measurements; classification happens on the main thread. */
-  async measure(pattern: Pattern): Promise<Measurement> {
-    return (await this.call({ type: 'measure', pattern })).measurement!;
+  async measure(pattern: Pattern, skipCover?: Uint8Array): Promise<Measurement> {
+    return (await this.call({ type: 'measure', pattern, skipCover })).measurement!;
   }
 
   /** Automatic correction (measures several times, so it runs off the main thread). */
