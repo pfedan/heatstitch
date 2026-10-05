@@ -1,10 +1,10 @@
 import { ImageClient } from '../digitize/client';
 import { digitizeDefaults, type DigitizeOptions, type Digitized } from '../digitize/digitize';
 import { formatNumber, t, type Key } from '../i18n';
-import { NONE, workingSize, type ColorEdit, type PrepareOptions, type ExactLabels, type Prepared, type Stroke } from '../image/prepare';
+import { nearestThread, NONE, workingSize, type ColorEdit, type PrepareOptions, type ExactLabels, type Prepared, type Stroke } from '../image/prepare';
 import { readSvg, type SvgDesign } from '../image/svg';
 import type { Raster } from '../image/raster';
-import type { Rgb } from '../image/color';
+import { rgbToLab, type Rgb } from '../image/color';
 import { patternStats, type Pattern, type ThreadColor } from '../model/pattern';
 import { sewingSeconds } from '../model/sequence';
 import { drawStitches } from '../render/stitches';
@@ -100,6 +100,22 @@ async function decode(file: Blob): Promise<HTMLCanvasElement> {
 }
 
 /**
+ * Threads for the colors of a vector file: the nearest Brother threads (colors landing on the same
+ * thread share it), or the colors themselves. `index` maps each color to its thread.
+ */
+function threadsFor(colors: Rgb[], brother: boolean): { threads: ThreadColor[]; index: number[] } {
+  const threads: ThreadColor[] = [];
+  const index = colors.map((c) => {
+    const t = brother ? nearestThread(rgbToLab(...c)).thread : { r: c[0], g: c[1], b: c[2] };
+    const same = threads.findIndex((x) => (brother ? x.pecIndex === t.pecIndex : x.r === t.r && x.g === t.g && x.b === t.b));
+    if (same >= 0) return same;
+    threads.push(t);
+    return threads.length - 1;
+  });
+  return { threads, index };
+}
+
+/**
  * Stitches for an SVG file without opening it in the Bild mode (the examples of the file list): its
  * shapes at their size in the file, the stitch settings of the material. A worker of its own runs
  * it, so an image open in the Bild mode stays as it is.
@@ -113,10 +129,18 @@ export async function digitizeSvg(file: File, prepare: PrepareOptions, options: 
     const widthMm = svg.widthMm ? Math.min(400, Math.max(10, svg.widthMm)) : prepare.widthMm;
     const data = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height);
     await client.load({ width: data.width, height: data.height, data: data.data });
+    const name = file.name.replace(/\.[^.]+$/, '');
+    // A file of plain shapes is sewn shape by shape, each whole; the rest goes the way of pictures.
+    const shapes = svg.shapes(widthMm);
+    if (shapes?.length) {
+      const { threads, index } = threadsFor(svg.colors, prepare.threads);
+      const mapped = shapes.map((s) => ({ ...s, color: index[s.color] }));
+      return await client.digitizeShapes(mapped, threads, options, { w: widthMm, h: widthMm * svg.aspect }, false, name);
+    }
     const { w, h, pxMm } = workingSize(widthMm, canvas.width, canvas.height);
     const exact = await svg.labels(w, h, pxMm);
     await client.prepare({ ...prepare, widthMm, smooth: 0 }, [], [], exact);
-    return await client.digitize(options, file.name.replace(/\.[^.]+$/, ''));
+    return await client.digitize(options, name);
   } finally {
     client.dispose();
     svg.dispose();

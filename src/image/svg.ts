@@ -1,6 +1,8 @@
 import type { Rgb } from './color';
 import { NONE } from './quantize';
 import type { ExactLabels } from './prepare';
+import type { Form, Mat } from '../shape/path';
+import { ellipsePath, parsePath, pointsPath, rectPath } from '../shape/svgPath';
 
 /**
  * SVG files read as what they are: shapes with exact colors. The browser draws the file, so every
@@ -132,8 +134,67 @@ export interface SvgDesign {
   picture(w: number, h: number): Promise<HTMLCanvasElement>;
   /** Regions by color at `w` × `h` pixels, `pxMm` mm each. */
   labels(w: number, h: number, pxMm: number): Promise<ExactLabels>;
+  /**
+   * Every fill and line of the file as it is drawn, whole (also where later shapes cover it), in mm
+   * from the top left at a width of `widthMm`, in the order they are painted. Null when the file
+   * has things only the browser can draw (text, clip paths, masks, markers).
+   */
+  shapes(widthMm: number): SvgShape[] | null;
   /** Releases the copy of the file kept in the page. */
   dispose(): void;
+}
+
+/** One painted part of an SVG shape: its fill (an area) or its stroke (a line of a width). */
+export interface SvgShape {
+  /** Index into the file's colors. */
+  color: number;
+  kind: 'fill' | 'stroke';
+  form: Form;
+  /** Stroke width in mm (strokes only), at least MIN_LINE_MM. */
+  width?: number;
+}
+
+/** The outline of a basic shape or path as path data, in its user units; null for text and the like. */
+function geometry(el: SVGGraphicsElement): string | null {
+  const len = (a: SVGAnimatedLength) => a.baseVal.value;
+  switch (el.localName) {
+    case 'path':
+      return el.getAttribute('d') ?? '';
+    case 'rect': {
+      const r = el as SVGRectElement;
+      const rx = r.getAttribute('rx') === null ? 0 : len(r.rx);
+      const ry = r.getAttribute('ry') === null ? 0 : len(r.ry);
+      return rectPath(len(r.x), len(r.y), len(r.width), len(r.height), rx, ry);
+    }
+    case 'circle': {
+      const c = el as SVGCircleElement;
+      return ellipsePath(len(c.cx), len(c.cy), len(c.r), len(c.r));
+    }
+    case 'ellipse': {
+      const e = el as SVGEllipseElement;
+      return ellipsePath(len(e.cx), len(e.cy), len(e.rx), len(e.ry));
+    }
+    case 'line': {
+      const l = el as SVGLineElement;
+      return `M${len(l.x1)} ${len(l.y1)}L${len(l.x2)} ${len(l.y2)}`;
+    }
+    case 'polyline':
+    case 'polygon':
+      return pointsPath(el.getAttribute('points') ?? '', el.localName === 'polygon');
+    default:
+      return null;
+  }
+}
+
+/** Whether something hides or adds to the shape in a way only the browser can draw. */
+function drawnByBrowser(el: Element, root: Element): boolean {
+  const cs = getComputedStyle(el);
+  if (cs.markerStart !== 'none' || cs.markerMid !== 'none' || cs.markerEnd !== 'none') return true;
+  for (let a: Element | null = el; a && a !== root; a = a.parentElement) {
+    const s = getComputedStyle(a);
+    if ((s.clipPath && s.clipPath !== 'none') || (s.mask && s.mask !== 'none')) return true;
+  }
+  return false;
 }
 
 const hrefOf = (el: Element) => el.getAttribute('href') ?? el.getAttributeNS(XLINK_NS, 'href');
@@ -350,6 +411,29 @@ export async function readSvg(text: string): Promise<SvgDesign | null> {
       widthMm,
       aspect,
       colors,
+      shapes(designMm) {
+        const box = root.getBoundingClientRect();
+        // Layout px to mm.
+        const s = designMm / lw;
+        const out: SvgShape[] = [];
+        for (const q of paints) {
+          if (q.el.closest('marker, pattern') || drawnByBrowser(q.el, root)) return null;
+          const d = geometry(q.el);
+          if (d === null) return null;
+          const c = q.el.getScreenCTM();
+          if (!c) continue;
+          const m: Mat = [c.a * s, c.b * s, c.c * s, c.d * s, (c.e - box.left) * s, (c.f - box.top) * s];
+          const form = parsePath(d, m);
+          if (!form.paths.length) continue;
+          if (q.fill >= 0) {
+            const closed = { paths: form.paths.filter((p) => p.nodes.length > 2 || p.closed).map((p) => ({ ...p, closed: true })) };
+            const nonzero = getComputedStyle(q.el).fillRule !== 'evenodd';
+            if (closed.paths.length) out.push({ color: q.fill, kind: 'fill', form: nonzero ? { ...closed, nonzero } : closed });
+          }
+          if (q.stroke >= 0) out.push({ color: q.stroke, kind: 'stroke', form, width: Math.max(MIN_LINE_MM, q.strokePx * s) });
+        }
+        return out;
+      },
       picture: (w, h) => draw(serialize(pristine, w, h), w, h),
       async labels(w, h, pxMm) {
         // Lines thinner than MIN_LINE_MM at this size are widened to it.

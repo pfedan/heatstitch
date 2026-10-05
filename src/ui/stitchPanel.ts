@@ -39,6 +39,11 @@ export interface StitchInfo {
   draw?: { tool: boolean; lines: number; single: boolean };
   /** Guide lines of the one selected fill: whether their tool is on. */
   guide?: { tool: boolean; single: boolean };
+  /**
+   * Fills with their shape as curves: whether they leave out what later fills cover (`mixed` when
+   * only some do), and whether anything lies on top of them at all.
+   */
+  knockout?: { on: boolean | 'mixed'; covered: boolean };
 }
 
 export interface StitchHooks {
@@ -52,6 +57,8 @@ export interface StitchHooks {
   draw: (action: 'tool' | 'sew') => void;
   /** Guide lines on a fill: their tool on or off (`off` only closes it). */
   guide: (action: 'tool' | 'off') => void;
+  /** Leaving out what later fills cover, on or off for the selected fills. */
+  knockout: (on: boolean) => void;
 }
 
 const KINDS: ObjectKind[] = ['fill', 'satin', 'run'];
@@ -122,7 +129,7 @@ export class StitchPanel {
     }
     if (info.key === this.key) {
       // The rung tool changes without a new selection: only its part is drawn anew.
-      const tools = JSON.stringify([info.direction, info.draw, info.guide]);
+      const tools = JSON.stringify([info.direction, info.draw, info.guide, info.knockout]);
       if (tools !== this.tools) this.render();
       return;
     }
@@ -155,7 +162,7 @@ export class StitchPanel {
 
   private render(): void {
     const info = this.info!;
-    this.tools = JSON.stringify([info.direction, info.draw, info.guide]);
+    this.tools = JSON.stringify([info.direction, info.draw, info.guide, info.knockout]);
     const head = document.createElement('div');
     head.className = 'stitch-head';
     const h = Object.assign(document.createElement('h3'), { textContent: t('stitch.title') });
@@ -204,6 +211,7 @@ export class StitchPanel {
       hand.append(Object.assign(document.createElement('span'), { textContent: t('stitch.hand', { n: formatNumber(info.hand) }) }));
       parts.push(hand);
     }
+    if (this.kind === 'fill' && info.knockout) parts.push(this.knockoutSwitch(info.knockout));
     if (this.kind === 'fill' || this.kind === 'satin') parts.push(this.kindSwitch(this.kind));
     if (this.kind === 'fill' && info.draw?.single) parts.push(this.drawTool(info.draw));
     if (this.kind === 'satin' && info.direction) parts.push(this.directionTool(info.direction));
@@ -621,6 +629,19 @@ export class StitchPanel {
         Object.assign(document.createElement('span'), { className: 'muted small', textContent: t('stitch.draw.help') }),
       );
     }
+    return wrap;
+  }
+
+  /** Leaving out what lies on top: a switch, taken over at once (the shape itself stays). */
+  private knockoutSwitch(k: NonNullable<StitchInfo['knockout']>): HTMLElement {
+    const wrap = document.createElement('div');
+    wrap.className = 'knockout';
+    const l = Object.assign(document.createElement('label'), { className: 'check', title: t('knockout.switch.hint') });
+    const i = Object.assign(document.createElement('input'), { type: 'checkbox', checked: k.on === true, indeterminate: k.on === 'mixed' });
+    i.addEventListener('change', () => this.hooks.knockout(i.checked));
+    l.append(i, Object.assign(document.createElement('span'), { textContent: t('knockout.switch') }));
+    wrap.append(l);
+    if (!k.covered) wrap.append(Object.assign(document.createElement('span'), { className: 'muted small', textContent: t('knockout.nothingOnTop') }));
     return wrap;
   }
 

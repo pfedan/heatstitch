@@ -428,6 +428,13 @@
             <button type="button" id="order-optimize" aria-expanded="false" aria-controls="order-card" data-i18n-title="order.button.hint"><span aria-hidden="true">⇅</span> <span data-i18n="order.button"></span></button>
           </div>
           <div class="order-card" id="order-card" role="group" data-i18n-aria="order.button" hidden></div>
+          <div class="order-card overlap-card" id="overlap-card" role="status" hidden>
+            <p id="overlap-text"></p>
+            <div class="row">
+              <button type="button" class="primary" id="overlap-cut" data-i18n="knockout.card.cut" data-i18n-title="knockout.card.cut.hint"></button>
+              <button type="button" id="overlap-keep" data-i18n="knockout.card.keep" data-i18n-title="knockout.card.keep.hint"></button>
+            </div>
+          </div>
           <ul class="layer-list" id="layer-list"></ul>
           <p class="layer-note" id="layer-note" role="status" hidden></p>
         </section>

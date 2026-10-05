@@ -2296,6 +2296,19 @@ body[data-mode='flow'] .stage .hint {
   margin: 0;
 }
 
+.overlap-card .row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.object-stitches .knockout {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 8px 0;
+}
+
 .order-title {
   font-weight: 600;
 }

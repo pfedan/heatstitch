@@ -164,6 +164,12 @@ export interface Remembered {
    * `region` is rastered from it, never the other way round.
    */
   form?: Form;
+  /**
+   * Parts of `form` that fills sewn later cover are left out of the stitches (computed, the form
+   * stays whole). `cut` names the area that was sewn, to see when the shapes on top have changed.
+   */
+  knockout?: boolean;
+  cut?: string;
 }
 
 /**
@@ -250,6 +256,8 @@ export interface StoredObject {
   shape?: StoredObject['region'];
   /** The fill area as curves (see Remembered.form). */
   form?: StoredPath[];
+  knockout?: boolean;
+  cut?: string;
   join?: boolean;
 }
 
@@ -271,6 +279,8 @@ export function rememberedIn(p: Pattern, objects: SewObject[]): StoredObject[] {
       ...(r.hand ? { hand: r.hand } : {}),
       ...(r.read ? { read: true } : {}),
       ...(r.form ? { form: storeForm(r.form) } : {}),
+      ...(r.knockout ? { knockout: true } : {}),
+      ...(r.cut ? { cut: r.cut } : {}),
     });
   }
   for (const j of joinsIn(p)) out.push({ key: j.key, region: null, join: j.join });
@@ -391,7 +401,7 @@ export function unionRegion(rs: Region[]): Region | null {
  * Remembers the exact areas the Image mode filled (`shapes`, by object, as `starts`: the number
  * of each object's first stitch), so editing them starts from those instead of the stitches.
  */
-export function rememberShapes(p: Pattern, objs: SewObject[], starts: number[], shapes: (KeptShape | undefined)[]): void {
+export function rememberShapes(p: Pattern, objs: SewObject[], starts: number[], shapes: (KeptShape | undefined)[], forms: ({ form?: Form; knockout?: boolean } | undefined)[] = []): void {
   const at = new Map<number, SewObject>();
   let n = 0;
   let k = 0;
@@ -404,7 +414,8 @@ export function rememberShapes(p: Pattern, objs: SewObject[], starts: number[], 
     const o = at.get(s);
     if (!shape || !o) return;
     const region = regionFrom(shape);
-    if (region) remember(p, o, { region, fill: { ...shape.fill } });
+    const f = forms[j];
+    if (region) remember(p, o, { region, fill: { ...shape.fill }, ...(f?.form ? { form: f.form, ...(f.knockout ? { knockout: true } : {}) } : {}) });
   });
 }
 
@@ -432,6 +443,8 @@ export function restoreRemembered(list: unknown): number {
     if (shape) r.shape = shape;
     const form = e.form === undefined ? null : formFrom(e.form);
     if (form) r.form = form;
+    if (form && e.knockout === true) r.knockout = true;
+    if (typeof e.cut === 'string') r.cut = e.cut;
     rememberKey(e.key, r);
     n++;
   }
@@ -1127,7 +1140,7 @@ export function restitch(
           satin: newSatinS ?? known?.satin,
           columns: settings.kind === 'satin' ? (rails.length === satinParts.length ? rails : undefined) : known?.columns,
           shape: known?.shape,
-          ...(known?.form && !newArea ? { form: known.form } : {}),
+          ...(known?.form && !newArea ? { form: known.form, ...(known.knockout ? { knockout: true, cut: known.cut } : {}) } : {}),
         };
     // Up to the object: everything as it was, except the jumps that lead to its first stitch.
     let lead = o.first;

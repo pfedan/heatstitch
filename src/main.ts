@@ -67,6 +67,7 @@ import { RungTool } from './ui/rungTool';
 import { ShapeTool } from './ui/shapeTool';
 import { FrameTool } from './ui/frameTool';
 import { formOf, reshapeFill, scaleBlocked, transformSewObject } from './model/reshape';
+import { isCovered, overlapsIn, refreshKnockouts, setKnockout } from './model/knockout';
 import { transformObject } from './model/transform';
 import { translation, type Form, type Mat } from './shape/path';
 import { digitizeDefaults, isStroke, SATIN_MAX, type Digitized } from './digitize/digitize';
@@ -707,7 +708,13 @@ function stitchInfo(p: Pattern, q: Sequence): StitchInfo {
     }
   }
   const hand = [...selectedObjects].reduce((a, o) => a + (q.objects[o] ? (remembered(p, q.objects[o])?.hand ?? 0) : 0), 0);
-  const info: StitchInfo = { key: selectionKey, hand, measured, counts, recommended: recommendedSpacing(settings.profile), shape: worst, outlines: shapes, toSatin: stroke };
+  // Fills with curves can leave out what lies on top.
+  const shaped = [...selectedObjects].map((o) => q.objects[o]).filter((obj) => obj && remembered(p, obj)?.form);
+  const ons = new Set(shaped.map((obj) => !!remembered(p, obj)?.knockout));
+  const knockout: StitchInfo['knockout'] = shaped.length
+    ? { on: ons.size > 1 ? 'mixed' : ons.has(true), covered: shaped.some((obj) => isCovered(p, q.objects, obj)) }
+    : undefined;
+  const info: StitchInfo = { key: selectionKey, hand, measured, counts, recommended: recommendedSpacing(settings.profile), shape: worst, outlines: shapes, toSatin: stroke, knockout };
   stitchCache = { p, key: selectionKey, info };
   return info;
 }
@@ -806,6 +813,7 @@ const stitchPanel = new StitchPanel($('object-stitches'), {
     if (a === 'tool') return toggleGuides();
     if (rungTool.mode === 'guide') closeRungs();
   },
+  knockout: (on) => knockoutObjects([...selectedObjects].sort((a, b) => a - b), on),
 });
 
 // Rungs -------------------------------------------------------------------------------------------
@@ -1113,6 +1121,74 @@ function commitShape(form: Form): void {
   }
   applyRestitched(r, 'shape.failed', true);
   if (hand) layers.say(t('shape.handReplaced', { n: formatNumber(hand) }));
+  followKnockouts();
+}
+
+/**
+ * After shapes changed: fills that leave out what lies on top are sewn anew where that changed, in
+ * the same undo step as the change.
+ */
+function followKnockouts(): void {
+  const f = files.active;
+  const p = f?.pattern;
+  if (!f || !p) return;
+  const r = refreshKnockouts(p, settings.trimMm);
+  if (!r) return;
+  const sel = selectedObjects;
+  files.setPattern(f, r.pattern, { record: false });
+  syncPlayer();
+  recompute();
+  files.setObjects(f, rememberedIn(r.pattern, seq(r.pattern).objects));
+  selectedObjects = sel;
+  selectionKey++;
+  const q = seq(r.pattern);
+  layers.say(t('knockout.followed', { list: r.changed.map((o) => (q.objects[o] ? objectName(q, o) : '')).filter(Boolean).join(', ') }));
+  redraw();
+}
+
+// The card that offers leaving out what lies on top, when shapes overlap (never done unasked).
+let overlapCache: { p: Pattern; list: number[] } | null = null;
+/** Files whose overlaps the user chose to keep as they are. */
+const overlapKept = new WeakSet<object>();
+
+function overlapping(p: Pattern): number[] {
+  if (overlapCache?.p !== p) overlapCache = { p, list: overlapsIn(p, seq(p).objects) };
+  return overlapCache.list;
+}
+
+function updateOverlapCard(): void {
+  const f = files.active;
+  const p = f?.pattern;
+  const list = f && p && settings.mode === 'flow' && !overlapKept.has(f) && !shapeTool.active ? overlapping(p) : [];
+  const card = $('overlap-card');
+  card.hidden = !list.length;
+  if (list.length) $('overlap-text').textContent = t(list.length === 1 ? 'knockout.card.one' : 'knockout.card', { n: formatNumber(list.length) });
+}
+
+$('overlap-cut').addEventListener('click', () => {
+  const p = files.active?.pattern;
+  if (p) knockoutObjects(overlapping(p), true);
+});
+$('overlap-keep').addEventListener('click', () => {
+  if (files.active) overlapKept.add(files.active);
+  layers.say(t('knockout.card.kept'));
+  redraw();
+});
+
+/** Turns leaving out what lies on top on or off for the objects `which`, as one undo step. */
+function knockoutObjects(which: number[], on: boolean): void {
+  const f = files.active;
+  const p = f?.pattern;
+  if (!f || !p) return;
+  const r = setKnockout(p, which, on, settings.trimMm);
+  if (!r) return;
+  const sel = selectedObjects;
+  applyEdit(r.pattern);
+  files.setObjects(f, rememberedIn(r.pattern, seq(r.pattern).objects));
+  selectedObjects = sel;
+  selectionKey++;
+  layers.say(t(on ? 'knockout.done' : 'knockout.undone', { n: formatNumber(r.changed) }) + ' ' + t('object.undo'));
+  redraw();
 }
 
 // The frame around the one selected object (level Objects): move, turn, scale.
@@ -1201,6 +1277,7 @@ function commitTransform(m: Mat): void {
   selectedObjects = nq.objects.length === seq(p).objects.length ? new Set(sel) : new Set();
   selectionKey++;
   if (restitched && hand) layers.say(t('shape.handReplaced', { n: formatNumber(hand) }));
+  followKnockouts();
   redraw();
 }
 
@@ -1486,6 +1563,7 @@ function redraw(): void {
       jumpsPanel.update({ list: q?.transitions ?? [], selected: selectedJump, lang: getLang() });
       objectPanel.update(p && q && selectedObjects.size ? objectInfo(p, q) : null, getLang());
       stitchPanel.update(p && q && selectedObjects.size ? { ...stitchInfo(p, q), ...rungInfo(p, q) } : null);
+      updateOverlapCard();
       $<HTMLButtonElement>('order-optimize').disabled = !q || q.objects.length < 2;
     }
     panel.update(active, selectedZone);
@@ -1846,7 +1924,7 @@ async function addDigitized(d: Digitized, name: string): Promise<void> {
   const added = parsePattern(data, `${name}.pes`);
   rememberObjects(added, d.starts);
   const objs = sewObjects(added);
-  rememberShapes(added, objs, d.starts, d.objects.map((o) => o.shape));
+  rememberShapes(added, objs, d.starts, d.objects.map((o) => o.shape), d.objects);
   await files.addWithObjects(`${name}.pes`, data.slice().buffer, rememberedIn(added, objs));
 }
 
@@ -1954,12 +2032,25 @@ input.addEventListener('change', () => {
 const IMAGE_FILE = /\.(png|jpe?g|gif|webp|bmp|svg|avif)$/i;
 
 /** Embroidery files go to the file list, an image to the Bild mode, a project opens everything it holds. */
+const isSvgFile = (f: File) => f.type === 'image/svg+xml' || /\.svg$/i.test(f.name);
+
 async function openFiles(list: Iterable<File>): Promise<void> {
   const all = [...list];
   for (const f of all.filter((f) => isProjectName(f.name))) await openProject(f);
   const image = all.find((f) => f.type.startsWith('image/') || IMAGE_FILE.test(f.name));
   const rest = all.filter((f) => f !== image && !isProjectName(f.name) && !f.type.startsWith('image/') && !IMAGE_FILE.test(f.name));
-  if (image) {
+  if (image && isSvgFile(image)) {
+    // An SVG of shapes opens as stitches in Ablauf, every shape whole; the Bild mode only for SVGs
+    // that are pictures (embedded photos, many colors).
+    try {
+      const d = await digitizeSvg(image, settings.image.prepare, digitizeDefaults(settings.profile));
+      await addDigitized(d, image.name.replace(/\.svg$/i, ''));
+      setMode('flow');
+    } catch {
+      setMode('image');
+      void imageMode.load(image);
+    }
+  } else if (image) {
     setMode('image');
     void imageMode.load(image);
   }
