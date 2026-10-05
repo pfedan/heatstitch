@@ -54,11 +54,15 @@ export interface StitchInfo {
     single: boolean;
     /** Cut lines on the column (sections). */
     cuts: number;
+    /** Lines drawn are cut lines (else rungs). */
+    cutMode?: boolean;
     /** A rung is selected: the spacing set there (null: the column's). */
     spacingHere?: number | null;
+    /** Chained columns show their order, direction and trims on the canvas. */
+    chain?: boolean;
   };
   /** Rungs drawn across the one selected fill to sew it as satin. */
-  draw?: { tool: boolean; lines: number; single: boolean };
+  draw?: { tool: boolean; lines: number; single: boolean; cuts?: number; cutMode?: boolean };
   /** Guide lines of the one selected fill: whether their tool is on. */
   guide?: { tool: boolean; single: boolean };
   /**
@@ -98,7 +102,7 @@ export interface StitchHooks {
   /** Sews the selection anew as another kind: fill or satin, a wide line as a fill and back. */
   convert: (to: 'fill' | 'satin' | 'line') => void;
   /** Rungs of a satin: the tool on or off, corners suggested, all removed, back to the stitches' own direction. */
-  direction: (action: 'tool' | 'corners' | 'sections' | 'even' | 'follow') => void;
+  direction: (action: 'tool' | 'corners' | 'sections' | 'even' | 'follow' | 'rung' | 'cut') => void;
   /** The spacing at the selected rung (null: as the column). */
   spacingHere: (v: number | null) => void;
   /** Rungs drawn across a fill: the tool on or off, sewn as satin along them. */
@@ -1120,10 +1124,31 @@ export class StitchPanel {
       );
     }
     wrap.append(row);
+    if (d.tool) wrap.append(this.penSwitch(!!d.cutMode));
     if (d.cuts) wrap.append(Object.assign(document.createElement('span'), { className: 'small', textContent: t(d.cuts === 1 ? 'stitch.sections.count.one' : 'stitch.sections.count', { n: d.cuts + 1 }) }));
     if (d.tool && d.spacingHere !== undefined) wrap.append(this.spacingHereField(d.spacingHere));
+    if (d.tool && d.chain) wrap.append(Object.assign(document.createElement('span'), { className: 'small', textContent: t('stitch.direction.chain') }));
     if (d.tool) wrap.append(Object.assign(document.createElement('span'), { className: 'muted small', textContent: t('stitch.direction.help') }));
     return wrap;
+  }
+
+  /** What a line drawn across the satin or the fill makes: a rung or a cut line. */
+  private penSwitch(cut: boolean): HTMLElement {
+    const l = Object.assign(document.createElement('div'), { className: 'pen-switch' });
+    const row = document.createElement('div');
+    row.className = 'segmented choice-row small';
+    row.setAttribute('role', 'radiogroup');
+    row.setAttribute('aria-label', t('stitch.pen'));
+    for (const v of ['rung', 'cut'] as const) {
+      const on = (v === 'cut') === cut;
+      const b = Object.assign(document.createElement('button'), { type: 'button', className: (on ? 'active ' : '') + 'pen-' + v, textContent: t(`stitch.pen.${v}`), title: t(`stitch.pen.${v}.hint`) });
+      b.setAttribute('role', 'radio');
+      b.setAttribute('aria-checked', String(on));
+      b.addEventListener('click', () => !on && this.hooks.direction(v));
+      row.append(b);
+    }
+    l.append(Object.assign(document.createElement('span'), { className: 'small', textContent: t('stitch.pen') }), row);
+    return l;
   }
 
   /** The spacing at the selected rung: empty keeps the column's. */
@@ -1178,14 +1203,15 @@ export class StitchPanel {
     if (!d.tool) row.append(this.button('stitch.draw', 'stitch.draw.hint', () => this.hooks.draw('tool')));
     else {
       row.append(
-        this.button('stitch.draw.sew', 'stitch.draw.hint', () => this.hooks.draw('sew'), true, d.lines < 2),
+        this.button('stitch.draw.sew', 'stitch.draw.hint', () => this.hooks.draw('sew'), true, d.lines < (d.cuts ? 1 : 2)),
         this.button('stitch.draw.cancel', 'stitch.draw.hint', () => this.hooks.draw('tool')),
       );
     }
     wrap.append(row);
     if (d.tool) {
       wrap.append(
-        Object.assign(document.createElement('span'), { className: 'small', textContent: t('stitch.draw.count', { n: d.lines }) }),
+        this.penSwitch(!!d.cutMode),
+        Object.assign(document.createElement('span'), { className: 'small', textContent: t('stitch.draw.count', { n: d.lines }) + (d.cuts ? ' ' + t('stitch.draw.parts') : '') }),
         Object.assign(document.createElement('span'), { className: 'muted small', textContent: t('stitch.draw.help') }),
       );
     }

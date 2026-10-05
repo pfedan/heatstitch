@@ -152,6 +152,7 @@ export function bindKeys(app: KeysApp) {
       if (e.key === 'e' || e.key === 'r' || e.key === 'g') return;
     }
     if (app.rungTool.active && app.settings.mode === 'flow') {
+      if ((e.key === 't' || e.key === 'T') && app.rungTool.mode !== 'guide' && !mod) return app.rungTool.setCutMode(!app.rungTool.cutMode);
       if ((e.key === 'Delete' || e.key === 'Backspace') && app.rungTool.deleteSelected()) {
         e.preventDefault();
         return;
@@ -200,6 +201,7 @@ export function bindKeys(app: KeysApp) {
       if (e.key === 'f') app.fitView();
       return;
     }
+    if (e.key === 'h') return void document.getElementById('marks-toggle')?.click();
     if (app.settings.mode === 'flow') {
       if ((e.target as HTMLElement).closest('button') && (e.key === ' ' || e.key === 'Enter')) return;
       if (e.key === 'e') {

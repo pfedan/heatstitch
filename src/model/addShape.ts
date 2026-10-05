@@ -5,8 +5,7 @@ import { rememberObjects, sewObjects } from './objects';
 import { reorder } from './order';
 import { stitchesBefore } from './transform';
 import { COLOR_CHANGE, END, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
-import { keepShape, remember, remembered, rememberShapes } from './restitch';
-import { stitchKinds } from './sequence';
+import { remember, rememberShapes } from './restitch';
 import { lineStitchFor, lineStitches } from './line';
 import type { PathStitch } from './along';
 import { runRecords } from './border';
@@ -45,15 +44,7 @@ export function addShape(p: Pattern, shape: NewShape, color: ThreadColor, after:
   if (!d.objects.length || !stitches(d.pattern)) return null;
   const r = insertObject(p, body(d.pattern), d.pattern.colors[0], after, options.trimMm);
   if (!r) return null;
-  const objs = sewObjects(r.pattern);
-  rememberShapes(r.pattern, objs, [r.start], [d.objects[0].shape], [d.objects[0]]);
-  // A narrow area comes out as a satin: it keeps its rails, read from its fresh stitches, so it is
-  // known as made here and not recognized again from its stitches later.
-  const o = objs.find((x) => stitchesBefore(r.pattern, x.first) === r.start);
-  if (o && !remembered(r.pattern, o)) {
-    const { read: _read, ...known } = keepShape(r.pattern, o, stitchKinds(r.pattern));
-    remember(r.pattern, o, known);
-  }
+  rememberShapes(r.pattern, sewObjects(r.pattern), [r.start], [d.objects[0].shape], [d.objects[0]]);
   return r;
 }
 

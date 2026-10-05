@@ -287,6 +287,7 @@ export function bindStitches(app: StitchesApp) {
     },
     direction: (a) => {
       if (a === 'tool') return app.toggleRungs();
+      if (a === 'rung' || a === 'cut') return app.rungTool.setCutMode(a === 'cut');
       if (!app.rungTool.active || app.rungTool.mode !== 'satin') return;
       if (a === 'corners') app.rungTool.corners();
       else if (a === 'sections') app.rungTool.sections();
