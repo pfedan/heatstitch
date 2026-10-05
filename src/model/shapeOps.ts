@@ -80,9 +80,13 @@ export function duplicateObject(p: Pattern, o: number, trimMm: number, offset = 
   if (!copy) return null;
   // Memory is keyed by stitches: a copy landing exactly on another object (the second copy of one
   // object on the first) would share what that one remembers. It goes a step further then.
+  // Its border in its own thread is sewn anew beside it too, so that must not land on another either.
   const taken = new Set(objs.map((x) => objectKey(p, x)));
+  const link = ownBorder(remembered(p, objs[o]));
+  const border = link ? objs.find((x) => remembered(p, x)?.outline === link) : undefined;
+  const lands = (d: number) => [objs[o], border].some((x) => x && taken.has(shiftedKey(p, x, d)));
   let step = 1;
-  while (step < 10 && taken.has(shiftedKey(p, objs[o], Math.round(offset * step * 10)))) step++;
+  while (step < 10 && lands(Math.round(offset * step * 10))) step++;
   const r = transformSewObject(doubled, nobjs, copy, kinds, translation(offset * step, offset * step), trimMm);
   // A fill's border of its own thread is copied with it (sewn after the color block, so the copy
   // keeps its number); a copied border becomes a line of its own.
