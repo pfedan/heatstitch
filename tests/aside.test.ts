@@ -55,8 +55,10 @@ describe('shapes aside', () => {
     expect(asideOf(off)[0].role).toBe('off');
     expect(sewObjects(off)).toHaveLength(2);
     expect(asideOf(dropAside(off, a.id)!)).toHaveLength(0);
-    // Never all of them.
-    expect(setAside(p, [0, 1, 2], 'off', options.trimMm)).toBeNull();
+    // All of them too: an empty design, the shapes waiting aside.
+    const none = setAside(p, [0, 1, 2], 'off', options.trimMm)!;
+    expect(sewObjects(none)).toHaveLength(0);
+    expect(asideOf(none)).toHaveLength(3);
   });
 
   it('goes along to the next version, and is stored and read back', () => {

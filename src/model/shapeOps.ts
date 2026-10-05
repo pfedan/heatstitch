@@ -22,8 +22,9 @@ import { stitchKinds } from './sequence';
 export const DUPLICATE_OFFSET_MM = 2;
 
 /**
- * The pattern without the objects `which`; null when nothing would be left. A fill's border in a
- * thread of its own goes with it; a border deleted alone leaves its fill without a border.
+ * The pattern without the objects `which` (an empty design when none is left); null when none of
+ * them is there. A fill's border in a thread of its own goes with it; a border deleted alone
+ * leaves its fill without a border.
  */
 export function deleteObjects(p: Pattern, which: number[], trimMm: number): Pattern | null {
   const objs = sewObjects(p);
@@ -49,12 +50,13 @@ export function deleteObjects(p: Pattern, which: number[], trimMm: number): Patt
 /** The link of a fill's border in a thread of its own, if it has one. */
 const ownBorder = (m: Remembered | undefined): string | undefined => (m?.fill?.border?.color ? m.fill.border.link : undefined);
 
-/** The pattern without the objects `which`, nothing else changed; null when nothing would be left. */
+/** The pattern without the objects `which`, nothing else changed (with all gone, an empty design); null when none of them is there. */
 function removeObjects(p: Pattern, which: number[], trimMm: number): Pattern | null {
   const objs = sewObjects(p);
   const gone = new Set(which);
   const order = objs.map((o) => o.index).filter((i) => !gone.has(i));
-  if (!order.length || order.length === objs.length) return null;
+  if (order.length === objs.length) return null;
+  if (!order.length) return { ...p, x: new Int32Array(0), y: new Int32Array(0), cmd: new Uint8Array(0), colors: [], bounds: { minX: 0, minY: 0, maxX: 0, maxY: 0 } };
   const starts: number[] = [];
   // Objects that meet where one went stay apart (in one thread they would become one object).
   const apart = new Set(order.flatMap((o, k) => (k > 0 && order[k - 1] !== o - 1 ? [k] : [])));

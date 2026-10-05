@@ -242,7 +242,7 @@ export function bindShapes(app: ShapesApp) {
     const sel = app.frameObjects();
     if (!p || !sel.length) return;
     const next = deleteObjects(p, sel, app.settings.trimMm);
-    if (!next) return app.layers.say(t('object.deleteLast'), true);
+    if (!next) return;
     takeShapes(next, []);
     app.layers.say(sel.length === 1 ? t('object.deleted.one') : t('object.deleted', { n: sel.length }));
   }
