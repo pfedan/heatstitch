@@ -5,7 +5,8 @@ import { rememberObjects, sewObjects } from './objects';
 import { reorder } from './order';
 import { stitchesBefore } from './transform';
 import { COLOR_CHANGE, END, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
-import { remember, rememberShapes } from './restitch';
+import { keepShape, remember, remembered, rememberShapes } from './restitch';
+import { stitchKinds } from './sequence';
 import { lineStitchFor, lineStitches } from './line';
 import type { PathStitch } from './along';
 import { runRecords } from './border';
@@ -44,7 +45,15 @@ export function addShape(p: Pattern, shape: NewShape, color: ThreadColor, after:
   if (!d.objects.length || !stitches(d.pattern)) return null;
   const r = insertObject(p, body(d.pattern), d.pattern.colors[0], after, options.trimMm);
   if (!r) return null;
-  rememberShapes(r.pattern, sewObjects(r.pattern), [r.start], [d.objects[0].shape], [d.objects[0]]);
+  const objs = sewObjects(r.pattern);
+  rememberShapes(r.pattern, objs, [r.start], [d.objects[0].shape], [d.objects[0]]);
+  // A narrow area comes out as a satin: it keeps its rails, read from its fresh stitches, so it is
+  // known as made here and not recognized again from its stitches later.
+  const o = objs.find((x) => stitchesBefore(r.pattern, x.first) === r.start);
+  if (o && !remembered(r.pattern, o)) {
+    const { read: _read, ...known } = keepShape(r.pattern, o, stitchKinds(r.pattern));
+    remember(r.pattern, o, known);
+  }
   return r;
 }
 
@@ -97,7 +106,9 @@ export function insertObject(p: Pattern, records: Rec[], color: ThreadColor, aft
   const order = objs.map((o) => o.index).filter((i) => i !== mine);
   order.splice(at + 1, 0, mine);
   const starts: number[] = [];
-  const result = reorder(joined, objs, order, trimMm, starts, host ? { into: new Map([[mine, host.block]]) } : {});
+  // Trimmed off its neighbours: in one thread with them it would otherwise become part of one.
+  const apart = new Set([at + 1, at + 2]);
+  const result = reorder(joined, objs, order, trimMm, starts, host ? { into: new Map([[mine, host.block]]), apart } : { apart });
   rememberObjects(result, starts);
   return { pattern: result, start: starts[order.indexOf(mine)] };
 }

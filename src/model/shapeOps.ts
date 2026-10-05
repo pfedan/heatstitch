@@ -2,7 +2,7 @@ import { knockOut, unionOf } from '../shape/rasterize';
 import { translation, type Form, type Mat } from '../shape/path';
 import { vectorize } from '../shape/vectorize';
 import { takeOver, wholeArea } from './knockout';
-import { rememberObjects, sewObjects, type SewObject } from './objects';
+import { rememberObjects, sewObjects, stitchKey, type SewObject } from './objects';
 import { insertObject } from './addShape';
 import { syncBorders } from './border';
 import { recs } from './jumps';
@@ -56,7 +56,9 @@ function removeObjects(p: Pattern, which: number[], trimMm: number): Pattern | n
   const order = objs.map((o) => o.index).filter((i) => !gone.has(i));
   if (!order.length || order.length === objs.length) return null;
   const starts: number[] = [];
-  const next = reorder(p, objs, order, trimMm, starts);
+  // Objects that meet where one went stay apart (in one thread they would become one object).
+  const apart = new Set(order.flatMap((o, k) => (k > 0 && order[k - 1] !== o - 1 ? [k] : [])));
+  const next = reorder(p, objs, order, trimMm, starts, { apart });
   rememberObjects(next, starts);
   return next;
 }
@@ -76,10 +78,27 @@ export function duplicateObject(p: Pattern, o: number, trimMm: number, offset = 
   const nobjs = sewObjects(doubled, kinds);
   const copy = nobjs[o + 1];
   if (!copy) return null;
-  const r = transformSewObject(doubled, nobjs, copy, kinds, translation(offset, offset), trimMm);
+  // Memory is keyed by stitches: a copy landing exactly on another object (the second copy of one
+  // object on the first) would share what that one remembers. It goes a step further then.
+  const taken = new Set(objs.map((x) => objectKey(p, x)));
+  let step = 1;
+  while (step < 10 && taken.has(shiftedKey(p, objs[o], Math.round(offset * step * 10)))) step++;
+  const r = transformSewObject(doubled, nobjs, copy, kinds, translation(offset * step, offset * step), trimMm);
   // A fill's border of its own thread is copied with it (sewn after the color block, so the copy
   // keeps its number); a copied border becomes a line of its own.
   return r ? { pattern: syncBorders(r.pattern, trimMm), index: o + 1 } : null;
+}
+
+/** The key the stitches of `o` would have, moved by `d` (0.1 mm) both ways. */
+function shiftedKey(p: Pattern, o: SewObject, d: number): string {
+  const n = o.last - o.first + 1;
+  const x = new Int32Array(n);
+  const y = new Int32Array(n);
+  for (let i = 0; i < n; i++) {
+    x[i] = p.x[o.first + i] + d;
+    y[i] = p.y[o.first + i] + d;
+  }
+  return stitchKey({ ...p, x, y, cmd: p.cmd.subarray(o.first, o.last + 1) }, 0, n - 1);
 }
 
 /** Mirrored left to right (`x`) or top to bottom (`y`) around its own middle. */
@@ -165,19 +184,24 @@ export function recolorObjects(p: Pattern, which: number[], color: ThreadColor, 
   const objs = sewObjects(p);
   const sel = [...new Set(which)].filter((o) => objs[o] && !sameColor(objs[o].color, color)).sort((a, b) => a - b);
   if (!sel.length) return null;
-  const next = recolorStitches(p, objs, sel, color, trimMm);
-  if (!next) return null;
-  // A border in a thread of its own takes the new thread: its fill's border is sewn in it from now on.
+  // A border in a thread of its own takes the new thread through its fill: the fill's border is
+  // sewn in it from now on, placed where borders go (moved by itself it could join a neighbour).
   const mem = objs.map((o) => remembered(p, o));
-  for (const o of sel) {
-    const link = mem[o]?.outline;
-    const f = link ? mem.findIndex((m) => ownBorder(m) === link) : -1;
-    if (f < 0) continue;
+  const fillOf = (o: number) => (mem[o]?.outline ? mem.findIndex((m) => ownBorder(m) === mem[o]!.outline) : -1);
+  const borders = sel.filter((o) => fillOf(o) >= 0);
+  const rest = sel.filter((o) => fillOf(o) < 0);
+  let next = rest.length ? recolorStitches(p, objs, rest, color, trimMm) : p;
+  if (!next) return null;
+  if (!borders.length) return next;
+  const cur = next;
+  for (const o of borders) {
+    const f = fillOf(o);
     const m = mem[f]!;
-    const at = sewObjects(next).find((x) => objectKey(next, x) === objectKey(p, objs[f]));
-    if (at) remember(next, at, { ...m, fill: { ...m.fill!, border: { ...m.fill!.border!, color: { ...color } } } });
+    const at = sewObjects(cur).find((x) => objectKey(cur, x) === objectKey(p, objs[f]));
+    if (at) remember(cur, at, { ...m, fill: { ...m.fill!, border: { ...m.fill!.border!, color: { ...color } } } });
   }
-  return next;
+  next = syncBorders(cur, trimMm);
+  return next === p ? null : next;
 }
 
 function recolorStitches(p: Pattern, objs: SewObject[], sel: number[], color: ThreadColor, trimMm: number): Pattern | null {

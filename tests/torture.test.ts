@@ -212,7 +212,15 @@ const OPS: Op[] = [
       return transform(d, sel, [s, 0, 0, s, b.minX * (1 - s), b.minY * (1 - s)]);
     },
   },
-  { name: 'delete', run: (d, r) => d.objects.length > 1 && shapes(d, deleteObjects(d.cur.p, [pick(r, d.objects).index], T)) },
+  {
+    name: 'delete',
+    run: (d, r) => {
+      if (d.objects.length < 2) return false;
+      const o = pick(r, d.objects).index;
+      if (process.env.TORTURE_TRACE) console.log('delete', o);
+      return shapes(d, deleteObjects(d.cur.p, [o], T));
+    },
+  },
   {
     name: 'cut out',
     run: (d, r) => {
@@ -227,7 +235,10 @@ const OPS: Op[] = [
     run: (d, r) => {
       if (!d.objects.length) return false;
       // As the app: takeShapes, so what leaves out the shapes on top follows the new order.
-      return shapes(d, recolorObjects(d.cur.p, [pick(r, d.objects).index], pick(r, COLORS), T));
+      const o = pick(r, d.objects).index;
+      const c = pick(r, COLORS);
+      if (process.env.TORTURE_TRACE) console.log('recolor', o, c);
+      return shapes(d, recolorObjects(d.cur.p, [o], c, T));
     },
   },
   {
@@ -320,7 +331,7 @@ function checkBorders(p: Pattern): void {
     else if (!sameColor(objs[k].color, mem[f]!.fill!.border!.color)) problems.push(`border ${k} not in its thread`);
   });
   for (const [link, k] of fills) if (!borders.has(link)) problems.push(`fill ${k} lost its border`);
-  expect(problems, 'border links').toEqual([]);
+  expect(problems.join('; '), 'border links').toBe('');
 }
 
 /** What leaves out the shapes on top fits the shapes on top now. */
@@ -355,13 +366,13 @@ function describeObjects(p: Pattern): string {
     .join('');
 }
 
-async function chain(seed: number): Promise<void> {
+async function chain(seed: number, steps = STEPS): Promise<void> {
   forgetAll();
   const r = rng(seed);
   const d = new Doc();
   const log: string[] = [];
   const at = () => `seed ${seed}: ${log.join(' > ')}`;
-  for (let step = 0; step < STEPS; step++) {
+  for (let step = 0; step < steps; step++) {
     const op = d.cur.p === empty ? OPS[0] : pick(r, OPS);
     let done: boolean;
     try {
@@ -379,7 +390,7 @@ async function chain(seed: number): Promise<void> {
       checkAllKnown(p);
       checkBorders(p);
       checkKnockouts(p);
-      if (op.name === 'save and open' || step === STEPS - 1) checkExport(p);
+      if (op.name === 'save and open' || step === steps - 1) checkExport(p);
     } catch (e) {
       throw new Error(`${at()}\n${(e as Error).message}`);
     }
@@ -446,8 +457,14 @@ describe('found by the torture test', () => {
   // Chains that failed once (borders on delete, cut out and recolor; knockouts after reopening a
   // project whose curves were stored rounded): replayed with every run.
   it.each([3, 4, 9, 11, 12, 16, 18, 24])('chain %i still holds', async (seed) => {
-    await chain(seed);
+    await chain(seed, 14);
   });
+  // From the first long run (20 steps): a narrow added shape sewn as satin forgot what it was;
+  // neighbours of one thread became one object after a delete or recolor between them; a copy
+  // landing on another object shared its memory; leaving out depended on what was left out before.
+  it.each([270, 387, 383, 130, 139, 315])('long chain %i still holds', async (seed) => {
+    await chain(seed, 20);
+  }, 60_000);
 });
 
 describe('versions keep what they knew', () => {
