@@ -22,12 +22,11 @@ import { bindHoop } from './ui/hoopPanel';
 import { legendSpec } from './ui/legendSpec';
 import { bindProfile } from './ui/profilePanel';
 import { renderStats } from './ui/stats';
-import { updateTooltip } from './ui/tooltip';
 import { ValidationPanel } from './ui/validationPanel';
 import { acknowledgementOf, settledBy, type Acknowledgement } from './validation/acks';
 import type { ValidationResult, Zone } from './validation/validate';
 import { POINTS_MIN_SCALE } from './render/editOverlay';
-import { DIVIDER_GRAB_PX, drawBeforeAfter, drawDivider, drawPanels } from './render/compare';
+import { drawBeforeAfter, drawDivider, drawPanels } from './render/compare';
 import type { Pattern, ThreadColor } from './model/pattern';
 import type { Measurement } from './validation/measure';
 import { initUpdateNotice } from './ui/updateNotice';
@@ -35,7 +34,7 @@ import { bindFileIo } from './app/fileIo';
 import { downloadPattern, writePattern } from './writers';
 import { parsePattern } from './parsers';
 import { ImageMode } from './ui/imageMode';
-import { lightFromPointer, lightFromTilt, sweep } from './render/light';
+import { lightFromTilt, sweep } from './render/light';
 import { classify } from './validation/validate';
 import { setTrims } from './model/jumps';
 import {
@@ -53,12 +52,11 @@ import {
 } from './model/sequence';
 import { recolor, sameColor } from './model/recolor';
 import { COLOR_CHANGE, computeBounds, patternStats, STITCH, TRIM } from './model/pattern';
-import { stitchAlpha, stitchAt, stitchColors, transitionAt, type StitchStyle } from './render/flow';
+import { stitchAlpha, stitchAt, stitchColors, type StitchStyle } from './render/flow';
 import type { FlowScene, ShapeOutline } from './render/scene';
 import type { Mode } from './settings';
 import { JumpsPanel } from './ui/jumpsPanel';
-import { blockName, kindLabel, LayersPanel, LONG_PRESS_MS } from './ui/layersPanel';
-import { ObjectMenu } from './ui/objectMenu';
+import { blockName, kindLabel, LayersPanel } from './ui/layersPanel';
 import { ObjectPanel, OrderCard } from './ui/objectPanel';
 import { StitchPanel, type Highlight, type StitchInfo } from './ui/stitchPanel';
 import { borderRanges, syncBorders } from './model/border';
@@ -99,6 +97,7 @@ import type { Key } from './i18n';
 import type { PlanPreview, Sequence } from './app/types';
 import { ui } from './app/state';
 import { bindRungs } from './app/rungs';
+import { bindPointer } from './app/pointer';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -3380,358 +3379,106 @@ window.addEventListener('keydown', (e) => {
 
 // Zoom, pan, pinch, tooltip ---------------------------------------------------
 
-const local = (e: { clientX: number; clientY: number }): [number, number] => {
-  const r = canvas.getBoundingClientRect();
-  return [e.clientX - r.left, e.clientY - r.top];
-};
-
-canvas.addEventListener(
-  'wheel',
-  (e) => {
-    e.preventDefault();
-    const [sx, sy] = local(e);
-    const delta = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
-    vp.zoomAt(sx, sy, Math.exp(-delta * 0.0015));
-    showTooltip(sx, sy);
-    redraw();
+const { showObjectMenu } = bindPointer({
+  get canvas() {
+    return canvas;
   },
-  { passive: false },
-);
-
-/** Tooltip for the side of the divider the pointer is on. */
-function showTooltip(sx: number, sy: number): void {
-  if (settings.mode === 'image') return;
-  if (settings.mode === 'flow') return flowTooltip(sx, sy);
-  const left = showCompare() && sx < ui.split * ui.stageW;
-  const f = files.active;
-  updateTooltip(tooltip, sx, sy, ui.stageW, vp, left ? ui.origGrid : ui.grid, settings, (left ? f?.originalValidation : f?.validation) ?? null);
-}
-
-const nearDivider = (sx: number) => showCompare() && Math.abs(sx - ui.split * ui.stageW) <= DIVIDER_GRAB_PX;
-
-const pointers = new Map<number, [number, number]>();
-let pinchDist = 0;
-/** Where a one-finger or mouse press started, to tell a click from a drag. */
-let pressAt: [number, number] | null = null;
-/** What the press started as: a point drag, a rectangle or panning (a click when it did not move). */
-let pressMode: 'move' | 'band' | 'pan' | 'frame' = 'pan';
-/** Pointer painting a brush stroke in the Bild mode, or null. */
-let painting: number | null = null;
-
-canvas.addEventListener('pointerdown', (e) => {
-  canvas.setPointerCapture(e.pointerId);
-  const pos = local(e);
-  pointers.set(e.pointerId, pos);
-  pressAt = pointers.size === 1 ? pos : null;
-  let mode: 'move' | 'band' | 'pan' | 'frame' = 'pan';
-  if (settings.mode === 'image' && imageMode.painting && pointers.size === 1 && e.button === 0) {
-    painting = e.pointerId;
-    imageMode.paintDown(...vp.toWorld(pos[0], pos[1]));
-    return;
-  }
-  // A second finger while painting means zooming: the stroke is dropped.
-  if (painting !== null) {
-    painting = null;
-    imageMode.paintCancel();
-  }
-  // On the comparison of a proposal: the line between before and after follows the finger or mouse.
-  if (pointers.size === 1 && e.button === 0 && inPlanFrame(pos[0], pos[1])) {
-    ui.planDrag = true;
-    movePlanSplit(pos[0]);
-    return;
-  }
-  if (pointers.size === 1 && e.button === 0 && nearDivider(pos[0])) {
-    ui.splitDrag = true;
-    stage.classList.add('splitting');
-    return;
-  }
-  if (pointers.size === 1 && e.button === 0) {
-    const [wx, wy] = vp.toWorld(pos[0], pos[1]);
-    const flow = settings.mode === 'flow';
-    if (drawTool.active && flow) {
-      drawTool.down(wx, wy, vp.scale);
-      mode = 'move';
-    } else if (ui.letterMode && flow) mode = letterDown(wx, wy) ? 'move' : 'pan';
-    else if (rungTool.active && flow) mode = rungTool.down(wx, wy, vp.scale, e.shiftKey);
-    else if (shapeTool.active && flow) mode = shapeTool.down(wx, wy, vp.scale);
-    else if (frameTool.active && flow && frameTool.down(wx, wy, vp.scale) !== null) mode = 'frame';
-    else mode = editor.down(wx, wy, pos[0], pos[1], e.shiftKey, vp.scale);
-  }
-  pressMode = mode;
-  cancelLongPress();
-  if (e.pointerType === 'touch' && pointers.size === 1 && settings.mode === 'flow') {
-    const at = pos;
-    const { clientX, clientY } = e;
-    longPress = {
-      at,
-      timer: window.setTimeout(() => {
-        longPress = null;
-        if (objectMenu.isOpen || !pointers.size || !openObjectMenu(at, clientX, clientY)) return;
-        // The finger lifted after this is no click, and nothing it started goes on.
-        pressAt = null;
-        editor.cancel();
-        frameTool.cancel();
-        ui.flowPreview = null;
-        redraw();
-      }, LONG_PRESS_MS),
-    };
-  }
-  if (mode === 'pan') canvas.classList.add('panning');
-  if (pointers.size === 2) {
-    editor.cancel();
-    rungTool.cancel();
-    shapeTool.cancel();
-    drawTool.abortPress();
-    ui.letterDrag = null;
-    if (frameTool.dragging !== null) {
-      frameTool.cancel();
-      ui.flowPreview = null;
-    }
-    const [a, b] = [...pointers.values()];
-    pinchDist = Math.hypot(a[0] - b[0], a[1] - b[1]);
-  }
-  redraw();
-});
-
-canvas.addEventListener('pointermove', (e) => {
-  const pos = local(e);
-  const prev = pointers.get(e.pointerId);
-  const [wx, wy] = vp.toWorld(pos[0], pos[1]);
-  if (settings.mode === 'image') {
-    if (painting === e.pointerId) {
-      imageMode.paintMove(wx, wy);
-      return;
-    }
-    imageMode.hover(wx, wy);
-    if (!prev && imageMode.painting) redraw();
-  }
-  if (settings.liveLight && e.pointerType === 'mouse' && threadsShown()) {
-    lightFromPointer(pos[0], pos[1], ui.stageW, ui.stageH);
-    redraw();
-  }
-  if (ui.splitDrag) {
-    ui.split = Math.min(0.98, Math.max(0.02, pos[0] / ui.stageW));
-    redraw();
-    return;
-  }
-  // A mouse over the comparison moves its line as it goes; a finger drags it.
-  if (ui.planDrag || (!prev && e.pointerType === 'mouse' && inPlanFrame(pos[0], pos[1]))) {
-    movePlanSplit(pos[0]);
-    // The density tip would cover the comparison, so it stays away here.
-    tooltip.hidden = true;
-    canvas.classList.remove('on-divider');
-    return;
-  }
-  canvas.classList.toggle('on-divider', !prev && nearDivider(pos[0]));
-  if (longPress && (pointers.size > 1 || Math.hypot(pos[0] - longPress.at[0], pos[1] - longPress.at[1]) > 8)) cancelLongPress();
-  // With the menu open after a long press, the finger moves nothing until it is lifted.
-  if (prev && objectMenu.isOpen && e.pointerType === 'touch') return;
-  if (prev) {
-    if (pointers.size === 1) {
-      if (!drawTool.dragTo(wx, wy, e.shiftKey, e.altKey) && !letterDragTo(wx, wy) && !rungTool.dragTo(wx, wy) && !shapeTool.dragTo(wx, wy) && !frameTool.dragTo(wx, wy, e.shiftKey, vp.scale) && !editor.dragTo(wx, wy, pos[0], pos[1])) vp.pan(pos[0] - prev[0], pos[1] - prev[1]);
-    } else if (pointers.size === 2) {
-      pointers.set(e.pointerId, pos);
-      const [a, b] = [...pointers.values()];
-      const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
-      if (pinchDist > 0) vp.zoomAt((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, d / pinchDist);
-      pinchDist = d;
-    }
-    pointers.set(e.pointerId, pos);
-    redraw();
-  } else if (
-    drawTool.active
-      ? drawTool.hoverAt(wx, wy, vp.scale)
-      : rungTool.active
-      ? rungTool.hoverAt(wx, wy, vp.scale)
-      : shapeTool.active
-        ? shapeTool.hoverAt(wx, wy, vp.scale)
-        : (frameTool.active && frameTool.hoverAt(wx, wy, vp.scale)) || editor.hoverAt(wx, wy, vp.scale)
-  )
-    redraw();
-  if (!prev) canvas.classList.toggle('on-frame', frameTool.active && frameTool.hover !== null);
-  if (e.pointerType === 'mouse' || pointers.size <= 1) showTooltip(pos[0], pos[1]);
-});
-
-/** Whether a click at `pos` (on the stage) hits stitches outside the selection. */
-function clickedOther(p: Pattern, pos: [number, number]): boolean {
-  const st = styleFor(p);
-  const [x, y] = vp.toWorld(pos[0], pos[1]);
-  const i = stitchAt(p, x * 10, y * 10, Math.max(3, 60 / vp.scale), st.limit, st.alpha);
-  return i >= 0 && !ui.selectedObjects.has(seq(p).objectAt[i]);
-}
-
-const endPointer = (e: PointerEvent) => {
-  const pos = local(e);
-  cancelLongPress();
-  if (painting === e.pointerId) {
-    painting = null;
-    pointers.delete(e.pointerId);
-    if (e.type === 'pointerup') imageMode.paintUp();
-    else imageMode.paintCancel();
-    return;
-  }
-  // A press on the frame that did not move is a click like any other.
-  const frameClick = pressMode === 'frame' && frameTool.dragging !== null && !frameTool.up();
-  if (pressMode === 'frame' && !frameClick) pressMode = 'move';
-  if (pressAt && e.type === 'pointerup' && e.button === 0 && settings.mode === 'flow' && (pressMode === 'pan' || frameClick) && !rungTool.active && Math.hypot(pos[0] - pressAt[0], pos[1] - pressAt[1]) < 4) {
-    const p = files.active?.pattern;
-    if (p && ui.letterMode && !clickedOther(p, pos)) {
-      // Moving single letters: a click beside the letters lets go of the chosen one.
-      if (ui.letterAt !== null) {
-        ui.letterAt = null;
-        redraw();
-      }
-    } else if (p && shapeTool.active) {
-      // Editing an outline: a click on another object goes on with its outline, a click beside it back to the objects.
-      const st = styleFor(p);
-      const [x, y] = vp.toWorld(pos[0], pos[1]);
-      const i = stitchAt(p, x * 10, y * 10, Math.max(3, 60 / vp.scale), st.limit, st.alpha);
-      const o = i >= 0 ? seq(p).objectAt[i] : -1;
-      if (o >= 0 && o !== ui.shapeObject && !shapeTool.near(x, y, vp.scale)) enterShape(o, false);
-      else if (o < 0 && !shapeTool.selected && !shapeTool.near(x, y, vp.scale)) closeShape();
-      else if (shapeTool.selected) {
-        shapeTool.selected = null;
-        redraw();
-      }
-    } else if (p && editor.active) {
-      // Editing stitches: a click on another object goes on with that one, a click beside the
-      // stitches (with no point selected) goes back to the objects.
-      const st = styleFor(p);
-      const [x, y] = vp.toWorld(pos[0], pos[1]);
-      const i = stitchAt(p, x * 10, y * 10, Math.max(3, 60 / vp.scale), st.limit, st.alpha);
-      const o = i >= 0 ? seq(p).objectAt[i] : -1;
-      if (o >= 0 && o !== ui.editObject) enterObject(o, ui.editObject === null);
-      else if (o < 0 && !editor.selection.size) setEditing(false);
-    } else if (p) {
-      const q = seq(p);
-      const k = transitionAt(p, q.transitions, vp, pos[0], pos[1]);
-      if (k >= 0 || ui.selectedJump !== null) {
-        ui.selectedJump = k >= 0 ? k : null;
-        redraw();
-      }
-      if (k < 0) {
-        // A click on stitches selects their object, a click beside them clears the selection.
-        const st = styleFor(p);
-        const [x, y] = vp.toWorld(pos[0], pos[1]);
-        const i = stitchAt(p, x * 10, y * 10, Math.max(3, 60 / vp.scale), st.limit, st.alpha);
-        const o = i >= 0 ? q.objectAt[i] : -1;
-        const add = e.shiftKey || e.ctrlKey || e.metaKey;
-        if (o >= 0) selectObjects([o], add);
-        else if (!add && ui.selectedObjects.size) selectObjects([], false);
-      }
-    }
-  }
-  pressAt = null;
-  ui.planDrag = false;
-  if (ui.splitDrag) {
-    ui.splitDrag = false;
-    stage.classList.remove('splitting');
-  }
-  if (pointers.size === 1 && pointers.has(e.pointerId)) {
-    drawTool.up(...vp.toWorld(pos[0], pos[1]), e.shiftKey, e.altKey);
-    letterUp();
-    rungTool.up();
-    shapeTool.up();
-    if (frameTool.dragging !== null) frameTool.up();
-    editor.up();
-  }
-  pointers.delete(e.pointerId);
-  pinchDist = 0;
-  if (!pointers.size) canvas.classList.remove('panning');
-};
-canvas.addEventListener('pointerup', endPointer);
-canvas.addEventListener('pointercancel', (e) => {
-  drawTool.abortPress();
-  ui.letterDrag = null;
-  editor.cancel();
-  rungTool.cancel();
-  shapeTool.cancel();
-  frameTool.cancel();
-  ui.flowPreview = null;
-  endPointer(e);
-});
-canvas.addEventListener('pointerleave', () => {
-  tooltip.hidden = true;
-  if (settings.mode === 'image') {
-    imageMode.leave();
-    redraw();
-  }
-});
-// The object actions at the pointer: right click, or a long press on a touch screen.
-const objectMenu = new ObjectMenu();
-let longPress: { timer: number; at: [number, number] } | null = null;
-
-function cancelLongPress(): void {
-  if (longPress) clearTimeout(longPress.timer);
-  longPress = null;
-}
-
-/** Opens the menu for the object under `pos` (on the stage), selecting it first; false when there is none. */
-function openObjectMenu(pos: [number, number], clientX: number, clientY: number): boolean {
-  const p = files.active?.pattern;
-  if (!p || settings.mode !== 'flow' || editor.active || shapeTool.active || rungTool.active || drawTool.active || orderCard.isOpen || ui.letterMode) return false;
-  const st = styleFor(p);
-  const [x, y] = vp.toWorld(pos[0], pos[1]);
-  const i = stitchAt(p, x * 10, y * 10, Math.max(3, 60 / vp.scale), st.limit, st.alpha);
-  const o = i >= 0 ? seq(p).objectAt[i] : -1;
-  return o >= 0 && showObjectMenu(o, clientX, clientY);
-}
-
-/** Opens the menu for object `o` (on the canvas or in the list), selecting it first unless it is selected. */
-function showObjectMenu(o: number, clientX: number, clientY: number): boolean {
-  const p = files.active?.pattern;
-  if (!p || settings.mode !== 'flow' || editor.active || shapeTool.active || rungTool.active || drawTool.active || orderCard.isOpen || ui.letterMode) return false;
-  // On a selected object the menu is for the whole selection, on another one for that one.
-  if (!ui.selectedObjects.has(o)) selectObjects([o], false);
-  redraw();
-  if (ui.lettering || !ui.selectedObjects.size) return false;
-  objectMenu.open(clientX, clientY, objectPanel.actions(objectInfo(p, seq(p))), t('object.menu'));
-  return objectMenu.isOpen;
-}
-
-canvas.addEventListener('contextmenu', (e) => {
-  // The right button pans while painting.
-  if (settings.mode === 'image') return e.preventDefault();
-  // A long press opened it already (some browsers send this after a long press too).
-  if (objectMenu.isOpen) return e.preventDefault();
-  cancelLongPress();
-  if (openObjectMenu(local(e), e.clientX, e.clientY)) e.preventDefault();
-});
-canvas.addEventListener('dblclick', (e) => {
-  const pos = local(e);
-  const [x, y] = vp.toWorld(pos[0], pos[1]);
-  if (drawTool.active) {
-    // The pen ends an open line; the other tools ignore it.
-    drawTool.finish(false);
-    return;
-  }
-  if (rungTool.active) return;
-  if (shapeTool.active) {
-    shapeTool.insertAt(x, y, vp.scale);
-    return;
-  }
-  if (editor.active) {
-    editor.insertAt(x, y, vp.scale);
-    return;
-  }
-  const p = files.active?.pattern;
-  if (settings.mode === 'flow' && p) {
-    // A double-click on an object opens its outline (a fill) or its stitches.
-    const st = styleFor(p);
-    const i = stitchAt(p, x * 10, y * 10, Math.max(3, 60 / vp.scale), st.limit, st.alpha);
-    const o = i >= 0 ? seq(p).objectAt[i] : -1;
-    // A lettering opens its text; one of its letters, while they are moved, nothing more.
-    if (o >= 0 && letteringsOf(p, seq(p))[o]) {
-      if (!ui.letterMode) {
-        if (!ui.selectedObjects.has(o)) selectObjects([o], false);
-        ui.focusText = true;
-        redraw();
-      }
-      return;
-    }
-    if (o >= 0) return enterShape(o, true);
-  }
-  fitView();
+  get closeShape() {
+    return closeShape;
+  },
+  get drawTool() {
+    return drawTool;
+  },
+  get editor() {
+    return editor;
+  },
+  get enterObject() {
+    return enterObject;
+  },
+  get enterShape() {
+    return enterShape;
+  },
+  get files() {
+    return files;
+  },
+  get fitView() {
+    return fitView;
+  },
+  get flowTooltip() {
+    return flowTooltip;
+  },
+  get frameTool() {
+    return frameTool;
+  },
+  get imageMode() {
+    return imageMode;
+  },
+  get inPlanFrame() {
+    return inPlanFrame;
+  },
+  get letterDown() {
+    return letterDown;
+  },
+  get letterDragTo() {
+    return letterDragTo;
+  },
+  get letterUp() {
+    return letterUp;
+  },
+  get letteringsOf() {
+    return letteringsOf;
+  },
+  get movePlanSplit() {
+    return movePlanSplit;
+  },
+  get objectInfo() {
+    return objectInfo;
+  },
+  get objectPanel() {
+    return objectPanel;
+  },
+  get orderCard() {
+    return orderCard;
+  },
+  get redraw() {
+    return redraw;
+  },
+  get rungTool() {
+    return rungTool;
+  },
+  get selectObjects() {
+    return selectObjects;
+  },
+  get seq() {
+    return seq;
+  },
+  get setEditing() {
+    return setEditing;
+  },
+  get settings() {
+    return settings;
+  },
+  get shapeTool() {
+    return shapeTool;
+  },
+  get showCompare() {
+    return showCompare;
+  },
+  get stage() {
+    return stage;
+  },
+  get styleFor() {
+    return styleFor;
+  },
+  get threadsShown() {
+    return threadsShown;
+  },
+  get tooltip() {
+    return tooltip;
+  },
+  get vp() {
+    return vp;
+  },
 });
 
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', redraw);
