@@ -278,6 +278,22 @@ is base64 of little-endian bytes tagged with its array type. A project from a ne
 refused with a message instead of being misread. Undo history and view settings are not saved.
 Object shapes are now also kept in IndexedDB with the file, so they survive a reload.
 
+## Lettering
+
+*Text* above the canvas (key `t`, Sequence mode) sets a lettering in one of 41 embroidery fonts
+from [Ink/Stitch](https://github.com/inkstitch/embroidery-fonts). The fonts were digitized as
+embroidery (satin columns with their rails and rungs, running stitch, fills), not outlines, so they
+sew well. A lettering stays text: its text, font, height in mm, alignment, shape (straight, arcs,
+circle), spacing and thread can change at any time, and its stitches are made anew in place. Satin
+is sewn anew along its rails at every height, so its density stays right. The frame moves, turns and
+scales it; single letters can be moved and turned. Letterings are kept in IndexedDB and in project
+files; DST and PES hold only the stitches.
+
+The fonts are converted once by `tools/fonts/convert.mjs` (into `public/fonts/`, with each license
+text) and loaded when first used. Only fonts under the SIL Open Font License, CC BY or in the public
+domain are included; those under CC BY-SA, non-commercial, no-derivatives or GPL terms are left out.
+No Ink/Stitch code is used, only the fonts' data.
+
 ## Image to embroidery
 
 Image mode (key `3`) turns a picture into an embroidery file in two steps, both in a Web Worker
@@ -467,9 +483,11 @@ src/render/      Viewport, color scale, heatmap, stitch plan, realistic threads 
 src/storage/     IndexedDB stores for files and the image, project files (.heatstitch)
 src/ui/          File list, validation, correction panel, stitch editor, controls, statistics,
                  tooltip, export, color list, jump list, player, Image mode, thread picker
+src/lettering/   Lettering: fonts, layout (lines, arcs, circle), sewing, placing into a design
 src/i18n/        Translations EN/DE
 public/examples/ Example embroidery files (loadable from the dropdown)
 public/guide/    Screenshots for the guide
+public/fonts/    Embroidery fonts from Ink/Stitch with their licenses (tools/fonts/convert.mjs)
 docs.html        Short guide EN/DE (src/docs.ts, src/docs.css)
 public/og-image.jpg, robots.txt, sitemap.xml  Social media preview image, crawlers
 ```

@@ -58,6 +58,7 @@
           <a href="#en-start">Quick start</a>
           <a href="#en-sequence">Sequence</a>
           <a href="#en-objects">Objects and stitches</a>
+          <a href="#en-lettering">Lettering</a>
           <a href="#en-jumps">Jumps and trims</a>
           <a href="#en-heatmap">Heatmap</a>
           <a href="#en-check">Check</a>
@@ -178,6 +179,88 @@
           <img src="/guide/patterns.jpg" width="1280" height="320" loading="lazy" alt="The red circle of the overlap demo sewn four ways: tatami with a brick offset, gradient, contour fill and spiral" />
           <figcaption>The red circle of <a href="examples/demos/overlap.pes" download>overlap.pes</a> sewn as tatami with brick offset, gradient, contour fill and spiral.</figcaption>
         </figure>
+
+        <h2 id="en-lettering">Lettering</h2>
+        <p>
+          <b>Text</b> above the canvas (or <kbd>t</kbd>) puts a lettering under the design, or starts a new design with it. Its text is
+          selected, so you can type right away. The lettering stays text: change the words, the font or the height later and the
+          letters are sewn anew in the same place, in the same thread and order. Every change is one undo step.
+        </p>
+        <ul>
+          <li><b>Font</b>: the list shows every font with your text in it. Tags say what a font lacks for it (a missing ä or ß, capitals only) and from or up to which height it looks good. In the open list the arrow keys try one font after the other right on the design. When a letter is missing, the card names fonts that have all of them.</li>
+          <li><b>Height of capitals</b> in millimeters, as a capital H is tall. The green strip under the slider marks the heights the font was digitized for; outside it a note says what happens and suggests fonts that fit better. Satin columns keep their density at any height, they are sewn anew along their rails.</li>
+          <li><b>Alignment</b> for several lines (Enter in the text field starts a new line), <b>Shape</b> straight, on an arc above or below or around a circle, with its <b>Radius</b>.</li>
+          <li><b>Thread</b>: the last thread of the design to begin with, so no color change is added. Another thread gets its own color block.</li>
+          <li><b>More</b>: letter, word and line spacing, rotation, density relative to the font, underlay, and lines sewn back and forth (shorter travel).</li>
+        </ul>
+        <p>
+          On the canvas a lettering is one object: a click selects it, the frame moves, turns and scales it (scaling sets its height, it is
+          sewn anew), the arrow keys nudge it. A double-click on it goes to its text. <b>Single letters</b> (or <kbd>Enter</kbd>) shows a box
+          around every letter: drag one to move it, the arrow keys nudge the chosen one, a slider turns it. That is how a pair is kerned by hand.
+          <kbd>Esc</kbd> goes back to the lettering.
+        </p>
+        <p>
+          Letterings are kept in the browser and in project files (.heatstitch). DST and PES only hold the stitches: opened again from
+          there, the letters are ordinary objects. <b>Convert to objects</b> does that on purpose, for example to edit single stitches.
+        </p>
+        <figure>
+          <img src="/guide/lettering-en.jpg" width="1280" height="800" loading="lazy" alt="The example cat with the name Minka set under it in Pacificlo, the Lettering card with the open font list on the right" />
+          <figcaption>A lettering under the cat. The font list shows the text in every font, with the heights each one is good for.</figcaption>
+        </figure>
+        <details class="font-table">
+          <summary>The 41 fonts and their licenses</summary>
+          <p>
+            The fonts come from <a href="https://github.com/inkstitch/embroidery-fonts">Ink/Stitch</a> (commit c7e3a05), converted for heatstitch.
+            Only fonts whose license allows using and sharing them in an MIT licensed app are included: SIL Open Font License, CC BY and public domain.
+            Each license text is linked; the fonts may be used for your embroidery, commercially too.
+          </p>
+        <table class="fonts">
+          <thead><tr><th>Font</th><th>Style</th><th>Good height</th><th>License</th></tr></thead>
+          <tbody>
+            <tr><td>AGS Γαραμου Garamond</td><td>Serif</td><td>15–29 mm</td><td><a href="fonts/licenses/ags_garamond_latin_grec.txt">OFL 1.1</a></td></tr>
+            <tr><td>Allegria 20</td><td>Script</td><td>10–40 mm</td><td><a href="fonts/licenses/allegria20.txt">OFL 1.1</a></td></tr>
+            <tr><td>Allegria 55</td><td>Script</td><td>22–77 mm</td><td><a href="fonts/licenses/allegria55.txt">OFL 1.1</a></td></tr>
+            <tr><td>Amitaclo</td><td>Script</td><td>18–36 mm</td><td><a href="fonts/licenses/amitaclo.txt">OFL 1.1</a></td></tr>
+            <tr><td>Apex Simple AGS</td><td>Serif</td><td>24–42 mm</td><td><a href="fonts/licenses/apex_simple_AGS.txt">OFL 1.1</a></td></tr>
+            <tr><td>Art Nouveau</td><td>Serif</td><td>19–35 mm</td><td><a href="fonts/licenses/art_nouveau.txt">OFL 1.1</a></td></tr>
+            <tr><td>Auberge Marif</td><td>Script</td><td>21–50 mm</td><td><a href="fonts/licenses/auberge_marif.txt">OFL 1.1</a></td></tr>
+            <tr><td>Barstitch Bold</td><td>Sans serif</td><td>12–31 mm</td><td><a href="fonts/licenses/barstitch_bold.txt">OFL 1.1</a></td></tr>
+            <tr><td>Barstitch regular</td><td>Sans serif</td><td>12–36 mm</td><td><a href="fonts/licenses/barstitch_regular.txt">OFL 1.1</a></td></tr>
+            <tr><td>Bathaus FI</td><td>Decorative</td><td>24–45 mm</td><td><a href="fonts/licenses/bathaus_FI.txt">OFL 1.1</a></td></tr>
+            <tr><td>Caesarus SC FI</td><td>Sans serif</td><td>18–126 mm</td><td><a href="fonts/licenses/caesarus_SC_FI.txt">OFL 1.1</a></td></tr>
+            <tr><td>Caffeine tiny</td><td>Sans serif</td><td>4–9 mm</td><td><a href="fonts/licenses/caffeine_tiny.txt">OFL 1.1</a></td></tr>
+            <tr><td>Cats</td><td>Decorative</td><td>28–60 mm</td><td><a href="fonts/licenses/cats.txt">OFL 1.1</a></td></tr>
+            <tr><td>Chicken Little KOR</td><td>Serif</td><td>16–63 mm</td><td><a href="fonts/licenses/chicken_little.txt">OFL 1.1</a></td></tr>
+            <tr><td>Chicken Scratch</td><td>Script</td><td>15–22 mm</td><td><a href="fonts/licenses/chicken_scratch.txt">OFL 1.1</a></td></tr>
+            <tr><td>Cogs KOR</td><td>Decorative</td><td>30–46 mm</td><td><a href="fonts/licenses/cogs_KOR.txt">CC BY 4.0</a></td></tr>
+            <tr><td>CooperMarif</td><td>Sans serif</td><td>58–348 mm</td><td><a href="fonts/licenses/cooper_marif.txt">OFL 1.1</a></td></tr>
+            <tr><td>Digory Doodles Bean</td><td>Script</td><td>18–37 mm</td><td><a href="fonts/licenses/digory_doodles_bean.txt">OFL 1.1</a></td></tr>
+            <tr><td>Excalibur KOR</td><td>Sans serif</td><td>9–24 mm</td><td><a href="fonts/licenses/excalibur_KOR.txt">Public domain</a></td></tr>
+            <tr><td>Fold Ink/Stitch (capitals only)</td><td>Decorative</td><td>51–379 mm</td><td><a href="fonts/licenses/fold_inkstitch.txt">OFL 1.1</a></td></tr>
+            <tr><td>Glacial Tiny 60 AGS</td><td>Sans serif</td><td>3–8 mm</td><td><a href="fonts/licenses/glacial_tiny.txt">OFL 1.1</a></td></tr>
+            <tr><td>Magnolia KOR</td><td>Script</td><td>16–24 mm</td><td><a href="fonts/licenses/magnolia_KOR.txt">OFL 1.1</a></td></tr>
+            <tr><td>MAM Script</td><td>Script</td><td>18–46 mm</td><td><a href="fonts/licenses/mam_script.txt">OFL 1.1</a></td></tr>
+            <tr><td>Manga Impact</td><td>Sans serif</td><td>8–41 mm</td><td><a href="fonts/licenses/manga_impact.txt">OFL 1.1</a></td></tr>
+            <tr><td>Marifenda</td><td>Script</td><td>24–48 mm</td><td><a href="fonts/licenses/marifenda.txt">OFL 1.1</a></td></tr>
+            <tr><td>Millimarif-bold20</td><td>Sans serif</td><td>16–30 mm</td><td><a href="fonts/licenses/milli_marif_bold.txt">OFL 1.1</a></td></tr>
+            <tr><td>Mimosa Medium</td><td>Decorative</td><td>21–42 mm</td><td><a href="fonts/licenses/mimosa_medium.txt">OFL 1.1</a></td></tr>
+            <tr><td>Montecarlo</td><td>Script</td><td>27–50 mm</td><td><a href="fonts/licenses/montecarlo.txt">OFL 1.1</a></td></tr>
+            <tr><td>Néon blinking</td><td>Decorative</td><td>20–58 mm</td><td><a href="fonts/licenses/neon_blinking.txt">OFL 1.1</a></td></tr>
+            <tr><td>Pacificlo</td><td>Script</td><td>14–25 mm</td><td><a href="fonts/licenses/pacificlo.txt">OFL 1.1</a></td></tr>
+            <tr><td>Paquerette</td><td>Decorative</td><td>23–28 mm</td><td><a href="fonts/licenses/paquerette.txt">Public domain</a></td></tr>
+            <tr><td>Pisankris</td><td>Decorative</td><td>20–40 mm</td><td><a href="fonts/licenses/pisankris.txt">OFL 1.1</a></td></tr>
+            <tr><td>Pixel 10</td><td>Sans serif</td><td>25–76 mm</td><td><a href="fonts/licenses/pixel10.txt">OFL 1.1</a></td></tr>
+            <tr><td>Roaring Twenties KOR</td><td>Decorative</td><td>11–23 mm</td><td><a href="fonts/licenses/roaring_twenties_KOR.txt">OFL 1.1</a></td></tr>
+            <tr><td>Roman AGS</td><td>Serif</td><td>20–33 mm</td><td><a href="fonts/licenses/roman_ags.txt">OFL 1.1</a></td></tr>
+            <tr><td>Sacramarif</td><td>Script</td><td>13–24 mm</td><td><a href="fonts/licenses/sacramarif.txt">OFL 1.1</a></td></tr>
+            <tr><td>Stebor AGS</td><td>Script</td><td>16–30 mm</td><td><a href="fonts/licenses/stebor_AGS.txt">OFL 1.1</a></td></tr>
+            <tr><td>TT Directors</td><td>Sans serif</td><td>9–26 mm</td><td><a href="fonts/licenses/tt_directors.txt">OFL 1.1</a></td></tr>
+            <tr><td>TT Masters</td><td>Sans serif</td><td>9–27 mm</td><td><a href="fonts/licenses/tt_masters.txt">OFL 1.1</a></td></tr>
+            <tr><td>Violin Serif</td><td>Serif</td><td>23–34 mm</td><td><a href="fonts/licenses/violin_serif.txt">OFL 1.1</a></td></tr>
+            <tr><td>Кирилиця</td><td>Sans serif</td><td>8–28 mm</td><td><a href="fonts/licenses/cyrillic.txt">OFL 1.1</a></td></tr>
+          </tbody>
+        </table>
+        </details>
 
         <h2 id="en-jumps">Jumps and trims</h2>
         <p>
@@ -359,6 +442,8 @@
             <tr><td><kbd>c</kbd>, <kbd>Del</kbd></td><td>At the level Shape: node a corner or round, delete it</td></tr>
             <tr><td><kbd>,</kbd> <kbd>.</kbd>, <kbd>i</kbd>, <kbd>Del</kbd></td><td>At the level Stitches: previous / next point, split the stitch, delete</td></tr>
             <tr><td><kbd>c</kbd></td><td>Compare with original</td></tr>
+            <tr><td><kbd>t</kbd></td><td>New lettering (Sequence)</td></tr>
+            <tr><td><kbd>Enter</kbd>, <kbd>Esc</kbd></td><td>On a lettering: move single letters, back to the lettering</td></tr>
             <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd></td><td>Undo / redo</td></tr>
             <tr><td><kbd>Shift</kbd> / <kbd>Ctrl</kbd>+click</td><td>Add objects to the selection (Sequence)</td></tr>
             <tr><td><kbd>Esc</kbd></td><td>Clear zone or selection, back from the stitches to the objects</td></tr>
@@ -390,6 +475,7 @@
           <a href="#de-start">Schnellstart</a>
           <a href="#de-sequence">Ablauf</a>
           <a href="#de-objects">Objekte und Stiche</a>
+          <a href="#de-lettering">Schrift</a>
           <a href="#de-jumps">Sprünge und Schnitte</a>
           <a href="#de-heatmap">Heatmap</a>
           <a href="#de-check">Prüfung</a>
@@ -511,6 +597,89 @@
           <img src="/guide/patterns.jpg" width="1280" height="320" loading="lazy" alt="Der rote Kreis der Überlappungs-Demo auf vier Arten gestickt: Tatami mit Ziegelversatz, Verlauf, Konturfüllung und Spirale" />
           <figcaption>Der rote Kreis aus <a href="examples/demos/overlap.pes" download>overlap.pes</a> als Tatami mit Ziegelversatz, Verlauf, Konturfüllung und Spirale.</figcaption>
         </figure>
+
+        <h2 id="de-lettering">Schrift</h2>
+        <p>
+          <b>Text</b> über der Leinwand (oder <kbd>t</kbd>) setzt einen Schriftzug unter das Stickmuster oder beginnt damit ein neues. Sein Text
+          ist markiert, du kannst sofort lostippen. Der Schriftzug bleibt Text: Wörter, Schrift oder Höhe lassen sich später ändern, die
+          Buchstaben werden dann an derselben Stelle neu gestickt, im selben Garn und in derselben Reihenfolge. Jede Änderung ist ein Schritt
+          zum Rückgängigmachen.
+        </p>
+        <ul>
+          <li><b>Schrift</b>: die Liste zeigt jede Schrift mit deinem Text. Hinweise sagen, was einer Schrift dafür fehlt (ein ä oder ß, nur Großbuchstaben) und ab oder bis zu welcher Höhe sie gut aussieht. In der offenen Liste probieren die Pfeiltasten eine Schrift nach der anderen gleich am Stickmuster aus. Fehlt ein Buchstabe, nennt die Karte Schriften, die alle haben.</li>
+          <li><b>Höhe der Großbuchstaben</b> in Millimetern, so hoch wie ein großes H. Der grüne Streifen unter dem Regler zeigt die Höhen, für die die Schrift gemacht ist; außerhalb sagt ein Hinweis, was passiert, und schlägt passendere Schriften vor. Satinsäulen behalten bei jeder Höhe ihre Dichte, sie werden entlang ihrer Kanten neu gestickt.</li>
+          <li><b>Ausrichtung</b> für mehrere Zeilen (Enter im Textfeld beginnt eine neue Zeile), <b>Form</b> gerade, im Bogen oben oder unten oder rund um einen Kreis, mit seinem <b>Radius</b>.</li>
+          <li><b>Garn</b>: zu Beginn das letzte Garn des Stickmusters, so kommt kein Farbwechsel dazu. Ein anderes Garn bekommt einen eigenen Farbblock.</li>
+          <li><b>Mehr</b>: Buchstaben-, Wort- und Zeilenabstand, Drehung, Dichte im Verhältnis zur Schrift, Unterlage und Zeilen hin und zurück (kürzere Wege).</li>
+        </ul>
+        <p>
+          Auf der Leinwand ist ein Schriftzug ein Objekt: ein Klick wählt ihn, der Rahmen verschiebt, dreht und skaliert ihn (Skalieren setzt
+          seine Höhe, er wird neu gestickt), die Pfeiltasten schieben ihn. Ein Doppelklick darauf führt zu seinem Text. <b>Buchstaben einzeln</b>
+          (oder <kbd>Enter</kbd>) zeigt um jeden Buchstaben einen Kasten: ziehen verschiebt ihn, die Pfeiltasten schieben den gewählten, ein Regler
+          dreht ihn. So lässt sich ein Paar von Hand unterschneiden. <kbd>Esc</kbd> geht zurück zum Schriftzug.
+        </p>
+        <p>
+          Schriftzüge bleiben im Browser und in Projektdateien (.heatstitch) erhalten. DST und PES speichern nur die Stiche: von dort wieder
+          geöffnet, sind die Buchstaben gewöhnliche Objekte. <b>In Objekte umwandeln</b> macht das mit Absicht, etwa um einzelne Stiche zu bearbeiten.
+        </p>
+        <figure>
+          <img src="/guide/lettering-de.jpg" width="1280" height="800" loading="lazy" alt="Die Beispielkatze mit dem Namen Minka darunter in Pacificlo, rechts die Karte Schriftzug mit der offenen Schriftliste" />
+          <figcaption>Ein Schriftzug unter der Katze. Die Schriftliste zeigt den Text in jeder Schrift, mit den Höhen, für die sie gut ist.</figcaption>
+        </figure>
+        <details class="font-table">
+          <summary>Die 41 Schriften und ihre Lizenzen</summary>
+          <p>
+            Die Schriften stammen aus <a href="https://github.com/inkstitch/embroidery-fonts">Ink/Stitch</a> (Commit c7e3a05), für heatstitch umgewandelt.
+            Dabei sind nur Schriften, deren Lizenz Nutzung und Weitergabe in einer MIT-lizenzierten App erlaubt: SIL Open Font License, CC BY und gemeinfreie.
+            Jeder Lizenztext ist verlinkt; die Schriften dürfen für deine Stickereien verwendet werden, auch gewerblich.
+          </p>
+        <table class="fonts">
+          <thead><tr><th>Schrift</th><th>Art</th><th>Gute Höhe</th><th>Lizenz</th></tr></thead>
+          <tbody>
+            <tr><td>AGS Γαραμου Garamond</td><td>Mit Serifen</td><td>15–29 mm</td><td><a href="fonts/licenses/ags_garamond_latin_grec.txt">OFL 1.1</a></td></tr>
+            <tr><td>Allegria 20</td><td>Schreibschrift</td><td>10–40 mm</td><td><a href="fonts/licenses/allegria20.txt">OFL 1.1</a></td></tr>
+            <tr><td>Allegria 55</td><td>Schreibschrift</td><td>22–77 mm</td><td><a href="fonts/licenses/allegria55.txt">OFL 1.1</a></td></tr>
+            <tr><td>Amitaclo</td><td>Schreibschrift</td><td>18–36 mm</td><td><a href="fonts/licenses/amitaclo.txt">OFL 1.1</a></td></tr>
+            <tr><td>Apex Simple AGS</td><td>Mit Serifen</td><td>24–42 mm</td><td><a href="fonts/licenses/apex_simple_AGS.txt">OFL 1.1</a></td></tr>
+            <tr><td>Art Nouveau</td><td>Mit Serifen</td><td>19–35 mm</td><td><a href="fonts/licenses/art_nouveau.txt">OFL 1.1</a></td></tr>
+            <tr><td>Auberge Marif</td><td>Schreibschrift</td><td>21–50 mm</td><td><a href="fonts/licenses/auberge_marif.txt">OFL 1.1</a></td></tr>
+            <tr><td>Barstitch Bold</td><td>Ohne Serifen</td><td>12–31 mm</td><td><a href="fonts/licenses/barstitch_bold.txt">OFL 1.1</a></td></tr>
+            <tr><td>Barstitch regular</td><td>Ohne Serifen</td><td>12–36 mm</td><td><a href="fonts/licenses/barstitch_regular.txt">OFL 1.1</a></td></tr>
+            <tr><td>Bathaus FI</td><td>Zierschrift</td><td>24–45 mm</td><td><a href="fonts/licenses/bathaus_FI.txt">OFL 1.1</a></td></tr>
+            <tr><td>Caesarus SC FI</td><td>Ohne Serifen</td><td>18–126 mm</td><td><a href="fonts/licenses/caesarus_SC_FI.txt">OFL 1.1</a></td></tr>
+            <tr><td>Caffeine tiny</td><td>Ohne Serifen</td><td>4–9 mm</td><td><a href="fonts/licenses/caffeine_tiny.txt">OFL 1.1</a></td></tr>
+            <tr><td>Cats</td><td>Zierschrift</td><td>28–60 mm</td><td><a href="fonts/licenses/cats.txt">OFL 1.1</a></td></tr>
+            <tr><td>Chicken Little KOR</td><td>Mit Serifen</td><td>16–63 mm</td><td><a href="fonts/licenses/chicken_little.txt">OFL 1.1</a></td></tr>
+            <tr><td>Chicken Scratch</td><td>Schreibschrift</td><td>15–22 mm</td><td><a href="fonts/licenses/chicken_scratch.txt">OFL 1.1</a></td></tr>
+            <tr><td>Cogs KOR</td><td>Zierschrift</td><td>30–46 mm</td><td><a href="fonts/licenses/cogs_KOR.txt">CC BY 4.0</a></td></tr>
+            <tr><td>CooperMarif</td><td>Ohne Serifen</td><td>58–348 mm</td><td><a href="fonts/licenses/cooper_marif.txt">OFL 1.1</a></td></tr>
+            <tr><td>Digory Doodles Bean</td><td>Schreibschrift</td><td>18–37 mm</td><td><a href="fonts/licenses/digory_doodles_bean.txt">OFL 1.1</a></td></tr>
+            <tr><td>Excalibur KOR</td><td>Ohne Serifen</td><td>9–24 mm</td><td><a href="fonts/licenses/excalibur_KOR.txt">Gemeinfrei</a></td></tr>
+            <tr><td>Fold Ink/Stitch (nur Großbuchstaben)</td><td>Zierschrift</td><td>51–379 mm</td><td><a href="fonts/licenses/fold_inkstitch.txt">OFL 1.1</a></td></tr>
+            <tr><td>Glacial Tiny 60 AGS</td><td>Ohne Serifen</td><td>3–8 mm</td><td><a href="fonts/licenses/glacial_tiny.txt">OFL 1.1</a></td></tr>
+            <tr><td>Magnolia KOR</td><td>Schreibschrift</td><td>16–24 mm</td><td><a href="fonts/licenses/magnolia_KOR.txt">OFL 1.1</a></td></tr>
+            <tr><td>MAM Script</td><td>Schreibschrift</td><td>18–46 mm</td><td><a href="fonts/licenses/mam_script.txt">OFL 1.1</a></td></tr>
+            <tr><td>Manga Impact</td><td>Ohne Serifen</td><td>8–41 mm</td><td><a href="fonts/licenses/manga_impact.txt">OFL 1.1</a></td></tr>
+            <tr><td>Marifenda</td><td>Schreibschrift</td><td>24–48 mm</td><td><a href="fonts/licenses/marifenda.txt">OFL 1.1</a></td></tr>
+            <tr><td>Millimarif-bold20</td><td>Ohne Serifen</td><td>16–30 mm</td><td><a href="fonts/licenses/milli_marif_bold.txt">OFL 1.1</a></td></tr>
+            <tr><td>Mimosa Medium</td><td>Zierschrift</td><td>21–42 mm</td><td><a href="fonts/licenses/mimosa_medium.txt">OFL 1.1</a></td></tr>
+            <tr><td>Montecarlo</td><td>Schreibschrift</td><td>27–50 mm</td><td><a href="fonts/licenses/montecarlo.txt">OFL 1.1</a></td></tr>
+            <tr><td>Néon blinking</td><td>Zierschrift</td><td>20–58 mm</td><td><a href="fonts/licenses/neon_blinking.txt">OFL 1.1</a></td></tr>
+            <tr><td>Pacificlo</td><td>Schreibschrift</td><td>14–25 mm</td><td><a href="fonts/licenses/pacificlo.txt">OFL 1.1</a></td></tr>
+            <tr><td>Paquerette</td><td>Zierschrift</td><td>23–28 mm</td><td><a href="fonts/licenses/paquerette.txt">Gemeinfrei</a></td></tr>
+            <tr><td>Pisankris</td><td>Zierschrift</td><td>20–40 mm</td><td><a href="fonts/licenses/pisankris.txt">OFL 1.1</a></td></tr>
+            <tr><td>Pixel 10</td><td>Ohne Serifen</td><td>25–76 mm</td><td><a href="fonts/licenses/pixel10.txt">OFL 1.1</a></td></tr>
+            <tr><td>Roaring Twenties KOR</td><td>Zierschrift</td><td>11–23 mm</td><td><a href="fonts/licenses/roaring_twenties_KOR.txt">OFL 1.1</a></td></tr>
+            <tr><td>Roman AGS</td><td>Mit Serifen</td><td>20–33 mm</td><td><a href="fonts/licenses/roman_ags.txt">OFL 1.1</a></td></tr>
+            <tr><td>Sacramarif</td><td>Schreibschrift</td><td>13–24 mm</td><td><a href="fonts/licenses/sacramarif.txt">OFL 1.1</a></td></tr>
+            <tr><td>Stebor AGS</td><td>Schreibschrift</td><td>16–30 mm</td><td><a href="fonts/licenses/stebor_AGS.txt">OFL 1.1</a></td></tr>
+            <tr><td>TT Directors</td><td>Ohne Serifen</td><td>9–26 mm</td><td><a href="fonts/licenses/tt_directors.txt">OFL 1.1</a></td></tr>
+            <tr><td>TT Masters</td><td>Ohne Serifen</td><td>9–27 mm</td><td><a href="fonts/licenses/tt_masters.txt">OFL 1.1</a></td></tr>
+            <tr><td>Violin Serif</td><td>Mit Serifen</td><td>23–34 mm</td><td><a href="fonts/licenses/violin_serif.txt">OFL 1.1</a></td></tr>
+            <tr><td>Кирилиця</td><td>Ohne Serifen</td><td>8–28 mm</td><td><a href="fonts/licenses/cyrillic.txt">OFL 1.1</a></td></tr>
+          </tbody>
+        </table>
+        </details>
 
         <h2 id="de-jumps">Sprünge und Schnitte</h2>
         <p>
@@ -694,6 +863,8 @@
             <tr><td><kbd>c</kbd>, <kbd>Entf</kbd></td><td>Auf der Ebene Form: Knoten zur Ecke oder rund machen, löschen</td></tr>
             <tr><td><kbd>,</kbd> <kbd>.</kbd>, <kbd>i</kbd>, <kbd>Entf</kbd></td><td>Auf der Ebene Stiche: voriger / nächster Einstich, Stich teilen, löschen</td></tr>
             <tr><td><kbd>c</kbd></td><td>Mit Original vergleichen</td></tr>
+            <tr><td><kbd>t</kbd></td><td>Neuer Schriftzug (Ablauf)</td></tr>
+            <tr><td><kbd>Enter</kbd>, <kbd>Esc</kbd></td><td>Auf einem Schriftzug: Buchstaben einzeln verschieben, zurück zum Schriftzug</td></tr>
             <tr><td><kbd>Strg</kbd>+<kbd>Z</kbd> / <kbd>Strg</kbd>+<kbd>Umschalt</kbd>+<kbd>Z</kbd></td><td>Rückgängig / wiederholen</td></tr>
             <tr><td><kbd>Umschalt</kbd> / <kbd>Strg</kbd>+Klick</td><td>Objekte zur Auswahl hinzufügen (Ablauf)</td></tr>
             <tr><td><kbd>Esc</kbd></td><td>Zone oder Auswahl aufheben, von den Stichen zurück zu den Objekten</td></tr>

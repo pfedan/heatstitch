@@ -51,7 +51,16 @@ export default defineConfig({
       workbox: {
         // A first visit is controlled right away, so the reload button can swap versions in it too.
         clientsClaim: true,
-        globPatterns: ['**/*.{js,css,html,svg,png,webmanifest,pes}'],
+        // The font list comes along; a font (some 100 KB to 2 MB) only once it is used, then it
+        // works offline too.
+        globPatterns: ['**/*.{js,css,html,svg,png,webmanifest,pes}', 'fonts/index.json'],
+        runtimeCaching: [
+          {
+            urlPattern: /\/fonts\/.+\.(json|txt)$/,
+            handler: 'StaleWhileRevalidate',
+            options: { cacheName: 'fonts', expiration: { maxEntries: 120 } },
+          },
+        ],
         // Only crawlers and link previews fetch the social image.
         globIgnores: ['og-image.jpg'],
         // Navigations into a preview must reach the network, not the cached app shell.
