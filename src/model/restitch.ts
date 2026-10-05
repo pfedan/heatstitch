@@ -1227,7 +1227,8 @@ export function restitch(
     // where the columns lie (traced from the stitches it would grow by their thickness each time).
     const satinRails =
       converting && src === 'satin' ? (known?.columns?.flat() ?? satinParts.flatMap((pt) => satinColumns(p, pt, kinds).map((c) => railsOf(p, c)).filter((r): r is Rails => !!r))) : undefined;
-    if (converting) area = known?.shape ?? (src === 'fill' ? an.fill : (railsArea(satinRails ?? []) ?? coveredBy(p, parts.filter((pt) => pt.kind === src))));
+    // The drawn form is the source of the area when there is one, never traced back from stitches.
+    if (converting) area = (known?.form ? rasterize(known.form) : null) ?? known?.shape ?? (src === 'fill' ? an.fill : (railsArea(satinRails ?? []) ?? coveredBy(p, parts.filter((pt) => pt.kind === src))));
     // A fill made from satin gets rows across the area in the direction with the fewest sections.
     const settings: Settings =
       converting && given.kind === 'fill' && area

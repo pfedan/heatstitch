@@ -58,7 +58,10 @@ describe('switching between satin and fill', () => {
     const form = { paths: [{ closed: true, nodes: [n(o.minX / 10, o.minY / 10), n(o.maxX / 10, o.minY / 10), n(o.maxX / 10, o.maxY / 10), n(o.minX / 10, o.maxY / 10)] }] };
     remember(p, o, { ...remembered(p, o), region: remembered(p, o)?.region ?? null, form });
     const a = convertTo(p, o.index, FILL);
-    expect(remembered(a.q, sewObjects(a.q, stitchKinds(a.q))[a.o])?.form).toEqual(form);
+    const m = remembered(a.q, sewObjects(a.q, stitchKinds(a.q))[a.o])!;
+    expect(m.form).toEqual(form);
+    // The fill's area is the form's rectangle, not where the satin lay.
+    expect(m.region!.areaMm2).toBeCloseTo(((o.maxX - o.minX) / 10) * ((o.maxY - o.minY) / 10), -1);
     const b = convertTo(a.q, a.o, SATIN);
     expect(remembered(b.q, sewObjects(b.q, stitchKinds(b.q))[b.o])?.form).toEqual(form);
   });
