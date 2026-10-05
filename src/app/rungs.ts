@@ -8,7 +8,7 @@ import type { Settings } from '../settings';
 import type { StitchInfo, StitchPanel } from '../ui/stitchPanel';
 import { RungTool } from '../ui/rungTool';
 import { outline } from '../digitize/region';
-import { railsFromOutline, stripsOfOutline } from '../digitize/rungs';
+import { inside, railsFromOutline, stripsOfOutline } from '../digitize/rungs';
 import { t, type Key } from '../i18n';
 import { type Rails, type SatinSettings, analyze, remembered, keepShape, remember, restitch, measureSatin, forget, type RestitchResult, type Settings as RestitchSettings } from '../model/restitch';
 import { ui } from './state';
@@ -239,6 +239,9 @@ export function bindRungs(app: RungsApp) {
     app.applyRestitched(withRungs(columns), 'stitch.failed');
   }
 
+  /** Twice the area of a closed outline (mm²). */
+  const area2 = (ring: Pt[]) => ring.reduce((a, p, i) => a + p[0] * ring[(i + 1) % ring.length][1] - ring[(i + 1) % ring.length][0] * p[1], 0);
+
   /** Sews the selected fill as satin along the lines drawn across it. */
   function sewAlongLines(): void {
     const p = app.files.active?.pattern;
@@ -250,10 +253,16 @@ export function bindRungs(app: RungsApp) {
     if (!area) return;
     const loops = outline(area);
     const loop = loops.reduce((a, b) => (b.length > a.length ? b : a), [] as [number, number][]) as Pt[];
+    // Holes: the other outlines lying inside it (the counter of an e, both of an 8).
+    const holes = loops.filter((l) => l !== loop && l.length > 2 && inside(loop, l[0] as Pt) && Math.abs(area2(l as Pt[])) > 0.5) as Pt[][];
     let columns: Rails[];
-    if (rungTool.cutLines.length) {
+    if (rungTool.cutLines.length || holes.length) {
       // Cut into parts: each its own column, sewn on one into the next without a trim.
-      const made = stripsOfOutline(loop, rungTool.lines, rungTool.cutLines);
+      const made = stripsOfOutline(loop, rungTool.lines, rungTool.cutLines, holes);
+      if (made.hole >= 0) {
+        rungTool.showBad(holes[made.hole]);
+        return app.layers.say(t('stitch.draw.openHole'), true);
+      }
       if (made.bad >= 0) {
         rungTool.showBad(made.parts[made.bad]);
         return app.layers.say(t('stitch.draw.notStripPart'), true);

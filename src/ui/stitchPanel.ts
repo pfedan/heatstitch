@@ -952,7 +952,7 @@ export class StitchPanel {
     if (d.tool) {
       wrap.append(
         this.penSwitch(!!d.cutMode),
-        Object.assign(document.createElement('span'), { className: 'small', textContent: t('stitch.draw.count', { n: d.lines }) + (d.cuts ? ' ' + t('stitch.draw.parts', { n: d.cuts + 1 }) : '') }),
+        Object.assign(document.createElement('span'), { className: 'small', textContent: t('stitch.draw.count', { n: d.lines }) + (d.cuts ? ' ' + t('stitch.draw.parts') : '') }),
         Object.assign(document.createElement('span'), { className: 'muted small', textContent: t('stitch.draw.help') }),
       );
     }
