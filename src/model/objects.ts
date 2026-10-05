@@ -244,6 +244,11 @@ export function restoreJoin(key: string, join: boolean): void {
   rememberJoin(key, join);
 }
 
+/** Forgets every section memory, as a fresh page would (tests). */
+export function forgetJoins(): void {
+  joins.clear();
+}
+
 /** What is sewn from one trim (or color change) to the next. */
 interface Section {
   block: number;
