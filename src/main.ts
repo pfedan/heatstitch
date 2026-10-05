@@ -63,29 +63,21 @@ import { borderRanges, syncBorders } from './model/border';
 import { analyze, holdMemory, openOnPurpose, objectKey, measureFill, measureRun, measureSatin, remember, remembered, rememberedIn, rememberShapes, restitch, shapeTrust, unionRegion, underlayRanges, type Remembered, type Settings as RestitchSettings, type ShapeTrust, type RestitchResult } from './model/restitch';
 import { outline } from './digitize/region';
 import type { Pt } from './digitize/skeleton';
-import { DrawTool, type DrawKind } from './ui/drawTool';
-import { nearestThread } from './image/prepare';
-import { rgbToLab } from './image/color';
 import { drawAside, drawDrawing, type FlatArea } from './render/shapeOverlay';
-import { AsidePanel } from './ui/asidePanel';
 import type { LeftOut } from './ui/imageMode';
-import { addShape, type NewShape } from './model/addShape';
 import { lineSettings, lineToFill } from './model/line';
 import { borderLines } from './model/along';
-import { asideOf, dropAside, sewAgain, setAside, setAsideRole, storeAside, type AsideRole, type AsideShape } from './model/aside';
+import { asideOf, storeAside, type AsideShape } from './model/aside';
 import { recolorObjects, unionForm } from './model/shapeOps';
-import { stitchesBefore } from './model/transform';
-import { FrameTool } from './ui/frameTool';
-import { formOf, scaleBlocked, transformSewObject } from './model/reshape';
-import { isCovered, overlapsIn, setKnockout, setOverlapShare, wholeArea, wholeOf } from './model/knockout';
-import { transformObject } from './model/transform';
+import { formOf } from './model/reshape';
+import { isCovered, setOverlapShare, wholeArea, wholeOf } from './model/knockout';
 import { apply, type Form, type Mat } from './shape/path';
 import { fontNow, loadCatalog, loadFont, type Catalog } from './lettering/font';
 import { followText, layout, LETTERING_DEFAULTS, type Lettering } from './lettering/layout';
 import { letteringObjects, letteringOf, placeLettering, withoutObjects } from './lettering/place';
 import { sewLettering } from './lettering/sew';
 import { LetteringPanel } from './ui/letteringPanel';
-import { digitizeDefaults, digitizeShapes, isStroke, pullFor, SATIN_MAX, type Digitized } from './digitize/digitize';
+import { digitizeDefaults, isStroke, pullFor, SATIN_MAX, type Digitized } from './digitize/digitize';
 import { recommendedSpacing } from './validation/profiles';
 import { numberInColor, overlaps, rememberObjects, sewObjects, splitObject, type SewObject } from './model/objects';
 import { conflicts, moveStats, optimizePlan, reorder, violations, weigh } from './model/order';
@@ -100,6 +92,8 @@ import { bindPointer } from './app/pointer';
 import { bindKeys } from './app/keys';
 import { bindLight } from './app/light';
 import { bindShapes } from './app/shapes';
+import { bindDrawing } from './app/drawing';
+import { bindAside } from './app/aside';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -1185,255 +1179,97 @@ const { closeShape, deleteSelected, duplicateSelected, enterShape, followKnockou
 
 // Shapes not sewn: switched off or guides ---------------------------------------
 
-const asidePanel = new AsidePanel({
-  sew: (id) => {
-    const p = files.active?.pattern;
-    if (!p) return;
-    const r = sewAgain(p, id, { ...digitizeDefaults(settings.profile), trimMm: settings.trimMm });
-    if (!r) return layers.say(t('aside.failed'), true);
-    const mine = seq(r.pattern).objects.findIndex((o) => stitchesBefore(r.pattern, o.first) === r.start);
-    ui.hoverAside = null;
-    takeShapes(r.pattern, mine >= 0 ? [mine] : []);
-    layers.say(t('aside.done.sewn'));
+const { asidePanel, putAside } = bindAside({
+  get applyEdit() {
+    return applyEdit;
   },
-  role: (id, role) => {
-    const p = files.active?.pattern;
-    const next = p && setAsideRole(p, id, role);
-    if (next) applyEdit(next);
+  get files() {
+    return files;
   },
-  drop: (id) => {
-    const p = files.active?.pattern;
-    const next = p && dropAside(p, id);
-    if (!next) return;
-    ui.hoverAside = null;
-    applyEdit(next);
-    layers.say(t('aside.done.dropped'));
+  get frameObjects() {
+    return frameObjects;
   },
-  hover: (id) => {
-    if (ui.hoverAside === id) return;
-    ui.hoverAside = id;
-    redraw();
+  get layers() {
+    return layers;
+  },
+  get redraw() {
+    return redraw;
+  },
+  get seq() {
+    return seq;
+  },
+  get settings() {
+    return settings;
+  },
+  get takeShapes() {
+    return takeShapes;
   },
 });
-
-/** The selected objects kept, but not sewn. */
-function putAside(role: AsideRole): void {
-  const p = files.active?.pattern;
-  const sel = frameObjects();
-  if (!p || !sel.length) return;
-  const next = setAside(p, sel, role, settings.trimMm);
-  if (!next) return layers.say(t('aside.last'), true);
-  takeShapes(next, []);
-  const one = sel.length === 1;
-  layers.say(role === 'guide' ? (one ? t('aside.done.guide') : t('aside.done.guideMany', { n: sel.length })) : one ? t('aside.done.off') : t('aside.done.offMany', { n: sel.length }));
-}
 
 // Drawing new shapes ---------------------------------------------------------
 
-/** A thread for the first shape of a new design: a Brother orange, clear on dark and light fabric. */
-const FIRST_THREAD: ThreadColor = nearestThread(rgbToLab(240, 140, 40)).thread;
-
-const drawTool = new DrawTool({ done: (s) => void drawn(s), redraw });
-const drawButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-draw]')];
-
-/** Picks a drawing tool, or none. */
-function setDrawing(kind: DrawKind | null): void {
-  if (kind && settings.mode !== 'flow') return;
-  if (kind) {
-    if (editor.active) setEditing(false);
-    if (shapeTool.active) closeShape();
-    if (rungTool.active) closeRungs();
-    if (ui.letterMode) setLetterMode(false);
-  }
-  drawTool.start(kind);
-  for (const b of drawButtons) b.setAttribute('aria-pressed', String(b.dataset.draw === kind));
-  stage.classList.toggle('drawing', !!kind);
-  updateLevel();
-  redraw();
-}
-drawButtons.forEach((b) => b.addEventListener('click', () => setDrawing(drawTool.kind === b.dataset.draw ? null : (b.dataset.draw as DrawKind))));
-
-/** A shape is drawn: sewn in the thread of the selected object right after it, else after the last one. */
-/** No stitches yet. */
-const EMPTY: Pattern = { x: new Int32Array(0), y: new Int32Array(0), cmd: new Uint8Array(0), colors: [] } as unknown as Pattern;
-
-/** The first shape of a new design; a line keeps its curves to be sewn along. */
-function firstShape(shape: NewShape, options: ReturnType<typeof digitizeDefaults> & { trimMm: number }): Digitized | null {
-  const line = shape.kind === 'stroke' ? addShape(EMPTY, shape, FIRST_THREAD, null, options) : null;
-  if (line) return { pattern: line.pattern, objects: [{ kind: 'run', label: 0, areaMm2: 0, path: shape.form }], starts: [0] };
-  const d = digitizeShapes([{ color: 0, ...shape }], [FIRST_THREAD], options, { w: 0, h: 0 }, false, 'shape');
-  return d.objects.length ? d : null;
-}
-
-async function drawn(shape: NewShape): Promise<void> {
-  const f = files.active;
-  const p = f?.pattern ?? null;
-  const options = { ...digitizeDefaults(settings.profile), trimMm: settings.trimMm };
-  if (!f || !p) {
-    // Nothing open yet: the shape starts a new design.
-    const d = firstShape(shape, options);
-    if (!d) return layers.say(t('draw.failed'), true);
-    ui.keepView = true;
-    await addDigitized(d, t('draw.newName'));
-    ui.keepView = false;
-    selectObjects([0], false);
-    return;
-  }
-  const q = seq(p);
-  const sel = [...ui.selectedObjects].sort((a, b) => a - b);
-  const after = sel.length ? sel[sel.length - 1] : q.objects.length ? q.objects.length - 1 : null;
-  const color = after !== null ? q.objects[after].color : FIRST_THREAD;
-  const r = addShape(p, shape, color, after, options);
-  if (!r) return layers.say(t('draw.failed'), true);
-  applyEdit(r.pattern);
-  files.setObjects(f, rememberedIn(r.pattern, seq(r.pattern).objects));
-  const nq = seq(r.pattern);
-  const mine = nq.objects.findIndex((o) => stitchesBefore(r.pattern, o.first) === r.start);
-  followKnockouts();
-  if (mine >= 0) selectObjects([mine], false);
-  layers.say(t(shape.kind === 'fill' ? 'draw.done.fill' : 'draw.done.line'));
-  redraw();
-}
-
-// The card that offers leaving out what lies on top, when shapes overlap (never done unasked).
-let overlapCache: { p: Pattern; list: number[] } | null = null;
-/** Files whose overlaps the user chose to keep as they are. */
-const overlapKept = new WeakSet<object>();
-
-function overlapping(p: Pattern): number[] {
-  if (overlapCache?.p !== p) overlapCache = { p, list: overlapsIn(p, seq(p).objects) };
-  return overlapCache.list;
-}
-
-function updateOverlapCard(): void {
-  const f = files.active;
-  const p = f?.pattern;
-  const list = f && p && settings.mode === 'flow' && !overlapKept.has(f) && !shapeTool.active ? overlapping(p) : [];
-  const card = $('overlap-card');
-  card.hidden = !list.length;
-  if (list.length) $('overlap-text').textContent = t(list.length === 1 ? 'knockout.card.one' : 'knockout.card', { n: formatNumber(list.length) });
-}
-
-$('overlap-cut').addEventListener('click', () => {
-  const p = files.active?.pattern;
-  if (p) knockoutObjects(overlapping(p), true);
-});
-$('overlap-keep').addEventListener('click', () => {
-  if (files.active) overlapKept.add(files.active);
-  layers.say(t('knockout.card.kept'));
-  redraw();
-});
-
-/** Turns leaving out what lies on top on or off for the objects `which`, as one undo step. */
-function knockoutObjects(which: number[], on: boolean): void {
-  const f = files.active;
-  const p = f?.pattern;
-  if (!f || !p) return;
-  const r = setKnockout(p, which, on, settings.trimMm);
-  if (!r) return;
-  const sel = ui.selectedObjects;
-  applyEdit(r.pattern);
-  files.setObjects(f, rememberedIn(r.pattern, seq(r.pattern).objects));
-  ui.selectedObjects = sel;
-  ui.selectionKey++;
-  layers.say(t(on ? 'knockout.done' : 'knockout.undone', { n: formatNumber(r.changed) }) + ' ' + t('object.undo'));
-  redraw();
-}
-
-// The frame around the one selected object (level Objects): move, turn, scale.
-let frameFrame = 0;
-let pendingFrame: Mat | null = null;
-
-const frameTool = new FrameTool({
-  change: (m, final) => {
-    if (final) {
-      pendingFrame = null;
-      cancelAnimationFrame(frameFrame);
-      frameFrame = 0;
-      ui.flowPreview = null;
-      return commitTransform(m);
-    }
-    pendingFrame = m;
-    if (frameFrame) return;
-    frameFrame = requestAnimationFrame(() => {
-      frameFrame = 0;
-      const p = files.active?.pattern;
-      // The stitches dragged along as they are; scaling sews them anew when let go. The last
-      // object first, so the records of the ones before stay where they are.
-      let next = p ?? null;
-      if (p && pendingFrame) for (const o of frameObjects().reverse()) next = transformObject(next!, seq(p).objects[o], pendingFrame).pattern;
-      ui.flowPreview = next !== p ? next : null;
-      redraw();
-    });
+const { commitTransform, drawTool, frameObjects, frameTool, knockoutObjects, setDrawing, syncFrame, updateOverlapCard } = bindDrawing({
+  get addDigitized() {
+    return addDigitized;
+  },
+  get applyEdit() {
+    return applyEdit;
+  },
+  get closeRungs() {
+    return closeRungs;
+  },
+  get closeShape() {
+    return closeShape;
+  },
+  get editor() {
+    return editor;
+  },
+  get files() {
+    return files;
+  },
+  get followKnockouts() {
+    return followKnockouts;
+  },
+  get layers() {
+    return layers;
+  },
+  get orderCard() {
+    return orderCard;
+  },
+  get redraw() {
+    return redraw;
+  },
+  get rungTool() {
+    return rungTool;
+  },
+  get selectObjects() {
+    return selectObjects;
+  },
+  get seq() {
+    return seq;
+  },
+  get setEditing() {
+    return setEditing;
+  },
+  get setLetterMode() {
+    return setLetterMode;
+  },
+  get settings() {
+    return settings;
+  },
+  get shapeTool() {
+    return shapeTool;
+  },
+  get stage() {
+    return stage;
+  },
+  get transformLettering() {
+    return transformLettering;
+  },
+  get updateLevel() {
+    return updateLevel;
   },
 });
-
-/** The objects the frame is on: the selected ones in the Ablauf mode, level Objects (in sewing order). */
-function frameObjects(): number[] {
-  if (settings.mode !== 'flow' || !ui.selectedObjects.size || editor.active || shapeTool.active || rungTool.active || orderCard.isOpen || ui.letterMode) return [];
-  const n = files.active?.pattern ? seq(files.active.pattern).objects.length : 0;
-  return [...ui.selectedObjects].filter((o) => o < n).sort((a, b) => a - b);
-}
-
-/** Puts the frame around the selected objects (or takes it away). */
-let frameKey: { p: Pattern; sel: ReadonlySet<number> } | null = null;
-function syncFrame(): void {
-  const p = files.active?.pattern;
-  const sel = frameObjects();
-  if (!p || !sel.length) {
-    if (frameTool.active) frameTool.close();
-    frameKey = null;
-    return;
-  }
-  if (frameTool.dragging !== null || (frameTool.active && frameKey?.p === p && frameKey.sel === ui.selectedObjects)) return;
-  frameKey = { p, sel: ui.selectedObjects };
-  const q = seq(p);
-  const objs = sel.map((o) => q.objects[o]);
-  const box = {
-    minX: Math.min(...objs.map((o) => o.minX)) / 10,
-    minY: Math.min(...objs.map((o) => o.minY)) / 10,
-    maxX: Math.max(...objs.map((o) => o.maxX)) / 10,
-    maxY: Math.max(...objs.map((o) => o.maxY)) / 10,
-  };
-  frameTool.open(box, objs.every((o) => scaleBlocked(p, o, q.kinds) === null));
-}
-
-/** The selected objects moved, turned or scaled by `m` together (one undo step). */
-function commitTransform(m: Mat): void {
-  const f = files.active;
-  const p = f?.pattern;
-  const sel = frameObjects();
-  if (!f || !p || !sel.length) return redraw();
-  // A lettering keeps its text: it is set anew where the frame put it.
-  if (ui.lettering) return transformLettering(m);
-  let cur = p;
-  let hand = 0;
-  let restitched = false;
-  // The last object first: the ones before keep their records. The objects stay as many as they were.
-  for (const o of [...sel].reverse()) {
-    const q = seq(cur);
-    const obj = q.objects[o];
-    hand += remembered(cur, obj)?.hand ?? 0;
-    const r = obj && transformSewObject(cur, q.objects, obj, q.kinds, m, settings.trimMm);
-    if (!r) {
-      layers.say(t('frame.failed'), true);
-      return redraw();
-    }
-    restitched ||= r.restitched;
-    cur = r.pattern;
-  }
-  // Borders in a thread of their own go along (sewn anew on the moved area).
-  const keys = new Set(sel.map((o) => objectKey(cur, seq(cur).objects[o])));
-  const synced = syncBorders(cur, settings.trimMm);
-  applyEdit(synced);
-  const nq = seq(synced);
-  files.setObjects(f, rememberedIn(synced, nq.objects));
-  ui.selectedObjects = synced !== cur ? new Set(nq.objects.flatMap((o, i) => (keys.has(objectKey(synced, o)) ? [i] : []))) : nq.objects.length === seq(p).objects.length ? new Set(sel) : new Set();
-  ui.selectionKey++;
-  if (restitched && hand) layers.say(t('shape.handReplaced', { n: formatNumber(hand) }));
-  followKnockouts();
-  redraw();
-}
 
 // Lettering ---------------------------------------------------------------------------------------
 
