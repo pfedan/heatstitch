@@ -6,7 +6,8 @@ import type { LoadedFile } from '../ui/fileList';
 import type { Pattern } from '../model/pattern';
 import type { Plan, Box } from '../correct/plan';
 import type { PlanPreview } from './types';
-import type { StitchInfo } from '../ui/stitchPanel';
+import type { Highlight, StitchInfo } from '../ui/stitchPanel';
+import type { RestitchResult } from '../model/restitch';
 import type { Zone } from '../validation/validate';
 
 /**
@@ -81,4 +82,8 @@ export const ui = {
   /** The proposals held for comparing (their name was clicked): shown while the pointer is elsewhere. */
   planPin: null as number[] | null,
   planDrag: false,
+  /** The pointer is on the underlay or border settings: that part of the selected objects is shown. */
+  highlight: null as Highlight | null,
+  /** The restitch behind `flowPreview` (it knows where the new underlay ends). */
+  previewResult: null as RestitchResult | null,
 };
