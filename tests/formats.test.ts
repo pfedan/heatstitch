@@ -124,6 +124,12 @@ describe('writers', () => {
     expect(s.length).toBe(stitches(p).length + 1); // 20 mm in two stitches
   });
 
+  it('JEF: the way to the first stitch is jumps, not a stitch from the middle', () => {
+    const p = new Shape().to(0, 30).to(1, 30).build();
+    const q = parsePattern(writeJef(p), 'out.jef');
+    expect(stitches(q)).toEqual(stitches(p));
+  });
+
   it('JEF: neighboring colors that round to the same Janome thread stay apart', () => {
     const p = example('demos/sun.dst');
     const black = jefColor(1);
