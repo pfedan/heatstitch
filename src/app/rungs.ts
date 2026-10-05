@@ -8,9 +8,9 @@ import type { Settings } from '../settings';
 import type { StitchInfo, StitchPanel } from '../ui/stitchPanel';
 import { RungTool } from '../ui/rungTool';
 import { outline } from '../digitize/region';
-import { railsFromOutline } from '../digitize/rungs';
+import { inside, railsFromOutline, stripsOfOutline } from '../digitize/rungs';
 import { t, type Key } from '../i18n';
-import { type Rails, analyze, remembered, keepShape, remember, restitch, measureSatin, forget, type RestitchResult, type Settings as RestitchSettings } from '../model/restitch';
+import { type Rails, type SatinSettings, analyze, remembered, keepShape, remember, restitch, measureSatin, forget, type RestitchResult, type Settings as RestitchSettings } from '../model/restitch';
 import { ui } from './state';
 
 /** What bindRungs needs from the rest of the app. */
@@ -81,13 +81,17 @@ export function bindRungs(app: RungsApp) {
         const cols = remembered(p, q.objects[[...ui.selectedObjects][0]])?.columns?.flat() ?? [];
         rungs = cols.some((c) => c.rungs) ? cols.reduce((a, c) => a + (c.rungs?.length ?? 0), 0) : null;
       }
+      if (!on || rungTool.mode !== 'satin') {
+        // Free rungs count as rungs.
+        if (single && rungs !== null) rungs += (remembered(p, q.objects[[...ui.selectedObjects][0]])?.columns?.flat() ?? []).reduce((a, c) => a + (c.spans?.length ?? 0), 0);
+      }
       let cuts = 0;
       if (on && rungTool.mode === 'satin') cuts = rungTool.columns.reduce((a, c) => a + c.cuts.length, 0);
       else if (single) cuts = (remembered(p, q.objects[[...ui.selectedObjects][0]])?.columns?.flat() ?? []).reduce((a, c) => a + (c.cuts?.length ?? 0), 0);
       const here = on && rungTool.mode === 'satin' ? rungTool.spacingHere : undefined;
-      out.direction = { tool: on && rungTool.mode === 'satin', rungs, single, cuts, ...(here !== undefined ? { spacingHere: here } : {}) };
+      out.direction = { tool: on && rungTool.mode === 'satin', rungs, single, cuts, cutMode: rungTool.cutMode, chain: on && rungTool.badges.length > 0, ...(here !== undefined ? { spacingHere: here } : {}) };
     }
-    if (info.measured.fill && !info.measured.satin) out.draw = { tool: on && rungTool.mode === 'fill', lines: on ? rungTool.lines.length : 0, single };
+    if (info.measured.fill && !info.measured.satin) out.draw = { tool: on && rungTool.mode === 'fill', lines: on ? rungTool.lines.length : 0, single, cuts: on ? rungTool.cutLines.length : 0, cutMode: rungTool.cutMode };
     if (info.measured.fill) out.guide = { tool: on && rungTool.mode === 'guide', single };
     return out;
   }
@@ -137,6 +141,7 @@ export function bindRungs(app: RungsApp) {
       const columns = keepShape(p, obj, q.kinds).columns;
       if (!columns?.length) return app.layers.say(t('stitch.direction.miss'), true);
       rungTool.openSatin(columns);
+      rungTool.satin = satinOf(p, q, obj);
     } else {
       const an = analyze(p, obj, q.kinds);
       const area = remembered(p, obj)?.shape ?? an.fill;
@@ -163,6 +168,14 @@ export function bindRungs(app: RungsApp) {
     app.redraw();
   }
 
+  /** The satin settings an object is sewn with (as withRungs sews it). */
+  function satinOf(p: Pattern, q: Sequence, obj: Sequence['objects'][number]): SatinSettings | null {
+    const known = remembered(p, obj)?.satin;
+    if (known) return known;
+    const part = analyze(p, obj, q.kinds).parts.find((pt) => pt.kind === 'satin');
+    return part ? measureSatin(p, part, q.kinds) : null;
+  }
+
   /** Keeps the rung tool on its object: after new stitches its columns are read again; it closes when the object is gone. */
   function syncRungs(): void {
     if (!rungTool.active) return;
@@ -185,16 +198,17 @@ export function bindRungs(app: RungsApp) {
     const columns = obj && rungTool.mode === 'satin' ? keepShape(p, obj, q.kinds).columns : null;
     if (!columns?.length) return closeRungs();
     rungTool.setColumns(columns);
+    rungTool.satin = satinOf(p, q, obj);
     ui.rungObject = o;
     rungPattern = p;
   }
 
   /**
    * New stitches for the rung tool's object along `columns` (rails with their rungs), in its own
-   * satin settings; with `keep`, the columns stay remembered for the old stitches (to show them
-   * while dragging, they are put back).
+   * satin settings. The old stitches keep what they remembered: undo brings back the rungs with
+   * them (the new stitches get theirs from the result).
    */
-  function withRungs(columns: Rails[][] | null, keep = false) {
+  function withRungs(columns: Rails[][] | null) {
     const p = app.files.active?.pattern;
     if (!p || ui.rungObject === null || !columns) return null;
     const q = app.seq(p);
@@ -214,7 +228,7 @@ export function bindRungs(app: RungsApp) {
       q.kinds,
       app.settings.trimMm,
     );
-    if (!keep || !r.starts.length) forget(p, obj, before);
+    forget(p, obj, before);
     return r;
   }
 
@@ -222,8 +236,11 @@ export function bindRungs(app: RungsApp) {
     pendingColumns = null;
     cancelAnimationFrame(rungFrame);
     rungFrame = 0;
-    app.applyRestitched(withRungs(columns, true), 'stitch.failed');
+    app.applyRestitched(withRungs(columns), 'stitch.failed');
   }
+
+  /** Twice the area of a closed outline (mm²). */
+  const area2 = (ring: Pt[]) => ring.reduce((a, p, i) => a + p[0] * ring[(i + 1) % ring.length][1] - ring[(i + 1) % ring.length][0] * p[1], 0);
 
   /** Sews the selected fill as satin along the lines drawn across it. */
   function sewAlongLines(): void {
@@ -236,13 +253,31 @@ export function bindRungs(app: RungsApp) {
     if (!area) return;
     const loops = outline(area);
     const loop = loops.reduce((a, b) => (b.length > a.length ? b : a), [] as [number, number][]) as Pt[];
-    const rails = railsFromOutline(loop, rungTool.lines);
-    if (!rails) return app.layers.say(t('stitch.draw.notStrip'), true);
+    // Holes: the other outlines lying inside it (the counter of an e, both of an 8).
+    const holes = loops.filter((l) => l !== loop && l.length > 2 && inside(loop, l[0] as Pt) && Math.abs(area2(l as Pt[])) > 0.5) as Pt[][];
+    let columns: Rails[];
+    if (rungTool.cutLines.length || holes.length) {
+      // Cut into parts: each its own column, sewn on one into the next without a trim.
+      const made = stripsOfOutline(loop, rungTool.lines, rungTool.cutLines, holes);
+      if (made.hole >= 0) {
+        rungTool.showBad(holes[made.hole]);
+        return app.layers.say(t('stitch.draw.openHole'), true);
+      }
+      if (made.bad >= 0) {
+        rungTool.showBad(made.parts[made.bad]);
+        return app.layers.say(t('stitch.draw.notStripPart'), true);
+      }
+      columns = made.strips.map((r) => ({ ...r, chain: 0 }));
+    } else {
+      const rails = railsFromOutline(loop, rungTool.lines);
+      if (!rails) return app.layers.say(t('stitch.draw.notStrip'), true);
+      columns = [rails];
+    }
     const s = app.convertSettings('satin', app.stitchInfo(p, q));
     if (!s) return;
     const o = ui.rungObject;
     closeRungs();
-    const r = restitch(p, q.objects, [o], s, q.kinds, app.settings.trimMm, 'fill', false, new Map([[o, [rails]]]));
+    const r = restitch(p, q.objects, [o], s, q.kinds, app.settings.trimMm, 'fill', false, new Map([[o, columns]]));
     app.applyRestitched(r, 'stitch.toSatin.failed', true);
   }
 
