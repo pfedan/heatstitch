@@ -80,7 +80,7 @@ import { FrameTool } from './ui/frameTool';
 import { formOf, reshapeFill, scaleBlocked, transformSewObject } from './model/reshape';
 import { isCovered, overlapsIn, refreshKnockouts, setKnockout, setOverlapShare, wholeArea, wholeOf } from './model/knockout';
 import { transformObject } from './model/transform';
-import { apply, translation, type Form, type Mat } from './shape/path';
+import { apply, type Form, type Mat } from './shape/path';
 import { fontNow, loadCatalog, loadFont, type Catalog } from './lettering/font';
 import { followText, layout, LETTERING_DEFAULTS, type Lettering } from './lettering/layout';
 import { letteringObjects, letteringOf, placeLettering, withoutObjects } from './lettering/place';
@@ -98,6 +98,7 @@ import type { PlanPreview, Sequence } from './app/types';
 import { ui } from './app/state';
 import { bindRungs } from './app/rungs';
 import { bindPointer } from './app/pointer';
+import { bindKeys } from './app/keys';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -3172,209 +3173,111 @@ const { adoptMaterial, storeMaterial } = bindFileIo({
   addDigitized,
 });
 
-/** Keys for the drawing tools (as in common drawing programs, where free of other uses here). */
-const DRAW_KEYS: Record<string, DrawKind> = { m: 'rect', o: 'ellipse', b: 'pen', p: 'free' };
+// Keyboard shortcuts --------------------------------------------------------
 
-window.addEventListener('keydown', (e) => {
-  if ((e.target as HTMLElement).closest('input, select, textarea')) return;
-  const mod = e.ctrlKey || e.metaKey;
-  if (mod && !e.altKey && ['z', 'Z', 'y'].includes(e.key)) {
-    e.preventDefault();
-    history(e.key === 'y' || e.shiftKey ? 'redo' : 'undo');
-    return;
-  }
-  if (mod && !e.altKey && (e.key === 'd' || e.key === 'D') && settings.mode === 'flow' && frameObjects().length === 1) {
-    e.preventDefault();
-    duplicateSelected();
-    return;
-  }
-  if (mod && e.key === 'a' && editor.active) {
-    e.preventDefault();
-    editor.selectAll();
-    return;
-  }
-  if (mod || e.altKey) return;
-  if (e.key === 'Escape' && ui.planPin) return pinPlan(null);
-  if (drawTool.active && settings.mode === 'flow') {
-    if (e.key === 'Escape') {
-      if (drawTool.busy) {
-        drawTool.cancel();
-        redraw();
-      } else setDrawing(null);
-      return;
-    }
-    if (e.key === 'Enter' && drawTool.busy) {
-      e.preventDefault();
-      return drawTool.finish(false);
-    }
-    if ((e.key === 'Delete' || e.key === 'Backspace') && drawTool.removeLast()) {
-      e.preventDefault();
-      return;
-    }
-  }
-  if (settings.mode === 'flow' && !e.shiftKey && e.key in DRAW_KEYS) {
-    const kind = DRAW_KEYS[e.key];
-    return setDrawing(drawTool.kind === kind ? null : kind);
-  }
-  if (shapeTool.active && settings.mode === 'flow') {
-    const step = e.shiftKey ? 0.5 : 0.1;
-    const arrows: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
-    if (e.key in arrows && shapeTool.selected) {
-      e.preventDefault();
-      shapeTool.nudge(...arrows[e.key]);
-      return;
-    }
-    if ((e.key === 'Delete' || e.key === 'Backspace') && shapeTool.deleteSelected()) {
-      e.preventDefault();
-      return;
-    }
-    if (e.key === 'c' && shapeTool.toggleSmooth()) return;
-    if (e.key === 'Escape') {
-      if (shapeTool.selected) {
-        shapeTool.selected = null;
-        redraw();
-      } else closeShape();
-      return;
-    }
-    if (e.key === 'Enter' && ui.shapeObject !== null) return enterObject(ui.shapeObject, false);
-  }
-  if ((e.key === 'Delete' || e.key === 'Backspace') && settings.mode === 'flow' && !drawTool.busy && frameObjects().length) {
-    e.preventDefault();
-    return deleteSelected();
-  }
-  // One object chosen (level Objects): the arrow keys move it, Enter goes into its outline.
-  if (frameTool.active && settings.mode === 'flow' && !(e.target as HTMLElement).closest('button')) {
-    const step = e.shiftKey ? 1 : 0.1;
-    const arrows: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
-    if (e.key in arrows) {
-      e.preventDefault();
-      commitTransform(translation(...arrows[e.key]));
-      return;
-    }
-  }
-  if (ui.lettering && settings.mode === 'flow' && !(e.target as HTMLElement).closest('button')) {
-    if (ui.letterMode) {
-      const step = e.shiftKey ? 1 : 0.1;
-      const arrows: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
-      if (e.key in arrows && ui.letterAt !== null) {
-        e.preventDefault();
-        const o = ui.lettering.l.letters.find((v) => v.at === ui.letterAt);
-        letterMoved(ui.letterAt, o?.dx ?? 0, o?.dy ?? 0, ...arrows[e.key], true);
-        return;
-      }
-      if (e.key === 'Escape') {
-        if (ui.letterAt !== null) {
-          ui.letterAt = null;
-          redraw();
-        } else setLetterMode(false);
-        return;
-      }
-      if (e.key === 'Enter') return;
-    } else if (e.key === 'Enter') return setLetterMode(true);
-    if (e.key === 'e' || e.key === 'r' || e.key === 'g') return;
-  }
-  if (rungTool.active && settings.mode === 'flow') {
-    if ((e.key === 'Delete' || e.key === 'Backspace') && rungTool.deleteSelected()) {
-      e.preventDefault();
-      return;
-    }
-    if (e.key === 'Escape') {
-      if (rungTool.selected) {
-        rungTool.selected = null;
-        redraw();
-      } else closeRungs();
-      return;
-    }
-  }
-  if (editor.active && editor.selection.size) {
-    const step = e.shiftKey ? 5 : 1; // 0.1 mm, with Shift 0.5 mm
-    const arrows: Record<string, [number, number]> = {
-      ArrowLeft: [-step, 0],
-      ArrowRight: [step, 0],
-      ArrowUp: [0, -step],
-      ArrowDown: [0, step],
-    };
-    if (e.key in arrows) {
-      e.preventDefault();
-      editor.nudge(...arrows[e.key]);
-      return;
-    }
-    if (e.key === 'Delete' || e.key === 'Backspace') {
-      e.preventDefault();
-      editor.deleteSelection();
-      return;
-    }
-    if (e.key === 'Escape') {
-      editor.selection.clear();
-      redraw();
-      return;
-    }
-    if (e.key === 'i') {
-      editor.splitSelected();
-      return;
-    }
-  }
-  if (e.key === '1' || e.key === '2' || e.key === '3') {
-    setMode(e.key === '1' ? 'flow' : e.key === '2' ? 'density' : 'image');
-    return;
-  }
-  if (settings.mode === 'image') {
-    if (e.key === 'f') fitView();
-    return;
-  }
-  if (settings.mode === 'flow') {
-    if ((e.target as HTMLElement).closest('button') && (e.key === ' ' || e.key === 'Enter')) return;
-    if (e.key === 'e') {
-      closeRungs();
-      return setEditing(!editor.active);
-    }
-    if (e.key === 'r') return toggleRungs();
-    if (e.key === 'g') return toggleGuides();
-    if (e.key === 't' && !editor.active && !shapeTool.active && !rungTool.active) return void newLettering();
-    if (editor.active) {
-      if (e.key === 'Escape') return setEditing(false);
-      if (e.key === ',' || e.key === '.') {
-        e.preventDefault();
-        const i = editor.step(e.key === '.' ? 1 : -1);
-        if (i >= 0) revealRecord(i);
-        return;
-      }
-    } else if (e.key === 'Enter' && ui.selectedObjects.size === 1) return enterShape([...ui.selectedObjects][0], true);
-    if (e.key === ' ') {
-      e.preventDefault();
-      player.toggle();
-    } else if (e.key === ',' || e.key === '.') player.step((e.key === '.' ? 1 : -1) * (e.shiftKey ? 100 : 1));
-    else if (e.key === 'Home') player.set(0);
-    else if (e.key === 'End') player.set(Number.MAX_SAFE_INTEGER);
-    else if (e.key === 'n') stepJump(1);
-    else if (e.key === 'N') stepJump(-1);
-    else if (e.key === 'ArrowDown' || e.key === 'j') files.step(1);
-    else if (e.key === 'ArrowUp' || e.key === 'k') files.step(-1);
-    else if (e.key === 'f') fitView();
-    else if (e.key === 'Escape') {
-      if (orderCard.isOpen) orderCard.close(true);
-      else if (ui.selectedObjects.size) ui.selectedObjects = new Set();
-      else ui.selectedJump = ui.focusBlock = null;
-      redraw();
-    }
-    return;
-  }
-  if (e.key === 'ArrowDown' || e.key === 'j') files.step(1);
-  else if (e.key === 'ArrowUp' || e.key === 'k') files.step(-1);
-  else if (e.key === 'f') fitView();
-  else if (e.key === 'e') setEditing(!editor.active);
-  else if (e.key === 'c' && FileList.edited(files.active)) setComparing(!ui.comparing);
-  else if (e.key === 'n') stepZone(1);
-  else if (e.key === 'N') stepZone(-1);
-  else if (e.key === 'v') {
-    settings.showValidation = !settings.showValidation;
-    saveSettings(settings);
-    controls.refresh();
-    redraw();
-  } else if (e.key === 'Escape' && ui.selectedZone) {
-    ui.selectedZone = null;
-    redraw();
-  } else if (e.key === 'Escape' && editor.active) setEditing(false);
+bindKeys({
+  get closeRungs() {
+    return closeRungs;
+  },
+  get closeShape() {
+    return closeShape;
+  },
+  get commitTransform() {
+    return commitTransform;
+  },
+  get controls() {
+    return controls;
+  },
+  get deleteSelected() {
+    return deleteSelected;
+  },
+  get drawTool() {
+    return drawTool;
+  },
+  get duplicateSelected() {
+    return duplicateSelected;
+  },
+  get editor() {
+    return editor;
+  },
+  get enterObject() {
+    return enterObject;
+  },
+  get enterShape() {
+    return enterShape;
+  },
+  get files() {
+    return files;
+  },
+  get fitView() {
+    return fitView;
+  },
+  get frameObjects() {
+    return frameObjects;
+  },
+  get frameTool() {
+    return frameTool;
+  },
+  get history() {
+    return history;
+  },
+  get letterMoved() {
+    return letterMoved;
+  },
+  get newLettering() {
+    return newLettering;
+  },
+  get orderCard() {
+    return orderCard;
+  },
+  get pinPlan() {
+    return pinPlan;
+  },
+  get player() {
+    return player;
+  },
+  get redraw() {
+    return redraw;
+  },
+  get revealRecord() {
+    return revealRecord;
+  },
+  get rungTool() {
+    return rungTool;
+  },
+  get setComparing() {
+    return setComparing;
+  },
+  get setDrawing() {
+    return setDrawing;
+  },
+  get setEditing() {
+    return setEditing;
+  },
+  get setLetterMode() {
+    return setLetterMode;
+  },
+  get setMode() {
+    return setMode;
+  },
+  get settings() {
+    return settings;
+  },
+  get shapeTool() {
+    return shapeTool;
+  },
+  get stepJump() {
+    return stepJump;
+  },
+  get stepZone() {
+    return stepZone;
+  },
+  get toggleGuides() {
+    return toggleGuides;
+  },
+  get toggleRungs() {
+    return toggleRungs;
+  },
 });
 
 // Zoom, pan, pinch, tooltip ---------------------------------------------------
