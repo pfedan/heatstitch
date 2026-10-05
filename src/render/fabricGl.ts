@@ -227,6 +227,8 @@ vec3 shadeAt(Surf s, vec3 N, vec3 base, vec3 L) {
   float shade = (0.35 + 0.8 * max(dot(N, L), 0.0)) / flatShade;
   // Gaps between yarns and under crossings get less light.
   float ao = mix(0.5, 1.08, smoothstep(-0.2, 0.75, s.h));
+  // Yarns of a pixel or two: the deep gaps would only read as grain, so they are shallower.
+  if (u_ss != 1) ao = mix(1.0, ao, 0.55);
   vec3 lit = base * shade * ao * (1.0 + 0.08 * s.tint);
   vec3 H = normalize(L + vec3(0.0, 0.0, 1.0));
   if (s.fiber != vec2(0.0)) {
