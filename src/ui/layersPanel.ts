@@ -22,6 +22,8 @@ export interface LayerHooks {
    * block (they are sewn as part of it), otherwise they keep their own.
    */
   move: (order: number[], moved: number[], into: number | null) => void;
+  /** The menu of object actions for object `o`, at the page position (right click, long press). */
+  menu: (o: number, x: number, y: number) => void;
 }
 
 /** A message under the list: what happened, as a warning or not, and an action that goes with it. */
@@ -45,6 +47,9 @@ export interface LayerState {
   /** Names of objects that have one of their own (letterings). */
   names?: ReadonlyMap<number, string>;
 }
+
+/** How long a finger rests on a row to open its menu (ms). */
+export const LONG_PRESS_MS = 500;
 
 const KIND_KEY: Record<ObjectKind, Key> = { fill: 'object.fill', satin: 'object.satin', run: 'object.run' };
 
@@ -270,8 +275,11 @@ export class LayersPanel {
     meta.textContent = formatNumber(o.stitches);
     li.title = t('object.rowHint');
     li.append(icon, name, meta);
+    // After a long press the finger lifted is no click (it would leave only this object selected).
+    let held = false;
     li.addEventListener('click', (e) => {
       e.stopPropagation();
+      if (held) return void (held = false);
       this.hooks.select([o.index], e.shiftKey || e.ctrlKey || e.metaKey);
     });
     li.addEventListener('mouseenter', () => {
@@ -284,6 +292,33 @@ export class LayersPanel {
       this.dragStart(e, { objects: objs, block: null }, li);
     });
     li.addEventListener('dragend', () => this.dragEnd());
+    li.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      this.hooks.menu(o.index, e.clientX, e.clientY);
+    });
+    // A long press on a touch screen, where no context menu comes (as on iOS).
+    let press = 0;
+    let at: [number, number] = [0, 0];
+    const stop = () => {
+      clearTimeout(press);
+      press = 0;
+    };
+    li.addEventListener('pointerdown', (e) => {
+      if (e.pointerType !== 'touch') return;
+      at = [e.clientX, e.clientY];
+      held = false;
+      stop();
+      press = window.setTimeout(() => {
+        press = 0;
+        held = true;
+        this.hooks.menu(o.index, at[0], at[1]);
+      }, LONG_PRESS_MS);
+    });
+    li.addEventListener('pointermove', (e) => {
+      if (press && Math.hypot(e.clientX - at[0], e.clientY - at[1]) > 8) stop();
+    });
+    li.addEventListener('pointerup', stop);
+    li.addEventListener('pointercancel', stop);
     return li;
   }
 
