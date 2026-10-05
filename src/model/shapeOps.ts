@@ -2,14 +2,14 @@ import { knockOut, unionOf } from '../shape/rasterize';
 import { translation, type Form, type Mat } from '../shape/path';
 import { vectorize } from '../shape/vectorize';
 import { takeOver, wholeArea } from './knockout';
-import { rememberObjects, sewObjects } from './objects';
+import { rememberObjects, sewObjects, type SewObject } from './objects';
 import { insertObject } from './addShape';
 import { syncBorders } from './border';
 import { recs } from './jumps';
 import { reorder } from './order';
 import { recolor, sameColor } from './recolor';
 import { STITCH, type Pattern, type ThreadColor } from './pattern';
-import { objectKey, remembered, rememberedIn, restoreRemembered } from './restitch';
+import { objectKey, remember, remembered, rememberedIn, restoreRemembered, type Remembered } from './restitch';
 import { formOf, reshapeFill, transformSewObject } from './reshape';
 import { stitchKinds } from './sequence';
 
@@ -21,8 +21,36 @@ import { stitchKinds } from './sequence';
 /** Where a copy lands, beside the original (mm). */
 export const DUPLICATE_OFFSET_MM = 2;
 
-/** The pattern without the objects `which`; null when nothing would be left. */
+/**
+ * The pattern without the objects `which`; null when nothing would be left. A fill's border in a
+ * thread of its own goes with it; a border deleted alone leaves its fill without a border.
+ */
 export function deleteObjects(p: Pattern, which: number[], trimMm: number): Pattern | null {
+  const objs = sewObjects(p);
+  const mem = objs.map((o) => remembered(p, o));
+  const gone = new Set(which.filter((o) => objs[o]));
+  for (const o of [...gone]) {
+    const link = ownBorder(mem[o]);
+    const border = link ? mem.findIndex((m) => m?.outline === link) : -1;
+    if (border >= 0) gone.add(border);
+  }
+  // Fills that stay while their border goes: they have none any more.
+  const bare = objs.filter((o) => !gone.has(o.index) && [...gone].some((g) => mem[g]?.outline && mem[g]!.outline === ownBorder(mem[o.index])));
+  const next = removeObjects(p, [...gone], trimMm);
+  if (!next) return null;
+  for (const o of bare) {
+    const m = mem[o.index]!;
+    const at = sewObjects(next).find((x) => objectKey(next, x) === objectKey(p, o));
+    if (at) remember(next, at, { ...m, fill: { ...m.fill!, border: undefined } });
+  }
+  return next;
+}
+
+/** The link of a fill's border in a thread of its own, if it has one. */
+const ownBorder = (m: Remembered | undefined): string | undefined => (m?.fill?.border?.color ? m.fill.border.link : undefined);
+
+/** The pattern without the objects `which`, nothing else changed; null when nothing would be left. */
+function removeObjects(p: Pattern, which: number[], trimMm: number): Pattern | null {
   const objs = sewObjects(p);
   const gone = new Set(which);
   const order = objs.map((o) => o.index).filter((i) => !gone.has(i));
@@ -89,12 +117,15 @@ export function subtractTop(p: Pattern, which: number[], trimMm: number): Subtra
   let cur = p;
   let kinds = stitchKinds(cur);
   let objs = sewObjects(cur, kinds);
+  // A fill's border in its own thread belongs to its fill: it neither cuts nor is cut.
+  const isBorder = (o: number) => !!objs[o] && !!remembered(cur, objs[o])?.outline;
+  if (isBorder(top)) return null;
   const cutter = formOf(cur, objs[top], kinds);
   const hole = cutter && wholeArea(cutter);
   if (!hole) return null;
   const gone = [top];
   const cut: number[] = [];
-  for (const o of sorted) {
+  for (const o of sorted.filter((x) => !isBorder(x))) {
     const obj = objs[o];
     const form = obj && formOf(cur, obj, kinds);
     const whole = form && wholeArea(form);
@@ -134,6 +165,22 @@ export function recolorObjects(p: Pattern, which: number[], color: ThreadColor, 
   const objs = sewObjects(p);
   const sel = [...new Set(which)].filter((o) => objs[o] && !sameColor(objs[o].color, color)).sort((a, b) => a - b);
   if (!sel.length) return null;
+  const next = recolorStitches(p, objs, sel, color, trimMm);
+  if (!next) return null;
+  // A border in a thread of its own takes the new thread: its fill's border is sewn in it from now on.
+  const mem = objs.map((o) => remembered(p, o));
+  for (const o of sel) {
+    const link = mem[o]?.outline;
+    const f = link ? mem.findIndex((m) => ownBorder(m) === link) : -1;
+    if (f < 0) continue;
+    const m = mem[f]!;
+    const at = sewObjects(next).find((x) => objectKey(next, x) === objectKey(p, objs[f]));
+    if (at) remember(next, at, { ...m, fill: { ...m.fill!, border: { ...m.fill!.border!, color: { ...color } } } });
+  }
+  return next;
+}
+
+function recolorStitches(p: Pattern, objs: SewObject[], sel: number[], color: ThreadColor, trimMm: number): Pattern | null {
   const blocks = new Set(sel.map((o) => objs[o].block));
   // Whole color blocks: their thread changes, nothing moves (unless a neighbour has that thread:
   // then they are sewn along in it).
@@ -151,7 +198,7 @@ export function recolorObjects(p: Pattern, which: number[], color: ThreadColor, 
     if (!obj) return null;
     const records = recs(cur, obj.first, obj.last + 1);
     const known = rememberedIn(cur, [obj]).find((m) => m.join === undefined);
-    const without = deleteObjects(cur, [o], trimMm);
+    const without = removeObjects(cur, [o], trimMm);
     if (!without) return null;
     const r = insertObject(without, records, color, o - 1, trimMm);
     if (!r) return null;
