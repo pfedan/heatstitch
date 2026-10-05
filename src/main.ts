@@ -29,7 +29,7 @@ import { initUpdateNotice } from './ui/updateNotice';
 import { toStored } from './storage/fileStore';
 import { downloadPattern, outputFileName, writePattern } from './writers';
 import { parsePattern } from './parsers';
-import { ImageMode } from './ui/imageMode';
+import { digitizeSvg, ImageMode } from './ui/imageMode';
 import { lightFromPointer, lightFromTilt, sweep } from './render/light';
 import { classify } from './validation/validate';
 import { setTrims } from './model/jumps';
@@ -69,7 +69,7 @@ import { FrameTool } from './ui/frameTool';
 import { formOf, reshapeFill, scaleBlocked, transformSewObject } from './model/reshape';
 import { transformObject } from './model/transform';
 import { translation, type Form, type Mat } from './shape/path';
-import { digitizeDefaults, isStroke, SATIN_MAX } from './digitize/digitize';
+import { digitizeDefaults, isStroke, SATIN_MAX, type Digitized } from './digitize/digitize';
 import { recommendedSpacing } from './validation/profiles';
 import { numberInColor, overlaps, rememberObjects, sewObjects, splitObject, type SewObject } from './model/objects';
 import { conflicts, moveStats, optimizePlan, reorder, violations, weigh } from './model/order';
@@ -1832,17 +1832,23 @@ const imageMode = new ImageMode({
   },
   validate: async (p) => classify(await validator.measure(p), settings.profile, settings.checks),
   takeOver: async (d, name) => {
-    // The objects as the Image mode sewed them (it trims inside some, between pieces of a fill),
-    // with the exact areas of its fills.
-    const data = writePattern(d.pattern, 'pes');
-    const added = parsePattern(data, `${name}.pes`);
-    rememberObjects(added, d.starts);
-    const objs = sewObjects(added);
-    rememberShapes(added, objs, d.starts, d.objects.map((o) => o.shape));
-    await files.addWithObjects(`${name}.pes`, data.slice().buffer, rememberedIn(added, objs));
+    await addDigitized(d, name);
     setMode('flow');
   },
 });
+
+/**
+ * Adds stitches made from an image to the file list, with the objects as the Image mode sewed them
+ * (it trims inside some, between pieces of a fill) and the exact areas of its fills.
+ */
+async function addDigitized(d: Digitized, name: string): Promise<void> {
+  const data = writePattern(d.pattern, 'pes');
+  const added = parsePattern(data, `${name}.pes`);
+  rememberObjects(added, d.starts);
+  const objs = sewObjects(added);
+  rememberShapes(added, objs, d.starts, d.objects.map((o) => o.shape));
+  await files.addWithObjects(`${name}.pes`, data.slice().buffer, rememberedIn(added, objs));
+}
 
 // Living thread: the light of the realistic view follows the pointer or the tilt of a phone -------
 
@@ -2046,12 +2052,27 @@ exampleSelect.addEventListener('change', async () => {
   const path = exampleSelect.value;
   exampleSelect.value = '';
   if (!path) return;
+  const name = path.split('/').pop()!;
+  const svg = name.endsWith('.svg');
+  // An SVG example is sewn first, which takes a moment: the list says so meanwhile.
+  const label = exampleSelect.options[0];
+  if (svg) {
+    exampleSelect.disabled = true;
+    label.textContent = t('files.example.loading');
+  }
   try {
     const res = await fetch(`${import.meta.env.BASE_URL}${path}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    await files.add([new File([await res.blob()], path.split('/').pop()!)]);
+    const file = new File([await res.blob()], name, svg ? { type: 'image/svg+xml' } : undefined);
+    if (svg) {
+      const d = await digitizeSvg(file, settings.image.prepare, digitizeDefaults(settings.profile));
+      await addDigitized(d, name.replace(/\.svg$/, ''));
+    } else await files.add([file]);
   } catch (err) {
     console.error('Loading the example failed', err);
+  } finally {
+    exampleSelect.disabled = false;
+    label.textContent = t('files.example');
   }
 });
 

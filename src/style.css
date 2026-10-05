@@ -1515,6 +1515,13 @@ body[data-mode='image'] .stage.painting canvas#canvas {
   color: #c23a3a;
 }
 
+/* What can be done with the open image: save it as a project or take it out. */
+.image-actions {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 16px;
+}
+
 .ai-prep {
   margin-top: 4px;
 }

@@ -107,9 +107,15 @@
           </p>
           <select id="load-example" class="example-select" data-i18n-aria="files.example">
             <option value="" data-i18n="files.example" selected hidden></option>
-            <option value="examples/cat-60mm.pes" data-i18n="files.example.cat"></option>
-            <option value="examples/demos/overlap.pes" data-i18n="files.example.overlap"></option>
-            <option value="examples/demos/confetti.pes" data-i18n="files.example.confetti"></option>
+            <optgroup data-i18n-label="files.example.stitches">
+              <option value="examples/cat-60mm.pes" data-i18n="files.example.cat"></option>
+              <option value="examples/demos/overlap.pes" data-i18n="files.example.overlap"></option>
+              <option value="examples/demos/confetti.pes" data-i18n="files.example.confetti"></option>
+            </optgroup>
+            <optgroup data-i18n-label="files.example.svg">
+              <option value="examples/svg/overlapping-circles.svg" data-i18n="files.example.overlapSvg"></option>
+              <option value="examples/svg/shapes-benchmark.svg" data-i18n="files.example.benchmark"></option>
+            </optgroup>
           </select>
           <ul id="file-list" class="file-list"></ul>
           <div class="file-actions" id="file-actions" hidden>
@@ -136,7 +142,10 @@
           </p>
           <button type="button" id="image-example" class="link" data-i18n="image.example"></button>
           <p class="muted small" id="image-info"></p>
-          <button type="button" id="image-save-project" class="link" data-i18n="image.saveProject" data-i18n-title="save.project.hint" hidden></button>
+          <div class="image-actions">
+            <button type="button" id="image-save-project" class="link" data-i18n="image.saveProject" data-i18n-title="save.project.hint" hidden></button>
+            <button type="button" id="image-clear" class="link" data-i18n="image.clear" data-i18n-title="image.clear.hint" hidden></button>
+          </div>
           <details class="ai-prep" data-section="aiPrep">
             <summary data-i18n="image.ai.title"></summary>
             <p class="small" data-i18n="image.ai.intro"></p>
