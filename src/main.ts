@@ -60,7 +60,7 @@ import { stitchAlpha, stitchAt, stitchColors, transitionAt, type StitchStyle } f
 import type { FlowScene, ShapeOutline } from './render/scene';
 import type { Mode } from './settings';
 import { JumpsPanel } from './ui/jumpsPanel';
-import { blockName, kindLabel, LayersPanel } from './ui/layersPanel';
+import { blockName, kindLabel, LayersPanel, LONG_PRESS_MS } from './ui/layersPanel';
 import { ObjectMenu } from './ui/objectMenu';
 import { ObjectPanel, OrderCard } from './ui/objectPanel';
 import { StitchPanel, type Highlight, type StitchInfo } from './ui/stitchPanel';
@@ -550,6 +550,7 @@ const layers = new LayersPanel({
     redraw();
   },
   move: (order, moved, into) => moveObjects(order, moved, into),
+  menu: (o, x, y) => void showObjectMenu(o, x, y),
 });
 
 /** Name of an object as the list shows it: kind and number within its color. */
@@ -4101,7 +4102,6 @@ canvas.addEventListener('pointerleave', () => {
 });
 // The object actions at the pointer: right click, or a long press on a touch screen.
 const objectMenu = new ObjectMenu();
-const LONG_PRESS_MS = 500;
 let longPress: { timer: number; at: [number, number] } | null = null;
 
 function cancelLongPress(): void {
@@ -4117,7 +4117,13 @@ function openObjectMenu(pos: [number, number], clientX: number, clientY: number)
   const [x, y] = vp.toWorld(pos[0], pos[1]);
   const i = stitchAt(p, x * 10, y * 10, Math.max(3, 60 / vp.scale), st.limit, st.alpha);
   const o = i >= 0 ? seq(p).objectAt[i] : -1;
-  if (o < 0) return false;
+  return o >= 0 && showObjectMenu(o, clientX, clientY);
+}
+
+/** Opens the menu for object `o` (on the canvas or in the list), selecting it first unless it is selected. */
+function showObjectMenu(o: number, clientX: number, clientY: number): boolean {
+  const p = files.active?.pattern;
+  if (!p || settings.mode !== 'flow' || editor.active || shapeTool.active || rungTool.active || drawTool.active || orderCard.isOpen || letterMode) return false;
   // On a selected object the menu is for the whole selection, on another one for that one.
   if (!selectedObjects.has(o)) selectObjects([o], false);
   redraw();
