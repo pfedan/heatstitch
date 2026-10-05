@@ -22,7 +22,7 @@ import { acknowledgementOf, settledBy, type Acknowledgement } from './validation
 import type { ValidationResult, Zone } from './validation/validate';
 import { POINTS_MIN_SCALE } from './render/editOverlay';
 import { drawDivider } from './render/compare';
-import type { Pattern } from './model/pattern';
+import { STITCH, type Pattern } from './model/pattern';
 import type { Measurement } from './validation/measure';
 import { initUpdateNotice } from './ui/updateNotice';
 import { bindFileIo } from './app/fileIo';
@@ -778,6 +778,7 @@ function redraw(): void {
           focus: ui.focusBlock,
           current,
           original: active?.original?.colors ?? NO_COLORS,
+          blank: !!p && !q!.objects.length,
           format: active?.pattern?.format ?? 'pes',
           names: p && q ? letteringNames(p, q) : undefined,
         },
@@ -906,6 +907,8 @@ function fitView(f: LoadedFile | null = files.active): void {
   // With a hoop chosen, fit shows the whole sewing field so the room left is visible.
   const m = f?.material.hoop ? hoopRect(b, f.material.hoop) : null;
   if (m) vp.fit(Math.min(m.x, b.minX / 10), Math.min(m.y, b.minY / 10), Math.max(m.x + m.w, b.maxX / 10), Math.max(m.y + m.h, b.maxY / 10), ui.stageW, ui.stageH, 56);
+  // A new, empty design without a hoop: 10 x 10 cm to draw into, not a point blown up.
+  else if (!f!.pattern!.cmd.includes(STITCH)) vp.fit(-50, -50, 50, 50, ui.stageW, ui.stageH);
   else vp.fit(b.minX / 10, b.minY / 10, b.maxX / 10, b.maxY / 10, ui.stageW, ui.stageH);
   redraw();
 }
