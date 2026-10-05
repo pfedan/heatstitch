@@ -11,6 +11,7 @@ import {
   saveAcks,
   saveActiveKey,
   saveAside,
+  saveMaterial,
   saveObjects,
   saveWorking,
   toStored,
@@ -20,12 +21,11 @@ import { restoreRemembered, type StoredObject } from '../model/restitch';
 import { asideFrom, asideOf, inheritAside, setAsideOf, storeAside, type StoredAside } from '../model/aside';
 import type { ProjectFile } from '../storage/project';
 import { liveAcknowledgements, openWorst, type Acknowledgement } from '../validation/acks';
-import type { Profile } from '../validation/profiles';
+import { normalizeMaterial, type Material } from '../settings';
 import {
   CAUTION,
   classify,
   CRITICAL,
-  type Checks,
   type Measurement,
   type ValidationResult,
 } from '../validation/validate';
@@ -54,6 +54,8 @@ export interface LoadedFile {
   storeKey?: number;
   /** Findings the user (or the correction) accepted as they are. */
   acks: Acknowledgement[];
+  /** This design's fabric, thread, hoop, fabric color and checks. */
+  material: Material;
 }
 
 interface FileData {
@@ -64,6 +66,8 @@ interface FileData {
   acks?: Acknowledgement[];
   objects?: StoredObject[];
   aside?: StoredAside[];
+  /** Unchecked; missing parts come from the material last used. */
+  material?: unknown;
 }
 
 /** Versions kept per file for undo. */
@@ -80,18 +84,17 @@ export class FileList {
     /** Measures a newly parsed file (in a worker). */
     private measure: (p: Pattern) => Promise<Measurement>,
     private onValidated: (f: LoadedFile) => void,
-    private profile: Profile,
-    private checks: Checks,
+    /** The material a new design starts with: the one used last. */
+    private defaults: () => Material,
   ) {}
 
-  /** Re-classifies every measured file for a new profile or set of checks. */
-  setProfile(profile: Profile, checks: Checks): void {
-    this.profile = profile;
-    this.checks = checks;
-    for (const f of this.files) {
-      if (f.measurement) f.validation = classify(f.measurement, profile, checks);
-      if (f.originalMeasurement) f.originalValidation = classify(f.originalMeasurement, profile, checks);
-    }
+  /** Gives a design another material, re-classifies it for the new fabric, thread and checks and stores it. */
+  setMaterial(f: LoadedFile, m: Material): void {
+    f.material = structuredClone(m);
+    const { profile, checks } = f.material;
+    if (f.measurement) f.validation = classify(f.measurement, profile, checks);
+    if (f.originalMeasurement) f.originalValidation = classify(f.originalMeasurement, profile, checks);
+    if (f.storeKey !== undefined) void saveMaterial(f.storeKey, f.material);
     this.render();
   }
 
@@ -123,7 +126,7 @@ export class FileList {
     const stored = await listFiles();
     if (!stored.length) return;
     const first = await this.addData(
-      stored.map((rec) => ({ name: rec.name, data: rec.data, storeKey: rec.key, working: rec.working, acks: acksOf(rec), objects: rec.objects, aside: rec.aside })),
+      stored.map((rec) => ({ name: rec.name, data: rec.data, storeKey: rec.key, working: rec.working, acks: acksOf(rec), objects: rec.objects, aside: rec.aside, material: rec.material })),
       false,
     );
     // Files the user added while we were reading storage keep the focus.
@@ -141,7 +144,7 @@ export class FileList {
   async addProject(list: ProjectFile[], active: number | null): Promise<void> {
     const before = this.files.length;
     const first = await this.addData(
-      list.map((f) => ({ name: f.name, data: f.data.slice().buffer, working: f.working, acks: f.acks, objects: f.objects, aside: f.aside })),
+      list.map((f) => ({ name: f.name, data: f.data.slice().buffer, working: f.working, acks: f.acks, objects: f.objects, aside: f.aside, material: f.material })),
       true,
     );
     const wanted = active !== null ? this.files[before + active] : undefined;
@@ -152,7 +155,7 @@ export class FileList {
 
   /** Shows a file that could not be opened, with the reason. */
   addError(name: string, error: string): void {
-    this.files.push({ id: this.nextId++, fileName: name, undo: [], redo: [], acks: [], error });
+    this.files.push({ id: this.nextId++, fileName: name, undo: [], redo: [], acks: [], error, material: this.defaults() });
     this.render();
   }
 
@@ -163,8 +166,19 @@ export class FileList {
 
   private async addData(list: FileData[], persist: boolean): Promise<LoadedFile | null> {
     let first: LoadedFile | null = null;
-    for (const { name, data, storeKey, working, acks, objects, aside } of list) {
-      const entry: LoadedFile = { id: this.nextId++, fileName: name, data: new Uint8Array(data), storeKey, undo: [], redo: [], acks: acks ?? [] };
+    for (const { name, data, storeKey, working, acks, objects, aside, material } of list) {
+      const entry: LoadedFile = {
+        id: this.nextId++,
+        fileName: name,
+        data: new Uint8Array(data),
+        storeKey,
+        undo: [],
+        redo: [],
+        acks: acks ?? [],
+        material: normalizeMaterial(material, this.defaults()),
+      };
+      // Stored before materials were kept per design: it keeps the one it was last seen with.
+      if (storeKey !== undefined && !material) void saveMaterial(storeKey, entry.material);
       // Remembered by their stitches, so they apply to whichever version has these objects.
       if (objects) restoreRemembered(objects);
       try {
@@ -196,6 +210,7 @@ export class FileList {
             if (entry.acks.length) void saveAcks(key, entry.acks);
             if (objects?.length) void saveObjects(key, objects);
             if (aside?.length) void saveAside(key, aside);
+            void saveMaterial(key, entry.material);
           }
         }
       } catch (err) {
@@ -235,7 +250,7 @@ export class FileList {
     }
     if (!this.files.includes(f) || f.original !== p) return;
     f.originalMeasurement = m;
-    f.originalValidation = classify(m, this.profile, this.checks);
+    f.originalValidation = classify(m, f.material.profile, f.material.checks);
     this.render();
     this.onValidated(f);
   }
@@ -288,7 +303,7 @@ export class FileList {
   /** Sets the measurement of `p`, the file's current pattern; the original's is kept for comparing. */
   private store(f: LoadedFile, p: Pattern, m: Measurement): void {
     f.measurement = m;
-    f.validation = classify(m, this.profile, this.checks);
+    f.validation = classify(m, f.material.profile, f.material.checks);
     // Acknowledgements of zones an edit removed would otherwise match a new zone there later.
     const live = liveAcknowledgements(f.validation.zones, f.acks);
     if (live.length !== f.acks.length) {

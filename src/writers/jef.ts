@@ -1,5 +1,6 @@
 import { COLOR_CHANGE, END, JUMP, STITCH, TRIM, type Pattern } from '../model/pattern';
 import { jefIndexOf } from '../parsers/jefPalette';
+import type { Hoop } from '../model/hoop';
 import { ByteWriter, extents, splitMove } from './bytes';
 
 /** Largest move per JEF record and axis (signed byte). */
@@ -19,6 +20,19 @@ export function jefHoop(width: number, height: number): number {
   if (width < 1400 && height < 2000) return HOOP_140X200;
   if (width < 2000 && height < 2000) return HOOP_200X200;
   return HOOP_110X110;
+}
+
+/** Janome code of a chosen sewing field (mm), or null when Janome has no such hoop. */
+export function jefHoopCode(hoop: Hoop): number | null {
+  const codes: Record<string, number> = {
+    '50x50': HOOP_50X50,
+    '100x100': HOOP_110X110,
+    '110x110': HOOP_110X110,
+    '126x110': HOOP_126X110,
+    '140x200': HOOP_140X200,
+    '200x200': HOOP_200X200,
+  };
+  return codes[`${hoop.w}x${hoop.h}`] ?? null;
 }
 
 /** Janome palette slot per color block; neighbors that would land on the same slot get the next nearest. */
@@ -44,7 +58,7 @@ const stamp = (d: Date) =>
  * longer than 3 mm, so a TRIM is not written. Long stitches are split into equal stitches, since
  * long jumps would read as cuts; after a cut the way to the next stitch is jumps. Colors are rounded to the Janome palette.
  */
-export function writeJef(p: Pattern, date = new Date()): Uint8Array {
+export function writeJef(p: Pattern, date = new Date(), hoop: Hoop | null = null): Uint8Array {
   const recs = new ByteWriter();
   let points = 1; // the end command
   let blocks = 1;
@@ -93,15 +107,12 @@ export function writeJef(p: Pattern, date = new Date()): Uint8Array {
   out.u8(0);
   out.u32(blocks);
   out.u32(points);
-  out.u32(jefHoop(b.maxX - b.minX, b.maxY - b.minY));
+  out.u32((hoop && jefHoopCode(hoop)) ?? jefHoop(b.maxX - b.minX, b.maxY - b.minY));
   for (const v of [halfW, halfH, halfW, halfH]) out.u32(v);
   // Distance to the edges of the 110 x 110, 50 x 50, 140 x 200 and custom hoops (-1 when it does not fit).
-  for (const [hw, hh] of [
-    [550, 550],
-    [250, 250],
-    [700, 1000],
-    [700, 1000],
-  ]) {
+  // The custom slot holds the chosen sewing field.
+  const custom = hoop ? [hoop.w * 5, hoop.h * 5] : [700, 1000];
+  for (const [hw, hh] of [[550, 550], [250, 250], [700, 1000], custom]) {
     const ex = hw - halfW;
     const ey = hh - halfH;
     for (const v of Math.min(ex, ey) >= 0 ? [ex, ey, ex, ey] : [-1, -1, -1, -1]) out.u32(v);
