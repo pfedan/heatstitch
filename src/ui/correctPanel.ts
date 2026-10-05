@@ -67,6 +67,8 @@ export interface PlanRow {
   reasons: Reason[];
   hand: number;
   checked: boolean;
+  /** Held on the canvas for comparing (its name was clicked). */
+  pinned?: boolean;
 }
 
 export interface PlanView {
@@ -365,13 +367,14 @@ export class CorrectPanel {
 
   private planRow(r: PlanRow): HTMLElement {
     const li = document.createElement('li');
-    li.className = `plan-row ${r.visibility}`;
+    li.className = `plan-row ${r.visibility}${r.pinned ? ' pinned' : ''}`;
     const top = document.createElement('div');
     top.className = 'plan-top';
     const l = Object.assign(document.createElement('label'), { className: 'check' });
     const i = Object.assign(document.createElement('input'), { type: 'checkbox', checked: r.checked });
     i.addEventListener('change', () => this.hooks.check(r.ids, i.checked));
     const name = Object.assign(document.createElement('button'), { type: 'button', className: 'link plan-name', title: t('plan.show') });
+    name.setAttribute('aria-pressed', String(!!r.pinned));
     const sw = Object.assign(document.createElement('span'), { className: 'swatch' });
     sw.style.background = r.color;
     const icon = Object.assign(document.createElement('span'), { className: `kind-icon kind-${r.kind}`, innerHTML: KIND_ICON[r.kind] });

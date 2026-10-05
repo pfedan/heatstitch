@@ -67,8 +67,9 @@ export function drawBeforeAfter(
   after: Scene,
   background: string,
   labels: [string, string],
+  at = 0.5,
 ): void {
-  const mid = Math.round((r.x0 + r.x1) / 2);
+  const mid = Math.round(r.x0 + (r.x1 - r.x0) * at);
   for (const [scene, a, b] of [
     [before, r.x0, mid],
     [after, mid, r.x1],

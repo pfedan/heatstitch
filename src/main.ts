@@ -2854,7 +2854,7 @@ function planMessage(): void {
   if (!st) return;
   st.view = {
     ...st.view,
-    rows: st.view.rows.map((r) => ({ ...r, checked: r.ids.every((id) => st.checked.has(id)) })),
+    rows: st.view.rows.map((r) => ({ ...r, checked: r.ids.every((id) => st.checked.has(id)), pinned: !!planPin && r.ids.join() === planPin.join() })),
     fineChecked: st.fineOn,
   };
   correctMessage = { kind: 'plan', plan: st.view };
@@ -3000,8 +3000,35 @@ interface PlanPreview {
 }
 /** Previews of the proposals by their ids, for the plan they belong to. */
 let planPreviews: { plan: Plan; byIds: Map<string, PlanPreview | null> } | null = null;
-/** The preview shown on the canvas now (the pointer is on its row). */
+/** The preview shown on the canvas now (the pointer is on its row, or it is held). */
 let planPreview: PlanPreview | null = null;
+/** The proposals held for comparing (their name was clicked): shown while the pointer is elsewhere. */
+let planPin: number[] | null = null;
+/** Where the line between before and after lies in the object's frame (0 left, 1 right). */
+let planSplit = 0.5;
+/** The frame of the comparison on the screen as last drawn, and whether its line is being dragged. */
+let planFrame: { x0: number; y0: number; x1: number; y1: number } | null = null;
+let planDrag = false;
+
+/** Holds the proposals `ids` for comparing, or lets go (null). */
+function pinPlan(ids: number[] | null): void {
+  planPin = ids;
+  planSplit = 0.5;
+  planHover = ids && proposalsBox(ids);
+  showPlanPreview(ids);
+  planMessage();
+  redraw();
+}
+
+/** Inside the frame of the comparison on the screen. */
+const inPlanFrame = (sx: number, sy: number) => !!planFrame && sx >= planFrame.x0 && sx <= planFrame.x1 && sy >= planFrame.y0 && sy <= planFrame.y1;
+
+/** The line between before and after follows `sx` (kept a little inside the frame). */
+function movePlanSplit(sx: number): void {
+  if (!planFrame) return;
+  planSplit = Math.min(0.97, Math.max(0.03, (sx - planFrame.x0) / Math.max(1, planFrame.x1 - planFrame.x0)));
+  redraw();
+}
 
 /**
  * Shows the proposals `ids` taken over on the canvas, without changing anything: the stitches at
@@ -3062,6 +3089,7 @@ const LOUPE_TOP = 56;
 function drawPlanCompare(): void {
   const pv = planPreview;
   const b = planHover;
+  planFrame = null;
   if (!pv || !b || settings.mode !== 'density' || planState?.file !== files.active) return;
   const pad = 1.5; // mm, as the frame of a zone
   const box = { minX: b.minX - pad, minY: b.minY - pad, maxX: b.maxX + pad, maxY: b.maxY + pad };
@@ -3070,7 +3098,8 @@ function drawPlanCompare(): void {
   const labels: [string, string] = [t('plan.before'), t('plan.after')];
   const [x0, y0] = vp.toScreen(box.minX, box.minY);
   const [x1, y1] = vp.toScreen(box.maxX, box.maxY);
-  drawBeforeAfter(ctx, stageW, stageH, { x0, y0, x1, y1 }, before, after, stageBg(), labels);
+  drawBeforeAfter(ctx, stageW, stageH, { x0, y0, x1, y1 }, before, after, stageBg(), labels, planSplit);
+  planFrame = { x0, y0, x1, y1 };
   if (Math.min(x1 - x0, y1 - y0) >= SIDE_BELOW) return;
   // Small: before and after side by side, each whole and enlarged, at the top left (or the top
   // right when the object lies there): the difference at a glance.
@@ -3187,17 +3216,21 @@ const correctPanel = new CorrectPanel(settings, {
     redraw();
   },
   hoverProposal: (ids) => {
-    planHover = ids && proposalsBox(ids);
-    showPlanPreview(ids);
+    // Away from the list, the held proposal comes back.
+    const show = ids ?? planPin;
+    if (ids && planPin?.join() !== ids.join()) planSplit = 0.5;
+    planHover = show && proposalsBox(show);
+    showPlanPreview(show);
     redraw();
   },
   showProposal: (ids) => {
+    // A second click lets go; otherwise it is held and the view goes to it.
+    if (planPin?.join() === ids.join()) return pinPlan(null);
     const b = proposalsBox(ids);
     if (!b) return;
     const pad = 4;
-    planHover = b;
     vp.fit(b.minX - pad, b.minY - pad, b.maxX + pad, b.maxY + pad, stageW, stageH);
-    redraw();
+    pinPlan(ids);
   },
   toggleCompare: () => setComparing(!comparing),
   deleteSelection: () => editor.deleteSelection(),
@@ -3565,6 +3598,7 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   if (mod || e.altKey) return;
+  if (e.key === 'Escape' && planPin) return pinPlan(null);
   if (drawTool.active && settings.mode === 'flow') {
     if (e.key === 'Escape') {
       if (drawTool.busy) {
@@ -3803,6 +3837,12 @@ canvas.addEventListener('pointerdown', (e) => {
     painting = null;
     imageMode.paintCancel();
   }
+  // On the comparison of a proposal: the line between before and after follows the finger or mouse.
+  if (pointers.size === 1 && e.button === 0 && inPlanFrame(pos[0], pos[1])) {
+    planDrag = true;
+    movePlanSplit(pos[0]);
+    return;
+  }
   if (pointers.size === 1 && e.button === 0 && nearDivider(pos[0])) {
     splitDrag = true;
     stage.classList.add('splitting');
@@ -3857,6 +3897,14 @@ canvas.addEventListener('pointermove', (e) => {
   if (splitDrag) {
     split = Math.min(0.98, Math.max(0.02, pos[0] / stageW));
     redraw();
+    return;
+  }
+  // A mouse over the comparison moves its line as it goes; a finger drags it.
+  if (planDrag || (!prev && e.pointerType === 'mouse' && inPlanFrame(pos[0], pos[1]))) {
+    movePlanSplit(pos[0]);
+    // The density tip would cover the comparison, so it stays away here.
+    tooltip.hidden = true;
+    canvas.classList.remove('on-divider');
     return;
   }
   canvas.classList.toggle('on-divider', !prev && nearDivider(pos[0]));
@@ -3955,6 +4003,7 @@ const endPointer = (e: PointerEvent) => {
     }
   }
   pressAt = null;
+  planDrag = false;
   if (splitDrag) {
     splitDrag = false;
     stage.classList.remove('splitting');

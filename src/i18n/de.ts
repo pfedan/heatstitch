@@ -217,7 +217,7 @@ export const de = {
   'plan.locked': '{n} gesperrte Objekte ausgelassen.',
   'plan.head': 'Vorschläge für {n} Änderungen',
   'plan.result': 'Mit allen Vorschlägen: kritische Fläche {c0} → {c1} mm², Vorsicht {w0} → {w1} mm².',
-  'plan.hover': 'Zeiger auf einen Vorschlag: oben links vorher und nachher nebeneinander, im Rahmen des Objekts links vorher, rechts nachher.',
+  'plan.hover': 'Zeiger auf einen Vorschlag zeigt vorher und nachher. Klick auf den Namen hält ihn fest: dann folgt die Trennlinie Maus oder Finger.',
   'plan.before': 'Vorher',
   'plan.after': 'Nachher',
   'plan.all': 'Alle auswählen',
