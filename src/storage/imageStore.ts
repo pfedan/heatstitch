@@ -71,3 +71,12 @@ export async function loadImage(): Promise<{ image: StoredImage; work: StoredWor
     return null;
   }
 }
+
+/** Forgets the image and its changes: the Bild mode starts empty after a reload. */
+export async function clearImage(): Promise<void> {
+  try {
+    await run('readwrite', (s) => s.clear());
+  } catch (err) {
+    console.warn('Could not remove the stored image', err);
+  }
+}

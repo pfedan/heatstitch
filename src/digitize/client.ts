@@ -39,6 +39,13 @@ export class ImageClient {
     return (await this.call({ type: 'prepare', options, edits, strokes, exact })).prepared!;
   }
 
+  /** Ends the worker; the client cannot be used afterwards. */
+  dispose(): void {
+    this.worker.terminate();
+    for (const p of this.pending.values()) p.reject(new Error('disposed'));
+    this.pending.clear();
+  }
+
   /** Stitches for the last prepared image. */
   async digitize(options: DigitizeOptions, name: string): Promise<Digitized> {
     return (await this.call({ type: 'digitize', options, name })).digitized!;
