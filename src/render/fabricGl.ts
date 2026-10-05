@@ -42,7 +42,8 @@ uniform vec2 u_light;
 uniform int u_kind;
 uniform float u_pitch;
 uniform float u_relief;
-uniform float u_detail;  // 0 far out (only the cloudiness), 1 when the yarns are well resolved
+uniform float u_detail;  // 0 far out (only the cloudiness), 1 when the yarns are resolved
+uniform int u_ss;        // samples per pixel: 1, or 4 while a yarn spans only a few pixels
 out vec4 o;
 
 vec3 toLinear(vec3 c) { return pow(c, vec3(2.2)); }
@@ -220,6 +221,28 @@ Surf surf(vec2 p) {
   return leather(p, u_pitch);
 }
 
+// Light on one point of the surface with normal N.
+vec3 shadeAt(Surf s, vec3 N, vec3 base, vec3 L) {
+  float flatShade = 0.35 + 0.8 * L.z;
+  float shade = (0.35 + 0.8 * max(dot(N, L), 0.0)) / flatShade;
+  // Gaps between yarns and under crossings get less light.
+  float ao = mix(0.5, 1.08, smoothstep(-0.2, 0.75, s.h));
+  vec3 lit = base * shade * ao * (1.0 + 0.08 * s.tint);
+  vec3 H = normalize(L + vec3(0.0, 0.0, 1.0));
+  if (s.fiber != vec2(0.0)) {
+    vec3 T = normalize(vec3(s.fiber, 0.0) - N * dot(vec3(s.fiber, 0.0), N));
+    float th = dot(T, H);
+    float sinTH = sqrt(max(1.0 - th * th, 0.0));
+    // Spun cotton has a soft, wide sheen; the fine fabric shines more, like silk.
+    float gloss = u_kind == 4 ? 0.22 : 0.07;
+    lit += (base * 0.6 + 0.04) * pow(sinTH, 24.0) * gloss * 3.0 * smoothstep(0.0, 0.6, s.h);
+  } else {
+    // Leather: a broad, slightly glossy highlight on the pebbles.
+    lit += (base * 0.3 + 0.05) * pow(max(dot(N, H), 0.0), 22.0) * 0.45 * smoothstep(0.1, 0.5, s.h);
+  }
+  return lit;
+}
+
 void main() {
   vec2 screen = vec2(gl_FragCoord.x, u_res.y - gl_FragCoord.y);
   vec2 p = (screen - u_offset) / u_scale;
@@ -229,37 +252,39 @@ void main() {
   vec3 col = base * (1.0 + cloud);
   vec3 L = normalize(vec3(u_light, 0.85));
   if (u_detail > 0.0) {
-    // Height and slope from three samples, half a pixel apart (but never coarser than a yarn).
-    float e = min(0.5 / u_scale, u_pitch * 0.12);
-    Surf s0 = surf(p);
-    float hx = surf(p + vec2(e, 0.0)).h;
-    float hy = surf(p + vec2(0.0, e)).h;
     float k = u_relief * u_pitch;
-    vec3 N = normalize(vec3(-(hx - s0.h) * k / e, -(hy - s0.h) * k / e, 1.0));
-    float flatShade = 0.35 + 0.8 * L.z;
-    float shade = (0.35 + 0.8 * max(dot(N, L), 0.0)) / flatShade;
-    // Gaps between yarns and under crossings get less light.
-    float ao = mix(0.5, 1.08, smoothstep(-0.2, 0.75, s0.h));
-    vec3 lit = base * shade * ao * (1.0 + 0.08 * s0.tint);
-    if (s0.fiber != vec2(0.0)) {
-      vec3 T = normalize(vec3(s0.fiber, 0.0) - N * dot(vec3(s0.fiber, 0.0), N));
-      vec3 H = normalize(L + vec3(0.0, 0.0, 1.0));
-      float th = dot(T, H);
-      float sinTH = sqrt(max(1.0 - th * th, 0.0));
-      // Spun cotton has a soft, wide sheen; the fine fabric shines more, like silk.
-      float gloss = u_kind == 4 ? 0.22 : 0.07;
-      lit += (base * 0.6 + 0.04) * pow(sinTH, 24.0) * gloss * 3.0 * smoothstep(0.0, 0.6, s0.h);
+    vec3 lit;
+    if (u_ss == 1) {
+      // Height and slope from three samples, half a pixel apart (but never coarser than a yarn).
+      float e = min(0.5 / u_scale, u_pitch * 0.12);
+      Surf s0 = surf(p);
+      float hx = surf(p + vec2(e, 0.0)).h;
+      float hy = surf(p + vec2(0.0, e)).h;
+      lit = shadeAt(s0, normalize(vec3(-(hx - s0.h) * k / e, -(hy - s0.h) * k / e, 1.0)), base, L);
     } else {
-      // Leather: a broad, slightly glossy highlight on the pebbles.
-      vec3 H = normalize(L + vec3(0.0, 0.0, 1.0));
-      lit += (base * 0.3 + 0.05) * pow(max(dot(N, H), 0.0), 22.0) * 0.45 * smoothstep(0.1, 0.5, s0.h);
+      // Yarns of one or two pixels: four samples spread over the pixel (rotated grid) are averaged,
+      // so the weave still shows as it would to the eye, without moiré. The slope is the plane
+      // through the four heights.
+      vec2 off[4] = vec2[4](vec2(-0.125, -0.375), vec2(0.375, -0.125), vec2(0.125, 0.375), vec2(-0.375, 0.125));
+      Surf ss[4];
+      float gx = 0.0, gy = 0.0;
+      for (int i = 0; i < 4; i++) {
+        ss[i] = surf(p + off[i] / u_scale);
+        gx += ss[i].h * off[i].x;
+        gy += ss[i].h * off[i].y;
+      }
+      // Sum of the squared offsets is 0.3125 per axis; the slope is per mm.
+      vec3 N = normalize(vec3(-gx / 0.3125 * u_scale * k, -gy / 0.3125 * u_scale * k, 1.0));
+      lit = vec3(0.0);
+      for (int i = 0; i < 4; i++) lit += shadeAt(ss[i], N, base, L);
+      lit *= 0.25;
     }
     col = mix(col, lit * (1.0 + cloud), u_detail);
   }
   o = vec4(toSrgb(col), 1.0);
 }`;
 
-const UNIFORMS = ['u_res', 'u_scale', 'u_offset', 'u_color', 'u_light', 'u_kind', 'u_pitch', 'u_relief', 'u_detail'];
+const UNIFORMS = ['u_res', 'u_scale', 'u_offset', 'u_color', 'u_light', 'u_kind', 'u_pitch', 'u_relief', 'u_detail', 'u_ss'];
 
 export class GlFabricRenderer {
   readonly canvas: HTMLCanvasElement | OffscreenCanvas;
@@ -309,19 +334,29 @@ export class GlFabricRenderer {
     gl.uniform2f(this.u.u_light, light[0], light[1]);
     gl.uniform1i(this.u.u_kind, look.kind);
     gl.uniform1f(this.u.u_pitch, look.pitch);
-    gl.uniform1f(this.u.u_relief, look.relief);
-    // Yarns show from about 2.5 px on and are fully there at 6 px.
-    gl.uniform1f(this.u.u_detail, fabricDetail(look.pitch * pxMm));
+    const yarnPx = look.pitch * pxMm;
+    // Slopes of yarns barely a pixel wide are mostly noise: the relief is flatter there.
+    gl.uniform1f(this.u.u_relief, look.relief * (0.4 + 0.6 * smooth((yarnPx - 1.5) / 2.5)));
+    gl.uniform1f(this.u.u_detail, fabricDetail(yarnPx));
+    gl.uniform1i(this.u.u_ss, yarnPx < 5 ? 4 : 1);
     gl.bindVertexArray(this.vao);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.bindVertexArray(null);
   }
 }
 
-/** How much of the yarn relief shows for a yarn pitch of `px` device pixels (0 to 1). */
-export function fabricDetail(px: number): number {
-  const t = Math.min(1, Math.max(0, (px - 2.5) / 3.5));
+const smooth = (x: number) => {
+  const t = Math.min(1, Math.max(0, x));
   return t * t * (3 - 2 * t);
+};
+
+/**
+ * How much of the yarn structure shows for a yarn pitch of `px` device pixels (0 to 1): fully from
+ * 1.5 px on, so the fabric still reads at real size on screen; below that it fades into the
+ * cloudiness, where single yarns would only flicker.
+ */
+export function fabricDetail(px: number): number {
+  return smooth((px - 0.6) / 0.9);
 }
 
 let gl: GlFabricRenderer | null = null;
