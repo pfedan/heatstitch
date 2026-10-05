@@ -758,7 +758,7 @@ const stitchPanel = new StitchPanel($('object-stitches'), {
   },
   apply: (s) => {
     const pat = s.kind === 'fill' ? s.s.pattern : null;
-    applyRestitched(restitched(s), pat === 'spiral' ? 'stitch.failedSpiral' : pat === 'contour' || pat === 'follow' ? 'stitch.failedCurved' : 'stitch.failed');
+    applyRestitched(restitched(s), pat === 'spiral' ? 'stitch.failedSpiral' : pat === 'contour' || pat === 'follow' ? 'stitch.failedCurved' : pat === 'guided' ? 'stitch.guide.failed' : 'stitch.failed');
   },
   convert: (to) => {
     const p = files.active?.pattern;
@@ -777,6 +777,10 @@ const stitchPanel = new StitchPanel($('object-stitches'), {
     else rungTool.follow();
   },
   draw: (a) => (a === 'tool' ? toggleRungs() : sewAlongLines()),
+  guide: (a) => {
+    if (a === 'tool') return toggleGuides();
+    if (rungTool.mode === 'guide') closeRungs();
+  },
 });
 
 // Rungs -------------------------------------------------------------------------------------------
@@ -798,6 +802,7 @@ const rungTool = new RungTool({
     if (!final) pendingColumns = columns;
   },
   lines: () => redraw(),
+  guides: (g) => stitchPanel.setGuides(g),
   redraw: () => redraw(),
   say: (key) => {
     layers.say(t(key), true);
@@ -820,10 +825,10 @@ function rungTarget(p: Pattern, q: Sequence): { o: number; mode: 'satin' | 'fill
 }
 
 /** What the stitch panel shows about the rung tool. */
-function rungInfo(p: Pattern, q: Sequence): Pick<StitchInfo, 'direction' | 'draw'> {
+function rungInfo(p: Pattern, q: Sequence): Pick<StitchInfo, 'direction' | 'draw' | 'guide'> {
   const single = selectedObjects.size === 1;
   const on = rungTool.active && rungObject !== null && selectedObjects.has(rungObject);
-  const out: Pick<StitchInfo, 'direction' | 'draw'> = {};
+  const out: Pick<StitchInfo, 'direction' | 'draw' | 'guide'> = {};
   const info = stitchInfo(p, q);
   if (info.measured.satin) {
     let rungs: number | null = null;
@@ -835,7 +840,39 @@ function rungInfo(p: Pattern, q: Sequence): Pick<StitchInfo, 'direction' | 'draw
     out.direction = { tool: on && rungTool.mode === 'satin', rungs, single };
   }
   if (info.measured.fill && !info.measured.satin) out.draw = { tool: on && rungTool.mode === 'fill', lines: on ? rungTool.lines.length : 0, single };
+  if (info.measured.fill) out.guide = { tool: on && rungTool.mode === 'guide', single };
   return out;
+}
+
+/** Outline of the one selected object's fill (its longest loop), or null when it has no fill. */
+function fillLoop(p: Pattern, q: Sequence, o: number): Pt[] | null {
+  const obj = q.objects[o];
+  const an = obj && analyze(p, obj, q.kinds);
+  if (!an?.fill) return null;
+  const area = remembered(p, obj)?.shape ?? an.fill;
+  const loops = outline(area);
+  return loops.reduce((a, b) => (b.length > a.length ? b : a), [] as [number, number][]) as Pt[];
+}
+
+/** The guide line tool on or off for the one selected fill (key G). */
+function toggleGuides(): void {
+  if (rungTool.active) {
+    const was = rungTool.mode;
+    closeRungs();
+    if (was === 'guide') return;
+  }
+  const p = files.active?.pattern;
+  if (!p || settings.mode !== 'flow' || selectedObjects.size !== 1) return;
+  const q = seq(p);
+  const o = [...selectedObjects][0];
+  const loop = fillLoop(p, q, o);
+  if (!loop) return;
+  if (editor.active) setEditing(false);
+  rungTool.openGuides(loop, remembered(p, q.objects[o])?.fill?.guides ?? []);
+  rungObject = o;
+  rungPattern = p;
+  stage.classList.add('rungs');
+  redraw();
 }
 
 /** The rung tool on or off for the selected object (key R). */
@@ -886,6 +923,16 @@ function syncRungs(): void {
   if (p === rungPattern) return;
   const q = seq(p);
   const o = [...selectedObjects][0];
+  if (rungTool.mode === 'guide') {
+    // The fill sewn anew along the guide lines: the tool stays on it.
+    if (!q.objects[o] || !fillLoop(p, q, o)) return closeRungs();
+    // After an undo the lines are the ones the stitches were made with.
+    const guides = remembered(p, q.objects[o])?.fill?.guides;
+    if (guides) rungTool.guides = guides.map((g) => g.slice());
+    rungObject = o;
+    rungPattern = p;
+    return;
+  }
   const obj = q.objects[o];
   const columns = obj && rungTool.mode === 'satin' ? keepShape(p, obj, q.kinds).columns : null;
   if (!columns?.length) return closeRungs();
@@ -1871,6 +1918,7 @@ window.addEventListener('keydown', (e) => {
       return setEditing(!editor.active);
     }
     if (e.key === 'r') return toggleRungs();
+    if (e.key === 'g') return toggleGuides();
     if (editor.active) {
       if (e.key === 'Escape') return setEditing(false);
       if (e.key === ',' || e.key === '.') {

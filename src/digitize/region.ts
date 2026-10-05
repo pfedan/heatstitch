@@ -222,3 +222,32 @@ export function outline(r: Region): [number, number][][] {
   }
   return out;
 }
+
+/**
+ * The region grown (`mm` > 0) or shrunk (`mm` < 0) on all sides by that distance (Ink/Stitch's
+ * expand): its window gets wider by as much, and its fields are made anew. Null when nothing is
+ * left of it.
+ */
+export function expandRegion(r: Region, mm: number): Region | null {
+  if (Math.abs(mm) < 1e-3) return r;
+  const pad = mm > 0 ? Math.ceil(mm / r.pxMm) + 1 : 0;
+  const w = r.w + 2 * pad;
+  const h = r.h + 2 * pad;
+  const own = new Uint8Array(w * h);
+  // From the area the fill covers now (its field, which may reach a little under neighbours).
+  for (let y = 0; y < r.h; y++) for (let x = 0; x < r.w; x++) own[(y + pad) * w + x + pad] = r.sdf[y * r.w + x] < 0 ? 1 : 0;
+  const d = mm > 0 ? distanceToSeeds(own, w, h) : distanceInside(own, w, h);
+  const limit = Math.abs(mm) / r.pxMm;
+  const mask = new Uint8Array(w * h);
+  let area = 0;
+  for (let i = 0; i < mask.length; i++) {
+    // Pixel centers lie half a pixel from the seeds' edges.
+    const on = mm > 0 ? own[i] === 1 || d[i] - 0.5 <= limit : own[i] === 1 && d[i] - 0.5 > limit;
+    if (!on) continue;
+    mask[i] = 1;
+    area++;
+  }
+  if (!area) return null;
+  const sdf = signedField(mask, w, h, r.pxMm);
+  return { label: r.label, x0: r.x0 - pad, y0: r.y0 - pad, w, h, pxMm: r.pxMm, mask, inside: distanceInside(mask, w, h), sdf, sdfBase: sdf, areaMm2: area * r.pxMm * r.pxMm };
+}

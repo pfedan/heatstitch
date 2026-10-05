@@ -466,6 +466,61 @@ export function stitchField(r: Region, lines: [Pt, Pt][]): DirField {
 }
 
 /**
+ * Field of guide lines drawn on a fill (Ink/Stitch's guided fill): every cell takes the direction
+ * of the nearest point of each guide, weighted by the inverse square of its distance, so one guide
+ * gives rows parallel to it and several guides blend from one to the next.
+ */
+export function guideField(r: Region, guides: Pt[][]): DirField {
+  const g = new Grid(r);
+  const n = g.gw * g.gh;
+  const c = new Float32Array(n);
+  const s = new Float32Array(n);
+  const segs: { a: Pt; b: Pt; cc: number; ss: number; guide: number }[] = [];
+  guides.forEach((line, k) => {
+    for (let i = 1; i < line.length; i++) {
+      const a = line[i - 1];
+      const b = line[i];
+      if (dist(a, b) < 1e-6) continue;
+      const t = Math.atan2(b[1] - a[1], b[0] - a[0]);
+      segs.push({ a, b, cc: Math.cos(2 * t), ss: Math.sin(2 * t), guide: k });
+    }
+  });
+  if (!segs.length) return { g, c, s };
+  const near = new Float64Array(guides.length);
+  const nc = new Float64Array(guides.length);
+  const ns = new Float64Array(guides.length);
+  for (let k = 0; k < n; k++) {
+    if (!g.dom[k]) continue;
+    const p = g.center(k % g.gw, Math.floor(k / g.gw));
+    near.fill(Infinity);
+    for (const sg of segs) {
+      const dx = sg.b[0] - sg.a[0];
+      const dy = sg.b[1] - sg.a[1];
+      const t = Math.max(0, Math.min(1, ((p[0] - sg.a[0]) * dx + (p[1] - sg.a[1]) * dy) / (dx * dx + dy * dy)));
+      const d = Math.hypot(sg.a[0] + dx * t - p[0], sg.a[1] + dy * t - p[1]);
+      if (d < near[sg.guide]) {
+        near[sg.guide] = d;
+        nc[sg.guide] = sg.cc;
+        ns[sg.guide] = sg.ss;
+      }
+    }
+    for (let q = 0; q < guides.length; q++) {
+      if (!Number.isFinite(near[q])) continue;
+      const w = 1 / (near[q] * near[q] + 0.25);
+      c[k] += w * nc[q];
+      s[k] += w * ns[q];
+    }
+    const l = Math.hypot(c[k], s[k]);
+    if (l > 1e-12) {
+      c[k] /= l;
+      s[k] /= l;
+    }
+  }
+  const rad = Math.max(1, Math.round(0.6 / g.cell));
+  return { g, c: blurDomain(c, g, rad), s: blurDomain(s, g, rad) };
+}
+
+/**
  * Fill along a direction field: straight tatami rows when the field has nearly one direction
  * (unless `curvedOnly`), else curved rows; null when there is no direction or the rows fail the
  * checks. `peak` is the highest density allowed anywhere, in times the nominal 1 / spacing.
@@ -506,7 +561,7 @@ export function fieldFill(
 
   const runs: Pt[][] = [];
   const grid = new TravelGrid(p.travel ?? r);
-  let pos = p.underlay ? sewUnderlay(r, mean + 90, p.spacing, start, grid, runs) : start;
+  let pos = p.underlay ? sewUnderlay(r, mean, p, start, grid, runs) : start;
   let cur: Pt[] | null = runs.length ? runs[runs.length - 1] : null;
   const todo = rows.slice();
   const reach = 2.5 * p.spacing + 0.3;

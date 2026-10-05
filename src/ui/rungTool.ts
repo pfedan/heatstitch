@@ -1,4 +1,6 @@
 import { addRung, cornerRungs, cumulative, pointAt, project, rungFromLine, rungRange, seedRungs, type Rung } from '../digitize/rungs';
+import { pathLength } from '../digitize/fill';
+import { simplify } from '../digitize/run';
 import type { Pt } from '../digitize/skeleton';
 import type { Rails } from '../model/restitch';
 
@@ -20,18 +22,24 @@ export interface RungColumn {
 }
 
 export interface RungPick {
-  /** Column (satin) or -1 (lines drawn across a fill). */
+  /** Column (satin) or -1 (lines drawn across a fill, guide lines). */
   col: number;
   i: number;
   /** End picked: 0 on the left rail (or the line's start), 1 on the right, -1 the line itself. */
   end: 0 | 1 | -1;
 }
 
+export type RungMode = 'satin' | 'fill' | 'guide';
+
 export interface RungView {
-  mode: 'satin' | 'fill';
+  mode: RungMode;
   columns: RungColumn[];
   /** Lines drawn across a fill. */
   lines: [Pt, Pt][];
+  /** Guide lines drawn on a fill (its rows follow them). */
+  guides: Pt[][];
+  /** The guide line being drawn. */
+  sketch: Pt[] | null;
   selected: RungPick | null;
   hover: RungPick | null;
   /** The line being drawn. */
@@ -43,25 +51,32 @@ export interface RungHooks {
   change: (columns: Rails[][], final: boolean) => void;
   /** Lines across the fill changed (count shown in the panel). */
   lines: () => void;
+  /** Guide lines changed: the fill is sewn anew along them. */
+  guides: (guides: Pt[][]) => void;
   redraw: () => void;
   /** Says why something did not work. */
   say: (key: 'stitch.direction.miss' | 'stitch.direction.cross' | 'stitch.direction.cornersNone') => void;
 }
 
-type Drag = { kind: 'end'; pick: RungPick } | { kind: 'draw' } | null;
+type Drag = { kind: 'end'; pick: RungPick } | { kind: 'draw' } | { kind: 'sketch' } | null;
 
 /**
  * Rungs on the canvas: lines across a satin column that set the direction of its stitches (dragged
  * across it to add one, its ends slid along the rails), or lines drawn across a fill to sew it as
- * satin along them. Coordinates are world millimetres.
+ * satin along them, or guide lines drawn freehand on a fill for its rows to follow. Coordinates are
+ * world millimetres.
  */
 export class RungTool implements RungView {
   active = false;
-  mode: 'satin' | 'fill' = 'satin';
+  mode: RungMode = 'satin';
   columns: RungColumn[] = [];
   /** Which satin part each column belongs to, to give the columns back per part. */
   private parts: number[] = [];
   lines: [Pt, Pt][] = [];
+  guides: Pt[][] = [];
+  sketch: Pt[] | null = null;
+  /** Pick radius of the last press, to thin the sketch. */
+  private sketchStep = 0.2;
   /** Outline of the fill the lines are drawn on (to start a line only near it). */
   private loop: Pt[] = [];
   selected: RungPick | null = null;
@@ -91,10 +106,24 @@ export class RungTool implements RungView {
     this.selected = null;
   }
 
+  /** Starts drawing guide lines on a fill with this outline, `guides` drawn already. */
+  openGuides(loop: Pt[], guides: Pt[][]): void {
+    this.active = true;
+    this.mode = 'guide';
+    this.columns = [];
+    this.parts = [];
+    this.lines = [];
+    this.guides = guides.map((g) => g.slice());
+    this.loop = loop;
+    this.selected = null;
+  }
+
   close(): void {
     this.active = false;
     this.columns = [];
     this.lines = [];
+    this.guides = [];
+    this.sketch = null;
     this.selected = this.hover = null;
     this.draft = null;
     this.drag = null;
@@ -149,14 +178,22 @@ export class RungTool implements RungView {
       if (d <= reachLine && (!best || d < best.d)) best = { pick: { col, i, end: -1 }, d };
     };
     if (this.mode === 'satin') this.columns.forEach((c, k) => c.rungs.forEach((r, i) => consider(k, i, ...this.ends(c, r))));
-    else this.lines.forEach(([a, b], i) => consider(-1, i, a, b));
+    else if (this.mode === 'fill') this.lines.forEach(([a, b], i) => consider(-1, i, a, b));
+    else {
+      this.guides.forEach((g, i) => {
+        for (let k = 1; k < g.length; k++) {
+          const d = segDist(q, g[k - 1], g[k]);
+          if (d <= reachLine && (!best || d < best.d)) best = { pick: { col: -1, i, end: -1 }, d };
+        }
+      });
+    }
     return (best as { pick: RungPick } | null)?.pick ?? null;
   }
 
   /** Whether a line may start here: on or near a column, or near the fill. */
   private near(x: number, y: number): boolean {
     const q: Pt = [x, y];
-    if (this.mode === 'fill') {
+    if (this.mode !== 'satin') {
       if (!this.loop.length) return true;
       let minX = Infinity;
       let minY = Infinity;
@@ -193,6 +230,12 @@ export class RungTool implements RungView {
       this.hooks.redraw();
       return 'pan';
     }
+    if (this.mode === 'guide') {
+      this.drag = { kind: 'sketch' };
+      this.sketch = [[x, y]];
+      this.sketchStep = 3 / scale;
+      return 'move';
+    }
     this.drag = { kind: 'draw' };
     this.draft = [
       [x, y],
@@ -206,7 +249,10 @@ export class RungTool implements RungView {
     const d = this.drag;
     if (!d) return false;
     if (d.kind === 'draw' && this.draft) this.draft[1] = [x, y];
-    else if (d.kind === 'end') {
+    else if (d.kind === 'sketch' && this.sketch) {
+      const l = this.sketch[this.sketch.length - 1];
+      if (Math.hypot(x - l[0], y - l[1]) >= this.sketchStep) this.sketch.push([x, y]);
+    } else if (d.kind === 'end') {
       const { col, i, end } = d.pick;
       if (this.mode === 'fill') this.lines[i][end as 0 | 1] = [x, y];
       else {
@@ -229,6 +275,13 @@ export class RungTool implements RungView {
     if (d.kind === 'end') {
       if (this.mode === 'satin') this.hooks.change(this.result(), true);
       else this.hooks.lines();
+    } else if (d.kind === 'sketch' && this.sketch) {
+      const line = simplify(this.sketch, this.sketchStep / 3);
+      this.sketch = null;
+      if (pathLength(line) < 1) return this.hooks.redraw();
+      this.guides.push(line);
+      this.selected = { col: -1, i: this.guides.length - 1, end: -1 };
+      this.hooks.guides(this.guides.map((g) => g.slice()));
     } else if (d.kind === 'draw' && this.draft) {
       const [a, b] = this.draft;
       this.draft = null;
@@ -266,6 +319,7 @@ export class RungTool implements RungView {
   cancel(): void {
     this.drag = null;
     this.draft = null;
+    this.sketch = null;
   }
 
   hoverAt(x: number, y: number, scale: number): boolean {
@@ -283,6 +337,9 @@ export class RungTool implements RungView {
     if (this.mode === 'fill') {
       this.lines.splice(s.i, 1);
       this.hooks.lines();
+    } else if (this.mode === 'guide') {
+      this.guides.splice(s.i, 1);
+      this.hooks.guides(this.guides.map((g) => g.slice()));
     } else {
       const c = this.columns[s.col];
       c.rungs = c.rungs.filter((_, i) => i !== s.i);
@@ -291,6 +348,15 @@ export class RungTool implements RungView {
     }
     this.hooks.redraw();
     return true;
+  }
+
+  /** All guide lines removed. */
+  clearGuides(): void {
+    if (!this.guides.length) return;
+    this.guides = [];
+    this.selected = null;
+    this.hooks.guides([]);
+    this.hooks.redraw();
   }
 
   /** Rungs at the corners of each column, the others kept. */

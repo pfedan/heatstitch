@@ -3,7 +3,12 @@ import type { ObjectKind } from '../model/objects';
 import { SATIN_SPLIT, UNDERLAYS, type FillPattern, type FillSettings, type RunSettings, type SatinSettings, type SatinType, type Settings, type ShapeTrust } from '../model/restitch';
 import type { UnderlayKind } from '../digitize/satin';
 import type { ShapeOutline } from '../render/scene';
+import { UNDERLAY_INSET } from '../digitize/fill';
+import type { Pt } from '../digitize/skeleton';
 import { KIND_ICON, kindLabel } from './layersPanel';
+
+type FillUnder = 'off' | 'single' | 'cross';
+const FILL_UNDERS: FillUnder[] = ['off', 'single', 'cross'];
 
 /**
  * Stitch settings of the selected objects: per kind of stitch the values that matter for it. The
@@ -32,6 +37,8 @@ export interface StitchInfo {
   direction?: { tool: boolean; rungs: number | null; single: boolean };
   /** Rungs drawn across the one selected fill to sew it as satin. */
   draw?: { tool: boolean; lines: number; single: boolean };
+  /** Guide lines of the one selected fill: whether their tool is on. */
+  guide?: { tool: boolean; single: boolean };
 }
 
 export interface StitchHooks {
@@ -43,11 +50,13 @@ export interface StitchHooks {
   direction: (action: 'tool' | 'corners' | 'even' | 'follow') => void;
   /** Rungs drawn across a fill: the tool on or off, sewn as satin along them. */
   draw: (action: 'tool' | 'sew') => void;
+  /** Guide lines on a fill: their tool on or off (`off` only closes it). */
+  guide: (action: 'tool' | 'off') => void;
 }
 
 const KINDS: ObjectKind[] = ['fill', 'satin', 'run'];
 
-const PATTERNS: FillPattern[] = ['tatami', 'gradient', 'contour', 'spiral', 'follow'];
+const PATTERNS: FillPattern[] = ['tatami', 'gradient', 'contour', 'spiral', 'follow', 'guided'];
 
 /** Small pictures of the fill patterns (24 × 24, drawn with the current color). */
 const PATTERN_ICON: Record<FillPattern, string> = {
@@ -56,6 +65,7 @@ const PATTERN_ICON: Record<FillPattern, string> = {
   contour: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="5"/><rect x="7" y="7" width="10" height="10" rx="2.5"/><path d="M11 11h2v2h-2z"/></svg>',
   spiral: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M12 12c0-1 1.5-1.2 2-.2.8 1.6-1 3.2-2.6 3-2.6-.3-3.4-3.6-1.8-5.6 2.2-2.8 6.6-1.8 7.6 1.4 1.3 4-2.2 7.6-6 7.2-4.4-.4-7-5-5.6-9C7 5 11.6 3 15.6 4.2"/></svg>',
   follow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M3 6c5-3 9 3 18 0M3 11c5-3 9 3 18 0M3 16c5-3 9 3 18 0M3 21c5-3 9 3 18 0"/></svg>',
+  guided: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path stroke-width="1.2" opacity=".6" d="M4 4c3 0 5 5 8 5s5-4 8-4M4 15c3 0 5 5 8 5s5-4 8-4"/><path stroke-width="2.4" d="M4 9.5c3 0 5 5 8 5s5-4 8-4"/></svg>',
 };
 
 const TRUST_ICON = {
@@ -112,7 +122,7 @@ export class StitchPanel {
     }
     if (info.key === this.key) {
       // The rung tool changes without a new selection: only its part is drawn anew.
-      const tools = JSON.stringify([info.direction, info.draw]);
+      const tools = JSON.stringify([info.direction, info.draw, info.guide]);
       if (tools !== this.tools) this.render();
       return;
     }
@@ -145,7 +155,7 @@ export class StitchPanel {
 
   private render(): void {
     const info = this.info!;
-    this.tools = JSON.stringify([info.direction, info.draw]);
+    this.tools = JSON.stringify([info.direction, info.draw, info.guide]);
     const head = document.createElement('div');
     head.className = 'stitch-head';
     const h = Object.assign(document.createElement('h3'), { textContent: t('stitch.title') });
@@ -222,6 +232,7 @@ export class StitchPanel {
           note: (v) => t('stitch.densityNote', { d: formatNumber(1 / v, 1) }),
         });
       const out: HTMLElement[] = [this.patterns(s)];
+      if (s.pattern === 'guided') out.push(this.guideTool(s, this.info!.guide));
       if (s.pattern === 'gradient') {
         out.push(
           density('stitch.densityFrom', () => s.spacing, (v) => (s.spacing = v)),
@@ -235,15 +246,22 @@ export class StitchPanel {
       if (s.pattern === 'contour' || s.pattern === 'spiral' || s.pattern === 'follow') out.push(this.toleranceSlider(s));
       out.push(
         this.slider({ label: 'stitch.edge', hint: 'stitch.edge.hint', min: -0.4, max: 0.6, step: 0.05, get: () => s.edge, set: (v) => (s.edge = v), fmt: signed }),
-        this.check('stitch.underlay', 'stitch.underlay.fill', () => s.underlay, (v) => (s.underlay = v)),
+        this.slider({ label: 'stitch.expand', hint: 'stitch.expand.hint', min: -3, max: 3, step: 0.05, get: () => s.expand ?? 0, set: (v) => (s.expand = v), fmt: signed }),
+        this.choice<FillUnder>('stitch.underlay', FILL_UNDERS, !s.underlay ? 'off' : s.underCross ? 'cross' : 'single', (v) => `stitch.fillUnder.${v}` as Key, (v) => {
+          s.underlay = v !== 'off';
+          s.underCross = v === 'cross';
+        }),
       );
+      if (s.underlay) {
+        out.push(this.slider({ label: 'stitch.underInset', hint: 'stitch.underInset.hint', min: 0, max: 1.5, step: 0.05, get: () => s.underInset ?? UNDERLAY_INSET, set: (v) => (s.underInset = v), fmt: mm(2) }));
+      }
       return out;
     }
     if (this.kind === 'satin') {
       const s = this.draft.satin!;
       const e = s.type === 'e';
       const width = (label: Key, get: () => number, set: (v: number) => void) =>
-        this.slider({ label, hint: 'stitch.width.hint', min: -0.4, max: 0.6, step: 0.05, get, set, fmt: signed });
+        this.slider({ label, hint: 'stitch.width.hint', min: -3, max: 3, step: 0.05, get, set, fmt: signed });
       this.sides ||= s.edgeB !== undefined && s.edgeB !== s.edge;
       const out: HTMLElement[] = [
         this.choice<SatinType>('stitch.satinType', ['satin', 'e'], s.type ?? 'satin', (v) => `stitch.satinType.${v}` as Key, (v) => {
@@ -404,10 +422,20 @@ export class StitchPanel {
       b.title = t(`stitch.pattern.${pat}.hint` as Key);
       b.innerHTML = PATTERN_ICON[pat];
       b.append(Object.assign(document.createElement('span'), { textContent: t(`stitch.pattern.${pat}` as Key) }));
+      // Guide lines belong to one object.
+      const blocked = pat === 'guided' && !this.info!.guide?.single;
+      if (blocked) {
+        b.disabled = true;
+        b.title = t('stitch.guide.single');
+      }
       b.addEventListener('click', () => {
         if (s.pattern === pat) return;
         s.pattern = pat;
         this.render();
+        // Without guide lines there is nothing to follow yet: their tool opens, and the stitches
+        // change with the first line.
+        if (pat === 'guided' && !s.guides?.length) return this.hooks.guide('tool');
+        if (pat !== 'guided' && this.info!.guide?.tool) this.hooks.guide('off');
         this.changed(true);
       });
       row.append(b);
@@ -540,6 +568,36 @@ export class StitchPanel {
     wrap.append(row);
     if (d.tool) wrap.append(Object.assign(document.createElement('span'), { className: 'muted small', textContent: t('stitch.direction.help') }));
     return wrap;
+  }
+
+  /** Guide lines of a guided fill: how many, and their tool. */
+  private guideTool(s: FillSettings, d: StitchInfo['guide']): HTMLElement {
+    const wrap = document.createElement('div');
+    wrap.className = 'field stitch-field direction-field' + (d?.tool ? ' on' : '');
+    const n = s.guides?.length ?? 0;
+    const head = Object.assign(document.createElement('span'), { className: 'label', textContent: t('stitch.guide') });
+    const line = Object.assign(document.createElement('span'), { className: 'muted small', textContent: n ? t(n === 1 ? 'stitch.guide.one' : 'stitch.guide.count', { n }) : t('stitch.guide.none') });
+    wrap.append(head, line);
+    if (!d?.single) return wrap;
+    const row = document.createElement('div');
+    row.className = 'direction-buttons';
+    row.append(this.button(d.tool ? 'stitch.direction.done' : 'stitch.guide.tool', 'stitch.guide.tool.hint', () => this.hooks.guide('tool'), !d.tool));
+    wrap.append(row);
+    if (d.tool) wrap.append(Object.assign(document.createElement('span'), { className: 'muted small', textContent: t('stitch.guide.help') }));
+    return wrap;
+  }
+
+  /**
+   * Guide lines drawn on the canvas: the fill follows them from now on. Without any left it goes
+   * back to straight rows.
+   */
+  setGuides(guides: Pt[][]): void {
+    const s = this.draft.fill;
+    if (!s || this.kind !== 'fill') return;
+    s.guides = guides;
+    s.pattern = guides.length ? 'guided' : 'tatami';
+    this.render();
+    this.changed(true);
   }
 
   /** Rungs drawn across a fill, to sew it as satin along them. */
