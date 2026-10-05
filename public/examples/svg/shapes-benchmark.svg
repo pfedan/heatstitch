@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120mm" height="120mm" viewBox="0 0 120 120">
+  <!--
+    Benchmark for shapes and objects, nine fields of 40 × 40 mm:
+    fill | fill with a hole | satin
+    satin network | satin or fill (5, 7 and 9.5 mm wide) | tapered leaf with a vein
+    running stitch | overlaps cut out of the shapes below | areas in pieces
+    Colors come back in several fields, so the order of colors and objects has work to do.
+  -->
+
+  <!-- Fill: a large free shape. -->
+  <path d="M6 20 C5 9 17 3 26 6 C36 9 37 21 33 28 C29 35 15 37 9 31 C6 28 6 24 6 20 Z" fill="#4a9a3c"/>
+
+  <!-- Fill with a hole: a ring 9 mm wide. -->
+  <path fill-rule="evenodd" fill="#d64545" d="M44 20 A16 16 0 1 0 76 20 A16 16 0 1 0 44 20 Z M53 20 A7 7 0 1 0 67 20 A7 7 0 1 0 53 20 Z"/>
+
+  <!-- Satin: an S curve and a ring of satin. -->
+  <path d="M84 8 C96 8 92 22 100 22 S106 34 116 34" fill="none" stroke="#1f5fa8" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="107" cy="12" r="6" fill="none" stroke="#1f5fa8" stroke-width="3"/>
+
+  <!-- Satin network: a star of five columns, sewn without a jump. -->
+  <g stroke="#e0a21b" stroke-width="3" stroke-linecap="round" fill="none" transform="translate(20 60)">
+    <path d="M0 0 L0 -15"/>
+    <path d="M0 0 L0 -15" transform="rotate(72)"/>
+    <path d="M0 0 L0 -15" transform="rotate(144)"/>
+    <path d="M0 0 L0 -15" transform="rotate(216)"/>
+    <path d="M0 0 L0 -15" transform="rotate(288)"/>
+  </g>
+
+  <!-- Satin or fill: bands 5, 7 and 9.5 mm wide, around the satin limit, to switch between the two. -->
+  <g fill="none" stroke="#7b4fa0">
+    <path d="M47 44 C57 54 37 66 47 76" stroke-width="5"/>
+    <path d="M57 44 C67 54 47 66 57 76" stroke-width="7"/>
+    <path d="M69 44 C79 54 59 66 69 76" stroke-width="9.5"/>
+  </g>
+
+  <!-- Tapered leaf: from a point to 12 mm wide; a vein in running stitch on top. -->
+  <path d="M84 76 C86 58 100 45 116 44 C115 60 102 74 84 76 Z" fill="#4a9a3c"/>
+  <path d="M85 75 C95 66 105 55 115 45" fill="none" stroke="#24502a" stroke-width="0.5"/>
+
+  <!-- Running stitch: a spiral of hairline, 3 mm between the turns. -->
+  <g fill="none" stroke="#3a3a3a" stroke-width="0.4">
+    <path d="M21.5 100 A1.5 1.5 0 0 0 18.5 100 A3 3 0 0 0 24.5 100 A4.5 4.5 0 0 0 15.5 100 A6 6 0 0 0 27.5 100 A7.5 7.5 0 0 0 12.5 100 A9 9 0 0 0 30.5 100 A10.5 10.5 0 0 0 9.5 100 A12 12 0 0 0 33.5 100 A13.5 13.5 0 0 0 6.5 100"/>
+  </g>
+
+  <!-- Overlaps: a circle on a square, a small square on both. Each shape on top is cut out of the ones below. -->
+  <rect x="46" y="84" width="22" height="22" fill="#1f5fa8"/>
+  <circle cx="66" cy="104" r="10" fill="#e0a21b"/>
+  <rect x="60" y="98" width="8" height="8" fill="#d64545"/>
+
+  <!-- Areas in pieces: a bar cut in three by two columns on top, and scattered dots of the same color. -->
+  <rect x="83" y="88" width="34" height="10" fill="#2a9d8f"/>
+  <g fill="#3a3a3a">
+    <rect x="91" y="84" width="3" height="18"/>
+    <rect x="105" y="84" width="3" height="18"/>
+  </g>
+  <g fill="#2a9d8f">
+    <circle cx="86" cy="110" r="2"/>
+    <circle cx="94" cy="113" r="2"/>
+    <circle cx="102" cy="109" r="2"/>
+    <circle cx="110" cy="114" r="2"/>
+    <circle cx="115" cy="108" r="2"/>
+  </g>
+</svg>

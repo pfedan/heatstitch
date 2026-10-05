@@ -1,7 +1,7 @@
 import { ImageClient } from '../digitize/client';
 import { digitizeDefaults, type DigitizeOptions, type Digitized } from '../digitize/digitize';
 import { formatNumber, t, type Key } from '../i18n';
-import { NONE, workingSize, type ColorEdit, type ExactLabels, type Prepared, type Stroke } from '../image/prepare';
+import { NONE, workingSize, type ColorEdit, type PrepareOptions, type ExactLabels, type Prepared, type Stroke } from '../image/prepare';
 import { readSvg, type SvgDesign } from '../image/svg';
 import type { Raster } from '../image/raster';
 import type { Rgb } from '../image/color';
@@ -13,7 +13,7 @@ import type { Viewport } from '../render/viewport';
 import type { ImageView, Settings } from '../settings';
 import { CAUTION, CRITICAL, type ValidationResult } from '../validation/validate';
 import { fabricLabel, threadLabel } from './profilePanel';
-import { loadImage, saveImage, saveWork, type StoredImage, type StoredWork } from '../storage/imageStore';
+import { clearImage, loadImage, saveImage, saveWork, type StoredImage, type StoredWork } from '../storage/imageStore';
 import { cssColor, ThreadPicker } from './threadPicker';
 
 /**
@@ -96,6 +96,30 @@ async function decode(file: Blob): Promise<HTMLCanvasElement> {
     return canvas;
   } finally {
     URL.revokeObjectURL(url);
+  }
+}
+
+/**
+ * Stitches for an SVG file without opening it in the Bild mode (the examples of the file list): its
+ * shapes at their size in the file, the stitch settings of the material. A worker of its own runs
+ * it, so an image open in the Bild mode stays as it is.
+ */
+export async function digitizeSvg(file: File, prepare: PrepareOptions, options: DigitizeOptions): Promise<Digitized> {
+  const vector = await decodeSvg(file);
+  if (!vector) throw new Error('not an SVG of shapes');
+  const { canvas, svg } = vector;
+  const client = new ImageClient();
+  try {
+    const widthMm = svg.widthMm ? Math.min(400, Math.max(10, svg.widthMm)) : prepare.widthMm;
+    const data = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height);
+    await client.load({ width: data.width, height: data.height, data: data.data });
+    const { w, h, pxMm } = workingSize(widthMm, canvas.width, canvas.height);
+    const exact = await svg.labels(w, h, pxMm);
+    await client.prepare({ ...prepare, widthMm, smooth: 0 }, [], [], exact);
+    return await client.digitize(options, file.name.replace(/\.[^.]+$/, ''));
+  } finally {
+    client.dispose();
+    svg.dispose();
   }
 }
 
@@ -233,6 +257,7 @@ export class ImageMode {
       }
       setTimeout(() => (copy.textContent = t('image.ai.copy')), 2500);
     });
+    $('image-clear').addEventListener('click', () => this.clear());
     $('image-take').addEventListener('click', async () => {
       const d = this.result;
       if (!d) return;
@@ -346,6 +371,36 @@ export class ImageMode {
     this.render();
     this.h.fit();
     this.run('prepare', 0);
+  }
+
+  /** Takes the image out: the mode is empty again, also after a reload. Taken over designs stay. */
+  clear(): void {
+    if (!this.source && !this.error) return;
+    // Loads and results still on their way belong to the image that is gone.
+    this.loads++;
+    this.generation++;
+    clearTimeout(this.timer);
+    this.needPrepare = this.needStitches = false;
+    this.busy = null;
+    this.source = null;
+    this.svg?.dispose();
+    this.svg = null;
+    this.exact = null;
+    this.file = null;
+    this.name = '';
+    this.work = { edits: [], strokes: [] };
+    this.undoStack = [];
+    this.redoStack = [];
+    this.prepared = null;
+    this.preparedImg = null;
+    this.result = null;
+    this.validation = null;
+    this.error = '';
+    this.stroke = null;
+    this.setTool('none');
+    void clearImage();
+    this.render();
+    this.h.redraw();
   }
 
   /** A setting changed: save, then prepare again or only redo the stitches. */
@@ -670,6 +725,7 @@ export class ImageMode {
           : '');
     info.classList.toggle('error', !!this.error);
     $('image-save-project').hidden = !this.source;
+    $('image-clear').hidden = !this.source && !this.error;
     this.renderPalette();
     this.renderResult();
   }
