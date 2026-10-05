@@ -9,6 +9,7 @@ import {
   measureRun,
   measureSatin,
   objectKey,
+  isOpenPattern,
   openOnPurpose,
   remember,
   remembered,
@@ -267,6 +268,8 @@ function candidates(p: Pattern, objs: SewObject[], o: SewObject, s: Settings, re
   const longMm = fabricOf(profile).longMm;
   const tooMuch = reasons.has('density') || reasons.has('perforation');
   const known = remembered(p, o);
+  // Open patterns are light on purpose: nothing to propose.
+  if (s.kind === 'fill' && isOpenPattern(s.s.pattern)) return out;
   if (s.kind === 'fill') {
     const f = s.s;
     if (tooMuch) {

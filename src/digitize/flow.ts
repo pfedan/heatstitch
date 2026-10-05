@@ -533,6 +533,7 @@ export function fieldFill(
   start: Pt,
   curvedOnly = false,
   peak = FLOW_PEAK,
+  cover = FLOW_COVER,
 ): FlowResult | null {
   const { c, s } = f;
   let sc = 0;
@@ -557,7 +558,7 @@ export function fieldFill(
   const rows = streamlines(r, g, c, s, p.spacing).map((line) => lengthen(simplify(line, 0.02), p.pull));
   if (!rows.length) return null;
   // The rows must not crowd or leave gaps; checked before anything is sewn.
-  if (peakDensity(rows) > peak / p.spacing || coverage(r, rows, p.spacing * 0.75) < FLOW_COVER) return null;
+  if (peakDensity(rows) > peak / p.spacing || coverage(r, rows, p.spacing * 0.75) < cover) return null;
 
   const runs: Pt[][] = [];
   const grid = new TravelGrid(p.travel ?? r);

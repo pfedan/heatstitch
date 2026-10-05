@@ -18,6 +18,7 @@ import { recommendedSpacing } from '../validation/profiles';
 import { recordOfStitch } from '../model/sequence';
 import { rememberObjects, type SewObject } from '../model/objects';
 import { syncBorders } from '../model/border';
+import { blendObject } from '../model/blend';
 import { t, type Key } from '../i18n';
 import { type ShapeTrust, analyze, remembered, measureFill, measureSatin, measureRun, shapeTrust, type Remembered, remember, rememberedIn, restitch, type Settings as RestitchSettings, type RestitchResult, objectKey } from '../model/restitch';
 import { type StitchInfo, StitchPanel } from '../ui/stitchPanel';
@@ -42,6 +43,7 @@ export interface StitchesApp {
   readonly sewLineAgain: (o: number) => void;
   readonly toggleGuides: () => void;
   readonly toggleRungs: () => void;
+  readonly takeShapes: (next: Pattern, select: number[]) => void;
 }
 
 /** The stitch panel of the selected objects: what it shows, sewing them anew with new settings, and loose objects. */
@@ -317,6 +319,16 @@ export function bindStitches(app: StitchesApp) {
       app.redraw();
     },
     free: (on) => looseObjects(on),
+    blend: (color) => {
+      const p = app.files.active?.pattern;
+      if (!p || ui.selectedObjects.size !== 1) return;
+      const o = [...ui.selectedObjects][0];
+      const next = blendObject(p, o, color, app.settings.trimMm);
+      if (!next) return app.layers.say(t('stitch.blend.failed'), true);
+      // Both layers selected: the blend shows in full, not dimmed behind the original.
+      app.takeShapes(next, [o, o + 1]);
+      app.layers.say(t('stitch.blend.done'));
+    },
     lock: (on) => {
       const p = app.files.active?.pattern;
       if (!p) return;
