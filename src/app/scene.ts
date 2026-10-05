@@ -255,6 +255,7 @@ export function bindScene(app: SceneApp) {
       rungs: app.rungTool.active ? app.rungTool : null,
       shape: app.shapeTool.active ? { view: app.shapeTool, handles: app.shapeTool.handles() } : null,
       frame: app.frameTool.active ? { view: app.frameTool, mapped: app.frameTool.mappedCorners() } : null,
+      band: ui.objectBand,
     };
   }
 

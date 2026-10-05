@@ -765,7 +765,7 @@ export const en: Record<keyof typeof de, string> = {
   'player.pos': 'Position in the sewing sequence',
   'player.speed': 'Speed, as a multiple of the machine speed',
   'player.info': 'Stitch {i} / {n} · {time}',
-  'canvas.hint.flow': 'Wheel: zoom · Drag: pan · Double-click: edit shape or stitches · Space: play · n: next jump',
+  'canvas.hint.flow': 'Wheel: zoom · Drag: pan · Shift+drag: select objects in a box · Double-click: edit shape or stitches · Space: play · n: next jump',
   'stitch.hand': 'New settings or another stitch type replace {n} changes made by hand to the needle points. Undo brings them back.',
   'edit.panelHint': 'Switch to "Stitches" at the top left of the canvas (key e), then select, drag, insert or delete needle points.',
   'edit.split.hint': 'Split the stitch to the selected needle point in the middle (i)',
