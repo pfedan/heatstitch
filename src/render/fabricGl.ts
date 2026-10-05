@@ -352,11 +352,11 @@ const smooth = (x: number) => {
 
 /**
  * How much of the yarn structure shows for a yarn pitch of `px` device pixels (0 to 1): fully from
- * 1.5 px on, so the fabric still reads at real size on screen; below that it fades into the
+ * 2 px on, so the fabric still reads at real size on screen; below that it fades into the
  * cloudiness, where single yarns would only flicker.
  */
 export function fabricDetail(px: number): number {
-  return smooth((px - 0.6) / 0.9);
+  return smooth((px - 0.9) / 1.1);
 }
 
 let gl: GlFabricRenderer | null = null;

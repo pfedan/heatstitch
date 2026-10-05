@@ -8,10 +8,10 @@ describe('fabric', () => {
     expect(parseColor('transparent')).toBeNull();
   });
 
-  it('shows the yarns down to about a pixel and a half per yarn', () => {
-    expect(fabricDetail(0.5)).toBe(0);
-    expect(fabricDetail(1)).toBeGreaterThan(0);
-    expect(fabricDetail(1)).toBeLessThan(1);
-    expect(fabricDetail(1.5)).toBe(1);
+  it('shows the yarns down to about two pixels per yarn', () => {
+    expect(fabricDetail(0.8)).toBe(0);
+    expect(fabricDetail(1.4)).toBeGreaterThan(0);
+    expect(fabricDetail(1.4)).toBeLessThan(1);
+    expect(fabricDetail(2)).toBe(1);
   });
 });
