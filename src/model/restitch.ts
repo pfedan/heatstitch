@@ -710,6 +710,22 @@ function coveredBy(p: Pattern, parts: Part[]): Region | null {
   return segs.length > 4 ? traceRegion(p, segs, REACH) : null;
 }
 
+/**
+ * The object as one part of `kind`, to be sewn anew as a whole: everything else in it (underlay,
+ * travel, a few stitches read as another kind) has to lie on its area, or null.
+ */
+function wholeObject(p: Pattern, o: SewObject, an: Analysis, kind: ObjectKind): Analysis | null {
+  const own = an.parts.filter((pt) => pt.kind === kind);
+  if (kind === 'run' || !own.length) return null;
+  const area = kind === 'fill' ? an.fill : coveredBy(p, own);
+  if (!area) return null;
+  for (const pt of an.parts) {
+    if (pt.kind === kind) continue;
+    for (let i = pt.s; i <= pt.e; i++) if (p.cmd[i] === STITCH && sample(area, area.sdfBase, p.x[i] / 10, p.y[i] / 10) > 0.6) return null;
+  }
+  return { parts: [{ kind, s: o.first, e: o.last }], fill: kind === 'fill' ? area : null };
+}
+
 /** New stitches of kind `s.kind` for the parts of kind `src` of an object, on `area`. */
 function convert(p: Pattern, o: SewObject, parts: Part[], src: ObjectKind, area: Region | null, s: Settings): Pt[][] | null {
   const first = parts.find((pt) => pt.kind === src);
@@ -724,16 +740,18 @@ function convert(p: Pattern, o: SewObject, parts: Part[], src: ObjectKind, area:
   return newFill(p, o, a, s.s);
 }
 
-function newFill(p: Pattern, o: SewObject, a: Analysis, s: FillSettings): Pt[][] | null {
+function newFill(p: Pattern, o: SewObject, a: Analysis, s: FillSettings, reverse = false): Pt[][] | null {
   const first = a.parts.find((pt) => pt.kind === 'fill');
-  if (!a.fill || !first) return null;
+  const last = a.parts.filter((pt) => pt.kind === 'fill').pop();
+  if (!a.fill || !first || !last) return null;
   // Travel may also follow the object's old thread (its travel between patches lies under other
   // objects), so patches the old stitches connected stay connected without a trim.
   const segs: number[] = [];
   for (let i = o.first + 1; i <= o.last; i++) if (p.cmd[i] === STITCH && p.cmd[i - 1] === STITCH) segs.push(i);
   const travel = traceRegion(p, segs, TRAVEL_REACH, 0, false) ?? undefined;
   const fp: FillParams = { spacing: s.spacing, stitch: s.stitch, angle: s.angle, pull: s.edge, underlay: s.underlay, travel, tolerance: s.tolerance };
-  const start = pt10(p, first.s);
+  // Reversed, the new stitches start where the old ones ended.
+  const start = reverse ? pt10(p, last.e) : pt10(p, first.s);
   const r = a.fill;
   let res;
   if (s.pattern === 'gradient') {
@@ -760,9 +778,11 @@ function newFill(p: Pattern, o: SewObject, a: Analysis, s: FillSettings): Pt[][]
  * New satin for a part, along `known` rails (kept from an earlier edit) or the rails its stitches
  * have now. Returns the stitches and the rails used.
  */
-function newSatin(p: Pattern, pt: Part, s: SatinSettings, kinds: Uint8Array, known?: Rails[]): { runs: Pt[][]; rails: Rails[] } | null {
+function newSatin(p: Pattern, pt: Part, s: SatinSettings, kinds: Uint8Array, known?: Rails[], reverse = false): { runs: Pt[][]; rails: Rails[] } | null {
   const runs: Pt[][] = [];
-  const rails = known ?? satinColumns(p, pt, kinds).map((c) => railsOf(p, c)).filter((r): r is Rails => !!r);
+  let rails = known ?? satinColumns(p, pt, kinds).map((c) => railsOf(p, c)).filter((r): r is Rails => !!r);
+  // Reversed: the columns from the last to the first, each from its other end (sides swap with it).
+  if (reverse) rails = rails.slice().reverse().map((r) => ({ left: r.right.slice().reverse(), right: r.left.slice().reverse() }));
   for (const r of rails) {
     const col = columnOf(r);
     const ps = pairs(col, { spacing: s.spacing, pull: s.edge, splitMm: 12, short: s.short });
@@ -835,13 +855,17 @@ export interface RestitchResult {
   memory: Remembered[];
 }
 
+/** Settings for each object: the same for all, or chosen per object (null leaves it as it is). */
+export type SettingsFor = Settings | ((o: SewObject, a: Analysis, known: Remembered | undefined) => Settings | null);
+
 /**
  * New stitches for the parts of kind `settings.kind` in the objects `which`, or, with `from`, the
  * parts of kind `from` turned into `settings.kind` (satin into fill or fill into satin, on the
  * area they cover). Moves inside an object up to 1 mm are stitched, up to `trimMm` jumped, longer
- * ones trimmed with lock stitches.
+ * ones trimmed with lock stitches. With `reverse`, satin and fill are sewn from the other side:
+ * satin columns from their other end, fills starting where they ended.
  */
-export function restitch(p: Pattern, objs: SewObject[], which: number[], given: Settings, kinds: Uint8Array, trimMm: number, from?: ObjectKind): RestitchResult {
+export function restitch(p: Pattern, objs: SewObject[], which: number[], settingsFor: SettingsFor, kinds: Uint8Array, trimMm: number, from?: ObjectKind, reverse = false): RestitchResult {
   const set = new Set(which);
   const out: Rec[] = [];
   const starts: number[] = [];
@@ -861,11 +885,22 @@ export function restitch(p: Pattern, objs: SewObject[], which: number[], given: 
   for (const o of objs) {
     if (!set.has(o.index)) continue;
     const known = remembered(p, o);
-    const an = analyze(p, o, kinds, known);
+    let an = analyze(p, o, kinds, known);
+    const given = typeof settingsFor === 'function' ? settingsFor(o, an, known) : settingsFor;
+    if (!given) continue;
+    if (reverse) {
+      // Turned around as a whole: its underlay and travel are made anew with it.
+      const whole = wholeObject(p, o, an, given.kind);
+      if (!whole) {
+        failed.push(o.index);
+        continue;
+      }
+      an = whole;
+    }
     const parts = an.parts;
     // Satin columns kept from an earlier edit, if the object still has as many satin parts.
     const satinParts = parts.filter((pt) => pt.kind === 'satin');
-    const keptRails = known?.columns?.length === satinParts.length ? known.columns : undefined;
+    const keptRails = reverse && known?.columns?.length ? [known.columns.flat()] : known?.columns?.length === satinParts.length ? known.columns : undefined;
     const rails: Rails[][] = [];
     const src = from ?? given.kind;
     const converting = src !== given.kind;
@@ -881,7 +916,7 @@ export function restitch(p: Pattern, objs: SewObject[], which: number[], given: 
     // All fill parts are one area, filled anew where the first of them was sewn; so are the parts
     // changing kind.
     const together = converting || settings.kind === 'fill';
-    const whole = !together ? null : converting ? convert(p, o, parts, src, area, settings) : newFill(p, o, an, settings.s as FillSettings);
+    const whole = !together ? null : converting ? convert(p, o, parts, src, area, settings) : newFill(p, o, an, settings.s as FillSettings, reverse);
     const firstPart = parts.findIndex((pt) => pt.kind === src);
     let lastPart = -1;
     parts.forEach((pt, k) => pt.kind === src && (lastPart = k));
@@ -891,7 +926,7 @@ export function restitch(p: Pattern, objs: SewObject[], which: number[], given: 
       if (pt.kind !== src) return null;
       if (together) return !whole ? null : k === firstPart ? whole : 'skip';
       if (settings.kind === 'satin') {
-        const sat = newSatin(p, pt, settings.s, kinds, keptRails?.[satinParts.indexOf(pt)]);
+        const sat = newSatin(p, pt, settings.s, kinds, keptRails?.[satinParts.indexOf(pt)], reverse);
         if (sat) rails.push(sat.rails);
         return sat?.runs ?? null;
       }

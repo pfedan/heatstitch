@@ -2,7 +2,7 @@ import { formatNumber, t, type Key } from '../i18n';
 import type { SewObject } from '../model/objects';
 import type { OrderCost } from '../model/order';
 import type { Settings } from '../settings';
-import { type Blocked, KIND_ICON, kindLabel, showBlocked } from './layersPanel';
+import { KIND_ICON, kindLabel } from './layersPanel';
 import { cssColor } from './threadPicker';
 
 export interface ObjectInfo {
@@ -18,15 +18,19 @@ export interface ObjectInfo {
   editing: { selection: number } | null;
   /** Why the selected objects cannot be sewn as one (several selected), or null. */
   mergeBlocked: Key | null;
+  /** Some of the selected objects can be sewn from the other side (satins and fills). */
+  reversible: boolean;
 }
 
 export interface ObjectHooks {
-  /** Sew the selected object one place earlier (-1) or later (1); returns why not, or null. */
-  step: (dir: -1 | 1) => Blocked | null;
-  /** Sew the selected objects as one; returns why not, or null. */
-  merge: () => Blocked | null;
+  /** Sew the selected object one place earlier (-1) or later (1). */
+  step: (dir: -1 | 1) => void;
+  /** Sew the selected objects as one. */
+  merge: () => void;
   /** Show the selected object as its pieces, each one an object. */
   split: () => void;
+  /** Sew the selected satins and fills from the other side. */
+  reverse: () => void;
   clear: () => void;
   /** Start or stop editing the points of the selected object. */
   editStitches: (on: boolean) => void;
@@ -36,6 +40,10 @@ export interface ObjectHooks {
 }
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+
+/** Two arrows in opposite directions: start and end swap. */
+const REVERSE_ICON =
+  '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 5.5h10M10 3l2.5 2.5L10 8M13.5 10.5h-10M6 8l-2.5 2.5L6 13"/></svg>';
 
 /** Size in mm of an object's stitches. */
 const sizeOf = (o: SewObject) => [(o.maxX - o.minX) / 10, (o.maxY - o.minY) / 10];
@@ -108,9 +116,7 @@ export class ObjectPanel {
       const o = sel[0];
       const btn = (label: string, dir: -1 | 1, disabled: boolean) => {
         const b = Object.assign(document.createElement('button'), { type: 'button', textContent: label, disabled });
-        b.addEventListener('click', () => {
-          showBlocked(this.msg, this.hooks.step(dir));
-        });
+        b.addEventListener('click', () => this.hooks.step(dir));
         return b;
       };
       actions.append(btn(t('object.earlier'), -1, o.index === 0), btn(t('object.later'), 1, o.index === info.objects.length - 1));
@@ -122,10 +128,18 @@ export class ObjectPanel {
     } else {
       const why = info.mergeBlocked;
       const b = Object.assign(document.createElement('button'), { type: 'button', textContent: t('object.merge'), title: t(why ?? 'object.merge.hint'), disabled: !!why });
-      b.addEventListener('click', () => showBlocked(this.msg, this.hooks.merge()));
+      b.addEventListener('click', () => this.hooks.merge());
       actions.append(b);
     }
     const hand = info.hand.reduce((x, y) => x + y, 0);
+    if (info.reversible && !info.editing) {
+      const b = Object.assign(document.createElement('button'), { type: 'button', className: 'wide reverse' });
+      b.title = hand ? `${t('object.reverse.hint')}\n${t('stitch.hand', { n: formatNumber(hand) })}` : t('object.reverse.hint');
+      b.innerHTML = REVERSE_ICON;
+      b.append(t('object.reverse'));
+      b.addEventListener('click', () => this.hooks.reverse());
+      actions.append(b);
+    }
     const handNote =
       sel.length > 1 && hand && !info.mergeBlocked
         ? [Object.assign(document.createElement('p'), { className: 'muted small', textContent: t('object.mergeHand', { n: formatNumber(hand) }) })]
@@ -175,6 +189,8 @@ export interface OrderPreview {
   afterSeconds: number;
   /** A better order was found. */
   changed: boolean;
+  /** Objects sewn from the other side in it (with new stitches). */
+  reversed: number;
 }
 
 export interface OrderHooks {
@@ -254,7 +270,7 @@ export class OrderCard {
 
     const opts = document.createElement('div');
     opts.className = 'order-opts';
-    const check = (key: 'combineColors' | 'shortestWays', label: string, hint: string) => {
+    const check = (key: 'combineColors' | 'shortestWays' | 'reverse', label: string, hint: string) => {
       const l = Object.assign(document.createElement('label'), { className: 'check', title: hint });
       const i = Object.assign(document.createElement('input'), { type: 'checkbox', checked: o[key] });
       i.addEventListener('change', () => {
@@ -265,9 +281,14 @@ export class OrderCard {
       l.append(i, Object.assign(document.createElement('span'), { textContent: label }));
       return l;
     };
-    opts.append(check('combineColors', t('order.combine'), t('order.combine.hint')), check('shortestWays', t('order.shortest'), t('order.shortest.hint')));
+    opts.append(
+      check('combineColors', t('order.combine'), t('order.combine.hint')),
+      check('shortestWays', t('order.shortest'), t('order.shortest.hint')),
+      check('reverse', t('order.reverse'), t('order.reverse.hint')),
+    );
 
-    const note = Object.assign(document.createElement('p'), { className: 'muted small', textContent: t('order.note') });
+    const noteText = !pv.reversed ? t('order.note') : pv.reversed === 1 ? t('order.noteReversed.one') : t('order.noteReversed', { n: pv.reversed });
+    const note = Object.assign(document.createElement('p'), { className: 'muted small', textContent: noteText });
     const buttons = document.createElement('div');
     buttons.className = 'row-buttons';
     const apply = Object.assign(document.createElement('button'), { type: 'button', className: 'primary', textContent: t('order.apply'), disabled: !pv.changed });

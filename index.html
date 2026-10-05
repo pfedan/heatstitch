@@ -195,7 +195,7 @@
           </label>
           <label class="field" data-i18n-title="image.satinMax.hint">
             <span class="label"><span data-i18n="image.satinMax"></span> <output id="image-satin-max-out"></output></span>
-            <input type="range" id="image-satin-max" min="3" max="10" step="0.5" />
+            <input type="range" id="image-satin-max" min="1" max="10" step="0.5" />
           </label>
           <label class="field" data-i18n-title="image.tolerance.hint">
             <span class="label"><span data-i18n="stitch.tolerance"></span> <output id="image-tolerance-out"></output></span>
@@ -289,6 +289,10 @@
           </label>
           <label class="check indent" data-i18n-title="controls.liveLight.hint"><input type="checkbox" id="live-light" /><span data-i18n="controls.liveLight"></span></label>
           <button type="button" id="allow-tilt" class="link indent" data-i18n="controls.tilt" hidden></button>
+          <div class="field bg-field" data-i18n-title="controls.background.hint">
+            <span class="label"><span data-i18n="controls.background"></span> <output id="bg-out"></output></span>
+            <div class="bg-swatches" id="bg-swatches"></div>
+          </div>
           <fieldset class="marks" data-mode="flow density">
             <legend data-i18n="marks.title"></legend>
             <label class="check"><input type="checkbox" data-mark="jumps" /><span><i class="mk mk-jump" aria-hidden="true"></i><span data-i18n="marks.jumps"></span></span></label>

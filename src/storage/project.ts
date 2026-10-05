@@ -11,7 +11,7 @@
 
 import { normalizeCorrection } from '../correct/auto';
 import type { StoredObject } from '../model/restitch';
-import { DEFAULTS, normalizeImage, type ImageSettings, type Settings } from '../settings';
+import { DEFAULTS, hexColor, normalizeImage, type ImageSettings, type Settings } from '../settings';
 import { isAcknowledgement, type Acknowledgement } from '../validation/acks';
 import { normalizeProfile } from '../validation/profiles';
 import { normalizeChecks } from '../validation/validate';
@@ -44,6 +44,8 @@ export interface ProjectImage {
 /** The settings that belong to the design rather than to how the app is looked at. */
 export type ProjectSettings = Pick<Settings, 'profile' | 'checks' | 'correction' | 'trimMm' | 'order' | 'machineSpm'> & {
   image: Pick<ImageSettings, 'prepare' | 'stitch'>;
+  /** The fabric color the design is shown on (null: the theme's); absent in older projects. */
+  background?: string | null;
 };
 
 export interface Project {
@@ -75,6 +77,7 @@ export function projectSettings(s: Settings): ProjectSettings {
     order: s.order,
     machineSpm: s.machineSpm,
     image: { prepare: s.image.prepare, stitch: s.image.stitch },
+    background: s.background,
   });
 }
 
@@ -214,8 +217,10 @@ function readSettings(v: unknown): ProjectSettings {
     order: {
       combineColors: typeof s.order?.combineColors === 'boolean' ? s.order.combineColors : true,
       shortestWays: typeof s.order?.shortestWays === 'boolean' ? s.order.shortestWays : true,
+      reverse: typeof s.order?.reverse === 'boolean' ? s.order.reverse : true,
     },
     machineSpm: positive(s.machineSpm, DEFAULTS.machineSpm),
     image: { prepare: image.prepare, stitch: image.stitch },
+    ...('background' in s ? { background: hexColor(s.background) } : {}),
   };
 }
