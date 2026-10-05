@@ -898,19 +898,40 @@ function stepZone(dir: 1 | -1): void {
 
 function fitView(f: LoadedFile | null = files.active): void {
   if (settings.mode === 'image') {
-    imageMode.fit(vp, ui.stageW, ui.stageH);
+    const a = freeArea();
+    imageMode.fit(vp, a.w, a.h);
+    vp.pan(a.x, a.y);
     redraw();
     return;
   }
   const b = f?.pattern?.bounds;
   if (!b) return;
+  const a = freeArea();
   // With a hoop chosen, fit shows the whole sewing field so the room left is visible.
   const m = f?.material.hoop ? hoopRect(b, f.material.hoop) : null;
-  if (m) vp.fit(Math.min(m.x, b.minX / 10), Math.min(m.y, b.minY / 10), Math.max(m.x + m.w, b.maxX / 10), Math.max(m.y + m.h, b.maxY / 10), ui.stageW, ui.stageH, 56);
+  if (m) vp.fit(Math.min(m.x, b.minX / 10), Math.min(m.y, b.minY / 10), Math.max(m.x + m.w, b.maxX / 10), Math.max(m.y + m.h, b.maxY / 10), a.w, a.h, 56);
   // A new, empty design without a hoop: 10 x 10 cm to draw into, not a point blown up.
-  else if (!f!.pattern!.cmd.includes(STITCH)) vp.fit(-50, -50, 50, 50, ui.stageW, ui.stageH);
-  else vp.fit(b.minX / 10, b.minY / 10, b.maxX / 10, b.maxY / 10, ui.stageW, ui.stageH);
+  else if (!f!.pattern!.cmd.includes(STITCH)) vp.fit(-50, -50, 50, 50, a.w, a.h);
+  else vp.fit(b.minX / 10, b.minY / 10, b.maxX / 10, b.maxY / 10, a.w, a.h);
+  vp.pan(a.x, a.y);
   redraw();
+}
+
+/** The part of the stage the tools on it leave free (less the fit margin they may share): fit puts the design there. */
+function freeArea(): { x: number; y: number; w: number; h: number } {
+  const s = stage.getBoundingClientRect();
+  const box = (sel: string) => {
+    const r = stage.querySelector(sel)?.getBoundingClientRect();
+    return r && r.width > 0 && r.height > 0 ? r : null;
+  };
+  const bar = box('.stage-bar');
+  const draw = box('.draw-tools');
+  const player = box('.player');
+  const inset = (v: number) => Math.max(0, v - 16);
+  const top = bar ? inset(bar.bottom - s.top) : 0;
+  const left = draw ? inset(draw.right - s.left) : 0;
+  const bottom = player ? inset(s.bottom - player.top) : 0;
+  return { x: left, y: top, w: Math.max(1, ui.stageW - left), h: Math.max(1, ui.stageH - top - bottom) };
 }
 
 function resize(): void {

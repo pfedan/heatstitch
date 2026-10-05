@@ -100,6 +100,24 @@ function crossing(rail, c, a, b) {
   return best?.s ?? null;
 }
 
+/** Whether two polylines touch or cross. */
+function touches(a, b) {
+  const side = (p, q, r) => (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]);
+  const on = (p, q, r) => Math.min(p[0], q[0]) - 1e-9 <= r[0] && r[0] <= Math.max(p[0], q[0]) + 1e-9 && Math.min(p[1], q[1]) - 1e-9 <= r[1] && r[1] <= Math.max(p[1], q[1]) + 1e-9;
+  for (let i = 1; i < a.length; i++) {
+    for (let j = 1; j < b.length; j++) {
+      const [p, q, r, s] = [a[i - 1], a[i], b[j - 1], b[j]];
+      const d1 = side(r, s, p);
+      const d2 = side(r, s, q);
+      const d3 = side(p, q, r);
+      const d4 = side(p, q, s);
+      if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) return true;
+      if ((d1 === 0 && on(r, s, p)) || (d2 === 0 && on(r, s, q)) || (d3 === 0 && on(p, q, r)) || (d4 === 0 && on(p, q, s))) return true;
+    }
+  }
+  return false;
+}
+
 /** Rails and rungs of a satin column from its subpaths (mm), or null. */
 function satinFrom(subs, attrs) {
   if (subs.length < 2) return null;
@@ -107,10 +125,14 @@ function satinFrom(subs, attrs) {
   let rungLines = [];
   if (subs.length === 2) rails = subs;
   else {
-    // Rungs are short pieces crossing two other subpaths; the rails are the two longest.
-    const order = subs.map((s, k) => ({ s, k, l: len(s.pts) })).sort((a, b) => b.l - a.l);
-    rails = [order[0].s, order[1].s];
-    rungLines = order.slice(2).map((o) => o.s);
+    // Rungs touch exactly two other subpaths (the rails); the rails are the others. Only when
+    // that leaves no clear pair (a # shape), the two longest are the rails. A rung may well be
+    // longer than a rail: across a round dot it is longer than either half circle.
+    const hits = subs.map((s, k) => subs.filter((o, j) => j !== k && touches(s.pts, o.pts)).length);
+    const order = subs.map((s, k) => ({ s, l: len(s.pts), rung: hits[k] === 2 })).sort((a, b) => b.l - a.l);
+    const clear = order.filter((o) => !o.rung).length === 2;
+    rails = (clear ? order.filter((o) => !o.rung) : order.slice(0, 2)).map((o) => o.s);
+    rungLines = order.filter((o) => !rails.includes(o.s)).map((o) => o.s);
   }
   let [L, Rr] = rails.map((s) => ({ pts: s.pts.map((p) => p.slice()), nodes: s.nodes.slice() }));
   const d = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
