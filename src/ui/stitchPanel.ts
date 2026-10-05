@@ -7,6 +7,7 @@ import type { ShapeOutline } from '../render/scene';
 import { UNDERLAY_INSET } from '../digitize/fill';
 import type { Pt } from '../digitize/skeleton';
 import { KIND_ICON, kindLabel } from './layersPanel';
+import type { LineCap } from '../shape/rasterize';
 import { BORDER_STITCH, BORDER_WIDTH, type BorderType } from '../digitize/border';
 import { TOLERANCE } from '../digitize/run';
 import type { ThreadColor } from '../model/pattern';
@@ -336,9 +337,10 @@ export class StitchPanel {
       return;
     }
     if (this.kind === 'fill' && info.knockout) parts.push(this.knockoutSwitch(info.knockout));
-    if (this.kind === 'fill' && info.asLine) parts.push(this.kindSwitch('fill', ['fill', 'line']));
+    if (this.kind === 'fill' && info.asLine) parts.push(this.kindSwitch('fill', ['fill', 'line']), ...this.lineFillControls());
     else if (this.kind === 'fill' || this.kind === 'satin') parts.push(this.kindSwitch(this.kind));
-    if (this.kind === 'fill' && info.draw?.single) parts.push(this.drawTool(info.draw));
+    // A fill along a line becomes satin by its line, not by rungs drawn across it.
+    if (this.kind === 'fill' && info.draw?.single && !info.asLine) parts.push(this.drawTool(info.draw));
     if (this.kind === 'satin' && info.direction) parts.push(this.directionTool(info.direction));
     parts.push(...this.controls());
     parts.push(this.lockSwitch(info.lock));
@@ -592,6 +594,16 @@ export class StitchPanel {
       this.slider({ label: 'stitch.length', hint: 'stitch.runLength.hint', min: 1, max: 6, step: 0.1, get: () => s.stitch, set: (v) => (s.stitch = v), fmt: mm(1) }),
       this.toleranceSlider(s),
       this.check('stitch.triple', 'stitch.triple.hint', () => s.triple, (v) => (s.triple = v)),
+    ];
+  }
+
+  /** A fill along a line: the width of the line and its ends make the area (the line stays the shape). */
+  private lineFillControls(): HTMLElement[] {
+    const s = this.draft.fill!;
+    const width = s.lineWidth ?? 3;
+    return [
+      this.slider({ label: 'stitch.lineWidth', hint: 'stitch.lineFill.width.hint', min: 0.8, max: Math.max(12, Math.ceil(width)), step: 0.1, get: () => s.lineWidth ?? width, set: (v) => (s.lineWidth = v), fmt: (v) => `${formatNumber(v, 1)} mm` }),
+      this.choice<LineCap>('stitch.lineCap', ['flat', 'round'], s.lineCap ?? 'flat', (v) => `stitch.lineCap.${v}` as Key, (v) => (s.lineCap = v)),
     ];
   }
 
@@ -1055,7 +1067,7 @@ export class StitchPanel {
       return out;
     }
     out.push(
-      this.slider({ label: offset ? 'stitch.borderWidth' : 'stitch.lineWidth', hint: offset ? 'stitch.borderWidth.hint' : 'stitch.lineWidth.hint', min: 0.8, max: 6, step: 0.1, get: () => st.width, set: (v) => change((s) => (s.width = v))(v), fmt: mm(1) }),
+      this.slider({ label: offset ? 'stitch.borderWidth' : 'stitch.lineWidth', hint: offset ? 'stitch.borderWidth.hint' : 'stitch.lineWidth.hint', min: 0.8, max: Math.max(6, Math.ceil(st.width)), step: 0.1, get: () => st.width, set: (v) => change((s) => (s.width = v))(v), fmt: mm(1) }),
       this.slider({ label: 'stitch.density', hint: 'stitch.satinDensity.hint', min: 0.2, max: 1, step: 0.01, get: () => st.spacing ?? 0.4, set: (v) => change((s) => (s.spacing = v))(v), fmt: mm(2) }),
       this.slider({ label: 'stitch.borderPull', hint: 'stitch.borderPull.hint', min: 0, max: 0.6, step: 0.05, get: () => st.pull ?? 0, set: (v) => change((s) => (s.pull = v || undefined))(v), fmt: mm(2) }),
       this.choice<UnderlayKind | 'off'>('stitch.under.kind', ['off', ...UNDERLAYS], autoUnder(st), (v) => (v === 'off' ? 'stitch.borderUnder.off' : (`stitch.under.${v}` as Key)), (v) => {

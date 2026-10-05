@@ -71,11 +71,14 @@ export function regionOf(mask: Uint8Array, x0: number, y0: number, w: number, h:
   return { label: 0, x0, y0, w, h, pxMm, mask, inside: distanceInside(mask, w, h), sdf, sdfBase: sdf, areaMm2: area * pxMm * pxMm };
 }
 
+/** How the ends of an open line are drawn: cut off square at the end, or round. */
+export type LineCap = 'flat' | 'round';
+
 /**
- * A line of the form drawn `width` mm wide (round ends and corners), as an area: the strokes of
- * SVG shapes. Open and closed paths count.
+ * A line of the form drawn `width` mm wide (round corners; round ends, or flat with `cap`), as an
+ * area: the strokes of SVG shapes. Open and closed paths count.
  */
-export function rasterizeStroke(f: Form, width: number, pxMm = 0.1): Region | null {
+export function rasterizeStroke(f: Form, width: number, pxMm = 0.1, cap: LineCap = 'round'): Region | null {
   const b = bounds(f);
   if (!b || !(width > 0)) return null;
   const r = width / 2 / pxMm;
@@ -89,6 +92,14 @@ export function rasterizeStroke(f: Form, width: number, pxMm = 0.1): Region | nu
     const pts = flatten(p, pxMm / 2).map(([x, y]) => [x / pxMm - x0 - 0.5, y / pxMm - y0 - 0.5]);
     if (p.closed && pts.length > 1) pts.push(pts[0]);
     if (pts.length === 1) pts.push(pts[0]);
+    // Flat ends: nothing beyond the first and the last point of an open line.
+    const flat = cap === 'flat' && !p.closed && pts.length > 1;
+    // Each end is cut square to the line's direction there (taken over a stretch as long as the
+    // half width, since the flattened line is made of tiny steps), close to that end only, so a
+    // line that turns back on itself is not cut elsewhere.
+    const cut = flat ? [endCut(pts, r), endCut(pts.slice().reverse(), r)] : [];
+    const kept = (x: number, y: number) =>
+      cut.every(([sx, sy, ux, uy]) => (x - sx) * ux + (y - sy) * uy >= 0 || (x - sx) ** 2 + (y - sy) ** 2 > 4 * r2);
     for (let i = 0; i + 1 < pts.length; i++) {
       const [ax, ay] = pts[i];
       const [bx, by] = pts[i + 1];
@@ -104,12 +115,24 @@ export function rasterizeStroke(f: Form, width: number, pxMm = 0.1): Region | nu
           const t = l2 > 0 ? Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / l2)) : 0;
           const ex = ax + t * dx - x;
           const ey = ay + t * dy - y;
-          if (ex * ex + ey * ey <= r2) mask[y * w + x] = 1;
+          if (ex * ex + ey * ey <= r2 && (!flat || kept(x, y))) mask[y * w + x] = 1;
         }
       }
     }
   }
   return regionOf(mask, x0, y0, w, h, pxMm);
+}
+
+/** Start point of a polyline and its unit direction there, measured over about `len`. */
+function endCut(pts: number[][], len: number): [number, number, number, number] {
+  const [sx, sy] = pts[0];
+  let q = pts[pts.length - 1];
+  for (const p of pts) if ((p[0] - sx) ** 2 + (p[1] - sy) ** 2 >= len * len) {
+    q = p;
+    break;
+  }
+  const d = Math.hypot(q[0] - sx, q[1] - sy) || 1;
+  return [sx, sy, (q[0] - sx) / d, (q[1] - sy) / d];
 }
 
 /**
