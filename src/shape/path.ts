@@ -279,10 +279,12 @@ export interface StoredPath {
   z?: 1;
 }
 
-const round = (v: number) => Math.round(v * 1000) / 1000;
-
+/**
+ * A form as stored, exactly: rounded, its area could rasterize a pixel differently after a reload,
+ * and fills that leave out what lies on top would be sewn anew for nothing.
+ */
 export function storeForm(f: Form): StoredPath[] {
-  return f.paths.map((p, k) => ({ c: p.closed, n: p.nodes.flatMap((n) => [...n.p, ...n.a, ...n.b, n.smooth ? 1 : 0].map(round)), ...(k === 0 && f.nonzero ? { z: 1 as const } : {}) }));
+  return f.paths.map((p, k) => ({ c: p.closed, n: p.nodes.flatMap((n) => [...n.p, ...n.a, ...n.b, n.smooth ? 1 : 0]), ...(k === 0 && f.nonzero ? { z: 1 as const } : {}) }));
 }
 
 /** A stored form back, or null when malformed. */

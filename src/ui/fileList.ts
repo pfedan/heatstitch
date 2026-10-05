@@ -17,7 +17,7 @@ import {
   toStored,
   type StoredPattern,
 } from '../storage/fileStore';
-import { restoreRemembered, type StoredObject } from '../model/restitch';
+import { backToVersion, keepVersion, restoreRemembered, type StoredObject } from '../model/restitch';
 import { asideFrom, asideOf, inheritAside, setAsideOf, storeAside, type StoredAside } from '../model/aside';
 import type { ProjectFile } from '../storage/project';
 import { liveAcknowledgements, openWorst, type Acknowledgement } from '../validation/acks';
@@ -161,6 +161,8 @@ export class FileList {
 
   /** Stores what is remembered about the objects of a file's current version. */
   setObjects(f: LoadedFile, objects: StoredObject[]): void {
+    // What the objects learned belongs to this version (undo brings it back with it).
+    if (f.pattern) keepVersion(f.pattern);
     if (f.storeKey !== undefined) void saveObjects(f.storeKey, objects);
   }
 
@@ -200,6 +202,8 @@ export class FileList {
         setAsideOf(original, entry.pattern === original ? asideFrom(aside) : []);
         if (entry.pattern !== original) setAsideOf(entry.pattern, asideFrom(aside));
         entry.stats = patternStats(entry.pattern);
+        keepVersion(original);
+        if (entry.pattern !== original) keepVersion(entry.pattern);
         first ??= entry;
         // Only parseable files are kept; a broken file would just show up again as an error.
         if (persist) {
@@ -269,6 +273,8 @@ export class FileList {
     }
     // A new version keeps the shapes aside of the one before; undo and redo bring back their own.
     inheritAside(f.pattern, p);
+    // A version seen before (undo, redo, back to the original) knows again what it knew then; a new one keeps what it knows now.
+    if (!backToVersion(p)) keepVersion(p);
     f.pattern = p;
     f.stats = patternStats(p);
     // The working copy is saved next to the original on every change, so a reload restores it.
@@ -344,6 +350,8 @@ export class FileList {
 
   activate(id: number | null): void {
     this.activeId = id;
+    // Another file's objects may have pushed this one's out of memory meanwhile.
+    if (this.active?.pattern) backToVersion(this.active.pattern);
     saveActiveKey(this.active?.storeKey ?? null);
     this.render();
     this.onActivate(this.active);

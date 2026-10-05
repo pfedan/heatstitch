@@ -16,7 +16,7 @@ import { rasterize, rasterizeStroke, type LineCap } from '../shape/rasterize';
 import { distanceInside, distanceToSeeds } from '../image/edt';
 import { tidy, withRecords } from './edit';
 import { coversOver, cutAway, type Cover } from './covers';
-import { holdJoins, joinsIn, knowKinds, rememberObjects, restoreJoin, stitchKey, type ObjectKind, type SewObject } from './objects';
+import { forgetJoins, holdJoins, joinsIn, knowKinds, rememberObjects, restoreJoin, stitchKey, type ObjectKind, type SewObject } from './objects';
 import { END, JUMP, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
 import { SATIN, TIE_STITCH } from './sequence';
 import { letteringFrom } from '../lettering/stored';
@@ -331,6 +331,37 @@ export function forget(p: Pattern, o: SewObject, r?: Remembered): void {
   const key = objectKey(p, o);
   if (r) rememberKey(key, r);
   else memory.delete(key);
+}
+
+/**
+ * What a version of a design knew about its objects while it was the current one. Memory is keyed
+ * by stitches, so a later version with the same stitches would otherwise change what an earlier
+ * one knows, and memory forgets the oldest entries: undo and redo bring back all of it or nothing.
+ */
+interface Known {
+  memory: Map<string, Remembered>;
+  joins: { key: string; join: boolean }[];
+}
+const versions = new WeakMap<Pattern, Known>();
+
+/** Keeps what `p` knows now as its own: when it becomes the current version, and after it learned something. */
+export function keepVersion(p: Pattern): void {
+  versions.set(p, { memory: new Map(memory), joins: joinsIn(p) });
+}
+
+/** Brings back what version `p` knew when it was kept (undo, redo, another file). False when it never was. */
+export function backToVersion(p: Pattern): boolean {
+  const v = versions.get(p);
+  if (!v) return false;
+  for (const [k, r] of v.memory) rememberKey(k, r);
+  for (const j of v.joins) restoreJoin(j.key, j.join);
+  return true;
+}
+
+/** Forgets everything objects remember, as a fresh page would (tests). */
+export function forgetAll(): void {
+  memory.clear();
+  forgetJoins();
 }
 
 export function remembered(p: Pattern, o: SewObject): Remembered | undefined {
