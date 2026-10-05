@@ -16,7 +16,7 @@ function sample(): Project {
   const original = parsePattern(data, 'cat-60mm.pes');
   // A custom color no PES palette slot holds exactly.
   const edited = recolor(original, 0, { r: 12, g: 34, b: 56, name: 'Mein Blau' });
-  const settings = projectSettings({ ...structuredClone(DEFAULTS), profile: { fabric: 'leather', thread: '60' }, trimMm: 5 });
+  const settings = projectSettings({ ...structuredClone(DEFAULTS), profile: { fabric: 'leather', thread: '60' }, trimMm: 5, background: '#ece4d4' });
   return {
     files: [
       { name: 'cat-60mm.pes', data, working: toStored(edited), acks: [{ bbox: { minX: 1, minY: 2, maxX: 3, maxY: 4 }, reason: 'manual' }], objects: [] },
@@ -34,6 +34,15 @@ function sample(): Project {
 }
 
 describe('project files', () => {
+  it('keeps the background color, and older projects without one leave it alone', async () => {
+    const back = await decodeProject(await encodeProject(sample()));
+    expect(back.settings.background).toBe('#ece4d4');
+    const { background, ...older } = sample().settings;
+    void background;
+    const old = await decodeProject(await encodeProject({ ...sample(), settings: older }));
+    expect(old.settings.background).toBeUndefined();
+  });
+
   it('reads back everything it wrote, compressed', async () => {
     const p = sample();
     const bytes = await encodeProject(p);

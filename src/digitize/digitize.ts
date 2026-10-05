@@ -72,7 +72,7 @@ export function digitizeDefaults(profile: Profile): DigitizeOptions {
     angle: null,
     flow: true,
     satinMax: 7,
-    satinMin: fabric.id === 'terry' ? 1.5 : 1,
+    satinMin: 1,
     pull: PULL[fabric.id] ?? 0.2,
     overlap: 0.2,
     underlay: true,

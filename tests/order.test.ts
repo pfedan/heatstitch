@@ -54,6 +54,31 @@ describe('objects', () => {
 });
 
 describe('sewing order', () => {
+  it('sews a moved object in the thread of the color it is dropped into', () => {
+    const red = { r: 255, g: 0, b: 0 };
+    const blue = { r: 0, g: 0, b: 255 };
+    const w = new Writer();
+    square(w, 0, 0, 10);
+    square(w, 30, 0, 10);
+    w.color();
+    square(w, 60, 0, 10);
+    const p = w.b.build('t', 'pes', [red, blue]);
+    const objs = sewObjects(p);
+    // The second red square goes into the blue block, after the blue square.
+    const into = reorder(p, objs, [0, 2, 1], 3, undefined, { into: new Map([[1, 1]]) });
+    expect(into.colors).toEqual([red, blue]);
+    const blueStitches = stitchesByColor(into).filter((s) => s.startsWith('0,0,255'));
+    expect(blueStitches.some((s) => s.endsWith(' 300 0'))).toBe(true);
+    // Without taking the thread it is sewn there in its own: a third block.
+    const own = reorder(p, objs, [0, 2, 1], 3);
+    expect(own.colors).toEqual([red, blue, red]);
+    // Taking the thread in place, without moving: the object leaves its color.
+    const inPlace = reorder(p, objs, [0, 1, 2], 3, undefined, { into: new Map([[1, 1]]) });
+    expect(inPlace.colors).toEqual([red, blue]);
+    expect(moveStats(inPlace).colorChanges).toBe(1);
+    expect(stitchesByColor(inPlace).filter((s) => s.startsWith('0,0,255')).length).toBeGreaterThan(stitchesByColor(p).filter((s) => s.startsWith('0,0,255')).length);
+  });
+
   it('combines colors where nothing lies in between, and keeps layering', () => {
     const red = { r: 255, g: 0, b: 0 };
     const blue = { r: 0, g: 0, b: 255 };

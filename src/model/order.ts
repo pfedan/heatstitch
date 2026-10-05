@@ -52,22 +52,95 @@ const keysOf = (p: Pattern, objs: SewObject[]) => {
 
 type Link = 'color' | 'original' | 'trim' | 'jump';
 
-function link(p: Pattern, a: SewObject, b: SewObject, keyA: string, keyB: string, trimMm: number): Link {
+/**
+ * How the machine goes from `a` to `b`: a change of thread, the way the file had (they follow each
+ * other as in the file), or a new jump, trimmed when long. With `fresh`, the way is new also
+ * between neighbours as in the file (their stitches changed, so the old way may not fit).
+ */
+function link(p: Pattern, a: SewObject, b: SewObject, keyA: string, keyB: string, trimMm: number, fresh?: ReadonlySet<number>, d = gap(p, a, b)): Link {
   if (keyA !== keyB) return 'color';
-  if (b.index === a.index + 1 && b.block === a.block) return 'original';
-  return gap(p, a, b) > trimMm ? 'trim' : 'jump';
+  if (b.index === a.index + 1 && b.block === a.block && !fresh?.has(a.index) && !fresh?.has(b.index)) return 'original';
+  return d > trimMm ? 'trim' : 'jump';
 }
+
+const flippedSet = (ends: Ends) => {
+  const out = new Set<number>();
+  ends.flip.forEach((f, i) => f && out.add(i));
+  return out;
+};
 
 const gap = (p: Pattern, a: SewObject, b: SewObject) => Math.hypot(p.x[b.first] - p.x[a.last], p.y[b.first] - p.y[a.last]) / 10;
 
-export function orderCost(p: Pattern, objs: SewObject[], order: number[], trimMm: number): OrderCost {
+/**
+ * Where an object would start and end when sewn from the other side (0.1 mm): a fill starts where
+ * it ended and ends about where it started; a satin that comes back to its start (underlay out,
+ * column back) starts and ends at its far end then.
+ */
+export interface Reversal {
+  sx: number;
+  sy: number;
+  ex: number;
+  ey: number;
+}
+
+export function reversalOf(p: Pattern, o: SewObject): Reversal {
+  const fx = p.x[o.first];
+  const fy = p.y[o.first];
+  const lx = p.x[o.last];
+  const ly = p.y[o.last];
+  if (o.kind === 'satin' && Math.hypot(lx - fx, ly - fy) < 30) {
+    let far = o.first;
+    let best = -1;
+    for (let i = o.first; i <= o.last; i++) {
+      const d = (p.x[i] - fx) ** 2 + (p.y[i] - fy) ** 2;
+      if (d > best) {
+        best = d;
+        far = i;
+      }
+    }
+    return { sx: p.x[far], sy: p.y[far], ex: p.x[far], ey: p.y[far] };
+  }
+  return { sx: lx, sy: ly, ex: fx, ey: fy };
+}
+
+/** Start and end of each object as sewn (flip 0) or from the other side (flip 1). */
+class Ends {
+  constructor(
+    private p: Pattern,
+    private objs: SewObject[],
+    private rev: (Reversal | null)[],
+    readonly flip: Uint8Array,
+  ) {}
+
+  can(i: number): boolean {
+    return !!this.rev[i];
+  }
+
+  /** Way from the end of `a` to the start of `b` (mm), `b` sewn with `fb`. */
+  gap(a: number, b: number, fb = this.flip[b]): number {
+    const p = this.p;
+    const ra = this.flip[a] ? this.rev[a] : null;
+    const rb = fb ? this.rev[b] : null;
+    const ax = ra ? ra.ex : p.x[this.objs[a].last];
+    const ay = ra ? ra.ey : p.y[this.objs[a].last];
+    const bx = rb ? rb.sx : p.x[this.objs[b].first];
+    const by = rb ? rb.sy : p.y[this.objs[b].first];
+    return Math.hypot(bx - ax, by - ay) / 10;
+  }
+}
+
+const noFlips = (p: Pattern, objs: SewObject[]) => new Ends(p, objs, objs.map(() => null), new Uint8Array(objs.length));
+
+export function orderCost(p: Pattern, objs: SewObject[], order: number[], trimMm: number, ends = noFlips(p, objs)): OrderCost {
   const keys = keysOf(p, objs);
   const cost: OrderCost = { colorChanges: 0, trims: 0, travelMm: 0 };
+  const flipped = flippedSet(ends);
   for (let k = 1; k < order.length; k++) {
     const a = objs[order[k - 1]];
     const b = objs[order[k]];
-    const l = link(p, a, b, keys[a.index], keys[b.index], trimMm);
-    cost.travelMm += gap(p, a, b);
+    const d = ends.gap(a.index, b.index);
+    const l = link(p, a, b, keys[a.index], keys[b.index], trimMm, flipped, d);
+    cost.travelMm += d;
     if (l === 'color') {
       cost.colorChanges++;
       cost.trims++;
@@ -113,7 +186,7 @@ export function conflicts(order: number[], over: number[][], obj: number): numbe
 
 type ColorPick = 'original' | 'complete';
 
-function greedy(p: Pattern, objs: SewObject[], over: number[][], keys: string[], o: OrderOptions, pick: ColorPick): number[] {
+function greedy(objs: SewObject[], over: number[][], keys: string[], o: OrderOptions, pick: ColorPick, ends: Ends): number[] {
   const n = objs.length;
   const waiting = over.map((l) => l.length);
   const after: number[][] = objs.map(() => []);
@@ -160,14 +233,20 @@ function greedy(p: Pattern, objs: SewObject[], over: number[][], keys: string[],
     let next = pool[0];
     if (o.shortestWays) {
       let bd = Infinity;
+      let bf = 0;
       for (const i of pool) {
-        // Going on with the object that followed in the file keeps its move as it was.
-        const d = gap(p, last, objs[i]) - (i === last.index + 1 ? 0.5 : 0);
-        if (d < bd) {
-          bd = d;
-          next = i;
+        for (let f = 0; f <= (ends.can(i) ? 1 : 0); f++) {
+          // Going on with the object that followed in the file keeps its move as it was.
+          const d = ends.gap(last.index, i, f) - (i === last.index + 1 && !f && !ends.flip[last.index] ? 0.5 : 0);
+          // Sewing one from the other side has to be clearly shorter: it means new stitches.
+          if (d + (f ? 1 : 0) < bd) {
+            bd = d + (f ? 1 : 0);
+            next = i;
+            bf = f;
+          }
         }
       }
+      ends.flip[next] = bf;
     } else next = Math.min(...pool);
     take(next);
   }
@@ -175,9 +254,9 @@ function greedy(p: Pattern, objs: SewObject[], over: number[][], keys: string[],
 }
 
 /** 2-opt within runs of one color: reverses stretches where that shortens the moves. */
-function untangle(p: Pattern, objs: SewObject[], over: number[][], keys: string[], order: number[]): number[] {
+function untangle(over: number[][], keys: string[], order: number[], ends: Ends): number[] {
   const out = order.slice();
-  const d = (a: number, b: number) => gap(p, objs[a], objs[b]);
+  const d = (a: number, b: number) => ends.gap(a, b);
   let start = 0;
   while (start < out.length) {
     let end = start;
@@ -221,22 +300,85 @@ function untangle(p: Pattern, objs: SewObject[], over: number[][], keys: string[
 
 /** The best order found, or the original one (0, 1, 2, ...) when nothing is better. */
 export function optimizeOrder(p: Pattern, objs: SewObject[], over: number[][], o: OrderOptions): number[] {
+  return optimizePlan(p, objs, over, o).order;
+}
+
+/** An order and the objects sewn from the other side in it. */
+export interface OrderPlan {
+  order: number[];
+  /** Objects (by index) to sew from the other side, ascending. */
+  flip: number[];
+}
+
+/** Sewing one from the other side has to save at least this much (weigh units, 1 per mm). */
+const FLIP_GAIN = 2;
+
+/**
+ * The best order found, and with `reversible` (per object: may it be sewn from the other side)
+ * the objects that are best sewn from the other side in it; the original order without any
+ * reversed when nothing is better.
+ */
+export function optimizePlan(p: Pattern, objs: SewObject[], over: number[][], o: OrderOptions, reversible?: readonly boolean[]): OrderPlan {
   const original = objs.map((_, i) => i);
-  if (objs.length < 2) return original;
+  if (objs.length < 1) return { order: original, flip: [] };
   const keys = keysOf(p, objs);
-  let best = original;
-  let bestCost = weigh(orderCost(p, objs, original, o.trimMm));
-  for (const pick of ['original', 'complete'] as ColorPick[]) {
-    let order = greedy(p, objs, over, keys, o, pick);
-    if (o.shortestWays) order = untangle(p, objs, over, keys, order);
-    if (violations(order, over).length) continue;
-    const c = weigh(orderCost(p, objs, order, o.trimMm));
-    if (c < bestCost - 1e-6) {
-      best = order;
+  const rev = objs.map((ob, i) => (reversible?.[i] ? reversalOf(p, ob) : null));
+  const plain = noFlips(p, objs);
+  let best: OrderPlan = { order: original, flip: [] };
+  let bestCost = weigh(orderCost(p, objs, original, o.trimMm, plain));
+  const consider = (order: number[], ends: Ends) => {
+    if (violations(order, over).length) return;
+    const c = weigh(orderCost(p, objs, order, o.trimMm, ends));
+    const flip = [...flippedSet(ends)].sort((a, b) => a - b);
+    if (c < bestCost - 1e-6 - (flip.length > best.flip.length ? FLIP_GAIN : 0)) {
+      best = { order, flip };
       bestCost = c;
     }
+  };
+  const flipping = rev.some(Boolean);
+  for (const pick of ['original', 'complete'] as ColorPick[]) {
+    for (const withFlips of flipping ? [false, true] : [false]) {
+      if (objs.length < 2 && !withFlips) continue;
+      const ends = withFlips ? new Ends(p, objs, rev, new Uint8Array(objs.length)) : noFlips(p, objs);
+      let order = objs.length < 2 ? original : greedy(objs, over, keys, o, pick, ends);
+      if (o.shortestWays) order = untangle(over, keys, order, ends);
+      if (withFlips) improveFlips(p, objs, order, o.trimMm, ends);
+      consider(order, ends);
+    }
+  }
+  // The original order with only some objects reversed.
+  if (flipping) {
+    const ends = new Ends(p, objs, rev, new Uint8Array(objs.length));
+    improveFlips(p, objs, original, o.trimMm, ends);
+    consider(original, ends);
   }
   return best;
+}
+
+/** Turns objects around one at a time where that makes the order cheaper (a few passes). */
+function improveFlips(p: Pattern, objs: SewObject[], order: number[], trimMm: number, ends: Ends): void {
+  let cost = weigh(orderCost(p, objs, order, trimMm, ends));
+  for (let pass = 0; pass < 3; pass++) {
+    let changed = false;
+    for (const i of order) {
+      if (!ends.can(i)) continue;
+      ends.flip[i] ^= 1;
+      const c = weigh(orderCost(p, objs, order, trimMm, ends));
+      // Turned around only for a real saving, and back again when that is not worse.
+      if (c < cost - (ends.flip[i] ? FLIP_GAIN : -1e-6)) {
+        cost = c;
+        changed = true;
+      } else ends.flip[i] ^= 1;
+    }
+    if (!changed) break;
+  }
+}
+
+export interface ReorderOptions {
+  /** Objects (by index) that are sewn in the thread of another color block (by index), as part of it. */
+  into?: ReadonlyMap<number, number>;
+  /** Objects whose ways in and out are made anew, also to and from their neighbours in the file. */
+  fresh?: ReadonlySet<number>;
 }
 
 /**
@@ -244,16 +386,25 @@ export function optimizeOrder(p: Pattern, objs: SewObject[], over: number[][], o
  * in the file are kept as they were; new ones are a jump, or a tie-off, trim, jump and tie-in when
  * longer than `trimMm`; a change of thread trims and stops for the color.
  */
-export function reorder(p: Pattern, objs: SewObject[], order: number[], trimMm: number, starts?: number[]): Pattern {
-  if (order.every((o, k) => o === k)) {
+export function reorder(p: Pattern, objs: SewObject[], order: number[], trimMm: number, starts?: number[], opts: ReorderOptions = {}): Pattern {
+  const { into, fresh } = opts;
+  if (order.every((o, k) => o === k) && !into?.size && !fresh?.size) {
     starts?.push(...objs.map((o) => stitchesBefore(p, o.first)));
     return p;
   }
   const keys = keysOf(p, objs);
+  const colorOf = (o: SewObject): ThreadColor => {
+    const b = into?.get(o.index);
+    return b === undefined ? o.color : (p.colors[b] ?? o.color);
+  };
+  if (into?.size) {
+    const byBlock = blockKeys(p, Math.max(...objs.map((o) => o.block), ...into.values()) + 1);
+    for (const [o, b] of into) keys[o] = byBlock[b];
+  }
   const out: Rec[] = [];
   const colors: ThreadColor[] = [];
   const first = objs[order[0]];
-  colors.push(first.color);
+  colors.push(colorOf(first));
   // Before the first object: what the file had, or a jump to the new first object.
   if (first.index === 0) out.push(...recs(p, 0, first.first));
   else out.push({ x: p.x[first.first], y: p.y[first.first], cmd: JUMP });
@@ -272,7 +423,7 @@ export function reorder(p: Pattern, objs: SewObject[], order: number[], trimMm: 
   for (let k = 1; k < order.length; k++) {
     const a = objs[order[k - 1]];
     const b = objs[order[k]];
-    const l = link(p, a, b, keys[a.index], keys[b.index], trimMm);
+    const l = link(p, a, b, keys[a.index], keys[b.index], trimMm, fresh);
     if (l === 'original') {
       out.push(...recs(p, a.last + 1, b.first));
       sew(b, false);
@@ -284,7 +435,7 @@ export function reorder(p: Pattern, objs: SewObject[], order: number[], trimMm: 
       out.push({ ...at, cmd: TRIM });
       if (l === 'color') {
         out.push({ ...at, cmd: COLOR_CHANGE });
-        colors.push(b.color);
+        colors.push(colorOf(b));
       }
     }
     out.push({ x: p.x[b.first], y: p.y[b.first], cmd: JUMP });
