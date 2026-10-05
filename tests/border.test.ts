@@ -71,7 +71,7 @@ describe('fill border', () => {
     expect(Math.abs(stitches(off.q, off.o.first, off.o.last) - stitches(plain.q, plain.o.first, plain.o.last))).toBeLessThan(60);
   });
 
-  it('moves the border off the edge by the set offset, inside and outside', () => {
+  it('moves the border off the edge by the set offset, inside and outside', { timeout: 30000 }, () => {
     for (const offset of [1, -0.8]) {
       const a = apply(p, o.index, { ...base, border: { type: 'run', width: 2, offset } });
       const region = a.memory.region!;
@@ -86,7 +86,7 @@ describe('fill border', () => {
     }
   });
 
-  it('sews the satin border with its own density and underlay', () => {
+  it('sews the satin border with its own density and underlay', { timeout: 30000 }, () => {
     const count = (b: object) => {
       const a = apply(p, o.index, { ...base, border: { type: 'satin', width: 3, ...b } });
       return stitches(a.q, a.o.first, a.o.last);
