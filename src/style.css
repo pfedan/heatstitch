@@ -3640,8 +3640,8 @@ button.mini-sw.thread-sw {
   flex: none;
   margin-left: auto;
   color: var(--muted);
-  font-size: 10px;
-  font-style: italic;
+  opacity: 0.7;
+  font-size: 12px;
 }
 
 .layer .layer-guessed + .layer-meta {

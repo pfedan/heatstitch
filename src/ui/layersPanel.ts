@@ -286,7 +286,9 @@ export class LayersPanel {
     li.append(icon, name);
     // Made here or guessed: only marked where both are in one design.
     if (st.guessed?.has(o.index) && !allGuessed(st)) {
-      const mark = Object.assign(document.createElement('span'), { className: 'layer-guessed', textContent: t('object.guessed'), title: t('object.guessedHint') });
+      // About equal: a sign rather than a word, said in full by the tooltip and to screen readers.
+      const mark = Object.assign(document.createElement('span'), { className: 'layer-guessed', textContent: '≈', title: t('object.guessedHint') });
+      mark.setAttribute('aria-label', t('object.guessed'));
       li.append(mark);
     }
     li.append(meta);
