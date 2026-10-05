@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { fillRegion, localThickness, pathLength } from '../src/digitize/fill';
+import { fillRegion, localThickness, pathLength, underlayArea } from '../src/digitize/fill';
 import { contourField, contourFill, fieldFill, guideField } from '../src/digitize/flow';
 import { coverage } from '../src/digitize/measure';
-import { buildRegion, expandRegion, outline, type Region } from '../src/digitize/region';
+import { buildRegion, expandRegion, outline, sample, type Region } from '../src/digitize/region';
 import { spiralFill } from '../src/digitize/spiral';
 import type { Pt } from '../src/digitize/skeleton';
 
@@ -121,6 +121,36 @@ describe('fill patterns', () => {
     expect(edgeOf(0.1)).toBeGreaterThan(edgeOf() + 1.2);
     // Its own spacing changes the rows, not how far they keep inside.
     expect(edgeOf(0.1, 2.5)).toBeGreaterThan(edgeOf() + 1.2);
+  });
+
+  it('keeps the underlay inset by width in one piece, also when large', () => {
+    // Pieces of an area (4-connected pixels).
+    const pieces = (a: Region) => {
+      const seen = new Uint8Array(a.w * a.h);
+      let n = 0;
+      for (let i = 0; i < seen.length; i++) {
+        if (seen[i] || a.sdf[i] >= 0) continue;
+        n++;
+        const stack = [i];
+        seen[i] = 1;
+        while (stack.length) {
+          const j = stack.pop()!;
+          for (const k of [j - 1, j + 1, j - a.w, j + a.w]) {
+            if (k < 0 || k >= seen.length || seen[k] || a.sdf[k] >= 0) continue;
+            seen[k] = 1;
+            stack.push(k);
+          }
+        }
+      }
+      return n;
+    };
+    for (const share of [0.1, 0.2, 0.3]) {
+      const a = underlayArea(square, 0, share)!;
+      expect(pieces(a)).toBe(1);
+      // The middle of a side keeps away from the edge by about the share of the 20 mm width.
+      expect(sample(a, a.sdf, 15, 5 + 20 * share - 1)).toBeGreaterThan(0);
+      expect(sample(a, a.sdf, 15, 5 + 20 * share + 1)).toBeLessThan(0);
+    }
   });
 
   it('spaces the underlay rows as set', () => {
