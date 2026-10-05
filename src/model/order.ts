@@ -379,6 +379,8 @@ export interface ReorderOptions {
   into?: ReadonlyMap<number, number>;
   /** Objects whose ways in and out are made anew, also to and from their neighbours in the file. */
   fresh?: ReadonlySet<number>;
+  /** Places in the order (by position) where the object is trimmed off the one before, never joined to it. */
+  apart?: ReadonlySet<number>;
 }
 
 /**
@@ -387,7 +389,7 @@ export interface ReorderOptions {
  * longer than `trimMm`; a change of thread trims and stops for the color.
  */
 export function reorder(p: Pattern, objs: SewObject[], order: number[], trimMm: number, starts?: number[], opts: ReorderOptions = {}): Pattern {
-  const { into, fresh } = opts;
+  const { into, fresh, apart } = opts;
   if (order.length === objs.length && order.every((o, k) => o === k) && !into?.size && !fresh?.size) {
     starts?.push(...objs.map((o) => stitchesBefore(p, o.first)));
     return p;
@@ -423,7 +425,7 @@ export function reorder(p: Pattern, objs: SewObject[], order: number[], trimMm: 
   for (let k = 1; k < order.length; k++) {
     const a = objs[order[k - 1]];
     const b = objs[order[k]];
-    const l = link(p, a, b, keys[a.index], keys[b.index], trimMm, fresh);
+    const l = apart?.has(k) && keys[a.index] === keys[b.index] ? 'trim' : link(p, a, b, keys[a.index], keys[b.index], trimMm, fresh);
     if (l === 'original') {
       out.push(...recs(p, a.last + 1, b.first));
       sew(b, false);

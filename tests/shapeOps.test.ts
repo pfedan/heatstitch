@@ -4,7 +4,9 @@ import { addShape } from '../src/model/addShape';
 import { wholeArea } from '../src/model/knockout';
 import { sewObjects } from '../src/model/objects';
 import type { Pattern } from '../src/model/pattern';
-import { remembered } from '../src/model/restitch';
+import { analyze, measureFill, remember, remembered, restitch } from '../src/model/restitch';
+import { rememberObjects } from '../src/model/objects';
+import { syncBorders } from '../src/model/border';
 import { formOf } from '../src/model/reshape';
 import { stitchKinds } from '../src/model/sequence';
 import { deleteObjects, duplicateObject, mirrorMatrix, recolorObjects, subtractTop, unionForm } from '../src/model/shapeOps';
@@ -108,5 +110,53 @@ describe('shape operations', () => {
     const c = recolorObjects(p, [1], yellow, options.trimMm)!;
     expect(c.colors[1]).toEqual(yellow);
     expect(c.cmd).toBe(p.cmd);
+  });
+});
+
+describe('duplicating', () => {
+  it('copies a satin line sewn last as an object of its own', () => {
+    const line = (y: number) => parsePath(`M0 ${y} C10 ${y + 10} 20 ${y - 10} 30 ${y}`, ID);
+    let p = addShape(empty, { form: line(0), kind: 'stroke', width: 3 }, red, null, options)!.pattern;
+    p = addShape(p, { form: line(10), kind: 'stroke', width: 3 }, red, 0, options)!.pattern;
+    for (const o of [0, 1]) {
+      const d = duplicateObject(p, o, options.trimMm)!;
+      const objs = sewObjects(d.pattern);
+      expect(objs).toHaveLength(3);
+      expect(objs[o + 1].kind).toBe('satin');
+      expect(remembered(d.pattern, objs[o + 1])?.path).toBeTruthy();
+      expect(objs[o + 1].minX - objs[o].minX).toBeCloseTo(20, -1);
+    }
+  });
+
+  it('copies a fill with its border of its own thread, and a copied border is a line of its own', () => {
+    const p0 = addShape(empty, { form: parsePath(rectPath(0, 0, 20, 20, 0, 0), ID), kind: 'fill' }, red, null, options)!.pattern;
+    const kinds = stitchKinds(p0);
+    const objs = sewObjects(p0, kinds);
+    const s = { ...measureFill(p0, analyze(p0, objs[0], kinds)), border: { type: 'run' as const, width: 2, color: blue, link: 'b1' } };
+    const r = restitch(p0, objs, [0], { kind: 'fill', s }, kinds, options.trimMm);
+    rememberObjects(r.pattern, [r.starts[0]], r.ends[0]);
+    remember(r.pattern, sewObjects(r.pattern)[0], r.memory[0]);
+    const p = syncBorders(r.pattern, options.trimMm);
+    expect(sewObjects(p)).toHaveLength(2);
+
+    const d = duplicateObject(p, 0, options.trimMm)!;
+    const after = sewObjects(d.pattern);
+    expect(after).toHaveLength(4);
+    expect(d.pattern.colors).toHaveLength(2);
+    const fills = after.filter((o) => remembered(d.pattern, o)?.fill?.border?.link);
+    const links = fills.map((o) => remembered(d.pattern, o)!.fill!.border!.link);
+    expect(new Set(links).size).toBe(2);
+    // Each fill has its border, the copy's beside the copy.
+    for (const [k, link] of links.entries()) {
+      const border = after.find((o) => remembered(d.pattern, o)?.outline === link)!;
+      expect(border.color).toMatchObject(blue);
+      expect(Math.abs(border.minX - fills[k].minX)).toBeLessThan(15);
+    }
+
+    const b = duplicateObject(p, 1, options.trimMm)!;
+    const bo = sewObjects(b.pattern);
+    expect(bo).toHaveLength(3);
+    expect(bo.filter((o) => remembered(b.pattern, o)?.outline === 'b1')).toHaveLength(1);
+    expect(remembered(b.pattern, bo[b.index])?.outline).toBeUndefined();
   });
 });

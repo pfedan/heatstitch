@@ -62,7 +62,8 @@ import { stitchAlpha, stitchAt, stitchColors, transitionAt, type StitchStyle } f
 import type { FlowScene, ShapeOutline } from './render/scene';
 import type { Mode } from './settings';
 import { JumpsPanel } from './ui/jumpsPanel';
-import { blockName, kindLabel, LayersPanel } from './ui/layersPanel';
+import { blockName, kindLabel, LayersPanel, LONG_PRESS_MS } from './ui/layersPanel';
+import { ObjectMenu } from './ui/objectMenu';
 import { ObjectPanel, OrderCard } from './ui/objectPanel';
 import { StitchPanel, type Highlight, type StitchInfo } from './ui/stitchPanel';
 import { borderRanges, syncBorders } from './model/border';
@@ -79,7 +80,7 @@ import { drawAside, drawDrawing, type FlatArea } from './render/shapeOverlay';
 import { AsidePanel } from './ui/asidePanel';
 import type { LeftOut } from './ui/imageMode';
 import { addShape, type NewShape } from './model/addShape';
-import { lineOf, lineSettings, resewLine } from './model/line';
+import { fillToLine, lineOf, lineSettings, lineToFill, resewLine } from './model/line';
 import { borderLines, type PathStitch } from './model/along';
 import { asideOf, dropAside, sewAgain, setAside, setAsideRole, storeAside, type AsideRole, type AsideShape } from './model/aside';
 import { deleteObjects, duplicateObject, mirrorMatrix, recolorObjects, subtractTop, unionForm } from './model/shapeOps';
@@ -541,6 +542,7 @@ const layers = new LayersPanel({
     redraw();
   },
   move: (order, moved, into) => moveObjects(order, moved, into),
+  menu: (o, x, y) => void showObjectMenu(o, x, y),
 });
 
 /** Name of an object as the list shows it: kind and number within its color. */
@@ -889,6 +891,7 @@ function stitchInfo(p: Pattern, q: Sequence): StitchInfo {
   if (runs.length && runs.every((obj) => remembered(p, obj)?.path)) info.line = true;
   const one = selectedObjects.size === 1 ? q.objects[[...selectedObjects][0]] : undefined;
   if (one && isLineObject(p, one)) info.path = { st: lineSettings(p, one, q.kinds), traced: !remembered(p, one)?.path };
+  if (one && remembered(p, one)?.asLine) info.asLine = true;
   const link = selectedObjects.size === 1 && q.objects[firstFill] ? remembered(p, q.objects[firstFill])?.outline : undefined;
   if (link) {
     const fill = q.objects.findIndex((o) => remembered(p, o)?.fill?.border?.link === link);
@@ -1043,6 +1046,20 @@ const stitchPanel = new StitchPanel($('object-stitches'), {
   convert: (to) => {
     const p = files.active?.pattern;
     if (!p || !selectedObjects.size) return;
+    const one = selectedObjects.size === 1 ? [...selectedObjects][0] : -1;
+    // A wide line: as a fill of its area, and back to the line it was.
+    if (to === 'line') {
+      if (one >= 0) sewLineAgain(one);
+      return;
+    }
+    if (to === 'fill' && one >= 0 && remembered(p, seq(p).objects[one])?.path) {
+      const d = digitizeDefaults(settings.profile);
+      const fill = { pattern: 'tatami' as const, spacing: d.spacing, spacingEnd: Math.min(1.2, Math.round(d.spacing * 250) / 100), offset: 0.25, angle: NaN, stitch: d.stitch, underlay: d.underlay, edge: 0, tolerance: d.tolerance };
+      const r = lineToFill(p, one, fill, settings.trimMm);
+      applyRestitched(r, 'stitch.failed', true);
+      if (r?.starts.length) layers.say(t('stitch.lineFilled'));
+      return;
+    }
     const s = convertSettings(to, stitchInfo(p, seq(p)));
     if (!s) return;
     const q = seq(p);
@@ -1415,6 +1432,23 @@ function sewLine(o: number, path: Form | null, st: PathStitch | null, final: boo
   followKnockouts();
   redraw();
   return true;
+}
+
+/** A fill that was a wide line sewn as that line again. */
+function sewLineAgain(o: number): void {
+  const f = files.active;
+  const p = f?.pattern;
+  if (!f || !p) return;
+  const r = fillToLine(p, o, settings.trimMm);
+  if (!r) return layers.say(t('stitch.failed', { n: 1 }), true);
+  flowPreview = null;
+  applyEdit(r.pattern);
+  files.setObjects(f, rememberedIn(r.pattern, seq(r.pattern).objects));
+  selectedObjects = new Set([o]);
+  selectionKey++;
+  stitchCache = null;
+  followKnockouts();
+  redraw();
 }
 
 /** Edits the outline of object `o` (level Form); objects without a fill go to their stitches. */
@@ -3890,6 +3924,24 @@ canvas.addEventListener('pointerdown', (e) => {
     else mode = editor.down(wx, wy, pos[0], pos[1], e.shiftKey, vp.scale);
   }
   pressMode = mode;
+  cancelLongPress();
+  if (e.pointerType === 'touch' && pointers.size === 1 && settings.mode === 'flow') {
+    const at = pos;
+    const { clientX, clientY } = e;
+    longPress = {
+      at,
+      timer: window.setTimeout(() => {
+        longPress = null;
+        if (objectMenu.isOpen || !pointers.size || !openObjectMenu(at, clientX, clientY)) return;
+        // The finger lifted after this is no click, and nothing it started goes on.
+        pressAt = null;
+        editor.cancel();
+        frameTool.cancel();
+        flowPreview = null;
+        redraw();
+      }, LONG_PRESS_MS),
+    };
+  }
   if (mode === 'pan') canvas.classList.add('panning');
   if (pointers.size === 2) {
     editor.cancel();
@@ -3937,6 +3989,9 @@ canvas.addEventListener('pointermove', (e) => {
     return;
   }
   canvas.classList.toggle('on-divider', !prev && nearDivider(pos[0]));
+  if (longPress && (pointers.size > 1 || Math.hypot(pos[0] - longPress.at[0], pos[1] - longPress.at[1]) > 8)) cancelLongPress();
+  // With the menu open after a long press, the finger moves nothing until it is lifted.
+  if (prev && objectMenu.isOpen && e.pointerType === 'touch') return;
   if (prev) {
     if (pointers.size === 1) {
       if (!drawTool.dragTo(wx, wy, e.shiftKey, e.altKey) && !letterDragTo(wx, wy) && !rungTool.dragTo(wx, wy) && !shapeTool.dragTo(wx, wy) && !frameTool.dragTo(wx, wy, e.shiftKey, vp.scale) && !editor.dragTo(wx, wy, pos[0], pos[1])) vp.pan(pos[0] - prev[0], pos[1] - prev[1]);
@@ -3973,6 +4028,7 @@ function clickedOther(p: Pattern, pos: [number, number]): boolean {
 
 const endPointer = (e: PointerEvent) => {
   const pos = local(e);
+  cancelLongPress();
   if (painting === e.pointerId) {
     painting = null;
     pointers.delete(e.pointerId);
@@ -3983,7 +4039,7 @@ const endPointer = (e: PointerEvent) => {
   // A press on the frame that did not move is a click like any other.
   const frameClick = pressMode === 'frame' && frameTool.dragging !== null && !frameTool.up();
   if (pressMode === 'frame' && !frameClick) pressMode = 'move';
-  if (pressAt && e.type === 'pointerup' && settings.mode === 'flow' && (pressMode === 'pan' || frameClick) && !rungTool.active && Math.hypot(pos[0] - pressAt[0], pos[1] - pressAt[1]) < 4) {
+  if (pressAt && e.type === 'pointerup' && e.button === 0 && settings.mode === 'flow' && (pressMode === 'pan' || frameClick) && !rungTool.active && Math.hypot(pos[0] - pressAt[0], pos[1] - pressAt[1]) < 4) {
     const p = files.active?.pattern;
     if (p && letterMode && !clickedOther(p, pos)) {
       // Moving single letters: a click beside the letters lets go of the chosen one.
@@ -4067,9 +4123,45 @@ canvas.addEventListener('pointerleave', () => {
     redraw();
   }
 });
-// The right button pans while painting.
+// The object actions at the pointer: right click, or a long press on a touch screen.
+const objectMenu = new ObjectMenu();
+let longPress: { timer: number; at: [number, number] } | null = null;
+
+function cancelLongPress(): void {
+  if (longPress) clearTimeout(longPress.timer);
+  longPress = null;
+}
+
+/** Opens the menu for the object under `pos` (on the stage), selecting it first; false when there is none. */
+function openObjectMenu(pos: [number, number], clientX: number, clientY: number): boolean {
+  const p = files.active?.pattern;
+  if (!p || settings.mode !== 'flow' || editor.active || shapeTool.active || rungTool.active || drawTool.active || orderCard.isOpen || letterMode) return false;
+  const st = styleFor(p);
+  const [x, y] = vp.toWorld(pos[0], pos[1]);
+  const i = stitchAt(p, x * 10, y * 10, Math.max(3, 60 / vp.scale), st.limit, st.alpha);
+  const o = i >= 0 ? seq(p).objectAt[i] : -1;
+  return o >= 0 && showObjectMenu(o, clientX, clientY);
+}
+
+/** Opens the menu for object `o` (on the canvas or in the list), selecting it first unless it is selected. */
+function showObjectMenu(o: number, clientX: number, clientY: number): boolean {
+  const p = files.active?.pattern;
+  if (!p || settings.mode !== 'flow' || editor.active || shapeTool.active || rungTool.active || drawTool.active || orderCard.isOpen || letterMode) return false;
+  // On a selected object the menu is for the whole selection, on another one for that one.
+  if (!selectedObjects.has(o)) selectObjects([o], false);
+  redraw();
+  if (lettering || !selectedObjects.size) return false;
+  objectMenu.open(clientX, clientY, objectPanel.actions(objectInfo(p, seq(p))), t('object.menu'));
+  return objectMenu.isOpen;
+}
+
 canvas.addEventListener('contextmenu', (e) => {
-  if (settings.mode === 'image') e.preventDefault();
+  // The right button pans while painting.
+  if (settings.mode === 'image') return e.preventDefault();
+  // A long press opened it already (some browsers send this after a long press too).
+  if (objectMenu.isOpen) return e.preventDefault();
+  cancelLongPress();
+  if (openObjectMenu(local(e), e.clientX, e.clientY)) e.preventDefault();
 });
 canvas.addEventListener('dblclick', (e) => {
   const pos = local(e);

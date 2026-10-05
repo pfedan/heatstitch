@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { digitizeDefaults, digitizeShapes } from '../src/digitize/digitize';
-import { lineSettings, resewLine, traceLine } from '../src/model/line';
+import { fillToLine, lineSettings, lineToFill, resewLine, traceLine } from '../src/model/line';
 import { addShape } from '../src/model/addShape';
-import { sewObjects } from '../src/model/objects';
-import { remembered, restitch } from '../src/model/restitch';
+import { rememberObjects, sewObjects } from '../src/model/objects';
+import { remember, remembered, rememberedIn, restitch, restoreRemembered, type FillSettings } from '../src/model/restitch';
 import { transformSewObject } from '../src/model/reshape';
 import { takeOver } from '../src/model/knockout';
 import { stitchKinds } from '../src/model/sequence';
@@ -118,5 +118,36 @@ describe('lines of all kinds', () => {
     const d = digitizeShapes([{ color: 0, kind: 'stroke', form, width: 0.3 }], [red], options, { w: 0, h: 0 }, false);
     expect(d.objects[0].path).toBeDefined();
     expect(d.objects[0].line?.type).toBe('run');
+  });
+});
+
+describe('wide line as a fill', () => {
+  it('sews the area of a wide line as a fill and makes it the same line again', () => {
+    const form = parsePath('M0 0 C10 10 20 -10 30 0', ID);
+    const p = addShape(empty, { form, kind: 'stroke', width: 5 }, { r: 120, g: 80, b: 160 }, null, options)!.pattern;
+    expect(sewObjects(p)[0].kind).toBe('satin');
+    const fs: FillSettings = { pattern: 'tatami', spacing: 0.4, spacingEnd: 0.8, offset: 0.25, angle: NaN, stitch: 4, underlay: true, edge: 0, tolerance: 0.15 };
+    const r = lineToFill(p, 0, fs, options.trimMm)!;
+    expect(r.starts).toHaveLength(1);
+    rememberObjects(r.pattern, [r.starts[0]], r.ends[0]);
+    const o = sewObjects(r.pattern)[0];
+    remember(r.pattern, o, r.memory[0]);
+    expect(o.kind).toBe('fill');
+    const m = remembered(r.pattern, o)!;
+    expect(m.asLine?.line.width).toBe(5);
+    expect(m.path).toBeUndefined();
+    // About the area of a 5 mm band along a curve of about 33 mm.
+    expect(m.region!.areaMm2).toBeGreaterThan(140);
+    expect(m.region!.areaMm2).toBeLessThan(220);
+    // Kept with the project.
+    const stored = JSON.parse(JSON.stringify(rememberedIn(r.pattern, [o])));
+    expect(stored[0].asLine.line.width).toBe(5);
+    restoreRemembered(stored);
+    expect(remembered(r.pattern, o)?.asLine?.path.paths).toHaveLength(1);
+    const back = fillToLine(r.pattern, 0, options.trimMm)!;
+    const b = sewObjects(back.pattern)[0];
+    expect(b.kind).toBe('satin');
+    expect(remembered(back.pattern, b)).toMatchObject({ path: form, line: { type: 'satin', width: 5 } });
+    expect(remembered(back.pattern, b)?.fill).toBeUndefined();
   });
 });

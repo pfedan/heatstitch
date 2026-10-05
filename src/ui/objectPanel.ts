@@ -67,6 +67,14 @@ export interface ObjectHooks {
   aside: (role: 'off' | 'guide') => void;
 }
 
+/** One thing to do with the selected objects, as a button or a menu entry. */
+export interface ObjectAction {
+  icon: string;
+  label: string;
+  hint: string;
+  run: () => void;
+}
+
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
 /** Two arrows in opposite directions: start and end swap. */
@@ -191,25 +199,16 @@ export class ObjectPanel {
       b.addEventListener('click', () => this.hooks.reverse());
       actions.append(b);
     }
-    if (!info.editing && !info.shaping) {
+    const shapeActions = this.actions(info);
+    if (shapeActions.length) {
       const shapeRow = document.createElement('div');
       shapeRow.className = 'row-buttons shape-actions';
-      const add = (svg: string, label: string, hint: string, run: () => void, labelled = false) => {
-        const b = Object.assign(document.createElement('button'), { type: 'button', title: hint });
-        b.innerHTML = svg;
-        if (labelled) b.append(label);
-        else b.setAttribute('aria-label', label);
-        b.addEventListener('click', run);
+      for (const a of shapeActions) {
+        const b = Object.assign(document.createElement('button'), { type: 'button', title: a.hint });
+        b.innerHTML = a.icon;
+        b.setAttribute('aria-label', a.label);
+        b.addEventListener('click', a.run);
         shapeRow.append(b);
-      };
-      if (sel.length === 1) add(SHAPE_ICONS.duplicate, t('object.duplicate'), t('object.duplicate.hint'), () => this.hooks.duplicate());
-      if (info.subtractable) add(SHAPE_ICONS.subtract, t('object.subtract'), t('object.subtract.hint'), () => this.hooks.subtract());
-      add(SHAPE_ICONS.mirrorX, t('object.mirrorX'), t('object.mirrorX'), () => this.hooks.mirror('x'));
-      add(SHAPE_ICONS.mirrorY, t('object.mirrorY'), t('object.mirrorY'), () => this.hooks.mirror('y'));
-      if (info.objects.length > sel.length) {
-        add(SHAPE_ICONS.off, t('object.off'), t('object.off.hint'), () => this.hooks.aside('off'));
-        add(SHAPE_ICONS.guide, t('object.guide'), t('object.guide.hint'), () => this.hooks.aside('guide'));
-        add(SHAPE_ICONS.remove, t('object.delete'), t('object.delete.hint'), () => this.hooks.remove());
       }
       extraRows.push(shapeRow);
     }
@@ -226,6 +225,26 @@ export class ObjectPanel {
       : [];
     const tools = sel.length !== 1 ? [] : info.shaping ? [this.shapeTools(info.shaping)] : [this.stitchTools(info)];
     this.body.replaceChildren(head, dl, ...(actions.childElementCount ? [actions] : []), ...extraRows, ...handNote, ...tools, ...frameHint, hint);
+  }
+
+  /**
+   * What can be done with the selected objects as shapes: duplicate, cut out, mirror, put aside,
+   * delete. The same actions in the panel and in the menu on the canvas (right click, long press).
+   */
+  actions(info: ObjectInfo): ObjectAction[] {
+    if (info.editing || info.shaping || !info.selected.length) return [];
+    const out: ObjectAction[] = [];
+    const add = (icon: string, label: string, hint: string, run: () => void) => out.push({ icon, label, hint, run });
+    if (info.selected.length === 1) add(SHAPE_ICONS.duplicate, t('object.duplicate'), t('object.duplicate.hint'), () => this.hooks.duplicate());
+    if (info.subtractable) add(SHAPE_ICONS.subtract, t('object.subtract'), t('object.subtract.hint'), () => this.hooks.subtract());
+    add(SHAPE_ICONS.mirrorX, t('object.mirrorX.short'), t('object.mirrorX'), () => this.hooks.mirror('x'));
+    add(SHAPE_ICONS.mirrorY, t('object.mirrorY.short'), t('object.mirrorY'), () => this.hooks.mirror('y'));
+    if (info.objects.length > info.selected.length) {
+      add(SHAPE_ICONS.off, t('object.off'), t('object.off.hint'), () => this.hooks.aside('off'));
+      add(SHAPE_ICONS.guide, t('object.guide'), t('object.guide.hint'), () => this.hooks.aside('guide'));
+      add(SHAPE_ICONS.remove, t('object.delete'), t('object.delete.hint'), () => this.hooks.remove());
+    }
+    return out;
   }
 
   /** Editing the outline of the one selected object: nodes, delete, corner or round, done. */

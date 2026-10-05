@@ -234,6 +234,8 @@ export interface Remembered {
    * satin back instead of one found anew on the area.
    */
   asSatin?: Rails[];
+  /** A fill that was a wide line here: the line and how it was sewn, to make it a line again. */
+  asLine?: { path: Form; line: PathStitch };
   /** The object is the border of a fill in its own thread: the fill's `border.link`. */
   outline?: string;
   /** A border object: the settings it was sewn with (its `region` is the fill's area it was sewn on). */
@@ -369,6 +371,7 @@ export interface StoredObject {
   underFrom?: number;
   borderAt?: number;
   asSatin?: StoredRails[];
+  asLine?: { path: StoredPath[]; line: PathStitch };
   outline?: string;
   border?: BorderSettings;
   lettering?: Lettering;
@@ -422,6 +425,7 @@ export function rememberedIn(p: Pattern, objects: SewObject[]): StoredObject[] {
       ...(r.underFrom ? { underFrom: r.underFrom } : {}),
       ...(r.borderAt ? { borderAt: r.borderAt } : {}),
       ...(r.asSatin ? { asSatin: r.asSatin.map(storeRails) } : {}),
+      ...(r.asLine ? { asLine: { path: storeForm(r.asLine.path), line: { ...r.asLine.line } } } : {}),
       ...(r.outline ? { outline: r.outline } : {}),
       ...(r.border ? { border: { ...r.border } } : {}),
       ...(r.lettering ? { lettering: r.lettering } : {}),
@@ -631,6 +635,8 @@ export function restoreRemembered(list: unknown): number {
     if (finite(e.borderAt) && e.borderAt > 0) r.borderAt = Math.round(e.borderAt);
     const asSatin = railsFrom([e.asSatin])?.[0];
     if (asSatin?.length) r.asSatin = asSatin;
+    const asLine = e.asLine && formFrom(e.asLine.path);
+    if (asLine && isLineStitch(e.asLine!.line)) r.asLine = { path: asLine, line: { ...e.asLine!.line } };
     if (typeof e.outline === 'string') r.outline = e.outline;
     if (isBorder(e.border)) r.border = { ...e.border };
     const lettering = e.lettering === undefined ? null : letteringFrom(e.lettering);
@@ -1624,6 +1630,7 @@ export function restitch(
           ...(known?.borderAt && !filled ? { borderAt: known.borderAt } : {}),
           // Its shape changed: the satin it was no longer fits.
           ...(known?.asSatin && !newArea ? { asSatin: known.asSatin } : {}),
+          ...(known?.asLine && !newArea ? { asLine: known.asLine } : {}),
           ...(known?.outline ? { outline: known.outline, border: known.border } : {}),
         };
     if (known?.lettering) after.lettering = known.lettering;
