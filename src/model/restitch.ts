@@ -6,12 +6,12 @@ import { chooseAngle, fillRegion, type FillParams } from '../digitize/fill';
 import { contourFill, fieldFill, guideField, stitchField } from '../digitize/flow';
 import { spiralFill } from '../digitize/spiral';
 import { coverage } from '../digitize/measure';
-import { expandRegion, sample, signedField, type Region } from '../digitize/region';
+import { expandRegion, outline, sample, signedField, type Region } from '../digitize/region';
 import { runStitch, TOLERANCE } from '../digitize/run';
 import { eStitches, pairs, satinStitches, underlayOf, type Column, type SatinParams, type UnderInset, type UnderlayKind } from '../digitize/satin';
 import { columnFromRungs, cumulative, inside, pointAt, project, reversedRungs, stripOfLoop, tidyRungs, type Arc, type Rung } from '../digitize/rungs';
 import type { Pt } from '../digitize/skeleton';
-import { formFrom, storeForm, type Form, type StoredPath } from '../shape/path';
+import { flatten, formFrom, storeForm, type Form, type StoredPath } from '../shape/path';
 import { rasterize, rasterizeStroke, type LineCap } from '../shape/rasterize';
 import { distanceInside, distanceToSeeds } from '../image/edt';
 import { tidy, withRecords } from './edit';
@@ -350,11 +350,59 @@ export function remembered(p: Pattern, o: SewObject): Remembered | undefined {
  */
 export function keepShape(p: Pattern, o: SewObject, kinds: Uint8Array): Remembered {
   const known = remembered(p, o);
-  if (known) return known;
+  if (known?.columns) return known;
   const an = analyze(p, o, kinds);
   const satin = an.parts.filter((pt) => pt.kind === 'satin');
-  const columns = satin.map((pt) => satinColumns(p, pt, kinds).map((c) => railsOf(p, c)).filter((r): r is Rails => !!r));
-  return { region: an.fill, read: true, ...(satin.length && columns.every((c) => c.length) ? { columns } : {}) };
+  // A satin that knows its shape (drawn, or from a vector file) but not its rails: read from the
+  // stitches, laid onto the shape's edge.
+  const columns = satin.map((pt) => readRails(p, pt, kinds, known));
+  const read = satin.length && columns.every((c) => c.length) ? { columns } : {};
+  return known ? { ...known, ...read } : { region: an.fill, read: true, ...read };
+}
+
+/** The rails of a satin part as its stitches have them, laid onto the edge of its shape when it is known. */
+function readRails(p: Pattern, pt: Part, kinds: Uint8Array, known?: Remembered): Rails[] {
+  const rails = satinColumns(p, pt, kinds).map((c) => railsOf(p, c)).filter((r): r is Rails => !!r);
+  const edge = edgeOf(known);
+  return edge ? rails.map((r) => ({ left: onEdge(r.left, r.right, edge), right: onEdge(r.right, r.left, edge) })) : rails;
+}
+
+/** The edge of a known shape as closed lines (its curves when drawn), or null. */
+function edgeOf(known?: Remembered): Pt[][] | null {
+  if (known?.form) return known.form.paths.map((path) => flatten(path, 0.05)).filter((l) => l.length > 2);
+  if (known?.shape) return outline(known.shape) as Pt[][];
+  return null;
+}
+
+/**
+ * A rail moved onto the shape's edge, point by point: each to the nearest point of the edge, when
+ * that is near (within a third of the column's width there), so it never jumps to the other side.
+ */
+function onEdge(rail: Pt[], other: Pt[], edge: Pt[][]): Pt[] {
+  return rail.map((q, i) => {
+    let best: Pt = q;
+    let bd = Infinity;
+    for (const line of edge) {
+      for (let k = 1; k < line.length; k++) {
+        const c = nearestOnSeg(q, line[k - 1], line[k]);
+        const d = dist(c, q);
+        if (d < bd) {
+          bd = d;
+          best = c;
+        }
+      }
+    }
+    const w = dist(q, other[i] ?? q);
+    return bd <= Math.max(0.3, w / 3) ? best : q;
+  });
+}
+
+function nearestOnSeg(q: Pt, a: Pt, b: Pt): Pt {
+  const vx = b[0] - a[0];
+  const vy = b[1] - a[1];
+  const l2 = vx * vx + vy * vy;
+  const t = l2 > 0 ? Math.min(1, Math.max(0, ((q[0] - a[0]) * vx + (q[1] - a[1]) * vy) / l2)) : 0;
+  return [a[0] + vx * t, a[1] + vy * t];
 }
 
 /**
@@ -630,9 +678,11 @@ export function rememberShapes(p: Pattern, objs: SewObject[], starts: number[], 
     const o = at.get(s);
     const line = forms[j]?.path;
     if (o && line) return remember(p, o, { region: null, path: line, ...(forms[j]?.line ? { line: { ...forms[j]!.line! } } : {}) });
+    const f = forms[j];
+    // A satin from a vector file keeps its shape: its rails lie on the shape's edge.
+    if (!shape && o && f?.form) return remember(p, o, { region: null, form: f.form });
     if (!shape || !o) return;
     const region = regionFrom(shape);
-    const f = forms[j];
     if (region) remember(p, o, { region, fill: { ...shape.fill }, ...(f?.form ? { form: f.form, ...(f.knockout ? { knockout: true } : {}) } : {}) });
   });
 }
@@ -1101,7 +1151,25 @@ function railsOf(p: Pattern, c: { s: number; e: number }): Rails | null {
     left.push(pt10(p, i));
     right.push(pt10(p, i + 1));
   }
-  return left.length < 2 ? null : { left, right };
+  return left.length < 2 ? null : { left: undent(left, right), right: undent(right, left) };
+}
+
+/**
+ * A rail read from penetrations without the dents short stitches leave on the inside of a curve
+ * (a penetration moved 15 % of the width towards the other rail, every second one or so): a point
+ * that lies nearer the other rail than the line between its close neighbours goes back onto it.
+ */
+function undent(rail: Pt[], other: Pt[]): Pt[] {
+  const out = rail.slice();
+  for (let i = 1; i + 1 < rail.length; i++) {
+    const a = rail[i - 1];
+    const b = rail[i + 1];
+    if (dist(a, b) > 0.8) continue;
+    const m: Pt = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    const w = dist(m, other[i]);
+    if (w - dist(rail[i], other[i]) > Math.max(0.1, w * 0.08)) out[i] = m;
+  }
+  return out;
 }
 
 /** A satin column between two rails, filled in between so the spacing can get finer. */
@@ -1270,8 +1338,8 @@ function newFill(p: Pattern, o: SewObject, a: Analysis, s: FillSettings, reverse
  * New satin for a part, along `known` rails (kept from an earlier edit) or the rails its stitches
  * have now. Returns the stitches and the rails used.
  */
-function newSatin(p: Pattern, pt: Part, s: SatinSettings, kinds: Uint8Array, known?: Rails[], reverse = false): { runs: Pt[][]; rails: Rails[] } | null {
-  let rails = known ?? satinColumns(p, pt, kinds).map((c) => railsOf(p, c)).filter((r): r is Rails => !!r);
+function newSatin(p: Pattern, pt: Part, s: SatinSettings, kinds: Uint8Array, known?: Rails[], reverse = false, shape?: Remembered): { runs: Pt[][]; rails: Rails[] } | null {
+  let rails = known ?? readRails(p, pt, kinds, shape);
   // Reversed: the columns from the last to the first, each from its other end (sides swap with it).
   if (reverse) rails = rails.slice().reverse().map(reversedRails);
   const runs = satinRuns(rails, reverse ? swappedSides(s) : s);
@@ -1734,7 +1802,7 @@ export function restitch(
       if (line) return k === firstPart ? (line.length ? line : null) : 'skip';
       if (together) return !whole ? null : k === firstPart ? whole : 'skip';
       if (settings.kind === 'satin') {
-        const sat = newSatin(p, pt, settings.s, kinds, keptRails?.[satinParts.indexOf(pt)], reverse);
+        const sat = newSatin(p, pt, settings.s, kinds, keptRails?.[satinParts.indexOf(pt)], reverse, known);
         if (sat) rails.push(sat.rails);
         return sat?.runs ?? null;
       }
