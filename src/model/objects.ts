@@ -40,6 +40,17 @@ export interface SewObject {
 
 const GREY: ThreadColor = { r: 128, g: 128, b: 128 };
 
+/**
+ * The kind an object was sewn in here, by its stitches (what restitch.ts remembers). It goes before
+ * what the stitches suggest: a small spiral fill winds too loosely to be read as one.
+ */
+let knownKind: ((p: Pattern, first: number, last: number) => ObjectKind | undefined) | null = null;
+
+/** Lets restitch.ts tell sewObjects the kind of the objects it knows (it imports this module). */
+export function knowKinds(f: typeof knownKind): void {
+  knownKind = f;
+}
+
 export function sewObjects(p: Pattern, kinds = stitchKinds(p), tags = tagShortStitches(p)): SewObject[] {
   const out: SewObject[] = [];
   for (const g of groupSections(p, sections(p, kinds))) {
@@ -61,7 +72,7 @@ export function sewObjects(p: Pattern, kinds = stitchKinds(p), tags = tagShortSt
       sections: g.length,
       stitches: m.stitches,
       threadMm: m.thread,
-      kind: kindOf(p, i, j, m),
+      kind: knownKind?.(p, i, j) ?? kindOf(p, i, j, m),
       tieIn,
       tieOff,
       minX: m.minX,
