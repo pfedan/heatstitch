@@ -1456,6 +1456,11 @@ details.panel.section[open] > summary {
   line-height: 1.4;
 }
 
+.file-actions .hoop-note.info {
+  border-left-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
 .file-actions .hoop-note.turned {
   border-left-color: #d97706;
   background: color-mix(in srgb, #d97706 10%, transparent);
@@ -3568,4 +3573,9 @@ button.mini-sw.thread-sw {
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   box-shadow: inset 3px 0 0 var(--accent);
   padding-left: 6px;
+}
+
+/* A size that does not fit the chosen hoop (lettering card, image mode) */
+.hoop-over {
+  color: #dc2626;
 }

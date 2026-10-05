@@ -2135,6 +2135,7 @@ const letteringPanel = new LetteringPanel({
   close: () => selectObjects([], false),
   letters: (on) => setLetterMode(on),
   release: () => releaseLettering(),
+  hoop: () => settings.hoop,
 });
 
 /** The letters of the chosen lettering where they are now, or null while its font loads. */
@@ -2556,7 +2557,7 @@ function redraw(): void {
       planPreview = null;
       if (correctMessage?.kind === 'plan') correctMessage = null;
     }
-    hoopPanel.refresh(active?.pattern?.bounds);
+    hoopPanel.refresh(active?.pattern?.bounds, active?.original?.hoop);
     correctPanel.update({
       file: active,
       zoneSelected: !!selectedZone,

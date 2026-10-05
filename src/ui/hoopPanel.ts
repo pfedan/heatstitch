@@ -17,11 +17,28 @@ export function hoopMessage(b: Bounds | undefined, hoop: Hoop | null): { text: s
   return { text: t('hoop.over', { hoop: hoopLabel(hoop), over: parts.join(t('hoop.and')) }), bigger: biggerHoop(b, hoop), turned: false };
 }
 
+/** A short note behind a size (mm): too big for the hoop, or only turned; empty when it fits. */
+export function hoopShort(w: number, h: number, hoop: Hoop | null): string {
+  if (!hoop) return '';
+  const f = hoopFit({ minX: 0, minY: 0, maxX: w * 10, maxY: h * 10 }, hoop);
+  return f.fits ? '' : t(f.turned ? 'hoop.short.turned' : 'hoop.short.over', { hoop: hoopLabel(hoop) });
+}
+
+/**
+ * The hoop the file names in its header, when it differs from the chosen one and the design fits it
+ * (some software writes a fixed size whatever the design).
+ */
+export function fileHoopOffer(b: Bounds | undefined, hoop: Hoop | null, fileHoop: Hoop | undefined): Hoop | null {
+  if (!b || !fileHoop || (hoop && hoopKey(hoop) === hoopKey(fileHoop))) return null;
+  const f = hoopFit(b, fileHoop);
+  return f.fits || f.turned ? fileHoop : null;
+}
+
 /**
  * The hoop picker under the file list: no hoop, the common sewing fields with their brands, or an own
  * size; and the line saying whether the active design fits.
  */
-export function bindHoop(s: Settings, onChange: () => void): { refresh: (b: Bounds | undefined) => void } {
+export function bindHoop(s: Settings, onChange: () => void): { refresh: (b: Bounds | undefined, fileHoop?: Hoop) => void } {
   const select = $<HTMLSelectElement>('hoop');
   const custom = $<HTMLElement>('hoop-custom');
   const w = $<HTMLInputElement>('hoop-w');
@@ -60,7 +77,7 @@ export function bindHoop(s: Settings, onChange: () => void): { refresh: (b: Boun
   w.addEventListener('change', typed);
   h.addEventListener('change', typed);
 
-  const refresh = (b: Bounds | undefined) => {
+  const refresh = (b: Bounds | undefined, fileHoop?: Hoop) => {
     bounds = b;
     // Rebuilt only for another language, so an open list is not disturbed by redraws.
     if (select.options[0]?.text !== t('hoop.none')) {
@@ -83,18 +100,25 @@ export function bindHoop(s: Settings, onChange: () => void): { refresh: (b: Boun
     select.title = hoop ? '' : t('hoop.hint');
 
     const msg = hoopMessage(bounds, hoop);
-    note.hidden = !msg;
-    if (msg) {
-      note.classList.toggle('turned', msg.turned);
-      const parts: Node[] = [document.createTextNode(msg.text)];
-      if (msg.bigger) {
-        const bigger = msg.bigger;
+    const named = fileHoopOffer(bounds, hoop, fileHoop);
+    // The hoop the file was made for beats a guess at a bigger one.
+    const offer = named ?? msg?.bigger ?? null;
+    const text = msg?.text ?? (named ? t('hoop.file', { hoop: hoopLabel(named) }) : '');
+    note.hidden = !text;
+    if (text) {
+      note.classList.toggle('turned', !!msg?.turned);
+      note.classList.toggle('info', !msg);
+      const parts: Node[] = [document.createTextNode(text)];
+      if (offer) {
         const btn = Object.assign(document.createElement('button'), {
           type: 'button',
           className: 'link',
-          textContent: t('hoop.pick', { hoop: hoopLabel(bigger) }),
+          textContent: t('hoop.pick', { hoop: hoopLabel(offer) }),
         });
-        btn.addEventListener('click', () => set(bigger));
+        btn.addEventListener('click', () => {
+          ownHoop = null;
+          set({ ...offer });
+        });
         parts.push(document.createTextNode(' '), btn);
       }
       note.replaceChildren(...parts);

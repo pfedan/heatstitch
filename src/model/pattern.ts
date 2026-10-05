@@ -41,6 +41,8 @@ export interface Pattern {
   colors: ThreadColor[];
   /** Bounds of STITCH records only, 0.1 mm. */
   bounds: Bounds;
+  /** Sewing field the file names in its header (PES 5+, JEF), mm; only set by the readers. */
+  hoop?: { w: number; h: number };
 }
 
 /** Growable record list used by the parsers. */
