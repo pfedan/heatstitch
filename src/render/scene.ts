@@ -71,6 +71,8 @@ export interface Scene {
   flow?: FlowScene | null;
   /** Symbols in the density mode (all stitches shown). */
   markers?: Markers | null;
+  /** Stitches to show clearly on a dimmed heatmap (the objects a proposal changes, as previewed). */
+  focus?: Pattern[] | null;
 }
 
 /**
@@ -115,6 +117,13 @@ export function drawScene(ctx: CanvasRenderingContext2D, w: number, h: number, s
     const end = pattern.cmd.length - 1;
     if (s.marks.jumps) drawJumps(ctx, vp, pattern, end);
     if (scene.markers) drawMarkers(ctx, vp, pattern, { markers: scene.markers, marks: { ...s.marks, points: s.marks.points && !edit }, limit: end }, w, h);
+  }
+  if (scene.focus?.length) {
+    ctx.save();
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+    ctx.fillRect(0, 0, w, h);
+    ctx.restore();
+    for (const fp of scene.focus) if (!s.realistic || !drawThreads(ctx, vp, fp, 1, s.threadMm)) drawStitches(ctx, vp, fp, 1, false);
   }
   if (scene.highlight) drawZoneHighlight(ctx, vp, scene.highlight);
   if (pattern && edit) drawEditOverlay(ctx, vp, pattern, edit, w, h);

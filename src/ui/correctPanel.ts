@@ -19,6 +19,8 @@ export interface CorrectHooks {
   plan: (scope: 'all' | 'zone') => void;
   /** Tick or untick a proposal (`fine`: the fine correction on the stitches). */
   check: (ids: number[] | 'fine', on: boolean) => void;
+  /** Tick all proposals (and the fine correction) or none. */
+  checkAll: (on: boolean) => void;
   /** Take over the ticked proposals, or drop them all. */
   applyPlan: () => void;
   discardPlan: () => void;
@@ -313,7 +315,7 @@ export class CorrectPanel {
     if (v.after) {
       out.push(
         p(
-          t('correct.result', {
+          t('plan.result', {
             c0: formatNumber(v.before.critical),
             c1: formatNumber(v.after.critical),
             w0: formatNumber(v.before.caution),
@@ -323,6 +325,16 @@ export class CorrectPanel {
         ),
       );
     }
+    out.push(p(t('plan.hover'), 'muted small'));
+    // Pick all or none at once (none is ticked at first).
+    const pick = document.createElement('div');
+    pick.className = 'plan-pick';
+    for (const [key, on] of [['plan.all', true], ['plan.noneChecked', false]] as const) {
+      const b = Object.assign(document.createElement('button'), { type: 'button', className: 'link small', textContent: t(key) });
+      b.addEventListener('click', () => this.hooks.checkAll(on));
+      pick.append(b);
+    }
+    out.push(pick);
     const list = document.createElement('ul');
     list.className = 'plan-list';
     for (const r of v.rows) list.append(this.planRow(r));

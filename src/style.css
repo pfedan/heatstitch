@@ -3471,3 +3471,9 @@ button.mini-sw.thread-sw {
 .object-stitches .free-row {
   margin-top: 6px;
 }
+
+.plan-pick {
+  display: flex;
+  gap: 14px;
+  margin: 4px 0 2px;
+}

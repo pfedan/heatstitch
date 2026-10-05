@@ -55,7 +55,7 @@ import {
   type Transition,
 } from './model/sequence';
 import { recolor, sameColor } from './model/recolor';
-import { COLOR_CHANGE, patternStats, STITCH, TRIM } from './model/pattern';
+import { COLOR_CHANGE, computeBounds, patternStats, STITCH, TRIM } from './model/pattern';
 import { stitchAlpha, stitchAt, stitchColors, transitionAt, type StitchStyle } from './render/flow';
 import type { FlowScene, ShapeOutline } from './render/scene';
 import type { Mode } from './settings';
@@ -65,7 +65,7 @@ import { ObjectPanel, OrderCard } from './ui/objectPanel';
 import { StitchPanel, type Highlight, type StitchInfo } from './ui/stitchPanel';
 import { borderRanges, syncBorders } from './model/border';
 import { borderLoops } from './digitize/border';
-import { analyze, forget, keepShape, openOnPurpose, objectKey, measureFill, measureRun, measureSatin, remember, remembered, type Rails, rememberedIn, rememberShapes, restitch, shapeTrust, unionRegion, underlayRanges, type Remembered, type Settings as RestitchSettings, type ShapeTrust, type RestitchResult } from './model/restitch';
+import { analyze, forget, holdMemory, keepShape, openOnPurpose, objectKey, measureFill, measureRun, measureSatin, remember, remembered, type Rails, rememberedIn, rememberShapes, restitch, shapeTrust, unionRegion, underlayRanges, type Remembered, type Settings as RestitchSettings, type ShapeTrust, type RestitchResult } from './model/restitch';
 import { outline } from './digitize/region';
 import { railsFromOutline } from './digitize/rungs';
 import type { Pt } from './digitize/skeleton';
@@ -181,7 +181,14 @@ function activeValidationImg(): HTMLCanvasElement | null {
   return validationImg.img;
 }
 
-const scene = (): Scene => ({
+const scene = (): Scene => {
+  // A proposal under the pointer: its stitches and heatmap, without the findings of the design as it is.
+  const pv = settings.mode === 'density' && planState && planState.file === files.active ? planPreview : null;
+  if (pv) return { ...baseScene(), pattern: pv.pattern, markers: null, gridImg: pv.img ?? gridImg, validation: null, validationImg: null, counted: null, focus: pv.focus };
+  return baseScene();
+};
+
+const baseScene = (): Scene => ({
   pattern: (settings.mode === 'flow' ? flowPreview : null) ?? editor.preview ?? files.active?.pattern ?? null,
   flow: flowScene(),
   markers: settings.mode === 'density' && files.active?.pattern && !editor.preview ? seq(files.active.pattern).markers : null,
@@ -2550,6 +2557,7 @@ function redraw(): void {
     if (planState && (planState.file !== active || planState.pattern !== active?.pattern)) {
       planState = null;
       planHover = null;
+      planPreview = null;
       if (correctMessage?.kind === 'plan') correctMessage = null;
     }
     correctPanel.update({
@@ -2922,7 +2930,7 @@ function tuneToFabric(quiet = false): void {
     before: v ? cellsOf(v) : { critical: 0, caution: 0 },
     after: null,
   };
-  planState = { file: f, pattern: p, plan, checked: new Set(proposals.filter((x) => x.checked).map((x) => x.id)), fine: [], fineOn: false, view };
+  planState = { file: f, pattern: p, plan, checked: new Set(), fine: [], fineOn: false, view };
   planMessage();
   redraw();
 }
@@ -2938,6 +2946,7 @@ async function planFix(scope: 'all' | 'zone'): Promise<void> {
   const region = scope === 'zone' && z ? { minX: z.bbox.minX - pad, minY: z.bbox.minY - pad, maxX: z.bbox.maxX + pad, maxY: z.bbox.maxY + pad } : undefined;
   planState = null;
   planHover = null;
+  planPreview = null;
   const stale = () => files.active !== f || f.pattern !== p;
   correctMessage = { kind: 'progress', done: 0, total: 0 };
   redraw();
@@ -2959,14 +2968,76 @@ async function planFix(scope: 'all' | 'zone'): Promise<void> {
     if (stale()) return;
     const fine = fineZones(p, after, plan.proposals, opt);
     const rows = planRows(p, plan.proposals);
-    const view: PlanView = { rows, fine: fine.length, fineChecked: true, locked: plan.locked, before: cellsOf(v), after: plan.proposals.length ? cellsOf(after) : null };
-    planState = { file: f, pattern: p, plan, checked: new Set(plan.proposals.filter((x) => x.checked).map((x) => x.id)), fine, fineOn: true, view };
+    const view: PlanView = { rows, fine: fine.length, fineChecked: false, locked: plan.locked, before: cellsOf(v), after: plan.proposals.length ? cellsOf(after) : null };
+    planState = { file: f, pattern: p, plan, checked: new Set(), fine, fineOn: false, view };
     planMessage();
   } catch (err) {
     console.error(err);
     correctMessage = { kind: 'text', text: t('correct.error', { msg: err instanceof Error ? err.message : String(err) }) };
   }
   redraw();
+}
+
+/** The stitches of the objects `which` (sewing order), each as a pattern of its own. */
+function objectStitches(p: Pattern, which: number[]): Pattern[] {
+  const objs = seq(p).objects;
+  return [...new Set(which)].flatMap((i) => {
+    const o = objs[i];
+    if (!o) return [];
+    const x = p.x.slice(o.first, o.last + 1);
+    const y = p.y.slice(o.first, o.last + 1);
+    const cmd = p.cmd.slice(o.first, o.last + 1);
+    return [{ name: p.name, format: p.format, x, y, cmd, colors: [o.color], bounds: computeBounds(x, y, cmd) }];
+  });
+}
+
+/** A proposal taken over only for a look: its stitches and their heatmap (once worked out). */
+interface PlanPreview {
+  pattern: Pattern;
+  img: HTMLCanvasElement | null;
+  /** The new stitches of the objects it changes, each on its own. */
+  focus: Pattern[];
+}
+/** Previews of the proposals by their ids, for the plan they belong to. */
+let planPreviews: { plan: Plan; byIds: Map<string, PlanPreview | null> } | null = null;
+/** The preview shown on the canvas now (the pointer is on its row). */
+let planPreview: PlanPreview | null = null;
+
+/**
+ * Shows the proposals `ids` taken over on the canvas, without changing anything: the stitches at
+ * once, their heatmap when it is worked out. Null: back to the design as it is.
+ */
+function showPlanPreview(ids: number[] | null): void {
+  const st = planState;
+  planPreview = null;
+  if (!st || !ids || files.active !== st.file || st.file.pattern !== st.pattern) return;
+  if (planPreviews?.plan !== st.plan) planPreviews = { plan: st.plan, byIds: new Map() };
+  const key = ids.join(',');
+  const cache = planPreviews.byIds;
+  if (!cache.has(key)) {
+    const chosen = st.plan.proposals.filter((x) => ids.includes(x.id));
+    // Sewn for a look only: what the objects remember stays as it is.
+    const release = holdMemory();
+    let pattern: Pattern | null = null;
+    try {
+      pattern = applyProposals(st.pattern, chosen, settings.trimMm)?.pattern ?? null;
+    } finally {
+      release();
+    }
+    const pv: PlanPreview | null = pattern && { pattern, img: null, focus: objectStitches(pattern, chosen.map((x) => x.index)) };
+    cache.set(key, pv);
+    if (pv) {
+      const { metric, cellMm, blurMm, includeJumps } = settings;
+      void density
+        .density(pv.pattern, { metric, cellMm, blurMm, includeJumps })
+        .then((g) => {
+          pv.img = gridToCanvas(g, settings.scales[metric].max);
+          if (planPreview === pv) redraw();
+        })
+        .catch((err) => console.error(err));
+    }
+  }
+  planPreview = cache.get(key) ?? null;
 }
 
 /** Where the objects of the proposals `ids` lie, together (mm). */
@@ -2996,6 +3067,7 @@ async function applyPlan(): Promise<void> {
   const chosen = st.plan.proposals.filter((x) => st.checked.has(x.id));
   correctMessage = { kind: 'busy' };
   planHover = null;
+  planPreview = null;
   redraw();
   try {
     let p = st.pattern;
@@ -3049,11 +3121,21 @@ const correctPanel = new CorrectPanel(settings, {
   discardPlan: () => {
     planState = null;
     planHover = null;
+    planPreview = null;
     correctMessage = null;
+    redraw();
+  },
+  checkAll: (on) => {
+    const st = planState;
+    if (!st) return;
+    st.checked = new Set(on ? st.plan.proposals.map((x) => x.id) : []);
+    st.fineOn = on && st.fine.length > 0;
+    planMessage();
     redraw();
   },
   hoverProposal: (ids) => {
     planHover = ids && proposalsBox(ids);
+    showPlanPreview(ids);
     redraw();
   },
   showProposal: (ids) => {
