@@ -331,7 +331,8 @@ figure img[src*='stitchplan'],
 figure img[src*='sections'],
 figure img[src*='kinds'],
 figure img[src*='shorts'],
-figure img[src*='leather'] {
+figure img[src*='/leather.jpg'],
+figure img[src*='save-'] {
   width: auto;
   max-width: 100%;
   max-height: 520px;
