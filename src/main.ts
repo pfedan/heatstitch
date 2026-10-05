@@ -68,7 +68,12 @@ import { ShapeTool } from './ui/shapeTool';
 import { FrameTool } from './ui/frameTool';
 import { formOf, reshapeFill, scaleBlocked, transformSewObject } from './model/reshape';
 import { transformObject } from './model/transform';
-import { translation, type Form, type Mat } from './shape/path';
+import { apply, translation, type Form, type Mat } from './shape/path';
+import { fontNow, loadCatalog, loadFont, type Catalog } from './lettering/font';
+import { followText, layout, LETTERING_DEFAULTS, type Lettering } from './lettering/layout';
+import { letteringObjects, letteringOf, placeLettering, withoutObjects } from './lettering/place';
+import { sewLettering } from './lettering/sew';
+import { LetteringPanel } from './ui/letteringPanel';
 import { digitizeDefaults, isStroke, SATIN_MAX, type Digitized } from './digitize/digitize';
 import { recommendedSpacing } from './validation/profiles';
 import { numberInColor, overlaps, rememberObjects, sewObjects, splitObject, type SewObject } from './model/objects';
@@ -248,6 +253,10 @@ interface Sequence {
   over?: number[][];
   /** Object of each record (-1 between objects). */
   objectAt: Int32Array;
+  /** The lettering each object belongs to (built when first needed). */
+  letterings?: (Lettering | undefined)[];
+  /** Their names in the list, per language. */
+  letteringNames?: { lang: string; names: ReadonlyMap<number, string> | undefined };
 }
 const seqCache = new WeakMap<Pattern, Sequence>();
 function seq(p: Pattern): Sequence {
@@ -454,6 +463,21 @@ function selectObjects(objs: number[], toggle: boolean): void {
     next = new Set(selectedObjects);
     for (const o of objs) if (!next.delete(o)) next.add(o);
   } else next = new Set(objs);
+  // A lettering is chosen as a whole: all its objects, or none of them.
+  const p0 = files.active?.pattern;
+  if (p0) {
+    const q0 = seq(p0);
+    const all = letteringsOf(p0, q0);
+    for (const o of objs) {
+      const id = all[o]?.id;
+      if (!id) continue;
+      all.forEach((l, k) => {
+        if (l?.id !== id) return;
+        if (next.has(o)) next.add(k);
+        else next.delete(k);
+      });
+    }
+  }
   selectedObjects = next;
   selectionKey++;
   flowPreview = null;
@@ -1145,7 +1169,7 @@ const frameTool = new FrameTool({
 
 /** The objects the frame is on: the selected ones in the Ablauf mode, level Objects (in sewing order). */
 function frameObjects(): number[] {
-  if (settings.mode !== 'flow' || !selectedObjects.size || editor.active || shapeTool.active || rungTool.active || orderCard.isOpen) return [];
+  if (settings.mode !== 'flow' || !selectedObjects.size || editor.active || shapeTool.active || rungTool.active || orderCard.isOpen || letterMode) return [];
   const n = files.active?.pattern ? seq(files.active.pattern).objects.length : 0;
   return [...selectedObjects].filter((o) => o < n).sort((a, b) => a - b);
 }
@@ -1179,6 +1203,8 @@ function commitTransform(m: Mat): void {
   const p = f?.pattern;
   const sel = frameObjects();
   if (!f || !p || !sel.length) return redraw();
+  // A lettering keeps its text: it is set anew where the frame put it.
+  if (lettering) return transformLettering(m);
   let cur = p;
   let hand = 0;
   let restitched = false;
@@ -1202,6 +1228,408 @@ function commitTransform(m: Mat): void {
   selectionKey++;
   if (restitched && hand) layers.say(t('shape.handReplaced', { n: formatNumber(hand) }));
   redraw();
+}
+
+// Lettering ---------------------------------------------------------------------------------------
+
+/** The fonts that come with the app (loaded on start, the fonts themselves when first used). */
+let catalog: Catalog | null = null;
+void loadCatalog()
+  .then((c) => {
+    catalog = c;
+    redraw();
+  })
+  .catch((err) => console.warn('No font catalog', err));
+
+/** The font a new lettering starts with: the one used last. */
+let lastFont = 'barstitch_regular';
+/** A red that shows on light and dark fabric alike, for a lettering in a new design. */
+const LETTERING_RED: ThreadColor = { r: 237, g: 23, b: 31, name: 'Red', pecIndex: 5 };
+
+/**
+ * The lettering chosen (all its objects are selected), as last set: while its font is still
+ * loading, ahead of its stitches. `recorded`: this edit already has its undo step; `sewn`: the
+ * settings its stitches were made with.
+ */
+let lettering: { l: Lettering; f: LoadedFile; recorded: boolean; sewn: string } | null = null;
+/** Moving single letters (the letter level), and the letter chosen there (its place in the text). */
+let letterMode = false;
+let letterAt: number | null = null;
+/** A letter being dragged: its place, where the drag started (mm) and its offset then. */
+let letterDrag: { at: number; from: [number, number]; dx: number; dy: number; moved: boolean } | null = null;
+/** The text field gets the focus once the card shows (a new lettering). */
+let focusText = false;
+
+const letteringsOf = (p: Pattern, q: Sequence) => (q.letterings ??= q.objects.map((o) => letteringOf(p, o)));
+
+/** The lettering all selected objects belong to, if they do. */
+function selectedLettering(p: Pattern, q: Sequence): Lettering | null {
+  if (settings.mode !== 'flow' || !selectedObjects.size) return null;
+  const all = letteringsOf(p, q);
+  let l: Lettering | null = null;
+  for (const o of selectedObjects) {
+    const x = all[o];
+    if (!x || (l && x.id !== l.id)) return null;
+    l = x;
+  }
+  return l;
+}
+
+/** Follows the selection: the card is on while a lettering is chosen, with its font loaded. */
+function syncLettering(): void {
+  const f = files.active;
+  const p = f?.pattern;
+  const l = p ? selectedLettering(p, seq(p)) : null;
+  const was = !!lettering;
+  const wasLetters = letterMode;
+  if (!l || !f) {
+    lettering = null;
+    letterMode = false;
+    letterAt = null;
+  } else if (!lettering || lettering.l.id !== l.id || lettering.f !== f) {
+    lettering = { l, f, recorded: false, sewn: JSON.stringify(l) };
+    letterMode = false;
+    letterAt = null;
+  }
+  if (lettering && !fontNow(lettering.l.font)) {
+    const want = lettering.l.font;
+    void loadFont(want)
+      .then(() => redraw())
+      .catch(() => layers.say(t('lettering.loadFailed'), true));
+  }
+  if (was !== !!lettering || wasLetters !== letterMode) updateLevel();
+}
+
+/** What the card shows about the chosen lettering. */
+function letteringInfo(q: Sequence) {
+  const objs = [...selectedObjects].map((o) => q.objects[o]).filter(Boolean);
+  const l = lettering!.l;
+  return {
+    lettering: l,
+    font: fontNow(l.font) ?? null,
+    catalog,
+    width: (Math.max(...objs.map((o) => o.maxX)) - Math.min(...objs.map((o) => o.minX))) / 10,
+    height: (Math.max(...objs.map((o) => o.maxY)) - Math.min(...objs.map((o) => o.minY))) / 10,
+    stitches: objs.reduce((a, o) => a + o.stitches, 0),
+    letters: letterMode,
+    letter: letterAt,
+  };
+}
+
+/** Names of lettering objects in the list: the text, numbered when it is sewn in pieces. */
+function letteringNames(p: Pattern, q: Sequence): ReadonlyMap<number, string> | undefined {
+  if (q.letteringNames?.lang !== getLang()) q.letteringNames = { lang: getLang(), names: namesOf(p, q) };
+  return q.letteringNames.names;
+}
+
+function namesOf(p: Pattern, q: Sequence): ReadonlyMap<number, string> | undefined {
+  const all = letteringsOf(p, q);
+  if (!all.some(Boolean)) return undefined;
+  const names = new Map<number, string>();
+  const pieces = new Map<string, number[]>();
+  all.forEach((l, o) => {
+    if (l) pieces.set(l.id, [...(pieces.get(l.id) ?? []), o]);
+  });
+  for (const list of pieces.values()) {
+    const l = all[list[0]]!;
+    const one = l.text.replace(/\s+/g, ' ').trim();
+    const text = one.length > 20 ? `${one.slice(0, 19)}…` : one;
+    list.forEach((o, k) => names.set(o, t('lettering.name', { text }) + (list.length > 1 ? ` ${k + 1}` : '')));
+  }
+  return names;
+}
+
+/** A new lettering: under the design (or as a new design), its text selected to type over. */
+async function newLettering(): Promise<void> {
+  if (settings.mode !== 'flow') setMode('flow');
+  let font;
+  try {
+    font = await loadFont(lastFont);
+  } catch {
+    layers.say(t('lettering.loadFailed'), true);
+    return;
+  }
+  const f = files.active;
+  const p = f?.pattern ?? null;
+  const height = Math.max(font.min * font.cap, Math.min(15, font.max * font.cap));
+  const b = p?.bounds;
+  const colors = p?.colors ?? [];
+  const l: Lettering = {
+    ...LETTERING_DEFAULTS,
+    id: `L${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+    text: t('lettering.new'),
+    font: font.id,
+    height: Math.round(height * 2) / 2,
+    align: 'center',
+    // Under the design, in its last thread (no color change for it).
+    x: b ? Math.round((b.minX + b.maxX) / 20) : 0,
+    y: b ? Math.round(b.maxY / 10 + 6 + height) : 0,
+    color: { ...(colors[colors.length - 1] ?? LETTERING_RED) },
+  };
+  const sewn = sewLettering(font, l, settings.trimMm);
+  if (!f || !p) {
+    // A new design of the lettering alone.
+    const placed = placeLettering(null, [], sewn, l, t('lettering.title'));
+    if (!placed) return;
+    const data = writePattern(placed.pattern, 'pes');
+    await files.addWithObjects(`${t('lettering.title')}.pes`, data.slice().buffer, rememberedIn(placed.pattern, sewObjects(placed.pattern)));
+    const np = files.active?.pattern;
+    if (!np) return;
+    const nb = np.bounds;
+    const cx = (nb.minX + nb.maxX) / 20;
+    const cy = (nb.minY + nb.maxY) / 20;
+    vp.fit(cx - 50, cy - 35, cx + 50, cy + 35, stageW, stageH);
+    selectedObjects = new Set(letteringObjects(np, seq(np).objects, l.id).map((o) => o.index));
+  } else {
+    const placed = placeLettering(p, [], sewn, l);
+    if (!placed) return;
+    applyEdit(placed.pattern);
+    files.setObjects(f, rememberedIn(placed.pattern, seq(placed.pattern).objects));
+    selectedObjects = new Set(placed.objects.map((o) => o.index));
+    keepInView(placed.pattern, placed.objects);
+  }
+  selectionKey++;
+  focusText = true;
+  layers.reveal([...selectedObjects]);
+  redraw();
+}
+$('lettering-new').addEventListener('click', () => void newLettering());
+
+/**
+ * The chosen lettering changed in the card or by the frame: its stitches are made anew in its
+ * place. Changes while typing or dragging a slider are one undo step, ended by `final`.
+ */
+function changeLettering(next: Lettering, final: boolean): void {
+  const cur = lettering;
+  if (!cur) return;
+  // Moved letters stay with their letters when the text changes.
+  if (next.text !== cur.l.text && next.letters.length) next = { ...next, letters: followText(cur.l.text, next.text, next.letters) };
+  cur.l = next;
+  lastFont = next.font;
+  const font = fontNow(next.font);
+  if (!font) {
+    void loadFont(next.font)
+      .then(() => {
+        if (lettering === cur) sewLetteringNow(cur, final);
+      })
+      .catch(() => layers.say(t('lettering.loadFailed'), true));
+    return redraw();
+  }
+  sewLetteringNow(cur, final);
+}
+
+function sewLetteringNow(cur: NonNullable<typeof lettering>, final: boolean): void {
+  const f = cur.f;
+  const p = f.pattern;
+  const font = fontNow(cur.l.font);
+  if (files.active !== f || !p || !font) return;
+  const key = JSON.stringify(cur.l);
+  if (key === cur.sewn) {
+    if (final) cur.recorded = false;
+    return redraw();
+  }
+  const q = seq(p);
+  const old = letteringObjects(p, q.objects, cur.l.id);
+  const sewn = sewLettering(font, cur.l, settings.trimMm);
+  let next: Pattern | null;
+  let mine: number[] = [];
+  if (sewn.recs.length) {
+    const placed = placeLettering(p, old, sewn, cur.l);
+    next = placed?.pattern ?? null;
+    mine = placed?.objects.map((o) => o.index) ?? [];
+  } else {
+    // No text: the letters go once the text field is left empty (and come back with undo).
+    if (!final) return redraw();
+    next = withoutObjects(p, old);
+  }
+  if (!next) return redraw();
+  hoverZone = selectedZone = null;
+  files.setPattern(f, next, { record: !cur.recorded });
+  cur.recorded = !final;
+  cur.sewn = key;
+  syncPlayer();
+  recompute();
+  files.setObjects(f, rememberedIn(next, seq(next).objects));
+  selectedObjects = new Set(mine);
+  selectionKey++;
+  if (final) keepInView(next, mine.map((o) => seq(next).objects[o]));
+  redraw();
+}
+
+/** Shows the whole design when the lettering went (partly) off the stage, or under the tools. */
+function keepInView(p: Pattern, objs: SewObject[]): void {
+  if (!objs.length) return;
+  const [ax, ay] = vp.toScreen(Math.min(...objs.map((o) => o.minX)) / 10, Math.min(...objs.map((o) => o.minY)) / 10);
+  const [bx, by] = vp.toScreen(Math.max(...objs.map((o) => o.maxX)) / 10, Math.max(...objs.map((o) => o.maxY)) / 10);
+  if (ax >= 20 && ay >= 60 && bx <= stageW - 20 && by <= stageH - 110) return;
+  const b = p.bounds;
+  vp.fit(b.minX / 10, b.minY / 10, b.maxX / 10, b.maxY / 10, stageW, stageH);
+}
+
+/** The frame moved, turned or scaled the lettering: its place, angle and size follow. */
+function transformLettering(m: Mat): void {
+  const l = lettering!.l;
+  const s = Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2]));
+  const turn = (Math.atan2(m[1], m[0]) * 180) / Math.PI;
+  const [x, y] = apply(m, [l.x, l.y]);
+  const angle = ((((l.angle + turn) % 360) + 540) % 360) - 180;
+  const round = (v: number, k = 100) => Math.round(v * k) / k;
+  changeLettering(
+    {
+      ...l,
+      x: round(x),
+      y: round(y),
+      angle: round(angle, 10),
+      height: round(l.height * s),
+      radius: round(l.radius * s),
+      spacing: round(l.spacing * s),
+      wordSpacing: round(l.wordSpacing * s),
+      letters: l.letters.map((o) => ({ ...o, dx: round(o.dx * s), dy: round(o.dy * s) })),
+    },
+    true,
+  );
+}
+
+/** The letters become ordinary objects: they forget their lettering. */
+function releaseLettering(): void {
+  const f = files.active;
+  const p = f?.pattern;
+  if (!f || !p || !lettering) return;
+  const q = seq(p);
+  for (const o of letteringObjects(p, q.objects, lettering.l.id)) {
+    const { lettering: _, ...rest } = remembered(p, o)!;
+    remember(p, o, rest);
+  }
+  q.letterings = undefined;
+  q.letteringNames = undefined;
+  files.setObjects(f, rememberedIn(p, q.objects));
+  lettering = null;
+  letterMode = false;
+  selectionKey++;
+  layers.say(t('lettering.released'));
+  updateLevel();
+  redraw();
+}
+
+function setLetterMode(on: boolean): void {
+  letterMode = on && !!lettering;
+  letterAt = null;
+  letterDrag = null;
+  updateLevel();
+  redraw();
+}
+
+const letteringPanel = new LetteringPanel({
+  change: (next, final) => changeLettering(next, final),
+  close: () => selectObjects([], false),
+  letters: (on) => setLetterMode(on),
+  release: () => releaseLettering(),
+});
+
+/** The letters of the chosen lettering where they are now, or null while its font loads. */
+function letterLayout() {
+  const font = lettering && fontNow(lettering.l.font);
+  return font ? layout(font, lettering!.l) : null;
+}
+
+/** The letter whose box contains the point (mm), or null. */
+function letterHit(x: number, y: number, pad: number): number | null {
+  const lay = letterLayout();
+  if (!lay) return null;
+  for (const pl of lay.letters) {
+    if (!pl.glyph) continue;
+    // Inside the (turned) box: on the same side of all four edges.
+    const b = pl.box;
+    let sign = 0;
+    let inside = true;
+    for (let k = 0; k < 4 && inside; k++) {
+      const [ax, ay] = b[k];
+      const [bx, by] = b[(k + 1) % 4];
+      const len = Math.hypot(bx - ax, by - ay) || 1;
+      const c = ((bx - ax) * (y - ay) - (by - ay) * (x - ax)) / len;
+      if (Math.abs(c) <= pad) continue;
+      if (sign && Math.sign(c) !== sign) inside = false;
+      sign = Math.sign(c);
+    }
+    if (inside) return pl.at;
+  }
+  return null;
+}
+
+/** A letter's offset moved by `wx`, `wy` (mm on the design), turned into the lettering's frame. */
+function letterMoved(at: number, dx0: number, dy0: number, wx: number, wy: number, final: boolean): void {
+  const l = lettering!.l;
+  const r = (-l.angle * Math.PI) / 180;
+  const dx = Math.round((dx0 + wx * Math.cos(r) - wy * Math.sin(r)) * 100) / 100;
+  const dy = Math.round((dy0 + wx * Math.sin(r) + wy * Math.cos(r)) * 100) / 100;
+  const ch = [...l.text][at] ?? '';
+  const old = l.letters.find((o) => o.at === at) ?? { at, ch, dx: 0, dy: 0, rot: 0 };
+  const rest = l.letters.filter((o) => o.at !== at);
+  const moved = { ...old, dx, dy };
+  changeLettering({ ...l, letters: moved.dx || moved.dy || moved.rot ? [...rest, moved] : rest }, final);
+}
+
+let letterFrame = 0;
+let pendingLetter: [number, number] | null = null;
+
+function letterDown(x: number, y: number): boolean {
+  const at = letterHit(x, y, 4 / vp.scale);
+  if (at === null) return false;
+  const o = lettering!.l.letters.find((v) => v.at === at);
+  letterDrag = { at, from: [x, y], dx: o?.dx ?? 0, dy: o?.dy ?? 0, moved: false };
+  if (letterAt !== at) {
+    letterAt = at;
+    redraw();
+  }
+  return true;
+}
+
+function letterDragTo(x: number, y: number): boolean {
+  const d = letterDrag;
+  if (!d) return false;
+  if (!d.moved && Math.hypot(x - d.from[0], y - d.from[1]) * vp.scale < 3) return true;
+  d.moved = true;
+  pendingLetter = [x - d.from[0], y - d.from[1]];
+  if (!letterFrame) {
+    letterFrame = requestAnimationFrame(() => {
+      letterFrame = 0;
+      if (letterDrag && pendingLetter) letterMoved(letterDrag.at, letterDrag.dx, letterDrag.dy, ...pendingLetter, false);
+    });
+  }
+  return true;
+}
+
+function letterUp(): void {
+  const d = letterDrag;
+  letterDrag = null;
+  cancelAnimationFrame(letterFrame);
+  letterFrame = 0;
+  if (d?.moved && pendingLetter) letterMoved(d.at, d.dx, d.dy, ...pendingLetter, true);
+  pendingLetter = null;
+}
+
+/** The letter boxes over the stitches while single letters are moved; the chosen one stands out. */
+function drawLetterBoxes(): void {
+  const lay = letterLayout();
+  if (!lay) return;
+  ctx.save();
+  ctx.lineWidth = 1;
+  for (const pl of lay.letters) {
+    if (!pl.glyph) continue;
+    const on = pl.at === letterAt;
+    ctx.strokeStyle = on ? '#ffd23f' : 'rgba(255, 255, 255, 0.55)';
+    ctx.setLineDash(on ? [] : [3, 3]);
+    ctx.lineWidth = on ? 1.5 : 1;
+    ctx.beginPath();
+    pl.box.forEach(([x, y], k) => {
+      const [sx, sy] = vp.toScreen(x, y);
+      if (k) ctx.lineTo(sx, sy);
+      else ctx.moveTo(sx, sy);
+    });
+    ctx.closePath();
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 /** Color changes and trims as the statistics count them, travel between objects. */
@@ -1447,8 +1875,10 @@ function redraw(): void {
     }
     syncRungs();
     syncShape();
+    syncLettering();
     syncFrame();
     drawScene(ctx, stageW, stageH, scene(), stageBg());
+    if (letterMode) drawLetterBoxes();
     if (showCompare()) {
       const x = Math.round(split * stageW);
       ctx.save();
@@ -1480,12 +1910,19 @@ function redraw(): void {
           current,
           original: active?.original?.colors ?? NO_COLORS,
           format: active?.pattern?.format ?? 'pes',
+          names: p && q ? letteringNames(p, q) : undefined,
         },
         getLang(),
       );
       jumpsPanel.update({ list: q?.transitions ?? [], selected: selectedJump, lang: getLang() });
-      objectPanel.update(p && q && selectedObjects.size ? objectInfo(p, q) : null, getLang());
-      stitchPanel.update(p && q && selectedObjects.size ? { ...stitchInfo(p, q), ...rungInfo(p, q) } : null);
+      const objects = !lettering && p && q && selectedObjects.size;
+      objectPanel.update(objects ? objectInfo(p, q) : null, getLang());
+      stitchPanel.update(objects ? { ...stitchInfo(p, q), ...rungInfo(p, q) } : null);
+      letteringPanel.update(lettering && q ? letteringInfo(q) : null, getLang());
+      if (focusText && lettering) {
+        letteringPanel.focusText(true);
+        focusText = false;
+      }
       $<HTMLButtonElement>('order-optimize').disabled = !q || q.objects.length < 2;
     }
     panel.update(active, selectedZone);
@@ -1727,7 +2164,21 @@ function updateLevel(): void {
   }
   const mode = settings.mode;
   $('canvas-hint').textContent = t(
-    mode === 'image' ? 'canvas.hint.image' : on ? (flow ? 'canvas.hint.flowEdit' : 'canvas.hint.edit') : shaping ? 'canvas.hint.shape' : flow ? 'canvas.hint.flow' : 'canvas.hint',
+    mode === 'image'
+      ? 'canvas.hint.image'
+      : on
+        ? flow
+          ? 'canvas.hint.flowEdit'
+          : 'canvas.hint.edit'
+        : shaping
+          ? 'canvas.hint.shape'
+          : flow && letterMode
+            ? 'canvas.hint.letters'
+            : flow && lettering
+              ? 'canvas.hint.lettering'
+              : flow
+                ? 'canvas.hint.flow'
+                : 'canvas.hint',
   );
 }
 
@@ -1753,6 +2204,8 @@ function history(step: 'undo' | 'redo' | 'revert'): void {
   editor.reset();
   hoverZone = selectedZone = null;
   correctMessage = null;
+  lettering = null;
+  letterMode = false;
   syncPlayer();
   recompute();
 }
@@ -2151,6 +2604,27 @@ window.addEventListener('keydown', (e) => {
       return;
     }
   }
+  if (lettering && settings.mode === 'flow' && !(e.target as HTMLElement).closest('button')) {
+    if (letterMode) {
+      const step = e.shiftKey ? 1 : 0.1;
+      const arrows: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+      if (e.key in arrows && letterAt !== null) {
+        e.preventDefault();
+        const o = lettering.l.letters.find((v) => v.at === letterAt);
+        letterMoved(letterAt, o?.dx ?? 0, o?.dy ?? 0, ...arrows[e.key], true);
+        return;
+      }
+      if (e.key === 'Escape') {
+        if (letterAt !== null) {
+          letterAt = null;
+          redraw();
+        } else setLetterMode(false);
+        return;
+      }
+      if (e.key === 'Enter') return;
+    } else if (e.key === 'Enter') return setLetterMode(true);
+    if (e.key === 'e' || e.key === 'r' || e.key === 'g') return;
+  }
   if (rungTool.active && settings.mode === 'flow') {
     if ((e.key === 'Delete' || e.key === 'Backspace') && rungTool.deleteSelected()) {
       e.preventDefault();
@@ -2208,6 +2682,7 @@ window.addEventListener('keydown', (e) => {
     }
     if (e.key === 'r') return toggleRungs();
     if (e.key === 'g') return toggleGuides();
+    if (e.key === 't' && !editor.active && !shapeTool.active && !rungTool.active) return void newLettering();
     if (editor.active) {
       if (e.key === 'Escape') return setEditing(false);
       if (e.key === ',' || e.key === '.') {
@@ -2318,7 +2793,8 @@ canvas.addEventListener('pointerdown', (e) => {
   if (pointers.size === 1 && e.button === 0) {
     const [wx, wy] = vp.toWorld(pos[0], pos[1]);
     const flow = settings.mode === 'flow';
-    if (rungTool.active && flow) mode = rungTool.down(wx, wy, vp.scale);
+    if (letterMode && flow) mode = letterDown(wx, wy) ? 'move' : 'pan';
+    else if (rungTool.active && flow) mode = rungTool.down(wx, wy, vp.scale);
     else if (shapeTool.active && flow) mode = shapeTool.down(wx, wy, vp.scale);
     else if (frameTool.active && flow && frameTool.down(wx, wy, vp.scale) !== null) mode = 'frame';
     else mode = editor.down(wx, wy, pos[0], pos[1], e.shiftKey, vp.scale);
@@ -2329,6 +2805,7 @@ canvas.addEventListener('pointerdown', (e) => {
     editor.cancel();
     rungTool.cancel();
     shapeTool.cancel();
+    letterDrag = null;
     if (frameTool.dragging !== null) {
       frameTool.cancel();
       flowPreview = null;
@@ -2363,7 +2840,7 @@ canvas.addEventListener('pointermove', (e) => {
   canvas.classList.toggle('on-divider', !prev && nearDivider(pos[0]));
   if (prev) {
     if (pointers.size === 1) {
-      if (!rungTool.dragTo(wx, wy) && !shapeTool.dragTo(wx, wy) && !frameTool.dragTo(wx, wy, e.shiftKey, vp.scale) && !editor.dragTo(wx, wy, pos[0], pos[1])) vp.pan(pos[0] - prev[0], pos[1] - prev[1]);
+      if (!letterDragTo(wx, wy) && !rungTool.dragTo(wx, wy) && !shapeTool.dragTo(wx, wy) && !frameTool.dragTo(wx, wy, e.shiftKey, vp.scale) && !editor.dragTo(wx, wy, pos[0], pos[1])) vp.pan(pos[0] - prev[0], pos[1] - prev[1]);
     } else if (pointers.size === 2) {
       pointers.set(e.pointerId, pos);
       const [a, b] = [...pointers.values()];
@@ -2385,6 +2862,14 @@ canvas.addEventListener('pointermove', (e) => {
   if (e.pointerType === 'mouse' || pointers.size <= 1) showTooltip(pos[0], pos[1]);
 });
 
+/** Whether a click at `pos` (on the stage) hits stitches outside the selection. */
+function clickedOther(p: Pattern, pos: [number, number]): boolean {
+  const st = styleFor(p);
+  const [x, y] = vp.toWorld(pos[0], pos[1]);
+  const i = stitchAt(p, x * 10, y * 10, Math.max(3, 60 / vp.scale), st.limit, st.alpha);
+  return i >= 0 && !selectedObjects.has(seq(p).objectAt[i]);
+}
+
 const endPointer = (e: PointerEvent) => {
   const pos = local(e);
   if (painting === e.pointerId) {
@@ -2399,7 +2884,13 @@ const endPointer = (e: PointerEvent) => {
   if (pressMode === 'frame' && !frameClick) pressMode = 'move';
   if (pressAt && e.type === 'pointerup' && settings.mode === 'flow' && (pressMode === 'pan' || frameClick) && !rungTool.active && Math.hypot(pos[0] - pressAt[0], pos[1] - pressAt[1]) < 4) {
     const p = files.active?.pattern;
-    if (p && shapeTool.active) {
+    if (p && letterMode && !clickedOther(p, pos)) {
+      // Moving single letters: a click beside the letters lets go of the chosen one.
+      if (letterAt !== null) {
+        letterAt = null;
+        redraw();
+      }
+    } else if (p && shapeTool.active) {
       // Editing an outline: a click on another object goes on with its outline, a click beside it back to the objects.
       const st = styleFor(p);
       const [x, y] = vp.toWorld(pos[0], pos[1]);
@@ -2445,6 +2936,7 @@ const endPointer = (e: PointerEvent) => {
     stage.classList.remove('splitting');
   }
   if (pointers.size === 1 && pointers.has(e.pointerId)) {
+    letterUp();
     rungTool.up();
     shapeTool.up();
     if (frameTool.dragging !== null) frameTool.up();
@@ -2456,6 +2948,7 @@ const endPointer = (e: PointerEvent) => {
 };
 canvas.addEventListener('pointerup', endPointer);
 canvas.addEventListener('pointercancel', (e) => {
+  letterDrag = null;
   editor.cancel();
   rungTool.cancel();
   shapeTool.cancel();
@@ -2492,6 +2985,15 @@ canvas.addEventListener('dblclick', (e) => {
     const st = styleFor(p);
     const i = stitchAt(p, x * 10, y * 10, Math.max(3, 60 / vp.scale), st.limit, st.alpha);
     const o = i >= 0 ? seq(p).objectAt[i] : -1;
+    // A lettering opens its text; one of its letters, while they are moved, nothing more.
+    if (o >= 0 && letteringsOf(p, seq(p))[o]) {
+      if (!letterMode) {
+        if (!selectedObjects.has(o)) selectObjects([o], false);
+        focusText = true;
+        redraw();
+      }
+      return;
+    }
     if (o >= 0) return enterShape(o, true);
   }
   fitView();
