@@ -63,7 +63,6 @@ import { borderRanges, syncBorders } from './model/border';
 import { analyze, holdMemory, openOnPurpose, objectKey, measureFill, measureRun, measureSatin, remember, remembered, rememberedIn, rememberShapes, restitch, shapeTrust, unionRegion, underlayRanges, type Remembered, type Settings as RestitchSettings, type ShapeTrust, type RestitchResult } from './model/restitch';
 import { outline } from './digitize/region';
 import type { Pt } from './digitize/skeleton';
-import { ShapeTool } from './ui/shapeTool';
 import { DrawTool, type DrawKind } from './ui/drawTool';
 import { nearestThread } from './image/prepare';
 import { rgbToLab } from './image/color';
@@ -71,14 +70,14 @@ import { drawAside, drawDrawing, type FlatArea } from './render/shapeOverlay';
 import { AsidePanel } from './ui/asidePanel';
 import type { LeftOut } from './ui/imageMode';
 import { addShape, type NewShape } from './model/addShape';
-import { fillToLine, lineOf, lineSettings, lineToFill, resewLine } from './model/line';
-import { borderLines, type PathStitch } from './model/along';
+import { lineSettings, lineToFill } from './model/line';
+import { borderLines } from './model/along';
 import { asideOf, dropAside, sewAgain, setAside, setAsideRole, storeAside, type AsideRole, type AsideShape } from './model/aside';
-import { deleteObjects, duplicateObject, mirrorMatrix, recolorObjects, subtractTop, unionForm } from './model/shapeOps';
+import { recolorObjects, unionForm } from './model/shapeOps';
 import { stitchesBefore } from './model/transform';
 import { FrameTool } from './ui/frameTool';
-import { formOf, reshapeFill, scaleBlocked, transformSewObject } from './model/reshape';
-import { isCovered, overlapsIn, refreshKnockouts, setKnockout, setOverlapShare, wholeArea, wholeOf } from './model/knockout';
+import { formOf, scaleBlocked, transformSewObject } from './model/reshape';
+import { isCovered, overlapsIn, setKnockout, setOverlapShare, wholeArea, wholeOf } from './model/knockout';
 import { transformObject } from './model/transform';
 import { apply, type Form, type Mat } from './shape/path';
 import { fontNow, loadCatalog, loadFont, type Catalog } from './lettering/font';
@@ -100,6 +99,7 @@ import { bindRungs } from './app/rungs';
 import { bindPointer } from './app/pointer';
 import { bindKeys } from './app/keys';
 import { bindLight } from './app/light';
+import { bindShapes } from './app/shapes';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -1126,245 +1126,65 @@ const { closeRungs, rungInfo, rungTool, sewAlongLines, syncRungs, toggleGuides, 
 
 // Shapes and the frame ---------------------------------------------------------------------------
 
-const shapeTool = new ShapeTool({
-  change: (form) => commitShape(form),
-  redraw: () => redraw(),
-  say: (key) => {
-    layers.say(t(key), true);
-    redraw();
+const { closeShape, deleteSelected, duplicateSelected, enterShape, followKnockouts, isLineObject, mirrorSelected, sewLine, sewLineAgain, shapeTarget, shapeTool, subtractSelected, syncShape, takeShapes } = bindShapes({
+  get applyEdit() {
+    return applyEdit;
+  },
+  get applyRestitched() {
+    return applyRestitched;
+  },
+  get closeRungs() {
+    return closeRungs;
+  },
+  get commitTransform() {
+    return commitTransform;
+  },
+  get editor() {
+    return editor;
+  },
+  get enterObject() {
+    return enterObject;
+  },
+  get files() {
+    return files;
+  },
+  get frameObjects() {
+    return frameObjects;
+  },
+  get frameTool() {
+    return frameTool;
+  },
+  get layers() {
+    return layers;
+  },
+  get objectName() {
+    return objectName;
+  },
+  get recompute() {
+    return recompute;
+  },
+  get redraw() {
+    return redraw;
+  },
+  get selectObjects() {
+    return selectObjects;
+  },
+  get seq() {
+    return seq;
+  },
+  get settings() {
+    return settings;
+  },
+  get syncPlayer() {
+    return syncPlayer;
+  },
+  get updateLevel() {
+    return updateLevel;
+  },
+  get vp() {
+    return vp;
   },
 });
-
-/**
- * Objects sewn along a line: drawn or SVG lines (their curves are known) and running stitches of a
- * file (their curve is traced); not the borders of fills and not letters.
- */
-function isLineObject(p: Pattern, o: SewObject): boolean {
-  const m = remembered(p, o);
-  if (m?.path) return true;
-  return o.kind === 'run' && !m?.outline && !m?.lettering;
-}
-
-/** The one selected object of the Ablauf mode, when it has a fill whose outline can be edited, or is a line. */
-function shapeTarget(p: Pattern, q: Sequence, o: number): Form | null {
-  const obj = q.objects[o];
-  // Stitches loosed from their shape are edited as stitches; the shape rests.
-  if (!obj || remembered(p, obj)?.free) return null;
-  return isLineObject(p, obj) ? lineOf(p, obj, q.kinds) : formOf(p, obj, q.kinds);
-}
-
-/**
- * Line `o` sewn anew along `path` with `st` (one undo step), or only shown while settings are
- * being changed (`final` false).
- */
-function sewLine(o: number, path: Form | null, st: PathStitch | null, final: boolean): boolean {
-  const f = files.active;
-  const p = f?.pattern;
-  if (!f || !p) return false;
-  const q = seq(p);
-  const obj = q.objects[o];
-  if (!obj) return false;
-  const line = path ?? lineOf(p, obj, q.kinds);
-  if (!line) return false;
-  const r = resewLine(p, o, line, st ?? lineSettings(p, obj, q.kinds), settings.trimMm);
-  if (!final) {
-    ui.flowPreview = r?.pattern ?? null;
-    redraw();
-    return !!r;
-  }
-  ui.flowPreview = null;
-  if (!r) {
-    layers.say(t('stitch.failed', { n: 1 }), true);
-    redraw();
-    return false;
-  }
-  const hand = remembered(p, obj)?.hand ?? 0;
-  applyEdit(r.pattern);
-  files.setObjects(f, rememberedIn(r.pattern, seq(r.pattern).objects));
-  ui.selectedObjects = new Set([o]);
-  ui.selectionKey++;
-  ui.stitchCache = null;
-  if (hand) layers.say(t('shape.handReplaced', { n: formatNumber(hand) }));
-  followKnockouts();
-  redraw();
-  return true;
-}
-
-/** A fill that was a wide line sewn as that line again. */
-function sewLineAgain(o: number): void {
-  const f = files.active;
-  const p = f?.pattern;
-  if (!f || !p) return;
-  const r = fillToLine(p, o, settings.trimMm);
-  if (!r) return layers.say(t('stitch.failed', { n: 1 }), true);
-  ui.flowPreview = null;
-  applyEdit(r.pattern);
-  files.setObjects(f, rememberedIn(r.pattern, seq(r.pattern).objects));
-  ui.selectedObjects = new Set([o]);
-  ui.selectionKey++;
-  ui.stitchCache = null;
-  followKnockouts();
-  redraw();
-}
-
-/** Edits the outline of object `o` (level Form); objects without a fill go to their stitches. */
-function enterShape(o: number, fit: boolean): void {
-  const p = files.active?.pattern;
-  if (!p || settings.mode !== 'flow') return;
-  const q = seq(p);
-  const form = shapeTarget(p, q, o);
-  if (!form) return enterObject(o, fit);
-  closeRungs();
-  if (editor.active) {
-    editor.setActive(false);
-    ui.editObject = null;
-  }
-  if (!ui.selectedObjects.has(o) || ui.selectedObjects.size !== 1) selectObjects([o], false);
-  shapeTool.open(form);
-  ui.shapeObject = o;
-  ui.shapePattern = p;
-  frameTool.close();
-  const obj = q.objects[o];
-  if (fit) {
-    const w = ((obj.maxX - obj.minX) / 10) * vp.scale;
-    const h = ((obj.maxY - obj.minY) / 10) * vp.scale;
-    if (Math.max(w / ui.stageW, h / ui.stageH) < 0.4) vp.fit(obj.minX / 10, obj.minY / 10, obj.maxX / 10, obj.maxY / 10, ui.stageW, ui.stageH, 60);
-  }
-  updateLevel();
-  redraw();
-}
-
-function closeShape(): void {
-  if (!shapeTool.active) return;
-  shapeTool.close();
-  ui.shapeObject = null;
-  ui.shapePattern = null;
-  updateLevel();
-  redraw();
-}
-
-/** Keeps the shape tool on its object after new stitches, undo or redo; it closes when the object has no fill any more. */
-function syncShape(): void {
-  if (!shapeTool.active) return;
-  const p = files.active?.pattern;
-  if (!p || settings.mode !== 'flow' || ui.selectedObjects.size !== 1) return closeShape();
-  if (p === ui.shapePattern) return;
-  const q = seq(p);
-  const o = [...ui.selectedObjects][0];
-  const form = shapeTarget(p, q, o);
-  if (!form) return closeShape();
-  shapeTool.setForm(form);
-  ui.shapeObject = o;
-  ui.shapePattern = p;
-}
-
-/** The fill sewn anew in its changed outline (one undo step). */
-function commitShape(form: Form): void {
-  const f = files.active;
-  const p = f?.pattern;
-  if (!f || !p || ui.shapeObject === null) return;
-  const q = seq(p);
-  const obj = q.objects[ui.shapeObject];
-  if (!obj) return;
-  if (isLineObject(p, obj)) {
-    if (!sewLine(ui.shapeObject, form, null, true)) shapeTool.setForm(shapeTarget(p, q, ui.shapeObject) ?? form);
-    return;
-  }
-  const hand = remembered(p, obj)?.hand ?? 0;
-  const r = reshapeFill(p, q.objects, obj, q.kinds, form, settings.trimMm);
-  if (!r || !r.starts.length) {
-    // Nothing to fill there (too small, or the outline crosses itself away): back to the old one.
-    shapeTool.setForm(shapeTarget(p, q, ui.shapeObject) ?? form);
-    layers.say(t('shape.failed'), true);
-    return redraw();
-  }
-  applyRestitched(r, 'shape.failed', true);
-  if (hand) layers.say(t('shape.handReplaced', { n: formatNumber(hand) }));
-  followKnockouts();
-}
-
-/**
- * After shapes changed: fills that leave out what lies on top are sewn anew where that changed, in
- * the same undo step as the change.
- */
-function followKnockouts(): void {
-  const f = files.active;
-  const p = f?.pattern;
-  if (!f || !p) return;
-  const r = refreshKnockouts(p, settings.trimMm);
-  if (!r) return;
-  const sel = ui.selectedObjects;
-  files.setPattern(f, r.pattern, { record: false });
-  syncPlayer();
-  recompute();
-  files.setObjects(f, rememberedIn(r.pattern, seq(r.pattern).objects));
-  ui.selectedObjects = sel;
-  ui.selectionKey++;
-  const q = seq(r.pattern);
-  layers.say(t('knockout.followed', { list: r.changed.map((o) => (q.objects[o] ? objectName(q, o) : '')).filter(Boolean).join(', ') }));
-  redraw();
-}
-
-// Objects as shapes: delete, duplicate, mirror, cut out ------------------------
-
-/** Takes over a pattern made from the objects, selecting `select` in it. */
-function takeShapes(next: Pattern, select: number[]): void {
-  const f = files.active;
-  if (!f) return;
-  applyEdit(next);
-  files.setObjects(f, rememberedIn(next, seq(next).objects));
-  ui.selectedObjects = new Set(select);
-  ui.selectionKey++;
-  followKnockouts();
-  redraw();
-}
-
-function deleteSelected(): void {
-  const p = files.active?.pattern;
-  const sel = frameObjects();
-  if (!p || !sel.length) return;
-  const next = deleteObjects(p, sel, settings.trimMm);
-  if (!next) return layers.say(t('object.deleteLast'), true);
-  takeShapes(next, []);
-  layers.say(sel.length === 1 ? t('object.deleted.one') : t('object.deleted', { n: sel.length }));
-}
-
-function duplicateSelected(): void {
-  const p = files.active?.pattern;
-  const sel = frameObjects();
-  if (!p || sel.length !== 1) return;
-  const r = duplicateObject(p, sel[0], settings.trimMm);
-  if (!r) return layers.say(t('frame.failed'), true);
-  takeShapes(r.pattern, [r.index]);
-  layers.say(t('object.duplicated'));
-}
-
-function mirrorSelected(axis: 'x' | 'y'): void {
-  const p = files.active?.pattern;
-  const sel = frameObjects();
-  if (!p || !sel.length) return;
-  const objs = sel.map((o) => seq(p).objects[o]);
-  const box = {
-    minX: Math.min(...objs.map((o) => o.minX)) / 10,
-    minY: Math.min(...objs.map((o) => o.minY)) / 10,
-    maxX: Math.max(...objs.map((o) => o.maxX)) / 10,
-    maxY: Math.max(...objs.map((o) => o.maxY)) / 10,
-  };
-  commitTransform(mirrorMatrix(axis, box));
-  layers.say(t('object.mirrored'));
-}
-
-function subtractSelected(): void {
-  const p = files.active?.pattern;
-  const sel = frameObjects();
-  if (!p || sel.length < 2) return;
-  const r = subtractTop(p, sel, settings.trimMm);
-  if (!r) return layers.say(t('object.subtract.nothing'), true);
-  takeShapes(r.pattern, r.cut);
-  const q = seq(r.pattern);
-  const list = r.cut.map((o) => (q.objects[o] ? objectName(q, o) : '')).filter(Boolean).join(', ');
-  layers.say([list ? t('object.subtracted', { list }) : '', r.covered ? t('object.subtracted.covered') : ''].filter(Boolean).join(' '));
-}
 
 // Shapes not sewn: switched off or guides ---------------------------------------
 
