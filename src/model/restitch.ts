@@ -1,7 +1,7 @@
 import { SATIN_MAX, satinForArea, type KeptShape } from '../digitize/digitize';
 import { borderLoops, borderRails, borderRun, orderLoops, type BorderType } from '../digitize/border';
 import { chooseAngle, fillRegion, type FillParams } from '../digitize/fill';
-import { contourField, fieldFill, guideField, stitchField } from '../digitize/flow';
+import { contourFill, fieldFill, guideField, stitchField } from '../digitize/flow';
 import { spiralFill } from '../digitize/spiral';
 import { coverage } from '../digitize/measure';
 import { expandRegion, sample, signedField, type Region } from '../digitize/region';
@@ -10,6 +10,7 @@ import { eStitches, pairs, satinStitches, underlayOf, type Column, type SatinPar
 import { columnFromRungs, cumulative, reversedRungs, type Rung } from '../digitize/rungs';
 import type { Pt } from '../digitize/skeleton';
 import { formFrom, storeForm, type Form, type StoredPath } from '../shape/path';
+import { rasterize } from '../shape/rasterize';
 import { distanceInside, distanceToSeeds } from '../image/edt';
 import { tidy, withRecords } from './edit';
 import { joinsIn, rememberObjects, restoreJoin, stitchKey, type ObjectKind, type SewObject } from './objects';
@@ -188,6 +189,11 @@ export interface Remembered {
   under?: number;
   /** The border in the fill's thread starts after this many stitches of the object. */
   borderAt?: number;
+  /**
+   * A fill that was a satin here: the columns it had, so making it a satin again gives the same
+   * satin back instead of one found anew on the area.
+   */
+  asSatin?: Rails[];
   /** The object is the border of a fill in its own thread: the fill's `border.link`. */
   outline?: string;
   /** A border object: the settings it was sewn with (its `region` is the fill's area it was sewn on). */
@@ -280,6 +286,7 @@ export interface StoredObject {
   form?: StoredPath[];
   under?: number;
   borderAt?: number;
+  asSatin?: { left: number[]; right: number[]; rungs?: number[] }[];
   outline?: string;
   border?: BorderSettings;
   join?: boolean;
@@ -305,6 +312,7 @@ export function rememberedIn(p: Pattern, objects: SewObject[]): StoredObject[] {
       ...(r.form ? { form: storeForm(r.form) } : {}),
       ...(r.under ? { under: r.under } : {}),
       ...(r.borderAt ? { borderAt: r.borderAt } : {}),
+      ...(r.asSatin ? { asSatin: r.asSatin.map((c) => ({ left: c.left.flat(), right: c.right.flat(), ...(c.rungs ? { rungs: c.rungs.flat() } : {}) })) } : {}),
       ...(r.outline ? { outline: r.outline } : {}),
       ...(r.border ? { border: { ...r.border } } : {}),
     });
@@ -479,6 +487,8 @@ export function restoreRemembered(list: unknown): number {
     if (form) r.form = form;
     if (finite(e.under) && e.under > 0) r.under = Math.round(e.under);
     if (finite(e.borderAt) && e.borderAt > 0) r.borderAt = Math.round(e.borderAt);
+    const asSatin = railsFrom([e.asSatin])?.[0];
+    if (asSatin?.length) r.asSatin = asSatin;
     if (typeof e.outline === 'string') r.outline = e.outline;
     if (isBorder(e.border)) r.border = { ...e.border };
     rememberKey(e.key, r);
@@ -906,6 +916,17 @@ const lerp = (a: Pt, b: Pt, t: number): Pt => [a[0] + (b[0] - a[0]) * t, a[1] + 
 /** Highest satin density allowed when a fill is turned into satin, in times the nominal. */
 const CONVERT_PEAK = 3;
 
+/** The area between the rails of satin columns (each column a polygon, together their union). */
+function railsArea(rails: Rails[]): Region | null {
+  const node = (q: Pt) => ({ p: q, a: q, b: q, smooth: false });
+  const parts = rails.flatMap((r) => {
+    const ring = [...r.left, ...r.right.slice().reverse()];
+    const g = ring.length >= 3 ? rasterize({ paths: [{ nodes: ring.map(node), closed: true }] }, 0.1) : null;
+    return g ? [g] : [];
+  });
+  return unionRegion(parts);
+}
+
 /** The area the stitches of `parts` cover: drawn thick enough that satin stitches close into it. */
 function coveredBy(p: Pattern, parts: Part[]): Region | null {
   const segs: number[] = [];
@@ -986,10 +1007,7 @@ function newFill(p: Pattern, o: SewObject, a: Analysis, s: FillSettings, reverse
   if (s.pattern === 'gradient') {
     res = fillRegion(r, { ...fp, spacingEnd: s.spacingEnd }, start);
   } else if (s.pattern === 'contour') {
-    const f = contourField(r);
-    // Rings meet where the shape narrows to its middle: a little denser there is the nature of
-    // a contour fill.
-    res = fieldFill(r, f.g, f, fp, start, true, CONTOUR_PEAK);
+    res = contourFill(r, fp, start);
   } else if (s.pattern === 'spiral') res = spiralFill(r, fp, start);
   else if (s.pattern === 'follow') {
     const lines: [Pt, Pt][] = [];
@@ -1217,7 +1235,11 @@ export function restitch(
     // The area of the parts that change: the fill area, or for a change of kind the area kept
     // from before or the one the parts cover.
     let area = an.fill;
-    if (converting) area = known?.shape ?? (src === 'fill' ? an.fill : coveredBy(p, parts.filter((pt) => pt.kind === src)));
+    // A satin made a fill: its columns, kept so it can become the same satin again; its area is
+    // where the columns lie (traced from the stitches it would grow by their thickness each time).
+    const satinRails =
+      converting && src === 'satin' ? (known?.columns?.flat() ?? satinParts.flatMap((pt) => satinColumns(p, pt, kinds).map((c) => railsOf(p, c)).filter((r): r is Rails => !!r))) : undefined;
+    if (converting) area = known?.shape ?? (src === 'fill' ? an.fill : (railsArea(satinRails ?? []) ?? coveredBy(p, parts.filter((pt) => pt.kind === src))));
     // A fill made from satin gets rows across the area in the direction with the fewest sections.
     const settings: Settings =
       converting && given.kind === 'fill' && area
@@ -1226,7 +1248,7 @@ export function restitch(
     // All fill parts are one area, filled anew where the first of them was sewn; so are the parts
     // changing kind.
     const together = converting || settings.kind === 'fill';
-    const guide = converting && settings.kind === 'satin' ? guides?.get(o.index) : undefined;
+    const guide = converting && settings.kind === 'satin' ? (guides?.get(o.index) ?? known?.asSatin) : undefined;
     const filled = together && !converting ? newFill(p, o, an, settings.s as FillSettings, reverse) : null;
     const whole = !together ? null : converting ? convert(p, o, parts, src, area, settings, guide) : (filled?.runs ?? null);
     const firstPart = parts.findIndex((pt) => pt.kind === src && !pt.border);
@@ -1255,7 +1277,7 @@ export function restitch(
     const newSatinS = settings.kind === 'satin' ? (reverse ? swappedSides(settings.s) : { ...settings.s }) : undefined;
     const after: Remembered = converting
       ? newFillS
-        ? { region: area, fill: newFillS, shape: area ?? undefined }
+        ? { region: area, fill: newFillS, shape: area ?? undefined, ...(satinRails?.length ? { asSatin: satinRails } : {}) }
         : { region: null, satin: newSatinS, shape: area ?? undefined, ...(guide ? { columns: [guide] } : {}) }
       : {
           region: an.fill,
@@ -1266,6 +1288,8 @@ export function restitch(
           ...(known?.form && !newArea ? { form: known.form } : {}),
           ...(known?.under && !filled ? { under: known.under } : {}),
           ...(known?.borderAt && !filled ? { borderAt: known.borderAt } : {}),
+          // Its shape changed: the satin it was no longer fits.
+          ...(known?.asSatin && !newArea ? { asSatin: known.asSatin } : {}),
           ...(known?.outline ? { outline: known.outline, border: known.border } : {}),
         };
     // Up to the object: everything as it was, except the jumps that lead to its first stitch.

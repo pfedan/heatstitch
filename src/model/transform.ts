@@ -111,6 +111,7 @@ export function transformRemembered(r: Remembered, m: Mat): Remembered {
       part.map((c): Rails => ({ left: mapPts(m, c.left), right: mapPts(m, c.right), ...(c.rungs ? { rungs: c.rungs.map(([a, b]) => [a * s, b * s]) } : {}) })),
     );
   }
+  if (r.asSatin) out.asSatin = r.asSatin.map((c): Rails => ({ left: mapPts(m, c.left), right: mapPts(m, c.right), ...(c.rungs ? { rungs: c.rungs.map(([a, b]) => [a * s, b * s]) } : {}) }));
   if (r.fill) out.fill = { ...r.fill, angle: mapAngle(m, r.fill.angle), ...(r.fill.guides ? { guides: r.fill.guides.map((g) => mapPts(m, g)) } : {}) };
   return out;
 }

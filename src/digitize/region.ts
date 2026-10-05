@@ -152,10 +152,12 @@ export const pixelMm = (r: Region, x: number, y: number): [number, number] => [(
 
 /**
  * Outline of a region: the zero level of its own signed distance, as closed polylines in mm
- * (marching squares between pixel centers, the crossings interpolated).
+ * (marching squares between pixel centers, the crossings interpolated); with `level`, the line
+ * that far outside (+) or inside (-) the edge of `field`.
  */
-export function outline(r: Region): [number, number][][] {
-  const { w, h, sdfBase: f } = r;
+export function outline(r: Region, level = 0, field = r.sdfBase): [number, number][][] {
+  const { w, h } = r;
+  const f = level ? field.map((v) => v - level) : field;
   // Edges between neighbouring pixel centers carry the crossing points: horizontal edge (x, y)
   // to (x + 1, y) has id 2 * (y * w + x), vertical edge (x, y) to (x, y + 1) the id after it.
   const point = (id: number): [number, number] => {
