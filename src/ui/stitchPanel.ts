@@ -71,6 +71,8 @@ export interface StitchInfo {
    * is sewn along its curve. `traced`: its curve is read from its stitches (none was drawn).
    */
   path?: { st: PathStitch; traced: boolean };
+  /** How deep the selected fills reach at their deepest point (mm; the shallowest of them): an underlay inset beyond it leaves none. */
+  depth?: number;
   /** Thread of the first selected fill (its border is sewn in it unless it has its own). */
   color?: ThreadColor;
   /** The one selected object is the border of a fill in its own thread (the fill's number, or null when gone). */
@@ -158,6 +160,8 @@ interface SliderDef {
   fmt: (v: number) => string;
   /** Range to mark on the track (recommended). */
   band?: [number, number];
+  /** What the band means (its title); the material's recommendation by default. */
+  bandHint?: Key;
   /** Extra line under the value. */
   note?: (v: number) => string;
   /** Taken over on its own when let go, instead of as a stitch setting (no preview while dragging). */
@@ -441,7 +445,19 @@ export class StitchPanel {
           ),
           this.under(
             s.underInsetShare === undefined
-              ? this.slider({ label: 'stitch.underInset', hint: 'stitch.underInset.hint', min: 0, max: 1.5, step: 0.05, get: () => s.underInset ?? UNDERLAY_INSET, set: (v) => (s.underInset = v), fmt: mm(2) })
+              ? this.slider({
+                  label: 'stitch.underInset',
+                  hint: 'stitch.underInset.hint',
+                  min: 0,
+                  max: 10,
+                  step: 0.05,
+                  get: () => s.underInset ?? UNDERLAY_INSET,
+                  set: (v) => (s.underInset = v),
+                  fmt: mm(2),
+                  // Up to where the underlay still has room (the deepest point less what is too thin to sew).
+                  band: this.info!.depth === undefined ? undefined : [0, Math.max(0, this.info!.depth - 0.6)],
+                  bandHint: 'stitch.underInset.band',
+                })
               : this.slider({
                   label: 'stitch.underInsetShare',
                   hint: 'stitch.underInsetShare.hint',
@@ -536,6 +552,35 @@ export class StitchPanel {
         ),
       );
       if (s.underlay) out.push(this.under(this.choice<UnderlayKind>('stitch.under.kind', UNDERLAYS, s.under ?? 'auto', (v) => `stitch.under.${v}` as Key, (v) => (s.under = v), true)));
+      // Along the middle there is nothing to keep inside.
+      if (s.underlay && s.under !== 'center') {
+        out.push(
+          this.under(
+            this.choice<'mm' | 'share'>(
+              'stitch.underInsetBy',
+              ['mm', 'share'],
+              s.underInsetShare === undefined ? 'mm' : 'share',
+              (v) => `stitch.underInsetBy.${v}` as Key,
+              (v) => (s.underInsetShare = v === 'share' ? 0.15 : undefined),
+              true,
+            ),
+          ),
+          this.under(
+            s.underInsetShare === undefined
+              ? this.slider({ label: 'stitch.underInset', hint: 'stitch.satinUnderInset.hint', min: 0, max: 3, step: 0.05, get: () => s.underInset ?? 0.4, set: (v) => (s.underInset = v), fmt: mm(2) })
+              : this.slider({
+                  label: 'stitch.underInsetShare',
+                  hint: 'stitch.satinUnderInsetShare.hint',
+                  min: 0,
+                  max: 0.45,
+                  step: 0.01,
+                  get: () => s.underInsetShare ?? 0,
+                  set: (v) => (s.underInsetShare = v),
+                  fmt: (v) => `${formatNumber(v * 100, 0)} %`,
+                }),
+          ),
+        );
+      }
       return out;
     }
     const s = this.draft.run!;
@@ -609,7 +654,7 @@ export class StitchPanel {
       // A green strip under the track marks the recommended range.
       const a = Math.max(0, ((d.band[0] - d.min) / (d.max - d.min)) * 100);
       const b = Math.min(100, ((d.band[1] - d.min) / (d.max - d.min)) * 100);
-      track = Object.assign(document.createElement('span'), { className: 'band-track', title: t('stitch.band', { a: formatNumber(d.band[0], 2), b: formatNumber(d.band[1], 2) }) });
+      track = Object.assign(document.createElement('span'), { className: 'band-track', title: t(d.bandHint ?? 'stitch.band', { a: formatNumber(d.band[0], 2), b: formatNumber(d.band[1], 2) }) });
       const band = Object.assign(document.createElement('span'), { className: 'band' });
       band.style.left = `${a}%`;
       band.style.width = `${Math.max(0, b - a)}%`;

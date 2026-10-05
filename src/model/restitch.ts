@@ -8,7 +8,7 @@ import { spiralFill } from '../digitize/spiral';
 import { coverage } from '../digitize/measure';
 import { expandRegion, sample, signedField, type Region } from '../digitize/region';
 import { runStitch, TOLERANCE } from '../digitize/run';
-import { eStitches, pairs, satinStitches, underlayOf, type Column, type SatinParams, type UnderlayKind } from '../digitize/satin';
+import { eStitches, pairs, satinStitches, underlayOf, type Column, type SatinParams, type UnderInset, type UnderlayKind } from '../digitize/satin';
 import { columnFromRungs, cumulative, pointAt, reversedRungs, tidyRungs, type Rung } from '../digitize/rungs';
 import type { Pt } from '../digitize/skeleton';
 import { formFrom, storeForm, type Form, type StoredPath } from '../shape/path';
@@ -105,6 +105,10 @@ export interface SatinSettings {
   type?: SatinType;
   /** Which underlay, when `underlay` is on; by the width when not set. */
   under?: UnderlayKind;
+  /** Contour and zigzag underlay keep this far inside the rails (mm); 0.4 (at most a fourth of the width) when not set. */
+  underInset?: number;
+  /** Underlay inset by this share of the width from each rail (0.1 = 10 %), in place of `underInset`. */
+  underInsetShare?: number;
   /** Stitches longer than this are split (mm); 12 when not set. */
   split?: number;
   /** Split points staggered from stitch to stitch; on when not set. */
@@ -476,7 +480,7 @@ function isSatin(f: unknown): f is SatinSettings {
     [s.spacing, s.edge].every(finite) &&
     typeof s.short === 'boolean' &&
     typeof s.underlay === 'boolean' &&
-    [s.tolerance, s.split, s.edgeShare, s.edgeB].every(optional) &&
+    [s.tolerance, s.split, s.edgeShare, s.edgeB, s.underInset, s.underInsetShare].every(optional) &&
     (s.type === undefined || s.type === 'satin' || s.type === 'e') &&
     (s.under === undefined || UNDERLAYS.includes(s.under)) &&
     (s.stagger === undefined || typeof s.stagger === 'boolean')
@@ -1369,7 +1373,7 @@ export function satinRuns(rails: Rails[], s: SatinSettings): Pt[][] {
       runs.push(sew(ps));
       continue;
     }
-    const under = underlayOf(col, s.under ?? 'auto', s.tolerance);
+    const under = underlayOf(col, s.under ?? 'auto', s.tolerance, underInset(s));
     if (!under.atEnd) {
       runs.push([...under.pts, ...sew(ps)]);
       continue;
@@ -1380,6 +1384,9 @@ export function satinRuns(rails: Rails[], s: SatinSettings): Pt[][] {
   }
   return runs;
 }
+
+/** How far a satin's underlay keeps inside its rails, as its settings say. */
+const underInset = (s: SatinSettings): UnderInset => ({ mm: s.underInset, share: s.underInsetShare });
 
 const reversedColumn = (col: Column): Column => ({ center: col.center.slice().reverse(), left: col.right.slice().reverse(), right: col.left.slice().reverse(), width: col.width });
 
@@ -1397,7 +1404,7 @@ function sectionRun(parts: Rails[], s: SatinSettings, sew: (ps: [Pt, Pt][]) => P
     parts.forEach((r, k) => out.push(...sew(pairs(cols[k], along(cols[k], r, sp)))));
     return out;
   }
-  const unders = cols.map((c) => underlayOf(c, kind, s.tolerance));
+  const unders = cols.map((c) => underlayOf(c, kind, s.tolerance, underInset(s)));
   if (!unders.every((u) => u.atEnd)) {
     parts.forEach((r, k) => out.push(...unders[k].pts, ...sew(pairs(cols[k], along(cols[k], r, sp)))));
     return out;

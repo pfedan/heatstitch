@@ -848,6 +848,7 @@ function stitchInfo(p: Pattern, q: Sequence): StitchInfo {
   let worst: ShapeTrust | undefined;
   const rank: Record<ShapeTrust, number> = { kept: 0, good: 1, approximate: 2 };
   let stroke = true;
+  let depth: number | undefined;
   for (const o of [...selectedObjects].sort((a, b) => a - b)) {
     const obj = q.objects[o];
     if (!obj) continue;
@@ -866,6 +867,9 @@ function stitchInfo(p: Pattern, q: Sequence): StitchInfo {
       const trust = shapeTrust(p, obj, an, (remembered(p, obj)?.fill ?? measureFill(p, an)).spacing);
       if (!worst || rank[trust] > rank[worst]) worst = trust;
       shapes.push({ lines: outline(an.fill), approximate: trust === 'approximate', resting: !!remembered(p, obj)?.free });
+      let deep = 0;
+      for (const v of an.fill.sdf) if (-v > deep) deep = -v;
+      depth = Math.min(depth ?? Infinity, deep);
       // Satin needs a stroke: narrow, about even in width (the same test as in Image mode).
       if (stroke && an.parts.some((pt) => pt.kind === 'fill')) stroke = !!isStroke(remembered(p, obj)?.shape ?? an.fill, SATIN_MAX);
     }
@@ -888,7 +892,7 @@ function stitchInfo(p: Pattern, q: Sequence): StitchInfo {
     fill: fillObj ? pullFor(settings.profile, 'fill', analyze(p, fillObj, q.kinds).fill?.areaMm2).edge : undefined,
     satin: pullFor(settings.profile, 'satin'),
   };
-  const info: StitchInfo = { key: selectionKey, lock, free, fixed, fabricPull, hand, measured, counts, recommended: recommendedSpacing(settings.profile), shape: worst, outlines: shapes, toSatin: stroke, knockout, color: q.objects[firstFill]?.color };
+  const info: StitchInfo = { key: selectionKey, lock, free, fixed, fabricPull, hand, measured, counts, recommended: recommendedSpacing(settings.profile), shape: worst, outlines: shapes, toSatin: stroke, knockout, depth, color: q.objects[firstFill]?.color };
   const runs = [...selectedObjects].map((o) => q.objects[o]).filter((obj) => obj?.kind === 'run');
   if (runs.length && runs.every((obj) => remembered(p, obj)?.path)) info.line = true;
   const one = selectedObjects.size === 1 ? q.objects[[...selectedObjects][0]] : undefined;
