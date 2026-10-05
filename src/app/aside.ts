@@ -62,7 +62,7 @@ export function bindAside(app: AsideApp) {
     const sel = app.frameObjects();
     if (!p || !sel.length) return;
     const next = setAside(p, sel, role, app.settings.trimMm);
-    if (!next) return app.layers.say(t('aside.last'), true);
+    if (!next) return;
     app.takeShapes(next, []);
     const one = sel.length === 1;
     app.layers.say(role === 'guide' ? (one ? t('aside.done.guide') : t('aside.done.guideMany', { n: sel.length })) : one ? t('aside.done.off') : t('aside.done.offMany', { n: sel.length }));

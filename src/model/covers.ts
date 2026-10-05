@@ -1,4 +1,5 @@
 import type { Region } from '../digitize/region';
+import { bounds } from '../shape/path';
 import { knockOut } from '../shape/rasterize';
 import { wholeArea } from './knockout';
 import type { SewObject } from './objects';
@@ -43,15 +44,27 @@ function satinArea(p: Pattern, x: SewObject, kinds: () => Uint8Array): { region:
   return out;
 }
 
-const overlapsBox = (a: SewObject, b: SewObject) => a.minX <= b.maxX && b.minX <= a.maxX && a.minY <= b.maxY && b.minY <= a.maxY;
+type Box = { minX: number; minY: number; maxX: number; maxY: number };
+const overlapsBox = (a: Box, b: Box) => a.minX <= b.maxX && b.minX <= a.maxX && a.minY <= b.maxY && b.minY <= a.maxY;
+
+/**
+ * Where object `o` can be covered (0.1 mm): its whole shape when known, not its stitches, which
+ * leave out what lies on top (else what covers it would depend on what it left out last time).
+ */
+function reachOf(p: Pattern, o: SewObject): Box {
+  const f = remembered(p, o)?.form;
+  const b = f && bounds(f);
+  return b ? { minX: b.minX * 10 - 1, minY: b.minY * 10 - 1, maxX: b.maxX * 10 + 1, maxY: b.maxY * 10 + 1 } : o;
+}
 
 /** The covers over object `o` from the objects sewn after it (see Cover). */
 export function coversOver(p: Pattern, objs: SewObject[], o: SewObject, pxMm: number, share = SATIN_SHARE): Cover[] {
   const out: Cover[] = [];
   let k: Uint8Array | null = null;
   const kinds = () => (k ??= stitchKinds(p));
+  const reach = reachOf(p, o);
   for (const x of objs) {
-    if (x.index <= o.index || !overlapsBox(x, o)) continue;
+    if (x.index <= o.index || !overlapsBox(reachOf(p, x), reach)) continue;
     const f = remembered(p, x)?.form;
     const r = f && wholeArea(f, pxMm);
     if (r) {

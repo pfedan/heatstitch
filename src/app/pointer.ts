@@ -15,6 +15,7 @@ import { DIVIDER_GRAB_PX } from '../render/compare';
 import { LONG_PRESS_MS } from '../ui/layersPanel';
 import { ObjectMenu } from '../ui/objectMenu';
 import { lightFromPointer } from '../render/light';
+import { objectsInRect } from '../model/edit';
 import { stitchAt, transitionAt, type StitchStyle } from '../render/flow';
 import { t } from '../i18n';
 import { ui } from './state';
@@ -135,6 +136,11 @@ export function bindPointer(app: PointerApp) {
       else if (app.shapeTool.active && flow) mode = app.shapeTool.down(wx, wy, app.vp.scale);
       else if (app.frameTool.active && flow && app.frameTool.down(wx, wy, app.vp.scale) !== null) mode = 'frame';
       else mode = app.editor.down(wx, wy, pos[0], pos[1], e.shiftKey, app.vp.scale);
+      // Shift+drag where it would pan: a rubber band adds the objects inside it to the selection.
+      if (mode === 'pan' && e.shiftKey && bandAllowed()) {
+        ui.objectBand = { x0: wx, y0: wy, x1: wx, y1: wy };
+        mode = 'band';
+      }
     }
     pressMode = mode;
     cancelLongPress();
@@ -145,7 +151,19 @@ export function bindPointer(app: PointerApp) {
         at,
         timer: window.setTimeout(() => {
           longPress = null;
-          if (objectMenu.isOpen || !pointers.size || !openObjectMenu(at, clientX, clientY)) return;
+          if (objectMenu.isOpen || !pointers.size) return;
+          if (!openObjectMenu(at, clientX, clientY)) {
+            // A long press beside the objects starts a rubber band, the finger drags it open.
+            if (pressMode !== 'pan' || !bandAllowed() || objectAt(at) >= 0) return;
+            const [wx, wy] = app.vp.toWorld(at[0], at[1]);
+            ui.objectBand = { x0: wx, y0: wy, x1: wx, y1: wy };
+            pressMode = 'band';
+            pressAt = null;
+            navigator.vibrate?.(15);
+            app.canvas.classList.remove('panning');
+            app.redraw();
+            return;
+          }
           // The finger lifted after this is no click, and nothing it started goes on.
           pressAt = null;
           app.editor.cancel();
@@ -157,6 +175,7 @@ export function bindPointer(app: PointerApp) {
     }
     if (mode === 'pan') app.canvas.classList.add('panning');
     if (pointers.size === 2) {
+      ui.objectBand = null;
       app.editor.cancel();
       app.rungTool.cancel();
       app.shapeTool.cancel();
@@ -206,7 +225,10 @@ export function bindPointer(app: PointerApp) {
     // With the menu open after a long press, the finger moves nothing until it is lifted.
     if (prev && objectMenu.isOpen && e.pointerType === 'touch') return;
     if (prev) {
-      if (pointers.size === 1) {
+      if (pointers.size === 1 && ui.objectBand) {
+        ui.objectBand.x1 = wx;
+        ui.objectBand.y1 = wy;
+      } else if (pointers.size === 1) {
         if (!app.drawTool.dragTo(wx, wy, e.shiftKey, e.altKey) && !app.letterDragTo(wx, wy) && !app.rungTool.dragTo(wx, wy) && !app.shapeTool.dragTo(wx, wy) && !app.frameTool.dragTo(wx, wy, e.shiftKey, app.vp.scale) && !app.editor.dragTo(wx, wy, pos[0], pos[1])) app.vp.pan(pos[0] - prev[0], pos[1] - prev[1]);
       } else if (pointers.size === 2) {
         pointers.set(e.pointerId, pos);
@@ -248,6 +270,13 @@ export function bindPointer(app: PointerApp) {
       if (e.type === 'pointerup') app.imageMode.paintUp();
       else app.imageMode.paintCancel();
       return;
+    }
+    if (ui.objectBand && pointers.has(e.pointerId)) {
+      const band = ui.objectBand;
+      ui.objectBand = null;
+      // A Shift+click that did not move stays a click (it adds the object under it).
+      if (pressAt && Math.hypot(pos[0] - pressAt[0], pos[1] - pressAt[1]) < 4) pressMode = 'pan';
+      else if (e.type === 'pointerup') selectInBand(band);
     }
     // A press on the frame that did not move is a click like any other.
     const frameClick = pressMode === 'frame' && app.frameTool.dragging !== null && !app.frameTool.up();
@@ -336,6 +365,31 @@ export function bindPointer(app: PointerApp) {
       app.redraw();
     }
   });
+  /** Whether a rubber band may select objects now (level Objects, no tool open). */
+  function bandAllowed(): boolean {
+    return app.settings.mode === 'flow' && !!app.files.active?.pattern && !app.editor.active && !app.shapeTool.active && !app.rungTool.active && !app.drawTool.active && !app.orderCard.isOpen && !ui.letterMode;
+  }
+
+  /** The object under `pos` (on the stage), or -1. */
+  function objectAt(pos: [number, number]): number {
+    const p = app.files.active?.pattern;
+    if (!p) return -1;
+    const st = app.styleFor(p);
+    const [x, y] = app.vp.toWorld(pos[0], pos[1]);
+    const i = stitchAt(p, x * 10, y * 10, Math.max(3, 60 / app.vp.scale), st.limit, st.alpha);
+    return i >= 0 ? app.seq(p).objectAt[i] : -1;
+  }
+
+  /** Adds the shown objects lying wholly inside the band to the selection. */
+  function selectInBand(b: { x0: number; y0: number; x1: number; y1: number }): void {
+    const p = app.files.active?.pattern;
+    if (!p) return app.redraw();
+    const st = app.styleFor(p);
+    const inside = objectsInRect(p, app.seq(p).objects, b.x0 * 10, b.y0 * 10, b.x1 * 10, b.y1 * 10, (o) => o.first <= st.limit && st.alpha[o.first] > 0);
+    if (inside.length) app.selectObjects([...new Set([...ui.selectedObjects, ...inside.map((o) => o.index)])], false);
+    app.redraw();
+  }
+
   // The object actions at the pointer: right click, or a long press on a touch screen.
   const objectMenu = new ObjectMenu();
   let longPress: { timer: number; at: [number, number] } | null = null;

@@ -43,6 +43,8 @@ export interface LayerState {
   current: number | null;
   /** Colors of the blocks as loaded, offered to go back to. */
   original: readonly ThreadColor[];
+  /** A design is open but has no stitches yet (started empty). */
+  blank?: boolean;
   format: FileFormat;
   /** Names of objects that have one of their own (letterings). */
   names?: ReadonlyMap<number, string>;
@@ -154,14 +156,14 @@ export class LayersPanel {
       }
     }
     if (show) requestAnimationFrame(() => this.list.querySelector<HTMLElement>(`[data-object="${show[0]}"]`)?.scrollIntoView({ block: 'nearest' }));
-    const key = [st.blocks, st.objects, st.selected, st.hidden, st.focus, st.current, lang, st.original, st.names];
+    const key = [st.blocks, st.objects, st.selected, st.hidden, st.focus, st.current, lang, st.original, st.names, st.blank];
     if (key.every((k, i) => k === this.key[i])) return;
     this.key = key;
     this.st = st;
     this.picker.close();
     this.reset.hidden = !st.hidden.size && st.focus === null;
     if (!st.blocks.length) {
-      this.list.replaceChildren(Object.assign(document.createElement('li'), { className: 'muted', textContent: t('layers.empty') }));
+      this.list.replaceChildren(Object.assign(document.createElement('li'), { className: 'muted', textContent: t(st.blank ? 'layers.blank' : 'layers.empty') }));
       return;
     }
     const rows: HTMLLIElement[] = [];

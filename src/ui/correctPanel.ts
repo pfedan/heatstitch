@@ -172,7 +172,7 @@ export class CorrectPanel {
     const save = () => {
       const f = this.last?.file;
       if (!f || !isOutputFormat(this.saveFormat.value)) return;
-      const name = cleanName(this.saveName.value) || suggestedName(f.fileName, FileList.edited(f));
+      const name = cleanName(this.saveName.value) || suggestedName(f.fileName, FileList.edited(f) && !FileList.blank(f));
       hooks.save(this.saveFormat.value, name);
     };
     this.saveFile.addEventListener('click', save);
@@ -215,13 +215,13 @@ export class CorrectPanel {
     this.undoBtn.disabled = !f?.undo.length || busy;
     this.redoBtn.disabled = !f?.redo.length || busy;
     this.revertBtn.disabled = busy;
-    this.revertBtn.hidden = !FileList.edited(f);
+    this.revertBtn.hidden = !FileList.edited(f) || FileList.blank(f);
     this.saveFile.disabled = this.saveFormat.disabled = this.saveName.disabled = !loaded || busy;
     // Until a format was chosen, the open file's own format is offered.
     const own = f?.pattern?.format;
     this.saveFormat.value = this.s.saveFormat ?? (isOutputFormat(own) ? own : 'pes');
     this.saveExt.textContent = `.${this.saveFormat.value}`;
-    const name = f ? (this.names.get(f) ?? suggestedName(f.fileName, FileList.edited(f))) : '';
+    const name = f ? (this.names.get(f) ?? suggestedName(f.fileName, FileList.edited(f) && !FileList.blank(f))) : '';
     if (document.activeElement !== this.saveName && this.saveName.value !== name) this.saveName.value = name;
 
     // Drawn anew only when the message changed: the canvas redraws while the pointer is on a row.
