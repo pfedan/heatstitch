@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { sewObjects } from '../src/model/objects';
 import { analyze, measureFill, remember, remembered, rememberedIn, restitch, restoreRemembered, shapeTrust } from '../src/model/restitch';
+import { STITCH, TRIM, type Pattern } from '../src/model/pattern';
 import { recolor } from '../src/model/recolor';
 import { stitchKinds } from '../src/model/sequence';
 import { parsePattern } from '../src/parsers';
@@ -174,6 +175,56 @@ describe('project files', () => {
     expect(restoreRemembered([{ key: 'b', region: null, fill: { pattern: 'zigzag' } }])).toBe(0);
     expect(restoreRemembered('nope')).toBe(0);
   });
+});
+
+describe('wild stitches in a user\'s project', () => {
+  // A user's project: a spiral and a fill with a satin border that showed stray stitches.
+  const load = async (name: string) => {
+    const file = (await decodeProject(new Uint8Array(readFileSync(new URL('./fixtures/wild-stitches.heatstitch', import.meta.url))))).files.find((f) => f.name === name)!;
+    restoreRemembered(file.objects);
+    const p = fromStored(parsePattern(file.data, file.name), file.working)!;
+    const kinds = stitchKinds(p);
+    return { p, kinds, objs: sewObjects(p, kinds) };
+  };
+
+  /** Longest stitch (mm) from record a to b, jumps and trims breaking the thread. */
+  const longest = (p: Pattern, a: number, b: number) => {
+    let m = 0;
+    for (let i = a + 1; i <= b; i++) if (p.cmd[i] === STITCH && p.cmd[i - 1] === STITCH) m = Math.max(m, Math.hypot(p.x[i] - p.x[i - 1], p.y[i] - p.y[i - 1]) / 10);
+    return m;
+  };
+
+  it('travels from the end of the underlay to the start of the spiral instead of one wild stitch', async () => {
+    // A spiral with underlay that once sewed a 79.6 mm stitch straight across.
+    const { p, kinds, objs } = await load('New design.pes');
+    const o = objs.find((x) => remembered(p, x)?.fill?.pattern === 'spiral')!;
+    const fill = remembered(p, o)!.fill!;
+    expect(longest(p, o.first, o.last)).toBeGreaterThan(70);
+
+    const r = restitch(p, objs, [o.index], { kind: 'fill', s: fill }, kinds, 3);
+    const q = r.pattern;
+    const now = sewObjects(q).find((x) => x.first === firstRecord(q, r.starts[0] + 1))!;
+    // Rows of 4 mm, travel of 2.5 mm: at most a little over the stitch length anywhere.
+    expect(longest(q, now.first, now.last)).toBeLessThan(fill.stitch * 1.35);
+  }, 30_000);
+
+  it('does not keep the travel of a fill along its edge as a satin sewn again after the border', async () => {
+    // The fill's travel along its edge lies under its own satin border; it was taken for the
+    // satin's underlay, kept as it was and sewn on top of the new border with every edit.
+    const { p, kinds, objs } = await load('shapes-benchmark.pes');
+    const o = objs.find((x) => remembered(p, x)?.fill?.border?.type === 'satin' && remembered(p, x)?.knockout)!;
+    const parts = analyze(p, o, kinds).parts;
+    expect(parts.filter((pt) => !pt.border).map((pt) => pt.kind)).not.toContain('satin');
+
+    const r = restitch(p, objs, [o.index], { kind: 'fill', s: remembered(p, o)!.fill! }, kinds, 3);
+    const q = r.pattern;
+    const now = sewObjects(q).find((x) => x.first === firstRecord(q, r.starts[0] + 1))!;
+    // Nothing is sewn after the border: no trim between where it starts and the end of the object.
+    const from = firstRecord(q, r.starts[0] + r.memory[0].borderAt!);
+    let trims = 0;
+    for (let i = from; i < now.last; i++) if (q.cmd[i] === TRIM) trims++;
+    expect(trims).toBe(0);
+  }, 30_000);
 });
 
 /** Record of the n-th stitch (1-based). */
