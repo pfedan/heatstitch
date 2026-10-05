@@ -1,6 +1,6 @@
 import { SATIN_MAX, satinForArea, type KeptShape } from '../digitize/digitize';
 import { borderStitches, type PathStitch } from './along';
-import { lineRuns } from './line';
+import { lineStitches, runAsLine } from './line';
 import { chooseAngle, fillRegion, type FillParams } from '../digitize/fill';
 import { contourFill, fieldFill, guideField, stitchField } from '../digitize/flow';
 import { spiralFill } from '../digitize/spiral';
@@ -196,6 +196,8 @@ export interface Remembered {
   cut?: string;
   /** A drawn line: sewn along these curves (see line.ts), not traced from its stitches. */
   path?: Form;
+  /** How a line (`path`) is sewn: running, triple or satin stitch along it. */
+  line?: PathStitch;
   /** This many stitches of the object, from `underFrom` on, are its underlay (sewn here). */
   under?: number;
   /** Its underlay starts after this many stitches of the object (other parts sewn before the fill). */
@@ -302,6 +304,7 @@ export interface StoredObject {
   knockout?: boolean;
   cut?: string;
   path?: StoredPath[];
+  line?: PathStitch;
   under?: number;
   underFrom?: number;
   borderAt?: number;
@@ -333,6 +336,7 @@ export function rememberedIn(p: Pattern, objects: SewObject[]): StoredObject[] {
       ...(r.knockout ? { knockout: true } : {}),
       ...(r.cut ? { cut: r.cut } : {}),
       ...(r.path ? { path: storeForm(r.path) } : {}),
+      ...(r.line ? { line: { ...r.line } } : {}),
       ...(r.under ? { under: r.under } : {}),
       ...(r.underFrom ? { underFrom: r.underFrom } : {}),
       ...(r.borderAt ? { borderAt: r.borderAt } : {}),
@@ -369,6 +373,10 @@ function isFill(f: unknown): f is FillSettings {
 
 const BORDERS: PathStitch['type'][] = ['run', 'triple', 'satin'];
 const isColor = (c: unknown) => !!c && [(c as ThreadColor).r, (c as ThreadColor).g, (c as ThreadColor).b].every(finite);
+
+function isLineStitch(b: unknown): b is PathStitch {
+  return isBorder(b) && (b as BorderSettings).color === undefined && (b as BorderSettings).link === undefined;
+}
 
 function isBorder(b: unknown): b is BorderSettings {
   const s = b as BorderSettings | null;
@@ -470,7 +478,7 @@ export function unionRegion(rs: Region[]): Region | null {
  * Remembers the exact areas the Image mode filled (`shapes`, by object, as `starts`: the number
  * of each object's first stitch), so editing them starts from those instead of the stitches.
  */
-export function rememberShapes(p: Pattern, objs: SewObject[], starts: number[], shapes: (KeptShape | undefined)[], forms: ({ form?: Form; knockout?: boolean; path?: Form } | undefined)[] = []): void {
+export function rememberShapes(p: Pattern, objs: SewObject[], starts: number[], shapes: (KeptShape | undefined)[], forms: ({ form?: Form; knockout?: boolean; path?: Form; line?: PathStitch } | undefined)[] = []): void {
   const at = new Map<number, SewObject>();
   let n = 0;
   let k = 0;
@@ -482,7 +490,7 @@ export function rememberShapes(p: Pattern, objs: SewObject[], starts: number[], 
     const shape = shapes[j];
     const o = at.get(s);
     const line = forms[j]?.path;
-    if (o && line) return remember(p, o, { region: null, path: line });
+    if (o && line) return remember(p, o, { region: null, path: line, ...(forms[j]?.line ? { line: { ...forms[j]!.line! } } : {}) });
     if (!shape || !o) return;
     const region = regionFrom(shape);
     const f = forms[j];
@@ -518,6 +526,7 @@ export function restoreRemembered(list: unknown): number {
     if (typeof e.cut === 'string') r.cut = e.cut;
     const path = e.path === undefined ? null : formFrom(e.path);
     if (path) r.path = path;
+    if (path && isLineStitch(e.line)) r.line = { ...e.line };
     if (finite(e.under) && e.under > 0) r.under = Math.round(e.under);
     if (finite(e.underFrom) && e.underFrom > 0) r.underFrom = Math.round(e.underFrom);
     if (finite(e.borderAt) && e.borderAt > 0) r.borderAt = Math.round(e.borderAt);
@@ -1215,6 +1224,14 @@ export type SettingsFor = Settings | ((o: SewObject, a: Analysis, known: Remembe
  * satin columns from their other end, fills starting where they ended. `guides` gives a fill
  * turned into satin the rails to follow (drawn with rungs across it), by object.
  */
+/** Settings of running stitch or satin given for a line, as the stitches along it (`known`: as it had them). */
+function asLine(given: Settings, known?: PathStitch): PathStitch | null {
+  if (given.kind === 'run') return runAsLine(given.s, known?.width);
+  if (given.kind !== 'satin') return null;
+  const s = given.s;
+  return { ...(known ?? { width: 2 }), type: 'satin', spacing: s.spacing, pull: s.edge || undefined, under: s.underlay ? (s.under ?? 'center') : 'off', tolerance: s.tolerance ?? known?.tolerance };
+}
+
 export function restitch(
   p: Pattern,
   objs: SewObject[],
@@ -1290,7 +1307,8 @@ export function restitch(
     const filled = together && !converting ? newFill(p, o, an, settings.s as FillSettings, reverse) : null;
     // A drawn line: sewn anew along its curves as a whole.
     const path = paths?.get(o.index) ?? known?.path;
-    const line = !converting && settings.kind === 'run' && path ? lineRuns(path, settings.s, reverse) : null;
+    const lineSt = !converting && path && settings.kind !== 'fill' ? asLine(settings, known?.line) : null;
+    const line = lineSt && path ? lineStitches(path, lineSt, reverse) : null;
     const whole = !together ? null : converting ? convert(p, o, parts, src, area, settings, guide) : (filled?.runs ?? null);
     const firstPart = parts.findIndex((pt) => pt.kind === src && !pt.border);
     let lastPart = -1;
@@ -1330,7 +1348,7 @@ export function restitch(
           columns: settings.kind === 'satin' ? (rails.length === satinParts.length ? rails : undefined) : known?.columns,
           shape: known?.shape,
           ...(known?.form && !newArea ? { form: known.form, ...(known.knockout ? { knockout: true, cut: known.cut } : {}) } : {}),
-          ...(path && settings.kind === 'run' ? { path } : {}),
+          ...(path && lineSt ? { path, line: lineSt } : {}),
           ...(known?.under && !filled ? { under: known.under, ...(known.underFrom ? { underFrom: known.underFrom } : {}) } : {}),
           ...(known?.borderAt && !filled ? { borderAt: known.borderAt } : {}),
           // Its shape changed: the satin it was no longer fits.

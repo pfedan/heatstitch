@@ -74,11 +74,13 @@ import { drawAside, drawDrawing, type FlatArea } from './render/shapeOverlay';
 import { AsidePanel } from './ui/asidePanel';
 import type { LeftOut } from './ui/imageMode';
 import { addShape, type NewShape } from './model/addShape';
+import { lineOf, lineSettings, resewLine } from './model/line';
+import type { PathStitch } from './model/along';
 import { asideOf, dropAside, sewAgain, setAside, setAsideRole, storeAside, type AsideRole, type AsideShape } from './model/aside';
 import { deleteObjects, duplicateObject, mirrorMatrix, recolorObjects, subtractTop, unionForm } from './model/shapeOps';
 import { stitchesBefore } from './model/transform';
 import { FrameTool } from './ui/frameTool';
-import { formOf, reshapeFill, reshapeLine, scaleBlocked, transformSewObject } from './model/reshape';
+import { formOf, reshapeFill, scaleBlocked, transformSewObject } from './model/reshape';
 import { isCovered, overlapsIn, refreshKnockouts, setKnockout, wholeArea } from './model/knockout';
 import { transformObject } from './model/transform';
 import { apply, translation, type Form, type Mat } from './shape/path';
@@ -826,6 +828,7 @@ const objectPanel = new ObjectPanel({
   },
   deleteNode: () => shapeTool.deleteSelected(),
   toggleNode: () => shapeTool.toggleSmooth(),
+  closeLine: () => shapeTool.toggleClosed(),
   deleteSelection: () => editor.deleteSelection(),
   splitStitch: () => editor.splitSelected(),
 });
@@ -874,6 +877,8 @@ function stitchInfo(p: Pattern, q: Sequence): StitchInfo {
   const info: StitchInfo = { key: selectionKey, hand, measured, counts, recommended: recommendedSpacing(settings.profile), shape: worst, outlines: shapes, toSatin: stroke, knockout, color: q.objects[firstFill]?.color };
   const runs = [...selectedObjects].map((o) => q.objects[o]).filter((obj) => obj?.kind === 'run');
   if (runs.length && runs.every((obj) => remembered(p, obj)?.path)) info.line = true;
+  const one = selectedObjects.size === 1 ? q.objects[[...selectedObjects][0]] : undefined;
+  if (one && isLineObject(p, one)) info.path = { st: lineSettings(p, one, q.kinds), traced: !remembered(p, one)?.path };
   const link = selectedObjects.size === 1 && q.objects[firstFill] ? remembered(p, q.objects[firstFill])?.outline : undefined;
   if (link) {
     const fill = q.objects.findIndex((o) => remembered(p, o)?.fill?.border?.link === link);
@@ -996,6 +1001,9 @@ const stitchPanel = new StitchPanel($('object-stitches'), {
   guide: (a) => {
     if (a === 'tool') return toggleGuides();
     if (rungTool.mode === 'guide') closeRungs();
+  },
+  line: (st, final) => {
+    if (selectedObjects.size === 1) sewLine([...selectedObjects][0], null, st, final);
   },
   knockout: (on) => knockoutObjects([...selectedObjects].sort((a, b) => a - b), on),
   highlight: (what) => {
@@ -1258,10 +1266,58 @@ const shapeTool = new ShapeTool({
   },
 });
 
-/** The one selected object of the Ablauf mode, when it has a fill whose outline can be edited, or is a drawn line. */
+/**
+ * Objects sewn along a line: drawn or SVG lines (their curves are known) and running stitches of a
+ * file (their curve is traced); not the borders of fills and not letters.
+ */
+function isLineObject(p: Pattern, o: SewObject): boolean {
+  const m = remembered(p, o);
+  if (m?.path) return true;
+  return o.kind === 'run' && !m?.outline && !m?.lettering;
+}
+
+/** The one selected object of the Ablauf mode, when it has a fill whose outline can be edited, or is a line. */
 function shapeTarget(p: Pattern, q: Sequence, o: number): Form | null {
   const obj = q.objects[o];
-  return obj ? (remembered(p, obj)?.path ?? formOf(p, obj, q.kinds)) : null;
+  if (!obj) return null;
+  return isLineObject(p, obj) ? lineOf(p, obj, q.kinds) : formOf(p, obj, q.kinds);
+}
+
+/**
+ * Line `o` sewn anew along `path` with `st` (one undo step), or only shown while settings are
+ * being changed (`final` false).
+ */
+function sewLine(o: number, path: Form | null, st: PathStitch | null, final: boolean): boolean {
+  const f = files.active;
+  const p = f?.pattern;
+  if (!f || !p) return false;
+  const q = seq(p);
+  const obj = q.objects[o];
+  if (!obj) return false;
+  const line = path ?? lineOf(p, obj, q.kinds);
+  if (!line) return false;
+  const r = resewLine(p, o, line, st ?? lineSettings(p, obj, q.kinds), settings.trimMm);
+  if (!final) {
+    flowPreview = r?.pattern ?? null;
+    redraw();
+    return !!r;
+  }
+  flowPreview = null;
+  if (!r) {
+    layers.say(t('stitch.failed', { n: 1 }), true);
+    redraw();
+    return false;
+  }
+  const hand = remembered(p, obj)?.hand ?? 0;
+  applyEdit(r.pattern);
+  files.setObjects(f, rememberedIn(r.pattern, seq(r.pattern).objects));
+  selectedObjects = new Set([o]);
+  selectionKey++;
+  stitchCache = null;
+  if (hand) layers.say(t('shape.handReplaced', { n: formatNumber(hand) }));
+  followKnockouts();
+  redraw();
+  return true;
 }
 
 /** Edits the outline of object `o` (level Form); objects without a fill go to their stitches. */
@@ -1323,8 +1379,12 @@ function commitShape(form: Form): void {
   const q = seq(p);
   const obj = q.objects[shapeObject];
   if (!obj) return;
+  if (isLineObject(p, obj)) {
+    if (!sewLine(shapeObject, form, null, true)) shapeTool.setForm(shapeTarget(p, q, shapeObject) ?? form);
+    return;
+  }
   const hand = remembered(p, obj)?.hand ?? 0;
-  const r = remembered(p, obj)?.path ? reshapeLine(p, q.objects, obj, q.kinds, form, settings.trimMm) : reshapeFill(p, q.objects, obj, q.kinds, form, settings.trimMm);
+  const r = reshapeFill(p, q.objects, obj, q.kinds, form, settings.trimMm);
   if (!r || !r.starts.length) {
     // Nothing to fill there (too small, or the outline crosses itself away): back to the old one.
     shapeTool.setForm(shapeTarget(p, q, shapeObject) ?? form);
@@ -2300,8 +2360,8 @@ function objectInfo(p: Pattern, q: Sequence) {
     numbers: selected.map((o) => numberInColor(q.objects, q.objects[o])),
     hand: selected.map((o) => remembered(p, q.objects[o])?.hand ?? 0),
     editing: editor.active && editObject !== null && selected.length === 1 && selected[0] === editObject ? { selection: editor.selection.size } : null,
-    shapeable: selected.length === 1 && !!stitchInfo(p, q).measured.fill,
-    shaping: shapeTool.active && selected.length === 1 && selected[0] === shapeObject ? { nodes: shapeTool.count, smooth: shapeTool.selectedSmooth } : null,
+    shapeable: selected.length === 1 && (!!stitchInfo(p, q).measured.fill || (!!q.objects[selected[0]] && isLineObject(p, q.objects[selected[0]]))),
+    shaping: shapeTool.active && selected.length === 1 && selected[0] === shapeObject ? { nodes: shapeTool.count, smooth: shapeTool.selectedSmooth, ...(q.objects[selected[0]] && isLineObject(p, q.objects[selected[0]]) ? { line: { closed: shapeTool.closed } } : {}) } : null,
     frame: frameTool.active ? { canScale: frameTool.canScale } : null,
     mergeBlocked: selected.length > 1 ? mergeBlocked(selected.map((o) => q.objects[o])) : null,
     reversible: selected.some((o) => reversible(q.objects[o])),
