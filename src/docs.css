@@ -266,3 +266,17 @@ figure img[src*='stitchplan'] {
     grid-template-columns: 1fr;
   }
 }
+
+/* The list of fonts with their licenses, folded away. */
+.font-table {
+  margin: 1.2em 0;
+}
+
+.font-table summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.font-table td:nth-child(3) {
+  white-space: nowrap;
+}

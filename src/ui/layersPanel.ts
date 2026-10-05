@@ -42,6 +42,8 @@ export interface LayerState {
   /** Colors of the blocks as loaded, offered to go back to. */
   original: readonly ThreadColor[];
   format: 'dst' | 'pes';
+  /** Names of objects that have one of their own (letterings). */
+  names?: ReadonlyMap<number, string>;
 }
 
 const KIND_KEY: Record<ObjectKind, Key> = { fill: 'object.fill', satin: 'object.satin', run: 'object.run' };
@@ -147,7 +149,7 @@ export class LayersPanel {
       }
     }
     if (show) requestAnimationFrame(() => this.list.querySelector<HTMLElement>(`[data-object="${show[0]}"]`)?.scrollIntoView({ block: 'nearest' }));
-    const key = [st.blocks, st.objects, st.selected, st.hidden, st.focus, st.current, lang, st.original];
+    const key = [st.blocks, st.objects, st.selected, st.hidden, st.focus, st.current, lang, st.original, st.names];
     if (key.every((k, i) => k === this.key[i])) return;
     this.key = key;
     this.st = st;
@@ -262,7 +264,7 @@ export class LayersPanel {
     icon.innerHTML = KIND_ICON[o.kind];
     const name = document.createElement('span');
     name.className = 'layer-name';
-    name.textContent = `${kindLabel(o.kind)} ${numberInColor(siblings, o)}`;
+    name.textContent = st.names?.get(o.index) ?? `${kindLabel(o.kind)} ${numberInColor(siblings, o)}`;
     const meta = document.createElement('span');
     meta.className = 'layer-meta';
     meta.textContent = formatNumber(o.stitches);
