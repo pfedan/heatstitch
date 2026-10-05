@@ -16,7 +16,7 @@ import { rasterize } from '../shape/rasterize';
 import { distanceInside, distanceToSeeds } from '../image/edt';
 import { tidy, withRecords } from './edit';
 import { coversOver, cutAway, type Cover } from './covers';
-import { holdJoins, joinsIn, rememberObjects, restoreJoin, stitchKey, type ObjectKind, type SewObject } from './objects';
+import { holdJoins, joinsIn, knowKinds, rememberObjects, restoreJoin, stitchKey, type ObjectKind, type SewObject } from './objects';
 import { END, JUMP, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
 import { SATIN, TIE_STITCH } from './sequence';
 import { letteringFrom } from '../lettering/stored';
@@ -285,6 +285,22 @@ export function holdMemory(): () => void {
     joins();
   };
 }
+
+/**
+ * The kind an object was sewn in, when what it remembers says so without doubt: a border or a
+ * drawn line by how it is sewn along, else a fill or a satin by which settings it has. A lettering
+ * or a shape read from stitches leaves it to the stitches.
+ */
+export function knownKind(r: Remembered | undefined): ObjectKind | undefined {
+  if (!r || r.read || r.lettering) return undefined;
+  if (r.outline && r.border) return r.border.type === 'satin' ? 'satin' : 'run';
+  if (r.path && r.line) return r.line.type === 'satin' ? 'satin' : 'run';
+  if (r.fill && !r.satin) return 'fill';
+  if (r.satin && !r.fill) return 'satin';
+  return undefined;
+}
+
+knowKinds((p, first, last) => (memory.size ? knownKind(memory.get(stitchKey(p, first, last))) : undefined));
 
 /** A key for an object's stitches. */
 export const objectKey = (p: Pattern, o: SewObject): string => stitchKey(p, o.first, o.last);
