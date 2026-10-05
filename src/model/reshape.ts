@@ -1,4 +1,4 @@
-import { lineSettings, resewLine } from './line';
+import { lineSettings, reshapeLineFill, resewLine } from './line';
 import { transformForm, type Form, type Mat } from '../shape/path';
 import { FIT_TOLERANCE, READ_TOLERANCE, vectorize } from '../shape/vectorize';
 import { cutKey, sewnArea } from './knockout';
@@ -6,7 +6,7 @@ import { rememberObjects, sewObjects, type SewObject } from './objects';
 import { STITCH, type Pattern } from './pattern';
 import { analyze, keepShape, measureFill, measureRun, measureSatin, remembered, rememberRange, restitch, type RestitchResult, type Settings } from './restitch';
 import { stitchKinds } from './sequence';
-import { isRigid, stitchesBefore, transformObject, transformRemembered } from './transform';
+import { isRigid, scaleOf, stitchesBefore, transformObject, transformRemembered } from './transform';
 
 /**
  * The fill area of an object as curves: the curves it was given here, else its area (kept or
@@ -14,6 +14,8 @@ import { isRigid, stitchesBefore, transformObject, transformRemembered } from '.
  */
 export function formOf(p: Pattern, o: SewObject, kinds: Uint8Array): Form | null {
   const known = remembered(p, o);
+  // A fill along a line: its shape is the line.
+  if (known?.asLine && known.fill) return known.asLine.path;
   if (known?.form) return known.form;
   const an = analyze(p, o, kinds, known);
   if (!an.fill || !an.parts.some((pt) => pt.kind === 'fill')) return null;
@@ -60,6 +62,7 @@ function keepGrouping(before: Pattern, objs: SewObject[], o: SewObject, after: P
  * with `knockout` (as the object had it, unless given) the area without what later fills cover.
  */
 export function reshapeFill(p: Pattern, objs: SewObject[], o: SewObject, kinds: Uint8Array, form: Form, trimMm: number, knockout?: boolean): RestitchResult | null {
+  if (remembered(p, o)?.asLine) return reshapeLineFill(p, objs, o, kinds, form, trimMm);
   const known = keepShape(p, o, kinds);
   const cut = knockout ?? !!remembered(p, o)?.knockout;
   const area = sewnArea(p, objs, o, form, cut, known.region?.pxMm ?? 0.1);
@@ -125,6 +128,16 @@ export function transformSewObject(p: Pattern, objs: SewObject[], o: SewObject, 
   if (line && !rigid) {
     const r = resewLine(p, o.index, transformForm(line, m), lineSettings(p, o, kinds), trimMm);
     return r && { ...r, restitched: true };
+  }
+  // A fill along a line: filled anew along the scaled line, in a width scaled with it.
+  const along = remembered(p, o);
+  if (along?.asLine && along.fill && !rigid) {
+    const width = (along.fill.lineWidth ?? along.asLine.line.width) * scaleOf(m);
+    const r = reshapeLineFill(p, objs, o, kinds, transformForm(along.asLine.path, m), trimMm, width);
+    const fresh = r?.starts.length ? sewObjects(r.pattern).find((x) => stitchesBefore(r.pattern, x.first) === r.starts[0]) : undefined;
+    if (!r || !fresh) return null;
+    rememberRange(r.pattern, fresh.first, fresh.last, r.memory[0]);
+    return { pattern: r.pattern, first: fresh.first, last: fresh.last, restitched: true };
   }
   const known = rigid ? remembered(p, o) : keepShape(p, o, kinds);
   // Settings as the object has them now (measured after scaling, the rows would be wider apart).

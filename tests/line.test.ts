@@ -4,7 +4,7 @@ import { fillToLine, lineSettings, lineToFill, resewLine, traceLine } from '../s
 import { addShape } from '../src/model/addShape';
 import { rememberObjects, sewObjects } from '../src/model/objects';
 import { remember, remembered, rememberedIn, restitch, restoreRemembered, type FillSettings } from '../src/model/restitch';
-import { transformSewObject } from '../src/model/reshape';
+import { formOf, reshapeFill, transformSewObject } from '../src/model/reshape';
 import { takeOver } from '../src/model/knockout';
 import { stitchKinds } from '../src/model/sequence';
 import { STITCH, type Pattern } from '../src/model/pattern';
@@ -149,5 +149,43 @@ describe('wide line as a fill', () => {
     expect(b.kind).toBe('satin');
     expect(remembered(back.pattern, b)).toMatchObject({ path: form, line: { type: 'satin', width: 5 } });
     expect(remembered(back.pattern, b)?.fill).toBeUndefined();
+  });
+
+  it('makes its area from the line each time: no outline of its own, width and ends from the fill, the line edited', () => {
+    const form = parsePath('M0 0 C10 10 20 -10 30 0', ID);
+    const p = addShape(empty, { form, kind: 'stroke', width: 5 }, red, null, options)!.pattern;
+    const fs: FillSettings = { pattern: 'tatami', spacing: 0.4, spacingEnd: 0.8, offset: 0.25, angle: NaN, stitch: 4, underlay: true, edge: 0, tolerance: 0.15 };
+    const take = (r: ReturnType<typeof lineToFill>) => {
+      rememberObjects(r!.pattern, [r!.starts[0]], r!.ends[0]);
+      const o = sewObjects(r!.pattern)[0];
+      remember(r!.pattern, o, r!.memory[0]);
+      return { q: r!.pattern, o, m: remembered(r!.pattern, o)! };
+    };
+    const a = take(lineToFill(p, 0, fs, options.trimMm));
+    // The line is the shape: no outline traced from its area, and the shape to edit is the line.
+    expect(a.m.form).toBeUndefined();
+    expect(a.m.fill).toMatchObject({ lineWidth: 5, lineCap: 'flat' });
+    expect(formOf(a.q, a.o, stitchKinds(a.q))).toBe(a.m.asLine!.path);
+    // The area is the line in its width, flat at the ends: about 5 × 33 mm.
+    expect(a.m.region!.areaMm2).toBeGreaterThan(150);
+    expect(a.m.region!.areaMm2).toBeLessThan(185);
+    // Round ends add a half disc at each end, a wider line a wider band.
+    const kinds = stitchKinds(a.q);
+    const round = take(restitch(a.q, sewObjects(a.q, kinds), [0], { kind: 'fill', s: { ...a.m.fill!, lineCap: 'round' } }, kinds, options.trimMm));
+    expect(round.m.region!.areaMm2 - a.m.region!.areaMm2).toBeCloseTo(Math.PI * 2.5 * 2.5, -1);
+    const wide = take(restitch(a.q, sewObjects(a.q, kinds), [0], { kind: 'fill', s: { ...a.m.fill!, lineWidth: 8 } }, kinds, options.trimMm));
+    expect(wide.m.region!.areaMm2 / a.m.region!.areaMm2).toBeGreaterThan(1.4);
+    expect(wide.m.asLine!.line.width).toBe(8);
+    // Its line edited: the area follows the new line.
+    const moved = parsePath('M0 20 C10 30 20 10 30 20', ID);
+    const e = take(reshapeFill(a.q, sewObjects(a.q, kinds), a.o, kinds, moved, options.trimMm));
+    expect(e.m.asLine!.path).toBe(moved);
+    expect(e.o.minY / 10).toBeGreaterThan(10);
+    // Scaled: the line and its width scale, the area is made anew from them.
+    const big = transformSewObject(a.q, sewObjects(a.q, kinds), a.o, kinds, [2, 0, 0, 2, 0, 0], options.trimMm)!;
+    const bo = sewObjects(big.pattern)[0];
+    const bm = remembered(big.pattern, bo)!;
+    expect(bm.fill!.lineWidth).toBeCloseTo(10, 5);
+    expect(bm.region!.areaMm2 / a.m.region!.areaMm2).toBeGreaterThan(3.5);
   });
 });
