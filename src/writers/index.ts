@@ -1,17 +1,50 @@
 import type { Pattern } from '../model/pattern';
 import { writeDst } from './dst';
-import { writePes } from './pes';
+import { writeExp } from './exp';
+import { writeJef } from './jef';
+import { writePecFile, writePes } from './pes';
+import { writeVp3 } from './vp3';
 
-export type OutputFormat = 'dst' | 'pes';
+export type OutputFormat = 'pes' | 'dst' | 'jef' | 'exp' | 'vp3' | 'pec';
+
+/** Save formats in menu order. */
+export const OUTPUT_FORMATS: OutputFormat[] = ['pes', 'dst', 'jef', 'vp3', 'exp', 'pec'];
+
+export function isOutputFormat(v: unknown): v is OutputFormat {
+  return OUTPUT_FORMATS.includes(v as OutputFormat);
+}
+
+const WRITERS: Record<OutputFormat, (p: Pattern) => Uint8Array> = {
+  pes: writePes,
+  dst: writeDst,
+  jef: (p) => writeJef(p),
+  exp: writeExp,
+  vp3: writeVp3,
+  pec: writePecFile,
+};
 
 export function writePattern(p: Pattern, format: OutputFormat): Uint8Array {
-  return format === 'dst' ? writeDst(p) : writePes(p);
+  return WRITERS[format](p);
+}
+
+/** Suggested name without extension: "design.pes" after edits becomes "design-corrected". */
+export function suggestedName(fileName: string, edited: boolean): string {
+  const base = fileName.replace(/\.[^.]+$/, '') || 'design';
+  return `${base}${edited ? '-corrected' : ''}`;
+}
+
+/** A name typed by the user, without characters file systems refuse; empty when nothing is left. */
+export function cleanName(name: string): string {
+  return name
+    .replace(/[\\/:*?"<>|\x00-\x1f]/g, '')
+    .trim()
+    .replace(/\.(pes|pec|dst|jef|exp|vp3)$/i, '')
+    .trim();
 }
 
 /** "design.pes" saved as DST after edits becomes "design-corrected.dst". */
 export function outputFileName(fileName: string, format: OutputFormat, edited: boolean): string {
-  const base = fileName.replace(/\.[^.]+$/, '') || 'design';
-  return `${base}${edited ? '-corrected' : ''}.${format}`;
+  return `${suggestedName(fileName, edited)}.${format}`;
 }
 
 /** Offers the file as a download. */

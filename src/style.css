@@ -1350,9 +1350,48 @@ details.panel.section[open] > summary {
   border-top: 1px solid var(--line);
 }
 
-.file-actions .buttons {
+.file-actions .save-format {
+  width: 100%;
   margin-top: 4px;
 }
+
+.file-actions .save-name {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+}
+
+.file-actions .save-name:focus-within {
+  border-color: var(--accent);
+}
+
+.file-actions .save-name input {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+}
+
+.file-actions .save-name span {
+  padding: 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.file-actions .save-file {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
 
 .file-actions .save-project {
   width: 100%;

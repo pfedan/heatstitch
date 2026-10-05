@@ -1,6 +1,6 @@
 import { formatNumber, t, type Key } from '../i18n';
 import { numberInColor, type ObjectKind, type SewObject } from '../model/objects';
-import type { ThreadColor } from '../model/pattern';
+import type { FileFormat, ThreadColor } from '../model/pattern';
 import { sameColor } from '../model/recolor';
 import type { ColorBlock } from '../model/sequence';
 import { cssColor as css, hexColor as hex, ThreadPicker } from './threadPicker';
@@ -41,7 +41,7 @@ export interface LayerState {
   current: number | null;
   /** Colors of the blocks as loaded, offered to go back to. */
   original: readonly ThreadColor[];
-  format: 'dst' | 'pes';
+  format: FileFormat;
   /** Names of objects that have one of their own (letterings). */
   names?: ReadonlyMap<number, string>;
 }
@@ -436,10 +436,17 @@ export class LayersPanel {
       title: t('layers.recolorTitle', { n: b.index + 1 }),
       current: b.color,
       original: orig && !sameColor(orig, b.color) ? { color: orig, label: t('layers.original', { name: orig.name ?? hex(orig) }) } : null,
-      note: t(st.format === 'pes' ? 'layers.colorNote.pes' : 'layers.colorNote.dst'),
+      note: colorNote(st.format),
       onPick: (c: ThreadColor) => {
         if (!sameColor(c, b.color)) this.hooks.recolor(b.index, c);
       },
     });
   }
+}
+
+/** What the open file's format does with a thread color. */
+function colorNote(format: FileFormat): string {
+  if (format === 'pes' || format === 'pec') return t('layers.colorNote.pes');
+  if (format === 'jef' || format === 'vp3') return t(`layers.colorNote.${format}`);
+  return t('layers.colorNote.none', { format: format.toUpperCase() });
 }

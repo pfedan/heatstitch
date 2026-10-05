@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>heatstitch guide: sequence, objects, stitch editing and the density check</title>
-    <meta name="description" content="How heatstitch shows the sewing sequence of DST and PES embroidery files, sews objects anew with other fill patterns, edits single stitches, checks thread density for your fabric, turns pictures into stitches and saves the result." />
+    <meta name="description" content="How heatstitch shows the sewing sequence of embroidery files (PES, DST, JEF, VP3, EXP, PEC), sews objects anew with other fill patterns, edits single stitches, checks thread density for your fabric, turns pictures into stitches and saves the result." />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://pfedan.github.io/heatstitch/docs.html" />
     <meta name="theme-color" content="#1b1026" />
@@ -50,7 +50,7 @@
           works through the design: colors, order, jumps and trims, stitch by stitch, and lets you decide which
           jumps get trimmed. <b>Density</b> shows how much thread lands on every square millimeter and tells you
           where a design is too dense for the fabric and thread you plan to use. You can fix those spots
-          automatically or by hand and save the result as DST or PES. <b>Image</b> turns a picture or photo into
+          automatically or by hand and save the result for your machine. <b>Image</b> turns a picture or photo into
           an embroidery file.
         </p>
 
@@ -77,7 +77,7 @@
 
         <h2 id="en-start">Quick start</h2>
         <ol>
-          <li>Drop one or more <b>DST</b> (Tajima) or <b>PES</b> (Brother) files on the file box, or pick one from <i>Load example</i> below it: the cat, the overlapping circles or the confetti. Two examples are vector graphics (SVG), sewn as they open: the overlapping circles once more, as three whole circles and a small one on top (see <i>Shapes on top of each other</i> below), and the <i>Shapes benchmark</i>, nine fields with what heatstitch does with shapes and objects (fill, fill with a hole, satin, a satin network, bands around the satin limit to switch between satin and fill, a tapered leaf, running stitch, overlaps and areas in pieces).</li>
+          <li>Drop one or more embroidery files on the file box: <b>PES</b> and <b>PEC</b> (Brother), <b>DST</b> (Tajima), <b>JEF</b> (Janome), <b>VP3</b> (Pfaff, Husqvarna Viking) or <b>EXP</b> (Melco), or pick one from <i>Load example</i> below it: the cat, the overlapping circles or the confetti. Two examples are vector graphics (SVG), sewn as they open: the overlapping circles once more, as three whole circles and a small one on top (see <i>Shapes on top of each other</i> below), and the <i>Shapes benchmark</i>, nine fields with what heatstitch does with shapes and objects (fill, fill with a hole, satin, a satin network, bands around the satin limit to switch between satin and fill, a tapered leaf, running stitch, overlaps and areas in pieces).</li>
           <li>Pick the mode at the top: <i>Sequence</i> (<kbd>1</kbd>) to see how the design is sewn, <i>Density</i> (<kbd>2</kbd>) to check it, <i>Image</i> (<kbd>3</kbd>) to make one from a picture (see <a href="#en-image">Image mode</a>).</li>
           <li>In <i>Density</i>, pick the <b>fabric</b> and <b>thread weight</b> under <i>Material</i>.</li>
           <li>Read the verdict in the <i>Findings</i> column: <span class="lv safe">Looks fine</span>, <span class="lv caution">Caution</span> or <span class="lv critical">Critical</span>. Click a zone to zoom to it.</li>
@@ -443,14 +443,15 @@
           <dt>Living thread</dt>
           <dd>Real thread shines across its fibers. In the realistic view the light follows your pointer, or the tilt of your phone, so satin columns and fill rows light up and darken by their stitch direction, as when you turn a sewn patch in your hand. The first converted image is shown this way with the light going round once; <i>✦ As sewn</i> on the canvas brings it back. <i>Light follows pointer and tilt</i> under <i>Display</i> switches it off.</dd>
           <dt>Result</dt>
-          <dd>Stitches, size, sewing time and the check for the material. <i>Take over as design</i> adds the design as a PES file to the file list, where you can look at it in the other modes, correct it and save it as DST or PES.</dd>
+          <dd>Stitches, size, sewing time and the check for the material. <i>Take over as design</i> adds the design as a PES file to the file list, where you can look at it in the other modes, correct it and save it as an embroidery file.</dd>
         </dl>
 
         <h2 id="en-save">Save and export</h2>
         <ul>
-          <li><b>Save: As DST / As PES</b> under the file list writes the current stitches and colors. <i>Back to the original</i> appears there once a file is changed. Edited files get the suffix <code>-corrected</code>. Objects and hoop settings from embroidery software are not kept.</li>
-          <li>DST has no colors; PES colors keep their palette slot, DST colors and colors you picked yourself get the nearest one.</li>
-          <li><b>As project (.heatstitch)</b> saves everything you work on in one file, also what DST and PES cannot hold: all loaded files with their original and your changes, exact thread colors, shapes and stitch settings of objects, acknowledged findings, the image of the <i>Image</i> mode with its color changes and brush strokes, and material, checks and correction options. In the <i>Image</i> mode the same is under the image as <i>Save as project</i>. To continue, open the file here again (drop it or click the file field); its files are added to the list. The undo history is not saved.</li>
+          <li><b>Save</b> under the file list writes the current stitches and colors in the format you pick, named by machine brand: PES, DST, JEF, VP3, EXP or PEC. The choice is remembered. The name field next to the button suggests the file's name (with <code>-corrected</code> after a change); what you type there names the file and the design inside it. <i>Back to the original</i> appears there once a file is changed.  Objects and hoop settings from embroidery software are not kept.</li>
+          <li>VP3 keeps colors exactly, with brand and catalog number. PES and PEC use the Brother palette (colors read from a PES keep their slot, others get the nearest), JEF the Janome palette. DST and EXP store no colors.</li>
+          <li>JEF has no trim command: the machine cuts before jumps over 3 mm, so a trim before a shorter move is lost. Stitches longer than 12.7 mm are split into equal stitches.</li>
+          <li><b>As project (.heatstitch)</b> saves everything you work on in one file, named by the day (<code>2026-10-05-heatstitch-project.heatstitch</code>), also what embroidery files cannot hold: all loaded files with their original and your changes, exact thread colors, shapes and stitch settings of objects, acknowledged findings, the image of the <i>Image</i> mode with its color changes and brush strokes, and material, checks and correction options. In the <i>Image</i> mode the same is under the image as <i>Save as project</i>. To continue, open the file here again (drop it or click the file field); its files are added to the list. The undo history is not saved.</li>
           <li><b>PNG</b> on the canvas saves the current view, in the <i>Density</i> mode with its legend.</li>
         </ul>
 
@@ -483,8 +484,8 @@
         <h2 id="en-limits">Limits</h2>
         <ul>
           <li>The limits come from digitizing guidelines and synthetic test layouts, not yet from real sew-outs. Treat them as a well founded hint, not a guarantee.</li>
-          <li>PES: colors come from the PEC palette; RGB thread lists of newer versions are not read yet.</li>
-          <li>heatstitch can be installed as an app and works offline after the first visit. On desktop it can open .dst and .pes files directly. When a new version is out, a small notice offers to reload; your open files stay.</li>
+          <li>PES: the thread list of versions 5 to 10 (real color, name, brand, catalog number) is read; saving writes version 1 with the Brother palette. Further formats such as XXX, HUS or U01 are not read yet.</li>
+          <li>heatstitch can be installed as an app and works offline after the first visit. On desktop it opens embroidery files directly. When a new version is out, a small notice offers to reload; your open files stay.</li>
         </ul>
         <p class="more">More detail: <a href="https://github.com/pfedan/heatstitch#readme">README on GitHub</a></p>
       </article>
@@ -497,7 +498,7 @@
           abarbeitet: Farben, Reihenfolge, Sprünge und Fadenschnitte, Stich für Stich, und lässt dich entscheiden,
           wo geschnitten wird. <b>Dichte</b> zeigt, wie viel Garn auf jedem Quadratmillimeter landet, und sagt
           dir, wo ein Stickmuster für deinen Stoff und dein Garn zu dicht ist. Diese Stellen kannst du automatisch
-          oder von Hand korrigieren und das Ergebnis als DST oder PES speichern. <b>Bild</b> macht aus einem Bild
+          oder von Hand korrigieren und das Ergebnis für deine Maschine speichern. <b>Bild</b> macht aus einem Bild
           oder Foto eine Stickdatei.
         </p>
 
@@ -524,7 +525,7 @@
 
         <h2 id="de-start">Schnellstart</h2>
         <ol>
-          <li>Eine oder mehrere <b>DST</b>- (Tajima) oder <b>PES</b>-Dateien (Brother) auf das Dateifeld ziehen oder darunter unter <i>Beispiel laden</i> eines auswählen: die Katze, die überlappenden Kreise oder das Konfetti. Zwei Beispiele sind Vektorgrafiken (SVG) und werden beim Öffnen gestickt: noch einmal die überlappenden Kreise, als drei ganze Kreise und ein kleiner darauf (siehe <i>Formen übereinander</i> unten), und der <i>Formen-Benchmark</i>, neun Felder mit dem, was heatstitch mit Formen und Objekten macht (Füllung, Füllung mit Loch, Satin, ein Satin-Netz, Bänder um die Satin-Grenze zum Wechseln zwischen Satin und Füllung, ein spitz zulaufendes Blatt, Steppstich, Überlappungen und Flächen in Stücken).</li>
+          <li>Eine oder mehrere Stickdateien auf das Dateifeld ziehen: <b>PES</b> und <b>PEC</b> (Brother), <b>DST</b> (Tajima), <b>JEF</b> (Janome), <b>VP3</b> (Pfaff, Husqvarna Viking) oder <b>EXP</b> (Melco), oder darunter unter <i>Beispiel laden</i> eines auswählen: die Katze, die überlappenden Kreise oder das Konfetti. Zwei Beispiele sind Vektorgrafiken (SVG) und werden beim Öffnen gestickt: noch einmal die überlappenden Kreise, als drei ganze Kreise und ein kleiner darauf (siehe <i>Formen übereinander</i> unten), und der <i>Formen-Benchmark</i>, neun Felder mit dem, was heatstitch mit Formen und Objekten macht (Füllung, Füllung mit Loch, Satin, ein Satin-Netz, Bänder um die Satin-Grenze zum Wechseln zwischen Satin und Füllung, ein spitz zulaufendes Blatt, Steppstich, Überlappungen und Flächen in Stücken).</li>
           <li>Oben den Modus wählen: <i>Ablauf</i> (<kbd>1</kbd>), um zu sehen, wie das Stickmuster gestickt wird, <i>Dichte</i> (<kbd>2</kbd>), um es zu prüfen, <i>Bild</i> (<kbd>3</kbd>), um aus einem Bild eine zu machen (siehe <a href="#de-image">Modus Bild</a>).</li>
           <li>Im Modus <i>Dichte</i> unter <i>Material</i> <b>Stoff</b> und <b>Garnstärke</b> wählen.</li>
           <li>Das Urteil in der Spalte <i>Befunde</i> lesen: <span class="lv safe">Unauffällig</span>, <span class="lv caution">Vorsicht</span> oder <span class="lv critical">Kritisch</span>. Ein Klick auf eine Zone zoomt hin.</li>
@@ -894,14 +895,15 @@
           <dt>Lebendiges Garn</dt>
           <dd>Echtes Garn glänzt quer zu seinen Fasern. In der realistischen Ansicht folgt das Licht dem Mauszeiger oder der Neigung des Handys, und Satinsäulen und Füllreihen leuchten je nach Stichrichtung auf oder werden dunkel, wie beim Drehen eines gestickten Aufnähers in der Hand. Das erste umgewandelte Bild erscheint so, und das Licht läuft einmal herum; <i>✦ Wie gestickt</i> auf der Leinwand holt es zurück. <i>Licht folgt Maus und Neigung</i> unter <i>Anzeige</i> schaltet es ab.</dd>
           <dt>Ergebnis</dt>
-          <dd>Stiche, Größe, Nähzeit und die Prüfung für das Material. <i>Als Stickmuster übernehmen</i> legt das Stickmuster als PES-Datei in die Dateiliste. Dort lässt es sich in den anderen Modi ansehen, korrigieren und als DST oder PES speichern.</dd>
+          <dd>Stiche, Größe, Nähzeit und die Prüfung für das Material. <i>Als Stickmuster übernehmen</i> legt das Stickmuster als PES-Datei in die Dateiliste. Dort lässt es sich in den anderen Modi ansehen, korrigieren und als Stickdatei speichern.</dd>
         </dl>
 
         <h2 id="de-save">Speichern und Export</h2>
         <ul>
-          <li><b>Speichern: Als DST / Als PES</b> unter der Dateiliste schreibt die aktuellen Stiche und Farben. <i>Zurück zum Original</i> erscheint dort, sobald eine Datei geändert ist. Geänderte Dateien bekommen den Zusatz <code>-corrected</code>. Objekte und Rahmeneinstellungen aus der Sticksoftware gehen verloren.</li>
-          <li>DST kennt keine Farben; PES-Farben behalten ihren Paletten-Platz, Farben aus DST und selbst gewählte Farben bekommen den nächstgelegenen.</li>
-          <li><b>Als Projekt (.heatstitch)</b> speichert alles, woran du arbeitest, in einer Datei, auch was DST und PES nicht halten können: alle geladenen Dateien mit Original und deinen Änderungen, genaue Garnfarben, Formen und Stich-Einstellungen der Objekte, quittierte Befunde, das Bild aus dem Modus <i>Bild</i> mit Farbänderungen und Pinselstrichen sowie Material, Prüfregeln und Korrektur-Optionen. Im Modus <i>Bild</i> steht dasselbe unter dem Bild als <i>Als Projekt speichern</i>. Zum Weiterarbeiten die Datei hier wieder öffnen (hineinziehen oder auf das Dateifeld klicken); ihre Dateien kommen zur Liste dazu. Der Rückgängig-Verlauf wird nicht gespeichert.</li>
+          <li><b>Speichern</b> unter der Dateiliste schreibt die aktuellen Stiche und Farben im gewählten Format, benannt nach Maschinenmarke: PES, DST, JEF, VP3, EXP oder PEC. Die Wahl bleibt gespeichert. Das Namensfeld neben dem Knopf schlägt den Namen der Datei vor (nach einer Änderung mit <code>-corrected</code>); was du dort eingibst, benennt die Datei und das Stickmuster darin. <i>Zurück zum Original</i> erscheint dort, sobald eine Datei geändert ist.  Objekte und Rahmeneinstellungen aus der Sticksoftware gehen verloren.</li>
+          <li>VP3 behält Farben genau, mit Marke und Katalognummer. PES und PEC nutzen die Brother-Palette (aus einer PES gelesene Farben behalten ihren Platz, andere bekommen den nächstgelegenen), JEF die Janome-Palette. DST und EXP speichern keine Farben.</li>
+          <li>JEF kennt keinen Schnittbefehl: Die Maschine schneidet vor Sprüngen über 3 mm, ein Schnitt vor einem kürzeren Weg geht verloren. Stiche über 12,7 mm werden in gleich lange Stiche geteilt.</li>
+          <li><b>Als Projekt (.heatstitch)</b> speichert alles, woran du arbeitest, in einer Datei, benannt nach dem Tag (<code>2026-10-05-heatstitch-projekt.heatstitch</code>), auch was Stickdateien nicht halten können: alle geladenen Dateien mit Original und deinen Änderungen, genaue Garnfarben, Formen und Stich-Einstellungen der Objekte, quittierte Befunde, das Bild aus dem Modus <i>Bild</i> mit Farbänderungen und Pinselstrichen sowie Material, Prüfregeln und Korrektur-Optionen. Im Modus <i>Bild</i> steht dasselbe unter dem Bild als <i>Als Projekt speichern</i>. Zum Weiterarbeiten die Datei hier wieder öffnen (hineinziehen oder auf das Dateifeld klicken); ihre Dateien kommen zur Liste dazu. Der Rückgängig-Verlauf wird nicht gespeichert.</li>
           <li><b>PNG</b> auf der Leinwand speichert die aktuelle Ansicht, im Modus <i>Dichte</i> mit Legende.</li>
         </ul>
 
@@ -934,8 +936,8 @@
         <h2 id="de-limits">Grenzen</h2>
         <ul>
           <li>Die Grenzwerte stammen aus Digitalisier-Richtwerten und synthetischen Testaufbauten, noch nicht aus echten Probestickungen. Sie sind ein gut begründeter Hinweis, keine Garantie.</li>
-          <li>PES: Farben kommen aus der PEC-Palette, die RGB-Garnlisten neuerer Versionen werden noch nicht gelesen.</li>
-          <li>heatstitch lässt sich als App installieren und funktioniert nach dem ersten Besuch offline. Am Desktop öffnet es .dst- und .pes-Dateien direkt. Gibt es eine neue Version, bietet ein kleiner Hinweis das Neuladen an; offene Dateien bleiben erhalten.</li>
+          <li>PES: Die Garnliste der Versionen 5 bis 10 (echte Farbe, Name, Marke, Katalognummer) wird gelesen; gespeichert wird Version 1 mit der Brother-Palette. Weitere Formate wie XXX, HUS oder U01 werden noch nicht gelesen.</li>
+          <li>heatstitch lässt sich als App installieren und funktioniert nach dem ersten Besuch offline. Am Desktop öffnet es Stickdateien direkt. Gibt es eine neue Version, bietet ein kleiner Hinweis das Neuladen an; offene Dateien bleiben erhalten.</li>
         </ul>
         <p class="more">Mehr Details: <a href="https://github.com/pfedan/heatstitch#readme">README auf GitHub</a></p>
       </article>
