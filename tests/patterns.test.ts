@@ -106,8 +106,8 @@ describe('fill patterns', () => {
   it('keeps the underlay further inside by a share of the width', () => {
     // How far the underlay's needle points keep from the edge of the disk, most of them (the
     // travel from the start on the edge left aside).
-    const edgeOf = (share: number) => {
-      const res = fillRegion(disk, { ...params, underlay: true, underInset: 0.4, underInsetShare: share }, [5, 15])!;
+    const edgeOf = (share?: number, underSpacing?: number) => {
+      const res = fillRegion(disk, { ...params, underlay: true, underInset: 0.4, underInsetShare: share, underSpacing }, [5, 15])!;
       const d = res.runs
         .flat()
         .slice(0, res.under!)
@@ -116,9 +116,16 @@ describe('fill patterns', () => {
       expect(d.length).toBeGreaterThan(20);
       return d[Math.floor(d.length * 0.1)];
     };
-    expect(edgeOf(0)).toBeGreaterThan(0.3);
-    // 10 % of the 20 mm wide disk: 2 mm more.
-    expect(edgeOf(0.1)).toBeGreaterThan(edgeOf(0) + 1.5);
+    expect(edgeOf()).toBeGreaterThan(0.3);
+    // 10 % of the 20 mm wide disk: 2 mm in place of 0.4.
+    expect(edgeOf(0.1)).toBeGreaterThan(edgeOf() + 1.2);
+    // Its own spacing changes the rows, not how far they keep inside.
+    expect(edgeOf(0.1, 2.5)).toBeGreaterThan(edgeOf() + 1.2);
+  });
+
+  it('spaces the underlay rows as set', () => {
+    const count = (underSpacing?: number) => fillRegion(disk, { ...params, underlay: true, underSpacing }, [5, 15])!.under!;
+    expect(count(0.8)).toBeGreaterThan(count(2.5) * 1.5);
   });
 
   it('fills a disk with rings along the outline', () => {
