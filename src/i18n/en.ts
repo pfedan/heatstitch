@@ -131,7 +131,6 @@ export const en: Record<keyof typeof de, string> = {
   'layout.resizeInspector': 'Width of the right column',
   'layout.resize.hint': 'Drag or use the arrow keys to change the width, double click or Enter resets it',
   'findings.title': 'Findings',
-  'findings.hide': 'Hide findings',
   'findings.all': 'All',
   'findings.prev': 'Previous zone (Shift+n)',
   'findings.next': 'Next zone (n)',

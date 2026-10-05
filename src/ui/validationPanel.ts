@@ -85,8 +85,8 @@ export interface PanelHooks {
 }
 
 /**
- * Verdict, level filter, zone stepper and a scrolling zone list, plus the compact chip on the
- * canvas that stands in for the panel while it is hidden. Rebuilds only when its inputs change.
+ * Verdict, level filter, zone stepper and a scrolling zone list, plus the short verdict on the
+ * section's line that stands in for it while it is closed. Rebuilds only when its inputs change.
  */
 export class ValidationPanel {
   private filter: ZoneFilter = 'all';
@@ -96,7 +96,7 @@ export class ValidationPanel {
 
   constructor(
     private root: HTMLElement,
-    private chip: HTMLElement,
+    private summary: HTMLElement,
     private hooks: PanelHooks,
   ) {}
 
@@ -121,23 +121,23 @@ export class ValidationPanel {
     // Keep the list where the user scrolled it; the selected entry is scrolled into view below.
     const scroll = this.root.querySelector('.val-zones')?.scrollTop ?? 0;
     this.root.replaceChildren(...this.build(file, selected));
-    this.renderChip(file);
+    this.renderSummary(file);
     const list = this.root.querySelector('.val-zones');
     if (list) list.scrollTop = scroll;
     this.root.querySelector('.val-zone.selected')?.scrollIntoView({ block: 'nearest' });
   }
 
-  private renderChip(file: LoadedFile | null): void {
+  private renderSummary(file: LoadedFile | null): void {
     const v = file?.pattern ? file.validation : null;
     if (!v) {
-      this.chip.replaceChildren(t('findings.title'));
+      this.summary.replaceChildren();
       return;
     }
     const open = v.zones.filter((z) => !settledBy(z, file!.acks));
     const critical = open.filter((z) => z.level === CRITICAL).length;
     const caution = open.length - critical;
     const worst = openWorst(v.zones, file!.acks) as Level;
-    this.chip.replaceChildren(
+    this.summary.replaceChildren(
       el('span', `dot ${LEVEL_CLASS[worst]}`),
       el('strong', '', t(VERDICT_KEY[worst])),
       ...(open.length ? [el('span', '', t('validation.counts', { critical, caution }))] : []),

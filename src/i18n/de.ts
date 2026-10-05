@@ -129,7 +129,6 @@ export const de = {
   'layout.resizeInspector': 'Breite der rechten Spalte',
   'layout.resize.hint': 'Ziehen oder Pfeiltasten ändern die Breite, Doppelklick oder Eingabe stellt sie zurück',
   'findings.title': 'Befunde',
-  'findings.hide': 'Befunde ausblenden',
   'findings.all': 'Alle',
   'findings.prev': 'Vorige Zone (Umschalt+n)',
   'findings.next': 'Nächste Zone (n)',

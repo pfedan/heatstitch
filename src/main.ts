@@ -219,7 +219,7 @@ function originalScene(): Scene {
   };
 }
 
-const panel = new ValidationPanel($('validation'), $('findings-open'), {
+const panel = new ValidationPanel($('validation'), $('findings-sum'), {
   onZone: (z) => selectZone(z),
   onHover: (z) => {
     hoverZone = z;
@@ -237,16 +237,6 @@ const panel = new ValidationPanel($('validation'), $('findings-open'), {
   },
 });
 
-/** Shows or hides the findings (the Correction panel stays in the column); while hidden a chip on the canvas reopens them. */
-function setFindingsOpen(open: boolean): void {
-  settings.findingsOpen = open;
-  saveSettings(settings);
-  $('layout').classList.toggle('findings-closed', !open);
-  $('findings-open').hidden = open;
-}
-$('findings-close').addEventListener('click', () => setFindingsOpen(false));
-$('findings-open').addEventListener('click', () => setFindingsOpen(true));
-setFindingsOpen(settings.findingsOpen);
 installPanelResize($('layout'), settings.panels, () => saveSettings(settings));
 
 
