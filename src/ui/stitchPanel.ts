@@ -372,17 +372,40 @@ export class StitchPanel {
       );
       if (s.underlay) {
         out.push(
-          this.under(this.slider({ label: 'stitch.underInset', hint: 'stitch.underInset.hint', min: 0, max: 1.5, step: 0.05, get: () => s.underInset ?? UNDERLAY_INSET, set: (v) => (s.underInset = v), fmt: mm(2) })),
+          this.under(
+            this.choice<'mm' | 'share'>(
+              'stitch.underInsetBy',
+              ['mm', 'share'],
+              s.underInsetShare === undefined ? 'mm' : 'share',
+              (v) => `stitch.underInsetBy.${v}` as Key,
+              (v) => (s.underInsetShare = v === 'share' ? 0.1 : undefined),
+              true,
+            ),
+          ),
+          this.under(
+            s.underInsetShare === undefined
+              ? this.slider({ label: 'stitch.underInset', hint: 'stitch.underInset.hint', min: 0, max: 1.5, step: 0.05, get: () => s.underInset ?? UNDERLAY_INSET, set: (v) => (s.underInset = v), fmt: mm(2) })
+              : this.slider({
+                  label: 'stitch.underInsetShare',
+                  hint: 'stitch.underInsetShare.hint',
+                  min: 0,
+                  max: 0.3,
+                  step: 0.01,
+                  get: () => s.underInsetShare ?? 0,
+                  set: (v) => (s.underInsetShare = v),
+                  fmt: (v) => `${formatNumber(v * 100, 0)} %`,
+                }),
+          ),
           this.under(
             this.slider({
-              label: 'stitch.underInsetShare',
-              hint: 'stitch.underInsetShare.hint',
-              min: 0,
-              max: 0.3,
-              step: 0.01,
-              get: () => s.underInsetShare ?? 0,
-              set: (v) => (s.underInsetShare = v || undefined),
-              fmt: (v) => `+${formatNumber(v * 100, 0)} %`,
+              label: 'stitch.underSpacing',
+              hint: 'stitch.underSpacing.hint',
+              min: 0.6,
+              max: 5,
+              step: 0.1,
+              get: () => s.underSpacing ?? Math.max(1.2, 3 * s.spacing),
+              set: (v) => (s.underSpacing = v),
+              fmt: mm(1),
             }),
           ),
         );

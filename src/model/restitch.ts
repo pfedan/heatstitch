@@ -63,8 +63,10 @@ export interface FillSettings {
   underCross?: boolean;
   /** Underlay stays this far inside the edge (mm); 0.4 when not set. */
   underInset?: number;
-  /** Underlay further inside by this share of the width where it is (0.1 = 10 %). */
+  /** Underlay inset by this share of the width where it is (0.1 = 10 %), in place of `underInset`. */
   underInsetShare?: number;
+  /** Distance between the underlay rows (mm); three times the spacing, at least 1.2 mm, when not set. */
+  underSpacing?: number;
   /** The area grown (+) or shrunk (-) on all sides before it is filled (mm); 0 when not set. */
   expand?: number;
   /** A border sewn on the edge after the fill; none when not set. */
@@ -365,6 +367,7 @@ function isFill(f: unknown): f is FillSettings {
     (s.underCross === undefined || typeof s.underCross === 'boolean') &&
     (s.underInset === undefined || finite(s.underInset)) &&
     (s.underInsetShare === undefined || finite(s.underInsetShare)) &&
+    (s.underSpacing === undefined || (finite(s.underSpacing) && s.underSpacing > 0)) &&
     (s.expand === undefined || finite(s.expand)) &&
     (s.border === undefined || isBorder(s.border)) &&
     typeof s.underlay === 'boolean'
@@ -1050,7 +1053,7 @@ function newFill(p: Pattern, o: SewObject, a: Analysis, s: FillSettings, reverse
   // the smaller area (the old thread runs where nothing is sewn now).
   const ex = s.expand ?? 0;
   const way = ex > 0 && travel ? (unionRegion([travel, r]) ?? travel) : ex < 0 ? r : travel;
-  const fp: FillParams = { spacing: s.spacing, stitch: s.stitch, angle: s.angle, pull: s.edge, underlay: s.underlay, underCross: s.underCross, underInset: s.underInset, underInsetShare: s.underInsetShare, travel: way, tolerance: s.tolerance };
+  const fp: FillParams = { spacing: s.spacing, stitch: s.stitch, angle: s.angle, pull: s.edge, underlay: s.underlay, underCross: s.underCross, underInset: s.underInset, underInsetShare: s.underInsetShare, underSpacing: s.underSpacing, travel: way, tolerance: s.tolerance };
   // Reversed, the new stitches start where the old ones ended.
   const start = reverse ? pt10(p, last.e) : pt10(p, first.s);
   // Straight rows end near where the next object starts, when that shortens the way (if nothing
