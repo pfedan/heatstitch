@@ -484,6 +484,8 @@ input[type='range'] {
   background: var(--stage);
   overflow: hidden;
   min-height: 300px;
+  /* The tools on it follow its own width, which the side columns narrow on any screen. */
+  container-type: inline-size;
 }
 
 .stage canvas#canvas {
@@ -541,6 +543,11 @@ input[type='range'] {
   left: 12px;
   bottom: 8px;
   margin: 0;
+  /* One line, so it stays under the legend of the density mode. */
+  max-width: calc(100% - 24px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: #8a8296;
   font-size: 11px;
   pointer-events: none;
@@ -1641,33 +1648,51 @@ details.panel.section[open] > summary {
 
 /* Canvas tools ----------------------------------------------------------------- */
 
-.stage-tools {
+.stage-top {
   position: absolute;
   top: 10px;
-  display: flex;
-  gap: 6px;
+  left: 10px;
+  right: 10px;
   z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  /* The gaps between the tools belong to the canvas. */
+  pointer-events: none;
 }
 
-.stage-tools-start {
-  left: 10px;
+/* Left and right tools in one row; on a narrow stage the right ones wrap below instead of covering. */
+.stage-bar {
+  align-self: stretch;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.stage-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  pointer-events: auto;
 }
 
 .stage-tools-end {
-  right: 10px;
+  margin-left: auto;
 }
+
 .stage-tools-center {
-  left: 50%;
-  transform: translateX(-50%);
+  margin: 0 auto;
+  flex-wrap: nowrap;
   gap: 0;
   background: var(--panel);
   border-radius: 8px;
 }
 
 .draw-tools {
-  top: 52px;
-  left: 10px;
   flex-direction: column;
+  flex-wrap: nowrap;
   gap: 4px;
 }
 
@@ -2047,6 +2072,19 @@ button.tool:disabled {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   color: #c9c2d4;
+}
+
+/* A narrow stage (phone, or side columns dragged wide): the bar gets its own row under the buttons. */
+@container (max-width: 640px) {
+  .player {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .player-track {
+    order: 3;
+    flex-basis: 100%;
+  }
 }
 
 .player select {
@@ -2508,6 +2546,12 @@ body[data-mode='flow'] .stage .hint {
   padding: 3px 8px;
   border-radius: 6px;
   background: rgba(13, 11, 16, 0.6);
+}
+
+@container (max-width: 640px) {
+  body[data-mode='flow'] .stage .hint {
+    display: none;
+  }
 }
 
 @media (max-width: 900px) {

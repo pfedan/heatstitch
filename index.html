@@ -367,33 +367,38 @@
 
       <section class="stage" id="stage">
         <canvas id="canvas"></canvas>
-        <div class="stage-tools stage-tools-start" data-mode="flow density">
-          <button type="button" id="undo" class="tool" data-i18n-title="edit.undo.key" data-i18n-aria="edit.undo"><span aria-hidden="true">↶</span></button>
-          <button type="button" id="redo" class="tool" data-i18n-title="edit.redo.key" data-i18n-aria="edit.redo"><span aria-hidden="true">↷</span></button>
-          <button type="button" id="lettering-new" class="tool" data-mode="flow" data-i18n-title="lettering.tool.hint"><span class="tool-glyph" aria-hidden="true">T</span> <span data-i18n="lettering.tool"></span></button>
-          <div class="segmented level-switch" role="radiogroup" data-i18n-aria="level.label">
-            <label data-i18n-title="level.objects.hint"><input type="radio" name="level" value="objects" checked /><span data-i18n="level.objects"></span></label>
-            <label data-i18n-title="level.shape.hint" data-mode="flow"><input type="radio" name="level" value="shape" /><span data-i18n="level.shape"></span></label>
-            <label data-i18n-title="level.stitches.hint"><input type="radio" name="level" value="stitches" /><span data-i18n="level.stitches"></span></label>
+        <!-- One row on top: when the stage is narrow, the right part moves to a second row instead of covering the left. -->
+        <div class="stage-top">
+          <div class="stage-bar">
+            <div class="stage-tools stage-tools-start" data-mode="flow density">
+              <button type="button" id="undo" class="tool" data-i18n-title="edit.undo.key" data-i18n-aria="edit.undo"><span aria-hidden="true">↶</span></button>
+              <button type="button" id="redo" class="tool" data-i18n-title="edit.redo.key" data-i18n-aria="edit.redo"><span aria-hidden="true">↷</span></button>
+              <button type="button" id="lettering-new" class="tool" data-mode="flow" data-i18n-title="lettering.tool.hint"><span class="tool-glyph" aria-hidden="true">T</span> <span data-i18n="lettering.tool"></span></button>
+              <div class="segmented level-switch" role="radiogroup" data-i18n-aria="level.label">
+                <label data-i18n-title="level.objects.hint"><input type="radio" name="level" value="objects" checked /><span data-i18n="level.objects"></span></label>
+                <label data-i18n-title="level.shape.hint" data-mode="flow"><input type="radio" name="level" value="shape" /><span data-i18n="level.shape"></span></label>
+                <label data-i18n-title="level.stitches.hint"><input type="radio" name="level" value="stitches" /><span data-i18n="level.stitches"></span></label>
+              </div>
+              <span class="edit-crumb" id="edit-crumb" hidden></span>
+            </div>
+            <div class="stage-tools stage-tools-center segmented" role="radiogroup" data-mode="image" data-i18n-aria="image.view">
+              <label><input type="radio" name="image-view" value="original" /><span data-i18n="image.view.original"></span></label>
+              <label><input type="radio" name="image-view" value="prepared" /><span data-i18n="image.view.prepared"></span></label>
+              <label><input type="radio" name="image-view" value="stitches" /><span data-i18n="image.view.stitches"></span></label>
+            </div>
+            <div class="stage-tools stage-tools-end">
+              <button type="button" id="image-shine" class="tool primary" data-mode="image" data-i18n-title="image.shine.hint" hidden><span aria-hidden="true">✦</span> <span data-i18n="image.shine"></span></button>
+              <button type="button" id="marks-toggle" class="tool" data-mode="flow density" aria-pressed="true" data-i18n-title="marks.toggle.key" data-i18n-aria="marks.toggle"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 15 L16 5" stroke-dasharray="2.6 2.2" /><circle cx="4" cy="15" r="2.4" class="node" /><circle cx="16" cy="5" r="2.4" class="node" /><path d="M3 3 L17 17" class="slash" /></svg></button>
+              <button type="button" id="fit" class="tool" data-i18n-title="controls.fit.key"><span aria-hidden="true">⤢</span> <span data-i18n="controls.fit"></span></button>
+              <button type="button" id="export" class="tool" data-mode="flow density" data-i18n-title="controls.export.hint"><span aria-hidden="true">⤓</span> PNG</button>
+            </div>
           </div>
-          <span class="edit-crumb" id="edit-crumb" hidden></span>
-        </div>
-        <div class="stage-tools draw-tools" data-mode="flow" role="toolbar" data-i18n-aria="draw.label">
-          <button type="button" class="tool" data-draw="rect" aria-pressed="false" data-i18n-title="draw.rect.hint" data-i18n-aria="draw.rect"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3.5" y="5" width="13" height="10" rx="0.5" /></svg></button>
-          <button type="button" class="tool" data-draw="ellipse" aria-pressed="false" data-i18n-title="draw.ellipse.hint" data-i18n-aria="draw.ellipse"><svg viewBox="0 0 20 20" aria-hidden="true"><ellipse cx="10" cy="10" rx="7" ry="5.5" /></svg></button>
-          <button type="button" class="tool" data-draw="pen" aria-pressed="false" data-i18n-title="draw.pen.hint" data-i18n-aria="draw.pen"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 16 C6 6 12 4 17 4" /><rect x="1.8" y="14.8" width="2.4" height="2.4" class="node" /><rect x="15.8" y="2.8" width="2.4" height="2.4" class="node" /></svg></button>
-          <button type="button" class="tool" data-draw="free" aria-pressed="false" data-i18n-title="draw.free.hint" data-i18n-aria="draw.free"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 14 C5 9 7 9 8 12 S11 16 12 11 S15 5 17 6" /></svg></button>
-        </div>
-        <div class="stage-tools stage-tools-end">
-          <button type="button" id="image-shine" class="tool primary" data-mode="image" data-i18n-title="image.shine.hint" hidden><span aria-hidden="true">✦</span> <span data-i18n="image.shine"></span></button>
-          <button type="button" id="marks-toggle" class="tool" data-mode="flow density" aria-pressed="true" data-i18n-title="marks.toggle.key" data-i18n-aria="marks.toggle"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 15 L16 5" stroke-dasharray="2.6 2.2" /><circle cx="4" cy="15" r="2.4" class="node" /><circle cx="16" cy="5" r="2.4" class="node" /><path d="M3 3 L17 17" class="slash" /></svg></button>
-          <button type="button" id="fit" class="tool" data-i18n-title="controls.fit.key"><span aria-hidden="true">⤢</span> <span data-i18n="controls.fit"></span></button>
-          <button type="button" id="export" class="tool" data-mode="flow density" data-i18n-title="controls.export.hint"><span aria-hidden="true">⤓</span> PNG</button>
-        </div>
-        <div class="stage-tools stage-tools-center segmented" role="radiogroup" data-mode="image" data-i18n-aria="image.view">
-          <label><input type="radio" name="image-view" value="original" /><span data-i18n="image.view.original"></span></label>
-          <label><input type="radio" name="image-view" value="prepared" /><span data-i18n="image.view.prepared"></span></label>
-          <label><input type="radio" name="image-view" value="stitches" /><span data-i18n="image.view.stitches"></span></label>
+          <div class="stage-tools draw-tools" data-mode="flow" role="toolbar" data-i18n-aria="draw.label">
+            <button type="button" class="tool" data-draw="rect" aria-pressed="false" data-i18n-title="draw.rect.hint" data-i18n-aria="draw.rect"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3.5" y="5" width="13" height="10" rx="0.5" /></svg></button>
+            <button type="button" class="tool" data-draw="ellipse" aria-pressed="false" data-i18n-title="draw.ellipse.hint" data-i18n-aria="draw.ellipse"><svg viewBox="0 0 20 20" aria-hidden="true"><ellipse cx="10" cy="10" rx="7" ry="5.5" /></svg></button>
+            <button type="button" class="tool" data-draw="pen" aria-pressed="false" data-i18n-title="draw.pen.hint" data-i18n-aria="draw.pen"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 16 C6 6 12 4 17 4" /><rect x="1.8" y="14.8" width="2.4" height="2.4" class="node" /><rect x="15.8" y="2.8" width="2.4" height="2.4" class="node" /></svg></button>
+            <button type="button" class="tool" data-draw="free" aria-pressed="false" data-i18n-title="draw.free.hint" data-i18n-aria="draw.free"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 14 C5 9 7 9 8 12 S11 16 12 11 S15 5 17 6" /></svg></button>
+          </div>
         </div>
         <p class="image-status" id="image-status" data-mode="image" aria-live="polite"></p>
         <canvas id="legend" class="legend" width="260" height="46" data-mode="density"></canvas>
