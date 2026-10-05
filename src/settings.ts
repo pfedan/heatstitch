@@ -37,6 +37,13 @@ export interface Marks {
   threads: boolean;
 }
 
+/**
+ * The markers drawn right now: none while the global switch is off. Loose jump threads stay, as
+ * they are how the thread lies on the fabric, not a symbol.
+ */
+export const shownMarks = (s: Pick<Settings, 'marks' | 'marksOn'>): Marks =>
+  s.marksOn ? s.marks : { jumps: false, trims: false, colors: false, ends: false, points: false, threads: s.marks.threads };
+
 /** What the stage shows in the Bild mode. */
 export type ImageView = 'original' | 'prepared' | 'stitches';
 
@@ -55,6 +62,8 @@ export interface Settings {
   mode: Mode;
   colorBy: ColorBy;
   marks: Marks;
+  /** Global switch for all markers on the canvas; off leaves the chosen ones as they are and shows none. */
+  marksOn: boolean;
   /** Open state of the collapsible sidebar sections, by id. */
   sections: Record<string, boolean>;
   /** Machine speed in stitches per minute, for the sewing time and the player. */
@@ -109,7 +118,8 @@ export interface Settings {
 export const DEFAULTS: Settings = {
   mode: 'flow',
   colorBy: 'thread',
-  marks: { jumps: true, trims: true, colors: false, ends: false, points: false, threads: false },
+  marks: { jumps: true, trims: true, colors: false, ends: false, points: false, threads: true },
+  marksOn: true,
   sections: { display: true, stats: false, advanced: false, findings: true },
   machineSpm: 800,
   playSpeed: 50,
@@ -163,6 +173,7 @@ export function loadSettings(): Settings {
       mode: MODES.includes(s.mode as Mode) ? s.mode! : 'density',
       colorBy: COLOR_BY.includes(s.colorBy as ColorBy) ? s.colorBy! : 'thread',
       marks: { ...DEFAULTS.marks, ...(showJumps !== undefined ? { jumps: showJumps } : {}), ...s.marks },
+      marksOn: typeof s.marksOn === 'boolean' ? s.marksOn : DEFAULTS.marksOn,
       // Findings closed with the old × stay closed as a collapsed section.
       sections: { ...DEFAULTS.sections, ...(findingsOpen === false ? { findings: false } : {}), ...s.sections },
       machineSpm: typeof s.machineSpm === 'number' && s.machineSpm > 0 ? s.machineSpm : DEFAULTS.machineSpm,

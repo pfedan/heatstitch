@@ -201,6 +201,7 @@ export function bindKeys(app: KeysApp) {
       if (e.key === 'f') app.fitView();
       return;
     }
+    if (e.key === 'h') return void document.getElementById('marks-toggle')?.click();
     if (app.settings.mode === 'flow') {
       if ((e.target as HTMLElement).closest('button') && (e.key === ' ' || e.key === 'Enter')) return;
       if (e.key === 'e') {

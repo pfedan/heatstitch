@@ -34,13 +34,16 @@ const area = (p: Pattern, o: number) => {
 };
 
 describe('shape operations', () => {
-  it('deletes objects, never all of them', () => {
+  it('deletes objects, all of them to an empty design', () => {
     const p = design();
     const next = deleteObjects(p, [1], options.trimMm)!;
     expect(sewObjects(next)).toHaveLength(2);
     // The others keep their curves.
     expect(remembered(next, sewObjects(next)[1])?.form).toBeTruthy();
-    expect(deleteObjects(p, [0, 1, 2], options.trimMm)).toBeNull();
+    const empty = deleteObjects(p, [0, 1, 2], options.trimMm)!;
+    expect(empty.cmd).toHaveLength(0);
+    expect(sewObjects(empty)).toHaveLength(0);
+    expect(deleteObjects(p, [7], options.trimMm)).toBeNull();
     // The last one too (the ones before stay as they are).
     expect(sewObjects(deleteObjects(p, [2], options.trimMm)!)).toHaveLength(2);
   });

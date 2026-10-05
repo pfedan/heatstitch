@@ -13,7 +13,7 @@ import { drawStitches } from '../render/stitches';
 import { drawThreads } from '../render/threads';
 import { drawFabric } from '../render/fabricGl';
 import type { Viewport } from '../render/viewport';
-import type { ImageView, Settings } from '../settings';
+import { shownMarks, type ImageView, type Settings } from '../settings';
 import { CAUTION, CRITICAL, type ValidationResult } from '../validation/validate';
 import { fabricLabel, threadLabel } from './profilePanel';
 import { clearImage, loadImage, saveImage, saveWork, type StoredImage, type StoredWork } from '../storage/imageStore';
@@ -712,7 +712,7 @@ export class ImageMode {
     const p = this.result?.pattern;
     if (view === 'stitches' && p && !this.stroke) {
       const s = this.h.settings;
-      if (!s.realistic || !drawThreads(ctx, vp, p, 1, s.threadMm)) drawStitches(ctx, vp, p, 1, s.marks.jumps);
+      if (!s.realistic || !drawThreads(ctx, vp, p, 1, s.threadMm)) drawStitches(ctx, vp, p, 1, shownMarks(s).jumps);
     }
     // Outline of the design area and the brush.
     ctx.save();

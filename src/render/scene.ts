@@ -1,7 +1,7 @@
 import type { DensityGrid } from '../density/grid';
 import { STITCH, type Pattern } from '../model/pattern';
 import type { Markers, Transition } from '../model/sequence';
-import type { Settings } from '../settings';
+import { shownMarks, type Settings } from '../settings';
 import type { EditView } from '../ui/editor';
 import type { ValidationResult, Zone } from '../validation/validate';
 import { drawBand, drawEditOverlay } from './editOverlay';
@@ -102,8 +102,9 @@ export function drawScene(ctx: CanvasRenderingContext2D, w: number, h: number, s
     const st = flow.style;
     if (flow.areas?.length) drawAreas(ctx, vp, flow.areas);
     if (!s.realistic || !drawThreads(ctx, vp, pattern, 1, s.threadMm, st)) drawFlatStitches(ctx, vp, pattern, st, 1);
-    if (s.marks.jumps) drawJumps(ctx, vp, pattern, st.limit, st.alpha, st.carried?.jumps);
-    drawMarkers(ctx, vp, pattern, { markers: flow.markers, marks: s.marks, limit: st.limit, alpha: st.alpha }, w, h);
+    const marks = shownMarks(s);
+    if (marks.jumps) drawJumps(ctx, vp, pattern, st.limit, st.alpha, st.carried?.jumps);
+    drawMarkers(ctx, vp, pattern, { markers: flow.markers, marks, limit: st.limit, alpha: st.alpha }, w, h);
     if (s.hoop) drawHoop(ctx, vp, pattern.bounds, s.hoop);
     if (flow.hover && flow.hover !== flow.selected) drawTransition(ctx, vp, pattern, flow.hover, false);
     if (flow.selected) drawTransition(ctx, vp, pattern, flow.selected, true);
@@ -131,8 +132,9 @@ export function drawScene(ctx: CanvasRenderingContext2D, w: number, h: number, s
   // Markers belong to the stitch plan: shown with it, not on the bare heatmap.
   if (pattern && opacity > 0) {
     const end = pattern.cmd.length - 1;
-    if (s.marks.jumps) drawJumps(ctx, vp, pattern, end);
-    if (scene.markers) drawMarkers(ctx, vp, pattern, { markers: scene.markers, marks: { ...s.marks, points: s.marks.points && !edit }, limit: end }, w, h);
+    const marks = shownMarks(s);
+    if (marks.jumps) drawJumps(ctx, vp, pattern, end);
+    if (scene.markers) drawMarkers(ctx, vp, pattern, { markers: scene.markers, marks: { ...marks, points: marks.points && !edit }, limit: end }, w, h);
   }
   if (scene.focus?.length) {
     ctx.save();

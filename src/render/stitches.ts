@@ -59,8 +59,8 @@ export function drawStitches(
 
   if (showJumps && jumps.length) {
     ctx.globalAlpha = 0.8;
-    ctx.lineWidth = 1;
-    ctx.setLineDash([4, 4]);
+    ctx.lineWidth = 1.75;
+    ctx.setLineDash([5, 4]);
     ctx.strokeStyle = '#888';
     ctx.beginPath();
     for (let i = 0; i < jumps.length; i += 4) {
