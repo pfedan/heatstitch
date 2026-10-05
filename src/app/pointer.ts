@@ -8,7 +8,7 @@ import type { ObjectPanel, OrderCard } from '../ui/objectPanel';
 import type { Pattern } from '../model/pattern';
 import type { RungTool } from '../ui/rungTool';
 import type { Sequence } from './types';
-import type { Settings } from '../settings';
+import { shownMarks, type Settings } from '../settings';
 import type { ShapeTool } from '../ui/shapeTool';
 import type { Viewport } from '../render/viewport';
 import { DIVIDER_GRAB_PX } from '../render/compare';
@@ -16,7 +16,7 @@ import { LONG_PRESS_MS } from '../ui/layersPanel';
 import { ObjectMenu } from '../ui/objectMenu';
 import { lightFromPointer } from '../render/light';
 import { objectsInRect } from '../model/edit';
-import { stitchAt, transitionAt, type StitchStyle } from '../render/flow';
+import { stitchAt, transitionAt, transitionShown, type StitchStyle } from '../render/flow';
 import { t } from '../i18n';
 import { ui } from './state';
 import { updateTooltip } from '../ui/tooltip';
@@ -312,14 +312,15 @@ export function bindPointer(app: PointerApp) {
         else if (o < 0 && !app.editor.selection.size) app.setEditing(false);
       } else if (p) {
         const q = app.seq(p);
-        const k = transitionAt(p, q.transitions, app.vp, pos[0], pos[1]);
+        const st = app.styleFor(p);
+        const jumps = shownMarks(app.settings).jumps;
+        const k = transitionAt(p, q.transitions, app.vp, pos[0], pos[1], 8, (t) => transitionShown(p, t, jumps, st));
         if (k >= 0 || ui.selectedJump !== null) {
           ui.selectedJump = k >= 0 ? k : null;
           app.redraw();
         }
         if (k < 0) {
           // A click on stitches selects their object, a click beside them clears the selection.
-          const st = app.styleFor(p);
           const [x, y] = app.vp.toWorld(pos[0], pos[1]);
           const i = stitchAt(p, x * 10, y * 10, Math.max(3, 60 / app.vp.scale), st.limit, st.alpha);
           const o = i >= 0 ? q.objectAt[i] : -1;
