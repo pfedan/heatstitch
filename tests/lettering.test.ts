@@ -41,6 +41,23 @@ describe('font catalog', () => {
       expect(f.good[0]).toBeLessThan(f.good[1]);
     }
   });
+
+  it('takes the rails of a satin as the font has them, not a rung across a dot', () => {
+    // A round dot is two half circles with one rung across, and the rung is the longest of the
+    // three; taken as a rail, it crosses the other rail and the dot is sewn as a wedge.
+    const pairsOf = (a: number[]) => a.flatMap((_, k) => (k % 2 || k + 3 >= a.length ? [] : [[a[k], a[k + 1], a[k + 2], a[k + 3]]]));
+    const side = (ax: number, ay: number, bx: number, by: number, cx: number, cy: number) => (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
+    const cross = (l: number[], r: number[]) =>
+      pairsOf(l).some(([ax, ay, bx, by]) =>
+        pairsOf(r).some(([cx, cy, dx, dy]) => side(cx, cy, dx, dy, ax, ay) * side(cx, cy, dx, dy, bx, by) < 0 && side(ax, ay, bx, by, cx, cy) * side(ax, ay, bx, by, dx, dy) < 0),
+      );
+    const crossed: string[] = [];
+    for (const entry of catalog.fonts) {
+      const f = font(entry.id);
+      for (const ch of 'i.') for (const e of f.glyphs[ch]?.e ?? []) if (e.k === 's' && cross(e.l, e.r)) crossed.push(`${entry.id} ${ch}`);
+    }
+    expect(crossed).toEqual([]);
+  });
 });
 
 describe('layout', () => {
