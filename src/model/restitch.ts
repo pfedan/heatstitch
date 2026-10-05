@@ -14,6 +14,7 @@ import { formFrom, storeForm, type Form, type StoredPath } from '../shape/path';
 import { rasterize } from '../shape/rasterize';
 import { distanceInside, distanceToSeeds } from '../image/edt';
 import { tidy, withRecords } from './edit';
+import { coversOver, cutAway, type Cover } from './covers';
 import { holdJoins, joinsIn, rememberObjects, restoreJoin, stitchKey, type ObjectKind, type SewObject } from './objects';
 import { END, JUMP, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
 import { SATIN, TIE_STITCH } from './sequence';
@@ -63,6 +64,8 @@ export interface FillSettings {
   underCross?: boolean;
   /** Underlay stays this far inside the edge (mm); 0.4 when not set. */
   underInset?: number;
+  /** No underlay where objects sewn later cover the fill completely. */
+  underCover?: boolean;
   /** The area grown (+) or shrunk (-) on all sides before it is filled (mm); 0 when not set. */
   expand?: number;
   /** A border sewn on the edge after the fill; none when not set. */
@@ -201,6 +204,8 @@ export interface Remembered {
    */
   knockout?: boolean;
   cut?: string;
+  /** Leaving out: how far it still reaches under a satin on top, as a share of its width (0.3 when not set). */
+  overlapShare?: number;
   /** A drawn line: sewn along these curves (see line.ts), not traced from its stitches. */
   path?: Form;
   /** The first this many stitches of the object are its underlay (sewn here). */
@@ -335,6 +340,7 @@ export interface StoredObject {
   form?: StoredPath[];
   knockout?: boolean;
   cut?: string;
+  overlapShare?: number;
   path?: StoredPath[];
   under?: number;
   borderAt?: number;
@@ -384,6 +390,7 @@ export function rememberedIn(p: Pattern, objects: SewObject[]): StoredObject[] {
       ...(r.form ? { form: storeForm(r.form) } : {}),
       ...(r.knockout ? { knockout: true } : {}),
       ...(r.cut ? { cut: r.cut } : {}),
+      ...(r.overlapShare !== undefined ? { overlapShare: r.overlapShare } : {}),
       ...(r.path ? { path: storeForm(r.path) } : {}),
       ...(r.under ? { under: r.under } : {}),
       ...(r.borderAt ? { borderAt: r.borderAt } : {}),
@@ -401,6 +408,8 @@ export function rememberedIn(p: Pattern, objects: SewObject[]): StoredObject[] {
 
 const isValue = (v: unknown) => finite(v) || typeof v === 'boolean' || typeof v === 'string';
 const isFixed = (x: unknown): x is Fixed => !!x && typeof (x as Fixed).field === 'string' && isValue((x as Fixed).from) && isValue((x as Fixed).to);
+/** Underlay is left out only this far inside what covers it (mm), so its edge stays held. */
+const UNDER_COVER_MARGIN = 0.5;
 const PATTERNS: FillPattern[] = ['tatami', 'gradient', 'contour', 'spiral', 'follow', 'guided'];
 const isLine = (l: unknown) => Array.isArray(l) && l.length >= 2 && l.every((q) => Array.isArray(q) && q.length === 2 && q.every(finite));
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
@@ -579,6 +588,7 @@ export function restoreRemembered(list: unknown): number {
     if (form) r.form = form;
     if (form && e.knockout === true) r.knockout = true;
     if (typeof e.cut === 'string') r.cut = e.cut;
+    if (finite(e.overlapShare) && e.overlapShare >= 0 && e.overlapShare <= 1) r.overlapShare = e.overlapShare;
     const path = e.path === undefined ? null : formFrom(e.path);
     if (path) r.path = path;
     if (finite(e.under) && e.under > 0) r.under = Math.round(e.under);
@@ -1032,7 +1042,7 @@ const lerp = (a: Pt, b: Pt, t: number): Pt => [a[0] + (b[0] - a[0]) * t, a[1] + 
 const CONVERT_PEAK = 3;
 
 /** The area between the rails of satin columns (each column a polygon, together their union). */
-function railsArea(rails: Rails[]): Region | null {
+export function railsArea(rails: Rails[]): Region | null {
   const node = (q: Pt) => ({ p: q, a: q, b: q, smooth: false });
   const parts = rails.flatMap((r) => {
     const ring = [...r.left, ...r.right.slice().reverse()];
@@ -1094,7 +1104,7 @@ interface NewFill {
   border: number;
 }
 
-function newFill(p: Pattern, o: SewObject, a: Analysis, s: FillSettings, reverse = false): NewFill | null {
+function newFill(p: Pattern, o: SewObject, a: Analysis, s: FillSettings, reverse = false, covers?: Cover[]): NewFill | null {
   const first = a.parts.find((pt) => pt.kind === 'fill' && !pt.border);
   const last = a.parts.filter((pt) => pt.kind === 'fill' && !pt.border).pop();
   if (!a.fill || !first || !last) return null;
@@ -1111,6 +1121,12 @@ function newFill(p: Pattern, o: SewObject, a: Analysis, s: FillSettings, reverse
   const ex = s.expand ?? 0;
   const way = ex > 0 && travel ? (unionRegion([travel, r]) ?? travel) : ex < 0 ? r : travel;
   const fp: FillParams = { spacing: s.spacing, stitch: s.stitch, angle: s.angle, pull: s.edge, underlay: s.underlay, underCross: s.underCross, underInset: s.underInset, travel: way, tolerance: s.tolerance };
+  // Under what lies on top completely, no underlay (it would only add thread under it).
+  if (s.underlay && s.underCover && covers?.length) {
+    const left = cutAway(r, covers.map((c) => ({ region: c.region, overlap: UNDER_COVER_MARGIN })));
+    if (left !== r) fp.underArea = left ?? undefined;
+    if (!left) fp.underlay = false;
+  }
   // Reversed, the new stitches start where the old ones ended.
   const start = reverse ? pt10(p, last.e) : pt10(p, first.s);
   // Straight rows end near where the next object starts, when that shortens the way (if nothing
@@ -1491,7 +1507,9 @@ export function restitch(
     // changing kind.
     const together = converting || settings.kind === 'fill';
     const guide = converting && settings.kind === 'satin' ? (guides?.get(o.index) ?? known?.asSatin) : undefined;
-    const filled = together && !converting ? newFill(p, o, an, settings.s as FillSettings, reverse) : null;
+    const fillS = settings.s as FillSettings;
+    const covers = together && !converting && fillS.underlay && fillS.underCover ? coversOver(p, objs, o, an.fill?.pxMm ?? 0.1) : undefined;
+    const filled = together && !converting ? newFill(p, o, an, fillS, reverse, covers) : null;
     // A drawn line: sewn anew along its curves as a whole.
     const path = paths?.get(o.index) ?? known?.path;
     const line = !converting && settings.kind === 'run' && path ? lineRuns(path, settings.s, reverse) : null;
@@ -1534,6 +1552,7 @@ export function restitch(
           columns: settings.kind === 'satin' ? (rails.length === satinParts.length ? rails : undefined) : known?.columns,
           shape: known?.shape,
           ...(known?.form && !newArea ? { form: known.form, ...(known.knockout ? { knockout: true, cut: known.cut } : {}) } : {}),
+          ...(known?.overlapShare !== undefined ? { overlapShare: known.overlapShare } : {}),
           ...(path && settings.kind === 'run' ? { path } : {}),
           ...(known?.under && !filled ? { under: known.under } : {}),
           ...(known?.borderAt && !filled ? { borderAt: known.borderAt } : {}),

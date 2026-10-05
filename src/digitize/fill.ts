@@ -33,6 +33,8 @@ export interface FillParams {
   underCross?: boolean;
   /** Underlay stays this far inside the edge (mm); UNDERLAY_INSET by default. */
   underInset?: number;
+  /** The underlay only in this part of the area (same pixels as the area); all of it when not set. */
+  underArea?: Region;
   /**
    * Shift of the needle points from row to row, as a fraction of the stitch length: 1/4 repeats
    * every 4 rows (the usual tatami), 1/2 gives a brick pattern; 0 shifts them at random.
@@ -602,13 +604,15 @@ export function fillRegion(r: Region, p: FillParams, start: Pt, neighbours: numb
  * times the top spacing apart (at least 1.2 mm), inset from the edge; appended to `runs`. Returns
  * where the needle ends.
  */
-export function sewUnderlay(r: Region, angle: number, p: Pick<FillParams, 'spacing' | 'underCross' | 'underInset'>, start: Pt, grid: TravelGrid, runs: Pt[][]): Pt {
+export function sewUnderlay(r: Region, angle: number, p: Pick<FillParams, 'spacing' | 'underCross' | 'underInset' | 'underArea'>, start: Pt, grid: TravelGrid, runs: Pt[][]): Pt {
   const us = Math.max(1.2, 3 * p.spacing);
   let pos = start;
+  // Only where it is wanted; travel still goes the whole area's way.
+  const u = p.underArea && p.underArea.pxMm === r.pxMm ? p.underArea : r;
   for (const a of p.underCross ? [angle - 45, angle + 45] : [angle + 90]) {
     const uf = new Frame(a, us);
-    const under = rows(r, r.sdf, uf, p.underInset ?? UNDERLAY_INSET);
-    if (under.length) pos = sewAll(uf, sections(r, r.sdf, uf, under), UNDERLAY_STITCH, 0, pos, grid, false, runs);
+    const under = rows(u, u.sdf, uf, p.underInset ?? UNDERLAY_INSET);
+    if (under.length) pos = sewAll(uf, sections(u, u.sdf, uf, under), UNDERLAY_STITCH, 0, pos, grid, false, runs);
   }
   grid.covered.fill(0);
   return pos;

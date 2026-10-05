@@ -1,3 +1,4 @@
+import { coversOver } from '../model/covers';
 import { setKnockout, isCovered, takeOver } from '../model/knockout';
 import { sewObjects, type ObjectKind, type SewObject } from '../model/objects';
 import { STITCH, TRIM, type Pattern } from '../model/pattern';
@@ -262,6 +263,7 @@ function candidates(p: Pattern, objs: SewObject[], o: SewObject, s: Settings, re
     const f = s.s;
     if (tooMuch) {
       if (known?.form && !known.knockout && isCovered(p, objs, o)) out.push({ changes: [], knockout: true, visibility: 'invisible', reason: 'density' });
+      if (f.underlay && !f.underCover && coversOver(p, objs, o, 0.1).length) out.push({ changes: [fix('underCover', false, true)], visibility: 'invisible', reason: 'density' });
       if (f.underlay && f.underCross) out.push({ changes: [fix('underCross', true, false)], visibility: 'invisible', reason: 'density' });
       if (f.underlay && areaMm2 < SMALL_FILL_MM2) out.push({ changes: [fix('underlay', true, false)], visibility: 'invisible', reason: 'density' });
       if (f.pattern !== 'gradient') {

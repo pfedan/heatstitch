@@ -60,7 +60,7 @@ export interface StitchInfo {
    * Fills with their shape as curves: whether they leave out what later fills cover (`mixed` when
    * only some do), and whether anything lies on top of them at all.
    */
-  knockout?: { on: boolean | 'mixed'; covered: boolean };
+  knockout?: { on: boolean | 'mixed'; covered: boolean; share: number };
   /** The selected running stitches are drawn lines, sewn along their curves. */
   line?: boolean;
   /** Thread of the first selected fill (its border is sewn in it unless it has its own). */
@@ -88,6 +88,8 @@ export interface StitchHooks {
   guide: (action: 'tool' | 'off') => void;
   /** Leaving out what later fills cover, on or off for the selected fills. */
   knockout: (on: boolean) => void;
+  /** How far the selected fills reach under a satin on top (share of its width). */
+  overlapShare: (share: number) => void;
   /** The pointer or focus on the underlay settings (true) or away from them: its stitches are shown. */
   underlay: (on: boolean) => void;
   /** A border object: select its fill, or make it an object of its own (no longer following the fill). */
@@ -135,6 +137,8 @@ interface SliderDef {
   band?: [number, number];
   /** Extra line under the value. */
   note?: (v: number) => string;
+  /** Taken over on its own when let go, instead of as a stitch setting (no preview while dragging). */
+  commit?: () => void;
 }
 
 export class StitchPanel {
@@ -353,6 +357,7 @@ export class StitchPanel {
         ),
       );
       if (s.underlay) {
+        out.push(this.under(this.check('stitch.underCover', 'stitch.underCover.hint', () => !!s.underCover, (v) => (v ? (s.underCover = true) : delete s.underCover))));
         out.push(this.under(this.slider({ label: 'stitch.underInset', hint: 'stitch.underInset.hint', min: 0, max: 1.5, step: 0.05, get: () => s.underInset ?? UNDERLAY_INSET, set: (v) => (s.underInset = v), fmt: mm(2) })));
       }
       out.push(this.borderGroup(s));
@@ -500,9 +505,9 @@ export class StitchPanel {
     input.addEventListener('input', () => {
       d.set(parseFloat(input.value));
       show();
-      this.changed(false);
+      if (!d.commit) this.changed(false);
     });
-    input.addEventListener('change', () => this.changed(true));
+    input.addEventListener('change', () => (d.commit ? d.commit() : this.changed(true)));
     label.append(top, track);
     if (d.note) label.append(note);
     return label;
@@ -766,6 +771,22 @@ export class StitchPanel {
     l.append(i, Object.assign(document.createElement('span'), { textContent: t('knockout.switch') }));
     wrap.append(l);
     if (!k.covered) wrap.append(Object.assign(document.createElement('span'), { className: 'muted small', textContent: t('knockout.nothingOnTop') }));
+    if (k.on) {
+      const share = { v: k.share };
+      wrap.append(
+        this.slider({
+          label: 'knockout.share',
+          hint: 'knockout.share.hint',
+          min: 0.1,
+          max: 0.5,
+          step: 0.05,
+          get: () => share.v,
+          set: (v) => (share.v = v),
+          fmt: (v) => `${formatNumber(v * 100, 0)} %`,
+          commit: () => this.hooks.overlapShare(share.v),
+        }),
+      );
+    }
     return wrap;
   }
 

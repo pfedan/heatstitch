@@ -10,6 +10,7 @@ import { Viewport } from './render/viewport';
 import { loadSettings, saveSettings } from './settings';
 import { bindControls, type ChangeKind } from './ui/controls';
 import { cssColor } from './ui/threadPicker';
+import { SATIN_SHARE } from './model/covers';
 import { CorrectPanel, type Cells, type CorrectMessage, type PlanRow, type PlanView } from './ui/correctPanel';
 import { applyProposals, fineZones, planCorrection, wanted, type Box, type Plan } from './correct/plan';
 import type { CorrectionReport } from './correct/auto';
@@ -81,7 +82,7 @@ import { deleteObjects, duplicateObject, mirrorMatrix, recolorObjects, subtractT
 import { stitchesBefore } from './model/transform';
 import { FrameTool } from './ui/frameTool';
 import { formOf, reshapeFill, reshapeLine, scaleBlocked, transformSewObject } from './model/reshape';
-import { isCovered, overlapsIn, refreshKnockouts, setKnockout, wholeArea } from './model/knockout';
+import { isCovered, overlapsIn, refreshKnockouts, setKnockout, setOverlapShare, wholeArea } from './model/knockout';
 import { transformObject } from './model/transform';
 import { apply, translation, type Form, type Mat } from './shape/path';
 import { fontNow, loadCatalog, loadFont, type Catalog } from './lettering/font';
@@ -843,7 +844,7 @@ function stitchInfo(p: Pattern, q: Sequence): StitchInfo {
   const shaped = [...selectedObjects].map((o) => q.objects[o]).filter((obj) => obj && remembered(p, obj)?.form);
   const ons = new Set(shaped.map((obj) => !!remembered(p, obj)?.knockout));
   const knockout: StitchInfo['knockout'] = shaped.length
-    ? { on: ons.size > 1 ? 'mixed' : ons.has(true), covered: shaped.some((obj) => isCovered(p, q.objects, obj)) }
+    ? { on: ons.size > 1 ? 'mixed' : ons.has(true), covered: shaped.some((obj) => isCovered(p, q.objects, obj)), share: remembered(p, shaped[0])?.overlapShare ?? SATIN_SHARE }
     : undefined;
   const locks = new Set([...selectedObjects].map((o) => !!(q.objects[o] && remembered(p, q.objects[o])?.lock)));
   const lock = locks.size > 1 ? 'mixed' : locks.has(true);
@@ -977,6 +978,20 @@ const stitchPanel = new StitchPanel($('object-stitches'), {
     if (rungTool.mode === 'guide') closeRungs();
   },
   knockout: (on) => knockoutObjects([...selectedObjects].sort((a, b) => a - b), on),
+  overlapShare: (share) => {
+    const f = files.active;
+    const p = f?.pattern;
+    if (!f || !p) return;
+    const r = setOverlapShare(p, [...selectedObjects].sort((a, b) => a - b), share, settings.trimMm);
+    if (!r) return;
+    const sel = selectedObjects;
+    if (r.pattern !== p) applyEdit(r.pattern);
+    files.setObjects(f, rememberedIn(r.pattern, seq(r.pattern).objects));
+    selectedObjects = sel;
+    selectionKey++;
+    stitchCache = null;
+    redraw();
+  },
   lock: (on) => {
     const p = files.active?.pattern;
     if (!p) return;
