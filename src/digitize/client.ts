@@ -1,6 +1,7 @@
 import type { ColorEdit, ExactLabels, PrepareOptions, Prepared, Stroke } from '../image/prepare';
 import type { Raster } from '../image/raster';
-import type { DigitizeOptions, Digitized } from './digitize';
+import type { DigitizeOptions, Digitized, ShapeInput } from './digitize';
+import type { ThreadColor } from '../model/pattern';
 import type { ImageRequest, ImageResponse } from './worker';
 
 type Unsent<T> = T extends unknown ? Omit<T, 'id'> : never;
@@ -44,6 +45,11 @@ export class ImageClient {
     this.worker.terminate();
     for (const p of this.pending.values()) p.reject(new Error('disposed'));
     this.pending.clear();
+  }
+
+  /** Stitches for the shapes of a vector file, each whole (see digitizeShapes). */
+  async digitizeShapes(shapes: ShapeInput[], threads: ThreadColor[], options: DigitizeOptions, size: { w: number; h: number }, knockout: boolean, name: string): Promise<Digitized> {
+    return (await this.call({ type: 'shapes', shapes, threads, options, size, knockout, name })).digitized!;
   }
 
   /** Stitches for the last prepared image. */

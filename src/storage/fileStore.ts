@@ -8,6 +8,7 @@
  */
 
 import { computeBounds, type Pattern, type ThreadColor } from '../model/pattern';
+import type { StoredAside } from '../model/aside';
 import type { StoredObject } from '../model/restitch';
 import { isAcknowledgement, type Acknowledgement } from '../validation/acks';
 import { STORAGE_NS } from './namespace';
@@ -30,6 +31,8 @@ export interface StoredFile {
   acks?: Acknowledgement[];
   /** Shapes and fill settings of objects given new stitches, so the next edit starts from them. */
   objects?: StoredObject[];
+  /** Shapes of the working copy that are not sewn. */
+  aside?: StoredAside[];
 }
 
 const DB_NAME = STORAGE_NS;
@@ -103,6 +106,14 @@ export function saveObjects(key: number, objects: StoredObject[]): Promise<void>
   return queue(key, (rec) => {
     if (objects.length) rec.objects = objects;
     else delete rec.objects;
+  });
+}
+
+/** Stores the shapes of file `key` that are not sewn. */
+export function saveAside(key: number, aside: StoredAside[]): Promise<void> {
+  return queue(key, (rec) => {
+    if (aside.length) rec.aside = aside;
+    else delete rec.aside;
   });
 }
 

@@ -66,8 +66,19 @@ import { railsFromOutline } from './digitize/rungs';
 import type { Pt } from './digitize/skeleton';
 import { RungTool } from './ui/rungTool';
 import { ShapeTool } from './ui/shapeTool';
+import { DrawTool, type DrawKind } from './ui/drawTool';
+import { nearestThread } from './image/prepare';
+import { rgbToLab } from './image/color';
+import { drawAside, drawDrawing, type FlatArea } from './render/shapeOverlay';
+import { AsidePanel } from './ui/asidePanel';
+import type { LeftOut } from './ui/imageMode';
+import { addShape, type NewShape } from './model/addShape';
+import { asideOf, dropAside, sewAgain, setAside, setAsideRole, storeAside, type AsideRole, type AsideShape } from './model/aside';
+import { deleteObjects, duplicateObject, mirrorMatrix, recolorObjects, subtractTop, unionForm } from './model/shapeOps';
+import { stitchesBefore } from './model/transform';
 import { FrameTool } from './ui/frameTool';
-import { formOf, reshapeFill, scaleBlocked, transformSewObject } from './model/reshape';
+import { formOf, reshapeFill, reshapeLine, scaleBlocked, transformSewObject } from './model/reshape';
+import { isCovered, overlapsIn, refreshKnockouts, setKnockout, wholeArea } from './model/knockout';
 import { transformObject } from './model/transform';
 import { apply, translation, type Form, type Mat } from './shape/path';
 import { fontNow, loadCatalog, loadFont, type Catalog } from './lettering/font';
@@ -75,7 +86,7 @@ import { followText, layout, LETTERING_DEFAULTS, type Lettering } from './letter
 import { letteringObjects, letteringOf, placeLettering, withoutObjects } from './lettering/place';
 import { sewLettering } from './lettering/sew';
 import { LetteringPanel } from './ui/letteringPanel';
-import { digitizeDefaults, isStroke, SATIN_MAX, type Digitized } from './digitize/digitize';
+import { digitizeDefaults, digitizeShapes, isStroke, SATIN_MAX, type Digitized } from './digitize/digitize';
 import { recommendedSpacing } from './validation/profiles';
 import { numberInColor, overlaps, rememberObjects, sewObjects, splitObject, type SewObject } from './model/objects';
 import { conflicts, moveStats, optimizePlan, reorder, violations, weigh } from './model/order';
@@ -140,7 +151,7 @@ const files = new FileList(
     correctMessage = null;
     editor.reset();
     resetFlow();
-    if (f?.pattern) fitView(f);
+    if (f?.pattern && !keepView) fitView(f);
     recompute();
   },
   (p) => validator.measure(p),
@@ -411,13 +422,47 @@ function styleFor(p: Pattern): StitchStyle {
   return { rgb, alpha: alphaCache.a, limit, carried };
 }
 
+/** Fills with a known shape, per pattern: drawn as flat areas in the view "Shapes instead of stitches". */
+const shapeCache = new WeakMap<Pattern, { o: SewObject; form: Form }[]>();
+function shapesOf(p: Pattern): { o: SewObject; form: Form }[] {
+  let list = shapeCache.get(p);
+  if (!list) {
+    const q = seq(p);
+    list = [];
+    for (const o of q.objects) {
+      if (o.kind !== 'fill') continue;
+      const form = formOf(p, o, q.kinds);
+      if (form?.paths.some((x) => x.closed)) list.push({ o, form });
+    }
+    shapeCache.set(p, list);
+  }
+  return list;
+}
+
+let flatAlpha: { from: Float32Array; a: Float32Array } | null = null;
+
+/** The style with the stitches of objects shown as areas left out, and those areas. */
+function asAreas(p: Pattern, style: StitchStyle): { style: StitchStyle; areas: FlatArea[] } {
+  const list = shapesOf(p);
+  if (flatAlpha?.from !== style.alpha) {
+    const a = style.alpha.slice();
+    for (const { o } of list) a.fill(0, o.first, o.last + 1);
+    flatAlpha = { from: style.alpha, a };
+  }
+  const areas = list.filter(({ o }) => o.first <= style.limit).map(({ o, form }) => ({ form, color: o.color, alpha: style.alpha[o.first] }));
+  return { style: { ...style, alpha: flatAlpha.a }, areas };
+}
+
 function flowScene(): FlowScene | null {
   const p = flowPreview ?? files.active?.pattern;
   if (settings.mode !== 'flow' || !p) return null;
   const q = seq(p);
-  const style = styleFor(p);
+  const plain = styleFor(p);
+  const flat = settings.shapesView ? asAreas(p, plain) : null;
+  const style = flat?.style ?? plain;
   return {
     style,
+    areas: flat?.areas ?? null,
     markers: q.markers,
     hover: hoverJump !== null ? (q.transitions[hoverJump] ?? null) : null,
     selected: selectedJump !== null ? (q.transitions[selectedJump] ?? null) : null,
@@ -630,14 +675,18 @@ function mergeObjects(): void {
   const merged = nq.objectAt[recordOfStitch(nq.numbers, starts[k] + 1)];
   const fills = objs.every((o) => o.kind === 'fill');
   const fill = fills ? (remembered(p, objs[0])?.fill ?? measureFill(p, analyze(p, objs[0], q.kinds))) : null;
-  const area = fills ? unionRegion(objs.flatMap((o) => remembered(p, o)?.region ?? analyze(p, o, q.kinds).fill ?? [])) : null;
+  // Fills with curves become one outline (editable as a shape), the others one area.
+  const forms = fills ? objs.map((o) => remembered(p, o)?.form) : [];
+  const form = forms.length && forms.every(Boolean) ? unionForm(forms as Form[]) : null;
+  const area = form ? wholeArea(form) : fills ? unionRegion(objs.flatMap((o) => remembered(p, o)?.region ?? analyze(p, o, q.kinds).fill ?? [])) : null;
   if (merged >= 0 && fill && area) {
-    remember(target, nq.objects[merged], { region: area, fill });
+    remember(target, nq.objects[merged], form ? { region: area, fill, form } : { region: area, fill });
     const r = restitch(target, nq.objects, [merged], { kind: 'fill', s: fill }, nq.kinds, settings.trimMm);
     if (r.starts.length) {
       selectedObjects = new Set([merged]);
       applyRestitched(r, 'stitch.failed', true);
-      done(sel.length);
+      if (form) layers.say(t('object.joined', { n: sel.length }));
+      else done(sel.length);
       return;
     }
   }
@@ -706,6 +755,20 @@ function splitSelected(): void {
 
 const objectPanel = new ObjectPanel({
   merge: () => mergeObjects(),
+  duplicate: () => duplicateSelected(),
+  mirror: (axis) => mirrorSelected(axis),
+  subtract: () => subtractSelected(),
+  remove: () => deleteSelected(),
+  aside: (role) => putAside(role),
+  thread: (c) => {
+    const p = files.active?.pattern;
+    const sel = frameObjects();
+    const next = p && recolorObjects(p, sel, c, settings.trimMm);
+    if (!next) return;
+    const q = seq(next);
+    // The objects keep their place in the order, so their indices stay.
+    takeShapes(next, sel.filter((o) => o < q.objects.length));
+  },
   split: splitSelected,
   step: (dir) => {
     const p = files.active?.pattern;
@@ -773,7 +836,15 @@ function stitchInfo(p: Pattern, q: Sequence): StitchInfo {
   }
   const hand = [...selectedObjects].reduce((a, o) => a + (q.objects[o] ? (remembered(p, q.objects[o])?.hand ?? 0) : 0), 0);
   const firstFill = [...selectedObjects].sort((a, b) => a - b).find((o) => q.objects[o]?.kind === 'fill') ?? [...selectedObjects][0];
-  const info: StitchInfo = { key: selectionKey, hand, measured, counts, recommended: recommendedSpacing(settings.profile), shape: worst, outlines: shapes, toSatin: stroke, color: q.objects[firstFill]?.color };
+  // Fills with curves can leave out what lies on top.
+  const shaped = [...selectedObjects].map((o) => q.objects[o]).filter((obj) => obj && remembered(p, obj)?.form);
+  const ons = new Set(shaped.map((obj) => !!remembered(p, obj)?.knockout));
+  const knockout: StitchInfo['knockout'] = shaped.length
+    ? { on: ons.size > 1 ? 'mixed' : ons.has(true), covered: shaped.some((obj) => isCovered(p, q.objects, obj)) }
+    : undefined;
+  const info: StitchInfo = { key: selectionKey, hand, measured, counts, recommended: recommendedSpacing(settings.profile), shape: worst, outlines: shapes, toSatin: stroke, knockout, color: q.objects[firstFill]?.color };
+  const runs = [...selectedObjects].map((o) => q.objects[o]).filter((obj) => obj?.kind === 'run');
+  if (runs.length && runs.every((obj) => remembered(p, obj)?.path)) info.line = true;
   const link = selectedObjects.size === 1 && q.objects[firstFill] ? remembered(p, q.objects[firstFill])?.outline : undefined;
   if (link) {
     const fill = q.objects.findIndex((o) => remembered(p, o)?.fill?.border?.link === link);
@@ -897,6 +968,7 @@ const stitchPanel = new StitchPanel($('object-stitches'), {
     if (a === 'tool') return toggleGuides();
     if (rungTool.mode === 'guide') closeRungs();
   },
+  knockout: (on) => knockoutObjects([...selectedObjects].sort((a, b) => a - b), on),
   underlay: (on) => {
     showUnder = on;
     redraw();
@@ -1157,10 +1229,10 @@ const shapeTool = new ShapeTool({
   },
 });
 
-/** The one selected object of the Ablauf mode, when it has a fill whose outline can be edited. */
+/** The one selected object of the Ablauf mode, when it has a fill whose outline can be edited, or is a drawn line. */
 function shapeTarget(p: Pattern, q: Sequence, o: number): Form | null {
   const obj = q.objects[o];
-  return obj ? formOf(p, obj, q.kinds) : null;
+  return obj ? (remembered(p, obj)?.path ?? formOf(p, obj, q.kinds)) : null;
 }
 
 /** Edits the outline of object `o` (level Form); objects without a fill go to their stitches. */
@@ -1223,7 +1295,7 @@ function commitShape(form: Form): void {
   const obj = q.objects[shapeObject];
   if (!obj) return;
   const hand = remembered(p, obj)?.hand ?? 0;
-  const r = reshapeFill(p, q.objects, obj, q.kinds, form, settings.trimMm);
+  const r = remembered(p, obj)?.path ? reshapeLine(p, q.objects, obj, q.kinds, form, settings.trimMm) : reshapeFill(p, q.objects, obj, q.kinds, form, settings.trimMm);
   if (!r || !r.starts.length) {
     // Nothing to fill there (too small, or the outline crosses itself away): back to the old one.
     shapeTool.setForm(shapeTarget(p, q, shapeObject) ?? form);
@@ -1232,6 +1304,253 @@ function commitShape(form: Form): void {
   }
   applyRestitched(r, 'shape.failed', true);
   if (hand) layers.say(t('shape.handReplaced', { n: formatNumber(hand) }));
+  followKnockouts();
+}
+
+/**
+ * After shapes changed: fills that leave out what lies on top are sewn anew where that changed, in
+ * the same undo step as the change.
+ */
+function followKnockouts(): void {
+  const f = files.active;
+  const p = f?.pattern;
+  if (!f || !p) return;
+  const r = refreshKnockouts(p, settings.trimMm);
+  if (!r) return;
+  const sel = selectedObjects;
+  files.setPattern(f, r.pattern, { record: false });
+  syncPlayer();
+  recompute();
+  files.setObjects(f, rememberedIn(r.pattern, seq(r.pattern).objects));
+  selectedObjects = sel;
+  selectionKey++;
+  const q = seq(r.pattern);
+  layers.say(t('knockout.followed', { list: r.changed.map((o) => (q.objects[o] ? objectName(q, o) : '')).filter(Boolean).join(', ') }));
+  redraw();
+}
+
+// Objects as shapes: delete, duplicate, mirror, cut out ------------------------
+
+/** Takes over a pattern made from the objects, selecting `select` in it. */
+function takeShapes(next: Pattern, select: number[]): void {
+  const f = files.active;
+  if (!f) return;
+  applyEdit(next);
+  files.setObjects(f, rememberedIn(next, seq(next).objects));
+  selectedObjects = new Set(select);
+  selectionKey++;
+  followKnockouts();
+  redraw();
+}
+
+function deleteSelected(): void {
+  const p = files.active?.pattern;
+  const sel = frameObjects();
+  if (!p || !sel.length) return;
+  const next = deleteObjects(p, sel, settings.trimMm);
+  if (!next) return layers.say(t('object.deleteLast'), true);
+  takeShapes(next, []);
+  layers.say(sel.length === 1 ? t('object.deleted.one') : t('object.deleted', { n: sel.length }));
+}
+
+function duplicateSelected(): void {
+  const p = files.active?.pattern;
+  const sel = frameObjects();
+  if (!p || sel.length !== 1) return;
+  const r = duplicateObject(p, sel[0], settings.trimMm);
+  if (!r) return layers.say(t('frame.failed'), true);
+  takeShapes(r.pattern, [r.index]);
+  layers.say(t('object.duplicated'));
+}
+
+function mirrorSelected(axis: 'x' | 'y'): void {
+  const p = files.active?.pattern;
+  const sel = frameObjects();
+  if (!p || !sel.length) return;
+  const objs = sel.map((o) => seq(p).objects[o]);
+  const box = {
+    minX: Math.min(...objs.map((o) => o.minX)) / 10,
+    minY: Math.min(...objs.map((o) => o.minY)) / 10,
+    maxX: Math.max(...objs.map((o) => o.maxX)) / 10,
+    maxY: Math.max(...objs.map((o) => o.maxY)) / 10,
+  };
+  commitTransform(mirrorMatrix(axis, box));
+  layers.say(t('object.mirrored'));
+}
+
+function subtractSelected(): void {
+  const p = files.active?.pattern;
+  const sel = frameObjects();
+  if (!p || sel.length < 2) return;
+  const r = subtractTop(p, sel, settings.trimMm);
+  if (!r) return layers.say(t('object.subtract.nothing'), true);
+  takeShapes(r.pattern, r.cut);
+  const q = seq(r.pattern);
+  const list = r.cut.map((o) => (q.objects[o] ? objectName(q, o) : '')).filter(Boolean).join(', ');
+  layers.say([list ? t('object.subtracted', { list }) : '', r.covered ? t('object.subtracted.covered') : ''].filter(Boolean).join(' '));
+}
+
+// Shapes not sewn: switched off or guides ---------------------------------------
+
+/** Shape aside hovered in its list, shown on the canvas. */
+let hoverAside: number | null = null;
+let asideShown: AsideShape[] | null = null;
+
+const asidePanel = new AsidePanel({
+  sew: (id) => {
+    const p = files.active?.pattern;
+    if (!p) return;
+    const r = sewAgain(p, id, { ...digitizeDefaults(settings.profile), trimMm: settings.trimMm });
+    if (!r) return layers.say(t('aside.failed'), true);
+    const mine = seq(r.pattern).objects.findIndex((o) => stitchesBefore(r.pattern, o.first) === r.start);
+    hoverAside = null;
+    takeShapes(r.pattern, mine >= 0 ? [mine] : []);
+    layers.say(t('aside.done.sewn'));
+  },
+  role: (id, role) => {
+    const p = files.active?.pattern;
+    const next = p && setAsideRole(p, id, role);
+    if (next) applyEdit(next);
+  },
+  drop: (id) => {
+    const p = files.active?.pattern;
+    const next = p && dropAside(p, id);
+    if (!next) return;
+    hoverAside = null;
+    applyEdit(next);
+    layers.say(t('aside.done.dropped'));
+  },
+  hover: (id) => {
+    if (hoverAside === id) return;
+    hoverAside = id;
+    redraw();
+  },
+});
+
+/** The selected objects kept, but not sewn. */
+function putAside(role: AsideRole): void {
+  const p = files.active?.pattern;
+  const sel = frameObjects();
+  if (!p || !sel.length) return;
+  const next = setAside(p, sel, role, settings.trimMm);
+  if (!next) return layers.say(t('aside.last'), true);
+  takeShapes(next, []);
+  const one = sel.length === 1;
+  layers.say(role === 'guide' ? (one ? t('aside.done.guide') : t('aside.done.guideMany', { n: sel.length })) : one ? t('aside.done.off') : t('aside.done.offMany', { n: sel.length }));
+}
+
+// Drawing new shapes ---------------------------------------------------------
+
+/** A thread for the first shape of a new design: a Brother orange, clear on dark and light fabric. */
+const FIRST_THREAD: ThreadColor = nearestThread(rgbToLab(240, 140, 40)).thread;
+/** The next file opened keeps the view (a design started by drawing stays where it was drawn). */
+let keepView = false;
+
+const drawTool = new DrawTool({ done: (s) => void drawn(s), redraw });
+const drawButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-draw]')];
+
+/** Picks a drawing tool, or none. */
+function setDrawing(kind: DrawKind | null): void {
+  if (kind && settings.mode !== 'flow') return;
+  if (kind) {
+    if (editor.active) setEditing(false);
+    if (shapeTool.active) closeShape();
+    if (rungTool.active) closeRungs();
+    if (letterMode) setLetterMode(false);
+  }
+  drawTool.start(kind);
+  for (const b of drawButtons) b.setAttribute('aria-pressed', String(b.dataset.draw === kind));
+  stage.classList.toggle('drawing', !!kind);
+  updateLevel();
+  redraw();
+}
+drawButtons.forEach((b) => b.addEventListener('click', () => setDrawing(drawTool.kind === b.dataset.draw ? null : (b.dataset.draw as DrawKind))));
+
+/** A shape is drawn: sewn in the thread of the selected object right after it, else after the last one. */
+/** No stitches yet. */
+const EMPTY: Pattern = { x: new Int32Array(0), y: new Int32Array(0), cmd: new Uint8Array(0), colors: [] } as unknown as Pattern;
+
+/** The first shape of a new design; a line keeps its curves to be sewn along. */
+function firstShape(shape: NewShape, options: ReturnType<typeof digitizeDefaults> & { trimMm: number }): Digitized | null {
+  const line = shape.kind === 'stroke' ? addShape(EMPTY, shape, FIRST_THREAD, null, options) : null;
+  if (line) return { pattern: line.pattern, objects: [{ kind: 'run', label: 0, areaMm2: 0, path: shape.form }], starts: [0] };
+  const d = digitizeShapes([{ color: 0, ...shape }], [FIRST_THREAD], options, { w: 0, h: 0 }, false, 'shape');
+  return d.objects.length ? d : null;
+}
+
+async function drawn(shape: NewShape): Promise<void> {
+  const f = files.active;
+  const p = f?.pattern ?? null;
+  const options = { ...digitizeDefaults(settings.profile), trimMm: settings.trimMm };
+  if (!f || !p) {
+    // Nothing open yet: the shape starts a new design.
+    const d = firstShape(shape, options);
+    if (!d) return layers.say(t('draw.failed'), true);
+    keepView = true;
+    await addDigitized(d, t('draw.newName'));
+    keepView = false;
+    selectObjects([0], false);
+    return;
+  }
+  const q = seq(p);
+  const sel = [...selectedObjects].sort((a, b) => a - b);
+  const after = sel.length ? sel[sel.length - 1] : q.objects.length ? q.objects.length - 1 : null;
+  const color = after !== null ? q.objects[after].color : FIRST_THREAD;
+  const r = addShape(p, shape, color, after, options);
+  if (!r) return layers.say(t('draw.failed'), true);
+  applyEdit(r.pattern);
+  files.setObjects(f, rememberedIn(r.pattern, seq(r.pattern).objects));
+  const nq = seq(r.pattern);
+  const mine = nq.objects.findIndex((o) => stitchesBefore(r.pattern, o.first) === r.start);
+  followKnockouts();
+  if (mine >= 0) selectObjects([mine], false);
+  layers.say(t(shape.kind === 'fill' ? 'draw.done.fill' : 'draw.done.line'));
+  redraw();
+}
+
+// The card that offers leaving out what lies on top, when shapes overlap (never done unasked).
+let overlapCache: { p: Pattern; list: number[] } | null = null;
+/** Files whose overlaps the user chose to keep as they are. */
+const overlapKept = new WeakSet<object>();
+
+function overlapping(p: Pattern): number[] {
+  if (overlapCache?.p !== p) overlapCache = { p, list: overlapsIn(p, seq(p).objects) };
+  return overlapCache.list;
+}
+
+function updateOverlapCard(): void {
+  const f = files.active;
+  const p = f?.pattern;
+  const list = f && p && settings.mode === 'flow' && !overlapKept.has(f) && !shapeTool.active ? overlapping(p) : [];
+  const card = $('overlap-card');
+  card.hidden = !list.length;
+  if (list.length) $('overlap-text').textContent = t(list.length === 1 ? 'knockout.card.one' : 'knockout.card', { n: formatNumber(list.length) });
+}
+
+$('overlap-cut').addEventListener('click', () => {
+  const p = files.active?.pattern;
+  if (p) knockoutObjects(overlapping(p), true);
+});
+$('overlap-keep').addEventListener('click', () => {
+  if (files.active) overlapKept.add(files.active);
+  layers.say(t('knockout.card.kept'));
+  redraw();
+});
+
+/** Turns leaving out what lies on top on or off for the objects `which`, as one undo step. */
+function knockoutObjects(which: number[], on: boolean): void {
+  const f = files.active;
+  const p = f?.pattern;
+  if (!f || !p) return;
+  const r = setKnockout(p, which, on, settings.trimMm);
+  if (!r) return;
+  const sel = selectedObjects;
+  applyEdit(r.pattern);
+  files.setObjects(f, rememberedIn(r.pattern, seq(r.pattern).objects));
+  selectedObjects = sel;
+  selectionKey++;
+  layers.say(t(on ? 'knockout.done' : 'knockout.undone', { n: formatNumber(r.changed) }) + ' ' + t('object.undo'));
+  redraw();
 }
 
 // The frame around the one selected object (level Objects): move, turn, scale.
@@ -1325,6 +1644,7 @@ function commitTransform(m: Mat): void {
   selectedObjects = synced !== cur ? new Set(nq.objects.flatMap((o, i) => (keys.has(objectKey(synced, o)) ? [i] : []))) : nq.objects.length === seq(p).objects.length ? new Set(sel) : new Set();
   selectionKey++;
   if (restitched && hand) layers.say(t('shape.handReplaced', { n: formatNumber(hand) }));
+  followKnockouts();
   redraw();
 }
 
@@ -1440,6 +1760,7 @@ function namesOf(p: Pattern, q: Sequence): ReadonlyMap<number, string> | undefin
 /** A new lettering: under the design (or as a new design), its text selected to type over. */
 async function newLettering(): Promise<void> {
   if (settings.mode !== 'flow') setMode('flow');
+  if (drawTool.active) setDrawing(null);
   let font;
   try {
     font = await loadFont(lastFont);
@@ -1922,6 +2243,7 @@ function setMode(mode: Mode): void {
     hoverZone = null;
   }
   if (mode !== 'flow') {
+    if (drawTool.active) setDrawing(null);
     player.pause();
     if (!player.complete) player.set(Number.MAX_SAFE_INTEGER);
   }
@@ -1954,6 +2276,7 @@ function objectInfo(p: Pattern, q: Sequence) {
     frame: frameTool.active ? { canScale: frameTool.canScale } : null,
     mergeBlocked: selected.length > 1 ? mergeBlocked(selected.map((o) => q.objects[o])) : null,
     reversible: selected.some((o) => reversible(q.objects[o])),
+    subtractable: selected.length > 1 && selected.every((o) => q.objects[o].kind === 'fill'),
   };
 }
 
@@ -1976,6 +2299,14 @@ function redraw(): void {
     syncLettering();
     syncFrame();
     drawScene(ctx, stageW, stageH, scene(), stageBg());
+    const aside = settings.mode === 'flow' ? asideOf(files.active?.pattern) : [];
+    if (aside.length) drawAside(ctx, vp, aside, hoverAside);
+    if (asideShown !== aside) {
+      asideShown = aside;
+      asidePanel.update(aside);
+    }
+    if (drawTool.preview && settings.mode === 'flow')
+      drawDrawing(ctx, vp, drawTool.preview, { nodes: drawTool.kind === 'pen' ? drawTool.count : 0, closing: drawTool.closing, size: drawTool.size });
     if (letterMode) drawLetterBoxes();
     if (showCompare()) {
       const x = Math.round(split * stageW);
@@ -1988,7 +2319,7 @@ function redraw(): void {
       drawDivider(ctx, x, stageH, t('compare.original'), t('compare.current'));
     }
     const active = files.active;
-    empty.hidden = !!active?.pattern;
+    empty.hidden = !!active?.pattern || drawTool.active;
     exportBtn.disabled = !active?.pattern;
     $('file-actions').hidden = !active?.pattern;
     if (settings.mode === 'density') drawLegendCanvas();
@@ -2016,6 +2347,7 @@ function redraw(): void {
       const objects = !lettering && p && q && selectedObjects.size;
       objectPanel.update(objects ? objectInfo(p, q) : null, getLang());
       stitchPanel.update(objects ? { ...stitchInfo(p, q), ...rungInfo(p, q) } : null);
+      updateOverlapCard();
       letteringPanel.update(lettering && q ? letteringInfo(q) : null, getLang());
       if (focusText && lettering) {
         letteringPanel.focusText(true);
@@ -2264,6 +2596,8 @@ function updateLevel(): void {
   $('canvas-hint').textContent = t(
     mode === 'image'
       ? 'canvas.hint.image'
+      : drawTool.kind && flow
+        ? `canvas.hint.draw.${drawTool.kind}`
       : on
         ? flow
           ? 'canvas.hint.flowEdit'
@@ -2392,13 +2726,16 @@ const imageMode = new ImageMode({
  * Adds stitches made from an image to the file list, with the objects as the Image mode sewed them
  * (it trims inside some, between pieces of a fill) and the exact areas of its fills.
  */
-async function addDigitized(d: Digitized, name: string): Promise<void> {
+async function addDigitized(d: Digitized & { leftOut?: LeftOut[] }, name: string): Promise<void> {
   const data = writePattern(d.pattern, 'pes');
   const added = parsePattern(data, `${name}.pes`);
   rememberObjects(added, d.starts);
   const objs = sewObjects(added);
-  rememberShapes(added, objs, d.starts, d.objects.map((o) => o.shape));
-  await files.addWithObjects(`${name}.pes`, data.slice().buffer, rememberedIn(added, objs));
+  rememberShapes(added, objs, d.starts, d.objects.map((o) => o.shape), d.objects);
+  // Shapes left out on the way in wait under "Not sewn", where it was: at the very back.
+  const aside: AsideShape[] = (d.leftOut ?? []).map((s, k) => ({ id: k + 1, role: 'off', kind: 'fill', color: s.color, after: -1, form: s.form, reason: s.reason }));
+  await files.addWithObjects(`${name}.pes`, data.slice().buffer, rememberedIn(added, objs), storeAside(aside));
+  if (aside.some((a) => a.reason === 'background')) layers.say(t('aside.backgroundFound'));
 }
 
 // Living thread: the light of the realistic view follows the pointer or the tilt of a phone -------
@@ -2466,6 +2803,8 @@ langSelect.addEventListener('change', () => {
   settings.lang = langSelect.value as Lang;
   saveSettings(settings);
   applyLang(settings.lang);
+  asideShown = null;
+  redraw();
 });
 applyLang(detectLang(settings.lang));
 applyI18n(document.body);
@@ -2505,12 +2844,25 @@ input.addEventListener('change', () => {
 const IMAGE_FILE = /\.(png|jpe?g|gif|webp|bmp|svg|avif)$/i;
 
 /** Embroidery files go to the file list, an image to the Bild mode, a project opens everything it holds. */
+const isSvgFile = (f: File) => f.type === 'image/svg+xml' || /\.svg$/i.test(f.name);
+
 async function openFiles(list: Iterable<File>): Promise<void> {
   const all = [...list];
   for (const f of all.filter((f) => isProjectName(f.name))) await openProject(f);
   const image = all.find((f) => f.type.startsWith('image/') || IMAGE_FILE.test(f.name));
   const rest = all.filter((f) => f !== image && !isProjectName(f.name) && !f.type.startsWith('image/') && !IMAGE_FILE.test(f.name));
-  if (image) {
+  if (image && isSvgFile(image)) {
+    // An SVG of shapes opens as stitches in Ablauf, every shape whole; the Bild mode only for SVGs
+    // that are pictures (embedded photos, many colors).
+    try {
+      const d = await digitizeSvg(image, settings.image.prepare, digitizeDefaults(settings.profile));
+      await addDigitized(d, image.name.replace(/\.svg$/i, ''));
+      setMode('flow');
+    } catch {
+      setMode('image');
+      void imageMode.load(image);
+    }
+  } else if (image) {
     setMode('image');
     void imageMode.load(image);
   }
@@ -2537,6 +2889,7 @@ function currentProject(): Project {
       ...(FileList.edited(f) ? { working: toStored(f.pattern!) } : {}),
       acks: f.acks,
       objects: rememberedIn(f.pattern!, seq(f.pattern!).objects),
+      ...(asideOf(f.pattern).length ? { aside: storeAside(asideOf(f.pattern)) } : {}),
     })),
     active: active >= 0 ? active : null,
     image: snap && { name: snap.image.name, type: snap.image.type, data: new Uint8Array(snap.image.data), work: snap.work },
@@ -2656,6 +3009,9 @@ launchQueue?.setConsumer(async (params) => {
   if (params.files.length) void openFiles(await Promise.all(params.files.map((h) => h.getFile())));
 });
 
+/** Keys for the drawing tools (as in common drawing programs, where free of other uses here). */
+const DRAW_KEYS: Record<string, DrawKind> = { m: 'rect', o: 'ellipse', b: 'pen', p: 'free' };
+
 window.addEventListener('keydown', (e) => {
   if ((e.target as HTMLElement).closest('input, select, textarea')) return;
   const mod = e.ctrlKey || e.metaKey;
@@ -2664,12 +3020,38 @@ window.addEventListener('keydown', (e) => {
     history(e.key === 'y' || e.shiftKey ? 'redo' : 'undo');
     return;
   }
+  if (mod && !e.altKey && (e.key === 'd' || e.key === 'D') && settings.mode === 'flow' && frameObjects().length === 1) {
+    e.preventDefault();
+    duplicateSelected();
+    return;
+  }
   if (mod && e.key === 'a' && editor.active) {
     e.preventDefault();
     editor.selectAll();
     return;
   }
   if (mod || e.altKey) return;
+  if (drawTool.active && settings.mode === 'flow') {
+    if (e.key === 'Escape') {
+      if (drawTool.busy) {
+        drawTool.cancel();
+        redraw();
+      } else setDrawing(null);
+      return;
+    }
+    if (e.key === 'Enter' && drawTool.busy) {
+      e.preventDefault();
+      return drawTool.finish(false);
+    }
+    if ((e.key === 'Delete' || e.key === 'Backspace') && drawTool.removeLast()) {
+      e.preventDefault();
+      return;
+    }
+  }
+  if (settings.mode === 'flow' && !e.shiftKey && e.key in DRAW_KEYS) {
+    const kind = DRAW_KEYS[e.key];
+    return setDrawing(drawTool.kind === kind ? null : kind);
+  }
   if (shapeTool.active && settings.mode === 'flow') {
     const step = e.shiftKey ? 0.5 : 0.1;
     const arrows: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
@@ -2691,6 +3073,10 @@ window.addEventListener('keydown', (e) => {
       return;
     }
     if (e.key === 'Enter' && shapeObject !== null) return enterObject(shapeObject, false);
+  }
+  if ((e.key === 'Delete' || e.key === 'Backspace') && settings.mode === 'flow' && !drawTool.busy && frameObjects().length) {
+    e.preventDefault();
+    return deleteSelected();
   }
   // One object chosen (level Objects): the arrow keys move it, Enter goes into its outline.
   if (frameTool.active && settings.mode === 'flow' && !(e.target as HTMLElement).closest('button')) {
@@ -2891,7 +3277,10 @@ canvas.addEventListener('pointerdown', (e) => {
   if (pointers.size === 1 && e.button === 0) {
     const [wx, wy] = vp.toWorld(pos[0], pos[1]);
     const flow = settings.mode === 'flow';
-    if (letterMode && flow) mode = letterDown(wx, wy) ? 'move' : 'pan';
+    if (drawTool.active && flow) {
+      drawTool.down(wx, wy, vp.scale);
+      mode = 'move';
+    } else if (letterMode && flow) mode = letterDown(wx, wy) ? 'move' : 'pan';
     else if (rungTool.active && flow) mode = rungTool.down(wx, wy, vp.scale);
     else if (shapeTool.active && flow) mode = shapeTool.down(wx, wy, vp.scale);
     else if (frameTool.active && flow && frameTool.down(wx, wy, vp.scale) !== null) mode = 'frame';
@@ -2903,6 +3292,7 @@ canvas.addEventListener('pointerdown', (e) => {
     editor.cancel();
     rungTool.cancel();
     shapeTool.cancel();
+    drawTool.abortPress();
     letterDrag = null;
     if (frameTool.dragging !== null) {
       frameTool.cancel();
@@ -2938,7 +3328,7 @@ canvas.addEventListener('pointermove', (e) => {
   canvas.classList.toggle('on-divider', !prev && nearDivider(pos[0]));
   if (prev) {
     if (pointers.size === 1) {
-      if (!letterDragTo(wx, wy) && !rungTool.dragTo(wx, wy) && !shapeTool.dragTo(wx, wy) && !frameTool.dragTo(wx, wy, e.shiftKey, vp.scale) && !editor.dragTo(wx, wy, pos[0], pos[1])) vp.pan(pos[0] - prev[0], pos[1] - prev[1]);
+      if (!drawTool.dragTo(wx, wy, e.shiftKey, e.altKey) && !letterDragTo(wx, wy) && !rungTool.dragTo(wx, wy) && !shapeTool.dragTo(wx, wy) && !frameTool.dragTo(wx, wy, e.shiftKey, vp.scale) && !editor.dragTo(wx, wy, pos[0], pos[1])) vp.pan(pos[0] - prev[0], pos[1] - prev[1]);
     } else if (pointers.size === 2) {
       pointers.set(e.pointerId, pos);
       const [a, b] = [...pointers.values()];
@@ -2949,7 +3339,9 @@ canvas.addEventListener('pointermove', (e) => {
     pointers.set(e.pointerId, pos);
     redraw();
   } else if (
-    rungTool.active
+    drawTool.active
+      ? drawTool.hoverAt(wx, wy, vp.scale)
+      : rungTool.active
       ? rungTool.hoverAt(wx, wy, vp.scale)
       : shapeTool.active
         ? shapeTool.hoverAt(wx, wy, vp.scale)
@@ -3034,6 +3426,7 @@ const endPointer = (e: PointerEvent) => {
     stage.classList.remove('splitting');
   }
   if (pointers.size === 1 && pointers.has(e.pointerId)) {
+    drawTool.up(...vp.toWorld(pos[0], pos[1]), e.shiftKey, e.altKey);
     letterUp();
     rungTool.up();
     shapeTool.up();
@@ -3046,6 +3439,7 @@ const endPointer = (e: PointerEvent) => {
 };
 canvas.addEventListener('pointerup', endPointer);
 canvas.addEventListener('pointercancel', (e) => {
+  drawTool.abortPress();
   letterDrag = null;
   editor.cancel();
   rungTool.cancel();
@@ -3068,6 +3462,11 @@ canvas.addEventListener('contextmenu', (e) => {
 canvas.addEventListener('dblclick', (e) => {
   const pos = local(e);
   const [x, y] = vp.toWorld(pos[0], pos[1]);
+  if (drawTool.active) {
+    // The pen ends an open line; the other tools ignore it.
+    drawTool.finish(false);
+    return;
+  }
   if (rungTool.active) return;
   if (shapeTool.active) {
     shapeTool.insertAt(x, y, vp.scale);

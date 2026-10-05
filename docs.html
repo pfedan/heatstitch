@@ -58,6 +58,7 @@
           <a href="#en-start">Quick start</a>
           <a href="#en-sequence">Sequence</a>
           <a href="#en-objects">Objects and stitches</a>
+          <a href="#en-draw">Draw shapes</a>
           <a href="#en-lettering">Lettering</a>
           <a href="#en-jumps">Jumps and trims</a>
           <a href="#en-heatmap">Heatmap</a>
@@ -76,7 +77,7 @@
 
         <h2 id="en-start">Quick start</h2>
         <ol>
-          <li>Drop one or more <b>DST</b> (Tajima) or <b>PES</b> (Brother) files on the file box, or pick one from <i>Load example</i> below it: the cat, the overlapping circles or the confetti. Two examples are vector graphics (SVG), sewn as they open: the overlapping circles once more, where every circle on top is cut out of the ones below, and the <i>Shapes benchmark</i>, nine fields with what heatstitch does with shapes and objects (fill, fill with a hole, satin, a satin network, bands around the satin limit to switch between satin and fill, a tapered leaf, running stitch, overlaps and areas in pieces).</li>
+          <li>Drop one or more <b>DST</b> (Tajima) or <b>PES</b> (Brother) files on the file box, or pick one from <i>Load example</i> below it: the cat, the overlapping circles or the confetti. Two examples are vector graphics (SVG), sewn as they open: the overlapping circles once more, as three whole circles and a small one on top (see <i>Shapes on top of each other</i> below), and the <i>Shapes benchmark</i>, nine fields with what heatstitch does with shapes and objects (fill, fill with a hole, satin, a satin network, bands around the satin limit to switch between satin and fill, a tapered leaf, running stitch, overlaps and areas in pieces).</li>
           <li>Pick the mode at the top: <i>Sequence</i> (<kbd>1</kbd>) to see how the design is sewn, <i>Density</i> (<kbd>2</kbd>) to check it, <i>Image</i> (<kbd>3</kbd>) to make one from a picture (see <a href="#en-image">Image mode</a>).</li>
           <li>In <i>Density</i>, pick the <b>fabric</b> and <b>thread weight</b> under <i>Material</i>.</li>
           <li>Read the verdict in the <i>Findings</i> column: <span class="lv safe">Looks fine</span>, <span class="lv caution">Caution</span> or <span class="lv critical">Critical</span>. Click a zone to zoom to it.</li>
@@ -154,6 +155,8 @@
           <dd>With several objects of one color selected, <i>Combine into one object</i> makes one of them. It is sewn where the first one is; as with moving, the layers are checked first. Fills become one area and are sewn anew with the settings of the first, so the pattern runs across all of it. With other objects in between, this works for fills only. The other way round, <i>Split into pieces</i> turns an object sewn in several pieces into those pieces, for example to see its underlay on its own. heatstitch remembers both, also in the project, and both can be undone.</dd>
           <dt>Move, turn and scale</dt>
           <dd>Selected objects get a dashed frame on the canvas. Drag inside it to move them (<kbd>Shift</kbd> keeps the line), drag a corner to scale them (the opposite corner stays; <kbd>Shift</kbd> scales width and height freely) and drag the round handle above to turn them around their middle (<kbd>Shift</kbd>: in steps of 15°). The arrow keys move them by 0.1 mm, with <kbd>Shift</kbd> 1 mm. Moving and turning take the stitches along as they are. Scaling sews the objects anew in the larger or smaller shape with their own settings, so density and stitch lengths stay right. Select a letter and its border together to change both at once. Objects made of fill and satin in one can be moved and turned, but not scaled yet.</dd>
+          <dt>Shapes on top of each other</dt>
+          <dd>Where a fill lies partly under one sewn later, both are sewn there unless you choose otherwise: the card above the list says how many fills would be sewn twice and offers <i>Leave out</i> or <i>Keep as is</i>. Leaving out is a stitch setting, not a change of the shape: the switch <i>Leave out under later shapes</i> in the stitch settings turns it on or off per fill, the fill still reaches 0.2 mm under the one on top so no fabric shows, and the curves on the level <i>Shape</i> stay whole. Move, turn or reshape the fill on top and the ones below are sewn anew to match, in the same undo step.</dd>
           <dt>Change the shape of a fill</dt>
           <dd>Double-click a fill, press <kbd>Enter</kbd>, choose <i>Shape</i> in the switch at the top left or <i>Edit shape</i> in the panel: its outline appears as curves with nodes (squares are corners, circles are round). Drag a node, or a handle of the selected node; dragging the outline between nodes bends it. Double-click the outline to put a node there, <kbd>Del</kbd> removes the selected node, <kbd>c</kbd> makes it a corner or round, the arrow keys move it. When you let go, the fill is sewn anew in the new shape with its settings. The outline is traced once from the stitches (or taken as made in the Image mode) and from then on kept as curves, also in the project, so it never drifts. <kbd>Enter</kbd> goes on to the stitches, <kbd>Esc</kbd> or a click beside it back to the objects.</dd>
           <dt>Single stitches</dt>
@@ -180,6 +183,29 @@
           <figcaption>The red circle of <a href="examples/demos/overlap.pes" download>overlap.pes</a> sewn as tatami with brick offset, gradient, contour fill and spiral.</figcaption>
         </figure>
 
+        <h2 id="en-draw">Draw shapes</h2>
+        <p>
+          In the <i>Sequence</i> mode you can also draw: the tools on the left of the canvas make new shapes that
+          are sewn at once with the settings for your material. Each new shape is sewn right after the selected
+          object, in its thread; with nothing selected, after the last one. With no file open, the first shape
+          starts a new design.
+        </p>
+        <figure>
+          <img src="/guide/draw-en.jpg" width="1280" height="800" loading="lazy" alt="A small house drawn in heatstitch: an orange rectangle with a round window cut out, a red roof drawn with the pen, a yellow sun, and a wavy ground line kept as a guide under Not sewn" />
+          <figcaption>A design drawn from nothing: a rectangle with a window cut out, a roof drawn with the pen, a sun in its own thread and the ground as a guide, which is never sewn.</figcaption>
+        </figure>
+        <dl>
+          <dt>Draw</dt>
+          <dd><b>Rectangle</b> (<kbd>m</kbd>) and <b>ellipse</b> (<kbd>o</kbd>): drag; <kbd>Shift</kbd> makes a square or circle, <kbd>Alt</kbd> draws from the middle, a label shows the size. <b>Pen</b> (<kbd>b</kbd>): click for corners, drag for curves; a click on the first node closes an area (a fill), a double-click or <kbd>Enter</kbd> ends an open line (running stitch), <kbd>Del</kbd> takes back the last node. <b>Freehand</b> (<kbd>p</kbd>): drag a line; it is smoothed when you let go and sewn in running stitch. Lines are sewn exactly along their curve, with the same stitches as the border of a fill; on the level <i>Shape</i> you move their nodes and the stitches follow, the stitch length and triple stitch are set under <i>Stitches</i>. The tool stays on for the next shape; <kbd>Esc</kbd> or a click on its button puts it away. Every shape is one step you can undo.</dd>
+          <dt>Duplicate, mirror, delete</dt>
+          <dd>Below the place in the order, the <i>Object</i> panel has a row of buttons: <i>Duplicate</i> (<kbd>Ctrl</kbd>+<kbd>D</kbd>) sews the object once more, 2 mm beside it and right after it; the two mirror buttons swap left and right or top and bottom around the middle of the selection; <i>Delete</i> (<kbd>Del</kbd>) removes the selected objects. A click on the color square next to the object's name chooses its thread: the same thread as a neighbour sews it along in that color, another one gives it a color of its own at its place.</dd>
+          <dt>Cut out and combine</dt>
+          <dd>With several fills selected, <i>Cut out top shape</i> cuts the one sewn last out of the others, and it goes away itself, as when punching a hole. <i>Combine into one object</i> joins fills whose shape is known as curves into one area with one outline, which you can then edit on the level <i>Shape</i>.</dd>
+          <dt>Not sewn</dt>
+          <dd><i>Do not sew</i> keeps the selected objects but takes them out of the stitches: they show as a thin outline in their color. <i>As a guide</i> keeps them as a dashed line, for example the outline of the garment or a line to line things up; guides are never sewn. Both wait in the block <i>Not sewn</i> under the list of colors and objects. There, <i>Sew</i> brings one back at its old place in the order, with its stitches and settings as they were; the middle button switches between off and guide, × deletes it. When an SVG has a plain rectangle behind everything, as many drawing programs export, it is a background: it is not sewn but put there too. All of this can be undone and is kept in the project.</dd>
+          <dt>Shapes instead of stitches</dt>
+          <dd>Under <i>Display</i>, <i>Shapes instead of stitches</i> shows the fills as flat areas of their color. That keeps the canvas calm while you arrange many shapes; outlines and running stitches still show their stitches.</dd>
+        </dl>
         <h2 id="en-lettering">Lettering</h2>
         <p>
           <b>Text</b> above the canvas (or <kbd>t</kbd>) puts a lettering under the design, or starts a new design with it. Its text is
@@ -395,7 +421,7 @@
           <dt>Preparation</dt>
           <dd>The image is reduced to a few thread colors (<i>Most colors</i>): similar colors are merged, small but distinct ones such as eyes are kept. <i>Simplify</i> smooths photos into flat regions while keeping their edges; it is switched on by itself for photos. Regions smaller than <i>Smallest area</i> join their neighbour, thin seams of anti-aliasing disappear, and the background at the image border is left out. With <i>Brother thread colors</i> every color becomes the nearest thread of the palette.</dd>
           <dt>SVG files</dt>
-          <dd>An SVG is read as shapes, not as pixels: every color of the file becomes one thread (a gradient its mean color), shapes keep their exact outline, and parts hidden under other shapes are left out. A size given in mm, cm or inches becomes the width. Lines become running stitch or satin by their width; lines thinner than 0.4 mm are sewn as running stitch instead of getting lost. Fill rows run straight, at angles that differ between neighbours. <i>Most colors</i> and <i>Simplify</i> are not needed and hidden. An SVG dropped on the file list opens here too. SVGs with embedded photos or patterns, or more than 48 colors (as from auto-tracing), are treated like a picture.</dd>
+          <dd>An SVG dropped on the file list opens in <i>Sequence</i>, sewn shape by shape in the order the file paints them: every shape stays whole, also where another one covers it, and keeps its curves for the level <i>Shape</i>; overlaps are offered to be left out, never removed unasked. Opened here in <i>Image</i>, an SVG is read as shapes too: every color of the file becomes one thread (a gradient its mean color), shapes keep their exact outline, and parts hidden under other shapes are left out. A size given in mm, cm or inches becomes the width. Lines become running stitch or satin by their width; lines thinner than 0.4 mm are sewn as running stitch instead of getting lost. Fill rows run straight, at angles that differ between neighbours. <i>Most colors</i> and <i>Simplify</i> are not needed and hidden. SVGs with text, clip paths or masks are sewn from their colors as in Image mode. SVGs with embedded photos or patterns, or more than 48 colors (as from auto-tracing), are treated like a picture.</dd>
           <dt>Colors and brush</dt>
           <dd>In the color list a check box leaves a color out, the swatch picks another thread and <i>→</i> merges it into another color. A ≠ warns that no thread is close to the image color. Click a color and paint with the <i>Brush</i> to recolor regions by hand, or erase where nothing should be sewn. Every change can be undone; the image and your changes stay after a reload.</dd>
           <dt>Stitches</dt>
@@ -441,6 +467,8 @@
             <tr><td>Arrow keys</td><td>Move the selected objects by 0.1 mm (with <kbd>Shift</kbd> 1 mm), at the level Shape the selected node</td></tr>
             <tr><td><kbd>c</kbd>, <kbd>Del</kbd></td><td>At the level Shape: node a corner or round, delete it</td></tr>
             <tr><td><kbd>,</kbd> <kbd>.</kbd>, <kbd>i</kbd>, <kbd>Del</kbd></td><td>At the level Stitches: previous / next point, split the stitch, delete</td></tr>
+            <tr><td><kbd>m</kbd> <kbd>o</kbd> <kbd>b</kbd> <kbd>p</kbd></td><td>Draw a rectangle, ellipse, with the pen, freehand (Sequence); <kbd>Esc</kbd> puts the tool away</td></tr>
+            <tr><td><kbd>Ctrl</kbd>+<kbd>D</kbd>, <kbd>Del</kbd></td><td>Duplicate the selected object, delete the selected objects (Sequence)</td></tr>
             <tr><td><kbd>c</kbd></td><td>Compare with original</td></tr>
             <tr><td><kbd>t</kbd></td><td>New lettering (Sequence)</td></tr>
             <tr><td><kbd>Enter</kbd>, <kbd>Esc</kbd></td><td>On a lettering: move single letters, back to the lettering</td></tr>
@@ -475,6 +503,7 @@
           <a href="#de-start">Schnellstart</a>
           <a href="#de-sequence">Ablauf</a>
           <a href="#de-objects">Objekte und Stiche</a>
+          <a href="#de-draw">Formen zeichnen</a>
           <a href="#de-lettering">Schrift</a>
           <a href="#de-jumps">Sprünge und Schnitte</a>
           <a href="#de-heatmap">Heatmap</a>
@@ -493,7 +522,7 @@
 
         <h2 id="de-start">Schnellstart</h2>
         <ol>
-          <li>Eine oder mehrere <b>DST</b>- (Tajima) oder <b>PES</b>-Dateien (Brother) auf das Dateifeld ziehen oder darunter unter <i>Beispiel laden</i> eines auswählen: die Katze, die überlappenden Kreise oder das Konfetti. Zwei Beispiele sind Vektorgrafiken (SVG) und werden beim Öffnen gestickt: noch einmal die überlappenden Kreise, wobei jeder obere Kreis aus den unteren ausgespart wird, und der <i>Formen-Benchmark</i>, neun Felder mit dem, was heatstitch mit Formen und Objekten macht (Füllung, Füllung mit Loch, Satin, ein Satin-Netz, Bänder um die Satin-Grenze zum Wechseln zwischen Satin und Füllung, ein spitz zulaufendes Blatt, Steppstich, Überlappungen und Flächen in Stücken).</li>
+          <li>Eine oder mehrere <b>DST</b>- (Tajima) oder <b>PES</b>-Dateien (Brother) auf das Dateifeld ziehen oder darunter unter <i>Beispiel laden</i> eines auswählen: die Katze, die überlappenden Kreise oder das Konfetti. Zwei Beispiele sind Vektorgrafiken (SVG) und werden beim Öffnen gestickt: noch einmal die überlappenden Kreise, als drei ganze Kreise und ein kleiner darauf (siehe <i>Formen übereinander</i> unten), und der <i>Formen-Benchmark</i>, neun Felder mit dem, was heatstitch mit Formen und Objekten macht (Füllung, Füllung mit Loch, Satin, ein Satin-Netz, Bänder um die Satin-Grenze zum Wechseln zwischen Satin und Füllung, ein spitz zulaufendes Blatt, Steppstich, Überlappungen und Flächen in Stücken).</li>
           <li>Oben den Modus wählen: <i>Ablauf</i> (<kbd>1</kbd>), um zu sehen, wie das Stickmuster gestickt wird, <i>Dichte</i> (<kbd>2</kbd>), um es zu prüfen, <i>Bild</i> (<kbd>3</kbd>), um aus einem Bild eine zu machen (siehe <a href="#de-image">Modus Bild</a>).</li>
           <li>Im Modus <i>Dichte</i> unter <i>Material</i> <b>Stoff</b> und <b>Garnstärke</b> wählen.</li>
           <li>Das Urteil in der Spalte <i>Befunde</i> lesen: <span class="lv safe">Unauffällig</span>, <span class="lv caution">Vorsicht</span> oder <span class="lv critical">Kritisch</span>. Ein Klick auf eine Zone zoomt hin.</li>
@@ -572,6 +601,8 @@
           <dd>Sind mehrere Objekte einer Farbe ausgewählt, macht <i>Zu einem Objekt zusammenfassen</i> eines daraus. Es wird an der Stelle des ersten gestickt; wie beim Verschieben wird vorher geprüft, ob das die Lagen erlaubt. Füllungen werden dabei eine Fläche und mit den Einstellungen der ersten neu gestickt, sodass das Muster über alles durchläuft. Liegen andere Objekte dazwischen, geht das nur mit Füllungen. Umgekehrt zerlegt <i>In Teile trennen</i> ein Objekt, das in mehreren Teilen gestickt wird, in diese Teile, zum Beispiel um die Unterlage einzeln zu sehen. heatstitch merkt sich beides, auch im Projekt, und es lässt sich rückgängig machen.</dd>
           <dt>Verschieben, drehen, skalieren</dt>
           <dd>Gewählte Objekte bekommen auf der Leinwand einen gestrichelten Rahmen. Im Rahmen ziehen verschiebt sie (<kbd>Umschalt</kbd> hält die Linie), eine Ecke ziehen skaliert (die gegenüberliegende Ecke bleibt; mit <kbd>Umschalt</kbd> Breite und Höhe frei), der runde Griff darüber dreht sie um ihre Mitte (<kbd>Umschalt</kbd>: in 15°-Schritten). Die Pfeiltasten schieben um 0,1 mm, mit <kbd>Umschalt</kbd> um 1 mm. Verschieben und Drehen nehmen die Stiche unverändert mit. Skalieren stickt die Objekte in der größeren oder kleineren Form mit ihren eigenen Einstellungen neu, so stimmen Dichte und Stichlängen weiter. Einen Buchstaben und seinen Rand zusammen wählen, um beide auf einmal zu ändern. Objekte, die Füllung und Satin in einem sind, lassen sich verschieben und drehen, aber noch nicht skalieren.</dd>
+          <dt>Formen übereinander</dt>
+          <dd>Liegt eine Füllung teilweise unter einer später gestickten, werden dort beide gestickt, solange du nichts anderes wählst: Die Karte über der Liste sagt, wie viele Füllungen doppelt gestickt würden, und bietet <i>Aussparen</i> oder <i>So lassen</i> an. Aussparen ist eine Stich-Einstellung, keine Formänderung: Der Schalter <i>Unter späteren Formen aussparen</i> in den Stich-Einstellungen schaltet es je Füllung ein oder aus, die Füllung reicht noch 0,2 mm unter die obere, damit kein Stoff durchscheint, und die Kurven auf der Ebene <i>Form</i> bleiben ganz. Verschiebt, dreht oder formt man die obere Füllung um, werden die unteren passend neu gestickt, im selben Rückgängig-Schritt.</dd>
           <dt>Form einer Füllung ändern</dt>
           <dd>Doppelklick auf eine Füllung, <kbd>Enter</kbd>, <i>Form</i> im Schalter oben links oder <i>Form bearbeiten</i> im Panel: Ihr Umriss erscheint als Kurven mit Knoten (Quadrate sind Ecken, Kreise runde Knoten). Einen Knoten ziehen oder einen Griff des gewählten Knotens; den Umriss zwischen zwei Knoten ziehen biegt ihn. Doppelklick auf den Umriss setzt dort einen Knoten, <kbd>Entf</kbd> löscht den gewählten, <kbd>c</kbd> macht ihn zur Ecke oder rund, die Pfeiltasten schieben ihn. Beim Loslassen wird die Füllung in der neuen Form mit ihren Einstellungen neu gestickt. Der Umriss wird einmal aus den Stichen gelesen (oder so übernommen, wie ihn der Bildmodus gemacht hat) und danach als Kurven behalten, auch im Projekt; er wandert also nicht. <kbd>Enter</kbd> geht weiter zu den Stichen, <kbd>Esc</kbd> oder ein Klick daneben zurück zu den Objekten.</dd>
           <dt>Einzelne Stiche</dt>
@@ -598,6 +629,29 @@
           <figcaption>Der rote Kreis aus <a href="examples/demos/overlap.pes" download>overlap.pes</a> als Tatami mit Ziegelversatz, Verlauf, Konturfüllung und Spirale.</figcaption>
         </figure>
 
+        <h2 id="de-draw">Formen zeichnen</h2>
+        <p>
+          Im Modus <i>Ablauf</i> kannst du auch zeichnen: Die Werkzeuge links auf der Leinwand machen neue Formen,
+          die sofort mit den Einstellungen für dein Material gestickt werden. Jede neue Form wird gleich nach dem
+          gewählten Objekt in dessen Garn gestickt, ohne Auswahl nach dem letzten. Ist keine Datei offen, beginnt
+          die erste Form ein neues Stickmuster.
+        </p>
+        <figure>
+          <img src="/guide/draw-de.jpg" width="1280" height="800" loading="lazy" alt="Ein kleines Haus, in heatstitch gezeichnet: ein oranges Rechteck mit ausgeschnittenem runden Fenster, ein rotes Dach mit dem Zeichenstift, eine gelbe Sonne und eine wellige Bodenlinie als Hilfslinie unter Nicht gestickt" />
+          <figcaption>Ein Stickmuster aus dem Nichts: ein Rechteck mit ausgeschnittenem Fenster, ein Dach mit dem Zeichenstift, eine Sonne in eigenem Garn und der Boden als Hilfslinie, die nie gestickt wird.</figcaption>
+        </figure>
+        <dl>
+          <dt>Zeichnen</dt>
+          <dd><b>Rechteck</b> (<kbd>m</kbd>) und <b>Ellipse</b> (<kbd>o</kbd>): ziehen; <kbd>Umschalt</kbd> macht ein Quadrat oder einen Kreis, <kbd>Alt</kbd> zeichnet von der Mitte aus, eine Marke zeigt die Größe. <b>Zeichenstift</b> (<kbd>b</kbd>): Klick für Ecken, Ziehen für Rundungen; ein Klick auf den ersten Knoten schließt eine Fläche (Füllung), Doppelklick oder <kbd>Enter</kbd> beendet eine offene Linie (Steppstich), <kbd>Entf</kbd> nimmt den letzten Knoten zurück. <b>Freihand</b> (<kbd>p</kbd>): eine Linie ziehen; sie wird beim Loslassen geglättet und im Steppstich gestickt. Linien werden genau entlang ihrer Kurve gestickt, mit denselben Stichen wie die Umrandung einer Füllung; auf der Ebene <i>Form</i> verschiebst du ihre Knoten und die Stiche folgen, Stichlänge und Dreifachstich stellst du unter <i>Stiche</i> ein. Das Werkzeug bleibt für die nächste Form an; <kbd>Esc</kbd> oder ein Klick auf seinen Knopf legt es weg. Jede Form ist ein Schritt, den du rückgängig machen kannst.</dd>
+          <dt>Duplizieren, spiegeln, löschen</dt>
+          <dd>Unter der Stelle in der Reihenfolge hat die Karte <i>Objekt</i> eine Reihe Knöpfe: <i>Duplizieren</i> (<kbd>Strg</kbd>+<kbd>D</kbd>) stickt das Objekt noch einmal, 2 mm daneben und gleich danach; die beiden Spiegel-Knöpfe tauschen links und rechts oder oben und unten um die Mitte der Auswahl; <i>Löschen</i> (<kbd>Entf</kbd>) entfernt die gewählten Objekte. Ein Klick auf das Farbquadrat neben dem Namen des Objekts wählt sein Garn: Das Garn eines Nachbarn stickt es in dessen Farbe mit, ein anderes gibt ihm eine eigene Farbe an seiner Stelle.</dd>
+          <dt>Ausschneiden und vereinen</dt>
+          <dd>Sind mehrere Füllungen gewählt, schneidet <i>Obere Form ausschneiden</i> die zuletzt gestickte aus den anderen aus und fällt selbst weg, wie beim Ausstanzen eines Lochs. <i>Zu einem Objekt zusammenfassen</i> macht aus Füllungen mit bekannten Kurven eine Fläche mit einem Umriss, den du auf der Ebene <i>Form</i> weiter bearbeiten kannst.</dd>
+          <dt>Nicht gestickt</dt>
+          <dd><i>Nicht sticken</i> behält die gewählten Objekte, nimmt sie aber aus den Stichen: Sie bleiben als dünner Umriss in ihrer Farbe sichtbar. <i>Als Hilfslinie</i> behält sie als gestrichelte Linie, etwa den Umriss des Kleidungsstücks oder eine Linie zum Ausrichten; Hilfslinien werden nie gestickt. Beide warten im Block <i>Nicht gestickt</i> unter der Liste der Farben und Objekte. Dort holt <i>Sticken</i> eines an seine alte Stelle in der Reihenfolge zurück, mit seinen Stichen und Einstellungen wie vorher; der mittlere Knopf wechselt zwischen aus und Hilfslinie, × löscht es. Hat eine SVG ein schlichtes Rechteck hinter allem, wie es viele Zeichenprogramme exportieren, ist das ein Hintergrund: Er wird nicht gestickt, sondern landet ebenfalls dort. All das lässt sich rückgängig machen und bleibt im Projekt erhalten.</dd>
+          <dt>Formen statt Stiche</dt>
+          <dd>Unter <i>Anzeige</i> zeigt <i>Formen statt Stiche</i> die Füllungen als flache Farbflächen. Das hält die Leinwand ruhig, während du viele Formen anordnest; Satin und Steppstiche zeigen weiter ihre Stiche.</dd>
+        </dl>
         <h2 id="de-lettering">Schrift</h2>
         <p>
           <b>Text</b> über der Leinwand (oder <kbd>t</kbd>) setzt einen Schriftzug unter das Stickmuster oder beginnt damit ein neues. Sein Text
@@ -816,7 +870,7 @@
           <dt>Vorbereitung</dt>
           <dd>Das Bild wird auf wenige Garnfarben reduziert (<i>Höchstens Farben</i>): Ähnliche Farben werden zusammengelegt, kleine auffällige wie Augen bleiben. <i>Vereinfachen</i> glättet Fotos zu Flächen und erhält dabei die Kanten; bei Fotos schaltet es sich von selbst ein. Flächen unter <i>Kleinste Fläche</i> gehen in der Nachbarfläche auf, dünne Säume der Kantenglättung verschwinden, und der Hintergrund am Bildrand wird weggelassen. Mit <i>Brother-Garnfarben</i> wird jede Farbe zum nächstliegenden Garn der Palette.</dd>
           <dt>SVG-Dateien</dt>
-          <dd>Eine SVG wird als Formen gelesen, nicht als Pixel: Jede Farbe der Datei wird ein Garn (ein Verlauf seine mittlere Farbe), Formen behalten ihren genauen Umriss, und was unter anderen Formen verdeckt liegt, wird weggelassen. Eine Größe in mm, cm oder Zoll wird zur Breite. Linien werden je nach Breite Steppstich oder Satin; Linien dünner als 0,4 mm werden als Steppstich gestickt, statt verloren zu gehen. Die Füllreihen laufen gerade, mit Winkeln, die sich bei Nachbarn unterscheiden. <i>Höchstens Farben</i> und <i>Vereinfachen</i> braucht es nicht, sie sind ausgeblendet. Auch eine auf die Dateiliste gezogene SVG öffnet sich hier. SVGs mit eingebetteten Fotos oder Mustern oder mehr als 48 Farben (wie aus automatischem Nachzeichnen) werden wie ein Bild behandelt.</dd>
+          <dd>Eine auf die Dateiliste gezogene SVG öffnet sich im <i>Ablauf</i>, Form für Form in der Reihenfolge gestickt, in der die Datei sie malt: Jede Form bleibt ganz, auch wo eine andere sie abdeckt, und behält ihre Kurven für die Ebene <i>Form</i>. Überdeckungen werden zum Aussparen angeboten, nie ungefragt entfernt. Hier im Modus <i>Bild</i> geöffnet, wird eine SVG ebenfalls als Formen gelesen: Jede Farbe der Datei wird ein Garn (ein Verlauf seine mittlere Farbe), Formen behalten ihren genauen Umriss, und was unter anderen Formen verdeckt liegt, wird weggelassen. Eine Größe in mm, cm oder Zoll wird zur Breite. Linien werden je nach Breite Steppstich oder Satin; Linien dünner als 0,4 mm werden als Steppstich gestickt, statt verloren zu gehen. Die Füllreihen laufen gerade, mit Winkeln, die sich bei Nachbarn unterscheiden. <i>Höchstens Farben</i> und <i>Vereinfachen</i> braucht es nicht, sie sind ausgeblendet. SVGs mit Text, Beschneidungspfaden oder Masken werden wie im Modus Bild aus ihren Farben gestickt. SVGs mit eingebetteten Fotos oder Mustern oder mehr als 48 Farben (wie aus automatischem Nachzeichnen) werden wie ein Bild behandelt.</dd>
           <dt>Farben und Pinsel</dt>
           <dd>In der Farbliste lässt das Häkchen eine Farbe weg, das Farbfeld wählt ein anderes Garn und <i>→</i> legt sie mit einer anderen Farbe zusammen. Ein ≠ warnt, dass kein Garn nah an der Bildfarbe liegt. Eine Farbe anklicken und mit dem <i>Pinsel</i> Flächen von Hand umfärben, oder radieren, wo nichts gestickt werden soll. Jede Änderung lässt sich rückgängig machen; Bild und Änderungen bleiben nach dem Neuladen erhalten.</dd>
           <dt>Stiche</dt>
@@ -862,6 +916,8 @@
             <tr><td>Pfeiltasten</td><td>Gewählte Objekte um 0,1 mm schieben (mit <kbd>Umschalt</kbd> 1 mm), auf der Ebene Form den gewählten Knoten</td></tr>
             <tr><td><kbd>c</kbd>, <kbd>Entf</kbd></td><td>Auf der Ebene Form: Knoten zur Ecke oder rund machen, löschen</td></tr>
             <tr><td><kbd>,</kbd> <kbd>.</kbd>, <kbd>i</kbd>, <kbd>Entf</kbd></td><td>Auf der Ebene Stiche: voriger / nächster Einstich, Stich teilen, löschen</td></tr>
+            <tr><td><kbd>m</kbd> <kbd>o</kbd> <kbd>b</kbd> <kbd>p</kbd></td><td>Rechteck, Ellipse, mit dem Zeichenstift, freihand zeichnen (Ablauf); <kbd>Esc</kbd> legt das Werkzeug weg</td></tr>
+            <tr><td><kbd>Strg</kbd>+<kbd>D</kbd>, <kbd>Entf</kbd></td><td>Gewähltes Objekt duplizieren, gewählte Objekte löschen (Ablauf)</td></tr>
             <tr><td><kbd>c</kbd></td><td>Mit Original vergleichen</td></tr>
             <tr><td><kbd>t</kbd></td><td>Neuer Schriftzug (Ablauf)</td></tr>
             <tr><td><kbd>Enter</kbd>, <kbd>Esc</kbd></td><td>Auf einem Schriftzug: Buchstaben einzeln verschieben, zurück zum Schriftzug</td></tr>

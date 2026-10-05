@@ -291,6 +291,7 @@
               <input type="range" id="opacity" min="0.05" max="1" step="0.05" />
             </label>
           </div>
+          <label class="check" data-mode="flow" data-i18n-title="display.shapes.hint"><input type="checkbox" id="shapes-view" /><span data-i18n="display.shapes"></span></label>
           <label class="check" data-i18n-title="controls.realistic.hint"><input type="checkbox" id="realistic" /><span data-i18n="controls.realistic"></span></label>
           <label class="field indent" data-i18n-title="controls.threadWidth.hint">
             <span class="label"><span data-i18n="controls.threadWidth"></span> <output id="thread-width-out"></output></span>
@@ -344,6 +345,12 @@
             <label data-i18n-title="level.stitches.hint"><input type="radio" name="level" value="stitches" /><span data-i18n="level.stitches"></span></label>
           </div>
           <span class="edit-crumb" id="edit-crumb" hidden></span>
+        </div>
+        <div class="stage-tools draw-tools" data-mode="flow" role="toolbar" data-i18n-aria="draw.label">
+          <button type="button" class="tool" data-draw="rect" aria-pressed="false" data-i18n-title="draw.rect.hint" data-i18n-aria="draw.rect"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3.5" y="5" width="13" height="10" rx="0.5" /></svg></button>
+          <button type="button" class="tool" data-draw="ellipse" aria-pressed="false" data-i18n-title="draw.ellipse.hint" data-i18n-aria="draw.ellipse"><svg viewBox="0 0 20 20" aria-hidden="true"><ellipse cx="10" cy="10" rx="7" ry="5.5" /></svg></button>
+          <button type="button" class="tool" data-draw="pen" aria-pressed="false" data-i18n-title="draw.pen.hint" data-i18n-aria="draw.pen"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 16 C6 6 12 4 17 4" /><rect x="1.8" y="14.8" width="2.4" height="2.4" class="node" /><rect x="15.8" y="2.8" width="2.4" height="2.4" class="node" /></svg></button>
+          <button type="button" class="tool" data-draw="free" aria-pressed="false" data-i18n-title="draw.free.hint" data-i18n-aria="draw.free"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 14 C5 9 7 9 8 12 S11 16 12 11 S15 5 17 6" /></svg></button>
         </div>
         <div class="stage-tools stage-tools-end">
           <button type="button" id="image-shine" class="tool primary" data-mode="image" data-i18n-title="image.shine.hint" hidden><span aria-hidden="true">✦</span> <span data-i18n="image.shine"></span></button>
@@ -429,7 +436,18 @@
             <button type="button" id="order-optimize" aria-expanded="false" aria-controls="order-card" data-i18n-title="order.button.hint"><span aria-hidden="true">⇅</span> <span data-i18n="order.button"></span></button>
           </div>
           <div class="order-card" id="order-card" role="group" data-i18n-aria="order.button" hidden></div>
+          <div class="order-card overlap-card" id="overlap-card" role="status" hidden>
+            <p id="overlap-text"></p>
+            <div class="row">
+              <button type="button" class="primary" id="overlap-cut" data-i18n="knockout.card.cut" data-i18n-title="knockout.card.cut.hint"></button>
+              <button type="button" id="overlap-keep" data-i18n="knockout.card.keep" data-i18n-title="knockout.card.keep.hint"></button>
+            </div>
+          </div>
           <ul class="layer-list" id="layer-list"></ul>
+          <details class="aside-block" id="aside-block" hidden>
+            <summary></summary>
+            <ul class="layer-list aside-list"></ul>
+          </details>
           <p class="layer-note" id="layer-note" role="status" hidden></p>
         </section>
 

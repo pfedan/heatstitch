@@ -1,5 +1,6 @@
 import { SATIN_MAX, satinForArea, type KeptShape } from '../digitize/digitize';
 import { borderStitches, type PathStitch } from './along';
+import { lineRuns } from './line';
 import { chooseAngle, fillRegion, type FillParams } from '../digitize/fill';
 import { contourFill, fieldFill, guideField, stitchField } from '../digitize/flow';
 import { spiralFill } from '../digitize/spiral';
@@ -185,6 +186,14 @@ export interface Remembered {
    * `region` is rastered from it, never the other way round.
    */
   form?: Form;
+  /**
+   * Parts of `form` that fills sewn later cover are left out of the stitches (computed, the form
+   * stays whole). `cut` names the area that was sewn, to see when the shapes on top have changed.
+   */
+  knockout?: boolean;
+  cut?: string;
+  /** A drawn line: sewn along these curves (see line.ts), not traced from its stitches. */
+  path?: Form;
   /** The first this many stitches of the object are its underlay (sewn here). */
   under?: number;
   /** The border in the fill's thread starts after this many stitches of the object. */
@@ -286,6 +295,9 @@ export interface StoredObject {
   shape?: StoredObject['region'];
   /** The fill area as curves (see Remembered.form). */
   form?: StoredPath[];
+  knockout?: boolean;
+  cut?: string;
+  path?: StoredPath[];
   under?: number;
   borderAt?: number;
   asSatin?: { left: number[]; right: number[]; rungs?: number[] }[];
@@ -313,6 +325,9 @@ export function rememberedIn(p: Pattern, objects: SewObject[]): StoredObject[] {
       ...(r.hand ? { hand: r.hand } : {}),
       ...(r.read ? { read: true } : {}),
       ...(r.form ? { form: storeForm(r.form) } : {}),
+      ...(r.knockout ? { knockout: true } : {}),
+      ...(r.cut ? { cut: r.cut } : {}),
+      ...(r.path ? { path: storeForm(r.path) } : {}),
       ...(r.under ? { under: r.under } : {}),
       ...(r.borderAt ? { borderAt: r.borderAt } : {}),
       ...(r.asSatin ? { asSatin: r.asSatin.map((c) => ({ left: c.left.flat(), right: c.right.flat(), ...(c.rungs ? { rungs: c.rungs.flat() } : {}) })) } : {}),
@@ -448,7 +463,7 @@ export function unionRegion(rs: Region[]): Region | null {
  * Remembers the exact areas the Image mode filled (`shapes`, by object, as `starts`: the number
  * of each object's first stitch), so editing them starts from those instead of the stitches.
  */
-export function rememberShapes(p: Pattern, objs: SewObject[], starts: number[], shapes: (KeptShape | undefined)[]): void {
+export function rememberShapes(p: Pattern, objs: SewObject[], starts: number[], shapes: (KeptShape | undefined)[], forms: ({ form?: Form; knockout?: boolean; path?: Form } | undefined)[] = []): void {
   const at = new Map<number, SewObject>();
   let n = 0;
   let k = 0;
@@ -459,9 +474,12 @@ export function rememberShapes(p: Pattern, objs: SewObject[], starts: number[], 
   starts.forEach((s, j) => {
     const shape = shapes[j];
     const o = at.get(s);
+    const line = forms[j]?.path;
+    if (o && line) return remember(p, o, { region: null, path: line });
     if (!shape || !o) return;
     const region = regionFrom(shape);
-    if (region) remember(p, o, { region, fill: { ...shape.fill } });
+    const f = forms[j];
+    if (region) remember(p, o, { region, fill: { ...shape.fill }, ...(f?.form ? { form: f.form, ...(f.knockout ? { knockout: true } : {}) } : {}) });
   });
 }
 
@@ -489,6 +507,10 @@ export function restoreRemembered(list: unknown): number {
     if (shape) r.shape = shape;
     const form = e.form === undefined ? null : formFrom(e.form);
     if (form) r.form = form;
+    if (form && e.knockout === true) r.knockout = true;
+    if (typeof e.cut === 'string') r.cut = e.cut;
+    const path = e.path === undefined ? null : formFrom(e.path);
+    if (path) r.path = path;
     if (finite(e.under) && e.under > 0) r.under = Math.round(e.under);
     if (finite(e.borderAt) && e.borderAt > 0) r.borderAt = Math.round(e.borderAt);
     const asSatin = railsFrom([e.asSatin])?.[0];
@@ -1186,6 +1208,7 @@ export function restitch(
   reverse = false,
   guides?: Map<number, Rails[]>,
   areas?: Map<number, Region>,
+  paths?: Map<number, Form>,
 ): RestitchResult {
   const set = new Set(which);
   const out: Rec[] = [];
@@ -1247,6 +1270,9 @@ export function restitch(
     const together = converting || settings.kind === 'fill';
     const guide = converting && settings.kind === 'satin' ? (guides?.get(o.index) ?? known?.asSatin) : undefined;
     const filled = together && !converting ? newFill(p, o, an, settings.s as FillSettings, reverse) : null;
+    // A drawn line: sewn anew along its curves as a whole.
+    const path = paths?.get(o.index) ?? known?.path;
+    const line = !converting && settings.kind === 'run' && path ? lineRuns(path, settings.s, reverse) : null;
     const whole = !together ? null : converting ? convert(p, o, parts, src, area, settings, guide) : (filled?.runs ?? null);
     const firstPart = parts.findIndex((pt) => pt.kind === src && !pt.border);
     let lastPart = -1;
@@ -1257,6 +1283,7 @@ export function restitch(
       // Running stitch between the old patches was travel; the new stitches travel their own way.
       if (whole && pt.kind === 'run' && k > firstPart && k < lastPart) return 'skip';
       if (pt.kind !== src) return null;
+      if (line) return k === firstPart ? (line.length ? line : null) : 'skip';
       if (together) return !whole ? null : k === firstPart ? whole : 'skip';
       if (settings.kind === 'satin') {
         const sat = newSatin(p, pt, settings.s, kinds, keptRails?.[satinParts.indexOf(pt)], reverse);
@@ -1284,7 +1311,8 @@ export function restitch(
           satin: newSatinS ?? known?.satin,
           columns: settings.kind === 'satin' ? (rails.length === satinParts.length ? rails : undefined) : known?.columns,
           shape: known?.shape,
-          ...(known?.form && !newArea ? { form: known.form } : {}),
+          ...(known?.form && !newArea ? { form: known.form, ...(known.knockout ? { knockout: true, cut: known.cut } : {}) } : {}),
+          ...(path && settings.kind === 'run' ? { path } : {}),
           ...(known?.under && !filled ? { under: known.under } : {}),
           ...(known?.borderAt && !filled ? { borderAt: known.borderAt } : {}),
           // Its shape changed: the satin it was no longer fits.

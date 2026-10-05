@@ -1487,6 +1487,46 @@ details.panel.section[open] > summary {
   border-radius: 8px;
 }
 
+.draw-tools {
+  top: 52px;
+  left: 10px;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.draw-tools button.tool {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+}
+
+.draw-tools svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.draw-tools svg .node {
+  fill: currentColor;
+  stroke: none;
+}
+
+.draw-tools button.tool[aria-pressed='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.stage.drawing canvas#canvas {
+  cursor: crosshair;
+}
+
 /* Bild mode ------------------------------------------------------------------ */
 
 .image-status {
@@ -2296,6 +2336,19 @@ body[data-mode='flow'] .stage .hint {
   margin: 0;
 }
 
+.overlap-card .row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.object-stitches .knockout {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 8px 0;
+}
+
 .order-title {
   font-weight: 600;
 }
@@ -2945,6 +2998,84 @@ body[data-mode='flow'] .stage .hint {
 .stage.shaping canvas#canvas.panning,
 .stage canvas#canvas.on-frame.panning {
   cursor: grabbing;
+}
+
+/* Shape actions of the selected objects: duplicate, cut out, mirror, delete */
+.row-buttons.shape-actions {
+  margin-top: 6px;
+}
+
+.row-buttons.shape-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding-inline: 6px;
+}
+
+.row-buttons.shape-actions svg {
+  width: 17px;
+  height: 17px;
+  flex: none;
+}
+
+/* Shapes not sewn, under the list of colors and objects */
+.aside-block {
+  margin-top: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 6px;
+}
+
+.aside-block summary {
+  cursor: pointer;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.aside-row {
+  flex-wrap: wrap;
+}
+
+.aside-row .layer-text {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+
+.aside-row .aside-actions {
+  display: flex;
+  gap: 6px;
+  flex-basis: 100%;
+  padding-left: 46px;
+}
+
+.aside-row.off .layer-name {
+  opacity: 0.65;
+}
+
+.aside-row button.small {
+  flex: none;
+  padding: 2px 7px;
+  font-size: 11.5px;
+}
+
+.aside-row button.icon {
+  padding: 2px 6px;
+}
+
+/* The thread of the selected object, to pick another */
+button.mini-sw.thread-sw {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  cursor: pointer;
+}
+
+
+.aside-row .layer-meta {
+  margin-left: 0;
 }
 
 /* Border thread: a swatch button with the thread's name */

@@ -38,8 +38,8 @@ const sameBorder = (a: BorderSettings, b: BorderSettings) => {
 /** A new link between a fill and its border object. */
 export const newLink = () => Math.random().toString(36).slice(2, 10);
 
-/** Records of a border: a jump to its start, its loops with locks, a trim at the end. */
-function borderRecords(runs: Pt[][], trimMm: number): Rec[] {
+/** Records of a border (or a drawn line): a jump to its start, its runs with locks, a trim at the end. */
+export function runRecords(runs: Pt[][], trimMm: number): Rec[] {
   const out: Rec[] = [];
   const at = (q: Pt, cmd: number): Rec => ({ x: Math.round(q[0] * 10), y: Math.round(q[1] * 10), cmd });
   let last: Pt | null = null;
@@ -106,7 +106,7 @@ export function syncBorders(p: Pattern, trimMm: number, drop: ReadonlySet<string
     const runs = borderStitches(m.region, b, from);
     if (!runs.length) return;
     const memory: Remembered = { region: m.region, outline: b.link, border: stitchOf(b) };
-    const recs = borderRecords(runs, trimMm);
+    const recs = runRecords(runs, trimMm);
     if (same) {
       changes.push({ a: leadOf(p, target), b: target.last, recs, memory });
       return;

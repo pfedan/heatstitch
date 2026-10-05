@@ -20,10 +20,12 @@ export interface Path {
 
 /**
  * A shape as vectors, in world millimetres (0.1 mm records / 10). An area is one or more closed
- * paths, filled even-odd: a path inside another is a hole.
+ * paths, filled even-odd: a path inside another is a hole. Shapes from SVG files may fill by the
+ * nonzero rule instead (paths running the same way add up rather than cut holes).
  */
 export interface Form {
   paths: Path[];
+  nonzero?: boolean;
 }
 
 /** Affine map x' = a x + c y + e, y' = b x + d y + f. */
@@ -61,11 +63,13 @@ export function turnOf(m: Mat): { deg: number; mirror: boolean } {
 }
 
 export const cloneForm = (f: Form): Form => ({
+  ...(f.nonzero ? { nonzero: true } : {}),
   paths: f.paths.map((p) => ({ closed: p.closed, nodes: p.nodes.map((n) => ({ p: [...n.p] as Pt, a: [...n.a] as Pt, b: [...n.b] as Pt, smooth: n.smooth })) })),
 });
 
 export function transformForm(f: Form, m: Mat): Form {
   return {
+    ...(f.nonzero ? { nonzero: true } : {}),
     paths: f.paths.map((p) => ({ closed: p.closed, nodes: p.nodes.map((n) => ({ p: apply(m, n.p), a: apply(m, n.a), b: apply(m, n.b), smooth: n.smooth })) })),
   };
 }
@@ -271,12 +275,14 @@ export function setSmooth(f: Form, path: number, i: number, smooth: boolean): Fo
 export interface StoredPath {
   c: boolean;
   n: number[];
+  /** On the first path: the form fills by the nonzero rule. */
+  z?: 1;
 }
 
 const round = (v: number) => Math.round(v * 1000) / 1000;
 
 export function storeForm(f: Form): StoredPath[] {
-  return f.paths.map((p) => ({ c: p.closed, n: p.nodes.flatMap((n) => [...n.p, ...n.a, ...n.b, n.smooth ? 1 : 0].map(round)) }));
+  return f.paths.map((p, k) => ({ c: p.closed, n: p.nodes.flatMap((n) => [...n.p, ...n.a, ...n.b, n.smooth ? 1 : 0].map(round)), ...(k === 0 && f.nonzero ? { z: 1 as const } : {}) }));
 }
 
 /** A stored form back, or null when malformed. */
@@ -290,5 +296,5 @@ export function formFrom(list: unknown): Form | null {
     for (let i = 0; i < n.length; i += 7) nodes.push({ p: [n[i], n[i + 1]], a: [n[i + 2], n[i + 3]], b: [n[i + 4], n[i + 5]], smooth: n[i + 6] === 1 });
     paths.push({ closed: e.c, nodes });
   }
-  return { paths };
+  return (list as StoredPath[])[0].z === 1 ? { paths, nonzero: true } : { paths };
 }
