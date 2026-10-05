@@ -61,6 +61,7 @@ import type { FlowScene, ShapeOutline } from './render/scene';
 import type { Mode } from './settings';
 import { JumpsPanel } from './ui/jumpsPanel';
 import { blockName, kindLabel, LayersPanel } from './ui/layersPanel';
+import { ObjectMenu } from './ui/objectMenu';
 import { ObjectPanel, OrderCard } from './ui/objectPanel';
 import { StitchPanel, type Highlight, type StitchInfo } from './ui/stitchPanel';
 import { borderRanges, syncBorders } from './model/border';
@@ -3867,6 +3868,24 @@ canvas.addEventListener('pointerdown', (e) => {
     else mode = editor.down(wx, wy, pos[0], pos[1], e.shiftKey, vp.scale);
   }
   pressMode = mode;
+  cancelLongPress();
+  if (e.pointerType === 'touch' && pointers.size === 1 && settings.mode === 'flow') {
+    const at = pos;
+    const { clientX, clientY } = e;
+    longPress = {
+      at,
+      timer: window.setTimeout(() => {
+        longPress = null;
+        if (objectMenu.isOpen || !pointers.size || !openObjectMenu(at, clientX, clientY)) return;
+        // The finger lifted after this is no click, and nothing it started goes on.
+        pressAt = null;
+        editor.cancel();
+        frameTool.cancel();
+        flowPreview = null;
+        redraw();
+      }, LONG_PRESS_MS),
+    };
+  }
   if (mode === 'pan') canvas.classList.add('panning');
   if (pointers.size === 2) {
     editor.cancel();
@@ -3914,6 +3933,9 @@ canvas.addEventListener('pointermove', (e) => {
     return;
   }
   canvas.classList.toggle('on-divider', !prev && nearDivider(pos[0]));
+  if (longPress && (pointers.size > 1 || Math.hypot(pos[0] - longPress.at[0], pos[1] - longPress.at[1]) > 8)) cancelLongPress();
+  // With the menu open after a long press, the finger moves nothing until it is lifted.
+  if (prev && objectMenu.isOpen && e.pointerType === 'touch') return;
   if (prev) {
     if (pointers.size === 1) {
       if (!drawTool.dragTo(wx, wy, e.shiftKey, e.altKey) && !letterDragTo(wx, wy) && !rungTool.dragTo(wx, wy) && !shapeTool.dragTo(wx, wy) && !frameTool.dragTo(wx, wy, e.shiftKey, vp.scale) && !editor.dragTo(wx, wy, pos[0], pos[1])) vp.pan(pos[0] - prev[0], pos[1] - prev[1]);
@@ -3950,6 +3972,7 @@ function clickedOther(p: Pattern, pos: [number, number]): boolean {
 
 const endPointer = (e: PointerEvent) => {
   const pos = local(e);
+  cancelLongPress();
   if (painting === e.pointerId) {
     painting = null;
     pointers.delete(e.pointerId);
@@ -3960,7 +3983,7 @@ const endPointer = (e: PointerEvent) => {
   // A press on the frame that did not move is a click like any other.
   const frameClick = pressMode === 'frame' && frameTool.dragging !== null && !frameTool.up();
   if (pressMode === 'frame' && !frameClick) pressMode = 'move';
-  if (pressAt && e.type === 'pointerup' && settings.mode === 'flow' && (pressMode === 'pan' || frameClick) && !rungTool.active && Math.hypot(pos[0] - pressAt[0], pos[1] - pressAt[1]) < 4) {
+  if (pressAt && e.type === 'pointerup' && e.button === 0 && settings.mode === 'flow' && (pressMode === 'pan' || frameClick) && !rungTool.active && Math.hypot(pos[0] - pressAt[0], pos[1] - pressAt[1]) < 4) {
     const p = files.active?.pattern;
     if (p && letterMode && !clickedOther(p, pos)) {
       // Moving single letters: a click beside the letters lets go of the chosen one.
@@ -4044,9 +4067,40 @@ canvas.addEventListener('pointerleave', () => {
     redraw();
   }
 });
-// The right button pans while painting.
+// The object actions at the pointer: right click, or a long press on a touch screen.
+const objectMenu = new ObjectMenu();
+const LONG_PRESS_MS = 500;
+let longPress: { timer: number; at: [number, number] } | null = null;
+
+function cancelLongPress(): void {
+  if (longPress) clearTimeout(longPress.timer);
+  longPress = null;
+}
+
+/** Opens the menu for the object under `pos` (on the stage), selecting it first; false when there is none. */
+function openObjectMenu(pos: [number, number], clientX: number, clientY: number): boolean {
+  const p = files.active?.pattern;
+  if (!p || settings.mode !== 'flow' || editor.active || shapeTool.active || rungTool.active || drawTool.active || orderCard.isOpen || letterMode) return false;
+  const st = styleFor(p);
+  const [x, y] = vp.toWorld(pos[0], pos[1]);
+  const i = stitchAt(p, x * 10, y * 10, Math.max(3, 60 / vp.scale), st.limit, st.alpha);
+  const o = i >= 0 ? seq(p).objectAt[i] : -1;
+  if (o < 0) return false;
+  // On a selected object the menu is for the whole selection, on another one for that one.
+  if (!selectedObjects.has(o)) selectObjects([o], false);
+  redraw();
+  if (lettering || !selectedObjects.size) return false;
+  objectMenu.open(clientX, clientY, objectPanel.actions(objectInfo(p, seq(p))), t('object.menu'));
+  return objectMenu.isOpen;
+}
+
 canvas.addEventListener('contextmenu', (e) => {
-  if (settings.mode === 'image') e.preventDefault();
+  // The right button pans while painting.
+  if (settings.mode === 'image') return e.preventDefault();
+  // A long press opened it already (some browsers send this after a long press too).
+  if (objectMenu.isOpen) return e.preventDefault();
+  cancelLongPress();
+  if (openObjectMenu(local(e), e.clientX, e.clientY)) e.preventDefault();
 });
 canvas.addEventListener('dblclick', (e) => {
   const pos = local(e);
