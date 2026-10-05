@@ -56,6 +56,8 @@ export interface FillSettings {
   underlay: boolean;
   /** Rows reach this much further (+) or less far (-) than now at both ends (mm). */
   edge: number;
+  /** `edge` follows the fabric (see pullFor): it changes with the material when tuned to it. */
+  edgeAuto?: boolean;
   /** Largest distance of a curved row's stitches from its line (mm); see TOLERANCE. */
   tolerance: number;
   /** Guided: the lines the rows follow (world mm). */
@@ -108,6 +110,8 @@ export interface SatinSettings {
   edgeB?: number;
   /** Spacing grows on narrow and shrinks on wide parts of the column (see widthFactor). */
   byWidth?: boolean;
+  /** `edge` and `edgeShare` follow the fabric (see pullFor). */
+  edgeAuto?: boolean;
 }
 
 export type SatinType = 'satin' | 'e';

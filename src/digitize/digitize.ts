@@ -52,6 +52,10 @@ export interface DigitizeOptions {
   /** Objects sewn earlier reach this far under neighbours sewn later (mm). */
   overlap: number;
   underlay: boolean;
+  /** Fills with an underlay get two crossing layers (stretchy and pile fabric); one layer when not set. */
+  underCross?: boolean;
+  /** Satin stitches longer than this are split (mm): where the fabric would let them snag. */
+  splitMm?: number;
   /** Jumps longer than this are trimmed (mm). */
   trimMm: number;
   /**
@@ -63,6 +67,41 @@ export interface DigitizeOptions {
 
 /** Pull compensation per fabric (mm per side): Wilcom's table, more for stretchy and pile fabrics. */
 const PULL: Record<string, number> = { woven: 0.2, cap: 0.2, knit: 0.35, terry: 0.4, light: 0.15, leather: 0.15 };
+
+/** Fills smaller than this (mm²) are sewn without underlay; from LARGE_FILL_MM2 crossing layers where the fabric asks for them. */
+export const SMALL_FILL_MM2 = 40;
+const LARGE_FILL_MM2 = 100;
+
+/** The underlay a fill of this size gets: none when small, crossing layers when large on stretchy fabric. */
+export function fillUnder(o: Pick<DigitizeOptions, 'underlay' | 'underCross'>, areaMm2: number): { underlay: boolean; underCross?: boolean } {
+  if (!o.underlay || areaMm2 < SMALL_FILL_MM2) return { underlay: false };
+  return o.underCross && areaMm2 >= LARGE_FILL_MM2 ? { underlay: true, underCross: true } : { underlay: true };
+}
+
+/**
+ * Pull compensation "by fabric" for an object here (see the stitch card): a fill's edges grow with
+ * its size (longer rows pull in more), a satin gets half fixed and half by its width.
+ */
+export function pullFor(profile: Profile, kind: 'fill' | 'satin', areaMm2 = 400): { edge: number; edgeShare?: number } {
+  const pull = PULL[fabricOf(profile).id] ?? 0.2;
+  if (kind === 'satin') return { edge: round2(pull / 2), edgeShare: Math.round((pull / 2 / PULL_WIDTH) * 1000) / 1000 };
+  const k = Math.min(1.5, Math.max(0.75, Math.sqrt(areaMm2) / 20));
+  return { edge: round2(Math.round((pull * k) / 0.05) * 0.05) };
+}
+
+/** Width at which a satin gets the fabric's whole pull compensation; narrower less, wider more. */
+const PULL_WIDTH = 4;
+
+/**
+ * Satin needle points for the options: compensation by the fabric, half of it fixed and half
+ * growing with the width (wide columns pull in more), split where stitches would snag.
+ */
+const satinOf = (o: DigitizeOptions): SatinParams => ({
+  spacing: o.satinSpacing,
+  pull: o.pull / 2,
+  pullShare: o.pull / 2 / PULL_WIDTH,
+  splitMm: Math.min(Math.max(7, o.satinMax), o.splitMm ?? Infinity),
+});
 
 /** Defaults for the material: spacing from the profile, compensation from the fabric. */
 export function digitizeDefaults(profile: Profile): DigitizeOptions {
@@ -79,6 +118,8 @@ export function digitizeDefaults(profile: Profile): DigitizeOptions {
     pull: PULL[fabric.id] ?? 0.2,
     overlap: 0.2,
     underlay: true,
+    underCross: fabric.pull === 'high',
+    splitMm: fabric.longMm,
     trimMm: 3,
     tolerance: TOLERANCE,
   };
@@ -321,7 +362,7 @@ function sewOne(obj: Obj, pos: Pt, o: DigitizeOptions, satin: SatinParams, angle
   if (obj.info.kind === 'fill') {
     // Fill angles of touching regions sewn already, so neighbours differ.
     const near = angles.filter((a) => touches(a.obj.region, obj.region)).map((a) => a.angle);
-    const fp = { spacing: o.spacing, stitch: o.stitch, angle: o.angle, pull: o.pull, underlay: o.underlay, tolerance: o.tolerance };
+    const fp = { spacing: o.spacing, stitch: o.stitch, angle: o.angle, pull: o.pull, ...fillUnder(o, obj.region.areaMm2), tolerance: o.tolerance };
     const flow = o.flow && o.angle === null && orient ? flowFill(obj.region, obj.graph, orient, fp, pos) : null;
     const res = flow ?? fillRegion(obj.region, fp, pos, near);
     if (res) {
@@ -364,7 +405,7 @@ export function digitize(prep: Prepared, o: DigitizeOptions, name = 'image'): Di
     byColor.get(label)!.push(obj);
   }
 
-  const satin: SatinParams = { spacing: o.satinSpacing, pull: o.pull, splitMm: Math.max(7, o.satinMax) };
+  const satin = satinOf(o);
   const blocks: Block[] = [];
   const objects: DigitizedObject[] = [];
   let pos: Pt = [0, 0];
@@ -432,7 +473,7 @@ function keep(obj: Obj, o: DigitizeOptions, imgW: number, imgH: number): KeptSha
       offset: 0.25,
       angle: Math.round(((((obj.info.angle ?? 0) % 180) + 180) % 180)) % 180,
       stitch: o.stitch,
-      underlay: o.underlay,
+      ...fillUnder(o, obj.region.areaMm2),
       edge: 0,
       tolerance: o.tolerance,
     },
@@ -702,7 +743,7 @@ export function digitizeShapes(shapes: ShapeInput[], threads: ThreadColor[], o: 
     items.push({ sh, form, whole });
   }
   for (let k = items.length - 1; k >= 0; k--) if (items[k].whole.areaMm2 < SPECK_MM2) items.splice(k, 1);
-  const satin: SatinParams = { spacing: o.satinSpacing, pull: o.pull, splitMm: Math.max(7, o.satinMax) };
+  const satin = satinOf(o);
   // Blocks of one thread, each a list of item indices.
   const blocks: { color: number; items: number[] }[] = [];
   const overlaps = (a: number, b: number) => sharedArea(items[a].whole, items[b].whole) > 0;

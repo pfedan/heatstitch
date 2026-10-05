@@ -96,3 +96,40 @@ describe('proposals from settings', () => {
     }
   });
 });
+
+describe('tuning to the fabric', () => {
+  it('brings spacing into the recommended range and leaves locked objects alone', async () => {
+    const { planFabric } = await import('../src/correct/plan');
+    const p = load('demos/overlap.pes');
+    const loose: Profile = { fabric: 'terry', thread: '40' };
+    const list = planFabric(p, loose);
+    expect(list.length).toBeGreaterThan(0);
+    for (const x of list) {
+      const sp = x.changes.find((c) => c.field === 'spacing');
+      if (sp) expect(Number(sp.to)).toBeGreaterThanOrEqual(0.55 - 1e-9);
+    }
+    const objs = sewObjects(p);
+    for (const o of objs) remember(p, o, { region: null, lock: true });
+    try {
+      expect(planFabric(p, loose)).toEqual([]);
+    } finally {
+      for (const o of objs) forget(p, o);
+    }
+  });
+});
+
+describe('rules as defaults for what is made here', () => {
+  it('gives small fills no underlay and large fills on stretchy fabric crossing layers', async () => {
+    const { digitizeDefaults, fillUnder, pullFor } = await import('../src/digitize/digitize');
+    const woven = digitizeDefaults({ fabric: 'woven', thread: '40' });
+    const knit = digitizeDefaults(KNIT);
+    expect(fillUnder(woven, 20)).toEqual({ underlay: false });
+    expect(fillUnder(woven, 500)).toEqual({ underlay: true });
+    expect(fillUnder(knit, 500)).toEqual({ underlay: true, underCross: true });
+    expect(knit.splitMm).toBe(7);
+    // Longer rows pull in more; satins half fixed, half by width.
+    expect(pullFor(KNIT, 'fill', 900).edge).toBeGreaterThan(pullFor(KNIT, 'fill', 100).edge);
+    const s = pullFor(KNIT, 'satin');
+    expect(s.edge + 4 * s.edgeShare!).toBeCloseTo(0.35, 1);
+  });
+});

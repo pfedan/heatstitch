@@ -71,6 +71,8 @@ export interface StitchInfo {
   lock: boolean | 'mixed';
   /** What the correction changed on the one selected object. */
   fixed?: Fixed[];
+  /** Pull compensation by the fabric for the first selected fill and satin (see pullFor). */
+  fabricPull?: { fill?: number; satin?: { edge: number; edgeShare?: number } };
 }
 
 export interface StitchHooks {
@@ -338,7 +340,15 @@ export class StitchPanel {
       // Straight rows cannot stray from their line; curved ones get shorter stitches in tight bends.
       if (s.pattern === 'contour' || s.pattern === 'spiral' || s.pattern === 'follow') out.push(this.toleranceSlider(s));
       out.push(
-        this.slider({ label: 'stitch.edge', hint: 'stitch.edge.hint', min: -0.4, max: 0.6, step: 0.05, get: () => s.edge, set: (v) => (s.edge = v), fmt: signed }),
+        this.slider({ label: 'stitch.edge', hint: 'stitch.edge.hint', min: -0.4, max: 0.6, step: 0.05, get: () => s.edge, set: (v) => ((s.edge = v), delete s.edgeAuto), fmt: signed }),
+        this.check('stitch.edgeAuto', 'stitch.edgeAuto.hint', () => !!s.edgeAuto, (v) => {
+          const e = this.info!.fabricPull?.fill;
+          if (v && e !== undefined) {
+            s.edgeAuto = true;
+            s.edge = e;
+          } else delete s.edgeAuto;
+          this.render();
+        }),
         this.slider({ label: 'stitch.expand', hint: 'stitch.expand.hint', min: -3, max: 3, step: 0.05, get: () => s.expand ?? 0, set: (v) => (s.expand = v), fmt: signed }),
         this.under(
           this.choice<FillUnder>(
@@ -381,10 +391,23 @@ export class StitchPanel {
       ];
       if (this.sides) {
         out.push(
-          width('stitch.widthLeft', () => s.edge, (v) => (s.edge = v)),
-          width('stitch.widthRight', () => s.edgeB ?? s.edge, (v) => (s.edgeB = v)),
+          width('stitch.widthLeft', () => s.edge, (v) => ((s.edge = v), delete s.edgeAuto)),
+          width('stitch.widthRight', () => s.edgeB ?? s.edge, (v) => ((s.edgeB = v), delete s.edgeAuto)),
         );
-      } else out.push(width('stitch.width', () => s.edge, (v) => ((s.edge = v), delete s.edgeB)));
+      } else out.push(width('stitch.width', () => s.edge, (v) => ((s.edge = v), delete s.edgeB, delete s.edgeAuto)));
+      out.push(
+        this.check('stitch.edgeAuto', 'stitch.edgeAuto.satin.hint', () => !!s.edgeAuto, (v) => {
+          const e = this.info!.fabricPull?.satin;
+          if (v && e) {
+            s.edgeAuto = true;
+            s.edge = e.edge;
+            s.edgeShare = e.edgeShare;
+            delete s.edgeB;
+            this.sides = false;
+          } else delete s.edgeAuto;
+          this.render();
+        }),
+      );
       out.push(
         this.check('stitch.sides', 'stitch.sides.hint', () => this.sides, (v) => {
           this.sides = v;
@@ -399,7 +422,7 @@ export class StitchPanel {
           max: 0.2,
           step: 0.01,
           get: () => s.edgeShare ?? 0,
-          set: (v) => (s.edgeShare = v),
+          set: (v) => ((s.edgeShare = v), delete s.edgeAuto),
           fmt: (v) => `+${formatNumber(v * 100, 0)} %`,
         }),
       );

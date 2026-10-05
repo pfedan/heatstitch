@@ -20,6 +20,7 @@ import {
   type Settings,
 } from '../model/restitch';
 import { stitchKinds } from '../model/sequence';
+import { digitizeDefaults, fillUnder, pullFor } from '../digitize/digitize';
 import { withRecords } from '../model/edit';
 import { settledBy, type Acknowledgement } from '../validation/acks';
 import { measurePattern } from '../validation/measure';
@@ -236,6 +237,13 @@ interface Candidate {
 }
 
 const fix = (field: string, from: Fixed['from'] | undefined, to: Fixed['to']): Fixed => ({ field, from: from ?? '', to });
+
+/** Longest stitch of an object (mm). */
+function longest(p: Pattern, o: SewObject): number {
+  let m = 0;
+  for (let i = o.first + 1; i <= o.last; i++) if (p.cmd[i] === STITCH && p.cmd[i - 1] === STITCH) m = Math.max(m, Math.hypot(p.x[i] - p.x[i - 1], p.y[i] - p.y[i - 1]) / 10);
+  return m;
+}
 
 /** Median length (mm) of an object's stitches over 1 mm: about the width of a satin. */
 function satinWidth(p: Pattern, o: SewObject): number {
@@ -468,6 +476,59 @@ async function plan(p: Pattern, v: ValidationResult, profile: Profile, checks: C
   }
   await opt.progress?.(order.length, order.length);
   return { proposals, fine, locked, pattern: cur };
+}
+
+/**
+ * "Auf Stoff abstimmen": the settings that suit the material better, by the rules alone (no
+ * finding needed): spacing into the recommended range, underlay by size and fabric, satins split
+ * where they would snag, pull compensation for objects that follow the fabric. Locked objects and
+ * objects whose shape is not certain are left out.
+ */
+export function planFabric(p: Pattern, profile: Profile): Proposal[] {
+  const kinds = stitchKinds(p);
+  const objs = sewObjects(p, kinds);
+  const [recMin, recMax] = recommendedSpacing(profile);
+  const longMm = fabricOf(profile).longMm;
+  const under = digitizeDefaults(profile);
+  const out: Proposal[] = [];
+  let id = 0;
+  const into = (v: number) => round2(Math.min(recMax, Math.max(recMin, v)));
+  for (const o of objs) {
+    const known = remembered(p, o);
+    if (known?.lock || known?.outline || known?.lettering || known?.read) continue;
+    const s = currentSettings(p, o, kinds);
+    if (!s || s.kind === 'run') continue;
+    const changes: Fixed[] = [];
+    let vis: Visibility = 'invisible';
+    const slight = () => (vis = 'slight');
+    if (s.kind === 'fill') {
+      const f = s.s;
+      const an = analyze(p, o, kinds, known);
+      if (shapeTrust(p, o, an, f.spacing) === 'approximate') continue;
+      const area = an.fill?.areaMm2 ?? 0;
+      if (f.pattern !== 'gradient' && Math.abs(into(f.spacing) - f.spacing) > 0.005) changes.push(fix('spacing', f.spacing, into(f.spacing))), slight();
+      const u = fillUnder(under, area);
+      if (u.underlay !== f.underlay) changes.push(fix('underlay', f.underlay, u.underlay));
+      else if (u.underlay && !!u.underCross !== !!f.underCross) changes.push(fix('underCross', !!f.underCross, !!u.underCross));
+      if (f.edgeAuto) {
+        const e = pullFor(profile, 'fill', area).edge;
+        if (Math.abs(e - f.edge) > 0.005) changes.push(fix('edge', f.edge, e)), slight();
+      }
+    } else {
+      const t = s.s;
+      if (Math.abs(into(t.spacing) - t.spacing) > 0.005) changes.push(fix('spacing', t.spacing, into(t.spacing))), slight();
+      if ((t.split ?? SATIN_SPLIT) > longMm && longest(p, o) > longMm) changes.push(fix('split', t.split ?? SATIN_SPLIT, longMm)), slight();
+      if (t.edgeAuto) {
+        const e = pullFor(profile, 'satin');
+        if (Math.abs(e.edge - t.edge) > 0.005) changes.push(fix('edge', t.edge, e.edge)), slight();
+        if (Math.abs((e.edgeShare ?? 0) - (t.edgeShare ?? 0)) > 0.005) changes.push(fix('edgeShare', t.edgeShare ?? 0, e.edgeShare ?? 0)), slight();
+      }
+    }
+    if (!changes.length) continue;
+    const hand = known?.hand ?? 0;
+    out.push({ id: id++, index: o.index, key: objectKey(p, o), kind: o.kind, changes, visibility: vis, reasons: [], hand, checked: !hand, box: boxOf(o) });
+  }
+  return out;
 }
 
 /**

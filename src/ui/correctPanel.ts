@@ -68,6 +68,8 @@ export interface PlanRow {
 }
 
 export interface PlanView {
+  /** A heading of its own (tuning to the fabric), instead of the count of proposals. */
+  title?: string;
   rows: PlanRow[];
   /** Places left for the fine correction on the stitches (shape not certain, or nothing else helped). */
   fine: number;
@@ -302,12 +304,12 @@ export class CorrectPanel {
     const p = (text: string, cls = '') => Object.assign(document.createElement('p'), { textContent: text, className: cls });
     const out: HTMLElement[] = [];
     if (!v.rows.length && !v.fine) {
-      out.push(p(t(v.before.critical + v.before.caution ? 'plan.none' : 'correct.nothing')));
+      out.push(p(v.title ?? t(v.before.critical + v.before.caution ? 'plan.none' : 'correct.nothing')));
       if (v.locked) out.push(p(t('plan.locked', { n: v.locked }), 'muted small'));
       return out;
     }
     const objects = v.rows.reduce((a, r) => a + r.ids.length, 0);
-    out.push(p(t(objects === 1 ? 'plan.head.one' : 'plan.head', { n: formatNumber(objects) }), 'strong'));
+    out.push(p(v.title ?? t(objects === 1 ? 'plan.head.one' : 'plan.head', { n: formatNumber(objects) }), 'strong'));
     if (v.after) {
       out.push(
         p(

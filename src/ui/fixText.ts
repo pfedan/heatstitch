@@ -19,7 +19,7 @@ export function fixText(c: Fixed): string {
     case 'underlay':
       return t(c.to ? 'plan.change.underlayOn' : 'plan.change.underlayOff');
     case 'underCross':
-      return t('plan.change.underSingle');
+      return t(c.to ? 'plan.change.underCross' : 'plan.change.underSingle');
     case 'under':
       return t('plan.change.under', { a: t(UNDER[String(c.from)] ?? 'stitch.under.auto'), b: t(UNDER[String(c.to)] ?? 'stitch.under.auto') });
     case 'edge':
@@ -36,6 +36,8 @@ export function fixText(c: Fixed): string {
       return t('plan.change.angle', { a: c.from === '' ? '…' : formatNumber(Number(c.from)), b: formatNumber(Number(c.to)) });
     case 'underCover':
       return t('plan.change.underCover');
+    case 'edgeShare':
+      return t('plan.change.edgeShare', { a: formatNumber(Number(c.from || 0) * 100), b: formatNumber(Number(c.to) * 100) });
     case 'byWidth':
       return t('plan.change.byWidth');
     case 'knockout':

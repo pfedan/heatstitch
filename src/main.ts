@@ -12,7 +12,7 @@ import { bindControls, type ChangeKind } from './ui/controls';
 import { cssColor } from './ui/threadPicker';
 import { SATIN_SHARE } from './model/covers';
 import { CorrectPanel, type Cells, type CorrectMessage, type PlanRow, type PlanView } from './ui/correctPanel';
-import { applyProposals, fineZones, planCorrection, wanted, type Box, type Plan } from './correct/plan';
+import { applyProposals, fineZones, planCorrection, planFabric, wanted, type Box, type Plan } from './correct/plan';
 import type { CorrectionReport } from './correct/auto';
 import { Editor } from './ui/editor';
 import { keepObjects, type HandChange } from './model/handEdit';
@@ -90,7 +90,7 @@ import { followText, layout, LETTERING_DEFAULTS, type Lettering } from './letter
 import { letteringObjects, letteringOf, placeLettering, withoutObjects } from './lettering/place';
 import { sewLettering } from './lettering/sew';
 import { LetteringPanel } from './ui/letteringPanel';
-import { digitizeDefaults, digitizeShapes, isStroke, SATIN_MAX, type Digitized } from './digitize/digitize';
+import { digitizeDefaults, digitizeShapes, isStroke, pullFor, SATIN_MAX, type Digitized } from './digitize/digitize';
 import { recommendedSpacing } from './validation/profiles';
 import { numberInColor, overlaps, rememberObjects, sewObjects, splitObject, type SewObject } from './model/objects';
 import { conflicts, moveStats, optimizePlan, reorder, violations, weigh } from './model/order';
@@ -849,7 +849,13 @@ function stitchInfo(p: Pattern, q: Sequence): StitchInfo {
   const locks = new Set([...selectedObjects].map((o) => !!(q.objects[o] && remembered(p, q.objects[o])?.lock)));
   const lock = locks.size > 1 ? 'mixed' : locks.has(true);
   const fixed = selectedObjects.size === 1 && q.objects[[...selectedObjects][0]] ? remembered(p, q.objects[[...selectedObjects][0]])?.fixed : undefined;
-  const info: StitchInfo = { key: selectionKey, lock, fixed, hand, measured, counts, recommended: recommendedSpacing(settings.profile), shape: worst, outlines: shapes, toSatin: stroke, knockout, color: q.objects[firstFill]?.color };
+  const firstOf = (k: string) => [...selectedObjects].sort((a, b) => a - b).map((o) => q.objects[o]).find((obj) => obj?.kind === k);
+  const fillObj = firstOf('fill');
+  const fabricPull = {
+    fill: fillObj ? pullFor(settings.profile, 'fill', analyze(p, fillObj, q.kinds).fill?.areaMm2).edge : undefined,
+    satin: pullFor(settings.profile, 'satin'),
+  };
+  const info: StitchInfo = { key: selectionKey, lock, fixed, fabricPull, hand, measured, counts, recommended: recommendedSpacing(settings.profile), shape: worst, outlines: shapes, toSatin: stroke, knockout, color: q.objects[firstFill]?.color };
   const runs = [...selectedObjects].map((o) => q.objects[o]).filter((obj) => obj?.kind === 'run');
   if (runs.length && runs.every((obj) => remembered(p, obj)?.path)) info.line = true;
   const link = selectedObjects.size === 1 && q.objects[firstFill] ? remembered(p, q.objects[firstFill])?.outline : undefined;
@@ -2711,6 +2717,75 @@ function planMessage(): void {
   correctMessage = { kind: 'plan', plan: st.view };
 }
 
+/** The proposals as the card's rows: the same change on several objects of a kind is one row ("Steppstich 3, 4, 7"). */
+function planRows(p: Pattern, proposals: Plan['proposals']): PlanRow[] {
+  const objs = seq(p).objects;
+  const rows: PlanRow[] = [];
+  const nameOf = (i: number) => `${numberInColor(objs.filter((y) => y.block === objs[i].block), objs[i])}`;
+  for (const x of proposals) {
+    const sig = JSON.stringify([x.kind, x.visibility, x.hand > 0, x.knockout, x.reasons, objs[x.index].color, x.changes.map((c) => [c.field, c.to])]);
+    const same = rows.find((r) => (r as PlanRow & { sig?: string }).sig === sig);
+    if (same) {
+      same.ids.push(x.id);
+      same.name += `, ${nameOf(x.index)}`;
+      same.hand += x.hand;
+      // Different values before: only the new one is said.
+      same.changes = same.changes.map((c, k) => (c.from === x.changes[k]?.from ? c : { ...c, from: '' }));
+      continue;
+    }
+    rows.push(
+      Object.assign(
+        {
+          ids: [x.id],
+          name: `${kindLabel(x.kind)} ${nameOf(x.index)}`,
+          color: cssColor(objs[x.index].color),
+          kind: x.kind,
+          visibility: x.visibility,
+          changes: x.changes.map((c) => ({ ...c })),
+          knockout: x.knockout,
+          reasons: x.reasons,
+          hand: x.hand,
+          checked: x.checked,
+        },
+        { sig },
+      ),
+    );
+  }
+  return rows;
+}
+
+/**
+ * "Auf Stoff abstimmen": the settings that suit the material better, as proposals in the
+ * correction card (nothing changes before they are taken over). `quiet`: say nothing when none.
+ */
+function tuneToFabric(quiet = false): void {
+  const f = files.active;
+  const p = f?.pattern;
+  if (!f || !p || correctMessage?.kind === 'busy' || correctMessage?.kind === 'progress') return;
+  const proposals = planFabric(p, settings.profile);
+  const name = t(`fabric.${settings.profile.fabric}` as Key);
+  if (!proposals.length) {
+    if (quiet) return;
+    planState = null;
+    correctMessage = { kind: 'text', text: t('tune.none', { fabric: name }) };
+    return redraw();
+  }
+  const plan: Plan = { proposals, fine: [], locked: 0, pattern: p };
+  const v = f.validation;
+  const view: PlanView = {
+    title: t(proposals.length === 1 ? 'tune.head.one' : 'tune.head', { n: formatNumber(proposals.length), fabric: name }),
+    rows: planRows(p, proposals),
+    fine: 0,
+    fineChecked: false,
+    locked: 0,
+    before: v ? cellsOf(v) : { critical: 0, caution: 0 },
+    after: null,
+  };
+  planState = { file: f, pattern: p, plan, checked: new Set(proposals.filter((x) => x.checked).map((x) => x.id)), fine: [], fineOn: false, view };
+  planMessage();
+  redraw();
+}
+
 /** Works out proposals for the whole design or the selected zone; nothing changes yet. */
 async function planFix(scope: 'all' | 'zone'): Promise<void> {
   const f = files.active;
@@ -2742,39 +2817,7 @@ async function planFix(scope: 'all' | 'zone'): Promise<void> {
     const after = plan.proposals.length ? await measured(plan.pattern) : v;
     if (stale()) return;
     const fine = fineZones(p, after, plan.proposals, opt);
-    const objs = seq(p).objects;
-    // The same change on several objects of a kind is one row ("Steppstich 3, 4, 7").
-    const rows: PlanRow[] = [];
-    const nameOf = (i: number) => `${numberInColor(objs.filter((y) => y.block === objs[i].block), objs[i])}`;
-    for (const x of plan.proposals) {
-      const sig = JSON.stringify([x.kind, x.visibility, x.hand > 0, x.knockout, x.reasons, objs[x.index].color, x.changes.map((c) => [c.field, c.to])]);
-      const same = rows.find((r) => (r as PlanRow & { sig?: string }).sig === sig);
-      if (same) {
-        same.ids.push(x.id);
-        same.name += `, ${nameOf(x.index)}`;
-        same.hand += x.hand;
-        // Different values before: only the new one is said.
-        same.changes = same.changes.map((c, k) => (c.from === x.changes[k]?.from ? c : { ...c, from: '' }));
-        continue;
-      }
-      rows.push(
-        Object.assign(
-          {
-            ids: [x.id],
-            name: `${kindLabel(x.kind)} ${nameOf(x.index)}`,
-            color: cssColor(objs[x.index].color),
-            kind: x.kind,
-            visibility: x.visibility,
-            changes: x.changes.map((c) => ({ ...c })),
-            knockout: x.knockout,
-            reasons: x.reasons,
-            hand: x.hand,
-            checked: x.checked,
-          },
-          { sig },
-        ),
-      );
-    }
+    const rows = planRows(p, plan.proposals);
     const view: PlanView = { rows, fine: fine.length, fineChecked: true, locked: plan.locked, before: cellsOf(v), after: plan.proposals.length ? cellsOf(after) : null };
     planState = { file: f, pattern: p, plan, checked: new Set(plan.proposals.filter((x) => x.checked).map((x) => x.id)), fine, fineOn: true, view };
     planMessage();
@@ -2912,6 +2955,8 @@ const profile = bindProfile(settings, () => {
   saveSettings(settings);
   // Classification is cheap: every file is re-checked instantly against the new limits.
   files.setProfile(settings.profile, settings.checks);
+  // Another fabric: what suits it better is offered, never changed silently.
+  tuneToFabric(true);
   imageMode.profileChanged();
   controls.refresh();
   hoverZone = selectedZone = null;
@@ -3715,3 +3760,5 @@ files.render();
 redraw();
 void files.restore();
 void imageMode.restore();
+
+$('fabric-tune').addEventListener('click', () => tuneToFabric());
