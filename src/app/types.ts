@@ -27,6 +27,8 @@ export interface Sequence {
   letterings?: (Lettering | undefined)[];
   /** Their names in the list, per language. */
   letteringNames?: { lang: string; names: ReadonlyMap<number, string> | undefined };
+  /** Objects whose shape and stitch type are only guessed from their stitches (built when first needed). */
+  guessed?: ReadonlySet<number>;
 }
 
 /** A proposal taken over only for a look: its stitches and their heatmap (once worked out). */
