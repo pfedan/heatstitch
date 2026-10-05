@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { sewObjects } from '../src/model/objects';
 import { analyze, measureFill, remember, remembered, rememberedIn, restitch, restoreRemembered, shapeTrust } from '../src/model/restitch';
+import { STITCH, type Pattern } from '../src/model/pattern';
 import { recolor } from '../src/model/recolor';
 import { stitchKinds } from '../src/model/sequence';
 import { parsePattern } from '../src/parsers';
@@ -174,6 +175,33 @@ describe('project files', () => {
     expect(restoreRemembered([{ key: 'b', region: null, fill: { pattern: 'zigzag' } }])).toBe(0);
     expect(restoreRemembered('nope')).toBe(0);
   });
+});
+
+describe('spiral after underlay', () => {
+  /** Longest stitch (mm) from record a to b, jumps and trims breaking the thread. */
+  const longest = (p: Pattern, a: number, b: number) => {
+    let m = 0;
+    for (let i = a + 1; i <= b; i++) if (p.cmd[i] === STITCH && p.cmd[i - 1] === STITCH) m = Math.max(m, Math.hypot(p.x[i] - p.x[i - 1], p.y[i] - p.y[i - 1]) / 10);
+    return m;
+  };
+
+  it('travels from the end of the underlay to the start of the spiral instead of one wild stitch', async () => {
+    // A user's project: a spiral with underlay that once sewed a 79.6 mm stitch straight across.
+    const file = (await decodeProject(new Uint8Array(readFileSync(new URL('./fixtures/spiral-underlay.heatstitch', import.meta.url))))).files[0];
+    restoreRemembered(file.objects);
+    const p = fromStored(parsePattern(file.data, file.name), file.working)!;
+    const kinds = stitchKinds(p);
+    const objs = sewObjects(p, kinds);
+    const o = objs.find((x) => remembered(p, x)?.fill?.pattern === 'spiral')!;
+    const fill = remembered(p, o)!.fill!;
+    expect(longest(p, o.first, o.last)).toBeGreaterThan(70);
+
+    const r = restitch(p, objs, [o.index], { kind: 'fill', s: fill }, kinds, 3);
+    const q = r.pattern;
+    const now = sewObjects(q).find((x) => x.first === firstRecord(q, r.starts[0] + 1))!;
+    // Rows of 4 mm, travel of 2.5 mm: at most a little over the stitch length anywhere.
+    expect(longest(q, now.first, now.last)).toBeLessThan(fill.stitch * 1.35);
+  }, 30_000);
 });
 
 /** Record of the n-th stitch (1-based). */

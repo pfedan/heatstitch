@@ -1,6 +1,6 @@
-import { pointCount, sewUnderlay, TravelGrid, type FillParams, type FillResult } from './fill';
+import { pathLength, pointCount, sewUnderlay, TRAVEL_STITCH, TRAVEL_TOLERANCE, TravelGrid, type FillParams, type FillResult } from './fill';
 import { sample, type Region } from './region';
-import { MIN_CURVE_STITCH, TOLERANCE } from './run';
+import { MIN_CURVE_STITCH, runStitch, TOLERANCE } from './run';
 import type { Pt } from './skeleton';
 
 /**
@@ -43,8 +43,13 @@ export function spiralFill(r: Region, p: FillParams, start: Pt): FillResult | nu
     const f = i - Math.floor(i);
     return radius[i0] * (1 - f) + radius[(i0 + 1) % ANGLES] * f;
   };
-  // Begin on the edge in the direction of the start point.
-  const a0 = Math.atan2(start[1] - cy, start[0] - cx) / (2 * Math.PI);
+  // The underlay first: the spiral begins on the edge in the direction of where it ends (of the
+  // start point without one), and the needle travels there inside the shape.
+  const runs: Pt[][] = [];
+  const grid = new TravelGrid(p.travel ?? r);
+  const pos = p.underlay ? sewUnderlay(r, -45, p, start, grid, runs) : start;
+  const under = pointCount(runs);
+  const a0 = Math.atan2(pos[1] - cy, pos[0] - cx) / (2 * Math.PI);
   const pts: Pt[] = [];
   const total = turns;
   const point = (s: number): Pt => {
@@ -59,6 +64,7 @@ export function spiralFill(r: Region, p: FillParams, start: Pt): FillResult | nu
   const tol = p.tolerance ?? TOLERANCE;
   const narrowest = tightest(radius) * Math.min(...radius) / mean;
   pts.push(point(0));
+  let prev = 0;
   for (let k = 0; k < total; k++) {
     const rr = mean * (1 - (k + 0.5) / total);
     const len = Math.min(p.stitch, Math.max(MIN_CURVE_STITCH, Math.sqrt(8 * rr * narrowest * tol)));
@@ -66,14 +72,20 @@ export function spiralFill(r: Region, p: FillParams, start: Pt): FillResult | nu
     const phase = (k * 0.618034) % 1;
     for (let j = 0; j < m; j++) {
       const s = k + (j + phase) / m;
-      if (s > 0) pts.push(point(s));
+      if (s <= 0) continue;
+      // Where one turn hands over to the next, the shift leaves a gap of up to 1.6 stitches: halved.
+      if ((s - prev) * m > 1.3) pts.push(point((prev + s) / 2));
+      pts.push(point(s));
+      prev = s;
     }
   }
   pts.push(point(total));
-  const runs: Pt[][] = [];
-  if (p.underlay) sewUnderlay(r, -45, p, start, new TravelGrid(r), runs);
-  const under = pointCount(runs);
-  if (runs.length) runs[runs.length - 1].push(...pts);
+  // Travel from the underlay along the inside; where there is no way, a new run (a jump).
+  const last = runs[runs.length - 1];
+  const bd = Math.hypot(pts[0][0] - pos[0], pts[0][1] - pos[1]);
+  const path = last && bd > 1 ? grid.path(pos, pts[0], false) : null;
+  if (last && bd <= 1) last.push(...pts);
+  else if (last && path && pathLength(path) < 2 * bd + 6) last.push(...runStitch(path, TRAVEL_STITCH, TRAVEL_TOLERANCE).slice(1), ...pts.slice(1));
   else runs.push(pts);
   return { runs, angle: 0, under };
 }
