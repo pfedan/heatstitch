@@ -75,7 +75,8 @@ export function writeJef(p: Pattern, date = new Date(), hoop: Hoop | null = null
     cx += dx;
     cy += dy;
   };
-  let trimmed = false;
+  // Nothing is sewn yet: the way to the first stitch is jumps, not a stitch from the origin.
+  let trimmed = true;
   for (let i = 0; i < p.cmd.length; i++) {
     const c = p.cmd[i];
     if (c === END) break;

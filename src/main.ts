@@ -8,7 +8,7 @@ import { hoopRect } from './render/hoop';
 import { drawScene, type FocusStitches, type Scene } from './render/scene';
 import { validationToCanvas } from './render/validationOverlay';
 import { Viewport } from './render/viewport';
-import { applyMaterial, loadSettings, materialOf, sameMaterial, saveSettings } from './settings';
+import { loadSettings, materialOf, saveSettings } from './settings';
 import { bindControls, type ChangeKind } from './ui/controls';
 import { cssColor } from './ui/threadPicker';
 import { SATIN_SHARE } from './model/covers';
@@ -32,10 +32,10 @@ import { DIVIDER_GRAB_PX, drawBeforeAfter, drawDivider, drawPanels } from './ren
 import type { Pattern, ThreadColor } from './model/pattern';
 import type { Measurement } from './validation/measure';
 import { initUpdateNotice } from './ui/updateNotice';
-import { toStored } from './storage/fileStore';
+import { bindFileIo } from './app/fileIo';
 import { downloadPattern, writePattern } from './writers';
 import { parsePattern } from './parsers';
-import { digitizeSvg, ImageMode } from './ui/imageMode';
+import { ImageMode } from './ui/imageMode';
 import { lightFromPointer, lightFromTilt, sweep } from './render/light';
 import { classify } from './validation/validate';
 import { setTrims } from './model/jumps';
@@ -103,8 +103,6 @@ import { autoReversible, reverseObjects, reversible } from './model/reverse';
 import { Player } from './ui/player';
 import { installPanelResize } from './ui/panelResize';
 import type { Key } from './i18n';
-import { decodeProject, encodeProject, isProjectName, PROJECT_EXT, PROJECT_MIME, projectSettings, ProjectError, type Project, type ProjectSettings } from './storage/project';
-import { threadWidthMm } from './validation/profiles';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 initUpdateNotice($('update-notice'));
@@ -3445,198 +3443,19 @@ exportBtn.addEventListener('click', () => {
   if (p) exportPng({ ...scene(), edit: null }, stageW, stageH, stageBg(), p.name || 'pattern');
 });
 
-// File input and drag & drop --------------------------------------------------
+// Opening and saving files and projects: src/app/fileIo.ts
 
-const input = $<HTMLInputElement>('file-input');
-input.addEventListener('change', () => {
-  if (input.files) void openFiles(input.files);
-  input.value = '';
-});
-
-const IMAGE_FILE = /\.(png|jpe?g|gif|webp|bmp|svg|avif)$/i;
-
-/** Embroidery files go to the file list, an image to the Bild mode, a project opens everything it holds. */
-const isSvgFile = (f: File) => f.type === 'image/svg+xml' || /\.svg$/i.test(f.name);
-
-async function openFiles(list: Iterable<File>): Promise<void> {
-  const all = [...list];
-  for (const f of all.filter((f) => isProjectName(f.name))) await openProject(f);
-  const image = all.find((f) => f.type.startsWith('image/') || IMAGE_FILE.test(f.name));
-  const rest = all.filter((f) => f !== image && !isProjectName(f.name) && !f.type.startsWith('image/') && !IMAGE_FILE.test(f.name));
-  if (image && isSvgFile(image)) {
-    // An SVG of shapes opens as stitches in Ablauf, every shape whole; the Bild mode only for SVGs
-    // that are pictures (embedded photos, many colors).
-    try {
-      const d = await digitizeSvg(image, settings.image.prepare, digitizeDefaults(settings.profile));
-      await addDigitized(d, image.name.replace(/\.svg$/i, ''));
-      setMode('flow');
-    } catch {
-      setMode('image');
-      void imageMode.load(image);
-    }
-  } else if (image) {
-    setMode('image');
-    void imageMode.load(image);
-  }
-  return rest.length ? files.add(rest) : Promise.resolve();
-}
-
-// Project files ---------------------------------------------------------------
-
-/** Name of the project file: after the active design, else the image. */
-/** A project holds every open file, so it is named by the day, not by one of them: "2026-10-05-heatstitch-projekt". */
-function projectName(): string {
-  const d = new Date();
-  const day = [d.getFullYear(), d.getMonth() + 1, d.getDate()].map((v) => String(v).padStart(2, '0')).join('-');
-  return `${day}-${t('save.project.file')}${PROJECT_EXT}`;
-}
-
-/** Everything open in the app as a project: the files with their edits, the image and the design settings. */
-function currentProject(): Project {
-  const list = files.files.filter((f) => f.pattern && f.data);
-  const active = list.findIndex((f) => f === files.active);
-  const snap = imageMode.snapshot();
-  return {
-    files: list.map((f) => ({
-      name: f.fileName,
-      data: f.data!,
-      ...(FileList.edited(f) ? { working: toStored(f.pattern!) } : {}),
-      acks: f.acks,
-      objects: rememberedIn(f.pattern!, seq(f.pattern!).objects),
-      ...(asideOf(f.pattern).length ? { aside: storeAside(asideOf(f.pattern)) } : {}),
-      material: f.material,
-    })),
-    active: active >= 0 ? active : null,
-    image: snap && { name: snap.image.name, type: snap.image.type, data: new Uint8Array(snap.image.data), work: snap.work },
-    settings: projectSettings(settings),
-  };
-}
-
-async function saveProject(): Promise<void> {
-  const bytes = await encodeProject(currentProject());
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([bytes as BlobPart], { type: PROJECT_MIME }));
-  a.download = projectName();
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-}
-$('save-project').addEventListener('click', () => void saveProject());
-$('image-save-project').addEventListener('click', () => void saveProject());
-
-/** The settings take the material of the design that becomes active (its fabric, thread, hoop, color, checks). */
-function adoptMaterial(f: LoadedFile): void {
-  if (sameMaterial(f.material, materialOf(settings))) return;
-  applyMaterial(settings, f.material);
-  saveSettings(settings);
-  profile.refresh();
-  controls.refresh();
-  imageMode.profileChanged();
-}
-
-/** A change of the material in the panels goes to the active design only; new designs start with it. */
-function storeMaterial(): void {
-  const f = files.active;
-  if (f && !sameMaterial(f.material, materialOf(settings))) files.setMaterial(f, materialOf(settings));
-}
-
-/** Takes over the material, checks, correction and order options of a project (and its image's, if it has one). */
-function applyProjectSettings(s: ProjectSettings, withImage: boolean): void {
-  if (s.profile.thread !== settings.profile.thread) settings.threadMm = threadWidthMm(s.profile);
-  settings.profile = s.profile;
-  settings.checks = s.checks;
-  // The panels keep these objects, so they change in place.
-  Object.assign(settings.correction, s.correction);
-  Object.assign(settings.order, s.order);
-  settings.trimMm = s.trimMm;
-  settings.machineSpm = s.machineSpm;
-  if (s.background !== undefined) settings.background = s.background;
-  if (withImage) {
-    Object.assign(settings.image.prepare, s.image.prepare);
-    for (const k of Object.keys(settings.image.stitch)) delete settings.image.stitch[k as keyof typeof settings.image.stitch];
-    Object.assign(settings.image.stitch, s.image.stitch);
-  }
-  saveSettings(settings);
-  profile.refresh();
-  controls.refresh();
-  correctPanel.sync();
-  imageMode.profileChanged();
-}
-
-async function openProject(file: File): Promise<void> {
-  let project: Project;
-  try {
-    project = await decodeProject(new Uint8Array(await file.arrayBuffer()));
-  } catch (err) {
-    console.warn('Could not open the project', err);
-    files.addError(file.name, t(err instanceof ProjectError && err.reason === 'newer' ? 'project.error.newer' : 'project.error.invalid'));
-    if (settings.mode === 'image') setMode('flow');
-    return;
-  }
-  applyProjectSettings(project.settings, !!project.image);
-  if (project.image) await imageMode.open({ ...project.image, data: project.image.data.slice().buffer }, project.image.work);
-  if (project.files.length) {
-    await files.addProject(project.files, project.active);
-    if (settings.mode === 'image') setMode('flow');
-  } else if (project.image) setMode('image');
-  redraw();
-}
-
-const exampleSelect = $<HTMLSelectElement>('load-example');
-exampleSelect.addEventListener('change', async () => {
-  const path = exampleSelect.value;
-  exampleSelect.value = '';
-  if (!path) return;
-  const name = path.split('/').pop()!;
-  const svg = name.endsWith('.svg');
-  // An SVG example is sewn first, which takes a moment: the list says so meanwhile.
-  const label = exampleSelect.options[0];
-  if (svg) {
-    exampleSelect.disabled = true;
-    label.textContent = t('files.example.loading');
-  }
-  try {
-    const res = await fetch(`${import.meta.env.BASE_URL}${path}`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const file = new File([await res.blob()], name, svg ? { type: 'image/svg+xml' } : undefined);
-    if (svg) {
-      const d = await digitizeSvg(file, settings.image.prepare, digitizeDefaults(settings.profile));
-      await addDigitized(d, name.replace(/\.svg$/, ''));
-    } else await files.add([file]);
-  } catch (err) {
-    console.error('Loading the example failed', err);
-  } finally {
-    exampleSelect.disabled = false;
-    label.textContent = t('files.example');
-  }
-});
-
-let dragDepth = 0;
-window.addEventListener('dragenter', (e) => {
-  e.preventDefault();
-  if (++dragDepth === 1) document.body.classList.add('dragging');
-});
-window.addEventListener('dragleave', () => {
-  if (--dragDepth <= 0) {
-    dragDepth = 0;
-    document.body.classList.remove('dragging');
-  }
-});
-window.addEventListener('dragover', (e) => e.preventDefault());
-window.addEventListener('drop', (e) => {
-  e.preventDefault();
-  dragDepth = 0;
-  document.body.classList.remove('dragging');
-  if (e.dataTransfer?.files.length) void openFiles(e.dataTransfer.files);
-});
-
-// Installed PWA opened via "Open with" on a .dst/.pes file (manifest file_handlers).
-interface LaunchParams {
-  files: { getFile(): Promise<File> }[];
-}
-const launchQueue = (window as unknown as { launchQueue?: { setConsumer(cb: (p: LaunchParams) => void): void } })
-  .launchQueue;
-launchQueue?.setConsumer(async (params) => {
-  if (params.files.length) void openFiles(await Promise.all(params.files.map((h) => h.getFile())));
+const { adoptMaterial, storeMaterial } = bindFileIo({
+  files,
+  settings,
+  imageMode,
+  profile,
+  controls,
+  correctPanel,
+  redraw,
+  seq,
+  setMode,
+  addDigitized,
 });
 
 /** Keys for the drawing tools (as in common drawing programs, where free of other uses here). */

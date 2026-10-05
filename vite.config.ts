@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
@@ -74,4 +75,7 @@ export default defineConfig({
     },
   },
   worker: { format: 'es' },
+  // Sewing whole designs takes a few seconds; with all test files in parallel on a CI runner the
+  // 5 s default made slow tests fail at random.
+  test: { testTimeout: 30_000 },
 });
