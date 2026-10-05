@@ -16,6 +16,8 @@ import { cssColor, hexColor, ThreadPicker } from './threadPicker';
 type FillUnder = 'off' | 'single' | 'cross';
 const FILL_UNDERS: FillUnder[] = ['off', 'single', 'cross'];
 type BorderChoice = 'off' | BorderType;
+/** What hovering a group of settings shows on the canvas. */
+export type Highlight = 'under' | 'border';
 const BORDERS: BorderChoice[] = ['off', 'run', 'triple', 'satin'];
 const sameColor = (a: ThreadColor, b: ThreadColor) => a.r === b.r && a.g === b.g && a.b === b.b;
 
@@ -79,10 +81,13 @@ export interface StitchHooks {
   guide: (action: 'tool' | 'off') => void;
   /** Leaving out what later fills cover, on or off for the selected fills. */
   knockout: (on: boolean) => void;
+  /**
+   * The pointer or focus on the underlay settings ('under') or on the border settings ('border'),
+   * or away from both (null): what they set is shown on the canvas.
+   */
+  highlight: (what: Highlight | null) => void;
   /** The one selected line sewn with `st`: shown while sliding (`final` false), then applied. */
   line: (st: PathStitch, final: boolean) => void;
-  /** The pointer or focus on the underlay settings (true) or away from them: its stitches are shown. */
-  underlay: (on: boolean) => void;
   /** A border object: select its fill, or make it an object of its own (no longer following the fill). */
   outline: (action: 'fill' | 'detach') => void;
 }
@@ -144,7 +149,7 @@ export class StitchPanel {
   private sides = false;
   private picker = new ThreadPicker('.border-thread');
   /** Whether the underlay is shown now (the pointer or focus on its settings). */
-  private underOn = false;
+  private lit: Highlight | null = null;
 
   constructor(
     private root: HTMLElement,
@@ -287,25 +292,30 @@ export class StitchPanel {
     this.picker.close();
     this.root.replaceChildren(...parts);
     // Its settings went away under the pointer (underlay off): nothing to show any more.
-    if (this.underOn && !this.root.querySelector('.under-field')) this.showUnder(false);
+    if (this.lit && !this.root.querySelector(`.lit-${this.lit}`)) this.light(null);
   }
 
-  private showUnder(on: boolean): void {
-    if (on === this.underOn) return;
-    this.underOn = on;
-    this.hooks.underlay(on);
+  private light(what: Highlight | null): void {
+    if (what === this.lit) return;
+    this.lit = what;
+    this.hooks.highlight(what);
   }
 
   /** Marks settings of the underlay: while the pointer or focus is on them, the underlay is shown on the canvas. */
   private under(el: HTMLElement): HTMLElement {
-    el.classList.add('under-field');
-    el.addEventListener('pointerenter', () => this.showUnder(true));
+    return this.lights(el, 'under');
+  }
+
+  /** While the pointer or focus is on `el`, what it sets (`what`) is shown on the canvas. */
+  private lights(el: HTMLElement, what: Highlight): HTMLElement {
+    el.classList.add(`lit-${what}`);
+    el.addEventListener('pointerenter', () => this.light(what));
     el.addEventListener('pointerleave', () => {
-      if (!el.contains(document.activeElement)) this.showUnder(false);
+      if (!el.contains(document.activeElement)) this.light(null);
     });
-    el.addEventListener('focusin', () => this.showUnder(true));
+    el.addEventListener('focusin', () => this.light(what));
     el.addEventListener('focusout', (e) => {
-      if (!el.contains(e.relatedTarget as Node | null) && !el.matches(':hover')) this.showUnder(false);
+      if (!el.contains(e.relatedTarget as Node | null) && !el.matches(':hover')) this.light(null);
     });
     return el;
   }
@@ -361,7 +371,44 @@ export class StitchPanel {
         ),
       );
       if (s.underlay) {
-        out.push(this.under(this.slider({ label: 'stitch.underInset', hint: 'stitch.underInset.hint', min: 0, max: 1.5, step: 0.05, get: () => s.underInset ?? UNDERLAY_INSET, set: (v) => (s.underInset = v), fmt: mm(2) })));
+        out.push(
+          this.under(
+            this.choice<'mm' | 'share'>(
+              'stitch.underInsetBy',
+              ['mm', 'share'],
+              s.underInsetShare === undefined ? 'mm' : 'share',
+              (v) => `stitch.underInsetBy.${v}` as Key,
+              (v) => (s.underInsetShare = v === 'share' ? 0.1 : undefined),
+              true,
+            ),
+          ),
+          this.under(
+            s.underInsetShare === undefined
+              ? this.slider({ label: 'stitch.underInset', hint: 'stitch.underInset.hint', min: 0, max: 1.5, step: 0.05, get: () => s.underInset ?? UNDERLAY_INSET, set: (v) => (s.underInset = v), fmt: mm(2) })
+              : this.slider({
+                  label: 'stitch.underInsetShare',
+                  hint: 'stitch.underInsetShare.hint',
+                  min: 0,
+                  max: 0.3,
+                  step: 0.01,
+                  get: () => s.underInsetShare ?? 0,
+                  set: (v) => (s.underInsetShare = v),
+                  fmt: (v) => `${formatNumber(v * 100, 0)} %`,
+                }),
+          ),
+          this.under(
+            this.slider({
+              label: 'stitch.underSpacing',
+              hint: 'stitch.underSpacing.hint',
+              min: 0.6,
+              max: 5,
+              step: 0.1,
+              get: () => s.underSpacing ?? Math.max(1.2, 3 * s.spacing),
+              set: (v) => (s.underSpacing = v),
+              fmt: mm(1),
+            }),
+          ),
+        );
       }
       out.push(this.borderGroup(s));
       return out;
@@ -850,7 +897,7 @@ export class StitchPanel {
       ),
     );
     if (s.border) box.append(this.borderThread(s.border));
-    return box;
+    return this.lights(box, 'border');
   }
 
   /**
