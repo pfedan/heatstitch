@@ -57,6 +57,8 @@ export interface StitchInfo {
     cutMode?: boolean;
     /** A rung is selected: the spacing set there (null: the column's). */
     spacingHere?: number | null;
+    /** Chained columns show their order, direction and trims on the canvas. */
+    chain?: boolean;
   };
   /** Rungs drawn across the one selected fill to sew it as satin. */
   draw?: { tool: boolean; lines: number; single: boolean; cuts?: number; cutMode?: boolean };
@@ -866,6 +868,7 @@ export class StitchPanel {
     if (d.tool) wrap.append(this.penSwitch(!!d.cutMode));
     if (d.cuts) wrap.append(Object.assign(document.createElement('span'), { className: 'small', textContent: t(d.cuts === 1 ? 'stitch.sections.count.one' : 'stitch.sections.count', { n: d.cuts + 1 }) }));
     if (d.tool && d.spacingHere !== undefined) wrap.append(this.spacingHereField(d.spacingHere));
+    if (d.tool && d.chain) wrap.append(Object.assign(document.createElement('span'), { className: 'small', textContent: t('stitch.direction.chain') }));
     if (d.tool) wrap.append(Object.assign(document.createElement('span'), { className: 'muted small', textContent: t('stitch.direction.help') }));
     return wrap;
   }

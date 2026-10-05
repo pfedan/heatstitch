@@ -7,7 +7,7 @@ import { forget, keepShape, measureSatin, remember, remembered, rememberedIn, re
 import { stitchKinds } from '../src/model/sequence';
 import { transformRemembered } from '../src/model/transform';
 import { parsePattern } from '../src/parsers';
-import { RungTool } from '../src/ui/rungTool';
+import { BADGE, RungTool } from '../src/ui/rungTool';
 
 const SATIN: SatinSettings = { spacing: 0.4, edge: 0, short: false, underlay: true, tolerance: 0.15 };
 
@@ -133,6 +133,48 @@ describe('a fill cut into columns by Trennlinien', () => {
     tool.deleteSelected();
     expect(tool.cutLines.length).toBe(1);
     expect(tool.bad).toBeNull();
+  });
+});
+
+describe('order, direction and trims of chained columns on the canvas', () => {
+  const open = () => {
+    const changes: Rails[][][] = [];
+    const tool = new RungTool({ change: (c) => changes.push(c), lines: () => {}, guides: () => {}, redraw: () => {}, say: () => {} });
+    const { strips } = stripsOfOutline(M, LINES, CUTS);
+    tool.openSatin([strips.map((s) => ({ ...s, chain: 0 }))]);
+    // Clicks on a column's control, 10 px to the mm.
+    const click = (n: number, what: 'number' | 'arrow' | 'scissors') => {
+      const b = tool.badges.find((x) => x.n === n)!;
+      const along = what === 'arrow' ? BADGE.arrow : BADGE.number;
+      const across = what === 'scissors' ? BADGE.scissors : 0;
+      tool.down(b.at[0] + (b.dir[0] * along - b.dir[1] * across) / 10, b.at[1] + (b.dir[1] * along + b.dir[0] * across) / 10, 10);
+      tool.up();
+    };
+    return { tool, changes, strips, click };
+  };
+
+  it('numbers the columns in the order they are sewn, scissors from the second on', () => {
+    const { tool } = open();
+    expect(tool.badges.map((b) => b.n)).toEqual([1, 2, 3, 4]);
+    expect(tool.badges.map((b) => b.trim)).toEqual([null, false, false, false]);
+  });
+
+  it('sews a column one place earlier, turns it round, sets and takes away a trim', () => {
+    const { tool, changes, strips, click } = open();
+    click(2, 'number');
+    expect(changes.length).toBe(1);
+    expect(changes[0][0][0].left).toEqual(strips[1].left);
+    expect(changes[0][0][1].left).toEqual(strips[0].left);
+    click(1, 'arrow');
+    expect(changes[1][0][0].left).toEqual(strips[1].right.slice().reverse());
+    click(3, 'scissors');
+    expect(changes[2][0].map((c) => c.chain)).toEqual([0, 0, 1, 1]);
+    expect(tool.badges.map((b) => b.trim)).toEqual([null, false, true, false]);
+    // Sewn as two runs now, the trim between them.
+    expect(satinRuns(changes[2][0], SATIN).length).toBe(2);
+    click(3, 'scissors');
+    expect(changes[3][0].map((c) => c.chain)).toEqual([0, 0, 0, 0]);
+    expect(satinRuns(changes[3][0], SATIN).length).toBe(1);
   });
 });
 

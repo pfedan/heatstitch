@@ -2,11 +2,32 @@ import { addRung, chordOf, cornerCuts, cornerRungs, cumulative, pointAt, project
 import { pathLength } from '../digitize/fill';
 import { simplify } from '../digitize/run';
 import type { Pt } from '../digitize/skeleton';
-import { spanSection, sectionLoops, sectionOfRung, type Rails, type SectionLoop } from '../model/restitch';
+import { reversedRails, spanSection, sectionLoops, sectionOfRung, type Rails, type SectionLoop } from '../model/restitch';
 
 /** Pick radius around the pointer for rung ends, CSS pixels; the line itself a little less. */
 const PICK_END_PX = 10;
 const PICK_LINE_PX = 6;
+
+/**
+ * Where a piece's controls sit, CSS pixels from where its satin starts along its direction (`dir`)
+ * and across it: the number before the start, the arrow just inside, the scissors beside the number.
+ */
+export const BADGE = { number: -16, arrow: 9, scissors: 19, r: 8 };
+
+/** A column of a chain (see Rails.chain) as the tool shows it: its place in the order and its controls. */
+export interface PieceBadge {
+  /** The column (index in `columns`). */
+  col: number;
+  /** Place in the order the part's columns are sewn, from 1. */
+  n: number;
+  /** Where its satin starts, and the direction it goes from there (unit). */
+  at: Pt;
+  dir: Pt;
+  /** Trimmed before it (null: the first of the part, nothing before). */
+  trim: boolean | null;
+}
+
+export type BadgeHit = { col: number; what: 'number' | 'arrow' | 'scissors' };
 
 /**
  * A free rung is taken when the section's two new rails differ in length by at most this much (or
@@ -67,6 +88,10 @@ export interface RungView {
   draft: [Pt, Pt] | null;
   /** The line being drawn is a cut line. */
   draftCut: boolean;
+  /** Order, direction and trims of the chained columns. */
+  badges: PieceBadge[];
+  /** The control under the pointer. */
+  badgeHover: BadgeHit | null;
 }
 
 export interface RungHooks {
@@ -108,6 +133,7 @@ export class RungTool implements RungView {
   hover: RungPick | null = null;
   draft: [Pt, Pt] | null = null;
   draftCut = false;
+  badgeHover: BadgeHit | null = null;
   /** Lines drawn across a satin or a fill are cut lines (Shift draws the other kind). */
   cutMode = false;
   private drag: Drag = null;
@@ -214,6 +240,68 @@ export class RungTool implements RungView {
     return this.columns.reduce((a, c) => a + c.rungs.length + c.spans.length, 0);
   }
 
+  /**
+   * The chained columns of each satin part with their place in the order (the satin of a chained
+   * column goes from its end back to its start, see chainRun) and whether a trim comes before.
+   */
+  get badges(): PieceBadge[] {
+    if (this.mode !== 'satin') return [];
+    const out: PieceBadge[] = [];
+    const byPart = new Map<number, number[]>();
+    this.parts.forEach((p, k) => this.columns[k].rails.chain !== undefined && byPart.set(p, [...(byPart.get(p) ?? []), k]));
+    for (const ks of byPart.values()) {
+      if (ks.length < 2) continue;
+      ks.forEach((k, i) => {
+        const c = this.columns[k];
+        const la = c.cl[c.cl.length - 1];
+        const lb = c.cr[c.cr.length - 1];
+        const at = mid(c.left[c.left.length - 1], c.right[c.right.length - 1]);
+        const inward = mid(pointAt(c.left, c.cl, Math.max(0, la - 1)), pointAt(c.right, c.cr, Math.max(0, lb - 1)));
+        const d = sub(inward, at);
+        const l = Math.hypot(d[0], d[1]) || 1;
+        out.push({ col: k, n: i + 1, at, dir: [d[0] / l, d[1] / l], trim: i ? this.columns[ks[i - 1]].rails.chain !== c.rails.chain : null });
+      });
+    }
+    return out;
+  }
+
+  /** The control of a chained column under the pointer, or null. */
+  badgeAt(x: number, y: number, scale: number): BadgeHit | null {
+    const r = (BADGE.r + 2) / scale;
+    for (const b of this.badges) {
+      const [nx, ny] = [-b.dir[1], b.dir[0]];
+      const spot = (along: number, across: number): Pt => [b.at[0] + (b.dir[0] * along + nx * across) / scale, b.at[1] + (b.dir[1] * along + ny * across) / scale];
+      const near = (p: Pt) => Math.hypot(p[0] - x, p[1] - y) <= r;
+      if (near(spot(BADGE.number, 0))) return { col: b.col, what: 'number' };
+      if (near(spot(BADGE.arrow, 0))) return { col: b.col, what: 'arrow' };
+      if (b.trim !== null && near(spot(BADGE.number, BADGE.scissors))) return { col: b.col, what: 'scissors' };
+    }
+    return null;
+  }
+
+  /** A control clicked: the column turned round, sewn one place earlier, or a trim before it set or taken away. */
+  private useBadge(h: BadgeHit): void {
+    const out = this.result();
+    const part = this.parts[h.col];
+    const cols = out[part];
+    const k = this.parts.slice(0, h.col).filter((p) => p === part).length;
+    // Trims stay between the same places in the order: the chain numbers belong to the places.
+    const ids = cols.map((c) => c.chain);
+    if (h.what === 'arrow') cols[k] = reversedRails(cols[k]);
+    else if (h.what === 'number') {
+      if (k === 0) return;
+      [cols[k - 1], cols[k]] = [cols[k], cols[k - 1]];
+    } else if (k > 0) {
+      const old = ids[k];
+      const to = ids[k - 1] === old ? Math.max(...ids.map((x) => x ?? 0)) + 1 : ids[k - 1];
+      for (let i = k; i < ids.length && ids[i] === old; i++) ids[i] = to;
+    }
+    cols.forEach((c, i) => (c.chain = ids[i]));
+    this.selected = null;
+    this.setColumns(out);
+    this.hooks.change(out, true);
+  }
+
   /** Lines drawn across a satin from now on are cut lines (true) or rungs. */
   setCutMode(on: boolean): void {
     this.cutMode = on;
@@ -311,6 +399,12 @@ export class RungTool implements RungView {
   down(x: number, y: number, scale: number, other = false): 'move' | 'pan' {
     if (!this.active) return 'pan';
     const cut = other !== this.cutMode;
+    const badge = this.badgeAt(x, y, scale);
+    if (badge) {
+      this.useBadge(badge);
+      this.hooks.redraw();
+      return 'move';
+    }
     const hit = this.pick(x, y, scale);
     if (hit) {
       this.selected = hit;
@@ -504,10 +598,12 @@ export class RungTool implements RungView {
   }
 
   hoverAt(x: number, y: number, scale: number): boolean {
-    const h = this.active ? this.pick(x, y, scale) : null;
-    if (JSON.stringify(h) === JSON.stringify(this.hover)) return false;
+    const b = this.active ? this.badgeAt(x, y, scale) : null;
+    const h = this.active && !b ? this.pick(x, y, scale) : null;
+    const changed = JSON.stringify(b) !== JSON.stringify(this.badgeHover) || JSON.stringify(h) !== JSON.stringify(this.hover);
+    this.badgeHover = b;
     this.hover = h;
-    return true;
+    return changed;
   }
 
   /** Removes the selected rung or line; false when nothing is selected. */
@@ -632,6 +728,7 @@ export class RungTool implements RungView {
 }
 
 const sub = (a: Pt, b: Pt): [number, number] => [a[0] - b[0], a[1] - b[1]];
+const mid = (a: Pt, b: Pt): Pt => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
 
 function segDist(q: Pt, a: Pt, b: Pt): number {
   const v = sub(b, a);

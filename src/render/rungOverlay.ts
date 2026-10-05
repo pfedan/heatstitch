@@ -1,7 +1,7 @@
 import { pointAt } from '../digitize/rungs';
 import { sectionsOf } from '../model/restitch';
 import type { Pt } from '../digitize/skeleton';
-import type { RungPick, RungView } from '../ui/rungTool';
+import { BADGE, type RungPick, type RungView } from '../ui/rungTool';
 import type { Viewport } from './viewport';
 
 const ACCENT = '#e0559e';
@@ -126,6 +126,55 @@ export function drawRungOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, vie
     ctx.lineWidth = 2;
     ctx.stroke();
     ctx.setLineDash([]);
+  }
+  // Chained columns: their place in the order before where the satin starts, an arrow the way it
+  // goes, and scissors for a trim before it (bright when set).
+  for (const b of view.badges) {
+    const [ax, ay] = S(b.at);
+    const [dx, dy] = S([b.at[0] + b.dir[0], b.at[1] + b.dir[1]]);
+    const l = Math.hypot(dx - ax, dy - ay) || 1;
+    const d: Pt = [(dx - ax) / l, (dy - ay) / l];
+    const n: Pt = [-d[1], d[0]];
+    const spot = (along: number, across: number): Pt => [ax + d[0] * along + n[0] * across, ay + d[1] * along + n[1] * across];
+    const hov = (what: string) => view.badgeHover?.col === b.col && view.badgeHover.what === what;
+    const disc = (p: Pt, fill: string, ring: string) => {
+      ctx.beginPath();
+      ctx.arc(p[0], p[1], BADGE.r, 0, Math.PI * 2);
+      ctx.fillStyle = fill;
+      ctx.fill();
+      ctx.strokeStyle = ring;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    };
+    const label = (p: Pt, text: string, color: string) => {
+      ctx.font = '700 11px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = color;
+      ctx.fillText(text, p[0], p[1] + 0.5);
+    };
+    const num = spot(BADGE.number, 0);
+    disc(num, hov('number') ? ACCENT : 'rgba(20, 20, 24, 0.9)', '#ffffff');
+    label(num, String(b.n), '#ffffff');
+    // The arrow: a triangle pointing the way the satin goes.
+    const tip = spot(BADGE.arrow + 6, 0);
+    const back1 = spot(BADGE.arrow - 5, 5);
+    const back2 = spot(BADGE.arrow - 5, -5);
+    ctx.beginPath();
+    ctx.moveTo(...tip);
+    ctx.lineTo(...back1);
+    ctx.lineTo(...back2);
+    ctx.closePath();
+    ctx.fillStyle = hov('arrow') ? ACCENT : '#ffffff';
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.75)';
+    ctx.lineWidth = 1.5;
+    ctx.fill();
+    ctx.stroke();
+    if (b.trim !== null) {
+      const sc = spot(BADGE.number, BADGE.scissors);
+      disc(sc, hov('scissors') ? ACCENT : b.trim ? CUT : 'rgba(20, 20, 24, 0.9)', b.trim ? '#ffffff' : 'rgba(255, 255, 255, 0.45)');
+      label(sc, '✂', b.trim ? '#10141a' : 'rgba(255, 255, 255, 0.55)');
+    }
   }
   if (view.draft) {
     const [a, b] = view.draft;

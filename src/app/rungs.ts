@@ -89,7 +89,7 @@ export function bindRungs(app: RungsApp) {
       if (on && rungTool.mode === 'satin') cuts = rungTool.columns.reduce((a, c) => a + c.cuts.length, 0);
       else if (single) cuts = (remembered(p, q.objects[[...ui.selectedObjects][0]])?.columns?.flat() ?? []).reduce((a, c) => a + (c.cuts?.length ?? 0), 0);
       const here = on && rungTool.mode === 'satin' ? rungTool.spacingHere : undefined;
-      out.direction = { tool: on && rungTool.mode === 'satin', rungs, single, cuts, cutMode: rungTool.cutMode, ...(here !== undefined ? { spacingHere: here } : {}) };
+      out.direction = { tool: on && rungTool.mode === 'satin', rungs, single, cuts, cutMode: rungTool.cutMode, chain: on && rungTool.badges.length > 0, ...(here !== undefined ? { spacingHere: here } : {}) };
     }
     if (info.measured.fill && !info.measured.satin) out.draw = { tool: on && rungTool.mode === 'fill', lines: on ? rungTool.lines.length : 0, single, cuts: on ? rungTool.cutLines.length : 0, cutMode: rungTool.cutMode };
     if (info.measured.fill) out.guide = { tool: on && rungTool.mode === 'guide', single };

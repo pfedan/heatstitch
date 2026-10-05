@@ -1559,8 +1559,9 @@ export function satinRuns(rails: Rails[], s: SatinSettings): Pt[][] {
   };
   for (let k = 0; k < rails.length; k++) {
     const whole = rails[k];
-    // Columns in one chain: sewn on one after the other without a trim.
-    if (whole.chain !== undefined && rails[k + 1]?.chain === whole.chain) {
+    // Columns in one chain: sewn on one after the other without a trim, each back to its start
+    // (also one alone, a trim before and after it, so its satin goes the same way).
+    if (whole.chain !== undefined) {
       const chain: Rails[] = [];
       for (; k < rails.length && rails[k].chain === whole.chain; k++) chain.push(rails[k]);
       k--;
