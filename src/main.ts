@@ -4,12 +4,16 @@ import type { DensityGrid } from './density/grid';
 import { applyI18n, detectLang, formatNumber, getLang, setLang, t, type Lang } from './i18n';
 import { gridToCanvas } from './render/heatmap';
 import { drawLegend } from './render/legend';
-import { drawScene, type Scene } from './render/scene';
+import { drawScene, type FocusStitches, type Scene } from './render/scene';
 import { validationToCanvas } from './render/validationOverlay';
 import { Viewport } from './render/viewport';
 import { loadSettings, saveSettings } from './settings';
 import { bindControls, type ChangeKind } from './ui/controls';
-import { CorrectPanel, type CorrectMessage } from './ui/correctPanel';
+import { cssColor } from './ui/threadPicker';
+import { SATIN_SHARE } from './model/covers';
+import { CorrectPanel, type Cells, type CorrectMessage, type PlanRow, type PlanView } from './ui/correctPanel';
+import { applyProposals, currentSettings, fineZones, planCorrection, planFabric, wanted, type Box, type Plan } from './correct/plan';
+import type { CorrectionReport } from './correct/auto';
 import { Editor } from './ui/editor';
 import { keepObjects, type HandChange } from './model/handEdit';
 import { exportPng } from './ui/export';
@@ -22,7 +26,7 @@ import { ValidationPanel } from './ui/validationPanel';
 import { acknowledgementOf, settledBy, type Acknowledgement } from './validation/acks';
 import type { ValidationResult, Zone } from './validation/validate';
 import { POINTS_MIN_SCALE } from './render/editOverlay';
-import { DIVIDER_GRAB_PX, drawDivider } from './render/compare';
+import { DIVIDER_GRAB_PX, drawBeforeAfter, drawDivider, drawPanels } from './render/compare';
 import type { Pattern, ThreadColor } from './model/pattern';
 import type { Measurement } from './validation/measure';
 import { initUpdateNotice } from './ui/updateNotice';
@@ -51,7 +55,7 @@ import {
   type Transition,
 } from './model/sequence';
 import { recolor, sameColor } from './model/recolor';
-import { COLOR_CHANGE, patternStats, STITCH, TRIM } from './model/pattern';
+import { COLOR_CHANGE, computeBounds, patternStats, STITCH, TRIM } from './model/pattern';
 import { stitchAlpha, stitchAt, stitchColors, transitionAt, type StitchStyle } from './render/flow';
 import type { FlowScene, ShapeOutline } from './render/scene';
 import type { Mode } from './settings';
@@ -60,7 +64,7 @@ import { blockName, kindLabel, LayersPanel } from './ui/layersPanel';
 import { ObjectPanel, OrderCard } from './ui/objectPanel';
 import { StitchPanel, type Highlight, type StitchInfo } from './ui/stitchPanel';
 import { borderRanges, syncBorders } from './model/border';
-import { analyze, forget, keepShape, objectKey, measureFill, measureRun, measureSatin, remember, remembered, type Rails, rememberedIn, rememberShapes, restitch, shapeTrust, unionRegion, underlayRanges, type Remembered, type Settings as RestitchSettings, type ShapeTrust, type RestitchResult } from './model/restitch';
+import { analyze, forget, holdMemory, keepShape, openOnPurpose, objectKey, measureFill, measureRun, measureSatin, remember, remembered, type Rails, rememberedIn, rememberShapes, restitch, shapeTrust, unionRegion, underlayRanges, type Remembered, type Settings as RestitchSettings, type ShapeTrust, type RestitchResult } from './model/restitch';
 import { outline } from './digitize/region';
 import { railsFromOutline } from './digitize/rungs';
 import type { Pt } from './digitize/skeleton';
@@ -80,7 +84,7 @@ import { deleteObjects, duplicateObject, mirrorMatrix, recolorObjects, subtractT
 import { stitchesBefore } from './model/transform';
 import { FrameTool } from './ui/frameTool';
 import { formOf, reshapeFill, scaleBlocked, transformSewObject } from './model/reshape';
-import { isCovered, overlapsIn, refreshKnockouts, setKnockout, wholeArea, wholeOf } from './model/knockout';
+import { isCovered, overlapsIn, refreshKnockouts, setKnockout, setOverlapShare, wholeArea, wholeOf } from './model/knockout';
 import { transformObject } from './model/transform';
 import { apply, translation, type Form, type Mat } from './shape/path';
 import { fontNow, loadCatalog, loadFont, type Catalog } from './lettering/font';
@@ -88,7 +92,7 @@ import { followText, layout, LETTERING_DEFAULTS, type Lettering } from './letter
 import { letteringObjects, letteringOf, placeLettering, withoutObjects } from './lettering/place';
 import { sewLettering } from './lettering/sew';
 import { LetteringPanel } from './ui/letteringPanel';
-import { digitizeDefaults, digitizeShapes, isStroke, SATIN_MAX, type Digitized } from './digitize/digitize';
+import { digitizeDefaults, digitizeShapes, isStroke, pullFor, SATIN_MAX, type Digitized } from './digitize/digitize';
 import { recommendedSpacing } from './validation/profiles';
 import { numberInColor, overlaps, rememberObjects, sewObjects, splitObject, type SewObject } from './model/objects';
 import { conflicts, moveStats, optimizePlan, reorder, violations, weigh } from './model/order';
@@ -156,7 +160,7 @@ const files = new FileList(
     if (f?.pattern && !keepView) fitView(f);
     recompute();
   },
-  (p) => validator.measure(p),
+  (p) => validator.measure(p, openOnPurpose(p, seq(p).objects) ?? undefined),
   (f) => {
     if (f === files.active) redraw();
   },
@@ -185,7 +189,7 @@ const scene = (): Scene => ({
   validation: files.active?.validation ?? null,
   validationImg: activeValidationImg(),
   counted: countedFor(files.active?.validation),
-  highlight: settings.showValidation ? (hoverZone ?? selectedZone) : null,
+  highlight: planHover ? { bbox: planHover } : settings.showValidation ? (hoverZone ?? selectedZone) : null,
   settings,
   vp,
   edit: editor.active ? editor : null,
@@ -861,7 +865,7 @@ function stitchInfo(p: Pattern, q: Sequence): StitchInfo {
     if (an.fill) {
       const trust = shapeTrust(p, obj, an, (remembered(p, obj)?.fill ?? measureFill(p, an)).spacing);
       if (!worst || rank[trust] > rank[worst]) worst = trust;
-      shapes.push({ lines: outline(an.fill), approximate: trust === 'approximate' });
+      shapes.push({ lines: outline(an.fill), approximate: trust === 'approximate', resting: !!remembered(p, obj)?.free });
       // Satin needs a stroke: narrow, about even in width (the same test as in Image mode).
       if (stroke && an.parts.some((pt) => pt.kind === 'fill')) stroke = !!isStroke(remembered(p, obj)?.shape ?? an.fill, SATIN_MAX);
     }
@@ -872,9 +876,19 @@ function stitchInfo(p: Pattern, q: Sequence): StitchInfo {
   const shaped = [...selectedObjects].map((o) => q.objects[o]).filter((obj) => obj && remembered(p, obj)?.form);
   const ons = new Set(shaped.map((obj) => !!remembered(p, obj)?.knockout));
   const knockout: StitchInfo['knockout'] = shaped.length
-    ? { on: ons.size > 1 ? 'mixed' : ons.has(true), covered: shaped.some((obj) => isCovered(p, q.objects, obj)) }
+    ? { on: ons.size > 1 ? 'mixed' : ons.has(true), covered: shaped.some((obj) => isCovered(p, q.objects, obj)), share: remembered(p, shaped[0])?.overlapShare ?? SATIN_SHARE }
     : undefined;
-  const info: StitchInfo = { key: selectionKey, hand, measured, counts, recommended: recommendedSpacing(settings.profile), shape: worst, outlines: shapes, toSatin: stroke, knockout, color: q.objects[firstFill]?.color };
+  const locks = new Set([...selectedObjects].map((o) => !!(q.objects[o] && remembered(p, q.objects[o])?.lock)));
+  const lock = locks.size > 1 ? 'mixed' : locks.has(true);
+  const free = freeOf(p, q);
+  const fixed = selectedObjects.size === 1 && q.objects[[...selectedObjects][0]] ? remembered(p, q.objects[[...selectedObjects][0]])?.fixed : undefined;
+  const firstOf = (k: string) => [...selectedObjects].sort((a, b) => a - b).map((o) => q.objects[o]).find((obj) => obj?.kind === k);
+  const fillObj = firstOf('fill');
+  const fabricPull = {
+    fill: fillObj ? pullFor(settings.profile, 'fill', analyze(p, fillObj, q.kinds).fill?.areaMm2).edge : undefined,
+    satin: pullFor(settings.profile, 'satin'),
+  };
+  const info: StitchInfo = { key: selectionKey, lock, free, fixed, fabricPull, hand, measured, counts, recommended: recommendedSpacing(settings.profile), shape: worst, outlines: shapes, toSatin: stroke, knockout, color: q.objects[firstFill]?.color };
   const runs = [...selectedObjects].map((o) => q.objects[o]).filter((obj) => obj?.kind === 'run');
   if (runs.length && runs.every((obj) => remembered(p, obj)?.path)) info.line = true;
   const one = selectedObjects.size === 1 ? q.objects[[...selectedObjects][0]] : undefined;
@@ -886,6 +900,54 @@ function stitchInfo(p: Pattern, q: Sequence): StitchInfo {
   }
   stitchCache = { p, key: selectionKey, info };
   return info;
+}
+
+/** Whether an object has a shape of its own its stitches can be loosed from (and sewn from again). */
+const loosable = (m: Remembered | undefined): boolean => !!m && !m.read && !m.lettering && !m.outline && !!(m.region || m.form || m.path || m.columns);
+
+/**
+ * The selected objects loosed from their shape (`on`), or sewn from their resting shape again with
+ * their own settings. The stitches loosed stay loosed for undo.
+ */
+function looseObjects(on: boolean): void {
+  const f = files.active;
+  const p = f?.pattern;
+  if (!f || !p) return;
+  const q = seq(p);
+  const objs = [...selectedObjects].sort((a, b) => a - b).flatMap((o) => (q.objects[o] ? [q.objects[o]] : []));
+  if (on) {
+    let n = 0;
+    for (const obj of objs) {
+      const mem = remembered(p, obj);
+      if (!mem || mem.free || !loosable(mem)) continue;
+      remember(p, obj, { ...mem, free: true });
+      n++;
+    }
+    if (!n) return;
+    closeRungs();
+    files.setObjects(f, rememberedIn(p, q.objects));
+    selectionKey++;
+    stitchCache = null;
+    layers.say(t('free.done', { n }));
+    return redraw();
+  }
+  const freed = objs.flatMap((obj) => {
+    const mem = remembered(p, obj);
+    return mem?.free ? [{ obj, mem }] : [];
+  });
+  if (!freed.length) return;
+  for (const { obj, mem } of freed) remember(p, obj, { ...mem, free: undefined });
+  const r = restitch(p, q.objects, freed.map((x) => x.obj.index), (o) => currentSettings(p, o, q.kinds), q.kinds, settings.trimMm);
+  // The loosed stitches stay loosed: undo brings them back as they were.
+  for (const { obj, mem } of freed) remember(p, obj, mem);
+  applyRestitched(r, 'free.failed', true);
+}
+
+/** Whether the selected objects' stitches are loosed from their shape, and whether any can be. */
+function freeOf(p: Pattern, q: Sequence): StitchInfo['free'] {
+  const mems = [...selectedObjects].map((o) => (q.objects[o] ? remembered(p, q.objects[o]) : undefined));
+  const frees = new Set(mems.map((m) => !!m?.free));
+  return { on: frees.size > 1 ? 'mixed' : frees.has(true), can: mems.some(loosable) };
 }
 
 /** The active pattern with new stitches for the selected objects. */
@@ -945,7 +1007,8 @@ function applyRestitched(r: RestitchResult | null, failed: Key, remeasure = fals
   files.setObjects(f, rememberedIn(p, seq(p).objects));
   if (selNow.size) selectedObjects = selNow;
   selectionKey = remeasure ? key + 1 : key;
-  stitchCache = stitchCache && !remeasure && p === r.pattern ? { ...stitchCache, p } : null;
+  // New stitches have a shape they can be loosed from.
+  stitchCache = stitchCache && !remeasure && p === r.pattern ? { ...stitchCache, p, info: { ...stitchCache.info, free: freeOf(p, seq(p)) } } : null;
   say();
   redraw();
 }
@@ -994,9 +1057,11 @@ const stitchPanel = new StitchPanel($('object-stitches'), {
     if (a === 'tool') return toggleRungs();
     if (!rungTool.active || rungTool.mode !== 'satin') return;
     if (a === 'corners') rungTool.corners();
+    else if (a === 'sections') rungTool.sections();
     else if (a === 'even') rungTool.even();
     else rungTool.follow();
   },
+  spacingHere: (v) => rungTool.setSpacingHere(v),
   draw: (a) => (a === 'tool' ? toggleRungs() : sewAlongLines()),
   guide: (a) => {
     if (a === 'tool') return toggleGuides();
@@ -1006,6 +1071,37 @@ const stitchPanel = new StitchPanel($('object-stitches'), {
     if (selectedObjects.size === 1) sewLine([...selectedObjects][0], null, st, final);
   },
   knockout: (on) => knockoutObjects([...selectedObjects].sort((a, b) => a - b), on),
+  overlapShare: (share) => {
+    const f = files.active;
+    const p = f?.pattern;
+    if (!f || !p) return;
+    const r = setOverlapShare(p, [...selectedObjects].sort((a, b) => a - b), share, settings.trimMm);
+    if (!r) return;
+    const sel = selectedObjects;
+    if (r.pattern !== p) applyEdit(r.pattern);
+    files.setObjects(f, rememberedIn(r.pattern, seq(r.pattern).objects));
+    selectedObjects = sel;
+    selectionKey++;
+    stitchCache = null;
+    redraw();
+  },
+  free: (on) => looseObjects(on),
+  lock: (on) => {
+    const p = files.active?.pattern;
+    if (!p) return;
+    const q = seq(p);
+    for (const o of selectedObjects) {
+      const obj = q.objects[o];
+      if (!obj) continue;
+      const mem = remembered(p, obj);
+      if (!mem && !on) continue;
+      remember(p, obj, { ...(mem ?? { region: null }), lock: on || undefined });
+    }
+    if (files.active) files.setObjects(files.active, rememberedIn(p, q.objects));
+    selectionKey++;
+    stitchCache = null;
+    redraw();
+  },
   highlight: (what) => {
     highlight = what;
     redraw();
@@ -1090,7 +1186,11 @@ function rungInfo(p: Pattern, q: Sequence): Pick<StitchInfo, 'direction' | 'draw
       const cols = remembered(p, q.objects[[...selectedObjects][0]])?.columns?.flat() ?? [];
       rungs = cols.some((c) => c.rungs) ? cols.reduce((a, c) => a + (c.rungs?.length ?? 0), 0) : null;
     }
-    out.direction = { tool: on && rungTool.mode === 'satin', rungs, single };
+    let cuts = 0;
+    if (on && rungTool.mode === 'satin') cuts = rungTool.columns.reduce((a, c) => a + c.cuts.length, 0);
+    else if (single) cuts = (remembered(p, q.objects[[...selectedObjects][0]])?.columns?.flat() ?? []).reduce((a, c) => a + (c.cuts?.length ?? 0), 0);
+    const here = on && rungTool.mode === 'satin' ? rungTool.spacingHere : undefined;
+    out.direction = { tool: on && rungTool.mode === 'satin', rungs, single, cuts, ...(here !== undefined ? { spacingHere: here } : {}) };
   }
   if (info.measured.fill && !info.measured.satin) out.draw = { tool: on && rungTool.mode === 'fill', lines: on ? rungTool.lines.length : 0, single };
   if (info.measured.fill) out.guide = { tool: on && rungTool.mode === 'guide', single };
@@ -1279,7 +1379,8 @@ function isLineObject(p: Pattern, o: SewObject): boolean {
 /** The one selected object of the Ablauf mode, when it has a fill whose outline can be edited, or is a line. */
 function shapeTarget(p: Pattern, q: Sequence, o: number): Form | null {
   const obj = q.objects[o];
-  if (!obj) return null;
+  // Stitches loosed from their shape are edited as stitches; the shape rests.
+  if (!obj || remembered(p, obj)?.free) return null;
   return isLineObject(p, obj) ? lineOf(p, obj, q.kinds) : formOf(p, obj, q.kinds);
 }
 
@@ -2360,7 +2461,7 @@ function objectInfo(p: Pattern, q: Sequence) {
     numbers: selected.map((o) => numberInColor(q.objects, q.objects[o])),
     hand: selected.map((o) => remembered(p, q.objects[o])?.hand ?? 0),
     editing: editor.active && editObject !== null && selected.length === 1 && selected[0] === editObject ? { selection: editor.selection.size } : null,
-    shapeable: selected.length === 1 && (!!stitchInfo(p, q).measured.fill || (!!q.objects[selected[0]] && isLineObject(p, q.objects[selected[0]]))),
+    shapeable: selected.length === 1 && !stitchInfo(p, q).free?.on && (!!stitchInfo(p, q).measured.fill || (!!q.objects[selected[0]] && isLineObject(p, q.objects[selected[0]]))),
     shaping: shapeTool.active && selected.length === 1 && selected[0] === shapeObject ? { nodes: shapeTool.count, smooth: shapeTool.selectedSmooth, ...(q.objects[selected[0]] && isLineObject(p, q.objects[selected[0]]) ? { line: { closed: shapeTool.closed } } : {}) } : null,
     frame: frameTool.active ? { canScale: frameTool.canScale } : null,
     mergeBlocked: selected.length > 1 ? mergeBlocked(selected.map((o) => q.objects[o])) : null,
@@ -2397,6 +2498,7 @@ function redraw(): void {
     if (drawTool.preview && settings.mode === 'flow')
       drawDrawing(ctx, vp, drawTool.preview, { nodes: drawTool.kind === 'pen' ? drawTool.count : 0, closing: drawTool.closing, size: drawTool.size });
     if (letterMode) drawLetterBoxes();
+    drawPlanCompare();
     if (showCompare()) {
       const x = Math.round(split * stageW);
       ctx.save();
@@ -2445,6 +2547,13 @@ function redraw(): void {
       $<HTMLButtonElement>('order-optimize').disabled = !q || q.objects.length < 2;
     }
     panel.update(active, selectedZone);
+    // Proposals belong to the version they were worked out on.
+    if (planState && (planState.file !== active || planState.pattern !== active?.pattern)) {
+      planState = null;
+      planHover = null;
+      planPreview = null;
+      if (correctMessage?.kind === 'plan') correctMessage = null;
+    }
     correctPanel.update({
       file: active,
       zoneSelected: !!selectedZone,
@@ -2731,31 +2840,398 @@ function history(step: 'undo' | 'redo' | 'revert'): void {
   recompute();
 }
 
-async function autoFix(scope: 'all' | 'zone'): Promise<void> {
+/** Proposals worked out for the active file, until they are taken over or the file changes. */
+let planState: { file: LoadedFile; pattern: Pattern; plan: Plan; checked: Set<number>; fine: Box[]; fineOn: boolean; view: PlanView } | null = null;
+/** The object of the proposal under the pointer (mm), outlined on the canvas. */
+let planHover: Box | null = null;
+
+const cellsOf = (v: ValidationResult): Cells => ({ critical: v.criticalCells, caution: v.cautionCells });
+const measured = async (p: Pattern) => classify(await validator.measure(p, openOnPurpose(p, seq(p).objects) ?? undefined), settings.profile, settings.checks);
+
+/** The card's view of `planState` after a box was ticked or not. */
+function planMessage(): void {
+  const st = planState;
+  if (!st) return;
+  st.view = {
+    ...st.view,
+    rows: st.view.rows.map((r) => ({ ...r, checked: r.ids.every((id) => st.checked.has(id)), pinned: !!planPin && r.ids.join() === planPin.join() })),
+    fineChecked: st.fineOn,
+  };
+  correctMessage = { kind: 'plan', plan: st.view };
+}
+
+/** The proposals as the card's rows: the same change on several objects of a kind is one row ("Steppstich 3, 4, 7"). */
+function planRows(p: Pattern, proposals: Plan['proposals']): PlanRow[] {
+  const objs = seq(p).objects;
+  const rows: PlanRow[] = [];
+  const nameOf = (i: number) => `${numberInColor(objs.filter((y) => y.block === objs[i].block), objs[i])}`;
+  for (const x of proposals) {
+    const sig = JSON.stringify([x.kind, x.visibility, x.hand > 0, x.knockout, x.reasons, objs[x.index].color, x.changes.map((c) => [c.field, c.to])]);
+    const same = rows.find((r) => (r as PlanRow & { sig?: string }).sig === sig);
+    if (same) {
+      same.ids.push(x.id);
+      same.name += `, ${nameOf(x.index)}`;
+      same.hand += x.hand;
+      // Different values before: only the new one is said.
+      same.changes = same.changes.map((c, k) => (c.from === x.changes[k]?.from ? c : { ...c, from: '' }));
+      continue;
+    }
+    rows.push(
+      Object.assign(
+        {
+          ids: [x.id],
+          name: `${kindLabel(x.kind)} ${nameOf(x.index)}`,
+          color: cssColor(objs[x.index].color),
+          kind: x.kind,
+          visibility: x.visibility,
+          changes: x.changes.map((c) => ({ ...c })),
+          knockout: x.knockout,
+          reasons: x.reasons,
+          hand: x.hand,
+          checked: x.checked,
+        },
+        { sig },
+      ),
+    );
+  }
+  return rows;
+}
+
+/**
+ * "Auf Stoff abstimmen": the settings that suit the material better, as proposals in the
+ * correction card (nothing changes before they are taken over). `quiet`: say nothing when none.
+ */
+function tuneToFabric(quiet = false): void {
   const f = files.active;
   const p = f?.pattern;
-  if (!f || !p || correctMessage?.kind === 'busy') return;
+  if (!f || !p || correctMessage?.kind === 'busy' || correctMessage?.kind === 'progress') return;
+  const proposals = planFabric(p, settings.profile);
+  const name = t(`fabric.${settings.profile.fabric}` as Key);
+  if (!proposals.length) {
+    if (quiet) return;
+    planState = null;
+    correctMessage = { kind: 'text', text: t('tune.none', { fabric: name }) };
+    return redraw();
+  }
+  const plan: Plan = { proposals, fine: [], locked: 0, pattern: p };
+  const v = f.validation;
+  const view: PlanView = {
+    title: t(proposals.length === 1 ? 'tune.head.one' : 'tune.head', { n: formatNumber(proposals.length), fabric: name }),
+    rows: planRows(p, proposals),
+    fine: 0,
+    fineChecked: false,
+    locked: 0,
+    before: v ? cellsOf(v) : { critical: 0, caution: 0 },
+    after: null,
+  };
+  planState = { file: f, pattern: p, plan, checked: new Set(), fine: [], fineOn: false, view };
+  planMessage();
+  redraw();
+}
+
+/** Works out proposals for the whole design or the selected zone; nothing changes yet. */
+async function planFix(scope: 'all' | 'zone'): Promise<void> {
+  const f = files.active;
+  const p = f?.pattern;
+  const v = f?.validation;
+  if (!f || !p || !v || correctMessage?.kind === 'busy' || correctMessage?.kind === 'progress') return;
   const z = selectedZone;
   const pad = 1; // mm around the zone
-  const region = scope === 'zone' && z
-    ? { minX: z.bbox.minX - pad, minY: z.bbox.minY - pad, maxX: z.bbox.maxX + pad, maxY: z.bbox.maxY + pad }
-    : undefined;
-  correctMessage = { kind: 'busy' };
+  const region = scope === 'zone' && z ? { minX: z.bbox.minX - pad, minY: z.bbox.minY - pad, maxX: z.bbox.maxX + pad, maxY: z.bbox.maxY + pad } : undefined;
+  planState = null;
+  planHover = null;
+  planPreview = null;
+  const stale = () => files.active !== f || f.pattern !== p;
+  correctMessage = { kind: 'progress', done: 0, total: 0 };
   redraw();
   try {
-    const r = await validator.correct(p, settings.profile, settings.checks, { ...settings.correction, region, acks: f.acks });
-    if (files.active !== f || f.pattern !== p) return; // the user moved on meanwhile
-    correctMessage = { kind: 'report', report: r.report };
-    editor.reset();
-    if (r.pattern !== p) applyEdit(r.pattern, r.measurement);
+    const opt = { ...settings.correction, region, acks: f.acks, trimMm: settings.trimMm };
+    const plan = await planCorrection(p, v, settings.profile, settings.checks, {
+      ...opt,
+      stale,
+      progress: async (done, total) => {
+        if (correctMessage?.kind !== 'progress' || correctMessage.done !== done || correctMessage.total !== total) {
+          correctMessage = { kind: 'progress', done, total };
+          redraw();
+        }
+        await new Promise((r) => setTimeout(r, 0));
+      },
+    });
+    if (stale()) return;
+    const after = plan.proposals.length ? await measured(plan.pattern) : v;
+    if (stale()) return;
+    const fine = fineZones(p, after, plan.proposals, opt);
+    const rows = planRows(p, plan.proposals);
+    const view: PlanView = { rows, fine: fine.length, fineChecked: false, locked: plan.locked, before: cellsOf(v), after: plan.proposals.length ? cellsOf(after) : null };
+    planState = { file: f, pattern: p, plan, checked: new Set(), fine, fineOn: false, view };
+    planMessage();
   } catch (err) {
+    console.error(err);
+    correctMessage = { kind: 'text', text: t('correct.error', { msg: err instanceof Error ? err.message : String(err) }) };
+  }
+  redraw();
+}
+
+/**
+ * The stitches of the objects `which` (sewing order), each as a pattern of its own with its
+ * underlay marked (read from what the objects remember, so while that is there).
+ */
+function objectStitches(p: Pattern, which: number[], under: boolean): FocusStitches[] {
+  const q = seq(p);
+  return [...new Set(which)].flatMap((i) => {
+    const o = q.objects[i];
+    if (!o) return [];
+    const x = p.x.slice(o.first, o.last + 1);
+    const y = p.y.slice(o.first, o.last + 1);
+    const cmd = p.cmd.slice(o.first, o.last + 1);
+    const mask = new Uint8Array(cmd.length);
+    if (under) for (const [a, b] of underlayRanges(p, o, q.kinds)) for (let k = a; k <= b; k++) if (k >= o.first && k <= o.last) mask[k - o.first] = 1;
+    return [{ pattern: { name: p.name, format: p.format, x, y, cmd, colors: [o.color], bounds: computeBounds(x, y, cmd) }, under: mask.includes(1) ? mask : null }];
+  });
+}
+
+/** A proposal taken over only for a look: its stitches and their heatmap (once worked out). */
+interface PlanPreview {
+  pattern: Pattern;
+  img: HTMLCanvasElement | null;
+  /** The stitches of the objects it changes, each on its own: as they are and as they would be. */
+  before: FocusStitches[];
+  focus: FocusStitches[];
+}
+/** Previews of the proposals by their ids, for the plan they belong to. */
+let planPreviews: { plan: Plan; byIds: Map<string, PlanPreview | null> } | null = null;
+/** The preview shown on the canvas now (the pointer is on its row, or it is held). */
+let planPreview: PlanPreview | null = null;
+/** The proposals held for comparing (their name was clicked): shown while the pointer is elsewhere. */
+let planPin: number[] | null = null;
+/** Where the line between before and after lies in the object's frame (0 left, 1 right). */
+let planSplit = 0.5;
+/** The frame of the comparison on the screen as last drawn, and whether its line is being dragged. */
+let planFrame: { x0: number; y0: number; x1: number; y1: number } | null = null;
+let planDrag = false;
+
+/** Holds the proposals `ids` for comparing, or lets go (null). */
+function pinPlan(ids: number[] | null): void {
+  planPin = ids;
+  planSplit = 0.5;
+  planHover = ids && proposalsBox(ids);
+  showPlanPreview(ids);
+  planMessage();
+  redraw();
+}
+
+/** Inside the frame of the comparison on the screen. */
+const inPlanFrame = (sx: number, sy: number) => !!planFrame && sx >= planFrame.x0 && sx <= planFrame.x1 && sy >= planFrame.y0 && sy <= planFrame.y1;
+
+/** The line between before and after follows `sx` (kept a little inside the frame). */
+function movePlanSplit(sx: number): void {
+  if (!planFrame) return;
+  planSplit = Math.min(0.97, Math.max(0.03, (sx - planFrame.x0) / Math.max(1, planFrame.x1 - planFrame.x0)));
+  redraw();
+}
+
+/**
+ * Shows the proposals `ids` taken over on the canvas, without changing anything: the stitches at
+ * once, their heatmap when it is worked out. Null: back to the design as it is.
+ */
+function showPlanPreview(ids: number[] | null): void {
+  const st = planState;
+  planPreview = null;
+  if (!st || !ids || files.active !== st.file || st.file.pattern !== st.pattern) return;
+  if (planPreviews?.plan !== st.plan) planPreviews = { plan: st.plan, byIds: new Map() };
+  const key = ids.join(',');
+  const cache = planPreviews.byIds;
+  if (!cache.has(key)) {
+    const chosen = st.plan.proposals.filter((x) => ids.includes(x.id));
+    // Sewn for a look only: what the objects remember stays as it is.
+    const release = holdMemory();
+    const which = chosen.map((x) => x.index);
+    // The underlay is marked only where the proposal changes it (elsewhere it would only cover the change).
+    const under = chosen.some((x) => x.changes.some((c) => UNDER_FIELDS.has(c.field)));
+    let pv: PlanPreview | null = null;
+    try {
+      const pattern = applyProposals(st.pattern, chosen, settings.trimMm)?.pattern ?? null;
+      // Its underlay is read from what the new stitches remember, before that is let go.
+      if (pattern) pv = { pattern, img: null, before: [], focus: objectStitches(pattern, which, under) };
+    } finally {
+      release();
+    }
+    if (pv) pv.before = objectStitches(st.pattern, which, under);
+    cache.set(key, pv);
+    if (pv) {
+      const { metric, cellMm, blurMm, includeJumps } = settings;
+      void density
+        .density(pv.pattern, { metric, cellMm, blurMm, includeJumps })
+        .then((g) => {
+          pv.img = gridToCanvas(g, settings.scales[metric].max);
+          if (planPreview === pv) redraw();
+        })
+        .catch((err) => console.error(err));
+    }
+  }
+  planPreview = cache.get(key) ?? null;
+}
+
+/** Settings of the underlay: a proposal changing one of them shows the underlay in its preview. */
+const UNDER_FIELDS = new Set(['underlay', 'underCross', 'under', 'underCover']);
+
+/** Below this size on the screen (CSS pixels), before and after are also shown whole side by side. */
+const SIDE_BELOW = 240;
+
+/** Top of the side-by-side comparison on the canvas (below the canvas tools), CSS pixels. */
+const LOUPE_TOP = 56;
+
+/**
+ * The proposal under the pointer, before and after side by side in its object's frame (left as
+ * it is, right as it would be: stitches clear on their heatmap, underlay marked), and both whole
+ * side by side at the top left of the canvas.
+ */
+function drawPlanCompare(): void {
+  const pv = planPreview;
+  const b = planHover;
+  planFrame = null;
+  if (!pv || !b || settings.mode !== 'density' || planState?.file !== files.active) return;
+  const pad = 1.5; // mm, as the frame of a zone
+  const box = { minX: b.minX - pad, minY: b.minY - pad, maxX: b.maxX + pad, maxY: b.maxY + pad };
+  const before: Scene = { ...scene(), validation: null, validationImg: null, counted: null, highlight: null, markers: null, focus: pv.before };
+  const after: Scene = { ...before, pattern: pv.pattern, gridImg: pv.img ?? gridImg, focus: pv.focus };
+  const labels: [string, string] = [t('plan.before'), t('plan.after')];
+  const [x0, y0] = vp.toScreen(box.minX, box.minY);
+  const [x1, y1] = vp.toScreen(box.maxX, box.maxY);
+  drawBeforeAfter(ctx, stageW, stageH, { x0, y0, x1, y1 }, before, after, stageBg(), labels, planSplit);
+  planFrame = { x0, y0, x1, y1 };
+  if (Math.min(x1 - x0, y1 - y0) >= SIDE_BELOW) return;
+  // Small: before and after side by side, each whole and enlarged, at the top left (or the top
+  // right when the object lies there): the difference at a glance.
+  const gap = 6;
+  const pw = Math.min(220, (stageW - 24 - gap) / 2);
+  const ph = Math.min(260, stageH - 80);
+  const scale = Math.min(pw / (box.maxX - box.minX), ph / (box.maxY - box.minY));
+  const w = (box.maxX - box.minX) * scale;
+  const h = (box.maxY - box.minY) * scale;
+  const panel = (x: number, sc: Scene, label: string) => {
+    const pvp = new Viewport();
+    pvp.scale = scale;
+    pvp.offsetX = x - box.minX * scale;
+    pvp.offsetY = LOUPE_TOP - box.minY * scale;
+    return { rect: { x0: x, y0: LOUPE_TOP, x1: x + w, y1: LOUPE_TOP + h }, scene: { ...sc, vp: pvp }, label };
+  };
+  const total = 2 * w + gap;
+  const left = !(x0 < 12 + total + 12 && y0 < LOUPE_TOP + h + 12);
+  const sx = left ? 12 : stageW - 12 - total;
+  drawPanels(ctx, stageW, stageH, [panel(sx, before, labels[0]), panel(sx + w + gap, after, labels[1])], stageBg());
+}
+
+/** Where the objects of the proposals `ids` lie, together (mm). */
+function proposalsBox(ids: number[]): Box | null {
+  const bs = (planState?.plan.proposals ?? []).filter((x) => ids.includes(x.id)).map((x) => x.box);
+  if (!bs.length) return null;
+  return { minX: Math.min(...bs.map((b) => b.minX)), minY: Math.min(...bs.map((b) => b.minY)), maxX: Math.max(...bs.map((b) => b.maxX)), maxY: Math.max(...bs.map((b) => b.maxY)) };
+}
+
+/** Adds up the fine corrections of several places. */
+function addReports(a: CorrectionReport | undefined, b: CorrectionReport): CorrectionReport {
+  if (!a) return b;
+  const sum = { ...a };
+  for (const k of ['zeroLength', 'merged', 'pulledBack', 'shortened', 'hiddenRows', 'respaced', 'respacedRows', 'moved'] as const) sum[k] = a[k] + b[k];
+  return sum;
+}
+
+/** Takes over the ticked proposals and the fine correction, as one step to undo. */
+async function applyPlan(): Promise<void> {
+  const st = planState;
+  const f = files.active;
+  if (!st || !f || st.file !== f || f.pattern !== st.pattern) {
+    planState = null;
+    correctMessage = null;
+    return redraw();
+  }
+  const chosen = st.plan.proposals.filter((x) => st.checked.has(x.id));
+  correctMessage = { kind: 'busy' };
+  planHover = null;
+  planPreview = null;
+  redraw();
+  try {
+    let p = st.pattern;
+    let done = 0;
+    const r = chosen.length ? applyProposals(p, chosen, settings.trimMm) : null;
+    if (r) {
+      p = syncBorders(r.pattern, settings.trimMm);
+      done = r.done;
+    }
+    let fine: CorrectionReport | undefined;
+    if (st.fineOn) {
+      for (const b of st.fine) {
+        const pad = 1;
+        const c = await validator.correct(p, settings.profile, settings.checks, { ...settings.correction, region: { minX: b.minX - pad, minY: b.minY - pad, maxX: b.maxX + pad, maxY: b.maxY + pad }, acks: f.acks });
+        if (c.pattern !== p) {
+          p = c.pattern;
+          fine = addReports(fine, c.report);
+        }
+      }
+    }
+    if (files.active !== f || f.pattern !== st.pattern) return;
+    planState = null;
+    if (p === st.pattern) {
+      correctMessage = { kind: 'text', text: t('correct.noChange') };
+      return redraw();
+    }
+    editor.reset();
+    applyEdit(p);
+    files.setObjects(f, rememberedIn(p, seq(p).objects));
+    const after = await measured(p);
+    const open = after.zones.filter((z) => !z.practice && !settledBy(z, f.acks) && wanted(z, settings.correction).length).length;
+    correctMessage = { kind: 'applied', done, before: st.view.before, after: cellsOf(after), fine, open };
+  } catch (err) {
+    console.error(err);
     correctMessage = { kind: 'text', text: t('correct.error', { msg: err instanceof Error ? err.message : String(err) }) };
   }
   redraw();
 }
 
 const correctPanel = new CorrectPanel(settings, {
-  autoFix: (scope) => void autoFix(scope),
+  plan: (scope) => void planFix(scope),
+  check: (ids, on) => {
+    const st = planState;
+    if (!st) return;
+    if (ids === 'fine') st.fineOn = on;
+    else for (const id of ids) on ? st.checked.add(id) : st.checked.delete(id);
+    planMessage();
+    redraw();
+  },
+  applyPlan: () => void applyPlan(),
+  discardPlan: () => {
+    planState = null;
+    planHover = null;
+    planPreview = null;
+    correctMessage = null;
+    redraw();
+  },
+  checkAll: (on) => {
+    const st = planState;
+    if (!st) return;
+    st.checked = new Set(on ? st.plan.proposals.map((x) => x.id) : []);
+    st.fineOn = on && st.fine.length > 0;
+    planMessage();
+    redraw();
+  },
+  hoverProposal: (ids) => {
+    // Away from the list, the held proposal comes back.
+    const show = ids ?? planPin;
+    if (ids && planPin?.join() !== ids.join()) planSplit = 0.5;
+    planHover = show && proposalsBox(show);
+    showPlanPreview(show);
+    redraw();
+  },
+  showProposal: (ids) => {
+    // A second click lets go; otherwise it is held and the view goes to it.
+    if (planPin?.join() === ids.join()) return pinPlan(null);
+    const b = proposalsBox(ids);
+    if (!b) return;
+    const pad = 4;
+    vp.fit(b.minX - pad, b.minY - pad, b.maxX + pad, b.maxY + pad, stageW, stageH);
+    pinPlan(ids);
+  },
   toggleCompare: () => setComparing(!comparing),
   deleteSelection: () => editor.deleteSelection(),
   thinSelection: (share) => {
@@ -2788,6 +3264,8 @@ const profile = bindProfile(settings, () => {
   saveSettings(settings);
   // Classification is cheap: every file is re-checked instantly against the new limits.
   files.setProfile(settings.profile, settings.checks);
+  // Another fabric: what suits it better is offered, never changed silently.
+  tuneToFabric(true);
   imageMode.profileChanged();
   controls.refresh();
   hoverZone = selectedZone = null;
@@ -2804,7 +3282,7 @@ const imageMode = new ImageMode({
     if (first) shine();
     else if (settings.realistic && settings.liveLight && settings.image.view === 'stitches') sweep(redraw);
   },
-  validate: async (p) => classify(await validator.measure(p), settings.profile, settings.checks),
+  validate: async (p) => classify(await validator.measure(p, openOnPurpose(p, seq(p).objects) ?? undefined), settings.profile, settings.checks),
   takeOver: async (d, name) => {
     await addDigitized(d, name);
     setMode('flow');
@@ -3122,6 +3600,7 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   if (mod || e.altKey) return;
+  if (e.key === 'Escape' && planPin) return pinPlan(null);
   if (drawTool.active && settings.mode === 'flow') {
     if (e.key === 'Escape') {
       if (drawTool.busy) {
@@ -3360,6 +3839,12 @@ canvas.addEventListener('pointerdown', (e) => {
     painting = null;
     imageMode.paintCancel();
   }
+  // On the comparison of a proposal: the line between before and after follows the finger or mouse.
+  if (pointers.size === 1 && e.button === 0 && inPlanFrame(pos[0], pos[1])) {
+    planDrag = true;
+    movePlanSplit(pos[0]);
+    return;
+  }
   if (pointers.size === 1 && e.button === 0 && nearDivider(pos[0])) {
     splitDrag = true;
     stage.classList.add('splitting');
@@ -3372,7 +3857,7 @@ canvas.addEventListener('pointerdown', (e) => {
       drawTool.down(wx, wy, vp.scale);
       mode = 'move';
     } else if (letterMode && flow) mode = letterDown(wx, wy) ? 'move' : 'pan';
-    else if (rungTool.active && flow) mode = rungTool.down(wx, wy, vp.scale);
+    else if (rungTool.active && flow) mode = rungTool.down(wx, wy, vp.scale, e.shiftKey);
     else if (shapeTool.active && flow) mode = shapeTool.down(wx, wy, vp.scale);
     else if (frameTool.active && flow && frameTool.down(wx, wy, vp.scale) !== null) mode = 'frame';
     else mode = editor.down(wx, wy, pos[0], pos[1], e.shiftKey, vp.scale);
@@ -3414,6 +3899,14 @@ canvas.addEventListener('pointermove', (e) => {
   if (splitDrag) {
     split = Math.min(0.98, Math.max(0.02, pos[0] / stageW));
     redraw();
+    return;
+  }
+  // A mouse over the comparison moves its line as it goes; a finger drags it.
+  if (planDrag || (!prev && e.pointerType === 'mouse' && inPlanFrame(pos[0], pos[1]))) {
+    movePlanSplit(pos[0]);
+    // The density tip would cover the comparison, so it stays away here.
+    tooltip.hidden = true;
+    canvas.classList.remove('on-divider');
     return;
   }
   canvas.classList.toggle('on-divider', !prev && nearDivider(pos[0]));
@@ -3512,6 +4005,7 @@ const endPointer = (e: PointerEvent) => {
     }
   }
   pressAt = null;
+  planDrag = false;
   if (splitDrag) {
     splitDrag = false;
     stage.classList.remove('splitting');
@@ -3593,3 +4087,5 @@ files.render();
 redraw();
 void files.restore();
 void imageMode.restore();
+
+$('fabric-tune').addEventListener('click', () => tuneToFabric());

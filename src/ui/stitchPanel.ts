@@ -1,6 +1,7 @@
 import { formatNumber, t, type Key } from '../i18n';
 import type { ObjectKind } from '../model/objects';
-import { SATIN_SPLIT, UNDERLAYS, type FillPattern, type FillSettings, type RunSettings, type SatinSettings, type SatinType, type Settings, type ShapeTrust } from '../model/restitch';
+import { SATIN_SPLIT, UNDERLAYS, type FillPattern, type FillSettings, type RunSettings, type SatinSettings, type SatinType, type Settings, type ShapeTrust, type Fixed } from '../model/restitch';
+import { fixText } from './fixText';
 import type { UnderlayKind } from '../digitize/satin';
 import type { ShapeOutline } from '../render/scene';
 import { UNDERLAY_INSET } from '../digitize/fill';
@@ -45,7 +46,15 @@ export interface StitchInfo {
   /** Whether the fill areas are strokes that can be sewn as satin. */
   toSatin: boolean;
   /** Rungs of the one selected satin: whether the tool is on, how many (null: the stitches' own direction). */
-  direction?: { tool: boolean; rungs: number | null; single: boolean };
+  direction?: {
+    tool: boolean;
+    rungs: number | null;
+    single: boolean;
+    /** Cut lines on the column (sections). */
+    cuts: number;
+    /** A rung is selected: the spacing set there (null: the column's). */
+    spacingHere?: number | null;
+  };
   /** Rungs drawn across the one selected fill to sew it as satin. */
   draw?: { tool: boolean; lines: number; single: boolean };
   /** Guide lines of the one selected fill: whether their tool is on. */
@@ -54,7 +63,7 @@ export interface StitchInfo {
    * Fills with their shape as curves: whether they leave out what later fills cover (`mixed` when
    * only some do), and whether anything lies on top of them at all.
    */
-  knockout?: { on: boolean | 'mixed'; covered: boolean };
+  knockout?: { on: boolean | 'mixed'; covered: boolean; share: number };
   /** The selected running stitches are lines sewn along their curves. */
   line?: boolean;
   /**
@@ -66,6 +75,14 @@ export interface StitchInfo {
   color?: ThreadColor;
   /** The one selected object is the border of a fill in its own thread (the fill's number, or null when gone). */
   outline?: { fill: number | null };
+  /** Left out of the correction (`mixed`: only some of the selected objects). */
+  lock: boolean | 'mixed';
+  /** Stitches loosed from their shape (`mixed`: only some), and whether any selected object has a shape to loose them from. */
+  free?: { on: boolean | 'mixed'; can: boolean };
+  /** What the correction changed on the one selected object. */
+  fixed?: Fixed[];
+  /** Pull compensation by the fabric for the first selected fill and satin (see pullFor). */
+  fabricPull?: { fill?: number; satin?: { edge: number; edgeShare?: number } };
 }
 
 export interface StitchHooks {
@@ -74,13 +91,17 @@ export interface StitchHooks {
   /** Sews the selected objects of the other kind (fill to satin or satin to fill). */
   convert: (to: 'fill' | 'satin') => void;
   /** Rungs of a satin: the tool on or off, corners suggested, all removed, back to the stitches' own direction. */
-  direction: (action: 'tool' | 'corners' | 'even' | 'follow') => void;
+  direction: (action: 'tool' | 'corners' | 'sections' | 'even' | 'follow') => void;
+  /** The spacing at the selected rung (null: as the column). */
+  spacingHere: (v: number | null) => void;
   /** Rungs drawn across a fill: the tool on or off, sewn as satin along them. */
   draw: (action: 'tool' | 'sew') => void;
   /** Guide lines on a fill: their tool on or off (`off` only closes it). */
   guide: (action: 'tool' | 'off') => void;
   /** Leaving out what later fills cover, on or off for the selected fills. */
   knockout: (on: boolean) => void;
+  /** How far the selected fills reach under a satin on top (share of its width). */
+  overlapShare: (share: number) => void;
   /**
    * The pointer or focus on the underlay settings ('under') or on the border settings ('border'),
    * or away from both (null): what they set is shown on the canvas.
@@ -90,6 +111,10 @@ export interface StitchHooks {
   line: (st: PathStitch, final: boolean) => void;
   /** A border object: select its fill, or make it an object of its own (no longer following the fill). */
   outline: (action: 'fill' | 'detach') => void;
+  /** The selected objects left out of the correction, or not. */
+  lock: (on: boolean) => void;
+  /** The selected objects' stitches loosed from their shape (true), or sewn from it again (false). */
+  free: (on: boolean) => void;
 }
 
 const KINDS: ObjectKind[] = ['fill', 'satin', 'run'];
@@ -111,6 +136,10 @@ const TRUST_ICON = {
   warn: '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5l6 11H2z"/><path d="M8 6.5v3.2M8 11.8v.1"/></svg>',
 };
 
+/** Stitches loosed from their shape: a dashed shape beside free stitches. */
+const FREE_ICON =
+  '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="1.5" y="1.5" width="8" height="8" rx="1.5" stroke-dasharray="2 2"/><path d="M7 14.5l2.5-4 2 3 3-5"/></svg>';
+
 const OFFSETS: [number, string][] = [
   [0.5, '1/2'],
   [1 / 3, '1/3'],
@@ -131,6 +160,8 @@ interface SliderDef {
   band?: [number, number];
   /** Extra line under the value. */
   note?: (v: number) => string;
+  /** Taken over on its own when let go, instead of as a stitch setting (no preview while dragging). */
+  commit?: () => void;
 }
 
 export class StitchPanel {
@@ -165,7 +196,7 @@ export class StitchPanel {
     }
     if (info.key === this.key) {
       // The rung tool changes without a new selection: only its part is drawn anew.
-      const tools = JSON.stringify([info.direction, info.draw, info.guide, info.knockout]);
+      const tools = JSON.stringify([info.direction, info.draw, info.guide, info.knockout, info.free]);
       if (tools !== this.tools) this.render();
       return;
     }
@@ -214,7 +245,7 @@ export class StitchPanel {
 
   private render(): void {
     const info = this.info!;
-    this.tools = JSON.stringify([info.direction, info.draw, info.guide, info.knockout]);
+    this.tools = JSON.stringify([info.direction, info.draw, info.guide, info.knockout, info.free]);
     const head = document.createElement('div');
     head.className = 'stitch-head';
     const h = Object.assign(document.createElement('h3'), { textContent: t('stitch.title') });
@@ -259,14 +290,15 @@ export class StitchPanel {
       this.root.replaceChildren(...parts);
       return;
     }
-    if (info.path && this.lineDraft) {
+    if (info.path && this.lineDraft && !info.free?.on) {
       parts.push(...this.lineGroup(h, info));
+      if (info.free?.can) parts.push(this.looseRow());
       this.picker.close();
       this.root.replaceChildren(...parts);
       return;
     }
     if (n > 1) parts.push(Object.assign(document.createElement('p'), { className: 'muted small', textContent: t('stitch.many', { n }) }));
-    if (this.kind === 'fill' && info.shape) {
+    if (this.kind === 'fill' && info.shape && !info.free?.on) {
       const trust = document.createElement('p');
       trust.className = `shape-trust ${info.shape}`;
       trust.setAttribute('role', 'status');
@@ -282,11 +314,27 @@ export class StitchPanel {
       hand.append(Object.assign(document.createElement('span'), { textContent: t('stitch.hand', { n: formatNumber(info.hand) }) }));
       parts.push(hand);
     }
+    if (info.fixed?.length) {
+      const fixed = document.createElement('p');
+      fixed.className = 'muted small fixed-note';
+      fixed.textContent = t('plan.fixed', { list: info.fixed.map(fixText).join(', ') });
+      parts.push(fixed);
+    }
+    if (info.free?.on) {
+      // Loosed stitches: no setting sews them anew, they are edited as stitches.
+      parts.push(this.freeBlock(info.free.on), this.lockSwitch(info.lock));
+      this.picker.close();
+      this.root.replaceChildren(...parts);
+      if (this.lit) this.light(null);
+      return;
+    }
     if (this.kind === 'fill' && info.knockout) parts.push(this.knockoutSwitch(info.knockout));
     if (this.kind === 'fill' || this.kind === 'satin') parts.push(this.kindSwitch(this.kind));
     if (this.kind === 'fill' && info.draw?.single) parts.push(this.drawTool(info.draw));
     if (this.kind === 'satin' && info.direction) parts.push(this.directionTool(info.direction));
     parts.push(...this.controls());
+    parts.push(this.lockSwitch(info.lock));
+    if (info.free?.can) parts.push(this.looseRow());
     const note = Object.assign(document.createElement('p'), { className: 'muted small stitch-note', textContent: t(this.kind === 'fill' && info.shape ? 'stitch.undo' : this.kind === 'run' && info.line ? 'stitch.lineNote' : 'stitch.note') });
     parts.push(note);
     this.picker.close();
@@ -352,7 +400,15 @@ export class StitchPanel {
       // Straight rows cannot stray from their line; curved ones get shorter stitches in tight bends.
       if (s.pattern === 'contour' || s.pattern === 'spiral' || s.pattern === 'follow') out.push(this.toleranceSlider(s));
       out.push(
-        this.slider({ label: 'stitch.edge', hint: 'stitch.edge.hint', min: -0.4, max: 0.6, step: 0.05, get: () => s.edge, set: (v) => (s.edge = v), fmt: signed }),
+        this.slider({ label: 'stitch.edge', hint: 'stitch.edge.hint', min: -0.4, max: 0.6, step: 0.05, get: () => s.edge, set: (v) => ((s.edge = v), delete s.edgeAuto), fmt: signed }),
+        this.check('stitch.edgeAuto', 'stitch.edgeAuto.hint', () => !!s.edgeAuto, (v) => {
+          const e = this.info!.fabricPull?.fill;
+          if (v && e !== undefined) {
+            s.edgeAuto = true;
+            s.edge = e;
+          } else delete s.edgeAuto;
+          this.render();
+        }),
         this.slider({ label: 'stitch.expand', hint: 'stitch.expand.hint', min: -3, max: 3, step: 0.05, get: () => s.expand ?? 0, set: (v) => (s.expand = v), fmt: signed }),
         this.under(
           this.choice<FillUnder>(
@@ -371,6 +427,7 @@ export class StitchPanel {
         ),
       );
       if (s.underlay) {
+        out.push(this.under(this.check('stitch.underCover', 'stitch.underCover.hint', () => !!s.underCover, (v) => (v ? (s.underCover = true) : delete s.underCover))));
         out.push(
           this.under(
             this.choice<'mm' | 'share'>(
@@ -431,10 +488,23 @@ export class StitchPanel {
       ];
       if (this.sides) {
         out.push(
-          width('stitch.widthLeft', () => s.edge, (v) => (s.edge = v)),
-          width('stitch.widthRight', () => s.edgeB ?? s.edge, (v) => (s.edgeB = v)),
+          width('stitch.widthLeft', () => s.edge, (v) => ((s.edge = v), delete s.edgeAuto)),
+          width('stitch.widthRight', () => s.edgeB ?? s.edge, (v) => ((s.edgeB = v), delete s.edgeAuto)),
         );
-      } else out.push(width('stitch.width', () => s.edge, (v) => ((s.edge = v), delete s.edgeB)));
+      } else out.push(width('stitch.width', () => s.edge, (v) => ((s.edge = v), delete s.edgeB, delete s.edgeAuto)));
+      out.push(
+        this.check('stitch.edgeAuto', 'stitch.edgeAuto.satin.hint', () => !!s.edgeAuto, (v) => {
+          const e = this.info!.fabricPull?.satin;
+          if (v && e) {
+            s.edgeAuto = true;
+            s.edge = e.edge;
+            s.edgeShare = e.edgeShare;
+            delete s.edgeB;
+            this.sides = false;
+          } else delete s.edgeAuto;
+          this.render();
+        }),
+      );
       out.push(
         this.check('stitch.sides', 'stitch.sides.hint', () => this.sides, (v) => {
           this.sides = v;
@@ -449,11 +519,12 @@ export class StitchPanel {
           max: 0.2,
           step: 0.01,
           get: () => s.edgeShare ?? 0,
-          set: (v) => (s.edgeShare = v),
+          set: (v) => ((s.edgeShare = v), delete s.edgeAuto),
           fmt: (v) => `+${formatNumber(v * 100, 0)} %`,
         }),
       );
       if (!e) out.push(this.check('stitch.short', 'stitch.short.hint', () => s.short, (v) => (s.short = v)));
+      if (!e) out.push(this.check('stitch.byWidth', 'stitch.byWidth.hint', () => !!s.byWidth, (v) => (v ? (s.byWidth = true) : delete s.byWidth)));
       out.push(
         this.slider({ label: 'stitch.split', hint: 'stitch.split.hint', min: 4, max: SATIN_SPLIT, step: 0.5, get: () => s.split ?? SATIN_SPLIT, set: (v) => (s.split = v), fmt: mm(1) }),
         this.check('stitch.stagger', 'stitch.stagger.hint', () => s.stagger ?? true, (v) => (s.stagger = v)),
@@ -554,9 +625,9 @@ export class StitchPanel {
     input.addEventListener('input', () => {
       d.set(parseFloat(input.value));
       show();
-      this.changed(false);
+      if (!d.commit) this.changed(false);
     });
-    input.addEventListener('change', () => this.changed(true));
+    input.addEventListener('change', () => (d.commit ? d.commit() : this.changed(true)));
     label.append(top, track);
     if (d.note) label.append(note);
     return label;
@@ -723,13 +794,28 @@ export class StitchPanel {
     if (d.tool) {
       row.append(
         this.button('stitch.direction.corners', 'stitch.direction.corners.hint', () => this.hooks.direction('corners')),
+        this.button('stitch.sections', 'stitch.sections.hint', () => this.hooks.direction('sections')),
         this.button('stitch.direction.even.button', 'stitch.direction.even.hint', () => this.hooks.direction('even'), false, d.rungs === 0),
         this.button('stitch.direction.follow.button', 'stitch.direction.follow.hint', () => this.hooks.direction('follow'), false, d.rungs === null),
       );
     }
     wrap.append(row);
+    if (d.cuts) wrap.append(Object.assign(document.createElement('span'), { className: 'small', textContent: t(d.cuts === 1 ? 'stitch.sections.count.one' : 'stitch.sections.count', { n: d.cuts + 1 }) }));
+    if (d.tool && d.spacingHere !== undefined) wrap.append(this.spacingHereField(d.spacingHere));
     if (d.tool) wrap.append(Object.assign(document.createElement('span'), { className: 'muted small', textContent: t('stitch.direction.help') }));
     return wrap;
+  }
+
+  /** The spacing at the selected rung: empty keeps the column's. */
+  private spacingHereField(v: number | null): HTMLElement {
+    const l = Object.assign(document.createElement('label'), { className: 'spacing-here', title: t('stitch.spacingHere.hint') });
+    const i = Object.assign(document.createElement('input'), { type: 'number', min: '0.2', max: '1.5', step: '0.05', placeholder: t('stitch.spacingHere.column'), value: v === null ? '' : String(v) });
+    i.addEventListener('change', () => {
+      const n = Number(i.value.replace(',', '.'));
+      this.hooks.spacingHere(i.value.trim() === '' || !Number.isFinite(n) || n <= 0 ? null : Math.min(1.5, Math.max(0.2, n)));
+    });
+    l.append(Object.assign(document.createElement('span'), { textContent: t('stitch.spacingHere') }), i, Object.assign(document.createElement('span'), { className: 'muted', textContent: 'mm' }));
+    return l;
   }
 
   /** Guide lines of a guided fill: how many, and their tool. */
@@ -786,6 +872,40 @@ export class StitchPanel {
     return wrap;
   }
 
+  /** The way to loose the stitches from their shape. */
+  private looseRow(): HTMLElement {
+    const row = document.createElement('div');
+    row.className = 'direction-buttons free-row';
+    row.append(this.button('free.loose', 'free.loose.hint', () => this.hooks.free(true)));
+    return row;
+  }
+
+  /** Stitches loosed from their shape: what that means, and the way back. */
+  private freeBlock(on: true | 'mixed'): HTMLElement {
+    const wrap = document.createElement('div');
+    wrap.className = 'free-block';
+    const status = document.createElement('p');
+    status.className = 'shape-trust free';
+    status.setAttribute('role', 'status');
+    status.innerHTML = FREE_ICON;
+    status.append(Object.assign(document.createElement('span'), { textContent: t(on === 'mixed' ? 'free.someText' : 'free.text') }));
+    const row = document.createElement('div');
+    row.className = 'direction-buttons';
+    row.append(this.button('free.back', 'free.back.hint', () => this.hooks.free(false)));
+    if (on === 'mixed') row.append(this.button('free.looseAll', 'free.loose.hint', () => this.hooks.free(true)));
+    wrap.append(status, row, Object.assign(document.createElement('p'), { className: 'muted small', textContent: t('free.edit') }));
+    return wrap;
+  }
+
+  /** Left out of the correction: a switch, taken over at once. */
+  private lockSwitch(on: boolean | 'mixed'): HTMLElement {
+    const l = Object.assign(document.createElement('label'), { className: 'check lock-switch', title: t('plan.lock.hint') });
+    const i = Object.assign(document.createElement('input'), { type: 'checkbox', checked: on === true, indeterminate: on === 'mixed' });
+    i.addEventListener('change', () => this.hooks.lock(i.checked));
+    l.append(i, Object.assign(document.createElement('span'), { textContent: t('plan.lock') }));
+    return l;
+  }
+
   /** A line: how it is sewn along its curve, for all kinds of stitch in one place. */
   private lineGroup(h: HTMLElement, info: StitchInfo): HTMLElement[] {
     const st = this.lineDraft!;
@@ -827,6 +947,22 @@ export class StitchPanel {
     l.append(i, Object.assign(document.createElement('span'), { textContent: t('knockout.switch') }));
     wrap.append(l);
     if (!k.covered) wrap.append(Object.assign(document.createElement('span'), { className: 'muted small', textContent: t('knockout.nothingOnTop') }));
+    if (k.on) {
+      const share = { v: k.share };
+      wrap.append(
+        this.slider({
+          label: 'knockout.share',
+          hint: 'knockout.share.hint',
+          min: 0.1,
+          max: 0.5,
+          step: 0.05,
+          get: () => share.v,
+          set: (v) => (share.v = v),
+          fmt: (v) => `${formatNumber(v * 100, 0)} %`,
+          commit: () => this.hooks.overlapShare(share.v),
+        }),
+      );
+    }
     return wrap;
   }
 

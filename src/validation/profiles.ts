@@ -20,6 +20,10 @@ export interface Fabric {
   spacing: [number, number];
   /** Needle holes can cut the material, so dense penetrations are checked as well. */
   perforation: boolean;
+  /** How far the thread pulls the fabric in: little on stable fabric, more on stretchy or soft fabric. */
+  pull: 'low' | 'high';
+  /** Stitches longer than this (mm) can snag: satin is split below it. */
+  longMm: number;
 }
 
 export interface Thread {
@@ -28,12 +32,12 @@ export interface Thread {
 }
 
 export const FABRICS: readonly Fabric[] = [
-  { id: 'woven', factor: 1, spacing: [0.4, 0.45], perforation: false },
-  { id: 'cap', factor: 0.9, spacing: [0.4, 0.5], perforation: false },
-  { id: 'knit', factor: 0.85, spacing: [0.42, 0.5], perforation: false },
-  { id: 'terry', factor: 0.65, spacing: [0.55, 0.7], perforation: false },
-  { id: 'light', factor: 0.6, spacing: [0.6, 0.7], perforation: false },
-  { id: 'leather', factor: 0.7, spacing: [0.5, 0.8], perforation: true },
+  { id: 'woven', factor: 1, spacing: [0.4, 0.45], perforation: false, pull: 'low', longMm: 10 },
+  { id: 'cap', factor: 0.9, spacing: [0.4, 0.5], perforation: false, pull: 'low', longMm: 7 },
+  { id: 'knit', factor: 0.85, spacing: [0.42, 0.5], perforation: false, pull: 'high', longMm: 7 },
+  { id: 'terry', factor: 0.65, spacing: [0.55, 0.7], perforation: false, pull: 'high', longMm: 7 },
+  { id: 'light', factor: 0.6, spacing: [0.6, 0.7], perforation: false, pull: 'high', longMm: 8 },
+  { id: 'leather', factor: 0.7, spacing: [0.5, 0.8], perforation: true, pull: 'low', longMm: 8 },
 ];
 
 export const THREADS: readonly Thread[] = [

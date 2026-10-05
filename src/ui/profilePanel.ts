@@ -20,9 +20,10 @@ import {
   SHORT_STITCH_MM,
   thresholdsFor,
 } from '../validation/thresholds';
+import { PULL } from '../validation/coverage';
 import type { Checks } from '../validation/validate';
 
-const CHECK_IDS = ['density', 'shortStitches', 'perforation'] as const satisfies readonly (keyof Checks)[];
+const CHECK_IDS = ['density', 'shortStitches', 'perforation', 'coverage', 'longStitches'] as const satisfies readonly (keyof Checks)[];
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -103,6 +104,14 @@ export function bindProfile(s: Settings, onChange: () => void): { refresh: () =>
       }),
     ];
     if (th.holes) items.push(t('validation.explain.perforation', { caution: HOLES_CAUTION, critical: HOLES_CRITICAL }));
+    items.push(
+      t('validation.explain.coverage', {
+        spacing: formatNumber(1 / th.sparse, 2),
+        pull: formatNumber(PULL[th.pull].share * 100, 1),
+        cap: formatNumber(PULL[th.pull].cap, 2),
+      }),
+      t('validation.explain.long', { v: formatNumber(th.long / 10) }),
+    );
     items.push(
       t('validation.explain.practice', {
         small: SMALL_CAUTION_MM2,

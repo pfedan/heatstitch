@@ -246,8 +246,9 @@ figcaption {
   margin: 0;
 }
 
-/* The narrow stitch plan picture would be too tall at full width. */
-figure img[src*='stitchplan'] {
+/* Narrow pictures (stitch plan, satin sections) would be too tall at full width. */
+figure img[src*='stitchplan'],
+figure img[src*='sections'] {
   width: auto;
   max-width: 100%;
   max-height: 520px;
