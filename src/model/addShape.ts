@@ -6,7 +6,8 @@ import { reorder } from './order';
 import { stitchesBefore } from './transform';
 import { COLOR_CHANGE, END, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
 import { remember, rememberShapes } from './restitch';
-import { LINE_RUN, lineRuns } from './line';
+import { lineStitchFor, lineStitches } from './line';
+import type { PathStitch } from './along';
 import { runRecords } from './border';
 
 /**
@@ -38,7 +39,7 @@ function body(p: Pattern): Rec[] {
 }
 
 export function addShape(p: Pattern, shape: NewShape, color: ThreadColor, after: number | null, options: DigitizeOptions): Added | null {
-  if (shape.kind === 'stroke' && (shape.width ?? 0) < LINE_SATIN) return addLine(p, shape.form, color, after, options);
+  if (shape.kind === 'stroke') return addLine(p, shape.form, lineStitchFor(shape.width ?? 0, options.tolerance), color, after, options);
   const d = digitizeShapes([{ color: 0, ...shape }], [color], options, { w: 0, h: 0 }, false, 'shape');
   if (!d.objects.length || !stitches(d.pattern)) return null;
   const r = insertObject(p, body(d.pattern), d.pattern.colors[0], after, options.trimMm);
@@ -47,18 +48,14 @@ export function addShape(p: Pattern, shape: NewShape, color: ThreadColor, after:
   return r;
 }
 
-/** Lines from this wide (mm) are sewn as satin, thinner ones along their curves in running stitch. */
-const LINE_SATIN = 1;
-
-/** A thin line sewn along its curves (see line.ts); it remembers them, so it can be edited as a line. */
-function addLine(p: Pattern, form: Form, color: ThreadColor, after: number | null, options: DigitizeOptions): Added | null {
-  const s = { ...LINE_RUN, tolerance: options.tolerance };
-  const runs = lineRuns(form, s);
+/** A line sewn along its curves (see line.ts); it remembers them, so it can be edited as a line. */
+export function addLine(p: Pattern, form: Form, st: PathStitch, color: ThreadColor, after: number | null, options: { trimMm: number }): Added | null {
+  const runs = lineStitches(form, st);
   if (!runs.length) return null;
   const r = insertObject(p, runRecords(runs, options.trimMm), color, after, options.trimMm);
   if (!r) return null;
   const obj = sewObjects(r.pattern).find((o) => stitchesBefore(r.pattern, o.first) === r.start);
-  if (obj) remember(r.pattern, obj, { region: null, path: form });
+  if (obj) remember(r.pattern, obj, { region: null, path: form, line: { ...st } });
   return r;
 }
 

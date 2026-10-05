@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { digitizeDefaults } from '../src/digitize/digitize';
+import { digitizeDefaults, digitizeShapes } from '../src/digitize/digitize';
+import { lineSettings, resewLine, traceLine } from '../src/model/line';
 import { addShape } from '../src/model/addShape';
 import { sewObjects } from '../src/model/objects';
 import { remembered, restitch } from '../src/model/restitch';
@@ -59,5 +60,63 @@ describe('drawn lines', () => {
     expect(path?.paths[0].nodes[2].p).toEqual([60, 40]);
     // Still on the (scaled) line, not stretched stitches.
     for (const [x, y] of points(r.pattern, o.first, o.last)) expect(Math.min(Math.abs(y), Math.abs(x - 60))).toBeLessThan(0.11);
+  });
+});
+
+describe('lines of all kinds', () => {
+  const form = parsePath('M0 0 C10 -10 20 10 30 0', ID);
+
+  it('sew a wide line as satin and keep its curve and settings', () => {
+    const a = addShape(empty, { form, kind: 'stroke', width: 2 }, red, null, options)!;
+    const [o] = sewObjects(a.pattern);
+    expect(o.kind).toBe('satin');
+    const m = remembered(a.pattern, o);
+    expect(m?.path).toBeDefined();
+    expect(m?.line?.type).toBe('satin');
+    expect(m?.line?.width).toBe(2);
+  });
+
+  it('change between running, triple and satin stitch in place', () => {
+    const a = addShape(empty, { form, kind: 'stroke', width: 0.4 }, red, null, options)!;
+    const st = lineSettings(a.pattern, sewObjects(a.pattern)[0]);
+    expect(st.type).toBe('run');
+    const satin = resewLine(a.pattern, 0, form, { ...st, type: 'satin', width: 3 }, 7)!;
+    let objs = sewObjects(satin.pattern);
+    expect(objs).toHaveLength(1);
+    expect(objs[0].kind).toBe('satin');
+    expect(lineSettings(satin.pattern, objs[0]).width).toBe(3);
+    const triple = resewLine(satin.pattern, 0, form, { ...st, type: 'triple' }, 7)!;
+    objs = sewObjects(triple.pattern);
+    expect(objs[0].kind).toBe('run');
+    expect(lineSettings(triple.pattern, objs[0]).type).toBe('triple');
+  });
+
+  it('keep the objects around them', () => {
+    const a = addShape(empty, { form: parsePath('M0 20 L30 20', ID), kind: 'stroke', width: 0.4 }, red, null, options)!;
+    const b = addShape(a.pattern, { form, kind: 'stroke', width: 0.4 }, red, null, options)!;
+    const c = addShape(b.pattern, { form: parsePath('M0 40 L30 40', ID), kind: 'stroke', width: 0.4 }, red, null, options)!;
+    expect(sewObjects(c.pattern)).toHaveLength(3);
+    const r = resewLine(c.pattern, 1, form, { type: 'satin', width: 2 }, 7)!;
+    const objs = sewObjects(r.pattern);
+    expect(objs.map((o) => o.kind)).toEqual(['run', 'satin', 'run']);
+    expect(remembered(r.pattern, objs[0])?.path).toBeDefined();
+    expect(remembered(r.pattern, objs[2])?.path).toBeDefined();
+  });
+
+  it('trace a curve through the running stitch of a file', () => {
+    // A running stitch along a quarter circle and then straight on: one corner.
+    const pts: [number, number][] = [];
+    for (let k = 0; k <= 20; k++) pts.push([10 * Math.cos((k / 20) * (Math.PI / 2)), 10 * Math.sin((k / 20) * (Math.PI / 2))]);
+    for (let k = 1; k <= 5; k++) pts.push([0, 10 + k * 2]);
+    const f = traceLine(pts)!;
+    expect(f.paths[0].closed).toBe(false);
+    expect(f.paths[0].nodes.length).toBeLessThan(8);
+    expect(f.paths[0].nodes.some((n) => Math.hypot(n.p[0], n.p[1] - 10) < 0.01 && !n.smooth)).toBe(true);
+  });
+
+  it('sews SVG strokes along their curves', () => {
+    const d = digitizeShapes([{ color: 0, kind: 'stroke', form, width: 0.3 }], [red], options, { w: 0, h: 0 }, false);
+    expect(d.objects[0].path).toBeDefined();
+    expect(d.objects[0].line?.type).toBe('run');
   });
 });

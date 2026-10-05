@@ -7,6 +7,7 @@ import { UNDERLAY_INSET } from '../digitize/fill';
 import type { Pt } from '../digitize/skeleton';
 import { KIND_ICON, kindLabel } from './layersPanel';
 import { BORDER_STITCH, BORDER_WIDTH, type BorderType } from '../digitize/border';
+import { TOLERANCE } from '../digitize/run';
 import type { ThreadColor } from '../model/pattern';
 import { newLink } from '../model/border';
 import { autoUnder, type PathStitch } from '../model/along';
@@ -52,8 +53,13 @@ export interface StitchInfo {
    * only some do), and whether anything lies on top of them at all.
    */
   knockout?: { on: boolean | 'mixed'; covered: boolean };
-  /** The selected running stitches are drawn lines, sewn along their curves. */
+  /** The selected running stitches are lines sewn along their curves. */
   line?: boolean;
+  /**
+   * The one selected object is a line (drawn, from an SVG, or a running stitch of a file): how it
+   * is sewn along its curve. `traced`: its curve is read from its stitches (none was drawn).
+   */
+  path?: { st: PathStitch; traced: boolean };
   /** Thread of the first selected fill (its border is sewn in it unless it has its own). */
   color?: ThreadColor;
   /** The one selected object is the border of a fill in its own thread (the fill's number, or null when gone). */
@@ -73,6 +79,8 @@ export interface StitchHooks {
   guide: (action: 'tool' | 'off') => void;
   /** Leaving out what later fills cover, on or off for the selected fills. */
   knockout: (on: boolean) => void;
+  /** The one selected line sewn with `st`: shown while sliding (`final` false), then applied. */
+  line: (st: PathStitch, final: boolean) => void;
   /** The pointer or focus on the underlay settings (true) or away from them: its stitches are shown. */
   underlay: (on: boolean) => void;
   /** A border object: select its fill, or make it an object of its own (no longer following the fill). */
@@ -123,6 +131,8 @@ interface SliderDef {
 export class StitchPanel {
   private key = -1;
   private kind: ObjectKind = 'fill';
+  /** Settings of the one selected line while they are changed (see StitchInfo.path). */
+  private lineDraft: PathStitch | null = null;
   private draft: Partial<{ fill: FillSettings; satin: SatinSettings; run: RunSettings }> = {};
   private info: StitchInfo | null = null;
   private frame = 0;
@@ -156,6 +166,7 @@ export class StitchPanel {
     }
     this.key = info.key;
     this.draft = structuredClone(info.measured);
+    this.lineDraft = info.path ? structuredClone(info.path.st) : null;
     if (this.tolerance !== null) for (const k of KINDS) if (this.draft[k]) this.draft[k]!.tolerance = this.tolerance;
     if (!info.measured[this.kind]) this.kind = KINDS.find((k) => info.measured[k])!;
     this.render();
@@ -168,6 +179,21 @@ export class StitchPanel {
   }
 
   private changed(final: boolean): void {
+    if (this.lineDraft) {
+      const st = structuredClone(this.lineDraft);
+      if (final) {
+        cancelAnimationFrame(this.frame);
+        this.frame = 0;
+        this.hooks.line(st, true);
+        return;
+      }
+      if (this.frame) return;
+      this.frame = requestAnimationFrame(() => {
+        this.frame = 0;
+        if (this.lineDraft) this.hooks.line(structuredClone(this.lineDraft), false);
+      });
+      return;
+    }
     if (final) {
       cancelAnimationFrame(this.frame);
       this.frame = 0;
@@ -224,6 +250,12 @@ export class StitchPanel {
       if (info.outline.fill !== null) row.append(this.button('stitch.outline.fill', 'stitch.outline.fill.hint', () => this.hooks.outline('fill'), true));
       row.append(this.button('stitch.outline.detach', 'stitch.outline.detach.hint', () => this.hooks.outline('detach')));
       parts.push(Object.assign(document.createElement('p'), { className: 'muted small', textContent: t('stitch.outline.text') }), row);
+      this.picker.close();
+      this.root.replaceChildren(...parts);
+      return;
+    }
+    if (info.path && this.lineDraft) {
+      parts.push(...this.lineGroup(h, info));
       this.picker.close();
       this.root.replaceChildren(...parts);
       return;
@@ -707,6 +739,37 @@ export class StitchPanel {
     return wrap;
   }
 
+  /** A line: how it is sewn along its curve, for all kinds of stitch in one place. */
+  private lineGroup(h: HTMLElement, info: StitchInfo): HTMLElement[] {
+    const st = this.lineDraft!;
+    h.innerHTML = '';
+    h.append(Object.assign(document.createElement('span'), { className: 'kind-icon', innerHTML: KIND_ICON[st.type === 'satin' ? 'satin' : 'run'] }), t('stitch.line.title'));
+    const out: HTMLElement[] = [];
+    if (info.hand) {
+      const hand = document.createElement('p');
+      hand.className = 'shape-trust approximate';
+      hand.setAttribute('role', 'status');
+      hand.innerHTML = TRUST_ICON.warn;
+      hand.append(Object.assign(document.createElement('span'), { textContent: t('stitch.hand', { n: formatNumber(info.hand) }) }));
+      out.push(hand);
+    }
+    out.push(
+      ...this.pathStitch(
+        st,
+        (v) => {
+          if (v) this.lineDraft = Object.assign(this.lineDraft ?? v, v);
+        },
+        false,
+      ),
+    );
+    if (st.type !== 'satin') {
+      st.tolerance ??= this.tolerance ?? TOLERANCE;
+      out.push(this.toleranceSlider(st as { tolerance: number }));
+    }
+    out.push(Object.assign(document.createElement('p'), { className: 'muted small stitch-note', textContent: t(info.path!.traced ? 'stitch.lineTraced' : 'stitch.lineNote') }));
+    return out;
+  }
+
   /** Leaving out what lies on top: a switch, taken over at once (the shape itself stays). */
   private knockoutSwitch(k: NonNullable<StitchInfo['knockout']>): HTMLElement {
     const wrap = document.createElement('div');
@@ -758,7 +821,7 @@ export class StitchPanel {
       return out;
     }
     out.push(
-      this.slider({ label: 'stitch.borderWidth', hint: 'stitch.borderWidth.hint', min: 0.8, max: 6, step: 0.1, get: () => st.width, set: (v) => change((s) => (s.width = v))(v), fmt: mm(1) }),
+      this.slider({ label: offset ? 'stitch.borderWidth' : 'stitch.lineWidth', hint: offset ? 'stitch.borderWidth.hint' : 'stitch.lineWidth.hint', min: 0.8, max: 6, step: 0.1, get: () => st.width, set: (v) => change((s) => (s.width = v))(v), fmt: mm(1) }),
       this.slider({ label: 'stitch.density', hint: 'stitch.satinDensity.hint', min: 0.2, max: 1, step: 0.01, get: () => st.spacing ?? 0.4, set: (v) => change((s) => (s.spacing = v))(v), fmt: mm(2) }),
       this.slider({ label: 'stitch.borderPull', hint: 'stitch.borderPull.hint', min: 0, max: 0.6, step: 0.05, get: () => st.pull ?? 0, set: (v) => change((s) => (s.pull = v || undefined))(v), fmt: mm(2) }),
       this.choice<UnderlayKind | 'off'>('stitch.under.kind', ['off', ...UNDERLAYS], autoUnder(st), (v) => (v === 'off' ? 'stitch.borderUnder.off' : (`stitch.under.${v}` as Key)), (v) => {

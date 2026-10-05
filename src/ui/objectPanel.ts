@@ -20,7 +20,7 @@ export interface ObjectInfo {
   /** The one selected object has a fill whose outline can be edited. */
   shapeable: boolean;
   /** Its outline is being edited: nodes, and whether the selected one is round (null: none selected). */
-  shaping: { nodes: number; smooth: boolean | null } | null;
+  shaping: { nodes: number; smooth: boolean | null; line?: { closed: boolean } } | null;
   /** The frame is on the one selected object; whether it can be scaled. */
   frame: { canScale: boolean } | null;
   /** Why the selected objects cannot be sewn as one (several selected), or null. */
@@ -48,6 +48,8 @@ export interface ObjectHooks {
   deleteNode: () => void;
   /** The selected node round or a corner. */
   toggleNode: () => void;
+  /** A line on the level Shape: closed, or opened again. */
+  closeLine: () => void;
   deleteSelection: () => void;
   /** Split the stitch to the selected point in two. */
   splitStitch: () => void;
@@ -102,7 +104,7 @@ export class ObjectPanel {
   }
 
   update(info: ObjectInfo | null, lang: string): void {
-    const key = [info?.objects, info?.selected.join(), info?.hand.join(), info?.editing?.selection ?? -1, info?.shapeable, info?.shaping?.nodes ?? -1, info?.shaping?.smooth, info?.frame?.canScale, lang];
+    const key = [info?.objects, info?.selected.join(), info?.hand.join(), info?.editing?.selection ?? -1, info?.shapeable, info?.shaping?.nodes ?? -1, info?.shaping?.smooth, info?.shaping?.line?.closed, info?.frame?.canScale, lang];
     if (key.every((k, i) => k === this.key[i])) return;
     this.key = key;
     this.msg.hidden = true;
@@ -227,7 +229,7 @@ export class ObjectPanel {
   }
 
   /** Editing the outline of the one selected object: nodes, delete, corner or round, done. */
-  private shapeTools(sh: { nodes: number; smooth: boolean | null }): HTMLElement {
+  private shapeTools(sh: { nodes: number; smooth: boolean | null; line?: { closed: boolean } }): HTMLElement {
     const box = document.createElement('div');
     box.className = 'object-edit';
     const button = (label: string, run: () => void, opts: { primary?: boolean; disabled?: boolean; title?: string } = {}) => {
@@ -245,6 +247,13 @@ export class ObjectPanel {
       button(t('object.editDone'), () => this.hooks.editShape(false), { primary: true }),
     );
     box.append(row);
+    if (sh.line) {
+      const close = button(t(sh.line.closed ? 'shape.line.open' : 'shape.line.close'), () => this.hooks.closeLine(), { title: t(sh.line.closed ? 'shape.line.open.hint' : 'shape.line.close.hint') });
+      const more = document.createElement('div');
+      more.className = 'row-buttons';
+      more.append(close);
+      box.append(more);
+    }
     return box;
   }
 
