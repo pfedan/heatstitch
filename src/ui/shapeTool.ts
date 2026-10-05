@@ -233,6 +233,45 @@ export class ShapeTool implements ShapeView {
     return true;
   }
 
+  /** Whether the path of the selected node (else the first one) is closed. */
+  get closed(): boolean {
+    return !!this.form.paths[this.selected?.path ?? 0]?.closed;
+  }
+
+  /**
+   * A line closed (its ends joined by a straight piece) or opened: after the selected node, else
+   * where it was closed. Lines only; for areas the outline stays closed.
+   */
+  toggleClosed(): boolean {
+    const k = this.selected?.path ?? 0;
+    const path = this.form.paths[k];
+    if (!path || path.nodes.length < 2) return false;
+    let nodes = path.nodes.map((n) => ({ ...n }));
+    if (path.closed) {
+      // Opened after the selected node: the piece from it to the next one goes.
+      const i = this.selected ? this.selected.i : nodes.length - 1;
+      nodes = [...nodes.slice(i + 1), ...nodes.slice(0, i + 1)];
+      const first = nodes[0];
+      const last = nodes[nodes.length - 1];
+      first.a = first.p;
+      last.b = last.p;
+      first.smooth = last.smooth = false;
+    } else {
+      if (nodes.length < 3 && Math.hypot(nodes[0].p[0] - nodes[1].p[0], nodes[0].p[1] - nodes[1].p[1]) < 0.05) return false;
+      // Ends on the same spot are one node.
+      const a = nodes[0];
+      const b = nodes[nodes.length - 1];
+      if (nodes.length > 2 && Math.hypot(a.p[0] - b.p[0], a.p[1] - b.p[1]) < 0.05) {
+        a.a = b.a;
+        nodes.pop();
+      }
+    }
+    this.form = { paths: this.form.paths.map((p, j) => (j === k ? { closed: !path.closed, nodes } : p)) };
+    this.selected = null;
+    this.hooks.change(this.form);
+    return true;
+  }
+
   /** The selected node moved by (dx, dy) mm. */
   nudge(dx: number, dy: number): boolean {
     const s = this.selected;
