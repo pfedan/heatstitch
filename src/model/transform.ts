@@ -109,10 +109,10 @@ export function transformRemembered(r: Remembered, m: Mat): Remembered {
   const s = scaleOf(m);
   if (r.columns) {
     out.columns = r.columns.map((part) =>
-      part.map((c): Rails => ({ left: mapPts(m, c.left), right: mapPts(m, c.right), ...(c.rungs ? { rungs: c.rungs.map(([a, b]) => [a * s, b * s]) } : {}) })),
+      part.map((c) => mapRails(m, s, c)),
     );
   }
-  if (r.asSatin) out.asSatin = r.asSatin.map((c): Rails => ({ left: mapPts(m, c.left), right: mapPts(m, c.right), ...(c.rungs ? { rungs: c.rungs.map(([a, b]) => [a * s, b * s]) } : {}) }));
+  if (r.asSatin) out.asSatin = r.asSatin.map((c) => mapRails(m, s, c));
   if (r.fill) out.fill = { ...r.fill, angle: mapAngle(m, r.fill.angle), ...(r.fill.guides ? { guides: r.fill.guides.map((g) => mapPts(m, g)) } : {}) };
   return out;
 }
@@ -122,4 +122,15 @@ export function stitchesBefore(p: Pattern, i: number): number {
   let n = 0;
   for (let k = 0; k < i; k++) if (p.cmd[k] === STITCH) n++;
   return n;
+}
+
+/** Rails moved by `m`, their distances along the rails scaled by `s`. */
+function mapRails(m: Parameters<typeof mapPts>[0], s: number, c: Rails): Rails {
+  return {
+    left: mapPts(m, c.left),
+    right: mapPts(m, c.right),
+    ...(c.rungs ? { rungs: c.rungs.map(([a, b]) => [a * s, b * s] as [number, number]) } : {}),
+    ...(c.cuts ? { cuts: c.cuts.map(([a, b]) => [a * s, b * s] as [number, number]) } : {}),
+    ...(c.spacings ? { spacings: c.spacings.map(([a, v]) => [a * s, v] as [number, number]) } : {}),
+  };
 }

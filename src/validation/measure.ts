@@ -1,5 +1,6 @@
 import { computeDensity, type Metric } from '../density/grid';
 import { STITCH, type Pattern } from '../model/pattern';
+import { measureCoverage } from './coverage';
 import { satinMask } from './satin';
 import { shortStitchCounts, tagShortStitches, TIE } from './shortStitches';
 
@@ -41,6 +42,13 @@ export interface Measurement {
    * Tie-ins and tie-offs are excluded.
    */
   holes: Uint8Array;
+  /** Mean thread density of cells well inside stitched area (0 elsewhere), for fabric showing through. */
+  cover: Float32Array;
+  /** Gap pixels (0.01 mm² each) per cell once the thread has pulled in, on stable and on stretchy fabric. */
+  gapsLow: Uint8Array;
+  gapsHigh: Uint8Array;
+  /** Longest stitch with an end in the cell (0.1 mm). */
+  longest: Uint16Array;
 }
 
 interface SubGrid {
@@ -90,7 +98,7 @@ function reduce(g: SubGrid, mode: 'max' | 'mean'): Float32Array {
  * the peak instead of the mean of each cell keeps narrow columns (lettering, borders) from being
  * averaged away with their empty surroundings.
  */
-export function measurePattern(p: Pattern): Measurement {
+export function measurePattern(p: Pattern, skipCover?: Uint8Array): Measurement {
   const total = subGrid(p, 'thread');
   const mask = satinMask(p);
   const satinSub = subGrid(p, 'thread', (end) => mask[end] === 1);
@@ -116,6 +124,7 @@ export function measurePattern(p: Pattern): Measurement {
     satin,
     shorts: shortStitchCounts(p, tags, originX, originY, cols, rows),
     holes: holeNeighbours(p, tags, originX, originY, cols, rows),
+    ...measureCoverage(p, totalMean, originX, originY, cols, rows, skipCover),
   };
 }
 
@@ -170,4 +179,4 @@ function holeNeighbours(
 
 /** Buffers of a measurement, for transferring it out of a worker. */
 export const measurementBuffers = (m: Measurement): ArrayBuffer[] =>
-  [m.density, m.satin, m.shorts, m.holes].map((a) => a.buffer as ArrayBuffer);
+  [m.density, m.satin, m.shorts, m.holes, m.cover, m.gapsLow, m.gapsHigh, m.longest].map((a) => a.buffer as ArrayBuffer);

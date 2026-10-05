@@ -47,6 +47,8 @@ const zone = (minX: number, minY: number, maxX: number, maxY: number, level = CA
   maxDensity: 8,
   maxHoles: 0,
   maxShorts: 0,
+  minCover: 0,
+  maxLong: 0,
   satinShare: 0,
   bbox: { minX, minY, maxX, maxY },
 });

@@ -118,7 +118,8 @@ export interface Transformed {
  * What the object remembers goes along. Null when scaling did not work.
  */
 export function transformSewObject(p: Pattern, objs: SewObject[], o: SewObject, kinds: Uint8Array, m: Mat, trimMm: number): Transformed | null {
-  const rigid = isRigid(m);
+  // Stitches loosed from their shape go along as they are, also scaled (the resting shape with them).
+  const rigid = isRigid(m) || !!remembered(p, o)?.free;
   // A line with its curves: scaled, it is sewn anew along them with its settings.
   const line = remembered(p, o)?.path;
   if (line && !rigid) {

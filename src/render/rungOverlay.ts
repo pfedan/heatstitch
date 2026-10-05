@@ -5,7 +5,10 @@ import type { Viewport } from './viewport';
 
 const ACCENT = '#e0559e';
 
-const same = (a: RungPick | null, col: number, i: number) => !!a && a.col === col && a.i === i;
+/** Cut lines in their own color, so they read apart from the rungs. */
+const CUT = '#6fd3ff';
+
+const same = (a: RungPick | null, col: number, i: number, cut = false) => !!a && a.col === col && a.i === i && !!a.cut === cut;
 
 /**
  * The rung tool on the canvas: the rails of the satin as thin lines, each rung as a line across
@@ -32,9 +35,9 @@ export function drawRungOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, vie
       ctx.stroke();
     }
   }
-  const rung = (a: Pt, b: Pt, col: number, i: number, suggested: boolean) => {
-    const sel = same(view.selected, col, i);
-    const hov = same(view.hover, col, i);
+  const rung = (a: Pt, b: Pt, col: number, i: number, suggested: boolean, cut = false, label = '') => {
+    const sel = same(view.selected, col, i, cut);
+    const hov = same(view.hover, col, i, cut);
     const [ax, ay] = S(a);
     const [bx, by] = S(b);
     ctx.setLineDash(suggested && !sel ? [4, 3] : []);
@@ -44,22 +47,38 @@ export function drawRungOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, vie
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
     ctx.lineWidth = sel || hov ? 5 : 4;
     ctx.stroke();
-    ctx.strokeStyle = sel ? ACCENT : hov ? '#ffffff' : 'rgba(255, 214, 102, 0.95)';
+    ctx.strokeStyle = sel ? ACCENT : hov ? '#ffffff' : cut ? CUT : 'rgba(255, 214, 102, 0.95)';
     ctx.lineWidth = sel || hov ? 2.5 : 2;
     ctx.stroke();
     ctx.setLineDash([]);
+    if (label) {
+      ctx.font = '600 11px system-ui, sans-serif';
+      const tx = bx + 8;
+      const ty = by + 4;
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.75)';
+      ctx.strokeText(label, tx, ty);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(label, tx, ty);
+    }
     for (const [end, x, y] of [[0, ax, ay], [1, bx, by]] as const) {
       const big = hov && view.hover?.end === end;
       ctx.beginPath();
       ctx.arc(x, y, big ? 6.5 : 5, 0, Math.PI * 2);
-      ctx.fillStyle = sel ? ACCENT : '#ffd666';
+      ctx.fillStyle = sel ? ACCENT : cut ? CUT : '#ffd666';
       ctx.strokeStyle = 'rgba(0, 0, 0, 0.75)';
       ctx.lineWidth = 1.5;
       ctx.fill();
       ctx.stroke();
     }
   };
-  view.columns.forEach((c, k) => c.rungs.forEach((r, i) => rung(pointAt(c.left, c.cl, r[0]), pointAt(c.right, c.cr, r[1]), k, i, !c.own)));
+  view.columns.forEach((c, k) =>
+    c.rungs.forEach((r, i) => {
+      const sp = c.spacings.find(([x]) => Math.abs(x - r[0]) < 0.05);
+      rung(pointAt(c.left, c.cl, r[0]), pointAt(c.right, c.cr, r[1]), k, i, !c.own, false, sp ? `${sp[1].toFixed(2)} mm` : '');
+    }),
+  );
+  view.columns.forEach((c, k) => c.cuts.forEach((r, i) => rung(pointAt(c.left, c.cl, r[0]), pointAt(c.right, c.cr, r[1]), k, i, false, true)));
   view.lines.forEach(([a, b], i) => rung(a, b, -1, i, false));
   // Guide lines in the same colors.
   view.guides.forEach((g, i) => {

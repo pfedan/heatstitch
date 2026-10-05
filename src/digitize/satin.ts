@@ -31,6 +31,8 @@ export interface SatinParams {
   pullShare?: number;
   /** Split stitches staggered from stitch to stitch, so the split points do not line up into a groove. */
   stagger?: boolean;
+  /** Spacing at each point of the column instead of `spacing` (see spacingAlong in restitch). */
+  spacingAt?: number[];
 }
 
 export interface Column {
@@ -159,7 +161,7 @@ export function pairs(c: Column, p: SatinParams, ends?: ColumnEnds): [Pt, Pt][] 
       const d = norm(sub(c.right[last], c.left[last]));
       const perp = (a: Pt, b: Pt) => Math.abs((b[0] - a[0]) * d[1] - (b[1] - a[1]) * d[0]);
       const adv = Math.max(perp(c.left[last], c.left[i]), perp(c.right[last], c.right[i]));
-      if (adv < p.spacing && i < n - 1) continue;
+      if (adv < (p.spacingAt?.[last] ?? p.spacing) && i < n - 1) continue;
       if (adv < 0.1) continue;
     }
     out.push([c.left[i], c.right[i]]);
@@ -260,8 +262,59 @@ const INSET = 0.4;
  * within `tol` of the centerline, so it stays under the satin in tight curves.
  */
 export function underlay(c: Column, tol = TOLERANCE): Pt[] {
-  return c.width <= 4 ? centerWalk(c, tol) : zigzag(c);
+  const parts = byWidth(c);
+  if (parts.length === 1) return c.width <= WIDE ? centerWalk(c, tol) : zigzag(c);
+  // Along the column by its width there: a centre walk where narrow, a zigzag where wide.
+  const out: Pt[] = [];
+  for (const { a, b, wide } of parts) {
+    const part = sliceColumn(c, a, b);
+    out.push(...(wide ? zigzag(part) : centerWalk(part, tol)));
+  }
+  return out;
 }
+
+/** Wider than this (mm), a column gets a zigzag underlay; up to it a centre walk. */
+const WIDE = 4;
+/** Along a column a stretch counts as wide only this much over WIDE (mm), so a column about 4 mm wide is not cut up. */
+const WIDE_MARGIN = 0.5;
+/** Stretches shorter than this (mm along the middle) go with their neighbours. */
+const MIN_STRETCH = 5;
+
+/** The column in stretches of about even width class: from index a to b, wide or not. */
+function byWidth(c: Column): { a: number; b: number; wide: boolean }[] {
+  const n = c.center.length;
+  const parts: { a: number; b: number; wide: boolean; len: number }[] = [];
+  for (let i = 0; i < n; i++) {
+    const wide = dist(c.left[i], c.right[i]) > WIDE + WIDE_MARGIN;
+    const step = i ? dist(c.center[i - 1], c.center[i]) : 0;
+    const last = parts[parts.length - 1];
+    if (last && last.wide === wide) {
+      last.b = i;
+      last.len += step;
+    } else parts.push({ a: last ? last.b : 0, b: i, wide, len: step });
+  }
+  // The shortest stretch under MIN_STRETCH goes to its longer neighbour, until none is left.
+  for (;;) {
+    let k = -1;
+    for (let j = 0; j < parts.length; j++) if (parts[j].len < MIN_STRETCH && (k < 0 || parts[j].len < parts[k].len)) k = j;
+    if (k < 0 || parts.length === 1) break;
+    const prev = parts[k - 1];
+    const next = parts[k + 1];
+    const into = !next || (prev && prev.len >= next.len) ? k - 1 : k + 1;
+    const lo = Math.min(k, into);
+    const merged = { a: parts[lo].a, b: parts[lo + 1].b, wide: parts[into].wide, len: parts[lo].len + parts[lo + 1].len };
+    parts.splice(lo, 2, merged);
+    // Neighbours of the same kind become one.
+    for (let j = parts.length - 1; j > 0; j--) {
+      if (parts[j].wide !== parts[j - 1].wide) continue;
+      parts[j - 1] = { a: parts[j - 1].a, b: parts[j].b, wide: parts[j].wide, len: parts[j - 1].len + parts[j].len };
+      parts.splice(j, 1);
+    }
+  }
+  return parts.map(({ a, b, wide }) => ({ a, b, wide }));
+}
+
+const sliceColumn = (c: Column, a: number, b: number): Column => ({ center: c.center.slice(a, b + 1), left: c.left.slice(a, b + 1), right: c.right.slice(a, b + 1), width: c.width });
 
 function centerWalk(c: Column, tol: number): Pt[] {
   return runStitch(c.center, 2.5, tol);

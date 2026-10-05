@@ -1,9 +1,10 @@
 import type { Region } from '../digitize/region';
 import type { Form } from '../shape/path';
-import { knockOut, rasterize } from '../shape/rasterize';
+import { rasterize } from '../shape/rasterize';
+import { coversOver, cutAway, SATIN_SHARE } from './covers';
 import { rememberObjects, sewObjects, type SewObject } from './objects';
 import type { Pattern } from './pattern';
-import { remembered, rememberRange, type Remembered, type RestitchResult } from './restitch';
+import { remember, remembered, rememberRange, type Remembered, type RestitchResult } from './restitch';
 import { reshapeFill } from './reshape';
 import { stitchKinds } from './sequence';
 import { stitchesBefore } from './transform';
@@ -16,7 +17,7 @@ import { stitchesBefore } from './transform';
  */
 
 /** How far a fill still reaches under the shape on top (mm), so no fabric shows between them. */
-export const KNOCKOUT_OVERLAP = 0.2;
+export { FILL_OVERLAP as KNOCKOUT_OVERLAP } from './covers';
 /** Overlaps smaller than this (mm²) are not worth mentioning. */
 const NOTABLE_MM2 = 1;
 
@@ -32,26 +33,14 @@ export function wholeArea(form: Form, pxMm = 0.1): Region | null {
   return r;
 }
 
-/** The whole areas of the fills sewn after `o` whose shape is known as curves. */
-function coversOf(p: Pattern, objs: SewObject[], o: SewObject, pxMm: number): Region[] {
-  const out: Region[] = [];
-  for (const x of objs) {
-    if (x.index <= o.index) continue;
-    const f = remembered(p, x)?.form;
-    const r = f && wholeArea(f, pxMm);
-    if (r) out.push(r);
-  }
-  return out;
-}
-
 /** Areas with parts left out, and the whole area they were cut from. */
 const cutFrom = new WeakMap<Region, Region>();
 
-/** The area to sew for `form` as object `o`: whole, or without what later fills cover. */
+/** The area to sew for `form` as object `o`: whole, or without what later fills and satins cover. */
 export function sewnArea(p: Pattern, objs: SewObject[], o: SewObject, form: Form, knockout: boolean, pxMm = 0.1): Region | null {
   const whole = wholeArea(form, pxMm);
   if (!whole || !knockout) return whole;
-  const cut = knockOut(whole, coversOf(p, objs, o, pxMm), KNOCKOUT_OVERLAP);
+  const cut = cutAway(whole, coversOver(p, objs, o, pxMm, remembered(p, o)?.overlapShare ?? SATIN_SHARE));
   if (cut && cut !== whole) cutFrom.set(cut, whole);
   return cut;
 }
@@ -111,11 +100,32 @@ export function setKnockout(p: Pattern, which: number[], on: boolean, trimMm: nu
     const objs = sewObjects(cur);
     const o = objs[index];
     const known = o && remembered(cur, o);
-    if (!known?.form || !!known.knockout === on) continue;
+    if (!known?.form || known.free || !!known.knockout === on) continue;
     const next = sewAgain(cur, index, on, trimMm);
     if (!next) continue;
     cur = next;
     changed++;
+  }
+  return changed ? { pattern: cur, changed } : null;
+}
+
+/**
+ * How far the fills `which` still reach under a satin on top (share of its width): remembered, and
+ * sewn anew where they leave out what lies on top. Null when nothing changed.
+ */
+export function setOverlapShare(p: Pattern, which: number[], share: number, trimMm: number): { pattern: Pattern; changed: number } | null {
+  let cur = p;
+  let changed = 0;
+  for (const index of which) {
+    const objs = sewObjects(cur);
+    const o = objs[index];
+    const known = o && remembered(cur, o);
+    if (!known?.form || known.free || (known.overlapShare ?? SATIN_SHARE) === share) continue;
+    remember(cur, o, { ...known, overlapShare: share });
+    changed++;
+    if (!known.knockout) continue;
+    const next = sewAgain(cur, index, true, trimMm);
+    if (next) cur = next;
   }
   return changed ? { pattern: cur, changed } : null;
 }
@@ -132,7 +142,7 @@ export function refreshKnockouts(p: Pattern, trimMm: number): { pattern: Pattern
     const objs = sewObjects(cur);
     const o = objs[index];
     const known = o && remembered(cur, o);
-    if (!known?.form || !known.knockout) continue;
+    if (!known?.form || known.free || !known.knockout) continue;
     const area = sewnArea(cur, objs, o, known.form, true, known.region?.pxMm ?? 0.1);
     if (cutKey(area) === known.cut) continue;
     const next = sewAgain(cur, index, true, trimMm);
@@ -148,7 +158,7 @@ export function isCovered(p: Pattern, objs: SewObject[], o: SewObject): boolean 
   const form = remembered(p, o)?.form;
   const whole = form && wholeArea(form, remembered(p, o)?.region?.pxMm ?? 0.1);
   if (!whole) return false;
-  const left = knockOut(whole, coversOf(p, objs, o, whole.pxMm), KNOCKOUT_OVERLAP);
+  const left = cutAway(whole, coversOver(p, objs, o, whole.pxMm, remembered(p, o)?.overlapShare ?? SATIN_SHARE));
   return (left?.areaMm2 ?? 0) < whole.areaMm2 - NOTABLE_MM2;
 }
 

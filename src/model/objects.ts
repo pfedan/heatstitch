@@ -143,10 +143,23 @@ export function stitchKey(p: Pattern, a: number, b: number): string {
 
 const sectionKey = (p: Pattern, s: Section) => `s${stitchKey(p, s.first, s.last)}`;
 
+let joinsHeld = 0;
+
+/** As holdMemory (restitch.ts) for the sections: call the returned function to put them back. */
+export function holdJoins(): () => void {
+  const saved = new Map(joins);
+  joinsHeld++;
+  return () => {
+    joinsHeld--;
+    joins.clear();
+    for (const [k, v] of saved) joins.set(k, v);
+  };
+}
+
 function rememberJoin(key: string, join: boolean): void {
   joins.delete(key);
   joins.set(key, join);
-  if (joins.size > JOINS_SIZE) joins.delete(joins.keys().next().value!);
+  if (!joinsHeld && joins.size > JOINS_SIZE) joins.delete(joins.keys().next().value!);
 }
 
 /**

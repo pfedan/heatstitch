@@ -1,4 +1,4 @@
-import { fabricOf, threadOf, type Profile } from './profiles';
+import { fabricOf, recommendedSpacing, threadOf, type Profile } from './profiles';
 
 export const SAFE = 0;
 export const CAUTION = 1;
@@ -40,6 +40,15 @@ export const SHORT_STITCH_MM = 1.0;
 /** This many non-exempt short stitches in one 1 mm cell make it Critical. */
 export const SHORT_STITCH_COUNT = 8;
 
+/**
+ * Fabric shows through where a single layer is clearly more open than the material's recommended
+ * spacing: a fill at spacing s has about 1 / s mm of thread per mm², a satin 2 / s. A cell well
+ * inside stitched area below this share of that, at the widest recommended spacing, is Caution.
+ */
+export const SPARSE_SHARE = 1 / 1.15;
+/** Gap pixels (0.01 mm² each) in a 1 mm cell from which it counts as a gap. */
+export const GAP_PIXELS = 6;
+
 export interface Thresholds {
   /** Combined fabric x thread factor applied to the density limits. */
   factor: number;
@@ -49,6 +58,12 @@ export interface Thresholds {
   satinCritical: number;
   /** Neighbour-count limits, or null when the material is not perforation-sensitive. */
   holes: { caution: number; critical: number } | null;
+  /** Lowest mean density of one fill layer inside stitched area (mm/mm²), satin twice that. */
+  sparse: number;
+  /** Which gap measurement applies: pull on stable or on stretchy fabric. */
+  pull: 'low' | 'high';
+  /** Longest stitch without snagging (0.1 mm). */
+  long: number;
 }
 
 /** Density limits scale with the fabric and thread factors; perforation limits are geometric. */
@@ -62,6 +77,9 @@ export function thresholdsFor(p: Profile): Thresholds {
     satinCaution: BASE.satinCaution * k,
     satinCritical: BASE.satinCritical * k,
     holes: fabric.perforation ? { caution: HOLES_CAUTION, critical: HOLES_CRITICAL } : null,
+    sparse: SPARSE_SHARE / recommendedSpacing(p)[1],
+    pull: fabric.pull,
+    long: fabric.longMm * 10,
   };
 }
 
@@ -84,3 +102,6 @@ export function classifyHoles(neighbours: number, th: Thresholds): Level {
   if (neighbours >= th.holes.caution) return CAUTION;
   return SAFE;
 }
+
+/** Lowest mean density for a cell whose thread is `satinShare` satin. */
+export const sparseLimit = (th: Thresholds, satinShare: number): number => th.sparse * (1 + Math.min(1, Math.max(0, satinShare)));

@@ -1067,6 +1067,78 @@ button.link:hover {
   font-weight: 600;
 }
 
+.plan-list {
+  list-style: none;
+  margin: 6px 0 8px;
+  padding: 0;
+  border-top: 1px solid var(--line);
+}
+
+.plan-row {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.plan-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.plan-top .check {
+  display: inline-flex;
+}
+
+.plan-row > .check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+}
+
+.plan-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  font-weight: 500;
+  color: inherit;
+  text-align: left;
+}
+
+.plan-name .swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  flex: none;
+}
+
+.plan-name .kind-icon svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
+.plan-vis {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.plan-vis.visible {
+  color: var(--accent);
+}
+
+.fix-report .plan-change {
+  margin: 2px 0 0 24px;
+}
+
+.object-stitches .lock-switch {
+  margin: 8px 0 0;
+}
+
 .edit-tools {
   margin-top: 6px;
 }
@@ -3418,4 +3490,35 @@ button.mini-sw.thread-sw {
 
 .lettering-release {
   display: block;
+}
+
+.shape-trust.free {
+  color: var(--ink);
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.shape-trust.free svg {
+  color: var(--accent);
+}
+
+.free-block .direction-buttons {
+  margin-bottom: 6px;
+}
+
+.object-stitches .free-row {
+  margin-top: 6px;
+}
+
+.plan-pick {
+  display: flex;
+  gap: 14px;
+  margin: 4px 0 2px;
+}
+
+.plan-row.pinned {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  box-shadow: inset 3px 0 0 var(--accent);
+  padding-left: 6px;
 }
