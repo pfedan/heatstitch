@@ -5,6 +5,8 @@ import type { Settings } from '../settings';
 import type { EditView } from '../ui/editor';
 import type { ValidationResult, Zone } from '../validation/validate';
 import { drawEditOverlay } from './editOverlay';
+import { drawRungOverlay } from './rungOverlay';
+import type { RungView } from '../ui/rungTool';
 import { drawFlatStitches, drawJumps, drawMarkers, drawNeedle, drawOutlines, drawTransition, type StitchStyle } from './flow';
 import { drawHeatmap } from './heatmap';
 import { drawStitches } from './stitches';
@@ -30,6 +32,8 @@ export interface FlowScene {
   needle: number;
   /** Fill areas of the selected objects. */
   outlines?: ShapeOutline[];
+  /** The rung tool, while it is on. */
+  rungs?: RungView | null;
 }
 
 export interface Scene {
@@ -70,6 +74,7 @@ export function drawScene(ctx: CanvasRenderingContext2D, w: number, h: number, s
     if (flow.hover && flow.hover !== flow.selected) drawTransition(ctx, vp, pattern, flow.hover, false);
     if (flow.selected) drawTransition(ctx, vp, pattern, flow.selected, true);
     if (flow.outlines?.length) drawOutlines(ctx, vp, flow.outlines);
+    if (flow.rungs) drawRungOverlay(ctx, vp, flow.rungs);
     if (flow.needle >= 0) drawNeedle(ctx, vp, pattern, flow.needle);
     if (scene.edit) drawEditOverlay(ctx, vp, pattern, scene.edit, w, h);
     return;

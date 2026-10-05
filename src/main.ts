@@ -59,8 +59,11 @@ import { JumpsPanel } from './ui/jumpsPanel';
 import { blockName, kindLabel, LayersPanel } from './ui/layersPanel';
 import { ObjectPanel, OrderCard } from './ui/objectPanel';
 import { StitchPanel, type StitchInfo } from './ui/stitchPanel';
-import { analyze, measureFill, measureRun, measureSatin, remember, remembered, rememberedIn, rememberShapes, restitch, shapeTrust, unionRegion, type Remembered, type Settings as RestitchSettings, type ShapeTrust, type RestitchResult } from './model/restitch';
+import { analyze, forget, keepShape, measureFill, measureRun, measureSatin, remember, remembered, type Rails, rememberedIn, rememberShapes, restitch, shapeTrust, unionRegion, type Remembered, type Settings as RestitchSettings, type ShapeTrust, type RestitchResult } from './model/restitch';
 import { outline } from './digitize/region';
+import { railsFromOutline } from './digitize/rungs';
+import type { Pt } from './digitize/skeleton';
+import { RungTool } from './ui/rungTool';
 import { digitizeDefaults, isStroke, SATIN_MAX } from './digitize/digitize';
 import { recommendedSpacing } from './validation/profiles';
 import { numberInColor, overlaps, rememberObjects, sewObjects, splitObject, type SewObject } from './model/objects';
@@ -367,6 +370,7 @@ function flowScene(): FlowScene | null {
     needle: player.complete ? -1 : style.limit,
     // The areas as recognized on the file itself, also while a change is previewed.
     outlines: files.active?.pattern && selectedObjects.size ? stitchInfo(files.active.pattern, seq(files.active.pattern)).outlines : undefined,
+    rungs: rungTool.active ? rungTool : null,
   };
 }
 
@@ -446,6 +450,7 @@ function selectObjects(objs: number[], toggle: boolean): void {
   selectionKey++;
   flowPreview = null;
   if (next.size) focusBlock = null;
+  if (rungTool.active && (next.size !== 1 || !next.has(rungObject!))) closeRungs();
   // While editing points, choosing another object (in the list too) goes on with that one.
   if (editor.active && settings.mode === 'flow') {
     const one = next.size === 1 ? [...next][0] : null;
@@ -764,7 +769,187 @@ const stitchPanel = new StitchPanel($('object-stitches'), {
     const r = restitch(p, q.objects, [...selectedObjects].sort((a, b) => a - b), s, q.kinds, settings.trimMm, to === 'satin' ? 'fill' : 'satin');
     applyRestitched(r, to === 'satin' ? 'stitch.toSatin.failed' : 'stitch.failed', true);
   },
+  direction: (a) => {
+    if (a === 'tool') return toggleRungs();
+    if (!rungTool.active || rungTool.mode !== 'satin') return;
+    if (a === 'corners') rungTool.corners();
+    else if (a === 'even') rungTool.even();
+    else rungTool.follow();
+  },
+  draw: (a) => (a === 'tool' ? toggleRungs() : sewAlongLines()),
 });
+
+// Rungs -------------------------------------------------------------------------------------------
+
+/** The object the rung tool works on, and the pattern its columns were read from. */
+let rungObject: number | null = null;
+let rungPattern: Pattern | null = null;
+
+const rungTool = new RungTool({
+  change: (columns, final) => {
+    if (final) applyRungs(columns);
+    else if (!rungFrame) {
+      rungFrame = requestAnimationFrame(() => {
+        rungFrame = 0;
+        flowPreview = rungTool.active ? (withRungs(rungTool.mode === 'satin' ? pendingColumns : null)?.pattern ?? null) : null;
+        redraw();
+      });
+    }
+    if (!final) pendingColumns = columns;
+  },
+  lines: () => redraw(),
+  redraw: () => redraw(),
+  say: (key) => {
+    layers.say(t(key), true);
+    redraw();
+  },
+});
+let rungFrame = 0;
+let pendingColumns: Rails[][] | null = null;
+
+/** The one selected object, if the rung tool can work on it: a satin with columns, or a fill with an area. */
+function rungTarget(p: Pattern, q: Sequence): { o: number; mode: 'satin' | 'fill' } | null {
+  if (settings.mode !== 'flow' || selectedObjects.size !== 1) return null;
+  const o = [...selectedObjects][0];
+  const obj = q.objects[o];
+  if (!obj) return null;
+  const an = analyze(p, obj, q.kinds);
+  if (an.parts.some((pt) => pt.kind === 'satin')) return { o, mode: 'satin' };
+  if (an.fill) return { o, mode: 'fill' };
+  return null;
+}
+
+/** What the stitch panel shows about the rung tool. */
+function rungInfo(p: Pattern, q: Sequence): Pick<StitchInfo, 'direction' | 'draw'> {
+  const single = selectedObjects.size === 1;
+  const on = rungTool.active && rungObject !== null && selectedObjects.has(rungObject);
+  const out: Pick<StitchInfo, 'direction' | 'draw'> = {};
+  const info = stitchInfo(p, q);
+  if (info.measured.satin) {
+    let rungs: number | null = null;
+    if (on && rungTool.mode === 'satin') rungs = rungTool.count;
+    else if (single) {
+      const cols = remembered(p, q.objects[[...selectedObjects][0]])?.columns?.flat() ?? [];
+      rungs = cols.some((c) => c.rungs) ? cols.reduce((a, c) => a + (c.rungs?.length ?? 0), 0) : null;
+    }
+    out.direction = { tool: on && rungTool.mode === 'satin', rungs, single };
+  }
+  if (info.measured.fill && !info.measured.satin) out.draw = { tool: on && rungTool.mode === 'fill', lines: on ? rungTool.lines.length : 0, single };
+  return out;
+}
+
+/** The rung tool on or off for the selected object (key R). */
+function toggleRungs(): void {
+  if (rungTool.active) return closeRungs();
+  const p = files.active?.pattern;
+  if (!p) return;
+  const q = seq(p);
+  const target = rungTarget(p, q);
+  if (!target) return;
+  if (editor.active) setEditing(false);
+  const obj = q.objects[target.o];
+  if (target.mode === 'satin') {
+    const columns = keepShape(p, obj, q.kinds).columns;
+    if (!columns?.length) return layers.say(t('stitch.direction.miss'), true);
+    rungTool.openSatin(columns);
+  } else {
+    const an = analyze(p, obj, q.kinds);
+    const area = remembered(p, obj)?.shape ?? an.fill;
+    if (!area) return;
+    // The longest outline is the outside; holes are covered by the satin anyway.
+    const loops = outline(area);
+    const loop = loops.reduce((a, b) => (b.length > a.length ? b : a), [] as [number, number][]);
+    rungTool.openFill(loop as Pt[]);
+  }
+  rungObject = target.o;
+  rungPattern = p;
+  stage.classList.add('rungs');
+  redraw();
+}
+
+function closeRungs(): void {
+  if (!rungTool.active) return;
+  rungTool.close();
+  rungObject = null;
+  rungPattern = null;
+  pendingColumns = null;
+  flowPreview = null;
+  stage.classList.remove('rungs');
+  redraw();
+}
+
+/** Keeps the rung tool on its object: after new stitches its columns are read again; it closes when the object is gone. */
+function syncRungs(): void {
+  if (!rungTool.active) return;
+  const p = files.active?.pattern;
+  if (!p || settings.mode !== 'flow' || selectedObjects.size !== 1) return closeRungs();
+  if (p === rungPattern) return;
+  const q = seq(p);
+  const o = [...selectedObjects][0];
+  const obj = q.objects[o];
+  const columns = obj && rungTool.mode === 'satin' ? keepShape(p, obj, q.kinds).columns : null;
+  if (!columns?.length) return closeRungs();
+  rungTool.setColumns(columns);
+  rungObject = o;
+  rungPattern = p;
+}
+
+/**
+ * New stitches for the rung tool's object along `columns` (rails with their rungs), in its own
+ * satin settings; with `keep`, the columns stay remembered for the old stitches (to show them
+ * while dragging, they are put back).
+ */
+function withRungs(columns: Rails[][] | null, keep = false) {
+  const p = files.active?.pattern;
+  if (!p || rungObject === null || !columns) return null;
+  const q = seq(p);
+  const obj = q.objects[rungObject];
+  if (!obj) return null;
+  const before = remembered(p, obj);
+  const shape = keepShape(p, obj, q.kinds);
+  remember(p, obj, { ...shape, columns, read: false });
+  const r = restitch(
+    p,
+    q.objects,
+    [rungObject],
+    (_o, an, known) => {
+      const part = an.parts.find((pt) => pt.kind === 'satin');
+      return part ? { kind: 'satin', s: known?.satin ?? measureSatin(p, part, q.kinds) } : null;
+    },
+    q.kinds,
+    settings.trimMm,
+  );
+  if (!keep || !r.starts.length) forget(p, obj, before);
+  return r;
+}
+
+function applyRungs(columns: Rails[][]): void {
+  pendingColumns = null;
+  cancelAnimationFrame(rungFrame);
+  rungFrame = 0;
+  applyRestitched(withRungs(columns, true), 'stitch.failed');
+}
+
+/** Sews the selected fill as satin along the lines drawn across it. */
+function sewAlongLines(): void {
+  const p = files.active?.pattern;
+  if (!p || rungObject === null || rungTool.mode !== 'fill') return;
+  const q = seq(p);
+  const obj = q.objects[rungObject];
+  const an = obj && analyze(p, obj, q.kinds);
+  const area = an && (remembered(p, obj)?.shape ?? an.fill);
+  if (!area) return;
+  const loops = outline(area);
+  const loop = loops.reduce((a, b) => (b.length > a.length ? b : a), [] as [number, number][]) as Pt[];
+  const rails = railsFromOutline(loop, rungTool.lines);
+  if (!rails) return layers.say(t('stitch.draw.notStrip'), true);
+  const s = convertSettings('satin', stitchInfo(p, q));
+  if (!s) return;
+  const o = rungObject;
+  closeRungs();
+  const r = restitch(p, q.objects, [o], s, q.kinds, settings.trimMm, 'fill', false, new Map([[o, [rails]]]));
+  applyRestitched(r, 'stitch.toSatin.failed', true);
+}
 
 /** Color changes and trims as the statistics count them, travel between objects. */
 function orderStats(p: Pattern) {
@@ -1000,6 +1185,7 @@ function redraw(): void {
       empty.hidden = imageMode.hasImage;
       return;
     }
+    syncRungs();
     drawScene(ctx, stageW, stageH, scene(), stageBg());
     if (showCompare()) {
       const x = Math.round(split * stageW);
@@ -1037,7 +1223,7 @@ function redraw(): void {
       );
       jumpsPanel.update({ list: q?.transitions ?? [], selected: selectedJump, lang: getLang() });
       objectPanel.update(p && q && selectedObjects.size ? objectInfo(p, q) : null, getLang());
-      stitchPanel.update(p && q && selectedObjects.size ? stitchInfo(p, q) : null);
+      stitchPanel.update(p && q && selectedObjects.size ? { ...stitchInfo(p, q), ...rungInfo(p, q) } : null);
       $<HTMLButtonElement>('order-optimize').disabled = !q || q.objects.length < 2;
     }
     panel.update(active, selectedZone);
@@ -1248,6 +1434,7 @@ function revealRecord(i: number): void {
 }
 
 function setEditing(on: boolean): void {
+  if (on) closeRungs();
   if (on && settings.mode === 'flow' && selectedObjects.size === 1) return enterObject([...selectedObjects][0], true);
   editor.setActive(on);
   editObject = null;
@@ -1628,6 +1815,19 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   if (mod || e.altKey) return;
+  if (rungTool.active && settings.mode === 'flow') {
+    if ((e.key === 'Delete' || e.key === 'Backspace') && rungTool.deleteSelected()) {
+      e.preventDefault();
+      return;
+    }
+    if (e.key === 'Escape') {
+      if (rungTool.selected) {
+        rungTool.selected = null;
+        redraw();
+      } else closeRungs();
+      return;
+    }
+  }
   if (editor.active && editor.selection.size) {
     const step = e.shiftKey ? 5 : 1; // 0.1 mm, with Shift 0.5 mm
     const arrows: Record<string, [number, number]> = {
@@ -1666,7 +1866,11 @@ window.addEventListener('keydown', (e) => {
   }
   if (settings.mode === 'flow') {
     if ((e.target as HTMLElement).closest('button') && (e.key === ' ' || e.key === 'Enter')) return;
-    if (e.key === 'e') return setEditing(!editor.active);
+    if (e.key === 'e') {
+      closeRungs();
+      return setEditing(!editor.active);
+    }
+    if (e.key === 'r') return toggleRungs();
     if (editor.active) {
       if (e.key === 'Escape') return setEditing(false);
       if (e.key === ',' || e.key === '.') {
@@ -1776,12 +1980,13 @@ canvas.addEventListener('pointerdown', (e) => {
   }
   if (pointers.size === 1 && e.button === 0) {
     const [wx, wy] = vp.toWorld(pos[0], pos[1]);
-    mode = editor.down(wx, wy, pos[0], pos[1], e.shiftKey, vp.scale);
+    mode = rungTool.active && settings.mode === 'flow' ? rungTool.down(wx, wy, vp.scale) : editor.down(wx, wy, pos[0], pos[1], e.shiftKey, vp.scale);
   }
   pressMode = mode;
   if (mode === 'pan') canvas.classList.add('panning');
   if (pointers.size === 2) {
     editor.cancel();
+    rungTool.cancel();
     const [a, b] = [...pointers.values()];
     pinchDist = Math.hypot(a[0] - b[0], a[1] - b[1]);
   }
@@ -1812,7 +2017,7 @@ canvas.addEventListener('pointermove', (e) => {
   canvas.classList.toggle('on-divider', !prev && nearDivider(pos[0]));
   if (prev) {
     if (pointers.size === 1) {
-      if (!editor.dragTo(wx, wy, pos[0], pos[1])) vp.pan(pos[0] - prev[0], pos[1] - prev[1]);
+      if (!rungTool.dragTo(wx, wy) && !editor.dragTo(wx, wy, pos[0], pos[1])) vp.pan(pos[0] - prev[0], pos[1] - prev[1]);
     } else if (pointers.size === 2) {
       pointers.set(e.pointerId, pos);
       const [a, b] = [...pointers.values()];
@@ -1822,7 +2027,7 @@ canvas.addEventListener('pointermove', (e) => {
     }
     pointers.set(e.pointerId, pos);
     redraw();
-  } else if (editor.hoverAt(wx, wy, vp.scale)) redraw();
+  } else if (rungTool.active ? rungTool.hoverAt(wx, wy, vp.scale) : editor.hoverAt(wx, wy, vp.scale)) redraw();
   if (e.pointerType === 'mouse' || pointers.size <= 1) showTooltip(pos[0], pos[1]);
 });
 
@@ -1835,7 +2040,7 @@ const endPointer = (e: PointerEvent) => {
     else imageMode.paintCancel();
     return;
   }
-  if (pressAt && e.type === 'pointerup' && settings.mode === 'flow' && pressMode === 'pan' && Math.hypot(pos[0] - pressAt[0], pos[1] - pressAt[1]) < 4) {
+  if (pressAt && e.type === 'pointerup' && settings.mode === 'flow' && pressMode === 'pan' && !rungTool.active && Math.hypot(pos[0] - pressAt[0], pos[1] - pressAt[1]) < 4) {
     const p = files.active?.pattern;
     if (p && editor.active) {
       // Editing stitches: a click on another object goes on with that one, a click beside the
@@ -1870,7 +2075,10 @@ const endPointer = (e: PointerEvent) => {
     splitDrag = false;
     stage.classList.remove('splitting');
   }
-  if (pointers.size === 1 && pointers.has(e.pointerId)) editor.up();
+  if (pointers.size === 1 && pointers.has(e.pointerId)) {
+    rungTool.up();
+    editor.up();
+  }
   pointers.delete(e.pointerId);
   pinchDist = 0;
   if (!pointers.size) canvas.classList.remove('panning');
@@ -1878,6 +2086,7 @@ const endPointer = (e: PointerEvent) => {
 canvas.addEventListener('pointerup', endPointer);
 canvas.addEventListener('pointercancel', (e) => {
   editor.cancel();
+  rungTool.cancel();
   endPointer(e);
 });
 canvas.addEventListener('pointerleave', () => {
@@ -1894,6 +2103,7 @@ canvas.addEventListener('contextmenu', (e) => {
 canvas.addEventListener('dblclick', (e) => {
   const pos = local(e);
   const [x, y] = vp.toWorld(pos[0], pos[1]);
+  if (rungTool.active) return;
   if (editor.active) {
     editor.insertAt(x, y, vp.scale);
     return;
