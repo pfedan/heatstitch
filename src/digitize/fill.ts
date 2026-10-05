@@ -1,6 +1,7 @@
 import { expandRegion, sample, signedField, type Region } from './region';
 import { runStitch, simplify } from './run';
 import type { Pt } from './skeleton';
+import { embossPoints, motifCrossings, motifInside, type Motif } from './deco';
 
 /**
  * Tatami fill of a region (with holes) from its signed distance field.
@@ -55,6 +56,14 @@ export interface FillParams {
   travel?: Region;
   /** Curved rows keep this close to their line (mm); TOLERANCE by default. */
   tolerance?: number;
+  /** Straight rows put their needle points on the lines of this motif (embossing, see deco.ts). */
+  emboss?: { motif: Motif; size: number };
+  /**
+   * Rows that fade out across the shape (`out`, dense where the rows start) or in (`in`): the
+   * density falls evenly to nearly nothing, so a second color fading the other way on the same
+   * area makes a color blend as dense as one fill (see blend.ts in model).
+   */
+  fade?: 'out' | 'in';
 }
 
 export interface FillResult {
@@ -74,6 +83,8 @@ interface Seg {
 type Section = Seg[];
 
 const STAGGERS = 4;
+/** A fading fill thins out to this share of its density at the far side. */
+const FADE_MIN = 0.05;
 const UNDERLAY_STITCH = 3;
 export const UNDERLAY_INSET = 0.4;
 export const TRAVEL_STITCH = 2.5;
@@ -94,6 +105,10 @@ class Frame {
   n: Pt;
   private vs: number[] | null = null;
   private k0 = 0;
+  /** Needle points on the lines of a motif (embossing). */
+  emboss?: { motif: Motif; size: number };
+  /** Density falling evenly across the shape (out) or rising (in); see FillParams.fade. */
+  fade?: 'out' | 'in';
   constructor(
     angleDeg: number,
     public spacing: number,
@@ -108,13 +123,24 @@ class Frame {
     return [u * this.e[0] + v * this.n[0], u * this.e[1] + v * this.n[1]];
   }
   get gradient(): boolean {
-    return Math.abs(this.end - this.spacing) >= 1e-3;
+    return !!this.fade || Math.abs(this.end - this.spacing) >= 1e-3;
   }
   /** Sets the extent across the rows; returns the first and last row index. */
   layout(vmin: number, vmax: number): [number, number] {
     if (!this.gradient) return [Math.ceil(vmin / this.spacing), Math.floor(vmax / this.spacing)];
     const vs: number[] = [];
     const span = Math.max(1e-6, vmax - vmin);
+    if (this.fade) {
+      // Density, not spacing, changes evenly: 1 / spacing at full, down to FADE_MIN of it.
+      for (let v = vmin + this.spacing / 2; v <= vmax; ) {
+        vs.push(v);
+        const t = (v - vmin) / span;
+        v += this.spacing / Math.max(FADE_MIN, this.fade === 'out' ? 1 - t : t);
+      }
+      this.vs = vs;
+      this.k0 = 0;
+      return [0, vs.length - 1];
+    }
     for (let v = vmin + this.spacing / 2; v <= vmax; ) {
       vs.push(v);
       v += this.spacing + ((this.end - this.spacing) * (v - vmin)) / span;
@@ -245,6 +271,11 @@ function rowStitches(f: Frame, k: number, v: number, from: number, to: number, l
   const margin = Math.min(0.6, len / 4);
   const pts: number[] = [];
   for (let j = Math.ceil((lo + margin) / len - phase); (j + phase) * len <= hi - margin; j++) pts.push((j + phase) * len);
+  if (f.emboss) {
+    const { motif, size } = f.emboss;
+    const cross = motifCrossings(motif, size, { o: f.at(0, v), e: f.e }, lo + 0.3, hi - 0.3);
+    pts.splice(0, pts.length, ...embossPoints(cross, pts, len, lo, hi, (u) => motifInside(motif, size, f.at(u, v))));
+  }
   if (dir < 0) pts.reverse();
   return [f.at(from, v), ...pts.map((u) => f.at(u, v)), f.at(to, v)];
 }
@@ -598,6 +629,8 @@ export function pathLength(p: Pt[]): number {
 export function fillRegion(r: Region, p: FillParams, start: Pt, neighbours: number[] = []): FillResult | null {
   const angle = p.angle ?? chooseAngle(r, p.spacing, neighbours);
   const f = new Frame(angle, p.spacing, p.spacingEnd ?? p.spacing, p.offset ?? 1 / STAGGERS);
+  if (p.emboss) f.emboss = p.emboss;
+  if (p.fade) f.fade = p.fade;
   const top = rows(r, r.sdf, f, 0);
   if (!top.length) return null;
   const runs: Pt[][] = [];

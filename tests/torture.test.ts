@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { digitizeDefaults } from '../src/digitize/digitize';
 import { addShape } from '../src/model/addShape';
 import { syncBorders } from '../src/model/border';
+import { blendObject } from '../src/model/blend';
+import { MOTIFS } from '../src/digitize/deco';
 import { refreshKnockouts, setKnockout } from '../src/model/knockout';
 import { rememberObjects, sewObjects } from '../src/model/objects';
 import { COLOR_CHANGE, END, STITCH, type Pattern, type ThreadColor } from '../src/model/pattern';
 import { sameColor } from '../src/model/recolor';
 import { transformSewObject } from '../src/model/reshape';
-import { backToVersion, forgetAll, keepVersion, remember, remembered, rememberedIn, restitch, restoreRemembered, type FillSettings, type StoredObject } from '../src/model/restitch';
+import { backToVersion, forgetAll, keepVersion, remember, remembered, rememberedIn, restitch, restoreRemembered, DECO_PATTERNS, OPEN_PATTERNS, type FillSettings, type StoredObject } from '../src/model/restitch';
 import { stitchKinds } from '../src/model/sequence';
 import { deleteObjects, duplicateObject, mirrorMatrix, recolorObjects, subtractTop } from '../src/model/shapeOps';
 import { stitchesBefore } from '../src/model/transform';
@@ -266,6 +268,34 @@ const OPS: Op[] = [
       if (old && r() < 0.4) return restitchFill(d, o.index, { ...fill, border: undefined }, new Set([old]));
       const border = { type: pick(r, ['run', 'satin'] as const), width: 2, length: 2.5, tolerance: 0.15, color: pick(r, COLORS), link: old ?? `l${Math.floor(r() * 1e9).toString(36)}` };
       return restitchFill(d, o.index, { ...fill, border }, new Set());
+    },
+  },
+  {
+    name: 'decorate',
+    run: (d, r) => {
+      const fills = d.objects.filter((o) => remembered(d.cur.p, o)?.fill && !remembered(d.cur.p, o)?.asLine);
+      if (!fills.length) return false;
+      const o = pick(r, fills);
+      const fill = remembered(d.cur.p, o)!.fill!;
+      const kind = pick(r, ['emboss', 'fade', ...DECO_PATTERNS, ...OPEN_PATTERNS] as const);
+      const deco = { seed: 1 + Math.floor(r() * 9), focus: [r(), r()] as [number, number] };
+      const s: FillSettings =
+        kind === 'emboss'
+          ? { ...fill, pattern: 'tatami', deco: { ...deco, emboss: pick(r, MOTIFS) } }
+          : kind === 'fade'
+            ? { ...fill, pattern: 'gradient', deco: { ...deco, fade: pick(r, ['out', 'in'] as const) } }
+            : { ...fill, pattern: kind, deco };
+      if (process.env.TORTURE_TRACE) console.log('decorate', o.index, kind);
+      return restitchFill(d, o.index, s, new Set());
+    },
+  },
+  {
+    name: 'blend',
+    run: (d, r) => {
+      const fills = d.objects.filter((o) => remembered(d.cur.p, o)?.fill && !remembered(d.cur.p, o)?.asLine);
+      if (!fills.length) return false;
+      const o = pick(r, fills).index;
+      return shapes(d, blendObject(d.cur.p, o, pick(r, COLORS), T));
     },
   },
   {
