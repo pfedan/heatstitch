@@ -2969,3 +2969,22 @@ body[data-mode='flow'] .stage .hint {
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
   flex: none;
 }
+
+/* A fill's border: a block of its own below the fill's settings */
+.border-group {
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.border-group h4 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.border-group > p {
+  margin: -6px 0 0;
+}

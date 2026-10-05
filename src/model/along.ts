@@ -2,6 +2,7 @@ import { borderLoops, borderRails, borderRun, lineRails, orderLoops, type Border
 import type { Region } from '../digitize/region';
 import { TOLERANCE } from '../digitize/run';
 import type { Pt } from '../digitize/skeleton';
+import type { UnderlayKind } from '../digitize/satin';
 import { satinRuns, type SatinSettings } from './restitch';
 
 /**
@@ -18,16 +19,27 @@ export interface PathStitch {
   length?: number;
   /** Curves keep this close to the line (mm); TOLERANCE by default. */
   tolerance?: number;
+  /** A border lies this far outside the edge (mm; inside when negative); on the edge by default. */
+  offset?: number;
+  /** Satin: distance between penetrations on one side (mm); 0.4 by default. */
+  spacing?: number;
+  /** Satin: wider on each side by this (mm), against the pull of the thread; 0 by default. */
+  pull?: number;
+  /** Satin: its underlay; along the middle from 1.5 mm width, none below, by default. */
+  under?: UnderlayKind | 'off';
 }
+
+/** The satin's underlay when none is chosen. */
+export const autoUnder = (s: PathStitch): UnderlayKind | 'off' => s.under ?? (s.width >= 1.5 ? 'center' : 'off');
 
 /** The satin of a line: narrow, underlay along its middle once it is wide enough to need one. */
 const satinOf = (s: PathStitch): SatinSettings => ({
-  spacing: 0.4,
-  edge: 0,
+  spacing: s.spacing ?? 0.4,
+  edge: s.pull ?? 0,
   short: true,
-  underlay: s.width >= 1.5,
+  underlay: autoUnder(s) !== 'off',
   tolerance: s.tolerance ?? TOLERANCE,
-  under: 'center',
+  under: autoUnder(s) === 'off' ? 'center' : (autoUnder(s) as UnderlayKind),
   stagger: true,
   edgeShare: 0,
 });
@@ -49,17 +61,17 @@ export function sewAlong(line: Pt[], closed: boolean, s: PathStitch, start?: Pt,
     const run = borderRun(l, s.type === 'triple', s.tolerance ?? TOLERANCE, s.length);
     return run.length > 1 ? [run] : [];
   }
-  const rails = area && closed ? borderRails(area, l, s.width) : lineRails(l, closed, s.width);
+  const rails = area && closed ? borderRails(area, l, s.width, s.offset ?? 0) : lineRails(l, closed, s.width);
   return satinRuns([rails], satinOf(s));
 }
 
-/** The stitches of a border on the edge of `r`, loop by loop, starting near `from`. */
+/** The stitches of a border on the edge of `r` (or `s.offset` from it), loop by loop, starting near `from`. */
 export function borderStitches(r: Region, s: PathStitch, from: Pt): Pt[][] {
-  const loops = orderLoops(borderLoops(r), from);
+  const loops = orderLoops(borderLoops(r, s.offset ?? 0), from);
   if (s.type !== 'satin') return loops.flatMap((l) => sewAlong(l, true, s, undefined, r));
   // One satin over all loops: its underlay first, then the satin, as satinRuns sews them.
   return satinRuns(
-    loops.map((l) => borderRails(r, l, s.width)),
+    loops.map((l) => borderRails(r, l, s.width, s.offset ?? 0)),
     satinOf(s),
   );
 }

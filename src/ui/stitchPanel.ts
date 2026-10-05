@@ -6,10 +6,10 @@ import type { ShapeOutline } from '../render/scene';
 import { UNDERLAY_INSET } from '../digitize/fill';
 import type { Pt } from '../digitize/skeleton';
 import { KIND_ICON, kindLabel } from './layersPanel';
-import { BORDER_WIDTH, type BorderType } from '../digitize/border';
+import { BORDER_STITCH, BORDER_WIDTH, type BorderType } from '../digitize/border';
 import type { ThreadColor } from '../model/pattern';
 import { newLink } from '../model/border';
-import type { PathStitch } from '../model/along';
+import { autoUnder, type PathStitch } from '../model/along';
 import { cssColor, hexColor, ThreadPicker } from './threadPicker';
 
 type FillUnder = 'off' | 'single' | 'cross';
@@ -321,13 +321,7 @@ export class StitchPanel {
       if (s.underlay) {
         out.push(this.under(this.slider({ label: 'stitch.underInset', hint: 'stitch.underInset.hint', min: 0, max: 1.5, step: 0.05, get: () => s.underInset ?? UNDERLAY_INSET, set: (v) => (s.underInset = v), fmt: mm(2) })));
       }
-      out.push(
-        ...this.pathStitch(s.border, (b) => {
-          if (b) s.border = Object.assign(s.border ?? b, b);
-          else delete s.border;
-        }),
-      );
-      if (s.border) out.push(this.borderThread(s.border));
+      out.push(this.borderGroup(s));
       return out;
     }
     if (this.kind === 'satin') {
@@ -705,22 +699,72 @@ export class StitchPanel {
 
   /**
    * Settings of stitches along a line (see along.ts): the kind, Aus first when `off` is allowed,
-   * and the satin's width. The same fields for a fill's border and for a line of its own.
+   * then what that kind needs. The same fields for a fill's border and for a line of its own;
+   * `offset` adds where the line lies to the edge (borders only).
    */
-  pathStitch(st: PathStitch | undefined, set: (v: PathStitch | undefined) => void, off = true): HTMLElement[] {
+  pathStitch(st: PathStitch | undefined, set: (v: PathStitch | undefined) => void, off = true, offset = false): HTMLElement[] {
+    const mm = (d: number) => (v: number) => `${formatNumber(v, d)} mm`;
     const kinds = off ? BORDERS : BORDERS.filter((v) => v !== 'off');
     const out = [
-      this.choice<BorderChoice>('stitch.border', kinds, st?.type ?? 'off', (v) => `stitch.border.${v}` as Key, (v) => {
+      this.choice<BorderChoice>('stitch.borderType', kinds, st?.type ?? 'off', (v) => `stitch.border.${v}` as Key, (v) => {
         set(v === 'off' ? undefined : { ...st, type: v, width: st?.width ?? BORDER_WIDTH });
       }),
     ];
-    if (st?.type === 'satin') {
-      out.push(this.slider({ label: 'stitch.borderWidth', hint: 'stitch.borderWidth.hint', min: 0.8, max: 6, step: 0.1, get: () => st.width, set: (v) => {
-          st.width = v;
-          set(st);
-        }, fmt: (v: number) => `${formatNumber(v, 1)} mm` }));
+    if (!st) return out;
+    const change = (f: (s: PathStitch) => void) => (v: number) => {
+      f(st);
+      set(st);
+      void v;
+    };
+    if (offset) {
+      out.push(
+        this.slider({
+          label: 'stitch.borderOffset',
+          hint: 'stitch.borderOffset.hint',
+          min: -3,
+          max: 3,
+          step: 0.05,
+          get: () => st.offset ?? 0,
+          set: (v) => change((s) => (s.offset = v || undefined))(v),
+          fmt: (v) => (v ? `${v > 0 ? '+' : '−'}${formatNumber(Math.abs(v), 2)} mm ${t(v > 0 ? 'stitch.borderOffset.out' : 'stitch.borderOffset.in')}` : t('stitch.borderOffset.edge')),
+        }),
+      );
     }
+    if (st.type !== 'satin') {
+      out.push(this.slider({ label: 'stitch.length', hint: 'stitch.runLength.hint', min: 1, max: 6, step: 0.1, get: () => st.length ?? BORDER_STITCH, set: (v) => change((s) => (s.length = v))(v), fmt: mm(1) }));
+      return out;
+    }
+    out.push(
+      this.slider({ label: 'stitch.borderWidth', hint: 'stitch.borderWidth.hint', min: 0.8, max: 6, step: 0.1, get: () => st.width, set: (v) => change((s) => (s.width = v))(v), fmt: mm(1) }),
+      this.slider({ label: 'stitch.density', hint: 'stitch.satinDensity.hint', min: 0.2, max: 1, step: 0.01, get: () => st.spacing ?? 0.4, set: (v) => change((s) => (s.spacing = v))(v), fmt: mm(2) }),
+      this.slider({ label: 'stitch.borderPull', hint: 'stitch.borderPull.hint', min: 0, max: 0.6, step: 0.05, get: () => st.pull ?? 0, set: (v) => change((s) => (s.pull = v || undefined))(v), fmt: mm(2) }),
+      this.choice<UnderlayKind | 'off'>('stitch.under.kind', ['off', ...UNDERLAYS], autoUnder(st), (v) => (v === 'off' ? 'stitch.borderUnder.off' : (`stitch.under.${v}` as Key)), (v) => {
+        st.under = v;
+        set(st);
+      }, true),
+    );
     return out;
+  }
+
+  /** A fill's border, as a block of its own: what it is, its stitches, its thread. */
+  private borderGroup(s: FillSettings): HTMLElement {
+    const box = document.createElement('section');
+    box.className = 'border-group';
+    box.append(
+      Object.assign(document.createElement('h4'), { textContent: t('stitch.border') }),
+      Object.assign(document.createElement('p'), { className: 'muted small', textContent: t('stitch.border.intro') }),
+      ...this.pathStitch(
+        s.border,
+        (b) => {
+          if (b) s.border = Object.assign(s.border ?? b, b);
+          else delete s.border;
+        },
+        true,
+        true,
+      ),
+    );
+    if (s.border) box.append(this.borderThread(s.border));
+    return box;
   }
 
   /**

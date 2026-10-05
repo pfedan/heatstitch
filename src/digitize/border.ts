@@ -19,9 +19,13 @@ const MIN_LOOP = 1.5;
 
 const dist = (a: Pt, b: Pt) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 
-/** The edge of the area as closed lines (first point repeated at the end), long enough to sew. */
-export function borderLoops(r: Region): Pt[][] {
-  return outline(r)
+/**
+ * The edge of the area as closed lines (first point repeated at the end), long enough to sew;
+ * `offset` mm outside it (inside when negative).
+ */
+export function borderLoops(r: Region, offset = 0): Pt[][] {
+  const f = offset > 0 ? padded(r, offset + 0.5) : r;
+  return outline(f, offset, f.sdfBase)
     .map((l) => l as Pt[])
     .filter((l) => {
       let s = 0;
@@ -101,25 +105,28 @@ function smoothLoop(pts: Pt[], k: number): Pt[] {
   return out;
 }
 
-/** The area with a wider empty margin, so its field reaches `mm` outside its edge. */
+/**
+ * The area's shape (as stored, not grown or shrunk) with a wider empty margin, so its field
+ * reaches `mm` outside its edge.
+ */
 function padded(r: Region, mm: number): Region {
   const pad = Math.ceil(mm / r.pxMm) + 2;
   const w = r.w + 2 * pad;
   const h = r.h + 2 * pad;
   const mask = new Uint8Array(w * h);
-  for (let y = 0; y < r.h; y++) for (let x = 0; x < r.w; x++) mask[(y + pad) * w + x + pad] = r.mask[y * r.w + x];
+  for (let y = 0; y < r.h; y++) for (let x = 0; x < r.w; x++) mask[(y + pad) * w + x + pad] = r.sdfBase[y * r.w + x] < 0 ? 1 : 0;
   const f = signedField(mask, w, h, r.pxMm);
   return { ...r, x0: r.x0 - pad, y0: r.y0 - pad, w, h, mask, sdf: f, sdfBase: f };
 }
 
 /**
- * Rails of a satin of width `w` centered on a closed edge line. Each side reaches half the width
- * along the normal, less where the band around the edge is narrower (inside a corner), so the
- * rails do not fold over at corners.
+ * Rails of a satin of width `w` centered on a closed line `level` mm outside the edge (inside
+ * when negative). Each side reaches half the width along the normal, less where the band around
+ * that line is narrower (inside a corner), so the rails do not fold over at corners.
  */
-export function borderRails(r: Region, loop: Pt[], w: number): { left: Pt[]; right: Pt[] } {
+export function borderRails(r: Region, loop: Pt[], w: number, level = 0): { left: Pt[]; right: Pt[] } {
   const half = w / 2;
-  const f = padded(r, half * 1.7 + 0.5);
+  const f = padded(r, half * 1.7 + 0.5 + Math.max(0, level));
   const center = smoothLoop(resample(loop, 0.2), 3);
   const n = center.length - 1;
   const open = center.slice(0, -1);
@@ -133,7 +140,7 @@ export function borderRails(r: Region, loop: Pt[], w: number): { left: Pt[]; rig
   const reach = (c: Pt, d: Pt): number => {
     const step = 0.05;
     for (let s = step; s <= half * 1.6; s += step) {
-      const v = Math.abs(sample(f, f.sdfBase, c[0] + d[0] * s, c[1] + d[1] * s));
+      const v = Math.abs(sample(f, f.sdfBase, c[0] + d[0] * s, c[1] + d[1] * s) - level);
       if (v >= half) return s;
     }
     return half;

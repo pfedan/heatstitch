@@ -27,7 +27,13 @@ export function sameRegion(a: Region | null | undefined, b: Region | null | unde
   return true;
 }
 
-const sameBorder = (a: BorderSettings, b: BorderSettings) => a.type === b.type && Math.abs(a.width - b.width) < 1e-6 && a.length === b.length && a.tolerance === b.tolerance;
+/** The stitch settings of a border, without its thread and link. */
+const stitchOf = ({ color: _c, link: _l, ...rest }: BorderSettings): BorderSettings => rest;
+const sameBorder = (a: BorderSettings, b: BorderSettings) => {
+  const x = stitchOf(a) as unknown as Record<string, unknown>;
+  const y = stitchOf(b) as unknown as Record<string, unknown>;
+  return [...new Set([...Object.keys(x), ...Object.keys(y)])].every((k) => x[k] === y[k]);
+};
 
 /** A new link between a fill and its border object. */
 export const newLink = () => Math.random().toString(36).slice(2, 10);
@@ -99,7 +105,7 @@ export function syncBorders(p: Pattern, trimMm: number, drop: ReadonlySet<string
     const from: Pt = [p.x[o.last] / 10, p.y[o.last] / 10];
     const runs = borderStitches(m.region, b, from);
     if (!runs.length) return;
-    const memory: Remembered = { region: m.region, outline: b.link, border: { type: b.type, width: b.width, length: b.length, tolerance: b.tolerance } };
+    const memory: Remembered = { region: m.region, outline: b.link, border: stitchOf(b) };
     const recs = borderRecords(runs, trimMm);
     if (same) {
       changes.push({ a: leadOf(p, target), b: target.last, recs, memory });

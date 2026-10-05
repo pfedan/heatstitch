@@ -71,6 +71,31 @@ describe('fill border', () => {
     expect(Math.abs(stitches(off.q, off.o.first, off.o.last) - stitches(plain.q, plain.o.first, plain.o.last))).toBeLessThan(60);
   });
 
+  it('moves the border off the edge by the set offset, inside and outside', () => {
+    for (const offset of [1, -0.8]) {
+      const a = apply(p, o.index, { ...base, border: { type: 'run', width: 2, offset } });
+      const region = a.memory.region!;
+      let near = 0;
+      let n = 0;
+      for (let i = a.o.last - 40; i <= a.o.last; i++) {
+        if (a.q.cmd[i] !== STITCH) continue;
+        n++;
+        if (Math.abs(sample(region, region.sdfBase, a.q.x[i] / 10, a.q.y[i] / 10) - offset) < 0.3) near++;
+      }
+      expect(near).toBeGreaterThan(n * 0.8);
+    }
+  });
+
+  it('sews the satin border with its own density and underlay', () => {
+    const count = (b: object) => {
+      const a = apply(p, o.index, { ...base, border: { type: 'satin', width: 3, ...b } });
+      return stitches(a.q, a.o.first, a.o.last);
+    };
+    const plain = count({});
+    expect(count({ spacing: 0.8 })).toBeLessThan(plain - 100);
+    expect(count({ under: 'off' })).toBeLessThan(plain);
+  });
+
   it('knows where the underlay of a fill sewn here ends', () => {
     const a = apply(p, o.index, base);
     expect(a.memory.under).toBeGreaterThan(10);
