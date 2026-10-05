@@ -3,7 +3,7 @@ import { chooseAngle, fillRegion, type FillParams } from '../digitize/fill';
 import { contourField, fieldFill, guideField, stitchField } from '../digitize/flow';
 import { spiralFill } from '../digitize/spiral';
 import { coverage } from '../digitize/measure';
-import { sample, signedField, type Region } from '../digitize/region';
+import { expandRegion, sample, signedField, type Region } from '../digitize/region';
 import { runStitch, TOLERANCE } from '../digitize/run';
 import { eStitches, pairs, satinStitches, underlayOf, type Column, type SatinParams, type UnderlayKind } from '../digitize/satin';
 import { columnFromRungs, cumulative, reversedRungs, type Rung } from '../digitize/rungs';
@@ -57,6 +57,8 @@ export interface FillSettings {
   underCross?: boolean;
   /** Underlay stays this far inside the edge (mm); 0.4 when not set. */
   underInset?: number;
+  /** The area grown (+) or shrunk (-) on all sides before it is filled (mm); 0 when not set. */
+  expand?: number;
 }
 
 export interface SatinSettings {
@@ -275,6 +277,7 @@ function isFill(f: unknown): f is FillSettings {
     (s.guides === undefined || (Array.isArray(s.guides) && s.guides.every(isLine))) &&
     (s.underCross === undefined || typeof s.underCross === 'boolean') &&
     (s.underInset === undefined || finite(s.underInset)) &&
+    (s.expand === undefined || finite(s.expand)) &&
     typeof s.underlay === 'boolean'
   );
 }
@@ -843,7 +846,14 @@ function newFill(p: Pattern, o: SewObject, a: Analysis, s: FillSettings, reverse
   const segs: number[] = [];
   for (let i = o.first + 1; i <= o.last; i++) if (p.cmd[i] === STITCH && p.cmd[i - 1] === STITCH) segs.push(i);
   const travel = traceRegion(p, segs, TRAVEL_REACH, 0, false) ?? undefined;
-  const fp: FillParams = { spacing: s.spacing, stitch: s.stitch, angle: s.angle, pull: s.edge, underlay: s.underlay, underCross: s.underCross, underInset: s.underInset, travel, tolerance: s.tolerance };
+  // Grown or shrunk for the stitches only: the shape kept for the next edit stays as it is.
+  const r = expandRegion(a.fill, s.expand ?? 0);
+  if (!r) return null;
+  // Grown, the travel may also use the new margin, so it stays one piece; shrunk, it stays inside
+  // the smaller area (the old thread runs where nothing is sewn now).
+  const ex = s.expand ?? 0;
+  const way = ex > 0 && travel ? (unionRegion([travel, r]) ?? travel) : ex < 0 ? r : travel;
+  const fp: FillParams = { spacing: s.spacing, stitch: s.stitch, angle: s.angle, pull: s.edge, underlay: s.underlay, underCross: s.underCross, underInset: s.underInset, travel: way, tolerance: s.tolerance };
   // Reversed, the new stitches start where the old ones ended.
   const start = reverse ? pt10(p, last.e) : pt10(p, first.s);
   // Straight rows end near where the next object starts, when that shortens the way (if nothing
@@ -851,7 +861,6 @@ function newFill(p: Pattern, o: SewObject, a: Analysis, s: FillSettings, reverse
   let next = o.last + 1;
   while (next < p.cmd.length && p.cmd[next] !== STITCH && p.cmd[next] !== END) next++;
   if (!reverse && a.parts[a.parts.length - 1] === last && next < p.cmd.length && p.cmd[next] === STITCH) fp.end = pt10(p, next);
-  const r = a.fill;
   let res;
   if (s.pattern === 'gradient') {
     res = fillRegion(r, { ...fp, spacingEnd: s.spacingEnd }, start);

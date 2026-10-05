@@ -378,6 +378,8 @@ export const en: Record<keyof typeof de, string> = {
   'stitch.fillUnder.single.hint': 'One sparse layer across the rows, sewn first, that holds the fabric',
   'stitch.fillUnder.cross': 'Cross',
   'stitch.fillUnder.cross.hint': 'Two sparse layers crossing: holds stretchy and fluffy fabric better, costs more stitches',
+  'stitch.expand': 'Expand',
+  'stitch.expand.hint': 'Grow (+) or shrink (−) the area on all sides before it is filled: closes gaps to outlines and neighbours or keeps away from them. The shape itself stays.',
   'stitch.underInset': 'Underlay inset',
   'stitch.underInset.hint': 'The underlay stays this far inside the edge so it does not peek out',
   'stitch.offset': 'Offset',

@@ -246,6 +246,7 @@ export class StitchPanel {
       if (s.pattern === 'contour' || s.pattern === 'spiral' || s.pattern === 'follow') out.push(this.toleranceSlider(s));
       out.push(
         this.slider({ label: 'stitch.edge', hint: 'stitch.edge.hint', min: -0.4, max: 0.6, step: 0.05, get: () => s.edge, set: (v) => (s.edge = v), fmt: signed }),
+        this.slider({ label: 'stitch.expand', hint: 'stitch.expand.hint', min: -3, max: 3, step: 0.05, get: () => s.expand ?? 0, set: (v) => (s.expand = v), fmt: signed }),
         this.choice<FillUnder>('stitch.underlay', FILL_UNDERS, !s.underlay ? 'off' : s.underCross ? 'cross' : 'single', (v) => `stitch.fillUnder.${v}` as Key, (v) => {
           s.underlay = v !== 'off';
           s.underCross = v === 'cross';
@@ -260,7 +261,7 @@ export class StitchPanel {
       const s = this.draft.satin!;
       const e = s.type === 'e';
       const width = (label: Key, get: () => number, set: (v: number) => void) =>
-        this.slider({ label, hint: 'stitch.width.hint', min: -0.4, max: 0.6, step: 0.05, get, set, fmt: signed });
+        this.slider({ label, hint: 'stitch.width.hint', min: -3, max: 3, step: 0.05, get, set, fmt: signed });
       this.sides ||= s.edgeB !== undefined && s.edgeB !== s.edge;
       const out: HTMLElement[] = [
         this.choice<SatinType>('stitch.satinType', ['satin', 'e'], s.type ?? 'satin', (v) => `stitch.satinType.${v}` as Key, (v) => {

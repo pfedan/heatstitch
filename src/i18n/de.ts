@@ -376,6 +376,8 @@ export const de = {
   'stitch.fillUnder.single.hint': 'Eine lockere Lage quer zu den Reihen, zuerst gestickt, die den Stoff hält',
   'stitch.fillUnder.cross': 'Kreuz',
   'stitch.fillUnder.cross.hint': 'Zwei lockere Lagen über Kreuz: hält dehnbare und flauschige Stoffe besser, kostet mehr Stiche',
+  'stitch.expand': 'Ausdehnen',
+  'stitch.expand.hint': 'Die Fläche rundum größer (+) oder kleiner (−) machen, bevor sie gefüllt wird: schließt Lücken zu Konturen und Nachbarn oder hält Abstand zu ihnen. Die Form selbst bleibt.',
   'stitch.underInset': 'Einzug der Unterlage',
   'stitch.underInset.hint': 'So weit bleibt die Unterlage innerhalb des Rands, damit sie nicht hervorschaut',
   'stitch.offset': 'Versatz',

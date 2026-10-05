@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { fillRegion, pathLength } from '../src/digitize/fill';
 import { contourField, fieldFill, guideField } from '../src/digitize/flow';
 import { coverage } from '../src/digitize/measure';
-import { buildRegion, outline, type Region } from '../src/digitize/region';
+import { buildRegion, expandRegion, outline, type Region } from '../src/digitize/region';
 import { spiralFill } from '../src/digitize/spiral';
 import type { Pt } from '../src/digitize/skeleton';
 
@@ -154,6 +154,22 @@ describe('guided fill, underlay and end', () => {
     const deep = fillRegion(square, { ...params, underlay: true, underInset: 1.5, stitch: 7 }, [5, 5])!;
     const loose = fillRegion(square, { ...params, underlay: true, stitch: 7 }, [5, 5])!;
     expect(thread(deep.runs)).toBeLessThan(thread(loose.runs));
+  });
+
+  it('grows and shrinks an area on all sides', () => {
+    // The 20 mm square: 2 mm more on each side gives about 24 × 24 mm, 2 mm less 16 × 16 mm.
+    const big = expandRegion(square, 2)!;
+    const small = expandRegion(square, -2)!;
+    expect(big.areaMm2).toBeGreaterThan(560);
+    expect(big.areaMm2).toBeLessThan(580);
+    expect(small.areaMm2).toBeGreaterThan(250);
+    expect(small.areaMm2).toBeLessThan(262);
+    expect(expandRegion(square, -11)).toBeNull();
+    const rowsOf = (r: Region) => fillRegion(r, params, [5, 5])!.runs.flat();
+    const ys = (pts: Pt[]) => [Math.min(...pts.map((q) => q[1])), Math.max(...pts.map((q) => q[1]))];
+    const [lo, hi] = ys(rowsOf(big));
+    expect(lo).toBeLessThan(3.4);
+    expect(hi).toBeGreaterThan(26.6);
   });
 
   it('ends near the next object when that shortens the way', () => {
