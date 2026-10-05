@@ -38,6 +38,7 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
   const shapesView = $<HTMLInputElement>('shapes-view');
   const threadWidth = $<HTMLInputElement>('thread-width');
   const liveLight = $<HTMLInputElement>('live-light');
+  const fabricLook = $<HTMLInputElement>('fabric-look');
   const spm = $<HTMLSelectElement>('machine-spm');
   const key = $<HTMLElement>('color-key');
   const stage = $<HTMLElement>('stage');
@@ -130,6 +131,9 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
     threadWidth.disabled = !s.realistic;
     liveLight.checked = s.liveLight;
     liveLight.disabled = !s.realistic;
+    fabricLook.checked = s.fabricLook;
+    fabricLook.disabled = !s.realistic;
+    $('fabric-out').textContent = `(${t(`fabric.${s.profile.fabric}` as Key)})`;
     spm.value = String(s.machineSpm);
     $('cell-out').textContent = `${formatNumber(s.cellMm, 2)} mm`;
     $('blur-out').textContent = s.blurMm > 0 ? `${formatNumber(s.blurMm, 1)} mm` : t('controls.off');
@@ -180,6 +184,7 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
   on(shapesView, 'change', () => ((s.shapesView = shapesView.checked), 'render'));
   on(threadWidth, 'input', () => ((s.threadMm = Number(threadWidth.value)), 'render'));
   on(liveLight, 'change', () => ((s.liveLight = liveLight.checked), 'render'));
+  on(fabricLook, 'change', () => ((s.fabricLook = fabricLook.checked), 'render'));
   on(spm, 'change', () => ((s.machineSpm = Number(spm.value)), 'render'));
 
   // Collapsible sidebar sections remember whether they are open.

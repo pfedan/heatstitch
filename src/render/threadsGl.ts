@@ -139,7 +139,7 @@ void main() {
   o = vec4(toSrgb(col) * alpha, alpha);
 }`;
 
-function compile(gl: WebGL2RenderingContext, vs: string, fs: string): WebGLProgram {
+export function compile(gl: WebGL2RenderingContext, vs: string, fs: string): WebGLProgram {
   const prog = gl.createProgram()!;
   for (const [type, src] of [
     [gl.VERTEX_SHADER, vs],

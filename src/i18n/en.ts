@@ -44,6 +44,8 @@ export const en: Record<keyof typeof de, string> = {
   'bg.navy': 'Navy',
   'bg.red': 'Red',
   'bg.own': 'Custom color',
+  'controls.fabric': 'Fabric texture',
+  'controls.fabric.hint': "Shows the profile's fabric in the background color, lit like the threads. Only with realistic threads.",
   'controls.showJumps': 'Show jumps as dashed lines',
   'controls.fit': 'Fit',
   'controls.export': 'Export PNG',

@@ -11,6 +11,7 @@ import { patternStats, type Pattern, type ThreadColor } from '../model/pattern';
 import { sewingSeconds } from '../model/sequence';
 import { drawStitches } from '../render/stitches';
 import { drawThreads } from '../render/threads';
+import { drawFabric } from '../render/fabricGl';
 import type { Viewport } from '../render/viewport';
 import type { ImageView, Settings } from '../settings';
 import { CAUTION, CRITICAL, type ValidationResult } from '../validation/validate';
@@ -694,6 +695,8 @@ export class ImageMode {
     const [W, H] = this.sizeMm();
     const [x0, y0] = vp.toScreen(-W / 2, -H / 2);
     const view = this.h.settings.image.view;
+    const st = this.h.settings;
+    if (view === 'stitches' && this.result && st.realistic && st.fabricLook) drawFabric(ctx, vp, st.profile.fabric, background);
     ctx.save();
     if (view === 'original' || !this.preparedImg) {
       ctx.imageSmoothingQuality = 'high';

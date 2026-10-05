@@ -75,6 +75,8 @@ export interface Settings {
   shapesView: boolean;
   /** Color behind the stitches (the fabric), as #rrggbb; null follows the light or dark theme. */
   background: string | null;
+  /** In the realistic view the background shows the profile's fabric (weave, knit, leather) in that color. */
+  fabricLook: boolean;
   /** Visual thread width of the realistic view in mm; reset to the thread weight's width when the profile thread changes. */
   threadMm: number;
   /** In the realistic view the light follows the pointer and the tilt of a phone. */
@@ -118,6 +120,7 @@ export const DEFAULTS: Settings = {
   realistic: false,
   shapesView: false,
   background: null,
+  fabricLook: true,
   threadMm: threadWidthMm(DEFAULT_PROFILE),
   liveLight: true,
   showValidation: true,
@@ -169,6 +172,7 @@ export function loadSettings(): Settings {
       threadMm: typeof s.threadMm === 'number' && s.threadMm > 0 ? s.threadMm : threadWidthMm(profile),
       background: hexColor(s.background),
       liveLight: typeof s.liveLight === 'boolean' ? s.liveLight : DEFAULTS.liveLight,
+      fabricLook: typeof s.fabricLook === 'boolean' ? s.fabricLook : DEFAULTS.fabricLook,
       panels: { side: width(s.panels?.side), inspector: width(s.panels?.inspector) },
       checks: normalizeChecks(s.checks),
       correction: normalizeCorrection(s.correction),

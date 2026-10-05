@@ -42,6 +42,8 @@ export const de = {
   'bg.navy': 'Marine',
   'bg.red': 'Rot',
   'bg.own': 'Eigene Farbe',
+  'controls.fabric': 'Stoffstruktur',
+  'controls.fabric.hint': "Zeigt den Stoff aus dem Material-Profil in der Hintergrundfarbe, mit Licht und Schatten wie die Fäden. Nur mit realistischen Fäden.",
   'controls.showJumps': 'Sprünge gestrichelt zeigen',
   'controls.fit': 'Einpassen',
   'controls.export': 'PNG exportieren',
