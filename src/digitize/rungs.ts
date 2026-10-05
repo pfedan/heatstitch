@@ -242,15 +242,15 @@ function railCorners(rail: Pt[], cum: number[], h: number, minDeg: number): { s:
  * rung along each corner's bisector (inner corner to outer corner) and one about a column width
  * before and after it, square to the rails. Rungs that were in the way are dropped; the others stay.
  */
-export function cornerRungs(left: Pt[], right: Pt[], rungs: Rung[], minDeg = 35): Rung[] {
+type Corner = { rung: Rung; turn: number };
+
+/** The corners of a column turning by `minDeg` or more: a rung along each one's bisector, along the column. */
+function cornersOf(left: Pt[], right: Pt[], rungs: Rung[], minDeg: number): { corners: Corner[]; w: number } {
   const cl = cumulative(left);
   const cr = cumulative(right);
-  const la = cl[cl.length - 1];
-  const lb = cr[cr.length - 1];
   const col = columnFromRungs(left, right, rungs, 0.2);
   const w = Math.max(0.5, col.width);
   const h = Math.max(0.4, w * 0.6);
-  type Corner = { rung: Rung; turn: number };
   const corners: Corner[] = [];
   for (const side of [0, 1] as const) {
     const [rail, cum, other, ocum] = side === 0 ? [left, cl, right, cr] : [right, cr, left, cl];
@@ -277,8 +277,25 @@ export function cornerRungs(left: Pt[], right: Pt[], rungs: Rung[], minDeg = 35)
     if (chosen.some((x) => dist(pointAt(left, cl, x.rung[0]), p) < w * 1.5)) continue;
     chosen.push(c);
   }
+  return { corners: chosen.sort((a, b) => a.rung[0] - b.rung[0]), w };
+}
+
+/**
+ * Cut lines at the sharp corners of a column (turning by `minDeg` or more), along their bisectors:
+ * sewn in sections there, each side ends in a clean mitre instead of fanning round the corner.
+ */
+export function cornerCuts(left: Pt[], right: Pt[], rungs: Rung[] = [], minDeg = 60): Rung[] {
+  return cornersOf(left, right, rungs, minDeg).corners.map((c) => c.rung);
+}
+
+export function cornerRungs(left: Pt[], right: Pt[], rungs: Rung[], minDeg = 35): Rung[] {
+  const cl = cumulative(left);
+  const cr = cumulative(right);
+  const la = cl[cl.length - 1];
+  const lb = cr[cr.length - 1];
+  const { corners: chosen, w } = cornersOf(left, right, rungs, minDeg);
   let out = rungs.slice();
-  for (const c of chosen.sort((a, b) => a.rung[0] - b.rung[0])) {
+  for (const c of chosen) {
     const [ca, cb] = c.rung;
     // Square rungs a column width before and after, measured on the rail with the shorter way round.
     const before = square(left, cl, right, cr, ca, cb, -1, w);

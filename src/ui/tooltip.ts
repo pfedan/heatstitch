@@ -4,7 +4,8 @@ import { sampleGrid } from '../render/heatmap';
 import { sampleCell } from '../render/validationOverlay';
 import type { Viewport } from '../render/viewport';
 import type { Settings } from '../settings';
-import { densityLimits } from '../validation/thresholds';
+import { densityLimits, sparseLimit } from '../validation/thresholds';
+import { REASON_BITS } from '../validation/zones';
 import { CAUTION, CRITICAL, type ValidationResult } from '../validation/validate';
 
 const LEVEL_KEY: Record<number, Key> = { [CAUTION]: 'level.caution', [CRITICAL]: 'level.critical' };
@@ -51,6 +52,10 @@ export function updateTooltip(
       }
       if (validation.checks.perforation && validation.thresholds.holes && m.holes[i]) parts.push(t('tooltip.holes', { v: m.holes[i] }));
       if (validation.checks.shortStitches && m.shorts[i]) parts.push(t('tooltip.shorts', { v: m.shorts[i] }));
+      const why = validation.reasons[i];
+      if (why & REASON_BITS.sparse) parts.push(t('tooltip.sparse', { v: formatNumber(sparseLimit(validation.thresholds, m.satin[i]), 1) }));
+      if (why & REASON_BITS.gap) parts.push(t('tooltip.gap'));
+      if (why & REASON_BITS.long) parts.push(t('tooltip.long', { v: formatNumber(m.longest[i] / 10, 1) }));
       const check = line(parts.join(' · '), 'check');
       if (LEVEL_KEY[level]) check.prepend(Object.assign(document.createElement('b'), { textContent: `${t(LEVEL_KEY[level])} ` }));
       lines.push(check);

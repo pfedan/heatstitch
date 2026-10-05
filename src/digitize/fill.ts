@@ -33,6 +33,8 @@ export interface FillParams {
   underCross?: boolean;
   /** Underlay stays this far inside the edge (mm); UNDERLAY_INSET by default. */
   underInset?: number;
+  /** The underlay only in this part of the area (same pixels as the area); all of it when not set. */
+  underArea?: Region;
   /**
    * Underlay inset as a share of the shape's width where it is (0.1 = 10 %), in place of the inset
    * in mm when set.
@@ -717,10 +719,12 @@ export function underlayArea(r: Region, inset: number, share?: number): Region |
  * times the top spacing apart (at least 1.2 mm) unless set, inside `underlayArea`; appended to
  * `runs`. Travel between its rows stays inside that area too. Returns where the needle ends.
  */
-export function sewUnderlay(r: Region, angle: number, p: Pick<FillParams, 'spacing' | 'underCross' | 'underInset' | 'underInsetShare' | 'underSpacing'>, start: Pt, grid: TravelGrid, runs: Pt[][]): Pt {
+export function sewUnderlay(r: Region, angle: number, p: Pick<FillParams, 'spacing' | 'underCross' | 'underInset' | 'underInsetShare' | 'underSpacing' | 'underArea'>, start: Pt, grid: TravelGrid, runs: Pt[][]): Pt {
   const us = p.underSpacing ?? Math.max(1.2, 3 * p.spacing);
   let pos = start;
-  const area = underlayArea(r, p.underInset ?? UNDERLAY_INSET, p.underInsetShare);
+  // Only where it is wanted (not under later objects); travel still goes the whole area's way.
+  const base = p.underArea && p.underArea.pxMm === r.pxMm && p.underArea.w === r.w && p.underArea.h === r.h ? p.underArea : r;
+  const area = underlayArea(base, p.underInset ?? UNDERLAY_INSET, p.underInsetShare);
   if (area) {
     const inner = area === r ? grid : new TravelGrid(area);
     for (const a of p.underCross ? [angle - 45, angle + 45] : [angle + 90]) {

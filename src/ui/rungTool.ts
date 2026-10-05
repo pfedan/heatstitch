@@ -1,4 +1,4 @@
-import { addRung, cornerRungs, cumulative, pointAt, project, rungFromLine, rungRange, seedRungs, type Rung } from '../digitize/rungs';
+import { addRung, cornerCuts, cornerRungs, cumulative, pointAt, project, rungFromLine, rungRange, seedRungs, type Rung } from '../digitize/rungs';
 import { pathLength } from '../digitize/fill';
 import { simplify } from '../digitize/run';
 import type { Pt } from '../digitize/skeleton';
@@ -15,6 +15,10 @@ export interface RungColumn {
   cl: number[];
   cr: number[];
   rungs: Rung[];
+  /** Cut lines: the column is sewn in sections there (see Rails.cuts). */
+  cuts: Rung[];
+  /** Spacing set at rungs: distance along the left rail and spacing (mm). */
+  spacings: [number, number][];
   /** The rungs are the column's own (false: suggested from its stitches, nothing set yet). */
   own: boolean;
   /** The column as it came, to give back what was not changed. */
@@ -27,6 +31,8 @@ export interface RungPick {
   i: number;
   /** End picked: 0 on the left rail (or the line's start), 1 on the right, -1 the line itself. */
   end: 0 | 1 | -1;
+  /** A cut line of the column, not a rung. */
+  cut?: boolean;
 }
 
 export type RungMode = 'satin' | 'fill' | 'guide';
@@ -55,10 +61,10 @@ export interface RungHooks {
   guides: (guides: Pt[][]) => void;
   redraw: () => void;
   /** Says why something did not work. */
-  say: (key: 'stitch.direction.miss' | 'stitch.direction.cross' | 'stitch.direction.cornersNone') => void;
+  say: (key: 'stitch.direction.miss' | 'stitch.direction.cross' | 'stitch.direction.cornersNone' | 'stitch.sections.none') => void;
 }
 
-type Drag = { kind: 'end'; pick: RungPick } | { kind: 'draw' } | { kind: 'sketch' } | null;
+type Drag = { kind: 'end'; pick: RungPick } | { kind: 'draw'; cut: boolean } | { kind: 'sketch' } | null;
 
 /**
  * Rungs on the canvas: lines across a satin column that set the direction of its stitches (dragged
@@ -136,11 +142,21 @@ export class RungTool implements RungView {
     columns.forEach((part, k) =>
       part.forEach((r) => {
         this.parts.push(k);
-        this.columns.push({ left: r.left, right: r.right, cl: cumulative(r.left), cr: cumulative(r.right), rungs: r.rungs ?? seedRungs(r.left, r.right), own: !!r.rungs, rails: r });
+        this.columns.push({
+          left: r.left,
+          right: r.right,
+          cl: cumulative(r.left),
+          cr: cumulative(r.right),
+          rungs: r.rungs ?? seedRungs(r.left, r.right),
+          cuts: (r.cuts ?? []).map((x) => [x[0], x[1]] as Rung),
+          spacings: (r.spacings ?? []).map((x) => [x[0], x[1]] as [number, number]),
+          own: !!r.rungs,
+          rails: r,
+        });
       }),
     );
     const s = this.selected;
-    if (s && (s.col >= this.columns.length || s.i >= this.columns[s.col].rungs.length)) this.selected = null;
+    if (s && (s.col >= this.columns.length || s.i >= (s.cut ? this.columns[s.col].cuts : this.columns[s.col].rungs).length)) this.selected = null;
   }
 
   /** How many rungs set the direction (null: the stitches' own, nothing set). */
@@ -153,7 +169,10 @@ export class RungTool implements RungView {
   private result(): Rails[][] {
     const out: Rails[][] = [];
     this.columns.forEach((c, k) => {
-      (out[this.parts[k]] ??= []).push(c.own ? { left: c.left, right: c.right, rungs: c.rungs.map((r) => [r[0], r[1]] as Rung) } : c.rails);
+      const base: Rails = c.own ? { left: c.left, right: c.right, rungs: c.rungs.map((r) => [r[0], r[1]] as Rung) } : { left: c.rails.left, right: c.rails.right, ...(c.rails.rungs ? { rungs: c.rails.rungs } : {}) };
+      if (c.cuts.length) base.cuts = c.cuts.map((r) => [r[0], r[1]] as Rung);
+      if (c.spacings.length) base.spacings = c.spacings.map((r) => [r[0], r[1]] as [number, number]);
+      (out[this.parts[k]] ??= []).push(base);
     });
     return out;
   }
@@ -168,16 +187,20 @@ export class RungTool implements RungView {
     const reachEnd = PICK_END_PX / scale;
     const reachLine = PICK_LINE_PX / scale;
     let best: { pick: RungPick; d: number } | null = null;
-    const consider = (col: number, i: number, a: Pt, b: Pt) => {
+    const consider = (col: number, i: number, a: Pt, b: Pt, cut = false) => {
+      const tag = cut ? { cut: true } : {};
       for (const [end, p] of [[0, a], [1, b]] as const) {
         const d = Math.hypot(p[0] - q[0], p[1] - q[1]);
-        if (d <= reachEnd && (!best || d < best.d)) best = { pick: { col, i, end }, d };
+        if (d <= reachEnd && (!best || d < best.d)) best = { pick: { col, i, end, ...tag }, d };
       }
       if (best && best.pick.end !== -1) return;
       const d = segDist(q, a, b);
-      if (d <= reachLine && (!best || d < best.d)) best = { pick: { col, i, end: -1 }, d };
+      if (d <= reachLine && (!best || d < best.d)) best = { pick: { col, i, end: -1, ...tag }, d };
     };
-    if (this.mode === 'satin') this.columns.forEach((c, k) => c.rungs.forEach((r, i) => consider(k, i, ...this.ends(c, r))));
+    if (this.mode === 'satin') {
+      this.columns.forEach((c, k) => c.rungs.forEach((r, i) => consider(k, i, ...this.ends(c, r))));
+      this.columns.forEach((c, k) => c.cuts.forEach((r, i) => consider(k, i, ...this.ends(c, r), true)));
+    }
     else if (this.mode === 'fill') this.lines.forEach(([a, b], i) => consider(-1, i, a, b));
     else {
       this.guides.forEach((g, i) => {
@@ -215,8 +238,11 @@ export class RungTool implements RungView {
     });
   }
 
-  /** Pointer pressed: an end to drag, a rung to select, or a new line to draw. Returns 'pan' when not taken. */
-  down(x: number, y: number, scale: number): 'move' | 'pan' {
+  /**
+   * Pointer pressed: an end to drag, a rung to select, or a new line to draw (with `cut`, Shift held
+   * on a satin: a cut line). Returns 'pan' when not taken.
+   */
+  down(x: number, y: number, scale: number, cut = false): 'move' | 'pan' {
     if (!this.active) return 'pan';
     const hit = this.pick(x, y, scale);
     if (hit) {
@@ -236,7 +262,7 @@ export class RungTool implements RungView {
       this.sketchStep = 3 / scale;
       return 'move';
     }
-    this.drag = { kind: 'draw' };
+    this.drag = { kind: 'draw', cut: cut && this.mode === 'satin' };
     this.draft = [
       [x, y],
       [x, y],
@@ -257,10 +283,14 @@ export class RungTool implements RungView {
       if (this.mode === 'fill') this.lines[i][end as 0 | 1] = [x, y];
       else {
         const c = this.columns[col];
-        const [lo, hi] = rungRange(c.rungs, i, end as 0 | 1, c.cl[c.cl.length - 1], c.cr[c.cr.length - 1]);
+        const list = d.pick.cut ? c.cuts : c.rungs;
+        const [lo, hi] = rungRange(list, i, end as 0 | 1, c.cl[c.cl.length - 1], c.cr[c.cr.length - 1]);
         const s = project(end === 0 ? c.left : c.right, end === 0 ? c.cl : c.cr, [x, y], lo, hi).s;
-        c.rungs[i] = end === 0 ? [s, c.rungs[i][1]] : [c.rungs[i][0], s];
-        c.own = true;
+        const was = list[i][0];
+        list[i] = end === 0 ? [s, list[i][1]] : [list[i][0], s];
+        // A spacing set at the rung goes along with it.
+        if (!d.pick.cut && end === 0) for (const sp of c.spacings) if (Math.abs(sp[0] - was) < 0.05) sp[0] = s;
+        if (!d.pick.cut) c.own = true;
         this.hooks.change(this.result(), false);
       }
     }
@@ -290,25 +320,28 @@ export class RungTool implements RungView {
         this.lines.push([a, b]);
         this.selected = { col: -1, i: this.lines.length - 1, end: -1 };
         this.hooks.lines();
-      } else this.addFromLine(a, b);
+      } else this.addFromLine(a, b, d.cut);
     }
     this.hooks.redraw();
   }
 
   /** A rung from a line drawn across a column: in the first column whose two rails it meets. */
-  private addFromLine(a: Pt, b: Pt): void {
+  private addFromLine(a: Pt, b: Pt, cut = false): void {
     let crossed = false;
     for (const [k, c] of this.columns.entries()) {
       const r = rungFromLine(c.left, c.right, a, b);
       if (!r) continue;
-      const next = addRung(c.rungs, r, c.cl[c.cl.length - 1], c.cr[c.cr.length - 1]);
+      const next = addRung(cut ? c.cuts : c.rungs, r, c.cl[c.cl.length - 1], c.cr[c.cr.length - 1]);
       if (!next) {
         crossed = true;
         continue;
       }
-      c.rungs = next;
-      c.own = true;
-      this.selected = { col: k, i: next.findIndex((x) => x[0] === r[0] && x[1] === r[1]), end: -1 };
+      if (cut) c.cuts = next;
+      else {
+        c.rungs = next;
+        c.own = true;
+      }
+      this.selected = { col: k, i: next.findIndex((x) => x[0] === r[0] && x[1] === r[1]), end: -1, ...(cut ? { cut: true } : {}) };
       this.hooks.change(this.result(), true);
       return;
     }
@@ -340,9 +373,15 @@ export class RungTool implements RungView {
     } else if (this.mode === 'guide') {
       this.guides.splice(s.i, 1);
       this.hooks.guides(this.guides.map((g) => g.slice()));
+    } else if (s.cut) {
+      const c = this.columns[s.col];
+      c.cuts = c.cuts.filter((_, i) => i !== s.i);
+      this.hooks.change(this.result(), true);
     } else {
       const c = this.columns[s.col];
+      const at = c.rungs[s.i][0];
       c.rungs = c.rungs.filter((_, i) => i !== s.i);
+      c.spacings = c.spacings.filter(([x]) => Math.abs(x - at) >= 0.05);
       c.own = true;
       this.hooks.change(this.result(), true);
     }
@@ -374,10 +413,56 @@ export class RungTool implements RungView {
     else this.hooks.say('stitch.direction.cornersNone');
   }
 
+  /** Cut lines at the sharp corners of each column, those there kept; says so when there are none. */
+  sections(): void {
+    let changed = false;
+    for (const c of this.columns) {
+      const la = c.cl[c.cl.length - 1];
+      const lb = c.cr[c.cr.length - 1];
+      let cuts = c.cuts;
+      for (const r of cornerCuts(c.left, c.right, c.own ? c.rungs : (c.rails.rungs ?? []))) {
+        const next = addRung(cuts, r, la, lb);
+        if (next) cuts = next;
+      }
+      if (cuts.length === c.cuts.length) continue;
+      c.cuts = cuts;
+      changed = true;
+    }
+    this.selected = null;
+    if (changed) this.hooks.change(this.result(), true);
+    else this.hooks.say('stitch.sections.none');
+  }
+
+  /** The spacing set at the selected rung (mm), or null when it keeps the column's. */
+  get spacingHere(): number | null | undefined {
+    const s = this.selected;
+    if (!s || s.cut || s.col < 0 || this.mode !== 'satin') return undefined;
+    const c = this.columns[s.col];
+    const at = c.rungs[s.i]?.[0];
+    if (at === undefined) return undefined;
+    return c.spacings.find(([x]) => Math.abs(x - at) < 0.05)?.[1] ?? null;
+  }
+
+  /** Sets the spacing at the selected rung (null: as the column). */
+  setSpacingHere(v: number | null): void {
+    const s = this.selected;
+    if (!s || s.cut || s.col < 0) return;
+    const c = this.columns[s.col];
+    const at = c.rungs[s.i]?.[0];
+    if (at === undefined) return;
+    c.spacings = c.spacings.filter(([x]) => Math.abs(x - at) >= 0.05);
+    if (v !== null) c.spacings.push([at, v]);
+    c.spacings.sort((a, b) => a[0] - b[0]);
+    // The rung becomes the column's own: its place must stay where the spacing was set.
+    c.own = true;
+    this.hooks.change(this.result(), true);
+  }
+
   /** No rungs: even from end to end. */
   even(): void {
     for (const c of this.columns) {
       c.rungs = [];
+      c.spacings = [];
       c.own = true;
     }
     this.selected = null;
@@ -387,7 +472,7 @@ export class RungTool implements RungView {
   /** Back to the direction of the stitches (no rungs set). */
   follow(): void {
     const out: Rails[][] = [];
-    this.columns.forEach((c, k) => (out[this.parts[k]] ??= []).push({ left: c.left, right: c.right }));
+    this.columns.forEach((c, k) => (out[this.parts[k]] ??= []).push({ left: c.left, right: c.right, ...(c.cuts.length ? { cuts: c.cuts } : {}) }));
     this.selected = null;
     this.hooks.change(out, true);
   }

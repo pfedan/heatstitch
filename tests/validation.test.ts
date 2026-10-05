@@ -3,6 +3,7 @@ import { DEFAULT_PROFILE, normalizeProfile, recommendedSpacing, type Profile } f
 import { satinMask } from '../src/validation/satin';
 import { BASE, classifyDensity, densityLimits, thresholdsFor } from '../src/validation/thresholds';
 import {
+  ALL_CHECKS,
   CAUTION,
   classify,
   CRITICAL,
@@ -233,7 +234,7 @@ describe('short-stitch clusters', () => {
   });
 
   it('flags nothing when the short-stitch check is off', () => {
-    const off = { density: true, shortStitches: false, perforation: true };
+    const off = { ...ALL_CHECKS, shortStitches: false };
     const r = classify(line(10, 'middle').measurement, KNIT, off);
     expect(r.criticalCells).toBe(0);
   });
@@ -244,20 +245,20 @@ describe('switching checks off', () => {
   const satin = measurePattern(new Shape().satin(10, 18, 20, 4, 0.15).build());
 
   it('defaults every check to on, also for old stored settings', () => {
-    expect(normalizeChecks(undefined)).toEqual({ density: true, shortStitches: true, perforation: true });
+    expect(normalizeChecks(undefined)).toEqual(ALL_CHECKS);
     const partial = normalizeChecks({ shortStitches: false });
-    expect(partial).toEqual({ density: true, shortStitches: false, perforation: true });
+    expect(partial).toEqual({ ...ALL_CHECKS, shortStitches: false });
   });
 
   it('drops density zones when the density check is off', () => {
     expect(classify(four, WOVEN).worst).toBe(CRITICAL);
-    const r = classify(four, WOVEN, { density: false, shortStitches: true, perforation: true });
+    const r = classify(four, WOVEN, { ...ALL_CHECKS, density: false });
     expect(r.zones.flatMap((z) => z.reasons)).not.toContain('density');
   });
 
   it('drops perforation zones when the perforation check is off', () => {
     expect(classify(satin, LEATHER).zones.flatMap((z) => z.reasons)).toContain('perforation');
-    const r = classify(satin, LEATHER, { density: true, shortStitches: true, perforation: false });
+    const r = classify(satin, LEATHER, { ...ALL_CHECKS, perforation: false });
     expect(r.zones.flatMap((z) => z.reasons)).not.toContain('perforation');
   });
 });

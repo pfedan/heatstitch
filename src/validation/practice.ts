@@ -21,6 +21,8 @@ import type { PracticeNote, Zone } from './zones';
 /** Small spots: caution up to this area (mm²), critical up to SMALL_CRITICAL_MM2. */
 export const SMALL_CAUTION_MM2 = 3;
 export const SMALL_CRITICAL_MM2 = 1;
+/** Gaps up to this area (mm²) are small spots too. */
+export const SMALL_GAP_MM2 = 1;
 /** Satin joins: mostly satin thread, compact, at most this area (mm², two 4 mm columns) ... */
 const JOIN_SATIN = 0.5;
 export const JOIN_MAX_MM2 = 16;
@@ -35,6 +37,9 @@ export const stableFabric = (p: Profile): boolean => STABLE.has(fabricOf(p).id);
 
 export function practiceNote(z: Zone, profile: Profile, th: Thresholds): PracticeNote | undefined {
   if (z.reasons.includes('perforation')) return undefined;
+  // A single long stitch already snags, and a gap shows along its whole length.
+  if (z.reasons.includes('long')) return undefined;
+  if (z.reasons.includes('gap') && z.areaMm2 > SMALL_GAP_MM2) return undefined;
   if (z.level === CAUTION ? z.areaMm2 <= SMALL_CAUTION_MM2 : z.areaMm2 <= SMALL_CRITICAL_MM2) return 'smallSpot';
   if (z.reasons.length === 1 && z.reasons[0] === 'shortStitches' && stableFabric(profile)) return 'shortsStable';
   if (

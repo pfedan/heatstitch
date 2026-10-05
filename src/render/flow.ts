@@ -400,6 +400,16 @@ export function drawOutlines(ctx: CanvasRenderingContext2D, vp: Viewport, shapes
     for (const line of shape.lines) {
       line.forEach(([x, y], i) => (i ? ctx.lineTo(x * s + vp.offsetX, y * s + vp.offsetY) : ctx.moveTo(x * s + vp.offsetX, y * s + vp.offsetY)));
     }
+    if (shape.resting) {
+      ctx.setLineDash([]);
+      ctx.strokeStyle = 'rgba(13, 11, 16, 0.6)';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.strokeStyle = '#c4c4cc';
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+      continue;
+    }
     ctx.setLineDash([]);
     ctx.strokeStyle = 'rgba(13, 11, 16, 0.75)';
     ctx.lineWidth = 3.5;

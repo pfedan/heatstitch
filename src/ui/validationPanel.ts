@@ -2,7 +2,7 @@ import { formatNumber, getLang, t, type Key } from '../i18n';
 import { openWorst, settledBy } from '../validation/acks';
 import { densityExcess } from '../validation/practice';
 import { fabricOf } from '../validation/profiles';
-import { CAUTION, CRITICAL, type Level, type Reason, type ValidationResult, type Zone } from '../validation/validate';
+import { CAUTION, CRITICAL, type Checks, type Level, type Reason, type ValidationResult, type Zone } from '../validation/validate';
 import type { LoadedFile } from './fileList';
 
 const LEVEL_CLASS = ['safe', 'caution', 'critical'] as const;
@@ -16,6 +16,18 @@ const REASON_KEY: Record<Reason, Key> = {
   density: 'validation.reason.density',
   shortStitches: 'validation.reason.shortStitches',
   perforation: 'validation.reason.perforation',
+  sparse: 'validation.reason.sparse',
+  gap: 'validation.reason.gap',
+  long: 'validation.reason.long',
+};
+/** The check behind each reason. */
+const CHECK_OF: Record<Reason, keyof Checks> = {
+  density: 'density',
+  shortStitches: 'shortStitches',
+  perforation: 'perforation',
+  sparse: 'coverage',
+  gap: 'coverage',
+  long: 'longStitches',
 };
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, className = '', text = ''): HTMLElementTagNameMap[K] => {
@@ -35,13 +47,16 @@ function figures(z: Zone, v: ValidationResult): string[] {
       return z.level === CRITICAL && pct >= 0 ? `${fig} (${t('validation.fig.excess', { v: `+${pct}` })})` : fig;
     }
     if (r === 'shortStitches') return t('validation.fig.shortStitches', { v: z.maxShorts });
+    if (r === 'sparse') return t('validation.fig.sparse', { v: formatNumber(z.minCover, 1) });
+    if (r === 'gap') return t('validation.fig.gap');
+    if (r === 'long') return t('validation.fig.long', { v: formatNumber(z.maxLong, 1) });
     return t('validation.fig.perforation', { v: z.maxHoles });
   });
 }
 
 /** Checks that apply to the material: perforation only on perforation-sensitive fabrics. */
-const applicableChecks = (v: ValidationResult): Reason[] =>
-  (Object.keys(REASON_KEY) as Reason[]).filter((r) => r !== 'perforation' || fabricOf(v.profile).perforation);
+const applicableChecks = (v: ValidationResult): (keyof Checks)[] =>
+  [...new Set(Object.values(CHECK_OF))].filter((c) => c !== 'perforation' || fabricOf(v.profile).perforation);
 
 /** Share of the stitched area in zones that still count. */
 function share(v: ValidationResult, counted: boolean[]): string {
@@ -156,7 +171,7 @@ export class ValidationPanel {
       verdict.append(el('p', 'counts', t('validation.notCounted', { list })));
     }
     if (off.length) {
-      const list = off.map((r) => t(REASON_KEY[r])).join(', ');
+      const list = off.map((c) => t(`checks.${c}` as Key)).join(', ');
       verdict.append(el('p', 'counts', t('validation.checksOff', { list })));
     }
     const parts: HTMLElement[] = [verdict];
