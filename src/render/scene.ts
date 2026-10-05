@@ -7,6 +7,10 @@ import type { ValidationResult, Zone } from '../validation/validate';
 import { drawEditOverlay } from './editOverlay';
 import { drawRungOverlay } from './rungOverlay';
 import type { RungView } from '../ui/rungTool';
+import { drawFrame, drawShapeOverlay } from './shapeOverlay';
+import type { ShapeView } from '../ui/shapeTool';
+import type { FrameView } from '../ui/frameTool';
+import type { Pt } from '../digitize/skeleton';
 import { drawFlatStitches, drawJumps, drawMarkers, drawNeedle, drawOutlines, drawTransition, type StitchStyle } from './flow';
 import { drawHeatmap } from './heatmap';
 import { drawStitches } from './stitches';
@@ -34,6 +38,10 @@ export interface FlowScene {
   outlines?: ShapeOutline[];
   /** The rung tool, while it is on. */
   rungs?: RungView | null;
+  /** The outline of the fill being reshaped (level Form), with the handles shown. */
+  shape?: { view: ShapeView; handles: { path: number; i: number; part: 'a' | 'b' }[] } | null;
+  /** The frame around the one selected object (level Objects), with its corners as dragged. */
+  frame?: { view: FrameView; mapped: Pt[] } | null;
 }
 
 export interface Scene {
@@ -75,6 +83,8 @@ export function drawScene(ctx: CanvasRenderingContext2D, w: number, h: number, s
     if (flow.selected) drawTransition(ctx, vp, pattern, flow.selected, true);
     if (flow.outlines?.length) drawOutlines(ctx, vp, flow.outlines);
     if (flow.rungs) drawRungOverlay(ctx, vp, flow.rungs);
+    if (flow.frame) drawFrame(ctx, vp, flow.frame.view, flow.frame.mapped);
+    if (flow.shape) drawShapeOverlay(ctx, vp, flow.shape.view, flow.shape.handles);
     if (flow.needle >= 0) drawNeedle(ctx, vp, pattern, flow.needle);
     if (scene.edit) drawEditOverlay(ctx, vp, pattern, scene.edit, w, h);
     return;
