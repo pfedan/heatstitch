@@ -1,4 +1,5 @@
-import type { Form, Mat } from '../shape/path';
+import { lineSettings, resewLine } from './line';
+import { transformForm, type Form, type Mat } from '../shape/path';
 import { FIT_TOLERANCE, READ_TOLERANCE, vectorize } from '../shape/vectorize';
 import { cutKey, sewnArea } from './knockout';
 import { rememberObjects, sewObjects, type SewObject } from './objects';
@@ -52,16 +53,6 @@ function keepGrouping(before: Pattern, objs: SewObject[], o: SewObject, after: P
   const at = startsOf(before, objs);
   const mine = at[objs.indexOf(o)];
   rememberObjects(after, at.map((s) => (s > mine ? s + delta : s)));
-}
-
-/** New stitches for a drawn line along its new curves `form`; its stitch settings stay. */
-export function reshapeLine(p: Pattern, objs: SewObject[], o: SewObject, kinds: Uint8Array, form: Form, trimMm: number): RestitchResult | null {
-  if (!remembered(p, o)?.path) return null;
-  const given = settingsOf(p, o, kinds);
-  if (given?.kind !== 'run') return null;
-  const r = restitch(p, objs, [o.index], given, kinds, trimMm, undefined, false, undefined, undefined, new Map([[o.index, form]]));
-  if (r.starts.length) keepGrouping(p, objs, o, r.pattern, totalStitches(r.pattern) - totalStitches(p));
-  return r;
 }
 
 /**
@@ -129,6 +120,12 @@ export interface Transformed {
 export function transformSewObject(p: Pattern, objs: SewObject[], o: SewObject, kinds: Uint8Array, m: Mat, trimMm: number): Transformed | null {
   // Stitches loosed from their shape go along as they are, also scaled (the resting shape with them).
   const rigid = isRigid(m) || !!remembered(p, o)?.free;
+  // A line with its curves: scaled, it is sewn anew along them with its settings.
+  const line = remembered(p, o)?.path;
+  if (line && !rigid) {
+    const r = resewLine(p, o.index, transformForm(line, m), lineSettings(p, o, kinds), trimMm);
+    return r && { ...r, restitched: true };
+  }
   const known = rigid ? remembered(p, o) : keepShape(p, o, kinds);
   // Settings as the object has them now (measured after scaling, the rows would be wider apart).
   const given = rigid ? null : settingsOf(p, o, kinds);

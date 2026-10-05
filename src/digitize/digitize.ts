@@ -13,6 +13,8 @@ import { reverse, skeleton, type Branch, type Graph, type Pt } from './skeleton'
 import type { FillSettings } from '../model/restitch';
 import type { Orientation } from '../image/orientation';
 import { transformForm, type Form } from '../shape/path';
+import { lineStitchFor, lineStitches } from '../model/line';
+import type { PathStitch } from '../model/along';
 import { knockOut, rasterize, rasterizeStroke, sharedArea, unionOf } from '../shape/rasterize';
 
 /**
@@ -142,8 +144,9 @@ export interface DigitizedObject {
   form?: Form;
   /** The parts later shapes cover are left out of the stitches (computed from `form`). */
   knockout?: boolean;
-  /** A drawn line, sewn along these curves (see model/line.ts). */
+  /** A line, sewn along these curves (see model/line.ts), and how. */
   path?: Form;
+  line?: PathStitch;
 }
 
 /** An area as pixels, in pattern coordinates (0.1 mm records / 10), and the fill it was sewn with. */
@@ -738,6 +741,7 @@ export function digitizeShapes(shapes: ShapeInput[], threads: ThreadColor[], o: 
     const prev = items[items.length - 1];
     if (prev && sh.kind === 'stroke' && prev.sh.kind === 'stroke' && prev.sh.color === sh.color && sharedArea(prev.whole, whole) > 0) {
       prev.whole = unionOf([prev.whole, whole])!;
+      prev.form = { paths: [...prev.form.paths, ...form.paths] };
       continue;
     }
     items.push({ sh, form, whole });
@@ -778,6 +782,18 @@ export function digitizeShapes(shapes: ShapeInput[], threads: ThreadColor[], o: 
       const it = items[k];
       let region = it.whole;
       const isFill = it.sh.kind === 'fill';
+      if (!isFill) {
+        // Lines are sewn along their curves, so they stay exact and can be edited as lines.
+        const line = lineStitchFor(it.sh.width ?? 0.4, o.tolerance);
+        const sewn = lineStitches(it.form, line, false, pos);
+        if (!sewn.length) continue;
+        runs.push(...sewn);
+        for (const _ of sewn) owners.push(objects.length);
+        objects.push({ kind: line.type === 'satin' ? 'satin' : 'run', label: it.sh.color, areaMm2: region.areaMm2, path: it.form, line });
+        const last = sewn[sewn.length - 1];
+        pos = last[last.length - 1];
+        continue;
+      }
       if (knockout && isFill) {
         const covers = items.filter((x, j) => x.sh.kind === 'fill' && sewnAt.get(j)! > sewnAt.get(k)!).map((x) => x.whole);
         const left = knockOut(region, covers, o.overlap);

@@ -442,12 +442,31 @@ export function drawUnderlay(ctx: CanvasRenderingContext2D, vp: Viewport, p: Pat
     ctx.lineTo(p.x[i] * s + vp.offsetX, p.y[i] * s + vp.offsetY);
     open = true;
   }
-  const w = Math.max(1.5, Math.min(4, 0.3 * vp.scale));
-  ctx.strokeStyle = 'rgba(13, 11, 16, 0.8)';
-  ctx.lineWidth = w + 2.5;
+  // Thin and see-through: the stitches and edges below stay visible for lining up.
+  const w = Math.max(1, Math.min(2.5, 0.2 * vp.scale));
+  ctx.strokeStyle = 'rgba(13, 11, 16, 0.25)';
+  ctx.lineWidth = w + 1.5;
   ctx.stroke();
-  ctx.strokeStyle = '#4de3ff';
+  ctx.strokeStyle = 'rgba(77, 227, 255, 0.5)';
   ctx.lineWidth = w;
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** Lines in mm (a border's line) drawn in the highlight color, under the highlighted stitches. */
+export function drawContour(ctx: CanvasRenderingContext2D, vp: Viewport, lines: readonly (readonly [number, number])[][]): void {
+  ctx.save();
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  for (const l of lines) {
+    l.forEach(([x, y], i) => (i ? ctx.lineTo(x * vp.scale + vp.offsetX, y * vp.scale + vp.offsetY) : ctx.moveTo(x * vp.scale + vp.offsetX, y * vp.scale + vp.offsetY)));
+  }
+  // A fine line with a faint halo: what lies under it stays visible for lining up.
+  ctx.strokeStyle = 'rgba(13, 11, 16, 0.35)';
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(77, 227, 255, 0.75)';
+  ctx.lineWidth = 1.25;
   ctx.stroke();
   ctx.restore();
 }

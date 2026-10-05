@@ -1,4 +1,4 @@
-import { sample, type Region } from './region';
+import { expandRegion, sample, signedField, type Region } from './region';
 import { runStitch, simplify } from './run';
 import type { Pt } from './skeleton';
 
@@ -35,6 +35,13 @@ export interface FillParams {
   underInset?: number;
   /** The underlay only in this part of the area (same pixels as the area); all of it when not set. */
   underArea?: Region;
+  /**
+   * Underlay inset as a share of the shape's width where it is (0.1 = 10 %), in place of the inset
+   * in mm when set.
+   */
+  underInsetShare?: number;
+  /** Distance between the underlay rows (mm); three times the top spacing, at least 1.2 mm, by default. */
+  underSpacing?: number;
   /**
    * Shift of the needle points from row to row, as a fraction of the stitch length: 1/4 repeats
    * every 4 rows (the usual tatami), 1/2 gives a brick pattern; 0 shifts them at random.
@@ -537,6 +544,7 @@ function sewAll(
   avoidSewn: boolean,
   runs: Pt[][],
   end?: Pt,
+  outer?: TravelGrid,
 ): Pt {
   let best = plan(f, secs, pull, start, undefined, end);
   if (end && secs.length) {
@@ -563,7 +571,8 @@ function sewAll(
     // Travel to the entry: straight when close, else along the inside of the shape.
     let travel: Pt[] | null = null;
     if (cur && bd > 1) {
-      const path = grid.path(pos, pts[0], avoidSewn);
+      // Where the grid has no way (from outside it, or between its parts), the outer one may.
+      const path = grid.path(pos, pts[0], avoidSewn) ?? outer?.path(pos, pts[0], avoidSewn);
       if (path && pathLength(path) < 2 * bd + 6) travel = runStitch(path, TRAVEL_STITCH, TRAVEL_TOLERANCE);
     } else if (cur) travel = [pos, pts[0]];
     if (cur && travel) cur.push(...travel.slice(1), ...pts.slice(1));
@@ -600,19 +609,129 @@ export function fillRegion(r: Region, p: FillParams, start: Pt, neighbours: numb
 }
 
 /**
- * Underlay for top rows at `angle`: rows across them (or two layers crossing at ±45 degrees), three
- * times the top spacing apart (at least 1.2 mm), inset from the edge; appended to `runs`. Returns
- * where the needle ends.
+ * Half the width of the area at each pixel (mm): the radius of the largest circle inside the area
+ * that covers the pixel, 0 outside. Spread from each pixel's own distance to the edge in two
+ * sweeps, so it is close but not exact.
  */
-export function sewUnderlay(r: Region, angle: number, p: Pick<FillParams, 'spacing' | 'underCross' | 'underInset' | 'underArea'>, start: Pt, grid: TravelGrid, runs: Pt[][]): Pt {
-  const us = Math.max(1.2, 3 * p.spacing);
+export function localThickness(r: Region): Float32Array {
+  const { w, h, pxMm } = r;
+  const t = new Float32Array(w * h);
+  // The center of the circle each pixel took its value from (pixels).
+  const cx = new Float32Array(w * h);
+  const cy = new Float32Array(w * h);
+  for (let i = 0; i < t.length; i++) {
+    t[i] = Math.max(0, -r.sdf[i]);
+    cx[i] = i % w;
+    cy[i] = Math.floor(i / w);
+  }
+  const take = (i: number, x: number, y: number, n: number) => {
+    if (t[n] > t[i] && Math.hypot(x - cx[n], y - cy[n]) * pxMm <= t[n]) {
+      t[i] = t[n];
+      cx[i] = cx[n];
+      cy[i] = cy[n];
+    }
+  };
+  for (let pass = 0; pass < 2; pass++) {
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = y * w + x;
+        if (!t[i]) continue;
+        if (x > 0) take(i, x, y, i - 1);
+        if (y > 0) {
+          take(i, x, y, i - w);
+          if (x > 0) take(i, x, y, i - w - 1);
+          if (x < w - 1) take(i, x, y, i - w + 1);
+        }
+      }
+    }
+    for (let y = h - 1; y >= 0; y--) {
+      for (let x = w - 1; x >= 0; x--) {
+        const i = y * w + x;
+        if (!t[i]) continue;
+        if (x < w - 1) take(i, x, y, i + 1);
+        if (y < h - 1) {
+          take(i, x, y, i + w);
+          if (x < w - 1) take(i, x, y, i + w + 1);
+          if (x > 0) take(i, x, y, i + w - 1);
+        }
+      }
+    }
+  }
+  return t;
+}
+
+/** The width of the area around each pixel (mm): its local thickness, evened out over about 1.5 mm. */
+function smoothWidth(r: Region): Float32Array {
+  const { w, h } = r;
+  const t = localThickness(r);
+  const on = new Float32Array(w * h);
+  for (let i = 0; i < on.length; i++) on[i] = r.sdf[i] < 0 ? 1 : 0;
+  // Box blur along rows then columns, twice, of the thickness and of the inside (to divide by).
+  const rad = Math.max(1, Math.round(1.5 / r.pxMm));
+  const blur = (a: Float32Array) => {
+    const out = new Float32Array(a.length);
+    const line = new Float32Array(Math.max(w, h) + 1);
+    for (const [n, m, step, stride] of [[h, w, w, 1], [w, h, 1, w]] as const) {
+      for (let a0 = 0; a0 < n; a0++) {
+        const base = a0 * step;
+        line[0] = 0;
+        for (let b = 0; b < m; b++) line[b + 1] = line[b] + a[base + b * stride];
+        for (let b = 0; b < m; b++) out[base + b * stride] = line[Math.min(m, b + rad + 1)] - line[Math.max(0, b - rad)];
+      }
+      a.set(out);
+    }
+    return a;
+  };
+  for (let i = 0; i < t.length; i++) t[i] *= on[i];
+  for (let k = 0; k < 2; k++) {
+    blur(t);
+    blur(on);
+  }
+  for (let i = 0; i < t.length; i++) t[i] = on[i] > 0 ? (2 * t[i]) / on[i] : 0;
+  return t;
+}
+
+/**
+ * The area the underlay keeps to: the fill's area shrunk by the inset in mm, or by `share` of its
+ * width where it is (smoothed, and without slivers too thin to sew). Null when nothing is left.
+ */
+export function underlayArea(r: Region, inset: number, share?: number): Region | null {
+  if (share === undefined) return expandRegion(r, -inset);
+  if (share <= 0) return r;
+  const wd = smoothWidth(r);
+  const mask = new Uint8Array(r.w * r.h);
+  let any = false;
+  for (let i = 0; i < mask.length; i++) {
+    if (r.sdf[i] < 0 && r.sdf[i] + share * wd[i] < 0) {
+      mask[i] = 1;
+      any = true;
+    }
+  }
+  if (!any) return null;
+  const sdf = signedField(mask, r.w, r.h, r.pxMm);
+  // Open it: shrink and grow back, which drops teeth and threads thinner than 1 mm.
+  const shrunk = expandRegion({ ...r, mask, sdf, sdfBase: sdf }, -0.5);
+  return shrunk && expandRegion(shrunk, 0.5);
+}
+
+/**
+ * Underlay for top rows at `angle`: rows across them (or two layers crossing at ±45 degrees), three
+ * times the top spacing apart (at least 1.2 mm) unless set, inside `underlayArea`; appended to
+ * `runs`. Travel between its rows stays inside that area too. Returns where the needle ends.
+ */
+export function sewUnderlay(r: Region, angle: number, p: Pick<FillParams, 'spacing' | 'underCross' | 'underInset' | 'underInsetShare' | 'underSpacing' | 'underArea'>, start: Pt, grid: TravelGrid, runs: Pt[][]): Pt {
+  const us = p.underSpacing ?? Math.max(1.2, 3 * p.spacing);
   let pos = start;
-  // Only where it is wanted; travel still goes the whole area's way.
-  const u = p.underArea && p.underArea.pxMm === r.pxMm ? p.underArea : r;
-  for (const a of p.underCross ? [angle - 45, angle + 45] : [angle + 90]) {
-    const uf = new Frame(a, us);
-    const under = rows(u, u.sdf, uf, p.underInset ?? UNDERLAY_INSET);
-    if (under.length) pos = sewAll(uf, sections(u, u.sdf, uf, under), UNDERLAY_STITCH, 0, pos, grid, false, runs);
+  // Only where it is wanted (not under later objects); travel still goes the whole area's way.
+  const base = p.underArea && p.underArea.pxMm === r.pxMm && p.underArea.w === r.w && p.underArea.h === r.h ? p.underArea : r;
+  const area = underlayArea(base, p.underInset ?? UNDERLAY_INSET, p.underInsetShare);
+  if (area) {
+    const inner = area === r ? grid : new TravelGrid(area);
+    for (const a of p.underCross ? [angle - 45, angle + 45] : [angle + 90]) {
+      const uf = new Frame(a, us);
+      const under = rows(area, area.sdf, uf, 0);
+      if (under.length) pos = sewAll(uf, sections(area, area.sdf, uf, under), UNDERLAY_STITCH, 0, pos, inner, false, runs, undefined, inner === grid ? undefined : grid);
+    }
   }
   grid.covered.fill(0);
   return pos;

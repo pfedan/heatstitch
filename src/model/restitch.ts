@@ -1,6 +1,6 @@
 import { SATIN_MAX, satinForArea, type KeptShape } from '../digitize/digitize';
 import { borderStitches, type PathStitch } from './along';
-import { lineRuns } from './line';
+import { lineStitches, runAsLine } from './line';
 import { chooseAngle, fillRegion, type FillParams } from '../digitize/fill';
 import { contourFill, fieldFill, guideField, stitchField } from '../digitize/flow';
 import { spiralFill } from '../digitize/spiral';
@@ -68,6 +68,10 @@ export interface FillSettings {
   underInset?: number;
   /** No underlay where objects sewn later cover the fill completely. */
   underCover?: boolean;
+  /** Underlay inset by this share of the width where it is (0.1 = 10 %), in place of `underInset`. */
+  underInsetShare?: number;
+  /** Distance between the underlay rows (mm); three times the spacing, at least 1.2 mm, when not set. */
+  underSpacing?: number;
   /** The area grown (+) or shrunk (-) on all sides before it is filled (mm); 0 when not set. */
   expand?: number;
   /** A border sewn on the edge after the fill; none when not set. */
@@ -212,8 +216,12 @@ export interface Remembered {
   overlapShare?: number;
   /** A drawn line: sewn along these curves (see line.ts), not traced from its stitches. */
   path?: Form;
-  /** The first this many stitches of the object are its underlay (sewn here). */
+  /** How a line (`path`) is sewn: running, triple or satin stitch along it. */
+  line?: PathStitch;
+  /** This many stitches of the object, from `underFrom` on, are its underlay (sewn here). */
   under?: number;
+  /** Its underlay starts after this many stitches of the object (other parts sewn before the fill). */
+  underFrom?: number;
   /** The border in the fill's thread starts after this many stitches of the object. */
   borderAt?: number;
   /**
@@ -351,7 +359,9 @@ export interface StoredObject {
   cut?: string;
   overlapShare?: number;
   path?: StoredPath[];
+  line?: PathStitch;
   under?: number;
+  underFrom?: number;
   borderAt?: number;
   asSatin?: StoredRails[];
   outline?: string;
@@ -402,7 +412,9 @@ export function rememberedIn(p: Pattern, objects: SewObject[]): StoredObject[] {
       ...(r.cut ? { cut: r.cut } : {}),
       ...(r.overlapShare !== undefined ? { overlapShare: r.overlapShare } : {}),
       ...(r.path ? { path: storeForm(r.path) } : {}),
+      ...(r.line ? { line: { ...r.line } } : {}),
       ...(r.under ? { under: r.under } : {}),
+      ...(r.underFrom ? { underFrom: r.underFrom } : {}),
       ...(r.borderAt ? { borderAt: r.borderAt } : {}),
       ...(r.asSatin ? { asSatin: r.asSatin.map(storeRails) } : {}),
       ...(r.outline ? { outline: r.outline } : {}),
@@ -435,6 +447,8 @@ function isFill(f: unknown): f is FillSettings {
     (s.guides === undefined || (Array.isArray(s.guides) && s.guides.every(isLine))) &&
     (s.underCross === undefined || typeof s.underCross === 'boolean') &&
     (s.underInset === undefined || finite(s.underInset)) &&
+    (s.underInsetShare === undefined || finite(s.underInsetShare)) &&
+    (s.underSpacing === undefined || (finite(s.underSpacing) && s.underSpacing > 0)) &&
     (s.expand === undefined || finite(s.expand)) &&
     (s.border === undefined || isBorder(s.border)) &&
     typeof s.underlay === 'boolean'
@@ -443,6 +457,10 @@ function isFill(f: unknown): f is FillSettings {
 
 const BORDERS: PathStitch['type'][] = ['run', 'triple', 'satin'];
 const isColor = (c: unknown) => !!c && [(c as ThreadColor).r, (c as ThreadColor).g, (c as ThreadColor).b].every(finite);
+
+function isLineStitch(b: unknown): b is PathStitch {
+  return isBorder(b) && (b as BorderSettings).color === undefined && (b as BorderSettings).link === undefined;
+}
 
 function isBorder(b: unknown): b is BorderSettings {
   const s = b as BorderSettings | null;
@@ -553,7 +571,7 @@ export function unionRegion(rs: Region[]): Region | null {
  * Remembers the exact areas the Image mode filled (`shapes`, by object, as `starts`: the number
  * of each object's first stitch), so editing them starts from those instead of the stitches.
  */
-export function rememberShapes(p: Pattern, objs: SewObject[], starts: number[], shapes: (KeptShape | undefined)[], forms: ({ form?: Form; knockout?: boolean; path?: Form } | undefined)[] = []): void {
+export function rememberShapes(p: Pattern, objs: SewObject[], starts: number[], shapes: (KeptShape | undefined)[], forms: ({ form?: Form; knockout?: boolean; path?: Form; line?: PathStitch } | undefined)[] = []): void {
   const at = new Map<number, SewObject>();
   let n = 0;
   let k = 0;
@@ -565,7 +583,7 @@ export function rememberShapes(p: Pattern, objs: SewObject[], starts: number[], 
     const shape = shapes[j];
     const o = at.get(s);
     const line = forms[j]?.path;
-    if (o && line) return remember(p, o, { region: null, path: line });
+    if (o && line) return remember(p, o, { region: null, path: line, ...(forms[j]?.line ? { line: { ...forms[j]!.line! } } : {}) });
     if (!shape || !o) return;
     const region = regionFrom(shape);
     const f = forms[j];
@@ -602,7 +620,9 @@ export function restoreRemembered(list: unknown): number {
     if (finite(e.overlapShare) && e.overlapShare >= 0 && e.overlapShare <= 1) r.overlapShare = e.overlapShare;
     const path = e.path === undefined ? null : formFrom(e.path);
     if (path) r.path = path;
+    if (path && isLineStitch(e.line)) r.line = { ...e.line };
     if (finite(e.under) && e.under > 0) r.under = Math.round(e.under);
+    if (finite(e.underFrom) && e.underFrom > 0) r.underFrom = Math.round(e.underFrom);
     if (finite(e.borderAt) && e.borderAt > 0) r.borderAt = Math.round(e.borderAt);
     const asSatin = railsFrom([e.asSatin])?.[0];
     if (asSatin?.length) r.asSatin = asSatin;
@@ -913,10 +933,19 @@ function readFill(p: Pattern, a: Analysis): { s: FillSettings; firstRow: number 
 export function underlayRanges(p: Pattern, o: SewObject, kinds: Uint8Array): [number, number][] {
   const known = remembered(p, o);
   if (known?.under) {
+    const from = known.underFrom ?? 0;
     let n = 0;
-    for (let i = o.first; i <= o.last; i++) if (p.cmd[i] === STITCH && ++n === known.under) return [[o.first, i]];
-    return [[o.first, o.last]];
+    let a = o.first;
+    for (let i = o.first; i <= o.last; i++) {
+      if (p.cmd[i] !== STITCH) continue;
+      n++;
+      if (n === from + 1) a = i;
+      if (n === from + known.under) return [[a, i]];
+    }
+    return [[a, o.last]];
   }
+  // A fill sewn here without underlay has none (its rows are not read as one).
+  if (known?.fill && !known.fill.underlay) return [];
   const an = analyze(p, o, kinds, known);
   const out: [number, number][] = [];
   if (an.fill && (known?.fill?.underlay ?? true)) {
@@ -926,7 +955,8 @@ export function underlayRanges(p: Pattern, o: SewObject, kinds: Uint8Array): [nu
       for (const pt of an.parts) if (pt.kind !== 'satin' && pt.s < firstRow - 1) out.push([pt.s, Math.min(pt.e, firstRow - 1)]);
     }
   }
-  for (const pt of an.parts) {
+  // Satin parts of a fill sewn here are its curved rows or its border, not columns with underlay.
+  for (const pt of known?.fill ? [] : an.parts) {
     if (pt.kind !== 'satin') continue;
     let a = -1;
     for (let i = pt.s; i <= pt.e + 1; i++) {
@@ -1132,7 +1162,7 @@ function newFill(p: Pattern, o: SewObject, a: Analysis, s: FillSettings, reverse
   // the smaller area (the old thread runs where nothing is sewn now).
   const ex = s.expand ?? 0;
   const way = ex > 0 && travel ? (unionRegion([travel, r]) ?? travel) : ex < 0 ? r : travel;
-  const fp: FillParams = { spacing: s.spacing, stitch: s.stitch, angle: s.angle, pull: s.edge, underlay: s.underlay, underCross: s.underCross, underInset: s.underInset, travel: way, tolerance: s.tolerance };
+  const fp: FillParams = { spacing: s.spacing, stitch: s.stitch, angle: s.angle, pull: s.edge, underlay: s.underlay, underCross: s.underCross, underInset: s.underInset, underInsetShare: s.underInsetShare, underSpacing: s.underSpacing, travel: way, tolerance: s.tolerance };
   // Under what lies on top completely, no underlay (it would only add thread under it).
   if (s.underlay && s.underCover && covers?.length) {
     const left = cutAway(r, covers.map((c) => ({ region: c.region, overlap: UNDER_COVER_MARGIN })));
@@ -1447,6 +1477,14 @@ export type SettingsFor = Settings | ((o: SewObject, a: Analysis, known: Remembe
  * satin columns from their other end, fills starting where they ended. `guides` gives a fill
  * turned into satin the rails to follow (drawn with rungs across it), by object.
  */
+/** Settings of running stitch or satin given for a line, as the stitches along it (`known`: as it had them). */
+function asLine(given: Settings, known?: PathStitch): PathStitch | null {
+  if (given.kind === 'run') return runAsLine(given.s, known?.width);
+  if (given.kind !== 'satin') return null;
+  const s = given.s;
+  return { ...(known ?? { width: 2 }), type: 'satin', spacing: s.spacing, pull: s.edge || undefined, under: s.underlay ? (s.under ?? 'center') : 'off', tolerance: s.tolerance ?? known?.tolerance };
+}
+
 export function restitch(
   p: Pattern,
   objs: SewObject[],
@@ -1529,7 +1567,8 @@ export function restitch(
     const filled = together && !converting ? newFill(p, o, an, fillS, reverse, covers) : null;
     // A drawn line: sewn anew along its curves as a whole.
     const path = paths?.get(o.index) ?? known?.path;
-    const line = !converting && settings.kind === 'run' && path ? lineRuns(path, settings.s, reverse) : null;
+    const lineSt = !converting && path && settings.kind !== 'fill' ? asLine(settings, known?.line) : null;
+    const line = lineSt && path ? lineStitches(path, lineSt, reverse) : null;
     const whole = !together ? null : converting ? convert(p, o, parts, src, area, settings, guide) : (filled?.runs ?? null);
     const firstPart = parts.findIndex((pt) => pt.kind === src && !pt.border);
     let lastPart = -1;
@@ -1570,8 +1609,8 @@ export function restitch(
           shape: known?.shape,
           ...(known?.form && !newArea ? { form: known.form, ...(known.knockout ? { knockout: true, cut: known.cut } : {}) } : {}),
           ...(known?.overlapShare !== undefined ? { overlapShare: known.overlapShare } : {}),
-          ...(path && settings.kind === 'run' ? { path } : {}),
-          ...(known?.under && !filled ? { under: known.under } : {}),
+          ...(path && lineSt ? { path, line: lineSt } : {}),
+          ...(known?.under && !filled ? { under: known.under, ...(known.underFrom ? { underFrom: known.underFrom } : {}) } : {}),
           ...(known?.borderAt && !filled ? { borderAt: known.borderAt } : {}),
           // Its shape changed: the satin it was no longer fits.
           ...(known?.asSatin && !newArea ? { asSatin: known.asSatin } : {}),
@@ -1590,10 +1629,16 @@ export function restitch(
     // Where the object's records start in `out`, and how many points of the new fill are out (for its underlay).
     let objOut = 0;
     let fed = 0;
-    const underlayDone = () => {
+    const sewnOfObject = () => {
       let n = 0;
       for (let k = objOut; k < out.length; k++) if (out[k].cmd === STITCH) n++;
-      if (n) after.under = n;
+      return n;
+    };
+    let underFrom = 0;
+    const underlayDone = () => {
+      const n = sewnOfObject() - underFrom;
+      if (n > 0) after.under = n;
+      if (n > 0 && underFrom) after.underFrom = underFrom;
     };
     const borderStarts = () => {
       let n = 0;
@@ -1639,6 +1684,8 @@ export function restitch(
         const border = f === whole && filled && filled.border < fed + f.reduce((n, r) => n + r.length, 0) ? filled.border : -1;
         for (const run of f) {
           if (fed === border) borderStarts();
+          // The underlay starts with the fill's first point (other parts may come before it).
+          if (fed === 0 && under) underFrom = first ? 0 : sewnOfObject();
           moveTo(run[0], run);
           // The underlay ends with a run or goes on into the rows: counted up to its last point.
           if (fed + 1 === under) underlayDone();

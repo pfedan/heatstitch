@@ -62,8 +62,9 @@ import type { Mode } from './settings';
 import { JumpsPanel } from './ui/jumpsPanel';
 import { blockName, kindLabel, LayersPanel } from './ui/layersPanel';
 import { ObjectPanel, OrderCard } from './ui/objectPanel';
-import { StitchPanel, type StitchInfo } from './ui/stitchPanel';
-import { syncBorders } from './model/border';
+import { StitchPanel, type Highlight, type StitchInfo } from './ui/stitchPanel';
+import { borderRanges, syncBorders } from './model/border';
+import { borderLoops } from './digitize/border';
 import { analyze, forget, keepShape, openOnPurpose, objectKey, measureFill, measureRun, measureSatin, remember, remembered, type Rails, rememberedIn, rememberShapes, restitch, shapeTrust, unionRegion, underlayRanges, type Remembered, type Settings as RestitchSettings, type ShapeTrust, type RestitchResult } from './model/restitch';
 import { outline } from './digitize/region';
 import { railsFromOutline } from './digitize/rungs';
@@ -77,11 +78,13 @@ import { drawAside, drawDrawing, type FlatArea } from './render/shapeOverlay';
 import { AsidePanel } from './ui/asidePanel';
 import type { LeftOut } from './ui/imageMode';
 import { addShape, type NewShape } from './model/addShape';
+import { lineOf, lineSettings, resewLine } from './model/line';
+import type { PathStitch } from './model/along';
 import { asideOf, dropAside, sewAgain, setAside, setAsideRole, storeAside, type AsideRole, type AsideShape } from './model/aside';
 import { deleteObjects, duplicateObject, mirrorMatrix, recolorObjects, subtractTop, unionForm } from './model/shapeOps';
 import { stitchesBefore } from './model/transform';
 import { FrameTool } from './ui/frameTool';
-import { formOf, reshapeFill, reshapeLine, scaleBlocked, transformSewObject } from './model/reshape';
+import { formOf, reshapeFill, scaleBlocked, transformSewObject } from './model/reshape';
 import { isCovered, overlapsIn, refreshKnockouts, setKnockout, setOverlapShare, wholeArea } from './model/knockout';
 import { transformObject } from './model/transform';
 import { apply, translation, type Form, type Mat } from './shape/path';
@@ -325,11 +328,11 @@ let selectionKey = 0;
 /** New stitches shown while a stitch setting is being dragged, not applied yet. */
 let flowPreview: Pattern | null = null;
 let hoverObject: number | null = null;
-/** The pointer is on the underlay settings: the selected objects' underlay is shown. */
-let showUnder = false;
+/** The pointer is on the underlay or border settings: that part of the selected objects is shown. */
+let highlight: Highlight | null = null;
 /** The restitch behind `flowPreview` (it knows where the new underlay ends). */
 let previewResult: RestitchResult | null = null;
-let underCache: { p: Pattern; key: number; mask: Uint8Array | null } | null = null;
+let underCache: { p: Pattern; key: number; what: Highlight; mask: Uint8Array | null } | null = null;
 /** Object whose penetrations are edited in the Ablauf mode (the level "Stitches"), or null. */
 let editObject: number | null = null;
 /** Nothing to pick: in the Ablauf mode the first click on the stitches chooses the object. */
@@ -375,33 +378,60 @@ function playerModel(p: Pattern | null) {
   };
 }
 
-/** The underlay of the selected objects, per record (null while it is not shown). */
+/** The underlay or the border of the selected objects, per record (null while it is not shown). */
 function underMask(p: Pattern): Uint8Array | null {
-  if (!showUnder || !selectedObjects.size) return null;
-  if (underCache?.p === p && underCache.key === selectionKey) return underCache.mask;
+  if (!highlight || !selectedObjects.size) return null;
+  if (underCache?.p === p && underCache.key === selectionKey && underCache.what === highlight) return underCache.mask;
   const q = seq(p);
   const mask = new Uint8Array(p.cmd.length);
   const r = previewResult?.pattern === p ? previewResult : null;
   if (r) {
     // A preview: the new stitches of each object, its first `under` of them.
+    // A preview: the new stitches of each object, its first `under` of them, or the ones from
+    // where its border starts.
     r.starts.forEach((a, k) => {
-      const n = r.memory[k]?.under ?? 0;
-      if (!n) return;
-      const from = recordOfStitch(q.numbers, a + 1);
-      const to = recordOfStitch(q.numbers, a + n);
+      const m = r.memory[k];
+      const skip = m?.underFrom ?? 0;
+      const [s, e] = highlight === 'under' ? [skip + 1, skip + (m?.under ?? 0)] : [(m?.borderAt ?? Infinity) + 1, r.ends[k] - a];
+      if (!(e >= s)) return;
+      const from = recordOfStitch(q.numbers, a + s);
+      const to = recordOfStitch(q.numbers, a + e);
       for (let i = from; i <= to; i++) mask[i] = 1;
     });
   } else {
     for (const o of selectedObjects) {
       const obj = q.objects[o];
       if (!obj) continue;
-      for (const [a, b] of underlayRanges(p, obj, q.kinds)) for (let i = a; i <= b; i++) mask[i] = 1;
+      const ranges = highlight === 'under' ? underlayRanges(p, obj, q.kinds) : borderRanges(p, q.objects, obj);
+      for (const [a, b] of ranges) for (let i = a; i <= b; i++) mask[i] = 1;
     }
   }
   // Nothing to show (no underlay): the stitches stay as they are.
   const any = mask.includes(1) ? mask : null;
-  underCache = { p, key: selectionKey, mask: any };
+  underCache = { p, key: selectionKey, what: highlight, mask: any };
   return any;
+}
+
+/** The line the border of each selected fill lies on (mm), while the border settings are pointed at. */
+let contourCache: { p: Pattern; key: number; r: RestitchResult | null; lines: Pt[][] | null } | null = null;
+function contourLines(p: Pattern): Pt[][] | null {
+  const r = previewResult?.pattern === p ? previewResult : null;
+  if (contourCache?.p === p && contourCache.key === selectionKey && contourCache.r === r) return contourCache.lines;
+  const q = seq(p);
+  const out: Pt[][] = [];
+  for (const o of selectedObjects) {
+    const obj = q.objects[o];
+    if (!obj || obj.kind !== 'fill') continue;
+    const m = remembered(p, obj);
+    // A fill read from the file: its area as recognized.
+    const region = m?.region ?? analyze(p, obj, q.kinds).fill;
+    if (!region) continue;
+    // While a change is previewed, the border where it would go.
+    const b = r ? r.memory[0]?.fill?.border : m?.fill?.border;
+    out.push(...borderLoops(region, b?.offset ?? 0));
+  }
+  contourCache = { p, key: selectionKey, r, lines: out.length ? out : null };
+  return contourCache.lines;
 }
 
 function styleFor(p: Pattern): StitchStyle {
@@ -475,6 +505,7 @@ function flowScene(): FlowScene | null {
     // their shape is edited or the object is dragged: those show their own outline).
     outlines: files.active?.pattern && selectedObjects.size && !shapeTool.active && frameTool.dragging === null ? stitchInfo(files.active.pattern, seq(files.active.pattern)).outlines : undefined,
     under: hoverObject === null ? underMask(p) : null,
+    contour: hoverObject === null && highlight === 'border' ? contourLines(p) : null,
     rungs: rungTool.active ? rungTool : null,
     shape: shapeTool.active ? { view: shapeTool, handles: shapeTool.handles() } : null,
     frame: frameTool.active ? { view: frameTool, mapped: frameTool.mappedCorners() } : null,
@@ -801,6 +832,7 @@ const objectPanel = new ObjectPanel({
   },
   deleteNode: () => shapeTool.deleteSelected(),
   toggleNode: () => shapeTool.toggleSmooth(),
+  closeLine: () => shapeTool.toggleClosed(),
   deleteSelection: () => editor.deleteSelection(),
   splitStitch: () => editor.splitSelected(),
 });
@@ -859,6 +891,8 @@ function stitchInfo(p: Pattern, q: Sequence): StitchInfo {
   const info: StitchInfo = { key: selectionKey, lock, free, fixed, fabricPull, hand, measured, counts, recommended: recommendedSpacing(settings.profile), shape: worst, outlines: shapes, toSatin: stroke, knockout, color: q.objects[firstFill]?.color };
   const runs = [...selectedObjects].map((o) => q.objects[o]).filter((obj) => obj?.kind === 'run');
   if (runs.length && runs.every((obj) => remembered(p, obj)?.path)) info.line = true;
+  const one = selectedObjects.size === 1 ? q.objects[[...selectedObjects][0]] : undefined;
+  if (one && isLineObject(p, one)) info.path = { st: lineSettings(p, one, q.kinds), traced: !remembered(p, one)?.path };
   const link = selectedObjects.size === 1 && q.objects[firstFill] ? remembered(p, q.objects[firstFill])?.outline : undefined;
   if (link) {
     const fill = q.objects.findIndex((o) => remembered(p, o)?.fill?.border?.link === link);
@@ -1033,6 +1067,9 @@ const stitchPanel = new StitchPanel($('object-stitches'), {
     if (a === 'tool') return toggleGuides();
     if (rungTool.mode === 'guide') closeRungs();
   },
+  line: (st, final) => {
+    if (selectedObjects.size === 1) sewLine([...selectedObjects][0], null, st, final);
+  },
   knockout: (on) => knockoutObjects([...selectedObjects].sort((a, b) => a - b), on),
   overlapShare: (share) => {
     const f = files.active;
@@ -1065,8 +1102,8 @@ const stitchPanel = new StitchPanel($('object-stitches'), {
     stitchCache = null;
     redraw();
   },
-  underlay: (on) => {
-    showUnder = on;
+  highlight: (what) => {
+    highlight = what;
     redraw();
   },
   outline: (a) => {
@@ -1329,12 +1366,59 @@ const shapeTool = new ShapeTool({
   },
 });
 
-/** The one selected object of the Ablauf mode, when it has a fill whose outline can be edited, or is a drawn line. */
+/**
+ * Objects sewn along a line: drawn or SVG lines (their curves are known) and running stitches of a
+ * file (their curve is traced); not the borders of fills and not letters.
+ */
+function isLineObject(p: Pattern, o: SewObject): boolean {
+  const m = remembered(p, o);
+  if (m?.path) return true;
+  return o.kind === 'run' && !m?.outline && !m?.lettering;
+}
+
+/** The one selected object of the Ablauf mode, when it has a fill whose outline can be edited, or is a line. */
 function shapeTarget(p: Pattern, q: Sequence, o: number): Form | null {
   const obj = q.objects[o];
   // Stitches loosed from their shape are edited as stitches; the shape rests.
   if (!obj || remembered(p, obj)?.free) return null;
-  return remembered(p, obj)?.path ?? formOf(p, obj, q.kinds);
+  return isLineObject(p, obj) ? lineOf(p, obj, q.kinds) : formOf(p, obj, q.kinds);
+}
+
+/**
+ * Line `o` sewn anew along `path` with `st` (one undo step), or only shown while settings are
+ * being changed (`final` false).
+ */
+function sewLine(o: number, path: Form | null, st: PathStitch | null, final: boolean): boolean {
+  const f = files.active;
+  const p = f?.pattern;
+  if (!f || !p) return false;
+  const q = seq(p);
+  const obj = q.objects[o];
+  if (!obj) return false;
+  const line = path ?? lineOf(p, obj, q.kinds);
+  if (!line) return false;
+  const r = resewLine(p, o, line, st ?? lineSettings(p, obj, q.kinds), settings.trimMm);
+  if (!final) {
+    flowPreview = r?.pattern ?? null;
+    redraw();
+    return !!r;
+  }
+  flowPreview = null;
+  if (!r) {
+    layers.say(t('stitch.failed', { n: 1 }), true);
+    redraw();
+    return false;
+  }
+  const hand = remembered(p, obj)?.hand ?? 0;
+  applyEdit(r.pattern);
+  files.setObjects(f, rememberedIn(r.pattern, seq(r.pattern).objects));
+  selectedObjects = new Set([o]);
+  selectionKey++;
+  stitchCache = null;
+  if (hand) layers.say(t('shape.handReplaced', { n: formatNumber(hand) }));
+  followKnockouts();
+  redraw();
+  return true;
 }
 
 /** Edits the outline of object `o` (level Form); objects without a fill go to their stitches. */
@@ -1396,8 +1480,12 @@ function commitShape(form: Form): void {
   const q = seq(p);
   const obj = q.objects[shapeObject];
   if (!obj) return;
+  if (isLineObject(p, obj)) {
+    if (!sewLine(shapeObject, form, null, true)) shapeTool.setForm(shapeTarget(p, q, shapeObject) ?? form);
+    return;
+  }
   const hand = remembered(p, obj)?.hand ?? 0;
-  const r = remembered(p, obj)?.path ? reshapeLine(p, q.objects, obj, q.kinds, form, settings.trimMm) : reshapeFill(p, q.objects, obj, q.kinds, form, settings.trimMm);
+  const r = reshapeFill(p, q.objects, obj, q.kinds, form, settings.trimMm);
   if (!r || !r.starts.length) {
     // Nothing to fill there (too small, or the outline crosses itself away): back to the old one.
     shapeTool.setForm(shapeTarget(p, q, shapeObject) ?? form);
@@ -2373,8 +2461,8 @@ function objectInfo(p: Pattern, q: Sequence) {
     numbers: selected.map((o) => numberInColor(q.objects, q.objects[o])),
     hand: selected.map((o) => remembered(p, q.objects[o])?.hand ?? 0),
     editing: editor.active && editObject !== null && selected.length === 1 && selected[0] === editObject ? { selection: editor.selection.size } : null,
-    shapeable: selected.length === 1 && !!stitchInfo(p, q).measured.fill && !stitchInfo(p, q).free?.on,
-    shaping: shapeTool.active && selected.length === 1 && selected[0] === shapeObject ? { nodes: shapeTool.count, smooth: shapeTool.selectedSmooth } : null,
+    shapeable: selected.length === 1 && !stitchInfo(p, q).free?.on && (!!stitchInfo(p, q).measured.fill || (!!q.objects[selected[0]] && isLineObject(p, q.objects[selected[0]]))),
+    shaping: shapeTool.active && selected.length === 1 && selected[0] === shapeObject ? { nodes: shapeTool.count, smooth: shapeTool.selectedSmooth, ...(q.objects[selected[0]] && isLineObject(p, q.objects[selected[0]]) ? { line: { closed: shapeTool.closed } } : {}) } : null,
     frame: frameTool.active ? { canScale: frameTool.canScale } : null,
     mergeBlocked: selected.length > 1 ? mergeBlocked(selected.map((o) => q.objects[o])) : null,
     reversible: selected.some((o) => reversible(q.objects[o])),

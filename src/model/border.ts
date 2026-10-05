@@ -165,3 +165,26 @@ export function syncBorders(p: Pattern, trimMm: number, drop: ReadonlySet<string
   }
   return next;
 }
+
+/**
+ * Records of the border of fill `o`: its last part when it is sewn in the fill's thread, the
+ * object of its own when it has a thread of its own.
+ */
+export function borderRanges(p: Pattern, objs: readonly SewObject[], o: SewObject): [number, number][] {
+  const m = remembered(p, o);
+  const b = m?.fill?.border;
+  if (!b) return [];
+  const out: [number, number][] = [];
+  if (!b.color && m.borderAt) {
+    let n = 0;
+    for (let i = o.first; i <= o.last; i++) {
+      if (p.cmd[i] !== STITCH) continue;
+      if (n++ === m.borderAt) {
+        out.push([i, o.last]);
+        break;
+      }
+    }
+  }
+  if (b.color && b.link) for (const x of objs) if (remembered(p, x)?.outline === b.link) out.push([leadOf(p, x), x.last]);
+  return out;
+}

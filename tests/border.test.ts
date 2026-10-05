@@ -212,3 +212,22 @@ it('remembers its border apart from the settings it was sewn with, which the pan
   const plain = apply(p, o.index, { ...s, border: undefined });
   expect(Math.abs(stitches(b.q, b.o.first, b.o.last) - stitches(plain.q, plain.o.first, plain.o.last))).toBeLessThan(60);
 }, 30000);
+
+it('shows only the underlay of a fill, not the running stitch sewn before it in the same object', () => {
+  const p = load('cat-60mm.pes');
+  const kinds = stitchKinds(p);
+  const objs = sewObjects(p, kinds);
+  // An object with a long running stitch before its fill.
+  const o = objs.find((x) => {
+    const parts = analyze(p, x, kinds).parts;
+    const f = parts.findIndex((pt) => pt.kind === 'fill');
+    return f > 0 && parts.slice(0, f).some((pt) => pt.kind === 'run' && pt.e - pt.s > 30);
+  });
+  expect(o).toBeDefined();
+  if (!o) return;
+  const a = apply(p, o.index, { ...measureFill(p, analyze(p, o, kinds)), pattern: 'tatami', underlay: true });
+  const [r] = underlayRanges(a.q, a.o, a.kinds);
+  const run = analyze(a.q, a.o, a.kinds).parts.find((pt) => pt.kind === 'run' && pt.e - pt.s > 30)!;
+  expect(r[0]).toBeGreaterThan(run.e - 1);
+  expect(stitches(a.q, r[0], r[1])).toBe(a.memory.under);
+}, 30000);
