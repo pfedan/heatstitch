@@ -8,6 +8,7 @@ import { runStitch, TOLERANCE } from '../digitize/run';
 import { eStitches, pairs, satinStitches, underlayOf, type Column, type SatinParams, type UnderlayKind } from '../digitize/satin';
 import { columnFromRungs, cumulative, reversedRungs, type Rung } from '../digitize/rungs';
 import type { Pt } from '../digitize/skeleton';
+import { formFrom, storeForm, type Form, type StoredPath } from '../shape/path';
 import { distanceInside, distanceToSeeds } from '../image/edt';
 import { tidy, withRecords } from './edit';
 import { joinsIn, rememberObjects, restoreJoin, stitchKey, type ObjectKind, type SewObject } from './objects';
@@ -158,6 +159,11 @@ export interface Remembered {
   read?: boolean;
   /** The area of an object whose kind was changed here, so changing it back gives the same area. */
   shape?: Region;
+  /**
+   * The fill area as curves, once its shape was changed here (level Form, turned or scaled):
+   * `region` is rastered from it, never the other way round.
+   */
+  form?: Form;
 }
 
 /**
@@ -179,6 +185,11 @@ function rememberKey(key: string, r: Remembered): void {
   memory.delete(key);
   memory.set(key, r);
   if (memory.size > MEMORY_SIZE) memory.delete(memory.keys().next().value!);
+}
+
+/** Remembers `r` for the stitches from record `first` to `last` (an object's records). */
+export function rememberRange(p: Pattern, first: number, last: number, r: Remembered): void {
+  rememberKey(stitchKey(p, first, last), r);
 }
 
 /** Forgets what was remembered for an object's stitches (or puts back `r`). */
@@ -237,6 +248,8 @@ export interface StoredObject {
   read?: boolean;
   /** The area of an object whose kind was changed, as `region`. */
   shape?: StoredObject['region'];
+  /** The fill area as curves (see Remembered.form). */
+  form?: StoredPath[];
   join?: boolean;
 }
 
@@ -257,6 +270,7 @@ export function rememberedIn(p: Pattern, objects: SewObject[]): StoredObject[] {
       ...(r.columns ? { columns: r.columns.map((part) => part.map((c) => ({ left: c.left.flat(), right: c.right.flat(), ...(c.rungs ? { rungs: c.rungs.flat() } : {}) }))) } : {}),
       ...(r.hand ? { hand: r.hand } : {}),
       ...(r.read ? { read: true } : {}),
+      ...(r.form ? { form: storeForm(r.form) } : {}),
     });
   }
   for (const j of joinsIn(p)) out.push({ key: j.key, region: null, join: j.join });
@@ -416,6 +430,8 @@ export function restoreRemembered(list: unknown): number {
     if (e.read === true) r.read = true;
     const shape = e.shape ? regionFrom(e.shape) : null;
     if (shape) r.shape = shape;
+    const form = e.form === undefined ? null : formFrom(e.form);
+    if (form) r.form = form;
     rememberKey(e.key, r);
     n++;
   }
@@ -1012,7 +1028,18 @@ export type SettingsFor = Settings | ((o: SewObject, a: Analysis, known: Remembe
  * satin columns from their other end, fills starting where they ended. `guides` gives a fill
  * turned into satin the rails to follow (drawn with rungs across it), by object.
  */
-export function restitch(p: Pattern, objs: SewObject[], which: number[], settingsFor: SettingsFor, kinds: Uint8Array, trimMm: number, from?: ObjectKind, reverse = false, guides?: Map<number, Rails[]>): RestitchResult {
+export function restitch(
+  p: Pattern,
+  objs: SewObject[],
+  which: number[],
+  settingsFor: SettingsFor,
+  kinds: Uint8Array,
+  trimMm: number,
+  from?: ObjectKind,
+  reverse = false,
+  guides?: Map<number, Rails[]>,
+  areas?: Map<number, Region>,
+): RestitchResult {
   const set = new Set(which);
   const out: Rec[] = [];
   const starts: number[] = [];
@@ -1033,6 +1060,9 @@ export function restitch(p: Pattern, objs: SewObject[], which: number[], setting
     if (!set.has(o.index)) continue;
     const known = remembered(p, o);
     let an = analyze(p, o, kinds, known);
+    // A new area (its shape changed): the old stitches are told apart by the old one, the fill is made in the new one.
+    const newArea = areas?.get(o.index);
+    if (newArea && an.fill) an = { ...an, fill: newArea };
     const given = typeof settingsFor === 'function' ? settingsFor(o, an, known) : settingsFor;
     if (!given) continue;
     if (reverse) {
@@ -1097,6 +1127,7 @@ export function restitch(p: Pattern, objs: SewObject[], which: number[], setting
           satin: newSatinS ?? known?.satin,
           columns: settings.kind === 'satin' ? (rails.length === satinParts.length ? rails : undefined) : known?.columns,
           shape: known?.shape,
+          ...(known?.form && !newArea ? { form: known.form } : {}),
         };
     // Up to the object: everything as it was, except the jumps that lead to its first stitch.
     let lead = o.first;
