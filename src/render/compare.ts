@@ -1,3 +1,5 @@
+import { drawScene, type Scene } from './scene';
+
 /** Grab distance around the divider, CSS pixels. */
 export const DIVIDER_GRAB_PX = 10;
 
@@ -42,4 +44,104 @@ export function drawDivider(ctx: CanvasRenderingContext2D, x: number, h: number,
   label(ctx, left, x, 'left');
   label(ctx, right, x, 'right');
   ctx.restore();
+}
+
+/** A rectangle on the screen (CSS pixels). */
+export interface ScreenRect {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
+/**
+ * Before and after side by side inside `r`: the left half drawn from `before`, the right half
+ * from `after`, with a divider, a frame and the two labels at the top.
+ */
+export function drawBeforeAfter(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  r: ScreenRect,
+  before: Scene,
+  after: Scene,
+  background: string,
+  labels: [string, string],
+): void {
+  const mid = Math.round((r.x0 + r.x1) / 2);
+  for (const [scene, a, b] of [
+    [before, r.x0, mid],
+    [after, mid, r.x1],
+  ] as const) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(a, r.y0, b - a, r.y1 - r.y0);
+    ctx.clip();
+    drawScene(ctx, w, h, scene, background);
+    ctx.restore();
+  }
+  ctx.save();
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.75)';
+  ctx.strokeRect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0);
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = '#ffffff';
+  ctx.strokeRect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0);
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+  ctx.fillRect(mid - 2, r.y0, 4, r.y1 - r.y0);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(mid - 1, r.y0, 2, r.y1 - r.y0);
+  ctx.font = '600 11px system-ui, sans-serif';
+  ctx.textBaseline = 'middle';
+  const top = Math.max(r.y0 + 6, 4);
+  for (const [text, side] of [
+    [labels[0], 'left'],
+    [labels[1], 'right'],
+  ] as const) {
+    const tw = ctx.measureText(text).width + 12;
+    const bx = side === 'left' ? mid - tw - 6 : mid + 6;
+    ctx.fillStyle = 'rgba(13, 11, 16, 0.8)';
+    ctx.beginPath();
+    ctx.roundRect(bx, top, tw, 18, 5);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(text, bx + 6, top + 9);
+  }
+  ctx.restore();
+}
+
+/** One side of a comparison: where on the screen, what is drawn there, and its label. */
+export interface Panel {
+  rect: ScreenRect;
+  scene: Scene;
+  label: string;
+}
+
+/** Scenes in panels of their own (each clipped to its rectangle), framed and labelled at the top. */
+export function drawPanels(ctx: CanvasRenderingContext2D, w: number, h: number, panels: Panel[], background: string): void {
+  for (const { rect: r, scene, label: text } of panels) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0);
+    ctx.clip();
+    drawScene(ctx, w, h, scene, background);
+    ctx.restore();
+    ctx.save();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.75)';
+    ctx.strokeRect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0);
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+    ctx.strokeRect(r.x0, r.y0, r.x1 - r.x0, r.y1 - r.y0);
+    ctx.font = '600 11px system-ui, sans-serif';
+    ctx.textBaseline = 'middle';
+    const tw = ctx.measureText(text).width + 12;
+    ctx.fillStyle = 'rgba(13, 11, 16, 0.8)';
+    ctx.beginPath();
+    ctx.roundRect(r.x0 + 6, r.y0 + 6, tw, 18, 5);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(text, r.x0 + 12, r.y0 + 15);
+    ctx.restore();
+  }
 }

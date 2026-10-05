@@ -1,5 +1,5 @@
 import type { DensityGrid } from '../density/grid';
-import type { Pattern } from '../model/pattern';
+import { STITCH, type Pattern } from '../model/pattern';
 import type { Markers, Transition } from '../model/sequence';
 import type { Settings } from '../settings';
 import type { EditView } from '../ui/editor';
@@ -52,6 +52,12 @@ export interface FlowScene {
   areas?: FlatArea[] | null;
 }
 
+/** The stitches of one object on their own, and which records are its underlay. */
+export interface FocusStitches {
+  pattern: Pattern;
+  under: Uint8Array | null;
+}
+
 export interface Scene {
   pattern: Pattern | null;
   grid: DensityGrid | null;
@@ -71,8 +77,11 @@ export interface Scene {
   flow?: FlowScene | null;
   /** Symbols in the density mode (all stitches shown). */
   markers?: Markers | null;
-  /** Stitches to show clearly on a dimmed heatmap (the objects a proposal changes, as previewed). */
-  focus?: Pattern[] | null;
+  /**
+   * Stitches to show clearly on a dimmed heatmap (the objects a proposal changes), with their
+   * underlay marked (records set in `under`).
+   */
+  focus?: FocusStitches[] | null;
 }
 
 /**
@@ -123,8 +132,28 @@ export function drawScene(ctx: CanvasRenderingContext2D, w: number, h: number, s
     ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
     ctx.fillRect(0, 0, w, h);
     ctx.restore();
-    for (const fp of scene.focus) if (!s.realistic || !drawThreads(ctx, vp, fp, 1, s.threadMm)) drawStitches(ctx, vp, fp, 1, false);
+    for (const f of scene.focus) {
+      if (!s.realistic || !drawThreads(ctx, vp, f.pattern, 1, s.threadMm)) drawStitches(ctx, vp, f.pattern, 1, false);
+      if (f.under) drawUnderlay(ctx, vp, f.pattern, f.under);
+      drawPoints(ctx, vp, f.pattern);
+    }
   }
   if (scene.highlight) drawZoneHighlight(ctx, vp, scene.highlight);
   if (pattern && edit) drawEditOverlay(ctx, vp, pattern, edit, w, h);
+}
+
+/** The needle points of `p` as small dots, so stitch lengths and spacing can be told apart. */
+function drawPoints(ctx: CanvasRenderingContext2D, vp: Viewport, p: Pattern): void {
+  const r = Math.min(2, Math.max(0.8, vp.scale * 0.08));
+  ctx.save();
+  ctx.fillStyle = 'rgba(13, 11, 16, 0.85)';
+  ctx.beginPath();
+  for (let i = 0; i < p.cmd.length; i++) {
+    if (p.cmd[i] !== STITCH) continue;
+    const [x, y] = vp.toScreen(p.x[i] / 10, p.y[i] / 10);
+    ctx.moveTo(x + r, y);
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+  }
+  ctx.fill();
+  ctx.restore();
 }

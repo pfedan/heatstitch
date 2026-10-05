@@ -4,7 +4,7 @@ import type { DensityGrid } from './density/grid';
 import { applyI18n, detectLang, formatNumber, getLang, setLang, t, type Lang } from './i18n';
 import { gridToCanvas } from './render/heatmap';
 import { drawLegend } from './render/legend';
-import { drawScene, type Scene } from './render/scene';
+import { drawScene, type FocusStitches, type Scene } from './render/scene';
 import { validationToCanvas } from './render/validationOverlay';
 import { Viewport } from './render/viewport';
 import { loadSettings, saveSettings } from './settings';
@@ -26,7 +26,7 @@ import { ValidationPanel } from './ui/validationPanel';
 import { acknowledgementOf, settledBy, type Acknowledgement } from './validation/acks';
 import type { ValidationResult, Zone } from './validation/validate';
 import { POINTS_MIN_SCALE } from './render/editOverlay';
-import { DIVIDER_GRAB_PX, drawDivider } from './render/compare';
+import { DIVIDER_GRAB_PX, drawBeforeAfter, drawDivider, drawPanels } from './render/compare';
 import type { Pattern, ThreadColor } from './model/pattern';
 import type { Measurement } from './validation/measure';
 import { initUpdateNotice } from './ui/updateNotice';
@@ -181,14 +181,7 @@ function activeValidationImg(): HTMLCanvasElement | null {
   return validationImg.img;
 }
 
-const scene = (): Scene => {
-  // A proposal under the pointer: its stitches and heatmap, without the findings of the design as it is.
-  const pv = settings.mode === 'density' && planState && planState.file === files.active ? planPreview : null;
-  if (pv) return { ...baseScene(), pattern: pv.pattern, markers: null, gridImg: pv.img ?? gridImg, validation: null, validationImg: null, counted: null, focus: pv.focus };
-  return baseScene();
-};
-
-const baseScene = (): Scene => ({
+const scene = (): Scene => ({
   pattern: (settings.mode === 'flow' ? flowPreview : null) ?? editor.preview ?? files.active?.pattern ?? null,
   flow: flowScene(),
   markers: settings.mode === 'density' && files.active?.pattern && !editor.preview ? seq(files.active.pattern).markers : null,
@@ -2505,6 +2498,7 @@ function redraw(): void {
     if (drawTool.preview && settings.mode === 'flow')
       drawDrawing(ctx, vp, drawTool.preview, { nodes: drawTool.kind === 'pen' ? drawTool.count : 0, closing: drawTool.closing, size: drawTool.size });
     if (letterMode) drawLetterBoxes();
+    drawPlanCompare();
     if (showCompare()) {
       const x = Math.round(split * stageW);
       ctx.save();
@@ -2978,16 +2972,21 @@ async function planFix(scope: 'all' | 'zone'): Promise<void> {
   redraw();
 }
 
-/** The stitches of the objects `which` (sewing order), each as a pattern of its own. */
-function objectStitches(p: Pattern, which: number[]): Pattern[] {
-  const objs = seq(p).objects;
+/**
+ * The stitches of the objects `which` (sewing order), each as a pattern of its own with its
+ * underlay marked (read from what the objects remember, so while that is there).
+ */
+function objectStitches(p: Pattern, which: number[], under: boolean): FocusStitches[] {
+  const q = seq(p);
   return [...new Set(which)].flatMap((i) => {
-    const o = objs[i];
+    const o = q.objects[i];
     if (!o) return [];
     const x = p.x.slice(o.first, o.last + 1);
     const y = p.y.slice(o.first, o.last + 1);
     const cmd = p.cmd.slice(o.first, o.last + 1);
-    return [{ name: p.name, format: p.format, x, y, cmd, colors: [o.color], bounds: computeBounds(x, y, cmd) }];
+    const mask = new Uint8Array(cmd.length);
+    if (under) for (const [a, b] of underlayRanges(p, o, q.kinds)) for (let k = a; k <= b; k++) if (k >= o.first && k <= o.last) mask[k - o.first] = 1;
+    return [{ pattern: { name: p.name, format: p.format, x, y, cmd, colors: [o.color], bounds: computeBounds(x, y, cmd) }, under: mask.includes(1) ? mask : null }];
   });
 }
 
@@ -2995,8 +2994,9 @@ function objectStitches(p: Pattern, which: number[]): Pattern[] {
 interface PlanPreview {
   pattern: Pattern;
   img: HTMLCanvasElement | null;
-  /** The new stitches of the objects it changes, each on its own. */
-  focus: Pattern[];
+  /** The stitches of the objects it changes, each on its own: as they are and as they would be. */
+  before: FocusStitches[];
+  focus: FocusStitches[];
 }
 /** Previews of the proposals by their ids, for the plan they belong to. */
 let planPreviews: { plan: Plan; byIds: Map<string, PlanPreview | null> } | null = null;
@@ -3018,13 +3018,18 @@ function showPlanPreview(ids: number[] | null): void {
     const chosen = st.plan.proposals.filter((x) => ids.includes(x.id));
     // Sewn for a look only: what the objects remember stays as it is.
     const release = holdMemory();
-    let pattern: Pattern | null = null;
+    const which = chosen.map((x) => x.index);
+    // The underlay is marked only where the proposal changes it (elsewhere it would only cover the change).
+    const under = chosen.some((x) => x.changes.some((c) => UNDER_FIELDS.has(c.field)));
+    let pv: PlanPreview | null = null;
     try {
-      pattern = applyProposals(st.pattern, chosen, settings.trimMm)?.pattern ?? null;
+      const pattern = applyProposals(st.pattern, chosen, settings.trimMm)?.pattern ?? null;
+      // Its underlay is read from what the new stitches remember, before that is let go.
+      if (pattern) pv = { pattern, img: null, before: [], focus: objectStitches(pattern, which, under) };
     } finally {
       release();
     }
-    const pv: PlanPreview | null = pattern && { pattern, img: null, focus: objectStitches(pattern, chosen.map((x) => x.index)) };
+    if (pv) pv.before = objectStitches(st.pattern, which, under);
     cache.set(key, pv);
     if (pv) {
       const { metric, cellMm, blurMm, includeJumps } = settings;
@@ -3038,6 +3043,54 @@ function showPlanPreview(ids: number[] | null): void {
     }
   }
   planPreview = cache.get(key) ?? null;
+}
+
+/** Settings of the underlay: a proposal changing one of them shows the underlay in its preview. */
+const UNDER_FIELDS = new Set(['underlay', 'underCross', 'under', 'underCover']);
+
+/** Below this size on the screen (CSS pixels), before and after are also shown whole side by side. */
+const SIDE_BELOW = 240;
+
+/** Top of the side-by-side comparison on the canvas (below the canvas tools), CSS pixels. */
+const LOUPE_TOP = 56;
+
+/**
+ * The proposal under the pointer, before and after side by side in its object's frame (left as
+ * it is, right as it would be: stitches clear on their heatmap, underlay marked), and both whole
+ * side by side at the top left of the canvas.
+ */
+function drawPlanCompare(): void {
+  const pv = planPreview;
+  const b = planHover;
+  if (!pv || !b || settings.mode !== 'density' || planState?.file !== files.active) return;
+  const pad = 1.5; // mm, as the frame of a zone
+  const box = { minX: b.minX - pad, minY: b.minY - pad, maxX: b.maxX + pad, maxY: b.maxY + pad };
+  const before: Scene = { ...scene(), validation: null, validationImg: null, counted: null, highlight: null, markers: null, focus: pv.before };
+  const after: Scene = { ...before, pattern: pv.pattern, gridImg: pv.img ?? gridImg, focus: pv.focus };
+  const labels: [string, string] = [t('plan.before'), t('plan.after')];
+  const [x0, y0] = vp.toScreen(box.minX, box.minY);
+  const [x1, y1] = vp.toScreen(box.maxX, box.maxY);
+  drawBeforeAfter(ctx, stageW, stageH, { x0, y0, x1, y1 }, before, after, stageBg(), labels);
+  if (Math.min(x1 - x0, y1 - y0) >= SIDE_BELOW) return;
+  // Small: before and after side by side, each whole and enlarged, at the top left (or the top
+  // right when the object lies there): the difference at a glance.
+  const gap = 6;
+  const pw = Math.min(220, (stageW - 24 - gap) / 2);
+  const ph = Math.min(260, stageH - 80);
+  const scale = Math.min(pw / (box.maxX - box.minX), ph / (box.maxY - box.minY));
+  const w = (box.maxX - box.minX) * scale;
+  const h = (box.maxY - box.minY) * scale;
+  const panel = (x: number, sc: Scene, label: string) => {
+    const pvp = new Viewport();
+    pvp.scale = scale;
+    pvp.offsetX = x - box.minX * scale;
+    pvp.offsetY = LOUPE_TOP - box.minY * scale;
+    return { rect: { x0: x, y0: LOUPE_TOP, x1: x + w, y1: LOUPE_TOP + h }, scene: { ...sc, vp: pvp }, label };
+  };
+  const total = 2 * w + gap;
+  const left = !(x0 < 12 + total + 12 && y0 < LOUPE_TOP + h + 12);
+  const sx = left ? 12 : stageW - 12 - total;
+  drawPanels(ctx, stageW, stageH, [panel(sx, before, labels[0]), panel(sx + w + gap, after, labels[1])], stageBg());
 }
 
 /** Where the objects of the proposals `ids` lie, together (mm). */
