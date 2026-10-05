@@ -1,0 +1,636 @@
+{
+ "source": "https://github.com/inkstitch/embroidery-fonts",
+ "commit": "c7e3a05",
+ "fonts": [
+  {
+   "id": "ags_garamond_latin_grec",
+   "name": "AGS Γαραμου Garamond",
+   "style": "serif",
+   "cap": 19.05,
+   "good": [
+    15.24,
+    28.58
+   ],
+   "license": "OFL-1.1",
+   "source": "EBGaramond12",
+   "chars": "!\"&'()+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz¡«·»¿ÀÁÂÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüýþČčĎďĐđĞğİıŒœŘřŞşŠšŤťŽž̈ͅ΄ΆΈΉΊΌΎΏΐΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩΪΫάέήίΰαβγδεζηθικλμνξοπρςστυφχψωϊϋόύώϏϐϑϓϕϖϗϜϰϱ→√∞∫",
+   "cases": "Aa",
+   "kb": 731
+  },
+  {
+   "id": "allegria20",
+   "name": "Allegria 20",
+   "style": "script",
+   "script": true,
+   "cap": 19.76,
+   "good": [
+    9.88,
+    39.52
+   ],
+   "license": "OFL-1.1",
+   "source": "Euphoria Script Regular Extended",
+   "chars": "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]_`abcdefghijklmnopqrstuvwxyz{|}~¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüýþÿŒœ–—‘’‚“”„€",
+   "cases": "Aa",
+   "kb": 110
+  },
+  {
+   "id": "allegria55",
+   "name": "Allegria 55",
+   "style": "script",
+   "script": true,
+   "cap": 54.77,
+   "good": [
+    21.91,
+    76.68
+   ],
+   "license": "OFL-1.1",
+   "source": "Euphoria Script Regular Extended",
+   "chars": "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]_`abcdefghijklmnopqrstuvwxyz{|}~¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüýþÿŒœ–—‘’‚“”„€",
+   "cases": "Aa",
+   "kb": 457
+  },
+  {
+   "id": "amitaclo",
+   "name": "Amitaclo",
+   "style": "script",
+   "script": true,
+   "cap": 22.38,
+   "good": [
+    17.9,
+    35.81
+   ],
+   "license": "OFL-1.1",
+   "source": "Amita",
+   "chars": "!\"&'()*+,-./0123456789:;=?@ABCDEFGHIJKLMNOPQRSTUVWXYZ\\abcdefghijklmnopqrstuvwxyz|ÄÆÈÉÊËÖÜßàáâäæçèéêëíîïñóôöùúûüıœ‘’",
+   "cases": "Aa",
+   "kb": 241
+  },
+  {
+   "id": "apex_simple_AGS",
+   "name": "Apex Simple AGS",
+   "style": "serif",
+   "cap": 32.62,
+   "good": [
+    24.46,
+    42.41
+   ],
+   "license": "OFL-1.1",
+   "source": "Linux Libertine Regular display Bold",
+   "chars": "!\"&'(),./0123456789:;?@ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz¡«»¿ÀÁÂÄÈÉÊËÌÍÎÏÒÓÔÖÙÚÛÜßàáâäçèéêëìíîïñòóôõöùúûü‘’",
+   "cases": "Aa",
+   "kb": 375
+  },
+  {
+   "id": "art_nouveau",
+   "name": "Art Nouveau",
+   "style": "serif",
+   "cap": 23.47,
+   "good": [
+    18.78,
+    35.21
+   ],
+   "license": "OFL-1.1",
+   "source": "Apollo ASM",
+   "chars": "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~¡¢£¥¦§¨ª«°´·¸º»¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüýþÿŒœŠšŸŽžƒʼˆ˜̧̀́̂̃̈̊̌–—‘’‚“”„†‡•…‰‹›€",
+   "cases": "Aa",
+   "kb": 386
+  },
+  {
+   "id": "auberge_marif",
+   "name": "Auberge Marif",
+   "style": "script",
+   "script": true,
+   "cap": 35.74,
+   "good": [
+    21.44,
+    50.04
+   ],
+   "license": "OFL-1.1",
+   "source": "Grand Hotel Marif",
+   "chars": "!\"&'()+,-.0123456789:;=?ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz«»ÀÁÂÃÄÆÇÈÉÊËÌÍÎÏÑÔÕÖÚÛÜßàáâãäæçèéêëìíîïñôõöùúûüĨĩĽľŒœŨũ‘’",
+   "cases": "Aa",
+   "kb": 368
+  },
+  {
+   "id": "barstitch_bold",
+   "name": "Barstitch Bold",
+   "style": "sans",
+   "cap": 24.14,
+   "good": [
+    12.07,
+    31.38
+   ],
+   "license": "OFL-1.1",
+   "source": "Barlow Bold",
+   "chars": "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]_`abcdefghijklmnopqrstuvwxyz{}¡«»¿ÀÁÂÃÄÆÇÈÉÊËÌÍÎÏÑÒÓÔÕÖØÙÚÛÜÝßàáâãäæçèéêëìíîïñòóôõö÷øùúûüýÿŒœŸ‘’",
+   "cases": "Aa",
+   "kb": 244
+  },
+  {
+   "id": "barstitch_regular",
+   "name": "Barstitch regular",
+   "style": "sans",
+   "cap": 24.2,
+   "good": [
+    12.1,
+    36.3
+   ],
+   "license": "OFL-1.1",
+   "source": "Barlow Regular",
+   "chars": "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]_`abcdefghijklmnopqrstuvwxyz{}¡«»¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝßàáâãäåæçèéêëìíîïñòóôõö÷øùúûüýÿŒœŸ‘’",
+   "cases": "Aa",
+   "kb": 194
+  },
+  {
+   "id": "bathaus_FI",
+   "name": "Bathaus FI",
+   "style": "display",
+   "cap": 30.16,
+   "good": [
+    24.13,
+    45.24
+   ],
+   "license": "OFL-1.1",
+   "source": "Baumans",
+   "chars": "!&'()+,-.0123456789:;=?@ABCDEFGHIJKLMNOPQRSTUVWXYZ`abcdefghijklmnopqrstuvwxyz¨«´»ÄÈÉÊËÖÜßàáâäçèéêëîïôöùûüˆ‘’",
+   "cases": "Aa",
+   "kb": 133
+  },
+  {
+   "id": "caesarus_SC_FI",
+   "name": "Caesarus SC FI",
+   "style": "sans",
+   "cap": 25.14,
+   "good": [
+    17.6,
+    125.7
+   ],
+   "license": "OFL-1.1",
+   "source": "Marcellus SC",
+   "chars": "!&'(),-./0123456789:;=?@ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz¡¿ÄÆÈÉÊËÖÜßàáâäæçèéêëìíîïñòóôöùúûüŒœ‘’",
+   "cases": "Aa",
+   "kb": 169
+  },
+  {
+   "id": "caffeine_tiny",
+   "name": "Caffeine tiny",
+   "style": "sans",
+   "small": true,
+   "cap": 16.96,
+   "good": [
+    4.24,
+    9.33
+   ],
+   "license": "OFL-1.1",
+   "source": "Espresso Dolce",
+   "chars": "!%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_abcdefghijklmnopqrstuvwxyz«°»ÄÈÉÊËÖ×Üßàâäæçèéêëîïôö÷ùûüœ‘’",
+   "cases": "Aa",
+   "kb": 177
+  },
+  {
+   "id": "cats",
+   "name": "Cats",
+   "style": "display",
+   "cap": 39.78,
+   "good": [
+    27.85,
+    59.67
+   ],
+   "license": "OFL-1.1",
+   "source": "Cat Font",
+   "chars": "!\"&',-./0123456789:;?@ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz«»ÀÂÄÆÈÉÊËÔÖÙÛÜßàâäæçèéêëîïôöùûüÿŒœ˝‘’“”„",
+   "cases": "Aa",
+   "kb": 428
+  },
+  {
+   "id": "chicken_little",
+   "name": "Chicken Little KOR",
+   "style": "serif",
+   "cap": 31.68,
+   "good": [
+    15.84,
+    63.36
+   ],
+   "license": "OFL-1.1",
+   "source": "Henny Penny",
+   "chars": "!\"%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]_abcdefghijklmnopqrstuvwxyz{}¡«°»¿ÀÁÄÆÇÈÉÊËÍÎÏÑÓÔÖ×ÙÚÛÜßàáâäæçèéêëíîïñóôöùúûüŒœ",
+   "cases": "Aa",
+   "kb": 447
+  },
+  {
+   "id": "chicken_scratch",
+   "name": "Chicken Scratch",
+   "style": "script",
+   "script": true,
+   "cap": 18.26,
+   "good": [
+    14.61,
+    21.91
+   ],
+   "license": "OFL-1.1",
+   "source": "Reenie Beanie",
+   "chars": "!\"$&'(),-.0123456789:?@ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzÄÈÉÊËÖÜßàâäçèéêëîïôöùûüÿ‚“”",
+   "cases": "Aa",
+   "kb": 129
+  },
+  {
+   "id": "cogs_KOR",
+   "name": "Cogs KOR",
+   "style": "display",
+   "cap": 38.12,
+   "good": [
+    30.5,
+    45.74
+   ],
+   "license": "CC-BY-4.0",
+   "source": "Jack of Gears",
+   "chars": "!\"#%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ\\_`abcdefghijklmnopqrstuvwxyzÀÁÂÄÅÆÇÈÉÊËÌÍÎÏÑÒÓÔÖØÙÚÛÜßàáâäåæçèéêëìíîïñòóôõøùúûüÿŒœŸ",
+   "cases": "Aa",
+   "kb": 503
+  },
+  {
+   "id": "cooper_marif",
+   "name": "CooperMarif",
+   "style": "sans",
+   "cap": 115.92,
+   "good": [
+    57.96,
+    347.76
+   ],
+   "license": "OFL-1.1",
+   "source": "Cooper*",
+   "chars": "!&'+-.0123456789:=?@ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz«»ÀÁÂÄÇÈÉÊËÌÍÎÏÑÒÓÔÕÖÙÚÛÜßàáâãäåçèéêëìíîïòóôöùúûü",
+   "cases": "Aa",
+   "kb": 1060
+  },
+  {
+   "id": "digory_doodles_bean",
+   "name": "Digory Doodles Bean",
+   "style": "script",
+   "script": true,
+   "cap": 18.36,
+   "good": [
+    18.36,
+    36.72
+   ],
+   "license": "OFL-1.1",
+   "source": "Digory Doodles",
+   "chars": "!\"&'(),-./0123456789:;=?@ABCDEFGHIJKLMNOPQRSTUVWXYZ\\^_`abcdefghijklmnopqrstuvwxyz{}~ÄÈÉÊËÖÜßäèéêëöü‘’",
+   "cases": "Aa",
+   "kb": 170
+  },
+  {
+   "id": "excalibur_KOR",
+   "name": "Excalibur KOR",
+   "style": "sans",
+   "cap": 17.22,
+   "good": [
+    8.61,
+    24.11
+   ],
+   "license": "Public Domain",
+   "source": "Excalibur Nouveau",
+   "chars": "!\"%&'()*,-./0123456789:;?ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz«»ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÑÒÓÔÕÖØÙÚÛÜßàáâãäåæçèéêëìíîïñòóôõöøùúûüŒœ–—‘’“”„•",
+   "cases": "Aa",
+   "kb": 415
+  },
+  {
+   "id": "fold_inkstitch",
+   "name": "Fold Ink/Stitch",
+   "style": "display",
+   "cap": 63.24,
+   "good": [
+    50.59,
+    379.44
+   ],
+   "license": "OFL-1.1",
+   "source": "Fold",
+   "chars": "!-0123456789?ABCDEFGHIJKLMNOPQRSTUVWXYZ‘",
+   "cases": "A",
+   "kb": 86
+  },
+  {
+   "id": "glacial_tiny",
+   "name": "Glacial Tiny 60 AGS",
+   "style": "sans",
+   "small": true,
+   "cap": 5.56,
+   "good": [
+    2.78,
+    8.34
+   ],
+   "license": "OFL-1.1",
+   "source": "Glacial Indifference",
+   "chars": "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ^`abcdefghijklmnopqrstuvwxyz~»ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïñòóôõöøùúûüČčŒœŘřŠšŽž‘’€",
+   "cases": "Aa",
+   "kb": 169
+  },
+  {
+   "id": "magnolia_KOR",
+   "name": "Magnolia KOR",
+   "style": "script",
+   "script": true,
+   "cap": 19.84,
+   "good": [
+    15.87,
+    23.81
+   ],
+   "license": "OFL-1.1",
+   "source": "Magnolia Script",
+   "chars": "!\"%&'()+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ\\_abcdefghijklmnopqrstuvwxyz{}°ÄÈÉÊËÖ×Üßàâäæçèéêëîïôöùûüœ‘’",
+   "cases": "Aa",
+   "kb": 245
+  },
+  {
+   "id": "mam_script",
+   "name": "MAM Script",
+   "style": "script",
+   "script": true,
+   "cap": 23.02,
+   "good": [
+    18.42,
+    46.04
+   ],
+   "license": "OFL-1.1",
+   "source": "Kaushan Script",
+   "chars": "!&',.0123456789:;?ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz¡¿ÄÈÉÊËÖÜßäèéêëöü‘’",
+   "cases": "Aa",
+   "kb": 227
+  },
+  {
+   "id": "manga_impact",
+   "name": "Manga Impact",
+   "style": "sans",
+   "cap": 20.33,
+   "good": [
+    8.13,
+    40.66
+   ],
+   "license": "OFL-1.1",
+   "source": "Shojumaru",
+   "chars": "!\"%&'()+,-./0123456789:;=?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz~¡¨«°´»¿ÆÇ×Øæç÷≈",
+   "cases": "Aa",
+   "kb": 226
+  },
+  {
+   "id": "marifenda",
+   "name": "Marifenda",
+   "style": "script",
+   "script": true,
+   "cap": 48.36,
+   "good": [
+    24.18,
+    48.36
+   ],
+   "license": "OFL-1.1",
+   "source": "Merienda-Bold",
+   "chars": "!\"%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz£«»¿ÀÁÂÃÄÅÆÇÈÉÊËÎÏÑÒÓÔÕÖ×ÙÚÛÜßàáâãäåæçèéêëìíîïðñòóôõö÷ùúûüýþÿŒœŠšŸŽž˝‘’‚“€",
+   "cases": "Aa",
+   "kb": 405
+  },
+  {
+   "id": "milli_marif_bold",
+   "name": "Millimarif-bold20",
+   "style": "sans",
+   "cap": 21.14,
+   "good": [
+    15.86,
+    29.6
+   ],
+   "license": "OFL-1.1",
+   "source": "Millimetre",
+   "chars": "!$%&'(),-.0123456789:?@ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzÀÁÂÆÇÈÉÊÔÙàâæçèéêëîïôûüŒœ‘€",
+   "cases": "Aa",
+   "kb": 139
+  },
+  {
+   "id": "mimosa_medium",
+   "name": "Mimosa Medium",
+   "style": "display",
+   "cap": 27.72,
+   "good": [
+    20.79,
+    41.58
+   ],
+   "license": "OFL-1.1",
+   "source": "Nose Transport",
+   "chars": "!\"$%&'(),-./0123456789:;?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]_abcdefghijklmnopqrstuvwxyz{}¡«»¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿŒœŸẞỲỳ‘’“”„€☺♿✈",
+   "cases": "Aa",
+   "kb": 1766
+  },
+  {
+   "id": "montecarlo",
+   "name": "Montecarlo",
+   "style": "script",
+   "script": true,
+   "cap": 33.58,
+   "good": [
+    26.86,
+    50.37
+   ],
+   "license": "OFL-1.1",
+   "source": "Montecarlo Regular",
+   "chars": "!\"#$%&'()+,-.0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{}~¡§¨ª«¯°´µ·¸º»¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿĀāĂăĄąĆćĈĉĊċČčĎďĐđĒēĔĕĖėĘęĚěĜĝĞğĠġĢģĤĥĦħĨĩĪīĬĭĮįİıĳĴĵĶķĸĹĺĻļĽľĿŀŁłŃńŅņŇňŉŊŋŌōŎŏŐőŒœŔŕŖŗŘřŚśŜŝŞşŠšŢţŤťŦŧŨũŪūŬŭŮůŰűŲųŴŵŶŷŸŹźŻżŽžƒƠơƯưǼǽǾǿȘȚʼˆˇ˘˙˚˛˜̧̨̛̣̦̀́̂̃̄̆̇̈̉̊̋̌̒ΩπẀẁẂẃẄẅẞẠạẢảẤấẦầẩẪẫẬậẮắẰằẲẳẴẵẶặẸẹẺẻẼẽẾếỀềỂểỄễỆệỈỉỊịỌọỎỏỐốỒồỔổỖỗỘộỚớỜờỞởỠỡỢợỤụỦủỨứỪừỬửỮữỰựỲỳỴỵỶỷỸỹ–—‘’‚“”„‹⁄€−∕",
+   "cases": "Aa",
+   "kb": 1079
+  },
+  {
+   "id": "neon_blinking",
+   "name": "Néon blinking",
+   "style": "display",
+   "cap": 39,
+   "good": [
+    19.5,
+    58.5
+   ],
+   "license": "OFL-1.1",
+   "source": "Sportrop",
+   "chars": "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~¡¢£¤¥¦¨©ª«®¯°±´µ·¸¹º»¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüýþÿĀāĂăĄąĆćĈĉĊċČčĎďĐđĒēĔĕĖėĘęĚěĜĝĞğĠġĢģĤĥĦħĨĩĪīĬĭĮįİıĴĵĶķĸĹĺĻļĽľĿŀŁłŃńŅņŇňŉŊŋŌōŎŏŐőŒœŔŕŖŗŘřŚśŜŝŞşŠšŢţŤťŦŧŨũŪūŬŭŮůŰűŲųŴŵŶŷŸŹźŻżŽžƉǍǎǏǐǑǒǓǔǕǖǗǘǙǚǛǜǞǟǠǡǢǣǤǥǦǧǨǩǪǫǬǭǰǴǵǸǹǺǻǼǽǾǿȀȁȂȃȄȅȆȇȈȉȊȋȌȍȎȏȐȑȒȓȔȕȖȗȘșȚțȞȟȦȧȨȩȪȫȬȭȮȯȰȱȲȳʰʲʳʷʸʼˆˇ˘˙˚˛˜˝ˡˢˣ̧̨̣̤̥̦̭̮̰̱̀́̂̃̄̆̇̈̊̋̌̏̑ḀḁḂḃḄḅḆḇḈḉḊḋḌḍḎḏḐḑḒḓḔḕḖḗḘḙḚḛḜḝḞḟḠḡḢḣḤḥḦḧḨḩḪḫḬḭḮḯḰḱḲḳḴḵḶḷḸḹḺḻḼḽḾḿṀṁṂṃṄṅṆṇṈṉṊṋṌṍṎṏṐṑṒṓṔṕṖṗṘṙṚṛṜṝṞṟṠṡṢṣṤṥṦṧṨṩṪṫṬṭṮṯṰṱṲṳṴṵṶṷṸṹṺṻṼṽṾṿẀẁẂẃẄẅẆẇẈẉẊẋẌẍẎẏẐẑẒẓẔẕẖẗẘẙẠạẤấẦầẪẫẬậẮắẰằẴẵẶặẸẹẼẽẾếỀềỄễỆệỊịỌọỐốỒồỖỗỘộỤụỲỳỴỵỸỹ’“”€�",
+   "cases": "Aa",
+   "kb": 1035
+  },
+  {
+   "id": "pacificlo",
+   "name": "Pacificlo",
+   "style": "script",
+   "script": true,
+   "cap": 17.58,
+   "good": [
+    14.06,
+    24.61
+   ],
+   "license": "OFL-1.1",
+   "source": "Pacifico",
+   "chars": "!\"&'()*+,-./0123456789:;=?@ABCDEFGHIJKLMNOPQRSTUVWXYZ\\abcdefghijklmnopqrstuvwxyz¡·¿ÄÆÈÉÊËÑÔÕÖÜßàáâãäæçèéêëìíîïñòóôõöùúûüıŒœ‘’",
+   "cases": "Aa",
+   "kb": 209
+  },
+  {
+   "id": "paquerette",
+   "name": "Paquerette",
+   "style": "display",
+   "cap": 25.75,
+   "good": [
+    23.18,
+    28.33
+   ],
+   "license": "Public Domain",
+   "source": "Coronaviral",
+   "chars": "!\"&'()*,-./0123456789:;?@ABCDEFGHIJKLMNOPQRSTUVWXYZ\\_`abcdefghijklmnopqrstuvwxyz|ÄÈÉÊËÖÜßàáâäçèéêëìíîïñòóôöùúûü‘’",
+   "cases": "Aa",
+   "kb": 287
+  },
+  {
+   "id": "pisankris",
+   "name": "Pisankris",
+   "style": "display",
+   "cap": 28.74,
+   "good": [
+    20.12,
+    40.24
+   ],
+   "license": "OFL-1.1",
+   "source": "Manuskript Gothisch",
+   "chars": "!\"&'(),-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ\\abcdefghijklmnopqrstuvwxyzÄÆÈÉÊËÔÖÜßàâäæçèéêëîïôöùûüŒœ‘’",
+   "cases": "Aa",
+   "kb": 273
+  },
+  {
+   "id": "pixel10",
+   "name": "Pixel 10",
+   "style": "sans",
+   "cap": 50.38,
+   "good": [
+    25.19,
+    75.57
+   ],
+   "license": "OFL-1.1",
+   "source": "Jersey 10 Regular",
+   "chars": "!\"#%&'(),-./0123456789:;?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]_abcdefghijklmnopqrstuvwxyz{}¡«´»¿ÀÁÂÃÄÆÇÈÉÊËÌÍÎÏÑÒÓÔÕÖØÙÚÛÜßàáâäæçèéêëìíîïñòóôöøùúûüÿİŒœŸ˝ẞ‘’‚“”„‹›",
+   "cases": "Aa",
+   "kb": 1752
+  },
+  {
+   "id": "roaring_twenties_KOR",
+   "name": "Roaring Twenties KOR",
+   "style": "display",
+   "cap": 15.05,
+   "good": [
+    10.54,
+    22.58
+   ],
+   "license": "OFL-1.1",
+   "source": "Limelight",
+   "chars": "!\"%&'()+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]_abcdefghijklmnopqrstuvwxyz¡¨«¯°»¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÑÒÓÔÖØÙÚÛÜßàáâäåæçèéêëìíîïñòóôõö÷øùúûÿĀāİıŒœ˝‘’‚",
+   "cases": "Aa",
+   "kb": 201
+  },
+  {
+   "id": "roman_ags",
+   "name": "Roman AGS",
+   "style": "serif",
+   "cap": 25.05,
+   "good": [
+    20.04,
+    32.57
+   ],
+   "license": "OFL-1.1",
+   "source": "Latin Modern Roman 10 Bold Italic",
+   "chars": "!\"&'()+,-./0123456789:;?@ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzÄÆÈÉÊËÖÜßàáâäæçèéêëîïôöùûüŒœ‘’",
+   "cases": "Aa",
+   "kb": 261
+  },
+  {
+   "id": "sacramarif",
+   "name": "Sacramarif",
+   "style": "script",
+   "script": true,
+   "cap": 16.26,
+   "good": [
+    13.01,
+    24.39
+   ],
+   "license": "OFL-1.1",
+   "source": "Sacramento",
+   "chars": "!#&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz§«»ÀÄÇÈÉÊËÍÎÏÖÙÛÜßàáâäæçèéêëîïöùûü‘’",
+   "cases": "Aa",
+   "kb": 86
+  },
+  {
+   "id": "stebor_AGS",
+   "name": "Stebor AGS",
+   "style": "script",
+   "script": true,
+   "cap": 19.84,
+   "good": [
+    15.87,
+    29.76
+   ],
+   "license": "OFL-1.1",
+   "source": "Lobster Two Bold Italic",
+   "chars": "!\"&'()+,-.0123456789:;=?@ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzÄÈÉÊËÖÜßàáâäæçèéêëîïôöùûüœ‘’",
+   "cases": "Aa",
+   "kb": 218
+  },
+  {
+   "id": "tt_directors",
+   "name": "TT Directors",
+   "style": "sans",
+   "cap": 18.32,
+   "good": [
+    9.16,
+    25.65
+   ],
+   "license": "OFL-1.1",
+   "source": "TT Directors",
+   "chars": "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`{|}§´ÀÂÄÆÇÈÉÊËÎÏÔÖÛÜßŒŨŸ€�",
+   "cases": "Aa",
+   "kb": 84
+  },
+  {
+   "id": "tt_masters",
+   "name": "TT Masters",
+   "style": "sans",
+   "cap": 18.09,
+   "good": [
+    9.05,
+    27.14
+   ],
+   "license": "OFL-1.1",
+   "source": "TT Masters",
+   "chars": "!\"$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`{|}~¡§©«®°±´»¿ÀÁÂÄÅÆÇÈÉÊËÌÍÎÏÑÒÓÔÕÖØÙÚÛÜßĀŌŒŪŸẞ‘’‰€�",
+   "cases": "Aa",
+   "kb": 174
+  },
+  {
+   "id": "violin_serif",
+   "name": "Violin Serif",
+   "style": "serif",
+   "cap": 28.31,
+   "good": [
+    22.65,
+    33.97
+   ],
+   "license": "OFL-1.1",
+   "source": "Instrument Serif",
+   "chars": "!$&(),-.0123456789:?ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzÄÈÉÊËÖÜßàâäçèéêëîïôöùûüÿ’‚“”",
+   "cases": "Aa",
+   "kb": 199
+  },
+  {
+   "id": "cyrillic",
+   "name": "Кирилиця",
+   "style": "sans",
+   "cap": 25,
+   "good": [
+    7.5,
+    27.5
+   ],
+   "license": "OFL-1.1",
+   "source": "Roboto",
+   "chars": "!\"#$%&'()*+,-./0123456789:;<=?@ABCDEFGHIJKLMNOPQRSTUVWXYZ\\_abcdefghijklmnopqrstuvwxyz£«»ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿŐőŒœŰűŸʼˆˇˉ˘˙˚˛˜˝˳̧̣̀́̂̃̄̆̈̉̊̋̏ЀЁЂЃЄЅІЇЈЉЊЋЌЍЎЏАБВГДЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдежзийклмнопрстуфхцчшщъыьэюяѐёђѓєѕіїјљњћќѝўџѠѡѢѣѤѥѦѧѨѩѪѫѬѭѮѯѰѱѲѳѴѵѶѷѸѹѺѻѼѽѾѿҀҁ҂҃҄҅҆ҊҋҌҍҎҏҐґҒғҔҕҖҗҘҙҚқҜҝҞҟҠҡҢңҤҥҦҧҨҩҪҫҬҭҮүҰұҲҳҴҵҶҷҸҹҺһҼҽҾҿӀӁӂӃӄӅӆӇӈӉӊӋӌӍӎӏӐӑӒӓӔӕӖӗӘәӚӛӜӝӞӟӠӡӢӣӤӥӦӧӨөӪӫӬӭӮӯӰӱӲӳӴӵӶӷӹӺӻӼӽӾӿԀԁԂԃԄԅԆԇԈԉԊԋԌԍԎԏԐԒԓ‐–—―‘’‛“”„′‹⁄₤€",
+   "cases": "Aa",
+   "kb": 700
+  }
+ ]
+}

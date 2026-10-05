@@ -14,6 +14,8 @@ import { tidy, withRecords } from './edit';
 import { joinsIn, rememberObjects, restoreJoin, stitchKey, type ObjectKind, type SewObject } from './objects';
 import { END, JUMP, STITCH, TRIM, type Pattern } from './pattern';
 import { SATIN, TIE_STITCH } from './sequence';
+import { letteringFrom } from '../lettering/stored';
+import type { Lettering } from '../lettering/layout';
 
 /**
  * New stitches for the objects of a design, with other settings: density, angle, stitch length,
@@ -170,6 +172,8 @@ export interface Remembered {
    */
   knockout?: boolean;
   cut?: string;
+  /** The lettering the object belongs to (it is sewn anew from its text, see lettering/). */
+  lettering?: Lettering;
 }
 
 /**
@@ -258,6 +262,7 @@ export interface StoredObject {
   form?: StoredPath[];
   knockout?: boolean;
   cut?: string;
+  lettering?: Lettering;
   join?: boolean;
 }
 
@@ -281,6 +286,7 @@ export function rememberedIn(p: Pattern, objects: SewObject[]): StoredObject[] {
       ...(r.form ? { form: storeForm(r.form) } : {}),
       ...(r.knockout ? { knockout: true } : {}),
       ...(r.cut ? { cut: r.cut } : {}),
+      ...(r.lettering ? { lettering: r.lettering } : {}),
     });
   }
   for (const j of joinsIn(p)) out.push({ key: j.key, region: null, join: j.join });
@@ -445,6 +451,8 @@ export function restoreRemembered(list: unknown): number {
     if (form) r.form = form;
     if (form && e.knockout === true) r.knockout = true;
     if (typeof e.cut === 'string') r.cut = e.cut;
+    const lettering = e.lettering === undefined ? null : letteringFrom(e.lettering);
+    if (lettering) r.lettering = lettering;
     rememberKey(e.key, r);
     n++;
   }
@@ -1142,6 +1150,7 @@ export function restitch(
           shape: known?.shape,
           ...(known?.form && !newArea ? { form: known.form, ...(known.knockout ? { knockout: true, cut: known.cut } : {}) } : {}),
         };
+    if (known?.lettering) after.lettering = known.lettering;
     // Up to the object: everything as it was, except the jumps that lead to its first stitch.
     let lead = o.first;
     while (lead - 1 >= i && p.cmd[lead - 1] === JUMP) lead--;

@@ -3077,3 +3077,264 @@ button.mini-sw.thread-sw {
 .aside-row .layer-meta {
   margin-left: 0;
 }
+
+/* Lettering: the text tool and the card of a lettering. */
+.tool-glyph {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-weight: 700;
+}
+
+.lettering-panel {
+  flex: none;
+}
+
+.lettering-panel .field {
+  margin-bottom: 12px;
+}
+
+.lettering-text {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  font: inherit;
+  font-size: 16px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--ink);
+  margin-top: 4px;
+}
+
+.lettering-text:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.lettering-missing {
+  font-size: 12px;
+  color: #b4560a;
+  margin-top: 4px;
+}
+
+.lettering-missing button.link {
+  margin: 0;
+  padding: 0;
+}
+
+.font-current {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 6px 8px;
+  text-align: left;
+}
+
+.font-current.open {
+  border-color: var(--accent);
+}
+
+.font-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.font-arrow {
+  color: var(--muted);
+}
+
+.font-license {
+  margin: 4px 0 0;
+}
+
+.font-license a {
+  color: var(--muted);
+}
+
+.font-list {
+  max-height: 340px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  margin: -4px 0 12px;
+  background: var(--panel);
+}
+
+.font-group {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  background: var(--bg);
+}
+
+.font-row {
+  display: block;
+  width: 100%;
+  border: none;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  padding: 4px 8px 6px;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+}
+
+.font-row:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.font-row.active {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.font-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.font-row.lacking .font-sample {
+  opacity: 0.45;
+}
+
+.font-sample {
+  display: block;
+  width: 100%;
+  height: 40px;
+}
+
+.font-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.font-tags {
+  text-align: right;
+}
+
+.lettering-height-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.lettering-height {
+  width: 4.5em;
+}
+
+.lettering-height-row .band-track {
+  flex: 1;
+  min-width: 0;
+}
+
+.lettering-height-row input[type='range'] {
+  width: 100%;
+}
+
+.lettering-height-note {
+  display: block;
+  margin-top: 6px;
+}
+
+.lettering-height-note.warn {
+  color: #b4560a;
+}
+
+.lettering-height-note button.link {
+  margin: 0;
+  padding: 0;
+}
+
+.lettering-size {
+  margin: -4px 0 12px;
+}
+
+.choice-row.icons button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 4px;
+}
+
+.swatch-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 4px 8px;
+}
+
+.swatch-button .swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  border: 1px solid color-mix(in srgb, var(--ink) 20%, transparent);
+}
+
+.lettering-letters {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.lettering-letters.on {
+  padding: 8px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.lettering-letters .stitch-field {
+  align-self: stretch;
+}
+
+.lettering-letters p {
+  margin: 0;
+}
+
+.lettering-letters button.link {
+  margin: 0;
+}
+
+.lettering-more {
+  margin-bottom: 8px;
+}
+
+.lettering-more summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.lettering-more .stitch-field {
+  display: block;
+  margin-bottom: 10px;
+}
+
+.lettering-more .stitch-field input[type='range'] {
+  width: 100%;
+}
+
+.lettering-more .check.disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.lettering-release {
+  display: block;
+}
