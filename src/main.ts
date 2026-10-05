@@ -78,7 +78,7 @@ import { drawAside, drawDrawing, type FlatArea } from './render/shapeOverlay';
 import { AsidePanel } from './ui/asidePanel';
 import type { LeftOut } from './ui/imageMode';
 import { addShape, type NewShape } from './model/addShape';
-import { lineOf, lineSettings, resewLine } from './model/line';
+import { fillToLine, lineOf, lineSettings, lineToFill, resewLine } from './model/line';
 import { borderLines, type PathStitch } from './model/along';
 import { asideOf, dropAside, sewAgain, setAside, setAsideRole, storeAside, type AsideRole, type AsideShape } from './model/aside';
 import { deleteObjects, duplicateObject, mirrorMatrix, recolorObjects, subtractTop, unionForm } from './model/shapeOps';
@@ -898,6 +898,7 @@ function stitchInfo(p: Pattern, q: Sequence): StitchInfo {
   if (runs.length && runs.every((obj) => remembered(p, obj)?.path)) info.line = true;
   const one = selectedObjects.size === 1 ? q.objects[[...selectedObjects][0]] : undefined;
   if (one && isLineObject(p, one)) info.path = { st: lineSettings(p, one, q.kinds), traced: !remembered(p, one)?.path };
+  if (one && remembered(p, one)?.asLine) info.asLine = true;
   const link = selectedObjects.size === 1 && q.objects[firstFill] ? remembered(p, q.objects[firstFill])?.outline : undefined;
   if (link) {
     const fill = q.objects.findIndex((o) => remembered(p, o)?.fill?.border?.link === link);
@@ -1052,6 +1053,20 @@ const stitchPanel = new StitchPanel($('object-stitches'), {
   convert: (to) => {
     const p = files.active?.pattern;
     if (!p || !selectedObjects.size) return;
+    const one = selectedObjects.size === 1 ? [...selectedObjects][0] : -1;
+    // A wide line: as a fill of its area, and back to the line it was.
+    if (to === 'line') {
+      if (one >= 0) sewLineAgain(one);
+      return;
+    }
+    if (to === 'fill' && one >= 0 && remembered(p, seq(p).objects[one])?.path) {
+      const d = digitizeDefaults(settings.profile);
+      const fill = { pattern: 'tatami' as const, spacing: d.spacing, spacingEnd: Math.min(1.2, Math.round(d.spacing * 250) / 100), offset: 0.25, angle: NaN, stitch: d.stitch, underlay: d.underlay, edge: 0, tolerance: d.tolerance };
+      const r = lineToFill(p, one, fill, settings.trimMm);
+      applyRestitched(r, 'stitch.failed', true);
+      if (r?.starts.length) layers.say(t('stitch.lineFilled'));
+      return;
+    }
     const s = convertSettings(to, stitchInfo(p, seq(p)));
     if (!s) return;
     const q = seq(p);
@@ -1424,6 +1439,23 @@ function sewLine(o: number, path: Form | null, st: PathStitch | null, final: boo
   followKnockouts();
   redraw();
   return true;
+}
+
+/** A fill that was a wide line sewn as that line again. */
+function sewLineAgain(o: number): void {
+  const f = files.active;
+  const p = f?.pattern;
+  if (!f || !p) return;
+  const r = fillToLine(p, o, settings.trimMm);
+  if (!r) return layers.say(t('stitch.failed', { n: 1 }), true);
+  flowPreview = null;
+  applyEdit(r.pattern);
+  files.setObjects(f, rememberedIn(r.pattern, seq(r.pattern).objects));
+  selectedObjects = new Set([o]);
+  selectionKey++;
+  stitchCache = null;
+  followKnockouts();
+  redraw();
 }
 
 /** Edits the outline of object `o` (level Form); objects without a fill go to their stitches. */
