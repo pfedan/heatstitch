@@ -58,6 +58,7 @@
           <a href="#en-start">Quick start</a>
           <a href="#en-sequence">Sequence</a>
           <a href="#en-objects">Objects and stitches</a>
+          <a href="#en-draw">Draw shapes</a>
           <a href="#en-jumps">Jumps and trims</a>
           <a href="#en-heatmap">Heatmap</a>
           <a href="#en-check">Check</a>
@@ -180,6 +181,30 @@
           <img src="/guide/patterns.jpg" width="1280" height="320" loading="lazy" alt="The red circle of the overlap demo sewn four ways: tatami with a brick offset, gradient, contour fill and spiral" />
           <figcaption>The red circle of <a href="examples/demos/overlap.pes" download>overlap.pes</a> sewn as tatami with brick offset, gradient, contour fill and spiral.</figcaption>
         </figure>
+
+        <h2 id="en-draw">Draw shapes</h2>
+        <p>
+          In the <i>Sequence</i> mode you can also draw: the tools on the left of the canvas make new shapes that
+          are sewn at once with the settings for your material. Each new shape is sewn right after the selected
+          object, in its thread; with nothing selected, after the last one. With no file open, the first shape
+          starts a new design.
+        </p>
+        <figure>
+          <img src="/guide/draw-en.jpg" width="1280" height="800" loading="lazy" alt="A small house drawn in heatstitch: an orange rectangle with a round window cut out, a red roof drawn with the pen, a yellow sun, and a wavy ground line kept as a guide under Not sewn" />
+          <figcaption>A design drawn from nothing: a rectangle with a window cut out, a roof drawn with the pen, a sun in its own thread and the ground as a guide, which is never sewn.</figcaption>
+        </figure>
+        <dl>
+          <dt>Draw</dt>
+          <dd><b>Rectangle</b> (<kbd>m</kbd>) and <b>ellipse</b> (<kbd>o</kbd>): drag; <kbd>Shift</kbd> makes a square or circle, <kbd>Alt</kbd> draws from the middle, a label shows the size. <b>Pen</b> (<kbd>b</kbd>): click for corners, drag for curves; a click on the first node closes an area (a fill), a double-click or <kbd>Enter</kbd> ends an open line (running stitch), <kbd>Del</kbd> takes back the last node. <b>Freehand</b> (<kbd>p</kbd>): drag a line; it is smoothed when you let go and sewn in running stitch. The tool stays on for the next shape; <kbd>Esc</kbd> or a click on its button puts it away. Every shape is one step you can undo.</dd>
+          <dt>Duplicate, mirror, delete</dt>
+          <dd>Below the place in the order, the <i>Object</i> panel has a row of buttons: <i>Duplicate</i> (<kbd>Ctrl</kbd>+<kbd>D</kbd>) sews the object once more, 2 mm beside it and right after it; the two mirror buttons swap left and right or top and bottom around the middle of the selection; <i>Delete</i> (<kbd>Del</kbd>) removes the selected objects. A click on the color square next to the object's name chooses its thread: the same thread as a neighbour sews it along in that color, another one gives it a color of its own at its place.</dd>
+          <dt>Cut out and combine</dt>
+          <dd>With several fills selected, <i>Cut out top shape</i> cuts the one sewn last out of the others, and it goes away itself, as when punching a hole. <i>Combine into one object</i> joins fills whose shape is known as curves into one area with one outline, which you can then edit on the level <i>Shape</i>.</dd>
+          <dt>Not sewn</dt>
+          <dd><i>Do not sew</i> keeps the selected objects but takes them out of the stitches: they show as a thin outline in their color. <i>As a guide</i> keeps them as a dashed line, for example the outline of the garment or a line to line things up; guides are never sewn. Both wait in the block <i>Not sewn</i> under the list of colors and objects. There, <i>Sew</i> brings one back at its old place in the order, with its stitches and settings as they were; the middle button switches between off and guide, × deletes it. When an SVG has a plain rectangle behind everything, as many drawing programs export, it is a background: it is not sewn but put there too. All of this can be undone and is kept in the project.</dd>
+          <dt>Shapes instead of stitches</dt>
+          <dd>Under <i>Display</i>, <i>Shapes instead of stitches</i> shows the fills as flat areas of their color. That keeps the canvas calm while you arrange many shapes; outlines and running stitches still show their stitches.</dd>
+        </dl>
 
         <h2 id="en-jumps">Jumps and trims</h2>
         <p>
@@ -360,6 +385,8 @@
             <tr><td>Arrow keys</td><td>Move the selected objects by 0.1 mm (with <kbd>Shift</kbd> 1 mm), at the level Shape the selected node</td></tr>
             <tr><td><kbd>c</kbd>, <kbd>Del</kbd></td><td>At the level Shape: node a corner or round, delete it</td></tr>
             <tr><td><kbd>,</kbd> <kbd>.</kbd>, <kbd>i</kbd>, <kbd>Del</kbd></td><td>At the level Stitches: previous / next point, split the stitch, delete</td></tr>
+            <tr><td><kbd>m</kbd> <kbd>o</kbd> <kbd>b</kbd> <kbd>p</kbd></td><td>Draw a rectangle, ellipse, with the pen, freehand (Sequence); <kbd>Esc</kbd> puts the tool away</td></tr>
+            <tr><td><kbd>Ctrl</kbd>+<kbd>D</kbd>, <kbd>Del</kbd></td><td>Duplicate the selected object, delete the selected objects (Sequence)</td></tr>
             <tr><td><kbd>c</kbd></td><td>Compare with original</td></tr>
             <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd></td><td>Undo / redo</td></tr>
             <tr><td><kbd>Shift</kbd> / <kbd>Ctrl</kbd>+click</td><td>Add objects to the selection (Sequence)</td></tr>
@@ -392,6 +419,7 @@
           <a href="#de-start">Schnellstart</a>
           <a href="#de-sequence">Ablauf</a>
           <a href="#de-objects">Objekte und Stiche</a>
+          <a href="#de-draw">Formen zeichnen</a>
           <a href="#de-jumps">Sprünge und Schnitte</a>
           <a href="#de-heatmap">Heatmap</a>
           <a href="#de-check">Prüfung</a>
@@ -515,6 +543,30 @@
           <img src="/guide/patterns.jpg" width="1280" height="320" loading="lazy" alt="Der rote Kreis der Überlappungs-Demo auf vier Arten gestickt: Tatami mit Ziegelversatz, Verlauf, Konturfüllung und Spirale" />
           <figcaption>Der rote Kreis aus <a href="examples/demos/overlap.pes" download>overlap.pes</a> als Tatami mit Ziegelversatz, Verlauf, Konturfüllung und Spirale.</figcaption>
         </figure>
+
+        <h2 id="de-draw">Formen zeichnen</h2>
+        <p>
+          Im Modus <i>Ablauf</i> kannst du auch zeichnen: Die Werkzeuge links auf der Leinwand machen neue Formen,
+          die sofort mit den Einstellungen für dein Material gestickt werden. Jede neue Form wird gleich nach dem
+          gewählten Objekt in dessen Garn gestickt, ohne Auswahl nach dem letzten. Ist keine Datei offen, beginnt
+          die erste Form ein neues Stickmuster.
+        </p>
+        <figure>
+          <img src="/guide/draw-de.jpg" width="1280" height="800" loading="lazy" alt="Ein kleines Haus, in heatstitch gezeichnet: ein oranges Rechteck mit ausgeschnittenem runden Fenster, ein rotes Dach mit dem Zeichenstift, eine gelbe Sonne und eine wellige Bodenlinie als Hilfslinie unter Nicht gestickt" />
+          <figcaption>Ein Stickmuster aus dem Nichts: ein Rechteck mit ausgeschnittenem Fenster, ein Dach mit dem Zeichenstift, eine Sonne in eigenem Garn und der Boden als Hilfslinie, die nie gestickt wird.</figcaption>
+        </figure>
+        <dl>
+          <dt>Zeichnen</dt>
+          <dd><b>Rechteck</b> (<kbd>m</kbd>) und <b>Ellipse</b> (<kbd>o</kbd>): ziehen; <kbd>Umschalt</kbd> macht ein Quadrat oder einen Kreis, <kbd>Alt</kbd> zeichnet von der Mitte aus, eine Marke zeigt die Größe. <b>Zeichenstift</b> (<kbd>b</kbd>): Klick für Ecken, Ziehen für Rundungen; ein Klick auf den ersten Knoten schließt eine Fläche (Füllung), Doppelklick oder <kbd>Enter</kbd> beendet eine offene Linie (Steppstich), <kbd>Entf</kbd> nimmt den letzten Knoten zurück. <b>Freihand</b> (<kbd>p</kbd>): eine Linie ziehen; sie wird beim Loslassen geglättet und im Steppstich gestickt. Das Werkzeug bleibt für die nächste Form an; <kbd>Esc</kbd> oder ein Klick auf seinen Knopf legt es weg. Jede Form ist ein Schritt, den du rückgängig machen kannst.</dd>
+          <dt>Duplizieren, spiegeln, löschen</dt>
+          <dd>Unter der Stelle in der Reihenfolge hat die Karte <i>Objekt</i> eine Reihe Knöpfe: <i>Duplizieren</i> (<kbd>Strg</kbd>+<kbd>D</kbd>) stickt das Objekt noch einmal, 2 mm daneben und gleich danach; die beiden Spiegel-Knöpfe tauschen links und rechts oder oben und unten um die Mitte der Auswahl; <i>Löschen</i> (<kbd>Entf</kbd>) entfernt die gewählten Objekte. Ein Klick auf das Farbquadrat neben dem Namen des Objekts wählt sein Garn: Das Garn eines Nachbarn stickt es in dessen Farbe mit, ein anderes gibt ihm eine eigene Farbe an seiner Stelle.</dd>
+          <dt>Ausschneiden und vereinen</dt>
+          <dd>Sind mehrere Füllungen gewählt, schneidet <i>Obere Form ausschneiden</i> die zuletzt gestickte aus den anderen aus und fällt selbst weg, wie beim Ausstanzen eines Lochs. <i>Zu einem Objekt zusammenfassen</i> macht aus Füllungen mit bekannten Kurven eine Fläche mit einem Umriss, den du auf der Ebene <i>Form</i> weiter bearbeiten kannst.</dd>
+          <dt>Nicht gestickt</dt>
+          <dd><i>Nicht sticken</i> behält die gewählten Objekte, nimmt sie aber aus den Stichen: Sie bleiben als dünner Umriss in ihrer Farbe sichtbar. <i>Als Hilfslinie</i> behält sie als gestrichelte Linie, etwa den Umriss des Kleidungsstücks oder eine Linie zum Ausrichten; Hilfslinien werden nie gestickt. Beide warten im Block <i>Nicht gestickt</i> unter der Liste der Farben und Objekte. Dort holt <i>Sticken</i> eines an seine alte Stelle in der Reihenfolge zurück, mit seinen Stichen und Einstellungen wie vorher; der mittlere Knopf wechselt zwischen aus und Hilfslinie, × löscht es. Hat eine SVG ein schlichtes Rechteck hinter allem, wie es viele Zeichenprogramme exportieren, ist das ein Hintergrund: Er wird nicht gestickt, sondern landet ebenfalls dort. All das lässt sich rückgängig machen und bleibt im Projekt erhalten.</dd>
+          <dt>Formen statt Stiche</dt>
+          <dd>Unter <i>Anzeige</i> zeigt <i>Formen statt Stiche</i> die Füllungen als flache Farbflächen. Das hält die Leinwand ruhig, während du viele Formen anordnest; Satin und Steppstiche zeigen weiter ihre Stiche.</dd>
+        </dl>
 
         <h2 id="de-jumps">Sprünge und Schnitte</h2>
         <p>
@@ -697,6 +749,8 @@
             <tr><td>Pfeiltasten</td><td>Gewählte Objekte um 0,1 mm schieben (mit <kbd>Umschalt</kbd> 1 mm), auf der Ebene Form den gewählten Knoten</td></tr>
             <tr><td><kbd>c</kbd>, <kbd>Entf</kbd></td><td>Auf der Ebene Form: Knoten zur Ecke oder rund machen, löschen</td></tr>
             <tr><td><kbd>,</kbd> <kbd>.</kbd>, <kbd>i</kbd>, <kbd>Entf</kbd></td><td>Auf der Ebene Stiche: voriger / nächster Einstich, Stich teilen, löschen</td></tr>
+            <tr><td><kbd>m</kbd> <kbd>o</kbd> <kbd>b</kbd> <kbd>p</kbd></td><td>Rechteck, Ellipse, mit dem Zeichenstift, freihand zeichnen (Ablauf); <kbd>Esc</kbd> legt das Werkzeug weg</td></tr>
+            <tr><td><kbd>Strg</kbd>+<kbd>D</kbd>, <kbd>Entf</kbd></td><td>Gewähltes Objekt duplizieren, gewählte Objekte löschen (Ablauf)</td></tr>
             <tr><td><kbd>c</kbd></td><td>Mit Original vergleichen</td></tr>
             <tr><td><kbd>Strg</kbd>+<kbd>Z</kbd> / <kbd>Strg</kbd>+<kbd>Umschalt</kbd>+<kbd>Z</kbd></td><td>Rückgängig / wiederholen</td></tr>
             <tr><td><kbd>Umschalt</kbd> / <kbd>Strg</kbd>+Klick</td><td>Objekte zur Auswahl hinzufügen (Ablauf)</td></tr>

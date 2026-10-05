@@ -7,7 +7,7 @@ import type { Pattern } from '../src/model/pattern';
 import { remembered } from '../src/model/restitch';
 import { formOf } from '../src/model/reshape';
 import { stitchKinds } from '../src/model/sequence';
-import { deleteObjects, duplicateObject, mirrorMatrix, subtractTop, unionForm } from '../src/model/shapeOps';
+import { deleteObjects, duplicateObject, mirrorMatrix, recolorObjects, subtractTop, unionForm } from '../src/model/shapeOps';
 import { transformSewObject } from '../src/model/reshape';
 import type { Mat } from '../src/shape/path';
 import { ellipsePath, parsePath, rectPath } from '../src/shape/svgPath';
@@ -87,5 +87,26 @@ describe('shape operations', () => {
     expect(before - area(r.pattern, 0)).toBeCloseTo((Math.PI * 36) / 2, -1);
     // Nothing to cut: no change.
     expect(subtractTop(p, [0, 2], options.trimMm)).toBeNull();
+  });
+
+  it('gives one object another thread, at its place', () => {
+    const p = design();
+    // The last red disc in yellow: a color of its own, still sewn last.
+    const yellow = { r: 240, g: 200, b: 30 };
+    const a = recolorObjects(p, [2], yellow, options.trimMm)!;
+    let objs = sewObjects(a);
+    expect(objs).toHaveLength(3);
+    expect(objs[2].color).toEqual(yellow);
+    expect(objs[0].color).toEqual(red);
+    expect(remembered(a, objs[2])?.form).toBeTruthy();
+    // In blue, next to the blue disc: sewn along in its thread.
+    const b = recolorObjects(p, [2], blue, options.trimMm)!;
+    objs = sewObjects(b);
+    expect(b.colors).toHaveLength(2);
+    expect(objs[2].block).toBe(objs[1].block);
+    // A whole block just changes its thread.
+    const c = recolorObjects(p, [1], yellow, options.trimMm)!;
+    expect(c.colors[1]).toEqual(yellow);
+    expect(c.cmd).toBe(p.cmd);
   });
 });

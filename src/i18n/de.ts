@@ -322,6 +322,8 @@ export const de = {
   'object.guide.hint': 'Als gestrichelte Hilfslinie behalten, etwa als Vorlage oder zum Ausrichten. Wird nie gestickt.',
   'display.shapes': 'Formen statt Stiche',
   'display.shapes.hint': 'Im Ablauf die Formen als flache Farbflächen zeigen statt der einzelnen Stiche',
+  'object.thread.hint': 'Garn dieses Objekts wählen',
+  'object.thread.note': 'Gleiches Garn wie ein Nachbar: Es wird in dessen Farbe mitgestickt. Sonst bekommt es eine eigene Farbe an seiner Stelle.',
   'object.duplicate': 'Duplizieren',
   'object.duplicate.hint': 'Das Objekt noch einmal, etwas daneben und gleich danach gestickt (Strg+D)',
   'object.mirrorX': 'Waagrecht spiegeln (links und rechts tauschen)',

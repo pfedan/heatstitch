@@ -73,7 +73,7 @@ import { AsidePanel } from './ui/asidePanel';
 import type { LeftOut } from './ui/imageMode';
 import { addShape, type NewShape } from './model/addShape';
 import { asideOf, dropAside, sewAgain, setAside, setAsideRole, storeAside, type AsideRole, type AsideShape } from './model/aside';
-import { deleteObjects, duplicateObject, mirrorMatrix, subtractTop, unionForm } from './model/shapeOps';
+import { deleteObjects, duplicateObject, mirrorMatrix, recolorObjects, subtractTop, unionForm } from './model/shapeOps';
 import { stitchesBefore } from './model/transform';
 import { FrameTool } from './ui/frameTool';
 import { formOf, reshapeFill, scaleBlocked, transformSewObject } from './model/reshape';
@@ -695,6 +695,15 @@ const objectPanel = new ObjectPanel({
   subtract: () => subtractSelected(),
   remove: () => deleteSelected(),
   aside: (role) => putAside(role),
+  thread: (c) => {
+    const p = files.active?.pattern;
+    const sel = frameObjects();
+    const next = p && recolorObjects(p, sel, c, settings.trimMm);
+    if (!next) return;
+    const q = seq(next);
+    // The objects keep their place in the order, so their indices stay.
+    takeShapes(next, sel.filter((o) => o < q.objects.length));
+  },
   split: splitSelected,
   step: (dir) => {
     const p = files.active?.pattern;

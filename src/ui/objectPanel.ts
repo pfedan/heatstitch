@@ -3,7 +3,8 @@ import type { SewObject } from '../model/objects';
 import type { OrderCost } from '../model/order';
 import type { Settings } from '../settings';
 import { KIND_ICON, kindLabel } from './layersPanel';
-import { cssColor } from './threadPicker';
+import { cssColor, ThreadPicker } from './threadPicker';
+import type { ThreadColor } from '../model/pattern';
 
 export interface ObjectInfo {
   objects: SewObject[];
@@ -58,6 +59,8 @@ export interface ObjectHooks {
   subtract: () => void;
   /** The selected objects deleted. */
   remove: () => void;
+  /** The selected objects sewn in another thread. */
+  thread: (c: ThreadColor) => void;
   /** The selected objects kept but not sewn: switched off, or as guides. */
   aside: (role: 'off' | 'guide') => void;
 }
@@ -92,6 +95,7 @@ export class ObjectPanel {
   private body = $<HTMLElement>('object-body');
   private msg = $<HTMLElement>('object-msg');
   private key: unknown[] = [];
+  private picker = new ThreadPicker('.thread-sw');
 
   constructor(private hooks: ObjectHooks) {
     $('object-close').addEventListener('click', () => hooks.clear());
@@ -123,9 +127,18 @@ export class ObjectPanel {
       icon.className = `kind-icon kind-${o.kind}`;
       icon.innerHTML = KIND_ICON[o.kind];
       const title = Object.assign(document.createElement('strong'), { textContent: `${kindLabel(o.kind)} ${info.numbers[0]}` });
-      const sw = document.createElement('span');
-      sw.className = 'mini-sw';
+      const sw = Object.assign(document.createElement('button'), { type: 'button', className: 'mini-sw thread-sw', title: t('object.thread.hint') });
+      sw.setAttribute('aria-label', t('object.thread.hint'));
       sw.style.background = cssColor(o.color);
+      sw.addEventListener('click', () =>
+        this.picker.toggle(sw, {
+          key: `object-${o.index}`,
+          title: t('object.thread.hint'),
+          current: o.color,
+          note: t('object.thread.note'),
+          onPick: (c) => this.hooks.thread(c),
+        }),
+      );
       const color = Object.assign(document.createElement('span'), {
         className: 'muted',
         textContent: `${o.block + 1}. ${o.color.name || t('layers.unnamed', { n: o.block + 1 })}`,

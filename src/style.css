@@ -3031,11 +3031,23 @@ body[data-mode='flow'] .stage .hint {
   color: var(--muted);
 }
 
+.aside-row {
+  flex-wrap: wrap;
+}
+
 .aside-row .layer-text {
   display: flex;
-  flex-direction: column;
+  align-items: baseline;
+  gap: 6px;
   min-width: 0;
   flex: 1;
+}
+
+.aside-row .aside-actions {
+  display: flex;
+  gap: 6px;
+  flex-basis: 100%;
+  padding-left: 46px;
 }
 
 .aside-row.off .layer-name {
@@ -3050,4 +3062,18 @@ body[data-mode='flow'] .stage .hint {
 
 .aside-row button.icon {
   padding: 2px 6px;
+}
+
+/* The thread of the selected object, to pick another */
+button.mini-sw.thread-sw {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  cursor: pointer;
+}
+
+
+.aside-row .layer-meta {
+  margin-left: 0;
 }

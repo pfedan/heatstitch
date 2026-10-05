@@ -324,6 +324,8 @@ export const en: Record<keyof typeof de, string> = {
   'object.guide.hint': 'Keep it as a dashed guide, for example as a template or to line things up. Never sewn.',
   'display.shapes': 'Shapes instead of stitches',
   'display.shapes.hint': 'Show the shapes in the sequence view as flat areas of color instead of single stitches',
+  'object.thread.hint': 'Choose the thread of this object',
+  'object.thread.note': 'The same thread as a neighbour: it is sewn along in that color. Otherwise it gets a color of its own at its place.',
   'object.duplicate': 'Duplicate',
   'object.duplicate.hint': 'The object once more, a little beside it and sewn right after it (Ctrl+D)',
   'object.mirrorX': 'Mirror horizontally (swap left and right)',

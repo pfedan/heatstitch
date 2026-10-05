@@ -3,9 +3,12 @@ import { translation, type Form, type Mat } from '../shape/path';
 import { vectorize } from '../shape/vectorize';
 import { takeOver, wholeArea } from './knockout';
 import { rememberObjects, sewObjects } from './objects';
+import { insertObject } from './addShape';
+import { recs } from './jumps';
 import { reorder } from './order';
-import type { Pattern } from './pattern';
-import { remembered } from './restitch';
+import { recolor, sameColor } from './recolor';
+import { STITCH, type Pattern, type ThreadColor } from './pattern';
+import { objectKey, remembered, rememberedIn, restoreRemembered } from './restitch';
 import { formOf, reshapeFill, transformSewObject } from './reshape';
 import { stitchKinds } from './sequence';
 
@@ -116,4 +119,49 @@ export function subtractTop(p: Pattern, which: number[], trimMm: number): Subtra
   if (!without) return null;
   const shift = (o: number) => o - gone.filter((g) => g < o).length;
   return { pattern: without, cut: cut.map(shift), covered: gone.length - 1 };
+}
+
+/**
+ * The objects `which` sewn in thread `color`, each where it is: into the thread of a neighbour of
+ * that color, else as a color of its own. When they are all of their color block, the block simply
+ * gets the new thread. Null when nothing changed.
+ */
+export function recolorObjects(p: Pattern, which: number[], color: ThreadColor, trimMm: number): Pattern | null {
+  const objs = sewObjects(p);
+  const sel = [...new Set(which)].filter((o) => objs[o] && !sameColor(objs[o].color, color)).sort((a, b) => a - b);
+  if (!sel.length) return null;
+  const blocks = new Set(sel.map((o) => objs[o].block));
+  // Whole color blocks: their thread changes, nothing moves (unless a neighbour has that thread:
+  // then they are sewn along in it).
+  const whole = (b: number) => objs.filter((o) => o.block === b).every((o) => sel.includes(o.index));
+  const besideSame = (b: number) => [b - 1, b + 1].some((n) => p.colors[n] && sameColor(p.colors[n], color));
+  if ([...blocks].every((b) => whole(b) && !besideSame(b))) {
+    let cur = p;
+    for (const b of blocks) cur = recolor(cur, b, color);
+    return cur;
+  }
+  let cur = p;
+  for (const o of sel) {
+    const all = sewObjects(cur);
+    const obj = all[o];
+    if (!obj) return null;
+    const records = recs(cur, obj.first, obj.last + 1);
+    const known = rememberedIn(cur, [obj]).find((m) => m.join === undefined);
+    const without = deleteObjects(cur, [o], trimMm);
+    if (!without) return null;
+    const r = insertObject(without, records, color, o - 1, trimMm);
+    if (!r) return null;
+    if (known) {
+      const back = sewObjects(r.pattern).find((x) => stitchesUpTo(r.pattern, x.first) === r.start);
+      if (back) restoreRemembered([{ ...known, key: objectKey(r.pattern, back) }]);
+    }
+    cur = r.pattern;
+  }
+  return cur;
+}
+
+function stitchesUpTo(p: Pattern, record: number): number {
+  let n = 0;
+  for (let i = 0; i < record; i++) if (p.cmd[i] === STITCH) n++;
+  return n;
 }

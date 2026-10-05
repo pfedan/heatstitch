@@ -68,14 +68,15 @@ export class AsidePanel {
       return b;
     };
     const other: AsideRole = a.role === 'guide' ? 'off' : 'guide';
-    li.append(
-      icon,
-      sw,
-      text,
+    const actions = document.createElement('span');
+    actions.className = 'aside-actions';
+    actions.append(
       button(t('aside.sew'), t('aside.sew.hint'), () => this.hooks.sew(a.id)),
       button(t(other === 'guide' ? 'aside.toGuide' : 'aside.toOff'), t(other === 'guide' ? 'aside.toGuide.hint' : 'aside.toOff.hint'), () => this.hooks.role(a.id, other)),
-      button('×', t('aside.drop.hint'), () => this.hooks.drop(a.id), 'icon'),
     );
+    const drop = button('×', t('aside.drop.hint'), () => this.hooks.drop(a.id), 'icon');
+    drop.setAttribute('aria-label', t('aside.drop.hint'));
+    li.append(icon, sw, text, drop, actions);
     return li;
   }
 }
