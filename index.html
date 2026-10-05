@@ -119,6 +119,17 @@
           </select>
           <ul id="file-list" class="file-list"></ul>
           <div class="file-actions" id="file-actions" hidden>
+            <label class="field hoop-field">
+              <span class="label" data-i18n="hoop.title" data-i18n-title="hoop.hint"></span>
+              <select id="hoop"></select>
+            </label>
+            <div class="hoop-custom" id="hoop-custom" hidden>
+              <input type="number" id="hoop-w" min="10" max="1000" step="1" data-i18n-aria="hoop.width" />
+              <span>×</span>
+              <input type="number" id="hoop-h" min="10" max="1000" step="1" data-i18n-aria="hoop.height" />
+              <span>mm</span>
+            </div>
+            <p class="hoop-note" id="hoop-note" hidden></p>
             <span class="label save-label" data-i18n-title="save.note"><span data-i18n="save.title"></span> <span class="info" aria-hidden="true">ⓘ</span></span>
             <select class="save-format" id="save-format" data-i18n-aria="save.format">
               <option value="pes" data-i18n="save.fmt.pes"></option>
@@ -385,7 +396,6 @@
         <div id="tooltip" class="tooltip" hidden></div>
         <p class="empty" id="empty" data-i18n="canvas.empty"></p>
         <p class="hint" id="canvas-hint"></p>
-        <button type="button" id="findings-open" class="findings-chip" data-mode="density" hidden></button>
         <div class="player" id="player" data-mode="flow" hidden>
           <div class="player-buttons">
             <button type="button" class="tool" data-play="block-prev" data-i18n-title="player.blockPrev"><span aria-hidden="true">⏮</span></button>
@@ -493,14 +503,11 @@
         </section>
 
         <!-- Dichte -->
-        <section class="panel findings" id="findings-panel" data-mode="density">
-          <div class="findings-head">
-            <h2 data-i18n="findings.title"></h2>
-            <label class="check val-toggle" data-i18n-title="validation.overlay.key"><input type="checkbox" id="show-validation" /><span data-i18n="validation.overlay"></span></label>
-            <button type="button" id="findings-close" class="icon" data-i18n-title="findings.hide"><span aria-hidden="true">&#x2715;</span></button>
-          </div>
+        <details class="panel section findings" id="findings-panel" data-mode="density" data-section="findings">
+          <summary><h2 data-i18n="findings.title"></h2><span id="findings-sum" class="findings-sum"></span></summary>
+          <label class="check val-toggle" data-i18n-title="validation.overlay.key"><input type="checkbox" id="show-validation" /><span data-i18n="validation.overlay"></span></label>
           <div id="validation" class="findings-body" aria-live="polite"></div>
-        </section>
+        </details>
 
         <section class="panel" id="correct-panel" data-mode="density">
           <h2><span data-i18n="correct.title"></span> <span class="beta-badge" data-i18n="correct.beta" data-i18n-title="correct.beta.hint"></span></h2>

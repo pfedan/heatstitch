@@ -4,10 +4,11 @@ import type { DensityGrid } from './density/grid';
 import { applyI18n, detectLang, formatNumber, getLang, setLang, t, type Lang } from './i18n';
 import { gridToCanvas } from './render/heatmap';
 import { drawLegend } from './render/legend';
+import { hoopRect } from './render/hoop';
 import { drawScene, type FocusStitches, type Scene } from './render/scene';
 import { validationToCanvas } from './render/validationOverlay';
 import { Viewport } from './render/viewport';
-import { loadSettings, saveSettings } from './settings';
+import { applyMaterial, loadSettings, materialOf, sameMaterial, saveSettings } from './settings';
 import { bindControls, type ChangeKind } from './ui/controls';
 import { cssColor } from './ui/threadPicker';
 import { SATIN_SHARE } from './model/covers';
@@ -18,6 +19,7 @@ import { Editor } from './ui/editor';
 import { keepObjects, type HandChange } from './model/handEdit';
 import { exportPng } from './ui/export';
 import { FileList, type LoadedFile } from './ui/fileList';
+import { bindHoop } from './ui/hoopPanel';
 import { legendSpec } from './ui/legendSpec';
 import { bindProfile } from './ui/profilePanel';
 import { renderStats } from './ui/stats';
@@ -149,6 +151,7 @@ let selectedZone: Zone | null = null;
 const files = new FileList(
   $<HTMLUListElement>('file-list'),
   (f) => {
+    if (f) adoptMaterial(f);
     grid = null;
     gridImg = null;
     origGrid = null;
@@ -165,8 +168,7 @@ const files = new FileList(
   (f) => {
     if (f === files.active) redraw();
   },
-  settings.profile,
-  settings.checks,
+  () => materialOf(settings),
 );
 
 /** Per zone of `v`: whether it still counts with the active file's decisions. */
@@ -220,7 +222,7 @@ function originalScene(): Scene {
   };
 }
 
-const panel = new ValidationPanel($('validation'), $('findings-open'), {
+const panel = new ValidationPanel($('validation'), $('findings-sum'), {
   onZone: (z) => selectZone(z),
   onHover: (z) => {
     hoverZone = z;
@@ -238,16 +240,6 @@ const panel = new ValidationPanel($('validation'), $('findings-open'), {
   },
 });
 
-/** Shows or hides the findings (the Correction panel stays in the column); while hidden a chip on the canvas reopens them. */
-function setFindingsOpen(open: boolean): void {
-  settings.findingsOpen = open;
-  saveSettings(settings);
-  $('layout').classList.toggle('findings-closed', !open);
-  $('findings-open').hidden = open;
-}
-$('findings-close').addEventListener('click', () => setFindingsOpen(false));
-$('findings-open').addEventListener('click', () => setFindingsOpen(true));
-setFindingsOpen(settings.findingsOpen);
 installPanelResize($('layout'), settings.panels, () => saveSettings(settings));
 
 
@@ -2171,6 +2163,7 @@ const letteringPanel = new LetteringPanel({
   close: () => selectObjects([], false),
   letters: (on) => setLetterMode(on),
   release: () => releaseLettering(),
+  hoop: () => settings.hoop,
 });
 
 /** The letters of the chosen lettering where they are now, or null while its font loads. */
@@ -2592,6 +2585,7 @@ function redraw(): void {
       planPreview = null;
       if (correctMessage?.kind === 'plan') correctMessage = null;
     }
+    hoopPanel.refresh(active?.pattern?.bounds, active?.original?.hoop);
     correctPanel.update({
       file: active,
       zoneSelected: !!selectedZone,
@@ -2691,7 +2685,10 @@ function fitView(f: LoadedFile | null = files.active): void {
   }
   const b = f?.pattern?.bounds;
   if (!b) return;
-  vp.fit(b.minX / 10, b.minY / 10, b.maxX / 10, b.maxY / 10, stageW, stageH);
+  // With a hoop chosen, fit shows the whole sewing field so the room left is visible.
+  const m = f?.material.hoop ? hoopRect(b, f.material.hoop) : null;
+  if (m) vp.fit(Math.min(m.x, b.minX / 10), Math.min(m.y, b.minY / 10), Math.max(m.x + m.w, b.maxX / 10), Math.max(m.y + m.h, b.maxY / 10), stageW, stageH, 56);
+  else vp.fit(b.minX / 10, b.minY / 10, b.maxX / 10, b.maxY / 10, stageW, stageH);
   redraw();
 }
 
@@ -3051,7 +3048,6 @@ let planDrag = false;
 /** Holds the proposals `ids` for comparing, or lets go (null). */
 function pinPlan(ids: number[] | null): void {
   planPin = ids;
-  planSplit = 0.5;
   planHover = ids && proposalsBox(ids);
   showPlanPreview(ids);
   planMessage();
@@ -3256,9 +3252,12 @@ const correctPanel = new CorrectPanel(settings, {
   hoverProposal: (ids) => {
     // Away from the list, the held proposal comes back.
     const show = ids ?? planPin;
-    if (ids && planPin?.join() !== ids.join()) planSplit = 0.5;
     planHover = show && proposalsBox(show);
     showPlanPreview(show);
+    redraw();
+  },
+  splitProposal: (at) => {
+    planSplit = Math.min(0.97, Math.max(0.03, at));
     redraw();
   },
   showProposal: (ids) => {
@@ -3281,7 +3280,7 @@ const correctPanel = new CorrectPanel(settings, {
   revert: () => history('revert'),
   save: (format, name) => {
     const f = files.active;
-    if (f?.pattern) downloadPattern({ ...f.pattern, name }, format, `${name}.${format}`);
+    if (f?.pattern) downloadPattern({ ...f.pattern, name }, format, `${name}.${format}`, { hoop: f.material.hoop });
   },
   optionsChanged: () => saveSettings(settings),
 });
@@ -3290,6 +3289,8 @@ const correctPanel = new CorrectPanel(settings, {
 
 const controls = bindControls(settings, (kind: ChangeKind) => {
   saveSettings(settings);
+  // The fabric color and thread width belong to the design.
+  storeMaterial();
   if (kind === 'density') recompute();
   else if (kind === 'style') redraw();
   else {
@@ -3298,10 +3299,16 @@ const controls = bindControls(settings, (kind: ChangeKind) => {
   }
 });
 
+const hoopPanel = bindHoop(settings, () => {
+  saveSettings(settings);
+  storeMaterial();
+  fitView();
+});
+
 const profile = bindProfile(settings, () => {
   saveSettings(settings);
-  // Classification is cheap: every file is re-checked instantly against the new limits.
-  files.setProfile(settings.profile, settings.checks);
+  // Classification is cheap: the design is re-checked instantly against the new limits.
+  storeMaterial();
   // Another fabric: what suits it better is offered, never changed silently.
   tuneToFabric(true);
   imageMode.profileChanged();
@@ -3497,6 +3504,7 @@ function currentProject(): Project {
       acks: f.acks,
       objects: rememberedIn(f.pattern!, seq(f.pattern!).objects),
       ...(asideOf(f.pattern).length ? { aside: storeAside(asideOf(f.pattern)) } : {}),
+      material: f.material,
     })),
     active: active >= 0 ? active : null,
     image: snap && { name: snap.image.name, type: snap.image.type, data: new Uint8Array(snap.image.data), work: snap.work },
@@ -3515,6 +3523,22 @@ async function saveProject(): Promise<void> {
 $('save-project').addEventListener('click', () => void saveProject());
 $('image-save-project').addEventListener('click', () => void saveProject());
 
+/** The settings take the material of the design that becomes active (its fabric, thread, hoop, color, checks). */
+function adoptMaterial(f: LoadedFile): void {
+  if (sameMaterial(f.material, materialOf(settings))) return;
+  applyMaterial(settings, f.material);
+  saveSettings(settings);
+  profile.refresh();
+  controls.refresh();
+  imageMode.profileChanged();
+}
+
+/** A change of the material in the panels goes to the active design only; new designs start with it. */
+function storeMaterial(): void {
+  const f = files.active;
+  if (f && !sameMaterial(f.material, materialOf(settings))) files.setMaterial(f, materialOf(settings));
+}
+
 /** Takes over the material, checks, correction and order options of a project (and its image's, if it has one). */
 function applyProjectSettings(s: ProjectSettings, withImage: boolean): void {
   if (s.profile.thread !== settings.profile.thread) settings.threadMm = threadWidthMm(s.profile);
@@ -3532,7 +3556,6 @@ function applyProjectSettings(s: ProjectSettings, withImage: boolean): void {
     Object.assign(settings.image.stitch, s.image.stitch);
   }
   saveSettings(settings);
-  files.setProfile(settings.profile, settings.checks);
   profile.refresh();
   controls.refresh();
   correctPanel.sync();

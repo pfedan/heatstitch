@@ -32,6 +32,12 @@ export function parsePes(data: Uint8Array, fileName = ''): Pattern {
     // An unusual header only costs the real thread colors; the PEC palette stays.
   }
   if (chart.length) p.colors = applyChart(p.colors, chart);
+  try {
+    const hoop = readPesHoop(data);
+    if (hoop) p.hoop = hoop;
+  } catch {
+    // Without a readable header the file names no hoop.
+  }
   return p;
 }
 
@@ -98,6 +104,36 @@ export function readPesThreads(data: Uint8Array): ThreadColor[] {
     threads.push({ r, g, b, ...(name ? { name } : {}), ...(brand ? { brand } : {}), ...(catalog ? { catalog } : {}) });
   }
   return threads;
+}
+
+/**
+ * The sewing field a PES header names, mm: versions 5 to 8 store width and height after the
+ * metadata, versions 9 and 10 a hoop name like "200 x 200". Null when there is none or it is
+ * not a plausible size.
+ */
+export function readPesHoop(data: Uint8Array): { w: number; h: number } | null {
+  const version = new TextDecoder('latin1').decode(data.subarray(4, 8));
+  const sized = ['0050', '0055', '0056', '0060', '0070', '0080'].includes(version);
+  const named = version === '0090' || version === '0100';
+  if (!sized && !named) return null;
+  let i = 16;
+  const string = () => {
+    const n = data[i++];
+    if (n === undefined || i + n > data.length) throw new Error('PES: header too short');
+    i += n;
+    return new TextDecoder('latin1').decode(data.subarray(i - n, i)).trim();
+  };
+  for (let k = 0; k < 5; k++) string(); // name, category, author, keywords, comments
+  const plausible = (w: number, h: number) => (w >= 20 && h >= 20 && w <= 1000 && h <= 1000 ? { w, h } : null);
+  if (sized) {
+    if (i + 8 > data.length) return null;
+    const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+    // Optimize hoop change, custom design page, then the hoop size.
+    return plausible(view.getUint16(i + 4, true), view.getUint16(i + 6, true));
+  }
+  i += 14;
+  const m = /(\d+)\s*(?:mm)?\s*[x×*]\s*(\d+)/i.exec(string());
+  return m ? plausible(Number(m[1]), Number(m[2])) : null;
 }
 
 /**

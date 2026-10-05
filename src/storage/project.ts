@@ -35,6 +35,8 @@ export interface ProjectFile {
   objects: StoredObject[];
   /** Shapes of the working copy that are not sewn (absent in older projects). */
   aside?: StoredAside[];
+  /** This design's fabric, thread, hoop, fabric color and checks (absent in older projects, which share the project settings). */
+  material?: unknown;
 }
 
 export interface ProjectImage {
@@ -186,6 +188,8 @@ export async function decodeProject(bytes: Uint8Array): Promise<Project> {
         objects: Array.isArray(e.objects) ? e.objects : [],
         // Checked when they are read (asideFrom).
         ...(Array.isArray(e.aside) && e.aside.length ? { aside: e.aside } : {}),
+        // Checked when it is read (normalizeMaterial).
+        ...(e.material && typeof e.material === 'object' ? { material: e.material } : {}),
       },
     ];
   });

@@ -178,11 +178,6 @@ body.resizing {
   user-select: none;
 }
 
-/* The Correction panel shares the column, so closing the findings hides only them. */
-.layout.findings-closed .findings {
-  display: none;
-}
-
 .sidebar {
   grid-area: side;
 }
@@ -552,8 +547,7 @@ input[type='range'] {
 }
 
 @media (max-width: 760px) {
-  .layout,
-  .layout.findings-closed {
+  .layout {
     grid-template-columns: 1fr;
     grid-template-rows: auto minmax(60vh, 1fr) auto;
     grid-template-areas: 'side' 'stage' 'findings';
@@ -748,27 +742,59 @@ input[type='range'] {
   border-left: 1px solid var(--line);
 }
 
+/* A collapsible section; open it shares the column with the Correction panel, closed only its line stays. */
 .findings {
+  flex: none;
+}
+
+.findings[open] {
   flex: 1 1 0;
   min-height: 240px;
   display: flex;
   flex-direction: column;
+  /* Browsers without ::details-content scroll the whole section instead of the list. */
+  overflow-y: auto;
 }
 
-.findings-head {
+.findings[open]::details-content {
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 10px;
+  flex-direction: column;
 }
 
-.findings-head h2 {
-  flex: 1;
-  margin: 0;
+.findings > summary h2 {
+  flex: none;
+}
+
+/* Closed, the line still tells how the pattern stands. */
+.findings-sum {
+  flex: 1 1 0;
+  min-width: 0;
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 2px 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.findings-sum span {
+  white-space: nowrap;
+}
+
+.findings-sum strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.findings[open] .findings-sum {
+  display: none;
 }
 
 .val-toggle {
-  margin: 0;
+  margin: 0 0 10px;
   align-items: center;
   font-size: 12px;
   color: var(--muted);
@@ -840,7 +866,7 @@ button.icon:not(:disabled):hover {
 }
 
 .f-chip .dot,
-.findings-chip .dot {
+.findings-sum .dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
@@ -871,30 +897,6 @@ button.icon:not(:disabled):hover {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-}
-
-.findings-chip {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  border: none;
-  border-radius: 999px;
-  background: rgba(13, 11, 16, 0.8);
-  color: #fff;
-  font-size: 13px;
-}
-
-.findings-chip span:last-child:not(.dot) {
-  color: #d9d3e2;
-  font-size: 12px;
-}
-
-.findings-chip:hover {
-  background: rgba(13, 11, 16, 0.95);
 }
 
 button.link {
@@ -1412,6 +1414,58 @@ details.panel.section[open] > summary {
 
 .panel details.section[open] > summary {
   margin-bottom: 8px;
+}
+
+/* Files: the hoop the designs are sewn in */
+
+.file-actions .hoop-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.file-actions .hoop-field select {
+  width: 100%;
+}
+
+.file-actions .hoop-custom {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: -4px 0 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.file-actions .hoop-custom input {
+  width: 72px;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  font: inherit;
+  color: var(--ink);
+}
+
+.file-actions .hoop-note {
+  margin: -4px 0 10px;
+  padding: 6px 8px;
+  border-left: 3px solid #dc2626;
+  border-radius: 4px;
+  background: color-mix(in srgb, #dc2626 10%, transparent);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.file-actions .hoop-note.info {
+  border-left-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.file-actions .hoop-note.turned {
+  border-left-color: #d97706;
+  background: color-mix(in srgb, #d97706 10%, transparent);
 }
 
 /* Files: save and revert under the list */
@@ -3562,4 +3616,9 @@ button.mini-sw.thread-sw {
   width: 16px;
   height: 16px;
   flex: none;
+}
+
+/* A size that does not fit the chosen hoop (lettering card, image mode) */
+.hoop-over {
+  color: #dc2626;
 }

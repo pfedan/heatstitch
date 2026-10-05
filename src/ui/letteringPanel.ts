@@ -28,7 +28,12 @@ export interface LetteringHooks {
   letters: (on: boolean) => void;
   /** The letters become ordinary objects (the text is gone). */
   release: () => void;
+  /** The hoop of the design, for a note when the lettering alone does not fit. */
+  hoop: () => Hoop | null;
 }
+
+import type { Hoop } from '../model/hoop';
+import { hoopShort } from './hoopPanel';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const STYLES: FontStyle[] = ['sans', 'serif', 'script', 'display'];
@@ -357,7 +362,9 @@ export class LetteringPanel {
     const p = Object.assign(document.createElement('p'), { className: 'muted small lettering-size' });
     const show = () => {
       const i = this.info!;
-      p.textContent = t('lettering.size', { w: formatNumber(i.width, 1), h: formatNumber(i.height, 1), n: formatNumber(i.stitches) });
+      const over = hoopShort(i.width, i.height, this.hooks.hoop());
+      p.textContent = t('lettering.size', { w: formatNumber(i.width, 1), h: formatNumber(i.height, 1), n: formatNumber(i.stitches) }) + (over ? ` · ${over}` : '');
+      p.classList.toggle('hoop-over', !!over);
     };
     show();
     this.refresh.push(show);

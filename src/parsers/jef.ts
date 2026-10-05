@@ -20,6 +20,14 @@ export function parseJef(data: Uint8Array, fileName = ''): Pattern {
   }
 
   const b = new PatternBuilder();
+  // Janome hoop codes: 0 = 110 x 110 (listed as 100 x 100), 1 = 50 x 50, 2 = 140 x 200, 3 = 126 x 110, 4 = 200 x 200.
+  const hoop = [
+    { w: 100, h: 100 },
+    { w: 50, h: 50 },
+    { w: 140, h: 200 },
+    { w: 126, h: 110 },
+    { w: 200, h: 200 },
+  ][view.getInt32(32, true)];
   let blocks = 1;
   // Moves since the last stitch, to decide where a cut goes.
   let runStart = -1;
@@ -67,6 +75,7 @@ export function parseJef(data: Uint8Array, fileName = ''): Pattern {
   let p = b.build(fileName, 'jef', []);
   if (trimAt.length) p = insertBefore(p, trimAt, TRIM);
   p.colors = Array.from({ length: blocks }, (_, k) => palette[k] ?? palette[palette.length - 1] ?? jefColor(1));
+  if (hoop) p.hoop = hoop;
   return p;
 }
 
