@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { sewObjects } from '../src/model/objects';
-import { analyze, measureFill, remember, remembered, rememberedIn, restitch, restoreRemembered, shapeTrust } from '../src/model/restitch';
+import { analyze, knownKind, measureFill, remember, remembered, rememberRange, rememberedIn, restitch, restoreRemembered, shapeTrust } from '../src/model/restitch';
 import { STITCH, TRIM, type Pattern } from '../src/model/pattern';
 import { recolor } from '../src/model/recolor';
 import { stitchKinds } from '../src/model/sequence';
@@ -225,6 +225,39 @@ describe('wild stitches in a user\'s project', () => {
     for (let i = from; i < now.last; i++) if (q.cmd[i] === TRIM) trims++;
     expect(trims).toBe(0);
   }, 30_000);
+});
+
+describe('the kind of an object sewn here', () => {
+  it('stays a fill for a small spiral whose loose turns read like a running stitch', async () => {
+    // A user's project: two spirals of under 3 mm, made from wide lines, listed as running stitches.
+    const file = (await decodeProject(new Uint8Array(readFileSync(new URL('./fixtures/spiral-kind.heatstitch', import.meta.url))))).files[0];
+    restoreRemembered(file.objects);
+    const p = fromStored(parsePattern(file.data, file.name), file.working)!;
+    const kinds = stitchKinds(p);
+    const spirals = sewObjects(p, kinds).filter((o) => remembered(p, o)?.fill?.pattern === 'spiral');
+    expect(spirals).toHaveLength(2);
+    expect(spirals.map((o) => o.kind)).toEqual(['fill', 'fill']);
+    // Unknown, the same stitches are still read from what they look like.
+    expect(knownKind(undefined)).toBeUndefined();
+
+    // Sewn anew, it is still a fill.
+    const r = restitch(p, sewObjects(p, kinds), [spirals[0].index], { kind: 'fill', s: { ...remembered(p, spirals[0])!.fill!, spacing: 0.5 } }, kinds, 3);
+    const at = sewObjects(r.pattern).find((x) => x.first === firstRecord(r.pattern, r.starts[0] + 1))!;
+    rememberRange(r.pattern, at.first, at.last, r.memory[0]);
+    const now = sewObjects(r.pattern).find((x) => x.first === at.first)!;
+    expect(now.kind).toBe('fill');
+  }, 30_000);
+
+  it('follows what the object remembers, and leaves doubtful cases to the stitches', () => {
+    const fill = { pattern: 'spiral' } as never;
+    const satin = { spacing: 0.4 } as never;
+    expect(knownKind({ region: null, fill })).toBe('fill');
+    expect(knownKind({ region: null, satin })).toBe('satin');
+    expect(knownKind({ region: null, fill, satin })).toBeUndefined();
+    expect(knownKind({ region: null, fill, read: true })).toBeUndefined();
+    expect(knownKind({ region: null, fill, outline: 'a', border: { type: 'run', width: 0 } })).toBe('run');
+    expect(knownKind({ region: null, fill, outline: 'a', border: { type: 'satin', width: 2 } })).toBe('satin');
+  });
 });
 
 /** Record of the n-th stitch (1-based). */
