@@ -15,7 +15,7 @@
    "source": "EBGaramond12",
    "chars": "!\"&'()+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz¡«·»¿ÀÁÂÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüýþČčĎďĐđĞğİıŒœŘřŞşŠšŤťŽž̈ͅ΄ΆΈΉΊΌΎΏΐΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩΪΫάέήίΰαβγδεζηθικλμνξοπρςστυφχψωϊϋόύώϏϐϑϓϕϖϗϜϰϱ→√∞∫",
    "cases": "Aa",
-   "kb": 731
+   "kb": 738
   },
   {
    "id": "allegria20",
@@ -63,7 +63,7 @@
    "source": "Amita",
    "chars": "!\"&'()*+,-./0123456789:;=?@ABCDEFGHIJKLMNOPQRSTUVWXYZ\\abcdefghijklmnopqrstuvwxyz|ÄÆÈÉÊËÖÜßàáâäæçèéêëíîïñóôöùúûüıœ‘’",
    "cases": "Aa",
-   "kb": 241
+   "kb": 244
   },
   {
    "id": "apex_simple_AGS",
@@ -78,7 +78,7 @@
    "source": "Linux Libertine Regular display Bold",
    "chars": "!\"&'(),./0123456789:;?@ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz¡«»¿ÀÁÂÄÈÉÊËÌÍÎÏÒÓÔÖÙÚÛÜßàáâäçèéêëìíîïñòóôõöùúûü‘’",
    "cases": "Aa",
-   "kb": 375
+   "kb": 380
   },
   {
    "id": "art_nouveau",
@@ -93,7 +93,7 @@
    "source": "Apollo ASM",
    "chars": "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~¡¢£¥¦§¨ª«°´·¸º»¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüýþÿŒœŠšŸŽžƒʼˆ˜̧̀́̂̃̈̊̌–—‘’‚“”„†‡•…‰‹›€",
    "cases": "Aa",
-   "kb": 386
+   "kb": 387
   },
   {
    "id": "auberge_marif",
@@ -109,7 +109,7 @@
    "source": "Grand Hotel Marif",
    "chars": "!\"&'()+,-.0123456789:;=?ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz«»ÀÁÂÃÄÆÇÈÉÊËÌÍÎÏÑÔÕÖÚÛÜßàáâãäæçèéêëìíîïñôõöùúûüĨĩĽľŒœŨũ‘’",
    "cases": "Aa",
-   "kb": 368
+   "kb": 372
   },
   {
    "id": "barstitch_bold",
@@ -124,7 +124,7 @@
    "source": "Barlow Bold",
    "chars": "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]_`abcdefghijklmnopqrstuvwxyz{}¡«»¿ÀÁÂÃÄÆÇÈÉÊËÌÍÎÏÑÒÓÔÕÖØÙÚÛÜÝßàáâãäæçèéêëìíîïñòóôõö÷øùúûüýÿŒœŸ‘’",
    "cases": "Aa",
-   "kb": 244
+   "kb": 252
   },
   {
    "id": "barstitch_regular",
@@ -139,7 +139,7 @@
    "source": "Barlow Regular",
    "chars": "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]_`abcdefghijklmnopqrstuvwxyz{}¡«»¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝßàáâãäåæçèéêëìíîïñòóôõö÷øùúûüýÿŒœŸ‘’",
    "cases": "Aa",
-   "kb": 194
+   "kb": 196
   },
   {
    "id": "bathaus_FI",
@@ -154,7 +154,7 @@
    "source": "Baumans",
    "chars": "!&'()+,-.0123456789:;=?@ABCDEFGHIJKLMNOPQRSTUVWXYZ`abcdefghijklmnopqrstuvwxyz¨«´»ÄÈÉÊËÖÜßàáâäçèéêëîïôöùûüˆ‘’",
    "cases": "Aa",
-   "kb": 133
+   "kb": 136
   },
   {
    "id": "caesarus_SC_FI",
@@ -169,7 +169,7 @@
    "source": "Marcellus SC",
    "chars": "!&'(),-./0123456789:;=?@ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz¡¿ÄÆÈÉÊËÖÜßàáâäæçèéêëìíîïñòóôöùúûüŒœ‘’",
    "cases": "Aa",
-   "kb": 169
+   "kb": 171
   },
   {
    "id": "caffeine_tiny",
@@ -185,7 +185,7 @@
    "source": "Espresso Dolce",
    "chars": "!%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_abcdefghijklmnopqrstuvwxyz«°»ÄÈÉÊËÖ×Üßàâäæçèéêëîïôö÷ùûüœ‘’",
    "cases": "Aa",
-   "kb": 177
+   "kb": 182
   },
   {
    "id": "cats",
@@ -200,7 +200,7 @@
    "source": "Cat Font",
    "chars": "!\"&',-./0123456789:;?@ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz«»ÀÂÄÆÈÉÊËÔÖÙÛÜßàâäæçèéêëîïôöùûüÿŒœ˝‘’“”„",
    "cases": "Aa",
-   "kb": 428
+   "kb": 433
   },
   {
    "id": "chicken_little",
@@ -215,7 +215,7 @@
    "source": "Henny Penny",
    "chars": "!\"%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]_abcdefghijklmnopqrstuvwxyz{}¡«°»¿ÀÁÄÆÇÈÉÊËÍÎÏÑÓÔÖ×ÙÚÛÜßàáâäæçèéêëíîïñóôöùúûüŒœ",
    "cases": "Aa",
-   "kb": 447
+   "kb": 450
   },
   {
    "id": "chicken_scratch",
@@ -231,7 +231,7 @@
    "source": "Reenie Beanie",
    "chars": "!\"$&'(),-.0123456789:?@ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzÄÈÉÊËÖÜßàâäçèéêëîïôöùûüÿ‚“”",
    "cases": "Aa",
-   "kb": 129
+   "kb": 132
   },
   {
    "id": "cogs_KOR",
@@ -246,7 +246,7 @@
    "source": "Jack of Gears",
    "chars": "!\"#%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ\\_`abcdefghijklmnopqrstuvwxyzÀÁÂÄÅÆÇÈÉÊËÌÍÎÏÑÒÓÔÖØÙÚÛÜßàáâäåæçèéêëìíîïñòóôõøùúûüÿŒœŸ",
    "cases": "Aa",
-   "kb": 503
+   "kb": 509
   },
   {
    "id": "cooper_marif",
@@ -277,7 +277,7 @@
    "source": "Digory Doodles",
    "chars": "!\"&'(),-./0123456789:;=?@ABCDEFGHIJKLMNOPQRSTUVWXYZ\\^_`abcdefghijklmnopqrstuvwxyz{}~ÄÈÉÊËÖÜßäèéêëöü‘’",
    "cases": "Aa",
-   "kb": 170
+   "kb": 171
   },
   {
    "id": "excalibur_KOR",
@@ -292,7 +292,7 @@
    "source": "Excalibur Nouveau",
    "chars": "!\"%&'()*,-./0123456789:;?ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz«»ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÑÒÓÔÕÖØÙÚÛÜßàáâãäåæçèéêëìíîïñòóôõöøùúûüŒœ–—‘’“”„•",
    "cases": "Aa",
-   "kb": 415
+   "kb": 422
   },
   {
    "id": "fold_inkstitch",
@@ -323,7 +323,7 @@
    "source": "Glacial Indifference",
    "chars": "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ^`abcdefghijklmnopqrstuvwxyz~»ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïñòóôõöøùúûüČčŒœŘřŠšŽž‘’€",
    "cases": "Aa",
-   "kb": 169
+   "kb": 173
   },
   {
    "id": "magnolia_KOR",
@@ -339,7 +339,7 @@
    "source": "Magnolia Script",
    "chars": "!\"%&'()+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ\\_abcdefghijklmnopqrstuvwxyz{}°ÄÈÉÊËÖ×Üßàâäæçèéêëîïôöùûüœ‘’",
    "cases": "Aa",
-   "kb": 245
+   "kb": 247
   },
   {
    "id": "mam_script",
@@ -355,22 +355,22 @@
    "source": "Kaushan Script",
    "chars": "!&',.0123456789:;?ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz¡¿ÄÈÉÊËÖÜßäèéêëöü‘’",
    "cases": "Aa",
-   "kb": 227
+   "kb": 232
   },
   {
    "id": "manga_impact",
    "name": "Manga Impact",
    "style": "sans",
-   "cap": 20.33,
+   "cap": 20.37,
    "good": [
-    8.13,
-    40.66
+    8.15,
+    40.74
    ],
    "license": "OFL-1.1",
    "source": "Shojumaru",
    "chars": "!\"%&'()+,-./0123456789:;=?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz~¡¨«°´»¿ÆÇ×Øæç÷≈",
    "cases": "Aa",
-   "kb": 226
+   "kb": 233
   },
   {
    "id": "marifenda",
@@ -386,7 +386,7 @@
    "source": "Merienda-Bold",
    "chars": "!\"%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz£«»¿ÀÁÂÃÄÅÆÇÈÉÊËÎÏÑÒÓÔÕÖ×ÙÚÛÜßàáâãäåæçèéêëìíîïðñòóôõö÷ùúûüýþÿŒœŠšŸŽž˝‘’‚“€",
    "cases": "Aa",
-   "kb": 405
+   "kb": 407
   },
   {
    "id": "milli_marif_bold",
@@ -401,7 +401,7 @@
    "source": "Millimetre",
    "chars": "!$%&'(),-.0123456789:?@ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzÀÁÂÆÇÈÉÊÔÙàâæçèéêëîïôûüŒœ‘€",
    "cases": "Aa",
-   "kb": 139
+   "kb": 142
   },
   {
    "id": "mimosa_medium",
@@ -432,7 +432,7 @@
    "source": "Montecarlo Regular",
    "chars": "!\"#$%&'()+,-.0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{}~¡§¨ª«¯°´µ·¸º»¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿĀāĂăĄąĆćĈĉĊċČčĎďĐđĒēĔĕĖėĘęĚěĜĝĞğĠġĢģĤĥĦħĨĩĪīĬĭĮįİıĳĴĵĶķĸĹĺĻļĽľĿŀŁłŃńŅņŇňŉŊŋŌōŎŏŐőŒœŔŕŖŗŘřŚśŜŝŞşŠšŢţŤťŦŧŨũŪūŬŭŮůŰűŲųŴŵŶŷŸŹźŻżŽžƒƠơƯưǼǽǾǿȘȚʼˆˇ˘˙˚˛˜̧̨̛̣̦̀́̂̃̄̆̇̈̉̊̋̌̒ΩπẀẁẂẃẄẅẞẠạẢảẤấẦầẩẪẫẬậẮắẰằẲẳẴẵẶặẸẹẺẻẼẽẾếỀềỂểỄễỆệỈỉỊịỌọỎỏỐốỒồỔổỖỗỘộỚớỜờỞởỠỡỢợỤụỦủỨứỪừỬửỮữỰựỲỳỴỵỶỷỸỹ–—‘’‚“”„‹⁄€−∕",
    "cases": "Aa",
-   "kb": 1079
+   "kb": 1081
   },
   {
    "id": "neon_blinking",
@@ -463,7 +463,7 @@
    "source": "Pacifico",
    "chars": "!\"&'()*+,-./0123456789:;=?@ABCDEFGHIJKLMNOPQRSTUVWXYZ\\abcdefghijklmnopqrstuvwxyz¡·¿ÄÆÈÉÊËÑÔÕÖÜßàáâãäæçèéêëìíîïñòóôõöùúûüıŒœ‘’",
    "cases": "Aa",
-   "kb": 209
+   "kb": 212
   },
   {
    "id": "paquerette",
@@ -484,31 +484,31 @@
    "id": "pisankris",
    "name": "Pisankris",
    "style": "display",
-   "cap": 28.74,
+   "cap": 28.84,
    "good": [
-    20.12,
-    40.24
+    20.19,
+    40.38
    ],
    "license": "OFL-1.1",
    "source": "Manuskript Gothisch",
    "chars": "!\"&'(),-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ\\abcdefghijklmnopqrstuvwxyzÄÆÈÉÊËÔÖÜßàâäæçèéêëîïôöùûüŒœ‘’",
    "cases": "Aa",
-   "kb": 273
+   "kb": 277
   },
   {
    "id": "pixel10",
    "name": "Pixel 10",
    "style": "sans",
-   "cap": 50.38,
+   "cap": 49.9,
    "good": [
-    25.19,
-    75.57
+    24.95,
+    74.85
    ],
    "license": "OFL-1.1",
    "source": "Jersey 10 Regular",
    "chars": "!\"#%&'(),-./0123456789:;?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]_abcdefghijklmnopqrstuvwxyz{}¡«´»¿ÀÁÂÃÄÆÇÈÉÊËÌÍÎÏÑÒÓÔÕÖØÙÚÛÜßàáâäæçèéêëìíîïñòóôöøùúûüÿİŒœŸ˝ẞ‘’‚“”„‹›",
    "cases": "Aa",
-   "kb": 1752
+   "kb": 1827
   },
   {
    "id": "roaring_twenties_KOR",
@@ -523,7 +523,7 @@
    "source": "Limelight",
    "chars": "!\"%&'()+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]_abcdefghijklmnopqrstuvwxyz¡¨«¯°»¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÑÒÓÔÖØÙÚÛÜßàáâäåæçèéêëìíîïñòóôõö÷øùúûÿĀāİıŒœ˝‘’‚",
    "cases": "Aa",
-   "kb": 201
+   "kb": 204
   },
   {
    "id": "roman_ags",
@@ -538,7 +538,7 @@
    "source": "Latin Modern Roman 10 Bold Italic",
    "chars": "!\"&'()+,-./0123456789:;?@ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzÄÆÈÉÊËÖÜßàáâäæçèéêëîïôöùûüŒœ‘’",
    "cases": "Aa",
-   "kb": 261
+   "kb": 264
   },
   {
    "id": "sacramarif",
@@ -570,7 +570,7 @@
    "source": "Lobster Two Bold Italic",
    "chars": "!\"&'()+,-.0123456789:;=?@ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzÄÈÉÊËÖÜßàáâäæçèéêëîïôöùûüœ‘’",
    "cases": "Aa",
-   "kb": 218
+   "kb": 221
   },
   {
    "id": "tt_directors",
@@ -585,7 +585,7 @@
    "source": "TT Directors",
    "chars": "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`{|}§´ÀÂÄÆÇÈÉÊËÎÏÔÖÛÜßŒŨŸ€�",
    "cases": "Aa",
-   "kb": 84
+   "kb": 85
   },
   {
    "id": "tt_masters",
@@ -600,7 +600,7 @@
    "source": "TT Masters",
    "chars": "!\"$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`{|}~¡§©«®°±´»¿ÀÁÂÄÅÆÇÈÉÊËÌÍÎÏÑÒÓÔÕÖØÙÚÛÜßĀŌŒŪŸẞ‘’‰€�",
    "cases": "Aa",
-   "kb": 174
+   "kb": 177
   },
   {
    "id": "violin_serif",
@@ -615,7 +615,7 @@
    "source": "Instrument Serif",
    "chars": "!$&(),-.0123456789:?ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyzÄÈÉÊËÖÜßàâäçèéêëîïôöùûüÿ’‚“”",
    "cases": "Aa",
-   "kb": 199
+   "kb": 200
   },
   {
    "id": "cyrillic",
@@ -630,7 +630,7 @@
    "source": "Roboto",
    "chars": "!\"#$%&'()*+,-./0123456789:;<=?@ABCDEFGHIJKLMNOPQRSTUVWXYZ\\_abcdefghijklmnopqrstuvwxyz£«»ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿŐőŒœŰűŸʼˆˇˉ˘˙˚˛˜˝˳̧̣̀́̂̃̄̆̈̉̊̋̏ЀЁЂЃЄЅІЇЈЉЊЋЌЍЎЏАБВГДЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдежзийклмнопрстуфхцчшщъыьэюяѐёђѓєѕіїјљњћќѝўџѠѡѢѣѤѥѦѧѨѩѪѫѬѭѮѯѰѱѲѳѴѵѶѷѸѹѺѻѼѽѾѿҀҁ҂҃҄҅҆ҊҋҌҍҎҏҐґҒғҔҕҖҗҘҙҚқҜҝҞҟҠҡҢңҤҥҦҧҨҩҪҫҬҭҮүҰұҲҳҴҵҶҷҸҹҺһҼҽҾҿӀӁӂӃӄӅӆӇӈӉӊӋӌӍӎӏӐӑӒӓӔӕӖӗӘәӚӛӜӝӞӟӠӡӢӣӤӥӦӧӨөӪӫӬӭӮӯӰӱӲӳӴӵӶӷӹӺӻӼӽӾӿԀԁԂԃԄԅԆԇԈԉԊԋԌԍԎԏԐԒԓ‐–—―‘’‛“”„′‹⁄₤€",
    "cases": "Aa",
-   "kb": 700
+   "kb": 713
   }
  ]
 }
