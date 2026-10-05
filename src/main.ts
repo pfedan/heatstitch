@@ -64,6 +64,11 @@ import { outline } from './digitize/region';
 import { railsFromOutline } from './digitize/rungs';
 import type { Pt } from './digitize/skeleton';
 import { RungTool } from './ui/rungTool';
+import { ShapeTool } from './ui/shapeTool';
+import { FrameTool } from './ui/frameTool';
+import { formOf, reshapeFill, scaleBlocked, transformSewObject } from './model/reshape';
+import { transformObject } from './model/transform';
+import { translation, type Form, type Mat } from './shape/path';
 import { digitizeDefaults, isStroke, SATIN_MAX } from './digitize/digitize';
 import { recommendedSpacing } from './validation/profiles';
 import { numberInColor, overlaps, rememberObjects, sewObjects, splitObject, type SewObject } from './model/objects';
@@ -368,9 +373,12 @@ function flowScene(): FlowScene | null {
     hover: hoverJump !== null ? (q.transitions[hoverJump] ?? null) : null,
     selected: selectedJump !== null ? (q.transitions[selectedJump] ?? null) : null,
     needle: player.complete ? -1 : style.limit,
-    // The areas as recognized on the file itself, also while a change is previewed.
-    outlines: files.active?.pattern && selectedObjects.size ? stitchInfo(files.active.pattern, seq(files.active.pattern)).outlines : undefined,
+    // The areas as recognized on the file itself, also while a change is previewed (not while
+    // their shape is edited or the object is dragged: those show their own outline).
+    outlines: files.active?.pattern && selectedObjects.size && !shapeTool.active && frameTool.dragging === null ? stitchInfo(files.active.pattern, seq(files.active.pattern)).outlines : undefined,
     rungs: rungTool.active ? rungTool : null,
+    shape: shapeTool.active ? { view: shapeTool, handles: shapeTool.handles() } : null,
+    frame: frameTool.active ? { view: frameTool, mapped: frameTool.mappedCorners() } : null,
   };
 }
 
@@ -451,6 +459,17 @@ function selectObjects(objs: number[], toggle: boolean): void {
   flowPreview = null;
   if (next.size) focusBlock = null;
   if (rungTool.active && (next.size !== 1 || !next.has(rungObject!))) closeRungs();
+  // While editing an outline, choosing another object goes on with that one's (or back to the objects).
+  if (shapeTool.active && (next.size !== 1 || !next.has(shapeObject!))) {
+    const one = next.size === 1 ? [...next][0] : null;
+    const p = files.active?.pattern;
+    const form = one !== null && p ? shapeTarget(p, seq(p), one) : null;
+    if (form && one !== null && p) {
+      shapeTool.open(form);
+      shapeObject = one;
+      shapePattern = p;
+    } else closeShape();
+  }
   // While editing points, choosing another object (in the list too) goes on with that one.
   if (editor.active && settings.mode === 'flow') {
     const one = next.size === 1 ? [...next][0] : null;
@@ -644,6 +663,12 @@ const objectPanel = new ObjectPanel({
     redraw();
   },
   editStitches: (on) => setEditing(on),
+  editShape: (on) => {
+    if (!on) return closeShape();
+    if (selectedObjects.size === 1) enterShape([...selectedObjects][0], true);
+  },
+  deleteNode: () => shapeTool.deleteSelected(),
+  toggleNode: () => shapeTool.toggleSmooth(),
   deleteSelection: () => editor.deleteSelection(),
   splitStitch: () => editor.splitSelected(),
 });
@@ -998,6 +1023,187 @@ function sewAlongLines(): void {
   applyRestitched(r, 'stitch.toSatin.failed', true);
 }
 
+// Shapes and the frame ---------------------------------------------------------------------------
+
+/** The object whose fill outline is edited (level Form), and the pattern its form was read from. */
+let shapeObject: number | null = null;
+let shapePattern: Pattern | null = null;
+
+const shapeTool = new ShapeTool({
+  change: (form) => commitShape(form),
+  redraw: () => redraw(),
+  say: (key) => {
+    layers.say(t(key), true);
+    redraw();
+  },
+});
+
+/** The one selected object of the Ablauf mode, when it has a fill whose outline can be edited. */
+function shapeTarget(p: Pattern, q: Sequence, o: number): Form | null {
+  const obj = q.objects[o];
+  return obj ? formOf(p, obj, q.kinds) : null;
+}
+
+/** Edits the outline of object `o` (level Form); objects without a fill go to their stitches. */
+function enterShape(o: number, fit: boolean): void {
+  const p = files.active?.pattern;
+  if (!p || settings.mode !== 'flow') return;
+  const q = seq(p);
+  const form = shapeTarget(p, q, o);
+  if (!form) return enterObject(o, fit);
+  closeRungs();
+  if (editor.active) {
+    editor.setActive(false);
+    editObject = null;
+  }
+  if (!selectedObjects.has(o) || selectedObjects.size !== 1) selectObjects([o], false);
+  shapeTool.open(form);
+  shapeObject = o;
+  shapePattern = p;
+  frameTool.close();
+  const obj = q.objects[o];
+  if (fit) {
+    const w = ((obj.maxX - obj.minX) / 10) * vp.scale;
+    const h = ((obj.maxY - obj.minY) / 10) * vp.scale;
+    if (Math.max(w / stageW, h / stageH) < 0.4) vp.fit(obj.minX / 10, obj.minY / 10, obj.maxX / 10, obj.maxY / 10, stageW, stageH, 60);
+  }
+  updateLevel();
+  redraw();
+}
+
+function closeShape(): void {
+  if (!shapeTool.active) return;
+  shapeTool.close();
+  shapeObject = null;
+  shapePattern = null;
+  updateLevel();
+  redraw();
+}
+
+/** Keeps the shape tool on its object after new stitches, undo or redo; it closes when the object has no fill any more. */
+function syncShape(): void {
+  if (!shapeTool.active) return;
+  const p = files.active?.pattern;
+  if (!p || settings.mode !== 'flow' || selectedObjects.size !== 1) return closeShape();
+  if (p === shapePattern) return;
+  const q = seq(p);
+  const o = [...selectedObjects][0];
+  const form = shapeTarget(p, q, o);
+  if (!form) return closeShape();
+  shapeTool.setForm(form);
+  shapeObject = o;
+  shapePattern = p;
+}
+
+/** The fill sewn anew in its changed outline (one undo step). */
+function commitShape(form: Form): void {
+  const f = files.active;
+  const p = f?.pattern;
+  if (!f || !p || shapeObject === null) return;
+  const q = seq(p);
+  const obj = q.objects[shapeObject];
+  if (!obj) return;
+  const hand = remembered(p, obj)?.hand ?? 0;
+  const r = reshapeFill(p, q.objects, obj, q.kinds, form, settings.trimMm);
+  if (!r || !r.starts.length) {
+    // Nothing to fill there (too small, or the outline crosses itself away): back to the old one.
+    shapeTool.setForm(shapeTarget(p, q, shapeObject) ?? form);
+    layers.say(t('shape.failed'), true);
+    return redraw();
+  }
+  applyRestitched(r, 'shape.failed', true);
+  if (hand) layers.say(t('shape.handReplaced', { n: formatNumber(hand) }));
+}
+
+// The frame around the one selected object (level Objects): move, turn, scale.
+let frameFrame = 0;
+let pendingFrame: Mat | null = null;
+
+const frameTool = new FrameTool({
+  change: (m, final) => {
+    if (final) {
+      pendingFrame = null;
+      cancelAnimationFrame(frameFrame);
+      frameFrame = 0;
+      flowPreview = null;
+      return commitTransform(m);
+    }
+    pendingFrame = m;
+    if (frameFrame) return;
+    frameFrame = requestAnimationFrame(() => {
+      frameFrame = 0;
+      const p = files.active?.pattern;
+      // The stitches dragged along as they are; scaling sews them anew when let go. The last
+      // object first, so the records of the ones before stay where they are.
+      let next = p ?? null;
+      if (p && pendingFrame) for (const o of frameObjects().reverse()) next = transformObject(next!, seq(p).objects[o], pendingFrame).pattern;
+      flowPreview = next !== p ? next : null;
+      redraw();
+    });
+  },
+});
+
+/** The objects the frame is on: the selected ones in the Ablauf mode, level Objects (in sewing order). */
+function frameObjects(): number[] {
+  if (settings.mode !== 'flow' || !selectedObjects.size || editor.active || shapeTool.active || rungTool.active || orderCard.isOpen) return [];
+  const n = files.active?.pattern ? seq(files.active.pattern).objects.length : 0;
+  return [...selectedObjects].filter((o) => o < n).sort((a, b) => a - b);
+}
+
+/** Puts the frame around the selected objects (or takes it away). */
+let frameKey: { p: Pattern; sel: ReadonlySet<number> } | null = null;
+function syncFrame(): void {
+  const p = files.active?.pattern;
+  const sel = frameObjects();
+  if (!p || !sel.length) {
+    if (frameTool.active) frameTool.close();
+    frameKey = null;
+    return;
+  }
+  if (frameTool.dragging !== null || (frameTool.active && frameKey?.p === p && frameKey.sel === selectedObjects)) return;
+  frameKey = { p, sel: selectedObjects };
+  const q = seq(p);
+  const objs = sel.map((o) => q.objects[o]);
+  const box = {
+    minX: Math.min(...objs.map((o) => o.minX)) / 10,
+    minY: Math.min(...objs.map((o) => o.minY)) / 10,
+    maxX: Math.max(...objs.map((o) => o.maxX)) / 10,
+    maxY: Math.max(...objs.map((o) => o.maxY)) / 10,
+  };
+  frameTool.open(box, objs.every((o) => scaleBlocked(p, o, q.kinds) === null));
+}
+
+/** The selected objects moved, turned or scaled by `m` together (one undo step). */
+function commitTransform(m: Mat): void {
+  const f = files.active;
+  const p = f?.pattern;
+  const sel = frameObjects();
+  if (!f || !p || !sel.length) return redraw();
+  let cur = p;
+  let hand = 0;
+  let restitched = false;
+  // The last object first: the ones before keep their records. The objects stay as many as they were.
+  for (const o of [...sel].reverse()) {
+    const q = seq(cur);
+    const obj = q.objects[o];
+    hand += remembered(cur, obj)?.hand ?? 0;
+    const r = obj && transformSewObject(cur, q.objects, obj, q.kinds, m, settings.trimMm);
+    if (!r) {
+      layers.say(t('frame.failed'), true);
+      return redraw();
+    }
+    restitched ||= r.restitched;
+    cur = r.pattern;
+  }
+  applyEdit(cur);
+  const nq = seq(cur);
+  files.setObjects(f, rememberedIn(cur, nq.objects));
+  selectedObjects = nq.objects.length === seq(p).objects.length ? new Set(sel) : new Set();
+  selectionKey++;
+  if (restitched && hand) layers.say(t('shape.handReplaced', { n: formatNumber(hand) }));
+  redraw();
+}
+
 /** Color changes and trims as the statistics count them, travel between objects. */
 function orderStats(p: Pattern) {
   const st = patternStats(p);
@@ -1181,6 +1387,10 @@ function setMode(mode: Mode): void {
   // The level (objects or stitches) stays when switching between Ablauf and Dichte.
   if (mode === 'image' && editor.active) setEditing(false);
   else editor.reset();
+  if (mode !== 'flow') {
+    closeShape();
+    frameTool.close();
+  }
   if (mode !== 'density') {
     comparing = false;
     hoverZone = null;
@@ -1213,6 +1423,9 @@ function objectInfo(p: Pattern, q: Sequence) {
     numbers: selected.map((o) => numberInColor(q.objects, q.objects[o])),
     hand: selected.map((o) => remembered(p, q.objects[o])?.hand ?? 0),
     editing: editor.active && editObject !== null && selected.length === 1 && selected[0] === editObject ? { selection: editor.selection.size } : null,
+    shapeable: selected.length === 1 && !!stitchInfo(p, q).measured.fill,
+    shaping: shapeTool.active && selected.length === 1 && selected[0] === shapeObject ? { nodes: shapeTool.count, smooth: shapeTool.selectedSmooth } : null,
+    frame: frameTool.active ? { canScale: frameTool.canScale } : null,
     mergeBlocked: selected.length > 1 ? mergeBlocked(selected.map((o) => q.objects[o])) : null,
     reversible: selected.some((o) => reversible(q.objects[o])),
   };
@@ -1233,6 +1446,8 @@ function redraw(): void {
       return;
     }
     syncRungs();
+    syncShape();
+    syncFrame();
     drawScene(ctx, stageW, stageH, scene(), stageBg());
     if (showCompare()) {
       const x = Math.round(split * stageW);
@@ -1455,6 +1670,7 @@ function enterObject(o: number, fit: boolean): void {
   const p = files.active?.pattern;
   const obj = p ? seq(p).objects[o] : undefined;
   if (!obj) return;
+  if (shapeTool.active) closeShape();
   if (!editor.active) editor.setActive(true);
   else editor.reset();
   editObject = o;
@@ -1482,6 +1698,7 @@ function revealRecord(i: number): void {
 
 function setEditing(on: boolean): void {
   if (on) closeRungs();
+  if (on) closeShape();
   if (on && settings.mode === 'flow' && selectedObjects.size === 1) return enterObject([...selectedObjects][0], true);
   editor.setActive(on);
   editObject = null;
@@ -1492,19 +1709,25 @@ function setEditing(on: boolean): void {
 /** Level switch, where the user is and what the keys do. */
 function updateLevel(): void {
   const on = editor.active;
+  const shaping = shapeTool.active;
+  const level = on ? 'stitches' : shaping ? 'shape' : 'objects';
   stage.classList.toggle('editing', on);
-  document.querySelectorAll<HTMLInputElement>('input[name="level"]').forEach((i) => (i.checked = (i.value === 'stitches') === on));
+  stage.classList.toggle('shaping', shaping);
+  document.querySelectorAll<HTMLInputElement>('input[name="level"]').forEach((i) => (i.checked = i.value === level));
   const crumb = $('edit-crumb');
   const p = files.active?.pattern;
   const flow = settings.mode === 'flow';
-  crumb.hidden = !on || !flow;
+  crumb.hidden = !(on || shaping) || !flow;
   if (on && flow) {
     const q = p ? seq(p) : null;
     crumb.textContent = q && editObject !== null && q.objects[editObject] ? t('level.in', { name: objectName(q, editObject) }) : t('level.pick');
+  } else if (shaping && flow) {
+    const q = p ? seq(p) : null;
+    crumb.textContent = q && shapeObject !== null && q.objects[shapeObject] ? t('level.inShape', { name: objectName(q, shapeObject) }) : '';
   }
   const mode = settings.mode;
   $('canvas-hint').textContent = t(
-    mode === 'image' ? 'canvas.hint.image' : on ? (flow ? 'canvas.hint.flowEdit' : 'canvas.hint.edit') : flow ? 'canvas.hint.flow' : 'canvas.hint',
+    mode === 'image' ? 'canvas.hint.image' : on ? (flow ? 'canvas.hint.flowEdit' : 'canvas.hint.edit') : shaping ? 'canvas.hint.shape' : flow ? 'canvas.hint.flow' : 'canvas.hint',
   );
 }
 
@@ -1693,9 +1916,22 @@ applyI18n(document.body);
 $('fit').addEventListener('click', () => fitView());
 document.querySelectorAll<HTMLInputElement>('input[name="level"]').forEach((i) =>
   i.addEventListener('change', () => {
-    if (i.checked) setEditing(i.value === 'stitches');
+    if (!i.checked) return;
+    if (i.value === 'shape') return chooseShapeLevel();
+    closeShape();
+    setEditing(i.value === 'stitches');
   }),
 );
+
+/** Level Form from the switch: the selected object's outline, or a hint to pick one with a fill. */
+function chooseShapeLevel(): void {
+  const p = files.active?.pattern;
+  const o = selectedObjects.size === 1 ? [...selectedObjects][0] : null;
+  if (p && o !== null && shapeTarget(p, seq(p), o)) return enterShape(o, true);
+  layers.say(t(o === null ? 'shape.pick' : 'shape.noFill'), true);
+  updateLevel();
+  redraw();
+}
 exportBtn.addEventListener('click', () => {
   const p = files.active?.pattern;
   if (p) exportPng({ ...scene(), edit: null }, stageW, stageH, stageBg(), p.name || 'pattern');
@@ -1862,6 +2098,38 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   if (mod || e.altKey) return;
+  if (shapeTool.active && settings.mode === 'flow') {
+    const step = e.shiftKey ? 0.5 : 0.1;
+    const arrows: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+    if (e.key in arrows && shapeTool.selected) {
+      e.preventDefault();
+      shapeTool.nudge(...arrows[e.key]);
+      return;
+    }
+    if ((e.key === 'Delete' || e.key === 'Backspace') && shapeTool.deleteSelected()) {
+      e.preventDefault();
+      return;
+    }
+    if (e.key === 'c' && shapeTool.toggleSmooth()) return;
+    if (e.key === 'Escape') {
+      if (shapeTool.selected) {
+        shapeTool.selected = null;
+        redraw();
+      } else closeShape();
+      return;
+    }
+    if (e.key === 'Enter' && shapeObject !== null) return enterObject(shapeObject, false);
+  }
+  // One object chosen (level Objects): the arrow keys move it, Enter goes into its outline.
+  if (frameTool.active && settings.mode === 'flow' && !(e.target as HTMLElement).closest('button')) {
+    const step = e.shiftKey ? 1 : 0.1;
+    const arrows: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+    if (e.key in arrows) {
+      e.preventDefault();
+      commitTransform(translation(...arrows[e.key]));
+      return;
+    }
+  }
   if (rungTool.active && settings.mode === 'flow') {
     if ((e.key === 'Delete' || e.key === 'Backspace') && rungTool.deleteSelected()) {
       e.preventDefault();
@@ -1927,7 +2195,7 @@ window.addEventListener('keydown', (e) => {
         if (i >= 0) revealRecord(i);
         return;
       }
-    } else if (e.key === 'Enter' && selectedObjects.size === 1) return enterObject([...selectedObjects][0], true);
+    } else if (e.key === 'Enter' && selectedObjects.size === 1) return enterShape([...selectedObjects][0], true);
     if (e.key === ' ') {
       e.preventDefault();
       player.toggle();
@@ -2001,7 +2269,7 @@ let pinchDist = 0;
 /** Where a one-finger or mouse press started, to tell a click from a drag. */
 let pressAt: [number, number] | null = null;
 /** What the press started as: a point drag, a rectangle or panning (a click when it did not move). */
-let pressMode: 'move' | 'band' | 'pan' = 'pan';
+let pressMode: 'move' | 'band' | 'pan' | 'frame' = 'pan';
 /** Pointer painting a brush stroke in the Bild mode, or null. */
 let painting: number | null = null;
 
@@ -2010,7 +2278,7 @@ canvas.addEventListener('pointerdown', (e) => {
   const pos = local(e);
   pointers.set(e.pointerId, pos);
   pressAt = pointers.size === 1 ? pos : null;
-  let mode: 'move' | 'band' | 'pan' = 'pan';
+  let mode: 'move' | 'band' | 'pan' | 'frame' = 'pan';
   if (settings.mode === 'image' && imageMode.painting && pointers.size === 1 && e.button === 0) {
     painting = e.pointerId;
     imageMode.paintDown(...vp.toWorld(pos[0], pos[1]));
@@ -2028,13 +2296,22 @@ canvas.addEventListener('pointerdown', (e) => {
   }
   if (pointers.size === 1 && e.button === 0) {
     const [wx, wy] = vp.toWorld(pos[0], pos[1]);
-    mode = rungTool.active && settings.mode === 'flow' ? rungTool.down(wx, wy, vp.scale) : editor.down(wx, wy, pos[0], pos[1], e.shiftKey, vp.scale);
+    const flow = settings.mode === 'flow';
+    if (rungTool.active && flow) mode = rungTool.down(wx, wy, vp.scale);
+    else if (shapeTool.active && flow) mode = shapeTool.down(wx, wy, vp.scale);
+    else if (frameTool.active && flow && frameTool.down(wx, wy, vp.scale) !== null) mode = 'frame';
+    else mode = editor.down(wx, wy, pos[0], pos[1], e.shiftKey, vp.scale);
   }
   pressMode = mode;
   if (mode === 'pan') canvas.classList.add('panning');
   if (pointers.size === 2) {
     editor.cancel();
     rungTool.cancel();
+    shapeTool.cancel();
+    if (frameTool.dragging !== null) {
+      frameTool.cancel();
+      flowPreview = null;
+    }
     const [a, b] = [...pointers.values()];
     pinchDist = Math.hypot(a[0] - b[0], a[1] - b[1]);
   }
@@ -2065,7 +2342,7 @@ canvas.addEventListener('pointermove', (e) => {
   canvas.classList.toggle('on-divider', !prev && nearDivider(pos[0]));
   if (prev) {
     if (pointers.size === 1) {
-      if (!rungTool.dragTo(wx, wy) && !editor.dragTo(wx, wy, pos[0], pos[1])) vp.pan(pos[0] - prev[0], pos[1] - prev[1]);
+      if (!rungTool.dragTo(wx, wy) && !shapeTool.dragTo(wx, wy) && !frameTool.dragTo(wx, wy, e.shiftKey, vp.scale) && !editor.dragTo(wx, wy, pos[0], pos[1])) vp.pan(pos[0] - prev[0], pos[1] - prev[1]);
     } else if (pointers.size === 2) {
       pointers.set(e.pointerId, pos);
       const [a, b] = [...pointers.values()];
@@ -2075,7 +2352,15 @@ canvas.addEventListener('pointermove', (e) => {
     }
     pointers.set(e.pointerId, pos);
     redraw();
-  } else if (rungTool.active ? rungTool.hoverAt(wx, wy, vp.scale) : editor.hoverAt(wx, wy, vp.scale)) redraw();
+  } else if (
+    rungTool.active
+      ? rungTool.hoverAt(wx, wy, vp.scale)
+      : shapeTool.active
+        ? shapeTool.hoverAt(wx, wy, vp.scale)
+        : (frameTool.active && frameTool.hoverAt(wx, wy, vp.scale)) || editor.hoverAt(wx, wy, vp.scale)
+  )
+    redraw();
+  if (!prev) canvas.classList.toggle('on-frame', frameTool.active && frameTool.hover !== null);
   if (e.pointerType === 'mouse' || pointers.size <= 1) showTooltip(pos[0], pos[1]);
 });
 
@@ -2088,9 +2373,24 @@ const endPointer = (e: PointerEvent) => {
     else imageMode.paintCancel();
     return;
   }
-  if (pressAt && e.type === 'pointerup' && settings.mode === 'flow' && pressMode === 'pan' && !rungTool.active && Math.hypot(pos[0] - pressAt[0], pos[1] - pressAt[1]) < 4) {
+  // A press on the frame that did not move is a click like any other.
+  const frameClick = pressMode === 'frame' && frameTool.dragging !== null && !frameTool.up();
+  if (pressMode === 'frame' && !frameClick) pressMode = 'move';
+  if (pressAt && e.type === 'pointerup' && settings.mode === 'flow' && (pressMode === 'pan' || frameClick) && !rungTool.active && Math.hypot(pos[0] - pressAt[0], pos[1] - pressAt[1]) < 4) {
     const p = files.active?.pattern;
-    if (p && editor.active) {
+    if (p && shapeTool.active) {
+      // Editing an outline: a click on another object goes on with its outline, a click beside it back to the objects.
+      const st = styleFor(p);
+      const [x, y] = vp.toWorld(pos[0], pos[1]);
+      const i = stitchAt(p, x * 10, y * 10, Math.max(3, 60 / vp.scale), st.limit, st.alpha);
+      const o = i >= 0 ? seq(p).objectAt[i] : -1;
+      if (o >= 0 && o !== shapeObject && !shapeTool.near(x, y, vp.scale)) enterShape(o, false);
+      else if (o < 0 && !shapeTool.selected && !shapeTool.near(x, y, vp.scale)) closeShape();
+      else if (shapeTool.selected) {
+        shapeTool.selected = null;
+        redraw();
+      }
+    } else if (p && editor.active) {
       // Editing stitches: a click on another object goes on with that one, a click beside the
       // stitches (with no point selected) goes back to the objects.
       const st = styleFor(p);
@@ -2125,6 +2425,8 @@ const endPointer = (e: PointerEvent) => {
   }
   if (pointers.size === 1 && pointers.has(e.pointerId)) {
     rungTool.up();
+    shapeTool.up();
+    if (frameTool.dragging !== null) frameTool.up();
     editor.up();
   }
   pointers.delete(e.pointerId);
@@ -2135,6 +2437,9 @@ canvas.addEventListener('pointerup', endPointer);
 canvas.addEventListener('pointercancel', (e) => {
   editor.cancel();
   rungTool.cancel();
+  shapeTool.cancel();
+  frameTool.cancel();
+  flowPreview = null;
   endPointer(e);
 });
 canvas.addEventListener('pointerleave', () => {
@@ -2152,17 +2457,21 @@ canvas.addEventListener('dblclick', (e) => {
   const pos = local(e);
   const [x, y] = vp.toWorld(pos[0], pos[1]);
   if (rungTool.active) return;
+  if (shapeTool.active) {
+    shapeTool.insertAt(x, y, vp.scale);
+    return;
+  }
   if (editor.active) {
     editor.insertAt(x, y, vp.scale);
     return;
   }
   const p = files.active?.pattern;
   if (settings.mode === 'flow' && p) {
-    // A double-click on an object opens its stitches.
+    // A double-click on an object opens its outline (a fill) or its stitches.
     const st = styleFor(p);
     const i = stitchAt(p, x * 10, y * 10, Math.max(3, 60 / vp.scale), st.limit, st.alpha);
     const o = i >= 0 ? seq(p).objectAt[i] : -1;
-    if (o >= 0) return enterObject(o, true);
+    if (o >= 0) return enterShape(o, true);
   }
   fitView();
 });

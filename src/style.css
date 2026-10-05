@@ -2926,3 +2926,16 @@ body[data-mode='flow'] .stage .hint {
 .stage.rungs canvas#canvas.panning {
   cursor: grabbing;
 }
+
+.stage.shaping canvas#canvas {
+  cursor: default;
+}
+
+.stage canvas#canvas.on-frame {
+  cursor: move;
+}
+
+.stage.shaping canvas#canvas.panning,
+.stage canvas#canvas.on-frame.panning {
+  cursor: grabbing;
+}

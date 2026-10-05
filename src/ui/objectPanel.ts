@@ -16,6 +16,12 @@ export interface ObjectInfo {
   hand: number[];
   /** Its points are being edited (one object), and how many of them are selected. */
   editing: { selection: number } | null;
+  /** The one selected object has a fill whose outline can be edited. */
+  shapeable: boolean;
+  /** Its outline is being edited: nodes, and whether the selected one is round (null: none selected). */
+  shaping: { nodes: number; smooth: boolean | null } | null;
+  /** The frame is on the one selected object; whether it can be scaled. */
+  frame: { canScale: boolean } | null;
   /** Why the selected objects cannot be sewn as one (several selected), or null. */
   mergeBlocked: Key | null;
   /** Some of the selected objects can be sewn from the other side (satins and fills). */
@@ -34,6 +40,11 @@ export interface ObjectHooks {
   clear: () => void;
   /** Start or stop editing the points of the selected object. */
   editStitches: (on: boolean) => void;
+  /** Start or stop editing the outline of the selected object. */
+  editShape: (on: boolean) => void;
+  deleteNode: () => void;
+  /** The selected node round or a corner. */
+  toggleNode: () => void;
   deleteSelection: () => void;
   /** Split the stitch to the selected point in two. */
   splitStitch: () => void;
@@ -63,7 +74,7 @@ export class ObjectPanel {
   }
 
   update(info: ObjectInfo | null, lang: string): void {
-    const key = [info?.objects, info?.selected.join(), info?.hand.join(), info?.editing?.selection ?? -1, lang];
+    const key = [info?.objects, info?.selected.join(), info?.hand.join(), info?.editing?.selection ?? -1, info?.shapeable, info?.shaping?.nodes ?? -1, info?.shaping?.smooth, info?.frame?.canScale, lang];
     if (key.every((k, i) => k === this.key[i])) return;
     this.key = key;
     this.msg.hidden = true;
@@ -146,9 +157,35 @@ export class ObjectPanel {
         : [];
     const hint = Object.assign(document.createElement('p'), {
       className: 'muted small',
-      textContent: t(info.editing ? 'object.editHint' : sel.length === 1 ? 'object.hint' : 'object.hintMany'),
+      textContent: t(info.editing ? 'object.editHint' : info.shaping ? 'shape.hint' : sel.length === 1 ? 'object.hint' : 'object.hintMany'),
     });
-    this.body.replaceChildren(head, dl, ...(actions.childElementCount ? [actions] : []), ...handNote, ...(sel.length === 1 ? [this.stitchTools(info)] : []), hint);
+    const frameHint = info.frame
+      ? [Object.assign(document.createElement('p'), { className: 'muted small', textContent: info.frame.canScale ? t('object.frameHint') : `${t('object.frameHint')} ${t('object.frameMixed')}` })]
+      : [];
+    const tools = sel.length !== 1 ? [] : info.shaping ? [this.shapeTools(info.shaping)] : [this.stitchTools(info)];
+    this.body.replaceChildren(head, dl, ...(actions.childElementCount ? [actions] : []), ...handNote, ...tools, ...frameHint, hint);
+  }
+
+  /** Editing the outline of the one selected object: nodes, delete, corner or round, done. */
+  private shapeTools(sh: { nodes: number; smooth: boolean | null }): HTMLElement {
+    const box = document.createElement('div');
+    box.className = 'object-edit';
+    const button = (label: string, run: () => void, opts: { primary?: boolean; disabled?: boolean; title?: string } = {}) => {
+      const b = Object.assign(document.createElement('button'), { type: 'button', textContent: label, disabled: !!opts.disabled, title: opts.title ?? '' });
+      if (opts.primary) b.className = 'primary';
+      b.addEventListener('click', run);
+      return b;
+    };
+    box.append(Object.assign(document.createElement('p'), { className: 'sel-info', textContent: `${t('shape.nodes', { n: formatNumber(sh.nodes) })} · ${sh.smooth === null ? t('shape.none') : t(sh.smooth ? 'shape.node.smooth' : 'shape.node.corner')}` }));
+    const row = document.createElement('div');
+    row.className = 'row-buttons';
+    row.append(
+      button(t('shape.node.delete'), () => this.hooks.deleteNode(), { disabled: sh.smooth === null }),
+      button(sh.smooth ? t('shape.node.corner') : t('shape.node.smooth'), () => this.hooks.toggleNode(), { disabled: sh.smooth === null, title: t('shape.node.kind') }),
+      button(t('object.editDone'), () => this.hooks.editShape(false), { primary: true }),
+    );
+    box.append(row);
+    return box;
   }
 
   /** Editing the points of the one selected object: start, what is selected, delete, split, done. */
@@ -165,6 +202,7 @@ export class ObjectPanel {
     if (!ed) {
       const row = document.createElement('div');
       row.className = 'row-buttons';
+      if (info.shapeable) row.append(button(t('object.editShape'), () => this.hooks.editShape(true), { title: t('level.shape.hint') }));
       row.append(button(t('object.editStitches'), () => this.hooks.editStitches(true), { title: t('level.stitches.hint') }));
       box.append(row);
       return box;
