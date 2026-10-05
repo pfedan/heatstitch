@@ -14,7 +14,13 @@ export interface ThreadColor {
   name?: string;
   /** Index in the Brother PEC palette, kept so PES files save with their original thread slots. */
   pecIndex?: number;
+  /** Thread brand and catalog number, when the file names them (PES v5+, VP3). */
+  brand?: string;
+  catalog?: string;
 }
+
+/** Embroidery file formats heatstitch reads (and writes). */
+export type FileFormat = 'dst' | 'pes' | 'pec' | 'jef' | 'exp' | 'vp3';
 
 export interface Bounds {
   minX: number;
@@ -25,7 +31,7 @@ export interface Bounds {
 
 export interface Pattern {
   name: string;
-  format: 'dst' | 'pes';
+  format: FileFormat;
   /** Absolute x per record, 0.1 mm. */
   x: Int32Array;
   /** Absolute y per record, 0.1 mm, y down. */

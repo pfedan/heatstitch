@@ -6,6 +6,7 @@ import { DEFAULT_PREPARE, type PrepareOptions } from './image/prepare';
 import type { Lang } from './i18n';
 import { DEFAULT_PROFILE, normalizeProfile, threadWidthMm, type Profile } from './validation/profiles';
 import { ALL_CHECKS, normalizeChecks, type Checks } from './validation/validate';
+import { isOutputFormat, type OutputFormat } from './writers';
 
 export interface PanelWidths {
   side: number | null;
@@ -93,6 +94,8 @@ export interface Settings {
   checks: Checks;
   /** Automatic correction options (the region is chosen per run). */
   correction: Omit<CorrectionOptions, 'region'>;
+  /** Embroidery file format last chosen for saving; null follows the format of the open file. */
+  saveFormat: OutputFormat | null;
   scales: Record<Metric, Scale>;
   image: ImageSettings;
   lang: Lang | null;
@@ -129,6 +132,7 @@ export const DEFAULTS: Settings = {
   profile: DEFAULT_PROFILE,
   checks: { ...ALL_CHECKS },
   correction: { ...DEFAULT_CORRECTION },
+  saveFormat: null,
   scales: {
     thread: { max: 12 },
     penetrations: { max: 4 },
@@ -176,6 +180,7 @@ export function loadSettings(): Settings {
       panels: { side: width(s.panels?.side), inspector: width(s.panels?.inspector) },
       checks: normalizeChecks(s.checks),
       correction: normalizeCorrection(s.correction),
+      saveFormat: isOutputFormat(s.saveFormat) ? s.saveFormat : null,
       image: normalizeImage(s.image),
     };
   } catch {

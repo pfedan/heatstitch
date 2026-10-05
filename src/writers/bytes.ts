@@ -1,3 +1,5 @@
+import type { Bounds, Pattern } from '../model/pattern';
+
 /** Growable little-endian byte buffer for the writers. */
 export class ByteWriter {
   private buf = new Uint8Array(4096);
@@ -90,4 +92,20 @@ export function headerLabel(name: string, max: number): string {
     .normalize('NFKD')
     .replace(/[^\x20-\x7e]/g, '')
     .slice(0, max);
+}
+
+/** Bounds of every record (jumps included), which the headers describe. */
+export function extents(p: Pattern): Bounds {
+  if (!p.cmd.length) return { minX: 0, minY: 0, maxX: 0, maxY: 0 };
+  let minX = 0;
+  let minY = 0;
+  let maxX = 0;
+  let maxY = 0;
+  for (let i = 0; i < p.cmd.length; i++) {
+    if (p.x[i] < minX) minX = p.x[i];
+    if (p.x[i] > maxX) maxX = p.x[i];
+    if (p.y[i] < minY) minY = p.y[i];
+    if (p.y[i] > maxY) maxY = p.y[i];
+  }
+  return { minX, minY, maxX, maxY };
 }

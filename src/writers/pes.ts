@@ -1,29 +1,13 @@
-import { COLOR_CHANGE, END, JUMP, STITCH, TRIM, type Bounds, type Pattern } from '../model/pattern';
+import { COLOR_CHANGE, END, JUMP, STITCH, TRIM, type Pattern } from '../model/pattern';
 import { PEC_STITCH_OFFSET } from '../parsers/pes';
 import { pecIndexOf } from '../parsers/pecPalette';
-import { ByteWriter, headerLabel, splitMove } from './bytes';
+import { ByteWriter, extents, headerLabel, splitMove } from './bytes';
 import { ICON_H, ICON_STRIDE, pecIcons } from './pecGraphics';
 
 /** Largest move per PEC record and axis (12-bit long form). */
 export const PEC_MAX_DELTA = 2047;
 const JUMP_FLAG = 0x10;
 const TRIM_FLAG = 0x20;
-
-/** Bounds of every record (jumps included), which the headers describe. */
-function extents(p: Pattern): Bounds {
-  if (!p.cmd.length) return { minX: 0, minY: 0, maxX: 0, maxY: 0 };
-  let minX = 0;
-  let minY = 0;
-  let maxX = 0;
-  let maxY = 0;
-  for (let i = 0; i < p.cmd.length; i++) {
-    if (p.x[i] < minX) minX = p.x[i];
-    if (p.x[i] > maxX) maxX = p.x[i];
-    if (p.y[i] < minY) minY = p.y[i];
-    if (p.y[i] > maxY) maxY = p.y[i];
-  }
-  return { minX, minY, maxX, maxY };
-}
 
 /** Number of color blocks (one more than the color changes). */
 function blockCount(p: Pattern): number {
@@ -228,6 +212,14 @@ export function writePes(p: Pattern): Uint8Array {
     out.u16(0);
   }
   out.patch(pecAt, out.length, 4);
+  writePec(out, p);
+  return out.result();
+}
+
+/** A bare PEC file ("#PEC0001" and the PEC block), as older Brother machines read it. */
+export function writePecFile(p: Pattern): Uint8Array {
+  const out = new ByteWriter();
+  out.ascii('#PEC0001');
   writePec(out, p);
   return out.result();
 }
