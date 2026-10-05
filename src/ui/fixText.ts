@@ -34,6 +34,8 @@ export function fixText(c: Fixed): string {
       return t('plan.change.stitch', { a: mm(c.from), b: mm(c.to) });
     case 'angle':
       return t('plan.change.angle', { a: c.from === '' ? '…' : formatNumber(Number(c.from)), b: formatNumber(Number(c.to)) });
+    case 'byWidth':
+      return t('plan.change.byWidth');
     case 'knockout':
       return t('plan.change.knockout');
     default:

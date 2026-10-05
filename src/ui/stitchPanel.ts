@@ -43,7 +43,15 @@ export interface StitchInfo {
   /** Whether the fill areas are strokes that can be sewn as satin. */
   toSatin: boolean;
   /** Rungs of the one selected satin: whether the tool is on, how many (null: the stitches' own direction). */
-  direction?: { tool: boolean; rungs: number | null; single: boolean };
+  direction?: {
+    tool: boolean;
+    rungs: number | null;
+    single: boolean;
+    /** Cut lines on the column (sections). */
+    cuts: number;
+    /** A rung is selected: the spacing set there (null: the column's). */
+    spacingHere?: number | null;
+  };
   /** Rungs drawn across the one selected fill to sew it as satin. */
   draw?: { tool: boolean; lines: number; single: boolean };
   /** Guide lines of the one selected fill: whether their tool is on. */
@@ -71,7 +79,9 @@ export interface StitchHooks {
   /** Sews the selected objects of the other kind (fill to satin or satin to fill). */
   convert: (to: 'fill' | 'satin') => void;
   /** Rungs of a satin: the tool on or off, corners suggested, all removed, back to the stitches' own direction. */
-  direction: (action: 'tool' | 'corners' | 'even' | 'follow') => void;
+  direction: (action: 'tool' | 'corners' | 'sections' | 'even' | 'follow') => void;
+  /** The spacing at the selected rung (null: as the column). */
+  spacingHere: (v: number | null) => void;
   /** Rungs drawn across a fill: the tool on or off, sewn as satin along them. */
   draw: (action: 'tool' | 'sew') => void;
   /** Guide lines on a fill: their tool on or off (`off` only closes it). */
@@ -389,6 +399,7 @@ export class StitchPanel {
         }),
       );
       if (!e) out.push(this.check('stitch.short', 'stitch.short.hint', () => s.short, (v) => (s.short = v)));
+      if (!e) out.push(this.check('stitch.byWidth', 'stitch.byWidth.hint', () => !!s.byWidth, (v) => (v ? (s.byWidth = true) : delete s.byWidth)));
       out.push(
         this.slider({ label: 'stitch.split', hint: 'stitch.split.hint', min: 4, max: SATIN_SPLIT, step: 0.5, get: () => s.split ?? SATIN_SPLIT, set: (v) => (s.split = v), fmt: mm(1) }),
         this.check('stitch.stagger', 'stitch.stagger.hint', () => s.stagger ?? true, (v) => (s.stagger = v)),
@@ -658,13 +669,28 @@ export class StitchPanel {
     if (d.tool) {
       row.append(
         this.button('stitch.direction.corners', 'stitch.direction.corners.hint', () => this.hooks.direction('corners')),
+        this.button('stitch.sections', 'stitch.sections.hint', () => this.hooks.direction('sections')),
         this.button('stitch.direction.even.button', 'stitch.direction.even.hint', () => this.hooks.direction('even'), false, d.rungs === 0),
         this.button('stitch.direction.follow.button', 'stitch.direction.follow.hint', () => this.hooks.direction('follow'), false, d.rungs === null),
       );
     }
     wrap.append(row);
+    if (d.cuts) wrap.append(Object.assign(document.createElement('span'), { className: 'small', textContent: t(d.cuts === 1 ? 'stitch.sections.count.one' : 'stitch.sections.count', { n: d.cuts + 1 }) }));
+    if (d.tool && d.spacingHere !== undefined) wrap.append(this.spacingHereField(d.spacingHere));
     if (d.tool) wrap.append(Object.assign(document.createElement('span'), { className: 'muted small', textContent: t('stitch.direction.help') }));
     return wrap;
+  }
+
+  /** The spacing at the selected rung: empty keeps the column's. */
+  private spacingHereField(v: number | null): HTMLElement {
+    const l = Object.assign(document.createElement('label'), { className: 'spacing-here', title: t('stitch.spacingHere.hint') });
+    const i = Object.assign(document.createElement('input'), { type: 'number', min: '0.2', max: '1.5', step: '0.05', placeholder: t('stitch.spacingHere.column'), value: v === null ? '' : String(v) });
+    i.addEventListener('change', () => {
+      const n = Number(i.value.replace(',', '.'));
+      this.hooks.spacingHere(i.value.trim() === '' || !Number.isFinite(n) || n <= 0 ? null : Math.min(1.5, Math.max(0.2, n)));
+    });
+    l.append(Object.assign(document.createElement('span'), { textContent: t('stitch.spacingHere') }), i, Object.assign(document.createElement('span'), { className: 'muted', textContent: 'mm' }));
+    return l;
   }
 
   /** Guide lines of a guided fill: how many, and their tool. */

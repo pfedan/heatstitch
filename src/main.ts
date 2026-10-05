@@ -966,9 +966,11 @@ const stitchPanel = new StitchPanel($('object-stitches'), {
     if (a === 'tool') return toggleRungs();
     if (!rungTool.active || rungTool.mode !== 'satin') return;
     if (a === 'corners') rungTool.corners();
+    else if (a === 'sections') rungTool.sections();
     else if (a === 'even') rungTool.even();
     else rungTool.follow();
   },
+  spacingHere: (v) => rungTool.setSpacingHere(v),
   draw: (a) => (a === 'tool' ? toggleRungs() : sewAlongLines()),
   guide: (a) => {
     if (a === 'tool') return toggleGuides();
@@ -1075,7 +1077,11 @@ function rungInfo(p: Pattern, q: Sequence): Pick<StitchInfo, 'direction' | 'draw
       const cols = remembered(p, q.objects[[...selectedObjects][0]])?.columns?.flat() ?? [];
       rungs = cols.some((c) => c.rungs) ? cols.reduce((a, c) => a + (c.rungs?.length ?? 0), 0) : null;
     }
-    out.direction = { tool: on && rungTool.mode === 'satin', rungs, single };
+    let cuts = 0;
+    if (on && rungTool.mode === 'satin') cuts = rungTool.columns.reduce((a, c) => a + c.cuts.length, 0);
+    else if (single) cuts = (remembered(p, q.objects[[...selectedObjects][0]])?.columns?.flat() ?? []).reduce((a, c) => a + (c.cuts?.length ?? 0), 0);
+    const here = on && rungTool.mode === 'satin' ? rungTool.spacingHere : undefined;
+    out.direction = { tool: on && rungTool.mode === 'satin', rungs, single, cuts, ...(here !== undefined ? { spacingHere: here } : {}) };
   }
   if (info.measured.fill && !info.measured.satin) out.draw = { tool: on && rungTool.mode === 'fill', lines: on ? rungTool.lines.length : 0, single };
   if (info.measured.fill) out.guide = { tool: on && rungTool.mode === 'guide', single };
@@ -3473,7 +3479,7 @@ canvas.addEventListener('pointerdown', (e) => {
       drawTool.down(wx, wy, vp.scale);
       mode = 'move';
     } else if (letterMode && flow) mode = letterDown(wx, wy) ? 'move' : 'pan';
-    else if (rungTool.active && flow) mode = rungTool.down(wx, wy, vp.scale);
+    else if (rungTool.active && flow) mode = rungTool.down(wx, wy, vp.scale, e.shiftKey);
     else if (shapeTool.active && flow) mode = shapeTool.down(wx, wy, vp.scale);
     else if (frameTool.active && flow && frameTool.down(wx, wy, vp.scale) !== null) mode = 'frame';
     else mode = editor.down(wx, wy, pos[0], pos[1], e.shiftKey, vp.scale);

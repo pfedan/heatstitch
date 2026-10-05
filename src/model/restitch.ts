@@ -8,7 +8,7 @@ import { coverage } from '../digitize/measure';
 import { expandRegion, sample, signedField, type Region } from '../digitize/region';
 import { runStitch, TOLERANCE } from '../digitize/run';
 import { eStitches, pairs, satinStitches, underlayOf, type Column, type SatinParams, type UnderlayKind } from '../digitize/satin';
-import { columnFromRungs, cumulative, reversedRungs, type Rung } from '../digitize/rungs';
+import { columnFromRungs, cumulative, pointAt, reversedRungs, tidyRungs, type Rung } from '../digitize/rungs';
 import type { Pt } from '../digitize/skeleton';
 import { formFrom, storeForm, type Form, type StoredPath } from '../shape/path';
 import { rasterize } from '../shape/rasterize';
@@ -103,6 +103,8 @@ export interface SatinSettings {
   edgeShare?: number;
   /** The right side gets this instead of `edge` (mm), when set. */
   edgeB?: number;
+  /** Spacing grows on narrow and shrinks on wide parts of the column (see widthFactor). */
+  byWidth?: boolean;
 }
 
 export type SatinType = 'satin' | 'e';
@@ -162,6 +164,13 @@ export interface Rails {
    * between these rungs and the two ends.
    */
   rungs?: Rung[];
+  /**
+   * Cut lines across the column (as rungs): it is sewn in sections, each starting anew (its own
+   * underlay and first stitch), one after the other without a trim. The column stays one.
+   */
+  cuts?: Rung[];
+  /** Spacing set at places along the column: distance along the left rail and spacing (mm); see spacingAlong. */
+  spacings?: [number, number][];
 }
 
 /**
@@ -317,7 +326,7 @@ export interface StoredObject {
   fill?: FillSettings;
   satin?: SatinSettings;
   /** Rails per satin part and column, as flat x, y lists; rungs as flat pairs of distances. */
-  columns?: { left: number[]; right: number[]; rungs?: number[] }[][];
+  columns?: StoredRails[][];
   hand?: number;
   read?: boolean;
   /** The area of an object whose kind was changed, as `region`. */
@@ -329,7 +338,7 @@ export interface StoredObject {
   path?: StoredPath[];
   under?: number;
   borderAt?: number;
-  asSatin?: { left: number[]; right: number[]; rungs?: number[] }[];
+  asSatin?: StoredRails[];
   outline?: string;
   border?: BorderSettings;
   lettering?: Lettering;
@@ -337,6 +346,23 @@ export interface StoredObject {
   fixed?: Fixed[];
   join?: boolean;
 }
+
+/** Rails as stored: flat x, y lists; rungs, cut lines and spacings as flat pairs. */
+export interface StoredRails {
+  left: number[];
+  right: number[];
+  rungs?: number[];
+  cuts?: number[];
+  spacings?: number[];
+}
+
+const storeRails = (c: Rails): StoredRails => ({
+  left: c.left.flat(),
+  right: c.right.flat(),
+  ...(c.rungs ? { rungs: c.rungs.flat() } : {}),
+  ...(c.cuts?.length ? { cuts: c.cuts.flat() } : {}),
+  ...(c.spacings?.length ? { spacings: c.spacings.flat() } : {}),
+});
 
 /** What is remembered about the objects of `p`, to store it with the file. */
 export function rememberedIn(p: Pattern, objects: SewObject[]): StoredObject[] {
@@ -352,7 +378,7 @@ export function rememberedIn(p: Pattern, objects: SewObject[]): StoredObject[] {
       ...(r.shape ? { shape: pixels(r.shape) } : {}),
       ...(r.fill ? { fill: { ...r.fill } } : {}),
       ...(r.satin ? { satin: { ...r.satin } } : {}),
-      ...(r.columns ? { columns: r.columns.map((part) => part.map((c) => ({ left: c.left.flat(), right: c.right.flat(), ...(c.rungs ? { rungs: c.rungs.flat() } : {}) }))) } : {}),
+      ...(r.columns ? { columns: r.columns.map((part) => part.map(storeRails)) } : {}),
       ...(r.hand ? { hand: r.hand } : {}),
       ...(r.read ? { read: true } : {}),
       ...(r.form ? { form: storeForm(r.form) } : {}),
@@ -361,7 +387,7 @@ export function rememberedIn(p: Pattern, objects: SewObject[]): StoredObject[] {
       ...(r.path ? { path: storeForm(r.path) } : {}),
       ...(r.under ? { under: r.under } : {}),
       ...(r.borderAt ? { borderAt: r.borderAt } : {}),
-      ...(r.asSatin ? { asSatin: r.asSatin.map((c) => ({ left: c.left.flat(), right: c.right.flat(), ...(c.rungs ? { rungs: c.rungs.flat() } : {}) })) } : {}),
+      ...(r.asSatin ? { asSatin: r.asSatin.map(storeRails) } : {}),
       ...(r.outline ? { outline: r.outline } : {}),
       ...(r.border ? { border: { ...r.border } } : {}),
       ...(r.lettering ? { lettering: r.lettering } : {}),
@@ -435,10 +461,19 @@ function railsFrom(list: unknown): Rails[][] | undefined {
       const left = pts(c?.left);
       const right = pts(c?.right);
       if (!left || !right) return undefined;
-      const r = c?.rungs;
-      if (r !== undefined && (!Array.isArray(r) || r.length % 2 || !r.every(finite))) return undefined;
-      const rungs: Rung[] | undefined = r && Array.from({ length: r.length / 2 }, (_, k) => [r[2 * k], r[2 * k + 1]] as Rung);
-      cols.push(rungs ? { left, right, rungs } : { left, right });
+      const twos = (r: unknown): [number, number][] | undefined | null => {
+        if (r === undefined) return undefined;
+        if (!Array.isArray(r) || r.length % 2 || !r.every(finite)) return null;
+        return Array.from({ length: r.length / 2 }, (_, k) => [r[2 * k], r[2 * k + 1]] as [number, number]);
+      };
+      const rungs = twos(c?.rungs);
+      const cuts = twos(c?.cuts);
+      const spacings = twos(c?.spacings);
+      if (rungs === null || cuts === null || spacings === null) return undefined;
+      const rails: Rails = rungs ? { left, right, rungs } : { left, right };
+      if (cuts?.length) rails.cuts = cuts;
+      if (spacings?.length && spacings.every(([, v]) => v > 0)) rails.spacings = spacings;
+      cols.push(rails);
     }
     out.push(cols);
   }
@@ -1138,8 +1173,102 @@ function newSatin(p: Pattern, pt: Part, s: SatinSettings, kinds: Uint8Array, kno
 /** Rails walked from the other end: the sides swap, the rungs come along. */
 export function reversedRails(r: Rails): Rails {
   const out: Rails = { left: r.right.slice().reverse(), right: r.left.slice().reverse() };
-  if (r.rungs) out.rungs = reversedRungs(r.rungs, cumulative(r.left).pop()!, cumulative(r.right).pop()!);
+  const la = cumulative(r.left).pop()!;
+  const lb = cumulative(r.right).pop()!;
+  if (r.rungs) out.rungs = reversedRungs(r.rungs, la, lb);
+  if (r.cuts) out.cuts = reversedRungs(r.cuts, la, lb);
+  if (r.spacings) {
+    // Kept at their rung: measured along the other rail from its other end.
+    const at = (s: number) => {
+      const g = r.rungs?.find(([a]) => Math.abs(a - s) < 0.05);
+      return g ? lb - g[1] : lb * (1 - s / Math.max(la, 1e-6));
+    };
+    out.spacings = r.spacings.map(([s, v]) => [at(s), v] as [number, number]).reverse();
+  }
   return out;
+}
+
+/** The part of a rail from distance s0 to s1 along it. */
+function subRail(rail: Pt[], cum: number[], s0: number, s1: number): Pt[] {
+  const out: Pt[] = [pointAt(rail, cum, s0)];
+  for (let i = 0; i < rail.length; i++) if (cum[i] > s0 + 1e-6 && cum[i] < s1 - 1e-6) out.push(rail[i]);
+  out.push(pointAt(rail, cum, s1));
+  return out;
+}
+
+/**
+ * The sections of a column cut across by its cut lines (see Rails.cuts), each with the rungs and
+ * spacings that lie in it; the column itself when it has none.
+ */
+export function sectionsOf(r: Rails): Rails[] {
+  if (!r.cuts?.length) return [r];
+  const cl = cumulative(r.left);
+  const cr = cumulative(r.right);
+  const la = cl[cl.length - 1];
+  const lb = cr[cr.length - 1];
+  const cuts = tidyRungs(r.cuts, la, lb);
+  if (!cuts.length) return [{ ...r, cuts: undefined }];
+  const out: Rails[] = [];
+  if (!r.rungs) {
+    // Paired by index (the stitches' own direction): cut where the left rail is nearest.
+    const at = cuts.map(([a]) => {
+      let k = 0;
+      for (let i = 1; i < cl.length; i++) if (Math.abs(cl[i] - a) < Math.abs(cl[k] - a)) k = i;
+      return k;
+    });
+    const ks = [0, ...at.filter((k, i) => k > 0 && k < r.left.length - 1 && (i === 0 || k > at[i - 1])), r.left.length - 1];
+    for (let j = 0; j + 1 < ks.length; j++) {
+      const s0 = cl[ks[j]];
+      const s1 = cl[ks[j + 1]];
+      const sp = r.spacings?.filter(([s]) => s >= s0 && s <= s1).map(([s, v]) => [s - s0, v] as [number, number]);
+      out.push({ left: r.left.slice(ks[j], ks[j + 1] + 1), right: r.right.slice(ks[j], ks[j + 1] + 1), ...(sp?.length ? { spacings: sp } : {}) });
+    }
+    return out;
+  }
+  const bounds: Rung[] = [[0, 0], ...cuts, [la, lb]];
+  for (let k = 0; k + 1 < bounds.length; k++) {
+    const [a0, b0] = bounds[k];
+    const [a1, b1] = bounds[k + 1];
+    const rungs = r.rungs.filter(([a, b]) => a > a0 && a < a1 && b > b0 && b < b1).map(([a, b]) => [a - a0, b - b0] as Rung);
+    const sp = r.spacings?.filter(([s]) => s >= a0 && s <= a1).map(([s, v]) => [s - a0, v] as [number, number]);
+    out.push({ left: subRail(r.left, cl, a0, a1), right: subRail(r.right, cr, b0, b1), rungs, ...(sp?.length ? { spacings: sp } : {}) });
+  }
+  return out;
+}
+
+/** Spacing grows on narrow columns and shrinks on wide ones ("Abstand nach Breite"), 1 at 4 mm. */
+export function widthFactor(w: number): number {
+  if (w <= 2) return 1.2;
+  if (w <= 4) return 1.2 - ((w - 2) / 2) * 0.2;
+  if (w <= 6) return 1 - ((w - 4) / 2) * 0.1;
+  return 0.9;
+}
+
+/**
+ * The spacing at each point of the column (null when even): set at places along it (blended
+ * linearly between those and the rungs and ends that keep the column's spacing), and with
+ * `byWidth` grown on narrow and shrunk on wide parts.
+ */
+export function spacingAlong(c: Column, r: Rails, base: number, byWidth: boolean): number[] | undefined {
+  if (!r.spacings?.length && !byWidth) return undefined;
+  const cum = cumulative(c.left);
+  const la = cum[cum.length - 1];
+  const ctrl: [number, number][] = [[0, base], [la, base]];
+  for (const [a] of r.rungs ?? []) ctrl.push([a, base]);
+  for (const [s, v] of r.spacings ?? []) {
+    const near = ctrl.findIndex(([x]) => Math.abs(x - s) < 0.05);
+    if (near >= 0) ctrl[near] = [s, v];
+    else ctrl.push([s, v]);
+  }
+  ctrl.sort((a, b) => a[0] - b[0]);
+  return cum.map((s, i) => {
+    let k = 0;
+    while (k + 2 < ctrl.length && ctrl[k + 1][0] <= s) k++;
+    const [x0, v0] = ctrl[k];
+    const [x1, v1] = ctrl[Math.min(k + 1, ctrl.length - 1)];
+    const v = x1 > x0 ? v0 + (v1 - v0) * Math.min(1, Math.max(0, (s - x0) / (x1 - x0))) : v0;
+    return byWidth ? v * widthFactor(dist(c.left[i], c.right[i])) : v;
+  });
 }
 
 /** Settings for the columns walked from the other end: what was right is left now. */
@@ -1160,9 +1289,20 @@ export function satinRuns(rails: Rails[], s: SatinSettings): Pt[][] {
   const runs: Pt[][] = [];
   const sp = satinParams(s);
   const sew = (ps: [Pt, Pt][]) => (s.type === 'e' ? eStitches(ps, sp) : satinStitches(ps, sp));
-  for (const r of rails) {
+  const along = (col: Column, r: Rails, q: SatinParams): SatinParams => {
+    const at = spacingAlong(col, r, q.spacing, !!s.byWidth);
+    return at ? { ...q, spacingAt: at } : q;
+  };
+  for (const whole of rails) {
+    const parts = sectionsOf(whole);
+    if (parts.length > 1) {
+      const run = sectionRun(parts, s, sew, along);
+      if (run.length) runs.push(run);
+      continue;
+    }
+    const r = whole;
     const col = columnOf(r);
-    const ps = pairs(col, sp);
+    const ps = pairs(col, along(col, r, sp));
     if (ps.length < 2) continue;
     if (!s.underlay) {
       runs.push(sew(ps));
@@ -1174,10 +1314,40 @@ export function satinRuns(rails: Rails[], s: SatinSettings): Pt[][] {
       continue;
     }
     // Underlay out along the column, satin back (its sides swap with the direction).
-    const rev: Column = { center: col.center.slice().reverse(), left: col.right.slice().reverse(), right: col.left.slice().reverse(), width: col.width };
-    runs.push([...under.pts, ...sew(pairs(rev, satinParams(swappedSides(s))))]);
+    const rev = reversedColumn(col);
+    runs.push([...under.pts, ...sew(pairs(rev, along(rev, reversedRails(r), satinParams(swappedSides(s)))))]);
   }
   return runs;
+}
+
+const reversedColumn = (col: Column): Column => ({ center: col.center.slice().reverse(), left: col.right.slice().reverse(), right: col.left.slice().reverse(), width: col.width });
+
+/**
+ * A column in sections, sewn as one run without trims: each section starts anew. With an underlay
+ * that ends at the far end, all underlays go out first and the sections come back one by one
+ * (the last first); otherwise each section brings its own underlay and goes out.
+ */
+function sectionRun(parts: Rails[], s: SatinSettings, sew: (ps: [Pt, Pt][]) => Pt[], along: (col: Column, r: Rails, q: SatinParams) => SatinParams): Pt[] {
+  const sp = satinParams(s);
+  const cols = parts.map(columnOf);
+  const out: Pt[] = [];
+  const kind = s.under ?? 'auto';
+  if (!s.underlay) {
+    parts.forEach((r, k) => out.push(...sew(pairs(cols[k], along(cols[k], r, sp)))));
+    return out;
+  }
+  const unders = cols.map((c) => underlayOf(c, kind, s.tolerance));
+  if (!unders.every((u) => u.atEnd)) {
+    parts.forEach((r, k) => out.push(...unders[k].pts, ...sew(pairs(cols[k], along(cols[k], r, sp)))));
+    return out;
+  }
+  for (const u of unders) out.push(...u.pts);
+  const back = satinParams(swappedSides(s));
+  for (let k = parts.length - 1; k >= 0; k--) {
+    const rev = reversedColumn(cols[k]);
+    out.push(...sew(pairs(rev, along(rev, reversedRails(parts[k]), back))));
+  }
+  return out;
 }
 
 function newRun(p: Pattern, pt: Part, s: RunSettings, kinds: Uint8Array): Pt[][] | null {

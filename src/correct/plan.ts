@@ -289,6 +289,8 @@ function candidates(p: Pattern, objs: SewObject[], o: SewObject, s: Settings, re
     if (tooMuch) {
       if (t.underlay && w > 0 && w < NARROW_SATIN) out.push({ changes: [fix('underlay', true, false)], visibility: 'invisible', reason: 'density' });
       else if (t.underlay && w < MEDIUM_SATIN && (t.under ?? 'auto') !== 'center') out.push({ changes: [fix('under', t.under ?? 'auto', 'center')], visibility: 'invisible', reason: 'density' });
+      // Narrow parts are densest: spacing by width loosens them first.
+      if (!t.byWidth && t.type !== 'e') out.push({ changes: [fix('byWidth', false, true)], visibility: 'slight', reason: 'density' });
       for (const to of [round2(Math.min(recMax, t.spacing * 1.08)), round2(recMax)]) {
         if (to > t.spacing + 0.005) out.push({ changes: [fix('spacing', t.spacing, to)], visibility: 'slight', reason: 'density' });
       }
