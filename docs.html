@@ -413,7 +413,8 @@
         <p>
           Die Liste rechts im Ablauf zeigt jeden Sprung zwischen zwei Stichfolgen einer Farbe, mit Länge und ob die Maschine dort
           schneidet. Farbwechsel stehen nicht darin, dort hält die Maschine ohnehin. Ein Klick auf einen Sprung in der
-          Liste oder auf der Leinwand zeigt ihn; <kbd>n</kbd> und <kbd>Umschalt</kbd>+<kbd>n</kbd> gehen sie durch.
+          Liste oder auf der Leinwand zeigt ihn; <kbd>n</kbd> und <kbd>Umschalt</kbd>+<kbd>n</kbd> gehen sie durch. Die Schalter
+          <i>Alle</i>, <i>Ohne Schnitt</i> und <i>Geschnitten</i> über der Liste zeigen nur die Sprünge, um die es gerade geht.
         </p>
         <ul>
           <li><b>Schneiden und vernähen</b>: Einige Vernähstiche sichern den Faden vor dem Sprung, der Faden wird geschnitten, und Anstiche beginnen die nächste Folge. Vorhandene Vernähstiche werden erkannt und nicht doppelt gesetzt.</li>
@@ -756,7 +757,7 @@
           <li>Drop an embroidery file on the file box: <b>PES</b> and <b>PEC</b> (Brother), <b>DST</b> (Tajima), <b>JEF</b> (Janome), <b>VP3</b> (Pfaff, Husqvarna Viking) or <b>EXP</b> (Melco). Or pick one under <i>Load example</i>: the cat, the overlapping circles or the confetti. The two vector graphics (SVG) below them are sewn when opened: the circles as whole shapes on top of each other, and the <i>Shapes benchmark</i>, nine panels with what heatstitch makes of shapes.</li>
           <li>Pick the mode at the top: <i>Sequence</i> (<kbd>1</kbd>) shows and edits the design, <i>Density</i> (<kbd>2</kbd>) checks it, <i>Image</i> (<kbd>3</kbd>) makes a new one from a picture.</li>
           <li>In the <i>Density</i> mode choose <b>fabric</b> and <b>thread</b> under <i>Material</i>. The verdict is under <i>Findings</i>: <span class="lv safe">Safe</span>, <span class="lv caution">Caution</span> or <span class="lv critical">Critical</span>. A click on a zone zooms to it.</li>
-          <li>Fix the zones with <i>Propose a correction</i> and compare with the original.</li>
+          <li>Fix the zones with <i>Propose corrections</i> and compare with the original.</li>
           <li>Under <i>Save</i> on the left choose your machine's format and save. <i>As project</i> keeps everything, including what embroidery files cannot hold.</li>
         </ol>
         <h3>The screen</h3>
@@ -833,11 +834,11 @@
           <dt>Combine and split</dt>
           <dd>With several objects of one color selected, <i>Combine into one object</i> makes one of them. It is sewn in the place of the first; before that, the layers are checked. Fills become one area with one outline and are sewn anew with the settings of the first, so the pattern runs through everything. With other objects in between, only fills can be combined. The other way round, <i>Split into pieces</i> takes an object sewn in several pieces apart into them, for example to see the underlay on its own.</dd>
           <dt>Cut out</dt>
-          <dd>With several fills selected, <i>Cut out the upper shape</i> cuts the one sewn last out of the others and drops it, like punching a hole.</dd>
+          <dd>With several fills selected, <i>Cut out top shape</i> cuts the one sewn last out of the others and drops it, like punching a hole.</dd>
           <dt>Shapes on top of each other</dt>
           <dd>Where a fill lies partly under one sewn later, both are sewn there as long as you choose nothing else. The card above the list says how many fills would be sewn twice and offers <i>Knock out</i> or <i>Leave it</i>. Knocking out is a stitch setting, not a change of shape: the switch <i>Knock out under later shapes</i> turns it on or off per fill; the fill still reaches 0.2 mm under an upper fill and under a satin by an adjustable share of its width, so no fabric shows. The shape stays whole. Move, rotate or reshape the upper fill, and the lower ones are sewn anew to match, in the same undo step.</dd>
           <dt>Not sewn</dt>
-          <dd><i>Don't sew</i> keeps the selected objects but takes them out of the stitches: they stay visible as a thin outline. <i>As guide</i> keeps them as a dashed line, say the outline of the garment or a line to align to; guides are never sewn. Both wait in the <i>Not sewn</i> block under the list. There, <i>Sew</i> brings one back to its old place in the order, with stitches and settings as before; the middle button switches between off and guide, × deletes it. If an SVG has a plain rectangle behind everything, as many drawing programs export it, that is a background: it is not sewn and lands there as well.</dd>
+          <dd><i>Don't sew</i> keeps the selected objects but takes them out of the stitches: they stay visible as a thin outline. <i>As a guide</i> keeps them as a dashed line, say the outline of the garment or a line to align to; guides are never sewn. Both wait in the <i>Not sewn</i> block under the list. There, <i>Sew</i> brings one back to its old place in the order, with stitches and settings as before; the middle button switches between off and guide, × deletes it. If an SVG has a plain rectangle behind everything, as many drawing programs export it, that is a background: it is not sewn and lands there as well.</dd>
         </dl>
         <figure>
           <img src="/guide/merge-en.jpg" width="1280" height="800" loading="lazy" alt="The letters M and K of letters.pes combined into one fill, on the right the object with its pieces and the Split into pieces button" />
@@ -873,7 +874,7 @@
           <dt>Underlay</dt>
           <dd><i>Off</i> for small areas and thin fabrics, <i>Across</i> (one loose layer across the rows, sewn first) or <i>Cross</i> (two layers crosswise, for stretchy and fluffy fabrics). Plus its <i>inset</i> from the edge, fixed in mm or as a share of the area's width, its row spacing and <i>Leave out under later objects</i>: where later objects cover the fill completely, the underlay is dropped, which saves thread and bulk under satin borders.</dd>
           <dt>Border</dt>
-          <dd>A line around the fill, sewn after it: <i>Running stitch</i>, <i>Triple</i> or a <i>satin edge</i> with width, pull compensation and underlay. <i>Position</i> puts it on the edge of the fill or offset inwards or outwards. With <i>Thread of the border</i> it becomes an object of its own in that thread, sewn right after the color of the fill; it still follows the shape of the fill and is duplicated and moved with it. With such a border selected, its card names the fill it belongs to; <i>Detach</i> makes it an independent object.</dd>
+          <dd>A line around the fill, sewn after it: <i>Running stitch</i>, <i>Triple</i> or a <i>satin edge</i> with width, pull compensation and underlay. <i>Position</i> puts it on the edge of the fill or offset inwards or outwards. With <i>Border thread</i> it becomes an object of its own in that thread, sewn right after the color of the fill; it still follows the shape of the fill and is duplicated and moved with it. With such a border selected, its card names the fill it belongs to; <i>Detach</i> makes it an independent object.</dd>
           <dt>Guide lines</dt>
           <dd>Choose the pattern <i>Guided</i> or press <kbd>g</kbd> with a fill selected and drag freehand across the area: the rows follow this line, exactly near it and more loosely further away. With several lines the rows blend from one to the next, so a round neckline turns into a straight hem. Every line sews the fill anew on release. Click a line and press <kbd>Del</kbd> to delete it; without lines the fill returns to straight rows. <kbd>Esc</kbd> or <i>Done</i> closes the tool.</dd>
           <dt>End near the next object</dt>
@@ -980,7 +981,7 @@
           <dt>Tools</dt>
           <dd><b>Rectangle</b> (<kbd>m</kbd>) and <b>Ellipse</b> (<kbd>o</kbd>): drag; <kbd>Shift</kbd> makes a square or a circle, <kbd>Alt</kbd> draws from the center, a tag shows the size. <b>Pen</b> (<kbd>b</kbd>): click for corners, drag for curves; a click on the first node closes an area (fill), double click or <kbd>Enter</kbd> ends an open line (running stitch), <kbd>Del</kbd> takes the last node back. <b>Freehand</b> (<kbd>p</kbd>): drag a line; it is smoothed on release and sewn as running stitch. The tool stays on for the next shape; <kbd>Esc</kbd> or a click on its button puts it away.</dd>
           <dt>Go on with the shape</dt>
-          <dd>A drawn area is a fill with all <a href="#en-settings">stitch settings</a>, a line a running stitch that can also become satin or fill. With <i>Cut out the upper shape</i> you punch holes, with <i>Combine into one object</i> you join areas, and on the <i>Shape</i> level you bend every outline further.</dd>
+          <dd>A drawn area is a fill with all <a href="#en-settings">stitch settings</a>, a line a running stitch that can also become satin or fill. With <i>Cut out top shape</i> you punch holes, with <i>Combine into one object</i> you join areas, and on the <i>Shape</i> level you bend every outline further.</dd>
           <dt>Shapes instead of stitches</dt>
           <dd>Under <i>Display</i>, <i>Shapes instead of stitches</i> shows fills as flat color areas. That keeps the canvas calm while you arrange many shapes; satin and running stitches keep showing their stitches.</dd>
         </dl>
@@ -1072,7 +1073,8 @@
         <p>
           The list on the right in Sequence shows every jump between two stitch runs of one color, with its length and whether the
           machine trims there. Color changes are not listed, the machine stops there anyway. A click on a jump in the list or on the
-          canvas shows it; <kbd>n</kbd> and <kbd>Shift</kbd>+<kbd>n</kbd> step through them.
+          canvas shows it; <kbd>n</kbd> and <kbd>Shift</kbd>+<kbd>n</kbd> step through them. The switches <i>All</i>,
+          <i>Not trimmed</i> and <i>Trimmed</i> above the list show only the jumps you are after.
         </p>
         <ul>
           <li><b>Trim and tie</b>: a few tie stitches secure the thread before the jump, the thread is cut, and tie-in stitches start the next run. Existing tie stitches are recognized and not set twice.</li>
@@ -1155,7 +1157,7 @@
         <h3>Proposals</h3>
         <p>
           Choose the goal (<i>Critical only</i>, the default, or <i>No warnings</i>) and the focus (<i>Both</i>, <i>Thread density</i> or
-          <i>Hole density</i>) and press <i>Propose a correction</i>, optionally with <i>Selected zone only</i>.
+          <i>Hole density</i>) and press <i>Propose corrections</i>, optionally with <i>Selected zone only</i>.
           The correction thinks like a digitizer: it does not push stitches around but looks for better settings for
           every affected object, tries them on the spot and keeps only what makes the result better. Stitch type,
           pattern and shape always stay. Nothing changes before you choose, and a loaded embroidery file is never changed on loading.
