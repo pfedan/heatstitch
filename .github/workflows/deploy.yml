@@ -42,6 +42,30 @@ jobs:
           path: dist
           include-hidden-files: true
 
+  # Every save format read back by pystitch (Ink/Stitch's pyembroidery), an independent reader (tests/oracle.test.ts,
+  # scripts/oracle.py): a writer bug that heatstitch's own reader would mirror still shows here.
+  oracle:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: oracle-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci
+      - run: pip install pystitch==1.0.1
+      - run: npx vitest run tests/oracle.test.ts
+        env:
+          ORACLE: '1'
+      - run: python scripts/oracle.py
+
   deploy:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     needs: build
