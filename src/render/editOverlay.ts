@@ -76,16 +76,21 @@ export function drawEditOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, p: 
 
   if (view.grab >= 0 && view.grab < p.cmd.length && p.cmd[view.grab] === STITCH) drawLengths(ctx, vp, p, view.grab, view.formatMm);
 
-  if (view.band) {
-    const [x0, y0] = vp.toScreen(view.band.x0, view.band.y0);
-    const [x1, y1] = vp.toScreen(view.band.x1, view.band.y1);
-    ctx.setLineDash([5, 4]);
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 1;
-    ctx.fillStyle = 'rgba(224, 85, 158, 0.15)';
-    ctx.fillRect(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0));
-    ctx.strokeRect(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0));
-  }
+  if (view.band) drawBand(ctx, vp, view.band);
+  ctx.restore();
+}
+
+/** A rubber band (world mm) being dragged to select what lies inside it. */
+export function drawBand(ctx: CanvasRenderingContext2D, vp: Viewport, band: { x0: number; y0: number; x1: number; y1: number }): void {
+  const [x0, y0] = vp.toScreen(band.x0, band.y0);
+  const [x1, y1] = vp.toScreen(band.x1, band.y1);
+  ctx.save();
+  ctx.setLineDash([5, 4]);
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 1;
+  ctx.fillStyle = 'rgba(224, 85, 158, 0.15)';
+  ctx.fillRect(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0));
+  ctx.strokeRect(Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0));
   ctx.restore();
 }
 

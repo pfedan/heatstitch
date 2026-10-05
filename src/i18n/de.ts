@@ -760,7 +760,7 @@ export const de = {
   'player.pos': 'Position im Nähablauf',
   'player.speed': 'Tempo, als Vielfaches des Maschinentempos',
   'player.info': 'Stich {i} / {n} · {time}',
-  'canvas.hint.flow': 'Mausrad: Zoom · Ziehen: Verschieben · Doppelklick: Form oder Stiche bearbeiten · Leertaste: Abspielen · n: nächster Sprung',
+  'canvas.hint.flow': 'Mausrad: Zoom · Ziehen: Verschieben · Umschalt+Ziehen: Objekte im Rahmen wählen · Doppelklick: Form oder Stiche bearbeiten · Leertaste: Abspielen · n: nächster Sprung',
   'stitch.hand': 'Neue Einstellungen oder eine andere Stichart ersetzen {n} Änderungen von Hand an den Einstichen. Rückgängig holt sie zurück.',
   'edit.panelHint': 'Oben links auf der Leinwand auf „Stiche“ schalten (Taste e), dann Einstiche wählen, ziehen, einfügen oder löschen.',
   'edit.split.hint': 'Den Stich zum gewählten Einstich in der Mitte teilen (i)',

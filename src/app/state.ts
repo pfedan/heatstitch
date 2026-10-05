@@ -41,6 +41,8 @@ export const ui = {
   hoverJump: null as number | null,
   /** Selected objects (by index in sewing order) and the one hovered in the list. */
   selectedObjects: new Set() as ReadonlySet<number>,
+  /** Rubber band (world mm) being dragged to select the objects inside it, or null. */
+  objectBand: null as { x0: number; y0: number; x1: number; y1: number } | null,
   /** Counts selections made by the user; the stitch settings are measured again for each. */
   selectionKey: 0,
   /** New stitches shown while a stitch setting is being dragged, not applied yet. */
