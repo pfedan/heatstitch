@@ -997,7 +997,8 @@ const stitchPanel = new StitchPanel($('object-stitches'), {
   direction: (a) => {
     if (a === 'tool') return toggleRungs();
     if (!rungTool.active || rungTool.mode !== 'satin') return;
-    if (a === 'corners') rungTool.corners();
+    if (a === 'rung' || a === 'cut') rungTool.setCutMode(a === 'cut');
+    else if (a === 'corners') rungTool.corners();
     else if (a === 'sections') rungTool.sections();
     else if (a === 'even') rungTool.even();
     else rungTool.follow();

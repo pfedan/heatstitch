@@ -1,4 +1,5 @@
 import { pointAt } from '../digitize/rungs';
+import { sectionsOf } from '../model/restitch';
 import type { Pt } from '../digitize/skeleton';
 import type { RungPick, RungView } from '../ui/rungTool';
 import type { Viewport } from './viewport';
@@ -8,7 +9,7 @@ const ACCENT = '#e0559e';
 /** Cut lines in their own color, so they read apart from the rungs. */
 const CUT = '#6fd3ff';
 
-const same = (a: RungPick | null, col: number, i: number, cut = false) => !!a && a.col === col && a.i === i && !!a.cut === cut;
+const same = (a: RungPick | null, col: number, i: number, cut = false, free = false) => !!a && a.col === col && a.i === i && !!a.cut === cut && !!a.span === free;
 
 /**
  * The rung tool on the canvas: the rails of the satin as thin lines, each rung as a line across
@@ -35,9 +36,23 @@ export function drawRungOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, vie
       ctx.stroke();
     }
   }
-  const rung = (a: Pt, b: Pt, col: number, i: number, suggested: boolean, cut = false, label = '') => {
-    const sel = same(view.selected, col, i, cut);
-    const hov = same(view.hover, col, i, cut);
+  // A column with free rungs: the rails its sections are sewn along, where a cut line became an edge.
+  for (const c of view.columns) {
+    if (!c.spans.length) continue;
+    ctx.setLineDash([5, 4]);
+    for (const sec of sectionsOf({ left: c.left, right: c.right, rungs: c.rungs, cuts: c.cuts, spans: c.spans })) {
+      for (const rail of [sec.left, sec.right]) {
+        path(rail);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+        ctx.lineWidth = 1.6;
+        ctx.stroke();
+      }
+    }
+    ctx.setLineDash([]);
+  }
+  const rung = (a: Pt, b: Pt, col: number, i: number, suggested: boolean, cut = false, label = '', free = false) => {
+    const sel = same(view.selected, col, i, cut, free);
+    const hov = same(view.hover, col, i, cut, free);
     const [ax, ay] = S(a);
     const [bx, by] = S(b);
     ctx.setLineDash(suggested && !sel ? [4, 3] : []);
@@ -78,6 +93,7 @@ export function drawRungOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, vie
       rung(pointAt(c.left, c.cl, r[0]), pointAt(c.right, c.cr, r[1]), k, i, !c.own, false, sp ? `${sp[1].toFixed(2)} mm` : '');
     }),
   );
+  view.columns.forEach((c, k) => c.spans.forEach(([a, b], i) => rung(a, b, k, i, false, false, '', true)));
   view.columns.forEach((c, k) => c.cuts.forEach((r, i) => rung(pointAt(c.left, c.cl, r[0]), pointAt(c.right, c.cr, r[1]), k, i, false, true)));
   view.lines.forEach(([a, b], i) => rung(a, b, -1, i, false));
   // Guide lines in the same colors.
@@ -107,7 +123,7 @@ export function drawRungOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, vie
     ctx.beginPath();
     ctx.moveTo(...S(a));
     ctx.lineTo(...S(b));
-    ctx.strokeStyle = '#ffffff';
+    ctx.strokeStyle = view.draftCut ? CUT : '#ffffff';
     ctx.lineWidth = 2;
     ctx.stroke();
   }

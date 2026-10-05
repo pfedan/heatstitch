@@ -152,6 +152,7 @@ export function bindKeys(app: KeysApp) {
       if (e.key === 'e' || e.key === 'r' || e.key === 'g') return;
     }
     if (app.rungTool.active && app.settings.mode === 'flow') {
+      if ((e.key === 't' || e.key === 'T') && app.rungTool.mode === 'satin' && !mod) return app.rungTool.setCutMode(!app.rungTool.cutMode);
       if ((e.key === 'Delete' || e.key === 'Backspace') && app.rungTool.deleteSelected()) {
         e.preventDefault();
         return;

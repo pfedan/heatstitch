@@ -81,11 +81,15 @@ export function bindRungs(app: RungsApp) {
         const cols = remembered(p, q.objects[[...ui.selectedObjects][0]])?.columns?.flat() ?? [];
         rungs = cols.some((c) => c.rungs) ? cols.reduce((a, c) => a + (c.rungs?.length ?? 0), 0) : null;
       }
+      if (!on || rungTool.mode !== 'satin') {
+        // Free rungs count as rungs.
+        if (single && rungs !== null) rungs += (remembered(p, q.objects[[...ui.selectedObjects][0]])?.columns?.flat() ?? []).reduce((a, c) => a + (c.spans?.length ?? 0), 0);
+      }
       let cuts = 0;
       if (on && rungTool.mode === 'satin') cuts = rungTool.columns.reduce((a, c) => a + c.cuts.length, 0);
       else if (single) cuts = (remembered(p, q.objects[[...ui.selectedObjects][0]])?.columns?.flat() ?? []).reduce((a, c) => a + (c.cuts?.length ?? 0), 0);
       const here = on && rungTool.mode === 'satin' ? rungTool.spacingHere : undefined;
-      out.direction = { tool: on && rungTool.mode === 'satin', rungs, single, cuts, ...(here !== undefined ? { spacingHere: here } : {}) };
+      out.direction = { tool: on && rungTool.mode === 'satin', rungs, single, cuts, cutMode: rungTool.cutMode, ...(here !== undefined ? { spacingHere: here } : {}) };
     }
     if (info.measured.fill && !info.measured.satin) out.draw = { tool: on && rungTool.mode === 'fill', lines: on ? rungTool.lines.length : 0, single };
     if (info.measured.fill) out.guide = { tool: on && rungTool.mode === 'guide', single };

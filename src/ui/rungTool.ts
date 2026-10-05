@@ -1,12 +1,19 @@
-import { addRung, cornerCuts, cornerRungs, cumulative, pointAt, project, rungFromLine, rungRange, seedRungs, type Rung } from '../digitize/rungs';
+import { addRung, chordOf, cornerCuts, cornerRungs, cumulative, pointAt, project, rungFromLine, rungRange, seedRungs, type Rung } from '../digitize/rungs';
 import { pathLength } from '../digitize/fill';
 import { simplify } from '../digitize/run';
 import type { Pt } from '../digitize/skeleton';
-import type { Rails } from '../model/restitch';
+import { spanSection, sectionLoops, sectionOfRung, type Rails, type SectionLoop } from '../model/restitch';
 
 /** Pick radius around the pointer for rung ends, CSS pixels; the line itself a little less. */
 const PICK_END_PX = 10;
 const PICK_LINE_PX = 6;
+
+/**
+ * A free rung is taken when the section's two new rails differ in length by at most this much (or
+ * no more than its rails did before); beyond it the section would fan from one side, a cut line
+ * is missing.
+ */
+const SPAN_RATIO = 2;
 
 /** A satin column as the tool shows it: its rails and the rungs on it. */
 export interface RungColumn {
@@ -19,6 +26,8 @@ export interface RungColumn {
   cuts: Rung[];
   /** Spacing set at rungs: distance along the left rail and spacing (mm). */
   spacings: [number, number][];
+  /** Rungs drawn anywhere across a section, as world points (see Rails.spans). */
+  spans: [Pt, Pt][];
   /** The rungs are the column's own (false: suggested from its stitches, nothing set yet). */
   own: boolean;
   /** The column as it came, to give back what was not changed. */
@@ -33,6 +42,8 @@ export interface RungPick {
   end: 0 | 1 | -1;
   /** A cut line of the column, not a rung. */
   cut?: boolean;
+  /** A free rung of the column (see Rails.spans). */
+  span?: boolean;
 }
 
 export type RungMode = 'satin' | 'fill' | 'guide';
@@ -50,6 +61,8 @@ export interface RungView {
   hover: RungPick | null;
   /** The line being drawn. */
   draft: [Pt, Pt] | null;
+  /** The line being drawn is a cut line. */
+  draftCut: boolean;
 }
 
 export interface RungHooks {
@@ -61,10 +74,10 @@ export interface RungHooks {
   guides: (guides: Pt[][]) => void;
   redraw: () => void;
   /** Says why something did not work. */
-  say: (key: 'stitch.direction.miss' | 'stitch.direction.cross' | 'stitch.direction.cornersNone' | 'stitch.sections.none') => void;
+  say: (key: 'stitch.direction.miss' | 'stitch.direction.cross' | 'stitch.direction.needCut' | 'stitch.direction.cornersNone' | 'stitch.sections.none') => void;
 }
 
-type Drag = { kind: 'end'; pick: RungPick } | { kind: 'draw'; cut: boolean } | { kind: 'sketch' } | null;
+type Drag = { kind: 'end'; pick: RungPick; loop?: SectionLoop } | { kind: 'draw'; cut: boolean } | { kind: 'sketch' } | null;
 
 /**
  * Rungs on the canvas: lines across a satin column that set the direction of its stitches (dragged
@@ -88,6 +101,9 @@ export class RungTool implements RungView {
   selected: RungPick | null = null;
   hover: RungPick | null = null;
   draft: [Pt, Pt] | null = null;
+  draftCut = false;
+  /** Lines drawn across a satin are cut lines (Shift draws the other kind). */
+  cutMode = false;
   private drag: Drag = null;
 
   constructor(private hooks: RungHooks) {}
@@ -150,19 +166,36 @@ export class RungTool implements RungView {
           rungs: r.rungs ?? seedRungs(r.left, r.right),
           cuts: (r.cuts ?? []).map((x) => [x[0], x[1]] as Rung),
           spacings: (r.spacings ?? []).map((x) => [x[0], x[1]] as [number, number]),
+          spans: (r.spans ?? []).map(([a, b]) => [a, b] as [Pt, Pt]),
           own: !!r.rungs,
           rails: r,
         });
       }),
     );
     const s = this.selected;
-    if (s && (s.col >= this.columns.length || s.i >= (s.cut ? this.columns[s.col].cuts : this.columns[s.col].rungs).length)) this.selected = null;
+    if (s && s.col >= 0 && (s.col >= this.columns.length || s.i >= this.listOf(this.columns[s.col], s).length)) this.selected = null;
+  }
+
+  /** The list a pick is in: the column's cut lines, free rungs or rungs. */
+  private listOf(c: RungColumn, s: RungPick): unknown[] {
+    return s.cut ? c.cuts : s.span ? c.spans : c.rungs;
   }
 
   /** How many rungs set the direction (null: the stitches' own, nothing set). */
   get count(): number | null {
     if (!this.columns.some((c) => c.own)) return null;
-    return this.columns.reduce((a, c) => a + c.rungs.length, 0);
+    return this.columns.reduce((a, c) => a + c.rungs.length + c.spans.length, 0);
+  }
+
+  /** Lines drawn across a satin from now on are cut lines (true) or rungs. */
+  setCutMode(on: boolean): void {
+    this.cutMode = on;
+    this.hooks.redraw();
+  }
+
+  /** The sections of a column as closed outlines, with its cut lines as they are now. */
+  private loops(c: RungColumn): SectionLoop[] {
+    return sectionLoops({ left: c.left, right: c.right, cuts: c.cuts });
   }
 
   /** The columns per satin part, with the rungs as set now. */
@@ -172,6 +205,7 @@ export class RungTool implements RungView {
       const base: Rails = c.own ? { left: c.left, right: c.right, rungs: c.rungs.map((r) => [r[0], r[1]] as Rung) } : { left: c.rails.left, right: c.rails.right, ...(c.rails.rungs ? { rungs: c.rails.rungs } : {}) };
       if (c.cuts.length) base.cuts = c.cuts.map((r) => [r[0], r[1]] as Rung);
       if (c.spacings.length) base.spacings = c.spacings.map((r) => [r[0], r[1]] as [number, number]);
+      if (c.spans.length) base.spans = c.spans.map(([a, b]) => [a, b] as [Pt, Pt]);
       (out[this.parts[k]] ??= []).push(base);
     });
     return out;
@@ -187,8 +221,8 @@ export class RungTool implements RungView {
     const reachEnd = PICK_END_PX / scale;
     const reachLine = PICK_LINE_PX / scale;
     let best: { pick: RungPick; d: number } | null = null;
-    const consider = (col: number, i: number, a: Pt, b: Pt, cut = false) => {
-      const tag = cut ? { cut: true } : {};
+    const consider = (col: number, i: number, a: Pt, b: Pt, cut = false, free = false) => {
+      const tag = cut ? { cut: true } : free ? { span: true } : {};
       for (const [end, p] of [[0, a], [1, b]] as const) {
         const d = Math.hypot(p[0] - q[0], p[1] - q[1]);
         if (d <= reachEnd && (!best || d < best.d)) best = { pick: { col, i, end, ...tag }, d };
@@ -199,6 +233,7 @@ export class RungTool implements RungView {
     };
     if (this.mode === 'satin') {
       this.columns.forEach((c, k) => c.rungs.forEach((r, i) => consider(k, i, ...this.ends(c, r))));
+      this.columns.forEach((c, k) => c.spans.forEach(([a, b], i) => consider(k, i, a, b, false, true)));
       this.columns.forEach((c, k) => c.cuts.forEach((r, i) => consider(k, i, ...this.ends(c, r), true)));
     }
     else if (this.mode === 'fill') this.lines.forEach(([a, b], i) => consider(-1, i, a, b));
@@ -239,15 +274,22 @@ export class RungTool implements RungView {
   }
 
   /**
-   * Pointer pressed: an end to drag, a rung to select, or a new line to draw (with `cut`, Shift held
-   * on a satin: a cut line). Returns 'pan' when not taken.
+   * Pointer pressed: an end to drag, a rung to select, or a new line to draw (on a satin a cut line
+   * when cutMode is on; `other`, Shift held, draws the other kind). Returns 'pan' when not taken.
    */
-  down(x: number, y: number, scale: number, cut = false): 'move' | 'pan' {
+  down(x: number, y: number, scale: number, other = false): 'move' | 'pan' {
     if (!this.active) return 'pan';
+    const cut = other !== this.cutMode;
     const hit = this.pick(x, y, scale);
     if (hit) {
       this.selected = hit;
-      this.drag = hit.end === -1 ? null : { kind: 'end', pick: hit };
+      let loop: SectionLoop | undefined;
+      if (hit.span && hit.end !== -1) {
+        const c = this.columns[hit.col];
+        const loops = this.loops(c);
+        loop = loops[sectionOfRung(loops, c.spans[hit.i])];
+      }
+      this.drag = hit.end === -1 || (hit.span && !loop) ? null : { kind: 'end', pick: hit, ...(loop ? { loop } : {}) };
       this.hooks.redraw();
       return 'move';
     }
@@ -263,6 +305,7 @@ export class RungTool implements RungView {
       return 'move';
     }
     this.drag = { kind: 'draw', cut: cut && this.mode === 'satin' };
+    this.draftCut = this.drag.cut;
     this.draft = [
       [x, y],
       [x, y],
@@ -281,7 +324,14 @@ export class RungTool implements RungView {
     } else if (d.kind === 'end') {
       const { col, i, end } = d.pick;
       if (this.mode === 'fill') this.lines[i][end as 0 | 1] = [x, y];
-      else {
+      else if (d.pick.span && d.loop) {
+        // Slid along the section's outline, wherever it goes.
+        const c = this.columns[col];
+        const { ring, cum } = d.loop;
+        const q = pointAt(ring, cum, project(ring, cum, [x, y]).s);
+        c.spans[i] = end === 0 ? [q, c.spans[i][1]] : [c.spans[i][0], q];
+        this.hooks.change(this.result(), false);
+      } else {
         const c = this.columns[col];
         const list = d.pick.cut ? c.cuts : c.rungs;
         const [lo, hi] = rungRange(list, i, end as 0 | 1, c.cl[c.cl.length - 1], c.cr[c.cr.length - 1]);
@@ -315,6 +365,7 @@ export class RungTool implements RungView {
     } else if (d.kind === 'draw' && this.draft) {
       const [a, b] = this.draft;
       this.draft = null;
+      this.draftCut = false;
       if (Math.hypot(b[0] - a[0], b[1] - a[1]) < 0.3) return this.hooks.redraw();
       if (this.mode === 'fill') {
         this.lines.push([a, b]);
@@ -325,8 +376,37 @@ export class RungTool implements RungView {
     this.hooks.redraw();
   }
 
-  /** A rung from a line drawn across a column: in the first column whose two rails it meets. */
+  /**
+   * A rung from a line drawn across a column, in the section its middle lies in: from rail to rail
+   * a plain rung; ending on a cut line or both ends on one rail a free rung, the section then sewn
+   * as a column of its own (see Rails.spans). A cut line goes from rail to rail.
+   */
   private addFromLine(a: Pt, b: Pt, cut = false): void {
+    if (!cut) {
+      for (const [k, c] of this.columns.entries()) {
+        const loops = this.loops(c);
+        for (const [sec, loop] of loops.entries()) {
+          const chord = chordOf(loop.ring, a, b);
+          if (!chord) continue;
+          const left = (u: number) => u <= loop.end[0] + 1e-6;
+          const right = (u: number) => u >= loop.end[1] - 1e-6 && u <= loop.start[0] + 1e-6;
+          const [u, v] = chord;
+          const hasSpans = c.spans.some((f) => sectionOfRung(loops, f) === sec);
+          if (!hasSpans && ((left(u) && right(v)) || (left(v) && right(u)))) {
+            const [ul, ur] = left(u) ? [u, v] : [v, u];
+            const r: Rung = [loop.from[0] + ul, loop.to[1] - (ur - loop.end[1])];
+            const next = addRung(c.rungs, r, c.cl[c.cl.length - 1], c.cr[c.cr.length - 1]);
+            if (!next) return this.hooks.say('stitch.direction.cross');
+            c.rungs = next;
+            c.own = true;
+            this.selected = { col: k, i: next.findIndex((x) => x[0] === r[0] && x[1] === r[1]), end: -1 };
+            this.hooks.change(this.result(), true);
+            return;
+          }
+          return this.addSpan(k, loops, sec, [pointAt(loop.ring, loop.cum, u), pointAt(loop.ring, loop.cum, v)]);
+        }
+      }
+    }
     let crossed = false;
     for (const [k, c] of this.columns.entries()) {
       const r = rungFromLine(c.left, c.right, a, b);
@@ -336,8 +416,10 @@ export class RungTool implements RungView {
         crossed = true;
         continue;
       }
-      if (cut) c.cuts = next;
-      else {
+      if (cut) {
+        c.cuts = next;
+        // The free rungs stay where they are drawn; a section without any is plain again.
+      } else {
         c.rungs = next;
         c.own = true;
       }
@@ -348,10 +430,44 @@ export class RungTool implements RungView {
     this.hooks.say(crossed ? 'stitch.direction.cross' : 'stitch.direction.miss');
   }
 
+  /**
+   * A free rung across section `sec` of column k: the section's rungs become free ones (those that
+   * still fit with it), so the section finds its own rails. Says so when it does not fit.
+   */
+  private addSpan(k: number, loops: SectionLoop[], sec: number, f: [Pt, Pt]): void {
+    const c = this.columns[k];
+    const loop = loops[sec];
+    const mine = c.spans.filter((x) => sectionOfRung(loops, x) === sec);
+    const l = loop.end[0];
+    const r = loop.start[0] - loop.end[1];
+    const most = Math.max(SPAN_RATIO, Math.max(l, r) / Math.max(1e-6, Math.min(l, r)));
+    const fits = (set: [Pt, Pt][]) => {
+      const own = spanSection(loop, [], set);
+      return !!own && own.ratio <= most;
+    };
+    const tried = spanSection(loop, [], [...mine, f]);
+    if (!tried || tried.ratio > most) return this.hooks.say(tried || !mine.length ? 'stitch.direction.needCut' : 'stitch.direction.cross');
+    // The plain rungs in the section, as free rungs where they still fit.
+    const inside = (r: Rung) => r[0] > loop.from[0] && r[0] < loop.to[0] && r[1] > loop.from[1] && r[1] < loop.to[1];
+    const kept = [...mine, f];
+    const plain = c.rungs.filter(inside);
+    for (const r of plain) {
+      const g = this.ends(c, r);
+      if (fits([...kept, g])) kept.push(g);
+    }
+    c.rungs = c.rungs.filter((r) => !inside(r));
+    c.spacings = c.spacings.filter(([s]) => s <= loop.from[0] || s >= loop.to[0]);
+    c.spans = [...c.spans.filter((x) => !mine.includes(x)), ...kept];
+    c.own = true;
+    this.selected = { col: k, i: c.spans.indexOf(f), end: -1, span: true };
+    this.hooks.change(this.result(), true);
+  }
+
   /** Abandons a drag (a second finger started a pinch). */
   cancel(): void {
     this.drag = null;
     this.draft = null;
+    this.draftCut = false;
     this.sketch = null;
   }
 
@@ -376,6 +492,10 @@ export class RungTool implements RungView {
     } else if (s.cut) {
       const c = this.columns[s.col];
       c.cuts = c.cuts.filter((_, i) => i !== s.i);
+      this.hooks.change(this.result(), true);
+    } else if (s.span) {
+      const c = this.columns[s.col];
+      c.spans = c.spans.filter((_, i) => i !== s.i);
       this.hooks.change(this.result(), true);
     } else {
       const c = this.columns[s.col];
@@ -436,7 +556,7 @@ export class RungTool implements RungView {
   /** The spacing set at the selected rung (mm), or null when it keeps the column's. */
   get spacingHere(): number | null | undefined {
     const s = this.selected;
-    if (!s || s.cut || s.col < 0 || this.mode !== 'satin') return undefined;
+    if (!s || s.cut || s.span || s.col < 0 || this.mode !== 'satin') return undefined;
     const c = this.columns[s.col];
     const at = c.rungs[s.i]?.[0];
     if (at === undefined) return undefined;
@@ -446,7 +566,7 @@ export class RungTool implements RungView {
   /** Sets the spacing at the selected rung (null: as the column). */
   setSpacingHere(v: number | null): void {
     const s = this.selected;
-    if (!s || s.cut || s.col < 0) return;
+    if (!s || s.cut || s.span || s.col < 0) return;
     const c = this.columns[s.col];
     const at = c.rungs[s.i]?.[0];
     if (at === undefined) return;
@@ -463,6 +583,7 @@ export class RungTool implements RungView {
     for (const c of this.columns) {
       c.rungs = [];
       c.spacings = [];
+      c.spans = [];
       c.own = true;
     }
     this.selected = null;

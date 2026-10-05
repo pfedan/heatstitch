@@ -413,3 +413,125 @@ export function railsFromOutline(loop: Pt[], lines: [Pt, Pt][]): { left: Pt[]; r
   const tidy = tidyRungs(rungs, cumulative(left).pop()!, cumulative(right).pop()!);
   return { left, right, rungs: tidy };
 }
+
+/** A stretch of a closed outline: from distance u0 along it forward to u1 (may wrap round). */
+export type Arc = [number, number];
+
+/**
+ * A satin column for a closed outline (first point repeated at the end) cut across by rungs, each
+ * given by the two places it meets the outline (distances along it). As in railsFromOutline the
+ * rungs must cut the outline into a strip. Beyond the first and the last rung the column ends on
+ * one of `caps` lying there (the one that leaves the two rails most alike in length), or where
+ * none lies, in a point in the middle when the outline ends soon after the rung. This is how a
+ * satin section finds its own rails: a cut line it does not end on becomes part of a rail.
+ * `ratio` is how much longer the longer rail is; null when the rungs make no strip.
+ */
+export function stripOfLoop(ring: Pt[], chords: [number, number][], caps: Arc[]): { left: Pt[]; right: Pt[]; rungs: Rung[]; ratio: number } | null {
+  const n = chords.length;
+  if (!n || ring.length < 4) return null;
+  const cum = cumulative(ring);
+  const total = cum[cum.length - 1];
+  if (total <= 0) return null;
+  const fwd = (u0: number, u1: number) => (((u1 - u0) % total) + total) % total;
+  const ends: { u: number; rung: number }[] = [];
+  chords.forEach(([a, b], k) => ends.push({ u: fwd(0, a), rung: k }, { u: fwd(0, b), rung: k }));
+  ends.sort((x, y) => x.u - y.u);
+  const m = ends.length;
+  let start = -1;
+  for (let r = 0; r < m && start < 0; r++) {
+    let ok = true;
+    for (let i = 0; i < n && ok; i++) ok = ends[(r + i) % m].rung === ends[(r + m - 1 - i) % m].rung && ends[(r + i) % m] !== ends[(r + m - 1 - i) % m];
+    if (ok) start = r;
+  }
+  if (start < 0) return null;
+  const at = (i: number) => ends[(start + i) % m].u;
+  // The caps that fit beyond a rung: in the stretch of outline from u0 on for len mm.
+  const fitting = (u0: number, len: number): Arc[] => {
+    const out = caps.filter(([c0, c1]) => {
+      let x0 = fwd(u0, c0);
+      if (x0 > total - 1e-6) x0 = 0;
+      const x1 = x0 + fwd(c0, c1);
+      return x1 <= len + 1e-6;
+    });
+    if (out.length) return out;
+    const a = pointAt(ring, cum, u0);
+    const b = pointAt(ring, cum, (u0 + len) % total);
+    if (len > 4 * dist(a, b) + 2) return [];
+    // The end is the stretch farthest beyond the rung: a square end its edge, a round or pointed one its tip.
+    const n = Math.max(2, Math.ceil(len / 0.05));
+    const t = norm(sub(b, a));
+    const beyond = (u: number) => {
+      const q = sub(pointAt(ring, cum, (u0 + u) % total), a);
+      return Math.abs(q[0] * t[1] - q[1] * t[0]);
+    };
+    const d = Array.from({ length: n + 1 }, (_, k) => beyond((len * k) / n));
+    const most = Math.max(...d);
+    const near = most - Math.max(0.1, most * 0.05);
+    const first = d.findIndex((x) => x >= near);
+    const last = d.length - 1 - [...d].reverse().findIndex((x) => x >= near);
+    return [[(u0 + (len * first) / n) % total, (u0 + (len * last) / n) % total]];
+  };
+  const capsA = fitting(at(m - 1), fwd(at(m - 1), at(0)));
+  const capsB = fitting(at(n - 1), fwd(at(n - 1), at(n)));
+  let best: { ca: Arc; cb: Arc; l: number; r: number; ratio: number } | null = null;
+  for (const ca of capsA) {
+    for (const cb of capsB) {
+      const l = fwd(ca[1], cb[0]);
+      const r = fwd(cb[1], ca[0]);
+      if (l <= 1e-6 || r <= 1e-6) continue;
+      const ratio = Math.max(l, r) / Math.min(l, r);
+      if (!best || ratio < best.ratio) best = { ca, cb, l, r, ratio };
+    }
+  }
+  if (!best) return null;
+  const walk = (u0: number, len: number): Pt[] => {
+    const inner: { u: number; p: Pt }[] = [];
+    for (let i = 0; i + 1 < ring.length; i++) {
+      const u = fwd(u0, cum[i]);
+      if (u > 1e-6 && u < len - 1e-6) inner.push({ u, p: ring[i] });
+    }
+    inner.sort((x, y) => x.u - y.u);
+    const out = [pointAt(ring, cum, u0), ...inner.map((x) => x.p), pointAt(ring, cum, (u0 + len) % total)];
+    return out.filter((p, i) => !i || dist(p, out[i - 1]) > 1e-6);
+  };
+  const { ca, cb } = best;
+  const left = walk(ca[1], best.l);
+  const right = walk(cb[1], best.r).reverse();
+  if (left.length < 2 || right.length < 2) return null;
+  const rungs: Rung[] = [];
+  for (let i = 0; i < n; i++) rungs.push([fwd(ca[1], at(i)), fwd(at(m - 1 - i), ca[0])]);
+  return { left, right, rungs: tidyRungs(rungs, cumulative(left).pop()!, cumulative(right).pop()!), ratio: best.ratio };
+}
+
+/** Whether q lies inside the closed outline. */
+export function inside(ring: Pt[], q: Pt): boolean {
+  let c = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i];
+    const [xj, yj] = ring[j];
+    if (yi > q[1] !== yj > q[1] && q[0] < ((xj - xi) * (q[1] - yi)) / (yj - yi) + xi) c = !c;
+  }
+  return c;
+}
+
+/**
+ * Where a line drawn inside a closed outline meets it: going out from the line's middle both ways,
+ * the first crossing each side (distances along the outline). Null when the middle is outside.
+ */
+export function chordOf(ring: Pt[], a: Pt, b: Pt): [number, number] | null {
+  const mid: Pt = lerp(a, b, 0.5);
+  if (!inside(ring, mid)) return null;
+  const d = sub(b, a);
+  const len = Math.hypot(d[0], d[1]);
+  if (len < 1e-9) return null;
+  const ext = Math.max(0.25, 10 / len);
+  const xs = crossings(ring, cumulative(ring), [a[0] - d[0] * ext, a[1] - d[1] * ext], [b[0] + d[0] * ext, b[1] + d[1] * ext]);
+  // t along the extended line; the middle of the drawn line is at 0.5.
+  let lo: { s: number; t: number } | null = null;
+  let hi: { s: number; t: number } | null = null;
+  for (const x of xs) {
+    if (x.t < 0.5 && (!lo || x.t > lo.t)) lo = x;
+    if (x.t > 0.5 && (!hi || x.t < hi.t)) hi = x;
+  }
+  return lo && hi ? [lo.s, hi.s] : null;
+}
