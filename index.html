@@ -119,6 +119,17 @@
           </select>
           <ul id="file-list" class="file-list"></ul>
           <div class="file-actions" id="file-actions" hidden>
+            <label class="field hoop-field">
+              <span class="label" data-i18n="hoop.title" data-i18n-title="hoop.hint"></span>
+              <select id="hoop"></select>
+            </label>
+            <div class="hoop-custom" id="hoop-custom" hidden>
+              <input type="number" id="hoop-w" min="10" max="1000" step="1" data-i18n-aria="hoop.width" />
+              <span>×</span>
+              <input type="number" id="hoop-h" min="10" max="1000" step="1" data-i18n-aria="hoop.height" />
+              <span>mm</span>
+            </div>
+            <p class="hoop-note" id="hoop-note" hidden></p>
             <span class="label save-label" data-i18n-title="save.note"><span data-i18n="save.title"></span> <span class="info" aria-hidden="true">ⓘ</span></span>
             <select class="save-format" id="save-format" data-i18n-aria="save.format">
               <option value="pes" data-i18n="save.fmt.pes"></option>

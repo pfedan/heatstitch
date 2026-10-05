@@ -7,6 +7,7 @@ import type { Lang } from './i18n';
 import { DEFAULT_PROFILE, normalizeProfile, threadWidthMm, type Profile } from './validation/profiles';
 import { ALL_CHECKS, normalizeChecks, type Checks } from './validation/validate';
 import { isOutputFormat, type OutputFormat } from './writers';
+import { normalizeHoop, type Hoop } from './model/hoop';
 
 export interface PanelWidths {
   side: number | null;
@@ -94,6 +95,8 @@ export interface Settings {
   checks: Checks;
   /** Automatic correction options (the region is chosen per run). */
   correction: Omit<CorrectionOptions, 'region'>;
+  /** Sewing field of the hoop; null shows none and checks nothing. Part of the design's material. */
+  hoop: Hoop | null;
   /** Embroidery file format last chosen for saving; null follows the format of the open file. */
   saveFormat: OutputFormat | null;
   scales: Record<Metric, Scale>;
@@ -133,6 +136,7 @@ export const DEFAULTS: Settings = {
   checks: { ...ALL_CHECKS },
   correction: { ...DEFAULT_CORRECTION },
   saveFormat: null,
+  hoop: null,
   scales: {
     thread: { max: 12 },
     penetrations: { max: 4 },
@@ -181,6 +185,7 @@ export function loadSettings(): Settings {
       checks: normalizeChecks(s.checks),
       correction: normalizeCorrection(s.correction),
       saveFormat: isOutputFormat(s.saveFormat) ? s.saveFormat : null,
+      hoop: normalizeHoop(s.hoop),
       image: normalizeImage(s.image),
     };
   } catch {
@@ -231,3 +236,47 @@ export function saveSettings(s: Settings): void {
     // Storage unavailable (private mode); settings stay per session.
   }
 }
+
+/**
+ * What belongs to one design rather than to the view: fabric and thread (with the thread width they
+ * set), the hoop, the fabric color behind it and the checks. Each open design keeps its own; the
+ * settings hold the active design's.
+ */
+export interface Material {
+  profile: Profile;
+  checks: Checks;
+  hoop: Hoop | null;
+  background: string | null;
+  threadMm: number;
+}
+
+export function materialOf(s: Settings): Material {
+  return structuredClone({ profile: s.profile, checks: s.checks, hoop: s.hoop, background: s.background, threadMm: s.threadMm });
+}
+
+/** Makes `m` the active material. */
+export function applyMaterial(s: Settings, m: Material): void {
+  const c = structuredClone(m);
+  s.profile = c.profile;
+  s.checks = c.checks;
+  s.hoop = c.hoop;
+  s.background = c.background;
+  s.threadMm = c.threadMm;
+}
+
+export const sameMaterial = (a: Material, b: Material) => JSON.stringify(a) === JSON.stringify(b);
+
+/** A valid material from stored data; missing parts come from `fallback`. */
+export function normalizeMaterial(v: unknown, fallback: Material): Material {
+  if (!v || typeof v !== 'object') return structuredClone(fallback);
+  const m = v as Partial<Material>;
+  const profile = m.profile ? normalizeProfile(m.profile) : fallback.profile;
+  return structuredClone({
+    profile,
+    checks: m.checks ? normalizeChecks(m.checks) : fallback.checks,
+    hoop: 'hoop' in m ? normalizeHoop(m.hoop) : fallback.hoop,
+    background: 'background' in m ? hexColor(m.background) : fallback.background,
+    threadMm: typeof m.threadMm === 'number' && m.threadMm > 0 ? m.threadMm : threadWidthMm(profile),
+  });
+}
+

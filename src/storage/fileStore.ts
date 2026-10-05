@@ -33,6 +33,8 @@ export interface StoredFile {
   objects?: StoredObject[];
   /** Shapes of the working copy that are not sewn. */
   aside?: StoredAside[];
+  /** Fabric, thread, hoop, fabric color and checks of this design (unchecked, normalize on reading). */
+  material?: unknown;
 }
 
 const DB_NAME = STORAGE_NS;
@@ -114,6 +116,13 @@ export function saveAside(key: number, aside: StoredAside[]): Promise<void> {
   return queue(key, (rec) => {
     if (aside.length) rec.aside = aside;
     else delete rec.aside;
+  });
+}
+
+/** Stores the material of file `key`. */
+export function saveMaterial(key: number, material: unknown): Promise<void> {
+  return queue(key, (rec) => {
+    rec.material = material;
   });
 }
 

@@ -72,6 +72,10 @@ sends the picture anywhere.
 - **Objects** in Sequence mode: order optimization without changing what lies on top, drag to
   reorder, per-object fill patterns, density and satin settings with a live preview
 - PNG export of the current view including legend
+- **Hoop:** common sewing fields or an own size, drawn around the design with a note when it does not
+  fit (by how much, a larger hoop to pick, or turn it at the machine)
+- **Material per design:** fabric, thread, fabric color, checks and hoop belong to each file and travel
+  in project files; a new file takes over the last ones used
 - **Correction (beta):** automatic, following digitizing practice, and by hand, with undo/redo and an
   original/corrected compare view, see below
 - **Save as PES, DST, JEF, VP3, EXP or PEC** (own writers, no pyembroidery), or as a **heatstitch
@@ -249,8 +253,9 @@ both versions are shown side by side.
 *Save* writes the current pattern in the chosen format (`src/writers/`); the choice is remembered,
 until then the open file's format is offered. The name field suggests the file's name, after a change
 `name-corrected`; the typed name also becomes the design name in the file header. A project file is
-named by the day, e.g. `2026-10-05-heatstitch-project.heatstitch`. Only stitches and colors are saved: PE-Design objects and hoop settings of the
-original are lost.
+named by the day, e.g. `2026-10-05-heatstitch-project.heatstitch`. Only stitches and colors are saved: PE-Design objects of the original are lost.
+With a hoop chosen (`src/model/hoop.ts`), PES writes the 100 × 100 mm hoop flag for fields up to that
+size, else 130 × 180 (all PES version 1 knows), and JEF the chosen Janome hoop code and edge distances.
 
 - **DST:** a trim is written as a sequence of 3 jumps, but only if the following jump sequence is not
   already long enough. That way trims don't grow on repeated saves (unlike pyembroidery). Untrimmed

@@ -1,3 +1,4 @@
+import type { Hoop } from '../model/hoop';
 import { COLOR_CHANGE, END, JUMP, STITCH, TRIM, type Pattern } from '../model/pattern';
 import { PEC_STITCH_OFFSET } from '../parsers/pes';
 import { pecIndexOf } from '../parsers/pecPalette';
@@ -111,7 +112,7 @@ export function writePec(out: ByteWriter, p: Pattern): void {
 }
 
 /** pyembroidery's "CEmbOne" / "CSewSeg" PES v1 objects, which PE-Design and similar software read. */
-function writeEmbObjects(out: ByteWriter, p: Pattern): void {
+function writeEmbObjects(out: ByteWriter, p: Pattern, field: Hoop): void {
   const b = extents(p);
   const width = b.maxX - b.minX;
   const height = b.maxY - b.minY;
@@ -122,9 +123,9 @@ function writeEmbObjects(out: ByteWriter, p: Pattern): void {
 
   string16('CEmbOne');
   out.fill(0, 16); // two empty rectangles
-  // Placement in a 130 x 180 mm hoop, as written by pyembroidery.
-  const hoopW = 1300;
-  const hoopH = 1800;
+  // Placement in the middle of the hoop the header names, with pyembroidery's offsets.
+  const hoopW = field.w * 10;
+  const hoopH = field.h * 10;
   for (const v of [1, 0, 0, 1, 350 + hoopW / 2 - width / 2, 100 + height + hoopH / 2 - height / 2]) out.f32(v);
   out.u16(1);
   out.u16(0);
@@ -194,19 +195,23 @@ function writeEmbObjects(out: ByteWriter, p: Pattern): void {
  * software) followed by the PEC block (what embroidery machines read). Thread colors are PEC
  * palette slots: a color read from a PES file keeps its slot, others get the nearest one.
  */
-export function writePes(p: Pattern): Uint8Array {
+export function writePes(p: Pattern, hoop: Hoop | null = null): Uint8Array {
+  // Version 1 knows two hoops: 100 x 100 and 130 x 180 mm. Larger fields are written as 130 x 180;
+  // machines read the PEC part and center the design themselves.
+  const small = !!hoop && hoop.w <= 100 && hoop.h <= 100;
+  const field = small ? { w: 100, h: 100 } : { w: 130, h: 180 };
   const out = new ByteWriter();
   out.ascii('#PES0001');
   const pecAt = out.length;
   out.u32(0);
   const hasStitches = p.cmd.some((c) => c === STITCH);
   out.u16(1); // scale to fit
-  out.u16(1); // 130 x 180 mm hoop
+  out.u16(small ? 0 : 1); // hoop: 0 = 100 x 100 mm, 1 = 130 x 180 mm
   out.u16(hasStitches ? 1 : 0);
   if (hasStitches) {
     out.u16(0xffff);
     out.u16(0x0000);
-    writeEmbObjects(out, p);
+    writeEmbObjects(out, p, field);
   } else {
     out.u16(0);
     out.u16(0);
