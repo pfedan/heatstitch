@@ -69,6 +69,31 @@ export type StitchKind = typeof RUNNING | typeof SATIN | typeof FILL | typeof TI
  * tie-in and tie-off stitches, and running stitch for everything else (outlines, travel, underlay).
  */
 export function stitchKinds(p: Pattern): Uint8Array {
+  // Worked out once per version: with many objects, one edit asks for it again and again.
+  const key = recordsKey(p);
+  const known = kindsOf.get(p);
+  if (known?.key === key) return known.kinds.slice();
+  const kinds = workOutKinds(p);
+  kindsOf.set(p, { key, kinds });
+  return kinds.slice();
+}
+
+/** Stitch kinds per pattern, with the key of the records they were worked out from. */
+const kindsOf = new WeakMap<Pattern, { key: string; kinds: Uint8Array }>();
+
+/** A key for the records of `p` (FNV-1a over commands and coordinates), so records changed in place are noticed. */
+function recordsKey(p: Pattern): string {
+  let h = 0x811c9dc5;
+  const n = p.cmd.length;
+  for (let i = 0; i < n; i++) {
+    h = Math.imul(h ^ p.cmd[i], 0x01000193);
+    h = Math.imul(h ^ p.x[i], 0x01000193);
+    h = Math.imul(h ^ p.y[i], 0x01000193);
+  }
+  return `${n}:${h >>> 0}`;
+}
+
+function workOutKinds(p: Pattern): Uint8Array {
   const n = p.cmd.length;
   const out = new Uint8Array(n);
   const satin = satinMask(p);
