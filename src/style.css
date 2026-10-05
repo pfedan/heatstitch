@@ -3634,3 +3634,26 @@ button.mini-sw.thread-sw {
 .hoop-over {
   color: #dc2626;
 }
+
+/* Objects only guessed from their stitches: a quiet word in the row, or one line for the whole list. */
+.layer .layer-guessed {
+  flex: none;
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 10px;
+  font-style: italic;
+}
+
+.layer .layer-guessed + .layer-meta {
+  margin-left: 8px;
+}
+
+.layers-guessed {
+  font-size: 11px;
+  padding: 6px 8px;
+}
+
+.layer.object .layer-guessed + .layer-meta {
+  min-width: 5ch;
+  text-align: right;
+}

@@ -48,7 +48,12 @@ export interface LayerState {
   format: FileFormat;
   /** Names of objects that have one of their own (letterings). */
   names?: ReadonlyMap<number, string>;
+  /** Objects whose shape and stitch type are only guessed from their stitches. */
+  guessed?: ReadonlySet<number>;
 }
+
+/** Every object of the design is only guessed from its stitches. */
+const allGuessed = (st: LayerState) => !!st.objects.length && st.guessed?.size === st.objects.length;
 
 /** How long a finger rests on a row to open its menu (ms). */
 export const LONG_PRESS_MS = 500;
@@ -156,7 +161,7 @@ export class LayersPanel {
       }
     }
     if (show) requestAnimationFrame(() => this.list.querySelector<HTMLElement>(`[data-object="${show[0]}"]`)?.scrollIntoView({ block: 'nearest' }));
-    const key = [st.blocks, st.objects, st.selected, st.hidden, st.focus, st.current, lang, st.original, st.names, st.blank];
+    const key = [st.blocks, st.objects, st.selected, st.hidden, st.focus, st.current, lang, st.original, st.names, st.blank, st.guessed];
     if (key.every((k, i) => k === this.key[i])) return;
     this.key = key;
     this.st = st;
@@ -172,6 +177,8 @@ export class LayersPanel {
       rows.push(this.colorRow(b, objs, st));
       if (this.open.has(b.index)) for (const o of objs) rows.push(this.objectRow(o, objs, st));
     }
+    // A file from elsewhere: all of it is guessed, said once instead of on every row.
+    if (allGuessed(st)) rows.push(Object.assign(document.createElement('li'), { className: 'muted layers-guessed', textContent: t('layers.allGuessed'), title: t('object.guessedHint') }));
     this.list.replaceChildren(...rows);
   }
 
@@ -276,7 +283,13 @@ export class LayersPanel {
     meta.className = 'layer-meta';
     meta.textContent = formatNumber(o.stitches);
     li.title = t('object.rowHint');
-    li.append(icon, name, meta);
+    li.append(icon, name);
+    // Made here or guessed: only marked where both are in one design.
+    if (st.guessed?.has(o.index) && !allGuessed(st)) {
+      const mark = Object.assign(document.createElement('span'), { className: 'layer-guessed', textContent: t('object.guessed'), title: t('object.guessedHint') });
+      li.append(mark);
+    }
+    li.append(meta);
     // After a long press the finger lifted is no click (it would leave only this object selected).
     let held = false;
     li.addEventListener('click', (e) => {
