@@ -65,7 +65,7 @@ export function cutKey(r: Region | null): string {
 }
 
 /** Takes over new stitches for one object as the edit functions do: one object, remembering its memory. */
-function takeOver(r: RestitchResult): Pattern | null {
+export function takeOver(r: RestitchResult): Pattern | null {
   if (!r.starts.length) return null;
   r.starts.forEach((a, k) => rememberObjects(r.pattern, [a], r.ends[k]));
   const fresh = sewObjects(r.pattern);

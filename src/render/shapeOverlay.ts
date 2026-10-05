@@ -1,6 +1,6 @@
 import { formatNumber } from '../i18n';
 import type { Pt } from '../digitize/skeleton';
-import { segment, segments } from '../shape/path';
+import { segment, segments, type Form } from '../shape/path';
 import { corners, TURN_PX, type FrameView } from '../ui/frameTool';
 import type { ShapePick, ShapeView } from '../ui/shapeTool';
 import type { Viewport } from './viewport';
@@ -146,6 +146,72 @@ export function drawFrame(ctx: CanvasRenderingContext2D, vp: Viewport, f: FrameV
     }
     const xs = pts.map((q) => q[0]);
     const ys = pts.map((q) => q[1]);
+    const lx = (Math.min(...xs) + Math.max(...xs)) / 2;
+    const ly = Math.max(...ys) + 18;
+    ctx.font = '600 12px system-ui, sans-serif';
+    const tw = ctx.measureText(text).width;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.72)';
+    ctx.beginPath();
+    ctx.roundRect(lx - tw / 2 - 7, ly - 11, tw + 14, 22, 6);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, lx, ly);
+  }
+  ctx.restore();
+}
+
+/**
+ * A shape being drawn: its curves light over dark, the pen's nodes, the first one in the accent
+ * color when a click there would close the area, and the size of a rectangle or ellipse.
+ */
+export function drawDrawing(ctx: CanvasRenderingContext2D, vp: Viewport, form: Form, o: { nodes: number; closing: boolean; size: [number, number] | null }): void {
+  const S = (p: Pt) => vp.toScreen(p[0], p[1]);
+  ctx.save();
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  for (const p of form.paths) {
+    if (!p.nodes.length) continue;
+    ctx.moveTo(...S(p.nodes[0].p));
+    for (let k = 0; k < segments(p); k++) {
+      const [, b, a, e] = segment(p, k);
+      ctx.bezierCurveTo(...S(b), ...S(a), ...S(e));
+    }
+    if (p.closed) ctx.closePath();
+  }
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
+  ctx.lineWidth = 3.5;
+  ctx.stroke();
+  ctx.strokeStyle = ACCENT;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  if (o.nodes) {
+    // The pen's nodes (not the end that follows the pointer).
+    (form.paths[0]?.nodes ?? []).slice(0, o.nodes).forEach((n, i) => {
+      const [x, y] = S(n.p);
+      const on = i === 0 && o.closing;
+      const r = on ? 6 : 4;
+      ctx.beginPath();
+      if (n.smooth) ctx.arc(x, y, r, 0, Math.PI * 2);
+      else ctx.rect(x - r, y - r, 2 * r, 2 * r);
+      ctx.fillStyle = on ? ACCENT : '#ffffff';
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
+      ctx.lineWidth = 1.5;
+      ctx.fill();
+      ctx.stroke();
+    });
+  }
+  if (o.size) {
+    const xs: number[] = [];
+    const ys: number[] = [];
+    for (const p of form.paths) for (const n of p.nodes) {
+      const [x, y] = S(n.p);
+      xs.push(x);
+      ys.push(y);
+    }
+    const text = `${formatNumber(o.size[0], 1)} × ${formatNumber(o.size[1], 1)} mm`;
     const lx = (Math.min(...xs) + Math.max(...xs)) / 2;
     const ly = Math.max(...ys) + 18;
     ctx.font = '600 12px system-ui, sans-serif';

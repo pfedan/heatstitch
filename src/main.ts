@@ -65,12 +65,19 @@ import { railsFromOutline } from './digitize/rungs';
 import type { Pt } from './digitize/skeleton';
 import { RungTool } from './ui/rungTool';
 import { ShapeTool } from './ui/shapeTool';
+import { DrawTool, type DrawKind } from './ui/drawTool';
+import { nearestThread } from './image/prepare';
+import { rgbToLab } from './image/color';
+import { drawDrawing } from './render/shapeOverlay';
+import { addShape, type NewShape } from './model/addShape';
+import { deleteObjects, duplicateObject, mirrorMatrix, subtractTop, unionForm } from './model/shapeOps';
+import { stitchesBefore } from './model/transform';
 import { FrameTool } from './ui/frameTool';
 import { formOf, reshapeFill, scaleBlocked, transformSewObject } from './model/reshape';
-import { isCovered, overlapsIn, refreshKnockouts, setKnockout } from './model/knockout';
+import { isCovered, overlapsIn, refreshKnockouts, setKnockout, wholeArea } from './model/knockout';
 import { transformObject } from './model/transform';
 import { translation, type Form, type Mat } from './shape/path';
-import { digitizeDefaults, isStroke, SATIN_MAX, type Digitized } from './digitize/digitize';
+import { digitizeDefaults, digitizeShapes, isStroke, SATIN_MAX, type Digitized } from './digitize/digitize';
 import { recommendedSpacing } from './validation/profiles';
 import { numberInColor, overlaps, rememberObjects, sewObjects, splitObject, type SewObject } from './model/objects';
 import { conflicts, moveStats, optimizePlan, reorder, violations, weigh } from './model/order';
@@ -135,7 +142,7 @@ const files = new FileList(
     correctMessage = null;
     editor.reset();
     resetFlow();
-    if (f?.pattern) fitView(f);
+    if (f?.pattern && !keepView) fitView(f);
     recompute();
   },
   (p) => validator.measure(p),
@@ -566,14 +573,18 @@ function mergeObjects(): void {
   const merged = nq.objectAt[recordOfStitch(nq.numbers, starts[k] + 1)];
   const fills = objs.every((o) => o.kind === 'fill');
   const fill = fills ? (remembered(p, objs[0])?.fill ?? measureFill(p, analyze(p, objs[0], q.kinds))) : null;
-  const area = fills ? unionRegion(objs.flatMap((o) => remembered(p, o)?.region ?? analyze(p, o, q.kinds).fill ?? [])) : null;
+  // Fills with curves become one outline (editable as a shape), the others one area.
+  const forms = fills ? objs.map((o) => remembered(p, o)?.form) : [];
+  const form = forms.length && forms.every(Boolean) ? unionForm(forms as Form[]) : null;
+  const area = form ? wholeArea(form) : fills ? unionRegion(objs.flatMap((o) => remembered(p, o)?.region ?? analyze(p, o, q.kinds).fill ?? [])) : null;
   if (merged >= 0 && fill && area) {
-    remember(target, nq.objects[merged], { region: area, fill });
+    remember(target, nq.objects[merged], form ? { region: area, fill, form } : { region: area, fill });
     const r = restitch(target, nq.objects, [merged], { kind: 'fill', s: fill }, nq.kinds, settings.trimMm);
     if (r.starts.length) {
       selectedObjects = new Set([merged]);
       applyRestitched(r, 'stitch.failed', true);
-      done(sel.length);
+      if (form) layers.say(t('object.joined', { n: sel.length }));
+      else done(sel.length);
       return;
     }
   }
@@ -642,6 +653,10 @@ function splitSelected(): void {
 
 const objectPanel = new ObjectPanel({
   merge: () => mergeObjects(),
+  duplicate: () => duplicateSelected(),
+  mirror: (axis) => mirrorSelected(axis),
+  subtract: () => subtractSelected(),
+  remove: () => deleteSelected(),
   split: splitSelected,
   step: (dir) => {
     const p = files.active?.pattern;
@@ -1146,6 +1161,124 @@ function followKnockouts(): void {
   redraw();
 }
 
+// Objects as shapes: delete, duplicate, mirror, cut out ------------------------
+
+/** Takes over a pattern made from the objects, selecting `select` in it. */
+function takeShapes(next: Pattern, select: number[]): void {
+  const f = files.active;
+  if (!f) return;
+  applyEdit(next);
+  files.setObjects(f, rememberedIn(next, seq(next).objects));
+  selectedObjects = new Set(select);
+  selectionKey++;
+  followKnockouts();
+  redraw();
+}
+
+function deleteSelected(): void {
+  const p = files.active?.pattern;
+  const sel = frameObjects();
+  if (!p || !sel.length) return;
+  const next = deleteObjects(p, sel, settings.trimMm);
+  if (!next) return layers.say(t('object.deleteLast'), true);
+  takeShapes(next, []);
+  layers.say(sel.length === 1 ? t('object.deleted.one') : t('object.deleted', { n: sel.length }));
+}
+
+function duplicateSelected(): void {
+  const p = files.active?.pattern;
+  const sel = frameObjects();
+  if (!p || sel.length !== 1) return;
+  const r = duplicateObject(p, sel[0], settings.trimMm);
+  if (!r) return layers.say(t('frame.failed'), true);
+  takeShapes(r.pattern, [r.index]);
+  layers.say(t('object.duplicated'));
+}
+
+function mirrorSelected(axis: 'x' | 'y'): void {
+  const p = files.active?.pattern;
+  const sel = frameObjects();
+  if (!p || !sel.length) return;
+  const objs = sel.map((o) => seq(p).objects[o]);
+  const box = {
+    minX: Math.min(...objs.map((o) => o.minX)) / 10,
+    minY: Math.min(...objs.map((o) => o.minY)) / 10,
+    maxX: Math.max(...objs.map((o) => o.maxX)) / 10,
+    maxY: Math.max(...objs.map((o) => o.maxY)) / 10,
+  };
+  commitTransform(mirrorMatrix(axis, box));
+  layers.say(t('object.mirrored'));
+}
+
+function subtractSelected(): void {
+  const p = files.active?.pattern;
+  const sel = frameObjects();
+  if (!p || sel.length < 2) return;
+  const r = subtractTop(p, sel, settings.trimMm);
+  if (!r) return layers.say(t('object.subtract.nothing'), true);
+  takeShapes(r.pattern, r.cut);
+  const q = seq(r.pattern);
+  const list = r.cut.map((o) => (q.objects[o] ? objectName(q, o) : '')).filter(Boolean).join(', ');
+  layers.say([list ? t('object.subtracted', { list }) : '', r.covered ? t('object.subtracted.covered') : ''].filter(Boolean).join(' '));
+}
+
+// Drawing new shapes ---------------------------------------------------------
+
+/** A thread for the first shape of a new design: a Brother orange, clear on dark and light fabric. */
+const FIRST_THREAD: ThreadColor = nearestThread(rgbToLab(240, 140, 40)).thread;
+/** The next file opened keeps the view (a design started by drawing stays where it was drawn). */
+let keepView = false;
+
+const drawTool = new DrawTool({ done: (s) => void drawn(s), redraw });
+const drawButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-draw]')];
+
+/** Picks a drawing tool, or none. */
+function setDrawing(kind: DrawKind | null): void {
+  if (kind && settings.mode !== 'flow') return;
+  if (kind) {
+    if (editor.active) setEditing(false);
+    if (shapeTool.active) closeShape();
+    if (rungTool.active) closeRungs();
+  }
+  drawTool.start(kind);
+  for (const b of drawButtons) b.setAttribute('aria-pressed', String(b.dataset.draw === kind));
+  stage.classList.toggle('drawing', !!kind);
+  updateLevel();
+  redraw();
+}
+drawButtons.forEach((b) => b.addEventListener('click', () => setDrawing(drawTool.kind === b.dataset.draw ? null : (b.dataset.draw as DrawKind))));
+
+/** A shape is drawn: sewn in the thread of the selected object right after it, else after the last one. */
+async function drawn(shape: NewShape): Promise<void> {
+  const f = files.active;
+  const p = f?.pattern ?? null;
+  const options = { ...digitizeDefaults(settings.profile), trimMm: settings.trimMm };
+  if (!f || !p) {
+    // Nothing open yet: the shape starts a new design.
+    const d = digitizeShapes([{ color: 0, ...shape }], [FIRST_THREAD], options, { w: 0, h: 0 }, false, 'shape');
+    if (!d.objects.length) return layers.say(t('draw.failed'), true);
+    keepView = true;
+    await addDigitized(d, t('draw.newName'));
+    keepView = false;
+    selectObjects([0], false);
+    return;
+  }
+  const q = seq(p);
+  const sel = [...selectedObjects].sort((a, b) => a - b);
+  const after = sel.length ? sel[sel.length - 1] : q.objects.length ? q.objects.length - 1 : null;
+  const color = after !== null ? q.objects[after].color : FIRST_THREAD;
+  const r = addShape(p, shape, color, after, options);
+  if (!r) return layers.say(t('draw.failed'), true);
+  applyEdit(r.pattern);
+  files.setObjects(f, rememberedIn(r.pattern, seq(r.pattern).objects));
+  const nq = seq(r.pattern);
+  const mine = nq.objects.findIndex((o) => stitchesBefore(r.pattern, o.first) === r.start);
+  followKnockouts();
+  if (mine >= 0) selectObjects([mine], false);
+  layers.say(t(shape.kind === 'fill' ? 'draw.done.fill' : 'draw.done.line'));
+  redraw();
+}
+
 // The card that offers leaving out what lies on top, when shapes overlap (never done unasked).
 let overlapCache: { p: Pattern; list: number[] } | null = null;
 /** Files whose overlaps the user chose to keep as they are. */
@@ -1473,6 +1606,7 @@ function setMode(mode: Mode): void {
     hoverZone = null;
   }
   if (mode !== 'flow') {
+    if (drawTool.active) setDrawing(null);
     player.pause();
     if (!player.complete) player.set(Number.MAX_SAFE_INTEGER);
   }
@@ -1505,6 +1639,7 @@ function objectInfo(p: Pattern, q: Sequence) {
     frame: frameTool.active ? { canScale: frameTool.canScale } : null,
     mergeBlocked: selected.length > 1 ? mergeBlocked(selected.map((o) => q.objects[o])) : null,
     reversible: selected.some((o) => reversible(q.objects[o])),
+    subtractable: selected.length > 1 && selected.every((o) => q.objects[o].kind === 'fill'),
   };
 }
 
@@ -1526,6 +1661,8 @@ function redraw(): void {
     syncShape();
     syncFrame();
     drawScene(ctx, stageW, stageH, scene(), stageBg());
+    if (drawTool.preview && settings.mode === 'flow')
+      drawDrawing(ctx, vp, drawTool.preview, { nodes: drawTool.kind === 'pen' ? drawTool.count : 0, closing: drawTool.closing, size: drawTool.size });
     if (showCompare()) {
       const x = Math.round(split * stageW);
       ctx.save();
@@ -1537,7 +1674,7 @@ function redraw(): void {
       drawDivider(ctx, x, stageH, t('compare.original'), t('compare.current'));
     }
     const active = files.active;
-    empty.hidden = !!active?.pattern;
+    empty.hidden = !!active?.pattern || drawTool.active;
     exportBtn.disabled = !active?.pattern;
     $('file-actions').hidden = !active?.pattern;
     if (settings.mode === 'density') drawLegendCanvas();
@@ -1805,7 +1942,7 @@ function updateLevel(): void {
   }
   const mode = settings.mode;
   $('canvas-hint').textContent = t(
-    mode === 'image' ? 'canvas.hint.image' : on ? (flow ? 'canvas.hint.flowEdit' : 'canvas.hint.edit') : shaping ? 'canvas.hint.shape' : flow ? 'canvas.hint.flow' : 'canvas.hint',
+    mode === 'image' ? 'canvas.hint.image' : drawTool.kind && flow ? `canvas.hint.draw.${drawTool.kind}` : on ? (flow ? 'canvas.hint.flowEdit' : 'canvas.hint.edit') : shaping ? 'canvas.hint.shape' : flow ? 'canvas.hint.flow' : 'canvas.hint',
   );
 }
 
@@ -2196,6 +2333,9 @@ launchQueue?.setConsumer(async (params) => {
   if (params.files.length) void openFiles(await Promise.all(params.files.map((h) => h.getFile())));
 });
 
+/** Keys for the drawing tools (as in common drawing programs, where free of other uses here). */
+const DRAW_KEYS: Record<string, DrawKind> = { m: 'rect', o: 'ellipse', b: 'pen', p: 'free' };
+
 window.addEventListener('keydown', (e) => {
   if ((e.target as HTMLElement).closest('input, select, textarea')) return;
   const mod = e.ctrlKey || e.metaKey;
@@ -2204,12 +2344,38 @@ window.addEventListener('keydown', (e) => {
     history(e.key === 'y' || e.shiftKey ? 'redo' : 'undo');
     return;
   }
+  if (mod && !e.altKey && (e.key === 'd' || e.key === 'D') && settings.mode === 'flow' && frameObjects().length === 1) {
+    e.preventDefault();
+    duplicateSelected();
+    return;
+  }
   if (mod && e.key === 'a' && editor.active) {
     e.preventDefault();
     editor.selectAll();
     return;
   }
   if (mod || e.altKey) return;
+  if (drawTool.active && settings.mode === 'flow') {
+    if (e.key === 'Escape') {
+      if (drawTool.busy) {
+        drawTool.cancel();
+        redraw();
+      } else setDrawing(null);
+      return;
+    }
+    if (e.key === 'Enter' && drawTool.busy) {
+      e.preventDefault();
+      return drawTool.finish(false);
+    }
+    if ((e.key === 'Delete' || e.key === 'Backspace') && drawTool.removeLast()) {
+      e.preventDefault();
+      return;
+    }
+  }
+  if (settings.mode === 'flow' && !e.shiftKey && e.key in DRAW_KEYS) {
+    const kind = DRAW_KEYS[e.key];
+    return setDrawing(drawTool.kind === kind ? null : kind);
+  }
   if (shapeTool.active && settings.mode === 'flow') {
     const step = e.shiftKey ? 0.5 : 0.1;
     const arrows: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
@@ -2231,6 +2397,10 @@ window.addEventListener('keydown', (e) => {
       return;
     }
     if (e.key === 'Enter' && shapeObject !== null) return enterObject(shapeObject, false);
+  }
+  if ((e.key === 'Delete' || e.key === 'Backspace') && settings.mode === 'flow' && !drawTool.busy && frameObjects().length) {
+    e.preventDefault();
+    return deleteSelected();
   }
   // One object chosen (level Objects): the arrow keys move it, Enter goes into its outline.
   if (frameTool.active && settings.mode === 'flow' && !(e.target as HTMLElement).closest('button')) {
@@ -2409,7 +2579,10 @@ canvas.addEventListener('pointerdown', (e) => {
   if (pointers.size === 1 && e.button === 0) {
     const [wx, wy] = vp.toWorld(pos[0], pos[1]);
     const flow = settings.mode === 'flow';
-    if (rungTool.active && flow) mode = rungTool.down(wx, wy, vp.scale);
+    if (drawTool.active && flow) {
+      drawTool.down(wx, wy, vp.scale);
+      mode = 'move';
+    } else if (rungTool.active && flow) mode = rungTool.down(wx, wy, vp.scale);
     else if (shapeTool.active && flow) mode = shapeTool.down(wx, wy, vp.scale);
     else if (frameTool.active && flow && frameTool.down(wx, wy, vp.scale) !== null) mode = 'frame';
     else mode = editor.down(wx, wy, pos[0], pos[1], e.shiftKey, vp.scale);
@@ -2420,6 +2593,7 @@ canvas.addEventListener('pointerdown', (e) => {
     editor.cancel();
     rungTool.cancel();
     shapeTool.cancel();
+    drawTool.abortPress();
     if (frameTool.dragging !== null) {
       frameTool.cancel();
       flowPreview = null;
@@ -2454,7 +2628,7 @@ canvas.addEventListener('pointermove', (e) => {
   canvas.classList.toggle('on-divider', !prev && nearDivider(pos[0]));
   if (prev) {
     if (pointers.size === 1) {
-      if (!rungTool.dragTo(wx, wy) && !shapeTool.dragTo(wx, wy) && !frameTool.dragTo(wx, wy, e.shiftKey, vp.scale) && !editor.dragTo(wx, wy, pos[0], pos[1])) vp.pan(pos[0] - prev[0], pos[1] - prev[1]);
+      if (!drawTool.dragTo(wx, wy, e.shiftKey, e.altKey) && !rungTool.dragTo(wx, wy) && !shapeTool.dragTo(wx, wy) && !frameTool.dragTo(wx, wy, e.shiftKey, vp.scale) && !editor.dragTo(wx, wy, pos[0], pos[1])) vp.pan(pos[0] - prev[0], pos[1] - prev[1]);
     } else if (pointers.size === 2) {
       pointers.set(e.pointerId, pos);
       const [a, b] = [...pointers.values()];
@@ -2465,7 +2639,9 @@ canvas.addEventListener('pointermove', (e) => {
     pointers.set(e.pointerId, pos);
     redraw();
   } else if (
-    rungTool.active
+    drawTool.active
+      ? drawTool.hoverAt(wx, wy, vp.scale)
+      : rungTool.active
       ? rungTool.hoverAt(wx, wy, vp.scale)
       : shapeTool.active
         ? shapeTool.hoverAt(wx, wy, vp.scale)
@@ -2536,6 +2712,7 @@ const endPointer = (e: PointerEvent) => {
     stage.classList.remove('splitting');
   }
   if (pointers.size === 1 && pointers.has(e.pointerId)) {
+    drawTool.up(...vp.toWorld(pos[0], pos[1]), e.shiftKey, e.altKey);
     rungTool.up();
     shapeTool.up();
     if (frameTool.dragging !== null) frameTool.up();
@@ -2547,6 +2724,7 @@ const endPointer = (e: PointerEvent) => {
 };
 canvas.addEventListener('pointerup', endPointer);
 canvas.addEventListener('pointercancel', (e) => {
+  drawTool.abortPress();
   editor.cancel();
   rungTool.cancel();
   shapeTool.cancel();
@@ -2568,6 +2746,11 @@ canvas.addEventListener('contextmenu', (e) => {
 canvas.addEventListener('dblclick', (e) => {
   const pos = local(e);
   const [x, y] = vp.toWorld(pos[0], pos[1]);
+  if (drawTool.active) {
+    // The pen ends an open line; the other tools ignore it.
+    drawTool.finish(false);
+    return;
+  }
   if (rungTool.active) return;
   if (shapeTool.active) {
     shapeTool.insertAt(x, y, vp.scale);

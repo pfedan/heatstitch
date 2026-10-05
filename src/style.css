@@ -1487,6 +1487,46 @@ details.panel.section[open] > summary {
   border-radius: 8px;
 }
 
+.draw-tools {
+  top: 52px;
+  left: 10px;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.draw-tools button.tool {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+}
+
+.draw-tools svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.draw-tools svg .node {
+  fill: currentColor;
+  stroke: none;
+}
+
+.draw-tools button.tool[aria-pressed='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.stage.drawing canvas#canvas {
+  cursor: crosshair;
+}
+
 /* Bild mode ------------------------------------------------------------------ */
 
 .image-status {
@@ -2958,4 +2998,22 @@ body[data-mode='flow'] .stage .hint {
 .stage.shaping canvas#canvas.panning,
 .stage canvas#canvas.on-frame.panning {
   cursor: grabbing;
+}
+
+/* Shape actions of the selected objects: duplicate, cut out, mirror, delete */
+.row-buttons.shape-actions {
+  margin-top: 6px;
+}
+
+.row-buttons.shape-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding-inline: 6px;
+}
+
+.row-buttons.shape-actions svg {
+  width: 17px;
+  height: 17px;
+  flex: none;
 }
