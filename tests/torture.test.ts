@@ -44,6 +44,8 @@ const COLORS: ThreadColor[] = [
   { r: 30, g: 160, b: 60 },
 ];
 const empty = { name: 'torture', format: 'dst', x: new Int32Array(0), y: new Int32Array(0), cmd: new Uint8Array(0), colors: [], bounds: { minX: 0, minY: 0, maxX: 0, maxY: 0 } } as unknown as Pattern;
+/** No records: the start, or every object deleted (an empty design). */
+const blank = (p: Pattern) => p.cmd.length === 0;
 
 /** What the app stores about the objects of a version (files.setObjects). */
 const knowledge = (p: Pattern): StoredObject[] => rememberedIn(p, sewObjects(p));
@@ -72,7 +74,7 @@ class Doc {
     this.cur = { p, known: knowledge(p) };
   }
   get objects() {
-    return this.cur.p === empty ? [] : sewObjects(this.cur.p);
+    return blank(this.cur.p) ? [] : sewObjects(this.cur.p);
   }
 }
 
@@ -288,7 +290,7 @@ const OPS: Op[] = [
       return true;
     },
   },
-  { name: 'save and open', run: async (d) => d.cur.p !== empty && (await saveAndOpen(d), true) },
+  { name: 'save and open', run: async (d) => !blank(d.cur.p) && (await saveAndOpen(d), true) },
 ];
 
 /** The records are a pattern the writers and the app can work with. */
@@ -296,6 +298,10 @@ function checkWellFormed(p: Pattern): void {
   const n = p.cmd.length;
   expect(p.x.length, 'x per record').toBe(n);
   expect(p.y.length, 'y per record').toBe(n);
+  if (!n) {
+    expect(p.colors, 'an empty design has no threads').toHaveLength(0);
+    return;
+  }
   expect(p.cmd[n - 1], 'ends with END').toBe(END);
   expect(p.cmd.slice(0, n - 1).includes(END), 'one END').toBe(false);
   const changes = p.cmd.reduce((k, c) => k + (c === COLOR_CHANGE ? 1 : 0), 0);
@@ -373,7 +379,7 @@ async function chain(seed: number, steps = STEPS): Promise<void> {
   const log: string[] = [];
   const at = () => `seed ${seed}: ${log.join(' > ')}`;
   for (let step = 0; step < steps; step++) {
-    const op = d.cur.p === empty ? OPS[0] : pick(r, OPS);
+    const op = blank(d.cur.p) ? OPS[0] : pick(r, OPS);
     let done: boolean;
     try {
       done = await op.run(d, r);
