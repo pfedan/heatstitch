@@ -810,7 +810,7 @@ export function digitizeShapes(shapes: ShapeInput[], threads: ThreadColor[], o: 
           obj.info.form = it.form;
           obj.info.knockout = knockout;
         }
-      }
+      } else if (obj.info.kind === 'satin' && isFill && !knockout) obj.info.form = it.form;
       runs.push(...sewn);
       for (const _ of sewn) owners.push(objects.length);
       objects.push(obj.info);
