@@ -2605,7 +2605,7 @@ body[data-mode='flow'] .stage .hint {
 
 .pattern-tiles {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 4px;
   margin: 4px 0;
 }
@@ -2637,7 +2637,12 @@ body[data-mode='flow'] .stage .hint {
   letter-spacing: -0.2px;
 }
 
-.pattern-tile:hover {
+.pattern-tile:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.pattern-tile:hover:not(:disabled) {
   color: var(--ink);
   border-color: var(--muted);
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { fillRegion, pathLength } from '../src/digitize/fill';
-import { contourField, fieldFill } from '../src/digitize/flow';
+import { contourField, fieldFill, guideField } from '../src/digitize/flow';
 import { coverage } from '../src/digitize/measure';
 import { buildRegion, outline, type Region } from '../src/digitize/region';
 import { spiralFill } from '../src/digitize/spiral';
@@ -92,5 +92,78 @@ describe('fill patterns', () => {
     const line = lines[0];
     expect(line[0]).toEqual(line[line.length - 1]);
     expect(Math.abs(pathLength(line) / (2 * Math.PI * 10) - 1)).toBeLessThan(0.02);
+  });
+});
+
+describe('guided fill, underlay and end', () => {
+  /** Directions of the long stitches inside the middle of the square (degrees, 0 to 180). */
+  const angles = (runs: Pt[][], inside: (p: Pt) => boolean) => {
+    const out: number[] = [];
+    for (const run of runs) {
+      for (let i = 1; i < run.length; i++) {
+        const [a, b] = [run[i - 1], run[i]];
+        if (Math.hypot(b[0] - a[0], b[1] - a[1]) < 1 || !inside([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2])) continue;
+        out.push(((Math.atan2(b[1] - a[1], b[0] - a[0]) * 180) / Math.PI + 180) % 180);
+      }
+    }
+    return out;
+  };
+
+  it('lays curved rows along one guide line', () => {
+    // An arc: rows near it run along it, not straight across.
+    const arc: Pt[] = Array.from({ length: 21 }, (_, i) => {
+      const t = Math.PI * (0.15 + (0.7 * i) / 20);
+      return [15 - 14 * Math.cos(t), 26 - 14 * Math.sin(t)];
+    });
+    const f = guideField(square, [arc]);
+    const res = fieldFill(square, f.g, f, params, [5, 5], false, 3)!;
+    expect(res.curved).toBe(true);
+    expect(coverage(square, res.runs, 0.3)).toBeGreaterThan(0.95);
+    // Left of the middle the arc rises, right of it it falls.
+    const left = angles(res.runs, ([x, y]) => x > 7 && x < 11 && y > 14 && y < 18);
+    const right = angles(res.runs, ([x, y]) => x > 19 && x < 23 && y > 14 && y < 18);
+    const mean = (a: number[]) => a.reduce((s, v) => s + v, 0) / a.length;
+    expect(mean(left)).toBeGreaterThan(110);
+    expect(mean(right)).toBeLessThan(70);
+  });
+
+  it('turns rows from one guide line to the next', () => {
+    const f = guideField(square, [
+      [
+        [6, 6],
+        [24, 6],
+      ],
+      [
+        [6, 10],
+        [6, 24],
+      ],
+    ]);
+    const res = fieldFill(square, f.g, f, params, [5, 5], false, 3)!;
+    expect(res.curved).toBe(true);
+    const top = angles(res.runs, ([x, y]) => x > 16 && x < 23 && y > 6 && y < 8);
+    const side = angles(res.runs, ([x, y]) => x > 6 && x < 8 && y > 16 && y < 23);
+    const near = (a: number[], deg: number) => a.filter((v) => Math.min(Math.abs(v - deg), 180 - Math.abs(v - deg)) < 20).length / a.length;
+    expect(near(top, 0)).toBeGreaterThan(0.8);
+    expect(near(side, 90)).toBeGreaterThan(0.8);
+  });
+
+  it('sews a crossing underlay in two layers and keeps it inside the inset', () => {
+    const one = fillRegion(square, { ...params, underlay: true }, [5, 5])!;
+    const cross = fillRegion(square, { ...params, underlay: true, underCross: true }, [5, 5])!;
+    expect(thread(cross.runs)).toBeGreaterThan(thread(one.runs) + 200);
+    const deep = fillRegion(square, { ...params, underlay: true, underInset: 1.5, stitch: 7 }, [5, 5])!;
+    const loose = fillRegion(square, { ...params, underlay: true, stitch: 7 }, [5, 5])!;
+    expect(thread(deep.runs)).toBeLessThan(thread(loose.runs));
+  });
+
+  it('ends near the next object when that shortens the way', () => {
+    const end: Pt = [26, 26];
+    const plain = fillRegion(ell, params, [4, 4])!;
+    const aimed = fillRegion(ell, { ...params, end }, [4, 4])!;
+    const last = (runs: Pt[][]) => runs[runs.length - 1][runs[runs.length - 1].length - 1];
+    const d = (p: Pt) => Math.hypot(p[0] - end[0], p[1] - end[1]);
+    expect(d(last(aimed.runs))).toBeLessThanOrEqual(d(last(plain.runs)));
+    expect(d(last(aimed.runs))).toBeLessThan(6);
+    expect(coverage(ell, aimed.runs, 0.3)).toBeGreaterThan(0.95);
   });
 });

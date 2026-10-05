@@ -13,7 +13,7 @@ import type { Pt } from './skeleton';
  *   row (Ink/Stitch's default of 4 staggers), so the stitch ends do not form visible lines.
  * - Without a fixed angle, the angle with the fewest sections out of 16 is used, as in the Goldman
  *   patent; fewer sections mean fewer travels.
- * - Underlay: a sparse fill at +90 degrees, inset from the edge, sewn first.
+ * - Underlay: a sparse fill at +90 degrees (or two crossing at ±45), inset from the edge, sewn first.
  * - Between sections the needle travels inside the region on a shortest path that avoids rows sewn
  *   already, so later rows cover it (Ink/Stitch's underpath); where it would run on top of sewn rows
  *   for more than 2 mm, the needle jumps instead.
@@ -29,6 +29,10 @@ export interface FillParams {
   /** Rows are lengthened at both ends by this (mm). */
   pull: number;
   underlay: boolean;
+  /** Underlay as one layer across the rows (default) or two crossing layers at ±45 degrees to them. */
+  underCross?: boolean;
+  /** Underlay stays this far inside the edge (mm); UNDERLAY_INSET by default. */
+  underInset?: number;
   /**
    * Shift of the needle points from row to row, as a fraction of the stitch length: 1/4 repeats
    * every 4 rows (the usual tatami), 1/2 gives a brick pattern; 0 shifts them at random.
@@ -36,6 +40,8 @@ export interface FillParams {
   offset?: number;
   /** Spacing on the far side of the rows (gradient fill): it changes evenly across the shape. */
   spacingEnd?: number;
+  /** The next object starts here: the fill should end near it (straight rows only). */
+  end?: Pt;
   /** Where travel between sections may run; the region itself by default. */
   travel?: Region;
   /** Curved rows keep this close to their line (mm); TOLERANCE by default. */
@@ -58,7 +64,7 @@ type Section = Seg[];
 
 const STAGGERS = 4;
 const UNDERLAY_STITCH = 3;
-const UNDERLAY_INSET = 0.4;
+export const UNDERLAY_INSET = 0.4;
 export const TRAVEL_STITCH = 2.5;
 /** Travel lies under the rows: it may cut its way's curves further than visible stitches (mm). */
 export const TRAVEL_TOLERANCE = 0.4;
@@ -246,7 +252,7 @@ function sewSection(f: Frame, s: Section, len: number, pull: number, reversed: b
 }
 
 /** The four ways into a section: [reversed, flip] with the entry point. */
-function entries(f: Frame, s: Section, pull: number): { reversed: boolean; flip: boolean; p: Pt }[] {
+function entries(f: Frame, s: Section, pull: number): Entry[] {
   const first = s[0];
   const last = s[s.length - 1];
   return [
@@ -465,20 +471,25 @@ export function chooseAngle(r: Region, spacing: number, neighbours: number[]): n
   return best;
 }
 
-/** Sews the sections greedily nearest first, connected by travel paths or jumps. */
-function sewAll(
-  f: Frame,
-  secs: Section[],
-  len: number,
-  pull: number,
-  start: Pt,
-  grid: TravelGrid,
-  avoidSewn: boolean,
-  runs: Pt[][],
-): Pt {
-  const todo = secs.slice();
+type Entry = { reversed: boolean; flip: boolean; p: Pt };
+
+/** Where a section entered this way ends. */
+function exitOf(f: Frame, s: Section, e: Entry, pull: number): Pt {
+  const seg = e.reversed ? s[0] : s[s.length - 1];
+  const fwd = ((s.length - 1) % 2 === 0) !== e.flip;
+  return f.at(fwd ? seg.u1 + pull : seg.u0 - pull, f.v(seg.k));
+}
+
+/**
+ * Order of the sections: greedily the nearest entry next. With `last`, that section is kept for
+ * the end. `cost` adds up the straight ways between sections and, with `end`, from the last exit
+ * to there.
+ */
+function plan(f: Frame, secs: Section[], pull: number, start: Pt, last?: { s: Section; e: Entry }, end?: Pt): { order: { s: Section; e: Entry }[]; cost: number } {
+  const todo = secs.filter((s) => s !== last?.s);
+  const order: { s: Section; e: Entry }[] = [];
   let pos = start;
-  let cur: Pt[] | null = runs.length ? runs[runs.length - 1] : null;
+  let cost = 0;
   while (todo.length) {
     let bi = 0;
     let be = entries(f, todo[0], pull)[0];
@@ -494,7 +505,57 @@ function sewAll(
       }
     });
     const s = todo.splice(bi, 1)[0];
-    const pts = sewSection(f, s, len, pull, be.reversed, be.flip);
+    order.push({ s, e: be });
+    cost += bd;
+    pos = exitOf(f, s, be, pull);
+  }
+  if (last) {
+    cost += dist(pos, last.e.p);
+    order.push(last);
+    pos = exitOf(f, last.s, last.e, pull);
+  }
+  if (end) cost += dist(pos, end);
+  return { order, cost };
+}
+
+/**
+ * Sews the sections greedily nearest first, connected by travel paths or jumps. With `end`, the
+ * section that leaves the needle nearest to it is sewn last, when that makes the ways in between
+ * and on to `end` shorter.
+ */
+function sewAll(
+  f: Frame,
+  secs: Section[],
+  len: number,
+  pull: number,
+  start: Pt,
+  grid: TravelGrid,
+  avoidSewn: boolean,
+  runs: Pt[][],
+  end?: Pt,
+): Pt {
+  let best = plan(f, secs, pull, start, undefined, end);
+  if (end && secs.length) {
+    let close: { s: Section; e: Entry } | null = null;
+    let cd = Infinity;
+    for (const s of secs) {
+      for (const e of entries(f, s, pull)) {
+        const d = dist(exitOf(f, s, e, pull), end);
+        if (d < cd) {
+          cd = d;
+          close = { s, e };
+        }
+      }
+    }
+    const other = close && plan(f, secs, pull, start, close, end);
+    // A little shorter is not worth a different look: at least 2 mm.
+    if (other && other.cost < best.cost - 2) best = other;
+  }
+  let pos = start;
+  let cur: Pt[] | null = runs.length ? runs[runs.length - 1] : null;
+  for (const { s, e } of best.order) {
+    const bd = dist(pos, e.p);
+    const pts = sewSection(f, s, len, pull, e.reversed, e.flip);
     // Travel to the entry: straight when close, else along the inside of the shape.
     let travel: Pt[] | null = null;
     if (cur && bd > 1) {
@@ -526,20 +587,24 @@ export function fillRegion(r: Region, p: FillParams, start: Pt, neighbours: numb
   if (!top.length) return null;
   const runs: Pt[][] = [];
   const grid = new TravelGrid(p.travel ?? r);
-  const pos = p.underlay ? sewUnderlay(r, angle + 90, p.spacing, start, grid, runs) : start;
-  sewAll(f, sections(r, r.sdf, f, top), p.stitch, p.pull, pos, grid, true, runs);
+  const pos = p.underlay ? sewUnderlay(r, angle, p, start, grid, runs) : start;
+  sewAll(f, sections(r, r.sdf, f, top), p.stitch, p.pull, pos, grid, true, runs, p.end);
   return { runs, angle };
 }
 
 /**
- * Underlay rows at `angle`, three times the top spacing apart (at least 1.2 mm), inset from the
- * edge; appended to `runs`. Returns where the needle ends.
+ * Underlay for top rows at `angle`: rows across them (or two layers crossing at ±45 degrees), three
+ * times the top spacing apart (at least 1.2 mm), inset from the edge; appended to `runs`. Returns
+ * where the needle ends.
  */
-export function sewUnderlay(r: Region, angle: number, spacing: number, start: Pt, grid: TravelGrid, runs: Pt[][]): Pt {
-  const us = Math.max(1.2, 3 * spacing);
-  const uf = new Frame(angle, us);
-  const under = rows(r, r.sdf, uf, UNDERLAY_INSET);
-  const pos = under.length ? sewAll(uf, sections(r, r.sdf, uf, under), UNDERLAY_STITCH, 0, start, grid, false, runs) : start;
+export function sewUnderlay(r: Region, angle: number, p: Pick<FillParams, 'spacing' | 'underCross' | 'underInset'>, start: Pt, grid: TravelGrid, runs: Pt[][]): Pt {
+  const us = Math.max(1.2, 3 * p.spacing);
+  let pos = start;
+  for (const a of p.underCross ? [angle - 45, angle + 45] : [angle + 90]) {
+    const uf = new Frame(a, us);
+    const under = rows(r, r.sdf, uf, p.underInset ?? UNDERLAY_INSET);
+    if (under.length) pos = sewAll(uf, sections(r, r.sdf, uf, under), UNDERLAY_STITCH, 0, pos, grid, false, runs);
+  }
   grid.covered.fill(0);
   return pos;
 }

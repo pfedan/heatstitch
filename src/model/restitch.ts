@@ -1,6 +1,6 @@
 import { SATIN_MAX, satinForArea, type KeptShape } from '../digitize/digitize';
 import { chooseAngle, fillRegion, type FillParams } from '../digitize/fill';
-import { contourField, fieldFill, stitchField } from '../digitize/flow';
+import { contourField, fieldFill, guideField, stitchField } from '../digitize/flow';
 import { spiralFill } from '../digitize/spiral';
 import { coverage } from '../digitize/measure';
 import { sample, signedField, type Region } from '../digitize/region';
@@ -11,7 +11,7 @@ import type { Pt } from '../digitize/skeleton';
 import { distanceInside, distanceToSeeds } from '../image/edt';
 import { tidy, withRecords } from './edit';
 import { joinsIn, rememberObjects, restoreJoin, stitchKey, type ObjectKind, type SewObject } from './objects';
-import { JUMP, STITCH, TRIM, type Pattern } from './pattern';
+import { END, JUMP, STITCH, TRIM, type Pattern } from './pattern';
 import { SATIN, TIE_STITCH } from './sequence';
 
 /**
@@ -29,10 +29,10 @@ import { SATIN, TIE_STITCH } from './sequence';
 
 /**
  * How the rows of a fill run: straight (tatami), straight with a spacing that changes across the
- * shape (gradient), along the outline (contour), as one line winding to the middle (spiral), or
- * with the directions and curves of the rows sewn now (follow).
+ * shape (gradient), along the outline (contour), as one line winding to the middle (spiral), with
+ * the directions and curves of the rows sewn now (follow), or along lines drawn on it (guided).
  */
-export type FillPattern = 'tatami' | 'gradient' | 'contour' | 'spiral' | 'follow';
+export type FillPattern = 'tatami' | 'gradient' | 'contour' | 'spiral' | 'follow' | 'guided';
 
 export interface FillSettings {
   pattern: FillPattern;
@@ -51,6 +51,12 @@ export interface FillSettings {
   edge: number;
   /** Largest distance of a curved row's stitches from its line (mm); see TOLERANCE. */
   tolerance: number;
+  /** Guided: the lines the rows follow (world mm). */
+  guides?: Pt[][];
+  /** Underlay in two crossing layers instead of one across the rows. */
+  underCross?: boolean;
+  /** Underlay stays this far inside the edge (mm); 0.4 when not set. */
+  underInset?: number;
 }
 
 export interface SatinSettings {
@@ -255,7 +261,8 @@ export function rememberedIn(p: Pattern, objects: SewObject[]): StoredObject[] {
   return out;
 }
 
-const PATTERNS: FillPattern[] = ['tatami', 'gradient', 'contour', 'spiral', 'follow'];
+const PATTERNS: FillPattern[] = ['tatami', 'gradient', 'contour', 'spiral', 'follow', 'guided'];
+const isLine = (l: unknown) => Array.isArray(l) && l.length >= 2 && l.every((q) => Array.isArray(q) && q.length === 2 && q.every(finite));
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
 function isFill(f: unknown): f is FillSettings {
@@ -265,6 +272,9 @@ function isFill(f: unknown): f is FillSettings {
     PATTERNS.includes(s.pattern) &&
     [s.spacing, s.spacingEnd, s.offset, s.angle, s.stitch, s.edge].every(finite) &&
     (s.tolerance === undefined || finite(s.tolerance)) &&
+    (s.guides === undefined || (Array.isArray(s.guides) && s.guides.every(isLine))) &&
+    (s.underCross === undefined || typeof s.underCross === 'boolean') &&
+    (s.underInset === undefined || finite(s.underInset)) &&
     typeof s.underlay === 'boolean'
   );
 }
@@ -833,9 +843,14 @@ function newFill(p: Pattern, o: SewObject, a: Analysis, s: FillSettings, reverse
   const segs: number[] = [];
   for (let i = o.first + 1; i <= o.last; i++) if (p.cmd[i] === STITCH && p.cmd[i - 1] === STITCH) segs.push(i);
   const travel = traceRegion(p, segs, TRAVEL_REACH, 0, false) ?? undefined;
-  const fp: FillParams = { spacing: s.spacing, stitch: s.stitch, angle: s.angle, pull: s.edge, underlay: s.underlay, travel, tolerance: s.tolerance };
+  const fp: FillParams = { spacing: s.spacing, stitch: s.stitch, angle: s.angle, pull: s.edge, underlay: s.underlay, underCross: s.underCross, underInset: s.underInset, travel, tolerance: s.tolerance };
   // Reversed, the new stitches start where the old ones ended.
   const start = reverse ? pt10(p, last.e) : pt10(p, first.s);
+  // Straight rows end near where the next object starts, when that shortens the way (if nothing
+  // else of the object comes after the fill; not when it is sewn the other way round on purpose).
+  let next = o.last + 1;
+  while (next < p.cmd.length && p.cmd[next] !== STITCH && p.cmd[next] !== END) next++;
+  if (!reverse && a.parts[a.parts.length - 1] === last && next < p.cmd.length && p.cmd[next] === STITCH) fp.end = pt10(p, next);
   const r = a.fill;
   let res;
   if (s.pattern === 'gradient') {
@@ -853,6 +868,10 @@ function newFill(p: Pattern, o: SewObject, a: Analysis, s: FillSettings, reverse
       for (let i = pt.s + 1; i <= pt.e; i++) if (p.cmd[i] === STITCH && p.cmd[i - 1] === STITCH && seg(p, i) >= 0.8) lines.push([pt10(p, i - 1), pt10(p, i)]);
     }
     const f = stitchField(r, lines);
+    res = fieldFill(r, f.g, f, fp, start, false, CONTOUR_PEAK);
+  } else if (s.pattern === 'guided') {
+    if (!s.guides?.length) return null;
+    const f = guideField(r, s.guides);
     res = fieldFill(r, f.g, f, fp, start, false, CONTOUR_PEAK);
   } else res = fillRegion(r, { ...fp, offset: s.offset }, start);
   return res?.runs.filter((run) => run.length > 1) ?? null;
@@ -1030,7 +1049,7 @@ export function restitch(p: Pattern, objs: SewObject[], which: number[], setting
     // A fill made from satin gets rows across the area in the direction with the fewest sections.
     const settings: Settings =
       converting && given.kind === 'fill' && area
-        ? { kind: 'fill', s: { ...given.s, pattern: given.s.pattern === 'follow' ? 'tatami' : given.s.pattern, angle: Number.isFinite(given.s.angle) ? given.s.angle : chooseAngle(area, given.s.spacing, []) } }
+        ? { kind: 'fill', s: { ...given.s, pattern: given.s.pattern === 'follow' || (given.s.pattern === 'guided' && !given.s.guides?.length) ? 'tatami' : given.s.pattern, angle: Number.isFinite(given.s.angle) ? given.s.angle : chooseAngle(area, given.s.spacing, []) } }
         : given;
     // All fill parts are one area, filled anew where the first of them was sewn; so are the parts
     // changing kind.
