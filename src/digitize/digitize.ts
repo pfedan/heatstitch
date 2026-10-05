@@ -101,6 +101,8 @@ export interface DigitizedObject {
   form?: Form;
   /** The parts later shapes cover are left out of the stitches (computed from `form`). */
   knockout?: boolean;
+  /** A drawn line, sewn along these curves (see model/line.ts). */
+  path?: Form;
 }
 
 /** An area as pixels, in pattern coordinates (0.1 mm records / 10), and the fill it was sewn with. */

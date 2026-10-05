@@ -54,6 +54,16 @@ function keepGrouping(before: Pattern, objs: SewObject[], o: SewObject, after: P
   rememberObjects(after, at.map((s) => (s > mine ? s + delta : s)));
 }
 
+/** New stitches for a drawn line along its new curves `form`; its stitch settings stay. */
+export function reshapeLine(p: Pattern, objs: SewObject[], o: SewObject, kinds: Uint8Array, form: Form, trimMm: number): RestitchResult | null {
+  if (!remembered(p, o)?.path) return null;
+  const given = settingsOf(p, o, kinds);
+  if (given?.kind !== 'run') return null;
+  const r = restitch(p, objs, [o.index], given, kinds, trimMm, undefined, false, undefined, undefined, new Map([[o.index, form]]));
+  if (r.starts.length) keepGrouping(p, objs, o, r.pattern, totalStitches(r.pattern) - totalStitches(p));
+  return r;
+}
+
 /**
  * New stitches for a fill in a new shape `form`: its settings stay, its rows fill the new area, or
  * with `knockout` (as the object had it, unless given) the area without what later fills cover.

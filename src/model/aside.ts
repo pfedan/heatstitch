@@ -90,7 +90,7 @@ export function setAside(p: Pattern, which: number[], role: AsideRole, trimMm: n
     const obj = objs[o];
     const key = objectKey(p, obj);
     const known = memory.find((m) => m.key === key);
-    const form = (known?.form && formFrom(known.form)) || (obj.kind === 'fill' ? formOf(p, obj, kinds) : obj.kind === 'run' ? lineOf(p, obj.first, obj.last) : null);
+    const form = (known?.form && formFrom(known.form)) || (known?.path && formFrom(known.path)) || (obj.kind === 'fill' ? formOf(p, obj, kinds) : obj.kind === 'run' ? lineOf(p, obj.first, obj.last) : null);
     list.push({
       id: id++,
       role,

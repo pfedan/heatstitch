@@ -77,7 +77,7 @@ import { asideOf, dropAside, sewAgain, setAside, setAsideRole, storeAside, type 
 import { deleteObjects, duplicateObject, mirrorMatrix, recolorObjects, subtractTop, unionForm } from './model/shapeOps';
 import { stitchesBefore } from './model/transform';
 import { FrameTool } from './ui/frameTool';
-import { formOf, reshapeFill, scaleBlocked, transformSewObject } from './model/reshape';
+import { formOf, reshapeFill, reshapeLine, scaleBlocked, transformSewObject } from './model/reshape';
 import { isCovered, overlapsIn, refreshKnockouts, setKnockout, wholeArea } from './model/knockout';
 import { transformObject } from './model/transform';
 import { apply, translation, type Form, type Mat } from './shape/path';
@@ -843,6 +843,8 @@ function stitchInfo(p: Pattern, q: Sequence): StitchInfo {
     ? { on: ons.size > 1 ? 'mixed' : ons.has(true), covered: shaped.some((obj) => isCovered(p, q.objects, obj)) }
     : undefined;
   const info: StitchInfo = { key: selectionKey, hand, measured, counts, recommended: recommendedSpacing(settings.profile), shape: worst, outlines: shapes, toSatin: stroke, knockout, color: q.objects[firstFill]?.color };
+  const runs = [...selectedObjects].map((o) => q.objects[o]).filter((obj) => obj?.kind === 'run');
+  if (runs.length && runs.every((obj) => remembered(p, obj)?.path)) info.line = true;
   const link = selectedObjects.size === 1 && q.objects[firstFill] ? remembered(p, q.objects[firstFill])?.outline : undefined;
   if (link) {
     const fill = q.objects.findIndex((o) => remembered(p, o)?.fill?.border?.link === link);
@@ -1227,10 +1229,10 @@ const shapeTool = new ShapeTool({
   },
 });
 
-/** The one selected object of the Ablauf mode, when it has a fill whose outline can be edited. */
+/** The one selected object of the Ablauf mode, when it has a fill whose outline can be edited, or is a drawn line. */
 function shapeTarget(p: Pattern, q: Sequence, o: number): Form | null {
   const obj = q.objects[o];
-  return obj ? formOf(p, obj, q.kinds) : null;
+  return obj ? (remembered(p, obj)?.path ?? formOf(p, obj, q.kinds)) : null;
 }
 
 /** Edits the outline of object `o` (level Form); objects without a fill go to their stitches. */
@@ -1293,7 +1295,7 @@ function commitShape(form: Form): void {
   const obj = q.objects[shapeObject];
   if (!obj) return;
   const hand = remembered(p, obj)?.hand ?? 0;
-  const r = reshapeFill(p, q.objects, obj, q.kinds, form, settings.trimMm);
+  const r = remembered(p, obj)?.path ? reshapeLine(p, q.objects, obj, q.kinds, form, settings.trimMm) : reshapeFill(p, q.objects, obj, q.kinds, form, settings.trimMm);
   if (!r || !r.starts.length) {
     // Nothing to fill there (too small, or the outline crosses itself away): back to the old one.
     shapeTool.setForm(shapeTarget(p, q, shapeObject) ?? form);
@@ -1465,14 +1467,25 @@ function setDrawing(kind: DrawKind | null): void {
 drawButtons.forEach((b) => b.addEventListener('click', () => setDrawing(drawTool.kind === b.dataset.draw ? null : (b.dataset.draw as DrawKind))));
 
 /** A shape is drawn: sewn in the thread of the selected object right after it, else after the last one. */
+/** No stitches yet. */
+const EMPTY: Pattern = { x: new Int32Array(0), y: new Int32Array(0), cmd: new Uint8Array(0), colors: [] } as unknown as Pattern;
+
+/** The first shape of a new design; a line keeps its curves to be sewn along. */
+function firstShape(shape: NewShape, options: ReturnType<typeof digitizeDefaults> & { trimMm: number }): Digitized | null {
+  const line = shape.kind === 'stroke' ? addShape(EMPTY, shape, FIRST_THREAD, null, options) : null;
+  if (line) return { pattern: line.pattern, objects: [{ kind: 'run', label: 0, areaMm2: 0, path: shape.form }], starts: [0] };
+  const d = digitizeShapes([{ color: 0, ...shape }], [FIRST_THREAD], options, { w: 0, h: 0 }, false, 'shape');
+  return d.objects.length ? d : null;
+}
+
 async function drawn(shape: NewShape): Promise<void> {
   const f = files.active;
   const p = f?.pattern ?? null;
   const options = { ...digitizeDefaults(settings.profile), trimMm: settings.trimMm };
   if (!f || !p) {
     // Nothing open yet: the shape starts a new design.
-    const d = digitizeShapes([{ color: 0, ...shape }], [FIRST_THREAD], options, { w: 0, h: 0 }, false, 'shape');
-    if (!d.objects.length) return layers.say(t('draw.failed'), true);
+    const d = firstShape(shape, options);
+    if (!d) return layers.say(t('draw.failed'), true);
     keepView = true;
     await addDigitized(d, t('draw.newName'));
     keepView = false;

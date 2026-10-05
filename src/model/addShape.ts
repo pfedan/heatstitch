@@ -5,7 +5,9 @@ import { rememberObjects, sewObjects } from './objects';
 import { reorder } from './order';
 import { stitchesBefore } from './transform';
 import { COLOR_CHANGE, END, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
-import { rememberShapes } from './restitch';
+import { remember, rememberShapes } from './restitch';
+import { LINE_RUN, lineRuns } from './line';
+import { runRecords } from './border';
 
 /**
  * New shapes sewn into a design: an area becomes a fill (or satin, when it is a stroke), a line
@@ -36,11 +38,27 @@ function body(p: Pattern): Rec[] {
 }
 
 export function addShape(p: Pattern, shape: NewShape, color: ThreadColor, after: number | null, options: DigitizeOptions): Added | null {
+  if (shape.kind === 'stroke' && (shape.width ?? 0) < LINE_SATIN) return addLine(p, shape.form, color, after, options);
   const d = digitizeShapes([{ color: 0, ...shape }], [color], options, { w: 0, h: 0 }, false, 'shape');
   if (!d.objects.length || !stitches(d.pattern)) return null;
   const r = insertObject(p, body(d.pattern), d.pattern.colors[0], after, options.trimMm);
   if (!r) return null;
   rememberShapes(r.pattern, sewObjects(r.pattern), [r.start], [d.objects[0].shape], [d.objects[0]]);
+  return r;
+}
+
+/** Lines from this wide (mm) are sewn as satin, thinner ones along their curves in running stitch. */
+const LINE_SATIN = 1;
+
+/** A thin line sewn along its curves (see line.ts); it remembers them, so it can be edited as a line. */
+function addLine(p: Pattern, form: Form, color: ThreadColor, after: number | null, options: DigitizeOptions): Added | null {
+  const s = { ...LINE_RUN, tolerance: options.tolerance };
+  const runs = lineRuns(form, s);
+  if (!runs.length) return null;
+  const r = insertObject(p, runRecords(runs, options.trimMm), color, after, options.trimMm);
+  if (!r) return null;
+  const obj = sewObjects(r.pattern).find((o) => stitchesBefore(r.pattern, o.first) === r.start);
+  if (obj) remember(r.pattern, obj, { region: null, path: form });
   return r;
 }
 

@@ -52,6 +52,8 @@ export interface StitchInfo {
    * only some do), and whether anything lies on top of them at all.
    */
   knockout?: { on: boolean | 'mixed'; covered: boolean };
+  /** The selected running stitches are drawn lines, sewn along their curves. */
+  line?: boolean;
   /** Thread of the first selected fill (its border is sewn in it unless it has its own). */
   color?: ThreadColor;
   /** The one selected object is the border of a fill in its own thread (the fill's number, or null when gone). */
@@ -248,7 +250,7 @@ export class StitchPanel {
     if (this.kind === 'fill' && info.draw?.single) parts.push(this.drawTool(info.draw));
     if (this.kind === 'satin' && info.direction) parts.push(this.directionTool(info.direction));
     parts.push(...this.controls());
-    const note = Object.assign(document.createElement('p'), { className: 'muted small stitch-note', textContent: t(this.kind === 'fill' && info.shape ? 'stitch.undo' : 'stitch.note') });
+    const note = Object.assign(document.createElement('p'), { className: 'muted small stitch-note', textContent: t(this.kind === 'fill' && info.shape ? 'stitch.undo' : this.kind === 'run' && info.line ? 'stitch.lineNote' : 'stitch.note') });
     parts.push(note);
     this.picker.close();
     this.root.replaceChildren(...parts);
