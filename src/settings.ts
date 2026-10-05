@@ -118,7 +118,7 @@ export interface Settings {
 export const DEFAULTS: Settings = {
   mode: 'flow',
   colorBy: 'thread',
-  marks: { jumps: true, trims: true, colors: false, ends: false, points: false, threads: false },
+  marks: { jumps: true, trims: true, colors: false, ends: false, points: false, threads: true },
   marksOn: true,
   sections: { display: true, stats: false, advanced: false, findings: true },
   machineSpm: 800,
