@@ -15,6 +15,7 @@ import { drawFlatStitches, drawJumps, drawMarkers, drawNeedle, drawOutlines, dra
 import { drawHeatmap } from './heatmap';
 import { drawStitches } from './stitches';
 import { drawThreads } from './threads';
+import { drawFabric } from './fabricGl';
 import { drawValidation, drawZoneHighlight, type Counted } from './validationOverlay';
 import type { Viewport } from './viewport';
 
@@ -79,6 +80,7 @@ export function drawScene(ctx: CanvasRenderingContext2D, w: number, h: number, s
   ctx.fillStyle = background;
   ctx.fillRect(0, 0, w, h);
   const { pattern, settings: s, vp, flow } = scene;
+  if (s.realistic && s.fabricLook) drawFabric(ctx, vp, s.profile.fabric, background);
   if (flow) {
     if (!pattern) return;
     const st = flow.style;
