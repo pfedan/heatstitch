@@ -195,10 +195,10 @@ export function bindRungs(app: RungsApp) {
 
   /**
    * New stitches for the rung tool's object along `columns` (rails with their rungs), in its own
-   * satin settings; with `keep`, the columns stay remembered for the old stitches (to show them
-   * while dragging, they are put back).
+   * satin settings. The old stitches keep what they remembered: undo brings back the rungs with
+   * them (the new stitches get theirs from the result).
    */
-  function withRungs(columns: Rails[][] | null, keep = false) {
+  function withRungs(columns: Rails[][] | null) {
     const p = app.files.active?.pattern;
     if (!p || ui.rungObject === null || !columns) return null;
     const q = app.seq(p);
@@ -218,7 +218,7 @@ export function bindRungs(app: RungsApp) {
       q.kinds,
       app.settings.trimMm,
     );
-    if (!keep || !r.starts.length) forget(p, obj, before);
+    forget(p, obj, before);
     return r;
   }
 
@@ -226,7 +226,7 @@ export function bindRungs(app: RungsApp) {
     pendingColumns = null;
     cancelAnimationFrame(rungFrame);
     rungFrame = 0;
-    app.applyRestitched(withRungs(columns, true), 'stitch.failed');
+    app.applyRestitched(withRungs(columns), 'stitch.failed');
   }
 
   /** Sews the selected fill as satin along the lines drawn across it. */
