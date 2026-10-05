@@ -6,13 +6,13 @@ import { OUTPUT_FORMATS, writePattern } from '../src/writers';
 
 /**
  * Writes every example in every save format to oracle/, with what heatstitch meant to write, for
- * scripts/oracle.py to read back with pyembroidery (an independent reader). Runs only with
+ * scripts/oracle.py to read back with pystitch, Ink/Stitch's pyembroidery (an independent reader). Runs only with
  * ORACLE set, as CI does: `ORACLE=1 npx vitest run tests/oracle.test.ts && python3 scripts/oracle.py`.
  */
 const on = !!process.env.ORACLE;
 const EXAMPLES = ['cat-60mm.pes', 'demos/confetti.pes', 'demos/leather-patch.dst', 'demos/letters.pes', 'demos/overlap.pes', 'demos/sun.dst'];
 
-describe.skipIf(!on)('files for the pyembroidery oracle', () => {
+describe.skipIf(!on)('files for the pystitch oracle', () => {
   it('writes each example in each format', () => {
     const out = new URL('../oracle/', import.meta.url);
     mkdirSync(out, { recursive: true });

@@ -449,9 +449,10 @@ npm run preview   # view the build locally: http://localhost:4173/heatstitch/
 The tests generate their DST/PES fixtures synthetically (`tests/helpers/encode.ts`) and check, among
 other things, that the grid sums exactly to the total thread length or stitch count.
 
-**pyembroidery as oracle:** CI also writes every example in every save format and reads the files back
-with pyembroidery, an independent reader, so a writer bug that heatstitch's own reader would mirror
-still shows. Locally (needs `pip install pyembroidery==1.5.1`):
+**pystitch as oracle:** CI also writes every example in every save format and reads the files back
+with pystitch (Ink/Stitch's fork of pyembroidery), an independent reader, so a writer bug that
+heatstitch's own reader would mirror still shows. Locally (needs `pip install pystitch==1.0.1`;
+pyembroidery works too):
 
 ```sh
 ORACLE=1 npx vitest run tests/oracle.test.ts && python3 scripts/oracle.py

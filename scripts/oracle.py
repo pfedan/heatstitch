@@ -1,15 +1,19 @@
-"""Reads the files tests/oracle.test.ts wrote to oracle/ with pyembroidery and checks them
-against what heatstitch meant to write: the same stitches, color changes and (where the format
-stores them) cuts and exact colors. pyembroidery is an independent reader, so a writer bug that
-heatstitch's own reader would mirror still shows here.
+"""Reads the files tests/oracle.test.ts wrote to oracle/ with pystitch (Ink/Stitch's fork of
+pyembroidery; pyembroidery itself also works) and checks them against what heatstitch meant to
+write: the same stitches, color changes and (where the format stores them) cuts and exact colors.
+It is an independent reader, so a writer bug that heatstitch's own reader would mirror still shows.
 
+    pip install pystitch==1.0.1
     ORACLE=1 npx vitest run tests/oracle.test.ts && python3 scripts/oracle.py
 """
 import json
 import sys
 from pathlib import Path
 
-import pyembroidery as pe
+try:
+    import pystitch as pe
+except ImportError:
+    import pyembroidery as pe
 
 OUT = Path(__file__).resolve().parent.parent / "oracle"
 FORMATS = ["pes", "dst", "jef", "vp3", "exp", "pec"]
@@ -80,7 +84,7 @@ def main():
                 print(f"FAIL {label}: " + "; ".join(problems))
             else:
                 print(f"ok   {label}")
-    print(f"{len(metas) * len(FORMATS) - failed} of {len(metas) * len(FORMATS)} files agree with pyembroidery {pe.__version__ if hasattr(pe, '__version__') else ''}".rstrip())
+    print(f"{len(metas) * len(FORMATS) - failed} of {len(metas) * len(FORMATS)} files agree with {pe.__name__}")
     sys.exit(1 if failed else 0)
 
 

@@ -42,7 +42,7 @@ jobs:
           path: dist
           include-hidden-files: true
 
-  # Every save format read back by pyembroidery, an independent reader (tests/oracle.test.ts,
+  # Every save format read back by pystitch (Ink/Stitch's pyembroidery), an independent reader (tests/oracle.test.ts,
   # scripts/oracle.py): a writer bug that heatstitch's own reader would mirror still shows here.
   oracle:
     if: github.event.action != 'closed'
@@ -60,7 +60,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: npm ci
-      - run: pip install pyembroidery==1.5.1
+      - run: pip install pystitch==1.0.1
       - run: npx vitest run tests/oracle.test.ts
         env:
           ORACLE: '1'
