@@ -626,9 +626,12 @@ export function analyze(p: Pattern, o: SewObject, kinds: Uint8Array, known = rem
       last.b = r.b;
     } else merged.push({ ...r });
   }
+  // A border in the fill's thread, sewn here as the last part, starts at this record.
+  const at = known?.fill?.border && !known.fill.border.color && known.borderAt ? idx[known.borderAt] : undefined;
   // Running stitch under a satin column (its underlay, also when trimmed off from it) is part of it.
+  // Not under the fill's own satin border: travel of the fill along its edge lies there too.
   const satinSegs: number[] = [];
-  for (let k = 1; k < idx.length; k++) if (kindAt[k] === 'satin' && sewnSeg(k)) satinSegs.push(idx[k]);
+  for (let k = 1; k < idx.length; k++) if (kindAt[k] === 'satin' && sewnSeg(k) && !(at !== undefined && idx[k] > at)) satinSegs.push(idx[k]);
   const column = satinSegs.length > 4 ? traceRegion(p, satinSegs, REACH) : null;
   if (column) {
     for (const r of merged) {
@@ -649,7 +652,6 @@ export function analyze(p: Pattern, o: SewObject, kinds: Uint8Array, known = rem
     else parts.push({ kind: r.kind, s: idx[r.a], e: idx[r.b] });
   }
   // A border in the fill's thread, sewn here as the last part: one part from where it starts.
-  const at = known?.fill?.border && !known.fill.border.color && known.borderAt ? idx[known.borderAt] : undefined;
   if (at !== undefined && parts.some((pt) => pt.kind === 'fill' && pt.s < at)) {
     parts = parts.filter((pt) => pt.s < at).map((pt) => (pt.e > at ? { ...pt, e: at } : pt));
     parts.push({ kind: 'fill', s: at, e: o.last, border: true });
