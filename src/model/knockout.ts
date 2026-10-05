@@ -1,7 +1,7 @@
 import type { Region } from '../digitize/region';
 import type { Form } from '../shape/path';
 import { rasterize } from '../shape/rasterize';
-import { coversOver, cutAway, SATIN_SHARE } from './covers';
+import { coversOver, cutAway, SATIN_SHARE, type Cover } from './covers';
 import { rememberObjects, sewObjects, type SewObject } from './objects';
 import type { Pattern } from './pattern';
 import { remember, remembered, rememberRange, type Remembered, type RestitchResult } from './restitch';
@@ -36,12 +36,21 @@ export function wholeArea(form: Form, pxMm = 0.1): Region | null {
 /** Areas with parts left out, and the whole area they were cut from. */
 const cutFrom = new WeakMap<Region, Region>();
 
+/** What was last left out of a whole area, and by what. */
+const lastCut = new WeakMap<Region, { covers: Cover[]; cut: Region | null }>();
+const sameCovers = (a: Cover[], b: Cover[]) => a.length === b.length && a.every((c, k) => c.region === b[k].region && c.overlap === b[k].overlap);
+
 /** The area to sew for `form` as object `o`: whole, or without what later fills and satins cover. */
 export function sewnArea(p: Pattern, objs: SewObject[], o: SewObject, form: Form, knockout: boolean, pxMm = 0.1): Region | null {
   const whole = wholeArea(form, pxMm);
   if (!whole || !knockout) return whole;
-  const cut = cutAway(whole, coversOver(p, objs, o, pxMm, remembered(p, o)?.overlapShare ?? SATIN_SHARE));
+  const covers = coversOver(p, objs, o, pxMm, remembered(p, o)?.overlapShare ?? SATIN_SHARE);
+  // The same shapes on top as last time (areas are cached per form): the same area is left.
+  const last = lastCut.get(whole);
+  if (last && sameCovers(last.covers, covers)) return last.cut;
+  const cut = cutAway(whole, covers);
   if (cut && cut !== whole) cutFrom.set(cut, whole);
+  lastCut.set(whole, { covers, cut });
   return cut;
 }
 
@@ -96,14 +105,15 @@ function sewAgain(p: Pattern, index: number, knockout: boolean, trimMm: number):
 export function setKnockout(p: Pattern, which: number[], on: boolean, trimMm: number): { pattern: Pattern; changed: number } | null {
   let cur = p;
   let changed = 0;
+  let objs = sewObjects(cur);
   for (const index of which) {
-    const objs = sewObjects(cur);
     const o = objs[index];
     const known = o && remembered(cur, o);
     if (!known?.form || known.free || !!known.knockout === on) continue;
     const next = sewAgain(cur, index, on, trimMm);
     if (!next) continue;
     cur = next;
+    objs = sewObjects(cur);
     changed++;
   }
   return changed ? { pattern: cur, changed } : null;
@@ -137,9 +147,10 @@ export function setOverlapShare(p: Pattern, which: number[], share: number, trim
 export function refreshKnockouts(p: Pattern, trimMm: number): { pattern: Pattern; changed: number[] } | null {
   let cur = p;
   const changed: number[] = [];
-  const count = sewObjects(cur).length;
+  // The objects are found again only when one was sewn anew (with many objects that is most of the time).
+  let objs = sewObjects(cur);
+  const count = objs.length;
   for (let index = 0; index < count; index++) {
-    const objs = sewObjects(cur);
     const o = objs[index];
     const known = o && remembered(cur, o);
     if (!known?.form || known.free || !known.knockout) continue;
@@ -148,6 +159,7 @@ export function refreshKnockouts(p: Pattern, trimMm: number): { pattern: Pattern
     const next = sewAgain(cur, index, true, trimMm);
     if (!next) continue;
     cur = next;
+    objs = sewObjects(cur);
     changed.push(index);
   }
   return changed.length ? { pattern: cur, changed } : null;
