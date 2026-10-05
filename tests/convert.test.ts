@@ -50,4 +50,16 @@ describe('switching between satin and fill', () => {
     const area = (x: { q: Pattern; o: number }) => remembered(x.q, sewObjects(x.q, stitchKinds(x.q))[x.o])?.shape?.areaMm2;
     expect(area(cur)).toBe(area(b));
   });
+
+  it('keeps the drawn form of the object', () => {
+    const p = load('demos/letters.pes');
+    const o = sewObjects(p, stitchKinds(p)).find((x) => x.kind === 'satin')!;
+    const n = (x: number, y: number) => ({ p: [x, y] as [number, number], a: [x, y] as [number, number], b: [x, y] as [number, number], smooth: false });
+    const form = { paths: [{ closed: true, nodes: [n(o.minX / 10, o.minY / 10), n(o.maxX / 10, o.minY / 10), n(o.maxX / 10, o.maxY / 10), n(o.minX / 10, o.maxY / 10)] }] };
+    remember(p, o, { ...remembered(p, o), region: remembered(p, o)?.region ?? null, form });
+    const a = convertTo(p, o.index, FILL);
+    expect(remembered(a.q, sewObjects(a.q, stitchKinds(a.q))[a.o])?.form).toEqual(form);
+    const b = convertTo(a.q, a.o, SATIN);
+    expect(remembered(b.q, sewObjects(b.q, stitchKinds(b.q))[b.o])?.form).toEqual(form);
+  });
 });

@@ -1,5 +1,5 @@
 import { SATIN_MAX, satinForArea, type KeptShape } from '../digitize/digitize';
-import { borderLoops, borderRails, borderRun, orderLoops, type BorderType } from '../digitize/border';
+import { borderStitches, type PathStitch } from './along';
 import { chooseAngle, fillRegion, type FillParams } from '../digitize/fill';
 import { contourFill, fieldFill, guideField, stitchField } from '../digitize/flow';
 import { spiralFill } from '../digitize/spiral';
@@ -71,10 +71,8 @@ export interface FillSettings {
  * sewn as the last part of the fill object; in another thread it is an object of its own (see
  * border.ts in model), found by `link`, that follows the fill's shape.
  */
-export interface BorderSettings {
-  type: BorderType;
-  /** Satin width (mm). */
-  width: number;
+/** A border: stitches along the fill's edge (see along.ts). */
+export interface BorderSettings extends PathStitch {
   /** Its own thread; the fill's when not set. */
   color?: ThreadColor;
   /** Marks the border object in its own thread (Remembered.outline). */
@@ -341,12 +339,12 @@ function isFill(f: unknown): f is FillSettings {
   );
 }
 
-const BORDERS: BorderType[] = ['run', 'triple', 'satin'];
+const BORDERS: PathStitch['type'][] = ['run', 'triple', 'satin'];
 const isColor = (c: unknown) => !!c && [(c as ThreadColor).r, (c as ThreadColor).g, (c as ThreadColor).b].every(finite);
 
 function isBorder(b: unknown): b is BorderSettings {
   const s = b as BorderSettings | null;
-  return !!s && BORDERS.includes(s.type) && finite(s.width) && (s.color === undefined || isColor(s.color)) && (s.link === undefined || typeof s.link === 'string');
+  return !!s && BORDERS.includes(s.type) && finite(s.width) && [s.length, s.tolerance].every((v) => v === undefined || finite(v)) && (s.color === undefined || isColor(s.color)) && (s.link === undefined || typeof s.link === 'string');
 }
 
 function isSatin(f: unknown): f is SatinSettings {
@@ -1043,16 +1041,6 @@ function newFill(p: Pattern, o: SewObject, a: Analysis, s: FillSettings, reverse
 }
 
 /** Satin of a border: about the density of a satin column, with a walk along the middle under it when wide enough. */
-const BORDER_SATIN: SatinSettings = { spacing: 0.4, edge: 0, short: true, underlay: true, tolerance: TOLERANCE, under: 'center', split: SATIN_SPLIT, stagger: true, edgeShare: 0 };
-
-/** The stitches of a border on the edge of `r`, loop by loop, starting near `from`. */
-export function borderStitches(r: Region, b: BorderSettings, from: Pt): Pt[][] {
-  const loops = orderLoops(borderLoops(r), from);
-  if (b.type !== 'satin') return loops.map((l) => borderRun(l, b.type === 'triple')).filter((run) => run.length > 1);
-  const s = { ...BORDER_SATIN, underlay: b.width >= 1.5 };
-  return satinRuns(loops.map((l) => borderRails(r, l, b.width)), s);
-}
-
 /**
  * New satin for a part, along `known` rails (kept from an earlier edit) or the rails its stitches
  * have now. Returns the stitches and the rails used.
@@ -1277,8 +1265,8 @@ export function restitch(
     const newSatinS = settings.kind === 'satin' ? (reverse ? swappedSides(settings.s) : { ...settings.s }) : undefined;
     const after: Remembered = converting
       ? newFillS
-        ? { region: area, fill: newFillS, shape: area ?? undefined, ...(satinRails?.length ? { asSatin: satinRails } : {}) }
-        : { region: null, satin: newSatinS, shape: area ?? undefined, ...(guide ? { columns: [guide] } : {}) }
+        ? { region: area, fill: newFillS, shape: area ?? undefined, ...(known?.form ? { form: known.form } : {}), ...(satinRails?.length ? { asSatin: satinRails } : {}) }
+        : { region: null, satin: newSatinS, shape: area ?? undefined, ...(known?.form ? { form: known.form } : {}), ...(guide ? { columns: [guide] } : {}) }
       : {
           region: an.fill,
           fill: newFillS ?? known?.fill,

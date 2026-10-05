@@ -9,6 +9,7 @@ import { KIND_ICON, kindLabel } from './layersPanel';
 import { BORDER_WIDTH, type BorderType } from '../digitize/border';
 import type { ThreadColor } from '../model/pattern';
 import { newLink } from '../model/border';
+import type { PathStitch } from '../model/along';
 import { cssColor, hexColor, ThreadPicker } from './threadPicker';
 
 type FillUnder = 'off' | 'single' | 'cross';
@@ -320,14 +321,12 @@ export class StitchPanel {
       if (s.underlay) {
         out.push(this.under(this.slider({ label: 'stitch.underInset', hint: 'stitch.underInset.hint', min: 0, max: 1.5, step: 0.05, get: () => s.underInset ?? UNDERLAY_INSET, set: (v) => (s.underInset = v), fmt: mm(2) })));
       }
-      out.push(this.choice<BorderChoice>('stitch.border', BORDERS, s.border?.type ?? 'off', (v) => `stitch.border.${v}` as Key, (v) => {
-        if (v === 'off') delete s.border;
-        else s.border = { ...s.border, type: v, width: s.border?.width ?? BORDER_WIDTH };
-      }));
-      if (s.border?.type === 'satin') {
-        const b = s.border;
-        out.push(this.slider({ label: 'stitch.borderWidth', hint: 'stitch.borderWidth.hint', min: 0.8, max: 6, step: 0.1, get: () => b.width, set: (v) => (b.width = v), fmt: mm(1) }));
-      }
+      out.push(
+        ...this.pathStitch(s.border, (b) => {
+          if (b) s.border = Object.assign(s.border ?? b, b);
+          else delete s.border;
+        }),
+      );
       if (s.border) out.push(this.borderThread(s.border));
       return out;
     }
@@ -702,6 +701,26 @@ export class StitchPanel {
       );
     }
     return wrap;
+  }
+
+  /**
+   * Settings of stitches along a line (see along.ts): the kind, Aus first when `off` is allowed,
+   * and the satin's width. The same fields for a fill's border and for a line of its own.
+   */
+  pathStitch(st: PathStitch | undefined, set: (v: PathStitch | undefined) => void, off = true): HTMLElement[] {
+    const kinds = off ? BORDERS : BORDERS.filter((v) => v !== 'off');
+    const out = [
+      this.choice<BorderChoice>('stitch.border', kinds, st?.type ?? 'off', (v) => `stitch.border.${v}` as Key, (v) => {
+        set(v === 'off' ? undefined : { ...st, type: v, width: st?.width ?? BORDER_WIDTH });
+      }),
+    ];
+    if (st?.type === 'satin') {
+      out.push(this.slider({ label: 'stitch.borderWidth', hint: 'stitch.borderWidth.hint', min: 0.8, max: 6, step: 0.1, get: () => st.width, set: (v) => {
+          st.width = v;
+          set(st);
+        }, fmt: (v: number) => `${formatNumber(v, 1)} mm` }));
+    }
+    return out;
   }
 
   /**

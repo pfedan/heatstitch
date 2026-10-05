@@ -158,9 +158,48 @@ export function borderRails(r: Region, loop: Pt[], w: number): { left: Pt[]; rig
   return { left, right };
 }
 
-/** Running or triple stitch along a closed line. */
-export function borderRun(loop: Pt[], triple: boolean, tol = TOLERANCE): Pt[] {
-  const pts = runStitch(loop, BORDER_STITCH, tol);
+/** An open line smoothed by a moving average; the ends stay where they are. */
+function smoothLine(pts: Pt[], k: number): Pt[] {
+  const n = pts.length;
+  if (n < 2 * k + 1) return pts;
+  return pts.map((q, i) => {
+    if (i === 0 || i === n - 1) return q;
+    const r = Math.min(k, i, n - 1 - i);
+    let x = 0;
+    let y = 0;
+    for (let j = -r; j <= r; j++) {
+      x += pts[i + j][0];
+      y += pts[i + j][1];
+    }
+    return [x / (2 * r + 1), y / (2 * r + 1)] as Pt;
+  });
+}
+
+/**
+ * Rails of a satin of width `w` centered on a line with no area around it (a drawn line): each
+ * side half the width out along the normal. A closed line repeats its first point at the end.
+ */
+export function lineRails(line: Pt[], closed: boolean, w: number): { left: Pt[]; right: Pt[] } {
+  const half = w / 2;
+  const center = closed ? smoothLoop(resample(line, 0.2), 3) : smoothLine(resample(line, 0.2), 3);
+  const n = center.length;
+  const at = (i: number) => (closed ? center[((i % (n - 1)) + (n - 1)) % (n - 1)] : center[Math.max(0, Math.min(n - 1, i))]);
+  const left: Pt[] = [];
+  const right: Pt[] = [];
+  for (let i = 0; i < n; i++) {
+    const a = at(i - 3);
+    const b = at(i + 3);
+    const l = dist(a, b) || 1;
+    const nn: Pt = [-(b[1] - a[1]) / l, (b[0] - a[0]) / l];
+    left.push([center[i][0] + nn[0] * half, center[i][1] + nn[1] * half]);
+    right.push([center[i][0] - nn[0] * half, center[i][1] - nn[1] * half]);
+  }
+  return { left, right };
+}
+
+/** Running or triple stitch along a line (closed or not). */
+export function borderRun(loop: Pt[], triple: boolean, tol = TOLERANCE, len = BORDER_STITCH): Pt[] {
+  const pts = runStitch(loop, len, tol);
   if (!triple) return pts;
   const out: Pt[] = [pts[0]];
   for (let i = 1; i < pts.length; i++) out.push(pts[i], pts[i - 1], pts[i]);

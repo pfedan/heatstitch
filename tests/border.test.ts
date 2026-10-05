@@ -7,6 +7,7 @@ import { stitchKinds } from '../src/model/sequence';
 import { parsePattern } from '../src/parsers';
 import { sample } from '../src/digitize/region';
 import { syncBorders } from '../src/model/border';
+import { sewAlong } from '../src/model/along';
 
 const load = (f: string) => parsePattern(readFileSync(new URL(`../public/examples/${f}`, import.meta.url)), f);
 
@@ -148,4 +149,26 @@ it('keeps the running stitch of a fill object when a border comes and goes', () 
   const b = apply(a.q, a.o.index, { ...base, border: { type: 'run', width: 2 } });
   const c = apply(b.q, b.o.index, base);
   expect(runOf(c.q, c.o, c.kinds)).toBeGreaterThan(before * 0.8);
+});
+
+describe('stitches along a drawn line', () => {
+  const line: [number, number][] = [
+    [0, 0],
+    [10, 0],
+    [20, 5],
+  ];
+  it('runs from the end nearest the needle', () => {
+    const [run] = sewAlong(line, false, { type: 'run', width: 2 }, [21, 5]);
+    expect(run[0]).toEqual([20, 5]);
+    expect(run[run.length - 1]).toEqual([0, 0]);
+    const triple = sewAlong(line, false, { type: 'triple', width: 2 })[0];
+    expect(triple.length).toBe(3 * run.length - 2);
+  });
+  it('sews a satin of the set width centered on the line', () => {
+    const runs = sewAlong(line, false, { type: 'satin', width: 3 });
+    const pts = runs.flat();
+    const far = Math.max(...pts.filter((q) => q[0] > 2 && q[0] < 8).map((q) => Math.abs(q[1])));
+    expect(far).toBeGreaterThan(1.3);
+    expect(far).toBeLessThan(1.7);
+  });
 });
