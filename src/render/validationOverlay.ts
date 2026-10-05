@@ -83,7 +83,7 @@ export function drawValidation(
 }
 
 /** Dashed frame around a zone (hovered in the list or selected), with some breathing room. */
-export function drawZoneHighlight(ctx: CanvasRenderingContext2D, vp: Viewport, z: Zone): void {
+export function drawZoneHighlight(ctx: CanvasRenderingContext2D, vp: Viewport, z: Pick<Zone, 'bbox'>): void {
   const pad = 1.5; // mm
   const [x0, y0] = vp.toScreen(z.bbox.minX - pad, z.bbox.minY - pad);
   const [x1, y1] = vp.toScreen(z.bbox.maxX + pad, z.bbox.maxY + pad);

@@ -1,4 +1,10 @@
 import type { CorrectionFocus, CorrectionReport } from '../correct/auto';
+import type { Visibility } from '../correct/plan';
+import type { ObjectKind } from '../model/objects';
+import type { Fixed } from '../model/restitch';
+import type { Reason } from '../validation/zones';
+import { fixText } from './fixText';
+import { KIND_ICON } from './layersPanel';
 import { formatNumber, getLang, t, type Key } from '../i18n';
 import { patternStats, type Pattern, type PatternStats } from '../model/pattern';
 import type { ValidationResult } from '../validation/validate';
@@ -9,8 +15,16 @@ import { FileList, type LoadedFile } from './fileList';
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
 export interface CorrectHooks {
-  /** Run the automatic correction on the whole design or the selected zone. */
-  autoFix: (scope: 'all' | 'zone') => void;
+  /** Work out proposals for the whole design or the selected zone. */
+  plan: (scope: 'all' | 'zone') => void;
+  /** Tick or untick a proposal (`fine`: the fine correction on the stitches). */
+  check: (ids: number[] | 'fine', on: boolean) => void;
+  /** Take over the ticked proposals, or drop them all. */
+  applyPlan: () => void;
+  discardPlan: () => void;
+  /** The pointer is over a proposal (null: no longer), or it was clicked. */
+  hoverProposal: (ids: number[] | null) => void;
+  showProposal: (ids: number[]) => void;
   toggleCompare: () => void;
   deleteSelection: () => void;
   thinSelection: (share: number) => void;
@@ -25,9 +39,45 @@ export interface CorrectHooks {
 /** Outcome line(s) shown under the correction buttons. */
 export type CorrectMessage =
   | { kind: 'busy' }
+  | { kind: 'progress'; done: number; total: number }
+  | { kind: 'plan'; plan: PlanView }
+  | { kind: 'applied'; done: number; before: Cells; after: Cells | null; fine?: CorrectionReport; open: number }
   | { kind: 'report'; report: CorrectionReport }
   | { kind: 'text'; text: string }
   | null;
+
+export interface Cells {
+  critical: number;
+  caution: number;
+}
+
+/** A proposal as the card shows it. */
+export interface PlanRow {
+  /** The proposals it stands for: the same change on several objects is one row. */
+  ids: number[];
+  /** The object's name as in the list of objects, and its thread. */
+  name: string;
+  color: string;
+  kind: ObjectKind;
+  visibility: Visibility;
+  changes: Fixed[];
+  knockout?: boolean;
+  reasons: Reason[];
+  hand: number;
+  checked: boolean;
+}
+
+export interface PlanView {
+  rows: PlanRow[];
+  /** Places left for the fine correction on the stitches (shape not certain, or nothing else helped). */
+  fine: number;
+  fineChecked: boolean;
+  /** Objects left out because they are locked. */
+  locked: number;
+  before: Cells;
+  /** With the ticked-by-default proposals (null while measured). */
+  after: Cells | null;
+}
 
 export interface CorrectState {
   file: LoadedFile | null;
@@ -64,6 +114,8 @@ export class CorrectPanel {
   private last: CorrectState | null = null;
   private stats = new WeakMap<Pattern, PatternStats>();
   private compareKey: unknown[] = [];
+  private shown: unknown[] = [];
+  private hooks: CorrectHooks;
 
   constructor(
     private s: Settings,
@@ -85,8 +137,9 @@ export class CorrectPanel {
         if (this.last) this.update(this.last);
       });
     });
-    this.fixAll.addEventListener('click', () => hooks.autoFix('all'));
-    this.fixZone.addEventListener('click', () => hooks.autoFix('zone'));
+    this.fixAll.addEventListener('click', () => hooks.plan('all'));
+    this.fixZone.addEventListener('click', () => hooks.plan('zone'));
+    this.hooks = hooks;
     this.compareToggle.addEventListener('click', () => hooks.toggleCompare());
     this.selDelete.addEventListener('click', () => hooks.deleteSelection());
     this.selThin.addEventListener('click', () => hooks.thinSelection(Number(this.thinShare.value)));
@@ -107,7 +160,7 @@ export class CorrectPanel {
     this.last = st;
     const f = st.file;
     const loaded = !!f?.pattern;
-    const busy = st.message?.kind === 'busy';
+    const busy = st.message?.kind === 'busy' || st.message?.kind === 'progress';
     this.fixAll.disabled = !loaded || busy;
     this.fixZone.disabled = !loaded || busy || !st.zoneSelected;
     const hint: Record<CorrectionFocus, Key> = {
@@ -116,7 +169,7 @@ export class CorrectPanel {
       holes: 'correct.focus.holes.hint',
     };
     this.focusHint.textContent = t(hint[this.s.correction.focus]);
-    this.fixAll.textContent = busy ? t('correct.running') : t('correct.all');
+    this.fixAll.textContent = busy ? t('plan.running') : t('correct.all');
 
     this.editOff.hidden = st.editing;
     this.tools.hidden = !st.editing;
@@ -134,7 +187,12 @@ export class CorrectPanel {
     this.revertBtn.hidden = !FileList.edited(f);
     this.saveDst.disabled = this.savePes.disabled = !loaded || busy;
 
-    this.report.replaceChildren(...this.message(st.message));
+    // Drawn anew only when the message changed: the canvas redraws while the pointer is on a row.
+    const shown = [st.message, getLang()];
+    if (shown.some((k, i) => k !== this.shown[i])) {
+      this.shown = shown;
+      this.report.replaceChildren(...this.message(st.message));
+    }
 
     const edited = FileList.edited(f);
     this.compareToggle.disabled = !edited;
@@ -191,7 +249,10 @@ export class CorrectPanel {
     const p = (text: string, cls = '') => Object.assign(document.createElement('p'), { textContent: text, className: cls });
     if (!m) return [];
     if (m.kind === 'busy') return [p(t('correct.running'), 'muted pending')];
+    if (m.kind === 'progress') return [p(m.total ? t('plan.progress', { a: formatNumber(Math.min(m.total, m.done + 1)), b: formatNumber(m.total) }) : t('plan.running'), 'muted pending')];
     if (m.kind === 'text') return [p(m.text)];
+    if (m.kind === 'plan') return this.planCard(m.plan);
+    if (m.kind === 'applied') return this.applied(m);
     const r = m.report;
     const changed = r.stitchesBefore !== r.stitchesAfter || r.pulledBack + r.shortened + r.moved + r.respaced > 0;
     if (!changed && !r.practice && !r.acknowledged) {
@@ -233,6 +294,122 @@ export class CorrectPanel {
     if (r.practice) out.push(p(t('correct.practice', { n: r.practice }), 'muted small'));
     if (r.acknowledged) out.push(p(t('correct.acknowledged', { n: r.acknowledged }), 'muted small'));
     if (r.manual) out.push(p(t('correct.left', { n: r.manual }), 'muted small'));
+    return out;
+  }
+
+  /** The proposals: one row per change, ticked or not, and the buttons to take them over. */
+  private planCard(v: PlanView): HTMLElement[] {
+    const p = (text: string, cls = '') => Object.assign(document.createElement('p'), { textContent: text, className: cls });
+    const out: HTMLElement[] = [];
+    if (!v.rows.length && !v.fine) {
+      out.push(p(t(v.before.critical + v.before.caution ? 'plan.none' : 'correct.nothing')));
+      if (v.locked) out.push(p(t('plan.locked', { n: v.locked }), 'muted small'));
+      return out;
+    }
+    const objects = v.rows.reduce((a, r) => a + r.ids.length, 0);
+    out.push(p(t(objects === 1 ? 'plan.head.one' : 'plan.head', { n: formatNumber(objects) }), 'strong'));
+    if (v.after) {
+      out.push(
+        p(
+          t('correct.result', {
+            c0: formatNumber(v.before.critical),
+            c1: formatNumber(v.after.critical),
+            w0: formatNumber(v.before.caution),
+            w1: formatNumber(v.after.caution),
+          }),
+          'muted small',
+        ),
+      );
+    }
+    const list = document.createElement('ul');
+    list.className = 'plan-list';
+    for (const r of v.rows) list.append(this.planRow(r));
+    if (v.fine) {
+      const li = document.createElement('li');
+      li.className = 'plan-row';
+      const l = Object.assign(document.createElement('label'), { className: 'check' });
+      const i = Object.assign(document.createElement('input'), { type: 'checkbox', checked: v.fineChecked });
+      i.addEventListener('change', () => this.hooks.check('fine', i.checked));
+      l.append(i, Object.assign(document.createElement('span'), { className: 'plan-name', textContent: t('plan.fine') }));
+      li.append(l, p(t(v.fine === 1 ? 'plan.fine.text.one' : 'plan.fine.text', { n: formatNumber(v.fine) }), 'muted small plan-change'));
+      list.append(li);
+    }
+    out.push(list);
+    if (v.locked) out.push(p(t('plan.locked', { n: v.locked }), 'muted small'));
+    const buttons = document.createElement('div');
+    buttons.className = 'buttons';
+    const take = Object.assign(document.createElement('button'), { type: 'button', className: 'primary', textContent: t('plan.apply') });
+    take.disabled = !v.rows.some((r) => r.checked) && !(v.fine && v.fineChecked);
+    take.addEventListener('click', () => this.hooks.applyPlan());
+    const drop = Object.assign(document.createElement('button'), { type: 'button', textContent: t('plan.discard') });
+    drop.addEventListener('click', () => this.hooks.discardPlan());
+    buttons.append(take, drop);
+    out.push(buttons);
+    out.push(p(t('plan.note'), 'muted small'));
+    return out;
+  }
+
+  private planRow(r: PlanRow): HTMLElement {
+    const li = document.createElement('li');
+    li.className = `plan-row ${r.visibility}`;
+    const top = document.createElement('div');
+    top.className = 'plan-top';
+    const l = Object.assign(document.createElement('label'), { className: 'check' });
+    const i = Object.assign(document.createElement('input'), { type: 'checkbox', checked: r.checked });
+    i.addEventListener('change', () => this.hooks.check(r.ids, i.checked));
+    const name = Object.assign(document.createElement('button'), { type: 'button', className: 'link plan-name', title: t('plan.show') });
+    const sw = Object.assign(document.createElement('span'), { className: 'swatch' });
+    sw.style.background = r.color;
+    const icon = Object.assign(document.createElement('span'), { className: `kind-icon kind-${r.kind}`, innerHTML: KIND_ICON[r.kind] });
+    name.append(sw, icon, r.name);
+    name.addEventListener('click', () => this.hooks.showProposal(r.ids));
+    l.append(i);
+    const vis = Object.assign(document.createElement('span'), {
+      className: `plan-vis ${r.visibility}`,
+      textContent: r.hand ? t('plan.hand', { n: formatNumber(r.hand) }) : t(`plan.vis.${r.visibility}` as Key),
+      title: t(`plan.vis.${r.visibility}.hint` as Key),
+    });
+    top.append(l, name, vis);
+    li.append(top);
+    const changes = [...r.changes.map(fixText), ...(r.knockout ? [fixText({ field: 'knockout', from: false, to: true })] : [])];
+    const why = r.reasons.map((x) => t(`validation.reason.${x}` as Key)).join(', ');
+    li.append(Object.assign(document.createElement('p'), { className: 'small plan-change', textContent: changes.join(' · ') }));
+    if (why) li.append(Object.assign(document.createElement('p'), { className: 'muted small plan-change', textContent: t('plan.against', { list: why }) }));
+    li.addEventListener('mouseenter', () => this.hooks.hoverProposal(r.ids));
+    li.addEventListener('mouseleave', () => this.hooks.hoverProposal(null));
+    return li;
+  }
+
+  private applied(m: Extract<CorrectMessage, { kind: 'applied' }>): HTMLElement[] {
+    const p = (text: string, cls = '') => Object.assign(document.createElement('p'), { textContent: text, className: cls });
+    const out = [p(t(m.done === 1 ? 'plan.applied.one' : 'plan.applied', { n: formatNumber(m.done) }), 'strong')];
+    if (m.after) {
+      out.push(
+        p(
+          t('correct.result', {
+            c0: formatNumber(m.before.critical),
+            c1: formatNumber(m.after.critical),
+            w0: formatNumber(m.before.caution),
+            w1: formatNumber(m.after.caution),
+          }),
+        ),
+      );
+    }
+    if (m.fine) {
+      const r = m.fine;
+      const items: [Key, number][] = [
+        ['correct.item.pull', r.pulledBack],
+        ['correct.item.short', r.shortened],
+        ['correct.item.resp', r.respaced],
+        ['correct.item.hidden', r.hiddenRows],
+        ['correct.item.clean', r.zeroLength + r.merged],
+        ['correct.item.moved', r.moved],
+      ];
+      const list = items.filter(([, n]) => n > 0).map(([k, n]) => t(k, { n: formatNumber(n) }));
+      if (list.length) out.push(p(t('plan.fineDone', { list: list.join(', ') }), 'small'));
+    }
+    if (m.open) out.push(p(t('correct.left', { n: m.open }), 'muted small'));
+    out.push(p(t('plan.undo'), 'muted small'));
     return out;
   }
 }

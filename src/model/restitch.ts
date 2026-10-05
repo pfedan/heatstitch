@@ -14,7 +14,7 @@ import { formFrom, storeForm, type Form, type StoredPath } from '../shape/path';
 import { rasterize } from '../shape/rasterize';
 import { distanceInside, distanceToSeeds } from '../image/edt';
 import { tidy, withRecords } from './edit';
-import { joinsIn, rememberObjects, restoreJoin, stitchKey, type ObjectKind, type SewObject } from './objects';
+import { holdJoins, joinsIn, rememberObjects, restoreJoin, stitchKey, type ObjectKind, type SewObject } from './objects';
 import { END, JUMP, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
 import { SATIN, TIE_STITCH } from './sequence';
 import { letteringFrom } from '../lettering/stored';
@@ -209,6 +209,17 @@ export interface Remembered {
   border?: BorderSettings;
   /** The lettering the object belongs to (it is sewn anew from its text, see lettering/). */
   lettering?: Lettering;
+  /** The correction leaves the object as it is (set by hand). */
+  lock?: boolean;
+  /** What the correction changed when it last gave the object new stitches (gone with the next change by hand). */
+  fixed?: Fixed[];
+}
+
+/** A setting the correction changed: which, and its value before and after. */
+export interface Fixed {
+  field: string;
+  from: number | boolean | string;
+  to: number | boolean | string;
 }
 
 /**
@@ -218,6 +229,24 @@ export interface Remembered {
  */
 const memory = new Map<string, Remembered>();
 const MEMORY_SIZE = 400;
+/** While trying things out (see holdMemory), nothing is forgotten for lack of room. */
+let held = 0;
+
+/**
+ * Lets stitches be tried out: until the returned function is called nothing is forgotten, and then
+ * memory is put back as it was (what the tries remembered goes again).
+ */
+export function holdMemory(): () => void {
+  const saved = new Map(memory);
+  const joins = holdJoins();
+  held++;
+  return () => {
+    held--;
+    memory.clear();
+    for (const [k, v] of saved) memory.set(k, v);
+    joins();
+  };
+}
 
 /** A key for an object's stitches. */
 export const objectKey = (p: Pattern, o: SewObject): string => stitchKey(p, o.first, o.last);
@@ -229,7 +258,7 @@ export function remember(p: Pattern, o: SewObject, r: Remembered): void {
 function rememberKey(key: string, r: Remembered): void {
   memory.delete(key);
   memory.set(key, r);
-  if (memory.size > MEMORY_SIZE) memory.delete(memory.keys().next().value!);
+  if (!held && memory.size > MEMORY_SIZE) memory.delete(memory.keys().next().value!);
 }
 
 /** Remembers `r` for the stitches from record `first` to `last` (an object's records). */
@@ -304,6 +333,8 @@ export interface StoredObject {
   outline?: string;
   border?: BorderSettings;
   lettering?: Lettering;
+  lock?: boolean;
+  fixed?: Fixed[];
   join?: boolean;
 }
 
@@ -334,12 +365,16 @@ export function rememberedIn(p: Pattern, objects: SewObject[]): StoredObject[] {
       ...(r.outline ? { outline: r.outline } : {}),
       ...(r.border ? { border: { ...r.border } } : {}),
       ...(r.lettering ? { lettering: r.lettering } : {}),
+      ...(r.lock ? { lock: true } : {}),
+      ...(r.fixed?.length ? { fixed: r.fixed.map((x) => ({ ...x })) } : {}),
     });
   }
   for (const j of joinsIn(p)) out.push({ key: j.key, region: null, join: j.join });
   return out;
 }
 
+const isValue = (v: unknown) => finite(v) || typeof v === 'boolean' || typeof v === 'string';
+const isFixed = (x: unknown): x is Fixed => !!x && typeof (x as Fixed).field === 'string' && isValue((x as Fixed).from) && isValue((x as Fixed).to);
 const PATTERNS: FillPattern[] = ['tatami', 'gradient', 'contour', 'spiral', 'follow', 'guided'];
 const isLine = (l: unknown) => Array.isArray(l) && l.length >= 2 && l.every((q) => Array.isArray(q) && q.length === 2 && q.every(finite));
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
@@ -519,6 +554,9 @@ export function restoreRemembered(list: unknown): number {
     if (isBorder(e.border)) r.border = { ...e.border };
     const lettering = e.lettering === undefined ? null : letteringFrom(e.lettering);
     if (lettering) r.lettering = lettering;
+    if (e.lock === true) r.lock = true;
+    const fixed = Array.isArray(e.fixed) ? e.fixed.filter(isFixed).map((x) => ({ ...x })) : [];
+    if (fixed.length) r.fixed = fixed;
     rememberKey(e.key, r);
     n++;
   }
@@ -1334,6 +1372,7 @@ export function restitch(
           ...(known?.outline ? { outline: known.outline, border: known.border } : {}),
         };
     if (known?.lettering) after.lettering = known.lettering;
+    if (known?.lock) after.lock = true;
     // Up to the object: everything as it was, except the jumps that lead to its first stitch.
     let lead = o.first;
     while (lead - 1 >= i && p.cmd[lead - 1] === JUMP) lead--;

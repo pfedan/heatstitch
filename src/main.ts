@@ -9,7 +9,10 @@ import { validationToCanvas } from './render/validationOverlay';
 import { Viewport } from './render/viewport';
 import { loadSettings, saveSettings } from './settings';
 import { bindControls, type ChangeKind } from './ui/controls';
-import { CorrectPanel, type CorrectMessage } from './ui/correctPanel';
+import { cssColor } from './ui/threadPicker';
+import { CorrectPanel, type Cells, type CorrectMessage, type PlanRow, type PlanView } from './ui/correctPanel';
+import { applyProposals, fineZones, planCorrection, wanted, type Box, type Plan } from './correct/plan';
+import type { CorrectionReport } from './correct/auto';
 import { Editor } from './ui/editor';
 import { keepObjects, type HandChange } from './model/handEdit';
 import { exportPng } from './ui/export';
@@ -183,7 +186,7 @@ const scene = (): Scene => ({
   validation: files.active?.validation ?? null,
   validationImg: activeValidationImg(),
   counted: countedFor(files.active?.validation),
-  highlight: settings.showValidation ? (hoverZone ?? selectedZone) : null,
+  highlight: planHover ? { bbox: planHover } : settings.showValidation ? (hoverZone ?? selectedZone) : null,
   settings,
   vp,
   edit: editor.active ? editor : null,
@@ -842,7 +845,10 @@ function stitchInfo(p: Pattern, q: Sequence): StitchInfo {
   const knockout: StitchInfo['knockout'] = shaped.length
     ? { on: ons.size > 1 ? 'mixed' : ons.has(true), covered: shaped.some((obj) => isCovered(p, q.objects, obj)) }
     : undefined;
-  const info: StitchInfo = { key: selectionKey, hand, measured, counts, recommended: recommendedSpacing(settings.profile), shape: worst, outlines: shapes, toSatin: stroke, knockout, color: q.objects[firstFill]?.color };
+  const locks = new Set([...selectedObjects].map((o) => !!(q.objects[o] && remembered(p, q.objects[o])?.lock)));
+  const lock = locks.size > 1 ? 'mixed' : locks.has(true);
+  const fixed = selectedObjects.size === 1 && q.objects[[...selectedObjects][0]] ? remembered(p, q.objects[[...selectedObjects][0]])?.fixed : undefined;
+  const info: StitchInfo = { key: selectionKey, lock, fixed, hand, measured, counts, recommended: recommendedSpacing(settings.profile), shape: worst, outlines: shapes, toSatin: stroke, knockout, color: q.objects[firstFill]?.color };
   const runs = [...selectedObjects].map((o) => q.objects[o]).filter((obj) => obj?.kind === 'run');
   if (runs.length && runs.every((obj) => remembered(p, obj)?.path)) info.line = true;
   const link = selectedObjects.size === 1 && q.objects[firstFill] ? remembered(p, q.objects[firstFill])?.outline : undefined;
@@ -969,6 +975,22 @@ const stitchPanel = new StitchPanel($('object-stitches'), {
     if (rungTool.mode === 'guide') closeRungs();
   },
   knockout: (on) => knockoutObjects([...selectedObjects].sort((a, b) => a - b), on),
+  lock: (on) => {
+    const p = files.active?.pattern;
+    if (!p) return;
+    const q = seq(p);
+    for (const o of selectedObjects) {
+      const obj = q.objects[o];
+      if (!obj) continue;
+      const mem = remembered(p, obj);
+      if (!mem && !on) continue;
+      remember(p, obj, { ...(mem ?? { region: null }), lock: on || undefined });
+    }
+    if (files.active) files.setObjects(files.active, rememberedIn(p, q.objects));
+    selectionKey++;
+    stitchCache = null;
+    redraw();
+  },
   underlay: (on) => {
     showUnder = on;
     redraw();
@@ -2356,6 +2378,12 @@ function redraw(): void {
       $<HTMLButtonElement>('order-optimize').disabled = !q || q.objects.length < 2;
     }
     panel.update(active, selectedZone);
+    // Proposals belong to the version they were worked out on.
+    if (planState && (planState.file !== active || planState.pattern !== active?.pattern)) {
+      planState = null;
+      planHover = null;
+      if (correctMessage?.kind === 'plan') correctMessage = null;
+    }
     correctPanel.update({
       file: active,
       zoneSelected: !!selectedZone,
@@ -2642,31 +2670,195 @@ function history(step: 'undo' | 'redo' | 'revert'): void {
   recompute();
 }
 
-async function autoFix(scope: 'all' | 'zone'): Promise<void> {
+/** Proposals worked out for the active file, until they are taken over or the file changes. */
+let planState: { file: LoadedFile; pattern: Pattern; plan: Plan; checked: Set<number>; fine: Box[]; fineOn: boolean; view: PlanView } | null = null;
+/** The object of the proposal under the pointer (mm), outlined on the canvas. */
+let planHover: Box | null = null;
+
+const cellsOf = (v: ValidationResult): Cells => ({ critical: v.criticalCells, caution: v.cautionCells });
+const measured = async (p: Pattern) => classify(await validator.measure(p, openOnPurpose(p, seq(p).objects) ?? undefined), settings.profile, settings.checks);
+
+/** The card's view of `planState` after a box was ticked or not. */
+function planMessage(): void {
+  const st = planState;
+  if (!st) return;
+  st.view = {
+    ...st.view,
+    rows: st.view.rows.map((r) => ({ ...r, checked: r.ids.every((id) => st.checked.has(id)) })),
+    fineChecked: st.fineOn,
+  };
+  correctMessage = { kind: 'plan', plan: st.view };
+}
+
+/** Works out proposals for the whole design or the selected zone; nothing changes yet. */
+async function planFix(scope: 'all' | 'zone'): Promise<void> {
   const f = files.active;
   const p = f?.pattern;
-  if (!f || !p || correctMessage?.kind === 'busy') return;
+  const v = f?.validation;
+  if (!f || !p || !v || correctMessage?.kind === 'busy' || correctMessage?.kind === 'progress') return;
   const z = selectedZone;
   const pad = 1; // mm around the zone
-  const region = scope === 'zone' && z
-    ? { minX: z.bbox.minX - pad, minY: z.bbox.minY - pad, maxX: z.bbox.maxX + pad, maxY: z.bbox.maxY + pad }
-    : undefined;
-  correctMessage = { kind: 'busy' };
+  const region = scope === 'zone' && z ? { minX: z.bbox.minX - pad, minY: z.bbox.minY - pad, maxX: z.bbox.maxX + pad, maxY: z.bbox.maxY + pad } : undefined;
+  planState = null;
+  planHover = null;
+  const stale = () => files.active !== f || f.pattern !== p;
+  correctMessage = { kind: 'progress', done: 0, total: 0 };
   redraw();
   try {
-    const r = await validator.correct(p, settings.profile, settings.checks, { ...settings.correction, region, acks: f.acks });
-    if (files.active !== f || f.pattern !== p) return; // the user moved on meanwhile
-    correctMessage = { kind: 'report', report: r.report };
-    editor.reset();
-    if (r.pattern !== p) applyEdit(r.pattern, r.measurement);
+    const opt = { ...settings.correction, region, acks: f.acks, trimMm: settings.trimMm };
+    const plan = await planCorrection(p, v, settings.profile, settings.checks, {
+      ...opt,
+      stale,
+      progress: async (done, total) => {
+        if (correctMessage?.kind !== 'progress' || correctMessage.done !== done || correctMessage.total !== total) {
+          correctMessage = { kind: 'progress', done, total };
+          redraw();
+        }
+        await new Promise((r) => setTimeout(r, 0));
+      },
+    });
+    if (stale()) return;
+    const after = plan.proposals.length ? await measured(plan.pattern) : v;
+    if (stale()) return;
+    const fine = fineZones(p, after, plan.proposals, opt);
+    const objs = seq(p).objects;
+    // The same change on several objects of a kind is one row ("Steppstich 3, 4, 7").
+    const rows: PlanRow[] = [];
+    const nameOf = (i: number) => `${numberInColor(objs.filter((y) => y.block === objs[i].block), objs[i])}`;
+    for (const x of plan.proposals) {
+      const sig = JSON.stringify([x.kind, x.visibility, x.hand > 0, x.knockout, x.reasons, objs[x.index].color, x.changes.map((c) => [c.field, c.to])]);
+      const same = rows.find((r) => (r as PlanRow & { sig?: string }).sig === sig);
+      if (same) {
+        same.ids.push(x.id);
+        same.name += `, ${nameOf(x.index)}`;
+        same.hand += x.hand;
+        // Different values before: only the new one is said.
+        same.changes = same.changes.map((c, k) => (c.from === x.changes[k]?.from ? c : { ...c, from: '' }));
+        continue;
+      }
+      rows.push(
+        Object.assign(
+          {
+            ids: [x.id],
+            name: `${kindLabel(x.kind)} ${nameOf(x.index)}`,
+            color: cssColor(objs[x.index].color),
+            kind: x.kind,
+            visibility: x.visibility,
+            changes: x.changes.map((c) => ({ ...c })),
+            knockout: x.knockout,
+            reasons: x.reasons,
+            hand: x.hand,
+            checked: x.checked,
+          },
+          { sig },
+        ),
+      );
+    }
+    const view: PlanView = { rows, fine: fine.length, fineChecked: true, locked: plan.locked, before: cellsOf(v), after: plan.proposals.length ? cellsOf(after) : null };
+    planState = { file: f, pattern: p, plan, checked: new Set(plan.proposals.filter((x) => x.checked).map((x) => x.id)), fine, fineOn: true, view };
+    planMessage();
   } catch (err) {
+    console.error(err);
+    correctMessage = { kind: 'text', text: t('correct.error', { msg: err instanceof Error ? err.message : String(err) }) };
+  }
+  redraw();
+}
+
+/** Where the objects of the proposals `ids` lie, together (mm). */
+function proposalsBox(ids: number[]): Box | null {
+  const bs = (planState?.plan.proposals ?? []).filter((x) => ids.includes(x.id)).map((x) => x.box);
+  if (!bs.length) return null;
+  return { minX: Math.min(...bs.map((b) => b.minX)), minY: Math.min(...bs.map((b) => b.minY)), maxX: Math.max(...bs.map((b) => b.maxX)), maxY: Math.max(...bs.map((b) => b.maxY)) };
+}
+
+/** Adds up the fine corrections of several places. */
+function addReports(a: CorrectionReport | undefined, b: CorrectionReport): CorrectionReport {
+  if (!a) return b;
+  const sum = { ...a };
+  for (const k of ['zeroLength', 'merged', 'pulledBack', 'shortened', 'hiddenRows', 'respaced', 'respacedRows', 'moved'] as const) sum[k] = a[k] + b[k];
+  return sum;
+}
+
+/** Takes over the ticked proposals and the fine correction, as one step to undo. */
+async function applyPlan(): Promise<void> {
+  const st = planState;
+  const f = files.active;
+  if (!st || !f || st.file !== f || f.pattern !== st.pattern) {
+    planState = null;
+    correctMessage = null;
+    return redraw();
+  }
+  const chosen = st.plan.proposals.filter((x) => st.checked.has(x.id));
+  correctMessage = { kind: 'busy' };
+  planHover = null;
+  redraw();
+  try {
+    let p = st.pattern;
+    let done = 0;
+    const r = chosen.length ? applyProposals(p, chosen, settings.trimMm) : null;
+    if (r) {
+      p = syncBorders(r.pattern, settings.trimMm);
+      done = r.done;
+    }
+    let fine: CorrectionReport | undefined;
+    if (st.fineOn) {
+      for (const b of st.fine) {
+        const pad = 1;
+        const c = await validator.correct(p, settings.profile, settings.checks, { ...settings.correction, region: { minX: b.minX - pad, minY: b.minY - pad, maxX: b.maxX + pad, maxY: b.maxY + pad }, acks: f.acks });
+        if (c.pattern !== p) {
+          p = c.pattern;
+          fine = addReports(fine, c.report);
+        }
+      }
+    }
+    if (files.active !== f || f.pattern !== st.pattern) return;
+    planState = null;
+    if (p === st.pattern) {
+      correctMessage = { kind: 'text', text: t('correct.noChange') };
+      return redraw();
+    }
+    editor.reset();
+    applyEdit(p);
+    files.setObjects(f, rememberedIn(p, seq(p).objects));
+    const after = await measured(p);
+    const open = after.zones.filter((z) => !z.practice && !settledBy(z, f.acks) && wanted(z, settings.correction).length).length;
+    correctMessage = { kind: 'applied', done, before: st.view.before, after: cellsOf(after), fine, open };
+  } catch (err) {
+    console.error(err);
     correctMessage = { kind: 'text', text: t('correct.error', { msg: err instanceof Error ? err.message : String(err) }) };
   }
   redraw();
 }
 
 const correctPanel = new CorrectPanel(settings, {
-  autoFix: (scope) => void autoFix(scope),
+  plan: (scope) => void planFix(scope),
+  check: (ids, on) => {
+    const st = planState;
+    if (!st) return;
+    if (ids === 'fine') st.fineOn = on;
+    else for (const id of ids) on ? st.checked.add(id) : st.checked.delete(id);
+    planMessage();
+    redraw();
+  },
+  applyPlan: () => void applyPlan(),
+  discardPlan: () => {
+    planState = null;
+    planHover = null;
+    correctMessage = null;
+    redraw();
+  },
+  hoverProposal: (ids) => {
+    planHover = ids && proposalsBox(ids);
+    redraw();
+  },
+  showProposal: (ids) => {
+    const b = proposalsBox(ids);
+    if (!b) return;
+    const pad = 4;
+    planHover = b;
+    vp.fit(b.minX - pad, b.minY - pad, b.maxX + pad, b.maxY + pad, stageW, stageH);
+    redraw();
+  },
   toggleCompare: () => setComparing(!comparing),
   deleteSelection: () => editor.deleteSelection(),
   thinSelection: (share) => {

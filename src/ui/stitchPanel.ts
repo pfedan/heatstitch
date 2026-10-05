@@ -1,6 +1,7 @@
 import { formatNumber, t, type Key } from '../i18n';
 import type { ObjectKind } from '../model/objects';
-import { SATIN_SPLIT, UNDERLAYS, type FillPattern, type FillSettings, type RunSettings, type SatinSettings, type SatinType, type Settings, type ShapeTrust } from '../model/restitch';
+import { SATIN_SPLIT, UNDERLAYS, type FillPattern, type FillSettings, type RunSettings, type SatinSettings, type SatinType, type Settings, type ShapeTrust, type Fixed } from '../model/restitch';
+import { fixText } from './fixText';
 import type { UnderlayKind } from '../digitize/satin';
 import type { ShapeOutline } from '../render/scene';
 import { UNDERLAY_INSET } from '../digitize/fill';
@@ -58,6 +59,10 @@ export interface StitchInfo {
   color?: ThreadColor;
   /** The one selected object is the border of a fill in its own thread (the fill's number, or null when gone). */
   outline?: { fill: number | null };
+  /** Left out of the correction (`mixed`: only some of the selected objects). */
+  lock: boolean | 'mixed';
+  /** What the correction changed on the one selected object. */
+  fixed?: Fixed[];
 }
 
 export interface StitchHooks {
@@ -77,6 +82,8 @@ export interface StitchHooks {
   underlay: (on: boolean) => void;
   /** A border object: select its fill, or make it an object of its own (no longer following the fill). */
   outline: (action: 'fill' | 'detach') => void;
+  /** The selected objects left out of the correction, or not. */
+  lock: (on: boolean) => void;
 }
 
 const KINDS: ObjectKind[] = ['fill', 'satin', 'run'];
@@ -245,11 +252,18 @@ export class StitchPanel {
       hand.append(Object.assign(document.createElement('span'), { textContent: t('stitch.hand', { n: formatNumber(info.hand) }) }));
       parts.push(hand);
     }
+    if (info.fixed?.length) {
+      const fixed = document.createElement('p');
+      fixed.className = 'muted small fixed-note';
+      fixed.textContent = t('plan.fixed', { list: info.fixed.map(fixText).join(', ') });
+      parts.push(fixed);
+    }
     if (this.kind === 'fill' && info.knockout) parts.push(this.knockoutSwitch(info.knockout));
     if (this.kind === 'fill' || this.kind === 'satin') parts.push(this.kindSwitch(this.kind));
     if (this.kind === 'fill' && info.draw?.single) parts.push(this.drawTool(info.draw));
     if (this.kind === 'satin' && info.direction) parts.push(this.directionTool(info.direction));
     parts.push(...this.controls());
+    parts.push(this.lockSwitch(info.lock));
     const note = Object.assign(document.createElement('p'), { className: 'muted small stitch-note', textContent: t(this.kind === 'fill' && info.shape ? 'stitch.undo' : this.kind === 'run' && info.line ? 'stitch.lineNote' : 'stitch.note') });
     parts.push(note);
     this.picker.close();
@@ -705,6 +719,15 @@ export class StitchPanel {
       );
     }
     return wrap;
+  }
+
+  /** Left out of the correction: a switch, taken over at once. */
+  private lockSwitch(on: boolean | 'mixed'): HTMLElement {
+    const l = Object.assign(document.createElement('label'), { className: 'check lock-switch', title: t('plan.lock.hint') });
+    const i = Object.assign(document.createElement('input'), { type: 'checkbox', checked: on === true, indeterminate: on === 'mixed' });
+    i.addEventListener('change', () => this.hooks.lock(i.checked));
+    l.append(i, Object.assign(document.createElement('span'), { textContent: t('plan.lock') }));
+    return l;
   }
 
   /** Leaving out what lies on top: a switch, taken over at once (the shape itself stays). */

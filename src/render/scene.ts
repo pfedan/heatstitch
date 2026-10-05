@@ -58,7 +58,7 @@ export interface Scene {
   /** Per zone: whether it counts (zones normal in practice or acknowledged are drawn faintly). */
   counted: Counted;
   /** Zone hovered in the list or selected, framed on the canvas. */
-  highlight: Zone | null;
+  highlight: Pick<Zone, 'bbox'> | null;
   settings: Settings;
   vp: Viewport;
   /** Stitch editor state; the stitch plan and needle penetrations are shown while it is set. */
