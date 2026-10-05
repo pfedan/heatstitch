@@ -26,6 +26,8 @@ export interface CorrectHooks {
   discardPlan: () => void;
   /** The pointer is over a proposal (null: no longer), or it was clicked. */
   hoverProposal: (ids: number[] | null) => void;
+  /** Where across its row the pointer is (0 left, 1 right): the comparison's line goes there. */
+  splitProposal: (at: number) => void;
   showProposal: (ids: number[]) => void;
   toggleCompare: () => void;
   deleteSelection: () => void;
@@ -421,7 +423,16 @@ export class CorrectPanel {
     const why = r.reasons.map((x) => t(`validation.reason.${x}` as Key)).join(', ');
     li.append(Object.assign(document.createElement('p'), { className: 'small plan-change', textContent: changes.join(' · ') }));
     if (why) li.append(Object.assign(document.createElement('p'), { className: 'muted small plan-change', textContent: t('plan.against', { list: why }) }));
-    li.addEventListener('mouseenter', () => this.hooks.hoverProposal(r.ids));
+    // Moving sideways over the row moves the line between before and after.
+    const split = (e: MouseEvent) => {
+      const b = li.getBoundingClientRect();
+      this.hooks.splitProposal((e.clientX - b.left) / Math.max(1, b.width));
+    };
+    li.addEventListener('mouseenter', (e) => {
+      this.hooks.hoverProposal(r.ids);
+      split(e);
+    });
+    li.addEventListener('mousemove', split);
     li.addEventListener('mouseleave', () => this.hooks.hoverProposal(null));
     return li;
   }

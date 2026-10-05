@@ -219,7 +219,7 @@ function originalScene(): Scene {
   };
 }
 
-const panel = new ValidationPanel($('validation'), $('findings-open'), {
+const panel = new ValidationPanel($('validation'), $('findings-sum'), {
   onZone: (z) => selectZone(z),
   onHover: (z) => {
     hoverZone = z;
@@ -237,16 +237,6 @@ const panel = new ValidationPanel($('validation'), $('findings-open'), {
   },
 });
 
-/** Shows or hides the findings (the Correction panel stays in the column); while hidden a chip on the canvas reopens them. */
-function setFindingsOpen(open: boolean): void {
-  settings.findingsOpen = open;
-  saveSettings(settings);
-  $('layout').classList.toggle('findings-closed', !open);
-  $('findings-open').hidden = open;
-}
-$('findings-close').addEventListener('click', () => setFindingsOpen(false));
-$('findings-open').addEventListener('click', () => setFindingsOpen(true));
-setFindingsOpen(settings.findingsOpen);
 installPanelResize($('layout'), settings.panels, () => saveSettings(settings));
 
 
@@ -3017,7 +3007,6 @@ let planDrag = false;
 /** Holds the proposals `ids` for comparing, or lets go (null). */
 function pinPlan(ids: number[] | null): void {
   planPin = ids;
-  planSplit = 0.5;
   planHover = ids && proposalsBox(ids);
   showPlanPreview(ids);
   planMessage();
@@ -3222,9 +3211,12 @@ const correctPanel = new CorrectPanel(settings, {
   hoverProposal: (ids) => {
     // Away from the list, the held proposal comes back.
     const show = ids ?? planPin;
-    if (ids && planPin?.join() !== ids.join()) planSplit = 0.5;
     planHover = show && proposalsBox(show);
     showPlanPreview(show);
+    redraw();
+  },
+  splitProposal: (at) => {
+    planSplit = Math.min(0.97, Math.max(0.03, at));
     redraw();
   },
   showProposal: (ids) => {
