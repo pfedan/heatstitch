@@ -411,3 +411,33 @@ export function drawOutlines(ctx: CanvasRenderingContext2D, vp: Viewport, shapes
   }
   ctx.restore();
 }
+
+/**
+ * The underlay of the selected objects on top of everything (records with `under` set, each the
+ * end of a stitch): a dark halo and a bright line, so it reads on any thread and background.
+ */
+export function drawUnderlay(ctx: CanvasRenderingContext2D, vp: Viewport, p: Pattern, under: Uint8Array): void {
+  const s = vp.scale / 10;
+  ctx.save();
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  let open = false;
+  for (let i = 1; i < p.cmd.length; i++) {
+    if (!under[i] || p.cmd[i] !== STITCH || p.cmd[i - 1] !== STITCH) {
+      open = false;
+      continue;
+    }
+    if (!open) ctx.moveTo(p.x[i - 1] * s + vp.offsetX, p.y[i - 1] * s + vp.offsetY);
+    ctx.lineTo(p.x[i] * s + vp.offsetX, p.y[i] * s + vp.offsetY);
+    open = true;
+  }
+  const w = Math.max(1.5, Math.min(4, 0.3 * vp.scale));
+  ctx.strokeStyle = 'rgba(13, 11, 16, 0.8)';
+  ctx.lineWidth = w + 2.5;
+  ctx.stroke();
+  ctx.strokeStyle = '#4de3ff';
+  ctx.lineWidth = w;
+  ctx.stroke();
+  ctx.restore();
+}

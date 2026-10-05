@@ -1,5 +1,5 @@
 import type { Orientation } from '../image/orientation';
-import { fillRegion, pathLength, sewUnderlay, TRAVEL_STITCH, TRAVEL_TOLERANCE, TravelGrid, type FillParams, type FillResult } from './fill';
+import { fillRegion, pathLength, pointCount, sewUnderlay, TRAVEL_STITCH, TRAVEL_TOLERANCE, TravelGrid, type FillParams, type FillResult } from './fill';
 import { coverage, peakDensity } from './measure';
 import { sample, type Region } from './region';
 import { MIN_CURVE_STITCH, Path, runStitch, simplify, TOLERANCE } from './run';
@@ -562,6 +562,7 @@ export function fieldFill(
   const runs: Pt[][] = [];
   const grid = new TravelGrid(p.travel ?? r);
   let pos = p.underlay ? sewUnderlay(r, mean, p, start, grid, runs) : start;
+  const under = pointCount(runs);
   let cur: Pt[] | null = runs.length ? runs[runs.length - 1] : null;
   const todo = rows.slice();
   const reach = 2.5 * p.spacing + 0.3;
@@ -624,5 +625,5 @@ export function fieldFill(
     pos = pts[pts.length - 1];
   }
 
-  return { runs, angle: mean, curved: true };
+  return { runs, angle: mean, curved: true, under };
 }

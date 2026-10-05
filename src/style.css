@@ -2946,3 +2946,26 @@ body[data-mode='flow'] .stage .hint {
 .stage canvas#canvas.on-frame.panning {
   cursor: grabbing;
 }
+
+/* Border thread: a swatch button with the thread's name */
+.border-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.border-thread {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 4px 10px 4px 6px;
+}
+
+.border-thread .sw {
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+  flex: none;
+}

@@ -11,7 +11,7 @@ import { drawFrame, drawShapeOverlay } from './shapeOverlay';
 import type { ShapeView } from '../ui/shapeTool';
 import type { FrameView } from '../ui/frameTool';
 import type { Pt } from '../digitize/skeleton';
-import { drawFlatStitches, drawJumps, drawMarkers, drawNeedle, drawOutlines, drawTransition, type StitchStyle } from './flow';
+import { drawFlatStitches, drawJumps, drawMarkers, drawNeedle, drawOutlines, drawTransition, drawUnderlay, type StitchStyle } from './flow';
 import { drawHeatmap } from './heatmap';
 import { drawStitches } from './stitches';
 import { drawThreads } from './threads';
@@ -36,6 +36,8 @@ export interface FlowScene {
   needle: number;
   /** Fill areas of the selected objects. */
   outlines?: ShapeOutline[];
+  /** Underlay of the selected objects, shown while its settings are pointed at (per record). */
+  under?: Uint8Array | null;
   /** The rung tool, while it is on. */
   rungs?: RungView | null;
   /** The outline of the fill being reshaped (level Form), with the handles shown. */
@@ -82,6 +84,7 @@ export function drawScene(ctx: CanvasRenderingContext2D, w: number, h: number, s
     if (flow.hover && flow.hover !== flow.selected) drawTransition(ctx, vp, pattern, flow.hover, false);
     if (flow.selected) drawTransition(ctx, vp, pattern, flow.selected, true);
     if (flow.outlines?.length) drawOutlines(ctx, vp, flow.outlines);
+    if (flow.under) drawUnderlay(ctx, vp, pattern, flow.under);
     if (flow.rungs) drawRungOverlay(ctx, vp, flow.rungs);
     if (flow.frame) drawFrame(ctx, vp, flow.frame.view, flow.frame.mapped);
     if (flow.shape) drawShapeOverlay(ctx, vp, flow.shape.view, flow.shape.handles);
