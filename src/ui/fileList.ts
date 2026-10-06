@@ -1,4 +1,4 @@
-import { onLangChange, t } from '../i18n';
+import { getLang, onLangChange, t } from '../i18n';
 import { patternStats, STITCH, type Pattern, type PatternStats } from '../model/pattern';
 import { parsePattern, SUPPORTED_EXTENSIONS } from '../parsers';
 import {
@@ -15,8 +15,10 @@ import {
   saveNaming,
   saveObjects,
   saveWorking,
+  titlesOf,
   toStored,
   type StoredPattern,
+  type Titles,
 } from '../storage/fileStore';
 import { backToVersion, keepVersion, restoreRemembered, type StoredObject } from '../model/restitch';
 import { asideFrom, asideOf, inheritAside, setAsideOf, storeAside, type StoredAside } from '../model/aside';
@@ -62,6 +64,8 @@ export interface LoadedFile {
    * as long as the user leaves it there (heatstitch objects may join it). Absent while it goes by its file name.
    */
   title?: string;
+  /** The name per app language, shown in place of `title` (the demo project's designs); dropped on rename. */
+  titles?: Titles;
   /**
    * Made in the app (empty with "Neu", from an image or SVG): it is named without extension, since
    * the PES behind it is only how it is kept, not a file the user opened.
@@ -80,6 +84,7 @@ interface FileData {
   /** Unchecked; missing parts come from the material last used. */
   material?: unknown;
   title?: string;
+  titles?: Titles;
   /** Absent in older records: then a design without stitches counts as made in the app. */
   own?: boolean;
 }
@@ -153,7 +158,7 @@ export class FileList {
     const stored = await listFiles();
     if (!stored.length) return;
     const first = await this.addData(
-      stored.map((rec) => ({ name: rec.name, data: rec.data, storeKey: rec.key, working: rec.working, acks: acksOf(rec), objects: rec.objects, aside: rec.aside, material: rec.material, title: rec.title, own: rec.own })),
+      stored.map((rec) => ({ name: rec.name, data: rec.data, storeKey: rec.key, working: rec.working, acks: acksOf(rec), objects: rec.objects, aside: rec.aside, material: rec.material, title: rec.title, titles: titlesOf(rec.titles), own: rec.own })),
       false,
     );
     // Files the user added while we were reading storage keep the focus.
@@ -171,7 +176,7 @@ export class FileList {
   async addProject(list: ProjectFile[], active: number | null): Promise<void> {
     const before = this.files.length;
     const first = await this.addData(
-      list.map((f) => ({ name: f.name, data: f.data.slice().buffer, working: f.working, acks: f.acks, objects: f.objects, aside: f.aside, material: f.material, title: f.title, own: f.own })),
+      list.map((f) => ({ name: f.name, data: f.data.slice().buffer, working: f.working, acks: f.acks, objects: f.objects, aside: f.aside, material: f.material, title: f.title, titles: f.titles, own: f.own })),
       true,
     );
     const wanted = active !== null ? this.files[before + active] : undefined;
@@ -195,7 +200,7 @@ export class FileList {
 
   private async addData(list: FileData[], persist: boolean): Promise<LoadedFile | null> {
     let first: LoadedFile | null = null;
-    for (const { name, data, storeKey, working, acks, objects, aside, material, title, own } of list) {
+    for (const { name, data, storeKey, working, acks, objects, aside, material, title, titles, own } of list) {
       const entry: LoadedFile = {
         id: this.nextId++,
         fileName: name,
@@ -206,6 +211,7 @@ export class FileList {
         acks: acks ?? [],
         material: normalizeMaterial(material, this.defaults()),
         ...(typeof title === 'string' && title.trim() ? { title: title.trim() } : {}),
+        ...(titles ? { titles } : {}),
         own: own === true,
       };
       // Stored before materials were kept per design: it keeps the one it was last seen with.
@@ -246,7 +252,7 @@ export class FileList {
             if (objects?.length) void saveObjects(key, objects);
             if (aside?.length) void saveAside(key, aside);
             void saveMaterial(key, entry.material);
-            if (entry.title || entry.own) void saveNaming(key, entry.title ?? null, entry.own);
+            if (entry.title || entry.titles || entry.own) void saveNaming(key, entry.title ?? null, entry.own, entry.titles);
           }
         }
       } catch (err) {
@@ -387,13 +393,19 @@ export class FileList {
 
   /** The design's name without an embroidery extension: the one the user gave it, else its file name. */
   static baseName(f: LoadedFile): string {
-    return f.title !== undefined ? f.title.replace(FORMAT_EXT, '').trim() : f.fileName.replace(EXT, '');
+    const title = FileList.titleOf(f);
+    return title !== undefined ? title.replace(FORMAT_EXT, '').trim() : f.fileName.replace(EXT, '');
+  }
+
+  /** The name the design was given: in the app's language when it has one per language. */
+  private static titleOf(f: LoadedFile): string | undefined {
+    return f.titles?.[getLang()] ?? f.title;
   }
 
   /** The name the list shows: the one the user gave it, else loaded embroidery files with their extension, designs made in the app without. */
   static displayName(f: LoadedFile): string {
     if (f.error) return f.fileName;
-    return f.title ?? FileList.fileDisplayName(f);
+    return FileList.titleOf(f) ?? FileList.fileDisplayName(f);
   }
 
   /** The name a design goes by until the user names it. */
@@ -414,7 +426,9 @@ export class FileList {
   rename(f: LoadedFile, name: string): void {
     const title = name.replace(/[\x00-\x1f]/g, '').trim();
     const next = title && title !== FileList.fileDisplayName(f) ? title : undefined;
-    if (next === f.title) return;
+    if (next === FileList.titleOf(f)) return;
+    // A name the user types is the same in every language.
+    delete f.titles;
     if (next) f.title = next;
     else delete f.title;
     if (f.storeKey !== undefined) void saveNaming(f.storeKey, f.title ?? null, f.own);
