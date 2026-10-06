@@ -68,7 +68,7 @@ export function bindFileIo(app: FileIoApp) {
       // An SVG of shapes opens as stitches in Ablauf, every shape whole; the Bild mode only for SVGs
       // that are pictures (embedded photos, many colors).
       try {
-        const d = await digitizeSvg(image, app.settings.image.prepare, digitizeDefaults(app.settings.profile));
+        const d = await digitizeSvg(image, app.settings.image.prepare, { ...digitizeDefaults(app.settings.profile), trimMm: app.settings.trimMm });
         await app.addDigitized(d, image.name.replace(/\.svg$/i, ''));
         app.setMode('flow');
       } catch {
@@ -219,7 +219,7 @@ export function bindFileIo(app: FileIoApp) {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const file = new File([await res.blob()], name, svg ? { type: 'image/svg+xml' } : undefined);
     if (svg) {
-      const d = await digitizeSvg(file, app.settings.image.prepare, digitizeDefaults(app.settings.profile));
+      const d = await digitizeSvg(file, app.settings.image.prepare, { ...digitizeDefaults(app.settings.profile), trimMm: app.settings.trimMm });
       await app.addDigitized(d, name.replace(/\.svg$/, ''));
       app.setMode('flow');
     } else if (isProjectName(name)) await openFiles([file]);
