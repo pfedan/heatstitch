@@ -293,7 +293,8 @@ export interface Rails {
 
 /** A fill cut into parts by cut lines (see Rails.split). */
 export interface Split {
-  outline: Pt[];
+  /** The outsides of its areas (more than one when they lie apart, as the dot and stem of an i). */
+  outlines: Pt[][];
   holes: Pt[][];
   cuts: [Pt, Pt][];
 }
@@ -624,8 +625,8 @@ export interface StoredRails {
   /** Plan: section, turned round (0/1), trimmed before (1) and mirrored (2) as bits, for each step. */
   plan?: number[];
   mirror?: 1;
-  /** Split: flat x, y of the outline and of each hole; the cut lines as x, y of both ends. */
-  split?: { outline: number[]; holes: number[][]; cuts: number[] };
+  /** Split: flat x, y of each outline and of each hole; the cut lines as x, y of both ends. */
+  split?: { outlines: number[][]; holes: number[][]; cuts: number[] };
 }
 
 const storeRails = (c: Rails): StoredRails => ({
@@ -638,7 +639,7 @@ const storeRails = (c: Rails): StoredRails => ({
   ...(c.chain !== undefined ? { chain: c.chain } : {}),
   ...(c.plan?.length ? { plan: c.plan.flatMap((x) => [x.sec, +x.flip, +x.trim | (x.mirror ? 2 : 0)]) } : {}),
   ...(c.mirror ? { mirror: 1 as const } : {}),
-  ...(c.split ? { split: { outline: c.split.outline.flat(), holes: c.split.holes.map((h) => h.flat()), cuts: c.split.cuts.flat(2) } } : {}),
+  ...(c.split ? { split: { outlines: c.split.outlines.map((o) => o.flat()), holes: c.split.holes.map((h) => h.flat()), cuts: c.split.cuts.flat(2) } } : {}),
 });
 
 /** What is remembered about the objects of `p`, to store it with the file. */
@@ -801,11 +802,11 @@ function railsFrom(list: unknown): Rails[][] | undefined {
       if (c?.mirror) rails.mirror = true;
       const split = c?.split;
       if (split !== undefined) {
-        const outline = pts(split?.outline);
+        const outlines = Array.isArray(split?.outlines) ? split.outlines.map(pts) : null;
         const holes = Array.isArray(split?.holes) ? split.holes.map(pts) : null;
         const cuts = split?.cuts;
-        if (!outline || !holes || holes.some((h: Pt[] | null) => !h) || !Array.isArray(cuts) || cuts.length % 4 || !cuts.every(finite)) return undefined;
-        rails.split = { outline, holes: holes as Pt[][], cuts: Array.from({ length: cuts.length / 4 }, (_, k) => [[cuts[4 * k], cuts[4 * k + 1]], [cuts[4 * k + 2], cuts[4 * k + 3]]] as [Pt, Pt]) };
+        if (!outlines?.length || outlines.some((o: Pt[] | null) => !o) || !holes || holes.some((h: Pt[] | null) => !h) || !Array.isArray(cuts) || cuts.length % 4 || !cuts.every(finite)) return undefined;
+        rails.split = { outlines: outlines as Pt[][], holes: holes as Pt[][], cuts: Array.from({ length: cuts.length / 4 }, (_, k) => [[cuts[4 * k], cuts[4 * k + 1]], [cuts[4 * k + 2], cuts[4 * k + 3]]] as [Pt, Pt]) };
       }
       cols.push(rails);
     }

@@ -9,7 +9,7 @@ import type { StitchInfo, StitchPanel } from '../ui/stitchPanel';
 import { RungTool } from '../ui/rungTool';
 import { outline } from '../digitize/region';
 import { atShare, regionBox, swirlCenters } from '../digitize/deco';
-import { inside, railsFromOutline, stripsOfOutline } from '../digitize/rungs';
+import { inside, railsFromOutline, stripsOfAreas } from '../digitize/rungs';
 import { t, type Key } from '../i18n';
 import { DECO_DEFAULTS, MAX_SWIRLS, type FillSettings, type Rails, type SatinSettings, analyze, remembered, keepShape, remember, restitch, measureSatin, forget, type RestitchResult, type Settings as RestitchSettings } from '../model/restitch';
 import { ui } from './state';
@@ -196,10 +196,8 @@ export function bindRungs(app: RungsApp) {
       const an = analyze(p, obj, q.kinds);
       const area = remembered(p, obj)?.shape ?? an.fill;
       if (!area) return;
-      // The longest outline is the outside; holes are covered by the satin anyway.
-      const loops = outline(area);
-      const loop = loops.reduce((a, b) => (b.length > a.length ? b : a), [] as [number, number][]);
-      rungTool.openFill(loop as Pt[]);
+      // Lines are drawn near any of its areas.
+      rungTool.openFill(areaLoops(area).outsides.flat());
     }
     ui.rungObject = target.o;
     rungPattern = p;
@@ -301,6 +299,17 @@ export function bindRungs(app: RungsApp) {
   /** Twice the area of a closed outline (mm²). */
   const area2 = (ring: Pt[]) => ring.reduce((a, p, i) => a + p[0] * ring[(i + 1) % ring.length][1] - ring[(i + 1) % ring.length][0] * p[1], 0);
 
+  /**
+   * The outlines of a fill: its outsides (more than one when its areas lie apart, as the dot and
+   * stem of an i) and its holes (the counter of an e, both of an 8), tiny specks left out.
+   */
+  function areaLoops(area: Parameters<typeof outline>[0]): { outsides: Pt[][]; holes: Pt[][] } {
+    const loops = (outline(area) as Pt[][]).filter((l) => l.length > 2 && Math.abs(area2(l)) > 0.5);
+    // Inside an even number of others: an outside; an odd number: a hole.
+    const depth = (l: Pt[]) => loops.filter((o) => o !== l && inside(o, l[0])).length;
+    return { outsides: loops.filter((l) => depth(l) % 2 === 0), holes: loops.filter((l) => depth(l) % 2 === 1) };
+  }
+
   /** Sews the selected fill as satin along the lines drawn across it. */
   function sewAlongLines(): void {
     const p = app.files.active?.pattern;
@@ -310,26 +319,26 @@ export function bindRungs(app: RungsApp) {
     const an = obj && analyze(p, obj, q.kinds);
     const area = an && (remembered(p, obj)?.shape ?? an.fill);
     if (!area) return;
-    const loops = outline(area);
-    const loop = loops.reduce((a, b) => (b.length > a.length ? b : a), [] as [number, number][]) as Pt[];
-    // Holes: the other outlines lying inside it (the counter of an e, both of an 8).
-    const holes = loops.filter((l) => l !== loop && l.length > 2 && inside(loop, l[0] as Pt) && Math.abs(area2(l as Pt[])) > 0.5) as Pt[][];
+    const { outsides, holes } = areaLoops(area);
+    if (!outsides.length) return;
     let columns: Rails[];
-    if (rungTool.cutLines.length || holes.length) {
-      // Cut into parts: each its own column, sewn on one into the next without a trim.
-      const made = stripsOfOutline(loop, rungTool.lines, rungTool.cutLines, holes);
+    if (rungTool.cutLines.length || holes.length || outsides.length > 1) {
+      // Cut into parts: each its own column, sewn on one into the next without a trim; areas apart
+      // each in a chain of their own, a trim between them.
+      const made = stripsOfAreas(outsides, rungTool.lines, rungTool.cutLines, holes);
       if (made.hole >= 0) {
         rungTool.showBad(holes[made.hole]);
         return app.layers.say(t('stitch.draw.openHole'), true);
       }
-      if (made.bad >= 0) {
-        rungTool.showBad(made.parts[made.bad]);
+      if (made.bad) {
+        rungTool.showBad(made.bad);
         return app.layers.say(t('stitch.draw.notStripPart'), true);
       }
-      columns = made.strips.map((r) => ({ ...r, chain: 0 }));
+      columns = made.areas.flatMap((strips, a) => strips.map((r) => ({ ...r, chain: a })));
       // The fill and its cut lines kept: the cut lines can be moved later (see Rails.split).
-      columns[0].split = { outline: loop, holes, cuts: rungTool.cutLines.map(([a, b]) => [a, b] as [Pt, Pt]) };
+      columns[0].split = { outlines: outsides, holes, cuts: rungTool.cutLines.map(([a, b]) => [a, b] as [Pt, Pt]) };
     } else {
+      const loop = outsides[0];
       const rails = railsFromOutline(loop, rungTool.lines);
       if (!rails) return app.layers.say(t('stitch.draw.notStrip'), true);
       columns = [rails];

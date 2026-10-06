@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { stripsOfOutline } from '../src/digitize/rungs';
+import { stripsOfAreas, stripsOfOutline } from '../src/digitize/rungs';
 import type { Pt } from '../src/digitize/skeleton';
 import { sewObjects } from '../src/model/objects';
-import { forget, keepShape, remember, remembered, rememberedIn, restoreRemembered, type Rails } from '../src/model/restitch';
+import { forget, keepShape, remember, remembered, rememberedIn, restoreRemembered, satinRuns, type Rails } from '../src/model/restitch';
 import { stitchKinds } from '../src/model/sequence';
 import { transformRemembered } from '../src/model/transform';
 import { parsePattern } from '../src/parsers';
@@ -38,7 +38,7 @@ const LINES: [Pt, Pt][] = [
 function cutM(): Rails[] {
   const made = stripsOfOutline(M, LINES, CUTS);
   const cols: Rails[] = made.strips.map((r) => ({ ...r, chain: 0 }));
-  cols[0].split = { outline: M, holes: [], cuts: CUTS.map(([a, b]) => [a, b] as [Pt, Pt]) };
+  cols[0].split = { outlines: [M], holes: [], cuts: CUTS.map(([a, b]) => [a, b] as [Pt, Pt]) };
   return cols;
 }
 
@@ -77,7 +77,7 @@ describe('cut lines of a satin cut from a fill', () => {
     const changes: Rails[][][] = [];
     const said: string[] = [];
     const tool = new RungTool({ change: (c) => changes.push(c), lines: () => {}, guides: () => {}, redraw: () => {}, say: (k) => said.push(k) });
-    tool.openSatin([[{ ...made.strips[0], chain: 0, split: { outline: O, holes: [H], cuts: [cut] } }]]);
+    tool.openSatin([[{ ...made.strips[0], chain: 0, split: { outlines: [O], holes: [H], cuts: [cut] } }]]);
     tool.down(-0.5, 10, 10);
     tool.up();
     expect(tool.deleteSelected()).toBe(true);
@@ -119,14 +119,14 @@ describe('the fill a satin was cut from, with the rest of the app', () => {
     const objs = sewObjects(p, kinds);
     const o = objs.find((x) => x.kind === 'satin')!;
     const shape = keepShape(p, o, kinds);
-    const columns = shape.columns!.map((part) => part.map((c, k) => ({ ...c, chain: 0, ...(k ? {} : { split: { outline: M, holes: [M.slice(0, 5)], cuts: CUTS }, mirror: true, plan: [{ sec: 0, flip: false, trim: true, mirror: true }] }) })));
+    const columns = shape.columns!.map((part) => part.map((c, k) => ({ ...c, chain: 0, ...(k ? {} : { split: { outlines: [M], holes: [M.slice(0, 5)], cuts: CUTS }, mirror: true, plan: [{ sec: 0, flip: false, trim: true, mirror: true }] }) })));
     remember(p, o, { ...shape, columns, read: false });
     try {
       const stored = JSON.parse(JSON.stringify(rememberedIn(p, objs).find((x) => x.columns)));
       forget(p, o);
       restoreRemembered([stored]);
       const split = remembered(p, o)?.columns?.flat().find((c) => c.split)?.split;
-      expect(split?.outline).toEqual(M);
+      expect(split?.outlines).toEqual([M]);
       expect(split?.holes).toEqual([M.slice(0, 5)]);
       expect(split?.cuts).toEqual(CUTS);
       // Mirrored, as a whole and in its plan.
@@ -135,7 +135,7 @@ describe('the fill a satin was cut from, with the rest of the app', () => {
       expect(first?.plan).toEqual([{ sec: 0, flip: false, trim: true, mirror: true }]);
       const mirrored = transformRemembered(remembered(p, o)!, [-1, 0, 0, 1, 0, 0]).columns!.flat().find((c) => c.split)!.split!;
       expect(mirrored.cuts[0]).toEqual([[1, 16], [-5, 16]]);
-      expect(mirrored.outline[1][0]).toBeCloseTo(-M[1][0]);
+      expect(mirrored.outlines[0][1][0]).toBeCloseTo(-M[1][0]);
     } finally {
       forget(p, o);
     }
@@ -153,5 +153,25 @@ describe('the far end of a part', () => {
     // Its foot at y 0: both rails go down to it (5 % of the leg would leave 0.7 mm).
     expect(low(stem.left)).toBeLessThan(0.2);
     expect(low(stem.right)).toBeLessThan(0.2);
+  });
+});
+
+describe('areas apart, as the dot and the stem of an i', () => {
+  const stem = poly([0, 0], [3, 0], [3, 10], [0, 10], [0, 0]);
+  const dot = poly([0, 12], [3, 12], [3, 15], [0, 15], [0, 12]);
+
+  it('each make columns of their own, a trim between them', () => {
+    const made = stripsOfAreas([stem, dot], [[[-1, 5], [4, 5]], [[-1, 13.5], [4, 13.5]]], []);
+    expect(made.bad).toBeNull();
+    expect(made.areas.map((a) => a.length)).toEqual([1, 1]);
+    const cols: Rails[] = made.areas.flatMap((strips, a) => strips.map((r) => ({ ...r, chain: a })));
+    // Two chains: two runs, the machine trims between them.
+    expect(satinRuns(cols, { spacing: 0.4, edge: 0, short: false, underlay: true, tolerance: 0.15 }).length).toBe(2);
+  });
+
+  it('say the area that has no line across it', () => {
+    const made = stripsOfAreas([stem, dot], [[[-1, 5], [4, 5]]], []);
+    expect(made.bad).not.toBeNull();
+    expect(Math.min(...made.bad!.map((p) => p[1]))).toBeGreaterThan(11);
   });
 });

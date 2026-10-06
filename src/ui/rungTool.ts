@@ -1,4 +1,4 @@
-import { addRung, chordOf, stripsOfOutline, cornerCuts, cornerRungs, cumulative, pointAt, project, rungFromLine, rungRange, seedRungs, type Rung } from '../digitize/rungs';
+import { addRung, chordOf, stripsOfAreas, cornerCuts, cornerRungs, cumulative, pointAt, project, rungFromLine, rungRange, seedRungs, type Rung } from '../digitize/rungs';
 import { pathLength } from '../digitize/fill';
 import { simplify } from '../digitize/run';
 import type { Pt } from '../digitize/skeleton';
@@ -256,7 +256,7 @@ export class RungTool implements RungView {
     columns.forEach((part, k) => {
       const from = part.find((r) => r.split)?.split;
       if (!from || this.split) return;
-      this.split = { part: k, outline: from.outline, holes: from.holes };
+      this.split = { part: k, outlines: from.outlines, holes: from.holes };
       this.cutLines = from.cuts.map(([a, b]) => [a, b] as [Pt, Pt]);
     });
     this.bad = null;
@@ -801,14 +801,15 @@ export class RungTool implements RungView {
         return r ? [{ at: this.ends(c, r)[0], v }] : [];
       });
     });
-    const made = stripsOfOutline(sp.outline, lines, this.cutLines, sp.holes);
-    if (made.hole >= 0 || made.bad >= 0) {
-      this.showBad(made.hole >= 0 ? sp.holes[made.hole] : made.parts[made.bad]);
+    const made = stripsOfAreas(sp.outlines, lines, this.cutLines, sp.holes);
+    if (made.hole >= 0 || made.bad) {
+      this.showBad(made.hole >= 0 ? sp.holes[made.hole] : made.bad!);
       return this.hooks.say(made.hole >= 0 ? 'stitch.draw.openHole' : 'stitch.draw.notStripPart');
     }
     const out = this.result();
     const old = out[sp.part];
-    let cols: Rails[] = made.strips.map((r) => ({ left: r.left, right: r.right, rungs: r.rungs, chain: old[0]?.chain ?? 0 }));
+    // One chain per area, a trim between areas apart.
+    let cols: Rails[] = made.areas.flatMap((strips, a) => strips.map((r) => ({ left: r.left, right: r.right, rungs: r.rungs, chain: a })));
     if (cols.length === old.length) cols = keptOrder(old, cols);
     for (const c of cols) {
       const cl = cumulative(c.left);
@@ -819,7 +820,7 @@ export class RungTool implements RungView {
       });
       if (spacings.length) c.spacings = spacings;
     }
-    cols[0].split = { outline: sp.outline, holes: sp.holes, cuts: this.cutLines.map(([a, b]) => [a, b] as [Pt, Pt]) };
+    cols[0].split = { outlines: sp.outlines, holes: sp.holes, cuts: this.cutLines.map(([a, b]) => [a, b] as [Pt, Pt]) };
     out[sp.part] = cols;
     this.setColumns(out);
     this.hooks.change(out, true);

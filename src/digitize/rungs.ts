@@ -747,3 +747,20 @@ export function stripsOfOutline(loop: Pt[], lines: [Pt, Pt][], cuts: [Pt, Pt][],
   parts.forEach((_, k) => !parent.has(k) && strips.push(oriented(k)));
   return { strips, parts, bad: -1, hole: -1 };
 }
+
+/**
+ * Areas apart from one another (the dot and the stem of an i), each cut into strips as
+ * stripsOfOutline does, with the holes that lie in it. The first part that makes no column, or the
+ * first hole not opened (by index in `holes`), is said instead.
+ */
+export function stripsOfAreas(outlines: Pt[][], lines: [Pt, Pt][], cuts: [Pt, Pt][], holes: Pt[][] = []): { areas: Strip[][]; bad: Pt[] | null; hole: number } {
+  const areas: Strip[][] = [];
+  for (const o of outlines) {
+    const mine = holes.map((_, j) => j).filter((j) => inside(o, holes[j][0]));
+    const made = stripsOfOutline(o, lines, cuts, mine.map((j) => holes[j]));
+    if (made.hole >= 0) return { areas: [], bad: null, hole: mine[made.hole] };
+    if (made.bad >= 0) return { areas: [], bad: made.parts[made.bad], hole: -1 };
+    areas.push(made.strips);
+  }
+  return { areas, bad: null, hole: -1 };
+}

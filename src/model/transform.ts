@@ -151,6 +151,6 @@ function mapRails(m: Parameters<typeof mapPts>[0], s: number, c: Rails): Rails {
     ...(c.chain !== undefined ? { chain: c.chain } : {}),
     ...(c.plan ? { plan: c.plan.map((x) => ({ ...x })) } : {}),
     ...(c.mirror ? { mirror: true } : {}),
-    ...(c.split ? { split: { outline: mapPts(m, c.split.outline), holes: c.split.holes.map((h) => mapPts(m, h)), cuts: c.split.cuts.map((f) => mapPts(m, f) as [Pt, Pt]) } } : {}),
+    ...(c.split ? { split: { outlines: c.split.outlines.map((o) => mapPts(m, o)), holes: c.split.holes.map((h) => mapPts(m, h)), cuts: c.split.cuts.map((f) => mapPts(m, f) as [Pt, Pt]) } } : {}),
   };
 }
