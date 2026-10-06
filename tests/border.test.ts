@@ -6,7 +6,9 @@ import { analyze, measureFill, remember, remembered, restitch, underlayRanges, t
 import { stitchKinds } from '../src/model/sequence';
 import { parsePattern } from '../src/parsers';
 import { sample } from '../src/digitize/region';
-import { syncBorders } from '../src/model/border';
+import { syncBorders, takeThreads } from '../src/model/border';
+import { blendObject } from '../src/model/blend';
+import { reorder } from '../src/model/order';
 import { borderLines, borderStitches, sewAlong } from '../src/model/along';
 import { regionOf } from '../src/shape/rasterize';
 import type { Pt } from '../src/digitize/skeleton';
@@ -299,5 +301,62 @@ describe('border on a fill with parts left out', () => {
     const open = borderLines(cut, 0, whole);
     expect(open).toHaveLength(1);
     expect(open[0].closed).toBe(false);
+  });
+});
+
+describe('border moved by hand', () => {
+  const lilac = { r: 200, g: 160, b: 220 };
+  /** A blend from the cat's fill with a satin border in the fill's thread: fill, second thread, border. */
+  const blended = () => {
+    const p = load('cat-60mm.pes');
+    const kinds = stitchKinds(p);
+    const o = sewObjects(p, kinds)[1];
+    const base = { ...measureFill(p, analyze(p, o, kinds)), pattern: 'tatami' as const };
+    const a = applyAll(p, o.index, { ...base, border: { type: 'satin', width: 2 } });
+    const q = blendObject(a.q, a.o.index, lilac, 7)!;
+    expect(q).not.toBeNull();
+    const objs = sewObjects(q, stitchKinds(q));
+    const fill = objs.findIndex((x) => remembered(q, x)?.fill?.deco?.blend);
+    const second = objs.findIndex((x) => remembered(q, x)?.blendOf);
+    const border = objs.findIndex((x) => remembered(q, x)?.outline);
+    return { q, objs, fill, second, border };
+  };
+  const moved = (b: ReturnType<typeof blended>, into?: number) => {
+    const order = b.objs.map((x) => x.index).filter((x) => x !== b.border);
+    order.splice(order.indexOf(b.fill) + 1, 0, b.border);
+    const starts: number[] = [];
+    const next = reorder(b.q, b.objs, order, 7, starts, into === undefined ? {} : { into: new Map([[b.border, into]]) });
+    const objs = sewObjects(next, stitchKinds(next));
+    const border = objs.findIndex((x) => remembered(next, x)?.outline);
+    return { next, objs, border };
+  };
+
+  it('comes after the second thread of a blend made just now', () => {
+    const b = blended();
+    expect(b.second).toBeGreaterThan(b.fill);
+    expect(b.border).toBeGreaterThan(b.second);
+  });
+
+  it('stays where it is moved to before the second thread, an object of its own', { timeout: 30000 }, () => {
+    const b = blended();
+    const m = moved(b);
+    expect(m.border).toBe(b.fill + 1);
+    expect(m.objs[m.border].block).toBe(m.objs[b.fill].block);
+    // Nothing to sew anew: it stays there.
+    expect(syncBorders(m.next, 7)).toBe(m.next);
+  });
+
+  it('keeps the thread of the color it is moved into', { timeout: 30000 }, () => {
+    const b = blended();
+    const m = moved(b, b.objs[b.second].block);
+    expect(m.objs[m.border].color).toMatchObject(lilac);
+    takeThreads(m.next, [m.border]);
+    const s = syncBorders(m.next, 7);
+    const objs = sewObjects(s, stitchKinds(s));
+    const borders = objs.filter((x) => remembered(s, x)?.outline);
+    expect(borders).toHaveLength(1);
+    expect(borders[0].color).toMatchObject(lilac);
+    expect(borders[0].index).toBe(b.fill + 1);
+    expect(remembered(s, objs[b.fill])?.fill?.border?.color).toMatchObject(lilac);
   });
 });
