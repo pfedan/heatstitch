@@ -12,7 +12,8 @@ import { BORDER_STITCH, BORDER_WIDTH, type BorderType } from '../digitize/border
 import { TOLERANCE } from '../digitize/run';
 import type { ThreadColor } from '../model/pattern';
 import { newLink } from '../model/border';
-import { autoUnder, E_SPACING, isRunType, spacingOf, ZIGZAG_SPACING, type PathStitch } from '../model/along';
+import { autoUnder, E_SPACING, isRunType, runLike, spacingOf, ZIGZAG_SPACING, type PathStitch } from '../model/along';
+import { LINE_MOTIFS, MOTIF_PERIOD, MOTIF_WIDTH, SIDED_MOTIFS, type LineMotif } from '../digitize/motif';
 import { cssColor, hexColor, ThreadPicker } from './threadPicker';
 import { CROSS_KINDS, GRID_KINDS, MOTIFS, type CrossKind, type GridKind, type Motif } from '../digitize/deco';
 
@@ -22,7 +23,7 @@ type BorderChoice = 'off' | BorderType;
 /** What hovering a group of settings shows on the canvas. */
 export type Highlight = 'under' | 'border';
 /** Kinds of stitch along a line, as buttons: a triple stitch is a running stitch sewn more often. */
-const BORDERS: BorderChoice[] = ['off', 'run', 'satin', 'zigzag', 'e'];
+const BORDERS: BorderChoice[] = ['off', 'run', 'satin', 'zigzag', 'e', 'motif'];
 /** How often each stitch of a running stitch is sewn. */
 const REPEATS = ['1', '3', '5'] as const;
 const sameColor = (a: ThreadColor, b: ThreadColor) => a.r === b.r && a.g === b.g && a.b === b.b;
@@ -1281,7 +1282,7 @@ export class StitchPanel {
   private lineGroup(h: HTMLElement, info: StitchInfo): HTMLElement[] {
     const st = this.lineDraft!;
     h.innerHTML = '';
-    h.append(Object.assign(document.createElement('span'), { className: 'kind-icon', innerHTML: KIND_ICON[isRunType(st.type) ? 'run' : 'satin'] }), t('stitch.line.title'));
+    h.append(Object.assign(document.createElement('span'), { className: 'kind-icon', innerHTML: KIND_ICON[runLike(st.type) ? 'run' : 'satin'] }), t('stitch.line.title'));
     const out: HTMLElement[] = [];
     if (info.hand) {
       const hand = document.createElement('p');
@@ -1347,15 +1348,18 @@ export class StitchPanel {
   pathStitch(st: PathStitch | undefined, set: (v: PathStitch | undefined) => void, off = true, offset = false): HTMLElement[] {
     const mm = (d: number) => (v: number) => `${formatNumber(v, d)} mm`;
     const kinds = off ? BORDERS : BORDERS.filter((v) => v !== 'off');
-    const out = [
-      this.choice<BorderChoice>('stitch.borderType', kinds, st ? (isRunType(st.type) ? 'run' : st.type) : 'off', (v) => `stitch.border.${v}` as Key, (v) => {
+    const type = this.choice<BorderChoice>('stitch.borderType', kinds, st ? (isRunType(st.type) ? 'run' : st.type) : 'off', (v) => `stitch.border.${v}` as Key, (v) => {
         if (v === 'off') return set(undefined);
         // Each kind starts with its own spacing; a satin's 0.4 mm would make a zigzag a satin.
         const next: PathStitch = { ...st, type: v, width: st?.width ?? BORDER_WIDTH };
         delete next.spacing;
+        // A motif needs a few mm to show its figures.
+        if (v === 'motif') next.width = Math.max(next.width, MOTIF_WIDTH);
         set(next);
-      }),
-    ];
+      });
+    // Five or six kinds: in even rows of three, not one left alone on a second row.
+    type.querySelector('.choice-row')?.classList.add('kinds');
+    const out = [type];
     if (!st) return out;
     const change = (f: (s: PathStitch) => void) => (v: number) => {
       f(st);
@@ -1390,22 +1394,35 @@ export class StitchPanel {
       return out;
     }
     const width = this.slider({ label: offset ? 'stitch.borderWidth' : 'stitch.lineWidth', hint: offset ? 'stitch.borderWidth.hint' : 'stitch.lineWidth.hint', min: 0.8, max: Math.max(6, Math.ceil(st.width)), step: 0.1, get: () => st.width, set: (v) => change((s) => (s.width = v))(v), fmt: mm(1) });
+    if (st.type === 'motif') {
+      const motif = st.motif ?? 'waves';
+      out.push(
+        this.choice<LineMotif>('stitch.lineMotif', LINE_MOTIFS, motif, (v) => `stitch.lineMotif.${v}` as Key, (v) => {
+          st.motif = v;
+          delete st.spacing;
+          set(st);
+        }, true),
+        this.slider({ label: 'stitch.lineMotifSize', hint: 'stitch.lineMotifSize.hint', min: 1, max: 8, step: 0.1, get: () => st.width, set: (v) => change((s) => (s.width = v))(v), fmt: mm(1) }),
+        this.slider({ label: 'stitch.gap', hint: 'stitch.motifSpacing.hint', min: 1.5, max: 15, step: 0.1, get: () => spacingOf(st), set: (v) => change((s) => (s.spacing = v === MOTIF_PERIOD[motif] ? undefined : v))(v), fmt: mm(1) }),
+      );
+      if (SIDED_MOTIFS.includes(motif)) out.push(this.sideChoice(st, set, offset));
+      const times = st.repeat === 3 || st.repeat === 5 ? (String(st.repeat) as '3' | '5') : '1';
+      out.push(
+        this.choice<(typeof REPEATS)[number]>('stitch.repeat', REPEATS, times, (v) => `stitch.repeat.${v}` as Key, (v) => {
+          if (v === '1') delete st.repeat;
+          else st.repeat = Number(v);
+          set(st);
+        }, true),
+      );
+      return out;
+    }
     if (st.type === 'zigzag' || st.type === 'e') {
       const e = st.type === 'e';
       out.push(
         width,
         this.slider({ label: 'stitch.gap', hint: e ? 'stitch.eSpacing.hint' : 'stitch.zigzagSpacing.hint', min: e ? 1 : 0.5, max: 6, step: 0.1, get: () => spacingOf(st), set: (v) => change((s) => (s.spacing = v === (e ? E_SPACING : ZIGZAG_SPACING) ? undefined : v))(v), fmt: mm(1) }),
       );
-      if (e) {
-        const sides = offset ? (['in', 'out'] as const) : (['right', 'left'] as const);
-        out.push(
-          this.choice<(typeof sides)[number]>('stitch.eSide', sides, sides[st.flip ? 1 : 0], (v) => `stitch.eSide.${v}` as Key, (v) => {
-            if (v === sides[1]) st.flip = true;
-            else delete st.flip;
-            set(st);
-          }, true),
-        );
-      }
+      if (e) out.push(this.sideChoice(st, set, offset));
       return out;
     }
     out.push(
@@ -1418,6 +1435,16 @@ export class StitchPanel {
       }, true),
     );
     return out;
+  }
+
+  /** Which side an E stitch's prongs or a motif's figures are on: of a line right or left, of a border inside or outside. */
+  private sideChoice(st: PathStitch, set: (v: PathStitch) => void, border: boolean): HTMLElement {
+    const sides = border ? (['in', 'out'] as const) : (['right', 'left'] as const);
+    return this.choice<(typeof sides)[number]>(st.type === 'e' ? 'stitch.eSide' : 'stitch.motifSide', sides, sides[st.flip ? 1 : 0], (v) => `stitch.eSide.${v}` as Key, (v) => {
+      if (v === sides[1]) st.flip = true;
+      else delete st.flip;
+      set(st);
+    }, true);
   }
 
   /** A fill's border, as a block of its own: what it is, its stitches, its thread. */

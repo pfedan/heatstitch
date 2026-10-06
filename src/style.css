@@ -3382,6 +3382,12 @@ body[data-mode='flow'] .stage .hint {
   white-space: nowrap;
 }
 
+/* Kinds of stitch along a line: three to a row. */
+.choice-row.kinds {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+}
+
 .choice-row.small button {
   font-size: 11px;
   padding: 4px 4px;

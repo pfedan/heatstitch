@@ -85,3 +85,74 @@ describe('E stitch as a border', () => {
     expect(Math.min(...outward)).toBeGreaterThan(-0.2);
   });
 });
+
+describe('motif stitch', () => {
+  const motifs = ['waves', 'scallops', 'hearts', 'chain'] as const;
+  const seg = (pts: Pt[]) => pts.slice(1).map((q, i) => Math.hypot(q[0] - pts[i][0], q[1] - pts[i][1]));
+
+  for (const motif of motifs) {
+    it(`sews ${motif} as one run within its size, without too short or long stitches`, () => {
+      const runs = lineStitches(straight, { type: 'motif', motif, width: 3 });
+      expect(runs.length).toBe(1);
+      const pts = runs[0];
+      expect(pts.length).toBeGreaterThan(20);
+      expect(pts.every(([x, y]) => Math.abs(y) <= 3.05 && x > -1.6 && x < 31.6)).toBe(true);
+      const lens = seg(pts);
+      expect(Math.min(...lens.slice(1, -1))).toBeGreaterThanOrEqual(0.6 - 1e-6);
+      expect(Math.max(...lens)).toBeLessThanOrEqual(2.5 + 1e-6);
+      // It runs from one end of the line to the other.
+      expect(Math.hypot(pts[0][0], pts[0][1])).toBeLessThan(0.1);
+      expect(Math.hypot(pts[pts.length - 1][0] - 30, pts[pts.length - 1][1])).toBeLessThan(3.1);
+    });
+  }
+
+  it('puts scallops and hearts on the right of the line, on the left with flip', () => {
+    // A heart hangs from the line by its notch: its lobes reach a third of its size over it.
+    for (const [motif, over] of [['scallops', 0.1], ['hearts', 1.05]] as const) {
+      expect(flat(lineStitches(straight, { type: 'motif', motif, width: 3 })).every(([, y]) => y > -over)).toBe(true);
+      expect(Math.max(...flat(lineStitches(straight, { type: 'motif', motif, width: 3 })).map(([, y]) => y))).toBeGreaterThan(2.9);
+      expect(flat(lineStitches(straight, { type: 'motif', motif, width: 3, flip: true })).every(([, y]) => y < over)).toBe(true);
+      // Sewn the other way round, still on the right of the drawn line.
+      expect(flat(lineStitches(straight, { type: 'motif', motif, width: 3 }, true)).every(([, y]) => y > -over)).toBe(true);
+    }
+  });
+
+  it('fits a whole number of figures and repeats each stitch when asked', () => {
+    // Waves 5 mm apart on 30 mm: six full waves, crossing the line twice each.
+    const pts = flat(lineStitches(straight, { type: 'motif', motif: 'waves', width: 3 }));
+    let cross = 0;
+    for (let i = 1; i < pts.length; i++) if (Math.sign(pts[i][1]) !== Math.sign(pts[i - 1][1]) && Math.abs(pts[i][1]) > 0.05) cross++;
+    expect(cross).toBeGreaterThanOrEqual(10);
+    expect(cross).toBeLessThanOrEqual(13);
+    const three = flat(lineStitches(straight, { type: 'motif', motif: 'waves', width: 3, repeat: 3 }));
+    expect(three.length).toBe((pts.length - 1) * 3 + 1);
+  });
+
+  it('is an object of the kind running stitch, kept with the line', () => {
+    const options = digitizeDefaults(DEFAULT_PROFILE);
+    const empty = { x: new Int32Array(0), y: new Int32Array(0), cmd: new Uint8Array(0), colors: [] } as never;
+    const a = addShape(empty, { form: straight, kind: 'stroke', width: 0.4 }, { r: 200, g: 30, b: 30 }, null, options)!;
+    const st: PathStitch = { type: 'motif', motif: 'hearts', width: 4, spacing: 10 };
+    const r = resewLine(a.pattern, 0, straight, st, 7)!;
+    const [o] = sewObjects(r.pattern);
+    expect(remembered(r.pattern, o)?.line).toEqual(st);
+    expect(isLineStitch({ type: 'motif', motif: 'stars', width: 3 })).toBe(false);
+  });
+});
+
+describe('motif as a border', () => {
+  const W = 300;
+  const mask = new Uint8Array(W * W);
+  for (let y = 0; y < W; y++) for (let x = 0; x < W; x++) mask[y * W + x] = Math.hypot((x + 0.5) * 0.1 - 15, (y + 0.5) * 0.1 - 15) < 9 ? 1 : 0;
+  const disk = regionOf(mask, 0, 0, W, W, 0.1)!;
+  const depth = (runs: Pt[][]) => flat(runs).map(([x, y]) => sample(disk, disk.sdfBase, x, y));
+
+  it('puts hearts inside onto the area, or outside with flip', () => {
+    const inward = depth(borderStitches(disk, { type: 'motif', motif: 'hearts', width: 2.5 }, [15, 5]));
+    expect(Math.min(...inward)).toBeLessThan(-1.7);
+    expect(Math.max(...inward)).toBeLessThan(1);
+    const outward = depth(borderStitches(disk, { type: 'motif', motif: 'hearts', width: 2.5, flip: true }, [15, 5]));
+    expect(Math.max(...outward)).toBeGreaterThan(1.7);
+    expect(Math.min(...outward)).toBeGreaterThan(-1);
+  });
+});

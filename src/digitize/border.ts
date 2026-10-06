@@ -6,10 +6,11 @@ import type { Pt } from './skeleton';
  * A border sewn around a fill on its edge (what Ink/Stitch sews for the stroke of a filled path,
  * and digitizing software calls an outline): a running stitch, a triple (bean) stitch or a satin
  * of a set width, centered on the edge, around the outside and every hole; or an open zigzag, or
- * an E stitch (blanket stitch) with its edge on the line, as appliqué is sewn on.
+ * an E stitch (blanket stitch) with its edge on the line, as appliqué is sewn on; or a motif
+ * repeated along it (motif.ts).
  */
 
-export type BorderType = 'run' | 'triple' | 'satin' | 'zigzag' | 'e';
+export type BorderType = 'run' | 'triple' | 'satin' | 'zigzag' | 'e' | 'motif';
 
 /** Stitch length of a running or triple border (mm). */
 export const BORDER_STITCH = 2.5;

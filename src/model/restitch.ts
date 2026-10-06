@@ -1,5 +1,6 @@
 import { SATIN_MAX, satinForArea, type KeptShape } from '../digitize/digitize';
-import { isRunType, type PathStitch } from './along';
+import { runLike, type PathStitch } from './along';
+import { LINE_MOTIFS } from '../digitize/motif';
 import { lineStitches, runAsLine } from './line';
 import { chooseAngle, fillRegion, type FillParams } from '../digitize/fill';
 import { contourFill, fieldFill, guideField, stitchField } from '../digitize/flow';
@@ -437,8 +438,8 @@ export function holdMemory(): () => void {
  */
 export function knownKind(r: Remembered | undefined): ObjectKind | undefined {
   if (!r || r.read || r.lettering) return undefined;
-  if (r.outline && r.border) return isRunType(r.border.type) ? 'run' : 'satin';
-  if (r.path && r.line) return isRunType(r.line.type) ? 'run' : 'satin';
+  if (r.outline && r.border) return runLike(r.border.type) ? 'run' : 'satin';
+  if (r.path && r.line) return runLike(r.line.type) ? 'run' : 'satin';
   if (r.fill && !r.satin) return 'fill';
   if (r.satin && !r.fill) return 'satin';
   return undefined;
@@ -760,7 +761,7 @@ function isDeco(d: unknown): d is DecoSettings {
   );
 }
 
-const BORDERS: PathStitch['type'][] = ['run', 'triple', 'satin', 'zigzag', 'e'];
+const BORDERS: PathStitch['type'][] = ['run', 'triple', 'satin', 'zigzag', 'e', 'motif'];
 const isColor = (c: unknown) => !!c && [(c as ThreadColor).r, (c as ThreadColor).g, (c as ThreadColor).b].every(finite);
 
 export function isLineStitch(b: unknown): b is PathStitch {
@@ -769,7 +770,7 @@ export function isLineStitch(b: unknown): b is PathStitch {
 
 function isBorder(b: unknown): b is BorderSettings {
   const s = b as BorderSettings | null;
-  return !!s && BORDERS.includes(s.type) && finite(s.width) && [s.length, s.repeat, s.tolerance, s.offset, s.spacing, s.pull].every((v) => v === undefined || finite(v)) && (s.flip === undefined || typeof s.flip === 'boolean') && (s.under === undefined || s.under === 'off' || UNDERLAYS.includes(s.under)) && (s.color === undefined || isColor(s.color)) && (s.link === undefined || typeof s.link === 'string');
+  return !!s && BORDERS.includes(s.type) && finite(s.width) && [s.length, s.repeat, s.tolerance, s.offset, s.spacing, s.pull].every((v) => v === undefined || finite(v)) && (s.flip === undefined || typeof s.flip === 'boolean') && (s.motif === undefined || LINE_MOTIFS.includes(s.motif)) && (s.under === undefined || s.under === 'off' || UNDERLAYS.includes(s.under)) && (s.color === undefined || isColor(s.color)) && (s.link === undefined || typeof s.link === 'string');
 }
 
 function isSatin(f: unknown): f is SatinSettings {
@@ -919,7 +920,7 @@ export function rememberShapes(p: Pattern, objs: SewObject[], starts: number[], 
       return [{ kind, end }];
     };
     const f = forms[j];
-    if (f?.path) return remember(p, o, { region: null, path: f.path, ...(f.line ? { line: { ...f.line }, parts: one(isRunType(f.line.type) ? 'run' : 'satin') } : {}) });
+    if (f?.path) return remember(p, o, { region: null, path: f.path, ...(f.line ? { line: { ...f.line }, parts: one(runLike(f.line.type) ? 'run' : 'satin') } : {}) });
     // A satin from a vector file keeps its shape: its rails lie on the shape's edge.
     if (!shape && f?.form) return remember(p, o, { region: null, form: f.form, parts: one('satin') });
     // A satin made here (a narrow area): its rails, read from its fresh stitches, so it is known as
