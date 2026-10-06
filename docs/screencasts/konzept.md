@@ -2,8 +2,8 @@
 
 Kurze Videos (1 bis 3 Minuten) für Hobbysticker, die heatstitch Schritt für Schritt zeigen.
 Dieses Dokument legt Themenbaum, Bildsprache, Stimme und Herstellung fest, damit alle Videos
-wie aus einem Guss wirken. Begriffe wie in der App (Stickmuster, Objekt, Stichart,
-Steppstich, Stickrahmen), so wie sie in App und Anleitung stehen.
+wie aus einem Guss wirken. Begriffe so, wie sie in App und Anleitung stehen (Stickmuster,
+Objekt, Stichart, Steppstich, Stickrahmen).
 
 ## Spielregeln
 
