@@ -1,3 +1,4 @@
+import { atShare, regionBox } from '../digitize/deco';
 import type { Region } from '../digitize/region';
 import type { Pt } from '../digitize/skeleton';
 import { apply, transformForm, type Mat } from '../shape/path';
@@ -115,6 +116,14 @@ export function transformRemembered(r: Remembered, m: Mat): Remembered {
   if (r.asSatin) out.asSatin = r.asSatin.map((c) => mapRails(m, s, c));
   if (r.asLine) out.asLine = { ...r.asLine, path: transformForm(r.asLine.path, m), line: { ...r.asLine.line, width: r.asLine.line.width * s } };
   if (r.fill) out.fill = { ...r.fill, ...(r.fill.lineWidth ? { lineWidth: r.fill.lineWidth * s } : {}), angle: mapAngle(m, r.fill.angle), ...(r.fill.guides ? { guides: r.fill.guides.map((g) => mapPts(m, g)) } : {}) };
+  // The start of rays stays on the same spot of the shape: mirrored and turned with it.
+  const focus = r.fill?.deco?.focus;
+  if (out.fill && focus && r.region && out.region) {
+    const q = apply(m, atShare(regionBox(r.region), focus));
+    const b = regionBox(out.region);
+    const share = (v: number, a: number, z: number) => Math.round(Math.min(1, Math.max(0, z > a ? (v - a) / (z - a) : 0.5)) * 1000) / 1000;
+    out.fill = { ...out.fill, deco: { ...out.fill.deco, focus: [share(q[0], b[0], b[2]), share(q[1], b[1], b[3])] } };
+  }
   return out;
 }
 
@@ -133,5 +142,8 @@ function mapRails(m: Parameters<typeof mapPts>[0], s: number, c: Rails): Rails {
     ...(c.rungs ? { rungs: c.rungs.map(([a, b]) => [a * s, b * s] as [number, number]) } : {}),
     ...(c.cuts ? { cuts: c.cuts.map(([a, b]) => [a * s, b * s] as [number, number]) } : {}),
     ...(c.spacings ? { spacings: c.spacings.map(([a, v]) => [a * s, v] as [number, number]) } : {}),
+    ...(c.spans ? { spans: c.spans.map((f) => mapPts(m, f) as [Pt, Pt]) } : {}),
+    ...(c.chain !== undefined ? { chain: c.chain } : {}),
+    ...(c.plan ? { plan: c.plan.map((x) => ({ ...x })) } : {}),
   };
 }

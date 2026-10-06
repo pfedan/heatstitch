@@ -573,6 +573,42 @@ shots.draw = async (lang) => {
   await close();
 };
 
+// 18. sections (shared): the satin M of letters.pes after Suggest sections, canvas only
+shots.sections = async () => {
+  const { page, close } = await boot('de');
+  await lettersFlow(page);
+  await clickObject(page, 4); // Satin 1 = the M
+  await clickText(page, T.de.rungs);
+  await page.getByRole('button', { name: 'Abschnitte vorschlagen', exact: true }).first().click();
+  await page.waitForTimeout(1500);
+  const b = await stageBox(page);
+  await zoomTo(page, b.x + 100, b.y + 375, 3);
+  const c = await page.locator('#canvas').boundingBox();
+  await jpeg(page, 'sections', { x: c.x + 90, y: c.y + 70, width: c.width - 180, height: c.height - 170 });
+  await close();
+};
+
+// 19. decor: an orange fill of the cat with the Swirl pattern, the Decor tab open
+shots.decor = async (lang) => {
+  const { page, close } = await boot(lang);
+  await example(page, CAT);
+  await mode(page, 'flow');
+  await realistic(page, true);
+  await expandColor(page, 4); // Rot: the sweater
+  const rows = await objectRows(page);
+  const big = rows.map((r) => ({ i: r.i, n: +(r.text.match(/(\d[\d.,]*)\s*$/) || [0, 0])[1].replace(/[.,]/g, '') })).sort((a, b) => b.n - a.n)[0];
+  await clickObject(page, big.i);
+  await page.locator('.pattern-groups button', { hasText: lang === 'de' ? 'Dekor' : 'Decor' }).click();
+  await page.waitForTimeout(500);
+  await page.locator('.pattern-tiles [role="radio"]', { hasText: lang === 'de' ? 'Wirbel' : 'Swirl' }).click();
+  await page.waitForTimeout(3000);
+  await inspectorTo(page, '.pattern-groups', -60);
+  await mouseAway(page);
+  await sidebarTop(page);
+  await jpeg(page, `decor-${lang}`);
+  await close();
+};
+
 // ---- runner
 const names = process.argv.slice(2);
 const list = names.length ? names : Object.keys(shots);

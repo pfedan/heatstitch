@@ -28,6 +28,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      # 120 objects, each common operation within a time budget (tests/load.test.ts), alone on the machine.
+      - run: npx vitest run tests/load.test.ts
+        env:
+          LOAD: '1'
       - run: npm run build
         env:
           BASE_PATH: ${{ github.event_name == 'pull_request' && format('/heatstitch/pr-preview/pr-{0}/', github.event.number) || '' }}

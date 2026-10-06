@@ -13,6 +13,8 @@ import {
   transitions,
 } from '../src/model/sequence';
 import { parseDst } from '../src/parsers/dst';
+import { transitionShown } from '../src/render/flow';
+import { shownMarks } from '../src/settings';
 import { writeDst } from '../src/writers/dst';
 import { letterDesign } from './helpers/designs';
 import { Shape } from './helpers/shapes';
@@ -115,5 +117,26 @@ describe('editing jumps', () => {
     expect(after).toHaveLength(all.length);
     expect(after.filter((t) => t.lengthMm >= 3).every((t) => t.trimmed)).toBe(true);
     expect(colorBlocks(q).reduce((n, b) => n + b.stitches, 0)).toBeGreaterThanOrEqual(colorBlocks(p).reduce((n, b) => n + b.stitches, 0));
+  });
+});
+
+describe('jumps on the canvas', () => {
+  it('can click a jump only where its line is drawn', () => {
+    const p = twoLines();
+    const [t] = transitions(p);
+    const all = { limit: p.cmd.length - 1, alpha: new Float32Array(p.cmd.length).fill(1), carried: null };
+    expect(transitionShown(p, t, true, all)).toBe(true);
+    // Markers off, before the player reaches it, or hidden with its color: not there to click.
+    expect(transitionShown(p, t, false, all)).toBe(false);
+    expect(transitionShown(p, t, true, { ...all, limit: t.from })).toBe(false);
+    expect(transitionShown(p, t, true, { ...all, alpha: new Float32Array(p.cmd.length) })).toBe(false);
+    // Drawn as loose thread it stays clickable without the jump markers.
+    expect(transitionShown(p, t, false, { ...all, carried: carriedJumps(p, [t]) })).toBe(true);
+  });
+
+  it('hides every marker but the loose threads with the global switch', () => {
+    const marks = { jumps: true, trims: true, colors: true, ends: true, points: true, threads: true };
+    expect(shownMarks({ marks, marksOn: true })).toBe(marks);
+    expect(shownMarks({ marks, marksOn: false })).toEqual({ jumps: false, trims: false, colors: false, ends: false, points: false, threads: true });
   });
 });

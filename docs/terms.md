@@ -23,7 +23,7 @@ README; code names (Pattern, SewObject, Region, Block) stay as they are, users n
 | Satin underlay just inside both rails | Randlauf | edge run | under.contour |
 | Line around a fill, sewn after it | Umrandung | border | border |
 | Lines across a satin column that set the direction | Querlinie | rung | Rung |
-| Line across a satin column where it starts afresh | Trennlinie | section line | section |
+| Line across a satin column where it starts afresh | Trennlinie | cut line | cut |
 | Drawn line that fill rows follow | Leitlinie | guide line | guide |
 | Lower fill left out under a later shape | Aussparen | knock out | knockout |
 | Shape kept only for aligning, never sewn | Hilfslinie | guide | aside 'guide' |
