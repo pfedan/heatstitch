@@ -133,7 +133,7 @@ export function initAmpel(app: AmpelApp): { update: () => void } {
     const n = engine.revertable().length;
     if (!engine.revertObjects()) return;
     looking = null;
-    toast(t('ampel.reverted', { n }), { label: t('ampel.undo'), run: app.undo });
+    toast(n === 1 ? t('ampel.reverted.one') : t('ampel.reverted', { n }), { label: t('ampel.undo'), run: app.undo });
   }
 
   /** Another fabric: set as the design's material, as in the material panel. */
@@ -343,7 +343,7 @@ export function initAmpel(app: AmpelApp): { update: () => void } {
     const back = engine.revertable().length;
     if (back) {
       parts.push(
-        h('button', { type: 'button', class: 'ampel-revert', title: t('ampel.revert.hint'), onclick: () => runCommand('ampel.revert') }, t('ampel.revert.n', { n: back })),
+        h('button', { type: 'button', class: 'ampel-revert', title: t('ampel.revert.hint'), onclick: () => runCommand('ampel.revert') }, back === 1 ? t('ampel.revert.one') : t('ampel.revert.n', { n: back })),
       );
     }
     body.replaceChildren(...parts);
