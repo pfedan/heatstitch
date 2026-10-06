@@ -1,3 +1,4 @@
+import { loadCatalogs } from './threads/catalog';
 import './style.css';
 import { WorkerClient } from './density/client';
 import { applyI18n, detectLang, formatNumber, getLang, setLang, t, type Lang } from './i18n';
@@ -221,7 +222,7 @@ const player = new Player(settings, () => {
   redraw();
 });
 
-const { layers, mergeBlocked, objectName, objectPanel, selectObjects } = bindObjects({
+const { colorList, layers, mergeBlocked, objectName, objectPanel, selectObjects } = bindObjects({
   get commitTransform() {
     return commitTransform;
   },
@@ -803,6 +804,8 @@ function redraw(): void {
     const p = active?.pattern ?? null;
     const q = p ? seq(p) : null;
     $('player').hidden = !p;
+    $('color-list').hidden = !q?.blocks.length;
+    if (p) colorList.update(p);
     if (settings.mode === 'flow') {
       const current = p && !player.complete ? seq(p).markers.colorStarts.filter((i) => q!.numbers[i] <= Math.max(1, player.pos)).length - 1 : null;
       layers.update(
@@ -1631,5 +1634,12 @@ files.render();
 redraw();
 void files.restore();
 void imageMode.restore();
+// The thread catalogs name the numbers of the threads in the list (Brother's too).
+void loadCatalogs()
+  .then(() => {
+    layers.refresh();
+    redraw();
+  })
+  .catch((err) => console.warn('No thread catalogs', err));
 
 $('fabric-tune').addEventListener('click', () => tuneToFabric());
