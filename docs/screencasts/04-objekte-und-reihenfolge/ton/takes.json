@@ -1,0 +1,72 @@
+{
+  "a2db32713e9fa624": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "[warm, inviting] Ein Stickmuster besteht aus Objekten. In diesem Video bringst du sie in die richtige Reihenfolge, kopierst, spiegelst und färbst sie, an einem Kirschenpaar."
+  },
+  "880cb0e4d42479cd": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "Ich öffne meine Zeichnung als SVG. Aus jeder Form wird ein Objekt, gestickt in der Reihenfolge, in der die Datei sie malt."
+  },
+  "8d2c02365df378c1": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "Rechts stehen die Farben, oben die erste, unten die letzte. Der Pfeil klappt eine Farbe auf und zeigt ihre Objekte. [focused] Im Feld Objekt steht, als wievieltes es gestickt wird und auf wie vielen anderen es liegt."
+  },
+  "7f4a4354daad7f01": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "[curious] Die Kirsche liegt auf zwei Objekten, dem Stiel und dem Glanzpunkt. Weiß kommt nämlich vor Rot dran. Ich ziehe Weiß in der Liste unter Rot, [delighted] und da sind die Glanzpunkte. Was später gestickt wird, liegt oben."
+  },
+  "b017877c6f0267da": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "Die Karte darüber bietet an, die Kirschen unter den Glanzpunkten auszusparen. Dann liegt dort kein doppeltes Garn."
+  },
+  "deb181fc497fc55e": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "[enthusiastic] Jetzt bekommt das Blatt einen Partner. Ein Rechtsklick öffnet ein kleines Menü: Duplizieren. Dieselben Knöpfe stehen auch im Feld Objekt. Ich spiegle die Kopie waagrecht."
+  },
+  "1a753573ca8fb026": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "Dann ziehe ich sie nach links. Die feine Linie zeigt: Sie rastet genau am ersten Blatt ein."
+  },
+  "7d60471b330d4f7f": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "Das zweite Blatt bekommt ein dunkleres Grün. Klick aufs Farbquadrat, Garn wählen. Es wird gleich nach dem ersten Blatt gestickt."
+  },
+  "0e306b3c8b5f5ce4": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "Mit der Leertaste siehst du die Reihenfolge: Stiele, Blätter, Kirschen und ganz zum Schluss die Glanzpunkte."
+  },
+  "5ab250b25c8f4d1e": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "[proud, warm] Mit Realistischen Fäden siehst du, wie es auf dem Stoff wirkt. Fertig ist dein Kirschenpaar."
+  }
+}
