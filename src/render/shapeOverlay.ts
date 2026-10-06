@@ -136,6 +136,23 @@ export function drawFrame(ctx: CanvasRenderingContext2D, vp: Viewport, f: FrameV
   ctx.lineWidth = 1.2;
   ctx.stroke();
   handle(hx, hy, true, f.hover === 'turn' || f.dragging === 'turn');
+  // What the move hangs on: a thin line in the accent color across the stage.
+  if (f.dragging === 'move' && (f.snapped.x !== null || f.snapped.y !== null)) {
+    ctx.beginPath();
+    if (f.snapped.x !== null) {
+      const [x] = S([f.snapped.x, 0]);
+      ctx.moveTo(x, -1e4);
+      ctx.lineTo(x, 1e4);
+    }
+    if (f.snapped.y !== null) {
+      const [, y] = S([0, f.snapped.y]);
+      ctx.moveTo(-1e4, y);
+      ctx.lineTo(1e4, y);
+    }
+    ctx.strokeStyle = ACCENT;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
   if (f.dragging !== null) {
     const m = f.m;
     let text = '';

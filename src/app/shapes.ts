@@ -13,6 +13,7 @@ import type { Viewport } from '../render/viewport';
 import { ShapeTool } from '../ui/shapeTool';
 import { deleteObjects, duplicateObject, mirrorMatrix, subtractTop } from '../model/shapeOps';
 import { formOf, reshapeFill } from '../model/reshape';
+import { railsForm, reshapeRails } from '../model/railsForm';
 import { lineOf, resewLine, lineSettings, fillToLine } from '../model/line';
 import { refreshKnockouts } from '../model/knockout';
 import { remembered, rememberedIn, type RestitchResult } from '../model/restitch';
@@ -68,7 +69,9 @@ export function bindShapes(app: ShapesApp) {
     const obj = q.objects[o];
     // Stitches loosed from their shape are edited as stitches; the shape rests.
     if (!obj || remembered(p, obj)?.free) return null;
-    return isLineObject(p, obj) ? lineOf(p, obj, q.kinds) : formOf(p, obj, q.kinds);
+    if (isLineObject(p, obj)) return lineOf(p, obj, q.kinds);
+    // A satin without an outline (of a file from elsewhere): its two rails.
+    return formOf(p, obj, q.kinds) ?? railsForm(p, obj, q.kinds);
   }
 
   /**
@@ -125,7 +128,7 @@ export function bindShapes(app: ShapesApp) {
     app.redraw();
   }
 
-  /** Edits the outline of object `o` (level Form); objects without a fill go to their stitches. */
+  /** Edits the outline of object `o` (level Form, with the frame around it); objects without an outline go to their stitches. */
   function enterShape(o: number, fit: boolean): void {
     const p = app.files.active?.pattern;
     if (!p || app.settings.mode !== 'flow') return;
@@ -137,11 +140,11 @@ export function bindShapes(app: ShapesApp) {
       app.editor.setActive(false);
       ui.editObject = null;
     }
-    if (!ui.selectedObjects.has(o) || ui.selectedObjects.size !== 1) app.selectObjects([o], false);
+    ui.formLevel = true;
     shapeTool.open(form);
     ui.shapeObject = o;
     ui.shapePattern = p;
-    app.frameTool.close();
+    if (!ui.selectedObjects.has(o) || ui.selectedObjects.size !== 1) app.selectObjects([o], false);
     const obj = q.objects[o];
     if (fit) {
       const w = ((obj.maxX - obj.minX) / 10) * app.vp.scale;
@@ -189,7 +192,8 @@ export function bindShapes(app: ShapesApp) {
       return;
     }
     const hand = remembered(p, obj)?.hand ?? 0;
-    const r = reshapeFill(p, q.objects, obj, q.kinds, form, app.settings.trimMm);
+    const rails = !formOf(p, obj, q.kinds) && railsForm(p, obj, q.kinds);
+    const r = rails ? reshapeRails(p, q.objects, obj, q.kinds, form, app.settings.trimMm) : reshapeFill(p, q.objects, obj, q.kinds, form, app.settings.trimMm);
     if (!r || !r.starts.length) {
       // Nothing to fill there (too small, or the outline crosses itself away): back to the old one.
       shapeTool.setForm(shapeTarget(p, q, ui.shapeObject) ?? form);

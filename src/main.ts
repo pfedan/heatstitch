@@ -14,6 +14,8 @@ import { keepObjects, type HandChange } from './model/handEdit';
 import { exportPng } from './ui/export';
 import { FileList, type LoadedFile } from './ui/fileList';
 import { bindHoop } from './ui/hoopPanel';
+import { scaling } from './shape/path';
+import { scaleBlocked } from './model/reshape';
 import { legendSpec } from './ui/legendSpec';
 import { bindProfile } from './ui/profilePanel';
 import { renderStats } from './ui/stats';
@@ -220,6 +222,12 @@ const player = new Player(settings, () => {
 });
 
 const { layers, mergeBlocked, objectName, objectPanel, selectObjects } = bindObjects({
+  get commitTransform() {
+    return commitTransform;
+  },
+  get drawTool() {
+    return drawTool;
+  },
   get applyEdit() {
     return applyEdit;
   },
@@ -519,6 +527,9 @@ const { commitTransform, drawTool, frameObjects, frameTool, knockoutObjects, set
   get layers() {
     return layers;
   },
+  get openSelectedForm() {
+    return openSelectedForm;
+  },
   get orderCard() {
     return orderCard;
   },
@@ -684,6 +695,7 @@ function setMode(mode: Mode): void {
     ui.comparing = false;
     ui.hoverZone = null;
   }
+  if (mode === 'flow' && ui.formLevel) openSelectedForm();
   if (mode !== 'flow') {
     if (drawTool.active) setDrawing(null);
     player.pause();
@@ -713,7 +725,7 @@ function objectInfo(p: Pattern, q: Sequence) {
     numbers: selected.map((o) => numberInColor(q.objects, q.objects[o])),
     hand: selected.map((o) => remembered(p, q.objects[o])?.hand ?? 0),
     editing: editor.active && ui.editObject !== null && selected.length === 1 && selected[0] === ui.editObject ? { selection: editor.selection.size } : null,
-    shapeable: selected.length === 1 && !stitchInfo(p, q).free?.on && (!!stitchInfo(p, q).measured.fill || (!!q.objects[selected[0]] && isLineObject(p, q.objects[selected[0]]))),
+    shapeable: selected.length === 1 && !stitchInfo(p, q).free?.on && (!!stitchInfo(p, q).measured.fill || !!stitchInfo(p, q).measured.satin || (!!q.objects[selected[0]] && isLineObject(p, q.objects[selected[0]]))),
     shaping: shapeTool.active && selected.length === 1 && selected[0] === ui.shapeObject ? { nodes: shapeTool.count, smooth: shapeTool.selectedSmooth, ...(q.objects[selected[0]] && isLineObject(p, q.objects[selected[0]]) ? { line: { closed: shapeTool.closed } } : {}) } : null,
     frame: frameTool.active ? { canScale: frameTool.canScale } : null,
     mergeBlocked: selected.length > 1 ? mergeBlocked(selected.map((o) => q.objects[o])) : null,
@@ -1017,6 +1029,8 @@ function enterObject(o: number, fit: boolean): void {
   const obj = p ? seq(p).objects[o] : undefined;
   if (!obj) return;
   if (shapeTool.active) closeShape();
+  if (drawTool.active) setDrawing(null);
+  ui.formLevel = false;
   if (!editor.active) editor.setActive(true);
   else editor.reset();
   ui.editObject = o;
@@ -1043,8 +1057,12 @@ function revealRecord(i: number): void {
 }
 
 function setEditing(on: boolean): void {
-  if (on) closeRungs();
-  if (on) closeShape();
+  if (on) {
+    ui.formLevel = false;
+    if (drawTool.active) setDrawing(null);
+    closeRungs();
+    closeShape();
+  }
   if (on && settings.mode === 'flow' && ui.selectedObjects.size === 1) return enterObject([...ui.selectedObjects][0], true);
   editor.setActive(on);
   ui.editObject = null;
@@ -1056,9 +1074,11 @@ function setEditing(on: boolean): void {
 function updateLevel(): void {
   const on = editor.active;
   const shaping = shapeTool.active;
-  const level = on ? 'stitches' : shaping ? 'shape' : 'objects';
+  const level = on ? 'stitches' : ui.formLevel && settings.mode === 'flow' ? 'shape' : 'objects';
   stage.classList.toggle('editing', on);
   stage.classList.toggle('shaping', shaping);
+  stage.classList.toggle('form-level', ui.formLevel && !on && settings.mode === 'flow');
+  $('draw-pointer').setAttribute('aria-pressed', String(!drawTool.kind));
   document.querySelectorAll<HTMLInputElement>('input[name="level"]').forEach((i) => (i.checked = i.value === level));
   const crumb = $('edit-crumb');
   const p = files.active?.pattern;
@@ -1083,6 +1103,8 @@ function updateLevel(): void {
           : 'canvas.hint.edit'
         : shaping
           ? 'canvas.hint.shape'
+          : flow && ui.formLevel && !ui.lettering
+            ? 'canvas.hint.form'
           : flow && ui.letterMode
             ? 'canvas.hint.letters'
             : flow && ui.lettering
@@ -1179,11 +1201,37 @@ const controls = bindControls(settings, (kind: ChangeKind) => {
   }
 });
 
-const hoopPanel = bindHoop(settings, () => {
-  saveSettings(settings);
-  storeMaterial();
+const hoopPanel = bindHoop(
+  settings,
+  () => {
+    saveSettings(settings);
+    storeMaterial();
+    fitView();
+  },
+  () => fitToHoop(),
+);
+
+/** Room left free on each side when a design is made to fit its hoop (mm). */
+const HOOP_FIT_MARGIN = 1;
+
+/** The whole design made smaller, evenly, until it fits the hoop with HOOP_FIT_MARGIN all round (one undo step). */
+function fitToHoop(): void {
+  const p = files.active?.pattern;
+  const hoop = settings.hoop;
+  if (!p || !hoop || settings.mode === 'image') return;
+  const b = p.bounds;
+  const w = (b.maxX - b.minX) / 10;
+  const h = (b.maxY - b.minY) / 10;
+  const s = Math.floor(Math.min((hoop.w - 2 * HOOP_FIT_MARGIN) / w, (hoop.h - 2 * HOOP_FIT_MARGIN) / h) * 1000) / 1000;
+  if (!(s > 0 && s < 1)) return;
+  const q = seq(p);
+  // Objects of a file that are fill and satin at once cannot be scaled as one.
+  if (q.objects.some((o) => scaleBlocked(p, o, q.kinds))) return layers.say(t('hoop.fit.blocked'), true);
+  const all = q.objects.map((o) => o.index);
+  if (!commitTransform(scaling(s, s, (b.minX + b.maxX) / 20, (b.minY + b.maxY) / 20), all)) return;
+  layers.say(t('hoop.fitted', { pct: formatNumber(Math.round(s * 100)) }) + ' ' + t('object.undo'));
   fitView();
-});
+}
 
 const profile = bindProfile(settings, () => {
   saveSettings(settings);
@@ -1276,20 +1324,39 @@ $('fit').addEventListener('click', () => fitView());
 document.querySelectorAll<HTMLInputElement>('input[name="level"]').forEach((i) =>
   i.addEventListener('change', () => {
     if (!i.checked) return;
-    if (i.value === 'shape') return chooseShapeLevel();
-    closeShape();
+    if (i.value === 'shape') return setFormLevel(true);
+    setFormLevel(false);
     setEditing(i.value === 'stitches');
   }),
 );
 
-/** Level Form from the switch: the selected object's outline, or a hint to pick one with a fill. */
-function chooseShapeLevel(): void {
-  const p = files.active?.pattern;
-  const o = ui.selectedObjects.size === 1 ? [...ui.selectedObjects][0] : null;
-  if (p && o !== null && shapeTarget(p, seq(p), o)) return enterShape(o, true);
-  layers.say(t(o === null ? 'shape.pick' : 'shape.noFill'), true);
+/**
+ * Level Form on or off. On: the drawing tools show and the one selected object shows its outline;
+ * off: drawing stops and the outline closes (the selection stays).
+ */
+function setFormLevel(on: boolean): void {
+  ui.formLevel = on;
+  if (on) {
+    if (editor.active) {
+      editor.setActive(false);
+      ui.editObject = null;
+    }
+    closeRungs();
+    openSelectedForm();
+  } else {
+    if (drawTool.active) setDrawing(null);
+    closeShape();
+  }
   updateLevel();
   redraw();
+}
+
+/** Level Form: the outline of the one selected object, when it has one that can be edited. */
+function openSelectedForm(): void {
+  const p = files.active?.pattern;
+  const o = ui.selectedObjects.size === 1 ? [...ui.selectedObjects][0] : null;
+  if (!ui.formLevel || settings.mode !== 'flow' || drawTool.active || ui.letterMode) return;
+  if (p && o !== null && o !== ui.shapeObject && shapeTarget(p, seq(p), o)) enterShape(o, false);
 }
 exportBtn.addEventListener('click', () => {
   const p = files.active?.pattern;
@@ -1299,6 +1366,9 @@ exportBtn.addEventListener('click', () => {
 // Opening and saving files and projects: src/app/fileIo.ts
 
 const { adoptMaterial, storeMaterial } = bindFileIo({
+  get setFormLevel() {
+    return setFormLevel;
+  },
   files,
   settings,
   imageMode,
@@ -1314,6 +1384,12 @@ const { adoptMaterial, storeMaterial } = bindFileIo({
 // Keyboard shortcuts --------------------------------------------------------
 
 bindKeys({
+  get selectObjects() {
+    return selectObjects;
+  },
+  get setFormLevel() {
+    return setFormLevel;
+  },
   get closeRungs() {
     return closeRungs;
   },

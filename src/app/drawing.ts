@@ -11,7 +11,7 @@ import type { Settings } from '../settings';
 import type { ShapeTool } from '../ui/shapeTool';
 import type { ThreadColor, Pattern } from '../model/pattern';
 import { DrawTool, type DrawKind } from '../ui/drawTool';
-import { FrameTool } from '../ui/frameTool';
+import { FrameTool, type SnapTargets } from '../ui/frameTool';
 import { digitizeDefaults, type Digitized, digitizeShapes } from '../digitize/digitize';
 import { nearestThread } from '../image/prepare';
 import { overlapsIn, setKnockout } from '../model/knockout';
@@ -34,6 +34,7 @@ export interface DrawingApp {
   readonly files: FileList;
   readonly followKnockouts: () => void;
   readonly layers: LayersPanel;
+  readonly openSelectedForm: () => void;
   readonly orderCard: OrderCard;
   readonly redraw: () => void;
   readonly rungTool: RungTool;
@@ -58,10 +59,11 @@ export function bindDrawing(app: DrawingApp) {
   const drawTool = new DrawTool({ done: (s) => void drawn(s), redraw: app.redraw });
   const drawButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-draw]')];
 
-  /** Picks a drawing tool, or none. */
+  /** Picks a drawing tool, or none (the pointer). Drawing belongs to the level Form. */
   function setDrawing(kind: DrawKind | null): void {
     if (kind && app.settings.mode !== 'flow') return;
     if (kind) {
+      ui.formLevel = true;
       if (app.editor.active) app.setEditing(false);
       if (app.shapeTool.active) app.closeShape();
       if (app.rungTool.active) app.closeRungs();
@@ -70,10 +72,12 @@ export function bindDrawing(app: DrawingApp) {
     drawTool.start(kind);
     for (const b of drawButtons) b.setAttribute('aria-pressed', String(b.dataset.draw === kind));
     app.stage.classList.toggle('drawing', !!kind);
+    if (!kind) app.openSelectedForm();
     app.updateLevel();
     app.redraw();
   }
   drawButtons.forEach((b) => b.addEventListener('click', () => setDrawing(drawTool.kind === b.dataset.draw ? null : (b.dataset.draw as DrawKind))));
+  $('draw-pointer').addEventListener('click', () => setDrawing(null));
 
   /** A shape is drawn: sewn in the thread of the selected object right after it, else after the last one. */
   /** No stitches yet. */
@@ -96,6 +100,8 @@ export function bindDrawing(app: DrawingApp) {
       const d = firstShape(shape, options);
       if (!d) return app.layers.say(t('draw.failed'), true);
       ui.keepView = true;
+      // Back to the pointer: the new shape is chosen, ready to be moved or shaped.
+      setDrawing(null);
       await app.addDigitized(d, t('draw.newName'));
       ui.keepView = false;
       app.selectObjects([0], false);
@@ -112,6 +118,7 @@ export function bindDrawing(app: DrawingApp) {
     const nq = app.seq(r.pattern);
     const mine = nq.objects.findIndex((o) => stitchesBefore(r.pattern, o.first) === r.start);
     app.followKnockouts();
+    setDrawing(null);
     if (mine >= 0) app.selectObjects([mine], false);
     app.layers.say(t(shape.kind === 'fill' ? 'draw.done.fill' : 'draw.done.line'));
     app.redraw();
@@ -190,9 +197,9 @@ export function bindDrawing(app: DrawingApp) {
     },
   });
 
-  /** The objects the frame is on: the selected ones in the Ablauf mode, level Objects (in sewing order). */
+  /** The objects the frame is on: the selected ones in the Ablauf mode, levels Form and Objects (in sewing order). */
   function frameObjects(): number[] {
-    if (app.settings.mode !== 'flow' || !ui.selectedObjects.size || app.editor.active || app.shapeTool.active || app.rungTool.active || app.orderCard.isOpen || ui.letterMode) return [];
+    if (app.settings.mode !== 'flow' || !ui.selectedObjects.size || app.editor.active || drawTool.active || app.rungTool.active || app.orderCard.isOpen || ui.letterMode) return [];
     const n = app.files.active?.pattern ? app.seq(app.files.active.pattern).objects.length : 0;
     return [...ui.selectedObjects].filter((o) => o < n).sort((a, b) => a - b);
   }
@@ -217,17 +224,42 @@ export function bindDrawing(app: DrawingApp) {
       maxX: Math.max(...objs.map((o) => o.maxX)) / 10,
       maxY: Math.max(...objs.map((o) => o.maxY)) / 10,
     };
-    frameTool.open(box, objs.every((o) => scaleBlocked(p, o, q.kinds) === null));
+    frameTool.open(box, objs.every((o) => scaleBlocked(p, o, q.kinds) === null), snapTargets(q.objects.filter((o) => !ui.selectedObjects.has(o.index))));
   }
 
-  /** The selected objects moved, turned or scaled by `m` together (one undo step). */
-  function commitTransform(m: Mat): void {
+  /** What a moved selection snaps to: the edges and middles of the other objects, and the middle of them all. */
+  function snapTargets(others: { minX: number; minY: number; maxX: number; maxY: number }[]): SnapTargets | null {
+    if (!others.length) return null;
+    const xs = new Set<number>();
+    const ys = new Set<number>();
+    for (const o of others) {
+      for (const v of [o.minX, (o.minX + o.maxX) / 2, o.maxX]) xs.add(v / 10);
+      for (const v of [o.minY, (o.minY + o.maxY) / 2, o.maxY]) ys.add(v / 10);
+    }
+    // The middle of the rest is where the hoop's middle will be.
+    xs.add((Math.min(...others.map((o) => o.minX)) + Math.max(...others.map((o) => o.maxX))) / 20);
+    ys.add((Math.min(...others.map((o) => o.minY)) + Math.max(...others.map((o) => o.maxY))) / 20);
+    return { xs: [...xs], ys: [...ys] };
+  }
+
+  /**
+   * The selected objects (or `objs`, the selection staying as it is) moved, turned or scaled by `m`
+   * together (one undo step). False when that did not work.
+   */
+  function commitTransform(m: Mat, objs?: number[]): boolean {
     const f = app.files.active;
     const p = f?.pattern;
-    const sel = frameObjects();
-    if (!f || !p || !sel.length) return app.redraw();
+    const sel = objs ?? frameObjects();
+    if (!f || !p || !sel.length) {
+      app.redraw();
+      return false;
+    }
     // A lettering keeps its text: it is set anew where the frame put it.
-    if (ui.lettering) return app.transformLettering(m);
+    if (ui.lettering && !objs) {
+      app.transformLettering(m);
+      return true;
+    }
+    const kept = ui.selectedObjects;
     let cur = p;
     let hand = 0;
     let restitched = false;
@@ -239,7 +271,8 @@ export function bindDrawing(app: DrawingApp) {
       const r = obj && transformSewObject(cur, q.objects, obj, q.kinds, m, app.settings.trimMm);
       if (!r) {
         app.layers.say(t('frame.failed'), true);
-        return app.redraw();
+        app.redraw();
+        return false;
       }
       restitched ||= r.restitched;
       cur = r.pattern;
@@ -250,11 +283,14 @@ export function bindDrawing(app: DrawingApp) {
     app.applyEdit(synced);
     const nq = app.seq(synced);
     app.files.setObjects(f, rememberedIn(synced, nq.objects));
-    ui.selectedObjects = synced !== cur ? new Set(nq.objects.flatMap((o, i) => (keys.has(objectKey(synced, o)) ? [i] : []))) : nq.objects.length === app.seq(p).objects.length ? new Set(sel) : new Set();
+    const same = nq.objects.length === app.seq(p).objects.length;
+    if (objs) ui.selectedObjects = same ? kept : new Set();
+    else ui.selectedObjects = synced !== cur ? new Set(nq.objects.flatMap((o, i) => (keys.has(objectKey(synced, o)) ? [i] : []))) : same ? new Set(sel) : new Set();
     ui.selectionKey++;
     if (restitched && hand) app.layers.say(t('shape.handReplaced', { n: formatNumber(hand) }));
     app.followKnockouts();
     app.redraw();
+    return true;
   }
 
   return { commitTransform, drawTool, frameObjects, frameTool, knockoutObjects, setDrawing, syncFrame, updateOverlapCard };

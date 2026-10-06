@@ -1,3 +1,4 @@
+import { simplifyMore } from '../shape/simplify';
 import type { Pt } from '../digitize/skeleton';
 import { cloneForm, insertNode, moveHandle, moveNode, nearestOnForm, removeNode, segment, segments, setSmooth, type Form } from '../shape/path';
 
@@ -286,6 +287,24 @@ export class ShapeTool implements ShapeView {
   get selectedSmooth(): boolean | null {
     const s = this.selected;
     return s ? (this.form.paths[s.path]?.nodes[s.i]?.smooth ?? null) : null;
+  }
+
+  /**
+   * The form with fewer nodes ("Vereinfachen"), each press a bit more; null when none can go. Take
+   * it over with `commit`.
+   */
+  simplify(): { before: number; after: number } | null {
+    const s = simplifyMore(this.form);
+    if (!s) return null;
+    const before = this.count;
+    this.form = s;
+    this.selected = this.hover = null;
+    return { before, after: this.count };
+  }
+
+  /** The form as it is now taken over (sewn anew). */
+  commit(): void {
+    this.hooks.change(this.form);
   }
 
   /** Nodes in the form. */

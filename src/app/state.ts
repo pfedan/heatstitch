@@ -54,6 +54,8 @@ export const ui = {
   stitchCache: null as { p: Pattern; key: number; info: StitchInfo } | null,
   /** The object the rung tool works on, and the pattern its columns were read from. */
   rungObject: null as number | null,
+  /** Level Form of the Ablauf mode: drawing, and the outline of the one selected object. */
+  formLevel: false,
   /** The object whose fill outline is edited (level Form), and the pattern its form was read from. */
   shapeObject: null as number | null,
   shapePattern: null as Pattern | null,
