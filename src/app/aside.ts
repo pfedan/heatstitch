@@ -4,7 +4,9 @@ import type { Measurement } from '../validation/measure';
 import type { Pattern } from '../model/pattern';
 import type { Sequence } from './types';
 import type { Settings } from '../settings';
-import { AsidePanel } from '../ui/asidePanel';
+import { AsidePanel, asideMenuIds } from '../ui/asidePanel';
+import { menuAt } from '../ui/objectMenu';
+import { registerAsideCommands } from '../areas/objects/commands';
 import { digitizeDefaults } from '../digitize/digitize';
 import { sewAgain, setAsideRole, dropAside, type AsideRole, setAside } from '../model/aside';
 import { stitchesBefore } from '../model/transform';
@@ -16,6 +18,7 @@ export interface AsideApp {
   readonly applyEdit: (p: Pattern, measurement?: Measurement | undefined) => void;
   readonly files: FileList;
   readonly frameObjects: () => number[];
+  readonly history: (step: 'undo' | 'redo' | 'revert') => void;
   readonly layers: LayersPanel;
   readonly redraw: () => void;
   readonly seq: (p: Pattern) => Sequence;
@@ -25,34 +28,67 @@ export interface AsideApp {
 
 /** Shapes not sewn: switched off or kept as guides. */
 export function bindAside(app: AsideApp) {
+  /** The shape the commands for "not sewn" work on: the one whose row was used last. */
+  let target: number | null = null;
+  const shapes = () => (app.settings.mode === 'flow' ? (ui.asideShown ?? []) : []);
+  const find = (id: number) => shapes().find((a) => a.id === id) ?? null;
+
+  /** Takes back the edit just made, if it is still the latest one. */
+  const undoable = () => {
+    const f = app.files.active;
+    const p = f?.pattern;
+    return () => {
+      if (f && app.files.active === f && f.pattern === p) app.history('undo');
+    };
+  };
+
+  function sew(id: number): void {
+    const p = app.files.active?.pattern;
+    if (!p) return;
+    const r = sewAgain(p, id, { ...digitizeDefaults(app.settings.profile), trimMm: app.settings.trimMm });
+    if (!r) return app.layers.say(t('aside.failed'), true);
+    const mine = app.seq(r.pattern).objects.findIndex((o) => stitchesBefore(r.pattern, o.first) === r.start);
+    ui.hoverAside = null;
+    app.takeShapes(r.pattern, mine >= 0 ? [mine] : []);
+    app.layers.say({ text: t('aside.done.sewn'), undo: undoable() });
+  }
+
+  function role(id: number, r: AsideRole): void {
+    const p = app.files.active?.pattern;
+    const next = p && setAsideRole(p, id, r);
+    if (next) app.applyEdit(next);
+  }
+
+  function drop(id: number): void {
+    const p = app.files.active?.pattern;
+    const next = p && dropAside(p, id);
+    if (!next) return;
+    ui.hoverAside = null;
+    app.applyEdit(next);
+    app.layers.say({ text: t('aside.done.dropped'), undo: undoable() });
+  }
+
+  registerAsideCommands({
+    flow: () => app.settings.mode === 'flow' && !!app.files.active?.pattern,
+    target: () => (target !== null && find(target) ? target : null),
+    roleOf: (id) => find(id)?.role ?? null,
+    sew,
+    role,
+    drop,
+  });
+
   const asidePanel = new AsidePanel({
-    sew: (id) => {
-      const p = app.files.active?.pattern;
-      if (!p) return;
-      const r = sewAgain(p, id, { ...digitizeDefaults(app.settings.profile), trimMm: app.settings.trimMm });
-      if (!r) return app.layers.say(t('aside.failed'), true);
-      const mine = app.seq(r.pattern).objects.findIndex((o) => stitchesBefore(r.pattern, o.first) === r.start);
-      ui.hoverAside = null;
-      app.takeShapes(r.pattern, mine >= 0 ? [mine] : []);
-      app.layers.say(t('aside.done.sewn'));
-    },
-    role: (id, role) => {
-      const p = app.files.active?.pattern;
-      const next = p && setAsideRole(p, id, role);
-      if (next) app.applyEdit(next);
-    },
-    drop: (id) => {
-      const p = app.files.active?.pattern;
-      const next = p && dropAside(p, id);
-      if (!next) return;
-      ui.hoverAside = null;
-      app.applyEdit(next);
-      app.layers.say(t('aside.done.dropped'));
-    },
     hover: (id) => {
       if (ui.hoverAside === id) return;
       ui.hoverAside = id;
       app.redraw();
+    },
+    target: (id) => (target = id),
+    menu: (id, at) => {
+      const a = find(id);
+      if (!a) return;
+      target = id;
+      menuAt(asideMenuIds(a.role), at, t('objects.aside.menu'));
     },
   });
 

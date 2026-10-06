@@ -70,6 +70,7 @@ import { initShell } from './shell/setup';
 import { initStitchArea } from './areas/stitches';
 import { initDesign } from './areas/design';
 import { initShapes, refreshShapes } from './areas/shapes';
+import { runCommand } from './shell/commands';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -229,6 +230,15 @@ const player = new Player(settings, () => {
 const { colorList, layers, mergeBlocked, objectName, objectPanel, selectObjects } = bindObjects({
   get commitTransform() {
     return commitTransform;
+  },
+  get knockoutObjects() {
+    return knockoutObjects;
+  },
+  get orderCard() {
+    return orderCard;
+  },
+  get objectInfo() {
+    return objectInfo;
   },
   get drawTool() {
     return drawTool;
@@ -493,6 +503,9 @@ const { closeShape, deleteSelected, duplicateSelected, enterShape, followKnockou
 const { asidePanel, putAside } = bindAside({
   get applyEdit() {
     return applyEdit;
+  },
+  get history() {
+    return history;
   },
   get files() {
     return files;
@@ -1426,14 +1439,15 @@ bindKeys({
   get controls() {
     return controls;
   },
+  // Through the commands, so the keys follow the same rule and say the same as the menus.
   get deleteSelected() {
-    return deleteSelected;
+    return () => runCommand('object.delete');
   },
   get drawTool() {
     return drawTool;
   },
   get duplicateSelected() {
-    return duplicateSelected;
+    return () => runCommand('object.duplicate');
   },
   get editor() {
     return editor;
@@ -1571,12 +1585,6 @@ const { showObjectMenu } = bindPointer({
   },
   get movePlanSplit() {
     return movePlanSplit;
-  },
-  get objectInfo() {
-    return objectInfo;
-  },
-  get objectPanel() {
-    return objectPanel;
   },
   get orderCard() {
     return orderCard;

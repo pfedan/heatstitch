@@ -77,6 +77,9 @@ export function keyLabel(spec: string): string {
     Space: ['Leertaste', 'Space'],
     ArrowUp: ['↑', '↑'],
     ArrowDown: ['↓', '↓'],
+    ArrowLeft: ['←', '←'],
+    ArrowRight: ['→', '→'],
+    Backspace: ['Rücktaste', 'Backspace'],
     Home: ['Pos1', 'Home'],
     End: ['Ende', 'End'],
   };
