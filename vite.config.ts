@@ -56,6 +56,12 @@ export default defineConfig({
         // works offline too.
         globPatterns: ['**/*.{js,css,html,svg,png,webmanifest,pes}', 'fonts/index.json', 'threads/catalogs.json'],
         runtimeCaching: [
+          // The demo project is not part of the install (some 500 KB); it is kept once it was opened.
+          {
+            urlPattern: /\/examples\/.+\.heatstitch$/,
+            handler: 'StaleWhileRevalidate',
+            options: { cacheName: 'examples', expiration: { maxEntries: 4 } },
+          },
           {
             urlPattern: /\/fonts\/.+\.(json|txt)$/,
             handler: 'StaleWhileRevalidate',
