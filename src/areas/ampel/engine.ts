@@ -90,8 +90,10 @@ export interface ReadyFix {
   pattern: Pattern;
   measurement: Measurement;
   outcome: FixOutcome;
-  /** What "Korrektur zurücknehmen" needs once it is applied. */
+  /** What "Korrektur zurücknehmen" shows once it is applied (for display; taking back uses `objects`). */
   revert: RevertEntry[];
+  /** Indices of the objects it changes, in `pattern`. */
+  objects: number[];
 }
 
 /**
@@ -108,6 +110,12 @@ export interface RestProposal {
   preview: { box: MmBox; before: Pattern; after: Pattern };
   /** Changes by hand it would replace (objects stitched anew). */
   replacesHandEdits: number;
+  /**
+   * The proposal ready to take over after the preview (apply() it like a direct fix). The direct
+   * changes of the same kind are part of it. Absent with the stand-in (it offers the rest in the
+   * correction card instead).
+   */
+  fix?: ReadyFix;
 }
 
 /** A computation that may still be running. */
@@ -162,6 +170,8 @@ export interface AppliedFix {
   before: Pattern;
   after: Pattern;
   revert: RevertEntry[];
+  /** Indices of the objects it changed, in `after`. */
+  objects: number[];
 }
 
 /** What a replaceable engine offers the light. */
@@ -174,6 +184,20 @@ export interface AmpelEngine {
   apply(fix: ReadyFix): AppliedFix | null;
   /** Fixes applied in this session, newest last. */
   applied(): readonly AppliedFix[];
+  /**
+   * Takes back fix `fix` as one undo step: its objects get exactly the stitches and settings they
+   * had before, also after other changes elsewhere. False when none of them can be taken back.
+   */
+  revert(fix: AppliedFix): boolean;
+  /**
+   * Objects of the active design a fix changed that can be taken back. They remember it in the
+   * design's version, so this holds after saving and loading too ("Korrektur zurücknehmen").
+   */
+  revertable(): number[];
+  /** Takes back the fixes on objects `objects` (all revertable ones when left out) as one undo step. */
+  revertObjects(objects?: number[]): boolean;
+  /** Whether fixes are being worked out right now. */
+  working(): boolean;
   /**
    * Whether the search for fixes waits to be asked for (on a phone and for large designs).
    * Otherwise it starts by itself once the design has been still for a moment, worst kind first.
