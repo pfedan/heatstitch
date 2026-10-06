@@ -1,0 +1,360 @@
+/* Area "Stiche": the stitch groups of the object page, the options bar over the stage, the tools in
+   the rail. Colors only from the tokens (design-system/heatstitch/MASTER.md). */
+
+/* The stitch block of the object page ---------------------------------------------------------- */
+
+.object-stitches:not(:empty) {
+  gap: 0;
+  padding-top: 4px;
+}
+
+.object-stitches details.sec {
+  padding: 8px 0 10px;
+}
+
+.object-stitches details.sec:first-of-type {
+  border-top: none;
+}
+
+.object-stitches details.sec > div,
+.object-stitches details.sec > label,
+.object-stitches details.sec > section {
+  margin-bottom: 10px;
+}
+
+.object-stitches details.sec > :last-child {
+  margin-bottom: 0;
+}
+
+.object-stitches details.sec[open] > summary {
+  margin-bottom: 10px;
+}
+
+.object-stitches .sec-extra {
+  flex: none;
+  max-width: 55%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--muted);
+}
+
+.object-stitches details.sec[open] .sec-extra {
+  display: none;
+}
+
+/* A slider's head: name, then "Auto" when chosen automatically, the value and the dot. */
+.object-stitches .stitch-field > .label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 18px;
+}
+
+.object-stitches .stitch-field > .label > .name {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.object-stitches .stitch-field output {
+  float: none;
+  flex: none;
+}
+
+.object-stitches .auto-dot {
+  flex: none;
+  margin: 0;
+}
+
+.auto-tag {
+  flex: none;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--muted) 14%, transparent);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.auto-tag[hidden] {
+  display: none;
+}
+
+.object-stitches .stitch-field.own output {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* Which kind of a mixed selection the settings are for. */
+.stitch-for {
+  margin: 4px 0 6px;
+}
+
+.stitch-tabs .tab-count {
+  font-size: 11px;
+  opacity: 0.75;
+  font-variant-numeric: tabular-nums;
+}
+
+/* One compact status line: chips with their details as hints. */
+.stitch-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  margin: 4px 0 6px;
+}
+
+.stitch-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 2px 8px 2px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 18px;
+  cursor: help;
+}
+
+.stitch-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stitch-chip svg {
+  flex: none;
+  width: 13px;
+  height: 13px;
+}
+
+.stitch-chip.ok svg {
+  color: #2f9e5b;
+}
+
+.stitch-chip.warn {
+  color: var(--ink);
+  border-color: color-mix(in srgb, #ffb347 55%, var(--line));
+  background: color-mix(in srgb, #ffb347 12%, transparent);
+}
+
+.stitch-chip.warn svg {
+  color: #e8912c;
+}
+
+.stitch-chip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.outline-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.outline-block p {
+  margin: 0;
+}
+
+.outline-head {
+  align-self: flex-start;
+  color: var(--ink);
+  cursor: default;
+}
+
+/* Rows of the tools: a button that stays pressed while its tool is on, its state beside it. */
+.tool-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.tool-row button {
+  font-size: 12px;
+  padding: 5px 9px;
+}
+
+.tool-toggle[aria-pressed='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.tool-state {
+  min-width: 0;
+}
+
+.thin-group {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.thin-group select {
+  padding: 4px 4px;
+  font-size: 12px;
+}
+
+.object-stitches .lock-switch {
+  margin: 2px 0 0;
+}
+
+.object-stitches .fx-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.object-stitches .fx-group + .fx-group {
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+}
+
+.object-stitches .knockout {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* The options bar over the stage --------------------------------------------------------------- */
+
+.stitch-bar {
+  pointer-events: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 4px 6px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  font-size: 12px;
+}
+
+.stitch-bar[hidden] {
+  display: none;
+}
+
+.stitch-bar .bar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 3px 8px;
+  font-size: 12px;
+}
+
+.stitch-bar .bar-btn.icon-only {
+  width: 28px;
+  padding: 0;
+  justify-content: center;
+}
+
+.stitch-bar .bar-btn svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.stitch-bar .bar-btn.primary {
+  margin-left: 2px;
+}
+
+.bar-title {
+  padding: 0 4px 0 2px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.bar-state {
+  padding: 0 4px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.bar-sep {
+  width: 1px;
+  height: 18px;
+  margin: 0 3px;
+  background: var(--line);
+}
+
+.bar-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.bar-label {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.bar-seg button {
+  border: none;
+  border-radius: 0;
+  padding: 4px 8px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.bar-seg button.active {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.bar-number {
+  width: 64px;
+  padding: 3px 6px;
+  font-size: 12px;
+}
+
+/* The two tools in the rail ------------------------------------------------------------------- */
+
+.toolrail .rail-sep {
+  width: 22px;
+  height: 1px;
+  margin: 6px 0 4px;
+  background: var(--line);
+}
+
+.toolrail .rail-stitches svg {
+  width: 20px;
+  height: 20px;
+}
+
+.toolrail button.tool.rail-stitches[aria-pressed='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+@media (max-width: 700px) {
+  .stitch-bar .bar-btn {
+    min-height: 36px;
+  }
+}
+
+/* A narrow stage wraps the bar: lines between groups would end up at the ends of rows. */
+@media (max-width: 1100px) {
+  .stitch-bar .bar-sep {
+    display: none;
+  }
+}

@@ -67,6 +67,7 @@ import { bindStitches } from './app/stitches';
 import { bindObjects } from './app/objects';
 import { bindScene } from './app/scene';
 import { initShell } from './shell/setup';
+import { initStitchArea } from './areas/stitches';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -854,6 +855,7 @@ function redraw(): void {
       pointsVisible: vp.scale >= POINTS_MIN_SCALE,
       message: ui.correctMessage,
     });
+    stitchArea.refresh();
   });
 }
 
@@ -1627,6 +1629,7 @@ const { showObjectMenu } = bindPointer({
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', redraw);
 
 initShell({ files, mode: () => settings.mode, setMode });
+const stitchArea = initStitchArea({ files, settings, editor, rungTool, stitchPanel, closeRungs, toggleRungs, toggleGuides, togglePoints, sewAlongLines, setEditing, enterObject, revealRecord, pointsVisible: () => vp.scale >= POINTS_MIN_SCALE, redraw });
 
 files.render();
 redraw();
