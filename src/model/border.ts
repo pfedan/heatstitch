@@ -9,6 +9,9 @@ import { lockAt, remember, remembered, type BorderSettings, type FillSettings, t
 import { expandRegion } from '../digitize/region';
 import { fillRegion } from '../digitize/fill';
 import { stitchKinds } from './sequence';
+import { lineStitches } from './line';
+import { shadowPath, shadowStitch } from './shadow';
+import { storeForm } from '../shape/path';
 import { recolor } from './recolor';
 
 /**
@@ -82,6 +85,8 @@ interface Change {
   recs: Rec[];
   /** A color block with this thread starts with the records (inserted after block `block`). */
   color?: { block: number; c: ThreadColor };
+  /** The records are a color block of this thread of their own, inserted before block `block` (at its start). */
+  before?: { block: number; c: ThreadColor };
   /** What to remember for the border object made by this change. */
   memory?: Remembered;
 }
@@ -97,7 +102,74 @@ export function syncBorders(p: Pattern, trimMm: number, drop: ReadonlySet<string
   // A blend made just now lies after its fill's border: the border moves after it (later it stays
   // where it is put).
   const fresh = new Set([...partners(a)].filter((l) => !before.has(l)));
-  return fresh.size ? syncOwnBorders(a, trimMm, drop, fresh) : a;
+  return syncShadows(fresh.size ? syncOwnBorders(a, trimMm, drop, fresh) : a, trimMm);
+}
+
+/**
+ * Every line's shadow (line.shadow) as an object of its own in its thread, linked to the line
+ * (`shadow.link`, the object's `shadowOf`), sewn before the line: at the end of the last block
+ * before the line's that has the shadow's thread, else as a color block of its own just before it.
+ * Sewn anew in place when the line, its stitch or the shadow changed; moved when its thread
+ * changed; taken out when its line has no shadow any more or is gone. Moved by hand, it stays where
+ * it is put. A copy of a line gets a shadow of its own; a copy of a shadow is a line of its own.
+ */
+export function syncShadows(p: Pattern, trimMm: number): Pattern {
+  if (!p.cmd.length) return p;
+  const kinds = stitchKinds(p);
+  const objs = sewObjects(p, kinds);
+  const mem = objs.map((o) => remembered(p, o));
+  if (!mem.some((m) => m?.shadowOf || (m?.path && m.line?.shadow))) return p;
+  const byLink = new Map<string, number>();
+  mem.forEach((m, k) => {
+    if (!m?.shadowOf) return;
+    if (!byLink.has(m.shadowOf)) byLink.set(m.shadowOf, k);
+    else remember(p, objs[k], (mem[k] = { ...m, shadowOf: undefined }));
+  });
+  const claimed = new Set<string>();
+  mem.forEach((m, k) => {
+    const s = m?.path && m.line?.shadow;
+    if (!s || m.shadowOf) return;
+    if (!claimed.has(s.link)) return void claimed.add(s.link);
+    remember(p, objs[k], (mem[k] = { ...m, line: { ...m.line!, shadow: { ...s, link: newLink() } } }));
+  });
+  const changes: Change[] = [];
+  const wanted = new Set<string>();
+  objs.forEach((o, k) => {
+    const m = mem[k];
+    const s = m?.path && !m.shadowOf ? m.line?.shadow : undefined;
+    if (!s) return;
+    wanted.add(s.link);
+    const path = shadowPath(m!.path!, s);
+    const st = shadowStitch(m!.line!);
+    const at = byLink.get(s.link);
+    const cur = at === undefined ? undefined : mem[at];
+    const target = at === undefined ? null : objs[at];
+    const same = target && sameColor(target.color, s.color);
+    if (same && cur?.path && JSON.stringify(storeForm(cur.path)) === JSON.stringify(storeForm(path)) && JSON.stringify(cur.line) === JSON.stringify(st)) return;
+    const runs = lineStitches(path, st);
+    if (!runs.length) return;
+    const memory: Remembered = { region: null, path, line: st, shadowOf: s.link };
+    const recs = runRecords(runs, trimMm);
+    if (same) {
+      changes.push({ a: leadOf(p, target), b: target.last, recs, memory });
+      return;
+    }
+    if (target) changes.push({ a: leadOf(p, target), b: target.last, recs: [] });
+    // At the end of the last block before the line's that has the shadow's thread (before its
+    // color change), so shadows share a thread change; else a block of its own right before.
+    const ends: number[] = [];
+    for (let i = 0; i < p.cmd.length && ends.length < o.block; i++) if (p.cmd[i] === COLOR_CHANGE) ends.push(i);
+    let into = o.block - 1;
+    while (into >= 0 && !sameColor(p.colors[into], s.color)) into--;
+    if (into >= 0) changes.push({ a: ends[into], b: ends[into] - 1, recs, memory });
+    else {
+      const start = o.block > 0 ? ends[o.block - 1] + 1 : 0;
+      changes.push({ a: start, b: start - 1, recs, before: { block: o.block, c: s.color }, memory });
+    }
+  });
+  // Shadows whose line has none any more, or is gone.
+  for (const [link, at] of byLink) if (!wanted.has(link)) changes.push({ a: leadOf(p, objs[at]), b: objs[at].last, recs: [] });
+  return applyChanges(p, changes);
 }
 
 /** The links of the blends whose second thread is sewn. */
@@ -203,6 +275,14 @@ function applyChanges(p: Pattern, changes: Change[]): Pattern {
     const start = sewn();
     out.push(...c.recs);
     if (c.memory) made.push({ start, end: sewn(), memory: c.memory });
+    if (c.before) {
+      // Its own block, then the thread changes back to the block that follows.
+      const x = out[out.length - 1] ?? { x: 0, y: 0, cmd: STITCH };
+      if (x.cmd !== TRIM) out.push({ ...x, cmd: TRIM });
+      out.push({ ...x, cmd: COLOR_CHANGE });
+      colors.splice(c.before.block + added, 0, { ...c.before.c });
+      added++;
+    }
     i = c.b + 1;
   }
   out.push(...recordsOf(p, i, p.cmd.length - 1));
@@ -366,8 +446,10 @@ export function takeThreads(p: Pattern, which: readonly number[]): Pattern {
   for (const i of which) {
     const own = mem[i];
     const color = objs[i]?.color;
-    if (!color || !(own?.outline || own?.blendOf)) continue;
+    if (!color || !(own?.outline || own?.blendOf || own?.shadowOf)) continue;
     objs.forEach((x, k) => {
+      const sh = mem[k]?.line?.shadow;
+      if (own.shadowOf && sh?.link === own.shadowOf) remember(p, x, (mem[k] = { ...mem[k]!, line: { ...mem[k]!.line!, shadow: { ...sh, color: { ...color } } } }));
       const f = mem[k]?.fill;
       if (!f) return;
       // A border in the fill's thread has none of its own.

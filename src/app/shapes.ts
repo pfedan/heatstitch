@@ -16,7 +16,9 @@ import { formOf, reshapeFill } from '../model/reshape';
 import { railsForm, reshapeRails } from '../model/railsForm';
 import { lineOf, resewLine, lineSettings, fillToLine, reshapeLineFill } from '../model/line';
 import { refreshKnockouts } from '../model/knockout';
-import { remembered, rememberedIn, restitch, type RestitchResult } from '../model/restitch';
+import { objectKey, remembered, rememberedIn, restitch, type RestitchResult } from '../model/restitch';
+import { syncBorders } from '../model/border';
+import { stitchKey } from '../model/objects';
 import { t, formatNumber, type Key } from '../i18n';
 import { ui } from './state';
 
@@ -145,7 +147,10 @@ export function bindShapes(app: ShapesApp) {
     if (!obj) return false;
     const line = path ?? lineOf(p, obj, q.kinds);
     if (!line) return false;
-    const r = resewLine(p, o, line, st ?? lineSettings(p, obj, q.kinds), app.settings.trimMm);
+    const sewn = resewLine(p, o, line, st ?? lineSettings(p, obj, q.kinds), app.settings.trimMm);
+    // Its shadow follows (sewn before it: a new one moves the line one place on).
+    const synced = sewn && syncBorders(sewn.pattern, app.settings.trimMm);
+    const r = sewn && synced && { pattern: synced, key: stitchKey(sewn.pattern, sewn.first, sewn.last) };
     if (!final) {
       ui.flowPreview = r?.pattern ?? null;
       app.redraw();
@@ -159,8 +164,11 @@ export function bindShapes(app: ShapesApp) {
     }
     const hand = remembered(p, obj)?.hand ?? 0;
     app.applyEdit(r.pattern);
-    app.files.setObjects(f, rememberedIn(r.pattern, app.seq(r.pattern).objects));
-    ui.selectedObjects = new Set([o]);
+    const nq = app.seq(r.pattern);
+    app.files.setObjects(f, rememberedIn(r.pattern, nq.objects));
+    const now = nq.objects.findIndex((x) => objectKey(r.pattern, x) === r.key);
+    if (now >= 0 && ui.shapeObject === o) ui.shapeObject = now;
+    ui.selectedObjects = new Set([now >= 0 ? now : o]);
     ui.selectionKey++;
     ui.stitchCache = null;
     if (hand) app.layers.say(t('shape.handReplaced', { n: formatNumber(hand) }));

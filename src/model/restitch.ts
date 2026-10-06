@@ -6,6 +6,7 @@ import { contourFill, fieldFill, guideField, stitchField } from '../digitize/flo
 import { atShare, crossFill, CROSS_KINDS, echoFill, circleField, grainField, GRID_KINDS, gridFill, mazeFill, meanderFill, MOTIFS, rayField, regionBox, swirlField, waveFill, type CrossKind, type GridKind, type Motif, type OpenParams } from '../digitize/deco';
 import { spiralFill } from '../digitize/spiral';
 import { isEcho } from '../digitize/echo';
+import { isShadow } from './shadow';
 import { coverage } from '../digitize/measure';
 import { expandRegion, outline, sample, signedField, type Region } from '../digitize/region';
 import { runStitch, TOLERANCE } from '../digitize/run';
@@ -375,6 +376,8 @@ export interface Remembered {
   outline?: string;
   /** The object is the second thread of a color blend: the fill's `deco.blend.link` (see syncBlends). */
   blendOf?: string;
+  /** The object is the shadow of a line: the line's `line.shadow.link` (see syncShadows). */
+  shadowOf?: string;
   /** A border object: the settings it was sewn with (its `region` is the fill's area it was sewn on). */
   border?: BorderSettings;
   /** The lettering the object belongs to (it is sewn anew from its text, see lettering/). */
@@ -621,6 +624,7 @@ export interface StoredObject {
   asLine?: { path: StoredPath[]; line: PathStitch; cap?: LineCap };
   outline?: string;
   blendOf?: string;
+  shadowOf?: string;
   border?: BorderSettings;
   lettering?: Lettering;
   lock?: boolean;
@@ -681,7 +685,7 @@ export function rememberedIn(p: Pattern, objects: SewObject[]): StoredObject[] {
       ...(r.cut ? { cut: r.cut } : {}),
       ...(r.overlapShare !== undefined ? { overlapShare: r.overlapShare } : {}),
       ...(r.path ? { path: storeForm(r.path) } : {}),
-      ...(r.line ? { line: { ...r.line, ...(r.line.echo ? { echo: { ...r.line.echo } } : {}) } } : {}),
+      ...(r.line ? { line: { ...r.line, ...(r.line.echo ? { echo: { ...r.line.echo } } : {}), ...(r.line.shadow ? { shadow: { ...r.line.shadow, color: { ...r.line.shadow.color } } } : {}) } } : {}),
       ...(r.under ? { under: r.under } : {}),
       ...(r.underFrom ? { underFrom: r.underFrom } : {}),
       ...(r.borderAt ? { borderAt: r.borderAt } : {}),
@@ -690,6 +694,7 @@ export function rememberedIn(p: Pattern, objects: SewObject[]): StoredObject[] {
       ...(r.asLine ? { asLine: { path: storeForm(r.asLine.path), line: { ...r.asLine.line }, cap: r.asLine.cap } } : {}),
       ...(r.outline ? { outline: r.outline } : {}),
       ...(r.blendOf ? { blendOf: r.blendOf } : {}),
+      ...(r.shadowOf ? { shadowOf: r.shadowOf } : {}),
       ...(r.border ? { border: { ...r.border } } : {}),
       ...(r.lettering ? { lettering: r.lettering } : {}),
       ...(r.lock ? { lock: true } : {}),
@@ -969,6 +974,10 @@ export function restoreRemembered(list: unknown): number {
         if (isEcho(r.line.echo)) r.line.echo = { ...r.line.echo };
         else delete r.line.echo;
       }
+      if (r.line.shadow !== undefined) {
+        if (isShadow(r.line.shadow)) r.line.shadow = { ...r.line.shadow, color: { ...r.line.shadow.color } };
+        else delete r.line.shadow;
+      }
     }
     if (finite(e.under) && e.under > 0) r.under = Math.round(e.under);
     if (finite(e.underFrom) && e.underFrom > 0) r.underFrom = Math.round(e.underFrom);
@@ -981,6 +990,7 @@ export function restoreRemembered(list: unknown): number {
     if (asLine && isLineStitch(e.asLine!.line)) r.asLine = { path: asLine, line: { ...e.asLine!.line }, cap: e.asLine!.cap === 'round' ? 'round' : 'flat' };
     if (typeof e.outline === 'string') r.outline = e.outline;
     if (typeof e.blendOf === 'string') r.blendOf = e.blendOf;
+    if (typeof e.shadowOf === 'string') r.shadowOf = e.shadowOf;
     if (isBorder(e.border)) r.border = { ...e.border };
     const lettering = e.lettering === undefined ? null : letteringFrom(e.lettering);
     if (lettering) r.lettering = lettering;
@@ -2183,7 +2193,7 @@ export type SettingsFor = Settings | ((o: SewObject, a: Analysis, known: Remembe
 /** Settings of running stitch or satin given for a line, as the stitches along it (`known`: as it had them). */
 function asLine(given: Settings, known?: PathStitch): PathStitch | null {
   // Its echo stays when the stitch changes.
-  if (given.kind === 'run') return { ...runAsLine(given.s, known?.width), ...(known?.echo ? { echo: { ...known.echo } } : {}) };
+  if (given.kind === 'run') return { ...runAsLine(given.s, known?.width), ...(known?.echo ? { echo: { ...known.echo } } : {}), ...(known?.shadow ? { shadow: known.shadow } : {}) };
   if (given.kind !== 'satin') return null;
   const s = given.s;
   return { ...(known ?? { width: 2 }), type: 'satin', spacing: s.spacing, pull: s.edge || undefined, under: s.underlay ? (s.under ?? 'center') : 'off', tolerance: s.tolerance ?? known?.tolerance };
@@ -2330,6 +2340,7 @@ export function restitch(
           ...(known?.asLine && settings.kind === 'fill' ? { asLine: lineFillOf(known.asLine, settings.s) } : {}),
           ...(known?.outline ? { outline: known.outline, border: known.border } : {}),
           ...(known?.blendOf ? { blendOf: known.blendOf } : {}),
+          ...(known?.shadowOf ? { shadowOf: known.shadowOf } : {}),
         };
     if (known?.lettering) after.lettering = known.lettering;
     if (known?.lock) after.lock = true;

@@ -38,6 +38,10 @@ export function deleteObjects(p: Pattern, which: number[], trimMm: number): Patt
     const blend = mem[o]?.fill?.deco?.blend?.link;
     const second = blend ? mem.findIndex((m) => m?.blendOf === blend) : -1;
     if (second >= 0) gone.add(second);
+    // A line's shadow goes with it.
+    const shadow = mem[o]?.path ? mem[o]?.line?.shadow?.link : undefined;
+    const behind = shadow ? mem.findIndex((m) => m?.shadowOf === shadow) : -1;
+    if (behind >= 0) gone.add(behind);
   }
   // Fills that stay while their border goes: they have none any more.
   const bare = objs.filter((o) => !gone.has(o.index) && [...gone].some((g) => mem[g]?.outline && mem[g]!.outline === ownBorder(mem[o.index])));
@@ -49,6 +53,14 @@ export function deleteObjects(p: Pattern, which: number[], trimMm: number): Patt
     if (at) remember(next, at, { ...m, fill: { ...m.fill!, border: undefined } });
   }
   // Fills whose second thread goes alone: they fade out on their own from now on.
+  // Lines whose shadow goes alone: they have none any more.
+  for (const o of objs) {
+    const m = mem[o.index];
+    const link = m?.path && !gone.has(o.index) ? m.line?.shadow?.link : undefined;
+    if (!link || ![...gone].some((g) => mem[g]?.shadowOf === link)) continue;
+    const at = sewObjects(next).find((x) => objectKey(next, x) === objectKey(p, o));
+    if (at) remember(next, at, { ...m!, line: { ...m!.line!, shadow: undefined } });
+  }
   for (const o of objs) {
     const m = mem[o.index];
     const link = m?.fill?.deco?.blend?.link;
@@ -100,7 +112,9 @@ export function duplicateObject(p: Pattern, o: number, trimMm: number, offset = 
   const border = link ? objs.find((x) => remembered(p, x)?.outline === link) : undefined;
   const blend = remembered(p, objs[o])?.fill?.deco?.blend?.link;
   const second = blend ? objs.find((x) => remembered(p, x)?.blendOf === blend) : undefined;
-  const lands = (d: number) => [objs[o], border, second].some((x) => x && taken.has(shiftedKey(p, x, d)));
+  const shadow = remembered(p, objs[o])?.line?.shadow?.link;
+  const behind = shadow ? objs.find((x) => remembered(p, x)?.shadowOf === shadow) : undefined;
+  const lands = (d: number) => [objs[o], border, second, behind].some((x) => x && taken.has(shiftedKey(p, x, d)));
   let step = 1;
   while (step < 10 && lands(Math.round(offset * step * 10))) step++;
   const r = transformSewObject(doubled, nobjs, copy, kinds, translation(offset * step, offset * step), trimMm);
@@ -158,7 +172,7 @@ export function subtractTop(p: Pattern, which: number[], trimMm: number): Subtra
   let objs = sewObjects(cur, kinds);
   // A fill's border in its own thread belongs to its fill: it neither cuts nor is cut (so does a
   // blend's second thread).
-  const isBorder = (o: number) => !!objs[o] && !!(remembered(cur, objs[o])?.outline || remembered(cur, objs[o])?.blendOf);
+  const isBorder = (o: number) => !!objs[o] && !!(remembered(cur, objs[o])?.outline || remembered(cur, objs[o])?.blendOf || remembered(cur, objs[o])?.shadowOf);
   if (isBorder(top)) return null;
   const cutter = formOf(cur, objs[top], kinds);
   const hole = cutter && wholeArea(cutter);
@@ -209,7 +223,13 @@ export function recolorObjects(p: Pattern, which: number[], color: ThreadColor, 
   // sewn in it from now on, placed where borders go (moved by itself it could join a neighbour).
   const mem = objs.map((o) => remembered(p, o));
   const fillOf = (o: number) =>
-    mem[o]?.outline ? mem.findIndex((m) => ownBorder(m) === mem[o]!.outline) : mem[o]?.blendOf ? mem.findIndex((m) => m?.fill?.deco?.blend?.link === mem[o]!.blendOf) : -1;
+    mem[o]?.outline
+      ? mem.findIndex((m) => ownBorder(m) === mem[o]!.outline)
+      : mem[o]?.blendOf
+        ? mem.findIndex((m) => m?.fill?.deco?.blend?.link === mem[o]!.blendOf)
+        : mem[o]?.shadowOf
+          ? mem.findIndex((m) => !m?.shadowOf && m?.line?.shadow?.link === mem[o]!.shadowOf)
+          : -1;
   const borders = sel.filter((o) => fillOf(o) >= 0);
   const rest = sel.filter((o) => fillOf(o) < 0);
   let next = rest.length ? recolorStitches(p, objs, rest, color, trimMm) : p;
@@ -221,7 +241,8 @@ export function recolorObjects(p: Pattern, which: number[], color: ThreadColor, 
     const f = fillOf(o);
     const m = mem[f]!;
     const at = sewObjects(cur).find((x) => objectKey(cur, x) === objectKey(p, objs[f]));
-    if (at && mem[o]!.blendOf) remember(cur, at, { ...m, fill: { ...m.fill!, deco: { ...m.fill!.deco, blend: { ...m.fill!.deco!.blend!, color: { ...color } } } } });
+    if (at && mem[o]!.shadowOf) remember(cur, at, { ...m, line: { ...m.line!, shadow: { ...m.line!.shadow!, color: { ...color } } } });
+    else if (at && mem[o]!.blendOf) remember(cur, at, { ...m, fill: { ...m.fill!, deco: { ...m.fill!.deco, blend: { ...m.fill!.deco!.blend!, color: { ...color } } } } });
     else if (at) remember(cur, at, { ...m, fill: { ...m.fill!, border: { ...m.fill!.border!, color: sameColor(at.color, color) ? undefined : { ...color } } } });
   }
   next = syncBorders(cur, trimMm);

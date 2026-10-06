@@ -14,6 +14,7 @@ import type { ThreadColor } from '../model/pattern';
 import { newLink } from '../model/border';
 import { autoUnder, type PathStitch } from '../model/along';
 import { ECHO_COUNT, ECHO_DEFAULT, ECHO_GAP, ECHO_SIDES, type EchoSide } from '../digitize/echo';
+import { SHADOW_COLOR, SHADOW_DEFAULT_DIST, SHADOW_DIRS, SHADOW_DIST, type ShadowDir } from '../model/shadow';
 import { cssColor, hexColor, ThreadPicker } from './threadPicker';
 import { CROSS_KINDS, GRID_KINDS, MOTIFS, type CrossKind, type GridKind, type Motif } from '../digitize/deco';
 
@@ -80,7 +81,7 @@ export interface StitchInfo {
    * is sewn along its curve. `traced`: its curve is read from its stitches (none was drawn).
    * `closed`: all its paths are loops (its echo lies outside or inside, not left or right).
    */
-  path?: { st: PathStitch; traced: boolean; closed: boolean };
+  path?: { st: PathStitch; traced: boolean; closed: boolean; color: ThreadColor };
   /** The one selected fill was a wide line, and can be one again. */
   asLine?: boolean;
   /** How deep the selected fills reach at their deepest point (mm; the shallowest of them): an underlay inset beyond it leaves none. */
@@ -89,7 +90,7 @@ export interface StitchInfo {
   color?: ThreadColor;
   /** The one selected object is the border of a fill in its own thread (the fill's number, or null when gone). */
   /** A border of its own thread, or the second thread of a color blend (`blend`), following its fill. */
-  outline?: { fill: number | null; blend?: boolean };
+  outline?: { fill: number | null; blend?: boolean; shadow?: boolean };
   /** The one selected fill can blend into a second thread (see blendObject). */
   blend?: boolean;
   /** Left out of the correction (`mixed`: only some of the selected objects). */
@@ -347,12 +348,13 @@ export class StitchPanel {
     if (info.outline) {
       // Its settings are the fill's: changed there, it follows.
       h.innerHTML = '';
-      h.append(Object.assign(document.createElement('span'), { className: 'kind-icon', innerHTML: KIND_ICON[this.kind] }), t(info.outline.blend ? 'stitch.blendOf.title' : 'stitch.outline.title'));
+      const of = info.outline.shadow ? 'stitch.shadowOf' : info.outline.blend ? 'stitch.blendOf' : 'stitch.outline';
+      h.append(Object.assign(document.createElement('span'), { className: 'kind-icon', innerHTML: KIND_ICON[this.kind] }), t(`${of}.title` as Key));
       const row = document.createElement('div');
       row.className = 'direction-buttons';
-      if (info.outline.fill !== null) row.append(this.button('stitch.outline.fill', 'stitch.outline.fill.hint', () => this.hooks.outline('fill'), true));
-      row.append(this.button('stitch.outline.detach', info.outline.blend ? 'stitch.blendOf.detach.hint' : 'stitch.outline.detach.hint', () => this.hooks.outline('detach')));
-      parts.push(Object.assign(document.createElement('p'), { className: 'muted small', textContent: t(info.outline.blend ? 'stitch.blendOf.text' : 'stitch.outline.text') }), row);
+      if (info.outline.fill !== null) row.append(info.outline.shadow ? this.button('stitch.shadowOf.line', 'stitch.shadowOf.line.hint', () => this.hooks.outline('fill'), true) : this.button('stitch.outline.fill', 'stitch.outline.fill.hint', () => this.hooks.outline('fill'), true));
+      row.append(this.button('stitch.outline.detach', `${of}.detach.hint` as Key, () => this.hooks.outline('detach')));
+      parts.push(Object.assign(document.createElement('p'), { className: 'muted small', textContent: t(`${of}.text` as Key) }), row);
       this.picker.close();
       this.root.replaceChildren(...parts);
       return;
@@ -1306,8 +1308,57 @@ export class StitchPanel {
       out.push(this.toleranceSlider(st as { tolerance: number }));
     }
     out.push(this.echoGroup(st, info.path!.closed));
+    if (!info.path!.traced) out.push(this.shadowGroup(st, info.path!.color));
     out.push(Object.assign(document.createElement('p'), { className: 'muted small stitch-note', textContent: t(info.path!.traced ? 'stitch.lineTraced' : 'stitch.lineNote') }));
     return out;
+  }
+
+  /**
+   * A line's shadow, as a block of its own: off, or where it falls, how far, in which thread. It is
+   * an object of its own in that thread, sewn before the line (see model/shadow.ts).
+   */
+  private shadowGroup(st: PathStitch, line: ThreadColor): HTMLElement {
+    const box = document.createElement('section');
+    box.className = 'border-group shadow-group';
+    const sh = st.shadow;
+    box.append(
+      Object.assign(document.createElement('h4'), { textContent: t('stitch.shadow') }),
+      Object.assign(document.createElement('p'), { className: 'muted small', textContent: t('stitch.shadow.intro') }),
+      this.choice<ShadowDir | 'off'>('stitch.shadow.dir', ['off', ...SHADOW_DIRS], sh?.dir ?? 'off', (v) => `stitch.shadow.${v}` as Key, (v) => {
+        if (v === 'off') delete st.shadow;
+        else st.shadow = sh ? { ...sh, dir: v } : { color: { ...SHADOW_COLOR }, link: newLink(), dir: v, dist: SHADOW_DEFAULT_DIST };
+      }),
+    );
+    if (!sh) return box;
+    box.append(this.slider({ label: 'stitch.shadow.dist', hint: 'stitch.shadow.dist.hint', min: SHADOW_DIST[0], max: SHADOW_DIST[1], step: 0.1, get: () => sh.dist, set: (v) => (sh.dist = v), fmt: (v) => `${formatNumber(v, 1)} mm` }));
+    const wrap = document.createElement('div');
+    wrap.className = 'field stitch-field border-field';
+    const row = document.createElement('div');
+    row.className = 'border-row';
+    const btn = Object.assign(document.createElement('button'), { type: 'button', className: 'border-thread', title: t('stitch.shadow.thread.hint') });
+    const sw = Object.assign(document.createElement('span'), { className: 'sw' });
+    sw.style.background = cssColor(sh.color);
+    btn.append(sw, sh.color.name ?? (sameColor(sh.color, SHADOW_COLOR) ? t('stitch.shadow.thread.grey') : hexColor(sh.color)));
+    btn.addEventListener('click', () => {
+      this.picker.toggle(btn, {
+        key: 'shadow',
+        title: t('stitch.shadow.thread'),
+        current: sh.color,
+        original: { color: SHADOW_COLOR, label: t('stitch.shadow.thread.grey') },
+        note: t('stitch.shadow.thread.note'),
+        onPick: (c) => {
+          // In the line's own thread a shadow would only be a thicker line.
+          if (sameColor(c, line)) return;
+          sh.color = { ...c };
+          this.render();
+          this.changed(true);
+        },
+      });
+    });
+    row.append(btn);
+    wrap.append(Object.assign(document.createElement('span'), { className: 'label', textContent: t('stitch.shadow.thread') }), row);
+    box.append(wrap);
+    return box;
   }
 
   /**
