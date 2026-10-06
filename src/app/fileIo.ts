@@ -11,6 +11,7 @@ import { FileList, type LoadedFile } from '../ui/fileList';
 import { digitizeSvg, type ImageMode, type LeftOut } from '../ui/imageMode';
 import { threadWidthMm } from '../validation/profiles';
 import { writePattern } from '../writers';
+import { toast } from '../shell/ui';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -50,7 +51,10 @@ export function bindFileIo(app: FileIoApp) {
   async function openFiles(list: Iterable<File>): Promise<void> {
     const all = [...list];
     for (const f of all.filter((f) => isProjectName(f.name))) await openProject(f);
-    const image = all.find((f) => f.type.startsWith('image/') || IMAGE_FILE.test(f.name));
+    const images = all.filter((f) => f.type.startsWith('image/') || IMAGE_FILE.test(f.name));
+    const image = images[0];
+    // One picture is converted at a time; the others are not dropped silently.
+    if (images.length > 1) toast(t('image.onlyFirst', { n: images.length }));
     const rest = all.filter((f) => f !== image && !isProjectName(f.name) && !f.type.startsWith('image/') && !IMAGE_FILE.test(f.name));
     if (image && isSvgFile(image)) {
       // An SVG of shapes opens as stitches in Ablauf, every shape whole; the Bild mode only for SVGs

@@ -1819,24 +1819,6 @@ details.panel.section[open] > summary {
 
 /* Bild mode ------------------------------------------------------------------ */
 
-.image-status {
-  position: absolute;
-  top: 52px;
-  left: 50%;
-  transform: translateX(-50%);
-  margin: 0;
-  padding: 3px 10px;
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--panel) 85%, transparent);
-  color: var(--muted);
-  font-size: 12px;
-  pointer-events: none;
-}
-
-.image-status:empty {
-  display: none;
-}
-
 body[data-mode='image'] .stage.painting canvas#canvas {
   cursor: none;
 }

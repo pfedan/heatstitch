@@ -13,23 +13,29 @@ import { drawStitches } from '../render/stitches';
 import { drawThreads } from '../render/threads';
 import { drawFabric } from '../render/fabricGl';
 import type { Viewport } from '../render/viewport';
-import { shownMarks, type ImageView, type Settings } from '../settings';
+import { shownMarks, type ImageView, type Mode, type Settings } from '../settings';
 import { CAUTION, CRITICAL, type ValidationResult } from '../validation/validate';
-import { fabricLabel, threadLabel } from './profilePanel';
 import { clearImage, loadImage, saveImage, saveWork, type StoredImage, type StoredWork } from '../storage/imageStore';
 import { hoopShort } from './hoopPanel';
 import { cssColor, ThreadPicker } from './threadPicker';
+import { FABRICS, THREADS } from '../validation/profiles';
+import { STORAGE_NS } from '../storage/namespace';
+import { command, commandTitle, getCommand } from '../shell/commands';
+import '../areas/image/image.css';
 
 /**
- * The Bild mode: an image becomes a stitch file in two steps.
+ * Bild umwandeln: an assistant in three steps that turns a picture into a design.
  *
- * 1. Preparation: size, number of colors, smoothing for photos, smallest region, background and
+ * 1. Bild wählen: the picture, its width, the prompt for preparing it with one's own AI.
+ * 2. Farben und Flächen: number of colors, smoothing for photos, smallest region, background and
  *    thread matching; then the user's own changes: per color another thread, merge into another
  *    color, leave out; and brush strokes that paint a color or erase.
- * 2. Stitches: fill, satin and running stitch with the material's spacing and compensation.
+ * 3. Stiche und Ergebnis: fill, satin and running stitch with the material's spacing and
+ *    compensation, the numbers of the result and its check against the material.
  *
- * Both run in a worker; every change starts a new run and older results are dropped. The result is
- * checked against the material like any loaded file, and "Take over" adds it to the file list.
+ * Preparing and stitching run in a worker; every change starts a new run and older results are
+ * dropped. The steps only choose what is shown: every step can be opened at any time, the view of
+ * the stage follows the step. "Übernehmen" adds the design to the list and goes back to Gestalten.
  */
 
 export interface ImageHooks {
@@ -43,7 +49,14 @@ export interface ImageHooks {
   validate: (p: Pattern) => Promise<ValidationResult>;
   /** Adds the design to the file list, with what is known about its objects. */
   takeOver: (d: Digitized, name: string) => Promise<void>;
+  mode: () => Mode;
+  setMode: (m: Mode) => void;
 }
+
+export type Step = 1 | 2 | 3;
+/** What the stage shows in each step, until the user picks another view. */
+const STEP_VIEW: Record<Step, ImageView> = { 1: 'original', 2: 'prepared', 3: 'stitches' };
+const STEP_KEY = `${STORAGE_NS}.image.step`;
 
 type Tool = 'none' | 'paint' | 'erase';
 
@@ -233,6 +246,12 @@ export class ImageMode {
   private brushColor = 0;
   private stroke: Stroke | null = null;
   private cursor: [number, number] | null = null;
+  /** The step of the assistant shown (kept over a reload while there is an image). */
+  private step: Step = 1;
+  /** The picture of the last session was looked for (until then the stored step stays). */
+  private restored = false;
+  /** A picture is being opened. */
+  private loading = false;
 
   constructor(private h: ImageHooks) {
     onLangChange(() => this.render());
@@ -240,18 +259,13 @@ export class ImageMode {
     const input = $<HTMLInputElement>('image-input');
     input.addEventListener('change', () => {
       const f = input.files?.[0];
-      if (f) void this.load(f);
+      if (f) {
+        if (h.mode() !== 'image') h.setMode('image');
+        void this.load(f);
+      }
       input.value = '';
     });
-    $('image-example').addEventListener('click', async () => {
-      try {
-        const res = await fetch(`${import.meta.env.BASE_URL}examples/image-example.svg`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        await this.load(new File([await res.blob()], 'image-example.svg', { type: 'image/svg+xml' }));
-      } catch (err) {
-        console.error('Loading the example image failed', err);
-      }
-    });
+    $('image-example').addEventListener('click', () => void this.loadExample());
 
     // Sliders apply while dragging, typed numbers once they are complete.
     const num = (id: string, read: (v: number) => void, kind: 'prepare' | 'stitches') => {
@@ -316,30 +330,214 @@ export class ImageMode {
       this.render();
     });
     $('image-strokes-undo').addEventListener('click', () => this.undo());
-    $('image-strokes-clear').addEventListener('click', () => {
-      if (!this.work.strokes.length) return;
-      this.commit({ ...this.work, strokes: [] });
-    });
-    const copy = $<HTMLButtonElement>('image-ai-copy');
-    copy.addEventListener('click', async () => {
-      const text = $<HTMLTextAreaElement>('image-ai-prompt');
-      try {
-        await navigator.clipboard.writeText(text.value);
-        copy.textContent = t('image.ai.copied');
-      } catch {
-        // No clipboard access: the text is selected, so Ctrl+C copies it.
-        text.select();
-        copy.textContent = t('image.ai.select');
-      }
-      setTimeout(() => (copy.textContent = t('image.ai.copy')), 2500);
-    });
+    $('image-strokes-redo').addEventListener('click', () => this.redo());
+    $('image-strokes-clear').addEventListener('click', () => this.clearStrokes());
+    $('image-ai-copy').addEventListener('click', () => void this.copyPrompt());
     $('image-clear').addEventListener('click', () => this.clear());
-    $('image-take').addEventListener('click', async () => {
-      const d = this.result;
-      if (!d) return;
-      await h.takeOver(d, this.name || 'image');
-    });
+    $('image-take').addEventListener('click', () => void this.take());
+    this.bindSteps();
+    this.bindMaterial();
+    this.registerCommands();
     this.render();
+  }
+
+  // The assistant ---------------------------------------------------------------
+
+  /** The stepper over the stage, back and next under the settings, and the way out. */
+  private bindSteps(): void {
+    try {
+      const v = Number(localStorage.getItem(STEP_KEY));
+      if (v === 2 || v === 3) this.step = v;
+    } catch {
+      /* private mode: the assistant starts at step 1 */
+    }
+    document.querySelectorAll<HTMLButtonElement>('.image-stepper [data-goto]').forEach((b) =>
+      b.addEventListener('click', () => this.goStep(Number(b.dataset.goto) as Step)),
+    );
+    $('image-back').addEventListener('click', () => this.goStep(Math.max(1, this.step - 1) as Step));
+    $('image-next').addEventListener('click', () => this.goStep(Math.min(3, this.step + 1) as Step));
+    $('image-cancel').addEventListener('click', () => this.cancel());
+    // Opening the assistant without a picture starts at its beginning; leaving it puts the brush away.
+    let mode = document.body.dataset.mode;
+    new MutationObserver(() => {
+      const now = document.body.dataset.mode;
+      if (now === mode) return;
+      mode = now;
+      // A picture dropped from elsewhere starts the assistant anew; its load moves on to step 2.
+      if (now === 'image' && this.loading) this.step = 1;
+      else if (now === 'image' && this.restored && !this.source) this.goStep(1);
+      else if (now !== 'image' && this.tool !== 'none') this.setTool('none');
+    }).observe(document.body, { attributes: true, attributeFilter: ['data-mode'] });
+  }
+
+  /** Shows a step of the assistant; the stage shows what the step is about. */
+  goStep(n: Step, view = true): void {
+    const was = this.step;
+    this.step = n;
+    try {
+      localStorage.setItem(STEP_KEY, String(n));
+    } catch {
+      /* private mode: the step is just not kept */
+    }
+    if (view && this.h.settings.image.view !== STEP_VIEW[n]) {
+      this.h.settings.image.view = STEP_VIEW[n];
+      this.h.save();
+    }
+    // The brush belongs to step 2, where the colors are.
+    if (n !== 2 && this.tool !== 'none') this.setTool('none');
+    this.render();
+    this.h.redraw();
+    // The inspector comes and goes with step 1: the picture is fitted into the stage it leaves.
+    if ((was === 1) !== (n === 1) && this.h.mode() === 'image') requestAnimationFrame(() => requestAnimationFrame(() => this.h.fit()));
+    this.maybeReveal();
+  }
+
+  /** The first stitches of a newly opened picture are shown "as sewn" once the user reaches them. */
+  private maybeReveal(): void {
+    if (!this.revealPending || !this.result || this.step !== 3 || this.h.mode() !== 'image') return;
+    this.revealPending = false;
+    const first = !this.h.settings.image.introDone;
+    this.h.settings.image.introDone = true;
+    this.h.save();
+    this.h.reveal(first);
+  }
+
+  /** Back to Gestalten; the picture and its changes stay for later. */
+  private cancel(): void {
+    this.setTool('none');
+    this.h.setMode('flow');
+  }
+
+  /** The stitches become a design in the list, and the assistant closes. */
+  private async take(): Promise<void> {
+    const d = this.result;
+    if (!d || this.busy) return;
+    this.setTool('none');
+    await this.h.takeOver(d, this.name || 'image');
+  }
+
+  private async loadExample(): Promise<void> {
+    try {
+      const res = await fetch(`${import.meta.env.BASE_URL}examples/image-example.svg`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await this.load(new File([await res.blob()], 'image-example.svg', { type: 'image/svg+xml' }));
+    } catch (err) {
+      console.error('Loading the example image failed', err);
+    }
+  }
+
+  private clearStrokes(): void {
+    if (!this.work.strokes.length) return;
+    this.commit({ ...this.work, strokes: [] });
+  }
+
+  private async copyPrompt(): Promise<void> {
+    const copy = $<HTMLButtonElement>('image-ai-copy');
+    const text = $<HTMLTextAreaElement>('image-ai-prompt');
+    try {
+      await navigator.clipboard.writeText(text.value);
+      copy.textContent = t('image.ai.copied');
+    } catch {
+      // No clipboard access: the text is selected, so Ctrl+C copies it.
+      text.select();
+      copy.textContent = t('image.ai.select');
+    }
+    setTimeout(() => (copy.textContent = t('image.ai.copy')), 2500);
+  }
+
+  private setView(v: ImageView): void {
+    this.h.settings.image.view = v;
+    this.h.save();
+    this.render();
+    this.h.redraw();
+  }
+
+  /**
+   * Fabric and thread in step 3: the same material as everywhere, so these pickers pass the choice
+   * to the material panel, which stores it and tells everyone that needs it.
+   */
+  private bindMaterial(): void {
+    for (const [mine, theirs] of [['image-fabric', 'fabric'], ['image-thread', 'thread']] as const) {
+      const sel = $<HTMLSelectElement>(mine);
+      sel.addEventListener('change', () => {
+        const real = document.getElementById(theirs) as HTMLSelectElement | null;
+        if (real) {
+          real.value = sel.value;
+          real.dispatchEvent(new Event('change'));
+          return;
+        }
+        this.h.settings.profile = { ...this.h.settings.profile, [theirs]: sel.value };
+        this.h.save();
+        this.profileChanged();
+      });
+    }
+  }
+
+  /** Every action of the assistant as a command (buttons, command search, key overview). */
+  private registerCommands(): void {
+    const G = 'shell.image.start' as const;
+    const inImage = () => this.h.mode() === 'image';
+    const enter = () => {
+      if (!inImage()) this.h.setMode('image');
+    };
+    command({
+      id: 'image.open',
+      label: 'image.open',
+      group: G,
+      run: () => {
+        enter();
+        $<HTMLInputElement>('image-input').click();
+      },
+    });
+    command({
+      id: 'image.example',
+      label: 'image.example',
+      group: G,
+      run: () => {
+        enter();
+        void this.loadExample();
+      },
+    });
+    const steps: [Step, Key][] = [[1, 'image.cmd.step1'], [2, 'image.cmd.step2'], [3, 'image.cmd.step3']];
+    for (const [n, label] of steps) {
+      command({
+        id: `image.step${n}`,
+        label,
+        group: G,
+        when: () => !inImage() || this.step !== n,
+        run: () => {
+          enter();
+          this.goStep(n);
+        },
+      });
+    }
+    command({ id: 'image.undoStroke', label: 'image.undo', group: G, keys: ['Mod+Z'], bind: false, when: () => inImage() && this.undoStack.length > 0, run: () => this.undo() });
+    command({ id: 'image.redoStroke', label: 'image.redo', group: G, keys: ['Mod+Shift+Z', 'Mod+Y'], bind: false, when: () => inImage() && this.redoStack.length > 0, run: () => this.redo() });
+    const tools: [Tool, Key][] = [['paint', 'image.cmd.paint'], ['erase', 'image.cmd.erase'], ['none', 'image.cmd.none']];
+    for (const [tool, label] of tools) {
+      command({
+        id: `image.brush.${tool}`,
+        label,
+        group: G,
+        when: () => inImage() && !!this.prepared && this.tool !== tool,
+        run: () => {
+          if (tool !== 'none' && this.step !== 2) this.goStep(2);
+          this.setTool(tool);
+        },
+      });
+    }
+    command({ id: 'image.strokes.clear', label: 'image.strokes.clear', group: G, when: () => inImage() && this.work.strokes.length > 0, run: () => this.clearStrokes() });
+    command({ id: 'image.take', label: 'image.take', group: G, when: () => inImage() && !!this.result && !this.busy, run: () => void this.take() });
+    command({ id: 'image.cancel', label: 'image.cancel', group: G, when: inImage, run: () => this.cancel() });
+    command({ id: 'image.shine', label: 'image.shine', group: 'shell.group.view', when: () => inImage() && !!this.result, run: () => $('image-shine').click() });
+    const views: [ImageView, Key][] = [['original', 'image.cmd.view.original'], ['prepared', 'image.cmd.view.prepared'], ['stitches', 'image.cmd.view.stitches']];
+    for (const [v, label] of views) {
+      command({ id: `image.view.${v}`, label, group: 'shell.group.view', when: () => inImage() && this.h.settings.image.view !== v, run: () => this.setView(v) });
+    }
+    command({ id: 'image.ai.copy', label: 'image.ai.copy', group: G, when: inImage, run: () => void this.copyPrompt() });
+    command({ id: 'image.stitch.reset', label: 'image.stitch.reset', group: G, when: () => inImage() && Object.keys(this.h.settings.image.stitch).length > 0, run: () => $('image-stitch-reset').click() });
+    command({ id: 'image.saveProject', label: 'image.saveProject', group: G, when: () => inImage() && !!this.source, run: () => $('image-save-project').click() });
+    command({ id: 'image.clear', label: 'image.clear', group: G, when: () => inImage() && (!!this.source || !!this.error), run: () => this.clear() });
   }
 
   get hasImage(): boolean {
@@ -366,11 +564,16 @@ export class ImageMode {
   /** The image of the last session, with its changes. */
   async restore(): Promise<void> {
     const before = this.loads;
-    const stored = await loadImage();
-    // An image opened meanwhile wins over the stored one.
-    if (!stored || this.loads !== before) return;
-    const { image, work } = stored;
-    await this.load(new File([image.data], image.name, { type: image.type }), work);
+    try {
+      const stored = await loadImage();
+      // An image opened meanwhile wins over the stored one.
+      if (!stored || this.loads !== before) return;
+      const { image, work } = stored;
+      await this.load(new File([image.data], image.name, { type: image.type }), work);
+    } finally {
+      this.restored = true;
+      if (!this.source && this.step !== 1) this.goStep(1, this.h.mode() === 'image');
+    }
   }
 
   /** The image with its color changes and brush strokes, or null without an image. */
@@ -387,6 +590,15 @@ export class ImageMode {
 
   /** Opens an image; `work` restores stored changes (and keeps the stored settings). */
   async load(file: File, work?: Work): Promise<void> {
+    this.loading = true;
+    try {
+      await this.read(file, work);
+    } finally {
+      this.loading = false;
+    }
+  }
+
+  private async read(file: File, work?: Work): Promise<void> {
     const token = ++this.loads;
     let canvas: HTMLCanvasElement;
     let svg: SvgDesign | null = null;
@@ -443,6 +655,9 @@ export class ImageMode {
       if (svg?.widthMm) this.h.settings.image.prepare.widthMm = Math.round(Math.min(400, Math.max(10, svg.widthMm)) * 10) / 10;
       this.h.save();
       void saveImage({ name: file.name, type: file.type, data: bytes });
+      // A new picture chosen in step 1 (or brought in from outside): on to its colors, the next
+      // thing to look at. A later step the user chose while it was opened stays.
+      if (this.step === 1) this.goStep(2);
     }
     this.render();
     this.h.fit();
@@ -475,8 +690,7 @@ export class ImageMode {
     this.stroke = null;
     this.setTool('none');
     void clearImage();
-    this.render();
-    this.h.redraw();
+    this.goStep(1);
   }
 
   /** A setting changed: save, then prepare again or only redo the stitches. */
@@ -539,13 +753,7 @@ export class ImageMode {
         this.error = '';
         this.render();
         this.h.redraw();
-        if (this.revealPending) {
-          this.revealPending = false;
-          const first = !this.h.settings.image.introDone;
-          this.h.settings.image.introDone = true;
-          this.h.save();
-          this.h.reveal(first);
-        }
+        this.maybeReveal();
         const v = await this.h.validate(d.pattern);
         if (this.result !== d) continue;
         this.validation = v;
@@ -777,11 +985,19 @@ export class ImageMode {
     angle.options[0].hidden = !!this.svg;
     angle.value = o.angle !== null ? String(o.angle) : o.flow && !this.svg ? 'flow' : 'auto';
     $('image-stitch-reset').hidden = !Object.keys(s.stitch).length;
-    $('image-material').textContent = t('image.material', { fabric: fabricLabel(this.h.settings.profile), thread: threadLabel(this.h.settings.profile) });
+    this.renderMaterial();
     document.querySelectorAll<HTMLInputElement>('input[name="image-view"]').forEach((el) => (el.checked = el.value === s.view));
     setVal('image-brush', s.brushMm);
     out('image-brush-out', `${formatNumber(s.brushMm, 1)} mm`);
-    $<HTMLButtonElement>('image-strokes-undo').disabled = !this.undoStack.length;
+    for (const [id, cmd, has] of [
+      ['image-strokes-undo', 'image.undoStroke', this.undoStack.length > 0],
+      ['image-strokes-redo', 'image.redoStroke', this.redoStack.length > 0],
+    ] as const) {
+      const b = $<HTMLButtonElement>(id);
+      b.disabled = !has;
+      b.title = commandTitle(getCommand(cmd)!);
+      b.setAttribute('aria-label', b.title);
+    }
     $<HTMLButtonElement>('image-strokes-clear').disabled = !this.work.strokes.length;
     // The prompt for preparing the image with one's own AI, with this design's size and colors:
     // 1 mm in the embroidery as a share of the image width is the smallest detail worth keeping.
@@ -804,17 +1020,56 @@ export class ImageMode {
           ? t('image.info', { name: this.name, w: this.source.width, h: this.source.height })
           : '');
     info.classList.toggle('error', !!this.error);
+    $('image-file').hidden = !this.source && !this.error;
+    $('image-drop').classList.toggle('compact', !!this.source);
+    $('image-views').hidden = !this.source;
     $('image-save-project').hidden = !this.source;
     $('image-clear').hidden = !this.source && !this.error;
+    this.renderSteps();
     this.renderPalette();
     this.renderResult();
+  }
+
+  /** The stepper, back, next and take over: where the user is and what is ready. */
+  private renderSteps(): void {
+    const n = this.step;
+    document.body.dataset.imageStep = String(n);
+    const ready: Record<Step, boolean> = { 1: !!this.source, 2: !!this.prepared, 3: !!this.result };
+    document.querySelectorAll<HTMLButtonElement>('.image-stepper [data-goto]').forEach((b) => {
+      const k = Number(b.dataset.goto) as Step;
+      if (k === n) b.setAttribute('aria-current', 'step');
+      else b.removeAttribute('aria-current');
+      b.classList.toggle('ready', ready[k]);
+      b.title = t(`image.cmd.step${k}` as Key);
+    });
+    const back = $<HTMLButtonElement>('image-back');
+    back.hidden = n === 1;
+    const next = $<HTMLButtonElement>('image-next');
+    next.hidden = n === 3;
+    next.disabled = n === 1 && !this.source;
+    next.title = next.disabled ? t('image.noImage') : t(`image.cmd.step${Math.min(3, n + 1)}` as Key);
+    $('image-take').hidden = n !== 3;
+    $('image-cancel').title = t('image.cancel.hint');
+  }
+
+  /** Fabric and thread of step 3 show the material in use. */
+  private renderMaterial(): void {
+    const p = this.h.settings.profile;
+    const fill = (id: string, items: readonly { id: string }[], label: (id: string) => string, value: string) => {
+      const sel = $<HTMLSelectElement>(id);
+      if (sel.options.length !== items.length) sel.replaceChildren(...items.map((x) => new Option('', x.id)));
+      items.forEach((x, i) => (sel.options[i].text = label(x.id)));
+      sel.value = value;
+    };
+    fill('image-fabric', FABRICS, (id) => t(`fabric.${id}` as Key), p.fabric);
+    fill('image-thread', THREADS, (id) => t(`thread.${id}` as Key), p.thread);
   }
 
   private renderPalette(): void {
     const list = $<HTMLUListElement>('image-palette');
     const p = this.prepared;
     if (!p) {
-      list.replaceChildren(Object.assign(document.createElement('li'), { className: 'muted', textContent: t(this.source ? 'image.busy' : 'image.none') }));
+      list.replaceChildren(Object.assign(document.createElement('li'), { className: 'muted', textContent: t(this.source ? 'image.busy' : 'image.noImage') }));
       return;
     }
     const sewn = p.palette.filter((e) => e.sew);
@@ -890,10 +1145,17 @@ export class ImageMode {
     take.disabled = !d || !!this.busy;
     $('image-shine').hidden = !d;
     const busyText = this.busy === 'prepare' ? t('image.busy.prepare') : this.busy === 'stitches' ? t('image.busy.stitches') : '';
-    $('image-status').textContent = busyText;
+    // The status in the bar over the stage: what is being computed, or what went wrong.
+    const status = $('image-status');
+    status.textContent = busyText || this.error;
+    status.classList.toggle('busy', !!busyText);
+    status.classList.toggle('error', !busyText && !!this.error);
+    $('image-take-hint').hidden = !d;
     if (!d) {
       dl.replaceChildren();
-      verdict.replaceChildren();
+      verdict.replaceChildren(
+        Object.assign(document.createElement('p'), { className: 'muted small', textContent: this.source ? this.error || t('image.busy') : t('image.noImage') }),
+      );
       return;
     }
     const st = patternStats(d.pattern);
@@ -921,7 +1183,7 @@ export class ImageMode {
     const box = Object.assign(document.createElement('div'), { className: `verdict ${cls}` });
     const head = Object.assign(document.createElement('div'), { className: 'verdict-head' });
     head.textContent = t((['validation.verdict.safe', 'validation.verdict.caution', 'validation.verdict.critical'] as const)[worst]);
-    box.append(head, Object.assign(document.createElement('p'), { textContent: t(worst ? 'image.verdict.findings' : 'image.verdict.safe', { n: open.length }) }));
+    box.append(head, Object.assign(document.createElement('p'), { textContent: t(worst ? 'image.verdict.check' : 'image.verdict.safe', { n: open.length }) }));
     verdict.replaceChildren(box);
   }
 }
