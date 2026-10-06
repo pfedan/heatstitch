@@ -205,7 +205,9 @@ it('keeps the running stitch of a fill object when a border comes and goes', () 
   const a = apply(p, o.index, { ...base, border: { type: 'satin', width: 2 } });
   const b = apply(a.q, a.o.index, { ...base, border: { type: 'run', width: 2 } });
   const c = apply(b.q, b.o.index, base);
-  // As much of it as when the fill is sewn anew without a border at all.
+  // As much of it as when the fill is sewn anew without a border at all (the running stitch
+  // between its patches was travel and goes with the first change; the new fill's own travel is
+  // part of the fill, not running stitch).
   const plain = apply(p, o.index, base);
   expect(runOf(c.q, c.o, c.kinds)).toBeGreaterThanOrEqual(runOf(plain.q, plain.o, plain.kinds) * 0.95);
   expect(runOf(b.q, b.o, b.kinds)).toBeGreaterThanOrEqual(runOf(plain.q, plain.o, plain.kinds) * 0.95);

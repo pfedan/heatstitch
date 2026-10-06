@@ -374,6 +374,22 @@ function checkAllKnown(p: Pattern): void {
   expect(unknown, 'objects that forgot what they are').toEqual([]);
 }
 
+/**
+ * The parts an object was sewn in fit its stitches (they end at its last stitch), so the next edit
+ * takes them as they are instead of telling parts apart again by how the stitches look.
+ */
+function checkPartsFit(p: Pattern): void {
+  const problems: string[] = [];
+  for (const o of sewObjects(p)) {
+    const parts = remembered(p, o)?.parts;
+    if (!parts) continue;
+    let n = 0;
+    for (let i = o.first; i <= o.last; i++) if (p.cmd[i] === STITCH) n++;
+    if (parts[parts.length - 1].end !== n) problems.push(`${o.index}: parts end at ${parts[parts.length - 1].end} of ${n} stitches`);
+  }
+  expect(problems.join('; '), 'sewn parts that no longer fit').toBe('');
+}
+
 /** Each fill's border is one object, in its own thread or the fill's, and every border has its fill. */
 function checkBorders(p: Pattern): void {
   const objs = sewObjects(p);
@@ -478,6 +494,7 @@ async function chain(seed: number, steps = STEPS): Promise<void> {
       checkWellFormed(p);
       expect(knowledge(p), 'knowledge as stored with this version').toEqual(d.cur.known);
       checkAllKnown(p);
+      checkPartsFit(p);
       checkBorders(p);
       checkBlends(p);
       checkKnockouts(p);
