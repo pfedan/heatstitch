@@ -112,14 +112,14 @@ describe('cut lines of a satin cut from a fill', () => {
 });
 
 describe('the fill a satin was cut from, with the rest of the app', () => {
-  it('is stored with the project and mapped with the object', () => {
+  it('is stored with the project and mapped with the object, mirrors too', () => {
     const f = 'demos/letters.pes';
     const p = parsePattern(readFileSync(new URL(`../public/examples/${f}`, import.meta.url)), f);
     const kinds = stitchKinds(p);
     const objs = sewObjects(p, kinds);
     const o = objs.find((x) => x.kind === 'satin')!;
     const shape = keepShape(p, o, kinds);
-    const columns = shape.columns!.map((part) => part.map((c, k) => ({ ...c, chain: 0, ...(k ? {} : { split: { outline: M, holes: [M.slice(0, 5)], cuts: CUTS } }) })));
+    const columns = shape.columns!.map((part) => part.map((c, k) => ({ ...c, chain: 0, ...(k ? {} : { split: { outline: M, holes: [M.slice(0, 5)], cuts: CUTS }, mirror: true, plan: [{ sec: 0, flip: false, trim: true, mirror: true }] }) })));
     remember(p, o, { ...shape, columns, read: false });
     try {
       const stored = JSON.parse(JSON.stringify(rememberedIn(p, objs).find((x) => x.columns)));
@@ -129,6 +129,10 @@ describe('the fill a satin was cut from, with the rest of the app', () => {
       expect(split?.outline).toEqual(M);
       expect(split?.holes).toEqual([M.slice(0, 5)]);
       expect(split?.cuts).toEqual(CUTS);
+      // Mirrored, as a whole and in its plan.
+      const first = remembered(p, o)?.columns?.flat().find((c) => c.split);
+      expect(first?.mirror).toBe(true);
+      expect(first?.plan).toEqual([{ sec: 0, flip: false, trim: true, mirror: true }]);
       const mirrored = transformRemembered(remembered(p, o)!, [-1, 0, 0, 1, 0, 0]).columns!.flat().find((c) => c.split)!.split!;
       expect(mirrored.cuts[0]).toEqual([[1, 16], [-5, 16]]);
       expect(mirrored.outline[1][0]).toBeCloseTo(-M[1][0]);

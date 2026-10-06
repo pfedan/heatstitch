@@ -287,6 +287,8 @@ export interface Rails {
    * stripsOfOutline).
    */
   split?: Split;
+  /** The satin starts on the right rail instead of the left (and ends on the other side). */
+  mirror?: boolean;
 }
 
 /** A fill cut into parts by cut lines (see Rails.split). */
@@ -301,6 +303,8 @@ export interface SectionStep {
   sec: number;
   flip: boolean;
   trim: boolean;
+  /** Its satin starts on the other rail (see Rails.mirror). */
+  mirror?: boolean;
 }
 
 /** Whether a plan fits a column of n sections: each section once. */
@@ -617,8 +621,9 @@ export interface StoredRails {
   /** Free rungs: x, y of one end, then of the other. */
   spans?: number[];
   chain?: number;
-  /** Plan: section, turned round (0/1), trimmed before (0/1) for each step. */
+  /** Plan: section, turned round (0/1), trimmed before (1) and mirrored (2) as bits, for each step. */
   plan?: number[];
+  mirror?: 1;
   /** Split: flat x, y of the outline and of each hole; the cut lines as x, y of both ends. */
   split?: { outline: number[]; holes: number[][]; cuts: number[] };
 }
@@ -631,7 +636,8 @@ const storeRails = (c: Rails): StoredRails => ({
   ...(c.spacings?.length ? { spacings: c.spacings.flat() } : {}),
   ...(c.spans?.length ? { spans: c.spans.flat(2) } : {}),
   ...(c.chain !== undefined ? { chain: c.chain } : {}),
-  ...(c.plan?.length ? { plan: c.plan.flatMap((x) => [x.sec, +x.flip, +x.trim]) } : {}),
+  ...(c.plan?.length ? { plan: c.plan.flatMap((x) => [x.sec, +x.flip, +x.trim | (x.mirror ? 2 : 0)]) } : {}),
+  ...(c.mirror ? { mirror: 1 as const } : {}),
   ...(c.split ? { split: { outline: c.split.outline.flat(), holes: c.split.holes.map((h) => h.flat()), cuts: c.split.cuts.flat(2) } } : {}),
 });
 
@@ -790,8 +796,9 @@ function railsFrom(list: unknown): Rails[][] | undefined {
       const plan = c?.plan;
       if (plan !== undefined) {
         if (!Array.isArray(plan) || plan.length % 3 || !plan.every((v) => Number.isInteger(v))) return undefined;
-        if (plan.length) rails.plan = Array.from({ length: plan.length / 3 }, (_, k) => ({ sec: plan[3 * k], flip: !!plan[3 * k + 1], trim: !!plan[3 * k + 2] }));
+        if (plan.length) rails.plan = Array.from({ length: plan.length / 3 }, (_, k) => ({ sec: plan[3 * k], flip: !!plan[3 * k + 1], trim: !!(plan[3 * k + 2] & 1), ...(plan[3 * k + 2] & 2 ? { mirror: true } : {}) }));
       }
+      if (c?.mirror) rails.mirror = true;
       const split = c?.split;
       if (split !== undefined) {
         const outline = pts(split?.outline);
@@ -1597,6 +1604,7 @@ export function reversedRails(r: Rails): Rails {
   if (r.spans) out.spans = r.spans.map(([a, b]) => [a, b] as [Pt, Pt]);
   if (r.chain !== undefined) out.chain = r.chain;
   if (r.split) out.split = r.split;
+  if (r.mirror) out.mirror = true;
   // Walked the other way: the last step first, each section numbered from the other end; a trim
   // stays between the same two steps.
   if (r.plan) {
@@ -1604,7 +1612,7 @@ export function reversedRails(r: Rails): Rails {
     out.plan = r.plan
       .slice()
       .reverse()
-      .map((x, j) => ({ sec: n - 1 - x.sec, flip: x.flip, trim: j > 0 && r.plan![n - j].trim }));
+      .map((x, j) => ({ sec: n - 1 - x.sec, flip: x.flip, trim: j > 0 && r.plan![n - j].trim, ...(x.mirror ? { mirror: true } : {}) }));
   }
   if (r.spacings) {
     // Kept at their rung: measured along the other rail from its other end.
@@ -1823,21 +1831,25 @@ export function satinRuns(rails: Rails[], s: SatinSettings): Pt[][] {
     const col = columnOf(r);
     const ps = pairs(col, along(col, r, sp));
     if (ps.length < 2) continue;
+    const sewR = sided(whole, sew);
     if (!s.underlay) {
-      runs.push(sew(ps));
+      runs.push(sewR(ps));
       continue;
     }
     const under = underlayOf(col, s.under ?? 'auto', s.tolerance, underInset(s));
     if (!under.atEnd) {
-      runs.push([...under.pts, ...sew(ps)]);
+      runs.push([...under.pts, ...sewR(ps)]);
       continue;
     }
     // Underlay out along the column, satin back (its sides swap with the direction).
     const rev = reversedColumn(col);
-    runs.push([...under.pts, ...sew(pairs(rev, along(rev, reversedRails(r), satinParams(swappedSides(s)))))]);
+    runs.push([...under.pts, ...sewR(pairs(rev, along(rev, reversedRails(r), satinParams(swappedSides(s)))))]);
   }
   return runs;
 }
+
+/** Satin of a column or section that starts on its other rail when it is mirrored (see Rails.mirror). */
+const sided = (r: Rails, sew: (ps: [Pt, Pt][]) => Pt[]) => (ps: [Pt, Pt][]) => sew(r.mirror ? ps.map(([a, b]) => [b, a] as [Pt, Pt]) : ps);
 
 /** How far a satin's underlay keeps inside its rails, as its settings say. */
 const underInset = (s: SatinSettings): UnderInset => ({ mm: s.underInset, share: s.underInsetShare });
@@ -1861,7 +1873,7 @@ function apartOf(parts: Rails[]): boolean {
 }
 
 /** Whether sectionRun sews the satin of these sections back: the last first, each from its end. */
-function sewnBack(parts: Rails[], s: SatinSettings): boolean {
+export function sewnBack(parts: Rails[], s: SatinSettings): boolean {
   if (apartOf(parts)) return true;
   return s.underlay && parts.every((r) => underlayOf(columnOf(r), s.under ?? 'auto', s.tolerance, underInset(s)).atEnd);
 }
@@ -1891,7 +1903,9 @@ function plannedRuns(secs: Rails[], plan: SectionStep[], s: SatinSettings, sew: 
   };
   plan.forEach((x, i) => {
     if (x.trim && i) flush();
-    group.push(x.flip ? reversedRails(secs[x.sec]) : secs[x.sec]);
+    const sec = x.flip ? reversedRails(secs[x.sec]) : { ...secs[x.sec] };
+    if (x.mirror) sec.mirror = true;
+    group.push(sec);
   });
   flush();
   return runs;
@@ -1916,20 +1930,20 @@ function sectionRun(parts: Rails[], s: SatinSettings, sew: (ps: [Pt, Pt][]) => P
   // go out first (underlay, or a run along the middle) and the satin comes back over the way.
   const apart = apartOf(parts);
   if (!s.underlay && !apart) {
-    parts.forEach((r, k) => push(sew(pairs(cols[k], along(cols[k], r, sp)))));
+    parts.forEach((r, k) => push(sided(r, sew)(pairs(cols[k], along(cols[k], r, sp)))));
     return out;
   }
   const unders = cols.map((c) => (s.underlay ? underlayOf(c, kind, s.tolerance, underInset(s)) : { pts: [] as Pt[], atEnd: false }));
   if (apart) {
     cols.forEach((c, k) => push(unders[k].atEnd ? unders[k].pts : [...unders[k].pts, ...runStitch(c.center, TRAVEL_STEP, s.tolerance)]));
   } else if (!unders.every((u) => u.atEnd)) {
-    parts.forEach((r, k) => push([...unders[k].pts, ...sew(pairs(cols[k], along(cols[k], r, sp)))]));
+    parts.forEach((r, k) => push([...unders[k].pts, ...sided(r, sew)(pairs(cols[k], along(cols[k], r, sp)))]));
     return out;
   } else for (const u of unders) push(u.pts);
   const back = satinParams(swappedSides(s));
   for (let k = parts.length - 1; k >= 0; k--) {
     const rev = reversedColumn(cols[k]);
-    push(sew(pairs(rev, along(rev, reversedRails(parts[k]), back))));
+    push(sided(parts[k], sew)(pairs(rev, along(rev, reversedRails(parts[k]), back))));
   }
   return out;
 }
@@ -1986,7 +2000,7 @@ function chainRun(cols: Rails[], s: SatinSettings, sew: (ps: [Pt, Pt][]) => Pt[]
     if (secs.length > 1) return add(sectionRun(secs, s, sew, along));
     const col = columns[k];
     const rev = reversedColumn(col);
-    const satinBack = () => sew(pairs(rev, along(rev, reversedRails(secs[0]), back)));
+    const satinBack = () => sided(r, sew)(pairs(rev, along(rev, reversedRails(secs[0]), back)));
     const under = s.underlay ? underlayOf(col, kind, s.tolerance, underInset(s)) : null;
     if (under?.atEnd) return add([...under.pts, ...satinBack()]);
     const underBack = s.underlay ? underlayOf(rev, kind, s.tolerance, underInset(s)).pts : [];

@@ -144,8 +144,9 @@ export function drawRungOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, vie
     ctx.stroke();
     ctx.setLineDash([]);
   }
-  // Chained columns: their place in the order before where the satin starts, an arrow the way it
-  // goes, and scissors for a trim before it (bright when set).
+  // Chained columns and sections: their place in the order before where the satin starts, an arrow
+  // the way it goes, scissors for a trim before it and the mirror for the rail it starts on (both
+  // bright when set). A column on its own has no place in an order.
   for (const b of view.badges) {
     const [ax, ay] = S(b.at);
     const [dx, dy] = S([b.at[0] + b.dir[0], b.at[1] + b.dir[1]]);
@@ -153,7 +154,7 @@ export function drawRungOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, vie
     const d: Pt = [(dx - ax) / l, (dy - ay) / l];
     const n: Pt = [-d[1], d[0]];
     const spot = (along: number, across: number): Pt => [ax + d[0] * along + n[0] * across, ay + d[1] * along + n[1] * across];
-    const hov = (what: string) => view.badgeHover?.col === b.col && view.badgeHover.what === what;
+    const hov = (what: string) => view.badgeHover?.col === b.col && view.badgeHover.step === b.step && view.badgeHover.what === what;
     const disc = (p: Pt, fill: string, ring: string) => {
       ctx.beginPath();
       ctx.arc(p[0], p[1], BADGE.r, 0, Math.PI * 2);
@@ -170,9 +171,15 @@ export function drawRungOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, vie
       ctx.fillStyle = color;
       ctx.fillText(text, p[0], p[1] + 0.5);
     };
-    const num = spot(BADGE.number, 0);
-    disc(num, hov('number') ? ACCENT : 'rgba(20, 20, 24, 0.9)', '#ffffff');
-    label(num, String(b.n), '#ffffff');
+    if (!b.lone) {
+      const num = spot(BADGE.number, 0);
+      disc(num, hov('number') ? ACCENT : 'rgba(20, 20, 24, 0.9)', '#ffffff');
+      label(num, String(b.n), '#ffffff');
+    }
+    // Mirrored: the satin starts on the other rail (bright when set).
+    const mi = spot(BADGE.number, -BADGE.scissors);
+    disc(mi, hov('mirror') ? ACCENT : b.mirror ? CUT : 'rgba(20, 20, 24, 0.9)', b.mirror ? '#ffffff' : 'rgba(255, 255, 255, 0.45)');
+    label(mi, '⇄', b.mirror ? '#10141a' : 'rgba(255, 255, 255, 0.7)');
     // The arrow: a triangle pointing the way the satin goes.
     const tip = spot(BADGE.arrow + 6, 0);
     const back1 = spot(BADGE.arrow - 5, 5);
