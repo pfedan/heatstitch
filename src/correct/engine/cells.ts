@@ -1,5 +1,5 @@
 import { settledBy, type Acknowledgement } from '../../validation/acks';
-import { fabricOf, type Profile } from '../../validation/profiles';
+import { fabricOf } from '../../validation/profiles';
 import { CAUTION, CRITICAL, SAFE, type Level } from '../../validation/thresholds';
 import type { ValidationResult } from '../../validation/validate';
 import { REASON_BITS, type Reason, type Zone } from '../../validation/zones';

@@ -1,0 +1,70 @@
+[
+ {
+  "name": "Aufnäher (woven)",
+  "ampel": "red",
+  "ampelAfter": "red",
+  "crit": 84,
+  "critAfter": 22,
+  "newCrit": 0,
+  "newCaution": 0,
+  "newGapSparse": 0,
+  "open": {
+   "density": [
+    84,
+    22
+   ],
+   "holes": [
+    0,
+    0
+   ],
+   "gap": [
+    0,
+    0
+   ],
+   "sparse": [
+    0,
+    0
+   ],
+   "long": [
+    0,
+    0
+   ]
+  },
+  "objects": 3,
+  "ms": 6028
+ },
+ {
+  "name": "Aufnäher (knit)",
+  "ampel": "red",
+  "ampelAfter": "red",
+  "crit": 255,
+  "critAfter": 120,
+  "newCrit": 0,
+  "newCaution": 3,
+  "newGapSparse": 0,
+  "open": {
+   "density": [
+    255,
+    120
+   ],
+   "holes": [
+    0,
+    0
+   ],
+   "gap": [
+    0,
+    0
+   ],
+   "sparse": [
+    0,
+    0
+   ],
+   "long": [
+    0,
+    0
+   ]
+  },
+  "objects": 3,
+  "ms": 6260
+ }
+]
