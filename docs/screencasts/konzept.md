@@ -79,8 +79,9 @@ der Akzentfarbe, weiße Schrift, nahe am Element. Es nennt genau das Wort, das d
 gerade sagt (zum Beispiel „Stichart“). Tasten erscheinen unten mittig als Tastenkappe
 („Leertaste“, „H“).
 
-**Untertitel.** Als WebVTT-Datei zum Einschalten, nicht eingebrannt. Sie entstehen aus dem
-Sprechtext.
+**Untertitel.** Zum Einschalten, nicht eingebrannt, auf Deutsch und Englisch. Sie entstehen aus
+dem Sprechtext ohne Regie (Felder `text` und `textEn` im Ablauf), liegen als Spuren im MP4 und
+zusätzlich als WebVTT-Dateien für die Hilfeseite. Die Stimme ist vorerst nur Deutsch.
 
 **Musik.** Keine. Stimme und App genügen, und Hobbysticker schauen oft nebenbei.
 
@@ -91,8 +92,10 @@ Hilfeseite.
 
 - Sprachsynthese mit Google Gemini TTS über Replicate (`google/gemini-3.1-flash-tts`),
   Sprache `de-DE`.
-- Eine Stimme für die ganze Serie. Auswahl beim Pilot aus drei Hörproben (Vorschlag: Kore,
-  Aoede, Charon).
+- Eine Stimme für die ganze Serie: Aoede (beim Pilot aus Kore, Aoede und Charon gewählt).
+- Jeder Auftrag an Replicate läuft nur einmal je identischem Auftrag. `tools/screencast/tts.mjs`
+  legt jede Aufnahme unter einem Fingerabdruck aus Modell, Stimme, Sprache, Anweisung und Text
+  in `ton/` neben dem Ablauf ab und fragt nur fehlende an.
 - Regieanweisungen immer auf Englisch, der Sprechtext auf Deutsch. Feste Anweisung für alle
   Videos (Feld `prompt`):
   "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing
@@ -115,28 +118,37 @@ Alles läuft im Container und ist wiederholbar. Ein Video wird aus einer Ablaufd
 2. **Stimme zuerst.** Jede Szene wird einzeln vertont. Die Länge der Tonspur bestimmt, wie
    lange die Szene im Bild dauert. So passen Bild und Ton immer zusammen, auch wenn ein Satz
    später geändert wird.
-3. **Aufnahme.** Playwright mit Chromium, die Uhr der Seite wird angehalten und Bild für Bild
-   weitergestellt (je 1/30 s, dann ein Bildschirmfoto). Das ist langsamer als Echtzeit, aber
-   jedes Bild ist scharf und flüssig, auch beim Abspielen des Stichablaufs. Getestet:
-   0,25 s pro Bild bei ruhiger Ansicht, bis 1,5 s beim Abspielen, ein Video mit 2 Minuten
-   braucht also 15 bis 60 Minuten. Eine Echtzeitaufnahme schafft im Container nur etwa
-   5 Bilder pro Sekunde und scheidet aus.
+3. **Aufnahme.** Playwright mit Chromium, die Uhr der Seite wird angehalten
+   (`clock.install()` und `clock.pauseAt()`, ohne Anhalten läuft die Zeit mit der echten mit
+   und der Stichablauf rast) und Bild für Bild weitergestellt (je 1/30 s, dann ein
+   Bildschirmfoto). Die Seite läuft in 1920 × 1080 bei Faktor 1, das Bildschirmfoto wird mit
+   `clip.scale = 2` in 3840 × 2160 gezeichnet (Faktor 2 auf der Seite verschiebt in der
+   Software-Grafik Teile der Leinwand). Chromium startet mit `--disable-gpu-compositing
+   --disable-accelerated-2d-canvas`, das macht die Aufnahme zwei- bis vierzehnmal schneller
+   bei gleichem Bild. Ein Video mit 2 Minuten braucht so etwa 15 Minuten. Eine
+   Echtzeitaufnahme schafft im Container nur etwa 5 Bilder pro Sekunde und scheidet aus.
+   Zeiger, Klicks, Etiketten, Tasten und Zoom zeichnet erst der Schnitt darüber
+   (`tools/screencast/compose.py`).
 4. **Schnitt.** ffmpeg setzt Vorspann, Bilder, Tonspuren und Abspann zusammen, gleicht die
-   Lautstärke an (auf -16 LUFS) und schreibt MP4 (H.264, für alle Browser), Poster und
-   Untertitel.
+   Lautstärke an (auf -16 LUFS) und schreibt MP4 (H.264, für alle Browser, mit
+   Untertitelspuren DE und EN), Poster und Untertitel als WebVTT.
 
-Werkzeuge kommen mit dem ersten Video ins Repo (`tools/screencast/`).
+Werkzeuge: `tools/screencast/tts.mjs` (Stimme), `record.mjs` (Aufnahme), `compose.py` (Schnitt).
+Die App muss gebaut und mit `npm run preview` erreichbar sein.
 
 ## Ablage und Hilfeseite
 
 ```
 docs/screencasts/
   konzept.md            dieses Dokument
-  01-erste-schritte/
-    ablauf.mjs          Szenen, Sprechtext, Aktionen (Quelle)
-    erste-schritte.mp4  fertiges Video
-    erste-schritte.vtt  Untertitel
-    erste-schritte.jpg  Poster
+  01-neues-stickmuster/
+    vorlage.md               Szenen und Sprechtext zur Abnahme
+    ablauf.mjs               Szenen, Sprechtext, Untertitel, Aktionen (Quelle)
+    ton/                     Sprachaufnahmen je Fingerabdruck, takes.json
+    neues-stickmuster.mp4    fertiges Video mit Untertitelspuren
+    neues-stickmuster.de.vtt Untertitel Deutsch
+    neues-stickmuster.en.vtt Untertitel Englisch
+    neues-stickmuster.jpg    Poster
 ```
 
 - Größenbudget: etwa 4 MB pro Minute, die ganze Serie bleibt unter 100 MB. Neu gerendert
