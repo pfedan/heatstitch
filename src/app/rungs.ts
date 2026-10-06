@@ -11,7 +11,7 @@ import { outline } from '../digitize/region';
 import { atShare, regionBox, swirlCenters } from '../digitize/deco';
 import { cutLinesBetween, inside, railsFromOutline, stripsOfAreas } from '../digitize/rungs';
 import { t, type Key } from '../i18n';
-import { DECO_DEFAULTS, MAX_SWIRLS, type FillSettings, type Rails, type SatinSettings, analyze, remembered, keepShape, remember, restitch, measureSatin, forget, type RestitchResult, type Settings as RestitchSettings } from '../model/restitch';
+import { bestChain, DECO_DEFAULTS, MAX_SWIRLS, type FillSettings, type Rails, type SatinSettings, analyze, remembered, keepShape, remember, restitch, measureSatin, forget, type RestitchResult, type Settings as RestitchSettings } from '../model/restitch';
 import { ui } from './state';
 
 /** What bindRungs needs from the rest of the app. */
@@ -97,7 +97,7 @@ export function bindRungs(app: RungsApp) {
       if (on && rungTool.mode === 'satin') cuts = rungTool.columns.reduce((a, c) => a + c.cuts.length, 0);
       else if (single) cuts = (remembered(p, q.objects[[...ui.selectedObjects][0]])?.columns?.flat() ?? []).reduce((a, c) => a + (c.cuts?.length ?? 0), 0);
       const here = on && rungTool.mode === 'satin' ? rungTool.spacingHere : undefined;
-      out.direction = { tool: on && rungTool.mode === 'satin', rungs, single, cuts, cutMode: rungTool.cutMode, chain: on && rungTool.badges.length > 0, ...(here !== undefined ? { spacingHere: here } : {}) };
+      out.direction = { tool: on && rungTool.mode === 'satin', rungs, single, cuts, cutMode: rungTool.cutMode, chain: on && rungTool.badges.length > 0, order: on && rungTool.mode === 'satin' && rungTool.chained, ...(here !== undefined ? { spacingHere: here } : {}) };
     }
     if (info.measured.fill && !info.measured.satin) out.draw = { tool: on && rungTool.mode === 'fill', lines: on ? rungTool.lines.length : 0, single, cuts: on ? rungTool.cutLines.length : 0, cutMode: rungTool.cutMode };
     if (info.measured.fill) out.guide = { tool: on && rungTool.mode === 'guide', single };
@@ -370,6 +370,15 @@ export function bindRungs(app: RungsApp) {
     }
     const s = app.convertSettings('satin', app.stitchInfo(p, q));
     if (!s) return;
+    // Each chain in the order that hides the ways between its parts best.
+    if (s.kind === 'satin' && columns.every((c) => c.chain !== undefined)) {
+      const satin = s.s;
+      const chains = new Map<number, Rails[]>();
+      for (const c of columns) if (c.chain !== undefined) chains.set(c.chain, [...(chains.get(c.chain) ?? []), c]);
+      const split = columns[0].split;
+      columns = [...chains.values()].flatMap((g) => (g.length > 1 ? bestChain(g, satin) : g)).map(({ split: _s, ...c }) => c);
+      if (split && columns.length) columns[0].split = split;
+    }
     const o = ui.rungObject;
     closeRungs();
     const r = restitch(p, q.objects, [o], s, q.kinds, app.settings.trimMm, 'fill', false, new Map([[o, columns]]));
