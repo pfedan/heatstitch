@@ -1,3 +1,4 @@
+import { LOCK_MM } from '../material/rules';
 import { tidy, withRecords } from './edit';
 import { STITCH, TRIM, type Pattern } from './pattern';
 import type { Transition } from './sequence';
@@ -8,7 +9,7 @@ import type { Transition } from './sequence';
  */
 
 /** Length of a lock stitch (0.1 mm); short enough to hide under the following stitches. */
-const TIE_LEN = 7;
+const TIE_LEN = LOCK_MM * 10;
 
 export interface Rec {
   x: number;

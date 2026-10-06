@@ -1,3 +1,4 @@
+import { LOCK_MM, SATIN_SPLIT_MM, SATIN_SPLIT_MAX } from '../material/rules';
 import { SATIN_MAX, satinForArea, type KeptShape } from '../digitize/digitize';
 import { borderStitches, runLike, type PathStitch } from './along';
 import { wholeOf } from './knockout';
@@ -207,8 +208,8 @@ export interface SatinSettings {
 
 export type SatinType = 'satin' | 'e';
 export const UNDERLAYS: UnderlayKind[] = ['auto', 'center', 'contour', 'zigzag', 'both'];
-/** Longest satin stitch before it is split (mm), as the stitch panel starts. */
-export const SATIN_SPLIT = 12;
+/** Longest satin stitch before it is split (mm) when the object does not say (see SATIN_SPLIT_MM). */
+export const SATIN_SPLIT = SATIN_SPLIT_MM;
 
 export interface RunSettings {
   stitch: number;
@@ -1472,7 +1473,19 @@ export function measureSatin(p: Pattern, pt: Part, kinds: Uint8Array): SatinSett
   }
   const type: SatinType = all && e * 2 > all ? 'e' : 'satin';
   const spacing = Math.round(Math.min(type === 'e' ? 6 : 1.5, Math.max(0.15, percentile(steps, 0.5) || 0.4)) * 100) / 100;
-  return { spacing, edge: 0, short: true, underlay: other > satin * 0.03, tolerance: TOLERANCE, type, under: 'auto', split: SATIN_SPLIT, stagger: true, edgeShare: 0 };
+  return { spacing, edge: 0, short: true, underlay: other > satin * 0.03, tolerance: TOLERANCE, type, under: 'auto', split: measuredSplit(p, pt, kinds), stagger: true, edgeShare: 0 };
+}
+
+/**
+ * The split length the stitches show: the default where none is longer (they were split there, or
+ * the column is narrower), else just over the longest, so sewing them anew splits none that the
+ * file did not (an unsplit 9 mm column stays unsplit).
+ */
+function measuredSplit(p: Pattern, pt: Part, kinds: Uint8Array): number {
+  let longest = 0;
+  for (let i = pt.s + 1; i <= pt.e; i++) if (kinds[i] === SATIN && p.cmd[i] === STITCH && p.cmd[i - 1] === STITCH) longest = Math.max(longest, seg(p, i));
+  if (longest <= SATIN_SPLIT_MM + 0.15) return SATIN_SPLIT_MM;
+  return Math.min(SATIN_SPLIT_MAX, Math.ceil(longest * 2) / 2);
 }
 
 export function measureRun(p: Pattern, pt: Part): RunSettings {
@@ -2319,7 +2332,7 @@ export interface Rec {
 }
 
 /** Length of a lock stitch (mm); SHORT_LOCK only to tell an object from one with the very same stitches. */
-const LOCK = 0.7;
+const LOCK = LOCK_MM;
 const SHORT_LOCK = 0.5;
 let lockMm = LOCK;
 

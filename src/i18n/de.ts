@@ -829,7 +829,7 @@ export const deBase = {
   'stitch.blendOf.detached': 'Die zweite Farbe ist jetzt ein eigenes Objekt.',
   'stitch.under.kind': 'Art der Unterlage',
   'stitch.under.auto': 'Auto',
-  'stitch.under.auto.hint': 'Nach Breite: Mittellauf bis 4 mm, darüber Zickzack',
+  'stitch.under.auto.hint': 'Nach Breite: Mittellauf bis 4 mm, darüber Randlauf und Zickzack',
   'stitch.under.center': 'Mitte',
   'stitch.under.center.hint': 'Ein Laufstich durch die Mitte der Säule, für schmale Säulen',
   'stitch.under.contour': 'Randlauf',
