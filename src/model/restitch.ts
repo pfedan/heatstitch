@@ -911,20 +911,25 @@ export function rememberShapes(p: Pattern, objs: SewObject[], starts: number[], 
   starts.forEach((s, j) => {
     const shape = shapes[j];
     const o = at.get(s);
-    const line = forms[j]?.path;
-    if (o && line) return remember(p, o, { region: null, path: line, ...(forms[j]?.line ? { line: { ...forms[j]!.line! } } : {}) });
     if (!o) return;
+    // Sewn here as one part of its kind: the next edit takes it as that, whatever its stitches look like.
+    const one = (kind: ObjectKind): SewnPart[] => {
+      let end = 0;
+      for (let i = o.first; i <= o.last; i++) if (p.cmd[i] === STITCH) end++;
+      return [{ kind, end }];
+    };
     const f = forms[j];
+    if (f?.path) return remember(p, o, { region: null, path: f.path, ...(f.line ? { line: { ...f.line }, parts: one(f.line.type === 'satin' ? 'satin' : 'run') } : {}) });
     // A satin from a vector file keeps its shape: its rails lie on the shape's edge.
-    if (!shape && f?.form) return remember(p, o, { region: null, form: f.form });
+    if (!shape && f?.form) return remember(p, o, { region: null, form: f.form, parts: one('satin') });
     // A satin made here (a narrow area): its rails, read from its fresh stitches, so it is known as
     // made here and not recognized again from its stitches later.
     if (!shape) {
       const { read: _read, ...known } = keepShape(p, o, (kinds ??= stitchKinds(p)));
-      return remember(p, o, known);
+      return remember(p, o, { ...known, parts: one('satin') });
     }
     const region = regionFrom(shape);
-    if (region) remember(p, o, { region, fill: { ...shape.fill }, ...(f?.form ? { form: f.form, ...(f.knockout ? { knockout: true } : {}) } : {}) });
+    if (region) remember(p, o, { region, fill: { ...shape.fill }, parts: one('fill'), ...(f?.form ? { form: f.form, ...(f.knockout ? { knockout: true } : {}) } : {}) });
   });
 }
 
