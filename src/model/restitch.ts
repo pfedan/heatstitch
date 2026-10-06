@@ -1800,6 +1800,7 @@ export function satinParams(s: SatinSettings): SatinParams {
  */
 export function satinRuns(rails: Rails[], s: SatinSettings): Pt[][] {
   const runs: Pt[][] = [];
+  const chains = new WeakSet<Pt[]>();
   const sp = satinParams(s);
   const sew = (ps: [Pt, Pt][]) => (s.type === 'e' ? eStitches(ps, sp) : satinStitches(ps, sp));
   const along = (col: Column, r: Rails, q: SatinParams): SatinParams => {
@@ -1815,7 +1816,10 @@ export function satinRuns(rails: Rails[], s: SatinSettings): Pt[][] {
       for (; k < rails.length && rails[k].chain === whole.chain; k++) chain.push(rails[k]);
       k--;
       const run = chainRun(chain, s, sew, along);
-      if (run.length) runs.push(run);
+      if (run.length) {
+        chains.add(run);
+        runs.push(run);
+      }
       continue;
     }
     const parts = sectionsOf(whole);
@@ -1846,8 +1850,13 @@ export function satinRuns(rails: Rails[], s: SatinSettings): Pt[][] {
     const rev = reversedColumn(col);
     runs.push([...under.pts, ...sewR(pairs(rev, along(rev, reversedRails(r), satinParams(swappedSides(s)))))]);
   }
+  // Chains are cut apart from what comes before and after them, however near (the dot of an i and its stem).
+  runs.forEach((run, k) => k && (chains.has(run) || chains.has(runs[k - 1])) && trimBefore.add(run));
   return runs;
 }
+
+/** Runs of satin with a trim before them wherever they start (asked for, not only for a long way). */
+export const trimBefore = new WeakSet<Pt[]>();
 
 /** Satin of a column or section that starts on its other rail when it is mirrored (see Rails.mirror). */
 const sided = (r: Rails, sew: (ps: [Pt, Pt][]) => Pt[]) => (ps: [Pt, Pt][]) => sew(r.mirror ? ps.map(([a, b]) => [b, a] as [Pt, Pt]) : ps);
@@ -1895,15 +1904,24 @@ export function sectionPlan(r: Rails, s: SatinSettings): SectionStep[] {
 function plannedRuns(secs: Rails[], plan: SectionStep[], s: SatinSettings, sew: (ps: [Pt, Pt][]) => Pt[], along: (col: Column, r: Rails, q: SatinParams) => SatinParams): Pt[][] {
   const runs: Pt[][] = [];
   let group: Rails[] = [];
+  // A trim asked for before the stretch.
+  let cut = false;
   const flush = () => {
     if (!group.length) return;
     const feed = sewnBack(group, s) ? group.slice().reverse().map(reversedRails) : group;
     const run = sectionRun(feed, s, sew, along);
-    if (run.length) runs.push(run);
+    if (run.length) {
+      if (cut) trimBefore.add(run);
+      runs.push(run);
+    }
+    cut = false;
     group = [];
   };
   plan.forEach((x, i) => {
-    if (x.trim && i) flush();
+    if (x.trim && i) {
+      flush();
+      cut = true;
+    }
     const sec = x.flip ? reversedRails(secs[x.sec]) : { ...secs[x.sec] };
     if (x.mirror) sec.mirror = true;
     group.push(sec);
@@ -2277,7 +2295,7 @@ export function restitch(
       }
       const d = dist(last!, q);
       if (d <= 1) return emitPoint(q);
-      if (d > trimMm && run) {
+      if (run && (d > trimMm || trimBefore.has(run))) {
         out.push(...lockAt(prevRun!, true), { x: out[out.length - 1].x, y: out[out.length - 1].y, cmd: TRIM });
         out.push({ x: Math.round(q[0] * 10), y: Math.round(q[1] * 10), cmd: JUMP });
         out.push(...lockAt(run, false));
