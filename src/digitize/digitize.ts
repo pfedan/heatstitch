@@ -2,7 +2,7 @@ import { distanceToSeeds } from '../image/edt';
 import { components, type Components } from '../image/labels';
 import { NONE, type Prepared } from '../image/prepare';
 import { COLOR_CHANGE, END, JUMP, PatternBuilder, STITCH, TRIM, type Pattern, type ThreadColor } from '../model/pattern';
-import { fabricOf, recommendedSpacing, type Profile } from '../validation/profiles';
+import { fabricOf, recommendedSpacing, type FabricId, type Profile } from '../validation/profiles';
 import { sewBlades, splitBlades, type Blades } from './blades';
 import { fillRegion } from './fill';
 import { flowFill } from './flow';
@@ -69,7 +69,20 @@ export interface DigitizeOptions {
 }
 
 /** Pull compensation per fabric (mm per side): Wilcom's table, more for stretchy and pile fabrics. */
-const PULL: Record<string, number> = { woven: 0.2, cap: 0.2, knit: 0.35, terry: 0.4, light: 0.15, leather: 0.15 };
+const PULL: Record<FabricId, number> = {
+  woven: 0.2,
+  // Heavy woven pulls in no more than woven.
+  woven_heavy: 0.2,
+  cap: 0.2,
+  knit: 0.35,
+  // Fleece stretches and has pile: like terry.
+  fleece: 0.4,
+  terry: 0.4,
+  light: 0.15,
+  // Sheer: as little as on light fabric, more would show as a hard edge.
+  sheer: 0.15,
+  leather: 0.15,
+};
 
 /** Fills smaller than this (mm²) are sewn without underlay; from LARGE_FILL_MM2 crossing layers where the fabric asks for them. */
 export const SMALL_FILL_MM2 = 40;

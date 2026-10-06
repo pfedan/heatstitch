@@ -65,35 +65,25 @@
   font-size: 11px;
 }
 
-.ready-tag {
-  margin-left: 6px;
+/* Quiet mark after a rule of thumb or disputed advice; explained in the legend under the card. */
+.ready-mark {
+  display: inline-flex;
+  margin-left: 4px;
+  vertical-align: -2px;
   color: var(--muted);
-  font-size: 11px;
-  white-space: nowrap;
-  text-decoration: underline dotted;
-  text-underline-offset: 2px;
   cursor: help;
 }
 
-.ready-meter {
-  display: inline-flex;
-  gap: 2px;
-  margin-right: 6px;
-  vertical-align: -1px;
+.ready-nowrap {
+  white-space: nowrap;
 }
 
-.ready-meter i {
-  width: 5px;
-  height: 10px;
-  border-radius: 1.5px;
-  background: var(--line);
+.ready-card .ready-mark .i {
+  width: 13px;
+  height: 13px;
+  color: inherit;
 }
 
-.ready-meter[data-step='3'] i,
-.ready-meter[data-step='2'] i:nth-child(-n + 2),
-.ready-meter[data-step='1'] i:first-child {
-  background: var(--muted);
-}
 
 .ready-hints,
 .ready-tips {
@@ -156,12 +146,37 @@
   margin: 0;
 }
 
-.ready-legend,
 .ready-foot {
-  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
   color: var(--muted);
   font-size: 11px;
   line-height: 1.4;
+}
+
+.ready-foot p {
+  margin: 0;
+}
+
+.ready-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+}
+
+.ready-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ready-legend .i {
+  flex: none;
+  width: 13px;
+  height: 13px;
 }
 
 /* Save popover: the line before stitching, like the hoop line above it. */
@@ -196,6 +211,8 @@
   padding: 0;
 }
 
-.ready-more > .ready-legend {
-  margin-top: 10px;
+
+/* Open, the card says it in full: the hidden summary must not squeeze the title onto two lines. */
+.design-page details.ready-sec[open] > summary .sec-sum {
+  display: none;
 }

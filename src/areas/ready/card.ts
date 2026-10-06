@@ -1,6 +1,6 @@
 import { formatNumber, t, type Key } from '../../i18n';
 import { h, icon } from '../../shell/h';
-import type { Basis, Card, Line, Params } from './recipes';
+import { DESIGN_RULES, type Basis, type Card, type Line, type Params } from './recipes';
 
 /** One line under a value: what it is and how firm. */
 export interface Note {
@@ -15,8 +15,6 @@ export interface RowView {
   value: string;
   basis?: Basis;
   notes: Note[];
-  /** Speed only: 3 normal, 2 somewhat slower, 1 slow. */
-  step?: number;
 }
 
 /** The card with every text in the current language, for the inspector and the stitch sheet. */
@@ -28,6 +26,8 @@ export interface CardView {
   tips: Note[];
   /** Short, for a section head or a line in the save popover. */
   summary: string;
+  /** The marks the card uses (rule of thumb, disputed), for its legend. */
+  marks: Basis[];
 }
 
 const fmt = (p?: Params): Params | undefined =>
@@ -35,15 +35,23 @@ const fmt = (p?: Params): Params | undefined =>
 
 const say = (l: Line): string => t(l.text, fmt(l.params));
 
-export function cardView(c: Card): CardView {
+/**
+ * The card in the current language. `machineSpm` is the speed set for the time estimates; when it
+ * is above the recommendation, the speed row says so.
+ */
+export function cardView(c: Card, machineSpm?: number): CardView {
   const s = c.stabilizer;
   const stabNotes: Note[] = [];
-  if (c.stronger) stabNotes.push({ text: say(c.stronger) });
+  if (c.stronger) stabNotes.push({ text: say(c.stronger), basis: c.stronger.basis });
   if (s.gsm) stabNotes.push({ text: t('ready.gsm', { a: s.gsm[0], b: s.gsm[1] }) });
   const needleNotes: Note[] = [];
   if (c.needle.alt) needleNotes.push({ text: t(c.needle.alt) });
   if (c.threadNeedle) needleNotes.push({ text: t(c.threadNeedle.text), basis: c.threadNeedle.basis });
-  const step = c.speed.step === 'normal' ? 3 : c.speed.step === 'reduced' ? 2 : 1;
+  const sp = c.speed;
+  const speedNotes: Note[] = [];
+  if (sp.why) speedNotes.push({ text: t(sp.why) });
+  if (sp.maxSpm !== null && machineSpm && machineSpm > sp.maxSpm) speedNotes.push({ text: t('ready.speed.over', { spm: formatNumber(machineSpm) }) });
+  speedNotes.push({ text: t('ready.speed.metallic', { n: formatNumber(DESIGN_RULES.metallicSpm) }), basis: 'rule' });
   const rows: RowView[] = [
     { id: 'stab', icon: 'ready-stab', label: t('ready.row.stab'), value: t(s.text), basis: s.basis, notes: stabNotes },
     { id: 'topping', icon: 'ready-topping', label: t('ready.row.topping'), value: t(c.topping.text), basis: c.topping.basis, notes: [] },
@@ -62,7 +70,14 @@ export function cardView(c: Card): CardView {
       value: t(`ready.thread.w${c.thread}` as Key),
       notes: [{ text: t(c.threadNote.text), basis: c.threadNote.basis }],
     },
-    { id: 'speed', icon: 'ready-speed', label: t('ready.row.speed'), value: t(c.speed.text), basis: c.speed.basis, notes: [], step },
+    {
+      id: 'speed',
+      icon: 'ready-speed',
+      label: t('ready.row.speed'),
+      value: sp.maxSpm === null ? t('ready.speed.machine') : t('ready.speed.max', { n: formatNumber(sp.maxSpm) }),
+      basis: sp.basis,
+      notes: speedNotes,
+    },
     {
       id: 'hoop',
       icon: c.hooping.method === 'float' ? 'ready-float' : 'ready-hoop',
@@ -79,23 +94,58 @@ export function cardView(c: Card): CardView {
   ]
     .filter(Boolean)
     .join(' · ');
-  return {
-    rows,
-    hints: c.hints.map((x) => ({ level: x.level, text: say(x), basis: x.basis })),
-    hooping: { text: t(c.hooping.text), basis: c.hooping.basis },
-    tips: c.tips.map((x) => ({ text: t(x.text), basis: x.basis })),
-    summary,
-  };
+  const hints = c.hints.map((x) => ({ level: x.level, text: say(x), basis: x.basis }));
+  const hooping = { text: t(c.hooping.text), basis: c.hooping.basis };
+  const tips = c.tips.map((x) => ({ text: t(x.text), basis: x.basis }));
+  const used = new Set<Basis | undefined>([...rows.flatMap((r) => [r.basis, ...r.notes.map((n) => n.basis)]), ...hints.map((x) => x.basis), hooping.basis, ...tips.map((x) => x.basis)]);
+  const marks = MARKED.filter((b) => used.has(b));
+  return { rows, hints, hooping, tips, summary, marks };
 }
 
-/** The small mark after a value that is a rule of thumb or disputed; sourced values carry none. */
+/** Bases that carry a mark, in the order of the legend; sourced values carry none. */
+const MARKED: Basis[] = ['rule', 'disputed'];
+
+/** Symbol of a mark (icons.ts). */
+export const markIcon = (b: Basis): string => `ready-${b}`;
+
+/**
+ * The quiet mark after a value that is a rule of thumb or disputed: a small symbol, its meaning in
+ * the legend under the card, on hover and for screen readers.
+ */
 export function basisTag(b: Basis | undefined): HTMLElement | null {
   if (!b || b === 'source') return null;
-  return h('span', { class: `ready-tag ${b}`, title: t(`ready.basis.${b}.hint` as Key) }, t(`ready.basis.${b}` as Key));
+  return h(
+    'span',
+    { class: `ready-mark ${b}`, role: 'img', 'aria-label': t(`ready.basis.${b}` as Key), title: `${t(`ready.basis.${b}` as Key)}: ${t(`ready.basis.${b}.hint` as Key)}` },
+    icon(markIcon(b)),
+  );
 }
 
-const meter = (step: number) =>
-  h('span', { class: 'ready-meter', 'data-step': String(step), 'aria-hidden': 'true' }, h('i'), h('i'), h('i'));
+/** A text with its mark, the mark kept on one line with the last word. */
+function marked(text: string, b: Basis | undefined): (string | HTMLElement)[] {
+  const tag = basisTag(b);
+  if (!tag) return [text];
+  const cut = text.lastIndexOf(' ') + 1;
+  return [text.slice(0, cut), h('span', { class: 'ready-nowrap' }, text.slice(cut), tag)];
+}
+
+/** The legend of the marks the card uses, and that everything on it is a starting point. */
+function legend(marks: Basis[]): HTMLElement {
+  return h(
+    'div',
+    { class: 'ready-foot' },
+    marks.length
+      ? h(
+          'p',
+          { class: 'ready-legend' },
+          marks.map((b) => h('span', null, icon(markIcon(b)), t(`ready.legend.${b}` as Key))),
+          h('span', null, t('ready.legend.source')),
+        )
+      : null,
+    h('p', null, t('ready.note')),
+  );
+}
+
 
 /** The card as the inspector shows it: six short rows, notes, then tips folded away. */
 export function renderCard(v: CardView, opts: { foldOpen: boolean; onFold: (open: boolean) => void }): HTMLElement[] {
@@ -110,8 +160,8 @@ export function renderCard(v: CardView, opts: { foldOpen: boolean; onFold: (open
         h(
           'dd',
           { title: r.basis ? t(`ready.basis.${r.basis}.hint` as Key) : '' },
-          h('span', { class: 'ready-value' }, r.step ? meter(r.step) : null, r.value, basisTag(r.basis)),
-          r.notes.map((n) => h('small', { class: 'ready-note' }, n.text, basisTag(n.basis))),
+          h('span', { class: 'ready-value' }, marked(r.value, r.basis)),
+          r.notes.map((n) => h('small', { class: 'ready-note' }, marked(n.text, n.basis))),
         ),
       ),
     ),
@@ -120,23 +170,21 @@ export function renderCard(v: CardView, opts: { foldOpen: boolean; onFold: (open
     ? h(
         'ul',
         { class: 'ready-hints' },
-        v.hints.map((x) => h('li', { class: x.level }, icon(x.level === 'warn' ? 'ready-alert' : 'ready-tip'), h('span', null, x.text, basisTag(x.basis)))),
+        v.hints.map((x) => h('li', { class: x.level }, icon(x.level === 'warn' ? 'ready-alert' : 'ready-tip'), h('span', null, marked(x.text, x.basis)))),
       )
     : null;
   const more = h(
     'details',
     { class: 'ready-more' },
     h('summary', null, t('ready.more')),
-    h('p', { class: 'ready-hooping' }, icon('ready-hoop'), h('span', null, v.hooping.text, basisTag(v.hooping.basis))),
+    h('p', { class: 'ready-hooping' }, icon('ready-hoop'), h('span', null, marked(v.hooping.text, v.hooping.basis))),
     h(
       'ul',
       { class: 'ready-tips' },
-      v.tips.map((x) => h('li', null, icon('ready-tip'), h('span', null, x.text, basisTag(x.basis)))),
+      v.tips.map((x) => h('li', null, icon('ready-tip'), h('span', null, marked(x.text, x.basis)))),
     ),
-    h('p', { class: 'ready-legend' }, t('ready.legend')),
   );
   more.open = opts.foldOpen;
   more.addEventListener('toggle', () => opts.onFold(more.open));
-  const note = h('p', { class: 'ready-foot' }, t('ready.note'));
-  return [rows, hints, more, note].filter((n): n is NonNullable<typeof n> => !!n);
+  return [rows, hints, more, legend(v.marks)].filter((n): n is NonNullable<typeof n> => !!n);
 }

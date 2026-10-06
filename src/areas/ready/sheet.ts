@@ -6,7 +6,7 @@ import { hoopRect } from '../../render/hoop';
 import { BROTHER, catalogOf, catalogPicked, catalogsNow, chosenCatalog, closeness, inCatalog, nearest, threadCode, threadNumber, type Catalog } from '../../threads/catalog';
 import type { Profile } from '../../validation/profiles';
 import type { Basis } from './recipes';
-import type { CardView, Note } from './card';
+import { markIcon, type CardView, type Note } from './card';
 import { spriteMarkup } from './icons';
 
 /**
@@ -49,7 +49,11 @@ const mm = (v: number) => formatNumber(v, Number.isInteger(Math.round(v * 10) / 
 const css = (c: ThreadColor) => `rgb(${c.r},${c.g},${c.b})`;
 const minutes = (s: number) => t('stats.minutes', { m: formatNumber(s / 60, 1) });
 const ico = (name: string) => `<svg class="i" aria-hidden="true"><use href="#i-${name}"/></svg>`;
-const tag = (b: Basis | undefined) => (!b || b === 'source' ? '' : ` <span class="tag">${esc(t(`ready.basis.${b}` as Key))}</span>`);
+const tag = (b: Basis | undefined) =>
+  !b || b === 'source' ? '' : ` <span class="mark" role="img" aria-label="${esc(t(`ready.basis.${b}` as Key))}">${ico(markIcon(b))}</span>`;
+/** Same legend as on the card: the marks used, then that all of it is a starting point. */
+const legend = (marks: Basis[]) =>
+  `<p class="small muted legend">${marks.map((b) => `<span>${ico(markIcon(b))} ${esc(t(`ready.legend.${b}` as Key))}</span>`).join('')}${marks.length ? `<span>${esc(t('ready.legend.source'))}</span>` : ''}</p><p class="small muted">${esc(t('ready.note'))}</p>`;
 const note = (n: Note) => `<small>${esc(n.text)}${tag(n.basis)}</small>`;
 
 /** Where the drawing lies and how it is split into sheets. */
@@ -204,7 +208,7 @@ function colorPage(i: SheetInput, sub: string[]): string {
   const recipe = c.rows
     .map(
       (r) =>
-        `<tr><td class="box"><span></span></td><td class="ic">${ico(r.icon)}</td><th>${esc(r.label)}</th><td>${r.step ? `<span class="meter" data-step="${r.step}"><i></i><i></i><i></i></span>` : ''}${esc(r.value)}${tag(r.basis)}${r.notes.map(note).join('')}</td></tr>`,
+        `<tr><td class="box"><span></span></td><td class="ic">${ico(r.icon)}</td><th>${esc(r.label)}</th><td>${esc(r.value)}${tag(r.basis)}${r.notes.map(note).join('')}</td></tr>`,
     )
     .join('');
   const hints = c.hints.length ? `<ul class="hints">${c.hints.map((x) => `<li>${ico(x.level === 'warn' ? 'ready-alert' : 'ready-tip')}<span>${esc(x.text)}${tag(x.basis)}</span></li>`).join('')}</ul>` : '';
@@ -225,7 +229,7 @@ ${headLine(i.name, t('ready.sheet.title'), sub)}
 <table class="recipe">${recipe}</table>
 ${hints}
 ${tips}
-<p class="small muted">${esc(t('ready.note'))} ${esc(t('ready.legend'))}</p>
+${legend(c.marks)}
 <h2>${esc(t('ready.sheet.notes'))}</h2>
 <div class="notes"></div>
 </section>`;
@@ -288,10 +292,9 @@ table { border-collapse: collapse; width: 100%; }
 .recipe tr { break-inside: avoid; }
 .i { width: 4.2mm; height: 4.2mm; fill: none; stroke: #000; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; vertical-align: -1mm; flex: none; }
 .i .fill { fill: #000; stroke: none; }
-.tag { font-size: 7.5pt; border: 0.2mm solid #777; border-radius: 0.8mm; padding: 0 0.8mm; color: #333; white-space: nowrap; }
-.meter { display: inline-flex; gap: 0.6mm; margin-right: 1.5mm; vertical-align: 0.2mm; }
-.meter i { width: 1.4mm; height: 2.6mm; border: 0.2mm solid #000; border-radius: 0.3mm; }
-.meter[data-step="3"] i, .meter[data-step="2"] i:nth-child(-n+2), .meter[data-step="1"] i:first-child { background: #000; }
+.mark .i { width: 3.4mm; height: 3.4mm; stroke: #444; vertical-align: -0.6mm; }
+.legend { display: flex; flex-wrap: wrap; gap: 0.5mm 4mm; margin-bottom: 0; }
+.legend .i { width: 3.4mm; height: 3.4mm; stroke: #444; vertical-align: -0.6mm; }
 .hints, .tips { list-style: none; padding: 0; margin: 2mm 0; }
 .hints li, .tips li { display: flex; gap: 2mm; margin: 1.2mm 0; break-inside: avoid; }
 .notes { height: 30mm; background: repeating-linear-gradient(to bottom, transparent 0, transparent 7.3mm, #bbb 7.3mm, #bbb 7.5mm); }

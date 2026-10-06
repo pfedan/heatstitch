@@ -7,7 +7,8 @@ import type { Viewport } from './viewport';
  * WebGL2 fabric behind the realistic threads. Nothing is loaded: the fragment shader builds the
  * surface of the material from the world position in mm, so the cloth pans and zooms with the
  * design, stays sharp at any zoom and costs no download. Every material is a height field (yarns
- * crossing over and under, knitted loops, terry loops, leather grain) lit with the same light as
+ * crossing over and under, knitted loops, terry loops, brushed fleece, open sheer weave, leather
+ * grain) lit with the same light as
  * the threads: a diffuse term, Kajiya-Kay sheen along the fibers and occlusion in the gaps.
  *
  * The shading is divided by that of a flat surface, so on average the cloth keeps the chosen
@@ -18,10 +19,14 @@ import type { Viewport } from './viewport';
 /** Per material: shader number, yarn pitch in mm (sets when detail fades in) and relief depth. */
 const LOOK: Record<FabricId, { kind: number; pitch: number; relief: number }> = {
   woven: { kind: 0, pitch: 0.26, relief: 1 },
+  // Denim and canvas: the twill of the cap with thicker yarns and deeper ribs.
+  woven_heavy: { kind: 1, pitch: 0.46, relief: 1.45 },
   cap: { kind: 1, pitch: 0.36, relief: 1.25 },
   knit: { kind: 2, pitch: 0.7, relief: 1 },
+  fleece: { kind: 6, pitch: 0.6, relief: 0.8 },
   terry: { kind: 3, pitch: 0.75, relief: 1.2 },
   light: { kind: 4, pitch: 0.13, relief: 0.45 },
+  sheer: { kind: 7, pitch: 0.16, relief: 0.55 },
   leather: { kind: 5, pitch: 0.5, relief: 0.7 },
 };
 
@@ -191,6 +196,41 @@ Surf terry(vec2 p, float pitch) {
   return s;
 }
 
+// Fleece: brushed pile, the knit underneath hidden by soft tufts of fibers lying every way.
+Surf fleece(vec2 p, float pitch) {
+  vec2 c = p / pitch;
+  float tuft = fbm(c * 0.9);
+  float fine = noise(c * 3.1 + 4.0);
+  vec2 dir = vec2(noise(c * 0.6) - 0.5, noise(c * 0.6 + 13.0) - 0.5);
+  Surf s;
+  s.h = 0.55 * tuft + 0.22 * fine + 0.08 * noise(c * 9.0);
+  s.fiber = normalize(dir + 1e-3);
+  s.tint = (tuft - 0.5) * 0.9 + (fine - 0.5) * 0.3;
+  return s;
+}
+
+// Sheer (organza, chiffon, tulle): thin smooth filaments in plain weave with open gaps between
+// them. The gaps lie deep and get little light, so the cloth reads as thin.
+Surf sheer(vec2 p, float pitch) {
+  vec2 c = p / pitch;
+  c += vec2(noise(c * vec2(0.04, 0.09)), noise(c * vec2(0.09, 0.04) + 9.0)) * 0.4;
+  vec2 cell = floor(c);
+  vec2 f = c - cell - 0.5;
+  // A yarn takes about half of its cell, the rest is open.
+  float cw = smoothstep(0.3, 0.16, abs(f.x));
+  float cf = smoothstep(0.3, 0.16, abs(f.y));
+  float hw = elev(int(cell.x), c.y, 2, true) * 0.15 + cw * 0.5;
+  float hf = elev(int(cell.y), c.x, 2, false) * 0.15 + cf * 0.5;
+  float k = smoothstep(-0.05, 0.05, hw - hf);
+  float yarn = max(cw, cf);
+  Surf s;
+  s.h = mix(-0.6, mix(hf, hw, k), yarn);
+  s.fiber = yarn > 0.0 ? mix(vec2(1.0, 0.0), vec2(0.0, 1.0), k) : vec2(0.0);
+  if (s.fiber != vec2(0.0)) s.fiber = normalize(s.fiber);
+  s.tint = (hash1(cell.x + 41.0) - 0.5) * 0.3 * yarn;
+  return s;
+}
+
 // Leather: pebbled grain from a cell pattern, the creases between the pebbles pressed in.
 Surf leather(vec2 p, float pitch) {
   vec2 c = p / pitch;
@@ -218,6 +258,8 @@ Surf surf(vec2 p) {
   if (u_kind == 2) return knit(p, u_pitch);
   if (u_kind == 3) return terry(p, u_pitch);
   if (u_kind == 4) return weave(p, u_pitch, 2);
+  if (u_kind == 6) return fleece(p, u_pitch);
+  if (u_kind == 7) return sheer(p, u_pitch);
   return leather(p, u_pitch);
 }
 
@@ -235,8 +277,8 @@ vec3 shadeAt(Surf s, vec3 N, vec3 base, vec3 L) {
     vec3 T = normalize(vec3(s.fiber, 0.0) - N * dot(vec3(s.fiber, 0.0), N));
     float th = dot(T, H);
     float sinTH = sqrt(max(1.0 - th * th, 0.0));
-    // Spun cotton has a soft, wide sheen; the fine fabric shines more, like silk.
-    float gloss = u_kind == 4 ? 0.22 : 0.07;
+    // Spun cotton has a soft, wide sheen; the fine and the sheer fabric shine more, like silk.
+    float gloss = u_kind == 4 || u_kind == 7 ? 0.22 : 0.07;
     lit += (base * 0.6 + 0.04) * pow(sinTH, 24.0) * gloss * 3.0 * smoothstep(0.0, 0.6, s.h);
   } else {
     // Leather: a broad, slightly glossy highlight on the pebbles.

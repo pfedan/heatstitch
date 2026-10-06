@@ -51,10 +51,10 @@ export function initReady(app: ReadyApp): { render: () => void } {
     const p = f?.pattern;
     if (!p) return null;
     const minLetter = app.minLetterMm(p);
-    const key = [p, f.measurement, s.profile.fabric, s.profile.thread, minLetter, t('ready.title')];
+    const key = [p, f.measurement, s.profile.fabric, s.profile.thread, minLetter, s.machineSpm, t('ready.title')];
     if (memo && memo.key.every((k, i) => k === key[i])) return memo.view;
     const card = recipeCard(s.profile.fabric, s.profile.thread, designFigures(p, f.measurement, minLetter));
-    memo = { key, view: cardView(card) };
+    memo = { key, view: cardView(card, s.machineSpm) };
     return memo.view;
   };
 

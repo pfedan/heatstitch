@@ -94,6 +94,19 @@ describe('thresholds and profiles', () => {
     expect(normalizeProfile({ fabric: 'kevlar' as never, thread: '30' })).toEqual({ fabric: 'woven', thread: '30' });
     expect(normalizeProfile(undefined)).toEqual(DEFAULT_PROFILE);
   });
+
+  it('keeps the newer fabrics and orders their tolerance by their neighbours', () => {
+    for (const fabric of ['woven_heavy', 'fleece', 'sheer'] as const) expect(normalizeProfile({ fabric, thread: '40' }).fabric).toBe(fabric);
+    const factor = (fabric: Profile['fabric']) => thresholdsFor({ fabric, thread: '40' }).factor;
+    // Heavy woven carries more than woven; fleece lies between terry and knit; sheer below light.
+    expect(factor('woven_heavy')).toBeGreaterThan(factor('woven'));
+    expect(factor('fleece')).toBeGreaterThan(factor('terry'));
+    expect(factor('fleece')).toBeLessThan(factor('knit'));
+    expect(factor('sheer')).toBeLessThan(factor('light'));
+    expect(recommendedSpacing({ fabric: 'woven_heavy', thread: '40' })).toEqual(recommendedSpacing(WOVEN));
+    expect(thresholdsFor({ fabric: 'fleece', thread: '40' }).pull).toBe('high');
+    expect(thresholdsFor({ fabric: 'sheer', thread: '40' }).holes).toBeNull();
+  });
 });
 
 describe('density tiers (40 wt on woven)', () => {
