@@ -14,7 +14,8 @@ import { stitchKinds, TIE_STITCH } from './sequence';
 /**
  * Lines: sewn along their curves with the same stitches as the border of a fill (along.ts), so
  * they stay exactly where they were drawn and follow every change of their nodes. The object
- * remembers the line as `path` and how it is sewn as `line` (running, triple or satin stitch).
+ * remembers the line as `path` and how it is sewn as `line` (running or bean stitch, satin, zigzag
+ * or E stitch).
  * Running stitches without curves (from a PES or DST file) get one traced through their stitches
  * the first time they are changed as a line.
  */
@@ -41,7 +42,7 @@ export function lineStitches(form: Form, st: PathStitch, reverse = false, from?:
   let at: Pt | undefined = from;
   for (const x of paths) {
     const pts = x.closed && x.pts.length > 2 && !samePt(x.pts[0], x.pts[x.pts.length - 1]) ? [...x.pts, x.pts[0]] : x.pts;
-    const runs = sewAlong(pts, x.closed, st, at);
+    const runs = sewAlong(pts, x.closed, st, at, undefined, reverse);
     out.push(...runs);
     const last = runs[runs.length - 1];
     if (last) at = last[last.length - 1];
