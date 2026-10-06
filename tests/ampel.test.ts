@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { tally } from '../src/areas/ampel/standin';
+import { tally } from '../src/areas/ampel/verdict';
 import { REASON_BITS, type Zone } from '../src/validation/zones';
 import type { ValidationResult } from '../src/validation/validate';
 import type { FabricId } from '../src/validation/profiles';

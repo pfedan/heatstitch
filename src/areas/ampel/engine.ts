@@ -6,9 +6,8 @@ import type { FabricId } from '../../validation/profiles';
  * The contract between the traffic light "Klappt das?" and the correction engine
  * (plans/korrektur-engine-review.md, last section "Schnittstelle zur Ampel").
  *
- * The light only reads an `AmpelReport` and applies what it offers. Today a stand-in fills it from
- * the validation and the correction there is (standin.ts); the new engine replaces that one file
- * and fills the same shapes, in a worker, after loading and after every change.
+ * The light only reads an `AmpelReport` and applies what it offers. live.ts fills it from the new
+ * correction engine (src/correct/engine), in workers, after loading and after every change.
  */
 
 /** The four kinds of findings the light names and fixes, each with its own button. */
@@ -112,8 +111,7 @@ export interface RestProposal {
   replacesHandEdits: number;
   /**
    * The proposal ready to take over after the preview (apply() it like a direct fix). The direct
-   * changes of the same kind are part of it. Absent with the stand-in (it offers the rest in the
-   * correction card instead).
+   * changes of the same kind are part of it.
    */
   fix?: ReadyFix;
 }

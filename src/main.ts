@@ -25,7 +25,7 @@ import { ValidationPanel } from './ui/validationPanel';
 import { acknowledgementOf, settledBy, type Acknowledgement } from './validation/acks';
 import type { ValidationResult, Zone } from './validation/validate';
 import { POINTS_MIN_SCALE } from './render/editOverlay';
-import { drawDivider } from './render/compare';
+import { drawDivider, drawPanels } from './render/compare';
 import { STITCH, type Pattern, type ThreadColor } from './model/pattern';
 import type { Measurement } from './validation/measure';
 import { initUpdateNotice } from './ui/updateNotice';
@@ -1208,7 +1208,7 @@ function history(step: 'undo' | 'redo' | 'revert'): void {
   recompute();
 }
 
-const { correctPanel, drawPlanCompare, inPlanFrame, movePlanSplit, pinPlan, tuneToFabric, planFix, applyPlan, discardPlan, offerPlan, busy, planShown, planTicked } = bindCorrection({
+const { correctPanel, drawPlanCompare, inPlanFrame, movePlanSplit, pinPlan, tuneToFabric, planFix, applyPlan, discardPlan, busy, planShown, planTicked } = bindCorrection({
   get applyEdit() {
     return applyEdit;
   },
@@ -1714,8 +1714,36 @@ ampel = initAmpel({
     files.setObjects(f, rememberedIn(p, seq(p).objects));
   },
   undo: () => history('undo'),
-  offer: offerPlan,
   busy,
+  drawCompare: (cv, box, before, after, labels) => {
+    // Before and after side by side, each fitted whole, stitches as they will sew (no heatmap).
+    const w = cv.clientWidth;
+    const hh = cv.clientHeight;
+    if (!w || !hh) return;
+    const dpr = window.devicePixelRatio || 1;
+    cv.width = Math.round(w * dpr);
+    cv.height = Math.round(hh * dpr);
+    const c = cv.getContext('2d');
+    if (!c) return;
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const pad = 1.5;
+    const b = { minX: box.minX - pad, minY: box.minY - pad, maxX: box.maxX + pad, maxY: box.maxY + pad };
+    const gap = 6;
+    const pw = (w - gap) / 2;
+    const bw = Math.max(1, b.maxX - b.minX);
+    const bh = Math.max(1, b.maxY - b.minY);
+    const scale = Math.min(pw / bw, hh / bh);
+    const look = { ...settings, overlay: true, opacity: 1, showValidation: false, hoop: null };
+    const panel = (x: number, pattern: Pattern, label: string) => {
+      const pvp = new Viewport();
+      pvp.scale = scale;
+      pvp.offsetX = x + (pw - bw * scale) / 2 - b.minX * scale;
+      pvp.offsetY = (hh - bh * scale) / 2 - b.minY * scale;
+      const sc: Scene = { pattern, grid: null, gridImg: null, validation: null, validationImg: null, counted: null, highlight: null, settings: look, vp: pvp, edit: null };
+      return { rect: { x0: x, y0: 0, x1: x + pw, y1: hh }, scene: sc, label };
+    };
+    drawPanels(c, w, hh, [panel(0, before, labels[0]), panel(pw + gap, after, labels[1])], stageBg());
+  },
 });
 
 files.render();

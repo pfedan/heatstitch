@@ -6,7 +6,6 @@ import type { Sequence } from '../../app/types';
 import type { WorkerClient } from '../../density/client';
 import type { Measurement } from '../../validation/measure';
 import type { Zone } from '../../validation/validate';
-import type { Plan } from '../../correct/plan';
 import { FABRICS, type FabricId } from '../../validation/profiles';
 import { command, runCommand } from '../../shell/commands';
 import { settledBy } from '../../validation/acks';
@@ -14,7 +13,7 @@ import { h } from '../../shell/h';
 import { toast } from '../../shell/ui';
 import { formatNumber, getLang, onLangChange, t, type Key } from '../../i18n';
 import { FINDING_TYPES, type AmpelReport, type FindingType, type Light, type MmBox, type Pending, type ReadyFix, type ReasonSummary, type RestProposal } from './engine';
-import { createStandIn } from './standin';
+import { createLive } from './live';
 
 /** What the traffic light needs from the rest of the app. */
 export interface AmpelApp {
@@ -28,9 +27,9 @@ export interface AmpelApp {
   /** Stores a fixed design as one undo step. */
   readonly commit: (p: Pattern, m: Measurement) => void;
   readonly undo: () => void;
-  /** Shows proposals in the correction card. */
-  readonly offer: (plan: Plan, title: string) => void;
   readonly busy: () => boolean;
+  /** Draws `before` and `after` side by side into `canvas`, each showing `box` whole. */
+  readonly drawCompare: (canvas: HTMLCanvasElement, box: MmBox, before: Pattern, after: Pattern, labels: [string, string]) => void;
 }
 
 /** How many reasons the light names. */
@@ -53,18 +52,16 @@ const typeName = (x: FindingType | 'all') => t(`ampel.type.${x}` as Key);
  * The traffic light "Klappt das?" (wow feature W2): one colour per fabric, the three main reasons
  * with their worst spot, one fix per kind of finding and "Alles beheben". It sits on top of the
  * summary card in Prüfen; its colour shows at "Prüfen" in the top bar, in Gestalten too. What it
- * shows comes from an AmpelEngine (engine.ts); today the stand-in in standin.ts.
+ * shows comes from an AmpelEngine (engine.ts); the new correction engine through live.ts.
  */
 export function initAmpel(app: AmpelApp): { update: () => void } {
-  const engine = createStandIn({
+  const engine = createLive({
     files: app.files,
     seq: app.seq,
     validator: app.validator,
     trimMm: () => app.settings.trimMm,
     commit: app.commit,
-    offer: app.offer,
     busy: app.busy,
-    wanted: () => app.settings.mode === 'density',
     onRequest: () => {
       const p = app.files.active?.pattern;
       return !!PHONE?.matches || (!!p && app.seq(p).objects.length >= LARGE_OBJECTS);
@@ -123,11 +120,20 @@ export function initAmpel(app: AmpelApp): { update: () => void } {
     toast(t('ampel.done', { type: typeName(fix.type), mm: mm(fix.outcome.fixedMm2) }), { label: t('ampel.undo'), run: app.undo });
   }
 
-  function offer(rest: RestProposal | null): void {
-    if (!rest) return;
-    engine.offerRest(rest, t('ampel.rest.title', { type: typeName(rest.type) }));
-    if (app.settings.mode !== 'density') app.setMode('density');
-    requestAnimationFrame(() => document.getElementById('correct-panel')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
+  /** The visible proposal shown with its before and after in the card, by kind (null: none). */
+  let looking: FindingType | null = null;
+  function offer(type: FindingType): void {
+    looking = looking === type ? null : type;
+    last = [];
+    update();
+  }
+
+  /** Takes back what fixes changed on the objects that still remember it, as one undo step. */
+  function revertAll(): void {
+    const n = engine.revertable().length;
+    if (!engine.revertObjects()) return;
+    looking = null;
+    toast(t('ampel.reverted', { n }), { label: t('ampel.undo'), run: app.undo });
   }
 
   /** Another fabric: set as the design's material, as in the material panel. */
@@ -144,9 +150,10 @@ export function initAmpel(app: AmpelApp): { update: () => void } {
   command({ id: 'ampel.worst', label: 'ampel.jump', group: G, when: () => !!active()?.verdict.worst, run: () => jump(active()!.verdict.worst!.bbox) });
   for (const x of FINDING_TYPES) {
     command({ id: `ampel.fix.${x}`, label: `ampel.cmd.fix.${x}` as Key, group: G, when: () => !!directOf(x), run: () => apply(directOf(x)) });
-    command({ id: `ampel.rest.${x}`, label: `ampel.cmd.rest.${x}` as Key, group: G, when: () => !!restOf(x) && !app.busy(), run: () => offer(restOf(x)) });
+    command({ id: `ampel.rest.${x}`, label: `ampel.cmd.rest.${x}` as Key, group: G, when: () => !!restOf(x) && !app.busy(), run: () => offer(x) });
   }
   command({ id: 'ampel.search', label: 'ampel.search', group: G, when: () => loaded() && engine.onRequest() && searchable(), run: () => engine.search() });
+  command({ id: 'ampel.revert', label: 'ampel.revert', group: G, when: () => loaded() && engine.revertable().length > 0, run: revertAll });
   command({ id: 'ampel.fix.all', label: 'ampel.cmd.fix.all', group: G, when: () => !!ready(active()?.all), run: () => apply(ready(active()?.all)) });
   for (const f of FABRICS) {
     command({ id: `ampel.fabric.${f.id}`, label: `ampel.cmd.fabric.${f.id}` as Key, group: G, when: () => loaded() && app.settings.mode !== 'image' && app.settings.profile.fabric !== f.id, run: () => pickFabric(f.id) });
@@ -227,7 +234,7 @@ export function initAmpel(app: AmpelApp): { update: () => void } {
       actions.push(
         h(
           'button',
-          { type: 'button', class: 'ampel-rest', title: `${cap(fixes(rest.outcome, false))}. ${t('ampel.rest.hint')}${hand}`, onclick: () => runCommand(`ampel.rest.${r.type}`) },
+          { type: 'button', class: 'ampel-rest', 'aria-expanded': String(looking === r.type), title: `${cap(fixes(rest.outcome, false))}. ${t('ampel.rest.hint')}${hand}`, onclick: () => runCommand(`ampel.rest.${r.type}`) },
           h('b', null, t('ampel.rest')),
           h('span', null, direct ? t('ampel.rest.left', { mm: mm(rest.outcome.leftMm2) }) : fixes(rest.outcome)),
         ),
@@ -237,14 +244,37 @@ export function initAmpel(app: AmpelApp): { update: () => void } {
     if (pending) {
       if (asked) actions.push(h('span', { class: `ampel-wait${working ? ' on' : ''}` }, t('ampel.working')));
     } else if (!direct && !rest && fx && r.targetMm2 > 0) actions.push(h('span', { class: 'ampel-wait' }, t('ampel.noFix')));
-    return h('li', { class: 'ampel-reason' }, top, actions.length ? h('div', { class: 'ampel-acts' }, actions) : null);
+    return h('li', { class: 'ampel-reason' }, top, actions.length ? h('div', { class: 'ampel-acts' }, actions) : null, rest && looking === r.type ? restPreview(rest) : null);
+  }
+
+  /** The visible proposal: before and after side by side, what it fixes, take over or close. */
+  function restPreview(rest: RestProposal): HTMLElement {
+    const cv = h('canvas', { class: 'ampel-compare', role: 'img', 'aria-label': t('ampel.rest.compare') }) as HTMLCanvasElement;
+    requestAnimationFrame(() => app.drawCompare(cv, rest.preview.box, rest.preview.before, rest.preview.after, [t('plan.before'), t('plan.after')]));
+    const hand = rest.replacesHandEdits ? ` ${t('ampel.rest.hand', { n: rest.replacesHandEdits })}` : '';
+    const fix = rest.fix ?? null;
+    return h(
+      'div',
+      { class: 'ampel-look' },
+      cv,
+      h('p', { class: 'small' }, `${cap(fixes(rest.outcome, false))}. ${t('ampel.rest.visible')}${hand}`),
+      h(
+        'div',
+        { class: 'ampel-acts' },
+        h('button', { type: 'button', class: 'primary', disabled: !fix, onclick: () => {
+          looking = null;
+          apply(fix);
+        } }, t('ampel.rest.take')),
+        h('button', { type: 'button', onclick: () => offer(rest.type as FindingType) }, t('ampel.rest.close')),
+      ),
+    );
   }
 
   let last: unknown[] = [];
   function update(): void {
     const f = app.files.active;
     const r = current();
-    const key = [f, f?.pattern, f?.validation, f?.acks, getLang(), version, r?.fabric];
+    const key = [f, f?.pattern, f?.validation, f?.acks, getLang(), version, r?.fabric, looking, engine.revertable().length];
     if (key.length === last.length && key.every((k, i) => k === last[i])) return;
     last = key;
     const a = active(r);
@@ -309,6 +339,12 @@ export function initAmpel(app: AmpelApp): { update: () => void } {
       );
     } else if (a.all?.state === 'pending' && shown.length > 1) {
       parts.push(h('p', { class: `ampel-wait${working ? ' on' : ''}` }, `${t('ampel.all')}: ${t('ampel.working')}`));
+    }
+    const back = engine.revertable().length;
+    if (back) {
+      parts.push(
+        h('button', { type: 'button', class: 'ampel-revert', title: t('ampel.revert.hint'), onclick: () => runCommand('ampel.revert') }, t('ampel.revert.n', { n: back })),
+      );
     }
     body.replaceChildren(...parts);
   }

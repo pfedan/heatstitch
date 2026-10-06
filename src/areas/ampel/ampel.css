@@ -260,3 +260,28 @@
     animation: none;
   }
 }
+
+/* The visible proposal: before and after side by side, then take over or close. */
+.ampel-look {
+  display: grid;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.ampel-compare {
+  width: 100%;
+  height: 150px;
+  border-radius: 6px;
+  background: var(--stage, var(--panel));
+}
+
+.ampel-look p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.ampel-revert {
+  justify-self: start;
+  font-size: 12px;
+  padding: 3px 8px;
+}

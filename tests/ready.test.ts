@@ -6,7 +6,7 @@ import { BOX, layout, sheetHtml } from '../src/areas/ready/sheet';
 import { de, en } from '../src/i18n/areas/ready';
 import { de as fabricDe, en as fabricEn } from '../src/i18n/areas/fabrics';
 import { de as ampelDe, en as ampelEn } from '../src/i18n/areas/ampel';
-import { RED_MIN_MM2 } from '../src/areas/ampel/standin';
+import { RED_MIN_MM2 } from '../src/areas/ampel/verdict';
 import { PatternBuilder, STITCH } from '../src/model/pattern';
 import { FABRICS } from '../src/validation/profiles';
 

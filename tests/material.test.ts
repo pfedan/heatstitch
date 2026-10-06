@@ -4,7 +4,7 @@ import { THREADS } from '../src/material/threads';
 import { digitizeDefaults, pullFor } from '../src/digitize/digitize';
 import { stableFabric } from '../src/validation/practice';
 import { normalizeProfile } from '../src/validation/profiles';
-import { RED_MIN_MM2 } from '../src/areas/ampel/standin';
+import { RED_MIN_MM2 } from '../src/areas/ampel/verdict';
 
 describe('material module', () => {
   it('lists every fabric once, in picker order', () => {

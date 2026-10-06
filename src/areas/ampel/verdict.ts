@@ -8,7 +8,7 @@ import { FINDING_TYPES, type FabricVerdict, type FindingType, type ReasonSummary
 /*
  * What the light reads from a validation, without any fix: the colour per fabric by its worst
  * spot, and the reasons by kind with their area and what a fix aims at. Shared by the engine
- * adapter (live.ts) and the stand-in.
+ * adapter (live.ts).
  */
 
 /**
