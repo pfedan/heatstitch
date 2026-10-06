@@ -28,8 +28,8 @@ import { transitions } from '../../src/model/sequence';
 /**
  * The demo project: a handful of own designs (Stickmuster), each showing a group of what the app
  * can do, made with the same operations the app uses, so every object stays editable when the
- * project is opened. tests/demoProject.test.ts builds and checks it; DEMO_PROJECT_OUT=<path>
- * writes the .heatstitch file.
+ * project is opened. tests/demoProject.test.ts builds and checks it and keeps
+ * public/examples/demo/heatstitch-demo.heatstitch (under "Load example") in sync.
  */
 
 const ID: Mat = [1, 0, 0, 1, 0, 0];
@@ -186,7 +186,14 @@ export class Design {
 
   /** A two-thread blend: fill `index` fades out, `color` fades in on the same area. */
   blend(index: number, color: ThreadColor): void {
-    this.take(blendObject(this.p, index, color, this.T));
+    // The app links the two by a random id; a fixed one keeps the demo file the same from run to run.
+    const random = Math.random;
+    Math.random = () => 0.5;
+    try {
+      this.take(blendObject(this.p, index, color, this.T));
+    } finally {
+      Math.random = random;
+    }
   }
 
   /** Fill `index` leaves out the shapes sewn on top of it. */
