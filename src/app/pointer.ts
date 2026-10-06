@@ -81,6 +81,11 @@ export function bindPointer(app: PointerApp) {
   /** Tooltip for the side of the divider the pointer is on. */
   function showTooltip(sx: number, sy: number): void {
     if (app.settings.mode === 'image') return;
+    // The width grip shows its own label.
+    if (app.shapeTool.active && (app.shapeTool.bandDragging || app.shapeTool.hover?.part === 'width')) {
+      app.tooltip.hidden = true;
+      return;
+    }
     if (app.settings.mode === 'flow') return app.flowTooltip(sx, sy);
     const left = app.showCompare() && sx < ui.split * ui.stageW;
     const f = app.files.active;

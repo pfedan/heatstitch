@@ -52,7 +52,30 @@ export function bindShapes(app: ShapesApp) {
       app.layers.say(t(key), true);
       app.redraw();
     },
+    width: (w) => setLineWidth(w),
   });
+
+  /** The satin width of line `o`, for its band on the level Form; null when it is no satin line. */
+  function bandOf(p: Pattern, q: Sequence, o: number): number | null {
+    const obj = q.objects[o];
+    if (!obj || !isLineObject(p, obj)) return null;
+    const st = lineSettings(p, obj, q.kinds);
+    return st.type === 'satin' ? st.width : null;
+  }
+
+  /** The selected satin line sewn with width `w` (its grip on the level Form). */
+  function setLineWidth(w: number): void {
+    const p = app.files.active?.pattern;
+    const o = ui.shapeObject;
+    if (!p || o === null) return;
+    const q = app.seq(p);
+    const obj = q.objects[o];
+    if (!obj) return;
+    const st = lineSettings(p, obj, q.kinds);
+    if (!sewLine(o, shapeTool.form, { ...st, width: w }, true)) shapeTool.band = st.width;
+    else app.layers.say(t('shape.width.set', { w: formatNumber(w, 1) }));
+    app.redraw();
+  }
 
   /**
    * Objects sewn along a line: drawn or SVG lines (their curves are known) and running stitches of a
@@ -142,6 +165,7 @@ export function bindShapes(app: ShapesApp) {
     }
     ui.formLevel = true;
     shapeTool.open(form);
+    shapeTool.band = bandOf(p, q, o);
     ui.shapeObject = o;
     ui.shapePattern = p;
     if (!ui.selectedObjects.has(o) || ui.selectedObjects.size !== 1) app.selectObjects([o], false);
@@ -175,6 +199,7 @@ export function bindShapes(app: ShapesApp) {
     const form = shapeTarget(p, q, o);
     if (!form) return closeShape();
     shapeTool.setForm(form);
+    shapeTool.band = bandOf(p, q, o);
     ui.shapeObject = o;
     ui.shapePattern = p;
   }
@@ -288,5 +313,5 @@ export function bindShapes(app: ShapesApp) {
     app.layers.say([list ? t('object.subtracted', { list }) : '', r.covered ? t('object.subtracted.covered') : ''].filter(Boolean).join(' '));
   }
 
-  return { closeShape, deleteSelected, duplicateSelected, enterShape, followKnockouts, isLineObject, mirrorSelected, sewLine, sewLineAgain, shapeTarget, shapeTool, subtractSelected, syncShape, takeShapes };
+  return { bandOf, closeShape, deleteSelected, duplicateSelected, enterShape, followKnockouts, isLineObject, mirrorSelected, sewLine, sewLineAgain, shapeTarget, shapeTool, subtractSelected, syncShape, takeShapes };
 }

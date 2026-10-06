@@ -943,6 +943,7 @@ export const en: Record<keyof typeof de, string> = {
   'shape.node.kind': 'Corner or round (c)',
   'shape.simplify': 'Simplify',
   'shape.simplify.hint': 'Fewer nodes, at most 0.3 mm beside the old outline. Press again to simplify further.',
+  'shape.width.set': 'Width {w} mm.',
   'shape.simplified': '{before} → {after} nodes. Undo brings the old shape back.',
   'shape.simplify.none': 'This shape does not get any simpler.',
   'object.editShape': 'Edit shape',

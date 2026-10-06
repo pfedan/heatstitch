@@ -222,6 +222,9 @@ const player = new Player(settings, () => {
 });
 
 const { layers, mergeBlocked, objectName, objectPanel, selectObjects } = bindObjects({
+  get bandOf() {
+    return bandOf;
+  },
   get commitTransform() {
     return commitTransform;
   },
@@ -411,7 +414,7 @@ const { closeRungs, rungInfo, rungTool, sewAlongLines, syncRungs, toggleGuides, 
 
 // Shapes and the frame ---------------------------------------------------------------------------
 
-const { closeShape, deleteSelected, duplicateSelected, enterShape, followKnockouts, isLineObject, mirrorSelected, sewLine, sewLineAgain, shapeTarget, shapeTool, subtractSelected, syncShape, takeShapes } = bindShapes({
+const { bandOf, closeShape, deleteSelected, duplicateSelected, enterShape, followKnockouts, isLineObject, mirrorSelected, sewLine, sewLineAgain, shapeTarget, shapeTool, subtractSelected, syncShape, takeShapes } = bindShapes({
   get applyEdit() {
     return applyEdit;
   },
@@ -1138,6 +1141,8 @@ function history(step: 'undo' | 'redo' | 'revert'): void {
   ui.correctMessage = null;
   ui.lettering = null;
   ui.letterMode = false;
+  // A kept selection shows the settings of the stitches as they are again (the panels read them anew).
+  ui.selectionKey++;
   syncPlayer();
   recompute();
 }

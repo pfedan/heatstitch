@@ -1,4 +1,5 @@
 import { simplifyMore } from '../shape/simplify';
+import { bandGrip, draggedWidth } from '../shape/band';
 import type { Pt } from '../digitize/skeleton';
 import { cloneForm, insertNode, moveHandle, moveNode, nearestOnForm, removeNode, segment, segments, setSmooth, type Form } from '../shape/path';
 
@@ -8,8 +9,8 @@ const PICK_CURVE_PX = 7;
 /** A double-click this close to the outline puts a node there. */
 const INSERT_PX = 14;
 
-/** A node, one of its handles (a: in, b: out), or a curve at parameter t. */
-export type ShapePick = { path: number; i: number; part: 'p' | 'a' | 'b' } | { path: number; seg: number; t: number; part: 'curve' };
+/** A node, one of its handles (a: in, b: out), a curve at parameter t, or the width grip of a satin line. */
+export type ShapePick = { path: number; i: number; part: 'p' | 'a' | 'b' } | { path: number; seg: number; t: number; part: 'curve' } | { part: 'width' };
 
 export interface ShapeView {
   form: Form;
@@ -17,6 +18,10 @@ export interface ShapeView {
   hover: ShapePick | null;
   /** The form was changed and is not sewn yet (while dragging). */
   dirty: boolean;
+  /** Satin width of a line (mm), shown as its band with a grip; null for areas and other lines. */
+  band: number | null;
+  /** Whether the width grip is being dragged. */
+  readonly bandDragging: boolean;
 }
 
 export interface ShapeHooks {
@@ -25,9 +30,11 @@ export interface ShapeHooks {
   redraw: () => void;
   /** Says why something did not work. */
   say: (key: 'shape.minNodes') => void;
+  /** A satin line given a new width (mm) with its grip. */
+  width: (w: number) => void;
 }
 
-type Drag = { pick: ShapePick; from: Pt; start: Form } | null;
+type Drag = { pick: ShapePick; from: Pt; start: Form; band: number | null } | null;
 
 /**
  * The outline of a fill on the canvas, as curves with nodes: nodes and their handles are dragged,
@@ -41,6 +48,7 @@ export class ShapeTool implements ShapeView {
   selected: { path: number; i: number } | null = null;
   hover: ShapePick | null = null;
   dirty = false;
+  band: number | null = null;
   private drag: Drag = null;
   private moved = false;
 
@@ -61,6 +69,7 @@ export class ShapeTool implements ShapeView {
     this.selected = this.hover = null;
     this.drag = null;
     this.dirty = false;
+    this.band = null;
   }
 
   /** The form anew (after new stitches); the selected node stays while it is still there. */
@@ -97,11 +106,18 @@ export class ShapeTool implements ShapeView {
     return out;
   }
 
-  /** What lies under the pointer: a shown handle, a node, or a curve. */
+  /** Whether the width grip is being dragged. */
+  get bandDragging(): boolean {
+    return this.drag?.pick.part === 'width';
+  }
+
+  /** What lies under the pointer: a shown handle, a node, the width grip, or a curve. */
   pickAt(x: number, y: number, scale: number): ShapePick | null {
     const r = PICK_PX / scale;
     let best: ShapePick | null = null;
     let bd = r;
+    const grip = this.band !== null ? bandGrip(this.form, this.band) : null;
+    if (grip && Math.hypot(grip.at[0] - x, grip.at[1] - y) < r) return { part: 'width' };
     for (const h of this.handles()) {
       const q = this.form.paths[h.path].nodes[h.i][h.part];
       const d = Math.hypot(q[0] - x, q[1] - y);
@@ -133,7 +149,7 @@ export class ShapeTool implements ShapeView {
       return 'pan';
     }
     if (pick.part === 'p') this.selected = { path: pick.path, i: pick.i };
-    this.drag = { pick, from: [x, y], start: this.form };
+    this.drag = { pick, from: [x, y], start: this.form, band: this.band };
     this.moved = false;
     this.hooks.redraw();
     return 'move';
@@ -147,6 +163,12 @@ export class ShapeTool implements ShapeView {
     if (!this.moved && Math.hypot(dx, dy) < 1e-6) return true;
     this.moved = true;
     const k = d.pick;
+    if (k.part === 'width') {
+      const g = d.band !== null ? bandGrip(d.start, d.band) : null;
+      if (g) this.band = draggedWidth(g, [x, y]);
+      this.hooks.redraw();
+      return true;
+    }
     if (k.part === 'p') {
       const n = d.start.paths[k.path].nodes[k.i];
       this.form = moveNode(d.start, k.path, k.i, [n.p[0] + dx, n.p[1] + dy]);
@@ -166,6 +188,11 @@ export class ShapeTool implements ShapeView {
     const d = this.drag;
     this.drag = null;
     if (!d) return;
+    if (d.pick.part === 'width') {
+      if (this.moved && this.band !== null && this.band !== d.band) this.hooks.width(this.band);
+      else this.hooks.redraw();
+      return;
+    }
     if (this.moved) this.hooks.change(this.form);
     else if (d.pick.part === 'curve') {
       this.selected = null;
@@ -174,7 +201,10 @@ export class ShapeTool implements ShapeView {
   }
 
   cancel(): void {
-    if (this.drag) this.form = this.drag.start;
+    if (this.drag) {
+      this.form = this.drag.start;
+      this.band = this.drag.band;
+    }
     this.drag = null;
     this.dirty = false;
   }
@@ -186,7 +216,7 @@ export class ShapeTool implements ShapeView {
 
   hoverAt(x: number, y: number, scale: number): boolean {
     const h = this.pickAt(x, y, scale);
-    const key = (p: ShapePick | null) => (p ? `${p.path}:${p.part === 'curve' ? `c${p.seg}` : `${p.i}${p.part}`}` : '');
+    const key = (p: ShapePick | null) => (!p ? '' : p.part === 'width' ? 'w' : `${p.path}:${p.part === 'curve' ? `c${p.seg}` : `${p.i}${p.part}`}`);
     if (key(h) === key(this.hover)) return false;
     this.hover = h;
     return true;

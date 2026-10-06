@@ -941,6 +941,7 @@ export const de = {
   'shape.node.kind': 'Ecke oder rund (c)',
   'shape.simplify': 'Vereinfachen',
   'shape.simplify.hint': 'Weniger Knoten, höchstens 0,3 mm neben dem alten Umriss. Nochmal drücken vereinfacht weiter.',
+  'shape.width.set': 'Breite {w} mm.',
   'shape.simplified': '{before} → {after} Knoten. Rückgängig holt die alte Form zurück.',
   'shape.simplify.none': 'Einfacher geht diese Form nicht.',
   'object.editShape': 'Form bearbeiten',
