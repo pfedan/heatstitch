@@ -2,7 +2,7 @@ import { addRung, chordOf, stripsOfAreas, cornerCuts, cornerRungs, cumulative, p
 import { pathLength } from '../digitize/fill';
 import { simplify } from '../digitize/run';
 import type { Pt } from '../digitize/skeleton';
-import { reversedRails, sectionPlan, sectionsOf, sewnBack, spanSection, sectionLoops, sectionOfRung, type Rails, type SatinSettings, type SectionLoop, type SectionStep, type Split } from '../model/restitch';
+import { bestChain, reversedRails, sectionPlan, sectionsOf, sewnBack, spanSection, sectionLoops, sectionOfRung, type Rails, type SatinSettings, type SectionLoop, type SectionStep, type Split } from '../model/restitch';
 
 /** Pick radius around the pointer for rung ends, CSS pixels; the line itself a little less. */
 const PICK_END_PX = 10;
@@ -118,7 +118,7 @@ export interface RungHooks {
   points?: (points: Pt[]) => void;
   redraw: () => void;
   /** Says why something did not work. */
-  say: (key: 'stitch.direction.miss' | 'stitch.direction.cross' | 'stitch.direction.needCut' | 'stitch.direction.cornersNone' | 'stitch.sections.none' | 'stitch.draw.openHole' | 'stitch.draw.notStripPart') => void;
+  say: (key: 'stitch.direction.miss' | 'stitch.direction.cross' | 'stitch.direction.needCut' | 'stitch.direction.cornersNone' | 'stitch.sections.none' | 'stitch.order.best.none' | 'stitch.draw.openHole' | 'stitch.draw.notStripPart') => void;
 }
 
 type Drag = { kind: 'end'; pick: RungPick; loop?: SectionLoop; moved?: boolean } | { kind: 'draw'; cut: boolean } | { kind: 'sketch' } | { kind: 'point'; i: number; moved: boolean } | null;
@@ -907,6 +907,36 @@ export class RungTool implements RungView {
   }
 
   /** Cut lines at the sharp corners of each column, those there kept; says so when there are none. */
+  /** Whether some chain has more than one column (see bestOrder). */
+  get chained(): boolean {
+    const n = new Map<string, number>();
+    this.columns.forEach((c, k) => c.rails.chain !== undefined && n.set(`${this.parts[k]}.${c.rails.chain}`, (n.get(`${this.parts[k]}.${c.rails.chain}`) ?? 0) + 1));
+    return [...n.values()].some((v) => v > 1);
+  }
+
+  /**
+   * Each chain in the order, directions and sides that hide the way between its columns best
+   * (see bestChain); says so when they already are.
+   */
+  bestOrder(): void {
+    if (this.mode !== 'satin' || !this.satin) return;
+    const satin = this.satin;
+    const out = this.result();
+    const next = out.map((part) => {
+      const groups: Rails[][] = [];
+      for (const r of part) {
+        const g = groups[groups.length - 1];
+        if (g && r.chain !== undefined && g[0].chain === r.chain) g.push(r);
+        else groups.push([r]);
+      }
+      return groups.flatMap((g) => (g.length > 1 && g[0].chain !== undefined ? bestChain(g, satin) : g));
+    });
+    this.selected = null;
+    if (JSON.stringify(next) === JSON.stringify(out)) return this.hooks.say('stitch.order.best.none');
+    this.setColumns(next);
+    this.hooks.change(next, true);
+  }
+
   sections(): void {
     let changed = false;
     for (const c of this.columns) {
