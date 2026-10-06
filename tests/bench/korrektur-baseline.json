@@ -1,0 +1,893 @@
+[
+ {
+  "name": "Blume (woven)",
+  "ampel": "yellow",
+  "ampelAfter": "yellow",
+  "crit": 0,
+  "critAfter": 0,
+  "newCrit": 0,
+  "newCaution": 0,
+  "newGapSparse": 0,
+  "open": {
+   "density": [
+    0,
+    0
+   ],
+   "holes": [
+    0,
+    0
+   ],
+   "gap": [
+    3,
+    3
+   ],
+   "sparse": [
+    0,
+    0
+   ],
+   "long": [
+    0,
+    0
+   ]
+  },
+  "ms": 230
+ },
+ {
+  "name": "Blume (knit)",
+  "ampel": "yellow",
+  "ampelAfter": "yellow",
+  "crit": 0,
+  "critAfter": 0,
+  "newCrit": 0,
+  "newCaution": 0,
+  "newGapSparse": 0,
+  "open": {
+   "density": [
+    0,
+    0
+   ],
+   "holes": [
+    0,
+    0
+   ],
+   "gap": [
+    0,
+    0
+   ],
+   "sparse": [
+    0,
+    0
+   ],
+   "long": [
+    0,
+    0
+   ]
+  },
+  "ms": 2
+ },
+ {
+  "name": "Musterkarte Dekor (woven)",
+  "ampel": "yellow",
+  "ampelAfter": "yellow",
+  "crit": 0,
+  "critAfter": 0,
+  "newCrit": 0,
+  "newCaution": 1,
+  "newGapSparse": 1,
+  "open": {
+   "density": [
+    0,
+    0
+   ],
+   "holes": [
+    0,
+    0
+   ],
+   "gap": [
+    2,
+    0
+   ],
+   "sparse": [
+    0,
+    0
+   ],
+   "long": [
+    0,
+    0
+   ]
+  },
+  "ms": 1575
+ },
+ {
+  "name": "Musterkarte Dekor (knit)",
+  "ampel": "red",
+  "ampelAfter": "yellow",
+  "crit": 4,
+  "critAfter": 0,
+  "newCrit": 0,
+  "newCaution": 4,
+  "newGapSparse": 3,
+  "open": {
+   "density": [
+    4,
+    0
+   ],
+   "holes": [
+    0,
+    0
+   ],
+   "gap": [
+    10,
+    4
+   ],
+   "sparse": [
+    0,
+    0
+   ],
+   "long": [
+    0,
+    0
+   ]
+  },
+  "ms": 3803
+ },
+ {
+  "name": "Linienstiche (woven)",
+  "ampel": "green",
+  "ampelAfter": "green",
+  "crit": 0,
+  "critAfter": 0,
+  "newCrit": 0,
+  "newCaution": 0,
+  "newGapSparse": 0,
+  "open": {
+   "density": [
+    0,
+    0
+   ],
+   "holes": [
+    0,
+    0
+   ],
+   "gap": [
+    0,
+    0
+   ],
+   "sparse": [
+    0,
+    0
+   ],
+   "long": [
+    0,
+    0
+   ]
+  },
+  "ms": 2
+ },
+ {
+  "name": "Linienstiche (knit)",
+  "ampel": "green",
+  "ampelAfter": "green",
+  "crit": 0,
+  "critAfter": 0,
+  "newCrit": 0,
+  "newCaution": 0,
+  "newGapSparse": 0,
+  "open": {
+   "density": [
+    0,
+    0
+   ],
+   "holes": [
+    0,
+    0
+   ],
+   "gap": [
+    0,
+    0
+   ],
+   "sparse": [
+    0,
+    0
+   ],
+   "long": [
+    0,
+    0
+   ]
+  },
+  "ms": 2
+ },
+ {
+  "name": "Linieneffekte (woven)",
+  "ampel": "red",
+  "ampelAfter": "red",
+  "crit": 37,
+  "critAfter": 34,
+  "newCrit": 0,
+  "newCaution": 0,
+  "newGapSparse": 0,
+  "open": {
+   "density": [
+    37,
+    34
+   ],
+   "holes": [
+    0,
+    0
+   ],
+   "gap": [
+    0,
+    0
+   ],
+   "sparse": [
+    15,
+    15
+   ],
+   "long": [
+    0,
+    0
+   ]
+  },
+  "ms": 1130
+ },
+ {
+  "name": "Linieneffekte (knit)",
+  "ampel": "red",
+  "ampelAfter": "red",
+  "crit": 113,
+  "critAfter": 110,
+  "newCrit": 1,
+  "newCaution": 0,
+  "newGapSparse": 0,
+  "open": {
+   "density": [
+    113,
+    110
+   ],
+   "holes": [
+    0,
+    0
+   ],
+   "gap": [
+    9,
+    6
+   ],
+   "sparse": [
+    13,
+    13
+   ],
+   "long": [
+    0,
+    0
+   ]
+  },
+  "ms": 1137
+ },
+ {
+  "name": "Schriftzug (woven)",
+  "ampel": "red",
+  "ampelAfter": "red",
+  "crit": 20,
+  "critAfter": 20,
+  "newCrit": 0,
+  "newCaution": 0,
+  "newGapSparse": 0,
+  "open": {
+   "density": [
+    20,
+    20
+   ],
+   "holes": [
+    0,
+    0
+   ],
+   "gap": [
+    0,
+    0
+   ],
+   "sparse": [
+    60,
+    60
+   ],
+   "long": [
+    0,
+    0
+   ]
+  },
+  "ms": 5
+ },
+ {
+  "name": "Schriftzug (knit)",
+  "ampel": "red",
+  "ampelAfter": "red",
+  "crit": 152,
+  "critAfter": 152,
+  "newCrit": 0,
+  "newCaution": 0,
+  "newGapSparse": 0,
+  "open": {
+   "density": [
+    152,
+    152
+   ],
+   "holes": [
+    0,
+    0
+   ],
+   "gap": [
+    19,
+    19
+   ],
+   "sparse": [
+    63,
+    63
+   ],
+   "long": [
+    0,
+    0
+   ]
+  },
+  "ms": 4
+ },
+ {
+  "name": "Aufnäher (woven)",
+  "ampel": "red",
+  "ampelAfter": "red",
+  "crit": 84,
+  "critAfter": 81,
+  "newCrit": 3,
+  "newCaution": 25,
+  "newGapSparse": 0,
+  "open": {
+   "density": [
+    84,
+    81
+   ],
+   "holes": [
+    0,
+    0
+   ],
+   "gap": [
+    0,
+    0
+   ],
+   "sparse": [
+    0,
+    0
+   ],
+   "long": [
+    0,
+    0
+   ]
+  },
+  "ms": 5223
+ },
+ {
+  "name": "Aufnäher (knit)",
+  "ampel": "red",
+  "ampelAfter": "red",
+  "crit": 255,
+  "critAfter": 248,
+  "newCrit": 13,
+  "newCaution": 41,
+  "newGapSparse": 0,
+  "open": {
+   "density": [
+    255,
+    248
+   ],
+   "holes": [
+    0,
+    0
+   ],
+   "gap": [
+    0,
+    0
+   ],
+   "sparse": [
+    0,
+    0
+   ],
+   "long": [
+    0,
+    0
+   ]
+  },
+  "ms": 7564
+ },
+ {
+  "name": "Handtuch (terry)",
+  "ampel": "red",
+  "ampelAfter": "red",
+  "crit": 1249,
+  "critAfter": 1098,
+  "newCrit": 84,
+  "newCaution": 36,
+  "newGapSparse": 0,
+  "open": {
+   "density": [
+    1249,
+    1098
+   ],
+   "holes": [
+    0,
+    0
+   ],
+   "gap": [
+    0,
+    0
+   ],
+   "sparse": [
+    0,
+    0
+   ],
+   "long": [
+    0,
+    0
+   ]
+  },
+  "ms": 6130
+ },
+ {
+  "name": "Handtuch (woven)",
+  "ampel": "red",
+  "ampelAfter": "yellow",
+  "crit": 7,
+  "critAfter": 0,
+  "newCrit": 0,
+  "newCaution": 17,
+  "newGapSparse": 0,
+  "open": {
+   "density": [
+    7,
+    0
+   ],
+   "holes": [
+    0,
+    0
+   ],
+   "gap": [
+    0,
+    0
+   ],
+   "sparse": [
+    0,
+    0
+   ],
+   "long": [
+    0,
+    0
+   ]
+  },
+  "ms": 6214
+ },
+ {
+  "name": "Handtuch (knit)",
+  "ampel": "red",
+  "ampelAfter": "red",
+  "crit": 66,
+  "critAfter": 34,
+  "newCrit": 18,
+  "newCaution": 102,
+  "newGapSparse": 0,
+  "open": {
+   "density": [
+    66,
+    34
+   ],
+   "holes": [
+    0,
+    0
+   ],
+   "gap": [
+    0,
+    0
+   ],
+   "sparse": [
+    0,
+    0
+   ],
+   "long": [
+    0,
+    0
+   ]
+  },
+  "ms": 6866
+ },
+ {
+  "name": "cat-60mm.pes (woven)",
+  "ampel": "yellow",
+  "ampelAfter": "yellow",
+  "crit": 5,
+  "critAfter": 0,
+  "newCrit": 0,
+  "newCaution": 59,
+  "newGapSparse": 6,
+  "open": {
+   "density": [
+    5,
+    0
+   ],
+   "holes": [
+    0,
+    0
+   ],
+   "gap": [
+    0,
+    4
+   ],
+   "sparse": [
+    0,
+    0
+   ],
+   "long": [
+    2,
+    2
+   ]
+  },
+  "ms": 33649
+ },
+ {
+  "name": "cat-60mm.pes (knit)",
+  "ampel": "red",
+  "ampelAfter": "red",
+  "crit": 86,
+  "critAfter": 21,
+  "newCrit": 6,
+  "newCaution": 78,
+  "newGapSparse": 59,
+  "open": {
+   "density": [
+    60,
+    16
+   ],
+   "holes": [
+    30,
+    6
+   ],
+   "gap": [
+    0,
+    9
+   ],
+   "sparse": [
+    0,
+    44
+   ],
+   "long": [
+    8,
+    0
+   ]
+  },
+  "ms": 55201
+ },
+ {
+  "name": "demos/overlap.pes (woven)",
+  "ampel": "red",
+  "ampelAfter": "red",
+  "crit": 77,
+  "critAfter": 74,
+  "newCrit": 0,
+  "newCaution": 0,
+  "newGapSparse": 0,
+  "open": {
+   "density": [
+    77,
+    74
+   ],
+   "holes": [
+    0,
+    0
+   ],
+   "gap": [
+    0,
+    0
+   ],
+   "sparse": [
+    0,
+    0
+   ],
+   "long": [
+    0,
+    0
+   ]
+  },
+  "ms": 5244
+ },
+ {
+  "name": "demos/overlap.pes (knit)",
+  "ampel": "red",
+  "ampelAfter": "red",
+  "crit": 84,
+  "critAfter": 83,
+  "newCrit": 0,
+  "newCaution": 0,
+  "newGapSparse": 0,
+  "open": {
+   "density": [
+    84,
+    83
+   ],
+   "holes": [
+    0,
+    0
+   ],
+   "gap": [
+    0,
+    0
+   ],
+   "sparse": [
+    0,
+    0
+   ],
+   "long": [
+    0,
+    0
+   ]
+  },
+  "ms": 5563
+ },
+ {
+  "name": "demos/letters.pes (woven)",
+  "ampel": "red",
+  "ampelAfter": "red",
+  "crit": 52,
+  "critAfter": 42,
+  "newCrit": 3,
+  "newCaution": 16,
+  "newGapSparse": 0,
+  "open": {
+   "density": [
+    52,
+    42
+   ],
+   "holes": [
+    3,
+    3
+   ],
+   "gap": [
+    0,
+    0
+   ],
+   "sparse": [
+    0,
+    0
+   ],
+   "long": [
+    0,
+    0
+   ]
+  },
+  "ms": 10985
+ },
+ {
+  "name": "demos/letters.pes (knit)",
+  "ampel": "red",
+  "ampelAfter": "red",
+  "crit": 253,
+  "critAfter": 188,
+  "newCrit": 24,
+  "newCaution": 18,
+  "newGapSparse": 2,
+  "open": {
+   "density": [
+    253,
+    188
+   ],
+   "holes": [
+    3,
+    0
+   ],
+   "gap": [
+    7,
+    8
+   ],
+   "sparse": [
+    4,
+    3
+   ],
+   "long": [
+    8,
+    0
+   ]
+  },
+  "ms": 15784
+ },
+ {
+  "name": "demos/sun.dst (woven)",
+  "ampel": "green",
+  "ampelAfter": "green",
+  "crit": 0,
+  "critAfter": 0,
+  "newCrit": 0,
+  "newCaution": 0,
+  "newGapSparse": 0,
+  "open": {
+   "density": [
+    0,
+    0
+   ],
+   "holes": [
+    0,
+    0
+   ],
+   "gap": [
+    0,
+    0
+   ],
+   "sparse": [
+    0,
+    0
+   ],
+   "long": [
+    0,
+    0
+   ]
+  },
+  "ms": 2
+ },
+ {
+  "name": "demos/sun.dst (knit)",
+  "ampel": "red",
+  "ampelAfter": "red",
+  "crit": 28,
+  "critAfter": 28,
+  "newCrit": 0,
+  "newCaution": 0,
+  "newGapSparse": 0,
+  "open": {
+   "density": [
+    0,
+    0
+   ],
+   "holes": [
+    28,
+    28
+   ],
+   "gap": [
+    0,
+    0
+   ],
+   "sparse": [
+    0,
+    0
+   ],
+   "long": [
+    0,
+    0
+   ]
+  },
+  "ms": 330
+ },
+ {
+  "name": "demos/confetti.pes (woven)",
+  "ampel": "green",
+  "ampelAfter": "green",
+  "crit": 0,
+  "critAfter": 0,
+  "newCrit": 0,
+  "newCaution": 0,
+  "newGapSparse": 0,
+  "open": {
+   "density": [
+    0,
+    0
+   ],
+   "holes": [
+    0,
+    0
+   ],
+   "gap": [
+    0,
+    0
+   ],
+   "sparse": [
+    0,
+    0
+   ],
+   "long": [
+    0,
+    0
+   ]
+  },
+  "ms": 1
+ },
+ {
+  "name": "demos/confetti.pes (knit)",
+  "ampel": "green",
+  "ampelAfter": "green",
+  "crit": 0,
+  "critAfter": 0,
+  "newCrit": 0,
+  "newCaution": 0,
+  "newGapSparse": 0,
+  "open": {
+   "density": [
+    0,
+    0
+   ],
+   "holes": [
+    0,
+    0
+   ],
+   "gap": [
+    0,
+    0
+   ],
+   "sparse": [
+    0,
+    0
+   ],
+   "long": [
+    0,
+    0
+   ]
+  },
+  "ms": 1
+ },
+ {
+  "name": "demos/leather-patch.dst (leather)",
+  "ampel": "red",
+  "ampelAfter": "red",
+  "crit": 328,
+  "critAfter": 290,
+  "newCrit": 1,
+  "newCaution": 24,
+  "newGapSparse": 0,
+  "open": {
+   "density": [
+    315,
+    272
+   ],
+   "holes": [
+    31,
+    41
+   ],
+   "gap": [
+    0,
+    0
+   ],
+   "sparse": [
+    0,
+    0
+   ],
+   "long": [
+    0,
+    0
+   ]
+  },
+  "ms": 4942
+ },
+ {
+  "name": "demos/leather-patch.dst (woven)",
+  "ampel": "green",
+  "ampelAfter": "green",
+  "crit": 0,
+  "critAfter": 0,
+  "newCrit": 0,
+  "newCaution": 0,
+  "newGapSparse": 0,
+  "open": {
+   "density": [
+    0,
+    0
+   ],
+   "holes": [
+    0,
+    0
+   ],
+   "gap": [
+    0,
+    0
+   ],
+   "sparse": [
+    0,
+    0
+   ],
+   "long": [
+    0,
+    0
+   ]
+  },
+  "ms": 2
+ }
+]
