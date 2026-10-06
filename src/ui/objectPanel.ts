@@ -279,7 +279,7 @@ export class ObjectPanel {
     if (info.editing || info.shaping || !info.selected.length) return [];
     const out: ObjectAction[] = [];
     const add = (icon: string, label: string, hint: string, run: (anchor: HTMLElement) => void) => out.push({ icon, label, hint, run });
-    if (info.selected.length === 1) add(SHAPE_ICONS.duplicate, t('object.duplicate'), t('object.duplicate.hint'), () => this.hooks.duplicate());
+    add(SHAPE_ICONS.duplicate, t('object.duplicate'), t('object.duplicate.hint'), () => this.hooks.duplicate());
     if (info.blend) add(SHAPE_ICONS.blend, t('object.blend'), t('object.blend.hint'), (anchor) => this.pickBlend(anchor, info.blend));
     if (info.subtractable) add(SHAPE_ICONS.subtract, t('object.subtract'), t('object.subtract.hint'), () => this.hooks.subtract());
     add(SHAPE_ICONS.mirrorX, t('object.mirrorX.short'), t('object.mirrorX'), () => this.hooks.mirror('x'));

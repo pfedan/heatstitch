@@ -12,10 +12,10 @@ import { rememberObjects, sewObjects } from '../src/model/objects';
 import { COLOR_CHANGE, END, STITCH, type Pattern, type ThreadColor } from '../src/model/pattern';
 import { sameColor } from '../src/model/recolor';
 import { transformSewObject } from '../src/model/reshape';
-import { backToVersion, forgetAll, keepVersion, remember, remembered, rememberedIn, restitch, restoreRemembered, DECO_PATTERNS, OPEN_PATTERNS, type FillSettings, type StoredObject } from '../src/model/restitch';
+import { backToVersion, forgetAll, keepVersion, objectKey, remember, remembered, rememberedIn, restitch, restoreRemembered, DECO_PATTERNS, OPEN_PATTERNS, type FillSettings, type StoredObject } from '../src/model/restitch';
 import { reorder } from '../src/model/order';
 import { stitchKinds } from '../src/model/sequence';
-import { deleteObjects, duplicateObject, mirrorMatrix, recolorObjects, subtractTop } from '../src/model/shapeOps';
+import { deleteObjects, duplicateObject, duplicateObjects, mirrorMatrix, recolorObjects, subtractTop } from '../src/model/shapeOps';
 import { stitchesBefore } from '../src/model/transform';
 import { parsePattern } from '../src/parsers';
 import { rotation, storeForm, translation, type Mat } from '../src/shape/path';
@@ -28,8 +28,9 @@ import { writePattern } from '../src/writers';
 import { rng } from './helpers/images';
 
 /**
- * The torture test: random chains of the operations the app offers on objects (add, duplicate,
- * move, turn, mirror, scale, delete, cut out, recolor, leave out, border in its own thread, echo and shadow of a line, undo,
+ * The torture test: random chains of the operations the app offers on objects (add, duplicate (also
+ * several, and in place),
+ * move, turn, mirror, scale, delete, cut out, recolor, leave out, border in its own thread, empty fill, echo and shadow of a line, undo,
  * redo, save and open the project, export), done the way the app does them, with the design's
  * invariants checked after every step. A failing chain names its seed and steps, so it can be
  * replayed and turned into a fixed regression test.
@@ -225,6 +226,24 @@ const OPS: Op[] = [
     },
   },
   { name: 'duplicate', run: (d, r) => d.objects.length > 0 && shapes(d, duplicateObject(d.cur.p, pick(r, d.objects).index, T)?.pattern) },
+  {
+    name: 'duplicate several',
+    run: (d, r) => {
+      if (d.objects.length < 2) return false;
+      const sel = [...new Set([pick(r, d.objects).index, pick(r, d.objects).index, pick(r, d.objects).index])];
+      return shapes(d, duplicateObjects(d.cur.p, sel, T)?.pattern);
+    },
+  },
+  {
+    name: 'duplicate in place',
+    run: (d, r) => {
+      // Ctrl+D: the copies lie exactly on their originals.
+      if (!d.objects.length) return false;
+      const sel = [...new Set([pick(r, d.objects).index, pick(r, d.objects).index])];
+      if (process.env.TORTURE_TRACE) console.log('duplicate in place', sel);
+      return shapes(d, duplicateObjects(d.cur.p, sel, T, 0)?.pattern);
+    },
+  },
   { name: 'move', run: (d, r) => d.objects.length > 0 && transform(d, [pick(r, d.objects).index], translation(between(r, -8, 8), between(r, -8, 8))) },
   {
     name: 'turn',
@@ -326,6 +345,21 @@ const OPS: Op[] = [
       // As the app: another pattern takes a blend's second thread out.
       const blend = fill.deco?.blend?.link;
       return restitchFill(d, o.index, s, new Set(blend ? [blend] : []));
+    },
+  },
+  {
+    name: 'empty fill',
+    run: (d, r) => {
+      // As the pattern tile Leer: only the border, in the fill's thread; another tile fills it again.
+      const fills = d.objects.filter((o) => remembered(d.cur.p, o)?.fill && !remembered(d.cur.p, o)?.asLine && !remembered(d.cur.p, o)?.blendOf);
+      if (!fills.length) return false;
+      const o = pick(r, fills);
+      const fill = remembered(d.cur.p, o)!.fill!;
+      if (fill.pattern === 'none') return restitchFill(d, o.index, { ...fill, pattern: 'tatami' }, new Set());
+      const old = [fill.border?.link, fill.deco?.blend?.link].filter((l): l is string => !!l);
+      const { color: _c, link: _l, ...kept } = fill.border ?? { type: pick(r, ['run', 'triple', 'satin'] as const), width: 2 };
+      const { blend: _b, ...deco } = fill.deco ?? {};
+      return restitchFill(d, o.index, { ...fill, pattern: 'none', deco, border: kept }, new Set(old));
     },
   },
   {
@@ -451,6 +485,19 @@ function checkBorders(p: Pattern): void {
   expect(problems.join('; '), 'border links').toBe('');
 }
 
+/** An empty fill is its border, in its own thread: it has one, without a thread or link of its own, and no object is its border. */
+function checkEmptyFills(p: Pattern): void {
+  const problems: string[] = [];
+  for (const o of sewObjects(p)) {
+    const f = remembered(p, o)?.fill;
+    if (f?.pattern !== 'none') continue;
+    if (!f.border) problems.push(`${o.index}: empty without border`);
+    else if (f.border.link || f.border.color) problems.push(`${o.index}: empty with a border object`);
+    if (f.deco?.blend) problems.push(`${o.index}: empty with a blend`);
+  }
+  expect(problems.join('; '), 'empty fills').toBe('');
+}
+
 /** Each blending fill has one second thread in its blend thread, and every second thread its fill. */
 function checkBlends(p: Pattern): void {
   const objs = sewObjects(p);
@@ -538,6 +585,18 @@ function checkLineParts(p: Pattern): void {
   expect(problems.join('; '), 'line parts').toBe('');
 }
 
+/** Every object has a key of its own, also copies lying exactly on their originals, so none shares what another remembers. */
+function checkKeys(p: Pattern): void {
+  const seen = new Map<string, number>();
+  const problems: string[] = [];
+  for (const o of sewObjects(p)) {
+    const k = objectKey(p, o);
+    if (seen.has(k)) problems.push(`objects ${seen.get(k)} and ${o.index} share key ${k}`);
+    seen.set(k, o.index);
+  }
+  expect(problems.join('; '), 'objects sharing what they remember').toBe('');
+}
+
 /** What leaves out the shapes on top fits the shapes on top now. */
 function checkKnockouts(p: Pattern): void {
   expect(refreshKnockouts(p, T)?.changed ?? [], 'fills whose left-out parts are out of date').toEqual([]);
@@ -564,8 +623,8 @@ function describeObjects(p: Pattern): string {
   return sewObjects(p)
     .map((o) => {
       const m = remembered(p, o);
-      const what = !m ? 'UNKNOWN' : [m.form && 'form', m.fill && 'fill', m.path && 'line', m.knockout && 'knockout', m.fill?.border?.link && `border->${m.fill.border.link}`, m.outline && `outline=${m.outline}`].filter(Boolean).join(' ');
-      return `\n  ${o.index} ${o.kind} block ${o.block} rgb(${o.color.r},${o.color.g},${o.color.b}) ${what}`;
+      const what = !m ? 'UNKNOWN' : [m.form && 'form', m.fill && 'fill', m.path && 'line', m.knockout && 'knockout', m.fill?.border?.link && `border->${m.fill.border.link}`, m.outline && `outline=${m.outline}`, m.blendOf && `blendOf=${m.blendOf}`, m.fill?.deco?.blend && `blend->${m.fill.deco.blend.link}`].filter(Boolean).join(' ');
+      return `\n  ${o.index} ${objectKey(p, o)} ${o.kind} block ${o.block} rgb(${o.color.r},${o.color.g},${o.color.b}) ${what}`;
     })
     .join('');
 }
@@ -592,8 +651,10 @@ async function chain(seed: number, steps = STEPS): Promise<void> {
       checkWellFormed(p);
       expect(knowledge(p), 'knowledge as stored with this version').toEqual(d.cur.known);
       checkAllKnown(p);
+      checkKeys(p);
       checkPartsFit(p);
       checkBorders(p);
+      checkEmptyFills(p);
       checkBlends(p);
       checkEchoes(p);
       checkLineParts(p);

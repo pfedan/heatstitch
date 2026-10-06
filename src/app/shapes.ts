@@ -12,7 +12,7 @@ import type { Settings } from '../settings';
 import type { SewObject } from '../model/objects';
 import type { Viewport } from '../render/viewport';
 import { ShapeTool } from '../ui/shapeTool';
-import { deleteObjects, duplicateObject, mirrorMatrix, subtractTop } from '../model/shapeOps';
+import { deleteObjects, duplicateObjects, mirrorMatrix, subtractTop } from '../model/shapeOps';
 import { formOf, reshapeFill } from '../model/reshape';
 import { railsForm, reshapeRails } from '../model/railsForm';
 import { lineOf, resewLine, lineSettings, fillToLine, reshapeLineFill } from '../model/line';
@@ -318,14 +318,58 @@ export function bindShapes(app: ShapesApp) {
     app.layers.say(sel.length === 1 ? t('object.deleted.one') : t('object.deleted', { n: sel.length }));
   }
 
-  function duplicateSelected(): void {
+  /**
+   * The selected objects once more, sewn right after their originals: 2 mm beside them (the
+   * button, Ctrl+C and Ctrl+V), or `inPlace` exactly on them (Ctrl+D). The copies are selected.
+   */
+  function duplicateSelected(inPlace = false): void {
+    duplicate(app.frameObjects(), inPlace);
+  }
+
+  function duplicate(sel: number[], inPlace: boolean): void {
     const p = app.files.active?.pattern;
-    const sel = app.frameObjects();
-    if (!p || sel.length !== 1) return;
-    const r = duplicateObject(p, sel[0], app.settings.trimMm);
+    if (!p || !sel.length) return;
+    const r = duplicateObjects(p, sel, app.settings.trimMm, inPlace ? 0 : undefined);
     if (!r) return app.layers.say(t('frame.failed'), true);
-    takeShapes(r.pattern, [r.index]);
-    app.layers.say(t('object.duplicated'));
+    takeShapes(r.pattern, r.copies);
+    const n = r.copies.length;
+    const said = inPlace ? (n === 1 ? t('object.duplicatedHere.one') : t('object.duplicatedHere', { n })) : n === 1 ? t('object.duplicated') : t('object.duplicated.many', { n });
+    app.layers.say([said, r.nudged ? t('object.duplicatedHere.nudged') : ''].filter(Boolean).join(' '));
+  }
+
+  /** Objects copied with Ctrl+C: their design and their stitches (found again by them for Ctrl+V). */
+  let copied: { file: unknown; keys: string[] } | null = null;
+
+  /** Ctrl+C: remembers the selected objects; false when none is selected (the page copies text then). */
+  function copySelected(): boolean {
+    const f = app.files.active;
+    const p = f?.pattern;
+    const sel = app.frameObjects();
+    if (!p || !sel.length) return false;
+    const q = app.seq(p);
+    copied = { file: f, keys: sel.flatMap((o) => (q.objects[o] ? [objectKey(p, q.objects[o])] : [])) };
+    app.layers.say(sel.length === 1 ? t('object.copied.one') : t('object.copied', { n: sel.length }));
+    return true;
+  }
+
+  /** Ctrl+V: the objects copied last once more, 2 mm beside them (each paste a step further). */
+  function pasteCopied(): boolean {
+    const f = app.files.active;
+    if (!copied || !f?.pattern) return false;
+    if (copied.file !== f) {
+      app.layers.say(t('object.paste.otherDesign'), true);
+      return true;
+    }
+    const p = f.pattern;
+    const q = app.seq(p);
+    const keys = new Set(copied.keys);
+    const sel = q.objects.flatMap((o, i) => (keys.has(objectKey(p, o)) ? [i] : []));
+    if (!sel.length) {
+      app.layers.say(t('object.paste.gone'), true);
+      return true;
+    }
+    duplicate(sel, false);
+    return true;
   }
 
   function mirrorSelected(axis: 'x' | 'y'): void {
@@ -355,5 +399,5 @@ export function bindShapes(app: ShapesApp) {
     app.layers.say([list ? t('object.subtracted', { list }) : '', r.covered ? t('object.subtracted.covered') : ''].filter(Boolean).join(' '));
   }
 
-  return { closeShape, deleteSelected, duplicateSelected, enterShape, followKnockouts, isLineObject, mirrorSelected, sewLine, sewLineAgain, shapeTarget, shapeTool, showBand, subtractSelected, syncShape, takeShapes };
+  return { closeShape, copySelected, deleteSelected, duplicateSelected, pasteCopied, enterShape, followKnockouts, isLineObject, mirrorSelected, sewLine, sewLineAgain, shapeTarget, shapeTool, showBand, subtractSelected, syncShape, takeShapes };
 }

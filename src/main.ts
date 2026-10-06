@@ -424,7 +424,7 @@ const { closeRungs, rungInfo, rungTool, sewAlongLines, syncRungs, toggleGuides, 
 
 // Shapes and the frame ---------------------------------------------------------------------------
 
-const { closeShape, deleteSelected, duplicateSelected, enterShape, followKnockouts, isLineObject, mirrorSelected, sewLine, sewLineAgain, shapeTarget, shapeTool, showBand, subtractSelected, syncShape, takeShapes } = bindShapes({
+const { closeShape, copySelected, deleteSelected, duplicateSelected, pasteCopied, enterShape, followKnockouts, isLineObject, mirrorSelected, sewLine, sewLineAgain, shapeTarget, shapeTool, showBand, subtractSelected, syncShape, takeShapes } = bindShapes({
   get applyEdit() {
     return applyEdit;
   },
@@ -1440,8 +1440,14 @@ bindKeys({
   get drawTool() {
     return drawTool;
   },
+  get copySelected() {
+    return copySelected;
+  },
   get duplicateSelected() {
     return duplicateSelected;
+  },
+  get pasteCopied() {
+    return pasteCopied;
   },
   get editor() {
     return editor;

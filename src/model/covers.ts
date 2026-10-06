@@ -69,6 +69,8 @@ export function coversOver(p: Pattern, objs: SewObject[], o: SewObject, pxMm: nu
   for (const x of objs) {
     if (x.index <= o.index || !overlapsBox(reachOf(p, x), reach)) continue;
     if (mine(remembered(p, x))) continue;
+    // An empty fill covers nothing but its border.
+    if (remembered(p, x)?.fill?.pattern === 'none') continue;
     const f = remembered(p, x)?.form;
     const r = f && wholeArea(f, pxMm);
     if (r) {
