@@ -306,23 +306,7 @@ export function initShapes(app: ShapesAreaApp): void {
     const parts: HTMLElement[] = [];
     const sep = () => h('span', { class: 'crumb-sep', 'aria-hidden': 'true' }, '›');
     const last = (text: string, title?: string) => h('span', { class: 'crumb-here', 'aria-current': 'location', title: title ?? '' }, text);
-    const anySelected = ui.selectedObjects.size > 0 || deeper();
-    if (design) {
-      parts.push(
-        anySelected
-          ? h('button', {
-              type: 'button',
-              class: 'crumb-link',
-              title: t('shapes.crumb.top'),
-              onclick: () => {
-                runCommand('level.objects');
-                app.selectObjects([], false);
-                done();
-              },
-            }, design)
-          : last(design),
-      );
-    }
+    // The design's name stands in the top bar already; the crumb starts at what is chosen in it.
     if (sel) {
       if (parts.length) parts.push(sep());
       parts.push(level ? h('button', { type: 'button', class: 'crumb-link', title: t('shapes.crumb.up'), onclick: () => runCommand('level.objects') }, sel) : last(sel));
