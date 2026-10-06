@@ -1,0 +1,201 @@
+/* Area "ready": the card "Bereit zum Sticken" on the design page and its line in the save popover.
+   Only tokens (design-system/heatstitch/MASTER.md); the warning tone is the one the save popover uses. */
+
+.ready-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.ready-for {
+  margin: -4px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ready-rows {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 7px 10px;
+  align-items: baseline;
+  margin: 0;
+}
+
+.ready-row {
+  display: contents;
+}
+
+.ready-row dt {
+  display: flex;
+  align-items: center;
+  align-self: start;
+  gap: 6px;
+  color: var(--muted);
+}
+
+.ready-row dt .i,
+.ready-hints .i,
+.ready-tips .i,
+.ready-hooping .i,
+.ready-save .i {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--muted);
+}
+
+.ready-row dd {
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0;
+  min-width: 0;
+  line-height: 1.35;
+}
+
+.ready-value {
+  color: var(--ink);
+}
+
+.ready-note {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.ready-tag {
+  margin-left: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+  cursor: help;
+}
+
+.ready-meter {
+  display: inline-flex;
+  gap: 2px;
+  margin-right: 6px;
+  vertical-align: -1px;
+}
+
+.ready-meter i {
+  width: 5px;
+  height: 10px;
+  border-radius: 1.5px;
+  background: var(--line);
+}
+
+.ready-meter[data-step='3'] i,
+.ready-meter[data-step='2'] i:nth-child(-n + 2),
+.ready-meter[data-step='1'] i:first-child {
+  background: var(--muted);
+}
+
+.ready-hints,
+.ready-tips {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ready-hints li,
+.ready-tips li,
+.ready-hooping {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  line-height: 1.4;
+}
+
+.ready-hints li {
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--bg);
+}
+
+.ready-hints li.warn {
+  background: color-mix(in srgb, #d97706 10%, transparent);
+}
+
+.ready-hints li.warn .i {
+  color: #d97706;
+}
+
+.ready-more > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+  border-radius: 4px;
+}
+
+.ready-more > summary:hover {
+  color: var(--ink);
+}
+
+.ready-more[open] > summary {
+  margin-bottom: 8px;
+}
+
+.ready-more {
+  display: flex;
+  flex-direction: column;
+}
+
+.ready-more > * + * {
+  margin-top: 6px;
+}
+
+.ready-hooping {
+  margin: 0;
+}
+
+.ready-legend,
+.ready-foot {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+/* Save popover: the line before stitching, like the hoop line above it. */
+.ready-save {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: var(--bg);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.ready-save[hidden] {
+  display: none;
+}
+
+.ready-save > span {
+  flex: 1;
+  min-width: 0;
+}
+
+.ready-save b {
+  font-weight: 600;
+}
+
+.ready-save .link {
+  flex: none;
+  margin: 0;
+  padding: 0;
+}
+
+.ready-more > .ready-legend {
+  margin-top: 10px;
+}

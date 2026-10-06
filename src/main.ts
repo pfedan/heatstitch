@@ -69,6 +69,7 @@ import { bindScene } from './app/scene';
 import { initShell } from './shell/setup';
 import { initStitchArea } from './areas/stitches';
 import { initDesign } from './areas/design';
+import { initReady } from './areas/ready';
 import { initShapes, refreshShapes } from './areas/shapes';
 import { runCommand } from './shell/commands';
 import { initCheck } from './areas/check/check';
@@ -834,6 +835,7 @@ function redraw(): void {
     if (settings.mode === 'density') drawLegendCanvas();
     renderStats($('stats'), active, ui.grid, settings, ui.computing);
     design.render();
+    ready.render();
     const p = active?.pattern ?? null;
     const q = p ? seq(p) : null;
     $('player').hidden = !p;
@@ -1658,6 +1660,15 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', red
 initShell({ files, mode: () => settings.mode, setMode });
 const stitchArea = initStitchArea({ files, settings, editor, rungTool, stitchPanel, closeRungs, toggleRungs, toggleGuides, togglePoints, sewAlongLines, setEditing, enterObject, revealRecord, pointsVisible: () => vp.scale >= POINTS_MIN_SCALE, redraw });
 const design = initDesign({ files, settings, player, vp, stage, fitView, fitToHoop, redraw, applyEdit });
+const ready = initReady({
+  files,
+  settings,
+  setMode,
+  minLetterMm: (p) => {
+    const hs = letteringsOf(p, seq(p)).flatMap((l) => (l ? [l.height] : []));
+    return hs.length ? Math.min(...hs) : null;
+  },
+});
 initShapes({ settings, setMode, files, seq, objectName, drawTool, setDrawing, shapeTool, enterShape, shapeTarget, isLineObject, frameTool, editor, setEditing, setFormLevel, newLettering, setLetterMode, letteringPanel, selectObjects, redraw });
 checkArea = initCheck({
   settings,
