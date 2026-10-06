@@ -189,12 +189,6 @@ kbd {
   padding: 6px;
 }
 
-.pop-section {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
 .pop-row {
   display: flex;
   align-items: center;
@@ -389,10 +383,6 @@ body[data-mode='density'] .resizer[data-panel='side'] {
   width: 36px;
   height: 36px;
   padding: 0;
-}
-
-.toolrail .rail-text .tool-glyph {
-  font: 600 17px/1 Georgia, 'Times New Roman', serif;
 }
 
 .toolrail #draw-pointer {

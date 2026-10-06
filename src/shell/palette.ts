@@ -41,16 +41,23 @@ export function createPalette(): { open: () => void; close: () => void } {
   let shown: Command[] = [];
   let at = 0;
   let before: HTMLElement | null = null;
+  /** Commands run from here in this visit, the latest first: with nothing typed they lead the list. */
+  const recent: string[] = [];
 
   const draw = () => {
     const words = fold(input.value).split(/\s+/).filter(Boolean);
+    const rank = (c: Command) => {
+      const i = recent.indexOf(c.id);
+      return i < 0 ? recent.length : i;
+    };
     shown = commands()
       .filter((c) => c.palette !== false && canRun(c))
       .map((c) => ({ c, s: words.length ? score(c, words) : 0 }))
       .filter((x) => x.s >= 0)
-      .sort((a, b) => b.s - a.s || t(a.c.group).localeCompare(t(b.c.group)) || t(a.c.label).localeCompare(t(b.c.label)))
+      .sort((a, b) => b.s - a.s || (words.length ? 0 : rank(a.c) - rank(b.c)) || t(a.c.group).localeCompare(t(b.c.group)) || t(a.c.label).localeCompare(t(b.c.label)))
       .map((x) => x.c)
-      .slice(0, 40);
+      // Typed: the best matches. Nothing typed: everything that can run now, to scroll through.
+      .slice(0, words.length ? 40 : undefined);
     at = Math.min(at, Math.max(0, shown.length - 1));
     list.replaceChildren(
       ...(shown.length
@@ -86,7 +93,9 @@ export function createPalette(): { open: () => void; close: () => void } {
   };
   const pick = (c: Command) => {
     close();
-    if (canRun(c)) c.run();
+    if (!canRun(c)) return;
+    recent.splice(0, recent.length, c.id, ...recent.filter((id) => id !== c.id).slice(0, 7));
+    c.run();
   };
   const open = () => {
     before = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -140,14 +149,22 @@ export function createKeyOverview(): { toggle: () => void } {
   const draw = () => {
     title.textContent = t('shell.keys.title');
     closeBtn.title = t('shell.close');
-    const groups = new Map<string, Command[]>();
+    // One row per key in each group: commands that share a key there (each in its own situation,
+    // like the next finding or the next jump) are named together.
+    const groups = new Map<string, Map<string, { labels: string[]; keys: string[] }>>();
     for (const c of commands()) {
       if (!c.keys?.length) continue;
       const g = t(c.group);
-      groups.set(g, [...(groups.get(g) ?? []), c]);
+      const rows = groups.get(g) ?? new Map<string, { labels: string[]; keys: string[] }>();
+      groups.set(g, rows);
+      const id = c.keys.join(' ');
+      const row = rows.get(id) ?? { labels: [], keys: c.keys };
+      rows.set(id, row);
+      const label = t(c.label);
+      if (!row.labels.includes(label)) row.labels.push(label);
     }
     body.replaceChildren(
-      ...[...groups].map(([g, cs]) =>
+      ...[...groups].map(([g, rows]) =>
         h(
           'section',
           null,
@@ -155,7 +172,7 @@ export function createKeyOverview(): { toggle: () => void } {
           h(
             'dl',
             null,
-            cs.flatMap((c) => [h('dt', null, t(c.label)), h('dd', null, c.keys!.map((k) => h('kbd', null, keyLabel(k))))]),
+            [...rows.values()].flatMap((r) => [h('dt', null, r.labels.join(' / ')), h('dd', null, r.keys.map((k) => h('kbd', null, keyLabel(k))))]),
           ),
         ),
       ),

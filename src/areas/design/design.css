@@ -351,18 +351,15 @@ body[data-mode='flow'] .material-panel .profile-info span:nth-child(2) {
   bottom: calc(var(--player-h) + 10px);
   z-index: 3;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 10px;
   pointer-events: none;
 }
 
-body[data-mode] .stage-foot .hint {
-  position: static;
-  transform: none;
+.stage-foot .hint {
   flex: 1 1 auto;
   min-width: 0;
-  max-width: none;
-  margin: 0 0 6px;
+  margin: 0;
   padding: 3px 8px;
   border-radius: 6px;
   background: rgba(13, 11, 16, 0.55);
@@ -371,7 +368,6 @@ body[data-mode] .stage-foot .hint {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  justify-self: start;
 }
 
 .stage-foot .hint:empty {
@@ -601,6 +597,9 @@ body[data-mode] .stage-foot .hint {
 /* Player at the foot of the stage --------------------------------------------------------------------- */
 
 .stage .player {
+  position: absolute;
+  display: flex;
+  align-items: center;
   left: 0;
   right: 0;
   bottom: 0;
@@ -701,6 +700,8 @@ body[data-mode] .stage-foot .hint {
 
 .stage .player select {
   flex: none;
+  padding: 3px 4px;
+  font-size: 12px;
   background: var(--bg);
   border-color: var(--line);
   color: var(--ink);
@@ -836,12 +837,6 @@ body[data-mode='flow'] .stage:has(.player.folded:not([hidden])) .stage-foot {
   padding-top: 8px;
   border-top: 1px solid var(--line);
   font-size: 13px;
-}
-
-/* The heatmap scale of the check view stands above the view bar. */
-.stage .legend {
-  right: 10px;
-  bottom: calc(var(--player-h) + 58px);
 }
 
 .view-pop .color-key:empty {

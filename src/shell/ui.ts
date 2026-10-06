@@ -17,7 +17,8 @@ let toastTimer = 0;
 export function toast(message: string, action?: { label: string; run: () => void }): void {
   if (!toastBox) {
     toastBox = h('div', { class: 'toast', role: 'status', 'aria-live': 'polite', hidden: true });
-    document.body.appendChild(toastBox);
+    // On the stage, above its foot (src/areas/cleanup/cleanup.css): never over the player or the view bar.
+    (document.getElementById('stage') ?? document.body).appendChild(toastBox);
   }
   const box = toastBox;
   const btn = action

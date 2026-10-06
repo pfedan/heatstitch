@@ -13,7 +13,6 @@ export const de = {
   'design.view.marksOn': 'Markierungen zeigen (H)',
   'design.view.marksOff': 'Markierungen ausgeblendet (H)',
   'design.zoom.hint': 'Zoom: Vergrößern, Verkleinern, Originalgröße',
-  'design.zoom.real': 'Originalgröße (100 %)',
 
   // Commands
   'design.cmd.viewMenu': 'Ansicht-Menü öffnen',
@@ -84,7 +83,6 @@ export const de = {
   'design.stats.time': 'Stickzeit',
   'design.stats.thread': 'Garn',
   'design.stats.trims': 'Schnitte',
-  'design.stats.colors': 'Farben',
   'design.stats.speed': 'Bei',
   'design.stats.spm': 'Stichen pro Minute',
   'design.stats.min': '{m} min',
@@ -104,7 +102,6 @@ export const en: Record<keyof typeof de, string> = {
   'design.view.marksOn': 'Show marks (H)',
   'design.view.marksOff': 'Marks hidden (H)',
   'design.zoom.hint': 'Zoom: in, out, actual size',
-  'design.zoom.real': 'Actual size (100 %)',
 
   'design.cmd.viewMenu': 'Open the view menu',
   'design.cmd.realistic': 'Realistic threads on or off',
@@ -172,7 +169,6 @@ export const en: Record<keyof typeof de, string> = {
   'design.stats.time': 'Sewing time',
   'design.stats.thread': 'Thread',
   'design.stats.trims': 'Trims',
-  'design.stats.colors': 'Colors',
   'design.stats.speed': 'At',
   'design.stats.spm': 'stitches per minute',
   'design.stats.min': '{m} min',

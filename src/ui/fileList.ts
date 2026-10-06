@@ -46,6 +46,11 @@ export interface LoadedFile {
   error?: string;
   /** The pattern as loaded; `pattern` differs once it was corrected or edited. */
   original?: Pattern;
+  /**
+   * The version a project brought along when it was opened (absent for plain files): the
+   * comparison with the original is offered once the design differs from it, not right away.
+   */
+  opened?: Pattern;
   /** Measurement and classification of `original`, kept for the comparison view. */
   originalMeasurement?: Measurement;
   originalValidation?: ValidationResult;
@@ -227,6 +232,7 @@ export class FileList {
           const edited = fromStored(original, working);
           if (edited) {
             entry.pattern = edited;
+            if (persist) entry.opened = edited;
             // One undo step leads back to the original.
             entry.undo.push(original);
           } else {
@@ -383,6 +389,11 @@ export class FileList {
   /** True once the pattern differs from the loaded one. */
   static edited(f: LoadedFile | null): boolean {
     return !!f?.pattern && f.pattern !== f.original;
+  }
+
+  /** Changed since it was opened: edited, and not the version a project came with. Offers the comparison. */
+  static changed(f: LoadedFile | null): boolean {
+    return FileList.edited(f) && f!.pattern !== f!.opened;
   }
 
   /** A design started empty with "Neu": it has no original stitches to go back to. */

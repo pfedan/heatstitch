@@ -1,5 +1,5 @@
 import { t } from '../../i18n';
-import { command, getCommand, runCommand } from '../../shell/commands';
+import { canRun, command, getCommand, runCommand } from '../../shell/commands';
 import type { MenuItem } from '../../shell/ui';
 import type { AsideRole } from '../../model/aside';
 import type { ObjectInfo } from '../../ui/objectPanel';
@@ -98,7 +98,8 @@ export function registerObjectCommands(a: ObjectActions): void {
   const some = () => a.flow() && a.frame().length > 0 && !a.lettering() && !a.drawing() && !a.info()?.shaping;
   const info = () => a.info();
 
-  command({ id: 'object.selectAll', label: 'objects.selectAll', group: G, keys: ['Mod+A'], when: () => a.flow() && a.count() > 0 && !a.typing(), run: a.selectAll });
+  // While stitches are edited by hand, Mod+A selects all their needle points (edit.selectAll).
+  command({ id: 'object.selectAll', label: 'objects.selectAll', group: G, keys: ['Mod+A'], when: () => a.flow() && a.count() > 0 && !a.typing() && !canRun('edit.selectAll'), run: a.selectAll });
   command({ id: 'object.clear', label: 'objects.clear', group: G, keys: ['Escape'], bind: false, when: a.hasSelection, run: a.clear });
   // Mod+D and Delete are read by src/app/keys.ts; the rules here are the same ones it asks.
   command({ id: 'object.duplicate', label: 'objects.duplicate', group: G, icon: 'obj-duplicate', when: some, run: () => a.duplicate() });
@@ -107,7 +108,8 @@ export function registerObjectCommands(a: ObjectActions): void {
   command({ id: 'object.paste', label: 'objects.paste', group: G, keys: ['Mod+V'], bind: false, when: () => a.flow() && a.canPaste() && !a.drawing(), run: () => void a.paste() });
   command({ id: 'object.delete', label: 'objects.delete', group: G, icon: 'obj-delete', keys: ['Delete', 'Backspace'], bind: false, when: () => a.flow() && a.frame().length > 0 && !a.drawing(), run: a.remove });
   command({ id: 'object.openShape', label: 'objects.openShape', group: G, icon: 'obj-shape', keys: ['Enter'], bind: false, when: () => !!info()?.shapeable && info()!.selected.length === 1 && !info()!.shaping && !info()!.editing, run: a.openShape });
-  command({ id: 'object.openStitches', label: 'objects.openStitches', group: G, icon: 'obj-stitches', keys: ['E'], bind: false, when: () => info()?.selected.length === 1 && !info()!.editing, run: a.openStitches });
+  // E is edit.stitches (src/areas/stitches); this is the object page's button for the one selected object.
+  command({ id: 'object.openStitches', label: 'objects.openStitches', group: G, icon: 'obj-stitches', palette: false, when: () => info()?.selected.length === 1 && !info()!.editing, run: a.openStitches });
   command({ id: 'object.color', label: 'objects.color', group: G, icon: 'obj-color', when: some, run: a.color });
   command({ id: 'object.blend', label: 'objects.blend', group: G, icon: 'obj-blend', when: () => some() && !!info()?.blend, run: a.blend });
   command({ id: 'object.mirrorH', label: 'objects.mirrorH', group: G, icon: 'obj-mirror-h', when: some, run: () => a.mirror('x') });

@@ -1,5 +1,6 @@
 import { loadCatalogs } from './threads/catalog';
 import './style.css';
+import './areas/cleanup/cleanup.css';
 import { WorkerClient } from './density/client';
 import { detectLang, formatNumber, getLang, onLangChange, setLang, t, type Lang } from './i18n';
 import { gridToCanvas } from './render/heatmap';
@@ -149,7 +150,7 @@ const scene = (): Scene => ({
 });
 
 /** True while the comparison view has something to compare. */
-const showCompare = () => ui.comparing && FileList.edited(files.active);
+const showCompare = () => ui.comparing && FileList.changed(files.active);
 
 /** The original pattern with its own heatmap and markings, for the left side of the divider. */
 function originalScene(): Scene {
@@ -831,6 +832,8 @@ function redraw(): void {
     empty.hidden = !!active?.pattern || drawTool.active;
     exportBtn.disabled = !active?.pattern;
     $('file-actions').hidden = !active?.pattern;
+    // Jumps and trims belong to a design: nothing to say on the start page.
+    $('jumps-panel').hidden = !active?.pattern;
     if (settings.mode === 'density') drawLegendCanvas();
     renderStats($('stats'), active, ui.grid, settings, ui.computing);
     design.render();
@@ -883,10 +886,7 @@ function redraw(): void {
     correctPanel.update({
       file: active,
       zoneSelected: !!ui.selectedZone,
-      editing: editor.active,
       comparing: ui.comparing,
-      selection: editor.selection.size,
-      pointsVisible: vp.scale >= POINTS_MIN_SCALE,
       message: ui.correctMessage,
     });
     stitchArea.refresh();

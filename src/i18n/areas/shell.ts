@@ -20,9 +20,6 @@ export const de = {
   'shell.group.view': 'Ansicht',
   'shell.group.edit': 'Bearbeiten',
   'shell.group.draw': 'Zeichnen',
-  'shell.cmd.new': 'Neues leeres Stickmuster',
-  'shell.cmd.open': 'Datei öffnen …',
-  'shell.cmd.png': 'Als Bild (PNG) speichern',
 } as const;
 
 export const en: Record<keyof typeof de, string> = {
@@ -46,7 +43,4 @@ export const en: Record<keyof typeof de, string> = {
   'shell.group.view': 'View',
   'shell.group.edit': 'Edit',
   'shell.group.draw': 'Draw',
-  'shell.cmd.new': 'New empty design',
-  'shell.cmd.open': 'Open file …',
-  'shell.cmd.png': 'Save as picture (PNG)',
 };

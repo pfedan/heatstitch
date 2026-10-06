@@ -254,24 +254,11 @@
   box-shadow: inset 3px 0 0 var(--accent);
 }
 
-.edit-tools .buttons,
 .compare-block .buttons {
   flex-wrap: wrap;
   align-items: center;
 }
 
-.edit-tools .sel-info {
-  flex-basis: 100%;
-  margin: 0;
-  font-size: 12px;
-  color: var(--muted);
-}
-
-.edit-tools .buttons button {
-  flex: 1 1 auto;
-}
-
-.edit-tools h3,
 .compare-block h3 {
   cursor: default;
 }

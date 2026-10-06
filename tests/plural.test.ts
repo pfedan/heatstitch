@@ -6,9 +6,9 @@ import { t } from '../src/i18n';
 /** A count of one reads in the singular: t() picks "<key>.one" for n = 1, as number or formatted. */
 describe('plural', () => {
   it('picks the singular for one', () => {
-    expect(t('image.verdict.findings', { n: 1 })).toBe(en['image.verdict.findings.one']);
-    expect(t('image.verdict.findings', { n: '1' })).toBe(en['image.verdict.findings.one']);
-    expect(t('image.verdict.findings', { n: 2 })).toMatch(/^2 areas/);
+    expect(t('edit.selection', { n: 1 })).toBe(en['edit.selection.one']);
+    expect(t('edit.selection', { n: '1' })).toBe(en['edit.selection.one']);
+    expect(t('edit.selection', { n: 2 })).toMatch(/^2 needle points/);
     expect(t('findings.count', { n: 0 })).toBe('0 zones');
   });
 

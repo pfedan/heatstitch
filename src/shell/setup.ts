@@ -102,9 +102,7 @@ export function initShell(app: ShellApp): void {
   command({ id: 'mode.image', label: 'shell.image.start', group: 'files.title', keys: ['3'], bind: false, when: () => app.mode() !== 'image', run: () => app.setMode('image') });
   command({ id: 'edit.undo', label: 'edit.undo', group: 'shell.group.edit', keys: ['Mod+Z'], bind: false, when: usable('undo'), run: press('undo') });
   command({ id: 'edit.redo', label: 'edit.redo', group: 'shell.group.edit', keys: ['Mod+Shift+Z', 'Mod+Y'], bind: false, when: usable('redo'), run: press('redo') });
-  command({ id: 'view.fit', label: 'controls.fit', group: 'shell.group.view', keys: ['F'], bind: false, when: usable('fit'), run: press('fit') });
-  command({ id: 'view.marks', label: 'marks.toggle', group: 'shell.group.view', keys: ['H'], bind: false, when: usable('marks-toggle'), run: press('marks-toggle') });
-  // Drawing, levels and lettering: src/areas/shapes. Order: src/areas/objects.
+  // View, zoom and player: src/areas/design. Drawing, levels and lettering: src/areas/shapes. Order: src/areas/objects.
   bindCommandKeys();
 
   // Titles of the frame's buttons carry their keys.
