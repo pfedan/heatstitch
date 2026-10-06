@@ -92,8 +92,8 @@ function lengthOf(l: Pt[]): number {
  * loop (its first point repeated at the end); its copies are loops too. `gap` is at least
  * `minGap` (a satin needs its width).
  */
-export function echoLines(line: Pt[], closed: boolean, e: LineEcho, minGap = 0): { line: Pt[]; closed: boolean }[] {
-  const base = { line, closed };
+export function echoLines(line: Pt[], closed: boolean, e: LineEcho, minGap = 0): EchoLine[] {
+  const base = { line, closed, back: false };
   if (line.length < 2) return [base];
   const gap = Math.max(e.gap, minGap);
   const n = Math.max(1, Math.round(e.count));
@@ -105,16 +105,31 @@ export function echoLines(line: Pt[], closed: boolean, e: LineEcho, minGap = 0):
   for (let k = 1; k <= n; k++) if (rings.has(k)) levels.push((e.side === 'in' ? -k : k) * gap);
   if (!levels.length) return [];
   const field = distanceField(line, n * gap + 1);
-  const out: { line: Pt[]; closed: boolean }[] = [];
+  const out: EchoLine[] = [];
+  const turn = closed ? Math.sign(area(line)) : 0;
   let at: Pt | null = null;
   for (const lv of levels) {
-    const pieces = lv === 0 ? [base] : copiesAt(field, line, closed, lv);
+    const pieces = lv === 0 ? [base] : copiesAt(field, line, closed, lv).map((pc) => ({ ...pc, back: pc.closed && Math.sign(area(pc.line)) !== turn }));
     for (const pc of order(pieces, at)) {
       out.push(pc);
       at = pc.line[pc.line.length - 1];
     }
   }
   return out;
+}
+
+/** A line to sew: `back` when it runs against the drawn direction of the line it echoes (what lies to one side of it stays there). */
+export interface EchoLine {
+  line: Pt[];
+  closed: boolean;
+  back: boolean;
+}
+
+/** Twice the signed area of a loop: its sign tells which way round it goes. */
+function area(l: Pt[]): number {
+  let a = 0;
+  for (let i = 1; i < l.length; i++) a += l[i - 1][0] * l[i][1] - l[i][0] * l[i - 1][1];
+  return a;
 }
 
 interface Field {
@@ -241,10 +256,10 @@ function copiesAt(f: Field, line: Pt[], closed: boolean, level: number): { line:
 }
 
 /** The pieces of one copy, each from its end (or for loops, its point) nearest where the needle is; the first stays as it is when nothing was sewn yet. */
-function order(pieces: { line: Pt[]; closed: boolean }[], from: Pt | null): { line: Pt[]; closed: boolean }[] {
+function order(pieces: EchoLine[], from: Pt | null): EchoLine[] {
   if (!from) return pieces;
   const todo = pieces.slice();
-  const out: { line: Pt[]; closed: boolean }[] = [];
+  const out: EchoLine[] = [];
   let at = from;
   while (todo.length) {
     let best = 0;
@@ -263,12 +278,16 @@ function order(pieces: { line: Pt[]; closed: boolean }[], from: Pt | null): { li
     });
     const pc = todo.splice(best, 1)[0];
     let l = pc.line;
+    let back = pc.back;
     if (pc.closed) {
       const open = l.slice(0, -1);
       const k = bestK % open.length;
       l = [...open.slice(k), ...open.slice(0, k), open[k]];
-    } else if (bestK !== 0) l = l.slice().reverse();
-    out.push({ line: l, closed: pc.closed });
+    } else if (bestK !== 0) {
+      l = l.slice().reverse();
+      back = !back;
+    }
+    out.push({ line: l, closed: pc.closed, back });
     at = l[l.length - 1];
   }
   return out;

@@ -52,6 +52,11 @@ sends the picture anywhere.
 
 - **Formats:** read and write PES and PEC (Brother), DST (Tajima), JEF (Janome), VP3 (Pfaff, Husqvarna
   Viking) and EXP (Melco); PES reads the thread list of versions 5 to 10
+- **Thread catalogs:** pick threads from 71 thread lines (Madeira, Isacord, Gunold, Gütermann, Mettler,
+  Sulky, Robison-Anton, Marathon and more, besides the Brother palette), search by number or name, see
+  the nearest threads of your brand, and switch a whole design to it. The **color list** shows the
+  threads in sewing order with stitches and thread length, ready to print. The catalog data comes from
+  the Ink/Stitch palettes under the GPL 3.0 (see `public/threads/LICENSE.md`)
 - **Two density metrics**, switchable:
   - *Thread length* in mm/mm²: every stitch segment is distributed exactly over the grid cells it crosses
   - *Penetrations* in 1/mm²: needle penetrations per area (perforation risk)

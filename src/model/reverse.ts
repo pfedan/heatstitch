@@ -2,7 +2,9 @@ import { rememberObjects, sewObjects, type SewObject } from './objects';
 import { reorder } from './order';
 import type { Pattern } from './pattern';
 import { measureFill, measureSatin, remembered, restitch, type RestitchResult } from './restitch';
-import { recordOfStitch, stitchNumbers } from './sequence';
+import { recordOfStitch, stitchKinds, stitchNumbers } from './sequence';
+import { lineOf, lineSettings, resewLine } from './line';
+import type { Form } from '../shape/path';
 
 /**
  * Sewing satins and fills from the other side: start and end swap. A satin column is sewn from
@@ -12,6 +14,56 @@ import { recordOfStitch, stitchNumbers } from './sequence';
  */
 
 export const reversible = (o: SewObject) => o.kind === 'fill' || o.kind === 'satin';
+
+/** A line: drawn (it remembers its curve) or the running stitch of a file, read as one. Turned by its curve (reverseLines). */
+export function isLine(p: Pattern, o: SewObject): boolean {
+  const m = remembered(p, o);
+  if (m?.path) return true;
+  return o.kind === 'run' && !m?.outline && !m?.lettering;
+}
+
+/** The same curves, drawn the other way round: the last path first, each from its end (a closed one from the same node). */
+export function reversedForm(f: Form): Form {
+  return {
+    ...f,
+    paths: f.paths
+      .slice()
+      .reverse()
+      .map((path) => {
+        const nodes = path.nodes.map((n) => ({ ...n, a: n.b, b: n.a })).reverse();
+        return { ...path, nodes: path.closed && nodes.length > 1 ? [nodes[nodes.length - 1], ...nodes.slice(0, -1)] : nodes };
+      }),
+  };
+}
+
+/**
+ * The lines `which` sewn from their other end: their curves turned around and sewn anew in place,
+ * so the next change of their settings keeps the new direction. What lies to one side of a line
+ * (the prongs of an E stitch, scallops, hearts) stays on that side. Lines that cannot be read
+ * stay as they are and are listed in `failed`.
+ */
+export function reverseLines(p: Pattern, which: number[], trimMm: number): { pattern: Pattern; failed: number[] } {
+  let pattern = p;
+  const failed: number[] = [];
+  for (const index of which) {
+    const kinds = stitchKinds(pattern);
+    const o = sewObjects(pattern, kinds)[index];
+    const path = o && lineOf(pattern, o, kinds);
+    if (!o || !path) {
+      failed.push(index);
+      continue;
+    }
+    const st = lineSettings(pattern, o, kinds);
+    if (st.type === 'e' || st.type === 'motif') st.flip = !st.flip || undefined;
+    if (!st.flip) delete st.flip;
+    // Echo copies of an open line lie to one side of its direction: they stay where they are.
+    if (st.echo && st.echo.side !== 'both' && !path.paths.some((x) => x.closed)) st.echo = { ...st.echo, side: st.echo.side === 'out' ? 'in' : 'out' };
+    const r = resewLine(pattern, index, reversedForm(path), st, trimMm);
+    if (r) pattern = r.pattern;
+    else failed.push(index);
+  }
+  return { pattern, failed };
+}
 
 /**
  * May "Optimize order" turn it around on its own: a satin (its columns come back as they were),

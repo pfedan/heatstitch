@@ -1,4 +1,5 @@
 import type { Editor } from '../ui/editor';
+import { isLine } from '../model/reverse';
 import type { FileList } from '../ui/fileList';
 import type { Form, Mat } from '../shape/path';
 import type { FrameTool } from '../ui/frameTool';
@@ -66,10 +67,10 @@ export function bindShapes(app: ShapesApp) {
     const known = obj && remembered(p, obj);
     if (known?.asLine && known.fill) return { width: known.fill.lineWidth ?? known.asLine.line.width, offset: 0 };
     const border = known?.fill?.border;
-    if (border?.type === 'satin') return { width: border.width, offset: border.offset ?? 0 };
+    if (border?.type === 'satin' || border?.type === 'zigzag') return { width: border.width, offset: border.offset ?? 0 };
     if (!obj || !isLineObject(p, obj)) return null;
     const st = lineSettings(p, obj, q.kinds);
-    return st.type === 'satin' ? { width: st.width, offset: 0 } : null;
+    return st.type === 'satin' || st.type === 'zigzag' ? { width: st.width, offset: 0 } : null;
   }
 
   /** The shape tool shows the band of object `o`, when it has one, and knows when its form is a satin column's rails. */
@@ -119,9 +120,7 @@ export function bindShapes(app: ShapesApp) {
    * file (their curve is traced); not the borders of fills and not letters.
    */
   function isLineObject(p: Pattern, o: SewObject): boolean {
-    const m = remembered(p, o);
-    if (m?.path) return true;
-    return o.kind === 'run' && !m?.outline && !m?.lettering;
+    return isLine(p, o);
   }
 
   /** The one selected object of the Ablauf mode, when it has a fill whose outline can be edited, or is a line. */

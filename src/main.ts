@@ -1,3 +1,4 @@
+import { loadCatalogs } from './threads/catalog';
 import './style.css';
 import { WorkerClient } from './density/client';
 import { applyI18n, detectLang, formatNumber, getLang, setLang, t, type Lang } from './i18n';
@@ -46,7 +47,7 @@ import type { LeftOut } from './ui/imageMode';
 import { asideOf, storeAside, type AsideShape } from './model/aside';
 import { type Digitized } from './digitize/digitize';
 import { numberInColor, rememberObjects, sewObjects } from './model/objects';
-import { reversible } from './model/reverse';
+import { isLine, reversible } from './model/reverse';
 import { Player } from './ui/player';
 import { installPanelResize } from './ui/panelResize';
 import type { Key } from './i18n';
@@ -221,7 +222,7 @@ const player = new Player(settings, () => {
   redraw();
 });
 
-const { layers, mergeBlocked, objectName, objectPanel, selectObjects } = bindObjects({
+const { colorList, layers, mergeBlocked, objectName, objectPanel, selectObjects } = bindObjects({
   get commitTransform() {
     return commitTransform;
   },
@@ -741,7 +742,7 @@ function objectInfo(p: Pattern, q: Sequence) {
     shaping: shapeTool.active && selected.length === 1 && selected[0] === ui.shapeObject ? { nodes: shapeTool.count, smooth: shapeTool.selectedSmooth, ...(shapeTool.band !== null ? { kind: 'band' as const } : shapeTool.rails ? { kind: 'rails' as const } : {}), ...(q.objects[selected[0]] && isLineObject(p, q.objects[selected[0]]) ? { line: { closed: shapeTool.closed } } : {}) } : null,
     frame: frameTool.active ? { canScale: frameTool.canScale } : null,
     mergeBlocked: selected.length > 1 ? mergeBlocked(selected.map((o) => q.objects[o])) : null,
-    reversible: selected.some((o) => reversible(q.objects[o])),
+    reversible: selected.some((o) => reversible(q.objects[o]) || isLine(p, q.objects[o])),
     subtractable: selected.length > 1 && selected.every((o) => q.objects[o].kind === 'fill'),
     ...blendOf(p, q, selected),
   };
@@ -803,6 +804,8 @@ function redraw(): void {
     const p = active?.pattern ?? null;
     const q = p ? seq(p) : null;
     $('player').hidden = !p;
+    $('color-list').hidden = !q?.blocks.length;
+    if (p) colorList.update(p);
     if (settings.mode === 'flow') {
       const current = p && !player.complete ? seq(p).markers.colorStarts.filter((i) => q!.numbers[i] <= Math.max(1, player.pos)).length - 1 : null;
       layers.update(
@@ -1631,5 +1634,12 @@ files.render();
 redraw();
 void files.restore();
 void imageMode.restore();
+// The thread catalogs name the numbers of the threads in the list (Brother's too).
+void loadCatalogs()
+  .then(() => {
+    layers.refresh();
+    redraw();
+  })
+  .catch((err) => console.warn('No thread catalogs', err));
 
 $('fabric-tune').addEventListener('click', () => tuneToFabric());

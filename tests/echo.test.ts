@@ -4,6 +4,7 @@ import { echoLines } from '../src/digitize/echo';
 import type { Pt } from '../src/digitize/skeleton';
 import { addShape } from '../src/model/addShape';
 import { lineSettings, resewLine } from '../src/model/line';
+import { reverseLines } from '../src/model/reverse';
 import { sewObjects } from '../src/model/objects';
 import { STITCH, type Pattern } from '../src/model/pattern';
 import { remembered, rememberedIn, restitch, restoreRemembered } from '../src/model/restitch';
@@ -138,6 +139,28 @@ describe('echo of a line', () => {
     const ys = points(again.pattern, again.first, again.last).map((q) => q[1]);
     expect(Math.max(...ys)).toBeGreaterThan(5.5);
     expect(Math.min(...ys)).toBeGreaterThan(-0.2);
+  });
+
+  it('stays where it is when the line is sewn from its other end', () => {
+    const r = echoed('M0 0 L30 0');
+    const t = reverseLines(r.pattern, [0], 7);
+    expect(t.failed).toEqual([]);
+    const o = sewObjects(t.pattern)[0];
+    expect(lineSettings(t.pattern, o).echo?.side).toBe('in');
+    const ys = points(t.pattern, o.first, o.last).map((q) => q[1]);
+    expect(Math.min(...ys)).toBeLessThan(-5.5);
+    expect(Math.max(...ys)).toBeLessThan(0.2);
+  });
+
+  it('gives each copy of an E stitch its prongs on the same side as the line', () => {
+    const a = addShape(empty, { form: parsePath('M0 0 L30 0', ID), kind: 'stroke', width: 0.4 }, red, null, options)!;
+    const o = sewObjects(a.pattern)[0];
+    const st = { ...lineSettings(a.pattern, o), type: 'e' as const, width: 2, echo: { side: 'out' as const, count: 2, gap: 4 } };
+    const r = resewLine(a.pattern, 0, remembered(a.pattern, o)!.path!, st, options.trimMm)!;
+    const ys = points(r.pattern, r.first, r.last).map((q) => q[1]);
+    // The line at 0, its copies at -4 and -8, all prongs pointing the same way (down).
+    for (const y of ys) expect([0, -4, -8].some((l) => y > l - 0.2 && y < l + 2.2)).toBe(true);
+    expect(Math.min(...ys)).toBeGreaterThan(-8.2);
   });
 
   it('keeps satin copies apart by their width', () => {
