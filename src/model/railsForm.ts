@@ -104,8 +104,10 @@ export function movedRails(cols: Rails[][], from: Form, to: Form): Rails[][] | n
       const right = moveRail(c.right, mr);
       const sl = lengthOf(c.left) > 0 ? lengthOf(left) / lengthOf(c.left) : 1;
       const sr = lengthOf(c.right) > 0 ? lengthOf(right) / lengthOf(c.right) : 1;
+      // Rails moved by hand no longer follow the fill they were cut from.
+      const { split: _split, ...rest } = c;
       return {
-        ...c,
+        ...rest,
         left,
         right,
         ...(c.rungs ? { rungs: c.rungs.map(([a, b]) => [a * sl, b * sr] as [number, number]) } : {}),

@@ -1,8 +1,8 @@
-import { addRung, chordOf, cornerCuts, cornerRungs, cumulative, pointAt, project, rungFromLine, rungRange, seedRungs, type Rung } from '../digitize/rungs';
+import { addRung, chordOf, stripsOfAreas, cornerCuts, cornerRungs, cumulative, pointAt, project, rungFromLine, rungRange, seedRungs, type Rung } from '../digitize/rungs';
 import { pathLength } from '../digitize/fill';
 import { simplify } from '../digitize/run';
 import type { Pt } from '../digitize/skeleton';
-import { reversedRails, sectionPlan, sectionsOf, spanSection, sectionLoops, sectionOfRung, type Rails, type SatinSettings, type SectionLoop, type SectionStep } from '../model/restitch';
+import { reversedRails, sectionPlan, sectionsOf, sewnBack, spanSection, sectionLoops, sectionOfRung, type Rails, type SatinSettings, type SectionLoop, type SectionStep, type Split } from '../model/restitch';
 
 /** Pick radius around the pointer for rung ends, CSS pixels; the line itself a little less. */
 const PICK_END_PX = 10;
@@ -30,9 +30,13 @@ export interface PieceBadge {
   dir: Pt;
   /** Trimmed before it (null: the first of the part, nothing before). */
   trim: boolean | null;
+  /** Its satin starts on the other rail (see Rails.mirror). */
+  mirror: boolean;
+  /** A column on its own: no place in an order to change. */
+  lone?: boolean;
 }
 
-export type BadgeHit = { col: number; step?: number; what: 'number' | 'arrow' | 'scissors' };
+export type BadgeHit = { col: number; step?: number; what: 'number' | 'arrow' | 'scissors' | 'mirror' };
 
 /**
  * A free rung is taken when the section's two new rails differ in length by at most this much (or
@@ -114,10 +118,10 @@ export interface RungHooks {
   points?: (points: Pt[]) => void;
   redraw: () => void;
   /** Says why something did not work. */
-  say: (key: 'stitch.direction.miss' | 'stitch.direction.cross' | 'stitch.direction.needCut' | 'stitch.direction.cornersNone' | 'stitch.sections.none') => void;
+  say: (key: 'stitch.direction.miss' | 'stitch.direction.cross' | 'stitch.direction.needCut' | 'stitch.direction.cornersNone' | 'stitch.sections.none' | 'stitch.draw.openHole' | 'stitch.draw.notStripPart') => void;
 }
 
-type Drag = { kind: 'end'; pick: RungPick; loop?: SectionLoop } | { kind: 'draw'; cut: boolean } | { kind: 'sketch' } | { kind: 'point'; i: number; moved: boolean } | null;
+type Drag = { kind: 'end'; pick: RungPick; loop?: SectionLoop; moved?: boolean } | { kind: 'draw'; cut: boolean } | { kind: 'sketch' } | { kind: 'point'; i: number; moved: boolean } | null;
 
 /**
  * Rungs on the canvas: lines across a satin column that set the direction of its stitches (dragged
@@ -131,6 +135,11 @@ export class RungTool implements RungView {
   columns: RungColumn[] = [];
   /** Which satin part each column belongs to, to give the columns back per part. */
   private parts: number[] = [];
+  /**
+   * The fill a satin part was cut from (see Rails.split): its cut lines are `cutLines`, moved,
+   * drawn and removed like on the fill, the part then cut anew.
+   */
+  private split: (Omit<Split, 'cuts'> & { part: number }) | null = null;
   lines: [Pt, Pt][] = [];
   cutLines: [Pt, Pt][] = [];
   bad: Pt[] | null = null;
@@ -242,6 +251,15 @@ export class RungTool implements RungView {
         });
       }),
     );
+    this.split = null;
+    this.cutLines = [];
+    columns.forEach((part, k) => {
+      const from = part.find((r) => r.split)?.split;
+      if (!from || this.split) return;
+      this.split = { part: k, outlines: from.outlines, holes: from.holes };
+      this.cutLines = from.cuts.map(([a, b]) => [a, b] as [Pt, Pt]);
+    });
+    this.bad = null;
     const s = this.selected;
     if (s && s.col >= 0 && (s.col >= this.columns.length || s.i >= this.listOf(this.columns[s.col], s).length)) this.selected = null;
   }
@@ -283,9 +301,11 @@ export class RungTool implements RungView {
     const out: PieceBadge[] = [];
     const byPart = new Map<number, number[]>();
     this.parts.forEach((p, k) => this.columns[k].rails.chain !== undefined && byPart.set(p, [...(byPart.get(p) ?? []), k]));
+    const chained = new Set<number>();
     for (const ks of byPart.values()) {
       if (ks.length < 2) continue;
       ks.forEach((k, i) => {
+        chained.add(k);
         const c = this.columns[k];
         const la = c.cl[c.cl.length - 1];
         const lb = c.cr[c.cr.length - 1];
@@ -293,7 +313,23 @@ export class RungTool implements RungView {
         const inward = mid(pointAt(c.left, c.cl, Math.max(0, la - 1)), pointAt(c.right, c.cr, Math.max(0, lb - 1)));
         const d = sub(inward, at);
         const l = Math.hypot(d[0], d[1]) || 1;
-        out.push({ col: k, n: i + 1, at, dir: [d[0] / l, d[1] / l], trim: i ? this.columns[ks[i - 1]].rails.chain !== c.rails.chain : null });
+        out.push({ col: k, n: i + 1, at, dir: [d[0] / l, d[1] / l], trim: i ? this.columns[ks[i - 1]].rails.chain !== c.rails.chain : null, mirror: !!c.rails.mirror });
+      });
+    }
+    // A column on its own (in one section): where its satin starts, turned round and mirrored there.
+    if (this.satin) {
+      const res = this.result().flat();
+      this.columns.forEach((c, k) => {
+        if (chained.has(k) || sectionsOf(res[k]).length > 1) return;
+        const back = sewnBack([res[k]], this.satin!);
+        const [a, b] = back ? [c.left.slice().reverse(), c.right.slice().reverse()] : [c.left, c.right];
+        const at = mid(a[0], b[0]);
+        const ca = cumulative(a);
+        const cb = cumulative(b);
+        const inward = mid(pointAt(a, ca, Math.min(1, ca[ca.length - 1])), pointAt(b, cb, Math.min(1, cb[cb.length - 1])));
+        const d = sub(inward, at);
+        const l = Math.hypot(d[0], d[1]) || 1;
+        out.push({ col: k, n: 1, at, dir: [d[0] / l, d[1] / l], trim: null, mirror: !!c.rails.mirror, lone: true });
       });
     }
     // Sections of a column: where the satin of each starts, in the order they are sewn.
@@ -313,7 +349,7 @@ export class RungTool implements RungView {
           const inward = mid(pointAt(a, ca, Math.min(1, ca[ca.length - 1])), pointAt(b, cb, Math.min(1, cb[cb.length - 1])));
           const d = sub(inward, at);
           const l = Math.hypot(d[0], d[1]) || 1;
-          out.push({ col: k, step: i, n: i + 1, at, dir: [d[0] / l, d[1] / l], trim: i ? plan[i].trim : null });
+          out.push({ col: k, step: i, n: i + 1, at, dir: [d[0] / l, d[1] / l], trim: i ? plan[i].trim : null, mirror: !!x.mirror });
         });
       });
     }
@@ -328,7 +364,8 @@ export class RungTool implements RungView {
       const spot = (along: number, across: number): Pt => [b.at[0] + (b.dir[0] * along + nx * across) / scale, b.at[1] + (b.dir[1] * along + ny * across) / scale];
       const near = (p: Pt) => Math.hypot(p[0] - x, p[1] - y) <= r;
       const at = b.step === undefined ? { col: b.col } : { col: b.col, step: b.step };
-      if (near(spot(BADGE.number, 0))) return { ...at, what: 'number' };
+      if (!b.lone && near(spot(BADGE.number, 0))) return { ...at, what: 'number' };
+      if (near(spot(BADGE.number, -BADGE.scissors))) return { ...at, what: 'mirror' };
       if (near(spot(BADGE.arrow, 0))) return { ...at, what: 'arrow' };
       if (b.trim !== null && near(spot(BADGE.number, BADGE.scissors))) return { ...at, what: 'scissors' };
     }
@@ -345,7 +382,10 @@ export class RungTool implements RungView {
     // Trims stay between the same places in the order: the chain numbers belong to the places.
     const ids = cols.map((c) => c.chain);
     if (h.what === 'arrow') cols[k] = reversedRails(cols[k]);
-    else if (h.what === 'number') {
+    else if (h.what === 'mirror') {
+      if (cols[k].mirror) delete cols[k].mirror;
+      else cols[k].mirror = true;
+    } else if (h.what === 'number') {
       if (k === 0) return;
       [cols[k - 1], cols[k]] = [cols[k], cols[k - 1]];
     } else if (k > 0) {
@@ -366,7 +406,10 @@ export class RungTool implements RungView {
     if (!this.satin || !r) return;
     const plan = sectionPlan(r, this.satin);
     if (h.what === 'arrow') plan[i].flip = !plan[i].flip;
-    else if (h.what === 'number') {
+    else if (h.what === 'mirror') {
+      if (plan[i].mirror) delete plan[i].mirror;
+      else plan[i].mirror = true;
+    } else if (h.what === 'number') {
       if (i === 0) return;
       // The trims stay between the same places in the order.
       const [a, b] = [plan[i - 1], plan[i]];
@@ -398,6 +441,8 @@ export class RungTool implements RungView {
       if (c.spacings.length) base.spacings = c.spacings.map((r) => [r[0], r[1]] as [number, number]);
       if (c.spans.length) base.spans = c.spans.map(([a, b]) => [a, b] as [Pt, Pt]);
       if (c.rails.chain !== undefined) base.chain = c.rails.chain;
+      if (c.rails.split) base.split = c.rails.split;
+      if (c.rails.mirror) base.mirror = true;
       // A plan for as many sections as there are now; with a cut line more or less it is made anew.
       if (c.plan && c.plan.length === c.cuts.length + 1) base.plan = c.plan.map((x) => ({ ...x }));
       (out[this.parts[k]] ??= []).push(base);
@@ -429,6 +474,7 @@ export class RungTool implements RungView {
       this.columns.forEach((c, k) => c.rungs.forEach((r, i) => consider(k, i, ...this.ends(c, r))));
       this.columns.forEach((c, k) => c.spans.forEach(([a, b], i) => consider(k, i, a, b, false, true)));
       this.columns.forEach((c, k) => c.cuts.forEach((r, i) => consider(k, i, ...this.ends(c, r), true)));
+      this.cutLines.forEach(([a, b], i) => consider(-1, i, a, b, true));
     }
     else if (this.mode === 'fill') {
       this.lines.forEach(([a, b], i) => consider(-1, i, a, b));
@@ -570,7 +616,8 @@ export class RungTool implements RungView {
       if (Math.hypot(x - l[0], y - l[1]) >= this.sketchStep) this.sketch.push([x, y]);
     } else if (d.kind === 'end') {
       const { col, i, end } = d.pick;
-      if (this.mode === 'fill') this.fillList(d.pick)[i][end as 0 | 1] = [x, y];
+      d.moved = true;
+      if (this.mode === 'fill' || col < 0) this.fillList(d.pick)[i][end as 0 | 1] = [x, y];
       else if (d.pick.span && d.loop) {
         // Slid along the section's outline, wherever it goes.
         const c = this.columns[col];
@@ -602,7 +649,10 @@ export class RungTool implements RungView {
     if (d.kind === 'point') {
       if (d.moved) this.hooks.points?.(this.points.map((p) => [p[0], p[1]] as Pt));
     } else if (d.kind === 'end') {
-      if (this.mode === 'satin') this.hooks.change(this.result(), true);
+      if (this.mode === 'satin' && d.pick.col < 0) {
+        if (d.moved) this.resplit();
+      }
+      else if (this.mode === 'satin') this.commit();
       else this.linesChanged();
     } else if (d.kind === 'sketch' && this.sketch) {
       const line = simplify(this.sketch, this.sketchStep / 3);
@@ -621,6 +671,11 @@ export class RungTool implements RungView {
         list.push([a, b]);
         this.selected = { col: -1, i: list.length - 1, end: -1, ...(d.cut ? { cut: true } : {}) };
         this.linesChanged();
+      } else if (d.cut && this.split) {
+        // On a satin cut from a fill every cut line cuts the fill anew.
+        this.cutLines.push([a, b]);
+        this.selected = { col: -1, i: this.cutLines.length - 1, end: -1, cut: true };
+        this.resplit();
       } else this.addFromLine(a, b, d.cut);
     }
     this.hooks.redraw();
@@ -650,7 +705,7 @@ export class RungTool implements RungView {
             c.rungs = next;
             c.own = true;
             this.selected = { col: k, i: next.findIndex((x) => x[0] === r[0] && x[1] === r[1]), end: -1 };
-            this.hooks.change(this.result(), true);
+            this.commit();
             return;
           }
           return this.addSpan(k, loops, sec, [pointAt(loop.ring, loop.cum, u), pointAt(loop.ring, loop.cum, v)]);
@@ -674,7 +729,7 @@ export class RungTool implements RungView {
         c.own = true;
       }
       this.selected = { col: k, i: next.findIndex((x) => x[0] === r[0] && x[1] === r[1]), end: -1, ...(cut ? { cut: true } : {}) };
-      this.hooks.change(this.result(), true);
+      this.commit();
       return;
     }
     this.hooks.say(crossed ? 'stitch.direction.cross' : 'stitch.direction.miss');
@@ -710,7 +765,65 @@ export class RungTool implements RungView {
     c.spans = [...c.spans.filter((x) => !mine.includes(x)), ...kept];
     c.own = true;
     this.selected = { col: k, i: c.spans.indexOf(f), end: -1, span: true };
+    this.commit();
+  }
+
+  /**
+   * A change taken over as one undo step. While the cut lines of a satin cut from a fill are not
+   * the ones it was cut along (they left a part without a column), the fill is cut anew with it:
+   * a rung drawn in such a part makes it fit.
+   */
+  private commit(): void {
+    const stored = this.columns.find((c) => c.rails.split)?.rails.split?.cuts;
+    if (this.split && JSON.stringify(stored) !== JSON.stringify(this.cutLines)) return this.resplit();
     this.hooks.change(this.result(), true);
+  }
+
+  /**
+   * The fill of a satin cut from one (see Rails.split) cut anew along the cut lines as they are now,
+   * its rungs kept. With as many parts as before each keeps its place in the order, its direction
+   * and the trim before it. A part that makes no column or a hole not opened is shown; the
+   * stitches then stay as they were until the lines fit.
+   */
+  private resplit(): void {
+    const sp = this.split;
+    if (!sp) return;
+    const ks = this.columns.map((_, k) => k).filter((k) => this.parts[k] === sp.part);
+    const lines = ks.flatMap((k) => {
+      const c = this.columns[k];
+      return [...c.rungs.map((r) => this.ends(c, r)), ...c.spans];
+    });
+    // Spacings set at rungs stay at the rung, wherever its part ends up.
+    const spaced = ks.flatMap((k) => {
+      const c = this.columns[k];
+      return c.spacings.flatMap(([at, v]) => {
+        const r = c.rungs.find(([x]) => Math.abs(x - at) < 0.05);
+        return r ? [{ at: this.ends(c, r)[0], v }] : [];
+      });
+    });
+    const made = stripsOfAreas(sp.outlines, lines, this.cutLines, sp.holes);
+    if (made.hole >= 0 || made.bad) {
+      this.showBad(made.hole >= 0 ? sp.holes[made.hole] : made.bad!);
+      return this.hooks.say(made.hole >= 0 ? 'stitch.draw.openHole' : 'stitch.draw.notStripPart');
+    }
+    const out = this.result();
+    const old = out[sp.part];
+    // One chain per area, a trim between areas apart.
+    let cols: Rails[] = made.areas.flatMap((strips, a) => strips.map((r) => ({ left: r.left, right: r.right, rungs: r.rungs, chain: a })));
+    if (cols.length === old.length) cols = keptOrder(old, cols);
+    for (const c of cols) {
+      const cl = cumulative(c.left);
+      const spacings = (c.rungs ?? []).flatMap((r) => {
+        const at = pointAt(c.left, cl, r[0]);
+        const hit = spaced.find((x) => Math.hypot(x.at[0] - at[0], x.at[1] - at[1]) < 0.3);
+        return hit ? [[r[0], hit.v] as [number, number]] : [];
+      });
+      if (spacings.length) c.spacings = spacings;
+    }
+    cols[0].split = { outlines: sp.outlines, holes: sp.holes, cuts: this.cutLines.map(([a, b]) => [a, b] as [Pt, Pt]) };
+    out[sp.part] = cols;
+    this.setColumns(out);
+    this.hooks.change(out, true);
   }
 
   /** Abandons a drag (a second finger started a pinch). */
@@ -746,21 +859,24 @@ export class RungTool implements RungView {
     } else if (this.mode === 'guide') {
       this.guides.splice(s.i, 1);
       this.hooks.guides(this.guides.map((g) => g.slice()));
+    } else if (s.cut && s.col < 0) {
+      this.cutLines.splice(s.i, 1);
+      this.resplit();
     } else if (s.cut) {
       const c = this.columns[s.col];
       c.cuts = c.cuts.filter((_, i) => i !== s.i);
-      this.hooks.change(this.result(), true);
+      this.commit();
     } else if (s.span) {
       const c = this.columns[s.col];
       c.spans = c.spans.filter((_, i) => i !== s.i);
-      this.hooks.change(this.result(), true);
+      this.commit();
     } else {
       const c = this.columns[s.col];
       const at = c.rungs[s.i][0];
       c.rungs = c.rungs.filter((_, i) => i !== s.i);
       c.spacings = c.spacings.filter(([x]) => Math.abs(x - at) >= 0.05);
       c.own = true;
-      this.hooks.change(this.result(), true);
+      this.commit();
     }
     this.hooks.redraw();
     return true;
@@ -864,4 +980,27 @@ function segDist(q: Pt, a: Pt, b: Pt): number {
   const l2 = v[0] * v[0] + v[1] * v[1];
   const t = l2 > 0 ? Math.min(1, Math.max(0, ((q[0] - a[0]) * v[0] + (q[1] - a[1]) * v[1]) / l2)) : 0;
   return Math.hypot(q[0] - a[0] - v[0] * t, q[1] - a[1] - v[1] * t);
+}
+
+/**
+ * Parts cut anew (`made`, as many as `old`) in the order of the old ones they lie on, each turned
+ * and mirrored as its old one was and with its chain number (the trims stay between the same places).
+ */
+function keptOrder(old: Rails[], made: Rails[]): Rails[] {
+  const centre = (r: Rails): Pt => {
+    const all = [...r.left, ...r.right];
+    return [all.reduce((a, p) => a + p[0], 0) / all.length, all.reduce((a, p) => a + p[1], 0) / all.length];
+  };
+  const start = (r: Rails) => mid(r.left[0], r.right[0]);
+  const end = (r: Rails) => mid(r.left[r.left.length - 1], r.right[r.right.length - 1]);
+  const d = (a: Pt, b: Pt) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+  const left = made.slice();
+  return old.map((o) => {
+    const c = centre(o);
+    let j = 0;
+    left.forEach((r, k) => d(centre(r), c) < d(centre(left[j]), c) && (j = k));
+    let r = left.splice(j, 1)[0];
+    if (d(start(o), end(r)) < d(start(o), start(r))) r = reversedRails(r);
+    return { ...r, chain: o.chain, ...(o.mirror ? { mirror: true } : {}) };
+  });
 }
