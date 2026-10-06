@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { stripsOfAreas, stripsOfOutline } from '../src/digitize/rungs';
 import type { Pt } from '../src/digitize/skeleton';
 import { sewObjects } from '../src/model/objects';
-import { forget, keepShape, remember, remembered, rememberedIn, restoreRemembered, satinRuns, type Rails } from '../src/model/restitch';
+import { forget, keepShape, remember, remembered, rememberedIn, restoreRemembered, reversedRails, satinRuns, type Rails } from '../src/model/restitch';
 import { stitchKinds } from '../src/model/sequence';
 import { transformRemembered } from '../src/model/transform';
 import { parsePattern } from '../src/parsers';
@@ -186,5 +186,19 @@ describe('the way between the parts of a chain', () => {
     const tiny = run.filter((p, i) => i && Math.hypot(p[0] - run[i - 1][0], p[1] - run[i - 1][1]) < 0.3).length;
     // Was close to 200, one for each point of the middle line.
     expect(tiny).toBeLessThan(10);
+  });
+
+  it('stays so with parts turned round and mirrored', () => {
+    const U = poly([0, 0], [14, 0], [14, 16], [10, 16], [10, 4], [4, 4], [4, 16], [0, 16], [0, 0]);
+    const made = stripsOfOutline(U, [[[-1, 10], [5, 10]], [[9, 10], [15, 10]], [[7, -1], [7, 5]]], [[[-1, 4], [5, 4]], [[9, 4], [15, 4]]]);
+    const n = made.strips.length;
+    for (let m = 0; m < 1 << (2 * n); m++) {
+      for (const underlay of [true, false]) {
+        const cols = made.strips.map((r, k) => ({ ...((m >> k) & 1 ? reversedRails(r) : r), chain: 0, mirror: !!((m >> (n + k)) & 1) }));
+        const run = satinRuns(cols, { spacing: 0.4, edge: 0, short: false, underlay, tolerance: 0.15 })[0];
+        const tiny = run.filter((p, i) => i && Math.hypot(p[0] - run[i - 1][0], p[1] - run[i - 1][1]) < 0.3).length;
+        expect(tiny).toBeLessThan(10);
+      }
+    }
   });
 });
