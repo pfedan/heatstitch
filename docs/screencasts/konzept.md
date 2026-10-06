@@ -27,13 +27,13 @@ damit Video und Text zusammenpassen.
 | 1 | Ein neues Stickmuster | + Neu, Stickrahmen, Formen zeichnen, Größe eintippen, Stichart wählen | leer | 2 min |
 | 2 | Schrift | Text setzen, Schriftart, Größe, Bogen, Abstand | leer | 2 min |
 | 3 | Vom Bild zum Stickmuster | Modus Bild: SVG oder Foto laden, Farben zusammenfassen, Stiche erzeugen | `image-example.svg` | 2 bis 3 min |
-| 4 | Objekte und Reihenfolge | Objektliste, Farben, kopieren und spiegeln, Kontextmenü, Reihenfolge per Ziehen | `overlapping-circles.svg` | 2 min |
+| 4 | Objekte und Reihenfolge | Objektliste, Lage, Reihenfolge per Ziehen, Aussparen, Kontextmenü, duplizieren und spiegeln, Garn eines Objekts | `kirschen.svg` (eigene) | 2 min |
 
 ### Stufe 2: Stickdatei ansehen und verbessern
 
 | Nr. | Titel | Inhalt | Demodatei | Länge |
 | --- | --- | --- | --- | --- |
-| 5 | Erste Schritte | Datei öffnen (Ziehen oder Beispiel), der Bildschirm in drei Spalten, Ablauf abspielen, Farben aus- und einblenden | `cat-60mm.pes` | 2 min |
+| 5 | Fertige Stickdatei öffnen | Datei öffnen (Ziehen oder Beispiel), der Bildschirm in drei Spalten, Ablauf abspielen, Farben aus- und einblenden | `cat-60mm.pes` | 2 min |
 | 6 | Stickdatei prüfen | Modus Dichte, Prüfung, Befunde lesen und zuklappen, Fokus auf eine Stelle | `overlap.pes` | 2 bis 3 min |
 | 7 | Korrigieren mit Vorschlägen | Korrektur, Vorschläge, auf Stoff abstimmen, Vergleich vorher und nachher | `letters.pes` | 2 bis 3 min |
 | 8 | Sprünge und Schnitte | Sprungliste, Schnitte setzen, alle auf einmal nach Länge, Reihenfolge optimieren | `confetti.pes` | 2 min |

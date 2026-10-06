@@ -1,0 +1,65 @@
+{
+  "0fe17ca0616762c4": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "[warm, inviting] Du hast eine fertige Stickdatei, gekauft oder geschenkt, und willst sie nachbessern? Der erste Schritt: Öffne sie und schau genau hin, wie sie gestickt wird. Genau das zeigt dieses Video."
+  },
+  "f4ac2aecf4186fa7": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "Zieh die Datei einfach links in das Feld Dateien. Das geht mit PES, DST und den anderen gängigen Formaten. [short pause] Deine Datei bleibt dabei auf deinem Gerät. Ohne eigene Datei probierst du es mit „Beispiel laden“."
+  },
+  "b4966d977d271fb9": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "[curious] Die Datei verrät sogar, für welchen Stickrahmen sie gemacht ist. Ein Klick auf den Vorschlag, und der Rahmen liegt um das Motiv."
+  },
+  "a068515ccf525bbd": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "Der Bildschirm hat drei Spalten. Links steht alles zur Datei: Stickrahmen, Speichern und wie die Stiche aussehen. In der Mitte liegt dein Stickmuster auf der Leinwand. Rechts stehen die Farben in der Reihenfolge, in der sie gestickt werden, und darunter die Sprünge."
+  },
+  "cded65b748f15b86": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "Mit dem Mausrad zoomst du hinein. [focused] Zeigst du auf einen Stich, steht daneben, der wievielte es ist, welche Stichart und wie lang. Ziehen verschiebt das Bild, „Einpassen“ zeigt wieder alles."
+  },
+  "4edaf10ec6e8cafe": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "[enthusiastic] Und jetzt das Schönste: Mit der Leertaste stickt die Maschine vor deinen Augen, Farbe für Farbe. Erst Creme, dann Orange, Gold und das rote Strickzeug."
+  },
+  "e2cdb011e88c0ad3": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "Unten steht, beim wievielten Stich du bist und wie lange die Maschine bis hierher braucht. Den Regler ziehst du einfach hin und her. Die Knöpfe außen springen von Farbe zu Farbe."
+  },
+  "aa67fdff667dbc79": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "Zeigst du rechts auf eine Farbe, tritt der Rest zurück, [delighted] und du siehst genau, was in Dunkelbraun gestickt wird. Mit dem Auge blendest du eine Farbe aus, mit „Alle zeigen“ ist sie wieder da."
+  },
+  "96439de97758f69f": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "[proud, warm] Mit Realistischen Fäden siehst du schon vorher, wie die Katze auf dem Stoff wirkt. So kennst du deine Datei, bevor du etwas an ihr änderst."
+  }
+}
