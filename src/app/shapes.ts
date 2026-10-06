@@ -14,7 +14,7 @@ import { ShapeTool } from '../ui/shapeTool';
 import { deleteObjects, duplicateObject, mirrorMatrix, subtractTop } from '../model/shapeOps';
 import { formOf, reshapeFill } from '../model/reshape';
 import { railsForm, reshapeRails } from '../model/railsForm';
-import { lineOf, resewLine, lineSettings, fillToLine } from '../model/line';
+import { lineOf, resewLine, lineSettings, fillToLine, reshapeLineFill } from '../model/line';
 import { refreshKnockouts } from '../model/knockout';
 import { remembered, rememberedIn, type RestitchResult } from '../model/restitch';
 import { t, formatNumber, type Key } from '../i18n';
@@ -55,15 +55,20 @@ export function bindShapes(app: ShapesApp) {
     width: (w) => setLineWidth(w),
   });
 
-  /** The satin width of line `o`, for its band on the level Form; null when it is no satin line. */
+  /**
+   * The width of line `o` where it covers an area (sewn as satin, or as a fill along it), for its
+   * band on the level Form; null for areas and for running and triple stitch.
+   */
   function bandOf(p: Pattern, q: Sequence, o: number): number | null {
     const obj = q.objects[o];
+    const known = obj && remembered(p, obj);
+    if (known?.asLine && known.fill) return known.fill.lineWidth ?? known.asLine.line.width;
     if (!obj || !isLineObject(p, obj)) return null;
     const st = lineSettings(p, obj, q.kinds);
     return st.type === 'satin' ? st.width : null;
   }
 
-  /** The selected satin line sewn with width `w` (its grip on the level Form). */
+  /** The selected line sewn with width `w` (its grip on the level Form), as satin or as a fill along it. */
   function setLineWidth(w: number): void {
     const p = app.files.active?.pattern;
     const o = ui.shapeObject;
@@ -71,6 +76,18 @@ export function bindShapes(app: ShapesApp) {
     const q = app.seq(p);
     const obj = q.objects[o];
     if (!obj) return;
+    if (remembered(p, obj)?.asLine) {
+      const r = reshapeLineFill(p, q.objects, obj, q.kinds, shapeTool.form, app.settings.trimMm, w);
+      if (!r || !r.starts.length) {
+        shapeTool.band = bandOf(p, q, o);
+        app.layers.say(t('shape.failed'), true);
+        return app.redraw();
+      }
+      app.applyRestitched(r, 'shape.failed', true);
+      app.layers.say(t('shape.width.set', { w: formatNumber(w, 1) }));
+      followKnockouts();
+      return;
+    }
     const st = lineSettings(p, obj, q.kinds);
     if (!sewLine(o, shapeTool.form, { ...st, width: w }, true)) shapeTool.band = st.width;
     else app.layers.say(t('shape.width.set', { w: formatNumber(w, 1) }));
