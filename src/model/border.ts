@@ -341,7 +341,18 @@ function blendRuns(region: Region, s: FillSettings, start: Pt): Pt[][] | null {
  */
 export function recolorBlock(p: Pattern, block: number, color: ThreadColor): Pattern {
   const next = recolor(p, block, color);
-  return takeThreads(next, sewObjects(next).filter((o) => o.block === block).map((o) => o.index));
+  const objs = sewObjects(next);
+  // A fill in it whose border (in the fill's thread) is sewn in another block: the border keeps
+  // its thread, only this block changes.
+  const old = p.colors[block];
+  objs.forEach((o) => {
+    const m = o.block === block ? remembered(next, o) : undefined;
+    const b = m?.fill?.border;
+    if (!b?.link || b.color || !old) return;
+    const border = objs.find((x) => remembered(next, x)?.outline === b.link);
+    if (border && border.block !== block) remember(next, o, { ...m!, fill: { ...m!.fill!, border: { ...b, color: { ...old } } } });
+  });
+  return takeThreads(next, objs.filter((o) => o.block === block).map((o) => o.index));
 }
 
 /**
