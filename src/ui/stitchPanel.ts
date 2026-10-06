@@ -12,7 +12,7 @@ import { BORDER_STITCH, BORDER_WIDTH, type BorderType } from '../digitize/border
 import { TOLERANCE } from '../digitize/run';
 import type { ThreadColor } from '../model/pattern';
 import { newLink } from '../model/border';
-import { autoUnder, type PathStitch } from '../model/along';
+import { autoUnder, E_SPACING, isRunType, spacingOf, ZIGZAG_SPACING, type PathStitch } from '../model/along';
 import { cssColor, hexColor, ThreadPicker } from './threadPicker';
 import { CROSS_KINDS, GRID_KINDS, MOTIFS, type CrossKind, type GridKind, type Motif } from '../digitize/deco';
 
@@ -21,7 +21,10 @@ const FILL_UNDERS: FillUnder[] = ['off', 'single', 'cross'];
 type BorderChoice = 'off' | BorderType;
 /** What hovering a group of settings shows on the canvas. */
 export type Highlight = 'under' | 'border';
-const BORDERS: BorderChoice[] = ['off', 'run', 'triple', 'satin'];
+/** Kinds of stitch along a line, as buttons: a triple stitch is a running stitch sewn more often. */
+const BORDERS: BorderChoice[] = ['off', 'run', 'satin', 'zigzag', 'e'];
+/** How often each stitch of a running stitch is sewn. */
+const REPEATS = ['1', '3', '5'] as const;
 const sameColor = (a: ThreadColor, b: ThreadColor) => a.r === b.r && a.g === b.g && a.b === b.b;
 
 /**
@@ -1278,7 +1281,7 @@ export class StitchPanel {
   private lineGroup(h: HTMLElement, info: StitchInfo): HTMLElement[] {
     const st = this.lineDraft!;
     h.innerHTML = '';
-    h.append(Object.assign(document.createElement('span'), { className: 'kind-icon', innerHTML: KIND_ICON[st.type === 'satin' ? 'satin' : 'run'] }), t('stitch.line.title'));
+    h.append(Object.assign(document.createElement('span'), { className: 'kind-icon', innerHTML: KIND_ICON[isRunType(st.type) ? 'run' : 'satin'] }), t('stitch.line.title'));
     const out: HTMLElement[] = [];
     if (info.hand) {
       const hand = document.createElement('p');
@@ -1299,7 +1302,7 @@ export class StitchPanel {
         false,
       ),
     );
-    if (st.type !== 'satin') {
+    if (isRunType(st.type)) {
       st.tolerance ??= this.tolerance ?? TOLERANCE;
       out.push(this.toleranceSlider(st as { tolerance: number }));
     }
@@ -1345,8 +1348,12 @@ export class StitchPanel {
     const mm = (d: number) => (v: number) => `${formatNumber(v, d)} mm`;
     const kinds = off ? BORDERS : BORDERS.filter((v) => v !== 'off');
     const out = [
-      this.choice<BorderChoice>('stitch.borderType', kinds, st?.type ?? 'off', (v) => `stitch.border.${v}` as Key, (v) => {
-        set(v === 'off' ? undefined : { ...st, type: v, width: st?.width ?? BORDER_WIDTH });
+      this.choice<BorderChoice>('stitch.borderType', kinds, st ? (isRunType(st.type) ? 'run' : st.type) : 'off', (v) => `stitch.border.${v}` as Key, (v) => {
+        if (v === 'off') return set(undefined);
+        // Each kind starts with its own spacing; a satin's 0.4 mm would make a zigzag a satin.
+        const next: PathStitch = { ...st, type: v, width: st?.width ?? BORDER_WIDTH };
+        delete next.spacing;
+        set(next);
       }),
     ];
     if (!st) return out;
@@ -1369,12 +1376,40 @@ export class StitchPanel {
         }),
       );
     }
-    if (st.type !== 'satin') {
-      out.push(this.slider({ label: 'stitch.length', hint: 'stitch.runLength.hint', min: 1, max: 6, step: 0.1, get: () => st.length ?? BORDER_STITCH, set: (v) => change((s) => (s.length = v))(v), fmt: mm(1) }));
+    if (isRunType(st.type)) {
+      const times = st.type === 'triple' ? (st.repeat === 5 ? '5' : '3') : '1';
+      out.push(
+        this.choice<(typeof REPEATS)[number]>('stitch.repeat', REPEATS, times, (v) => `stitch.repeat.${v}` as Key, (v) => {
+          st.type = v === '1' ? 'run' : 'triple';
+          if (v === '5') st.repeat = 5;
+          else delete st.repeat;
+          set(st);
+        }, true),
+        this.slider({ label: 'stitch.length', hint: 'stitch.runLength.hint', min: 1, max: 6, step: 0.1, get: () => st.length ?? BORDER_STITCH, set: (v) => change((s) => (s.length = v))(v), fmt: mm(1) }),
+      );
+      return out;
+    }
+    const width = this.slider({ label: offset ? 'stitch.borderWidth' : 'stitch.lineWidth', hint: offset ? 'stitch.borderWidth.hint' : 'stitch.lineWidth.hint', min: 0.8, max: Math.max(6, Math.ceil(st.width)), step: 0.1, get: () => st.width, set: (v) => change((s) => (s.width = v))(v), fmt: mm(1) });
+    if (st.type === 'zigzag' || st.type === 'e') {
+      const e = st.type === 'e';
+      out.push(
+        width,
+        this.slider({ label: 'stitch.gap', hint: e ? 'stitch.eSpacing.hint' : 'stitch.zigzagSpacing.hint', min: e ? 1 : 0.5, max: 6, step: 0.1, get: () => spacingOf(st), set: (v) => change((s) => (s.spacing = v === (e ? E_SPACING : ZIGZAG_SPACING) ? undefined : v))(v), fmt: mm(1) }),
+      );
+      if (e) {
+        const sides = offset ? (['in', 'out'] as const) : (['right', 'left'] as const);
+        out.push(
+          this.choice<(typeof sides)[number]>('stitch.eSide', sides, sides[st.flip ? 1 : 0], (v) => `stitch.eSide.${v}` as Key, (v) => {
+            if (v === sides[1]) st.flip = true;
+            else delete st.flip;
+            set(st);
+          }, true),
+        );
+      }
       return out;
     }
     out.push(
-      this.slider({ label: offset ? 'stitch.borderWidth' : 'stitch.lineWidth', hint: offset ? 'stitch.borderWidth.hint' : 'stitch.lineWidth.hint', min: 0.8, max: Math.max(6, Math.ceil(st.width)), step: 0.1, get: () => st.width, set: (v) => change((s) => (s.width = v))(v), fmt: mm(1) }),
+      width,
       this.slider({ label: 'stitch.density', hint: 'stitch.satinDensity.hint', min: 0.2, max: 1, step: 0.01, get: () => st.spacing ?? 0.4, set: (v) => change((s) => (s.spacing = v))(v), fmt: mm(2) }),
       this.slider({ label: 'stitch.borderPull', hint: 'stitch.borderPull.hint', min: 0, max: 0.6, step: 0.05, get: () => st.pull ?? 0, set: (v) => change((s) => (s.pull = v || undefined))(v), fmt: mm(2) }),
       this.choice<UnderlayKind | 'off'>('stitch.under.kind', ['off', ...UNDERLAYS], autoUnder(st), (v) => (v === 'off' ? 'stitch.borderUnder.off' : (`stitch.under.${v}` as Key)), (v) => {
