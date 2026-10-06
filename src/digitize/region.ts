@@ -30,7 +30,37 @@ export interface Region {
 
 const MARGIN = 6;
 
+/**
+ * Signed fields of the last masks: sewing an object anew (another spacing, the correction trying
+ * variants, a border following its fill) rasters the same area again and again, and the distance
+ * transforms are the costly part. Found by size and content; callers get a copy.
+ */
+const fields: { w: number; h: number; pxMm: number; hash: number; mask: Uint8Array; field: Float32Array }[] = [];
+const FIELDS = 12;
+
+function maskHash(mask: Uint8Array): number {
+  let h = 2166136261;
+  for (let i = 0; i < mask.length; i++) if (mask[i]) h = Math.imul(h ^ i, 16777619);
+  return h >>> 0;
+}
+
 export function signedField(mask: Uint8Array, w: number, h: number, pxMm: number): Float32Array {
+  const hash = maskHash(mask);
+  const hit = fields.find((c) => c.w === w && c.h === h && c.pxMm === pxMm && c.hash === hash && sameMask(c.mask, mask));
+  if (hit) return hit.field.slice();
+  const field = computeField(mask, w, h, pxMm);
+  fields.unshift({ w, h, pxMm, hash, mask: mask.slice(), field: field.slice() });
+  if (fields.length > FIELDS) fields.pop();
+  return field;
+}
+
+function sameMask(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (!a[i] !== !b[i]) return false;
+  return true;
+}
+
+function computeField(mask: Uint8Array, w: number, h: number, pxMm: number): Float32Array {
   const dIn = distanceInside(mask, w, h);
   const dOut = distanceToSeeds(mask, w, h);
   const f = new Float32Array(w * h);
