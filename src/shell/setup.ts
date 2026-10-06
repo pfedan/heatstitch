@@ -104,16 +104,7 @@ export function initShell(app: ShellApp): void {
   command({ id: 'edit.redo', label: 'edit.redo', group: 'shell.group.edit', keys: ['Mod+Shift+Z', 'Mod+Y'], bind: false, when: usable('redo'), run: press('redo') });
   command({ id: 'view.fit', label: 'controls.fit', group: 'shell.group.view', keys: ['F'], bind: false, when: usable('fit'), run: press('fit') });
   command({ id: 'view.marks', label: 'marks.toggle', group: 'shell.group.view', keys: ['H'], bind: false, when: usable('marks-toggle'), run: press('marks-toggle') });
-  command({ id: 'lettering.new', label: 'lettering.tool', group: 'shell.group.draw', keys: ['T'], bind: false, when: usable('lettering-new'), run: press('lettering-new') });
-  for (const [kind, label] of [['rect', 'draw.rect'], ['ellipse', 'draw.ellipse'], ['pen', 'draw.pen'], ['free', 'draw.free']] as const) {
-    command({
-      id: `draw.${kind}`,
-      label,
-      group: 'shell.group.draw',
-      when: () => app.mode() === 'flow',
-      run: () => document.querySelector<HTMLButtonElement>(`[data-draw="${kind}"]`)?.click(),
-    });
-  }
+  // Drawing, levels and lettering: src/areas/shapes.
   command({ id: 'order.optimize', label: 'order.button', group: 'shell.group.edit', when: usable('order-optimize'), run: press('order-optimize') });
   bindCommandKeys();
 

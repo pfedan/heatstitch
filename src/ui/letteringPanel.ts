@@ -5,6 +5,7 @@ import { missingIn, type Align, type Lettering, type LetteringShape } from '../l
 import { drawSample } from '../lettering/preview';
 import type { ThreadColor } from '../model/pattern';
 import { cssColor, ThreadPicker } from './threadPicker';
+import { section } from '../shell/ui';
 
 export interface LetteringInfo {
   lettering: Lettering;
@@ -81,7 +82,9 @@ export class LetteringPanel {
   private samples = new Map<string, HTMLCanvasElement>();
   private textArea: HTMLTextAreaElement | null = null;
   private lang = '';
-  private moreOpen = false;
+  /** What is typed in the font search; kept while the card is built anew (trying fonts). */
+  private fontQuery = '';
+  private search: HTMLInputElement | null = null;
 
   constructor(private hooks: LetteringHooks) {
     $('lettering-close').addEventListener('click', () => hooks.close());
@@ -123,12 +126,31 @@ export class LetteringPanel {
   }
 
   /** Puts the cursor into the text (with all of it selected, for a new lettering). */
-  focusText(selectAll: boolean): void {
+  focusText(selectAll: boolean, tries = 3): void {
     const ta = this.textArea;
     if (!ta) return;
     ta.focus();
+    // The inspector may show the object page only a moment later: then once more.
+    if (document.activeElement !== ta) {
+      if (tries > 0) requestAnimationFrame(() => this.focusText(selectAll, tries - 1));
+      return;
+    }
     if (selectAll) ta.select();
     else ta.setSelectionRange(ta.value.length, ta.value.length);
+  }
+
+  /** Opens the font list with its search field focused. */
+  openFonts(): void {
+    if (!this.info) return;
+    this.fontsOpen = true;
+    this.built = '';
+    this.update(this.info, this.lang);
+    this.search?.focus();
+  }
+
+  /** The letters become ordinary objects (as the link at the end of the card). */
+  release(): void {
+    if (this.info) this.hooks.release();
   }
 
   private get l(): Lettering {
@@ -139,17 +161,35 @@ export class LetteringPanel {
     this.hooks.change({ ...this.l, ...change }, final);
   }
 
+  /**
+   * Text first, then font, size, arc and spacing (what shapes a lettering); the rest in folding
+   * groups: layout, thread and stitches, single letters.
+   */
   private render(): void {
     const info = this.info!;
     this.refresh = [];
     this.observer?.disconnect();
     this.samples.clear();
-    const parts: HTMLElement[] = [this.textField()];
-    parts.push(this.fontField());
+    this.search = null;
+    const parts: HTMLElement[] = [this.textField(), this.fontField()];
     if (this.fontsOpen && info.catalog) parts.push(this.fontList(info.catalog));
-    parts.push(this.heightField(), this.sizeLine(), this.alignField(), this.shapeField());
+    parts.push(this.heightField(), this.shapeField());
     if (this.l.shape !== 'line') parts.push(this.radiusField());
-    parts.push(this.colorField(), this.lettersField(), this.more());
+    parts.push(this.spacingField());
+    const mm = (v: number) => `${v > 0 ? '+' : v < 0 ? '−' : '±'}${formatNumber(Math.abs(v), 1)} mm`;
+    parts.push(
+      section('lettering.layout', 'shapes.lettering.layout', [
+        this.alignField(),
+        this.slider('lettering.wordSpacing', null, -4, 15, 0.1, () => this.l.wordSpacing, (v) => this.set({ wordSpacing: v }, false), mm),
+        this.slider('lettering.lineSpacing', null, 0.5, 2.5, 0.05, () => this.l.lineSpacing, (v) => this.set({ lineSpacing: v }, false), (v) => `${formatNumber(v * 100, 0)} %`),
+        this.slider('lettering.angle', null, -180, 180, 1, () => this.l.angle, (v) => this.set({ angle: v }, false), (v) => `${formatNumber(v, 0)}°`),
+      ], { open: false }),
+      section('lettering.stitch', 'shapes.lettering.stitch', this.stitchFields(), { open: true }),
+    );
+    const single = section('lettering.single', 'shapes.lettering.single', [this.lettersField()], { open: false });
+    // Moving single letters shows its group, whatever was folded before.
+    if (info.letters) single.open = true;
+    parts.push(single);
     const release = Object.assign(document.createElement('button'), { type: 'button', className: 'link lettering-release', textContent: t('lettering.release'), title: t('lettering.release.hint') });
     release.addEventListener('click', () => this.hooks.release());
     parts.push(release);
@@ -234,13 +274,18 @@ export class LetteringPanel {
     b.title = t('lettering.font.hint');
     const name = Object.assign(document.createElement('span'), { className: 'font-name', textContent: entry?.name ?? this.l.font });
     const arrow = Object.assign(document.createElement('span'), { className: 'font-arrow', textContent: this.fontsOpen ? '▴' : '▾', ariaHidden: 'true' });
-    b.append(name, arrow);
+    // The chosen font as a sample of the text, so the button shows what it is.
+    const font = this.info!.font;
+    const sample = Object.assign(document.createElement('canvas'), { className: 'font-sample font-current-sample' });
+    sample.setAttribute('aria-hidden', 'true');
+    if (font) requestAnimationFrame(() => drawSample(sample, font, this.l.text.trim() || t('lettering.text.placeholder'), getComputedStyle(document.body).color || '#222'));
+    b.append(name, sample, arrow);
     b.addEventListener('click', () => {
       this.fontsOpen = !this.fontsOpen;
       this.built = '';
       this.update(this.info, this.lang);
-      // The chosen font takes the focus, so up and down try the next fonts right away.
-      if (this.fontsOpen) this.focusActiveFont();
+      // The search takes the focus: type to narrow the list, down to the fonts.
+      if (this.fontsOpen) this.search?.focus();
     });
     const parts: (HTMLElement | string)[] = [b];
     if (entry) {
@@ -252,8 +297,17 @@ export class LetteringPanel {
     return this.field('lettering.font', ...parts);
   }
 
-  /** Every font with the text in it, by style; rows draw themselves once they scroll into view. */
+  /**
+   * Every font with the text in it, by style, under a search field; rows draw themselves once they
+   * scroll into view.
+   */
   private fontList(cat: Catalog): HTMLElement {
+    const box = document.createElement('div');
+    box.className = 'font-picker';
+    const search = Object.assign(document.createElement('input'), { type: 'search', className: 'font-search', value: this.fontQuery, placeholder: t('shapes.font.search'), spellcheck: false, autocomplete: 'off' });
+    search.setAttribute('aria-label', t('shapes.font.search'));
+    this.search = search;
+    const none = Object.assign(document.createElement('p'), { className: 'muted small font-none', textContent: t('shapes.font.none'), hidden: true });
     const list = document.createElement('div');
     list.className = 'font-list';
     list.setAttribute('role', 'listbox');
@@ -308,24 +362,73 @@ export class LetteringPanel {
         list.append(row);
       }
     }
+    const groups = [...list.querySelectorAll<HTMLElement>('.font-group')];
+    const fold = (v: string) => v.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const visible = () => rows.filter((r) => !r.hidden);
+    const filter = () => {
+      const words = fold(search.value).split(/\s+/).filter(Boolean);
+      for (const r of rows) {
+        const f = cat.fonts.find((x) => x.id === r.dataset.font)!;
+        const hay = fold(`${f.name} ${f.id} ${t(`lettering.style.${f.style}` as Key)}`);
+        r.hidden = !words.every((w) => hay.includes(w));
+      }
+      // A style heading shows while one of its fonts does.
+      for (const g of groups) {
+        let n = g.nextElementSibling as HTMLElement | null;
+        let any = false;
+        while (n && !n.classList.contains('font-group')) {
+          any ||= !n.hidden;
+          n = n.nextElementSibling as HTMLElement | null;
+        }
+        g.hidden = !any;
+      }
+      none.hidden = visible().length > 0;
+    };
+    filter();
+    const close = () => {
+      this.fontsOpen = false;
+      this.set({}, true);
+    };
+    search.addEventListener('input', () => {
+      this.fontQuery = search.value;
+      filter();
+    });
+    search.addEventListener('keydown', (e) => {
+      const first = visible()[0];
+      if (e.key === 'ArrowDown' && first) {
+        e.preventDefault();
+        e.stopPropagation();
+        first.focus();
+      } else if (e.key === 'Enter' && first) {
+        e.preventDefault();
+        this.fontsOpen = false;
+        this.set({ font: first.dataset.font! }, true);
+      } else if (e.key === 'Escape') {
+        e.stopPropagation();
+        close();
+      }
+    });
     // Up and down try the fonts one after the other on the design; Enter keeps one.
     list.addEventListener('keydown', (e) => {
-      const i = rows.findIndex((r) => r === document.activeElement);
+      const shown = visible();
+      const i = shown.findIndex((r) => r === document.activeElement);
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault();
         // Not on to the page keys, where up and down step to the next design.
         e.stopPropagation();
-        const next = rows[Math.max(0, Math.min(rows.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1)))];
+        if (e.key === 'ArrowUp' && i <= 0) return search.focus();
+        const next = shown[Math.max(0, Math.min(shown.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1)))];
+        if (!next) return;
         next.focus();
         rows.forEach((r) => r.classList.toggle('active', r === next));
         this.hooks.change({ ...this.l, font: next.dataset.font! }, false);
       } else if (e.key === 'Escape') {
         e.stopPropagation();
-        this.fontsOpen = false;
-        this.set({}, true);
+        close();
       }
     });
-    return list;
+    box.append(search, list, none);
+    return box;
   }
 
   private heightField(): HTMLElement {
@@ -380,8 +483,9 @@ export class LetteringPanel {
     const row = document.createElement('div');
     row.className = 'lettering-height-row';
     row.append(num, Object.assign(document.createElement('span'), { textContent: 'mm', className: 'muted' }), track);
-    const f = this.field('lettering.height', row, note);
+    const f = this.field('shapes.lettering.size', row, note, this.sizeLine());
     f.title = t('lettering.height.hint');
+    num.title = t('lettering.height');
     return f;
   }
 
@@ -432,7 +536,7 @@ export class LetteringPanel {
   }
 
   private shapeField(): HTMLElement {
-    return this.segmented('lettering.shape', SHAPES, () => this.l.shape, (v) => `lettering.shape.${v}` as Key, SHAPE_ICON, (v) => {
+    return this.segmented('shapes.lettering.arc', SHAPES, () => this.l.shape, (v) => `lettering.shape.${v}` as Key, SHAPE_ICON, (v) => {
       // A first arc as wide as the text is, so it bends noticeably but stays readable.
       const radius = this.l.shape === 'line' ? Math.max(15, Math.round(this.info!.width * 0.8)) : this.l.radius;
       this.set({ shape: v, radius }, true);
@@ -525,18 +629,15 @@ export class LetteringPanel {
     this.set({ letters: [...this.l.letters.filter((x) => x.at !== at), next] }, false);
   }
 
-  private more(): HTMLElement {
-    const d = document.createElement('details');
-    d.className = 'lettering-more';
-    d.open = this.moreOpen;
-    d.addEventListener('toggle', () => (this.moreOpen = d.open));
-    d.append(Object.assign(document.createElement('summary'), { textContent: t('lettering.more') }));
+  private spacingField(): HTMLElement {
     const mm = (v: number) => `${v > 0 ? '+' : v < 0 ? '−' : '±'}${formatNumber(Math.abs(v), 1)} mm`;
-    d.append(
-      this.slider('lettering.spacing', 'lettering.spacing.hint', -3, 6, 0.1, () => this.l.spacing, (v) => this.set({ spacing: v }, false), mm),
-      this.slider('lettering.wordSpacing', null, -4, 15, 0.1, () => this.l.wordSpacing, (v) => this.set({ wordSpacing: v }, false), mm),
-      this.slider('lettering.lineSpacing', null, 0.5, 2.5, 0.05, () => this.l.lineSpacing, (v) => this.set({ lineSpacing: v }, false), (v) => `${formatNumber(v * 100, 0)} %`),
-      this.slider('lettering.angle', null, -180, 180, 1, () => this.l.angle, (v) => this.set({ angle: v }, false), (v) => `${formatNumber(v, 0)}°`),
+    return this.slider('lettering.spacing', 'lettering.spacing.hint', -3, 6, 0.1, () => this.l.spacing, (v) => this.set({ spacing: v }, false), mm);
+  }
+
+  /** Thread, density, underlay and the way back of the lines. */
+  private stitchFields(): HTMLElement[] {
+    const out: HTMLElement[] = [
+      this.colorField(),
       this.slider(
         'lettering.density',
         'lettering.density.hint',
@@ -548,7 +649,7 @@ export class LetteringPanel {
         (v) => `${formatNumber(v, 0)} %`,
       ),
       this.check('lettering.underlay', 'lettering.underlay.hint', () => this.l.underlay, (v) => this.set({ underlay: v }, true)),
-    );
+    ];
     const font = this.info!.font;
     const back = this.check('lettering.back', 'lettering.back.hint', () => this.l.back, (v) => this.set({ back: v }, true));
     if (font && !font.rev) {
@@ -556,8 +657,8 @@ export class LetteringPanel {
       back.querySelector('input')!.disabled = true;
       back.title = t('lettering.back.not');
     }
-    d.append(back);
-    return d;
+    out.push(back);
+    return out;
   }
 
   private check(label: Key, hint: Key, get: () => boolean, set: (v: boolean) => void): HTMLElement {

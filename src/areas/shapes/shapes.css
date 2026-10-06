@@ -1,0 +1,361 @@
+/* Area C (shapes): tool rail, breadcrumb of the levels, options of the active tool, lettering card. */
+
+/* Tool rail ------------------------------------------------------------------------------------------ */
+
+.toolrail button.tool {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--muted);
+  backdrop-filter: none;
+  border-radius: 8px;
+  transition: background-color 0.12s, color 0.12s;
+}
+
+.toolrail button.tool:not(:disabled):hover {
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  border-color: transparent;
+  color: var(--ink);
+}
+
+.toolrail button.tool[aria-pressed='true'],
+.toolrail button.tool[aria-pressed='true']:not(:disabled):hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.toolrail button.tool:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.toolrail svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.toolrail svg .node {
+  fill: currentColor;
+  stroke: none;
+}
+
+.toolrail #draw-pointer svg path {
+  fill: currentColor;
+  fill-opacity: 0.15;
+}
+
+.toolrail #draw-pointer,
+.toolrail #lettering-new {
+  margin: 0;
+}
+
+.rail-sep {
+  flex: none;
+  width: 22px;
+  height: 1px;
+  margin: 4px 0;
+  background: var(--line);
+}
+
+@media (max-width: 760px) {
+  .rail-sep {
+    width: 1px;
+    height: 22px;
+    margin: 0 4px;
+    align-self: center;
+  }
+}
+
+/* Breadcrumb of the levels (design › object › Form) ------------------------------------------------ */
+
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  max-width: min(560px, 100%);
+  height: 30px;
+  padding: 0 2px 0 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  color: var(--ink);
+  font-size: 13px;
+  backdrop-filter: blur(6px);
+}
+
+.crumbs[hidden] {
+  display: none;
+}
+
+.crumbs > * {
+  flex: none;
+}
+
+.crumbs .crumb-link,
+.crumbs .crumb-here {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+
+.crumbs .crumb-link {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.crumbs .crumb-link:hover {
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  color: var(--ink);
+}
+
+.crumbs .crumb-here {
+  font-weight: 600;
+}
+
+.crumbs .crumb-sep {
+  color: var(--muted);
+  opacity: 0.7;
+}
+
+.crumbs .crumb-levels {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  margin-left: 2px;
+  padding: 0;
+  border: none;
+  border-left: 1px solid var(--line);
+  border-radius: 0 6px 6px 0;
+  background: none;
+  color: var(--muted);
+}
+
+.crumbs .crumb-levels:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+}
+
+.crumbs .crumb-levels .i {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* The level radios stay for scripts and screen readers, not shown: a few pixels each, side by side. */
+.level-radios {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  gap: 2px;
+  width: 12px;
+  height: 3px;
+  overflow: hidden;
+  opacity: 0;
+}
+
+.level-radios label {
+  display: block;
+  width: 3px;
+  height: 3px;
+  overflow: hidden;
+  font-size: 0;
+}
+
+.level-radios input {
+  display: block;
+  width: 3px;
+  height: 3px;
+  margin: 0;
+}
+
+.stage-tools-start {
+  position: relative;
+  min-width: 0;
+}
+
+/* Options of the active tool, a slim bar over the stage ------------------------------------------ */
+
+.tool-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 3px 4px 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  color: var(--ink);
+  font-size: 12.5px;
+  pointer-events: auto;
+  backdrop-filter: blur(6px);
+}
+
+.tool-options[hidden] {
+  display: none;
+}
+
+.tool-options .opt-title {
+  font-weight: 600;
+  margin-right: 4px;
+}
+
+.tool-options .opt-hint {
+  color: var(--muted);
+  padding: 0 6px;
+}
+
+.tool-options .opt-sep {
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--line);
+}
+
+.tool-options button.opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  white-space: nowrap;
+}
+
+.tool-options button.opt:not(:disabled):hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+}
+
+.tool-options button.opt:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.tool-options .opt-check {
+  position: relative;
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid var(--muted);
+  border-radius: 3px;
+}
+
+.tool-options .opt-toggle[aria-pressed='true'] {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg));
+}
+
+.tool-options .opt-toggle[aria-pressed='true'] .opt-check {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.tool-options .opt-toggle[aria-pressed='true'] .opt-check::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 0;
+  width: 3px;
+  height: 7px;
+  border: solid var(--accent-ink);
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toolrail button.tool {
+    transition: none;
+  }
+}
+
+/* Lettering card ------------------------------------------------------------------------------------- */
+
+.lettering-panel .sec {
+  margin-top: 4px;
+}
+
+.lettering-panel .lettering-size {
+  margin: 4px 0 0;
+}
+
+.font-current {
+  min-height: 38px;
+}
+
+.font-current .font-name {
+  flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.font-current .font-current-sample {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 24px;
+  width: 0;
+  opacity: 0.85;
+}
+
+.font-picker {
+  margin: -4px 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.font-picker .font-search {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+}
+
+.font-picker .font-search:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.font-picker .font-list {
+  margin: 0;
+  border: none;
+  border-radius: 0;
+}
+
+.font-picker .font-row[hidden],
+.font-picker .font-group[hidden] {
+  display: none;
+}
+
+.font-picker .font-none {
+  margin: 8px;
+}
