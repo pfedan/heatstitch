@@ -1,0 +1,459 @@
+/* Area "Prüfen": summary, findings, correction, jumps and heatmap in the inspector, the badge at
+   "Prüfen" in the top bar. Status colors as in src/style.css (caution #ffa500, critical #ff0000). */
+
+/* Badge at "Prüfen" ---------------------------------------------------------------------------------- */
+
+.modes .check-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  background: var(--line);
+  color: var(--ink);
+}
+
+.modes .check-badge.caution {
+  background: #ffa500;
+  color: #1d1a22;
+}
+
+.modes .check-badge.critical {
+  background: #ff0000;
+  color: #ffffff;
+}
+
+/* The column in Prüfen: panels size to their content, the inspector scrolls as a whole. ---------- */
+
+.insp-page .findings[open],
+.insp-page .findings-body,
+.insp-page #correct-panel,
+.insp-page .jumps,
+.insp-page .jumps-body {
+  flex: none;
+  min-height: 0;
+  overflow: visible;
+}
+
+.insp-page .findings[open]::details-content {
+  display: block;
+}
+
+.insp-page .panel {
+  flex: none;
+}
+
+/* Summary card ---------------------------------------------------------------------------------------- */
+
+.check-summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 12px;
+  align-items: start;
+}
+
+.check-light {
+  grid-row: span 2;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 5px;
+  border-radius: 999px;
+  background: var(--stage);
+}
+
+.check-light i {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: color-mix(in srgb, #ffffff 14%, transparent);
+  transition: background-color 0.15s;
+}
+
+.check-light[data-level='critical'] i:nth-child(1) {
+  background: #ff0000;
+  box-shadow: 0 0 8px #ff0000;
+}
+
+.check-light[data-level='caution'] i:nth-child(2) {
+  background: #ffa500;
+  box-shadow: 0 0 8px #ffa500;
+}
+
+.check-light[data-level='safe'] i:nth-child(3) {
+  background: #3fb27f;
+  box-shadow: 0 0 8px #3fb27f;
+}
+
+.check-state {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.check-state p {
+  margin: 0;
+}
+
+.check-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.check-head strong {
+  font-size: 16px;
+  cursor: help;
+}
+
+.check-head .share {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.check-what {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.check-state .muted.small {
+  font-size: 12px;
+}
+
+.check-state .check-for {
+  align-self: flex-start;
+  margin: 2px 0 0;
+  padding: 0;
+  text-align: left;
+}
+
+.check-summary .val-toggle {
+  grid-column: 2;
+  margin: 6px 0 0;
+  font-size: 12px;
+}
+
+/* Findings -------------------------------------------------------------------------------------------- */
+
+.findings > summary .findings-sum,
+.jumps > summary .findings-sum,
+.heatmap-panel > summary .findings-sum {
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.insp-page details.panel.section > summary {
+  flex-wrap: wrap;
+}
+
+.insp-page details.panel.section > summary h2 {
+  flex: none;
+}
+
+.insp-page details.panel.section > summary .findings-sum {
+  flex: 1 1 auto;
+}
+
+/* The line stays when open too: it says how many are open while the list is filtered. */
+.insp-page .findings[open] .findings-sum {
+  display: inline-flex;
+}
+
+.insp-page .findings .findings-bar {
+  margin-top: 0;
+}
+
+.insp-page .val-zones {
+  max-height: 300px;
+  min-height: 0;
+}
+
+/* Correction ------------------------------------------------------------------------------------------ */
+
+.correct h2 {
+  margin-bottom: 10px;
+}
+
+.correct {
+  container-type: inline-size;
+}
+
+.correct-opts {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 6px 10px;
+  font-size: 12px;
+}
+
+.correct-opts .label {
+  color: var(--muted);
+}
+
+.correct-opts .segmented span {
+  padding: 4px 4px;
+  white-space: nowrap;
+}
+
+.correct-actions {
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.correct-actions button {
+  flex: 1 1 auto;
+}
+
+.correct-actions .primary {
+  flex-basis: 100%;
+}
+
+.fix-report:empty {
+  display: none;
+}
+
+.fix-report {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.plan-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 4px;
+}
+
+.plan-head .plan-pick {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+}
+
+.plan-head .plan-pick button.link {
+  margin: 0;
+  padding: 0;
+}
+
+.plan-row.pinned {
+  margin: 0 -6px;
+  padding-left: 6px;
+  padding-right: 6px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.edit-tools .buttons,
+.compare-block .buttons {
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.edit-tools .sel-info {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.edit-tools .buttons button {
+  flex: 1 1 auto;
+}
+
+.edit-tools h3,
+.compare-block h3 {
+  cursor: default;
+}
+
+.compare-block #compare-toggle {
+  width: 100%;
+}
+
+.compare-block .compare-table {
+  margin-top: 8px;
+}
+
+/* Jumps and trims ------------------------------------------------------------------------------------- */
+
+.jumps-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.jumps-head .jumps-summary {
+  margin: 0;
+  font-size: 13px;
+}
+
+.jumps .jumps-warn {
+  margin: 6px 0 0;
+}
+
+.jumps .jumps-rule {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 6px;
+  font-size: 12px;
+}
+
+.jumps-limit {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: auto;
+  color: var(--muted);
+}
+
+.jumps .jumps-rule input {
+  width: 58px;
+  padding: 3px 4px;
+}
+
+.jumps .jumps-rule button {
+  flex: 1 1 auto;
+  padding: 4px 8px;
+}
+
+.jumps .f-chips {
+  margin-top: 8px;
+}
+
+.jumps .jump-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-height: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.jumps .jump {
+  padding: 4px 8px;
+  font-size: 13px;
+}
+
+.jumps .j-meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.jumps .j-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.jumps .j-actions .meta {
+  flex-basis: 100%;
+}
+
+.jumps .j-actions button {
+  flex: 1 1 auto;
+  font-size: 12px;
+  padding: 3px 8px;
+}
+
+/* Heatmap --------------------------------------------------------------------------------------------- */
+
+.heatmap-panel .unit-hint {
+  margin-left: 4px;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.heatmap-panel .field-inline {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.heatmap-panel .field-inline input {
+  width: 80px;
+}
+
+/* Zone rows: level and reasons on top with the decision at the right, figures below. */
+.insp-page .findings-bar .f-nav {
+  margin-left: auto;
+}
+
+.insp-page .val-zone {
+  border-radius: 6px;
+}
+
+.insp-page .val-zone .z-top {
+  padding-right: 0;
+}
+
+/* The decision shows on the row pointed at, focused or selected; the list stays calm otherwise. */
+.insp-page .val-zones li:is(:hover, :focus-within, :has(.val-zone.selected)) .z-top {
+  padding-right: 108px;
+}
+
+.insp-page .val-zones li:not(:hover, :focus-within, :has(.val-zone.selected)) .z-ack {
+  visibility: hidden;
+}
+
+.insp-page .val-zone .why {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.insp-page .val-zone .meta {
+  padding-right: 0;
+}
+
+.insp-page .z-ack {
+  top: 5px;
+  bottom: auto;
+  right: 8px;
+  white-space: nowrap;
+  line-height: 1.25;
+}
+
+.insp-page .jumps[open] > summary .findings-sum {
+  display: none;
+}
+
+.plan-head .plan-pick > * {
+  flex: none;
+  white-space: nowrap;
+}
+
+.fix-report .buttons .primary {
+  flex: 2 1 auto;
+}
+
+.fix-report .buttons button:not(.primary) {
+  flex: 0 1 auto;
+}
+
+/* A narrow inspector puts the labels of the correction options above their choices. */
+@container (max-width: 260px) {
+  .correct-opts {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+}

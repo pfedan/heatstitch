@@ -134,7 +134,7 @@
       </div>
       <div class="modes segmented" role="radiogroup" id="modes" data-i18n-aria="mode.label">
         <label data-i18n-title="mode.flow.hint"><input type="radio" name="mode" value="flow" /><span><span data-i18n="mode.flow"></span></span></label>
-        <label data-i18n-title="mode.density.hint"><input type="radio" name="mode" value="density" /><span><span data-i18n="mode.density"></span></span></label>
+        <label data-i18n-title="mode.density.hint"><input type="radio" name="mode" value="density" /><span><span data-i18n="mode.density"></span><span class="check-badge" id="check-badge" hidden></span></span></label>
         <label data-i18n-title="mode.image.hint" data-mode="image"><input type="radio" name="mode" value="image" /><span><span data-i18n="mode.image"></span></span></label>
       </div>
       <nav class="topbar-end">
@@ -450,13 +450,6 @@
                 </div>
                 <div id="color-key" class="color-key"></div>
               </section>
-              <section class="vp-group" data-mode="density">
-                <label class="check"><input type="checkbox" id="overlay" /><span data-i18n="controls.overlay"></span></label>
-                <label class="field vp-sub">
-                  <span class="label"><span data-i18n="controls.opacity"></span> <output id="opacity-out"></output></span>
-                  <input type="range" id="opacity" min="0.05" max="1" step="0.05" />
-                </label>
-              </section>
               <section class="vp-group" data-i18n-title="controls.background.hint">
                 <h3><span data-i18n="controls.background"></span> <output id="bg-out"></output></h3>
                 <div class="bg-swatches" id="bg-swatches"></div>
@@ -593,47 +586,44 @@
               </label>
             </div>
           </div>
-          <section class="panel jumps" id="jumps-panel" data-mode="flow">
-            <h2 data-i18n="jumps.title"></h2>
-            <div id="jumps" class="jumps-body" aria-live="polite"></div>
+          <!-- Prüfen (area check): summary, findings, correction, jumps; heatmap after the material -->
+          <section class="panel check-summary" id="check-summary" data-mode="density" aria-live="polite">
+            <div class="check-light" id="check-light" role="img"><i></i><i></i><i></i></div>
+            <div class="check-state" id="check-state"></div>
+            <label class="check val-toggle" data-i18n-title="validation.overlay.key"><input type="checkbox" id="show-validation" /><span data-i18n="validation.overlay"></span></label>
           </section>
-          <!-- Dichte -->
           <details class="panel section findings" id="findings-panel" data-mode="density" data-section="findings">
             <summary><h2 data-i18n="findings.title"></h2><span id="findings-sum" class="findings-sum"></span></summary>
-            <label class="check val-toggle" data-i18n-title="validation.overlay.key"><input type="checkbox" id="show-validation" /><span data-i18n="validation.overlay"></span></label>
-            <div id="validation" class="findings-body" aria-live="polite"></div>
+            <div id="validation" class="findings-body"></div>
           </details>
 
-          <section class="panel" id="correct-panel" data-mode="density">
+          <section class="panel correct" id="correct-panel" data-mode="density">
             <h2><span data-i18n="correct.title"></span> <span class="beta-badge" data-i18n="correct.beta" data-i18n-title="correct.beta.hint"></span></h2>
-            <div class="field">
+            <div class="correct-opts">
               <span class="label" data-i18n="correct.goal"></span>
-              <div class="segmented" role="radiogroup">
+              <div class="segmented" role="radiogroup" data-i18n-aria="correct.goal">
                 <label><input type="radio" name="fix-goal" value="caution" /><span data-i18n="correct.goal.caution"></span></label>
                 <label><input type="radio" name="fix-goal" value="critical" /><span data-i18n="correct.goal.critical"></span></label>
               </div>
-            </div>
-            <div class="field">
               <span class="label" data-i18n="correct.focus"></span>
-              <div class="segmented" role="radiogroup">
-                <label><input type="radio" name="fix-focus" value="both" /><span data-i18n="correct.focus.both"></span></label>
-                <label><input type="radio" name="fix-focus" value="thread" /><span data-i18n="correct.focus.thread"></span></label>
-                <label><input type="radio" name="fix-focus" value="holes" /><span data-i18n="correct.focus.holes"></span></label>
+              <div class="segmented" role="radiogroup" id="fix-focus" data-i18n-aria="correct.focus">
+                <label data-i18n-title="correct.focus.both.hint"><input type="radio" name="fix-focus" value="both" /><span data-i18n="correct.focus.both"></span></label>
+                <label data-i18n-title="correct.focus.thread.hint"><input type="radio" name="fix-focus" value="thread" /><span data-i18n="correct.focus.thread"></span></label>
+                <label data-i18n-title="correct.focus.holes.hint"><input type="radio" name="fix-focus" value="holes" /><span data-i18n="correct.focus.holes"></span></label>
               </div>
-              <p class="muted small" id="fix-focus-hint"></p>
             </div>
-            <div class="buttons">
-              <button type="button" id="fix-all" class="primary" data-i18n="correct.all"></button>
-              <button type="button" id="fix-zone" data-i18n="correct.zone"></button>
+            <div class="buttons correct-actions">
+              <button type="button" id="fix-all" class="primary" data-i18n="correct.all" data-i18n-title="check.fixAll.hint"></button>
+              <button type="button" id="fix-zone" data-i18n="check.fixZone.short" data-i18n-title="check.fixZone.hint"></button>
+              <button type="button" id="fix-tune" data-i18n="tune.button" data-i18n-title="tune.button.hint"></button>
             </div>
             <div id="fix-report" class="fix-report" aria-live="polite"></div>
 
-            <h3 data-i18n="edit.title"></h3>
-            <p class="muted small" id="edit-off-hint" data-i18n="edit.panelHint"></p>
             <div id="edit-tools" class="edit-tools" hidden>
-              <p class="muted small" data-i18n="edit.hint"></p>
-              <p class="sel-info" id="sel-info"></p>
+              <h3 data-i18n="check.edit.title" data-i18n-title="edit.hint"></h3>
+              <p class="muted small" id="edit-off-hint" data-i18n="edit.panelHint" hidden></p>
               <div class="buttons">
+                <span class="sel-info" id="sel-info"></span>
                 <button type="button" id="sel-delete" data-i18n="edit.delete"></button>
                 <button type="button" id="sel-thin" data-i18n="edit.thin"></button>
                 <select id="thin-share" aria-label="">
@@ -644,12 +634,44 @@
               </div>
             </div>
 
-            <h3 data-i18n="compare.title"></h3>
-            <div class="buttons">
-              <button type="button" id="compare-toggle" aria-pressed="false" data-i18n="compare.start"></button>
+            <div class="compare-block" id="compare-block" hidden>
+              <h3 data-i18n="compare.title"></h3>
+              <button type="button" id="compare-toggle" aria-pressed="false" data-i18n="compare.start" data-i18n-title="compare.hint"></button>
+              <table class="compare-table" id="compare-table" hidden></table>
             </div>
-            <table class="compare-table" id="compare-table" hidden></table>
           </section>
+          <details class="panel section jumps" id="jumps-panel" data-mode="flow density">
+            <summary><h2 data-i18n="jumps.title"></h2><span id="jumps-sum" class="findings-sum"></span></summary>
+            <div id="jumps" class="jumps-body" aria-live="polite"></div>
+          </details>
+          <details class="panel section heatmap-panel" id="heatmap-panel" data-mode="density" data-section="heatmap">
+            <summary><h2 data-i18n="heatmap.title"></h2><span id="heatmap-sum" class="findings-sum"></span></summary>
+            <div class="field">
+              <span class="label"><span data-i18n="controls.metric"></span> <span class="unit-hint" id="unit-hint"></span></span>
+              <div class="segmented" role="radiogroup" data-i18n-aria="controls.metric">
+                <label><input type="radio" name="metric" value="thread" /><span data-i18n="metric.thread"></span></label>
+                <label><input type="radio" name="metric" value="penetrations" /><span data-i18n="metric.penetrations"></span></label>
+              </div>
+            </div>
+            <label class="check"><input type="checkbox" id="overlay" /><span data-i18n="controls.overlay"></span></label>
+            <label class="field indent">
+              <span class="label"><span data-i18n="controls.opacity"></span> <output id="opacity-out"></output></span>
+              <input type="range" id="opacity" min="0.05" max="1" step="0.05" />
+            </label>
+            <label class="field">
+              <span class="label"><span data-i18n="controls.cell"></span> <output id="cell-out"></output></span>
+              <input type="range" id="cell" min="0.5" max="5" step="0.25" />
+            </label>
+            <label class="field">
+              <span class="label"><span data-i18n="controls.blur"></span> <output id="blur-out"></output></span>
+              <input type="range" id="blur" min="0" max="3" step="0.1" />
+            </label>
+            <label class="field field-inline">
+              <span class="label" data-i18n="controls.max"></span>
+              <input type="number" id="max" min="0.1" step="0.5" />
+            </label>
+            <label class="check"><input type="checkbox" id="include-jumps" /><span data-i18n="controls.jumps"></span></label>
+          </details>
           <!-- Dichte: material, checks and heatmap -->
           <section class="material-panel" id="material-panel">
             <div class="profile">
@@ -673,33 +695,6 @@
             <details class="explain" data-mode="density">
               <summary data-i18n="validation.explain"></summary>
               <ul id="explain"></ul>
-            </details>
-          </section>
-          <section class="panel" data-mode="density">
-            <h2 data-i18n="heatmap.title"></h2>
-            <div class="field">
-              <span class="label" data-i18n="controls.metric"></span>
-              <div class="segmented" role="radiogroup">
-                <label><input type="radio" name="metric" value="thread" /><span data-i18n="metric.thread"></span></label>
-                <label><input type="radio" name="metric" value="penetrations" /><span data-i18n="metric.penetrations"></span></label>
-              </div>
-              <span class="unit-hint" id="unit-hint"></span>
-            </div>
-            <details class="section" data-section="advanced">
-              <summary data-i18n="heatmap.advanced"></summary>
-              <label class="field">
-                <span class="label"><span data-i18n="controls.cell"></span> <output id="cell-out"></output></span>
-                <input type="range" id="cell" min="0.5" max="5" step="0.25" />
-              </label>
-              <label class="field">
-                <span class="label"><span data-i18n="controls.blur"></span> <output id="blur-out"></output></span>
-                <input type="range" id="blur" min="0" max="3" step="0.1" />
-              </label>
-              <label class="field">
-                <span class="label" data-i18n="controls.max"></span>
-                <input type="number" id="max" min="0.1" step="0.5" />
-              </label>
-              <label class="check"><input type="checkbox" id="include-jumps" /><span data-i18n="controls.jumps"></span></label>
             </details>
           </section>
         </div>
