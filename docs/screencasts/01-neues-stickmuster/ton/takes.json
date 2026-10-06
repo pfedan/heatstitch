@@ -1,0 +1,72 @@
+{
+  "1af28b0cb68fb446": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "[warm, inviting] In diesem Video stickst du dein erstes eigenes Muster: einen runden Aufnäher mit einer Welle. Dafür brauchst du nur die Maus und zwei Minuten."
+  },
+  "d5549cd20c3f5ddb": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "Klick links auf „Neu“. Es entsteht ein leeres Stickmuster. Der gestrichelte Rahmen ist dein Stickrahmen, hier hundert mal hundert Millimeter."
+  },
+  "92621ee6a9ec1213": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "Links auf der Leinwand liegen die Zeichenwerkzeuge. [focused] Nimm die Ellipse und zieh mit gedrückter Umschalttaste einen Kreis auf. [short pause] [delighted] Sobald du loslässt, ist er schon gestickt: als Füllung, passend zu deinem Stoff."
+  },
+  "3310ba24714214b4": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "Rechts siehst du, wie groß er ist. [casual] Tipp einfach sechzig Millimeter ein, die Höhe geht mit."
+  },
+  "306e1a270996b15c": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "Ein Klick auf das Farbfeld öffnet die Garne. Ich nehme ein helles Blau."
+  },
+  "fd50c20e175716cd": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "[focused] Jetzt die Welle. Mit dem Zeichenstift setzt ein Klick eine Ecke, Ziehen macht eine Rundung. Enter beendet die Linie. Eine Linie wird zuerst im Steppstich gestickt."
+  },
+  "dc87b7856f1dcf3d": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "[enthusiastic] Für eine kräftige Welle stellst du die Art auf Satin, ziehst die Breite auf drei Millimeter und gibst ihr weißes Garn."
+  },
+  "bc3da9231d58ed43": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "[curious] Mit der Leertaste siehst du, wie die Maschine stickt: erst den blauen Kreis, dann die Welle."
+  },
+  "b334905023a39dbf": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "Unter Anzeige zeigt „Realistische Fäden“ dein Muster so, wie es auf dem Stoff aussehen wird. [impressed] Schön, oder?"
+  },
+  "02cda017ac5a16e5": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "Zum Schluss wählst du links das Format deiner Maschine und speicherst. [short pause] [proud, warm] Fertig ist dein erstes Stickmuster."
+  }
+}
