@@ -315,6 +315,9 @@ const { layers, mergeBlocked, objectName, objectPanel, selectObjects } = bindObj
 });
 
 const { applyRestitched, convertSettings, stitchInfo, stitchPanel } = bindStitches({
+  get objectPanel() {
+    return objectPanel;
+  },
   get applyEdit() {
     return applyEdit;
   },
@@ -818,7 +821,7 @@ function redraw(): void {
       jumpsPanel.update({ list: q?.transitions ?? [], selected: ui.selectedJump, lang: getLang() });
       const objects = !ui.lettering && p && q && ui.selectedObjects.size;
       objectPanel.update(objects ? objectInfo(p, q) : null, getLang());
-      stitchPanel.update(objects ? { ...stitchInfo(p, q), ...rungInfo(p, q) } : null);
+      stitchPanel.update(objects ? { ...stitchInfo(p, q), ...rungInfo(p, q), blend: !!blendOf(p, q, [...ui.selectedObjects]).blend } : null);
       updateOverlapCard();
       letteringPanel.update(ui.lettering && q ? letteringInfo(q) : null, getLang());
       if (ui.focusText && ui.lettering) {
