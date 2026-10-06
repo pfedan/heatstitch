@@ -21,7 +21,7 @@ import { formatNumber, t, type Key } from '../i18n';
 import { ui } from './state';
 import { unionForm, recolorObjects } from '../model/shapeOps';
 import { blendObject } from '../model/blend';
-import { recolorBlock } from '../model/border';
+import { recolorBlock, takeThreads } from '../model/border';
 import { violations, conflicts, reorder } from '../model/order';
 import { wholeArea } from '../model/knockout';
 
@@ -198,6 +198,11 @@ export function bindObjects(app: ObjectsApp) {
     const starts: number[] = [];
     const next = reorder(p, q.objects, order, app.settings.trimMm, starts, { into: new Map(recolored.map((o) => [o, into!])) });
     if (next === p) return;
+    // A border or a blend's second thread moved into another color keeps it from now on.
+    if (recolored.length) {
+      const nk = app.seq(next);
+      takeThreads(next, recolored.map((o) => nk.objectAt[recordOfStitch(nk.numbers, starts[order.indexOf(o)] + 1)]).filter((o) => o >= 0));
+    }
     const conflict = coverConflict(q, p, order, movedSet);
     const keepHidden = ui.hiddenBlocks.size;
     app.applyEdit(next, f.measurement);

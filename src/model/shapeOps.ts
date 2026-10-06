@@ -59,8 +59,8 @@ export function deleteObjects(p: Pattern, which: number[], trimMm: number): Patt
   return next;
 }
 
-/** The link of a fill's border in a thread of its own, if it has one. */
-const ownBorder = (m: Remembered | undefined): string | undefined => (m?.fill?.border?.color ? m.fill.border.link : undefined);
+/** The link of a fill's border (an object of its own), if it has one. */
+const ownBorder = (m: Remembered | undefined): string | undefined => m?.fill?.border?.link;
 
 /** The pattern without the objects `which`, nothing else changed (with all gone, an empty design); null when none of them is there. */
 function removeObjects(p: Pattern, which: number[], trimMm: number): Pattern | null {
