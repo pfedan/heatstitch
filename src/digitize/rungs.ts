@@ -764,3 +764,34 @@ export function stripsOfAreas(outlines: Pt[][], lines: [Pt, Pt][], cuts: [Pt, Pt
   }
   return { areas, bad: null, hole: -1 };
 }
+
+/**
+ * The cut lines a fill was cut into these columns by (see stripsOfOutline), found again from the
+ * columns: an end of a column inside the fill (another column goes on beyond it, not the edge)
+ * is one. Drawn a little beyond the edge, as by hand.
+ */
+export function cutLinesBetween(cols: { left: Pt[]; right: Pt[] }[], outlines: Pt[][], holes: Pt[][]): [Pt, Pt][] {
+  const within = (q: Pt) => outlines.some((o) => inside(o, q)) && !holes.some((h) => inside(h, q));
+  const cuts: [Pt, Pt][] = [];
+  for (const c of cols) {
+    const n = Math.min(c.left.length, c.right.length);
+    if (n < 2) continue;
+    const ends: [Pt, Pt, Pt][] = [
+      [c.left[0], c.right[0], mid(c.left[1], c.right[1])],
+      [c.left[c.left.length - 1], c.right[c.right.length - 1], mid(c.left[c.left.length - 2], c.right[c.right.length - 2])],
+    ];
+    for (const [a, b, inward] of ends) {
+      const m = mid(a, b);
+      const d = Math.hypot(m[0] - inward[0], m[1] - inward[1]) || 1;
+      if (!within([m[0] + ((m[0] - inward[0]) / d) * 0.4, m[1] + ((m[1] - inward[1]) / d) * 0.4])) continue;
+      // The two columns on either side of one cut line end on it both.
+      if (cuts.some(([p, q]) => Math.hypot((p[0] + q[0]) / 2 - m[0], (p[1] + q[1]) / 2 - m[1]) < 0.3)) continue;
+      const w = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+      const e: Pt = [((b[0] - a[0]) / w) * 0.5, ((b[1] - a[1]) / w) * 0.5];
+      cuts.push([[a[0] - e[0], a[1] - e[1]], [b[0] + e[0], b[1] + e[1]]]);
+    }
+  }
+  return cuts;
+}
+
+const mid = (a: Pt, b: Pt): Pt => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
