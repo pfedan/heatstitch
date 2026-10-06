@@ -194,7 +194,8 @@
 
 .ampel-fix,
 .ampel-rest,
-.ampel-all {
+.ampel-all,
+.ampel-search {
   display: inline-flex;
   align-items: baseline;
   gap: 6px;
@@ -212,10 +213,15 @@
   border-style: dashed;
 }
 
-.ampel-all {
+.ampel-all,
+.ampel-search {
   justify-content: center;
   padding: 5px 8px;
   font-size: 13px;
+}
+
+.ampel-search span {
+  color: var(--muted);
 }
 
 .ampel-all span {

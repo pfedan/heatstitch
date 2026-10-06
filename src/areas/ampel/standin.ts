@@ -46,8 +46,8 @@ import {
  */
 export const RED_MIN_MM2: Record<FabricId, number> = { woven: 5, woven_heavy: 5, cap: 5, knit: 3, fleece: 3, terry: 3, light: 3, sheer: 3, leather: 3 };
 
-/** Quiet time after a change before fixes are worked out (ms). */
-const SETTLE_MS = 900;
+/** Quiet time after a change before fixes are worked out (ms): no search starts while one is still at work. */
+const SETTLE_MS = 2000;
 
 /** The validation reasons behind each kind of finding. */
 const TYPE_REASONS: Record<FindingType, Reason[]> = {
@@ -221,6 +221,8 @@ export interface StandInDeps {
    * check view is open instead of slowing down editing; the light itself is always there.
    */
   readonly wanted: () => boolean;
+  /** Whether the search waits to be asked for (phone, large design) instead of starting by itself. */
+  readonly onRequest: () => boolean;
 }
 
 /** One kind's plan, kept so its rest can be offered in the correction card. */
@@ -252,6 +254,10 @@ export function createStandIn(deps: StandInDeps): StandIn {
   const planned = new Map<string, Planned>();
   let timer = 0;
   let running = false;
+  /** The search was asked for, for the version in `fixKey`. */
+  let requested = false;
+  /** May the search run now: wanted, and started by itself or asked for. */
+  const may = () => deps.wanted() && (requested || !deps.onRequest());
 
   const same = (a: unknown[], b: unknown[]) => a.length === b.length && a.every((x, i) => x === b[i]);
 
@@ -287,8 +293,9 @@ export function createStandIn(deps: StandInDeps): StandIn {
         fixes[r.type] = { direct: has ? { state: 'pending' } : { state: 'none' }, rest: has ? { state: 'pending' } : { state: 'none' } };
       }
       all = active.target.all > 0 && active.reasons.filter((r) => active.target[r.type] > 0).length > 1 ? { state: 'pending' } : { state: 'none' };
-      schedule();
-    } else if (!running && !timer && waiting() && deps.wanted()) schedule();
+      requested = false;
+      if (may()) schedule();
+    } else if (!running && !timer && waiting() && may()) schedule();
     const fabrics = {} as Record<FabricId, FabricReport>;
     for (const fab of FABRICS) {
       const t = ts[fab.id];
@@ -309,7 +316,7 @@ export function createStandIn(deps: StandInDeps): StandIn {
 
   /** Works out the fixes of the current version, kind by kind, then all together. */
   async function run(): Promise<void> {
-    if (!deps.wanted()) return;
+    if (!may()) return;
     if (running || deps.busy()) return schedule();
     const f = deps.files.active;
     const v = f?.validation;
@@ -317,7 +324,9 @@ export function createStandIn(deps: StandInDeps): StandIn {
     if (!f || !v || !p) return;
     const key = fixKey;
     const stale = () => key !== fixKey || f.pattern !== p || deps.busy() || !deps.wanted();
-    const pending = FINDING_TYPES.filter((t) => fixes[t]?.direct.state === 'pending');
+    // Worst kind first: its button comes first (the reasons are sorted critical first, then by area).
+    const order = tallies(f, v)[v.profile.fabric].reasons.map((r) => r.type);
+    const pending = FINDING_TYPES.filter((t) => fixes[t]?.direct.state === 'pending').sort((a, b) => order.indexOf(a) - order.indexOf(b));
     running = true;
     notify();
     try {
@@ -345,7 +354,7 @@ export function createStandIn(deps: StandInDeps): StandIn {
       const now = deps.files.active?.pattern;
       if (now) backToVersion(now);
       // Interrupted (the correction was busy) or a newer version waits: once more after a pause.
-      if (deps.wanted() && (key !== fixKey || waiting())) schedule();
+      if (may() && (key !== fixKey || waiting())) schedule();
       notify();
     }
   }
@@ -497,6 +506,15 @@ export function createStandIn(deps: StandInDeps): StandIn {
       return done;
     },
     applied: () => applied,
+    onRequest: () => deps.onRequest() && !requested,
+    search() {
+      if (requested || !waiting()) return;
+      requested = true;
+      clearTimeout(timer);
+      timer = 0;
+      void run();
+      notify();
+    },
     offerRest(rest, title) {
       const f = deps.files.active;
       const pl = planned.get(rest.id);

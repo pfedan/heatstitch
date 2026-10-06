@@ -35,6 +35,12 @@ export interface AmpelApp {
 
 /** How many reasons the light names. */
 const SHOWN_REASONS = 3;
+/**
+ * From this many objects the search for fixes waits to be asked for: it would keep the page busy
+ * for a long while (the cat with 60 objects takes about 40 s). On a phone it always waits.
+ */
+const LARGE_OBJECTS = 40;
+const PHONE = typeof matchMedia === 'function' ? matchMedia('(max-width: 760px)') : null;
 /** The light's colours in the classes of the check area (src/areas/check/check.css). */
 const LEVEL: Record<Light, string> = { green: 'safe', yellow: 'caution', red: 'critical' };
 const mm = (v: number) => formatNumber(v < 10 ? Math.round(v * 10) / 10 : Math.round(v), v < 10 && v % 1 ? 1 : 0);
@@ -59,6 +65,10 @@ export function initAmpel(app: AmpelApp): { update: () => void } {
     offer: app.offer,
     busy: app.busy,
     wanted: () => app.settings.mode === 'density',
+    onRequest: () => {
+      const p = app.files.active?.pattern;
+      return !!PHONE?.matches || (!!p && app.seq(p).objects.length >= LARGE_OBJECTS);
+    },
   });
   let version = 0;
   engine.onChange(() => {
@@ -78,6 +88,8 @@ export function initAmpel(app: AmpelApp): { update: () => void } {
   const ready = <T,>(p: Pending<T> | undefined): T | null => (p?.state === 'ready' ? p.value : null);
   const directOf = (x: FindingType) => ready(active()?.fixes?.[x]?.direct);
   const restOf = (x: FindingType) => ready(active()?.fixes?.[x]?.rest);
+  /** Whether there are fixes still to be worked out. */
+  const searchable = (a = active()) => !!a && (FINDING_TYPES.some((x) => a.fixes?.[x]?.direct.state === 'pending') || a.all?.state === 'pending');
 
   /** Into the check view, the card in sight. */
   function open(): void {
@@ -134,6 +146,7 @@ export function initAmpel(app: AmpelApp): { update: () => void } {
     command({ id: `ampel.fix.${x}`, label: `ampel.cmd.fix.${x}` as Key, group: G, when: () => !!directOf(x), run: () => apply(directOf(x)) });
     command({ id: `ampel.rest.${x}`, label: `ampel.cmd.rest.${x}` as Key, group: G, when: () => !!restOf(x) && !app.busy(), run: () => offer(restOf(x)) });
   }
+  command({ id: 'ampel.search', label: 'ampel.search', group: G, when: () => loaded() && engine.onRequest() && searchable(), run: () => engine.search() });
   command({ id: 'ampel.fix.all', label: 'ampel.cmd.fix.all', group: G, when: () => !!ready(active()?.all), run: () => apply(ready(active()?.all)) });
   for (const f of FABRICS) {
     command({ id: `ampel.fabric.${f.id}`, label: `ampel.cmd.fabric.${f.id}` as Key, group: G, when: () => loaded() && app.settings.mode !== 'image' && app.settings.profile.fabric !== f.id, run: () => pickFabric(f.id) });
@@ -180,7 +193,7 @@ export function initAmpel(app: AmpelApp): { update: () => void } {
   /** The figures of a fix: "behebt 22 von 30 mm²". */
   const fixes = (o: { fixedMm2: number; ofMm2: number }, short = true) => t(short ? 'ampel.fixes.short' : 'ampel.fixes', { fixed: mm(o.fixedMm2), of: mm(o.ofMm2) });
 
-  function reasonRow(r: ReasonSummary, report: AmpelReport, working: boolean): HTMLElement {
+  function reasonRow(r: ReasonSummary, report: AmpelReport, working: boolean, asked: boolean): HTMLElement {
     const fx = report.fabrics[report.fabric].fixes?.[r.type];
     const area = r.level === 'critical' ? t('ampel.area.critical', { mm: mm(r.targetMm2 || r.areaMm2) }) : t('ampel.area.caution', { mm: mm(r.areaMm2) });
     const spots = t('ampel.spots', { n: r.spots });
@@ -221,8 +234,9 @@ export function initAmpel(app: AmpelApp): { update: () => void } {
       );
     }
     const pending = fx?.direct.state === 'pending' || fx?.rest.state === 'pending';
-    if (pending) actions.push(h('span', { class: `ampel-wait${working ? ' on' : ''}` }, t('ampel.working')));
-    else if (!direct && !rest && fx && r.targetMm2 > 0) actions.push(h('span', { class: 'ampel-wait' }, t('ampel.noFix')));
+    if (pending) {
+      if (asked) actions.push(h('span', { class: `ampel-wait${working ? ' on' : ''}` }, t('ampel.working')));
+    } else if (!direct && !rest && fx && r.targetMm2 > 0) actions.push(h('span', { class: 'ampel-wait' }, t('ampel.noFix')));
     return h('li', { class: 'ampel-reason' }, top, actions.length ? h('div', { class: 'ampel-acts' }, actions) : null);
   }
 
@@ -266,8 +280,10 @@ export function initAmpel(app: AmpelApp): { update: () => void } {
 
     const parts: HTMLElement[] = [fabricChips(r)];
     const working = engine.working();
+    // On a phone and for large designs the search waits for a click.
+    const asked = !engine.onRequest();
     const shown = a.reasons.slice(0, SHOWN_REASONS);
-    if (shown.length) parts.push(h('ol', { class: 'ampel-reasons' }, shown.map((x) => reasonRow(x, r, working))));
+    if (shown.length) parts.push(h('ol', { class: 'ampel-reasons' }, shown.map((x) => reasonRow(x, r, working, asked))));
     else parts.push(h('p', { class: 'muted small' }, t('ampel.none')));
     // "Alles beheben" when more than one kind is fixed, or together it fixes more than any one fix.
     const singles = FINDING_TYPES.map((x) => ready(a.fixes?.[x]?.direct)).filter((x): x is ReadyFix => !!x);
@@ -280,6 +296,15 @@ export function initAmpel(app: AmpelApp): { update: () => void } {
           { type: 'button', class: 'primary ampel-all', title: `${cap(fixes(all.outcome, false))}. ${t('ampel.all.hint')} ${t('ampel.fix.after', { light: t(`ampel.light.${all.outcome.lightAfter}` as Key) })}`, onclick: () => runCommand('ampel.fix.all') },
           h('b', null, t('ampel.all')),
           h('span', null, fixes(all.outcome)),
+        ),
+      );
+    } else if (!asked && searchable(a)) {
+      parts.push(
+        h(
+          'button',
+          { type: 'button', class: 'ampel-search', title: t('ampel.search.hint'), onclick: () => runCommand('ampel.search') },
+          h('b', null, t('ampel.search')),
+          h('span', null, t('ampel.search.time')),
         ),
       );
     } else if (a.all?.state === 'pending' && shown.length > 1) {

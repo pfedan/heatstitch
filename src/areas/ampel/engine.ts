@@ -174,4 +174,11 @@ export interface AmpelEngine {
   apply(fix: ReadyFix): AppliedFix | null;
   /** Fixes applied in this session, newest last. */
   applied(): readonly AppliedFix[];
+  /**
+   * Whether the search for fixes waits to be asked for (on a phone and for large designs).
+   * Otherwise it starts by itself once the design has been still for a moment, worst kind first.
+   */
+  onRequest(): boolean;
+  /** Starts the search for fixes of the current version, when it waits to be asked for. */
+  search(): void;
 }
