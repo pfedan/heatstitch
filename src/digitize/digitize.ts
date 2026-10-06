@@ -3,6 +3,7 @@ import { components, type Components } from '../image/labels';
 import { NONE, type Prepared } from '../image/prepare';
 import { COLOR_CHANGE, END, JUMP, PatternBuilder, STITCH, TRIM, type Pattern, type ThreadColor } from '../model/pattern';
 import { fabricOf, recommendedSpacing, type Profile } from '../validation/profiles';
+import { sewBlades, splitBlades, type Blades } from './blades';
 import { fillRegion } from './fill';
 import { flowFill } from './flow';
 import { coverage, peakDensity } from './measure';
@@ -174,6 +175,11 @@ interface Obj {
   graph: Graph | null;
   /** Points on the region for choosing the nearest next object. */
   probe: Pt[];
+  /** Blades sewn as satin, then their body filled over their starts (see blades.ts). */
+  blades?: Blades;
+  body?: Obj;
+  /** A blades' body: straight rows at this angle unless the user fixed one. */
+  rowAngle?: number;
 }
 
 const dist = (p: Pt, q: Pt) => Math.hypot(p[0] - q[0], p[1] - q[1]);
@@ -348,6 +354,9 @@ function sewRun(o: Obj, start: Pt, tol: number): Pt[][] {
   return run.length ? [run] : [];
 }
 
+/** Satin that neither piles up nor leaves its region bare. */
+const satinOk = (runs: Pt[][], r: Region, o: DigitizeOptions) => peakDensity(runs) <= (SATIN_PEAK * 2) / o.satinSpacing && coverage(r, runs) >= SATIN_COVER;
+
 /**
  * Stitches for one object starting near `pos`: satin that would pile up or leave its region bare is
  * filled instead, a region too thin to fill becomes running stitch. Fills note their angle in
@@ -355,9 +364,10 @@ function sewRun(o: Obj, start: Pt, tol: number): Pt[][] {
  */
 function sewOne(obj: Obj, pos: Pt, o: DigitizeOptions, satin: SatinParams, angles: { obj: Obj; angle: number }[], orient?: Orientation): Pt[][] {
   let out: Pt[][] = [];
+  if (obj.blades) return sewBlades(obj.blades, pos, satin, o.underlay, o.tolerance).filter((r) => r.length > 1);
   if (obj.info.kind === 'satin') {
     out = sewSatin(obj, pos, satin, o.underlay, o.tolerance);
-    if (peakDensity(out) > (SATIN_PEAK * 2) / o.satinSpacing || coverage(obj.region, out) < SATIN_COVER) {
+    if (!satinOk(out, obj.region, o)) {
       obj.info.kind = 'fill';
       out = [];
     }
@@ -366,8 +376,8 @@ function sewOne(obj: Obj, pos: Pt, o: DigitizeOptions, satin: SatinParams, angle
     // Fill angles of touching regions sewn already, so neighbours differ.
     const near = angles.filter((a) => touches(a.obj.region, obj.region)).map((a) => a.angle);
     const fp = { spacing: o.spacing, stitch: o.stitch, angle: o.angle, pull: o.pull, ...fillUnder(o, obj.region.areaMm2), tolerance: o.tolerance };
-    const flow = o.flow && o.angle === null && orient ? flowFill(obj.region, obj.graph, orient, fp, pos) : null;
-    const res = flow ?? fillRegion(obj.region, fp, pos, near);
+    const flow = o.flow && o.angle === null && orient && obj.rowAngle === undefined ? flowFill(obj.region, obj.graph, orient, fp, pos) : null;
+    const res = flow ?? fillRegion(obj.region, { ...fp, angle: o.angle ?? obj.rowAngle ?? null }, pos, near);
     if (res) {
       out = res.runs;
       obj.info.angle = res.angle;
@@ -384,6 +394,7 @@ function sewOne(obj: Obj, pos: Pt, o: DigitizeOptions, satin: SatinParams, angle
 export function digitize(prep: Prepared, o: DigitizeOptions, name = 'image'): Digitized {
   const { width: w, height: h, pxMm, labels, palette } = prep;
   const comps = components(labels, w, h);
+  const satin = satinOf(o);
   // Colors by sewn area, largest first.
   const area = new Array(palette.length).fill(0);
   for (const l of labels) if (l !== NONE) area[l]++;
@@ -405,10 +416,18 @@ export function digitize(prep: Prepared, o: DigitizeOptions, name = 'image'): Di
     const obj: Obj = { info: { kind, label, areaMm2: region.areaMm2 }, region, graph, probe: probes(region) };
     if (!obj.probe.length) continue;
     if (!byColor.has(label)) byColor.set(label, []);
+    // Blades on a body (a grass tuft): the blades as satin, then the body as a fill over their
+    // starts and over the thread run between them.
+    const networkOk = () => satinOk(sewSatin(obj, [0, 0], satin, o.underlay, o.tolerance), region, o);
+    const blades = kind !== 'run' ? splitBlades(region, graph, kind, o, satin, networkOk) : null;
+    if (blades) {
+      obj.info = { kind: 'satin', label, areaMm2: region.areaMm2 - blades.core.areaMm2 };
+      obj.blades = blades;
+      obj.body = { info: { kind: 'fill', label, areaMm2: blades.core.areaMm2 }, region: blades.core, graph: null, probe: probes(blades.core), rowAngle: blades.angle };
+    }
     byColor.get(label)!.push(obj);
   }
 
-  const satin = satinOf(o);
   const blocks: Block[] = [];
   const objects: DigitizedObject[] = [];
   let pos: Pt = [0, 0];
@@ -418,7 +437,18 @@ export function digitize(prep: Prepared, o: DigitizeOptions, name = 'image'): Di
     if (!objs?.length) continue;
     const runs: Pt[][] = [];
     const owners: number[] = [];
-    const rankOf = (x: Obj) => (x.info.kind === 'fill' ? 0 : 1);
+    // Blades with their body go with the fills.
+    const rankOf = (x: Obj) => (x.info.kind === 'fill' || x.body ? 0 : 1);
+    const place = (obj: Obj) => {
+      const out = sewOne(obj, pos, o, satin, angles, prep.orient);
+      if (!out.length) return;
+      if (obj.info.kind === 'fill') obj.info.shape = keep(obj, o, w, h);
+      runs.push(...out);
+      for (const _ of out) owners.push(objects.length);
+      objects.push(obj.info);
+      const last = out[out.length - 1];
+      pos = last[last.length - 1];
+    };
     const todo = objs.slice();
     while (todo.length) {
       // Fills first, then nearest.
@@ -434,14 +464,8 @@ export function digitize(prep: Prepared, o: DigitizeOptions, name = 'image'): Di
         }
       });
       const obj = todo.splice(bi, 1)[0];
-      const out = sewOne(obj, pos, o, satin, angles, prep.orient);
-      if (!out.length) continue;
-      if (obj.info.kind === 'fill') obj.info.shape = keep(obj, o, w, h);
-      runs.push(...out);
-      for (const _ of out) owners.push(objects.length);
-      objects.push(obj.info);
-      const last = out[out.length - 1];
-      pos = last[last.length - 1];
+      place(obj);
+      if (obj.body?.probe.length) place(obj.body);
     }
     if (runs.length) blocks.push({ color: palette[label].thread, runs, owners });
   }
