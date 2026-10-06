@@ -3,7 +3,7 @@ import { digitizeDefaults } from '../src/digitize/digitize';
 import { addShape } from '../src/model/addShape';
 import { rememberObjects, sewObjects, type ObjectKind, type SewObject } from '../src/model/objects';
 import { STITCH, type Pattern } from '../src/model/pattern';
-import { forgetAll, isGuessed, remember, remembered, rememberedIn, restitch, restoreRemembered, type RestitchResult, DECO_PATTERNS, OPEN_PATTERNS, type FillPattern, type FillSettings, type SatinSettings, type Settings } from '../src/model/restitch';
+import { analyze, forgetAll, isGuessed, remember, remembered, rememberedIn, restitch, restoreRemembered, type RestitchResult, DECO_PATTERNS, OPEN_PATTERNS, type FillPattern, type FillSettings, type SatinSettings, type Settings } from '../src/model/restitch';
 import { reverseObjects } from '../src/model/reverse';
 import { transformSewObject } from '../src/model/reshape';
 import { mirrorMatrix } from '../src/model/shapeOps';
@@ -110,6 +110,8 @@ function what(x: At) {
     kind: o.kind,
     area: r!.region ? Math.round(r!.region.areaMm2 * 10) / 10 : null,
     columns: r!.columns ? JSON.stringify(r!.columns.map((c) => c.map((k) => [k.left.length, k.right.length, k.rungs?.length ?? 0]))) : null,
+    // The parts it was sewn in, taken as they are (not told apart again by how the stitches look).
+    parts: r!.parts && analyze(x.p, o, stitchKinds(x.p)).parts.map((pt) => pt.kind + (pt.border ? '+border' : '')).join(' '),
   };
 }
 
