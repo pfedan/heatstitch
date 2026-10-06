@@ -32,7 +32,12 @@ export interface ObjectActions {
 
   selectAll(): void;
   clear(): void;
-  duplicate(): void;
+  duplicate(inPlace?: boolean): void;
+  /** Ctrl+C: remembers the selected objects; false when nothing is selected. */
+  copy(): boolean;
+  /** Ctrl+V: the remembered objects once more beside them; false when nothing was copied. */
+  paste(): boolean;
+  canPaste(): boolean;
   remove(): void;
   canShift(s: Shift): boolean;
   shift(s: Shift): void;
@@ -89,7 +94,6 @@ const C = 'objects.group.colors' as const;
 /** Registers every action of the area as a command. */
 export function registerObjectCommands(a: ObjectActions): void {
   actions = a;
-  const one = () => a.frame().length === 1;
   /** Objects selected that the object actions work on (not a lettering, not while drawing). */
   const some = () => a.flow() && a.frame().length > 0 && !a.lettering() && !a.drawing() && !a.info()?.shaping;
   const info = () => a.info();
@@ -97,7 +101,10 @@ export function registerObjectCommands(a: ObjectActions): void {
   command({ id: 'object.selectAll', label: 'objects.selectAll', group: G, keys: ['Mod+A'], when: () => a.flow() && a.count() > 0 && !a.typing(), run: a.selectAll });
   command({ id: 'object.clear', label: 'objects.clear', group: G, keys: ['Escape'], bind: false, when: a.hasSelection, run: a.clear });
   // Mod+D and Delete are read by src/app/keys.ts; the rules here are the same ones it asks.
-  command({ id: 'object.duplicate', label: 'objects.duplicate', group: G, icon: 'obj-duplicate', keys: ['Mod+D'], bind: false, when: () => a.flow() && one() && !a.drawing(), run: a.duplicate });
+  command({ id: 'object.duplicate', label: 'objects.duplicate', group: G, icon: 'obj-duplicate', when: some, run: () => a.duplicate() });
+  command({ id: 'object.duplicateInPlace', label: 'objects.duplicateInPlace', group: G, keys: ['Mod+D'], bind: false, when: some, run: () => a.duplicate(true) });
+  command({ id: 'object.copy', label: 'objects.copy', group: G, keys: ['Mod+C'], bind: false, when: some, run: () => void a.copy() });
+  command({ id: 'object.paste', label: 'objects.paste', group: G, keys: ['Mod+V'], bind: false, when: () => a.flow() && a.canPaste() && !a.drawing(), run: () => void a.paste() });
   command({ id: 'object.delete', label: 'objects.delete', group: G, icon: 'obj-delete', keys: ['Delete', 'Backspace'], bind: false, when: () => a.flow() && a.frame().length > 0 && !a.drawing(), run: a.remove });
   command({ id: 'object.openShape', label: 'objects.openShape', group: G, icon: 'obj-shape', keys: ['Enter'], bind: false, when: () => !!info()?.shapeable && info()!.selected.length === 1 && !info()!.shaping && !info()!.editing, run: a.openShape });
   command({ id: 'object.openStitches', label: 'objects.openStitches', group: G, icon: 'obj-stitches', keys: ['E'], bind: false, when: () => info()?.selected.length === 1 && !info()!.editing, run: a.openStitches });

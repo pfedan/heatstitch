@@ -265,6 +265,15 @@ const { colorList, layers, mergeBlocked, objectName, objectPanel, selectObjects 
   get duplicateSelected() {
     return duplicateSelected;
   },
+  get copySelected() {
+    return copySelected;
+  },
+  get pasteCopied() {
+    return pasteCopied;
+  },
+  get canPaste() {
+    return canPaste;
+  },
   get editor() {
     return editor;
   },
@@ -442,7 +451,7 @@ const { closeRungs, rungInfo, rungTool, sewAlongLines, syncRungs, toggleGuides, 
 
 // Shapes and the frame ---------------------------------------------------------------------------
 
-const { closeShape, deleteSelected, duplicateSelected, enterShape, followKnockouts, isLineObject, mirrorSelected, sewLine, sewLineAgain, shapeTarget, shapeTool, showBand, subtractSelected, syncShape, takeShapes } = bindShapes({
+const { canPaste, closeShape, copySelected, deleteSelected, duplicateSelected, pasteCopied, enterShape, followKnockouts, isLineObject, mirrorSelected, sewLine, sewLineAgain, shapeTarget, shapeTool, showBand, subtractSelected, syncShape, takeShapes } = bindShapes({
   get applyEdit() {
     return applyEdit;
   },
@@ -1454,8 +1463,14 @@ bindKeys({
   get drawTool() {
     return drawTool;
   },
+  get copySelected() {
+    return () => runCommand('object.copy');
+  },
   get duplicateSelected() {
-    return () => runCommand('object.duplicate');
+    return (inPlace?: boolean) => runCommand(inPlace ? 'object.duplicateInPlace' : 'object.duplicate');
+  },
+  get pasteCopied() {
+    return () => runCommand('object.paste');
   },
   get editor() {
     return editor;

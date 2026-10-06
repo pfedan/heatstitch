@@ -163,7 +163,7 @@ type Tile = FillPattern;
 type TileGroup = 'cover' | 'open';
 const GROUPS: Record<TileGroup, Tile[]> = {
   cover: ['tatami', 'gradient', 'contour', 'spiral', 'follow', 'guided', 'waves', 'rays', 'swirl', 'grain', 'circles'],
-  open: ['meander', 'maze', 'grid', 'echo', 'cross'],
+  open: ['none', 'meander', 'maze', 'grid', 'echo', 'cross'],
 };
 const TILE_GROUPS: TileGroup[] = ['cover', 'open'];
 const tileOf = (s: FillSettings): Tile => s.pattern;
@@ -194,6 +194,7 @@ const PATTERN_ICON: Record<Tile, string> = {
   grid: SVG('<path d="M7 2.8l4 2.3v4.6l-4 2.3-4-2.3V5.1zM17 2.8l4 2.3v4.6l-4 2.3-4-2.3V5.1zM12 11.6l4 2.3v4.6L12 20.8l-4-2.3v-4.6z"/>', 1.4),
   echo: SVG('<path d="M12 20.5S3 15 3 9.3a4.6 4.6 0 0 1 9-1.4 4.6 4.6 0 0 1 9 1.4C21 15 12 20.5 12 20.5z"/><path d="M12 15.6s-4.4-2.8-4.4-5.6a2.2 2.2 0 0 1 4.4-.7 2.2 2.2 0 0 1 4.4.7c0 2.8-4.4 5.6-4.4 5.6z"/>', 1.4),
   cross: SVG('<path d="M4 4l6 6M10 4l-6 6M14 4l6 6M20 4l-6 6M4 14l6 6M10 14l-6 6M14 14l6 6M20 14l-6 6"/>'),
+  none: SVG('<rect x="3.5" y="3.5" width="17" height="17" rx="3"/>', 2),
 };
 
 /** No embossing: plain rows. */
@@ -537,6 +538,13 @@ export class StitchPanel {
     if (info.knockout) tools.push(this.knockoutSwitch(info.knockout));
     tools.push(this.handRow(), this.lockSwitch(info.lock), info.free?.can ? this.looseRow() : null);
     const border = s.border ? t(`stitch.border.${isRunType(s.border.type) ? 'run' : s.border.type}` as Key) : t('stitches.sec.off');
+    // Empty: its border is all there is to set.
+    if (s.pattern === 'none')
+      return [
+        this.sec('kind', 'stitches.sec.kind', [this.kindSwitch(info), this.patterns(s)], t('stitch.pattern.none')),
+        this.borderSection(s, border),
+        this.sec('tools', 'stitches.sec.tools', tools),
+      ];
     return [
       this.sec('kind', 'stitches.sec.kind', [this.kindSwitch(info), this.patterns(s)], t(`stitch.pattern.${s.pattern}` as Key)),
       this.sec('look', 'stitches.sec.look', look),
@@ -1050,6 +1058,13 @@ export class StitchPanel {
       const { focus: _f, centers: _c, fade: _d, blend: _b, ...rest } = to.deco ?? {};
       to.pattern = tile;
       to.deco = rest;
+      // Empty: only the border is sewn, as the object in its thread (a triple stitch when it had none).
+      if (tile === 'none') {
+        if (to.border) {
+          delete to.border.color;
+          delete to.border.link;
+        } else to.border = { type: 'triple', width: BORDER_WIDTH };
+      }
     };
     for (const tile of GROUPS[group]) {
       const b = h('button', { type: 'button', class: 'pattern-tile' + (tile === now ? ' active' : ''), role: 'radio', 'aria-checked': String(tile === now), title: t(`stitch.pattern.${tile}.hint` as Key) });
@@ -1623,12 +1638,20 @@ export class StitchPanel {
       s.border,
       (b) => {
         if (b) s.border = Object.assign(s.border ?? b, b);
-        else delete s.border;
+        else {
+          delete s.border;
+          // An empty fill is its border: without it, it is filled again (and picking Empty gives a
+          // fill a border).
+          if (s.pattern === 'none') {
+            s.pattern = 'tatami';
+            this.group = null;
+          }
+        }
       },
       true,
       true,
     );
-    const box = this.sec('border', 'stitches.sec.border', [parts.type, ...parts.look, ...parts.hold, s.border ? this.borderThread(s.border) : null], extra);
+    const box = this.sec('border', 'stitches.sec.border', [parts.type, ...parts.look, ...parts.hold, s.border && s.pattern !== 'none' ? this.borderThread(s.border) : null], extra);
     box.title = t('stitch.border.intro');
     return this.lights(box, 'border');
   }

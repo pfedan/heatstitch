@@ -40,7 +40,10 @@ export interface ObjectsApp {
   readonly commitTransform: (m: Mat) => void;
   readonly deleteSelected: () => void;
   readonly drawTool: DrawTool;
-  readonly duplicateSelected: () => void;
+  readonly duplicateSelected: (inPlace?: boolean) => void;
+  readonly copySelected: () => boolean;
+  readonly pasteCopied: () => boolean;
+  readonly canPaste: () => boolean;
   readonly editor: Editor;
   readonly enterShape: (o: number, fit: boolean) => void;
   readonly files: FileList;
@@ -567,7 +570,14 @@ export function bindObjects(app: ObjectsApp) {
       if (app.editor.active) app.setEditing(false);
       selectObjects([], false);
     },
-    duplicate: () => withUndo(app.duplicateSelected),
+    duplicate: (inPlace) => withUndo(() => app.duplicateSelected(inPlace)),
+    copy: () => app.copySelected(),
+    paste: () => {
+      let done = false;
+      withUndo(() => (done = app.pasteCopied()));
+      return done;
+    },
+    canPaste: () => app.canPaste(),
     remove: () => {
       const n = app.frameObjects().length;
       withUndo(app.deleteSelected, () => objectCount(n));
