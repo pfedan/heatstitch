@@ -241,7 +241,7 @@ function score(v: ValidationResult, opts: CorrectionOptions): number {
  * stitching, checked every 0.1 mm along them. A row that crosses a visible gap between two
  * outlines is not hidden, even if both of its ends are.
  */
-function hiddenStitches(p: Pattern): Uint8Array {
+export function hiddenStitches(p: Pattern): Uint8Array {
   const n = p.cmd.length;
   const covered = new Uint8Array(n); // segment ending at i
   const runs = stitchRuns(p);

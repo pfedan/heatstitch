@@ -98,7 +98,7 @@ function reduce(g: SubGrid, mode: 'max' | 'mean'): Float32Array {
  * the peak instead of the mean of each cell keeps narrow columns (lettering, borders) from being
  * averaged away with their empty surroundings.
  */
-export function measurePattern(p: Pattern, skipCover?: Uint8Array): Measurement {
+export function measurePattern(p: Pattern, skipCover?: Uint8Array, gaps = true): Measurement {
   const total = subGrid(p, 'thread');
   const mask = satinMask(p);
   const satinSub = subGrid(p, 'thread', (end) => mask[end] === 1);
@@ -124,7 +124,7 @@ export function measurePattern(p: Pattern, skipCover?: Uint8Array): Measurement 
     satin,
     shorts: shortStitchCounts(p, tags, originX, originY, cols, rows),
     holes: holeNeighbours(p, tags, originX, originY, cols, rows),
-    ...measureCoverage(p, totalMean, originX, originY, cols, rows, skipCover),
+    ...measureCoverage(p, totalMean, originX, originY, cols, rows, skipCover, gaps),
   };
 }
 
