@@ -4,6 +4,9 @@
 
 const away = [1480, 200]; // a quiet spot on the canvas, outside the hoop
 
+// Shorter moves and pauses where many steps share one sentence.
+let pace = 1;
+
 /** Drags a range slider of the lettering card to a value, then nudges it there exactly. */
 const slide = async (s, label, value, sec = 1.2) => {
   const input = s.page.locator('#lettering-body label', { hasText: label }).locator('input[type=range]');
@@ -22,11 +25,11 @@ const slide = async (s, label, value, sec = 1.2) => {
 
 /** Opens the font list and picks a font, scrolling the list gently until it shows. */
 const pickFont = async (s, id, { pauseAt, step = 40 } = {}) => {
-  await s.click('.font-current', { move: 0.9 });
-  await s.wait(1.2);
+  await s.click('.font-current', { move: 0.9 * pace });
+  await s.wait(1.2 * pace);
   const list = s.page.locator('.font-list');
   const row = s.page.locator(`.font-row[data-font=${id}]`);
-  await s.move(list, 0.7);
+  await s.move(list, 0.7 * pace);
   for (let i = 0; i < 60; i++) {
     const lb = await s.box(list);
     const rb = await s.box(row);
@@ -34,33 +37,33 @@ const pickFont = async (s, id, { pauseAt, step = 40 } = {}) => {
       const pb = await s.box(s.page.locator(`.font-row[data-font=${pauseAt}]`));
       if (pb.y + pb.height < lb.y + lb.height - 10) {
         await s.label('ohne Ä', s.page.locator(`.font-row[data-font=${pauseAt}] .font-tags`), 'left');
-        await s.wait(2.6);
+        await s.wait(2.6 * pace);
         s.unlabel();
         pauseAt = null;
       }
     }
     if (!pauseAt && rb.y + rb.height < lb.y + lb.height - 10) break;
     await s.page.mouse.wheel(0, step);
-    await s.wait(0.07);
+    await s.wait(0.07 * pace);
   }
-  await s.wait(0.6);
-  await s.click(row, { move: 0.7, before: 0.4 });
+  await s.wait(0.6 * pace);
+  await s.click(row, { move: 0.7 * pace, before: 0.4 * pace });
 };
 
 const setHeight = async (s, mm) => {
   const h = s.page.locator('.lettering-height');
-  await s.click(h, { move: 0.8 });
+  await s.click(h, { move: 0.8 * pace });
   await s.page.keyboard.press('Control+a');
-  await s.wait(0.3);
-  await s.type(mm, { perChar: 0.25 });
-  await s.press('Enter', { show: 0.9 });
+  await s.wait(0.3 * pace);
+  await s.type(mm, { perChar: 0.25 * pace });
+  await s.press('Enter', { show: 0.9 * pace });
 };
 
 const pickThread = async (s, name) => {
-  await s.click('.lettering-color', { move: 0.8 });
-  await s.wait(1.0);
-  await s.click(`.color-pop .pick[title*="${name}"]`, { move: 0.8, before: 0.4 });
-  await s.wait(0.6);
+  await s.click('.lettering-color', { move: 0.8 * pace });
+  await s.wait(1.0 * pace);
+  await s.click(`.color-pop .pick[title*="${name}"]`, { move: 0.8 * pace, before: 0.4 * pace });
+  await s.wait(0.6 * pace);
 };
 
 export default {
@@ -176,18 +179,20 @@ export default {
       text: 'Ein zweiter Klick auf „Text“ setzt den nächsten Schriftzug genau darunter. Für den Namen nehme ich eine Schreibschrift, Pacificlo, zwanzig Millimeter hoch, in Rosa.',
       textEn: 'A second click on “Text” puts the next lettering right underneath. For the name I take a script font, Pacificlo, twenty millimetres high, in pink.',
       run: async (s) => {
-        await s.click(away, { move: 0.8 });
-        await s.click('#lettering-new', { move: 1.0 });
-        await s.wait(0.6);
-        await s.move([1300, 820], 0.8);
-        await s.type('Frieda', { perChar: 0.12 });
+        pace = 0.6;
+        await s.click(away, { move: 0.6, after: 0.2 });
+        await s.click('#lettering-new', { move: 0.7, after: 0.2 });
         await s.wait(0.3);
-        await pickFont(s, 'pacificlo', { step: 90 });
+        await s.move([1300, 820], 0.5);
+        await s.type('Frieda', { perChar: 0.1 });
+        await s.wait(0.2);
+        await pickFont(s, 'pacificlo', { step: 240 });
         await s.label('Pacificlo', '.font-current', 'left');
         await setHeight(s, '20');
         s.unlabel();
         await pickThread(s, 'Deep Rose');
-        await s.click(away, { move: 0.7 });
+        await s.click(away, { move: 0.6 });
+        pace = 1;
       },
     },
     {
