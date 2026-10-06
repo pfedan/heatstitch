@@ -724,6 +724,7 @@ export const de = {
   'stitch.outline.detach': 'Lösen',
   'stitch.outline.detach.hint': 'Ein eigenes Objekt daraus machen: es folgt der Füllung nicht mehr und lässt sich wie jeder Steppstich oder Satin einstellen',
   'stitch.outline.detached': 'Die Umrandung ist jetzt ein eigenes Objekt.',
+  'stitch.blend.change': 'Andere zweite Farbe',
   'stitch.blendOf.title': 'Zweite Farbe eines Verlaufs',
   'stitch.blendOf.text': 'Sie folgt ihrer Füllung: Form, Richtung und Abstand stellst du dort ein, das Garn über die Farbe der Lage.',
   'stitch.blendOf.detach.hint': 'Ein eigenes Objekt daraus machen: es folgt der Füllung nicht mehr',

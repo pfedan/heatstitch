@@ -113,12 +113,14 @@ export class ObjectPanel {
   private msg = $<HTMLElement>('object-msg');
   private key: unknown[] = [];
   private picker = new ThreadPicker('.thread-sw');
+  private info: ObjectInfo | null = null;
 
   constructor(private hooks: ObjectHooks) {
     $('object-close').addEventListener('click', () => hooks.clear());
   }
 
   update(info: ObjectInfo | null, lang: string): void {
+    this.info = info;
     const key = [info?.objects, info?.selected.join(), info?.hand.join(), info?.editing?.selection ?? -1, info?.shapeable, info?.shaping?.nodes ?? -1, info?.shaping?.smooth, info?.shaping?.line?.closed, info?.frame?.canScale, lang];
     if (key.every((k, i) => k === this.key[i])) return;
     this.key = key;
@@ -234,6 +236,20 @@ export class ObjectPanel {
     this.body.replaceChildren(head, dl, ...(actions.childElementCount ? [actions] : []), ...extraRows, ...handNote, ...tools, ...frameHint, hint);
   }
 
+  /** The thread picker for the second color of a blend, at `anchor` (also used by the stitch panel). */
+  pickBlend(anchor: HTMLElement, fill = this.info?.blend): void {
+    if (!fill) return;
+    this.picker.toggle(anchor, {
+      key: 'blend',
+      title: t('object.blend.pick'),
+      current: fill,
+      note: t('object.blend.note'),
+      onPick: (c) => {
+        if (!sameColor(c, fill)) this.hooks.blend(c);
+      },
+    });
+  }
+
   /**
    * What can be done with the selected objects as shapes: duplicate, cut out, mirror, put aside,
    * delete. The same actions in the panel and in the menu on the canvas (right click, long press).
@@ -243,20 +259,7 @@ export class ObjectPanel {
     const out: ObjectAction[] = [];
     const add = (icon: string, label: string, hint: string, run: (anchor: HTMLElement) => void) => out.push({ icon, label, hint, run });
     if (info.selected.length === 1) add(SHAPE_ICONS.duplicate, t('object.duplicate'), t('object.duplicate.hint'), () => this.hooks.duplicate());
-    const fill = info.blend;
-    if (fill) {
-      add(SHAPE_ICONS.blend, t('object.blend'), t('object.blend.hint'), (anchor) =>
-        this.picker.toggle(anchor, {
-          key: 'blend',
-          title: t('object.blend.pick'),
-          current: fill,
-          note: t('object.blend.note'),
-          onPick: (c) => {
-            if (!sameColor(c, fill)) this.hooks.blend(c);
-          },
-        }),
-      );
-    }
+    if (info.blend) add(SHAPE_ICONS.blend, t('object.blend'), t('object.blend.hint'), (anchor) => this.pickBlend(anchor, info.blend));
     if (info.subtractable) add(SHAPE_ICONS.subtract, t('object.subtract'), t('object.subtract.hint'), () => this.hooks.subtract());
     add(SHAPE_ICONS.mirrorX, t('object.mirrorX.short'), t('object.mirrorX'), () => this.hooks.mirror('x'));
     add(SHAPE_ICONS.mirrorY, t('object.mirrorY.short'), t('object.mirrorY'), () => this.hooks.mirror('y'));

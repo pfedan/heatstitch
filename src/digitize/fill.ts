@@ -83,8 +83,12 @@ interface Seg {
 type Section = Seg[];
 
 const STAGGERS = 4;
-/** A fading fill thins out to this share of its density at the far side. */
-const FADE_MIN = 0.05;
+/**
+ * A fading fill ends where it thins out below this share of its density: sparser rows would lie
+ * several millimetres apart, joined by long stitches across (the other thread of a blend covers
+ * that end almost alone anyway).
+ */
+const FADE_MIN = 0.15;
 const UNDERLAY_STITCH = 3;
 export const UNDERLAY_INSET = 0.4;
 export const TRAVEL_STITCH = 2.5;
@@ -133,9 +137,10 @@ class Frame {
     if (this.fade) {
       // Density, not spacing, changes evenly: 1 / spacing at full, down to FADE_MIN of it.
       for (let v = vmin + this.spacing / 2; v <= vmax; ) {
-        vs.push(v);
         const t = (v - vmin) / span;
-        v += this.spacing / Math.max(FADE_MIN, this.fade === 'out' ? 1 - t : t);
+        const d = this.fade === 'out' ? 1 - t : t;
+        if (d >= FADE_MIN) vs.push(v);
+        v += this.spacing / Math.max(FADE_MIN, d);
       }
       this.vs = vs;
       this.k0 = 0;
@@ -314,7 +319,12 @@ function sewSection(f: Frame, s: Section, len: number, pull: number, reversed: b
     const fwd = (i % 2 === 0) !== flip;
     const a = fwd ? seg.u0 - pull : seg.u1 + pull;
     const b = fwd ? seg.u1 + pull : seg.u0 - pull;
-    out.push(...rowStitches(f, seg.k, f.v(seg.k), a, b, len));
+    const row = rowStitches(f, seg.k, f.v(seg.k), a, b, len);
+    // The step to the next row: in short stitches where the rows lie far apart (a fading fill).
+    const prev = out[out.length - 1];
+    const gap = prev ? dist(prev, row[0]) : 0;
+    for (let i = 1, n = Math.ceil(gap / len); i < n; i++) out.push([prev[0] + ((row[0][0] - prev[0]) * i) / n, prev[1] + ((row[0][1] - prev[1]) * i) / n]);
+    out.push(...row);
   });
   return out;
 }

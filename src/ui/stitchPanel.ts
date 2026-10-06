@@ -88,6 +88,8 @@ export interface StitchInfo {
   /** The one selected object is the border of a fill in its own thread (the fill's number, or null when gone). */
   /** A border of its own thread, or the second thread of a color blend (`blend`), following its fill. */
   outline?: { fill: number | null; blend?: boolean };
+  /** The one selected fill can blend into a second thread (see blendObject). */
+  blend?: boolean;
   /** Left out of the correction (`mixed`: only some of the selected objects). */
   lock: boolean | 'mixed';
   /** Stitches loosed from their shape (`mixed`: only some), and whether any selected object has a shape to loose them from. */
@@ -127,6 +129,8 @@ export interface StitchHooks {
   line: (st: PathStitch, final: boolean) => void;
   /** A border object: select its fill, or make it an object of its own (no longer following the fill). */
   outline: (action: 'fill' | 'detach') => void;
+  /** Opens the thread picker for a second color of a blend at `anchor`. */
+  blend: (anchor: HTMLElement) => void;
   /** The selected objects left out of the correction, or not. */
   lock: (on: boolean) => void;
   /** The selected objects' stitches loosed from their shape (true), or sewn from it again (false). */
@@ -474,6 +478,13 @@ export class StitchPanel {
           density('stitch.densityTo', () => s.spacingEnd, (v) => (s.spacingEnd = v)),
         );
       } else out.push(density('stitch.density', () => s.spacing, (v) => (s.spacing = v)));
+      // A gradient is where a color blend is looked for: the same action as in the object panel.
+      if (s.pattern === 'gradient' && this.info!.blend) {
+        const b: HTMLButtonElement = this.button(d.blend ? 'stitch.blend.change' : 'object.blend', 'object.blend.hint', () => this.hooks.blend(b));
+        const row = Object.assign(document.createElement('div'), { className: 'direction-buttons' });
+        row.append(b);
+        out.push(row);
+      }
       if (ANGLED.includes(s.pattern)) out.push(this.angle(s));
       if (s.pattern === 'waves') {
         out.push(

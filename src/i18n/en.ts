@@ -726,6 +726,7 @@ export const en: Record<keyof typeof de, string> = {
   'stitch.outline.detach': 'Detach',
   'stitch.outline.detach.hint': 'Make it an object of its own: it no longer follows the fill and can be set like any running stitch or satin',
   'stitch.outline.detached': 'The border is an object of its own now.',
+  'stitch.blend.change': 'Other second color',
   'stitch.blendOf.title': 'Second color of a blend',
   'stitch.blendOf.text': 'It follows its fill: set shape, direction and spacing there, the thread by the color of its layer.',
   'stitch.blendOf.detach.hint': 'Make it an object of its own: it no longer follows the fill',

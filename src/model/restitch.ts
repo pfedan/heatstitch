@@ -2091,7 +2091,12 @@ export function restitch(
     // A new area (its shape changed): the old stitches are told apart by the old one, the fill is made in the new one.
     const newArea = areas?.get(o.index);
     if (newArea && an.fill) an = { ...an, fill: newArea };
-    const given = typeof settingsFor === 'function' ? settingsFor(o, an, known) : settingsFor;
+    const asked = typeof settingsFor === 'function' ? settingsFor(o, an, known) : settingsFor;
+    // A blending fill's border goes after its second thread, so it is an object of its own even
+    // in the fill's thread (sewn into the fill, the second thread would lie over it).
+    const bd = asked?.kind === 'fill' && asked.s.deco?.blend ? asked.s.border : undefined;
+    const given: Settings | null | undefined =
+      asked?.kind === 'fill' && bd && !bd.color ? { kind: 'fill', s: { ...asked.s, border: { ...bd, color: { ...o.color }, link: bd.link ?? Math.random().toString(36).slice(2, 10) } } } : asked;
     if (!given) continue;
     // A fill along a line: its area is always made from the line, never kept or traced.
     const byLine = !newArea && known?.asLine && given.kind === 'fill' ? lineFillArea(known.asLine, given.s) : null;
