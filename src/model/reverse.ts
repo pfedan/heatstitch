@@ -1,7 +1,7 @@
 import { rememberObjects, sewObjects, type SewObject } from './objects';
 import { reorder } from './order';
 import type { Pattern } from './pattern';
-import { measureFill, measureSatin, remembered, restitch, type RestitchResult } from './restitch';
+import { measureFill, measureSatin, remembered, restitch, type RestitchResult, type SettingsFor } from './restitch';
 import { recordOfStitch, stitchKinds, stitchNumbers } from './sequence';
 import { lineOf, lineSettings, resewLine } from './line';
 import type { Form } from '../shape/path';
@@ -77,6 +77,16 @@ export function autoReversible(p: Pattern, o: SewObject): boolean {
   return o.kind === 'satin' || (!!known?.region && !known.read);
 }
 
+/** Each fill or satin with the settings it has (known, else measured from its stitches). */
+export const ownSettings =
+  (p: Pattern, kinds: Uint8Array): SettingsFor =>
+  (o, an, known) => {
+    if (o.kind === 'fill') return an.fill ? { kind: 'fill', s: known?.fill ?? measureFill(p, an) } : null;
+    if (o.kind !== 'satin') return null;
+    const part = an.parts.find((pt) => pt.kind === 'satin');
+    return part ? { kind: 'satin', s: known?.satin ?? measureSatin(p, part, kinds) } : null;
+  };
+
 /**
  * The objects `which` sewn from the other side, each with its own settings; objects whose stitches
  * do not all lie on their own area (a way out to another part, say) stay as they are and are
@@ -85,21 +95,7 @@ export function autoReversible(p: Pattern, o: SewObject): boolean {
  * `restitch`, in the returned pattern.
  */
 export function reverseObjects(p: Pattern, objs: SewObject[], which: number[], kinds: Uint8Array, trimMm: number, order?: number[]): RestitchResult {
-  const r = restitch(
-    p,
-    objs,
-    which,
-    (o, an, known) => {
-      if (o.kind === 'fill') return an.fill ? { kind: 'fill', s: known?.fill ?? measureFill(p, an) } : null;
-      if (o.kind !== 'satin') return null;
-      const part = an.parts.find((pt) => pt.kind === 'satin');
-      return part ? { kind: 'satin', s: known?.satin ?? measureSatin(p, part, kinds) } : null;
-    },
-    kinds,
-    trimMm,
-    undefined,
-    true,
-  );
+  const r = restitch(p, objs, which, ownSettings(p, kinds), kinds, trimMm, undefined, true);
   const unchanged = { ...r, pattern: p, starts: [], ends: [], regions: [], memory: [] };
   if (order && (r.failed.length || r.starts.length !== which.length)) return unchanged;
   if (!r.starts.length) return r;

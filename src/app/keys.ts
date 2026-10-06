@@ -18,7 +18,9 @@ export interface KeysApp {
   readonly controls: { refresh: () => void; };
   readonly deleteSelected: () => void;
   readonly drawTool: DrawTool;
-  readonly duplicateSelected: () => void;
+  readonly copySelected: () => boolean;
+  readonly duplicateSelected: (inPlace?: boolean) => void;
+  readonly pasteCopied: () => boolean;
   readonly editor: Editor;
   readonly enterObject: (o: number, fit: boolean) => void;
   readonly enterShape: (o: number, fit: boolean) => void;
@@ -66,9 +68,19 @@ export function bindKeys(app: KeysApp) {
       app.history(e.key === 'y' || e.shiftKey ? 'redo' : 'undo');
       return;
     }
-    if (mod && !e.altKey && (e.key === 'd' || e.key === 'D') && app.settings.mode === 'flow' && app.frameObjects().length === 1) {
+    // Ctrl+D: a copy exactly in place; Ctrl+C and Ctrl+V: copies 2 mm beside (as the button).
+    const objectKeys = mod && !e.altKey && app.settings.mode === 'flow' && !app.editor.active;
+    if (objectKeys && (e.key === 'd' || e.key === 'D') && app.frameObjects().length) {
       e.preventDefault();
-      app.duplicateSelected();
+      app.duplicateSelected(true);
+      return;
+    }
+    if (objectKeys && (e.key === 'c' || e.key === 'C') && !window.getSelection()?.toString() && app.copySelected()) {
+      e.preventDefault();
+      return;
+    }
+    if (objectKeys && (e.key === 'v' || e.key === 'V') && app.pasteCopied()) {
+      e.preventDefault();
       return;
     }
     if (mod && e.key === 'a' && app.editor.active) {
