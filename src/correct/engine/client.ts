@@ -3,12 +3,14 @@ import type { Pattern } from '../../model/pattern';
 import { rememberedIn } from '../../model/restitch';
 import type { Profile } from '../../validation/profiles';
 import type { AmpelReport } from './ampel';
-import { planOrder } from './ampel';
+import { planOrder, restWorth } from './ampel';
+import type { PlannedFix } from './apply';
+import type { FixKind } from './cells';
 import type { EngineRequest, EngineResponse, EngineSettings } from './worker';
 
 /**
- * Works out the Ampel in a few workers at once: the report first, then each kind's fixes in its own
- * worker (density first), "Alles beheben" last. A new design (an edit) drops what is still running:
+ * Works out the Ampel in a few workers at once: the report first, then each kind's direct fix
+ * (density first), "Alles beheben", and the proposals for the rest, each as its own job. A new design (an edit) drops what is still running:
  * busy workers are stopped and started again, so the newest design never waits behind an old one.
  */
 
@@ -46,19 +48,35 @@ export class EngineClient {
     const report = first.report;
     progress?.(report);
     const kinds = planOrder(report.kinds.map((k) => k.kind));
-    const jobs = kinds.map(async (kind) => {
-      const r = await this.ask({ ...base, id: 0, type: 'kind', kind });
-      if (gen !== this.generation) return;
+    // Each kind's direct fix first (the buttons), then "Alles beheben", then the proposals: each
+    // is its own job, so a free worker takes the next one and no button waits behind a proposal.
+    const rests = new Map<FixKind, PlannedFix | null>();
+    const show = (kind: FixKind) => {
       const k = report.kinds.find((x) => x.kind === kind)!;
-      k.direct = r.direct ?? null;
-      k.rest = r.rest ?? null;
+      k.rest = restWorth(k.direct, rests.get(kind) ?? null);
+    };
+    const jobs = kinds.map(async (kind) => {
+      const r = await this.ask({ ...base, id: 0, type: 'kind', kind, mode: 'direct' });
+      if (gen !== this.generation) return;
+      report.kinds.find((x) => x.kind === kind)!.direct = r.fix ?? null;
+      if (rests.has(kind)) show(kind);
       progress?.(report);
     });
     if (kinds.length > 1) {
       jobs.push(
         this.ask({ ...base, id: 0, type: 'all' }).then((r) => {
           if (gen !== this.generation) return;
-          report.all = r.all ?? null;
+          report.all = r.fix ?? null;
+          progress?.(report);
+        }),
+      );
+    }
+    for (const kind of kinds) {
+      jobs.push(
+        this.ask({ ...base, id: 0, type: 'kind', kind, mode: 'rest' }).then((r) => {
+          if (gen !== this.generation) return;
+          rests.set(kind, r.fix ?? null);
+          show(kind);
           progress?.(report);
         }),
       );

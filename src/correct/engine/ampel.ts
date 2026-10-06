@@ -74,12 +74,26 @@ export function planOrder(kinds: FixKind[]): FixKind[] {
 
 const useful = (f: PlannedFix) => f.after < f.before && f.objects.length > 0;
 
+/** The direct fix of one kind: invisible and barely visible changes. Null when it clears nothing. */
+export async function directFix(p: Pattern, profile: Profile, kind: FixKind, opt: FixOptions): Promise<PlannedFix | null> {
+  const f = await prepareFix(p, profile, kind, { ...opt, visible: false, hand: false });
+  return useful(f) ? f : null;
+}
+
+/** The proposal for the rest of one kind: visible changes too, objects changed by hand sewn anew. */
+export async function restFix(p: Pattern, profile: Profile, kind: FixKind, opt: FixOptions): Promise<PlannedFix | null> {
+  const f = await prepareFix(p, profile, kind, { ...opt, visible: true, hand: true });
+  return useful(f) ? f : null;
+}
+
+/** The rest proposal is shown only when it clears more than the direct fix. */
+export const restWorth = (direct: PlannedFix | null, rest: PlannedFix | null): PlannedFix | null => (rest && (!direct || rest.after < direct.after) ? rest : null);
+
 /** The direct fix and the rest proposal of one kind (null where they clear nothing). */
 export async function kindFixes(p: Pattern, profile: Profile, kind: FixKind, opt: FixOptions): Promise<{ direct: PlannedFix | null; rest: PlannedFix | null }> {
-  const direct = await prepareFix(p, profile, kind, { ...opt, visible: false, hand: false });
-  if (opt.stale?.()) return { direct: useful(direct) ? direct : null, rest: null };
-  const rest = await prepareFix(p, profile, kind, { ...opt, visible: true, hand: true });
-  return { direct: useful(direct) ? direct : null, rest: useful(rest) && rest.after < direct.after ? rest : null };
+  const direct = await directFix(p, profile, kind, opt);
+  if (opt.stale?.()) return { direct, rest: null };
+  return { direct, rest: restWorth(direct, await restFix(p, profile, kind, opt)) };
 }
 
 /** "Alles beheben": all kinds together, directly. */

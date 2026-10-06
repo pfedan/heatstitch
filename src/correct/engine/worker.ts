@@ -4,7 +4,7 @@ import { forgetAll, restoreRemembered, type StoredObject } from '../../model/res
 import type { Acknowledgement } from '../../validation/acks';
 import type { Profile } from '../../validation/profiles';
 import type { Checks } from '../../validation/validate';
-import { allFix, ampelReport, kindFixes, type AmpelReport } from './ampel';
+import { allFix, ampelReport, directFix, restFix, type AmpelReport } from './ampel';
 import type { PlannedFix } from './apply';
 import type { FixKind } from './cells';
 
@@ -22,15 +22,14 @@ export interface EngineSettings {
 
 export type EngineRequest =
   | { id: number; type: 'report'; pattern: Pattern; memory: StoredObject[]; profile: Profile; settings: EngineSettings }
-  | { id: number; type: 'kind'; kind: FixKind; pattern: Pattern; memory: StoredObject[]; profile: Profile; settings: EngineSettings }
+  | { id: number; type: 'kind'; kind: FixKind; mode: 'direct' | 'rest'; pattern: Pattern; memory: StoredObject[]; profile: Profile; settings: EngineSettings }
   | { id: number; type: 'all'; pattern: Pattern; memory: StoredObject[]; profile: Profile; settings: EngineSettings };
 
 export interface EngineResponse {
   id: number;
   report?: AmpelReport;
-  direct?: PlannedFix | null;
-  rest?: PlannedFix | null;
-  all?: PlannedFix | null;
+  /** The fix asked for ('kind' and 'all'); null when it clears nothing. */
+  fix?: PlannedFix | null;
   error?: string;
 }
 
@@ -48,8 +47,8 @@ export async function handleEngine(req: EngineRequest): Promise<EngineResponse> 
     }
     const opt = { trimMm: req.settings.trimMm, checks: req.settings.checks, acks: req.settings.acks };
     if (req.type === 'report') return { id: req.id, report: ampelReport(req.pattern, req.profile, opt) };
-    if (req.type === 'kind') return { id: req.id, ...(await kindFixes(req.pattern, req.profile, req.kind, opt)) };
-    return { id: req.id, all: await allFix(req.pattern, req.profile, opt) };
+    if (req.type === 'kind') return { id: req.id, fix: await (req.mode === 'direct' ? directFix : restFix)(req.pattern, req.profile, req.kind, opt) };
+    return { id: req.id, fix: await allFix(req.pattern, req.profile, opt) };
   } catch (err) {
     return { id: req.id, error: String(err) };
   }
