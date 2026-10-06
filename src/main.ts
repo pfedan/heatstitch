@@ -1286,6 +1286,8 @@ const imageMode = new ImageMode({
     await addDigitized(d, name);
     setMode('flow');
   },
+  mode: () => settings.mode,
+  setMode: (m) => setMode(m),
 });
 
 /**

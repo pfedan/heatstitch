@@ -150,6 +150,8 @@ const STATES: Record<string, (page: Page) => Promise<void>> = {
   'Bild with a picture': async (page) => {
     await mode(page, 'image');
     await page.click('#image-example');
+    // The assistant opens the colors of a new picture; its last step shows the result and take over.
+    await page.click('.image-stepper [data-goto="3"]');
     await page.locator('#image-take:not([hidden]):not([disabled])').waitFor({ timeout: 30_000 });
   },
   'a lettering': async (page) => {
