@@ -1,0 +1,849 @@
+/* Area "design": the design page of the inspector, the view bar on the stage and the player.
+   Only tokens (design-system/heatstitch/MASTER.md); thread colors are content, never interface. */
+
+/* Design page --------------------------------------------------------------------------------------- */
+
+.design-page {
+  display: flex;
+  flex-direction: column;
+  padding: 2px 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.design-page > details.sec:first-of-type {
+  border-top: none;
+}
+
+.design-page details.sec {
+  padding: 10px 0;
+}
+
+.design-page details.sec > summary {
+  min-height: 20px;
+}
+
+.design-page details.sec[open] > summary {
+  margin-bottom: 10px;
+}
+
+.design-page .sec-sum {
+  margin-left: auto;
+  overflow: hidden;
+  max-width: 60%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 400;
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.design-page .sec-sum.bad {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* Open sections say it in full below, the head keeps only the title. */
+.design-page details.sec[open] > summary .sec-sum {
+  visibility: hidden;
+}
+
+.design-page.none > details.sec {
+  display: none;
+}
+
+.design-page:not(.none) .design-empty {
+  display: none;
+}
+
+.design-page .design-empty {
+  margin: 10px 0;
+}
+
+/* In the check view the findings come first; the design page follows them. */
+body[data-mode='density'] .design-page {
+  order: 2;
+}
+
+/* Stickrahmen */
+
+.hoop-panel select {
+  width: 100%;
+}
+
+.hoop-panel .hoop-custom {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.hoop-panel .hoop-custom input {
+  width: 5.5em;
+  font-variant-numeric: tabular-nums;
+}
+
+.hoop-status {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 2px 10px;
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.hoop-ok {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--ink);
+}
+
+.hoop-ok::before {
+  content: '';
+  width: 14px;
+  height: 14px;
+  background: var(--accent);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='m4.5 10.5 3.5 3.5 7.5-8' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='m4.5 10.5 3.5 3.5 7.5-8' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+.hoop-panel .hoop-note {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border-left: 3px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.hoop-panel .hoop-note.info,
+.hoop-panel .hoop-note.turned {
+  border-left-color: var(--muted);
+  background: var(--bg);
+}
+
+.hoop-panel .hoop-note button.link {
+  display: inline-block;
+  margin: 4px 12px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Material */
+
+.material-panel .profile .field {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.material-panel .profile .field .label {
+  font-size: 13px;
+}
+
+.material-panel .profile-info {
+  margin: 2px 0 4px;
+  padding: 0;
+  background: none;
+  line-height: 1.45;
+}
+
+/* The limits matter when checking; while designing the spacing is what counts. */
+body[data-mode='flow'] .material-panel .profile-info span:nth-child(2) {
+  display: none;
+}
+
+.material-panel .profile .buttons {
+  margin: 4px 0 8px;
+}
+
+.material-panel .checks {
+  margin: 8px 0 6px;
+}
+
+.material-panel .explain {
+  margin-top: 4px;
+}
+
+/* Garne */
+
+.dt-list {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dt-row {
+  display: grid;
+  grid-template-columns: 14px 26px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  font-size: 13px;
+}
+
+.dt-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.25;
+}
+
+.dt-count {
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.dt-num {
+  color: var(--muted);
+  font-size: 11px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.dt-sw {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--ink) 25%, transparent);
+}
+
+.dt-sw:hover,
+.dt-sw:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.dt-name,
+.dt-code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dt-code {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.dt-brandrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.dt-brandrow select {
+  flex: 1;
+  min-width: 0;
+  color: var(--ink);
+}
+
+.dt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin: 8px 0 4px;
+}
+
+.dt-state {
+  flex: 1 1 140px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.dt-switch {
+  font-size: 13px;
+}
+
+.dt-listlink {
+  margin-top: 4px;
+  font-size: 13px;
+}
+
+/* Statistik */
+
+.design-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
+  gap: 6px;
+  margin: 0;
+}
+
+.design-stats .tile {
+  display: flex;
+  flex-direction: column-reverse;
+  justify-content: flex-end;
+  gap: 1px;
+  min-width: 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--bg);
+}
+
+.design-stats .tile.wide {
+  grid-column: 1 / -1;
+}
+
+.design-stats dd {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.design-stats dt {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.speed-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.speed-row select {
+  padding: 2px 4px;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Foot of the stage: key hint and view bar ----------------------------------------------------------- */
+
+.stage {
+  --player-h: 0px;
+}
+
+.stage-foot {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: calc(var(--player-h) + 10px);
+  z-index: 3;
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  pointer-events: none;
+}
+
+body[data-mode] .stage-foot .hint {
+  position: static;
+  transform: none;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: none;
+  margin: 0 0 6px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(13, 11, 16, 0.55);
+  color: #d8d2e0;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  justify-self: start;
+}
+
+.stage-foot .hint:empty {
+  visibility: hidden;
+}
+
+.view-bar {
+  position: relative;
+  margin-left: auto;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  pointer-events: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
+}
+
+.vb-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 9px;
+  border: none;
+  border-radius: 7px;
+  background: none;
+  color: var(--ink);
+  font-size: 13px;
+  white-space: nowrap;
+  transition: background-color 0.12s;
+}
+
+.vb-btn:not(:disabled):hover,
+.vb-btn[aria-expanded='true'] {
+  background: var(--bg);
+}
+
+.vb-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.vb-icon {
+  width: 32px;
+  padding: 0;
+}
+
+.view-button .chev {
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
+}
+
+.view-button > .i:first-child {
+  color: var(--muted);
+}
+
+#marks-toggle {
+  position: relative;
+  color: var(--accent);
+}
+
+#marks-toggle[aria-pressed='false'] {
+  color: var(--muted);
+}
+
+/* Off: struck through, so the state does not hang on color alone. */
+#marks-toggle[aria-pressed='false']::after {
+  content: '';
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  top: 50%;
+  height: 1.6px;
+  background: currentColor;
+  transform: rotate(45deg);
+  border-radius: 1px;
+}
+
+.vb-sep {
+  width: 1px;
+  height: 18px;
+  margin: 0 3px;
+  background: var(--line);
+}
+
+.zoom-button {
+  min-width: 60px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The view menu lies on the page (placed by src/areas/design) and opens upwards from the bar. */
+.popover.view-pop {
+  position: fixed;
+  top: auto;
+  right: auto;
+  width: min(320px, calc(100vw - 16px));
+  max-height: calc(100vh - 120px);
+  padding: 4px 14px;
+}
+
+.vp-group {
+  margin: 0;
+  padding: 10px 0;
+  border: none;
+  border-top: 1px solid var(--line);
+  min-width: 0;
+}
+
+.view-pop > .vp-group:first-child {
+  border-top: none;
+}
+
+.vp-group h3,
+.vp-group legend {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  margin: 0 0 8px;
+  padding: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.vp-group h3 output {
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink);
+}
+
+.view-pop .check {
+  margin-bottom: 6px;
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.view-pop .field {
+  margin-bottom: 6px;
+}
+
+.vp-sub {
+  margin-left: 24px;
+}
+
+.vp-sub.off {
+  opacity: 0.5;
+}
+
+.vp-sub .link {
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.vp-seg {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  font-size: 13px;
+}
+
+.vp-seg label + label {
+  border-left: 1px solid var(--line);
+}
+
+.vp-seg label:nth-child(3) {
+  border-left: none;
+}
+
+.vp-seg label:nth-child(n + 3) {
+  border-top: 1px solid var(--line);
+}
+
+.view-pop .color-key {
+  margin-top: 8px;
+}
+
+.view-pop .color-key .muted.small {
+  margin: 0;
+  font-size: 12px;
+}
+
+.vp-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 13px;
+}
+
+.vp-row select {
+  min-width: 0;
+  max-width: 180px;
+}
+
+.view-pop .bg-swatches {
+  gap: 7px;
+  margin-top: 0;
+}
+
+.view-pop .marks {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 10px;
+}
+
+/* Floated, the legend is a plain row of the grid instead of sitting on the border. */
+.view-pop .marks legend {
+  float: left;
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
+.view-pop .marks .check {
+  margin-bottom: 6px;
+  font-size: 12.5px;
+}
+
+/* Player at the foot of the stage --------------------------------------------------------------------- */
+
+.stage .player {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 4;
+  min-height: 48px;
+  gap: 10px;
+  padding: 6px 12px;
+  background: var(--panel);
+  color: var(--ink);
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  backdrop-filter: none;
+}
+
+.player-play {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1.5px solid var(--accent);
+  background: none;
+  color: var(--accent);
+  transition: background-color 0.12s;
+}
+
+.player-play:hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.player-play.primary,
+.player-play.primary:hover {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.player-play .i {
+  width: 16px;
+  height: 16px;
+}
+
+.player-steps {
+  display: flex;
+  flex: none;
+}
+
+.player-btn {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+}
+
+.player-btn:not(:disabled):hover {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+.player-btn .i {
+  width: 17px;
+  height: 17px;
+}
+
+.stage .player-sections {
+  height: 10px;
+  margin-top: -5px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 12%, transparent);
+}
+
+.stage .player-sections > div + div:not(.rest) {
+  box-shadow: inset 1px 0 0 color-mix(in srgb, var(--panel) 70%, transparent);
+}
+
+.stage .player-sections > .rest {
+  background: color-mix(in srgb, var(--panel) 68%, transparent);
+}
+
+.stage .player-track input[type='range']::-webkit-slider-thumb {
+  margin-top: 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+.stage .player-info {
+  color: var(--muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stage .player select {
+  flex: none;
+  background: var(--bg);
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+/* Folded: the play button and the way back, in a small pill. */
+.stage .player.folded {
+  left: 10px;
+  right: auto;
+  bottom: 10px;
+  min-height: 0;
+  padding: 4px;
+  gap: 2px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
+}
+
+.stage .player.folded > :not(.player-play, .player-fold) {
+  display: none;
+}
+
+.stage .player.folded .player-play {
+  width: 30px;
+  height: 30px;
+}
+
+body[data-mode='flow'] .stage:has(.player.folded:not([hidden])) .stage-foot {
+  left: 92px;
+}
+
+/* A narrow stage: the buttons in one row, the bar and the stitch count in the next. */
+@container (max-width: 640px) {
+  .stage .player {
+    flex-wrap: wrap;
+    gap: 2px 6px;
+  }
+
+  .stage .player::after {
+    content: '';
+    order: 5;
+    flex-basis: 100%;
+  }
+
+  .stage .player .player-play {
+    order: 1;
+  }
+
+  .stage .player .player-steps {
+    order: 2;
+  }
+
+  .stage .player select {
+    order: 3;
+    margin-left: auto;
+  }
+
+  .stage .player .player-fold {
+    order: 4;
+  }
+
+  .stage .player-track {
+    order: 6;
+    flex: 1 1 120px;
+  }
+
+  .stage .player-info {
+    order: 7;
+    font-size: 11px;
+  }
+
+  .stage .player-info .pi-time {
+    display: none;
+  }
+
+  .player-steps [data-play^='block'] {
+    display: none;
+  }
+
+  .view-button #view-name {
+    display: none;
+  }
+}
+
+/* Thread picker (src/ui/threadPicker.ts) --------------------------------------------------------------- */
+
+.color-pop {
+  width: 288px;
+  gap: 10px;
+  padding: 12px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.3);
+}
+
+.color-pop-head {
+  font-size: 13px;
+}
+
+.color-pop-orig {
+  border-radius: 6px;
+  background: var(--bg);
+}
+
+.color-pop-near {
+  flex-wrap: wrap;
+  padding: 6px;
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.color-pop-near > .muted {
+  flex-basis: 100%;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.color-pop-near .near-pick {
+  height: 34px;
+}
+
+.color-pop .color-grid {
+  gap: 4px;
+  max-height: 228px;
+}
+
+.color-pop-name {
+  margin-top: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.color-pop-own {
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+}
+
+/* The heatmap scale of the check view stands above the view bar. */
+.stage .legend {
+  right: 10px;
+  bottom: calc(var(--player-h) + 58px);
+}
+
+.view-pop .color-key:empty {
+  display: none;
+}

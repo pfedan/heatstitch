@@ -62,7 +62,7 @@ export const isMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.user
 /** A key as shown to the user: "Strg+D", "⌘D", "Umschalt+N". */
 export function keyLabel(spec: string): string {
   const de = getLang() === 'de';
-  const parts = spec.split('+');
+  const parts = spec.split(/\+(?!$)/); // a lone '+' is the key itself
   const key = parts.pop()!;
   const mods = parts.map((m) => {
     if (m === 'Mod') return isMac ? '⌘' : de ? 'Strg' : 'Ctrl';
@@ -86,7 +86,7 @@ export function keyLabel(spec: string): string {
 
 /** Whether a keydown matches a key spec. */
 export function matches(e: KeyboardEvent, spec: string): boolean {
-  const parts = spec.split('+');
+  const parts = spec.split(/\+(?!$)/); // a lone '+' is the key itself
   const key = parts.pop()!;
   const mod = parts.includes('Mod');
   const shift = parts.includes('Shift');

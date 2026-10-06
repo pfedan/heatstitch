@@ -67,6 +67,7 @@ import { bindStitches } from './app/stitches';
 import { bindObjects } from './app/objects';
 import { bindScene } from './app/scene';
 import { initShell } from './shell/setup';
+import { initDesign } from './areas/design';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -807,6 +808,7 @@ function redraw(): void {
     $('file-actions').hidden = !active?.pattern;
     if (settings.mode === 'density') drawLegendCanvas();
     renderStats($('stats'), active, ui.grid, settings, ui.computing);
+    design.render();
     const p = active?.pattern ?? null;
     const q = p ? seq(p) : null;
     $('player').hidden = !p;
@@ -1634,6 +1636,7 @@ const { showObjectMenu } = bindPointer({
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', redraw);
 
 initShell({ files, mode: () => settings.mode, setMode });
+const design = initDesign({ files, settings, player, vp, stage, fitView, fitToHoop, redraw, applyEdit });
 
 files.render();
 redraw();
