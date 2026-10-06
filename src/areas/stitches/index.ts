@@ -270,6 +270,8 @@ export function initStitchArea(app: StitchAreaApp): { refresh: () => void } {
         help(app.settings.mode === 'flow' ? 'canvas.hint.flowEdit' : 'edit.hint'),
         cmdButton('edit.done', 'object.editDone', { primary: true }),
       );
+    } else if (!rungsOn()) {
+      // No line tool on: the mode the tool was last in does not count.
     } else if (rt.mode === 'satin') {
       const d = dir();
       const what = !d ? '' : d.rungs === null ? t('stitches.bar.follow') : d.rungs === 0 ? t('stitches.bar.even') : t('stitches.bar.rungs', { n: d.rungs });
