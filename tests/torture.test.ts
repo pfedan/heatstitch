@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { digitizeDefaults } from '../src/digitize/digitize';
 import { addShape } from '../src/model/addShape';
-import { syncBorders } from '../src/model/border';
+import { recolorBlock, syncBorders } from '../src/model/border';
 import { blendObject } from '../src/model/blend';
 import { MOTIFS } from '../src/digitize/deco';
 import { refreshKnockouts, setKnockout } from '../src/model/knockout';
@@ -286,7 +286,9 @@ const OPS: Op[] = [
             ? { ...fill, pattern: 'gradient', deco: { ...deco, fade: pick(r, ['out', 'in'] as const) } }
             : { ...fill, pattern: kind, deco };
       if (process.env.TORTURE_TRACE) console.log('decorate', o.index, kind);
-      return restitchFill(d, o.index, s, new Set());
+      // As the app: another pattern takes a blend's second thread out.
+      const blend = fill.deco?.blend?.link;
+      return restitchFill(d, o.index, s, new Set(blend ? [blend] : []));
     },
   },
   {
@@ -296,6 +298,18 @@ const OPS: Op[] = [
       if (!fills.length) return false;
       const o = pick(r, fills).index;
       return shapes(d, blendObject(d.cur.p, o, pick(r, COLORS), T));
+    },
+  },
+  {
+    name: 'recolor block',
+    run: (d, r) => {
+      if (!d.cur.p.colors.length) return false;
+      const b = Math.floor(r() * d.cur.p.colors.length);
+      const c = pick(r, COLORS);
+      if (sameColor(d.cur.p.colors[b], c)) return false;
+      // As the layers panel: only the colors change.
+      d.commit(recolorBlock(d.cur.p, b, c));
+      return true;
     },
   },
   {
@@ -370,6 +384,31 @@ function checkBorders(p: Pattern): void {
   expect(problems.join('; '), 'border links').toBe('');
 }
 
+/** Each blending fill has one second thread in its blend thread, and every second thread its fill. */
+function checkBlends(p: Pattern): void {
+  const objs = sewObjects(p);
+  const mem = objs.map((o) => remembered(p, o));
+  const problems: string[] = [];
+  const fills = new Map<string, number>();
+  mem.forEach((m, k) => {
+    const b = m?.fill?.deco?.blend;
+    if (!b) return;
+    if (fills.has(b.link)) problems.push(`fills ${fills.get(b.link)} and ${k} share blend link ${b.link}`);
+    fills.set(b.link, k);
+  });
+  const seconds = new Map<string, number>();
+  mem.forEach((m, k) => {
+    if (!m?.blendOf) return;
+    if (seconds.has(m.blendOf)) problems.push(`objects ${seconds.get(m.blendOf)} and ${k} are the blend ${m.blendOf}`);
+    seconds.set(m.blendOf, k);
+    const f = fills.get(m.blendOf);
+    if (f === undefined) problems.push(`second thread ${k} has no fill`);
+    else if (!sameColor(objs[k].color, mem[f]!.fill!.deco!.blend!.color)) problems.push(`second thread ${k} not in its thread`);
+  });
+  for (const [link, k] of fills) if (!seconds.has(link)) problems.push(`fill ${k} lost its second thread`);
+  expect(problems.join('; '), 'blend links').toBe('');
+}
+
 /** What leaves out the shapes on top fits the shapes on top now. */
 function checkKnockouts(p: Pattern): void {
   expect(refreshKnockouts(p, T)?.changed ?? [], 'fills whose left-out parts are out of date').toEqual([]);
@@ -425,6 +464,7 @@ async function chain(seed: number, steps = STEPS): Promise<void> {
       expect(knowledge(p), 'knowledge as stored with this version').toEqual(d.cur.known);
       checkAllKnown(p);
       checkBorders(p);
+      checkBlends(p);
       checkKnockouts(p);
       if (op.name === 'save and open' || step === steps - 1) checkExport(p);
     } catch (e) {

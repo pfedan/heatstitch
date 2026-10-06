@@ -4,6 +4,7 @@ import type { OrderCost } from '../model/order';
 import type { Settings } from '../settings';
 import { KIND_ICON, kindLabel } from './layersPanel';
 import { cssColor, ThreadPicker } from './threadPicker';
+import { sameColor } from '../model/recolor';
 import type { ThreadColor } from '../model/pattern';
 
 export interface ObjectInfo {
@@ -29,6 +30,8 @@ export interface ObjectInfo {
   reversible: boolean;
   /** Several fills are selected: the one on top can be cut out of the others. */
   subtractable: boolean;
+  /** The one selected object is a fill that can blend into a second thread: its thread. */
+  blend?: ThreadColor;
 }
 
 export interface ObjectHooks {
@@ -63,6 +66,8 @@ export interface ObjectHooks {
   remove: () => void;
   /** The selected objects sewn in another thread. */
   thread: (c: ThreadColor) => void;
+  /** The one selected fill fades out, and a copy in `c` fades in on the same area: a color blend. */
+  blend: (c: ThreadColor) => void;
   /** The selected objects kept but not sewn: switched off, or as guides. */
   aside: (role: 'off' | 'guide') => void;
 }
@@ -72,7 +77,8 @@ export interface ObjectAction {
   icon: string;
   label: string;
   hint: string;
-  run: () => void;
+  /** Runs it; `anchor` is the button or menu entry, for a popup that opens next to it. */
+  run: (anchor: HTMLElement) => void;
 }
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -88,6 +94,7 @@ const SHAPE_ICONS = {
   remove: icon('<path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.7 9h5.6l.7-9"/>'),
   off: icon('<path d="M11.5 1.5L4.5 14.5"/><ellipse cx="10.6" cy="3.2" rx="0.5" ry="1"/><path d="M2 2l12 12"/>'),
   guide: icon('<path d="M2 13L14 3" stroke-dasharray="2.4 2"/>'),
+  blend: icon('<path d="M2.5 3.5h11M2.5 6h11M2.5 9h11"/><path d="M2.5 11.5h11M2.5 13.5h11" opacity=".5"/>'),
 };
 
 const REVERSE_ICON =
@@ -207,7 +214,7 @@ export class ObjectPanel {
         const b = Object.assign(document.createElement('button'), { type: 'button', title: a.hint });
         b.innerHTML = a.icon;
         b.setAttribute('aria-label', a.label);
-        b.addEventListener('click', a.run);
+        b.addEventListener('click', () => a.run(b));
         shapeRow.append(b);
       }
       extraRows.push(shapeRow);
@@ -234,8 +241,22 @@ export class ObjectPanel {
   actions(info: ObjectInfo): ObjectAction[] {
     if (info.editing || info.shaping || !info.selected.length) return [];
     const out: ObjectAction[] = [];
-    const add = (icon: string, label: string, hint: string, run: () => void) => out.push({ icon, label, hint, run });
+    const add = (icon: string, label: string, hint: string, run: (anchor: HTMLElement) => void) => out.push({ icon, label, hint, run });
     if (info.selected.length === 1) add(SHAPE_ICONS.duplicate, t('object.duplicate'), t('object.duplicate.hint'), () => this.hooks.duplicate());
+    const fill = info.blend;
+    if (fill) {
+      add(SHAPE_ICONS.blend, t('object.blend'), t('object.blend.hint'), (anchor) =>
+        this.picker.toggle(anchor, {
+          key: 'blend',
+          title: t('object.blend.pick'),
+          current: fill,
+          note: t('object.blend.note'),
+          onPick: (c) => {
+            if (!sameColor(c, fill)) this.hooks.blend(c);
+          },
+        }),
+      );
+    }
     if (info.subtractable) add(SHAPE_ICONS.subtract, t('object.subtract'), t('object.subtract.hint'), () => this.hooks.subtract());
     add(SHAPE_ICONS.mirrorX, t('object.mirrorX.short'), t('object.mirrorX'), () => this.hooks.mirror('x'));
     add(SHAPE_ICONS.mirrorY, t('object.mirrorY.short'), t('object.mirrorY'), () => this.hooks.mirror('y'));

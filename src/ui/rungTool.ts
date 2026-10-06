@@ -74,7 +74,7 @@ export interface RungPick {
   span?: boolean;
 }
 
-export type RungMode = 'satin' | 'fill' | 'guide';
+export type RungMode = 'satin' | 'fill' | 'guide' | 'points';
 
 export interface RungView {
   mode: RungMode;
@@ -89,6 +89,8 @@ export interface RungView {
   guides: Pt[][];
   /** The guide line being drawn. */
   sketch: Pt[] | null;
+  /** Points set on a fill: the middle of its rays or circles, the eyes of its swirls. */
+  points: Pt[];
   selected: RungPick | null;
   hover: RungPick | null;
   /** The line being drawn. */
@@ -108,12 +110,14 @@ export interface RungHooks {
   lines: () => void;
   /** Guide lines changed: the fill is sewn anew along them. */
   guides: (guides: Pt[][]) => void;
+  /** Points moved, added or removed: the fill is sewn anew around them. */
+  points?: (points: Pt[]) => void;
   redraw: () => void;
   /** Says why something did not work. */
   say: (key: 'stitch.direction.miss' | 'stitch.direction.cross' | 'stitch.direction.needCut' | 'stitch.direction.cornersNone' | 'stitch.sections.none') => void;
 }
 
-type Drag = { kind: 'end'; pick: RungPick; loop?: SectionLoop } | { kind: 'draw'; cut: boolean } | { kind: 'sketch' } | null;
+type Drag = { kind: 'end'; pick: RungPick; loop?: SectionLoop } | { kind: 'draw'; cut: boolean } | { kind: 'sketch' } | { kind: 'point'; i: number; moved: boolean } | null;
 
 /**
  * Rungs on the canvas: lines across a satin column that set the direction of its stitches (dragged
@@ -132,6 +136,9 @@ export class RungTool implements RungView {
   bad: Pt[] | null = null;
   guides: Pt[][] = [];
   sketch: Pt[] | null = null;
+  points: Pt[] = [];
+  /** How many points the fill takes (one for rays and circles, up to three swirls). */
+  private pointMax = 1;
   /** Pick radius of the last press, to thin the sketch. */
   private sketchStep = 0.2;
   /** Outline of the fill the lines are drawn on (to start a line only near it). */
@@ -183,8 +190,25 @@ export class RungTool implements RungView {
     this.selected = null;
   }
 
+  /**
+   * Starts setting points on a fill with this outline: `points` set already, at most `max`. With
+   * one point a click moves it; with more a click adds one until there are `max`.
+   */
+  openPoints(loop: Pt[], points: Pt[], max: number): void {
+    this.active = true;
+    this.mode = 'points';
+    this.columns = [];
+    this.parts = [];
+    this.lines = [];
+    this.points = points.map((p) => [p[0], p[1]] as Pt);
+    this.pointMax = max;
+    this.loop = loop;
+    this.selected = null;
+  }
+
   close(): void {
     this.active = false;
+    this.points = [];
     this.columns = [];
     this.lines = [];
     this.cutLines = [];
@@ -410,6 +434,12 @@ export class RungTool implements RungView {
       this.lines.forEach(([a, b], i) => consider(-1, i, a, b));
       this.cutLines.forEach(([a, b], i) => consider(-1, i, a, b, true));
     }
+    else if (this.mode === 'points') {
+      this.points.forEach((p, i) => {
+        const d = Math.hypot(p[0] - q[0], p[1] - q[1]);
+        if (d <= reachEnd * 1.4 && (!best || d < best.d)) best = { pick: { col: -1, i, end: 0 }, d };
+      });
+    }
     else {
       this.guides.forEach((g, i) => {
         for (let k = 1; k < g.length; k++) {
@@ -419,6 +449,19 @@ export class RungTool implements RungView {
       });
     }
     return (best as { pick: RungPick } | null)?.pick ?? null;
+  }
+
+  /** Whether a point lies inside the fill's outline (even-odd); anywhere when there is none. */
+  private inside(x: number, y: number): boolean {
+    const l = this.loop;
+    if (!l.length) return true;
+    let inn = false;
+    for (let i = 0, j = l.length - 1; i < l.length; j = i++) {
+      const [ax, ay] = l[i];
+      const [bx, by] = l[j];
+      if (ay > y !== by > y && x < ax + ((y - ay) / (by - ay)) * (bx - ax)) inn = !inn;
+    }
+    return inn;
   }
 
   /** Whether a line may start here: on or near a column, or near the fill. */
@@ -460,6 +503,28 @@ export class RungTool implements RungView {
       return 'move';
     }
     const hit = this.pick(x, y, scale);
+    if (this.mode === 'points') {
+      if (hit) {
+        this.selected = hit;
+        this.drag = { kind: 'point', i: hit.i, moved: false };
+        this.hooks.redraw();
+        return 'move';
+      }
+      if (!this.inside(x, y)) {
+        this.selected = null;
+        this.hooks.redraw();
+        return 'pan';
+      }
+      // A click on the fill: a new point while there is room, else the only one moves there.
+      if (this.points.length < this.pointMax) this.points.push([x, y]);
+      else if (this.pointMax === 1) this.points[0] = [x, y];
+      else return 'pan';
+      const i = this.pointMax === 1 ? 0 : this.points.length - 1;
+      this.selected = { col: -1, i, end: 0 };
+      this.drag = { kind: 'point', i, moved: true };
+      this.hooks.redraw();
+      return 'move';
+    }
     if (hit) {
       this.selected = hit;
       let loop: SectionLoop | undefined;
@@ -496,7 +561,10 @@ export class RungTool implements RungView {
   dragTo(x: number, y: number): boolean {
     const d = this.drag;
     if (!d) return false;
-    if (d.kind === 'draw' && this.draft) this.draft[1] = [x, y];
+    if (d.kind === 'point') {
+      if (this.inside(x, y)) this.points[d.i] = [x, y];
+      d.moved = true;
+    } else if (d.kind === 'draw' && this.draft) this.draft[1] = [x, y];
     else if (d.kind === 'sketch' && this.sketch) {
       const l = this.sketch[this.sketch.length - 1];
       if (Math.hypot(x - l[0], y - l[1]) >= this.sketchStep) this.sketch.push([x, y]);
@@ -531,7 +599,9 @@ export class RungTool implements RungView {
     const d = this.drag;
     this.drag = null;
     if (!d) return;
-    if (d.kind === 'end') {
+    if (d.kind === 'point') {
+      if (d.moved) this.hooks.points?.(this.points.map((p) => [p[0], p[1]] as Pt));
+    } else if (d.kind === 'end') {
       if (this.mode === 'satin') this.hooks.change(this.result(), true);
       else this.linesChanged();
     } else if (d.kind === 'sketch' && this.sketch) {
@@ -668,6 +738,11 @@ export class RungTool implements RungView {
     if (this.mode === 'fill') {
       this.fillList(s).splice(s.i, 1);
       this.linesChanged();
+    } else if (this.mode === 'points') {
+      // The last point stays: rays and swirls need one.
+      if (this.points.length < 2) return false;
+      this.points.splice(s.i, 1);
+      this.hooks.points?.(this.points.map((p) => [p[0], p[1]] as Pt));
     } else if (this.mode === 'guide') {
       this.guides.splice(s.i, 1);
       this.hooks.guides(this.guides.map((g) => g.slice()));

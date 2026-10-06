@@ -1,7 +1,7 @@
 import { expandRegion, sample, signedField, type Region } from './region';
 import { runStitch, simplify } from './run';
 import type { Pt } from './skeleton';
-import { embossPoints, motifCrossings, motifInside, type Motif } from './deco';
+import { embossPoints, motifCrossings, type Motif } from './deco';
 
 /**
  * Tatami fill of a region (with holes) from its signed distance field.
@@ -274,7 +274,7 @@ function rowStitches(f: Frame, k: number, v: number, from: number, to: number, l
   if (f.emboss) {
     const { motif, size } = f.emboss;
     const cross = motifCrossings(motif, size, { o: f.at(0, v), e: f.e }, lo + 0.3, hi - 0.3);
-    pts.splice(0, pts.length, ...embossPoints(cross, pts, len, lo, hi, (u) => motifInside(motif, size, f.at(u, v))));
+    pts.splice(0, pts.length, ...embossPoints(cross, pts, len, lo, hi));
   }
   if (dir < 0) pts.reverse();
   return [f.at(from, v), ...pts.map((u) => f.at(u, v)), f.at(to, v)];

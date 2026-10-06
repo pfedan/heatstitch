@@ -8,9 +8,10 @@ import type { Settings } from '../settings';
 import type { StitchInfo, StitchPanel } from '../ui/stitchPanel';
 import { RungTool } from '../ui/rungTool';
 import { outline } from '../digitize/region';
+import { atShare, regionBox, swirlCenters } from '../digitize/deco';
 import { inside, railsFromOutline, stripsOfOutline } from '../digitize/rungs';
 import { t, type Key } from '../i18n';
-import { type Rails, type SatinSettings, analyze, remembered, keepShape, remember, restitch, measureSatin, forget, type RestitchResult, type Settings as RestitchSettings } from '../model/restitch';
+import { DECO_DEFAULTS, MAX_SWIRLS, type FillSettings, type Rails, type SatinSettings, analyze, remembered, keepShape, remember, restitch, measureSatin, forget, type RestitchResult, type Settings as RestitchSettings } from '../model/restitch';
 import { ui } from './state';
 
 /** What bindRungs needs from the rest of the app. */
@@ -47,6 +48,13 @@ export function bindRungs(app: RungsApp) {
     },
     lines: () => app.redraw(),
     guides: (g) => app.stitchPanel.setGuides(g),
+    points: (pts) => {
+      // Kept as shares of the shape's extent, so they move with it (see transformRemembered).
+      const box = pointsBox();
+      if (!box) return;
+      const share = (v: number, lo: number, hi: number) => Math.round(Math.min(1, Math.max(0, hi > lo ? (v - lo) / (hi - lo) : 0.5)) * 1000) / 1000;
+      app.stitchPanel.setPoints(pts.map((q) => [share(q[0], box[0], box[2]), share(q[1], box[1], box[3])] as Pt));
+    },
     redraw: () => app.redraw(),
     say: (key) => {
       app.layers.say(t(key), true);
@@ -69,10 +77,10 @@ export function bindRungs(app: RungsApp) {
   }
 
   /** What the stitch panel shows about the rung tool. */
-  function rungInfo(p: Pattern, q: Sequence): Pick<StitchInfo, 'direction' | 'draw' | 'guide'> {
+  function rungInfo(p: Pattern, q: Sequence): Pick<StitchInfo, 'direction' | 'draw' | 'guide' | 'points'> {
     const single = ui.selectedObjects.size === 1;
     const on = rungTool.active && ui.rungObject !== null && ui.selectedObjects.has(ui.rungObject);
-    const out: Pick<StitchInfo, 'direction' | 'draw' | 'guide'> = {};
+    const out: Pick<StitchInfo, 'direction' | 'draw' | 'guide' | 'points'> = {};
     const info = app.stitchInfo(p, q);
     if (info.measured.satin) {
       let rungs: number | null = null;
@@ -93,6 +101,7 @@ export function bindRungs(app: RungsApp) {
     }
     if (info.measured.fill && !info.measured.satin) out.draw = { tool: on && rungTool.mode === 'fill', lines: on ? rungTool.lines.length : 0, single, cuts: on ? rungTool.cutLines.length : 0, cutMode: rungTool.cutMode };
     if (info.measured.fill) out.guide = { tool: on && rungTool.mode === 'guide', single };
+    if (info.measured.fill) out.points = { tool: on && rungTool.mode === 'points', single };
     return out;
   }
 
@@ -121,6 +130,47 @@ export function bindRungs(app: RungsApp) {
     if (!loop) return;
     if (app.editor.active) app.setEditing(false);
     rungTool.openGuides(loop, remembered(p, q.objects[o])?.fill?.guides ?? []);
+    ui.rungObject = o;
+    rungPattern = p;
+    app.stage.classList.add('rungs');
+    app.redraw();
+  }
+
+  /** Patterns with points on the area: the middle of rays and circles, the eyes of swirls. */
+  const POINTED = new Set(['rays', 'circles', 'swirl']);
+
+  /** The extent (mm) of the area of the object the point tool is on. */
+  function pointsBox(): [number, number, number, number] | null {
+    const p = app.files.active?.pattern;
+    if (!p || ui.rungObject === null) return null;
+    const region = remembered(p, app.seq(p).objects[ui.rungObject])?.region;
+    return region ? regionBox(region) : null;
+  }
+
+  /** The points of a fill's pattern on the design (mm), as it is sewn now. */
+  function pointsOf(f: FillSettings, box: [number, number, number, number], region: Parameters<typeof swirlCenters>[0]): Pt[] {
+    const d = f.deco ?? {};
+    if (f.pattern === 'swirl') return d.centers?.map((c) => atShare(box, c)) ?? swirlCenters(region, d.seed ?? DECO_DEFAULTS.seed);
+    return [atShare(box, d.focus ?? (f.pattern === 'circles' ? [0.5, 0.5] : DECO_DEFAULTS.focus))];
+  }
+
+  /** The point tool on or off for the one selected fill with rays, circles or swirls. */
+  function togglePoints(): void {
+    if (rungTool.active) {
+      const was = rungTool.mode;
+      closeRungs();
+      if (was === 'points') return;
+    }
+    const p = app.files.active?.pattern;
+    if (!p || app.settings.mode !== 'flow' || ui.selectedObjects.size !== 1) return;
+    const q = app.seq(p);
+    const o = [...ui.selectedObjects][0];
+    const known = remembered(p, q.objects[o]);
+    const loop = fillLoop(p, q, o);
+    if (!loop || !known?.fill || !known.region || !POINTED.has(known.fill.pattern)) return;
+    if (app.editor.active) app.setEditing(false);
+    const box = regionBox(known.region);
+    rungTool.openPoints(loop, pointsOf(known.fill, box, known.region), known.fill.pattern === 'swirl' ? MAX_SWIRLS : 1);
     ui.rungObject = o;
     rungPattern = p;
     app.stage.classList.add('rungs');
@@ -184,6 +234,15 @@ export function bindRungs(app: RungsApp) {
     if (p === rungPattern) return;
     const q = app.seq(p);
     const o = [...ui.selectedObjects][0];
+    if (rungTool.mode === 'points') {
+      // The fill sewn anew around its points: the tool stays on it while the pattern has points.
+      const known = q.objects[o] && remembered(p, q.objects[o]);
+      if (!known?.fill || !known.region || !POINTED.has(known.fill.pattern) || !fillLoop(p, q, o)) return closeRungs();
+      rungTool.points = pointsOf(known.fill, regionBox(known.region), known.region);
+      ui.rungObject = o;
+      rungPattern = p;
+      return;
+    }
     if (rungTool.mode === 'guide') {
       // The fill sewn anew along the guide lines: the tool stays on it.
       if (!q.objects[o] || !fillLoop(p, q, o)) return closeRungs();
@@ -281,5 +340,5 @@ export function bindRungs(app: RungsApp) {
     app.applyRestitched(r, 'stitch.toSatin.failed', true);
   }
 
-  return { closeRungs, rungInfo, rungTool, sewAlongLines, syncRungs, toggleGuides, toggleRungs };
+  return { closeRungs, rungInfo, rungTool, sewAlongLines, syncRungs, toggleGuides, togglePoints, toggleRungs };
 }

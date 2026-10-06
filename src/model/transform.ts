@@ -116,13 +116,18 @@ export function transformRemembered(r: Remembered, m: Mat): Remembered {
   if (r.asSatin) out.asSatin = r.asSatin.map((c) => mapRails(m, s, c));
   if (r.asLine) out.asLine = { ...r.asLine, path: transformForm(r.asLine.path, m), line: { ...r.asLine.line, width: r.asLine.line.width * s } };
   if (r.fill) out.fill = { ...r.fill, ...(r.fill.lineWidth ? { lineWidth: r.fill.lineWidth * s } : {}), angle: mapAngle(m, r.fill.angle), ...(r.fill.guides ? { guides: r.fill.guides.map((g) => mapPts(m, g)) } : {}) };
-  // The start of rays stays on the same spot of the shape: mirrored and turned with it.
-  const focus = r.fill?.deco?.focus;
-  if (out.fill && focus && r.region && out.region) {
-    const q = apply(m, atShare(regionBox(r.region), focus));
+  // The middle of rays and circles and the eyes of swirls stay on the same spots of the shape:
+  // mirrored and turned with it.
+  const deco = r.fill?.deco;
+  if (out.fill && deco && (deco.focus || deco.centers) && r.region && out.region) {
+    const a = regionBox(r.region);
     const b = regionBox(out.region);
-    const share = (v: number, a: number, z: number) => Math.round(Math.min(1, Math.max(0, z > a ? (v - a) / (z - a) : 0.5)) * 1000) / 1000;
-    out.fill = { ...out.fill, deco: { ...out.fill.deco, focus: [share(q[0], b[0], b[2]), share(q[1], b[1], b[3])] } };
+    const share = (v: number, lo: number, hi: number) => Math.round(Math.min(1, Math.max(0, hi > lo ? (v - lo) / (hi - lo) : 0.5)) * 1000) / 1000;
+    const map = (f: Pt): Pt => {
+      const q = apply(m, atShare(a, f));
+      return [share(q[0], b[0], b[2]), share(q[1], b[1], b[3])];
+    };
+    out.fill = { ...out.fill, deco: { ...out.fill.deco, ...(deco.focus ? { focus: map(deco.focus) } : {}), ...(deco.centers ? { centers: deco.centers.map(map) } : {}) } };
   }
   return out;
 }

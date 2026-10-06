@@ -4,7 +4,7 @@ import { wholeOf } from './knockout';
 import { lineStitches, runAsLine } from './line';
 import { chooseAngle, fillRegion, type FillParams } from '../digitize/fill';
 import { contourFill, fieldFill, guideField, stitchField } from '../digitize/flow';
-import { atShare, crossFill, CROSS_KINDS, echoFill, grainField, GRID_KINDS, gridFill, mazeFill, meanderFill, MOTIFS, rayField, regionBox, swirlField, waveField, type CrossKind, type GridKind, type Motif, type OpenParams } from '../digitize/deco';
+import { atShare, crossFill, CROSS_KINDS, echoFill, circleField, grainField, GRID_KINDS, gridFill, mazeFill, meanderFill, MOTIFS, rayField, regionBox, swirlField, waveFill, type CrossKind, type GridKind, type Motif, type OpenParams } from '../digitize/deco';
 import { spiralFill } from '../digitize/spiral';
 import { coverage } from '../digitize/measure';
 import { expandRegion, outline, sample, signedField, type Region } from '../digitize/region';
@@ -43,11 +43,11 @@ import type { Lettering } from '../lettering/layout';
  */
 export type FillPattern = 'tatami' | 'gradient' | 'contour' | 'spiral' | 'follow' | 'guided' | DecoPattern | OpenPattern;
 /** Dense fills with curved rows laid on a field drawn from a few numbers (see deco.ts). */
-export type DecoPattern = 'waves' | 'grain' | 'rays' | 'swirl';
+export type DecoPattern = 'waves' | 'grain' | 'rays' | 'swirl' | 'circles';
 /** One line through the area, the fabric showing between (see deco.ts). */
 export type OpenPattern = 'meander' | 'maze' | 'grid' | 'echo' | 'cross';
 export const OPEN_PATTERNS: OpenPattern[] = ['meander', 'maze', 'grid', 'echo', 'cross'];
-export const DECO_PATTERNS: DecoPattern[] = ['waves', 'grain', 'rays', 'swirl'];
+export const DECO_PATTERNS: DecoPattern[] = ['waves', 'grain', 'rays', 'swirl', 'circles'];
 export const isOpenPattern = (p: FillPattern): p is OpenPattern => (OPEN_PATTERNS as FillPattern[]).includes(p);
 
 /** Settings of the decorative patterns; each falls back to DECO_DEFAULTS when not set. */
@@ -61,8 +61,10 @@ export interface DecoSettings {
   length?: number;
   /** Grain: how far the rows wander from their direction, 0 to 1. */
   strength?: number;
-  /** Rays: where they start, as a share (0 to 1) of the shape's width and height. */
+  /** Rays and circles: their middle, as a share (0 to 1) of the shape's width and height. */
   focus?: Pt;
+  /** Swirls: their eyes, shares like `focus`; picked by `seed` when not set. */
+  centers?: Pt[];
   /** Grain, swirls, meander and maze: which of the random ones. */
   seed?: number;
   /** Open patterns: distance between the lines, or the size of a cell (mm). */
@@ -73,19 +75,31 @@ export interface DecoSettings {
   cross?: CrossKind;
   /** Gradient: the density falls evenly to nearly nothing (out) or rises from it (in), for color blends. */
   fade?: 'out' | 'in';
+  /**
+   * A color blend: a second object in `color` fades the other way on the same area. It follows
+   * the fill like a border of its own thread (see syncBlends), found by `link`.
+   */
+  blend?: { color: ThreadColor; link: string };
 }
 
 export const DECO_DEFAULTS = {
-  embossSize: 14,
-  height: 2,
-  length: 16,
+  embossSize: 8,
+  height: 1.8,
+  length: 20,
   strength: 0.5,
-  focus: [0.5, 0.5] as Pt,
+  // Rays rise from near the bottom, like a sun on the horizon.
+  focus: [0.5, 0.9] as Pt,
   seed: 1,
   triple: false,
   grid: 'hex' as GridKind,
   cross: 'full' as CrossKind,
 };
+
+/** At most this many swirls in one fill. */
+export const MAX_SWIRLS = 3;
+
+/** Circles go round the middle of the shape when no point is set. */
+const CIRCLES_FOCUS: Pt = [0.5, 0.5];
 
 /** Open patterns: distance between lines or cell size when none is set (mm). */
 export const OPEN_SIZE: Record<OpenPattern, number> = { meander: 2.5, maze: 2.5, grid: 6, echo: 3, cross: 2.5 };
@@ -333,6 +347,8 @@ export interface Remembered {
   asLine?: LineFill;
   /** The object is the border of a fill in its own thread: the fill's `border.link`. */
   outline?: string;
+  /** The object is the second thread of a color blend: the fill's `deco.blend.link` (see syncBlends). */
+  blendOf?: string;
   /** A border object: the settings it was sewn with (its `region` is the fill's area it was sewn on). */
   border?: BorderSettings;
   /** The lettering the object belongs to (it is sewn anew from its text, see lettering/). */
@@ -569,6 +585,7 @@ export interface StoredObject {
   asSatin?: StoredRails[];
   asLine?: { path: StoredPath[]; line: PathStitch; cap?: LineCap };
   outline?: string;
+  blendOf?: string;
   border?: BorderSettings;
   lettering?: Lettering;
   lock?: boolean;
@@ -631,6 +648,7 @@ export function rememberedIn(p: Pattern, objects: SewObject[]): StoredObject[] {
       ...(r.asSatin ? { asSatin: r.asSatin.map(storeRails) } : {}),
       ...(r.asLine ? { asLine: { path: storeForm(r.asLine.path), line: { ...r.asLine.line }, cap: r.asLine.cap } } : {}),
       ...(r.outline ? { outline: r.outline } : {}),
+      ...(r.blendOf ? { blendOf: r.blendOf } : {}),
       ...(r.border ? { border: { ...r.border } } : {}),
       ...(r.lettering ? { lettering: r.lettering } : {}),
       ...(r.lock ? { lock: true } : {}),
@@ -669,6 +687,8 @@ function isFill(f: unknown): f is FillSettings {
   );
 }
 
+const isShare = (f: unknown) => Array.isArray(f) && f.length === 2 && f.every(finite);
+
 function isDeco(d: unknown): d is DecoSettings {
   const s = d as DecoSettings | null;
   return (
@@ -676,11 +696,13 @@ function isDeco(d: unknown): d is DecoSettings {
     typeof s === 'object' &&
     (s.emboss === undefined || MOTIFS.includes(s.emboss)) &&
     [s.embossSize, s.height, s.length, s.strength, s.seed, s.size].every((v) => v === undefined || finite(v)) &&
-    (s.focus === undefined || (Array.isArray(s.focus) && s.focus.length === 2 && s.focus.every(finite))) &&
+    (s.focus === undefined || isShare(s.focus)) &&
+    (s.centers === undefined || (Array.isArray(s.centers) && s.centers.length >= 1 && s.centers.length <= MAX_SWIRLS && s.centers.every(isShare))) &&
     (s.triple === undefined || typeof s.triple === 'boolean') &&
     (s.grid === undefined || GRID_KINDS.includes(s.grid)) &&
     (s.cross === undefined || CROSS_KINDS.includes(s.cross)) &&
-    (s.fade === undefined || s.fade === 'out' || s.fade === 'in')
+    (s.fade === undefined || s.fade === 'out' || s.fade === 'in') &&
+    (s.blend === undefined || (isColor(s.blend.color) && typeof s.blend.link === 'string'))
   );
 }
 
@@ -881,6 +903,7 @@ export function restoreRemembered(list: unknown): number {
     const asLine = e.asLine && formFrom(e.asLine.path);
     if (asLine && isLineStitch(e.asLine!.line)) r.asLine = { path: asLine, line: { ...e.asLine!.line }, cap: e.asLine!.cap === 'round' ? 'round' : 'flat' };
     if (typeof e.outline === 'string') r.outline = e.outline;
+    if (typeof e.blendOf === 'string') r.blendOf = e.blendOf;
     if (isBorder(e.border)) r.border = { ...e.border };
     const lettering = e.lettering === undefined ? null : letteringFrom(e.lettering);
     if (lettering) r.lettering = lettering;
@@ -1497,19 +1520,21 @@ function newFill(p: Pattern, o: SewObject, a: Analysis, s: FillSettings, reverse
   return { runs, under, border };
 }
 
-/** A dense fill with curved rows on one of the decorative fields. */
+/** A dense fill with curved rows: wave rows, or rows on one of the decorative fields. */
 function decoFill(r: Region, s: FillSettings, fp: FillParams, start: Pt) {
   const d = { ...DECO_DEFAULTS, ...s.deco };
   const angle = Number.isFinite(s.angle) ? s.angle : 0;
+  if (s.pattern === 'waves') return waveFill(r, fp, angle, d.height, d.length, start);
+  const focus = atShare(regionBox(r), s.deco?.focus ?? (s.pattern === 'circles' ? CIRCLES_FOCUS : DECO_DEFAULTS.focus));
   const f =
-    s.pattern === 'waves'
-      ? waveField(r, angle, d.height, d.length)
-      : s.pattern === 'grain'
-        ? grainField(r, angle, d.strength, d.seed, 18)
-        : s.pattern === 'rays'
-          ? rayField(r, atShare(regionBox(r), d.focus))
-          : swirlField(r, d.seed);
-  return fieldFill(r, f.g, f, fp, start, true, s.pattern === 'rays' || s.pattern === 'swirl' ? DECO_PEAK_POINT : DECO_PEAK);
+    s.pattern === 'grain'
+      ? grainField(r, angle, d.strength, d.seed)
+      : s.pattern === 'rays'
+        ? rayField(r, focus)
+        : s.pattern === 'circles'
+          ? circleField(r, focus)
+          : swirlField(r, d.seed, s.deco?.centers?.map((c) => atShare(regionBox(r), c)));
+  return fieldFill(r, f.g, f, fp, start, true, s.pattern === 'grain' ? DECO_PEAK : DECO_PEAK_POINT);
 }
 
 /** One of the open patterns: no underlay, no pull, one line. */
@@ -2156,6 +2181,7 @@ export function restitch(
           ...(known?.asSatin && !newArea ? { asSatin: known.asSatin } : {}),
           ...(known?.asLine && settings.kind === 'fill' ? { asLine: lineFillOf(known.asLine, settings.s) } : {}),
           ...(known?.outline ? { outline: known.outline, border: known.border } : {}),
+          ...(known?.blendOf ? { blendOf: known.blendOf } : {}),
         };
     if (known?.lettering) after.lettering = known.lettering;
     if (known?.lock) after.lock = true;
