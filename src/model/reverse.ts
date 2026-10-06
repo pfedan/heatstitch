@@ -56,6 +56,8 @@ export function reverseLines(p: Pattern, which: number[], trimMm: number): { pat
     const st = lineSettings(pattern, o, kinds);
     if (st.type === 'e' || st.type === 'motif') st.flip = !st.flip || undefined;
     if (!st.flip) delete st.flip;
+    // Echo copies of an open line lie to one side of its direction: they stay where they are.
+    if (st.echo && st.echo.side !== 'both' && !path.paths.some((x) => x.closed)) st.echo = { ...st.echo, side: st.echo.side === 'out' ? 'in' : 'out' };
     const r = resewLine(pattern, index, reversedForm(path), st, trimMm);
     if (r) pattern = r.pattern;
     else failed.push(index);

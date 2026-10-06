@@ -1,3 +1,4 @@
+import { syncBorders } from '../model/border';
 import type { AsideRole } from '../model/aside';
 import type { DrawTool } from '../ui/drawTool';
 import type { Editor } from '../ui/editor';
@@ -308,7 +309,8 @@ export function bindObjects(app: ObjectsApp) {
     const which = selected.filter((o) => !lines.includes(o) && reversible(q.objects[o]));
     if (!which.length && !lines.length) return;
     const turned = reverseLines(p, lines, app.settings.trimMm);
-    const pl = turned.pattern;
+    // Shadows and echo copies in threads of their own follow their lines.
+    const pl = turned.pattern === p ? p : syncBorders(turned.pattern, app.settings.trimMm);
     const ql = app.seq(pl);
     const r = which.length ? reverseObjects(pl, ql.objects, which, ql.kinds, app.settings.trimMm) : null;
     const failed = (r?.failed.length ?? 0) + turned.failed.length;
