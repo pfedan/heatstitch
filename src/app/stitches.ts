@@ -9,11 +9,12 @@ import type { RungTool } from '../ui/rungTool';
 import type { Sequence } from './types';
 import type { Settings } from '../settings';
 import type { ShapeOutline } from '../render/scene';
+import { hasPart, partOf, withoutPart } from '../model/shadow';
 import { SATIN_SHARE } from '../model/covers';
 import { currentSettings } from '../correct/plan';
 import { isCovered, setOverlapShare } from '../model/knockout';
 import { isStroke, SATIN_MAX, pullFor, digitizeDefaults } from '../digitize/digitize';
-import { lineSettings, lineToFill } from '../model/line';
+import { lineOf, lineSettings, lineToFill } from '../model/line';
 import { outline } from '../digitize/region';
 import { recommendedSpacing } from '../validation/profiles';
 import { recordOfStitch } from '../model/sequence';
@@ -108,12 +109,21 @@ export function bindStitches(app: StitchesApp) {
     const runs = [...ui.selectedObjects].map((o) => q.objects[o]).filter((obj) => obj?.kind === 'run');
     if (runs.length && runs.every((obj) => remembered(p, obj)?.path)) info.line = true;
     const one = ui.selectedObjects.size === 1 ? q.objects[[...ui.selectedObjects][0]] : undefined;
-    if (one && app.isLineObject(p, one)) info.path = { st: lineSettings(p, one, q.kinds), traced: !remembered(p, one)?.path };
+    if (one && app.isLineObject(p, one)) {
+      const form = lineOf(p, one, q.kinds);
+      info.path = { st: lineSettings(p, one, q.kinds), traced: !remembered(p, one)?.path, closed: !!form?.paths.length && form.paths.every((x) => x.closed), color: one.color };
+    }
     if (one && remembered(p, one)?.asLine) info.asLine = true;
     const own = ui.selectedObjects.size === 1 && q.objects[firstFill] ? remembered(p, q.objects[firstFill]) : undefined;
     if (own?.outline || own?.blendOf) {
       const fill = q.objects.findIndex((o) => partnerOf(remembered(p, o), own));
       info.outline = { fill: fill >= 0 ? fill : null, blend: !own.outline };
+    }
+    // A line's shadow: set at its line.
+    const shade = one && remembered(p, one);
+    if (partOf(shade)) {
+      const line = q.objects.findIndex((o) => partnerOf(remembered(p, o), shade!));
+      info.outline = { fill: line >= 0 ? line : null, shadow: shade!.shadowOf ? true : undefined, echo: shade!.echoOf ? true : undefined };
     }
     ui.stitchCache = { p, key: ui.selectionKey, info };
     return info;
@@ -121,10 +131,14 @@ export function bindStitches(app: StitchesApp) {
 
   /** Whether `fill` is the fill the border or second blend thread `own` belongs to. */
   const partnerOf = (fill: Remembered | undefined, own: Remembered): boolean =>
-    own.outline ? fill?.fill?.border?.link === own.outline : !!own.blendOf && fill?.fill?.deco?.blend?.link === own.blendOf;
+    own.outline
+      ? fill?.fill?.border?.link === own.outline
+      : own.blendOf
+        ? fill?.fill?.deco?.blend?.link === own.blendOf
+        : !!partOf(own) && hasPart(fill, partOf(own)!);
 
   /** Whether an object has a shape of its own its stitches can be loosed from (and sewn from again). */
-  const loosable = (m: Remembered | undefined): boolean => !!m && !m.read && !m.lettering && !m.outline && !m.blendOf && !!(m.region || m.form || m.path || m.columns);
+  const loosable = (m: Remembered | undefined): boolean => !!m && !m.read && !m.lettering && !m.outline && !m.blendOf && !partOf(m) && !!(m.region || m.form || m.path || m.columns);
 
   /**
    * The selected objects loosed from their shape (`on`), or sewn from their resting shape again with
@@ -359,8 +373,10 @@ export function bindStitches(app: StitchesApp) {
       const q = app.seq(p);
       const own = q.objects[[...ui.selectedObjects][0]];
       const mem = own && remembered(p, own);
-      if (!mem?.outline && !mem?.blendOf) return;
-      const blend = !mem.outline;
+      if (!mem || (!mem.outline && !mem.blendOf && !partOf(mem))) return;
+      const blend = !mem.outline && !!mem.blendOf;
+      const part = partOf(mem);
+      const shadow = !!part;
       const fill = q.objects.findIndex((o) => partnerOf(remembered(p, o), mem));
       if (a === 'fill') {
         if (fill >= 0) app.selectObjects([fill], false);
@@ -369,13 +385,18 @@ export function bindStitches(app: StitchesApp) {
       }
       // Its own object from now on: the fill forgets its border (or second thread), and it its fill.
       const fm = fill >= 0 ? remembered(p, q.objects[fill]) : undefined;
-      if (fm?.fill && blend) remember(p, q.objects[fill], { ...fm, fill: { ...fm.fill, deco: { ...fm.fill.deco, blend: undefined } } });
-      else if (fm?.fill) remember(p, q.objects[fill], { ...fm, fill: { ...fm.fill, border: undefined } });
-      remember(p, own, blend ? { ...mem, blendOf: undefined } : { ...mem, outline: undefined, border: undefined });
+      if (shadow) {
+        if (fm?.line) remember(p, q.objects[fill], withoutPart(fm, part!));
+        remember(p, own, { ...mem, shadowOf: undefined, echoOf: undefined });
+      } else {
+        if (fm?.fill && blend) remember(p, q.objects[fill], { ...fm, fill: { ...fm.fill, deco: { ...fm.fill.deco, blend: undefined } } });
+        else if (fm?.fill) remember(p, q.objects[fill], { ...fm, fill: { ...fm.fill, border: undefined } });
+        remember(p, own, blend ? { ...mem, blendOf: undefined } : { ...mem, outline: undefined, border: undefined });
+      }
       if (app.files.active) app.files.setObjects(app.files.active, rememberedIn(p, q.objects));
       ui.selectionKey++;
       ui.stitchCache = null;
-      app.layers.say(t(blend ? 'stitch.blendOf.detached' : 'stitch.outline.detached'));
+      app.layers.say(t(shadow ? (mem.echoOf ? 'stitch.echoOf.detached' : 'stitch.shadowOf.detached') : blend ? 'stitch.blendOf.detached' : 'stitch.outline.detached'));
       app.redraw();
     },
   });

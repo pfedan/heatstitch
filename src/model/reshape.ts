@@ -6,7 +6,7 @@ import { rememberObjects, sewObjects, type SewObject } from './objects';
 import { STITCH, type Pattern } from './pattern';
 import { analyze, keepShape, measureFill, measureRun, measureSatin, remembered, rememberRange, restitch, type RestitchResult, type Settings } from './restitch';
 import { stitchKinds } from './sequence';
-import { isRigid, scaleOf, stitchesBefore, transformObject, transformRemembered } from './transform';
+import { isRigid, mirroredEcho, scaleOf, stitchesBefore, transformObject, transformRemembered } from './transform';
 
 /**
  * The fill area of an object as curves: the curves it was given here, else its area (kept or
@@ -126,7 +126,7 @@ export function transformSewObject(p: Pattern, objs: SewObject[], o: SewObject, 
   // A line with its curves: scaled, it is sewn anew along them with its settings.
   const line = remembered(p, o)?.path;
   if (line && !rigid) {
-    const r = resewLine(p, o.index, transformForm(line, m), lineSettings(p, o, kinds), trimMm);
+    const r = resewLine(p, o.index, transformForm(line, m), mirroredEcho(lineSettings(p, o, kinds), line, m), trimMm);
     return r && { ...r, restitched: true };
   }
   // A fill along a line: filled anew along the scaled line, in a width scaled with it.

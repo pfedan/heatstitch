@@ -1,4 +1,6 @@
 import { borderLoops, borderRails, borderRun, keptLines, keptRails, lineRails, orderLoops, type BorderType } from '../digitize/border';
+import type { LineEcho } from '../digitize/echo';
+import type { LineShadow } from './shadow';
 import { sample, type Region } from '../digitize/region';
 import { TOLERANCE } from '../digitize/run';
 import type { Pt } from '../digitize/skeleton';
@@ -35,6 +37,10 @@ export interface PathStitch {
   pull?: number;
   /** Satin: its underlay; along the middle from 1.5 mm width, none below, by default. */
   under?: UnderlayKind | 'off';
+  /** Lines only: copies of the line beside it (see digitize/echo.ts); none by default. */
+  echo?: LineEcho;
+  /** Lines only: a copy beside it in a thread of its own, sewn before it (see shadow.ts). */
+  shadow?: LineShadow;
 }
 
 /** Sewn as a running stitch (once or more often), not across a band. */
