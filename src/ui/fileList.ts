@@ -57,7 +57,10 @@ export interface LoadedFile {
   acks: Acknowledgement[];
   /** This design's fabric, thread, hoop, fabric color and checks. */
   material: Material;
-  /** The name the user gave the design, without extension; absent while it goes by its file name. */
+  /**
+   * The name the user gave the design, as the list shows it: a loaded file keeps the extension only
+   * as long as the user leaves it there (heatstitch objects may join it). Absent while it goes by its file name.
+   */
   title?: string;
   /**
    * Made in the app (empty with "Neu", from an image or SVG): it is named without extension, since
@@ -85,6 +88,8 @@ interface FileData {
 const HISTORY = 50;
 
 const EXT = /\.[^.]+$/;
+/** The extension of an embroidery format at the end of a name ("Herz 1.5" has none). */
+const FORMAT_EXT = new RegExp(`(${SUPPORTED_EXTENSIONS.map((e) => e.replace('.', '\\.')).join('|')})$`, 'i');
 
 export class FileList {
   files: LoadedFile[] = [];
@@ -378,15 +383,20 @@ export class FileList {
     return !!f?.original && !f.original.cmd.includes(STITCH);
   }
 
-  /** The design's name without extension: the one the user gave it, else its file name. */
+  /** The design's name without an embroidery extension: the one the user gave it, else its file name. */
   static baseName(f: LoadedFile): string {
-    return f.title ?? f.fileName.replace(EXT, '');
+    return f.title !== undefined ? f.title.replace(FORMAT_EXT, '').trim() : f.fileName.replace(EXT, '');
   }
 
-  /** The name the list shows: loaded embroidery files with their extension, designs made in the app without. */
+  /** The name the list shows: the one the user gave it, else loaded embroidery files with their extension, designs made in the app without. */
   static displayName(f: LoadedFile): string {
-    if (f.error || !f.title) return f.own ? f.fileName.replace(EXT, '') : f.fileName;
-    return f.own ? f.title : `${f.title}${f.fileName.match(EXT)?.[0] ?? ''}`;
+    if (f.error) return f.fileName;
+    return f.title ?? FileList.fileDisplayName(f);
+  }
+
+  /** The name a design goes by until the user names it. */
+  private static fileDisplayName(f: LoadedFile): string {
+    return f.own ? f.fileName.replace(EXT, '') : f.fileName;
   }
 
   /**
@@ -398,10 +408,10 @@ export class FileList {
     return FileList.edited(f) && !f.own && !f.title ? `${base}-corrected` : base;
   }
 
-  /** Gives a design another name; an empty name (or its file name) goes back to the file name. */
+  /** Gives a design another name, exactly as typed; an empty name (or its file name) goes back to the file name. */
   rename(f: LoadedFile, name: string): void {
     const title = name.replace(/[\x00-\x1f]/g, '').trim();
-    const next = title && title !== f.fileName.replace(EXT, '') ? title : undefined;
+    const next = title && title !== FileList.fileDisplayName(f) ? title : undefined;
     if (next === f.title) return;
     if (next) f.title = next;
     else delete f.title;
@@ -414,11 +424,13 @@ export class FileList {
   startRename(id: number): void {
     const f = this.files.find((x) => x.id === id);
     if (!f?.pattern) return;
-    this.renaming = { id, text: FileList.baseName(f) };
+    const text = FileList.displayName(f);
+    this.renaming = { id, text };
     this.render();
     const input = this.list.querySelector<HTMLInputElement>('input.rename-input');
     input?.focus();
-    input?.select();
+    // Like a file manager: the name is selected, an extension behind it stays as long as one types over the selection.
+    input?.setSelectionRange(0, text.length - (text.match(FORMAT_EXT)?.[0].length ?? 0));
   }
 
   /** Ends editing a name: takes the typed text, or with `keep` false leaves the name as it was. */
@@ -481,7 +493,7 @@ export class FileList {
     input.className = 'rename-input';
     input.type = 'text';
     input.value = this.renaming!.text;
-    input.placeholder = f.fileName.replace(EXT, '');
+    input.placeholder = FileList.fileDisplayName(f);
     input.setAttribute('aria-label', t('files.rename'));
     input.addEventListener('input', () => {
       if (this.renaming) this.renaming.text = input.value;
@@ -498,9 +510,6 @@ export class FileList {
     input.addEventListener('click', (e) => e.stopPropagation());
     input.addEventListener('dblclick', (e) => e.stopPropagation());
     wrap.append(input);
-    // A loaded embroidery file stays one: its extension shows behind the field.
-    const ext = f.own ? '' : (f.fileName.match(EXT)?.[0] ?? '');
-    if (ext) wrap.append(Object.assign(document.createElement('span'), { className: 'ext', textContent: ext }));
     return wrap;
   }
 

@@ -16,8 +16,9 @@ describe('design names', () => {
     expect(FileList.displayName(file('Neues Stickmuster.pes', { own: true }))).toBe('Neues Stickmuster');
   });
 
-  it('shows a given name, keeping the extension of a loaded file', () => {
-    expect(FileList.displayName(file('katze.dst', { title: 'Katze rot' }))).toBe('Katze rot.dst');
+  it('shows a given name exactly as typed, with or without extension', () => {
+    expect(FileList.displayName(file('katze.dst', { title: 'Katze rot.dst' }))).toBe('Katze rot.dst');
+    expect(FileList.displayName(file('katze.dst', { title: 'Katze mit Schrift' }))).toBe('Katze mit Schrift');
     expect(FileList.displayName(file('Neues Stickmuster.pes', { own: true, title: 'Herz 1.5' }))).toBe('Herz 1.5');
   });
 
@@ -26,6 +27,7 @@ describe('design names', () => {
     expect(FileList.saveName(file('katze.pes'))).toBe('katze');
     expect(FileList.saveName(edited(file('katze.pes')))).toBe('katze-corrected');
     expect(FileList.saveName(edited(file('katze.pes', { title: 'Katze rot' })))).toBe('Katze rot');
+    expect(FileList.saveName(file('katze.pes', { title: 'Katze rot.pes' }))).toBe('Katze rot');
     expect(FileList.saveName(edited(file('Logo.pes', { own: true })))).toBe('Logo');
     expect(FileList.saveName(file('x.pes', { own: true, title: 'Herz 1.5' }))).toBe('Herz 1.5');
   });

@@ -333,10 +333,6 @@ body.dragging .dropzone {
   color: inherit;
 }
 
-.file-list .name.rename .ext {
-  color: var(--muted);
-}
-
 /* Quiet until the row is pointed at or chosen; touch screens without hover see it on the chosen row. */
 .file-list .rename-btn {
   display: inline-flex;
