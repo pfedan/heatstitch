@@ -531,8 +531,9 @@ describe('found by the torture test', () => {
   });
 
   // Chains that failed once (borders on delete, cut out and recolor; knockouts after reopening a
-  // project whose curves were stored rounded): replayed with every run.
-  it.each([3, 4, 9, 11, 12, 16, 18, 24])('chain %i still holds', async (seed) => {
+  // project whose curves were stored rounded; a fill leaving out its own satin border): replayed
+  // with every run.
+  it.each([3, 4, 9, 11, 12, 16, 18, 24, 389])('chain %i still holds', async (seed) => {
     await chain(seed, 14);
   });
   // From the first long run (20 steps): a narrow added shape sewn as satin forgot what it was;
