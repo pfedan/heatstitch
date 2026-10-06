@@ -1,0 +1,79 @@
+{
+  "2f6f95a7d0abea73": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "[warm, inviting] In diesem Video stickst du ein Etikett für Selbstgenähtes: „Mit Liebe genäht“ im Bogen, darunter ein Name."
+  },
+  "65ad1cde149f9c08": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "Klick links auf „Neu“ und dann über der Leinwand auf „Text“. Der Text ist schon markiert, du tippst einfach los."
+  },
+  "f0d29862b8be2fb4": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "[curious] Rot heißt hier: zu breit für den Stickrahmen. Das lösen wir gleich mit Schrift und Höhe."
+  },
+  "ad2c6519a1a896a9": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "Ein Klick auf die Schrift öffnet die Liste, und jede Schrift zeigt gleich deinen Text. [focused] Grau heißt: Hier fehlt ein Buchstabe, zum Beispiel das Ä. Rechts steht, für welche Höhe die Schrift gemacht ist. Ich nehme Excalibur."
+  },
+  "c5530d705d8fa59f": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "Die Höhe gilt für die Großbuchstaben. Neun Millimeter, [delighted] und schon passt alles in den Rahmen. Der grüne Streifen unter dem Regler zeigt, wo die Schrift gut aussieht."
+  },
+  "6b9b0a2929403b6f": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "[enthusiastic] Jetzt kommt der Bogen: Form „Bogen oben“. Mit dem Radius bestimmst du, wie stark er sich krümmt."
+  },
+  "e3acec0e9e3a41ac": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "Unter „Mehr“ bekommen die Buchstaben mit etwas mehr Abstand Luft. Dazu ein dunkles Blau."
+  },
+  "cb2c3f28cc222183": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "Ein zweiter Klick auf „Text“ setzt den nächsten Schriftzug genau darunter. Für den Namen nehme ich eine Schreibschrift, Pacificlo, zwanzig Millimeter hoch, in Rosa."
+  },
+  "afa211bd0e023a53": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "[delighted] Das Schöne: Ein Schriftzug bleibt Text. Doppelklick darauf, und aus Frieda wird Emma. Schrift, Garn und Platz bleiben."
+  },
+  "cf9c2620a30cf056": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "Mit der Leertaste siehst du, wie die Maschine stickt: erst den blauen Bogen, dann den Namen."
+  },
+  "51d449fecdba7c76": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "[proud, warm] Speichern geht links wie bei jedem Stickmuster. Fertig ist dein Etikett."
+  }
+}
