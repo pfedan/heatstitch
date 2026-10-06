@@ -1,11 +1,11 @@
 import type { Region } from '../digitize/region';
 import type { Pt } from '../digitize/skeleton';
 import { tidy, withRecords } from './edit';
-import { rememberObjects, sewObjects, type SewObject } from './objects';
+import { rememberObjects, sewObjects, stitchKey, type SewObject } from './objects';
 import { COLOR_CHANGE, END, JUMP, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
 import { borderStitches } from './along';
 import { wholeOf } from './knockout';
-import { lockAt, remember, remembered, trimBefore, type BorderSettings, type FillSettings, type Rec, type Remembered } from './restitch';
+import { lockAt, objectKey, remember, remembered, trimBefore, type BorderSettings, type FillSettings, type Rec, type Remembered } from './restitch';
 import { expandRegion } from '../digitize/region';
 import { fillRegion } from '../digitize/fill';
 import { stitchKinds } from './sequence';
@@ -64,6 +64,14 @@ export function runRecords(runs: Pt[][], trimMm: number): Rec[] {
   });
   if (runs.length) out.push(...lockAt(runs[runs.length - 1], true), { ...out[out.length - 1], cmd: TRIM });
   return out;
+}
+
+/** The key the stitches of `recs` have as an object (objectKey). */
+function keyOf(recs: Rec[]): string {
+  const x = Int32Array.from(recs, (r) => r.x);
+  const y = Int32Array.from(recs, (r) => r.y);
+  const cmd = Uint8Array.from(recs, (r) => r.cmd);
+  return stitchKey({ x, y, cmd } as Pattern, 0, recs.length - 1);
 }
 
 const recordsOf = (p: Pattern, a: number, b: number): Rec[] => {
@@ -223,8 +231,9 @@ function syncOwnBorders(p: Pattern, trimMm: number, drop: ReadonlySet<string>, f
   const claimed = new Set<string>();
   mem.forEach((m, k) => {
     const b = m?.fill?.border;
-    // A border still sewn as the last part of its fill (from before borders were objects) stays so.
-    if (!m?.fill || !b || (!b.color && m.borderAt)) return;
+    // A border still sewn as the last part of its fill (from before borders were objects) stays so,
+    // as does the border of an empty fill (it is all the object is).
+    if (!m?.fill || !b || (!b.color && m.borderAt) || m.fill.pattern === 'none') return;
     if (b.link && !claimed.has(b.link)) return void claimed.add(b.link);
     // A border without link yet, or the copy of a fill: a link of its own.
     remember(p, objs[k], (mem[k] = { ...m, fill: { ...m.fill, border: { ...b, link: newLink() } } }));
@@ -232,13 +241,15 @@ function syncOwnBorders(p: Pattern, trimMm: number, drop: ReadonlySet<string>, f
   });
   const seconds = new Map<string, number>();
   mem.forEach((m, k) => m?.blendOf && !seconds.has(m.blendOf) && seconds.set(m.blendOf, k));
+  let keys: Set<string> | null = null;
+  const taken = () => (keys ??= new Set(objs.map((o) => objectKey(p, o))));
   const changes: Change[] = [];
   const wanted = new Set<string>();
   objs.forEach((o, k) => {
     const m = mem[k];
     const b = m?.fill?.border;
     // A blend's second thread is sewn as its fill says, without border.
-    if (!m?.region || !b?.link || (!b.color && m.borderAt) || m.blendOf) return;
+    if (!m?.region || !b?.link || (!b.color && m.borderAt) || m.blendOf || m.fill?.pattern === 'none') return;
     wanted.add(b.link);
     const color = b.color ?? o.color;
     // Sewn after this object: the fill, or the second thread of its blend.
@@ -250,10 +261,17 @@ function syncOwnBorders(p: Pattern, trimMm: number, drop: ReadonlySet<string>, f
     const same = target && cur?.border && sameColor(target.color, color) && (second === undefined || !fresh.has(m.fill!.deco!.blend!.link) || at! > second);
     if (same && sameRegion(cur!.region, m.region) && sameBorder(cur!.border!, b)) return;
     const from: Pt = [p.x[after.last] / 10, p.y[after.last] / 10];
-    const runs = borderStitches(m.region, b, from, wholeOf(m.region, m));
+    let runs = borderStitches(m.region, b, from, wholeOf(m.region, m));
     if (!runs.length) return;
     const memory: Remembered = { region: m.region, outline: b.link, border: stitchOf(b) };
-    const recs = runRecords(runs, trimMm);
+    let recs = runRecords(runs, trimMm);
+    // The very stitches of another border (a fill copied in place): sewn the other way round, so
+    // each remembers its own (memory is keyed by stitches).
+    if (taken().has(keyOf(recs)) && (!target || keyOf(recs) !== objectKey(p, target))) {
+      runs = runs.slice().reverse().map((run) => run.slice().reverse());
+      recs = runRecords(runs, trimMm);
+    }
+    taken().add(keyOf(recs));
     if (same) {
       changes.push({ a: leadOf(p, target), b: target.last, recs, memory });
       return;
@@ -395,6 +413,8 @@ export function syncBlends(p: Pattern, trimMm: number, drop: ReadonlySet<string>
     if (!claimed.has(b.link)) return void claimed.add(b.link);
     remember(p, objs[k], (mem[k] = { ...m, fill: { ...m.fill, deco: { ...m.fill.deco, blend: { ...b, link: newLink() } } } }));
   });
+  let keys: Set<string> | null = null;
+  const taken = () => (keys ??= new Set(objs.map((o) => objectKey(p, o))));
   const changes: Change[] = [];
   const wanted = new Set<string>();
   objs.forEach((o, k) => {
@@ -411,7 +431,10 @@ export function syncBlends(p: Pattern, trimMm: number, drop: ReadonlySet<string>
     const runs = blendRuns(m!.region!, want, [p.x[o.last] / 10, p.y[o.last] / 10]);
     if (!runs) return;
     const memory: Remembered = { region: m!.region, fill: want, blendOf: b.link };
-    const recs = runRecords(runs, trimMm);
+    let recs = runRecords(runs, trimMm);
+    // The very stitches of another object (a fill copied in place): sewn the other way round.
+    if (taken().has(keyOf(recs)) && (!target || keyOf(recs) !== objectKey(p, target))) recs = runRecords(runs.slice().reverse().map((run) => run.slice().reverse()), trimMm);
+    taken().add(keyOf(recs));
     if (same) {
       changes.push({ a: leadOf(p, target), b: target.last, recs, memory });
       return;

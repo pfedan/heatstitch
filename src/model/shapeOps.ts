@@ -10,9 +10,11 @@ import { recs } from './jumps';
 import { reorder } from './order';
 import { recolor, sameColor } from './recolor';
 import { STITCH, type Pattern, type ThreadColor } from './pattern';
-import { objectKey, remember, remembered, rememberedIn, restoreRemembered, type Remembered } from './restitch';
+import { forget, objectKey, remember, remembered, rememberedIn, restitch, restoreRemembered, type Remembered } from './restitch';
 import { formOf, reshapeFill, transformSewObject } from './reshape';
 import { stitchKinds } from './sequence';
+import { stitchesBefore } from './transform';
+import { autoReversible, isLine, ownSettings, reverseLines } from './reverse';
 
 /**
  * Working with objects as shapes: deleting, duplicating, mirroring, and combining fills by their
@@ -96,35 +98,138 @@ function removeObjects(p: Pattern, which: number[], trimMm: number): Pattern | n
 
 /** Object `o` once more, sewn right after it and a little beside it; with the index of the copy. */
 export function duplicateObject(p: Pattern, o: number, trimMm: number, offset = DUPLICATE_OFFSET_MM): { pattern: Pattern; index: number } | null {
+  const r = duplicateObjects(p, [o], trimMm, offset);
+  return r && { pattern: r.pattern, index: r.copies[0] };
+}
+
+export interface Duplicated {
+  pattern: Pattern;
+  /** The copies (indices in `pattern`). */
+  copies: number[];
+  /** Copies in place that could not be sewn the other way round: 0.1 mm beside their original. */
+  nudged: number;
+}
+
+/**
+ * The objects `which` once more, each copy sewn right after its original and `offset` mm beside it
+ * (right and down), all by the same step so they keep their places to each other; with 0 exactly
+ * on it (Ctrl+D). What belongs to a chosen object (its border in its own thread, a blend's second
+ * thread, a line's shadow and echo copies) is not copied on its own: the copy gets parts of its own
+ * (syncBorders). With the indices of the copies.
+ */
+export function duplicateObjects(p: Pattern, which: number[], trimMm: number, offset = DUPLICATE_OFFSET_MM): Duplicated | null {
   const objs = sewObjects(p);
-  if (!objs[o]) return null;
-  const order = objs.map((x) => x.index);
-  order.splice(o + 1, 0, o);
-  const starts: number[] = [];
-  // Trimmed off the original, so it stays an object of its own even when it starts where that ends.
-  const doubled = reorder(p, objs, order, trimMm, starts, { apart: new Set([o + 1]) });
-  // The copy has the same stitches, so it remembers the same (its key is its stitches).
-  rememberObjects(doubled, starts);
-  const kinds = stitchKinds(doubled);
-  const nobjs = sewObjects(doubled, kinds);
-  const copy = nobjs[o + 1];
-  if (!copy) return null;
-  // Memory is keyed by stitches: a copy landing exactly on another object (the second copy of one
-  // object on the first) would share what that one remembers. It goes a step further then.
-  // Its border in its own thread is sewn anew beside it too, so that must not land on another either.
-  const taken = new Set(objs.map((x) => objectKey(p, x)));
-  const link = ownBorder(remembered(p, objs[o]));
-  const border = link ? objs.find((x) => remembered(p, x)?.outline === link) : undefined;
-  const blend = remembered(p, objs[o])?.fill?.deco?.blend?.link;
-  const second = blend ? objs.find((x) => remembered(p, x)?.blendOf === blend) : undefined;
-  const parts = objs.filter((x) => { const l = partOf(remembered(p, x)); return !!l && hasPart(remembered(p, objs[o]), l); });
-  const lands = (d: number) => [objs[o], border, second, ...parts].some((x) => x && taken.has(shiftedKey(p, x, d)));
+  const mem = objs.map((x) => remembered(p, x));
+  const chosen = new Set(which.filter((o) => objs[o]));
+  // Parts of a chosen object come anew with its copy.
+  const partsOf = (o: number): number[] => {
+    const m = mem[o];
+    const link = ownBorder(m);
+    const blend = m?.fill?.deco?.blend?.link;
+    return objs.flatMap((_, k) => {
+      const n = mem[k];
+      const l = partOf(n);
+      return (link && n?.outline === link) || (blend && n?.blendOf === blend) || (l && hasPart(m, l)) ? [k] : [];
+    });
+  };
+  for (const o of [...chosen]) for (const k of partsOf(o)) if (k !== o && chosen.has(k) && !partsOf(k).includes(o)) chosen.delete(k);
+  const list = [...chosen].sort((a, b) => a - b);
+  if (!list.length) return null;
+  // Memory is keyed by stitches: a copy landing exactly on another object beside it (the second
+  // copy of one object on the first) is moved a step further, so copies do not pile up unseen.
   let step = 1;
-  while (step < 10 && lands(Math.round(offset * step * 10))) step++;
-  const r = transformSewObject(doubled, nobjs, copy, kinds, translation(offset * step, offset * step), trimMm);
+  if (offset) {
+    const taken = new Set(objs.map((x) => objectKey(p, x)));
+    const moving = list.flatMap((o) => [o, ...partsOf(o)]);
+    const lands = (d: number) => moving.some((k) => taken.has(shiftedKey(p, objs[k], d)));
+    while (step < 10 && lands(Math.round(offset * step * 10))) step++;
+  }
+  const order: number[] = [];
+  const apart = new Set<number>();
+  for (const x of objs) {
+    order.push(x.index);
+    if (!list.includes(x.index)) continue;
+    // Trimmed off the original, so it stays an object of its own even when it starts where that ends.
+    apart.add(order.length);
+    order.push(x.index);
+  }
+  const starts: number[] = [];
+  let cur = reorder(p, objs, order, trimMm, starts, { apart });
+  // The copy has the same stitches, so it remembers the same (its key is its stitches).
+  rememberObjects(cur, starts);
+  const copies = [...apart];
+  if (copies.some((k) => !sewObjects(cur)[k])) return null;
+  let nudged = 0;
+  for (const k of copies) {
+    const next = offset ? moved(cur, k, translation(offset * step, offset * step), trimMm) : inPlace(cur, k, trimMm);
+    if (!next) return null;
+    if (next.nudged) nudged++;
+    cur = next.pattern;
+  }
   // A fill's border of its own thread is copied with it (sewn after the color block, so the copy
-  // keeps its number); a copied border becomes a line of its own.
-  return r ? { pattern: syncBorders(r.pattern, trimMm), index: o + 1 } : null;
+  // keeps its number); a copied border becomes a line of its own. The copies are found again by
+  // their stitches, as parts sewn in for them move them on.
+  const nobjs = sewObjects(cur);
+  const keys = copies.map((k) => objectKey(cur, nobjs[k]));
+  const next = syncBorders(cur, trimMm);
+  const after = sewObjects(next).map((x) => objectKey(next, x));
+  const found = keys.map((key) => after.indexOf(key));
+  if (found.some((k) => k < 0)) return null;
+  return { pattern: next, copies: found, nudged };
+}
+
+/** Object `k` of `p` moved by `m`. */
+function moved(p: Pattern, k: number, m: Mat, trimMm: number): { pattern: Pattern; nudged?: boolean } | null {
+  const kinds = stitchKinds(p);
+  const objs = sewObjects(p, kinds);
+  const r = transformSewObject(p, objs, objs[k], kinds, m, trimMm);
+  return r && { pattern: r.pattern };
+}
+
+/**
+ * Copy `k`, lying on its original right before it, kept exactly there but sewn from the other end:
+ * it starts where the original ends (no way back to its start), and with stitches of its own it
+ * remembers its own (memory is keyed by stitches). A line turns its curve (0.1 mm beside), a fill
+ * or satin is sewn anew the other way round. What cannot be turned (stitches from a file changed by hand, a fill
+ * read from a file) goes the smallest step beside it, 0.1 mm to the right.
+ */
+function inPlace(p: Pattern, k: number, trimMm: number): { pattern: Pattern; nudged?: boolean } | null {
+  const kinds = stitchKinds(p);
+  const objs = sewObjects(p, kinds);
+  const o = objs[k];
+  const known = remembered(p, o);
+  // A try whose stitches turn out to be another object's has overwritten what that one remembers
+  // (memory is keyed by stitches): it is put back.
+  const kept = objs.map((x) => remembered(p, x));
+  let next: Pattern | null = null;
+  if (isLine(p, o) && !known?.hand) {
+    // A line also goes the smallest step beside it: sewn back along itself (an echo on both sides,
+    // a line there and back) it would otherwise have the very stitches of its copy.
+    const beside = moved(p, k, translation(0.1, 0), trimMm);
+    next = beside && reverseLines(beside.pattern, [k], trimMm).pattern;
+  }
+  else if (autoReversible(p, o)) {
+    // Sewn anew the other way round, where it is (not moved in the order, so it stays apart).
+    const r = restitch(p, objs, [k], ownSettings(p, kinds), kinds, trimMm, undefined, true);
+    if (r.starts.length === 1 && !r.failed.length) {
+      rememberObjects(r.pattern, [r.starts[0]], r.ends[0]);
+      const at = sewObjects(r.pattern).find((x) => stitchesBefore(r.pattern, x.first) === r.starts[0]);
+      if (at) {
+        remember(r.pattern, at, r.memory[0]);
+        next = r.pattern;
+      }
+    }
+  }
+  const own = (q: Pattern) => {
+    const now = sewObjects(q);
+    const key = now.length === objs.length && objectKey(q, now[k]);
+    if (key && now.every((x) => x.index === k || objectKey(q, x) !== key)) return true;
+    objs.forEach((x, i) => i !== k && forget(p, x, kept[i]));
+    return false;
+  };
+  if (next && next !== p && own(next)) return { pattern: next };
+  const step = moved(p, k, translation(0.1, 0), trimMm);
+  return step && own(step.pattern) ? { pattern: step.pattern, nudged: true } : null;
 }
 
 /** The key the stitches of `o` would have, moved by `d` (0.1 mm) both ways. */
