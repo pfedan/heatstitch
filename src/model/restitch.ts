@@ -5,6 +5,7 @@ import { chooseAngle, fillRegion, type FillParams } from '../digitize/fill';
 import { contourFill, fieldFill, guideField, stitchField } from '../digitize/flow';
 import { atShare, crossFill, CROSS_KINDS, echoFill, circleField, grainField, GRID_KINDS, gridFill, mazeFill, meanderFill, MOTIFS, rayField, regionBox, swirlField, waveFill, type CrossKind, type GridKind, type Motif, type OpenParams } from '../digitize/deco';
 import { spiralFill } from '../digitize/spiral';
+import { isEcho } from '../digitize/echo';
 import { coverage } from '../digitize/measure';
 import { expandRegion, outline, sample, signedField, type Region } from '../digitize/region';
 import { runStitch, TOLERANCE } from '../digitize/run';
@@ -680,7 +681,7 @@ export function rememberedIn(p: Pattern, objects: SewObject[]): StoredObject[] {
       ...(r.cut ? { cut: r.cut } : {}),
       ...(r.overlapShare !== undefined ? { overlapShare: r.overlapShare } : {}),
       ...(r.path ? { path: storeForm(r.path) } : {}),
-      ...(r.line ? { line: { ...r.line } } : {}),
+      ...(r.line ? { line: { ...r.line, ...(r.line.echo ? { echo: { ...r.line.echo } } : {}) } } : {}),
       ...(r.under ? { under: r.under } : {}),
       ...(r.underFrom ? { underFrom: r.underFrom } : {}),
       ...(r.borderAt ? { borderAt: r.borderAt } : {}),
@@ -962,7 +963,13 @@ export function restoreRemembered(list: unknown): number {
     if (finite(e.overlapShare) && e.overlapShare >= 0 && e.overlapShare <= 1) r.overlapShare = e.overlapShare;
     const path = e.path === undefined ? null : formFrom(e.path);
     if (path) r.path = path;
-    if (path && isLineStitch(e.line)) r.line = { ...e.line };
+    if (path && isLineStitch(e.line)) {
+      r.line = { ...e.line };
+      if (r.line.echo !== undefined) {
+        if (isEcho(r.line.echo)) r.line.echo = { ...r.line.echo };
+        else delete r.line.echo;
+      }
+    }
     if (finite(e.under) && e.under > 0) r.under = Math.round(e.under);
     if (finite(e.underFrom) && e.underFrom > 0) r.underFrom = Math.round(e.underFrom);
     if (finite(e.borderAt) && e.borderAt > 0) r.borderAt = Math.round(e.borderAt);
@@ -2175,7 +2182,8 @@ export type SettingsFor = Settings | ((o: SewObject, a: Analysis, known: Remembe
  */
 /** Settings of running stitch or satin given for a line, as the stitches along it (`known`: as it had them). */
 function asLine(given: Settings, known?: PathStitch): PathStitch | null {
-  if (given.kind === 'run') return runAsLine(given.s, known?.width);
+  // Its echo stays when the stitch changes.
+  if (given.kind === 'run') return { ...runAsLine(given.s, known?.width), ...(known?.echo ? { echo: { ...known.echo } } : {}) };
   if (given.kind !== 'satin') return null;
   const s = given.s;
   return { ...(known ?? { width: 2 }), type: 'satin', spacing: s.spacing, pull: s.edge || undefined, under: s.underlay ? (s.under ?? 'center') : 'off', tolerance: s.tolerance ?? known?.tolerance };

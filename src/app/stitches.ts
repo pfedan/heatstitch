@@ -13,7 +13,7 @@ import { SATIN_SHARE } from '../model/covers';
 import { currentSettings } from '../correct/plan';
 import { isCovered, setOverlapShare } from '../model/knockout';
 import { isStroke, SATIN_MAX, pullFor, digitizeDefaults } from '../digitize/digitize';
-import { lineSettings, lineToFill } from '../model/line';
+import { lineOf, lineSettings, lineToFill } from '../model/line';
 import { outline } from '../digitize/region';
 import { recommendedSpacing } from '../validation/profiles';
 import { recordOfStitch } from '../model/sequence';
@@ -108,7 +108,10 @@ export function bindStitches(app: StitchesApp) {
     const runs = [...ui.selectedObjects].map((o) => q.objects[o]).filter((obj) => obj?.kind === 'run');
     if (runs.length && runs.every((obj) => remembered(p, obj)?.path)) info.line = true;
     const one = ui.selectedObjects.size === 1 ? q.objects[[...ui.selectedObjects][0]] : undefined;
-    if (one && app.isLineObject(p, one)) info.path = { st: lineSettings(p, one, q.kinds), traced: !remembered(p, one)?.path };
+    if (one && app.isLineObject(p, one)) {
+      const form = lineOf(p, one, q.kinds);
+      info.path = { st: lineSettings(p, one, q.kinds), traced: !remembered(p, one)?.path, closed: !!form?.paths.length && form.paths.every((x) => x.closed) };
+    }
     if (one && remembered(p, one)?.asLine) info.asLine = true;
     const own = ui.selectedObjects.size === 1 && q.objects[firstFill] ? remembered(p, q.objects[firstFill]) : undefined;
     if (own?.outline || own?.blendOf) {

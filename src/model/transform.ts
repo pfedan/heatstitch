@@ -1,7 +1,8 @@
 import { atShare, regionBox } from '../digitize/deco';
 import type { Region } from '../digitize/region';
 import type { Pt } from '../digitize/skeleton';
-import { apply, transformForm, type Mat } from '../shape/path';
+import { apply, transformForm, type Form, type Mat } from '../shape/path';
+import type { PathStitch } from './along';
 import { rasterize } from '../shape/rasterize';
 import { vectorize } from '../shape/vectorize';
 import { syncMarks, tidy, withRecords } from './edit';
@@ -89,6 +90,16 @@ function mapAngle(m: Mat, deg: number): number {
 }
 
 /**
+ * The stitch of line `path` after `m`: mirrored, the echo of an open line goes to the other side of
+ * its drawing direction, so it stays on the side of the line where it was seen.
+ */
+export function mirroredEcho(st: PathStitch, path: Form, m: Mat): PathStitch {
+  const e = st.echo;
+  if (!e || e.side === 'both' || m[0] * m[3] - m[1] * m[2] >= 0 || path.paths.some((x) => x.closed)) return st;
+  return { ...st, echo: { ...e, side: e.side === 'out' ? 'in' : 'out' } };
+}
+
+/**
  * What an object remembers, mapped with it: its area (from the curves when it has them, so the
  * shape never drifts), the rails of its satins, its row direction and guide lines.
  */
@@ -106,6 +117,7 @@ export function transformRemembered(r: Remembered, m: Mat): Remembered {
     out.region = rasterize(out.form, r.region?.pxMm ?? 0.1);
   }
   if (r.path) out.path = transformForm(r.path, m);
+  if (r.path && r.line) out.line = mirroredEcho(r.line, r.path, m);
   if (r.shape) out.shape = shiftRegion(r.shape, m) ?? rasterize(transformForm(vectorize(r.shape), m), r.shape.pxMm) ?? undefined;
   const s = scaleOf(m);
   if (r.columns) {

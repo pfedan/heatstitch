@@ -4,6 +4,8 @@ import { addShape } from '../src/model/addShape';
 import { recolorBlock, syncBorders } from '../src/model/border';
 import { blendObject } from '../src/model/blend';
 import { MOTIFS } from '../src/digitize/deco';
+import { ECHO_SIDES } from '../src/digitize/echo';
+import { lineStitches, resewLine } from '../src/model/line';
 import { refreshKnockouts, setKnockout } from '../src/model/knockout';
 import { rememberObjects, sewObjects } from '../src/model/objects';
 import { COLOR_CHANGE, END, STITCH, type Pattern, type ThreadColor } from '../src/model/pattern';
@@ -26,7 +28,7 @@ import { rng } from './helpers/images';
 
 /**
  * The torture test: random chains of the operations the app offers on objects (add, duplicate,
- * move, turn, mirror, scale, delete, cut out, recolor, leave out, border in its own thread, undo,
+ * move, turn, mirror, scale, delete, cut out, recolor, leave out, border in its own thread, echo of a line, undo,
  * redo, save and open the project, export), done the way the app does them, with the design's
  * invariants checked after every step. A failing chain names its seed and steps, so it can be
  * replayed and turned into a fixed regression test.
@@ -186,6 +188,19 @@ const OPS: Op[] = [
       const pts = [0, 1, 2].map(() => `${between(r, 0, 60)} ${between(r, 0, 60)}`);
       const a = addShape(d.cur.p, { form: parsePath(`M${pts[0]} L${pts[1]} L${pts[2]}`, ID), kind: 'stroke', width: pick(r, [0, 2]) }, pick(r, COLORS), null, options);
       return shapes(d, a?.pattern);
+    },
+  },
+  {
+    name: 'echo',
+    run: (d, r) => {
+      // As the line panel: an echo on one side, both sides or none, sewn with the line.
+      const lines = d.objects.filter((o) => remembered(d.cur.p, o)?.path && remembered(d.cur.p, o)?.line);
+      if (!lines.length) return false;
+      const o = pick(r, lines);
+      const m = remembered(d.cur.p, o)!;
+      const echo = r() < 0.25 ? undefined : { side: pick(r, ECHO_SIDES), count: pick(r, [1, 2, 3]), gap: between(r, 1.5, 5) };
+      const next = resewLine(d.cur.p, o.index, m.path!, { ...m.line!, echo }, T);
+      return !!next && shapes(d, next.pattern);
     },
   },
   { name: 'duplicate', run: (d, r) => d.objects.length > 0 && shapes(d, duplicateObject(d.cur.p, pick(r, d.objects).index, T)?.pattern) },
@@ -440,6 +455,37 @@ function checkBlends(p: Pattern): void {
   expect(problems.join('; '), 'blend links').toBe('');
 }
 
+/**
+ * A line's stitches are what its curve and settings (with its echo) sew: every stitch lies on the
+ * lines sewn anew from them, and every one of those lines has stitches, so an echo that moved,
+ * turned, mirrored, scaled, was undone or saved never parts from what the line remembers.
+ */
+function checkEchoes(p: Pattern): void {
+  const problems: string[] = [];
+  const near = (q: [number, number], line: [number, number][]) => {
+    let best = Infinity;
+    for (let i = 1; i < line.length; i++) {
+      const [a, b] = [line[i - 1], line[i]];
+      const dx = b[0] - a[0];
+      const dy = b[1] - a[1];
+      const t = Math.max(0, Math.min(1, ((q[0] - a[0]) * dx + (q[1] - a[1]) * dy) / (dx * dx + dy * dy || 1)));
+      best = Math.min(best, Math.hypot(q[0] - a[0] - t * dx, q[1] - a[1] - t * dy));
+    }
+    return best;
+  };
+  for (const o of sewObjects(p)) {
+    const m = remembered(p, o);
+    if (!m?.path || !m.line?.echo) continue;
+    const fresh = lineStitches(m.path, m.line).flat();
+    const sewn: [number, number][] = [];
+    for (let i = o.first; i <= o.last; i++) if (p.cmd[i] === STITCH) sewn.push([p.x[i] / 10, p.y[i] / 10]);
+    const off = Math.max(...sewn.map((q) => near(q, fresh)));
+    const missing = Math.max(...fresh.filter((_, k) => k % 7 === 0).map((q) => near(q, sewn)));
+    if (off > 0.6 || missing > 0.6) problems.push(`line ${o.index}: stitches ${off.toFixed(2)} mm off its echo, echo ${missing.toFixed(2)} mm from its stitches`);
+  }
+  expect(problems.join('; '), 'echoes that parted from their lines').toBe('');
+}
+
 /** What leaves out the shapes on top fits the shapes on top now. */
 function checkKnockouts(p: Pattern): void {
   expect(refreshKnockouts(p, T)?.changed ?? [], 'fills whose left-out parts are out of date').toEqual([]);
@@ -497,6 +543,7 @@ async function chain(seed: number, steps = STEPS): Promise<void> {
       checkPartsFit(p);
       checkBorders(p);
       checkBlends(p);
+      checkEchoes(p);
       checkKnockouts(p);
       if (op.name === 'save and open' || step === steps - 1) checkExport(p);
     } catch (e) {

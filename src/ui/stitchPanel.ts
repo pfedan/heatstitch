@@ -13,6 +13,7 @@ import { TOLERANCE } from '../digitize/run';
 import type { ThreadColor } from '../model/pattern';
 import { newLink } from '../model/border';
 import { autoUnder, type PathStitch } from '../model/along';
+import { ECHO_COUNT, ECHO_DEFAULT, ECHO_GAP, ECHO_SIDES, type EchoSide } from '../digitize/echo';
 import { cssColor, hexColor, ThreadPicker } from './threadPicker';
 import { CROSS_KINDS, GRID_KINDS, MOTIFS, type CrossKind, type GridKind, type Motif } from '../digitize/deco';
 
@@ -77,8 +78,9 @@ export interface StitchInfo {
   /**
    * The one selected object is a line (drawn, from an SVG, or a running stitch of a file): how it
    * is sewn along its curve. `traced`: its curve is read from its stitches (none was drawn).
+   * `closed`: all its paths are loops (its echo lies outside or inside, not left or right).
    */
-  path?: { st: PathStitch; traced: boolean };
+  path?: { st: PathStitch; traced: boolean; closed: boolean };
   /** The one selected fill was a wide line, and can be one again. */
   asLine?: boolean;
   /** How deep the selected fills reach at their deepest point (mm; the shallowest of them): an underlay inset beyond it leaves none. */
@@ -1303,8 +1305,50 @@ export class StitchPanel {
       st.tolerance ??= this.tolerance ?? TOLERANCE;
       out.push(this.toleranceSlider(st as { tolerance: number }));
     }
+    out.push(this.echoGroup(st, info.path!.closed));
     out.push(Object.assign(document.createElement('p'), { className: 'muted small stitch-note', textContent: t(info.path!.traced ? 'stitch.lineTraced' : 'stitch.lineNote') }));
     return out;
+  }
+
+  /**
+   * A line's echo, as a block of its own: off, or on which side, how many copies, how far apart.
+   * A closed line has an outside and an inside; an open line one side or the other (which one is
+   * left of its drawing direction is not to be seen, so the side is switched with a button).
+   */
+  private echoGroup(st: PathStitch, closed: boolean): HTMLElement {
+    const box = document.createElement('section');
+    box.className = 'border-group echo-group';
+    type Choice = EchoSide | 'off' | 'one';
+    const now: Choice = !st.echo ? 'off' : closed || st.echo.side === 'both' ? st.echo.side : 'one';
+    const values: Choice[] = closed ? ['off', ...ECHO_SIDES] : ['off', 'one', 'both'];
+    box.append(
+      Object.assign(document.createElement('h4'), { textContent: t('stitch.echo') }),
+      Object.assign(document.createElement('p'), { className: 'muted small', textContent: t('stitch.echo.intro') }),
+      this.choice<Choice>('stitch.echo.side', values, now, (v) => `stitch.echo.${v}` as Key, (v) => {
+        if (v === 'off') delete st.echo;
+        else st.echo = { ...(st.echo ?? ECHO_DEFAULT), side: v === 'one' ? (st.echo && st.echo.side !== 'both' ? st.echo.side : 'out') : v };
+      }),
+    );
+    if (now === 'one') {
+      const row = document.createElement('div');
+      row.className = 'direction-buttons';
+      row.append(
+        this.button('stitch.echo.flip', 'stitch.echo.flip.hint', () => {
+          st.echo!.side = st.echo!.side === 'out' ? 'in' : 'out';
+          this.changed(true);
+        }),
+      );
+      box.append(row);
+    }
+    const e = st.echo;
+    if (!e) return box;
+    // Satin columns side by side need their width.
+    const least = st.type === 'satin' ? Math.min(ECHO_GAP[1], Math.round((st.width + 0.5) * 10) / 10) : ECHO_GAP[0];
+    box.append(
+      this.slider({ label: 'stitch.echo.count', hint: 'stitch.echo.count.hint', min: ECHO_COUNT[0], max: ECHO_COUNT[1], step: 1, get: () => e.count, set: (v) => (e.count = Math.round(v)), fmt: (v) => formatNumber(v) }),
+      this.slider({ label: 'stitch.echo.gap', hint: 'stitch.echo.gap.hint', min: least, max: ECHO_GAP[1], step: 0.1, get: () => Math.max(least, e.gap), set: (v) => (e.gap = v), fmt: (v) => `${formatNumber(v, 1)} mm` }),
+    );
+    return box;
   }
 
   /** Leaving out what lies on top: a switch, taken over at once (the shape itself stays). */

@@ -1,5 +1,6 @@
 import { BORDER_STITCH, BORDER_WIDTH } from '../digitize/border';
 import { TOLERANCE } from '../digitize/run';
+import { echoLines } from '../digitize/echo';
 import type { Pt } from '../digitize/skeleton';
 import { flatten, type Form, type Node } from '../shape/path';
 import { fitCubic } from '../shape/vectorize';
@@ -41,7 +42,7 @@ export function lineStitches(form: Form, st: PathStitch, reverse = false, from?:
   let at: Pt | undefined = from;
   for (const x of paths) {
     const pts = x.closed && x.pts.length > 2 && !samePt(x.pts[0], x.pts[x.pts.length - 1]) ? [...x.pts, x.pts[0]] : x.pts;
-    const runs = sewAlong(pts, x.closed, st, at);
+    const runs = st.echo ? echoStitches(pts, x.closed, st, at) : sewAlong(pts, x.closed, st, at);
     out.push(...runs);
     const last = runs[runs.length - 1];
     if (last) at = last[last.length - 1];
@@ -51,6 +52,26 @@ export function lineStitches(form: Form, st: PathStitch, reverse = false, from?:
 
 /** Running stitch along the paths of `form` (see lineStitches). */
 export const lineRuns = (form: Form, s: RunSettings, reverse = false): Pt[][] => lineStitches(form, runAsLine(s), reverse);
+
+/**
+ * A line with its echo (see digitize/echo.ts): the line and its copies one after the other. Running
+ * and triple stitch go from one to the next in a single run, a short stitch across; satin columns
+ * are sewn one by one.
+ */
+function echoStitches(line: Pt[], closed: boolean, st: PathStitch, from?: Pt): Pt[][] {
+  let lines = echoLines(line, closed, st.echo!, st.type === 'satin' ? st.width + 0.5 : 0);
+  // From the end nearest the needle.
+  const first = lines[0].line[0];
+  const last = lines[lines.length - 1].line[lines[lines.length - 1].line.length - 1];
+  if (from && Math.hypot(last[0] - from[0], last[1] - from[1]) < Math.hypot(first[0] - from[0], first[1] - from[1])) {
+    lines = lines.reverse().map((l) => ({ ...l, line: l.line.slice().reverse() }));
+  }
+  const plain = { ...st, echo: undefined };
+  if (st.type === 'satin') return lines.flatMap((l) => sewAlong(l.line, l.closed, plain));
+  const all: Pt[] = [];
+  for (const l of lines) for (const q of l.line) if (!all.length || !samePt(all[all.length - 1], q)) all.push(q);
+  return sewAlong(all, false, plain);
+}
 
 const samePt = (a: Pt, b: Pt) => Math.hypot(a[0] - b[0], a[1] - b[1]) < 1e-6;
 
