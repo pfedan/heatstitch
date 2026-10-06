@@ -1985,11 +1985,9 @@ function chainRun(cols: Rails[], s: SatinSettings, sew: (ps: [Pt, Pt][]) => Pt[]
         way = [from, ...(a <= b ? mid : mid.reverse()), to];
       }
     }
-    for (let i = 1; i < way.length; i++) {
-      const [p, q] = [way[i - 1], way[i]];
-      const m = Math.ceil(dist(p, q) / TRAVEL_STEP);
-      for (let j = 1; j <= m; j++) out.push(lerp(p, q, j / m));
-    }
+    // As a running stitch along the way: the middle of a column has a point every few tenths, a
+    // stitch to each would pile up needle holes.
+    out.push(...runStitch(way, TRAVEL_STEP, s.tolerance).slice(1));
   };
   const add = (pts: Pt[]) => {
     if (!pts.length) return;

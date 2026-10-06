@@ -175,3 +175,16 @@ describe('areas apart, as the dot and the stem of an i', () => {
     expect(Math.min(...made.bad!.map((p) => p[1]))).toBeGreaterThan(11);
   });
 });
+
+describe('the way between the parts of a chain', () => {
+  it('runs along the middle of a column in running stitches, not a stitch at every point', () => {
+    // A U cut at both legs: the way from one leg to the other goes along the bar.
+    const U = poly([0, 0], [14, 0], [14, 16], [10, 16], [10, 4], [4, 4], [4, 16], [0, 16], [0, 0]);
+    const made = stripsOfOutline(U, [[[-1, 10], [5, 10]], [[9, 10], [15, 10]], [[7, -1], [7, 5]]], [[[-1, 4], [5, 4]], [[9, 4], [15, 4]]]);
+    expect(made.strips.length).toBe(3);
+    const run = satinRuns(made.strips.map((r) => ({ ...r, chain: 0 })), { spacing: 0.4, edge: 0, short: false, underlay: true, tolerance: 0.15 })[0];
+    const tiny = run.filter((p, i) => i && Math.hypot(p[0] - run[i - 1][0], p[1] - run[i - 1][1]) < 0.3).length;
+    // Was close to 200, one for each point of the middle line.
+    expect(tiny).toBeLessThan(10);
+  });
+});
