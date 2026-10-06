@@ -127,6 +127,21 @@ export function bindCorrection(app: CorrectionApp) {
     app.redraw();
   }
 
+  /**
+   * Shows proposals worked out elsewhere (the traffic light's visible rest) in the correction card,
+   * unticked, with their before and after preview; nothing changes before they are taken over.
+   */
+  function offerPlan(plan: Plan, title: string): void {
+    const f = app.files.active;
+    const p = f?.pattern;
+    if (!f || !p || !plan.proposals.length || busy()) return;
+    const v = f.validation;
+    const view: PlanView = { title, rows: planRows(p, plan.proposals), fine: 0, fineChecked: false, locked: plan.locked, before: v ? cellsOf(v) : { critical: 0, caution: 0 }, after: null };
+    ui.planState = { file: f, pattern: p, plan: { ...plan, pattern: p }, checked: new Set(), fine: [], fineOn: false, view };
+    planMessage();
+    app.redraw();
+  }
+
   /** Works out proposals for the whole design or the selected zone; nothing changes yet. */
   async function planFix(scope: 'all' | 'zone'): Promise<void> {
     const f = app.files.active;
@@ -445,5 +460,5 @@ export function bindCorrection(app: CorrectionApp) {
   const planShown = () => !!ui.planState && ui.planState.file === app.files.active;
   const planTicked = () => planShown() && (ui.planState!.checked.size > 0 || (ui.planState!.fineOn && ui.planState!.fine.length > 0));
 
-  return { correctPanel, drawPlanCompare, inPlanFrame, movePlanSplit, pinPlan, tuneToFabric, planFix, applyPlan, discardPlan, busy, planShown, planTicked };
+  return { correctPanel, drawPlanCompare, inPlanFrame, movePlanSplit, pinPlan, tuneToFabric, planFix, applyPlan, discardPlan, offerPlan, busy, planShown, planTicked };
 }

@@ -6,6 +6,7 @@ import { de as stitches } from './areas/stitches';
 import { de as check } from './areas/check';
 import { de as image } from './areas/image';
 import { de as design } from './areas/design';
+import { de as ampel } from './areas/ampel';
 
 export const deBase = {
   'app.tagline': 'Stickdateien ansehen, bearbeiten und prüfen',
@@ -1328,4 +1329,4 @@ export const deBase = {
 } as const;
 
 /** All German texts: the base plus one block per area of the new interface (src/i18n/areas). */
-export const de = { ...deBase, ...shell, ...files, ...objects, ...shapes, ...stitches, ...check, ...image, ...design } as const;
+export const de = { ...deBase, ...shell, ...files, ...objects, ...shapes, ...stitches, ...check, ...image, ...design, ...ampel } as const;
