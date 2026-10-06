@@ -1,3 +1,4 @@
+import { onLangChange } from '../i18n';
 import type { ObjectAction } from './objectPanel';
 
 /**
@@ -23,6 +24,7 @@ export class ObjectMenu {
     );
     window.addEventListener('resize', () => this.close());
     window.addEventListener('wheel', () => this.close(), { passive: true });
+    onLangChange(() => this.close());
   }
 
   get isOpen(): boolean {

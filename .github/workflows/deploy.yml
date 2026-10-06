@@ -32,6 +32,11 @@ jobs:
       - run: npx vitest run tests/load.test.ts
         env:
           LOAD: '1'
+      # Switching the language in a real browser leaves no text of the old one (tests/langSwitch.test.ts).
+      - run: npx playwright install --with-deps chromium
+      - run: npx vitest run tests/langSwitch.test.ts
+        env:
+          BROWSER_TESTS: '1'
       - run: npm run build
         env:
           BASE_PATH: ${{ github.event_name == 'pull_request' && format('/heatstitch/pr-preview/pr-{0}/', github.event.number) || '' }}

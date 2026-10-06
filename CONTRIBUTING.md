@@ -57,7 +57,8 @@ Write the subject in the imperative, in English, under about 70 characters
 
 ## Tests
 
-Tests live in `tests/` and run with Vitest in Node (no browser).
+Tests live in `tests/` and run with Vitest in Node (no browser; only `tests/langSwitch.test.ts`
+opens one, see App texts below).
 
 - Fixtures are generated synthetically (`tests/helpers/encode.ts`, `shapes.ts`, `designs.ts`), so
   tests don't depend on binary files. Prefer building a small synthetic pattern over adding a file.
@@ -126,6 +127,13 @@ will polish it.
   typed as `Record<keyof typeof de, string>`, so a missing or extra key fails the typecheck.
 - Never hard-code user-facing text in TypeScript or HTML. Use `t('key', { vars })` in code and
   `data-i18n`, `data-i18n-title` or `data-i18n-aria` attributes in markup.
+- The language switches without a reload. Markup with `data-i18n` follows on its own; a part that
+  writes text with `t()` and keeps it (a panel, a card, a menu, a hint) draws it anew in
+  `onLangChange(...)`, registered in its constructor. A cache key that skips redrawing would
+  otherwise keep the old language. `tests/langSwitch.test.ts` switches in a real browser in several
+  states and fails on any text of the old language left on the page; add a state there for a new
+  panel: `BROWSER_TESTS=1 npx vitest run tests/langSwitch.test.ts` (needs
+  `npx playwright install chromium`).
 - Keys are dotted and grouped by area (`files.example.cat`, `controls.metric`). Add new keys next to
   related ones in both files, in the same order.
 - Placeholders use `{name}` and must appear in both languages.

@@ -1,4 +1,4 @@
-import { formatNumber, t } from '../i18n';
+import { formatNumber, onLangChange, t } from '../i18n';
 import { biggerHoop, HOOP_MAX_MM, hoopFit, hoopKey, HOOPS, isListed, type Hoop } from '../model/hoop';
 import type { Bounds } from '../model/pattern';
 import type { Settings } from '../settings';
@@ -77,8 +77,10 @@ export function bindHoop(s: Settings, onChange: () => void, fit: (() => void) | 
   w.addEventListener('change', typed);
   h.addEventListener('change', typed);
 
+  let fromFile: Hoop | undefined;
   const refresh = (b: Bounds | undefined, fileHoop?: Hoop) => {
     bounds = b;
+    fromFile = fileHoop;
     // Rebuilt only for another language, so an open list is not disturbed by redraws.
     if (select.options[0]?.text !== t('hoop.none')) {
       select.replaceChildren(
@@ -130,5 +132,6 @@ export function bindHoop(s: Settings, onChange: () => void, fit: (() => void) | 
       note.replaceChildren(...parts);
     }
   };
+  onLangChange(() => refresh(bounds, fromFile));
   return { refresh };
 }

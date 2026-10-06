@@ -1,4 +1,4 @@
-import { formatNumber, t, type Key } from '../i18n';
+import { formatNumber, getLang, onLangChange, t, type Key } from '../i18n';
 import { numberInColor, type ObjectKind, type SewObject } from '../model/objects';
 import type { FileFormat, ThreadColor } from '../model/pattern';
 import { sameColor } from '../model/recolor';
@@ -111,6 +111,12 @@ export class LayersPanel {
       if (!this.list.contains(e.relatedTarget as Node)) this.clearDrop();
     });
     this.list.addEventListener('drop', (e) => this.dropped(e));
+    // Also outside Ablauf, where the list shows but is not updated.
+    onLangChange(() => {
+      if (!this.st) return;
+      this.key = [];
+      this.update(this.st, getLang());
+    });
   }
 
   /**

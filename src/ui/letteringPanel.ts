@@ -1,4 +1,4 @@
-import { formatNumber, t, type Key } from '../i18n';
+import { formatNumber, getLang, onLangChange, t, type Key } from '../i18n';
 import type { Catalog, Font, FontEntry, FontStyle } from '../lettering/font';
 import { loadFont } from '../lettering/font';
 import { missingIn, type Align, type Lettering, type LetteringShape } from '../lettering/layout';
@@ -76,6 +76,10 @@ export class LetteringPanel {
 
   constructor(private hooks: LetteringHooks) {
     $('lettering-close').addEventListener('click', () => hooks.close());
+    onLangChange(() => {
+      this.built = '';
+      this.update(this.info, getLang());
+    });
   }
 
   get open(): boolean {

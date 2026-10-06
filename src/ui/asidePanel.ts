@@ -1,4 +1,4 @@
-import { t } from '../i18n';
+import { onLangChange, t } from '../i18n';
 import type { AsideRole, AsideShape } from '../model/aside';
 import { KIND_ICON, kindLabel } from './layersPanel';
 import { cssColor } from './threadPicker';
@@ -29,9 +29,11 @@ export class AsidePanel {
   private summary = this.root.querySelector('summary')!;
   private list = this.root.querySelector('ul')!;
   private count = 0;
+  private shown: AsideShape[] = [];
 
   constructor(private hooks: AsideHooks) {
     this.list.addEventListener('mouseleave', () => hooks.hover(null));
+    onLangChange(() => this.update(this.shown));
   }
 
   update(list: AsideShape[]): void {
@@ -39,6 +41,7 @@ export class AsidePanel {
     // A shape newly put aside shows where it went.
     if (list.length > this.count) this.root.open = true;
     this.count = list.length;
+    this.shown = list;
     this.summary.textContent = t('aside.title', { n: list.length });
     this.list.replaceChildren(...list.map((a, k) => this.row(a, k)));
   }
