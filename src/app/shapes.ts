@@ -16,7 +16,7 @@ import { formOf, reshapeFill } from '../model/reshape';
 import { railsForm, reshapeRails } from '../model/railsForm';
 import { lineOf, resewLine, lineSettings, fillToLine, reshapeLineFill } from '../model/line';
 import { refreshKnockouts } from '../model/knockout';
-import { remembered, rememberedIn, type RestitchResult } from '../model/restitch';
+import { remembered, rememberedIn, restitch, type RestitchResult } from '../model/restitch';
 import { t, formatNumber, type Key } from '../i18n';
 import { ui } from './state';
 
@@ -56,19 +56,31 @@ export function bindShapes(app: ShapesApp) {
   });
 
   /**
-   * The width of line `o` where it covers an area (sewn as satin, or as a fill along it), for its
-   * band on the level Form; null for areas and for running and triple stitch.
+   * The band of object `o` on the level Form: a line where it covers an area (sewn as satin, or as a
+   * fill along it), or the satin border of a fill; null for running and triple stitch.
    */
-  function bandOf(p: Pattern, q: Sequence, o: number): number | null {
+  function bandOf(p: Pattern, q: Sequence, o: number): { width: number; offset: number } | null {
     const obj = q.objects[o];
     const known = obj && remembered(p, obj);
-    if (known?.asLine && known.fill) return known.fill.lineWidth ?? known.asLine.line.width;
+    if (known?.asLine && known.fill) return { width: known.fill.lineWidth ?? known.asLine.line.width, offset: 0 };
+    const border = known?.fill?.border;
+    if (border?.type === 'satin') return { width: border.width, offset: border.offset ?? 0 };
     if (!obj || !isLineObject(p, obj)) return null;
     const st = lineSettings(p, obj, q.kinds);
-    return st.type === 'satin' ? st.width : null;
+    return st.type === 'satin' ? { width: st.width, offset: 0 } : null;
   }
 
-  /** The selected line sewn with width `w` (its grip on the level Form), as satin or as a fill along it. */
+  /** The shape tool shows the band of object `o`, when it has one. */
+  function showBand(p: Pattern, q: Sequence, o: number): void {
+    const b = bandOf(p, q, o);
+    shapeTool.band = b?.width ?? null;
+    shapeTool.bandOffset = b?.offset ?? 0;
+  }
+
+  /**
+   * The selected object's band made `w` mm wide (its grip on the level Form): a line sewn as satin or
+   * as a fill along it, or the satin border of a fill.
+   */
   function setLineWidth(w: number): void {
     const p = app.files.active?.pattern;
     const o = ui.shapeObject;
@@ -76,10 +88,14 @@ export function bindShapes(app: ShapesApp) {
     const q = app.seq(p);
     const obj = q.objects[o];
     if (!obj) return;
-    if (remembered(p, obj)?.asLine) {
-      const r = reshapeLineFill(p, q.objects, obj, q.kinds, shapeTool.form, app.settings.trimMm, w);
+    const known = remembered(p, obj);
+    if (known?.asLine || known?.fill?.border) {
+      const fill = known.fill && structuredClone(known.fill);
+      const r = known.asLine
+        ? reshapeLineFill(p, q.objects, obj, q.kinds, shapeTool.form, app.settings.trimMm, w)
+        : fill?.border && restitch(p, q.objects, [o], { kind: 'fill', s: { ...fill, border: { ...fill.border, width: w } } }, q.kinds, app.settings.trimMm);
       if (!r || !r.starts.length) {
-        shapeTool.band = bandOf(p, q, o);
+        showBand(p, q, o);
         app.layers.say(t('shape.failed'), true);
         return app.redraw();
       }
@@ -182,7 +198,7 @@ export function bindShapes(app: ShapesApp) {
     }
     ui.formLevel = true;
     shapeTool.open(form);
-    shapeTool.band = bandOf(p, q, o);
+    showBand(p, q, o);
     ui.shapeObject = o;
     ui.shapePattern = p;
     if (!ui.selectedObjects.has(o) || ui.selectedObjects.size !== 1) app.selectObjects([o], false);
@@ -216,7 +232,7 @@ export function bindShapes(app: ShapesApp) {
     const form = shapeTarget(p, q, o);
     if (!form) return closeShape();
     shapeTool.setForm(form);
-    shapeTool.band = bandOf(p, q, o);
+    showBand(p, q, o);
     ui.shapeObject = o;
     ui.shapePattern = p;
   }
@@ -330,5 +346,5 @@ export function bindShapes(app: ShapesApp) {
     app.layers.say([list ? t('object.subtracted', { list }) : '', r.covered ? t('object.subtracted.covered') : ''].filter(Boolean).join(' '));
   }
 
-  return { bandOf, closeShape, deleteSelected, duplicateSelected, enterShape, followKnockouts, isLineObject, mirrorSelected, sewLine, sewLineAgain, shapeTarget, shapeTool, subtractSelected, syncShape, takeShapes };
+  return { closeShape, deleteSelected, duplicateSelected, enterShape, followKnockouts, isLineObject, mirrorSelected, sewLine, sewLineAgain, shapeTarget, shapeTool, showBand, subtractSelected, syncShape, takeShapes };
 }

@@ -18,8 +18,10 @@ export interface ShapeView {
   hover: ShapePick | null;
   /** The form was changed and is not sewn yet (while dragging). */
   dirty: boolean;
-  /** Satin width of a line (mm), shown as its band with a grip; null for areas and other lines. */
+  /** Width of the band (mm): a line covering an area, or an area's satin border; null when there is none. */
   band: number | null;
+  /** How far the band lies outside an area's edge (mm): a border's offset, 0 for lines. */
+  bandOffset: number;
   /** Whether the width grip is being dragged. */
   readonly bandDragging: boolean;
 }
@@ -49,6 +51,7 @@ export class ShapeTool implements ShapeView {
   hover: ShapePick | null = null;
   dirty = false;
   band: number | null = null;
+  bandOffset = 0;
   private drag: Drag = null;
   private moved = false;
 
@@ -70,6 +73,7 @@ export class ShapeTool implements ShapeView {
     this.drag = null;
     this.dirty = false;
     this.band = null;
+    this.bandOffset = 0;
   }
 
   /** The form anew (after new stitches); the selected node stays while it is still there. */
@@ -116,7 +120,7 @@ export class ShapeTool implements ShapeView {
     const r = PICK_PX / scale;
     let best: ShapePick | null = null;
     let bd = r;
-    const grip = this.band !== null ? bandGrip(this.form, this.band) : null;
+    const grip = this.band !== null ? bandGrip(this.form, this.band, this.bandOffset) : null;
     if (grip && Math.hypot(grip.at[0] - x, grip.at[1] - y) < r) return { part: 'width' };
     for (const h of this.handles()) {
       const q = this.form.paths[h.path].nodes[h.i][h.part];
@@ -164,7 +168,7 @@ export class ShapeTool implements ShapeView {
     this.moved = true;
     const k = d.pick;
     if (k.part === 'width') {
-      const g = d.band !== null ? bandGrip(d.start, d.band) : null;
+      const g = d.band !== null ? bandGrip(d.start, d.band, this.bandOffset) : null;
       if (g) this.band = draggedWidth(g, [x, y]);
       this.hooks.redraw();
       return true;

@@ -36,3 +36,28 @@ describe('band of a satin line', () => {
     expect(draggedWidth(g, [10, 99])).toBe(BAND_MAX);
   });
 });
+
+describe('band of an area border', () => {
+  // A 20 mm square from the middle of a side, run round either way (halfway is the middle of the opposite side).
+  const square = (ccw: boolean): Form => {
+    const pts: [number, number][] = ccw
+      ? [[10, 0], [20, 0], [20, 20], [0, 20], [0, 0]]
+      : [[10, 0], [0, 0], [0, 20], [20, 20], [20, 0]];
+    return { paths: [{ closed: true, nodes: pts.map((p) => ({ p, a: p, b: p, smooth: false })) }] };
+  };
+
+  it('puts the grip on the outer edge, whichever way the outline runs', () => {
+    for (const ccw of [true, false]) {
+      const g = bandGrip(square(ccw), 2)!;
+      const out = Math.max(Math.abs(g.at[0] - 10), Math.abs(g.at[1] - 10));
+      expect(out).toBeCloseTo(11);
+    }
+  });
+
+  it('moves the band outside by the border offset', () => {
+    for (const ccw of [true, false]) {
+      const g = bandGrip(square(ccw), 2, 1)!;
+      expect(Math.max(Math.abs(g.mid[0] - 10), Math.abs(g.mid[1] - 10))).toBeCloseTo(11);
+    }
+  });
+});

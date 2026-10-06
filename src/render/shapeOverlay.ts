@@ -25,7 +25,7 @@ export function drawShapeOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, vi
   // A satin line: the edges of its band, dashed.
   if (view.band !== null) {
     ctx.beginPath();
-    for (const edge of bandEdges(view.form, view.band)) edge.forEach((q, k) => (k ? ctx.lineTo(...S(q)) : ctx.moveTo(...S(q))));
+    for (const edge of bandEdges(view.form, view.band, view.bandOffset)) edge.forEach((q, k) => (k ? ctx.lineTo(...S(q)) : ctx.moveTo(...S(q))));
     ctx.setLineDash([4, 4]);
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
     ctx.lineWidth = 2.5;
@@ -106,7 +106,7 @@ export function drawShapeOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, vi
 
 /** The round grip on the band's edge, from the middle of the line; its width in mm while hovered or dragged. */
 function drawWidthGrip(ctx: CanvasRenderingContext2D, vp: Viewport, view: ShapeView, hover: boolean): void {
-  const g = view.band !== null ? bandGrip(view.form, view.band) : null;
+  const g = view.band !== null ? bandGrip(view.form, view.band, view.bandOffset) : null;
   if (!g || view.band === null) return;
   const [mx, my] = vp.toScreen(g.mid[0], g.mid[1]);
   const [x, y] = vp.toScreen(g.at[0], g.at[1]);

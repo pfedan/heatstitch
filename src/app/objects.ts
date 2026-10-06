@@ -49,7 +49,7 @@ export interface ObjectsApp {
   readonly setEditing: (on: boolean) => void;
   readonly settings: Settings;
   readonly shapeTarget: (p: Pattern, q: Sequence, o: number) => Form | null;
-  readonly bandOf: (p: Pattern, q: Sequence, o: number) => number | null;
+  readonly showBand: (p: Pattern, q: Sequence, o: number) => void;
   readonly shapeTool: ShapeTool;
   readonly showObjectMenu: (o: number, clientX: number, clientY: number) => boolean;
   readonly subtractSelected: () => void;
@@ -159,7 +159,7 @@ export function bindObjects(app: ObjectsApp) {
       const form = one !== null && p && ui.formLevel && !ui.letterMode && !app.drawTool.active ? app.shapeTarget(p, app.seq(p), one) : null;
       if (form && one !== null && p) {
         app.shapeTool.open(form);
-        app.shapeTool.band = app.bandOf(p, app.seq(p), one);
+        app.showBand(p, app.seq(p), one);
         ui.shapeObject = one;
         ui.shapePattern = p;
         app.updateLevel();

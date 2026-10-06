@@ -222,9 +222,6 @@ const player = new Player(settings, () => {
 });
 
 const { layers, mergeBlocked, objectName, objectPanel, selectObjects } = bindObjects({
-  get bandOf() {
-    return bandOf;
-  },
   get commitTransform() {
     return commitTransform;
   },
@@ -296,6 +293,9 @@ const { layers, mergeBlocked, objectName, objectPanel, selectObjects } = bindObj
   },
   get shapeTarget() {
     return shapeTarget;
+  },
+  get showBand() {
+    return showBand;
   },
   get shapeTool() {
     return shapeTool;
@@ -414,7 +414,7 @@ const { closeRungs, rungInfo, rungTool, sewAlongLines, syncRungs, toggleGuides, 
 
 // Shapes and the frame ---------------------------------------------------------------------------
 
-const { bandOf, closeShape, deleteSelected, duplicateSelected, enterShape, followKnockouts, isLineObject, mirrorSelected, sewLine, sewLineAgain, shapeTarget, shapeTool, subtractSelected, syncShape, takeShapes } = bindShapes({
+const { closeShape, deleteSelected, duplicateSelected, enterShape, followKnockouts, isLineObject, mirrorSelected, sewLine, sewLineAgain, shapeTarget, shapeTool, showBand, subtractSelected, syncShape, takeShapes } = bindShapes({
   get applyEdit() {
     return applyEdit;
   },
