@@ -23,6 +23,7 @@ import { canRun, getCommand, keyLabel, runCommand } from '../shell/commands';
 import { h } from '../shell/h';
 import { section } from '../shell/ui';
 import { setThinShare, THIN_SHARES, thinShare } from '../areas/stitches/state';
+import { kindWay, type KindState, type KindWay } from '../areas/stitches/kindWay';
 
 type FillUnder = 'off' | 'single' | 'cross';
 const FILL_UNDERS: FillUnder[] = ['off', 'single', 'cross'];
@@ -103,8 +104,14 @@ export interface StitchInfo {
   depth?: number;
   /** Thread of the first selected fill (its border is sewn in it unless it has its own). */
   color?: ThreadColor;
-  /** A border of its own thread, or the second thread of a color blend (`blend`), following its fill. */
-  outline?: { fill: number | null; blend?: boolean; shadow?: boolean; echo?: boolean };
+  /**
+   * A border of its own thread, or the second thread of a color blend (`blend`), following its fill;
+   * or a shadow or echo copies following their line. `of`: the settings of the fill or line it
+   * follows, set here as they are there (not for a blend: its settings are all of its fill's).
+   */
+  outline?: { fill: number | null; blend?: boolean; shadow?: boolean; echo?: boolean; of?: { fill?: FillSettings; line?: PathStitch; closed?: boolean; color: ThreadColor } };
+  /** The area of the first selected fill, the same while its shape stays: what it was before is kept for it. */
+  area?: object;
   /** The one selected fill can blend into a second thread (see blendObject). */
   blend?: boolean;
   /** Left out of the correction (`mixed`: only some of the selected objects). */
@@ -249,11 +256,35 @@ interface SliderDef {
   auto?: { is: () => boolean; reset: () => void; fabric?: boolean };
 }
 
+/** What a fill was before only its edge was sewn (see StitchPanel.toEmpty). */
+interface FilledBefore {
+  pattern: FillPattern;
+  deco?: DecoSettings;
+  border?: FillSettings['border'];
+}
+
 /** The pieces of stitches along a line: their kind, what they look like, what holds them. */
 interface PathParts {
   type: HTMLElement;
   look: HTMLElement[];
   hold: HTMLElement[];
+}
+
+/**
+ * Pattern `tile` for fill settings `to`. Points belong to the pattern they were set for, a fade and
+ * its second thread to the gradient: another pattern takes them out. Empty sews only the border, as
+ * the object in its thread (a triple stitch when it had none).
+ */
+function setPattern(to: FillSettings, tile: FillPattern): void {
+  const { focus: _f, centers: _c, fade: _d, blend: _b, ...rest } = to.deco ?? {};
+  to.pattern = tile;
+  to.deco = rest;
+  if (tile === 'none') {
+    if (to.border) {
+      delete to.border.color;
+      delete to.border.link;
+    } else to.border = { type: 'triple', width: BORDER_WIDTH };
+  }
 }
 
 export class StitchPanel {
@@ -275,6 +306,10 @@ export class StitchPanel {
   private lit: Highlight | null = null;
   /** The tab of fill patterns looked at; the one holding the pattern now when not set. */
   private group: TileGroup | null = null;
+  /** What a fill had before it became a line of its edge (pattern Empty), per area; for going back to Füllung. */
+  private filled = new WeakMap<object, FilledBefore>();
+  /** The same for the fill being changed now (also without a known area). */
+  private filledNow: FilledBefore | null = null;
 
   constructor(
     private root: HTMLElement,
@@ -311,10 +346,18 @@ export class StitchPanel {
     }
     this.key = info.key;
     this.group = null;
+    this.filledNow = null;
     this.draft = structuredClone(info.measured);
     this.lineDraft = info.path ? structuredClone(info.path.st) : null;
     if (this.tolerance !== null) for (const k of KINDS) if (this.draft[k]) this.draft[k]!.tolerance = this.tolerance;
     if (!info.measured[this.kind]) this.kind = KINDS.find((k) => info.measured[k])!;
+    // A border, shadow or echo: the settings changed are its fill's or line's.
+    const of = info.outline?.of;
+    if (of) {
+      this.draft = of.fill ? { fill: structuredClone(of.fill) } : {};
+      this.lineDraft = of.line ? structuredClone(of.line) : null;
+      if (of.fill) this.kind = 'fill';
+    }
     this.render();
   }
 
@@ -322,21 +365,61 @@ export class StitchPanel {
     return JSON.stringify([info.direction?.tool, info.direction?.rungs, info.direction?.cuts, info.draw?.tool, info.guide?.tool, info.points?.tool, info.knockout, info.free]);
   }
 
+  /** What the kind switch knows about the selection (see kindWay). */
+  private kindState(): KindState {
+    const info = this.current;
+    if (!info) return { now: null };
+    return {
+      now: this.nowKind(),
+      asLine: !!info.asLine,
+      toSatin: info.toSatin,
+      draw: info.draw ? { single: info.draw.single, tool: info.draw.tool } : undefined,
+      empty: this.emptyLine(),
+      lineFills: info.path?.st.type === 'satin' && !info.path.traced,
+      blocked: !!info.outline || !!info.free?.on,
+    };
+  }
+
   /** Whether the selection can be sewn as `to` now (see the kind switch). */
   canConvert(to: 'fill' | 'satin' | 'line'): boolean {
-    const info = this.current;
-    if (!info || info.outline || info.free?.on) return false;
-    const now = this.nowKind();
-    if (!now || now === to) return false;
-    if (to === 'fill') return now === 'satin' || (now === 'line' && info.path?.st.type === 'satin' && !info.path.traced);
-    if (to === 'satin') return now === 'fill' && !info.asLine && info.toSatin;
-    return now === 'fill' && !!info.asLine;
+    return kindWay(this.kindState(), to) !== null;
   }
 
   convert(to: 'fill' | 'satin' | 'line'): void {
-    if (!this.canConvert(to)) return;
+    const way = kindWay(this.kindState(), to);
+    if (!way) return;
     this.hooks.preview(null);
+    if (way === 'draw') return this.hooks.draw('tool');
+    if (way === 'empty') return this.pickPattern('none');
+    if (way === 'fill') return this.fillAgain();
     this.hooks.convert(to);
+  }
+
+  /** An empty fill shown as a line: only its edge is sewn (not a wide line sewn as a fill). */
+  private emptyLine(): boolean {
+    const info = this.info;
+    return !!info && !info.outline && !info.path && !info.asLine && this.kind === 'fill' && this.draft.fill?.pattern === 'none';
+  }
+
+  /** An empty fill filled again as before it was emptied (Tatami when that is not known), its border as it was. */
+  private fillAgain(): void {
+    const s = this.draft.fill;
+    if (!s) return;
+    const area = this.info?.area;
+    const was = (area && this.filled.get(area)) ?? this.filledNow;
+    if (was) {
+      s.pattern = was.pattern;
+      s.deco = structuredClone(was.deco);
+      // The border it had keeps what was set for the line, and gets its thread back; none it had goes.
+      if (!was.border) delete s.border;
+      else if (s.border) {
+        if (was.border.color) s.border.color = { ...was.border.color };
+        if (was.border.link) s.border.link = was.border.link;
+      } else s.border = structuredClone(was.border);
+    } else s.pattern = 'tatami';
+    this.group = null;
+    this.render();
+    this.changed(true);
   }
 
   /** A new random variant of the pattern (grain, swirls, meander, maze), when it has one. */
@@ -378,6 +461,7 @@ export class StitchPanel {
     const info = this.info;
     if (!info) return null;
     if (info.path && this.lineDraft) return 'line';
+    if (this.emptyLine()) return 'line';
     if (this.kind === 'fill' || this.kind === 'satin') return this.kind;
     return null;
   }
@@ -410,6 +494,9 @@ export class StitchPanel {
       this.hooks.apply(this.settings());
       return;
     }
+    // A border of its own thread is sewn with its fill only when taken over (sewing it along for
+    // every step of a slider takes seconds): the fill alone would show nothing of it.
+    if (this.info?.outline?.of?.fill) return;
     if (this.frame) return;
     this.frame = requestAnimationFrame(() => {
       this.frame = 0;
@@ -422,7 +509,7 @@ export class StitchPanel {
     this.tools = this.toolKey(info);
     const parts: HTMLElement[] = [];
     if (info.outline) {
-      parts.push(this.outlineBlock(info));
+      parts.push(...(info.outline.of ? this.followerSections(info) : [this.outlineBlock(info)]));
       return this.show(parts);
     }
     const present = KINDS.filter((k) => info.measured[k]);
@@ -435,6 +522,7 @@ export class StitchPanel {
       return this.show(parts);
     }
     if (line) parts.push(...this.lineSections(info));
+    else if (this.emptyLine()) parts.push(...this.emptySections(info));
     else if (this.kind === 'fill') parts.push(...this.fillSections(info));
     else if (this.kind === 'satin') parts.push(...this.satinSections(info));
     else parts.push(...this.runSections(info));
@@ -513,6 +601,54 @@ export class StitchPanel {
     if (o.fill !== null) row.append(this.button(o.shadow || o.echo ? 'stitch.shadowOf.line' : 'stitch.outline.fill', o.shadow || o.echo ? 'stitch.shadowOf.line.hint' : 'stitch.outline.fill.hint', () => this.hooks.outline('fill'), true));
     row.append(this.button('stitch.outline.detach', `${of}.detach.hint` as Key, () => this.hooks.outline('detach')));
     return h('div', { class: 'outline-block' }, head, h('p', { class: 'muted small' }, t(`${of}.text` as Key)), row);
+  }
+
+  /**
+   * A border, shadow or echo with the settings of its fill or line that make it: the same groups as
+   * there, changing the fill or line (one undo step each). Its fill or line is a click away, and it
+   * can become an object of its own.
+   */
+  private followerSections(info: StitchInfo): HTMLElement[] {
+    const o = info.outline!;
+    const of = o.of!;
+    const which = o.echo ? 'stitch.echoOf' : o.shadow ? 'stitch.shadowOf' : 'stitch.outline';
+    const head = h('p', { class: 'stitch-chip outline-head', title: t(o.echo ? 'stitches.echoOf.of' : o.shadow ? 'stitches.shadowOf.of' : 'stitches.outline.of'), tabindex: 0 });
+    head.innerHTML = STATUS_ICON.info;
+    head.append(h('span', null, t(`${which}.title` as Key)));
+    const actions = h('div', { class: 'follower-actions' });
+    if (o.fill !== null) actions.append(this.button(o.shadow || o.echo ? 'stitch.shadowOf.line' : 'stitch.outline.fill', o.shadow || o.echo ? 'stitch.shadowOf.line.hint' : 'stitch.outline.fill.hint', () => this.hooks.outline('fill')));
+    actions.append(this.button('stitch.outline.detach', `${which}.detach.hint` as Key, () => this.hooks.outline('detach')));
+    const top = h('div', { class: 'follower-head' }, head, actions);
+    if (of.fill) {
+      const s = this.draft.fill!;
+      const border = s.border ? t(`stitch.border.${isRunType(s.border.type) ? 'run' : s.border.type}` as Key) : t('stitches.sec.off');
+      return [top, this.borderSection(s, border)];
+    }
+    const st = this.lineDraft!;
+    const fx = o.shadow ? this.shadowGroup(st, of.color) : this.echoGroup(st, !!of.closed, of.color);
+    const on = o.shadow ? !!st.shadow : !!st.echo;
+    const extra: Key = !on ? 'stitches.sec.off' : o.shadow ? (`stitch.shadow.${st.shadow!.dir}` as Key) : 'stitch.echo';
+    return [top, this.sec('effects', 'stitches.sec.effects', [fx], t(extra))];
+  }
+
+  /**
+   * An empty fill as a line: its edge is all that is sewn, in the object's thread, so the border's
+   * settings are the line's ("nur Kontur"). Füllung fills it again.
+   */
+  private emptySections(info: StitchInfo): HTMLElement[] {
+    const s = this.draft.fill!;
+    s.border ??= { type: 'triple', width: BORDER_WIDTH };
+    const parts = this.pathStitch(s.border, (b) => {
+      if (b) s.border = Object.assign(s.border ?? b, b);
+    }, false, true, true);
+    const st = s.border;
+    const kindName = t(`stitch.border.${isRunType(st.type) ? 'run' : st.type}` as Key);
+    return [
+      this.sec('kind', 'stitches.sec.kind', [this.kindSwitch(info), parts.type], kindName),
+      parts.look.length ? this.sec('look', 'stitches.sec.look', parts.look) : null,
+      parts.hold.length ? this.sec('hold', 'stitches.sec.hold', parts.hold) : null,
+      this.sec('tools', 'stitches.sec.tools', [this.handRow(), this.lockSwitch(info.lock), info.free?.can ? this.looseRow() : null]),
+    ].filter((x): x is HTMLDetailsElement => !!x);
   }
 
   // Sections per kind -------------------------------------------------------------------------------
@@ -928,26 +1064,35 @@ export class StitchPanel {
       const b = h('button', { type: 'button', class: on ? 'active' : '', role: 'radio', 'aria-checked': String(on) });
       b.innerHTML = `<span class="kind-icon">${KIND_ICON[k === 'line' ? 'run' : k]}</span>`;
       b.append(k === 'line' ? t('stitch.kind.line') : kindLabel(k));
-      const can = on || this.canConvert(k);
-      b.disabled = !can;
+      const way = on ? null : kindWay(this.kindState(), k);
+      b.disabled = !on && !way;
       const cmd = getCommand(`stitch.kind.${k}`);
       const key = cmd?.keys?.[0] ? ` (${keyLabel(cmd.keys[0])})` : '';
-      if (!on)
-        b.title = !can
-          ? k === 'satin'
-            ? now === 'fill' && !info.asLine
-              ? t('stitch.kind.noSatin')
-              : t('stitches.kind.notForLine')
-            : k === 'line'
-              ? t('stitches.kind.lineOnly')
-              : t('stitch.kind.toFill')
-          : t(k === 'satin' ? 'stitch.kind.toSatin' : k === 'line' ? 'stitch.kind.toLine' : now === 'line' ? 'stitch.kind.lineToFill' : 'stitch.kind.toFill') + key;
+      if (!on) b.title = way ? t(this.wayHint(k, way, now)) + key : t(this.blockedHint(k, now, info));
       b.addEventListener('click', () => {
         if (!on) this.convert(k);
       });
       row.append(b);
     }
     return h('div', { class: 'field stitch-field' }, row);
+  }
+
+  /** What picking `k` on the kind switch does, said on its button. */
+  private wayHint(k: 'fill' | 'satin' | 'line', way: KindWay, now: ReturnType<StitchPanel['nowKind']>): Key {
+    if (way === 'draw') return 'stitches.kind.toSatinDraw';
+    if (way === 'empty') return 'stitches.kind.toEmpty';
+    if (way === 'fill') return 'stitches.kind.fillAgain';
+    return k === 'satin' ? 'stitch.kind.toSatin' : k === 'line' ? 'stitch.kind.toLine' : now === 'line' ? 'stitch.kind.lineToFill' : 'stitch.kind.toFill';
+  }
+
+  /** Why `k` cannot be picked now. */
+  private blockedHint(k: 'fill' | 'satin' | 'line', now: ReturnType<StitchPanel['nowKind']>, info: StitchInfo): Key {
+    if (this.emptyLine()) return 'stitches.kind.satinViaFill';
+    if (k === 'satin') {
+      if (now !== 'fill' || info.asLine) return 'stitches.kind.notForLine';
+      return info.draw?.tool ? 'stitches.kind.drawing' : info.draw?.single ? 'stitch.kind.noSatin' : 'stitches.kind.noSatinMany';
+    }
+    return k === 'line' ? 'stitches.kind.lineOnly' : 'stitch.kind.toFill';
   }
 
   /** Max. deviation from the line; remembered for the next objects. */
@@ -1052,20 +1197,6 @@ export class StitchPanel {
       tabs.append(b);
     }
     const row = h('div', { class: 'pattern-tiles', role: 'radiogroup', 'aria-label': t(`stitch.group.${group}` as Key) });
-    const apply = (to: FillSettings, tile: Tile) => {
-      // Points belong to the pattern they were set for: rays and circles start anew in their place.
-      // A fade and its second thread belong to the gradient: another pattern takes the second one out.
-      const { focus: _f, centers: _c, fade: _d, blend: _b, ...rest } = to.deco ?? {};
-      to.pattern = tile;
-      to.deco = rest;
-      // Empty: only the border is sewn, as the object in its thread (a triple stitch when it had none).
-      if (tile === 'none') {
-        if (to.border) {
-          delete to.border.color;
-          delete to.border.link;
-        } else to.border = { type: 'triple', width: BORDER_WIDTH };
-      }
-    };
     for (const tile of GROUPS[group]) {
       const b = h('button', { type: 'button', class: 'pattern-tile' + (tile === now ? ' active' : ''), role: 'radio', 'aria-checked': String(tile === now), title: t(`stitch.pattern.${tile}.hint` as Key) });
       b.innerHTML = PATTERN_ICON[tile];
@@ -1079,20 +1210,13 @@ export class StitchPanel {
       b.addEventListener('click', () => {
         if (tileOf(s) === tile) return;
         this.hooks.preview(null);
-        apply(s, tile);
-        this.render();
-        // Without guide lines there is nothing to follow yet: their tool opens, and the stitches
-        // change with the first line.
-        if (tile === 'guided' && !s.guides?.length) return this.hooks.guide('tool');
-        if (tile !== 'guided' && this.info!.guide?.tool) this.hooks.guide('off');
-        if (!POINTED.includes(tile) && this.info!.points?.tool) this.hooks.points('off');
-        this.changed(true);
+        this.pickPattern(tile);
       });
       // Pointing at a pattern shows it on the canvas before it is picked (guided needs its lines first).
       if (tile !== now && tile !== 'guided' && !blocked) {
         b.addEventListener('pointerenter', () => {
           const peek = structuredClone(s);
-          apply(peek, tile);
+          setPattern(peek, tile);
           this.hooks.preview({ kind: 'fill', s: peek });
         });
         b.addEventListener('pointerleave', () => this.hooks.preview(null));
@@ -1100,6 +1224,29 @@ export class StitchPanel {
       row.append(b);
     }
     return h('div', { class: 'field stitch-field', title: t(`stitch.pattern.${now}.hint` as Key) }, h('span', { class: 'label' }, t('stitch.pattern')), tabs, row);
+  }
+
+  /**
+   * Pattern `tile` for the fills, sewn at once. Empty makes a fill a line of its edge: what it was
+   * is kept, for Füllung to bring back.
+   */
+  private pickPattern(tile: Tile): void {
+    const s = this.draft.fill;
+    if (!s || s.pattern === tile) return;
+    if (tile === 'none') {
+      const was: FilledBefore = { pattern: s.pattern, deco: structuredClone(s.deco), border: structuredClone(s.border) };
+      this.filledNow = was;
+      if (this.info?.area) this.filled.set(this.info.area, was);
+    }
+    setPattern(s, tile);
+    this.group = null;
+    this.render();
+    // Without guide lines there is nothing to follow yet: their tool opens, and the stitches
+    // change with the first line.
+    if (tile === 'guided' && !s.guides?.length) return this.hooks.guide('tool');
+    if (tile !== 'guided' && this.info!.guide?.tool) this.hooks.guide('off');
+    if (!POINTED.includes(tile) && this.info!.points?.tool) this.hooks.points('off');
+    this.changed(true);
   }
 
   /** The settings of decorative and open patterns, made when first set. */
@@ -1506,9 +1653,10 @@ export class StitchPanel {
   /**
    * Settings of stitches along a line (see along.ts): the kind, Aus first when `off` is allowed,
    * then what that kind looks like and what holds it. The same fields for a fill's border and for a
-   * line of its own; `offset` adds where the line lies to the edge (borders only).
+   * line of its own; `offset` adds where the line lies to the edge (borders only), `line` names
+   * the width as a line's.
    */
-  pathStitch(st: PathStitch | undefined, set: (v: PathStitch | undefined) => void, off = true, offset = false): PathParts {
+  pathStitch(st: PathStitch | undefined, set: (v: PathStitch | undefined) => void, off = true, offset = false, line = !offset): PathParts {
     const mm = (d: number) => (v: number) => `${formatNumber(v, d)} mm`;
     const kinds = off ? BORDERS : BORDERS.filter((v) => v !== 'off');
     const type = this.choice<BorderChoice>('stitch.borderType', kinds, st ? (isRunType(st.type) ? 'run' : st.type) : 'off', (v) => `stitch.border.${v}` as Key, (v) => {
@@ -1564,7 +1712,7 @@ export class StitchPanel {
       );
       return out;
     }
-    const width = this.slider({ label: offset ? 'stitch.borderWidth' : 'stitch.lineWidth', hint: offset ? 'stitch.borderWidth.hint' : 'stitch.lineWidth.hint', min: 0.8, max: Math.max(6, Math.ceil(st.width)), step: 0.1, get: () => st.width, set: (v) => change((s) => (s.width = v))(v), fmt: mm(1) });
+    const width = this.slider({ label: line ? 'stitch.lineWidth' : 'stitch.borderWidth', hint: line ? 'stitch.lineWidth.hint' : 'stitch.borderWidth.hint', min: 0.8, max: Math.max(6, Math.ceil(st.width)), step: 0.1, get: () => st.width, set: (v) => change((s) => (s.width = v))(v), fmt: mm(1) });
     if (st.type === 'motif') {
       const motif = st.motif ?? 'waves';
       const fits = Math.round(motifMaxSize(motif, spacingOf(st)) * 10) / 10;

@@ -168,6 +168,32 @@
   cursor: default;
 }
 
+/* A border, shadow or echo with its settings: what it is, and the way to its fill or line. */
+.follower-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin: 4px 0 8px;
+}
+
+.follower-head .outline-head {
+  margin: 0;
+  min-width: 0;
+}
+
+.follower-actions {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.follower-actions button {
+  font-size: 12px;
+  padding: 3px 8px;
+}
+
 /* Rows of the tools: a button that stays pressed while its tool is on, its state beside it. */
 .tool-row {
   display: flex;
