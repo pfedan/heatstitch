@@ -12,7 +12,7 @@ import { drawTransition } from '../../render/flow';
 import { settledBy } from '../../validation/acks';
 import { command } from '../../shell/commands';
 import { ui } from '../../app/state';
-import { t } from '../../i18n';
+import { onLangChange, t } from '../../i18n';
 
 /** What the check area needs from the rest of the app. */
 export interface CheckApp {
@@ -101,13 +101,19 @@ export function initCheck(app: CheckApp): { draw: (ctx: CanvasRenderingContext2D
   command({ id: 'jumps.tie', label: 'check.jumps.tie', group: G, when: () => app.jumps.actions().includes('tie'), run: () => app.jumps.act('tie') });
   command({ id: 'jumps.carry', label: 'check.jumps.carry', group: G, when: () => app.jumps.actions().includes('carry'), run: () => app.jumps.act('carry') });
 
+  // The heatmap section's line says what it shows while it is folded away.
+  const heatmapSum = () => {
+    const sum = $('heatmap-sum');
+    const what = [t(app.settings.metric === 'thread' ? 'metric.thread' : 'metric.penetrations'), ...(app.settings.overlay ? [t('check.heatmap.plan')] : [])].join(' · ');
+    if (sum && sum.textContent !== what) sum.textContent = what;
+  };
+  // The canvas is not drawn in every mode (Bild), the line still follows the language.
+  onLangChange(heatmapSum);
+
   return {
     /** In Prüfen the jump chosen or pointed at in the list shows on the heatmap too. */
     draw(ctx) {
-      // The heatmap section's line says what it shows while it is folded away.
-      const sum = $('heatmap-sum');
-      const what = [t(app.settings.metric === 'thread' ? 'metric.thread' : 'metric.penetrations'), ...(app.settings.overlay ? [t('check.heatmap.plan')] : [])].join(' · ');
-      if (sum && sum.textContent !== what) sum.textContent = what;
+      heatmapSum();
       const p = app.files.active?.pattern;
       if (!density() || !p) return;
       const list = app.seq(p).transitions;
