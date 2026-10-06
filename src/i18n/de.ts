@@ -605,7 +605,7 @@ export const de = {
   'stitch.pattern.swirl': 'Wirbel',
   'stitch.pattern.swirl.hint': 'Reihen drehen sich um ein bis drei Punkte, die du auf der Fläche setzt',
   'stitch.pattern.none': 'Leer',
-  'stitch.pattern.none.hint': 'Keine Füllung: Nur die Umrandung wird gestickt, im Garn des Objekts. Die Form bleibt, eine andere Füllung kommt jederzeit zurück',
+  'stitch.pattern.none.hint': 'Keine Füllung: Nur die Umrandung wird gestickt, im Garn des Objekts. Die Form bleibt. Umrandung aus macht daraus wieder eine einfache Füllung',
   'stitch.pattern.meander': 'Mäander',
   'stitch.pattern.meander.hint': 'Eine weich verschlungene Linie, die sich nie kreuzt (Stippling)',
   'stitch.pattern.maze': 'Labyrinth',

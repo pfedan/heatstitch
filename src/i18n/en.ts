@@ -607,7 +607,7 @@ export const en: Record<keyof typeof de, string> = {
   'stitch.pattern.swirl': 'Swirl',
   'stitch.pattern.swirl.hint': 'Rows turn around one to three points you set on the area',
   'stitch.pattern.none': 'Empty',
-  'stitch.pattern.none.hint': 'No fill: only the border is sewn, in the object\'s thread. The shape stays, another fill comes back any time',
+  'stitch.pattern.none.hint': 'No fill: only the border is sewn, in the object\'s thread. The shape stays. Turning the border off makes it a plain fill again',
   'stitch.pattern.meander': 'Meander',
   'stitch.pattern.meander.hint': 'A soft winding line that never crosses itself (stippling)',
   'stitch.pattern.maze': 'Maze',

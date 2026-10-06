@@ -355,7 +355,11 @@ const OPS: Op[] = [
       if (!fills.length) return false;
       const o = pick(r, fills);
       const fill = remembered(d.cur.p, o)!.fill!;
-      if (fill.pattern === 'none') return restitchFill(d, o.index, { ...fill, pattern: 'tatami' }, new Set());
+      if (fill.pattern === 'none') {
+        // Another tile, or the border off (a plain fill again).
+        const { border: _o, ...plain } = fill;
+        return restitchFill(d, o.index, r() < 0.5 ? { ...fill, pattern: 'tatami' } : { ...plain, pattern: 'tatami' }, new Set());
+      }
       const old = [fill.border?.link, fill.deco?.blend?.link].filter((l): l is string => !!l);
       const { color: _c, link: _l, ...kept } = fill.border ?? { type: pick(r, ['run', 'triple', 'satin'] as const), width: 2 };
       const { blend: _b, ...deco } = fill.deco ?? {};

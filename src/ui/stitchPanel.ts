@@ -1634,10 +1634,17 @@ export class StitchPanel {
         s.border,
         (b) => {
           if (b) s.border = Object.assign(s.border ?? b, b);
-          else delete s.border;
+          else {
+            delete s.border;
+            // An empty fill is its border: without it, it is filled again (and picking Empty gives a
+            // fill a border).
+            if (s.pattern === 'none') {
+              s.pattern = 'tatami';
+              this.group = null;
+            }
+          }
         },
-        // An empty fill is its border: it cannot be off, and it is sewn in the object's thread.
-        s.pattern !== 'none',
+        true,
         true,
       ),
     );
