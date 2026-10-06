@@ -764,7 +764,7 @@ export const en: Record<keyof typeof de, string> = {
   'stitch.pen.rung.hint': 'A line drawn sets the stitch direction (key T switches)',
   'stitch.pen.cut': 'Cut line',
   'stitch.pen.cut.hint': 'A line drawn splits the column: each section becomes a column of its own, without a trim (key T switches)',
-  'stitch.direction.chain': 'On the canvas: click the number to sew the part one place earlier, the arrow to turn its direction round, the scissors to set a trim before it or take it away.',
+  'stitch.direction.chain': 'On the canvas: click the number to sew the part one place earlier, the arrow to turn its direction round, the scissors to set a trim before it or take it away. Cut lines of a fill: drag, delete or draw anew, and the parts are made anew.',
   'stitch.direction.needCut': 'This rung does not fit the column. A cut line before it makes a section of its own where it fits.',
   'stitch.sections': 'Suggest sections',
   'stitch.sections.hint': 'Cut lines at the sharp corners of the column: it starts anew there and ends in a clean mitre instead of fanning round the corner. No trim, it stays one object.',

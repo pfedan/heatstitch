@@ -281,6 +281,19 @@ export interface Rails {
    * the column has as many sections as the plan has steps.
    */
   plan?: SectionStep[];
+  /**
+   * The fill this chain was cut from (kept on one of its columns): its outline, its holes and the
+   * cut lines, as world points, so the cut lines can be moved later and the parts made anew (see
+   * stripsOfOutline).
+   */
+  split?: Split;
+}
+
+/** A fill cut into parts by cut lines (see Rails.split). */
+export interface Split {
+  outline: Pt[];
+  holes: Pt[][];
+  cuts: [Pt, Pt][];
 }
 
 /** One section of a column in the order its satin is sewn: which, turned round, trimmed before. */
@@ -606,6 +619,8 @@ export interface StoredRails {
   chain?: number;
   /** Plan: section, turned round (0/1), trimmed before (0/1) for each step. */
   plan?: number[];
+  /** Split: flat x, y of the outline and of each hole; the cut lines as x, y of both ends. */
+  split?: { outline: number[]; holes: number[][]; cuts: number[] };
 }
 
 const storeRails = (c: Rails): StoredRails => ({
@@ -617,6 +632,7 @@ const storeRails = (c: Rails): StoredRails => ({
   ...(c.spans?.length ? { spans: c.spans.flat(2) } : {}),
   ...(c.chain !== undefined ? { chain: c.chain } : {}),
   ...(c.plan?.length ? { plan: c.plan.flatMap((x) => [x.sec, +x.flip, +x.trim]) } : {}),
+  ...(c.split ? { split: { outline: c.split.outline.flat(), holes: c.split.holes.map((h) => h.flat()), cuts: c.split.cuts.flat(2) } } : {}),
 });
 
 /** What is remembered about the objects of `p`, to store it with the file. */
@@ -775,6 +791,14 @@ function railsFrom(list: unknown): Rails[][] | undefined {
       if (plan !== undefined) {
         if (!Array.isArray(plan) || plan.length % 3 || !plan.every((v) => Number.isInteger(v))) return undefined;
         if (plan.length) rails.plan = Array.from({ length: plan.length / 3 }, (_, k) => ({ sec: plan[3 * k], flip: !!plan[3 * k + 1], trim: !!plan[3 * k + 2] }));
+      }
+      const split = c?.split;
+      if (split !== undefined) {
+        const outline = pts(split?.outline);
+        const holes = Array.isArray(split?.holes) ? split.holes.map(pts) : null;
+        const cuts = split?.cuts;
+        if (!outline || !holes || holes.some((h: Pt[] | null) => !h) || !Array.isArray(cuts) || cuts.length % 4 || !cuts.every(finite)) return undefined;
+        rails.split = { outline, holes: holes as Pt[][], cuts: Array.from({ length: cuts.length / 4 }, (_, k) => [[cuts[4 * k], cuts[4 * k + 1]], [cuts[4 * k + 2], cuts[4 * k + 3]]] as [Pt, Pt]) };
       }
       cols.push(rails);
     }
@@ -1572,6 +1596,7 @@ export function reversedRails(r: Rails): Rails {
   if (r.cuts) out.cuts = reversedRungs(r.cuts, la, lb);
   if (r.spans) out.spans = r.spans.map(([a, b]) => [a, b] as [Pt, Pt]);
   if (r.chain !== undefined) out.chain = r.chain;
+  if (r.split) out.split = r.split;
   // Walked the other way: the last step first, each section numbered from the other end; a trim
   // stays between the same two steps.
   if (r.plan) {

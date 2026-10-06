@@ -327,6 +327,8 @@ export function bindRungs(app: RungsApp) {
         return app.layers.say(t('stitch.draw.notStripPart'), true);
       }
       columns = made.strips.map((r) => ({ ...r, chain: 0 }));
+      // The fill and its cut lines kept: the cut lines can be moved later (see Rails.split).
+      columns[0].split = { outline: loop, holes, cuts: rungTool.cutLines.map(([a, b]) => [a, b] as [Pt, Pt]) };
     } else {
       const rails = railsFromOutline(loop, rungTool.lines);
       if (!rails) return app.layers.say(t('stitch.draw.notStrip'), true);

@@ -762,7 +762,7 @@ export const de = {
   'stitch.pen.rung.hint': 'Eine gezogene Linie legt die Stichrichtung fest (Taste T wechselt)',
   'stitch.pen.cut': 'Trennlinie',
   'stitch.pen.cut.hint': 'Eine gezogene Linie teilt die Säule: Jeder Abschnitt wird eine eigene Säule, ohne Garnschnitt (Taste T wechselt)',
-  'stitch.direction.chain': 'Auf der Leinwand: Klick auf die Nummer stickt den Teil einen Platz früher, Klick auf den Pfeil dreht seine Richtung um, die Schere setzt davor einen Garnschnitt oder nimmt ihn weg.',
+  'stitch.direction.chain': 'Auf der Leinwand: Klick auf die Nummer stickt den Teil einen Platz früher, Klick auf den Pfeil dreht seine Richtung um, die Schere setzt davor einen Garnschnitt oder nimmt ihn weg. Trennlinien einer Füllung: ziehen, löschen oder neu zeichnen, die Teile werden neu gebildet.',
   'stitch.direction.needCut': 'Diese Querlinie passt nicht in die Säule. Eine Trennlinie davor macht daraus einen eigenen Abschnitt, in dem sie passt.',
   'stitch.sections': 'Abschnitte vorschlagen',
   'stitch.sections.hint': 'Trennlinien an den spitzen Ecken der Säule: Dort setzt die Säule neu an und endet sauber auf Gehrung, statt sich um die Ecke zu fächern. Ohne Garnschnitt, es bleibt ein Objekt.',

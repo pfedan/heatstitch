@@ -447,6 +447,8 @@ export function stripOfLoop(ring: Pt[], chords: [number, number][], caps: Arc[],
   }
   if (start < 0) return null;
   const at = (i: number) => ends[(start + i) % m].u;
+  // The far ends as they are sewn, by the cap they were chosen as.
+  const tight = new Map<Arc, Arc>();
   // The caps that fit beyond a rung: in the stretch of outline from u0 on for len mm.
   const fitting = (u0: number, len: number): Arc[] => {
     const out = caps.filter(([c0, c1]) => {
@@ -470,10 +472,26 @@ export function stripOfLoop(ring: Pt[], chords: [number, number][], caps: Arc[],
     };
     const d = Array.from({ length: n + 1 }, (_, k) => beyond((len * k) / n));
     const most = Math.max(...d);
-    const near = most - Math.max(0.1, most * 0.05);
-    const first = d.findIndex((x) => x >= near);
-    const last = d.length - 1 - [...d].reverse().findIndex((x) => x >= near);
-    return [...out, [(u0 + (len * first) / n) % total, (u0 + (len * last) / n) % total]];
+    // The stretch round the farthest point that stays this far out (not beyond a dip, such as a
+    // cut line into a hole on the way).
+    const top = d.indexOf(most);
+    const stretch = (near: number): Arc => {
+      let first = top;
+      let last = top;
+      while (first > 0 && d[first - 1] >= near) first--;
+      while (last < n && d[last + 1] >= near) last++;
+      return [(u0 + (len * first) / n) % total, (u0 + (len * last) / n) % total];
+    };
+    // Chosen among the caps as wide as an edge drawn slightly askew, sewn as narrow as a few tenths:
+    // on a long part 5 % eats into its sides round the corners, the rails would stop short of its end.
+    const wide = stretch(most - Math.max(0.1, most * 0.05));
+    // Only where it bends round a corner into the sides: a straight edge stays as it is.
+    const along = fwd(wide[0], wide[1]);
+    // A cut line right at the end (into a hole, say) keeps it as it is, the satin turns there.
+    const close = (x: number, y: number) => Math.min(fwd(x, y), fwd(y, x)) < 0.6;
+    const byCut = caps.some(([c0, c1]) => [c0, c1].some((c) => close(c, wide[0]) || close(c, wide[1])));
+    if (!byCut && along > dist(pointAt(ring, cum, wide[0]), pointAt(ring, cum, wide[1])) * 1.05 + 0.05) tight.set(wide, stretch(most - Math.min(0.15, Math.max(0.1, most * 0.05))));
+    return [...out, wide];
   };
   const capsA = fitting(at(m - 1), fwd(at(m - 1), at(0)));
   const capsB = fitting(at(n - 1), fwd(at(n - 1), at(n)));
@@ -498,9 +516,12 @@ export function stripOfLoop(ring: Pt[], chords: [number, number][], caps: Arc[],
     const out = [pointAt(ring, cum, u0), ...inner.map((x) => x.p), pointAt(ring, cum, (u0 + len) % total)];
     return out.filter((p, i) => !i || dist(p, out[i - 1]) > 1e-6);
   };
-  const { ca, cb } = best;
-  const left = walk(ca[1], best.l);
-  const right = walk(cb[1], best.r).reverse();
+  const ca = tight.get(best.ca) ?? best.ca;
+  const cb = tight.get(best.cb) ?? best.cb;
+  const l = fwd(ca[1], cb[0]);
+  const r = fwd(cb[1], ca[0]);
+  const left = walk(ca[1], l);
+  const right = walk(cb[1], r).reverse();
   if (left.length < 2 || right.length < 2) return null;
   const rungs: Rung[] = [];
   for (let i = 0; i < n; i++) rungs.push([fwd(ca[1], at(i)), fwd(at(m - 1 - i), ca[0])]);
