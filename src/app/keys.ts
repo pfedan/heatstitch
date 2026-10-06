@@ -56,7 +56,10 @@ export function bindKeys(app: KeysApp) {
   const DRAW_KEYS: Record<string, DrawKind> = { m: 'rect', o: 'ellipse', b: 'pen', p: 'free' };
 
   window.addEventListener('keydown', (e) => {
-    if ((e.target as HTMLElement).closest('input, select, textarea')) return;
+    // Space passes a clicked switch (checkbox, radio) to reach the player below, like a button.
+    const field = (e.target as HTMLElement).closest<HTMLElement>('input, select, textarea, [contenteditable]');
+    const toggle = field instanceof HTMLInputElement && (field.type === 'checkbox' || field.type === 'radio');
+    if (field && !(toggle && e.key === ' ')) return;
     const mod = e.ctrlKey || e.metaKey;
     if (mod && !e.altKey && ['z', 'Z', 'y'].includes(e.key)) {
       e.preventDefault();
@@ -211,7 +214,14 @@ export function bindKeys(app: KeysApp) {
     }
     if (e.key === 'h') return void document.getElementById('marks-toggle')?.click();
     if (app.settings.mode === 'flow') {
-      if ((e.target as HTMLElement).closest('button') && (e.key === ' ' || e.key === 'Enter')) return;
+      // Enter still presses a focused button; Space always plays, not the button clicked last (Einpassen...).
+      if (toggle || (e.target as HTMLElement).closest('button')) {
+        if (e.key === 'Enter') return;
+        if (e.key === ' ') {
+          e.preventDefault();
+          return app.player.toggle();
+        }
+      }
       if (e.key === 'e') {
         app.closeRungs();
         return app.setEditing(!app.editor.active);
