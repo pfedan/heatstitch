@@ -744,6 +744,7 @@ export const en: Record<keyof typeof de, string> = {
   'stitch.lineMotif.chain.hint': 'Loops like a hand-sewn chain stitch, each reaching into the next',
   'stitch.lineMotifSize': 'Size',
   'stitch.lineMotifSize.hint': 'How far the motif reaches across the line',
+  'stitch.lineMotifSize.band': 'At this spacing the size works up to {b} mm, beyond that the figures would touch',
   'stitch.motifSpacing.hint': 'Distance from one figure to the next; adjusted a little so the figures fit the line exactly',
   'stitch.motifSide': 'Side',
   'stitch.border.intro': 'A line around the fill, sewn after it: running or bean stitch, a satin edge, zigzag, E stitch or a motif.',

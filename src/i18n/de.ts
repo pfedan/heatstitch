@@ -742,6 +742,7 @@ export const de = {
   'stitch.lineMotif.chain.hint': 'Schlingen wie ein Kettstich von Hand, eine in die nächste greifend',
   'stitch.lineMotifSize': 'Größe',
   'stitch.lineMotifSize.hint': 'Wie weit das Motiv quer zur Linie reicht',
+  'stitch.lineMotifSize.band': 'Bei diesem Abstand wirkt die Größe bis {b} mm, darüber würden sich die Figuren berühren',
   'stitch.motifSpacing.hint': 'Abstand von einer Figur zur nächsten; er wird leicht angepasst, damit die Figuren genau auf die Linie passen',
   'stitch.motifSide': 'Seite',
   'stitch.border.intro': 'Eine Linie um die Füllung, nach ihr gestickt: Steppstich, Bohnenstich, Satinkante, Zickzack, E-Stich oder ein Motiv.',

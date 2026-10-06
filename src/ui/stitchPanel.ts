@@ -13,7 +13,7 @@ import { TOLERANCE } from '../digitize/run';
 import type { ThreadColor } from '../model/pattern';
 import { newLink } from '../model/border';
 import { autoUnder, E_SPACING, isRunType, runLike, spacingOf, ZIGZAG_SPACING, type PathStitch } from '../model/along';
-import { LINE_MOTIFS, MOTIF_PERIOD, MOTIF_WIDTH, SIDED_MOTIFS, type LineMotif } from '../digitize/motif';
+import { LINE_MOTIFS, MOTIF_PERIOD, MOTIF_WIDTH, motifMaxSize, SIDED_MOTIFS, type LineMotif } from '../digitize/motif';
 import { cssColor, hexColor, ThreadPicker } from './threadPicker';
 import { CROSS_KINDS, GRID_KINDS, MOTIFS, type CrossKind, type GridKind, type Motif } from '../digitize/deco';
 
@@ -1396,13 +1396,25 @@ export class StitchPanel {
     const width = this.slider({ label: offset ? 'stitch.borderWidth' : 'stitch.lineWidth', hint: offset ? 'stitch.borderWidth.hint' : 'stitch.lineWidth.hint', min: 0.8, max: Math.max(6, Math.ceil(st.width)), step: 0.1, get: () => st.width, set: (v) => change((s) => (s.width = v))(v), fmt: mm(1) });
     if (st.type === 'motif') {
       const motif = st.motif ?? 'waves';
+      const fits = Math.round(motifMaxSize(motif, spacingOf(st)) * 10) / 10;
       out.push(
         this.choice<LineMotif>('stitch.lineMotif', LINE_MOTIFS, motif, (v) => `stitch.lineMotif.${v}` as Key, (v) => {
           st.motif = v;
           delete st.spacing;
           set(st);
         }, true),
-        this.slider({ label: 'stitch.lineMotifSize', hint: 'stitch.lineMotifSize.hint', min: 1, max: 8, step: 0.1, get: () => st.width, set: (v) => change((s) => (s.width = v))(v), fmt: mm(1) }),
+        this.slider({
+          label: 'stitch.lineMotifSize',
+          hint: 'stitch.lineMotifSize.hint',
+          min: 1,
+          max: 8,
+          step: 0.1,
+          get: () => st.width,
+          set: (v) => change((s) => (s.width = v))(v),
+          fmt: mm(1),
+          // Where the spacing caps the size, only the part below the cap makes a difference.
+          ...(fits < 8 ? { band: [1, fits] as [number, number], bandHint: 'stitch.lineMotifSize.band' as Key } : {}),
+        }),
         this.slider({ label: 'stitch.gap', hint: 'stitch.motifSpacing.hint', min: 1.5, max: 15, step: 0.1, get: () => spacingOf(st), set: (v) => change((s) => (s.spacing = v === MOTIF_PERIOD[motif] ? undefined : v))(v), fmt: mm(1) }),
       );
       if (SIDED_MOTIFS.includes(motif)) out.push(this.sideChoice(st, set, offset));

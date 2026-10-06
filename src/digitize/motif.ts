@@ -17,6 +17,12 @@ export const MOTIF_PERIOD: Record<LineMotif, number> = { waves: 5, scallops: 4, 
 /** Size of a motif across the line the panel starts with (mm). */
 export const MOTIF_WIDTH = 3;
 
+/**
+ * The largest size a motif takes with figures `period` mm apart: hearts stay apart (no wider than
+ * 90 % of the period; a heart is 32 parts wide for 22 from notch to tip), the others take any size.
+ */
+export const motifMaxSize = (motif: LineMotif, period: number): number => (motif === 'hearts' ? ((period * 0.9) / 32) * 22 : Infinity);
+
 /** Motifs with a side: they stand on the line and reach out to one side of it. */
 export const SIDED_MOTIFS: LineMotif[] = ['scallops', 'hearts'];
 
@@ -93,8 +99,7 @@ export function motifStitches(line: Pt[], closed: boolean, motif: LineMotif, wid
     }
   } else if (motif === 'hearts') {
     // A heart on the line every period, hanging from it; a running stitch between them.
-    // No wider than 90 % of the period (a heart is 32 parts wide for 22 from notch to tip).
-    const size = Math.min(width, ((d * 0.9) / 32) * 22);
+    const size = Math.min(width, motifMaxSize('hearts', d));
     let s = 0;
     for (let k = 0; k < count; k++) {
       const at = k * d + d / 2;
