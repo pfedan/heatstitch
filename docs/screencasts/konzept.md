@@ -27,7 +27,7 @@ damit Video und Text zusammenpassen.
 | 1 | Ein neues Stickmuster | + Neu, Stickrahmen, Formen zeichnen, Größe eintippen, Stichart wählen | leer | 2 min |
 | 2 | Schrift | Text setzen, Schriftart, Größe, Bogen, Abstand | leer | 2 min |
 | 3 | Vom Bild zum Stickmuster | Modus Bild: SVG oder Foto laden, Farben zusammenfassen, Stiche erzeugen | `image-example.svg` | 2 bis 3 min |
-| 4 | Objekte und Reihenfolge | Objektliste, Farben, kopieren und spiegeln, Kontextmenü, Reihenfolge per Ziehen | `overlapping-circles.svg` | 2 min |
+| 4 | Objekte und Reihenfolge | Objektliste, Lage, Reihenfolge per Ziehen, Aussparen, Kontextmenü, duplizieren und spiegeln, Garn eines Objekts | `kirschen.svg` (eigene) | 2 min |
 
 ### Stufe 2: Stickdatei ansehen und verbessern
 
