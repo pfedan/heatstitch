@@ -202,11 +202,12 @@ export function bindFileIo(app: FileIoApp) {
     if (!path) return;
     const name = path.split('/').pop()!;
     const svg = name.endsWith('.svg');
-    // An SVG example is sewn first, which takes a moment: the list says so meanwhile.
+    const project = isProjectName(name);
+    // An SVG example is sewn first and a project is fetched only now: the list says so meanwhile.
     const label = exampleSelect.options[0];
-    if (svg) {
+    if (svg || project) {
       exampleSelect.disabled = true;
-      label.textContent = t('files.example.loading');
+      label.textContent = t(svg ? 'files.example.loading' : 'files.example.opening');
     }
     try {
       const res = await fetch(`${import.meta.env.BASE_URL}${path}`);
@@ -215,7 +216,8 @@ export function bindFileIo(app: FileIoApp) {
       if (svg) {
         const d = await digitizeSvg(file, app.settings.image.prepare, digitizeDefaults(app.settings.profile));
         await app.addDigitized(d, name.replace(/\.svg$/, ''));
-      } else await app.files.add([file]);
+      } else if (project) await openFiles([file]);
+      else await app.files.add([file]);
     } catch (err) {
       console.error('Loading the example failed', err);
     } finally {
