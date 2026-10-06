@@ -106,6 +106,7 @@ export function bindFileIo(app: FileIoApp) {
         ...(asideOf(f.pattern).length ? { aside: storeAside(asideOf(f.pattern)) } : {}),
         material: f.material,
         ...(f.title ? { title: f.title } : {}),
+        ...(f.titles ? { titles: f.titles } : {}),
         ...(f.own ? { own: true } : {}),
       })),
       active: active >= 0 ? active : null,

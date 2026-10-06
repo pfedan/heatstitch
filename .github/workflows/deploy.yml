@@ -75,6 +75,32 @@ jobs:
           ORACLE: '1'
       - run: python scripts/oracle.py
 
+  # The correction engine on its fixed test set (tests/korrekturBench.test.ts): never a new critical cell, and
+  # no case fixes less than the reference in tests/bench/korrektur.json.
+  korrektur:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: korrektur-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx vitest run tests/korrekturBench.test.ts
+        env:
+          BENCH: '1'
+          BENCH_CHECK: '1'
+          BENCH_OUT: korrektur-ci.json
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: korrektur-benchmark
+          path: tests/bench/korrektur-ci.json
+
   deploy:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     needs: build

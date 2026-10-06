@@ -16,7 +16,7 @@ import { DEFAULTS, hexColor, normalizeImage, type ImageSettings, type Settings }
 import { isAcknowledgement, type Acknowledgement } from '../validation/acks';
 import { normalizeProfile } from '../validation/profiles';
 import { normalizeChecks } from '../validation/validate';
-import type { StoredPattern } from './fileStore';
+import { titlesOf, type StoredPattern, type Titles } from './fileStore';
 import type { StoredWork } from './imageStore';
 
 export const PROJECT_EXT = '.heatstitch';
@@ -39,6 +39,8 @@ export interface ProjectFile {
   material?: unknown;
   /** The name the user gave the design, without extension (absent: its file name). */
   title?: string;
+  /** The name per app language, in place of `title` (the demo project's designs); absent once renamed. */
+  titles?: Titles;
   /** Made in the app rather than loaded as an embroidery file (absent in older projects). */
   own?: boolean;
 }
@@ -197,6 +199,7 @@ export async function decodeProject(bytes: Uint8Array): Promise<Project> {
         // Checked when it is read (normalizeMaterial).
         ...(e.material && typeof e.material === 'object' ? { material: e.material } : {}),
         ...(typeof e.title === 'string' && e.title.trim() ? { title: e.title.trim() } : {}),
+        ...(titlesOf(e.titles) ? { titles: titlesOf(e.titles) } : {}),
         ...(e.own === true ? { own: true } : {}),
       },
     ];
