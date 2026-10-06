@@ -122,6 +122,28 @@ describe('digitize', () => {
     expect(objects.map((o) => o.kind)).toEqual(['fill']);
   });
 
+  it('sews a grass tuft as satin blades with a filled base over their starts', () => {
+    // Two tapering blades, 4 mm wide at the bottom, joined by a base 4 mm high: as one satin
+    // network the base's columns fanned out and crossed, as one fill the blades got ragged rows.
+    const tri = (x: number, y: number, x0: number, x1: number, tx: number, ty: number) => {
+      if (y < ty || y > 26) return false;
+      const t = (y - ty) / (26 - ty);
+      return x >= tx + (x0 - tx) * t && x <= tx + (x1 - tx) * t;
+    };
+    const { pattern, objects } = design(30, (x, y) =>
+      (x > 4 && x < 24 && y >= 26 && y < 30) || tri(x, y, 6, 10, 7, 8) || tri(x, y, 15, 19, 21, 11) ? BLACK : null,
+    );
+    expect(objects.map((o) => o.kind)).toEqual(['satin', 'fill']);
+    expect(objects[1].areaMm2).toBeLessThan(objects[0].areaMm2 + objects[1].areaMm2);
+    expect(kindShare(pattern)[SATIN]).toBeGreaterThan(0.4);
+    expect(noCritical(pattern)).toEqual([]);
+    // The blades' tips are sewn: stitches reach up to them.
+    const pts = stitches(pattern, 30);
+    expect(Math.min(...pts.filter((p) => p[0] < 12).map((p) => p[1]))).toBeLessThan(11.5);
+    expect(Math.min(...pts.filter((p) => p[0] > 17).map((p) => p[1]))).toBeLessThan(14);
+    roundTrips(pattern);
+  });
+
   it('does not pile up satin in a tight bend', () => {
     // A hook 5 mm wide around a 1 mm hole: satin would fan out on the inside of the bend.
     const { pattern } = design(30, (x, y) => {
