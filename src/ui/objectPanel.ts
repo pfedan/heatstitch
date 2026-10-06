@@ -1,4 +1,4 @@
-import { formatNumber, t, type Key } from '../i18n';
+import { formatNumber, getLang, onLangChange, t, type Key } from '../i18n';
 import type { SewObject } from '../model/objects';
 import type { OrderCost } from '../model/order';
 import type { Settings } from '../settings';
@@ -129,6 +129,10 @@ export class ObjectPanel {
 
   constructor(private hooks: ObjectHooks) {
     $('object-close').addEventListener('click', () => hooks.clear());
+    onLangChange(() => {
+      this.key = [];
+      this.update(this.info, getLang());
+    });
   }
 
   update(info: ObjectInfo | null, lang: string): void {
@@ -429,6 +433,7 @@ export class OrderCard {
     this.card.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') this.close(true);
     });
+    onLangChange(() => this.isOpen && this.show());
   }
 
   get isOpen(): boolean {

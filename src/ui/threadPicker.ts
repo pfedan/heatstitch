@@ -1,4 +1,4 @@
-import { t } from '../i18n';
+import { onLangChange, t } from '../i18n';
 import type { ThreadColor } from '../model/pattern';
 import { BROTHER, brotherCatalog, catalogsNow, chooseCatalog, chosenCatalog, closeness, inCatalog, loadCatalogs, nearest, search as searchThreads, threadNumber, type Catalog } from '../threads/catalog';
 
@@ -44,6 +44,7 @@ export class ThreadPicker {
       true,
     );
     window.addEventListener('resize', () => this.close());
+    onLangChange(() => this.close());
   }
 
   close(): void {

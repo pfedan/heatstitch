@@ -1,6 +1,6 @@
 import { ImageClient } from '../digitize/client';
 import { digitizeDefaults, shapesOrigin, type DigitizeOptions, type Digitized } from '../digitize/digitize';
-import { formatNumber, t, type Key } from '../i18n';
+import { formatNumber, onLangChange, t, type Key } from '../i18n';
 import { nearestThread, NONE, workingSize, type ColorEdit, type PrepareOptions, type ExactLabels, type Prepared, type Stroke } from '../image/prepare';
 import { readSvg, type SvgDesign, type SvgShape } from '../image/svg';
 import { transformForm, type Form } from '../shape/path';
@@ -235,6 +235,7 @@ export class ImageMode {
   private cursor: [number, number] | null = null;
 
   constructor(private h: ImageHooks) {
+    onLangChange(() => this.render());
     const s = h.settings.image;
     const input = $<HTMLInputElement>('image-input');
     input.addEventListener('change', () => {

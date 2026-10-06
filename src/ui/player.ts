@@ -1,4 +1,4 @@
-import { formatNumber, t } from '../i18n';
+import { formatNumber, onLangChange, t } from '../i18n';
 import type { Settings } from '../settings';
 
 export interface PlayerModel {
@@ -44,6 +44,7 @@ export class Player {
     private s: Settings,
     private changed: () => void,
   ) {
+    onLangChange(() => this.render());
     this.speed.value = String(s.playSpeed);
     this.speed.addEventListener('change', () => {
       s.playSpeed = Number(this.speed.value);

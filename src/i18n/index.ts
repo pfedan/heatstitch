@@ -6,16 +6,32 @@ export type Key = keyof typeof de;
 
 const dicts: Record<Lang, Record<Key, string>> = { de, en };
 let lang: Lang = 'en';
+const listeners = new Set<() => void>();
 
 export function detectLang(stored: string | null): Lang {
   if (stored === 'de' || stored === 'en') return stored;
   return navigator.language?.toLowerCase().startsWith('de') ? 'de' : 'en';
 }
 
+/**
+ * Switches the language at once, without a reload: the static texts (data-i18n) here, everything
+ * drawn with t() by whoever listens (see onLangChange).
+ */
 export function setLang(l: Lang): void {
   lang = l;
   document.documentElement.lang = l;
   applyI18n(document.body);
+  for (const fn of listeners) fn();
+}
+
+/**
+ * Runs fn after every language change. Whatever writes text with t() and keeps it on the page (a
+ * panel, a card, a menu, a hint) draws it anew here; a check in its own cache would keep the old
+ * language until the next reload. Returns the way to stop listening.
+ */
+export function onLangChange(fn: () => void): () => void {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
 }
 
 export function getLang(): Lang {

@@ -1,5 +1,5 @@
 import type { Metric } from '../density/grid';
-import { formatNumber, t, type Key } from '../i18n';
+import { formatNumber, onLangChange, t, type Key } from '../i18n';
 import { FILL, RUNNING, SATIN, TIE_STITCH } from '../model/sequence';
 import { KIND_COLORS, LENGTH_COLORS, LONG_MM, MAX_MM, ORDER_CSS } from '../render/flow';
 import type { ColorBy, Marks, Settings } from '../settings';
@@ -226,5 +226,6 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
   });
 
   refresh();
+  onLangChange(refresh);
   return { refresh };
 }

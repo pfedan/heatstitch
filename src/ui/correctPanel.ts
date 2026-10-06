@@ -5,7 +5,7 @@ import type { Fixed } from '../model/restitch';
 import type { Reason } from '../validation/zones';
 import { fixText } from './fixText';
 import { KIND_ICON } from './layersPanel';
-import { formatNumber, getLang, t, type Key } from '../i18n';
+import { formatNumber, getLang, onLangChange, t, type Key } from '../i18n';
 import { patternStats, type Pattern, type PatternStats } from '../model/pattern';
 import type { ValidationResult } from '../validation/validate';
 import type { Settings } from '../settings';
@@ -153,6 +153,7 @@ export class CorrectPanel {
     this.fixAll.addEventListener('click', () => hooks.plan('all'));
     this.fixZone.addEventListener('click', () => hooks.plan('zone'));
     this.hooks = hooks;
+    onLangChange(() => this.last && this.update(this.last));
     this.compareToggle.addEventListener('click', () => hooks.toggleCompare());
     this.selDelete.addEventListener('click', () => hooks.deleteSelection());
     this.selThin.addEventListener('click', () => hooks.thinSelection(Number(this.thinShare.value)));

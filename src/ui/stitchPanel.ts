@@ -1,4 +1,4 @@
-import { formatNumber, t, type Key } from '../i18n';
+import { formatNumber, onLangChange, t, type Key } from '../i18n';
 import type { ObjectKind } from '../model/objects';
 import { DECO_DEFAULTS, isOpenPattern, OPEN_SIZE, OPEN_SIZE_RANGE, SATIN_SPLIT, UNDERLAYS, type DecoSettings, type FillPattern, type FillSettings, type OpenPattern, type RunSettings, type SatinSettings, type SatinType, type Settings, type ShapeTrust, type Fixed } from '../model/restitch';
 import { fixText } from './fixText';
@@ -256,7 +256,12 @@ export class StitchPanel {
   constructor(
     private root: HTMLElement,
     private hooks: StitchHooks,
-  ) {}
+  ) {
+    // Drawn anew in the other language, with the values being changed kept.
+    onLangChange(() => {
+      if (this.info && this.key !== -1) this.render();
+    });
+  }
 
   update(info: StitchInfo | null): void {
     this.info = info;

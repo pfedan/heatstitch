@@ -1,4 +1,4 @@
-import { t } from '../i18n';
+import { onLangChange, t } from '../i18n';
 import { patternStats, STITCH, type Pattern, type PatternStats } from '../model/pattern';
 import { parsePattern, SUPPORTED_EXTENSIONS } from '../parsers';
 import {
@@ -108,7 +108,9 @@ export class FileList {
     private onValidated: (f: LoadedFile) => void,
     /** The material a new design starts with: the one used last. */
     private defaults: () => Material,
-  ) {}
+  ) {
+    onLangChange(() => this.render());
+  }
 
   /** Gives a design another material, re-classifies it for the new fabric, thread and checks and stores it. */
   setMaterial(f: LoadedFile, m: Material): void {

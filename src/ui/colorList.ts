@@ -1,4 +1,4 @@
-import { formatNumber, t } from '../i18n';
+import { formatNumber, onLangChange, t } from '../i18n';
 import { blockIndex, colorBlocks, sewingSeconds } from '../model/sequence';
 import { forEachThreadSegment, patternStats, type Pattern, type ThreadColor } from '../model/pattern';
 import { catalogsNow, chooseCatalog, chosenCatalog, closeness, inCatalog, loadCatalogs, nearest, threadCode, threadNumber, type Catalog } from '../threads/catalog';
@@ -31,6 +31,10 @@ export class ColorList {
   private dialog: HTMLDialogElement | null = null;
   private info: ColorListInfo | null = null;
   private done = '';
+
+  constructor() {
+    onLangChange(() => this.dialog?.open && this.render());
+  }
 
   open(info: ColorListInfo): void {
     this.info = info;
