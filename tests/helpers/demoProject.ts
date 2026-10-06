@@ -21,7 +21,7 @@ import { ellipsePath, parsePath, rectPath } from '../../src/shape/svgPath';
 import { DEFAULTS, materialOf, type Material } from '../../src/settings';
 import type { FabricId, Profile } from '../../src/validation/profiles';
 import { writePattern } from '../../src/writers';
-import { toStored, type StoredPattern } from '../../src/storage/fileStore';
+import { toStored, type StoredPattern, type Titles } from '../../src/storage/fileStore';
 import { setTrims } from '../../src/model/jumps';
 import { transitions } from '../../src/model/sequence';
 
@@ -223,7 +223,7 @@ export class Design {
   }
 
   /** The design as a file of the project: PES bytes as the app writes an own design, and what it knows of its objects. */
-  file(): { name: string; data: Uint8Array; working: StoredPattern; acks: []; objects: StoredObject[]; material: Material; title: string; own: true } {
+  file(): { name: string; data: Uint8Array; working: StoredPattern; acks: []; titles: Titles; objects: StoredObject[]; material: Material; title: string; own: true } {
     const data = writePattern(this.p, 'pes');
     // As the app adds it (addWithObjects): the objects as read back from the file.
     const back = parsePattern(data, `${this.title}.pes`);
@@ -238,7 +238,8 @@ export class Design {
       background: this.background,
     };
     // The working copy keeps the threads as picked from the catalog (PES alone maps them to Brother's).
-    return { name: `${this.title}.pes`, data, working: toStored(this.p), acks: [], objects: known, material, title: this.title, own: true };
+    const titles = { de: this.title, en: ENGLISH[this.title] };
+    return { name: `${this.title}.pes`, data, working: toStored(this.p), acks: [], objects: known, material, title: this.title, titles, own: true };
   }
 }
 
@@ -267,6 +268,18 @@ const wave = (x0: number, y: number, len: number, amp: number, waves: number) =>
   let d = `M${f(x0)} ${f(y)}`;
   for (let k = 0; k < waves * 2; k++) d += ` Q${f(x0 + step * (k + 0.5))} ${f(y + (k % 2 ? amp : -amp) * 1.6)} ${f(x0 + step * (k + 1))} ${f(y)}`;
   return d;
+};
+
+/** The designs' names in English: the list shows them in the app's language. */
+const ENGLISH: Record<string, string> = {
+  Blume: 'Flower',
+  'Musterkarte Dekor': 'Decorative sampler',
+  Linienstiche: 'Line stitches',
+  'Linien mit Parametern': 'Line settings',
+  Linieneffekte: 'Line effects',
+  Schriftzug: 'Lettering',
+  Aufnäher: 'Patch',
+  Handtuch: 'Towel',
 };
 
 // The designs ----------------------------------------------------------------------------------
@@ -345,6 +358,60 @@ export function lineStitches(): Design {
   return d;
 }
 
+/**
+ * Linien mit Parametern: each line stitch and line effect in three settings side by side, one row
+ * per setting that changes (stitch length, repeats, width, spacing, side, motif size, underlay,
+ * echo copies and gap, shadow direction and distance).
+ */
+export function lineVariants(): Design {
+  const d = new Design('Linien mit Parametern', { fabric: 'woven', thread: '40' }, { w: 130, h: 180 }, '#f3efe6');
+  const { black, brown, red, orange, green, teal, blue, pink, purple, navy, grey, sky, gold } = THREADS;
+  type Cell = { st: Partial<PathStitch>; width?: number; then?: (d: Design, i: number) => void };
+  const rows: [ThreadColor, Cell[]][] = [
+    // Steppstich: stitch length 1.5, 2.5, 4 mm.
+    [black, [1.5, 2.5, 4].map((length) => ({ st: { type: 'run', length } }))],
+    // Bohnenstich: 3 and 5 times, and 5 times with long stitches.
+    [brown, [{ st: { type: 'triple', repeat: 3 } }, { st: { type: 'triple', repeat: 5 } }, { st: { type: 'triple', repeat: 5, length: 4 } }]],
+    // Zickzack: narrow and dense, middle, wide and open.
+    [orange, [[2, 0.8], [3.5, 1.5], [5, 2.5]].map(([width, spacing]) => ({ st: { type: 'zigzag', width, spacing } }))],
+    // E-Stich: narrow, wide, wide on the other side.
+    [green, [{ st: { type: 'e', width: 2 } }, { st: { type: 'e', width: 4 } }, { st: { type: 'e', width: 4, flip: true } }]],
+    // Motivstich Wellen: 2, 4, 6 mm across.
+    [teal, [2, 4, 6].map((width) => ({ st: { type: 'motif', motif: 'waves', width } }))],
+    // Motivstich Bögen on one side and the other, a chain sewn three times; then hearts 3 and 5 mm, the big ones three times.
+    [blue, [{ st: { type: 'motif', motif: 'scallops', width: 4 } }, { st: { type: 'motif', motif: 'scallops', width: 4, flip: true } }, { st: { type: 'motif', motif: 'chain', width: 3, repeat: 3 } }]],
+    [pink, [{ st: { type: 'motif', motif: 'hearts', width: 3 } }, { st: { type: 'motif', motif: 'hearts', width: 5 } }, { st: { type: 'motif', motif: 'hearts', width: 5, repeat: 3 } }]],
+    // Satinlinie: 1.5 mm without underlay, 3 mm, 5 mm with zigzag underlay.
+    [navy, [{ st: { type: 'satin', width: 1.5, under: 'off' }, width: 1.5 }, { st: { type: 'satin', width: 3 }, width: 3 }, { st: { type: 'satin', width: 5, under: 'zigzag' }, width: 5 }]],
+    // Echo: one copy outside, two on both sides, three close ones.
+    [purple, [
+      { st: { type: 'run' }, then: (x, i) => x.echo(i, 'out', 1, 2.5) },
+      { st: { type: 'run' }, then: (x, i) => x.echo(i, 'both', 2, 1.8) },
+      { st: { type: 'triple', repeat: 3 }, then: (x, i) => x.echo(i, 'in', 3, 1.2) },
+    ]],
+    // Echo copies in threads of their own.
+    [red, [
+      { st: { type: 'run' }, then: (x, i) => x.echo(i, 'out', 1, 2.5, [gold]) },
+      { st: { type: 'triple', repeat: 3 }, then: (x, i) => x.echo(i, 'both', 1, 2.2, [sky]) },
+      { st: { type: 'run' }, then: (x, i) => x.echo(i, 'out', 2, 2, [orange, gold]) },
+    ]],
+    // Schatten: close below right, further below right, above left.
+    [navy, [
+      { st: { type: 'satin', width: 2 }, width: 2, then: (x, i) => x.shadow(i, grey, 'se', 0.5) },
+      { st: { type: 'satin', width: 2 }, width: 2, then: (x, i) => x.shadow(i, grey, 'se', 1.5) },
+      { st: { type: 'satin', width: 2 }, width: 2, then: (x, i) => x.shadow(i, grey, 'nw', 1.2) },
+    ]],
+  ];
+  rows.forEach(([color, cells], r) =>
+    cells.forEach(({ st, width, then }, c) => {
+      const i = d.line(wave(8 + c * 40, 12 + r * 15.5, 34, 1.6, 1), color, st, width ?? 0);
+      then?.(d, i);
+    }),
+  );
+  d.cutJumps();
+  return d;
+}
+
 /** Linieneffekte: echoes on one side and both sides, a shadow in a thread of its own, echo copies in their own threads. */
 export function lineEffects(): Design {
   const d = new Design('Linieneffekte', undefined, undefined, '#eef0f2');
@@ -400,7 +467,7 @@ export function towel(): Design {
   return d;
 }
 
-export const DEMO_DESIGNS = [flower, decoSampler, lineStitches, lineEffects, lettering, patch, towel];
+export const DEMO_DESIGNS = [flower, decoSampler, lineStitches, lineVariants, lineEffects, lettering, patch, towel];
 
 /** Builds every design afresh (object memory starts empty). */
 export function buildDemos(): Design[] {
