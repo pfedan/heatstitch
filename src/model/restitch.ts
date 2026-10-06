@@ -441,6 +441,8 @@ export function knownKind(r: Remembered | undefined): ObjectKind | undefined {
   if (r.path && r.line) return r.line.type === 'satin' ? 'satin' : 'run';
   if (r.fill && !r.satin) return 'fill';
   if (r.satin && !r.fill) return 'satin';
+  // Both settings (a fill made satin, or back): the columns only a satin keeps.
+  if (r.satin && r.columns?.length) return 'satin';
   return undefined;
 }
 
@@ -1107,7 +1109,7 @@ export function analyze(p: Pattern, o: SewObject, kinds: Uint8Array, known = rem
   }
   // A satin made here is satin all along: where rungs slant its stitches far, they are split and
   // look like fill rows to the recognizer.
-  if (known?.satin && known.columns && !known.fill) for (const r of merged) if (r.kind === 'fill') r.kind = 'satin';
+  if (known?.satin && known.columns?.length) for (const r of merged) if (r.kind === 'fill') r.kind = 'satin';
 
   const parts: Part[] = [];
   for (const r of merged) {
@@ -2240,7 +2242,7 @@ export function restitch(
     // stitches no longer read as satin parts like the kept ones (an E stitch reads as running
     // stitch along its rails).
     const keptSatin =
-      !reverse && given.kind === 'satin' && (from ?? 'satin') === 'satin' && !!known?.satin && !!known.columns?.length && !known.fill && an.parts.filter((pt) => pt.kind === 'satin').length !== known.columns.length;
+      !reverse && given.kind === 'satin' && (from ?? 'satin') === 'satin' && !!known?.satin && !!known.columns?.length && an.parts.filter((pt) => pt.kind === 'satin').length !== known.columns.length;
     if (keptSatin) an = { parts: [{ kind: 'satin', s: o.first, e: o.last }], fill: null };
     const parts = an.parts;
     // Satin columns kept from an earlier edit, if the object still has as many satin parts.
