@@ -31,7 +31,7 @@
    ]
   },
   "objects": 0,
-  "ms": 2288
+  "ms": 2274
  },
  {
   "name": "Blume (knit)",
@@ -65,7 +65,7 @@
    ]
   },
   "objects": 0,
-  "ms": 231
+  "ms": 222
  },
  {
   "name": "Musterkarte Dekor (woven)",
@@ -99,7 +99,7 @@
    ]
   },
   "objects": 1,
-  "ms": 7272
+  "ms": 7623
  },
  {
   "name": "Musterkarte Dekor (knit)",
@@ -133,7 +133,7 @@
    ]
   },
   "objects": 1,
-  "ms": 16464
+  "ms": 16912
  },
  {
   "name": "Linienstiche (woven)",
@@ -167,7 +167,7 @@
    ]
   },
   "objects": 0,
-  "ms": 838
+  "ms": 874
  },
  {
   "name": "Linienstiche (knit)",
@@ -201,7 +201,7 @@
    ]
   },
   "objects": 0,
-  "ms": 852
+  "ms": 851
  },
  {
   "name": "Linieneffekte (woven)",
@@ -235,7 +235,7 @@
    ]
   },
   "objects": 1,
-  "ms": 2797
+  "ms": 3051
  },
  {
   "name": "Linieneffekte (knit)",
@@ -269,7 +269,7 @@
    ]
   },
   "objects": 1,
-  "ms": 2030
+  "ms": 2853
  },
  {
   "name": "Schriftzug (woven)",
@@ -303,7 +303,7 @@
    ]
   },
   "objects": 0,
-  "ms": 7444
+  "ms": 8400
  },
  {
   "name": "Schriftzug (knit)",
@@ -337,21 +337,21 @@
    ]
   },
   "objects": 0,
-  "ms": 9324
+  "ms": 11537
  },
  {
   "name": "Aufnäher (woven)",
   "ampel": "red",
   "ampelAfter": "red",
   "crit": 84,
-  "critAfter": 16,
+  "critAfter": 20,
   "newCrit": 0,
   "newCaution": 0,
   "newGapSparse": 0,
   "open": {
    "density": [
     84,
-    16
+    20
    ],
    "holes": [
     0,
@@ -371,21 +371,21 @@
    ]
   },
   "objects": 3,
-  "ms": 7228
+  "ms": 8625
  },
  {
   "name": "Aufnäher (knit)",
   "ampel": "red",
   "ampelAfter": "red",
   "crit": 255,
-  "critAfter": 101,
+  "critAfter": 102,
   "newCrit": 0,
-  "newCaution": 27,
+  "newCaution": 43,
   "newGapSparse": 0,
   "open": {
    "density": [
     255,
-    101
+    102
    ],
    "holes": [
     0,
@@ -405,7 +405,7 @@
    ]
   },
   "objects": 3,
-  "ms": 6769
+  "ms": 16285
  },
  {
   "name": "Handtuch (terry)",
@@ -439,7 +439,7 @@
    ]
   },
   "objects": 2,
-  "ms": 20854
+  "ms": 30891
  },
  {
   "name": "Handtuch (woven)",
@@ -473,7 +473,7 @@
    ]
   },
   "objects": 1,
-  "ms": 5593
+  "ms": 8921
  },
  {
   "name": "Handtuch (knit)",
@@ -507,7 +507,7 @@
    ]
   },
   "objects": 3,
-  "ms": 13290
+  "ms": 19822
  },
  {
   "name": "cat-60mm.pes (woven)",
@@ -541,25 +541,25 @@
    ]
   },
   "objects": 3,
-  "ms": 33993
+  "ms": 36044
  },
  {
   "name": "cat-60mm.pes (knit)",
   "ampel": "red",
   "ampelAfter": "red",
   "crit": 86,
-  "critAfter": 58,
+  "critAfter": 84,
   "newCrit": 0,
   "newCaution": 1,
   "newGapSparse": 0,
   "open": {
    "density": [
     60,
-    38
+    58
    ],
    "holes": [
     30,
-    22
+    30
    ],
    "gap": [
     0,
@@ -574,8 +574,8 @@
     8
    ]
   },
-  "objects": 12,
-  "ms": 38510
+  "objects": 2,
+  "ms": 57407
  },
  {
   "name": "demos/overlap.pes (woven)",
@@ -609,7 +609,7 @@
    ]
   },
   "objects": 3,
-  "ms": 3454
+  "ms": 4079
  },
  {
   "name": "demos/overlap.pes (knit)",
@@ -643,7 +643,7 @@
    ]
   },
   "objects": 2,
-  "ms": 2631
+  "ms": 3880
  },
  {
   "name": "demos/letters.pes (woven)",
@@ -677,7 +677,7 @@
    ]
   },
   "objects": 5,
-  "ms": 11460
+  "ms": 14595
  },
  {
   "name": "demos/letters.pes (knit)",
@@ -711,7 +711,7 @@
    ]
   },
   "objects": 4,
-  "ms": 14288
+  "ms": 21666
  },
  {
   "name": "demos/sun.dst (woven)",
@@ -745,7 +745,7 @@
    ]
   },
   "objects": 0,
-  "ms": 76
+  "ms": 82
  },
  {
   "name": "demos/sun.dst (knit)",
@@ -779,7 +779,7 @@
    ]
   },
   "objects": 1,
-  "ms": 1381
+  "ms": 1626
  },
  {
   "name": "demos/confetti.pes (woven)",
@@ -813,7 +813,7 @@
    ]
   },
   "objects": 0,
-  "ms": 42
+  "ms": 46
  },
  {
   "name": "demos/confetti.pes (knit)",
@@ -847,14 +847,14 @@
    ]
   },
   "objects": 0,
-  "ms": 45
+  "ms": 61
  },
  {
   "name": "demos/leather-patch.dst (leather)",
   "ampel": "red",
   "ampelAfter": "red",
   "crit": 328,
-  "critAfter": 311,
+  "critAfter": 313,
   "newCrit": 0,
   "newCaution": 0,
   "newGapSparse": 0,
@@ -865,7 +865,7 @@
    ],
    "holes": [
     31,
-    34
+    36
    ],
    "gap": [
     0,
@@ -881,7 +881,7 @@
    ]
   },
   "objects": 4,
-  "ms": 5860
+  "ms": 6746
  },
  {
   "name": "demos/leather-patch.dst (woven)",
@@ -915,6 +915,6 @@
    ]
   },
   "objects": 0,
-  "ms": 105
+  "ms": 117
  }
 ]

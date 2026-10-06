@@ -1,6 +1,6 @@
 import { autoUnder, spacingOf } from '../../model/along';
 import { syncBorders } from '../../model/border';
-import { sewObjects, type SewObject } from '../../model/objects';
+import { sewObjects, stitchKey, type SewObject } from '../../model/objects';
 import { JUMP, STITCH, type Pattern } from '../../model/pattern';
 import { remembered, underlayRanges, type Fixed, type Settings } from '../../model/restitch';
 import { stitchKinds } from '../../model/sequence';
@@ -64,6 +64,11 @@ export function unitOf(p: Pattern, objs: SewObject[], o: SewObject, kinds: Uint8
 }
 
 export const unitKey = (u: Unit): string => `${u.kind}:${u.owner}`;
+
+/** A key for a design's records (fixes are worked out for one exact design). */
+export function designKey(p: Pattern): string {
+  return `${p.cmd.length}:${stitchKey(p, 0, p.cmd.length - 1)}`;
+}
 
 /** Tools on a border sewn in a thread of its own (set on its fill). */
 export function borderTools(u: Unit & { kind: 'border' }, want: Set<FixKind>, profile: Profile): Tool[] {

@@ -1,10 +1,11 @@
 import { withRecords } from '../../model/edit';
-import { sewObjects, stitchKey } from '../../model/objects';
+import { sewObjects } from '../../model/objects';
 import type { Pattern } from '../../model/pattern';
 import { forget, holdMemory, remembered, rememberedIn, restoreRemembered, type Remembered, type StoredObject } from '../../model/restitch';
 import type { Profile } from '../../validation/profiles';
 import type { FixKind } from './cells';
 import { planFix, type FixOptions, type FixResult } from './solve';
+import { designKey } from './units';
 
 /**
  * A fix worked out ahead (in the worker, after loading and after each change) and applied with one
@@ -22,10 +23,7 @@ export interface PlannedFix extends FixResult {
   memory: StoredObject[];
 }
 
-/** A key for a design's records (fixes are worked out for one exact design). */
-export function designKey(p: Pattern): string {
-  return `${p.cmd.length}:${stitchKey(p, 0, p.cmd.length - 1)}`;
-}
+export { designKey };
 
 /** Works out a fix without changing anything (see planFix). */
 export async function prepareFix(p: Pattern, profile: Profile, kind: FixKind | 'all', opt: FixOptions): Promise<PlannedFix> {

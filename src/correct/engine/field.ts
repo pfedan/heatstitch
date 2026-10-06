@@ -14,11 +14,11 @@ import { CAUTION, classifyDensity, classifyHoles, CRITICAL, SAFE, SHORT_STITCH_C
  * are not additive and are checked on the real result (verify.ts).
  */
 
-const SUB = 5;
+export const SUB = 5;
 const SUB_MM = VALIDATION_CELL_MM / SUB;
 const SHIFT_MM = -0.05;
 /** Share below the critical density that counts as at risk (see Field.risk). */
-const RISK = 0.04;
+export const RISK = 0.04;
 /** Margin around the design (mm) that variants may grow into. */
 const MARGIN_MM = 4;
 
@@ -69,7 +69,7 @@ export class Field {
    * real; the margin keeps a search from walking up to the limit.
    */
   readonly risk: Uint8Array;
-  private readonly basePeak: Float32Array;
+  readonly basePeak: Float32Array;
   /** Penetrations per bucket (HOLE_RADIUS_MM wide), as counts of points at each position. */
   private readonly buckets = new Map<number, number[]>();
   private readonly holeR = HOLE_RADIUS_MM * 10;

@@ -131,7 +131,9 @@ export type AmpelColor = 'green' | 'yellow' | 'red';
  * reaches the fabric's size, yellow for smaller critical spots or any caution, green otherwise.
  */
 export function ampelOf(v: ValidationResult, acks?: readonly Acknowledgement[]): { color: AmpelColor; worst: Zone | null } {
-  const red = RED_MM2[fabricOf(v.profile).id] ?? 5;
+  // A fabric without its own value (one added later): stretchy ones like knit, firm ones like woven.
+  const fab = fabricOf(v.profile);
+  const red = RED_MM2[fab.id] ?? (fab.pull === 'high' ? 3 : 5);
   // Rank: red spots by critical area, then yellow ones (critical before caution) by area.
   let worst: Zone | null = null;
   let best = -1;

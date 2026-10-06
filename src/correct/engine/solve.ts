@@ -10,8 +10,9 @@ import { ALL_CHECKS, type Checks, type ValidationResult } from '../../validation
 import { CAUTION_KINDS, cellDiff, cellKey, countingCells, openFor, type CellDiff, type FixKind } from './cells';
 import { Field, type Contribution } from './field';
 import { merged, toolSets, toolsFor, type Tool, type Variant } from './variants';
-import { borderTools, letteringTools, predictable, sewUnit, stitchesOf, unitKey, unitOf, type Unit } from './units';
+import { borderTools, designKey, letteringTools, predictable, sewUnit, stitchesOf, unitKey, unitOf, type Unit } from './units';
 import { fineFix, fineObjects } from './fine';
+import type { solveMip } from './mip';
 import { validateDesign } from './validate';
 
 /**
@@ -68,6 +69,13 @@ export interface FixOptions {
   hand?: boolean;
   /** Time for the search per group (ms). */
   budgetMs?: number;
+  /**
+   * Search: large neighbourhoods (default), the exact program, or the program before the search. The
+   * program needs `exact` (mip.ts, HiGHS): on the benchmark it never beat the search and took longer,
+   * so the app does not load it (2026-10-06).
+   */
+  solver?: 'lns' | 'mip' | 'both';
+  exact?: typeof solveMip;
   /** Stop early (a new edit came in). */
   stale?: () => boolean;
   /** Notes on the search, for the benchmark. */
@@ -81,6 +89,8 @@ const SHARE = 0.15;
 /** Later thread (mm/mm²) from which an object's thread counts as covered. */
 const HIDDEN = 2.2;
 const MAX_ROUNDS = 3;
+/** Time for the caution kinds (gaps, too open, long stitches), object by object. */
+const LOWER_BUDGET_MS = 6000;
 /** Groups with at most this many combinations are searched completely. */
 const EXHAUSTIVE = 1500;
 
@@ -186,9 +196,10 @@ export async function planFix(p: Pattern, profile: Profile, kind: FixKind | 'all
     const r = await upperFix(p, v, counting, profile, upper, opt);
     pattern = r.pattern;
     objects = r.objects;
+    opt.log?.(`upper done t=${Math.round(performance.now() - t0)}`);
     // Stitches that cannot be set here: invisible stitch work on them.
     const fine = fineFix(pattern, v, profile, upper, { checks, acks: opt.acks, objects: fineObjects(pattern, new Set(objects.map((x) => x.index))) });
-    opt.log?.(`fine: ${fine.steps.join(',') || 'nothing'} on ${fine.objects.join(',')}`);
+    opt.log?.(`fine: ${fine.steps.join(',') || 'nothing'} on ${fine.objects.join(',')} t=${Math.round(performance.now() - t0)}`);
     if (fine.objects.length) {
       const objs = sewObjects(fine.pattern);
       pattern = fine.pattern;
@@ -201,6 +212,7 @@ export async function planFix(p: Pattern, profile: Profile, kind: FixKind | 'all
     pattern = r.pattern;
     objects = [...objects, ...r.objects].sort((a, b) => a.index - b.index);
   }
+  opt.log?.(`lower done t=${Math.round(performance.now() - t0)}`);
   if (pattern === p) return done(p, [], null, before);
   const after = validateDesign(pattern, profile, checks);
   return done(pattern, objects, cellDiff(v, after, opt.acks), openCount(after));
@@ -209,6 +221,7 @@ export async function planFix(p: Pattern, profile: Profile, kind: FixKind | 'all
 /** Density and penetrations: search on the additive field, check for real. */
 async function upperFix(p: Pattern, v: ValidationResult, counting: Uint8Array, profile: Profile, kinds: FixKind[], opt: FixOptions): Promise<{ pattern: Pattern; objects: ObjectFix[] }> {
   const tStart = performance.now();
+  cacheDesign(p);
   const th = thresholdsFor(profile);
   const f = new Field(p, th, stableFabric(profile));
   const fc = fieldCells(f, v);
@@ -322,7 +335,7 @@ async function upperFix(p: Pattern, v: ValidationResult, counting: Uint8Array, p
     return tally.fixed * 1e6 - vis * 1e3 - tally.newCaution * 20 - touched;
   };
 
-  const solveGroup = (g: Candidate[]) => {
+  const solveGroup = async (g: Candidate[]) => {
     // Forbidden variants leave the choice first.
     for (const c of g) if (c.banned.has(c.chosen)) choose(c, 0);
     const allowed = g.map((c) => c.variants.map((_, k) => k).filter((k) => !c.banned.has(k)));
@@ -336,6 +349,18 @@ async function upperFix(p: Pattern, v: ValidationResult, counting: Uint8Array, p
         bestChoice = g.map((c) => c.chosen);
       }
     };
+    const mode = opt.solver ?? 'lns';
+    if (mode !== 'lns' && opt.exact && combos > 1) {
+      const start = g.map((c) => c.chosen);
+      const r = await opt.exact(f, g.map((c, k) => ({ contributions: c.contributions, allowed: allowed[k], chosen: c.chosen, visibility: c.visibility })), target, opt.budgetMs ?? 1500);
+      if (r) {
+        g.forEach((c, k) => choose(c, r.choice[k]));
+        keep();
+        opt.log?.(`mip ${r.status} rows ${r.rows} cols ${r.cols} value ${value(g)}`);
+      }
+      g.forEach((c, k) => choose(c, mode === 'mip' ? bestChoice[k] : start[k]));
+      if (mode === 'mip' && r && value(g) > -Infinity) return;
+    }
     if (combos <= EXHAUSTIVE) {
       const rec = (k: number) => {
         if (k === g.length) return keep();
@@ -395,7 +420,7 @@ async function upperFix(p: Pattern, v: ValidationResult, counting: Uint8Array, p
   let pattern = p;
   for (let round = 0; round < MAX_ROUNDS; round++) {
     const ts = performance.now();
-    for (const g of groups.values()) solveGroup(g);
+    for (const g of groups.values()) await solveGroup(g);
     opt.log?.(`search ${Math.round(performance.now() - ts)}ms groups ${[...groups.values()].map((g) => g.length).join(',')}`);
     if (opt.stale?.()) break;
     // Sew the choice for real and check the whole design.
@@ -519,8 +544,12 @@ function lowerFix(p: Pattern, orig: Pattern, v0: ValidationResult, profile: Prof
     for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) if (kinds.some((k) => openFor(x, cnt, r * m.cols + c, k))) n++;
     return n;
   };
-  for (const o0 of objs) {
-    if (opt.stale?.() || taken.has(o0.index)) continue;
+  // Most open cells first, within a time budget: each try sews and checks the whole design.
+  const deadline = performance.now() + LOWER_BUDGET_MS;
+  const order = objs.map((o) => ({ o, n: taken.has(o.index) ? 0 : openIn(v, o) })).filter((x) => x.n > 0).sort((a, b) => b.n - a.n);
+  for (const { o: o0 } of order) {
+    if (opt.stale?.() || performance.now() > deadline) break;
+    if (taken.has(o0.index)) continue;
     const o = sewObjects(cur)[o0.index];
     const open = openIn(v, o);
     if (!open) continue;
@@ -602,22 +631,27 @@ function buildVariants(p: Pattern, f: Field, u: Unit, tools: Tool[], trimMm: num
   // Stitches from elsewhere change when sewn here even with the same settings: what is predicted
   // starts from them sewn here, not from the stitches in the file.
   const foreign = u.kind === 'object' && !sewnHere(p, u.owner);
+  const uk = `${unitKey(u)}|${trimMm}`;
   for (const set of realSets) {
     const knockout = set.some((t) => t.knockout);
-    let next: Pattern | null = p;
-    if (set.length || (foreign && variants.length)) next = sewUnit(p, u, merged(set), knockout, trimMm, true);
-    if (!next) continue;
     if (!set.length && foreign && !variants.length) {
       // The file's own stitches as they are, then the same sewn here as the base of the predictions.
       const st0 = stitchesOf(p, u.objects);
       variants.push({ tools: [], changes: [], knockout: false, stitches: st0, strength: 0, visible: false });
-      contributions.push(f.contribution(st0));
-      next = sewUnit(p, u, [], false, trimMm, true);
-      if (!next) break;
+      contributions.push(sewnOnce(`${uk}|file`, () => ({ st: st0, top: f.contribution(st0), under: f.contribution(st0, () => false) }))!.top);
     }
-    const st = stitchesOf(next, u.objects);
-    const top = f.contribution(st, (r) => !st.under[r]);
-    const under = f.contribution(st, (r) => !!st.under[r]);
+    const key = `${uk}|${set.map((t) => t.id).sort().join('+')}`;
+    const sewn = sewnOnce(key, () => {
+      const next = set.length || foreign ? sewUnit(p, u, merged(set), knockout, trimMm, true) : p;
+      if (!next) return null;
+      const st = stitchesOf(next, u.objects);
+      return { st, top: f.contribution(st, (r) => !st.under[r]), under: f.contribution(st, (r) => !!st.under[r]) };
+    });
+    if (!sewn) {
+      if (!set.length && foreign) break;
+      continue;
+    }
+    const { st, top, under } = sewn;
     for (const sc of scales) {
       for (const un of unders) {
         const all = [...set, ...(sc ? [sc] : []), ...(un ? [un] : [])];
@@ -633,6 +667,32 @@ function buildVariants(p: Pattern, f: Field, u: Unit, tools: Tool[], trimMm: num
   // The current one first, then the least visible.
   const order = variants.map((_, k) => k).filter((k) => k > 0).sort((a, b) => variants[a].strength - variants[b].strength || variants[a].tools.length - variants[b].tools.length).slice(0, MAX_VARIANTS - 1);
   return { variants: [variants[0], ...order.map((k) => variants[k])], contributions: [contributions[0], ...order.map((k) => contributions[k])] };
+}
+
+/**
+ * What a unit sewn with a set of tools contributes, kept for the design it was sewn on: the Ampel
+ * works out several fixes of one design (each kind, the rest, all together), and they try the same
+ * variants. Null: it could not be sewn.
+ */
+interface Sewn {
+  st: Pattern & { under: Uint8Array };
+  top: Contribution;
+  under: Contribution;
+}
+const sewnCache = new Map<string, Sewn | null>();
+let sewnFor = '';
+
+/** Starts the cache for design `p` (forgets the one before). */
+function cacheDesign(p: Pattern): void {
+  const k = designKey(p);
+  if (k === sewnFor) return;
+  sewnFor = k;
+  sewnCache.clear();
+}
+
+function sewnOnce(key: string, make: () => Sewn | null): Sewn | null {
+  if (!sewnCache.has(key)) sewnCache.set(key, make());
+  return sewnCache.get(key)!;
 }
 
 /** Changes by hand on the objects of unit `u`. */
