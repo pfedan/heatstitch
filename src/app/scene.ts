@@ -119,7 +119,7 @@ export function bindScene(app: SceneApp) {
       total: q.total,
       sections,
       blockStarts: q.markers.colorStarts.map((i) => q.numbers[i]),
-      timeAt: (k: number) => sewingSeconds(k, count(q.trimsAt, k), count(q.colorsAt, k), app.settings.machineSpm),
+      timeAt: (k: number) => sewingSeconds(k, count(q.trimsAt, k), count(q.colorsAt, k), app.settings),
     };
   }
 

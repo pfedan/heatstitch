@@ -1,5 +1,5 @@
 import { formatNumber, onLangChange, t } from '../i18n';
-import { blockIndex, colorBlocks, sewingSeconds } from '../model/sequence';
+import { blockIndex, colorBlocks, sewingSeconds, type MachineTimes } from '../model/sequence';
 import { forEachThreadSegment, patternStats, type Pattern, type ThreadColor } from '../model/pattern';
 import { catalogsNow, chooseCatalog, chosenCatalog, closeness, inCatalog, loadCatalogs, nearest, threadCode, threadNumber, type Catalog } from '../threads/catalog';
 import { cssColor } from './threadPicker';
@@ -8,7 +8,7 @@ export interface ColorListInfo {
   pattern: Pattern;
   name: string;
   /** Machine speed for the sewing time. */
-  spm: number;
+  machine: MachineTimes;
   /** All color blocks get these threads, as one edit. */
   apply: (colors: ThreadColor[]) => void;
 }
@@ -67,7 +67,7 @@ export class ColorList {
 
   private render(): void {
     const d = this.dialog!;
-    const { pattern: p, name, spm } = this.info!;
+    const { pattern: p, name, machine } = this.info!;
     const blocks = colorBlocks(p);
     const st = patternStats(p);
     const all = catalogsNow();
@@ -98,7 +98,7 @@ export class ColorList {
       [t('colorList.stitches'), formatNumber(st.stitches)],
       [t('colorList.changes'), t('colorList.changesValue', { colors: blocks.length, spools })],
       [t('colorList.thread'), `${formatNumber(st.threadLength / 1000, 1)} m`],
-      [t('colorList.time'), t('stats.minutes', { m: formatNumber(sewingSeconds(st.stitches, st.trims, st.colorChanges, spm) / 60) })],
+      [t('colorList.time'), t('stats.minutes', { m: formatNumber(sewingSeconds(st.stitches, st.trims, st.colorChanges, machine) / 60) })],
     ];
     for (const [k, v] of rows) facts.append(el('dt', '', k), el('dd', '', v));
     const named = el('div', 'cl-named');

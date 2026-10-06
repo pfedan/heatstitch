@@ -103,7 +103,7 @@ describe('ready: stitch sheet', () => {
     const l = layout(p, { w: 100, h: 100 });
     expect(l.tiles).toHaveLength(1);
     expect(l.hoopWhole).toBe(true);
-    const html = sheetHtml({ pattern: p, name: 'Test <1>', hoop: { w: 100, h: 100 }, profile: { fabric: 'woven', thread: '40' }, spm: 800, card: cardView(recipeCard('woven', '40', plain)) });
+    const html = sheetHtml({ pattern: p, name: 'Test <1>', hoop: { w: 100, h: 100 }, profile: { fabric: 'woven', thread: '40' }, machine: { machineSpm: 800, trimSeconds: 3, colorSeconds: 30 }, card: cardView(recipeCard('woven', '40', plain)) });
     // The drawing's width in mm equals its viewBox width in mm: 1:1.
     const m = html.match(/<svg class="drawing" width="([\d.]+)mm" height="([\d.]+)mm" viewBox="[-\d.]+ [-\d.]+ ([\d.]+) ([\d.]+)"/);
     expect(m).toBeTruthy();

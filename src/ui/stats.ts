@@ -18,7 +18,7 @@ export function renderStats(
   const rows: [Key, string, string?][] = [];
   const st = file?.stats;
   if (st) {
-    const min = sewingSeconds(st.stitches, st.trims, st.colorChanges, s.machineSpm) / 60;
+    const min = sewingSeconds(st.stitches, st.trims, st.colorChanges, s) / 60;
     rows.push(
       ['stats.stitches', formatNumber(st.stitches)],
       ['design.stats.time', t('design.stats.min', { m: formatNumber(min, min < 10 ? 1 : 0) }), 'time'],

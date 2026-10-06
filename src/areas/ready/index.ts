@@ -113,7 +113,7 @@ export function initReady(app: ReadyApp): { render: () => void } {
       if (!f?.pattern || !v) return;
       closeSave();
       openSheet(
-        { pattern: f.pattern, name: FileList.baseName(f) || f.pattern.name, hoop: s.hoop, profile: s.profile, spm: s.machineSpm, card: v },
+        { pattern: f.pattern, name: FileList.baseName(f) || f.pattern.name, hoop: s.hoop, profile: s.profile, machine: s, card: v },
         () => toast(t('ready.sheet.blocked')),
       );
     },

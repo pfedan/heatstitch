@@ -152,6 +152,8 @@ export function bindFileIo(app: FileIoApp) {
     Object.assign(app.settings.order, s.order);
     app.settings.trimMm = s.trimMm;
     app.settings.machineSpm = s.machineSpm;
+    app.settings.trimSeconds = s.trimSeconds;
+    app.settings.colorSeconds = s.colorSeconds;
     if (s.background !== undefined) app.settings.background = s.background;
     if (withImage) {
       Object.assign(app.settings.image.prepare, s.image.prepare);

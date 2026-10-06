@@ -639,7 +639,7 @@ export function bindObjects(app: ObjectsApp) {
     colorList.open({
       pattern: f.pattern,
       name: FileList.baseName(f) || f.pattern.name,
-      spm: app.settings.machineSpm,
+      machine: app.settings,
       apply: (colors) => {
         const g = app.files.active;
         if (!g?.pattern) return;

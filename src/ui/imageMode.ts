@@ -1168,7 +1168,7 @@ export class ImageMode {
       ['image.result.objects', t('image.result.kinds', { fill: count('fill'), satin: count('satin'), run: count('run') })],
       ...(d.objects.some((o) => o.curved) ? [['image.result.curved', formatNumber(d.objects.filter((o) => o.curved).length)] as [Key, string]] : []),
       ['stats.trims', formatNumber(st.trims)],
-      ['image.result.time', t('image.result.minutes', { m: formatNumber(sewingSeconds(st.stitches, st.trims, st.colorChanges, this.h.settings.machineSpm) / 60, 0) })],
+      ['image.result.time', t('image.result.minutes', { m: formatNumber(sewingSeconds(st.stitches, st.trims, st.colorChanges, this.h.settings) / 60, 0) })],
     ];
     dl.replaceChildren(
       ...rows.flatMap(([k, v]) => [Object.assign(document.createElement('dt'), { textContent: t(k) }), Object.assign(document.createElement('dd'), { textContent: v })]),

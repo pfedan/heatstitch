@@ -1,6 +1,6 @@
 import type { Metric } from '../density/grid';
 import { formatNumber, onLangChange, t, type Key } from '../i18n';
-import { FILL, RUNNING, SATIN, TIE_STITCH } from '../model/sequence';
+import { COLOR_SECONDS, FILL, RUNNING, SATIN, TIE_STITCH } from '../model/sequence';
 import { KIND_COLORS, LENGTH_COLORS, LONG_MM, MAX_MM, ORDER_CSS } from '../render/flow';
 import type { ColorBy, Marks, Settings } from '../settings';
 import { FABRICS } from '../validation/profiles';
@@ -157,6 +157,11 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
     fabricLook.value = s.fabricLook ? s.profile.fabric : 'flat';
     fabricLook.disabled = !s.realistic;
     spm.value = String(s.machineSpm);
+    $<HTMLInputElement>('trim-seconds').value = String(s.trimSeconds);
+    $<HTMLInputElement>('color-seconds').value = String(s.colorSeconds);
+    // Up to 15 s counts as a machine that changes by itself.
+    const needles = s.colorSeconds <= 15 ? 'multi' : 'single';
+    document.querySelectorAll<HTMLInputElement>('input[name="machine-needles"]').forEach((r) => (r.checked = r.value === needles));
     $('cell-out').textContent = `${formatNumber(s.cellMm, 2)} mm`;
     $('blur-out').textContent = s.blurMm > 0 ? `${formatNumber(s.blurMm, 1)} mm` : t('controls.off');
     $('thread-width-out').textContent = `${formatNumber(s.threadMm, 2)} mm`;
@@ -227,6 +232,18 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
     onChange('render');
   });
   on(spm, 'change', () => ((s.machineSpm = Number(spm.value)), 'render'));
+  // Trim and thread change times: picking the machine sets the usual thread change time.
+  const trimSec = $<HTMLInputElement>('trim-seconds');
+  const colorSec = $<HTMLInputElement>('color-seconds');
+  const seconds = (i: HTMLInputElement, max: number, d: number) => {
+    const v = Number(i.value.replace(',', '.'));
+    return Number.isFinite(v) && v >= 0 ? Math.min(max, v) : d;
+  };
+  on(trimSec, 'change', () => ((s.trimSeconds = seconds(trimSec, 60, s.trimSeconds)), refresh(), 'render'));
+  on(colorSec, 'change', () => ((s.colorSeconds = seconds(colorSec, 300, s.colorSeconds)), refresh(), 'render'));
+  document.querySelectorAll<HTMLInputElement>('input[name="machine-needles"]').forEach((r) =>
+    on(r, 'change', () => ((s.colorSeconds = COLOR_SECONDS[r.value as 'single' | 'multi']), refresh(), 'render')),
+  );
 
   // Collapsible sidebar sections remember whether they are open.
   document.querySelectorAll<HTMLDetailsElement>('details[data-section]').forEach((d) => {
