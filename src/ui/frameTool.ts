@@ -25,6 +25,37 @@ export interface FrameView {
   dragging: FramePart | null;
   /** Turn so far (degrees), for the label. */
   turn: number;
+  /** Where a move snapped (world mm), drawn as a line across the stage; null: not snapped that way. */
+  snapped: { x: number | null; y: number | null };
+}
+
+/** Lines a moved frame snaps to (world mm): edges and middles of the other objects, the middle of the rest. */
+export interface SnapTargets {
+  xs: number[];
+  ys: number[];
+}
+
+/** How near (screen pixels) an edge or middle has to come to a target to snap. */
+export const SNAP_PX = 6;
+
+/**
+ * A move by (dx, dy) of `box`, its left, middle and right (top, middle, bottom) pulled onto the
+ * nearest target within `reach` (mm) in each direction; `x`, `y` the target it hangs on.
+ */
+export function snapMove(box: Box, dx: number, dy: number, targets: SnapTargets, reach: number): { dx: number; dy: number; x: number | null; y: number | null } {
+  const best = (sides: number[], d: number, list: number[]) => {
+    let pick: { shift: number; at: number } | null = null;
+    for (const s of sides) {
+      for (const at of list) {
+        const shift = at - (s + d);
+        if (Math.abs(shift) <= reach && (!pick || Math.abs(shift) < Math.abs(pick.shift))) pick = { shift, at };
+      }
+    }
+    return pick;
+  };
+  const sx = best([box.minX, (box.minX + box.maxX) / 2, box.maxX], dx, targets.xs);
+  const sy = best([box.minY, (box.minY + box.maxY) / 2, box.maxY], dy, targets.ys);
+  return { dx: dx + (sx?.shift ?? 0), dy: dy + (sy?.shift ?? 0), x: sx?.at ?? null, y: sy?.at ?? null };
 }
 
 export interface FrameHooks {
@@ -53,20 +84,25 @@ export class FrameTool implements FrameView {
   hover: FramePart | null = null;
   dragging: FramePart | null = null;
   turn = 0;
+  snapped: { x: number | null; y: number | null } = { x: null, y: null };
+  /** What a move snaps to; none: it moves freely. */
+  targets: SnapTargets | null = null;
   private from: Pt = [0, 0];
   private moved = false;
 
   constructor(private hooks: FrameHooks) {}
 
-  open(box: Box, canScale: boolean): void {
+  open(box: Box, canScale: boolean, targets: SnapTargets | null = null): void {
     this.active = true;
     this.box = box;
     this.canScale = canScale;
+    this.targets = targets;
     if (!this.dragging) this.m = IDENTITY;
   }
 
   close(): void {
     this.active = false;
+    this.snapped = { x: null, y: null };
     this.dragging = null;
     this.hover = null;
     this.m = IDENTITY;
@@ -99,9 +135,11 @@ export class FrameTool implements FrameView {
     return part;
   }
 
-  dragTo(x: number, y: number, shift: boolean, scale: number): boolean {
+  /** `free` (Alt) moves without snapping. */
+  dragTo(x: number, y: number, shift: boolean, scale: number, free = false): boolean {
     const part = this.dragging;
     if (part === null) return false;
+    this.snapped = { x: null, y: null };
     const [fx, fy] = this.from;
     // A press that moves less than a few pixels stays a click.
     if (!this.moved && Math.hypot(x - fx, y - fy) * scale < 3) return true;
@@ -116,6 +154,13 @@ export class FrameTool implements FrameView {
       if (shift) {
         if (Math.abs(dx) > Math.abs(dy)) dy = 0;
         else dx = 0;
+      }
+      if (this.targets && !free) {
+        const s = snapMove(b, dx, dy, this.targets, SNAP_PX / scale);
+        // Shift keeps the line it moves on.
+        if (!shift || dx) dx = s.dx;
+        if (!shift || dy) dy = s.dy;
+        this.snapped = { x: !shift || dx ? s.x : null, y: !shift || dy ? s.y : null };
       }
       this.m = translation(dx, dy);
     } else if (part === 'turn') {
@@ -150,6 +195,7 @@ export class FrameTool implements FrameView {
     const was = this.dragging !== null && this.moved;
     const m = this.m;
     this.dragging = null;
+    this.snapped = { x: null, y: null };
     this.moved = false;
     if (was) this.hooks.change(m, true);
     this.m = IDENTITY;
@@ -159,6 +205,7 @@ export class FrameTool implements FrameView {
 
   cancel(): void {
     this.dragging = null;
+    this.snapped = { x: null, y: null };
     this.moved = false;
     this.m = IDENTITY;
     this.turn = 0;

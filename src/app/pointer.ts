@@ -81,6 +81,11 @@ export function bindPointer(app: PointerApp) {
   /** Tooltip for the side of the divider the pointer is on. */
   function showTooltip(sx: number, sy: number): void {
     if (app.settings.mode === 'image') return;
+    // The width grip shows its own label.
+    if (app.shapeTool.active && (app.shapeTool.bandDragging || app.shapeTool.hover?.part === 'width')) {
+      app.tooltip.hidden = true;
+      return;
+    }
     if (app.settings.mode === 'flow') return app.flowTooltip(sx, sy);
     const left = app.showCompare() && sx < ui.split * ui.stageW;
     const f = app.files.active;
@@ -133,8 +138,10 @@ export function bindPointer(app: PointerApp) {
         mode = 'move';
       } else if (ui.letterMode && flow) mode = app.letterDown(wx, wy) ? 'move' : 'pan';
       else if (app.rungTool.active && flow) mode = app.rungTool.down(wx, wy, app.vp.scale, e.shiftKey);
-      else if (app.shapeTool.active && flow) mode = app.shapeTool.down(wx, wy, app.vp.scale);
+      // Level Form: nodes, handles and curves first, the frame around them takes the rest.
+      else if (app.shapeTool.active && flow && app.shapeTool.pickAt(wx, wy, app.vp.scale)) mode = app.shapeTool.down(wx, wy, app.vp.scale);
       else if (app.frameTool.active && flow && app.frameTool.down(wx, wy, app.vp.scale) !== null) mode = 'frame';
+      else if (app.shapeTool.active && flow) mode = 'pan';
       else mode = app.editor.down(wx, wy, pos[0], pos[1], e.shiftKey, app.vp.scale);
       // Shift+drag where it would pan: a rubber band adds the objects inside it to the selection.
       if (mode === 'pan' && e.shiftKey && bandAllowed()) {
@@ -229,7 +236,7 @@ export function bindPointer(app: PointerApp) {
         ui.objectBand.x1 = wx;
         ui.objectBand.y1 = wy;
       } else if (pointers.size === 1) {
-        if (!app.drawTool.dragTo(wx, wy, e.shiftKey, e.altKey) && !app.letterDragTo(wx, wy) && !app.rungTool.dragTo(wx, wy) && !app.shapeTool.dragTo(wx, wy) && !app.frameTool.dragTo(wx, wy, e.shiftKey, app.vp.scale) && !app.editor.dragTo(wx, wy, pos[0], pos[1])) app.vp.pan(pos[0] - prev[0], pos[1] - prev[1]);
+        if (!app.drawTool.dragTo(wx, wy, e.shiftKey, e.altKey) && !app.letterDragTo(wx, wy) && !app.rungTool.dragTo(wx, wy) && !app.shapeTool.dragTo(wx, wy) && !app.frameTool.dragTo(wx, wy, e.shiftKey, app.vp.scale, e.altKey) && !app.editor.dragTo(wx, wy, pos[0], pos[1])) app.vp.pan(pos[0] - prev[0], pos[1] - prev[1]);
       } else if (pointers.size === 2) {
         pointers.set(e.pointerId, pos);
         const [a, b] = [...pointers.values()];
@@ -245,11 +252,11 @@ export function bindPointer(app: PointerApp) {
         : app.rungTool.active
         ? app.rungTool.hoverAt(wx, wy, app.vp.scale)
         : app.shapeTool.active
-          ? app.shapeTool.hoverAt(wx, wy, app.vp.scale)
+          ? [app.shapeTool.hoverAt(wx, wy, app.vp.scale), app.frameTool.active && app.frameTool.hoverAt(wx, wy, app.vp.scale)].some(Boolean)
           : (app.frameTool.active && app.frameTool.hoverAt(wx, wy, app.vp.scale)) || app.editor.hoverAt(wx, wy, app.vp.scale)
     )
       app.redraw();
-    if (!prev) app.canvas.classList.toggle('on-frame', app.frameTool.active && app.frameTool.hover !== null);
+    if (!prev) app.canvas.classList.toggle('on-frame', app.frameTool.active && app.frameTool.hover !== null && !(app.shapeTool.active && app.shapeTool.hover));
     if (e.pointerType === 'mouse' || pointers.size <= 1) showTooltip(pos[0], pos[1]);
   });
 
@@ -290,13 +297,16 @@ export function bindPointer(app: PointerApp) {
           app.redraw();
         }
       } else if (p && app.shapeTool.active) {
-        // Editing an outline: a click on another object goes on with its outline, a click beside it back to the objects.
+        // Editing an outline: a click on another object goes on with its outline (Shift or Ctrl adds
+        // it), a click beside it lets go of the object; the level stays Form.
         const st = app.styleFor(p);
         const [x, y] = app.vp.toWorld(pos[0], pos[1]);
         const i = stitchAt(p, x * 10, y * 10, Math.max(3, 60 / app.vp.scale), st.limit, st.alpha);
         const o = i >= 0 ? app.seq(p).objectAt[i] : -1;
-        if (o >= 0 && o !== ui.shapeObject && !app.shapeTool.near(x, y, app.vp.scale)) app.enterShape(o, false);
-        else if (o < 0 && !app.shapeTool.selected && !app.shapeTool.near(x, y, app.vp.scale)) app.closeShape();
+        const add = e.shiftKey || e.ctrlKey || e.metaKey;
+        if (o >= 0 && o !== ui.shapeObject && add) app.selectObjects([o], true);
+        else if (o >= 0 && o !== ui.shapeObject && !app.shapeTool.near(x, y, app.vp.scale)) app.enterShape(o, false);
+        else if (o < 0 && !app.shapeTool.selected && !app.shapeTool.near(x, y, app.vp.scale) && !add) app.selectObjects([], false);
         else if (app.shapeTool.selected) {
           app.shapeTool.selected = null;
           app.redraw();

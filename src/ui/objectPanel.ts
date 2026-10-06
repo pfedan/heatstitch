@@ -7,6 +7,12 @@ import { cssColor, ThreadPicker } from './threadPicker';
 import { sameColor } from '../model/recolor';
 import type { ThreadColor } from '../model/pattern';
 
+
+/** A chain link: the typed sizes keep their proportions. */
+const SIZE_LOCK = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8.5 11.5 L11.5 8.5" /><path d="M9 6.5 L11 4.5 A2.5 2.5 0 0 1 15.5 9 L13.5 11" /><path d="M11 13.5 L9 15.5 A2.5 2.5 0 0 1 4.5 11 L6.5 9" /></svg>';
+
+/** Nodes from which an outline offers to be simplified. */
+const SIMPLIFY_FROM = 12;
 export interface ObjectInfo {
   objects: SewObject[];
   selected: number[];
@@ -21,7 +27,7 @@ export interface ObjectInfo {
   /** The one selected object has a fill whose outline can be edited. */
   shapeable: boolean;
   /** Its outline is being edited: nodes, and whether the selected one is round (null: none selected). */
-  shaping: { nodes: number; smooth: boolean | null; line?: { closed: boolean } } | null;
+  shaping: { nodes: number; smooth: boolean | null; line?: { closed: boolean }; kind?: 'band' | 'rails' } | null;
   /** The frame is on the one selected object; whether it can be scaled. */
   frame: { canScale: boolean } | null;
   /** Why the selected objects cannot be sewn as one (several selected), or null. */
@@ -51,6 +57,8 @@ export interface ObjectHooks {
   deleteNode: () => void;
   /** The selected node round or a corner. */
   toggleNode: () => void;
+  /** The outline with fewer nodes. */
+  simplify: () => void;
   /** A line on the level Shape: closed, or opened again. */
   closeLine: () => void;
   deleteSelection: () => void;
@@ -62,6 +70,8 @@ export interface ObjectHooks {
   mirror: (axis: 'x' | 'y') => void;
   /** The top one of the selected fills cut out of the others. */
   subtract: () => void;
+  /** The selected objects scaled by sx, sy about their middle. */
+  resize: (sx: number, sy: number) => void;
   /** The selected objects deleted. */
   remove: () => void;
   /** The selected objects sewn in another thread. */
@@ -112,6 +122,8 @@ export class ObjectPanel {
   private body = $<HTMLElement>('object-body');
   private msg = $<HTMLElement>('object-msg');
   private key: unknown[] = [];
+  /** Typed sizes keep the proportions. */
+  private keepRatio = true;
   private picker = new ThreadPicker('.thread-sw');
 
   constructor(private hooks: ObjectHooks) {
@@ -119,7 +131,7 @@ export class ObjectPanel {
   }
 
   update(info: ObjectInfo | null, lang: string): void {
-    const key = [info?.objects, info?.selected.join(), info?.hand.join(), info?.editing?.selection ?? -1, info?.shapeable, info?.shaping?.nodes ?? -1, info?.shaping?.smooth, info?.shaping?.line?.closed, info?.frame?.canScale, lang];
+    const key = [info?.objects, info?.selected.join(), info?.hand.join(), info?.editing?.selection ?? -1, info?.shapeable, info?.shaping?.nodes ?? -1, info?.shaping?.smooth, info?.shaping?.line?.closed, info?.shaping?.kind, info?.frame?.canScale, lang];
     if (key.every((k, i) => k === this.key[i])) return;
     this.key = key;
     this.msg.hidden = true;
@@ -164,7 +176,8 @@ export class ObjectPanel {
       const [w, h] = sizeOf(o);
       row(t('object.stitches'), formatNumber(o.stitches));
       row(t('object.thread'), `${formatNumber(o.threadMm / 1000, 2)} m`);
-      row(t('object.size'), `${formatNumber(w, 1)} × ${formatNumber(h, 1)} mm`);
+      if (!info.frame?.canScale) row(t('object.size'), `${formatNumber(w, 1)} × ${formatNumber(h, 1)} mm`);
+      else this.sizeRow(dl, w, h);
       if (o.sections > 1) row(t('object.sections'), t('object.sectionsValue', { n: o.sections }));
       if (info.hand[0]) row(t('object.hand'), t(info.hand[0] === 1 ? 'object.handValue.one' : 'object.handValue', { n: formatNumber(info.hand[0]) }));
       row(t('object.position'), t('object.positionOf', { k: o.index + 1, n: info.objects.length }));
@@ -174,6 +187,10 @@ export class ObjectPanel {
       head.append(Object.assign(document.createElement('strong'), { textContent: t('object.many', { n: sel.length }) }));
       row(t('object.stitches'), formatNumber(stitches));
       row(t('object.thread'), `${formatNumber(thread / 1000, 2)} m`);
+      const w = (Math.max(...sel.map((o) => o.maxX)) - Math.min(...sel.map((o) => o.minX))) / 10;
+      const h = (Math.max(...sel.map((o) => o.maxY)) - Math.min(...sel.map((o) => o.minY))) / 10;
+      if (!info.frame?.canScale) row(t('object.size'), `${formatNumber(w, 1)} × ${formatNumber(h, 1)} mm`);
+      else this.sizeRow(dl, w, h);
     }
     const actions = document.createElement('div');
     actions.className = 'row-buttons';
@@ -225,7 +242,7 @@ export class ObjectPanel {
         : [];
     const hint = Object.assign(document.createElement('p'), {
       className: 'muted small',
-      textContent: t(info.editing ? 'object.editHint' : info.shaping ? 'shape.hint' : sel.length === 1 ? 'object.hint' : 'object.hintMany'),
+      textContent: [t(info.editing ? 'object.editHint' : info.shaping ? 'shape.hint' : sel.length === 1 ? 'object.hint' : 'object.hintMany'), info.shaping?.kind ? t(`shape.hint.${info.shaping.kind}`) : ''].filter(Boolean).join(' '),
     });
     const frameHint = info.frame
       ? [Object.assign(document.createElement('p'), { className: 'muted small', textContent: info.frame.canScale ? t('object.frameHint') : `${t('object.frameHint')} ${t('object.frameMixed')}` })]
@@ -268,7 +285,45 @@ export class ObjectPanel {
     return out;
   }
 
-  /** Editing the outline of the one selected object: nodes, delete, corner or round, done. */
+  /**
+   * The size of the selection as two fields (mm) to type in, with a lock that keeps the proportions.
+   * A typed size scales the selection about its middle, as the frame does.
+   */
+  private sizeRow(dl: HTMLElement, w: number, h: number): void {
+    const dd = Object.assign(document.createElement('dd'), { className: 'size-edit' });
+    const field = (v: number, label: string) => {
+      const i = Object.assign(document.createElement('input'), { type: 'number', min: '1', max: '1000', step: '0.1', value: v.toFixed(1), title: label });
+      i.setAttribute('aria-label', label);
+      return i;
+    };
+    const iw = field(w, t('object.size.w'));
+    const ih = field(h, t('object.size.h'));
+    const lock = Object.assign(document.createElement('button'), { type: 'button', className: 'size-lock', title: t('object.size.lock') });
+    lock.setAttribute('aria-label', t('object.size.lock'));
+    lock.innerHTML = SIZE_LOCK;
+    const showLock = () => lock.setAttribute('aria-pressed', String(this.keepRatio));
+    showLock();
+    lock.addEventListener('click', () => {
+      this.keepRatio = !this.keepRatio;
+      showLock();
+    });
+    const typed = (which: 'w' | 'h') => {
+      const v = Number((which === 'w' ? iw : ih).value);
+      const old = which === 'w' ? w : h;
+      if (!(v >= 1 && v <= 1000) || old <= 0.05 || Math.abs(v - old) < 0.05) return;
+      const s = v / old;
+      // The other side follows when the lock is on; a side that has no extent (a straight line) stays.
+      const sx = which === 'w' ? s : this.keepRatio && w > 0.05 ? s : 1;
+      const sy = which === 'h' ? s : this.keepRatio && h > 0.05 ? s : 1;
+      this.hooks.resize(sx, sy);
+    };
+    iw.addEventListener('change', () => typed('w'));
+    ih.addEventListener('change', () => typed('h'));
+    dd.append(iw, document.createTextNode('×'), ih, document.createTextNode('mm'), lock);
+    dl.append(Object.assign(document.createElement('dt'), { textContent: t('object.size') }), dd);
+  }
+
+  /** Editing the outline of the one selected object: nodes, delete, corner or round, simplify. */
   private shapeTools(sh: { nodes: number; smooth: boolean | null; line?: { closed: boolean } }): HTMLElement {
     const box = document.createElement('div');
     box.className = 'object-edit';
@@ -284,8 +339,9 @@ export class ObjectPanel {
     row.append(
       button(t('shape.node.delete'), () => this.hooks.deleteNode(), { disabled: sh.smooth === null }),
       button(sh.smooth ? t('shape.node.corner') : t('shape.node.smooth'), () => this.hooks.toggleNode(), { disabled: sh.smooth === null, title: t('shape.node.kind') }),
-      button(t('object.editDone'), () => this.hooks.editShape(false), { primary: true }),
     );
+    // Traced outlines come with many nodes; fewer are easier to grab.
+    if (sh.nodes >= SIMPLIFY_FROM) row.append(button(t('shape.simplify'), () => this.hooks.simplify(), { title: t('shape.simplify.hint') }));
     box.append(row);
     if (sh.line) {
       const close = button(t(sh.line.closed ? 'shape.line.open' : 'shape.line.close'), () => this.hooks.closeLine(), { title: t(sh.line.closed ? 'shape.line.open.hint' : 'shape.line.close.hint') });

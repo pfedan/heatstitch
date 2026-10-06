@@ -34,10 +34,12 @@ export interface KeysApp {
   readonly player: Player;
   readonly redraw: () => void;
   readonly revealRecord: (i: number) => void;
+  readonly selectObjects: (objs: number[], toggle: boolean) => void;
   readonly rungTool: RungTool;
   readonly setComparing: (on: boolean) => void;
   readonly setDrawing: (kind: DrawKind | null) => void;
   readonly setEditing: (on: boolean) => void;
+  readonly setFormLevel: (on: boolean) => void;
   readonly setLetterMode: (on: boolean) => void;
   readonly setMode: (mode: Mode) => void;
   readonly settings: Settings;
@@ -90,6 +92,12 @@ export function bindKeys(app: KeysApp) {
         return;
       }
     }
+    // v: the pointer of the level Form (going there from another level).
+    if (app.settings.mode === 'flow' && e.key === 'v' && !ui.letterMode) {
+      if (app.drawTool.active) return app.setDrawing(null);
+      if (!ui.formLevel) return app.setFormLevel(true);
+      return;
+    }
     if (app.settings.mode === 'flow' && !e.shiftKey && e.key in DRAW_KEYS) {
       const kind = DRAW_KEYS[e.key];
       return app.setDrawing(app.drawTool.kind === kind ? null : kind);
@@ -111,7 +119,7 @@ export function bindKeys(app: KeysApp) {
         if (app.shapeTool.selected) {
           app.shapeTool.selected = null;
           app.redraw();
-        } else app.closeShape();
+        } else app.selectObjects([], false);
         return;
       }
       if (e.key === 'Enter' && ui.shapeObject !== null) return app.enterObject(ui.shapeObject, false);
