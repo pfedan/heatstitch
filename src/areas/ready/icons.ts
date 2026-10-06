@@ -20,6 +20,9 @@ export const SYMBOLS: Record<string, string> = {
   // A tip.
   'ready-tip': '<path d="M7.3 13.2a4.6 4.6 0 1 1 5.4 0V15H7.3z"/><path d="M8 17.5h4"/>',
   'ready-alert': '<path d="M10 3.5 17.5 16h-15z"/><path d="M10 8.5v3.5"/><circle cx="10" cy="14.2" r=".5" class="fill"/>',
+  // Marks: a rule of thumb (approximately), sources that disagree (a fork).
+  'ready-rule': '<path d="M4 8.3c2-1.9 4 1.9 6 0s4-1.9 6 0"/><path d="M4 12.8c2-1.9 4 1.9 6 0s4-1.9 6 0"/>',
+  'ready-disputed': '<path d="M10 17.5v-6.3"/><path d="M10 11.2 5 5"/><path d="m10 11.2 5-6.2"/><circle cx="5" cy="4.6" r="1.4"/><circle cx="15" cy="4.6" r="1.4"/>',
   'ready-sheet': '<path d="M5 2.5h7l3.5 3.5v11.5H5z"/><path d="M12 2.5V6h3.5"/><path d="M10.2 9v6M7.2 12h6"/>',
 };
 

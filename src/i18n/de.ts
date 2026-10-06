@@ -9,6 +9,7 @@ import { de as design } from './areas/design';
 import { de as ready } from './areas/ready';
 import { de as ampel } from './areas/ampel';
 import { de as responsive } from './areas/responsive';
+import { de as fabrics } from './areas/fabrics';
 
 export const deBase = {
   'app.tagline': 'Stickdateien ansehen, bearbeiten und prüfen',
@@ -86,18 +87,6 @@ export const deBase = {
   'profile.title': 'Material',
   'profile.fabric': 'Stoff',
   'profile.thread': 'Garn',
-  'fabric.woven': 'Webware, stabil',
-  'fabric.woven.ex': 'z. B. Twill, Canvas, Denim, Arbeitskleidung',
-  'fabric.cap': 'Kappe, strukturiert',
-  'fabric.cap.ex': 'z. B. Baseballkappen mit Versteifung',
-  'fabric.knit': 'Strick, Fleece',
-  'fabric.knit.ex': 'z. B. Polo-Piqué, Jersey, Sweatshirt, Fleece',
-  'fabric.terry': 'Frottee, Flor',
-  'fabric.terry.ex': 'z. B. Handtuch, Bademantel, Samt, Cord',
-  'fabric.light': 'Leicht, empfindlich',
-  'fabric.light.ex': 'z. B. Seide, Satin, Batist, leichte Baumwolle',
-  'fabric.leather': 'Leder, Kunstleder',
-  'fabric.leather.ex': 'z. B. Glattleder, Kunstleder, Vinyl',
   'thread.60': '60 wt (fein)',
   'thread.40': '40 wt (Standard)',
   'thread.30': '30 wt (kräftig)',
@@ -1331,4 +1320,4 @@ export const deBase = {
 } as const;
 
 /** All German texts: the base plus one block per area of the new interface (src/i18n/areas). */
-export const de = { ...deBase, ...shell, ...files, ...objects, ...shapes, ...stitches, ...check, ...image, ...design, ...ready, ...ampel, ...responsive } as const;
+export const de = { ...deBase, ...shell, ...files, ...objects, ...shapes, ...stitches, ...check, ...image, ...design, ...ready, ...ampel, ...responsive, ...fabrics } as const;

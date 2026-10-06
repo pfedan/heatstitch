@@ -4,6 +4,9 @@ import { designFigures } from '../src/areas/ready/figures';
 import { extraLayers, recipeCard, RECIPES, type DesignFigures } from '../src/areas/ready/recipes';
 import { BOX, layout, sheetHtml } from '../src/areas/ready/sheet';
 import { de, en } from '../src/i18n/areas/ready';
+import { de as fabricDe, en as fabricEn } from '../src/i18n/areas/fabrics';
+import { de as ampelDe, en as ampelEn } from '../src/i18n/areas/ampel';
+import { RED_MIN_MM2 } from '../src/areas/ampel/standin';
 import { PatternBuilder, STITCH } from '../src/model/pattern';
 import { FABRICS } from '../src/validation/profiles';
 
@@ -34,8 +37,15 @@ describe('ready: recipes', () => {
     expect(c.hints.some((h) => h.text === 'ready.hint.layers' && h.basis === 'rule')).toBe(true);
   });
 
+  it('does not call an ordinary small design dense (the demo flower: about 2,800 stitches, 129 per cm²)', () => {
+    const flower: DesignFigures = { stitches: 2809, perCm2: 129, largestFillCm2: 8.8, widthMm: 54, heightMm: 87, minLetterMm: null };
+    for (const f of FABRICS) expect(recipeCard(f.id, '40', flower).stronger, f.id).toBeNull();
+    // Narrow satin lettering measures about 200 per cm² and is not dense either.
+    expect(recipeCard('woven', '40', { ...plain, perCm2: 207 }).stronger).toBeNull();
+  });
+
   it('takes the stronger stabilizer for dense designs, and warns on delicate fabric', () => {
-    const woven = recipeCard('woven', '40', { ...plain, perCm2: 140 });
+    const woven = recipeCard('woven', '40', { ...plain, perCm2: 270 });
     expect(woven.stabilizer).toBe(RECIPES.woven.stabilizerDense);
     expect(woven.stronger?.text).toBe('ready.reason.dense');
     expect(recipeCard('woven', '40', plain).stabilizer).toBe(RECIPES.woven.stabilizer);
@@ -62,7 +72,109 @@ describe('ready: recipes', () => {
   it('leather floats and goes slow', () => {
     const c = recipeCard('leather', '40', plain);
     expect(c.hooping.method).toBe('float');
-    expect(c.speed.step).toBe('slow');
+    expect(c.speed.maxSpm).toBeLessThanOrEqual(500);
+  });
+
+  it('recommends a maximum speed: none on woven, lower on caps and delicate fabric, lower again for the design', () => {
+    expect(recipeCard('woven', '40', plain).speed.maxSpm).toBeNull();
+    expect(recipeCard('cap', '40', plain).speed.maxSpm).toBe(400);
+    expect(recipeCard('knit', '40', plain).speed.maxSpm).toBe(600);
+    const dense = recipeCard('woven', '40', { ...plain, perCm2: 270 });
+    expect(dense.speed).toMatchObject({ maxSpm: 600, basis: 'rule', why: 'ready.speed.why.dense' });
+    expect(recipeCard('woven', '12', plain).speed).toMatchObject({ maxSpm: 500, why: 'ready.speed.why.thick' });
+    expect(recipeCard('woven', '40', { ...plain, minLetterMm: 5 }).speed.why).toBe('ready.speed.why.text');
+    // Never raised: a cap stays at 400 for a dense design.
+    expect(recipeCard('cap', '40', { ...plain, perCm2: 270 }).speed.maxSpm).toBe(400);
+  });
+
+  it('says when the machine is set faster than recommended', () => {
+    const notes = (spm: number) => cardView(recipeCard('knit', '40', plain), spm).rows.find((r) => r.id === 'speed')!.notes.map((n) => n.text);
+    expect(notes(800).some((n) => n.includes('800'))).toBe(true);
+    expect(notes(500).some((n) => n.includes('500'))).toBe(false);
+  });
+
+  it('heavy woven: like woven, but a 90/14 needle', () => {
+    const c = recipeCard('woven_heavy', '40', plain);
+    expect(c.needle.size).toBe('90/14');
+    expect(c.stabilizer.kind).toBe('tear');
+    expect(recipeCard('woven_heavy', '40', { ...plain, stitches: 23_000 }).extraLayers).toBe(2);
+    expect(cardView(c).summary).toContain('90/14');
+  });
+
+  it('fleece: cut-away, always topping, heavy cut-away only for many stitches', () => {
+    const c = recipeCard('fleece', '40', plain);
+    expect(c.stabilizer.kind).toBe('cut');
+    expect(c.topping.need).toBe('always');
+    expect(c.needle.text).toBe('ready.needle.ballpoint');
+    expect(recipeCard('fleece', '40', { ...plain, stitches: 15_000 }).stronger).toBeNull();
+    const many = recipeCard('fleece', '40', { ...plain, stitches: 25_000 });
+    expect(many.stabilizer).toBe(RECIPES.fleece.stabilizerDense);
+    expect(many.stabilizer.weight).toBe('heavy');
+    expect(recipeCard('fleece', '40', { ...plain, minLetterMm: 5 }).topping.text).toBe('ready.topping.forText');
+  });
+
+  it('sheer: wash-away, slower, and a warning for dense designs', () => {
+    const c = recipeCard('sheer', '40', plain);
+    expect(c.stabilizer.kind).toBe('wash');
+    expect(c.speed.maxSpm).toBe(500);
+    expect(c.hints).toEqual([]);
+    const dense = recipeCard('sheer', '40', { ...plain, largestFillCm2: 30 });
+    expect(dense.stabilizer).toBe(RECIPES.sheer.stabilizerDense);
+    expect(dense.hints[0]).toMatchObject({ level: 'warn', text: 'ready.hint.denseDelicate' });
+  });
+});
+
+describe('ready: rules of thumb read as such', () => {
+  it('marks every rule of thumb and disputed value, and lists the marks in the legend', () => {
+    for (const f of FABRICS) {
+      const v = cardView(recipeCard(f.id, '40', { ...plain, perCm2: 270, stitches: 23_000, minLetterMm: 5 }));
+      const shown = [
+        ...v.rows.flatMap((r) => [r.basis, ...r.notes.map((n) => n.basis)]),
+        ...v.hints.map((x) => x.basis),
+        v.hooping.basis,
+        ...v.tips.map((x) => x.basis),
+      ];
+      for (const b of ['rule', 'disputed'] as const) expect(v.marks.includes(b), `${f.id} ${b}`).toBe(shown.includes(b));
+    }
+  });
+
+  it('marks why the stabilizer is stronger as a rule of thumb', () => {
+    const v = cardView(recipeCard('woven', '40', { ...plain, perCm2: 270 }));
+    const stab = v.rows.find((r) => r.id === 'stab')!;
+    expect(stab.notes[0].basis).toBe('rule');
+  });
+
+  it('marks every speed that is not from a source', () => {
+    for (const f of FABRICS) {
+      const v = cardView(recipeCard(f.id, '40', plain));
+      const speed = v.rows.find((r) => r.id === 'speed')!;
+      expect(speed.basis === undefined || ['source', 'rule', 'disputed'].includes(speed.basis), f.id).toBe(true);
+      if (RECIPES[f.id].speed.basis === 'rule') expect(v.marks, f.id).toContain('rule');
+    }
+  });
+});
+
+describe('fabric profiles', () => {
+  it('every fabric has a name and examples in German and English, a light name and a red threshold', () => {
+    expect(Object.keys(fabricEn).sort()).toEqual(Object.keys(fabricDe).sort());
+    for (const f of FABRICS) {
+      for (const k of [`fabric.${f.id}`, `fabric.${f.id}.ex`]) {
+        expect(fabricDe, k).toHaveProperty([k]);
+        expect(fabricEn, k).toHaveProperty([k]);
+      }
+      for (const k of [`ampel.fabric.${f.id}`, `ampel.cmd.fabric.${f.id}`]) {
+        expect(ampelDe, k).toHaveProperty([k]);
+        expect(ampelEn, k).toHaveProperty([k]);
+      }
+      expect(RED_MIN_MM2[f.id], f.id).toBeGreaterThan(0);
+    }
+    for (const s of [...Object.values(fabricDe), ...Object.values(fabricEn)]) expect(s).not.toMatch(/[–—]/);
+  });
+
+  it('woven-like fabrics turn red from 5 mm², knit-like and delicate ones from 3 mm²', () => {
+    expect(RED_MIN_MM2.woven_heavy).toBe(RED_MIN_MM2.woven);
+    expect(RED_MIN_MM2.fleece).toBe(RED_MIN_MM2.knit);
+    expect(RED_MIN_MM2.sheer).toBe(3);
   });
 });
 
@@ -72,19 +184,22 @@ describe('ready: texts', () => {
     for (const s of [...Object.values(de), ...Object.values(en)]) expect(s).not.toMatch(/[–—]/);
   });
 
-  it('names no brand and no fixed stitches per minute in its advice', () => {
+  it('names no brand in its advice and does not address the reader', () => {
     const advice = ([...Object.entries(de), ...Object.entries(en)] as [string, string][])
       .filter(([k]) => !k.startsWith('ready.sheet.'))
       .map(([, v]) => v)
       .join('\n');
     for (const brand of ['Madeira', 'Gunold', 'Sulky', 'Floriani', 'Schmetz', 'Isacord', 'Vlieseline', 'Brother', 'Janome', 'Microtex', 'Polymesh'])
       expect(advice).not.toContain(brand);
-    expect(advice).not.toMatch(/\d+\s*(Stiche|stitches)\s*(pro Minute|per minute|\/\s*min)/);
+    // A calm, factual tone: no "du" sentences, no exclamations (the time note of the sheet aside).
+    const card = ([...Object.entries(de)] as [string, string][]).filter(([k]) => k !== 'ready.sheet.timeNote').map(([, v]) => v).join('\n');
+    expect(card).not.toMatch(/\b(du|dein|deine|dir|dich)\b/i);
+    expect(advice).not.toContain('!');
   });
 
   it('every key a recipe names exists', () => {
     for (const r of Object.values(RECIPES)) {
-      const keys = [r.stabilizer, r.stabilizerDense, r.topping, r.needle, r.thread, r.speed, r.hooping, ...r.tips].map((v) => v.text);
+      const keys = [r.stabilizer, r.stabilizerDense, r.topping, r.needle, r.thread, r.hooping, ...r.tips].map((v) => v.text);
       if (r.needle.alt) keys.push(r.needle.alt);
       for (const k of keys) expect(de, k).toHaveProperty([k]);
     }

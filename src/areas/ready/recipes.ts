@@ -12,14 +12,18 @@ import type { FabricId, ThreadId } from '../../validation/profiles';
  *   'source'   backed by at least one maker's or specialist source (URL in the comment)
  *   'disputed' the sources disagree; the more common advice is taken (reason in the comment)
  *   'rule'     rule of thumb without a firm source
- * The interface shows 'rule' and 'disputed' next to the value and words all advice carefully.
- * No brand names in the texts, no fixed stitches per minute (home machines run about 400 to 1000).
+ * The interface marks 'rule' and 'disputed' next to the value and explains the marks in a legend.
+ * No brand names in the texts. Speed is a recommended maximum in stitches per minute, shown as
+ * "max. etwa N": home machines run about 400 to 1000, so it is a guide, not a setting.
  * Texts are i18n keys in src/i18n/areas/ready.ts.
  */
 
 export type Basis = 'source' | 'disputed' | 'rule';
-/** Relative speed: normal, about 2/3 to 3/4 of the maximum, about half or less. */
-export type Speed = 'normal' | 'reduced' | 'slow';
+/** Recommended maximum speed in stitches per minute; null: the machine's own maximum. */
+export interface Speed {
+  maxSpm: number | null;
+  basis: Basis;
+}
 export type Hooping = 'hoop' | 'float' | 'hoopOrFloat' | 'capFrameOrFloat';
 export type StabKind = 'tear' | 'cut' | 'mesh' | 'wash' | 'sticky';
 export type Weight = 'light' | 'medium' | 'heavy';
@@ -44,7 +48,7 @@ export interface Recipe {
   needle: Value & { size?: string; alt?: Key };
   /** What matters about the thread on this fabric, after its weight. */
   thread: Value;
-  speed: Value & { step: Speed };
+  speed: Speed;
   hooping: Value & { method: Hooping };
   /** At most 3. */
   tips: Value[];
@@ -66,7 +70,8 @@ export const RECIPES: Record<FabricId, Recipe> = {
     needle: { size: '75/11', alt: 'ready.woven.needleAlt', text: 'ready.needle.embroidery', basis: 'source' },
     // https://lindas.com/blogs/product-guides/isacord-40wt-embroidery-thread-guide
     thread: { text: 'ready.woven.thread', basis: 'source' },
-    speed: { step: 'normal', text: 'ready.speed.normal', basis: 'rule' },
+    // Rule of thumb: stable woven runs at the machine's own maximum.
+    speed: { maxSpm: null, basis: 'rule' },
     // https://janome.com/learn/software-lessons/embroidery-tips/proper-hooping
     // https://www.sewingpartsonline.com/blogs/education/beginners-guide-to-embroidery-episode-5-hooping
     hooping: { method: 'hoop', text: 'ready.woven.hoop', basis: 'source' },
@@ -77,6 +82,31 @@ export const RECIPES: Record<FabricId, Recipe> = {
       // Disputed: one source takes cut-away for all denim, others tear-away for firm denim; cut-away once
       // it stretches. https://emblibrary.com/learn/how-to/fabrics-101-embroidering-on-denim-machine-embroidery
       { text: 'ready.woven.tip.stretch', basis: 'disputed' },
+    ],
+  },
+
+  // Jeans, schwere Webware (denim, canvas, bags, heavy twill) ----------------------------------------
+  // Split off woven (research section 3): another needle (90/14), totes and denim jackets are common.
+  woven_heavy: {
+    // Disputed: one source takes cut-away for all denim, others tear-away for firm denim and canvas.
+    // Taken: tear-away, cut-away once it stretches or the design is dense.
+    // https://oesd.com/content/PDF/OESD_Stabilizers.pdf (tear-away for canvas)
+    // https://emblibrary.com/learn/how-to/fabrics-101-embroidering-on-denim-machine-embroidery (cut-away)
+    stabilizer: { kind: 'tear', weight: 'medium', gsm: [50, 60], text: 'ready.wovenHeavy.stab', basis: 'disputed' },
+    // https://emblibrary.com/learn/how-to/fabrics-101-embroidering-on-denim-machine-embroidery
+    stabilizerDense: { kind: 'cut', weight: 'medium', gsm: [60, 85], text: 'ready.wovenHeavy.stabDense', basis: 'source' },
+    // https://library.loudoun.gov/Portals/0/Pdf/Makerspace/Makerspace%20-%20Embroidery%20Machine%20Trifold%20May%202025%20Update.pdf (denim: no topping)
+    topping: { need: 'no', text: 'ready.topping.no', basis: 'source' },
+    // https://lindas.com/blogs/product-guides/isacord-40wt-embroidery-thread-guide (90/14 on denim and canvas)
+    needle: { size: '90/14', alt: 'ready.wovenHeavy.needleAlt', text: 'ready.needle.embroidery', basis: 'source' },
+    thread: { text: 'ready.woven.thread', basis: 'source' },
+    speed: { maxSpm: null, basis: 'rule' },
+    // https://janome.com/learn/software-lessons/embroidery-tips/proper-hooping
+    hooping: { method: 'hoop', text: 'ready.woven.hoop', basis: 'source' },
+    tips: [
+      { text: 'ready.woven.tip.stretch', basis: 'disputed' },
+      { text: 'ready.wovenHeavy.tip.seams', basis: 'rule' },
+      { text: 'ready.wovenHeavy.tip.bags', basis: 'rule' },
     ],
   },
 
@@ -92,8 +122,8 @@ export const RECIPES: Record<FabricId, Recipe> = {
     // https://coldesi.com/?p=270768 (caps work best with a sharp needle, 70/10 or 75/11)
     needle: { size: '75/11', text: 'ready.needle.sharp', basis: 'source' },
     thread: { text: 'ready.cap.thread', basis: 'rule' },
-    // https://static.naehpark.com//out/pictures/media/brother-pr-680w-herstellerprospekt.pdf (speed limited for caps)
-    speed: { step: 'reduced', text: 'ready.speed.reduced', basis: 'source' },
+    // https://static.naehpark.com//out/pictures/media/brother-pr-680w-herstellerprospekt.pdf (cap frames limited to 400 per minute)
+    speed: { maxSpm: 400, basis: 'source' },
     // https://www.sewingmachinefun.com/machine-embroider-hat/ (flat hoop, sticky stabilizer)
     // https://machineembroiderygeek.com/durkee-cap-frames-for-easy-embroidery-on-baseball-caps/
     hooping: { method: 'capFrameOrFloat', text: 'ready.cap.hoop', basis: 'source' },
@@ -104,7 +134,7 @@ export const RECIPES: Record<FabricId, Recipe> = {
     ],
   },
 
-  // Strick, Fleece (jersey, T-shirt, polo, sweat) ----------------------------------------------------
+  // Strick, Jersey (T-shirt, polo, jersey) -----------------------------------------------------------
   knit: {
     // Disputed: one guide names sticky tear-away for T-shirts, nearly all makers say cut-away, since knits
     // need lasting support. https://emblibrary.com/blogs/projects/fabrics-101-embroidering-on-t-shirts
@@ -121,7 +151,8 @@ export const RECIPES: Record<FabricId, Recipe> = {
     needle: { size: '75/11', alt: 'ready.knit.needleAlt', text: 'ready.needle.ballpoint', basis: 'source' },
     // https://www.madeira.co.uk/embroidery-threads/polyneon (polyester for textiles washed often)
     thread: { text: 'ready.knit.thread', basis: 'source' },
-    speed: { step: 'normal', text: 'ready.speed.normalOrLess', basis: 'rule' },
+    // Rule of thumb: knits shift and pucker less a little slower.
+    speed: { maxSpm: 600, basis: 'rule' },
     // https://emblibrary.com/blogs/projects/fabrics-101-embroidering-on-t-shirts (spray on cut-away)
     // https://www.magnetichoop.com/blogs/news/mastering-embroidery-on-t-shirts-techniques-for-professional-results (fusible mesh)
     hooping: { method: 'hoop', text: 'ready.knit.hoop', basis: 'source' },
@@ -132,6 +163,34 @@ export const RECIPES: Record<FabricId, Recipe> = {
       { text: 'ready.knit.tip.light', basis: 'source' },
       // https://emblibrary.com/learn/how-to/fabrics-101-embroidering-on-denim-machine-embroidery (trim with a margin)
       { text: 'ready.knit.tip.trim', basis: 'source' },
+    ],
+  },
+
+  // Fleece, Sweat (fleece, sweatshirt, hoodie) --------------------------------------------------------
+  // Split off knit (research section 3): cut-away like knit, but medium to heavy, and topping. Not
+  // with terry: fleece stretches and needs cut-away, terry does not.
+  fleece: {
+    // https://emblibrary.com/blogs/projects/fabrics-101-embroidering-on-fleece (cut-away 2.5 to 3 oz)
+    // https://quiltsocial.com/a-comprehensive-look-at-the-wide-and-varied-world-of-sulky-stabilizers/ (cut-away for sweatshirts)
+    stabilizer: { kind: 'cut', weight: 'medium', gsm: [60, 85], text: 'ready.fleece.stab', basis: 'source' },
+    // https://emblibrary.com/blogs/projects/fabrics-101-embroidering-on-fleece (3 oz is about 100 g/m²)
+    stabilizerDense: { kind: 'cut', weight: 'heavy', gsm: [85, 100], text: 'ready.fleece.stabDense', basis: 'source' },
+    // https://emblibrary.com/blogs/projects/fabrics-101-embroidering-on-fleece (topping on the nap)
+    // https://www.urbanthreads.com/blogs/projects/embroidery-on-sweatshirts (smooth outside: optional)
+    topping: { need: 'always', text: 'ready.fleece.topping', basis: 'source' },
+    // https://oesd.com/embroidery-needles-ballpoint-7511-10pk (ballpoint for knits)
+    needle: { size: '75/11', text: 'ready.needle.ballpoint', basis: 'source' },
+    // https://www.madeira.co.uk/embroidery-threads/polyneon
+    thread: { text: 'ready.knit.thread', basis: 'source' },
+    speed: { maxSpm: 600, basis: 'rule' },
+    // Spray on cut-away as on knit (source); floating against hoop marks is a rule of thumb.
+    hooping: { method: 'hoopOrFloat', text: 'ready.fleece.hoop', basis: 'rule' },
+    tips: [
+      // https://emblibrary.com/blogs/projects/fabrics-101-embroidering-on-fleece
+      { text: 'ready.fleece.tip.sink', basis: 'source' },
+      // https://www.sewingpartsonline.com/blogs/education/beginners-guide-to-embroidery-episode-5-hooping
+      { text: 'ready.knit.tip.stretch', basis: 'source' },
+      { text: 'ready.fleece.tip.marks', basis: 'rule' },
     ],
   },
 
@@ -150,7 +209,8 @@ export const RECIPES: Record<FabricId, Recipe> = {
     needle: { size: '75/11', alt: 'ready.terry.needleAlt', text: 'ready.needle.embroidery', basis: 'source' },
     // https://www.madeira.co.uk/embroidery-threads/polyneon
     thread: { text: 'ready.terry.thread', basis: 'source' },
-    speed: { step: 'normal', text: 'ready.speed.normalOrLess', basis: 'rule' },
+    // Rule of thumb: "normal to reduced" in the research.
+    speed: { maxSpm: 700, basis: 'rule' },
     // https://hatchembroidery.com/resources/blog/top-10-tips-for-embroidering-on-towels (sticky stabilizer for thick towels)
     hooping: { method: 'hoopOrFloat', text: 'ready.terry.hoop', basis: 'source' },
     tips: [
@@ -163,12 +223,11 @@ export const RECIPES: Record<FabricId, Recipe> = {
     ],
   },
 
-  // Leicht, empfindlich (batiste, lawn; also sheer fabrics in today's profile) ----------------------
+  // Leicht, empfindlich (batiste, lawn, silk; see-through fabrics are 'sheer') -----------------------
   light: {
-    // Disputed: sheer fabrics take heavy wash-away https://emblibrary.com/learn/how-to/fabrics-101-embroidering-on-organza-machine-embroidery
-    // batiste takes mesh or tear-away https://emblibrary.com/blogs/projects/fabrics-101-embroidering-on-batiste
+    // https://emblibrary.com/blogs/projects/fabrics-101-embroidering-on-batiste (mesh, tear-away if very thin)
     // https://kimberbell.com/blogs/thekimberbellablog/using-no-show-mesh-stabilizer-for-lightweight-fabrics
-    stabilizer: { kind: 'mesh', weight: 'light', gsm: [40, 50], text: 'ready.light.stab', basis: 'disputed' },
+    stabilizer: { kind: 'mesh', weight: 'light', gsm: [40, 50], text: 'ready.light.stab', basis: 'source' },
     stabilizerDense: { kind: 'mesh', weight: 'light', gsm: [40, 50], text: 'ready.light.stabDense', basis: 'rule' },
     topping: { need: 'no', text: 'ready.topping.no', basis: 'rule' },
     // Disputed: one source 75/11 sharp, many guides smaller. https://emblibrary.com/learn/how-to/fabrics-101-embroidering-on-organza-machine-embroidery
@@ -177,9 +236,35 @@ export const RECIPES: Record<FabricId, Recipe> = {
     // https://emblibrary.com/learn/how-to/fabrics-101-embroidering-on-organza-machine-embroidery (bobbin like top thread)
     thread: { text: 'ready.light.thread', basis: 'source' },
     // https://zdigitizing.com/how-to-machine-embroidery-on-chiffon-fabric/ (weak source)
-    speed: { step: 'reduced', text: 'ready.speed.reduced', basis: 'source' },
+    speed: { maxSpm: 600, basis: 'rule' },
     // https://emblibrary.com/learn/how-to/fabrics-101-embroidering-on-organza-machine-embroidery ("hoop both layers together firmly")
     hooping: { method: 'hoop', text: 'ready.light.hoop', basis: 'source' },
+    tips: [
+      { text: 'ready.light.tip.open', basis: 'source' },
+      { text: 'ready.light.tip.bobbin', basis: 'source' },
+      // https://emblibrary.com/blogs/projects/fabrics-101-embroidering-on-batiste
+      { text: 'ready.light.tip.shows', basis: 'source' },
+    ],
+  },
+
+  // Durchsichtiges (organza, chiffon, tulle, voile) ---------------------------------------------------
+  // Split off light (research section 3): a wholly different stabilizer (wash-away) than batiste.
+  sheer: {
+    // https://emblibrary.com/learn/how-to/fabrics-101-embroidering-on-organza-machine-embroidery (one layer heavy wash-away)
+    // https://makema.de/en/products/madeira-avalon-plus-wash-away (silk, organza, tulle)
+    stabilizer: { kind: 'wash', weight: 'heavy', text: 'ready.sheer.stab', basis: 'source' },
+    // Rule of thumb: the number of layers; the source advises open, light designs.
+    stabilizerDense: { kind: 'wash', weight: 'heavy', text: 'ready.sheer.stabDense', basis: 'rule' },
+    topping: { need: 'no', text: 'ready.topping.no', basis: 'rule' },
+    // Disputed: one source 75/11 sharp, many guides smaller.
+    // https://emblibrary.com/learn/how-to/fabrics-101-embroidering-on-organza-machine-embroidery
+    needle: { size: '75/11', alt: 'ready.sheer.needleAlt', text: 'ready.needle.sharp', basis: 'disputed' },
+    // https://emblibrary.com/learn/how-to/fabrics-101-embroidering-on-organza-machine-embroidery (bobbin like top thread)
+    thread: { text: 'ready.light.thread', basis: 'source' },
+    // https://zdigitizing.com/how-to-machine-embroidery-on-chiffon-fabric/ (weak source)
+    speed: { maxSpm: 500, basis: 'rule' },
+    // https://emblibrary.com/learn/how-to/fabrics-101-embroidering-on-organza-machine-embroidery ("hoop both layers together firmly")
+    hooping: { method: 'hoop', text: 'ready.sheer.hoop', basis: 'source' },
     tips: [
       { text: 'ready.light.tip.open', basis: 'source' },
       { text: 'ready.light.tip.bobbin', basis: 'source' },
@@ -203,7 +288,8 @@ export const RECIPES: Record<FabricId, Recipe> = {
     thread: { text: 'ready.leather.thread', basis: 'rule' },
     // https://blog.sulky.com/machine-embroidery-series-upholstery/ (at least halve the speed)
     // https://allstitch.com/blogs/embroidery-blogs/how-to-embroider-on-leather
-    speed: { step: 'slow', text: 'ready.speed.slow', basis: 'source' },
+    // The halving is sourced; the number (half of a usual 800) is a rule of thumb.
+    speed: { maxSpm: 400, basis: 'rule' },
     // https://blog.sulky.com/machine-embroidery-series-leather/ ; tape instead of pins: rule of thumb
     hooping: { method: 'float', text: 'ready.leather.hoop', basis: 'disputed' },
     tips: [
@@ -238,14 +324,20 @@ export const DESIGN_RULES = {
   /** Rule of thumb: at most 2 extra layers (3 in all). */
   maxExtraLayers: 2,
   /**
-   * Rule of thumb: mean stitches per cm² over the stitched area (2 mm cells, see figures.ts). The
-   * research reckons tatami at about 60 per cm² (0.4 mm rows, about 4 mm stitches) and takes a design
-   * above 40, two thirds of that, as mostly solid fill. Fills as this app sews them (shorter stitches,
-   * underlay) measure about 130 to 160 on that grid, so two thirds of solid fill is about 100 here.
-   * No source names a firm number (https://oesd.com/embroidery-density-stitch-count-and-size/ says
-   * there is none).
+   * Rule of thumb: mean stitches per cm² over the stitched area (2 mm cells, see figures.ts) above
+   * which a design counts as dense. No source names a firm number
+   * (https://oesd.com/embroidery-density-stitch-count-and-size/ says there is none).
+   *
+   * The research takes a design that is mostly solid fill as dense (above 40 on its reckoning, two
+   * thirds of a tatami at about 60). On this grid fills as this app sews them (shorter stitches,
+   * underlay) already measure about 130 to 160, narrow satin and lettering about 150 to 210. With
+   * 100 (two thirds of a fill) every ordinary small hobby design was dense, the flower of the demo
+   * too (Daniel: too strict). So dense here means clearly more than a solid fill, about 1.5 times:
+   * stacked layers or very tight stitching. Large solid areas still count through largeFillCm2.
+   * Measured 2026-10-06: Blume 129, Musterkarte Dekor 136, Linienstiche 70, Linieneffekte 98,
+   * Schriftzug 207, Aufnäher 157, Handtuch 124; examples letters.pes 272 and cat-60mm.pes 382.
    */
-  denseStitchesPerCm2: 100,
+  denseStitchesPerCm2: 220,
   /** Rule of thumb: one closed fill larger than about 5 × 5 cm. */
   largeFillCm2: 25,
   /** Rule of thumb: on knits and light fabrics a design over about 10 cm needs more support. */
@@ -256,6 +348,16 @@ export const DESIGN_RULES = {
   tinyTextMm: 3.5,
   /** Rule of thumb: designs on caps mostly at most about 5 to 6 cm high. */
   capMaxHeightMm: 55,
+  /** Rule of thumb: dense designs and small lettering sew cleaner at most this fast (stitches per minute). */
+  carefulSpm: 600,
+  /** Rule of thumb: thick thread (30 wt, 12 wt) at most this fast. */
+  thickThreadSpm: { '30': 600, '12': 500 } as Partial<Record<ThreadId, number>>,
+  /**
+   * Metallic thread: about 350 to 400 per minute on home machines (swpea), 650 to 750 on industrial
+   * ones (Madeira); taken about 450, a rule of thumb.
+   * https://swpea.com/blogs/machine-embroidery-blogs/tips-for-using-metallic-thread-with-an-embroidery-machine
+   */
+  metallicSpm: 450,
 } as const;
 
 // The card for one design ------------------------------------------------------------------------
@@ -297,20 +399,37 @@ export interface Card {
   threadNeedle: Value | null;
   /** What matters about the thread on this fabric. */
   threadNote: Value;
-  speed: Recipe['speed'];
+  /** Recommended maximum, lowered by the design and thread where they ask for it. */
+  speed: Speed & { why: Key | null };
   hooping: Recipe['hooping'];
   /** Design-dependent notes, most important first, at most 3. */
   hints: Hint[];
   tips: Value[];
 }
 
-const DELICATE: readonly FabricId[] = ['knit', 'light', 'leather'];
-const PILE: readonly FabricId[] = ['terry', 'knit'];
+/** Fabrics a dense design is a risk on (research rule R4). */
+const DELICATE: readonly FabricId[] = ['knit', 'light', 'sheer', 'leather'];
+/** Fabrics with pile or texture small lettering sinks into (rule R7). */
+const PILE: readonly FabricId[] = ['terry', 'knit', 'fleece'];
+/** Fabrics where a large design needs more support (rule R9): knits and thin fabrics. */
+const STRETCHY_OR_THIN: readonly FabricId[] = ['knit', 'fleece', 'light', 'sheer'];
 
 /** Extra tear-away layers for many stitches: about one per further 10,000 (rule of thumb), at most 2. */
 export function extraLayers(stitches: number, free = 1): number {
   const n = Math.ceil(stitches / DESIGN_RULES.stitchesPerLayer) - free;
   return Math.max(0, Math.min(DESIGN_RULES.maxExtraLayers, n));
+}
+
+/** The fabric's maximum speed, lowered (never raised) for dense designs, small lettering and thick thread. */
+function speedFor(base: Speed, thread: ThreadId, dense: boolean, smallText: boolean): Card['speed'] {
+  let out: Card['speed'] = { ...base, why: null };
+  const lower = (spm: number | undefined, why: Key) => {
+    if (spm !== undefined && (out.maxSpm === null || spm < out.maxSpm)) out = { maxSpm: spm, basis: 'rule', why };
+  };
+  lower(DESIGN_RULES.thickThreadSpm[thread], 'ready.speed.why.thick');
+  if (smallText) lower(DESIGN_RULES.carefulSpm, 'ready.speed.why.text');
+  if (dense) lower(DESIGN_RULES.carefulSpm, 'ready.speed.why.dense');
+  return out;
 }
 
 /** The card for a fabric and thread weight, adjusted to the design. */
@@ -319,14 +438,20 @@ export function recipeCard(fabric: FabricId, thread: ThreadId, d: DesignFigures)
   const hints: Hint[] = [];
   const many = d.stitches > DESIGN_RULES.stitchesPerLayer;
   const dense = d.perCm2 > DESIGN_RULES.denseStitchesPerCm2 || d.largestFillCm2 > DESIGN_RULES.largeFillCm2;
-  const large = (fabric === 'knit' || fabric === 'light') && Math.max(d.widthMm, d.heightMm) > DESIGN_RULES.largeDesignMm;
+  const large = STRETCHY_OR_THIN.includes(fabric) && Math.max(d.widthMm, d.heightMm) > DESIGN_RULES.largeDesignMm;
 
   // Stabilizer: the fabric is the base; stitch count, density and size add to it.
   let stronger: Line | null = null;
   let layers = 0;
-  if (fabric === 'woven' || fabric === 'terry') {
+  if (fabric === 'woven' || fabric === 'woven_heavy' || fabric === 'terry') {
     if (dense) stronger = { text: 'ready.reason.dense', basis: 'rule' };
     layers = extraLayers(d.stitches);
+  } else if (fabric === 'fleece') {
+    // Medium cut-away carries about 20,000 stitches, then heavy; past about 30,000 a tear-away under it.
+    // https://graphics-pro.com/education/is-my-design-too-heavy-for-the-fabric-i-want-to-embroider/
+    const lots = d.stitches > 2 * DESIGN_RULES.stitchesPerLayer;
+    if (lots || dense || large) stronger = { text: lots ? 'ready.reason.many' : dense ? 'ready.reason.dense' : 'ready.reason.large', basis: lots ? 'source' : 'rule' };
+    layers = extraLayers(d.stitches, 3);
   } else if (fabric === 'knit') {
     // Mesh to about 10,000 stitches, then medium cut-away; past about 20,000 a tear-away under it.
     if (many || dense || large) stronger = { text: many ? 'ready.reason.many' : dense ? 'ready.reason.dense' : 'ready.reason.large', basis: many ? 'source' : 'rule' };
@@ -372,7 +497,7 @@ export function recipeCard(fabric: FabricId, thread: ThreadId, d: DesignFigures)
     needle: r.needle,
     threadNeedle: tw.needle ?? null,
     threadNote: r.thread,
-    speed: r.speed,
+    speed: speedFor(r.speed, thread, dense, mm !== null && mm < DESIGN_RULES.smallTextMm),
     hooping: r.hooping,
     hints: hints.slice(0, 3),
     tips: r.tips.slice(0, 3),

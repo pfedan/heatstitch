@@ -9,7 +9,7 @@
  * 30 wt 0.50, 12 wt 0.80 mm).
  */
 
-export type FabricId = 'woven' | 'cap' | 'knit' | 'terry' | 'light' | 'leather';
+export type FabricId = 'woven' | 'woven_heavy' | 'cap' | 'knit' | 'fleece' | 'terry' | 'light' | 'sheer' | 'leather';
 export type ThreadId = '60' | '40' | '30' | '12';
 
 export interface Fabric {
@@ -33,10 +33,21 @@ export interface Thread {
 
 export const FABRICS: readonly Fabric[] = [
   { id: 'woven', factor: 1, spacing: [0.4, 0.45], perforation: false, pull: 'low', longMm: 10 },
+  // Denim, canvas, twill: like woven, but the firm, thick cloth carries more thread before it
+  // puckers (a little more tolerance); same spacing as woven (twill/canvas 0.40 to 0.45 mm). The
+  // stronger needle (90/14) is in the card (src/areas/ready/recipes.ts).
+  { id: 'woven_heavy', factor: 1.1, spacing: [0.4, 0.45], perforation: false, pull: 'low', longMm: 10 },
   { id: 'cap', factor: 0.9, spacing: [0.4, 0.5], perforation: false, pull: 'low', longMm: 7 },
   { id: 'knit', factor: 0.85, spacing: [0.42, 0.5], perforation: false, pull: 'high', longMm: 7 },
+  // Fleece, sweat, hoodie: a knit with pile. Stretches like knit (pull high, long stitches snag
+  // from 7 mm), stitches sink into the pile like on terry, so the tolerance lies between knit and
+  // terry and the spacing a little wider than on knit. Topping is in the card.
+  { id: 'fleece', factor: 0.75, spacing: [0.45, 0.6], perforation: false, pull: 'high', longMm: 7 },
   { id: 'terry', factor: 0.65, spacing: [0.55, 0.7], perforation: false, pull: 'high', longMm: 7 },
   { id: 'light', factor: 0.6, spacing: [0.6, 0.7], perforation: false, pull: 'high', longMm: 8 },
+  // Organza, chiffon, tulle: like light, but thinner still and see-through; dense thread pulls and
+  // puckers it soonest of all (lowest tolerance), and long stitches show and snag.
+  { id: 'sheer', factor: 0.5, spacing: [0.6, 0.75], perforation: false, pull: 'high', longMm: 7 },
   { id: 'leather', factor: 0.7, spacing: [0.5, 0.8], perforation: true, pull: 'low', longMm: 8 },
 ];
 
@@ -57,7 +68,10 @@ export const DEFAULT_PROFILE: Profile = { fabric: 'woven', thread: '40' };
 export const fabricOf = (p: Profile): Fabric => FABRICS.find((f) => f.id === p.fabric) ?? FABRICS[0];
 export const threadOf = (p: Profile): Thread => THREADS.find((t) => t.id === p.thread) ?? THREADS[1];
 
-/** Returns a valid profile, falling back to the defaults for unknown ids. */
+/**
+ * Returns a valid profile, falling back to the defaults for unknown ids. FABRICS only grows, so
+ * every older project keeps its fabric.
+ */
 export function normalizeProfile(p: Partial<Profile> | undefined): Profile {
   return {
     fabric: FABRICS.some((f) => f.id === p?.fabric) ? p!.fabric! : DEFAULT_PROFILE.fabric,

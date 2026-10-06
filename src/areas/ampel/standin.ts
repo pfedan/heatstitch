@@ -41,10 +41,10 @@ import {
 
 /**
  * From this size (mm²) one connected critical spot that counts makes the light red. Start values
- * (Entscheidung 15): 5 mm² on stable fabric and caps, 3 mm² on knit, jersey and terry; light
- * fabrics and leather take the stricter value.
+ * (Entscheidung 15): 5 mm² on stable fabric and caps (heavy woven too), 3 mm² on knit, jersey,
+ * fleece and terry; light and sheer fabrics and leather take the stricter value.
  */
-export const RED_MIN_MM2: Record<FabricId, number> = { woven: 5, cap: 5, knit: 3, terry: 3, light: 3, leather: 3 };
+export const RED_MIN_MM2: Record<FabricId, number> = { woven: 5, woven_heavy: 5, cap: 5, knit: 3, fleece: 3, terry: 3, light: 3, sheer: 3, leather: 3 };
 
 /** Quiet time after a change before fixes are worked out (ms). */
 const SETTLE_MS = 900;

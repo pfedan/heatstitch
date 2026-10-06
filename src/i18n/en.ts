@@ -10,6 +10,7 @@ import { en as design } from './areas/design';
 import { en as ready } from './areas/ready';
 import { en as ampel } from './areas/ampel';
 import { en as responsive } from './areas/responsive';
+import { en as fabrics } from './areas/fabrics';
 
 
 const enBase: Record<keyof typeof deBase, string> = {
@@ -88,18 +89,6 @@ const enBase: Record<keyof typeof deBase, string> = {
   'profile.title': 'Material',
   'profile.fabric': 'Fabric',
   'profile.thread': 'Thread',
-  'fabric.woven': 'Stable woven',
-  'fabric.woven.ex': 'e.g. twill, canvas, denim, workwear',
-  'fabric.cap': 'Structured cap',
-  'fabric.cap.ex': 'e.g. baseball caps with buckram',
-  'fabric.knit': 'Knit, fleece',
-  'fabric.knit.ex': 'e.g. polo piqué, jersey, sweatshirt, fleece',
-  'fabric.terry': 'Terry, pile',
-  'fabric.terry.ex': 'e.g. towels, bathrobes, velvet, corduroy',
-  'fabric.light': 'Light, delicate',
-  'fabric.light.ex': 'e.g. silk, satin, voile, light cotton',
-  'fabric.leather': 'Leather, vinyl',
-  'fabric.leather.ex': 'e.g. smooth leather, faux leather, vinyl',
   'thread.60': '60 wt (fine)',
   'thread.40': '40 wt (standard)',
   'thread.30': '30 wt (heavy)',
@@ -1332,4 +1321,4 @@ const enBase: Record<keyof typeof deBase, string> = {
   'canvas.hint.letters': 'Drag letters: move · Arrow keys: nudge · Esc: back to the lettering',
 };
 
-export const en: Record<keyof typeof de, string> = { ...enBase, ...shell, ...files, ...objects, ...shapes, ...stitches, ...check, ...image, ...design, ...ready, ...ampel, ...responsive };
+export const en: Record<keyof typeof de, string> = { ...enBase, ...shell, ...files, ...objects, ...shapes, ...stitches, ...check, ...image, ...design, ...ready, ...ampel, ...responsive, ...fabrics };
