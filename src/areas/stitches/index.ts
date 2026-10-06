@@ -135,14 +135,15 @@ export function initStitchArea(app: StitchAreaApp): { refresh: () => void } {
     when: () => hasPattern() && (ed.active || !info()?.outline),
     run: () => app.setEditing(!ed.active),
   });
-  command({ id: 'edit.done', label: 'stitches.cmd.editDone', group: G, keys: ['Escape'], bind: false, when: () => ed.active, run: () => app.setEditing(false) });
+  // Esc leaves the stitches as level.up (src/areas/shapes) says; this is the bar's "Fertig".
+  command({ id: 'edit.done', label: 'stitches.cmd.editDone', group: G, when: () => ed.active, run: () => app.setEditing(false) });
   command({ id: 'edit.selectAll', label: 'stitches.cmd.selectAll', group: G, keys: ['Mod+A'], bind: false, when: () => ed.active, run: () => ed.selectAll() });
   command({
     id: 'edit.delete',
     label: 'stitches.cmd.delete',
     group: G,
-    keys: ['Delete'],
-    bind: false,
+    // Bound here (not in src/app/keys.ts), so the key also says what was deleted, with the way back.
+    keys: ['Delete', 'Backspace'],
     when: () => (ed.active && ed.selection.size > 0) || (rungsOn() && !!rt.selected),
     run: () => {
       if (ed.active && ed.selection.size) {
@@ -252,7 +253,11 @@ export function initStitchArea(app: StitchAreaApp): { refresh: () => void } {
 
   function renderBar(): void {
     const items: HTMLElement[] = [];
-    if (ed.active) {
+    // Same rules as barState: nothing in Bild, the line tools only while one is on.
+    const tool = rungsOn() ? rt.mode : null;
+    if (app.settings.mode === 'image') {
+      /* Bild draws no stitches */
+    } else if (ed.active) {
       const n = ed.selection.size;
       const seen = ed.range !== null || app.pointsVisible();
       // The crumb over the stage already says "› Stiche": the bar starts with what is selected.
@@ -270,9 +275,7 @@ export function initStitchArea(app: StitchAreaApp): { refresh: () => void } {
         help(app.settings.mode === 'flow' ? 'canvas.hint.flowEdit' : 'edit.hint'),
         cmdButton('edit.done', 'object.editDone', { primary: true }),
       );
-    } else if (!rungsOn()) {
-      // No line tool on: the mode the tool was last in does not count.
-    } else if (rt.mode === 'satin') {
+    } else if (tool === 'satin') {
       const d = dir();
       const what = !d ? '' : d.rungs === null ? t('stitches.bar.follow') : d.rungs === 0 ? t('stitches.bar.even') : t('stitches.bar.rungs', { n: d.rungs });
       items.push(title('stitches.bar.direction'), state(d?.cuts ? `${what} · ${t('stitches.bar.cuts', { n: d.cuts + 1 })}` : what), sep(), pen(), sep());
@@ -281,7 +284,7 @@ export function initStitchArea(app: StitchAreaApp): { refresh: () => void } {
       items.push(cmdButton('stitch.rungs.even', 'stitches.bar.remove', { hint: 'stitch.direction.even.hint' }), cmdButton('stitch.rungs.follow', 'stitch.direction.follow.button', { hint: 'stitch.direction.follow.hint' }));
       if (d?.spacingHere !== undefined) items.push(sep(), spacingHere(d.spacingHere));
       items.push(help(d?.chain ? 'stitch.direction.chain' : 'stitch.direction.help'), cmdButton('stitch.tool.done', 'stitch.direction.done', { primary: true }));
-    } else if (rt.mode === 'fill') {
+    } else if (tool === 'fill') {
       items.push(
         title('stitches.bar.toSatin'),
         state(t('stitches.bar.rungs', { n: rt.lines.length }) + (rt.cutLines.length ? ` · ${t('stitches.bar.cuts', { n: rt.cutLines.length + 1 })}` : '')),
@@ -291,10 +294,10 @@ export function initStitchArea(app: StitchAreaApp): { refresh: () => void } {
         cmdButton('stitch.tool.done', 'stitch.draw.cancel'),
         cmdButton('stitch.rungs.sew', 'stitch.draw.sew', { primary: true, hint: 'stitch.draw.hint' }),
       );
-    } else if (rt.mode === 'guide') {
+    } else if (tool === 'guide') {
       const n = rt.guides.length;
       items.push(title('stitches.bar.guides'), state(n ? t(n === 1 ? 'stitch.guide.one' : 'stitch.guide.count', { n }).replace(/\.$/, '') : t('stitches.guides.none')), help('stitch.guide.help'), cmdButton('stitch.tool.done', 'stitch.direction.done', { primary: true }));
-    } else if (rt.mode === 'points') {
+    } else if (tool === 'points') {
       const pattern = info()?.measured.fill?.pattern;
       items.push(
         title('stitches.bar.points'),

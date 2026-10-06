@@ -10,9 +10,6 @@ import { canRun, commandTitle, getCommand, runCommand } from '../shell/commands'
 import { h, icon } from '../shell/h';
 import { objectMenu, showOrderMenu } from './objectMenu';
 
-/** Nodes from which an outline offers to be simplified. */
-const SIMPLIFY_FROM = 12;
-
 export interface ObjectInfo {
   objects: SewObject[];
   selected: number[];
@@ -42,20 +39,6 @@ export interface ObjectInfo {
 
 export interface ObjectHooks {
   clear: () => void;
-  /** Start or stop editing the points of the selected object. */
-  editStitches: (on: boolean) => void;
-  /** Stop editing the outline of the selected object. */
-  closeShape: () => void;
-  deleteNode: () => void;
-  /** The selected node round or a corner. */
-  toggleNode: () => void;
-  /** The outline with fewer nodes. */
-  simplify: () => void;
-  /** A line on the level Shape: closed, or opened again. */
-  closeLine: () => void;
-  deleteSelection: () => void;
-  /** Split the stitch to the selected point in two. */
-  splitStitch: () => void;
   /** The selected objects scaled by sx, sy about their middle. */
   resize: (sx: number, sy: number) => void;
   /** The selected objects moved by dx, dy (mm). */
@@ -100,7 +83,8 @@ function commandButton(id: string, opts: { text?: boolean; cls?: string } = {}):
 /**
  * The top of the object page: what is selected (name, kind, thread), its size and place, where it
  * is sewn, and a row of buttons for the object commands; below come the stitch settings
- * (#object-stitches). Editing the outline or the points shows their tools instead of the buttons.
+ * (#object-stitches). While the outline or the points are edited the buttons give way to the option
+ * bar over the stage.
  * Explanations are hints on the elements, not paragraphs.
  */
 export class ObjectPanel {
@@ -144,9 +128,8 @@ export class ObjectPanel {
     this.panel.hidden = false;
     const sel = info.selected.map((i) => info.objects[i]);
     const parts: (HTMLElement | null)[] = [this.head(info, sel), this.facts(info, sel), this.geometry(info, sel)];
-    if (info.editing) parts.push(this.stitchTools(info.editing));
-    else if (info.shaping) parts.push(this.shapeTools(info.shaping));
-    else parts.push(this.toolbar(), this.more(info, sel));
+    // Editing the outline or the points: their tools are the option bar over the stage (areas shapes, stitches).
+    if (!info.editing && !info.shaping) parts.push(this.toolbar(), this.more(info, sel));
     this.body.replaceChildren(...parts.filter((p): p is HTMLElement => !!p));
   }
 
@@ -338,47 +321,6 @@ export class ObjectPanel {
     if (chip && chip.offsetParent) return chip;
     const row = this.info ? document.querySelector<HTMLElement>(`#layer-list [data-object="${this.info.selected[0]}"]`) : null;
     return row?.offsetParent ? row : chip;
-  }
-
-  /** Editing the outline of the one selected object: nodes, delete, corner or round, simplify. */
-  private shapeTools(sh: { nodes: number; smooth: boolean | null; line?: { closed: boolean }; kind?: 'band' | 'rails' }): HTMLElement {
-    const button = (label: string, run: () => void, opts: { primary?: boolean; disabled?: boolean; title?: string } = {}) =>
-      h('button', { type: 'button', class: opts.primary ? 'primary' : '', disabled: !!opts.disabled, title: opts.title ?? '', onclick: run }, label);
-    const hint = [t('shape.hint'), sh.kind ? t(`shape.hint.${sh.kind}`) : ''].filter(Boolean).join(' ');
-    const row = h(
-      'div',
-      { class: 'row-buttons' },
-      button(t('shape.node.delete'), () => this.hooks.deleteNode(), { disabled: sh.smooth === null }),
-      button(sh.smooth ? t('shape.node.corner') : t('shape.node.smooth'), () => this.hooks.toggleNode(), { disabled: sh.smooth === null, title: t('shape.node.kind') }),
-      // Traced outlines come with many nodes; fewer are easier to grab.
-      sh.nodes >= SIMPLIFY_FROM ? button(t('shape.simplify'), () => this.hooks.simplify(), { title: t('shape.simplify.hint') }) : null,
-      sh.line ? button(t(sh.line.closed ? 'shape.line.open' : 'shape.line.close'), () => this.hooks.closeLine(), { title: t(sh.line.closed ? 'shape.line.open.hint' : 'shape.line.close.hint') }) : null,
-      button(t('object.editDone'), () => this.hooks.closeShape(), { primary: true }),
-    );
-    return h(
-      'div',
-      { class: 'object-edit', title: hint },
-      h('p', { class: 'sel-info' }, `${t('shape.nodes', { n: formatNumber(sh.nodes) })} · ${sh.smooth === null ? t('shape.none') : t(sh.smooth ? 'shape.node.smooth' : 'shape.node.corner')}`),
-      row,
-    );
-  }
-
-  /** Editing the points of the one selected object: what is selected, delete, split, done. */
-  private stitchTools(ed: { selection: number }): HTMLElement {
-    const button = (label: string, run: () => void, opts: { primary?: boolean; disabled?: boolean; title?: string } = {}) =>
-      h('button', { type: 'button', class: opts.primary ? 'primary' : '', disabled: !!opts.disabled, title: opts.title ?? '', onclick: run }, label);
-    return h(
-      'div',
-      { class: 'object-edit', title: t('object.editHint') },
-      h('p', { class: 'sel-info' }, ed.selection ? t(ed.selection === 1 ? 'edit.selection.one' : 'edit.selection', { n: formatNumber(ed.selection) }) : t('edit.none')),
-      h(
-        'div',
-        { class: 'row-buttons' },
-        button(t('edit.delete'), () => this.hooks.deleteSelection(), { disabled: !ed.selection }),
-        button(t('edit.split'), () => this.hooks.splitStitch(), { disabled: ed.selection !== 1, title: t('edit.split.hint') }),
-        button(t('object.editDone'), () => this.hooks.editStitches(false), { primary: true }),
-      ),
-    );
   }
 }
 

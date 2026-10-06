@@ -32,8 +32,6 @@ export interface CorrectHooks {
   splitProposal: (at: number) => void;
   showProposal: (ids: number[]) => void;
   toggleCompare: () => void;
-  deleteSelection: () => void;
-  thinSelection: (share: number) => void;
   undo: () => void;
   redo: () => void;
   revert: () => void;
@@ -93,15 +91,11 @@ export interface PlanView {
 export interface CorrectState {
   file: LoadedFile | null;
   zoneSelected: boolean;
-  editing: boolean;
   comparing: boolean;
-  selection: number;
-  /** Penetrations are visible at the current zoom. */
-  pointsVisible: boolean;
   message: CorrectMessage;
 }
 
-/** Correction options, auto-fix, manual edit tools, undo and save. */
+/** Correction options, auto-fix, comparison, undo and save. (Stitches by hand: the bar over the stage.) */
 export class CorrectPanel {
   private goal = document.querySelectorAll<HTMLInputElement>('input[name="fix-goal"]');
   private focus = document.querySelectorAll<HTMLInputElement>('input[name="fix-focus"]');
@@ -109,12 +103,6 @@ export class CorrectPanel {
   private fixZone = $<HTMLButtonElement>('fix-zone');
   private fixTune = $<HTMLButtonElement>('fix-tune');
   private report = $<HTMLElement>('fix-report');
-  private editOff = $<HTMLElement>('edit-off-hint');
-  private tools = $<HTMLElement>('edit-tools');
-  private selInfo = $<HTMLElement>('sel-info');
-  private selDelete = $<HTMLButtonElement>('sel-delete');
-  private selThin = $<HTMLButtonElement>('sel-thin');
-  private thinShare = $<HTMLSelectElement>('thin-share');
   private undoBtn = $<HTMLButtonElement>('undo');
   private redoBtn = $<HTMLButtonElement>('redo');
   private revertBtn = $<HTMLButtonElement>('revert');
@@ -159,8 +147,6 @@ export class CorrectPanel {
     this.hooks = hooks;
     onLangChange(() => this.last && this.update(this.last));
     this.compareToggle.addEventListener('click', () => hooks.toggleCompare());
-    this.selDelete.addEventListener('click', () => hooks.deleteSelection());
-    this.selThin.addEventListener('click', () => hooks.thinSelection(Number(this.thinShare.value)));
     this.undoBtn.addEventListener('click', () => hooks.undo());
     this.redoBtn.addEventListener('click', () => hooks.redo());
     this.revertBtn.addEventListener('click', () => hooks.revert());
@@ -207,18 +193,6 @@ export class CorrectPanel {
     this.fixTune.disabled = !loaded || busy;
     this.fixAll.textContent = busy ? t('plan.running') : t('correct.all');
 
-    // Editing by hand shows its tools here only while the level Stiche is on; how to get there is
-    // said by the level switch itself.
-    this.editOff.hidden = true;
-    this.tools.hidden = !st.editing;
-    this.selInfo.textContent = !st.pointsVisible
-      ? t('edit.zoom')
-      : st.selection
-        ? t(st.selection === 1 ? 'edit.selection.one' : 'edit.selection', { n: formatNumber(st.selection) })
-        : t('edit.none');
-    this.selDelete.disabled = this.selThin.disabled = !st.selection || busy;
-    this.thinShare.setAttribute('aria-label', t('edit.thin'));
-
     this.undoBtn.disabled = !f?.undo.length || busy;
     this.redoBtn.disabled = !f?.redo.length || busy;
     this.revertBtn.disabled = busy;
@@ -238,7 +212,7 @@ export class CorrectPanel {
       this.report.replaceChildren(...this.message(st.message));
     }
 
-    const edited = FileList.edited(f);
+    const edited = FileList.changed(f);
     this.compareBlock.hidden = !edited;
     this.compareToggle.disabled = !edited;
     this.compareToggle.textContent = t(st.comparing && edited ? 'compare.stop' : 'compare.start');

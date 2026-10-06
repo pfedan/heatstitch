@@ -135,8 +135,9 @@
       <div class="modes segmented" role="radiogroup" id="modes" data-i18n-aria="mode.label">
         <label data-i18n-title="mode.flow.hint"><input type="radio" name="mode" value="flow" /><span><span data-i18n="mode.flow"></span></span></label>
         <label data-i18n-title="mode.density.hint"><input type="radio" name="mode" value="density" /><span><span data-i18n="mode.density"></span><span class="check-badge" id="check-badge" hidden></span></span></label>
-        <label data-i18n-title="mode.image.hint" data-mode="image"><input type="radio" name="mode" value="image" /><span><span data-i18n="mode.image"></span></span></label>
       </div>
+      <!-- Bild umwandeln has no tab: it starts from the design menu, the header names it and the stepper leads back. -->
+      <p class="image-head" data-mode="image"><svg class="i" aria-hidden="true"><use href="#i-image" /></svg><span data-i18n="shell.image.start"></span></p>
       <nav class="topbar-end">
         <button type="button" id="palette-open" class="search-button" data-i18n-title="shell.palette.hint">
           <svg class="i" aria-hidden="true"><use href="#i-search" /></svg>
@@ -403,12 +404,12 @@
           </div>
           <div class="tool-options" id="tool-options" role="toolbar" hidden></div>
         </div>
-        <canvas id="legend" class="legend" width="260" height="46" data-mode="density"></canvas>
         <div id="tooltip" class="tooltip" hidden></div>
         <div class="empty" id="empty"></div>
-        <!-- Foot of the stage: the key hint and the view bar in one row above the player (src/areas/design). -->
+        <!-- Foot of the stage, one row above the player: the key hint, the heatmap scale (Prüfen) and the view bar. -->
         <div class="stage-foot" id="stage-foot">
           <p class="hint" id="canvas-hint"></p>
+          <canvas id="legend" class="legend" width="260" height="46" data-mode="density"></canvas>
           <div class="view-bar" id="view-bar" role="toolbar" data-i18n-aria="design.view.title">
             <button type="button" id="view-button" class="vb-btn view-button" data-i18n-title="design.view.hint">
               <svg class="i" aria-hidden="true"><use href="#i-eye" /></svg>
@@ -620,21 +621,6 @@
               <button type="button" id="fix-tune" data-i18n="tune.button" data-i18n-title="tune.button.hint"></button>
             </div>
             <div id="fix-report" class="fix-report" aria-live="polite"></div>
-
-            <div id="edit-tools" class="edit-tools" hidden>
-              <h3 data-i18n="check.edit.title" data-i18n-title="edit.hint"></h3>
-              <p class="muted small" id="edit-off-hint" data-i18n="edit.panelHint" hidden></p>
-              <div class="buttons">
-                <span class="sel-info" id="sel-info"></span>
-                <button type="button" id="sel-delete" data-i18n="edit.delete"></button>
-                <button type="button" id="sel-thin" data-i18n="edit.thin"></button>
-                <select id="thin-share" aria-label="">
-                  <option value="0.25">25 %</option>
-                  <option value="0.34" selected>33 %</option>
-                  <option value="0.5">50 %</option>
-                </select>
-              </div>
-            </div>
 
             <div class="compare-block" id="compare-block" hidden>
               <h3 data-i18n="compare.title"></h3>

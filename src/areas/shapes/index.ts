@@ -155,8 +155,7 @@ export function initShapes(app: ShapesAreaApp): void {
     id: 'level.shape',
     label: 'shapes.cmd.level.shape',
     group: LEVEL,
-    keys: ['Enter'],
-    bind: false,
+    // Enter on one selected object is object.openShape (src/areas/objects).
     when: () => {
       if (!flow() || ui.lettering || (shapeLevel() && (app.shapeTool.active || one() === null))) return false;
       const p = pattern();
@@ -173,8 +172,8 @@ export function initShapes(app: ShapesAreaApp): void {
     id: 'level.stitches',
     label: 'shapes.cmd.level.stitches',
     group: LEVEL,
-    keys: ['E'],
-    bind: false,
+    // The key E and the command search: edit.stitches (src/areas/stitches); this one is for the crumb's menu.
+    palette: false,
     when: () => app.settings.mode !== 'image' && !!pattern() && !app.editor.active && !ui.lettering,
     run: () => app.setEditing(true),
   });
@@ -354,7 +353,7 @@ export function initShapes(app: ShapesAreaApp): void {
   const bar = $('tool-options');
   let barKey = '';
 
-  type Item = { kind: 'title'; text: string; title?: string } | { kind: 'hint'; text: string } | { kind: 'cmd'; id: string; text?: string; toggle?: boolean; on?: boolean } | { kind: 'sep' };
+  type Item = { kind: 'title'; text: string; title?: string } | { kind: 'hint'; text: string } | { kind: 'cmd'; id: string; text?: string; toggle?: boolean; on?: boolean; primary?: boolean } | { kind: 'sep' };
 
   function barItems(): Item[] {
     if (!flow()) return [];
@@ -395,7 +394,9 @@ export function initShapes(app: ShapesAreaApp): void {
       if (s.count >= SIMPLIFY_FROM) items.push({ kind: 'cmd', id: 'shape.simplify' });
       if (canRun('shape.closeLine')) items.push({ kind: 'cmd', id: 'shape.closeLine' });
       if (canRun('shape.openLine')) items.push({ kind: 'cmd', id: 'shape.openLine' });
-      items.push({ kind: 'sep' }, snap, { kind: 'cmd', id: 'level.stitches', text: t('level.stitches') });
+      // Fertig as in the bar of the stitches by hand: back to the objects (as Esc). The level Stiche
+      // is in the crumb's menu and on the key E.
+      items.push({ kind: 'sep' }, snap, { kind: 'cmd', id: 'level.up', text: t('object.editDone'), primary: true });
       return items;
     }
     if (ui.lettering) return [{ kind: 'title', text: t('lettering.title'), title: t('canvas.hint.lettering') }, { kind: 'cmd', id: 'lettering.letters' }, snap, { kind: 'hint', text: t('shapes.opt.lettering') }];
@@ -423,7 +424,7 @@ export function initShapes(app: ShapesAreaApp): void {
           'button',
           {
             type: 'button',
-            class: `opt${i.toggle ? ' opt-toggle' : ''}`,
+            class: `opt${i.toggle ? ' opt-toggle' : ''}${i.primary ? ' primary' : ''}`,
             disabled: !canRun(c),
             title: `${hint}${key ? ` (${keyLabel(key)})` : ''}`,
             'aria-pressed': i.toggle ? String(!!i.on) : undefined,

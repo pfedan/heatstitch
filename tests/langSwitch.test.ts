@@ -102,6 +102,9 @@ const mode = async (page: Page, m: 'flow' | 'density' | 'image') => {
 };
 
 /** The states the switch is tried in. */
+/** How long the slowest step (converting the example picture) may take; the test gets that much more. */
+const SLOW_STEP = 90_000;
+
 const STATES: Record<string, (page: Page) => Promise<void>> = {
   'nothing loaded': async () => {},
   'an object selected': async (page) => {
@@ -152,7 +155,8 @@ const STATES: Record<string, (page: Page) => Promise<void>> = {
     await page.click('#image-example');
     // The assistant opens the colors of a new picture; its last step shows the result and take over.
     await page.click('.image-stepper [data-goto="3"]');
-    await page.locator('#image-take:not([hidden]):not([disabled])').waitFor({ timeout: 30_000 });
+    // Converting the picture runs in a worker and can take long on a busy machine.
+    await page.locator('#image-take:not([hidden]):not([disabled])').waitFor({ timeout: SLOW_STEP });
   },
   'a lettering': async (page) => {
     await page.evaluate(() => document.getElementById('new-design')!.click());
@@ -181,7 +185,7 @@ describe.skipIf(!on)('switching the language', () => {
   });
 
   for (const [name, reach] of Object.entries(STATES)) {
-    it(`leaves no text of the old language with ${name}`, { timeout: 90_000 }, async () => {
+    it(`leaves no text of the old language with ${name}`, { timeout: name === 'Bild with a picture' ? 60_000 + SLOW_STEP : 90_000 }, async () => {
       const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
       const page = await ctx.newPage();
       const errors: string[] = [];

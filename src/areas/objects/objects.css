@@ -171,17 +171,22 @@
   vertical-align: 2px;
 }
 
-/* Tools of a color row: laid over its right end on hover and focus, so the name keeps its room.
-   A color hidden or highlighted keeps them shown; on touch they stay in the row. */
+/* Tools of a color row: on hover and focus they lie over the end of the second line (thread code and
+   count), never over the name; the stitch count moves up beside the name. A color hidden or
+   highlighted keeps them shown; on touch they stay in the row. */
+#layer-list .color-row .layer-meta {
+  align-self: flex-start;
+  margin-top: 2px;
+  line-height: 16px;
+}
+
 #layer-list .layer-tools {
   position: absolute;
   right: 4px;
-  top: 50%;
-  transform: translateY(-50%);
+  bottom: 1px;
   display: none;
   gap: 0;
-  padding: 1px;
-  border-radius: 6px;
+  border-radius: 5px;
   background: var(--bg);
 }
 
@@ -194,6 +199,11 @@
 
 #layer-list .color-row.focused .layer-tools {
   background: color-mix(in srgb, var(--accent) 7%, var(--panel));
+}
+
+#layer-list .color-row .layer-tools button.icon {
+  width: 24px;
+  height: 17px;
 }
 
 #layer-list .layer button.icon,
@@ -241,9 +251,13 @@
 @media (hover: none) {
   #layer-list .layer-tools {
     position: static;
-    transform: none;
     display: flex;
     background: none;
+  }
+
+  #layer-list .color-row .layer-meta {
+    align-self: center;
+    margin-top: 0;
   }
 
   #layer-list .object .row-more,
@@ -761,32 +775,6 @@
 
 #object-panel .obj-text-btn:not(:disabled):hover {
   border-color: color-mix(in srgb, var(--accent) 50%, var(--line));
-}
-
-#object-panel .object-edit {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 8px;
-  border-radius: 8px;
-  background: var(--bg);
-}
-
-#object-panel .object-edit .sel-info {
-  margin: 0;
-  font-size: 12px;
-  color: var(--muted);
-}
-
-#object-panel .object-edit .row-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-#object-panel .object-edit .row-buttons button {
-  flex: 1 1 auto;
-  font-size: 13px;
 }
 
 #object-panel #object-stitches:not(:empty) {

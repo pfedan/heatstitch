@@ -126,15 +126,11 @@ export class JumpsPanel {
     const cut = list.filter((j) => j.trimmed).length;
     const limit = this.s.trimMm;
     const longUncut = list.filter((j) => !j.trimmed && j.lengthMm >= limit).length;
-    // The section's line: how many, how many lie loose; a dot when long ones are not trimmed.
-    this.sum?.replaceChildren(
-      ...(list.length
-        ? [
-            ...(longUncut ? [el('span', 'dot caution')] : []),
-            el('span', '', cut === list.length ? t('check.jumps.sum.all', { n: list.length }) : t('check.jumps.sum', { n: list.length, u: list.length - cut })),
-          ]
-        : []),
-    );
+    // The section's line: how many, a dot when long ones are not trimmed. It stays one short line
+    // next to the title; how many lie loose is its hint.
+    const said = cut === list.length ? t('check.jumps.sum.all', { n: list.length }) : t('check.jumps.sum', { n: list.length, u: list.length - cut });
+    if (this.sum) this.sum.title = list.length ? said : '';
+    this.sum?.replaceChildren(...(list.length ? [...(longUncut ? [el('span', 'dot caution')] : []), el('span', '', formatNumber(list.length))] : []));
     if (!list.length) {
       this.root.replaceChildren(el('p', 'muted small', t('jumps.none')));
       return;

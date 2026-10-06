@@ -430,11 +430,6 @@ export function bindCorrection(app: CorrectionApp) {
       pinPlan(ids);
     },
     toggleCompare: () => app.setComparing(!ui.comparing),
-    deleteSelection: () => app.editor.deleteSelection(),
-    thinSelection: (share) => {
-      if (!app.editor.thinSelection(share)) ui.correctMessage = { kind: 'text', text: t('edit.thin.none') };
-      app.redraw();
-    },
     undo: () => app.history('undo'),
     redo: () => app.history('redo'),
     revert: () => app.history('revert'),

@@ -249,6 +249,19 @@
   border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
 }
 
+.tool-options button.opt.primary {
+  margin-left: 2px;
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+.tool-options button.opt.primary:not(:disabled):hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 88%, var(--ink));
+}
+
 .tool-options button.opt:disabled {
   opacity: 0.45;
   cursor: default;

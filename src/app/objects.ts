@@ -23,7 +23,7 @@ import { sameColor } from '../model/recolor';
 import { recordOfStitch } from '../model/sequence';
 import { remembered, rememberedIn, measureFill, analyze, unionRegion, remember, restitch, type RestitchResult } from '../model/restitch';
 import { isLine, reverseLines, reversible, reverseObjects } from '../model/reverse';
-import { formatNumber, t, type Key } from '../i18n';
+import { t, type Key } from '../i18n';
 import { ui } from './state';
 import { unionForm, recolorObjects } from '../model/shapeOps';
 import { blendObject } from '../model/blend';
@@ -505,10 +505,6 @@ export function bindObjects(app: ObjectsApp) {
       if (app.editor.active) app.setEditing(false);
       selectObjects([], false);
     },
-    editStitches: (on) => app.setEditing(on),
-    closeShape: () => app.closeShape(),
-    deleteNode: () => app.shapeTool.deleteSelected(),
-    toggleNode: () => app.shapeTool.toggleSmooth(),
     resize: (sx, sy) => {
       const p = app.files.active?.pattern;
       const sel = app.frameObjects();
@@ -521,15 +517,6 @@ export function bindObjects(app: ObjectsApp) {
     move: (dx, dy) => {
       if (app.frameObjects().length) app.commitTransform(translation(dx, dy));
     },
-    simplify: () => {
-      const r = app.shapeTool.simplify();
-      if (!r) return layers.say(t('shape.simplify.none'), true);
-      layers.say(t('shape.simplified', { before: formatNumber(r.before), after: formatNumber(r.after) }));
-      app.shapeTool.commit();
-    },
-    closeLine: () => app.shapeTool.toggleClosed(),
-    deleteSelection: () => app.editor.deleteSelection(),
-    splitStitch: () => app.editor.splitSelected(),
   });
 
   const pattern = () => app.files.active?.pattern ?? null;

@@ -82,7 +82,7 @@ export function initCheck(app: CheckApp): { draw: (ctx: CanvasRenderingContext2D
   command({ id: 'check.apply', label: 'check.apply', group: G, when: () => density() && app.correction.planTicked() && !app.correction.busy(), run: () => void app.correction.applyPlan() });
   command({ id: 'check.discard', label: 'check.discard', group: G, when: () => app.correction.planShown(), run: () => app.correction.discardPlan() });
   command({ id: 'check.unpin', label: 'check.unpin', group: G, keys: ['Escape'], bind: false, when: () => !!ui.planPin, run: () => app.correction.pinPlan(null) });
-  command({ id: 'check.compare', label: 'check.compare', group: G, keys: ['C'], bind: false, when: () => density() && Files.edited(app.files.active), run: () => app.setComparing(!ui.comparing) });
+  command({ id: 'check.compare', label: 'check.compare', group: G, keys: ['C'], bind: false, when: () => density() && Files.changed(app.files.active), run: () => app.setComparing(!ui.comparing) });
 
   // Heatmap
   command({ id: 'check.overlay', label: 'check.overlay', group: G, when: density, run: () => press('overlay') });

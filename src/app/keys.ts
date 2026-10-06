@@ -164,7 +164,7 @@ export function bindKeys(app: KeysApp) {
       if (e.key === 'e' || e.key === 'r' || e.key === 'g') return;
     }
     if (app.rungTool.active && app.settings.mode === 'flow') {
-      if ((e.key === 't' || e.key === 'T') && app.rungTool.mode !== 'guide' && !mod) return app.rungTool.setCutMode(!app.rungTool.cutMode);
+      if ((e.key === 't' || e.key === 'T') && (app.rungTool.mode === 'satin' || app.rungTool.mode === 'fill')) return app.rungTool.setCutMode(!app.rungTool.cutMode);
       if ((e.key === 'Delete' || e.key === 'Backspace') && app.rungTool.deleteSelected()) {
         e.preventDefault();
         return;
@@ -263,7 +263,7 @@ export function bindKeys(app: KeysApp) {
     else if (e.key === 'ArrowUp' || e.key === 'k') app.files.step(-1);
     else if (e.key === 'f') app.fitView();
     else if (e.key === 'e') app.setEditing(!app.editor.active);
-    else if (e.key === 'c' && FileList.edited(app.files.active)) app.setComparing(!ui.comparing);
+    else if (e.key === 'c' && FileList.changed(app.files.active)) app.setComparing(!ui.comparing);
     else if (e.key === 'n') app.stepZone(1);
     else if (e.key === 'N') app.stepZone(-1);
     else if (e.key === 'v') {
