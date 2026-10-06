@@ -35,6 +35,10 @@ export interface StoredFile {
   aside?: StoredAside[];
   /** Fabric, thread, hoop, fabric color and checks of this design (unchecked, normalize on reading). */
   material?: unknown;
+  /** The name the user gave the design (without extension); absent while it has its file name. */
+  title?: string;
+  /** Made in the app (empty with "Neu", from an image or SVG) rather than loaded as an embroidery file. */
+  own?: boolean;
 }
 
 const DB_NAME = STORAGE_NS;
@@ -123,6 +127,16 @@ export function saveAside(key: number, aside: StoredAside[]): Promise<void> {
 export function saveMaterial(key: number, material: unknown): Promise<void> {
   return queue(key, (rec) => {
     rec.material = material;
+  });
+}
+
+/** Stores how file `key` is named: the name the user gave it (null: its file name) and whether it was made in the app. */
+export function saveNaming(key: number, title: string | null, own: boolean): Promise<void> {
+  return queue(key, (rec) => {
+    if (title) rec.title = title;
+    else delete rec.title;
+    if (own) rec.own = true;
+    else delete rec.own;
   });
 }
 

@@ -93,6 +93,8 @@ export function bindFileIo(app: FileIoApp) {
         objects: rememberedIn(f.pattern!, app.seq(f.pattern!).objects),
         ...(asideOf(f.pattern).length ? { aside: storeAside(asideOf(f.pattern)) } : {}),
         material: f.material,
+        ...(f.title ? { title: f.title } : {}),
+        ...(f.own ? { own: true } : {}),
       })),
       active: active >= 0 ? active : null,
       image: snap && { name: snap.image.name, type: snap.image.type, data: new Uint8Array(snap.image.data), work: snap.work },
@@ -175,7 +177,7 @@ export function bindFileIo(app: FileIoApp) {
   /** "Neues Stickmuster", or "Neues Stickmuster 2" and so on when that name is taken. */
   function newName(): string {
     const base = t('draw.newName');
-    const taken = new Set(app.files.files.map((f) => f.fileName.replace(/\.[^.]+$/, '')));
+    const taken = new Set(app.files.files.map((f) => FileList.baseName(f)));
     let name = base;
     for (let k = 2; taken.has(name); k++) name = `${base} ${k}`;
     return name;
@@ -187,7 +189,7 @@ export function bindFileIo(app: FileIoApp) {
     // Without a hoop there would be nothing to draw into: the common 10 x 10 cm one stands in.
     const material = materialOf(app.settings);
     material.hoop ??= { w: 100, h: 100 };
-    await app.files.addWithObjects(`${name}.pes`, data.slice().buffer, [], [], material);
+    await app.files.addWithObjects(`${name}.pes`, data.slice().buffer, [], [], material, true);
     app.setMode('flow');
     // Nothing to choose yet: straight to drawing.
     app.setFormLevel(true);
