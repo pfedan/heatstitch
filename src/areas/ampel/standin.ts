@@ -44,7 +44,7 @@ import {
  * (Entscheidung 15): 5 mm² on stable fabric and caps (heavy woven too), 3 mm² on knit, jersey,
  * fleece and terry; light and sheer fabrics and leather take the stricter value.
  */
-export const RED_MIN_MM2: Record<FabricId, number> = { woven: 5, woven_heavy: 5, cap: 5, knit: 3, fleece: 3, terry: 3, light: 3, sheer: 3, leather: 3 };
+export const RED_MIN_MM2 = Object.fromEntries(FABRICS.map((f) => [f.id, f.redMinMm2])) as Record<FabricId, number>;
 
 /** Quiet time after a change before fixes are worked out (ms): no search starts while one is still at work. */
 const SETTLE_MS = 2000;

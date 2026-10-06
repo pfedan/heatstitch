@@ -2,7 +2,7 @@ import { distanceToSeeds } from '../image/edt';
 import { components, type Components } from '../image/labels';
 import { NONE, type Prepared } from '../image/prepare';
 import { COLOR_CHANGE, END, JUMP, PatternBuilder, STITCH, TRIM, type Pattern, type ThreadColor } from '../model/pattern';
-import { fabricOf, recommendedSpacing, type FabricId, type Profile } from '../validation/profiles';
+import { fabricOf, recommendedSpacing, type Profile } from '../validation/profiles';
 import { sewBlades, splitBlades, type Blades } from './blades';
 import { fillRegion } from './fill';
 import { flowFill } from './flow';
@@ -68,22 +68,6 @@ export interface DigitizeOptions {
   tolerance: number;
 }
 
-/** Pull compensation per fabric (mm per side): Wilcom's table, more for stretchy and pile fabrics. */
-const PULL: Record<FabricId, number> = {
-  woven: 0.2,
-  // Heavy woven pulls in no more than woven.
-  woven_heavy: 0.2,
-  cap: 0.2,
-  knit: 0.35,
-  // Fleece stretches and has pile: like terry.
-  fleece: 0.4,
-  terry: 0.4,
-  light: 0.15,
-  // Sheer: as little as on light fabric, more would show as a hard edge.
-  sheer: 0.15,
-  leather: 0.15,
-};
-
 /** Fills smaller than this (mm²) are sewn without underlay; from LARGE_FILL_MM2 crossing layers where the fabric asks for them. */
 export const SMALL_FILL_MM2 = 40;
 const LARGE_FILL_MM2 = 100;
@@ -99,7 +83,7 @@ export function fillUnder(o: Pick<DigitizeOptions, 'underlay' | 'underCross'>, a
  * its size (longer rows pull in more), a satin gets half fixed and half by its width.
  */
 export function pullFor(profile: Profile, kind: 'fill' | 'satin', areaMm2 = 400): { edge: number; edgeShare?: number } {
-  const pull = PULL[fabricOf(profile).id] ?? 0.2;
+  const pull = fabricOf(profile).pullMm;
   if (kind === 'satin') return { edge: round2(pull / 2), edgeShare: Math.round((pull / 2 / PULL_WIDTH) * 1000) / 1000 };
   const k = Math.min(1.5, Math.max(0.75, Math.sqrt(areaMm2) / 20));
   return { edge: round2(Math.round((pull * k) / 0.05) * 0.05) };
@@ -131,7 +115,7 @@ export function digitizeDefaults(profile: Profile): DigitizeOptions {
     flow: true,
     satinMax: 7,
     satinMin: 1,
-    pull: PULL[fabric.id] ?? 0.2,
+    pull: fabric.pullMm,
     overlap: 0.2,
     underlay: true,
     underCross: fabric.pull === 'high',

@@ -30,10 +30,8 @@ const JOIN_MAX_ASPECT = 2.5;
 /** ... and at most this factor above the critical limit (more means a third layer). */
 export const JOIN_MAX_EXCESS = 1.3;
 
-/** Fabrics that carry short-stitch clusters without trouble. */
-const STABLE = new Set(['woven', 'woven_heavy', 'cap']);
-
-export const stableFabric = (p: Profile): boolean => STABLE.has(fabricOf(p).id);
+/** Fabrics that carry short-stitch clusters without trouble (see Fabric.shortsOk). */
+export const stableFabric = (p: Profile): boolean => fabricOf(p).shortsOk;
 
 export function practiceNote(z: Zone, profile: Profile, th: Thresholds): PracticeNote | undefined {
   if (z.reasons.includes('perforation')) return undefined;

@@ -1,5 +1,5 @@
 import type { Key } from '../../i18n';
-import type { FabricId, ThreadId } from '../../validation/profiles';
+import { FABRICS, type FabricId, type ThreadId } from '../../validation/profiles';
 
 /**
  * "Bereit zum Sticken": what to put under and on the fabric, which needle, thread, speed and how
@@ -408,11 +408,11 @@ export interface Card {
 }
 
 /** Fabrics a dense design is a risk on (research rule R4). */
-const DELICATE: readonly FabricId[] = ['knit', 'light', 'sheer', 'leather'];
+const DELICATE: readonly FabricId[] = FABRICS.filter((f) => f.delicate).map((f) => f.id);
 /** Fabrics with pile or texture small lettering sinks into (rule R7). */
-const PILE: readonly FabricId[] = ['terry', 'knit', 'fleece'];
+const PILE: readonly FabricId[] = FABRICS.filter((f) => f.pile).map((f) => f.id);
 /** Fabrics where a large design needs more support (rule R9): knits and thin fabrics. */
-const STRETCHY_OR_THIN: readonly FabricId[] = ['knit', 'fleece', 'light', 'sheer'];
+const STRETCHY_OR_THIN: readonly FabricId[] = FABRICS.filter((f) => f.stretchyOrThin).map((f) => f.id);
 
 /** Extra tear-away layers for many stitches: about one per further 10,000 (rule of thumb), at most 2. */
 export function extraLayers(stitches: number, free = 1): number {
