@@ -38,7 +38,7 @@ export function fileHoopOffer(b: Bounds | undefined, hoop: Hoop | null, fileHoop
  * The hoop picker under the file list: no hoop, the common sewing fields with their brands, or an own
  * size; and the line saying whether the active design fits.
  */
-export function bindHoop(s: Settings, onChange: () => void): { refresh: (b: Bounds | undefined, fileHoop?: Hoop) => void } {
+export function bindHoop(s: Settings, onChange: () => void, fit: (() => void) | null = null): { refresh: (b: Bounds | undefined, fileHoop?: Hoop) => void } {
   const select = $<HTMLSelectElement>('hoop');
   const custom = $<HTMLElement>('hoop-custom');
   const w = $<HTMLInputElement>('hoop-w');
@@ -109,6 +109,12 @@ export function bindHoop(s: Settings, onChange: () => void): { refresh: (b: Boun
       note.classList.toggle('turned', !!msg?.turned);
       note.classList.toggle('info', !msg);
       const parts: Node[] = [document.createTextNode(text)];
+      // Too big: made smaller to fit, or a bigger hoop.
+      if (msg && !msg.turned && fit) {
+        const btn = Object.assign(document.createElement('button'), { type: 'button', className: 'link', textContent: t('hoop.fit'), title: t('hoop.fit.hint') });
+        btn.addEventListener('click', fit);
+        parts.push(document.createTextNode(' '), btn);
+      }
       if (offer) {
         const btn = Object.assign(document.createElement('button'), {
           type: 'button',

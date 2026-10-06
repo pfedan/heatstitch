@@ -16,6 +16,7 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 
 /** What opening and saving files needs from the app. */
 export interface FileIoApp {
+  readonly setFormLevel: (on: boolean) => void;
   files: FileList;
   settings: Settings;
   imageMode: ImageMode;
@@ -188,6 +189,8 @@ export function bindFileIo(app: FileIoApp) {
     material.hoop ??= { w: 100, h: 100 };
     await app.files.addWithObjects(`${name}.pes`, data.slice().buffer, [], [], material);
     app.setMode('flow');
+    // Nothing to choose yet: straight to drawing.
+    app.setFormLevel(true);
   });
 
   const exampleSelect = $<HTMLSelectElement>('load-example');

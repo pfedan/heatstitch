@@ -1,7 +1,8 @@
 import type { AsideRole } from '../model/aside';
+import type { DrawTool } from '../ui/drawTool';
 import type { Editor } from '../ui/editor';
 import type { FileList } from '../ui/fileList';
-import type { Form } from '../shape/path';
+import { scaling, type Form, type Mat } from '../shape/path';
 import type { Lettering } from '../lettering/layout';
 import type { Measurement } from '../validation/measure';
 import type { Pattern } from '../model/pattern';
@@ -16,7 +17,7 @@ import { sameColor } from '../model/recolor';
 import { recordOfStitch } from '../model/sequence';
 import { remembered, measureFill, analyze, unionRegion, remember, restitch, type RestitchResult } from '../model/restitch';
 import { reversible, reverseObjects } from '../model/reverse';
-import { t, type Key } from '../i18n';
+import { formatNumber, t, type Key } from '../i18n';
 import { ui } from './state';
 import { unionForm, recolorObjects } from '../model/shapeOps';
 import { blendObject } from '../model/blend';
@@ -30,7 +31,9 @@ export interface ObjectsApp {
   readonly applyRestitched: (r: RestitchResult | null, failed: Key, remeasure?: boolean) => void;
   readonly closeRungs: () => void;
   readonly closeShape: () => void;
+  readonly commitTransform: (m: Mat) => void;
   readonly deleteSelected: () => void;
+  readonly drawTool: DrawTool;
   readonly duplicateSelected: () => void;
   readonly editor: Editor;
   readonly enterShape: (o: number, fit: boolean) => void;
@@ -48,6 +51,7 @@ export interface ObjectsApp {
   readonly setEditing: (on: boolean) => void;
   readonly settings: Settings;
   readonly shapeTarget: (p: Pattern, q: Sequence, o: number) => Form | null;
+  readonly showBand: (p: Pattern, q: Sequence, o: number) => void;
   readonly shapeTool: ShapeTool;
   readonly showObjectMenu: (o: number, clientX: number, clientY: number) => boolean;
   readonly subtractSelected: () => void;
@@ -150,15 +154,17 @@ export function bindObjects(app: ObjectsApp) {
     ui.flowPreview = null;
     if (next.size) ui.focusBlock = null;
     if (app.rungTool.active && (next.size !== 1 || !next.has(ui.rungObject!))) app.closeRungs();
-    // While editing an outline, choosing another object goes on with that one's (or back to the objects).
-    if (app.shapeTool.active && (next.size !== 1 || !next.has(ui.shapeObject!))) {
+    // Level Form: the one selected object shows its outline (another one chosen goes on with that one's).
+    if ((app.shapeTool.active || ui.formLevel) && (next.size !== 1 || !next.has(ui.shapeObject!))) {
       const one = next.size === 1 ? [...next][0] : null;
       const p = app.files.active?.pattern;
-      const form = one !== null && p ? app.shapeTarget(p, app.seq(p), one) : null;
+      const form = one !== null && p && ui.formLevel && !ui.letterMode && !app.drawTool.active ? app.shapeTarget(p, app.seq(p), one) : null;
       if (form && one !== null && p) {
         app.shapeTool.open(form);
+        app.showBand(p, app.seq(p), one);
         ui.shapeObject = one;
         ui.shapePattern = p;
+        app.updateLevel();
       } else app.closeShape();
     }
     // While editing points, choosing another object (in the list too) goes on with that one.
@@ -379,10 +385,7 @@ export function bindObjects(app: ObjectsApp) {
     reverse: () => reverseSelected(),
     clear: () => {
       if (app.editor.active) app.setEditing(false);
-      ui.selectedObjects = new Set();
-      ui.selectionKey++;
-      ui.flowPreview = null;
-      app.redraw();
+      selectObjects([], false);
     },
     editStitches: (on) => app.setEditing(on),
     editShape: (on) => {
@@ -391,6 +394,21 @@ export function bindObjects(app: ObjectsApp) {
     },
     deleteNode: () => app.shapeTool.deleteSelected(),
     toggleNode: () => app.shapeTool.toggleSmooth(),
+    resize: (sx, sy) => {
+      const p = app.files.active?.pattern;
+      const sel = app.frameObjects();
+      if (!p || !sel.length) return;
+      const objs = sel.map((o) => app.seq(p).objects[o]);
+      const cx = (Math.min(...objs.map((o) => o.minX)) + Math.max(...objs.map((o) => o.maxX))) / 20;
+      const cy = (Math.min(...objs.map((o) => o.minY)) + Math.max(...objs.map((o) => o.maxY))) / 20;
+      app.commitTransform(scaling(sx, sy, cx, cy));
+    },
+    simplify: () => {
+      const r = app.shapeTool.simplify();
+      if (!r) return layers.say(t('shape.simplify.none'), true);
+      layers.say(t('shape.simplified', { before: formatNumber(r.before), after: formatNumber(r.after) }));
+      app.shapeTool.commit();
+    },
     closeLine: () => app.shapeTool.toggleClosed(),
     deleteSelection: () => app.editor.deleteSelection(),
     splitStitch: () => app.editor.splitSelected(),

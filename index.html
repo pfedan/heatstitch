@@ -375,8 +375,8 @@
               <button type="button" id="redo" class="tool" data-i18n-title="edit.redo.key" data-i18n-aria="edit.redo"><span aria-hidden="true">↷</span></button>
               <button type="button" id="lettering-new" class="tool" data-mode="flow" data-i18n-title="lettering.tool.hint"><span class="tool-glyph" aria-hidden="true">T</span> <span data-i18n="lettering.tool"></span></button>
               <div class="segmented level-switch" role="radiogroup" data-i18n-aria="level.label">
-                <label data-i18n-title="level.objects.hint"><input type="radio" name="level" value="objects" checked /><span data-i18n="level.objects"></span></label>
                 <label data-i18n-title="level.shape.hint" data-mode="flow"><input type="radio" name="level" value="shape" /><span data-i18n="level.shape"></span></label>
+                <label data-i18n-title="level.objects.hint"><input type="radio" name="level" value="objects" checked /><span data-i18n="level.objects"></span></label>
                 <label data-i18n-title="level.stitches.hint"><input type="radio" name="level" value="stitches" /><span data-i18n="level.stitches"></span></label>
               </div>
               <span class="edit-crumb" id="edit-crumb" hidden></span>
@@ -394,6 +394,7 @@
             </div>
           </div>
           <div class="stage-tools draw-tools" data-mode="flow" role="toolbar" data-i18n-aria="draw.label">
+            <button type="button" class="tool" id="draw-pointer" aria-pressed="true" data-i18n-title="draw.pointer.hint" data-i18n-aria="draw.pointer"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 3 L5 15.5 L8.2 12.6 L10.5 17.5 L12.6 16.5 L10.3 11.7 L14.6 11.3 Z" /></svg></button>
             <button type="button" class="tool" data-draw="rect" aria-pressed="false" data-i18n-title="draw.rect.hint" data-i18n-aria="draw.rect"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3.5" y="5" width="13" height="10" rx="0.5" /></svg></button>
             <button type="button" class="tool" data-draw="ellipse" aria-pressed="false" data-i18n-title="draw.ellipse.hint" data-i18n-aria="draw.ellipse"><svg viewBox="0 0 20 20" aria-hidden="true"><ellipse cx="10" cy="10" rx="7" ry="5.5" /></svg></button>
             <button type="button" class="tool" data-draw="pen" aria-pressed="false" data-i18n-title="draw.pen.hint" data-i18n-aria="draw.pen"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 16 C6 6 12 4 17 4" /><rect x="1.8" y="14.8" width="2.4" height="2.4" class="node" /><rect x="15.8" y="2.8" width="2.4" height="2.4" class="node" /></svg></button>
