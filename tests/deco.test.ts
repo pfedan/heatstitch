@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { crossFill, embossPoints, gridFill, mazeFill, meanderFill, motifCrossings, regionBox, type OpenParams } from '../src/digitize/deco';
+import { crossFill, embossPoints, gridFill, motifInside, mazeFill, meanderFill, motifCrossings, regionBox, type OpenParams } from '../src/digitize/deco';
 import { digitizeDefaults } from '../src/digitize/digitize';
 import { fillRegion } from '../src/digitize/fill';
 import { buildRegion, sample, type Region } from '../src/digitize/region';
@@ -75,6 +75,29 @@ describe('embossing', () => {
     const b = motifCrossings('stars', 8, { o: [40, 5], e: [-1, 0] }, 0, 40).map((u) => 40 - u).reverse();
     expect(a.length).toBeGreaterThan(2);
     a.forEach((u, i) => expect(b[i]).toBeCloseTo(u, 6));
+  });
+
+  it('knows what lies inside a motif', () => {
+    // Size 10: a diamond per 10 x 18.8 mm tile, stars and hearts at a quarter and three quarters.
+    expect(motifInside('diamonds', 10, [5, 9.4])).toBe(true);
+    expect(motifInside('diamonds', 10, [1, 1])).toBe(false);
+    expect(motifInside('diamonds', 10, [25, 9.4 + 18.8])).toBe(true);
+    expect(motifInside('stars', 10, [2.5, 4.75])).toBe(true);
+    expect(motifInside('stars', 10, [7.5, 4.75])).toBe(false);
+    expect(motifInside('hearts', 10, [7.5, 14.25])).toBe(true);
+    expect(motifInside('waves', 10, [5, 3])).toBe(true);
+    expect(motifInside('waves', 10, [0, 3])).toBe(false);
+    expect(motifInside('waves', 10, [-5, 3])).toBe(true);
+  });
+
+  it('sews shorter stitches inside the motif when it should show clearly', () => {
+    const r = disc();
+    const kinds = (strong: boolean) => {
+      const m = remembered(r, sewObjects(r)[0])!.fill!;
+      const q = sewAs(r, () => ({ ...m, pattern: 'tatami', deco: { emboss: 'diamonds', embossStrong: strong } }))!;
+      return q.cmd.filter((c) => c === STITCH).length;
+    };
+    expect(kinds(true)).toBeGreaterThan(kinds(false) * 1.15);
   });
 });
 

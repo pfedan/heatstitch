@@ -933,6 +933,22 @@ export class StitchPanel {
     if (!d.emboss) return [wrap];
     return [
       wrap,
+      this.choice<'soft' | 'strong'>(
+        'stitch.motifStrength',
+        ['soft', 'strong'],
+        d.embossStrong ? 'strong' : 'soft',
+        (v) => `stitch.motifStrength.${v}` as Key,
+        (v) => (v === 'strong' ? (d.embossStrong = true) : delete d.embossStrong),
+        false,
+        (v) => {
+          if (!v) return this.hooks.preview(null);
+          const peek = structuredClone(s);
+          const pd = (peek.deco ??= {});
+          if (v === 'strong') pd.embossStrong = true;
+          else delete pd.embossStrong;
+          this.hooks.preview({ kind: 'fill', s: peek });
+        },
+      ),
       this.slider({ label: 'stitch.motifSize', hint: 'stitch.motifSize.hint', min: 4, max: 30, step: 0.5, get: () => d.embossSize ?? DECO_DEFAULTS.embossSize, set: (v) => (d.embossSize = v), fmt: (v) => `${formatNumber(v, 1)} mm` }),
     ];
   }

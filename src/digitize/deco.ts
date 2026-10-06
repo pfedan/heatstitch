@@ -153,6 +153,48 @@ export function motifCrossings(m: Motif, size: number, row: MotifRow, lo: number
 }
 
 /**
+ * Whether point `q` (mm) lies inside the motif: between the two lines of a wave, or within a
+ * diamond, star or heart. Counts the lines crossed on the way to the corner of its tile, which is
+ * outside every motif.
+ */
+export function motifInside(m: Motif, size: number, q: Pt): boolean {
+  const tile = TILES[m];
+  const tw = tile.w * size;
+  const th = tile.h * size;
+  const i = Math.floor(q[0] / tw);
+  const j = Math.floor(q[1] / th);
+  const c: Pt = [i * tw, j * th];
+  let n = 0;
+  for (let dj = -1; dj <= 1; dj++) {
+    for (let di = -1; di <= 1; di++) {
+      for (const line of tile.lines) {
+        for (let k = 1; k < line.length; k++) {
+          const a: Pt = [(i + di) * tw + line[k - 1][0] * size, (j + dj) * th + line[k - 1][1] * size];
+          const b: Pt = [(i + di) * tw + line[k][0] * size, (j + dj) * th + line[k][1] * size];
+          if (crosses(q, c, a, b)) n++;
+        }
+      }
+    }
+  }
+  return n % 2 === 1;
+}
+
+/** Whether segment p-q crosses segment a-b (a touching end counts once: half open at b). */
+function crosses(p: Pt, q: Pt, a: Pt, b: Pt): boolean {
+  const d1x = q[0] - p[0];
+  const d1y = q[1] - p[1];
+  const d2x = b[0] - a[0];
+  const d2y = b[1] - a[1];
+  const den = d1x * d2y - d1y * d2x;
+  if (Math.abs(den) < 1e-12) return false;
+  const wx = a[0] - p[0];
+  const wy = a[1] - p[1];
+  const t = (wx * d2y - wy * d2x) / den;
+  const s = (wx * d1y - wy * d1x) / den;
+  return t >= 0 && t <= 1 && s >= 0 && s < 1;
+}
+
+/**
  * Needle points of an embossed row from lo to hi (sorted, u along the row), as in the program
  * split of commercial software: on every crossing of a motif line lies a needle point, so the
  * points of neighbouring rows line up into a groove that draws the motif. The regular points stay

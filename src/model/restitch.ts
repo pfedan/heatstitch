@@ -56,6 +56,8 @@ export interface DecoSettings {
   emboss?: Motif;
   /** Size of one motif (mm). */
   embossSize?: number;
+  /** Embossing that shows clearly: shorter stitches inside the motif as well (see motifInside). */
+  embossStrong?: boolean;
   /** Waves: from the middle to a crest, and from crest to crest (mm). */
   height?: number;
   length?: number;
@@ -699,6 +701,7 @@ function isDeco(d: unknown): d is DecoSettings {
     (s.focus === undefined || isShare(s.focus)) &&
     (s.centers === undefined || (Array.isArray(s.centers) && s.centers.length >= 1 && s.centers.length <= MAX_SWIRLS && s.centers.every(isShare))) &&
     (s.triple === undefined || typeof s.triple === 'boolean') &&
+    (s.embossStrong === undefined || typeof s.embossStrong === 'boolean') &&
     (s.grid === undefined || GRID_KINDS.includes(s.grid)) &&
     (s.cross === undefined || CROSS_KINDS.includes(s.cross)) &&
     (s.fade === undefined || s.fade === 'out' || s.fade === 'in') &&
@@ -1498,7 +1501,7 @@ function newFill(p: Pattern, o: SewObject, a: Analysis, s: FillSettings, reverse
     res = openFill(r, s, start);
   } else {
     const d = s.deco;
-    res = fillRegion(r, { ...fp, offset: s.offset, ...(s.pattern === 'tatami' && d?.emboss ? { emboss: { motif: d.emboss, size: d.embossSize ?? DECO_DEFAULTS.embossSize } } : {}) }, start);
+    res = fillRegion(r, { ...fp, offset: s.offset, ...(s.pattern === 'tatami' && d?.emboss ? { emboss: { motif: d.emboss, size: d.embossSize ?? DECO_DEFAULTS.embossSize, strong: !!d.embossStrong } } : {}) }, start);
   }
   if (!res) return null;
   // Underlay points in runs too short to sew are not sewn either.

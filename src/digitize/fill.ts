@@ -1,7 +1,7 @@
 import { expandRegion, sample, signedField, type Region } from './region';
 import { runStitch, simplify } from './run';
 import type { Pt } from './skeleton';
-import { embossPoints, motifCrossings, type Motif } from './deco';
+import { embossPoints, motifCrossings, motifInside, type Motif } from './deco';
 
 /**
  * Tatami fill of a region (with holes) from its signed distance field.
@@ -57,7 +57,7 @@ export interface FillParams {
   /** Curved rows keep this close to their line (mm); TOLERANCE by default. */
   tolerance?: number;
   /** Straight rows put their needle points on the lines of this motif (embossing, see deco.ts). */
-  emboss?: { motif: Motif; size: number };
+  emboss?: { motif: Motif; size: number; strong?: boolean };
   /**
    * Rows that fade out across the shape (`out`, dense where the rows start) or in (`in`): the
    * density falls evenly to nearly nothing, so a second color fading the other way on the same
@@ -106,7 +106,7 @@ class Frame {
   private vs: number[] | null = null;
   private k0 = 0;
   /** Needle points on the lines of a motif (embossing). */
-  emboss?: { motif: Motif; size: number };
+  emboss?: { motif: Motif; size: number; strong?: boolean };
   /** Density falling evenly across the shape (out) or rising (in); see FillParams.fade. */
   fade?: 'out' | 'in';
   constructor(
@@ -275,9 +275,35 @@ function rowStitches(f: Frame, k: number, v: number, from: number, to: number, l
     const { motif, size } = f.emboss;
     const cross = motifCrossings(motif, size, { o: f.at(0, v), e: f.e }, lo + 0.3, hi - 0.3);
     pts.splice(0, pts.length, ...embossPoints(cross, pts, len, lo, hi));
+    if (f.emboss.strong) {
+      const v0 = f.at(0, v);
+      const inside = (u: number) => motifInside(motif, size, [v0[0] + f.e[0] * u, v0[1] + f.e[1] * u]);
+      pts.splice(0, pts.length, ...shortInside(pts, inside, len, lo, hi));
+    }
   }
   if (dir < 0) pts.reverse();
   return [f.at(from, v), ...pts.map((u) => f.at(u, v)), f.at(to, v)];
+}
+
+/**
+ * Strong embossing: inside the motif the stitches are about half as long, so the motif shows as
+ * an area of a finer, more matte texture between its grooves, whichever way its lines run. The
+ * rows and their spacing stay, so the density does too.
+ */
+function shortInside(pts: number[], inside: (u: number) => boolean, len: number, lo: number, hi: number): number[] {
+  const short = Math.max(1.5, len * 0.5);
+  const out: number[] = [];
+  let prev = lo;
+  for (const u of [...pts, hi]) {
+    const g = u - prev;
+    if (g > short * 1.4 && inside((prev + u) / 2)) {
+      const n = Math.round(g / short);
+      for (let i = 1; i < n; i++) out.push(prev + (g * i) / n);
+    }
+    if (u < hi) out.push(u);
+    prev = u;
+  }
+  return out;
 }
 
 /** Stitches of a section, entered at its first or last row and at the start or end of that row. */
