@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { stripsOfAreas, stripsOfOutline } from '../src/digitize/rungs';
+import { cutLinesBetween, stripsOfAreas, stripsOfOutline } from '../src/digitize/rungs';
 import type { Pt } from '../src/digitize/skeleton';
 import { sewObjects } from '../src/model/objects';
 import { forget, keepShape, remember, remembered, rememberedIn, restoreRemembered, reversedRails, satinRuns, type Rails } from '../src/model/restitch';
@@ -222,5 +222,28 @@ describe('the way between the parts of a chain', () => {
         expect(tiny).toBeLessThan(10);
       }
     }
+  });
+});
+
+describe('cut lines lost', () => {
+  it('are found again where the columns meet inside the fill, and cut it the same way', () => {
+    const cols = cutM();
+    const cuts = cutLinesBetween(cols, [M], []);
+    expect(cuts.length).toBe(3);
+    // Each where one was drawn (at y 16), from edge to edge.
+    for (const [a, b] of cuts) {
+      expect(Math.abs(a[1] - 16) + Math.abs(b[1] - 16)).toBeLessThan(0.1);
+      expect(Math.abs(a[0] - b[0])).toBeGreaterThan(4.5);
+    }
+    const again = stripsOfOutline(M, LINES, cuts);
+    expect(again.strips.length).toBe(cols.length);
+    const centreX = (r: Rails) => [...r.left, ...r.right].reduce((a, p) => a + p[0], 0) / (r.left.length + r.right.length);
+    again.strips.forEach((r) => expect(Math.min(...cols.map((c) => Math.abs(centreY(c) - centreY(r)) + Math.abs(centreX(c) - centreX(r))))).toBeLessThan(0.5));
+  });
+
+  it('are none on a column that only meets the edge', () => {
+    const square = poly([0, 0], [20, 0], [20, 4], [0, 4], [0, 0]);
+    const made = stripsOfOutline(square, [[[10, -1], [10, 5]]], []);
+    expect(cutLinesBetween(made.strips, [square], [])).toEqual([]);
   });
 });

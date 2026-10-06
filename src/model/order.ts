@@ -406,7 +406,7 @@ export function reorder(p: Pattern, objs: SewObject[], order: number[], trimMm: 
     const byBlock = blockKeys(p, Math.max(...objs.map((o) => o.block), ...into.values()) + 1);
     for (const [o, b] of into) keys[o] = byBlock[b];
   }
-  const linked = (o: SewObject) => !!(remembered(p, o)?.outline || remembered(p, o)?.blendOf);
+  const linked = (o: SewObject) => !!(remembered(p, o)?.outline || remembered(p, o)?.blendOf || remembered(p, o)?.shadowOf || remembered(p, o)?.echoOf);
   const out: Rec[] = [];
   const colors: ThreadColor[] = [];
   const first = objs[order[0]];

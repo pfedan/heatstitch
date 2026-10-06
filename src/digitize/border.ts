@@ -5,10 +5,12 @@ import type { Pt } from './skeleton';
 /**
  * A border sewn around a fill on its edge (what Ink/Stitch sews for the stroke of a filled path,
  * and digitizing software calls an outline): a running stitch, a triple (bean) stitch or a satin
- * of a set width, centered on the edge, around the outside and every hole.
+ * of a set width, centered on the edge, around the outside and every hole; or an open zigzag, or
+ * an E stitch (blanket stitch) with its edge on the line, as appliqué is sewn on; or a motif
+ * repeated along it (motif.ts).
  */
 
-export type BorderType = 'run' | 'triple' | 'satin';
+export type BorderType = 'run' | 'triple' | 'satin' | 'zigzag' | 'e' | 'motif';
 
 /** Stitch length of a running or triple border (mm). */
 export const BORDER_STITCH = 2.5;
@@ -260,11 +262,14 @@ export function lineRails(line: Pt[], closed: boolean, w: number): { left: Pt[];
   return { left, right };
 }
 
-/** Running or triple stitch along a line (closed or not). */
-export function borderRun(loop: Pt[], triple: boolean, tol = TOLERANCE, len = BORDER_STITCH): Pt[] {
+/** Running stitch along a line (closed or not), each stitch sewn `times` times (3 or 5: bean stitch). */
+export function borderRun(loop: Pt[], times = 1, tol = TOLERANCE, len = BORDER_STITCH): Pt[] {
   const pts = runStitch(loop, len, tol);
-  if (!triple) return pts;
+  if (times < 3) return pts;
   const out: Pt[] = [pts[0]];
-  for (let i = 1; i < pts.length; i++) out.push(pts[i], pts[i - 1], pts[i]);
+  for (let i = 1; i < pts.length; i++) {
+    for (let k = 0; k < (times - 1) / 2; k++) out.push(pts[i], pts[i - 1]);
+    out.push(pts[i]);
+  }
   return out;
 }

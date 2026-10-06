@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { rememberObjects, sewObjects } from '../src/model/objects';
 import { STITCH, TRIM, type Pattern } from '../src/model/pattern';
 import type { Pt } from '../src/digitize/skeleton';
-import { forget, keepShape, remember, remembered, restitch, type Rails, type SatinSettings } from '../src/model/restitch';
+import { forget, keepShape, knownKind, remember, remembered, restitch, type Rails, type SatinSettings } from '../src/model/restitch';
 import { stitchKinds } from '../src/model/sequence';
 import { parsePattern } from '../src/parsers';
 
@@ -74,5 +74,14 @@ describe('chains and trims asked for', () => {
     } finally {
       forget(p, o);
     }
+  });
+});
+
+describe('a fill made satin', () => {
+  it('is known as satin by its columns, also when it still knows its fill settings', () => {
+    const col: Rails = { left: [[0, 0], [10, 0]], right: [[0, 2], [10, 2]] };
+    const fill = { pattern: 'tatami' as const, spacing: 0.4, spacingEnd: 1, offset: 0.25, angle: 0, stitch: 4, underlay: true, edge: 0, tolerance: 0.15 };
+    expect(knownKind({ region: null, satin: SATIN, fill, columns: [[col]] })).toBe('satin');
+    expect(knownKind({ region: null, satin: SATIN, fill })).toBeUndefined();
   });
 });

@@ -1,3 +1,4 @@
+import { syncBorders } from '../model/border';
 import type { AsideRole } from '../model/aside';
 import type { DrawTool } from '../ui/drawTool';
 import type { Editor } from '../ui/editor';
@@ -16,8 +17,8 @@ import { ObjectPanel } from '../ui/objectPanel';
 import { numberInColor, rememberObjects, type SewObject, splitObject } from '../model/objects';
 import { sameColor } from '../model/recolor';
 import { recordOfStitch } from '../model/sequence';
-import { remembered, measureFill, analyze, unionRegion, remember, restitch, type RestitchResult } from '../model/restitch';
-import { reversible, reverseObjects } from '../model/reverse';
+import { remembered, rememberedIn, measureFill, analyze, unionRegion, remember, restitch, type RestitchResult } from '../model/restitch';
+import { isLine, reverseLines, reversible, reverseObjects } from '../model/reverse';
 import { formatNumber, t, type Key } from '../i18n';
 import { ui } from './state';
 import { unionForm, recolorObjects } from '../model/shapeOps';
@@ -302,17 +303,30 @@ export function bindObjects(app: ObjectsApp) {
     const p = f?.pattern;
     if (!f || !p || !ui.selectedObjects.size) return;
     const q = app.seq(p);
-    const which = [...ui.selectedObjects].sort((a, b) => a - b).filter((o) => reversible(q.objects[o]));
-    if (!which.length) return;
-    const r = reverseObjects(p, q.objects, which, q.kinds, app.settings.trimMm);
-    const failed = r.failed.length;
+    const selected = [...ui.selectedObjects].sort((a, b) => a - b);
+    // Lines are turned by their curve (in place, so the others keep their numbers), the rest sewn from the other side.
+    const lines = selected.filter((o) => isLine(p, q.objects[o]));
+    const which = selected.filter((o) => !lines.includes(o) && reversible(q.objects[o]));
+    if (!which.length && !lines.length) return;
+    const turned = reverseLines(p, lines, app.settings.trimMm);
+    // Shadows and echo copies in threads of their own follow their lines.
+    const pl = turned.pattern === p ? p : syncBorders(turned.pattern, app.settings.trimMm);
+    const ql = app.seq(pl);
+    const r = which.length ? reverseObjects(pl, ql.objects, which, ql.kinds, app.settings.trimMm) : null;
+    const failed = (r?.failed.length ?? 0) + turned.failed.length;
     const failText = failed ? t(failed === 1 ? 'object.reverse.failed.one' : 'object.reverse.failed', { n: failed }) : null;
-    if (!r.starts.length) {
+    if (!r?.starts.length && pl === p) {
       layers.say(failText ?? '', true);
       return;
     }
     const before = app.orderStats(p);
-    app.applyRestitched({ ...r, failed: [] }, 'stitch.failed');
+    if (r?.starts.length) app.applyRestitched({ ...r, failed: [] }, 'stitch.failed');
+    else {
+      app.applyEdit(pl);
+      app.files.setObjects(f, rememberedIn(pl, app.seq(pl).objects));
+      ui.stitchCache = null;
+      app.redraw();
+    }
     const now = app.files.active?.pattern;
     if (!now) return;
     const after = app.orderStats(now);

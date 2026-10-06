@@ -1,4 +1,5 @@
 import type { Editor } from '../ui/editor';
+import { isLine } from '../model/reverse';
 import type { FileList } from '../ui/fileList';
 import type { Form, Mat } from '../shape/path';
 import type { FrameTool } from '../ui/frameTool';
@@ -16,7 +17,9 @@ import { formOf, reshapeFill } from '../model/reshape';
 import { railsForm, reshapeRails } from '../model/railsForm';
 import { lineOf, resewLine, lineSettings, fillToLine, reshapeLineFill } from '../model/line';
 import { refreshKnockouts } from '../model/knockout';
-import { remembered, rememberedIn, restitch, type RestitchResult } from '../model/restitch';
+import { objectKey, remembered, rememberedIn, restitch, type RestitchResult } from '../model/restitch';
+import { syncBorders } from '../model/border';
+import { stitchKey } from '../model/objects';
 import { t, formatNumber, type Key } from '../i18n';
 import { ui } from './state';
 
@@ -64,10 +67,10 @@ export function bindShapes(app: ShapesApp) {
     const known = obj && remembered(p, obj);
     if (known?.asLine && known.fill) return { width: known.fill.lineWidth ?? known.asLine.line.width, offset: 0 };
     const border = known?.fill?.border;
-    if (border?.type === 'satin') return { width: border.width, offset: border.offset ?? 0 };
+    if (border?.type === 'satin' || border?.type === 'zigzag') return { width: border.width, offset: border.offset ?? 0 };
     if (!obj || !isLineObject(p, obj)) return null;
     const st = lineSettings(p, obj, q.kinds);
-    return st.type === 'satin' ? { width: st.width, offset: 0 } : null;
+    return st.type === 'satin' || st.type === 'zigzag' ? { width: st.width, offset: 0 } : null;
   }
 
   /** The shape tool shows the band of object `o`, when it has one, and knows when its form is a satin column's rails. */
@@ -117,9 +120,7 @@ export function bindShapes(app: ShapesApp) {
    * file (their curve is traced); not the borders of fills and not letters.
    */
   function isLineObject(p: Pattern, o: SewObject): boolean {
-    const m = remembered(p, o);
-    if (m?.path) return true;
-    return o.kind === 'run' && !m?.outline && !m?.lettering;
+    return isLine(p, o);
   }
 
   /** The one selected object of the Ablauf mode, when it has a fill whose outline can be edited, or is a line. */
@@ -145,7 +146,10 @@ export function bindShapes(app: ShapesApp) {
     if (!obj) return false;
     const line = path ?? lineOf(p, obj, q.kinds);
     if (!line) return false;
-    const r = resewLine(p, o, line, st ?? lineSettings(p, obj, q.kinds), app.settings.trimMm);
+    const sewn = resewLine(p, o, line, st ?? lineSettings(p, obj, q.kinds), app.settings.trimMm);
+    // Its shadow follows (sewn before it: a new one moves the line one place on).
+    const synced = sewn && syncBorders(sewn.pattern, app.settings.trimMm);
+    const r = sewn && synced && { pattern: synced, key: stitchKey(sewn.pattern, sewn.first, sewn.last) };
     if (!final) {
       ui.flowPreview = r?.pattern ?? null;
       app.redraw();
@@ -159,8 +163,11 @@ export function bindShapes(app: ShapesApp) {
     }
     const hand = remembered(p, obj)?.hand ?? 0;
     app.applyEdit(r.pattern);
-    app.files.setObjects(f, rememberedIn(r.pattern, app.seq(r.pattern).objects));
-    ui.selectedObjects = new Set([o]);
+    const nq = app.seq(r.pattern);
+    app.files.setObjects(f, rememberedIn(r.pattern, nq.objects));
+    const now = nq.objects.findIndex((x) => objectKey(r.pattern, x) === r.key);
+    if (now >= 0 && ui.shapeObject === o) ui.shapeObject = now;
+    ui.selectedObjects = new Set([now >= 0 ? now : o]);
     ui.selectionKey++;
     ui.stitchCache = null;
     if (hand) app.layers.say(t('shape.handReplaced', { n: formatNumber(hand) }));
