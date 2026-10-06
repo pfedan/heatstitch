@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { borderStitches, sewAlong, type PathStitch } from '../src/model/along';
 import { lineStitches, resewLine } from '../src/model/line';
+import { reverseLines, reversedForm } from '../src/model/reverse';
+import { STITCH, type Pattern } from '../src/model/pattern';
 import { addShape } from '../src/model/addShape';
 import { sewObjects } from '../src/model/objects';
 import { isLineStitch, remembered } from '../src/model/restitch';
@@ -154,5 +156,46 @@ describe('motif as a border', () => {
     const outward = depth(borderStitches(disk, { type: 'motif', motif: 'hearts', width: 2.5, flip: true }, [15, 5]));
     expect(Math.max(...outward)).toBeGreaterThan(1.7);
     expect(Math.min(...outward)).toBeGreaterThan(-1);
+  });
+});
+
+describe('lines sewn from their other end', () => {
+  const options = digitizeDefaults(DEFAULT_PROFILE);
+  const empty = { x: new Int32Array(0), y: new Int32Array(0), cmd: new Uint8Array(0), colors: [] } as never;
+  const stitched = (p: Pattern) => {
+    const [o] = sewObjects(p);
+    const out: Pt[] = [];
+    for (let i = o.first; i <= o.last; i++) if (p.cmd[i] === STITCH) out.push([p.x[i] / 10, p.y[i] / 10]);
+    return out;
+  };
+
+  for (const st of [{ type: 'run', width: 2 }, { type: 'motif', motif: 'hearts', width: 3 }, { type: 'e', width: 2 }] as PathStitch[]) {
+    it(`start at the other end and keep their side (${st.type})`, () => {
+      const a = addShape(empty, { form: straight, kind: 'stroke', width: 0.4 }, { r: 200, g: 30, b: 30 }, null, options)!;
+      const p = resewLine(a.pattern, 0, straight, st, 7)!.pattern;
+      expect(stitched(p)[0][0]).toBeLessThan(1);
+      const r = reverseLines(p, [0], 7);
+      expect(r.failed).toEqual([]);
+      const pts = stitched(r.pattern);
+      expect(pts[0][0]).toBeGreaterThan(28);
+      expect(pts[pts.length - 1][0]).toBeLessThan(2);
+      // Hearts and prongs stay below the line (y down), as before.
+      if (st.type !== 'run') expect(Math.max(...pts.map(([, y]) => y))).toBeGreaterThan(1.9);
+      if (st.type !== 'run') expect(Math.min(...pts.map(([, y]) => y))).toBeGreaterThan(-1.1);
+      // It remembers the turned curve: settings changed later keep the direction.
+      const [o] = sewObjects(r.pattern);
+      const known = remembered(r.pattern, o)!;
+      const again = resewLine(r.pattern, 0, known.path!, known.line!, 7)!;
+      expect(stitched(again.pattern)[0][0]).toBeGreaterThan(28);
+      // Twice turned is as before.
+      expect(stitched(reverseLines(r.pattern, [0], 7).pattern)[0][0]).toBeLessThan(1);
+    });
+  }
+
+  it('turns a closed curve around without moving its start', () => {
+    const ring = parsePath('M0 0 L10 0 L10 10 L0 10 Z', ID);
+    const back = reversedForm(ring);
+    expect(back.paths[0].nodes[0].p).toEqual(ring.paths[0].nodes[0].p);
+    expect(back.paths[0].nodes[1].p).toEqual([0, 10]);
   });
 });

@@ -1,4 +1,5 @@
 import type { Editor } from '../ui/editor';
+import { isLine } from '../model/reverse';
 import type { FileList } from '../ui/fileList';
 import type { Form, Mat } from '../shape/path';
 import type { FrameTool } from '../ui/frameTool';
@@ -117,9 +118,7 @@ export function bindShapes(app: ShapesApp) {
    * file (their curve is traced); not the borders of fills and not letters.
    */
   function isLineObject(p: Pattern, o: SewObject): boolean {
-    const m = remembered(p, o);
-    if (m?.path) return true;
-    return o.kind === 'run' && !m?.outline && !m?.lettering;
+    return isLine(p, o);
   }
 
   /** The one selected object of the Ablauf mode, when it has a fill whose outline can be edited, or is a line. */
