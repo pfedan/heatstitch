@@ -2140,10 +2140,16 @@ export function restitch(
       }
       an = whole;
     }
+    // A satin made here, sewn anew as satin: all of it along the columns it keeps, also where its
+    // stitches no longer read as satin parts like the kept ones (an E stitch reads as running
+    // stitch along its rails).
+    const keptSatin =
+      !reverse && given.kind === 'satin' && (from ?? 'satin') === 'satin' && !!known?.satin && !!known.columns?.length && !known.fill && an.parts.filter((pt) => pt.kind === 'satin').length !== known.columns.length;
+    if (keptSatin) an = { parts: [{ kind: 'satin', s: o.first, e: o.last }], fill: null };
     const parts = an.parts;
     // Satin columns kept from an earlier edit, if the object still has as many satin parts.
     const satinParts = parts.filter((pt) => pt.kind === 'satin');
-    const keptRails = reverse && known?.columns?.length ? [known.columns.flat()] : known?.columns?.length === satinParts.length ? known.columns : undefined;
+    const keptRails = (reverse || keptSatin) && known?.columns?.length ? [known.columns.flat()] : known?.columns?.length === satinParts.length ? known.columns : undefined;
     const rails: Rails[][] = [];
     const src = from ?? given.kind;
     const converting = src !== given.kind;
