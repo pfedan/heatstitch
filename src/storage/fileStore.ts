@@ -11,6 +11,7 @@ import { computeBounds, type Pattern, type ThreadColor } from '../model/pattern'
 import type { StoredAside } from '../model/aside';
 import type { StoredObject } from '../model/restitch';
 import { isAcknowledgement, type Acknowledgement } from '../validation/acks';
+import type { Lang } from '../i18n';
 import { STORAGE_NS } from './namespace';
 
 /** The records of an edited pattern; name, format and bounds come from the original. */
@@ -37,6 +38,8 @@ export interface StoredFile {
   material?: unknown;
   /** The name the user gave the design (without extension); absent while it has its file name. */
   title?: string;
+  /** The name per app language (the demo project's designs); absent once renamed. */
+  titles?: Titles;
   /** Made in the app (empty with "Neu", from an image or SVG) rather than loaded as an embroidery file. */
   own?: boolean;
 }
@@ -130,11 +133,30 @@ export function saveMaterial(key: number, material: unknown): Promise<void> {
   });
 }
 
-/** Stores how file `key` is named: the name the user gave it (null: its file name) and whether it was made in the app. */
-export function saveNaming(key: number, title: string | null, own: boolean): Promise<void> {
+/** A design's name per app language. */
+export type Titles = Partial<Record<Lang, string>>;
+
+/** Valid names per language from stored data, or undefined when there are none. */
+export function titlesOf(v: unknown): Titles | undefined {
+  if (!v || typeof v !== 'object') return undefined;
+  const out: Titles = {};
+  for (const l of ['de', 'en'] as const) {
+    const s = (v as Record<string, unknown>)[l];
+    if (typeof s === 'string' && s.trim()) out[l] = s.trim();
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+/**
+ * Stores how file `key` is named: the name the user gave it (null: its file name), its names per
+ * language (the demo project's designs) and whether it was made in the app.
+ */
+export function saveNaming(key: number, title: string | null, own: boolean, titles?: Titles): Promise<void> {
   return queue(key, (rec) => {
     if (title) rec.title = title;
     else delete rec.title;
+    if (titles) rec.titles = titles;
+    else delete rec.titles;
     if (own) rec.own = true;
     else delete rec.own;
   });

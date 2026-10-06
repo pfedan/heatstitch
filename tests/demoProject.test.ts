@@ -38,6 +38,8 @@ describe('demo project', () => {
     forgetAll();
     const back = await decodeProject(bytes);
     expect(back.files.map((f) => f.title)).toEqual(designs.map((d) => d.title));
+    // Named in both app languages.
+    expect(back.files.every((f) => f.titles?.de === f.title && !!f.titles?.en)).toBe(true);
     for (const f of back.files) {
       expect(f.own).toBe(true);
       const p = parsePattern(f.data, f.name);
