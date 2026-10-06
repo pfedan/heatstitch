@@ -1,52 +1,83 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { COLOR_CHANGE, JUMP, PatternBuilder, STITCH } from '../src/model/pattern';
-import { colorRuns } from '../src/render/threads';
-import { threadWidthMm } from '../src/validation/profiles';
-import { buildInstances } from '../src/render/threadsGl';
+import { recolor } from '../src/model/recolor';
+import { pecColor } from '../src/parsers/pecPalette';
+import { parseVp3 } from '../src/parsers/vp3';
+import { BROTHER, inCatalog, nearest, search, setCatalogs, threadCode, threadNumber, type Catalog } from '../src/threads/catalog';
+import { writeVp3 } from '../src/writers/vp3';
+import { Shape } from './helpers/shapes';
 
-describe('colorRuns', () => {
-  it('splits stitches into one run per color and skips jumps and zero-length stitches', () => {
-    const b = new PatternBuilder();
-    b.add(0, 0, STITCH);
-    b.add(10, 0, STITCH);
-    b.add(0, 0, STITCH);
-    b.add(0, 10, STITCH);
-    b.add(50, 0, JUMP);
-    b.add(10, 0, STITCH);
-    b.add(10, 0, STITCH);
-    b.mark(COLOR_CHANGE);
-    b.add(0, 20, STITCH);
-    b.add(0, 20, STITCH);
-    const red = { r: 255, g: 0, b: 0 };
-    const runs = colorRuns(b.build('runs', 'dst', [red]));
-    expect(runs).toHaveLength(2);
-    expect(Array.from(runs[0].segs)).toEqual([0, 0, 10, 0, 10, 0, 10, 10, 70, 10, 80, 10]);
-    expect(Array.from(runs[1].segs)).toEqual([80, 30, 80, 50]);
-    // Blocks without a palette entry reuse the last color, like the flat renderer.
-    expect(runs[1].color).toBe(red);
+const file = JSON.parse(new TextDecoder().decode(readFileSync(new URL('../public/threads/catalogs.json', import.meta.url))));
+const all = setCatalogs(file);
+const byName = (n: string): Catalog => all.find((c) => c.name === n)!;
+
+describe('thread catalogs', () => {
+  it('has Brother first and the common brands before the others', () => {
+    expect(all[0].id).toBe(BROTHER);
+    for (const n of ['Madeira Polyneon', 'Madeira Rayon', 'Isacord Polyester', 'Gunold Polyester', 'Gütermann Creativ Dekor', 'Sulky Rayon', 'Robison-Anton Polyester', 'Marathon Polyester'])
+      expect(byName(n)?.common).toBe(true);
+    const firstOther = all.findIndex((c) => !c.common);
+    expect(all.slice(firstOther).every((c) => !c.common)).toBe(true);
+    // Brother's numbers are only lent to the PEC palette, not a list of their own.
+    expect(all.some((c) => c.id === 'brother-embroidery')).toBe(false);
   });
-});
 
-describe('threadWidthMm', () => {
-  it('scales the 0.4 mm reference width with the thread weight', () => {
-    expect(threadWidthMm({ fabric: 'woven', thread: '40' })).toBeCloseTo(0.4);
-    expect(threadWidthMm({ fabric: 'woven', thread: '12' })).toBeCloseTo(0.8);
-    expect(threadWidthMm({ fabric: 'woven', thread: '60' })).toBeLessThan(0.4);
+  it('holds sane threads: each with a color, a name and a number unique in its catalog', () => {
+    for (const c of all.slice(1)) {
+      expect(c.threads.length).toBeGreaterThanOrEqual(10);
+      const nums = c.threads.map((t) => t.catalog);
+      expect(new Set(nums).size, c.name).toBe(nums.length);
+      for (const t of c.threads) {
+        expect(t.brand).toBe(c.name);
+        expect(t.name || t.catalog).toBeTruthy();
+        for (const v of [t.r, t.g, t.b]) expect(v >= 0 && v <= 255).toBe(true);
+      }
+    }
   });
-});
 
-describe('buildInstances', () => {
-  it('packs one segment and one color per stitch in sewing order', () => {
-    const b = new PatternBuilder();
-    b.add(0, 0, STITCH);
-    b.add(10, 0, STITCH);
-    b.mark(COLOR_CHANGE);
-    b.add(0, 10, STITCH);
-    b.add(0, 10, STITCH);
-    const { segs, colors, count } = buildInstances(b.build('inst', 'dst', [{ r: 255, g: 0, b: 0 }, { r: 0, g: 0, b: 255 }]));
-    expect(count).toBe(2);
-    expect(Array.from(segs)).toEqual([0, 0, 10, 0, 10, 10, 10, 20]);
-    expect(Array.from(colors.subarray(0, 3))).toEqual([1, 0, 0]);
-    expect(Array.from(colors.subarray(4, 7))).toEqual([0, 0, 1]);
+  it('finds a thread by its number, a full number first', () => {
+    const madeira = byName('Madeira Polyneon');
+    const r = search(madeira, '1610');
+    expect(r[0]).toMatchObject({ catalog: '1610', name: 'Celestial Blue' });
+    expect(search(madeira, '16').every((t) => t.catalog!.startsWith('16') || t.name!.toLowerCase().includes('16'))).toBe(true);
+    expect(search(madeira, 'celestial').map((t) => t.catalog)).toContain('1610');
+    // Leading zeros do not matter.
+    expect(search(byName('Isacord Polyester'), '15')[0].catalog).toBe('0015');
+  });
+
+  it('suggests the nearest threads, an exact one at distance 0', () => {
+    const madeira = byName('Madeira Polyneon');
+    const t = madeira.threads[10];
+    const [m] = nearest({ r: t.r, g: t.g, b: t.b }, madeira);
+    expect(m.dE).toBeCloseTo(0, 5);
+    const three = nearest({ r: 200, g: 30, b: 40 }, madeira, 3);
+    expect(three).toHaveLength(3);
+    expect(three[0].dE).toBeLessThanOrEqual(three[1].dE);
+    expect(three[1].dE).toBeLessThanOrEqual(three[2].dE);
+  });
+
+  it('knows which threads belong to a catalog', () => {
+    const madeira = byName('Madeira Polyneon');
+    const isacord = byName('Isacord Polyester');
+    expect(inCatalog({ ...madeira.threads[3] }, madeira)).toBe(madeira.threads[3]);
+    expect(inCatalog({ ...madeira.threads[3] }, isacord)).toBeUndefined();
+    expect(inCatalog(pecColor(5), all[0])).toBeTruthy();
+    expect(inCatalog(madeira.threads[3], all[0])).toBeUndefined();
+  });
+
+  it('names maker and number, also for colors of the Brother palette', () => {
+    expect(threadCode(byName('Madeira Polyneon').threads[0])).toBe('Madeira Polyneon 1610');
+    const black = pecColor(20);
+    expect(black.name).toBe('Black');
+    expect(threadCode(black)).toBe('Brother 900');
+    expect(threadNumber(black)).toBe('900');
+    expect(threadCode({ r: 1, g: 2, b: 3 })).toBe('');
+  });
+
+  it('keeps maker and number of a chosen thread through VP3', () => {
+    const t = byName('Madeira Polyneon').threads[0];
+    const p = recolor(new Shape().to(0, 0).to(5, 0).to(10, 0).build(), 0, t);
+    const back = parseVp3(writeVp3(p)).colors[0];
+    expect(back).toMatchObject({ r: t.r, g: t.g, b: t.b, brand: 'Madeira Polyneon', catalog: '1610' });
   });
 });

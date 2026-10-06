@@ -1,7 +1,8 @@
 import type { AsideRole } from '../model/aside';
 import type { DrawTool } from '../ui/drawTool';
 import type { Editor } from '../ui/editor';
-import type { FileList } from '../ui/fileList';
+import { FileList } from '../ui/fileList';
+import { ColorList } from '../ui/colorList';
 import { scaling, type Form, type Mat } from '../shape/path';
 import type { Lettering } from '../lettering/layout';
 import type { Measurement } from '../validation/measure';
@@ -422,5 +423,24 @@ export function bindObjects(app: ObjectsApp) {
     splitStitch: () => app.editor.splitSelected(),
   });
 
-  return { layers, mergeBlocked, objectName, objectPanel, selectObjects };
+  // The threads in sewing order, to print, and switching them all to one brand.
+  const colorList = new ColorList();
+  $('color-list').addEventListener('click', () => {
+    const f = app.files.active;
+    if (!f?.pattern) return;
+    colorList.open({
+      pattern: f.pattern,
+      name: FileList.baseName(f) || f.pattern.name,
+      spm: app.settings.machineSpm,
+      apply: (colors) => {
+        const g = app.files.active;
+        if (!g?.pattern) return;
+        let next = g.pattern;
+        colors.forEach((c, b) => (next = recolorBlock(next, b, c)));
+        app.applyEdit(next, g.measurement);
+      },
+    });
+  });
+
+  return { colorList, layers, mergeBlocked, objectName, objectPanel, selectObjects };
 }
