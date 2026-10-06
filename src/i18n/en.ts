@@ -8,6 +8,7 @@ import { en as check } from './areas/check';
 import { en as image } from './areas/image';
 import { en as design } from './areas/design';
 import { en as ready } from './areas/ready';
+import { en as ampel } from './areas/ampel';
 
 
 const enBase: Record<keyof typeof deBase, string> = {
@@ -1330,4 +1331,4 @@ const enBase: Record<keyof typeof deBase, string> = {
   'canvas.hint.letters': 'Drag letters: move · Arrow keys: nudge · Esc: back to the lettering',
 };
 
-export const en: Record<keyof typeof de, string> = { ...enBase, ...shell, ...files, ...objects, ...shapes, ...stitches, ...check, ...image, ...design, ...ready };
+export const en: Record<keyof typeof de, string> = { ...enBase, ...shell, ...files, ...objects, ...shapes, ...stitches, ...check, ...image, ...design, ...ready, ...ampel };

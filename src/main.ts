@@ -73,6 +73,7 @@ import { initReady } from './areas/ready';
 import { initShapes, refreshShapes } from './areas/shapes';
 import { runCommand } from './shell/commands';
 import { initCheck } from './areas/check/check';
+import { initAmpel } from './areas/ampel/ampel';
 import type { ZoneDecision } from './ui/validationPanel';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -791,6 +792,8 @@ function blendOf(p: Pattern, q: Sequence, selected: number[]): { blend?: ThreadC
 let frame = 0;
 /** What the check area draws on the stage (src/areas/check). */
 let checkArea: { draw: (ctx: CanvasRenderingContext2D) => void } | null = null;
+/** The traffic light "Klappt das?" (src/areas/ampel). */
+let ampel: { update: () => void } | null = null;
 function redraw(): void {
   if (frame) return;
   frame = requestAnimationFrame(() => {
@@ -818,6 +821,7 @@ function redraw(): void {
     if (ui.letterMode) drawLetterBoxes();
     drawPlanCompare();
     checkArea?.draw(ctx);
+    ampel?.update();
     if (showCompare()) {
       const x = Math.round(ui.split * ui.stageW);
       ctx.save();
@@ -1196,7 +1200,7 @@ function history(step: 'undo' | 'redo' | 'revert'): void {
   recompute();
 }
 
-const { correctPanel, drawPlanCompare, inPlanFrame, movePlanSplit, pinPlan, tuneToFabric, planFix, applyPlan, discardPlan, busy, planShown, planTicked } = bindCorrection({
+const { correctPanel, drawPlanCompare, inPlanFrame, movePlanSplit, pinPlan, tuneToFabric, planFix, applyPlan, discardPlan, offerPlan, busy, planShown, planTicked } = bindCorrection({
   get applyEdit() {
     return applyEdit;
   },
@@ -1684,6 +1688,25 @@ checkArea = initCheck({
   correction: { planFix, applyPlan, discardPlan, tuneToFabric, pinPlan, busy, planShown, planTicked },
   jumps: jumpsPanel,
   stepJump,
+});
+ampel = initAmpel({
+  settings,
+  files,
+  seq,
+  validator,
+  setMode,
+  redraw,
+  selectZone,
+  commit: (p, m) => {
+    const f = files.active;
+    if (!f) return;
+    editor.reset();
+    applyEdit(p, m);
+    files.setObjects(f, rememberedIn(p, seq(p).objects));
+  },
+  undo: () => history('undo'),
+  offer: offerPlan,
+  busy,
 });
 
 files.render();
