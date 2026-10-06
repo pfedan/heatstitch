@@ -15,28 +15,28 @@ Objekt, Stichart, Steppstich, Stickrahmen).
 
 ## Themenbaum
 
-Drei Stufen: erst eine fremde Stickdatei ansehen und verbessern (der häufigste Anlass),
-dann selbst gestalten, dann Feinschliff. Die Gruppen folgen der Anleitung (`docs.html`),
+Drei Stufen: erst selbst gestalten, dann eine fremde Stickdatei ansehen und verbessern,
+dann Feinschliff. Die Gruppen folgen der Anleitung (`docs.html`),
 damit Video und Text zusammenpassen.
 
-### Stufe 1: Stickdatei ansehen und verbessern
+### Stufe 1: Selbst gestalten
 
 | Nr. | Titel | Inhalt | Demodatei | Länge |
 | --- | --- | --- | --- | --- |
-| 1 | Erste Schritte | Datei öffnen (Ziehen oder Beispiel), der Bildschirm in drei Spalten, Ablauf abspielen, Farben aus- und einblenden | `cat-60mm.pes` | 2 min |
-| 2 | Stickdatei prüfen | Modus Dichte, Prüfung, Befunde lesen und zuklappen, Fokus auf eine Stelle | `overlap.pes` | 2 bis 3 min |
-| 3 | Korrigieren mit Vorschlägen | Korrektur, Vorschläge, auf Stoff abstimmen, Vergleich vorher und nachher | `letters.pes` | 2 bis 3 min |
-| 4 | Sprünge und Schnitte | Sprungliste, Schnitte setzen, alle auf einmal nach Länge, Reihenfolge optimieren | `confetti.pes` | 2 min |
-| 5 | Vorschau und Speichern | Realistische Fäden, Stoff wählen, Markierungen, Stickrahmen, Format wählen, als Projekt speichern | `leather-patch.dst` | 2 min |
+| 1 | Ein neues Stickmuster | + Neu, Stickrahmen, Formen zeichnen, Größe eintippen, Stichart wählen | leer | 2 min |
+| 2 | Schrift | Text setzen, Schriftart, Größe, Bogen, Abstand | leer | 2 min |
+| 3 | Vom Bild zum Stickmuster | Modus Bild: SVG oder Foto laden, Farben zusammenfassen, Stiche erzeugen | `image-example.svg` | 2 bis 3 min |
+| 4 | Objekte und Reihenfolge | Objektliste, Farben, kopieren und spiegeln, Kontextmenü, Reihenfolge per Ziehen | `overlapping-circles.svg` | 2 min |
 
-### Stufe 2: Selbst gestalten
+### Stufe 2: Stickdatei ansehen und verbessern
 
 | Nr. | Titel | Inhalt | Demodatei | Länge |
 | --- | --- | --- | --- | --- |
-| 6 | Ein neues Stickmuster | + Neu, Stickrahmen, Formen zeichnen, Größe eintippen, Stichart wählen | leer | 2 min |
-| 7 | Schrift | Text setzen, Schriftart, Größe, Bogen, Abstand | leer | 2 min |
-| 8 | Vom Bild zum Stickmuster | Modus Bild: SVG oder Foto laden, Farben zusammenfassen, Stiche erzeugen | `image-example.svg` | 2 bis 3 min |
-| 9 | Objekte und Reihenfolge | Objektliste, Farben, kopieren und spiegeln, Kontextmenü, Reihenfolge per Ziehen | `overlapping-circles.svg` | 2 min |
+| 5 | Erste Schritte | Datei öffnen (Ziehen oder Beispiel), der Bildschirm in drei Spalten, Ablauf abspielen, Farben aus- und einblenden | `cat-60mm.pes` | 2 min |
+| 6 | Stickdatei prüfen | Modus Dichte, Prüfung, Befunde lesen und zuklappen, Fokus auf eine Stelle | `overlap.pes` | 2 bis 3 min |
+| 7 | Korrigieren mit Vorschlägen | Korrektur, Vorschläge, auf Stoff abstimmen, Vergleich vorher und nachher | `letters.pes` | 2 bis 3 min |
+| 8 | Sprünge und Schnitte | Sprungliste, Schnitte setzen, alle auf einmal nach Länge, Reihenfolge optimieren | `confetti.pes` | 2 min |
+| 9 | Vorschau und Speichern | Realistische Fäden, Stoff wählen, Markierungen, Stickrahmen, Format wählen, als Projekt speichern | `leather-patch.dst` | 2 min |
 
 ### Stufe 3: Feinschliff
 
@@ -49,7 +49,7 @@ damit Video und Text zusammenpassen.
 Nicht als eigenes Video: Tastenkürzel (erscheinen als Einblendung, wann immer eine Taste
 benutzt wird), Grenzen und Begriffe (bleiben in der Anleitung).
 
-Vorschlag für den Anfang: Teil 1 als Pilot. Daran werden Stimme, Tempo und Bildsprache
+Teil 1 („Ein neues Stickmuster“) ist der Pilot. Daran werden Stimme, Tempo und Bildsprache
 einmal abgestimmt, bevor weitere Teile folgen.
 
 ## Bildsprache
@@ -62,7 +62,7 @@ nur die App.
 „Teil 3 von 12“ in der Akzentfarbe (`#e0559e`), eine feine Stichlinie als Linie unter dem
 Titel. Ruhige Blende in die App.
 
-**Abspann (3 s).** Gleicher Grund, „Als Nächstes: Teil 4, Sprünge und Schnitte“ und die
+**Abspann (3 s).** Gleicher Grund, „Als Nächstes: Teil 2, Schrift“ und die
 Adresse der App. Kein Logo-Feuerwerk.
 
 **Maus.** Ein eingeblendeter Zeiger (weißer Pfeil mit dunklem Rand, etwas größer als normal),
