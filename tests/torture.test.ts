@@ -5,7 +5,7 @@ import { recolorBlock, syncBorders } from '../src/model/border';
 import { blendObject } from '../src/model/blend';
 import { MOTIFS } from '../src/digitize/deco';
 import { ECHO_SIDES } from '../src/digitize/echo';
-import { SHADOW_DIRS, shadowOffset } from '../src/model/shadow';
+import { lineParts, partOf, SHADOW_DIRS, type LinePart } from '../src/model/shadow';
 import { lineStitches, resewLine } from '../src/model/line';
 import { refreshKnockouts, setKnockout } from '../src/model/knockout';
 import { rememberObjects, sewObjects } from '../src/model/objects';
@@ -18,7 +18,7 @@ import { stitchKinds } from '../src/model/sequence';
 import { deleteObjects, duplicateObject, mirrorMatrix, recolorObjects, subtractTop } from '../src/model/shapeOps';
 import { stitchesBefore } from '../src/model/transform';
 import { parsePattern } from '../src/parsers';
-import { rotation, translation, type Mat } from '../src/shape/path';
+import { rotation, storeForm, translation, type Mat } from '../src/shape/path';
 import { ellipsePath, parsePath, rectPath } from '../src/shape/svgPath';
 import { fromStored, toStored } from '../src/storage/fileStore';
 import { decodeProject, encodeProject, projectSettings } from '../src/storage/project';
@@ -195,11 +195,15 @@ const OPS: Op[] = [
     name: 'echo',
     run: (d, r) => {
       // As the line panel: an echo on one side, both sides or none, sewn with the line.
-      const lines = d.objects.filter((o) => remembered(d.cur.p, o)?.path && remembered(d.cur.p, o)?.line);
+      const lines = d.objects.filter((o) => remembered(d.cur.p, o)?.path && remembered(d.cur.p, o)?.line && !partOf(remembered(d.cur.p, o)));
       if (!lines.length) return false;
       const o = pick(r, lines);
       const m = remembered(d.cur.p, o)!;
-      const echo = r() < 0.25 ? undefined : { side: pick(r, ECHO_SIDES), count: pick(r, [1, 2, 3]), gap: between(r, 1.5, 5) };
+      const count = pick(r, [1, 2, 3]);
+      const old = m.line!.echo;
+      // Now and then copies in threads of their own, or trimmed apart.
+      const colors = r() < 0.4 ? Array.from({ length: count }, () => (r() < 0.5 ? null : pick(r, COLORS.filter((c) => !sameColor(c, o.color))))) : undefined;
+      const echo = r() < 0.25 ? undefined : { side: pick(r, ECHO_SIDES), count, gap: between(r, 1.5, 5), ...(r() < 0.3 ? { cut: true } : {}), ...(colors?.some(Boolean) ? { colors, link: old?.link ?? `e${Math.floor(r() * 1e9).toString(36)}` } : {}) };
       const next = resewLine(d.cur.p, o.index, m.path!, { ...m.line!, echo }, T);
       // As the app: a shadow follows its line.
       return !!next && shapes(d, syncBorders(next.pattern, T));
@@ -209,7 +213,7 @@ const OPS: Op[] = [
     name: 'shadow',
     run: (d, r) => {
       // As the line panel: a shadow in a thread of its own, another one, or none.
-      const lines = d.objects.filter((o) => remembered(d.cur.p, o)?.path && remembered(d.cur.p, o)?.line && !remembered(d.cur.p, o)?.shadowOf);
+      const lines = d.objects.filter((o) => remembered(d.cur.p, o)?.path && remembered(d.cur.p, o)?.line && !partOf(remembered(d.cur.p, o)));
       if (!lines.length) return false;
       const o = pick(r, lines);
       const m = remembered(d.cur.p, o)!;
@@ -504,36 +508,34 @@ function checkEchoes(p: Pattern): void {
 }
 
 /**
- * Each line with a shadow has one shadow object, in the shadow's thread, sewn along the line moved
- * by the shadow's offset; every shadow object has its line.
+ * Each part of a line in a thread of its own (its shadow, its echo copies by thread) is one object,
+ * in that thread, remembering what the line says it is; every such object has its line.
  */
-function checkShadows(p: Pattern): void {
+function checkLineParts(p: Pattern): void {
   const objs = sewObjects(p);
   const mem = objs.map((o) => remembered(p, o));
   const problems: string[] = [];
-  const lines = new Map<string, number>();
+  const want = new Map<string, { line: number; part: LinePart }>();
   mem.forEach((m, k) => {
-    const s = m?.path && !m.shadowOf ? m.line?.shadow : undefined;
-    if (!s) return;
-    if (lines.has(s.link)) problems.push(`lines ${lines.get(s.link)} and ${k} share shadow ${s.link}`);
-    lines.set(s.link, k);
+    if (!m?.path || !m.line || partOf(m)) return;
+    for (const part of lineParts(m)) {
+      if (want.has(part.link)) problems.push(`lines ${want.get(part.link)!.line} and ${k} share part ${part.link}`);
+      want.set(part.link, { line: k, part });
+    }
   });
-  const shadows = new Map<string, number>();
+  const have = new Map<string, number>();
   mem.forEach((m, k) => {
-    if (!m?.shadowOf) return;
-    if (shadows.has(m.shadowOf)) problems.push(`objects ${shadows.get(m.shadowOf)} and ${k} are the shadow ${m.shadowOf}`);
-    shadows.set(m.shadowOf, k);
-    const l = lines.get(m.shadowOf);
-    if (l === undefined) return void problems.push(`shadow ${k} has no line`);
-    const s = mem[l]!.line!.shadow!;
-    if (!sameColor(objs[k].color, s.color)) problems.push(`shadow ${k} not in its thread`);
-    const [dx, dy] = shadowOffset(s);
-    const want = mem[l]!.path!.paths[0].nodes[0].p;
-    const got = m.path?.paths[0].nodes[0].p;
-    if (!got || Math.hypot(got[0] - want[0] - dx, got[1] - want[1] - dy) > 0.01) problems.push(`shadow ${k} not where its line casts it`);
+    const l = partOf(m);
+    if (!l) return;
+    if (have.has(l)) problems.push(`objects ${have.get(l)} and ${k} are the part ${l}`);
+    have.set(l, k);
+    const w = want.get(l);
+    if (!w) return void problems.push(`part ${k} has no line`);
+    if (!sameColor(objs[k].color, w.part.color)) problems.push(`part ${k} not in its thread`);
+    if (JSON.stringify(storeForm(m!.path!)) !== JSON.stringify(storeForm(w.part.memory.path!)) || JSON.stringify(m!.line) !== JSON.stringify(w.part.memory.line)) problems.push(`part ${k} not what its line says`);
   });
-  for (const [link, k] of lines) if (!shadows.has(link)) problems.push(`line ${k} lost its shadow`);
-  expect(problems.join('; '), 'shadow links').toBe('');
+  for (const [link, w] of want) if (!have.has(link)) problems.push(`line ${w.line} lost its part ${link}`);
+  expect(problems.join('; '), 'line parts').toBe('');
 }
 
 /** What leaves out the shapes on top fits the shapes on top now. */
@@ -594,7 +596,7 @@ async function chain(seed: number, steps = STEPS): Promise<void> {
       checkBorders(p);
       checkBlends(p);
       checkEchoes(p);
-      checkShadows(p);
+      checkLineParts(p);
       checkKnockouts(p);
       if (op.name === 'save and open' || step === steps - 1) checkExport(p);
     } catch (e) {

@@ -378,6 +378,8 @@ export interface Remembered {
   blendOf?: string;
   /** The object is the shadow of a line: the line's `line.shadow.link` (see syncShadows). */
   shadowOf?: string;
+  /** The object is copies of a line's echo in a thread of their own: the line's `echo.link` and the thread (see lineParts). */
+  echoOf?: string;
   /** A border object: the settings it was sewn with (its `region` is the fill's area it was sewn on). */
   border?: BorderSettings;
   /** The lettering the object belongs to (it is sewn anew from its text, see lettering/). */
@@ -625,6 +627,7 @@ export interface StoredObject {
   outline?: string;
   blendOf?: string;
   shadowOf?: string;
+  echoOf?: string;
   border?: BorderSettings;
   lettering?: Lettering;
   lock?: boolean;
@@ -685,7 +688,7 @@ export function rememberedIn(p: Pattern, objects: SewObject[]): StoredObject[] {
       ...(r.cut ? { cut: r.cut } : {}),
       ...(r.overlapShare !== undefined ? { overlapShare: r.overlapShare } : {}),
       ...(r.path ? { path: storeForm(r.path) } : {}),
-      ...(r.line ? { line: { ...r.line, ...(r.line.echo ? { echo: { ...r.line.echo } } : {}), ...(r.line.shadow ? { shadow: { ...r.line.shadow, color: { ...r.line.shadow.color } } } : {}) } } : {}),
+      ...(r.line ? { line: { ...r.line, ...(r.line.echo ? { echo: structuredClone(r.line.echo) } : {}), ...(r.line.shadow ? { shadow: { ...r.line.shadow, color: { ...r.line.shadow.color } } } : {}) } } : {}),
       ...(r.under ? { under: r.under } : {}),
       ...(r.underFrom ? { underFrom: r.underFrom } : {}),
       ...(r.borderAt ? { borderAt: r.borderAt } : {}),
@@ -695,6 +698,7 @@ export function rememberedIn(p: Pattern, objects: SewObject[]): StoredObject[] {
       ...(r.outline ? { outline: r.outline } : {}),
       ...(r.blendOf ? { blendOf: r.blendOf } : {}),
       ...(r.shadowOf ? { shadowOf: r.shadowOf } : {}),
+      ...(r.echoOf ? { echoOf: r.echoOf } : {}),
       ...(r.border ? { border: { ...r.border } } : {}),
       ...(r.lettering ? { lettering: r.lettering } : {}),
       ...(r.lock ? { lock: true } : {}),
@@ -971,7 +975,7 @@ export function restoreRemembered(list: unknown): number {
     if (path && isLineStitch(e.line)) {
       r.line = { ...e.line };
       if (r.line.echo !== undefined) {
-        if (isEcho(r.line.echo)) r.line.echo = { ...r.line.echo };
+        if (isEcho(r.line.echo)) r.line.echo = structuredClone(r.line.echo);
         else delete r.line.echo;
       }
       if (r.line.shadow !== undefined) {
@@ -991,6 +995,7 @@ export function restoreRemembered(list: unknown): number {
     if (typeof e.outline === 'string') r.outline = e.outline;
     if (typeof e.blendOf === 'string') r.blendOf = e.blendOf;
     if (typeof e.shadowOf === 'string') r.shadowOf = e.shadowOf;
+    if (typeof e.echoOf === 'string') r.echoOf = e.echoOf;
     if (isBorder(e.border)) r.border = { ...e.border };
     const lettering = e.lettering === undefined ? null : letteringFrom(e.lettering);
     if (lettering) r.lettering = lettering;
@@ -2341,6 +2346,7 @@ export function restitch(
           ...(known?.outline ? { outline: known.outline, border: known.border } : {}),
           ...(known?.blendOf ? { blendOf: known.blendOf } : {}),
           ...(known?.shadowOf ? { shadowOf: known.shadowOf } : {}),
+          ...(known?.echoOf ? { echoOf: known.echoOf } : {}),
         };
     if (known?.lettering) after.lettering = known.lettering;
     if (known?.lock) after.lock = true;

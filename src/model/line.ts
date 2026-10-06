@@ -9,7 +9,7 @@ import { runRecords } from './border';
 import { tidy, withRecords } from './edit';
 import { rememberObjects, sewObjects, type SewObject } from './objects';
 import { JUMP, STITCH, type Pattern } from './pattern';
-import { lineFillArea, lineFillOf, remember, remembered, restitch, type FillSettings, type LineFill, type Rec, type Remembered, type RestitchResult, type RunSettings } from './restitch';
+import { lineFillArea, lineFillOf, remember, remembered, restitch, trimBefore, type FillSettings, type LineFill, type Rec, type Remembered, type RestitchResult, type RunSettings } from './restitch';
 import { stitchKinds, TIE_STITCH } from './sequence';
 
 /**
@@ -60,6 +60,7 @@ export const lineRuns = (form: Form, s: RunSettings, reverse = false): Pt[][] =>
  */
 function echoStitches(line: Pt[], closed: boolean, st: PathStitch, from?: Pt): Pt[][] {
   let lines = echoLines(line, closed, st.echo!, st.type === 'satin' ? st.width + 0.5 : 0);
+  if (!lines.length) return [];
   // From the end nearest the needle.
   const first = lines[0].line[0];
   const last = lines[lines.length - 1].line[lines[lines.length - 1].line.length - 1];
@@ -67,7 +68,12 @@ function echoStitches(line: Pt[], closed: boolean, st: PathStitch, from?: Pt): P
     lines = lines.reverse().map((l) => ({ ...l, line: l.line.slice().reverse() }));
   }
   const plain = { ...st, echo: undefined };
-  if (st.type === 'satin') return lines.flatMap((l) => sewAlong(l.line, l.closed, plain));
+  if (st.type === 'satin' || st.echo!.cut) {
+    const runs = lines.flatMap((l) => sewAlong(l.line, l.closed, plain));
+    // Cut: a trim from copy to copy, however near they are.
+    if (st.echo!.cut) runs.forEach((run, k) => k && trimBefore.add(run));
+    return runs;
+  }
   const all: Pt[] = [];
   for (const l of lines) for (const q of l.line) if (!all.length || !samePt(all[all.length - 1], q)) all.push(q);
   return sewAlong(all, false, plain);

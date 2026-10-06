@@ -90,7 +90,7 @@ export interface StitchInfo {
   color?: ThreadColor;
   /** The one selected object is the border of a fill in its own thread (the fill's number, or null when gone). */
   /** A border of its own thread, or the second thread of a color blend (`blend`), following its fill. */
-  outline?: { fill: number | null; blend?: boolean; shadow?: boolean };
+  outline?: { fill: number | null; blend?: boolean; shadow?: boolean; echo?: boolean };
   /** The one selected fill can blend into a second thread (see blendObject). */
   blend?: boolean;
   /** Left out of the correction (`mixed`: only some of the selected objects). */
@@ -348,11 +348,11 @@ export class StitchPanel {
     if (info.outline) {
       // Its settings are the fill's: changed there, it follows.
       h.innerHTML = '';
-      const of = info.outline.shadow ? 'stitch.shadowOf' : info.outline.blend ? 'stitch.blendOf' : 'stitch.outline';
+      const of = info.outline.echo ? 'stitch.echoOf' : info.outline.shadow ? 'stitch.shadowOf' : info.outline.blend ? 'stitch.blendOf' : 'stitch.outline';
       h.append(Object.assign(document.createElement('span'), { className: 'kind-icon', innerHTML: KIND_ICON[this.kind] }), t(`${of}.title` as Key));
       const row = document.createElement('div');
       row.className = 'direction-buttons';
-      if (info.outline.fill !== null) row.append(info.outline.shadow ? this.button('stitch.shadowOf.line', 'stitch.shadowOf.line.hint', () => this.hooks.outline('fill'), true) : this.button('stitch.outline.fill', 'stitch.outline.fill.hint', () => this.hooks.outline('fill'), true));
+      if (info.outline.fill !== null) row.append(info.outline.shadow || info.outline.echo ? this.button('stitch.shadowOf.line', 'stitch.shadowOf.line.hint', () => this.hooks.outline('fill'), true) : this.button('stitch.outline.fill', 'stitch.outline.fill.hint', () => this.hooks.outline('fill'), true));
       row.append(this.button('stitch.outline.detach', `${of}.detach.hint` as Key, () => this.hooks.outline('detach')));
       parts.push(Object.assign(document.createElement('p'), { className: 'muted small', textContent: t(`${of}.text` as Key) }), row);
       this.picker.close();
@@ -1307,7 +1307,7 @@ export class StitchPanel {
       st.tolerance ??= this.tolerance ?? TOLERANCE;
       out.push(this.toleranceSlider(st as { tolerance: number }));
     }
-    out.push(this.echoGroup(st, info.path!.closed));
+    out.push(this.echoGroup(st, info.path!.closed, info.path!.color));
     if (!info.path!.traced) out.push(this.shadowGroup(st, info.path!.color));
     out.push(Object.assign(document.createElement('p'), { className: 'muted small stitch-note', textContent: t(info.path!.traced ? 'stitch.lineTraced' : 'stitch.lineNote') }));
     return out;
@@ -1362,11 +1362,52 @@ export class StitchPanel {
   }
 
   /**
+   * A thread for each copy of an echo, nearest first: the line's, or one of its own (then the
+   * copies of that thread are an object of their own, linked to the line).
+   */
+  private echoThreads(e: NonNullable<PathStitch['echo']>, line: ThreadColor): HTMLElement {
+    const wrap = document.createElement('div');
+    wrap.className = 'field stitch-field border-field';
+    wrap.title = t('stitch.echo.threads.hint');
+    const row = document.createElement('div');
+    row.className = 'border-row echo-threads';
+    for (let k = 1; k <= e.count; k++) {
+      if (e.skip?.includes(k)) continue;
+      const own = e.colors?.[k - 1] ?? null;
+      const btn = Object.assign(document.createElement('button'), { type: 'button', className: 'border-thread', title: own ? (own.name ?? hexColor(own)) : t('stitch.echo.same') });
+      const sw = Object.assign(document.createElement('span'), { className: 'sw' });
+      sw.style.background = cssColor(own ?? line);
+      btn.append(sw, String(k));
+      btn.addEventListener('click', () => {
+        this.picker.toggle(btn, {
+          key: `echo${k}`,
+          title: t('stitch.echo.copy', { n: k }),
+          current: own ?? line,
+          original: { color: line, label: t('stitch.echo.same') },
+          onPick: (c) => {
+            const colors = Array.from({ length: e.count }, (_, i) => e.colors?.[i] ?? null);
+            colors[k - 1] = sameColor(c, line) ? null : { ...c };
+            if (colors.some(Boolean)) {
+              e.colors = colors;
+              e.link ??= newLink();
+            } else delete e.colors;
+            this.render();
+            this.changed(true);
+          },
+        });
+      });
+      row.append(btn);
+    }
+    wrap.append(Object.assign(document.createElement('span'), { className: 'label', textContent: t('stitch.echo.threads') }), row);
+    return wrap;
+  }
+
+  /**
    * A line's echo, as a block of its own: off, or on which side, how many copies, how far apart.
    * A closed line has an outside and an inside; an open line one side or the other (which one is
    * left of its drawing direction is not to be seen, so the side is switched with a button).
    */
-  private echoGroup(st: PathStitch, closed: boolean): HTMLElement {
+  private echoGroup(st: PathStitch, closed: boolean, line: ThreadColor): HTMLElement {
     const box = document.createElement('section');
     box.className = 'border-group echo-group';
     type Choice = EchoSide | 'off' | 'one';
@@ -1398,6 +1439,13 @@ export class StitchPanel {
     box.append(
       this.slider({ label: 'stitch.echo.count', hint: 'stitch.echo.count.hint', min: ECHO_COUNT[0], max: ECHO_COUNT[1], step: 1, get: () => e.count, set: (v) => (e.count = Math.round(v)), fmt: (v) => formatNumber(v) }),
       this.slider({ label: 'stitch.echo.gap', hint: 'stitch.echo.gap.hint', min: least, max: ECHO_GAP[1], step: 0.1, get: () => Math.max(least, e.gap), set: (v) => (e.gap = v), fmt: (v) => `${formatNumber(v, 1)} mm` }),
+    );
+    box.append(
+      this.choice<'joined' | 'cut'>('stitch.echo.link', ['joined', 'cut'], e.cut ? 'cut' : 'joined', (v) => `stitch.echo.${v}` as Key, (v) => {
+        if (v === 'cut') e.cut = true;
+        else delete e.cut;
+      }),
+      this.echoThreads(e, line),
     );
     return box;
   }

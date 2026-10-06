@@ -5,12 +5,12 @@ import { rememberObjects, sewObjects, type SewObject } from './objects';
 import { COLOR_CHANGE, END, JUMP, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
 import { borderStitches } from './along';
 import { wholeOf } from './knockout';
-import { lockAt, remember, remembered, type BorderSettings, type FillSettings, type Rec, type Remembered } from './restitch';
+import { lockAt, remember, remembered, trimBefore, type BorderSettings, type FillSettings, type Rec, type Remembered } from './restitch';
 import { expandRegion } from '../digitize/region';
 import { fillRegion } from '../digitize/fill';
 import { stitchKinds } from './sequence';
 import { lineStitches } from './line';
-import { shadowPath, shadowStitch } from './shadow';
+import { hasPart, lineParts, partInThread, partOf } from './shadow';
 import { storeForm } from '../shape/path';
 import { recolor } from './recolor';
 
@@ -55,9 +55,10 @@ export function runRecords(runs: Pt[][], trimMm: number): Rec[] {
   let last: Pt | null = null;
   runs.forEach((run, k) => {
     const d = last ? Math.hypot(run[0][0] - last[0], run[0][1] - last[1]) : Infinity;
-    if (k && d > trimMm) out.push(...lockAt(runs[k - 1], true), { ...out[out.length - 1], cmd: TRIM });
-    if (!k || d > 1) out.push(at(run[0], JUMP));
-    if (!k || d > trimMm) out.push(...lockAt(run, false));
+    const cut = d > trimMm || trimBefore.has(run);
+    if (k && cut) out.push(...lockAt(runs[k - 1], true), { ...out[out.length - 1], cmd: TRIM });
+    if (!k || d > 1 || cut) out.push(at(run[0], JUMP));
+    if (!k || cut) out.push(...lockAt(run, false));
     for (const q of run) out.push(at(q, STITCH));
     last = run[run.length - 1];
   });
@@ -106,68 +107,93 @@ export function syncBorders(p: Pattern, trimMm: number, drop: ReadonlySet<string
 }
 
 /**
- * Every line's shadow (line.shadow) as an object of its own in its thread, linked to the line
- * (`shadow.link`, the object's `shadowOf`), sewn before the line: at the end of the last block
- * before the line's that has the shadow's thread, else as a color block of its own just before it.
- * Sewn anew in place when the line, its stitch or the shadow changed; moved when its thread
- * changed; taken out when its line has no shadow any more or is gone. Moved by hand, it stays where
- * it is put. A copy of a line gets a shadow of its own; a copy of a shadow is a line of its own.
+ * The parts of lines in threads of their own, each an object linked to its line: its shadow
+ * (line.shadow, the object's `shadowOf`), sewn before the line, and the copies of its echo in
+ * threads of their own (line.echo.colors, one object per thread, `echoOf`), sewn after it. A shadow
+ * goes to the end of the last block before the line's that has its thread, else into a block of
+ * its own just before the line's; echo copies right after the line's block (into the next block
+ * when that has their thread). They are sewn anew in place when the line, its stitch or the part
+ * changed; moved when their thread changed; taken out when the line has the part no more or is
+ * gone. Moved by hand, they stay where they are put. A copy of a line gets parts of its own; a copy
+ * of a part is a line of its own.
  */
 export function syncShadows(p: Pattern, trimMm: number): Pattern {
   if (!p.cmd.length) return p;
   const kinds = stitchKinds(p);
   const objs = sewObjects(p, kinds);
   const mem = objs.map((o) => remembered(p, o));
-  if (!mem.some((m) => m?.shadowOf || (m?.path && m.line?.shadow))) return p;
+  const isLine = (m: Remembered | undefined) => !!m?.path && !!m.line && !partOf(m);
+  if (!mem.some((m) => partOf(m) || (isLine(m) && (m!.line!.shadow || m!.line!.echo?.link)))) return p;
   const byLink = new Map<string, number>();
   mem.forEach((m, k) => {
-    if (!m?.shadowOf) return;
-    if (!byLink.has(m.shadowOf)) byLink.set(m.shadowOf, k);
-    else remember(p, objs[k], (mem[k] = { ...m, shadowOf: undefined }));
+    const l = partOf(m);
+    if (!l) return;
+    if (!byLink.has(l)) byLink.set(l, k);
+    else remember(p, objs[k], (mem[k] = { ...m!, shadowOf: undefined, echoOf: undefined }));
   });
+  // A copy of a line gets links of its own.
   const claimed = new Set<string>();
   mem.forEach((m, k) => {
-    const s = m?.path && m.line?.shadow;
-    if (!s || m.shadowOf) return;
-    if (!claimed.has(s.link)) return void claimed.add(s.link);
-    remember(p, objs[k], (mem[k] = { ...m, line: { ...m.line!, shadow: { ...s, link: newLink() } } }));
+    if (!isLine(m)) return;
+    const links = [m!.line!.shadow?.link, m!.line!.echo?.link].filter((l): l is string => !!l);
+    if (!links.length) return;
+    if (!links.some((l) => claimed.has(l))) return void links.forEach((l) => claimed.add(l));
+    const st = m!.line!;
+    const line = { ...st, ...(st.shadow ? { shadow: { ...st.shadow, link: newLink() } } : {}), ...(st.echo?.link ? { echo: { ...st.echo, link: newLink() } } : {}) };
+    remember(p, objs[k], (mem[k] = { ...m!, line }));
+    [line.shadow?.link, line.echo?.link].forEach((l) => l && claimed.add(l));
   });
   const changes: Change[] = [];
   const wanted = new Set<string>();
   objs.forEach((o, k) => {
     const m = mem[k];
-    const s = m?.path && !m.shadowOf ? m.line?.shadow : undefined;
-    if (!s) return;
-    wanted.add(s.link);
-    const path = shadowPath(m!.path!, s);
-    const st = shadowStitch(m!.line!);
-    const at = byLink.get(s.link);
-    const cur = at === undefined ? undefined : mem[at];
-    const target = at === undefined ? null : objs[at];
-    const same = target && sameColor(target.color, s.color);
-    if (same && cur?.path && JSON.stringify(storeForm(cur.path)) === JSON.stringify(storeForm(path)) && JSON.stringify(cur.line) === JSON.stringify(st)) return;
-    const runs = lineStitches(path, st);
-    if (!runs.length) return;
-    const memory: Remembered = { region: null, path, line: st, shadowOf: s.link };
-    const recs = runRecords(runs, trimMm);
-    if (same) {
-      changes.push({ a: leadOf(p, target), b: target.last, recs, memory });
-      return;
-    }
-    if (target) changes.push({ a: leadOf(p, target), b: target.last, recs: [] });
-    // At the end of the last block before the line's that has the shadow's thread (before its
-    // color change), so shadows share a thread change; else a block of its own right before.
-    const ends: number[] = [];
-    for (let i = 0; i < p.cmd.length && ends.length < o.block; i++) if (p.cmd[i] === COLOR_CHANGE) ends.push(i);
-    let into = o.block - 1;
-    while (into >= 0 && !sameColor(p.colors[into], s.color)) into--;
-    if (into >= 0) changes.push({ a: ends[into], b: ends[into] - 1, recs, memory });
-    else {
-      const start = o.block > 0 ? ends[o.block - 1] + 1 : 0;
-      changes.push({ a: start, b: start - 1, recs, before: { block: o.block, c: s.color }, memory });
+    if (!isLine(m)) return;
+    for (const part of lineParts(m!)) {
+      wanted.add(part.link);
+      const at = byLink.get(part.link);
+      const cur = at === undefined ? undefined : mem[at];
+      const target = at === undefined ? null : objs[at];
+      const same = target && sameColor(target.color, part.color);
+      if (same && cur?.path && JSON.stringify(storeForm(cur.path)) === JSON.stringify(storeForm(part.memory.path!)) && JSON.stringify(cur.line) === JSON.stringify(part.memory.line)) continue;
+      const runs = lineStitches(part.memory.path!, part.memory.line!);
+      if (!runs.length) continue;
+      const recs = runRecords(runs, trimMm);
+      const memory = part.memory;
+      if (same) {
+        changes.push({ a: leadOf(p, target), b: target.last, recs, memory });
+        continue;
+      }
+      if (target) changes.push({ a: leadOf(p, target), b: target.last, recs: [] });
+      // Where each color block ends (its color change).
+      const ends: number[] = [];
+      for (let i = 0; i < p.cmd.length && ends.length <= o.block; i++) if (p.cmd[i] === COLOR_CHANGE) ends.push(i);
+      if (part.after) {
+        // After the line's block, or after the block of its last copies sewn after it, so nearer
+        // copies come first: at the start of the next block when that has the thread.
+        let after = o.block;
+        mem.forEach((x, j) => {
+          const l = x?.echoOf;
+          if (l && l !== part.link && hasPart(m, l) && objs[j].block > after) after = objs[j].block;
+        });
+        for (let i = ends.length ? ends[ends.length - 1] + 1 : 0; i < p.cmd.length && ends.length <= after; i++) if (p.cmd[i] === COLOR_CHANGE) ends.push(i);
+        const end = ends[after] ?? p.cmd.length - 1;
+        const next = p.cmd[end] === COLOR_CHANGE ? p.colors[after + 1] : undefined;
+        if (next && sameColor(next, part.color)) changes.push({ a: end + 1, b: end, recs, memory });
+        else changes.push({ a: end, b: end - 1, recs, color: { block: after, c: part.color }, memory });
+        continue;
+      }
+      // Before: at the end of the last block before the line's with its thread, so shadows share
+      // a thread change; else a block of its own right before.
+      let into = o.block - 1;
+      while (into >= 0 && !sameColor(p.colors[into], part.color)) into--;
+      if (into >= 0) changes.push({ a: ends[into], b: ends[into] - 1, recs, memory });
+      else {
+        const start = o.block > 0 ? ends[o.block - 1] + 1 : 0;
+        changes.push({ a: start, b: start - 1, recs, before: { block: o.block, c: part.color }, memory });
+      }
     }
   });
-  // Shadows whose line has none any more, or is gone.
+  // Parts whose line has them no more, or is gone.
   for (const [link, at] of byLink) if (!wanted.has(link)) changes.push({ a: leadOf(p, objs[at]), b: objs[at].last, recs: [] });
   return applyChanges(p, changes);
 }
@@ -446,10 +472,10 @@ export function takeThreads(p: Pattern, which: readonly number[]): Pattern {
   for (const i of which) {
     const own = mem[i];
     const color = objs[i]?.color;
-    if (!color || !(own?.outline || own?.blendOf || own?.shadowOf)) continue;
+    const part = partOf(own);
+    if (!color || !own || !(own.outline || own.blendOf || part)) continue;
     objs.forEach((x, k) => {
-      const sh = mem[k]?.line?.shadow;
-      if (own.shadowOf && sh?.link === own.shadowOf) remember(p, x, (mem[k] = { ...mem[k]!, line: { ...mem[k]!.line!, shadow: { ...sh, color: { ...color } } } }));
+      if (part && hasPart(mem[k], part)) remember(p, x, (mem[k] = partInThread(mem[k]!, part, color)));
       const f = mem[k]?.fill;
       if (!f) return;
       // A border in the fill's thread has none of its own.

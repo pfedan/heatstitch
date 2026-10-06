@@ -4,7 +4,7 @@ import { addShape } from '../src/model/addShape';
 import { syncBorders } from '../src/model/border';
 import { lineSettings, resewLine } from '../src/model/line';
 import { sewObjects } from '../src/model/objects';
-import { STITCH, type Pattern } from '../src/model/pattern';
+import { STITCH, TRIM, type Pattern } from '../src/model/pattern';
 import { remembered, rememberedIn, restoreRemembered } from '../src/model/restitch';
 import { deleteObjects, duplicateObject, recolorObjects } from '../src/model/shapeOps';
 import { transformSewObject } from '../src/model/reshape';
@@ -100,5 +100,29 @@ describe('shadow of a line', () => {
     const line = objs.find((o) => remembered(q, o)?.line?.shadow)!;
     expect(remembered(q, line)?.line?.shadow?.color).toMatchObject(blue);
     expect(objs.find((o) => remembered(q, o)?.shadowOf)?.color).toMatchObject(blue);
+  });
+
+  it('trims between echo copies when asked, and sews copies of another thread as a linked object after the line', () => {
+    const a = addShape(empty, { form: parsePath('M0 0 L30 0', ID), kind: 'stroke', width: 0.4 }, red, null, options)!;
+    const o = sewObjects(a.pattern)[0];
+    const st = { ...lineSettings(a.pattern, o), echo: { side: 'out' as const, count: 3, gap: 3, cut: true, colors: [null, blue, blue], link: 'e1' } };
+    const r = resewLine(a.pattern, 0, remembered(a.pattern, o)!.path!, st, T)!;
+    const p = syncBorders(r.pattern, T);
+    const objs = sewObjects(p);
+    expect(objs).toHaveLength(2);
+    expect(objs[0].color).toMatchObject(red);
+    expect(objs[1].color).toMatchObject(blue);
+    expect(remembered(p, objs[1])?.echoOf).toBe('e1:2');
+    // The line with copy 1, trimmed between them; copies 2 and 3 in blue.
+    let trims = 0;
+    for (let i = objs[0].first; i <= objs[0].last; i++) if (p.cmd[i] === TRIM) trims++;
+    const ys = (k: number) => points(p, objs[k].first, objs[k].last).map((q) => Math.round(q[1]));
+    expect(new Set(ys(0))).toEqual(new Set([0, -3]));
+    expect(new Set(ys(1))).toEqual(new Set([-6, -9]));
+    expect(trims).toBeGreaterThan(0);
+    // Deleted alone, the line leaves those copies out from now on.
+    const alone = deleteObjects(p, [1], T)!;
+    expect(remembered(alone, sewObjects(alone)[0])?.line?.echo?.skip).toEqual([2, 3]);
+    expect(syncBorders(alone, T)).toBe(alone);
   });
 });

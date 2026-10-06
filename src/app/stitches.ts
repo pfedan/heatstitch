@@ -9,6 +9,7 @@ import type { RungTool } from '../ui/rungTool';
 import type { Sequence } from './types';
 import type { Settings } from '../settings';
 import type { ShapeOutline } from '../render/scene';
+import { hasPart, partOf, withoutPart } from '../model/shadow';
 import { SATIN_SHARE } from '../model/covers';
 import { currentSettings } from '../correct/plan';
 import { isCovered, setOverlapShare } from '../model/knockout';
@@ -120,9 +121,9 @@ export function bindStitches(app: StitchesApp) {
     }
     // A line's shadow: set at its line.
     const shade = one && remembered(p, one);
-    if (shade?.shadowOf) {
-      const line = q.objects.findIndex((o) => partnerOf(remembered(p, o), shade));
-      info.outline = { fill: line >= 0 ? line : null, shadow: true };
+    if (partOf(shade)) {
+      const line = q.objects.findIndex((o) => partnerOf(remembered(p, o), shade!));
+      info.outline = { fill: line >= 0 ? line : null, shadow: shade!.shadowOf ? true : undefined, echo: shade!.echoOf ? true : undefined };
     }
     ui.stitchCache = { p, key: ui.selectionKey, info };
     return info;
@@ -134,10 +135,10 @@ export function bindStitches(app: StitchesApp) {
       ? fill?.fill?.border?.link === own.outline
       : own.blendOf
         ? fill?.fill?.deco?.blend?.link === own.blendOf
-        : !!own.shadowOf && !fill?.shadowOf && fill?.line?.shadow?.link === own.shadowOf;
+        : !!partOf(own) && hasPart(fill, partOf(own)!);
 
   /** Whether an object has a shape of its own its stitches can be loosed from (and sewn from again). */
-  const loosable = (m: Remembered | undefined): boolean => !!m && !m.read && !m.lettering && !m.outline && !m.blendOf && !m.shadowOf && !!(m.region || m.form || m.path || m.columns);
+  const loosable = (m: Remembered | undefined): boolean => !!m && !m.read && !m.lettering && !m.outline && !m.blendOf && !partOf(m) && !!(m.region || m.form || m.path || m.columns);
 
   /**
    * The selected objects loosed from their shape (`on`), or sewn from their resting shape again with
@@ -372,9 +373,10 @@ export function bindStitches(app: StitchesApp) {
       const q = app.seq(p);
       const own = q.objects[[...ui.selectedObjects][0]];
       const mem = own && remembered(p, own);
-      if (!mem?.outline && !mem?.blendOf && !mem?.shadowOf) return;
+      if (!mem || (!mem.outline && !mem.blendOf && !partOf(mem))) return;
       const blend = !mem.outline && !!mem.blendOf;
-      const shadow = !!mem.shadowOf;
+      const part = partOf(mem);
+      const shadow = !!part;
       const fill = q.objects.findIndex((o) => partnerOf(remembered(p, o), mem));
       if (a === 'fill') {
         if (fill >= 0) app.selectObjects([fill], false);
@@ -384,8 +386,8 @@ export function bindStitches(app: StitchesApp) {
       // Its own object from now on: the fill forgets its border (or second thread), and it its fill.
       const fm = fill >= 0 ? remembered(p, q.objects[fill]) : undefined;
       if (shadow) {
-        if (fm?.line) remember(p, q.objects[fill], { ...fm, line: { ...fm.line, shadow: undefined } });
-        remember(p, own, { ...mem, shadowOf: undefined });
+        if (fm?.line) remember(p, q.objects[fill], withoutPart(fm, part!));
+        remember(p, own, { ...mem, shadowOf: undefined, echoOf: undefined });
       } else {
         if (fm?.fill && blend) remember(p, q.objects[fill], { ...fm, fill: { ...fm.fill, deco: { ...fm.fill.deco, blend: undefined } } });
         else if (fm?.fill) remember(p, q.objects[fill], { ...fm, fill: { ...fm.fill, border: undefined } });
@@ -394,7 +396,7 @@ export function bindStitches(app: StitchesApp) {
       if (app.files.active) app.files.setObjects(app.files.active, rememberedIn(p, q.objects));
       ui.selectionKey++;
       ui.stitchCache = null;
-      app.layers.say(t(shadow ? 'stitch.shadowOf.detached' : blend ? 'stitch.blendOf.detached' : 'stitch.outline.detached'));
+      app.layers.say(t(shadow ? (mem.echoOf ? 'stitch.echoOf.detached' : 'stitch.shadowOf.detached') : blend ? 'stitch.blendOf.detached' : 'stitch.outline.detached'));
       app.redraw();
     },
   });

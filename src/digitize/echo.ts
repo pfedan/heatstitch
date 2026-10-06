@@ -1,6 +1,7 @@
 import { distanceToSeeds } from '../image/edt';
 import { insidePoly } from '../shape/path';
 import { outline, type Region } from './region';
+import type { ThreadColor } from '../model/pattern';
 import type { Pt } from './skeleton';
 
 /**
@@ -23,15 +24,52 @@ export interface LineEcho {
   count: number;
   /** From line to line (mm). */
   gap: number;
+  /** Trimmed from copy to copy instead of a short stitch across. */
+  cut?: boolean;
+  /**
+   * A thread for each copy, nearest first (both sides alike); none or null: the line's. Copies in
+   * a thread of their own are objects of their own, linked to the line by `link` (model/shadow.ts).
+   */
+  colors?: (ThreadColor | null)[];
+  link?: string;
+  /** Only these copies (1 nearest), without the line: what an object of copies in their own thread sews. */
+  only?: number[];
+  /** Copies the line leaves out (they went their own way as objects of their own). */
+  skip?: number[];
 }
 
 export const ECHO_DEFAULT: LineEcho = { side: 'out', count: 2, gap: 3 };
 export const ECHO_COUNT: [number, number] = [1, 6];
 export const ECHO_GAP: [number, number] = [1, 10];
 
+const isColor = (c: unknown) => {
+  const x = c as ThreadColor | null;
+  const byte = (v: unknown) => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 255;
+  return !!x && byte(x.r) && byte(x.g) && byte(x.b);
+};
+
 export function isEcho(e: unknown): e is LineEcho {
   const x = e as LineEcho | null;
-  return !!x && ECHO_SIDES.includes(x.side) && Number.isInteger(x.count) && x.count >= ECHO_COUNT[0] && x.count <= ECHO_COUNT[1] && Number.isFinite(x.gap) && x.gap >= ECHO_GAP[0] && x.gap <= ECHO_GAP[1];
+  return (
+    !!x &&
+    ECHO_SIDES.includes(x.side) &&
+    Number.isInteger(x.count) &&
+    x.count >= ECHO_COUNT[0] &&
+    x.count <= ECHO_COUNT[1] &&
+    Number.isFinite(x.gap) &&
+    x.gap >= ECHO_GAP[0] &&
+    x.gap <= ECHO_GAP[1] &&
+    (x.cut === undefined || typeof x.cut === 'boolean') &&
+    (x.colors === undefined || (Array.isArray(x.colors) && x.colors.every((c) => c === null || isColor(c)))) &&
+    (x.link === undefined || typeof x.link === 'string') &&
+    [x.only, x.skip].every((l) => l === undefined || (Array.isArray(l) && l.every((k) => Number.isInteger(k) && k >= 1 && k <= ECHO_COUNT[1])))
+  );
+}
+
+/** The copies (1 nearest) sewn in the line's own thread. */
+export function ownCopies(e: LineEcho): number[] {
+  const n = Math.max(1, Math.round(e.count));
+  return Array.from({ length: n }, (_, i) => i + 1).filter((k) => !e.colors?.[k - 1] && !e.skip?.includes(k));
 }
 
 /** Pieces of copies shorter than this are left out (mm). */
@@ -59,11 +97,13 @@ export function echoLines(line: Pt[], closed: boolean, e: LineEcho, minGap = 0):
   if (line.length < 2) return [base];
   const gap = Math.max(e.gap, minGap);
   const n = Math.max(1, Math.round(e.count));
+  // The line with its copies in its own thread, or only the copies asked for.
+  const rings = new Set(e.only ?? ownCopies(e));
   const levels: number[] = [];
-  if (e.side === 'both') for (let k = n; k >= 1; k--) levels.push(-k * gap);
-  levels.push(0);
-  if (e.side !== 'in') for (let k = 1; k <= n; k++) levels.push(k * gap);
-  else for (let k = 1; k <= n; k++) levels.push(-k * gap);
+  if (e.side === 'both') for (let k = n; k >= 1; k--) if (rings.has(k)) levels.push(-k * gap);
+  if (!e.only) levels.push(0);
+  for (let k = 1; k <= n; k++) if (rings.has(k)) levels.push((e.side === 'in' ? -k : k) * gap);
+  if (!levels.length) return [];
   const field = distanceField(line, n * gap + 1);
   const out: { line: Pt[]; closed: boolean }[] = [];
   let at: Pt | null = null;
