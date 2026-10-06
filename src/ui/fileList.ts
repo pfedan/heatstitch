@@ -23,6 +23,7 @@ import { asideFrom, asideOf, inheritAside, setAsideOf, storeAside, type StoredAs
 import type { ProjectFile } from '../storage/project';
 import { liveAcknowledgements, openWorst, type Acknowledgement } from '../validation/acks';
 import { normalizeMaterial, type Material } from '../settings';
+import { toast } from '../shell/ui';
 import {
   CAUTION,
   classify,
@@ -86,6 +87,8 @@ interface FileData {
 
 /** Versions kept per file for undo. */
 const HISTORY = 50;
+/** How long a removed design can still be brought back (a little longer than its note shows). */
+const REMOVE_GRACE_MS = 8000;
 
 const EXT = /\.[^.]+$/;
 /** The extension of an embroidery format at the end of a name ("Herz 1.5" has none). */
@@ -97,6 +100,8 @@ export class FileList {
   private nextId = 1;
   /** The file whose name is being edited in the list, with the text typed so far. */
   private renaming: { id: number; text: string } | null = null;
+  /** True while the list is drawn anew: the name field it takes away loses its focus then, which is no real leave. */
+  private drawing = false;
   /** Called after a design got another name (the save field suggests the new one). */
   onRename: (f: LoadedFile) => void = () => {};
 
@@ -454,17 +459,50 @@ export class FileList {
     this.onActivate(this.active);
   }
 
-  remove(id: number): void {
+  /**
+   * Takes a design out of the list and activates the next one. It stays in storage for a few
+   * seconds: the returned function puts it back as it was (with its undo history), until then.
+   */
+  remove(id: number): (() => void) | null {
     const idx = this.files.findIndex((f) => f.id === id);
-    if (idx < 0) return;
+    if (idx < 0) return null;
     const [removed] = this.files.splice(idx, 1);
-    if (removed.storeKey !== undefined) void deleteFile(removed.storeKey);
-    if (this.activeId === id) {
+    const wasActive = this.activeId === id;
+    let settled = false;
+    const drop = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      window.removeEventListener('pagehide', drop);
+      if (removed.storeKey !== undefined) void deleteFile(removed.storeKey);
+    };
+    const timer = window.setTimeout(drop, REMOVE_GRACE_MS);
+    window.addEventListener('pagehide', drop);
+    if (this.renaming?.id === id) this.renaming = null;
+    if (wasActive) {
       const next = this.files.slice(idx).find((f) => f.pattern) ?? [...this.files].reverse().find((f) => f.pattern);
       this.activate(next?.id ?? null);
     } else {
       this.render();
     }
+    return () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      window.removeEventListener('pagehide', drop);
+      this.files.splice(Math.min(idx, this.files.length), 0, removed);
+      if (wasActive || this.activeId === null) this.activate(removed.id);
+      else this.render();
+    };
+  }
+
+  /** Removes a design and says so, with a way back (no question before). */
+  removeWithUndo(id: number): void {
+    const f = this.files.find((x) => x.id === id);
+    if (!f) return;
+    const name = FileList.displayName(f);
+    const undo = this.remove(id);
+    if (undo) toast(t('files.removed', { name }), { label: t('files.undo'), run: undo });
   }
 
   /** Moves the selection by `dir` among parsed files (keyboard navigation). */
@@ -478,13 +516,22 @@ export class FileList {
   render(): void {
     // A list drawn anew while a name is typed (a measurement came in) keeps the field and its focus.
     const typing = !!this.renaming && document.activeElement?.classList.contains('rename-input');
+    const old = typing ? (document.activeElement as HTMLInputElement) : null;
+    const sel = old ? [old.selectionStart ?? 0, old.selectionEnd ?? 0] : null;
     if (this.renaming && !this.files.some((f) => f.id === this.renaming!.id)) this.renaming = null;
+    this.drawing = true;
     this.list.replaceChildren(
       ...(this.files.length
         ? this.files.map((f) => this.item(f))
         : [Object.assign(document.createElement('li'), { className: 'muted', textContent: t('files.empty') })]),
     );
-    if (typing) this.list.querySelector<HTMLInputElement>('input.rename-input')?.focus();
+    this.drawing = false;
+    if (typing) {
+      // The new field takes over the focus and what was selected in the old one.
+      const input = this.list.querySelector<HTMLInputElement>('input.rename-input');
+      input?.focus();
+      if (sel) input?.setSelectionRange(sel[0], sel[1]);
+    }
   }
 
   /** The text field that replaces a name while it is edited; Enter or leaving it takes the name, Escape keeps the old one. */
@@ -507,7 +554,7 @@ export class FileList {
     });
     input.addEventListener('blur', () => {
       // Drawing the list anew blurs the old field too; only a real leave ends editing.
-      if (input.isConnected) this.endRename(true);
+      if (input.isConnected && !this.drawing) this.endRename(true);
     });
     input.addEventListener('click', (e) => e.stopPropagation());
     input.addEventListener('dblclick', (e) => e.stopPropagation());
@@ -579,9 +626,10 @@ export class FileList {
     rm.textContent = '×';
     rm.title = t('files.remove');
     rm.setAttribute('aria-label', `${t('files.remove')}: ${shown}`);
+    rm.className = 'remove-btn';
     rm.addEventListener('click', (e) => {
       e.stopPropagation();
-      this.remove(f.id);
+      this.removeWithUndo(f.id);
     });
     li.append(rm);
     return li;

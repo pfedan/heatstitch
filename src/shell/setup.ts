@@ -100,13 +100,10 @@ export function initShell(app: ShellApp): void {
   command({ id: 'mode.flow', label: 'mode.flow', group: 'shell.group.view', keys: ['1'], bind: false, when: () => app.mode() !== 'flow', run: () => app.setMode('flow') });
   command({ id: 'mode.density', label: 'mode.density', group: 'shell.group.view', keys: ['2'], bind: false, when: () => app.mode() !== 'density', run: () => app.setMode('density') });
   command({ id: 'mode.image', label: 'shell.image.start', group: 'files.title', keys: ['3'], bind: false, when: () => app.mode() !== 'image', run: () => app.setMode('image') });
-  command({ id: 'files.new', label: 'shell.cmd.new', group: 'files.title', run: press('new-design') });
-  command({ id: 'files.open', label: 'shell.cmd.open', group: 'files.title', run: () => $<HTMLInputElement>('file-input').click() });
   command({ id: 'edit.undo', label: 'edit.undo', group: 'shell.group.edit', keys: ['Mod+Z'], bind: false, when: usable('undo'), run: press('undo') });
   command({ id: 'edit.redo', label: 'edit.redo', group: 'shell.group.edit', keys: ['Mod+Shift+Z', 'Mod+Y'], bind: false, when: usable('redo'), run: press('redo') });
   command({ id: 'view.fit', label: 'controls.fit', group: 'shell.group.view', keys: ['F'], bind: false, when: usable('fit'), run: press('fit') });
   command({ id: 'view.marks', label: 'marks.toggle', group: 'shell.group.view', keys: ['H'], bind: false, when: usable('marks-toggle'), run: press('marks-toggle') });
-  command({ id: 'view.png', label: 'shell.cmd.png', group: 'files.title', when: usable('export'), run: press('export') });
   command({ id: 'lettering.new', label: 'lettering.tool', group: 'shell.group.draw', keys: ['T'], bind: false, when: usable('lettering-new'), run: press('lettering-new') });
   for (const [kind, label] of [['rect', 'draw.rect'], ['ellipse', 'draw.ellipse'], ['pen', 'draw.pen'], ['free', 'draw.free']] as const) {
     command({
@@ -117,7 +114,6 @@ export function initShell(app: ShellApp): void {
       run: () => document.querySelector<HTMLButtonElement>(`[data-draw="${kind}"]`)?.click(),
     });
   }
-  command({ id: 'colorList.open', label: 'colorList.button', group: 'files.title', when: usable('color-list'), run: press('color-list') });
   command({ id: 'order.optimize', label: 'order.button', group: 'shell.group.edit', when: usable('order-optimize'), run: press('order-optimize') });
   bindCommandKeys();
 

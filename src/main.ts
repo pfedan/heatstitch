@@ -692,11 +692,6 @@ function flowTooltip(sx: number, sy: number): void {
   tooltip.style.top = `${sy + 14}px`;
 }
 
-function emptyText(): void {
-  const mode = settings.mode;
-  empty.textContent = t(mode === 'flow' ? 'canvas.empty.flow' : mode === 'image' ? 'canvas.empty.image' : 'canvas.empty');
-}
-
 function setMode(mode: Mode): void {
   const previous = document.body.dataset.mode;
   settings.mode = mode;
@@ -722,7 +717,6 @@ function setMode(mode: Mode): void {
   }
   controls.refresh();
   updateLevel();
-  emptyText();
   tooltip.hidden = true;
   // The image and the loaded file have their own place on the stage.
   if ((previous === 'image') !== (mode === 'image')) fitView();
@@ -1339,7 +1333,6 @@ const langSelect = $<HTMLSelectElement>('lang');
 // only what this file writes. The mode, the selection and the hand edit stay as they are.
 onLangChange(() => {
   langSelect.value = getLang();
-  emptyText();
   updateLevel();
   tooltip.hidden = true;
   tooltip.replaceChildren();

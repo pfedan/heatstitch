@@ -2,10 +2,10 @@ import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { lengthMm } from '../src/image/svg';
 
-/** The examples offered under "Load example" in index.html. */
+/** The examples offered in the design switcher (index.html). */
 const html = new TextDecoder().decode(readFileSync(new URL('../index.html', import.meta.url)));
-const select = html.slice(html.indexOf('id="load-example"'), html.indexOf('</select>', html.indexOf('id="load-example"')));
-const examples = [...select.matchAll(/<option value="([^"]+)"/g)].map((m) => m[1]);
+const list = html.slice(html.indexOf('id="load-example"'), html.indexOf('</ul>', html.indexOf('id="load-example"')));
+const examples = [...list.matchAll(/data-example="([^"]+)"/g)].map((m) => m[1]);
 
 describe('example list', () => {
   it('offers stitch files and SVGs', () => {

@@ -27,7 +27,7 @@ describe.skipIf(!on)('the space key', () => {
     browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
     page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
     await page.goto(server.resolvedUrls!.local[0]);
-    await page.selectOption('#load-example', 'examples/cat-60mm.pes', { force: true });
+    await page.evaluate(() => document.querySelector<HTMLButtonElement>('#load-example [data-example="examples/cat-60mm.pes"]')!.click());
     await page.locator('#layer-list .layer').first().waitFor();
     await page.waitForTimeout(500);
   }, 60_000);

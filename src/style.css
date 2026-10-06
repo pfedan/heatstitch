@@ -993,26 +993,6 @@ button.link {
   font-size: 12px;
 }
 
-.file-start {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  margin-top: 6px;
-}
-
-.new-design {
-  padding: 2px 8px;
-  font-size: 12px;
-}
-
-.example-select {
-  display: block;
-  min-width: 0;
-  padding: 2px 6px;
-  font-size: 12px;
-  color: var(--accent);
-}
-
 button.link:hover {
   text-decoration: underline;
 }
@@ -1563,66 +1543,6 @@ details.panel.section[open] > summary {
 .file-actions .hoop-note.turned {
   border-left-color: #d97706;
   background: color-mix(in srgb, #d97706 10%, transparent);
-}
-
-/* Files: save and revert under the list */
-
-.file-actions {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--line);
-}
-
-.file-actions .save-format {
-  width: 100%;
-  margin-top: 4px;
-}
-
-.file-actions .save-name {
-  display: flex;
-  flex: 1;
-  min-width: 0;
-  align-items: center;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--bg);
-}
-
-.file-actions .save-name:focus-within {
-  border-color: var(--accent);
-}
-
-.file-actions .save-name input {
-  flex: 1;
-  min-width: 0;
-  padding: 5px 8px;
-  border: 0;
-  outline: none;
-  background: transparent;
-  font: inherit;
-  color: inherit;
-}
-
-.file-actions .save-name span {
-  padding: 0 8px;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.file-actions .save-file {
-  display: flex;
-  gap: 6px;
-  margin-top: 4px;
-}
-
-
-.file-actions .save-project {
-  width: 100%;
-  margin-top: 6px;
-}
-
-.file-actions .muted.small {
-  font-size: 11px;
 }
 
 /* Coloring key */
@@ -2603,14 +2523,6 @@ button.tool:disabled {
     order: 3;
     flex-basis: 100%;
   }
-}
-
-.save-label {
-  cursor: help;
-}
-
-.save-label .info {
-  font-size: 11px;
 }
 
 /* With the global switch off the chosen markers stay, but none is drawn (loose threads aside). */

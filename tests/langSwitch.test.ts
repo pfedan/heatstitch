@@ -76,7 +76,7 @@ const canvasAt = async (page: Page, fx = 0.5, fy = 0.5) => {
   return { x: b.x + b.width * fx, y: b.y + b.height * fy };
 };
 const loadCat = async (page: Page) => {
-  await page.selectOption('#load-example', 'examples/cat-60mm.pes', { force: true });
+  await page.evaluate(() => document.querySelector<HTMLButtonElement>('#load-example [data-example="examples/cat-60mm.pes"]')!.click());
   await page.locator('#layer-list .layer').first().waitFor();
   await wait(page, 500);
 };
@@ -87,7 +87,7 @@ const selectMiddle = async (page: Page) => {
 };
 /** Opens every color of the shapes example and selects one object in the list. */
 const selectInList = async (page: Page, object: number) => {
-  await page.selectOption('#load-example', 'examples/svg/shapes-benchmark.svg', { force: true });
+  await page.evaluate(() => document.querySelector<HTMLButtonElement>('#load-example [data-example="examples/svg/shapes-benchmark.svg"]')!.click());
   await page.locator('#layer-list .layer').first().waitFor();
   const blocks = await page.locator('#layer-list .layer[data-block]').count();
   for (let b = 0; b < blocks; b++) await page.locator(`#layer-list .layer[data-block="${b}"] .chev`).click();
@@ -135,6 +135,7 @@ const STATES: Record<string, (page: Page) => Promise<void>> = {
   },
   'the color list open': async (page) => {
     await loadCat(page);
+    await page.click('#save-button');
     await page.click('#color-list');
     await page.locator('dialog.color-list[open]').waitFor();
   },
