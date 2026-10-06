@@ -33,7 +33,7 @@ damit Video und Text zusammenpassen.
 
 | Nr. | Titel | Inhalt | Demodatei | Länge |
 | --- | --- | --- | --- | --- |
-| 5 | Erste Schritte | Datei öffnen (Ziehen oder Beispiel), der Bildschirm in drei Spalten, Ablauf abspielen, Farben aus- und einblenden | `cat-60mm.pes` | 2 min |
+| 5 | Fertige Stickdatei öffnen | Datei öffnen (Ziehen oder Beispiel), der Bildschirm in drei Spalten, Ablauf abspielen, Farben aus- und einblenden | `cat-60mm.pes` | 2 min |
 | 6 | Stickdatei prüfen | Modus Dichte, Prüfung, Befunde lesen und zuklappen, Fokus auf eine Stelle | `overlap.pes` | 2 bis 3 min |
 | 7 | Korrigieren mit Vorschlägen | Korrektur, Vorschläge, auf Stoff abstimmen, Vergleich vorher und nachher | `letters.pes` | 2 bis 3 min |
 | 8 | Sprünge und Schnitte | Sprungliste, Schnitte setzen, alle auf einmal nach Länge, Reihenfolge optimieren | `confetti.pes` | 2 min |
