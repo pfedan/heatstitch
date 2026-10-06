@@ -4,7 +4,7 @@ import type { FileList, LoadedFile } from '../ui/fileList';
 import type { FrameTool } from '../ui/frameTool';
 import type { ImageMode } from '../ui/imageMode';
 import type { Lettering } from '../lettering/layout';
-import type { ObjectPanel, OrderCard } from '../ui/objectPanel';
+import type { OrderCard } from '../ui/objectPanel';
 import type { Pattern } from '../model/pattern';
 import type { RungTool } from '../ui/rungTool';
 import type { Sequence } from './types';
@@ -13,11 +13,10 @@ import type { ShapeTool } from '../ui/shapeTool';
 import type { Viewport } from '../render/viewport';
 import { DIVIDER_GRAB_PX } from '../render/compare';
 import { LONG_PRESS_MS } from '../ui/layersPanel';
-import { ObjectMenu } from '../ui/objectMenu';
+import { objectMenu } from '../ui/objectMenu';
 import { lightFromPointer } from '../render/light';
 import { objectsInRect } from '../model/edit';
 import { stitchAt, transitionAt, transitionShown, type StitchStyle } from '../render/flow';
-import { t } from '../i18n';
 import { ui } from './state';
 import { updateTooltip } from '../ui/tooltip';
 
@@ -40,8 +39,6 @@ export interface PointerApp {
   readonly letterUp: () => void;
   readonly letteringsOf: (p: Pattern, q: Sequence) => (Lettering | undefined)[];
   readonly movePlanSplit: (sx: number) => void;
-  readonly objectInfo: (p: Pattern, q: Sequence) => Parameters<ObjectPanel['actions']>[0];
-  readonly objectPanel: ObjectPanel;
   readonly orderCard: OrderCard;
   readonly redraw: () => void;
   readonly rungTool: RungTool;
@@ -402,7 +399,6 @@ export function bindPointer(app: PointerApp) {
   }
 
   // The object actions at the pointer: right click, or a long press on a touch screen.
-  const objectMenu = new ObjectMenu();
   let longPress: { timer: number; at: [number, number] } | null = null;
 
   function cancelLongPress(): void {
@@ -429,7 +425,7 @@ export function bindPointer(app: PointerApp) {
     if (!ui.selectedObjects.has(o)) app.selectObjects([o], false);
     app.redraw();
     if (ui.lettering || !ui.selectedObjects.size) return false;
-    objectMenu.open(clientX, clientY, app.objectPanel.actions(app.objectInfo(p, app.seq(p))), t('object.menu'));
+    objectMenu.open({ x: clientX, y: clientY });
     return objectMenu.isOpen;
   }
 

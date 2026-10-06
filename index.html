@@ -294,7 +294,7 @@
             <button type="button" class="link" id="color-list" data-i18n="colorList.button" data-i18n-title="colorList.buttonHint" hidden></button>
           </div>
           <div class="order-bar">
-            <button type="button" id="order-optimize" aria-expanded="false" aria-controls="order-card" data-i18n-title="order.button.hint"><span aria-hidden="true">⇅</span> <span data-i18n="order.button"></span></button>
+            <button type="button" id="order-optimize" aria-expanded="false" aria-controls="order-card" data-i18n-title="order.button.hint"><svg class="i" aria-hidden="true"><use href="#i-obj-order" /></svg><span data-i18n="order.button"></span></button>
           </div>
           <div class="order-card" id="order-card" role="group" data-i18n-aria="order.button" hidden></div>
           <div class="order-card overlap-card" id="overlap-card" role="status" hidden>
@@ -411,11 +411,7 @@
 
         <div class="insp-page" data-page="object" data-mode="flow">
           <p class="insp-empty muted" id="object-empty" data-i18n="shell.object.empty"></p>
-          <section class="panel object-panel" id="object-panel" data-mode="flow" hidden>
-            <div class="panel-head">
-              <h2 data-i18n="object.title"></h2>
-              <button type="button" id="object-close" class="icon" data-i18n-title="object.clear"><span aria-hidden="true">&#x2715;</span></button>
-            </div>
+          <section class="panel object-panel" id="object-panel" data-mode="flow" data-i18n-aria="object.title" hidden>
             <div id="object-body"></div>
             <div id="object-stitches" class="object-stitches"></div>
             <p class="layer-note error" id="object-msg" role="status" hidden></p>

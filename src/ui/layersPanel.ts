@@ -3,8 +3,10 @@ import { numberInColor, type ObjectKind, type SewObject } from '../model/objects
 import type { FileFormat, ThreadColor } from '../model/pattern';
 import { sameColor } from '../model/recolor';
 import type { ColorBlock } from '../model/sequence';
-import { threadCode } from '../threads/catalog';
+import { threadCode, threadNumber } from '../threads/catalog';
 import { cssColor as css, hexColor as hex, ThreadPicker } from './threadPicker';
+import { toast } from '../shell/ui';
+import { h, icon } from '../shell/h';
 
 export interface LayerHooks {
   /** Show or hide a color block. */
@@ -25,6 +27,8 @@ export interface LayerHooks {
   move: (order: number[], moved: number[], into: number | null) => void;
   /** The menu of object actions for object `o`, at the page position (right click, long press). */
   menu: (o: number, x: number, y: number) => void;
+  /** The menu of a color block, at the page position or under its button. */
+  colorMenu: (block: number, at: { x: number; y: number } | HTMLElement) => void;
 }
 
 /** A message under the list: what happened, as a warning or not, and an action that goes with it. */
@@ -32,6 +36,8 @@ export interface Notice {
   text: string;
   warn?: boolean;
   action?: { label: string; title?: string; run: () => void };
+  /** Takes the edit back; offered as "Undo" with the message. */
+  undo?: () => void;
 }
 
 export interface LayerState {
@@ -78,11 +84,11 @@ export const blockName = (b: Pick<ColorBlock, 'index' | 'color'>) => `${b.index 
 type Drag = { objects: number[]; block: number | null };
 
 /**
- * The color blocks in sewing order, each opening to the objects sewn in it. A color row: an eye to
- * hide it, the swatch to pick another thread, a click to highlight it. An object row: hover shows
- * it on the canvas, a click selects it (Shift or Ctrl adds). Colors and objects can be dragged to
- * another place in the order; a place that would sew something over what has to lie on top of it
- * is refused with the reason.
+ * The color blocks in sewing order, each opening to the objects sewn in it. A color row: a click
+ * opens it, the swatch picks another thread, and on hover (always on touch) buttons highlight or
+ * hide it and open its menu. An object row: hover shows it on the canvas, a click selects it (Shift
+ * or Ctrl adds), a right click, a long press or its button opens the object menu. Colors and
+ * objects can be dragged to another place in the order, or moved by the order commands.
  */
 export class LayersPanel {
   private list = document.getElementById('layer-list') as HTMLUListElement;
@@ -138,23 +144,49 @@ export class LayersPanel {
     this.key = [];
   }
 
-  /** A short message under the list, gone after a while (longer with an action to take). */
+  /** While set, say() hands its notice here instead of showing it (see capture). */
+  private catcher: ((n: Notice) => void) | null = null;
+
+  /** Runs `fn` and returns what it said instead of showing it, to show it with more (an undo). */
+  capture(fn: () => void): Notice | null {
+    let said: Notice | null = null;
+    const before = this.catcher;
+    this.catcher = (n) => (said = n);
+    try {
+      fn();
+    } finally {
+      this.catcher = before;
+    }
+    return said;
+  }
+
+  /**
+   * Says what happened. A plain message is a short note at the bottom of the stage (with "Undo"
+   * when the notice brings one); a warning or a message with its own action stays under the list,
+   * near what it is about, a while longer.
+   */
   say(n: string | Notice, error = false): void {
     const notice: Notice = typeof n === 'string' ? { text: n, warn: error } : n;
+    if (this.catcher) return this.catcher(notice);
+    if (!notice.text) return;
+    const a = notice.action;
+    if (!a && !notice.warn) {
+      const undo = notice.undo;
+      toast(notice.text, undo ? { label: t('objects.undo'), run: undo } : undefined);
+      return;
+    }
     window.clearTimeout(this.noteTimer);
     this.note.replaceChildren(document.createTextNode(notice.text));
-    const a = notice.action;
     if (a) {
-      const btn = Object.assign(document.createElement('button'), { type: 'button', className: 'link', textContent: a.label, title: a.title ?? '' });
-      btn.addEventListener('click', () => {
+      const btn = h('button', { type: 'button', class: 'link', title: a.title ?? '', onclick: () => {
         this.note.hidden = true;
         a.run();
-      });
-      this.note.append(btn);
+      } }, a.label);
+      this.note.append(' ', btn);
     }
     this.note.classList.toggle('error', !!notice.warn);
-    this.note.hidden = !notice.text;
-    if (notice.text) this.noteTimer = window.setTimeout(() => (this.note.hidden = true), a ? 15000 : notice.warn ? 9000 : 6000);
+    this.note.hidden = false;
+    this.noteTimer = window.setTimeout(() => (this.note.hidden = true), a ? 15000 : 9000);
   }
 
   update(st: LayerState, lang: string): void {
@@ -180,9 +212,13 @@ export class LayersPanel {
     this.picker.close();
     this.reset.hidden = !st.hidden.size && st.focus === null;
     if (!st.blocks.length) {
-      this.list.replaceChildren(Object.assign(document.createElement('li'), { className: 'muted', textContent: t(st.blank ? 'layers.blank' : 'layers.empty') }));
+      this.list.replaceChildren(h('li', { class: 'muted layers-empty' }, t(st.blank ? 'layers.blank' : 'layers.empty')));
       return;
     }
+    // The row with the keyboard focus keeps it when the rows are built anew.
+    const had = document.activeElement instanceof HTMLElement && this.list.contains(document.activeElement) ? document.activeElement : null;
+    const focusKey = had?.closest<HTMLElement>('.layer')?.dataset;
+    const focusPart = had?.dataset.part;
     const rows: HTMLLIElement[] = [];
     for (const b of st.blocks) {
       const objs = st.objects.filter((o) => o.block === b.index);
@@ -190,144 +226,183 @@ export class LayersPanel {
       if (this.open.has(b.index)) for (const o of objs) rows.push(this.objectRow(o, objs, st));
     }
     // A file from elsewhere: all of it is guessed, said once instead of on every row.
-    if (allGuessed(st)) rows.push(Object.assign(document.createElement('li'), { className: 'muted layers-guessed', textContent: t('layers.allGuessed'), title: t('object.guessedHint') }));
+    if (allGuessed(st)) rows.push(h('li', { class: 'muted layers-guessed', title: t('object.guessedHint') }, t('layers.allGuessed')));
     this.list.replaceChildren(...rows);
+    if (focusKey) {
+      const sel = focusKey.object !== undefined ? `[data-object="${focusKey.object}"]` : `[data-block="${focusKey.block}"]`;
+      const row = this.list.querySelector<HTMLElement>(sel);
+      (focusPart ? row?.querySelector<HTMLElement>(`[data-part="${focusPart}"]`) : row)?.focus({ preventScroll: true });
+    }
+  }
+
+  /** Opens or closes the objects of every color. */
+  openAll(on: boolean): void {
+    const st = this.st;
+    if (!st) return;
+    this.open = new Set(on ? st.blocks.map((b) => b.index) : []);
+    this.key = [];
+    this.update(st, getLang());
+  }
+
+  /** The color row's swatch, to open a thread picker next to (also from a command). */
+  recolor(b: number): void {
+    const st = this.st;
+    const block = st?.blocks[b];
+    const sw = this.list.querySelector<HTMLElement>(`[data-block="${b}"] .sw`);
+    if (st && block && sw) this.openPicker(block, st, sw);
+  }
+
+  private toggleOpen(b: number): void {
+    if (!this.open.delete(b)) this.open.add(b);
+    this.key = [];
+    if (this.st) this.update(this.st, getLang());
   }
 
   private colorRow(b: ColorBlock, objs: SewObject[], st: LayerState): HTMLLIElement {
     const hidden = st.hidden.has(b.index);
+    const focused = st.focus === b.index;
     const isOpen = this.open.has(b.index);
-    const li = document.createElement('li');
-    li.className = 'layer';
-    li.dataset.block = String(b.index);
-    li.classList.toggle('hidden-layer', hidden);
-    li.classList.toggle('focused', st.focus === b.index);
-    li.classList.toggle('current', st.current === b.index);
-    li.classList.toggle('open', isOpen);
-    li.draggable = st.blocks.length > 1;
-
-    const chev = document.createElement('button');
-    chev.type = 'button';
-    chev.className = 'icon chev';
-    chev.title = t(isOpen ? 'layers.close' : 'layers.open', { n: objs.length });
-    chev.setAttribute('aria-expanded', String(isOpen));
-    chev.setAttribute('aria-label', chev.title);
-    chev.addEventListener('click', (e) => {
+    const stop = (fn: () => void) => (e: Event) => {
       e.stopPropagation();
-      if (!this.open.delete(b.index)) this.open.add(b.index);
-      this.key = [];
-      this.update(st, '');
-    });
-
-    const eye = document.createElement('button');
-    eye.type = 'button';
-    eye.className = 'icon eye';
-    eye.textContent = hidden ? '◌' : '◉';
-    eye.title = t(hidden ? 'layers.show' : 'layers.hide');
-    eye.setAttribute('aria-pressed', String(!hidden));
-    eye.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.hooks.toggle(b.index);
-    });
-
-    const sw = document.createElement('button');
-    sw.type = 'button';
-    sw.className = 'sw';
+      fn();
+    };
+    const openLabel = t(isOpen ? 'layers.close' : 'layers.open', { n: objs.length });
+    const chev = h('button', { type: 'button', class: 'icon chev', 'data-part': 'chev', title: openLabel, 'aria-label': openLabel, 'aria-expanded': String(isOpen), onclick: stop(() => this.toggleOpen(b.index)) });
+    const sw = h('button', { type: 'button', class: 'sw', 'data-part': 'sw', title: t('layers.recolor'), 'aria-label': t('layers.recolor'), 'aria-haspopup': 'dialog', onclick: stop(() => this.openPicker(b, st, sw)) });
     sw.style.background = css(b.color);
-    sw.title = t('layers.recolor');
-    sw.setAttribute('aria-label', t('layers.recolor'));
-    sw.setAttribute('aria-haspopup', 'dialog');
-    sw.addEventListener('click', (e) => {
-      e.stopPropagation();
-      this.openPicker(b, st, sw);
-    });
-
-    const text = document.createElement('span');
-    text.className = 'layer-text';
-    const name = document.createElement('span');
-    name.className = 'layer-name';
-    name.textContent = blockName(b);
-    const sub = document.createElement('span');
-    sub.className = 'layer-sub';
-    const count = t(objs.length === 1 ? 'layers.objects.one' : 'layers.objects', { n: objs.length });
-    const code = threadCode(b.color);
-    sub.textContent = code ? `${code} · ${count}` : count;
-    text.append(name, sub);
+    // The thread number first: it is what one buys; the brand and the count of objects after it.
+    const num = threadNumber(b.color);
+    const code = num && b.color.brand ? `${num} · ${b.color.brand}` : threadCode(b.color);
+    const count = t('objects.color.count', { n: objs.length });
+    const eyeLabel = t(hidden ? 'layers.show' : 'layers.hide');
+    const eye = h('button', { type: 'button', class: 'icon eye', 'data-part': 'eye', title: eyeLabel, 'aria-label': eyeLabel, 'aria-pressed': String(hidden), onclick: stop(() => this.hooks.toggle(b.index)) }, icon(hidden ? 'obj-aside' : 'obj-eye'));
+    const focusLabel = t(focused ? 'objects.color.unfocus' : 'objects.color.focus');
+    const spot = h('button', { type: 'button', class: 'icon spot', 'data-part': 'spot', title: focusLabel, 'aria-label': focusLabel, 'aria-pressed': String(focused), onclick: stop(() => this.hooks.focus(focused ? null : b.index, true)) }, icon('obj-focus'));
+    const more = h('button', { type: 'button', class: 'icon row-more', 'data-part': 'more', title: t('objects.color.menu'), 'aria-label': t('objects.color.menu'), 'aria-haspopup': 'menu', onclick: stop(() => this.hooks.colorMenu(b.index, more)) }, icon('more'));
     const parts = [t('layers.meta', { stitches: formatNumber(b.stitches), thread: formatNumber(b.threadMm / 1000, 1) })];
     if (b.trims) parts.push(t('layers.trims', { n: b.trims }));
-    const meta = document.createElement('span');
-    meta.className = 'layer-meta';
-    meta.textContent = formatNumber(b.stitches);
-    li.title = `${parts.join(' · ')}\n${t('layers.focus')}`;
-
-    li.append(chev, eye, sw, text, meta);
-    li.addEventListener('click', () => this.hooks.focus(st.focus === b.index ? null : b.index, true));
-    li.addEventListener('mouseenter', () => {
-      this.hooks.hover(null);
-      this.hooks.focus(b.index, false);
-    });
+    const li = h(
+      'li',
+      {
+        class: `layer color-row${hidden ? ' hidden-layer' : ''}${focused ? ' focused' : ''}${st.current === b.index ? ' current' : ''}${isOpen ? ' open' : ''}`,
+        'data-block': String(b.index),
+        title: parts.join(' · '),
+        draggable: st.blocks.length > 1,
+        onclick: () => this.toggleOpen(b.index),
+        onmouseenter: () => {
+          this.hooks.hover(null);
+          this.hooks.focus(b.index, false);
+        },
+        oncontextmenu: (e: Event) => {
+          e.preventDefault();
+          const m = e as MouseEvent;
+          this.hooks.colorMenu(b.index, { x: m.clientX, y: m.clientY });
+        },
+      },
+      chev,
+      sw,
+      h(
+        'span',
+        { class: 'layer-text' },
+        h('span', { class: 'layer-name' }, h('span', { class: 'layer-num' }, `${b.index + 1}`), b.color.name || t('layers.unnamed', { n: b.index + 1 })),
+        h('span', { class: 'layer-sub' }, code ? `${code} · ${count}` : count),
+      ),
+      h('span', { class: 'layer-tools' }, spot, eye, more),
+      h('span', { class: 'layer-meta' }, formatNumber(b.stitches)),
+    );
+    this.longPress(li, (x, y) => this.hooks.colorMenu(b.index, { x, y }));
     li.addEventListener('dragstart', (e) => this.dragStart(e, { objects: objs.map((o) => o.index), block: b.index }, li));
     li.addEventListener('dragend', () => this.dragEnd());
     return li;
   }
 
   private objectRow(o: SewObject, siblings: SewObject[], st: LayerState): HTMLLIElement {
-    const li = document.createElement('li');
-    li.className = 'layer object';
-    li.dataset.object = String(o.index);
-    li.classList.toggle('selected', st.selected.has(o.index));
-    li.classList.toggle('hidden-layer', st.hidden.has(o.block));
-    li.draggable = st.objects.length > 1;
-    li.tabIndex = 0;
-    li.setAttribute('role', 'button');
-    li.setAttribute('aria-pressed', String(st.selected.has(o.index)));
-    li.addEventListener('keydown', (e) => {
-      if (e.key !== 'Enter' && e.key !== ' ') return;
-      e.preventDefault();
-      e.stopPropagation();
-      this.hooks.select([o.index], e.shiftKey || e.ctrlKey || e.metaKey);
-    });
-    const icon = document.createElement('span');
-    icon.className = `kind-icon kind-${o.kind}`;
-    icon.innerHTML = KIND_ICON[o.kind];
-    const name = document.createElement('span');
-    name.className = 'layer-name';
-    name.textContent = st.names?.get(o.index) ?? `${kindLabel(o.kind)} ${numberInColor(siblings, o)}`;
-    const meta = document.createElement('span');
-    meta.className = 'layer-meta';
-    meta.textContent = formatNumber(o.stitches);
-    li.title = t('object.rowHint');
-    li.append(icon, name);
-    // Made here or guessed: only marked where both are in one design.
-    if (st.guessed?.has(o.index) && !allGuessed(st)) {
-      // About equal: a sign rather than a word, said in full by the tooltip and to screen readers.
-      const mark = Object.assign(document.createElement('span'), { className: 'layer-guessed', textContent: '≈', title: t('object.guessedHint') });
-      mark.setAttribute('aria-label', t('object.guessed'));
-      li.append(mark);
-    }
-    li.append(meta);
+    const selected = st.selected.has(o.index);
+    const kind = h('span', { class: `kind-icon kind-${o.kind}` });
+    kind.innerHTML = KIND_ICON[o.kind];
+    // Made here or guessed: only marked where both are in one design. About equal: a sign, said in full by the hint.
+    const guessed = st.guessed?.has(o.index) && !allGuessed(st) ? h('span', { class: 'layer-guessed', title: t('object.guessedHint'), 'aria-label': t('object.guessed') }, '≈') : null;
+    const more = h(
+      'button',
+      {
+        type: 'button',
+        class: 'icon row-more',
+        'data-part': 'more',
+        tabindex: -1,
+        title: t('objects.row.more'),
+        'aria-label': t('objects.row.more'),
+        'aria-haspopup': 'menu',
+        onclick: (e: Event) => {
+          e.stopPropagation();
+          const r = more.getBoundingClientRect();
+          this.hooks.menu(o.index, r.left, r.bottom + 4);
+        },
+      },
+      icon('more'),
+    );
     // After a long press the finger lifted is no click (it would leave only this object selected).
     let held = false;
-    li.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (held) return void (held = false);
-      this.hooks.select([o.index], e.shiftKey || e.ctrlKey || e.metaKey);
-    });
-    li.addEventListener('mouseenter', () => {
-      this.hooks.focus(null, false);
-      this.hooks.hover(o.index);
-    });
+    const li = h(
+      'li',
+      {
+        class: `layer object${selected ? ' selected' : ''}${st.hidden.has(o.block) ? ' hidden-layer' : ''}`,
+        'data-object': String(o.index),
+        draggable: st.objects.length > 1,
+        tabindex: 0,
+        role: 'button',
+        'aria-pressed': String(selected),
+        title: t('object.rowHint'),
+        onclick: (e: Event) => {
+          e.stopPropagation();
+          if (held) return void (held = false);
+          const m = e as MouseEvent;
+          this.hooks.select([o.index], m.shiftKey || m.ctrlKey || m.metaKey);
+        },
+        onkeydown: (e: Event) => {
+          const k = e as KeyboardEvent;
+          // The menu key or Shift+F10 opens the actions of the row, as a right click does.
+          if (k.key === 'ContextMenu' || (k.key === 'F10' && k.shiftKey)) {
+            k.preventDefault();
+            const r = li.getBoundingClientRect();
+            this.hooks.menu(o.index, r.left + 24, r.bottom);
+            return;
+          }
+          if (k.key !== 'Enter' && k.key !== ' ') return;
+          k.preventDefault();
+          k.stopPropagation();
+          this.hooks.select([o.index], k.shiftKey || k.ctrlKey || k.metaKey);
+        },
+        onmouseenter: () => {
+          this.hooks.focus(null, false);
+          this.hooks.hover(o.index);
+        },
+        oncontextmenu: (e: Event) => {
+          e.preventDefault();
+          const m = e as MouseEvent;
+          this.hooks.menu(o.index, m.clientX, m.clientY);
+        },
+      },
+      kind,
+      h('span', { class: 'layer-name' }, st.names?.get(o.index) ?? `${kindLabel(o.kind)} ${numberInColor(siblings, o)}`),
+      guessed,
+      more,
+      h('span', { class: 'layer-meta' }, formatNumber(o.stitches)),
+    );
     li.addEventListener('dragstart', (e) => {
       // Dragging a selected object takes the whole selection along.
-      const objs = st.selected.has(o.index) ? [...st.selected].sort((a, b) => a - b) : [o.index];
+      const objs = selected ? [...st.selected].sort((a, b) => a - b) : [o.index];
       this.dragStart(e, { objects: objs, block: null }, li);
     });
     li.addEventListener('dragend', () => this.dragEnd());
-    li.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-      this.hooks.menu(o.index, e.clientX, e.clientY);
+    this.longPress(li, (x, y) => {
+      held = true;
+      this.hooks.menu(o.index, x, y);
     });
-    // A long press on a touch screen, where no context menu comes (as on iOS).
+    return li;
+  }
+
+  /** A long press on a touch screen, where no context menu comes (as on iOS). */
+  private longPress(li: HTMLElement, fire: (x: number, y: number) => void): void {
     let press = 0;
     let at: [number, number] = [0, 0];
     const stop = () => {
@@ -337,12 +412,10 @@ export class LayersPanel {
     li.addEventListener('pointerdown', (e) => {
       if (e.pointerType !== 'touch') return;
       at = [e.clientX, e.clientY];
-      held = false;
       stop();
       press = window.setTimeout(() => {
         press = 0;
-        held = true;
-        this.hooks.menu(o.index, at[0], at[1]);
+        fire(at[0], at[1]);
       }, LONG_PRESS_MS);
     });
     li.addEventListener('pointermove', (e) => {
@@ -350,7 +423,6 @@ export class LayersPanel {
     });
     li.addEventListener('pointerup', stop);
     li.addEventListener('pointercancel', stop);
-    return li;
   }
 
   private dragStart(e: DragEvent, d: Drag, li: HTMLLIElement): void {

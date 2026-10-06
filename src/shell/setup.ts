@@ -118,7 +118,6 @@ export function initShell(app: ShellApp): void {
     });
   }
   command({ id: 'colorList.open', label: 'colorList.button', group: 'files.title', when: usable('color-list'), run: press('color-list') });
-  command({ id: 'order.optimize', label: 'order.button', group: 'shell.group.edit', when: usable('order-optimize'), run: press('order-optimize') });
   bindCommandKeys();
 
   // Titles of the frame's buttons carry their keys.
