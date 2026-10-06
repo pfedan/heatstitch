@@ -6,6 +6,7 @@ import type { ShapePick, ShapeView } from '../ui/shapeTool';
 import type { Viewport } from './viewport';
 import type { AsideShape } from '../model/aside';
 import { STITCH } from '../model/pattern';
+import { bandEdges, bandGrip } from '../shape/band';
 
 const ACCENT = '#e0559e';
 
@@ -21,6 +22,19 @@ export function drawShapeOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, vi
   ctx.save();
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
+  // A satin line: the edges of its band, dashed.
+  if (view.band !== null) {
+    ctx.beginPath();
+    for (const edge of bandEdges(view.form, view.band, view.bandOffset)) edge.forEach((q, k) => (k ? ctx.lineTo(...S(q)) : ctx.moveTo(...S(q))));
+    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+    ctx.strokeStyle = view.bandDragging ? '#ffd666' : 'rgba(255, 255, 255, 0.9)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
   ctx.beginPath();
   for (const p of view.form.paths) {
     if (!p.nodes.length) continue;
@@ -86,7 +100,45 @@ export function drawShapeOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, vi
       ctx.stroke();
     }),
   );
+  if (view.band !== null) drawWidthGrip(ctx, vp, view, h?.part === 'width');
   ctx.restore();
+}
+
+/** The round grip on the band's edge, from the middle of the line; its width in mm while hovered or dragged. */
+function drawWidthGrip(ctx: CanvasRenderingContext2D, vp: Viewport, view: ShapeView, hover: boolean): void {
+  const g = view.band !== null ? bandGrip(view.form, view.band, view.bandOffset) : null;
+  if (!g || view.band === null) return;
+  const [mx, my] = vp.toScreen(g.mid[0], g.mid[1]);
+  const [x, y] = vp.toScreen(g.at[0], g.at[1]);
+  const on = hover || view.bandDragging;
+  ctx.beginPath();
+  ctx.moveTo(mx, my);
+  ctx.lineTo(x, y);
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  ctx.strokeStyle = ACCENT;
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(x, y, on ? 6.5 : 5.5, 0, Math.PI * 2);
+  ctx.fillStyle = on ? ACCENT : '#ffffff';
+  ctx.strokeStyle = ACCENT;
+  ctx.lineWidth = 2;
+  ctx.fill();
+  ctx.stroke();
+  if (!on) return;
+  ctx.font = '600 12px system-ui, sans-serif';
+  const text = `${formatNumber(view.band, 1)} mm`;
+  const tw = ctx.measureText(text).width;
+  const lx = x + 12;
+  const ly = y - 12;
+  ctx.fillStyle = 'rgba(20, 20, 24, 0.85)';
+  ctx.beginPath();
+  ctx.roundRect(lx - 6, ly - 13, tw + 12, 20, 5);
+  ctx.fill();
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(text, lx, ly + 1);
 }
 
 /**
@@ -136,6 +188,23 @@ export function drawFrame(ctx: CanvasRenderingContext2D, vp: Viewport, f: FrameV
   ctx.lineWidth = 1.2;
   ctx.stroke();
   handle(hx, hy, true, f.hover === 'turn' || f.dragging === 'turn');
+  // What the move hangs on: a thin line in the accent color across the stage.
+  if (f.dragging === 'move' && (f.snapped.x !== null || f.snapped.y !== null)) {
+    ctx.beginPath();
+    if (f.snapped.x !== null) {
+      const [x] = S([f.snapped.x, 0]);
+      ctx.moveTo(x, -1e4);
+      ctx.lineTo(x, 1e4);
+    }
+    if (f.snapped.y !== null) {
+      const [, y] = S([0, f.snapped.y]);
+      ctx.moveTo(-1e4, y);
+      ctx.lineTo(1e4, y);
+    }
+    ctx.strokeStyle = ACCENT;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
   if (f.dragging !== null) {
     const m = f.m;
     let text = '';
