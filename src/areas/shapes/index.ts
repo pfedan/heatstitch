@@ -327,23 +327,30 @@ export function initShapes(app: ShapesAreaApp): void {
       if (parts.length) parts.push(sep());
       parts.push(level ? h('button', { type: 'button', class: 'crumb-link', title: t('shapes.crumb.up'), onclick: () => runCommand('level.objects') }, sel) : last(sel));
     }
-    if (level) {
-      if (parts.length) parts.push(sep());
-      parts.push(last(level, app.editor.active && ui.editObject === null ? t('level.pick') : undefined));
-    }
+    // The last crumb is the level itself, as the button that switches it ("Form ▾"): the menu
+    // belongs to the level, not to the design name before it.
+    const here = level ?? t('level.objects');
+    const pick = app.editor.active && ui.editObject === null ? `${t('level.pick')}. ` : '';
     const menu = h(
       'button',
       {
         type: 'button',
         class: 'crumb-levels',
-        title: t('shapes.crumb.levels'),
-        'aria-label': t('shapes.crumb.levels'),
+        title: pick + t('shapes.crumb.level', { level: here }),
+        'aria-label': t('shapes.crumb.level', { level: here }),
         'aria-haspopup': 'menu',
         onclick: () => showMenu(['level.objects', 'level.shape', 'level.stitches', ...(ui.lettering ? ['-', 'lettering.letters'] : []), '-', 'level.up'], menu, t('shapes.crumb.levels')),
       },
+      h('span', { class: 'crumb-level' }, here),
       icon('chevron-down'),
     );
-    if (p) parts.push(menu);
+    if (p) {
+      if (parts.length) parts.push(sep());
+      parts.push(menu);
+    } else if (level) {
+      if (parts.length) parts.push(sep());
+      parts.push(last(level));
+    }
     crumb.setAttribute('aria-label', t('shapes.crumb.label'));
     crumb.replaceChildren(...parts);
   }

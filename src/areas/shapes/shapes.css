@@ -131,17 +131,18 @@
 }
 
 .crumbs .crumb-levels {
-  display: grid;
-  place-items: center;
-  width: 26px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   height: 26px;
-  margin-left: 2px;
-  padding: 0;
+  padding: 0 4px 0 6px;
   border: none;
-  border-left: 1px solid var(--line);
-  border-radius: 0 6px 6px 0;
+  border-radius: 6px;
   background: none;
-  color: var(--muted);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .crumbs .crumb-levels:hover {
