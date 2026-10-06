@@ -5,7 +5,7 @@ states, adds the opening and closing cards, lays the voice under the scenes and 
 MP4, the WebVTT subtitles and a poster image.
 
     python3 tools/screencast/compose.py OUT --part 1 --title "Ein neues Stickmuster" \
-        --video docs/screencasts/01-neues-stickmuster/neues-stickmuster
+        --video docs/screencasts/01-neues-stickmuster/01-neues-stickmuster
 
 OUT is the record.mjs output folder (frames/, timeline.json, ton/). Needs Pillow and ffmpeg.
 """

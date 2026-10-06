@@ -136,25 +136,80 @@ Alles läuft im Container und ist wiederholbar. Ein Video wird aus einer Ablaufd
 Werkzeuge: `tools/screencast/tts.mjs` (Stimme), `record.mjs` (Aufnahme), `compose.py` (Schnitt).
 Die App muss gebaut und mit `npm run preview` erreichbar sein.
 
-## Ablage und Hilfeseite
+## Benennung und Ablage
+
+Jedes Video hat einen festen **Schlüssel** aus Teilnummer und Kurzname, zum Beispiel
+`01-neues-stickmuster`. Er heißt überall gleich: Ordner im Repo, Ordner in den
+Projektdateien, Dateinamen des fertigen Videos, Adresse auf der Website.
+
+- **Nummer:** die Nr. aus dem Themenbaum, zweistellig (`01`, `12`). Sie ist das „Teil N“ im
+  Vorspann.
+- **Kurzname:** der Titel klein geschrieben, Wörter mit Bindestrich, ohne führenden Artikel,
+  Umlaute als `ae`, `oe`, `ue`, `ß` als `ss`, nur `a-z`, `0-9` und `-`. „Ein neues
+  Stickmuster“ wird `neues-stickmuster`, „Vom Bild zum Stickmuster“ wird
+  `vom-bild-zum-stickmuster`.
+- Ist ein Video veröffentlicht, bleibt der Schlüssel, auch wenn sich der Titel ändert, damit
+  Links auf der Hilfeseite halten.
+- Alle Datei- und Ordnernamen deutsch, klein, mit Bindestrich, ohne Leer- und Sonderzeichen
+  (Werkzeuge im Repo bleiben englisch benannt).
+
+### Im Repo: `docs/screencasts/`
+
+Hier liegt alles, was das Video wiederholbar macht, und das fertige Ergebnis.
 
 ```
 docs/screencasts/
-  konzept.md            dieses Dokument
-  01-neues-stickmuster/
-    vorlage.md               Szenen und Sprechtext zur Abnahme
-    ablauf.mjs               Szenen, Sprechtext, Untertitel, Aktionen (Quelle)
-    ton/                     Sprachaufnahmen je Fingerabdruck, takes.json
-    neues-stickmuster.mp4    fertiges Video mit Untertitelspuren
-    neues-stickmuster.de.vtt Untertitel Deutsch
-    neues-stickmuster.en.vtt Untertitel Englisch
-    neues-stickmuster.jpg    Poster
+  konzept.md                     dieses Dokument
+  01-neues-stickmuster/          ein Ordner je Video, Name = Schlüssel
+    vorlage.md                   Szenen und Sprechtext, abgenommene Fassung
+    ablauf.mjs                   Szenen, Sprechtext, Untertitel, Aktionen (Quelle)
+    ton/                         Sprachaufnahmen je Fingerabdruck, takes.json
+    material/                    nur falls nötig: Demodatei des Videos und ihre Quelle
+    01-neues-stickmuster.mp4     fertiges Video mit Untertitelspuren
+    01-neues-stickmuster.de.vtt  Untertitel Deutsch
+    01-neues-stickmuster.en.vtt  Untertitel Englisch
+    01-neues-stickmuster.jpg     Poster
 ```
+
+- Die fertigen Dateien tragen den Schlüssel im Namen, damit sie auch außerhalb ihres Ordners
+  eindeutig sind (Website, Download). `compose.py` bekommt dafür
+  `--video docs/screencasts/NN-kurzname/NN-kurzname`.
+- Eine Demodatei, die auch in der App unter „Beispiel laden“ stehen soll, liegt dort, wo die
+  App ihre Beispiele hat, nicht unter `material/`.
+- Probeaufnahmen, Hörproben und Standbilder kommen nicht ins Repo.
+
+### In den Projektdateien: `screencasts/`
+
+Hier liegt, was zur Abnahme angesehen wird, und was bei der Herstellung abfällt.
+
+```
+screencasts/
+  notizen/                       Wissen über die Herstellung, für alle Videos
+    aufnahme-beschleunigen.md
+  01-neues-stickmuster/          Name = Schlüssel, wie im Repo
+    01-neues-stickmuster.mp4     fertiges Video zum Ansehen (Kopie aus dem Repo)
+    vorlage.md                   nur bis zur Abnahme, danach gilt die im Repo
+    standbilder/                 szene-NN-stichwort.png, NN = Szene aus der Vorlage
+    proben/                      Hörproben, Probeschnitte, verworfene Fassungen
+    material/                    Demodatei und Quelle, solange sie noch nicht im Repo ist
+```
+
+- Standbilder heißen nach ihrer Szene, zweistellig: `szene-03-kreis.png`,
+  `szene-12-ergebnis.png`. So stehen sie in der Reihenfolge des Videos.
+- Proben sagen, was sie prüfen: `hoerprobe-aoede.m4a`, `sprechtext-kore.m4a`,
+  `probe-szenen-01-03.mp4`, `gras-v2-kaefer.png`.
+- Eine Datei liegt nur an einer Stelle. Sobald das Video im Repo ist, gelten Vorlage, Ablauf
+  und Untertitel dort; in den Projektdateien bleibt nur das Video als Ansichtskopie. Wird es
+  neu geschnitten, wird die Kopie mit ersetzt.
+- Leere Unterordner werden nicht angelegt.
+
+### Website und Hilfeseite
 
 - Größenbudget: etwa 4 MB pro Minute, die ganze Serie bleibt unter 100 MB. Neu gerendert
   wird nur auf Anfrage, damit das Repo nicht wächst.
 - Die Website liefert `docs/` heute nicht aus. Beim Bauen werden Video, Poster und Untertitel
-  nach `videos/` der Website kopiert.
+  flach nach `videos/` der Website kopiert (`videos/01-neues-stickmuster.mp4`), daher der
+  Schlüssel im Dateinamen.
 - Die Videos sind nicht Teil des Offline-Speichers der App (zu groß), sie laden nur beim
   Abspielen.
 - Hilfeseite: ein Bereich „Videos“ oben bei „Was möchtest du tun?“, als Karten mit Poster,
