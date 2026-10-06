@@ -220,7 +220,7 @@ ${headLine(i.name, t('ready.sheet.title'), sub)}
 <div class="grow">
 <h2>${esc(t('ready.sheet.colors'))}</h2>
 <table class="list"><thead>${head}</thead><tbody>${rows}</tbody><tfoot>${foot}</tfoot></table>
-<p class="small muted">${esc(t('ready.sheet.timeNote', { spm: formatNumber(i.machine.machineSpm) }))}</p>
+<p class="small muted">${esc(t('ready.sheet.timeNote', { spm: formatNumber(i.machine.machineSpm), trim: formatNumber(i.machine.trimSeconds, 1), color: formatNumber(i.machine.colorSeconds) }))}</p>
 </div>
 <figure class="overview"><svg viewBox="${n1(p.bounds.minX / 10 - 2)} ${n1(p.bounds.minY / 10 - 2)} ${n1((p.bounds.maxX - p.bounds.minX) / 10 + 4)} ${n1((p.bounds.maxY - p.bounds.minY) / 10 + 4)}" preserveAspectRatio="xMidYMid meet"><use href="#hs-design"/></svg><figcaption>${esc(t('ready.sheet.overview'))}</figcaption></figure>
 </div>
