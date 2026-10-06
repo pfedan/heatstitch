@@ -37,6 +37,10 @@ export interface ProjectFile {
   aside?: StoredAside[];
   /** This design's fabric, thread, hoop, fabric color and checks (absent in older projects, which share the project settings). */
   material?: unknown;
+  /** The name the user gave the design, without extension (absent: its file name). */
+  title?: string;
+  /** Made in the app rather than loaded as an embroidery file (absent in older projects). */
+  own?: boolean;
 }
 
 export interface ProjectImage {
@@ -190,6 +194,8 @@ export async function decodeProject(bytes: Uint8Array): Promise<Project> {
         ...(Array.isArray(e.aside) && e.aside.length ? { aside: e.aside } : {}),
         // Checked when it is read (normalizeMaterial).
         ...(e.material && typeof e.material === 'object' ? { material: e.material } : {}),
+        ...(typeof e.title === 'string' && e.title.trim() ? { title: e.title.trim() } : {}),
+        ...(e.own === true ? { own: true } : {}),
       },
     ];
   });

@@ -35,6 +35,17 @@ function sample(): Project {
 }
 
 describe('project files', () => {
+  it('keeps the name a design was given and whether it was made in the app', async () => {
+    const p = sample();
+    p.files[0] = { ...p.files[0], title: 'Katze für Oma' };
+    p.files[1] = { ...p.files[1], name: 'Neues Stickmuster.pes', own: true };
+    const back = await decodeProject(await encodeProject(p));
+    expect(back.files[0].title).toBe('Katze für Oma');
+    expect(back.files[0].own).toBeUndefined();
+    expect(back.files[1].title).toBeUndefined();
+    expect(back.files[1].own).toBe(true);
+  });
+
   it('keeps the background color, and older projects without one leave it alone', async () => {
     const back = await decodeProject(await encodeProject(sample()));
     expect(back.settings.background).toBe('#ece4d4');
