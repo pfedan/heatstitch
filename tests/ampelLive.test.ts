@@ -8,7 +8,7 @@ import { handleEngine, type EngineRequest } from '../src/correct/engine/worker';
 import type { WorkerClient } from '../src/density/client';
 import { sewObjects } from '../src/model/objects';
 import type { Pattern } from '../src/model/pattern';
-import { forgetAll } from '../src/model/restitch';
+import { forgetAll, holdMemory } from '../src/model/restitch';
 import { parsePattern } from '../src/parsers';
 import type { FileList, LoadedFile } from '../src/ui/fileList';
 import { measurePattern, type Measurement } from '../src/validation/measure';
@@ -22,7 +22,13 @@ const spawn = (): WorkerLike => {
   let alive = true;
   const w: WorkerLike = {
     onmessage: null,
-    postMessage: (req: EngineRequest) => void handleEngine(structuredClone(req)).then((data) => alive && w.onmessage?.({ data } as MessageEvent)),
+    postMessage: (req: EngineRequest) => {
+      // A worker has its own memory: what it learns stays there.
+      const release = holdMemory();
+      void handleEngine(structuredClone(req))
+        .finally(release)
+        .then((data) => alive && w.onmessage?.({ data } as MessageEvent));
+    },
     terminate: () => void (alive = false),
   };
   return w;
@@ -48,7 +54,7 @@ describe('Ampel on the correction engine', () => {
       trimMm: () => 2,
       commit,
       onRequest: () => false,
-      client: new EngineClient(2, spawn),
+      client: new EngineClient(1, spawn),
       settleMs: 0,
     });
     const r0 = engine.report()!;

@@ -37,6 +37,18 @@ describe('correction engine', () => {
     expect(fixedObjects(back)).toEqual([]);
   }, 120_000);
 
+  it('takes a fix back exactly where sewing anew splits an object differently and moves the jump after it', async () => {
+    // The cat: object 0 is sewn anew in several sections, and the travel to object 1 changes.
+    forgetAll();
+    const p = load('cat-60mm.pes');
+    const f = await prepareFix(p, { fabric: 'knit', thread: '40' }, 'density', { trimMm: 2, visible: false, hand: false });
+    expect(f.objects.length).toBeGreaterThan(0);
+    const q = applyFix(p, f)!;
+    expect(fixedObjects(q)).toEqual(f.objects.map((x) => x.index));
+    const back = revertFix(q, fixedObjects(q))!;
+    expect(same(back, p)).toBe(true);
+  }, 300_000);
+
   it('applies a fix only to the design it was worked out on', async () => {
     forgetAll();
     const p = load('demos/overlap.pes');

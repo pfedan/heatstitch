@@ -4,7 +4,7 @@ import type { FixTarget } from '../../correct/engine/cells';
 import { EngineClient } from '../../correct/engine/client';
 import { objectsOf } from '../../correct/engine/units';
 import type { WorkerClient } from '../../density/client';
-import { stitchKey } from '../../model/objects';
+import { sewObjects, stitchKey, type SewObject } from '../../model/objects';
 import type { Pattern } from '../../model/pattern';
 import { holdMemory, openOnPurpose, restoreRemembered } from '../../model/restitch';
 import type { FileList, LoadedFile } from '../../ui/fileList';
@@ -195,6 +195,21 @@ export function createLive(deps: LiveDeps): AmpelEngine {
     notify();
   }
 
+  /**
+   * The objects of a fix's design. How new stitches group into objects is part of what the fix
+   * remembers, so they are read with that (the engine's per-design cache would keep a grouping
+   * without it).
+   */
+  function objectsIn(p: Pattern, memory: PlannedFix['memory']): SewObject[] {
+    const release = holdMemory();
+    try {
+      restoreRemembered(memory);
+      return sewObjects(p);
+    } finally {
+      release();
+    }
+  }
+
   /** Measures what `p` looks like to the app (objects open on purpose are not checked for showing fabric). */
   async function measure(p: Pattern, memory: PlannedFix['memory'] = []): Promise<Measurement> {
     const release = holdMemory();
@@ -243,7 +258,7 @@ export function createLive(deps: LiveDeps): AmpelEngine {
 
   /** The rest proposal for the preview: where it changes the design, and the fix to take it over. */
   function restOf(p: Pattern, fix: ReadyFix, pf: PlannedFix): RestProposal {
-    const objs = objectsOf(fix.pattern);
+    const objs = objectsIn(fix.pattern, pf.memory);
     const shown = pf.objects.filter((x) => x.visible || x.hand);
     const box = (shown.length ? shown : pf.objects)
       .map((x) => objs[x.index])
@@ -298,9 +313,10 @@ export function createLive(deps: LiveDeps): AmpelEngine {
       if (!p) return false;
       if (p === fix.after) return revertObjects(fix.objects);
       // Changed elsewhere since: its objects are those with the same stitches as right after the fix.
-      const was = objectsOf(fix.after);
+      // Applied: what its objects remember is in memory now.
+      const was = sewObjects(fix.after);
       const keys = new Set(fix.objects.map((i) => was[i]).filter(Boolean).map((o) => stitchKey(fix.after, o.first, o.last)));
-      const now = objectsOf(p);
+      const now = sewObjects(p);
       const which = fixedObjects(p).filter((i) => keys.has(stitchKey(p, now[i].first, now[i].last)));
       return which.length > 0 && revertObjects(which);
     },
