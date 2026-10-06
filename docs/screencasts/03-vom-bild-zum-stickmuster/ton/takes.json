@@ -1,0 +1,72 @@
+{
+  "658c032974c12de7": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "[warm, inviting] In diesem Video wird aus einem Bild ein Stickmuster: ein Fliegenpilz, wie du ihn im Netz findest oder selbst malst."
+  },
+  "8f5381d0b7c541dd": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "Oben wechselst du in den Modus Bild. Dann ziehst du dein Bild einfach links in das Feld. [delighted] Ein paar Sekunden sp\u00e4ter ist es schon gestickt."
+  },
+  "e3c95d49cb066589": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "\u00dcber der Leinwand schaltest du um. \u201eVorbereitet\u201c zeigt, was heatstitch aus dem Bild macht: wenige, glatte Farbfl\u00e4chen. [curious] Aber schau auf den Stiel: Er ist grau, genau wie der Schatten."
+  },
+  "8999b2137e6aebb6": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "Sechs Farben sind hier zu wenig. Mit neun bekommt der Stiel sein Beige."
+  },
+  "4d95a23539cd8704": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "Daf\u00fcr wird der Farbverlauf auf dem Hut jetzt zu zwei Rott\u00f6nen. Ein Rot gen\u00fcgt: Klick auf den Pfeil und mit Rot zusammenlegen."
+  },
+  "83d1465ed9718e50": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "Den Schatten will ich nicht sticken, also nehme ich das H\u00e4kchen weg."
+  },
+  "ad0a093df72007d4": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "[focused] Bleibt der rote Fleck oben rechts. Rot abw\u00e4hlen geht nicht, sonst fehlt der Hut. Daf\u00fcr gibt es den Pinsel: Radieren, einmal dar\u00fcber, und weg ist er. [satisfied] Jetzt sind es wieder f\u00fcnf Garnfarben wie am Anfang, nur diesmal die richtigen."
+  },
+  "eb1df4a7e9122dab": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "[proud, warm] Ein Klick auf \u201eAls Stickmuster \u00fcbernehmen\u201c, und dein Fliegenpilz ist ein ganz normales Stickmuster. Du kannst ihn abspielen, pr\u00fcfen und als Stickdatei speichern."
+  },
+  "55f136d50fe0d15f": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "Ein Tipp zum Schluss: Fotos werden viel besser, wenn eine KI sie vorher in eine flache Grafik verwandelt. Den passenden Auftrag kopierst du hier. Und eine SVG-Datei \u00fcbernimmt heatstitch Form f\u00fcr Form, ganz genau."
+  },
+  "5eabb8955b2520ef": {
+    "model": "google/gemini-3.1-flash-tts",
+    "voice": "Aoede",
+    "language": "de-DE",
+    "prompt": "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.",
+    "text": "[delighted] Unter \u201eStiche\u201c siehst du das Stickmuster, und mit \u201eWie gestickt\u201c gl\u00e4nzt das Garn im Licht. Rechts pr\u00fcft heatstitch die Stiche f\u00fcr deinen Stoff. Zwei Stellen sind etwas dicht, die schaust du dir nach dem \u00dcbernehmen im Modus Dichte an."
+  }
+}
