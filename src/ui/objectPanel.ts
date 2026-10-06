@@ -433,6 +433,7 @@ export class OrderCard {
     this.card.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') this.close(true);
     });
+    onLangChange(() => this.isOpen && this.show());
   }
 
   get isOpen(): boolean {

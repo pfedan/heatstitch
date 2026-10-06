@@ -85,6 +85,15 @@ const selectMiddle = async (page: Page) => {
   await page.mouse.click(p.x, p.y);
   await page.locator('#object-panel:not([hidden])').waitFor();
 };
+/** Opens every color of the shapes example and selects one object in the list. */
+const selectInList = async (page: Page, object: number) => {
+  await page.selectOption('#load-example', 'examples/svg/shapes-benchmark.svg');
+  await page.locator('#layer-list .layer').first().waitFor();
+  const blocks = await page.locator('#layer-list .layer[data-block]').count();
+  for (let b = 0; b < blocks; b++) await page.locator(`#layer-list .layer[data-block="${b}"] .chev`).click();
+  await page.locator(`#layer-list [data-object="${object}"]`).click();
+  await page.locator('#object-panel:not([hidden])').waitFor();
+};
 const mode = async (page: Page, m: 'flow' | 'density' | 'image') => {
   await page.locator(`input[name=mode][value=${m}]`).check({ force: true });
   await wait(page, 1500);
@@ -108,6 +117,13 @@ const STATES: Record<string, (page: Page) => Promise<void>> = {
     await selectMiddle(page);
     await page.locator('input[name=level][value=shape]').check({ force: true });
     await wait(page, 500);
+  },
+  'a satin selected': (page) => selectInList(page, 3),
+  'a line selected': (page) => selectInList(page, 12),
+  'the order card open': async (page) => {
+    await loadCat(page);
+    await page.click('#order-optimize');
+    await page.locator('#order-card:not([hidden])').waitFor();
   },
   'the object menu open': async (page) => {
     await loadCat(page);
