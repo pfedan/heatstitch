@@ -38,8 +38,13 @@ export function getLang(): Lang {
   return lang;
 }
 
+/**
+ * A count of exactly one picks the singular "<key>.one" where the dictionary has one, so a caller
+ * passing { n } never shows "1 Zonen" or "1 zones".
+ */
 export function t(key: Key, vars?: Record<string, string | number>): string {
-  const s = dicts[lang][key];
+  const one = vars && String(vars.n) === '1' ? dicts[lang][`${key}.one` as Key] : undefined;
+  const s = one ?? dicts[lang][key];
   return vars ? s.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m)) : s;
 }
 
