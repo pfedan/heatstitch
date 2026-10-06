@@ -12,13 +12,15 @@ import type { ShapeTool } from '../ui/shapeTool';
 import { LayersPanel, kindLabel, blockName } from '../ui/layersPanel';
 import { ObjectPanel } from '../ui/objectPanel';
 import { numberInColor, rememberObjects, type SewObject, splitObject } from '../model/objects';
-import { recolor, sameColor } from '../model/recolor';
+import { sameColor } from '../model/recolor';
 import { recordOfStitch } from '../model/sequence';
 import { remembered, measureFill, analyze, unionRegion, remember, restitch, type RestitchResult } from '../model/restitch';
 import { reversible, reverseObjects } from '../model/reverse';
 import { t, type Key } from '../i18n';
 import { ui } from './state';
 import { unionForm, recolorObjects } from '../model/shapeOps';
+import { blendObject } from '../model/blend';
+import { recolorBlock } from '../model/border';
 import { violations, conflicts, reorder } from '../model/order';
 import { wholeArea } from '../model/knockout';
 
@@ -83,7 +85,7 @@ export function bindObjects(app: ObjectsApp) {
     // Only the colors change, so the density measurement still holds.
     recolor: (b, color) => {
       const f = app.files.active;
-      if (f?.pattern) app.applyEdit(recolor(f.pattern, b, color), f.measurement);
+      if (f?.pattern) app.applyEdit(recolorBlock(f.pattern, b, color), f.measurement);
     },
     select: (objs, toggle) => selectObjects(objs, toggle),
     hover: (o) => {
@@ -347,6 +349,19 @@ export function bindObjects(app: ObjectsApp) {
       const q = app.seq(next);
       // The objects keep their place in the order, so their indices stay.
       app.takeShapes(next, sel.filter((o) => o < q.objects.length));
+    },
+    blend: (c) => {
+      const p = app.files.active?.pattern;
+      if (!p || ui.selectedObjects.size !== 1) return;
+      const o = [...ui.selectedObjects][0];
+      const next = blendObject(p, o, c, app.settings.trimMm);
+      if (!next) return layers.say(t('object.blend.failed'), true);
+      // Both layers selected: the blend shows in full, not dimmed behind the original.
+      const objs = app.seq(next).objects;
+      const link = remembered(next, objs[o])?.fill?.deco?.blend?.link;
+      const partner = objs.findIndex((x) => !!link && remembered(next, x)?.blendOf === link);
+      app.takeShapes(next, partner < 0 ? [o] : [o, partner]);
+      layers.say(t('object.blend.done'));
     },
     split: splitSelected,
     step: (dir) => {

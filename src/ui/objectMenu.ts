@@ -48,8 +48,9 @@ export class ObjectMenu {
       b.innerHTML = a.icon;
       b.append(a.label);
       b.addEventListener('click', () => {
+        // Run first: a popup it opens is placed next to the entry before the menu goes.
+        a.run(b);
         this.close();
-        a.run();
       });
       pop.append(b);
     }

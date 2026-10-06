@@ -1,17 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { crossFill, embossPoints, gridFill, mazeFill, meanderFill, motifCrossings, motifInside, regionBox, type OpenParams } from '../src/digitize/deco';
+import { crossFill, embossPoints, gridFill, mazeFill, meanderFill, motifCrossings, regionBox, type OpenParams } from '../src/digitize/deco';
 import { digitizeDefaults } from '../src/digitize/digitize';
 import { fillRegion } from '../src/digitize/fill';
 import { buildRegion, sample, type Region } from '../src/digitize/region';
 import type { Pt } from '../src/digitize/skeleton';
 import { addShape } from '../src/model/addShape';
 import { blendObject } from '../src/model/blend';
+import { syncBorders } from '../src/model/border';
 import { takeOver } from '../src/model/knockout';
 import { sewObjects } from '../src/model/objects';
 import { COLOR_CHANGE, STITCH, type Pattern } from '../src/model/pattern';
 import { DECO_PATTERNS, OPEN_PATTERNS, openOnPurpose, remembered, restitch, restoreRemembered, rememberedIn, forgetAll, type FillSettings } from '../src/model/restitch';
 import { stitchKinds } from '../src/model/sequence';
-import { mirrorMatrix } from '../src/model/shapeOps';
+import { deleteObjects, mirrorMatrix, recolorObjects } from '../src/model/shapeOps';
 import { transformRemembered } from '../src/model/transform';
 import { ellipsePath, parsePath } from '../src/shape/svgPath';
 import { DEFAULT_PROFILE } from '../src/validation/profiles';
@@ -61,7 +62,7 @@ describe('embossing', () => {
     const cr = motifCrossings('diamonds', 10, row, 0, 40);
     expect(cr.length).toBeGreaterThan(4);
     const regular = Array.from({ length: 11 }, (_, i) => i * 4);
-    const pts = embossPoints(cr, regular, 4, 0, 40, (u) => motifInside('diamonds', 10, [u, 7.3]));
+    const pts = embossPoints(cr, regular, 4, 0, 40);
     for (const c of cr) expect(pts.some((u) => Math.abs(u - c) < 1e-9 || Math.abs(u - c) < 0.6)).toBe(true);
     const all = [0, ...pts, 40];
     for (let i = 1; i < all.length; i++) expect(all[i] - all[i - 1]).toBeLessThanOrEqual(4 * 1.4 + 1e-9);
@@ -69,9 +70,11 @@ describe('embossing', () => {
   });
 
   it('keeps the motifs upright in the design, whatever the row direction', () => {
-    // The same point is inside or not, no matter how a row reaches it.
-    expect(motifInside('hearts', 10, [5, 5])).toBe(motifInside('hearts', 10, [15, 25]));
-    expect(motifInside('waves', 10, [5, 5])).toBe(false);
+    // A row at 0 and one at 180 degrees through the same line cross the motif at the same points.
+    const a = motifCrossings('stars', 8, { o: [0, 5], e: [1, 0] }, 0, 40);
+    const b = motifCrossings('stars', 8, { o: [40, 5], e: [-1, 0] }, 0, 40).map((u) => 40 - u).reverse();
+    expect(a.length).toBeGreaterThan(2);
+    a.forEach((u, i) => expect(b[i]).toBeCloseTo(u, 6));
   });
 });
 
@@ -233,9 +236,35 @@ describe('decorative fills in the design', () => {
     const objs = sewObjects(q);
     expect(objs).toHaveLength(2);
     const a = remembered(q, objs[0])!.fill!;
-    const b = remembered(q, objs[1])!.fill!;
+    const second = remembered(q, objs[1])!;
+    const b = second.fill!;
     expect([a.pattern, a.deco?.fade]).toEqual(['gradient', 'out']);
     expect([b.pattern, b.deco?.fade, b.underlay]).toEqual(['gradient', 'in', false]);
     expect(q.cmd.filter((c) => c === COLOR_CHANGE)).toHaveLength(1);
+    // Coupled as a border of its own thread: it knows its fill.
+    expect(second.blendOf).toBe(a.deco!.blend!.link);
+  });
+
+  it('keeps the second thread of a blend with its fill', () => {
+    const q = blendObject(disc(), 0, blue, options.trimMm)!;
+    const link = remembered(q, sewObjects(q)[0])!.fill!.deco!.blend!.link;
+    // The fill sewn tighter: the second thread follows.
+    const fill = remembered(q, sewObjects(q)[0])!.fill!;
+    const tighter = syncBorders(sewAs(q, () => ({ ...fill, spacing: fill.spacing * 0.8 }))!, options.trimMm);
+    const objs = sewObjects(tighter);
+    expect(objs).toHaveLength(2);
+    expect(remembered(tighter, objs[1])!.fill!.spacing).toBeCloseTo(fill.spacing * 0.8);
+    // Another pattern takes it out.
+    const objsQ = sewObjects(q);
+    const plain = syncBorders(takeOver(restitch(q, objsQ, [0], { kind: 'fill', s: { ...fill, pattern: 'tatami', deco: undefined } }, stitchKinds(q), options.trimMm))!, options.trimMm, new Set([link]));
+    expect(sewObjects(plain)).toHaveLength(1);
+    expect(plain.colors).toEqual([red]);
+    // Deleting the fill deletes both.
+    expect(sewObjects(deleteObjects(q, [0], options.trimMm)!)).toHaveLength(0);
+    // Recoloring the second thread keeps it coupled, in the new thread.
+    const green = { r: 0, g: 160, b: 60 };
+    const g = recolorObjects(q, [1], green, options.trimMm)!;
+    expect(remembered(g, sewObjects(g)[0])!.fill!.deco!.blend!.color).toEqual(green);
+    expect(remembered(g, sewObjects(g)[1])!.blendOf).toBe(link);
   });
 });

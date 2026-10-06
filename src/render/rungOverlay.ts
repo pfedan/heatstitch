@@ -119,6 +119,23 @@ export function drawRungOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, vie
     ctx.lineWidth = sel || hov ? 3 : 2.5;
     ctx.stroke();
   });
+  // Points of rays, circles and swirls: a ring with a dot, easy to grab.
+  view.points.forEach((p, i) => {
+    const sel = same(view.selected, -1, i);
+    const hov = same(view.hover, -1, i);
+    const [x, y] = S(p);
+    ctx.beginPath();
+    ctx.arc(x, y, 9, 0, 2 * Math.PI);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+    ctx.fill();
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = sel ? ACCENT : hov ? '#ffffff' : 'rgba(255, 214, 102, 0.95)';
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(x, y, 2.5, 0, 2 * Math.PI);
+    ctx.fillStyle = ctx.strokeStyle;
+    ctx.fill();
+  });
   if (view.sketch && view.sketch.length > 1) {
     ctx.setLineDash([6, 4]);
     path(view.sketch);

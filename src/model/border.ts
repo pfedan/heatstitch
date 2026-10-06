@@ -5,8 +5,11 @@ import { rememberObjects, sewObjects, type SewObject } from './objects';
 import { COLOR_CHANGE, END, JUMP, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
 import { borderStitches } from './along';
 import { wholeOf } from './knockout';
-import { lockAt, remember, remembered, type BorderSettings, type Rec, type Remembered } from './restitch';
+import { lockAt, remember, remembered, type BorderSettings, type FillSettings, type Rec, type Remembered } from './restitch';
+import { expandRegion } from '../digitize/region';
+import { fillRegion } from '../digitize/fill';
 import { stitchKinds } from './sequence';
+import { recolor } from './recolor';
 
 /**
  * Borders of fills in a thread of their own. A border in the fill's thread is part of the fill
@@ -84,9 +87,9 @@ interface Change {
 }
 
 /**
- * The pattern with every fill's border of its own thread fitting its fill (or `p` itself when
- * nothing changes). `drop` lists links whose borders go: their fill has no border of its own
- * thread any more.
+ * The pattern with every fill's border of its own thread fitting its fill, and every color blend's
+ * second thread fitting its fill (see syncBlends), or `p` itself when nothing changes. `drop` lists
+ * links whose borders or blends go: their fill has none any more.
  */
 export function syncBorders(p: Pattern, trimMm: number, drop: ReadonlySet<string> = new Set()): Pattern {
   const kinds = stitchKinds(p);
@@ -112,7 +115,8 @@ export function syncBorders(p: Pattern, trimMm: number, drop: ReadonlySet<string
   objs.forEach((o, k) => {
     const m = mem[k];
     const b = m?.fill?.border;
-    if (!m?.region || !b?.color || !b.link) return;
+    // A blend's second thread is sewn as its fill says, without border.
+    if (!m?.region || !b?.color || !b.link || m.blendOf) return;
     wanted.add(b.link);
     const at = byLink.get(b.link);
     const cur = at === undefined ? undefined : mem[at];
@@ -139,6 +143,11 @@ export function syncBorders(p: Pattern, trimMm: number, drop: ReadonlySet<string
   });
   // Borders whose fill has none of its own thread any more.
   for (const [link, at] of byLink) if (drop.has(link) && !wanted.has(link)) changes.push({ a: leadOf(p, objs[at]), b: objs[at].last, recs: [] });
+  return syncBlends(applyChanges(p, changes), trimMm, drop);
+}
+
+/** The records changed as listed (each new object remembering its `memory`), or `p` when nothing changes. */
+function applyChanges(p: Pattern, changes: Change[]): Pattern {
   if (!changes.length) return p;
   changes.sort((x, y) => x.a - y.a || x.b - y.b);
   const out: Rec[] = [];
@@ -204,4 +213,111 @@ export function borderRanges(p: Pattern, objs: readonly SewObject[], o: SewObjec
   }
   if (b.color && b.link) for (const x of objs) if (remembered(p, x)?.outline === b.link) out.push([leadOf(p, x), x.last]);
   return out;
+}
+
+/**
+ * The second thread of a color blend, sewn like the fill it belongs to: the same area, rows,
+ * spacing and stitch, fading the other way, without underlay (the fill's holds both) and without
+ * border.
+ */
+export function blendSettings(f: FillSettings): FillSettings {
+  const { blend: _b, emboss: _e, focus: _f, centers: _c, ...deco } = f.deco ?? {};
+  return { ...f, pattern: 'gradient', underlay: false, border: undefined, deco: { ...deco, fade: f.deco?.fade === 'in' ? 'out' : 'in' } };
+}
+
+/** Whether a fill is one of a color blend: it fades, and has a second thread to blend with. */
+export const blends = (m: Remembered | undefined): boolean => !!m?.region && m.fill?.pattern === 'gradient' && !!m.fill.deco?.fade && !!m.fill.deco.blend;
+
+/**
+ * Color blends: a fill fading out (FillSettings.deco.blend) and an object in a second thread fading
+ * in on the same area, so together they stay as dense as one fill. The second object follows its
+ * fill as a border of its own thread does: sewn when it is new, sewn anew when the fill's area or
+ * settings changed, moved when its thread changed. A fill that blends no more (another pattern)
+ * takes it out when its link is in `drop`; otherwise, and when the fill is gone, it stays as a
+ * fill of its own. A copy of a blending fill gets a second thread of its own.
+ */
+export function syncBlends(p: Pattern, trimMm: number, drop: ReadonlySet<string> = new Set()): Pattern {
+  if (!p.cmd.length) return p;
+  const kinds = stitchKinds(p);
+  const objs = sewObjects(p, kinds);
+  const mem = objs.map((o) => remembered(p, o));
+  const byLink = new Map<string, number>();
+  mem.forEach((m, k) => {
+    if (!m?.blendOf) return;
+    // A copy of the second thread is a fill of its own.
+    if (!byLink.has(m.blendOf)) byLink.set(m.blendOf, k);
+    else remember(p, objs[k], (mem[k] = { ...m, blendOf: undefined }));
+  });
+  const claimed = new Set<string>();
+  mem.forEach((m, k) => {
+    const b = m?.fill?.deco?.blend;
+    if (!m?.fill || !b) return;
+    if (!claimed.has(b.link)) return void claimed.add(b.link);
+    remember(p, objs[k], (mem[k] = { ...m, fill: { ...m.fill, deco: { ...m.fill.deco, blend: { ...b, link: newLink() } } } }));
+  });
+  const changes: Change[] = [];
+  const wanted = new Set<string>();
+  objs.forEach((o, k) => {
+    const m = mem[k];
+    if (!blends(m)) return;
+    const b = m!.fill!.deco!.blend!;
+    wanted.add(b.link);
+    const want = blendSettings(m!.fill!);
+    const at = byLink.get(b.link);
+    const cur = at === undefined ? undefined : mem[at];
+    const target = at === undefined ? null : objs[at];
+    const same = target && sameColor(target.color, b.color);
+    if (same && sameRegion(cur!.region, m!.region) && JSON.stringify(cur!.fill) === JSON.stringify(want)) return;
+    const runs = blendRuns(m!.region!, want, [p.x[o.last] / 10, p.y[o.last] / 10]);
+    if (!runs) return;
+    const memory: Remembered = { region: m!.region, fill: want, blendOf: b.link };
+    const recs = runRecords(runs, trimMm);
+    if (same) {
+      changes.push({ a: leadOf(p, target), b: target.last, recs, memory });
+      return;
+    }
+    if (target) changes.push({ a: leadOf(p, target), b: target.last, recs: [] });
+    // After the last record of the fill's color block, as a border of its own thread.
+    let end = o.last;
+    while (end + 1 < p.cmd.length && p.cmd[end + 1] !== COLOR_CHANGE && p.cmd[end + 1] !== END) end++;
+    const next = p.cmd[end + 1] === COLOR_CHANGE ? p.colors[o.block + 1] : undefined;
+    if (next && sameColor(next, b.color)) changes.push({ a: end + 2, b: end + 1, recs, memory });
+    else changes.push({ a: end + 1, b: end, recs, color: { block: o.block, c: b.color }, memory });
+  });
+  for (const [link, at] of byLink) {
+    if (wanted.has(link)) continue;
+    // Its fill blends no more: taken out when asked, else a fill of its own.
+    if (drop.has(link)) changes.push({ a: leadOf(p, objs[at]), b: objs[at].last, recs: [] });
+    else remember(p, objs[at], { ...mem[at]!, blendOf: undefined });
+  }
+  return applyChanges(p, changes);
+}
+
+/** Stitches of a blend's second thread on `region` (before it is grown or shrunk). */
+function blendRuns(region: Region, s: FillSettings, start: Pt): Pt[][] | null {
+  const r = expandRegion(region, s.expand ?? 0);
+  if (!r) return null;
+  const res = fillRegion(r, { spacing: s.spacing, stitch: s.stitch, angle: Number.isFinite(s.angle) ? s.angle : null, pull: s.edge, underlay: false, fade: s.deco?.fade ?? 'in', tolerance: s.tolerance }, start);
+  return res?.runs.length ? res.runs.filter((run) => run.length > 1) : null;
+}
+
+/**
+ * Another thread for color block `block`, as recolor does; a border or a blend's second thread in
+ * it takes the thread through its fill, so the next sync keeps it there and does not move it back.
+ */
+export function recolorBlock(p: Pattern, block: number, color: ThreadColor): Pattern {
+  const next = recolor(p, block, color);
+  const objs = sewObjects(next);
+  const mem = objs.map((o) => remembered(next, o));
+  for (const o of objs) {
+    const own = mem[o.index];
+    if (o.block !== block || !(own?.outline || own?.blendOf)) continue;
+    objs.forEach((x, k) => {
+      const f = mem[k]?.fill;
+      if (!f) return;
+      if (own.outline && f.border?.color && f.border.link === own.outline) remember(next, x, (mem[k] = { ...mem[k]!, fill: { ...f, border: { ...f.border, color: { ...color } } } }));
+      if (own.blendOf && f.deco?.blend?.link === own.blendOf) remember(next, x, (mem[k] = { ...mem[k]!, fill: { ...f, deco: { ...f.deco, blend: { ...f.deco.blend, color: { ...color } } } } }));
+    });
+  }
+  return next;
 }
