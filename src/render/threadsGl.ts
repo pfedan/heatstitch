@@ -55,6 +55,9 @@ void main() {
 
 const THREAD_FS = `#version 300 es
 precision highp float;
+// How deep the shade in a needle hole is (0 none).
+const float DIMPLE = 0.28;
+const float DIVE_SHADE = 0.45;
 in vec2 v_local;
 in float v_len;
 in vec4 v_color;
@@ -89,6 +92,9 @@ void main() {
     float d = length(vec2(dt, a));
     float s = 1.0 - smoothstep(hw * 0.3, hw * 1.7, d);
     float alpha = 0.42 * s * s * u_thin * v_alpha;
+    // The needle hole: the fabric and the threads around it are pulled down into a small dimple.
+    float hole = min(length(vec2(t, a)), length(vec2(t - v_len, a)));
+    alpha = max(alpha, DIMPLE * (1.0 - smoothstep(hw * 0.1, hw * 0.9, hole)) * u_thin * v_alpha);
     o = vec4(0.0, 0.0, 0.0, alpha);
     return;
   }
@@ -110,6 +116,12 @@ void main() {
   vec2 u = v_dir;
   vec2 n = vec2(-u.y, u.x);
   vec3 N = normalize(vec3(u * qn.x + n * qn.y, sqrt(1.0 - r2)));
+  // Both ends dive into their needle holes: the thread bends down there, facing away along the
+  // stitch, and lies in the shade of the dimple. Where many needle points line up (embossing),
+  // this draws the line the motif makes on the fabric.
+  float toEnd = min(t, v_len - t);
+  float dive = 1.0 - smoothstep(0.0, hw * 1.8, toEnd);
+  N = normalize(N + vec3(u * (t < v_len * 0.5 ? -1.0 : 1.0) * dive * 1.4, 0.0));
 
   // Twisted ply: ridges running diagonally across the thread, as on a real two ply thread.
   float seed = v_color.a;
@@ -155,6 +167,8 @@ void main() {
   // Far out the shading is smaller than a pixel: fade to the plain thread color to avoid shimmer.
   float detail = smoothstep(0.8, 2.0, hw);
   col = mix(base * 0.95, col, detail);
+  // The shade at the holes stays when zoomed out: it is what makes rows of holes read as lines.
+  col *= 1.0 - DIVE_SHADE * dive * dive;
 
   float alpha = cover * u_thin * v_alpha;
   o = vec4(toSrgb(col) * alpha, alpha);

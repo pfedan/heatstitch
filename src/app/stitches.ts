@@ -1,3 +1,4 @@
+import type { ObjectPanel } from '../ui/objectPanel';
 import type { FileList } from '../ui/fileList';
 import type { Form } from '../shape/path';
 import type { LayersPanel } from '../ui/layersPanel';
@@ -25,6 +26,7 @@ import { ui } from './state';
 
 /** What bindStitches needs from the rest of the app. */
 export interface StitchesApp {
+  readonly objectPanel: ObjectPanel;
   readonly applyEdit: (p: Pattern, measurement?: Measurement | undefined) => void;
   readonly closeRungs: () => void;
   readonly files: FileList;
@@ -350,6 +352,7 @@ export function bindStitches(app: StitchesApp) {
       ui.highlight = what;
       app.redraw();
     },
+    blend: (anchor) => app.objectPanel.pickBlend(anchor),
     outline: (a) => {
       const p = app.files.active?.pattern;
       if (!p || ui.selectedObjects.size !== 1) return;

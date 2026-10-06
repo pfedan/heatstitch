@@ -56,6 +56,8 @@ export interface DecoSettings {
   emboss?: Motif;
   /** Size of one motif (mm). */
   embossSize?: number;
+  /** Embossing that shows clearly: shorter stitches inside the motif as well (see motifInside). */
+  embossStrong?: boolean;
   /** Waves: from the middle to a crest, and from crest to crest (mm). */
   height?: number;
   length?: number;
@@ -699,6 +701,7 @@ function isDeco(d: unknown): d is DecoSettings {
     (s.focus === undefined || isShare(s.focus)) &&
     (s.centers === undefined || (Array.isArray(s.centers) && s.centers.length >= 1 && s.centers.length <= MAX_SWIRLS && s.centers.every(isShare))) &&
     (s.triple === undefined || typeof s.triple === 'boolean') &&
+    (s.embossStrong === undefined || typeof s.embossStrong === 'boolean') &&
     (s.grid === undefined || GRID_KINDS.includes(s.grid)) &&
     (s.cross === undefined || CROSS_KINDS.includes(s.cross)) &&
     (s.fade === undefined || s.fade === 'out' || s.fade === 'in') &&
@@ -1498,7 +1501,7 @@ function newFill(p: Pattern, o: SewObject, a: Analysis, s: FillSettings, reverse
     res = openFill(r, s, start);
   } else {
     const d = s.deco;
-    res = fillRegion(r, { ...fp, offset: s.offset, ...(s.pattern === 'tatami' && d?.emboss ? { emboss: { motif: d.emboss, size: d.embossSize ?? DECO_DEFAULTS.embossSize } } : {}) }, start);
+    res = fillRegion(r, { ...fp, offset: s.offset, ...(s.pattern === 'tatami' && d?.emboss ? { emboss: { motif: d.emboss, size: d.embossSize ?? DECO_DEFAULTS.embossSize, strong: !!d.embossStrong } } : {}) }, start);
   }
   if (!res) return null;
   // Underlay points in runs too short to sew are not sewn either.
@@ -2088,7 +2091,12 @@ export function restitch(
     // A new area (its shape changed): the old stitches are told apart by the old one, the fill is made in the new one.
     const newArea = areas?.get(o.index);
     if (newArea && an.fill) an = { ...an, fill: newArea };
-    const given = typeof settingsFor === 'function' ? settingsFor(o, an, known) : settingsFor;
+    const asked = typeof settingsFor === 'function' ? settingsFor(o, an, known) : settingsFor;
+    // A blending fill's border goes after its second thread, so it is an object of its own even
+    // in the fill's thread (sewn into the fill, the second thread would lie over it).
+    const bd = asked?.kind === 'fill' && asked.s.deco?.blend ? asked.s.border : undefined;
+    const given: Settings | null | undefined =
+      asked?.kind === 'fill' && bd && !bd.color ? { kind: 'fill', s: { ...asked.s, border: { ...bd, color: { ...o.color }, link: bd.link ?? Math.random().toString(36).slice(2, 10) } } } : asked;
     if (!given) continue;
     // A fill along a line: its area is always made from the line, never kept or traced.
     const byLine = !newArea && known?.asLine && given.kind === 'fill' ? lineFillArea(known.asLine, given.s) : null;

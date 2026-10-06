@@ -1,7 +1,7 @@
 import { expandRegion, sample, signedField, type Region } from './region';
 import { runStitch, simplify } from './run';
 import type { Pt } from './skeleton';
-import { embossPoints, motifCrossings, type Motif } from './deco';
+import { embossPoints, motifCrossings, motifInside, type Motif } from './deco';
 
 /**
  * Tatami fill of a region (with holes) from its signed distance field.
@@ -57,7 +57,7 @@ export interface FillParams {
   /** Curved rows keep this close to their line (mm); TOLERANCE by default. */
   tolerance?: number;
   /** Straight rows put their needle points on the lines of this motif (embossing, see deco.ts). */
-  emboss?: { motif: Motif; size: number };
+  emboss?: { motif: Motif; size: number; strong?: boolean };
   /**
    * Rows that fade out across the shape (`out`, dense where the rows start) or in (`in`): the
    * density falls evenly to nearly nothing, so a second color fading the other way on the same
@@ -83,8 +83,12 @@ interface Seg {
 type Section = Seg[];
 
 const STAGGERS = 4;
-/** A fading fill thins out to this share of its density at the far side. */
-const FADE_MIN = 0.05;
+/**
+ * A fading fill ends where it thins out below this share of its density: sparser rows would lie
+ * several millimetres apart, joined by long stitches across (the other thread of a blend covers
+ * that end almost alone anyway).
+ */
+const FADE_MIN = 0.15;
 const UNDERLAY_STITCH = 3;
 export const UNDERLAY_INSET = 0.4;
 export const TRAVEL_STITCH = 2.5;
@@ -106,7 +110,7 @@ class Frame {
   private vs: number[] | null = null;
   private k0 = 0;
   /** Needle points on the lines of a motif (embossing). */
-  emboss?: { motif: Motif; size: number };
+  emboss?: { motif: Motif; size: number; strong?: boolean };
   /** Density falling evenly across the shape (out) or rising (in); see FillParams.fade. */
   fade?: 'out' | 'in';
   constructor(
@@ -133,9 +137,10 @@ class Frame {
     if (this.fade) {
       // Density, not spacing, changes evenly: 1 / spacing at full, down to FADE_MIN of it.
       for (let v = vmin + this.spacing / 2; v <= vmax; ) {
-        vs.push(v);
         const t = (v - vmin) / span;
-        v += this.spacing / Math.max(FADE_MIN, this.fade === 'out' ? 1 - t : t);
+        const d = this.fade === 'out' ? 1 - t : t;
+        if (d >= FADE_MIN) vs.push(v);
+        v += this.spacing / Math.max(FADE_MIN, d);
       }
       this.vs = vs;
       this.k0 = 0;
@@ -275,9 +280,35 @@ function rowStitches(f: Frame, k: number, v: number, from: number, to: number, l
     const { motif, size } = f.emboss;
     const cross = motifCrossings(motif, size, { o: f.at(0, v), e: f.e }, lo + 0.3, hi - 0.3);
     pts.splice(0, pts.length, ...embossPoints(cross, pts, len, lo, hi));
+    if (f.emboss.strong) {
+      const v0 = f.at(0, v);
+      const inside = (u: number) => motifInside(motif, size, [v0[0] + f.e[0] * u, v0[1] + f.e[1] * u]);
+      pts.splice(0, pts.length, ...shortInside(pts, inside, len, lo, hi));
+    }
   }
   if (dir < 0) pts.reverse();
   return [f.at(from, v), ...pts.map((u) => f.at(u, v)), f.at(to, v)];
+}
+
+/**
+ * Strong embossing: inside the motif the stitches are about half as long, so the motif shows as
+ * an area of a finer, more matte texture between its grooves, whichever way its lines run. The
+ * rows and their spacing stay, so the density does too.
+ */
+function shortInside(pts: number[], inside: (u: number) => boolean, len: number, lo: number, hi: number): number[] {
+  const short = Math.max(1.5, len * 0.5);
+  const out: number[] = [];
+  let prev = lo;
+  for (const u of [...pts, hi]) {
+    const g = u - prev;
+    if (g > short * 1.4 && inside((prev + u) / 2)) {
+      const n = Math.round(g / short);
+      for (let i = 1; i < n; i++) out.push(prev + (g * i) / n);
+    }
+    if (u < hi) out.push(u);
+    prev = u;
+  }
+  return out;
 }
 
 /** Stitches of a section, entered at its first or last row and at the start or end of that row. */
@@ -288,7 +319,12 @@ function sewSection(f: Frame, s: Section, len: number, pull: number, reversed: b
     const fwd = (i % 2 === 0) !== flip;
     const a = fwd ? seg.u0 - pull : seg.u1 + pull;
     const b = fwd ? seg.u1 + pull : seg.u0 - pull;
-    out.push(...rowStitches(f, seg.k, f.v(seg.k), a, b, len));
+    const row = rowStitches(f, seg.k, f.v(seg.k), a, b, len);
+    // The step to the next row: in short stitches where the rows lie far apart (a fading fill).
+    const prev = out[out.length - 1];
+    const gap = prev ? dist(prev, row[0]) : 0;
+    for (let i = 1, n = Math.ceil(gap / len); i < n; i++) out.push([prev[0] + ((row[0][0] - prev[0]) * i) / n, prev[1] + ((row[0][1] - prev[1]) * i) / n]);
+    out.push(...row);
   });
   return out;
 }
