@@ -375,6 +375,7 @@ export function bindCorrection(app: CorrectionApp) {
 
   const correctPanel = new CorrectPanel(app.settings, {
     plan: (scope) => void planFix(scope),
+    tune: () => tuneToFabric(),
     check: (ids, on) => {
       const st = ui.planState;
       if (!st) return;
@@ -384,13 +385,7 @@ export function bindCorrection(app: CorrectionApp) {
       app.redraw();
     },
     applyPlan: () => void applyPlan(),
-    discardPlan: () => {
-      ui.planState = null;
-      ui.planHover = null;
-      ui.planPreview = null;
-      ui.correctMessage = null;
-      app.redraw();
-    },
+    discardPlan,
     checkAll: (on) => {
       const st = ui.planState;
       if (!st) return;
@@ -435,5 +430,20 @@ export function bindCorrection(app: CorrectionApp) {
     optionsChanged: () => saveSettings(app.settings),
   });
 
-  return { correctPanel, drawPlanCompare, inPlanFrame, movePlanSplit, pinPlan, tuneToFabric };
+  /** Drops the proposals. */
+  function discardPlan(): void {
+    ui.planState = null;
+    ui.planHover = null;
+    ui.planPreview = null;
+    ui.planPin = null;
+    ui.correctMessage = null;
+    app.redraw();
+  }
+
+  /** Whether proposals are shown, and whether any of them is ticked. */
+  const busy = () => ui.correctMessage?.kind === 'busy' || ui.correctMessage?.kind === 'progress';
+  const planShown = () => !!ui.planState && ui.planState.file === app.files.active;
+  const planTicked = () => planShown() && (ui.planState!.checked.size > 0 || (ui.planState!.fineOn && ui.planState!.fine.length > 0));
+
+  return { correctPanel, drawPlanCompare, inPlanFrame, movePlanSplit, pinPlan, tuneToFabric, planFix, applyPlan, discardPlan, busy, planShown, planTicked };
 }

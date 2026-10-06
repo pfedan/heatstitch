@@ -17,6 +17,8 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 export interface CorrectHooks {
   /** Work out proposals for the whole design or the selected zone. */
   plan: (scope: 'all' | 'zone') => void;
+  /** Proposals for settings that suit the fabric better. */
+  tune: () => void;
   /** Tick or untick a proposal (`fine`: the fine correction on the stitches). */
   check: (ids: number[] | 'fine', on: boolean) => void;
   /** Tick all proposals (and the fine correction) or none. */
@@ -103,9 +105,9 @@ export interface CorrectState {
 export class CorrectPanel {
   private goal = document.querySelectorAll<HTMLInputElement>('input[name="fix-goal"]');
   private focus = document.querySelectorAll<HTMLInputElement>('input[name="fix-focus"]');
-  private focusHint = $<HTMLElement>('fix-focus-hint');
   private fixAll = $<HTMLButtonElement>('fix-all');
   private fixZone = $<HTMLButtonElement>('fix-zone');
+  private fixTune = $<HTMLButtonElement>('fix-tune');
   private report = $<HTMLElement>('fix-report');
   private editOff = $<HTMLElement>('edit-off-hint');
   private tools = $<HTMLElement>('edit-tools');
@@ -122,6 +124,7 @@ export class CorrectPanel {
   private saveExt = $<HTMLElement>('save-ext');
   /** Names typed per file; other files show the suggestion. */
   private names = new WeakMap<object, string>();
+  private compareBlock = $<HTMLElement>('compare-block');
   private compareToggle = $<HTMLButtonElement>('compare-toggle');
   private compareTable = $<HTMLTableElement>('compare-table');
   private last: CorrectState | null = null;
@@ -152,6 +155,7 @@ export class CorrectPanel {
     });
     this.fixAll.addEventListener('click', () => hooks.plan('all'));
     this.fixZone.addEventListener('click', () => hooks.plan('zone'));
+    this.fixTune.addEventListener('click', () => hooks.tune());
     this.hooks = hooks;
     onLangChange(() => this.last && this.update(this.last));
     this.compareToggle.addEventListener('click', () => hooks.toggleCompare());
@@ -200,15 +204,12 @@ export class CorrectPanel {
     const busy = st.message?.kind === 'busy' || st.message?.kind === 'progress';
     this.fixAll.disabled = !loaded || busy;
     this.fixZone.disabled = !loaded || busy || !st.zoneSelected;
-    const hint: Record<CorrectionFocus, Key> = {
-      both: 'correct.focus.both.hint',
-      thread: 'correct.focus.thread.hint',
-      holes: 'correct.focus.holes.hint',
-    };
-    this.focusHint.textContent = t(hint[this.s.correction.focus]);
+    this.fixTune.disabled = !loaded || busy;
     this.fixAll.textContent = busy ? t('plan.running') : t('correct.all');
 
-    this.editOff.hidden = st.editing;
+    // Editing by hand shows its tools here only while the level Stiche is on; how to get there is
+    // said by the level switch itself.
+    this.editOff.hidden = true;
     this.tools.hidden = !st.editing;
     this.selInfo.textContent = !st.pointsVisible
       ? t('edit.zoom')
@@ -238,6 +239,7 @@ export class CorrectPanel {
     }
 
     const edited = FileList.edited(f);
+    this.compareBlock.hidden = !edited;
     this.compareToggle.disabled = !edited;
     this.compareToggle.textContent = t(st.comparing && edited ? 'compare.stop' : 'compare.start');
     this.compareToggle.setAttribute('aria-pressed', String(st.comparing && edited));
@@ -283,9 +285,7 @@ export class CorrectPanel {
       tr.append(cell('th', t(key)), cell('td', fmt(x)), cell('td', fmt(y), cls));
       body.append(tr);
     }
-    const caption = document.createElement('caption');
-    caption.textContent = t('compare.hint');
-    this.compareTable.replaceChildren(caption, head, body);
+    this.compareTable.replaceChildren(head, body);
   }
 
   private message(m: CorrectMessage): HTMLElement[] {
@@ -350,7 +350,10 @@ export class CorrectPanel {
       return out;
     }
     const objects = v.rows.reduce((a, r) => a + r.ids.length, 0);
-    out.push(p(v.title ?? t(objects === 1 ? 'plan.head.one' : 'plan.head', { n: formatNumber(objects) }), 'strong'));
+    const head = document.createElement('div');
+    head.className = 'plan-head';
+    head.append(p(v.title ?? t(objects === 1 ? 'plan.head.one' : 'plan.head', { n: formatNumber(objects) }), 'strong'));
+    out.push(head);
     if (v.after) {
       out.push(
         p(
@@ -364,18 +367,19 @@ export class CorrectPanel {
         ),
       );
     }
-    out.push(p(t('plan.hover'), 'muted small'));
     // Pick all or none at once (none is ticked at first).
     const pick = document.createElement('div');
     pick.className = 'plan-pick';
+    const ticked = v.rows.filter((r) => r.checked).length + (v.fine && v.fineChecked ? 1 : 0);
     for (const [key, on] of [['plan.all', true], ['plan.noneChecked', false]] as const) {
       const b = Object.assign(document.createElement('button'), { type: 'button', className: 'link small', textContent: t(key) });
       b.addEventListener('click', () => this.hooks.checkAll(on));
       pick.append(b);
     }
-    out.push(pick);
+    head.append(pick);
     const list = document.createElement('ul');
     list.className = 'plan-list';
+    head.title = t('plan.hover');
     for (const r of v.rows) list.append(this.planRow(r));
     if (v.fine) {
       const li = document.createElement('li');
@@ -384,21 +388,21 @@ export class CorrectPanel {
       const i = Object.assign(document.createElement('input'), { type: 'checkbox', checked: v.fineChecked });
       i.addEventListener('change', () => this.hooks.check('fine', i.checked));
       l.append(i, Object.assign(document.createElement('span'), { className: 'plan-name', textContent: t('plan.fine') }));
-      li.append(l, p(t(v.fine === 1 ? 'plan.fine.text.one' : 'plan.fine.text', { n: formatNumber(v.fine) }), 'muted small plan-change'));
+      li.title = t(v.fine === 1 ? 'plan.fine.text.one' : 'plan.fine.text', { n: formatNumber(v.fine) });
+      li.append(l);
       list.append(li);
     }
     out.push(list);
     if (v.locked) out.push(p(t('plan.locked', { n: v.locked }), 'muted small'));
     const buttons = document.createElement('div');
     buttons.className = 'buttons';
-    const take = Object.assign(document.createElement('button'), { type: 'button', className: 'primary', textContent: t('plan.apply') });
+    const take = Object.assign(document.createElement('button'), { type: 'button', className: 'primary', textContent: `${t('plan.apply')} (${formatNumber(ticked)})`, title: t('plan.note') });
     take.disabled = !v.rows.some((r) => r.checked) && !(v.fine && v.fineChecked);
     take.addEventListener('click', () => this.hooks.applyPlan());
     const drop = Object.assign(document.createElement('button'), { type: 'button', textContent: t('plan.discard') });
     drop.addEventListener('click', () => this.hooks.discardPlan());
     buttons.append(take, drop);
     out.push(buttons);
-    out.push(p(t('plan.note'), 'muted small'));
     return out;
   }
 
@@ -428,7 +432,7 @@ export class CorrectPanel {
     const changes = [...r.changes.map(fixText), ...(r.knockout ? [fixText({ field: 'knockout', from: false, to: true })] : [])];
     const why = r.reasons.map((x) => t(`validation.reason.${x}` as Key)).join(', ');
     li.append(Object.assign(document.createElement('p'), { className: 'small plan-change', textContent: changes.join(' · ') }));
-    if (why) li.append(Object.assign(document.createElement('p'), { className: 'muted small plan-change', textContent: t('plan.against', { list: why }) }));
+    if (why) li.title = t('plan.against', { list: why });
     // Moving sideways over the row moves the line between before and after.
     const split = (e: MouseEvent) => {
       const b = li.getBoundingClientRect();
@@ -446,6 +450,7 @@ export class CorrectPanel {
   private applied(m: Extract<CorrectMessage, { kind: 'applied' }>): HTMLElement[] {
     const p = (text: string, cls = '') => Object.assign(document.createElement('p'), { textContent: text, className: cls });
     const out = [p(t(m.done === 1 ? 'plan.applied.one' : 'plan.applied', { n: formatNumber(m.done) }), 'strong')];
+    out[0].title = t('plan.undo');
     if (m.after) {
       out.push(
         p(
@@ -472,7 +477,6 @@ export class CorrectPanel {
       if (list.length) out.push(p(t('plan.fineDone', { list: list.join(', ') }), 'small'));
     }
     if (m.open) out.push(p(t('correct.left', { n: m.open }), 'muted small'));
-    out.push(p(t('plan.undo'), 'muted small'));
     return out;
   }
 }

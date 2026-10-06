@@ -67,6 +67,8 @@ import { bindStitches } from './app/stitches';
 import { bindObjects } from './app/objects';
 import { bindScene } from './app/scene';
 import { initShell } from './shell/setup';
+import { initCheck } from './areas/check/check';
+import type { ZoneDecision } from './ui/validationPanel';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -173,16 +175,18 @@ const panel = new ValidationPanel($('validation'), $('findings-sum'), {
     redraw();
   },
   onStep: (dir) => stepZone(dir),
-  onDecide: (z, d) => {
-    const f = files.active;
-    if (!f) return;
-    // One decision per zone: the new one replaces whatever was stored for it.
-    const rest = f.acks.filter((a) => a !== acknowledgementOf(z, f.acks));
-    const bbox = { ...z.bbox };
-    files.setAcks(f, d === 'ack' ? [...rest, { bbox, reason: 'manual' }] : d === 'reopen' ? [...rest, { bbox, reason: 'reopened' }] : rest);
-    redraw();
-  },
+  onDecide: (z, d) => decideZone(z, d),
 });
+
+/** One decision per zone: the new one replaces whatever was stored for it. */
+function decideZone(z: Zone, d: ZoneDecision): void {
+  const f = files.active;
+  if (!f) return;
+  const rest = f.acks.filter((a) => a !== acknowledgementOf(z, f.acks));
+  const bbox = { ...z.bbox };
+  files.setAcks(f, d === 'ack' ? [...rest, { bbox, reason: 'manual' }] : d === 'reopen' ? [...rest, { bbox, reason: 'reopened' }] : rest);
+  redraw();
+}
 
 installPanelResize($('layout'), settings.panels, () => saveSettings(settings));
 
@@ -765,6 +769,8 @@ function blendOf(p: Pattern, q: Sequence, selected: number[]): { blend?: ThreadC
 // Rendering ------------------------------------------------------------------
 
 let frame = 0;
+/** What the check area draws on the stage (src/areas/check). */
+let checkArea: { draw: (ctx: CanvasRenderingContext2D) => void } | null = null;
 function redraw(): void {
   if (frame) return;
   frame = requestAnimationFrame(() => {
@@ -791,6 +797,7 @@ function redraw(): void {
       drawDrawing(ctx, vp, drawTool.preview, { nodes: drawTool.kind === 'pen' ? drawTool.count : 0, closing: drawTool.closing, size: drawTool.size });
     if (ui.letterMode) drawLetterBoxes();
     drawPlanCompare();
+    checkArea?.draw(ctx);
     if (showCompare()) {
       const x = Math.round(ui.split * ui.stageW);
       ctx.save();
@@ -830,7 +837,6 @@ function redraw(): void {
         },
         getLang(),
       );
-      jumpsPanel.update({ list: q?.transitions ?? [], selected: ui.selectedJump, lang: getLang() });
       const objects = !ui.lettering && p && q && ui.selectedObjects.size;
       objectPanel.update(objects ? objectInfo(p, q) : null, getLang());
       stitchPanel.update(objects ? { ...stitchInfo(p, q), ...rungInfo(p, q), blend: !!blendOf(p, q, [...ui.selectedObjects]).blend } : null);
@@ -843,6 +849,8 @@ function redraw(): void {
       $<HTMLButtonElement>('order-optimize').disabled = !q || q.objects.length < 2;
     }
     panel.update(active, ui.selectedZone);
+    // Jumps and trims show in Gestalten and in Prüfen.
+    jumpsPanel.update({ list: q?.transitions ?? [], selected: ui.selectedJump, lang: getLang() });
     // Proposals belong to the version they were worked out on.
     if (ui.planState && (ui.planState.file !== active || ui.planState.pattern !== active?.pattern)) {
       ui.planState = null;
@@ -1174,7 +1182,7 @@ function history(step: 'undo' | 'redo' | 'revert'): void {
   recompute();
 }
 
-const { correctPanel, drawPlanCompare, inPlanFrame, movePlanSplit, pinPlan, tuneToFabric } = bindCorrection({
+const { correctPanel, drawPlanCompare, inPlanFrame, movePlanSplit, pinPlan, tuneToFabric, planFix, applyPlan, discardPlan, busy, planShown, planTicked } = bindCorrection({
   get applyEdit() {
     return applyEdit;
   },
@@ -1634,6 +1642,21 @@ const { showObjectMenu } = bindPointer({
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', redraw);
 
 initShell({ files, mode: () => settings.mode, setMode });
+checkArea = initCheck({
+  settings,
+  files,
+  setMode,
+  redraw,
+  vp,
+  seq,
+  findings: panel,
+  stepZone,
+  decideZone,
+  setComparing,
+  correction: { planFix, applyPlan, discardPlan, tuneToFabric, pinPlan, busy, planShown, planTicked },
+  jumps: jumpsPanel,
+  stepJump,
+});
 
 files.render();
 redraw();

@@ -4,6 +4,7 @@ import { densityExcess } from '../validation/practice';
 import { fabricOf } from '../validation/profiles';
 import { CAUTION, CRITICAL, type Checks, type Level, type Reason, type ValidationResult, type Zone } from '../validation/validate';
 import type { LoadedFile } from './fileList';
+import { commandTitle, getCommand } from '../shell/commands';
 
 const LEVEL_CLASS = ['safe', 'caution', 'critical'] as const;
 const VERDICT_KEY: Record<Level, Key> = {
@@ -94,6 +95,11 @@ export class ValidationPanel {
   private selected: Zone | null = null;
   private last: unknown[] = [];
 
+  /** The summary card on top of the check view, its traffic light and the badge at "Prüfen" in the top bar. */
+  private light = document.getElementById('check-light');
+  private state = document.getElementById('check-state');
+  private badge = document.getElementById('check-badge');
+
   constructor(
     private root: HTMLElement,
     private summary: HTMLElement,
@@ -134,19 +140,66 @@ export class ValidationPanel {
 
   private renderSummary(file: LoadedFile | null): void {
     const v = file?.pattern ? file.validation : null;
-    if (!v) {
-      this.summary.replaceChildren();
-      return;
-    }
-    const open = v.zones.filter((z) => !settledBy(z, file!.acks));
+    const open = v ? v.zones.filter((z) => !settledBy(z, file!.acks)) : [];
     const critical = open.filter((z) => z.level === CRITICAL).length;
-    const caution = open.length - critical;
-    const worst = openWorst(v.zones, file!.acks) as Level;
-    this.summary.replaceChildren(
-      el('span', `dot ${LEVEL_CLASS[worst]}`),
-      el('strong', '', t(VERDICT_KEY[worst])),
-      ...(open.length ? [el('span', '', t('validation.counts', { critical, caution }))] : []),
-    );
+    const worst = v ? (openWorst(v.zones, file!.acks) as Level) : null;
+
+    // The badge at "Prüfen": seen from the design view too.
+    if (this.badge) {
+      this.badge.hidden = !open.length;
+      this.badge.textContent = String(open.length);
+      this.badge.className = `check-badge ${worst !== null ? LEVEL_CLASS[worst] : ''}`;
+      this.badge.title = open.length ? t('check.badge', { n: open.length }) + (critical ? `, ${t('check.sum.critical', { n: critical })}` : '') : '';
+    }
+
+    // The line of the closed findings section.
+    this.summary.replaceChildren(...(open.length ? [el('span', `dot ${LEVEL_CLASS[worst ?? 0]}`), el('span', '', t('check.findings.open', { n: open.length }))] : []));
+
+    // The summary card: traffic light, verdict, what stands out and why it counts or not.
+    if (this.light) {
+      this.light.dataset.level = worst === null ? '' : LEVEL_CLASS[worst];
+      this.light.setAttribute('aria-label', worst === null ? '' : t(VERDICT_KEY[worst]));
+    }
+    if (!this.state) return;
+    if (!file?.pattern) return void this.state.replaceChildren(el('p', 'muted small', t('validation.noFile')));
+    if (!v) return void this.state.replaceChildren(el('strong', 'pending', t('validation.pending')));
+    const applicable = applicableChecks(v);
+    const off = applicable.filter((r) => !v.checks[r]);
+    if (off.length === applicable.length) return void this.state.replaceChildren(el('strong', '', t('validation.noChecks')));
+    const w = worst ?? 0;
+    const head = el('div', 'check-head');
+    const verdict = el('strong', '', t(VERDICT_KEY[w]));
+    verdict.title = t(w === 0 && v.zones.length ? 'validation.msg.safeSettled' : MSG_KEY[w]);
+    head.append(verdict);
+    if (w) head.append(el('span', 'share', share(v, v.zones.map((z) => !settledBy(z, file.acks)))));
+    const lines: HTMLElement[] = [head];
+    if (open.length) {
+      const what = [t('check.sum.open', { n: open.length }), ...(critical ? [t('check.sum.critical', { n: critical })] : [])].join(', ');
+      // Which checks found them, most frequent first.
+      const by = new Map<Reason, number>();
+      for (const z of open) for (const r of z.reasons) by.set(r, (by.get(r) ?? 0) + 1);
+      const reasons = [...by].sort((a, b) => b[1] - a[1]).map(([r, n]) => `${t(REASON_KEY[r])} ${n}`).join(' · ');
+      lines.push(el('p', 'check-what', what), el('p', 'muted small', reasons));
+    } else lines.push(el('p', 'check-what', t('check.sum.none')));
+    const by = v.zones.map((z) => settledBy(z, file.acks));
+    const practice = by.filter((b) => b === 'practice').length;
+    const acked = by.filter((b) => b === 'manual').length;
+    if (practice || acked) {
+      const list = [...(practice ? [t('validation.practiceN', { n: practice })] : []), ...(acked ? [t('validation.ackedN', { n: acked })] : [])].join(', ');
+      lines.push(el('p', 'muted small', t('validation.notCounted', { list })));
+    }
+    if (off.length) lines.push(el('p', 'muted small', t('validation.checksOff', { list: off.map((c) => t(`checks.${c}` as Key)).join(', ') })));
+    // What the check was made for; a click leads to the material.
+    const fabric = el('button', 'link check-for', t('check.sum.for', { fabric: t(`fabric.${v.profile.fabric}` as Key) }));
+    fabric.type = 'button';
+    fabric.title = t('check.sum.material');
+    fabric.addEventListener('click', () => {
+      const m = document.getElementById('material-panel');
+      m?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      document.getElementById('fabric')?.focus({ preventScroll: true });
+    });
+    lines.push(fabric);
+    this.state.replaceChildren(...lines);
   }
 
   private build(file: LoadedFile | null, selected: Zone | null): HTMLElement[] {
@@ -155,40 +208,16 @@ export class ValidationPanel {
     if (!v) return [el('p', 'muted pending', t('validation.pending'))];
 
     const applicable = applicableChecks(v);
-    const off = applicable.filter((r) => !v.checks[r]);
-    if (off.length === applicable.length) return [el('p', 'muted', t('validation.noChecks'))];
-
-    // Findings that are normal in practice or acknowledged do not count towards the verdict.
-    const worst = openWorst(v.zones, file.acks) as Level;
-    const by = v.zones.map((z) => settledBy(z, file.acks));
-    const practice = by.filter((b) => b === 'practice').length;
-    const acked = by.filter((b) => b === 'manual').length;
-    const verdict = el('div', `verdict ${LEVEL_CLASS[worst]}`);
-    const head = el('div', 'verdict-head');
-    head.append(el('strong', '', t(VERDICT_KEY[worst])));
-    if (worst) head.append(el('span', '', share(v, by.map((b) => !b))));
-    verdict.append(head, el('p', '', t(worst === 0 && v.zones.length ? 'validation.msg.safeSettled' : MSG_KEY[worst])));
-    if (practice || acked) {
-      const list = [
-        ...(practice ? [t('validation.practiceN', { n: practice })] : []),
-        ...(acked ? [t('validation.ackedN', { n: acked })] : []),
-      ].join(', ');
-      verdict.append(el('p', 'counts', t('validation.notCounted', { list })));
-    }
-    if (off.length) {
-      const list = off.map((c) => t(`checks.${c}` as Key)).join(', ');
-      verdict.append(el('p', 'counts', t('validation.checksOff', { list })));
-    }
-    const parts: HTMLElement[] = [verdict];
-    if (!v.zones.length) return parts;
-
-    parts.push(this.toolbar(v.zones, file, selected));
+    if (applicable.every((r) => !v.checks[r])) return [el('p', 'muted small', t('validation.noChecks'))];
+    if (!v.zones.length) return [el('p', 'muted small', t('check.sum.none'))];
+    const parts: HTMLElement[] = [this.toolbar(v.zones, file, selected)];
     const shown = this.visible(v.zones);
     if (!shown.length) {
       parts.push(el('p', 'muted small', t('findings.empty')));
       return parts;
     }
     const list = el('ol', 'val-zones');
+    list.title = t('validation.zoneHint');
     for (const z of shown) {
       const settled = settledBy(z, file.acks);
       const reopened = !settled && !!z.practice;
@@ -199,9 +228,8 @@ export class ValidationPanel {
         el('span', 'dot'),
         el('span', 'lvl', t(z.level === CRITICAL ? 'level.critical' : 'level.caution')),
         el('span', 'why', z.reasons.map((r) => t(REASON_KEY[r])).join(', ')),
-        el('span', 'num', `#${v.zones.indexOf(z) + 1}`),
       );
-      const meta = [`${formatNumber(z.areaMm2)} mm²`, ...figures(z, v)];
+      const meta = [`#${v.zones.indexOf(z) + 1}`, `${formatNumber(z.areaMm2)} mm²`, ...figures(z, v)];
       btn.append(top, el('span', 'meta', meta.join(' · ')));
       if (z.practice || settled) {
         const note = settled === 'manual' ? t('findings.manual') : t(`findings.practice.${z.practice!}` as Key);
@@ -229,7 +257,7 @@ export class ValidationPanel {
       li.append(btn, toggle);
       list.append(li);
     }
-    parts.push(list, el('p', 'muted small', t('validation.zoneHint')));
+    parts.push(list);
     return parts;
   }
 
@@ -252,7 +280,8 @@ export class ValidationPanel {
       b.dataset.level = String(f);
       b.setAttribute('role', 'radio');
       b.setAttribute('aria-checked', String(f === this.filter));
-      b.disabled = !n && f !== this.filter;
+      // Empty levels are left out rather than shown greyed.
+      if (!n && f !== this.filter && f !== 'all') continue;
       if (f !== 'all' && f !== 'settled') b.append(el('span', 'dot'));
       b.append(label, el('span', 'n', String(n)));
       b.addEventListener('click', () => {
@@ -268,8 +297,12 @@ export class ValidationPanel {
     const prev = el('button', 'icon', '‹');
     const next = el('button', 'icon', '›');
     prev.type = next.type = 'button';
-    prev.title = t('findings.prev');
-    next.title = t('findings.next');
+    const title = (id: string, fallback: Key) => {
+      const c = getCommand(id);
+      return c ? commandTitle(c) : t(fallback);
+    };
+    prev.title = title('check.prev', 'findings.prev');
+    next.title = title('check.next', 'findings.next');
     prev.setAttribute('aria-label', prev.title);
     next.setAttribute('aria-label', next.title);
     prev.disabled = next.disabled = !shown.length;

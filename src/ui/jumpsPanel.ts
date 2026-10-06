@@ -1,6 +1,7 @@
 import { formatNumber, getLang, onLangChange, t, type Key } from '../i18n';
 import type { Transition } from '../model/sequence';
 import type { Settings } from '../settings';
+import { commandTitle, getCommand } from '../shell/commands';
 
 export type JumpFilter = 'all' | 'uncut' | 'cut';
 
@@ -20,6 +21,9 @@ export interface JumpState {
   lang: string;
 }
 
+/** What can be done to the selected jump. */
+export type JumpAction = 'cut' | 'tie' | 'carry';
+
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, className = '', text = ''): HTMLElementTagNameMap[K] => {
   const e = document.createElement(tag);
   if (className) e.className = className;
@@ -29,15 +33,26 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, className = '', text 
 
 const tied = (j: Transition) => j.tieOff > 0 && j.tieIn > 0;
 
+/** The title of a command with its keys; in Prüfen n steps through the findings, so the key is left out there. */
+const titleOf = (id: string, fallback: Key) => {
+  const c = getCommand(id);
+  if (!c) return t(fallback);
+  return document.body.dataset.mode === 'density' ? t(c.label) : commandTitle(c);
+};
+
 /**
- * Jumps between stitch runs of one color: a summary with a warning for long untrimmed ones, the
- * rule "trim from X mm on", a filtered list in sewing order and the actions for the selected one.
+ * Jumps between stitch runs of one color, in a section that folds away: a summary with a warning
+ * for long untrimmed ones, the rule "trim from X mm on", a filtered list in sewing order and the
+ * actions for the selected one. Shown in Gestalten and in Prüfen; open by default in Gestalten only.
  */
 export class JumpsPanel {
   private root = document.getElementById('jumps') as HTMLElement;
+  private box = document.getElementById('jumps-panel') as HTMLDetailsElement | null;
+  private sum = document.getElementById('jumps-sum');
   private filter: JumpFilter = 'all';
   private key: unknown[] = [];
   private last: JumpState | null = null;
+  private mode = '';
 
   constructor(
     private s: Settings,
@@ -45,6 +60,19 @@ export class JumpsPanel {
   ) {
     // Also outside Ablauf, where the list shows but is not updated.
     onLangChange(() => this.last && this.update({ ...this.last, lang: getLang() }, true));
+    // Open or closed is remembered per mode: a long list should not push the findings away.
+    const syncOpen = () => {
+      this.mode = document.body.dataset.mode ?? 'flow';
+      if (this.box) this.box.open = this.s.sections[`jumps.${this.mode}`] ?? this.mode === 'flow';
+    };
+    syncOpen();
+    new MutationObserver(syncOpen).observe(document.body, { attributes: true, attributeFilter: ['data-mode'] });
+    this.box?.addEventListener('toggle', () => {
+      const id = `jumps.${this.mode}`;
+      if (this.s.sections[id] === this.box!.open) return;
+      this.s.sections = { ...this.s.sections, [id]: this.box!.open };
+      this.hooks.limitChanged();
+    });
   }
 
   /** Indices (into the full list) the current filter shows. */
@@ -52,46 +80,94 @@ export class JumpsPanel {
     return list.flatMap((j, i) => (this.filter === 'all' || (this.filter === 'cut') === j.trimmed ? [i] : []));
   }
 
+  /** Jumps the rule would trim (from the limit on, not trimmed yet) and carry (shorter, trimmed or tied). */
+  private rule(list: Transition[]): { toCut: number[]; toCarry: number[] } {
+    const limit = this.s.trimMm;
+    return {
+      toCut: list.flatMap((j, i) => (j.lengthMm >= limit && !j.trimmed ? [i] : [])),
+      toCarry: list.flatMap((j, i) => (j.lengthMm < limit && (j.trimmed || j.tieIn || j.tieOff) ? [i] : [])),
+    };
+  }
+
+  /** How many jumps "trim from the limit" and "do not trim below" would change. */
+  counts(): { toCut: number; toCarry: number } {
+    const r = this.rule(this.last?.list ?? []);
+    return { toCut: r.toCut.length, toCarry: r.toCarry.length };
+  }
+
+  /** Trims every jump from the limit on (true) or carries every shorter one (false). */
+  applyRule(cut: boolean): void {
+    const r = this.rule(this.last?.list ?? []);
+    const which = cut ? r.toCut : r.toCarry;
+    if (which.length) this.hooks.apply(which, cut);
+  }
+
+  /** The actions the selected jump offers. */
+  actions(): JumpAction[] {
+    const i = this.last?.selected;
+    const j = i !== null && i !== undefined ? this.last!.list[i] : undefined;
+    if (!j) return [];
+    return j.trimmed ? [...(tied(j) ? [] : (['tie'] as const)), 'carry'] : ['cut'];
+  }
+
+  /** Runs an action on the selected jump. */
+  act(a: JumpAction): void {
+    const i = this.last?.selected;
+    if (i === null || i === undefined || !this.actions().includes(a)) return;
+    this.hooks.apply([i], a !== 'carry');
+  }
+
   update(st: JumpState, force = false): void {
-    const key = [st.list, st.selected, st.lang, this.filter, this.s.trimMm];
+    const key = [st.list, st.selected, st.lang, this.filter, this.s.trimMm, document.body.dataset.mode];
     if (!force && key.every((k, i) => k === this.key[i])) return;
     this.key = key;
     this.last = st;
     const { list } = st;
+    const cut = list.filter((j) => j.trimmed).length;
+    const limit = this.s.trimMm;
+    const longUncut = list.filter((j) => !j.trimmed && j.lengthMm >= limit).length;
+    // The section's line: how many, how many lie loose; a dot when long ones are not trimmed.
+    this.sum?.replaceChildren(
+      ...(list.length
+        ? [
+            ...(longUncut ? [el('span', 'dot caution')] : []),
+            el('span', '', cut === list.length ? t('check.jumps.sum.all', { n: list.length }) : t('check.jumps.sum', { n: list.length, u: list.length - cut })),
+          ]
+        : []),
+    );
     if (!list.length) {
       this.root.replaceChildren(el('p', 'muted small', t('jumps.none')));
       return;
     }
-    const cut = list.filter((j) => j.trimmed).length;
-    const limit = this.s.trimMm;
-    const longUncut = list.filter((j) => !j.trimmed && j.lengthMm >= limit).length;
-    const toCut = list.flatMap((j, i) => (j.lengthMm >= limit && !j.trimmed ? [i] : []));
-    const toCarry = list.flatMap((j, i) => (j.lengthMm < limit && (j.trimmed || j.tieIn || j.tieOff) ? [i] : []));
+    const { toCut, toCarry } = this.rule(list);
 
+    // Summary and stepper on one line.
+    const shown = this.visible(list);
+    const at = st.selected !== null ? shown.indexOf(st.selected) : -1;
     const head = el('div', 'jumps-head');
     const nav = el('div', 'f-nav');
     const prev = el('button', 'icon', '‹');
-    prev.title = t('jumps.prev');
-    prev.addEventListener('click', () => this.hooks.step(-1));
     const next = el('button', 'icon', '›');
-    next.title = t('jumps.next');
+    prev.type = next.type = 'button';
+    prev.title = titleOf('jumps.prev', 'jumps.prev');
+    next.title = titleOf('jumps.next', 'jumps.next');
+    prev.setAttribute('aria-label', prev.title);
+    next.setAttribute('aria-label', next.title);
+    prev.disabled = next.disabled = !shown.length;
+    prev.addEventListener('click', () => this.hooks.step(-1));
     next.addEventListener('click', () => this.hooks.step(1));
-    nav.append(prev, next);
+    nav.append(prev, el('span', 'pos', at < 0 ? String(shown.length) : t('findings.pos', { i: at + 1, n: shown.length })), next);
     head.append(el('p', 'jumps-summary', t('jumps.summary', { n: list.length, cut })), nav);
     const out: HTMLElement[] = [head];
     if (longUncut) out.push(el('p', 'jumps-warn', t('jumps.longUncut', { n: longUncut, v: formatNumber(limit, 1) })));
 
-    // The rule: one length, two directions. Folded away unless asked for or needed.
-    const rule = el('details', 'jumps-rule section');
-    rule.open = (this.s.sections.jumpRule ?? false) || longUncut > 0;
-    rule.addEventListener('toggle', () => {
-      this.s.sections = { ...this.s.sections, jumpRule: rule.open };
-      this.hooks.limitChanged();
-    });
-    rule.append(el('summary', '', t('jumps.rule')));
-    const lab = el('label', 'field row-inline');
-    lab.append(el('span', 'label', t('jumps.limit')));
+    // The rule: one length, two directions, all on one line.
+    const rule = el('div', 'jumps-rule');
+    rule.title = t('jumps.rule');
+    const lab = el('label', 'jumps-limit');
+    lab.title = t('jumps.limit');
     const input = Object.assign(el('input'), { type: 'number', min: '0.5', max: '50', step: '0.5', value: String(limit) });
+    input.setAttribute('aria-label', t('jumps.limit'));
     input.addEventListener('change', () => {
       const v = Number(input.value);
       if (v > 0) {
@@ -100,22 +176,22 @@ export class JumpsPanel {
         if (this.last) this.update(this.last, true);
       }
     });
-    lab.append(input, el('span', 'label', 'mm'));
-    const btns = el('div', 'buttons');
+    lab.append(el('span', '', t('check.jumps.from')), input, el('span', 'unit', 'mm'));
     const cutBtn = el('button', '', t('jumps.cutFrom', { n: toCut.length }));
+    cutBtn.type = 'button';
     cutBtn.title = t('jumps.cutFrom.hint');
     cutBtn.disabled = !toCut.length;
-    cutBtn.addEventListener('click', () => this.hooks.apply(toCut, true));
+    cutBtn.addEventListener('click', () => this.applyRule(true));
     const carryBtn = el('button', '', t('jumps.carryBelow', { n: toCarry.length }));
+    carryBtn.type = 'button';
     carryBtn.title = t('jumps.carryBelow.hint');
     carryBtn.disabled = !toCarry.length;
-    carryBtn.addEventListener('click', () => this.hooks.apply(toCarry, false));
-    btns.append(cutBtn, carryBtn);
-    rule.append(lab, btns);
+    carryBtn.addEventListener('click', () => this.applyRule(false));
+    // Only what would change something is offered.
+    rule.append(lab, ...(toCut.length ? [cutBtn] : []), ...(toCarry.length ? [carryBtn] : []));
     out.push(rule);
 
-    // Filter chips and stepper.
-    const bar = el('div', 'findings-bar');
+    // Filter chips.
     const chips = el('div', 'f-chips');
     chips.setAttribute('role', 'radiogroup');
     const counts: Record<JumpFilter, number> = { all: list.length, uncut: list.length - cut, cut };
@@ -124,6 +200,7 @@ export class JumpsPanel {
       b.type = 'button';
       b.setAttribute('role', 'radio');
       b.setAttribute('aria-checked', String(this.filter === f));
+      if (!counts[f] && f !== this.filter && f !== 'all') return;
       b.append(t(`jumps.filter.${f}` as Key), el('span', 'n', String(counts[f])));
       b.addEventListener('click', () => {
         this.filter = f;
@@ -131,48 +208,53 @@ export class JumpsPanel {
       });
       chips.append(b);
     });
-    bar.append(chips);
-    out.push(bar);
+    out.push(chips);
 
-    const shown = this.visible(list);
     const ul = el('ul', 'jump-list');
+    ul.title = t('jumps.hint');
     ul.addEventListener('mouseleave', () => this.hooks.hover(null));
     if (!shown.length) ul.append(el('li', 'muted small', t('jumps.empty')));
     for (const i of shown) ul.append(this.item(list[i], i, st.selected === i));
-    out.push(ul, el('p', 'muted small', t('jumps.hint')));
+    out.push(ul);
+    // Keep the list where it was scrolled; the selected one comes into view.
+    const scroll = this.root.querySelector('.jump-list')?.scrollTop ?? 0;
     this.root.replaceChildren(...out);
+    ul.scrollTop = scroll;
     ul.querySelector('.selected')?.scrollIntoView({ block: 'nearest' });
   }
 
   private item(j: Transition, i: number, selected: boolean): HTMLLIElement {
     const li = el('li', `jump ${j.trimmed ? 'cut' : 'carried'}${selected ? ' selected' : ''}`);
+    const states = [t(j.trimmed ? 'jumps.state.cut' : 'jumps.state.carried')];
+    if (j.trimmed) states.push(t(tied(j) ? 'jumps.state.tied' : 'jumps.state.untied'));
     const top = el('div', 'j-top');
     top.append(
       el('span', 'j-icon', j.trimmed ? '✂' : '⤳'),
       el('span', 'j-name', t('jumps.item', { n: i + 1 })),
+      el('span', 'j-meta', t('jumps.color', { n: j.block + 1 })),
       el('span', 'num', `${formatNumber(j.lengthMm, 1)} mm`),
     );
-    const states = [t(j.trimmed ? 'jumps.state.cut' : 'jumps.state.carried')];
-    if (j.trimmed) states.push(t(tied(j) ? 'jumps.state.tied' : 'jumps.state.untied'));
-    const meta = el('div', 'meta', `${t('jumps.color', { n: j.block + 1 })} · ${states.join(', ')}`);
-    li.append(top, meta);
+    li.title = states.join(', ');
+    li.append(top);
     li.addEventListener('click', () => this.hooks.select(selected ? null : i));
     li.addEventListener('mouseenter', () => this.hooks.hover(i));
     if (selected) {
-      const acts = el('div', 'buttons j-actions');
-      const add = (k: Key, cut: boolean, primary = false) => {
+      const acts = el('div', 'j-actions');
+      acts.append(el('span', 'meta', states.join(', ')));
+      const add = (k: Key, cmd: string, cut: boolean, primary = false) => {
         const b = el('button', primary ? 'primary' : '', t(k));
         b.type = 'button';
+        b.title = titleOf(cmd, k);
         b.addEventListener('click', (e) => {
           e.stopPropagation();
           this.hooks.apply([i], cut);
         });
         acts.append(b);
       };
-      if (!j.trimmed) add('jumps.cut', true, true);
+      if (!j.trimmed) add('jumps.cut', 'jumps.cut', true, true);
       else {
-        if (!tied(j)) add('jumps.tie', true, true);
-        add('jumps.carry', false);
+        if (!tied(j)) add('jumps.tie', 'jumps.tie', true, true);
+        add('jumps.carry', 'jumps.carry', false);
       }
       li.append(acts);
     }
