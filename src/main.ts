@@ -746,7 +746,7 @@ function objectInfo(p: Pattern, q: Sequence) {
 
 /** The one selected fill can blend into a second thread when it knows its area and is not a line. */
 function blendOf(p: Pattern, q: Sequence, selected: number[]): { blend?: ThreadColor } {
-  if (selected.length !== 1 || editor.active || shapeTool.active) return {};
+  if (selected.length !== 1 || editor.active) return {};
   const o = q.objects[selected[0]];
   const known = o && remembered(p, o);
   return known?.fill && known.region && !known.asLine && !known.blendOf && !isOpenPattern(known.fill.pattern) ? { blend: o.color } : {};

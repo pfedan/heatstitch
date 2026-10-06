@@ -10,6 +10,7 @@ import { COLOR_CHANGE, END, STITCH, type Pattern, type ThreadColor } from '../sr
 import { sameColor } from '../src/model/recolor';
 import { transformSewObject } from '../src/model/reshape';
 import { backToVersion, forgetAll, keepVersion, remember, remembered, rememberedIn, restitch, restoreRemembered, DECO_PATTERNS, OPEN_PATTERNS, type FillSettings, type StoredObject } from '../src/model/restitch';
+import { reorder } from '../src/model/order';
 import { stitchKinds } from '../src/model/sequence';
 import { deleteObjects, duplicateObject, mirrorMatrix, recolorObjects, subtractTop } from '../src/model/shapeOps';
 import { stitchesBefore } from '../src/model/transform';
@@ -266,7 +267,7 @@ const OPS: Op[] = [
       const fill = remembered(d.cur.p, o)!.fill!;
       const old = fill.border?.link;
       if (old && r() < 0.4) return restitchFill(d, o.index, { ...fill, border: undefined }, new Set([old]));
-      const border = { type: pick(r, ['run', 'satin'] as const), width: 2, length: 2.5, tolerance: 0.15, color: pick(r, COLORS), link: old ?? `l${Math.floor(r() * 1e9).toString(36)}` };
+      const border = { type: pick(r, ['run', 'satin'] as const), width: 2, length: 2.5, tolerance: 0.15, color: r() < 0.4 ? undefined : pick(r, COLORS), link: old ?? `l${Math.floor(r() * 1e9).toString(36)}` };
       return restitchFill(d, o.index, { ...fill, border }, new Set());
     },
   },
@@ -298,6 +299,20 @@ const OPS: Op[] = [
       if (!fills.length) return false;
       const o = pick(r, fills).index;
       return shapes(d, blendObject(d.cur.p, o, pick(r, COLORS), T));
+    },
+  },
+  {
+    name: 'sew later',
+    run: (d, r) => {
+      // As the panel's Sew later: an object swaps places with the next one (a border too).
+      if (d.objects.length < 2) return false;
+      const o = Math.floor(r() * (d.objects.length - 1));
+      const order = d.objects.map((x) => x.index);
+      [order[o], order[o + 1]] = [order[o + 1], order[o]];
+      const next = reorder(d.cur.p, d.objects, order, T, []);
+      if (next === d.cur.p) return false;
+      d.commit(next);
+      return true;
     },
   },
   {
@@ -359,7 +374,7 @@ function checkAllKnown(p: Pattern): void {
   expect(unknown, 'objects that forgot what they are').toEqual([]);
 }
 
-/** Each fill's border in its own thread is one object of that thread, and every border has its fill. */
+/** Each fill's border is one object, in its own thread or the fill's, and every border has its fill. */
 function checkBorders(p: Pattern): void {
   const objs = sewObjects(p);
   const mem = objs.map((o) => remembered(p, o));
@@ -367,7 +382,7 @@ function checkBorders(p: Pattern): void {
   const fills = new Map<string, number>();
   mem.forEach((m, k) => {
     const b = m?.fill?.border;
-    if (!b?.color || !b.link) return;
+    if (!b?.link) return;
     if (fills.has(b.link)) problems.push(`fills ${fills.get(b.link)} and ${k} share border link ${b.link}`);
     fills.set(b.link, k);
   });
@@ -378,7 +393,7 @@ function checkBorders(p: Pattern): void {
     borders.set(m.outline, k);
     const f = fills.get(m.outline);
     if (f === undefined) problems.push(`border ${k} has no fill`);
-    else if (!sameColor(objs[k].color, mem[f]!.fill!.border!.color)) problems.push(`border ${k} not in its thread`);
+    else if (!sameColor(objs[k].color, mem[f]!.fill!.border!.color ?? objs[f].color)) problems.push(`border ${k} not in its thread`);
   });
   for (const [link, k] of fills) if (!borders.has(link)) problems.push(`fill ${k} lost its border`);
   expect(problems.join('; '), 'border links').toBe('');

@@ -1,6 +1,5 @@
 import { SATIN_MAX, satinForArea, type KeptShape } from '../digitize/digitize';
-import { borderStitches, type PathStitch } from './along';
-import { wholeOf } from './knockout';
+import type { PathStitch } from './along';
 import { lineStitches, runAsLine } from './line';
 import { chooseAngle, fillRegion, type FillParams } from '../digitize/fill';
 import { contourFill, fieldFill, guideField, stitchField } from '../digitize/flow';
@@ -1513,13 +1512,8 @@ function newFill(p: Pattern, o: SewObject, a: Analysis, s: FillSettings, reverse
     if (run.length > 1) under += take;
   }
   const runs = res.runs.filter((run) => run.length > 1);
+  // The border is an object of its own, sewn after the fill (see syncBorders).
   const border = runs.reduce((n, run) => n + run.length, 0);
-  // The border goes on the edge of the shape itself (not the grown or shrunk one), starting near
-  // where the fill ends.
-  if (s.border && !s.border.color && runs.length) {
-    const end = runs[runs.length - 1];
-    runs.push(...borderStitches(a.fill, s.border, end[end.length - 1], wholeOf(a.fill, remembered(p, o))));
-  }
   return { runs, under, border };
 }
 
@@ -2091,12 +2085,7 @@ export function restitch(
     // A new area (its shape changed): the old stitches are told apart by the old one, the fill is made in the new one.
     const newArea = areas?.get(o.index);
     if (newArea && an.fill) an = { ...an, fill: newArea };
-    const asked = typeof settingsFor === 'function' ? settingsFor(o, an, known) : settingsFor;
-    // A blending fill's border goes after its second thread, so it is an object of its own even
-    // in the fill's thread (sewn into the fill, the second thread would lie over it).
-    const bd = asked?.kind === 'fill' && asked.s.deco?.blend ? asked.s.border : undefined;
-    const given: Settings | null | undefined =
-      asked?.kind === 'fill' && bd && !bd.color ? { kind: 'fill', s: { ...asked.s, border: { ...bd, color: { ...o.color }, link: bd.link ?? Math.random().toString(36).slice(2, 10) } } } : asked;
+    const given = typeof settingsFor === 'function' ? settingsFor(o, an, known) : settingsFor;
     if (!given) continue;
     // A fill along a line: its area is always made from the line, never kept or traced.
     const byLine = !newArea && known?.asLine && given.kind === 'fill' ? lineFillArea(known.asLine, given.s) : null;
