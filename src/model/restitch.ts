@@ -1218,7 +1218,38 @@ const MARGIN = 4;
  * the row ends; then opened by `open`, which removes lines narrower than 2 * open (travel, outlines).
  * Without `close` the lines just stay `reach` thick (where the thread went).
  */
+/**
+ * Regions traced lately, by the segments they were traced from: the correction tries many variants
+ * of one design, and each try reads the same unchanged objects again. A copy is handed out, so a
+ * caller that sets its own fields leaves the kept one as it was.
+ */
+const traced = new Map<string, Region | null>();
+const TRACED_SIZE = 96;
+
 export function traceRegion(p: Pattern, segs: number[], reach: number, open = 0, close = true): Region | null {
+  // Two independent hashes over the segment ends: a wrong hit would need both to collide.
+  let h1 = 0x811c9dc5;
+  let h2 = 0x1234567;
+  for (const i of segs) {
+    for (const v of [p.x[i - 1], p.y[i - 1], p.x[i], p.y[i]]) {
+      h1 = Math.imul(h1 ^ v, 0x01000193);
+      h2 = Math.imul(h2 + v, 0x5bd1e995) ^ (h2 >>> 15);
+    }
+  }
+  const key = `${segs.length}:${h1 >>> 0}:${h2 >>> 0}:${reach}:${open}:${+close}`;
+  if (traced.has(key)) {
+    const r = traced.get(key)!;
+    traced.delete(key);
+    traced.set(key, r);
+    return r && { ...r };
+  }
+  const r = traceRegionNow(p, segs, reach, open, close);
+  traced.set(key, r);
+  if (traced.size > TRACED_SIZE) traced.delete(traced.keys().next().value!);
+  return r && { ...r };
+}
+
+function traceRegionNow(p: Pattern, segs: number[], reach: number, open: number, close: boolean): Region | null {
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;

@@ -29,7 +29,7 @@ const SPACING_FULL = 0.15;
 
 /** Whether fill `index` has a border in a thread of its own. */
 function hasBorder(p: Pattern, index: number): boolean {
-  const objs = sewObjects(p);
+  const objs = objectsOf(p);
   const link = remembered(p, objs[index])?.fill?.border?.link;
   return !!link && objs.some((x) => remembered(p, x)?.outline === link);
 }
@@ -64,6 +64,17 @@ export function unitOf(p: Pattern, objs: SewObject[], o: SewObject, kinds: Uint8
 }
 
 export const unitKey = (u: Unit): string => `${u.kind}:${u.owner}`;
+
+const objectsCache = new WeakMap<Pattern, SewObject[]>();
+/**
+ * The objects of `p`, worked out once per design version: the engine asks for them again and again
+ * while trying variants. Designs are not changed in place, so a version keeps its objects.
+ */
+export function objectsOf(p: Pattern): SewObject[] {
+  let o = objectsCache.get(p);
+  if (!o) objectsCache.set(p, (o = sewObjects(p)));
+  return o;
+}
 
 /** A key for a design's records (fixes are worked out for one exact design). */
 export function designKey(p: Pattern): string {
@@ -121,11 +132,11 @@ export function withChanges<T extends object>(s: T, changes: Fixed[]): T {
  * did not work or the objects came out different in number.
  */
 export function sewUnit(p: Pattern, u: Unit, changes: Fixed[], knockout: boolean, trimMm: number, force = false): Pattern | null {
-  const n = sewObjects(p).length;
+  const n = objectsOf(p).length;
   let next: Pattern | null;
   if (u.kind === 'lettering') {
     const l = withChanges({ lettering: u.lettering }, changes).lettering;
-    const objs = sewObjects(p);
+    const objs = objectsOf(p);
     const sewn = sewLettering(u.font, l, trimMm);
     next = placeLettering(p, u.objects.map((i) => objs[i]), sewn, l)?.pattern ?? null;
   } else {
@@ -134,7 +145,7 @@ export function sewUnit(p: Pattern, u: Unit, changes: Fixed[], knockout: boolean
     // The border follows the fill's shape and its own settings: sewn anew only when those change.
     if (next && (u.kind === 'border' || (knockout && hasBorder(p, u.owner)))) next = syncBorders(next, trimMm);
   }
-  return next && sewObjects(next).length === n ? next : null;
+  return next && objectsOf(next).length === n ? next : null;
 }
 
 /**

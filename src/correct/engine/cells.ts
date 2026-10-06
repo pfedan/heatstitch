@@ -122,7 +122,7 @@ export function cellDiff(before: ValidationResult, after: ValidationResult, acks
 }
 
 /** Red from this many mm² of one connected critical spot, by fabric (decided 2026-10-06; starting values). */
-export const RED_MM2: Record<string, number> = { woven: 5, cap: 5, knit: 3, terry: 3, light: 3, leather: 5 };
+export const RED_MM2: Record<string, number> = { woven: 5, cap: 5, knit: 3, terry: 3, light: 3, leather: 3 };
 
 export type AmpelColor = 'green' | 'yellow' | 'red';
 

@@ -1,4 +1,3 @@
-import { sewObjects } from '../../model/objects';
 import type { Pattern } from '../../model/pattern';
 import { forget, remembered } from '../../model/restitch';
 import type { Acknowledgement } from '../../validation/acks';
@@ -13,6 +12,7 @@ import { shortenSatinCurves } from '../satinShort';
 import { mergeShortStitches, removeZeroLength } from '../shorts';
 import { thinSweeps } from '../thin';
 import { cellDiff, countingCells, openFor, type FixKind } from './cells';
+import { objectsOf } from './units';
 import { validateDesign } from './validate';
 
 /**
@@ -48,7 +48,7 @@ export interface FineResult {
 /** Objects of `p` the fine stage may work on: from elsewhere or changed by hand, not locked. */
 export function fineObjects(p: Pattern, skip: Set<number>): Set<number> {
   const out = new Set<number>();
-  for (const o of sewObjects(p)) {
+  for (const o of objectsOf(p)) {
     if (skip.has(o.index)) continue;
     const m = remembered(p, o);
     if (m?.lock || m?.free || m?.lettering) continue;
@@ -61,7 +61,7 @@ export function fineObjects(p: Pattern, skip: Set<number>): Set<number> {
 export function fineFix(p: Pattern, v0: ValidationResult, profile: Profile, kinds: FixKind[], opt: FineOptions): FineResult {
   const steps: string[] = [];
   if (!opt.objects.size) return { pattern: p, objects: [], steps };
-  const n0 = sewObjects(p).length;
+  const n0 = objectsOf(p).length;
   const openCount = (x: ValidationResult) => {
     const cnt = countingCells(x, opt.acks);
     let k = 0;
@@ -69,14 +69,14 @@ export function fineFix(p: Pattern, v0: ValidationResult, profile: Profile, kind
     return k;
   };
   let cur = p;
-  let v = validateDesign(cur, profile, opt.checks);
+  let v = validateDesign(cur, profile, opt.checks, false);
   let open = openCount(v);
   const changed = new Set<number>();
 
   /** Records of the objects that may change, as a mask over `q`. */
   const mask = (q: Pattern) => {
     const out = new Uint8Array(q.cmd.length);
-    for (const o of sewObjects(q)) if (opt.objects.has(o.index)) out.fill(1, o.first, o.last + 1);
+    for (const o of objectsOf(q)) if (opt.objects.has(o.index)) out.fill(1, o.first, o.last + 1);
     return out;
   };
   /** Per open cell of `x`: the share by which the stitches there should thin out. */
@@ -115,14 +115,14 @@ export function fineFix(p: Pattern, v0: ValidationResult, profile: Profile, kind
     return false;
   };
   const attempt = (name: string, q: Pattern): boolean => {
-    if (q === cur || sewObjects(q).length !== n0) return false;
-    const vq = validateDesign(q, profile, opt.checks);
+    if (q === cur || objectsOf(q).length !== n0) return false;
+    const vq = validateDesign(q, profile, opt.checks, false);
     if (cellDiff(v0, vq, opt.acks).newCritical) return false;
     const oq = openCount(vq);
     if (oq >= open) return false;
     // Which objects changed: compare their stitch counts and ends.
-    const a = sewObjects(cur);
-    const b = sewObjects(q);
+    const a = objectsOf(cur);
+    const b = objectsOf(q);
     for (const k of opt.objects) if (a[k].last - a[k].first !== b[k].last - b[k].first || a[k].threadMm !== b[k].threadMm) changed.add(k);
     cur = q;
     v = vq;
@@ -175,8 +175,8 @@ export function fineFix(p: Pattern, v0: ValidationResult, profile: Profile, kind
     if (!attempt('hiddenRows', h.pattern)) break;
   }
   // What the objects remember (read from stitches, changed by hand) goes with their new stitches.
-  const was = sewObjects(p);
-  const now = sewObjects(cur);
+  const was = objectsOf(p);
+  const now = objectsOf(cur);
   for (const k of changed) {
     const m = remembered(p, was[k]);
     if (m) forget(cur, now[k], m);

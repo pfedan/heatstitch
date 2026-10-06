@@ -2,6 +2,8 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { applyFix, designKey, fixedObjects, prepareFix, revertFix } from '../src/correct/engine/apply';
 import { assess } from '../src/correct/engine/ampel';
+import { EngineClient, type WorkerLike } from '../src/correct/engine/client';
+import { handleEngine, type EngineRequest } from '../src/correct/engine/worker';
 import { sewObjects } from '../src/model/objects';
 import { forgetAll, rememberedIn, restoreRemembered } from '../src/model/restitch';
 import { parsePattern } from '../src/parsers';
@@ -52,5 +54,36 @@ describe('correction engine', () => {
     const d = r.kinds.find((k) => k.kind === 'density')!;
     expect(d.areaMm2).toBeGreaterThan(0);
     expect(d.direct?.diff?.newCritical).toBe(0);
+  }, 300_000);
+
+  it('works the Ampel out in workers, and a newer design drops the older one', async () => {
+    forgetAll();
+    const p = load('demos/overlap.pes');
+    let spawned = 0;
+    let dropped = 0;
+    const spawn = (): WorkerLike => {
+      spawned++;
+      let alive = true;
+      const w: WorkerLike = {
+        onmessage: null,
+        postMessage: (req: EngineRequest) =>
+          void handleEngine(structuredClone(req)).then((data) => alive && w.onmessage?.({ data } as MessageEvent)),
+        terminate: () => {
+          if (alive) dropped++;
+          alive = false;
+        },
+      };
+      return w;
+    };
+    const c = new EngineClient(2, spawn);
+    const old = c.assess(p, WOVEN, { trimMm: 2 });
+    const seen: number[] = [];
+    const r = await c.assess(p, WOVEN, { trimMm: 2 }, (x) => seen.push(x.kinds.filter((k) => k.direct).length));
+    expect(await old).toBeNull();
+    expect(r?.color).toBe('red');
+    expect(r?.kinds.find((k) => k.kind === 'density')?.direct?.diff?.newCritical).toBe(0);
+    expect(seen.length).toBeGreaterThan(1);
+    expect(spawned).toBeLessThanOrEqual(2 + dropped);
+    c.dispose();
   }, 300_000);
 });

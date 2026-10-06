@@ -43,9 +43,8 @@ export interface AssessOptions extends Omit<FixOptions, 'visible' | 'hand' | 'lo
   progress?: (r: AmpelReport) => void;
 }
 
-/** Works out the Ampel and all its fixes for design `p` on `profile`. Changes nothing. */
-export async function assess(p: Pattern, profile: Profile, opt: AssessOptions): Promise<AmpelReport> {
-  const t0 = performance.now();
+/** The Ampel without its fixes: color, worst spot, kinds with their area. Fast (one validation). */
+export function ampelReport(p: Pattern, profile: Profile, opt: Pick<AssessOptions, 'checks' | 'acks'>): AmpelReport {
   const v = validateDesign(p, profile, opt.checks);
   const counting = countingCells(v, opt.acks);
   const cell = v.measurement.cellMm * v.measurement.cellMm;
@@ -60,27 +59,46 @@ export async function assess(p: Pattern, profile: Profile, opt: AssessOptions): 
     const zw = zones.reduce<Zone | null>((a, z) => (!a || z.level > a.level || (z.level === a.level && z.areaMm2 > a.areaMm2) ? z : a), null);
     kinds.push({ kind, areaMm2: n * cell, worst: zw, direct: null, rest: null });
   }
-  // Density first (it matters most), then the critical kinds, then the caution ones.
-  kinds.sort((a, b) => +(a.kind !== 'density') - +(b.kind !== 'density') || +CAUTION_KINDS.has(a.kind) - +CAUTION_KINDS.has(b.kind) || b.areaMm2 - a.areaMm2);
-  const report: AmpelReport = { color, worst, kinds, all: null, validation: v, ms: 0 };
-  const useful = (f: PlannedFix) => f.after < f.before && f.objects.length > 0;
-  const base = { ...opt, progress: undefined };
-  for (const k of kinds) {
-    if (opt.stale?.()) break;
-    const direct = await prepareFix(p, profile, k.kind, base);
-    k.direct = useful(direct) ? direct : null;
-    opt.progress?.(report);
-    if (opt.stale?.()) break;
-    const rest = await prepareFix(p, profile, k.kind, { ...base, visible: true, hand: true });
-    k.rest = useful(rest) && rest.after < direct.after ? rest : null;
-    opt.progress?.(report);
-  }
-  if (kinds.length > 1 && !opt.stale?.()) {
-    const all = await prepareFix(p, profile, 'all', base);
-    report.all = useful(all) ? all : null;
-  }
   // The Ampel lists kinds by what is open, the largest first.
   kinds.sort((a, b) => b.areaMm2 - a.areaMm2);
+  return { color, worst, kinds, all: null, validation: v, ms: 0 };
+}
+
+/**
+ * Order the fixes are worked out in: density first (it matters most), then the critical kinds,
+ * then the caution ones.
+ */
+export function planOrder(kinds: FixKind[]): FixKind[] {
+  return [...kinds].sort((a, b) => +(a !== 'density') - +(b !== 'density') || +CAUTION_KINDS.has(a) - +CAUTION_KINDS.has(b));
+}
+
+const useful = (f: PlannedFix) => f.after < f.before && f.objects.length > 0;
+
+/** The direct fix and the rest proposal of one kind (null where they clear nothing). */
+export async function kindFixes(p: Pattern, profile: Profile, kind: FixKind, opt: FixOptions): Promise<{ direct: PlannedFix | null; rest: PlannedFix | null }> {
+  const direct = await prepareFix(p, profile, kind, { ...opt, visible: false, hand: false });
+  if (opt.stale?.()) return { direct: useful(direct) ? direct : null, rest: null };
+  const rest = await prepareFix(p, profile, kind, { ...opt, visible: true, hand: true });
+  return { direct: useful(direct) ? direct : null, rest: useful(rest) && rest.after < direct.after ? rest : null };
+}
+
+/** "Alles beheben": all kinds together, directly. */
+export async function allFix(p: Pattern, profile: Profile, opt: FixOptions): Promise<PlannedFix | null> {
+  const all = await prepareFix(p, profile, 'all', { ...opt, visible: false, hand: false });
+  return useful(all) ? all : null;
+}
+
+/** Works out the Ampel and all its fixes for design `p` on `profile`, one after the other. Changes nothing. */
+export async function assess(p: Pattern, profile: Profile, opt: AssessOptions): Promise<AmpelReport> {
+  const t0 = performance.now();
+  const report = ampelReport(p, profile, opt);
+  const base = { ...opt, progress: undefined };
+  for (const kind of planOrder(report.kinds.map((k) => k.kind))) {
+    if (opt.stale?.()) break;
+    Object.assign(report.kinds.find((k) => k.kind === kind)!, await kindFixes(p, profile, kind, base));
+    opt.progress?.(report);
+  }
+  if (report.kinds.length > 1 && !opt.stale?.()) report.all = await allFix(p, profile, base);
   report.ms = performance.now() - t0;
   opt.progress?.(report);
   return report;

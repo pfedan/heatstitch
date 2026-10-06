@@ -1,6 +1,6 @@
 import { coversOver } from '../../model/covers';
 import { setKnockout, takeOver } from '../../model/knockout';
-import { sewObjects, type SewObject } from '../../model/objects';
+import { sewObjects, stitchKey, type SewObject } from '../../model/objects';
 import { STITCH, type Pattern } from '../../model/pattern';
 import {
   analyze,
@@ -98,7 +98,7 @@ export function satinWidth(p: Pattern, o: SewObject): number {
 }
 
 /** Whether the object may be sewn anew, and its settings now. */
-export function roleOf(p: Pattern, objs: SewObject[], o: SewObject, kinds: Uint8Array, allowHand = false): { role: Role; settings: Settings | null; why?: string } {
+export function roleOf(p: Pattern, _objs: SewObject[], o: SewObject, kinds: Uint8Array, allowHand = false): { role: Role; settings: Settings | null; why?: string } {
   const known = remembered(p, o);
   if (known?.lock) return { role: 'fixed', settings: null, why: 'lock' };
   if (known?.outline || known?.blendOf || known?.shadowOf || known?.echoOf) return { role: 'fixed', settings: null, why: 'derived' };
@@ -106,6 +106,21 @@ export function roleOf(p: Pattern, objs: SewObject[], o: SewObject, kinds: Uint8
   if (known?.free) return { role: 'fixed', settings: null, why: 'free' };
   if (known?.hand && !allowHand) return { role: 'fixed', settings: null, why: 'hand' };
   if (known?.read) return { role: 'fixed', settings: null, why: 'guessed' };
+  // Stitches from elsewhere are measured, which is slow; the same stitches measure the same.
+  const key = known ? null : stitchKey(p, o.first, o.last);
+  const had = key ? measured.get(key) : undefined;
+  if (had) return had;
+  const r = roleNow(p, o, kinds, known);
+  if (key) {
+    measured.set(key, r);
+    if (measured.size > 200) measured.delete(measured.keys().next().value!);
+  }
+  return r;
+}
+
+const measured = new Map<string, { role: Role; settings: Settings | null; why?: string }>();
+
+function roleNow(p: Pattern, o: SewObject, kinds: Uint8Array, known: ReturnType<typeof remembered>): { role: Role; settings: Settings | null; why?: string } {
   const s = currentSettings(p, o, kinds);
   if (!s) return { role: 'fixed', settings: null, why: 'unknown' };
   if (s.kind === 'fill') {
@@ -113,7 +128,6 @@ export function roleOf(p: Pattern, objs: SewObject[], o: SewObject, kinds: Uint8
     const an = analyze(p, o, kinds, known);
     if (shapeTrust(p, o, an, s.s.spacing) === 'approximate') return { role: 'fixed', settings: null, why: 'guessed' };
   }
-  void objs;
   return { role: 'settings', settings: s };
 }
 

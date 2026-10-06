@@ -10,7 +10,7 @@ import { ALL_CHECKS, type Checks, type ValidationResult } from '../../validation
 import { CAUTION_KINDS, cellDiff, cellKey, countingCells, openFor, type CellDiff, type FixKind } from './cells';
 import { Field, type Contribution } from './field';
 import { merged, toolSets, toolsFor, type Tool, type Variant } from './variants';
-import { borderTools, designKey, letteringTools, predictable, sewUnit, stitchesOf, unitKey, unitOf, type Unit } from './units';
+import { borderTools, designKey, letteringTools, objectsOf, predictable, sewUnit, stitchesOf, unitKey, unitOf, type Unit } from './units';
 import { fineFix, fineObjects } from './fine';
 import type { solveMip } from './mip';
 import { validateDesign } from './validate';
@@ -89,6 +89,9 @@ const SHARE = 0.15;
 /** Later thread (mm/mm²) from which an object's thread counts as covered. */
 const HIDDEN = 2.2;
 const MAX_ROUNDS = 3;
+/** Search time per group (ms), and neighbourhoods in a row without a better choice before it stops. */
+const BUDGET_MS = 800;
+const STALE = 40;
 /** Time for the caution kinds (gaps, too open, long stitches), object by object. */
 const LOWER_BUDGET_MS = 6000;
 /** Groups with at most this many combinations are searched completely. */
@@ -201,7 +204,7 @@ export async function planFix(p: Pattern, profile: Profile, kind: FixKind | 'all
     const fine = fineFix(pattern, v, profile, upper, { checks, acks: opt.acks, objects: fineObjects(pattern, new Set(objects.map((x) => x.index))) });
     opt.log?.(`fine: ${fine.steps.join(',') || 'nothing'} on ${fine.objects.join(',')} t=${Math.round(performance.now() - t0)}`);
     if (fine.objects.length) {
-      const objs = sewObjects(fine.pattern);
+      const objs = objectsOf(fine.pattern);
       pattern = fine.pattern;
       objects = [...objects, ...fine.objects.map((i) => ({ index: i, kind: objs[i].kind, tools: fine.steps.map((x) => `fine.${x}`), changes: [], knockout: false, visibility: 0, visible: false, hand: 0 }))].sort((a, b) => a.index - b.index);
     }
@@ -252,6 +255,7 @@ async function upperFix(p: Pattern, v: ValidationResult, counting: Uint8Array, p
     carriers.set(c, who);
   }
   // Candidates: the units (sets of settings) that may be changed, with their variants.
+  opt.log?.(`field and carriers t=${Math.round(performance.now() - tStart)}`);
   const want = new Set<FixKind>(kinds);
   const cands = new Map<number, Candidate>();
   const unitCand = new Map<string, Candidate>();
@@ -279,7 +283,8 @@ async function upperFix(p: Pattern, v: ValidationResult, counting: Uint8Array, p
     // Visibility: where the unit's objects lie on top.
     const hid = u.objects.reduce((a, i) => a + hidden[i] * objs[i].threadMm, 0) / Math.max(1e-6, u.objects.reduce((a, i) => a + objs[i].threadMm, 0));
     // Sewing over changes by hand shows: a proposal only.
-    const visibility = variants.map((x, k) => (!k ? 0 : x.visible || handOf(p, u) ? 1 : x.strength * (1 - hid)));
+    const hand = u.objects.some((i) => remembered(p, objs[i])?.hand);
+    const visibility = variants.map((x, k) => (!k ? 0 : x.visible || hand ? 1 : x.strength * (1 - hid)));
     const banned = new Set<number>();
     variants.forEach((_, k) => {
       if (k && !opt.visible && visibility[k] > (opt.directMax ?? DIRECT_MAX)) banned.add(k);
@@ -352,7 +357,7 @@ async function upperFix(p: Pattern, v: ValidationResult, counting: Uint8Array, p
     const mode = opt.solver ?? 'lns';
     if (mode !== 'lns' && opt.exact && combos > 1) {
       const start = g.map((c) => c.chosen);
-      const r = await opt.exact(f, g.map((c, k) => ({ contributions: c.contributions, allowed: allowed[k], chosen: c.chosen, visibility: c.visibility })), target, opt.budgetMs ?? 1500);
+      const r = await opt.exact(f, g.map((c, k) => ({ contributions: c.contributions, allowed: allowed[k], chosen: c.chosen, visibility: c.visibility })), target, opt.budgetMs ?? BUDGET_MS);
       if (r) {
         g.forEach((c, k) => choose(c, r.choice[k]));
         keep();
@@ -372,7 +377,7 @@ async function upperFix(p: Pattern, v: ValidationResult, counting: Uint8Array, p
       rec(0);
     } else {
       // Greedy from the current choice, then large neighbourhoods: a few objects at once, exactly.
-      const deadline = performance.now() + (opt.budgetMs ?? 1500);
+      const deadline = performance.now() + (opt.budgetMs ?? BUDGET_MS);
       let improved = true;
       while (improved && performance.now() < deadline) {
         improved = false;
@@ -396,7 +401,7 @@ async function upperFix(p: Pattern, v: ValidationResult, counting: Uint8Array, p
       let seed = 1;
       const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
       let stale = 0;
-      while (performance.now() < deadline && stale < 200) {
+      while (performance.now() < deadline && stale < STALE) {
         g.forEach((c, k) => choose(c, bestChoice[k]));
         // A neighbourhood: one object and those sharing open cells with it, up to five.
         const pivot = Math.floor(rnd() * g.length);
@@ -456,7 +461,7 @@ async function upperFix(p: Pattern, v: ValidationResult, counting: Uint8Array, p
     .sort((a, b) => a.o.index - b.o.index)
     .map((c) => {
       const x = c.variants[c.chosen];
-      return { index: c.o.index, kind: c.o.kind, tools: x.tools.map((t) => t.id), changes: x.changes, knockout: x.knockout, visibility: c.visibility[c.chosen], visible: x.visible || c.visibility[c.chosen] > (opt.directMax ?? DIRECT_MAX), hand: handOf(p, c.unit) };
+      return { index: c.o.index, kind: c.o.kind, tools: x.tools.map((t) => t.id), changes: x.changes, knockout: x.knockout, visibility: c.visibility[c.chosen], visible: x.visible || c.visibility[c.chosen] > (opt.directMax ?? DIRECT_MAX), hand: handOf(p, c.unit, objs) };
     });
   return { pattern, objects };
 }
@@ -497,7 +502,7 @@ function blame(p: Pattern, after: Pattern, chosen: Candidate[], diff: CellDiff, 
   if (diff.newGapSparse > 2) {
     for (let i = 0; i < va.level.length; i++) if (va.reasons[i] & (8 | 16)) keys.add(cellKey(va, i));
   }
-  const objs = sewObjects(after);
+  const objs = objectsOf(after);
   const out: Candidate[] = [];
   for (const c of chosen) {
     const os = c.unit.objects.map((i) => objs[i]).filter(Boolean);
@@ -528,11 +533,12 @@ function blame(p: Pattern, after: Pattern, chosen: Candidate[], diff: CellDiff, 
  */
 function lowerFix(p: Pattern, orig: Pattern, v0: ValidationResult, profile: Profile, checks: Checks, kinds: FixKind[], opt: FixOptions, taken: Set<number>): { pattern: Pattern; objects: ObjectFix[] } {
   let cur = p;
-  let v = validateDesign(cur, profile, checks);
+  const want = new Set<FixKind>(kinds);
+  const gaps = want.has('gap');
+  let v = validateDesign(cur, profile, checks, gaps);
   const objects: ObjectFix[] = [];
   const kindsArr = stitchKinds(cur);
   const objs = sewObjects(cur, kindsArr);
-  const want = new Set<FixKind>(kinds);
   const openIn = (x: ValidationResult, o: SewObject) => {
     const cnt = countingCells(x, opt.acks);
     const m = x.measurement;
@@ -547,29 +553,31 @@ function lowerFix(p: Pattern, orig: Pattern, v0: ValidationResult, profile: Prof
   // Most open cells first, within a time budget: each try sews and checks the whole design.
   const deadline = performance.now() + LOWER_BUDGET_MS;
   const order = objs.map((o) => ({ o, n: taken.has(o.index) ? 0 : openIn(v, o) })).filter((x) => x.n > 0).sort((a, b) => b.n - a.n);
+  let curObjs = { p: cur, kinds: kindsArr, objs };
   for (const { o: o0 } of order) {
     if (opt.stale?.() || performance.now() > deadline) break;
     if (taken.has(o0.index)) continue;
-    const o = sewObjects(cur)[o0.index];
+    if (curObjs.p !== cur) curObjs = { p: cur, kinds: stitchKinds(cur), objs: objectsOf(cur) };
+    const { kinds: ka, objs: now } = curObjs;
+    const o = now[o0.index];
     const open = openIn(v, o);
     if (!open) continue;
-    const ka = stitchKinds(cur);
-    const u = unitOf(cur, sewObjects(cur, ka), o, ka, opt.hand);
+    const u = unitOf(cur, now, o, ka, opt.hand);
     if (!('kind' in u) || u.kind === 'lettering' || taken.has(u.owner)) continue;
-    const owner = sewObjects(cur, ka)[u.owner];
-    const hand = handOf(cur, u);
+    const owner = now[u.owner];
+    const hand = handOf(cur, u, now);
     if (hand && !opt.visible) continue;
-    const all: Tool[] = u.kind === 'border' ? borderTools(u, want, profile) : toolsFor(cur, sewObjects(cur, ka), owner, u.settings, want, profile, analyze(cur, owner, ka).fill?.areaMm2 ?? 0);
+    const all: Tool[] = u.kind === 'border' ? borderTools(u, want, profile) : toolsFor(cur, now, owner, u.settings, want, profile, analyze(cur, owner, ka).fill?.areaMm2 ?? 0);
     const tools = all.filter((t) => !t.visible && t.kinds.some((k) => want.has(k)));
     for (const t of tools) {
       const vis = t.strength;
       if (vis > (opt.directMax ?? DIRECT_MAX) && !opt.visible) continue;
       const next = sewUnit(cur, u, t.changes, !!t.knockout, opt.trimMm);
       if (!next) continue;
-      const vn = validateDesign(next, profile, checks);
+      const vn = validateDesign(next, profile, checks, gaps);
       const d = cellDiff(v0, vn, opt.acks);
       if (d.newCritical) continue;
-      if (openIn(vn, sewObjects(next)[o.index]) >= open) continue;
+      if (openIn(vn, objectsOf(next)[o.index]) >= open) continue;
       cur = next;
       v = vn;
       taken.add(u.owner);
@@ -607,7 +615,7 @@ function coveredAfter(f: Field, base: Contribution[], index: number): (sx: numbe
 
 /** Whether object `index` was sewn here (its settings are remembered, not measured from stitches). */
 function sewnHere(p: Pattern, index: number): boolean {
-  const m = remembered(p, sewObjects(p)[index]);
+  const m = remembered(p, objectsOf(p)[index]);
   return !!(m?.fill || m?.satin || m?.path);
 }
 
@@ -696,8 +704,7 @@ function sewnOnce(key: string, make: () => Sewn | null): Sewn | null {
 }
 
 /** Changes by hand on the objects of unit `u`. */
-function handOf(p: Pattern, u: Unit): number {
-  const objs = sewObjects(p);
+function handOf(p: Pattern, u: Unit, objs = objectsOf(p)): number {
   return u.objects.reduce((a, i) => a + (remembered(p, objs[i])?.hand ?? 0), 0);
 }
 
