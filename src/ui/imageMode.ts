@@ -708,7 +708,7 @@ export class ImageMode {
   }
 
   private options(): DigitizeOptions {
-    return { ...digitizeDefaults(this.h.settings.profile), ...this.h.settings.image.stitch };
+    return { ...digitizeDefaults(this.h.settings.profile), trimMm: this.h.settings.trimMm, ...this.h.settings.image.stitch };
   }
 
   /**

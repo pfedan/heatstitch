@@ -328,7 +328,9 @@ export function bindStitches(app: StitchesApp) {
     if (to === 'satin') {
       const f = info.measured.fill;
       if (!f) return null;
-      return { kind: 'satin', s: { spacing: f.spacing, edge: digitizeDefaults(app.settings.profile).pull, short: true, underlay: f.underlay, tolerance: f.tolerance } };
+      // Compensation by the fabric as a satin gets it (half fixed, half by width), not a fill's whole.
+      const pull = pullFor(app.settings.profile, 'satin');
+      return { kind: 'satin', s: { spacing: f.spacing, edge: pull.edge, edgeShare: pull.edgeShare, edgeAuto: true, short: true, underlay: f.underlay, tolerance: f.tolerance } };
     }
     const s = info.measured.satin;
     if (!s) return null;
