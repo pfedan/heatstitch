@@ -1979,49 +1979,60 @@ function chainRun(cols: Rails[], s: SatinSettings, sew: (ps: [Pt, Pt][]) => Pt[]
   const kind = s.under ?? 'auto';
   const columns = cols.map((r) => columnOf(sectionsOf(r)[0]));
   const outlines = cols.map((r) => [...r.left, ...r.right.slice().reverse(), r.left[0]]);
-  const within = (q: Pt) => outlines.some((o) => inside(o, q));
   const out: Pt[] = [];
-  // Straight on where that stays inside the columns, else along the middle of the nearest one.
-  const travel = (to: Pt) => {
+  // The way to column k: hidden under the columns still to be sewn (k and after) as far as can be,
+  // straight on or along the middle of one of them; else as short in sight as it gets (a trim
+  // with a cut line avoids it).
+  const travel = (to: Pt, k: number) => {
     const from = out[out.length - 1];
     if (!from) return;
-    const n = Math.ceil(dist(from, to) / 0.25);
+    // How much a point of the way shows: not under a column still to be sewn, worse off the columns.
+    const shows = (q: Pt) => (outlines.some((o, j) => j >= k && inside(o, q)) ? 0 : outlines.some((o) => inside(o, q)) ? 1 : 3);
+    // How much of the way shows, then how long it is.
+    const cost = (way: Pt[]) => {
+      let seen = 0;
+      let all = 0;
+      for (let i = 1; i < way.length; i++) {
+        const d = dist(way[i - 1], way[i]);
+        const n = Math.max(1, Math.ceil(d / 0.25));
+        for (let j = 0; j < n; j++) seen += (shows(lerp(way[i - 1], way[i], (j + 0.5) / n)) * d) / n;
+        all += d;
+      }
+      return seen * 1000 + all;
+    };
     let way: Pt[] = [from, to];
-    if (Array.from({ length: n - 1 }, (_, j) => lerp(from, to, (j + 1) / n)).some((q) => !within(q))) {
-      let best: { c: number; a: number; b: number; d: number } | null = null;
-      columns.forEach((c, k) => {
+    let best = cost(way);
+    // Seen less than a little: straight on.
+    if (best >= 0.3 * 1000) {
+      for (const c of columns) {
         const cum = cumulative(c.center);
-        const a = project(c.center, cum, from);
-        const b = project(c.center, cum, to);
-        if (!best || a.d + b.d < best.d) best = { c: k, a: a.s, b: b.s, d: a.d + b.d };
-      });
-      if (best) {
-        const { c, a, b } = best as { c: number; a: number; b: number };
-        const ctr = columns[c].center;
-        const cum = cumulative(ctr);
-        const mid = subRail(ctr, cum, Math.min(a, b), Math.max(a, b));
-        way = [from, ...(a <= b ? mid : mid.reverse()), to];
+        const a = project(c.center, cum, from).s;
+        const b = project(c.center, cum, to).s;
+        const mid = subRail(c.center, cum, Math.min(a, b), Math.max(a, b));
+        const along = [from, ...(a <= b ? mid : mid.reverse()), to];
+        const v = cost(along);
+        if (v < best) [way, best] = [along, v];
       }
     }
     // As a running stitch along the way: the middle of a column has a point every few tenths, a
     // stitch to each would pile up needle holes.
     out.push(...runStitch(way, TRAVEL_STEP, s.tolerance).slice(1));
   };
-  const add = (pts: Pt[]) => {
+  const add = (pts: Pt[], k: number) => {
     if (!pts.length) return;
-    travel(pts[0]);
+    travel(pts[0], k);
     out.push(...pts);
   };
   cols.forEach((r, k) => {
     const secs = sectionsOf(r);
-    if (secs.length > 1) return add(sectionRun(secs, s, sew, along));
+    if (secs.length > 1) return add(sectionRun(secs, s, sew, along), k);
     const col = columns[k];
     const rev = reversedColumn(col);
     const satinBack = () => sided(r, sew)(pairs(rev, along(rev, reversedRails(secs[0]), back)));
     const under = s.underlay ? underlayOf(col, kind, s.tolerance, underInset(s)) : null;
-    if (under?.atEnd) return add([...under.pts, ...satinBack()]);
+    if (under?.atEnd) return add([...under.pts, ...satinBack()], k);
     const underBack = s.underlay ? underlayOf(rev, kind, s.tolerance, underInset(s)).pts : [];
-    add([...runStitch(col.center, TRAVEL_STEP, s.tolerance), ...underBack, ...satinBack()]);
+    add([...runStitch(col.center, TRAVEL_STEP, s.tolerance), ...underBack, ...satinBack()], k);
   });
   return out;
 }

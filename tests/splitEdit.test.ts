@@ -188,6 +188,28 @@ describe('the way between the parts of a chain', () => {
     expect(tiny).toBeLessThan(10);
   });
 
+  it('goes under the parts still to be sewn, not across the fabric, however they are turned and mirrored', () => {
+    const U = poly([0, 0], [14, 0], [14, 16], [10, 16], [10, 4], [4, 4], [4, 16], [0, 16], [0, 0]);
+    const made = stripsOfOutline(U, [[[-1, 10], [5, 10]], [[9, 10], [15, 10]], [[7, -1], [7, 5]]], [[[-1, 4], [5, 4]], [[9, 4], [15, 4]]]);
+    const inU = (q: Pt) => {
+      let c = false;
+      for (let i = 0, j = U.length - 1; i < U.length; j = i++) if (U[i][1] > q[1] !== U[j][1] > q[1] && q[0] < ((U[j][0] - U[i][0]) * (q[1] - U[i][1])) / (U[j][1] - U[i][1]) + U[i][0]) c = !c;
+      return c;
+    };
+    const n = made.strips.length;
+    for (let m = 0; m < 1 << (2 * n); m++) {
+      const cols = made.strips.map((r, k) => ({ ...((m >> k) & 1 ? reversedRails(r) : r), chain: 0, mirror: !!((m >> (n + k)) & 1) }));
+      const run = satinRuns(cols, { spacing: 0.4, edge: 0, short: false, underlay: false, tolerance: 0.15 })[0];
+      // Stitch length off the U (a way across the gap between its legs was up to 6 mm).
+      let off = 0;
+      for (let i = 1; i < run.length; i++) {
+        const [a, b] = [run[i - 1], run[i]];
+        for (let j = 0; j < 4; j++) if (!inU([a[0] + ((b[0] - a[0]) * (j + 0.5)) / 4, a[1] + ((b[1] - a[1]) * (j + 0.5)) / 4])) off += Math.hypot(b[0] - a[0], b[1] - a[1]) / 4;
+      }
+      expect(off).toBeLessThan(0.5);
+    }
+  });
+
   it('stays so with parts turned round and mirrored', () => {
     const U = poly([0, 0], [14, 0], [14, 16], [10, 16], [10, 4], [4, 4], [4, 16], [0, 16], [0, 0]);
     const made = stripsOfOutline(U, [[[-1, 10], [5, 10]], [[9, 10], [15, 10]], [[7, -1], [7, 5]]], [[[-1, 4], [5, 4]], [[9, 4], [15, 4]]]);
