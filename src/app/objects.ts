@@ -38,6 +38,7 @@ export interface ObjectsApp {
   readonly editor: Editor;
   readonly enterShape: (o: number, fit: boolean) => void;
   readonly files: FileList;
+  readonly followKnockouts: () => void;
   readonly frameObjects: () => number[];
   readonly history: (step: 'undo' | 'redo' | 'revert') => void;
   readonly letteringsOf: (p: Pattern, q: Sequence) => (Lettering | undefined)[];
@@ -196,7 +197,7 @@ export function bindObjects(app: ObjectsApp) {
     const target = into === null ? undefined : q.blocks[into];
     const recolored = target ? moved.filter((o) => !sameColor(q.objects[o].color, target.color)) : [];
     const starts: number[] = [];
-    const next = reorder(p, q.objects, order, app.settings.trimMm, starts, { into: new Map(recolored.map((o) => [o, into!])) });
+    const next = reorder(p, q.objects, order, app.settings.trimMm, starts, { into: new Map(recolored.map((o) => [o, into!])), whole: true });
     if (next === p) return;
     // A border or a blend's second thread moved into another color keeps it from now on.
     if (recolored.length) {
@@ -215,6 +216,8 @@ export function bindObjects(app: ObjectsApp) {
     ui.selectedObjects = new Set(moved.map(now).filter((o) => o >= 0));
     ui.selectionKey++;
     layers.reveal([...ui.selectedObjects]);
+    // What leaves out the shapes on top follows the new order (same undo step).
+    app.followKnockouts();
     const undo = t('object.undo');
     if (target && recolored.length) {
       const own = q.objects[recolored[0]];

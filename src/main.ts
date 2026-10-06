@@ -309,6 +309,9 @@ const { layers, mergeBlocked, objectName, objectPanel, selectObjects } = bindObj
   get takeShapes() {
     return takeShapes;
   },
+  get followKnockouts() {
+    return followKnockouts;
+  },
   get updateLevel() {
     return updateLevel;
   },

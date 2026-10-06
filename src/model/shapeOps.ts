@@ -214,14 +214,15 @@ export function recolorObjects(p: Pattern, which: number[], color: ThreadColor, 
   const rest = sel.filter((o) => fillOf(o) < 0);
   let next = rest.length ? recolorStitches(p, objs, rest, color, trimMm) : p;
   if (!next) return null;
-  if (!borders.length) return next;
+  // A border in its fill's thread goes along into the new one.
+  if (!borders.length) return syncBorders(next, trimMm);
   const cur = next;
   for (const o of borders) {
     const f = fillOf(o);
     const m = mem[f]!;
     const at = sewObjects(cur).find((x) => objectKey(cur, x) === objectKey(p, objs[f]));
     if (at && mem[o]!.blendOf) remember(cur, at, { ...m, fill: { ...m.fill!, deco: { ...m.fill!.deco, blend: { ...m.fill!.deco!.blend!, color: { ...color } } } } });
-    else if (at) remember(cur, at, { ...m, fill: { ...m.fill!, border: { ...m.fill!.border!, color: { ...color } } } });
+    else if (at) remember(cur, at, { ...m, fill: { ...m.fill!, border: { ...m.fill!.border!, color: sameColor(at.color, color) ? undefined : { ...color } } } });
   }
   next = syncBorders(cur, trimMm);
   return next === p ? null : next;
