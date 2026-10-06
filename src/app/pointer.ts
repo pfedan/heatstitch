@@ -327,16 +327,19 @@ export function bindPointer(app: PointerApp) {
         const q = app.seq(p);
         const st = app.styleFor(p);
         const jumps = shownMarks(app.settings).jumps;
-        const k = transitionAt(p, q.transitions, app.vp, pos[0], pos[1], 8, (t) => transitionShown(p, t, jumps, st));
+        // A finger is wide: within its reach an object wins over a dashed jump line across it, and
+        // both are found a little further away than under the mouse.
+        const touch = e.pointerType === 'touch';
+        const [x, y] = app.vp.toWorld(pos[0], pos[1]);
+        const i = stitchAt(p, x * 10, y * 10, Math.max(3, (touch ? 140 : 60) / app.vp.scale), st.limit, st.alpha);
+        const o = i >= 0 ? q.objectAt[i] : -1;
+        const k = touch && o >= 0 ? -1 : transitionAt(p, q.transitions, app.vp, pos[0], pos[1], touch ? 12 : 8, (t) => transitionShown(p, t, jumps, st));
         if (k >= 0 || ui.selectedJump !== null) {
           ui.selectedJump = k >= 0 ? k : null;
           app.redraw();
         }
         if (k < 0) {
           // A click on stitches selects their object, a click beside them clears the selection.
-          const [x, y] = app.vp.toWorld(pos[0], pos[1]);
-          const i = stitchAt(p, x * 10, y * 10, Math.max(3, 60 / app.vp.scale), st.limit, st.alpha);
-          const o = i >= 0 ? q.objectAt[i] : -1;
           const add = e.shiftKey || e.ctrlKey || e.metaKey;
           if (o >= 0) app.selectObjects([o], add);
           else if (!add && ui.selectedObjects.size) app.selectObjects([], false);

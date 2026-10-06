@@ -781,12 +781,12 @@ function objectInfo(p: Pattern, q: Sequence) {
   };
 }
 
-/** The one selected fill can blend into a second thread when it knows its area and is not a line. */
+/** The one selected fill can blend into a second thread when it knows its area and is not a line (an empty fill shows as one). */
 function blendOf(p: Pattern, q: Sequence, selected: number[]): { blend?: ThreadColor } {
   if (selected.length !== 1 || editor.active) return {};
   const o = q.objects[selected[0]];
   const known = o && remembered(p, o);
-  return known?.fill && known.region && !known.asLine && !known.blendOf && !isOpenPattern(known.fill.pattern) ? { blend: o.color } : {};
+  return known?.fill && known.region && !known.asLine && !known.blendOf && known.fill.pattern !== 'none' && !isOpenPattern(known.fill.pattern) ? { blend: o.color } : {};
 }
 
 // Rendering ------------------------------------------------------------------
@@ -1149,6 +1149,13 @@ function updateLevel(): void {
   const flow = settings.mode === 'flow';
   refreshShapes();
   const mode = settings.mode;
+  // Fingers have no wheel, Shift or keys: on a touch screen the hint says the gestures, and only
+  // where no bar over the stage says what to do already.
+  if (matchMedia('(pointer: coarse)').matches) {
+    const base = !drawTool.kind && !on && !shaping && !ui.formLevel && !ui.lettering;
+    $('canvas-hint').textContent = mode === 'image' ? t('responsive.hint.view') : !base ? '' : flow ? t('responsive.hint.flow') : t('responsive.hint.check');
+    return;
+  }
   $('canvas-hint').textContent = t(
     mode === 'image'
       ? 'canvas.hint.image'

@@ -422,6 +422,11 @@ export class StitchPanel {
     this.changed(true);
   }
 
+  /** The fill pattern the panel shows now (the tile picked, also before it is measured back). */
+  get fillPattern(): string | null {
+    return this.current && this.kind === 'fill' ? (this.draft.fill?.pattern ?? null) : null;
+  }
+
   /** A new random variant of the pattern (grain, swirls, meander, maze), when it has one. */
   canReroll(): boolean {
     const s = this.current && !this.current.path && this.kind === 'fill' ? this.draft.fill : null;
@@ -612,9 +617,10 @@ export class StitchPanel {
     const o = info.outline!;
     const of = o.of!;
     const which = o.echo ? 'stitch.echoOf' : o.shadow ? 'stitch.shadowOf' : 'stitch.outline';
-    const head = h('p', { class: 'stitch-chip outline-head', title: t(o.echo ? 'stitches.echoOf.of' : o.shadow ? 'stitches.shadowOf.of' : 'stitches.outline.of'), tabindex: 0 });
+    // One line with its two buttons: the chip names it short, its hint says it in full.
+    const head = h('p', { class: 'stitch-chip outline-head', title: `${t(`${which}.title` as Key)}. ${t(o.echo ? 'stitches.echoOf.of' : o.shadow ? 'stitches.shadowOf.of' : 'stitches.outline.of')}`, tabindex: 0 });
     head.innerHTML = STATUS_ICON.info;
-    head.append(h('span', null, t(`${which}.title` as Key)));
+    head.append(h('span', null, t(o.echo ? 'stitches.follower.echo' : o.shadow ? 'stitches.follower.shadow' : 'stitches.follower.outline')));
     const actions = h('div', { class: 'follower-actions' });
     if (o.fill !== null) actions.append(this.button(o.shadow || o.echo ? 'stitch.shadowOf.line' : 'stitch.outline.fill', o.shadow || o.echo ? 'stitch.shadowOf.line.hint' : 'stitch.outline.fill.hint', () => this.hooks.outline('fill')));
     actions.append(this.button('stitch.outline.detach', `${which}.detach.hint` as Key, () => this.hooks.outline('detach')));

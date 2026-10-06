@@ -2,6 +2,7 @@
 export const de = {
   'files.start.title': 'Was möchtest du sticken?',
   'files.start.lead': 'Öffne eine Stickdatei, wandle ein Bild um oder fang leer an. Dateien kannst du auch einfach hierher ziehen.',
+  'files.start.image.above': 'Wähle oben ein Bild (PNG, JPG, SVG …) aus.',
   'files.start.open': 'Stickdatei öffnen',
   'files.start.open.sub': 'PES, DST, JEF, EXP, VP3, PEC, SVG oder Projekt',
   'files.start.image': 'Bild umwandeln',
@@ -70,6 +71,7 @@ export const de = {
 export const en: Record<keyof typeof de, string> = {
   'files.start.title': 'What would you like to stitch?',
   'files.start.lead': 'Open an embroidery file, convert a picture or start empty. You can also just drop files here.',
+  'files.start.image.above': 'Choose an image (PNG, JPG, SVG …) above.',
   'files.start.open': 'Open embroidery file',
   'files.start.open.sub': 'PES, DST, JEF, EXP, VP3, PEC, SVG or project',
   'files.start.image': 'Convert a picture',

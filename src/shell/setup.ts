@@ -45,6 +45,8 @@ export function initShell(app: ShellApp): void {
     if (app.files.active !== last) {
       last = app.files.active;
       if (last) designPop.close();
+      // Another design: its inspector starts at the top (its check summary), not where the last one was.
+      $('inspector').scrollTop = 0;
     }
   }).observe($('file-list'), { childList: true, subtree: true, characterData: true });
   onLangChange(showName);
