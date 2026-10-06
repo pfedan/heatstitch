@@ -20,7 +20,7 @@ zu viel.
 
 | Nr. | Bild und Aktion | Einblendung | Sprechtext |
 | --- | --- | --- | --- |
-| 0 | Vorspann | „Teil 1 von 12 · Ein neues Stickmuster“ | (keiner) |
+| 0 | Vorspann | „Teil 1 · Ein neues Stickmuster“ | (keiner) |
 | 1 | Leere App, ganzes Bild. Zeiger ruht in der Mitte, wandert dann zu „+ Neu“. | | In diesem Video stickst du dein erstes eigenes Muster: einen runden Aufnäher mit einer Welle. Dafür brauchst du nur die Maus und zwei Minuten. |
 | 2 | Klick auf „+ Neu“. Zoom auf den gestrichelten Rahmen, dann kurz auf das Feld Stickrahmen links. | Etikett „Stickrahmen“ | Klick links auf „Neu“. Es entsteht ein leeres Stickmuster. Der gestrichelte Rahmen ist dein Stickrahmen, hier hundert mal hundert Millimeter. |
 | 3 | Zeiger zu den Werkzeugen links auf der Leinwand, Klick auf Ellipse. Umschalt halten, Kreis aufziehen, loslassen. | Taste „Umschalt“, dann Etikett „Füllung“ | Links auf der Leinwand liegen die Zeichenwerkzeuge. Nimm die Ellipse und zieh mit gedrückter Umschalttaste einen Kreis auf. Sobald du loslässt, ist er schon gestickt: als Füllung, passend zu deinem Stoff. |

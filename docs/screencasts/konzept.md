@@ -59,7 +59,7 @@ Oberfläche, dunkle Leinwand, Sprache Deutsch, Standard-Einstellungen. Keine Bro
 nur die App.
 
 **Vorspann (3 s).** Dunkler Grund (`#141118`), heatstitch-Logo, Titel in Weiß, darunter
-„Teil 3 von 12“ in der Akzentfarbe (`#e0559e`), eine feine Stichlinie als Linie unter dem
+„Teil 3“ in der Akzentfarbe (`#e0559e`), eine feine Stichlinie als Linie unter dem
 Titel. Ruhige Blende in die App.
 
 **Abspann (3 s).** Gleicher Grund, „Als Nächstes: Teil 2, Schrift“ und die
