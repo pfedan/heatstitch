@@ -1,4 +1,4 @@
-import { analyze } from '../../model/restitch';
+import { analyze, remembered } from '../../model/restitch';
 import { sewObjects, type SewObject } from '../../model/objects';
 import type { Pattern } from '../../model/pattern';
 import { stitchKinds } from '../../model/sequence';
@@ -11,6 +11,7 @@ import { CAUTION_KINDS, cellDiff, cellKey, countingCells, openFor, type CellDiff
 import { Field, type Contribution } from './field';
 import { merged, toolSets, toolsFor, type Tool, type Variant } from './variants';
 import { borderTools, letteringTools, predictable, sewUnit, stitchesOf, unitKey, unitOf, type Unit } from './units';
+import { fineFix, fineObjects } from './fine';
 import { validateDesign } from './validate';
 
 /**
@@ -38,6 +39,8 @@ export interface ObjectFix {
   visibility: number;
   /** Shown only as a proposal (visible on any account, or above the direct limit). */
   visible: boolean;
+  /** Changes by hand the new stitches replace (0: none). */
+  hand: number;
 }
 
 export interface FixResult {
@@ -61,6 +64,8 @@ export interface FixOptions {
   directMax?: number;
   /** Allow visible changes (the proposals beyond the direct fix). */
   visible?: boolean;
+  /** Also sew objects changed by hand anew from their shape (their hand changes are lost: a proposal). */
+  hand?: boolean;
   /** Time for the search per group (ms). */
   budgetMs?: number;
   /** Stop early (a new edit came in). */
@@ -181,6 +186,14 @@ export async function planFix(p: Pattern, profile: Profile, kind: FixKind | 'all
     const r = await upperFix(p, v, counting, profile, upper, opt);
     pattern = r.pattern;
     objects = r.objects;
+    // Stitches that cannot be set here: invisible stitch work on them.
+    const fine = fineFix(pattern, v, profile, upper, { checks, acks: opt.acks, objects: fineObjects(pattern, new Set(objects.map((x) => x.index))) });
+    opt.log?.(`fine: ${fine.steps.join(',') || 'nothing'} on ${fine.objects.join(',')}`);
+    if (fine.objects.length) {
+      const objs = sewObjects(fine.pattern);
+      pattern = fine.pattern;
+      objects = [...objects, ...fine.objects.map((i) => ({ index: i, kind: objs[i].kind, tools: fine.steps.map((x) => `fine.${x}`), changes: [], knockout: false, visibility: 0, visible: false, hand: 0 }))].sort((a, b) => a.index - b.index);
+    }
   }
   const lower = kinds.filter((k) => CAUTION_KINDS.has(k));
   if (lower.length) {
@@ -231,7 +244,7 @@ async function upperFix(p: Pattern, v: ValidationResult, counting: Uint8Array, p
   const unitCand = new Map<string, Candidate>();
   for (const idx of new Set([...carriers.values()].flat())) {
     if (opt.stale?.()) break;
-    const u = unitOf(p, objs, objs[idx], kindsArr);
+    const u = unitOf(p, objs, objs[idx], kindsArr, opt.hand);
     if (!('kind' in u)) continue;
     const key = unitKey(u);
     const had = unitCand.get(key);
@@ -252,7 +265,8 @@ async function upperFix(p: Pattern, v: ValidationResult, counting: Uint8Array, p
     const { variants, contributions } = built;
     // Visibility: where the unit's objects lie on top.
     const hid = u.objects.reduce((a, i) => a + hidden[i] * objs[i].threadMm, 0) / Math.max(1e-6, u.objects.reduce((a, i) => a + objs[i].threadMm, 0));
-    const visibility = variants.map((x) => (x.visible ? 1 : x.strength * (1 - hid)));
+    // Sewing over changes by hand shows: a proposal only.
+    const visibility = variants.map((x, k) => (!k ? 0 : x.visible || handOf(p, u) ? 1 : x.strength * (1 - hid)));
     const banned = new Set<number>();
     variants.forEach((_, k) => {
       if (k && !opt.visible && visibility[k] > (opt.directMax ?? DIRECT_MAX)) banned.add(k);
@@ -278,17 +292,14 @@ async function upperFix(p: Pattern, v: ValidationResult, counting: Uint8Array, p
   }
 
   const tally: Tally = { fixed: 0, newCritical: 0, newCaution: 0 };
-  const onChange = (c: number, was: number, now: number) => {
+  const onChange = (c: number, was: number, now: number, riskWas: number, riskNow: number) => {
     const b = f.base[c];
     if (target[c]) {
       const open = (l: number) => l === CRITICAL;
       if (open(was) && !open(now)) tally.fixed++;
       else if (!open(was) && open(now)) tally.fixed--;
     }
-    if (b !== CRITICAL) {
-      if (was === CRITICAL) tally.newCritical--;
-      if (now === CRITICAL) tally.newCritical++;
-    }
+    tally.newCritical += riskNow - riskWas;
     if (b === SAFE) {
       if (was !== SAFE) tally.newCaution--;
       if (now !== SAFE) tally.newCaution++;
@@ -312,6 +323,8 @@ async function upperFix(p: Pattern, v: ValidationResult, counting: Uint8Array, p
   };
 
   const solveGroup = (g: Candidate[]) => {
+    // Forbidden variants leave the choice first.
+    for (const c of g) if (c.banned.has(c.chosen)) choose(c, 0);
     const allowed = g.map((c) => c.variants.map((_, k) => k).filter((k) => !c.banned.has(k)));
     const combos = allowed.reduce((a, l) => a * l.length, 1);
     let best = value(g);
@@ -387,7 +400,7 @@ async function upperFix(p: Pattern, v: ValidationResult, counting: Uint8Array, p
     if (opt.stale?.()) break;
     // Sew the choice for real and check the whole design.
     const chosen = [...unitCand.values()].filter((c) => c.chosen).sort((a, b) => a.o.index - b.o.index);
-    pattern = applyChoice(p, chosen, opt.trimMm);
+    pattern = applyChoice(p, chosen, opt.trimMm, opt.hand);
     // What was predicted is known now: its real thread replaces the prediction.
     for (const c of chosen) {
       const x = c.variants[c.chosen];
@@ -410,7 +423,7 @@ async function upperFix(p: Pattern, v: ValidationResult, counting: Uint8Array, p
         choose(c, 0);
         c.variants.forEach((_, k) => k && c.banned.add(k));
       }
-      pattern = applyChoice(p, [...unitCand.values()].filter((c) => c.chosen).sort((a, b) => a.o.index - b.o.index), opt.trimMm);
+      pattern = applyChoice(p, [...unitCand.values()].filter((c) => c.chosen).sort((a, b) => a.o.index - b.o.index), opt.trimMm, opt.hand);
     }
   }
   const objects = [...unitCand.values()]
@@ -418,7 +431,7 @@ async function upperFix(p: Pattern, v: ValidationResult, counting: Uint8Array, p
     .sort((a, b) => a.o.index - b.o.index)
     .map((c) => {
       const x = c.variants[c.chosen];
-      return { index: c.o.index, kind: c.o.kind, tools: x.tools.map((t) => t.id), changes: x.changes, knockout: x.knockout, visibility: c.visibility[c.chosen], visible: x.visible || c.visibility[c.chosen] > (opt.directMax ?? DIRECT_MAX) };
+      return { index: c.o.index, kind: c.o.kind, tools: x.tools.map((t) => t.id), changes: x.changes, knockout: x.knockout, visibility: c.visibility[c.chosen], visible: x.visible || c.visibility[c.chosen] > (opt.directMax ?? DIRECT_MAX), hand: handOf(p, c.unit) };
     });
   return { pattern, objects };
 }
@@ -440,12 +453,12 @@ function sliceOf(p: Pattern, o: SewObject): Pattern {
 }
 
 /** Sews the chosen variants into the design, object by object. */
-function applyChoice(p: Pattern, chosen: Candidate[], trimMm: number): Pattern {
+function applyChoice(p: Pattern, chosen: Candidate[], trimMm: number, hand = false): Pattern {
   let cur = p;
   for (const c of chosen) {
     const x = c.variants[c.chosen];
     // Settings of other units are taken from what the object remembers now: unchanged by the others.
-    const u = refreshed(cur, c.unit);
+    const u = refreshed(cur, c.unit, hand);
     const next = u && sewUnit(cur, u, x.changes, x.knockout, trimMm);
     if (next) cur = next;
   }
@@ -512,9 +525,11 @@ function lowerFix(p: Pattern, orig: Pattern, v0: ValidationResult, profile: Prof
     const open = openIn(v, o);
     if (!open) continue;
     const ka = stitchKinds(cur);
-    const u = unitOf(cur, sewObjects(cur, ka), o, ka);
+    const u = unitOf(cur, sewObjects(cur, ka), o, ka, opt.hand);
     if (!('kind' in u) || u.kind === 'lettering' || taken.has(u.owner)) continue;
     const owner = sewObjects(cur, ka)[u.owner];
+    const hand = handOf(cur, u);
+    if (hand && !opt.visible) continue;
     const all: Tool[] = u.kind === 'border' ? borderTools(u, want, profile) : toolsFor(cur, sewObjects(cur, ka), owner, u.settings, want, profile, analyze(cur, owner, ka).fill?.areaMm2 ?? 0);
     const tools = all.filter((t) => !t.visible && t.kinds.some((k) => want.has(k)));
     for (const t of tools) {
@@ -529,7 +544,7 @@ function lowerFix(p: Pattern, orig: Pattern, v0: ValidationResult, profile: Prof
       cur = next;
       v = vn;
       taken.add(u.owner);
-      objects.push({ index: u.owner, kind: owner.kind, tools: [t.id], changes: t.changes, knockout: !!t.knockout, visibility: vis, visible: false });
+      objects.push({ index: u.owner, kind: owner.kind, tools: [t.id], changes: t.changes, knockout: !!t.knockout, visibility: hand ? 1 : vis, visible: hand > 0, hand });
       break;
     }
   }
@@ -561,6 +576,12 @@ function coveredAfter(f: Field, base: Contribution[], index: number): (sx: numbe
   };
 }
 
+/** Whether object `index` was sewn here (its settings are remembered, not measured from stitches). */
+function sewnHere(p: Pattern, index: number): boolean {
+  const m = remembered(p, sewObjects(p)[index]);
+  return !!(m?.fill || m?.satin || m?.path);
+}
+
 /** Most variants a unit gets (least visible first). */
 const MAX_VARIANTS = 36;
 
@@ -578,17 +599,30 @@ function buildVariants(p: Pattern, f: Field, u: Unit, tools: Tool[], trimMm: num
   const unders: (Tool | null)[] = [null, ...pred.filter((t) => predictable(t)!.under !== undefined)];
   const variants: Variant[] = [];
   const contributions: Contribution[] = [];
+  // Stitches from elsewhere change when sewn here even with the same settings: what is predicted
+  // starts from them sewn here, not from the stitches in the file.
+  const foreign = u.kind === 'object' && !sewnHere(p, u.owner);
   for (const set of realSets) {
     const knockout = set.some((t) => t.knockout);
     let next: Pattern | null = p;
-    if (set.length) next = sewUnit(p, u, merged(set), knockout, trimMm);
+    if (set.length || (foreign && variants.length)) next = sewUnit(p, u, merged(set), knockout, trimMm, true);
     if (!next) continue;
+    if (!set.length && foreign && !variants.length) {
+      // The file's own stitches as they are, then the same sewn here as the base of the predictions.
+      const st0 = stitchesOf(p, u.objects);
+      variants.push({ tools: [], changes: [], knockout: false, stitches: st0, strength: 0, visible: false });
+      contributions.push(f.contribution(st0));
+      next = sewUnit(p, u, [], false, trimMm, true);
+      if (!next) break;
+    }
     const st = stitchesOf(next, u.objects);
     const top = f.contribution(st, (r) => !st.under[r]);
     const under = f.contribution(st, (r) => !!st.under[r]);
     for (const sc of scales) {
       for (const un of unders) {
         const all = [...set, ...(sc ? [sc] : []), ...(un ? [un] : [])];
+        // Sewn here without a change: kept only as the base of predictions for stitches from elsewhere.
+        if (foreign && !all.length) continue;
         const pu = un ? predictable(un)!.under! : 1;
         const c = f.blend(top, under, sc ? predictable(sc)!.scale! : 1, pu === 'covered' ? 1 : pu, pu === 'covered' ? uncovered : undefined);
         variants.push({ tools: all, changes: merged(all), knockout, stitches: sc || un ? undefined : st, strength: Math.max(0, ...all.map((t) => t.strength)), visible: all.some((t) => t.visible), predicted: !!(sc || un) });
@@ -601,11 +635,17 @@ function buildVariants(p: Pattern, f: Field, u: Unit, tools: Tool[], trimMm: num
   return { variants: [variants[0], ...order.map((k) => variants[k])], contributions: [contributions[0], ...order.map((k) => contributions[k])] };
 }
 
+/** Changes by hand on the objects of unit `u`. */
+function handOf(p: Pattern, u: Unit): number {
+  const objs = sewObjects(p);
+  return u.objects.reduce((a, i) => a + (remembered(p, objs[i])?.hand ?? 0), 0);
+}
+
 /** Unit `u` as found in `p` now (after other units were sewn anew). */
-function refreshed(p: Pattern, u: Unit): Unit | null {
+function refreshed(p: Pattern, u: Unit, hand = false): Unit | null {
   const kinds = stitchKinds(p);
   const objs = sewObjects(p, kinds);
   const o = objs[u.kind === 'border' ? u.objects[0] : u.owner];
-  const r = o && unitOf(p, objs, o, kinds);
+  const r = o && unitOf(p, objs, o, kinds, hand);
   return r && 'kind' in r ? r : null;
 }

@@ -396,6 +396,12 @@ export interface Remembered {
   free?: boolean;
   /** What the correction changed when it last gave the object new stitches (gone with the next change by hand). */
   fixed?: Fixed[];
+  /**
+   * The object as it was before the correction last changed it: its records (absolute, as in the
+   * design; the first `lead` of them the travel to it from the object before) and what it
+   * remembered. "Korrektur zurücknehmen" puts exactly these back.
+   */
+  undo?: { x: Int32Array; y: Int32Array; cmd: Uint8Array; lead: number; memory?: Remembered };
 }
 
 /** A part an object was sewn in: its kind, and the number of the object's stitches up to its last one. */
@@ -638,6 +644,7 @@ export interface StoredObject {
   lock?: boolean;
   free?: boolean;
   fixed?: Fixed[];
+  undo?: { x: Int32Array; y: Int32Array; cmd: Uint8Array; lead: number; memory?: StoredObject };
   join?: boolean;
 }
 
@@ -671,45 +678,50 @@ const storeRails = (c: Rails): StoredRails => ({
   ...(c.split ? { split: { outlines: c.split.outlines.map((o) => o.flat()), holes: c.split.holes.map((h) => h.flat()), cuts: c.split.cuts.flat(2) } } : {}),
 });
 
+/** One object's memory as stored with the file. */
+function storeOne(key: string, r: Remembered): StoredObject {
+  const pixels = (g: Region | null) => g && { x0: g.x0, y0: g.y0, w: g.w, h: g.h, pxMm: g.pxMm, mask: g.mask, areaMm2: g.areaMm2 };
+  return {
+    key,
+    region: pixels(r.region),
+    ...(r.shape ? { shape: pixels(r.shape) } : {}),
+    ...(r.fill ? { fill: { ...r.fill } } : {}),
+    ...(r.satin ? { satin: { ...r.satin } } : {}),
+    ...(r.columns ? { columns: r.columns.map((part) => part.map(storeRails)) } : {}),
+    ...(r.hand ? { hand: r.hand } : {}),
+    ...(r.read ? { read: true } : {}),
+    ...(r.form ? { form: storeForm(r.form) } : {}),
+    ...(r.knockout ? { knockout: true } : {}),
+    ...(r.cut ? { cut: r.cut } : {}),
+    ...(r.overlapShare !== undefined ? { overlapShare: r.overlapShare } : {}),
+    ...(r.path ? { path: storeForm(r.path) } : {}),
+    ...(r.line ? { line: { ...r.line, ...(r.line.echo ? { echo: structuredClone(r.line.echo) } : {}), ...(r.line.shadow ? { shadow: { ...r.line.shadow, color: { ...r.line.shadow.color } } } : {}) } } : {}),
+    ...(r.under ? { under: r.under } : {}),
+    ...(r.underFrom ? { underFrom: r.underFrom } : {}),
+    ...(r.borderAt ? { borderAt: r.borderAt } : {}),
+    ...(r.parts ? { parts: r.parts.map((x) => ({ ...x })) } : {}),
+    ...(r.asSatin ? { asSatin: r.asSatin.map(storeRails) } : {}),
+    ...(r.asLine ? { asLine: { path: storeForm(r.asLine.path), line: { ...r.asLine.line }, cap: r.asLine.cap } } : {}),
+    ...(r.outline ? { outline: r.outline } : {}),
+    ...(r.blendOf ? { blendOf: r.blendOf } : {}),
+    ...(r.shadowOf ? { shadowOf: r.shadowOf } : {}),
+    ...(r.echoOf ? { echoOf: r.echoOf } : {}),
+    ...(r.border ? { border: { ...r.border } } : {}),
+    ...(r.lettering ? { lettering: r.lettering } : {}),
+    ...(r.lock ? { lock: true } : {}),
+    ...(r.free ? { free: true } : {}),
+    ...(r.fixed?.length ? { fixed: r.fixed.map((x) => ({ ...x })) } : {}),
+    ...(r.undo ? { undo: { x: r.undo.x.slice(), y: r.undo.y.slice(), cmd: r.undo.cmd.slice(), lead: r.undo.lead, ...(r.undo.memory ? { memory: storeOne(key, r.undo.memory) } : {}) } } : {}),
+  };
+}
+
 /** What is remembered about the objects of `p`, to store it with the file. */
 export function rememberedIn(p: Pattern, objects: SewObject[]): StoredObject[] {
   const out: StoredObject[] = [];
   for (const o of objects) {
     const key = objectKey(p, o);
     const r = memory.get(key);
-    if (!r) continue;
-    const pixels = (g: Region | null) => g && { x0: g.x0, y0: g.y0, w: g.w, h: g.h, pxMm: g.pxMm, mask: g.mask, areaMm2: g.areaMm2 };
-    out.push({
-      key,
-      region: pixels(r.region),
-      ...(r.shape ? { shape: pixels(r.shape) } : {}),
-      ...(r.fill ? { fill: { ...r.fill } } : {}),
-      ...(r.satin ? { satin: { ...r.satin } } : {}),
-      ...(r.columns ? { columns: r.columns.map((part) => part.map(storeRails)) } : {}),
-      ...(r.hand ? { hand: r.hand } : {}),
-      ...(r.read ? { read: true } : {}),
-      ...(r.form ? { form: storeForm(r.form) } : {}),
-      ...(r.knockout ? { knockout: true } : {}),
-      ...(r.cut ? { cut: r.cut } : {}),
-      ...(r.overlapShare !== undefined ? { overlapShare: r.overlapShare } : {}),
-      ...(r.path ? { path: storeForm(r.path) } : {}),
-      ...(r.line ? { line: { ...r.line, ...(r.line.echo ? { echo: structuredClone(r.line.echo) } : {}), ...(r.line.shadow ? { shadow: { ...r.line.shadow, color: { ...r.line.shadow.color } } } : {}) } } : {}),
-      ...(r.under ? { under: r.under } : {}),
-      ...(r.underFrom ? { underFrom: r.underFrom } : {}),
-      ...(r.borderAt ? { borderAt: r.borderAt } : {}),
-      ...(r.parts ? { parts: r.parts.map((x) => ({ ...x })) } : {}),
-      ...(r.asSatin ? { asSatin: r.asSatin.map(storeRails) } : {}),
-      ...(r.asLine ? { asLine: { path: storeForm(r.asLine.path), line: { ...r.asLine.line }, cap: r.asLine.cap } } : {}),
-      ...(r.outline ? { outline: r.outline } : {}),
-      ...(r.blendOf ? { blendOf: r.blendOf } : {}),
-      ...(r.shadowOf ? { shadowOf: r.shadowOf } : {}),
-      ...(r.echoOf ? { echoOf: r.echoOf } : {}),
-      ...(r.border ? { border: { ...r.border } } : {}),
-      ...(r.lettering ? { lettering: r.lettering } : {}),
-      ...(r.lock ? { lock: true } : {}),
-      ...(r.free ? { free: true } : {}),
-      ...(r.fixed?.length ? { fixed: r.fixed.map((x) => ({ ...x })) } : {}),
-    });
+    if (r) out.push(storeOne(key, r));
   }
   for (const j of joinsIn(p)) out.push({ key: j.key, region: null, join: j.join });
   return out;
@@ -948,6 +960,66 @@ export function rememberShapes(p: Pattern, objs: SewObject[], starts: number[], 
   });
 }
 
+/** One object's memory from the file; null when it does not hold. */
+function fromStored(e: StoredObject): Remembered | null {
+  if (typeof e?.key !== 'string' || (e.fill !== undefined && !isFill(e.fill))) return null;
+  const region = e.region ? regionFrom(e.region) : null;
+  if (e.region && !region) return null;
+  // Files from before the tolerance existed have none.
+  const r: Remembered = { region, fill: e.fill && { ...e.fill, tolerance: e.fill.tolerance ?? TOLERANCE } };
+  if (isSatin(e.satin)) r.satin = { ...e.satin, tolerance: e.satin.tolerance ?? TOLERANCE };
+  const columns = railsFrom(e.columns);
+  if (columns) r.columns = columns;
+  if (finite(e.hand) && e.hand > 0) r.hand = Math.round(e.hand);
+  if (e.read === true) r.read = true;
+  const shape = e.shape ? regionFrom(e.shape) : null;
+  if (shape) r.shape = shape;
+  const form = e.form === undefined ? null : formFrom(e.form);
+  if (form) r.form = form;
+  if (form && e.knockout === true) r.knockout = true;
+  if (typeof e.cut === 'string') r.cut = e.cut;
+  if (finite(e.overlapShare) && e.overlapShare >= 0 && e.overlapShare <= 1) r.overlapShare = e.overlapShare;
+  const path = e.path === undefined ? null : formFrom(e.path);
+  if (path) r.path = path;
+  if (path && isLineStitch(e.line)) {
+    r.line = { ...e.line };
+    if (r.line.echo !== undefined) {
+      if (isEcho(r.line.echo)) r.line.echo = structuredClone(r.line.echo);
+      else delete r.line.echo;
+    }
+    if (r.line.shadow !== undefined) {
+      if (isShadow(r.line.shadow)) r.line.shadow = { ...r.line.shadow, color: { ...r.line.shadow.color } };
+      else delete r.line.shadow;
+    }
+  }
+  if (finite(e.under) && e.under > 0) r.under = Math.round(e.under);
+  if (finite(e.underFrom) && e.underFrom > 0) r.underFrom = Math.round(e.underFrom);
+  if (finite(e.borderAt) && e.borderAt > 0) r.borderAt = Math.round(e.borderAt);
+  const parts = partsFrom(e.parts);
+  if (parts) r.parts = parts;
+  const asSatin = railsFrom([e.asSatin])?.[0];
+  if (asSatin?.length) r.asSatin = asSatin;
+  const asLine = e.asLine && formFrom(e.asLine.path);
+  if (asLine && isLineStitch(e.asLine!.line)) r.asLine = { path: asLine, line: { ...e.asLine!.line }, cap: e.asLine!.cap === 'round' ? 'round' : 'flat' };
+  if (typeof e.outline === 'string') r.outline = e.outline;
+  if (typeof e.blendOf === 'string') r.blendOf = e.blendOf;
+  if (typeof e.shadowOf === 'string') r.shadowOf = e.shadowOf;
+  if (typeof e.echoOf === 'string') r.echoOf = e.echoOf;
+  if (isBorder(e.border)) r.border = { ...e.border };
+  const lettering = e.lettering === undefined ? null : letteringFrom(e.lettering);
+  if (lettering) r.lettering = lettering;
+  if (e.lock === true) r.lock = true;
+  if (e.free === true) r.free = true;
+  const fixed = Array.isArray(e.fixed) ? e.fixed.filter(isFixed).map((x) => ({ ...x })) : [];
+  if (fixed.length) r.fixed = fixed;
+  const undo = e.undo;
+  if (undo && undo.x instanceof Int32Array && undo.y instanceof Int32Array && undo.cmd instanceof Uint8Array && undo.x.length === undo.y.length && undo.x.length === undo.cmd.length && finite(undo.lead) && undo.lead >= 0 && undo.lead < undo.x.length) {
+    const memory = undo.memory ? fromStored(undo.memory) : null;
+    r.undo = { x: undo.x.slice(), y: undo.y.slice(), cmd: undo.cmd.slice(), lead: Math.round(undo.lead), ...(memory ? { memory } : {}) };
+  }
+  return r;
+}
+
 /** Remembers stored objects again (from storage or a project file); malformed entries are skipped. */
 export function restoreRemembered(list: unknown): number {
   if (!Array.isArray(list)) return 0;
@@ -958,56 +1030,8 @@ export function restoreRemembered(list: unknown): number {
       n++;
       continue;
     }
-    if (typeof e?.key !== 'string' || (e.fill !== undefined && !isFill(e.fill))) continue;
-    const region = e.region ? regionFrom(e.region) : null;
-    if (e.region && !region) continue;
-    // Files from before the tolerance existed have none.
-    const r: Remembered = { region, fill: e.fill && { ...e.fill, tolerance: e.fill.tolerance ?? TOLERANCE } };
-    if (isSatin(e.satin)) r.satin = { ...e.satin, tolerance: e.satin.tolerance ?? TOLERANCE };
-    const columns = railsFrom(e.columns);
-    if (columns) r.columns = columns;
-    if (finite(e.hand) && e.hand > 0) r.hand = Math.round(e.hand);
-    if (e.read === true) r.read = true;
-    const shape = e.shape ? regionFrom(e.shape) : null;
-    if (shape) r.shape = shape;
-    const form = e.form === undefined ? null : formFrom(e.form);
-    if (form) r.form = form;
-    if (form && e.knockout === true) r.knockout = true;
-    if (typeof e.cut === 'string') r.cut = e.cut;
-    if (finite(e.overlapShare) && e.overlapShare >= 0 && e.overlapShare <= 1) r.overlapShare = e.overlapShare;
-    const path = e.path === undefined ? null : formFrom(e.path);
-    if (path) r.path = path;
-    if (path && isLineStitch(e.line)) {
-      r.line = { ...e.line };
-      if (r.line.echo !== undefined) {
-        if (isEcho(r.line.echo)) r.line.echo = structuredClone(r.line.echo);
-        else delete r.line.echo;
-      }
-      if (r.line.shadow !== undefined) {
-        if (isShadow(r.line.shadow)) r.line.shadow = { ...r.line.shadow, color: { ...r.line.shadow.color } };
-        else delete r.line.shadow;
-      }
-    }
-    if (finite(e.under) && e.under > 0) r.under = Math.round(e.under);
-    if (finite(e.underFrom) && e.underFrom > 0) r.underFrom = Math.round(e.underFrom);
-    if (finite(e.borderAt) && e.borderAt > 0) r.borderAt = Math.round(e.borderAt);
-    const parts = partsFrom(e.parts);
-    if (parts) r.parts = parts;
-    const asSatin = railsFrom([e.asSatin])?.[0];
-    if (asSatin?.length) r.asSatin = asSatin;
-    const asLine = e.asLine && formFrom(e.asLine.path);
-    if (asLine && isLineStitch(e.asLine!.line)) r.asLine = { path: asLine, line: { ...e.asLine!.line }, cap: e.asLine!.cap === 'round' ? 'round' : 'flat' };
-    if (typeof e.outline === 'string') r.outline = e.outline;
-    if (typeof e.blendOf === 'string') r.blendOf = e.blendOf;
-    if (typeof e.shadowOf === 'string') r.shadowOf = e.shadowOf;
-    if (typeof e.echoOf === 'string') r.echoOf = e.echoOf;
-    if (isBorder(e.border)) r.border = { ...e.border };
-    const lettering = e.lettering === undefined ? null : letteringFrom(e.lettering);
-    if (lettering) r.lettering = lettering;
-    if (e.lock === true) r.lock = true;
-    if (e.free === true) r.free = true;
-    const fixed = Array.isArray(e.fixed) ? e.fixed.filter(isFixed).map((x) => ({ ...x })) : [];
-    if (fixed.length) r.fixed = fixed;
+    const r = fromStored(e);
+    if (!r) continue;
     rememberKey(e.key, r);
     n++;
   }

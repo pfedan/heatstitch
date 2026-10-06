@@ -38,27 +38,27 @@ function hasBorder(p: Pattern, index: number): boolean {
  * The unit object `o` is adjusted in, or the reason it is left as it is (locked, changed by hand,
  * shape only guessed, sewn from something else that cannot be set here).
  */
-export function unitOf(p: Pattern, objs: SewObject[], o: SewObject, kinds: Uint8Array): Unit | { why: string } {
+export function unitOf(p: Pattern, objs: SewObject[], o: SewObject, kinds: Uint8Array, allowHand = false): Unit | { why: string } {
   const known = remembered(p, o);
   if (known?.lock) return { why: 'lock' };
-  if (known?.hand) return { why: 'hand' };
+  if (known?.hand && !allowHand) return { why: 'hand' };
   if (known?.free) return { why: 'free' };
   if (known?.lettering) {
     const font = fontNow(known.lettering.font);
     if (!font) return { why: 'font' };
     const list = letteringObjects(p, objs, known.lettering.id);
-    if (list.some((x) => remembered(p, x)?.lock || remembered(p, x)?.hand)) return { why: 'hand' };
+    if (list.some((x) => remembered(p, x)?.lock || (remembered(p, x)?.hand && !allowHand))) return { why: 'hand' };
     return { kind: 'lettering', owner: list[0].index, objects: list.map((x) => x.index), lettering: known.lettering, font };
   }
   if (known?.outline) {
     const fill = objs.find((x) => remembered(p, x)?.fill?.border?.link === known.outline);
     if (!fill) return { why: 'derived' };
-    const r = roleOf(p, objs, fill, kinds);
+    const r = roleOf(p, objs, fill, kinds, allowHand);
     if (r.role !== 'settings' || r.settings?.kind !== 'fill' || !r.settings.s.border) return { why: r.why ?? 'derived' };
     return { kind: 'border', owner: fill.index, objects: [o.index], settings: r.settings as Settings & { kind: 'fill' } };
   }
   if (known?.blendOf || known?.shadowOf || known?.echoOf) return { why: 'derived' };
-  const r = roleOf(p, objs, o, kinds);
+  const r = roleOf(p, objs, o, kinds, allowHand);
   if (r.role !== 'settings' || !r.settings) return { why: r.why ?? 'unknown' };
   return { kind: 'object', owner: o.index, objects: [o.index], settings: r.settings };
 }
@@ -115,7 +115,7 @@ export function withChanges<T extends object>(s: T, changes: Fixed[]): T {
  * The design with unit `u` sewn with `changes` (and leaving out what lies on top); null when that
  * did not work or the objects came out different in number.
  */
-export function sewUnit(p: Pattern, u: Unit, changes: Fixed[], knockout: boolean, trimMm: number): Pattern | null {
+export function sewUnit(p: Pattern, u: Unit, changes: Fixed[], knockout: boolean, trimMm: number, force = false): Pattern | null {
   const n = sewObjects(p).length;
   let next: Pattern | null;
   if (u.kind === 'lettering') {
@@ -124,7 +124,7 @@ export function sewUnit(p: Pattern, u: Unit, changes: Fixed[], knockout: boolean
     const sewn = sewLettering(u.font, l, trimMm);
     next = placeLettering(p, u.objects.map((i) => objs[i]), sewn, l)?.pattern ?? null;
   } else {
-    const s = changes.length ? (withChanges({ kind: u.settings.kind, s: u.settings.s }, changes) as Settings) : null;
+    const s = changes.length || force ? ({ kind: u.settings.kind, s: withChanges(u.settings.s, changes) } as Settings) : null;
     next = sewWith(p, u.owner, s, knockout, trimMm);
     // The border follows the fill's shape and its own settings: sewn anew only when those change.
     if (next && (u.kind === 'border' || (knockout && hasBorder(p, u.owner)))) next = syncBorders(next, trimMm);

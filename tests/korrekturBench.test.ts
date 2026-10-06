@@ -39,7 +39,7 @@ run('correction benchmark', () => {
       rows.push({ name: c.name, ampel: ampelOf(v).color, ampelAfter: ampelOf(va).color, crit: d.criticalBefore, critAfter: d.criticalAfter, newCrit: d.newCritical, newCaution: d.newCaution, newGapSparse: d.newGapSparse, open: d.open, objects, ms: Math.round(ms) });
     }
     mkdirSync(new URL('./bench/', import.meta.url), { recursive: true });
-    const file = process.env.BENCH_BASELINE ? 'korrektur-baseline.json' : 'korrektur.json';
+    const file = process.env.BENCH_OUT ?? (process.env.BENCH_BASELINE ? 'korrektur-baseline.json' : 'korrektur.json');
     writeFileSync(new URL(`./bench/${file}`, import.meta.url), new TextEncoder().encode(JSON.stringify(rows, null, 1)));
     expect(FIX_KINDS.length).toBe(5);
   }, 3_600_000);

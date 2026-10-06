@@ -98,13 +98,13 @@ export function satinWidth(p: Pattern, o: SewObject): number {
 }
 
 /** Whether the object may be sewn anew, and its settings now. */
-export function roleOf(p: Pattern, objs: SewObject[], o: SewObject, kinds: Uint8Array): { role: Role; settings: Settings | null; why?: string } {
+export function roleOf(p: Pattern, objs: SewObject[], o: SewObject, kinds: Uint8Array, allowHand = false): { role: Role; settings: Settings | null; why?: string } {
   const known = remembered(p, o);
   if (known?.lock) return { role: 'fixed', settings: null, why: 'lock' };
   if (known?.outline || known?.blendOf || known?.shadowOf || known?.echoOf) return { role: 'fixed', settings: null, why: 'derived' };
   if (known?.lettering) return { role: 'fixed', settings: null, why: 'lettering' };
   if (known?.free) return { role: 'fixed', settings: null, why: 'free' };
-  if (known?.hand) return { role: 'fixed', settings: null, why: 'hand' };
+  if (known?.hand && !allowHand) return { role: 'fixed', settings: null, why: 'hand' };
   if (known?.read) return { role: 'fixed', settings: null, why: 'guessed' };
   const s = currentSettings(p, o, kinds);
   if (!s) return { role: 'fixed', settings: null, why: 'unknown' };

@@ -17,6 +17,8 @@ import { CAUTION, classifyDensity, classifyHoles, CRITICAL, SAFE, SHORT_STITCH_C
 const SUB = 5;
 const SUB_MM = VALIDATION_CELL_MM / SUB;
 const SHIFT_MM = -0.05;
+/** Share below the critical density that counts as at risk (see Field.risk). */
+const RISK = 0.04;
 /** Margin around the design (mm) that variants may grow into. */
 const MARGIN_MM = 4;
 
@@ -61,6 +63,13 @@ export class Field {
   /** Level per cell now, and as the design is (the surrogate's own measure, for a fair comparison). */
   readonly level: Uint8Array;
   readonly base: Uint8Array;
+  /**
+   * Cells at risk of becoming critical that were not: critical now, or within RISK of the critical
+   * density and denser than before. The fast measure can be off by a little against sewing for
+   * real; the margin keeps a search from walking up to the limit.
+   */
+  readonly risk: Uint8Array;
+  private readonly basePeak: Float32Array;
   /** Penetrations per bucket (HOLE_RADIUS_MM wide), as counts of points at each position. */
   private readonly buckets = new Map<number, number[]>();
   private readonly holeR = HOLE_RADIUS_MM * 10;
@@ -101,8 +110,13 @@ export class Field {
     }
     if (th.holes) for (let i = 0; i < p.cmd.length; i++) if (p.cmd[i] === STITCH && tags[i] !== TIE) this.addHole(p.x[i], p.y[i], 1);
     this.level = new Uint8Array(this.cols * this.rows);
-    for (let c = 0; c < this.level.length; c++) this.level[c] = this.levelOf(c);
+    this.basePeak = new Float32Array(this.cols * this.rows);
+    for (let c = 0; c < this.level.length; c++) {
+      this.level[c] = this.levelOf(c);
+      this.basePeak[c] = this.densityOf(c).peak;
+    }
     this.base = this.level.slice();
+    this.risk = new Uint8Array(this.level.length);
   }
 
   /** Cell of a point (0.1 mm), or -1. */
@@ -208,7 +222,7 @@ export class Field {
    * Replaces contribution `from` by `to`. Returns the cells whose level may have changed (box),
    * after their levels were recomputed; `onChange` sees each cell's old and new level.
    */
-  swap(from: Contribution, to: Contribution, onChange?: (c: number, was: number, now: number) => void): void {
+  swap(from: Contribution, to: Contribution, onChange?: (c: number, was: number, now: number, riskWas: number, riskNow: number) => void): void {
     this.addMap(from.map, -1);
     this.addMap(to.map, 1);
     for (const [c, n] of from.shorts) this.shorts[c] -= n;
@@ -225,9 +239,12 @@ export class Field {
         const i = r * this.cols + c;
         const was = this.level[i];
         const now = this.levelOf(i);
-        if (now !== was) {
+        const rWas = this.risk[i];
+        const rNow = this.riskOf(i, now);
+        if (now !== was || rNow !== rWas) {
           this.level[i] = now;
-          onChange?.(i, was, now);
+          this.risk[i] = rNow;
+          onChange?.(i, was, now, rWas, rNow);
         }
       }
     }
@@ -321,6 +338,14 @@ export class Field {
       }
     }
     return best;
+  }
+
+  private riskOf(c: number, level: number): number {
+    if (this.base[c] === CRITICAL) return 0;
+    if (level === CRITICAL) return 1;
+    const { peak, share } = this.densityOf(c);
+    const crit = this.th.critical + share * (this.th.satinCritical - this.th.critical);
+    return peak >= crit * (1 - RISK) && peak > this.basePeak[c] + 0.05 ? 1 : 0;
   }
 
   /** Level of cell `c` by density, short stitches and penetrations (the upper limits). */
