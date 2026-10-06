@@ -1,6 +1,15 @@
-import type { de } from './de';
+import type { de, deBase } from './de';
+import { en as shell } from './areas/shell';
+import { en as files } from './areas/files';
+import { en as objects } from './areas/objects';
+import { en as shapes } from './areas/shapes';
+import { en as stitches } from './areas/stitches';
+import { en as check } from './areas/check';
+import { en as image } from './areas/image';
+import { en as design } from './areas/design';
 
-export const en: Record<keyof typeof de, string> = {
+
+const enBase: Record<keyof typeof deBase, string> = {
   'app.tagline': 'View, edit and check embroidery files',
   'app.docs': 'Guide',
   'files.title': 'Files',
@@ -370,10 +379,10 @@ export const en: Record<keyof typeof de, string> = {
   'update.reload': 'Reload',
   'update.dismiss': 'Later',
   'mode.label': 'Mode',
-  'mode.flow': 'Sequence',
-  'mode.flow.hint': 'Sequence: how the machine works through the file. See and edit colors, order, jumps and trims. (key 1)',
-  'mode.density': 'Density',
-  'mode.density.hint': 'Density: heatmap, check for fabric and thread, correction. (key 2)',
+  'mode.flow': 'Design',
+  'mode.flow.hint': 'Design: edit shapes, objects, stitch types, order and jumps. (key 1)',
+  'mode.density': 'Check',
+  'mode.density.hint': 'Check: density heatmap, check for fabric and thread, correction. (key 2)',
   'flow.settings': 'Coloring',
   'colorBy.title': 'Color stitches by',
   'colorBy.thread': 'Thread',
@@ -1309,3 +1318,5 @@ export const en: Record<keyof typeof de, string> = {
   'canvas.hint.lettering': 'Drag: move · Corner: size · Circle: turn · Double-click: edit text · Enter: single letters · Esc: done',
   'canvas.hint.letters': 'Drag letters: move · Arrow keys: nudge · Esc: back to the lettering',
 };
+
+export const en: Record<keyof typeof de, string> = { ...enBase, ...shell, ...files, ...objects, ...shapes, ...stitches, ...check, ...image, ...design };

@@ -66,6 +66,7 @@ import { bindOrder } from './app/order';
 import { bindStitches } from './app/stitches';
 import { bindObjects } from './app/objects';
 import { bindScene } from './app/scene';
+import { initShell } from './shell/setup';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -1631,6 +1632,8 @@ const { showObjectMenu } = bindPointer({
 });
 
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', redraw);
+
+initShell({ files, mode: () => settings.mode, setMode });
 
 files.render();
 redraw();

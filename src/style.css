@@ -1803,10 +1803,6 @@ details.panel.section[open] > summary {
   color: var(--accent-ink);
 }
 
-.stage:not(.form-level) .draw-tools {
-  display: none;
-}
-
 /* The pointer stands apart from the tools that draw. */
 #draw-pointer {
   margin-bottom: 4px;

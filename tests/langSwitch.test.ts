@@ -76,7 +76,7 @@ const canvasAt = async (page: Page, fx = 0.5, fy = 0.5) => {
   return { x: b.x + b.width * fx, y: b.y + b.height * fy };
 };
 const loadCat = async (page: Page) => {
-  await page.selectOption('#load-example', 'examples/cat-60mm.pes');
+  await page.selectOption('#load-example', 'examples/cat-60mm.pes', { force: true });
   await page.locator('#layer-list .layer').first().waitFor();
   await wait(page, 500);
 };
@@ -87,7 +87,7 @@ const selectMiddle = async (page: Page) => {
 };
 /** Opens every color of the shapes example and selects one object in the list. */
 const selectInList = async (page: Page, object: number) => {
-  await page.selectOption('#load-example', 'examples/svg/shapes-benchmark.svg');
+  await page.selectOption('#load-example', 'examples/svg/shapes-benchmark.svg', { force: true });
   await page.locator('#layer-list .layer').first().waitFor();
   const blocks = await page.locator('#layer-list .layer[data-block]').count();
   for (let b = 0; b < blocks; b++) await page.locator(`#layer-list .layer[data-block="${b}"] .chev`).click();
@@ -95,7 +95,9 @@ const selectInList = async (page: Page, object: number) => {
   await page.locator('#object-panel:not([hidden])').waitFor();
 };
 const mode = async (page: Page, m: 'flow' | 'density' | 'image') => {
-  await page.locator(`input[name=mode][value=${m}]`).check({ force: true });
+  // Bild has no tab of its own: it starts from the design menu.
+  if (m === 'image') await page.evaluate(() => document.getElementById('image-start')!.click());
+  else await page.locator(`input[name=mode][value=${m}]`).check({ force: true });
   await wait(page, 1500);
 };
 
@@ -150,7 +152,7 @@ const STATES: Record<string, (page: Page) => Promise<void>> = {
     await page.locator('#image-take:not([hidden]):not([disabled])').waitFor({ timeout: 30_000 });
   },
   'a lettering': async (page) => {
-    await page.click('#new-design');
+    await page.evaluate(() => document.getElementById('new-design')!.click());
     await page.click('#lettering-new');
     await page.locator('#lettering-panel:not([hidden])').waitFor();
   },
@@ -183,12 +185,12 @@ describe.skipIf(!on)('switching the language', () => {
       page.on('pageerror', (e) => errors.push(e.message));
       try {
         await page.goto(url);
-        await page.selectOption('#lang', 'de');
+        await page.selectOption('#lang', 'de', { force: true });
         await reach(page);
-        await page.selectOption('#lang', 'en');
+        await page.selectOption('#lang', 'en', { force: true });
         await wait(page, 500);
         expect(await leftOver(page, 'de', 'en'), 'German texts after switching to English').toEqual([]);
-        await page.selectOption('#lang', 'de');
+        await page.selectOption('#lang', 'de', { force: true });
         await wait(page, 500);
         expect(await leftOver(page, 'en', 'de'), 'English texts after switching back to German').toEqual([]);
         expect(errors).toEqual([]);

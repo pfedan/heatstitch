@@ -74,89 +74,135 @@
     <noscript>
       <p class="noscript">heatstitch needs JavaScript. <a href="docs.html">Read the guide</a> to see what it does.</p>
     </noscript>
+    <svg class="sprite" aria-hidden="true" width="0" height="0">
+      <symbol id="i-chevron-down" viewBox="0 0 20 20"><path d="M5.5 7.5 10 12l4.5-4.5" /></symbol>
+      <symbol id="i-search" viewBox="0 0 20 20"><circle cx="9" cy="9" r="5.5" /><path d="m13.2 13.2 3.8 3.8" /></symbol>
+      <symbol id="i-save" viewBox="0 0 20 20"><path d="M10 3v9m-3.5-3.5L10 12l3.5-3.5" /><path d="M4 13.5V16h12v-2.5" /></symbol>
+      <symbol id="i-more" viewBox="0 0 20 20"><circle cx="5" cy="10" r="1.3" class="fill" /><circle cx="10" cy="10" r="1.3" class="fill" /><circle cx="15" cy="10" r="1.3" class="fill" /></symbol>
+      <symbol id="i-image" viewBox="0 0 20 20"><rect x="3" y="4" width="14" height="12" rx="1.5" /><circle cx="7.5" cy="8.5" r="1.4" /><path d="m3.5 14.5 4.5-4 3 2.5 2.5-2 3 3" /></symbol>
+      <symbol id="i-plus" viewBox="0 0 20 20"><path d="M10 4.5v11M4.5 10h11" /></symbol>
+      <symbol id="i-keyboard" viewBox="0 0 20 20"><rect x="2.5" y="5.5" width="15" height="9" rx="1.5" /><path d="M5.5 8.5h1m2.5 0h1m2.5 0h1M5.5 11.5h9" /></symbol>
+      <symbol id="i-book" viewBox="0 0 20 20"><path d="M4 4.5h4.5A2 2 0 0 1 10 6v10a2 2 0 0 0-1.5-1.5H4zM16 4.5h-4.5A2 2 0 0 0 10 6v10a2 2 0 0 1 1.5-1.5H16z" /></symbol>
+    </svg>
     <header class="topbar">
-      <div class="brand">
-        <img src="/favicon.svg" alt="" width="28" height="28" />
-        <h1>heatstitch</h1>
+      <div class="topbar-start">
+        <img class="brand-mark" src="/favicon.svg" alt="heatstitch" width="24" height="24" />
+        <div class="design-switch">
+          <button type="button" id="design-button" class="design-button" data-i18n-title="shell.designs.hint">
+            <span class="design-name" id="design-name" data-i18n="shell.designs"></span>
+            <svg class="i" aria-hidden="true"><use href="#i-chevron-down" /></svg>
+          </button>
+          <div class="popover design-pop" id="design-pop" role="dialog" data-i18n-aria="files.title" hidden>
+            <section class="pop-section" data-mode="flow density image">
+              <label class="dropzone" id="dropzone">
+                <input type="file" id="file-input" accept=".dst,.pes,.pec,.jef,.exp,.vp3,.svg,.DST,.PES,.PEC,.JEF,.EXP,.VP3,.SVG,.heatstitch" multiple hidden />
+                <span data-i18n="files.drop"></span>
+              </label>
+              <p class="privacy-note" data-i18n-title="files.privacy.detail">
+                <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path d="M4.5 7V5a3.5 3.5 0 0 1 7 0v2" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="2.5" y="7" width="11" height="8" rx="1.5" fill="currentColor"/></svg>
+                <span data-i18n="files.privacy"></span>
+              </p>
+              <div class="file-start">
+                <button type="button" id="new-design" class="new-design" data-i18n="files.new" data-i18n-title="files.new.hint"></button>
+                <select id="load-example" class="example-select" data-i18n-aria="files.example">
+                  <option value="" data-i18n="files.example" selected hidden></option>
+                  <optgroup data-i18n-label="files.example.projects">
+                    <option value="examples/demo/heatstitch-demo.heatstitch" data-i18n="files.example.demo"></option>
+                  </optgroup>
+                  <optgroup data-i18n-label="files.example.stitches">
+                    <option value="examples/cat-60mm.pes" data-i18n="files.example.cat"></option>
+                    <option value="examples/demos/overlap.pes" data-i18n="files.example.overlap"></option>
+                    <option value="examples/demos/confetti.pes" data-i18n="files.example.confetti"></option>
+                  </optgroup>
+                  <optgroup data-i18n-label="files.example.svg">
+                    <option value="examples/svg/overlapping-circles.svg" data-i18n="files.example.overlapSvg"></option>
+                    <option value="examples/svg/shapes-benchmark.svg" data-i18n="files.example.benchmark"></option>
+                  </optgroup>
+                </select>
+              </div>
+              <ul id="file-list" class="file-list"></ul>
+              <button type="button" id="image-start" class="pop-row" data-i18n-title="mode.image.hint">
+                <svg class="i" aria-hidden="true"><use href="#i-image" /></svg>
+                <span data-i18n="shell.image.start"></span>
+              </button>
+            </section>
+          </div>
+        </div>
+        <div class="history" data-mode="flow density">
+          <button type="button" id="undo" class="tool" data-i18n-title="edit.undo.key" data-i18n-aria="edit.undo"><span aria-hidden="true">↶</span></button>
+              <button type="button" id="redo" class="tool" data-i18n-title="edit.redo.key" data-i18n-aria="edit.redo"><span aria-hidden="true">↷</span></button>
+        </div>
       </div>
       <div class="modes segmented" role="radiogroup" id="modes" data-i18n-aria="mode.label">
-        <label data-i18n-title="mode.flow.hint"><input type="radio" name="mode" value="flow" /><span><span data-i18n="mode.flow"></span><kbd>1</kbd></span></label>
-        <label data-i18n-title="mode.density.hint"><input type="radio" name="mode" value="density" /><span><span data-i18n="mode.density"></span><kbd>2</kbd></span></label>
-        <label data-i18n-title="mode.image.hint"><input type="radio" name="mode" value="image" /><span><span data-i18n="mode.image"></span><kbd>3</kbd></span></label>
+        <label data-i18n-title="mode.flow.hint"><input type="radio" name="mode" value="flow" /><span><span data-i18n="mode.flow"></span></span></label>
+        <label data-i18n-title="mode.density.hint"><input type="radio" name="mode" value="density" /><span><span data-i18n="mode.density"></span></span></label>
+        <label data-i18n-title="mode.image.hint" data-mode="image"><input type="radio" name="mode" value="image" /><span><span data-i18n="mode.image"></span></span></label>
       </div>
       <nav class="topbar-end">
-        <a class="doc-link" id="doc-link" href="docs.html" data-i18n="app.docs">Guide</a>
-        <select id="lang" aria-label="Language">
-          <option value="de">Deutsch</option>
-          <option value="en">English</option>
-        </select>
+        <button type="button" id="palette-open" class="search-button" data-i18n-title="shell.palette.hint">
+          <svg class="i" aria-hidden="true"><use href="#i-search" /></svg>
+          <span class="search-text" data-i18n="shell.palette"></span>
+          <kbd id="palette-key"></kbd>
+        </button>
+        <div class="save-switch" data-mode="flow density">
+          <button type="button" id="save-button" class="primary save-button">
+            <svg class="i" aria-hidden="true"><use href="#i-save" /></svg>
+            <span data-i18n="save.title"></span>
+          </button>
+          <div class="popover save-pop" id="save-pop" role="dialog" data-i18n-aria="save.title" hidden>
+            <p class="muted small" id="save-empty" data-i18n="shell.save.empty"></p>
+            <div class="file-actions" id="file-actions" hidden>
+              <span class="label save-label" data-i18n-title="save.note"><span data-i18n="save.title"></span> <span class="info" aria-hidden="true">ⓘ</span></span>
+              <select class="save-format" id="save-format" data-i18n-aria="save.format">
+                <option value="pes" data-i18n="save.fmt.pes"></option>
+                <option value="dst" data-i18n="save.fmt.dst"></option>
+                <option value="jef" data-i18n="save.fmt.jef"></option>
+                <option value="vp3" data-i18n="save.fmt.vp3"></option>
+                <option value="exp" data-i18n="save.fmt.exp"></option>
+                <option value="pec" data-i18n="save.fmt.pec"></option>
+              </select>
+              <div class="save-file">
+                <label class="save-name">
+                  <input type="text" id="save-name" spellcheck="false" autocomplete="off" data-i18n-aria="save.name" />
+                  <span id="save-ext">.pes</span>
+                </label>
+                <button type="button" id="save-file" data-i18n="save.file"></button>
+              </div>
+              <button type="button" id="save-project" class="save-project" data-i18n="save.project" data-i18n-title="save.project.hint"></button>
+              <button type="button" id="revert" class="link" data-i18n="edit.revert" hidden></button>
+            </div>
+          </div>
+        </div>
+        <div class="more-switch">
+          <button type="button" id="more-button" class="icon more-button" data-i18n-title="shell.more" data-i18n-aria="shell.more">
+            <svg class="i" aria-hidden="true"><use href="#i-more" /></svg>
+          </button>
+          <div class="popover more-pop" id="more-pop" role="menu" hidden>
+            <a class="pop-row doc-link" id="doc-link" href="docs.html"><svg class="i" aria-hidden="true"><use href="#i-book" /></svg><span data-i18n="app.docs">Guide</span></a>
+            <button type="button" class="pop-row" id="keys-open"><svg class="i" aria-hidden="true"><use href="#i-keyboard" /></svg><span data-i18n="shell.keys.title"></span><kbd>?</kbd></button>
+            <label class="pop-row lang-row">
+              <span data-i18n="shell.language"></span>
+              <select id="lang" aria-label="Language">
+                <option value="de">Deutsch</option>
+                <option value="en">English</option>
+              </select>
+            </label>
+          </div>
+        </div>
       </nav>
     </header>
 
     <main class="layout" id="layout">
-      <aside class="sidebar">
-        <section class="panel" data-mode="flow density">
-          <h2 data-i18n="files.title"></h2>
-          <label class="dropzone" id="dropzone">
-            <input type="file" id="file-input" accept=".dst,.pes,.pec,.jef,.exp,.vp3,.svg,.DST,.PES,.PEC,.JEF,.EXP,.VP3,.SVG,.heatstitch" multiple hidden />
-            <span data-i18n="files.drop"></span>
-          </label>
-          <p class="privacy-note" data-i18n-title="files.privacy.detail">
-            <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path d="M4.5 7V5a3.5 3.5 0 0 1 7 0v2" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="2.5" y="7" width="11" height="8" rx="1.5" fill="currentColor"/></svg>
-            <span data-i18n="files.privacy"></span>
-          </p>
-          <div class="file-start">
-            <button type="button" id="new-design" class="new-design" data-i18n="files.new" data-i18n-title="files.new.hint"></button>
-            <select id="load-example" class="example-select" data-i18n-aria="files.example">
-              <option value="" data-i18n="files.example" selected hidden></option>
-              <optgroup data-i18n-label="files.example.projects">
-                <option value="examples/demo/heatstitch-demo.heatstitch" data-i18n="files.example.demo"></option>
-              </optgroup>
-              <optgroup data-i18n-label="files.example.stitches">
-                <option value="examples/cat-60mm.pes" data-i18n="files.example.cat"></option>
-                <option value="examples/demos/overlap.pes" data-i18n="files.example.overlap"></option>
-                <option value="examples/demos/confetti.pes" data-i18n="files.example.confetti"></option>
-              </optgroup>
-              <optgroup data-i18n-label="files.example.svg">
-                <option value="examples/svg/overlapping-circles.svg" data-i18n="files.example.overlapSvg"></option>
-                <option value="examples/svg/shapes-benchmark.svg" data-i18n="files.example.benchmark"></option>
-              </optgroup>
-            </select>
-          </div>
-          <ul id="file-list" class="file-list"></ul>
-          <div class="file-actions" id="file-actions" hidden>
-            <label class="field hoop-field">
-              <span class="label" data-i18n="hoop.title" data-i18n-title="hoop.hint"></span>
-              <select id="hoop"></select>
-            </label>
-            <div class="hoop-custom" id="hoop-custom" hidden>
-              <input type="number" id="hoop-w" min="10" max="1000" step="1" data-i18n-aria="hoop.width" />
-              <span>×</span>
-              <input type="number" id="hoop-h" min="10" max="1000" step="1" data-i18n-aria="hoop.height" />
-              <span>mm</span>
-            </div>
-            <p class="hoop-note" id="hoop-note" hidden></p>
-            <span class="label save-label" data-i18n-title="save.note"><span data-i18n="save.title"></span> <span class="info" aria-hidden="true">ⓘ</span></span>
-            <select class="save-format" id="save-format" data-i18n-aria="save.format">
-              <option value="pes" data-i18n="save.fmt.pes"></option>
-              <option value="dst" data-i18n="save.fmt.dst"></option>
-              <option value="jef" data-i18n="save.fmt.jef"></option>
-              <option value="vp3" data-i18n="save.fmt.vp3"></option>
-              <option value="exp" data-i18n="save.fmt.exp"></option>
-              <option value="pec" data-i18n="save.fmt.pec"></option>
-            </select>
-            <div class="save-file">
-              <label class="save-name">
-                <input type="text" id="save-name" spellcheck="false" autocomplete="off" data-i18n-aria="save.name" />
-                <span id="save-ext">.pes</span>
-              </label>
-              <button type="button" id="save-file" data-i18n="save.file"></button>
-            </div>
-            <button type="button" id="save-project" class="save-project" data-i18n="save.project" data-i18n-title="save.project.hint"></button>
-            <button type="button" id="revert" class="link" data-i18n="edit.revert" hidden></button>
-          </div>
-        </section>
+      <nav class="toolrail draw-tools" data-mode="flow" role="toolbar" aria-orientation="vertical" data-i18n-aria="draw.label">
+        <button type="button" class="tool" id="draw-pointer" aria-pressed="true" data-i18n-title="draw.pointer.hint" data-i18n-aria="draw.pointer"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 3 L5 15.5 L8.2 12.6 L10.5 17.5 L12.6 16.5 L10.3 11.7 L14.6 11.3 Z" /></svg></button>
+        <button type="button" class="tool" data-draw="rect" aria-pressed="false" data-i18n-title="draw.rect.hint" data-i18n-aria="draw.rect"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3.5" y="5" width="13" height="10" rx="0.5" /></svg></button>
+        <button type="button" class="tool" data-draw="ellipse" aria-pressed="false" data-i18n-title="draw.ellipse.hint" data-i18n-aria="draw.ellipse"><svg viewBox="0 0 20 20" aria-hidden="true"><ellipse cx="10" cy="10" rx="7" ry="5.5" /></svg></button>
+        <button type="button" class="tool" data-draw="pen" aria-pressed="false" data-i18n-title="draw.pen.hint" data-i18n-aria="draw.pen"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 16 C6 6 12 4 17 4" /><rect x="1.8" y="14.8" width="2.4" height="2.4" class="node" /><rect x="15.8" y="2.8" width="2.4" height="2.4" class="node" /></svg></button>
+        <button type="button" class="tool" data-draw="free" aria-pressed="false" data-i18n-title="draw.free.hint" data-i18n-aria="draw.free"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 14 C5 9 7 9 8 12 S11 16 12 11 S15 5 17 6" /></svg></button>
+        <button type="button" id="lettering-new" class="tool rail-text" data-mode="flow" data-i18n-title="lettering.tool.hint" data-i18n-aria="lettering.tool"><span class="tool-glyph" aria-hidden="true">T</span></button>
+      </nav>
 
+      <aside class="sidebar">
         <!-- Bild: the image and how it is prepared -->
         <section class="panel" data-mode="image">
           <h2 data-i18n="image.title"></h2>
@@ -241,128 +287,30 @@
           <label class="check" data-i18n-title="image.underlay.hint"><input type="checkbox" id="image-underlay" /><span data-i18n="image.underlay"></span></label>
           <button type="button" id="image-stitch-reset" class="link" data-i18n="image.stitch.reset" hidden></button>
         </section>
-
-        <!-- Ablauf: what the colors mean -->
-        <section class="panel" data-mode="flow">
-          <h2 data-i18n="flow.settings"></h2>
-          <div class="field">
-            <span class="label" data-i18n="colorBy.title"></span>
-            <div class="segmented wrap" role="radiogroup">
-              <label><input type="radio" name="color-by" value="thread" /><span data-i18n="colorBy.thread"></span></label>
-              <label><input type="radio" name="color-by" value="order" /><span data-i18n="colorBy.order"></span></label>
-              <label><input type="radio" name="color-by" value="kind" /><span data-i18n="colorBy.kind"></span></label>
-              <label><input type="radio" name="color-by" value="length" /><span data-i18n="colorBy.length"></span></label>
+        <section class="panel layers" id="layers-panel" data-mode="flow">
+          <div class="panel-head">
+            <h2 data-i18n="layers.title"></h2>
+            <button type="button" class="link" id="layers-reset" data-i18n="layers.showAll" hidden></button>
+            <button type="button" class="link" id="color-list" data-i18n="colorList.button" data-i18n-title="colorList.buttonHint" hidden></button>
+          </div>
+          <div class="order-bar">
+            <button type="button" id="order-optimize" aria-expanded="false" aria-controls="order-card" data-i18n-title="order.button.hint"><span aria-hidden="true">⇅</span> <span data-i18n="order.button"></span></button>
+          </div>
+          <div class="order-card" id="order-card" role="group" data-i18n-aria="order.button" hidden></div>
+          <div class="order-card overlap-card" id="overlap-card" role="status" hidden>
+            <p id="overlap-text"></p>
+            <div class="row">
+              <button type="button" class="primary" id="overlap-cut" data-i18n="knockout.card.cut" data-i18n-title="knockout.card.cut.hint"></button>
+              <button type="button" id="overlap-keep" data-i18n="knockout.card.keep" data-i18n-title="knockout.card.keep.hint"></button>
             </div>
           </div>
-          <div id="color-key" class="color-key"></div>
-        </section>
-
-        <!-- Dichte: material, checks and heatmap -->
-        <section class="panel" id="material-panel" data-mode="density image">
-          <h2 data-i18n="profile.title"></h2>
-          <div class="profile">
-            <label class="field">
-              <span class="label" data-i18n="profile.fabric"></span>
-              <select id="fabric"></select>
-            </label>
-            <label class="field">
-              <span class="label" data-i18n="profile.thread"></span>
-              <select id="thread"></select>
-            </label>
-            <p class="profile-info" id="profile-info"></p>
-            <div class="buttons" data-mode="density">
-              <button type="button" id="fabric-tune" data-i18n="tune.button" data-i18n-title="tune.button.hint"></button>
-            </div>
-          </div>
-          <fieldset class="checks" data-mode="density">
-            <legend data-i18n="checks.title"></legend>
-            <div id="checks"></div>
-          </fieldset>
-          <details class="explain" data-mode="density">
-            <summary data-i18n="validation.explain"></summary>
-            <ul id="explain"></ul>
+          <ul class="layer-list" id="layer-list"></ul>
+          <details class="aside-block" id="aside-block" hidden>
+            <summary></summary>
+            <ul class="layer-list aside-list"></ul>
           </details>
+          <p class="layer-note" id="layer-note" role="status" hidden></p>
         </section>
-
-        <section class="panel" data-mode="density">
-          <h2 data-i18n="heatmap.title"></h2>
-          <div class="field">
-            <span class="label" data-i18n="controls.metric"></span>
-            <div class="segmented" role="radiogroup">
-              <label><input type="radio" name="metric" value="thread" /><span data-i18n="metric.thread"></span></label>
-              <label><input type="radio" name="metric" value="penetrations" /><span data-i18n="metric.penetrations"></span></label>
-            </div>
-            <span class="unit-hint" id="unit-hint"></span>
-          </div>
-          <details class="section" data-section="advanced">
-            <summary data-i18n="heatmap.advanced"></summary>
-            <label class="field">
-              <span class="label"><span data-i18n="controls.cell"></span> <output id="cell-out"></output></span>
-              <input type="range" id="cell" min="0.5" max="5" step="0.25" />
-            </label>
-            <label class="field">
-              <span class="label"><span data-i18n="controls.blur"></span> <output id="blur-out"></output></span>
-              <input type="range" id="blur" min="0" max="3" step="0.1" />
-            </label>
-            <label class="field">
-              <span class="label" data-i18n="controls.max"></span>
-              <input type="number" id="max" min="0.1" step="0.5" />
-            </label>
-            <label class="check"><input type="checkbox" id="include-jumps" /><span data-i18n="controls.jumps"></span></label>
-          </details>
-        </section>
-
-        <!-- Both modes: what is drawn and how -->
-        <details class="panel section" data-section="display">
-          <summary><h2 data-i18n="display.title"></h2></summary>
-          <div data-mode="density">
-            <label class="check"><input type="checkbox" id="overlay" /><span data-i18n="controls.overlay"></span></label>
-            <label class="field indent">
-              <span class="label"><span data-i18n="controls.opacity"></span> <output id="opacity-out"></output></span>
-              <input type="range" id="opacity" min="0.05" max="1" step="0.05" />
-            </label>
-          </div>
-          <label class="check" data-mode="flow" data-i18n-title="display.shapes.hint"><input type="checkbox" id="shapes-view" /><span data-i18n="display.shapes"></span></label>
-          <label class="check" data-i18n-title="controls.realistic.hint"><input type="checkbox" id="realistic" /><span data-i18n="controls.realistic"></span></label>
-          <label class="field indent" data-i18n-title="controls.threadWidth.hint">
-            <span class="label"><span data-i18n="controls.threadWidth"></span> <output id="thread-width-out"></output></span>
-            <input type="range" id="thread-width" min="0.02" max="1" step="0.01" />
-          </label>
-          <label class="check indent" data-i18n-title="controls.liveLight.hint"><input type="checkbox" id="live-light" /><span data-i18n="controls.liveLight"></span></label>
-          <button type="button" id="allow-tilt" class="link indent" data-i18n="controls.tilt" hidden></button>
-          <div class="field bg-field" data-i18n-title="controls.background.hint">
-            <span class="label"><span data-i18n="controls.background"></span> <output id="bg-out"></output></span>
-            <div class="bg-swatches" id="bg-swatches"></div>
-          </div>
-          <label class="field" data-i18n-title="controls.fabric.hint">
-            <span class="label" data-i18n="controls.fabric"></span>
-            <select id="fabric-look"></select>
-          </label>
-          <fieldset class="marks" data-mode="flow density">
-            <legend data-i18n="marks.title"></legend>
-            <label class="check"><input type="checkbox" data-mark="jumps" /><span><i class="mk mk-jump" aria-hidden="true"></i><span data-i18n="marks.jumps"></span></span></label>
-            <label class="check" data-mode="flow" data-i18n-title="marks.threads.hint"><input type="checkbox" data-mark="threads" /><span><i class="mk mk-thread" aria-hidden="true"></i><span data-i18n="marks.threads"></span></span></label>
-            <label class="check"><input type="checkbox" data-mark="trims" /><span><i class="mk" aria-hidden="true">✂</i><span data-i18n="marks.trims"></span></span></label>
-            <label class="check"><input type="checkbox" data-mark="colors" /><span><i class="mk mk-num" aria-hidden="true">1</i><span data-i18n="marks.colors"></span></span></label>
-            <label class="check"><input type="checkbox" data-mark="ends" /><span><i class="mk mk-start" aria-hidden="true">S</i><span data-i18n="marks.ends"></span></span></label>
-            <label class="check" data-i18n-title="marks.points.hint"><input type="checkbox" data-mark="points" /><span><i class="mk mk-point" aria-hidden="true"></i><span data-i18n="marks.points"></span></span></label>
-          </fieldset>
-        </details>
-
-        <details class="panel section" data-section="stats" data-mode="flow density">
-          <summary><h2 data-i18n="stats.title"></h2></summary>
-          <dl id="stats" class="stats"></dl>
-          <label class="field speed">
-            <span class="label" data-i18n="stats.speed"></span>
-            <select id="machine-spm">
-              <option value="400">400</option>
-              <option value="600">600</option>
-              <option value="800">800</option>
-              <option value="1000">1000</option>
-              <option value="1200">1200</option>
-            </select>
-          </label>
-        </details>
       </aside>
 
       <div class="resizer" data-panel="side" role="separator" aria-orientation="vertical" tabindex="0" data-i18n-aria="layout.resizeSide" data-i18n-title="layout.resize.hint"></div>
@@ -374,9 +322,6 @@
         <div class="stage-top">
           <div class="stage-bar">
             <div class="stage-tools stage-tools-start" data-mode="flow density">
-              <button type="button" id="undo" class="tool" data-i18n-title="edit.undo.key" data-i18n-aria="edit.undo"><span aria-hidden="true">↶</span></button>
-              <button type="button" id="redo" class="tool" data-i18n-title="edit.redo.key" data-i18n-aria="edit.redo"><span aria-hidden="true">↷</span></button>
-              <button type="button" id="lettering-new" class="tool" data-mode="flow" data-i18n-title="lettering.tool.hint"><span class="tool-glyph" aria-hidden="true">T</span> <span data-i18n="lettering.tool"></span></button>
               <div class="segmented level-switch" role="radiogroup" data-i18n-aria="level.label">
                 <label data-i18n-title="level.shape.hint" data-mode="flow"><input type="radio" name="level" value="shape" /><span data-i18n="level.shape"></span></label>
                 <label data-i18n-title="level.objects.hint"><input type="radio" name="level" value="objects" checked /><span data-i18n="level.objects"></span></label>
@@ -395,13 +340,6 @@
               <button type="button" id="fit" class="tool" data-i18n-title="controls.fit.key"><span aria-hidden="true">⤢</span> <span data-i18n="controls.fit"></span></button>
               <button type="button" id="export" class="tool" data-mode="flow density" data-i18n-title="controls.export.hint"><span aria-hidden="true">⤓</span> PNG</button>
             </div>
-          </div>
-          <div class="stage-tools draw-tools" data-mode="flow" role="toolbar" data-i18n-aria="draw.label">
-            <button type="button" class="tool" id="draw-pointer" aria-pressed="true" data-i18n-title="draw.pointer.hint" data-i18n-aria="draw.pointer"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 3 L5 15.5 L8.2 12.6 L10.5 17.5 L12.6 16.5 L10.3 11.7 L14.6 11.3 Z" /></svg></button>
-            <button type="button" class="tool" data-draw="rect" aria-pressed="false" data-i18n-title="draw.rect.hint" data-i18n-aria="draw.rect"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3.5" y="5" width="13" height="10" rx="0.5" /></svg></button>
-            <button type="button" class="tool" data-draw="ellipse" aria-pressed="false" data-i18n-title="draw.ellipse.hint" data-i18n-aria="draw.ellipse"><svg viewBox="0 0 20 20" aria-hidden="true"><ellipse cx="10" cy="10" rx="7" ry="5.5" /></svg></button>
-            <button type="button" class="tool" data-draw="pen" aria-pressed="false" data-i18n-title="draw.pen.hint" data-i18n-aria="draw.pen"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 16 C6 6 12 4 17 4" /><rect x="1.8" y="14.8" width="2.4" height="2.4" class="node" /><rect x="15.8" y="2.8" width="2.4" height="2.4" class="node" /></svg></button>
-            <button type="button" class="tool" data-draw="free" aria-pressed="false" data-i18n-title="draw.free.hint" data-i18n-aria="draw.free"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 14 C5 9 7 9 8 12 S11 16 12 11 S15 5 17 6" /></svg></button>
           </div>
         </div>
         <p class="image-status" id="image-status" data-mode="image" aria-live="polite"></p>
@@ -432,6 +370,10 @@
       </section>
 
       <aside class="inspector" id="inspector">
+        <div class="insp-tabs segmented" role="tablist" data-mode="flow" id="insp-tabs">
+          <button type="button" role="tab" data-tab="object" aria-selected="false"><span data-i18n="shell.tab.object"></span></button>
+          <button type="button" role="tab" data-tab="design" aria-selected="true"><span data-i18n="shell.tab.design"></span></button>
+        </div>
         <!-- Bild -->
         <section class="panel" data-mode="image">
           <h2 data-i18n="image.palette"></h2>
@@ -467,108 +409,217 @@
           <p class="muted small" data-i18n="image.take.hint"></p>
         </section>
 
-        <!-- Ablauf -->
-        <section class="panel layers" id="layers-panel" data-mode="flow">
-          <div class="panel-head">
-            <h2 data-i18n="layers.title"></h2>
-            <button type="button" class="link" id="layers-reset" data-i18n="layers.showAll" hidden></button>
-            <button type="button" class="link" id="color-list" data-i18n="colorList.button" data-i18n-title="colorList.buttonHint" hidden></button>
-          </div>
-          <div class="order-bar">
-            <button type="button" id="order-optimize" aria-expanded="false" aria-controls="order-card" data-i18n-title="order.button.hint"><span aria-hidden="true">⇅</span> <span data-i18n="order.button"></span></button>
-          </div>
-          <div class="order-card" id="order-card" role="group" data-i18n-aria="order.button" hidden></div>
-          <div class="order-card overlap-card" id="overlap-card" role="status" hidden>
-            <p id="overlap-text"></p>
-            <div class="row">
-              <button type="button" class="primary" id="overlap-cut" data-i18n="knockout.card.cut" data-i18n-title="knockout.card.cut.hint"></button>
-              <button type="button" id="overlap-keep" data-i18n="knockout.card.keep" data-i18n-title="knockout.card.keep.hint"></button>
+        <div class="insp-page" data-page="object" data-mode="flow">
+          <p class="insp-empty muted" id="object-empty" data-i18n="shell.object.empty"></p>
+          <section class="panel object-panel" id="object-panel" data-mode="flow" hidden>
+            <div class="panel-head">
+              <h2 data-i18n="object.title"></h2>
+              <button type="button" id="object-close" class="icon" data-i18n-title="object.clear"><span aria-hidden="true">&#x2715;</span></button>
             </div>
-          </div>
-          <ul class="layer-list" id="layer-list"></ul>
-          <details class="aside-block" id="aside-block" hidden>
-            <summary></summary>
-            <ul class="layer-list aside-list"></ul>
+            <div id="object-body"></div>
+            <div id="object-stitches" class="object-stitches"></div>
+            <p class="layer-note error" id="object-msg" role="status" hidden></p>
+          </section>
+
+          <section class="panel lettering-panel" id="lettering-panel" data-mode="flow" hidden>
+            <div class="panel-head">
+              <h2 data-i18n="lettering.title"></h2>
+              <button type="button" id="lettering-close" class="icon" data-i18n-title="lettering.close"><span aria-hidden="true">&#x2715;</span></button>
+            </div>
+            <div id="lettering-body"></div>
+          </section>
+        </div>
+
+        <div class="insp-page" data-page="design" data-mode="flow density">
+          <section class="panel" id="hoop-panel" data-mode="flow">
+            <h2 data-i18n="hoop.title"></h2>
+            <label class="field hoop-field">
+              <span class="label" data-i18n="hoop.title" data-i18n-title="hoop.hint"></span>
+              <select id="hoop"></select>
+            </label>
+            <div class="hoop-custom" id="hoop-custom" hidden>
+              <input type="number" id="hoop-w" min="10" max="1000" step="1" data-i18n-aria="hoop.width" />
+              <span>×</span>
+              <input type="number" id="hoop-h" min="10" max="1000" step="1" data-i18n-aria="hoop.height" />
+              <span>mm</span>
+            </div>
+            <p class="hoop-note" id="hoop-note" hidden></p>
+          </section>
+          <!-- Ablauf: what the colors mean -->
+          <section class="panel" data-mode="flow">
+            <h2 data-i18n="flow.settings"></h2>
+            <div class="field">
+              <span class="label" data-i18n="colorBy.title"></span>
+              <div class="segmented wrap" role="radiogroup">
+                <label><input type="radio" name="color-by" value="thread" /><span data-i18n="colorBy.thread"></span></label>
+                <label><input type="radio" name="color-by" value="order" /><span data-i18n="colorBy.order"></span></label>
+                <label><input type="radio" name="color-by" value="kind" /><span data-i18n="colorBy.kind"></span></label>
+                <label><input type="radio" name="color-by" value="length" /><span data-i18n="colorBy.length"></span></label>
+              </div>
+            </div>
+            <div id="color-key" class="color-key"></div>
+          </section>
+          <section class="panel jumps" id="jumps-panel" data-mode="flow">
+            <h2 data-i18n="jumps.title"></h2>
+            <div id="jumps" class="jumps-body" aria-live="polite"></div>
+          </section>
+          <!-- Dichte -->
+          <details class="panel section findings" id="findings-panel" data-mode="density" data-section="findings">
+            <summary><h2 data-i18n="findings.title"></h2><span id="findings-sum" class="findings-sum"></span></summary>
+            <label class="check val-toggle" data-i18n-title="validation.overlay.key"><input type="checkbox" id="show-validation" /><span data-i18n="validation.overlay"></span></label>
+            <div id="validation" class="findings-body" aria-live="polite"></div>
           </details>
-          <p class="layer-note" id="layer-note" role="status" hidden></p>
-        </section>
 
-        <section class="panel object-panel" id="object-panel" data-mode="flow" hidden>
-          <div class="panel-head">
-            <h2 data-i18n="object.title"></h2>
-            <button type="button" id="object-close" class="icon" data-i18n-title="object.clear"><span aria-hidden="true">&#x2715;</span></button>
-          </div>
-          <div id="object-body"></div>
-          <div id="object-stitches" class="object-stitches"></div>
-          <p class="layer-note error" id="object-msg" role="status" hidden></p>
-        </section>
-
-        <section class="panel lettering-panel" id="lettering-panel" data-mode="flow" hidden>
-          <div class="panel-head">
-            <h2 data-i18n="lettering.title"></h2>
-            <button type="button" id="lettering-close" class="icon" data-i18n-title="lettering.close"><span aria-hidden="true">&#x2715;</span></button>
-          </div>
-          <div id="lettering-body"></div>
-        </section>
-
-        <section class="panel jumps" id="jumps-panel" data-mode="flow">
-          <h2 data-i18n="jumps.title"></h2>
-          <div id="jumps" class="jumps-body" aria-live="polite"></div>
-        </section>
-
-        <!-- Dichte -->
-        <details class="panel section findings" id="findings-panel" data-mode="density" data-section="findings">
-          <summary><h2 data-i18n="findings.title"></h2><span id="findings-sum" class="findings-sum"></span></summary>
-          <label class="check val-toggle" data-i18n-title="validation.overlay.key"><input type="checkbox" id="show-validation" /><span data-i18n="validation.overlay"></span></label>
-          <div id="validation" class="findings-body" aria-live="polite"></div>
-        </details>
-
-        <section class="panel" id="correct-panel" data-mode="density">
-          <h2><span data-i18n="correct.title"></span> <span class="beta-badge" data-i18n="correct.beta" data-i18n-title="correct.beta.hint"></span></h2>
-          <div class="field">
-            <span class="label" data-i18n="correct.goal"></span>
-            <div class="segmented" role="radiogroup">
-              <label><input type="radio" name="fix-goal" value="caution" /><span data-i18n="correct.goal.caution"></span></label>
-              <label><input type="radio" name="fix-goal" value="critical" /><span data-i18n="correct.goal.critical"></span></label>
+          <section class="panel" id="correct-panel" data-mode="density">
+            <h2><span data-i18n="correct.title"></span> <span class="beta-badge" data-i18n="correct.beta" data-i18n-title="correct.beta.hint"></span></h2>
+            <div class="field">
+              <span class="label" data-i18n="correct.goal"></span>
+              <div class="segmented" role="radiogroup">
+                <label><input type="radio" name="fix-goal" value="caution" /><span data-i18n="correct.goal.caution"></span></label>
+                <label><input type="radio" name="fix-goal" value="critical" /><span data-i18n="correct.goal.critical"></span></label>
+              </div>
             </div>
-          </div>
-          <div class="field">
-            <span class="label" data-i18n="correct.focus"></span>
-            <div class="segmented" role="radiogroup">
-              <label><input type="radio" name="fix-focus" value="both" /><span data-i18n="correct.focus.both"></span></label>
-              <label><input type="radio" name="fix-focus" value="thread" /><span data-i18n="correct.focus.thread"></span></label>
-              <label><input type="radio" name="fix-focus" value="holes" /><span data-i18n="correct.focus.holes"></span></label>
+            <div class="field">
+              <span class="label" data-i18n="correct.focus"></span>
+              <div class="segmented" role="radiogroup">
+                <label><input type="radio" name="fix-focus" value="both" /><span data-i18n="correct.focus.both"></span></label>
+                <label><input type="radio" name="fix-focus" value="thread" /><span data-i18n="correct.focus.thread"></span></label>
+                <label><input type="radio" name="fix-focus" value="holes" /><span data-i18n="correct.focus.holes"></span></label>
+              </div>
+              <p class="muted small" id="fix-focus-hint"></p>
             </div>
-            <p class="muted small" id="fix-focus-hint"></p>
-          </div>
-          <div class="buttons">
-            <button type="button" id="fix-all" class="primary" data-i18n="correct.all"></button>
-            <button type="button" id="fix-zone" data-i18n="correct.zone"></button>
-          </div>
-          <div id="fix-report" class="fix-report" aria-live="polite"></div>
-
-          <h3 data-i18n="edit.title"></h3>
-          <p class="muted small" id="edit-off-hint" data-i18n="edit.panelHint"></p>
-          <div id="edit-tools" class="edit-tools" hidden>
-            <p class="muted small" data-i18n="edit.hint"></p>
-            <p class="sel-info" id="sel-info"></p>
             <div class="buttons">
-              <button type="button" id="sel-delete" data-i18n="edit.delete"></button>
-              <button type="button" id="sel-thin" data-i18n="edit.thin"></button>
-              <select id="thin-share" aria-label="">
-                <option value="0.25">25 %</option>
-                <option value="0.34" selected>33 %</option>
-                <option value="0.5">50 %</option>
-              </select>
+              <button type="button" id="fix-all" class="primary" data-i18n="correct.all"></button>
+              <button type="button" id="fix-zone" data-i18n="correct.zone"></button>
             </div>
-          </div>
+            <div id="fix-report" class="fix-report" aria-live="polite"></div>
 
-          <h3 data-i18n="compare.title"></h3>
-          <div class="buttons">
-            <button type="button" id="compare-toggle" aria-pressed="false" data-i18n="compare.start"></button>
-          </div>
-          <table class="compare-table" id="compare-table" hidden></table>
-        </section>
+            <h3 data-i18n="edit.title"></h3>
+            <p class="muted small" id="edit-off-hint" data-i18n="edit.panelHint"></p>
+            <div id="edit-tools" class="edit-tools" hidden>
+              <p class="muted small" data-i18n="edit.hint"></p>
+              <p class="sel-info" id="sel-info"></p>
+              <div class="buttons">
+                <button type="button" id="sel-delete" data-i18n="edit.delete"></button>
+                <button type="button" id="sel-thin" data-i18n="edit.thin"></button>
+                <select id="thin-share" aria-label="">
+                  <option value="0.25">25 %</option>
+                  <option value="0.34" selected>33 %</option>
+                  <option value="0.5">50 %</option>
+                </select>
+              </div>
+            </div>
+
+            <h3 data-i18n="compare.title"></h3>
+            <div class="buttons">
+              <button type="button" id="compare-toggle" aria-pressed="false" data-i18n="compare.start"></button>
+            </div>
+            <table class="compare-table" id="compare-table" hidden></table>
+          </section>
+          <!-- Dichte: material, checks and heatmap -->
+          <section class="panel" id="material-panel" data-mode="density image">
+            <h2 data-i18n="profile.title"></h2>
+            <div class="profile">
+              <label class="field">
+                <span class="label" data-i18n="profile.fabric"></span>
+                <select id="fabric"></select>
+              </label>
+              <label class="field">
+                <span class="label" data-i18n="profile.thread"></span>
+                <select id="thread"></select>
+              </label>
+              <p class="profile-info" id="profile-info"></p>
+              <div class="buttons" data-mode="density">
+                <button type="button" id="fabric-tune" data-i18n="tune.button" data-i18n-title="tune.button.hint"></button>
+              </div>
+            </div>
+            <fieldset class="checks" data-mode="density">
+              <legend data-i18n="checks.title"></legend>
+              <div id="checks"></div>
+            </fieldset>
+            <details class="explain" data-mode="density">
+              <summary data-i18n="validation.explain"></summary>
+              <ul id="explain"></ul>
+            </details>
+          </section>
+          <section class="panel" data-mode="density">
+            <h2 data-i18n="heatmap.title"></h2>
+            <div class="field">
+              <span class="label" data-i18n="controls.metric"></span>
+              <div class="segmented" role="radiogroup">
+                <label><input type="radio" name="metric" value="thread" /><span data-i18n="metric.thread"></span></label>
+                <label><input type="radio" name="metric" value="penetrations" /><span data-i18n="metric.penetrations"></span></label>
+              </div>
+              <span class="unit-hint" id="unit-hint"></span>
+            </div>
+            <details class="section" data-section="advanced">
+              <summary data-i18n="heatmap.advanced"></summary>
+              <label class="field">
+                <span class="label"><span data-i18n="controls.cell"></span> <output id="cell-out"></output></span>
+                <input type="range" id="cell" min="0.5" max="5" step="0.25" />
+              </label>
+              <label class="field">
+                <span class="label"><span data-i18n="controls.blur"></span> <output id="blur-out"></output></span>
+                <input type="range" id="blur" min="0" max="3" step="0.1" />
+              </label>
+              <label class="field">
+                <span class="label" data-i18n="controls.max"></span>
+                <input type="number" id="max" min="0.1" step="0.5" />
+              </label>
+              <label class="check"><input type="checkbox" id="include-jumps" /><span data-i18n="controls.jumps"></span></label>
+            </details>
+          </section>
+          <!-- Both modes: what is drawn and how -->
+          <details class="panel section" data-section="display">
+            <summary><h2 data-i18n="display.title"></h2></summary>
+            <div data-mode="density">
+              <label class="check"><input type="checkbox" id="overlay" /><span data-i18n="controls.overlay"></span></label>
+              <label class="field indent">
+                <span class="label"><span data-i18n="controls.opacity"></span> <output id="opacity-out"></output></span>
+                <input type="range" id="opacity" min="0.05" max="1" step="0.05" />
+              </label>
+            </div>
+            <label class="check" data-mode="flow" data-i18n-title="display.shapes.hint"><input type="checkbox" id="shapes-view" /><span data-i18n="display.shapes"></span></label>
+            <label class="check" data-i18n-title="controls.realistic.hint"><input type="checkbox" id="realistic" /><span data-i18n="controls.realistic"></span></label>
+            <label class="field indent" data-i18n-title="controls.threadWidth.hint">
+              <span class="label"><span data-i18n="controls.threadWidth"></span> <output id="thread-width-out"></output></span>
+              <input type="range" id="thread-width" min="0.02" max="1" step="0.01" />
+            </label>
+            <label class="check indent" data-i18n-title="controls.liveLight.hint"><input type="checkbox" id="live-light" /><span data-i18n="controls.liveLight"></span></label>
+            <button type="button" id="allow-tilt" class="link indent" data-i18n="controls.tilt" hidden></button>
+            <div class="field bg-field" data-i18n-title="controls.background.hint">
+              <span class="label"><span data-i18n="controls.background"></span> <output id="bg-out"></output></span>
+              <div class="bg-swatches" id="bg-swatches"></div>
+            </div>
+            <label class="field" data-i18n-title="controls.fabric.hint">
+              <span class="label" data-i18n="controls.fabric"></span>
+              <select id="fabric-look"></select>
+            </label>
+            <fieldset class="marks" data-mode="flow density">
+              <legend data-i18n="marks.title"></legend>
+              <label class="check"><input type="checkbox" data-mark="jumps" /><span><i class="mk mk-jump" aria-hidden="true"></i><span data-i18n="marks.jumps"></span></span></label>
+              <label class="check" data-mode="flow" data-i18n-title="marks.threads.hint"><input type="checkbox" data-mark="threads" /><span><i class="mk mk-thread" aria-hidden="true"></i><span data-i18n="marks.threads"></span></span></label>
+              <label class="check"><input type="checkbox" data-mark="trims" /><span><i class="mk" aria-hidden="true">✂</i><span data-i18n="marks.trims"></span></span></label>
+              <label class="check"><input type="checkbox" data-mark="colors" /><span><i class="mk mk-num" aria-hidden="true">1</i><span data-i18n="marks.colors"></span></span></label>
+              <label class="check"><input type="checkbox" data-mark="ends" /><span><i class="mk mk-start" aria-hidden="true">S</i><span data-i18n="marks.ends"></span></span></label>
+              <label class="check" data-i18n-title="marks.points.hint"><input type="checkbox" data-mark="points" /><span><i class="mk mk-point" aria-hidden="true"></i><span data-i18n="marks.points"></span></span></label>
+            </fieldset>
+          </details>
+          <details class="panel section" data-section="stats" data-mode="flow density">
+            <summary><h2 data-i18n="stats.title"></h2></summary>
+            <dl id="stats" class="stats"></dl>
+            <label class="field speed">
+              <span class="label" data-i18n="stats.speed"></span>
+              <select id="machine-spm">
+                <option value="400">400</option>
+                <option value="600">600</option>
+                <option value="800">800</option>
+                <option value="1000">1000</option>
+                <option value="1200">1200</option>
+              </select>
+            </label>
+          </details>
+        </div>
       </aside>
     </main>
     <div class="update-notice" id="update-notice" role="status" hidden>

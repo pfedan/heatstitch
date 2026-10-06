@@ -1,4 +1,13 @@
-export const de = {
+import { de as shell } from './areas/shell';
+import { de as files } from './areas/files';
+import { de as objects } from './areas/objects';
+import { de as shapes } from './areas/shapes';
+import { de as stitches } from './areas/stitches';
+import { de as check } from './areas/check';
+import { de as image } from './areas/image';
+import { de as design } from './areas/design';
+
+export const deBase = {
   'app.tagline': 'Stickdateien ansehen, bearbeiten und prüfen',
   'app.docs': 'Anleitung',
   'files.title': 'Dateien',
@@ -368,10 +377,10 @@ export const de = {
   'update.reload': 'Neu laden',
   'update.dismiss': 'Später',
   'mode.label': 'Modus',
-  'mode.flow': 'Ablauf',
-  'mode.flow.hint': 'Ablauf: wie die Maschine die Datei abarbeitet. Farben, Reihenfolge, Sprünge und Fadenschnitte ansehen und bearbeiten. (Taste 1)',
-  'mode.density': 'Dichte',
-  'mode.density.hint': 'Dichte: Heatmap, Prüfung für Stoff und Garn, Korrektur. (Taste 2)',
+  'mode.flow': 'Gestalten',
+  'mode.flow.hint': 'Gestalten: Formen, Objekte, Sticharten, Reihenfolge und Sprünge bearbeiten. (Taste 1)',
+  'mode.density': 'Prüfen',
+  'mode.density.hint': 'Prüfen: Dichte als Heatmap, Prüfung für Stoff und Garn, Korrektur. (Taste 2)',
   'flow.settings': 'Färben',
   'colorBy.title': 'Stiche färben nach',
   'colorBy.thread': 'Garnfarbe',
@@ -1307,3 +1316,6 @@ export const de = {
   'canvas.hint.lettering': 'Ziehen: verschieben · Ecke: Größe · Kreis: drehen · Doppelklick: Text bearbeiten · Enter: Buchstaben einzeln · Esc: fertig',
   'canvas.hint.letters': 'Buchstaben ziehen: verschieben · Pfeiltasten: schieben · Esc: zurück zum Schriftzug',
 } as const;
+
+/** All German texts: the base plus one block per area of the new interface (src/i18n/areas). */
+export const de = { ...deBase, ...shell, ...files, ...objects, ...shapes, ...stitches, ...check, ...image, ...design } as const;
