@@ -10,7 +10,8 @@ Objekt, Stichart, Steppstich, Stickrahmen).
 - Ein Video wird nur auf direkte Anfrage geplant und erstellt.
 - Je Video zuerst die Vorlage: Ablauf (Szenen mit Aktionen), Demodatei und Sprechtext.
   Erst nach dem Ok wird aufgenommen, vertont und geschnitten.
-- Jedes Video steht für sich. Wer nur Teil 7 sieht, braucht Teil 1 bis 6 nicht.
+- Jedes Video steht für sich. Wer nur Teil 7 sieht, braucht Teil 1 bis 6 nicht. Kein Video
+  verweist auf andere Teile, weder im Bild noch im Sprechtext.
 - Ein Video, ein Ziel. Der Titel sagt, was man danach kann.
 
 ## Themenbaum
@@ -62,8 +63,8 @@ nur die App.
 „Teil 3“ in der Akzentfarbe (`#e0559e`), eine feine Stichlinie als Linie unter dem
 Titel. Ruhige Blende in die App.
 
-**Abspann (3 s).** Gleicher Grund, „Als Nächstes: Teil 2, Schrift“ und die
-Adresse der App. Kein Logo-Feuerwerk.
+**Abspann (3 s).** Gleicher Grund, Logo und die Adresse der App. Kein Verweis auf andere
+Teile, kein Logo-Feuerwerk.
 
 **Maus.** Ein eingeblendeter Zeiger (weißer Pfeil mit dunklem Rand, etwas größer als normal),
 der sich weich bewegt und nie springt. Ein Klick zeigt einen kurzen Ring in der Akzentfarbe.

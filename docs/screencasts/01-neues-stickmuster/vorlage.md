@@ -31,7 +31,7 @@ zu viel.
 | 8 | Klick auf eine leere Stelle, Leertaste. Ablauf spielt vom Anfang ab (schnell). | Taste „Leertaste“ | Mit der Leertaste siehst du, wie die Maschine stickt: erst den blauen Kreis, dann die Welle. |
 | 9 | Links unter Anzeige Klick auf „Realistische Fäden“. Zoom langsam auf den Aufnäher. | | Unter Anzeige zeigt „Realistische Fäden“ dein Muster so, wie es auf dem Stoff aussehen wird. |
 | 10 | Zoom auf Speichern links: Format „PES · Brother, Babylock“ zeigen, Zeiger auf „Speichern“, Klick. | Etikett „Speichern“ | Zum Schluss wählst du links das Format deiner Maschine und speicherst. [kurze Pause] Fertig ist dein erstes Stickmuster. |
-| 11 | Abspann | „Als Nächstes: Teil 2, Schrift“ | (keiner) |
+| 11 | Abspann | Logo und Adresse der App | (keiner) |
 
 ## Sprechtext am Stück
 
