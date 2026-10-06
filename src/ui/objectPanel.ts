@@ -26,7 +26,7 @@ export interface ObjectInfo {
   /** The one selected object has a fill whose outline can be edited. */
   shapeable: boolean;
   /** Its outline is being edited: nodes, and whether the selected one is round (null: none selected). */
-  shaping: { nodes: number; smooth: boolean | null; line?: { closed: boolean } } | null;
+  shaping: { nodes: number; smooth: boolean | null; line?: { closed: boolean }; kind?: 'band' | 'rails' } | null;
   /** The frame is on the one selected object; whether it can be scaled. */
   frame: { canScale: boolean } | null;
   /** Why the selected objects cannot be sewn as one (several selected), or null. */
@@ -124,7 +124,7 @@ export class ObjectPanel {
   }
 
   update(info: ObjectInfo | null, lang: string): void {
-    const key = [info?.objects, info?.selected.join(), info?.hand.join(), info?.editing?.selection ?? -1, info?.shapeable, info?.shaping?.nodes ?? -1, info?.shaping?.smooth, info?.shaping?.line?.closed, info?.frame?.canScale, lang];
+    const key = [info?.objects, info?.selected.join(), info?.hand.join(), info?.editing?.selection ?? -1, info?.shapeable, info?.shaping?.nodes ?? -1, info?.shaping?.smooth, info?.shaping?.line?.closed, info?.shaping?.kind, info?.frame?.canScale, lang];
     if (key.every((k, i) => k === this.key[i])) return;
     this.key = key;
     this.msg.hidden = true;
@@ -235,7 +235,7 @@ export class ObjectPanel {
         : [];
     const hint = Object.assign(document.createElement('p'), {
       className: 'muted small',
-      textContent: t(info.editing ? 'object.editHint' : info.shaping ? 'shape.hint' : sel.length === 1 ? 'object.hint' : 'object.hintMany'),
+      textContent: [t(info.editing ? 'object.editHint' : info.shaping ? 'shape.hint' : sel.length === 1 ? 'object.hint' : 'object.hintMany'), info.shaping?.kind ? t(`shape.hint.${info.shaping.kind}`) : ''].filter(Boolean).join(' '),
     });
     const frameHint = info.frame
       ? [Object.assign(document.createElement('p'), { className: 'muted small', textContent: info.frame.canScale ? t('object.frameHint') : `${t('object.frameHint')} ${t('object.frameMixed')}` })]

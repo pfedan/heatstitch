@@ -70,11 +70,13 @@ export function bindShapes(app: ShapesApp) {
     return st.type === 'satin' ? { width: st.width, offset: 0 } : null;
   }
 
-  /** The shape tool shows the band of object `o`, when it has one. */
+  /** The shape tool shows the band of object `o`, when it has one, and knows when its form is a satin column's rails. */
   function showBand(p: Pattern, q: Sequence, o: number): void {
     const b = bandOf(p, q, o);
     shapeTool.band = b?.width ?? null;
     shapeTool.bandOffset = b?.offset ?? 0;
+    const obj = q.objects[o];
+    shapeTool.rails = !b && !!obj && !isLineObject(p, obj) && !formOf(p, obj, q.kinds) && !!railsForm(p, obj, q.kinds);
   }
 
   /**

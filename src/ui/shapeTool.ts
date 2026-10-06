@@ -52,6 +52,8 @@ export class ShapeTool implements ShapeView {
   dirty = false;
   band: number | null = null;
   bandOffset = 0;
+  /** The form is the two rails of a satin column (its edges), not an outline or a line. */
+  rails = false;
   private drag: Drag = null;
   private moved = false;
 
@@ -74,6 +76,7 @@ export class ShapeTool implements ShapeView {
     this.dirty = false;
     this.band = null;
     this.bandOffset = 0;
+    this.rails = false;
   }
 
   /** The form anew (after new stitches); the selected node stays while it is still there. */
