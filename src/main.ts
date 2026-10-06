@@ -67,6 +67,7 @@ import { bindStitches } from './app/stitches';
 import { bindObjects } from './app/objects';
 import { bindScene } from './app/scene';
 import { initShell } from './shell/setup';
+import { initShapes, refreshShapes } from './areas/shapes';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -842,6 +843,7 @@ function redraw(): void {
       }
       $<HTMLButtonElement>('order-optimize').disabled = !q || q.objects.length < 2;
     }
+    refreshShapes();
     panel.update(active, ui.selectedZone);
     // Proposals belong to the version they were worked out on.
     if (ui.planState && (ui.planState.file !== active || ui.planState.pattern !== active?.pattern)) {
@@ -1108,19 +1110,9 @@ function updateLevel(): void {
   stage.classList.toggle('editing', on);
   stage.classList.toggle('shaping', shaping);
   stage.classList.toggle('form-level', ui.formLevel && !on && settings.mode === 'flow');
-  $('draw-pointer').setAttribute('aria-pressed', String(!drawTool.kind));
   document.querySelectorAll<HTMLInputElement>('input[name="level"]').forEach((i) => (i.checked = i.value === level));
-  const crumb = $('edit-crumb');
-  const p = files.active?.pattern;
   const flow = settings.mode === 'flow';
-  crumb.hidden = !(on || shaping) || !flow;
-  if (on && flow) {
-    const q = p ? seq(p) : null;
-    crumb.textContent = q && ui.editObject !== null && q.objects[ui.editObject] ? t('level.in', { name: objectName(q, ui.editObject) }) : t('level.pick');
-  } else if (shaping && flow) {
-    const q = p ? seq(p) : null;
-    crumb.textContent = q && ui.shapeObject !== null && q.objects[ui.shapeObject] ? t('level.inShape', { name: objectName(q, ui.shapeObject) }) : '';
-  }
+  refreshShapes();
   const mode = settings.mode;
   $('canvas-hint').textContent = t(
     mode === 'image'
@@ -1634,6 +1626,7 @@ const { showObjectMenu } = bindPointer({
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', redraw);
 
 initShell({ files, mode: () => settings.mode, setMode });
+initShapes({ settings, setMode, files, seq, objectName, drawTool, setDrawing, shapeTool, enterShape, shapeTarget, isLineObject, frameTool, editor, setEditing, setFormLevel, newLettering, setLetterMode, letteringPanel, selectObjects, redraw });
 
 files.render();
 redraw();

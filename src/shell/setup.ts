@@ -107,16 +107,7 @@ export function initShell(app: ShellApp): void {
   command({ id: 'view.fit', label: 'controls.fit', group: 'shell.group.view', keys: ['F'], bind: false, when: usable('fit'), run: press('fit') });
   command({ id: 'view.marks', label: 'marks.toggle', group: 'shell.group.view', keys: ['H'], bind: false, when: usable('marks-toggle'), run: press('marks-toggle') });
   command({ id: 'view.png', label: 'shell.cmd.png', group: 'files.title', when: usable('export'), run: press('export') });
-  command({ id: 'lettering.new', label: 'lettering.tool', group: 'shell.group.draw', keys: ['T'], bind: false, when: usable('lettering-new'), run: press('lettering-new') });
-  for (const [kind, label] of [['rect', 'draw.rect'], ['ellipse', 'draw.ellipse'], ['pen', 'draw.pen'], ['free', 'draw.free']] as const) {
-    command({
-      id: `draw.${kind}`,
-      label,
-      group: 'shell.group.draw',
-      when: () => app.mode() === 'flow',
-      run: () => document.querySelector<HTMLButtonElement>(`[data-draw="${kind}"]`)?.click(),
-    });
-  }
+  // Drawing, levels and lettering: src/areas/shapes.
   command({ id: 'colorList.open', label: 'colorList.button', group: 'files.title', when: usable('color-list'), run: press('color-list') });
   command({ id: 'order.optimize', label: 'order.button', group: 'shell.group.edit', when: usable('order-optimize'), run: press('order-optimize') });
   bindCommandKeys();

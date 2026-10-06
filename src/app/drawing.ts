@@ -57,9 +57,8 @@ export function bindDrawing(app: DrawingApp) {
   const FIRST_THREAD: ThreadColor = nearestThread(rgbToLab(240, 140, 40)).thread;
 
   const drawTool = new DrawTool({ done: (s) => void drawn(s), redraw: app.redraw });
-  const drawButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-draw]')];
 
-  /** Picks a drawing tool, or none (the pointer). Drawing belongs to the level Form. */
+  /** Picks a drawing tool, or none (the pointer). Drawing belongs to the level Form. The tool rail runs it (src/areas/shapes). */
   function setDrawing(kind: DrawKind | null): void {
     if (kind && app.settings.mode !== 'flow') return;
     if (kind) {
@@ -70,14 +69,11 @@ export function bindDrawing(app: DrawingApp) {
       if (ui.letterMode) app.setLetterMode(false);
     }
     drawTool.start(kind);
-    for (const b of drawButtons) b.setAttribute('aria-pressed', String(b.dataset.draw === kind));
     app.stage.classList.toggle('drawing', !!kind);
     if (!kind) app.openSelectedForm();
     app.updateLevel();
     app.redraw();
   }
-  drawButtons.forEach((b) => b.addEventListener('click', () => setDrawing(drawTool.kind === b.dataset.draw ? null : (b.dataset.draw as DrawKind))));
-  $('draw-pointer').addEventListener('click', () => setDrawing(null));
 
   /** A shape is drawn: sewn in the thread of the selected object right after it, else after the last one. */
   /** No stitches yet. */

@@ -193,13 +193,15 @@
     </header>
 
     <main class="layout" id="layout">
-      <nav class="toolrail draw-tools" data-mode="flow" role="toolbar" aria-orientation="vertical" data-i18n-aria="draw.label">
-        <button type="button" class="tool" id="draw-pointer" aria-pressed="true" data-i18n-title="draw.pointer.hint" data-i18n-aria="draw.pointer"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 3 L5 15.5 L8.2 12.6 L10.5 17.5 L12.6 16.5 L10.3 11.7 L14.6 11.3 Z" /></svg></button>
-        <button type="button" class="tool" data-draw="rect" aria-pressed="false" data-i18n-title="draw.rect.hint" data-i18n-aria="draw.rect"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3.5" y="5" width="13" height="10" rx="0.5" /></svg></button>
-        <button type="button" class="tool" data-draw="ellipse" aria-pressed="false" data-i18n-title="draw.ellipse.hint" data-i18n-aria="draw.ellipse"><svg viewBox="0 0 20 20" aria-hidden="true"><ellipse cx="10" cy="10" rx="7" ry="5.5" /></svg></button>
-        <button type="button" class="tool" data-draw="pen" aria-pressed="false" data-i18n-title="draw.pen.hint" data-i18n-aria="draw.pen"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 16 C6 6 12 4 17 4" /><rect x="1.8" y="14.8" width="2.4" height="2.4" class="node" /><rect x="15.8" y="2.8" width="2.4" height="2.4" class="node" /></svg></button>
-        <button type="button" class="tool" data-draw="free" aria-pressed="false" data-i18n-title="draw.free.hint" data-i18n-aria="draw.free"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 14 C5 9 7 9 8 12 S11 16 12 11 S15 5 17 6" /></svg></button>
-        <button type="button" id="lettering-new" class="tool rail-text" data-mode="flow" data-i18n-title="lettering.tool.hint" data-i18n-aria="lettering.tool"><span class="tool-glyph" aria-hidden="true">T</span></button>
+      <nav class="toolrail draw-tools" data-mode="flow" role="toolbar" aria-orientation="vertical">
+        <button type="button" class="tool" id="draw-pointer" data-command="tool.select" aria-pressed="true"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 3 L5 15.5 L8.2 12.6 L10.5 17.5 L12.6 16.5 L10.3 11.7 L14.6 11.3 Z" /></svg></button>
+        <span class="rail-sep" aria-hidden="true"></span>
+        <button type="button" class="tool" data-draw="rect" data-command="draw.rect" aria-pressed="false"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3.5" y="5" width="13" height="10" rx="0.5" /></svg></button>
+        <button type="button" class="tool" data-draw="ellipse" data-command="draw.ellipse" aria-pressed="false"><svg viewBox="0 0 20 20" aria-hidden="true"><ellipse cx="10" cy="10" rx="7" ry="5.5" /></svg></button>
+        <button type="button" class="tool" data-draw="pen" data-command="draw.pen" aria-pressed="false"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 16 C6 6 12 4 17 4" /><rect x="1.8" y="14.8" width="2.4" height="2.4" class="node" /><rect x="15.8" y="2.8" width="2.4" height="2.4" class="node" /></svg></button>
+        <button type="button" class="tool" data-draw="free" data-command="draw.free" aria-pressed="false"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 14 C5 9 7 9 8 12 S11 16 12 11 S15 5 17 6" /></svg></button>
+        <span class="rail-sep" aria-hidden="true"></span>
+        <button type="button" id="lettering-new" class="tool rail-text" data-command="lettering.new"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4.5 5.5V4h11v1.5M10 4v12.5M7.5 16.5h5" /></svg></button>
       </nav>
 
       <aside class="sidebar">
@@ -322,12 +324,13 @@
         <div class="stage-top">
           <div class="stage-bar">
             <div class="stage-tools stage-tools-start" data-mode="flow density">
-              <div class="segmented level-switch" role="radiogroup" data-i18n-aria="level.label">
-                <label data-i18n-title="level.shape.hint" data-mode="flow"><input type="radio" name="level" value="shape" /><span data-i18n="level.shape"></span></label>
-                <label data-i18n-title="level.objects.hint"><input type="radio" name="level" value="objects" checked /><span data-i18n="level.objects"></span></label>
-                <label data-i18n-title="level.stitches.hint"><input type="radio" name="level" value="stitches" /><span data-i18n="level.stitches"></span></label>
+              <nav class="edit-crumb crumbs" id="edit-crumb" hidden></nav>
+              <!-- The levels as radios for scripts and screen readers; people use the breadcrumb, Enter, e and Esc. -->
+              <div class="level-radios" role="radiogroup" data-i18n-aria="level.label">
+                <label><input type="radio" name="level" value="shape" tabindex="-1" /><span data-i18n="level.shape"></span></label>
+                <label><input type="radio" name="level" value="objects" tabindex="-1" checked /><span data-i18n="level.objects"></span></label>
+                <label><input type="radio" name="level" value="stitches" tabindex="-1" /><span data-i18n="level.stitches"></span></label>
               </div>
-              <span class="edit-crumb" id="edit-crumb" hidden></span>
             </div>
             <div class="stage-tools stage-tools-center segmented" role="radiogroup" data-mode="image" data-i18n-aria="image.view">
               <label><input type="radio" name="image-view" value="original" /><span data-i18n="image.view.original"></span></label>
@@ -341,6 +344,7 @@
               <button type="button" id="export" class="tool" data-mode="flow density" data-i18n-title="controls.export.hint"><span aria-hidden="true">⤓</span> PNG</button>
             </div>
           </div>
+          <div class="tool-options" id="tool-options" role="toolbar" hidden></div>
         </div>
         <p class="image-status" id="image-status" data-mode="image" aria-live="polite"></p>
         <canvas id="legend" class="legend" width="260" height="46" data-mode="density"></canvas>
