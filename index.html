@@ -363,8 +363,6 @@
             </div>
             <div class="stage-tools stage-tools-end">
               <button type="button" id="image-shine" class="tool primary" data-mode="image" data-i18n-title="image.shine.hint" hidden><span aria-hidden="true">✦</span> <span data-i18n="image.shine"></span></button>
-              <button type="button" id="marks-toggle" class="tool" data-mode="flow density" aria-pressed="true" data-i18n-title="marks.toggle.key" data-i18n-aria="marks.toggle"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 15 L16 5" stroke-dasharray="2.6 2.2" /><circle cx="4" cy="15" r="2.4" class="node" /><circle cx="16" cy="5" r="2.4" class="node" /><path d="M3 3 L17 17" class="slash" /></svg></button>
-              <button type="button" id="fit" class="tool" data-i18n-title="controls.fit.key"><span aria-hidden="true">⤢</span> <span data-i18n="controls.fit"></span></button>
             </div>
           </div>
         </div>
@@ -372,14 +370,86 @@
         <canvas id="legend" class="legend" width="260" height="46" data-mode="density"></canvas>
         <div id="tooltip" class="tooltip" hidden></div>
         <div class="empty" id="empty"></div>
-        <p class="hint" id="canvas-hint"></p>
+        <!-- Foot of the stage: the key hint and the view bar in one row above the player (src/areas/design). -->
+        <div class="stage-foot" id="stage-foot">
+          <p class="hint" id="canvas-hint"></p>
+          <div class="view-bar" id="view-bar" role="toolbar" data-i18n-aria="design.view.title">
+            <button type="button" id="view-button" class="vb-btn view-button" data-i18n-title="design.view.hint">
+              <svg class="i" aria-hidden="true"><use href="#i-eye" /></svg>
+              <span id="view-name" data-i18n="design.view.title"></span>
+              <svg class="i chev" aria-hidden="true"><use href="#i-chevron-up" /></svg>
+            </button>
+            <button type="button" id="marks-toggle" class="vb-btn vb-icon" data-mode="flow density" aria-pressed="true" data-i18n-aria="marks.toggle">
+              <svg class="i" aria-hidden="true"><use href="#i-marks" /></svg>
+            </button>
+            <span class="vb-sep" aria-hidden="true"></span>
+            <button type="button" id="zoom-button" class="vb-btn zoom-button" aria-haspopup="menu" data-i18n-title="design.zoom.hint">
+              <span id="zoom-out">100 %</span>
+            </button>
+            <button type="button" id="fit" class="vb-btn vb-icon" data-i18n-aria="controls.fit">
+              <svg class="i" aria-hidden="true"><use href="#i-fit" /></svg>
+            </button>
+
+            <div class="popover view-pop" id="view-pop" role="dialog" data-i18n-aria="design.view.title" hidden>
+              <section class="vp-group">
+                <h3 data-i18n="design.view.look"></h3>
+                <label class="check" data-i18n-title="controls.realistic.hint"><input type="checkbox" id="realistic" /><span data-i18n="controls.realistic"></span></label>
+                <div class="vp-sub" id="realistic-sub">
+                  <label class="field" data-i18n-title="controls.threadWidth.hint">
+                    <span class="label"><span data-i18n="controls.threadWidth"></span> <output id="thread-width-out"></output></span>
+                    <input type="range" id="thread-width" min="0.02" max="1" step="0.01" />
+                  </label>
+                  <label class="check" data-i18n-title="controls.liveLight.hint"><input type="checkbox" id="live-light" /><span data-i18n="controls.liveLight"></span></label>
+                  <button type="button" id="allow-tilt" class="link" data-i18n="controls.tilt" hidden></button>
+                </div>
+                <label class="check" data-mode="flow" data-i18n-title="display.shapes.hint"><input type="checkbox" id="shapes-view" /><span data-i18n="display.shapes"></span></label>
+              </section>
+              <section class="vp-group" data-mode="flow">
+                <h3 data-i18n="colorBy.title"></h3>
+                <div class="segmented vp-seg" role="radiogroup" data-i18n-aria="colorBy.title">
+                  <label><input type="radio" name="color-by" value="thread" /><span data-i18n="colorBy.thread"></span></label>
+                  <label><input type="radio" name="color-by" value="order" /><span data-i18n="colorBy.order"></span></label>
+                  <label><input type="radio" name="color-by" value="kind" /><span data-i18n="colorBy.kind"></span></label>
+                  <label><input type="radio" name="color-by" value="length" /><span data-i18n="colorBy.length"></span></label>
+                </div>
+                <div id="color-key" class="color-key"></div>
+              </section>
+              <section class="vp-group" data-mode="density">
+                <label class="check"><input type="checkbox" id="overlay" /><span data-i18n="controls.overlay"></span></label>
+                <label class="field vp-sub">
+                  <span class="label"><span data-i18n="controls.opacity"></span> <output id="opacity-out"></output></span>
+                  <input type="range" id="opacity" min="0.05" max="1" step="0.05" />
+                </label>
+              </section>
+              <section class="vp-group" data-i18n-title="controls.background.hint">
+                <h3><span data-i18n="controls.background"></span> <output id="bg-out"></output></h3>
+                <div class="bg-swatches" id="bg-swatches"></div>
+                <label class="vp-row" data-i18n-title="controls.fabric.hint">
+                  <span data-i18n="controls.fabric"></span>
+                  <select id="fabric-look"></select>
+                </label>
+              </section>
+              <fieldset class="marks vp-group" data-mode="flow density">
+                <legend data-i18n="marks.title"></legend>
+                <label class="check"><input type="checkbox" data-mark="jumps" /><span><i class="mk mk-jump" aria-hidden="true"></i><span data-i18n="marks.jumps"></span></span></label>
+                <label class="check" data-mode="flow" data-i18n-title="marks.threads.hint"><input type="checkbox" data-mark="threads" /><span><i class="mk mk-thread" aria-hidden="true"></i><span data-i18n="marks.threads"></span></span></label>
+                <label class="check"><input type="checkbox" data-mark="trims" /><span><i class="mk" aria-hidden="true">✂</i><span data-i18n="marks.trims"></span></span></label>
+                <label class="check"><input type="checkbox" data-mark="colors" /><span><i class="mk mk-num" aria-hidden="true">1</i><span data-i18n="marks.colors"></span></span></label>
+                <label class="check"><input type="checkbox" data-mark="ends" /><span><i class="mk mk-start" aria-hidden="true">S</i><span data-i18n="marks.ends"></span></span></label>
+                <label class="check" data-i18n-title="marks.points.hint"><input type="checkbox" data-mark="points" /><span><i class="mk mk-point" aria-hidden="true"></i><span data-i18n="marks.points"></span></span></label>
+              </fieldset>
+            </div>
+          </div>
+        </div>
         <div class="player" id="player" data-mode="flow" hidden>
-          <div class="player-buttons">
-            <button type="button" class="tool" data-play="block-prev" data-i18n-title="player.blockPrev"><span aria-hidden="true">⏮</span></button>
-            <button type="button" class="tool" data-play="prev" data-i18n-title="player.prev"><span aria-hidden="true">◂</span></button>
-            <button type="button" class="tool play" data-play="toggle" data-i18n-title="player.play"><span aria-hidden="true">▶</span></button>
-            <button type="button" class="tool" data-play="next" data-i18n-title="player.next"><span aria-hidden="true">▸</span></button>
-            <button type="button" class="tool" data-play="block-next" data-i18n-title="player.blockNext"><span aria-hidden="true">⏭</span></button>
+          <button type="button" class="player-play" data-play="toggle" data-i18n-title="player.play" data-i18n-aria="design.player.play">
+            <svg class="i" aria-hidden="true"><use href="#i-play" /></svg>
+          </button>
+          <div class="player-steps">
+            <button type="button" class="player-btn" data-play="block-prev" data-i18n-title="player.blockPrev" data-i18n-aria="player.blockPrev"><svg class="i" aria-hidden="true"><use href="#i-skip-back" /></svg></button>
+            <button type="button" class="player-btn" data-play="prev" data-i18n-title="player.prev" data-i18n-aria="design.player.prev"><svg class="i" aria-hidden="true"><use href="#i-step-back" /></svg></button>
+            <button type="button" class="player-btn" data-play="next" data-i18n-title="player.next" data-i18n-aria="design.player.next"><svg class="i" aria-hidden="true"><use href="#i-step-forward" /></svg></button>
+            <button type="button" class="player-btn" data-play="block-next" data-i18n-title="player.blockNext" data-i18n-aria="player.blockNext"><svg class="i" aria-hidden="true"><use href="#i-skip-forward" /></svg></button>
           </div>
           <div class="player-track">
             <div class="player-sections" id="player-sections" aria-hidden="true"></div>
@@ -392,6 +462,9 @@
             <option value="50">50×</option>
             <option value="250">250×</option>
           </select>
+          <button type="button" class="player-btn player-fold" id="player-fold" aria-expanded="true" data-i18n-title="design.player.fold" data-i18n-aria="design.player.fold">
+            <svg class="i" aria-hidden="true"><use href="#i-chevron-down" /></svg>
+          </button>
         </div>
       </section>
 
@@ -457,34 +530,35 @@
         </div>
 
         <div class="insp-page" data-page="design" data-mode="flow density">
-          <section class="panel" id="hoop-panel" data-mode="flow">
-            <h2 data-i18n="hoop.title"></h2>
-            <label class="field hoop-field">
-              <span class="label" data-i18n="hoop.title" data-i18n-title="hoop.hint"></span>
-              <select id="hoop"></select>
-            </label>
-            <div class="hoop-custom" id="hoop-custom" hidden>
-              <input type="number" id="hoop-w" min="10" max="1000" step="1" data-i18n-aria="hoop.width" />
-              <span>×</span>
-              <input type="number" id="hoop-h" min="10" max="1000" step="1" data-i18n-aria="hoop.height" />
-              <span>mm</span>
-            </div>
-            <p class="hoop-note" id="hoop-note" hidden></p>
-          </section>
-          <!-- Ablauf: what the colors mean -->
-          <section class="panel" data-mode="flow">
-            <h2 data-i18n="flow.settings"></h2>
-            <div class="field">
-              <span class="label" data-i18n="colorBy.title"></span>
-              <div class="segmented wrap" role="radiogroup">
-                <label><input type="radio" name="color-by" value="thread" /><span data-i18n="colorBy.thread"></span></label>
-                <label><input type="radio" name="color-by" value="order" /><span data-i18n="colorBy.order"></span></label>
-                <label><input type="radio" name="color-by" value="kind" /><span data-i18n="colorBy.kind"></span></label>
-                <label><input type="radio" name="color-by" value="length" /><span data-i18n="colorBy.length"></span></label>
+          <!-- Stickmuster: hoop, threads and figures; src/areas/design/page.ts puts them (and #material-panel) into sections. -->
+          <div class="design-page" id="design-page">
+            <div class="hoop-panel" id="hoop-panel">
+              <select id="hoop" data-i18n-aria="hoop.title"></select>
+              <div class="hoop-custom" id="hoop-custom" hidden>
+                <input type="number" id="hoop-w" min="10" max="1000" step="1" data-i18n-aria="hoop.width" />
+                <span>×</span>
+                <input type="number" id="hoop-h" min="10" max="1000" step="1" data-i18n-aria="hoop.height" />
+                <span>mm</span>
               </div>
+              <p class="hoop-status" id="hoop-status" hidden></p>
+              <p class="hoop-note" id="hoop-note" hidden></p>
             </div>
-            <div id="color-key" class="color-key"></div>
-          </section>
+            <div class="design-threads" id="design-threads"></div>
+            <div class="stats-panel" id="stats-panel">
+              <dl id="stats" class="design-stats"></dl>
+              <label class="speed-row">
+                <span data-i18n="design.stats.speed"></span>
+                <select id="machine-spm" data-i18n-aria="stats.speed">
+                  <option value="400">400</option>
+                  <option value="600">600</option>
+                  <option value="800">800</option>
+                  <option value="1000">1000</option>
+                  <option value="1200">1200</option>
+                </select>
+                <span class="muted" data-i18n="design.stats.spm"></span>
+              </label>
+            </div>
+          </div>
           <section class="panel jumps" id="jumps-panel" data-mode="flow">
             <h2 data-i18n="jumps.title"></h2>
             <div id="jumps" class="jumps-body" aria-live="polite"></div>
@@ -543,8 +617,7 @@
             <table class="compare-table" id="compare-table" hidden></table>
           </section>
           <!-- Dichte: material, checks and heatmap -->
-          <section class="panel" id="material-panel" data-mode="density image">
-            <h2 data-i18n="profile.title"></h2>
+          <section class="material-panel" id="material-panel">
             <div class="profile">
               <label class="field">
                 <span class="label" data-i18n="profile.fabric"></span>
@@ -595,56 +668,6 @@
               <label class="check"><input type="checkbox" id="include-jumps" /><span data-i18n="controls.jumps"></span></label>
             </details>
           </section>
-          <!-- Both modes: what is drawn and how -->
-          <details class="panel section" data-section="display">
-            <summary><h2 data-i18n="display.title"></h2></summary>
-            <div data-mode="density">
-              <label class="check"><input type="checkbox" id="overlay" /><span data-i18n="controls.overlay"></span></label>
-              <label class="field indent">
-                <span class="label"><span data-i18n="controls.opacity"></span> <output id="opacity-out"></output></span>
-                <input type="range" id="opacity" min="0.05" max="1" step="0.05" />
-              </label>
-            </div>
-            <label class="check" data-mode="flow" data-i18n-title="display.shapes.hint"><input type="checkbox" id="shapes-view" /><span data-i18n="display.shapes"></span></label>
-            <label class="check" data-i18n-title="controls.realistic.hint"><input type="checkbox" id="realistic" /><span data-i18n="controls.realistic"></span></label>
-            <label class="field indent" data-i18n-title="controls.threadWidth.hint">
-              <span class="label"><span data-i18n="controls.threadWidth"></span> <output id="thread-width-out"></output></span>
-              <input type="range" id="thread-width" min="0.02" max="1" step="0.01" />
-            </label>
-            <label class="check indent" data-i18n-title="controls.liveLight.hint"><input type="checkbox" id="live-light" /><span data-i18n="controls.liveLight"></span></label>
-            <button type="button" id="allow-tilt" class="link indent" data-i18n="controls.tilt" hidden></button>
-            <div class="field bg-field" data-i18n-title="controls.background.hint">
-              <span class="label"><span data-i18n="controls.background"></span> <output id="bg-out"></output></span>
-              <div class="bg-swatches" id="bg-swatches"></div>
-            </div>
-            <label class="field" data-i18n-title="controls.fabric.hint">
-              <span class="label" data-i18n="controls.fabric"></span>
-              <select id="fabric-look"></select>
-            </label>
-            <fieldset class="marks" data-mode="flow density">
-              <legend data-i18n="marks.title"></legend>
-              <label class="check"><input type="checkbox" data-mark="jumps" /><span><i class="mk mk-jump" aria-hidden="true"></i><span data-i18n="marks.jumps"></span></span></label>
-              <label class="check" data-mode="flow" data-i18n-title="marks.threads.hint"><input type="checkbox" data-mark="threads" /><span><i class="mk mk-thread" aria-hidden="true"></i><span data-i18n="marks.threads"></span></span></label>
-              <label class="check"><input type="checkbox" data-mark="trims" /><span><i class="mk" aria-hidden="true">✂</i><span data-i18n="marks.trims"></span></span></label>
-              <label class="check"><input type="checkbox" data-mark="colors" /><span><i class="mk mk-num" aria-hidden="true">1</i><span data-i18n="marks.colors"></span></span></label>
-              <label class="check"><input type="checkbox" data-mark="ends" /><span><i class="mk mk-start" aria-hidden="true">S</i><span data-i18n="marks.ends"></span></span></label>
-              <label class="check" data-i18n-title="marks.points.hint"><input type="checkbox" data-mark="points" /><span><i class="mk mk-point" aria-hidden="true"></i><span data-i18n="marks.points"></span></span></label>
-            </fieldset>
-          </details>
-          <details class="panel section" data-section="stats" data-mode="flow density">
-            <summary><h2 data-i18n="stats.title"></h2></summary>
-            <dl id="stats" class="stats"></dl>
-            <label class="field speed">
-              <span class="label" data-i18n="stats.speed"></span>
-              <select id="machine-spm">
-                <option value="400">400</option>
-                <option value="600">600</option>
-                <option value="800">800</option>
-                <option value="1000">1000</option>
-                <option value="1200">1200</option>
-              </select>
-            </label>
-          </details>
         </div>
       </aside>
     </main>

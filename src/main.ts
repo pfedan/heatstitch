@@ -68,6 +68,7 @@ import { bindObjects } from './app/objects';
 import { bindScene } from './app/scene';
 import { initShell } from './shell/setup';
 import { initStitchArea } from './areas/stitches';
+import { initDesign } from './areas/design';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -802,6 +803,7 @@ function redraw(): void {
     $('file-actions').hidden = !active?.pattern;
     if (settings.mode === 'density') drawLegendCanvas();
     renderStats($('stats'), active, ui.grid, settings, ui.computing);
+    design.render();
     const p = active?.pattern ?? null;
     const q = p ? seq(p) : null;
     $('player').hidden = !p;
@@ -1630,6 +1632,7 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', red
 
 initShell({ files, mode: () => settings.mode, setMode });
 const stitchArea = initStitchArea({ files, settings, editor, rungTool, stitchPanel, closeRungs, toggleRungs, toggleGuides, togglePoints, sewAlongLines, setEditing, enterObject, revealRecord, pointsVisible: () => vp.scale >= POINTS_MIN_SCALE, redraw });
+const design = initDesign({ files, settings, player, vp, stage, fitView, fitToHoop, redraw, applyEdit });
 
 files.render();
 redraw();

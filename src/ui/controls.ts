@@ -13,7 +13,7 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 const rgb = (c: { r: number; g: number; b: number }) => `rgb(${c.r}, ${c.g}, ${c.b})`;
 
 /** Fabric colors offered for the background; null is the theme's own. */
-const BACKGROUNDS: [string | null, Key][] = [
+export const BACKGROUNDS: [string | null, Key][] = [
   [null, 'bg.default'],
   ['#ffffff', 'bg.white'],
   ['#ece4d4', 'bg.natural'],
@@ -23,7 +23,16 @@ const BACKGROUNDS: [string | null, Key][] = [
   ['#9b2430', 'bg.red'],
 ];
 
-/** Heatmap, coloring, display and marker controls of the sidebar. */
+/** What the view button on the stage says: the look that is on. */
+function viewName(s: Settings): string {
+  if (s.realistic && (s.mode === 'flow' || s.mode === 'image' || s.overlay)) return t('design.view.realistic');
+  if (s.mode !== 'flow') return t('design.view.title');
+  if (s.shapesView) return t('design.view.shapes');
+  if (s.colorBy !== 'thread') return t(`colorBy.${s.colorBy}` as Key);
+  return t('design.view.stitches');
+}
+
+/** Heatmap controls of the inspector, and the coloring, display and marker controls of the view menu on the stage. */
 export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void): { refresh: () => void } {
   const metricInputs = document.querySelectorAll<HTMLInputElement>('input[name="metric"]');
   const colorBy = document.querySelectorAll<HTMLInputElement>('input[name="color-by"]');
@@ -81,7 +90,8 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
     };
     const list = document.createElement('ul');
     const note = (k: Key) => Object.assign(document.createElement('p'), { className: 'muted small', textContent: t(k) });
-    if (s.colorBy === 'thread') return key.replaceChildren(note('colorBy.thread.hint'));
+    // Thread colors need no key: they are the colors of the list.
+    if (s.colorBy === 'thread') return key.replaceChildren();
     if (s.colorBy === 'order') {
       const bar = Object.assign(document.createElement('div'), { className: 'gradient' });
       bar.style.background = ORDER_CSS;
@@ -119,6 +129,9 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
       i.disabled = s.mode === 'density' && !s.overlay;
     });
     marksToggle.setAttribute('aria-pressed', String(s.marksOn));
+    marksToggle.title = t(s.marksOn ? 'design.view.marksOn' : 'design.view.marksOff');
+    $('view-name').textContent = viewName(s);
+    $('realistic-sub').classList.toggle('off', !s.realistic);
     marksBox.classList.toggle('all-off', !s.marksOn);
     marksBox.querySelector('legend')!.dataset.off = t('marks.allOff');
     cell.value = String(s.cellMm);

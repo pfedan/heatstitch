@@ -65,6 +65,8 @@ describe.skipIf(!on)('the space key', () => {
   it('plays after a click on a switch instead of flipping it back', { timeout: 30_000 }, async () => {
     const box = page.locator('#realistic');
     const label = page.locator('label:has(#realistic)');
+    // The switch lives in the view menu on the stage.
+    await page.click('#view-button');
     await label.click();
     const checked = await box.isChecked();
     await page.keyboard.press(' ');

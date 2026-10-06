@@ -185,3 +185,21 @@ export function chooseCatalog(id: string): void {
     // As above.
   }
 }
+
+/** Whether someone picked a brand yet; until then a list may start with the brand the colors are from. */
+export function catalogPicked(): boolean {
+  if (chosen) return true;
+  try {
+    return !!localStorage.getItem(KEY);
+  } catch {
+    return false;
+  }
+}
+
+/** The catalog most of these threads come from (by their brand), if any. */
+export function catalogOf(colors: ThreadColor[]): Catalog | undefined {
+  const count = new Map<string, number>();
+  for (const c of colors) if (c.brand) count.set(c.brand, (count.get(c.brand) ?? 0) + 1);
+  const top = [...count].sort((a, b) => b[1] - a[1])[0]?.[0];
+  return top ? catalogsNow().find((c) => c.name === top) : undefined;
+}
