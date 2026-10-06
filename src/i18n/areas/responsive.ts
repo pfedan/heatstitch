@@ -10,6 +10,11 @@ export const de = {
   'responsive.sheet': 'Ziehen oder tippen: größer oder kleiner',
   'responsive.tools': 'Werkzeuge',
   'responsive.more': 'Weitere Optionen',
+  'responsive.hint.flow': 'Tippen: wählen · Doppeltippen: Form oder Stiche bearbeiten · Lange drücken: Menü · Ziehen oder zwei Finger: verschieben und zoomen',
+  'responsive.hint.check': 'Ziehen oder zwei Finger: verschieben und zoomen · Doppeltippen: einpassen',
+  'responsive.hint.view': 'Ziehen oder zwei Finger: verschieben und zoomen · Doppeltippen: einpassen',
+  'responsive.draw': 'Zeichnen',
+  'responsive.opt.frame': 'Ziehen: verschieben · Ecke: Größe · Kreis: drehen',
 } as const;
 
 export const en: Record<keyof typeof de, string> = {
@@ -23,4 +28,9 @@ export const en: Record<keyof typeof de, string> = {
   'responsive.sheet': 'Drag or tap: larger or smaller',
   'responsive.tools': 'Tools',
   'responsive.more': 'More options',
+  'responsive.hint.flow': 'Tap: select · Double tap: edit shape or stitches · Long press: menu · Drag or two fingers: pan and zoom',
+  'responsive.hint.check': 'Drag or two fingers: pan and zoom · Double tap: fit',
+  'responsive.hint.view': 'Drag or two fingers: pan and zoom · Double tap: fit',
+  'responsive.draw': 'Draw',
+  'responsive.opt.frame': 'Drag: move · Corner: size · Circle: turn',
 };

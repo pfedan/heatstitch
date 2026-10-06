@@ -5,8 +5,80 @@
 .rs-head,
 .rs-scrim,
 .rs-phone-row,
-.rs-handle {
+.rs-handle,
+.toolrail button.tool.rs-draw {
   display: none;
+}
+
+/* A bar that scrolls sideways fades out where more of it is hidden (fades() in responsive.ts). */
+[data-fade='end'] {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+}
+
+[data-fade='start'] {
+  -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent);
+}
+
+[data-fade='both'] {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+}
+
+/* The menu of the drawing tools on the phone (drawGroup() in responsive.ts). */
+.rs-draw-pop {
+  position: fixed;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 168px;
+  padding: 6px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+}
+
+.rs-draw-pop[hidden] {
+  display: none;
+}
+
+.rs-draw-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 12px 0 10px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+}
+
+.rs-draw-row svg {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.rs-draw-row:hover,
+.rs-draw-row:focus-visible {
+  background: var(--bg);
+}
+
+.rs-draw-row[aria-checked='true'] {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  font-weight: 600;
 }
 
 /* Tablet and phone: the stage gets the width, the side columns lie over it -------------------------- */
@@ -494,6 +566,57 @@
     display: none;
   }
 
+  /* The sheet at its small height: the player and the view bar stand on it (liftFoot()). */
+  body.rs-drawers .stage .player:not(.folded) {
+    bottom: var(--rs-lift, 0px);
+    transition: bottom 0.18s ease;
+  }
+
+  body.rs-drawers .stage .player.folded {
+    bottom: calc(var(--rs-lift, 0px) + 10px);
+  }
+
+  body.rs-drawers .stage-foot {
+    bottom: calc(var(--player-h) + 10px + var(--rs-lift, 0px));
+    transition: bottom 0.18s ease;
+  }
+
+  /* The four drawing tools share one button with a small menu: the bottom bar fits. */
+  body.rs-drawers .toolrail button[data-draw] {
+    display: none;
+  }
+
+  body.rs-drawers .toolrail button.tool.rs-draw {
+    display: grid;
+    place-items: center;
+  }
+
+  /* A small corner says the button holds more tools. */
+  body.rs-drawers .toolrail button.tool.rs-draw {
+    position: relative;
+  }
+
+  body.rs-drawers .toolrail button.tool.rs-draw::after {
+    content: '';
+    position: absolute;
+    right: 6px;
+    bottom: 6px;
+    border: 3px solid transparent;
+    border-right-color: currentColor;
+    border-bottom-color: currentColor;
+    opacity: 0.7;
+  }
+
+  .toolrail .rs-draw .rs-draw-face {
+    display: grid;
+    place-items: center;
+  }
+
+  .toolrail .rs-draw svg {
+    width: 20px;
+    height: 20px;
+  }
+
   /* The start page needs no view settings; on a phone they would cover it. */
   .stage:has(#empty:not([hidden]) .start) .stage-foot {
     display: none;
@@ -570,6 +693,11 @@
   .crumbs button,
   .stage-tools button {
     min-height: 40px;
+  }
+
+  /* The pill grows with its finger-sized buttons, so the divider before the level menu stays inside. */
+  .crumbs {
+    height: auto;
   }
 
   /* The object list: rows and their buttons big enough for a finger. */

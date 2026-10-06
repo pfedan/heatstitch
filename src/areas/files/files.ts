@@ -277,7 +277,11 @@ export function initFilesArea(app: FilesAreaApp): void {
         h('span', null, t('files.privacy')),
       ),
     );
-    empty.replaceChildren(sheet, h('p', { class: 'start-image', 'data-mode': 'image' }, t('canvas.empty.image')));
+    // On the phone the steps of the assistant stand above the stage, not left of it.
+    empty.replaceChildren(
+      sheet,
+      h('p', { class: 'start-image', 'data-mode': 'image' }, h('span', { class: 'start-image-wide' }, t('canvas.empty.image')), h('span', { class: 'start-image-narrow' }, t('files.start.image.above'))),
+    );
     showLoading();
   };
   // The list redraws whenever a design is added, renamed, measured or removed.

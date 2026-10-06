@@ -145,6 +145,7 @@ export function initResponsive(): void {
     layout.classList.toggle('rs-side-open', sideShown);
     layout.dataset.sheet = inspState;
     if (inspState === 'closed' || !on) insp.style.removeProperty('height');
+    liftFoot();
     for (const b of [topSide, dockSide]) b.setAttribute('aria-expanded', String(sideShown));
     for (const b of [topInsp, dockInsp]) {
       b.setAttribute('aria-expanded', String(inspState !== 'closed'));
@@ -216,6 +217,17 @@ export function initResponsive(): void {
       setSheet(open ? 'closed' : layoutNow() === 'phone' ? 'half' : 'full');
     },
   });
+
+  /**
+   * The sheet at its small height lies over the foot of the stage: the player and the view bar
+   * move up and stand on it, so playing stays at hand while an object is selected.
+   */
+  function liftFoot(): void {
+    const peek = layoutNow() === 'phone' && drawers() && layout.dataset.sheet === 'peek';
+    if (peek) layout.style.setProperty('--rs-lift', `${insp.offsetHeight}px`);
+    else layout.style.removeProperty('--rs-lift');
+  }
+  new ResizeObserver(liftFoot).observe(insp);
 
   // Closing --------------------------------------------------------------------------------------
   window.addEventListener(
@@ -348,8 +360,132 @@ export function initResponsive(): void {
     setTimeout(() => setSide(false), 120);
   });
 
+  drawGroup();
+  fades();
+
   TABLET.addEventListener('change', texts);
   PHONE.addEventListener('change', texts);
   onLangChange(texts);
   texts();
+}
+
+/**
+ * On the phone the four drawing tools (Rechteck, Ellipse, Pfad, Freihand) share one button in the
+ * bottom bar; it shows the tool in use (or the last one) and opens a small menu of the four, so the
+ * bar fits without scrolling. Elsewhere the rail shows them one by one.
+ */
+function drawGroup(): void {
+  const rail = document.querySelector<HTMLElement>('.toolrail');
+  const tools = [...(rail?.querySelectorAll<HTMLButtonElement>('button[data-draw]') ?? [])];
+  if (!rail || !tools.length) return;
+  let last = tools[0];
+  const face = h('span', { class: 'rs-draw-face', 'aria-hidden': 'true' });
+  const button = h('button', { type: 'button', class: 'tool rs-draw', id: 'rs-draw', 'aria-haspopup': 'menu', 'aria-expanded': 'false', 'aria-pressed': 'false' }, face);
+  const pop = h('div', { class: 'rs-draw-pop', role: 'menu', hidden: true });
+  tools[0].before(button);
+  document.body.append(pop);
+
+  const rows = tools.map((tool) => {
+    const label = h('span');
+    const row = h('button', { type: 'button', role: 'menuitemradio', class: 'rs-draw-row', 'aria-checked': 'false' }, tool.querySelector('svg')!.cloneNode(true), label);
+    row.addEventListener('click', () => {
+      close();
+      tool.click();
+    });
+    return { tool, row, label };
+  });
+  pop.append(...rows.map((r) => r.row));
+
+  const place = () => {
+    const r = button.getBoundingClientRect();
+    pop.style.left = `${Math.max(8, Math.min(r.left + r.width / 2 - pop.offsetWidth / 2, innerWidth - pop.offsetWidth - 8))}px`;
+    pop.style.bottom = `${innerHeight - r.top + 8}px`;
+  };
+  const isOpen = () => !pop.hidden;
+  const open = () => {
+    pop.hidden = false;
+    button.setAttribute('aria-expanded', 'true');
+    place();
+    (rows.find((r) => r.tool === last)?.row ?? rows[0].row).focus({ preventScroll: true });
+  };
+  function close(refocus = false): void {
+    if (!isOpen()) return;
+    pop.hidden = true;
+    button.setAttribute('aria-expanded', 'false');
+    if (refocus) button.focus({ preventScroll: true });
+  }
+  button.addEventListener('click', () => (isOpen() ? close() : open()));
+  document.addEventListener('pointerdown', (e) => {
+    const t0 = e.target as Node;
+    if (isOpen() && !pop.contains(t0) && !button.contains(t0)) close();
+  });
+  window.addEventListener(
+    'keydown',
+    (e) => {
+      if (!isOpen()) return;
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        close(true);
+      } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        const i = rows.findIndex((r) => r.row === document.activeElement);
+        rows[(i + (e.key === 'ArrowDown' ? 1 : rows.length - 1)) % rows.length].row.focus();
+      }
+    },
+    { capture: true },
+  );
+  window.addEventListener('resize', () => close());
+
+  // The button follows the tools: the one in use (or the last used) is its face.
+  const sync = () => {
+    const on = tools.find((b) => b.getAttribute('aria-pressed') === 'true');
+    if (on) last = on;
+    face.replaceChildren(last.querySelector('svg')!.cloneNode(true));
+    button.setAttribute('aria-pressed', String(!!on));
+    for (const r of rows) {
+      r.label.textContent = r.tool.getAttribute('aria-label') ?? '';
+      r.row.setAttribute('aria-checked', String(r.tool === on));
+      r.row.title = r.tool.title;
+    }
+    button.title = button.ariaLabel = `${t('responsive.draw')}: ${last.getAttribute('aria-label') ?? ''}`;
+  };
+  const watch = new MutationObserver(sync);
+  for (const b of tools) watch.observe(b, { attributes: true, attributeFilter: ['aria-pressed', 'aria-label', 'title'] });
+  onLangChange(sync);
+  sync();
+}
+
+/**
+ * Bars that scroll sideways on a narrow screen (the tool options over the stage, the bottom bar of
+ * the phone) fade out at the side where more is hidden, so it shows that they scroll.
+ */
+function fades(): void {
+  const watched = new WeakSet<HTMLElement>();
+  const update = (el: HTMLElement) => {
+    const more = el.scrollWidth - el.clientWidth;
+    const start = more > 1 && el.scrollLeft > 1;
+    const end = more > 1 && el.scrollLeft < more - 1;
+    const fade = start && end ? 'both' : start ? 'start' : end ? 'end' : '';
+    if (fade) el.dataset.fade = fade;
+    else delete el.dataset.fade;
+  };
+  const watch = (el: HTMLElement | null) => {
+    if (!el || watched.has(el)) return;
+    watched.add(el);
+    const run = () => update(el);
+    el.addEventListener('scroll', run, { passive: true });
+    new ResizeObserver(run).observe(el);
+    new MutationObserver(() => requestAnimationFrame(run)).observe(el, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'class'] });
+    run();
+  };
+  const all = () => {
+    watch(document.querySelector<HTMLElement>('#tool-options'));
+    watch(document.querySelector<HTMLElement>('.stage .stitch-bar'));
+    watch(document.querySelector<HTMLElement>('.layout > .toolrail'));
+  };
+  // The bar of the stitches comes with its area, perhaps after this one.
+  const top = document.querySelector('#stage .stage-top');
+  if (top) new MutationObserver(all).observe(top, { childList: true });
+  all();
 }

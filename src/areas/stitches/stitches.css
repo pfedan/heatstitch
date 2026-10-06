@@ -171,7 +171,7 @@
 /* A border, shadow or echo with its settings: what it is, and the way to its fill or line. */
 .follower-head {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: space-between;
   gap: 6px;
@@ -179,14 +179,20 @@
 }
 
 .follower-head .outline-head {
+  flex: 0 1 auto;
   margin: 0;
   min-width: 0;
 }
 
 .follower-actions {
+  flex: none;
   display: flex;
   gap: 4px;
   margin-left: auto;
+}
+
+.follower-actions button {
+  white-space: nowrap;
 }
 
 .follower-actions button {
@@ -254,7 +260,10 @@
 .stitch-bar {
   pointer-events: auto;
   display: flex;
-  flex-wrap: wrap;
+  /* One line: what does not fit goes into the menu "…" (fit() in index.ts), the rest scrolls. */
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
   align-items: center;
   gap: 4px;
   max-width: 100%;
@@ -269,6 +278,18 @@
 
 .stitch-bar[hidden] {
   display: none;
+}
+
+.stitch-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.stitch-bar > * {
+  flex: none;
+}
+
+.stitch-bar > .bar-off {
+  display: none !important;
 }
 
 .stitch-bar .bar-btn {

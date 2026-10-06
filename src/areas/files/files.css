@@ -224,6 +224,20 @@
   color: #a49cb0;
 }
 
+.start-image-narrow {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .start-image-wide {
+    display: none;
+  }
+
+  .start-image-narrow {
+    display: inline;
+  }
+}
+
 /* Dropping files anywhere: the whole window says it takes them. */
 body.dragging::after {
   content: attr(data-drop-text);

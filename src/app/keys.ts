@@ -242,8 +242,10 @@ export function bindKeys(app: KeysApp) {
       if (e.key === ' ') {
         e.preventDefault();
         app.player.toggle();
-      } else if (e.key === ',' || e.key === '.') app.player.step((e.key === '.' ? 1 : -1) * (e.shiftKey ? 100 : 1));
-      else if (e.key === 'Home') app.player.set(0);
+      } else if (e.key === ',' || e.key === '.' || (e.shiftKey && (e.code === 'Comma' || e.code === 'Period'))) {
+        // With Shift most layouts give another character (">", ":"): the key's place still counts.
+        app.player.step((e.key === '.' || e.code === 'Period' ? 1 : -1) * (e.shiftKey ? 100 : 1));
+      } else if (e.key === 'Home') app.player.set(0);
       else if (e.key === 'End') app.player.set(Number.MAX_SAFE_INTEGER);
       else if (e.key === 'n') app.stepJump(1);
       else if (e.key === 'N') app.stepJump(-1);

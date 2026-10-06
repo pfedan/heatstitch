@@ -8,7 +8,7 @@ import type { Settings } from '../../settings';
 import { ui } from '../../app/state';
 import { canRun, command, commandTitle, getCommand, keyLabel, runCommand } from '../../shell/commands';
 import { h } from '../../shell/h';
-import { toast } from '../../shell/ui';
+import { showMenu, toast, type MenuItem } from '../../shell/ui';
 import { effect } from '../../shell/signal';
 import { setThinShare, THIN_SHARES, thinShare } from './state';
 
@@ -43,6 +43,7 @@ const ICON = {
   prev: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12 5l-5 5 5 5" /></svg>',
   next: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8 5l5 5-5 5" /></svg>',
   help: '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7" /><path d="M8 8a2 2 0 1 1 2.8 1.8c-.6.3-.8.7-.8 1.4M10 13.6v.1" /></svg>',
+  more: '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="5" cy="10" r="1.2" /><circle cx="10" cy="10" r="1.2" /><circle cx="15" cy="10" r="1.2" /></svg>',
 };
 
 /**
@@ -93,7 +94,7 @@ export function initStitchArea(app: StitchAreaApp): { refresh: () => void } {
     id: 'stitch.points',
     label: 'stitches.cmd.points',
     group: G,
-    when: () => (rungsOn() && rt.mode === 'points') || (!!info()?.points?.single && POINTED.includes(info()?.measured.fill?.pattern ?? '') && panel.shownKind === 'fill'),
+    when: () => (rungsOn() && rt.mode === 'points') || (!!info()?.points?.single && POINTED.includes(panel.fillPattern ?? '')),
     run: () => app.togglePoints(),
   });
   const drawing = () => rungsOn() && (rt.mode === 'satin' || rt.mode === 'fill');
@@ -192,8 +193,11 @@ export function initStitchArea(app: StitchAreaApp): { refresh: () => void } {
   document.querySelector('#stage .stage-top')?.appendChild(bar);
   let barKey = '';
 
-  /** A button that runs a command: disabled when it cannot run, its key in the hint. */
-  const cmdButton = (id: string, text: Key | null, opts: { icon?: string; primary?: boolean; hint?: Key; pressed?: boolean } = {}) => {
+  /**
+   * A button that runs a command: disabled when it cannot run, its key in the hint. With `more`,
+   * it moves into the menu "…" of the bar when the stage is too narrow (higher numbers go first).
+   */
+  const cmdButton = (id: string, text: Key | null, opts: { icon?: string; primary?: boolean; hint?: Key; pressed?: boolean; more?: number } = {}) => {
     const c = getCommand(id)!;
     const b = h('button', {
       type: 'button',
@@ -208,16 +212,26 @@ export function initStitchArea(app: StitchAreaApp): { refresh: () => void } {
     b.addEventListener('click', () => {
       runCommand(id);
     });
-    return b;
+    return opts.more ? spare(b, opts.more, id) : b;
+  };
+  /** Marks a part of the bar that may give way on a narrow stage: into the menu "…" as `cmd`, or just hidden. */
+  const spare = <T extends HTMLElement>(el: T, more: number, cmd?: string): T => {
+    el.dataset.more = String(more);
+    if (cmd) el.dataset.cmd = cmd;
+    return el;
   };
   const sep = () => h('span', { class: 'bar-sep', 'aria-hidden': 'true' });
   const title = (text: Key) => h('span', { class: 'bar-title' }, t(text));
-  const state = (text: string) => h('span', { class: 'bar-state' }, text);
-  const help = (text: Key) => {
+  const state = (text: string, more?: number) => {
+    const el = h('span', { class: 'bar-state' }, text);
+    return more ? spare(el, more) : el;
+  };
+  const help = (text: Key, more = 4) => {
     const b = h('button', { type: 'button', class: 'bar-btn icon-only', title: t(text), 'aria-label': t('stitches.bar.help') });
     b.innerHTML = ICON.help;
     b.addEventListener('click', () => toast(t(text)));
-    return b;
+    b.dataset.label = t('stitches.bar.help');
+    return spare(b, more);
   };
   /** Querlinie | Trennlinie: what a line drawn makes. */
   const pen = () => {
@@ -264,24 +278,24 @@ export function initStitchArea(app: StitchAreaApp): { refresh: () => void } {
       items.push(
         state(n ? t(n === 1 ? 'edit.selection.one' : 'edit.selection', { n: formatNumber(n) }) : seen ? t('edit.none') : t('stitches.bar.zoom')),
         sep(),
-        cmdButton('edit.selectAll', 'stitches.bar.all'),
+        cmdButton('edit.selectAll', 'stitches.bar.all', { more: 3 }),
         cmdButton('edit.delete', 'edit.delete'),
-        cmdButton('edit.split', 'edit.split', { hint: 'edit.split.hint' }),
+        cmdButton('edit.split', 'edit.split', { hint: 'edit.split.hint', more: 4 }),
         sep(),
-        h('span', { class: 'bar-group' }, cmdButton('edit.thin', 'edit.thin'), shares()),
+        spare(h('span', { class: 'bar-group' }, cmdButton('edit.thin', 'edit.thin'), shares()), 5, 'edit.thin'),
         sep(),
-        cmdButton('edit.prev', null, { icon: ICON.prev }),
-        cmdButton('edit.next', null, { icon: ICON.next }),
-        help(app.settings.mode === 'flow' ? 'canvas.hint.flowEdit' : 'edit.hint'),
+        cmdButton('edit.prev', null, { icon: ICON.prev, more: 6 }),
+        cmdButton('edit.next', null, { icon: ICON.next, more: 6 }),
+        help(app.settings.mode === 'flow' ? 'canvas.hint.flowEdit' : 'edit.hint', 7),
         cmdButton('edit.done', 'object.editDone', { primary: true }),
       );
     } else if (tool === 'satin') {
       const d = dir();
       const what = !d ? '' : d.rungs === null ? t('stitches.bar.follow') : d.rungs === 0 ? t('stitches.bar.even') : t('stitches.bar.rungs', { n: d.rungs });
-      items.push(title('stitches.bar.direction'), state(d?.cuts ? `${what} · ${t('stitches.bar.cuts', { n: d.cuts + 1 })}` : what), sep(), pen(), sep());
-      items.push(cmdButton('stitch.rungs.corners', 'stitches.bar.corners', { hint: 'stitch.direction.corners.hint' }), cmdButton('stitch.rungs.sections', 'stitches.bar.sections', { hint: 'stitch.sections.hint' }));
-      if (rt.chained) items.push(cmdButton('stitch.rungs.order', 'stitches.bar.order', { hint: 'stitch.order.best.hint' }));
-      items.push(cmdButton('stitch.rungs.even', 'stitches.bar.remove', { hint: 'stitch.direction.even.hint' }), cmdButton('stitch.rungs.follow', 'stitch.direction.follow.button', { hint: 'stitch.direction.follow.hint' }));
+      items.push(title('stitches.bar.direction'), state(d?.cuts ? `${what} · ${t('stitches.bar.cuts', { n: d.cuts + 1 })}` : what, 3), sep(), pen(), sep());
+      items.push(cmdButton('stitch.rungs.corners', 'stitches.bar.corners', { hint: 'stitch.direction.corners.hint', more: 5 }), cmdButton('stitch.rungs.sections', 'stitches.bar.sections', { hint: 'stitch.sections.hint', more: 6 }));
+      if (rt.chained) items.push(cmdButton('stitch.rungs.order', 'stitches.bar.order', { hint: 'stitch.order.best.hint', more: 7 }));
+      items.push(cmdButton('stitch.rungs.even', 'stitches.bar.remove', { hint: 'stitch.direction.even.hint', more: 8 }), cmdButton('stitch.rungs.follow', 'stitch.direction.follow.button', { hint: 'stitch.direction.follow.hint', more: 9 }));
       if (d?.spacingHere !== undefined) items.push(sep(), spacingHere(d.spacingHere));
       items.push(help(d?.chain ? 'stitch.direction.chain' : 'stitch.direction.help'), cmdButton('stitch.tool.done', 'stitch.direction.done', { primary: true }));
     } else if (tool === 'fill') {
@@ -298,7 +312,7 @@ export function initStitchArea(app: StitchAreaApp): { refresh: () => void } {
       const n = rt.guides.length;
       items.push(title('stitches.bar.guides'), state(n ? t(n === 1 ? 'stitch.guide.one' : 'stitch.guide.count', { n }).replace(/\.$/, '') : t('stitches.guides.none')), help('stitch.guide.help'), cmdButton('stitch.tool.done', 'stitch.direction.done', { primary: true }));
     } else if (tool === 'points') {
-      const pattern = info()?.measured.fill?.pattern;
+      const pattern = panel.fillPattern;
       items.push(
         title('stitches.bar.points'),
         state(pattern && POINTED.includes(pattern) ? t(`stitch.points.${pattern}` as Key) : ''),
@@ -307,9 +321,55 @@ export function initStitchArea(app: StitchAreaApp): { refresh: () => void } {
       );
     }
     bar.setAttribute('aria-label', t('stitches.bar.label'));
+    // The menu "…" stands before the primary button at the end, for what does not fit (fit()).
+    const last = items[items.length - 1];
+    if (last?.classList.contains('primary')) items.splice(items.length - 1, 0, moreButton);
+    else if (items.length) items.push(moreButton);
     bar.replaceChildren(...items);
     bar.hidden = !items.length;
+    fit();
   }
+
+  /** "…": the parts of the bar that gave way on a narrow stage, as a menu of their commands. */
+  const moreButton = h('button', { type: 'button', class: 'bar-btn icon-only bar-more', 'aria-haspopup': 'menu' });
+  moreButton.innerHTML = ICON.more;
+  moreButton.addEventListener('click', () => {
+    const gone = [...bar.querySelectorAll<HTMLElement>(':scope > .bar-off')];
+    const items: MenuItem[] = [];
+    for (const el of gone) {
+      if (el.dataset.cmd) items.push(el.dataset.cmd);
+      else if (el.dataset.label) items.push({ label: el.dataset.label, run: () => el.click() });
+    }
+    showMenu(items, moreButton, t('stitches.bar.more'));
+  });
+
+  /**
+   * Keeps the bar on one line: while it is wider than the stage, the parts marked as spare give way,
+   * the highest number first, into the menu "…" (or out of sight, for a mere state text).
+   */
+  function fit(): void {
+    if (bar.hidden) return;
+    const spares = [...bar.querySelectorAll<HTMLElement>(':scope > [data-more]')];
+    for (const el of spares) el.classList.remove('bar-off');
+    moreButton.classList.add('bar-off');
+    spares.sort((a, b) => Number(b.dataset.more) - Number(a.dataset.more));
+    const over = () => bar.scrollWidth > bar.clientWidth + 1;
+    for (const el of spares) {
+      if (!over()) break;
+      el.classList.add('bar-off');
+      if (el.dataset.cmd || el.dataset.label) moreButton.classList.remove('bar-off');
+    }
+    // No two lines in a row where the parts between them gave way.
+    let afterSep = true;
+    for (const el of bar.children) {
+      if (el.classList.contains('bar-sep')) {
+        el.classList.toggle('bar-off', afterSep);
+        afterSep = true;
+      } else if (!el.classList.contains('bar-off')) afterSep = false;
+    }
+    moreButton.title = moreButton.ariaLabel = t('stitches.bar.more');
+  }
+  new ResizeObserver(() => fit()).observe(document.querySelector('#stage') ?? bar);
 
   /** The spacing at the selected rung: empty keeps the column's. */
   function spacingHere(v: number | null): HTMLElement {

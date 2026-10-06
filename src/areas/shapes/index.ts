@@ -400,7 +400,7 @@ export function initShapes(app: ShapesAreaApp): void {
       return items;
     }
     if (ui.lettering) return [{ kind: 'title', text: t('lettering.title'), title: t('canvas.hint.lettering') }, { kind: 'cmd', id: 'lettering.letters' }, snap, { kind: 'hint', text: t('shapes.opt.lettering') }];
-    if (app.frameTool.active) return [snap, { kind: 'hint', text: t('shapes.opt.frame') }];
+    if (app.frameTool.active) return [snap, { kind: 'hint', text: t(matchMedia('(pointer: coarse)').matches ? 'responsive.opt.frame' : 'shapes.opt.frame') }];
     if (shapeLevel() && !app.editor.active) return [{ kind: 'title', text: t('level.shape') }, { kind: 'hint', text: t('shapes.opt.formPick') }];
     return [];
   }

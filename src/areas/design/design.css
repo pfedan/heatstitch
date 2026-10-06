@@ -365,9 +365,13 @@ body[data-mode='flow'] .material-panel .profile-info span:nth-child(2) {
   background: rgba(13, 11, 16, 0.55);
   color: #d8d2e0;
   font-size: 11px;
-  white-space: nowrap;
+  line-height: 1.35;
+  /* A long hint takes a second line instead of losing its end. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .stage-foot .hint:empty {
