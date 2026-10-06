@@ -42,12 +42,21 @@ export type MenuItem = string | Command | '-' | { label: string; run: () => void
 
 let openMenu: { el: HTMLElement; close: () => void } | null = null;
 
+/** Fingers on the screen: a menu opened by a long press must not take the lifting finger as a tap. */
+let touches = 0;
+if (typeof document !== 'undefined') {
+  document.addEventListener('pointerdown', (e) => e.pointerType === 'touch' && touches++, true);
+  for (const ev of ['pointerup', 'pointercancel'] as const) document.addEventListener(ev, (e) => e.pointerType === 'touch' && (touches = Math.max(0, touches - 1)), true);
+}
+
 /**
  * A menu at a point (context menu) or under an element. Items are command ids (shown with their
  * keys, disabled when they cannot run), plain entries or '-' for a line.
  */
 export function showMenu(items: MenuItem[], at: { x: number; y: number } | HTMLElement, label?: string): void {
   openMenu?.close();
+  // Opened under a finger (long press): its lifting is no choice; the next touch or key is.
+  let held = touches > 0;
   const rows: HTMLElement[] = [];
   for (const it of items) {
     if (it === '-') {
@@ -72,6 +81,7 @@ export function showMenu(items: MenuItem[], at: { x: number; y: number } | HTMLE
             class: danger ? 'danger' : '',
             disabled,
             onclick: () => {
+              if (held) return;
               close();
               run();
             },
@@ -84,6 +94,8 @@ export function showMenu(items: MenuItem[], at: { x: number; y: number } | HTMLE
   }
   while (rows.length && rows[rows.length - 1].classList.contains('menu-sep')) rows.pop();
   const el = h('ul', { class: 'menu', role: 'menu', 'aria-label': label ?? '' }, rows);
+  el.addEventListener('pointerdown', () => (held = false), true);
+  el.addEventListener('keydown', () => (held = false), true);
   document.body.appendChild(el);
   const r = at instanceof HTMLElement ? at.getBoundingClientRect() : null;
   const x = r ? r.left : (at as { x: number }).x;

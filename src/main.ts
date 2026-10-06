@@ -74,6 +74,7 @@ import { initShapes, refreshShapes } from './areas/shapes';
 import { runCommand } from './shell/commands';
 import { initCheck } from './areas/check/check';
 import { initAmpel } from './areas/ampel/ampel';
+import { initResponsive } from './areas/responsive/responsive';
 import type { ZoneDecision } from './ui/validationPanel';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -1662,6 +1663,7 @@ const { showObjectMenu } = bindPointer({
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', redraw);
 
 initShell({ files, mode: () => settings.mode, setMode });
+initResponsive();
 const stitchArea = initStitchArea({ files, settings, editor, rungTool, stitchPanel, closeRungs, toggleRungs, toggleGuides, togglePoints, sewAlongLines, setEditing, enterObject, revealRecord, pointsVisible: () => vp.scale >= POINTS_MIN_SCALE, redraw });
 const design = initDesign({ files, settings, player, vp, stage, fitView, fitToHoop, redraw, applyEdit });
 const ready = initReady({

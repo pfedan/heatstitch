@@ -93,6 +93,7 @@ export function bindPointer(app: PointerApp) {
 
   const pointers = new Map<number, [number, number]>();
   let pinchDist = 0;
+  let pinchMid: [number, number] | null = null;
   /** Where a one-finger or mouse press started, to tell a click from a drag. */
   let pressAt: [number, number] | null = null;
   /** What the press started as: a point drag, a rectangle or panning (a click when it did not move). */
@@ -191,6 +192,7 @@ export function bindPointer(app: PointerApp) {
       }
       const [a, b] = [...pointers.values()];
       pinchDist = Math.hypot(a[0] - b[0], a[1] - b[1]);
+      pinchMid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
     }
     app.redraw();
   });
@@ -238,8 +240,12 @@ export function bindPointer(app: PointerApp) {
         pointers.set(e.pointerId, pos);
         const [a, b] = [...pointers.values()];
         const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
-        if (pinchDist > 0) app.vp.zoomAt((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, d / pinchDist);
+        // Two fingers zoom around their middle and move the view with it.
+        const mid: [number, number] = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+        if (pinchMid) app.vp.pan(mid[0] - pinchMid[0], mid[1] - pinchMid[1]);
+        if (pinchDist > 0) app.vp.zoomAt(mid[0], mid[1], d / pinchDist);
         pinchDist = d;
+        pinchMid = mid;
       }
       pointers.set(e.pointerId, pos);
       app.redraw();
@@ -353,6 +359,7 @@ export function bindPointer(app: PointerApp) {
     }
     pointers.delete(e.pointerId);
     pinchDist = 0;
+    pinchMid = null;
     if (!pointers.size) app.canvas.classList.remove('panning');
   };
   app.canvas.addEventListener('pointerup', endPointer);
