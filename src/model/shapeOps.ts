@@ -189,8 +189,8 @@ function moved(p: Pattern, k: number, m: Mat, trimMm: number): { pattern: Patter
 /**
  * Copy `k`, lying on its original right before it, kept exactly there but sewn from the other end:
  * it starts where the original ends (no way back to its start), and with stitches of its own it
- * remembers its own (memory is keyed by stitches). A line turns its curve, a fill or satin is sewn
- * anew the other way round. What cannot be turned (stitches from a file changed by hand, a fill
+ * remembers its own (memory is keyed by stitches). A line turns its curve (0.1 mm beside), a fill
+ * or satin is sewn anew the other way round. What cannot be turned (stitches from a file changed by hand, a fill
  * read from a file) goes the smallest step beside it, 0.1 mm to the right.
  */
 function inPlace(p: Pattern, k: number, trimMm: number): { pattern: Pattern; nudged?: boolean } | null {
@@ -202,7 +202,12 @@ function inPlace(p: Pattern, k: number, trimMm: number): { pattern: Pattern; nud
   // (memory is keyed by stitches): it is put back.
   const kept = objs.map((x) => remembered(p, x));
   let next: Pattern | null = null;
-  if (isLine(p, o) && !known?.hand) next = reverseLines(p, [k], trimMm).pattern;
+  if (isLine(p, o) && !known?.hand) {
+    // A line also goes the smallest step beside it: sewn back along itself (an echo on both sides,
+    // a line there and back) it would otherwise have the very stitches of its copy.
+    const beside = moved(p, k, translation(0.1, 0), trimMm);
+    next = beside && reverseLines(beside.pattern, [k], trimMm).pattern;
+  }
   else if (autoReversible(p, o)) {
     // Sewn anew the other way round, where it is (not moved in the order, so it stays apart).
     const r = restitch(p, objs, [k], ownSettings(p, kinds), kinds, trimMm, undefined, true);
