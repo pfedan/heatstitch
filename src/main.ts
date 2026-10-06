@@ -22,7 +22,7 @@ import { acknowledgementOf, settledBy, type Acknowledgement } from './validation
 import type { ValidationResult, Zone } from './validation/validate';
 import { POINTS_MIN_SCALE } from './render/editOverlay';
 import { drawDivider } from './render/compare';
-import { STITCH, type Pattern } from './model/pattern';
+import { STITCH, type Pattern, type ThreadColor } from './model/pattern';
 import type { Measurement } from './validation/measure';
 import { initUpdateNotice } from './ui/updateNotice';
 import { bindFileIo } from './app/fileIo';
@@ -38,7 +38,7 @@ import {
 } from './model/sequence';
 import { stitchAt } from './render/flow';
 import type { Mode } from './settings';
-import { isGuessed, openOnPurpose, remembered, rememberedIn, rememberShapes } from './model/restitch';
+import { isGuessed, isOpenPattern, openOnPurpose, remembered, rememberedIn, rememberShapes } from './model/restitch';
 import { drawAside, drawDrawing } from './render/shapeOverlay';
 import type { LeftOut } from './ui/imageMode';
 import { asideOf, storeAside, type AsideShape } from './model/aside';
@@ -355,6 +355,9 @@ const { applyRestitched, convertSettings, stitchInfo, stitchPanel } = bindStitch
   get toggleGuides() {
     return toggleGuides;
   },
+  get togglePoints() {
+    return togglePoints;
+  },
   get toggleRungs() {
     return toggleRungs;
   },
@@ -362,7 +365,7 @@ const { applyRestitched, convertSettings, stitchInfo, stitchPanel } = bindStitch
 
 // Rungs -------------------------------------------------------------------------------------------
 
-const { closeRungs, rungInfo, rungTool, sewAlongLines, syncRungs, toggleGuides, toggleRungs } = bindRungs({
+const { closeRungs, rungInfo, rungTool, sewAlongLines, syncRungs, toggleGuides, togglePoints, toggleRungs } = bindRungs({
   get applyRestitched() {
     return applyRestitched;
   },
@@ -719,7 +722,16 @@ function objectInfo(p: Pattern, q: Sequence) {
     mergeBlocked: selected.length > 1 ? mergeBlocked(selected.map((o) => q.objects[o])) : null,
     reversible: selected.some((o) => reversible(q.objects[o])),
     subtractable: selected.length > 1 && selected.every((o) => q.objects[o].kind === 'fill'),
+    ...blendOf(p, q, selected),
   };
+}
+
+/** The one selected fill can blend into a second thread when it knows its area and is not a line. */
+function blendOf(p: Pattern, q: Sequence, selected: number[]): { blend?: ThreadColor } {
+  if (selected.length !== 1 || editor.active || shapeTool.active) return {};
+  const o = q.objects[selected[0]];
+  const known = o && remembered(p, o);
+  return known?.fill && known.region && !known.asLine && !known.blendOf && !isOpenPattern(known.fill.pattern) ? { blend: o.color } : {};
 }
 
 // Rendering ------------------------------------------------------------------

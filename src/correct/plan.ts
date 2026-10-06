@@ -403,7 +403,7 @@ async function plan(p: Pattern, v: ValidationResult, profile: Profile, checks: C
       continue;
     }
     // Borders follow their fill, lettering is sewn from its text, loosed stitches only get the fine correction.
-    if (known?.outline || known?.lettering || known?.free) continue;
+    if (known?.outline || known?.blendOf || known?.lettering || known?.free) continue;
     const { reasons, box } = need.get(index)!;
     const an = analyze(p, o0, kinds, known);
     const base = currentSettings(p, o0, kinds);
@@ -498,7 +498,7 @@ export function planFabric(p: Pattern, profile: Profile): Proposal[] {
   const into = (v: number) => round2(Math.min(recMax, Math.max(recMin, v)));
   for (const o of objs) {
     const known = remembered(p, o);
-    if (known?.lock || known?.free || known?.outline || known?.lettering || known?.read) continue;
+    if (known?.lock || known?.free || known?.outline || known?.blendOf || known?.lettering || known?.read) continue;
     const s = currentSettings(p, o, kinds);
     if (!s || s.kind === 'run') continue;
     const changes: Fixed[] = [];

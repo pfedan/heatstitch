@@ -2967,8 +2967,7 @@ body[data-mode='flow'] .stage .hint {
 }
 
 .pattern-groups button:focus-visible,
-.motif-row button:focus-visible,
-.focus-grid button:focus-visible {
+.motif-row button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
@@ -3000,36 +2999,6 @@ body[data-mode='flow'] .stage .hint {
 .motif-row button.active {
   background: var(--accent);
   color: var(--accent-ink);
-}
-
-.focus-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 22px);
-  grid-template-rows: repeat(3, 22px);
-  gap: 3px;
-  margin-top: 4px;
-  padding: 4px;
-  width: max-content;
-  border: 1px dashed var(--line);
-  border-radius: 6px;
-}
-
-.focus-grid button {
-  padding: 0;
-  border: 1px solid var(--line);
-  border-radius: 50%;
-  background: transparent;
-  cursor: pointer;
-}
-
-.focus-grid button:hover {
-  border-color: var(--muted);
-}
-
-.focus-grid button.active {
-  border-color: var(--accent);
-  background: var(--accent);
-  box-shadow: inset 0 0 0 4px var(--panel, transparent);
 }
 
 .reroll-row button {
