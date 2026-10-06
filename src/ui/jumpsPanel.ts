@@ -1,4 +1,4 @@
-import { formatNumber, t, type Key } from '../i18n';
+import { formatNumber, getLang, onLangChange, t, type Key } from '../i18n';
 import type { Transition } from '../model/sequence';
 import type { Settings } from '../settings';
 
@@ -42,7 +42,10 @@ export class JumpsPanel {
   constructor(
     private s: Settings,
     private hooks: JumpHooks,
-  ) {}
+  ) {
+    // Also outside Ablauf, where the list shows but is not updated.
+    onLangChange(() => this.last && this.update({ ...this.last, lang: getLang() }, true));
+  }
 
   /** Indices (into the full list) the current filter shows. */
   visible(list: Transition[]): number[] {

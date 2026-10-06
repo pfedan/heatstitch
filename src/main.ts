@@ -1,7 +1,7 @@
 import { loadCatalogs } from './threads/catalog';
 import './style.css';
 import { WorkerClient } from './density/client';
-import { applyI18n, detectLang, formatNumber, getLang, setLang, t, type Lang } from './i18n';
+import { detectLang, formatNumber, getLang, onLangChange, setLang, t, type Lang } from './i18n';
 import { gridToCanvas } from './render/heatmap';
 import { drawLegend } from './render/legend';
 import { hoopRect } from './render/hoop';
@@ -691,6 +691,11 @@ function flowTooltip(sx: number, sy: number): void {
   tooltip.style.top = `${sy + 14}px`;
 }
 
+function emptyText(): void {
+  const mode = settings.mode;
+  empty.textContent = t(mode === 'flow' ? 'canvas.empty.flow' : mode === 'image' ? 'canvas.empty.image' : 'canvas.empty');
+}
+
 function setMode(mode: Mode): void {
   const previous = document.body.dataset.mode;
   settings.mode = mode;
@@ -716,7 +721,7 @@ function setMode(mode: Mode): void {
   }
   controls.refresh();
   updateLevel();
-  empty.textContent = t(mode === 'flow' ? 'canvas.empty.flow' : mode === 'image' ? 'canvas.empty.image' : 'canvas.empty');
+  emptyText();
   tooltip.hidden = true;
   // The image and the loaded file have their own place on the stage.
   if ((previous === 'image') !== (mode === 'image')) fitView();
@@ -1329,26 +1334,23 @@ const { shine, threadsShown } = bindLight({
 });
 
 const langSelect = $<HTMLSelectElement>('lang');
-const applyLang = (l: Lang) => {
-  setLang(l);
-  langSelect.value = l;
-  controls.refresh();
-  profile.refresh();
-  files.render();
-  player.render();
-  imageMode.render();
-  setMode(settings.mode);
+// Every part that writes text itself follows a language change on its own (onLangChange); here
+// only what this file writes. The mode, the selection and the hand edit stay as they are.
+onLangChange(() => {
+  langSelect.value = getLang();
+  emptyText();
+  updateLevel();
+  tooltip.hidden = true;
+  tooltip.replaceChildren();
   redraw();
-};
+});
 langSelect.addEventListener('change', () => {
   settings.lang = langSelect.value as Lang;
   saveSettings(settings);
-  applyLang(settings.lang);
-  ui.asideShown = null;
-  redraw();
+  setLang(settings.lang);
 });
-applyLang(detectLang(settings.lang));
-applyI18n(document.body);
+setLang(detectLang(settings.lang));
+setMode(settings.mode);
 
 $('fit').addEventListener('click', () => fitView());
 document.querySelectorAll<HTMLInputElement>('input[name="level"]').forEach((i) =>

@@ -1,4 +1,4 @@
-import { formatNumber, t, type Key } from '../i18n';
+import { formatNumber, onLangChange, t, type Key } from '../i18n';
 import { JOIN_MAX_EXCESS, JOIN_MAX_MM2, SMALL_CAUTION_MM2 } from '../validation/practice';
 import type { Settings } from '../settings';
 import {
@@ -134,5 +134,6 @@ export function bindProfile(s: Settings, onChange: () => void): { refresh: () =>
   fabric.addEventListener('change', update);
   thread.addEventListener('change', update);
   refresh();
+  onLangChange(refresh);
   return { refresh };
 }
