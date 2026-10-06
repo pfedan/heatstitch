@@ -6,7 +6,9 @@ import { analyze, measureFill, remember, remembered, restitch, underlayRanges, t
 import { stitchKinds } from '../src/model/sequence';
 import { parsePattern } from '../src/parsers';
 import { sample } from '../src/digitize/region';
-import { syncBorders } from '../src/model/border';
+import { syncBorders, takeThreads } from '../src/model/border';
+import { blendObject } from '../src/model/blend';
+import { reorder } from '../src/model/order';
 import { borderLines, borderStitches, sewAlong } from '../src/model/along';
 import { regionOf } from '../src/shape/rasterize';
 import type { Pt } from '../src/digitize/skeleton';
@@ -30,6 +32,29 @@ function apply(p: Pattern, which: number, s: FillSettings) {
   return { q, kinds: qk, objs: now, o: now[o], memory: r.memory[0] };
 }
 
+/** The pattern after a restitch with its borders made (as the app does), with the fill and its border object. */
+function applyAll(p: Pattern, which: number, s: FillSettings) {
+  const a = apply(p, which, s);
+  const q = syncBorders(a.q, 7);
+  const kinds = stitchKinds(q);
+  const objs = sewObjects(q, kinds);
+  const fill = objs.find((x) => remembered(q, x)?.region && sameAt(q, x, a.q, a.o))!;
+  const link = remembered(q, fill)?.fill?.border?.link;
+  const border = link ? objs.find((x) => remembered(q, x)?.outline === link) : undefined;
+  return { ...a, q, kinds, objs, o: fill, border };
+}
+
+/** Whether object `x` of `q` starts where object `o` of `p` does. */
+const sameAt = (q: Pattern, x: SewObject, p: Pattern, o: SewObject) => {
+  const i = firstStitch(q, x);
+  const j = firstStitch(p, o);
+  return q.x[i] === p.x[j] && q.y[i] === p.y[j] && x.block === o.block;
+};
+const firstStitch = (p: Pattern, o: SewObject) => {
+  for (let i = o.first; i <= o.last; i++) if (p.cmd[i] === STITCH) return i;
+  return o.first;
+};
+
 const stitches = (p: Pattern, a: number, b: number) => {
   let n = 0;
   for (let i = a; i <= b; i++) if (p.cmd[i] === STITCH) n++;
@@ -43,55 +68,60 @@ describe('fill border', () => {
   const o = objs[1];
   const base = { ...measureFill(p, analyze(p, o, kinds)), pattern: 'tatami' as const, underlay: true };
 
-  it('sews a running border on the edge after the fill, once also after a second change', () => {
-    const a = apply(p, o.index, { ...base, border: { type: 'run', width: 2 } });
-    const region = a.memory.region!;
-    // The last stitches lie on the edge.
-    let onEdge = 0;
+  /** How many of the stitches of `x` lie `off` mm from the edge of `region`. */
+  const near = (q: Pattern, x: SewObject, region: NonNullable<ReturnType<typeof apply>['memory']['region']>, off = 0) => {
+    let hit = 0;
     let n = 0;
-    for (let i = a.o.last - 40; i <= a.o.last; i++) {
-      if (a.q.cmd[i] !== STITCH) continue;
+    for (let i = x.first; i <= x.last; i++) {
+      if (q.cmd[i] !== STITCH) continue;
       n++;
-      if (Math.abs(sample(region, region.sdfBase, a.q.x[i] / 10, a.q.y[i] / 10)) < 0.3) onEdge++;
+      if (Math.abs(sample(region, region.sdfBase, q.x[i] / 10, q.y[i] / 10) - off) < 0.3) hit++;
     }
-    expect(onEdge).toBeGreaterThan(n * 0.8);
-    // The border is part of the fill: a new spacing makes it anew, not twice.
-    const one = stitches(a.q, a.o.first, a.o.last);
-    const b = apply(a.q, a.o.index, { ...base, spacing: base.spacing, border: { type: 'run', width: 2 } });
-    expect(Math.abs(stitches(b.q, b.o.first, b.o.last) - one)).toBeLessThan(one * 0.05);
-    // The border is the last part, and only one.
-    const parts = analyze(b.q, b.o, b.kinds).parts;
-    expect(parts[parts.length - 1]).toMatchObject({ kind: 'fill', e: b.o.last, border: true });
-    expect(parts.filter((pt) => pt.border)).toHaveLength(1);
+    return hit / n;
+  };
+
+  it('sews a running border on the edge as an object of its own right after the fill, once also after a second change', () => {
+    const a = applyAll(p, o.index, { ...base, border: { type: 'run', width: 2 } });
+    const region = a.memory.region!;
+    expect(a.border).toBeDefined();
+    expect(near(a.q, a.border!, region)).toBeGreaterThan(0.8);
+    // In the fill's thread, right after it, trimmed off it.
+    expect(a.border!.index).toBe(a.o.index + 1);
+    expect(a.border!.block).toBe(a.o.block);
+    expect(a.q.colors.length).toBe(p.colors.length);
+    // The fill has no border stitches of its own.
+    expect(analyze(a.q, a.o, a.kinds).parts.some((pt) => pt.border)).toBe(false);
+    // A new spacing makes it anew, not twice.
+    const one = stitches(a.q, a.border!.first, a.border!.last);
+    const b = applyAll(a.q, a.o.index, { ...base, spacing: base.spacing, border: { ...remembered(a.q, a.o)!.fill!.border! } });
+    expect(b.border).toBeDefined();
+    expect(Math.abs(stitches(b.q, b.border!.first, b.border!.last) - one)).toBeLessThan(one * 0.05);
+    expect(b.objs.filter((x) => remembered(b.q, x)?.outline)).toHaveLength(1);
   });
 
   it('sews a satin border of the set width, and none once taken away', () => {
-    const plain = apply(p, o.index, base);
-    const sat = apply(p, o.index, { ...base, border: { type: 'satin', width: 3 } });
-    expect(stitches(sat.q, sat.o.first, sat.o.last)).toBeGreaterThan(stitches(plain.q, plain.o.first, plain.o.last) + 200);
+    const plain = applyAll(p, o.index, base);
+    expect(plain.border).toBeUndefined();
+    const sat = applyAll(p, o.index, { ...base, border: { type: 'satin', width: 3 } });
+    expect(stitches(sat.q, sat.border!.first, sat.border!.last)).toBeGreaterThan(200);
+    const link = remembered(sat.q, sat.o)!.fill!.border!.link!;
     const off = apply(sat.q, sat.o.index, base);
-    expect(Math.abs(stitches(off.q, off.o.first, off.o.last) - stitches(plain.q, plain.o.first, plain.o.last))).toBeLessThan(60);
+    const gone = syncBorders(off.q, 7, new Set([link]));
+    expect(sewObjects(gone, stitchKinds(gone)).some((x) => remembered(gone, x)?.outline)).toBe(false);
+    expect(Math.abs(gone.cmd.length - plain.q.cmd.length)).toBeLessThan(80);
   });
 
   it('moves the border off the edge by the set offset, inside and outside', { timeout: 30000 }, () => {
     for (const offset of [1, -0.8]) {
-      const a = apply(p, o.index, { ...base, border: { type: 'run', width: 2, offset } });
-      const region = a.memory.region!;
-      let near = 0;
-      let n = 0;
-      for (let i = a.o.last - 40; i <= a.o.last; i++) {
-        if (a.q.cmd[i] !== STITCH) continue;
-        n++;
-        if (Math.abs(sample(region, region.sdfBase, a.q.x[i] / 10, a.q.y[i] / 10) - offset) < 0.3) near++;
-      }
-      expect(near).toBeGreaterThan(n * 0.8);
+      const a = applyAll(p, o.index, { ...base, border: { type: 'run', width: 2, offset } });
+      expect(near(a.q, a.border!, a.memory.region!, offset)).toBeGreaterThan(0.8);
     }
   });
 
   it('sews the satin border with its own density and underlay', { timeout: 30000 }, () => {
     const count = (b: object) => {
-      const a = apply(p, o.index, { ...base, border: { type: 'satin', width: 3, ...b } });
-      return stitches(a.q, a.o.first, a.o.last);
+      const a = applyAll(p, o.index, { ...base, border: { type: 'satin', width: 3, ...b } });
+      return stitches(a.q, a.border!.first, a.border!.last);
     };
     const plain = count({});
     expect(count({ spacing: 0.8 })).toBeLessThan(plain - 100);
@@ -175,7 +205,11 @@ it('keeps the running stitch of a fill object when a border comes and goes', () 
   const a = apply(p, o.index, { ...base, border: { type: 'satin', width: 2 } });
   const b = apply(a.q, a.o.index, { ...base, border: { type: 'run', width: 2 } });
   const c = apply(b.q, b.o.index, base);
-  expect(runOf(c.q, c.o, c.kinds)).toBeGreaterThan(before * 0.8);
+  // As much of it as when the fill is sewn anew without a border at all.
+  const plain = apply(p, o.index, base);
+  expect(runOf(c.q, c.o, c.kinds)).toBeGreaterThanOrEqual(runOf(plain.q, plain.o, plain.kinds) * 0.95);
+  expect(runOf(b.q, b.o, b.kinds)).toBeGreaterThanOrEqual(runOf(plain.q, plain.o, plain.kinds) * 0.95);
+  expect(before).toBeGreaterThan(30);
 });
 
 describe('stitches along a drawn line', () => {
@@ -267,5 +301,62 @@ describe('border on a fill with parts left out', () => {
     const open = borderLines(cut, 0, whole);
     expect(open).toHaveLength(1);
     expect(open[0].closed).toBe(false);
+  });
+});
+
+describe('border moved by hand', () => {
+  const lilac = { r: 200, g: 160, b: 220 };
+  /** A blend from the cat's fill with a satin border in the fill's thread: fill, second thread, border. */
+  const blended = () => {
+    const p = load('cat-60mm.pes');
+    const kinds = stitchKinds(p);
+    const o = sewObjects(p, kinds)[1];
+    const base = { ...measureFill(p, analyze(p, o, kinds)), pattern: 'tatami' as const };
+    const a = applyAll(p, o.index, { ...base, border: { type: 'satin', width: 2 } });
+    const q = blendObject(a.q, a.o.index, lilac, 7)!;
+    expect(q).not.toBeNull();
+    const objs = sewObjects(q, stitchKinds(q));
+    const fill = objs.findIndex((x) => remembered(q, x)?.fill?.deco?.blend);
+    const second = objs.findIndex((x) => remembered(q, x)?.blendOf);
+    const border = objs.findIndex((x) => remembered(q, x)?.outline);
+    return { q, objs, fill, second, border };
+  };
+  const moved = (b: ReturnType<typeof blended>, into?: number) => {
+    const order = b.objs.map((x) => x.index).filter((x) => x !== b.border);
+    order.splice(order.indexOf(b.fill) + 1, 0, b.border);
+    const starts: number[] = [];
+    const next = reorder(b.q, b.objs, order, 7, starts, into === undefined ? {} : { into: new Map([[b.border, into]]) });
+    const objs = sewObjects(next, stitchKinds(next));
+    const border = objs.findIndex((x) => remembered(next, x)?.outline);
+    return { next, objs, border };
+  };
+
+  it('comes after the second thread of a blend made just now', () => {
+    const b = blended();
+    expect(b.second).toBeGreaterThan(b.fill);
+    expect(b.border).toBeGreaterThan(b.second);
+  });
+
+  it('stays where it is moved to before the second thread, an object of its own', { timeout: 30000 }, () => {
+    const b = blended();
+    const m = moved(b);
+    expect(m.border).toBe(b.fill + 1);
+    expect(m.objs[m.border].block).toBe(m.objs[b.fill].block);
+    // Nothing to sew anew: it stays there.
+    expect(syncBorders(m.next, 7)).toBe(m.next);
+  });
+
+  it('keeps the thread of the color it is moved into', { timeout: 30000 }, () => {
+    const b = blended();
+    const m = moved(b, b.objs[b.second].block);
+    expect(m.objs[m.border].color).toMatchObject(lilac);
+    takeThreads(m.next, [m.border]);
+    const s = syncBorders(m.next, 7);
+    const objs = sewObjects(s, stitchKinds(s));
+    const borders = objs.filter((x) => remembered(s, x)?.outline);
+    expect(borders).toHaveLength(1);
+    expect(borders[0].color).toMatchObject(lilac);
+    expect(borders[0].index).toBe(b.fill + 1);
+    expect(remembered(s, objs[b.fill])?.fill?.border?.color).toMatchObject(lilac);
   });
 });

@@ -2,6 +2,7 @@ import { build, recs, tieIn, tieOff, type Rec } from './jumps';
 import type { SewObject } from './objects';
 import { COLOR_CHANGE, END, JUMP, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
 import { sameColor } from './recolor';
+import { remembered } from './restitch';
 
 /**
  * Sewing order of the objects: what the machine sews when. Changing it changes neither the
@@ -403,6 +404,7 @@ export function reorder(p: Pattern, objs: SewObject[], order: number[], trimMm: 
     const byBlock = blockKeys(p, Math.max(...objs.map((o) => o.block), ...into.values()) + 1);
     for (const [o, b] of into) keys[o] = byBlock[b];
   }
+  const linked = (o: SewObject) => !!(remembered(p, o)?.outline || remembered(p, o)?.blendOf);
   const out: Rec[] = [];
   const colors: ThreadColor[] = [];
   const first = objs[order[0]];
@@ -425,7 +427,9 @@ export function reorder(p: Pattern, objs: SewObject[], order: number[], trimMm: 
   for (let k = 1; k < order.length; k++) {
     const a = objs[order[k - 1]];
     const b = objs[order[k]];
-    const l = apart?.has(k) && keys[a.index] === keys[b.index] ? 'trim' : link(p, a, b, keys[a.index], keys[b.index], trimMm, fresh);
+    let l = apart?.has(k) && keys[a.index] === keys[b.index] ? 'trim' : link(p, a, b, keys[a.index], keys[b.index], trimMm, fresh);
+    // A border or a blend's second thread stays an object of its own, never joined to a neighbour.
+    if (l === 'jump' && (linked(a) || linked(b))) l = 'trim';
     if (l === 'original') {
       out.push(...recs(p, a.last + 1, b.first));
       sew(b, false);
