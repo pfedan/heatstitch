@@ -511,8 +511,9 @@ export class ImageMode {
         },
       });
     }
-    command({ id: 'image.undoStroke', label: 'image.undo', group: G, keys: ['Mod+Z'], bind: false, when: () => inImage() && this.undoStack.length > 0, run: () => this.undo() });
-    command({ id: 'image.redoStroke', label: 'image.redo', group: G, keys: ['Mod+Shift+Z', 'Mod+Y'], bind: false, when: () => inImage() && this.redoStack.length > 0, run: () => this.redo() });
+    // Mod+Z and Mod+Shift+Z are edit.undo and edit.redo (src/app/keys.ts sends them here in Bild).
+    command({ id: 'image.undoStroke', label: 'image.undo', group: G, when: () => inImage() && this.undoStack.length > 0, run: () => this.undo() });
+    command({ id: 'image.redoStroke', label: 'image.redo', group: G, when: () => inImage() && this.redoStack.length > 0, run: () => this.redo() });
     const tools: [Tool, Key][] = [['paint', 'image.cmd.paint'], ['erase', 'image.cmd.erase'], ['none', 'image.cmd.none']];
     for (const [tool, label] of tools) {
       command({
