@@ -314,6 +314,7 @@ export function bindStitches(app: StitchesApp) {
       if (!app.rungTool.active || app.rungTool.mode !== 'satin') return;
       if (a === 'corners') app.rungTool.corners();
       else if (a === 'sections') app.rungTool.sections();
+      else if (a === 'order') app.rungTool.bestOrder();
       else if (a === 'even') app.rungTool.even();
       else app.rungTool.follow();
     },

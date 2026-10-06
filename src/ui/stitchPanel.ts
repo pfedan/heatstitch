@@ -66,6 +66,8 @@ export interface StitchInfo {
     spacingHere?: number | null;
     /** Chained columns show their order, direction and trims on the canvas. */
     chain?: boolean;
+    /** Some chain has more than one column: their order can be chosen by itself. */
+    order?: boolean;
   };
   /** Rungs drawn across the one selected fill to sew it as satin. */
   draw?: { tool: boolean; lines: number; single: boolean; cuts?: number; cutMode?: boolean };
@@ -114,7 +116,7 @@ export interface StitchHooks {
   /** Sews the selection anew as another kind: fill or satin, a wide line as a fill and back. */
   convert: (to: 'fill' | 'satin' | 'line') => void;
   /** Rungs of a satin: the tool on or off, corners suggested, all removed, back to the stitches' own direction. */
-  direction: (action: 'tool' | 'corners' | 'sections' | 'even' | 'follow' | 'rung' | 'cut') => void;
+  direction: (action: 'tool' | 'corners' | 'sections' | 'even' | 'follow' | 'rung' | 'cut' | 'order') => void;
   /** The spacing at the selected rung (null: as the column). */
   spacingHere: (v: number | null) => void;
   /** Rungs drawn across a fill: the tool on or off, sewn as satin along them. */
@@ -1149,6 +1151,7 @@ export class StitchPanel {
       row.append(
         this.button('stitch.direction.corners', 'stitch.direction.corners.hint', () => this.hooks.direction('corners')),
         this.button('stitch.sections', 'stitch.sections.hint', () => this.hooks.direction('sections')),
+        ...(d.order ? [this.button('stitch.order.best', 'stitch.order.best.hint', () => this.hooks.direction('order'))] : []),
         this.button('stitch.direction.even.button', 'stitch.direction.even.hint', () => this.hooks.direction('even'), false, d.rungs === 0),
         this.button('stitch.direction.follow.button', 'stitch.direction.follow.hint', () => this.hooks.direction('follow'), false, d.rungs === null),
       );

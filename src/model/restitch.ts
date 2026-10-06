@@ -1894,11 +1894,7 @@ export function satinRuns(rails: Rails[], s: SatinSettings): Pt[][] {
   const runs: Pt[][] = [];
   const chains = new WeakSet<Pt[]>();
   const sp = satinParams(s);
-  const sew = (ps: [Pt, Pt][]) => (s.type === 'e' ? eStitches(ps, sp) : satinStitches(ps, sp));
-  const along = (col: Column, r: Rails, q: SatinParams): SatinParams => {
-    const at = spacingAlong(col, r, q.spacing, !!s.byWidth);
-    return at ? { ...q, spacingAt: at } : q;
-  };
+  const { sew, along } = sewing(s);
   for (let k = 0; k < rails.length; k++) {
     const whole = rails[k];
     // Columns in one chain: sewn on one after the other without a trim, each back to its start
@@ -1949,6 +1945,86 @@ export function satinRuns(rails: Rails[], s: SatinSettings): Pt[][] {
 
 /** Runs of satin with a trim before them wherever they start (asked for, not only for a long way). */
 export const trimBefore = new WeakSet<Pt[]>();
+
+/** How the satin stitches of settings `s` are made, and their spacing along a column. */
+function sewing(s: SatinSettings) {
+  const sp = satinParams(s);
+  const sew = (ps: [Pt, Pt][]) => (s.type === 'e' ? eStitches(ps, sp) : satinStitches(ps, sp));
+  const along = (col: Column, r: Rails, q: SatinParams): SatinParams => {
+    const at = spacingAlong(col, r, q.spacing, !!s.byWidth);
+    return at ? { ...q, spacingAt: at } : q;
+  };
+  return { sew, along };
+}
+
+/**
+ * The columns of a chain (see Rails.chain) in the order, directions and sides (Rails.mirror) that
+ * show the least of the way between them: under columns still to be sewn rather than over sewn
+ * satin, over satin rather than across the fabric, then the shortest. Starts from the order given
+ * and changes it only where that is better: one column turned round, mirrored or moved at a time,
+ * as long as that helps.
+ */
+export function bestChain(cols: Rails[], s: SatinSettings): Rails[] {
+  if (cols.length < 2 && !cols.some((c) => sectionsOf(c).length > 1)) return cols;
+  const { sew, along } = sewing(s);
+  // Each column in its four ways (as given, turned round, mirrored, both): where its run starts and ends.
+  const ways = cols.map((c) => {
+    const turned = reversedRails(c);
+    return [c, turned, { ...c, mirror: !c.mirror }, { ...turned, mirror: !c.mirror }].map((r) => {
+      const run = columnRun(r, s, sew, along);
+      return { r, a: run[0], b: run[run.length - 1] };
+    });
+  });
+  const outlines = cols.map(outlineOf);
+  const columns = cols.map((r) => columnOf(sectionsOf(r)[0]));
+  type Step = { c: number; w: number };
+  const cache = new Map<string, number>();
+  const score = (order: Step[]) => {
+    let v = 0;
+    for (let k = 1; k < order.length; k++) {
+      const [p, q] = [ways[order[k - 1].c][order[k - 1].w], ways[order[k].c][order[k].w]];
+      if (!p.b || !q.a) continue;
+      const later = order.slice(k).map((x) => x.c);
+      const key = `${order[k - 1].c}.${order[k - 1].w}>${order[k].c}.${order[k].w}|${later.slice().sort((x, y) => x - y)}`;
+      let c = cache.get(key);
+      if (c === undefined) {
+        c = wayBetween(p.b, q.a, k, order.map((x) => outlines[x.c]), columns).cost;
+        cache.set(key, c);
+      }
+      v += c;
+    }
+    return v;
+  };
+  let cur: Step[] = cols.map((_, c) => ({ c, w: 0 }));
+  let best = score(cur);
+  for (let round = 0; round < 50; round++) {
+    let found: Step[] | null = null;
+    cur.forEach((x, k) => {
+      for (let w = 0; w < 4; w++) {
+        if (w === x.w) continue;
+        const next = cur.map((y, j) => (j === k ? { c: y.c, w } : y));
+        const v = score(next);
+        if (v < best - 1e-6) [found, best] = [next, v];
+      }
+      for (let j = 0; j < cur.length; j++) {
+        if (j === k) continue;
+        const next = cur.filter((_, i) => i !== k);
+        next.splice(j, 0, x);
+        const v = score(next);
+        if (v < best - 1e-6) [found, best] = [next, v];
+      }
+    });
+    if (!found) break;
+    cur = found;
+  }
+  // Mirrored or not: only where set.
+  return cur.map(({ c, w }) => {
+    const r = ways[c][w].r;
+    if (r.mirror) return r;
+    const { mirror: _m, ...rest } = r;
+    return rest;
+  });
+}
 
 /** Satin of a column or section that starts on its other rail when it is mirrored (see Rails.mirror). */
 const sided = (r: Rails, sew: (ps: [Pt, Pt][]) => Pt[]) => (ps: [Pt, Pt][]) => sew(r.mirror ? ps.map(([a, b]) => [b, a] as [Pt, Pt]) : ps);
@@ -2067,66 +2143,83 @@ function sectionRun(parts: Rails[], s: SatinSettings, sew: (ps: [Pt, Pt][]) => P
  * not across the fabric.
  */
 function chainRun(cols: Rails[], s: SatinSettings, sew: (ps: [Pt, Pt][]) => Pt[], along: (col: Column, r: Rails, q: SatinParams) => SatinParams): Pt[] {
-  const back = satinParams(swappedSides(s));
-  const kind = s.under ?? 'auto';
   const columns = cols.map((r) => columnOf(sectionsOf(r)[0]));
-  const outlines = cols.map((r) => [...r.left, ...r.right.slice().reverse(), r.left[0]]);
+  const outlines = cols.map(outlineOf);
   const out: Pt[] = [];
-  // The way to column k: hidden under the columns still to be sewn (k and after) as far as can be,
-  // straight on or along the middle of one of them; else as short in sight as it gets (a trim
-  // with a cut line avoids it).
-  const travel = (to: Pt, k: number) => {
+  cols.forEach((r, k) => {
+    const pts = columnRun(r, s, sew, along);
+    if (!pts.length) return;
     const from = out[out.length - 1];
-    if (!from) return;
-    // How much a point of the way shows: not under a column still to be sewn, worse off the columns.
-    const shows = (q: Pt) => (outlines.some((o, j) => j >= k && inside(o, q)) ? 0 : outlines.some((o) => inside(o, q)) ? 1 : 3);
-    // How much of the way shows, then how long it is.
-    const cost = (way: Pt[]) => {
-      let seen = 0;
-      let all = 0;
-      for (let i = 1; i < way.length; i++) {
-        const d = dist(way[i - 1], way[i]);
-        const n = Math.max(1, Math.ceil(d / 0.25));
-        for (let j = 0; j < n; j++) seen += (shows(lerp(way[i - 1], way[i], (j + 0.5) / n)) * d) / n;
-        all += d;
-      }
-      return seen * 1000 + all;
-    };
-    let way: Pt[] = [from, to];
-    let best = cost(way);
-    // Seen less than a little: straight on.
-    if (best >= 0.3 * 1000) {
-      for (const c of columns) {
-        const cum = cumulative(c.center);
-        const a = project(c.center, cum, from).s;
-        const b = project(c.center, cum, to).s;
-        const mid = subRail(c.center, cum, Math.min(a, b), Math.max(a, b));
-        const along = [from, ...(a <= b ? mid : mid.reverse()), to];
-        const v = cost(along);
-        if (v < best) [way, best] = [along, v];
-      }
-    }
     // As a running stitch along the way: the middle of a column has a point every few tenths, a
     // stitch to each would pile up needle holes.
-    out.push(...runStitch(way, TRAVEL_STEP, s.tolerance).slice(1));
-  };
-  const add = (pts: Pt[], k: number) => {
-    if (!pts.length) return;
-    travel(pts[0], k);
+    if (from) out.push(...runStitch(wayBetween(from, pts[0], k, outlines, columns).way, TRAVEL_STEP, s.tolerance).slice(1));
     out.push(...pts);
-  };
-  cols.forEach((r, k) => {
-    const secs = sectionsOf(r);
-    if (secs.length > 1) return add(sectionRun(secs, s, sew, along), k);
-    const col = columns[k];
-    const rev = reversedColumn(col);
-    const satinBack = () => sided(r, sew)(pairs(rev, along(rev, reversedRails(secs[0]), back)));
-    const under = s.underlay ? underlayOf(col, kind, s.tolerance, underInset(s)) : null;
-    if (under?.atEnd) return add([...under.pts, ...satinBack()], k);
-    const underBack = s.underlay ? underlayOf(rev, kind, s.tolerance, underInset(s)).pts : [];
-    add([...runStitch(col.center, TRAVEL_STEP, s.tolerance), ...underBack, ...satinBack()], k);
   });
   return out;
+}
+
+/** The outline of a column (both rails, closed). */
+const outlineOf = (r: Rails): Pt[] => {
+  // A point every few tenths is close enough to tell where the way lies.
+  const out: Pt[] = [];
+  for (const q of [...r.left, ...r.right.slice().reverse(), r.left[0]]) if (!out.length || dist(out[out.length - 1], q) >= 0.3) out.push(q);
+  return out;
+};
+
+/** A column of a chain on its own: out along it (underlay or a run along its middle) and the satin back to its start. */
+function columnRun(r: Rails, s: SatinSettings, sew: (ps: [Pt, Pt][]) => Pt[], along: (col: Column, r: Rails, q: SatinParams) => SatinParams): Pt[] {
+  const secs = sectionsOf(r);
+  if (secs.length > 1) return sectionRun(secs, s, sew, along);
+  const kind = s.under ?? 'auto';
+  const col = columnOf(secs[0]);
+  const rev = reversedColumn(col);
+  const satinBack = () => sided(r, sew)(pairs(rev, along(rev, reversedRails(secs[0]), satinParams(swappedSides(s)))));
+  const under = s.underlay ? underlayOf(col, kind, s.tolerance, underInset(s)) : null;
+  if (under?.atEnd) return [...under.pts, ...satinBack()];
+  const underBack = s.underlay ? underlayOf(rev, kind, s.tolerance, underInset(s)).pts : [];
+  return [...runStitch(col.center, TRAVEL_STEP, s.tolerance), ...underBack, ...satinBack()];
+}
+
+/**
+ * The way from one column of a chain to column k: hidden under the columns still to be sewn (k
+ * and after) as far as can be, straight on or along the middle of one of them; else as short in
+ * sight as it gets (a trim with a cut line avoids it). Its cost: how much of it shows (three
+ * times as much off the columns as over sewn satin), then how long it is.
+ */
+function wayBetween(from: Pt, to: Pt, k: number, outlines: Pt[][], columns: Column[]): { way: Pt[]; cost: number } {
+  const boxes = outlines.map((o) => {
+    let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+    for (const [x, y] of o) [x0, y0, x1, y1] = [Math.min(x0, x), Math.min(y0, y), Math.max(x1, x), Math.max(y1, y)];
+    return [x0, y0, x1, y1];
+  });
+  const isIn = (j: number, q: Pt) => q[0] >= boxes[j][0] && q[0] <= boxes[j][2] && q[1] >= boxes[j][1] && q[1] <= boxes[j][3] && inside(outlines[j], q);
+  const shows = (q: Pt) => (outlines.some((_, j) => j >= k && isIn(j, q)) ? 0 : outlines.some((_, j) => isIn(j, q)) ? 1 : 3);
+  const cost = (way: Pt[]) => {
+    let seen = 0;
+    let all = 0;
+    for (let i = 1; i < way.length; i++) {
+      const d = dist(way[i - 1], way[i]);
+      const n = Math.max(1, Math.ceil(d / 0.25));
+      for (let j = 0; j < n; j++) seen += (shows(lerp(way[i - 1], way[i], (j + 0.5) / n)) * d) / n;
+      all += d;
+    }
+    return seen * 1000 + all;
+  };
+  let way: Pt[] = [from, to];
+  let best = cost(way);
+  // Seen less than a little: straight on.
+  if (best >= 0.3 * 1000) {
+    for (const c of columns) {
+      const cum = cumulative(c.center);
+      const a = project(c.center, cum, from).s;
+      const b = project(c.center, cum, to).s;
+      const mid = subRail(c.center, cum, Math.min(a, b), Math.max(a, b));
+      const along = [from, ...(a <= b ? mid : mid.reverse()), to];
+      const v = cost(along);
+      if (v < best) [way, best] = [along, v];
+    }
+  }
+  return { way, cost: best };
 }
 
 function newRun(p: Pattern, pt: Part, s: RunSettings, kinds: Uint8Array): Pt[][] | null {

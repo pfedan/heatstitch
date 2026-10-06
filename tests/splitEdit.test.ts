@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { cutLinesBetween, stripsOfAreas, stripsOfOutline } from '../src/digitize/rungs';
 import type { Pt } from '../src/digitize/skeleton';
 import { sewObjects } from '../src/model/objects';
-import { forget, keepShape, remember, remembered, rememberedIn, restoreRemembered, reversedRails, satinRuns, type Rails } from '../src/model/restitch';
+import { bestChain, forget, keepShape, remember, remembered, rememberedIn, restoreRemembered, reversedRails, satinRuns, type Rails } from '../src/model/restitch';
 import { stitchKinds } from '../src/model/sequence';
 import { transformRemembered } from '../src/model/transform';
 import { parsePattern } from '../src/parsers';
@@ -245,5 +245,48 @@ describe('cut lines lost', () => {
     const square = poly([0, 0], [20, 0], [20, 4], [0, 4], [0, 0]);
     const made = stripsOfOutline(square, [[[10, -1], [10, 5]]], []);
     expect(cutLinesBetween(made.strips, [square], [])).toEqual([]);
+  });
+});
+
+describe('the best order of a chain', () => {
+  const inM = (q: Pt) => {
+    let c = false;
+    for (let i = 0, j = M.length - 1; i < M.length; j = i++) if (M[i][1] > q[1] !== M[j][1] > q[1] && q[0] < ((M[j][0] - M[i][0]) * (q[1] - M[i][1])) / (M[j][1] - M[i][1]) + M[i][0]) c = !c;
+    return c;
+  };
+  const S = { spacing: 0.4, edge: 0, short: false, underlay: true, tolerance: 0.15 };
+  /** Stitch length off the m. */
+  const off = (cols: Rails[]) => {
+    const run = satinRuns(cols, S)[0];
+    let v = 0;
+    for (let i = 1; i < run.length; i++) {
+      const [a, b] = [run[i - 1], run[i]];
+      for (let j = 0; j < 4; j++) if (!inM([a[0] + ((b[0] - a[0]) * (j + 0.5)) / 4, a[1] + ((b[1] - a[1]) * (j + 0.5)) / 4])) v += Math.hypot(b[0] - a[0], b[1] - a[1]) / 4;
+    }
+    return v;
+  };
+
+  it('keeps the ways off the fabric however the parts were turned and mirrored', () => {
+    const cols = cutM();
+    const n = cols.length;
+    let tried = 0;
+    for (let m = 0; m < 1 << (2 * n) && tried < 3; m++) {
+      const start = cols.map((r, k) => ({ ...((m >> k) & 1 ? reversedRails(r) : r), mirror: !!((m >> (n + k)) & 1) }));
+      if (off(start) < 1) continue;
+      tried++;
+      const best = bestChain(start, S);
+      expect(best.length).toBe(n);
+      expect(off(best)).toBeLessThan(0.5);
+      // The same parts, all still one chain.
+      expect(best.every((c) => c.chain === 0)).toBe(true);
+      expect(new Set(best.map((c) => Math.round(centreY(c) * 10) + Math.round(c.left.reduce((a, p) => a + p[0], 0) / c.left.length) * 1000)).size).toBe(n);
+    }
+    expect(tried).toBeGreaterThan(0);
+  });
+
+  it('leaves a chain alone that is already best', () => {
+    const cols = cutM();
+    const best = bestChain(cols, S);
+    expect(bestChain(best, S)).toEqual(best);
   });
 });
