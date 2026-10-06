@@ -9,6 +9,7 @@ import { sewObjects } from '../src/model/objects';
 import { COLOR_CHANGE, END, STITCH, TRIM } from '../src/model/pattern';
 import { rememberedIn, restoreRemembered } from '../src/model/restitch';
 import { parsePattern } from '../src/parsers';
+import { panelKey, type LetteringInfo } from '../src/ui/letteringPanel';
 import { writePattern } from '../src/writers';
 
 const text = (u: URL) => new TextDecoder().decode(readFileSync(u));
@@ -208,5 +209,18 @@ describe('placing', () => {
     const found = letteringObjects(back, sewObjects(back), l.id);
     expect(found.length).toBe(placed.objects.length);
     expect(letteringFrom(stored[0].lettering)).toEqual(l);
+  });
+});
+
+describe('lettering card', () => {
+  const info = (over: Partial<Lettering> = {}): LetteringInfo => ({ lettering: spec(over), font: null, catalog, width: 40, height: 10, stitches: 500, letters: false, letter: null });
+
+  it('is built anew when the radius field comes or goes with the shape', () => {
+    const line = panelKey(info({ shape: 'line' }), false, 'de');
+    const arc = panelKey(info({ shape: 'arcUp' }), false, 'de');
+    expect(arc).not.toBe(line);
+    // Between curved shapes the radius field stays, so the card keeps its fields (and focus).
+    expect(panelKey(info({ shape: 'circle' }), false, 'de')).toBe(arc);
+    expect(panelKey(info({ shape: 'arcDown', radius: 80 }), false, 'de')).toBe(arc);
   });
 });
