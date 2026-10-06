@@ -1206,6 +1206,10 @@ const { correctPanel, drawPlanCompare, inPlanFrame, movePlanSplit, pinPlan, tune
     return vp;
   },
 });
+files.onRename = (f) => {
+  correctPanel.forgetName(f);
+  redraw();
+};
 
 // Controls, language, export --------------------------------------------------
 
@@ -1294,7 +1298,7 @@ async function addDigitized(d: Digitized & { leftOut?: LeftOut[] }, name: string
   rememberShapes(added, objs, d.starts, d.objects.map((o) => o.shape), d.objects);
   // Shapes left out on the way in wait under "Not sewn", where it was: at the very back.
   const aside: AsideShape[] = (d.leftOut ?? []).map((s, k) => ({ id: k + 1, role: 'off', kind: 'fill', color: s.color, after: -1, form: s.form, reason: s.reason }));
-  await files.addWithObjects(`${name}.pes`, data.slice().buffer, rememberedIn(added, objs), storeAside(aside));
+  await files.addWithObjects(`${name}.pes`, data.slice().buffer, rememberedIn(added, objs), storeAside(aside), undefined, true);
   if (aside.some((a) => a.reason === 'background')) layers.say(t('aside.backgroundFound'));
 }
 
@@ -1379,8 +1383,8 @@ function openSelectedForm(): void {
   if (p && o !== null && o !== ui.shapeObject && shapeTarget(p, seq(p), o)) enterShape(o, false);
 }
 exportBtn.addEventListener('click', () => {
-  const p = files.active?.pattern;
-  if (p) exportPng({ ...scene(), edit: null }, ui.stageW, ui.stageH, stageBg(), p.name || 'pattern');
+  const f = files.active;
+  if (f?.pattern) exportPng({ ...scene(), edit: null }, ui.stageW, ui.stageH, stageBg(), FileList.baseName(f) || 'pattern');
 });
 
 // Opening and saving files and projects: src/app/fileIo.ts
