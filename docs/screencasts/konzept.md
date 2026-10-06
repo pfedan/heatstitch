@@ -93,11 +93,15 @@ Hilfeseite.
   Sprache `de-DE`.
 - Eine Stimme für die ganze Serie. Auswahl beim Pilot aus drei Hörproben (Vorschlag: Kore,
   Aoede, Charon).
-- Feste Regieanweisung für alle Videos:
-  „Sprich ruhig, freundlich und klar, wie eine erfahrene Stickerin, die einer Freundin etwas
-  am Rechner zeigt. Natürliches Tempo, kleine Pausen zwischen den Gedanken.“
-- Regie im Text dezent: höchstens ein oder zwei Markierungen pro Video (etwa eine kurze Pause
-  vor dem Aha-Moment). Kein Lachen, kein Flüstern.
+- Regieanweisungen immer auf Englisch, der Sprechtext auf Deutsch. Feste Anweisung für alle
+  Videos (Feld `prompt`):
+  "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing
+  a friend something on the computer. Natural pace, small pauses between thoughts. Let real
+  enthusiasm show when something nice happens."
+- Regie im Text als englische Markierungen in eckigen Klammern, etwa `[enthusiastic]`,
+  `[delighted]`, `[focused]`, `[curious]`, `[proud, warm]`, `[short pause]`. Gern mehrere pro
+  Video, wo Begeisterung oder Konzentration den Satz tragen, aber nicht in jedem Satz.
+  Kein Lachen, kein Flüstern.
 - Du-Form wie in der App. Kurze Sätze, ein Gedanke pro Satz. Etwa 130 Wörter pro Minute,
   ein Video mit 2 Minuten hat also rund 260 Wörter.
 - Fachwörter genau wie in der App. Was auf dem Bildschirm steht, wird auch so gesagt.
