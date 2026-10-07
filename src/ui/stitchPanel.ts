@@ -123,6 +123,8 @@ export interface StitchInfo {
   free?: { on: boolean | 'mixed'; can: boolean };
   /** What the correction changed on the one selected object. */
   fixed?: Fixed[];
+  /** Some selected objects of a file from elsewhere can go back to the stitches the file had (see originalOf). */
+  original?: boolean;
   /** Pull compensation by the fabric for the first selected fill and satin (see pullFor). */
   fabricPull?: { fill?: number; satin?: { edge: number; edgeShare?: number } };
 }
@@ -161,6 +163,8 @@ export interface StitchHooks {
   lock: (on: boolean) => void;
   /** The selected objects' stitches loosed from their shape (true), or sewn from it again (false). */
   free: (on: boolean) => void;
+  /** The selected objects of a file from elsewhere sewn with the stitches the file had again. */
+  original: () => void;
 }
 
 const KINDS: ObjectKind[] = ['fill', 'satin', 'run'];
@@ -656,7 +660,7 @@ export class StitchPanel {
       this.sec('kind', 'stitches.sec.kind', [this.kindSwitch(info), parts.type], kindName),
       parts.look.length ? this.sec('look', 'stitches.sec.look', parts.look) : null,
       parts.hold.length ? this.sec('hold', 'stitches.sec.hold', parts.hold) : null,
-      this.sec('tools', 'stitches.sec.tools', [this.handRow(), this.lockSwitch(info.lock), info.free?.can ? this.looseRow() : null]),
+      this.sec('tools', 'stitches.sec.tools', [this.handRow(), this.lockSwitch(info.lock), info.free?.can ? this.looseRow() : null, this.originalRow(info)]),
     ].filter((x): x is HTMLDetailsElement => !!x);
   }
 
@@ -681,7 +685,7 @@ export class StitchPanel {
     // A fill along a line becomes satin by its line, not by rungs drawn across it.
     if (!info.asLine && info.draw) tools.push(this.toolRow('stitch.direction', 'stitches.tool.toSatin', 'stitch.draw.hint', !!info.draw.tool, info.draw.single ? null : t('stitch.direction.single')));
     if (info.knockout) tools.push(this.knockoutSwitch(info.knockout));
-    tools.push(this.handRow(), this.lockSwitch(info.lock), info.free?.can ? this.looseRow() : null);
+    tools.push(this.handRow(), this.lockSwitch(info.lock), info.free?.can ? this.looseRow() : null, this.originalRow(info));
     const border = s.border ? t(`stitch.border.${isRunType(s.border.type) ? 'run' : s.border.type}` as Key) : t('stitches.sec.off');
     // Empty: its border is all there is to set.
     if (s.pattern === 'none')
@@ -1024,7 +1028,7 @@ export class StitchPanel {
       d ? this.toolRow('stitch.direction', 'stitches.tool.direction', 'stitch.direction.tool.hint', d.tool, sections) : null,
       this.handRow(),
       this.lockSwitch(info.lock),
-      info.free?.can ? this.looseRow() : null,
+      info.free?.can ? this.looseRow() : null, this.originalRow(info),
     ];
     return [
       this.sec('kind', 'stitches.sec.kind', kind, t(`stitch.satinType.${s.type ?? 'satin'}` as Key)),
@@ -1080,7 +1084,7 @@ export class StitchPanel {
         this.check('stitch.triple', 'stitch.triple.hint', () => s.triple, (v) => (s.triple = v)),
       ]),
       this.sec('hold', 'stitches.sec.hold', [this.toleranceSlider(s)]),
-      this.sec('tools', 'stitches.sec.tools', [this.handRow(), this.lockSwitch(info.lock), info.free?.can ? this.looseRow() : null]),
+      this.sec('tools', 'stitches.sec.tools', [this.handRow(), this.lockSwitch(info.lock), info.free?.can ? this.looseRow() : null, this.originalRow(info)]),
     ];
   }
 
@@ -1105,7 +1109,7 @@ export class StitchPanel {
       this.sec('look', 'stitches.sec.look', parts.look),
       this.sec('effects', 'stitches.sec.effects', [this.echoGroup(st, info.path!.closed, info.path!.color), info.path!.traced ? null : this.shadowGroup(st, info.path!.color)], fx || t('stitches.sec.off')),
       parts.hold.length ? this.sec('hold', 'stitches.sec.hold', parts.hold) : null,
-      this.sec('tools', 'stitches.sec.tools', [this.handRow(), this.lockSwitch(info.lock), info.free?.can ? this.looseRow() : null]),
+      this.sec('tools', 'stitches.sec.tools', [this.handRow(), this.lockSwitch(info.lock), info.free?.can ? this.looseRow() : null, this.originalRow(info)]),
     ].filter((x): x is HTMLDetailsElement => !!x);
   }
 
@@ -1542,6 +1546,12 @@ export class StitchPanel {
     share.addEventListener('change', () => setThinShare(Number(share.value)));
     edit.append(h('span', { class: 'thin-group' }, thin, share));
     return edit;
+  }
+
+  /** The way back to the stitches the file had, for objects of a file from elsewhere sewn anew. */
+  private originalRow(info: StitchInfo): HTMLElement | null {
+    if (!info.original) return null;
+    return h('div', { class: 'tool-row' }, this.button('original.back', 'original.back.hint', () => this.hooks.original()));
   }
 
   /** The way to loose the stitches from their shape. */
