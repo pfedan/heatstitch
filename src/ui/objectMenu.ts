@@ -1,68 +1,49 @@
-import { onLangChange } from '../i18n';
-import type { ObjectAction } from './objectPanel';
+import { onLangChange, t } from '../i18n';
+import { closeMenu, showMenu, type MenuItem } from '../shell/ui';
+import { objectMenuItems, ORDER_IDS } from '../areas/objects/commands';
+
+type At = { x: number; y: number } | HTMLElement;
+
+let open: HTMLElement | null = null;
+
+/** Shows a menu built with showMenu (src/shell/ui.ts) and remembers it, so isOpen can tell. */
+export function menuAt(items: MenuItem[], at: At, label: string): void {
+  showMenu(items, at, label);
+  const all = document.querySelectorAll<HTMLElement>('body > ul.menu');
+  open = all[all.length - 1] ?? null;
+}
+
+/** The order commands as a menu of their own (the submenu "Reihenfolge"). */
+export function showOrderMenu(at: At): void {
+  menuAt(ORDER_IDS, at, t('objects.orderMenu'));
+}
 
 /**
- * The actions of the object panel as a small menu at the pointer: right click on an object, or a
- * long press on a touch screen. Closes on a choice, Escape, a press elsewhere, scrolling or a resize.
+ * The one menu of object actions for the selection: right click or a long press on the stage or
+ * on a row of the list, and the "more" buttons. Its entries are commands, so they are enabled by
+ * the same rules as the buttons, keys and the command search. "Reihenfolge" opens the order
+ * commands as a second menu at the same place.
  */
 export class ObjectMenu {
-  private pop: HTMLElement | null = null;
-
   constructor() {
-    document.addEventListener('pointerdown', (e) => {
-      if (this.pop && !this.pop.contains(e.target as Node)) this.close();
-    });
-    document.addEventListener(
-      'keydown',
-      (e) => {
-        if (e.key === 'Escape' && this.pop) {
-          e.stopPropagation();
-          this.close();
-        }
-      },
-      true,
-    );
-    window.addEventListener('resize', () => this.close());
-    window.addEventListener('wheel', () => this.close(), { passive: true });
-    onLangChange(() => this.close());
+    // A menu keeps the texts it was opened with; a language switch closes it.
+    onLangChange(() => closeMenu());
   }
 
   get isOpen(): boolean {
-    return !!this.pop;
+    return !!open?.isConnected;
   }
 
   close(): void {
-    this.pop?.remove();
-    this.pop = null;
+    if (this.isOpen) closeMenu();
   }
 
-  /** Opens at the page position (`x`, `y`), kept inside the window. */
-  open(x: number, y: number, actions: ObjectAction[], label: string): void {
-    this.close();
-    if (!actions.length) return;
-    const pop = document.createElement('div');
-    pop.className = 'object-menu';
-    pop.setAttribute('role', 'menu');
-    pop.setAttribute('aria-label', label);
-    for (const a of actions) {
-      const b = Object.assign(document.createElement('button'), { type: 'button', title: a.hint });
-      b.setAttribute('role', 'menuitem');
-      b.innerHTML = a.icon;
-      b.append(a.label);
-      b.addEventListener('click', () => {
-        // Run first: a popup it opens is placed next to the entry before the menu goes.
-        a.run(b);
-        this.close();
-      });
-      pop.append(b);
-    }
-    pop.addEventListener('contextmenu', (e) => e.preventDefault());
-    document.body.append(pop);
-    this.pop = pop;
-    const r = pop.getBoundingClientRect();
-    const m = 8;
-    pop.style.left = `${Math.max(m, Math.min(x, innerWidth - r.width - m))}px`;
-    pop.style.top = `${Math.max(m, Math.min(y, innerHeight - r.height - m))}px`;
-    pop.querySelector('button')?.focus({ preventScroll: true });
+  /** Opens at the page position (`x`, `y`) or under an element, kept inside the window. */
+  open(at: At): void {
+    const point = at instanceof HTMLElement ? at : { x: at.x, y: at.y };
+    menuAt(objectMenuItems(() => showOrderMenu(point)), point, t('object.menu'));
   }
 }
+
+/** Shared by the stage, the list and the object page. */
+export const objectMenu = new ObjectMenu();

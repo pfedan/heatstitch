@@ -31,6 +31,7 @@ export class Player {
   private speed = $<HTMLSelectElement>('player-speed');
   private toggleBtn = this.root.querySelector<HTMLButtonElement>('[data-play="toggle"]')!;
   private sections = $<HTMLElement>('player-sections');
+  private foldBtn = $<HTMLButtonElement>('player-fold');
   private rest = document.createElement('div');
   private model: PlayerModel = { total: 0, blockStarts: [], sections: [], timeAt: () => 0 };
   /** Stitches shown; equal to total when the design is complete. */
@@ -54,6 +55,7 @@ export class Player {
       this.pause();
       this.set(Number(this.slider.value));
     });
+    this.foldBtn.addEventListener('click', () => this.fold(!this.folded));
     this.root.querySelectorAll<HTMLButtonElement>('[data-play]').forEach((b) =>
       b.addEventListener('click', () => {
         const a = b.dataset.play;
@@ -64,6 +66,25 @@ export class Player {
         else this.block(1);
       }),
     );
+  }
+
+  get isPlaying(): boolean {
+    return this.playing;
+  }
+
+  get hasStitches(): boolean {
+    return this.model.total > 0;
+  }
+
+  /** Folded, the bar is only the play button and a way back, so the stage gets the room. */
+  get folded(): boolean {
+    return !!this.s.sections.player;
+  }
+
+  fold(on: boolean): void {
+    this.s.sections = { ...this.s.sections, player: on };
+    this.render();
+    this.changed();
   }
 
   get complete(): boolean {
@@ -155,15 +176,20 @@ export class Player {
     this.slider.value = String(this.pos);
     this.rest.style.left = `${m.total ? (this.pos / m.total) * 100 : 0}%`;
     this.slider.disabled = !m.total;
-    this.info.textContent = m.total
-      ? t('player.info', {
-          i: formatNumber(this.pos),
-          n: formatNumber(m.total),
-          time: `${clock(m.timeAt(this.pos))} / ${clock(m.timeAt(m.total))}`,
-        })
-      : '';
-    this.toggleBtn.querySelector('span')!.textContent = this.playing ? '❚❚' : '▶';
+    // The stitch count and the time apart, so a narrow bar can leave the time out.
+    const time = `${clock(m.timeAt(this.pos))} / ${clock(m.timeAt(m.total))}`;
+    const text = m.total ? t('player.info', { i: formatNumber(this.pos), n: formatNumber(m.total), time }) : '';
+    const at = text.lastIndexOf(time);
+    const part = (cls: string, s: string) => Object.assign(document.createElement('span'), { className: cls, textContent: s });
+    this.info.replaceChildren(...(at > 0 ? [part('pi-count', text.slice(0, at).replace(/[\s·]+$/, '')), part('pi-time', ` · ${time}`)] : [text]));
+    this.toggleBtn.querySelector('use')!.setAttribute('href', this.playing ? '#i-pause' : '#i-play');
     this.toggleBtn.title = t(this.playing ? 'player.pause' : 'player.play');
+    this.toggleBtn.setAttribute('aria-label', this.toggleBtn.title);
+    this.root.classList.toggle('folded', this.folded);
+    this.foldBtn.setAttribute('aria-expanded', String(!this.folded));
+    this.foldBtn.title = t(this.folded ? 'design.player.unfold' : 'design.player.fold');
+    this.foldBtn.setAttribute('aria-label', this.foldBtn.title);
+    this.foldBtn.querySelector('use')!.setAttribute('href', this.folded ? '#i-chevron-up' : '#i-chevron-down');
     this.toggleBtn.classList.toggle('primary', this.playing);
     this.speed.value = String(this.s.playSpeed);
   }

@@ -7,7 +7,7 @@ import { stableFabric } from '../../validation/practice';
 import type { Profile } from '../../validation/profiles';
 import { CAUTION, CRITICAL, SAFE, thresholdsFor } from '../../validation/thresholds';
 import { ALL_CHECKS, type Checks, type ValidationResult } from '../../validation/validate';
-import { CAUTION_KINDS, cellDiff, cellKey, countingCells, openFor, type CellDiff, type FixKind } from './cells';
+import { CAUTION_KINDS, cellDiff, cellKey, countingCells, kindsOf, openFor, type CellDiff, type FixKind, type FixTarget } from './cells';
 import { Field, type Contribution } from './field';
 import { merged, toolSets, toolsFor, type Tool, type Variant } from './variants';
 import { borderTools, designKey, letteringTools, objectsOf, predictable, sewUnit, stitchesOf, unitKey, unitOf, type Unit } from './units';
@@ -45,7 +45,7 @@ export interface ObjectFix {
 }
 
 export interface FixResult {
-  kind: FixKind | 'all';
+  kind: FixTarget;
   /** Open cells (counting) before and after. */
   before: number;
   after: number;
@@ -176,12 +176,12 @@ interface Tally {
  * Fixes the open cells of `kind` (or of all kinds) in `p`. Nothing in `p` changes: the result
  * carries the design with the fix.
  */
-export async function planFix(p: Pattern, profile: Profile, kind: FixKind | 'all', opt: FixOptions): Promise<FixResult> {
+export async function planFix(p: Pattern, profile: Profile, kind: FixTarget, opt: FixOptions): Promise<FixResult> {
   const t0 = performance.now();
   const checks = opt.checks ?? ALL_CHECKS;
   const v = validateDesign(p, profile, checks);
   const counting = countingCells(v, opt.acks);
-  const kinds: FixKind[] = kind === 'all' ? ['density', 'holes', 'gap', 'sparse', 'long'] : [kind];
+  const kinds = kindsOf(kind);
   const openCount = (x: ValidationResult) => {
     const cnt = countingCells(x, opt.acks);
     let n = 0;

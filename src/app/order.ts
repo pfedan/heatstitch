@@ -80,7 +80,7 @@ export function bindOrder(app: OrderApp) {
       const next = pendingOrder?.next ?? p;
       const before = orderStats(p);
       const after = orderStats(next);
-      const secs = (x: Pattern, c: typeof before) => sewingSeconds(app.seq(x).total, c.trims, c.colorChanges, app.settings.machineSpm);
+      const secs = (x: Pattern, c: typeof before) => sewingSeconds(app.seq(x).total, c.trims, c.colorChanges, app.settings);
       return { before, after, beforeSeconds: secs(p, before), afterSeconds: secs(next, after), changed: next !== p, reversed: pendingOrder?.reversed.length ?? 0 };
     },
     apply: () => {

@@ -247,12 +247,25 @@ export function recordOfStitch(numbers: Uint32Array, k: number): number {
   return lo;
 }
 
+/** How fast the machine sews and how long a trim and a thread change take (rules of thumb, set by the user). */
+export interface MachineTimes {
+  machineSpm: number;
+  trimSeconds: number;
+  colorSeconds: number;
+}
+
 /**
- * Estimated sewing time in seconds: stitches at `spm` stitches per minute plus a fixed time for
- * every trim and color change (the machine slows down, cuts and starts again).
+ * A trim: slowing down, cutting and starting again slowly, about 3 to 5 s on most machines.
+ * A thread change: a multi-needle machine switches by itself in a few seconds; on a single-needle
+ * machine the thread is changed and threaded by hand, rather 30 to 60 s.
  */
-export function sewingSeconds(stitches: number, trims: number, colorChanges: number, spm: number): number {
-  const TRIM_S = 4;
-  const COLOR_S = 15;
-  return (stitches / spm) * 60 + trims * TRIM_S + colorChanges * COLOR_S;
+export const TRIM_SECONDS = 3;
+export const COLOR_SECONDS = { single: 30, multi: 6 } as const;
+
+/**
+ * Estimated sewing time in seconds: stitches at the machine's stitches per minute plus a fixed time
+ * for every trim and thread change.
+ */
+export function sewingSeconds(stitches: number, trims: number, colorChanges: number, m: MachineTimes): number {
+  return (stitches / m.machineSpm) * 60 + trims * m.trimSeconds + colorChanges * m.colorSeconds;
 }
