@@ -92,12 +92,14 @@ async function cmd(page, text, wait = 800) {
   await page.waitForTimeout(400);
   await page.keyboard.press('Enter');
   await page.waitForTimeout(wait);
+  // no focus ring on the search box in the shot
+  await page.evaluate(() => document.activeElement?.blur?.());
 }
 
 /** Take the final JPEG (optionally clipped). */
 async function jpeg(page, name, clip) {
   await page.waitForTimeout(300);
-  await page.screenshot({ path: FINAL + name + '.jpg', type: 'jpeg', quality: 86, clip });
+  await page.screenshot({ path: FINAL + name + '.jpg', type: 'jpeg', quality: 86, clip, timeout: 60000 });
   console.log('shot', name);
 }
 const sidebarTop = (page) => page.evaluate(() => { for (const s of ['.sidebar', '#inspector']) { const el = document.querySelector(s); if (el) el.scrollTop = 0; } });
@@ -208,6 +210,16 @@ const inspectorToText = (page, container, text, offset = -8) => page.evaluate(([
   if (el) insp.scrollTop += el.getBoundingClientRect().top - insp.getBoundingClientRect().top + o;
   return !!el;
 }, [container, text, offset]);
+/** Wait until the element's text no longer matches, up to `ms`. */
+async function waitGone(page, sel, re, ms) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < ms) {
+    const txt = await page.evaluate((s) => document.querySelector(s)?.innerText || '', sel);
+    if (!re.test(txt)) return true;
+    await page.waitForTimeout(500);
+  }
+  return false;
+}
 /** Wait until the element's text matches, up to `ms`. */
 async function waitText(page, sel, re, ms) {
   const t0 = Date.now();
@@ -228,8 +240,8 @@ async function propose(page, lang) {
 const shots = {};
 
 const T = {
-  de: { corners: 'Ecken', sections: 'Abschnitte', merge: 'Zu einem Objekt zusammenfassen', subtract: 'Obere Form ausschneiden', guide: 'Als Hilfslinie behalten', all: 'Alle auswählen', apply: 'Ausgewählte übernehmen', uncut: 'Ohne Schnitt', covering: 'Deckend', swirl: 'Wirbel', border: 'Umrandung', ready: 'Bereit zum Sticken', cut: 'Schneiden', newDesign: 'Neues leeres Stickmuster' },
-  en: { corners: 'Corners', sections: 'Sections', merge: 'Combine into one object', subtract: 'Cut out the top shape', guide: 'Keep as a guide', all: 'Select all', apply: 'Apply selected', uncut: 'Not trimmed', covering: 'Covering', swirl: 'Swirl', border: 'Border', ready: 'Ready to stitch', cut: 'Cut', newDesign: 'New empty design' },
+  de: { corners: 'Querlinien an Ecken vorschlagen', sections: 'Abschnitte an spitzen Ecken vorschlagen', merge: 'Zu einem Objekt zusammenfassen', subtract: 'Obere Form ausschneiden', guide: 'Als Hilfslinie behalten', all: 'Alle auswählen', apply: 'Ausgewählte übernehmen', uncut: 'Ohne Schnitt', covering: 'Deckend', swirl: 'Wirbel', border: 'Umrandung', ready: 'Bereit zum Sticken', cutTool: 'Zerteilen', newDesign: 'Neues leeres Stickmuster' },
+  en: { corners: 'Suggest rungs at corners', sections: 'Suggest sections at sharp corners', merge: 'Combine into one object', subtract: 'Cut out the top shape', guide: 'Keep as a guide', all: 'Select all', apply: 'Apply selected', uncut: 'Not trimmed', covering: 'Covering', swirl: 'Swirl', border: 'Border', ready: 'Ready to stitch', cutTool: 'Cut apart', newDesign: 'New empty design' },
 };
 
 // 0. start: the start page "Was möchtest du sticken?"
@@ -262,6 +274,7 @@ shots.heatmap = async (lang) => {
   await realistic(page, false);
   await page.evaluate(() => { document.querySelector('#findings-panel').open = true; });
   await fit(page);
+  await waitGone(page, '#check-summary', /Wird berechnet|Working/, 60000);
   await sidebarTop(page);
   await mouseAway(page);
   await jpeg(page, `heatmap-${lang}`);
@@ -289,22 +302,61 @@ async function patchFlow(page, ...colors) {
   await realistic(page, true);
   for (const c of colors) await expandColor(page, c);
 }
-// patch.pes objects: 0 disc fill, 4 satin ring, 5 star fill, 7..10 HEAT, 11..16 STITCH (white satin)
-const PATCH = { disc: 0, ring: 4, star: 5, starPart: 6, S: 11 };
+// patch.pes is recognized from its stitches, so the object numbers change with the recognition.
+// The shots find their objects by color row and content instead: the satin S is the first white
+// satin in the lower text line, the star is the fills of the third color.
+/** Rows of the open color n (1-based) as { i, text, n: stitch count }. */
+async function colorRows(page, n) {
+  return page.evaluate((n) => {
+    const colors = Array.from(document.querySelectorAll('#layer-list > li.layer:not(.object)'));
+    const row = colors[n - 1];
+    const out = [];
+    for (let el = row.nextElementSibling; el && el.classList.contains('object'); el = el.nextElementSibling) {
+      const text = el.innerText.replace(/\s+/g, ' ').trim();
+      out.push({ i: el.dataset.object, text, n: +((text.match(/(\d[\d.,]*)\s*$/) || [0, '0'])[1]).replace(/[.,]/g, '') });
+    }
+    return out;
+  }, n);
+}
+/** Center (mm) of the selected object, read from the Mitte fields of the inspector. */
+async function selectedCenter(page) {
+  return page.evaluate(() => {
+    const v = Array.from(document.querySelectorAll('#object-body input')).filter((x) => x.type === 'number' || x.inputMode === 'decimal').map((x) => +x.value.replace(',', '.'));
+    return { x: v[2], y: v[3] };
+  });
+}
+/** The satin S of the patch: the first white satin whose center lies in the lower text line. Leaves it selected. */
+async function selectPatchS(page) {
+  const rows = await colorRows(page, 4);
+  let best = null;
+  for (const r of rows) {
+    await clickObject(page, r.i);
+    const c = await selectedCenter(page);
+    if (c.y > 65 && (!best || c.x < best.x)) best = { ...r, ...c };
+  }
+  if (!best) throw new Error('no S found');
+  await clickObject(page, best.i);
+  return best;
+}
+/** The star of the patch: the fills of the third color, biggest first. */
+async function starParts(page) {
+  const rows = await colorRows(page, 3);
+  return rows.filter((r) => /^(Füllung|Fill)/.test(r.text)).sort((a, b) => b.n - a.n);
+}
 
 /** The rung tool (R) on the selected satin, then one of its bar buttons. */
-async function rungTool(page, barText) {
+async function rungTool(page, cmdText) {
   await page.keyboard.press('r');
   await page.waitForTimeout(800);
-  await page.locator('#tool-options button', { hasText: new RegExp(`^${barText}$`) }).first().click();
-  await page.waitForTimeout(1200);
+  // the bar folds its buttons into a "..." menu on narrow stages, so the command search runs it
+  await cmd(page, cmdText, 1200);
 }
 
 // 4. satin: rungs on the satin S of the patch
 shots.satin = async (lang) => {
   const { page, close } = await boot(lang);
   await patchFlow(page, 4);
-  await clickObject(page, PATCH.S);
+  await selectPatchS(page);
   await rungTool(page, T[lang].corners);
   // zoom onto the S (left of STITCH)
   const b = await stageBox(page);
@@ -319,8 +371,9 @@ shots.satin = async (lang) => {
 shots.merge = async (lang) => {
   const { page, close } = await boot(lang);
   await patchFlow(page, 3);
-  await clickObject(page, PATCH.star);
-  await clickObject(page, PATCH.starPart, true);
+  const parts = await starParts(page);
+  await clickObject(page, parts[0].i);
+  for (const p of parts.slice(1)) await clickObject(page, p.i, true);
   await cmd(page, T[lang].merge, 1500);
   await inspectorTo(page, '#object-panel');
   await mouseAway(page);
@@ -333,7 +386,7 @@ shots.merge = async (lang) => {
 shots.stitches = async (lang) => {
   const { page, close } = await boot(lang);
   await patchFlow(page, 3);
-  await clickObject(page, PATCH.star);
+  await clickObject(page, (await starParts(page))[0].i);
   await level(page, 'stitches');
   await page.waitForTimeout(400);
   const b = await stageBox(page);
@@ -440,6 +493,8 @@ shots.compare = async (lang) => {
   const { page, close } = await boot(lang, { width: 1280, height: 960 });
   await loadFile(page, DEMOS + 'patch.pes');
   await density(page, 'woven', true);
+  await page.evaluate(() => document.querySelector('input[name="fix-goal"][value="caution"]').click());
+  await page.waitForTimeout(500);
   await propose(page, lang);
   await page.locator('#fix-report button', { hasText: T[lang].all }).first().click();
   await page.waitForTimeout(500);
@@ -487,7 +542,7 @@ shots.border = async (lang) => {
   await page.waitForTimeout(600);
   await page.locator('.color-pop .color-grid button.pick').nth(12).click();
   await page.waitForTimeout(2500);
-  await inspectorToText(page, '#object-stitches', T[lang].border, -12);
+  await inspectorToText(page, '#object-stitches', T[lang].border, -64);
   await mouseAway(page);
   await jpeg(page, `border-${lang}`);
   await close();
@@ -555,7 +610,7 @@ shots.ready = async (lang) => {
   await tab(page, 'design');
   await setControl(page, '#hoop', '100x100');
   await page.waitForTimeout(600);
-  await inspectorToText(page, '#inspector', T[lang].ready, -12);
+  await inspectorToText(page, '#inspector', T[lang].ready, -64);
   await mouseAway(page);
   await jpeg(page, `ready-${lang}`);
   await close();
@@ -564,24 +619,25 @@ shots.ready = async (lang) => {
 // 21. cut: the sweater of the cat cut in two with Zerteilen (X)
 shots.cut = async (lang) => {
   const { page, close } = await boot(lang);
-  await example(page, 'cat');
+  // the Aufnäher of the demo project: its disc is a fill the app knows (recognized fills can't be cut)
+  await example(page, 'demo');
+  await page.waitForTimeout(1500);
+  await page.evaluate(() => {
+    const li = Array.from(document.querySelectorAll('#file-list li')).find((l) => /Aufnäher|Patch/.test(l.innerText));
+    (li.querySelector('button, .name, span') ?? li).click();
+  });
+  await page.waitForTimeout(2500);
   await realistic(page, true);
-  await expandColor(page, 4); // Rot: the sweater
-  const rows = await objectRows(page);
-  const big = rows.map((r) => ({ i: r.i, n: +(r.text.match(/(\d[\d.,]*)\s*$/) || [0, 0])[1].replace(/[.,]/g, '') })).sort((a, b) => b.n - a.n)[0];
-  await clickObject(page, big.i);
+  await expandColor(page, 1);
+  await clickObject(page, (await colorRows(page, 1))[0].i);
   await fit(page);
-  await page.keyboard.press('x');
-  await page.waitForTimeout(800);
-  // a straight line across the middle of the selected object (its frame on the stage)
-  const f = await page.evaluate(() => { const c = document.querySelector('#canvas').getBoundingClientRect(); return { x: c.x, y: c.y, w: c.width, h: c.height }; });
-  const box = await page.evaluate(() => globalThis.__selectionBox?.() ?? null);
-  const cx = box ? f.x + box.x + box.w / 2 : f.x + f.w / 2, cy = box ? f.y + box.y + box.h / 2 : f.y + f.h / 2;
-  const half = box ? Math.max(box.w, box.h) * 0.7 : 160;
+  await cmd(page, T[lang].cutTool, 800);
+  // A straight drag (Shift) through the middle of the disc; the cut runs on release.
+  const b = await stageBox(page);
+  const y = b.y + b.height * 0.5;
   await page.keyboard.down('Shift');
-  await drag(page, cx - half, cy - half * 0.35, cx + half, cy + half * 0.35, 10);
+  await drag(page, b.x + b.width * 0.08, y, b.x + b.width * 0.92, y, 10);
   await page.keyboard.up('Shift');
-  await page.locator('#tool-options button', { hasText: new RegExp(`^${T[lang].cut}$`) }).first().click();
   await page.waitForTimeout(2500);
   await mouseAway(page);
   await sidebarTop(page);
@@ -667,7 +723,7 @@ shots.draw = async (lang) => {
 shots.sections = async () => {
   const { page, close } = await boot('de');
   await patchFlow(page, 4);
-  await clickObject(page, PATCH.S);
+  await selectPatchS(page);
   await rungTool(page, T.de.sections);
   const b = await stageBox(page);
   await zoomTo(page, b.x + 212, b.y + 538, 6);
