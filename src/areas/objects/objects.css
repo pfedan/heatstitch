@@ -1,0 +1,782 @@
+/* Area "objects": the list "Farben und Objekte", the object page of the inspector, the menus.
+   Only tokens (design-system/heatstitch/MASTER.md). Selectors start at the area's ids, so they win
+   over the older rules in src/style.css without touching them. */
+
+/* List ------------------------------------------------------------------------------------------ */
+
+#layers-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 8px 8px;
+}
+
+#layers-panel > .panel-head {
+  align-items: center;
+  margin: 0 4px;
+  gap: 10px;
+}
+
+#layers-panel > .panel-head h2 {
+  margin: 0;
+  flex: 1;
+}
+
+#layers-panel > .panel-head #color-list {
+  margin-left: 0;
+}
+
+#layers-panel .order-bar {
+  margin: 0;
+}
+
+#layers-panel .order-bar button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  background: none;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+#layers-panel .order-bar button:not(:disabled):hover,
+#layers-panel .order-bar button[aria-expanded='true'] {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--line));
+}
+
+#layers-panel .order-bar .i {
+  width: 16px;
+  height: 16px;
+}
+
+#layer-list {
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+}
+
+#layer-list .layer,
+#aside-block .layer {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 3px 6px 3px 2px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+#layer-list .layer:hover,
+#aside-block .layer:hover {
+  background: var(--bg);
+}
+
+#layer-list .layer:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* A color: chevron, swatch, name with its number and thread, tools on hover, stitches. */
+#layer-list .color-row {
+  min-height: 40px;
+}
+
+#layer-list .color-row + .color-row,
+#layer-list .object + .color-row {
+  margin-top: 2px;
+}
+
+#layer-list .chev {
+  width: 20px;
+  height: 28px;
+  margin: 0;
+  border: none;
+  background: none;
+}
+
+#layer-list .chev::before {
+  width: 16px;
+  height: 16px;
+}
+
+#layer-list .color-row .sw {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
+  border-radius: 5px;
+}
+
+#layer-list .layer-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+#layer-list .layer-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#layer-list .color-row .layer-name {
+  font-weight: 500;
+}
+
+#layer-list .layer-num {
+  display: inline-block;
+  min-width: 1.4em;
+  margin-right: 2px;
+  color: var(--muted);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+#layer-list .layer-sub,
+#aside-block .layer-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+#layer-list .layer-meta {
+  flex: none;
+  margin-left: auto;
+  min-width: 3.2em;
+  text-align: right;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+#layer-list .layer.current .layer-name::after {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: 2px;
+}
+
+/* Tools of a color row: on hover and focus they lie over the end of the second line (thread code and
+   count), never over the name; the stitch count moves up beside the name. A color hidden or
+   highlighted keeps them shown; on touch they stay in the row. */
+#layer-list .color-row .layer-meta {
+  align-self: flex-start;
+  margin-top: 2px;
+  line-height: 16px;
+}
+
+#layer-list .layer-tools {
+  position: absolute;
+  right: 4px;
+  bottom: 1px;
+  display: none;
+  gap: 0;
+  border-radius: 5px;
+  background: var(--bg);
+}
+
+#layer-list .color-row:hover .layer-tools,
+#layer-list .color-row:focus-within .layer-tools,
+#layer-list .color-row.hidden-layer .layer-tools,
+#layer-list .color-row.focused .layer-tools {
+  display: flex;
+}
+
+#layer-list .color-row.focused .layer-tools {
+  background: color-mix(in srgb, var(--accent) 7%, var(--panel));
+}
+
+#layer-list .color-row .layer-tools button.icon {
+  width: 24px;
+  height: 17px;
+}
+
+#layer-list .layer button.icon,
+#aside-block .layer button.icon {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  color: var(--muted);
+}
+
+#layer-list .layer button.icon:hover,
+#aside-block .layer button.icon:hover {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--ink);
+}
+
+#layer-list .layer button.icon .i,
+#aside-block .layer button.icon .i {
+  width: 16px;
+  height: 16px;
+}
+
+#layer-list .layer-tools button[aria-pressed='true'] {
+  color: var(--accent);
+}
+
+/* The "…" of an object row: only where the pointer or the focus is, and on the selected rows. */
+#layer-list .object .row-more,
+#aside-block .row-more {
+  visibility: hidden;
+}
+
+#layer-list .object:hover .row-more,
+#layer-list .object:focus-within .row-more,
+#aside-block .layer:hover .row-more,
+#aside-block .layer:focus-within .row-more {
+  visibility: visible;
+}
+
+@media (hover: none) {
+  #layer-list .layer-tools {
+    position: static;
+    display: flex;
+    background: none;
+  }
+
+  #layer-list .color-row .layer-meta {
+    align-self: center;
+    margin-top: 0;
+  }
+
+  #layer-list .object .row-more,
+  #aside-block .row-more {
+    visibility: visible;
+  }
+}
+
+#layer-list .color-row.focused {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+
+#layer-list .layer.hidden-layer .sw,
+#layer-list .layer.hidden-layer .layer-text,
+#layer-list .layer.hidden-layer .layer-name,
+#layer-list .layer.hidden-layer .kind-icon {
+  opacity: 0.4;
+}
+
+/* An object: indented under its color, kind icon, name, stitches. */
+#layer-list .object {
+  margin-left: 26px;
+  min-height: 30px;
+  padding-left: 6px;
+}
+
+#layer-list .object .kind-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  color: var(--muted);
+}
+
+#layer-list .object .kind-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+#layer-list .object .layer-name {
+  flex: 1;
+  min-width: 0;
+}
+
+#layer-list .object.selected {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+#layer-list .object.selected::before {
+  content: '';
+  position: absolute;
+  left: -1px;
+  top: 5px;
+  bottom: 5px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+#layer-list .object.selected .kind-icon {
+  color: var(--accent);
+}
+
+#layer-list .layer .layer-guessed {
+  flex: none;
+  color: var(--muted);
+}
+
+#layer-list .layers-guessed,
+#layer-list .layers-empty {
+  padding: 8px 6px;
+  font-size: 12px;
+  cursor: default;
+}
+
+/* "Not sewn": its own group at the end of the list. */
+#aside-block {
+  margin: 0;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+}
+
+#aside-block > summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 6px 0 2px;
+  list-style: none;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 6px;
+}
+
+#aside-block > summary::-webkit-details-marker {
+  display: none;
+}
+
+#aside-block > summary:hover {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+#aside-block > summary .i {
+  width: 14px;
+  height: 14px;
+  margin: 0 3px;
+  transition: transform 0.12s;
+}
+
+#aside-block[open] > summary .i {
+  transform: rotate(90deg);
+}
+
+#aside-block .aside-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+#aside-block .aside-row {
+  margin-left: 26px;
+  padding-left: 6px;
+  cursor: default;
+}
+
+#aside-block .aside-row .kind-icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--muted);
+}
+
+#aside-block .aside-row .kind-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+#aside-block .aside-row .mini-sw {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  opacity: 0.6;
+}
+
+#aside-block .aside-row .layer-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  line-height: 1.25;
+}
+
+#aside-block .aside-row .layer-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+#aside-block .aside-sew {
+  flex: none;
+  padding: 2px 8px;
+  font-size: 12px;
+  background: none;
+}
+
+#aside-block .aside-sew:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Notes under the list (warnings, a choice after a drop); plain news go to the toast. */
+#layers-panel .layer-note {
+  margin: 0;
+  padding: 6px 8px;
+  border-left: 3px solid var(--accent);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 12px;
+}
+
+#layers-panel .layer-note.error {
+  color: var(--ink);
+}
+
+/* Cards on top of the list ------------------------------------------------------------------------ */
+
+#layers-panel .order-card {
+  margin: 0;
+}
+
+#overlap-card {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 8px 10px;
+  border-color: var(--line);
+  background: var(--bg);
+  font-size: 12px;
+}
+
+#overlap-card p {
+  flex: 1 1 180px;
+  color: var(--ink);
+}
+
+#overlap-card .row {
+  flex: none;
+  gap: 6px;
+}
+
+#overlap-card .row button {
+  padding: 3px 9px;
+  font-size: 12px;
+}
+
+/* Object page ------------------------------------------------------------------------------------- */
+
+#object-panel {
+  padding: 12px;
+  /* Brought into view under the sticky tabs of the inspector. */
+  scroll-margin-top: 52px;
+}
+
+#object-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#object-panel .obj-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+}
+
+#object-panel .obj-head .kind-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+}
+
+#object-panel .obj-head .kind-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+#object-panel .obj-title {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+#object-panel .obj-title strong {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+#object-panel .obj-thread {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  margin: 1px 0 0 -4px;
+  padding: 1px 4px;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+#object-panel .obj-thread:not(:disabled):hover {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+#object-panel .obj-swatches {
+  display: inline-flex;
+}
+
+#object-panel .obj-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid color-mix(in srgb, var(--ink) 20%, transparent);
+}
+
+#object-panel .obj-swatch + .obj-swatch {
+  margin-left: -3px;
+}
+
+#object-panel .obj-thread-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#object-panel #object-close {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--muted);
+}
+
+#object-panel #object-close:hover {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+#object-panel .obj-facts p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+#object-panel .obj-facts p:first-child {
+  color: var(--ink);
+}
+
+#object-panel .obj-facts .obj-warn {
+  margin-top: 4px;
+  padding: 4px 8px;
+  border-left: 3px solid var(--accent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--ink);
+}
+
+/* Size and middle: two short rows of fields. */
+#object-panel .obj-geom {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 4px 10px;
+}
+
+#object-panel .obj-geom-label {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+#object-panel .obj-geom-fields {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+#object-panel .obj-geom input {
+  width: 0;
+  flex: 1 1 0;
+  min-width: 40px;
+  max-width: 72px;
+  padding: 3px 6px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+#object-panel .obj-geom input::-webkit-inner-spin-button,
+#object-panel .obj-geom input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+#object-panel .obj-geom input:disabled {
+  opacity: 1;
+  border-color: transparent;
+  background: none;
+  color: var(--ink);
+  cursor: default;
+}
+
+#object-panel .obj-x,
+#object-panel .obj-unit {
+  flex: none;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+#object-panel .obj-x {
+  width: 10px;
+  text-align: center;
+}
+
+#object-panel .size-lock,
+#object-panel .obj-lock-space {
+  flex: none;
+  width: 26px;
+  height: 26px;
+}
+
+#object-panel .size-lock {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--muted);
+}
+
+#object-panel .size-lock .i {
+  width: 15px;
+  height: 15px;
+}
+
+#object-panel .size-lock[aria-pressed='true'] {
+  color: var(--accent);
+}
+
+#object-panel .size-lock:disabled {
+  visibility: hidden;
+}
+
+/* The row of command buttons. */
+#object-panel .obj-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+#object-panel .obj-icon-btn {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  color: var(--ink);
+}
+
+#object-panel .obj-icon-btn:not(:disabled):hover {
+  background: var(--bg);
+  color: var(--accent);
+}
+
+#object-panel .obj-icon-btn:disabled {
+  opacity: 0.35;
+}
+
+#object-panel .obj-icon-btn[data-command='object.delete']:not(:disabled):hover {
+  color: #c0392b;
+}
+
+#object-panel .obj-sep {
+  flex: none;
+  width: 1px;
+  height: 18px;
+  background: var(--line);
+}
+
+/* Steps for this selection: its outline, its points, parts, merging... */
+#object-panel .obj-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+#object-panel .obj-text-btn {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 4px 10px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+#object-panel .obj-text-btn .i {
+  width: 16px;
+  height: 16px;
+  color: var(--muted);
+}
+
+#object-panel .obj-text-btn:not(:disabled):hover {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--line));
+}
+
+#object-panel #object-stitches:not(:empty) {
+  margin-top: 12px;
+}

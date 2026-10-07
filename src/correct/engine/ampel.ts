@@ -4,7 +4,7 @@ import type { Profile } from '../../validation/profiles';
 import type { ValidationResult } from '../../validation/validate';
 import type { Zone } from '../../validation/zones';
 import { prepareFix, type PlannedFix } from './apply';
-import { ampelOf, CAUTION_KINDS, countingCells, FIX_KINDS, KIND_REASONS, openFor, type AmpelColor, type FixKind } from './cells';
+import { ampelOf, CAUTION_KINDS, countingCells, FIX_KINDS, KIND_REASONS, openFor, type AmpelColor, type FixKind, type FixTarget } from './cells';
 import type { FixOptions } from './solve';
 import { validateDesign } from './validate';
 
@@ -75,13 +75,13 @@ export function planOrder(kinds: FixKind[]): FixKind[] {
 const useful = (f: PlannedFix) => f.after < f.before && f.objects.length > 0;
 
 /** The direct fix of one kind: invisible and barely visible changes. Null when it clears nothing. */
-export async function directFix(p: Pattern, profile: Profile, kind: FixKind, opt: FixOptions): Promise<PlannedFix | null> {
+export async function directFix(p: Pattern, profile: Profile, kind: FixTarget, opt: FixOptions): Promise<PlannedFix | null> {
   const f = await prepareFix(p, profile, kind, { ...opt, visible: false, hand: false });
   return useful(f) ? f : null;
 }
 
 /** The proposal for the rest of one kind: visible changes too, objects changed by hand sewn anew. */
-export async function restFix(p: Pattern, profile: Profile, kind: FixKind, opt: FixOptions): Promise<PlannedFix | null> {
+export async function restFix(p: Pattern, profile: Profile, kind: FixTarget, opt: FixOptions): Promise<PlannedFix | null> {
   const f = await prepareFix(p, profile, kind, { ...opt, visible: true, hand: true });
   return useful(f) ? f : null;
 }

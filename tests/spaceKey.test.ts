@@ -27,7 +27,7 @@ describe.skipIf(!on)('the space key', () => {
     browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
     page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
     await page.goto(server.resolvedUrls!.local[0]);
-    await page.selectOption('#load-example', 'examples/cat-60mm.pes');
+    await page.evaluate(() => document.querySelector<HTMLButtonElement>('#load-example [data-example="examples/cat-60mm.pes"]')!.click());
     await page.locator('#layer-list .layer').first().waitFor();
     await page.waitForTimeout(500);
   }, 60_000);
@@ -65,6 +65,8 @@ describe.skipIf(!on)('the space key', () => {
   it('plays after a click on a switch instead of flipping it back', { timeout: 30_000 }, async () => {
     const box = page.locator('#realistic');
     const label = page.locator('label:has(#realistic)');
+    // The switch lives in the view menu on the stage.
+    await page.click('#view-button');
     await label.click();
     const checked = await box.isChecked();
     await page.keyboard.press(' ');

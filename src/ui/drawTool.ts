@@ -36,6 +36,9 @@ export class DrawTool {
   size: [number, number] | null = null;
   /** The pen's first node is under the pointer: a click closes the area. */
   closing = false;
+  /** Options of the tool bar, as if Shift (a square or circle) or Alt (from the middle) were held. */
+  square = false;
+  fromCenter = false;
   /** Nodes of the pen. */
   private nodes: Node[] = [];
   private from: Pt | null = null;
@@ -158,7 +161,7 @@ export class DrawTool {
       this.hooks.redraw();
       return true;
     }
-    this.preview = this.box(x, y, shift, alt);
+    this.preview = this.box(x, y, shift || this.square, alt || this.fromCenter);
     this.hooks.redraw();
     return true;
   }
@@ -179,7 +182,7 @@ export class DrawTool {
       if (line) this.hooks.done({ form: line, kind: 'stroke', width: 0.4 });
       return this.hooks.redraw();
     }
-    const form = this.box(x, y, shift, alt, from);
+    const form = this.box(x, y, shift || this.square, alt || this.fromCenter, from);
     this.preview = null;
     this.size = null;
     if (form) this.hooks.done({ form, kind: 'fill' });

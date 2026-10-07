@@ -4,7 +4,7 @@ import type { FileList, LoadedFile } from '../ui/fileList';
 import type { FrameTool } from '../ui/frameTool';
 import type { ImageMode } from '../ui/imageMode';
 import type { Lettering } from '../lettering/layout';
-import type { ObjectPanel, OrderCard } from '../ui/objectPanel';
+import type { OrderCard } from '../ui/objectPanel';
 import type { Pattern } from '../model/pattern';
 import type { RungTool } from '../ui/rungTool';
 import type { Sequence } from './types';
@@ -13,11 +13,10 @@ import type { ShapeTool } from '../ui/shapeTool';
 import type { Viewport } from '../render/viewport';
 import { DIVIDER_GRAB_PX } from '../render/compare';
 import { LONG_PRESS_MS } from '../ui/layersPanel';
-import { ObjectMenu } from '../ui/objectMenu';
+import { objectMenu } from '../ui/objectMenu';
 import { lightFromPointer } from '../render/light';
 import { objectsInRect } from '../model/edit';
 import { stitchAt, transitionAt, transitionShown, type StitchStyle } from '../render/flow';
-import { t } from '../i18n';
 import { ui } from './state';
 import { updateTooltip } from '../ui/tooltip';
 
@@ -40,8 +39,6 @@ export interface PointerApp {
   readonly letterUp: () => void;
   readonly letteringsOf: (p: Pattern, q: Sequence) => (Lettering | undefined)[];
   readonly movePlanSplit: (sx: number) => void;
-  readonly objectInfo: (p: Pattern, q: Sequence) => Parameters<ObjectPanel['actions']>[0];
-  readonly objectPanel: ObjectPanel;
   readonly orderCard: OrderCard;
   readonly redraw: () => void;
   readonly rungTool: RungTool;
@@ -96,6 +93,7 @@ export function bindPointer(app: PointerApp) {
 
   const pointers = new Map<number, [number, number]>();
   let pinchDist = 0;
+  let pinchMid: [number, number] | null = null;
   /** Where a one-finger or mouse press started, to tell a click from a drag. */
   let pressAt: [number, number] | null = null;
   /** What the press started as: a point drag, a rectangle or panning (a click when it did not move). */
@@ -194,6 +192,7 @@ export function bindPointer(app: PointerApp) {
       }
       const [a, b] = [...pointers.values()];
       pinchDist = Math.hypot(a[0] - b[0], a[1] - b[1]);
+      pinchMid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
     }
     app.redraw();
   });
@@ -241,8 +240,12 @@ export function bindPointer(app: PointerApp) {
         pointers.set(e.pointerId, pos);
         const [a, b] = [...pointers.values()];
         const d = Math.hypot(a[0] - b[0], a[1] - b[1]);
-        if (pinchDist > 0) app.vp.zoomAt((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, d / pinchDist);
+        // Two fingers zoom around their middle and move the view with it.
+        const mid: [number, number] = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+        if (pinchMid) app.vp.pan(mid[0] - pinchMid[0], mid[1] - pinchMid[1]);
+        if (pinchDist > 0) app.vp.zoomAt(mid[0], mid[1], d / pinchDist);
         pinchDist = d;
+        pinchMid = mid;
       }
       pointers.set(e.pointerId, pos);
       app.redraw();
@@ -324,16 +327,19 @@ export function bindPointer(app: PointerApp) {
         const q = app.seq(p);
         const st = app.styleFor(p);
         const jumps = shownMarks(app.settings).jumps;
-        const k = transitionAt(p, q.transitions, app.vp, pos[0], pos[1], 8, (t) => transitionShown(p, t, jumps, st));
+        // A finger is wide: within its reach an object wins over a dashed jump line across it, and
+        // both are found a little further away than under the mouse.
+        const touch = e.pointerType === 'touch';
+        const [x, y] = app.vp.toWorld(pos[0], pos[1]);
+        const i = stitchAt(p, x * 10, y * 10, Math.max(3, (touch ? 140 : 60) / app.vp.scale), st.limit, st.alpha);
+        const o = i >= 0 ? q.objectAt[i] : -1;
+        const k = touch && o >= 0 ? -1 : transitionAt(p, q.transitions, app.vp, pos[0], pos[1], touch ? 12 : 8, (t) => transitionShown(p, t, jumps, st));
         if (k >= 0 || ui.selectedJump !== null) {
           ui.selectedJump = k >= 0 ? k : null;
           app.redraw();
         }
         if (k < 0) {
           // A click on stitches selects their object, a click beside them clears the selection.
-          const [x, y] = app.vp.toWorld(pos[0], pos[1]);
-          const i = stitchAt(p, x * 10, y * 10, Math.max(3, 60 / app.vp.scale), st.limit, st.alpha);
-          const o = i >= 0 ? q.objectAt[i] : -1;
           const add = e.shiftKey || e.ctrlKey || e.metaKey;
           if (o >= 0) app.selectObjects([o], add);
           else if (!add && ui.selectedObjects.size) app.selectObjects([], false);
@@ -356,6 +362,7 @@ export function bindPointer(app: PointerApp) {
     }
     pointers.delete(e.pointerId);
     pinchDist = 0;
+    pinchMid = null;
     if (!pointers.size) app.canvas.classList.remove('panning');
   };
   app.canvas.addEventListener('pointerup', endPointer);
@@ -402,7 +409,6 @@ export function bindPointer(app: PointerApp) {
   }
 
   // The object actions at the pointer: right click, or a long press on a touch screen.
-  const objectMenu = new ObjectMenu();
   let longPress: { timer: number; at: [number, number] } | null = null;
 
   function cancelLongPress(): void {
@@ -429,7 +435,7 @@ export function bindPointer(app: PointerApp) {
     if (!ui.selectedObjects.has(o)) app.selectObjects([o], false);
     app.redraw();
     if (ui.lettering || !ui.selectedObjects.size) return false;
-    objectMenu.open(clientX, clientY, app.objectPanel.actions(app.objectInfo(p, app.seq(p))), t('object.menu'));
+    objectMenu.open({ x: clientX, y: clientY });
     return objectMenu.isOpen;
   }
 

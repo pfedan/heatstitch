@@ -1,0 +1,438 @@
+/* Bild umwandeln: the assistant in three steps (src/ui/imageMode.ts). */
+
+/* Only the current step's settings, palette and result are shown. */
+body[data-image-step='1'] .image-step:not([data-step='1']),
+body[data-image-step='2'] .image-step:not([data-step='2']),
+body[data-image-step='3'] .image-step:not([data-step='3']) {
+  display: none;
+}
+
+/* Step 1 needs no inspector: the picture gets the room. */
+body[data-mode='image'][data-image-step='1'] .layout {
+  grid-template-columns: auto min(var(--side-w), 30vw) minmax(0, 1fr) 0;
+}
+
+body[data-mode='image'][data-image-step='1'] .inspector,
+body[data-mode='image'][data-image-step='1'] .resizer[data-panel='inspector'] {
+  display: none;
+}
+
+/* The bar over the stage: steps, status, cancel ---------------------------------------------------- */
+
+.image-steps {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 4px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  pointer-events: auto;
+}
+
+.image-stepper {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-width: 0;
+}
+
+.image-stepper li {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.image-stepper li + li::before {
+  content: '';
+  flex: none;
+  width: 18px;
+  height: 1px;
+  margin: 0 2px;
+  background: var(--line);
+}
+
+.image-stepper button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 10px 4px 4px;
+  border: none;
+  border-radius: 7px;
+  background: none;
+  color: var(--muted);
+  white-space: nowrap;
+  transition: background 0.12s, color 0.12s;
+}
+
+.image-stepper button:hover {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+.image-stepper .num {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 1.5px solid var(--line);
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+/* A step whose work is there: its number in the accent. */
+.image-stepper button.ready .num {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.image-stepper button[aria-current='step'] {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.image-stepper button[aria-current='step'] .num {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.image-status {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.image-status.busy::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: 1px;
+  animation: image-pulse 1s ease-in-out infinite alternate;
+}
+
+.image-status.error {
+  color: #c23a3a;
+}
+
+@keyframes image-pulse {
+  from {
+    opacity: 0.25;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.image-cancel {
+  flex: none;
+  padding: 4px 10px;
+}
+
+/* Left column: the settings of the step, back and next at its foot ---------------------------------- */
+
+.image-wizard {
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.image-wizard .panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.image-wizard .panel > h2 {
+  margin: 0;
+}
+
+.image-wizard .field,
+.image-wizard .check {
+  margin: 0;
+}
+
+.image-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 26px 12px;
+}
+
+.image-drop-icon {
+  width: 30px;
+  height: 30px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* With a picture open the drop zone only offers another one. */
+.image-drop.compact {
+  flex-direction: row;
+  justify-content: center;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+.image-drop.compact .image-drop-icon {
+  display: none;
+}
+
+/* Without a picture there is nothing to switch between. */
+#image-views[hidden] {
+  display: none;
+}
+
+.image-under-drop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+  margin-top: -4px;
+}
+
+.image-under-drop .privacy-note {
+  margin: 0;
+}
+
+.image-file {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.image-file[hidden] {
+  display: none;
+}
+
+.image-info {
+  margin: 0 0 2px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.image-info.error {
+  color: #c23a3a;
+}
+
+.image-width output {
+  font-variant-numeric: tabular-nums;
+}
+
+.image-wizard .ai-prep {
+  margin: 0;
+}
+
+.image-wizard .ai-prep[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.image-wizard .ai-prep p,
+.image-wizard .ai-prep .buttons {
+  margin: 0;
+}
+
+.image-material {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.image-material select {
+  width: 100%;
+  min-width: 0;
+}
+
+.image-wizard #image-stitch-reset {
+  align-self: flex-start;
+}
+
+.image-nav {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  gap: 8px;
+  margin: auto -12px -12px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--line);
+  background: var(--bg);
+}
+
+.image-nav button {
+  min-width: 96px;
+  padding: 7px 14px;
+}
+
+.image-nav button.primary {
+  margin-left: auto;
+  font-weight: 600;
+}
+
+.image-nav button[hidden] {
+  display: none;
+}
+
+/* Inspector: colors and brush (step 2), result (step 3) -------------------------------------------- */
+
+.image-insp {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.image-insp .panel-head {
+  align-items: center;
+}
+
+.image-history {
+  display: flex;
+  gap: 2px;
+}
+
+.image-history button.icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 28px;
+  padding: 0;
+}
+
+.image-history svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.image-insp .image-palette {
+  max-height: none;
+}
+
+.image-palette-hint {
+  margin: 8px 0 0;
+  cursor: help;
+}
+
+.image-insp .image-tools {
+  display: flex;
+}
+
+.image-insp .image-tools label {
+  flex: 1;
+}
+
+.image-insp .image-tools span {
+  display: block;
+  text-align: center;
+}
+
+.image-insp .panel > .field,
+.image-insp .panel > p {
+  margin: 10px 0 0;
+}
+
+.image-insp #image-strokes-clear {
+  margin-top: 6px;
+}
+
+.image-insp #image-verdict {
+  margin-top: 10px;
+}
+
+.image-insp #image-take-hint {
+  margin: 10px 0 0;
+}
+
+/* Narrow windows: settings over colors and result, both beside the stage ---------------------------- */
+
+@media (max-width: 1100px) and (min-width: 761px) {
+  body[data-mode='image'] .layout,
+  body[data-mode='image'][data-image-step='1'] .layout {
+    grid-template-columns: auto min(var(--side-w), 40vw) minmax(0, 1fr);
+    grid-template-rows: fit-content(60%) minmax(0, 1fr);
+    grid-template-areas:
+      'rail side stage'
+      'rail findings stage';
+  }
+
+  body[data-mode='image'][data-image-step='1'] .layout {
+    grid-template-areas:
+      'rail side stage'
+      'rail side stage';
+  }
+
+  body[data-mode='image'] .inspector {
+    border-left: none;
+    border-top: 1px solid var(--line);
+    border-right: 1px solid var(--line);
+  }
+
+  body[data-mode='image'] .resizer[data-panel='inspector'] {
+    display: none;
+  }
+
+  .image-stepper button:not([aria-current='step']) .name {
+    display: none;
+  }
+
+  .image-stepper button:not([aria-current='step']) {
+    padding-right: 4px;
+  }
+}
+
+@media (max-width: 760px) {
+  .image-stepper button:not([aria-current='step']) .name {
+    display: none;
+  }
+
+  .image-stepper button:not([aria-current='step']) {
+    padding-right: 4px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .image-status.busy::before {
+    animation: none;
+  }
+
+  .image-stepper button {
+    transition: none;
+  }
+}
+
+/* Two fields side by side keep their inputs on one line when a label wraps. */
+.image-wizard .field-row {
+  align-items: end;
+}

@@ -45,11 +45,14 @@ export function drawLegend(ctx: CanvasRenderingContext2D, x: number, y: number, 
   ctx.textBaseline = 'top';
   ctx.textAlign = 'left';
   ctx.fillText('0', x, top + barH + 4);
+  // The values in the ink, not in the tick's colour: orange and red text is hard to read on the
+  // dark ground. The coloured tick on the bar above still tells which limit it is.
   ctx.textAlign = 'center';
   for (const tick of spec.ticks) {
     if (tick.value > spec.max * 0.96 || tick.value < spec.max * 0.06) continue;
-    ctx.fillStyle = tick.color;
-    ctx.fillText(fmt(tick.value), x + (tick.value / spec.max) * w, top + barH + 4);
+    const tx = x + (tick.value / spec.max) * w;
+    ctx.fillStyle = spec.ink;
+    ctx.fillText(fmt(tick.value), tx, top + barH + 4);
   }
   ctx.restore();
 }

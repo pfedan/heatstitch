@@ -1,5 +1,6 @@
 import { loadCatalogs } from './threads/catalog';
 import './style.css';
+import './areas/cleanup/cleanup.css';
 import { WorkerClient } from './density/client';
 import { detectLang, formatNumber, getLang, onLangChange, setLang, t, type Lang } from './i18n';
 import { gridToCanvas } from './render/heatmap';
@@ -24,7 +25,7 @@ import { ValidationPanel } from './ui/validationPanel';
 import { acknowledgementOf, settledBy, type Acknowledgement } from './validation/acks';
 import type { ValidationResult, Zone } from './validation/validate';
 import { POINTS_MIN_SCALE } from './render/editOverlay';
-import { drawDivider } from './render/compare';
+import { drawDivider, drawPanels } from './render/compare';
 import { STITCH, type Pattern, type ThreadColor } from './model/pattern';
 import type { Measurement } from './validation/measure';
 import { initUpdateNotice } from './ui/updateNotice';
@@ -66,6 +67,16 @@ import { bindOrder } from './app/order';
 import { bindStitches } from './app/stitches';
 import { bindObjects } from './app/objects';
 import { bindScene } from './app/scene';
+import { initShell } from './shell/setup';
+import { initStitchArea } from './areas/stitches';
+import { initDesign } from './areas/design';
+import { initReady } from './areas/ready';
+import { initShapes, refreshShapes } from './areas/shapes';
+import { runCommand } from './shell/commands';
+import { initCheck } from './areas/check/check';
+import { initAmpel } from './areas/ampel/ampel';
+import { initResponsive } from './areas/responsive/responsive';
+import type { ZoneDecision } from './ui/validationPanel';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -142,7 +153,7 @@ const scene = (): Scene => ({
 });
 
 /** True while the comparison view has something to compare. */
-const showCompare = () => ui.comparing && FileList.edited(files.active);
+const showCompare = () => ui.comparing && FileList.changed(files.active);
 
 /** The original pattern with its own heatmap and markings, for the left side of the divider. */
 function originalScene(): Scene {
@@ -172,16 +183,18 @@ const panel = new ValidationPanel($('validation'), $('findings-sum'), {
     redraw();
   },
   onStep: (dir) => stepZone(dir),
-  onDecide: (z, d) => {
-    const f = files.active;
-    if (!f) return;
-    // One decision per zone: the new one replaces whatever was stored for it.
-    const rest = f.acks.filter((a) => a !== acknowledgementOf(z, f.acks));
-    const bbox = { ...z.bbox };
-    files.setAcks(f, d === 'ack' ? [...rest, { bbox, reason: 'manual' }] : d === 'reopen' ? [...rest, { bbox, reason: 'reopened' }] : rest);
-    redraw();
-  },
+  onDecide: (z, d) => decideZone(z, d),
 });
+
+/** One decision per zone: the new one replaces whatever was stored for it. */
+function decideZone(z: Zone, d: ZoneDecision): void {
+  const f = files.active;
+  if (!f) return;
+  const rest = f.acks.filter((a) => a !== acknowledgementOf(z, f.acks));
+  const bbox = { ...z.bbox };
+  files.setAcks(f, d === 'ack' ? [...rest, { bbox, reason: 'manual' }] : d === 'reopen' ? [...rest, { bbox, reason: 'reopened' }] : rest);
+  redraw();
+}
 
 installPanelResize($('layout'), settings.panels, () => saveSettings(settings));
 
@@ -226,6 +239,15 @@ const { colorList, layers, mergeBlocked, objectName, objectPanel, selectObjects 
   get commitTransform() {
     return commitTransform;
   },
+  get knockoutObjects() {
+    return knockoutObjects;
+  },
+  get orderCard() {
+    return orderCard;
+  },
+  get objectInfo() {
+    return objectInfo;
+  },
   get drawTool() {
     return drawTool;
   },
@@ -246,6 +268,15 @@ const { colorList, layers, mergeBlocked, objectName, objectPanel, selectObjects 
   },
   get duplicateSelected() {
     return duplicateSelected;
+  },
+  get copySelected() {
+    return copySelected;
+  },
+  get pasteCopied() {
+    return pasteCopied;
+  },
+  get canPaste() {
+    return canPaste;
   },
   get editor() {
     return editor;
@@ -424,7 +455,7 @@ const { closeRungs, rungInfo, rungTool, sewAlongLines, syncRungs, toggleGuides, 
 
 // Shapes and the frame ---------------------------------------------------------------------------
 
-const { closeShape, copySelected, deleteSelected, duplicateSelected, pasteCopied, enterShape, followKnockouts, isLineObject, mirrorSelected, sewLine, sewLineAgain, shapeTarget, shapeTool, showBand, subtractSelected, syncShape, takeShapes } = bindShapes({
+const { canPaste, closeShape, copySelected, deleteSelected, duplicateSelected, pasteCopied, enterShape, followKnockouts, isLineObject, mirrorSelected, sewLine, sewLineAgain, shapeTarget, shapeTool, showBand, subtractSelected, syncShape, takeShapes } = bindShapes({
   get applyEdit() {
     return applyEdit;
   },
@@ -489,6 +520,9 @@ const { closeShape, copySelected, deleteSelected, duplicateSelected, pasteCopied
 const { asidePanel, putAside } = bindAside({
   get applyEdit() {
     return applyEdit;
+  },
+  get history() {
+    return history;
   },
   get files() {
     return files;
@@ -691,11 +725,6 @@ function flowTooltip(sx: number, sy: number): void {
   tooltip.style.top = `${sy + 14}px`;
 }
 
-function emptyText(): void {
-  const mode = settings.mode;
-  empty.textContent = t(mode === 'flow' ? 'canvas.empty.flow' : mode === 'image' ? 'canvas.empty.image' : 'canvas.empty');
-}
-
 function setMode(mode: Mode): void {
   const previous = document.body.dataset.mode;
   settings.mode = mode;
@@ -721,7 +750,6 @@ function setMode(mode: Mode): void {
   }
   controls.refresh();
   updateLevel();
-  emptyText();
   tooltip.hidden = true;
   // The image and the loaded file have their own place on the stage.
   if ((previous === 'image') !== (mode === 'image')) fitView();
@@ -753,17 +781,21 @@ function objectInfo(p: Pattern, q: Sequence) {
   };
 }
 
-/** The one selected fill can blend into a second thread when it knows its area and is not a line. */
+/** The one selected fill can blend into a second thread when it knows its area and is not a line (an empty fill shows as one). */
 function blendOf(p: Pattern, q: Sequence, selected: number[]): { blend?: ThreadColor } {
   if (selected.length !== 1 || editor.active) return {};
   const o = q.objects[selected[0]];
   const known = o && remembered(p, o);
-  return known?.fill && known.region && !known.asLine && !known.blendOf && !isOpenPattern(known.fill.pattern) ? { blend: o.color } : {};
+  return known?.fill && known.region && !known.asLine && !known.blendOf && known.fill.pattern !== 'none' && !isOpenPattern(known.fill.pattern) ? { blend: o.color } : {};
 }
 
 // Rendering ------------------------------------------------------------------
 
 let frame = 0;
+/** What the check area draws on the stage (src/areas/check). */
+let checkArea: { draw: (ctx: CanvasRenderingContext2D) => void } | null = null;
+/** The traffic light "Klappt das?" (src/areas/ampel). */
+let ampel: { update: () => void } | null = null;
 function redraw(): void {
   if (frame) return;
   frame = requestAnimationFrame(() => {
@@ -790,6 +822,8 @@ function redraw(): void {
       drawDrawing(ctx, vp, drawTool.preview, { nodes: drawTool.kind === 'pen' ? drawTool.count : 0, closing: drawTool.closing, size: drawTool.size });
     if (ui.letterMode) drawLetterBoxes();
     drawPlanCompare();
+    checkArea?.draw(ctx);
+    ampel?.update();
     if (showCompare()) {
       const x = Math.round(ui.split * ui.stageW);
       ctx.save();
@@ -804,8 +838,12 @@ function redraw(): void {
     empty.hidden = !!active?.pattern || drawTool.active;
     exportBtn.disabled = !active?.pattern;
     $('file-actions').hidden = !active?.pattern;
+    // Jumps and trims belong to a design: nothing to say on the start page.
+    $('jumps-panel').hidden = !active?.pattern;
     if (settings.mode === 'density') drawLegendCanvas();
     renderStats($('stats'), active, ui.grid, settings, ui.computing);
+    design.render();
+    ready.render();
     const p = active?.pattern ?? null;
     const q = p ? seq(p) : null;
     $('player').hidden = !p;
@@ -829,7 +867,6 @@ function redraw(): void {
         },
         getLang(),
       );
-      jumpsPanel.update({ list: q?.transitions ?? [], selected: ui.selectedJump, lang: getLang() });
       const objects = !ui.lettering && p && q && ui.selectedObjects.size;
       objectPanel.update(objects ? objectInfo(p, q) : null, getLang());
       stitchPanel.update(objects ? { ...stitchInfo(p, q), ...rungInfo(p, q), blend: !!blendOf(p, q, [...ui.selectedObjects]).blend } : null);
@@ -841,7 +878,10 @@ function redraw(): void {
       }
       $<HTMLButtonElement>('order-optimize').disabled = !q || q.objects.length < 2;
     }
+    refreshShapes();
     panel.update(active, ui.selectedZone);
+    // Jumps and trims show in Gestalten and in Prüfen.
+    jumpsPanel.update({ list: q?.transitions ?? [], selected: ui.selectedJump, lang: getLang() });
     // Proposals belong to the version they were worked out on.
     if (ui.planState && (ui.planState.file !== active || ui.planState.pattern !== active?.pattern)) {
       ui.planState = null;
@@ -853,12 +893,10 @@ function redraw(): void {
     correctPanel.update({
       file: active,
       zoneSelected: !!ui.selectedZone,
-      editing: editor.active,
       comparing: ui.comparing,
-      selection: editor.selection.size,
-      pointsVisible: vp.scale >= POINTS_MIN_SCALE,
       message: ui.correctMessage,
     });
+    stitchArea.refresh();
   });
 }
 
@@ -1107,20 +1145,17 @@ function updateLevel(): void {
   stage.classList.toggle('editing', on);
   stage.classList.toggle('shaping', shaping);
   stage.classList.toggle('form-level', ui.formLevel && !on && settings.mode === 'flow');
-  $('draw-pointer').setAttribute('aria-pressed', String(!drawTool.kind));
   document.querySelectorAll<HTMLInputElement>('input[name="level"]').forEach((i) => (i.checked = i.value === level));
-  const crumb = $('edit-crumb');
-  const p = files.active?.pattern;
   const flow = settings.mode === 'flow';
-  crumb.hidden = !(on || shaping) || !flow;
-  if (on && flow) {
-    const q = p ? seq(p) : null;
-    crumb.textContent = q && ui.editObject !== null && q.objects[ui.editObject] ? t('level.in', { name: objectName(q, ui.editObject) }) : t('level.pick');
-  } else if (shaping && flow) {
-    const q = p ? seq(p) : null;
-    crumb.textContent = q && ui.shapeObject !== null && q.objects[ui.shapeObject] ? t('level.inShape', { name: objectName(q, ui.shapeObject) }) : '';
-  }
+  refreshShapes();
   const mode = settings.mode;
+  // Fingers have no wheel, Shift or keys: on a touch screen the hint says the gestures, and only
+  // where no bar over the stage says what to do already.
+  if (matchMedia('(pointer: coarse)').matches) {
+    const base = !drawTool.kind && !on && !shaping && !ui.formLevel && !ui.lettering;
+    $('canvas-hint').textContent = mode === 'image' ? t('responsive.hint.view') : !base ? '' : flow ? t('responsive.hint.flow') : t('responsive.hint.check');
+    return;
+  }
   $('canvas-hint').textContent = t(
     mode === 'image'
       ? 'canvas.hint.image'
@@ -1173,7 +1208,7 @@ function history(step: 'undo' | 'redo' | 'revert'): void {
   recompute();
 }
 
-const { correctPanel, drawPlanCompare, inPlanFrame, movePlanSplit, pinPlan, tuneToFabric } = bindCorrection({
+const { correctPanel, drawPlanCompare, inPlanFrame, movePlanSplit, pinPlan, tuneToFabric, planFix, applyPlan, discardPlan, busy, planShown, planTicked } = bindCorrection({
   get applyEdit() {
     return applyEdit;
   },
@@ -1295,6 +1330,8 @@ const imageMode = new ImageMode({
     await addDigitized(d, name);
     setMode('flow');
   },
+  mode: () => settings.mode,
+  setMode: (m) => setMode(m),
 });
 
 /**
@@ -1338,7 +1375,6 @@ const langSelect = $<HTMLSelectElement>('lang');
 // only what this file writes. The mode, the selection and the hand edit stay as they are.
 onLangChange(() => {
   langSelect.value = getLang();
-  emptyText();
   updateLevel();
   tooltip.hidden = true;
   tooltip.replaceChildren();
@@ -1434,20 +1470,21 @@ bindKeys({
   get controls() {
     return controls;
   },
+  // Through the commands, so the keys follow the same rule and say the same as the menus.
   get deleteSelected() {
-    return deleteSelected;
+    return () => runCommand('object.delete');
   },
   get drawTool() {
     return drawTool;
   },
   get copySelected() {
-    return copySelected;
+    return () => runCommand('object.copy');
   },
   get duplicateSelected() {
-    return duplicateSelected;
+    return (inPlace?: boolean) => runCommand(inPlace ? 'object.duplicateInPlace' : 'object.duplicate');
   },
   get pasteCopied() {
-    return pasteCopied;
+    return () => runCommand('object.paste');
   },
   get editor() {
     return editor;
@@ -1586,12 +1623,6 @@ const { showObjectMenu } = bindPointer({
   get movePlanSplit() {
     return movePlanSplit;
   },
-  get objectInfo() {
-    return objectInfo;
-  },
-  get objectPanel() {
-    return objectPanel;
-  },
   get orderCard() {
     return orderCard;
   },
@@ -1637,6 +1668,83 @@ const { showObjectMenu } = bindPointer({
 });
 
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', redraw);
+
+initShell({ files, mode: () => settings.mode, setMode });
+initResponsive();
+const stitchArea = initStitchArea({ files, settings, editor, rungTool, stitchPanel, closeRungs, toggleRungs, toggleGuides, togglePoints, sewAlongLines, setEditing, enterObject, revealRecord, pointsVisible: () => vp.scale >= POINTS_MIN_SCALE, redraw });
+const design = initDesign({ files, settings, player, vp, stage, fitView, fitToHoop, redraw, applyEdit });
+const ready = initReady({
+  files,
+  settings,
+  setMode,
+  minLetterMm: (p) => {
+    const hs = letteringsOf(p, seq(p)).flatMap((l) => (l ? [l.height] : []));
+    return hs.length ? Math.min(...hs) : null;
+  },
+});
+initShapes({ settings, setMode, files, seq, objectName, drawTool, setDrawing, shapeTool, enterShape, shapeTarget, isLineObject, frameTool, editor, setEditing, setFormLevel, newLettering, setLetterMode, letteringPanel, selectObjects, redraw });
+checkArea = initCheck({
+  settings,
+  files,
+  setMode,
+  redraw,
+  vp,
+  seq,
+  findings: panel,
+  stepZone,
+  decideZone,
+  setComparing,
+  correction: { planFix, applyPlan, discardPlan, tuneToFabric, pinPlan, busy, planShown, planTicked },
+  jumps: jumpsPanel,
+  stepJump,
+});
+ampel = initAmpel({
+  settings,
+  files,
+  seq,
+  validator,
+  setMode,
+  redraw,
+  selectZone,
+  commit: (p, m) => {
+    const f = files.active;
+    if (!f) return;
+    editor.reset();
+    applyEdit(p, m);
+    files.setObjects(f, rememberedIn(p, seq(p).objects));
+  },
+  undo: () => history('undo'),
+  busy,
+  drawCompare: (cv, box, before, after, labels) => {
+    // Before and after side by side, each fitted whole, stitches as they will sew (no heatmap).
+    const w = cv.clientWidth;
+    const hh = cv.clientHeight;
+    if (!w || !hh) return;
+    const dpr = window.devicePixelRatio || 1;
+    cv.width = Math.round(w * dpr);
+    cv.height = Math.round(hh * dpr);
+    const c = cv.getContext('2d');
+    if (!c) return;
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const pad = 1.5;
+    const b = { minX: box.minX - pad, minY: box.minY - pad, maxX: box.maxX + pad, maxY: box.maxY + pad };
+    const gap = 6;
+    const pw = (w - gap) / 2;
+    const bw = Math.max(1, b.maxX - b.minX);
+    const bh = Math.max(1, b.maxY - b.minY);
+    const scale = Math.min(pw / bw, hh / bh);
+    const look = { ...settings, overlay: true, opacity: 1, showValidation: false, hoop: null };
+    const panel = (x: number, pattern: Pattern, label: string) => {
+      const pvp = new Viewport();
+      pvp.scale = scale;
+      pvp.offsetX = x + (pw - bw * scale) / 2 - b.minX * scale;
+      pvp.offsetY = (hh - bh * scale) / 2 - b.minY * scale;
+      const sc: Scene = { pattern, grid: null, gridImg: null, validation: null, validationImg: null, counted: null, highlight: null, settings: look, vp: pvp, edit: null };
+      return { rect: { x0: x, y0: 0, x1: x + pw, y1: hh }, scene: sc, label };
+    };
+    drawPanels(c, w, hh, [panel(0, before, labels[0]), panel(pw + gap, after, labels[1])], stageBg());
+  },
+});
 
 files.render();
 redraw();

@@ -4,13 +4,9 @@ import { densityExcess } from '../validation/practice';
 import { fabricOf } from '../validation/profiles';
 import { CAUTION, CRITICAL, type Checks, type Level, type Reason, type ValidationResult, type Zone } from '../validation/validate';
 import type { LoadedFile } from './fileList';
+import { commandTitle, getCommand } from '../shell/commands';
 
 const LEVEL_CLASS = ['safe', 'caution', 'critical'] as const;
-const VERDICT_KEY: Record<Level, Key> = {
-  0: 'validation.verdict.safe',
-  1: 'validation.verdict.caution',
-  2: 'validation.verdict.critical',
-};
 const MSG_KEY: Record<Level, Key> = { 0: 'validation.msg.safe', 1: 'validation.msg.caution', 2: 'validation.msg.critical' };
 const REASON_KEY: Record<Reason, Key> = {
   density: 'validation.reason.density',
@@ -94,6 +90,9 @@ export class ValidationPanel {
   private selected: Zone | null = null;
   private last: unknown[] = [];
 
+  /** The notes under the traffic light of the summary card (the light itself is src/areas/ampel). */
+  private state = document.getElementById('check-state');
+
   constructor(
     private root: HTMLElement,
     private summary: HTMLElement,
@@ -134,19 +133,35 @@ export class ValidationPanel {
 
   private renderSummary(file: LoadedFile | null): void {
     const v = file?.pattern ? file.validation : null;
-    if (!v) {
-      this.summary.replaceChildren();
-      return;
-    }
-    const open = v.zones.filter((z) => !settledBy(z, file!.acks));
+    const open = v ? v.zones.filter((z) => !settledBy(z, file!.acks)) : [];
     const critical = open.filter((z) => z.level === CRITICAL).length;
-    const caution = open.length - critical;
-    const worst = openWorst(v.zones, file!.acks) as Level;
-    this.summary.replaceChildren(
-      el('span', `dot ${LEVEL_CLASS[worst]}`),
-      el('strong', '', t(VERDICT_KEY[worst])),
-      ...(open.length ? [el('span', '', t('validation.counts', { critical, caution }))] : []),
-    );
+    const worst = v ? (openWorst(v.zones, file!.acks) as Level) : null;
+
+    // The line of the closed findings section.
+    this.summary.replaceChildren(...(open.length ? [el('span', `dot ${LEVEL_CLASS[worst ?? 0]}`), el('span', '', t('check.findings.open', { n: open.length }))] : []));
+
+    // The summary card: under the light, what stands out and why some of it does not count.
+    if (!this.state) return;
+    if (!file?.pattern || !v) return void this.state.replaceChildren();
+    const applicable = applicableChecks(v);
+    const off = applicable.filter((r) => !v.checks[r]);
+    if (off.length === applicable.length) return void this.state.replaceChildren(el('p', 'muted small', t('validation.noChecks')));
+    const lines: HTMLElement[] = [];
+    if (open.length) {
+      const what = [t('check.sum.open', { n: open.length }), ...(critical ? [t('check.sum.critical', { n: critical })] : []), share(v, v.zones.map((z) => !settledBy(z, file.acks)))].filter(Boolean).join(' · ');
+      const line = el('p', 'muted small', what);
+      line.title = t(MSG_KEY[worst ?? 0]);
+      lines.push(line);
+    }
+    const by = v.zones.map((z) => settledBy(z, file.acks));
+    const practice = by.filter((b) => b === 'practice').length;
+    const acked = by.filter((b) => b === 'manual').length;
+    if (practice || acked) {
+      const list = [...(practice ? [t('validation.practiceN', { n: practice })] : []), ...(acked ? [t('validation.ackedN', { n: acked })] : [])].join(', ');
+      lines.push(el('p', 'muted small', t('validation.notCounted', { list })));
+    }
+    if (off.length) lines.push(el('p', 'muted small', t('validation.checksOff', { list: off.map((c) => t(`checks.${c}` as Key)).join(', ') })));
+    this.state.replaceChildren(...lines);
   }
 
   private build(file: LoadedFile | null, selected: Zone | null): HTMLElement[] {
@@ -155,40 +170,16 @@ export class ValidationPanel {
     if (!v) return [el('p', 'muted pending', t('validation.pending'))];
 
     const applicable = applicableChecks(v);
-    const off = applicable.filter((r) => !v.checks[r]);
-    if (off.length === applicable.length) return [el('p', 'muted', t('validation.noChecks'))];
-
-    // Findings that are normal in practice or acknowledged do not count towards the verdict.
-    const worst = openWorst(v.zones, file.acks) as Level;
-    const by = v.zones.map((z) => settledBy(z, file.acks));
-    const practice = by.filter((b) => b === 'practice').length;
-    const acked = by.filter((b) => b === 'manual').length;
-    const verdict = el('div', `verdict ${LEVEL_CLASS[worst]}`);
-    const head = el('div', 'verdict-head');
-    head.append(el('strong', '', t(VERDICT_KEY[worst])));
-    if (worst) head.append(el('span', '', share(v, by.map((b) => !b))));
-    verdict.append(head, el('p', '', t(worst === 0 && v.zones.length ? 'validation.msg.safeSettled' : MSG_KEY[worst])));
-    if (practice || acked) {
-      const list = [
-        ...(practice ? [t('validation.practiceN', { n: practice })] : []),
-        ...(acked ? [t('validation.ackedN', { n: acked })] : []),
-      ].join(', ');
-      verdict.append(el('p', 'counts', t('validation.notCounted', { list })));
-    }
-    if (off.length) {
-      const list = off.map((c) => t(`checks.${c}` as Key)).join(', ');
-      verdict.append(el('p', 'counts', t('validation.checksOff', { list })));
-    }
-    const parts: HTMLElement[] = [verdict];
-    if (!v.zones.length) return parts;
-
-    parts.push(this.toolbar(v.zones, file, selected));
+    if (applicable.every((r) => !v.checks[r])) return [el('p', 'muted small', t('validation.noChecks'))];
+    if (!v.zones.length) return [el('p', 'muted small', t('check.sum.none'))];
+    const parts: HTMLElement[] = [this.toolbar(v.zones, file, selected)];
     const shown = this.visible(v.zones);
     if (!shown.length) {
       parts.push(el('p', 'muted small', t('findings.empty')));
       return parts;
     }
     const list = el('ol', 'val-zones');
+    list.title = t('validation.zoneHint');
     for (const z of shown) {
       const settled = settledBy(z, file.acks);
       const reopened = !settled && !!z.practice;
@@ -199,9 +190,8 @@ export class ValidationPanel {
         el('span', 'dot'),
         el('span', 'lvl', t(z.level === CRITICAL ? 'level.critical' : 'level.caution')),
         el('span', 'why', z.reasons.map((r) => t(REASON_KEY[r])).join(', ')),
-        el('span', 'num', `#${v.zones.indexOf(z) + 1}`),
       );
-      const meta = [`${formatNumber(z.areaMm2)} mm²`, ...figures(z, v)];
+      const meta = [`#${v.zones.indexOf(z) + 1}`, `${formatNumber(z.areaMm2)} mm²`, ...figures(z, v)];
       btn.append(top, el('span', 'meta', meta.join(' · ')));
       if (z.practice || settled) {
         const note = settled === 'manual' ? t('findings.manual') : t(`findings.practice.${z.practice!}` as Key);
@@ -229,7 +219,7 @@ export class ValidationPanel {
       li.append(btn, toggle);
       list.append(li);
     }
-    parts.push(list, el('p', 'muted small', t('validation.zoneHint')));
+    parts.push(list);
     return parts;
   }
 
@@ -252,7 +242,8 @@ export class ValidationPanel {
       b.dataset.level = String(f);
       b.setAttribute('role', 'radio');
       b.setAttribute('aria-checked', String(f === this.filter));
-      b.disabled = !n && f !== this.filter;
+      // Empty levels are left out rather than shown greyed.
+      if (!n && f !== this.filter && f !== 'all') continue;
       if (f !== 'all' && f !== 'settled') b.append(el('span', 'dot'));
       b.append(label, el('span', 'n', String(n)));
       b.addEventListener('click', () => {
@@ -268,8 +259,12 @@ export class ValidationPanel {
     const prev = el('button', 'icon', '‹');
     const next = el('button', 'icon', '›');
     prev.type = next.type = 'button';
-    prev.title = t('findings.prev');
-    next.title = t('findings.next');
+    const title = (id: string, fallback: Key) => {
+      const c = getCommand(id);
+      return c ? commandTitle(c) : t(fallback);
+    };
+    prev.title = title('check.prev', 'findings.prev');
+    next.title = title('check.next', 'findings.next');
     prev.setAttribute('aria-label', prev.title);
     next.setAttribute('aria-label', next.title);
     prev.disabled = next.disabled = !shown.length;

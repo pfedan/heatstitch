@@ -54,9 +54,6 @@ export interface KeysApp {
 
 /** Keyboard shortcuts on the whole page (not while typing in a field). */
 export function bindKeys(app: KeysApp) {
-  /** Keys for the drawing tools (as in common drawing programs, where free of other uses here). */
-  const DRAW_KEYS: Record<string, DrawKind> = { m: 'rect', o: 'ellipse', b: 'pen', p: 'free' };
-
   window.addEventListener('keydown', (e) => {
     // Space passes a clicked switch (checkbox, radio) to reach the player below, like a button.
     const field = (e.target as HTMLElement).closest<HTMLElement>('input, select, textarea, [contenteditable]');
@@ -107,16 +104,7 @@ export function bindKeys(app: KeysApp) {
         return;
       }
     }
-    // v: the pointer of the level Form (going there from another level).
-    if (app.settings.mode === 'flow' && e.key === 'v' && !ui.letterMode) {
-      if (app.drawTool.active) return app.setDrawing(null);
-      if (!ui.formLevel) return app.setFormLevel(true);
-      return;
-    }
-    if (app.settings.mode === 'flow' && !e.shiftKey && e.key in DRAW_KEYS) {
-      const kind = DRAW_KEYS[e.key];
-      return app.setDrawing(app.drawTool.kind === kind ? null : kind);
-    }
+    // v and the keys of the drawing tools (m, o, b, p) are commands of the tool rail: src/areas/shapes.
     if (app.shapeTool.active && app.settings.mode === 'flow') {
       const step = e.shiftKey ? 0.5 : 0.1;
       const arrows: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
@@ -130,11 +118,12 @@ export function bindKeys(app: KeysApp) {
         return;
       }
       if (e.key === 'c' && app.shapeTool.toggleSmooth()) return;
+      // Esc: first the node, then one level back to the objects (the selection stays).
       if (e.key === 'Escape') {
         if (app.shapeTool.selected) {
           app.shapeTool.selected = null;
           app.redraw();
-        } else app.selectObjects([], false);
+        } else app.setFormLevel(false);
         return;
       }
       if (e.key === 'Enter' && ui.shapeObject !== null) return app.enterObject(ui.shapeObject, false);
@@ -175,7 +164,7 @@ export function bindKeys(app: KeysApp) {
       if (e.key === 'e' || e.key === 'r' || e.key === 'g') return;
     }
     if (app.rungTool.active && app.settings.mode === 'flow') {
-      if ((e.key === 't' || e.key === 'T') && app.rungTool.mode !== 'guide' && !mod) return app.rungTool.setCutMode(!app.rungTool.cutMode);
+      if ((e.key === 't' || e.key === 'T') && (app.rungTool.mode === 'satin' || app.rungTool.mode === 'fill')) return app.rungTool.setCutMode(!app.rungTool.cutMode);
       if ((e.key === 'Delete' || e.key === 'Backspace') && app.rungTool.deleteSelected()) {
         e.preventDefault();
         return;
@@ -253,8 +242,10 @@ export function bindKeys(app: KeysApp) {
       if (e.key === ' ') {
         e.preventDefault();
         app.player.toggle();
-      } else if (e.key === ',' || e.key === '.') app.player.step((e.key === '.' ? 1 : -1) * (e.shiftKey ? 100 : 1));
-      else if (e.key === 'Home') app.player.set(0);
+      } else if (e.key === ',' || e.key === '.' || (e.shiftKey && (e.code === 'Comma' || e.code === 'Period'))) {
+        // With Shift most layouts give another character (">", ":"): the key's place still counts.
+        app.player.step((e.key === '.' || e.code === 'Period' ? 1 : -1) * (e.shiftKey ? 100 : 1));
+      } else if (e.key === 'Home') app.player.set(0);
       else if (e.key === 'End') app.player.set(Number.MAX_SAFE_INTEGER);
       else if (e.key === 'n') app.stepJump(1);
       else if (e.key === 'N') app.stepJump(-1);
@@ -263,6 +254,7 @@ export function bindKeys(app: KeysApp) {
       else if (e.key === 'f') app.fitView();
       else if (e.key === 'Escape') {
         if (app.orderCard.isOpen) app.orderCard.close(true);
+        else if (ui.formLevel) app.setFormLevel(false);
         else if (ui.selectedObjects.size) ui.selectedObjects = new Set();
         else ui.selectedJump = ui.focusBlock = null;
         app.redraw();
@@ -273,7 +265,7 @@ export function bindKeys(app: KeysApp) {
     else if (e.key === 'ArrowUp' || e.key === 'k') app.files.step(-1);
     else if (e.key === 'f') app.fitView();
     else if (e.key === 'e') app.setEditing(!app.editor.active);
-    else if (e.key === 'c' && FileList.edited(app.files.active)) app.setComparing(!ui.comparing);
+    else if (e.key === 'c' && FileList.changed(app.files.active)) app.setComparing(!ui.comparing);
     else if (e.key === 'n') app.stepZone(1);
     else if (e.key === 'N') app.stepZone(-1);
     else if (e.key === 'v') {

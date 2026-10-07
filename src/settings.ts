@@ -8,6 +8,7 @@ import { DEFAULT_PROFILE, normalizeProfile, threadWidthMm, type Profile } from '
 import { ALL_CHECKS, normalizeChecks, type Checks } from './validation/validate';
 import { isOutputFormat, type OutputFormat } from './writers';
 import { normalizeHoop, type Hoop } from './model/hoop';
+import { COLOR_SECONDS, TRIM_SECONDS } from './model/sequence';
 
 export interface PanelWidths {
   side: number | null;
@@ -68,6 +69,10 @@ export interface Settings {
   sections: Record<string, boolean>;
   /** Machine speed in stitches per minute, for the sewing time and the player. */
   machineSpm: number;
+  /** Seconds a trim takes, for the sewing time. */
+  trimSeconds: number;
+  /** Seconds a thread change takes: a few on a multi-needle machine, rather 30 to 60 by hand. */
+  colorSeconds: number;
   /** Player speed as a multiple of the machine speed. */
   playSpeed: number;
   /** Jumps from this length (mm) on are cut by "cut from this length". */
@@ -122,6 +127,8 @@ export const DEFAULTS: Settings = {
   marksOn: true,
   sections: { display: true, stats: false, advanced: false, findings: true },
   machineSpm: 800,
+  trimSeconds: TRIM_SECONDS,
+  colorSeconds: COLOR_SECONDS.single,
   playSpeed: 50,
   trimMm: 3,
   order: { combineColors: true, shortestWays: true, reverse: true },
@@ -177,6 +184,8 @@ export function loadSettings(): Settings {
       // Findings closed with the old × stay closed as a collapsed section.
       sections: { ...DEFAULTS.sections, ...(findingsOpen === false ? { findings: false } : {}), ...s.sections },
       machineSpm: typeof s.machineSpm === 'number' && s.machineSpm > 0 ? s.machineSpm : DEFAULTS.machineSpm,
+      trimSeconds: typeof s.trimSeconds === 'number' && s.trimSeconds >= 0 ? s.trimSeconds : DEFAULTS.trimSeconds,
+      colorSeconds: typeof s.colorSeconds === 'number' && s.colorSeconds >= 0 ? s.colorSeconds : DEFAULTS.colorSeconds,
       playSpeed: typeof s.playSpeed === 'number' && s.playSpeed > 0 ? s.playSpeed : DEFAULTS.playSpeed,
       trimMm: typeof s.trimMm === 'number' && s.trimMm > 0 ? s.trimMm : DEFAULTS.trimMm,
       order: {

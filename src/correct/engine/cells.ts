@@ -15,6 +15,12 @@ import { REASON_BITS, type Reason, type Zone } from '../../validation/zones';
 export type FixKind = 'density' | 'holes' | 'gap' | 'sparse' | 'long';
 export const FIX_KINDS: readonly FixKind[] = ['density', 'holes', 'gap', 'sparse', 'long'];
 
+/** What one fix works on: one kind, gaps and too open areas together ('gaps', one button in the Ampel), or all kinds. */
+export type FixTarget = FixKind | 'gaps' | 'all';
+
+/** The kinds a fix target covers. */
+export const kindsOf = (t: FixTarget): FixKind[] => (t === 'all' ? [...FIX_KINDS] : t === 'gaps' ? ['gap', 'sparse'] : [t]);
+
 /** Reasons of each kind. Short stitches and perforation are both "too many penetrations". */
 export const KIND_REASONS: Record<FixKind, Reason[]> = {
   density: ['density'],
@@ -121,9 +127,6 @@ export function cellDiff(before: ValidationResult, after: ValidationResult, acks
   return { criticalBefore, criticalAfter, newCritical, newCaution, newGapSparse, open, newCriticalKeys };
 }
 
-/** Red from this many mm² of one connected critical spot, by fabric (decided 2026-10-06; starting values). */
-export const RED_MM2: Record<string, number> = { woven: 5, cap: 5, knit: 3, terry: 3, light: 3, leather: 3 };
-
 export type AmpelColor = 'green' | 'yellow' | 'red';
 
 /**
@@ -133,7 +136,8 @@ export type AmpelColor = 'green' | 'yellow' | 'red';
 export function ampelOf(v: ValidationResult, acks?: readonly Acknowledgement[]): { color: AmpelColor; worst: Zone | null } {
   // A fabric without its own value (one added later): stretchy ones like knit, firm ones like woven.
   const fab = fabricOf(v.profile);
-  const red = RED_MM2[fab.id] ?? (fab.pull === 'high' ? 3 : 5);
+  // Red from this many mm² of one connected critical spot (src/material, per fabric).
+  const red = fab.redMinMm2;
   // Rank: red spots by critical area, then yellow ones (critical before caution) by area.
   let worst: Zone | null = null;
   let best = -1;

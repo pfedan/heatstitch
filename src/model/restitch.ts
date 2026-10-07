@@ -398,10 +398,10 @@ export interface Remembered {
   fixed?: Fixed[];
   /**
    * The object as it was before the correction last changed it: its records (absolute, as in the
-   * design; the first `lead` of them the travel to it from the object before) and what it
-   * remembered. "Korrektur zurücknehmen" puts exactly these back.
+   * design; the first `lead` of them the travel to it from the object before, the last `trail` the
+   * travel from it to the next one) and what it remembered. "Korrektur zurücknehmen" puts exactly these back.
    */
-  undo?: { x: Int32Array; y: Int32Array; cmd: Uint8Array; lead: number; memory?: Remembered };
+  undo?: { x: Int32Array; y: Int32Array; cmd: Uint8Array; lead: number; trail?: number; memory?: Remembered };
 }
 
 /** A part an object was sewn in: its kind, and the number of the object's stitches up to its last one. */
@@ -644,7 +644,7 @@ export interface StoredObject {
   lock?: boolean;
   free?: boolean;
   fixed?: Fixed[];
-  undo?: { x: Int32Array; y: Int32Array; cmd: Uint8Array; lead: number; memory?: StoredObject };
+  undo?: { x: Int32Array; y: Int32Array; cmd: Uint8Array; lead: number; trail?: number; memory?: StoredObject };
   join?: boolean;
 }
 
@@ -711,7 +711,7 @@ function storeOne(key: string, r: Remembered): StoredObject {
     ...(r.lock ? { lock: true } : {}),
     ...(r.free ? { free: true } : {}),
     ...(r.fixed?.length ? { fixed: r.fixed.map((x) => ({ ...x })) } : {}),
-    ...(r.undo ? { undo: { x: r.undo.x.slice(), y: r.undo.y.slice(), cmd: r.undo.cmd.slice(), lead: r.undo.lead, ...(r.undo.memory ? { memory: storeOne(key, r.undo.memory) } : {}) } } : {}),
+    ...(r.undo ? { undo: { x: r.undo.x.slice(), y: r.undo.y.slice(), cmd: r.undo.cmd.slice(), lead: r.undo.lead, ...(r.undo.trail ? { trail: r.undo.trail } : {}), ...(r.undo.memory ? { memory: storeOne(key, r.undo.memory) } : {}) } } : {}),
   };
 }
 
@@ -1014,8 +1014,9 @@ function fromStored(e: StoredObject): Remembered | null {
   if (fixed.length) r.fixed = fixed;
   const undo = e.undo;
   if (undo && undo.x instanceof Int32Array && undo.y instanceof Int32Array && undo.cmd instanceof Uint8Array && undo.x.length === undo.y.length && undo.x.length === undo.cmd.length && finite(undo.lead) && undo.lead >= 0 && undo.lead < undo.x.length) {
+    const trail = finite(undo.trail) && undo.trail > 0 && undo.lead + undo.trail < undo.x.length ? Math.round(undo.trail) : 0;
     const memory = undo.memory ? fromStored(undo.memory) : null;
-    r.undo = { x: undo.x.slice(), y: undo.y.slice(), cmd: undo.cmd.slice(), lead: Math.round(undo.lead), ...(memory ? { memory } : {}) };
+    r.undo = { x: undo.x.slice(), y: undo.y.slice(), cmd: undo.cmd.slice(), lead: Math.round(undo.lead), ...(trail ? { trail } : {}), ...(memory ? { memory } : {}) };
   }
   return r;
 }

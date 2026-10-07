@@ -105,7 +105,9 @@ export function bindStitches(app: StitchesApp) {
       fill: fillObj ? pullFor(app.settings.profile, 'fill', analyze(p, fillObj, q.kinds).fill?.areaMm2).edge : undefined,
       satin: pullFor(app.settings.profile, 'satin'),
     };
-    const info: StitchInfo = { key: ui.selectionKey, lock, free, fixed, fabricPull, hand, measured, counts, recommended: recommendedSpacing(app.settings.profile), shape: worst, outlines: shapes, toSatin: stroke, knockout, depth, color: q.objects[firstFill]?.color };
+    const defaults = digitizeDefaults(app.settings.profile);
+    const auto = { fillSpacing: defaults.spacing, satinSpacing: defaults.satinSpacing, stitch: defaults.stitch };
+    const info: StitchInfo = { key: ui.selectionKey, lock, free, fixed, fabricPull, auto, hand, measured, counts, recommended: recommendedSpacing(app.settings.profile), shape: worst, outlines: shapes, toSatin: stroke, knockout, depth, color: q.objects[firstFill]?.color, area: (fillObj && remembered(p, fillObj)?.region) || undefined };
     const runs = [...ui.selectedObjects].map((o) => q.objects[o]).filter((obj) => obj?.kind === 'run');
     if (runs.length && runs.every((obj) => remembered(p, obj)?.path)) info.line = true;
     const one = ui.selectedObjects.size === 1 ? q.objects[[...ui.selectedObjects][0]] : undefined;
@@ -118,12 +120,24 @@ export function bindStitches(app: StitchesApp) {
     if (own?.outline || own?.blendOf) {
       const fill = q.objects.findIndex((o) => partnerOf(remembered(p, o), own));
       info.outline = { fill: fill >= 0 ? fill : null, blend: !own.outline };
+      // A border's settings are its fill's: shown and set here as they are there.
+      const fm = fill >= 0 ? remembered(p, q.objects[fill]) : undefined;
+      if (own.outline && fm?.fill?.border && !fm.free) {
+        info.outline.of = { fill: structuredClone(fm.fill), color: q.objects[fill].color };
+        info.color = q.objects[fill].color;
+      }
     }
     // A line's shadow: set at its line.
     const shade = one && remembered(p, one);
     if (partOf(shade)) {
       const line = q.objects.findIndex((o) => partnerOf(remembered(p, o), shade!));
       info.outline = { fill: line >= 0 ? line : null, shadow: shade!.shadowOf ? true : undefined, echo: shade!.echoOf ? true : undefined };
+      const lo = line >= 0 ? q.objects[line] : undefined;
+      const lm = lo && remembered(p, lo);
+      if (lo && lm?.path && lm.line && !lm.free) {
+        const form = lineOf(p, lo, q.kinds);
+        info.outline.of = { line: lineSettings(p, lo, q.kinds), closed: !!form?.paths.length && form.paths.every((x) => x.closed), color: lo.color };
+      }
     }
     ui.stitchCache = { p, key: ui.selectionKey, info };
     return info;
@@ -185,19 +199,68 @@ export function bindStitches(app: StitchesApp) {
     return { on: frees.size > 1 ? 'mixed' : frees.has(true), can: mems.some(loosable) };
   }
 
-  /** The active pattern with new stitches for the selected objects. */
+  /**
+   * The objects the panel's settings go to: the selection, or the fill or line that the one
+   * selected border, shadow or echo follows (its settings are set there).
+   */
+  function targets(): number[] {
+    const p = app.files.active?.pattern;
+    if (!p) return [];
+    const sel = [...ui.selectedObjects].sort((a, b) => a - b);
+    const o = sel.length === 1 ? stitchInfo(p, app.seq(p)).outline : undefined;
+    return o?.of && o.fill !== null ? [o.fill] : sel;
+  }
+
+  /**
+   * How to find the one selected border, shadow or echo again after its fill or line was sewn anew
+   * (null from the finder: it is gone), or null when the selection is none of them.
+   */
+  function dependentFinder(): ((p: Pattern) => number | null) | null {
+    const p0 = app.files.active?.pattern;
+    if (!p0 || ui.selectedObjects.size !== 1) return null;
+    const obj = app.seq(p0).objects[[...ui.selectedObjects][0]];
+    const m = obj && remembered(p0, obj);
+    const link = m?.outline;
+    const part = partOf(m);
+    if (!link && !part) return null;
+    // Echo copies are found by their line's link and the first copy of their thread, which can move.
+    const base = part?.includes(':') ? part.slice(0, part.lastIndexOf(':') + 1) : null;
+    return (p) => {
+      const objs = app.seq(p).objects;
+      const find = (ok: (x: Remembered | undefined) => boolean) => objs.findIndex((x) => ok(remembered(p, x)));
+      let i = link ? find((x) => x?.outline === link) : find((x) => partOf(x) === part);
+      if (i < 0 && base) i = find((x) => !!partOf(x)?.startsWith(base));
+      return i >= 0 ? i : null;
+    };
+  }
+
+  /** The active pattern with new stitches for the objects the settings go to. */
   function restitched(s: RestitchSettings) {
     const p = app.files.active?.pattern;
-    if (!p || !ui.selectedObjects.size) return null;
+    const which = targets();
+    if (!p || !which.length) return null;
     const q = app.seq(p);
-    return restitch(p, q.objects, [...ui.selectedObjects].sort((a, b) => a - b), s, q.kinds, app.settings.trimMm);
+    return restitch(p, q.objects, which, s, q.kinds, app.settings.trimMm);
+  }
+
+  /** Links of the borders and second threads of the fills `which`: new stitches may take them away. */
+  function linksOf(p: Pattern, which: number[]): Set<string> {
+    const q = app.seq(p);
+    return new Set(
+      which
+        .flatMap((o) => {
+          const f = q.objects[o] && remembered(p, q.objects[o])?.fill;
+          return [f?.border?.link ?? '', f?.deco?.blend?.link ?? ''];
+        })
+        .filter(Boolean),
+    );
   }
 
   /**
    * Takes over new stitches for the selected objects; `failed` is said for objects left as they
    * were. With `remeasure` (another kind of stitch), the panel measures the objects again.
    */
-  function applyRestitched(r: RestitchResult | null, failed: Key, remeasure = false): void {
+  function applyRestitched(r: RestitchResult | null, failed: Key, remeasure = false, find: ((p: Pattern) => number | null) | null = null): void {
     const f = app.files.active;
     ui.flowPreview = null;
     if (!f || !r) return app.redraw();
@@ -241,6 +304,12 @@ export function bindStitches(app: StitchesApp) {
     app.applyEdit(p);
     app.files.setObjects(f, rememberedIn(p, app.seq(p).objects));
     if (selNow.size) ui.selectedObjects = selNow;
+    // A border set from its own page stays selected; gone (no border, or in the fill's thread now), its fill is.
+    if (find) {
+      const i = find(p);
+      if (i !== null) ui.selectedObjects = new Set([i]);
+      else remeasure = true;
+    }
     ui.selectionKey = remeasure ? key + 1 : key;
     // New stitches have a shape they can be loosed from; the outlines follow a changed area (a
     // fill along a line gets wider), the measured values stay as set in the panel.
@@ -259,7 +328,9 @@ export function bindStitches(app: StitchesApp) {
     if (to === 'satin') {
       const f = info.measured.fill;
       if (!f) return null;
-      return { kind: 'satin', s: { spacing: f.spacing, edge: digitizeDefaults(app.settings.profile).pull, short: true, underlay: f.underlay, tolerance: f.tolerance } };
+      // Compensation by the fabric as a satin gets it (half fixed, half by width), not a fill's whole.
+      const pull = pullFor(app.settings.profile, 'satin');
+      return { kind: 'satin', s: { spacing: f.spacing, edge: pull.edge, edgeShare: pull.edgeShare, edgeAuto: true, short: true, underlay: f.underlay, tolerance: f.tolerance } };
     }
     const s = info.measured.satin;
     if (!s) return null;
@@ -276,14 +347,9 @@ export function bindStitches(app: StitchesApp) {
     apply: (s) => {
       const pat = s.kind === 'fill' ? s.s.pattern : null;
       const p = app.files.active?.pattern;
-      if (p) {
-        const q = app.seq(p);
-        dropLinks = new Set([...ui.selectedObjects].flatMap((o) => {
-          const f = q.objects[o] && remembered(p, q.objects[o])?.fill;
-          return [f?.border?.link ?? '', f?.deco?.blend?.link ?? ''];
-        }).filter(Boolean));
-      }
-      applyRestitched(restitched(s), pat === 'spiral' ? 'stitch.failedSpiral' : pat === 'contour' || pat === 'follow' ? 'stitch.failedCurved' : pat === 'guided' ? 'stitch.guide.failed' : 'stitch.failed');
+      if (p) dropLinks = linksOf(p, targets());
+      const find = dependentFinder();
+      applyRestitched(restitched(s), pat === 'spiral' ? 'stitch.failedSpiral' : pat === 'contour' || pat === 'follow' ? 'stitch.failedCurved' : pat === 'guided' ? 'stitch.guide.failed' : 'stitch.failed', false, find);
     },
     convert: (to) => {
       const p = app.files.active?.pattern;
@@ -329,7 +395,18 @@ export function bindStitches(app: StitchesApp) {
       if (app.rungTool.mode === 'points') app.closeRungs();
     },
     line: (st, final) => {
-      if (ui.selectedObjects.size === 1) app.sewLine([...ui.selectedObjects][0], null, st, final);
+      const which = targets();
+      if (which.length !== 1) return;
+      // A shadow or echo is set at its line, and stays selected (gone, its line is).
+      const find = final ? dependentFinder() : null;
+      if (!app.sewLine(which[0], null, st, final) || !find) return;
+      const p = app.files.active?.pattern;
+      const i = p ? find(p) : null;
+      if (i === null) return;
+      ui.selectedObjects = new Set([i]);
+      ui.selectionKey++;
+      ui.stitchCache = null;
+      app.redraw();
     },
     knockout: (on) => app.knockoutObjects([...ui.selectedObjects].sort((a, b) => a - b), on),
     overlapShare: (share) => {

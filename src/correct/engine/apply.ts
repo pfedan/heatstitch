@@ -3,7 +3,7 @@ import { sewObjects } from '../../model/objects';
 import type { Pattern } from '../../model/pattern';
 import { forget, holdMemory, remembered, rememberedIn, restoreRemembered, type Remembered, type StoredObject } from '../../model/restitch';
 import type { Profile } from '../../validation/profiles';
-import type { FixKind } from './cells';
+import type { FixTarget } from './cells';
 import { planFix, type FixOptions, type FixResult } from './solve';
 import { designKey } from './units';
 
@@ -26,7 +26,7 @@ export interface PlannedFix extends FixResult {
 export { designKey };
 
 /** Works out a fix without changing anything (see planFix). */
-export async function prepareFix(p: Pattern, profile: Profile, kind: FixKind | 'all', opt: FixOptions): Promise<PlannedFix> {
+export async function prepareFix(p: Pattern, profile: Profile, kind: FixTarget, opt: FixOptions): Promise<PlannedFix> {
   const release = holdMemory();
   try {
     const r = await planFix(p, profile, kind, opt);
@@ -44,16 +44,19 @@ export function applyFix(p: Pattern, f: PlannedFix): Pattern | null {
   if (designKey(p) !== f.base) return null;
   if (!f.objects.length) return p;
   const before = sewObjects(p);
-  const after = sewObjects(f.pattern);
+  // What the fix's objects remember first: it includes how its new stitches group into objects,
+  // and the indices of the fix count in that grouping.
   restoreRemembered(f.memory);
+  const after = sewObjects(f.pattern);
   for (const x of f.objects) {
     const o = before[x.index];
     const was = remembered(p, o);
     const now = remembered(f.pattern, after[x.index]) ?? { region: null };
     // A fix on a fix: the first "before" stays, so taking it back goes to the original.
-    // With the travel to it: sewing anew also moves where the jump to the object lands.
+    // With the travel to it and from it: sewing anew also moves where the jumps around it go.
     const from = x.index ? before[x.index - 1].last + 1 : 0;
-    const undo = was?.undo ?? { x: p.x.slice(from, o.last + 1), y: p.y.slice(from, o.last + 1), cmd: p.cmd.slice(from, o.last + 1), lead: o.first - from, ...(was ? { memory: was } : {}) };
+    const end = before[x.index + 1]?.first ?? p.cmd.length;
+    const undo = was?.undo ?? { x: p.x.slice(from, end), y: p.y.slice(from, end), cmd: p.cmd.slice(from, end), lead: o.first - from, trail: end - o.last - 1, ...(was ? { memory: was } : {}) };
     const fixed = [...x.changes, ...(x.knockout ? [{ field: 'knockout', from: false, to: true }] : []), ...x.tools.filter((t) => t.startsWith('fine.')).map((t) => ({ field: t, from: '', to: true }))];
     forget(f.pattern, after[x.index], { ...now, fixed, undo });
   }
@@ -82,21 +85,28 @@ export function revertFix(p: Pattern, which: number[]): Pattern | null {
   let y = p.y;
   let cmd = p.cmd;
   const restored: { at: number; memory?: Remembered }[] = [];
+  const taken = new Set(list.map((o) => o.index));
   // From the back, so the earlier records stay where they are.
   for (const o of list) {
     const u = remembered(p, o)!.undo!;
     const from = o.index ? objs[o.index - 1].last + 1 : 0;
+    // The travel to the next object too, unless that one is taken back as well (its own travel brings it back).
+    const next = objs[o.index + 1];
+    const trail = u.trail ?? 0;
+    const withTrail = trail > 0 && !(next && taken.has(next.index));
+    const end = withTrail ? (next ? next.first : x.length) : o.last + 1;
+    const keep = withTrail ? u.x.length : u.x.length - trail;
     const cat = <T extends Int32Array | Uint8Array>(a: T, mid: T, make: (n: number) => T): T => {
-      const out = make(a.length - (o.last + 1 - from) + mid.length);
+      const out = make(a.length - (end - from) + keep);
       out.set(a.subarray(0, from), 0);
-      out.set(mid, from);
-      out.set(a.subarray(o.last + 1), from + mid.length);
+      out.set(mid.subarray(0, keep), from);
+      out.set(a.subarray(end), from + keep);
       return out;
     };
     x = cat(x, u.x, (n) => new Int32Array(n));
     y = cat(y, u.y, (n) => new Int32Array(n));
     cmd = cat(cmd, u.cmd, (n) => new Uint8Array(n));
-    for (const r of restored) r.at += u.x.length - (o.last + 1 - from);
+    for (const r of restored) r.at += keep - (end - from);
     restored.push({ at: from + u.lead, memory: u.memory });
   }
   const next = withRecords(p, x, y, cmd);

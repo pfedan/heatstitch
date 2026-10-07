@@ -53,7 +53,7 @@ export interface ProjectImage {
 }
 
 /** The settings that belong to the design rather than to how the app is looked at. */
-export type ProjectSettings = Pick<Settings, 'profile' | 'checks' | 'correction' | 'trimMm' | 'order' | 'machineSpm'> & {
+export type ProjectSettings = Pick<Settings, 'profile' | 'checks' | 'correction' | 'trimMm' | 'order' | 'machineSpm' | 'trimSeconds' | 'colorSeconds'> & {
   image: Pick<ImageSettings, 'prepare' | 'stitch'>;
   /** The fabric color the design is shown on (null: the theme's); absent in older projects. */
   background?: string | null;
@@ -87,6 +87,8 @@ export function projectSettings(s: Settings): ProjectSettings {
     trimMm: s.trimMm,
     order: s.order,
     machineSpm: s.machineSpm,
+    trimSeconds: s.trimSeconds,
+    colorSeconds: s.colorSeconds,
     image: { prepare: s.image.prepare, stitch: s.image.stitch },
     background: s.background,
   });
@@ -238,6 +240,8 @@ function readSettings(v: unknown): ProjectSettings {
       reverse: typeof s.order?.reverse === 'boolean' ? s.order.reverse : true,
     },
     machineSpm: positive(s.machineSpm, DEFAULTS.machineSpm),
+    trimSeconds: typeof s.trimSeconds === 'number' && s.trimSeconds >= 0 ? s.trimSeconds : DEFAULTS.trimSeconds,
+    colorSeconds: typeof s.colorSeconds === 'number' && s.colorSeconds >= 0 ? s.colorSeconds : DEFAULTS.colorSeconds,
     image: { prepare: image.prepare, stitch: image.stitch },
     ...('background' in s ? { background: hexColor(s.background) } : {}),
   };

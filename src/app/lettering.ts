@@ -39,8 +39,6 @@ export interface LetteringApp {
 
 /** Lettering: the text card, fonts, sewing the text, and moving single letters. */
 export function bindLettering(app: LetteringApp) {
-  const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
-
   /** The fonts that come with the app (loaded on start, the fonts themselves when first used). */
   let catalog: Catalog | null = null;
   void loadCatalog()
@@ -191,7 +189,6 @@ export function bindLettering(app: LetteringApp) {
     app.layers.reveal([...ui.selectedObjects]);
     app.redraw();
   }
-  $('lettering-new').addEventListener('click', () => void newLettering());
 
   /**
    * The chosen lettering changed in the card or by the frame: its stitches are made anew in its
