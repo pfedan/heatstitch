@@ -568,7 +568,10 @@ export function recolorBlock(p: Pattern, block: number, color: ThreadColor): Pat
     const b = m?.fill?.border;
     if (!b?.link || b.color || !old) return;
     const border = objs.find((x) => remembered(next, x)?.outline === b.link);
-    if (border && border.block !== block) remember(next, o, { ...m!, fill: { ...m!.fill!, border: { ...b, color: { ...old } } } });
+    if (!border || border.block === block) return;
+    // The thread it is sewn in (for parts of a fill cut apart, that of the first part); all parts take it.
+    remember(next, o, { ...m!, fill: { ...m!.fill!, border: { ...b, color: { ...border.color } } } });
+    shareBorders(next, [o]);
   });
   return takeThreads(next, objs.filter((o) => o.block === block).map((o) => o.index));
 }
@@ -590,8 +593,12 @@ export function takeThreads(p: Pattern, which: readonly number[]): Pattern {
       if (part && hasPart(mem[k], part)) remember(p, x, (mem[k] = partInThread(mem[k]!, part, color)));
       const f = mem[k]?.fill;
       if (!f) return;
-      // A border in the fill's thread has none of its own.
-      if (own.outline && f.border?.link === own.outline) remember(p, x, (mem[k] = { ...mem[k]!, fill: { ...f, border: { ...f.border, color: sameColor(x.color, color) ? undefined : { ...color } } } }));
+      // A border in the fill's thread has none of its own (for parts of a fill cut apart: the
+      // thread of the first part, which all parts go by).
+      if (own.outline && f.border?.link === own.outline) {
+        const first = objs[mem.findIndex((n) => n?.fill?.border?.link === own.outline)] ?? x;
+        remember(p, x, (mem[k] = { ...mem[k]!, fill: { ...f, border: { ...f.border, color: sameColor(first.color, color) ? undefined : { ...color } } } }));
+      }
       if (own.blendOf && f.deco?.blend?.link === own.blendOf) remember(p, x, (mem[k] = { ...mem[k]!, fill: { ...f, deco: { ...f.deco, blend: { ...f.deco.blend, color: { ...color } } } } }));
     });
   }
