@@ -20,9 +20,9 @@ import type { Graph, Pt } from './skeleton';
  * the same while only stitch settings change.
  */
 
-/** What an area becomes: straight rows, rows that follow the image, or satin. */
-export type Technique = 'flat' | 'dynamic' | 'satin';
-export const TECHNIQUES: readonly Technique[] = ['flat', 'dynamic', 'satin'];
+/** What an area becomes: straight rows, rows that follow the image, satin, or satin in sections (see satinSuggest). */
+export type Technique = 'flat' | 'dynamic' | 'satin' | 'sections';
+export const TECHNIQUES: readonly Technique[] = ['flat', 'dynamic', 'satin', 'sections'];
 
 /** Why Smart chose what it chose for an area (shown in the list of areas). */
 export type Reason = 'calm' | 'structure' | 'round' | 'stroke' | 'line' | 'blades';
@@ -47,6 +47,8 @@ export interface AreaInfo {
   reason: Reason;
   /** Set by hand. */
   fixed: boolean;
+  /** The techniques it can be set to (satin in sections only where it is a drawing of lines). */
+  offers?: Technique[];
 }
 
 /** The key of an area: its color and its bounding box in image pixels. */
@@ -75,6 +77,8 @@ export interface AreaGroup {
   auto: Technique | 'run';
   /** Set by hand for all of them; 'mixed' when only for some, or differently. */
   fixed: Technique | 'mixed' | null;
+  /** The techniques all of them can be set to. */
+  offers: Technique[];
 }
 
 /** The groups of the areas, in the order of their letters. */
@@ -83,7 +87,9 @@ export function groupAreas(areas: readonly AreaInfo[], set: Readonly<Record<stri
   for (const a of areas) {
     const k = groupOf(a);
     let g = out.get(k);
-    if (!g) out.set(k, (g = { letter: a.letter, label: a.label, reason: a.reason, keys: [], areaMm2: 0, auto: a.auto, fixed: null }));
+    const offers = a.offers ?? TECHNIQUES.filter((x) => x !== 'sections');
+    if (!g) out.set(k, (g = { letter: a.letter, label: a.label, reason: a.reason, keys: [], areaMm2: 0, auto: a.auto, fixed: null, offers }));
+    else g.offers = g.offers.filter((x) => offers.includes(x));
     g.keys.push(a.key);
     g.areaMm2 += a.areaMm2;
   }

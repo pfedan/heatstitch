@@ -12,7 +12,9 @@ import { buildRegion, type Region } from './region';
 import { runStitch, TOLERANCE } from './run';
 import { column, pairs, satinStitches, underlay, type Column, type SatinParams } from './satin';
 import { reverse, skeleton, type Branch, type Graph, type Pt } from './skeleton';
-import type { FillSettings } from '../model/restitch';
+import { bestChain, satinRuns, type FillSettings, type Rails, type SatinSettings } from '../model/restitch';
+import { stripsOfAreas } from './rungs';
+import { areaLoops, offersSections, suggestSatin } from './satinSuggest';
 import type { Orientation } from '../image/orientation';
 import { transformForm, type Form } from '../shape/path';
 import { lineStitchFor, lineStitches } from '../model/line';
@@ -153,6 +155,13 @@ export interface DigitizedObject {
   line?: PathStitch;
   /** The area of the image it was sewn for (AreaInfo.key). */
   area?: string;
+  /**
+   * A satin in sections (see satinSuggest): its columns (pattern coordinates), how they are sewn,
+   * and the area they were cut from, so the satin tool can move their lines later.
+   */
+  columns?: Rails[];
+  satin?: SatinSettings;
+  satinShape?: Omit<KeptShape, 'fill'>;
 }
 
 /** An area as pixels, in pattern coordinates (0.1 mm records / 10), and the fill it was sewn with. */
@@ -190,7 +199,9 @@ interface Obj {
   /** Rows follow the image (else as the options say). */
   flow?: boolean;
   /** The area as Smart sees it: its key, what it would choose and why, and whether it was set by hand. */
-  smart?: { key: string; auto: Technique | 'run'; reason: Reason; fixed: boolean };
+  smart?: { key: string; auto: Technique | 'run'; reason: Reason; fixed: boolean; offers: Technique[] };
+  /** Sewn as a satin in sections (see satinSuggest). */
+  sections?: boolean;
 }
 
 const dist = (p: Pt, q: Pt) => Math.hypot(p[0] - q[0], p[1] - q[1]);
@@ -373,10 +384,51 @@ const satinOk = (runs: Pt[][], r: Region, o: DigitizeOptions) => peakDensity(run
  * filled instead, a region too thin to fill becomes running stitch. Fills note their angle in
  * `angles`, so touching fills sewn later run another way. Runs of fewer than two points are left out.
  */
+/** The satin settings the image's satins are sewn with, as an object keeps them. */
+function satinSettings(o: DigitizeOptions, p: SatinParams): SatinSettings {
+  return { spacing: p.spacing, edge: round2(p.pull), edgeShare: Math.round((p.pullShare ?? 0) * 1000) / 1000, short: true, underlay: o.underlay, tolerance: o.tolerance, ...(Number.isFinite(p.splitMm) ? { split: p.splitMm } : {}) };
+}
+
+/**
+ * A satin in sections (Satin in Abschnitten): the area cut into columns at its junctions with lines
+ * across where it bends, as "Vorschlagen" in the satin tool does, sewn as one chain each piece of
+ * area in the order that hides the ways between the columns best. Remembers the columns, so the
+ * satin tool can change them later. Nothing when the area makes no columns.
+ */
+function sewSections(obj: Obj, o: DigitizeOptions, p: SatinParams): Pt[][] {
+  const r = obj.region;
+  const plan = suggestSatin(r, obj.graph ?? undefined);
+  if (!plan?.ok) return [];
+  const { outsides, holes } = areaLoops(r);
+  const made = stripsOfAreas(outsides, plan.lines, plan.cuts, holes);
+  if (made.bad || made.hole >= 0) return [];
+  const s = satinSettings(o, p);
+  let columns: Rails[] = made.areas.flatMap((strips, a) => strips.map((x) => ({ ...x, chain: a })));
+  const chains = new Map<number, Rails[]>();
+  for (const c of columns) chains.set(c.chain!, [...(chains.get(c.chain!) ?? []), c]);
+  columns = [...chains.values()].flatMap((g) => (g.length > 1 ? bestChain(g, s) : g));
+  const runs = satinRuns(columns, s);
+  if (!runs.length) return [];
+  obj.info.columns = columns.map((c, k) => (k ? c : { ...c, split: { outlines: outsides, holes, cuts: plan.cuts } }));
+  obj.info.satin = s;
+  return runs;
+}
+
 function sewOne(obj: Obj, pos: Pt, o: DigitizeOptions, satin: SatinParams, angles: { obj: Obj; angle: number }[], orient?: Orientation): Pt[][] {
   let out: Pt[][] = [];
   if (obj.blades) return sewBlades(obj.blades, pos, satin, o.underlay, o.tolerance).filter((r) => r.length > 1);
-  if (obj.info.kind === 'satin') {
+  if (obj.sections) {
+    out = sewSections(obj, o, satin);
+    // Not made into columns, or the satin would not hold: as a satin along its middle.
+    if (!out.length || !satinOk(out, obj.region, o)) {
+      obj.sections = false;
+      delete obj.info.columns;
+      delete obj.info.satin;
+      delete obj.info.satinShape;
+      out = [];
+    }
+  }
+  if (obj.info.kind === 'satin' && !obj.sections) {
     out = sewSatin(obj, pos, satin, o.underlay, o.tolerance);
     if (!satinOk(out, obj.region, o)) {
       obj.info.kind = 'fill';
@@ -455,6 +507,7 @@ export function digitize(prep: Prepared, o: DigitizeOptions, name = 'image'): Di
       const out = sewOne(obj, pos, o, satin, angles, prep.orient);
       if (!out.length) return;
       if (obj.info.kind === 'fill') obj.info.shape = keep(obj, o, w, h);
+      if (obj.sections && obj.info.columns) keepSections(obj, w, h);
       runs.push(...out);
       for (const _ of out) owners.push(objects.length);
       objects.push(obj.info);
@@ -516,15 +569,26 @@ function choose(obj: Obj, key: string, o: DigitizeOptions, orient?: Orientation)
   let auto: Technique | 'run';
   let reason: Reason;
   let across: Graph | null = null;
+  // Satin in sections where the area is a drawing of lines that branch or close (an outline).
+  const sections = !obj.blades && obj.info.kind !== 'run' && !!obj.graph && offersSections(obj.graph);
+  const offers: Technique[] = sections ? ['flat', 'dynamic', 'satin', 'sections'] : ['flat', 'dynamic', 'satin'];
   if (obj.blades) [auto, reason] = ['satin', 'blades'];
   else if (obj.info.kind === 'run') [auto, reason] = ['run', 'line'];
-  else if (obj.info.kind === 'satin') [auto, reason] = ['satin', 'stroke'];
+  else if (obj.info.kind === 'satin' || sections) [auto, reason] = [sections ? 'sections' : 'satin', 'stroke'];
   else if ((across = acrossGraph(r, o.satinMax))) [auto, reason] = ['satin', 'round'];
   else if (r.areaMm2 >= STRUCTURE_MIN_MM2 && structure(r, orient) >= STRUCTURE) [auto, reason] = ['dynamic', 'structure'];
   else [auto, reason] = ['flat', 'calm'];
-  obj.smart = { key, auto, reason, fixed: !!fixed };
-  const t = fixed ?? (o.smart ? auto : undefined);
+  obj.smart = { key, auto, reason, fixed: !!fixed, offers };
+  let t = fixed ?? (o.smart ? auto : undefined);
+  if (t === 'sections' && !sections) t = 'satin';
   if (!t || t === 'run') return;
+  if (t === 'sections') {
+    if (obj.blades) return;
+    obj.info.kind = 'satin';
+    obj.sections = true;
+    obj.flow = false;
+    return;
+  }
   if (t === 'satin') {
     if (obj.blades || obj.info.kind !== 'fill') return;
     // Across, else along its centerline; filled when the satin would not hold (sewOne).
@@ -557,9 +621,28 @@ function areaInfo(obj: Obj, o: DigitizeOptions): AreaInfo {
     }
   }
   const kind = obj.info.kind;
-  const technique: AreaInfo['technique'] = obj.blades || kind === 'satin' ? 'satin' : kind === 'run' ? 'run' : (obj.flow ?? o.flow) ? 'dynamic' : 'flat';
+  const technique: AreaInfo['technique'] = obj.sections ? 'sections' : obj.blades || kind === 'satin' ? 'satin' : kind === 'run' ? 'run' : (obj.flow ?? o.flow) ? 'dynamic' : 'flat';
   const s = obj.smart!;
-  return { key: s.key, letter: '', name: '', label: obj.info.label, areaMm2: Math.round(r.areaMm2 * 10) / 10, at, technique, auto: s.auto, reason: s.reason, fixed: s.fixed };
+  return { key: s.key, letter: '', name: '', label: obj.info.label, areaMm2: Math.round(r.areaMm2 * 10) / 10, at, technique, auto: s.auto, reason: s.reason, fixed: s.fixed, offers: s.offers };
+}
+
+/** A satin in sections moved to pattern coordinates (see keep): its columns, and its area as pixels. */
+function keepSections(obj: Obj, imgW: number, imgH: number): void {
+  const r = obj.region;
+  const dx = Math.floor(imgW / 2) * r.pxMm;
+  const dy = Math.floor(imgH / 2) * r.pxMm;
+  const mv = (q: Pt): Pt => [q[0] - dx, q[1] - dy];
+  const mvAll = (qs: Pt[]) => qs.map(mv);
+  obj.info.columns = obj.info.columns!.map((c) => ({
+    ...c,
+    left: mvAll(c.left),
+    right: mvAll(c.right),
+    ...(c.split ? { split: { outlines: c.split.outlines.map(mvAll), holes: c.split.holes.map(mvAll), cuts: c.split.cuts.map(([a, b]) => [mv(a), mv(b)] as [Pt, Pt]) } } : {}),
+  }));
+  const mask = Uint8Array.from(r.sdfBase, (d) => (d < 0 ? 1 : 0));
+  let area = 0;
+  for (const m of mask) area += m;
+  obj.info.satinShape = { x0: r.x0 - Math.floor(imgW / 2), y0: r.y0 - Math.floor(imgH / 2), w: r.w, h: r.h, pxMm: r.pxMm, mask, areaMm2: area * r.pxMm * r.pxMm };
 }
 
 /**
