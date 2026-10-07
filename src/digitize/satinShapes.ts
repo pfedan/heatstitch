@@ -14,9 +14,12 @@ import type { Branch, Graph, Pt } from './skeleton';
  *   square to the cut, so no stitch is longer than the half.
  * - `pointed`: an area with corners (a triangle, a nose). The lines across fan out from the corner
  *   that keeps the stitches shortest to the edge opposite it.
+ * - `leaf` and `drop`: a long round area pointed at both ends or at one. Sewn as a dot is (one
+ *   column, or halves cut along its middle as the vein of a leaf); the halves of a leaf slant
+ *   toward its tip, as the veins do.
  */
 
-export type BlobKind = 'dot' | 'pointed';
+export type BlobKind = 'dot' | 'pointed' | 'leaf' | 'drop';
 
 export interface ShapePlan {
   kind: BlobKind;
@@ -220,7 +223,16 @@ export interface Shape {
 
 /** A whole area as a shape. */
 export function wholeShape(outsides: Pt[][], holes: Pt[][], material: (q: Pt) => boolean): Shape {
-  return { samples: grid(outsides.flat(), material), outline: [...outsides, ...holes], holes, attach: [] };
+  // Each ring walked on a little past its start, so a corner at the start has arms both sides.
+  const wrap = (r: Pt[]) => {
+    const out = r.slice();
+    for (let i = 1, l = 0; i < r.length && l < 2; i++) {
+      l += dist(r[i - 1], r[i]);
+      out.push(r[i]);
+    }
+    return out;
+  };
+  return { samples: grid(outsides.flat(), material), outline: [...outsides, ...holes].map(wrap), holes, attach: [] };
 }
 
 /**
@@ -260,7 +272,8 @@ export function blobShape(blob: Blob, lines: Graph, outsides: Pt[][], holes: Pt[
   return { samples, outline, holes: holes.filter((hole) => hole.filter(mine).length > 0.7 * hole.length), attach: blob.attach };
 }
 
-function grid(box: Pt[], keep: (q: Pt) => boolean): Pt[] {
+/** Points on a grid over the box of `box` that `keep` keeps. */
+export function grid(box: Pt[], keep: (q: Pt) => boolean): Pt[] {
   const xs = box.map((p) => p[0]);
   const ys = box.map((p) => p[1]);
   const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
@@ -320,7 +333,7 @@ interface Tip {
  * when it fits neither within the satin limit `max` (mm). A fan is preferred unless a column
  * across keeps the stitches clearly shorter.
  */
-export function planShape(s: Shape, material: (q: Pt) => boolean, max: number, split = true): ShapePlan | null {
+export function planShape(s: Shape, material: (q: Pt) => boolean, max: number, split = true, column = false): ShapePlan | null {
   if (s.samples.length < 8) return null;
   const { out, notches } = corners(s, material);
   // A heart: cut from its notch to the corner opposite, each half planned on its own.
@@ -330,7 +343,10 @@ export function planShape(s: Shape, material: (q: Pt) => boolean, max: number, s
   }
   const tips: Tip[] = [...out.map((p) => ({ p })), ...s.attach.map((a) => ({ p: a.p, along: perp(a.t), w: a.r * 0.7 }))];
   const fan = tips.length && !s.holes.length ? planFan(s, tips, material, max) : null;
-  const col = planDot(s, material, max);
+  const col = planDot(s, material, max, out);
+  // A column where it fits, unless asked for, or three corners at most (a fan suits a triangle, not a square).
+  if (col && (column || out.length > 3)) return col.plan;
+  if (col && col.plan.kind !== 'dot') return col.plan;
   if (fan && (!col || col.longest >= 0.6 * fan.longest)) return fan.plan;
   return col?.plan ?? null;
 }
@@ -394,7 +410,7 @@ function planFan(s: Shape, tips: Tip[], material: (q: Pt) => boolean, max: numbe
 }
 
 /** A round area: one column across, or two halves cut along it (through a hole in it). */
-function planDot(s: Shape, material: (q: Pt) => boolean, max: number): Option | null {
+function planDot(s: Shape, material: (q: Pt) => boolean, max: number, tips: Pt[] = []): Option | null {
   if (s.holes.length > 1) return null;
   const c = centroid(s.samples);
   // The long axis (of the second moments).
@@ -420,6 +436,9 @@ function planDot(s: Shape, material: (q: Pt) => boolean, max: number): Option | 
   const [nlo, nhi] = extent(c, perp(axis));
   // Round enough: covers about half its box or more (a triangle just so).
   if (s.samples.length * STEP * STEP < 0.45 * (uhi - ulo) * (nhi - nlo)) return null;
+  // Long, with a corner at an end of its long way or at both: a drop or a leaf.
+  const ends = [ulo, uhi].map((e) => tips.some((t) => Math.abs(dot(sub(t, c), axis) - e) < 0.6 && Math.abs(dot(sub(t, c), perp(axis))) < 0.25 * (nhi - nlo)));
+  const kind: BlobKind = s.holes.length || uhi - ulo < 1.4 * (nhi - nlo) ? 'dot' : ends[0] && ends[1] ? 'leaf' : ends[0] || ends[1] ? 'drop' : 'dot';
   const hole = s.holes[0];
   if (!hole && nhi - nlo <= max) {
     // One column across, along the long axis.
@@ -430,11 +449,16 @@ function planDot(s: Shape, material: (q: Pt) => boolean, max: number): Option | 
       const p = add(c, axis, ulo + ((uhi - ulo) * k) / (m + 1));
       lines.push([add(p, n, nlo - 0.4), add(p, n, nhi + 0.4)]);
     }
-    return { plan: { kind: 'dot', cuts: [], lines }, longest: nhi - nlo };
+    return { plan: { kind, cuts: [], lines }, longest: nhi - nlo };
   }
   // Two halves, cut along a line through the middle (through the hole): the long axis, else the
   // way that keeps the halves narrowest with the cut clear of the lines leaving the shape.
   const base = hole ? centroid(hole) : c;
+  // A leaf: cut along its vein, the halves slanting toward the tip at the far end of its axis.
+  if (kind === 'leaf') {
+    const h = halves(s, material, base, axis, false, extent, Math.PI / 3, max);
+    if (h && h.longest <= max) return { ...h, plan: { ...h.plan, kind } };
+  }
   const ways: Pt[] = [axis];
   for (let k = 1; k < 12; k++) ways.push([Math.cos(ang + (k * Math.PI) / 12), Math.sin(ang + (k * Math.PI) / 12)]);
   let best: Option | null = null;
@@ -442,7 +466,7 @@ function planDot(s: Shape, material: (q: Pt) => boolean, max: number): Option | 
     const h = halves(s, material, base, u, !!hole, extent);
     if (h && (!best || h.longest < best.longest - 0.05)) best = h;
   }
-  return best && best.longest <= max ? best : null;
+  return best && best.longest <= max ? { ...best, plan: { ...best.plan, kind: kind === 'leaf' ? 'dot' : kind } } : null;
 }
 
 /** A material stretch along a ray: where it starts and ends (mm from o), or null. */
@@ -459,7 +483,7 @@ function run(material: (q: Pt) => boolean, o: Pt, d: Pt, to: number): [number, n
 }
 
 /** Two halves cut along the line through `base` in direction u, lines square to the cut. */
-function halves(s: Shape, material: (q: Pt) => boolean, base: Pt, u: Pt, hole: boolean, extent: (o: Pt, v: Pt) => number[]): Option | null {
+function halves(s: Shape, material: (q: Pt) => boolean, base: Pt, u: Pt, hole: boolean, extent: (o: Pt, v: Pt) => number[], slant = Math.PI / 2, max = Infinity): Option | null {
   const n = perp(u);
   const [ulo, uhi] = extent(base, u);
   const [nlo, nhi] = extent(base, n);
@@ -477,17 +501,20 @@ function halves(s: Shape, material: (q: Pt) => boolean, base: Pt, u: Pt, hole: b
   // Clear of where lines leave the shape (their cut lines lie there).
   const clear = (p: Pt) => s.attach.every((a) => dist(a.p, p) > a.r * 1.25 + 0.8);
   if (!ends.every(clear)) return null;
+  // Slanting (a leaf's veins) where the stitches stay within max so, else square to the cut.
+  const half = Math.max(-nlo, nhi);
+  const a = half / Math.sin(slant) <= max ? slant : Math.PI / 2;
   const lines: [Pt, Pt][] = [];
   for (const f of [0.15, 0.32, 0.5, 0.68, 0.85]) {
     const p = add(base, u, ulo + (uhi - ulo) * f);
     for (const sgn of [-1, 1]) {
-      const d: Pt = [n[0] * sgn, n[1] * sgn];
-      const r = run(material, p, d, (sgn < 0 ? -nlo : nhi) + 1);
+      const d = norm(add([n[0] * sgn * Math.sin(a), n[1] * sgn * Math.sin(a)], u, Math.cos(a)));
+      const r = run(material, p, d, (sgn < 0 ? -nlo : nhi) / Math.sin(a) + 1);
       if (!r || r[1] - r[0] < 0.4) continue;
       lines.push([add(p, d, r[0] > 0.1 ? r[0] - 0.3 : -0.3), add(p, d, r[1] + 0.3)]);
     }
   }
-  return { plan: { kind: 'dot', cuts, lines }, longest: Math.max(-nlo, nhi) };
+  return { plan: { kind: 'dot', cuts, lines }, longest: half / Math.sin(a) };
 }
 
 const centroid = (pts: Pt[]): Pt => {

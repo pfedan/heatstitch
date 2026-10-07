@@ -4,7 +4,6 @@ import { components, type Components } from '../image/labels';
 import { NONE, type Prepared } from '../image/prepare';
 import { COLOR_CHANGE, END, JUMP, PatternBuilder, STITCH, TRIM, type Pattern, type ThreadColor } from '../model/pattern';
 import { fabricOf, recommendedSpacing, type Profile } from '../validation/profiles';
-import { sewBlades, splitBlades, type Blades } from './blades';
 import { fillRegion } from './fill';
 import { flowFill } from './flow';
 import { coverage, peakDensity } from './measure';
@@ -14,7 +13,7 @@ import { column, pairs, satinStitches, underlay, type Column, type SatinParams }
 import { reverse, skeleton, type Branch, type Graph, type Pt } from './skeleton';
 import { bestChain, satinRuns, type FillSettings, type Rails, type SatinSettings } from '../model/restitch';
 import { stripsOfAreas } from './rungs';
-import { areaLoops, offersSections, suggestSatin } from './satinSuggest';
+import { areaLoops, offersSections, suggestSatin, type SatinSuggestion, type ShapeClass } from './satinSuggest';
 import type { Orientation } from '../image/orientation';
 import { transformForm, type Form } from '../shape/path';
 import { lineStitchFor, lineStitches } from '../model/line';
@@ -191,11 +190,8 @@ interface Obj {
   graph: Graph | null;
   /** Points on the region for choosing the nearest next object. */
   probe: Pt[];
-  /** Blades sewn as satin, then their body filled over their starts (see blades.ts). */
-  blades?: Blades;
-  body?: Obj;
-  /** A blades' body: straight rows at this angle unless the user fixed one. */
-  rowAngle?: number;
+  /** Cut lines and lines across for satin in sections, found when Smart looked at the area. */
+  plan?: SatinSuggestion | null;
   /** Rows follow the image (else as the options say). */
   flow?: boolean;
   /** The area as Smart sees it: its key, what it would choose and why, and whether it was set by hand. */
@@ -397,7 +393,7 @@ function satinSettings(o: DigitizeOptions, p: SatinParams): SatinSettings {
  */
 function sewSections(obj: Obj, o: DigitizeOptions, p: SatinParams): Pt[][] {
   const r = obj.region;
-  const plan = suggestSatin(r, obj.graph ?? undefined);
+  const plan = obj.plan !== undefined ? obj.plan : suggestSatin(r, obj.graph ?? undefined, o.satinMax);
   if (!plan?.ok) return [];
   const { outsides, holes } = areaLoops(r);
   const made = stripsOfAreas(outsides, plan.lines, plan.cuts, holes);
@@ -416,7 +412,6 @@ function sewSections(obj: Obj, o: DigitizeOptions, p: SatinParams): Pt[][] {
 
 function sewOne(obj: Obj, pos: Pt, o: DigitizeOptions, satin: SatinParams, angles: { obj: Obj; angle: number }[], orient?: Orientation): Pt[][] {
   let out: Pt[][] = [];
-  if (obj.blades) return sewBlades(obj.blades, pos, satin, o.underlay, o.tolerance).filter((r) => r.length > 1);
   if (obj.sections) {
     out = sewSections(obj, o, satin);
     // Not made into columns, or the satin would not hold: as a satin along its middle.
@@ -439,8 +434,8 @@ function sewOne(obj: Obj, pos: Pt, o: DigitizeOptions, satin: SatinParams, angle
     // Fill angles of touching regions sewn already, so neighbours differ.
     const near = angles.filter((a) => touches(a.obj.region, obj.region)).map((a) => a.angle);
     const fp = { spacing: o.spacing, stitch: o.stitch, angle: o.angle, pull: o.pull, ...fillUnder(o, obj.region.areaMm2), tolerance: o.tolerance };
-    const flow = (obj.flow ?? o.flow) && o.angle === null && orient && obj.rowAngle === undefined ? flowFill(obj.region, obj.graph, orient, fp, pos) : null;
-    const res = flow ?? fillRegion(obj.region, { ...fp, angle: o.angle ?? obj.rowAngle ?? null }, pos, near);
+    const flow = (obj.flow ?? o.flow) && o.angle === null && orient ? flowFill(obj.region, obj.graph, orient, fp, pos) : null;
+    const res = flow ?? fillRegion(obj.region, { ...fp, angle: o.angle ?? null }, pos, near);
     if (res) {
       out = res.runs;
       obj.info.angle = res.angle;
@@ -478,15 +473,6 @@ export function digitize(prep: Prepared, o: DigitizeOptions, name = 'image'): Di
     obj.info.area = key;
     if (!obj.probe.length) continue;
     if (!byColor.has(label)) byColor.set(label, []);
-    // Blades on a body (a grass tuft): the blades as satin, then the body as a fill over their
-    // starts and over the thread run between them.
-    const networkOk = () => satinOk(sewSatin(obj, [0, 0], satin, o.underlay, o.tolerance), region, o);
-    const blades = kind !== 'run' ? splitBlades(region, graph, kind, o, satin, networkOk) : null;
-    if (blades) {
-      obj.info = { kind: 'satin', label, areaMm2: region.areaMm2 - blades.core.areaMm2 };
-      obj.blades = blades;
-      obj.body = { info: { kind: 'fill', label, areaMm2: blades.core.areaMm2, area: key }, region: blades.core, graph: null, probe: probes(blades.core), rowAngle: blades.angle };
-    }
     choose(obj, key, o, prep.orient);
     byColor.get(label)!.push(obj);
   }
@@ -501,8 +487,7 @@ export function digitize(prep: Prepared, o: DigitizeOptions, name = 'image'): Di
     if (!objs?.length) continue;
     const runs: Pt[][] = [];
     const owners: number[] = [];
-    // Blades with their body go with the fills.
-    const rankOf = (x: Obj) => (x.info.kind === 'fill' || x.body ? 0 : 1);
+    const rankOf = (x: Obj) => (x.info.kind === 'fill' ? 0 : 1);
     const place = (obj: Obj) => {
       const out = sewOne(obj, pos, o, satin, angles, prep.orient);
       if (!out.length) return;
@@ -531,7 +516,6 @@ export function digitize(prep: Prepared, o: DigitizeOptions, name = 'image'): Di
       });
       const obj = todo.splice(bi, 1)[0];
       place(obj);
-      if (obj.body?.probe.length) place(obj.body);
     }
     if (runs.length) blocks.push({ color: palette[label].thread, runs, owners });
   }
@@ -541,7 +525,7 @@ export function digitize(prep: Prepared, o: DigitizeOptions, name = 'image'): Di
   // and kind, numbers by place (top to bottom): neither changes when a technique is changed.
   const groups = new Map<string, AreaInfo[]>();
   for (const a of areas) groups.set(groupOf(a), [...(groups.get(groupOf(a)) ?? []), a]);
-  const kinds: Reason[] = ['calm', 'structure', 'round', 'stroke', 'line', 'blades'];
+  const kinds: Reason[] = ['calm', 'structure', 'round', 'stroke', 'line', 'shape'];
   const sorted = [...groups.values()].sort((x, y) => rank[x[0].label] - rank[y[0].label] || kinds.indexOf(x[0].reason) - kinds.indexOf(y[0].reason));
   sorted.forEach((g, k) => {
     const place = (a: AreaInfo) => boxOf(a.key) ?? { minX: 0, minY: 0 };
@@ -558,9 +542,10 @@ export function digitize(prep: Prepared, o: DigitizeOptions, name = 'image'): Di
 
 /**
  * The technique of an area: set by hand, else Smart's choice (with the Smart style), else as the
- * style says for all. Smart keeps strokes, lines and grass tufts as they are found; a small round
- * area becomes satin across; a fill follows the image where it has clear structure of its own,
- * else gets straight rows.
+ * style says for all. Smart keeps strokes and lines as they are found; a small round area becomes
+ * satin across; a shape a digitizer cuts into satin columns (a star, a frame, a leaf: see
+ * satinSuggest) becomes satin in sections; a fill follows the image where it has clear structure
+ * of its own, else gets straight rows.
  */
 function choose(obj: Obj, key: string, o: DigitizeOptions, orient?: Orientation): void {
   const fixed = o.areas?.[key];
@@ -569,12 +554,16 @@ function choose(obj: Obj, key: string, o: DigitizeOptions, orient?: Orientation)
   let auto: Technique | 'run';
   let reason: Reason;
   let across: Graph | null = null;
-  // Satin in sections where the area is a drawing of lines that branch or close (an outline).
-  const sections = !obj.blades && obj.info.kind !== 'run' && !!obj.graph && offersSections(obj.graph);
+  // Satin in sections where the area is a drawing of lines that branch or close (an outline), or a
+  // shape that is cut into columns (see satinSuggest).
+  const lines = obj.info.kind !== 'run' && !!obj.graph && offersSections(obj.graph);
+  const shape = obj.info.kind !== 'run' ? shapeOf(obj, o) : null;
+  const sections = lines || !!shape;
   const offers: Technique[] = sections ? ['flat', 'dynamic', 'satin', 'sections'] : ['flat', 'dynamic', 'satin'];
-  if (obj.blades) [auto, reason] = ['satin', 'blades'];
-  else if (obj.info.kind === 'run') [auto, reason] = ['run', 'line'];
-  else if (obj.info.kind === 'satin' || sections) [auto, reason] = [sections ? 'sections' : 'satin', 'stroke'];
+  if (obj.info.kind === 'run') [auto, reason] = ['run', 'line'];
+  else if (shape && SMART_SHAPES.includes(shape)) [auto, reason] = ['sections', 'shape'];
+  else if (lines) [auto, reason] = ['sections', 'stroke'];
+  else if (obj.info.kind === 'satin') [auto, reason] = ['satin', 'stroke'];
   else if ((across = acrossGraph(r, o.satinMax))) [auto, reason] = ['satin', 'round'];
   else if (r.areaMm2 >= STRUCTURE_MIN_MM2 && structure(r, orient) >= STRUCTURE) [auto, reason] = ['dynamic', 'structure'];
   else [auto, reason] = ['flat', 'calm'];
@@ -583,27 +572,37 @@ function choose(obj: Obj, key: string, o: DigitizeOptions, orient?: Orientation)
   if (t === 'sections' && !sections) t = 'satin';
   if (!t || t === 'run') return;
   if (t === 'sections') {
-    if (obj.blades) return;
     obj.info.kind = 'satin';
     obj.sections = true;
     obj.flow = false;
     return;
   }
   if (t === 'satin') {
-    if (obj.blades || obj.info.kind !== 'fill') return;
+    if (obj.info.kind !== 'fill') return;
     // Across, else along its centerline; filled when the satin would not hold (sewOne).
     obj.info.kind = 'satin';
     obj.graph = across ?? acrossGraph(r, o.satinMax, o.satinMax, Infinity) ?? obj.graph;
     obj.flow = false;
     return;
   }
-  // Rows: a stroke or grass tuft set to a fill by hand is filled whole.
+  // Rows: a stroke set to a fill by hand is filled whole.
   if (fixed) {
-    obj.blades = undefined;
-    obj.body = undefined;
     obj.info = { kind: 'fill', label: obj.info.label, areaMm2: r.areaMm2, area: key };
   }
   obj.flow = t === 'dynamic';
+}
+
+/** Shapes Smart sews as satin in sections by itself (others only when set so by hand). */
+const SMART_SHAPES: readonly ShapeClass[] = ['spikes', 'frame', 'leaf', 'drop', 'crescent', 'pointed'];
+/** Areas larger than this (mm²) are not looked at as shapes (a background is none). */
+const SHAPE_MAX_MM2 = 1500;
+
+/** The class of shape the area is cut into satin columns as, or null (remembers the plan for sewing). */
+function shapeOf(obj: Obj, o: DigitizeOptions): ShapeClass | null {
+  if (obj.region.areaMm2 > SHAPE_MAX_MM2 || !obj.graph) return null;
+  const plan = suggestSatin(obj.region, obj.graph, o.satinMax);
+  obj.plan = plan?.ok ? plan : null;
+  return obj.plan && obj.plan.kind !== 'strokes' && obj.plan.kind !== 'wide' ? obj.plan.kind : null;
 }
 
 /** What became of an area, for the list of areas. */
@@ -621,7 +620,7 @@ function areaInfo(obj: Obj, o: DigitizeOptions): AreaInfo {
     }
   }
   const kind = obj.info.kind;
-  const technique: AreaInfo['technique'] = obj.sections ? 'sections' : obj.blades || kind === 'satin' ? 'satin' : kind === 'run' ? 'run' : (obj.flow ?? o.flow) ? 'dynamic' : 'flat';
+  const technique: AreaInfo['technique'] = obj.sections ? 'sections' : kind === 'satin' ? 'satin' : kind === 'run' ? 'run' : (obj.flow ?? o.flow) ? 'dynamic' : 'flat';
   const s = obj.smart!;
   return { key: s.key, letter: '', name: '', label: obj.info.label, areaMm2: Math.round(r.areaMm2 * 10) / 10, at, technique, auto: s.auto, reason: s.reason, fixed: s.fixed, offers: s.offers };
 }
