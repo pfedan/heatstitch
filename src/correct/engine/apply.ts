@@ -1,5 +1,5 @@
 import { withRecords } from '../../model/edit';
-import { sewObjects } from '../../model/objects';
+import { setMemory, sewObjects } from '../../model/objects';
 import type { Pattern } from '../../model/pattern';
 import { forget, holdMemory, remembered, rememberedIn, restoreRemembered, type ObjectsAsStored, type Remembered } from '../../model/restitch';
 import type { Profile } from '../../validation/profiles';
@@ -84,7 +84,7 @@ export function revertFix(p: Pattern, which: number[]): Pattern | null {
   let x = p.x;
   let y = p.y;
   let cmd = p.cmd;
-  const restored: { at: number; memory?: Remembered }[] = [];
+  const restored: { at: number; last: number; memory?: Remembered }[] = [];
   const taken = new Set(list.map((o) => o.index));
   // From the back, so the earlier records stay where they are.
   for (const o of list) {
@@ -106,15 +106,17 @@ export function revertFix(p: Pattern, which: number[]): Pattern | null {
     x = cat(x, u.x, (n) => new Int32Array(n));
     y = cat(y, u.y, (n) => new Int32Array(n));
     cmd = cat(cmd, u.cmd, (n) => new Uint8Array(n));
-    for (const r of restored) r.at += keep - (end - from);
-    restored.push({ at: from + u.lead, memory: u.memory });
+    for (const r of restored) {
+      r.at += keep - (end - from);
+      r.last += keep - (end - from);
+    }
+    restored.push({ at: from + u.lead, last: from + u.x.length - trail - 1, memory: u.memory });
   }
   const next = withRecords(p, x, y, cmd);
-  const now = sewObjects(next);
-  if (now.length !== objs.length) return null;
-  for (const r of restored) {
-    const o = now.find((q) => q.first === r.at);
-    if (o && r.memory) forget(next, o, r.memory);
-  }
+  // Each object gets its stitches back as one object with what it knew, before the objects are
+  // counted: without its memory, a fill sewn in sections (gaps closed in a pattern fill) would be
+  // read as several objects.
+  for (const r of restored) setMemory(next, r.at, r.last, r.memory);
+  if (sewObjects(next).length !== objs.length) return null;
   return next;
 }
