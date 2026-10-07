@@ -115,3 +115,31 @@ describe('moving through the list', () => {
     }
   }, 120000);
 });
+
+describe('scaling through the list', () => {
+  it.each([flower, patch].map((f) => [f.name, f] as const))('%s', (_, make) => {
+    const d = make();
+    const p = d.p;
+    const objs = sewObjects(p);
+    const kinds = stitchKinds(p);
+    const box = (q: Pattern, o: SewObject) => {
+      const xs: number[] = [];
+      for (let i = o.first; i <= o.last; i++) if (q.cmd[i] === STITCH) xs.push(q.x[i]);
+      return Math.max(...xs) - Math.min(...xs);
+    };
+    for (const o of objs.filter((x) => x.kind === 'fill' && specOf(p, x))) {
+      const r = transformSewObject(p, objs, o, kinds, [1.25, 0, 0, 1.25, 0, 0], d.T);
+      expect(r?.restitched).toBe(true);
+      const after = sewObjects(r!.pattern);
+      // The same objects; the others keep their stitches, the scaled one is sewn anew about a quarter wider.
+      expect(after.map((x) => x.id)).toEqual(objs.map((x) => x.id));
+      after.forEach((x, k) => {
+        if (k !== o.index) expect(stitchesOf(r!.pattern, x)).toBe(stitchesOf(p, objs[k]));
+      });
+      // (Its stitches end where the rows and the travel do, not exactly on the edge.)
+      const grown = box(r!.pattern, after[o.index]) / box(p, o);
+      expect(grown).toBeGreaterThan(1.1);
+      expect(grown).toBeLessThan(1.45);
+    }
+  }, 120000);
+});

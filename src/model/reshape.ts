@@ -1,4 +1,4 @@
-import { listOf, sewList } from './sew';
+import { listOf, sewList, specOf } from './sew';
 import { lineSettings, reshapeLineFill, resewLine } from './line';
 import { transformForm, type Form, type Mat } from '../shape/path';
 import { FIT_TOLERANCE, READ_TOLERANCE, vectorize } from '../shape/vectorize';
@@ -158,6 +158,17 @@ export function transformSewObject(p: Pattern, objs: SewObject[], o: SewObject, 
     const next = sewList(p, list, trimMm);
     const now = sewObjects(next).find((x) => x.id === o.id);
     return now ? { pattern: next, first: now.first, last: now.last, restitched: false } : null;
+  }
+  // Scaled: what it remembers is scaled in the object list, and it is sewn anew from that.
+  const shaped = remembered(p, o);
+  const scaled = shaped && transformRemembered(shaped, m);
+  if (scaled && specOf(p, o, scaled)) {
+    const list = listOf(p);
+    const k = list.findIndex((e) => e.obj.index === o.index);
+    list[k] = { ...list[k], sew: true, memory: scaled };
+    const next = sewList(p, list, trimMm);
+    const now = sewObjects(next).find((x) => x.id === o.id);
+    return now ? { pattern: next, first: now.first, last: now.last, restitched: true } : null;
   }
   const known = keepShape(p, o, kinds);
   // Settings as the object has them now (measured after scaling, the rows would be wider apart).
