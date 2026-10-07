@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { digitize, digitizeDefaults, type Digitized, type DigitizeOptions } from '../src/digitize/digitize';
 import { buildRegion } from '../src/digitize/region';
-import { acrossGraph, groupAreas, letterOf, readAreas } from '../src/digitize/smart';
+import { acrossGraph, groupAreas, groupsByColor, letterOf, readAreas } from '../src/digitize/smart';
 import { DEFAULT_PREPARE, Preparer, type Prepared } from '../src/image/prepare';
 import { normalizeImage } from '../src/settings';
 import { DEFAULT_PROFILE } from '../src/validation/profiles';
@@ -81,6 +81,15 @@ describe('Smart', () => {
       ['B', ['c'], 50, null],
     ]);
     expect(groupAreas(areas, { a: 'flat', b: 'flat' })[0].fixed).toBe('flat');
+  });
+
+  it('lists the groups under their thread color, colors as sewn', () => {
+    const g = (letter: string, label: number) => ({ letter, label, reason: 'calm' as const, keys: [letter], areaMm2: 1, auto: 'flat' as const, fixed: null });
+    expect(groupsByColor([g('A', 2), g('B', 2), g('C', 0), g('D', 1), g('E', 1)]).map((c) => [c.label, c.groups.map((x) => x.letter)])).toEqual([
+      [2, ['A', 'B']],
+      [0, ['C']],
+      [1, ['D', 'E']],
+    ]);
   });
 
   it('names groups A to Z, then AA', () => {

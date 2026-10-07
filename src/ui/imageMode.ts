@@ -1,6 +1,6 @@
 import { ImageClient } from '../digitize/client';
 import { digitizeDefaults, shapesOrigin, type DigitizeOptions, type Digitized } from '../digitize/digitize';
-import { boxOf, groupAreas, TECHNIQUES, type AreaInfo, type Technique } from '../digitize/smart';
+import { boxOf, groupAreas, groupsByColor, TECHNIQUES, type AreaInfo, type Technique } from '../digitize/smart';
 import { formatNumber, onLangChange, t, type Key } from '../i18n';
 import { nearestThread, NONE, workingSize, type ColorEdit, type PrepareOptions, type ExactLabels, type Prepared, type Stroke } from '../image/prepare';
 import { readSvg, type SvgDesign, type SvgShape } from '../image/svg';
@@ -75,6 +75,8 @@ const SOURCE_MAX = 1600;
 const ANGLES = [0, 15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165];
 
 const rgbOf = (c: ThreadColor): Rgb => [c.r, c.g, c.b];
+/** A thread's name, or its color as #rrggbb. */
+const threadName = (c: ThreadColor) => c.name ?? `#${rgbOf(c).map((v) => v.toString(16).padStart(2, '0')).join('')}`;
 const same = (a: Rgb, b: Rgb) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
 
 const isSvg = (file: File) => file.type === 'image/svg+xml' || /\.svg$/i.test(file.name);
@@ -1181,7 +1183,7 @@ export class ImageMode {
         text.className = 'image-color-text';
         const name = document.createElement('span');
         name.className = 'image-color-name';
-        name.textContent = e.thread.name ?? `#${rgbOf(e.thread).map((v) => v.toString(16).padStart(2, '0')).join('')}`;
+        name.textContent = threadName(e.thread);
         const meta = document.createElement('span');
         meta.className = 'image-color-meta';
         meta.textContent = `${formatNumber(e.areaMm2, 0)} mm²`;
@@ -1216,7 +1218,7 @@ export class ImageMode {
     );
   }
 
-  /** Smart: the area groups with their letter, thread and technique; opened, each area of a group. */
+  /** Smart: the area groups under their thread color, each with its letter and technique; opened, each area of a group. */
   private renderAreas(): void {
     const box = $('image-areas');
     const d = this.result;
@@ -1233,45 +1235,70 @@ export class ImageMode {
       const sel = document.createElement('select');
       sel.title = t('image.tech.hint');
       sel.setAttribute('aria-label', label);
-      sel.append(new Option(t('image.tech.auto', { t: name(auto) }), 'auto'), ...TECHNIQUES.map((x) => new Option(name(x), x)));
+      // As Smart chose it, just the technique: the list is Smart throughout, and a row set by hand
+      // shows it with its accent border. Only then "Smart: …" is offered, as the way back.
+      const own = value !== 'auto';
+      sel.append(
+        new Option(own ? t('image.tech.auto', { t: name(auto) }) : name(auto), 'auto'),
+        ...TECHNIQUES.filter((x) => own || x !== auto).map((x) => new Option(name(x), x)),
+      );
       if (value === 'mixed') sel.append(new Option(t('image.tech.mixed'), 'mixed'));
       sel.value = value;
       sel.addEventListener('change', () => sel.value !== 'mixed' && apply(sel.value === 'auto' ? null : (sel.value as Technique)));
       return sel;
     };
     const rows: HTMLElement[] = [];
-    for (const g of groupAreas(d.areas, set)) {
-      const li = el('li', `image-area${g.fixed ? ' fixed' : ''}`);
-      const open = this.openGroups.has(g.letter);
-      const several = g.keys.length > 1;
-      const toggle = el('button', 'area-open', open ? '▾' : '▸');
-      toggle.type = 'button';
-      toggle.hidden = !several;
-      toggle.setAttribute('aria-expanded', String(open));
-      toggle.title = t(open ? 'image.area.close' : 'image.area.open');
-      toggle.addEventListener('click', () => {
-        if (open) this.openGroups.delete(g.letter);
-        else this.openGroups.add(g.letter);
-        this.renderAreas();
-      });
+    const chevron = (open: boolean, several: boolean, flip: () => void) => {
+      const b = el('button', 'area-open');
+      b.type = 'button';
+      // Kept in place when there is nothing to open, so all rows of a color line up.
+      if (!several) b.classList.add('none');
+      else {
+        b.setAttribute('aria-expanded', String(open));
+        b.title = t(open ? 'image.area.close' : 'image.area.open');
+        b.addEventListener('click', flip);
+      }
+      b.tabIndex = several ? 0 : -1;
+      b.setAttribute('aria-hidden', String(!several));
+      return b;
+    };
+    // One block per thread color, as sewn; in it what Smart recognized, each kind one row.
+    for (const c of groupsByColor(groupAreas(d.areas, set))) {
+      const head = el('li', 'image-area-color');
       const sw = el('span', 'sw');
-      const thread = this.prepared?.palette[g.label]?.thread;
+      const thread = this.prepared?.palette[c.label]?.thread;
       if (thread) sw.style.background = cssColor(thread);
-      const text = el('span', 'area-text', t(`image.area.${g.reason}` as Key, { n: g.keys.length }));
-      li.append(toggle, el('span', 'letter', g.letter), sw, text, select(g.auto, g.fixed ?? 'auto', `${g.letter}: ${text.textContent}`, (x) => this.setAreas(g.keys, x)));
-      li.addEventListener('pointerenter', () => this.hot(g.letter, null));
-      li.addEventListener('pointerleave', () => this.hot(null, null));
-      rows.push(li);
-      if (!open || !several) continue;
-      // Each area of the group on its own.
-      for (const a of d.areas.filter((x) => x.letter === g.letter)) {
-        const sub = el('li', `image-area sub${set[a.key] ? ' fixed' : ''}${this.hotArea === a.key ? ' hot' : ''}`);
-        sub.dataset.area = a.key;
-        const size = el('span', 'area-text', `${formatNumber(a.areaMm2, a.areaMm2 < 10 ? 1 : 0)} mm²`);
-        sub.append(el('span', ''), el('span', 'letter', a.name), el('span', ''), size, select(a.auto, set[a.key] ?? 'auto', a.name, (x) => this.setAreas([a.key], x)));
-        sub.addEventListener('pointerenter', () => this.hot(null, a.key));
-        sub.addEventListener('pointerleave', () => this.hot(null, null));
-        rows.push(sub);
+      head.append(sw, el('span', 'area-color-name', thread ? threadName(thread) : ''));
+      rows.push(head);
+      for (const g of c.groups) {
+        const open = this.openGroups.has(g.letter);
+        const several = g.keys.length > 1;
+        const flip = () => {
+          if (open) this.openGroups.delete(g.letter);
+          else this.openGroups.add(g.letter);
+          this.renderAreas();
+        };
+        const li = el('li', `image-area${g.fixed ? ' fixed' : ''}${open && several ? ' open' : ''}`);
+        li.dataset.group = g.letter;
+        const text = el('span', 'area-text', t(`image.area.${g.reason}` as Key, { n: g.keys.length }));
+        // The text opens the group too: a larger target than the chevron.
+        if (several) text.addEventListener('click', flip);
+        li.append(chevron(open, several, flip), el('span', 'letter', g.letter), text, select(g.auto, g.fixed ?? 'auto', `${g.letter}: ${text.textContent}`, (x) => this.setAreas(g.keys, x)));
+        li.addEventListener('pointerenter', () => this.hot(g.letter, null));
+        li.addEventListener('pointerleave', () => this.hot(null, null));
+        rows.push(li);
+        if (!open || !several) continue;
+        // Each area of the group on its own.
+        for (const a of d.areas.filter((x) => x.letter === g.letter)) {
+          const sub = el('li', `image-area sub${set[a.key] ? ' fixed' : ''}${this.hotArea === a.key ? ' hot' : ''}`);
+          sub.dataset.area = a.key;
+          const name = el('span', 'area-text');
+          name.append(el('span', 'letter', a.name), `${formatNumber(a.areaMm2, a.areaMm2 < 10 ? 1 : 0)} mm²`);
+          sub.append(el('span', ''), el('span', ''), name, select(a.auto, set[a.key] ?? 'auto', a.name, (x) => this.setAreas([a.key], x)));
+          sub.addEventListener('pointerenter', () => this.hot(null, a.key));
+          sub.addEventListener('pointerleave', () => this.hot(null, null));
+          rows.push(sub);
+        }
       }
     }
     list.replaceChildren(...rows);

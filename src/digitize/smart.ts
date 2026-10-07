@@ -94,6 +94,13 @@ export function groupAreas(areas: readonly AreaInfo[], set: Readonly<Record<stri
   return [...out.values()];
 }
 
+/** The groups under their thread color, colors as sewn (the order of the first letter of each). */
+export function groupsByColor(groups: readonly AreaGroup[]): { label: number; groups: AreaGroup[] }[] {
+  const out = new Map<number, AreaGroup[]>();
+  for (const g of groups) out.set(g.label, [...(out.get(g.label) ?? []), g]);
+  return [...out].map(([label, gs]) => ({ label, groups: gs }));
+}
+
 /** Techniques set by hand as stored: only known techniques survive. */
 export function readAreas(v: unknown): Record<string, Technique> {
   const out: Record<string, Technique> = {};
