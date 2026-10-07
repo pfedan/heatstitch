@@ -20,7 +20,7 @@ import {
   type StoredPattern,
   type Titles,
 } from '../storage/fileStore';
-import { backToVersion, keepVersion, restoreRemembered, type StoredObject } from '../model/restitch';
+import { backToVersion, keepVersion, rememberedIn, restoreRemembered, type ObjectsAsStored } from '../model/restitch';
 import { asideFrom, asideOf, inheritAside, setAsideOf, storeAside, type StoredAside } from '../model/aside';
 import type { ProjectFile } from '../storage/project';
 import { liveAcknowledgements, openWorst, type Acknowledgement } from '../validation/acks';
@@ -85,7 +85,7 @@ interface FileData {
   storeKey?: number;
   working?: StoredPattern;
   acks?: Acknowledgement[];
-  objects?: StoredObject[];
+  objects?: ObjectsAsStored;
   aside?: StoredAside[];
   /** Unchecked; missing parts come from the material last used. */
   material?: unknown;
@@ -157,7 +157,7 @@ export class FileList {
    * Adds one file with what is known about its objects (and its own material, else the last used), and
    * activates it. `own`: made in the app, so it is named without the extension of the PES behind it.
    */
-  async addWithObjects(name: string, data: ArrayBuffer, objects: StoredObject[], aside: StoredAside[] = [], material?: Material, own = false): Promise<void> {
+  async addWithObjects(name: string, data: ArrayBuffer, objects: ObjectsAsStored, aside: StoredAside[] = [], material?: Material, own = false): Promise<void> {
     const first = await this.addData([{ name, data, objects, aside, material, own }], true);
     if (first) this.activate(first.id);
     else this.render();
@@ -184,13 +184,22 @@ export class FileList {
    * one that was active when it was saved (else the first).
    */
   async addProject(list: ProjectFile[], active: number | null): Promise<void> {
+    // Opening the same project again (say after a reload brought it back) does not list its designs
+    // twice: a design that is already open exactly as the project holds it is shown, not added.
+    const used = new Set<LoadedFile>();
+    const open = list.map((f) => {
+      const o = this.files.find((o) => !used.has(o) && sameDesign(o, f));
+      if (o) used.add(o);
+      return o;
+    });
     const before = this.files.length;
+    const fresh = list.filter((_, i) => !open[i]);
     const first = await this.addData(
-      list.map((f) => ({ name: f.name, data: f.data.slice().buffer, working: f.working, acks: f.acks, objects: f.objects, aside: f.aside, material: f.material, title: f.title, titles: f.titles, own: f.own })),
+      fresh.map((f) => ({ name: f.name, data: f.data.slice().buffer, working: f.working, acks: f.acks, objects: f.objects, aside: f.aside, material: f.material, title: f.title, titles: f.titles, own: f.own })),
       true,
     );
-    const wanted = active !== null ? this.files[before + active] : undefined;
-    const target = wanted?.pattern ? wanted : first;
+    const wanted = active !== null ? (open[active] ?? this.files[before + fresh.indexOf(list[active])]) : undefined;
+    const target = wanted?.pattern ? wanted : (first ?? open.find((o) => o?.pattern));
     if (target) this.activate(target.id);
     else this.render();
   }
@@ -202,7 +211,7 @@ export class FileList {
   }
 
   /** Stores what is remembered about the objects of a file's current version. */
-  setObjects(f: LoadedFile, objects: StoredObject[]): void {
+  setObjects(f: LoadedFile, objects: ObjectsAsStored): void {
     // What the objects learned belongs to this version (undo brings it back with it).
     if (f.pattern) keepVersion(f.pattern);
     if (f.storeKey !== undefined) void saveObjects(f.storeKey, objects);
@@ -226,8 +235,6 @@ export class FileList {
       };
       // Stored before materials were kept per design: it keeps the one it was last seen with.
       if (storeKey !== undefined && !material) void saveMaterial(storeKey, entry.material);
-      // Remembered by their stitches, so they apply to whichever version has these objects.
-      if (objects) restoreRemembered(objects);
       try {
         const original = parsePattern(new Uint8Array(data), name);
         entry.original = original;
@@ -249,6 +256,14 @@ export class FileList {
         // Shapes aside belong to the working copy (to the original only while there is none).
         setAsideOf(original, entry.pattern === original ? asideFrom(aside) : []);
         if (entry.pattern !== original) setAsideOf(entry.pattern, asideFrom(aside));
+        // The objects of the version as stored; an older project knew them by their stitches, so
+        // its original knows those that are in it too.
+        if (objects) {
+          restoreRemembered(entry.pattern, objects);
+          if (Array.isArray(objects) && entry.pattern !== original) restoreRemembered(original, objects);
+          // Kept from an older version of the app: kept as an object list from now on.
+          if (!persist && storeKey !== undefined && Array.isArray(objects)) void saveObjects(storeKey, rememberedIn(entry.pattern));
+        }
         entry.stats = patternStats(entry.pattern);
         keepVersion(original);
         if (entry.pattern !== original) keepVersion(entry.pattern);
@@ -260,7 +275,7 @@ export class FileList {
           if (key !== undefined) {
             if (entry.pattern !== original) void saveWorking(key, toStored(entry.pattern));
             if (entry.acks.length) void saveAcks(key, entry.acks);
-            if (objects?.length) void saveObjects(key, objects);
+            if (objects) void saveObjects(key, rememberedIn(entry.pattern));
             if (aside?.length) void saveAside(key, aside);
             void saveMaterial(key, entry.material);
             if (entry.title || entry.titles || entry.own) void saveNaming(key, entry.title ?? null, entry.own, entry.titles);
@@ -659,4 +674,28 @@ export class FileList {
     li.append(rm);
     return li;
   }
+}
+
+/** True if the open design is the project's design as it was saved: same file, same stitches, same name. */
+export function sameDesign(o: LoadedFile, f: ProjectFile): boolean {
+  if (!o.pattern || !o.original || !o.data || o.fileName !== f.name || (o.title ?? '') !== (f.title ?? '')) return false;
+  if (!sameBytes(o.data, f.data)) return false;
+  const p = o.pattern;
+  const w = f.working;
+  const sameAside = JSON.stringify(storeAside(asideOf(p))) === JSON.stringify(f.aside ?? []);
+  if (!w) return p === o.original && sameAside;
+  if (p === o.original) return false;
+  return (
+    sameAside &&
+    sameBytes(p.cmd, w.cmd) &&
+    sameBytes(new Uint8Array(p.x.buffer, p.x.byteOffset, p.x.byteLength), new Uint8Array(w.x.buffer, w.x.byteOffset, w.x.byteLength)) &&
+    sameBytes(new Uint8Array(p.y.buffer, p.y.byteOffset, p.y.byteLength), new Uint8Array(w.y.buffer, w.y.byteOffset, w.y.byteLength)) &&
+    JSON.stringify(p.colors) === JSON.stringify(w.colors)
+  );
+}
+
+function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
 }

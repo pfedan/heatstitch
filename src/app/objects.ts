@@ -34,6 +34,8 @@ import { wholeArea } from '../model/knockout';
 /** What bindObjects needs from the rest of the app. */
 export interface ObjectsApp {
   readonly applyEdit: (p: Pattern, measurement?: Measurement | undefined) => void;
+  /** Selects object `o`, loosed from its shape, and offers to sew it from its shape again. */
+  readonly offerShapeBack: (o: number) => void;
   readonly applyRestitched: (r: RestitchResult | null, failed: Key, remeasure?: boolean) => void;
   readonly closeRungs: () => void;
   readonly closeShape: () => void;
@@ -123,6 +125,7 @@ export function bindObjects(app: ObjectsApp) {
     move: (order, moved, into) => moveObjects(order, moved, into),
     menu: (o, x, y) => void app.showObjectMenu(o, x, y),
     colorMenu: (b, at) => colorMenu(b, at),
+    loose: (o) => app.offerShapeBack(o),
   });
 
   /** Name of an object as the list shows it: kind and number within its color. */

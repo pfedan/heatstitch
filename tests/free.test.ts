@@ -26,10 +26,10 @@ describe('stitches loosed from their shape', () => {
       expect(r.failed).toEqual([fill.index]);
       expect(r.starts).toEqual([]);
       // Stored with the project and read back.
-      const stored = rememberedIn(p, objs).find((x) => x.free);
-      expect(stored).toBeTruthy();
+      const stored = rememberedIn(p);
+      expect(stored.objects.find((x) => x.memory?.free)).toBeTruthy();
       forget(p, fill);
-      restoreRemembered([stored!]);
+      restoreRemembered(p, stored);
       expect(remembered(p, fill)?.free).toBe(true);
       // The correction proposes no settings for it.
       const plan = await planCorrection(p, validatePattern(p, KNIT), KNIT, ALL_CHECKS, { goal: 'critical', focus: 'both', trimMm: 2 });

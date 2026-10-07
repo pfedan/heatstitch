@@ -11,7 +11,7 @@
 
 import { normalizeCorrection } from '../correct/auto';
 import type { StoredAside } from '../model/aside';
-import type { StoredObject } from '../model/restitch';
+import { isStoredObjects, type ObjectsAsStored } from '../model/restitch';
 import { DEFAULTS, hexColor, normalizeImage, type ImageSettings, type Settings } from '../settings';
 import { isAcknowledgement, type Acknowledgement } from '../validation/acks';
 import { normalizeProfile } from '../validation/profiles';
@@ -22,7 +22,7 @@ import type { StoredWork } from './imageStore';
 export const PROJECT_EXT = '.heatstitch';
 export const PROJECT_MIME = 'application/x-heatstitch-project';
 /** Raised whenever the content changes in a way older versions would misread. */
-export const PROJECT_VERSION = 1;
+export const PROJECT_VERSION = 2;
 const MAGIC = 'heatstitch-project';
 
 export interface ProjectFile {
@@ -32,7 +32,7 @@ export interface ProjectFile {
   /** The edited version; absent while the file is unchanged. */
   working?: StoredPattern;
   acks: Acknowledgement[];
-  objects: StoredObject[];
+  objects: ObjectsAsStored;
   /** Shapes of the working copy that are not sewn (absent in older projects). */
   aside?: StoredAside[];
   /** This design's fabric, thread, hoop, fabric color and checks (absent in older projects, which share the project settings). */
@@ -193,7 +193,7 @@ export async function decodeProject(bytes: Uint8Array): Promise<Project> {
         ...(isWorking(e.working) ? { working: e.working } : {}),
         acks: Array.isArray(e.acks) ? e.acks.filter(isAcknowledgement) : [],
         // Checked when they are remembered again (restoreRemembered).
-        objects: Array.isArray(e.objects) ? e.objects : [],
+        objects: isStoredObjects(e.objects) || Array.isArray(e.objects) ? e.objects : [],
         // Checked when they are read (asideFrom).
         ...(Array.isArray(e.aside) && e.aside.length ? { aside: e.aside } : {}),
         // Checked when it is read (normalizeMaterial).

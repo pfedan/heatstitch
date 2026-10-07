@@ -1,7 +1,7 @@
 import { sameColor } from '../model/recolor';
 import { tidy, withRecords } from '../model/edit';
 import { rememberObjects, sewObjects, type SewObject } from '../model/objects';
-import { COLOR_CHANGE, computeBounds, END, JUMP, STITCH, TRIM, type Pattern } from '../model/pattern';
+import { COLOR_CHANGE, computeBounds, END, JUMP, nextVersion, STITCH, TRIM, type Pattern } from '../model/pattern';
 import { remember, remembered } from '../model/restitch';
 import type { Lettering } from './layout';
 import type { Rec, Sewn } from './sew';
@@ -129,4 +129,40 @@ export function placeLettering(p: Pattern | null, old: SewObject[], sewn: Sewn, 
   const mine = objs.filter((o) => number[o.first] >= first && number[o.first] < first + sewn.stitches);
   for (const o of mine) remember(next, o, { region: null, lettering: l });
   return { pattern: next, objects: mine };
+}
+
+/**
+ * The letters of lettering `l` as objects of their own, in a new version (undo brings the
+ * lettering back). Each letter keeps its stitches and what the lettering knew, but not its text.
+ * `sewn` is the lettering sewn again: where the stitches still match it, the letters are cut where
+ * they start; else (changed by hand, or no font) the lettering is cut where the thread is trimmed.
+ */
+export function splitLettering(p: Pattern, objs: SewObject[], l: Lettering, sewn: Sewn | null): Placed | null {
+  const mine = letteringObjects(p, objs, l.id);
+  if (!mine.length) return null;
+  const number = new Int32Array(p.cmd.length);
+  for (let i = 0, n = 0; i < p.cmd.length; i++) {
+    number[i] = n;
+    if (p.cmd[i] === STITCH) n++;
+  }
+  const next = nextVersion(p, {});
+  const parts: [number, number][] = [];
+  for (const o of mine) {
+    const from = number[o.first];
+    const end = from + o.stitches;
+    let starts: number[];
+    if (mine.length === 1 && sewn && sewn.stitches === o.stitches) starts = sewn.letters.map((k) => from + k);
+    else {
+      starts = [from];
+      for (let i = o.first; i <= o.last; i++) if (p.cmd[i] === TRIM && i < o.last) starts.push(number[i]);
+    }
+    starts = [...new Set(starts)].filter((k) => k >= from && k < end).sort((a, b) => a - b);
+    if (!starts.length || starts[0] !== from) starts.unshift(from);
+    const { lettering: _, ...rest } = remembered(p, o) ?? { region: null };
+    rememberObjects(next, starts, end);
+    for (const x of sewObjects(next)) if (number[x.first] >= from && number[x.first] < end) remember(next, x, rest);
+    parts.push([from, end]);
+  }
+  const objects = sewObjects(next).filter((x) => parts.some(([a, b]) => number[x.first] >= a && number[x.first] < b));
+  return { pattern: next, objects };
 }

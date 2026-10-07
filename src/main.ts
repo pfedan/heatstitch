@@ -236,6 +236,7 @@ const player = new Player(settings, () => {
 });
 
 const { colorList, layers, mergeBlocked, objectName, objectPanel, selectObjects } = bindObjects({
+  offerShapeBack,
   get commitTransform() {
     return commitTransform;
   },
@@ -349,7 +350,7 @@ const { colorList, layers, mergeBlocked, objectName, objectPanel, selectObjects 
   },
 });
 
-const { applyRestitched, convertSettings, stitchInfo, stitchPanel } = bindStitches({
+const { applyRestitched, convertSettings, looseObjects, stitchInfo, stitchPanel } = bindStitches({
   get objectPanel() {
     return objectPanel;
   },
@@ -864,6 +865,7 @@ function redraw(): void {
           format: active?.pattern?.format ?? 'pes',
           names: p && q ? letteringNames(p, q) : undefined,
           guessed: p && q ? (q.guessed ??= new Set(q.objects.filter((o) => isGuessed(p, o)).map((o) => o.index))) : undefined,
+          loose: p && q ? looseOf(p, q) : undefined,
         },
         getLang(),
       );
@@ -1077,10 +1079,15 @@ function commitHand(next: Pattern, change: HandChange | null): void {
   const p = f?.pattern;
   if (!f || !p) return;
   if (!change) return applyEdit(next);
+  const was = ui.editObject !== null ? seq(p).objects[ui.editObject] : undefined;
+  const wasFree = !!(was && remembered(p, was)?.free);
   const moved = keepObjects(p, next, change, seq);
   const editing = ui.editObject !== null && moved.has(ui.editObject) ? moved.get(ui.editObject)! : ui.editObject;
   applyEdit(next);
   files.setObjects(f, rememberedIn(next, seq(next).objects));
+  // The first change by hand looses the object from its shape: the way back is offered right here.
+  const now = editing !== null && editing >= 0 ? seq(next).objects[editing] : undefined;
+  if (now && !wasFree && remembered(next, now)?.free) sayShapeBack(now.id);
   if (ui.editObject !== null) {
     ui.editObject = editing !== null && editing >= 0 ? editing : null;
     ui.selectedObjects = ui.editObject !== null ? new Set([ui.editObject]) : new Set();
@@ -1088,6 +1095,41 @@ function commitHand(next: Pattern, change: HandChange | null): void {
   ui.selectionKey++;
   updateLevel();
   redraw();
+}
+
+/** The objects loosed from their shape; the same set while they stay the same, so the list is not built anew. */
+function looseOf(p: Pattern, q: Sequence): ReadonlySet<number> {
+  const list = q.objects.filter((o) => remembered(p, o)?.free).map((o) => o.index);
+  const key = list.join(',');
+  if (q.loose?.key !== key) q.loose = { key, set: new Set(list) };
+  return q.loose.set;
+}
+
+/** Says that object `id` is loosed from its shape, with the button that sews it from its shape again. */
+function sayShapeBack(id: number): void {
+  layers.say({
+    text: t('free.byHand'),
+    action: {
+      label: t('free.back'),
+      title: t('free.back.hint'),
+      run: () => {
+        const q = files.active?.pattern;
+        const o = q ? seq(q).objects.findIndex((x) => x.id === id) : -1;
+        if (o < 0) return;
+        ui.selectedObjects = new Set([o]);
+        looseObjects(false);
+      },
+    },
+  });
+}
+
+/** Object `o` (loosed from its shape) is selected, and sewing it from its shape again is offered. */
+function offerShapeBack(o: number): void {
+  const p = files.active?.pattern;
+  const obj = p ? seq(p).objects[o] : undefined;
+  if (!obj) return;
+  selectObjects([o], false);
+  sayShapeBack(obj.id);
 }
 
 /** The penetrations of object `o` are edited (Ablauf). `fit` zooms in when it is small on the stage. */
