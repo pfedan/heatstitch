@@ -128,8 +128,8 @@
           </div>
         </div>
         <div class="history" data-mode="flow density">
-          <button type="button" id="undo" class="tool" data-i18n-title="edit.undo.key" data-i18n-aria="edit.undo"><span aria-hidden="true">↶</span></button>
-              <button type="button" id="redo" class="tool" data-i18n-title="edit.redo.key" data-i18n-aria="edit.redo"><span aria-hidden="true">↷</span></button>
+          <button type="button" id="undo" class="tool" data-i18n-aria="edit.undo"><span aria-hidden="true">↶</span></button>
+              <button type="button" id="redo" class="tool" data-i18n-aria="edit.redo"><span aria-hidden="true">↷</span></button>
         </div>
       </div>
       <div class="modes segmented" role="radiogroup" id="modes" data-i18n-aria="mode.label">
@@ -229,6 +229,7 @@
         <button type="button" class="tool" data-draw="ellipse" data-command="draw.ellipse" aria-pressed="false"><svg viewBox="0 0 20 20" aria-hidden="true"><ellipse cx="10" cy="10" rx="7" ry="5.5" /></svg></button>
         <button type="button" class="tool" data-draw="pen" data-command="draw.pen" aria-pressed="false"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 16 C6 6 12 4 17 4" /><rect x="1.8" y="14.8" width="2.4" height="2.4" class="node" /><rect x="15.8" y="2.8" width="2.4" height="2.4" class="node" /></svg></button>
         <button type="button" class="tool" data-draw="free" data-command="draw.free" aria-pressed="false"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 14 C5 9 7 9 8 12 S11 16 12 11 S15 5 17 6" /></svg></button>
+        <button type="button" class="tool" data-draw="cut" data-command="draw.cut" aria-pressed="false" disabled><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="5.5" cy="14.5" r="2.4" /><circle cx="14.5" cy="14.5" r="2.4" /><path d="M7.3 12.9 13.5 3M12.7 12.9 6.5 3" /></svg></button>
         <span class="rail-sep" aria-hidden="true"></span>
         <button type="button" id="lettering-new" class="tool rail-text" data-command="lettering.new"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4.5 5.5V4h11v1.5M10 4v12.5M7.5 16.5h5" /></svg></button>
       </nav>
@@ -298,6 +299,19 @@
 
           <section class="panel image-step" data-step="3" aria-labelledby="image-step3-title">
             <h2 id="image-step3-title" data-i18n="image.stitch"></h2>
+            <div class="image-styles" role="radiogroup" data-i18n-aria="image.style">
+              <span class="label" data-i18n="image.style"></span>
+              <label class="image-style" data-i18n-title="image.style.flat.hint">
+                <input type="radio" name="image-style" value="flat" />
+                <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 8h22M5 12h22M5 16h22M5 20h22M5 24h22" /></svg>
+                <b data-i18n="image.style.flat"></b><span data-i18n="image.style.flat.short"></span>
+              </label>
+              <label class="image-style" id="image-style-dynamic" data-i18n-title="image.style.dynamic.hint">
+                <input type="radio" name="image-style" value="dynamic" />
+                <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M4 10q12-8 24 0M4 15q12-8 24 0M4 20q12-8 24 0M4 25q12-8 24 0" /></svg>
+                <b data-i18n="image.style.dynamic"></b><span data-i18n="image.style.dynamic.short"></span>
+              </label>
+            </div>
             <div class="image-material" data-i18n-title="image.material.hint">
               <label class="field">
                 <span class="label" data-i18n="profile.fabric"></span>
@@ -308,6 +322,8 @@
                 <select id="image-thread"></select>
               </label>
             </div>
+            <details class="image-fine" data-section="imageFine">
+            <summary><span data-i18n="image.fine"></span> <span class="own-dot" id="image-fine-own" data-i18n-title="image.fine.own" hidden></span></summary>
             <div class="field-row">
               <label class="field" data-i18n-title="image.spacing.hint">
                 <span class="label" data-i18n="image.spacing"></span>
@@ -332,6 +348,7 @@
             </label>
             <label class="check" data-i18n-title="image.underlay.hint"><input type="checkbox" id="image-underlay" /><span data-i18n="image.underlay"></span></label>
             <button type="button" id="image-stitch-reset" class="link" data-i18n="image.stitch.reset" data-i18n-title="image.stitch.reset.hint" hidden></button>
+            </details>
           </section>
 
           <nav class="image-nav" data-i18n-aria="image.steps">

@@ -15,6 +15,7 @@ const PATHS: Record<string, string> = {
   'obj-aside': '<path d="M3 3l14 14"/><path d="M8.2 5.2A7.7 7.7 0 0 1 10 5c4 0 6.5 3.4 7.2 5a9.6 9.6 0 0 1-2.1 2.9M5.3 6.9A9.3 9.3 0 0 0 2.8 10c.7 1.6 3.2 5 7.2 5a7 7 0 0 0 2.9-.6"/>',
   'obj-guide': '<path d="M3 16.5 17 3.5" stroke-dasharray="2.6 2.2"/>',
   'obj-delete': '<path d="M3.5 5.5h13M8 5.5V3.5h4v2M5.5 5.5l.8 11h7.4l.8-11M8.5 8.5v5M11.5 8.5v5"/>',
+  'obj-cut': '<circle cx="5.5" cy="14.5" r="2.4"/><circle cx="14.5" cy="14.5" r="2.4"/><path d="M7.3 12.9 13.5 3M12.7 12.9 6.5 3"/>',
   'obj-split': '<circle cx="5.5" cy="5.5" r="2.2"/><circle cx="5.5" cy="14.5" r="2.2"/><path d="M7.4 6.7 16.5 14M7.4 13.3 16.5 6"/>',
   'obj-combine': '<path d="M4 4.5h4.5a3 3 0 0 1 3 3v8.5M16 4.5h-1.5a3 3 0 0 0-3 3M8.5 13.5l3 3 3-3"/>',
   'obj-subtract': '<path d="M3.5 3.5h9v4.2a5 5 0 0 0-4.8 4.8H3.5z"/><circle cx="12.5" cy="12.5" r="4" stroke-dasharray="1.6 1.6"/>',

@@ -207,9 +207,10 @@ export function resewLine(p: Pattern, index: number, path: Form, st: PathStitch,
   const fresh = sewObjects(next).find((x) => stitchesUpTo(next, x.first) === before);
   if (!fresh) return null;
   const known = remembered(p, o);
-  const memory: Remembered = { ...(known ?? { region: null }), region: null, path, line: { ...st } };
+  const memory: Remembered = { ...(known ?? { region: null }), region: null, path, line: { ...st }, id: o.id };
   // Stitches set by hand are gone with the old ones.
   delete memory.hand;
+  delete memory.free;
   remember(next, fresh, memory);
   return { pattern: next, first: fresh.first, last: fresh.last };
 }

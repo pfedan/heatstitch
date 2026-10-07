@@ -4,7 +4,7 @@ import { FIT_TOLERANCE, READ_TOLERANCE, vectorize } from '../shape/vectorize';
 import { cutKey, sewnArea } from './knockout';
 import { rememberObjects, sewObjects, type SewObject } from './objects';
 import { STITCH, type Pattern } from './pattern';
-import { analyze, keepShape, measureFill, measureRun, measureSatin, remembered, rememberRange, restitch, type RestitchResult, type Settings } from './restitch';
+import { analyze, keepShape, measureFill, measureRun, measureSatin, remembered, rememberRange, restitch, type FillSettings, type RestitchResult, type Settings } from './restitch';
 import { stitchKinds } from './sequence';
 import { isRigid, mirroredEcho, scaleOf, stitchesBefore, transformObject, transformRemembered } from './transform';
 
@@ -58,18 +58,24 @@ function keepGrouping(before: Pattern, objs: SewObject[], o: SewObject, after: P
 }
 
 /**
- * New stitches for a fill in a new shape `form`: its settings stay, its rows fill the new area, or
- * with `knockout` (as the object had it, unless given) the area without what later fills cover.
+ * New stitches for a fill in a new shape `form`: its settings stay (but for `change`), its rows fill
+ * the new area, or with `knockout` (as the object had it, unless given) the area without what later
+ * fills cover.
  */
-export function reshapeFill(p: Pattern, objs: SewObject[], o: SewObject, kinds: Uint8Array, form: Form, trimMm: number, knockout?: boolean): RestitchResult | null {
+export function reshapeFill(p: Pattern, objs: SewObject[], o: SewObject, kinds: Uint8Array, form: Form, trimMm: number, knockout?: boolean, change?: Partial<FillSettings>): RestitchResult | null {
   if (remembered(p, o)?.asLine) return reshapeLineFill(p, objs, o, kinds, form, trimMm);
   const known = keepShape(p, o, kinds);
   const cut = knockout ?? !!remembered(p, o)?.knockout;
   const area = sewnArea(p, objs, o, form, cut, known.region?.pxMm ?? 0.1);
   if (!area) return null;
-  const an = analyze(p, o, kinds, remembered(p, o));
-  if (!an.fill) return null;
-  const s = known.fill ?? measureFill(p, an);
+  // Settings it remembers, else measured from its stitches (when they read as a fill).
+  let fill = known.fill;
+  if (!fill) {
+    const an = analyze(p, o, kinds, remembered(p, o));
+    if (!an.fill) return null;
+    fill = measureFill(p, an);
+  }
+  const s = { ...fill, ...change };
   const r = restitch(p, objs, [o.index], { kind: 'fill', s }, kinds, trimMm, undefined, false, undefined, new Map([[o.index, area]]));
   r.memory.forEach((m) => {
     m.form = form;

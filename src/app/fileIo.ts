@@ -158,6 +158,7 @@ export function bindFileIo(app: FileIoApp) {
     if (s.background !== undefined) app.settings.background = s.background;
     if (withImage) {
       Object.assign(app.settings.image.prepare, s.image.prepare);
+      app.settings.image.style = s.image.style;
       for (const k of Object.keys(app.settings.image.stitch)) delete app.settings.image.stitch[k as keyof typeof app.settings.image.stitch];
       Object.assign(app.settings.image.stitch, s.image.stitch);
     }
@@ -230,20 +231,28 @@ export function bindFileIo(app: FileIoApp) {
     }
   }
 
+  // Only files dragged in from outside open: a row dragged in the object list is no file and
+  // keeps its own drop (move, take the thread) without the "drop to open" overlay.
+  const carriesFiles = (e: DragEvent) => !!e.dataTransfer?.types.includes('Files');
   let dragDepth = 0;
   window.addEventListener('dragenter', (e) => {
+    if (!carriesFiles(e)) return;
     e.preventDefault();
     if (++dragDepth === 1) document.body.classList.add('dragging');
   });
-  window.addEventListener('dragleave', () => {
+  window.addEventListener('dragleave', (e) => {
+    if (!carriesFiles(e)) return;
     if (--dragDepth <= 0) {
       dragDepth = 0;
       document.body.classList.remove('dragging');
     }
   });
-  window.addEventListener('dragover', (e) => e.preventDefault());
+  window.addEventListener('dragover', (e) => {
+    if (carriesFiles(e)) e.preventDefault();
+  });
   window.addEventListener('drop', (e) => {
     e.preventDefault();
+    if (!carriesFiles(e)) return;
     dragDepth = 0;
     document.body.classList.remove('dragging');
     if (e.dataTransfer?.files.length) void openFiles(e.dataTransfer.files);

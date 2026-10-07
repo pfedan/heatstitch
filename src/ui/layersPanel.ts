@@ -37,7 +37,7 @@ export interface LayerHooks {
 export interface Notice {
   text: string;
   warn?: boolean;
-  action?: { label: string; title?: string; run: () => void };
+  action?: { label: string; title?: string; run: () => void; /** Shows what the action would do while the pointer is on it (true) and stops (false). */ preview?: (on: boolean) => void };
   /** Takes the edit back; offered as "Undo" with the message. */
   undo?: () => void;
 }
@@ -184,8 +184,15 @@ export class LayersPanel {
     if (a) {
       const btn = h('button', { type: 'button', class: 'link', title: a.title ?? '', onclick: () => {
         this.note.hidden = true;
+        a.preview?.(false);
         a.run();
       } }, a.label);
+      if (a.preview) {
+        btn.addEventListener('pointerenter', () => a.preview!(true));
+        btn.addEventListener('pointerleave', () => a.preview!(false));
+        btn.addEventListener('focus', () => a.preview!(true));
+        btn.addEventListener('blur', () => a.preview!(false));
+      }
       this.note.append(' ', btn);
     }
     this.note.classList.toggle('error', !!notice.warn);

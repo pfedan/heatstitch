@@ -405,7 +405,7 @@ export function initStitchArea(app: StitchAreaApp): { refresh: () => void } {
     const e = getCommand('edit.stitches')!;
     railDirection.setAttribute('aria-pressed', String(rungsOn()));
     railDirection.disabled = !rungsOn() && !canRun(d);
-    railDirection.title = `${t('stitch.direction.tool.hint')} (${keyLabel('R')})`;
+    railDirection.title = t('stitch.direction.tool.hint');
     railDirection.setAttribute('aria-label', t('stitches.cmd.direction'));
     railHand.setAttribute('aria-pressed', String(ed.active));
     railHand.disabled = !canRun(e);
