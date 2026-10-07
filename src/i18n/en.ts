@@ -1033,6 +1033,8 @@ const enBase: Record<keyof typeof deBase, string> = {
   'canvas.hint.draw.pen': 'Click: corner · Drag: curve · Click the first node: area · Double-click or Enter: line · Del: remove last node · Esc: cancel',
   'canvas.hint.draw.free': 'Drag: freehand line · Esc: put the tool away',
   'canvas.hint.draw.cut': 'Drag: cut freehand · Click: path, double-click ends it · Shift: straight · Esc: done',
+  'cut.plain': '{n} parts are too small for the pattern and got straight rows.',
+  'cut.plain.one': '1 part is too small for the pattern and got straight rows.',
   'cut.done': 'Cut into {n} parts, each with its own direction.',
   'cut.whole': 'The cut does not divide the fill: it has to cross it completely, from edge to edge.',
   'cut.none': 'Select a fill first to cut it apart.',
