@@ -65,6 +65,13 @@ const cross = (a: Pt, b: Pt, c: Pt, d: Pt) => {
   const mu = 0.6 / Math.hypot(q[0], q[1]);
   return t > mt && t < 1 - mt && u > mu && u < 1 - mu;
 };
+/** Distance from q to the segment from a to b. */
+const toSegment = (q: Pt, a: Pt, b: Pt) => {
+  const v = sub(b, a);
+  const l2 = dot(v, v);
+  const t = l2 ? Math.max(0, Math.min(1, dot(sub(q, a), v) / l2)) : 0;
+  return dist(q, add(a, v, t));
+};
 const lengthOf = (pts: Pt[]) => pts.reduce((a, p, i) => (i ? a + dist(p, pts[i - 1]) : a), 0);
 const area2 = (ring: Pt[]) => ring.reduce((a, p, i) => a + p[0] * ring[(i + 1) % ring.length][1] - ring[(i + 1) % ring.length][0] * p[1], 0);
 
@@ -139,9 +146,18 @@ function plan(g: Graph, outsides: Pt[][], holes: Pt[][], apart: boolean): { cuts
   for (let guard = 0; made.bad && guard < 8; guard++) {
     const bad = made.bad;
     const same = (b: Pt[] | null) => !!b && b.length === bad.length && dist(b[0], bad[0]) < 1e-6;
-    const k = lines.findIndex((l) => inside(bad, add(l[0], sub(l[1], l[0]), 0.5)) && !same(stripsOfAreas(outsides, lines.filter((x) => x !== l), cutsNow, holes).bad));
-    if (k < 0) break;
-    lines.splice(k, 1);
+    const mine = (l: [Pt, Pt]) => inside(bad, add(l[0], sub(l[1], l[0]), 0.5));
+    const k = lines.findIndex((l) => mine(l) && !same(stripsOfAreas(outsides, lines.filter((x) => x !== l), cutsNow, holes).bad));
+    if (k >= 0) {
+      lines.splice(k, 1);
+    } else {
+      // Several that do not go together: the part's lines taken one by one, each kept that fits.
+      const rest = lines.filter((l) => !mine(l));
+      const kept: [Pt, Pt][] = [];
+      for (const l of lines.filter(mine)) if (!same(stripsOfAreas(outsides, [...rest, ...kept, l], cutsNow, holes).bad)) kept.push(l);
+      if (!kept.length) break;
+      lines.splice(0, lines.length, ...rest, ...kept);
+    }
     made = stripsOfAreas(outsides, lines, cutsNow, holes);
   }
   return { cuts: cutsNow, lines, ok: made.hole < 0 && !made.bad };
@@ -254,6 +270,8 @@ export function planStrokes(g: Graph, rings: Pt[][], apart = false): { cuts: [Pt
   });
   const degree = (n: number) => ends.get(find(n))?.length ?? 0;
   const loop = (e: End) => find(B[e.br].a) === find(B[e.br].b);
+  // A cut line just past a hole it does not end on pinches off the line round the hole.
+  const pinch = (p: Pt, q: Pt) => rings.some((r) => !r.includes(p) && !r.includes(q) && r.some((h) => toSegment(h, p, q) < 0.4));
   const key = (e: End) => `${e.br}${e.atB ? 'b' : 'a'}`;
   const partner = new Map<string, End>();
   const cuts: [Pt, Pt][] = [];
@@ -392,12 +410,12 @@ export function planStrokes(g: Graph, rings: Pt[][], apart = false): { cuts: [Pt
       const p = corner(own.p, 3 * own.r + 1.5, cw, k, k);
       const q = corner(own.p, 3 * own.r + 1.5, k, ccw, k);
       let cut: [Pt, Pt];
-      if (p && q && dist(p, q) > 0.2 && within(p, q)) {
+      if (p && q && dist(p, q) > 0.2 && within(p, q) && !pinch(p, q)) {
         const d = norm(sub(q, p));
         cut = [add(p, d, -0.3), add(q, d, 0.3)];
       } else {
         // No corners found: square across the branch a junction's width out.
-        const c = pointAlong(pts, Math.min(lenOf[e.br] * 0.5, g.nodes[n].r + 0.2));
+        const c = pointAlong(pts, Math.min(lenOf[e.br] * 0.5, Math.max(g.nodes[n].r + 0.2, own.r + halfOf[e.br])));
         const d = dirs[k];
         const w = halfOf[e.br] * 1.2 + 0.3;
         cut = [add(c, [-d[1], d[0]], -w), add(c, [-d[1], d[0]], w)];
@@ -534,10 +552,10 @@ export function planStrokes(g: Graph, rings: Pt[][], apart = false): { cuts: [Pt
     for (const i of corners) {
       const tt = turnAt(i, hc);
       const bis = norm(sub(tt.din, tt.dout));
-      if (tt.deg >= SHARP && Math.hypot(bis[0], bis[1]) > 0.1) {
+      const l = Math.min(5 * half, (half / Math.max(0.3, Math.cos((tt.deg * Math.PI) / 360))) * 1.1 + 0.3);
+      if (tt.deg >= SHARP && Math.hypot(bis[0], bis[1]) > 0.1 && !pinch(add(st.pts[i], bis, -l), add(st.pts[i], bis, l))) {
         // Too sharp to fan (the stitches would pile up in the inner corner): cut along the
         // bisector, a mitre, with a line across either side.
-        const l = Math.min(5 * half, (half / Math.max(0.3, Math.cos((tt.deg * Math.PI) / 360))) * 1.1 + 0.3);
         cuts.push([add(st.pts[i], bis, -l), add(st.pts[i], bis, l)]);
         placed.push(cum[i]);
       } else if (free(cum[i], w * 0.8)) {
