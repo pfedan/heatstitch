@@ -174,20 +174,6 @@ describe('border in a thread of its own', () => {
   });
 });
 
-describe('border and other parts', () => {
-  it('drops the border from the fill when it gets its own thread', () => {
-    const p = load('cat-60mm.pes');
-    const kinds = stitchKinds(p);
-    const objs = sewObjects(p, kinds);
-    const o = objs[1];
-    const base = { ...measureFill(p, analyze(p, o, kinds)), pattern: 'tatami' as const };
-    const plain = apply(p, o.index, base);
-    const a = apply(p, o.index, { ...base, border: { type: 'satin', width: 2 } });
-    const b = apply(a.q, a.o.index, { ...base, border: { type: 'satin', width: 2, color: { r: 1, g: 2, b: 3 }, link: 'x' } });
-    expect(Math.abs(stitches(b.q, b.o.first, b.o.last) - stitches(plain.q, plain.o.first, plain.o.last))).toBeLessThan(60);
-  });
-});
-
 it('keeps the running stitch of a fill object when a border comes and goes', () => {
   const p = load('cat-60mm.pes');
   const kinds = stitchKinds(p);

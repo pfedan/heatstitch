@@ -497,13 +497,6 @@ export function rememberObjects(p: Pattern, starts: number[], end = Infinity): v
   t.entries = out;
 }
 
-/** Sews the objects `objs` (one after the other in one color) as one object from now on. */
-export function joinObjects(p: Pattern, objs: SewObject[]): void {
-  if (!objs.length) return;
-  const ix = indexOf(p);
-  rememberObjects(p, [ix.before[objs[0].first]], ix.before[objs[objs.length - 1].last + 1]);
-}
-
 /** Shows object `o` as its sections from now on, each one an object. */
 export function splitObject(p: Pattern, o: SewObject): void {
   const ix = indexOf(p);

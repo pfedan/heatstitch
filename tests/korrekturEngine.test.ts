@@ -5,7 +5,7 @@ import { assess } from '../src/correct/engine/ampel';
 import { EngineClient, type WorkerLike } from '../src/correct/engine/client';
 import { handleEngine, type EngineRequest } from '../src/correct/engine/worker';
 import { sewObjects } from '../src/model/objects';
-import { forgetAll, rememberedIn, restoreRemembered } from '../src/model/restitch';
+import { rememberedIn, restoreRemembered } from '../src/model/restitch';
 import { parsePattern } from '../src/parsers';
 import type { Profile } from '../src/validation/profiles';
 
@@ -16,7 +16,6 @@ const same = (a: { x: Int32Array; y: Int32Array; cmd: Uint8Array }, b: typeof a)
 
 describe('correction engine', () => {
   it('fixes density on stacked fills without a new critical cell, and takes it back bit for bit', async () => {
-    forgetAll();
     const p = load('demos/overlap.pes');
     const memBefore = JSON.stringify(rememberedIn(p, sewObjects(p)));
     const f = await prepareFix(p, WOVEN, 'density', { trimMm: 2 });
@@ -27,9 +26,8 @@ describe('correction engine', () => {
     const q = applyFix(p, f)!;
     expect(q).toBeTruthy();
     expect(fixedObjects(q).length).toBe(f.objects.length);
-    // Stored with the project and read back: still taken back exactly.
+    // Stored with the project and read back onto it: still taken back exactly.
     const stored = rememberedIn(q, sewObjects(q));
-    forgetAll();
     restoreRemembered(q, structuredClone(stored));
     const back = revertFix(q, fixedObjects(q))!;
     expect(back).toBeTruthy();
@@ -39,7 +37,6 @@ describe('correction engine', () => {
 
   it('takes a fix back exactly where sewing anew splits an object differently and moves the jump after it', async () => {
     // The cat: object 0 is sewn anew in several sections, and the travel to object 1 changes.
-    forgetAll();
     const p = load('cat-60mm.pes');
     const f = await prepareFix(p, { fabric: 'knit', thread: '40' }, 'density', { trimMm: 2, visible: false, hand: false });
     expect(f.objects.length).toBeGreaterThan(0);
@@ -50,7 +47,6 @@ describe('correction engine', () => {
   }, 300_000);
 
   it('applies a fix only to the design it was worked out on', async () => {
-    forgetAll();
     const p = load('demos/overlap.pes');
     const f = await prepareFix(p, WOVEN, 'density', { trimMm: 2 });
     const other = { ...p, x: p.x.map((v) => v + 10) };
@@ -59,7 +55,6 @@ describe('correction engine', () => {
   }, 120_000);
 
   it('reports the Ampel with a direct fix per kind', async () => {
-    forgetAll();
     const p = load('demos/overlap.pes');
     const r = await assess(p, WOVEN, { trimMm: 2 });
     expect(r.color).toBe('red');
@@ -69,7 +64,6 @@ describe('correction engine', () => {
   }, 300_000);
 
   it('works the Ampel out in workers, and a newer design drops the older one', async () => {
-    forgetAll();
     const p = load('demos/overlap.pes');
     let spawned = 0;
     let dropped = 0;

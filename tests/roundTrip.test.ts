@@ -3,7 +3,7 @@ import { digitizeDefaults } from '../src/digitize/digitize';
 import { addShape } from '../src/model/addShape';
 import { rememberObjects, sewObjects, type ObjectKind, type SewObject } from '../src/model/objects';
 import { STITCH, type Pattern } from '../src/model/pattern';
-import { analyze, forgetAll, isGuessed, remember, remembered, rememberedIn, restitch, restoreRemembered, type RestitchResult, DECO_PATTERNS, OPEN_PATTERNS, type FillPattern, type FillSettings, type SatinSettings, type Settings } from '../src/model/restitch';
+import { analyze, isGuessed, remember, remembered, rememberedIn, restitch, restoreRemembered, type RestitchResult, DECO_PATTERNS, OPEN_PATTERNS, type FillPattern, type FillSettings, type SatinSettings, type Settings } from '../src/model/restitch';
 import { reverseObjects } from '../src/model/reverse';
 import { transformSewObject } from '../src/model/reshape';
 import { mirrorMatrix } from '../src/model/shapeOps';
@@ -92,7 +92,6 @@ async function saveAndOpen(x: At): Promise<At> {
     image: null,
     settings: projectSettings(structuredClone(DEFAULTS)),
   });
-  forgetAll();
   const back = await decodeProject(bytes);
   const p = fromStored(parsePattern(data, 'rt.dst'), back.files[0].working);
   expect(p, 'opens').toBeTruthy();
@@ -116,7 +115,6 @@ function what(x: At) {
 }
 
 function fillObject(round: boolean): At {
-  forgetAll();
   const form = parsePath(round ? ellipsePath(20, 20, 9, 6) : rectPath(10, 10, 18, 12, 0, 0), ID);
   const a = addShape(empty, { form, kind: 'fill' }, RED, null, options);
   expect(a).toBeTruthy();
@@ -126,7 +124,6 @@ function fillObject(round: boolean): At {
 }
 
 function satinObject(): At {
-  forgetAll();
   const a = addShape(empty, { form: parsePath('M10 10 C20 0 30 25 45 12', ID), kind: 'stroke', width: 3 }, RED, null, options);
   expect(a).toBeTruthy();
   return { p: a!.pattern, o: 0 };
@@ -179,7 +176,6 @@ describe('own objects keep what they are through a change and back', () => {
   });
 
   it('small spiral stays a fill', async () => {
-    forgetAll();
     const a = addShape(empty, { form: parsePath(ellipsePath(10, 10, 1.4, 1.4), ID), kind: 'fill' }, RED, null, options);
     const x = sew({ p: a!.pattern, o: 0 }, { kind: 'fill', s: { ...FILL, pattern: 'spiral' } });
     expect(what(x).kind).toBe('fill');
@@ -187,7 +183,6 @@ describe('own objects keep what they are through a change and back', () => {
   });
 
   it('running line: triple and back', () => {
-    forgetAll();
     const a = addShape(empty, { form: parsePath('M10 10 C20 0 30 25 45 12', ID), kind: 'stroke', width: 0 }, RED, null, options);
     const x = { p: a!.pattern, o: 0 };
     const b = sew(x, { kind: 'run', s: { stitch: 2.5, triple: true, tolerance: 0.15 } });
@@ -212,7 +207,6 @@ describe('own objects keep what they are through a change and back', () => {
     .slice(0, 4)
     .map((o) => o.index);
   const column = (o: number): At => {
-    forgetAll();
     return sew({ p: letters, o }, { kind: 'satin', s: SATIN });
   };
   for (const o of satins) {

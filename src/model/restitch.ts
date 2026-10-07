@@ -466,9 +466,6 @@ export function forget(p: Pattern, o: SewObject, r?: Remembered): void {
 
 export { backToVersion, keepVersion };
 
-/** Nothing to forget any more: what objects know belongs to their version (kept for tests that start afresh). */
-export function forgetAll(): void {}
-
 /** The object's shape and stitch type are only guessed from its stitches (a file from elsewhere), not known. */
 export function isGuessed(p: Pattern, o: SewObject): boolean {
   const r = remembered(p, o);
