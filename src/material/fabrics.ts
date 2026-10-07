@@ -3,9 +3,8 @@
  * the Ampel and the ready-to-stitch card read from here; a new fabric that misses a value does not
  * compile (concept: plans/voreinstellungen.md in the project files).
  *
- * Spacing ranges: common digitizing guides (twill/canvas 0.40 to 0.45 mm, caps 0.40 to 0.50,
- * piqué/jersey 0.42 to 0.50, terry 0.55 to 0.70, silk and light fabrics 0.60 to 0.70, leather/vinyl
- * 0.50 to 0.80). Pull compensation: Wilcom's table, more for stretchy and pile fabrics. Texts,
+ * Spacing ranges: common digitizing guides, checked against Wilcom's auto fabrics and Impressions
+ * (plans/voreinstellungen-recherche.md in the project files). Pull compensation: Wilcom's table, more for stretchy and pile fabrics. Texts,
  * stabilizers, needles and their sources: src/areas/ready/recipes.ts.
  */
 
@@ -44,15 +43,21 @@ const FABRIC_VALUES: Record<FabricId, Values> = {
   // Denim, canvas, twill: like woven, but the firm, thick cloth carries more thread before it
   // puckers (a little more tolerance) and pulls in no more than woven; same spacing (twill/canvas
   // 0.40 to 0.45 mm). The stronger needle (90/14) is in the card.
-  woven_heavy: { factor: 1.1, spacing: [0.4, 0.45], perforation: false, pull: 'low', pullMm: 0.2, longMm: 10, shortsOk: true, redMinMm2: 5, delicate: false, pile: false, stretchyOrThin: false },
-  cap: { factor: 0.9, spacing: [0.4, 0.5], perforation: false, pull: 'low', pullMm: 0.2, longMm: 7, shortsOk: true, redMinMm2: 5, delicate: false, pile: false, stretchyOrThin: false },
+  // Spacing 0.42 to 0.50: Wilcom's auto fabric Denim, "slightly reduced density"
+  // (docs.wilcom.com, Digitizing > properties-9).
+  woven_heavy: { factor: 1.1, spacing: [0.42, 0.5], perforation: false, pull: 'low', pullMm: 0.2, longMm: 10, shortsOk: true, redMinMm2: 5, delicate: false, pile: false, stretchyOrThin: false },
+  // Spacing 0.40 to 0.45: Wilcom's auto fabric Cap, "tighter density".
+  cap: { factor: 0.9, spacing: [0.4, 0.45], perforation: false, pull: 'low', pullMm: 0.2, longMm: 7, shortsOk: true, redMinMm2: 5, delicate: false, pile: false, stretchyOrThin: false },
   knit: { factor: 0.85, spacing: [0.42, 0.5], perforation: false, pull: 'high', pullMm: 0.35, longMm: 7, shortsOk: false, redMinMm2: 3, delicate: true, pile: true, stretchyOrThin: true },
   // Fleece, sweat, hoodie: a knit with pile. Stretches like knit (pull high, long stitches snag
   // from 7 mm), stitches sink into the pile like on terry (compensation like terry), so the
   // tolerance lies between knit and terry and the spacing a little wider than on knit.
-  fleece: { factor: 0.75, spacing: [0.45, 0.6], perforation: false, pull: 'high', pullMm: 0.4, longMm: 7, shortsOk: false, redMinMm2: 3, delicate: false, pile: true, stretchyOrThin: true },
+  // Spacing 0.42 to 0.50, disputed: Wilcom's auto fabric Fleece says wider spacing, Impressions
+  // (difficult fabrics) 10 to 15 % denser for sweatshirts; between both (Daniel, 2026-10-07).
+  fleece: { factor: 0.75, spacing: [0.42, 0.5], perforation: false, pull: 'high', pullMm: 0.4, longMm: 7, shortsOk: false, redMinMm2: 3, delicate: false, pile: true, stretchyOrThin: true },
   terry: { factor: 0.65, spacing: [0.55, 0.7], perforation: false, pull: 'high', pullMm: 0.4, longMm: 7, shortsOk: false, redMinMm2: 3, delicate: false, pile: true, stretchyOrThin: false },
-  light: { factor: 0.6, spacing: [0.6, 0.7], perforation: false, pull: 'high', pullMm: 0.15, longMm: 8, shortsOk: false, redMinMm2: 3, delicate: true, pile: false, stretchyOrThin: true },
+  // Spacing 0.50 to 0.60: Impressions (digitizing for thin fabrics), about 75 % of the stitches.
+  light: { factor: 0.6, spacing: [0.5, 0.6], perforation: false, pull: 'high', pullMm: 0.15, longMm: 8, shortsOk: false, redMinMm2: 3, delicate: true, pile: false, stretchyOrThin: true },
   // Organza, chiffon, tulle: like light, but thinner still and see-through; dense thread pulls and
   // puckers it soonest of all (lowest tolerance), long stitches show and snag, and compensation
   // stays as small as on light fabric (more would show as a hard edge).

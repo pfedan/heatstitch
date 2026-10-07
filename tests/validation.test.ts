@@ -103,7 +103,8 @@ describe('thresholds and profiles', () => {
     expect(factor('fleece')).toBeGreaterThan(factor('terry'));
     expect(factor('fleece')).toBeLessThan(factor('knit'));
     expect(factor('sheer')).toBeLessThan(factor('light'));
-    expect(recommendedSpacing({ fabric: 'woven_heavy', thread: '40' })).toEqual(recommendedSpacing(WOVEN));
+    // Heavy woven a little looser than woven (Wilcom's auto fabric Denim).
+    expect(recommendedSpacing({ fabric: 'woven_heavy', thread: '40' })[0]).toBeGreaterThan(recommendedSpacing(WOVEN)[0]);
     expect(thresholdsFor({ fabric: 'fleece', thread: '40' }).pull).toBe('high');
     expect(thresholdsFor({ fabric: 'sheer', thread: '40' }).holes).toBeNull();
   });
