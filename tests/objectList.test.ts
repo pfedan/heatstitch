@@ -12,7 +12,11 @@ import { setTrims } from '../src/model/jumps';
 import { sewObjects, tableOf } from '../src/model/objects';
 import { reorder } from '../src/model/order';
 import { STITCH, TRIM, type Pattern } from '../src/model/pattern';
-import { remembered, rememberedIn, restoreRemembered, isStoredObjects } from '../src/model/restitch';
+import { remember, remembered, rememberedIn, restitch, restoreRemembered, isStoredObjects } from '../src/model/restitch';
+import { rememberObjects } from '../src/model/objects';
+import { lineSettings, resewLine } from '../src/model/line';
+import { reverseObjects } from '../src/model/reverse';
+import { stitchKinds } from '../src/model/sequence';
 import { transitions } from '../src/model/sequence';
 import { duplicateObject } from '../src/model/shapeOps';
 import { parsePattern } from '../src/parsers';
@@ -72,6 +76,25 @@ describe('object list', () => {
     const copy = sewObjects(d.pattern)[d.index];
     expect(copy.id).not.toBe(a);
     expect(remembered(d.pattern, copy)?.fill).toEqual(remembered(p, sewObjects(p)[0])?.fill);
+  });
+
+  it('keeps the id of an object sewn anew, as a fill, as a line and the other way round', () => {
+    const p = twoFills();
+    const objs = sewObjects(p, stitchKinds(p));
+    const r = restitch(p, objs, [1], { kind: 'fill', s: { ...remembered(p, objs[1])!.fill!, spacing: 0.6 } }, stitchKinds(p), options.trimMm);
+    // As the app takes new stitches (applyRestitched).
+    rememberObjects(r.pattern, [r.starts[0]], r.ends[0]);
+    remember(r.pattern, sewObjects(r.pattern)[1], r.memory[0]);
+    expect(ids(r.pattern)).toEqual(ids(p));
+    const t = reverseObjects(p, objs, [0], stitchKinds(p), options.trimMm);
+    rememberObjects(t.pattern, [t.starts[0]], t.ends[0]);
+    remember(t.pattern, sewObjects(t.pattern)[0], t.memory[0]);
+    expect(ids(t.pattern)).toEqual(ids(p));
+    const line = addShape(p, { form: parsePath('M50 10 C60 0 70 25 85 12', ID), kind: 'stroke', width: 3 }, RED, null, options)!.pattern;
+    const lo = sewObjects(line).length - 1;
+    const lobj = sewObjects(line)[lo];
+    const again = resewLine(line, lo, remembered(line, lobj)!.path!, { ...lineSettings(line, lobj, stitchKinds(line)), width: 4 }, options.trimMm)!;
+    expect(ids(again.pattern)).toEqual(ids(line));
   });
 
   it('keeps what a version knows, whatever a later version with the same stitches learns', () => {
