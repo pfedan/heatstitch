@@ -581,7 +581,7 @@ function checkBorders(p: Pattern): void {
   });
   // Unless nothing of its edge shows (all of it under shapes on top).
   // (A part cut apart on its own, e.g. a copy of one, counts as a whole: its border can vanish too, set inward of a small part.)
-  const alone = (m: NonNullable<(typeof mem)[number]>) => !m.piece || mem.filter((x) => x?.piece === m.piece && x.fill).length === 1;
+  const alone = (m: NonNullable<(typeof mem)[number]>) => !m.piece || mem.filter((x) => x?.piece === m.piece && x?.fill).length === 1;
   const hidden = (m: NonNullable<(typeof mem)[number]>) => alone(m) && !!m.region && borderStitches(m.region, m.fill!.border!, [0, 0], wholeOf(m.region, m)).length === 0;
   for (const [link, k] of fills) if (!borders.has(link) && !hidden(mem[k]!)) problems.push(`fill ${k} lost its border`);
   expect(problems.join('; '), 'border links').toBe('');
@@ -1031,8 +1031,7 @@ describe('borders read from a file', () => {
     }
     checkAllKnown(d.cur.p);
     const log: string[] = ['take borders'];
-    // Deleting checks that what stays keeps its stitches: an object read from a file can get another tie-in.
-    const ops = OPS.filter((op) => op.name !== 'delete');
+    const ops = OPS;
     for (let step = 0; step < STEPS; step++) {
       const op = pick(r, ops);
       if (!(await op.run(d, r))) continue;
