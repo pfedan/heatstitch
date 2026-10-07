@@ -1,3 +1,4 @@
+import type { Components } from '../image/labels';
 import type { Orientation } from '../image/orientation';
 import { sample, type Region } from './region';
 import type { Graph, Pt } from './skeleton';
@@ -92,6 +93,35 @@ export function groupAreas(areas: readonly AreaInfo[], set: Readonly<Record<stri
     g.areaMm2 = Math.round(g.areaMm2 * 10) / 10;
   }
   return [...out.values()];
+}
+
+/** The groups under their thread color, colors as sewn (the order of the first letter of each). */
+export function groupsByColor(groups: readonly AreaGroup[]): { label: number; groups: AreaGroup[] }[] {
+  const out = new Map<number, AreaGroup[]>();
+  for (const g of groups) out.set(g.label, [...(out.get(g.label) ?? []), g]);
+  return [...out].map(([label, gs]) => ({ label, groups: gs }));
+}
+
+/**
+ * The pixels of some areas (1 inside), to show them on the stage: the pieces of the area's color
+ * inside its box (several when a later detail cut it apart), without pieces that are areas of
+ * their own (a dot inside a ring).
+ */
+export function areaPixels(comps: Components, w: number, h: number, areas: readonly Pick<AreaInfo, 'key'>[], keys: readonly string[]): Uint8Array {
+  const out = new Uint8Array(w * h);
+  const all = new Set(areas.map((a) => a.key));
+  const take = new Set<number>();
+  for (const key of keys) {
+    const b = boxOf(key);
+    if (!b) continue;
+    comps.label.forEach((l, c) => {
+      if (l !== b.label || comps.minX[c] < b.minX || comps.minY[c] < b.minY || comps.maxX[c] > b.maxX || comps.maxY[c] > b.maxY) return;
+      const own = areaKey(l, comps.minX[c], comps.minY[c], comps.maxX[c], comps.maxY[c]);
+      if (own === key || !all.has(own)) take.add(c);
+    });
+  }
+  for (let i = 0; i < w * h; i++) if (take.has(comps.comp[i])) out[i] = 1;
+  return out;
 }
 
 /** Techniques set by hand as stored: only known techniques survive. */
