@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { digitizeDefaults } from '../src/digitize/digitize';
 import { addShape } from '../src/model/addShape';
-import { recolorBlock, syncBorders } from '../src/model/border';
+import { recolorBlock, shareBorders, syncBorders } from '../src/model/border';
 import { blendObject } from '../src/model/blend';
 import { MOTIFS } from '../src/digitize/deco';
 import { ECHO_SIDES } from '../src/digitize/echo';
@@ -15,11 +15,12 @@ import { formOf, transformSewObject } from '../src/model/reshape';
 import { canSplit, splitFill } from '../src/model/splitFill';
 import { wholeArea } from '../src/model/knockout';
 import type { Region } from '../src/digitize/region';
-import { backToVersion, forgetAll, keepVersion, objectKey, remember, remembered, rememberedIn, restitch, restoreRemembered, DECO_PATTERNS, OPEN_PATTERNS, type FillSettings, type StoredObjects } from '../src/model/restitch';
+import { backToVersion, keepVersion, objectKey, remember, remembered, rememberedIn, restitch, restoreRemembered, DECO_PATTERNS, OPEN_PATTERNS, type FillSettings, type StoredObjects } from '../src/model/restitch';
 import { reorder } from '../src/model/order';
 import { stitchKinds } from '../src/model/sequence';
 import { deleteObjects, duplicateObject, duplicateObjects, mirrorMatrix, recolorObjects, subtractTop } from '../src/model/shapeOps';
 import { stitchesBefore } from '../src/model/transform';
+import { sewDesign, specOf } from '../src/model/sew';
 import { parsePattern } from '../src/parsers';
 import { rotation, storeForm, translation, type Mat } from '../src/shape/path';
 import { ellipsePath, parsePath, rectPath } from '../src/shape/svgPath';
@@ -134,6 +135,7 @@ function restitchFill(d: Doc, o: number, s: FillSettings, drop: Set<string>): bo
       return n >= a && n < r.ends[k];
     });
     if (pieces.length === 1) remember(r.pattern, pieces[0], r.memory[k]);
+    shareBorders(r.pattern, pieces);
   });
   return shapes(d, syncBorders(r.pattern, T, drop));
 }
@@ -158,7 +160,6 @@ async function saveAndOpen(d: Doc): Promise<void> {
     image: null,
     settings: projectSettings(structuredClone(DEFAULTS)),
   });
-  forgetAll();
   const back = await decodeProject(bytes);
   const p = fromStored(original, back.files[0].working);
   expect(p, 'project opens').toBeTruthy();
@@ -339,7 +340,11 @@ const OPS: Op[] = [
       const { pattern, parts } = s!;
       const hadBorder = !!remembered(p, o)?.fill?.border;
       if (!hadBorder) expect(sewObjects(pattern).length, 'one object more per part').toBe(d.objects.length + parts.length - 1);
-      expect(parts.every((k) => !remembered(pattern, sewObjects(pattern)[k])?.fill?.border), 'parts have no border').toBe(true);
+      // Invariant: the parts are one whole and keep the fill's border, one object around them all.
+      const pm = parts.map((k) => remembered(pattern, sewObjects(pattern)[k]));
+      expect(new Set(pm.map((m) => m?.piece)).size, 'parts are one whole').toBe(1);
+      expect(pm[0]?.piece, 'parts are one whole').toBeTruthy();
+      expect(pm.every((m) => !!m?.fill?.border === hadBorder), 'parts keep the border').toBe(true);
       // Invariant: the parts cover the area as it was, no fabric along the cut.
       const kinds = stitchKinds(pattern);
       const objs = sewObjects(pattern, kinds);
@@ -523,7 +528,10 @@ function checkPartsFit(p: Pattern): void {
   expect(problems.join('; '), 'sewn parts that no longer fit').toBe('');
 }
 
-/** Each fill's border is one object, in its own thread or the fill's, and every border has its fill. */
+/**
+ * Each fill's border is one object, in its own thread or the fill's, and every border has its fill.
+ * Only the parts of one fill cut apart share a border (and have the same settings for it).
+ */
 function checkBorders(p: Pattern): void {
   const objs = sewObjects(p);
   const mem = objs.map((o) => remembered(p, o));
@@ -532,8 +540,16 @@ function checkBorders(p: Pattern): void {
   mem.forEach((m, k) => {
     const b = m?.fill?.border;
     if (!b?.link) return;
-    if (fills.has(b.link)) problems.push(`fills ${fills.get(b.link)} and ${k} share border link ${b.link}`);
-    fills.set(b.link, k);
+    const f = fills.get(b.link);
+    if (f !== undefined && (!m!.piece || mem[f]!.piece !== m!.piece)) problems.push(`fills ${f} and ${k} share border link ${b.link}`);
+    if (f === undefined) fills.set(b.link, k);
+  });
+  const pieces = new Map<string, number>();
+  mem.forEach((m, k) => {
+    if (!m?.piece || !m.region || !m.fill || m.fill.pattern === 'none') return;
+    const f = pieces.get(m.piece);
+    if (f === undefined) return void pieces.set(m.piece, k);
+    if (JSON.stringify(mem[f]!.fill!.border) !== JSON.stringify(m.fill.border)) problems.push(`parts ${f} and ${k} of one whole have other borders`);
   });
   const borders = new Map<string, number>();
   mem.forEach((m, k) => {
@@ -706,6 +722,34 @@ function checkExport(p: Pattern): void {
 }
 
 /** The objects of `p` in a line each, to follow a chain (TORTURE_TRACE=1). */
+/**
+ * The design sewn from its object list (stage C, see src/model/sew.ts): the same objects with the
+ * same ids, kinds and threads in the same order, each that knows its shape sewn from it, and sewn
+ * again from the new list it stays as it is.
+ */
+function checkSewDesign(p: Pattern): void {
+  if (!p.cmd.length) return;
+  const objs = sewObjects(p);
+  const q = sewDesign(p, T);
+  checkWellFormed(q);
+  checkObjectList(q);
+  const after = sewObjects(q);
+  const shape = (os: typeof objs) => os.map((o) => `${o.id}:${o.kind}:${o.block}`).join(' ');
+  expect(shape(after), 'objects sewn from the list').toBe(shape(objs));
+  expect(q.colors, 'threads').toEqual(p.colors);
+  expect(objs.filter((o) => specOf(p, o)).length, 'objects sewn from their shape').toBe(after.filter((o) => specOf(q, o)).length);
+  const r = sewDesign(q, T);
+  const ro = sewObjects(r);
+  const moved = after.filter((o, k) => {
+    const b = ro[k];
+    if (!b || b.last - b.first !== o.last - o.first) return true;
+    for (let i = 0; i <= o.last - o.first; i++) if (q.x[o.first + i] !== r.x[b.first + i] || q.y[o.first + i] !== r.y[b.first + i] || q.cmd[o.first + i] !== r.cmd[b.first + i]) return true;
+    return false;
+  });
+  const what = (o: (typeof objs)[number]) => { const m = remembered(q, o); return `${o.index}:${o.kind}:${specOf(q, o)?.kind ?? 'kept'}:${m?.fill?.pattern ?? ''}${m?.outline ? ':border' : ''}${m?.blendOf ? ':blend' : ''}${m?.knockout ? ':ko' : ''}`; };
+  expect(moved.map(what).join(' '), 'sewn again from the new list: objects that changed').toBe('');
+}
+
 function describeObjects(p: Pattern): string {
   return sewObjects(p)
     .map((o) => {
@@ -717,7 +761,6 @@ function describeObjects(p: Pattern): string {
 }
 
 async function chain(seed: number, steps = STEPS): Promise<void> {
-  forgetAll();
   const r = rng(seed);
   const d = new Doc();
   const log: string[] = [];
@@ -747,7 +790,10 @@ async function chain(seed: number, steps = STEPS): Promise<void> {
       checkEchoes(p);
       checkLineParts(p);
       checkKnockouts(p);
-      if (op.name === 'save and open' || step === steps - 1) checkExport(p);
+      if (op.name === 'save and open' || step === steps - 1) {
+        checkExport(p);
+        checkSewDesign(p);
+      }
     } catch (e) {
       throw new Error(`${at()}\n${(e as Error).message}`);
     }
@@ -763,7 +809,6 @@ describe('torture test', () => {
 
 /** A square with a running border in a thread of its own, made as the app makes it. */
 function borderedSquare(): Doc {
-  forgetAll();
   const d = new Doc();
   shapes(d, addShape(empty, { form: parsePath(rectPath(0, 0, 20, 20, 0, 0), ID), kind: 'fill' }, COLORS[0], null, options)!.pattern);
   shapes(d, addShape(d.cur.p, { form: parsePath(ellipsePath(40, 10, 6, 6), ID), kind: 'fill' }, COLORS[0], 0, options)!.pattern);
@@ -814,7 +859,9 @@ describe('found by the torture test', () => {
   // Chains that failed once (borders on delete, cut out and recolor; knockouts after reopening a
   // project whose curves were stored rounded; a fill leaving out its own satin border): replayed
   // with every run.
-  it.each([3, 4, 9, 11, 12, 16, 18, 24, 34, 38, 101, 389])('chain %i still holds', async (seed) => {
+  // The ones the regular chains above already run with the same steps are not run twice.
+  const regular = (seed: number) => STEPS === 14 && seed >= FIRST_SEED && seed < FIRST_SEED + CHAINS;
+  it.each([3, 4, 9, 11, 12, 16, 18, 24, 34, 38, 101, 389].filter((s) => !regular(s)))('chain %i still holds', async (seed) => {
     await chain(seed, 14);
   });
   // From the first long run (20 steps): a narrow added shape sewn as satin forgot what it was;

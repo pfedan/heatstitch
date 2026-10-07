@@ -5,6 +5,7 @@
  */
 
 import type { ColorEdit, Stroke } from '../image/prepare';
+import { readAreas, type Technique } from '../digitize/smart';
 import { STORAGE_NS } from './namespace';
 
 export interface StoredImage {
@@ -16,6 +17,8 @@ export interface StoredImage {
 export interface StoredWork {
   edits: ColorEdit[];
   strokes: Stroke[];
+  /** Smart: techniques set by hand, by area. */
+  areas?: Record<string, Technique>;
 }
 
 const STORE = 'image';
@@ -65,7 +68,8 @@ export async function loadImage(): Promise<{ image: StoredImage; work: StoredWor
     const work = (await run('readonly', (s) => s.get('work'))) as Partial<StoredWork> | undefined;
     const edits = Array.isArray(work?.edits) ? work.edits : [];
     const strokes = Array.isArray(work?.strokes) ? work.strokes : [];
-    return { image, work: { edits, strokes } };
+    const areas = readAreas(work?.areas);
+    return { image, work: { edits, strokes, ...(Object.keys(areas).length ? { areas } : {}) } };
   } catch (err) {
     console.warn('Could not read the stored image', err);
     return null;

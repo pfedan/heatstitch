@@ -8,7 +8,7 @@ import { handleEngine, type EngineRequest } from '../src/correct/engine/worker';
 import type { WorkerClient } from '../src/density/client';
 import { sewObjects } from '../src/model/objects';
 import type { Pattern } from '../src/model/pattern';
-import { forgetAll, holdMemory } from '../src/model/restitch';
+import { holdMemory } from '../src/model/restitch';
 import { parsePattern } from '../src/parsers';
 import type { FileList, LoadedFile } from '../src/ui/fileList';
 import { measurePattern, type Measurement } from '../src/validation/measure';
@@ -36,7 +36,6 @@ const spawn = (): WorkerLike => {
 
 describe('Ampel on the correction engine', () => {
   it('offers a measured density fix, applies it as one step and takes it back exactly', async () => {
-    forgetAll();
     const p0 = load('demos/overlap.pes');
     const profile = { fabric: 'woven', thread: '40' } as const;
     const file = { pattern: p0, acks: [], validation: classify(measurePattern(p0), profile, ALL_CHECKS) } as unknown as LoadedFile;

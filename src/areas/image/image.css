@@ -437,7 +437,7 @@ body[data-mode='image'][data-image-step='1'] .resizer[data-panel='inspector'] {
   align-items: end;
 }
 
-/* Stil: Flach | Dynamisch, as tiles with a small picture of the rows */
+/* Stil: Flach | Dynamisch | Smart, as tiles with a small picture of the rows */
 .image-styles {
   position: relative;
   display: grid;
@@ -520,6 +520,86 @@ body[data-mode='image'][data-image-step='1'] .resizer[data-panel='inspector'] {
   border-radius: 50%;
   background: var(--accent);
   vertical-align: 2px;
+}
+
+/* Smart: the area groups, each with its letter, thread and technique */
+.image-areas ul {
+  display: grid;
+  gap: 4px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.image-area {
+  display: grid;
+  grid-template-columns: 18px auto auto 1fr auto;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.image-area:hover,
+.image-area:focus-within {
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+
+.image-area.sub {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.image-area.sub .letter {
+  background: color-mix(in srgb, var(--ink) 70%, transparent);
+}
+
+.image-area.hot {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.image-area .area-open {
+  width: 18px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.image-area .area-open[hidden] {
+  display: block;
+  visibility: hidden;
+}
+
+.image-area .letter {
+  display: grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 4px;
+  border-radius: 11px;
+  background: var(--ink);
+  color: var(--bg);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.image-area .sw {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+
+.image-area select {
+  max-width: 9.5em;
+}
+
+.image-area.fixed select {
+  border-color: var(--accent);
 }
 
 @media (prefers-reduced-motion: reduce) {
