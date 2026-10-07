@@ -785,7 +785,7 @@ body[data-mode='flow'] .stage:has(.player.folded:not([hidden])) .stage-foot {
     display: none;
   }
 
-  .view-button #view-name {
+  .view-button:not(.vb-named) #view-name {
     display: none;
   }
 }

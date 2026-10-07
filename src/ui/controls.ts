@@ -25,9 +25,10 @@ export const BACKGROUNDS: [string | null, Key][] = [
 
 /** What the view button on the stage says: the look that is on. */
 function viewName(s: Settings): string {
+  // Shapes first: they replace the stitches, realistic or not, and the stage should say so.
+  if (s.mode === 'flow' && s.shapesView) return t('design.view.shapes');
   if (s.realistic && (s.mode === 'flow' || s.mode === 'image' || s.overlay)) return t('design.view.realistic');
   if (s.mode !== 'flow') return t('design.view.title');
-  if (s.shapesView) return t('design.view.shapes');
   if (s.colorBy !== 'thread') return t(`colorBy.${s.colorBy}` as Key);
   return t('design.view.stitches');
 }
@@ -131,6 +132,8 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
     marksToggle.setAttribute('aria-pressed', String(s.marksOn));
     marksToggle.title = t(s.marksOn ? 'design.view.marksOn' : 'design.view.marksOff');
     $('view-name').textContent = viewName(s);
+    // On a phone the button shows only the eye; with shapes on it names them, or the flat areas look like a fault.
+    $('view-button').classList.toggle('vb-named', s.mode === 'flow' && s.shapesView);
     $('realistic-sub').classList.toggle('off', !s.realistic);
     marksBox.classList.toggle('all-off', !s.marksOn);
     marksBox.querySelector('legend')!.dataset.off = t('marks.allOff');
