@@ -749,8 +749,12 @@ function sections(p: Pattern, kinds: Uint8Array, a = 0, b = p.cmd.length - 1, sp
 /** A piece of a section has this many stitches and this much thread (mm) at least. */
 const PIECE_STITCHES = 20;
 const PIECE_THREAD = 8;
-/** A fill piece beside another fill has this many stitches at least to be a fill of its own. */
-const FILL_PIECE = 50;
+/** A fill piece beside another fill has this much thread (mm) at least to be a fill of its own. */
+const FILL_PIECE = 70;
+/** Rows of fill patches sewn on from one another turn less than this when they are one fill. */
+const SAME_WAY = (1.5 * Math.PI) / 180;
+/** A fill piece this many times as long (thread) as a few rows beside it takes them in. */
+const SCRAP = 30;
 
 /**
  * The pieces of what is sewn from record i to j (stitches, no trim between) start. Many
@@ -823,14 +827,31 @@ function piecesOf(p: Pattern, kinds: Uint8Array, i: number, j: number): { from: 
   // Running stitch close enough to cover an area is fill (a spiral's tight middle).
   for (const r of pieces) if (r.label === -1 && kindOf(p, r.from, r.to, measure(p, kinds, r.from, r.to)) === 'fill') r.label = -3;
   pieces = together(pieces);
-  // A fill sewn on in patches with its rows the same way, the travel between them too, is one
-  // fill (tatami hopping from patch to patch); a fill whose rows turn is another.
+  // A fill sewn on in patches that meet, with its rows exactly the same way, the travel between them
+  // too, is one fill (tatami hopping from patch to patch); rows that turn even a little are another
+  // fill (digitizers turn the rows from area to area).
   const sameWay = (a: number, b: number) => {
     const [ax, ay] = ways[a];
     const [bx, by] = ways[b];
     const la = Math.hypot(ax, ay);
     const lb = Math.hypot(bx, by);
-    return la > 0 && lb > 0 && (ax * bx + ay * by) / (la * lb) >= Math.cos(2 * SAME_ANGLE);
+    return la > 0 && lb > 0 && (ax * bx + ay * by) / (la * lb) >= Math.cos(2 * SAME_WAY);
+  };
+  // Pieces meet where their stitches come within a millimetre (on a millimetre grid).
+  const cellsOf = new Map<(typeof pieces)[number], Set<number>>();
+  const cells = (x: (typeof pieces)[number]) => {
+    let c = cellsOf.get(x);
+    if (!c) {
+      c = new Set();
+      for (let q = x.from; q <= x.to; q++) if (p.cmd[q] === STITCH) c.add(Math.round(p.y[q] / 10) * 100000 + Math.round(p.x[q] / 10));
+      cellsOf.set(x, c);
+    }
+    return c;
+  };
+  const meet = (x: (typeof pieces)[number], y: (typeof pieces)[number]) => {
+    const cy = cells(y);
+    for (const c of cells(x)) for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (cy.has(c + dy * 100000 + dx)) return true;
+    return false;
   };
   for (let k = 1; k < pieces.length; k++) {
     const r = pieces[k];
@@ -838,14 +859,15 @@ function piecesOf(p: Pattern, kinds: Uint8Array, i: number, j: number): { from: 
     let m = k - 1;
     while (m >= 0 && pieces[m].label <= 0) m--;
     if (m < 0 || !sameWay(pieces[m].label, r.label)) continue;
+    if (!meet(pieces[m], r)) continue;
     const to = pieces[m].label;
     for (let q = m + 1; q <= k; q++) pieces[q].label = to;
   }
   pieces = together(pieces);
   // A few rows beside another fill (a corner, the start of a patch) are no fill of their own.
   pieces.forEach((r, k) => {
-    if ((r.label <= 0 && r.label !== -3) || r.stitches >= FILL_PIECE) return;
-    const by = [pieces[k - 1], pieces[k + 1]].find((x) => x && x.label > 0 && x.stitches >= FILL_PIECE);
+    if ((r.label <= 0 && r.label !== -3) || r.thread >= FILL_PIECE) return;
+    const by = [pieces[k - 1], pieces[k + 1]].find((x) => x && x.label > 0 && x.thread >= SCRAP * r.thread && meet(x, r));
     if (by) r.label = by.label;
   });
   pieces = together(pieces);
