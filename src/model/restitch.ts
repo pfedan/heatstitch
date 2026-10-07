@@ -1023,10 +1023,11 @@ export function rememberShapes(
     // A satin from a vector file keeps its shape: its rails lie on the shape's edge.
     if (!shape && f?.form) return remember(p, o, { region: null, form: f.form, parts: one('satin') });
     // A satin made here (a narrow area): its rails, read from its fresh stitches, so it is known as
-    // made here and not recognized again from its stitches later.
+    // made here and not recognized again from its stitches later; and the area it was made for.
     if (!shape) {
       const { read: _read, ...known } = keepShape(p, o, (kinds ??= stitchKinds(p)));
-      return remember(p, o, { ...known, parts: one('satin') });
+      const area = f?.satinShape ? regionFrom(f.satinShape) : null;
+      return remember(p, o, { ...known, ...(area ? { shape: area } : {}), parts: one('satin') });
     }
     const region = regionFrom(shape);
     if (region) remember(p, o, { region, fill: { ...shape.fill }, parts: one('fill'), ...(f?.form ? { form: f.form, ...(f.knockout ? { knockout: true } : {}) } : {}) });

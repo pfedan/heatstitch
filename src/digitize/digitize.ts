@@ -508,6 +508,8 @@ export function digitize(prep: Prepared, o: DigitizeOptions, name = 'image'): Di
       if (!out.length) return;
       if (obj.info.kind === 'fill') obj.info.shape = keep(obj, o, w, h);
       if (obj.sections && obj.info.columns) keepSections(obj, w, h);
+      // A satin along its middle keeps its area too: the satin tool cuts and suggests on it.
+      else if (obj.info.kind === 'satin' && !obj.blades) keepSatinArea(obj, w, h);
       runs.push(...out);
       for (const _ of out) owners.push(objects.length);
       objects.push(obj.info);
@@ -639,6 +641,12 @@ function keepSections(obj: Obj, imgW: number, imgH: number): void {
     right: mvAll(c.right),
     ...(c.split ? { split: { outlines: c.split.outlines.map(mvAll), holes: c.split.holes.map(mvAll), cuts: c.split.cuts.map(([a, b]) => [mv(a), mv(b)] as [Pt, Pt]) } } : {}),
   }));
+  keepSatinArea(obj, imgW, imgH);
+}
+
+/** The area of a satin as pixels, in pattern coordinates (see keep). */
+function keepSatinArea(obj: Obj, imgW: number, imgH: number): void {
+  const r = obj.region;
   const mask = Uint8Array.from(r.sdfBase, (d) => (d < 0 ? 1 : 0));
   let area = 0;
   for (const m of mask) area += m;
