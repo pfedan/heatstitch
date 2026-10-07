@@ -11,6 +11,7 @@ import type { FrameTool } from '../../ui/frameTool';
 import type { LetteringPanel } from '../../ui/letteringPanel';
 import type { ShapeTool } from '../../ui/shapeTool';
 import { FileList } from '../../ui/fileList';
+import { canSplit } from '../../model/splitFill';
 import { ui } from '../../app/state';
 import { STORAGE_NS } from '../../storage/namespace';
 import { canRun, command, getCommand, keyLabel, runCommand } from '../../shell/commands';
@@ -102,6 +103,23 @@ export function initShapes(app: ShapesAreaApp): void {
       },
     });
   }
+  // Zerteilen: a cut across the selected fills (src/model/splitFill). Not a new shape, so it keeps the
+  // level and the selection; it can run while a fill is selected, and stays on for further cuts.
+  let cutCache: { p: Pattern | null; key: number; ok: boolean } | null = null;
+  const fillSelected = () => {
+    const p = pattern();
+    if (cutCache?.p !== p || cutCache.key !== ui.selectionKey) cutCache = { p, key: ui.selectionKey, ok: !!p && [...ui.selectedObjects].some((o) => canSplit(p, o)) };
+    return cutCache.ok;
+  };
+  command({
+    id: 'draw.cut',
+    label: 'shapes.tool.cut',
+    group: SHAPE,
+    icon: 'obj-cut',
+    keys: ['X'],
+    when: () => flow() && !ui.letterMode && !app.editor.active && (app.drawTool.kind === 'cut' || fillSelected()),
+    run: () => app.setDrawing(app.drawTool.kind === 'cut' ? null : 'cut'),
+  });
   command({
     id: 'draw.square',
     label: 'shapes.cmd.square',
@@ -122,10 +140,10 @@ export function initShapes(app: ShapesAreaApp): void {
       refresh();
     },
   });
-  const pen = (n: number) => () => flow() && app.drawTool.kind === 'pen' && app.drawTool.count >= n;
+  const pen = (n: number) => () => flow() && (app.drawTool.kind === 'pen' || app.drawTool.kind === 'cut') && app.drawTool.count >= n;
   command({ id: 'draw.undoNode', label: 'shapes.draw.undoNode', group: DRAW, keys: ['Delete'], bind: false, when: pen(1), run: () => void app.drawTool.removeLast() });
   command({ id: 'draw.finishLine', label: 'shapes.draw.finishLine', group: DRAW, keys: ['Enter'], bind: false, when: pen(2), run: () => app.drawTool.finish(false) });
-  command({ id: 'draw.closeArea', label: 'shapes.draw.closeArea', group: DRAW, when: pen(3), run: () => app.drawTool.finish(true) });
+  command({ id: 'draw.closeArea', label: 'shapes.draw.closeArea', group: DRAW, when: () => pen(3)() && app.drawTool.kind === 'pen', run: () => app.drawTool.finish(true) });
   command({
     id: 'draw.cancel',
     label: 'shapes.draw.cancel',
@@ -250,6 +268,7 @@ export function initShapes(app: ShapesAreaApp): void {
     'draw.ellipse': 'shapes.tool.ellipse.hint',
     'draw.pen': 'shapes.tool.pen.hint',
     'draw.free': 'shapes.tool.free.hint',
+    'draw.cut': 'shapes.tool.cut.hint',
     'lettering.new': 'shapes.tool.text.hint',
   };
   const railTitles = () => {
@@ -372,6 +391,18 @@ export function initShapes(app: ShapesAreaApp): void {
           : [{ kind: 'hint', text: t('shapes.opt.pen') } as Item]),
       ];
     }
+    if (d.kind === 'cut') {
+      return [
+        { kind: 'title', text: t('shapes.tool.cut'), title: t('shapes.tool.cut.hint') },
+        ...(d.count
+          ? ([
+              { kind: 'cmd', id: 'draw.undoNode' },
+              { kind: 'cmd', id: 'draw.finishLine', text: t('shapes.cut.finish'), primary: d.count >= 2 },
+              { kind: 'cmd', id: 'draw.cancel' },
+            ] as Item[])
+          : ([{ kind: 'hint', text: t('shapes.opt.cut') }, { kind: 'sep' }, { kind: 'cmd', id: 'tool.select', text: t('object.editDone'), primary: true }] as Item[])),
+      ];
+    }
     if (d.kind === 'free') return [{ kind: 'title', text: t('shapes.tool.free'), title: t('draw.free.hint') }, { kind: 'hint', text: t('shapes.opt.free') }];
     if (ui.letterMode) return [{ kind: 'title', text: t('shapes.crumb.letters'), title: t('lettering.letters.how') }, { kind: 'hint', text: t('shapes.opt.letters') }, { kind: 'cmd', id: 'lettering.letters', text: t('lettering.letters.done') }];
     const s = app.shapeTool;
@@ -433,6 +464,7 @@ export function initShapes(app: ShapesAreaApp): void {
       const id = b.dataset.command!;
       if (id === 'tool.select') b.setAttribute('aria-pressed', String(!app.drawTool.kind));
       else if (id.startsWith('draw.')) b.setAttribute('aria-pressed', String(app.drawTool.kind === id.slice(5)));
+      if (id === 'draw.cut') b.disabled = !canRun(id);
     }
     renderCrumb();
     renderBar();

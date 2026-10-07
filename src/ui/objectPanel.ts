@@ -272,6 +272,7 @@ export class ObjectPanel {
     if (sel.length === 1) {
       add('object.openShape');
       add('object.openStitches');
+      add('draw.cut');
       add('object.split');
       add('object.blend');
       add('object.reverse');
@@ -281,6 +282,7 @@ export class ObjectPanel {
       if (b && info.mergeBlocked) b.title = t(info.mergeBlocked);
       if (b) out.push(b);
       add('object.subtract');
+      add('draw.cut');
       add('object.reverse');
     }
     return out.length ? h('div', { class: 'obj-actions' }, out) : null;
