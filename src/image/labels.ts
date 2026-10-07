@@ -25,7 +25,7 @@ export interface Components {
  * 4-connected components of equal labels (two-pass union-find). 4-connectivity keeps every region
  * a union of whole pixel squares, so outlines never pinch at a diagonal.
  */
-export function components(labels: Uint8Array, w: number, h: number): Components {
+export function components(labels: Uint8Array | Uint16Array, w: number, h: number): Components {
   const n = w * h;
   const parent = new Int32Array(n);
   const find = (i: number) => {
@@ -185,7 +185,6 @@ export function removeSeams(
   maxWidth: number,
   between: (seam: number, a: number, b: number) => boolean,
 ): Uint8Array {
-  const c = components(labels, w, h);
   // Distance to the nearest pixel of another region: half the local width of every region.
   const edge = new Uint8Array(labels.length);
   for (let y = 0; y < h; y++) {
@@ -196,25 +195,53 @@ export function removeSeams(
     }
   }
   const dist = distanceToSeeds(edge, w, h);
+  // A seam can run into a wide region of its own color (the dark edge between a light and a dark
+  // area joining a dark area further on). Its thin parts count on their own: whatever a disc of
+  // `maxWidth` does not reach inside the region (a morphological opening) is a component of its own.
+  const r = maxWidth / 2;
+  const core = (i: number) => 2 * (dist[i] + 1) > maxWidth;
+  const covered = new Uint8Array(labels.length);
+  const reach = Math.ceil(r);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      if (!core(i)) continue;
+      covered[i] = 1;
+      // Inner core pixels are covered already; only the core's rim reaches out.
+      if (x > 0 && x + 1 < w && y > 0 && y + 1 < h && core(i - 1) && core(i + 1) && core(i - w) && core(i + w)) continue;
+      const l = labels[i];
+      for (let yy = Math.max(0, y - reach); yy <= Math.min(h - 1, y + reach); yy++) {
+        for (let xx = Math.max(0, x - reach); xx <= Math.min(w - 1, x + reach); xx++) {
+          const j = yy * w + xx;
+          if (labels[j] === l && (xx - x) ** 2 + (yy - y) ** 2 <= r * r) covered[j] = 1;
+        }
+      }
+    }
+  }
+  const THIN = 0x100;
+  const split = new Uint16Array(labels.length);
+  for (let i = 0; i < labels.length; i++) split[i] = labels[i] === NONE || covered[i] ? labels[i] : labels[i] | THIN;
+  const c = components(split, w, h);
+  const real = (k: number) => c.label[k] & 0xff;
   const maxHalf = new Float32Array(c.label.length);
   for (let i = 0; i < labels.length; i++) maxHalf[c.comp[i]] = Math.max(maxHalf[c.comp[i]], dist[i] + 1);
   const adj = adjacency(c, w, h);
   const out = labels.slice();
   for (let k = 0; k < c.label.length; k++) {
-    if (c.label[k] === NONE || 2 * maxHalf[k] > maxWidth) continue;
-    const nbs = [...adj[k]].sort((a, b) => b[1] - a[1]);
+    if (real(k) === NONE || 2 * maxHalf[k] > maxWidth) continue;
+    const nbs = [...adj[k]].filter(([nb]) => real(nb) !== real(k)).sort((a, b) => b[1] - a[1]);
     if (nbs.length < 2) continue;
-    const a = c.label[nbs[0][0]];
-    const second = nbs.find(([nb]) => c.label[nb] !== a);
+    const a = real(nbs[0][0]);
+    const second = nbs.find(([nb]) => real(nb) !== a);
     if (!second) continue;
-    const b = c.label[second[0]];
-    if (!between(c.label[k], a, b)) continue;
+    const b = real(second[0]);
+    if (!between(real(k), a, b)) continue;
     // Each pixel goes to whichever of the two sides is nearer: grow both into the seam.
     let todo: number[] = [];
     for (let y = c.minY[k]; y <= c.maxY[k]; y++) {
       for (let x = c.minX[k]; x <= c.maxX[k]; x++) if (c.comp[y * w + x] === k) todo.push(y * w + x);
     }
-    const seam = c.label[k];
+    const seam = real(k);
     while (todo.length) {
       const changes: number[] = [];
       const rest: number[] = [];

@@ -3,7 +3,7 @@ import { deltaE2000, labToRgb, rgbToLab, type Lab } from '../src/image/color';
 import { distanceInside } from '../src/image/edt';
 import { looksLikePhoto } from '../src/image/filters';
 import { orientation } from '../src/image/orientation';
-import { components, mergeSmall, removeBackground } from '../src/image/labels';
+import { components, mergeSmall, removeBackground, removeSeams } from '../src/image/labels';
 import { DEFAULT_PREPARE, NONE, Preparer, type Stroke } from '../src/image/prepare';
 import { quantize } from '../src/image/quantize';
 import { toLab } from '../src/image/raster';
@@ -96,6 +96,19 @@ describe('label cleanup', () => {
     expect(components(out, w, w).label.length).toBe(2);
   });
 
+  it('removes a seam that runs into a wide region of its own color', () => {
+    // Left half 0, right half 1, a 2 px seam of 2 between them that widens into a block at the bottom.
+    const w = 40;
+    const labels = new Uint8Array(w * w);
+    for (let y = 0; y < w; y++) for (let x = 0; x < w; x++) labels[y * w + x] = x < 19 ? 0 : x > 20 ? 1 : 2;
+    for (let y = 30; y < w; y++) for (let x = 12; x < 28; x++) labels[y * w + x] = 2;
+    const out = removeSeams(labels, w, w, 5, () => true);
+    expect(out[10 * w + 19]).toBe(0);
+    expect(out[10 * w + 20]).toBe(1);
+    // The block itself is wide: it stays.
+    expect(out[36 * w + 20]).toBe(2);
+  });
+
   it('removes only the background connected to the border', () => {
     const w = 20;
     const labels = new Uint8Array(w * w); // 0 = white background
@@ -138,6 +151,26 @@ describe('prepare', () => {
     expect(ring.areaMm2).toBeCloseTo(Math.PI * (225 - 144), -1);
     // Background (one region around the design), ring and disk.
     expect(components(p.labels, p.width, p.height).label.length).toBe(3);
+  });
+
+  it('enlarges a small image without stair steps along its edges', () => {
+    // 100 px for 40 mm: every source pixel becomes 4 x 4 working pixels.
+    const img = shape(100, 100, (x, y) => (Math.hypot(x - 50, y - 50) < 30 ? RED : null), WHITE);
+    const p = new Preparer(img).run(opts);
+    expect(p.width).toBe(400);
+    const red = p.labels[200 * p.width + 200];
+    // Distance of every edge pixel of the disk to the circle it was drawn as (r = 120 px).
+    let worst = 0;
+    for (let y = 1; y < p.height - 1; y++) {
+      for (let x = 1; x < p.width - 1; x++) {
+        const i = y * p.width + x;
+        if (p.labels[i] !== red) continue;
+        if (p.labels[i - 1] === red && p.labels[i + 1] === red && p.labels[i - p.width] === red && p.labels[i + p.width] === red) continue;
+        worst = Math.max(worst, Math.abs(Math.hypot(x + 0.5 - 200, y + 0.5 - 200) - 120));
+      }
+    }
+    // Copying source pixels into 4 px blocks leaves steps of up to 4 px; interpolated, the edge stays on the circle.
+    expect(worst).toBeLessThan(1.6);
   });
 
   it('applies color edits and brush strokes', () => {
