@@ -8,12 +8,13 @@ import { ECHO_SIDES } from '../src/digitize/echo';
 import { lineParts, partOf, SHADOW_DIRS, type LinePart } from '../src/model/shadow';
 import { lineStitches, resewLine } from '../src/model/line';
 import { refreshKnockouts, setKnockout } from '../src/model/knockout';
-import { rememberObjects, sewObjects, tableOf } from '../src/model/objects';
+import { rememberObjects, sewObjects, tableOf, type SewObject } from '../src/model/objects';
 import { COLOR_CHANGE, END, STITCH, type Pattern, type ThreadColor } from '../src/model/pattern';
 import { sameColor } from '../src/model/recolor';
 import { formOf, transformSewObject } from '../src/model/reshape';
 import { canSplit, splitFill } from '../src/model/splitFill';
-import { wholeArea } from '../src/model/knockout';
+import { wholeArea, wholeOf } from '../src/model/knockout';
+import { borderStitches } from '../src/model/along';
 import type { Region } from '../src/digitize/region';
 import { backToVersion, keepVersion, objectKey, remember, remembered, rememberedIn, restitch, restoreRemembered, DECO_PATTERNS, OPEN_PATTERNS, type FillSettings, type StoredObjects } from '../src/model/restitch';
 import { reorder } from '../src/model/order';
@@ -41,6 +42,13 @@ import { rng } from './helpers/images';
  *
  * TORTURE_CHAINS and TORTURE_STEPS run more of them (e.g. TORTURE_CHAINS=10000 for a long run).
  */
+
+/** The stitches of object `o` (0.1 mm), its tie-in left out. */
+const ownStitches = (p: Pattern, o: SewObject) => {
+  const out: string[] = [];
+  for (let i = o.first + o.tieIn; i <= o.last; i++) if (p.cmd[i] === STITCH) out.push(`${p.x[i]},${p.y[i]}`);
+  return out.join(' ');
+};
 
 const CHAINS = Number(process.env.TORTURE_CHAINS ?? 24);
 const STEPS = Number(process.env.TORTURE_STEPS ?? 14);
@@ -305,7 +313,15 @@ const OPS: Op[] = [
       if (d.objects.length < 2) return false;
       const o = pick(r, d.objects).index;
       if (process.env.TORTURE_TRACE) console.log('delete', o);
-      return shapes(d, deleteObjects(d.cur.p, [o], T));
+      const before = d.cur.p;
+      const next = deleteObjects(before, [o], T);
+      // Sewn from the list without it: what stays keeps its stitches (tie-ins aside).
+      if (next) {
+        const was = new Map(sewObjects(before).map((x) => [x.id, ownStitches(before, x)]));
+        const moved = sewObjects(next).filter((x) => was.get(x.id) !== ownStitches(next, x));
+        expect(moved.map((x) => `${x.id}: other stitches after delete`).join('; ')).toBe('');
+      }
+      return shapes(d, next);
     },
   },
   {
@@ -560,7 +576,9 @@ function checkBorders(p: Pattern): void {
     if (f === undefined) problems.push(`border ${k} has no fill`);
     else if (!sameColor(objs[k].color, mem[f]!.fill!.border!.color ?? objs[f].color)) problems.push(`border ${k} not in its thread`);
   });
-  for (const [link, k] of fills) if (!borders.has(link)) problems.push(`fill ${k} lost its border`);
+  // Unless nothing of its edge shows (all of it under shapes on top).
+  const hidden = (m: NonNullable<(typeof mem)[number]>) => !m.piece && !!m.region && borderStitches(m.region, m.fill!.border!, [0, 0], wholeOf(m.region, m)).length === 0;
+  for (const [link, k] of fills) if (!borders.has(link) && !hidden(mem[k]!)) problems.push(`fill ${k} lost its border`);
   expect(problems.join('; '), 'border links').toBe('');
 }
 
@@ -859,11 +877,12 @@ describe('found by the torture test', () => {
   });
 
   // Chains that failed once (borders on delete, cut out and recolor; knockouts after reopening a
-  // project whose curves were stored rounded; a fill leaving out its own satin border): replayed
-  // with every run.
+  // project whose curves were stored rounded; a fill leaving out its own satin border; the parts of
+  // a fill cut apart: an empty part, parts recolored apart, a part too small for its pattern, a tiny
+  // part given a tie-off): replayed with every run.
   // The ones the regular chains above already run with the same steps are not run twice.
   const regular = (seed: number) => STEPS === 14 && seed >= FIRST_SEED && seed < FIRST_SEED + CHAINS;
-  it.each([3, 4, 9, 11, 12, 16, 18, 24, 34, 38, 101, 389].filter((s) => !regular(s)))('chain %i still holds', async (seed) => {
+  it.each([3, 4, 9, 11, 12, 16, 18, 24, 34, 38, 101, 389, 1034, 1051, 1062, 1276, 2015, 2335].filter((s) => !regular(s)))('chain %i still holds', async (seed) => {
     await chain(seed, 14);
   });
   // From the first long run (20 steps): a narrow added shape sewn as satin forgot what it was;
