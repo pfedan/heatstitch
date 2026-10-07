@@ -20,11 +20,12 @@ import {
   type StoredPattern,
   type Titles,
 } from '../storage/fileStore';
-import { backToVersion, keepVersion, restoreRemembered, type StoredObject } from '../model/restitch';
+import { backToVersion, keepVersion, rememberedIn, restoreRemembered, type ObjectsAsStored } from '../model/restitch';
 import { asideFrom, asideOf, inheritAside, setAsideOf, storeAside, type StoredAside } from '../model/aside';
 import type { ProjectFile } from '../storage/project';
 import { liveAcknowledgements, openWorst, type Acknowledgement } from '../validation/acks';
 import { normalizeMaterial, type Material } from '../settings';
+import { toast } from '../shell/ui';
 import {
   CAUTION,
   classify,
@@ -47,6 +48,11 @@ export interface LoadedFile {
   error?: string;
   /** The pattern as loaded; `pattern` differs once it was corrected or edited. */
   original?: Pattern;
+  /**
+   * The version a project brought along when it was opened (absent for plain files): the
+   * comparison with the original is offered once the design differs from it, not right away.
+   */
+  opened?: Pattern;
   /** Measurement and classification of `original`, kept for the comparison view. */
   originalMeasurement?: Measurement;
   originalValidation?: ValidationResult;
@@ -79,7 +85,7 @@ interface FileData {
   storeKey?: number;
   working?: StoredPattern;
   acks?: Acknowledgement[];
-  objects?: StoredObject[];
+  objects?: ObjectsAsStored;
   aside?: StoredAside[];
   /** Unchecked; missing parts come from the material last used. */
   material?: unknown;
@@ -91,6 +97,8 @@ interface FileData {
 
 /** Versions kept per file for undo. */
 const HISTORY = 50;
+/** How long a removed design can still be brought back (a little longer than its note shows). */
+const REMOVE_GRACE_MS = 8000;
 
 const EXT = /\.[^.]+$/;
 /** The extension of an embroidery format at the end of a name ("Herz 1.5" has none). */
@@ -102,6 +110,8 @@ export class FileList {
   private nextId = 1;
   /** The file whose name is being edited in the list, with the text typed so far. */
   private renaming: { id: number; text: string } | null = null;
+  /** True while the list is drawn anew: the name field it takes away loses its focus then, which is no real leave. */
+  private drawing = false;
   /** Called after a design got another name (the save field suggests the new one). */
   onRename: (f: LoadedFile) => void = () => {};
 
@@ -147,7 +157,7 @@ export class FileList {
    * Adds one file with what is known about its objects (and its own material, else the last used), and
    * activates it. `own`: made in the app, so it is named without the extension of the PES behind it.
    */
-  async addWithObjects(name: string, data: ArrayBuffer, objects: StoredObject[], aside: StoredAside[] = [], material?: Material, own = false): Promise<void> {
+  async addWithObjects(name: string, data: ArrayBuffer, objects: ObjectsAsStored, aside: StoredAside[] = [], material?: Material, own = false): Promise<void> {
     const first = await this.addData([{ name, data, objects, aside, material, own }], true);
     if (first) this.activate(first.id);
     else this.render();
@@ -174,13 +184,22 @@ export class FileList {
    * one that was active when it was saved (else the first).
    */
   async addProject(list: ProjectFile[], active: number | null): Promise<void> {
+    // Opening the same project again (say after a reload brought it back) does not list its designs
+    // twice: a design that is already open exactly as the project holds it is shown, not added.
+    const used = new Set<LoadedFile>();
+    const open = list.map((f) => {
+      const o = this.files.find((o) => !used.has(o) && sameDesign(o, f));
+      if (o) used.add(o);
+      return o;
+    });
     const before = this.files.length;
+    const fresh = list.filter((_, i) => !open[i]);
     const first = await this.addData(
-      list.map((f) => ({ name: f.name, data: f.data.slice().buffer, working: f.working, acks: f.acks, objects: f.objects, aside: f.aside, material: f.material, title: f.title, titles: f.titles, own: f.own })),
+      fresh.map((f) => ({ name: f.name, data: f.data.slice().buffer, working: f.working, acks: f.acks, objects: f.objects, aside: f.aside, material: f.material, title: f.title, titles: f.titles, own: f.own })),
       true,
     );
-    const wanted = active !== null ? this.files[before + active] : undefined;
-    const target = wanted?.pattern ? wanted : first;
+    const wanted = active !== null ? (open[active] ?? this.files[before + fresh.indexOf(list[active])]) : undefined;
+    const target = wanted?.pattern ? wanted : (first ?? open.find((o) => o?.pattern));
     if (target) this.activate(target.id);
     else this.render();
   }
@@ -192,7 +211,7 @@ export class FileList {
   }
 
   /** Stores what is remembered about the objects of a file's current version. */
-  setObjects(f: LoadedFile, objects: StoredObject[]): void {
+  setObjects(f: LoadedFile, objects: ObjectsAsStored): void {
     // What the objects learned belongs to this version (undo brings it back with it).
     if (f.pattern) keepVersion(f.pattern);
     if (f.storeKey !== undefined) void saveObjects(f.storeKey, objects);
@@ -216,8 +235,6 @@ export class FileList {
       };
       // Stored before materials were kept per design: it keeps the one it was last seen with.
       if (storeKey !== undefined && !material) void saveMaterial(storeKey, entry.material);
-      // Remembered by their stitches, so they apply to whichever version has these objects.
-      if (objects) restoreRemembered(objects);
       try {
         const original = parsePattern(new Uint8Array(data), name);
         entry.original = original;
@@ -228,6 +245,7 @@ export class FileList {
           const edited = fromStored(original, working);
           if (edited) {
             entry.pattern = edited;
+            if (persist) entry.opened = edited;
             // One undo step leads back to the original.
             entry.undo.push(original);
           } else {
@@ -238,6 +256,14 @@ export class FileList {
         // Shapes aside belong to the working copy (to the original only while there is none).
         setAsideOf(original, entry.pattern === original ? asideFrom(aside) : []);
         if (entry.pattern !== original) setAsideOf(entry.pattern, asideFrom(aside));
+        // The objects of the version as stored; an older project knew them by their stitches, so
+        // its original knows those that are in it too.
+        if (objects) {
+          restoreRemembered(entry.pattern, objects);
+          if (Array.isArray(objects) && entry.pattern !== original) restoreRemembered(original, objects);
+          // Kept from an older version of the app: kept as an object list from now on.
+          if (!persist && storeKey !== undefined && Array.isArray(objects)) void saveObjects(storeKey, rememberedIn(entry.pattern));
+        }
         entry.stats = patternStats(entry.pattern);
         keepVersion(original);
         if (entry.pattern !== original) keepVersion(entry.pattern);
@@ -249,7 +275,7 @@ export class FileList {
           if (key !== undefined) {
             if (entry.pattern !== original) void saveWorking(key, toStored(entry.pattern));
             if (entry.acks.length) void saveAcks(key, entry.acks);
-            if (objects?.length) void saveObjects(key, objects);
+            if (objects) void saveObjects(key, rememberedIn(entry.pattern));
             if (aside?.length) void saveAside(key, aside);
             void saveMaterial(key, entry.material);
             if (entry.title || entry.titles || entry.own) void saveNaming(key, entry.title ?? null, entry.own, entry.titles);
@@ -386,6 +412,11 @@ export class FileList {
     return !!f?.pattern && f.pattern !== f.original;
   }
 
+  /** Changed since it was opened: edited, and not the version a project came with. Offers the comparison. */
+  static changed(f: LoadedFile | null): boolean {
+    return FileList.edited(f) && f!.pattern !== f!.opened;
+  }
+
   /** A design started empty with "Neu": it has no original stitches to go back to. */
   static blank(f: LoadedFile | null): boolean {
     return !!f?.original && !f.original.cmd.includes(STITCH);
@@ -468,17 +499,50 @@ export class FileList {
     this.onActivate(this.active);
   }
 
-  remove(id: number): void {
+  /**
+   * Takes a design out of the list and activates the next one. It stays in storage for a few
+   * seconds: the returned function puts it back as it was (with its undo history), until then.
+   */
+  remove(id: number): (() => void) | null {
     const idx = this.files.findIndex((f) => f.id === id);
-    if (idx < 0) return;
+    if (idx < 0) return null;
     const [removed] = this.files.splice(idx, 1);
-    if (removed.storeKey !== undefined) void deleteFile(removed.storeKey);
-    if (this.activeId === id) {
+    const wasActive = this.activeId === id;
+    let settled = false;
+    const drop = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      window.removeEventListener('pagehide', drop);
+      if (removed.storeKey !== undefined) void deleteFile(removed.storeKey);
+    };
+    const timer = window.setTimeout(drop, REMOVE_GRACE_MS);
+    window.addEventListener('pagehide', drop);
+    if (this.renaming?.id === id) this.renaming = null;
+    if (wasActive) {
       const next = this.files.slice(idx).find((f) => f.pattern) ?? [...this.files].reverse().find((f) => f.pattern);
       this.activate(next?.id ?? null);
     } else {
       this.render();
     }
+    return () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      window.removeEventListener('pagehide', drop);
+      this.files.splice(Math.min(idx, this.files.length), 0, removed);
+      if (wasActive || this.activeId === null) this.activate(removed.id);
+      else this.render();
+    };
+  }
+
+  /** Removes a design and says so, with a way back (no question before). */
+  removeWithUndo(id: number): void {
+    const f = this.files.find((x) => x.id === id);
+    if (!f) return;
+    const name = FileList.displayName(f);
+    const undo = this.remove(id);
+    if (undo) toast(t('files.removed', { name }), { label: t('files.undo'), run: undo });
   }
 
   /** Moves the selection by `dir` among parsed files (keyboard navigation). */
@@ -492,13 +556,22 @@ export class FileList {
   render(): void {
     // A list drawn anew while a name is typed (a measurement came in) keeps the field and its focus.
     const typing = !!this.renaming && document.activeElement?.classList.contains('rename-input');
+    const old = typing ? (document.activeElement as HTMLInputElement) : null;
+    const sel = old ? [old.selectionStart ?? 0, old.selectionEnd ?? 0] : null;
     if (this.renaming && !this.files.some((f) => f.id === this.renaming!.id)) this.renaming = null;
+    this.drawing = true;
     this.list.replaceChildren(
       ...(this.files.length
         ? this.files.map((f) => this.item(f))
         : [Object.assign(document.createElement('li'), { className: 'muted', textContent: t('files.empty') })]),
     );
-    if (typing) this.list.querySelector<HTMLInputElement>('input.rename-input')?.focus();
+    this.drawing = false;
+    if (typing) {
+      // The new field takes over the focus and what was selected in the old one.
+      const input = this.list.querySelector<HTMLInputElement>('input.rename-input');
+      input?.focus();
+      if (sel) input?.setSelectionRange(sel[0], sel[1]);
+    }
   }
 
   /** The text field that replaces a name while it is edited; Enter or leaving it takes the name, Escape keeps the old one. */
@@ -521,7 +594,7 @@ export class FileList {
     });
     input.addEventListener('blur', () => {
       // Drawing the list anew blurs the old field too; only a real leave ends editing.
-      if (input.isConnected) this.endRename(true);
+      if (input.isConnected && !this.drawing) this.endRename(true);
     });
     input.addEventListener('click', (e) => e.stopPropagation());
     input.addEventListener('dblclick', (e) => e.stopPropagation());
@@ -593,11 +666,36 @@ export class FileList {
     rm.textContent = '×';
     rm.title = t('files.remove');
     rm.setAttribute('aria-label', `${t('files.remove')}: ${shown}`);
+    rm.className = 'remove-btn';
     rm.addEventListener('click', (e) => {
       e.stopPropagation();
-      this.remove(f.id);
+      this.removeWithUndo(f.id);
     });
     li.append(rm);
     return li;
   }
+}
+
+/** True if the open design is the project's design as it was saved: same file, same stitches, same name. */
+export function sameDesign(o: LoadedFile, f: ProjectFile): boolean {
+  if (!o.pattern || !o.original || !o.data || o.fileName !== f.name || (o.title ?? '') !== (f.title ?? '')) return false;
+  if (!sameBytes(o.data, f.data)) return false;
+  const p = o.pattern;
+  const w = f.working;
+  const sameAside = JSON.stringify(storeAside(asideOf(p))) === JSON.stringify(f.aside ?? []);
+  if (!w) return p === o.original && sameAside;
+  if (p === o.original) return false;
+  return (
+    sameAside &&
+    sameBytes(p.cmd, w.cmd) &&
+    sameBytes(new Uint8Array(p.x.buffer, p.x.byteOffset, p.x.byteLength), new Uint8Array(w.x.buffer, w.x.byteOffset, w.x.byteLength)) &&
+    sameBytes(new Uint8Array(p.y.buffer, p.y.byteOffset, p.y.byteLength), new Uint8Array(w.y.buffer, w.y.byteOffset, w.y.byteLength)) &&
+    JSON.stringify(p.colors) === JSON.stringify(w.colors)
+  );
+}
+
+function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
 }

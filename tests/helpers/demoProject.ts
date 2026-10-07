@@ -12,7 +12,7 @@ import { refreshKnockouts, setKnockout } from '../../src/model/knockout';
 import { rememberObjects, sewObjects } from '../../src/model/objects';
 import type { PathStitch } from '../../src/model/along';
 import type { Pattern, ThreadColor } from '../../src/model/pattern';
-import { forgetAll, keepVersion, remember, remembered, rememberedIn, restitch, type FillSettings, type StoredObject } from '../../src/model/restitch';
+import { keepVersion, remember, remembered, rememberedIn, restitch, restoreRemembered, type FillSettings, type StoredObjects } from '../../src/model/restitch';
 import { stitchKinds } from '../../src/model/sequence';
 import { stitchesBefore } from '../../src/model/transform';
 import { parsePattern } from '../../src/parsers';
@@ -223,14 +223,15 @@ export class Design {
   }
 
   /** The design as a file of the project: PES bytes as the app writes an own design, and what it knows of its objects. */
-  file(): { name: string; data: Uint8Array; working: StoredPattern; acks: []; titles: Titles; objects: StoredObject[]; material: Material; title: string; own: true } {
+  file(): { name: string; data: Uint8Array; working: StoredPattern; acks: []; titles: Titles; objects: StoredObjects; material: Material; title: string; own: true } {
     const data = writePattern(this.p, 'pes');
-    // As the app adds it (addWithObjects): the objects as read back from the file.
+    // As the app opens it: the stitches read back from the file, and the object list put on them.
     const back = parsePattern(data, `${this.title}.pes`);
     const objs = sewObjects(this.p);
+    const known = rememberedIn(this.p, objs);
+    restoreRemembered(back, structuredClone(known));
     const read = sewObjects(back);
     if (objs.length !== read.length) throw new Error(`${this.title}: ${objs.length} objects, ${read.length} read back`);
-    const known = rememberedIn(this.p, objs);
     const material: Material = {
       ...materialOf(structuredClone(DEFAULTS)),
       profile: this.profile,
@@ -471,7 +472,6 @@ export const DEMO_DESIGNS = [flower, decoSampler, lineStitches, lineVariants, li
 
 /** Builds every design afresh (object memory starts empty). */
 export function buildDemos(): Design[] {
-  forgetAll();
   return DEMO_DESIGNS.map((make) => make());
 }
 

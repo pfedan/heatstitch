@@ -173,7 +173,7 @@ describe('rungs and new stitches', () => {
     const no = sewObjects(r.pattern, nk);
     const again = no.find((x) => x.first >= o.first && x.kind === 'satin')!;
     remember(r.pattern, again, r.memory[0]);
-    const stored = rememberedIn(r.pattern, no).find((s) => s.columns);
+    const stored = rememberedIn(r.pattern, no).objects.find((s) => s.memory?.columns)?.memory;
     expect(stored?.columns?.[0][0].rungs?.length).toBe(columns[0][0].rungs!.length * 2);
     expect(remembered(r.pattern, again)?.columns?.[0][0].rungs).toBeDefined();
   });

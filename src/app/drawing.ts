@@ -10,6 +10,7 @@ import type { Sequence } from './types';
 import type { Settings } from '../settings';
 import type { ShapeTool } from '../ui/shapeTool';
 import type { ThreadColor, Pattern } from '../model/pattern';
+import type { Pt } from '../digitize/skeleton';
 import { DrawTool, type DrawKind } from '../ui/drawTool';
 import { FrameTool, type SnapTargets } from '../ui/frameTool';
 import { digitizeDefaults, type Digitized, digitizeShapes } from '../digitize/digitize';
@@ -20,6 +21,7 @@ import { rgbToLab } from '../image/color';
 import { scaleBlocked, transformSewObject } from '../model/reshape';
 import { stitchesBefore, transformObject } from '../model/transform';
 import { syncBorders } from '../model/border';
+import { canSplit, splitFill } from '../model/splitFill';
 import { t, formatNumber } from '../i18n';
 import { type NewShape, addShape } from '../model/addShape';
 import { ui } from './state';
@@ -56,28 +58,68 @@ export function bindDrawing(app: DrawingApp) {
   /** A thread for the first shape of a new design: a Brother orange, clear on dark and light fabric. */
   const FIRST_THREAD: ThreadColor = nearestThread(rgbToLab(240, 140, 40)).thread;
 
-  const drawTool = new DrawTool({ done: (s) => void drawn(s), redraw: app.redraw });
-  const drawButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-draw]')];
+  const drawTool = new DrawTool({ done: (s) => void drawn(s), cut: (line) => cutSelected(line), redraw: app.redraw });
 
-  /** Picks a drawing tool, or none (the pointer). Drawing belongs to the level Form. */
+  /** Picks a drawing tool, or none (the pointer). Drawing belongs to the level Form. The tool rail runs it (src/areas/shapes). */
   function setDrawing(kind: DrawKind | null): void {
     if (kind && app.settings.mode !== 'flow') return;
+    // Zerteilen works on the selected fills where they are: the level and the selection stay.
+    if (kind === 'cut' && !cuttable().length) return app.layers.say(t('cut.none'), true);
     if (kind) {
-      ui.formLevel = true;
+      if (kind !== 'cut') ui.formLevel = true;
       if (app.editor.active) app.setEditing(false);
       if (app.shapeTool.active) app.closeShape();
       if (app.rungTool.active) app.closeRungs();
       if (ui.letterMode) app.setLetterMode(false);
     }
     drawTool.start(kind);
-    for (const b of drawButtons) b.setAttribute('aria-pressed', String(b.dataset.draw === kind));
     app.stage.classList.toggle('drawing', !!kind);
     if (!kind) app.openSelectedForm();
     app.updateLevel();
     app.redraw();
   }
-  drawButtons.forEach((b) => b.addEventListener('click', () => setDrawing(drawTool.kind === b.dataset.draw ? null : (b.dataset.draw as DrawKind))));
-  $('draw-pointer').addEventListener('click', () => setDrawing(null));
+
+  /** The selected objects that are fills that can be cut apart. */
+  function cuttable(): number[] {
+    const p = app.files.active?.pattern;
+    return p ? [...ui.selectedObjects].filter((o) => canSplit(p, o)) : [];
+  }
+
+  /**
+   * The selected fills cut along `line` (world mm), as one undo step: each part an object of its own
+   * with its own row direction, the parts selected after it (so a next cut can go on).
+   */
+  function cutSelected(line: Pt[]): void {
+    const f = app.files.active;
+    const p = f?.pattern;
+    if (!f || !p) return;
+    const fills = cuttable().sort((a, b) => b - a);
+    if (!fills.length) return app.layers.say(t('cut.none'), true);
+    let cur = p;
+    let sel = [...ui.selectedObjects];
+    let parts = 0;
+    let plain = 0;
+    // The last fill first, so the ones before keep their place; what comes after moves on by the new parts.
+    for (const o of fills) {
+      const r = splitFill(cur, o, [line], app.settings.trimMm);
+      if (r === 'whole') continue;
+      if (!r) return app.layers.say(t('cut.failed'), true);
+      const added = app.seq(r.pattern).objects.length - app.seq(cur).objects.length;
+      sel = sel.flatMap((s) => (s > o ? [s + added] : s === o ? r.parts : [s]));
+      parts += r.parts.length;
+      plain += r.plain;
+      cur = r.pattern;
+    }
+    if (cur === p) return app.layers.say(t('cut.whole'), true);
+    const synced = syncBorders(cur, app.settings.trimMm);
+    app.applyEdit(synced);
+    app.files.setObjects(f, rememberedIn(synced, app.seq(synced).objects));
+    ui.selectedObjects = new Set(sel);
+    ui.selectionKey++;
+    app.followKnockouts();
+    app.layers.say(`${t('cut.done', { n: formatNumber(parts) })}${plain ? ` ${t('cut.plain', { n: formatNumber(plain) })}` : ''} ${t('object.undo')}`);
+    app.redraw();
+  }
 
   /** A shape is drawn: sewn in the thread of the selected object right after it, else after the last one. */
   /** No stitches yet. */

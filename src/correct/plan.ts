@@ -9,6 +9,7 @@ import {
   measureRun,
   measureSatin,
   objectKey,
+  isGradient,
   isOpenPattern,
   openOnPurpose,
   remember,
@@ -277,7 +278,7 @@ function candidates(p: Pattern, objs: SewObject[], o: SewObject, s: Settings, re
       if (f.underlay && !f.underCover && coversOver(p, objs, o, 0.1).length) out.push({ changes: [fix('underCover', false, true)], visibility: 'invisible', reason: 'density' });
       if (f.underlay && f.underCross) out.push({ changes: [fix('underCross', true, false)], visibility: 'invisible', reason: 'density' });
       if (f.underlay && areaMm2 < SMALL_FILL_MM2) out.push({ changes: [fix('underlay', true, false)], visibility: 'invisible', reason: 'density' });
-      if (f.pattern !== 'gradient') {
+      if (!isGradient(f)) {
         for (const to of [round2(Math.min(recMax, f.spacing * 1.08)), round2(recMax)]) {
           if (to > f.spacing + 0.005) out.push({ changes: [fix('spacing', f.spacing, to)], visibility: 'slight', reason: 'density' });
         }
@@ -287,7 +288,7 @@ function candidates(p: Pattern, objs: SewObject[], o: SewObject, s: Settings, re
       }
     }
     if (reasons.has('sparse')) {
-      if (f.pattern !== 'gradient' && f.spacing > recMax + 0.005) out.push({ changes: [fix('spacing', f.spacing, round2(recMax))], visibility: 'slight', reason: 'sparse' });
+      if (!isGradient(f) && f.spacing > recMax + 0.005) out.push({ changes: [fix('spacing', f.spacing, round2(recMax))], visibility: 'slight', reason: 'sparse' });
       if (!f.underlay && areaMm2 >= SMALL_FILL_MM2) out.push({ changes: [fix('underlay', false, true)], visibility: 'invisible', reason: 'sparse' });
     }
     if (reasons.has('gap') && f.edge < MAX_FILL_EDGE - 0.01) {
@@ -509,7 +510,7 @@ export function planFabric(p: Pattern, profile: Profile): Proposal[] {
       const an = analyze(p, o, kinds, known);
       if (shapeTrust(p, o, an, f.spacing) === 'approximate') continue;
       const area = an.fill?.areaMm2 ?? 0;
-      if (f.pattern !== 'gradient' && Math.abs(into(f.spacing) - f.spacing) > 0.005) changes.push(fix('spacing', f.spacing, into(f.spacing))), slight();
+      if (!isGradient(f) && Math.abs(into(f.spacing) - f.spacing) > 0.005) changes.push(fix('spacing', f.spacing, into(f.spacing))), slight();
       const u = fillUnder(under, area);
       if (u.underlay !== f.underlay) changes.push(fix('underlay', f.underlay, u.underlay));
       else if (u.underlay && !!u.underCross !== !!f.underCross) changes.push(fix('underCross', !!f.underCross, !!u.underCross));

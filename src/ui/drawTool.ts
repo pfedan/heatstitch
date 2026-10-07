@@ -4,7 +4,7 @@ import type { Form, Node } from '../shape/path';
 import { ellipsePath, parsePath, rectPath } from '../shape/svgPath';
 import { fitCubic } from '../shape/vectorize';
 
-export type DrawKind = 'rect' | 'ellipse' | 'pen' | 'free';
+export type DrawKind = 'rect' | 'ellipse' | 'pen' | 'free' | 'cut';
 
 /** A click this close to the first node closes the pen's path (CSS pixels). */
 const CLOSE_PX = 10;
@@ -12,10 +12,16 @@ const CLOSE_PX = 10;
 const FREE_TOLERANCE = 0.3;
 /** Shapes smaller than this on both sides (mm) are taken as a slip and not drawn. */
 const MIN_SIZE = 1;
+/** A press that moves less than this (CSS pixels) is a click: the cut becomes a path of corners. */
+const CLICK_PX = 6;
+/** With Shift, cuts go in steps of this angle (degrees). */
+const SNAP_DEG = 15;
 
 export interface DrawHooks {
   /** A shape is drawn: sew it. */
   done: (shape: NewShape) => void;
+  /** A cut is drawn (tool Zerteilen): split the selected fills along it (world mm). */
+  cut: (line: Pt[]) => void;
   redraw: () => void;
 }
 
@@ -26,6 +32,8 @@ const corner = (p: Pt): Node => ({ p, a: p, b: p, smooth: false });
  * Drawing new shapes on the canvas: a rectangle or ellipse by dragging (Shift: square or circle,
  * Alt: from the middle), the pen (click: corner, drag: round node, click on the first node: a
  * closed area, double-click or Enter: an open line) and freehand lines, smoothed on release.
+ * The cut (Zerteilen) is all three in one gesture: drag for freehand, click, click, ... for a path
+ * (double-click or Enter ends it), Shift for straight lines in steps of 15 degrees.
  * Coordinates are world millimetres.
  */
 export class DrawTool {
@@ -36,6 +44,9 @@ export class DrawTool {
   size: [number, number] | null = null;
   /** The pen's first node is under the pointer: a click closes the area. */
   closing = false;
+  /** Options of the tool bar, as if Shift (a square or circle) or Alt (from the middle) were held. */
+  square = false;
+  fromCenter = false;
   /** Nodes of the pen. */
   private nodes: Node[] = [];
   private from: Pt | null = null;
@@ -45,6 +56,9 @@ export class DrawTool {
   private cursor: Pt | null = null;
   /** The pen set a node with this press (dropped again when it turns into a pinch). */
   private added = false;
+  /** The cut's press moved far enough to be freehand. */
+  private moved = false;
+  private scale = 1;
 
   constructor(private hooks: DrawHooks) {}
 
@@ -68,13 +82,14 @@ export class DrawTool {
     this.preview = null;
     this.size = null;
     this.closing = false;
+    this.moved = false;
   }
 
   /** A second finger came: the press was for zooming, not drawing. */
   abortPress(): void {
     if (!this.dragging) return;
     this.dragging = false;
-    if (this.kind === 'pen') {
+    if (this.kind === 'pen' || (this.kind === 'cut' && this.nodes.length)) {
       if (this.added) this.nodes.pop();
       this.added = false;
       return this.update();
@@ -86,15 +101,20 @@ export class DrawTool {
 
   /** Takes back the pen's last node; false when there is none. */
   removeLast(): boolean {
-    if (this.kind !== 'pen' || !this.nodes.length) return false;
+    if ((this.kind !== 'pen' && this.kind !== 'cut') || !this.nodes.length) return false;
     this.nodes.pop();
     this.update();
     return true;
   }
 
   /** The pointer moved without a press: the pen shows where the next segment would go. */
-  hoverAt(x: number, y: number, scale: number): boolean {
-    if (this.kind !== 'pen' || this.dragging || !this.nodes.length) return false;
+  hoverAt(x: number, y: number, scale: number, shift = false): boolean {
+    if ((this.kind !== 'pen' && this.kind !== 'cut') || this.dragging || !this.nodes.length) return false;
+    if (this.kind === 'cut') {
+      this.cursor = shift ? snapped(this.nodes[this.nodes.length - 1].p, [x, y]) : [x, y];
+      this.update();
+      return true;
+    }
     this.closing = this.closesAt(x, y, scale);
     this.cursor = this.closing ? this.nodes[0].p : [x, y];
     this.update();
@@ -117,9 +137,19 @@ export class DrawTool {
     return this.nodes.length > 0 || this.from !== null;
   }
 
-  down(x: number, y: number, scale: number): void {
+  down(x: number, y: number, scale: number, shift = false): void {
     if (!this.kind) return;
     this.dragging = true;
+    this.scale = scale;
+    if (this.kind === 'cut' && this.nodes.length) {
+      // A path of corners: each click one more.
+      this.nodes.push(corner(shift ? snapped(this.nodes[this.nodes.length - 1].p, [x, y]) : [x, y]));
+      this.added = true;
+      this.cursor = null;
+      this.update();
+      return;
+    }
+    if (this.kind === 'cut') this.moved = false;
     if (this.kind === 'pen') {
       if (this.closesAt(x, y, scale)) {
         this.dragging = false;
@@ -151,6 +181,19 @@ export class DrawTool {
       return true;
     }
     if (!this.from) return true;
+    if (this.kind === 'cut') {
+      if (this.nodes.length) return true;
+      if (!this.moved && Math.hypot(x - this.from[0], y - this.from[1]) * this.scale < CLICK_PX) return true;
+      this.moved = true;
+      if (shift) this.free = [this.from, snapped(this.from, [x, y])];
+      else {
+        const last = this.free[this.free.length - 1];
+        if (Math.hypot(x - last[0], y - last[1]) > 0.2) this.free.push([x, y]);
+      }
+      this.preview = { paths: [{ closed: false, nodes: this.free.map(corner) }] };
+      this.hooks.redraw();
+      return true;
+    }
     if (this.kind === 'free') {
       const last = this.free[this.free.length - 1];
       if (Math.hypot(x - last[0], y - last[1]) > 0.2) this.free.push([x, y]);
@@ -158,7 +201,7 @@ export class DrawTool {
       this.hooks.redraw();
       return true;
     }
-    this.preview = this.box(x, y, shift, alt);
+    this.preview = this.box(x, y, shift || this.square, alt || this.fromCenter);
     this.hooks.redraw();
     return true;
   }
@@ -168,9 +211,24 @@ export class DrawTool {
     this.dragging = false;
     this.added = false;
     if (this.kind === 'pen') return;
+    if (this.kind === 'cut' && this.nodes.length) return;
     const from = this.from;
     this.from = null;
     if (!from) return;
+    if (this.kind === 'cut') {
+      const pts = this.free;
+      this.free = [];
+      this.preview = null;
+      if (this.moved) {
+        this.moved = false;
+        if (pts.length >= 2) this.hooks.cut(pts);
+      } else {
+        // A click: the start of a path.
+        this.nodes = [corner(from)];
+        this.update();
+      }
+      return this.hooks.redraw();
+    }
     if (this.kind === 'free') {
       const pts = this.free;
       this.free = [];
@@ -179,7 +237,7 @@ export class DrawTool {
       if (line) this.hooks.done({ form: line, kind: 'stroke', width: 0.4 });
       return this.hooks.redraw();
     }
-    const form = this.box(x, y, shift, alt, from);
+    const form = this.box(x, y, shift || this.square, alt || this.fromCenter, from);
     this.preview = null;
     this.size = null;
     if (form) this.hooks.done({ form, kind: 'fill' });
@@ -188,6 +246,15 @@ export class DrawTool {
 
   /** Ends the pen: a closed area, or an open line (double-click, Enter). */
   finish(closed = false): void {
+    if (this.kind === 'cut') {
+      const pts = this.nodes.map((n) => n.p).filter((q, i, all) => i === 0 || Math.hypot(q[0] - all[i - 1][0], q[1] - all[i - 1][1]) > 0.05);
+      this.nodes = [];
+      this.cursor = null;
+      this.preview = null;
+      if (pts.length >= 2) this.hooks.cut(pts);
+      this.hooks.redraw();
+      return;
+    }
     if (this.kind !== 'pen') return;
     // A double-click sets one node too many on the same spot.
     const nodes = this.nodes.filter((n, i, all) => i === 0 || Math.hypot(n.p[0] - all[i - 1].p[0], n.p[1] - all[i - 1].p[1]) > 0.05);
@@ -228,6 +295,14 @@ export class DrawTool {
     const f = parsePath(d, ID);
     return f.paths.length ? f : null;
   }
+}
+
+/** `to` moved so the line from `from` runs in a step of SNAP_DEG, as long as before. */
+function snapped(from: Pt, to: Pt): Pt {
+  const d = Math.hypot(to[0] - from[0], to[1] - from[1]);
+  const step = (SNAP_DEG * Math.PI) / 180;
+  const a = Math.round(Math.atan2(to[1] - from[1], to[0] - from[0]) / step) * step;
+  return [from[0] + d * Math.cos(a), from[1] + d * Math.sin(a)];
 }
 
 /** Points drawn by hand as a smooth open line, or null when it is too short. */

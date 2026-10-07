@@ -4,7 +4,7 @@ import { build, recs, type Rec } from './jumps';
 import { rememberObjects, sewObjects } from './objects';
 import { reorder } from './order';
 import { stitchesBefore } from './transform';
-import { COLOR_CHANGE, END, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
+import { COLOR_CHANGE, END, nextVersion, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
 import { remember, rememberShapes } from './restitch';
 import { lineStitchFor, lineStitches } from './line';
 import type { PathStitch } from './along';
@@ -66,10 +66,12 @@ const same = (a: ThreadColor, b: ThreadColor) => a.r === b.r && a.g === b.g && a
  * object `after` (-1: before all others; null: at the end), in the thread of a neighbour of the
  * same color, else as a color of its own. Null when it did not come out as one object.
  */
-export function insertObject(p: Pattern, records: Rec[], color: ThreadColor, after: number | null, trimMm: number): Added | null {
+export function insertObject(p: Pattern, given: Rec[], color: ThreadColor, after: number | null, trimMm: number): Added | null {
+  // New records: where they came from (another version, perhaps) says nothing about `p`.
+  const records = given.map(({ x, y, cmd }) => ({ x, y, cmd }));
   const before = stitches(p);
   let joined: Pattern;
-  if (!before) joined = build({ ...p, colors: [color] }, [...records, { ...records[records.length - 1], cmd: END }]);
+  if (!before) joined = build(nextVersion(p, { colors: [color] }), [...records, { ...records[records.length - 1], cmd: END }], p);
   else {
     const out = body(p);
     const last = out[out.length - 1];
@@ -77,7 +79,7 @@ export function insertObject(p: Pattern, records: Rec[], color: ThreadColor, aft
     out.push({ x: last.x, y: last.y, cmd: TRIM }, { x: last.x, y: last.y, cmd: COLOR_CHANGE }, ...records);
     const end = out[out.length - 1];
     out.push({ x: end.x, y: end.y, cmd: END });
-    joined = build({ ...p, colors: [...p.colors, color] }, out);
+    joined = build(nextVersion(p, { colors: [...p.colors, color] }), out, p);
   }
   const total = stitches(joined);
   // The objects as they were, and the new one as one object.

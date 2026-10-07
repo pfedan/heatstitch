@@ -48,7 +48,10 @@ export interface FillParams {
    * every 4 rows (the usual tatami), 1/2 gives a brick pattern; 0 shifts them at random.
    */
   offset?: number;
-  /** Spacing on the far side of the rows (gradient fill): it changes evenly across the shape. */
+  /**
+   * Spacing on the far side of the rows (gradient fill): it changes evenly across the shape. Curved
+   * rows (fieldFill) take it across their mean direction, from the side where straight rows would start.
+   */
   spacingEnd?: number;
   /** The next object starts here: the fill should end near it (straight rows only). */
   end?: Pt;
@@ -675,63 +678,6 @@ export function fillRegion(r: Region, p: FillParams, start: Pt, neighbours: numb
   const under = pointCount(runs);
   sewAll(f, sections(r, r.sdf, f, top), p.stitch, p.pull, pos, grid, true, runs, p.end);
   return { runs, angle, under };
-}
-
-/**
- * Half the width of the area at each pixel (mm): the radius of the largest circle inside the area
- * that covers the pixel, 0 outside. Spread from each pixel's own distance to the edge in two
- * sweeps, so it is close but not exact.
- */
-export function localThickness(r: Region): Float32Array {
-  return largestCircles(r).t;
-}
-
-/** For each pixel the largest circle inside the area that covers it: radius `t` (mm), center (`cx`, `cy`, pixels). */
-function largestCircles(r: Region): { t: Float32Array; cx: Float32Array; cy: Float32Array } {
-  const { w, h, pxMm } = r;
-  const t = new Float32Array(w * h);
-  // The center of the circle each pixel took its value from (pixels).
-  const cx = new Float32Array(w * h);
-  const cy = new Float32Array(w * h);
-  for (let i = 0; i < t.length; i++) {
-    t[i] = Math.max(0, -r.sdf[i]);
-    cx[i] = i % w;
-    cy[i] = Math.floor(i / w);
-  }
-  const take = (i: number, x: number, y: number, n: number) => {
-    if (t[n] > t[i] && Math.hypot(x - cx[n], y - cy[n]) * pxMm <= t[n]) {
-      t[i] = t[n];
-      cx[i] = cx[n];
-      cy[i] = cy[n];
-    }
-  };
-  for (let pass = 0; pass < 2; pass++) {
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        const i = y * w + x;
-        if (!t[i]) continue;
-        if (x > 0) take(i, x, y, i - 1);
-        if (y > 0) {
-          take(i, x, y, i - w);
-          if (x > 0) take(i, x, y, i - w - 1);
-          if (x < w - 1) take(i, x, y, i - w + 1);
-        }
-      }
-    }
-    for (let y = h - 1; y >= 0; y--) {
-      for (let x = w - 1; x >= 0; x--) {
-        const i = y * w + x;
-        if (!t[i]) continue;
-        if (x < w - 1) take(i, x, y, i + 1);
-        if (y < h - 1) {
-          take(i, x, y, i + w);
-          if (x < w - 1) take(i, x, y, i + w + 1);
-          if (x > 0) take(i, x, y, i + w - 1);
-        }
-      }
-    }
-  }
-  return { t, cx, cy };
 }
 
 /**

@@ -189,9 +189,9 @@ describe('chained columns with the rest of the app', () => {
     const columns = shape.columns!.map((part) => part.map((c) => ({ ...c, chain: 0 })));
     remember(p, o, { ...shape, columns, read: false });
     try {
-      const stored = JSON.parse(JSON.stringify(rememberedIn(p, objs).find((x) => x.columns)));
+      const stored = JSON.parse(JSON.stringify(rememberedIn(p)));
       forget(p, o);
-      restoreRemembered([stored]);
+      restoreRemembered(p, stored);
       expect(remembered(p, o)?.columns?.flat().every((c) => c.chain === 0)).toBe(true);
       const mirrored = transformRemembered(remembered(p, o)!, [-1, 0, 0, 1, 0, 0]);
       expect(mirrored.columns!.flat().every((c) => c.chain === 0)).toBe(true);

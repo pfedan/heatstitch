@@ -87,6 +87,8 @@ export class FrameTool implements FrameView {
   snapped: { x: number | null; y: number | null } = { x: null, y: null };
   /** What a move snaps to; none: it moves freely. */
   targets: SnapTargets | null = null;
+  /** Snapping on (the switch in the tool bar); Alt while dragging moves freely either way. */
+  snap = true;
   private from: Pt = [0, 0];
   private moved = false;
 
@@ -155,7 +157,7 @@ export class FrameTool implements FrameView {
         if (Math.abs(dx) > Math.abs(dy)) dy = 0;
         else dx = 0;
       }
-      if (this.targets && !free) {
+      if (this.targets && this.snap && !free) {
         const s = snapMove(b, dx, dy, this.targets, SNAP_PX / scale);
         // Shift keeps the line it moves on.
         if (!shift || dx) dx = s.dx;

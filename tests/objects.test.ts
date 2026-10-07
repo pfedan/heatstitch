@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { digitize, digitizeDefaults } from '../src/digitize/digitize';
 import { DEFAULT_PREPARE, Preparer } from '../src/image/prepare';
-import { joinObjects, rememberObjects, sewObjects, splitObject } from '../src/model/objects';
+import { rememberObjects, sewObjects, splitObject } from '../src/model/objects';
 import { BLUE } from './helpers/images';
 import { STITCH, TRIM, type Pattern } from '../src/model/pattern';
 import { analyze, carryOver, unionRegion, measureFill, measureSatin, remember, remembered, rememberedIn, rememberShapes, restitch, restoreRemembered, shapeTrust } from '../src/model/restitch';
@@ -64,8 +64,10 @@ describe('objects made of several sections', () => {
     expect(objs[0].kind).toBe('fill');
     // Stored with the file and read again.
     const stored = rememberedIn(p, objs);
-    expect(stored.filter((s) => s.join !== undefined).length).toBe(objs[0].sections);
-    expect(restoreRemembered(JSON.parse(JSON.stringify(stored)))).toBe(stored.length);
+    expect(stored.objects.length).toBe(1);
+    const again = parsePattern(writePattern(d.pattern, 'pes'), 'u.pes');
+    restoreRemembered(again, JSON.parse(JSON.stringify(stored)));
+    expect(sewObjects(again).map((o) => [o.first, o.last, o.id])).toEqual(objs.map((o) => [o.first, o.last, o.id]));
   });
 
   it('replaces the underlay of a fill when it gets new stitches, instead of adding a second one', () => {
@@ -212,11 +214,13 @@ describe('shapes that stay as they are', () => {
     expect(widths[0]).toBeGreaterThan(width(load('demos/letters.pes'), i));
     expect(Math.abs(widths[2] - widths[0])).toBeLessThan(0.05);
     // Stored with the file and read again.
-    const stored = rememberedIn(p, sewObjects(p)).find((s) => s.columns);
+    const all = rememberedIn(p, sewObjects(p));
+    const stored = all.objects.find((s) => s.memory?.columns)?.memory;
     expect(stored?.satin?.edge).toBe(0.3);
-    const again = JSON.parse(JSON.stringify(stored));
-    expect(restoreRemembered([again])).toBe(1);
-    expect(remembered(p, sewObjects(p)[i])?.columns?.[0]?.[0]?.left.length).toBe(stored!.columns![0][0].left.length / 2);
+    // A copy of the stitches without what this session knows, as after a reload.
+    const q = { ...p };
+    expect(restoreRemembered(q, JSON.parse(JSON.stringify(all)))).toBeGreaterThan(0);
+    expect(remembered(q, sewObjects(q)[i])?.columns?.[0]?.[0]?.left.length).toBe(stored!.columns![0][0].left.length / 2);
   });
 });
 
@@ -281,7 +285,7 @@ describe('changing the kind of an object', () => {
     expect(remembered(moved, after[0])?.region).toBe(r.memory[0].region);
   });
 
-  it('splits an object into its pieces and joins them again', () => {
+  it('splits an object into its pieces', () => {
     const p = load('demos/letters.pes');
     const objs = sewObjects(p);
     const i = objs.findIndex((o) => o.sections > 1);
@@ -292,9 +296,6 @@ describe('changing the kind of an object', () => {
     expect(split.length).toBe(objs.length + o.sections - 1);
     const pieces = split.filter((x) => x.first >= o.first && x.last <= o.last);
     expect(pieces.length).toBe(o.sections);
-    const r: Pattern = { ...q };
-    joinObjects(r, pieces);
-    expect(sewObjects(r).length).toBe(objs.length);
   });
 
   it('puts areas together', () => {

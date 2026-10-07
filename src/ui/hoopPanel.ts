@@ -44,6 +44,7 @@ export function bindHoop(s: Settings, onChange: () => void, fit: (() => void) | 
   const w = $<HTMLInputElement>('hoop-w');
   const h = $<HTMLInputElement>('hoop-h');
   const note = $<HTMLElement>('hoop-note');
+  const status = $<HTMLElement>('hoop-status');
   let bounds: Bounds | undefined;
   /** The size last typed or started as an own size; it stays "own" even when it is in the list. */
   let ownHoop: Hoop | null = null;
@@ -100,6 +101,25 @@ export function bindHoop(s: Settings, onChange: () => void, fit: (() => void) | 
     }
     custom.hidden = !own;
     select.title = hoop ? '' : t('hoop.hint');
+
+    // The size of the design, and whether (and how roomy) it fits: always in view.
+    status.hidden = !bounds;
+    if (bounds) {
+      const dw = (bounds.maxX - bounds.minX) / 10;
+      const dh = (bounds.maxY - bounds.minY) / 10;
+      const size = Object.assign(document.createElement('span'), { className: 'hoop-size', textContent: t('design.hoop.size', { w: mm(dw), h: mm(dh) }) });
+      const parts: Node[] = [size];
+      const fit = hoop ? hoopFit(bounds, hoop) : null;
+      if (hoop && fit?.fits) {
+        const spare = Math.min(hoop.w - dw, hoop.h - dh) / 2;
+        const ok = Object.assign(document.createElement('span'), {
+          className: 'hoop-ok',
+          textContent: spare >= 1 ? t('design.hoop.fits', { mm: mm(spare) }) : t('design.hoop.fitsTight'),
+        });
+        parts.push(ok);
+      }
+      status.replaceChildren(...parts);
+    }
 
     const msg = hoopMessage(bounds, hoop);
     const named = fileHoopOffer(bounds, hoop, fileHoop);

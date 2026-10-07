@@ -11,9 +11,9 @@ import type { PracticeNote, Zone } from './zones';
  * - Satin joins: where two satin columns meet or cross, both run over the same patch. The patch is
  *   compact (about as long as the columns are wide), and the density is that of two satin layers.
  *   Two columns stacked along their length make a long zone instead and stay a finding.
- * - Short stitches on stable fabric: woven fabric and caps carry clusters of short stitches (small
- *   details, fill ends, tie-ins) without bird nests or holes; on knits, light fabrics and leather
- *   they stay a finding.
+ * - Short stitches on stable fabric: woven fabric (light or heavy) and caps carry clusters of
+ *   short stitches (small details, fill ends, tie-ins) without bird nests or holes; on knits,
+ *   fleece, light and sheer fabrics and leather they stay a finding.
  *
  * Nothing is accepted where perforation is the reason.
  */
@@ -30,10 +30,8 @@ const JOIN_MAX_ASPECT = 2.5;
 /** ... and at most this factor above the critical limit (more means a third layer). */
 export const JOIN_MAX_EXCESS = 1.3;
 
-/** Fabrics that carry short-stitch clusters without trouble. */
-const STABLE = new Set(['woven', 'cap']);
-
-export const stableFabric = (p: Profile): boolean => STABLE.has(fabricOf(p).id);
+/** Fabrics that carry short-stitch clusters without trouble (see Fabric.shortsOk). */
+export const stableFabric = (p: Profile): boolean => fabricOf(p).shortsOk;
 
 export function practiceNote(z: Zone, profile: Profile, th: Thresholds): PracticeNote | undefined {
   if (z.reasons.includes('perforation')) return undefined;

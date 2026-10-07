@@ -6,7 +6,7 @@ import type { FrameTool } from '../ui/frameTool';
 import type { LayersPanel } from '../ui/layersPanel';
 import type { Measurement } from '../validation/measure';
 import type { PathStitch } from '../model/along';
-import type { Pattern } from '../model/pattern';
+import { nextVersion, type Pattern } from '../model/pattern';
 import type { Sequence } from './types';
 import type { Settings } from '../settings';
 import type { SewObject } from '../model/objects';
@@ -17,7 +17,8 @@ import { formOf, reshapeFill } from '../model/reshape';
 import { railsForm, reshapeRails } from '../model/railsForm';
 import { lineOf, resewLine, lineSettings, fillToLine, reshapeLineFill } from '../model/line';
 import { refreshKnockouts } from '../model/knockout';
-import { objectKey, remembered, rememberedIn, restitch, type RestitchResult } from '../model/restitch';
+import { objectKey, remember, remembered, rememberedIn, restitch, type Remembered, type RestitchResult } from '../model/restitch';
+import { rasterize } from '../shape/rasterize';
 import { syncBorders } from '../model/border';
 import { stitchKey } from '../model/objects';
 import { t, formatNumber, type Key } from '../i18n';
@@ -126,8 +127,9 @@ export function bindShapes(app: ShapesApp) {
   /** The one selected object of the Ablauf mode, when it has a fill whose outline can be edited, or is a line. */
   function shapeTarget(p: Pattern, q: Sequence, o: number): Form | null {
     const obj = q.objects[o];
-    // Stitches loosed from their shape are edited as stitches; the shape rests.
-    if (!obj || remembered(p, obj)?.free) return null;
+    if (!obj) return null;
+    // Stitches loosed from their shape: its resting shape is edited (a satin without one has none).
+    if (remembered(p, obj)?.free) return isLineObject(p, obj) ? lineOf(p, obj, q.kinds) : formOf(p, obj, q.kinds);
     if (isLineObject(p, obj)) return lineOf(p, obj, q.kinds);
     // A satin without an outline (of a file from elsewhere): its two rails.
     return formOf(p, obj, q.kinds) ?? railsForm(p, obj, q.kinds);
@@ -246,30 +248,99 @@ export function bindShapes(app: ShapesApp) {
     ui.shapePattern = p;
   }
 
-  /** The fill sewn anew in its changed outline (one undo step). */
+  /**
+   * The fill or line sewn anew in its changed outline (one undo step); one loosed from its shape keeps
+   * its stitches and only its resting shape changes (see restShape).
+   */
   function commitShape(form: Form): void {
-    const f = app.files.active;
-    const p = f?.pattern;
-    if (!f || !p || ui.shapeObject === null) return;
+    const p = app.files.active?.pattern;
+    if (!p || ui.shapeObject === null) return;
     const q = app.seq(p);
     const obj = q.objects[ui.shapeObject];
     if (!obj) return;
-    if (isLineObject(p, obj)) {
-      if (!sewLine(ui.shapeObject, form, null, true)) shapeTool.setForm(shapeTarget(p, q, ui.shapeObject) ?? form);
-      return;
-    }
+    if (remembered(p, obj)?.free) return restShape(p, obj, form);
+    if (!sewShape(ui.shapeObject, form)) shapeTool.setForm(shapeTarget(p, q, ui.shapeObject) ?? form);
+  }
+
+  /** Object `o` sewn anew in `form` (one undo step), or only shown with `preview`. False when it could not be. */
+  function sewShape(o: number, form: Form, preview = false): boolean {
+    const f = app.files.active;
+    const p = f?.pattern;
+    if (!f || !p) return false;
+    const q = app.seq(p);
+    const obj = q.objects[o];
+    if (!obj) return false;
+    if (isLineObject(p, obj)) return sewLine(o, form, null, !preview);
     const hand = remembered(p, obj)?.hand ?? 0;
     const rails = !formOf(p, obj, q.kinds) && railsForm(p, obj, q.kinds);
     const r = rails ? reshapeRails(p, q.objects, obj, q.kinds, form, app.settings.trimMm) : reshapeFill(p, q.objects, obj, q.kinds, form, app.settings.trimMm);
+    if (preview) {
+      ui.flowPreview = r?.starts.length ? r.pattern : null;
+      app.redraw();
+      return !!ui.flowPreview;
+    }
     if (!r || !r.starts.length) {
       // Nothing to fill there (too small, or the outline crosses itself away): back to the old one.
-      shapeTool.setForm(shapeTarget(p, q, ui.shapeObject) ?? form);
       app.layers.say(t('shape.failed'), true);
-      return app.redraw();
+      app.redraw();
+      return false;
     }
     app.applyRestitched(r, 'shape.failed', true);
     if (hand) app.layers.say(t('shape.handReplaced', { n: formatNumber(hand) }));
     followKnockouts();
+    return true;
+  }
+
+  /**
+   * The resting shape of `obj`, loosed from it, changed to `form` (one undo step): its stitches stay as
+   * they were set by hand. Sewing it from the new shape is offered, with a look at the result.
+   */
+  function restShape(p: Pattern, obj: SewObject, form: Form): void {
+    const f = app.files.active;
+    const mem = remembered(p, obj);
+    if (!f || !mem) return;
+    const rested: Remembered = isLineObject(p, obj)
+      ? { ...mem, path: form }
+      : mem.asLine && mem.fill
+        ? { ...mem, asLine: { ...mem.asLine, path: form } }
+        : { ...mem, form, region: rasterize(form, mem.region?.pxMm ?? 0.1) ?? mem.region };
+    const next = nextVersion(p, {});
+    remember(next, obj, rested);
+    app.applyEdit(next);
+    app.files.setObjects(f, rememberedIn(next, app.seq(next).objects));
+    ui.stitchCache = null;
+    const id = obj.id;
+    // Sewn from the shape it rests in now: loosed only for that try, as it was otherwise.
+    const fromShape = (preview: boolean): boolean => {
+      const cur = app.files.active?.pattern;
+      const cq = cur && app.seq(cur);
+      const o = cq ? cq.objects.findIndex((x) => x.id === id) : -1;
+      const at = cq?.objects[o];
+      const m = at && remembered(cur!, at);
+      if (!cur || !cq || !at || !m?.free) return false;
+      remember(cur, at, { ...m, free: undefined });
+      const shape = shapeTarget(cur, cq, o);
+      const ok = !!shape && sewShape(o, shape, preview);
+      remember(cur, at, m);
+      if (ok && !preview) app.selectObjects([app.seq(app.files.active!.pattern!).objects.findIndex((x) => x.id === id)].filter((k) => k >= 0), false);
+      return ok;
+    };
+    app.layers.say({
+      text: t('shape.rested'),
+      action: {
+        label: t('shape.rested.sew'),
+        title: t('shape.rested.sew.hint'),
+        run: () => void fromShape(false),
+        preview: (on) => {
+          if (on) fromShape(true);
+          else {
+            ui.flowPreview = null;
+            app.redraw();
+          }
+        },
+      },
+    });
+    app.redraw();
   }
 
   /**
@@ -399,5 +470,8 @@ export function bindShapes(app: ShapesApp) {
     app.layers.say([list ? t('object.subtracted', { list }) : '', r.covered ? t('object.subtracted.covered') : ''].filter(Boolean).join(' '));
   }
 
-  return { closeShape, copySelected, deleteSelected, duplicateSelected, pasteCopied, enterShape, followKnockouts, isLineObject, mirrorSelected, sewLine, sewLineAgain, shapeTarget, shapeTool, showBand, subtractSelected, syncShape, takeShapes };
+  /** Whether Ctrl+V has something to paste. */
+  const canPaste = (): boolean => !!copied;
+
+  return { canPaste, closeShape, copySelected, deleteSelected, duplicateSelected, pasteCopied, enterShape, followKnockouts, isLineObject, mirrorSelected, sewLine, sewLineAgain, shapeTarget, shapeTool, showBand, subtractSelected, syncShape, takeShapes };
 }

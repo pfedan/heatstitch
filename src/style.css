@@ -56,19 +56,6 @@ body {
   background: var(--panel);
 }
 
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-.brand h1 {
-  font-size: 18px;
-  margin: 0;
-  letter-spacing: 0.02em;
-}
-
 .topbar-end {
   display: flex;
   align-items: center;
@@ -90,13 +77,6 @@ body {
   margin: 0;
   padding: 10px 16px;
   background: var(--panel);
-}
-
-.tagline {
-  color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 select,
@@ -400,10 +380,6 @@ body.dragging .dropzone {
   margin-left: 24px;
 }
 
-.field.indent2 {
-  margin-left: 48px;
-}
-
 .label {
   color: var(--muted);
   font-size: 12px;
@@ -502,20 +478,6 @@ input[type='range'] {
 }
 
 /* The size of the selection, typed in mm. */
-.stats dd.size-edit {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 4px;
-}
-
-.size-edit input {
-  width: 5.2em;
-  padding: 2px 4px;
-  text-align: right;
-  font: inherit;
-  font-variant-numeric: tabular-nums;
-}
 
 .size-lock {
   display: grid;
@@ -543,20 +505,6 @@ input[type='range'] {
   color: var(--accent);
 }
 
-.swatches {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 10px;
-}
-
-.swatches span {
-  width: 16px;
-  height: 16px;
-  border-radius: 4px;
-  border: 1px solid var(--line);
-}
-
 .stage {
   position: relative;
   background: var(--stage);
@@ -580,9 +528,6 @@ input[type='range'] {
 }
 
 .legend {
-  position: absolute;
-  right: 12px;
-  bottom: 30px;
   width: 260px;
   height: 46px;
   padding: 0;
@@ -616,21 +561,6 @@ input[type='range'] {
   text-align: center;
 }
 
-.hint {
-  position: absolute;
-  left: 12px;
-  bottom: 8px;
-  margin: 0;
-  /* One line, so it stays under the legend of the density mode. */
-  max-width: calc(100% - 24px);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: #8a8296;
-  font-size: 11px;
-  pointer-events: none;
-}
-
 @media (max-width: 760px) {
   .layout {
     grid-template-columns: 1fr;
@@ -648,9 +578,7 @@ input[type='range'] {
     display: none;
   }
 
-  .tagline {
-    display: none;
-  }
+  
 
   .legend {
     width: 200px;
@@ -993,26 +921,6 @@ button.link {
   font-size: 12px;
 }
 
-.file-start {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  margin-top: 6px;
-}
-
-.new-design {
-  padding: 2px 8px;
-  font-size: 12px;
-}
-
-.example-select {
-  display: block;
-  min-width: 0;
-  padding: 2px 6px;
-  font-size: 12px;
-  color: var(--accent);
-}
-
 button.link:hover {
   text-decoration: underline;
 }
@@ -1147,12 +1055,6 @@ button.link:hover {
   border-top: 1px solid var(--line);
 }
 
-.fix-options {
-  border: none;
-  padding: 0;
-  margin: 4px 0 0;
-}
-
 .fix-report {
   margin-top: 8px;
   font-size: 13px;
@@ -1236,22 +1138,6 @@ button.link:hover {
 
 .object-stitches .lock-switch {
   margin: 8px 0 0;
-}
-
-.edit-tools {
-  margin-top: 6px;
-}
-
-.edit-tools p {
-  margin: 0 0 6px;
-}
-
-.edit-tools .sel-info {
-  font-size: 13px;
-}
-
-.edit-tools select {
-  flex: 0 0 auto;
 }
 
 .file-list .edited {
@@ -1513,118 +1399,6 @@ details.panel.section[open] > summary {
   margin-bottom: 8px;
 }
 
-/* Files: the hoop the designs are sewn in */
-
-.file-actions .hoop-field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-bottom: 10px;
-}
-
-.file-actions .hoop-field select {
-  width: 100%;
-}
-
-.file-actions .hoop-custom {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: -4px 0 10px;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.file-actions .hoop-custom input {
-  width: 72px;
-  padding: 4px 6px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--bg);
-  font: inherit;
-  color: var(--ink);
-}
-
-.file-actions .hoop-note {
-  margin: -4px 0 10px;
-  padding: 6px 8px;
-  border-left: 3px solid #dc2626;
-  border-radius: 4px;
-  background: color-mix(in srgb, #dc2626 10%, transparent);
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-.file-actions .hoop-note.info {
-  border-left-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-}
-
-.file-actions .hoop-note.turned {
-  border-left-color: #d97706;
-  background: color-mix(in srgb, #d97706 10%, transparent);
-}
-
-/* Files: save and revert under the list */
-
-.file-actions {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--line);
-}
-
-.file-actions .save-format {
-  width: 100%;
-  margin-top: 4px;
-}
-
-.file-actions .save-name {
-  display: flex;
-  flex: 1;
-  min-width: 0;
-  align-items: center;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--bg);
-}
-
-.file-actions .save-name:focus-within {
-  border-color: var(--accent);
-}
-
-.file-actions .save-name input {
-  flex: 1;
-  min-width: 0;
-  padding: 5px 8px;
-  border: 0;
-  outline: none;
-  background: transparent;
-  font: inherit;
-  color: inherit;
-}
-
-.file-actions .save-name span {
-  padding: 0 8px;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.file-actions .save-file {
-  display: flex;
-  gap: 6px;
-  margin-top: 4px;
-}
-
-
-.file-actions .save-project {
-  width: 100%;
-  margin-top: 6px;
-}
-
-.file-actions .muted.small {
-  font-size: 11px;
-}
-
 /* Coloring key */
 
 .color-key ul {
@@ -1720,10 +1494,6 @@ details.panel.section[open] > summary {
   background: radial-gradient(circle, #0a080e 0 2.5px, #fff 2.5px 3.5px, #2a2530 3.5px);
 }
 
-.speed {
-  margin: 10px 0 0;
-}
-
 /* Canvas tools ----------------------------------------------------------------- */
 
 .stage-top {
@@ -1803,10 +1573,6 @@ details.panel.section[open] > summary {
   color: var(--accent-ink);
 }
 
-.stage:not(.form-level) .draw-tools {
-  display: none;
-}
-
 /* The pointer stands apart from the tools that draw. */
 #draw-pointer {
   margin-bottom: 4px;
@@ -1822,24 +1588,6 @@ details.panel.section[open] > summary {
 }
 
 /* Bild mode ------------------------------------------------------------------ */
-
-.image-status {
-  position: absolute;
-  top: 52px;
-  left: 50%;
-  transform: translateX(-50%);
-  margin: 0;
-  padding: 3px 10px;
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--panel) 85%, transparent);
-  color: var(--muted);
-  font-size: 12px;
-  pointer-events: none;
-}
-
-.image-status:empty {
-  display: none;
-}
 
 body[data-mode='image'] .stage.painting canvas#canvas {
   cursor: none;
@@ -2003,70 +1751,7 @@ button.tool:disabled {
   opacity: 0.35;
 }
 
-/* Level switch on the canvas: whole objects or their single points. */
-.level-switch {
-  margin-left: 4px;
-  background: rgba(13, 11, 16, 0.72);
-  border-color: rgba(255, 255, 255, 0.12);
-  color: #ece8f1;
-  font-size: 13px;
-  backdrop-filter: blur(4px);
-}
-
-.level-switch span {
-  padding: 4px 10px;
-  line-height: 1.2;
-}
-
-.level-switch label:not(:has(input:checked)):hover span {
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.edit-crumb {
-  align-self: center;
-  padding: 3px 9px;
-  border-radius: 6px;
-  background: rgba(13, 11, 16, 0.72);
-  color: #ece8f1;
-  font-size: 12.5px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 34ch;
-}
-
 /* Player ------------------------------------------------------------------------ */
-
-.player {
-  position: absolute;
-  left: 10px;
-  right: 10px;
-  bottom: 10px;
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 10px;
-  background: rgba(13, 11, 16, 0.78);
-  color: #ece8f1;
-  border-radius: 10px;
-  backdrop-filter: blur(4px);
-}
-
-.player-buttons {
-  display: flex;
-  gap: 4px;
-  flex: none;
-}
-
-.player button.tool {
-  min-width: 30px;
-  padding: 3px 6px;
-}
-
-.player button.play {
-  min-width: 38px;
-}
 
 /* The bar: color blocks in their thread colors under a bare slider, the part not sewn yet dimmed.
    The sections are inset by half the thumb so the thumb center meets the block borders. */
@@ -2163,28 +1848,6 @@ button.tool:disabled {
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-  color: #c9c2d4;
-}
-
-/* A narrow stage (phone, or side columns dragged wide): the bar gets its own row under the buttons. */
-@container (max-width: 640px) {
-  .player {
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-
-  .player-track {
-    order: 3;
-    flex-basis: 100%;
-  }
-}
-
-.player select {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.15);
-  color: #ece8f1;
-  padding: 3px 4px;
-  font-size: 12px;
 }
 
 /* Work area of the Ablauf mode ----------------------------------------------- */
@@ -2491,13 +2154,6 @@ button.tool:disabled {
   background: var(--bg);
 }
 
-.jumps-rule .row-inline {
-  flex-direction: row;
-  align-items: center;
-  gap: 6px;
-  margin: 0;
-}
-
 .jumps-rule input {
   width: 70px;
 }
@@ -2573,9 +2229,7 @@ button.tool:disabled {
     row-gap: 8px;
   }
 
-  .brand {
-    grid-area: brand;
-  }
+  
 
   .topbar-end {
     grid-area: end;
@@ -2609,14 +2263,6 @@ button.tool:disabled {
   }
 }
 
-.save-label {
-  cursor: help;
-}
-
-.save-label .info {
-  font-size: 11px;
-}
-
 /* With the global switch off the chosen markers stay, but none is drawn (loose threads aside). */
 .marks.all-off .check:not([data-mode='flow']) {
   opacity: 0.5;
@@ -2641,15 +2287,6 @@ button.tool:disabled {
 
 #marks-toggle[aria-pressed='false'] {
   color: var(--muted);
-}
-
-#marks-toggle .slash {
-  display: none;
-}
-
-#marks-toggle[aria-pressed='false'] .slash {
-  display: inline;
-  stroke-width: 1.8;
 }
 
 .marks .check:has(input:disabled) {
@@ -2705,20 +2342,6 @@ button.tool:disabled {
 
 .jumps .f-chip {
   white-space: nowrap;
-}
-
-/* In the Ablauf mode the player takes the bottom edge; the hint sits just above it. */
-body[data-mode='flow'] .stage .hint {
-  bottom: 62px;
-  left: 50%;
-  transform: translateX(-50%);
-  white-space: nowrap;
-  max-width: calc(100% - 24px);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  padding: 3px 8px;
-  border-radius: 6px;
-  background: rgba(13, 11, 16, 0.6);
 }
 
 @container (max-width: 640px) {
@@ -2959,6 +2582,41 @@ body[data-mode='flow'] .stage .hint {
   bottom: -10px;
 }
 
+/* Follows the pointer while a row is dragged, beside the drop line instead of over it. */
+.drag-chip {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  padding: 3px 9px 3px 5px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.18);
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.drag-chip > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.drag-chip .sw {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.15);
+}
+
 .layer-note {
   margin: 8px 0 0;
   font-size: 12px;
@@ -2971,24 +2629,6 @@ body[data-mode='flow'] .stage .hint {
 
 .object-panel {
   flex: none;
-}
-
-.object-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-  min-width: 0;
-}
-
-.object-head .kind-icon {
-  color: var(--accent);
-}
-
-.object-head .muted {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .mini-sw {
@@ -3038,18 +2678,6 @@ body[data-mode='flow'] .stage .hint {
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-
-.stitch-head h3 {
-  margin: 0;
-  font-size: 13px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.stitch-head .kind-icon {
-  color: var(--accent);
 }
 
 .stitch-tabs button,
@@ -3321,52 +2949,12 @@ body[data-mode='flow'] .stage .hint {
   background: var(--accent);
 }
 
-.shape-trust {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  margin: 2px 0 8px;
-  font-size: 12px;
-  line-height: 1.35;
-  color: var(--muted);
-}
-
-.shape-trust svg {
-  flex: none;
-  width: 14px;
-  height: 14px;
-  margin-top: 1px;
-}
-
-.shape-trust.good svg,
-.shape-trust.kept svg {
-  color: #2f9e5b;
-}
-
-.shape-trust.approximate {
-  color: var(--ink);
-  padding: 6px 8px;
-  border-radius: 6px;
-  background: color-mix(in srgb, #ffb347 14%, transparent);
-}
-
-.shape-trust.approximate svg {
-  color: #ffb347;
-}
-
-.stitch-note {
-  margin: 2px 0 0;
-}
-
 .layer-note button.link {
   display: block;
   margin-top: 2px;
 }
 
 /* Background (fabric) color of the stage */
-.bg-field {
-  margin-top: 4px;
-}
 
 .bg-swatches {
   display: flex;
@@ -3485,27 +3073,6 @@ body[data-mode='flow'] .stage .hint {
 }
 
 /* Rungs: the direction of a satin, and lines drawn across a fill. */
-.direction-field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.direction-field.on {
-  border-left: 2px solid var(--accent);
-  padding-left: 8px;
-}
-
-.direction-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.direction-buttons button {
-  font-size: 12px;
-  padding: 4px 8px;
-}
 
 .stage.rungs canvas#canvas {
   cursor: crosshair;
@@ -3526,24 +3093,6 @@ body[data-mode='flow'] .stage .hint {
 .stage.shaping canvas#canvas.panning,
 .stage canvas#canvas.on-frame.panning {
   cursor: grabbing;
-}
-
-/* Shape actions of the selected objects: duplicate, cut out, mirror, delete */
-.row-buttons.shape-actions {
-  margin-top: 6px;
-}
-
-.row-buttons.shape-actions button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding-inline: 6px;
-}
-
-.row-buttons.shape-actions svg {
-  width: 17px;
-  height: 17px;
-  flex: none;
 }
 
 /* Shapes not sewn, under the list of colors and objects */
@@ -3571,13 +3120,6 @@ body[data-mode='flow'] .stage .hint {
   flex: 1;
 }
 
-.aside-row .aside-actions {
-  display: flex;
-  gap: 6px;
-  flex-basis: 100%;
-  padding-left: 46px;
-}
-
 .aside-row.off .layer-name {
   opacity: 0.65;
 }
@@ -3600,7 +3142,6 @@ button.mini-sw.thread-sw {
   border: 1px solid rgba(255, 255, 255, 0.35);
   cursor: pointer;
 }
-
 
 .aside-row .layer-meta {
   margin-left: 0;
@@ -3629,30 +3170,7 @@ button.mini-sw.thread-sw {
   flex: none;
 }
 
-/* A fill's border: a block of its own below the fill's settings */
-.border-group {
-  margin-top: 4px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.border-group h4 {
-  margin: 0;
-  font-size: 13px;
-}
-
-.border-group > p {
-  margin: -6px 0 0;
-}
-
 /* Lettering: the text tool and the card of a lettering. */
-.tool-glyph {
-  font-family: Georgia, 'Times New Roman', serif;
-  font-weight: 700;
-}
 
 .lettering-panel {
   flex: none;
@@ -3880,52 +3398,8 @@ button.mini-sw.thread-sw {
   margin: 0;
 }
 
-.lettering-more {
-  margin-bottom: 8px;
-}
-
-.lettering-more summary {
-  cursor: pointer;
-  color: var(--accent);
-  font-size: 13px;
-  margin-bottom: 8px;
-}
-
-.lettering-more .stitch-field {
-  display: block;
-  margin-bottom: 10px;
-}
-
-.lettering-more .stitch-field input[type='range'] {
-  width: 100%;
-}
-
-.lettering-more .check.disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
 .lettering-release {
   display: block;
-}
-
-.shape-trust.free {
-  color: var(--ink);
-  padding: 6px 8px;
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-}
-
-.shape-trust.free svg {
-  color: var(--accent);
-}
-
-.free-block .direction-buttons {
-  margin-bottom: 6px;
-}
-
-.object-stitches .free-row {
-  margin-top: 6px;
 }
 
 .plan-pick {
@@ -3940,47 +3414,6 @@ button.mini-sw.thread-sw {
   padding-left: 6px;
 }
 
-/* Menu of the object actions at the pointer (right click, long press) */
-.object-menu {
-  position: fixed;
-  z-index: 50;
-  min-width: 180px;
-  max-width: calc(100vw - 16px);
-  padding: 4px;
-  display: flex;
-  flex-direction: column;
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
-}
-
-.object-menu button {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--ink);
-  font-size: 13px;
-  text-align: left;
-  cursor: pointer;
-}
-
-.object-menu button:hover,
-.object-menu button:focus-visible {
-  background: var(--line);
-  outline: none;
-}
-
-.object-menu svg {
-  width: 16px;
-  height: 16px;
-  flex: none;
-}
-
 /* A size that does not fit the chosen hoop (lettering card, image mode) */
 .hoop-over {
   color: #dc2626;
@@ -3993,6 +3426,35 @@ button.mini-sw.thread-sw {
   color: var(--muted);
   opacity: 0.7;
   font-size: 12px;
+}
+
+.layer .layer-loose {
+  flex: none;
+  margin-left: auto;
+  padding: 2px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  line-height: 0;
+}
+
+.layer .layer-loose:hover,
+.layer .layer-loose:focus-visible {
+  color: var(--text);
+}
+
+.layer .layer-loose .i {
+  width: 14px;
+  height: 14px;
+}
+
+.layer .layer-guessed + .layer-loose {
+  margin-left: 6px;
+}
+
+.layer .layer-loose + .layer-meta {
+  margin-left: 8px;
 }
 
 .layer .layer-guessed + .layer-meta {

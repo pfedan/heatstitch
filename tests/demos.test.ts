@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { autoCorrect, DEFAULT_CORRECTION } from '../src/correct/auto';
 import { parsePattern } from '../src/parsers';
-import { CRITICAL, SAFE, validatePattern } from '../src/validation/validate';
+import { CAUTION, CRITICAL, SAFE, validatePattern } from '../src/validation/validate';
 import type { Profile } from '../src/validation/profiles';
 import { writePattern } from '../src/writers';
 import { transitions } from '../src/model/sequence';
@@ -13,6 +13,7 @@ const DIR = new URL('../public/examples/demos/', import.meta.url);
 
 const WOVEN: Profile = { fabric: 'woven', thread: '40' };
 const KNIT: Profile = { fabric: 'knit', thread: '40' };
+const CAP: Profile = { fabric: 'cap', thread: '40' };
 const LEATHER: Profile = { fabric: 'leather', thread: '40' };
 
 /** Zones that count towards the verdict. */
@@ -34,14 +35,17 @@ describe('demo files', () => {
   });
 
   it('each shows what the guide says it shows', () => {
-    // Stacked fills: critical where four layers meet, the correction brings it down.
+    // Stacked fills: critical where five layers meet, the correction brings it down.
     const overlap = overlapDesign();
     expect(worst(overlap, WOVEN)).toBe(CRITICAL);
     expect(worst(autoCorrect(overlap, WOVEN, DEFAULT_CORRECTION).pattern, WOVEN)).toBeLessThan(CRITICAL);
-    // Fill under satin: critical, cleared by pulling the fill back.
+    // Fill under satin: caution on woven (a satin over one fill is normal practice), critical on
+    // caps and knits, cleared on caps by pulling the fill back.
     const letters = satinOverlapDesign();
-    expect(worst(letters, WOVEN)).toBe(CRITICAL);
-    expect(worst(autoCorrect(letters, WOVEN, DEFAULT_CORRECTION).pattern, WOVEN)).toBeLessThan(CRITICAL);
+    expect(worst(letters, WOVEN)).toBe(CAUTION);
+    expect(worst(letters, KNIT)).toBe(CRITICAL);
+    expect(worst(letters, CAP)).toBe(CRITICAL);
+    expect(worst(autoCorrect(letters, CAP, DEFAULT_CORRECTION).pattern, CAP)).toBeLessThan(CRITICAL);
     // Tiny spiral: normal on woven, critical on knits.
     const sun = shortStitchDesign();
     expect(worst(sun, WOVEN)).toBe(SAFE);

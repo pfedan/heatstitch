@@ -1,8 +1,9 @@
+import { LOCK_MM, SATIN_SPLIT_MM, SATIN_SPLIT_MAX } from '../material/rules';
 import { SATIN_MAX, satinForArea, type KeptShape } from '../digitize/digitize';
 import { borderStitches, runLike, type PathStitch } from './along';
 import { wholeOf } from './knockout';
 import { LINE_MOTIFS } from '../digitize/motif';
-import { lineStitches, runAsLine } from './line';
+import { lineStitches, runAsLine, runWays } from './line';
 import { chooseAngle, fillRegion, type FillParams } from '../digitize/fill';
 import { contourFill, fieldFill, guideField, stitchField } from '../digitize/flow';
 import { atShare, crossFill, CROSS_KINDS, echoFill, circleField, grainField, GRID_KINDS, gridFill, mazeFill, meanderFill, MOTIFS, rayField, regionBox, swirlField, waveFill, type CrossKind, type GridKind, type Motif, type OpenParams } from '../digitize/deco';
@@ -12,7 +13,7 @@ import { isShadow } from './shadow';
 import { coverage } from '../digitize/measure';
 import { expandRegion, outline, sample, signedField, type Region } from '../digitize/region';
 import { runStitch, TOLERANCE } from '../digitize/run';
-import { eStitches, pairs, satinStitches, underlayOf, type Column, type SatinParams, type UnderInset, type UnderlayKind } from '../digitize/satin';
+import { eStitches, fringedColumn, pairs, satinStitches, underlayOf, type Column, type SatinParams, type UnderInset, type UnderlayKind } from '../digitize/satin';
 import { columnFromRungs, cumulative, inside, pointAt, project, reversedRungs, stripOfLoop, tidyRungs, type Arc, type Rung } from '../digitize/rungs';
 import type { Pt } from '../digitize/skeleton';
 import { flatten, formFrom, storeForm, type Form, type StoredPath } from '../shape/path';
@@ -20,9 +21,10 @@ import { rasterize, rasterizeStroke, type LineCap } from '../shape/rasterize';
 import { distanceInside, distanceToSeeds } from '../image/edt';
 import { tidy, withRecords } from './edit';
 import { coversOver, cutAway, type Cover } from './covers';
-import { forgetJoins, holdJoins, joinsIn, knowKinds, rememberObjects, restoreJoin, stitchKey, type ObjectKind, type SewObject } from './objects';
+import { backToVersion, entryOf, hasTable, hold, keepVersion, knowKinds, rememberObjects, setMemory, setObjects, setObjectsFromKeys, stitchIndex, stitchKey, tableOf, type ObjectKind, type PlacedEntry, type SewObject } from './objects';
 import { END, JUMP, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
 import { SATIN, stitchKinds, TIE_STITCH } from './sequence';
+import { gradientOf, patchArea, patchSpacing, rowPatches, type RowPatch } from './rows';
 import { letteringFrom } from '../lettering/stored';
 import type { Lettering } from '../lettering/layout';
 
@@ -125,6 +127,8 @@ export interface FillSettings {
   spacing: number;
   /** Gradient: spacing on the far side (mm). */
   spacingEnd: number;
+  /** Rows get further apart evenly from spacing to spacingEnd; curved patterns (follow, guided). */
+  gradient?: boolean;
   /** Tatami: shift of the needle points from row to row (fraction of a stitch; 0 at random). */
   offset: number;
   /** Direction of the rows, degrees 0 to 180 (tatami and gradient). */
@@ -172,6 +176,8 @@ export interface BorderSettings extends PathStitch {
   color?: ThreadColor;
   /** Marks the border object in its own thread (Remembered.outline). */
   link?: string;
+  /** The parts of a fill cut apart: one line along each cut too (the outer border alone by default). */
+  seams?: boolean;
 }
 
 export interface SatinSettings {
@@ -203,12 +209,18 @@ export interface SatinSettings {
   byWidth?: boolean;
   /** `edge` and `edgeShare` follow the fabric (see pullFor). */
   edgeAuto?: boolean;
+  /** A ragged edge (fur, feathers): stitches end up to this far short of the rail (mm), each a different way; none when not set. */
+  fringe?: number;
+  /** The side of the fringe (in sewing direction); both when not set. */
+  fringeSide?: FringeSide;
 }
+
+export type FringeSide = 'left' | 'right';
 
 export type SatinType = 'satin' | 'e';
 export const UNDERLAYS: UnderlayKind[] = ['auto', 'center', 'contour', 'zigzag', 'both'];
-/** Longest satin stitch before it is split (mm), as the stitch panel starts. */
-export const SATIN_SPLIT = 12;
+/** Longest satin stitch before it is split (mm) when the object does not say (see SATIN_SPLIT_MM). */
+export const SATIN_SPLIT = SATIN_SPLIT_MM;
 
 export interface RunSettings {
   stitch: number;
@@ -241,7 +253,7 @@ const REACH = 0.3;
 /** Highest density allowed for curved rows, in times the nominal (where rows meet). */
 const CONTOUR_PEAK = 3;
 /** Half width of the band along the old thread that new travel may follow (mm). */
-const TRAVEL_REACH = 0.5;
+export const TRAVEL_REACH = 0.5;
 const OPEN = 0.36;
 
 /**
@@ -326,6 +338,8 @@ export function planFits(plan: SectionStep[] | undefined, n: number): plan is Se
  * let the shape drift a little with every change.
  */
 export interface Remembered {
+  /** Id of the object this is about (see objects.ts): it goes with it when the object is sewn anew. */
+  id?: number;
   region: Region | null;
   fill?: FillSettings;
   satin?: SatinSettings;
@@ -377,6 +391,11 @@ export interface Remembered {
   asLine?: LineFill;
   /** The object is the border of a fill in its own thread: the fill's `border.link`. */
   outline?: string;
+  /**
+   * The fill is a part of a fill cut apart (see splitFill): the parts with the same `piece` are one
+   * whole, with one border around them all (never along the cuts), whose settings each part keeps.
+   */
+  piece?: string;
   /** The object is the second thread of a color blend: the fill's `deco.blend.link` (see syncBlends). */
   blendOf?: string;
   /** The object is the shadow of a line: the line's `line.shadow.link` (see syncShadows). */
@@ -398,10 +417,10 @@ export interface Remembered {
   fixed?: Fixed[];
   /**
    * The object as it was before the correction last changed it: its records (absolute, as in the
-   * design; the first `lead` of them the travel to it from the object before) and what it
-   * remembered. "Korrektur zurücknehmen" puts exactly these back.
+   * design; the first `lead` of them the travel to it from the object before, the last `trail` the
+   * travel from it to the next one) and what it remembered. "Korrektur zurücknehmen" puts exactly these back.
    */
-  undo?: { x: Int32Array; y: Int32Array; cmd: Uint8Array; lead: number; memory?: Remembered };
+  undo?: { x: Int32Array; y: Int32Array; cmd: Uint8Array; lead: number; trail?: number; memory?: Remembered };
 }
 
 /** A part an object was sewn in: its kind, and the number of the object's stitches up to its last one. */
@@ -420,30 +439,10 @@ export interface Fixed {
 }
 
 /**
- * Objects given new stitches here, by their stitches: the next edit starts from the exact shape
- * and the chosen pattern instead of recognizing them again from the stitches (an open gradient
- * or a spiral would not give its shape back as well as dense rows do).
+ * Lets stitches be tried out: until the returned function is called what objects learn is kept
+ * apart, and then it is put back as it was (what the tries remembered goes again).
  */
-const memory = new Map<string, Remembered>();
-const MEMORY_SIZE = 400;
-/** While trying things out (see holdMemory), nothing is forgotten for lack of room. */
-let held = 0;
-
-/**
- * Lets stitches be tried out: until the returned function is called nothing is forgotten, and then
- * memory is put back as it was (what the tries remembered goes again).
- */
-export function holdMemory(): () => void {
-  const saved = new Map(memory);
-  const joins = holdJoins();
-  held++;
-  return () => {
-    held--;
-    memory.clear();
-    for (const [k, v] of saved) memory.set(k, v);
-    joins();
-  };
-}
+export const holdMemory = hold;
 
 /**
  * The kind an object was sewn in, when what it remembers says so without doubt: a border or a
@@ -461,63 +460,27 @@ export function knownKind(r: Remembered | undefined): ObjectKind | undefined {
   return undefined;
 }
 
-knowKinds((p, first, last) => (memory.size ? knownKind(memory.get(stitchKey(p, first, last))) : undefined));
+knowKinds(knownKind);
 
 /** A key for an object's stitches. */
 export const objectKey = (p: Pattern, o: SewObject): string => stitchKey(p, o.first, o.last);
 
+/** Remembers `r` for object `o` of version `p`. */
 export function remember(p: Pattern, o: SewObject, r: Remembered): void {
-  rememberKey(objectKey(p, o), r);
-}
-
-function rememberKey(key: string, r: Remembered): void {
-  memory.delete(key);
-  memory.set(key, r);
-  if (!held && memory.size > MEMORY_SIZE) memory.delete(memory.keys().next().value!);
+  setMemory(p, o.first, o.last, r);
 }
 
 /** Remembers `r` for the stitches from record `first` to `last` (an object's records). */
 export function rememberRange(p: Pattern, first: number, last: number, r: Remembered): void {
-  rememberKey(stitchKey(p, first, last), r);
+  setMemory(p, first, last, r);
 }
 
-/** Forgets what was remembered for an object's stitches (or puts back `r`). */
+/** Forgets what object `o` of `p` remembered (or puts back `r`). */
 export function forget(p: Pattern, o: SewObject, r?: Remembered): void {
-  const key = objectKey(p, o);
-  if (r) rememberKey(key, r);
-  else memory.delete(key);
+  setMemory(p, o.first, o.last, r);
 }
 
-/**
- * What a version of a design knew about its objects while it was the current one. Memory is keyed
- * by stitches, so a later version with the same stitches would otherwise change what an earlier
- * one knows, and memory forgets the oldest entries: undo and redo bring back all of it or nothing.
- */
-interface Known {
-  memory: Map<string, Remembered>;
-  joins: { key: string; join: boolean }[];
-}
-const versions = new WeakMap<Pattern, Known>();
-
-/** Keeps what `p` knows now as its own: when it becomes the current version, and after it learned something. */
-export function keepVersion(p: Pattern): void {
-  versions.set(p, { memory: new Map(memory), joins: joinsIn(p) });
-}
-
-/** Brings back what version `p` knew when it was kept (undo, redo, another file). False when it never was. */
-export function backToVersion(p: Pattern): boolean {
-  const v = versions.get(p);
-  if (!v) return false;
-  for (const [k, r] of v.memory) rememberKey(k, r);
-  for (const j of v.joins) restoreJoin(j.key, j.join);
-  return true;
-}
-
-/** Forgets everything objects remember, as a fresh page would (tests). */
-export function forgetAll(): void {
-  memory.clear();
-  forgetJoins();
-}
+export { backToVersion, keepVersion };
 
 /** The object's shape and stitch type are only guessed from its stitches (a file from elsewhere), not known. */
 export function isGuessed(p: Pattern, o: SewObject): boolean {
@@ -526,7 +489,7 @@ export function isGuessed(p: Pattern, o: SewObject): boolean {
 }
 
 export function remembered(p: Pattern, o: SewObject): Remembered | undefined {
-  return memory.get(objectKey(p, o));
+  return entryOf(p, o.first, o.last)?.memory;
 }
 
 /**
@@ -604,7 +567,7 @@ export function carryOver(before: Pattern, o: SewObject, after: Pattern, first: 
   }
   rememberObjects(after, [a], n);
   const r = remembered(before, o);
-  if (r) rememberKey(stitchKey(after, first, last), r);
+  setMemory(after, first, last, r ?? (o.id ? ({ region: null, read: true, id: o.id } as Remembered) : undefined));
 }
 
 /**
@@ -636,6 +599,7 @@ export interface StoredObject {
   asSatin?: StoredRails[];
   asLine?: { path: StoredPath[]; line: PathStitch; cap?: LineCap };
   outline?: string;
+  piece?: string;
   blendOf?: string;
   shadowOf?: string;
   echoOf?: string;
@@ -644,7 +608,7 @@ export interface StoredObject {
   lock?: boolean;
   free?: boolean;
   fixed?: Fixed[];
-  undo?: { x: Int32Array; y: Int32Array; cmd: Uint8Array; lead: number; memory?: StoredObject };
+  undo?: { x: Int32Array; y: Int32Array; cmd: Uint8Array; lead: number; trail?: number; memory?: StoredObject };
   join?: boolean;
 }
 
@@ -703,6 +667,7 @@ function storeOne(key: string, r: Remembered): StoredObject {
     ...(r.asSatin ? { asSatin: r.asSatin.map(storeRails) } : {}),
     ...(r.asLine ? { asLine: { path: storeForm(r.asLine.path), line: { ...r.asLine.line }, cap: r.asLine.cap } } : {}),
     ...(r.outline ? { outline: r.outline } : {}),
+    ...(r.piece ? { piece: r.piece } : {}),
     ...(r.blendOf ? { blendOf: r.blendOf } : {}),
     ...(r.shadowOf ? { shadowOf: r.shadowOf } : {}),
     ...(r.echoOf ? { echoOf: r.echoOf } : {}),
@@ -711,20 +676,109 @@ function storeOne(key: string, r: Remembered): StoredObject {
     ...(r.lock ? { lock: true } : {}),
     ...(r.free ? { free: true } : {}),
     ...(r.fixed?.length ? { fixed: r.fixed.map((x) => ({ ...x })) } : {}),
-    ...(r.undo ? { undo: { x: r.undo.x.slice(), y: r.undo.y.slice(), cmd: r.undo.cmd.slice(), lead: r.undo.lead, ...(r.undo.memory ? { memory: storeOne(key, r.undo.memory) } : {}) } } : {}),
+    ...(r.undo ? { undo: { x: r.undo.x.slice(), y: r.undo.y.slice(), cmd: r.undo.cmd.slice(), lead: r.undo.lead, ...(r.undo.trail ? { trail: r.undo.trail } : {}), ...(r.undo.memory ? { memory: storeOne(key, r.undo.memory) } : {}) } } : {}),
   };
 }
 
-/** What is remembered about the objects of `p`, to store it with the file. */
-export function rememberedIn(p: Pattern, objects: SewObject[]): StoredObject[] {
-  const out: StoredObject[] = [];
-  for (const o of objects) {
-    const key = objectKey(p, o);
-    const r = memory.get(key);
-    if (r) out.push(storeOne(key, r));
+/** How an object follows another one (its leader), as stored: see StoredEntry.of. */
+export type FollowRole = 'border' | 'blend' | 'shadow' | 'echo' | 'piece';
+
+/** One object of a version as stored (project version 2). */
+export interface StoredEntry {
+  id: number;
+  /** Its first and last stitch, counted from 0 in sewing order. */
+  first: number;
+  last: number;
+  /** Its stitches (see stitchKey) and where the first one is, to find them when the stitches moved. */
+  key: string;
+  at: [number, number];
+  /** What it knows; absent for an object only recognized from its stitches. */
+  memory?: Omit<StoredObject, 'key' | 'join'> & {
+    /**
+     * The object it follows (by id) and how: its fill's border, its blend's second thread, its
+     * line's shadow or echo copies (n: the nearest copy), or a part of the same fill cut apart.
+     */
+    of?: { id: number; role: FollowRole; n?: number };
+  };
+}
+
+/** The object list of a version as stored with the file (project version 2). */
+export interface StoredObjects {
+  v: 2;
+  /** The id the next new object gets. */
+  next: number;
+  objects: StoredEntry[];
+}
+
+/** Objects as stored with a file: a list of project version 2, or what version 1 kept by stitches. */
+export type ObjectsAsStored = StoredObjects | StoredObject[];
+
+/** Whether `v` is an object list as stored by project version 2 (else a list of an older version). */
+export const isStoredObjects = (v: unknown): v is StoredObjects => !!v && typeof v === 'object' && (v as StoredObjects).v === 2 && Array.isArray((v as StoredObjects).objects);
+
+/** The link a leader gives its followers of `role`. */
+function leaderLink(m: Remembered, role: FollowRole): string | undefined {
+  if (role === 'border') return m.fill?.border?.link;
+  if (role === 'blend') return m.fill?.deco?.blend?.link;
+  if (role === 'shadow') return m.line?.shadow?.link;
+  if (role === 'piece') return m.piece;
+  return m.line?.echo?.link;
+}
+
+/** What object `m` follows: the link it names and how. */
+function followed(m: Remembered): { link: string; role: FollowRole; n?: number } | null {
+  if (m.outline) return { link: m.outline, role: 'border' };
+  if (m.blendOf) return { link: m.blendOf, role: 'blend' };
+  if (m.shadowOf) return { link: m.shadowOf, role: 'shadow' };
+  if (m.echoOf) {
+    const k = m.echoOf.lastIndexOf(':');
+    const n = Number(m.echoOf.slice(k + 1));
+    return k > 0 && Number.isInteger(n) ? { link: m.echoOf.slice(0, k), role: 'echo', n } : { link: m.echoOf, role: 'echo' };
   }
-  for (const j of joinsIn(p)) out.push({ key: j.key, region: null, join: j.join });
-  return out;
+  // The first part of a fill cut apart names the whole, the others follow it.
+  if (m.piece) return { link: m.piece, role: 'piece' };
+  return null;
+}
+
+/** What the objects of `p` are and know, to store it with the file. */
+export function rememberedIn(p: Pattern, _objects?: SewObject[]): StoredObjects {
+  const t = tableOf(p);
+  const ix = stitchIndex(p);
+  // Leaders by the links they give.
+  const leaders = new Map<string, number>();
+  for (const e of t.entries) {
+    const m = e.memory;
+    if (!m) continue;
+    for (const role of ['border', 'blend', 'shadow', 'echo', 'piece'] as const) {
+      const l = leaderLink(m, role);
+      if (l && !leaders.has(`${role} ${l}`)) leaders.set(`${role} ${l}`, e.id);
+    }
+  }
+  return {
+    v: 2,
+    next: t.next,
+    objects: t.entries.map((e): StoredEntry => {
+      const where = { id: e.id, first: ix.before[e.first], last: ix.before[e.last], key: stitchKey(p, e.first, e.last), at: [p.x[e.first], p.y[e.first]] as [number, number] };
+      if (!e.memory) return where;
+      const { key: _k, outline: _o, blendOf: _b, shadowOf: _s, echoOf: _e, piece: _p, ...stored } = storeOne('', e.memory);
+      const f = followed(e.memory);
+      const leader = f ? leaders.get(`${f.role} ${f.link}`) : undefined;
+      // A follower whose leader is gone keeps naming it, as it did (the next change drops it).
+      const keep = f && (leader === undefined || leader === e.id) ? { [f.role === 'border' ? 'outline' : f.role === 'blend' ? 'blendOf' : f.role === 'shadow' ? 'shadowOf' : f.role === 'piece' ? 'piece' : 'echoOf']: f.role === 'echo' ? e.memory.echoOf : f.link } : {};
+      return { ...where, memory: { ...stored, ...keep, ...(f && leader !== undefined && leader !== e.id ? { of: { id: leader, role: f.role, ...(f.n !== undefined ? { n: f.n } : {}) } } : {}) } };
+    }),
+  };
+}
+
+/** What object `o` of `p` knows, as stored (to keep it with a shape set aside). */
+export function storedOf(p: Pattern, o: SewObject): StoredObject | undefined {
+  const m = remembered(p, o);
+  return m && storeOne(objectKey(p, o), m);
+}
+
+/** What a stored object knew, back (null when it does not hold). */
+export function memoryFrom(e: StoredObject): Remembered | null {
+  return fromStored({ ...e, key: e.key ?? '' });
 }
 
 const isValue = (v: unknown) => finite(v) || typeof v === 'boolean' || typeof v === 'string';
@@ -755,6 +809,7 @@ function isFill(f: unknown): f is FillSettings {
     PATTERNS.includes(s.pattern) &&
     [s.spacing, s.spacingEnd, s.offset, s.angle, s.stitch, s.edge].every(finite) &&
     (s.tolerance === undefined || finite(s.tolerance)) &&
+    (s.gradient === undefined || typeof s.gradient === 'boolean') &&
     (s.guides === undefined || (Array.isArray(s.guides) && s.guides.every(isLine))) &&
     (s.underCross === undefined || typeof s.underCross === 'boolean') &&
     (s.underInset === undefined || finite(s.underInset)) &&
@@ -796,7 +851,7 @@ export function isLineStitch(b: unknown): b is PathStitch {
 
 function isBorder(b: unknown): b is BorderSettings {
   const s = b as BorderSettings | null;
-  return !!s && BORDERS.includes(s.type) && finite(s.width) && [s.length, s.repeat, s.tolerance, s.offset, s.spacing, s.pull].every((v) => v === undefined || finite(v)) && (s.flip === undefined || typeof s.flip === 'boolean') && (s.motif === undefined || LINE_MOTIFS.includes(s.motif)) && (s.under === undefined || s.under === 'off' || UNDERLAYS.includes(s.under)) && (s.color === undefined || isColor(s.color)) && (s.link === undefined || typeof s.link === 'string');
+  return !!s && BORDERS.includes(s.type) && finite(s.width) && [s.length, s.repeat, s.tolerance, s.offset, s.spacing, s.pull].every((v) => v === undefined || finite(v)) && (s.flip === undefined || typeof s.flip === 'boolean') && (s.motif === undefined || LINE_MOTIFS.includes(s.motif)) && (s.under === undefined || s.under === 'off' || UNDERLAYS.includes(s.under)) && (s.color === undefined || isColor(s.color)) && (s.link === undefined || typeof s.link === 'string') && (s.seams === undefined || typeof s.seams === 'boolean') && (s.fringe === undefined || finite(s.fringe)) && (s.fringeSide === undefined || s.fringeSide === 'left' || s.fringeSide === 'right');
 }
 
 function isSatin(f: unknown): f is SatinSettings {
@@ -810,7 +865,9 @@ function isSatin(f: unknown): f is SatinSettings {
     [s.tolerance, s.split, s.edgeShare, s.edgeB, s.underInset, s.underInsetShare].every(optional) &&
     (s.type === undefined || s.type === 'satin' || s.type === 'e') &&
     (s.under === undefined || UNDERLAYS.includes(s.under)) &&
-    (s.stagger === undefined || typeof s.stagger === 'boolean')
+    (s.stagger === undefined || typeof s.stagger === 'boolean') &&
+    optional(s.fringe) &&
+    (s.fringeSide === undefined || s.fringeSide === 'left' || s.fringeSide === 'right')
   );
 }
 
@@ -1002,6 +1059,7 @@ function fromStored(e: StoredObject): Remembered | null {
   const asLine = e.asLine && formFrom(e.asLine.path);
   if (asLine && isLineStitch(e.asLine!.line)) r.asLine = { path: asLine, line: { ...e.asLine!.line }, cap: e.asLine!.cap === 'round' ? 'round' : 'flat' };
   if (typeof e.outline === 'string') r.outline = e.outline;
+  if (typeof e.piece === 'string' && r.fill) r.piece = e.piece;
   if (typeof e.blendOf === 'string') r.blendOf = e.blendOf;
   if (typeof e.shadowOf === 'string') r.shadowOf = e.shadowOf;
   if (typeof e.echoOf === 'string') r.echoOf = e.echoOf;
@@ -1014,29 +1072,69 @@ function fromStored(e: StoredObject): Remembered | null {
   if (fixed.length) r.fixed = fixed;
   const undo = e.undo;
   if (undo && undo.x instanceof Int32Array && undo.y instanceof Int32Array && undo.cmd instanceof Uint8Array && undo.x.length === undo.y.length && undo.x.length === undo.cmd.length && finite(undo.lead) && undo.lead >= 0 && undo.lead < undo.x.length) {
+    const trail = finite(undo.trail) && undo.trail > 0 && undo.lead + undo.trail < undo.x.length ? Math.round(undo.trail) : 0;
     const memory = undo.memory ? fromStored(undo.memory) : null;
-    r.undo = { x: undo.x.slice(), y: undo.y.slice(), cmd: undo.cmd.slice(), lead: Math.round(undo.lead), ...(memory ? { memory } : {}) };
+    r.undo = { x: undo.x.slice(), y: undo.y.slice(), cmd: undo.cmd.slice(), lead: Math.round(undo.lead), ...(trail ? { trail } : {}), ...(memory ? { memory } : {}) };
   }
   return r;
 }
 
-/** Remembers stored objects again (from storage or a project file); malformed entries are skipped. */
-export function restoreRemembered(list: unknown): number {
+/**
+ * Gives version `p` the objects stored with it: an object list (project version 2), or what an
+ * older project kept by the objects' stitches (version 1: the knowledge of each object and which
+ * sections continued the object before). Malformed entries are skipped. Returns how many objects
+ * know what they are.
+ */
+export function restoreRemembered(p: Pattern, list: unknown): number {
+  // Nothing stored: a version that knows its objects keeps them.
+  if (Array.isArray(list) && !list.length && hasTable(p)) return 0;
+  if (isStoredObjects(list)) {
+    const entries: PlacedEntry[] = [];
+    const ofs: { at: number; of: NonNullable<NonNullable<StoredEntry['memory']>['of']> }[] = [];
+    for (const e of list.objects) {
+      if (!e || !finite(e.id) || !finite(e.first) || !finite(e.last) || typeof e.key !== 'string' || !Array.isArray(e.at) || !e.at.every(finite)) continue;
+      const m = e.memory ? fromStored({ ...e.memory, key: '' } as StoredObject) : null;
+      entries.push({ id: e.id, first: e.first, last: e.last, key: e.key, at: [e.at[0], e.at[1]], ...(m ? { memory: m } : {}) });
+      const of = e.memory?.of;
+      if (m && of && finite(of.id) && ['border', 'blend', 'shadow', 'echo', 'piece'].includes(of.role)) ofs.push({ at: entries.length - 1, of });
+    }
+    // Followers name their leader's link again.
+    for (const { at, of } of ofs) {
+      const leader = entries.find((x) => x.id === of.id)?.memory;
+      const link = leader && leaderLink(leader, of.role);
+      if (!link) continue;
+      const m = entries[at].memory!;
+      if (of.role === 'border') m.outline = link;
+      else if (of.role === 'blend') m.blendOf = link;
+      else if (of.role === 'shadow') m.shadowOf = link;
+      else if (of.role === 'piece') {
+        if (m.fill) m.piece = link;
+      } else m.echoOf = of.n !== undefined ? `${link}:${of.n}` : link;
+    }
+    setObjects(p, entries, finite(list.next) ? list.next : 1);
+    return entries.filter((e) => e.memory).length;
+  }
   if (!Array.isArray(list)) return 0;
-  let n = 0;
+  const joins = new Map<string, boolean>();
+  const memory = new Map<string, Remembered>();
   for (const e of list as StoredObject[]) {
-    if (typeof e?.key === 'string' && typeof e.join === 'boolean') {
-      restoreJoin(e.key, e.join);
-      n++;
+    if (typeof e?.key !== 'string') continue;
+    if (typeof e.join === 'boolean') {
+      joins.set(e.key, e.join);
       continue;
     }
     const r = fromStored(e);
-    if (!r) continue;
-    rememberKey(e.key, r);
-    n++;
+    if (r) memory.set(e.key, r);
   }
-  return n;
+  setObjectsFromKeys(p, joins, memory);
+  return memory.size;
 }
+
+/** Curved patterns that can grow lighter across the shape (FillSettings.gradient). */
+export const CURVED_GRADIENT: FillPattern[] = ['follow', 'guided'];
+
+/** A fill whose rows get further apart across the shape: the gradient pattern, or curved rows set so. */
+export const isGradient = (f: FillSettings): boolean => f.pattern === 'gradient' || (!!f.gradient && CURVED_GRADIENT.includes(f.pattern));
 
 /**
  * Records of the fills sewn open on purpose (gradients), which the coverage check leaves out; null
@@ -1045,8 +1143,8 @@ export function restoreRemembered(list: unknown): number {
 export function openOnPurpose(p: Pattern, objs: SewObject[]): Uint8Array | null {
   let out: Uint8Array | null = null;
   for (const o of objs) {
-    const pat = remembered(p, o)?.fill?.pattern;
-    if (pat !== 'gradient' && !(pat && isOpenPattern(pat))) continue;
+    const f = remembered(p, o)?.fill;
+    if (!f || (!isGradient(f) && !isOpenPattern(f.pattern))) continue;
     out ??= new Uint8Array(p.cmd.length);
     out.fill(1, o.first, o.last + 1);
   }
@@ -1069,7 +1167,10 @@ export function shapeTrust(p: Pattern, o: SewObject, a: Analysis, spacing: numbe
   if (!a.fill) return 'approximate';
   const known = remembered(p, o);
   if (known?.region === a.fill && !known.read) return 'kept';
-  if (spacing > OPEN_ROWS) return 'approximate';
+  // Open rows read as such: the area lies between them, however far apart they are.
+  const open = openRows.get(a.fill);
+  if (open) spacing = Math.max(spacing, open);
+  else if (spacing > OPEN_ROWS) return 'approximate';
   const runs: Pt[][] = [];
   for (const pt of a.parts) {
     if (pt.kind !== 'fill') continue;
@@ -1114,7 +1215,8 @@ export function analyze(p: Pattern, o: SewObject, kinds: Uint8Array, known = rem
   });
   const others: number[] = [];
   for (let k = 1; k < idx.length; k++) if (sewnSeg(k) && !satin[k]) others.push(idx[k]);
-  const region = known?.region ?? (others.length > 4 ? traceRegion(p, others, REACH, OPEN) : null);
+  const traced = known?.region ?? (others.length > 4 ? traceRegion(p, others, REACH, OPEN) : null);
+  const region = known?.region ?? withOpenRows(p, o, others, traced);
   const inFill = (k: number) => {
     if (!region) return false;
     const i = idx[k];
@@ -1143,14 +1245,15 @@ export function analyze(p: Pattern, o: SewObject, kinds: Uint8Array, known = rem
   }
   // A border in the fill's thread, sewn here as the last part, starts at this record.
   const at = known?.fill?.border && !known.fill.border.color && known.borderAt ? idx[known.borderAt] : undefined;
-  // Running stitch under a satin column (its underlay, also when trimmed off from it) is part of it.
+  // Running stitch under a satin column (its underlay, also when trimmed off from it) is part of it,
+  // and so is a zigzag underlay, whose long stitches back and forth look like fill rows.
   // Not under the fill's own satin border: travel of the fill along its edge lies there too.
   const satinSegs: number[] = [];
   for (let k = 1; k < idx.length; k++) if (kindAt[k] === 'satin' && sewnSeg(k) && !(at !== undefined && idx[k] > at)) satinSegs.push(idx[k]);
   const column = satinSegs.length > 4 ? traceRegion(p, satinSegs, REACH) : null;
   if (column) {
     for (const r of merged) {
-      if (r.kind !== 'run') continue;
+      if (r.kind === 'satin') continue;
       let inside = 0;
       for (let k = r.a; k <= r.b; k++) if (sample(column, column.sdfBase, p.x[idx[k]] / 10, p.y[idx[k]] / 10) < 0.2) inside++;
       if (inside >= (r.b - r.a + 1) * 0.8) r.kind = 'satin';
@@ -1187,6 +1290,47 @@ function sewnParts(idx: number[], known: Remembered | undefined): Part[] | null 
     from = x.end;
   }
   return parts;
+}
+
+/** Rows this far apart or more do not close into an area by traceRegion: they are read as rows (mm). */
+const OPEN_PATCH = 0.5;
+/** Areas that take in open rows, with the widest distance between those rows. */
+const openRows = new WeakMap<Region, number>();
+/** Areas with open rows lately, by the object's stitches (see traced). */
+const withRows = new Map<string, { region: Region | null; open: number }>();
+
+/**
+ * The area `traced` from an object's stitches, with the patches of open rows among the stitches
+ * `segs` (a gradient, a light fill) added as the strips between their rows.
+ */
+function withOpenRows(p: Pattern, o: SewObject, segs: number[], traced: Region | null): Region | null {
+  const key = `${stitchKey(p, o.first, o.last)}:${segs.length}`;
+  let got = withRows.get(key);
+  if (!got) {
+    const open = openPatches(p, segs);
+    const area = open.length ? patchArea(open, traced?.pxMm ?? 0.1) : null;
+    const region = area ? (traced ? unionRegion([traced, area]) : area) : traced;
+    got = { region, open: area ? Math.max(...open.map(patchSpacing)) : 0 };
+    withRows.set(key, got);
+    if (withRows.size > TRACED_SIZE) withRows.delete(withRows.keys().next().value!);
+  }
+  if (!got.region) return null;
+  const r = { ...got.region };
+  if (got.open) openRows.set(r, got.open);
+  return r;
+}
+
+/** The patches of rows further apart than OPEN_PATCH among the stitches `segs` (records). */
+function openPatches(p: Pattern, segs: number[]): RowPatch[] {
+  const out: RowPatch[] = [];
+  // Stretches of stitches one after the other.
+  for (let k = 0; k < segs.length; ) {
+    let e = k;
+    while (e + 1 < segs.length && segs[e + 1] === segs[e] + 1) e++;
+    if (e - k >= 6) for (const pt of rowPatches(p, segs[k] - 1, segs[e])) if (patchSpacing(pt) >= OPEN_PATCH) out.push(pt);
+    k = e + 1;
+  }
+  return out;
 }
 
 /** The parts with a border in the fill's thread, sewn here as the last part, as one part from where it starts. */
@@ -1377,18 +1521,35 @@ function readFill(p: Pattern, a: Analysis): { s: FillSettings; firstRow: number 
   for (const g of segs) all += g.l;
   const curved = segs.length > 10 && rowThread < all * 0.75;
   const sp = Math.round(spacing * 100) / 100;
+  const ang = angle === 180 ? 0 : angle;
+  // Rows that get further apart (or closer) evenly across most of the fill: a gradient.
+  const grad = gradientIn(p, a, all, ang);
   const s: FillSettings = {
-    pattern: curved ? 'follow' : 'tatami',
-    spacing: sp,
-    spacingEnd: Math.min(1.2, Math.round(sp * 2.5 * 100) / 100),
+    pattern: grad ? 'gradient' : curved ? 'follow' : 'tatami',
+    spacing: grad?.spacing ?? sp,
+    spacingEnd: grad?.spacingEnd ?? Math.min(1.2, Math.round(sp * 2.5 * 100) / 100),
     offset: 0.25,
-    angle: angle === 180 ? 0 : angle,
+    angle: ang,
     stitch: Math.round((percentile(rows.map((g) => g.l), 0.8) || 4) * 10) / 10,
     underlay: before > rowThread * 0.06,
     edge: 0,
     tolerance: TOLERANCE,
   };
   return { s, firstRow };
+}
+
+/**
+ * The gradient of the fill parts of `a` (see gradientOf), when the patch of rows it is read from
+ * holds at least half of their thread (`all`, mm); rows at `angle`.
+ */
+function gradientIn(p: Pattern, a: Analysis, all: number, angle: number): { spacing: number; spacingEnd: number } | null {
+  const patches: RowPatch[] = [];
+  for (const pt of a.parts) if (pt.kind === 'fill' && !pt.border) patches.push(...rowPatches(p, pt.s, pt.e));
+  const grad = gradientOf(patches, angle);
+  if (!grad) return null;
+  const largest = patches.reduce((best, x) => (x.rows.length > best.rows.length ? x : best));
+  const thread = largest.rows.reduce((n, r) => n + r.len, 0);
+  return thread >= all * 0.5 ? grad : null;
 }
 
 /**
@@ -1471,7 +1632,19 @@ export function measureSatin(p: Pattern, pt: Part, kinds: Uint8Array): SatinSett
   }
   const type: SatinType = all && e * 2 > all ? 'e' : 'satin';
   const spacing = Math.round(Math.min(type === 'e' ? 6 : 1.5, Math.max(0.15, percentile(steps, 0.5) || 0.4)) * 100) / 100;
-  return { spacing, edge: 0, short: true, underlay: other > satin * 0.03, tolerance: TOLERANCE, type, under: 'auto', split: SATIN_SPLIT, stagger: true, edgeShare: 0 };
+  return { spacing, edge: 0, short: true, underlay: other > satin * 0.03, tolerance: TOLERANCE, type, under: 'auto', split: measuredSplit(p, pt, kinds), stagger: true, edgeShare: 0 };
+}
+
+/**
+ * The split length the stitches show: the default where none is longer (they were split there, or
+ * the column is narrower), else just over the longest, so sewing them anew splits none that the
+ * file did not (an unsplit 9 mm column stays unsplit).
+ */
+function measuredSplit(p: Pattern, pt: Part, kinds: Uint8Array): number {
+  let longest = 0;
+  for (let i = pt.s + 1; i <= pt.e; i++) if (kinds[i] === SATIN && p.cmd[i] === STITCH && p.cmd[i - 1] === STITCH) longest = Math.max(longest, seg(p, i));
+  if (longest <= SATIN_SPLIT_MM + 0.15) return SATIN_SPLIT_MM;
+  return Math.min(SATIN_SPLIT_MAX, Math.ceil(longest * 2) / 2);
 }
 
 export function measureRun(p: Pattern, pt: Part): RunSettings {
@@ -1623,7 +1796,7 @@ function convert(p: Pattern, o: SewObject, parts: Part[], src: ObjectKind, area:
 }
 
 /** Stitches of a fill: its runs, the first `under` points of them its underlay. */
-interface NewFill {
+export interface NewFill {
   runs: Pt[][];
   under: number;
   /** Points of `runs` before the border (all of them without one). */
@@ -1640,27 +1813,59 @@ function newFill(p: Pattern, o: SewObject, a: Analysis, s: FillSettings, reverse
   const segs: number[] = [];
   for (let i = o.first + 1; i <= o.last; i++) if (p.cmd[i] === STITCH && p.cmd[i - 1] === STITCH) segs.push(i);
   const travel = traceRegion(p, segs, TRAVEL_REACH, 0, false) ?? undefined;
-  // Grown or shrunk for the stitches only: the shape kept for the next edit stays as it is.
-  const r = expandRegion(a.fill, s.expand ?? 0);
-  if (!r) return null;
-  // Grown, the travel may also use the new margin, so it stays one piece; shrunk, it stays inside
-  // the smaller area (the old thread runs where nothing is sewn now).
-  const ex = s.expand ?? 0;
-  const way = ex > 0 && travel ? (unionRegion([travel, r]) ?? travel) : ex < 0 ? r : travel;
-  const fp: FillParams = { spacing: s.spacing, stitch: s.stitch, angle: s.angle, pull: s.edge, underlay: s.underlay, underCross: s.underCross, underInset: s.underInset, underInsetShare: s.underInsetShare, underSpacing: s.underSpacing, travel: way, tolerance: s.tolerance };
-  // Under what lies on top completely, no underlay (it would only add thread under it).
-  if (s.underlay && s.underCover && covers?.length) {
-    const left = cutAway(r, covers.map((c) => ({ region: c.region, overlap: UNDER_COVER_MARGIN })));
-    if (left !== r) fp.underArea = left ?? undefined;
-    if (!left) fp.underlay = false;
-  }
   // Reversed, the new stitches start where the old ones ended.
   const start = reverse ? pt10(p, last.e) : pt10(p, first.s);
   // Straight rows end near where the next object starts, when that shortens the way (if nothing
   // else of the object comes after the fill; not when it is sewn the other way round on purpose).
   let next = o.last + 1;
   while (next < p.cmd.length && p.cmd[next] !== STITCH && p.cmd[next] !== END) next++;
-  if (!reverse && a.parts.filter((pt) => !pt.border).pop() === last && next < p.cmd.length && p.cmd[next] === STITCH) fp.end = pt10(p, next);
+  const end = !reverse && a.parts.filter((pt) => !pt.border).pop() === last && next < p.cmd.length && p.cmd[next] === STITCH ? pt10(p, next) : undefined;
+  // A fill that follows its stitches: the direction of the old rows.
+  const rows: [Pt, Pt][] = [];
+  if (s.pattern === 'follow')
+    for (const pt of a.parts) {
+      if (pt.kind !== 'fill' || pt.border) continue;
+      for (let i = pt.s + 1; i <= pt.e; i++) if (p.cmd[i] === STITCH && p.cmd[i - 1] === STITCH && seg(p, i) >= 0.8) rows.push([pt10(p, i - 1), pt10(p, i)]);
+    }
+  return fillRuns(a.fill, s, { start, end, travel, covers, rows });
+}
+
+/** Where and along what a fill is sewn (see fillRuns). */
+export interface FillWay {
+  /** Its stitches start near here. */
+  start: Pt;
+  /** Straight rows end near here (where the next object starts). */
+  end?: Pt;
+  /** Where travel between patches may run besides the area (the old thread). */
+  travel?: Region;
+  /** What lies on top of it (no underlay under what covers it completely). */
+  covers?: Cover[];
+  /** The rows a 'follow' fill follows. */
+  rows?: [Pt, Pt][];
+}
+
+/**
+ * The stitches of a fill in area `area` with settings `s`: everything they depend on is given, so
+ * the same area, settings and way give the same stitches (an empty fill has none here).
+ */
+export function fillRuns(area: Region, s: FillSettings, way: FillWay): NewFill | null {
+  if (s.pattern === 'none') return null;
+  const { start, travel, covers } = way;
+  // Grown or shrunk for the stitches only: the shape kept for the next edit stays as it is.
+  const r = expandRegion(area, s.expand ?? 0);
+  if (!r) return null;
+  // Grown, the travel may also use the new margin, so it stays one piece; shrunk, it stays inside
+  // the smaller area (the old thread runs where nothing is sewn now).
+  const ex = s.expand ?? 0;
+  const tw = ex > 0 && travel ? (unionRegion([travel, r]) ?? travel) : ex < 0 ? r : travel;
+  const fp: FillParams = { spacing: s.spacing, stitch: s.stitch, angle: s.angle, pull: s.edge, underlay: s.underlay, underCross: s.underCross, underInset: s.underInset, underInsetShare: s.underInsetShare, underSpacing: s.underSpacing, travel: tw, tolerance: s.tolerance };
+  // Under what lies on top completely, no underlay (it would only add thread under it).
+  if (s.underlay && s.underCover && covers?.length) {
+    const left = cutAway(r, covers.map((c) => ({ region: c.region, overlap: UNDER_COVER_MARGIN })));
+    if (left !== r) fp.underArea = left ?? undefined;
+    if (!left) fp.underlay = false;
+  }
+  if (way.end) fp.end = way.end;
   let res;
   if (s.pattern === 'gradient') {
     res = fillRegion(r, { ...fp, spacingEnd: s.spacingEnd, ...(s.deco?.fade ? { fade: s.deco.fade } : {}) }, start);
@@ -1668,15 +1873,12 @@ function newFill(p: Pattern, o: SewObject, a: Analysis, s: FillSettings, reverse
     res = contourFill(r, fp, start);
   } else if (s.pattern === 'spiral') res = spiralFill(r, fp, start);
   else if (s.pattern === 'follow') {
-    const lines: [Pt, Pt][] = [];
-    for (const pt of a.parts) {
-      if (pt.kind !== 'fill' || pt.border) continue;
-      for (let i = pt.s + 1; i <= pt.e; i++) if (p.cmd[i] === STITCH && p.cmd[i - 1] === STITCH && seg(p, i) >= 0.8) lines.push([pt10(p, i - 1), pt10(p, i)]);
-    }
-    const f = stitchField(r, lines);
+    if (s.gradient) fp.spacingEnd = s.spacingEnd;
+    const f = stitchField(r, way.rows ?? []);
     res = fieldFill(r, f.g, f, fp, start, false, CONTOUR_PEAK);
   } else if (s.pattern === 'guided') {
     if (!s.guides?.length) return null;
+    if (s.gradient) fp.spacingEnd = s.spacingEnd;
     const f = guideField(r, s.guides);
     res = fieldFill(r, f.g, f, fp, start, false, CONTOUR_PEAK);
   } else if ((DECO_PATTERNS as FillPattern[]).includes(s.pattern)) {
@@ -1947,12 +2149,29 @@ export function spacingAlong(c: Column, r: Rails, base: number, byWidth: boolean
 
 /** Settings for the columns walked from the other end: what was right is left now. */
 export function swappedSides(s: SatinSettings): SatinSettings {
-  return s.edgeB === undefined ? s : { ...s, edge: s.edgeB, edgeB: s.edge };
+  let out = s.edgeB === undefined ? s : { ...s, edge: s.edgeB, edgeB: s.edge };
+  if (s.fringeSide) out = { ...out, fringeSide: s.fringeSide === 'left' ? 'right' : 'left' };
+  return out;
+}
+
+/**
+ * How deep the fringe of settings `s` is on the rails `left` and `right` (mm); an E stitch has none.
+ * The sides the user picks are as seen on screen (y down) along the column: its left is the rail
+ * called right here.
+ */
+function fringeOf(s: SatinSettings): [number, number] {
+  const f = s.type === 'e' ? 0 : Math.max(0, s.fringe ?? 0);
+  return [s.fringeSide === 'left' ? 0 : f, s.fringeSide === 'right' ? 0 : f];
+}
+
+function fringeParams(s: SatinSettings): Pick<SatinParams, 'fringe' | 'fringeB'> {
+  const [a, b] = fringeOf(s);
+  return a || b ? { fringe: a, fringeB: b } : {};
 }
 
 /** The satin's parameters for `pairs` and its stitches. */
 export function satinParams(s: SatinSettings): SatinParams {
-  return { spacing: s.spacing, pull: s.edge, pullB: s.edgeB, pullShare: s.edgeShare ?? 0, splitMm: s.split ?? SATIN_SPLIT, short: s.short && s.type !== 'e', stagger: s.stagger ?? true };
+  return { spacing: s.spacing, pull: s.edge, pullB: s.edgeB, pullShare: s.edgeShare ?? 0, splitMm: s.split ?? SATIN_SPLIT, short: s.short && s.type !== 'e', stagger: s.stagger ?? true, ...fringeParams(s) };
 }
 
 /**
@@ -1998,7 +2217,7 @@ export function satinRuns(rails: Rails[], s: SatinSettings): Pt[][] {
       runs.push(sewR(ps));
       continue;
     }
-    const under = underlayOf(col, s.under ?? 'auto', s.tolerance, underInset(s));
+    const under = underOf(col, s);
     if (!under.atEnd) {
       runs.push([...under.pts, ...sewR(ps)]);
       continue;
@@ -2101,6 +2320,9 @@ const sided = (r: Rails, sew: (ps: [Pt, Pt][]) => Pt[]) => (ps: [Pt, Pt][]) => s
 /** How far a satin's underlay keeps inside its rails, as its settings say. */
 const underInset = (s: SatinSettings): UnderInset => ({ mm: s.underInset, share: s.underInsetShare });
 
+/** The underlay of a column sewn with `s` (walked the way `s` says its sides are): inside the fringe, where every stitch covers it. */
+const underOf = (c: Column, s: SatinSettings) => underlayOf(fringedColumn(c, ...fringeOf(s)), s.under ?? 'auto', s.tolerance, underInset(s));
+
 /** Longest stitch of the run joining two sections that do not meet (mm). */
 const TRAVEL_STEP = 2.5;
 
@@ -2122,7 +2344,7 @@ function apartOf(parts: Rails[]): boolean {
 /** Whether sectionRun sews the satin of these sections back: the last first, each from its end. */
 export function sewnBack(parts: Rails[], s: SatinSettings): boolean {
   if (apartOf(parts)) return true;
-  return s.underlay && parts.every((r) => underlayOf(columnOf(r), s.under ?? 'auto', s.tolerance, underInset(s)).atEnd);
+  return s.underlay && parts.every((r) => underOf(columnOf(r), s).atEnd);
 }
 
 /** The steps a column's sections are sewn in: its plan, or as sectionRun sews them. */
@@ -2181,7 +2403,6 @@ function sectionRun(parts: Rails[], s: SatinSettings, sew: (ps: [Pt, Pt][]) => P
     }
     out.push(...pts);
   };
-  const kind = s.under ?? 'auto';
   // A section sewn as a column of its own may end away from where the next one starts: then all
   // go out first (underlay, or a run along the middle) and the satin comes back over the way.
   const apart = apartOf(parts);
@@ -2189,7 +2410,7 @@ function sectionRun(parts: Rails[], s: SatinSettings, sew: (ps: [Pt, Pt][]) => P
     parts.forEach((r, k) => push(sided(r, sew)(pairs(cols[k], along(cols[k], r, sp)))));
     return out;
   }
-  const unders = cols.map((c) => (s.underlay ? underlayOf(c, kind, s.tolerance, underInset(s)) : { pts: [] as Pt[], atEnd: false }));
+  const unders = cols.map((c) => (s.underlay ? underOf(c, s) : { pts: [] as Pt[], atEnd: false }));
   if (apart) {
     cols.forEach((c, k) => push(unders[k].atEnd ? unders[k].pts : [...unders[k].pts, ...runStitch(c.center, TRAVEL_STEP, s.tolerance)]));
   } else if (!unders.every((u) => u.atEnd)) {
@@ -2239,13 +2460,12 @@ const outlineOf = (r: Rails): Pt[] => {
 function columnRun(r: Rails, s: SatinSettings, sew: (ps: [Pt, Pt][]) => Pt[], along: (col: Column, r: Rails, q: SatinParams) => SatinParams): Pt[] {
   const secs = sectionsOf(r);
   if (secs.length > 1) return sectionRun(secs, s, sew, along);
-  const kind = s.under ?? 'auto';
   const col = columnOf(secs[0]);
   const rev = reversedColumn(col);
   const satinBack = () => sided(r, sew)(pairs(rev, along(rev, reversedRails(secs[0]), satinParams(swappedSides(s)))));
-  const under = s.underlay ? underlayOf(col, kind, s.tolerance, underInset(s)) : null;
+  const under = s.underlay ? underOf(col, s) : null;
   if (under?.atEnd) return [...under.pts, ...satinBack()];
-  const underBack = s.underlay ? underlayOf(rev, kind, s.tolerance, underInset(s)).pts : [];
+  const underBack = s.underlay ? underOf(rev, swappedSides(s)).pts : [];
   return [...runStitch(col.center, TRAVEL_STEP, s.tolerance), ...underBack, ...satinBack()];
 }
 
@@ -2292,23 +2512,18 @@ function wayBetween(from: Pt, to: Pt, k: number, outlines: Pt[][], columns: Colu
 }
 
 function newRun(p: Pattern, pt: Part, s: RunSettings, kinds: Uint8Array): Pt[][] | null {
-  // The path without lock stitches and without the way back of a triple stitch.
-  const path: Pt[] = [];
-  for (let i = pt.s; i <= pt.e; i++) {
-    if (p.cmd[i] !== STITCH || (kinds[i] === TIE_STITCH && i > pt.s)) continue;
-    const q = pt10(p, i);
-    if (path.length >= 2 && dist(q, path[path.length - 2]) < 0.05) {
-      path.pop();
+  const out: Pt[][] = [];
+  for (const way of runWays(p, pt.s, pt.e, kinds)) {
+    const pts = runStitch(way, s.stitch, s.tolerance);
+    if (!s.triple) {
+      out.push(pts);
       continue;
     }
-    if (!path.length || dist(q, path[path.length - 1]) > 0.05) path.push(q);
+    const tri: Pt[] = [pts[0]];
+    for (let i = 1; i < pts.length; i++) tri.push(pts[i], pts[i - 1], pts[i]);
+    out.push(tri);
   }
-  if (path.length < 2) return null;
-  const pts = runStitch(path, s.stitch, s.tolerance);
-  if (!s.triple) return [pts];
-  const out: Pt[] = [pts[0]];
-  for (let i = 1; i < pts.length; i++) out.push(pts[i], pts[i - 1], pts[i]);
-  return [out];
+  return out.length ? out : null;
 }
 
 export interface Rec {
@@ -2318,7 +2533,7 @@ export interface Rec {
 }
 
 /** Length of a lock stitch (mm); SHORT_LOCK only to tell an object from one with the very same stitches. */
-const LOCK = 0.7;
+const LOCK = LOCK_MM;
 const SHORT_LOCK = 0.5;
 let lockMm = LOCK;
 
@@ -2465,6 +2680,9 @@ function restitchOnce(
     if (newArea && an.fill) an = { ...an, fill: newArea };
     const given = typeof settingsFor === 'function' ? settingsFor(o, an, known) : settingsFor;
     if (!given) continue;
+    // A fill given a new area whose stitches no longer read as a fill (a thin sliver of few rows
+    // reads as running stitch): all of it is the fill it remembers being.
+    if (newArea && !an.fill && given.kind === 'fill' && known?.fill && !known.asLine) an = { parts: [{ kind: 'fill', s: o.first, e: o.last }], fill: newArea };
     // A fill along a line: its area is always made from the line, never kept or traced.
     const byLine = !newArea && known?.asLine && given.kind === 'fill' ? lineFillArea(known.asLine, given.s) : null;
     if (byLine && an.fill) an = { ...an, fill: byLine };
@@ -2578,10 +2796,13 @@ function restitchOnce(
           ...(known?.asLine && settings.kind === 'fill' ? { asLine: lineFillOf(known.asLine, settings.s) } : {}),
           ...(known?.outline ? { outline: known.outline, border: known.border } : {}),
           ...(known?.blendOf ? { blendOf: known.blendOf } : {}),
+          ...(known?.piece && settings.kind === 'fill' ? { piece: known.piece } : {}),
           ...(known?.shadowOf ? { shadowOf: known.shadowOf } : {}),
           ...(known?.echoOf ? { echoOf: known.echoOf } : {}),
         };
     if (known?.lettering) after.lettering = known.lettering;
+    // The same object with new stitches: it keeps its id.
+    after.id = o.id;
     if (known?.lock) after.lock = true;
     // Up to the object: everything as it was, except the jumps that lead to its first stitch.
     let lead = o.first;

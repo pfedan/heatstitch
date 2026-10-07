@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { sewObjects } from '../src/model/objects';
-import { forgetAll, remembered, restoreRemembered } from '../src/model/restitch';
+import { remembered, restoreRemembered } from '../src/model/restitch';
 import { parsePattern } from '../src/parsers';
 import { decodeProject, encodeProject, projectSettings } from '../src/storage/project';
 import { DEFAULTS } from '../src/settings';
@@ -35,7 +35,6 @@ describe('demo project', () => {
     const same = (await unpacked(new Uint8Array(readFileSync(FILE)))) === (await unpacked(bytes));
     expect(same, 'public/examples/demo is out of date: UPDATE_DEMOS=1 npm test').toBe(true);
 
-    forgetAll();
     const back = await decodeProject(bytes);
     expect(back.files.map((f) => f.title)).toEqual(designs.map((d) => d.title));
     // Named in both app languages.
@@ -43,7 +42,7 @@ describe('demo project', () => {
     for (const f of back.files) {
       expect(f.own).toBe(true);
       const p = parsePattern(f.data, f.name);
-      restoreRemembered(f.objects);
+      restoreRemembered(p, f.objects);
       const lost = sewObjects(p).filter((o) => !remembered(p, o));
       expect(lost.map((o) => `${f.title} ${o.index}`), 'objects that forgot what they are after opening').toEqual([]);
     }

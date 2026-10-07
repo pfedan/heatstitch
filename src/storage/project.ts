@@ -10,8 +10,9 @@
  */
 
 import { normalizeCorrection } from '../correct/auto';
+import { readAreas } from '../digitize/smart';
 import type { StoredAside } from '../model/aside';
-import type { StoredObject } from '../model/restitch';
+import { isStoredObjects, type ObjectsAsStored } from '../model/restitch';
 import { DEFAULTS, hexColor, normalizeImage, type ImageSettings, type Settings } from '../settings';
 import { isAcknowledgement, type Acknowledgement } from '../validation/acks';
 import { normalizeProfile } from '../validation/profiles';
@@ -22,7 +23,7 @@ import type { StoredWork } from './imageStore';
 export const PROJECT_EXT = '.heatstitch';
 export const PROJECT_MIME = 'application/x-heatstitch-project';
 /** Raised whenever the content changes in a way older versions would misread. */
-export const PROJECT_VERSION = 1;
+export const PROJECT_VERSION = 2;
 const MAGIC = 'heatstitch-project';
 
 export interface ProjectFile {
@@ -32,7 +33,7 @@ export interface ProjectFile {
   /** The edited version; absent while the file is unchanged. */
   working?: StoredPattern;
   acks: Acknowledgement[];
-  objects: StoredObject[];
+  objects: ObjectsAsStored;
   /** Shapes of the working copy that are not sewn (absent in older projects). */
   aside?: StoredAside[];
   /** This design's fabric, thread, hoop, fabric color and checks (absent in older projects, which share the project settings). */
@@ -53,8 +54,8 @@ export interface ProjectImage {
 }
 
 /** The settings that belong to the design rather than to how the app is looked at. */
-export type ProjectSettings = Pick<Settings, 'profile' | 'checks' | 'correction' | 'trimMm' | 'order' | 'machineSpm'> & {
-  image: Pick<ImageSettings, 'prepare' | 'stitch'>;
+export type ProjectSettings = Pick<Settings, 'profile' | 'checks' | 'correction' | 'trimMm' | 'order' | 'machineSpm' | 'trimSeconds' | 'colorSeconds'> & {
+  image: Pick<ImageSettings, 'prepare' | 'style' | 'stitch'>;
   /** The fabric color the design is shown on (null: the theme's); absent in older projects. */
   background?: string | null;
 };
@@ -87,7 +88,9 @@ export function projectSettings(s: Settings): ProjectSettings {
     trimMm: s.trimMm,
     order: s.order,
     machineSpm: s.machineSpm,
-    image: { prepare: s.image.prepare, stitch: s.image.stitch },
+    trimSeconds: s.trimSeconds,
+    colorSeconds: s.colorSeconds,
+    image: { prepare: s.image.prepare, style: s.image.style, stitch: s.image.stitch },
     background: s.background,
   });
 }
@@ -191,7 +194,7 @@ export async function decodeProject(bytes: Uint8Array): Promise<Project> {
         ...(isWorking(e.working) ? { working: e.working } : {}),
         acks: Array.isArray(e.acks) ? e.acks.filter(isAcknowledgement) : [],
         // Checked when they are remembered again (restoreRemembered).
-        objects: Array.isArray(e.objects) ? e.objects : [],
+        objects: isStoredObjects(e.objects) || Array.isArray(e.objects) ? e.objects : [],
         // Checked when they are read (asideFrom).
         ...(Array.isArray(e.aside) && e.aside.length ? { aside: e.aside } : {}),
         // Checked when it is read (normalizeMaterial).
@@ -219,14 +222,15 @@ function readImage(v: unknown): ProjectImage | null {
     name: i.name,
     type: i.type,
     data: i.data,
-    work: { edits: Array.isArray(w.edits) ? w.edits : [], strokes: Array.isArray(w.strokes) ? w.strokes : [] },
+    work: { edits: Array.isArray(w.edits) ? w.edits : [], strokes: Array.isArray(w.strokes) ? w.strokes : [], ...(w.areas ? { areas: readAreas(w.areas) } : {}) },
   };
 }
 
 function readSettings(v: unknown): ProjectSettings {
   const s = (v ?? {}) as Partial<ProjectSettings>;
   const positive = (x: unknown, d: number) => (typeof x === 'number' && Number.isFinite(x) && x > 0 ? x : d);
-  const image = normalizeImage({ prepare: s.image?.prepare, stitch: s.image?.stitch } as Partial<ImageSettings>);
+  // Projects from before the style switch were converted with rows following the image.
+  const image = normalizeImage({ prepare: s.image?.prepare, style: s.image?.style, stitch: s.image?.stitch } as Partial<ImageSettings>, 'dynamic');
   return {
     profile: normalizeProfile(s.profile),
     checks: normalizeChecks(s.checks),
@@ -238,7 +242,9 @@ function readSettings(v: unknown): ProjectSettings {
       reverse: typeof s.order?.reverse === 'boolean' ? s.order.reverse : true,
     },
     machineSpm: positive(s.machineSpm, DEFAULTS.machineSpm),
-    image: { prepare: image.prepare, stitch: image.stitch },
+    trimSeconds: typeof s.trimSeconds === 'number' && s.trimSeconds >= 0 ? s.trimSeconds : DEFAULTS.trimSeconds,
+    colorSeconds: typeof s.colorSeconds === 'number' && s.colorSeconds >= 0 ? s.colorSeconds : DEFAULTS.colorSeconds,
+    image: { prepare: image.prepare, style: image.style, stitch: image.stitch },
     ...('background' in s ? { background: hexColor(s.background) } : {}),
   };
 }

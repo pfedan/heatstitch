@@ -29,6 +29,8 @@ export interface Sequence {
   letteringNames?: { lang: string; names: ReadonlyMap<number, string> | undefined };
   /** Objects whose shape and stitch type are only guessed from their stitches (built when first needed). */
   guessed?: ReadonlySet<number>;
+  /** Objects loosed from their shape, as last listed (they change on the same version, see looseOf). */
+  loose?: { key: string; set: ReadonlySet<number> };
 }
 
 /** A proposal taken over only for a look: its stitches and their heatmap (once worked out). */

@@ -1,0 +1,54 @@
+/* Integration of the areas: what sits between them (the header in Bild, the foot of the stage). */
+
+/* Header in Bild umwandeln: no third tab, the assistant names itself; the stepper leads back. */
+body[data-mode='image'] #modes {
+  display: none;
+}
+
+.image-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.image-head .i {
+  color: var(--accent);
+}
+
+/*
+ * Foot of the stage, one calm row above the player: the key hint on the left (only when it adds
+ * something), the heatmap scale of Prüfen, the view bar on the right. Notes (toasts) stand above
+ * this row, so they never cover the player or the view bar.
+ */
+.stage-foot .legend {
+  flex: none;
+  margin-left: auto;
+}
+
+body[data-mode='density'] .stage-foot .view-bar {
+  margin-left: 0;
+}
+
+/* The bars over the stage say what to do with the tool: the hint below would only repeat it. */
+.stage:has(.tool-options:not([hidden]), .stitch-bar:not([hidden])) .stage-foot .hint,
+/* Start page or Bild without a picture: nothing to zoom or show yet. */
+.stage:has(#empty:not([hidden])) .stage-foot .hint,
+.stage:has(#empty:not([hidden])) .view-bar {
+  visibility: hidden;
+}
+
+.stage > .toast {
+  position: absolute;
+  bottom: calc(var(--player-h, 0px) + 66px);
+  max-width: calc(100% - 24px);
+  box-sizing: border-box;
+}
+
+/* Section lines of the inspector stay one line: the title, then its short summary. */
+.insp-page .jumps > summary {
+  flex-wrap: nowrap;
+}

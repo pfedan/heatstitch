@@ -1,11 +1,11 @@
-import { sewObjects } from '../../model/objects';
 import type { Pattern } from '../../model/pattern';
 import { rememberedIn } from '../../model/restitch';
 import type { Profile } from '../../validation/profiles';
 import type { AmpelReport } from './ampel';
 import { planOrder, restWorth } from './ampel';
+import { objectsOf } from './units';
 import type { PlannedFix } from './apply';
-import type { FixKind } from './cells';
+import type { FixKind, FixTarget } from './cells';
 import type { EngineRequest, EngineResponse, EngineSettings } from './worker';
 
 /**
@@ -38,12 +38,9 @@ export class EngineClient {
    * null when a newer call took over.
    */
   async assess(p: Pattern, profile: Profile, settings: EngineSettings, progress?: (r: AmpelReport) => void): Promise<AmpelReport | null> {
-    const gen = ++this.generation;
-    this.dropBusy();
+    const gen = this.cancel();
     const t0 = performance.now();
-    const memory = rememberedIn(p, sewObjects(p));
-    const base = { pattern: p, memory, profile, settings };
-    const first = await this.ask({ ...base, id: 0, type: 'report' });
+    const first = await this.ask({ ...this.base(p, profile, settings), id: 0, type: 'report' });
     if (gen !== this.generation || !first.report) return null;
     const report = first.report;
     progress?.(report);
@@ -56,26 +53,26 @@ export class EngineClient {
       k.rest = restWorth(k.direct, rests.get(kind) ?? null);
     };
     const jobs = kinds.map(async (kind) => {
-      const r = await this.ask({ ...base, id: 0, type: 'kind', kind, mode: 'direct' });
+      const f = await this.fix(p, profile, settings, kind, 'direct');
       if (gen !== this.generation) return;
-      report.kinds.find((x) => x.kind === kind)!.direct = r.fix ?? null;
+      report.kinds.find((x) => x.kind === kind)!.direct = f;
       if (rests.has(kind)) show(kind);
       progress?.(report);
     });
     if (kinds.length > 1) {
       jobs.push(
-        this.ask({ ...base, id: 0, type: 'all' }).then((r) => {
+        this.fix(p, profile, settings, 'all', 'direct').then((f) => {
           if (gen !== this.generation) return;
-          report.all = r.fix ?? null;
+          report.all = f;
           progress?.(report);
         }),
       );
     }
     for (const kind of kinds) {
       jobs.push(
-        this.ask({ ...base, id: 0, type: 'kind', kind, mode: 'rest' }).then((r) => {
+        this.fix(p, profile, settings, kind, 'rest').then((f) => {
           if (gen !== this.generation) return;
-          rests.set(kind, r.fix ?? null);
+          rests.set(kind, f);
           show(kind);
           progress?.(report);
         }),
@@ -85,6 +82,31 @@ export class EngineClient {
     if (gen !== this.generation) return null;
     report.ms = performance.now() - t0;
     return report;
+  }
+
+  /**
+   * One fix of `p`, worked out in the next free worker (in the order asked). Null when it clears
+   * nothing, or when cancel() dropped it.
+   */
+  async fix(p: Pattern, profile: Profile, settings: EngineSettings, target: FixTarget, mode: 'direct' | 'rest'): Promise<PlannedFix | null> {
+    const r = await this.ask({ ...this.base(p, profile, settings), id: 0, type: 'fix', target, mode });
+    if (r.error) console.error(r.error);
+    return r.fix ?? null;
+  }
+
+  /** Drops what is running or waiting (for an older design): busy workers are stopped. Returns the new generation. */
+  cancel(): number {
+    this.dropBusy();
+    return ++this.generation;
+  }
+
+  /** Jobs running or waiting. */
+  get pending(): number {
+    return this.waiting.size;
+  }
+
+  private base(p: Pattern, profile: Profile, settings: EngineSettings) {
+    return { pattern: p, memory: rememberedIn(p, objectsOf(p)), profile, settings };
   }
 
   dispose(): void {

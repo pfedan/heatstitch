@@ -1,6 +1,6 @@
 import { onLangChange, t } from '../i18n';
 import type { ThreadColor } from '../model/pattern';
-import { BROTHER, brotherCatalog, catalogsNow, chooseCatalog, chosenCatalog, closeness, inCatalog, loadCatalogs, nearest, search as searchThreads, threadNumber, type Catalog } from '../threads/catalog';
+import { BROTHER, brotherCatalog, catalogOf, catalogPicked, catalogsNow, chooseCatalog, chosenCatalog, closeness, inCatalog, loadCatalogs, nearest, search as searchThreads, threadNumber, type Catalog } from '../threads/catalog';
 
 export const cssColor = (c: ThreadColor) => `rgb(${c.r}, ${c.g}, ${c.b})`;
 export const hexColor = (c: ThreadColor) => '#' + [c.r, c.g, c.b].map((v) => v.toString(16).padStart(2, '0')).join('');
@@ -70,12 +70,13 @@ export class ThreadPicker {
       btn.type = 'button';
       btn.className = 'pick';
       btn.style.background = cssColor(c);
-      btn.title = threadTitle(c);
-      btn.setAttribute('aria-label', btn.title);
+      const label = threadTitle(c);
+      btn.title = label;
+      btn.setAttribute('aria-label', label);
       if (current) btn.setAttribute('aria-current', 'true');
       btn.addEventListener('click', () => pick(c));
       // The name shows at once under the colors (the tooltip comes only after a while).
-      const show = () => (name.textContent = btn.title);
+      const show = () => (name.textContent = label);
       btn.addEventListener('pointerenter', show);
       btn.addEventListener('focus', show);
       return btn;
@@ -143,7 +144,9 @@ export class ThreadPicker {
             return g;
           }),
       );
-      select.value = all.some((c) => c.id === chosenCatalog()) ? chosenCatalog() : BROTHER;
+      // Before anyone chose a brand, the list starts with the brand of the color itself.
+      const own = catalogPicked() ? undefined : catalogOf([o.current]);
+      select.value = own?.id ?? (all.some((c) => c.id === chosenCatalog()) ? chosenCatalog() : BROTHER);
     };
     const catalog = () => catalogsNow().find((c) => c.id === select.value) ?? brotherCatalog();
 
@@ -230,11 +233,17 @@ export class ThreadPicker {
     else if (matchMedia('(pointer: fine)').matches) search.focus();
   }
 
-  /** Next to the swatch, kept on screen. */
+  /** Next to the swatch, kept on screen; from the inspector on the right it opens to the left of it. */
   private place(pop: HTMLElement, anchor: HTMLElement): void {
     const r = anchor.getBoundingClientRect();
     const w = pop.offsetWidth;
     const h = pop.offsetHeight;
+    const side = anchor.closest('.inspector')?.getBoundingClientRect();
+    if (side && side.left - w - 8 >= 8) {
+      pop.style.left = `${side.left - w - 8}px`;
+      pop.style.top = `${Math.max(8, Math.min(window.innerHeight - h - 8, r.top - 40))}px`;
+      return;
+    }
     const left = Math.max(8, Math.min(window.innerWidth - w - 8, r.right - w));
     const below = r.bottom + 6;
     const top = below + h <= window.innerHeight - 8 ? below : Math.max(8, r.top - h - 6);

@@ -34,12 +34,6 @@ export function writePattern(p: Pattern, format: OutputFormat, options: WriteOpt
   return WRITERS[format](p, options);
 }
 
-/** Suggested name without extension: "design.pes" after edits becomes "design-corrected". */
-export function suggestedName(fileName: string, edited: boolean): string {
-  const base = fileName.replace(/\.[^.]+$/, '') || 'design';
-  return `${base}${edited ? '-corrected' : ''}`;
-}
-
 /** A name typed by the user, without characters file systems refuse; empty when nothing is left. */
 export function cleanName(name: string): string {
   return name
@@ -47,11 +41,6 @@ export function cleanName(name: string): string {
     .trim()
     .replace(/\.(pes|pec|dst|jef|exp|vp3)$/i, '')
     .trim();
-}
-
-/** "design.pes" saved as DST after edits becomes "design-corrected.dst". */
-export function outputFileName(fileName: string, format: OutputFormat, edited: boolean): string {
-  return `${suggestedName(fileName, edited)}.${format}`;
 }
 
 /** Offers the file as a download. */

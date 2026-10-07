@@ -45,6 +45,44 @@ export interface Pattern {
   hoop?: { w: number; h: number };
 }
 
+/** Designs read from a file, and every version made from one (see readFromFile). */
+const read = new WeakSet<Pattern>();
+
+/**
+ * Marks `p` as read from a file: its objects are recognized from its stitches, split where their
+ * stitches change (see objects.ts). Its later versions too: stitches changed by an edit that does
+ * not carry its objects over are split the same way, so objects next to each other stay apart.
+ */
+export function readFromFile(p: Pattern): Pattern {
+  read.add(p);
+  return p;
+}
+
+export const isReadFromFile = (p: Pattern): boolean => read.has(p);
+
+/**
+ * The version each version of a design was made from. A new version takes over what the objects of
+ * the one before knew (see objects.ts), so every way of making one from another goes through
+ * `nextVersion` (or withRecords, which uses it).
+ */
+const parents = new WeakMap<Pattern, Pattern>();
+
+/** A new version of `p` with `changes`; it knows it came from `p`. */
+export function nextVersion(p: Pattern, changes: Partial<Pattern>): Pattern {
+  const next: Pattern = { ...p, ...changes };
+  parents.set(next, p);
+  if (read.has(p)) read.add(next);
+  return next;
+}
+
+/** The version `p` was made from, if it was made from one. */
+export const parentOf = (p: Pattern): Pattern | undefined => parents.get(p);
+
+/** Forgets where `p` came from (it knows its objects now, or never will). */
+export function dropParent(p: Pattern): void {
+  parents.delete(p);
+}
+
 /** Growable record list used by the parsers. */
 export class PatternBuilder {
   private xs: number[] = [];

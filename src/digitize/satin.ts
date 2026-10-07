@@ -1,3 +1,4 @@
+import { SATIN_CENTER_MAX } from '../material/rules';
 import { sample, type Region } from './region';
 import { runStitch, TOLERANCE } from './run';
 import type { Branch, Pt } from './skeleton';
@@ -33,6 +34,10 @@ export interface SatinParams {
   stagger?: boolean;
   /** Spacing at each point of the column instead of `spacing` (see spacingAlong in restitch). */
   spacingAt?: number[];
+  /** Fringe on the left side: each stitch ends up to this much short of the rail (mm), see fringe. */
+  fringe?: number;
+  /** Fringe on the right side (mm). */
+  fringeB?: number;
 }
 
 export interface Column {
@@ -189,7 +194,58 @@ export function pairs(c: Column, p: SatinParams, ends?: ColumnEnds): [Pt, Pt][] 
       else ref = q;
     }
   }
+  if (p.fringe || p.fringeB) fringe(comp, p.fringe ?? 0, p.fringeB ?? 0);
   return comp;
+}
+
+/** A fringed stitch keeps at least this long (mm), and this share of the width. */
+const FRINGE_KEEP = 1;
+const FRINGE_KEEP_SHARE = 0.35;
+
+/** A number in [0, 1) for stitch i on a side, the same every time (no state, so restitching repeats it). */
+function hash(i: number, side: number): number {
+  let h = Math.imul(i + 1, 0x9e3779b1) ^ Math.imul(side + 7, 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d);
+  h = Math.imul(h ^ (h >>> 12), 0x297a2d39);
+  return ((h ^ (h >>> 15)) >>> 0) / 4294967296;
+}
+
+/**
+ * A ragged edge (fur, feathers): on each side every stitch ends a different way short of the rail,
+ * up to `a` (left) and `b` (right) mm. Neighbours always differ by at least 30 % of the depth, so the
+ * edge looks frayed rather than wavy; the depths scale with the setting and stay where they are.
+ */
+function fringe(ps: [Pt, Pt][], a: number, b: number): void {
+  let ra = 0.5;
+  let rb = 0.5;
+  ps.forEach(([l, r], i) => {
+    ra = (ra + 0.3 + 0.4 * hash(i, 0)) % 1;
+    rb = (rb + 0.3 + 0.4 * hash(i, 1)) % 1;
+    const w = dist(l, r);
+    if (w < 1e-6) return;
+    const room = Math.max(0, w - Math.max(FRINGE_KEEP, FRINGE_KEEP_SHARE * w));
+    // Each side's share of the room, so also the stitch back from one pair to the next keeps it.
+    const k = a + b > room ? room / (a + b) : 1;
+    const da = a * k * ra;
+    const db = b * k * rb;
+    ps[i] = [lerp(l, r, da / w), lerp(r, l, db / w)];
+  });
+}
+
+/** The column with its rails drawn in by the fringe (left `a`, right `b` mm): where the satin covers on every stitch. */
+export function fringedColumn(c: Column, a: number, b: number): Column {
+  if (!a && !b) return c;
+  const left: Pt[] = [];
+  const right: Pt[] = [];
+  c.left.forEach((l, i) => {
+    const r = c.right[i];
+    const w = dist(l, r);
+    const room = Math.max(0, w - Math.max(FRINGE_KEEP, FRINGE_KEEP_SHARE * w));
+    const k = a + b > room ? room / (a + b) : 1;
+    left.push(w ? lerp(l, r, (a * k) / w) : l);
+    right.push(w ? lerp(r, l, (b * k) / w) : r);
+  });
+  return { ...c, left, right, center: left.map((l, i) => lerp(l, right[i], 0.5)) };
 }
 
 /** Splits a stitch from a to b into equal parts no longer than `max`; returns the points after a. */
@@ -256,25 +312,29 @@ export type UnderlayKind = 'auto' | 'center' | 'contour' | 'zigzag' | 'both';
 const INSET = 0.4;
 
 /**
- * Underlay sewn on the way out along the column (the satin follows on the way back): a center walk
- * for columns up to 4 mm, a zigzag inset 0.4 mm from both rails with 3 mm between penetrations on
- * the same side for wider ones (Wilcom and Ink/Stitch use these by width). The center walk keeps
- * within `tol` of the centerline, so it stays under the satin in tight curves.
+ * Underlay sewn on the way out along the column (the satin follows on the way back), by width (see
+ * SATIN_CENTER_MAX): a center walk for columns up to 4 mm; for wider ones a contour inset 0.4 mm
+ * from both rails, then a zigzag with 3 mm between penetrations on the same side (Ink/Stitch's
+ * underlay tutorial). The center walk keeps within `tol` of the centerline, so it stays under the
+ * satin in tight curves.
  */
 export function underlay(c: Column, tol = TOLERANCE, inset = insetOf(undefined)): Pt[] {
   const parts = byWidth(c);
-  if (parts.length === 1) return c.width <= WIDE ? centerWalk(c, tol) : zigzag(c, inset);
+  if (parts.length === 1) return c.width <= WIDE ? centerWalk(c, tol) : wideUnder(c, tol, inset);
   // Along the column by its width there: a centre walk where narrow, a zigzag where wide.
   const out: Pt[] = [];
   for (const { a, b, wide } of parts) {
     const part = sliceColumn(c, a, b);
-    out.push(...(wide ? zigzag(part, inset) : centerWalk(part, tol)));
+    out.push(...(wide ? wideUnder(part, tol, inset) : centerWalk(part, tol)));
   }
   return out;
 }
 
-/** Wider than this (mm), a column gets a zigzag underlay; up to it a centre walk. */
-const WIDE = 4;
+/** Wider than this (mm), a column gets contour and zigzag underlay; up to it a centre walk. */
+const WIDE = SATIN_CENTER_MAX;
+
+/** Contour (out and back along the rails) then zigzag to the far end, where the satin starts back. */
+const wideUnder = (c: Column, tol: number, inset: (a: Pt, b: Pt) => number): Pt[] => [...contour(c, tol, inset), ...zigzag(c, inset)];
 /** Along a column a stretch counts as wide only this much over WIDE (mm), so a column about 4 mm wide is not cut up. */
 const WIDE_MARGIN = 0.5;
 /** Stretches shorter than this (mm along the middle) go with their neighbours. */

@@ -1,0 +1,740 @@
+/* Narrow screens (src/areas/responsive/responsive.ts): drawers on the tablet, a bottom bar and a
+   sheet on the phone, larger targets for fingers. Desktop stays as it is. */
+
+.rs-toggle,
+.rs-head,
+.rs-scrim,
+.rs-phone-row,
+.rs-handle,
+.toolrail button.tool.rs-draw {
+  display: none;
+}
+
+/* A bar that scrolls sideways fades out where more of it is hidden (fades() in responsive.ts). */
+[data-fade='end'] {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+}
+
+[data-fade='start'] {
+  -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to left, #000 calc(100% - 28px), transparent);
+}
+
+[data-fade='both'] {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 28px, #000 calc(100% - 28px), transparent);
+}
+
+/* The menu of the drawing tools on the phone (drawGroup() in responsive.ts). */
+.rs-draw-pop {
+  position: fixed;
+  z-index: 70;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 168px;
+  padding: 6px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+}
+
+.rs-draw-pop[hidden] {
+  display: none;
+}
+
+.rs-draw-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 12px 0 10px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+}
+
+.rs-draw-row svg {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.rs-draw-row:hover,
+.rs-draw-row:focus-visible {
+  background: var(--bg);
+}
+
+.rs-draw-row[aria-checked='true'] {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* Tablet and phone: the stage gets the width, the side columns lie over it -------------------------- */
+
+@media (max-width: 1100px) {
+  body.rs-drawers .layout,
+  body.rs-drawers[data-mode] .layout {
+    position: relative;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-areas: 'rail stage';
+    /* Clip, not hidden: a closed drawer must not let the layout scroll to it. */
+    overflow: clip;
+  }
+
+  body.rs-drawers .layout > .resizer {
+    display: none;
+  }
+
+  body.rs-drawers .layout > .sidebar,
+  body.rs-drawers .layout > .inspector {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 41;
+    grid-area: auto;
+    width: min(360px, calc(100vw - 56px));
+    background: var(--bg);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    visibility: hidden;
+    transition:
+      transform 0.15s ease,
+      visibility 0s linear 0.15s;
+  }
+
+  body.rs-drawers .layout > .sidebar {
+    left: 0;
+    width: min(340px, calc(100vw - 56px));
+    border-right: 1px solid var(--line);
+    transform: translateX(-104%);
+  }
+
+  body.rs-drawers .layout > .inspector {
+    right: 0;
+    border-left: 1px solid var(--line);
+    transform: translateX(104%);
+  }
+
+  body.rs-drawers .layout.rs-side-open > .sidebar,
+  body.rs-drawers .layout:not([data-sheet='closed']) > .inspector {
+    visibility: visible;
+    transform: none;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.3);
+    transition: transform 0.15s ease;
+  }
+
+  body.rs-drawers .layout.rs-side-open > .rs-scrim {
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: 40;
+    background: color-mix(in srgb, var(--stage) 40%, transparent);
+  }
+
+  /* Head of a drawer: its name and the way to close it. */
+  body.rs-drawers .rs-head {
+    position: sticky;
+    top: -12px;
+    z-index: 4;
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 44px;
+    margin: -12px -12px 0;
+    padding: 0 6px 0 14px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--line);
+  }
+
+  body.rs-drawers .rs-title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .rs-close {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border-color: transparent;
+    background: none;
+    color: var(--muted);
+  }
+
+  .rs-close:hover {
+    background: var(--panel);
+    color: var(--ink);
+  }
+
+  /* The list fills its drawer without a card around it. */
+  body.rs-drawers .layout > .sidebar {
+    background: var(--panel);
+  }
+
+  body.rs-drawers .layout > .sidebar .rs-head {
+    background: var(--panel);
+  }
+
+  body.rs-drawers #layers-panel {
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: none;
+  }
+
+  /* The drawer names the list, so the panel inside does not again. */
+  body.rs-drawers #layers-panel .panel-head h2 {
+    display: none;
+  }
+
+  body.rs-drawers #layers-panel .panel-head:not(:has(#layers-reset:not([hidden]))) {
+    display: none;
+  }
+
+  body.rs-drawers .inspector .insp-tabs {
+    top: 32px;
+  }
+
+  /* The toggles in the top bar. */
+  body.rs-drawers .rs-top {
+    position: relative;
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border-color: transparent;
+    background: none;
+    color: var(--muted);
+  }
+
+  body.rs-drawers .rs-top:hover,
+  body.rs-drawers .rs-top[aria-expanded='true'] {
+    background: var(--bg);
+    color: var(--ink);
+  }
+
+  body.rs-drawers .rs-top[aria-expanded='true'] {
+    color: var(--accent);
+  }
+
+  body.rs-drawers[data-mode='density'] #rs-side-top {
+    display: none;
+  }
+
+  body.rs-drawers .rs-top:has(.rs-label:not(:empty)) {
+    grid-auto-flow: column;
+    gap: 6px;
+    width: auto;
+    padding: 0 10px;
+    font-weight: 600;
+  }
+
+  .rs-label:empty {
+    display: none;
+  }
+
+  .rs-dot {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 2px var(--panel);
+    display: none;
+  }
+
+  .rs-toggle.marked[aria-expanded='false'] .rs-dot {
+    display: block;
+  }
+
+  /* Option bars over the stage stay one line; what does not fit scrolls sideways. */
+  .stage .tool-options,
+  .stage .stitch-bar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+  }
+
+  .stage .tool-options::-webkit-scrollbar,
+  .stage .stitch-bar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .stage .tool-options > *,
+  .stage .stitch-bar > * {
+    flex: none;
+  }
+}
+
+/* Phone: tool rail at the bottom, inspector as a sheet, a condensed top bar ------------------------- */
+
+@media (max-width: 760px) {
+  .topbar,
+  body[data-mode] .topbar {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-areas: none;
+    gap: 6px;
+    padding: 6px 6px 6px 8px;
+  }
+
+  .topbar > .topbar-start,
+  .topbar > .modes,
+  .topbar > .topbar-end {
+    grid-area: auto;
+    grid-column: auto;
+    grid-row: auto;
+  }
+
+  .topbar .modes > label > span {
+    padding: 6px 10px;
+  }
+
+  .topbar .brand-mark,
+  .topbar .history,
+  .topbar #palette-open {
+    display: none;
+  }
+
+  .design-button {
+    max-width: 100%;
+    padding: 5px 4px;
+  }
+
+  .save-button > span {
+    display: none;
+  }
+
+  .save-button {
+    padding: 6px 9px;
+  }
+
+  .more-pop .rs-phone-row {
+    display: flex;
+  }
+
+  .more-pop .menu-sep.rs-phone-row {
+    display: block;
+  }
+
+  body.rs-drawers {
+    --rs-dock: 52px;
+  }
+
+  body.rs-drawers .rs-top {
+    display: none;
+  }
+
+  body.rs-drawers .layout,
+  body.rs-drawers[data-mode] .layout {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-rows: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'stage stage stage'
+      'dockl rail dockr';
+  }
+
+  body.rs-drawers .stage {
+    min-height: 0;
+  }
+
+  /* The bottom bar: the list on the left, the tools in the middle, the inspector on the right. */
+  body.rs-drawers .layout > .toolrail {
+    grid-area: rail;
+    flex-direction: row;
+    align-items: center;
+    gap: 2px;
+    height: var(--rs-dock);
+    padding: 0 4px;
+    justify-content: flex-start;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    border: none;
+    border-top: 1px solid var(--line);
+  }
+
+  body.rs-drawers .toolrail .rail-sep {
+    width: 1px;
+    height: 22px;
+    margin: 0 3px;
+  }
+
+  body.rs-drawers .layout > .toolrail::-webkit-scrollbar {
+    display: none;
+  }
+
+  body.rs-drawers .layout > .toolrail > :first-child {
+    margin-left: auto;
+  }
+
+  body.rs-drawers .layout > .toolrail > :last-child {
+    margin-right: auto;
+  }
+
+  body.rs-drawers .layout > .toolrail > * {
+    flex: none;
+  }
+
+  body.rs-drawers .toolrail #lettering-new {
+    margin: 0;
+  }
+
+  body.rs-drawers .toolrail #draw-pointer {
+    margin-top: 0;
+    margin-bottom: 0;
+  }
+
+  body.rs-drawers .rs-dock {
+    position: relative;
+    display: grid;
+    place-items: center;
+    height: var(--rs-dock);
+    min-width: 52px;
+    padding: 0 4px;
+    border: none;
+    border-top: 1px solid var(--line);
+    border-radius: 0;
+    background: var(--panel);
+    color: var(--muted);
+  }
+
+  body.rs-drawers .rs-dock-side {
+    grid-area: dockl;
+    border-right: 1px solid var(--line);
+  }
+
+  body.rs-drawers .rs-dock-insp {
+    grid-area: dockr;
+    border-left: 1px solid var(--line);
+  }
+
+  body.rs-drawers .rs-dock[aria-expanded='true'] {
+    color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+  }
+
+  body.rs-drawers .rs-dock .rs-dot {
+    top: 10px;
+    right: 12px;
+  }
+
+  /* Checking has no tools: the findings take the bar. */
+  body.rs-drawers[data-mode='density'] .rs-dock-side {
+    display: none;
+  }
+
+  body.rs-drawers[data-mode='density'] .rs-dock-insp {
+    grid-column: 1 / -1;
+    grid-auto-flow: column;
+    justify-content: center;
+    gap: 8px;
+    border-left: none;
+    font-weight: 600;
+  }
+
+  /* The object list: a drawer from the left over everything below the top bar. */
+  body.rs-drawers .layout > .sidebar {
+    z-index: 43;
+  }
+
+  body.rs-drawers .layout.rs-side-open > .rs-scrim {
+    z-index: 42;
+  }
+
+  /* The inspector: a sheet from below, above the bottom bar. */
+  body.rs-drawers .layout > .inspector {
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: var(--rs-dock);
+    width: auto;
+    height: min(176px, 40%);
+    border: 1px solid var(--line);
+    border-bottom: none;
+    border-radius: 14px 14px 0 0;
+    transform: translateY(calc(100% + var(--rs-dock)));
+    transition:
+      transform 0.18s ease,
+      height 0.18s ease,
+      visibility 0s linear 0.18s;
+  }
+
+  body.rs-drawers .layout:not([data-sheet='closed']) > .inspector {
+    transition:
+      transform 0.18s ease,
+      height 0.18s ease;
+  }
+
+  body.rs-drawers .layout[data-sheet='half'] > .inspector {
+    height: 55%;
+  }
+
+  body.rs-drawers .layout[data-sheet='full'] > .inspector {
+    height: 100%;
+    border-radius: 0;
+  }
+
+  body.rs-drawers .layout[data-sheet='full'] > .inspector {
+    bottom: 0;
+    z-index: 44;
+  }
+
+  body.rs-drawers .layout > .inspector.rs-dragging {
+    transition: none;
+  }
+
+  body.rs-drawers .rs-sheet-head {
+    flex-wrap: wrap;
+    height: 50px;
+    padding-top: 0;
+    border-radius: 14px 14px 0 0;
+    cursor: grab;
+    touch-action: none;
+    align-content: flex-start;
+  }
+
+  body.rs-drawers .layout[data-sheet='full'] .rs-sheet-head {
+    border-radius: 0;
+  }
+
+  body.rs-drawers .rs-handle {
+    flex-basis: 100%;
+    display: block;
+    height: 14px;
+    position: relative;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: none;
+  }
+
+  body.rs-drawers .rs-handle:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+
+  body.rs-drawers .rs-handle::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 6px;
+    width: 40px;
+    height: 4px;
+    margin-left: -20px;
+    border-radius: 2px;
+    background: color-mix(in srgb, var(--ink) 25%, transparent);
+  }
+
+  body.rs-drawers .rs-sheet-head .rs-close {
+    height: 34px;
+  }
+
+  body.rs-drawers .inspector .insp-tabs {
+    top: 38px;
+  }
+
+  /* The stage's foot and options leave room for nothing more than they need. */
+  body.rs-drawers .stage-foot .hint {
+    display: none;
+  }
+
+  /* The sheet at its small height: the player and the view bar stand on it (liftFoot()). */
+  body.rs-drawers .stage .player:not(.folded) {
+    bottom: var(--rs-lift, 0px);
+    transition: bottom 0.18s ease;
+  }
+
+  body.rs-drawers .stage .player.folded {
+    bottom: calc(var(--rs-lift, 0px) + 10px);
+  }
+
+  body.rs-drawers .stage-foot {
+    bottom: calc(var(--player-h) + 10px + var(--rs-lift, 0px));
+    transition: bottom 0.18s ease;
+    /* On a phone the heatmap scale and the view bar do not fit side by side: the scale goes on top. */
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    row-gap: 6px;
+  }
+
+  /* The four drawing tools share one button with a small menu: the bottom bar fits. */
+  body.rs-drawers .toolrail button[data-draw] {
+    display: none;
+  }
+
+  body.rs-drawers .toolrail button.tool.rs-draw {
+    display: grid;
+    place-items: center;
+  }
+
+  /* A small corner says the button holds more tools. */
+  body.rs-drawers .toolrail button.tool.rs-draw {
+    position: relative;
+  }
+
+  body.rs-drawers .toolrail button.tool.rs-draw::after {
+    content: '';
+    position: absolute;
+    right: 6px;
+    bottom: 6px;
+    border: 3px solid transparent;
+    border-right-color: currentColor;
+    border-bottom-color: currentColor;
+    opacity: 0.7;
+  }
+
+  .toolrail .rs-draw .rs-draw-face {
+    display: grid;
+    place-items: center;
+  }
+
+  .toolrail .rs-draw svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  /* The start page needs no view settings; on a phone they would cover it. */
+  .stage:has(#empty:not([hidden]) .start) .stage-foot {
+    display: none;
+  }
+
+  /* Notes stand above the bottom bar. */
+  body.rs-drawers .toast {
+    bottom: calc(var(--rs-dock) + 12px);
+    max-width: calc(100vw - 24px);
+  }
+
+  /* Popovers open as sheets below the top bar. */
+  .popover {
+    max-height: calc(100dvh - 72px);
+  }
+}
+
+/* Image assistant on the phone: the steps over the stage, the page scrolls down to the result. ---- */
+
+@media (max-width: 760px) {
+  html body[data-mode='image'][data-image-step] .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Fingers: at least 44 px to hit (design-system/heatstitch/konzept.md, "Touch") ------------------- */
+
+@media (pointer: coarse) {
+  .toolrail button.tool,
+  .history .tool,
+  .more-button,
+  .rs-top,
+  .rs-close,
+  .player-btn,
+  .player-play {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .player-play {
+    width: 44px;
+    height: 44px;
+  }
+
+  .vb-btn {
+    height: 44px;
+    min-width: 44px;
+  }
+
+  .topbar .design-button,
+  .save-button,
+  .search-button,
+  .topbar .modes > label > span {
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+  }
+
+  .insp-tabs button,
+  .pop-row,
+  .menu button {
+    min-height: 44px;
+  }
+
+  .stage .tool-options button.opt,
+  .stitch-bar .bar-btn {
+    min-height: 40px;
+  }
+
+  .stitch-bar .bar-btn.icon-only {
+    width: 40px;
+  }
+
+  .crumbs button,
+  .stage-tools button {
+    min-height: 40px;
+  }
+
+  /* The pill grows with its finger-sized buttons, so the divider before the level menu stays inside. */
+  .crumbs {
+    height: auto;
+  }
+
+  /* The object list: rows and their buttons big enough for a finger. */
+  #layer-list .layer,
+  #aside-block .layer {
+    min-height: 44px;
+  }
+
+  #layer-list .layer button.icon,
+  #aside-block .layer button.icon {
+    width: 40px;
+    height: 44px;
+  }
+
+  #layer-list .chev {
+    width: 32px;
+    height: 44px;
+  }
+
+  #layer-list .layer-tools {
+    padding: 0;
+  }
+}
+
+@media (pointer: coarse) and (max-width: 1100px) {
+  /* The thread list of the design page has the counts too; here the names get the room. */
+  #layer-list .color-row .layer-meta {
+    display: none;
+  }
+}
+
+@media (pointer: coarse) and (max-width: 760px) {
+  body.rs-drawers .layout > .sidebar {
+    width: calc(100vw - 40px);
+  }
+}

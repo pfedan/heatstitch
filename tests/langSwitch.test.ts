@@ -8,7 +8,7 @@ import { en } from '../src/i18n/en';
  * Switching the language changes every text at once, without a reload: the app is opened in a
  * browser, brought into a state (an object selected, a menu open, Dichte, Bild, a lettering...),
  * switched over and searched for any text of the other language still on the page, shown or
- * hidden, in text, titles, labels and placeholders. Then back again.
+ * hidden, in text, titles (tooltips), labels and placeholders. Then back again.
  *
  * A part that writes text with t() and keeps it (a panel, a card, a menu) listens with
  * onLangChange (src/i18n); one that forgets shows up here with the key of the text it left behind.
@@ -48,8 +48,9 @@ function pageTexts(page: Page): Promise<[string, string][]> {
       // The language list names each language in its own.
       if (s && !el.closest('script, style, #lang')) out.push([s, where(el)]);
     }
-    for (const el of document.querySelectorAll('[title], [aria-label], [placeholder], optgroup[label]'))
-      for (const a of ['title', 'aria-label', 'placeholder', 'label']) {
+    // data-tip: a title once the tooltip layer took it over (src/shell/tooltip.ts).
+    for (const el of document.querySelectorAll('[title], [data-tip], [aria-label], [placeholder], optgroup[label]'))
+      for (const a of ['title', 'data-tip', 'aria-label', 'placeholder', 'label']) {
         const v = el.getAttribute(a);
         if (v && !el.closest('#lang')) out.push([v, `${where(el)}[${a}]`]);
       }
@@ -76,7 +77,7 @@ const canvasAt = async (page: Page, fx = 0.5, fy = 0.5) => {
   return { x: b.x + b.width * fx, y: b.y + b.height * fy };
 };
 const loadCat = async (page: Page) => {
-  await page.selectOption('#load-example', 'examples/cat-60mm.pes');
+  await page.evaluate(() => document.querySelector<HTMLButtonElement>('#load-example [data-example="examples/cat-60mm.pes"]')!.click());
   await page.locator('#layer-list .layer').first().waitFor();
   await wait(page, 500);
 };
@@ -87,7 +88,7 @@ const selectMiddle = async (page: Page) => {
 };
 /** Opens every color of the shapes example and selects one object in the list. */
 const selectInList = async (page: Page, object: number) => {
-  await page.selectOption('#load-example', 'examples/svg/shapes-benchmark.svg');
+  await page.evaluate(() => document.querySelector<HTMLButtonElement>('#load-example [data-example="examples/svg/shapes-benchmark.svg"]')!.click());
   await page.locator('#layer-list .layer').first().waitFor();
   const blocks = await page.locator('#layer-list .layer[data-block]').count();
   for (let b = 0; b < blocks; b++) await page.locator(`#layer-list .layer[data-block="${b}"] .chev`).click();
@@ -95,11 +96,16 @@ const selectInList = async (page: Page, object: number) => {
   await page.locator('#object-panel:not([hidden])').waitFor();
 };
 const mode = async (page: Page, m: 'flow' | 'density' | 'image') => {
-  await page.locator(`input[name=mode][value=${m}]`).check({ force: true });
+  // Bild has no tab of its own: it starts from the design menu.
+  if (m === 'image') await page.evaluate(() => document.getElementById('image-start')!.click());
+  else await page.locator(`input[name=mode][value=${m}]`).check({ force: true });
   await wait(page, 1500);
 };
 
 /** The states the switch is tried in. */
+/** How long the slowest step (converting the example picture) may take; the test gets that much more. */
+const SLOW_STEP = 90_000;
+
 const STATES: Record<string, (page: Page) => Promise<void>> = {
   'nothing loaded': async () => {},
   'an object selected': async (page) => {
@@ -133,6 +139,7 @@ const STATES: Record<string, (page: Page) => Promise<void>> = {
   },
   'the color list open': async (page) => {
     await loadCat(page);
+    await page.click('#save-button');
     await page.click('#color-list');
     await page.locator('dialog.color-list[open]').waitFor();
   },
@@ -147,10 +154,13 @@ const STATES: Record<string, (page: Page) => Promise<void>> = {
   'Bild with a picture': async (page) => {
     await mode(page, 'image');
     await page.click('#image-example');
-    await page.locator('#image-take:not([hidden]):not([disabled])').waitFor({ timeout: 30_000 });
+    // The assistant opens the colors of a new picture; its last step shows the result and take over.
+    await page.click('.image-stepper [data-goto="3"]');
+    // Converting the picture runs in a worker and can take long on a busy machine.
+    await page.locator('#image-take:not([hidden]):not([disabled])').waitFor({ timeout: SLOW_STEP });
   },
   'a lettering': async (page) => {
-    await page.click('#new-design');
+    await page.evaluate(() => document.getElementById('new-design')!.click());
     await page.click('#lettering-new');
     await page.locator('#lettering-panel:not([hidden])').waitFor();
   },
@@ -176,19 +186,19 @@ describe.skipIf(!on)('switching the language', () => {
   });
 
   for (const [name, reach] of Object.entries(STATES)) {
-    it(`leaves no text of the old language with ${name}`, { timeout: 90_000 }, async () => {
+    it(`leaves no text of the old language with ${name}`, { timeout: name === 'Bild with a picture' ? 60_000 + SLOW_STEP : 90_000 }, async () => {
       const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
       const page = await ctx.newPage();
       const errors: string[] = [];
       page.on('pageerror', (e) => errors.push(e.message));
       try {
         await page.goto(url);
-        await page.selectOption('#lang', 'de');
+        await page.selectOption('#lang', 'de', { force: true });
         await reach(page);
-        await page.selectOption('#lang', 'en');
+        await page.selectOption('#lang', 'en', { force: true });
         await wait(page, 500);
         expect(await leftOver(page, 'de', 'en'), 'German texts after switching to English').toEqual([]);
-        await page.selectOption('#lang', 'de');
+        await page.selectOption('#lang', 'de', { force: true });
         await wait(page, 500);
         expect(await leftOver(page, 'en', 'de'), 'English texts after switching back to German').toEqual([]);
         expect(errors).toEqual([]);

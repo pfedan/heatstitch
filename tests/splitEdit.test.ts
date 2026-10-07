@@ -122,9 +122,9 @@ describe('the fill a satin was cut from, with the rest of the app', () => {
     const columns = shape.columns!.map((part) => part.map((c, k) => ({ ...c, chain: 0, ...(k ? {} : { split: { outlines: [M], holes: [M.slice(0, 5)], cuts: CUTS }, mirror: true, plan: [{ sec: 0, flip: false, trim: true, mirror: true }] }) })));
     remember(p, o, { ...shape, columns, read: false });
     try {
-      const stored = JSON.parse(JSON.stringify(rememberedIn(p, objs).find((x) => x.columns)));
+      const stored = JSON.parse(JSON.stringify(rememberedIn(p, objs)));
       forget(p, o);
-      restoreRemembered([stored]);
+      restoreRemembered(p, stored);
       const split = remembered(p, o)?.columns?.flat().find((c) => c.split)?.split;
       expect(split?.outlines).toEqual([M]);
       expect(split?.holes).toEqual([M.slice(0, 5)]);

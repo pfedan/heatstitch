@@ -8,6 +8,7 @@ import { DEFAULT_PROFILE, normalizeProfile, threadWidthMm, type Profile } from '
 import { ALL_CHECKS, normalizeChecks, type Checks } from './validation/validate';
 import { isOutputFormat, type OutputFormat } from './writers';
 import { normalizeHoop, type Hoop } from './model/hoop';
+import { COLOR_SECONDS, TRIM_SECONDS } from './model/sequence';
 
 export interface PanelWidths {
   side: number | null;
@@ -47,8 +48,16 @@ export const shownMarks = (s: Pick<Settings, 'marks' | 'marksOn'>): Marks =>
 /** What the stage shows in the Bild mode. */
 export type ImageView = 'original' | 'prepared' | 'stitches';
 
+/**
+ * How the Bild assistant lays the stitches: straight rows and clean satin, rows that follow shape
+ * and image, or Smart: the technique that suits each area (digitize/smart.ts).
+ */
+export type ImageStyle = 'flat' | 'dynamic' | 'smart';
+export const IMAGE_STYLES: readonly ImageStyle[] = ['flat', 'dynamic', 'smart'];
+
 export interface ImageSettings {
   prepare: PrepareOptions;
+  style: ImageStyle;
   /** Stitch options the user changed; the others follow the material. */
   stitch: Partial<DigitizeOptions>;
   view: ImageView;
@@ -68,6 +77,10 @@ export interface Settings {
   sections: Record<string, boolean>;
   /** Machine speed in stitches per minute, for the sewing time and the player. */
   machineSpm: number;
+  /** Seconds a trim takes, for the sewing time. */
+  trimSeconds: number;
+  /** Seconds a thread change takes: a few on a multi-needle machine, rather 30 to 60 by hand. */
+  colorSeconds: number;
   /** Player speed as a multiple of the machine speed. */
   playSpeed: number;
   /** Jumps from this length (mm) on are cut by "cut from this length". */
@@ -113,7 +126,7 @@ export interface Settings {
 
 /**
  * A 1 mm blur suppresses aliasing between typical 0.4 mm row spacing and the grid. The thread
- * scale tops out at 12 mm/mm² so both reference thresholds (7 and 9.5) are visible.
+ * scale tops out at 15 mm/mm² so both reference thresholds (7 and 12) are visible.
  */
 export const DEFAULTS: Settings = {
   mode: 'flow',
@@ -122,6 +135,8 @@ export const DEFAULTS: Settings = {
   marksOn: true,
   sections: { display: true, stats: false, advanced: false, findings: true },
   machineSpm: 800,
+  trimSeconds: TRIM_SECONDS,
+  colorSeconds: COLOR_SECONDS.single,
   playSpeed: 50,
   trimMm: 3,
   order: { combineColors: true, shortestWays: true, reverse: true },
@@ -145,10 +160,10 @@ export const DEFAULTS: Settings = {
   saveFormat: null,
   hoop: null,
   scales: {
-    thread: { max: 12 },
+    thread: { max: 15 },
     penetrations: { max: 4 },
   },
-  image: { prepare: { ...DEFAULT_PREPARE }, stitch: {}, view: 'stitches', brushMm: 3, introDone: false },
+  image: { prepare: { ...DEFAULT_PREPARE }, style: 'flat', stitch: {}, view: 'stitches', brushMm: 3, introDone: false },
   lang: null,
 };
 
@@ -177,6 +192,8 @@ export function loadSettings(): Settings {
       // Findings closed with the old × stay closed as a collapsed section.
       sections: { ...DEFAULTS.sections, ...(findingsOpen === false ? { findings: false } : {}), ...s.sections },
       machineSpm: typeof s.machineSpm === 'number' && s.machineSpm > 0 ? s.machineSpm : DEFAULTS.machineSpm,
+      trimSeconds: typeof s.trimSeconds === 'number' && s.trimSeconds >= 0 ? s.trimSeconds : DEFAULTS.trimSeconds,
+      colorSeconds: typeof s.colorSeconds === 'number' && s.colorSeconds >= 0 ? s.colorSeconds : DEFAULTS.colorSeconds,
       playSpeed: typeof s.playSpeed === 'number' && s.playSpeed > 0 ? s.playSpeed : DEFAULTS.playSpeed,
       trimMm: typeof s.trimMm === 'number' && s.trimMm > 0 ? s.trimMm : DEFAULTS.trimMm,
       order: {
@@ -210,7 +227,7 @@ const width = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v 
 const num = (v: unknown, lo: number, hi: number, fallback: number) =>
   typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : fallback;
 
-export function normalizeImage(i: Partial<ImageSettings> | undefined): ImageSettings {
+export function normalizeImage(i: Partial<ImageSettings> | undefined, oldStyle: ImageStyle = DEFAULTS.image.style): ImageSettings {
   const d = DEFAULTS.image;
   const p: Partial<PrepareOptions> = i?.prepare ?? {};
   const st: Record<string, unknown> = { ...i?.stitch };
@@ -220,7 +237,6 @@ export function normalizeImage(i: Partial<ImageSettings> | undefined): ImageSett
     if (typeof st[k] === 'number' && Number.isFinite(st[k]) && (st[k] as number) >= 0) stitch[k] = st[k] as number;
   }
   if (typeof st.underlay === 'boolean') stitch.underlay = st.underlay;
-  if (typeof st.flow === 'boolean') stitch.flow = st.flow;
   if (typeof st.angle === 'number' && Number.isFinite(st.angle)) stitch.angle = st.angle;
   return {
     prepare: {
@@ -231,6 +247,8 @@ export function normalizeImage(i: Partial<ImageSettings> | undefined): ImageSett
       background: typeof p.background === 'boolean' ? p.background : d.prepare.background,
       threads: typeof p.threads === 'boolean' ? p.threads : d.prepare.threads,
     },
+    // Before the style switch, "follows the image" was a stitch option of its own.
+    style: IMAGE_STYLES.includes(i?.style as ImageStyle) ? i!.style! : typeof st.flow === 'boolean' ? (st.flow ? 'dynamic' : 'flat') : oldStyle,
     stitch,
     view: IMAGE_VIEWS.includes(i?.view as ImageView) ? i!.view! : d.view,
     brushMm: num(i?.brushMm, 0.5, 30, d.brushMm),

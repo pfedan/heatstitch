@@ -1,0 +1,287 @@
+/* The traffic light "Klappt das?" on top of the summary card in Prüfen and at "Prüfen" in the top
+   bar. Status colours as in the check area (green #3fb27f, caution #ffa500, critical #ff0000). */
+
+/* Badge at "Prüfen": the light's colour, the number of open findings when not green. */
+.modes .check-badge.ampel-badge.safe {
+  min-width: 10px;
+  width: 10px;
+  height: 10px;
+  padding: 0;
+  background: #3fb27f;
+}
+
+.modes .check-badge.ampel-badge:empty:not(.safe) {
+  min-width: 10px;
+  width: 10px;
+  height: 10px;
+  padding: 0;
+}
+
+/* Card layout: light and verdict side by side, the rest across the card. */
+.check-summary .check-light {
+  grid-row: auto;
+}
+
+.ampel-head {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.ampel-q {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.ampel-verdict {
+  font-size: 16px;
+  line-height: 1.25;
+  cursor: help;
+}
+
+.ampel-verdict.pending {
+  color: var(--muted);
+  font-weight: 600;
+  cursor: default;
+}
+
+.ampel-others {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.ampel-body,
+.check-summary .check-state,
+.check-summary .val-toggle {
+  grid-column: 1 / -1;
+}
+
+.ampel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ampel-body:empty {
+  display: none;
+}
+
+/* Fabric switch: one chip per fabric with its colour. */
+.ampel-fabrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.ampel-fab {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px 2px 6px;
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--muted);
+  background: transparent;
+}
+
+.ampel-fab:hover {
+  color: var(--ink);
+}
+
+.ampel-fab[aria-pressed='true'] {
+  color: var(--ink);
+  font-weight: 600;
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.ampel-fab .dot,
+.ampel-why .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--line);
+}
+
+.ampel-why .dot.caution {
+  background: #ffa500;
+}
+
+.ampel-why .dot.critical {
+  background: #ff0000;
+}
+
+.ampel-fab.safe .dot {
+  background: #3fb27f;
+}
+
+.ampel-fab.caution .dot {
+  background: #ffa500;
+}
+
+.ampel-fab.critical .dot {
+  background: #ff0000;
+}
+
+/* Reasons: kind, area and spots (click: to the worst spot), then the fixes. */
+.ampel-reasons {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+
+.ampel-reason {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ampel-why {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 2px 4px;
+  margin: 0 -4px;
+  box-sizing: content-box;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font-size: 13px;
+  color: var(--ink);
+  min-width: 0;
+}
+
+.ampel-why:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.ampel-why .name {
+  font-weight: 600;
+  flex: none;
+}
+
+.ampel-why .fig {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.ampel-acts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding-left: 14px;
+}
+
+.ampel-fix,
+.ampel-rest,
+.ampel-all,
+.ampel-search {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12px;
+  padding: 3px 8px;
+}
+
+.ampel-fix span,
+.ampel-rest span {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.ampel-rest {
+  border-style: dashed;
+}
+
+.ampel-all,
+.ampel-search {
+  justify-content: center;
+  padding: 5px 8px;
+  font-size: 13px;
+}
+
+.ampel-search span {
+  color: var(--muted);
+}
+
+.ampel-all span {
+  font-weight: 400;
+  opacity: 0.85;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Calm "being worked out": a slow pulse while it is, plain otherwise. */
+.ampel-wait {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.ampel-wait.on::after {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+  vertical-align: middle;
+  animation: ampel-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes ampel-pulse {
+  50% {
+    opacity: 0.2;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ampel-wait.on::after {
+    animation: none;
+  }
+}
+
+/* The visible proposal: before and after side by side, then take over or close. */
+.ampel-look {
+  display: grid;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.ampel-compare {
+  width: 100%;
+  height: 150px;
+  border-radius: 6px;
+  background: var(--stage, var(--panel));
+}
+
+.ampel-look p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.ampel-revert {
+  justify-self: start;
+  font-size: 12px;
+  padding: 3px 8px;
+}

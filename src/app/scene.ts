@@ -15,6 +15,7 @@ import type { ShapeTool } from '../ui/shapeTool';
 import { borderLines } from '../model/along';
 import { borderRanges } from '../model/border';
 import { formOf } from '../model/reshape';
+import { satinArea } from '../model/railsForm';
 import { remembered, underlayRanges, type RestitchResult, analyze } from '../model/restitch';
 import { sewObjects, overlaps, type SewObject } from '../model/objects';
 import { stitchNumbers, stitchKinds, colorBlocks, markers as findMarkers, transitions, sewingSeconds, recordOfStitch, carriedJumps } from '../model/sequence';
@@ -119,7 +120,7 @@ export function bindScene(app: SceneApp) {
       total: q.total,
       sections,
       blockStarts: q.markers.colorStarts.map((i) => q.numbers[i]),
-      timeAt: (k: number) => sewingSeconds(k, count(q.trimsAt, k), count(q.colorsAt, k), app.settings.machineSpm),
+      timeAt: (k: number) => sewingSeconds(k, count(q.trimsAt, k), count(q.colorsAt, k), app.settings),
     };
   }
 
@@ -147,7 +148,9 @@ export function bindScene(app: SceneApp) {
       for (const o of ui.selectedObjects) {
         const obj = q.objects[o];
         if (!obj) continue;
-        const ranges = ui.highlight === 'under' ? underlayRanges(p, obj, q.kinds) : borderRanges(p, q.objects, obj);
+        // A border of its own thread selected: it is all border.
+        const own = ui.highlight === 'border' && remembered(p, obj)?.outline;
+        const ranges = own ? [[obj.first, obj.last] as [number, number]] : ui.highlight === 'under' ? underlayRanges(p, obj, q.kinds) : borderRanges(p, q.objects, obj);
         for (const [a, b] of ranges) for (let i = a; i <= b; i++) mask[i] = 1;
       }
     }
@@ -166,8 +169,13 @@ export function bindScene(app: SceneApp) {
     const out: Pt[][] = [];
     for (const o of ui.selectedObjects) {
       const obj = q.objects[o];
+      const m = obj && remembered(p, obj);
+      // A border of its own thread: on the area of the fill it was sewn on.
+      if (m?.outline && m.region) {
+        out.push(...borderLines(m.region, m.border?.offset ?? 0, null).map((l) => l.line));
+        continue;
+      }
       if (!obj || obj.kind !== 'fill') continue;
-      const m = remembered(p, obj);
       // A fill read from the file: its area as recognized.
       const region = m?.region ?? analyze(p, obj, q.kinds).fill;
       if (!region) continue;
@@ -210,6 +218,10 @@ export function bindScene(app: SceneApp) {
       const q = seq(p);
       list = [];
       for (const o of q.objects) {
+        if (o.kind === 'satin') {
+          const area = satinArea(p, o, q.kinds);
+          if (area) list.push({ o, form: area });
+        }
         if (o.kind !== 'fill') continue;
         const form = formOf(p, o, q.kinds);
         if (form?.paths.some((x) => x.closed)) list.push({ o, form });

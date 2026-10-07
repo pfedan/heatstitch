@@ -1,6 +1,6 @@
 import { build, recs, tieIn, tieOff, type Rec } from './jumps';
 import type { SewObject } from './objects';
-import { COLOR_CHANGE, END, JUMP, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
+import { COLOR_CHANGE, END, JUMP, nextVersion, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
 import { sameColor } from './recolor';
 import { remembered } from './restitch';
 
@@ -455,7 +455,7 @@ export function reorder(p: Pattern, objs: SewObject[], order: number[], trimMm: 
     if (!last.tieOff) out.push(...tieOff(p, last.last));
     out.push({ x: p.x[last.last], y: p.y[last.last], cmd: TRIM }, { x: p.x[last.last], y: p.y[last.last], cmd: END });
   }
-  return build({ ...p, colors }, out);
+  return build(nextVersion(p, { colors }), out, p);
 }
 
 function stitchesBefore(p: Pattern, at: number): number {

@@ -100,13 +100,13 @@ describe('echo of a line', () => {
     const far = Math.max(...pts.map((q) => distTo(line, q)));
     expect(far).toBeGreaterThan(5.8);
     expect(far).toBeLessThan(6.3);
-    const stored = JSON.parse(JSON.stringify(rememberedIn(r.pattern, [o])));
-    expect(stored[0].line.echo).toEqual({ side: 'out', count: 2, gap: 3 });
-    restoreRemembered(stored);
+    const stored = JSON.parse(JSON.stringify(rememberedIn(r.pattern)));
+    expect(stored.objects[0].memory.line.echo).toEqual({ side: 'out', count: 2, gap: 3 });
+    restoreRemembered(r.pattern, stored);
     expect(lineSettings(r.pattern, o).echo).toEqual({ side: 'out', count: 2, gap: 3 });
     // A broken echo from a file is left out, the line stays.
-    stored[0].line.echo = { side: 'up', count: 99, gap: -1 };
-    restoreRemembered(stored);
+    stored.objects[0].memory.line.echo = { side: 'up', count: 99, gap: -1 };
+    restoreRemembered(r.pattern, stored);
     expect(remembered(r.pattern, o)?.line?.echo).toBeUndefined();
     expect(remembered(r.pattern, o)?.path).toBeDefined();
   });
@@ -139,6 +139,28 @@ describe('echo of a line', () => {
     const ys = points(again.pattern, again.first, again.last).map((q) => q[1]);
     expect(Math.max(...ys)).toBeGreaterThan(5.5);
     expect(Math.min(...ys)).toBeGreaterThan(-0.2);
+  });
+
+  it('has the same copies wherever the line lies, also round a sharp corner', () => {
+    // Beyond a corner a point is as near to both sides of it: its side was taken from whichever
+    // won by rounding, so moving the line brought stray pieces of copies there and took them away.
+    const line: Pt[] = [[44.45, 58.66], [17.81, 8.79], [44.61, 20.83]];
+    const lengths = (d: number) =>
+      echoLines(line.map(([x, y]) => [x + d, y + d] as Pt), false, { side: 'in', count: 2, gap: 3.437 }).map((l) =>
+        l.line.reduce((s, q, k) => s + (k ? Math.hypot(q[0] - l.line[k - 1][0], q[1] - l.line[k - 1][1]) : 0), 0).toFixed(1),
+      );
+    expect(lengths(2.8)).toEqual(lengths(0));
+    expect(lengths(0)).toHaveLength(3);
+  });
+
+  it('is sewn as the mirrored line is sewn anew, on both sides too', () => {
+    const r = echoed('M5 5 L25 12 L8 30', { side: 'both' as never, count: 2, gap: 3 });
+    const kinds = stitchKinds(r.pattern);
+    const objs = sewObjects(r.pattern, kinds);
+    const m = transformSewObject(r.pattern, objs, objs[0], kinds, [-1, 0, 0, 1, 40, 0], 7)!;
+    const o = sewObjects(m.pattern)[0];
+    const again = resewLine(m.pattern, 0, remembered(m.pattern, o)!.path!, lineSettings(m.pattern, o), 7)!;
+    expect(points(m.pattern, o.first, o.last)).toEqual(points(again.pattern, again.first, again.last));
   });
 
   it('stays where it is when the line is sewn from its other end', () => {

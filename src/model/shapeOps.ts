@@ -5,12 +5,12 @@ import { vectorize } from '../shape/vectorize';
 import { takeOver, wholeArea } from './knockout';
 import { rememberObjects, sewObjects, stitchKey, type SewObject } from './objects';
 import { insertObject } from './addShape';
-import { syncBorders } from './border';
+import { newLink, syncBorders } from './border';
 import { recs } from './jumps';
 import { reorder } from './order';
 import { recolor, sameColor } from './recolor';
-import { STITCH, type Pattern, type ThreadColor } from './pattern';
-import { forget, objectKey, remember, remembered, rememberedIn, restitch, restoreRemembered, type Remembered } from './restitch';
+import { nextVersion, STITCH, type Pattern, type ThreadColor } from './pattern';
+import { forget, objectKey, remember, remembered, restitch, type Remembered } from './restitch';
 import { formOf, reshapeFill, transformSewObject } from './reshape';
 import { stitchKinds } from './sequence';
 import { stitchesBefore } from './transform';
@@ -87,7 +87,7 @@ function removeObjects(p: Pattern, which: number[], trimMm: number): Pattern | n
   const gone = new Set(which);
   const order = objs.map((o) => o.index).filter((i) => !gone.has(i));
   if (order.length === objs.length) return null;
-  if (!order.length) return { ...p, x: new Int32Array(0), y: new Int32Array(0), cmd: new Uint8Array(0), colors: [], bounds: { minX: 0, minY: 0, maxX: 0, maxY: 0 } };
+  if (!order.length) return nextVersion(p, { x: new Int32Array(0), y: new Int32Array(0), cmd: new Uint8Array(0), colors: [], bounds: { minX: 0, minY: 0, maxX: 0, maxY: 0 } });
   const starts: number[] = [];
   // Objects that meet where one went stay apart (in one thread they would become one object).
   const apart = new Set(order.flatMap((o, k) => (k > 0 && order[k - 1] !== o - 1 ? [k] : [])));
@@ -170,6 +170,14 @@ export function duplicateObjects(p: Pattern, which: number[], trimMm: number, of
   // keeps its number); a copied border becomes a line of its own. The copies are found again by
   // their stitches, as parts sewn in for them move them on.
   const nobjs = sewObjects(cur);
+  // Copies of parts of a fill cut apart are a whole of their own (the parts copied together one).
+  const wholes = new Map<string, string>();
+  for (const k of copies) {
+    const m = remembered(cur, nobjs[k]);
+    if (!m?.piece) continue;
+    if (!wholes.has(m.piece)) wholes.set(m.piece, newLink());
+    remember(cur, nobjs[k], { ...m, piece: wholes.get(m.piece) });
+  }
   const keys = copies.map((k) => objectKey(cur, nobjs[k]));
   const next = syncBorders(cur, trimMm);
   const after = sewObjects(next).map((x) => objectKey(next, x));
@@ -375,14 +383,14 @@ function recolorStitches(p: Pattern, objs: SewObject[], sel: number[], color: Th
     const obj = all[o];
     if (!obj) return null;
     const records = recs(cur, obj.first, obj.last + 1);
-    const known = rememberedIn(cur, [obj]).find((m) => m.join === undefined);
+    const known = remembered(cur, obj);
     const without = removeObjects(cur, [o], trimMm);
     if (!without) return null;
     const r = insertObject(without, records, color, o - 1, trimMm);
     if (!r) return null;
     if (known) {
       const back = sewObjects(r.pattern).find((x) => stitchesUpTo(r.pattern, x.first) === r.start);
-      if (back) restoreRemembered([{ ...known, key: objectKey(r.pattern, back) }]);
+      if (back) remember(r.pattern, back, { ...known, id: obj.id });
     }
     cur = r.pattern;
   }

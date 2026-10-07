@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fillRegion, localThickness, pathLength, underlayArea } from '../src/digitize/fill';
+import { fillRegion, pathLength, underlayArea } from '../src/digitize/fill';
 import { contourField, contourFill, fieldFill, guideField } from '../src/digitize/flow';
 import { coverage } from '../src/digitize/measure';
 import { buildRegion, expandRegion, outline, sample, type Region } from '../src/digitize/region';
@@ -92,15 +92,6 @@ describe('fill patterns', () => {
       expect(n).toBeGreaterThan(100);
       expect(off).toBeLessThan(n * 0.1);
     }
-  });
-
-  it('knows the width of the area where it is', () => {
-    // The L: arms 6 mm wide; in the middle of an arm, half the width is 3 mm also near its edge.
-    const t = localThickness(ell);
-    const at = (x: number, y: number) => t[Math.floor(y / PX - ell.y0) * ell.w + Math.floor(x / PX - ell.x0)];
-    expect(at(6, 12)).toBeGreaterThan(2.7);
-    expect(at(6, 12)).toBeLessThan(3.3);
-    expect(at(3.5, 12)).toBeGreaterThan(2.5);
   });
 
   it('keeps the underlay further inside by a share of the width', () => {
@@ -213,6 +204,40 @@ describe('guided fill, underlay and end', () => {
     const mean = (a: number[]) => a.reduce((s, v) => s + v, 0) / a.length;
     expect(mean(left)).toBeGreaterThan(110);
     expect(mean(right)).toBeLessThan(70);
+  });
+
+  it('lets curved rows get further apart evenly across the shape (gradient)', () => {
+    // Rows bowed like a bowl, as on a bird's belly: 0.35 mm apart on the side where they start, 1 mm on the far side.
+    const bowl: Pt[] = Array.from({ length: 21 }, (_, i) => {
+      const t = Math.PI * (0.15 + (0.7 * i) / 20);
+      return [15 - 14 * Math.cos(t), 4 + 14 * Math.sin(t)];
+    });
+    const f = guideField(square, [bowl]);
+    const res = fieldFill(square, f.g, f, { ...params, spacing: 0.35, spacingEnd: 1 }, [5, 5], false, 3)!;
+    expect(res.curved).toBe(true);
+    // Where the rows cross the middle of the square (they run nearly across it there).
+    const ys: number[] = [];
+    for (const run of res.runs) {
+      for (let i = 1; i < run.length; i++) {
+        const [a, b] = [run[i - 1], run[i]];
+        if ((a[0] - 15) * (b[0] - 15) > 0 || a[0] === b[0] || Math.abs(b[1] - a[1]) > Math.abs(b[0] - a[0])) continue;
+        ys.push(a[1] + ((b[1] - a[1]) * (15 - a[0])) / (b[0] - a[0]));
+      }
+    }
+    ys.sort((a, b) => a - b);
+    const gaps = ys.slice(1).map((y, i) => ({ y: (y + ys[i]) / 2, d: y - ys[i] }));
+    const median = (lo: number, hi: number) => {
+      const d = gaps.filter((g) => g.y > lo && g.y < hi).map((g) => g.d).sort((a, b) => a - b);
+      return d[Math.floor(d.length / 2)];
+    };
+    expect(median(5, 8)).toBeGreaterThan(0.3);
+    expect(median(5, 8)).toBeLessThan(0.45);
+    expect(median(12, 15)).toBeGreaterThan(median(5, 8) + 0.05);
+    expect(median(20, 24)).toBeGreaterThan(0.8);
+    expect(median(20, 24)).toBeLessThan(1.15);
+    // Without a gradient the rows stay as they were.
+    const plain = fieldFill(square, f.g, f, { ...params, spacing: 0.35 }, [5, 5], false, 3)!;
+    expect(fieldFill(square, f.g, f, { ...params, spacing: 0.35, spacingEnd: 0.35 }, [5, 5], false, 3)!.runs).toEqual(plain.runs);
   });
 
   it('turns rows from one guide line to the next', () => {

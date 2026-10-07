@@ -1,3 +1,4 @@
+import { SATIN_UNDER_MIN } from '../material/rules';
 import { borderLoops, borderRails, borderRun, keptLines, keptRails, lineRails, orderLoops, type BorderType } from '../digitize/border';
 import type { LineEcho } from '../digitize/echo';
 import type { LineShadow } from './shadow';
@@ -6,7 +7,7 @@ import { TOLERANCE } from '../digitize/run';
 import type { Pt } from '../digitize/skeleton';
 import type { UnderlayKind } from '../digitize/satin';
 import { MOTIF_PERIOD, motifStitches, type LineMotif } from '../digitize/motif';
-import { satinRuns, type SatinSettings } from './restitch';
+import { satinRuns, type FringeSide, type SatinSettings } from './restitch';
 
 /**
  * Stitches along a line: the border of a fill (on the edge of its area) and, for drawn lines, a
@@ -37,6 +38,10 @@ export interface PathStitch {
   pull?: number;
   /** Satin: its underlay; along the middle from 1.5 mm width, none below, by default. */
   under?: UnderlayKind | 'off';
+  /** Satin lines only: a ragged edge, stitches up to this far short of the side (mm); see SatinSettings.fringe. */
+  fringe?: number;
+  /** Satin lines only: the fringe on this side of the drawn line only; both by default. */
+  fringeSide?: FringeSide;
   /** Lines only: copies of the line beside it (see digitize/echo.ts); none by default. */
   echo?: LineEcho;
   /** Lines only: a copy beside it in a thread of its own, sewn before it (see shadow.ts). */
@@ -68,11 +73,14 @@ export const ZIGZAG_SPACING = 1.5;
 export const E_SPACING = 2.5;
 export const spacingOf = (s: PathStitch): number => s.spacing ?? (s.type === 'zigzag' ? ZIGZAG_SPACING : s.type === 'e' ? E_SPACING : s.type === 'motif' ? MOTIF_PERIOD[s.motif ?? 'waves'] : 0.4);
 
-/** The satin's underlay when none is chosen (a zigzag and an E stitch have none). */
-export const autoUnder = (s: PathStitch): UnderlayKind | 'off' => (s.type !== 'satin' ? 'off' : (s.under ?? (s.width >= 1.5 ? 'center' : 'off')));
+/** The satin's underlay when none is chosen (a zigzag and an E stitch have none): by width as any satin (see SATIN_UNDER_MIN). */
+export const autoUnder = (s: PathStitch): UnderlayKind | 'off' => (s.type !== 'satin' ? 'off' : (s.under ?? (s.width >= SATIN_UNDER_MIN ? 'auto' : 'off')));
 
-/** The satin of a line: narrow, underlay along its middle once it is wide enough to need one. */
-const satinOf = (s: PathStitch): SatinSettings => ({
+/**
+ * The satin of a line: narrow, underlay along its middle once it is wide enough to need one. A
+ * line (not a border) keeps its fringe on its side of the drawn line, also sewn the other way (`back`).
+ */
+const satinOf = (s: PathStitch, line = false, back = false): SatinSettings => ({
   spacing: spacingOf(s),
   edge: s.type === 'satin' ? (s.pull ?? 0) : 0,
   short: s.type === 'satin',
@@ -82,7 +90,10 @@ const satinOf = (s: PathStitch): SatinSettings => ({
   stagger: true,
   edgeShare: 0,
   ...(s.type === 'e' ? { type: 'e' as const } : {}),
+  ...(line && s.type === 'satin' && s.fringe ? { fringe: s.fringe, ...(s.fringeSide ? { fringeSide: back ? other(s.fringeSide) : s.fringeSide } : {}) } : {}),
 });
+
+const other = (side: FringeSide): FringeSide => (side === 'left' ? 'right' : 'left');
 
 type Band = { left: Pt[]; right: Pt[] };
 
@@ -153,7 +164,7 @@ export function sewAlong(line: Pt[], closed: boolean, s: PathStitch, start?: Pt,
   if (area && closed) return satinRuns([onEdge(area, borderRails(area, l, s.width, s.offset ?? 0), s)], satinOf(s));
   const rails = lineRails(l, closed, s.width);
   // Prongs of an E stitch on the right of the drawn line (the left rail is on the right on screen, y down).
-  return satinRuns([s.type === 'e' ? eRails(rails, back === !!s.flip) : rails], satinOf(s));
+  return satinRuns([s.type === 'e' ? eRails(rails, back === !!s.flip) : rails], satinOf(s, true, back));
 }
 
 /**
@@ -211,4 +222,55 @@ export function borderStitches(r: Region, s: PathStitch, from: Pt, whole?: Regio
     loops.flatMap((l) => (keep ? keptRails(r, l, s.width, off, keep) : [borderRails(r, l, s.width, off)]).map((b) => onEdge(r, b, s))),
     satinOf(s),
   );
+}
+
+/**
+ * The lines along the cuts between the parts `parts` of a fill cut apart (in sewing order), one
+ * line per cut: the edge of each part where it lies on a part sewn before it (the one on top shows
+ * its edge), away from the edge of all parts together (`area`), where the border runs.
+ */
+export function seamLines(parts: readonly Region[], area: Region): Pt[][] {
+  const out: Pt[][] = [];
+  for (let k = 1; k < parts.length; k++) {
+    const before = parts.slice(0, k);
+    const keep = (q: Pt) => sample(area, area.sdfBase, q[0], q[1]) < -CUT_EDGE && before.some((r) => sample(r, r.sdfBase, q[0], q[1]) < SEAM_NEAR);
+    for (const l of borderLoops(parts[k], 0)) for (const k2 of keptLines(l, keep)) if (!k2.closed && k2.line.length > 1) out.push(k2.line);
+  }
+  return out;
+}
+
+/**
+ * An edge counts as lying on another part up to this far outside it (mm): the parts reach 0.2 mm
+ * under each other, but their curves are traced from pixels and can come apart a little.
+ */
+const SEAM_NEAR = 0.15;
+
+/** The stitches along the cuts between parts (see seamLines), each line from its end nearest the last stitch. */
+export function seamStitches(parts: readonly Region[], area: Region, s: PathStitch, from: Pt): Pt[][] {
+  const out: Pt[][] = [];
+  let at = from;
+  for (const line of orderedLines(seamLines(parts, area), from)) {
+    const runs = sewAlong(line, false, s, at);
+    out.push(...runs);
+    const last = runs[runs.length - 1];
+    if (last) at = last[last.length - 1];
+  }
+  return out;
+}
+
+/** Open lines, each next the one with an end nearest where the one before ended. */
+function orderedLines(lines: Pt[][], from: Pt): Pt[][] {
+  const left = lines.slice();
+  const out: Pt[][] = [];
+  let at = from;
+  const d = (q: Pt) => Math.hypot(q[0] - at[0], q[1] - at[1]);
+  while (left.length) {
+    let best = 0;
+    for (let i = 1; i < left.length; i++) if (Math.min(d(left[i][0]), d(left[i][left[i].length - 1])) < Math.min(d(left[best][0]), d(left[best][left[best].length - 1]))) best = i;
+    let l = left.splice(best, 1)[0];
+    if (d(l[l.length - 1]) < d(l[0])) l = l.slice().reverse();
+    out.push(l);
+    at = l[l.length - 1];
+  }
+  return out;
 }

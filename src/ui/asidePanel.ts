@@ -1,15 +1,17 @@
 import { onLangChange, t } from '../i18n';
 import type { AsideRole, AsideShape } from '../model/aside';
-import { KIND_ICON, kindLabel } from './layersPanel';
+import { runCommand } from '../shell/commands';
+import { h, icon } from '../shell/h';
+import { KIND_ICON, kindLabel, LONG_PRESS_MS } from './layersPanel';
 import { cssColor } from './threadPicker';
 
 export interface AsideHooks {
-  /** Sew shape `id` again at its place. */
-  sew: (id: number) => void;
-  role: (id: number, role: AsideRole) => void;
-  drop: (id: number) => void;
   /** Shape `id` hovered in the list (shown on the canvas), or none. */
   hover: (id: number | null) => void;
+  /** The menu of shape `id`, at the page position or under its button. */
+  menu: (id: number, at: { x: number; y: number } | HTMLElement) => void;
+  /** The shape the commands work on (its row was used). */
+  target: (id: number) => void;
 }
 
 /** A dashed line: a guide. */
@@ -20,9 +22,10 @@ const GUIDE_ICON =
 export const asideName = (a: AsideShape, k: number) => `${kindLabel(a.kind)} ${k + 1}`;
 
 /**
- * The block "Not sewn" under the list of colors and objects: shapes switched off or kept as guides,
- * and shapes left out when the file came in. Each can be sewn again, turned into the other role or
- * deleted. Closed until it is opened; it opens by itself when a shape goes aside.
+ * The group "Not sewn" at the end of the list of colors and objects: shapes switched off or kept
+ * as guides, and shapes left out when the file came in. Each row sews its shape again with one
+ * click; its menu (right click, long press, its button) turns it into the other role or deletes
+ * it. Closed until it is opened; it opens by itself when a shape goes aside.
  */
 export class AsidePanel {
   private root = document.getElementById('aside-block') as HTMLDetailsElement;
@@ -42,44 +45,73 @@ export class AsidePanel {
     if (list.length > this.count) this.root.open = true;
     this.count = list.length;
     this.shown = list;
-    this.summary.textContent = t('aside.title', { n: list.length });
+    this.summary.replaceChildren(icon('obj-chevron'), h('span', { class: 'aside-title' }, t('aside.title', { n: list.length })));
     this.list.replaceChildren(...list.map((a, k) => this.row(a, k)));
   }
 
   private row(a: AsideShape, k: number): HTMLLIElement {
-    const li = document.createElement('li');
-    li.className = `layer aside-row ${a.role}`;
-    li.addEventListener('mouseenter', () => this.hooks.hover(a.id));
-    const icon = document.createElement('span');
-    icon.className = `kind-icon kind-${a.kind}`;
-    icon.innerHTML = a.role === 'guide' ? GUIDE_ICON : KIND_ICON[a.kind];
-    const sw = document.createElement('span');
-    sw.className = 'mini-sw';
+    const kind = h('span', { class: `kind-icon kind-${a.kind}` });
+    kind.innerHTML = a.role === 'guide' ? GUIDE_ICON : KIND_ICON[a.kind];
+    const sw = h('span', { class: 'mini-sw' });
     sw.style.background = cssColor(a.color);
-    const text = document.createElement('span');
-    text.className = 'layer-text';
-    const name = Object.assign(document.createElement('span'), { className: 'layer-name', textContent: asideName(a, k) });
-    const why = Object.assign(document.createElement('span'), {
-      className: 'layer-meta',
-      textContent: t(a.reason === 'background' ? 'aside.background' : a.role === 'guide' ? 'aside.guide' : 'aside.off'),
-    });
-    if (a.reason === 'background') li.title = t('aside.background.hint');
-    text.append(name, why);
-    const button = (label: string, hint: string, run: () => void, cls = '') => {
-      const b = Object.assign(document.createElement('button'), { type: 'button', className: `small ${cls}`.trim(), textContent: label, title: hint });
-      b.addEventListener('click', run);
-      return b;
+    const why = t(a.reason === 'background' ? 'aside.background' : a.role === 'guide' ? 'aside.guide' : 'aside.off');
+    // The buttons run the commands for this shape: it becomes their target first.
+    const act = (id: string) => () => {
+      this.hooks.target(a.id);
+      runCommand(id);
     };
-    const other: AsideRole = a.role === 'guide' ? 'off' : 'guide';
-    const actions = document.createElement('span');
-    actions.className = 'aside-actions';
-    actions.append(
-      button(t('aside.sew'), t('aside.sew.hint'), () => this.hooks.sew(a.id)),
-      button(t(other === 'guide' ? 'aside.toGuide' : 'aside.toOff'), t(other === 'guide' ? 'aside.toGuide.hint' : 'aside.toOff.hint'), () => this.hooks.role(a.id, other)),
+    const sewBtn = h('button', { type: 'button', class: 'aside-sew', title: t('aside.sew.hint'), onclick: (e: Event) => (e.stopPropagation(), act('aside.sew')()) }, t('aside.sew'));
+    const more = h(
+      'button',
+      {
+        type: 'button',
+        class: 'icon row-more',
+        title: t('objects.aside.menu'),
+        'aria-label': t('objects.aside.menu'),
+        'aria-haspopup': 'menu',
+        onclick: (e: Event) => {
+          e.stopPropagation();
+          this.hooks.menu(a.id, more);
+        },
+      },
+      icon('more'),
     );
-    const drop = button('×', t('aside.drop.hint'), () => this.hooks.drop(a.id), 'icon');
-    drop.setAttribute('aria-label', t('aside.drop.hint'));
-    li.append(icon, sw, text, drop, actions);
+    const li = h(
+      'li',
+      {
+        class: `layer aside-row ${a.role}`,
+        title: a.reason === 'background' ? t('aside.background.hint') : '',
+        onmouseenter: () => this.hooks.hover(a.id),
+        oncontextmenu: (e: Event) => {
+          e.preventDefault();
+          const m = e as MouseEvent;
+          this.hooks.menu(a.id, { x: m.clientX, y: m.clientY });
+        },
+      },
+      kind,
+      sw,
+      h('span', { class: 'layer-text' }, h('span', { class: 'layer-name' }, asideName(a, k)), h('span', { class: 'layer-sub' }, why)),
+      sewBtn,
+      more,
+    );
+    // A long press on a touch screen opens the menu too.
+    let press = 0;
+    let at = { x: 0, y: 0 };
+    li.addEventListener('pointerdown', (e) => {
+      if (e.pointerType !== 'touch') return;
+      at = { x: e.clientX, y: e.clientY };
+      clearTimeout(press);
+      press = window.setTimeout(() => this.hooks.menu(a.id, at), LONG_PRESS_MS);
+    });
+    li.addEventListener('pointermove', (e) => {
+      if (Math.hypot(e.clientX - at.x, e.clientY - at.y) > 8) clearTimeout(press);
+    });
+    for (const ev of ['pointerup', 'pointercancel'] as const) li.addEventListener(ev, () => clearTimeout(press));
     return li;
   }
+}
+
+/** The entries of the menu of a shape "not sewn": its other role, sew, delete for good. */
+export function asideMenuIds(role: AsideRole): string[] {
+  return ['aside.sew', role === 'guide' ? 'aside.toOff' : 'aside.toGuide', '-', 'aside.drop'];
 }

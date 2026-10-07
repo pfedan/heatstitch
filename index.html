@@ -74,408 +74,306 @@
     <noscript>
       <p class="noscript">heatstitch needs JavaScript. <a href="docs.html">Read the guide</a> to see what it does.</p>
     </noscript>
+    <svg class="sprite" aria-hidden="true" width="0" height="0">
+      <symbol id="i-chevron-down" viewBox="0 0 20 20"><path d="M5.5 7.5 10 12l4.5-4.5" /></symbol>
+      <symbol id="i-search" viewBox="0 0 20 20"><circle cx="9" cy="9" r="5.5" /><path d="m13.2 13.2 3.8 3.8" /></symbol>
+      <symbol id="i-save" viewBox="0 0 20 20"><path d="M10 3v9m-3.5-3.5L10 12l3.5-3.5" /><path d="M4 13.5V16h12v-2.5" /></symbol>
+      <symbol id="i-more" viewBox="0 0 20 20"><circle cx="5" cy="10" r="1.3" class="fill" /><circle cx="10" cy="10" r="1.3" class="fill" /><circle cx="15" cy="10" r="1.3" class="fill" /></symbol>
+      <symbol id="i-image" viewBox="0 0 20 20"><rect x="3" y="4" width="14" height="12" rx="1.5" /><circle cx="7.5" cy="8.5" r="1.4" /><path d="m3.5 14.5 4.5-4 3 2.5 2.5-2 3 3" /></symbol>
+      <symbol id="i-plus" viewBox="0 0 20 20"><path d="M10 4.5v11M4.5 10h11" /></symbol>
+      <symbol id="i-keyboard" viewBox="0 0 20 20"><rect x="2.5" y="5.5" width="15" height="9" rx="1.5" /><path d="M5.5 8.5h1m2.5 0h1m2.5 0h1M5.5 11.5h9" /></symbol>
+      <symbol id="i-book" viewBox="0 0 20 20"><path d="M4 4.5h4.5A2 2 0 0 1 10 6v10a2 2 0 0 0-1.5-1.5H4zM16 4.5h-4.5A2 2 0 0 0 10 6v10a2 2 0 0 1 1.5-1.5H16z" /></symbol>
+    </svg>
     <header class="topbar">
-      <div class="brand">
-        <img src="/favicon.svg" alt="" width="28" height="28" />
-        <h1>heatstitch</h1>
+      <div class="topbar-start">
+        <img class="brand-mark" src="/favicon.svg" alt="heatstitch" width="24" height="24" />
+        <div class="design-switch">
+          <button type="button" id="design-button" class="design-button" data-i18n-title="shell.designs.hint">
+            <span class="design-name" id="design-name" data-i18n="shell.designs"></span>
+            <svg class="i" aria-hidden="true"><use href="#i-chevron-down" /></svg>
+          </button>
+          <div class="popover design-pop" id="design-pop" role="dialog" data-i18n-aria="files.title" hidden>
+            <input type="file" id="file-input" accept=".dst,.pes,.pec,.jef,.exp,.vp3,.svg,.DST,.PES,.PEC,.JEF,.EXP,.VP3,.SVG,.heatstitch,image/*" multiple hidden />
+            <div class="dp-actions">
+              <button type="button" id="new-design" class="dp-action" data-i18n-title="files.new.hint">
+                <svg class="i" aria-hidden="true"><use href="#i-plus" /></svg><span data-i18n="files.pop.new"></span>
+              </button>
+              <button type="button" id="open-file" class="dp-action" data-i18n-title="files.start.open.sub">
+                <svg class="i" aria-hidden="true"><use href="#i-files-open" /></svg><span data-i18n="files.pop.open"></span>
+              </button>
+              <button type="button" id="image-start" class="dp-action" data-i18n-title="mode.image.hint">
+                <svg class="i" aria-hidden="true"><use href="#i-image" /></svg><span data-i18n="shell.image.start"></span>
+              </button>
+            </div>
+            <h3 class="pop-head" data-i18n="files.pop.designs"></h3>
+            <ul id="file-list" class="file-list"></ul>
+            <details class="dp-examples" id="dp-examples">
+              <summary><svg class="i" aria-hidden="true"><use href="#i-chevron-down" /></svg><span data-i18n="files.pop.examples"></span></summary>
+              <ul class="example-list" id="load-example">
+                <li class="ex-group" data-i18n="files.example.projects"></li>
+                <li><button type="button" class="ex-row" data-example="examples/demo/heatstitch-demo.heatstitch" data-cmd="demo"><span data-i18n="files.example.demo"></span><small class="ex-kind">heatstitch</small></button></li>
+                <li class="ex-group" data-i18n="files.example.stitches"></li>
+                <li><button type="button" class="ex-row" data-example="examples/cat-60mm.pes" data-cmd="cat"><span data-i18n="files.example.cat"></span><small class="ex-kind">PES</small></button></li>
+                <li><button type="button" class="ex-row" data-example="examples/demos/overlap.pes" data-cmd="overlap"><span data-i18n="files.example.overlap"></span><small class="ex-kind">PES</small></button></li>
+                <li><button type="button" class="ex-row" data-example="examples/demos/confetti.pes" data-cmd="confetti"><span data-i18n="files.example.confetti"></span><small class="ex-kind">PES</small></button></li>
+                <li class="ex-group" data-i18n="files.example.svg"></li>
+                <li><button type="button" class="ex-row" data-example="examples/svg/overlapping-circles.svg" data-cmd="overlapSvg"><span data-i18n="files.example.overlapSvg"></span><small class="ex-kind">SVG</small></button></li>
+                <li><button type="button" class="ex-row" data-example="examples/svg/shapes-benchmark.svg" data-cmd="benchmark"><span data-i18n="files.example.benchmark"></span><small class="ex-kind">SVG</small></button></li>
+              </ul>
+            </details>
+            <p class="privacy-note" data-i18n-title="files.privacy.detail">
+              <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path d="M4.5 7V5a3.5 3.5 0 0 1 7 0v2" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="2.5" y="7" width="11" height="8" rx="1.5" fill="currentColor"/></svg>
+              <span data-i18n="files.privacy"></span>
+            </p>
+          </div>
+        </div>
+        <div class="history" data-mode="flow density">
+          <button type="button" id="undo" class="tool" data-i18n-aria="edit.undo"><span aria-hidden="true">↶</span></button>
+              <button type="button" id="redo" class="tool" data-i18n-aria="edit.redo"><span aria-hidden="true">↷</span></button>
+        </div>
       </div>
       <div class="modes segmented" role="radiogroup" id="modes" data-i18n-aria="mode.label">
-        <label data-i18n-title="mode.flow.hint"><input type="radio" name="mode" value="flow" /><span><span data-i18n="mode.flow"></span><kbd>1</kbd></span></label>
-        <label data-i18n-title="mode.density.hint"><input type="radio" name="mode" value="density" /><span><span data-i18n="mode.density"></span><kbd>2</kbd></span></label>
-        <label data-i18n-title="mode.image.hint"><input type="radio" name="mode" value="image" /><span><span data-i18n="mode.image"></span><kbd>3</kbd></span></label>
+        <label data-i18n-title="mode.flow.hint"><input type="radio" name="mode" value="flow" /><span><span data-i18n="mode.flow"></span></span></label>
+        <label data-i18n-title="mode.density.hint"><input type="radio" name="mode" value="density" /><span><span data-i18n="mode.density"></span><span class="check-badge" id="check-badge" hidden></span></span></label>
       </div>
+      <!-- Bild umwandeln has no tab: it starts from the design menu, the header names it and the stepper leads back. -->
+      <p class="image-head" data-mode="image"><svg class="i" aria-hidden="true"><use href="#i-image" /></svg><span data-i18n="shell.image.start"></span></p>
       <nav class="topbar-end">
-        <a class="doc-link" id="doc-link" href="docs.html" data-i18n="app.docs">Guide</a>
-        <select id="lang" aria-label="Language">
-          <option value="de">Deutsch</option>
-          <option value="en">English</option>
-        </select>
+        <button type="button" id="palette-open" class="search-button" data-i18n-title="shell.palette.hint">
+          <svg class="i" aria-hidden="true"><use href="#i-search" /></svg>
+          <span class="search-text" data-i18n="shell.palette"></span>
+          <kbd id="palette-key"></kbd>
+        </button>
+        <div class="save-switch" data-mode="flow density">
+          <button type="button" id="save-button" class="primary save-button">
+            <svg class="i" aria-hidden="true"><use href="#i-save" /></svg>
+            <span data-i18n="save.title"></span>
+          </button>
+          <div class="popover save-pop" id="save-pop" role="dialog" data-i18n-aria="save.title" hidden>
+            <p class="muted small" id="save-empty" data-i18n="shell.save.empty"></p>
+            <div class="file-actions" id="file-actions" hidden>
+              <p class="save-hoop" id="save-hoop" role="status"></p>
+              <fieldset class="save-formats">
+                <legend data-i18n="files.save.format"></legend>
+                <div class="fmt-grid" role="radiogroup" data-i18n-aria="save.format">
+                  <label class="fmt-opt"><input type="radio" name="save-fmt" value="pes" /><b>PES</b><span data-i18n="files.fmt.pes"></span></label>
+                  <label class="fmt-opt"><input type="radio" name="save-fmt" value="dst" /><b>DST</b><span data-i18n="files.fmt.dst"></span></label>
+                  <label class="fmt-opt"><input type="radio" name="save-fmt" value="jef" /><b>JEF</b><span data-i18n="files.fmt.jef"></span></label>
+                  <label class="fmt-opt"><input type="radio" name="save-fmt" value="vp3" /><b>VP3</b><span data-i18n="files.fmt.vp3"></span></label>
+                  <label class="fmt-opt"><input type="radio" name="save-fmt" value="exp" /><b>EXP</b><span data-i18n="files.fmt.exp"></span></label>
+                  <label class="fmt-opt"><input type="radio" name="save-fmt" value="pec" /><b>PEC</b><span data-i18n="files.fmt.pec"></span></label>
+                </div>
+                <p class="fmt-note" id="save-fmt-note" data-i18n-title="save.note"></p>
+              </fieldset>
+              <!-- The format the save reads; the radios above set it. -->
+              <select id="save-format" hidden data-i18n-aria="save.format">
+                <option value="pes" data-i18n="save.fmt.pes"></option>
+                <option value="dst" data-i18n="save.fmt.dst"></option>
+                <option value="jef" data-i18n="save.fmt.jef"></option>
+                <option value="vp3" data-i18n="save.fmt.vp3"></option>
+                <option value="exp" data-i18n="save.fmt.exp"></option>
+                <option value="pec" data-i18n="save.fmt.pec"></option>
+              </select>
+              <label class="save-field">
+                <span class="save-field-label" data-i18n="files.save.name"></span>
+                <span class="save-name" data-i18n-title="save.name">
+                  <input type="text" id="save-name" spellcheck="false" autocomplete="off" data-i18n-aria="save.name" />
+                  <span id="save-ext">.pes</span>
+                </span>
+              </label>
+              <button type="button" id="save-file" class="primary save-go">
+                <svg class="i" aria-hidden="true"><use href="#i-save" /></svg><span data-i18n="save.file"></span>
+              </button>
+              <div class="save-more">
+                <button type="button" id="save-project" class="pop-row save-row" data-i18n-title="save.project.hint">
+                  <svg class="i" aria-hidden="true"><use href="#i-files-project" /></svg>
+                  <span><span data-i18n="files.cmd.project"></span><small data-i18n="files.save.project.sub"></small></span>
+                </button>
+                <button type="button" id="export" class="pop-row save-row" data-i18n-title="controls.export.hint">
+                  <svg class="i" aria-hidden="true"><use href="#i-image" /></svg>
+                  <span><span data-i18n="files.save.png"></span><small data-i18n="files.save.png.sub"></small></span>
+                </button>
+                <button type="button" id="color-list" class="pop-row save-row" data-i18n-title="colorList.buttonHint" hidden>
+                  <svg class="i" aria-hidden="true"><use href="#i-files-print" /></svg>
+                  <span><span data-i18n="files.save.colors"></span><small data-i18n="files.save.colors.sub"></small></span>
+                </button>
+              </div>
+              <button type="button" id="revert" class="link save-revert" data-i18n="edit.revert" hidden></button>
+            </div>
+          </div>
+        </div>
+        <div class="more-switch">
+          <button type="button" id="more-button" class="icon more-button" data-i18n-title="shell.more" data-i18n-aria="shell.more">
+            <svg class="i" aria-hidden="true"><use href="#i-more" /></svg>
+          </button>
+          <div class="popover more-pop" id="more-pop" role="menu" hidden>
+            <a class="pop-row doc-link" id="doc-link" href="docs.html"><svg class="i" aria-hidden="true"><use href="#i-book" /></svg><span data-i18n="app.docs">Guide</span></a>
+            <button type="button" class="pop-row" id="keys-open"><svg class="i" aria-hidden="true"><use href="#i-keyboard" /></svg><span data-i18n="shell.keys.title"></span><kbd>?</kbd></button>
+            <label class="pop-row lang-row">
+              <span data-i18n="shell.language"></span>
+              <select id="lang" aria-label="Language">
+                <option value="de">Deutsch</option>
+                <option value="en">English</option>
+              </select>
+            </label>
+          </div>
+        </div>
       </nav>
     </header>
 
     <main class="layout" id="layout">
+      <nav class="toolrail draw-tools" data-mode="flow" role="toolbar" aria-orientation="vertical">
+        <button type="button" class="tool" id="draw-pointer" data-command="tool.select" aria-pressed="true"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 3 L5 15.5 L8.2 12.6 L10.5 17.5 L12.6 16.5 L10.3 11.7 L14.6 11.3 Z" /></svg></button>
+        <span class="rail-sep" aria-hidden="true"></span>
+        <button type="button" class="tool" data-draw="rect" data-command="draw.rect" aria-pressed="false"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3.5" y="5" width="13" height="10" rx="0.5" /></svg></button>
+        <button type="button" class="tool" data-draw="ellipse" data-command="draw.ellipse" aria-pressed="false"><svg viewBox="0 0 20 20" aria-hidden="true"><ellipse cx="10" cy="10" rx="7" ry="5.5" /></svg></button>
+        <button type="button" class="tool" data-draw="pen" data-command="draw.pen" aria-pressed="false"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 16 C6 6 12 4 17 4" /><rect x="1.8" y="14.8" width="2.4" height="2.4" class="node" /><rect x="15.8" y="2.8" width="2.4" height="2.4" class="node" /></svg></button>
+        <button type="button" class="tool" data-draw="free" data-command="draw.free" aria-pressed="false"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 14 C5 9 7 9 8 12 S11 16 12 11 S15 5 17 6" /></svg></button>
+        <button type="button" class="tool" data-draw="cut" data-command="draw.cut" aria-pressed="false" disabled><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="5.5" cy="14.5" r="2.4" /><circle cx="14.5" cy="14.5" r="2.4" /><path d="M7.3 12.9 13.5 3M12.7 12.9 6.5 3" /></svg></button>
+        <span class="rail-sep" aria-hidden="true"></span>
+        <button type="button" id="lettering-new" class="tool rail-text" data-command="lettering.new"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4.5 5.5V4h11v1.5M10 4v12.5M7.5 16.5h5" /></svg></button>
+      </nav>
+
       <aside class="sidebar">
-        <section class="panel" data-mode="flow density">
-          <h2 data-i18n="files.title"></h2>
-          <label class="dropzone" id="dropzone">
-            <input type="file" id="file-input" accept=".dst,.pes,.pec,.jef,.exp,.vp3,.svg,.DST,.PES,.PEC,.JEF,.EXP,.VP3,.SVG,.heatstitch" multiple hidden />
-            <span data-i18n="files.drop"></span>
-          </label>
-          <p class="privacy-note" data-i18n-title="files.privacy.detail">
-            <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path d="M4.5 7V5a3.5 3.5 0 0 1 7 0v2" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="2.5" y="7" width="11" height="8" rx="1.5" fill="currentColor"/></svg>
-            <span data-i18n="files.privacy"></span>
-          </p>
-          <div class="file-start">
-            <button type="button" id="new-design" class="new-design" data-i18n="files.new" data-i18n-title="files.new.hint"></button>
-            <select id="load-example" class="example-select" data-i18n-aria="files.example">
-              <option value="" data-i18n="files.example" selected hidden></option>
-              <optgroup data-i18n-label="files.example.projects">
-                <option value="examples/demo/heatstitch-demo.heatstitch" data-i18n="files.example.demo"></option>
-              </optgroup>
-              <optgroup data-i18n-label="files.example.stitches">
-                <option value="examples/cat-60mm.pes" data-i18n="files.example.cat"></option>
-                <option value="examples/demos/overlap.pes" data-i18n="files.example.overlap"></option>
-                <option value="examples/demos/confetti.pes" data-i18n="files.example.confetti"></option>
-              </optgroup>
-              <optgroup data-i18n-label="files.example.svg">
-                <option value="examples/svg/overlapping-circles.svg" data-i18n="files.example.overlapSvg"></option>
-                <option value="examples/svg/shapes-benchmark.svg" data-i18n="files.example.benchmark"></option>
-              </optgroup>
-            </select>
-          </div>
-          <ul id="file-list" class="file-list"></ul>
-          <div class="file-actions" id="file-actions" hidden>
-            <label class="field hoop-field">
-              <span class="label" data-i18n="hoop.title" data-i18n-title="hoop.hint"></span>
-              <select id="hoop"></select>
+        <!-- Bild umwandeln: the settings of the current step of the assistant -->
+        <div class="image-wizard" data-mode="image">
+          <section class="panel image-step" data-step="1" aria-labelledby="image-step1-title">
+            <h2 id="image-step1-title" data-i18n="image.step1"></h2>
+            <label class="dropzone image-drop" id="image-drop">
+              <input type="file" id="image-input" accept="image/*,.svg" hidden />
+              <svg class="image-drop-icon" viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="4" width="14" height="12" rx="1.5" /><circle cx="7.5" cy="8.5" r="1.4" /><path d="m3.5 14.5 4.5-4 3 2.5 2.5-2 3 3" /></svg>
+              <span data-i18n="image.drop"></span>
             </label>
-            <div class="hoop-custom" id="hoop-custom" hidden>
-              <input type="number" id="hoop-w" min="10" max="1000" step="1" data-i18n-aria="hoop.width" />
-              <span>×</span>
-              <input type="number" id="hoop-h" min="10" max="1000" step="1" data-i18n-aria="hoop.height" />
-              <span>mm</span>
+            <div class="image-under-drop">
+              <button type="button" id="image-example" class="link" data-i18n="image.example"></button>
+              <p class="privacy-note" data-i18n-title="files.privacy.detail">
+                <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path d="M4.5 7V5a3.5 3.5 0 0 1 7 0v2" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="2.5" y="7" width="11" height="8" rx="1.5" fill="currentColor"/></svg>
+                <span data-i18n="files.privacy"></span>
+              </p>
             </div>
-            <p class="hoop-note" id="hoop-note" hidden></p>
-            <span class="label save-label" data-i18n-title="save.note"><span data-i18n="save.title"></span> <span class="info" aria-hidden="true">ⓘ</span></span>
-            <select class="save-format" id="save-format" data-i18n-aria="save.format">
-              <option value="pes" data-i18n="save.fmt.pes"></option>
-              <option value="dst" data-i18n="save.fmt.dst"></option>
-              <option value="jef" data-i18n="save.fmt.jef"></option>
-              <option value="vp3" data-i18n="save.fmt.vp3"></option>
-              <option value="exp" data-i18n="save.fmt.exp"></option>
-              <option value="pec" data-i18n="save.fmt.pec"></option>
-            </select>
-            <div class="save-file">
-              <label class="save-name">
-                <input type="text" id="save-name" spellcheck="false" autocomplete="off" data-i18n-aria="save.name" />
-                <span id="save-ext">.pes</span>
-              </label>
-              <button type="button" id="save-file" data-i18n="save.file"></button>
-            </div>
-            <button type="button" id="save-project" class="save-project" data-i18n="save.project" data-i18n-title="save.project.hint"></button>
-            <button type="button" id="revert" class="link" data-i18n="edit.revert" hidden></button>
-          </div>
-        </section>
-
-        <!-- Bild: the image and how it is prepared -->
-        <section class="panel" data-mode="image">
-          <h2 data-i18n="image.title"></h2>
-          <label class="dropzone" id="image-drop">
-            <input type="file" id="image-input" accept="image/*,.svg" hidden />
-            <span data-i18n="image.drop"></span>
-          </label>
-          <p class="privacy-note" data-i18n-title="files.privacy.detail">
-            <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true"><path d="M4.5 7V5a3.5 3.5 0 0 1 7 0v2" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="2.5" y="7" width="11" height="8" rx="1.5" fill="currentColor"/></svg>
-            <span data-i18n="files.privacy"></span>
-          </p>
-          <button type="button" id="image-example" class="link" data-i18n="image.example"></button>
-          <p class="muted small" id="image-info"></p>
-          <div class="image-actions">
-            <button type="button" id="image-save-project" class="link" data-i18n="image.saveProject" data-i18n-title="save.project.hint" hidden></button>
-            <button type="button" id="image-clear" class="link" data-i18n="image.clear" data-i18n-title="image.clear.hint" hidden></button>
-          </div>
-          <details class="ai-prep" data-section="aiPrep">
-            <summary data-i18n="image.ai.title"></summary>
-            <p class="small" data-i18n="image.ai.intro"></p>
-            <ol class="small">
-              <li data-i18n="image.ai.step1"></li>
-              <li data-i18n="image.ai.step2"></li>
-              <li data-i18n="image.ai.step3"></li>
-            </ol>
-            <textarea id="image-ai-prompt" class="ai-prompt" rows="9" readonly data-i18n-aria="image.ai.prompt"></textarea>
-            <div class="buttons">
-              <button type="button" id="image-ai-copy" data-i18n="image.ai.copy"></button>
-            </div>
-            <p class="muted small" data-i18n="image.ai.note"></p>
-          </details>
-        </section>
-
-        <section class="panel" data-mode="image">
-          <h2 data-i18n="image.prep"></h2>
-          <label class="field">
-            <span class="label"><span data-i18n="image.width"></span> <output id="image-height"></output></span>
-            <input type="number" id="image-width" min="10" max="400" step="1" />
-          </label>
-          <p class="muted small" id="image-svg-note" data-i18n="image.svg.note" hidden></p>
-          <label class="field" id="image-colors-field" data-i18n-title="image.colors.hint">
-            <span class="label"><span data-i18n="image.colors"></span> <output id="image-colors-out"></output></span>
-            <input type="range" id="image-colors" min="2" max="16" step="1" />
-          </label>
-          <label class="field" id="image-smooth-field" data-i18n-title="image.smooth.hint">
-            <span class="label"><span data-i18n="image.smooth"></span> <output id="image-smooth-out"></output></span>
-            <input type="range" id="image-smooth" min="0" max="5" step="1" />
-          </label>
-          <label class="field" data-i18n-title="image.minArea.hint">
-            <span class="label"><span data-i18n="image.minArea"></span> <output id="image-min-area-out"></output></span>
-            <input type="range" id="image-min-area" min="0.5" max="20" step="0.5" />
-          </label>
-          <label class="check" data-i18n-title="image.background.hint"><input type="checkbox" id="image-background" /><span data-i18n="image.background"></span></label>
-          <label class="check" data-i18n-title="image.threads.hint"><input type="checkbox" id="image-threads" /><span data-i18n="image.threads"></span></label>
-        </section>
-
-        <section class="panel" data-mode="image">
-          <h2 data-i18n="image.stitch"></h2>
-          <p class="muted small" id="image-material"></p>
-          <div class="field-row">
-            <label class="field" data-i18n-title="image.spacing.hint">
-              <span class="label" data-i18n="image.spacing"></span>
-              <input type="number" id="image-spacing" min="0.2" max="1.5" step="0.05" />
-            </label>
-            <label class="field" data-i18n-title="image.pull.hint">
-              <span class="label" data-i18n="image.pull"></span>
-              <input type="number" id="image-pull" min="0" max="1" step="0.05" />
-            </label>
-          </div>
-          <label class="field" data-i18n-title="image.angle.hint">
-            <span class="label" data-i18n="image.angle"></span>
-            <select id="image-angle"></select>
-          </label>
-          <label class="field" data-i18n-title="image.satinMax.hint">
-            <span class="label"><span data-i18n="image.satinMax"></span> <output id="image-satin-max-out"></output></span>
-            <input type="range" id="image-satin-max" min="1" max="10" step="0.5" />
-          </label>
-          <label class="field" data-i18n-title="image.tolerance.hint">
-            <span class="label"><span data-i18n="stitch.tolerance"></span> <output id="image-tolerance-out"></output></span>
-            <input type="range" id="image-tolerance" min="0.05" max="0.5" step="0.05" />
-          </label>
-          <label class="check" data-i18n-title="image.underlay.hint"><input type="checkbox" id="image-underlay" /><span data-i18n="image.underlay"></span></label>
-          <button type="button" id="image-stitch-reset" class="link" data-i18n="image.stitch.reset" hidden></button>
-        </section>
-
-        <!-- Ablauf: what the colors mean -->
-        <section class="panel" data-mode="flow">
-          <h2 data-i18n="flow.settings"></h2>
-          <div class="field">
-            <span class="label" data-i18n="colorBy.title"></span>
-            <div class="segmented wrap" role="radiogroup">
-              <label><input type="radio" name="color-by" value="thread" /><span data-i18n="colorBy.thread"></span></label>
-              <label><input type="radio" name="color-by" value="order" /><span data-i18n="colorBy.order"></span></label>
-              <label><input type="radio" name="color-by" value="kind" /><span data-i18n="colorBy.kind"></span></label>
-              <label><input type="radio" name="color-by" value="length" /><span data-i18n="colorBy.length"></span></label>
-            </div>
-          </div>
-          <div id="color-key" class="color-key"></div>
-        </section>
-
-        <!-- Dichte: material, checks and heatmap -->
-        <section class="panel" id="material-panel" data-mode="density image">
-          <h2 data-i18n="profile.title"></h2>
-          <div class="profile">
-            <label class="field">
-              <span class="label" data-i18n="profile.fabric"></span>
-              <select id="fabric"></select>
-            </label>
-            <label class="field">
-              <span class="label" data-i18n="profile.thread"></span>
-              <select id="thread"></select>
-            </label>
-            <p class="profile-info" id="profile-info"></p>
-            <div class="buttons" data-mode="density">
-              <button type="button" id="fabric-tune" data-i18n="tune.button" data-i18n-title="tune.button.hint"></button>
-            </div>
-          </div>
-          <fieldset class="checks" data-mode="density">
-            <legend data-i18n="checks.title"></legend>
-            <div id="checks"></div>
-          </fieldset>
-          <details class="explain" data-mode="density">
-            <summary data-i18n="validation.explain"></summary>
-            <ul id="explain"></ul>
-          </details>
-        </section>
-
-        <section class="panel" data-mode="density">
-          <h2 data-i18n="heatmap.title"></h2>
-          <div class="field">
-            <span class="label" data-i18n="controls.metric"></span>
-            <div class="segmented" role="radiogroup">
-              <label><input type="radio" name="metric" value="thread" /><span data-i18n="metric.thread"></span></label>
-              <label><input type="radio" name="metric" value="penetrations" /><span data-i18n="metric.penetrations"></span></label>
-            </div>
-            <span class="unit-hint" id="unit-hint"></span>
-          </div>
-          <details class="section" data-section="advanced">
-            <summary data-i18n="heatmap.advanced"></summary>
-            <label class="field">
-              <span class="label"><span data-i18n="controls.cell"></span> <output id="cell-out"></output></span>
-              <input type="range" id="cell" min="0.5" max="5" step="0.25" />
-            </label>
-            <label class="field">
-              <span class="label"><span data-i18n="controls.blur"></span> <output id="blur-out"></output></span>
-              <input type="range" id="blur" min="0" max="3" step="0.1" />
-            </label>
-            <label class="field">
-              <span class="label" data-i18n="controls.max"></span>
-              <input type="number" id="max" min="0.1" step="0.5" />
-            </label>
-            <label class="check"><input type="checkbox" id="include-jumps" /><span data-i18n="controls.jumps"></span></label>
-          </details>
-        </section>
-
-        <!-- Both modes: what is drawn and how -->
-        <details class="panel section" data-section="display">
-          <summary><h2 data-i18n="display.title"></h2></summary>
-          <div data-mode="density">
-            <label class="check"><input type="checkbox" id="overlay" /><span data-i18n="controls.overlay"></span></label>
-            <label class="field indent">
-              <span class="label"><span data-i18n="controls.opacity"></span> <output id="opacity-out"></output></span>
-              <input type="range" id="opacity" min="0.05" max="1" step="0.05" />
-            </label>
-          </div>
-          <label class="check" data-mode="flow" data-i18n-title="display.shapes.hint"><input type="checkbox" id="shapes-view" /><span data-i18n="display.shapes"></span></label>
-          <label class="check" data-i18n-title="controls.realistic.hint"><input type="checkbox" id="realistic" /><span data-i18n="controls.realistic"></span></label>
-          <label class="field indent" data-i18n-title="controls.threadWidth.hint">
-            <span class="label"><span data-i18n="controls.threadWidth"></span> <output id="thread-width-out"></output></span>
-            <input type="range" id="thread-width" min="0.02" max="1" step="0.01" />
-          </label>
-          <label class="check indent" data-i18n-title="controls.liveLight.hint"><input type="checkbox" id="live-light" /><span data-i18n="controls.liveLight"></span></label>
-          <button type="button" id="allow-tilt" class="link indent" data-i18n="controls.tilt" hidden></button>
-          <div class="field bg-field" data-i18n-title="controls.background.hint">
-            <span class="label"><span data-i18n="controls.background"></span> <output id="bg-out"></output></span>
-            <div class="bg-swatches" id="bg-swatches"></div>
-          </div>
-          <label class="field" data-i18n-title="controls.fabric.hint">
-            <span class="label" data-i18n="controls.fabric"></span>
-            <select id="fabric-look"></select>
-          </label>
-          <fieldset class="marks" data-mode="flow density">
-            <legend data-i18n="marks.title"></legend>
-            <label class="check"><input type="checkbox" data-mark="jumps" /><span><i class="mk mk-jump" aria-hidden="true"></i><span data-i18n="marks.jumps"></span></span></label>
-            <label class="check" data-mode="flow" data-i18n-title="marks.threads.hint"><input type="checkbox" data-mark="threads" /><span><i class="mk mk-thread" aria-hidden="true"></i><span data-i18n="marks.threads"></span></span></label>
-            <label class="check"><input type="checkbox" data-mark="trims" /><span><i class="mk" aria-hidden="true">✂</i><span data-i18n="marks.trims"></span></span></label>
-            <label class="check"><input type="checkbox" data-mark="colors" /><span><i class="mk mk-num" aria-hidden="true">1</i><span data-i18n="marks.colors"></span></span></label>
-            <label class="check"><input type="checkbox" data-mark="ends" /><span><i class="mk mk-start" aria-hidden="true">S</i><span data-i18n="marks.ends"></span></span></label>
-            <label class="check" data-i18n-title="marks.points.hint"><input type="checkbox" data-mark="points" /><span><i class="mk mk-point" aria-hidden="true"></i><span data-i18n="marks.points"></span></span></label>
-          </fieldset>
-        </details>
-
-        <details class="panel section" data-section="stats" data-mode="flow density">
-          <summary><h2 data-i18n="stats.title"></h2></summary>
-          <dl id="stats" class="stats"></dl>
-          <label class="field speed">
-            <span class="label" data-i18n="stats.speed"></span>
-            <select id="machine-spm">
-              <option value="400">400</option>
-              <option value="600">600</option>
-              <option value="800">800</option>
-              <option value="1000">1000</option>
-              <option value="1200">1200</option>
-            </select>
-          </label>
-        </details>
-      </aside>
-
-      <div class="resizer" data-panel="side" role="separator" aria-orientation="vertical" tabindex="0" data-i18n-aria="layout.resizeSide" data-i18n-title="layout.resize.hint"></div>
-      <div class="resizer" data-panel="inspector" role="separator" aria-orientation="vertical" tabindex="0" data-i18n-aria="layout.resizeInspector" data-i18n-title="layout.resize.hint"></div>
-
-      <section class="stage" id="stage">
-        <canvas id="canvas"></canvas>
-        <!-- One row on top: when the stage is narrow, the right part moves to a second row instead of covering the left. -->
-        <div class="stage-top">
-          <div class="stage-bar">
-            <div class="stage-tools stage-tools-start" data-mode="flow density">
-              <button type="button" id="undo" class="tool" data-i18n-title="edit.undo.key" data-i18n-aria="edit.undo"><span aria-hidden="true">↶</span></button>
-              <button type="button" id="redo" class="tool" data-i18n-title="edit.redo.key" data-i18n-aria="edit.redo"><span aria-hidden="true">↷</span></button>
-              <button type="button" id="lettering-new" class="tool" data-mode="flow" data-i18n-title="lettering.tool.hint"><span class="tool-glyph" aria-hidden="true">T</span> <span data-i18n="lettering.tool"></span></button>
-              <div class="segmented level-switch" role="radiogroup" data-i18n-aria="level.label">
-                <label data-i18n-title="level.shape.hint" data-mode="flow"><input type="radio" name="level" value="shape" /><span data-i18n="level.shape"></span></label>
-                <label data-i18n-title="level.objects.hint"><input type="radio" name="level" value="objects" checked /><span data-i18n="level.objects"></span></label>
-                <label data-i18n-title="level.stitches.hint"><input type="radio" name="level" value="stitches" /><span data-i18n="level.stitches"></span></label>
+            <div class="image-file" id="image-file" hidden>
+              <p class="image-info" id="image-info"></p>
+              <div class="image-actions">
+                <button type="button" id="image-save-project" class="link" data-i18n="image.saveProject" data-i18n-title="save.project.hint" hidden></button>
+                <button type="button" id="image-clear" class="link" data-i18n="image.clear" data-i18n-title="image.clear.hint" hidden></button>
               </div>
-              <span class="edit-crumb" id="edit-crumb" hidden></span>
             </div>
-            <div class="stage-tools stage-tools-center segmented" role="radiogroup" data-mode="image" data-i18n-aria="image.view">
-              <label><input type="radio" name="image-view" value="original" /><span data-i18n="image.view.original"></span></label>
-              <label><input type="radio" name="image-view" value="prepared" /><span data-i18n="image.view.prepared"></span></label>
-              <label><input type="radio" name="image-view" value="stitches" /><span data-i18n="image.view.stitches"></span></label>
+            <label class="field image-width" data-i18n-title="image.width.hint">
+              <span class="label"><span data-i18n="image.width"></span> <output id="image-height"></output></span>
+              <input type="number" id="image-width" min="10" max="400" step="1" />
+            </label>
+            <details class="ai-prep" data-section="aiPrep">
+              <summary data-i18n="image.ai.title"></summary>
+              <p class="small" data-i18n="image.ai.intro"></p>
+              <ol class="small">
+                <li data-i18n="image.ai.step1"></li>
+                <li data-i18n="image.ai.step2b"></li>
+                <li data-i18n="image.ai.step3"></li>
+              </ol>
+              <textarea id="image-ai-prompt" class="ai-prompt" rows="8" readonly data-i18n-aria="image.ai.prompt"></textarea>
+              <div class="buttons">
+                <button type="button" id="image-ai-copy" data-i18n="image.ai.copy"></button>
+              </div>
+              <p class="muted small" data-i18n="image.ai.note"></p>
+            </details>
+          </section>
+
+          <section class="panel image-step" data-step="2" aria-labelledby="image-step2-title">
+            <h2 id="image-step2-title" data-i18n="image.step2"></h2>
+            <p class="muted small" id="image-svg-note" data-i18n="image.svg.note" hidden></p>
+            <label class="field" id="image-colors-field" data-i18n-title="image.colors.hint">
+              <span class="label"><span data-i18n="image.colors"></span> <output id="image-colors-out"></output></span>
+              <input type="range" id="image-colors" min="2" max="16" step="1" />
+            </label>
+            <label class="field" id="image-smooth-field" data-i18n-title="image.smooth.hint">
+              <span class="label"><span data-i18n="image.smooth"></span> <output id="image-smooth-out"></output></span>
+              <input type="range" id="image-smooth" min="0" max="5" step="1" />
+            </label>
+            <label class="field" data-i18n-title="image.minArea.hint">
+              <span class="label"><span data-i18n="image.minArea"></span> <output id="image-min-area-out"></output></span>
+              <input type="range" id="image-min-area" min="0.5" max="20" step="0.5" />
+            </label>
+            <label class="check" data-i18n-title="image.background.hint"><input type="checkbox" id="image-background" /><span data-i18n="image.background"></span></label>
+            <label class="check" data-i18n-title="image.threads.hint"><input type="checkbox" id="image-threads" /><span data-i18n="image.threads"></span></label>
+          </section>
+
+          <section class="panel image-step" data-step="3" aria-labelledby="image-step3-title">
+            <h2 id="image-step3-title" data-i18n="image.stitch"></h2>
+            <div class="image-styles" role="radiogroup" data-i18n-aria="image.style">
+              <span class="label" data-i18n="image.style"></span>
+              <label class="image-style" data-i18n-title="image.style.flat.hint">
+                <input type="radio" name="image-style" value="flat" />
+                <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 8h22M5 12h22M5 16h22M5 20h22M5 24h22" /></svg>
+                <b data-i18n="image.style.flat"></b><span data-i18n="image.style.flat.short"></span>
+              </label>
+              <label class="image-style" id="image-style-dynamic" data-i18n-title="image.style.dynamic.hint">
+                <input type="radio" name="image-style" value="dynamic" />
+                <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M4 10q12-8 24 0M4 15q12-8 24 0M4 20q12-8 24 0M4 25q12-8 24 0" /></svg>
+                <b data-i18n="image.style.dynamic"></b><span data-i18n="image.style.dynamic.short"></span>
+              </label>
+              <label class="image-style" id="image-style-smart" data-i18n-title="image.style.smart.hint">
+                <input type="radio" name="image-style" value="smart" />
+                <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M4 8h11M4 12h11M4 16h11M18 10q5-4 10 0M18 15q5-4 10 0M18 20q5-4 10 0" /><circle cx="9" cy="24" r="3.2" /></svg>
+                <b data-i18n="image.style.smart"></b><span data-i18n="image.style.smart.short"></span>
+              </label>
             </div>
-            <div class="stage-tools stage-tools-end">
-              <button type="button" id="image-shine" class="tool primary" data-mode="image" data-i18n-title="image.shine.hint" hidden><span aria-hidden="true">✦</span> <span data-i18n="image.shine"></span></button>
-              <button type="button" id="marks-toggle" class="tool" data-mode="flow density" aria-pressed="true" data-i18n-title="marks.toggle.key" data-i18n-aria="marks.toggle"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 15 L16 5" stroke-dasharray="2.6 2.2" /><circle cx="4" cy="15" r="2.4" class="node" /><circle cx="16" cy="5" r="2.4" class="node" /><path d="M3 3 L17 17" class="slash" /></svg></button>
-              <button type="button" id="fit" class="tool" data-i18n-title="controls.fit.key"><span aria-hidden="true">⤢</span> <span data-i18n="controls.fit"></span></button>
-              <button type="button" id="export" class="tool" data-mode="flow density" data-i18n-title="controls.export.hint"><span aria-hidden="true">⤓</span> PNG</button>
+            <div class="image-areas" id="image-areas" hidden>
+              <span class="label" data-i18n="image.areas" data-i18n-title="image.areas.hint"></span>
+              <ul id="image-area-list"></ul>
             </div>
-          </div>
-          <div class="stage-tools draw-tools" data-mode="flow" role="toolbar" data-i18n-aria="draw.label">
-            <button type="button" class="tool" id="draw-pointer" aria-pressed="true" data-i18n-title="draw.pointer.hint" data-i18n-aria="draw.pointer"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 3 L5 15.5 L8.2 12.6 L10.5 17.5 L12.6 16.5 L10.3 11.7 L14.6 11.3 Z" /></svg></button>
-            <button type="button" class="tool" data-draw="rect" aria-pressed="false" data-i18n-title="draw.rect.hint" data-i18n-aria="draw.rect"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3.5" y="5" width="13" height="10" rx="0.5" /></svg></button>
-            <button type="button" class="tool" data-draw="ellipse" aria-pressed="false" data-i18n-title="draw.ellipse.hint" data-i18n-aria="draw.ellipse"><svg viewBox="0 0 20 20" aria-hidden="true"><ellipse cx="10" cy="10" rx="7" ry="5.5" /></svg></button>
-            <button type="button" class="tool" data-draw="pen" aria-pressed="false" data-i18n-title="draw.pen.hint" data-i18n-aria="draw.pen"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 16 C6 6 12 4 17 4" /><rect x="1.8" y="14.8" width="2.4" height="2.4" class="node" /><rect x="15.8" y="2.8" width="2.4" height="2.4" class="node" /></svg></button>
-            <button type="button" class="tool" data-draw="free" aria-pressed="false" data-i18n-title="draw.free.hint" data-i18n-aria="draw.free"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 14 C5 9 7 9 8 12 S11 16 12 11 S15 5 17 6" /></svg></button>
-          </div>
+            <div class="image-material" data-i18n-title="image.material.hint">
+              <label class="field">
+                <span class="label" data-i18n="profile.fabric"></span>
+                <select id="image-fabric"></select>
+              </label>
+              <label class="field">
+                <span class="label" data-i18n="profile.thread"></span>
+                <select id="image-thread"></select>
+              </label>
+            </div>
+            <details class="image-fine" data-section="imageFine">
+            <summary><span data-i18n="image.fine"></span> <span class="own-dot" id="image-fine-own" data-i18n-title="image.fine.own" hidden></span></summary>
+            <div class="field-row">
+              <label class="field" data-i18n-title="image.spacing.hint">
+                <span class="label" data-i18n="image.spacing"></span>
+                <input type="number" id="image-spacing" min="0.2" max="1.5" step="0.05" />
+              </label>
+              <label class="field" data-i18n-title="image.pull.hint">
+                <span class="label" data-i18n="image.pull"></span>
+                <input type="number" id="image-pull" min="0" max="1" step="0.05" />
+              </label>
+            </div>
+            <label class="field" data-i18n-title="image.angle.hint">
+              <span class="label" data-i18n="image.angle"></span>
+              <select id="image-angle"></select>
+            </label>
+            <label class="field" data-i18n-title="image.satinMax.hint">
+              <span class="label"><span data-i18n="image.satinMax"></span> <output id="image-satin-max-out"></output></span>
+              <input type="range" id="image-satin-max" min="1" max="10" step="0.5" />
+            </label>
+            <label class="field" data-i18n-title="image.tolerance.hint">
+              <span class="label"><span data-i18n="stitch.tolerance"></span> <output id="image-tolerance-out"></output></span>
+              <input type="range" id="image-tolerance" min="0.05" max="0.5" step="0.05" />
+            </label>
+            <label class="check" data-i18n-title="image.underlay.hint"><input type="checkbox" id="image-underlay" /><span data-i18n="image.underlay"></span></label>
+            <button type="button" id="image-stitch-reset" class="link" data-i18n="image.stitch.reset" data-i18n-title="image.stitch.reset.hint" hidden></button>
+            </details>
+          </section>
+
+          <nav class="image-nav" data-i18n-aria="image.steps">
+            <button type="button" id="image-back" data-i18n="image.back"></button>
+            <button type="button" id="image-next" class="primary" data-i18n="image.next"></button>
+            <button type="button" id="image-take" class="primary" data-i18n="image.takeShort" data-i18n-title="image.take.hint" hidden></button>
+          </nav>
         </div>
-        <p class="image-status" id="image-status" data-mode="image" aria-live="polite"></p>
-        <canvas id="legend" class="legend" width="260" height="46" data-mode="density"></canvas>
-        <div id="tooltip" class="tooltip" hidden></div>
-        <p class="empty" id="empty" data-i18n="canvas.empty"></p>
-        <p class="hint" id="canvas-hint"></p>
-        <div class="player" id="player" data-mode="flow" hidden>
-          <div class="player-buttons">
-            <button type="button" class="tool" data-play="block-prev" data-i18n-title="player.blockPrev"><span aria-hidden="true">⏮</span></button>
-            <button type="button" class="tool" data-play="prev" data-i18n-title="player.prev"><span aria-hidden="true">◂</span></button>
-            <button type="button" class="tool play" data-play="toggle" data-i18n-title="player.play"><span aria-hidden="true">▶</span></button>
-            <button type="button" class="tool" data-play="next" data-i18n-title="player.next"><span aria-hidden="true">▸</span></button>
-            <button type="button" class="tool" data-play="block-next" data-i18n-title="player.blockNext"><span aria-hidden="true">⏭</span></button>
-          </div>
-          <div class="player-track">
-            <div class="player-sections" id="player-sections" aria-hidden="true"></div>
-            <input type="range" id="player-pos" min="0" max="1" step="1" value="1" data-i18n-aria="player.pos" />
-          </div>
-          <span class="player-info" id="player-info"></span>
-          <select id="player-speed" data-i18n-title="player.speed" data-i18n-aria="player.speed">
-            <option value="1">1×</option>
-            <option value="10">10×</option>
-            <option value="50">50×</option>
-            <option value="250">250×</option>
-          </select>
-        </div>
-      </section>
 
-      <aside class="inspector" id="inspector">
-        <!-- Bild -->
-        <section class="panel" data-mode="image">
-          <h2 data-i18n="image.palette"></h2>
-          <ul class="image-palette" id="image-palette"></ul>
-          <p class="muted small" data-i18n="image.palette.hint"></p>
-        </section>
-
-        <section class="panel" data-mode="image">
-          <h2 data-i18n="image.brush"></h2>
-          <div class="segmented" role="radiogroup">
-            <label><input type="radio" name="image-tool" value="none" checked /><span data-i18n="image.tool.none"></span></label>
-            <label><input type="radio" name="image-tool" value="paint" /><span data-i18n="image.tool.paint"></span></label>
-            <label><input type="radio" name="image-tool" value="erase" /><span data-i18n="image.tool.erase"></span></label>
-          </div>
-          <label class="field">
-            <span class="label"><span data-i18n="image.brushSize"></span> <output id="image-brush-out"></output></span>
-            <input type="range" id="image-brush" min="0.5" max="20" step="0.5" />
-          </label>
-          <p class="muted small" id="image-brush-hint"></p>
-          <div class="buttons">
-            <button type="button" id="image-strokes-undo" data-i18n="image.undo"></button>
-            <button type="button" id="image-strokes-clear" data-i18n="image.strokes.clear"></button>
-          </div>
-        </section>
-
-        <section class="panel" data-mode="image">
-          <h2 data-i18n="image.result"></h2>
-          <dl id="image-result" class="stats"></dl>
-          <div id="image-verdict"></div>
-          <div class="buttons">
-            <button type="button" id="image-take" class="primary" data-i18n="image.take"></button>
-          </div>
-          <p class="muted small" data-i18n="image.take.hint"></p>
-        </section>
-
-        <!-- Ablauf -->
         <section class="panel layers" id="layers-panel" data-mode="flow">
           <div class="panel-head">
             <h2 data-i18n="layers.title"></h2>
             <button type="button" class="link" id="layers-reset" data-i18n="layers.showAll" hidden></button>
-            <button type="button" class="link" id="color-list" data-i18n="colorList.button" data-i18n-title="colorList.buttonHint" hidden></button>
           </div>
           <div class="order-bar">
-            <button type="button" id="order-optimize" aria-expanded="false" aria-controls="order-card" data-i18n-title="order.button.hint"><span aria-hidden="true">⇅</span> <span data-i18n="order.button"></span></button>
+            <button type="button" id="order-optimize" aria-expanded="false" aria-controls="order-card" data-i18n-title="order.button.hint"><svg class="i" aria-hidden="true"><use href="#i-obj-order" /></svg><span data-i18n="order.button"></span></button>
           </div>
           <div class="order-card" id="order-card" role="group" data-i18n-aria="order.button" hidden></div>
           <div class="order-card overlap-card" id="overlap-card" role="status" hidden>
@@ -492,83 +390,337 @@
           </details>
           <p class="layer-note" id="layer-note" role="status" hidden></p>
         </section>
+      </aside>
 
-        <section class="panel object-panel" id="object-panel" data-mode="flow" hidden>
-          <div class="panel-head">
-            <h2 data-i18n="object.title"></h2>
-            <button type="button" id="object-close" class="icon" data-i18n-title="object.clear"><span aria-hidden="true">&#x2715;</span></button>
+      <div class="resizer" data-panel="side" role="separator" aria-orientation="vertical" tabindex="0" data-i18n-aria="layout.resizeSide" data-i18n-title="layout.resize.hint"></div>
+      <div class="resizer" data-panel="inspector" role="separator" aria-orientation="vertical" tabindex="0" data-i18n-aria="layout.resizeInspector" data-i18n-title="layout.resize.hint"></div>
+
+      <section class="stage" id="stage">
+        <canvas id="canvas"></canvas>
+        <!-- One row on top: when the stage is narrow, the right part moves to a second row instead of covering the left. -->
+        <div class="stage-top">
+          <!-- Bild umwandeln: the steps of the assistant and the way out -->
+          <div class="image-steps" data-mode="image">
+            <ol class="image-stepper" data-i18n-aria="image.steps">
+              <li><button type="button" data-goto="1"><span class="num" aria-hidden="true">1</span><span class="name" data-i18n="image.step1"></span></button></li>
+              <li><button type="button" data-goto="2"><span class="num" aria-hidden="true">2</span><span class="name" data-i18n="image.step2"></span></button></li>
+              <li><button type="button" data-goto="3"><span class="num" aria-hidden="true">3</span><span class="name" data-i18n="image.step3"></span></button></li>
+            </ol>
+            <p class="image-status" id="image-status" aria-live="polite"></p>
+            <button type="button" id="image-cancel" class="image-cancel" data-i18n="image.cancel"></button>
           </div>
-          <div id="object-body"></div>
-          <div id="object-stitches" class="object-stitches"></div>
-          <p class="layer-note error" id="object-msg" role="status" hidden></p>
-        </section>
-
-        <section class="panel lettering-panel" id="lettering-panel" data-mode="flow" hidden>
-          <div class="panel-head">
-            <h2 data-i18n="lettering.title"></h2>
-            <button type="button" id="lettering-close" class="icon" data-i18n-title="lettering.close"><span aria-hidden="true">&#x2715;</span></button>
-          </div>
-          <div id="lettering-body"></div>
-        </section>
-
-        <section class="panel jumps" id="jumps-panel" data-mode="flow">
-          <h2 data-i18n="jumps.title"></h2>
-          <div id="jumps" class="jumps-body" aria-live="polite"></div>
-        </section>
-
-        <!-- Dichte -->
-        <details class="panel section findings" id="findings-panel" data-mode="density" data-section="findings">
-          <summary><h2 data-i18n="findings.title"></h2><span id="findings-sum" class="findings-sum"></span></summary>
-          <label class="check val-toggle" data-i18n-title="validation.overlay.key"><input type="checkbox" id="show-validation" /><span data-i18n="validation.overlay"></span></label>
-          <div id="validation" class="findings-body" aria-live="polite"></div>
-        </details>
-
-        <section class="panel" id="correct-panel" data-mode="density">
-          <h2><span data-i18n="correct.title"></span> <span class="beta-badge" data-i18n="correct.beta" data-i18n-title="correct.beta.hint"></span></h2>
-          <div class="field">
-            <span class="label" data-i18n="correct.goal"></span>
-            <div class="segmented" role="radiogroup">
-              <label><input type="radio" name="fix-goal" value="caution" /><span data-i18n="correct.goal.caution"></span></label>
-              <label><input type="radio" name="fix-goal" value="critical" /><span data-i18n="correct.goal.critical"></span></label>
+          <div class="stage-bar">
+            <div class="stage-tools stage-tools-start" data-mode="flow density">
+              <nav class="edit-crumb crumbs" id="edit-crumb" hidden></nav>
+              <!-- The levels as radios for scripts and screen readers; people use the breadcrumb, Enter, e and Esc. -->
+              <div class="level-radios" role="radiogroup" data-i18n-aria="level.label">
+                <label><input type="radio" name="level" value="shape" tabindex="-1" /><span data-i18n="level.shape"></span></label>
+                <label><input type="radio" name="level" value="objects" tabindex="-1" checked /><span data-i18n="level.objects"></span></label>
+                <label><input type="radio" name="level" value="stitches" tabindex="-1" /><span data-i18n="level.stitches"></span></label>
+              </div>
+            </div>
+            <div class="stage-tools stage-tools-center segmented" id="image-views" role="radiogroup" data-mode="image" data-i18n-aria="image.view">
+              <label><input type="radio" name="image-view" value="original" /><span data-i18n="image.view.original"></span></label>
+              <label><input type="radio" name="image-view" value="prepared" /><span data-i18n="image.view.prepared"></span></label>
+              <label><input type="radio" name="image-view" value="stitches" /><span data-i18n="image.view.stitches"></span></label>
+            </div>
+            <div class="stage-tools stage-tools-end">
+              <button type="button" id="image-shine" class="tool primary" data-mode="image" data-i18n-title="image.shine.hint" hidden><span aria-hidden="true">✦</span> <span data-i18n="image.shine"></span></button>
             </div>
           </div>
-          <div class="field">
-            <span class="label" data-i18n="correct.focus"></span>
-            <div class="segmented" role="radiogroup">
-              <label><input type="radio" name="fix-focus" value="both" /><span data-i18n="correct.focus.both"></span></label>
-              <label><input type="radio" name="fix-focus" value="thread" /><span data-i18n="correct.focus.thread"></span></label>
-              <label><input type="radio" name="fix-focus" value="holes" /><span data-i18n="correct.focus.holes"></span></label>
-            </div>
-            <p class="muted small" id="fix-focus-hint"></p>
-          </div>
-          <div class="buttons">
-            <button type="button" id="fix-all" class="primary" data-i18n="correct.all"></button>
-            <button type="button" id="fix-zone" data-i18n="correct.zone"></button>
-          </div>
-          <div id="fix-report" class="fix-report" aria-live="polite"></div>
+          <div class="tool-options" id="tool-options" role="toolbar" hidden></div>
+        </div>
+        <div id="tooltip" class="tooltip" hidden></div>
+        <div class="empty" id="empty"></div>
+        <!-- Foot of the stage, one row above the player: the key hint, the heatmap scale (Prüfen) and the view bar. -->
+        <div class="stage-foot" id="stage-foot">
+          <p class="hint" id="canvas-hint"></p>
+          <canvas id="legend" class="legend" width="260" height="46" data-mode="density"></canvas>
+          <div class="view-bar" id="view-bar" role="toolbar" data-i18n-aria="design.view.title">
+            <button type="button" id="view-button" class="vb-btn view-button" data-i18n-title="design.view.hint">
+              <svg class="i" aria-hidden="true"><use href="#i-eye" /></svg>
+              <span id="view-name" data-i18n="design.view.title"></span>
+              <svg class="i chev" aria-hidden="true"><use href="#i-chevron-up" /></svg>
+            </button>
+            <button type="button" id="marks-toggle" class="vb-btn vb-icon" data-mode="flow density" aria-pressed="true" data-i18n-aria="marks.toggle">
+              <svg class="i" aria-hidden="true"><use href="#i-marks" /></svg>
+            </button>
+            <span class="vb-sep" aria-hidden="true"></span>
+            <button type="button" id="zoom-button" class="vb-btn zoom-button" aria-haspopup="menu" data-i18n-title="design.zoom.hint">
+              <span id="zoom-out">100 %</span>
+            </button>
+            <button type="button" id="fit" class="vb-btn vb-icon" data-i18n-aria="controls.fit">
+              <svg class="i" aria-hidden="true"><use href="#i-fit" /></svg>
+            </button>
 
-          <h3 data-i18n="edit.title"></h3>
-          <p class="muted small" id="edit-off-hint" data-i18n="edit.panelHint"></p>
-          <div id="edit-tools" class="edit-tools" hidden>
-            <p class="muted small" data-i18n="edit.hint"></p>
-            <p class="sel-info" id="sel-info"></p>
-            <div class="buttons">
-              <button type="button" id="sel-delete" data-i18n="edit.delete"></button>
-              <button type="button" id="sel-thin" data-i18n="edit.thin"></button>
-              <select id="thin-share" aria-label="">
-                <option value="0.25">25 %</option>
-                <option value="0.34" selected>33 %</option>
-                <option value="0.5">50 %</option>
-              </select>
+            <div class="popover view-pop" id="view-pop" role="dialog" data-i18n-aria="design.view.title" hidden>
+              <section class="vp-group">
+                <h3 data-i18n="design.view.look"></h3>
+                <label class="check" data-i18n-title="controls.realistic.hint"><input type="checkbox" id="realistic" /><span data-i18n="controls.realistic"></span></label>
+                <div class="vp-sub" id="realistic-sub">
+                  <label class="field" data-i18n-title="controls.threadWidth.hint">
+                    <span class="label"><span data-i18n="controls.threadWidth"></span> <output id="thread-width-out"></output></span>
+                    <input type="range" id="thread-width" min="0.02" max="1" step="0.01" />
+                  </label>
+                  <label class="check" data-i18n-title="controls.liveLight.hint"><input type="checkbox" id="live-light" /><span data-i18n="controls.liveLight"></span></label>
+                  <button type="button" id="allow-tilt" class="link" data-i18n="controls.tilt" hidden></button>
+                </div>
+                <label class="check" data-mode="flow" data-i18n-title="display.shapes.hint"><input type="checkbox" id="shapes-view" /><span data-i18n="display.shapes"></span></label>
+              </section>
+              <section class="vp-group" data-mode="flow">
+                <h3 data-i18n="colorBy.title"></h3>
+                <div class="segmented vp-seg" role="radiogroup" data-i18n-aria="colorBy.title">
+                  <label><input type="radio" name="color-by" value="thread" /><span data-i18n="colorBy.thread"></span></label>
+                  <label><input type="radio" name="color-by" value="order" /><span data-i18n="colorBy.order"></span></label>
+                  <label><input type="radio" name="color-by" value="kind" /><span data-i18n="colorBy.kind"></span></label>
+                  <label><input type="radio" name="color-by" value="length" /><span data-i18n="colorBy.length"></span></label>
+                </div>
+                <div id="color-key" class="color-key"></div>
+              </section>
+              <section class="vp-group" data-i18n-title="controls.background.hint">
+                <h3><span data-i18n="controls.background"></span> <output id="bg-out"></output></h3>
+                <div class="bg-swatches" id="bg-swatches"></div>
+                <label class="vp-row" data-i18n-title="controls.fabric.hint">
+                  <span data-i18n="controls.fabric"></span>
+                  <select id="fabric-look"></select>
+                </label>
+              </section>
+              <fieldset class="marks vp-group" data-mode="flow density">
+                <legend data-i18n="marks.title"></legend>
+                <label class="check"><input type="checkbox" data-mark="jumps" /><span><i class="mk mk-jump" aria-hidden="true"></i><span data-i18n="marks.jumps"></span></span></label>
+                <label class="check" data-mode="flow" data-i18n-title="marks.threads.hint"><input type="checkbox" data-mark="threads" /><span><i class="mk mk-thread" aria-hidden="true"></i><span data-i18n="marks.threads"></span></span></label>
+                <label class="check"><input type="checkbox" data-mark="trims" /><span><i class="mk" aria-hidden="true">✂</i><span data-i18n="marks.trims"></span></span></label>
+                <label class="check"><input type="checkbox" data-mark="colors" /><span><i class="mk mk-num" aria-hidden="true">1</i><span data-i18n="marks.colors"></span></span></label>
+                <label class="check"><input type="checkbox" data-mark="ends" /><span><i class="mk mk-start" aria-hidden="true">S</i><span data-i18n="marks.ends"></span></span></label>
+                <label class="check" data-i18n-title="marks.points.hint"><input type="checkbox" data-mark="points" /><span><i class="mk mk-point" aria-hidden="true"></i><span data-i18n="marks.points"></span></span></label>
+              </fieldset>
             </div>
           </div>
-
-          <h3 data-i18n="compare.title"></h3>
-          <div class="buttons">
-            <button type="button" id="compare-toggle" aria-pressed="false" data-i18n="compare.start"></button>
+        </div>
+        <div class="player" id="player" data-mode="flow" hidden>
+          <button type="button" class="player-play" data-play="toggle" data-i18n-title="player.play" data-i18n-aria="design.player.play">
+            <svg class="i" aria-hidden="true"><use href="#i-play" /></svg>
+          </button>
+          <div class="player-steps">
+            <button type="button" class="player-btn" data-play="block-prev" data-i18n-title="player.blockPrev" data-i18n-aria="player.blockPrev"><svg class="i" aria-hidden="true"><use href="#i-skip-back" /></svg></button>
+            <button type="button" class="player-btn" data-play="prev" data-i18n-title="player.prev" data-i18n-aria="design.player.prev"><svg class="i" aria-hidden="true"><use href="#i-step-back" /></svg></button>
+            <button type="button" class="player-btn" data-play="next" data-i18n-title="player.next" data-i18n-aria="design.player.next"><svg class="i" aria-hidden="true"><use href="#i-step-forward" /></svg></button>
+            <button type="button" class="player-btn" data-play="block-next" data-i18n-title="player.blockNext" data-i18n-aria="player.blockNext"><svg class="i" aria-hidden="true"><use href="#i-skip-forward" /></svg></button>
           </div>
-          <table class="compare-table" id="compare-table" hidden></table>
-        </section>
+          <div class="player-track">
+            <div class="player-sections" id="player-sections" aria-hidden="true"></div>
+            <input type="range" id="player-pos" min="0" max="1" step="1" value="1" data-i18n-aria="player.pos" />
+          </div>
+          <span class="player-info" id="player-info"></span>
+          <select id="player-speed" data-i18n-title="player.speed" data-i18n-aria="player.speed">
+            <option value="1">1×</option>
+            <option value="10">10×</option>
+            <option value="50">50×</option>
+            <option value="250">250×</option>
+          </select>
+          <button type="button" class="player-btn player-fold" id="player-fold" aria-expanded="true" data-i18n-title="design.player.fold" data-i18n-aria="design.player.fold">
+            <svg class="i" aria-hidden="true"><use href="#i-chevron-down" /></svg>
+          </button>
+        </div>
+      </section>
+
+      <aside class="inspector" id="inspector">
+        <div class="insp-tabs segmented" role="tablist" data-mode="flow" id="insp-tabs">
+          <button type="button" role="tab" data-tab="object" aria-selected="false"><span data-i18n="shell.tab.object"></span></button>
+          <button type="button" role="tab" data-tab="design" aria-selected="true"><span data-i18n="shell.tab.design"></span></button>
+        </div>
+        <!-- Bild umwandeln: colors and brush (step 2), the result (step 3) -->
+        <div class="image-insp" data-mode="image">
+          <section class="panel image-step" data-step="2">
+            <div class="panel-head">
+              <h2 data-i18n="image.palette"></h2>
+              <div class="image-history">
+                <button type="button" id="image-strokes-undo" class="icon"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7.5 5 4 8.5 7.5 12" /><path d="M4.5 8.5H12a4 4 0 0 1 0 8H9" /></svg></button>
+                <button type="button" id="image-strokes-redo" class="icon"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12.5 5 16 8.5 12.5 12" /><path d="M15.5 8.5H8a4 4 0 0 0 0 8h3" /></svg></button>
+              </div>
+            </div>
+            <ul class="image-palette" id="image-palette"></ul>
+            <p class="muted small image-palette-hint" data-i18n="image.palette.short" data-i18n-title="image.palette.hint"></p>
+          </section>
+
+          <section class="panel image-step" data-step="2">
+            <h2 data-i18n="image.brush"></h2>
+            <div class="segmented image-tools" role="radiogroup" data-i18n-aria="image.brush">
+              <label><input type="radio" name="image-tool" value="none" checked /><span data-i18n="image.tool.none"></span></label>
+              <label><input type="radio" name="image-tool" value="paint" /><span data-i18n="image.tool.paint"></span></label>
+              <label><input type="radio" name="image-tool" value="erase" /><span data-i18n="image.tool.erase"></span></label>
+            </div>
+            <label class="field">
+              <span class="label"><span data-i18n="image.brushSize"></span> <output id="image-brush-out"></output></span>
+              <input type="range" id="image-brush" min="0.5" max="20" step="0.5" />
+            </label>
+            <p class="muted small" id="image-brush-hint"></p>
+            <button type="button" id="image-strokes-clear" class="link" data-i18n="image.strokes.clear"></button>
+          </section>
+
+          <section class="panel image-step" data-step="3">
+            <h2 data-i18n="image.result"></h2>
+            <dl id="image-result" class="stats"></dl>
+            <div id="image-verdict"></div>
+            <p class="muted small" id="image-take-hint" data-i18n="image.take.short"></p>
+          </section>
+        </div>
+
+        <div class="insp-page" data-page="object" data-mode="flow">
+          <p class="insp-empty muted" id="object-empty" data-i18n="shell.object.empty"></p>
+          <section class="panel object-panel" id="object-panel" data-mode="flow" data-i18n-aria="object.title" hidden>
+            <div id="object-body"></div>
+            <div id="object-stitches" class="object-stitches"></div>
+            <p class="layer-note error" id="object-msg" role="status" hidden></p>
+          </section>
+
+          <section class="panel lettering-panel" id="lettering-panel" data-mode="flow" hidden>
+            <div class="panel-head">
+              <h2 data-i18n="lettering.title"></h2>
+              <button type="button" id="lettering-close" class="icon" data-i18n-title="lettering.close"><span aria-hidden="true">&#x2715;</span></button>
+            </div>
+            <div id="lettering-body"></div>
+          </section>
+        </div>
+
+        <div class="insp-page" data-page="design" data-mode="flow density">
+          <!-- Stickmuster: hoop, threads and figures; src/areas/design/page.ts puts them (and #material-panel) into sections. -->
+          <div class="design-page" id="design-page">
+            <div class="hoop-panel" id="hoop-panel">
+              <select id="hoop" data-i18n-aria="hoop.title"></select>
+              <div class="hoop-custom" id="hoop-custom" hidden>
+                <input type="number" id="hoop-w" min="10" max="1000" step="1" data-i18n-aria="hoop.width" />
+                <span>×</span>
+                <input type="number" id="hoop-h" min="10" max="1000" step="1" data-i18n-aria="hoop.height" />
+                <span>mm</span>
+              </div>
+              <p class="hoop-status" id="hoop-status" hidden></p>
+              <p class="hoop-note" id="hoop-note" hidden></p>
+            </div>
+            <div class="design-threads" id="design-threads"></div>
+            <div class="stats-panel" id="stats-panel">
+              <dl id="stats" class="design-stats"></dl>
+              <label class="speed-row">
+                <span data-i18n="design.stats.speed"></span>
+                <select id="machine-spm" data-i18n-aria="stats.speed">
+                  <option value="400">400</option>
+                  <option value="600">600</option>
+                  <option value="800">800</option>
+                  <option value="1000">1000</option>
+                  <option value="1200">1200</option>
+                </select>
+                <span class="muted" data-i18n="design.stats.spm"></span>
+              </label>
+              <!-- Time per trim and thread change: rules of thumb the user sets for their machine. -->
+              <div class="machine-row" data-i18n-title="design.machine.hint">
+                <div class="segmented" role="radiogroup" data-i18n-aria="design.machine">
+                  <label><input type="radio" name="machine-needles" value="single" /><span data-i18n="design.machine.single"></span></label>
+                  <label><input type="radio" name="machine-needles" value="multi" /><span data-i18n="design.machine.multi"></span></label>
+                </div>
+                <label class="time-field"><span data-i18n="design.machine.trim"></span><input type="number" id="trim-seconds" min="0" max="60" step="0.5" /><span class="muted">s</span></label>
+                <label class="time-field"><span data-i18n="design.machine.color"></span><input type="number" id="color-seconds" min="0" max="300" step="1" /><span class="muted">s</span></label>
+              </div>
+            </div>
+          </div>
+          <!-- Prüfen (area check): summary, findings, correction, jumps; heatmap after the material -->
+          <section class="panel check-summary" id="check-summary" data-mode="density" aria-live="polite">
+            <div class="check-light" id="check-light" role="img"><i></i><i></i><i></i></div>
+            <div class="ampel-head" id="ampel-head"></div>
+            <div class="ampel-body" id="ampel-body"></div>
+            <div class="check-state" id="check-state"></div>
+            <label class="check val-toggle" data-i18n-title="validation.overlay.key"><input type="checkbox" id="show-validation" /><span data-i18n="validation.overlay"></span></label>
+          </section>
+          <details class="panel section findings" id="findings-panel" data-mode="density" data-section="findings">
+            <summary><h2 data-i18n="findings.title"></h2><span id="findings-sum" class="findings-sum"></span></summary>
+            <div id="validation" class="findings-body"></div>
+          </details>
+
+          <section class="panel correct" id="correct-panel" data-mode="density">
+            <h2><span data-i18n="correct.title"></span> <span class="beta-badge" data-i18n="correct.beta" data-i18n-title="correct.beta.hint"></span></h2>
+            <div class="correct-opts">
+              <span class="label" data-i18n="correct.goal"></span>
+              <div class="segmented" role="radiogroup" data-i18n-aria="correct.goal">
+                <label><input type="radio" name="fix-goal" value="caution" /><span data-i18n="correct.goal.caution"></span></label>
+                <label><input type="radio" name="fix-goal" value="critical" /><span data-i18n="correct.goal.critical"></span></label>
+              </div>
+              <span class="label" data-i18n="correct.focus"></span>
+              <div class="segmented" role="radiogroup" id="fix-focus" data-i18n-aria="correct.focus">
+                <label data-i18n-title="correct.focus.both.hint"><input type="radio" name="fix-focus" value="both" /><span data-i18n="correct.focus.both"></span></label>
+                <label data-i18n-title="correct.focus.thread.hint"><input type="radio" name="fix-focus" value="thread" /><span data-i18n="correct.focus.thread"></span></label>
+                <label data-i18n-title="correct.focus.holes.hint"><input type="radio" name="fix-focus" value="holes" /><span data-i18n="correct.focus.holes"></span></label>
+              </div>
+            </div>
+            <div class="buttons correct-actions">
+              <button type="button" id="fix-all" class="primary" data-i18n="correct.all" data-i18n-title="check.fixAll.hint"></button>
+              <button type="button" id="fix-zone" data-i18n="check.fixZone.short" data-i18n-title="check.fixZone.hint"></button>
+              <button type="button" id="fix-tune" data-i18n="tune.button" data-i18n-title="tune.button.hint"></button>
+            </div>
+            <div id="fix-report" class="fix-report" aria-live="polite"></div>
+
+            <div class="compare-block" id="compare-block" hidden>
+              <h3 data-i18n="compare.title"></h3>
+              <button type="button" id="compare-toggle" aria-pressed="false" data-i18n="compare.start" data-i18n-title="compare.hint"></button>
+              <table class="compare-table" id="compare-table" hidden></table>
+            </div>
+          </section>
+          <details class="panel section jumps" id="jumps-panel" data-mode="flow density">
+            <summary><h2 data-i18n="jumps.title"></h2><span id="jumps-sum" class="findings-sum"></span></summary>
+            <div id="jumps" class="jumps-body" aria-live="polite"></div>
+          </details>
+          <details class="panel section heatmap-panel" id="heatmap-panel" data-mode="density" data-section="heatmap">
+            <summary><h2 data-i18n="heatmap.title"></h2><span id="heatmap-sum" class="findings-sum"></span></summary>
+            <div class="field">
+              <span class="label"><span data-i18n="controls.metric"></span> <span class="unit-hint" id="unit-hint"></span></span>
+              <div class="segmented" role="radiogroup" data-i18n-aria="controls.metric">
+                <label><input type="radio" name="metric" value="thread" /><span data-i18n="metric.thread"></span></label>
+                <label><input type="radio" name="metric" value="penetrations" /><span data-i18n="metric.penetrations"></span></label>
+              </div>
+            </div>
+            <label class="check"><input type="checkbox" id="overlay" /><span data-i18n="controls.overlay"></span></label>
+            <label class="field indent">
+              <span class="label"><span data-i18n="controls.opacity"></span> <output id="opacity-out"></output></span>
+              <input type="range" id="opacity" min="0.05" max="1" step="0.05" />
+            </label>
+            <label class="field">
+              <span class="label"><span data-i18n="controls.cell"></span> <output id="cell-out"></output></span>
+              <input type="range" id="cell" min="0.5" max="5" step="0.25" />
+            </label>
+            <label class="field">
+              <span class="label"><span data-i18n="controls.blur"></span> <output id="blur-out"></output></span>
+              <input type="range" id="blur" min="0" max="3" step="0.1" />
+            </label>
+            <label class="field field-inline">
+              <span class="label" data-i18n="controls.max"></span>
+              <input type="number" id="max" min="0.1" step="0.5" />
+            </label>
+            <label class="check"><input type="checkbox" id="include-jumps" /><span data-i18n="controls.jumps"></span></label>
+          </details>
+          <!-- Dichte: material, checks and heatmap -->
+          <section class="material-panel" id="material-panel">
+            <div class="profile">
+              <label class="field">
+                <span class="label" data-i18n="profile.fabric"></span>
+                <select id="fabric"></select>
+              </label>
+              <label class="field">
+                <span class="label" data-i18n="profile.thread"></span>
+                <select id="thread"></select>
+              </label>
+              <p class="profile-info" id="profile-info"></p>
+              <div class="buttons" data-mode="density">
+                <button type="button" id="fabric-tune" data-i18n="tune.button" data-i18n-title="tune.button.hint"></button>
+              </div>
+            </div>
+            <fieldset class="checks" data-mode="density">
+              <legend data-i18n="checks.title"></legend>
+              <div id="checks"></div>
+            </fieldset>
+            <details class="explain" data-mode="density">
+              <summary data-i18n="validation.explain"></summary>
+              <ul id="explain"></ul>
+            </details>
+          </section>
+        </div>
       </aside>
     </main>
     <div class="update-notice" id="update-notice" role="status" hidden>

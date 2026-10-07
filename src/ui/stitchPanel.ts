@@ -1,6 +1,7 @@
+import { SATIN_SPLIT_MAX } from '../material/rules';
 import { formatNumber, onLangChange, t, type Key } from '../i18n';
 import type { ObjectKind } from '../model/objects';
-import { DECO_DEFAULTS, isOpenPattern, OPEN_SIZE, OPEN_SIZE_RANGE, SATIN_SPLIT, UNDERLAYS, type DecoSettings, type FillPattern, type FillSettings, type OpenPattern, type RunSettings, type SatinSettings, type SatinType, type Settings, type ShapeTrust, type Fixed } from '../model/restitch';
+import { CURVED_GRADIENT, DECO_DEFAULTS, isOpenPattern, OPEN_SIZE, OPEN_SIZE_RANGE, SATIN_SPLIT, UNDERLAYS, type DecoSettings, type FillPattern, type FringeSide, type FillSettings, type OpenPattern, type RunSettings, type SatinSettings, type SatinType, type Settings, type ShapeTrust, type Fixed } from '../model/restitch';
 import { fixText } from './fixText';
 import type { UnderlayKind } from '../digitize/satin';
 import type { ShapeOutline } from '../render/scene';
@@ -12,12 +13,18 @@ import { BORDER_STITCH, BORDER_WIDTH, type BorderType } from '../digitize/border
 import { TOLERANCE } from '../digitize/run';
 import type { ThreadColor } from '../model/pattern';
 import { newLink } from '../model/border';
-import { autoUnder, E_SPACING, isRunType, runLike, spacingOf, ZIGZAG_SPACING, type PathStitch } from '../model/along';
+import { SATIN_SHARE } from '../model/covers';
+import { autoUnder, E_SPACING, isRunType, spacingOf, ZIGZAG_SPACING, type PathStitch } from '../model/along';
 import { LINE_MOTIFS, MOTIF_PERIOD, MOTIF_WIDTH, motifMaxSize, SIDED_MOTIFS, type LineMotif } from '../digitize/motif';
 import { ECHO_COUNT, ECHO_DEFAULT, ECHO_GAP, ECHO_SIDES, type EchoSide } from '../digitize/echo';
 import { SHADOW_COLOR, SHADOW_DEFAULT_DIST, SHADOW_DIRS, SHADOW_DIST, type ShadowDir } from '../model/shadow';
 import { cssColor, hexColor, ThreadPicker } from './threadPicker';
 import { CROSS_KINDS, GRID_KINDS, MOTIFS, type CrossKind, type GridKind, type Motif } from '../digitize/deco';
+import { canRun, getCommand, keyLabel, runCommand } from '../shell/commands';
+import { h } from '../shell/h';
+import { section } from '../shell/ui';
+import { setThinShare, THIN_SHARES, thinShare } from '../areas/stitches/state';
+import { kindWay, type KindState, type KindWay } from '../areas/stitches/kindWay';
 
 type FillUnder = 'off' | 'single' | 'cross';
 const FILL_UNDERS: FillUnder[] = ['off', 'single', 'cross'];
@@ -31,9 +38,11 @@ const REPEATS = ['1', '3', '5'] as const;
 const sameColor = (a: ThreadColor, b: ThreadColor) => a.r === b.r && a.g === b.g && a.b === b.b;
 
 /**
- * Stitch settings of the selected objects: per kind of stitch the values that matter for it. The
- * values start as measured on the first selected object; moving a slider shows the result on the
- * canvas at once, letting go applies it (one undo step).
+ * Stitch settings of the selected objects, in fixed groups (konzept.md section 5): Stichart and
+ * Muster, Gestaltung, Umrandung or Effekte, Stoff und Halt, Werkzeuge. Each group folds and is
+ * remembered. The values start as measured on the first selected object; moving a slider shows the
+ * result on the canvas at once, letting go applies it (one undo step). A value that is chosen
+ * automatically says so; a small dot takes an own value back to automatic.
  */
 
 export interface StitchInfo {
@@ -43,6 +52,8 @@ export interface StitchInfo {
   measured: Partial<{ fill: FillSettings; satin: SatinSettings; run: RunSettings }>;
   /** Recommended fill spacing for the material (mm). */
   recommended: [number, number];
+  /** Values chosen automatically for the material: what "Nach Stoff" gives. */
+  auto?: { fillSpacing: number; satinSpacing: number; stitch: number };
   /** How many selected objects have stitches of each kind. */
   counts: Partial<Record<ObjectKind, number>>;
   /** How far the fill areas can be trusted (the least of the selected objects). */
@@ -53,6 +64,8 @@ export interface StitchInfo {
   hand?: number;
   /** Whether the fill areas are strokes that can be sewn as satin. */
   toSatin: boolean;
+  /** The first selected fill is a part of a fill cut apart: how many parts share its border. */
+  pieces?: number;
   /** Rungs of the one selected satin: whether the tool is on, how many (null: the stitches' own direction). */
   direction?: {
     tool: boolean;
@@ -94,9 +107,14 @@ export interface StitchInfo {
   depth?: number;
   /** Thread of the first selected fill (its border is sewn in it unless it has its own). */
   color?: ThreadColor;
-  /** The one selected object is the border of a fill in its own thread (the fill's number, or null when gone). */
-  /** A border of its own thread, or the second thread of a color blend (`blend`), following its fill. */
-  outline?: { fill: number | null; blend?: boolean; shadow?: boolean; echo?: boolean };
+  /**
+   * A border of its own thread, or the second thread of a color blend (`blend`), following its fill;
+   * or a shadow or echo copies following their line. `of`: the settings of the fill or line it
+   * follows, set here as they are there (not for a blend: its settings are all of its fill's).
+   */
+  outline?: { fill: number | null; blend?: boolean; shadow?: boolean; echo?: boolean; of?: { fill?: FillSettings; line?: PathStitch; closed?: boolean; color: ThreadColor } };
+  /** The area of the first selected fill, the same while its shape stays: what it was before is kept for it. */
+  area?: object;
   /** The one selected fill can blend into a second thread (see blendObject). */
   blend?: boolean;
   /** Left out of the correction (`mixed`: only some of the selected objects). */
@@ -112,7 +130,6 @@ export interface StitchInfo {
 export interface StitchHooks {
   preview: (s: Settings | null) => void;
   apply: (s: Settings) => void;
-  /** Sews the selected objects of the other kind (fill to satin or satin to fill). */
   /** Sews the selection anew as another kind: fill or satin, a wide line as a fill and back. */
   convert: (to: 'fill' | 'satin' | 'line') => void;
   /** Rungs of a satin: the tool on or off, corners suggested, all removed, back to the stitches' own direction. */
@@ -201,14 +218,15 @@ const MOTIF_ICON: Record<Motif, string> = {
   hearts: SVG('<path d="M12 20S4 14.8 4 9.5a4 4 0 0 1 8-1.3 4 4 0 0 1 8 1.3C20 14.8 12 20 12 20z"/>'),
 };
 
-const TRUST_ICON = {
+/** Small status icons (16 × 16). */
+const STATUS_ICON = {
   ok: '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"/></svg>',
   warn: '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5l6 11H2z"/><path d="M8 6.5v3.2M8 11.8v.1"/></svg>',
+  info: '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><path d="M8 7.2v4M8 4.9v.1"/></svg>',
+  fix: '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.5 2.5a3 3 0 0 0-3.6 3.9L2.5 10.8a1.3 1.3 0 0 0 1.8 1.8l4.4-4.4a3 3 0 0 0 3.9-3.6l-1.8 1.8-1.7-.4-.4-1.7z"/></svg>',
+  /** Stitches loosed from their shape: a dashed shape beside free stitches. */
+  free: '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="1.5" y="1.5" width="8" height="8" rx="1.5" stroke-dasharray="2 2"/><path d="M7 14.5l2.5-4 2 3 3-5"/></svg>',
 };
-
-/** Stitches loosed from their shape: a dashed shape beside free stitches. */
-const FREE_ICON =
-  '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="1.5" y="1.5" width="8" height="8" rx="1.5" stroke-dasharray="2 2"/><path d="M7 14.5l2.5-4 2 3 3-5"/></svg>';
 
 const OFFSETS: [number, string][] = [
   [0.5, '1/2'],
@@ -234,6 +252,42 @@ interface SliderDef {
   note?: (v: number) => string;
   /** Taken over on its own when let go, instead of as a stitch setting (no preview while dragging). */
   commit?: () => void;
+  /**
+   * The value can be chosen automatically: `is` says whether it is now, `reset` goes back to it.
+   * `fabric`: the automatic value follows the material ("Nach Stoff").
+   */
+  auto?: { is: () => boolean; reset: () => void; fabric?: boolean };
+}
+
+/** What a fill was before only its edge was sewn (see StitchPanel.toEmpty). */
+interface FilledBefore {
+  pattern: FillPattern;
+  deco?: DecoSettings;
+  border?: FillSettings['border'];
+}
+
+/** The pieces of stitches along a line: their kind, what they look like, what holds them. */
+interface PathParts {
+  type: HTMLElement;
+  look: HTMLElement[];
+  hold: HTMLElement[];
+}
+
+/**
+ * Pattern `tile` for fill settings `to`. Points belong to the pattern they were set for, a fade and
+ * its second thread to the gradient: another pattern takes them out. Empty sews only the border, as
+ * the object in its thread (a triple stitch when it had none).
+ */
+function setPattern(to: FillSettings, tile: FillPattern): void {
+  const { focus: _f, centers: _c, fade: _d, blend: _b, ...rest } = to.deco ?? {};
+  to.pattern = tile;
+  to.deco = rest;
+  if (tile === 'none') {
+    if (to.border) {
+      delete to.border.color;
+      delete to.border.link;
+    } else to.border = { type: 'triple', width: BORDER_WIDTH };
+  }
 }
 
 export class StitchPanel {
@@ -246,7 +300,7 @@ export class StitchPanel {
   private frame = 0;
   /** Max. deviation chosen last: the next objects start with it (they cannot be measured for it). */
   private tolerance: number | null = null;
-  /** The rung tools as last drawn. */
+  /** The tool state as last drawn. */
   private tools = '';
   /** Left and right width set apart. */
   private sides = false;
@@ -255,6 +309,10 @@ export class StitchPanel {
   private lit: Highlight | null = null;
   /** The tab of fill patterns looked at; the one holding the pattern now when not set. */
   private group: TileGroup | null = null;
+  /** What a fill had before it became a line of its edge (pattern Empty), per area; for going back to Füllung. */
+  private filled = new WeakMap<object, FilledBefore>();
+  /** The same for the fill being changed now (also without a known area). */
+  private filledNow: FilledBefore | null = null;
 
   constructor(
     private root: HTMLElement,
@@ -266,6 +324,16 @@ export class StitchPanel {
     });
   }
 
+  /** What the panel shows now (null: nothing selected). */
+  get current(): StitchInfo | null {
+    return this.key === -1 ? null : this.info;
+  }
+
+  /** The kind of stitch whose settings are shown (in a mixed selection, the tab picked). */
+  get shownKind(): ObjectKind {
+    return this.kind;
+  }
+
   update(info: StitchInfo | null): void {
     this.info = info;
     if (!info || !Object.keys(info.measured).length) {
@@ -274,18 +342,136 @@ export class StitchPanel {
       return;
     }
     if (info.key === this.key) {
-      // The rung tool changes without a new selection: only its part is drawn anew.
-      const tools = JSON.stringify([info.direction, info.draw, info.guide, info.knockout, info.free]);
+      // A tool changes without a new selection: the panel is drawn anew for its buttons.
+      const tools = this.toolKey(info);
       if (tools !== this.tools) this.render();
       return;
     }
     this.key = info.key;
     this.group = null;
+    this.filledNow = null;
     this.draft = structuredClone(info.measured);
     this.lineDraft = info.path ? structuredClone(info.path.st) : null;
     if (this.tolerance !== null) for (const k of KINDS) if (this.draft[k]) this.draft[k]!.tolerance = this.tolerance;
     if (!info.measured[this.kind]) this.kind = KINDS.find((k) => info.measured[k])!;
+    // A border, shadow or echo: the settings changed are its fill's or line's.
+    const of = info.outline?.of;
+    if (of) {
+      this.draft = of.fill ? { fill: structuredClone(of.fill) } : {};
+      this.lineDraft = of.line ? structuredClone(of.line) : null;
+      if (of.fill) this.kind = 'fill';
+    }
     this.render();
+  }
+
+  private toolKey(info: StitchInfo): string {
+    return JSON.stringify([info.direction?.tool, info.direction?.rungs, info.direction?.cuts, info.draw?.tool, info.guide?.tool, info.points?.tool, info.knockout, info.free]);
+  }
+
+  /** What the kind switch knows about the selection (see kindWay). */
+  private kindState(): KindState {
+    const info = this.current;
+    if (!info) return { now: null };
+    return {
+      now: this.nowKind(),
+      asLine: !!info.asLine,
+      toSatin: info.toSatin,
+      draw: info.draw ? { single: info.draw.single, tool: info.draw.tool } : undefined,
+      empty: this.emptyLine(),
+      lineFills: info.path?.st.type === 'satin' && !info.path.traced,
+      blocked: !!info.outline || !!info.free?.on,
+    };
+  }
+
+  /** Whether the selection can be sewn as `to` now (see the kind switch). */
+  canConvert(to: 'fill' | 'satin' | 'line'): boolean {
+    return kindWay(this.kindState(), to) !== null;
+  }
+
+  convert(to: 'fill' | 'satin' | 'line'): void {
+    const way = kindWay(this.kindState(), to);
+    if (!way) return;
+    this.hooks.preview(null);
+    if (way === 'draw') return this.hooks.draw('tool');
+    if (way === 'empty') return this.pickPattern('none');
+    if (way === 'fill') return this.fillAgain();
+    this.hooks.convert(to);
+  }
+
+  /** An empty fill shown as a line: only its edge is sewn (not a wide line sewn as a fill). */
+  private emptyLine(): boolean {
+    const info = this.info;
+    return !!info && !info.outline && !info.path && !info.asLine && this.kind === 'fill' && this.draft.fill?.pattern === 'none';
+  }
+
+  /** An empty fill filled again as before it was emptied (Tatami when that is not known), its border as it was. */
+  private fillAgain(): void {
+    const s = this.draft.fill;
+    if (!s) return;
+    const area = this.info?.area;
+    const was = (area && this.filled.get(area)) ?? this.filledNow;
+    if (was) {
+      s.pattern = was.pattern;
+      s.deco = structuredClone(was.deco);
+      // The border it had keeps what was set for the line, and gets its thread back; none it had goes.
+      if (!was.border) delete s.border;
+      else if (s.border) {
+        if (was.border.color) s.border.color = { ...was.border.color };
+        if (was.border.link) s.border.link = was.border.link;
+      } else s.border = structuredClone(was.border);
+    } else s.pattern = 'tatami';
+    this.group = null;
+    this.render();
+    this.changed(true);
+  }
+
+  /** The fill pattern the panel shows now (the tile picked, also before it is measured back). */
+  get fillPattern(): string | null {
+    return this.current && this.kind === 'fill' ? (this.draft.fill?.pattern ?? null) : null;
+  }
+
+  /** A new random variant of the pattern (grain, swirls, meander, maze), when it has one. */
+  canReroll(): boolean {
+    const s = this.current && !this.current.path && this.kind === 'fill' ? this.draft.fill : null;
+    return !!s && ['grain', 'swirl', 'meander', 'maze'].includes(s.pattern);
+  }
+
+  reroll(): void {
+    const s = this.draft.fill;
+    if (!s || !this.canReroll()) return;
+    const d = this.deco(s);
+    let seed = d.seed ?? DECO_DEFAULTS.seed;
+    while (seed === (d.seed ?? DECO_DEFAULTS.seed)) seed = 1 + Math.floor(Math.random() * 99999);
+    d.seed = seed;
+    if (s.pattern === 'swirl') delete d.centers;
+    this.changed(true);
+  }
+
+  /** The actions of the panel for commands: left out of the correction, loosed, knocked out, a border's fill. */
+  lock(on: boolean): void {
+    this.hooks.lock(on);
+  }
+
+  free(on: boolean): void {
+    this.hooks.free(on);
+  }
+
+  knockout(on: boolean): void {
+    this.hooks.knockout(on);
+  }
+
+  outline(action: 'fill' | 'detach'): void {
+    this.hooks.outline(action);
+  }
+
+  /** The kind switch's position: a line, a fill, a satin, or none (running stitches). */
+  private nowKind(): 'fill' | 'satin' | 'line' | null {
+    const info = this.info;
+    if (!info) return null;
+    if (info.path && this.lineDraft) return 'line';
+    if (this.emptyLine()) return 'line';
+    if (this.kind === 'fill' || this.kind === 'satin') return this.kind;
+    return null;
   }
 
   private settings(): Settings {
@@ -316,6 +502,9 @@ export class StitchPanel {
       this.hooks.apply(this.settings());
       return;
     }
+    // A border of its own thread is sewn with its fill only when taken over (sewing it along for
+    // every step of a slider takes seconds): the fill alone would show nothing of it.
+    if (this.info?.outline?.of?.fill) return;
     if (this.frame) return;
     this.frame = requestAnimationFrame(() => {
       this.frame = 0;
@@ -325,391 +514,606 @@ export class StitchPanel {
 
   private render(): void {
     const info = this.info!;
-    this.tools = JSON.stringify([info.direction, info.draw, info.guide, info.knockout, info.free]);
-    const head = document.createElement('div');
-    head.className = 'stitch-head';
-    const h = Object.assign(document.createElement('h3'), { textContent: t('stitch.title') });
-    head.append(h);
-    const present = KINDS.filter((k) => info.measured[k]);
-    const parts: HTMLElement[] = [head];
-    if (present.length > 1) {
-      const tabs = document.createElement('div');
-      tabs.className = 'segmented stitch-tabs';
-      tabs.setAttribute('role', 'tablist');
-      for (const k of present) {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.setAttribute('role', 'tab');
-        b.setAttribute('aria-selected', String(k === this.kind));
-        b.className = k === this.kind ? 'active' : '';
-        b.innerHTML = `<span class="kind-icon">${KIND_ICON[k]}</span>`;
-        b.append(kindLabel(k));
-        b.addEventListener('click', () => {
-          this.kind = k;
-          this.hooks.preview(null);
-          this.render();
-        });
-        tabs.append(b);
-      }
-      parts.push(tabs);
-    } else {
-      h.innerHTML = '';
-      h.append(Object.assign(document.createElement('span'), { className: 'kind-icon', innerHTML: KIND_ICON[this.kind] }), t('stitch.titleOf', { kind: kindLabel(this.kind) }));
-    }
-    const n = info.counts[this.kind] ?? 0;
+    this.tools = this.toolKey(info);
+    const parts: HTMLElement[] = [];
     if (info.outline) {
-      // Its settings are the fill's: changed there, it follows.
-      h.innerHTML = '';
-      const of = info.outline.echo ? 'stitch.echoOf' : info.outline.shadow ? 'stitch.shadowOf' : info.outline.blend ? 'stitch.blendOf' : 'stitch.outline';
-      h.append(Object.assign(document.createElement('span'), { className: 'kind-icon', innerHTML: KIND_ICON[this.kind] }), t(`${of}.title` as Key));
-      const row = document.createElement('div');
-      row.className = 'direction-buttons';
-      if (info.outline.fill !== null) row.append(info.outline.shadow || info.outline.echo ? this.button('stitch.shadowOf.line', 'stitch.shadowOf.line.hint', () => this.hooks.outline('fill'), true) : this.button('stitch.outline.fill', 'stitch.outline.fill.hint', () => this.hooks.outline('fill'), true));
-      row.append(this.button('stitch.outline.detach', `${of}.detach.hint` as Key, () => this.hooks.outline('detach')));
-      parts.push(Object.assign(document.createElement('p'), { className: 'muted small', textContent: t(`${of}.text` as Key) }), row);
-      this.picker.close();
-      this.root.replaceChildren(...parts);
-      return;
+      parts.push(...(info.outline.of ? this.followerSections(info) : [this.outlineBlock(info)]));
+      return this.show(parts);
     }
-    if (info.path && this.lineDraft && !info.free?.on) {
-      parts.push(...this.lineGroup(h, info));
-      if (info.free?.can) parts.push(this.looseRow());
-      this.picker.close();
-      this.root.replaceChildren(...parts);
-      return;
-    }
-    if (n > 1) parts.push(Object.assign(document.createElement('p'), { className: 'muted small', textContent: t('stitch.many', { n }) }));
-    if (this.kind === 'fill' && info.shape && !info.free?.on) {
-      const trust = document.createElement('p');
-      trust.className = `shape-trust ${info.shape}`;
-      trust.setAttribute('role', 'status');
-      trust.innerHTML = info.shape === 'approximate' ? TRUST_ICON.warn : TRUST_ICON.ok;
-      trust.append(Object.assign(document.createElement('span'), { textContent: t(`stitch.shape.${info.shape}`) }));
-      parts.push(trust);
-    }
-    if (info.hand) {
-      const hand = document.createElement('p');
-      hand.className = 'shape-trust approximate';
-      hand.setAttribute('role', 'status');
-      hand.innerHTML = TRUST_ICON.warn;
-      hand.append(Object.assign(document.createElement('span'), { textContent: t('stitch.hand', { n: formatNumber(info.hand) }) }));
-      parts.push(hand);
-    }
-    if (info.fixed?.length) {
-      const fixed = document.createElement('p');
-      fixed.className = 'muted small fixed-note';
-      fixed.textContent = t('plan.fixed', { list: info.fixed.map(fixText).join(', ') });
-      parts.push(fixed);
-    }
+    const present = KINDS.filter((k) => info.measured[k]);
+    const line = !!(info.path && this.lineDraft);
+    if (present.length > 1 && !line) parts.push(this.kindTabs(present));
+    const status = this.statusLine(info);
+    if (status) parts.push(status);
     if (info.free?.on) {
-      // Loosed stitches: no setting sews them anew, they are edited as stitches.
-      parts.push(this.freeBlock(info.free.on), this.lockSwitch(info.lock));
-      this.picker.close();
-      this.root.replaceChildren(...parts);
-      if (this.lit) this.light(null);
-      return;
+      parts.push(this.sec('tools', 'stitches.sec.tools', [...this.freeRows(info.free.on), this.handRow(), this.lockSwitch(info.lock)]));
+      return this.show(parts);
     }
-    if (this.kind === 'fill' && info.knockout) parts.push(this.knockoutSwitch(info.knockout));
-    if (this.kind === 'fill' && info.asLine) parts.push(this.kindSwitch('fill', ['fill', 'line']), ...this.lineFillControls());
-    else if (this.kind === 'fill' || this.kind === 'satin') parts.push(this.kindSwitch(this.kind));
-    // A fill along a line becomes satin by its line, not by rungs drawn across it.
-    if (this.kind === 'fill' && info.draw?.single && !info.asLine) parts.push(this.drawTool(info.draw));
-    if (this.kind === 'satin' && info.direction) parts.push(this.directionTool(info.direction));
-    parts.push(...this.controls());
-    parts.push(this.lockSwitch(info.lock));
-    if (info.free?.can) parts.push(this.looseRow());
-    const note = Object.assign(document.createElement('p'), { className: 'muted small stitch-note', textContent: t(this.kind === 'fill' && info.shape ? 'stitch.undo' : this.kind === 'run' && info.line ? 'stitch.lineNote' : 'stitch.note') });
-    parts.push(note);
+    if (line) parts.push(...this.lineSections(info));
+    else if (this.emptyLine()) parts.push(...this.emptySections(info));
+    else if (this.kind === 'fill') parts.push(...this.fillSections(info));
+    else if (this.kind === 'satin') parts.push(...this.satinSections(info));
+    else parts.push(...this.runSections(info));
+    this.show(parts);
+  }
+
+  private show(parts: HTMLElement[]): void {
     this.picker.close();
     this.root.replaceChildren(...parts);
     // Its settings went away under the pointer (underlay off): nothing to show any more.
     if (this.lit && !this.root.querySelector(`.lit-${this.lit}`)) this.light(null);
   }
 
-  private light(what: Highlight | null): void {
-    if (what === this.lit) return;
-    this.lit = what;
-    this.hooks.highlight(what);
+  /** One group of the panel, folded or open as the user left it. */
+  private sec(id: string, title: Key, body: (HTMLElement | null | false)[], extra?: string): HTMLDetailsElement {
+    const nodes = body.filter((n): n is HTMLElement => !!n);
+    return section(`stitches.${id}`, title, nodes, extra ? { extra: h('span', { class: 'sec-extra' }, extra) } : {});
   }
 
-  /** Marks settings of the underlay: while the pointer or focus is on them, the underlay is shown on the canvas. */
-  private under(el: HTMLElement): HTMLElement {
-    return this.lights(el, 'under');
+  // Head ----------------------------------------------------------------------------------------
+
+  /** Which kind of the mixed selection the settings are for. */
+  private kindTabs(present: ObjectKind[]): HTMLElement {
+    const info = this.info!;
+    const row = h('div', { class: 'segmented stitch-tabs', role: 'tablist', 'aria-label': t('stitches.editFor') });
+    for (const k of present) {
+      const b = h('button', { type: 'button', role: 'tab', 'aria-selected': String(k === this.kind), class: k === this.kind ? 'active' : '' });
+      b.innerHTML = `<span class="kind-icon">${KIND_ICON[k]}</span>`;
+      b.append(kindLabel(k), h('span', { class: 'tab-count' }, formatNumber(info.counts[k] ?? 0)));
+      b.addEventListener('click', () => {
+        if (k === this.kind) return;
+        this.kind = k;
+        this.hooks.preview(null);
+        this.render();
+      });
+      row.append(b);
+    }
+    return h('div', { class: 'field stitch-for' }, h('span', { class: 'label' }, t('stitches.editFor')), row);
   }
 
-  /** While the pointer or focus is on `el`, what it sets (`what`) is shown on the canvas. */
-  private lights(el: HTMLElement, what: Highlight): HTMLElement {
-    el.classList.add(`lit-${what}`);
-    el.addEventListener('pointerenter', () => this.light(what));
-    el.addEventListener('pointerleave', () => {
-      if (!el.contains(document.activeElement)) this.light(null);
-    });
-    el.addEventListener('focusin', () => this.light(what));
-    el.addEventListener('focusout', (e) => {
-      if (!el.contains(e.relatedTarget as Node | null) && !el.matches(':hover')) this.light(null);
-    });
-    return el;
+  /**
+   * One compact line about the selection: how many objects, how far the shape is trusted, changes
+   * by hand that new settings replace, what the correction changed. The details are hints.
+   */
+  private statusLine(info: StitchInfo): HTMLElement | null {
+    const chips: HTMLElement[] = [];
+    const chip = (icon: keyof typeof STATUS_ICON | null, text: string, hint: string, tone = '') => {
+      const c = h('span', { class: `stitch-chip ${tone}`, title: hint, tabindex: 0 });
+      if (icon) c.innerHTML = STATUS_ICON[icon];
+      c.append(h('span', null, text));
+      chips.push(c);
+    };
+    const line = !!(info.path && this.lineDraft);
+    const n = info.counts[this.kind] ?? 0;
+    if (!line && n > 1) chip(null, t('stitches.many', { n: formatNumber(n) }), t('stitch.many', { n }));
+    if (line) chip('info', t(info.path!.traced ? 'stitches.line.traced' : 'stitches.line.drawn'), t(info.path!.traced ? 'stitch.lineTraced' : 'stitch.lineNote'));
+    else if (this.kind === 'fill' && info.shape && !info.free?.on) {
+      const warn = info.shape === 'approximate';
+      chip(warn ? 'warn' : 'ok', t(`stitches.trust.${info.shape}`), `${t(`stitch.shape.${info.shape}`)} ${t('stitch.undo')}`, warn ? 'warn' : 'ok');
+    }
+    if (info.hand) chip('warn', t('stitches.hand', { n: formatNumber(info.hand) }), t('stitch.hand', { n: formatNumber(info.hand) }), 'warn');
+    if (info.fixed?.length) chip('fix', t('stitches.fixed'), t('plan.fixed', { list: info.fixed.map(fixText).join(', ') }));
+    if (info.free?.on) chip('free', t(info.free.on === 'mixed' ? 'stitches.free.some' : 'stitches.free'), t(info.free.on === 'mixed' ? 'free.someText' : 'free.text'));
+    if (!chips.length) return null;
+    return h('div', { class: 'stitch-status', role: 'status' }, chips);
   }
 
-  private controls(): HTMLElement[] {
+  /** A border, second thread, shadow or echo: its settings are its parent's. */
+  private outlineBlock(info: StitchInfo): HTMLElement {
+    const o = info.outline!;
+    const of = o.echo ? 'stitch.echoOf' : o.shadow ? 'stitch.shadowOf' : o.blend ? 'stitch.blendOf' : 'stitch.outline';
+    const head = h('p', { class: 'stitch-chip outline-head', title: t(`${of}.text` as Key) });
+    head.innerHTML = STATUS_ICON.info;
+    head.append(h('span', null, t(`${of}.title` as Key)));
+    const row = h('div', { class: 'tool-row' });
+    if (o.fill !== null) row.append(this.button(o.shadow || o.echo ? 'stitch.shadowOf.line' : 'stitch.outline.fill', o.shadow || o.echo ? 'stitch.shadowOf.line.hint' : 'stitch.outline.fill.hint', () => this.hooks.outline('fill'), true));
+    row.append(this.button('stitch.outline.detach', `${of}.detach.hint` as Key, () => this.hooks.outline('detach')));
+    return h('div', { class: 'outline-block' }, head, h('p', { class: 'muted small' }, t(`${of}.text` as Key)), row);
+  }
+
+  /**
+   * A border, shadow or echo with the settings of its fill or line that make it: the same groups as
+   * there, changing the fill or line (one undo step each). Its fill or line is a click away, and it
+   * can become an object of its own.
+   */
+  private followerSections(info: StitchInfo): HTMLElement[] {
+    const o = info.outline!;
+    const of = o.of!;
+    const which = o.echo ? 'stitch.echoOf' : o.shadow ? 'stitch.shadowOf' : 'stitch.outline';
+    // One line with its two buttons: the chip names it short, its hint says it in full.
+    const head = h('p', { class: 'stitch-chip outline-head', title: `${t(`${which}.title` as Key)}. ${t(o.echo ? 'stitches.echoOf.of' : o.shadow ? 'stitches.shadowOf.of' : 'stitches.outline.of')}`, tabindex: 0 });
+    head.innerHTML = STATUS_ICON.info;
+    head.append(h('span', null, t(o.echo ? 'stitches.follower.echo' : o.shadow ? 'stitches.follower.shadow' : 'stitches.follower.outline')));
+    const actions = h('div', { class: 'follower-actions' });
+    if (o.fill !== null) actions.append(this.button(o.shadow || o.echo ? 'stitch.shadowOf.line' : 'stitch.outline.fill', o.shadow || o.echo ? 'stitch.shadowOf.line.hint' : 'stitch.outline.fill.hint', () => this.hooks.outline('fill')));
+    actions.append(this.button('stitch.outline.detach', `${which}.detach.hint` as Key, () => this.hooks.outline('detach')));
+    const top = h('div', { class: 'follower-head' }, head, actions);
+    if (of.fill) {
+      const s = this.draft.fill!;
+      const border = s.border ? t(`stitch.border.${isRunType(s.border.type) ? 'run' : s.border.type}` as Key) : t('stitches.sec.off');
+      return [top, this.borderSection(s, border)];
+    }
+    const st = this.lineDraft!;
+    const fx = o.shadow ? this.shadowGroup(st, of.color) : this.echoGroup(st, !!of.closed, of.color);
+    const on = o.shadow ? !!st.shadow : !!st.echo;
+    const extra: Key = !on ? 'stitches.sec.off' : o.shadow ? (`stitch.shadow.${st.shadow!.dir}` as Key) : 'stitch.echo';
+    return [top, this.sec('effects', 'stitches.sec.effects', [fx], t(extra))];
+  }
+
+  /**
+   * An empty fill as a line: its edge is all that is sewn, in the object's thread, so the border's
+   * settings are the line's ("nur Kontur"). Füllung fills it again.
+   */
+  private emptySections(info: StitchInfo): HTMLElement[] {
+    const s = this.draft.fill!;
+    s.border ??= { type: 'triple', width: BORDER_WIDTH };
+    const parts = this.pathStitch(s.border, (b) => {
+      if (b) s.border = Object.assign(s.border ?? b, b);
+    }, false, true, true);
+    const st = s.border;
+    const kindName = t(`stitch.border.${isRunType(st.type) ? 'run' : st.type}` as Key);
+    return [
+      this.sec('kind', 'stitches.sec.kind', [this.kindSwitch(info), parts.type], kindName),
+      parts.look.length ? this.sec('look', 'stitches.sec.look', parts.look) : null,
+      parts.hold.length ? this.sec('hold', 'stitches.sec.hold', parts.hold) : null,
+      this.sec('tools', 'stitches.sec.tools', [this.handRow(), this.lockSwitch(info.lock), info.free?.can ? this.looseRow() : null]),
+    ].filter((x): x is HTMLDetailsElement => !!x);
+  }
+
+  // Sections per kind -------------------------------------------------------------------------------
+
+  private fillSections(info: StitchInfo): HTMLElement[] {
+    const s = this.draft.fill!;
+    const open = isOpenPattern(s.pattern);
+    const look: (HTMLElement | null)[] = [];
+    const hold: (HTMLElement | null)[] = [];
+    const tools: (HTMLElement | null)[] = [];
+    if (info.asLine) look.push(...this.lineFillControls());
+    if (open) {
+      look.push(...this.openControls(s));
+      hold.push(this.expandSlider(s));
+    } else {
+      look.push(...this.coverLook(s));
+      hold.push(...this.coverHold(s));
+    }
+    if (s.pattern === 'guided') tools.push(this.guideRow(s, info.guide));
+    if (POINTED.includes(s.pattern)) tools.push(this.pointRow(s, info.points));
+    // A fill along a line becomes satin by its line, not by rungs drawn across it.
+    if (!info.asLine && info.draw) tools.push(this.toolRow('stitch.direction', 'stitches.tool.toSatin', 'stitch.draw.hint', !!info.draw.tool, info.draw.single ? null : t('stitch.direction.single')));
+    if (info.knockout) tools.push(this.knockoutSwitch(info.knockout));
+    tools.push(this.handRow(), this.lockSwitch(info.lock), info.free?.can ? this.looseRow() : null);
+    const border = s.border ? t(`stitch.border.${isRunType(s.border.type) ? 'run' : s.border.type}` as Key) : t('stitches.sec.off');
+    // Empty: its border is all there is to set.
+    if (s.pattern === 'none')
+      return [
+        this.sec('kind', 'stitches.sec.kind', [this.kindSwitch(info), this.patterns(s)], t('stitch.pattern.none')),
+        this.borderSection(s, border),
+        this.sec('tools', 'stitches.sec.tools', tools),
+      ];
+    return [
+      this.sec('kind', 'stitches.sec.kind', [this.kindSwitch(info), this.patterns(s)], t(`stitch.pattern.${s.pattern}` as Key)),
+      this.sec('look', 'stitches.sec.look', look),
+      this.borderSection(s, border),
+      hold.some(Boolean) ? this.sec('hold', 'stitches.sec.hold', hold) : null,
+      this.sec('tools', 'stitches.sec.tools', tools),
+    ].filter((x): x is HTMLDetailsElement => !!x);
+  }
+
+  /** Gestaltung of a covering fill: the rows' spacing and direction, the stitches, decorations. */
+  private coverLook(s: FillSettings): HTMLElement[] {
+    const mm = (d: number) => (v: number) => `${formatNumber(v, d)} mm`;
+    const auto = this.info!.auto;
+    const density = (label: Key, get: () => number, set: (v: number) => void, own = false) =>
+      this.slider({
+        label,
+        hint: 'stitch.density.hint',
+        min: 0.2,
+        max: 1.2,
+        step: 0.01,
+        get,
+        set,
+        fmt: mm(2),
+        band: this.info!.recommended,
+        note: (v) => t('stitch.densityNote', { d: formatNumber(1 / v, 1) }),
+        ...(own && auto ? { auto: { is: () => Math.abs(get() - auto.fillSpacing) < 0.005, reset: () => set(auto.fillSpacing), fabric: true } } : {}),
+      });
+    const out: HTMLElement[] = [];
+    const d = this.deco(s);
+    if (s.pattern === 'gradient' && d.fade) {
+      // One layer of a two-color blend (see blendObject): its density fades evenly to nothing.
+      out.push(
+        density('stitch.density', () => s.spacing, (v) => (s.spacing = v)),
+        this.choice<'out' | 'in'>('stitch.fade', ['out', 'in'], d.fade, (v) => `stitch.fade.${v}` as Key, (v) => (d.fade = v)),
+      );
+    } else if (s.pattern === 'gradient') {
+      out.push(
+        density('stitch.densityFrom', () => s.spacing, (v) => (s.spacing = v)),
+        density('stitch.densityTo', () => s.spacingEnd, (v) => (s.spacingEnd = v)),
+      );
+    } else if (CURVED_GRADIENT.includes(s.pattern)) {
+      // Curved rows may grow lighter across the shape too: one switch, then the end spacing.
+      const on = !!s.gradient;
+      out.push(
+        density(on ? 'stitch.densityFrom' : 'stitch.density', () => s.spacing, (v) => (s.spacing = v), !on),
+        this.check('stitch.gradient', 'stitch.gradient.hint', () => on, (v) => {
+          if (v) {
+            s.gradient = true;
+            // An end spacing like the start one would show no change: start from a clear one.
+            if (Math.abs(s.spacingEnd - s.spacing) < 0.05) s.spacingEnd = Math.min(1.2, Math.round(s.spacing * 250) / 100);
+          } else delete s.gradient;
+          this.render();
+        }),
+      );
+      if (on) out.push(density('stitch.densityTo', () => s.spacingEnd, (v) => (s.spacingEnd = v)));
+    } else out.push(density('stitch.density', () => s.spacing, (v) => (s.spacing = v), true));
+    // A gradient is where a color blend is looked for: the same action as in the object panel.
+    if (s.pattern === 'gradient' && this.info!.blend) {
+      const b: HTMLButtonElement = this.button(d.blend ? 'stitch.blend.change' : 'object.blend', 'object.blend.hint', () => this.hooks.blend(b));
+      out.push(h('div', { class: 'tool-row' }, b));
+    }
+    if (ANGLED.includes(s.pattern)) out.push(this.angle(s));
+    if (s.pattern === 'waves') {
+      out.push(
+        this.slider({ label: 'stitch.waveHeight', hint: 'stitch.waveHeight.hint', min: 0.5, max: 8, step: 0.1, get: () => d.height ?? DECO_DEFAULTS.height, set: (v) => (d.height = v), fmt: mm(1), auto: this.unset(d, 'height') }),
+        this.slider({ label: 'stitch.waveLength', hint: 'stitch.waveLength.hint', min: 6, max: 50, step: 0.5, get: () => d.length ?? DECO_DEFAULTS.length, set: (v) => (d.length = v), fmt: mm(1), auto: this.unset(d, 'length') }),
+      );
+    }
+    if (s.pattern === 'grain') {
+      out.push(
+        this.slider({ label: 'stitch.grainStrength', hint: 'stitch.grainStrength.hint', min: 0.1, max: 1, step: 0.05, get: () => d.strength ?? DECO_DEFAULTS.strength, set: (v) => (d.strength = v), fmt: (v) => `${formatNumber(v * 100, 0)} %`, auto: this.unset(d, 'strength') }),
+        this.rerollRow(),
+      );
+    }
+    if (s.pattern === 'swirl') out.push(this.rerollRow());
+    out.push(
+      this.slider({
+        label: 'stitch.length',
+        hint: 'stitch.length.hint',
+        min: 1.5,
+        max: 7,
+        step: 0.1,
+        get: () => s.stitch,
+        set: (v) => (s.stitch = v),
+        fmt: mm(1),
+        ...(auto ? { auto: { is: () => Math.abs(s.stitch - auto.stitch) < 0.05, reset: () => (s.stitch = auto.stitch) } } : {}),
+      }),
+    );
+    if (s.pattern === 'tatami') out.push(this.offsets(s), ...this.embossControls(s));
+    return out;
+  }
+
+  /** Stoff und Halt of a covering fill: underlay, edges against the pull, how exact curves are. */
+  private coverHold(s: FillSettings): HTMLElement[] {
     const mm = (d: number) => (v: number) => `${formatNumber(v, d)} mm`;
     const signed = (v: number) => `${v > 0 ? '+' : v < 0 ? '−' : '±'}${formatNumber(Math.abs(v), 2)} mm`;
-    if (this.kind === 'fill') {
-      const s = this.draft.fill!;
-      const density = (label: Key, get: () => number, set: (v: number) => void) =>
-        this.slider({
-          label,
-          hint: 'stitch.density.hint',
-          min: 0.2,
-          max: 1.2,
-          step: 0.01,
-          get,
-          set,
-          fmt: mm(2),
-          band: this.info!.recommended,
-          note: (v) => t('stitch.densityNote', { d: formatNumber(1 / v, 1) }),
-        });
-      const out: HTMLElement[] = [this.patterns(s)];
-      // Empty: its border is all there is to set.
-      if (s.pattern === 'none') {
-        out.push(this.borderGroup(s));
-        return out;
-      }
-      // An open pattern is one line: no density, edges or underlay to set.
-      if (isOpenPattern(s.pattern)) {
-        out.push(
-          ...this.openControls(s),
-          this.slider({ label: 'stitch.expand', hint: 'stitch.expand.hint', min: -3, max: 3, step: 0.05, get: () => s.expand ?? 0, set: (v) => (s.expand = v), fmt: signed }),
-          this.borderGroup(s),
-        );
-        return out;
-      }
-      const d = this.deco(s);
-      if (s.pattern === 'guided') out.push(this.guideTool(s, this.info!.guide));
-      if (POINTED.includes(s.pattern)) out.push(this.pointTool(s, this.info!.points));
-      if (s.pattern === 'gradient' && d.fade) {
-        // One layer of a two-color blend (see blendObject): its density fades evenly to nothing.
-        out.push(
-          density('stitch.density', () => s.spacing, (v) => (s.spacing = v)),
-          this.choice<'out' | 'in'>('stitch.fade', ['out', 'in'], d.fade, (v) => `stitch.fade.${v}` as Key, (v) => (d.fade = v)),
-        );
-      } else if (s.pattern === 'gradient') {
-        out.push(
-          density('stitch.densityFrom', () => s.spacing, (v) => (s.spacing = v)),
-          density('stitch.densityTo', () => s.spacingEnd, (v) => (s.spacingEnd = v)),
-        );
-      } else out.push(density('stitch.density', () => s.spacing, (v) => (s.spacing = v)));
-      // A gradient is where a color blend is looked for: the same action as in the object panel.
-      if (s.pattern === 'gradient' && this.info!.blend) {
-        const b: HTMLButtonElement = this.button(d.blend ? 'stitch.blend.change' : 'object.blend', 'object.blend.hint', () => this.hooks.blend(b));
-        const row = Object.assign(document.createElement('div'), { className: 'direction-buttons' });
-        row.append(b);
-        out.push(row);
-      }
-      if (ANGLED.includes(s.pattern)) out.push(this.angle(s));
-      if (s.pattern === 'waves') {
-        out.push(
-          this.slider({ label: 'stitch.waveHeight', hint: 'stitch.waveHeight.hint', min: 0.5, max: 8, step: 0.1, get: () => d.height ?? DECO_DEFAULTS.height, set: (v) => (d.height = v), fmt: mm(1) }),
-          this.slider({ label: 'stitch.waveLength', hint: 'stitch.waveLength.hint', min: 6, max: 50, step: 0.5, get: () => d.length ?? DECO_DEFAULTS.length, set: (v) => (d.length = v), fmt: mm(1) }),
-        );
-      }
-      if (s.pattern === 'grain') {
-        out.push(
-          this.slider({ label: 'stitch.grainStrength', hint: 'stitch.grainStrength.hint', min: 0.1, max: 1, step: 0.05, get: () => d.strength ?? DECO_DEFAULTS.strength, set: (v) => (d.strength = v), fmt: (v) => `${formatNumber(v * 100, 0)} %` }),
-          this.reroll(s),
-        );
-      }
-      if (s.pattern === 'swirl') out.push(this.reroll(s, true));
-      out.push(this.slider({ label: 'stitch.length', hint: 'stitch.length.hint', min: 1.5, max: 7, step: 0.1, get: () => s.stitch, set: (v) => (s.stitch = v), fmt: mm(1) }));
-      if (s.pattern === 'tatami') out.push(this.offsets(s), ...this.embossControls(s));
-      // Straight rows cannot stray from their line; curved ones get shorter stitches in tight bends.
-      if (CURVED.includes(s.pattern)) out.push(this.toleranceSlider(s));
+    const pull = this.info!.fabricPull?.fill;
+    const out: HTMLElement[] = [
+      this.under(
+        this.choice<FillUnder>(
+          'stitch.underlay',
+          FILL_UNDERS,
+          !s.underlay ? 'off' : s.underCross ? 'cross' : 'single',
+          (v) => `stitch.fillUnder.${v}` as Key,
+          (v) => {
+            s.underlay = v !== 'off';
+            s.underCross = v === 'cross';
+          },
+          false,
+          // Pointing at another kind shows it on the canvas before it is picked.
+          (v) => this.hooks.preview(v === null ? null : { kind: 'fill', s: { ...s, underlay: v !== 'off', underCross: v === 'cross' } }),
+        ),
+      ),
+    ];
+    if (s.underlay) {
       out.push(
-        this.slider({ label: 'stitch.edge', hint: 'stitch.edge.hint', min: -0.4, max: 0.6, step: 0.05, get: () => s.edge, set: (v) => ((s.edge = v), delete s.edgeAuto), fmt: signed }),
-        this.check('stitch.edgeAuto', 'stitch.edgeAuto.hint', () => !!s.edgeAuto, (v) => {
-          const e = this.info!.fabricPull?.fill;
-          if (v && e !== undefined) {
-            s.edgeAuto = true;
-            s.edge = e;
-          } else delete s.edgeAuto;
-          this.render();
-        }),
-        this.slider({ label: 'stitch.expand', hint: 'stitch.expand.hint', min: -3, max: 3, step: 0.05, get: () => s.expand ?? 0, set: (v) => (s.expand = v), fmt: signed }),
+        this.under(this.check('stitch.underCover', 'stitch.underCover.hint', () => !!s.underCover, (v) => (v ? (s.underCover = true) : delete s.underCover))),
         this.under(
-          this.choice<FillUnder>(
-            'stitch.underlay',
-            FILL_UNDERS,
-            !s.underlay ? 'off' : s.underCross ? 'cross' : 'single',
-            (v) => `stitch.fillUnder.${v}` as Key,
-            (v) => {
-              s.underlay = v !== 'off';
-              s.underCross = v === 'cross';
-            },
-            false,
-            // Pointing at another kind shows it on the canvas before it is picked.
-            (v) => this.hooks.preview(v === null ? null : { kind: 'fill', s: { ...s, underlay: v !== 'off', underCross: v === 'cross' } }),
+          this.choice<'mm' | 'share'>(
+            'stitch.underInsetBy',
+            ['mm', 'share'],
+            s.underInsetShare === undefined ? 'mm' : 'share',
+            (v) => `stitch.underInsetBy.${v}` as Key,
+            (v) => (s.underInsetShare = v === 'share' ? 0.1 : undefined),
+            true,
           ),
         ),
-      );
-      if (s.underlay) {
-        out.push(this.under(this.check('stitch.underCover', 'stitch.underCover.hint', () => !!s.underCover, (v) => (v ? (s.underCover = true) : delete s.underCover))));
-        out.push(
-          this.under(
-            this.choice<'mm' | 'share'>(
-              'stitch.underInsetBy',
-              ['mm', 'share'],
-              s.underInsetShare === undefined ? 'mm' : 'share',
-              (v) => `stitch.underInsetBy.${v}` as Key,
-              (v) => (s.underInsetShare = v === 'share' ? 0.1 : undefined),
-              true,
-            ),
-          ),
-          this.under(
-            s.underInsetShare === undefined
-              ? this.slider({
-                  label: 'stitch.underInset',
-                  hint: 'stitch.underInset.hint',
-                  min: 0,
-                  max: 10,
-                  step: 0.05,
-                  get: () => s.underInset ?? UNDERLAY_INSET,
-                  set: (v) => (s.underInset = v),
-                  fmt: mm(2),
-                  // Up to where the underlay still has room (the deepest point less what is too thin to sew).
-                  band: this.info!.depth === undefined ? undefined : [0, Math.max(0, this.info!.depth - 0.6)],
-                  bandHint: 'stitch.underInset.band',
-                })
-              : this.slider({
-                  label: 'stitch.underInsetShare',
-                  hint: 'stitch.underInsetShare.hint',
-                  min: 0,
-                  max: 0.3,
-                  step: 0.01,
-                  get: () => s.underInsetShare ?? 0,
-                  set: (v) => (s.underInsetShare = v),
-                  fmt: (v) => `${formatNumber(v * 100, 0)} %`,
-                }),
-          ),
-          this.under(
-            this.slider({
-              label: 'stitch.underSpacing',
-              hint: 'stitch.underSpacing.hint',
-              min: 0.6,
-              max: 5,
-              step: 0.1,
-              get: () => s.underSpacing ?? Math.max(1.2, 3 * s.spacing),
-              set: (v) => (s.underSpacing = v),
-              fmt: mm(1),
-            }),
-          ),
-        );
-      }
-      out.push(this.borderGroup(s));
-      return out;
-    }
-    if (this.kind === 'satin') {
-      const s = this.draft.satin!;
-      const e = s.type === 'e';
-      const width = (label: Key, get: () => number, set: (v: number) => void) =>
-        this.slider({ label, hint: 'stitch.width.hint', min: -3, max: 3, step: 0.05, get, set, fmt: signed });
-      this.sides ||= s.edgeB !== undefined && s.edgeB !== s.edge;
-      const out: HTMLElement[] = [
-        this.choice<SatinType>('stitch.satinType', ['satin', 'e'], s.type ?? 'satin', (v) => `stitch.satinType.${v}` as Key, (v) => {
-          s.type = v;
-          // An E stitch has its stitches across a few mm apart, a satin a fraction of a mm.
-          s.spacing = v === 'e' ? Math.max(s.spacing, 2.5) : Math.min(s.spacing, 0.4);
-        }),
-        e
-          ? this.slider({ label: 'stitch.density', hint: 'stitch.eSpacing.hint', min: 1, max: 6, step: 0.1, get: () => s.spacing, set: (v) => (s.spacing = v), fmt: mm(1) })
-          : this.slider({ label: 'stitch.density', hint: 'stitch.satinDensity.hint', min: 0.2, max: 1, step: 0.01, get: () => s.spacing, set: (v) => (s.spacing = v), fmt: mm(2), band: this.info!.recommended }),
-      ];
-      if (this.sides) {
-        out.push(
-          width('stitch.widthLeft', () => s.edge, (v) => ((s.edge = v), delete s.edgeAuto)),
-          width('stitch.widthRight', () => s.edgeB ?? s.edge, (v) => ((s.edgeB = v), delete s.edgeAuto)),
-        );
-      } else out.push(width('stitch.width', () => s.edge, (v) => ((s.edge = v), delete s.edgeB, delete s.edgeAuto)));
-      out.push(
-        this.check('stitch.edgeAuto', 'stitch.edgeAuto.satin.hint', () => !!s.edgeAuto, (v) => {
-          const e = this.info!.fabricPull?.satin;
-          if (v && e) {
-            s.edgeAuto = true;
-            s.edge = e.edge;
-            s.edgeShare = e.edgeShare;
-            delete s.edgeB;
-            this.sides = false;
-          } else delete s.edgeAuto;
-          this.render();
-        }),
-      );
-      out.push(
-        this.check('stitch.sides', 'stitch.sides.hint', () => this.sides, (v) => {
-          this.sides = v;
-          if (v) s.edgeB = s.edge;
-          else delete s.edgeB;
-          this.render();
-        }),
-        this.slider({
-          label: 'stitch.widthShare',
-          hint: 'stitch.widthShare.hint',
-          min: 0,
-          max: 0.2,
-          step: 0.01,
-          get: () => s.edgeShare ?? 0,
-          set: (v) => ((s.edgeShare = v), delete s.edgeAuto),
-          fmt: (v) => `+${formatNumber(v * 100, 0)} %`,
-        }),
-      );
-      if (!e) out.push(this.check('stitch.short', 'stitch.short.hint', () => s.short, (v) => (s.short = v)));
-      if (!e) out.push(this.check('stitch.byWidth', 'stitch.byWidth.hint', () => !!s.byWidth, (v) => (v ? (s.byWidth = true) : delete s.byWidth)));
-      out.push(
-        this.slider({ label: 'stitch.split', hint: 'stitch.split.hint', min: 4, max: SATIN_SPLIT, step: 0.5, get: () => s.split ?? SATIN_SPLIT, set: (v) => (s.split = v), fmt: mm(1) }),
-        this.check('stitch.stagger', 'stitch.stagger.hint', () => s.stagger ?? true, (v) => (s.stagger = v)),
         this.under(
-          this.check('stitch.underlay', 'stitch.underlay.satin', () => s.underlay, (v) => {
-            s.underlay = v;
-            this.render();
+          s.underInsetShare === undefined
+            ? this.slider({
+                label: 'stitch.underInset',
+                hint: 'stitch.underInset.hint',
+                min: 0,
+                max: 10,
+                step: 0.05,
+                get: () => s.underInset ?? UNDERLAY_INSET,
+                set: (v) => (s.underInset = v),
+                fmt: mm(2),
+                // Up to where the underlay still has room (the deepest point less what is too thin to sew).
+                band: this.info!.depth === undefined ? undefined : [0, Math.max(0, this.info!.depth - 0.6)],
+                bandHint: 'stitch.underInset.band',
+                auto: this.unset(s, 'underInset'),
+              })
+            : this.slider({
+                label: 'stitch.underInsetShare',
+                hint: 'stitch.underInsetShare.hint',
+                min: 0,
+                max: 0.3,
+                step: 0.01,
+                get: () => s.underInsetShare ?? 0,
+                set: (v) => (s.underInsetShare = v),
+                fmt: (v) => `${formatNumber(v * 100, 0)} %`,
+              }),
+        ),
+        this.under(
+          this.slider({
+            label: 'stitch.underSpacing',
+            hint: 'stitch.underSpacing.hint',
+            min: 0.6,
+            max: 5,
+            step: 0.1,
+            get: () => s.underSpacing ?? Math.max(1.2, 3 * s.spacing),
+            set: (v) => (s.underSpacing = v),
+            fmt: mm(1),
+            auto: this.unset(s, 'underSpacing'),
           }),
         ),
       );
-      if (s.underlay) out.push(this.under(this.choice<UnderlayKind>('stitch.under.kind', UNDERLAYS, s.under ?? 'auto', (v) => `stitch.under.${v}` as Key, (v) => (s.under = v), true)));
-      // Along the middle there is nothing to keep inside.
-      if (s.underlay && s.under !== 'center') {
-        out.push(
-          this.under(
-            this.choice<'mm' | 'share'>(
-              'stitch.underInsetBy',
-              ['mm', 'share'],
-              s.underInsetShare === undefined ? 'mm' : 'share',
-              (v) => `stitch.underInsetBy.${v}` as Key,
-              (v) => (s.underInsetShare = v === 'share' ? 0.15 : undefined),
-              true,
-            ),
-          ),
-          this.under(
-            s.underInsetShare === undefined
-              ? this.slider({ label: 'stitch.underInset', hint: 'stitch.satinUnderInset.hint', min: 0, max: 3, step: 0.05, get: () => s.underInset ?? 0.4, set: (v) => (s.underInset = v), fmt: mm(2) })
-              : this.slider({
-                  label: 'stitch.underInsetShare',
-                  hint: 'stitch.satinUnderInsetShare.hint',
-                  min: 0,
-                  max: 0.45,
-                  step: 0.01,
-                  get: () => s.underInsetShare ?? 0,
-                  set: (v) => (s.underInsetShare = v),
-                  fmt: (v) => `${formatNumber(v * 100, 0)} %`,
-                }),
-          ),
-        );
-      }
-      return out;
     }
+    out.push(
+      this.slider({
+        label: 'stitch.edge',
+        hint: 'stitch.edgeAuto.hint',
+        min: -0.4,
+        max: 0.6,
+        step: 0.05,
+        get: () => s.edge,
+        set: (v) => ((s.edge = v), delete s.edgeAuto),
+        fmt: signed,
+        ...(pull !== undefined
+          ? {
+              auto: {
+                is: () => !!s.edgeAuto,
+                reset: () => {
+                  s.edgeAuto = true;
+                  s.edge = pull;
+                },
+                fabric: true,
+              },
+            }
+          : {}),
+      }),
+      this.expandSlider(s),
+    );
+    // Straight rows cannot stray from their line; curved ones get shorter stitches in tight bends.
+    if (CURVED.includes(s.pattern)) out.push(this.toleranceSlider(s));
+    return out;
+  }
+
+  private expandSlider(s: FillSettings): HTMLElement {
+    const signed = (v: number) => `${v > 0 ? '+' : v < 0 ? '−' : '±'}${formatNumber(Math.abs(v), 2)} mm`;
+    return this.slider({ label: 'stitch.expand', hint: 'stitch.expand.hint', min: -3, max: 3, step: 0.05, get: () => s.expand ?? 0, set: (v) => (s.expand = v || undefined), fmt: signed, auto: this.unset(s, 'expand') });
+  }
+
+  private satinSections(info: StitchInfo): HTMLElement[] {
+    const s = this.draft.satin!;
+    const e = s.type === 'e';
+    const mm = (d: number) => (v: number) => `${formatNumber(v, d)} mm`;
+    const signed = (v: number) => `${v > 0 ? '+' : v < 0 ? '−' : '±'}${formatNumber(Math.abs(v), 2)} mm`;
+    const auto = info.auto;
+    const pull = info.fabricPull?.satin;
+    const pullAuto = pull
+      ? {
+          is: () => !!s.edgeAuto,
+          reset: () => {
+            s.edgeAuto = true;
+            s.edge = pull.edge;
+            s.edgeShare = pull.edgeShare;
+            delete s.edgeB;
+            this.sides = false;
+          },
+          fabric: true,
+        }
+      : undefined;
+    const width = (label: Key, get: () => number, set: (v: number) => void) => this.slider({ label, hint: 'stitch.edgeAuto.satin.hint', min: -3, max: 3, step: 0.05, get, set, fmt: signed, auto: pullAuto });
+    this.sides ||= s.edgeB !== undefined && s.edgeB !== s.edge;
+    const kind = [
+      this.kindSwitch(info),
+      this.choice<SatinType>('stitch.satinType', ['satin', 'e'], s.type ?? 'satin', (v) => `stitch.satinType.${v}` as Key, (v) => {
+        s.type = v;
+        // An E stitch has its stitches across a few mm apart, a satin a fraction of a mm.
+        s.spacing = v === 'e' ? Math.max(s.spacing, 2.5) : Math.min(s.spacing, 0.4);
+      }),
+    ];
+    const look: HTMLElement[] = [
+      e
+        ? this.slider({ label: 'stitch.density', hint: 'stitch.eSpacing.hint', min: 1, max: 6, step: 0.1, get: () => s.spacing, set: (v) => (s.spacing = v), fmt: mm(1) })
+        : this.slider({
+            label: 'stitch.density',
+            hint: 'stitch.satinDensity.hint',
+            min: 0.2,
+            max: 1,
+            step: 0.01,
+            get: () => s.spacing,
+            set: (v) => (s.spacing = v),
+            fmt: mm(2),
+            band: info.recommended,
+            ...(auto ? { auto: { is: () => Math.abs(s.spacing - auto.satinSpacing) < 0.005, reset: () => (s.spacing = auto.satinSpacing), fabric: true } } : {}),
+          }),
+    ];
+    if (!e) look.push(this.check('stitch.short', 'stitch.short.hint', () => s.short, (v) => (s.short = v)));
+    if (!e) look.push(this.check('stitch.byWidth', 'stitch.byWidth.hint', () => !!s.byWidth, (v) => (v ? (s.byWidth = true) : delete s.byWidth)));
+    if (!e) {
+      // Pointing at a side shows its fringe on the canvas before it is picked.
+      const peek = (v: FringeSide | undefined | null) => {
+        if (v === null) return this.hooks.preview(null);
+        const { fringeSide: _f, ...rest } = s;
+        this.hooks.preview({ kind: 'satin', s: v ? { ...rest, fringeSide: v } : rest });
+      };
+      look.push(...this.fringeControls(s, () => {}, peek));
+    }
+    look.push(
+      this.slider({ label: 'stitch.split', hint: 'stitch.split.hint', min: 4, max: SATIN_SPLIT_MAX, step: 0.5, get: () => s.split ?? SATIN_SPLIT, set: (v) => (s.split = v), fmt: mm(1), auto: this.unset(s, 'split') }),
+      this.check('stitch.stagger', 'stitch.stagger.hint', () => s.stagger ?? true, (v) => (s.stagger = v)),
+    );
+    const hold: HTMLElement[] = [];
+    if (this.sides) {
+      hold.push(
+        width('stitch.widthLeft', () => s.edge, (v) => ((s.edge = v), delete s.edgeAuto)),
+        width('stitch.widthRight', () => s.edgeB ?? s.edge, (v) => ((s.edgeB = v), delete s.edgeAuto)),
+      );
+    } else hold.push(width('stitch.width', () => s.edge, (v) => ((s.edge = v), delete s.edgeB, delete s.edgeAuto)));
+    hold.push(
+      this.slider({
+        label: 'stitch.widthShare',
+        hint: 'stitch.widthShare.hint',
+        min: 0,
+        max: 0.2,
+        step: 0.01,
+        get: () => s.edgeShare ?? 0,
+        set: (v) => ((s.edgeShare = v), delete s.edgeAuto),
+        fmt: (v) => `+${formatNumber(v * 100, 0)} %`,
+        auto: pullAuto,
+      }),
+      this.check('stitch.sides', 'stitch.sides.hint', () => this.sides, (v) => {
+        this.sides = v;
+        if (v) s.edgeB = s.edge;
+        else delete s.edgeB;
+        this.render();
+      }),
+      this.under(
+        this.check('stitch.underlay', 'stitch.underlay.satin', () => s.underlay, (v) => {
+          s.underlay = v;
+          this.render();
+        }),
+      ),
+    );
+    if (s.underlay) hold.push(this.under(this.choice<UnderlayKind>('stitch.under.kind', UNDERLAYS, s.under ?? 'auto', (v) => `stitch.under.${v}` as Key, (v) => (s.under = v), true)));
+    // Along the middle there is nothing to keep inside.
+    if (s.underlay && s.under !== 'center') {
+      hold.push(
+        this.under(
+          this.choice<'mm' | 'share'>(
+            'stitch.underInsetBy',
+            ['mm', 'share'],
+            s.underInsetShare === undefined ? 'mm' : 'share',
+            (v) => `stitch.underInsetBy.${v}` as Key,
+            (v) => (s.underInsetShare = v === 'share' ? 0.15 : undefined),
+            true,
+          ),
+        ),
+        this.under(
+          s.underInsetShare === undefined
+            ? this.slider({ label: 'stitch.underInset', hint: 'stitch.satinUnderInset.hint', min: 0, max: 3, step: 0.05, get: () => s.underInset ?? 0.4, set: (v) => (s.underInset = v), fmt: mm(2), auto: this.unset(s, 'underInset') })
+            : this.slider({
+                label: 'stitch.underInsetShare',
+                hint: 'stitch.satinUnderInsetShare.hint',
+                min: 0,
+                max: 0.45,
+                step: 0.01,
+                get: () => s.underInsetShare ?? 0,
+                set: (v) => (s.underInsetShare = v),
+                fmt: (v) => `${formatNumber(v * 100, 0)} %`,
+              }),
+        ),
+      );
+    }
+    const d = info.direction;
+    const state = !d ? null : !d.single ? t('stitch.direction.single') : d.rungs === null ? t('stitches.bar.follow') : d.rungs === 0 ? t('stitches.bar.even') : t('stitches.bar.rungs', { n: d.rungs });
+    const sections = d?.cuts ? `${state} · ${t('stitches.bar.cuts', { n: d.cuts + 1 })}` : state;
+    const tools = [
+      d ? this.toolRow('stitch.direction', 'stitches.tool.direction', 'stitch.direction.tool.hint', d.tool, sections) : null,
+      this.handRow(),
+      this.lockSwitch(info.lock),
+      info.free?.can ? this.looseRow() : null,
+    ];
+    return [
+      this.sec('kind', 'stitches.sec.kind', kind, t(`stitch.satinType.${s.type ?? 'satin'}` as Key)),
+      this.sec('look', 'stitches.sec.look', look),
+      this.sec('hold', 'stitches.sec.hold', hold),
+      this.sec('tools', 'stitches.sec.tools', tools),
+    ];
+  }
+
+  /**
+   * The fringe of a satin (an object, or a satin line): how deep, and on which side (shown once
+   * there is a fringe). `set` takes each change over; `peek` shows a side before it is picked.
+   */
+  private fringeControls(o: { fringe?: number; fringeSide?: FringeSide }, set: () => void, peek?: (side: FringeSide | undefined | null) => void): HTMLElement[] {
+    type Side = 'both' | FringeSide;
+    const side = this.choice<Side>(
+      'stitch.fringeSide',
+      ['both', 'left', 'right'],
+      o.fringeSide ?? 'both',
+      (v) => `stitch.fringeSide.${v}` as Key,
+      (v) => {
+        if (v === 'both') delete o.fringeSide;
+        else o.fringeSide = v;
+        set();
+      },
+      true,
+      peek && ((v) => peek(v === null ? null : v === 'both' ? undefined : v)),
+    );
+    side.style.display = o.fringe ? '' : 'none';
+    const depth = this.slider({
+      label: 'stitch.fringe',
+      hint: 'stitch.fringe.hint',
+      min: 0,
+      max: 5,
+      step: 0.1,
+      get: () => o.fringe ?? 0,
+      set: (v) => {
+        if (v) o.fringe = v;
+        else delete o.fringe;
+        side.style.display = v ? '' : 'none';
+        set();
+      },
+      fmt: (v) => (v ? `${formatNumber(v, 1)} mm` : t('stitch.fringe.off')),
+    });
+    return [depth, side];
+  }
+
+  private runSections(info: StitchInfo): HTMLElement[] {
     const s = this.draft.run!;
     return [
-      this.slider({ label: 'stitch.length', hint: 'stitch.runLength.hint', min: 1, max: 6, step: 0.1, get: () => s.stitch, set: (v) => (s.stitch = v), fmt: mm(1) }),
-      this.toleranceSlider(s),
-      this.check('stitch.triple', 'stitch.triple.hint', () => s.triple, (v) => (s.triple = v)),
+      this.sec('look', 'stitches.sec.look', [
+        this.slider({ label: 'stitch.length', hint: 'stitch.runLength.hint', min: 1, max: 6, step: 0.1, get: () => s.stitch, set: (v) => (s.stitch = v), fmt: (v) => `${formatNumber(v, 1)} mm` }),
+        this.check('stitch.triple', 'stitch.triple.hint', () => s.triple, (v) => (s.triple = v)),
+      ]),
+      this.sec('hold', 'stitches.sec.hold', [this.toleranceSlider(s)]),
+      this.sec('tools', 'stitches.sec.tools', [this.handRow(), this.lockSwitch(info.lock), info.free?.can ? this.looseRow() : null]),
     ];
+  }
+
+  /** A line: how it is sewn along its curve, its echo and shadow. */
+  private lineSections(info: StitchInfo): HTMLElement[] {
+    const st = this.lineDraft!;
+    const parts = this.pathStitch(
+      st,
+      (v) => {
+        if (v) this.lineDraft = Object.assign(this.lineDraft ?? v, v);
+      },
+      false,
+    );
+    if (isRunType(st.type)) {
+      st.tolerance ??= this.tolerance ?? TOLERANCE;
+      parts.hold.push(this.toleranceSlider(st as { tolerance: number }));
+    }
+    const kindName = t(`stitch.border.${isRunType(st.type) ? 'run' : st.type}` as Key);
+    const fx = [st.echo ? t('stitch.echo') : '', st.shadow ? t('stitch.shadow') : ''].filter(Boolean).join(', ');
+    return [
+      this.sec('kind', 'stitches.sec.kind', [this.kindSwitch(info), parts.type], kindName),
+      this.sec('look', 'stitches.sec.look', parts.look),
+      this.sec('effects', 'stitches.sec.effects', [this.echoGroup(st, info.path!.closed, info.path!.color), info.path!.traced ? null : this.shadowGroup(st, info.path!.color)], fx || t('stitches.sec.off')),
+      parts.hold.length ? this.sec('hold', 'stitches.sec.hold', parts.hold) : null,
+      this.sec('tools', 'stitches.sec.tools', [this.handRow(), this.lockSwitch(info.lock), info.free?.can ? this.looseRow() : null]),
+    ].filter((x): x is HTMLDetailsElement => !!x);
+  }
+
+  // Building blocks -------------------------------------------------------------------------------
+
+  /** Automatic while `key` of `o` is not set: going back takes it out. */
+  private unset<T extends object>(o: T, key: keyof T): SliderDef['auto'] {
+    return { is: () => o[key] === undefined, reset: () => delete o[key] };
   }
 
   /** A fill along a line: the width of the line and its ends make the area (the line stays the shape). */
@@ -722,38 +1126,44 @@ export class StitchPanel {
     ];
   }
 
-  /** Fill or satin: picking the other one sews the objects anew in that kind. */
-  private kindSwitch(now: 'fill' | 'satin' | 'line', kinds: ('fill' | 'satin' | 'line')[] = ['fill', 'satin']): HTMLElement {
-    const wrap = document.createElement('div');
-    wrap.className = 'field stitch-field';
-    const label = Object.assign(document.createElement('span'), { className: 'label', textContent: t('stitch.kind') });
-    const row = document.createElement('div');
-    row.className = 'segmented kind-switch';
-    row.setAttribute('role', 'radiogroup');
-    row.setAttribute('aria-label', t('stitch.kind'));
-    const blocked = now === 'fill' && kinds.includes('satin') && !this.info!.toSatin;
-    for (const k of kinds) {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = k === now ? 'active' : '';
-      b.setAttribute('role', 'radio');
-      b.setAttribute('aria-checked', String(k === now));
-      b.innerHTML = `<span class="kind-icon">${KIND_ICON[k === 'line' ? 'satin' : k]}</span>`;
+  /** Füllung, Satin, Linie: picking another one sews the objects anew in that kind. */
+  private kindSwitch(info: StitchInfo): HTMLElement {
+    const now = this.nowKind();
+    const row = h('div', { class: 'segmented kind-switch', role: 'radiogroup', 'aria-label': t('stitch.kind') });
+    for (const k of ['fill', 'satin', 'line'] as const) {
+      const on = k === now;
+      const b = h('button', { type: 'button', class: on ? 'active' : '', role: 'radio', 'aria-checked': String(on) });
+      b.innerHTML = `<span class="kind-icon">${KIND_ICON[k === 'line' ? 'run' : k]}</span>`;
       b.append(k === 'line' ? t('stitch.kind.line') : kindLabel(k));
-      if (k !== now && k === 'satin' && blocked) {
-        b.disabled = true;
-        b.title = t('stitch.kind.noSatin');
-      } else if (k !== now) b.title = t(k === 'satin' ? 'stitch.kind.toSatin' : k === 'line' ? 'stitch.kind.toLine' : now === 'line' ? 'stitch.kind.lineToFill' : 'stitch.kind.toFill');
+      const way = on ? null : kindWay(this.kindState(), k);
+      b.disabled = !on && !way;
+      const cmd = getCommand(`stitch.kind.${k}`);
+      const key = cmd?.keys?.[0] ? ` (${keyLabel(cmd.keys[0])})` : '';
+      if (!on) b.title = way ? t(this.wayHint(k, way, now)) + key : t(this.blockedHint(k, now, info));
       b.addEventListener('click', () => {
-        if (k === now) return;
-        this.hooks.preview(null);
-        this.hooks.convert(k);
+        if (!on) this.convert(k);
       });
       row.append(b);
     }
-    wrap.append(label, row);
-    if (blocked) wrap.append(Object.assign(document.createElement('span'), { className: 'muted small', textContent: t('stitch.kind.noSatin') }));
-    return wrap;
+    return h('div', { class: 'field stitch-field' }, row);
+  }
+
+  /** What picking `k` on the kind switch does, said on its button. */
+  private wayHint(k: 'fill' | 'satin' | 'line', way: KindWay, now: ReturnType<StitchPanel['nowKind']>): Key {
+    if (way === 'draw') return 'stitches.kind.toSatinDraw';
+    if (way === 'empty') return 'stitches.kind.toEmpty';
+    if (way === 'fill') return 'stitches.kind.fillAgain';
+    return k === 'satin' ? 'stitch.kind.toSatin' : k === 'line' ? 'stitch.kind.toLine' : now === 'line' ? 'stitch.kind.lineToFill' : 'stitch.kind.toFill';
+  }
+
+  /** Why `k` cannot be picked now. */
+  private blockedHint(k: 'fill' | 'satin' | 'line', now: ReturnType<StitchPanel['nowKind']>, info: StitchInfo): Key {
+    if (this.emptyLine()) return 'stitches.kind.satinViaFill';
+    if (k === 'satin') {
+      if (now !== 'fill' || info.asLine) return 'stitches.kind.notForLine';
+      return info.draw?.tool ? 'stitches.kind.drawing' : info.draw?.single ? 'stitch.kind.noSatin' : 'stitches.kind.noSatinMany';
+    }
+    return k === 'line' ? 'stitches.kind.lineOnly' : 'stitch.kind.toFill';
   }
 
   /** Max. deviation from the line; remembered for the next objects. */
@@ -767,35 +1177,66 @@ export class StitchPanel {
       get: () => s.tolerance,
       set: (v) => (s.tolerance = this.tolerance = v),
       fmt: (v) => `${formatNumber(v, 2)} mm`,
-      note: () => t('stitch.toleranceNote'),
+      auto: {
+        is: () => Math.abs(s.tolerance - TOLERANCE) < 0.001,
+        reset: () => {
+          s.tolerance = TOLERANCE;
+          this.tolerance = null;
+        },
+      },
     });
   }
 
   private slider(d: SliderDef): HTMLElement {
-    const label = document.createElement('label');
-    label.className = 'field stitch-field';
+    const label = h('label', { class: 'field stitch-field' + (d.auto ? ' has-auto' : '') });
     if (d.hint) label.title = t(d.hint);
-    const top = document.createElement('span');
-    top.className = 'label';
-    const out = document.createElement('output');
-    top.append(t(d.label), ' ', out);
-    const input = Object.assign(document.createElement('input'), { type: 'range', min: String(d.min), max: String(d.max), step: String(d.step), value: String(d.get()) });
+    const out = h('output');
+    const name = h('span', { class: 'name' }, t(d.label));
+    const top = h('span', { class: 'label' }, name);
+    const input = h('input', { type: 'range', min: String(d.min), max: String(d.max), step: String(d.step), value: String(d.get()) });
     let track: HTMLElement = input;
     if (d.band) {
       // A green strip under the track marks the recommended range.
       const a = Math.max(0, ((d.band[0] - d.min) / (d.max - d.min)) * 100);
       const b = Math.min(100, ((d.band[1] - d.min) / (d.max - d.min)) * 100);
-      track = Object.assign(document.createElement('span'), { className: 'band-track', title: t(d.bandHint ?? 'stitch.band', { a: formatNumber(d.band[0], 2), b: formatNumber(d.band[1], 2) }) });
-      const band = Object.assign(document.createElement('span'), { className: 'band' });
+      track = h('span', { class: 'band-track', title: t(d.bandHint ?? 'stitch.band', { a: formatNumber(d.band[0], 2), b: formatNumber(d.band[1], 2) }) });
+      const band = h('span', { class: 'band' });
       band.style.left = `${a}%`;
       band.style.width = `${Math.max(0, b - a)}%`;
       track.append(input, band);
     }
-    const note = document.createElement('span');
-    note.className = 'muted small';
+    const note = h('span', { class: 'muted small' });
+    let tag: HTMLElement | null = null;
+    let dot: HTMLButtonElement | null = null;
+    const auto = d.auto;
+    if (auto) {
+      tag = h('span', { class: 'auto-tag' }, t(auto.fabric ? 'stitches.auto.fabric' : 'stitches.auto'));
+      dot = h('button', { type: 'button', class: 'auto-dot' });
+      dot.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (auto.is()) return;
+        auto.reset();
+        this.render();
+        if (d.commit) d.commit();
+        else this.changed(true);
+      });
+      top.append(tag);
+    }
+    top.append(out);
+    if (dot) top.append(dot);
     const show = () => {
       out.textContent = d.fmt(d.get());
       if (d.note) note.textContent = d.note(d.get());
+      if (auto && dot && tag) {
+        const on = auto.is();
+        dot.classList.toggle('on', on);
+        dot.disabled = on;
+        const hint = t(on ? (auto.fabric ? 'stitches.auto.onFabric' : 'stitches.auto.on') : 'stitches.auto.own');
+        dot.title = hint;
+        dot.setAttribute('aria-label', hint);
+        tag.hidden = !on;
+        label.classList.toggle('own', !on);
+      }
     };
     show();
     input.addEventListener('input', () => {
@@ -814,23 +1255,11 @@ export class StitchPanel {
    * applies it, pointing at one shows it on the canvas first.
    */
   private patterns(s: FillSettings): HTMLElement {
-    const wrap = document.createElement('div');
-    wrap.className = 'field';
-    const label = Object.assign(document.createElement('span'), { className: 'label', textContent: t('stitch.pattern') });
     const now = tileOf(s);
     const group = this.group ?? groupOf(now);
-    const tabs = document.createElement('div');
-    tabs.className = 'pattern-groups';
-    tabs.setAttribute('role', 'tablist');
-    tabs.setAttribute('aria-label', t('stitch.pattern'));
+    const tabs = h('div', { class: 'pattern-groups', role: 'tablist', 'aria-label': t('stitch.pattern') });
     for (const g of TILE_GROUPS) {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = (g === group ? 'active' : '') + (g === groupOf(now) ? ' holds' : '');
-      b.setAttribute('role', 'tab');
-      b.setAttribute('aria-selected', String(g === group));
-      b.textContent = t(`stitch.group.${g}` as Key);
-      b.title = t(`stitch.group.${g}.hint` as Key);
+      const b = h('button', { type: 'button', class: (g === group ? 'active' : '') + (g === groupOf(now) ? ' holds' : ''), role: 'tab', 'aria-selected': String(g === group), title: t(`stitch.group.${g}.hint` as Key) }, t(`stitch.group.${g}` as Key));
       b.addEventListener('click', () => {
         if (g === group) return;
         this.group = g;
@@ -838,33 +1267,11 @@ export class StitchPanel {
       });
       tabs.append(b);
     }
-    const row = document.createElement('div');
-    row.className = 'pattern-tiles';
-    row.setAttribute('role', 'radiogroup');
-    row.setAttribute('aria-label', t(`stitch.group.${group}` as Key));
-    const apply = (to: FillSettings, tile: Tile) => {
-      // Points belong to the pattern they were set for: rays and circles start anew in their place.
-      // A fade and its second thread belong to the gradient: another pattern takes the second one out.
-      const { focus: _f, centers: _c, fade: _d, blend: _b, ...rest } = to.deco ?? {};
-      to.pattern = tile;
-      to.deco = rest;
-      // Empty: only the border is sewn, as the object in its thread (a triple stitch when it had none).
-      if (tile === 'none') {
-        if (to.border) {
-          delete to.border.color;
-          delete to.border.link;
-        } else to.border = { type: 'triple', width: BORDER_WIDTH };
-      }
-    };
+    const row = h('div', { class: 'pattern-tiles', role: 'radiogroup', 'aria-label': t(`stitch.group.${group}` as Key) });
     for (const tile of GROUPS[group]) {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'pattern-tile' + (tile === now ? ' active' : '');
-      b.setAttribute('role', 'radio');
-      b.setAttribute('aria-checked', String(tile === now));
-      b.title = t(`stitch.pattern.${tile}.hint` as Key);
+      const b = h('button', { type: 'button', class: 'pattern-tile' + (tile === now ? ' active' : ''), role: 'radio', 'aria-checked': String(tile === now), title: t(`stitch.pattern.${tile}.hint` as Key) });
       b.innerHTML = PATTERN_ICON[tile];
-      b.append(Object.assign(document.createElement('span'), { textContent: t(`stitch.pattern.${tile}` as Key) }));
+      b.append(h('span', null, t(`stitch.pattern.${tile}` as Key)));
       // Guide lines belong to one object.
       const blocked = tile === 'guided' && !this.info!.guide?.single;
       if (blocked) {
@@ -874,29 +1281,43 @@ export class StitchPanel {
       b.addEventListener('click', () => {
         if (tileOf(s) === tile) return;
         this.hooks.preview(null);
-        apply(s, tile);
-        this.render();
-        // Without guide lines there is nothing to follow yet: their tool opens, and the stitches
-        // change with the first line.
-        if (tile === 'guided' && !s.guides?.length) return this.hooks.guide('tool');
-        if (tile !== 'guided' && this.info!.guide?.tool) this.hooks.guide('off');
-        if (!POINTED.includes(tile) && this.info!.points?.tool) this.hooks.points('off');
-        this.changed(true);
+        this.pickPattern(tile);
       });
       // Pointing at a pattern shows it on the canvas before it is picked (guided needs its lines first).
       if (tile !== now && tile !== 'guided' && !blocked) {
         b.addEventListener('pointerenter', () => {
           const peek = structuredClone(s);
-          apply(peek, tile);
+          setPattern(peek, tile);
           this.hooks.preview({ kind: 'fill', s: peek });
         });
         b.addEventListener('pointerleave', () => this.hooks.preview(null));
       }
       row.append(b);
     }
-    const hint = Object.assign(document.createElement('span'), { className: 'muted small', textContent: t(`stitch.pattern.${now}.hint` as Key) });
-    wrap.append(label, tabs, row, hint);
-    return wrap;
+    return h('div', { class: 'field stitch-field', title: t(`stitch.pattern.${now}.hint` as Key) }, h('span', { class: 'label' }, t('stitch.pattern')), tabs, row);
+  }
+
+  /**
+   * Pattern `tile` for the fills, sewn at once. Empty makes a fill a line of its edge: what it was
+   * is kept, for Füllung to bring back.
+   */
+  private pickPattern(tile: Tile): void {
+    const s = this.draft.fill;
+    if (!s || s.pattern === tile) return;
+    if (tile === 'none') {
+      const was: FilledBefore = { pattern: s.pattern, deco: structuredClone(s.deco), border: structuredClone(s.border) };
+      this.filledNow = was;
+      if (this.info?.area) this.filled.set(this.info.area, was);
+    }
+    setPattern(s, tile);
+    this.group = null;
+    this.render();
+    // Without guide lines there is nothing to follow yet: their tool opens, and the stitches
+    // change with the first line.
+    if (tile === 'guided' && !s.guides?.length) return this.hooks.guide('tool');
+    if (tile !== 'guided' && this.info!.guide?.tool) this.hooks.guide('off');
+    if (!POINTED.includes(tile) && this.info!.points?.tool) this.hooks.points('off');
+    this.changed(true);
   }
 
   /** The settings of decorative and open patterns, made when first set. */
@@ -904,22 +1325,12 @@ export class StitchPanel {
     return (s.deco ??= {});
   }
 
-  /** A new random variant of grain, swirls, meander and maze; for swirls (`points`) new eyes too. */
-  private reroll(s: FillSettings, points = false): HTMLElement {
-    const wrap = document.createElement('div');
-    wrap.className = 'field stitch-field reroll-row';
-    const b = this.button('stitch.reroll', 'stitch.reroll.hint', () => {
-      const d = this.deco(s);
-      let seed = d.seed ?? DECO_DEFAULTS.seed;
-      while (seed === (d.seed ?? DECO_DEFAULTS.seed)) seed = 1 + Math.floor(Math.random() * 99999);
-      d.seed = seed;
-      if (points) delete d.centers;
-      this.changed(true);
-    });
+  /** A new random variant of grain, swirls, meander and maze; for swirls new eyes too. */
+  private rerollRow(): HTMLElement {
+    const b = this.button('stitch.reroll', 'stitch.reroll.hint', () => this.reroll());
     b.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="2" y="2" width="12" height="12" rx="2.5"/><circle cx="5.5" cy="5.5" r=".9" fill="currentColor"/><circle cx="10.5" cy="10.5" r=".9" fill="currentColor"/><circle cx="8" cy="8" r=".9" fill="currentColor"/></svg>';
     b.append(t('stitch.reroll'));
-    wrap.append(b);
-    return wrap;
+    return h('div', { class: 'field stitch-field reroll-row' }, b);
   }
 
   /**
@@ -928,25 +1339,13 @@ export class StitchPanel {
    */
   private embossControls(s: FillSettings): HTMLElement[] {
     const d = this.deco(s);
-    const wrap = document.createElement('div');
-    wrap.className = 'field stitch-field';
-    wrap.title = t('stitch.motif.hint');
-    const head = Object.assign(document.createElement('span'), { className: 'label', textContent: t('stitch.motif') });
-    const row = document.createElement('div');
-    row.className = 'segmented motif-row';
-    row.setAttribute('role', 'radiogroup');
-    row.setAttribute('aria-label', t('stitch.motif'));
+    const row = h('div', { class: 'segmented motif-row', role: 'radiogroup', 'aria-label': t('stitch.motif') });
     for (const m of [null, ...MOTIFS] as (Motif | null)[]) {
-      const b = document.createElement('button');
-      b.type = 'button';
       const on = (d.emboss ?? null) === m;
-      b.className = on ? 'active' : '';
-      b.setAttribute('role', 'radio');
-      b.setAttribute('aria-checked', String(on));
       const key = (m ? `stitch.motif.${m}` : 'stitch.motif.none') as Key;
-      b.title = t(key);
+      const b = h('button', { type: 'button', class: on ? 'active' : '', role: 'radio', 'aria-checked': String(on), title: t(key) });
       b.innerHTML = m ? MOTIF_ICON[m] : MOTIF_NONE;
-      b.append(Object.assign(document.createElement('span'), { textContent: t(key) }));
+      b.append(h('span', null, t(key)));
       b.addEventListener('click', () => {
         if (on) return;
         if (m) d.emboss = m;
@@ -968,7 +1367,7 @@ export class StitchPanel {
       }
       row.append(b);
     }
-    wrap.append(head, row);
+    const wrap = h('div', { class: 'field stitch-field', title: t('stitch.motif.hint') }, h('span', { class: 'label' }, t('stitch.motif')), row);
     if (!d.emboss) return [wrap];
     return [
       wrap,
@@ -988,26 +1387,13 @@ export class StitchPanel {
           this.hooks.preview({ kind: 'fill', s: peek });
         },
       ),
-      this.slider({ label: 'stitch.motifSize', hint: 'stitch.motifSize.hint', min: 4, max: 30, step: 0.5, get: () => d.embossSize ?? DECO_DEFAULTS.embossSize, set: (v) => (d.embossSize = v), fmt: (v) => `${formatNumber(v, 1)} mm` }),
+      this.slider({ label: 'stitch.motifSize', hint: 'stitch.motifSize.hint', min: 4, max: 30, step: 0.5, get: () => d.embossSize ?? DECO_DEFAULTS.embossSize, set: (v) => (d.embossSize = v), fmt: (v) => `${formatNumber(v, 1)} mm`, auto: this.unset(d, 'embossSize') }),
     ];
   }
 
   /** Points of rays, circles and swirls: set and moved on the canvas with their tool. */
-  private pointTool(s: FillSettings, d: StitchInfo['points']): HTMLElement {
-    const wrap = document.createElement('div');
-    wrap.className = 'field stitch-field direction-field' + (d?.tool ? ' on' : '');
-    const head = Object.assign(document.createElement('span'), { className: 'label', textContent: t(`stitch.points.${s.pattern}` as Key) });
-    wrap.append(head);
-    if (!d?.single) {
-      wrap.append(Object.assign(document.createElement('span'), { className: 'muted small', textContent: t('stitch.points.single') }));
-      return wrap;
-    }
-    const row = document.createElement('div');
-    row.className = 'direction-buttons';
-    row.append(this.button(d.tool ? 'stitch.direction.done' : 'stitch.points.tool', 'stitch.points.tool.hint', () => this.hooks.points('tool'), !d.tool));
-    wrap.append(row);
-    if (d.tool) wrap.append(Object.assign(document.createElement('span'), { className: 'muted small', textContent: t(s.pattern === 'swirl' ? 'stitch.points.help.swirl' : 'stitch.points.help') }));
-    return wrap;
+  private pointRow(s: FillSettings, d: StitchInfo['points']): HTMLElement {
+    return this.toolRow('stitch.points', 'stitches.tool.points', 'stitch.points.tool.hint', !!d?.tool, d?.single ? t(`stitch.points.${s.pattern}` as Key) : t('stitch.points.single'));
   }
 
   /** Points set on the canvas (shares of the shape's extent): the fill is sewn anew around them. */
@@ -1040,33 +1426,22 @@ export class StitchPanel {
         get: () => Math.min(hi, Math.max(lo, d.size ?? OPEN_SIZE[pat])),
         set: (v) => (d.size = v),
         fmt: (v) => `${formatNumber(v, 1)} mm`,
+        auto: this.unset(d, 'size'),
       }),
     );
     if (pat !== 'cross') out.push(this.slider({ label: 'stitch.length', hint: 'stitch.openLength.hint', min: 1, max: 3, step: 0.1, get: () => Math.min(3, s.stitch), set: (v) => (s.stitch = v), fmt: (v) => `${formatNumber(v, 1)} mm` }));
     out.push(this.check('stitch.triple', 'stitch.openTriple.hint', () => !!d.triple, (v) => (d.triple = v)));
-    if (pat === 'meander' || pat === 'maze') out.push(this.reroll(s));
+    if (pat === 'meander' || pat === 'maze') out.push(this.rerollRow());
     return out;
   }
 
   /** Tatami offset: how far the needle points shift from row to row. */
   private offsets(s: FillSettings): HTMLElement {
-    const wrap = document.createElement('div');
-    wrap.className = 'field stitch-field';
-    wrap.title = t('stitch.offset.hint');
-    const label = Object.assign(document.createElement('span'), { className: 'label', textContent: t('stitch.offset') });
-    const row = document.createElement('div');
-    row.className = 'segmented offset-buttons';
-    row.setAttribute('role', 'radiogroup');
-    row.setAttribute('aria-label', t('stitch.offset'));
+    const row = h('div', { class: 'segmented offset-buttons', role: 'radiogroup', 'aria-label': t('stitch.offset') });
     const options: [number, string][] = [...OFFSETS, [0, t('stitch.offset.random')]];
     for (const [v, text] of options) {
-      const b = document.createElement('button');
-      b.type = 'button';
       const on = Math.abs(s.offset - v) < 1e-3;
-      b.className = on ? 'active' : '';
-      b.setAttribute('role', 'radio');
-      b.setAttribute('aria-checked', String(on));
-      b.textContent = text;
+      const b = h('button', { type: 'button', class: on ? 'active' : '', role: 'radio', 'aria-checked': String(on) }, text);
       b.addEventListener('click', () => {
         if (Math.abs(s.offset - v) < 1e-3) return;
         s.offset = v;
@@ -1075,31 +1450,19 @@ export class StitchPanel {
       });
       row.append(b);
     }
-    wrap.append(label, row);
-    return wrap;
+    return h('div', { class: 'field stitch-field', title: t('stitch.offset.hint') }, h('span', { class: 'label' }, t('stitch.offset')), row);
   }
 
   /** Angle: a dial that shows the row direction, and a slider. */
   private angle(s: FillSettings): HTMLElement {
-    const wrap = document.createElement('label');
-    wrap.className = 'field stitch-field';
-    wrap.title = t('stitch.angle.hint');
-    const top = document.createElement('span');
-    top.className = 'label';
-    const out = document.createElement('output');
-    top.append(t('stitch.angle'), ' ', out);
-    const row = document.createElement('span');
-    row.className = 'angle-row';
-    const dial = document.createElement('span');
-    dial.className = 'angle-dial';
-    dial.setAttribute('aria-hidden', 'true');
-    const needle = document.createElement('span');
-    dial.append(needle);
-    const input = Object.assign(document.createElement('input'), { type: 'range', min: '0', max: '175', step: '5', value: String(Math.round(s.angle / 5) * 5 % 180) });
+    const out = h('output');
+    const needle = h('span');
+    const dial = h('span', { class: 'angle-dial', 'aria-hidden': 'true' }, needle);
+    const input = h('input', { type: 'range', min: '0', max: '175', step: '5', value: String(((Math.round(s.angle / 5) * 5) % 180) || 0) });
     const show = () => {
-      out.textContent = `${Math.round(s.angle)}°`;
+      out.textContent = Number.isFinite(s.angle) ? `${Math.round(s.angle)}°` : t('stitches.auto');
       // Screen y points down, so the rows' angle turns clockwise.
-      needle.style.transform = `rotate(${s.angle}deg)`;
+      needle.style.transform = `rotate(${Number.isFinite(s.angle) ? s.angle : 0}deg)`;
     };
     show();
     input.addEventListener('input', () => {
@@ -1108,28 +1471,14 @@ export class StitchPanel {
       this.changed(false);
     });
     input.addEventListener('change', () => this.changed(true));
-    row.append(dial, input);
-    wrap.append(top, row);
-    return wrap;
+    return h('label', { class: 'field stitch-field', title: t('stitch.angle.hint') }, h('span', { class: 'label' }, h('span', { class: 'name' }, t('stitch.angle')), out), h('span', { class: 'angle-row' }, dial, input));
   }
 
-  /** A row of buttons, one per value; picking one applies it. With `hints`, each has `<label>.hint` as its title. */
+  /** A row of buttons, one per value; picking one applies it. Each has `<text>.hint` as its title. */
   private choice<T extends string>(label: Key, values: readonly T[], now: T, text: (v: T) => Key, set: (v: T) => void, small = false, peek?: (v: T | null) => void): HTMLElement {
-    const wrap = document.createElement('div');
-    wrap.className = 'field stitch-field';
-    const head = Object.assign(document.createElement('span'), { className: 'label', textContent: t(label) });
-    const row = document.createElement('div');
-    row.className = 'segmented choice-row' + (small ? ' small' : '');
-    row.setAttribute('role', 'radiogroup');
-    row.setAttribute('aria-label', t(label));
+    const row = h('div', { class: 'segmented choice-row' + (small ? ' small' : ''), role: 'radiogroup', 'aria-label': t(label) });
     for (const v of values) {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = v === now ? 'active' : '';
-      b.setAttribute('role', 'radio');
-      b.setAttribute('aria-checked', String(v === now));
-      b.textContent = t(text(v));
-      b.title = t(`${text(v)}.hint` as Key);
+      const b = h('button', { type: 'button', class: v === now ? 'active' : '', role: 'radio', 'aria-checked': String(v === now), title: t(`${text(v)}.hint` as Key) }, t(text(v)));
       b.addEventListener('click', () => {
         if (v === now) return;
         set(v);
@@ -1142,93 +1491,32 @@ export class StitchPanel {
       }
       row.append(b);
     }
-    wrap.append(head, row);
-    return wrap;
+    return h('div', { class: 'field stitch-field' }, h('span', { class: 'label' }, t(label)), row);
   }
 
-  /** A small button for the rung tools. */
+  /** A small button. */
   private button(text: Key, hint: Key, on: () => void, primary = false, disabled = false): HTMLButtonElement {
-    const b = Object.assign(document.createElement('button'), { type: 'button', className: primary ? 'primary small' : 'small', textContent: t(text), title: t(hint), disabled });
+    const b = h('button', { type: 'button', class: primary ? 'primary small' : 'small', title: t(hint), disabled }, t(text));
     b.addEventListener('click', on);
     return b;
   }
 
-  /** Direction of a satin: what sets it now, and the rung tool. */
-  private directionTool(d: NonNullable<StitchInfo['direction']>): HTMLElement {
-    const wrap = document.createElement('div');
-    wrap.className = 'field stitch-field direction-field' + (d.tool ? ' on' : '');
-    const head = Object.assign(document.createElement('span'), { className: 'label', textContent: t('stitch.direction') });
-    const state = d.rungs === null ? t('stitch.direction.follow') : d.rungs === 0 ? t('stitch.direction.even') : t(d.rungs === 1 ? 'stitch.direction.rungs.one' : 'stitch.direction.rungs', { n: d.rungs });
-    const line = Object.assign(document.createElement('span'), { className: 'muted small', textContent: d.single ? state : t('stitch.direction.single') });
-    wrap.append(head, line);
-    if (!d.single) return wrap;
-    const row = document.createElement('div');
-    row.className = 'direction-buttons';
-    row.append(this.button(d.tool ? 'stitch.direction.done' : 'stitch.direction.tool', 'stitch.direction.tool.hint', () => this.hooks.direction('tool'), !d.tool));
-    if (d.tool) {
-      row.append(
-        this.button('stitch.direction.corners', 'stitch.direction.corners.hint', () => this.hooks.direction('corners')),
-        this.button('stitch.sections', 'stitch.sections.hint', () => this.hooks.direction('sections')),
-        ...(d.order ? [this.button('stitch.order.best', 'stitch.order.best.hint', () => this.hooks.direction('order'))] : []),
-        this.button('stitch.direction.even.button', 'stitch.direction.even.hint', () => this.hooks.direction('even'), false, d.rungs === 0),
-        this.button('stitch.direction.follow.button', 'stitch.direction.follow.hint', () => this.hooks.direction('follow'), false, d.rungs === null),
-      );
-    }
-    wrap.append(row);
-    if (d.tool) wrap.append(this.penSwitch(!!d.cutMode));
-    if (d.cuts) wrap.append(Object.assign(document.createElement('span'), { className: 'small', textContent: t(d.cuts === 1 ? 'stitch.sections.count.one' : 'stitch.sections.count', { n: d.cuts + 1 }) }));
-    if (d.tool && d.spacingHere !== undefined) wrap.append(this.spacingHereField(d.spacingHere));
-    if (d.tool && d.chain) wrap.append(Object.assign(document.createElement('span'), { className: 'small', textContent: t('stitch.direction.chain') }));
-    if (d.tool) wrap.append(Object.assign(document.createElement('span'), { className: 'muted small', textContent: t('stitch.direction.help') }));
-    return wrap;
-  }
-
-  /** What a line drawn across the satin or the fill makes: a rung or a cut line. */
-  private penSwitch(cut: boolean): HTMLElement {
-    const l = Object.assign(document.createElement('div'), { className: 'pen-switch' });
-    const row = document.createElement('div');
-    row.className = 'segmented choice-row small';
-    row.setAttribute('role', 'radiogroup');
-    row.setAttribute('aria-label', t('stitch.pen'));
-    for (const v of ['rung', 'cut'] as const) {
-      const on = (v === 'cut') === cut;
-      const b = Object.assign(document.createElement('button'), { type: 'button', className: (on ? 'active ' : '') + 'pen-' + v, textContent: t(`stitch.pen.${v}`), title: t(`stitch.pen.${v}.hint`) });
-      b.setAttribute('role', 'radio');
-      b.setAttribute('aria-checked', String(on));
-      b.addEventListener('click', () => !on && this.hooks.direction(v));
-      row.append(b);
-    }
-    l.append(Object.assign(document.createElement('span'), { className: 'small', textContent: t('stitch.pen') }), row);
-    return l;
-  }
-
-  /** The spacing at the selected rung: empty keeps the column's. */
-  private spacingHereField(v: number | null): HTMLElement {
-    const l = Object.assign(document.createElement('label'), { className: 'spacing-here', title: t('stitch.spacingHere.hint') });
-    const i = Object.assign(document.createElement('input'), { type: 'number', min: '0.2', max: '1.5', step: '0.05', placeholder: t('stitch.spacingHere.column'), value: v === null ? '' : String(v) });
-    i.addEventListener('change', () => {
-      const n = Number(i.value.replace(',', '.'));
-      this.hooks.spacingHere(i.value.trim() === '' || !Number.isFinite(n) || n <= 0 ? null : Math.min(1.5, Math.max(0.2, n)));
-    });
-    l.append(Object.assign(document.createElement('span'), { textContent: t('stitch.spacingHere') }), i, Object.assign(document.createElement('span'), { className: 'muted', textContent: 'mm' }));
-    return l;
+  /**
+   * A tool of the canvas as a button that stays pressed while the tool is on (its options then show
+   * over the stage), with what it holds now beside it.
+   */
+  private toolRow(cmd: string, label: Key, hint: Key, on: boolean, state: string | null): HTMLElement {
+    const c = getCommand(cmd);
+    const key = c?.keys?.[0] ? ` (${keyLabel(c.keys[0])})` : '';
+    const b = h('button', { type: 'button', class: 'tool-toggle', 'aria-pressed': String(on), title: t(hint) + key, disabled: !on && !canRun(cmd) }, t(label));
+    b.addEventListener('click', () => runCommand(cmd));
+    return h('div', { class: 'tool-row' }, b, state ? h('span', { class: 'tool-state muted small' }, state) : null);
   }
 
   /** Guide lines of a guided fill: how many, and their tool. */
-  private guideTool(s: FillSettings, d: StitchInfo['guide']): HTMLElement {
-    const wrap = document.createElement('div');
-    wrap.className = 'field stitch-field direction-field' + (d?.tool ? ' on' : '');
+  private guideRow(s: FillSettings, d: StitchInfo['guide']): HTMLElement {
     const n = s.guides?.length ?? 0;
-    const head = Object.assign(document.createElement('span'), { className: 'label', textContent: t('stitch.guide') });
-    const line = Object.assign(document.createElement('span'), { className: 'muted small', textContent: n ? t(n === 1 ? 'stitch.guide.one' : 'stitch.guide.count', { n }) : t('stitch.guide.none') });
-    wrap.append(head, line);
-    if (!d?.single) return wrap;
-    const row = document.createElement('div');
-    row.className = 'direction-buttons';
-    row.append(this.button(d.tool ? 'stitch.direction.done' : 'stitch.guide.tool', 'stitch.guide.tool.hint', () => this.hooks.guide('tool'), !d.tool));
-    wrap.append(row);
-    if (d.tool) wrap.append(Object.assign(document.createElement('span'), { className: 'muted small', textContent: t('stitch.guide.help') }));
-    return wrap;
+    return this.toolRow('stitch.guides', 'stitches.tool.guides', 'stitch.guide.tool.hint', !!d?.tool, d?.single ? (n ? t(n === 1 ? 'stitch.guide.one' : 'stitch.guide.count', { n }) : t('stitches.guides.none')) : t('stitch.guide.single'));
   }
 
   /**
@@ -1244,124 +1532,68 @@ export class StitchPanel {
     this.changed(true);
   }
 
-  /** Rungs drawn across a fill, to sew it as satin along them. */
-  private drawTool(d: NonNullable<StitchInfo['draw']>): HTMLElement {
-    const wrap = document.createElement('div');
-    wrap.className = 'field stitch-field direction-field' + (d.tool ? ' on' : '');
-    if (!d.single) return wrap;
-    const row = document.createElement('div');
-    row.className = 'direction-buttons';
-    if (!d.tool) row.append(this.button('stitch.draw', 'stitch.draw.hint', () => this.hooks.draw('tool')));
-    else {
-      row.append(
-        this.button('stitch.draw.sew', 'stitch.draw.hint', () => this.hooks.draw('sew'), true, d.lines < (d.cuts ? 1 : 2)),
-        this.button('stitch.draw.cancel', 'stitch.draw.hint', () => this.hooks.draw('tool')),
-      );
-    }
-    wrap.append(row);
-    if (d.tool) {
-      wrap.append(
-        this.penSwitch(!!d.cutMode),
-        Object.assign(document.createElement('span'), { className: 'small', textContent: t('stitch.draw.count', { n: d.lines }) + (d.cuts ? ' ' + t('stitch.draw.parts') : '') }),
-        Object.assign(document.createElement('span'), { className: 'muted small', textContent: t('stitch.draw.help') }),
-      );
-    }
-    return wrap;
+  /** Stitches by hand, and thinning out the object's rows by a share. */
+  private handRow(): HTMLElement {
+    const edit = this.toolRow('edit.stitches', 'stitches.tool.hand', 'level.stitches.hint', false, null);
+    const thin = h('button', { type: 'button', class: 'small', title: t('stitches.cmd.thin'), disabled: !canRun('edit.thin') }, t('stitches.tool.thin'));
+    thin.addEventListener('click', () => runCommand('edit.thin'));
+    const share = h('select', { class: 'thin-share', 'aria-label': t('stitches.thin.share'), title: t('stitches.thin.share') });
+    for (const [v, text] of THIN_SHARES) share.append(h('option', { value: String(v), selected: v === thinShare.peek() }, text));
+    share.addEventListener('change', () => setThinShare(Number(share.value)));
+    edit.append(h('span', { class: 'thin-group' }, thin, share));
+    return edit;
   }
 
   /** The way to loose the stitches from their shape. */
   private looseRow(): HTMLElement {
-    const row = document.createElement('div');
-    row.className = 'direction-buttons free-row';
-    row.append(this.button('free.loose', 'free.loose.hint', () => this.hooks.free(true)));
-    return row;
+    const b = h('button', { type: 'button', class: 'link', title: t('free.loose.hint') }, t('free.loose'));
+    b.addEventListener('click', () => this.hooks.free(true));
+    return h('div', { class: 'tool-row' }, b);
   }
 
-  /** Stitches loosed from their shape: what that means, and the way back. */
-  private freeBlock(on: true | 'mixed'): HTMLElement {
-    const wrap = document.createElement('div');
-    wrap.className = 'free-block';
-    const status = document.createElement('p');
-    status.className = 'shape-trust free';
-    status.setAttribute('role', 'status');
-    status.innerHTML = FREE_ICON;
-    status.append(Object.assign(document.createElement('span'), { textContent: t(on === 'mixed' ? 'free.someText' : 'free.text') }));
-    const row = document.createElement('div');
-    row.className = 'direction-buttons';
-    row.append(this.button('free.back', 'free.back.hint', () => this.hooks.free(false)));
+  /** Stitches loosed from their shape: the way back (and to loose the rest). */
+  private freeRows(on: true | 'mixed'): HTMLElement[] {
+    const row = h('div', { class: 'tool-row' }, this.button('free.back', 'free.back.hint', () => this.hooks.free(false)));
     if (on === 'mixed') row.append(this.button('free.looseAll', 'free.loose.hint', () => this.hooks.free(true)));
-    wrap.append(status, row, Object.assign(document.createElement('p'), { className: 'muted small', textContent: t('free.edit') }));
-    return wrap;
+    return [row];
   }
 
   /** Left out of the correction: a switch, taken over at once. */
   private lockSwitch(on: boolean | 'mixed'): HTMLElement {
-    const l = Object.assign(document.createElement('label'), { className: 'check lock-switch', title: t('plan.lock.hint') });
-    const i = Object.assign(document.createElement('input'), { type: 'checkbox', checked: on === true, indeterminate: on === 'mixed' });
+    const i = h('input', { type: 'checkbox', checked: on === true, indeterminate: on === 'mixed' });
     i.addEventListener('change', () => this.hooks.lock(i.checked));
-    l.append(i, Object.assign(document.createElement('span'), { textContent: t('plan.lock') }));
-    return l;
-  }
-
-  /** A line: how it is sewn along its curve, for all kinds of stitch in one place. */
-  private lineGroup(h: HTMLElement, info: StitchInfo): HTMLElement[] {
-    const st = this.lineDraft!;
-    h.innerHTML = '';
-    h.append(Object.assign(document.createElement('span'), { className: 'kind-icon', innerHTML: KIND_ICON[runLike(st.type) ? 'run' : 'satin'] }), t('stitch.line.title'));
-    const out: HTMLElement[] = [];
-    if (info.hand) {
-      const hand = document.createElement('p');
-      hand.className = 'shape-trust approximate';
-      hand.setAttribute('role', 'status');
-      hand.innerHTML = TRUST_ICON.warn;
-      hand.append(Object.assign(document.createElement('span'), { textContent: t('stitch.hand', { n: formatNumber(info.hand) }) }));
-      out.push(hand);
-    }
-    // A wide line can also be sewn as a fill of its area.
-    if (st.type === 'satin' && !info.path!.traced) out.push(this.kindSwitch('line', ['line', 'fill']));
-    out.push(
-      ...this.pathStitch(
-        st,
-        (v) => {
-          if (v) this.lineDraft = Object.assign(this.lineDraft ?? v, v);
-        },
-        false,
-      ),
-    );
-    if (isRunType(st.type)) {
-      st.tolerance ??= this.tolerance ?? TOLERANCE;
-      out.push(this.toleranceSlider(st as { tolerance: number }));
-    }
-    out.push(this.echoGroup(st, info.path!.closed, info.path!.color));
-    if (!info.path!.traced) out.push(this.shadowGroup(st, info.path!.color));
-    out.push(Object.assign(document.createElement('p'), { className: 'muted small stitch-note', textContent: t(info.path!.traced ? 'stitch.lineTraced' : 'stitch.lineNote') }));
-    return out;
+    return h('label', { class: 'check lock-switch', title: t('plan.lock.hint') }, i, h('span', null, t('plan.lock')));
   }
 
   /**
-   * A line's shadow, as a block of its own: off, or where it falls, how far, in which thread. It is
-   * an object of its own in that thread, sewn before the line (see model/shadow.ts).
+   * A line's shadow: off, or where it falls, how far, in which thread. It is an object of its own in
+   * that thread, sewn before the line (see model/shadow.ts).
    */
   private shadowGroup(st: PathStitch, line: ThreadColor): HTMLElement {
-    const box = document.createElement('section');
-    box.className = 'border-group shadow-group';
     const sh = st.shadow;
+    const box = h('div', { class: 'fx-group', title: t('stitch.shadow.intro') });
     box.append(
-      Object.assign(document.createElement('h4'), { textContent: t('stitch.shadow') }),
-      Object.assign(document.createElement('p'), { className: 'muted small', textContent: t('stitch.shadow.intro') }),
-      this.choice<ShadowDir | 'off'>('stitch.shadow.dir', ['off', ...SHADOW_DIRS], sh?.dir ?? 'off', (v) => `stitch.shadow.${v}` as Key, (v) => {
+      this.choice<ShadowDir | 'off'>('stitch.shadow', ['off', ...SHADOW_DIRS], sh?.dir ?? 'off', (v) => `stitch.shadow.${v}` as Key, (v) => {
         if (v === 'off') delete st.shadow;
         else st.shadow = sh ? { ...sh, dir: v } : { color: { ...SHADOW_COLOR }, link: newLink(), dir: v, dist: SHADOW_DEFAULT_DIST };
       }),
     );
     if (!sh) return box;
-    box.append(this.slider({ label: 'stitch.shadow.dist', hint: 'stitch.shadow.dist.hint', min: SHADOW_DIST[0], max: SHADOW_DIST[1], step: 0.1, get: () => sh.dist, set: (v) => (sh.dist = v), fmt: (v) => `${formatNumber(v, 1)} mm` }));
-    const wrap = document.createElement('div');
-    wrap.className = 'field stitch-field border-field';
-    const row = document.createElement('div');
-    row.className = 'border-row';
-    const btn = Object.assign(document.createElement('button'), { type: 'button', className: 'border-thread', title: t('stitch.shadow.thread.hint') });
-    const sw = Object.assign(document.createElement('span'), { className: 'sw' });
+    box.append(
+      this.slider({
+        label: 'stitch.shadow.dist',
+        hint: 'stitch.shadow.dist.hint',
+        min: SHADOW_DIST[0],
+        max: SHADOW_DIST[1],
+        step: 0.1,
+        get: () => sh.dist,
+        set: (v) => (sh.dist = v),
+        fmt: (v) => `${formatNumber(v, 1)} mm`,
+        auto: { is: () => sh.dist === SHADOW_DEFAULT_DIST, reset: () => (sh.dist = SHADOW_DEFAULT_DIST) },
+      }),
+    );
+    const btn = h('button', { type: 'button', class: 'border-thread', title: t('stitch.shadow.thread.hint') });
+    const sw = h('span', { class: 'sw' });
     sw.style.background = cssColor(sh.color);
     btn.append(sw, sh.color.name ?? (sameColor(sh.color, SHADOW_COLOR) ? t('stitch.shadow.thread.grey') : hexColor(sh.color)));
     btn.addEventListener('click', () => {
@@ -1380,9 +1612,7 @@ export class StitchPanel {
         },
       });
     });
-    row.append(btn);
-    wrap.append(Object.assign(document.createElement('span'), { className: 'label', textContent: t('stitch.shadow.thread') }), row);
-    box.append(wrap);
+    box.append(h('div', { class: 'field stitch-field border-field' }, h('span', { class: 'label' }, t('stitch.shadow.thread')), h('div', { class: 'border-row' }, btn)));
     return box;
   }
 
@@ -1391,16 +1621,12 @@ export class StitchPanel {
    * copies of that thread are an object of their own, linked to the line).
    */
   private echoThreads(e: NonNullable<PathStitch['echo']>, line: ThreadColor): HTMLElement {
-    const wrap = document.createElement('div');
-    wrap.className = 'field stitch-field border-field';
-    wrap.title = t('stitch.echo.threads.hint');
-    const row = document.createElement('div');
-    row.className = 'border-row echo-threads';
+    const row = h('div', { class: 'border-row echo-threads' });
     for (let k = 1; k <= e.count; k++) {
       if (e.skip?.includes(k)) continue;
       const own = e.colors?.[k - 1] ?? null;
-      const btn = Object.assign(document.createElement('button'), { type: 'button', className: 'border-thread', title: own ? (own.name ?? hexColor(own)) : t('stitch.echo.same') });
-      const sw = Object.assign(document.createElement('span'), { className: 'sw' });
+      const btn = h('button', { type: 'button', class: 'border-thread', title: own ? (own.name ?? hexColor(own)) : t('stitch.echo.same') });
+      const sw = h('span', { class: 'sw' });
       sw.style.background = cssColor(own ?? line);
       btn.append(sw, String(k));
       btn.addEventListener('click', () => {
@@ -1423,39 +1649,36 @@ export class StitchPanel {
       });
       row.append(btn);
     }
-    wrap.append(Object.assign(document.createElement('span'), { className: 'label', textContent: t('stitch.echo.threads') }), row);
-    return wrap;
+    return h('div', { class: 'field stitch-field border-field', title: t('stitch.echo.threads.hint') }, h('span', { class: 'label' }, t('stitch.echo.threads')), row);
   }
 
   /**
-   * A line's echo, as a block of its own: off, or on which side, how many copies, how far apart.
-   * A closed line has an outside and an inside; an open line one side or the other (which one is
-   * left of its drawing direction is not to be seen, so the side is switched with a button).
+   * A line's echo: off, or on which side, how many copies, how far apart. A closed line has an
+   * outside and an inside; an open line one side or the other (which one is left of its drawing
+   * direction is not to be seen, so the side is switched with a button).
    */
   private echoGroup(st: PathStitch, closed: boolean, line: ThreadColor): HTMLElement {
-    const box = document.createElement('section');
-    box.className = 'border-group echo-group';
     type Choice = EchoSide | 'off' | 'one';
     const now: Choice = !st.echo ? 'off' : closed || st.echo.side === 'both' ? st.echo.side : 'one';
     const values: Choice[] = closed ? ['off', ...ECHO_SIDES] : ['off', 'one', 'both'];
+    const box = h('div', { class: 'fx-group', title: t('stitch.echo.intro') });
     box.append(
-      Object.assign(document.createElement('h4'), { textContent: t('stitch.echo') }),
-      Object.assign(document.createElement('p'), { className: 'muted small', textContent: t('stitch.echo.intro') }),
-      this.choice<Choice>('stitch.echo.side', values, now, (v) => `stitch.echo.${v}` as Key, (v) => {
+      this.choice<Choice>('stitch.echo', values, now, (v) => `stitch.echo.${v}` as Key, (v) => {
         if (v === 'off') delete st.echo;
         else st.echo = { ...(st.echo ?? ECHO_DEFAULT), side: v === 'one' ? (st.echo && st.echo.side !== 'both' ? st.echo.side : 'out') : v };
       }),
     );
     if (now === 'one') {
-      const row = document.createElement('div');
-      row.className = 'direction-buttons';
-      row.append(
-        this.button('stitch.echo.flip', 'stitch.echo.flip.hint', () => {
-          st.echo!.side = st.echo!.side === 'out' ? 'in' : 'out';
-          this.changed(true);
-        }),
+      box.append(
+        h(
+          'div',
+          { class: 'tool-row' },
+          this.button('stitch.echo.flip', 'stitch.echo.flip.hint', () => {
+            st.echo!.side = st.echo!.side === 'out' ? 'in' : 'out';
+            this.changed(true);
+          }),
+        ),
       );
-      box.append(row);
     }
     const e = st.echo;
     if (!e) return box;
@@ -1464,8 +1687,6 @@ export class StitchPanel {
     box.append(
       this.slider({ label: 'stitch.echo.count', hint: 'stitch.echo.count.hint', min: ECHO_COUNT[0], max: ECHO_COUNT[1], step: 1, get: () => e.count, set: (v) => (e.count = Math.round(v)), fmt: (v) => formatNumber(v) }),
       this.slider({ label: 'stitch.echo.gap', hint: 'stitch.echo.gap.hint', min: least, max: ECHO_GAP[1], step: 0.1, get: () => Math.max(least, e.gap), set: (v) => (e.gap = v), fmt: (v) => `${formatNumber(v, 1)} mm` }),
-    );
-    box.append(
       this.choice<'joined' | 'cut'>('stitch.echo.link', ['joined', 'cut'], e.cut ? 'cut' : 'joined', (v) => `stitch.echo.${v}` as Key, (v) => {
         if (v === 'cut') e.cut = true;
         else delete e.cut;
@@ -1477,14 +1698,9 @@ export class StitchPanel {
 
   /** Leaving out what lies on top: a switch, taken over at once (the shape itself stays). */
   private knockoutSwitch(k: NonNullable<StitchInfo['knockout']>): HTMLElement {
-    const wrap = document.createElement('div');
-    wrap.className = 'knockout';
-    const l = Object.assign(document.createElement('label'), { className: 'check', title: t('knockout.switch.hint') });
-    const i = Object.assign(document.createElement('input'), { type: 'checkbox', checked: k.on === true, indeterminate: k.on === 'mixed' });
+    const i = h('input', { type: 'checkbox', checked: k.on === true, indeterminate: k.on === 'mixed' });
     i.addEventListener('change', () => this.hooks.knockout(i.checked));
-    l.append(i, Object.assign(document.createElement('span'), { textContent: t('knockout.switch') }));
-    wrap.append(l);
-    if (!k.covered) wrap.append(Object.assign(document.createElement('span'), { className: 'muted small', textContent: t('knockout.nothingOnTop') }));
+    const wrap = h('div', { class: 'knockout' }, h('label', { class: 'check', title: t('knockout.switch.hint') + (k.covered ? '' : ` ${t('knockout.nothingOnTop')}`) }, i, h('span', null, t('knockout.switch'))));
     if (k.on) {
       const share = { v: k.share };
       wrap.append(
@@ -1498,6 +1714,7 @@ export class StitchPanel {
           set: (v) => (share.v = v),
           fmt: (v) => `${formatNumber(v * 100, 0)} %`,
           commit: () => this.hooks.overlapShare(share.v),
+          auto: { is: () => Math.abs(share.v - SATIN_SHARE) < 0.001, reset: () => (share.v = SATIN_SHARE) },
         }),
       );
     }
@@ -1506,32 +1723,40 @@ export class StitchPanel {
 
   /**
    * Settings of stitches along a line (see along.ts): the kind, Aus first when `off` is allowed,
-   * then what that kind needs. The same fields for a fill's border and for a line of its own;
-   * `offset` adds where the line lies to the edge (borders only).
+   * then what that kind looks like and what holds it. The same fields for a fill's border and for a
+   * line of its own; `offset` adds where the line lies to the edge (borders only), `line` names
+   * the width as a line's.
    */
-  pathStitch(st: PathStitch | undefined, set: (v: PathStitch | undefined) => void, off = true, offset = false): HTMLElement[] {
+  pathStitch(st: PathStitch | undefined, set: (v: PathStitch | undefined) => void, off = true, offset = false, line = !offset): PathParts {
     const mm = (d: number) => (v: number) => `${formatNumber(v, d)} mm`;
     const kinds = off ? BORDERS : BORDERS.filter((v) => v !== 'off');
     const type = this.choice<BorderChoice>('stitch.borderType', kinds, st ? (isRunType(st.type) ? 'run' : st.type) : 'off', (v) => `stitch.border.${v}` as Key, (v) => {
-        if (v === 'off') return set(undefined);
-        // Each kind starts with its own spacing; a satin's 0.4 mm would make a zigzag a satin.
-        const next: PathStitch = { ...st, type: v, width: st?.width ?? BORDER_WIDTH };
-        delete next.spacing;
-        // A motif needs a few mm to show its figures.
-        if (v === 'motif') next.width = Math.max(next.width, MOTIF_WIDTH);
-        set(next);
-      });
+      if (v === 'off') return set(undefined);
+      // Each kind starts with its own spacing; a satin's 0.4 mm would make a zigzag a satin.
+      const next: PathStitch = { ...st, type: v, width: st?.width ?? BORDER_WIDTH };
+      delete next.spacing;
+      // A motif needs a few mm to show its figures.
+      if (v === 'motif') next.width = Math.max(next.width, MOTIF_WIDTH);
+      set(next);
+    });
     // Five or six kinds: in even rows of three, not one left alone on a second row.
     type.querySelector('.choice-row')?.classList.add('kinds');
-    const out = [type];
+    const out: PathParts = { type, look: [], hold: [] };
     if (!st) return out;
     const change = (f: (s: PathStitch) => void) => (v: number) => {
       f(st);
       set(st);
       void v;
     };
+    const unset = (key: keyof PathStitch) => ({
+      is: () => st[key] === undefined,
+      reset: () => {
+        delete st[key];
+        set(st);
+      },
+    });
     if (offset) {
-      out.push(
+      out.look.push(
         this.slider({
           label: 'stitch.borderOffset',
           hint: 'stitch.borderOffset.hint',
@@ -1541,27 +1766,28 @@ export class StitchPanel {
           get: () => st.offset ?? 0,
           set: (v) => change((s) => (s.offset = v || undefined))(v),
           fmt: (v) => (v ? `${v > 0 ? '+' : '−'}${formatNumber(Math.abs(v), 2)} mm ${t(v > 0 ? 'stitch.borderOffset.out' : 'stitch.borderOffset.in')}` : t('stitch.borderOffset.edge')),
+          auto: unset('offset'),
         }),
       );
     }
     if (isRunType(st.type)) {
       const times = st.type === 'triple' ? (st.repeat === 5 ? '5' : '3') : '1';
-      out.push(
+      out.look.push(
         this.choice<(typeof REPEATS)[number]>('stitch.repeat', REPEATS, times, (v) => `stitch.repeat.${v}` as Key, (v) => {
           st.type = v === '1' ? 'run' : 'triple';
           if (v === '5') st.repeat = 5;
           else delete st.repeat;
           set(st);
         }, true),
-        this.slider({ label: 'stitch.length', hint: 'stitch.runLength.hint', min: 1, max: 6, step: 0.1, get: () => st.length ?? BORDER_STITCH, set: (v) => change((s) => (s.length = v))(v), fmt: mm(1) }),
+        this.slider({ label: 'stitch.length', hint: 'stitch.runLength.hint', min: 1, max: 6, step: 0.1, get: () => st.length ?? BORDER_STITCH, set: (v) => change((s) => (s.length = v))(v), fmt: mm(1), auto: unset('length') }),
       );
       return out;
     }
-    const width = this.slider({ label: offset ? 'stitch.borderWidth' : 'stitch.lineWidth', hint: offset ? 'stitch.borderWidth.hint' : 'stitch.lineWidth.hint', min: 0.8, max: Math.max(6, Math.ceil(st.width)), step: 0.1, get: () => st.width, set: (v) => change((s) => (s.width = v))(v), fmt: mm(1) });
+    const width = this.slider({ label: line ? 'stitch.lineWidth' : 'stitch.borderWidth', hint: line ? 'stitch.lineWidth.hint' : 'stitch.borderWidth.hint', min: 0.8, max: Math.max(6, Math.ceil(st.width)), step: 0.1, get: () => st.width, set: (v) => change((s) => (s.width = v))(v), fmt: mm(1) });
     if (st.type === 'motif') {
       const motif = st.motif ?? 'waves';
       const fits = Math.round(motifMaxSize(motif, spacingOf(st)) * 10) / 10;
-      out.push(
+      out.look.push(
         this.choice<LineMotif>('stitch.lineMotif', LINE_MOTIFS, motif, (v) => `stitch.lineMotif.${v}` as Key, (v) => {
           st.motif = v;
           delete st.spacing;
@@ -1579,11 +1805,11 @@ export class StitchPanel {
           // Where the spacing caps the size, only the part below the cap makes a difference.
           ...(fits < 8 ? { band: [1, fits] as [number, number], bandHint: 'stitch.lineMotifSize.band' as Key } : {}),
         }),
-        this.slider({ label: 'stitch.gap', hint: 'stitch.motifSpacing.hint', min: 1.5, max: 15, step: 0.1, get: () => spacingOf(st), set: (v) => change((s) => (s.spacing = v === MOTIF_PERIOD[motif] ? undefined : v))(v), fmt: mm(1) }),
+        this.slider({ label: 'stitch.gap', hint: 'stitch.motifSpacing.hint', min: 1.5, max: 15, step: 0.1, get: () => spacingOf(st), set: (v) => change((s) => (s.spacing = v === MOTIF_PERIOD[motif] ? undefined : v))(v), fmt: mm(1), auto: unset('spacing') }),
       );
-      if (SIDED_MOTIFS.includes(motif)) out.push(this.sideChoice(st, set, offset));
+      if (SIDED_MOTIFS.includes(motif)) out.look.push(this.sideChoice(st, set, offset));
       const times = st.repeat === 3 || st.repeat === 5 ? (String(st.repeat) as '3' | '5') : '1';
-      out.push(
+      out.look.push(
         this.choice<(typeof REPEATS)[number]>('stitch.repeat', REPEATS, times, (v) => `stitch.repeat.${v}` as Key, (v) => {
           if (v === '1') delete st.repeat;
           else st.repeat = Number(v);
@@ -1594,17 +1820,21 @@ export class StitchPanel {
     }
     if (st.type === 'zigzag' || st.type === 'e') {
       const e = st.type === 'e';
-      out.push(
+      out.look.push(
         width,
-        this.slider({ label: 'stitch.gap', hint: e ? 'stitch.eSpacing.hint' : 'stitch.zigzagSpacing.hint', min: e ? 1 : 0.5, max: 6, step: 0.1, get: () => spacingOf(st), set: (v) => change((s) => (s.spacing = v === (e ? E_SPACING : ZIGZAG_SPACING) ? undefined : v))(v), fmt: mm(1) }),
+        this.slider({ label: 'stitch.gap', hint: e ? 'stitch.eSpacing.hint' : 'stitch.zigzagSpacing.hint', min: e ? 1 : 0.5, max: 6, step: 0.1, get: () => spacingOf(st), set: (v) => change((s) => (s.spacing = v === (e ? E_SPACING : ZIGZAG_SPACING) ? undefined : v))(v), fmt: mm(1), auto: unset('spacing') }),
       );
-      if (e) out.push(this.sideChoice(st, set, offset));
+      if (e) out.look.push(this.sideChoice(st, set, offset));
       return out;
     }
-    out.push(
+    out.look.push(
       width,
-      this.slider({ label: 'stitch.density', hint: 'stitch.satinDensity.hint', min: 0.2, max: 1, step: 0.01, get: () => st.spacing ?? 0.4, set: (v) => change((s) => (s.spacing = v))(v), fmt: mm(2) }),
-      this.slider({ label: 'stitch.borderPull', hint: 'stitch.borderPull.hint', min: 0, max: 0.6, step: 0.05, get: () => st.pull ?? 0, set: (v) => change((s) => (s.pull = v || undefined))(v), fmt: mm(2) }),
+      this.slider({ label: 'stitch.density', hint: 'stitch.satinDensity.hint', min: 0.2, max: 1, step: 0.01, get: () => st.spacing ?? 0.4, set: (v) => change((s) => (s.spacing = v))(v), fmt: mm(2), auto: unset('spacing') }),
+    );
+    // A drawn satin line can be frayed (fur, feathers); a border keeps a clean edge.
+    if (line && !offset) out.look.push(...this.fringeControls(st, () => set(st)));
+    out.hold.push(
+      this.slider({ label: 'stitch.borderPull', hint: 'stitch.borderPull.hint', min: 0, max: 0.6, step: 0.05, get: () => st.pull ?? 0, set: (v) => change((s) => (s.pull = v || undefined))(v), fmt: mm(2), auto: unset('pull') }),
       this.choice<UnderlayKind | 'off'>('stitch.under.kind', ['off', ...UNDERLAYS], autoUnder(st), (v) => (v === 'off' ? 'stitch.borderUnder.off' : (`stitch.under.${v}` as Key)), (v) => {
         st.under = v;
         set(st);
@@ -1623,32 +1853,38 @@ export class StitchPanel {
     }, true);
   }
 
-  /** A fill's border, as a block of its own: what it is, its stitches, its thread. */
-  private borderGroup(s: FillSettings): HTMLElement {
-    const box = document.createElement('section');
-    box.className = 'border-group';
-    box.append(
-      Object.assign(document.createElement('h4'), { textContent: t('stitch.border') }),
-      Object.assign(document.createElement('p'), { className: 'muted small', textContent: t('stitch.border.intro') }),
-      ...this.pathStitch(
-        s.border,
-        (b) => {
-          if (b) s.border = Object.assign(s.border ?? b, b);
-          else {
-            delete s.border;
-            // An empty fill is its border: without it, it is filled again (and picking Empty gives a
-            // fill a border).
-            if (s.pattern === 'none') {
-              s.pattern = 'tatami';
-              this.group = null;
-            }
+  /** A fill's border, as a group of its own: what it is, its stitches, its thread. */
+  private borderSection(s: FillSettings, extra: string): HTMLElement {
+    const parts = this.pathStitch(
+      s.border,
+      (b) => {
+        if (b) s.border = Object.assign(s.border ?? b, b);
+        else {
+          delete s.border;
+          // An empty fill is its border: without it, it is filled again (and picking Empty gives a
+          // fill a border).
+          if (s.pattern === 'none') {
+            s.pattern = 'tatami';
+            this.group = null;
           }
-        },
-        true,
-        true,
-      ),
+        }
+      },
+      true,
+      true,
     );
-    if (s.border && s.pattern !== 'none') box.append(this.borderThread(s.border));
+    // The parts of a fill cut apart have one border around them all: it changes for each of them.
+    const pieces = this.info!.pieces ?? 0;
+    const shared = pieces > 1 && s.pattern !== 'none' ? h('p', { class: 'muted small' }, t('stitch.border.pieces', { n: pieces })) : null;
+    const seams =
+      shared && s.border
+        ? this.check('stitch.border.seams', 'stitch.border.seams.hint', () => !!s.border?.seams, (v) => {
+            if (!s.border) return;
+            if (v) s.border.seams = true;
+            else delete s.border.seams;
+          })
+        : null;
+    const box = this.sec('border', 'stitches.sec.border', [shared, seams, parts.type, ...parts.look, ...parts.hold, s.border && s.pattern !== 'none' ? this.borderThread(s.border) : null], extra);
+    box.title = t('stitch.border.intro');
     return this.lights(box, 'border');
   }
 
@@ -1658,14 +1894,9 @@ export class StitchPanel {
    */
   private borderThread(b: NonNullable<FillSettings['border']>): HTMLElement {
     const fill = this.info!.color;
-    const wrap = document.createElement('div');
-    wrap.className = 'field stitch-field border-field';
-    const head = Object.assign(document.createElement('span'), { className: 'label', textContent: t('stitch.borderThread') });
-    const row = document.createElement('div');
-    row.className = 'border-row';
     const now = b.color ?? fill;
-    const btn = Object.assign(document.createElement('button'), { type: 'button', className: 'border-thread', title: t('stitch.borderThread.hint') });
-    const sw = Object.assign(document.createElement('span'), { className: 'sw' });
+    const btn = h('button', { type: 'button', class: 'border-thread', title: t('stitch.borderThread.hint') + (b.color ? ` ${t('stitch.borderThread.own')}` : '') });
+    const sw = h('span', { class: 'sw' });
     if (now) sw.style.background = cssColor(now);
     btn.append(sw, b.color ? (b.color.name ?? hexColor(b.color)) : t('stitch.borderThread.same'));
     btn.addEventListener('click', () => {
@@ -1687,20 +1918,40 @@ export class StitchPanel {
         },
       });
     });
-    row.append(btn);
-    wrap.append(head, row);
-    if (b.color) wrap.append(Object.assign(document.createElement('span'), { className: 'muted small', textContent: t('stitch.borderThread.own') }));
-    return wrap;
+    return h('div', { class: 'field stitch-field border-field' }, h('span', { class: 'label' }, t('stitch.borderThread')), h('div', { class: 'border-row' }, btn));
   }
 
   private check(label: Key, hint: Key, get: () => boolean, set: (v: boolean) => void): HTMLElement {
-    const l = Object.assign(document.createElement('label'), { className: 'check', title: t(hint) });
-    const i = Object.assign(document.createElement('input'), { type: 'checkbox', checked: get() });
+    const i = h('input', { type: 'checkbox', checked: get() });
     i.addEventListener('change', () => {
       set(i.checked);
       this.changed(true);
     });
-    l.append(i, Object.assign(document.createElement('span'), { textContent: t(label) }));
-    return l;
+    return h('label', { class: 'check', title: t(hint) }, i, h('span', null, t(label)));
+  }
+
+  private light(what: Highlight | null): void {
+    if (what === this.lit) return;
+    this.lit = what;
+    this.hooks.highlight(what);
+  }
+
+  /** Marks settings of the underlay: while the pointer or focus is on them, the underlay is shown on the canvas. */
+  private under(el: HTMLElement): HTMLElement {
+    return this.lights(el, 'under');
+  }
+
+  /** While the pointer or focus is on `el`, what it sets (`what`) is shown on the canvas. */
+  private lights<E extends HTMLElement>(el: E, what: Highlight): E {
+    el.classList.add(`lit-${what}`);
+    el.addEventListener('pointerenter', () => this.light(what));
+    el.addEventListener('pointerleave', () => {
+      if (!el.contains(document.activeElement)) this.light(null);
+    });
+    el.addEventListener('focusin', () => this.light(what));
+    el.addEventListener('focusout', (e) => {
+      if (!el.contains(e.relatedTarget as Node | null) && !el.matches(':hover')) this.light(null);
+    });
+    return el;
   }
 }

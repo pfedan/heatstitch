@@ -4,7 +4,7 @@ import type { DrawTool } from '../ui/drawTool';
 import type { Editor } from '../ui/editor';
 import { FileList } from '../ui/fileList';
 import { ColorList } from '../ui/colorList';
-import { scaling, type Form, type Mat } from '../shape/path';
+import { scaling, translation, type Form, type Mat } from '../shape/path';
 import type { Lettering } from '../lettering/layout';
 import type { Measurement } from '../validation/measure';
 import type { Pattern } from '../model/pattern';
@@ -13,13 +13,17 @@ import type { Sequence } from './types';
 import type { Settings } from '../settings';
 import type { ShapeTool } from '../ui/shapeTool';
 import { LayersPanel, kindLabel, blockName } from '../ui/layersPanel';
-import { ObjectPanel } from '../ui/objectPanel';
+import { ObjectPanel, type ObjectInfo, type OrderCard } from '../ui/objectPanel';
+import { menuAt, objectMenu } from '../ui/objectMenu';
+import { colorMenuItems, registerObjectCommands, type Shift } from '../areas/objects/commands';
+import { addObjectIcons } from '../areas/objects/icons';
+import '../areas/objects/objects.css';
 import { numberInColor, rememberObjects, type SewObject, splitObject } from '../model/objects';
 import { sameColor } from '../model/recolor';
 import { recordOfStitch } from '../model/sequence';
 import { remembered, rememberedIn, measureFill, analyze, unionRegion, remember, restitch, type RestitchResult } from '../model/restitch';
 import { isLine, reverseLines, reversible, reverseObjects } from '../model/reverse';
-import { formatNumber, t, type Key } from '../i18n';
+import { t, type Key } from '../i18n';
 import { ui } from './state';
 import { unionForm, recolorObjects } from '../model/shapeOps';
 import { blendObject } from '../model/blend';
@@ -30,21 +34,29 @@ import { wholeArea } from '../model/knockout';
 /** What bindObjects needs from the rest of the app. */
 export interface ObjectsApp {
   readonly applyEdit: (p: Pattern, measurement?: Measurement | undefined) => void;
+  /** Selects object `o`, loosed from its shape, and offers to sew it from its shape again. */
+  readonly offerShapeBack: (o: number) => void;
   readonly applyRestitched: (r: RestitchResult | null, failed: Key, remeasure?: boolean) => void;
   readonly closeRungs: () => void;
   readonly closeShape: () => void;
   readonly commitTransform: (m: Mat) => void;
   readonly deleteSelected: () => void;
   readonly drawTool: DrawTool;
-  readonly duplicateSelected: () => void;
+  readonly duplicateSelected: (inPlace?: boolean) => void;
+  readonly copySelected: () => boolean;
+  readonly pasteCopied: () => boolean;
+  readonly canPaste: () => boolean;
   readonly editor: Editor;
   readonly enterShape: (o: number, fit: boolean) => void;
   readonly files: FileList;
   readonly followKnockouts: () => void;
   readonly frameObjects: () => number[];
   readonly history: (step: 'undo' | 'redo' | 'revert') => void;
+  readonly knockoutObjects: (which: number[], on: boolean) => void;
   readonly letteringsOf: (p: Pattern, q: Sequence) => (Lettering | undefined)[];
   readonly mirrorSelected: (axis: 'x' | 'y') => void;
+  readonly objectInfo: (p: Pattern, q: Sequence) => ObjectInfo;
+  readonly orderCard: OrderCard;
   readonly orderStats: (p: Pattern) => { colorChanges: number; trims: number; travelMm: number; };
   readonly overOf: (q: Sequence, p: Pattern) => number[][];
   readonly putAside: (role: AsideRole) => void;
@@ -63,36 +75,46 @@ export interface ObjectsApp {
 }
 
 /**
- * The object list of the Ablauf mode and what it does with the objects (select, move, merge,
- * reverse, split), and the object panel with its actions.
+ * The object list of Gestalten and what it does with the objects (select, move, merge, reverse,
+ * split), the object page, and the commands of all object actions (src/areas/objects/commands.ts).
  */
 export function bindObjects(app: ObjectsApp) {
   const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
+  addObjectIcons();
+
+  function toggleBlock(b: number): void {
+    const next = new Set(ui.hiddenBlocks);
+    if (!next.delete(b)) next.add(b);
+    ui.hiddenBlocks = next;
+    if (ui.focusBlock === b) ui.focusBlock = null;
+    app.redraw();
+  }
+
+  function focusBlock(b: number | null, sticky: boolean): void {
+    if (sticky) {
+      ui.focusBlock = b;
+      ui.hoverBlock = null;
+    } else ui.hoverBlock = b;
+    app.redraw();
+  }
+
+  function showAll(): void {
+    ui.hiddenBlocks = new Set();
+    ui.focusBlock = ui.hoverBlock = null;
+    app.redraw();
+  }
+
   const layers = new LayersPanel({
-    toggle: (b) => {
-      const next = new Set(ui.hiddenBlocks);
-      if (!next.delete(b)) next.add(b);
-      ui.hiddenBlocks = next;
-      if (ui.focusBlock === b) ui.focusBlock = null;
-      app.redraw();
-    },
-    focus: (b, sticky) => {
-      if (sticky) {
-        ui.focusBlock = b;
-        ui.hoverBlock = null;
-      } else ui.hoverBlock = b;
-      app.redraw();
-    },
-    showAll: () => {
-      ui.hiddenBlocks = new Set();
-      ui.focusBlock = ui.hoverBlock = null;
-      app.redraw();
-    },
+    toggle: toggleBlock,
+    focus: focusBlock,
+    showAll,
     // Only the colors change, so the density measurement still holds.
     recolor: (b, color) => {
       const f = app.files.active;
-      if (f?.pattern) app.applyEdit(recolorBlock(f.pattern, b, color), f.measurement);
+      if (!f?.pattern) return;
+      app.applyEdit(recolorBlock(f.pattern, b, color), f.measurement);
+      layers.say({ text: t('objects.recolored'), undo: undoable() });
     },
     select: (objs, toggle) => selectObjects(objs, toggle),
     hover: (o) => {
@@ -102,6 +124,8 @@ export function bindObjects(app: ObjectsApp) {
     },
     move: (order, moved, into) => moveObjects(order, moved, into),
     menu: (o, x, y) => void app.showObjectMenu(o, x, y),
+    colorMenu: (b, at) => colorMenu(b, at),
+    loose: (o) => app.offerShapeBack(o),
   });
 
   /** Name of an object as the list shows it: kind and number within its color. */
@@ -220,14 +244,14 @@ export function bindObjects(app: ObjectsApp) {
     layers.reveal([...ui.selectedObjects]);
     // What leaves out the shapes on top follows the new order (same undo step).
     app.followKnockouts();
-    const undo = t('object.undo');
+    const undo = undoable();
     if (target && recolored.length) {
       const own = q.objects[recolored[0]];
       const ownColors = new Set(recolored.map((o) => q.objects[o].block));
       const one = now(recolored[0]);
       const what = recolored.length > 1 ? t('object.many', { n: recolored.length }) : one >= 0 ? `${kindLabel(nq.objects[one].kind)} ${numberInColor(nq.objects, nq.objects[one])}` : objectName(q, recolored[0]);
       layers.say({
-        text: [warning, t('object.movedInto', { a: what, color: blockName(target) }), undo].filter(Boolean).join(' ') + ' ',
+        text: [warning, t('object.movedInto', { a: what, color: blockName(target) })].filter(Boolean).join(' '),
         warn: !!warning,
         // The other way to read the drop: sewn at that time, but in its own thread.
         action: {
@@ -240,7 +264,7 @@ export function bindObjects(app: ObjectsApp) {
           },
         },
       });
-    } else layers.say({ text: [warning, t(warning ? 'object.movedAnyway' : 'object.moved'), undo].filter(Boolean).join(' '), warn: !!warning });
+    } else layers.say({ text: [warning, t(warning ? 'object.movedAnyway' : 'object.moved'), warning ? t('object.undo') : ''].filter(Boolean).join(' '), warn: !!warning, undo });
     app.redraw();
   }
 
@@ -261,7 +285,7 @@ export function bindObjects(app: ObjectsApp) {
     const order = [...q.objects.keys()].filter((o) => o < sel[0] || (o > sel[0] && !set.has(o)));
     order.splice(sel[0], 0, ...sel);
     const warning = coverWarning(coverConflict(q, p, order, set), (o) => objectName(q, o));
-    const done = (n: number) => layers.say({ text: [warning, t('object.merged', { n })].filter(Boolean).join(' '), warn: !!warning });
+    const done = (n: number) => layers.say({ text: [warning, t('object.merged', { n })].filter(Boolean).join(' '), warn: !!warning, undo: undoable() });
     const starts: number[] = [];
     const next = reorder(p, q.objects, order, app.settings.trimMm, starts);
     // A new pattern also when nothing moved: undo goes back to the one that shows them apart.
@@ -282,7 +306,7 @@ export function bindObjects(app: ObjectsApp) {
       if (r.starts.length) {
         ui.selectedObjects = new Set([merged]);
         app.applyRestitched(r, 'stitch.failed', true);
-        if (form) layers.say(t('object.joined', { n: sel.length }));
+        if (form) layers.say({ text: t('object.joined', { n: sel.length }), undo: undoable() });
         else done(sel.length);
         return;
       }
@@ -333,7 +357,7 @@ export function bindObjects(app: ObjectsApp) {
     const dt = before.trims - after.trims;
     const saved = dt > 0 ? t(dt === 1 ? 'order.fewerTrims.one' : 'order.fewerTrims', { n: dt }) : after.travelMm < before.travelMm - 1 ? t('order.shorterTravel') : null;
     const done = saved ? t('object.reversedSaves', { what: saved }) : t('object.reversed');
-    layers.say({ text: [failText, done, t('object.undo')].filter(Boolean).join(' '), warn: !!failText });
+    layers.say({ text: [failText, done].filter(Boolean).join(' '), warn: !!failText, undo: undoable() });
   }
 
   /** Why the objects cannot be sewn as one, or null. */
@@ -359,17 +383,104 @@ export function bindObjects(app: ObjectsApp) {
     ui.selectedObjects = new Set(nq.objects.flatMap((x, i) => (x.first >= o.first && x.last <= o.last ? [i] : [])));
     ui.selectionKey++;
     layers.reveal([...ui.selectedObjects]);
-    layers.say(t('object.splitDone', { n: ui.selectedObjects.size }));
+    layers.say({ text: t('object.splitDone', { n: ui.selectedObjects.size }), undo: undoable() });
     app.redraw();
   }
 
+  /** Takes back the edit just made, if it is still the latest one of the same design. */
+  function undoable(): () => void {
+    const f = app.files.active;
+    const p = f?.pattern;
+    return () => {
+      if (f && app.files.active === f && f.pattern === p) app.history('undo');
+    };
+  }
+
+  /**
+   * Runs an edit made elsewhere and says what it did as a note with "Undo" (no question before:
+   * undo is the way back). `text` replaces what the edit said, when it changed the design.
+   */
+  function withUndo(run: () => void, text?: () => string): void {
+    const f = app.files.active;
+    const before = f?.pattern;
+    const said = layers.capture(run);
+    const changed = !!f && app.files.active === f && f.pattern !== before;
+    if (said && (said.warn || said.action)) return layers.say(said);
+    const message = changed && text ? text() : said?.text;
+    if (message) layers.say({ text: message, undo: changed ? undoable() : undefined });
+  }
+
+  /**
+   * The order with the selected objects moved: to the front or the end, or each one place earlier
+   * or later (past the next object that is not selected). Null when nothing would change.
+   */
+  function shiftedOrder(s: Shift): { order: number[]; moved: number[] } | null {
+    const p = app.files.active?.pattern;
+    const sel = app.frameObjects();
+    if (!p || !sel.length) return null;
+    const n = app.seq(p).objects.length;
+    const set = new Set(sel);
+    const rest = [...Array(n).keys()].filter((o) => !set.has(o));
+    let order: number[];
+    if (s === 'first') order = [...sel, ...rest];
+    else if (s === 'last') order = [...rest, ...sel];
+    else {
+      order = [...Array(n).keys()];
+      const swap = (i: number, j: number) => ([order[i], order[j]] = [order[j], order[i]]);
+      if (s === 'earlier') {
+        for (let i = 1; i < n; i++) if (set.has(order[i]) && !set.has(order[i - 1])) swap(i, i - 1);
+      } else for (let i = n - 2; i >= 0; i--) if (set.has(order[i]) && !set.has(order[i + 1])) swap(i, i + 1);
+    }
+    return order.some((o, k) => o !== k) ? { order, moved: sel } : null;
+  }
+
+  /** The objects of color block `b`, in sewing order. */
+  function blockObjects(b: number): number[] {
+    const p = app.files.active?.pattern;
+    return p ? app.seq(p).objects.filter((o) => o.block === b).map((o) => o.index) : [];
+  }
+
+  /** The order with color block `b` sewn before the color before it (-1) or after the one after it (1). */
+  function colorOrder(b: number, dir: -1 | 1): number[] | null {
+    const p = app.files.active?.pattern;
+    if (!p) return null;
+    const q = app.seq(p);
+    const other = q.blocks[b + dir];
+    const mine = blockObjects(b);
+    if (!other || !mine.length) return null;
+    const theirs = new Set(blockObjects(other.index));
+    const moving = new Set(mine);
+    const rest = q.objects.map((o) => o.index).filter((o) => !moving.has(o));
+    // Before the first object of the color before, or after the last one of the color after.
+    const at = dir < 0 ? rest.findIndex((o) => theirs.has(o)) : rest.length - [...rest].reverse().findIndex((o) => theirs.has(o));
+    if (at < 0) return null;
+    const order = [...rest.slice(0, at), ...mine, ...rest.slice(at)];
+    return order.some((o, k) => o !== k) ? order : null;
+  }
+
+  /** The color block of the selection, when all of it is in one. */
+  function selectionBlock(): number | null {
+    const p = app.files.active?.pattern;
+    if (!p || !ui.selectedObjects.size) return null;
+    const objs = app.seq(p).objects;
+    const blocks = new Set([...ui.selectedObjects].map((o) => objs[o]?.block));
+    return blocks.size === 1 ? ([...blocks][0] ?? null) : null;
+  }
+
+  /** The block whose menu is open now (the color commands work on it), else the selection's. */
+  let menuBlock: number | null = null;
+
+  /** The selected fills with an outline, and whether they leave out what lies on them. */
+  function knockoutState(): 'on' | 'off' | null {
+    const p = app.files.active?.pattern;
+    if (!p) return null;
+    const objs = app.seq(p).objects;
+    const shaped = app.frameObjects().map((o) => objs[o] && remembered(p, objs[o])).filter((m) => !!m?.form && !m.free);
+    if (!shaped.length) return null;
+    return shaped.every((m) => !!m?.knockout) ? 'on' : 'off';
+  }
+
   const objectPanel = new ObjectPanel({
-    merge: () => mergeObjects(),
-    duplicate: () => app.duplicateSelected(),
-    mirror: (axis) => app.mirrorSelected(axis),
-    subtract: () => app.subtractSelected(),
-    remove: () => app.deleteSelected(),
-    aside: (role) => app.putAside(role),
     thread: (c) => {
       const p = app.files.active?.pattern;
       const sel = app.frameObjects();
@@ -378,6 +489,7 @@ export function bindObjects(app: ObjectsApp) {
       const q = app.seq(next);
       // The objects keep their place in the order, so their indices stay.
       app.takeShapes(next, sel.filter((o) => o < q.objects.length));
+      layers.say({ text: t('objects.recolored'), undo: undoable() });
     },
     blend: (c) => {
       const p = app.files.active?.pattern;
@@ -390,33 +502,12 @@ export function bindObjects(app: ObjectsApp) {
       const link = remembered(next, objs[o])?.fill?.deco?.blend?.link;
       const partner = objs.findIndex((x) => !!link && remembered(next, x)?.blendOf === link);
       app.takeShapes(next, partner < 0 ? [o] : [o, partner]);
-      layers.say(t('object.blend.done'));
+      layers.say({ text: t('object.blend.done'), undo: undoable() });
     },
-    split: splitSelected,
-    step: (dir) => {
-      const p = app.files.active?.pattern;
-      if (!p || ui.selectedObjects.size !== 1) return;
-      const o = [...ui.selectedObjects][0];
-      const n = app.seq(p).objects.length;
-      const k = o + dir;
-      if (k < 0 || k >= n) return;
-      const order = Array.from({ length: n }, (_, i) => i);
-      order[o] = k;
-      order[k] = o;
-      moveObjects(order, [o]);
-    },
-    reverse: () => reverseSelected(),
     clear: () => {
       if (app.editor.active) app.setEditing(false);
       selectObjects([], false);
     },
-    editStitches: (on) => app.setEditing(on),
-    editShape: (on) => {
-      if (!on) return app.closeShape();
-      if (ui.selectedObjects.size === 1) app.enterShape([...ui.selectedObjects][0], true);
-    },
-    deleteNode: () => app.shapeTool.deleteSelected(),
-    toggleNode: () => app.shapeTool.toggleSmooth(),
     resize: (sx, sy) => {
       const p = app.files.active?.pattern;
       const sel = app.frameObjects();
@@ -426,16 +517,122 @@ export function bindObjects(app: ObjectsApp) {
       const cy = (Math.min(...objs.map((o) => o.minY)) + Math.max(...objs.map((o) => o.maxY))) / 20;
       app.commitTransform(scaling(sx, sy, cx, cy));
     },
-    simplify: () => {
-      const r = app.shapeTool.simplify();
-      if (!r) return layers.say(t('shape.simplify.none'), true);
-      layers.say(t('shape.simplified', { before: formatNumber(r.before), after: formatNumber(r.after) }));
-      app.shapeTool.commit();
+    move: (dx, dy) => {
+      if (app.frameObjects().length) app.commitTransform(translation(dx, dy));
     },
-    closeLine: () => app.shapeTool.toggleClosed(),
-    deleteSelection: () => app.editor.deleteSelection(),
-    splitStitch: () => app.editor.splitSelected(),
   });
+
+  const pattern = () => app.files.active?.pattern ?? null;
+  const count = () => {
+    const p = pattern();
+    return p ? app.seq(p).objects.length : 0;
+  };
+  const flow = () => app.settings.mode === 'flow' && !!pattern();
+  const objectCount = (n: number) => (n === 1 ? t('objects.deleted.one') : t('objects.deleted', { n }));
+
+  registerObjectCommands({
+    flow,
+    count,
+    frame: () => app.frameObjects(),
+    // What the page shows, or worked out now when the selection changed since (a right click selects first).
+    info: () => {
+      const p = pattern();
+      if (!p || !ui.selectedObjects.size || ui.lettering || app.settings.mode !== 'flow') return null;
+      const q = app.seq(p);
+      const cur = objectPanel.current;
+      const sel = [...ui.selectedObjects].sort((a, b) => a - b).join();
+      return cur && cur.objects === q.objects && cur.selected.join() === sel ? cur : app.objectInfo(p, q);
+    },
+    lettering: () => !!ui.lettering,
+    drawing: () => app.drawTool.busy,
+    typing: () => {
+      const el = document.activeElement;
+      return el instanceof HTMLElement && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+    },
+    hasSelection: () => ui.selectedObjects.size > 0,
+    frameActive: () => app.settings.mode === 'flow' && !!objectPanel.current?.frame,
+
+    selectAll: () => {
+      if (app.editor.active) app.setEditing(false);
+      selectObjects([...Array(count()).keys()], false);
+    },
+    clear: () => {
+      if (app.editor.active) app.setEditing(false);
+      selectObjects([], false);
+    },
+    duplicate: (inPlace) => withUndo(() => app.duplicateSelected(inPlace)),
+    copy: () => app.copySelected(),
+    paste: () => {
+      let done = false;
+      withUndo(() => (done = app.pasteCopied()));
+      return done;
+    },
+    canPaste: () => app.canPaste(),
+    remove: () => {
+      const n = app.frameObjects().length;
+      withUndo(app.deleteSelected, () => objectCount(n));
+    },
+    canShift: (s) => !!shiftedOrder(s),
+    shift: (s) => {
+      const r = shiftedOrder(s);
+      if (r) moveObjects(r.order, r.moved);
+    },
+    mirror: (axis) => withUndo(() => app.mirrorSelected(axis)),
+    reverse: () => reverseSelected(),
+    split: () => splitSelected(),
+    combine: () => mergeObjects(),
+    subtract: () => withUndo(app.subtractSelected),
+    knockoutState,
+    knockout: () => {
+      const on = knockoutState() !== 'on';
+      withUndo(() => app.knockoutObjects(app.frameObjects(), on));
+    },
+    overlapShown: () => !$('overlap-card').hidden,
+    overlapCut: () => withUndo(() => $('overlap-cut').click()),
+    blend: () => objectPanel.pickBlend(),
+    color: () => objectPanel.pickColor(),
+    aside: (role) => withUndo(() => app.putAside(role)),
+    openShape: () => {
+      if (ui.selectedObjects.size === 1) app.enterShape([...ui.selectedObjects][0], true);
+    },
+    openStitches: () => {
+      app.closeRungs();
+      app.setEditing(true);
+    },
+    nudge: (dx, dy) => {
+      if (app.frameObjects().length) app.commitTransform(translation(dx, dy));
+    },
+    canOptimize: () => flow() && count() > 1,
+    optimize: () => (app.orderCard.isOpen ? app.orderCard.close(true) : app.orderCard.show()),
+
+    colorTarget: () => (menuBlock !== null && menuBlock < (pattern() ? app.seq(pattern()!).blocks.length : 0) ? menuBlock : selectionBlock()),
+    colorFocused: () => ui.focusBlock,
+    colorHidden: (b) => ui.hiddenBlocks.has(b),
+    colorSelect: (b) => selectObjects(blockObjects(b), false),
+    colorFocus: (b) => focusBlock(ui.focusBlock === b ? null : b, true),
+    colorHide: (b) => toggleBlock(b),
+    colorRecolor: (b) => layers.recolor(b),
+    canColorShift: (b, dir) => !!colorOrder(b, dir),
+    colorShift: (b, dir) => {
+      const order = colorOrder(b, dir);
+      if (order) moveObjects(order, blockObjects(b));
+    },
+    canShowAll: () => ui.hiddenBlocks.size > 0 || ui.focusBlock !== null,
+    showAll: () => showAll(),
+    expandAll: (open) => layers.openAll(open),
+  });
+
+  // The menu of a color block: its commands work on it while the menu is open.
+  function colorMenu(b: number, at: { x: number; y: number } | HTMLElement): void {
+    menuBlock = b;
+    menuAt(colorMenuItems(b), at, t('objects.color.menu'));
+    // Back to the selection's color once the menu is gone (a choice runs before it closes).
+    const until = () => {
+      if (objectMenu.isOpen) return void requestAnimationFrame(until);
+      menuBlock = null;
+    };
+    requestAnimationFrame(until);
+  }
 
   // The threads in sewing order, to print, and switching them all to one brand.
   const colorList = new ColorList();
@@ -445,7 +642,7 @@ export function bindObjects(app: ObjectsApp) {
     colorList.open({
       pattern: f.pattern,
       name: FileList.baseName(f) || f.pattern.name,
-      spm: app.settings.machineSpm,
+      machine: app.settings,
       apply: (colors) => {
         const g = app.files.active;
         if (!g?.pattern) return;

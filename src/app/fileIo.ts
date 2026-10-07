@@ -11,6 +11,9 @@ import { FileList, type LoadedFile } from '../ui/fileList';
 import { digitizeSvg, type ImageMode, type LeftOut } from '../ui/imageMode';
 import { threadWidthMm } from '../validation/profiles';
 import { writePattern } from '../writers';
+import { SUPPORTED_EXTENSIONS } from '../parsers';
+import { toast } from '../shell/ui';
+import { initFilesArea } from '../areas/files/files';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -47,16 +50,25 @@ export function bindFileIo(app: FileIoApp) {
   /** Embroidery files go to the file list, an image to the Bild mode, a project opens everything it holds. */
   const isSvgFile = (f: File) => f.type === 'image/svg+xml' || /\.svg$/i.test(f.name);
 
+  const isImage = (f: File) => f.type.startsWith('image/') || IMAGE_FILE.test(f.name);
+  const isStitchFile = (f: File) => SUPPORTED_EXTENSIONS.some((ext) => f.name.toLowerCase().endsWith(ext));
+
   async function openFiles(list: Iterable<File>): Promise<void> {
     const all = [...list];
     for (const f of all.filter((f) => isProjectName(f.name))) await openProject(f);
-    const image = all.find((f) => f.type.startsWith('image/') || IMAGE_FILE.test(f.name));
-    const rest = all.filter((f) => f !== image && !isProjectName(f.name) && !f.type.startsWith('image/') && !IMAGE_FILE.test(f.name));
+    const images = all.filter(isImage);
+    const image = images[0];
+    const rest = all.filter((f) => !isProjectName(f.name) && !isImage(f) && isStitchFile(f));
+    // Nothing is dropped silently: files heatstitch cannot read, and pictures beyond the first, get a note.
+    const unknown = all.filter((f) => !isProjectName(f.name) && !isImage(f) && !isStitchFile(f));
+    if (unknown.length === 1) toast(t('files.unsupported', { name: unknown[0].name }));
+    else if (unknown.length) toast(t('files.unsupported.many', { n: unknown.length, names: unknown.map((f) => f.name).join(', ') }));
+    else if (images.length > 1) toast(t('files.oneImage', { name: image.name }));
     if (image && isSvgFile(image)) {
       // An SVG of shapes opens as stitches in Ablauf, every shape whole; the Bild mode only for SVGs
       // that are pictures (embedded photos, many colors).
       try {
-        const d = await digitizeSvg(image, app.settings.image.prepare, digitizeDefaults(app.settings.profile));
+        const d = await digitizeSvg(image, app.settings.image.prepare, { ...digitizeDefaults(app.settings.profile), trimMm: app.settings.trimMm });
         await app.addDigitized(d, image.name.replace(/\.svg$/i, ''));
         app.setMode('flow');
       } catch {
@@ -104,6 +116,7 @@ export function bindFileIo(app: FileIoApp) {
   }
 
   async function saveProject(): Promise<void> {
+    if (!app.files.files.some((f) => f.pattern) && !app.imageMode.snapshot()) return;
     const bytes = await encodeProject(currentProject());
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([bytes as BlobPart], { type: PROJECT_MIME }));
@@ -140,9 +153,12 @@ export function bindFileIo(app: FileIoApp) {
     Object.assign(app.settings.order, s.order);
     app.settings.trimMm = s.trimMm;
     app.settings.machineSpm = s.machineSpm;
+    app.settings.trimSeconds = s.trimSeconds;
+    app.settings.colorSeconds = s.colorSeconds;
     if (s.background !== undefined) app.settings.background = s.background;
     if (withImage) {
       Object.assign(app.settings.image.prepare, s.image.prepare);
+      app.settings.image.style = s.image.style;
       for (const k of Object.keys(app.settings.image.stitch)) delete app.settings.image.stitch[k as keyof typeof app.settings.image.stitch];
       Object.assign(app.settings.image.stitch, s.image.stitch);
     }
@@ -184,7 +200,7 @@ export function bindFileIo(app: FileIoApp) {
     return name;
   }
 
-  $('new-design').addEventListener('click', async () => {
+  async function newDesign(): Promise<void> {
     const name = newName();
     const data = writePattern({ ...EMPTY, name }, 'pes');
     // Without a hoop there would be nothing to draw into: the common 10 x 10 cm one stands in.
@@ -194,53 +210,49 @@ export function bindFileIo(app: FileIoApp) {
     app.setMode('flow');
     // Nothing to choose yet: straight to drawing.
     app.setFormLevel(true);
-  });
+  }
+  $('new-design').addEventListener('click', () => void newDesign());
 
-  const exampleSelect = $<HTMLSelectElement>('load-example');
-  exampleSelect.addEventListener('change', async () => {
-    const path = exampleSelect.value;
-    exampleSelect.value = '';
-    if (!path) return;
+  /** Opens an example from the server. An SVG is sewn first; throws when it cannot be fetched. */
+  async function loadExample(path: string): Promise<void> {
     const name = path.split('/').pop()!;
     const svg = name.endsWith('.svg');
-    const project = isProjectName(name);
-    // An SVG example is sewn first and a project is fetched only now: the list says so meanwhile.
-    const label = exampleSelect.options[0];
-    if (svg || project) {
-      exampleSelect.disabled = true;
-      label.textContent = t(svg ? 'files.example.loading' : 'files.example.opening');
+    const res = await fetch(`${import.meta.env.BASE_URL}${path}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const file = new File([await res.blob()], name, svg ? { type: 'image/svg+xml' } : undefined);
+    if (svg) {
+      const d = await digitizeSvg(file, app.settings.image.prepare, { ...digitizeDefaults(app.settings.profile), trimMm: app.settings.trimMm });
+      await app.addDigitized(d, name.replace(/\.svg$/, ''));
+      app.setMode('flow');
+    } else if (isProjectName(name)) await openFiles([file]);
+    else {
+      await app.files.add([file]);
+      if (app.settings.mode === 'image') app.setMode('flow');
     }
-    try {
-      const res = await fetch(`${import.meta.env.BASE_URL}${path}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const file = new File([await res.blob()], name, svg ? { type: 'image/svg+xml' } : undefined);
-      if (svg) {
-        const d = await digitizeSvg(file, app.settings.image.prepare, digitizeDefaults(app.settings.profile));
-        await app.addDigitized(d, name.replace(/\.svg$/, ''));
-      } else if (project) await openFiles([file]);
-      else await app.files.add([file]);
-    } catch (err) {
-      console.error('Loading the example failed', err);
-    } finally {
-      exampleSelect.disabled = false;
-      label.textContent = t('files.example');
-    }
-  });
+  }
 
+  // Only files dragged in from outside open: a row dragged in the object list is no file and
+  // keeps its own drop (move, take the thread) without the "drop to open" overlay.
+  const carriesFiles = (e: DragEvent) => !!e.dataTransfer?.types.includes('Files');
   let dragDepth = 0;
   window.addEventListener('dragenter', (e) => {
+    if (!carriesFiles(e)) return;
     e.preventDefault();
     if (++dragDepth === 1) document.body.classList.add('dragging');
   });
-  window.addEventListener('dragleave', () => {
+  window.addEventListener('dragleave', (e) => {
+    if (!carriesFiles(e)) return;
     if (--dragDepth <= 0) {
       dragDepth = 0;
       document.body.classList.remove('dragging');
     }
   });
-  window.addEventListener('dragover', (e) => e.preventDefault());
+  window.addEventListener('dragover', (e) => {
+    if (carriesFiles(e)) e.preventDefault();
+  });
   window.addEventListener('drop', (e) => {
     e.preventDefault();
+    if (!carriesFiles(e)) return;
     dragDepth = 0;
     document.body.classList.remove('dragging');
     if (e.dataTransfer?.files.length) void openFiles(e.dataTransfer.files);
@@ -255,6 +267,8 @@ export function bindFileIo(app: FileIoApp) {
   launchQueue?.setConsumer(async (params) => {
     if (params.files.length) void openFiles(await Promise.all(params.files.map((h) => h.getFile())));
   });
+
+  initFilesArea({ files: app.files, settings: app.settings, setMode: (m) => app.setMode(m), newDesign, loadExample, saveProject });
 
   return { openFiles, openProject, adoptMaterial, storeMaterial };
 }

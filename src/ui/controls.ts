@@ -1,6 +1,6 @@
 import type { Metric } from '../density/grid';
 import { formatNumber, onLangChange, t, type Key } from '../i18n';
-import { FILL, RUNNING, SATIN, TIE_STITCH } from '../model/sequence';
+import { COLOR_SECONDS, FILL, RUNNING, SATIN, TIE_STITCH } from '../model/sequence';
 import { KIND_COLORS, LENGTH_COLORS, LONG_MM, MAX_MM, ORDER_CSS } from '../render/flow';
 import type { ColorBy, Marks, Settings } from '../settings';
 import { FABRICS } from '../validation/profiles';
@@ -13,7 +13,7 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 const rgb = (c: { r: number; g: number; b: number }) => `rgb(${c.r}, ${c.g}, ${c.b})`;
 
 /** Fabric colors offered for the background; null is the theme's own. */
-const BACKGROUNDS: [string | null, Key][] = [
+export const BACKGROUNDS: [string | null, Key][] = [
   [null, 'bg.default'],
   ['#ffffff', 'bg.white'],
   ['#ece4d4', 'bg.natural'],
@@ -23,7 +23,16 @@ const BACKGROUNDS: [string | null, Key][] = [
   ['#9b2430', 'bg.red'],
 ];
 
-/** Heatmap, coloring, display and marker controls of the sidebar. */
+/** What the view button on the stage says: the look that is on. */
+function viewName(s: Settings): string {
+  if (s.realistic && (s.mode === 'flow' || s.mode === 'image' || s.overlay)) return t('design.view.realistic');
+  if (s.mode !== 'flow') return t('design.view.title');
+  if (s.shapesView) return t('design.view.shapes');
+  if (s.colorBy !== 'thread') return t(`colorBy.${s.colorBy}` as Key);
+  return t('design.view.stitches');
+}
+
+/** Heatmap controls of the inspector, and the coloring, display and marker controls of the view menu on the stage. */
 export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void): { refresh: () => void } {
   const metricInputs = document.querySelectorAll<HTMLInputElement>('input[name="metric"]');
   const colorBy = document.querySelectorAll<HTMLInputElement>('input[name="color-by"]');
@@ -81,7 +90,8 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
     };
     const list = document.createElement('ul');
     const note = (k: Key) => Object.assign(document.createElement('p'), { className: 'muted small', textContent: t(k) });
-    if (s.colorBy === 'thread') return key.replaceChildren(note('colorBy.thread.hint'));
+    // Thread colors need no key: they are the colors of the list.
+    if (s.colorBy === 'thread') return key.replaceChildren();
     if (s.colorBy === 'order') {
       const bar = Object.assign(document.createElement('div'), { className: 'gradient' });
       bar.style.background = ORDER_CSS;
@@ -119,6 +129,9 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
       i.disabled = s.mode === 'density' && !s.overlay;
     });
     marksToggle.setAttribute('aria-pressed', String(s.marksOn));
+    marksToggle.title = t(s.marksOn ? 'design.view.marksOn' : 'design.view.marksOff');
+    $('view-name').textContent = viewName(s);
+    $('realistic-sub').classList.toggle('off', !s.realistic);
     marksBox.classList.toggle('all-off', !s.marksOn);
     marksBox.querySelector('legend')!.dataset.off = t('marks.allOff');
     cell.value = String(s.cellMm);
@@ -144,6 +157,11 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
     fabricLook.value = s.fabricLook ? s.profile.fabric : 'flat';
     fabricLook.disabled = !s.realistic;
     spm.value = String(s.machineSpm);
+    $<HTMLInputElement>('trim-seconds').value = String(s.trimSeconds);
+    $<HTMLInputElement>('color-seconds').value = String(s.colorSeconds);
+    // Up to 15 s counts as a machine that changes by itself.
+    const needles = s.colorSeconds <= 15 ? 'multi' : 'single';
+    document.querySelectorAll<HTMLInputElement>('input[name="machine-needles"]').forEach((r) => (r.checked = r.value === needles));
     $('cell-out').textContent = `${formatNumber(s.cellMm, 2)} mm`;
     $('blur-out').textContent = s.blurMm > 0 ? `${formatNumber(s.blurMm, 1)} mm` : t('controls.off');
     $('thread-width-out').textContent = `${formatNumber(s.threadMm, 2)} mm`;
@@ -214,6 +232,18 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
     onChange('render');
   });
   on(spm, 'change', () => ((s.machineSpm = Number(spm.value)), 'render'));
+  // Trim and thread change times: picking the machine sets the usual thread change time.
+  const trimSec = $<HTMLInputElement>('trim-seconds');
+  const colorSec = $<HTMLInputElement>('color-seconds');
+  const seconds = (i: HTMLInputElement, max: number, d: number) => {
+    const v = Number(i.value.replace(',', '.'));
+    return Number.isFinite(v) && v >= 0 ? Math.min(max, v) : d;
+  };
+  on(trimSec, 'change', () => ((s.trimSeconds = seconds(trimSec, 60, s.trimSeconds)), refresh(), 'render'));
+  on(colorSec, 'change', () => ((s.colorSeconds = seconds(colorSec, 300, s.colorSeconds)), refresh(), 'render'));
+  document.querySelectorAll<HTMLInputElement>('input[name="machine-needles"]').forEach((r) =>
+    on(r, 'change', () => ((s.colorSeconds = COLOR_SECONDS[r.value as 'single' | 'multi']), refresh(), 'render')),
+  );
 
   // Collapsible sidebar sections remember whether they are open.
   document.querySelectorAll<HTMLDetailsElement>('details[data-section]').forEach((d) => {

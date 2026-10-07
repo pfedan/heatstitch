@@ -1,5 +1,6 @@
 import { ImageClient } from '../digitize/client';
 import { digitizeDefaults, shapesOrigin, type DigitizeOptions, type Digitized } from '../digitize/digitize';
+import { boxOf, groupAreas, TECHNIQUES, type AreaInfo, type Technique } from '../digitize/smart';
 import { formatNumber, onLangChange, t, type Key } from '../i18n';
 import { nearestThread, NONE, workingSize, type ColorEdit, type PrepareOptions, type ExactLabels, type Prepared, type Stroke } from '../image/prepare';
 import { readSvg, type SvgDesign, type SvgShape } from '../image/svg';
@@ -13,23 +14,29 @@ import { drawStitches } from '../render/stitches';
 import { drawThreads } from '../render/threads';
 import { drawFabric } from '../render/fabricGl';
 import type { Viewport } from '../render/viewport';
-import { shownMarks, type ImageView, type Settings } from '../settings';
+import { IMAGE_STYLES, shownMarks, type ImageStyle, type ImageView, type Mode, type Settings } from '../settings';
 import { CAUTION, CRITICAL, type ValidationResult } from '../validation/validate';
-import { fabricLabel, threadLabel } from './profilePanel';
 import { clearImage, loadImage, saveImage, saveWork, type StoredImage, type StoredWork } from '../storage/imageStore';
 import { hoopShort } from './hoopPanel';
 import { cssColor, ThreadPicker } from './threadPicker';
+import { FABRICS, THREADS } from '../validation/profiles';
+import { STORAGE_NS } from '../storage/namespace';
+import { command, commandTitle, getCommand } from '../shell/commands';
+import '../areas/image/image.css';
 
 /**
- * The Bild mode: an image becomes a stitch file in two steps.
+ * Bild umwandeln: an assistant in three steps that turns a picture into a design.
  *
- * 1. Preparation: size, number of colors, smoothing for photos, smallest region, background and
+ * 1. Bild wählen: the picture, its width, the prompt for preparing it with one's own AI.
+ * 2. Farben und Flächen: number of colors, smoothing for photos, smallest region, background and
  *    thread matching; then the user's own changes: per color another thread, merge into another
  *    color, leave out; and brush strokes that paint a color or erase.
- * 2. Stitches: fill, satin and running stitch with the material's spacing and compensation.
+ * 3. Stiche und Ergebnis: fill, satin and running stitch with the material's spacing and
+ *    compensation, the numbers of the result and its check against the material.
  *
- * Both run in a worker; every change starts a new run and older results are dropped. The result is
- * checked against the material like any loaded file, and "Take over" adds it to the file list.
+ * Preparing and stitching run in a worker; every change starts a new run and older results are
+ * dropped. The steps only choose what is shown: every step can be opened at any time, the view of
+ * the stage follows the step. "Übernehmen" adds the design to the list and goes back to Gestalten.
  */
 
 export interface ImageHooks {
@@ -43,13 +50,22 @@ export interface ImageHooks {
   validate: (p: Pattern) => Promise<ValidationResult>;
   /** Adds the design to the file list, with what is known about its objects. */
   takeOver: (d: Digitized, name: string) => Promise<void>;
+  mode: () => Mode;
+  setMode: (m: Mode) => void;
 }
+
+export type Step = 1 | 2 | 3;
+/** What the stage shows in each step, until the user picks another view. */
+const STEP_VIEW: Record<Step, ImageView> = { 1: 'original', 2: 'prepared', 3: 'stitches' };
+const STEP_KEY = `${STORAGE_NS}.image.step`;
 
 type Tool = 'none' | 'paint' | 'erase';
 
 interface Work {
   edits: ColorEdit[];
   strokes: Stroke[];
+  /** Smart: techniques set by hand, by area (AreaInfo.key). */
+  areas?: Record<string, Technique>;
 }
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -233,6 +249,17 @@ export class ImageMode {
   private brushColor = 0;
   private stroke: Stroke | null = null;
   private cursor: [number, number] | null = null;
+  /** The step of the assistant shown (kept over a reload while there is an image). */
+  private step: Step = 1;
+  /** The picture of the last session was looked for (until then the stored step stays). */
+  private restored = false;
+  /** A picture is being opened. */
+  private loading = false;
+  /** Smart: the area group, or the one area, the pointer is on in the list (or clicked on the stage). */
+  private hotGroup: string | null = null;
+  private hotArea: string | null = null;
+  /** Smart: the groups opened in the list, by letter, to set their areas one by one. */
+  private openGroups = new Set<string>();
 
   constructor(private h: ImageHooks) {
     onLangChange(() => this.render());
@@ -240,18 +267,13 @@ export class ImageMode {
     const input = $<HTMLInputElement>('image-input');
     input.addEventListener('change', () => {
       const f = input.files?.[0];
-      if (f) void this.load(f);
+      if (f) {
+        if (h.mode() !== 'image') h.setMode('image');
+        void this.load(f);
+      }
       input.value = '';
     });
-    $('image-example').addEventListener('click', async () => {
-      try {
-        const res = await fetch(`${import.meta.env.BASE_URL}examples/image-example.svg`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        await this.load(new File([await res.blob()], 'image-example.svg', { type: 'image/svg+xml' }));
-      } catch (err) {
-        console.error('Loading the example image failed', err);
-      }
-    });
+    $('image-example').addEventListener('click', () => void this.loadExample());
 
     // Sliders apply while dragging, typed numbers once they are complete.
     const num = (id: string, read: (v: number) => void, kind: 'prepare' | 'stitches') => {
@@ -283,13 +305,18 @@ export class ImageMode {
     check('image-underlay', (v) => (s.stitch.underlay = v), 'stitches');
     const angle = $<HTMLSelectElement>('image-angle');
     angle.addEventListener('change', () => {
-      // Following the image is the default; "straight" switches it off, a number fixes the angle.
+      // The style lays the rows; a number fixes one angle for all fills.
       delete s.stitch.angle;
-      delete s.stitch.flow;
-      if (angle.value === 'auto') s.stitch.flow = false;
-      else if (angle.value !== 'flow') s.stitch.angle = Number(angle.value);
+      if (angle.value !== 'style') s.stitch.angle = Number(angle.value);
       this.changed('stitches');
     });
+    document.querySelectorAll<HTMLInputElement>('input[name="image-style"]').forEach((el) =>
+      el.addEventListener('change', () => {
+        if (!el.checked || !IMAGE_STYLES.includes(el.value as ImageStyle)) return;
+        s.style = el.value as ImageStyle;
+        this.changed('stitches');
+      }),
+    );
     $('image-stitch-reset').addEventListener('click', () => {
       s.stitch = {};
       this.changed('stitches');
@@ -316,30 +343,215 @@ export class ImageMode {
       this.render();
     });
     $('image-strokes-undo').addEventListener('click', () => this.undo());
-    $('image-strokes-clear').addEventListener('click', () => {
-      if (!this.work.strokes.length) return;
-      this.commit({ ...this.work, strokes: [] });
-    });
-    const copy = $<HTMLButtonElement>('image-ai-copy');
-    copy.addEventListener('click', async () => {
-      const text = $<HTMLTextAreaElement>('image-ai-prompt');
-      try {
-        await navigator.clipboard.writeText(text.value);
-        copy.textContent = t('image.ai.copied');
-      } catch {
-        // No clipboard access: the text is selected, so Ctrl+C copies it.
-        text.select();
-        copy.textContent = t('image.ai.select');
-      }
-      setTimeout(() => (copy.textContent = t('image.ai.copy')), 2500);
-    });
+    $('image-strokes-redo').addEventListener('click', () => this.redo());
+    $('image-strokes-clear').addEventListener('click', () => this.clearStrokes());
+    $('image-ai-copy').addEventListener('click', () => void this.copyPrompt());
     $('image-clear').addEventListener('click', () => this.clear());
-    $('image-take').addEventListener('click', async () => {
-      const d = this.result;
-      if (!d) return;
-      await h.takeOver(d, this.name || 'image');
-    });
+    $('image-take').addEventListener('click', () => void this.take());
+    this.bindSteps();
+    this.bindMaterial();
+    this.registerCommands();
     this.render();
+  }
+
+  // The assistant ---------------------------------------------------------------
+
+  /** The stepper over the stage, back and next under the settings, and the way out. */
+  private bindSteps(): void {
+    try {
+      const v = Number(localStorage.getItem(STEP_KEY));
+      if (v === 2 || v === 3) this.step = v;
+    } catch {
+      /* private mode: the assistant starts at step 1 */
+    }
+    document.querySelectorAll<HTMLButtonElement>('.image-stepper [data-goto]').forEach((b) =>
+      b.addEventListener('click', () => this.goStep(Number(b.dataset.goto) as Step)),
+    );
+    $('image-back').addEventListener('click', () => this.goStep(Math.max(1, this.step - 1) as Step));
+    $('image-next').addEventListener('click', () => this.goStep(Math.min(3, this.step + 1) as Step));
+    $('image-cancel').addEventListener('click', () => this.cancel());
+    // Opening the assistant without a picture starts at its beginning; leaving it puts the brush away.
+    let mode = document.body.dataset.mode;
+    new MutationObserver(() => {
+      const now = document.body.dataset.mode;
+      if (now === mode) return;
+      mode = now;
+      // A picture dropped from elsewhere starts the assistant anew; its load moves on to step 2.
+      if (now === 'image' && this.loading) this.step = 1;
+      else if (now === 'image' && this.restored && !this.source) this.goStep(1);
+      else if (now !== 'image' && this.tool !== 'none') this.setTool('none');
+    }).observe(document.body, { attributes: true, attributeFilter: ['data-mode'] });
+  }
+
+  /** Shows a step of the assistant; the stage shows what the step is about. */
+  goStep(n: Step, view = true): void {
+    const was = this.step;
+    this.step = n;
+    try {
+      localStorage.setItem(STEP_KEY, String(n));
+    } catch {
+      /* private mode: the step is just not kept */
+    }
+    if (view && this.h.settings.image.view !== STEP_VIEW[n]) {
+      this.h.settings.image.view = STEP_VIEW[n];
+      this.h.save();
+    }
+    // The brush belongs to step 2, where the colors are.
+    if (n !== 2 && this.tool !== 'none') this.setTool('none');
+    this.render();
+    this.h.redraw();
+    // The inspector comes and goes with step 1: the picture is fitted into the stage it leaves.
+    if ((was === 1) !== (n === 1) && this.h.mode() === 'image') requestAnimationFrame(() => requestAnimationFrame(() => this.h.fit()));
+    this.maybeReveal();
+  }
+
+  /** The first stitches of a newly opened picture are shown "as sewn" once the user reaches them. */
+  private maybeReveal(): void {
+    if (!this.revealPending || !this.result || this.step !== 3 || this.h.mode() !== 'image') return;
+    this.revealPending = false;
+    const first = !this.h.settings.image.introDone;
+    this.h.settings.image.introDone = true;
+    this.h.save();
+    this.h.reveal(first);
+  }
+
+  /** Back to Gestalten; the picture and its changes stay for later. */
+  private cancel(): void {
+    this.setTool('none');
+    this.h.setMode('flow');
+  }
+
+  /** The stitches become a design in the list, and the assistant closes. */
+  private async take(): Promise<void> {
+    const d = this.result;
+    if (!d || this.busy) return;
+    this.setTool('none');
+    await this.h.takeOver(d, this.name || 'image');
+  }
+
+  private async loadExample(): Promise<void> {
+    try {
+      const res = await fetch(`${import.meta.env.BASE_URL}examples/image-example.svg`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await this.load(new File([await res.blob()], 'image-example.svg', { type: 'image/svg+xml' }));
+    } catch (err) {
+      console.error('Loading the example image failed', err);
+    }
+  }
+
+  private clearStrokes(): void {
+    if (!this.work.strokes.length) return;
+    this.commit({ ...this.work, strokes: [] });
+  }
+
+  private async copyPrompt(): Promise<void> {
+    const copy = $<HTMLButtonElement>('image-ai-copy');
+    const text = $<HTMLTextAreaElement>('image-ai-prompt');
+    try {
+      await navigator.clipboard.writeText(text.value);
+      copy.textContent = t('image.ai.copied');
+    } catch {
+      // No clipboard access: the text is selected, so Ctrl+C copies it.
+      text.select();
+      copy.textContent = t('image.ai.select');
+    }
+    setTimeout(() => (copy.textContent = t('image.ai.copy')), 2500);
+  }
+
+  private setView(v: ImageView): void {
+    this.h.settings.image.view = v;
+    this.h.save();
+    this.render();
+    this.h.redraw();
+  }
+
+  /**
+   * Fabric and thread in step 3: the same material as everywhere, so these pickers pass the choice
+   * to the material panel, which stores it and tells everyone that needs it.
+   */
+  private bindMaterial(): void {
+    for (const [mine, theirs] of [['image-fabric', 'fabric'], ['image-thread', 'thread']] as const) {
+      const sel = $<HTMLSelectElement>(mine);
+      sel.addEventListener('change', () => {
+        const real = document.getElementById(theirs) as HTMLSelectElement | null;
+        if (real) {
+          real.value = sel.value;
+          real.dispatchEvent(new Event('change'));
+          return;
+        }
+        this.h.settings.profile = { ...this.h.settings.profile, [theirs]: sel.value };
+        this.h.save();
+        this.profileChanged();
+      });
+    }
+  }
+
+  /** Every action of the assistant as a command (buttons, command search, key overview). */
+  private registerCommands(): void {
+    const G = 'shell.image.start' as const;
+    const inImage = () => this.h.mode() === 'image';
+    const enter = () => {
+      if (!inImage()) this.h.setMode('image');
+    };
+    command({
+      id: 'image.open',
+      label: 'image.open',
+      group: G,
+      run: () => {
+        enter();
+        $<HTMLInputElement>('image-input').click();
+      },
+    });
+    command({
+      id: 'image.example',
+      label: 'image.example',
+      group: G,
+      run: () => {
+        enter();
+        void this.loadExample();
+      },
+    });
+    const steps: [Step, Key][] = [[1, 'image.cmd.step1'], [2, 'image.cmd.step2'], [3, 'image.cmd.step3']];
+    for (const [n, label] of steps) {
+      command({
+        id: `image.step${n}`,
+        label,
+        group: G,
+        when: () => !inImage() || this.step !== n,
+        run: () => {
+          enter();
+          this.goStep(n);
+        },
+      });
+    }
+    // Mod+Z and Mod+Shift+Z are edit.undo and edit.redo (src/app/keys.ts sends them here in Bild).
+    command({ id: 'image.undoStroke', label: 'image.undo', group: G, when: () => inImage() && this.undoStack.length > 0, run: () => this.undo() });
+    command({ id: 'image.redoStroke', label: 'image.redo', group: G, when: () => inImage() && this.redoStack.length > 0, run: () => this.redo() });
+    const tools: [Tool, Key][] = [['paint', 'image.cmd.paint'], ['erase', 'image.cmd.erase'], ['none', 'image.cmd.none']];
+    for (const [tool, label] of tools) {
+      command({
+        id: `image.brush.${tool}`,
+        label,
+        group: G,
+        when: () => inImage() && !!this.prepared && this.tool !== tool,
+        run: () => {
+          if (tool !== 'none' && this.step !== 2) this.goStep(2);
+          this.setTool(tool);
+        },
+      });
+    }
+    command({ id: 'image.strokes.clear', label: 'image.strokes.clear', group: G, when: () => inImage() && this.work.strokes.length > 0, run: () => this.clearStrokes() });
+    command({ id: 'image.take', label: 'image.take', group: G, when: () => inImage() && !!this.result && !this.busy, run: () => void this.take() });
+    command({ id: 'image.cancel', label: 'image.cancel', group: G, when: inImage, run: () => this.cancel() });
+    command({ id: 'image.shine', label: 'image.shine', group: 'shell.group.view', when: () => inImage() && !!this.result, run: () => $('image-shine').click() });
+    const views: [ImageView, Key][] = [['original', 'image.cmd.view.original'], ['prepared', 'image.cmd.view.prepared'], ['stitches', 'image.cmd.view.stitches']];
+    for (const [v, label] of views) {
+      command({ id: `image.view.${v}`, label, group: 'shell.group.view', when: () => inImage() && this.h.settings.image.view !== v, run: () => this.setView(v) });
+    }
+    command({ id: 'image.ai.copy', label: 'image.ai.copy', group: G, when: inImage, run: () => void this.copyPrompt() });
+    command({ id: 'image.stitch.reset', label: 'image.stitch.reset', group: G, when: () => inImage() && Object.keys(this.h.settings.image.stitch).length > 0, run: () => $('image-stitch-reset').click() });
+    command({ id: 'image.saveProject', label: 'image.saveProject', group: G, when: () => inImage() && !!this.source, run: () => $('image-save-project').click() });
+    command({ id: 'image.clear', label: 'image.clear', group: G, when: () => inImage() && (!!this.source || !!this.error), run: () => this.clear() });
   }
 
   get hasImage(): boolean {
@@ -366,11 +578,16 @@ export class ImageMode {
   /** The image of the last session, with its changes. */
   async restore(): Promise<void> {
     const before = this.loads;
-    const stored = await loadImage();
-    // An image opened meanwhile wins over the stored one.
-    if (!stored || this.loads !== before) return;
-    const { image, work } = stored;
-    await this.load(new File([image.data], image.name, { type: image.type }), work);
+    try {
+      const stored = await loadImage();
+      // An image opened meanwhile wins over the stored one.
+      if (!stored || this.loads !== before) return;
+      const { image, work } = stored;
+      await this.load(new File([image.data], image.name, { type: image.type }), work);
+    } finally {
+      this.restored = true;
+      if (!this.source && this.step !== 1) this.goStep(1, this.h.mode() === 'image');
+    }
   }
 
   /** The image with its color changes and brush strokes, or null without an image. */
@@ -387,6 +604,15 @@ export class ImageMode {
 
   /** Opens an image; `work` restores stored changes (and keeps the stored settings). */
   async load(file: File, work?: Work): Promise<void> {
+    this.loading = true;
+    try {
+      await this.read(file, work);
+    } finally {
+      this.loading = false;
+    }
+  }
+
+  private async read(file: File, work?: Work): Promise<void> {
     const token = ++this.loads;
     let canvas: HTMLCanvasElement;
     let svg: SvgDesign | null = null;
@@ -443,6 +669,9 @@ export class ImageMode {
       if (svg?.widthMm) this.h.settings.image.prepare.widthMm = Math.round(Math.min(400, Math.max(10, svg.widthMm)) * 10) / 10;
       this.h.save();
       void saveImage({ name: file.name, type: file.type, data: bytes });
+      // A new picture chosen in step 1 (or brought in from outside): on to its colors, the next
+      // thing to look at. A later step the user chose while it was opened stays.
+      if (this.step === 1) this.goStep(2);
     }
     this.render();
     this.h.fit();
@@ -475,8 +704,7 @@ export class ImageMode {
     this.stroke = null;
     this.setTool('none');
     void clearImage();
-    this.render();
-    this.h.redraw();
+    this.goStep(1);
   }
 
   /** A setting changed: save, then prepare again or only redo the stitches. */
@@ -493,7 +721,16 @@ export class ImageMode {
   }
 
   private options(): DigitizeOptions {
-    return { ...digitizeDefaults(this.h.settings.profile), ...this.h.settings.image.stitch };
+    const image = this.h.settings.image;
+    // Shapes of an SVG are flat: their rows run straight in every style.
+    const smart = image.style === 'smart' && !this.svg;
+    return {
+      ...digitizeDefaults(this.h.settings.profile),
+      trimMm: this.h.settings.trimMm,
+      flow: image.style === 'dynamic',
+      ...(smart ? { smart, areas: this.work.areas ?? {} } : {}),
+      ...image.stitch,
+    };
   }
 
   /**
@@ -539,13 +776,7 @@ export class ImageMode {
         this.error = '';
         this.render();
         this.h.redraw();
-        if (this.revealPending) {
-          this.revealPending = false;
-          const first = !this.h.settings.image.introDone;
-          this.h.settings.image.introDone = true;
-          this.h.save();
-          this.h.reveal(first);
-        }
+        this.maybeReveal();
         const v = await this.h.validate(d.pattern);
         if (this.result !== d) continue;
         this.validation = v;
@@ -584,9 +815,24 @@ export class ImageMode {
   }
 
   private setWork(w: Work): void {
+    // Only the techniques of areas changed: the prepared image stays.
+    const stitchesOnly = w.edits === this.work.edits && w.strokes === this.work.strokes;
     this.work = w;
     void saveWork(w);
-    this.run('prepare', 0);
+    this.run(stitchesOnly ? 'stitches' : 'prepare', 0);
+  }
+
+  /** Smart: the technique of areas set by hand (null: as Smart chooses), as one undo step. */
+  private setAreas(keys: string[], technique: Technique | null): void {
+    // Only areas of the image as it is now are kept.
+    const now = new Set(this.result?.areas?.map((a) => a.key) ?? []);
+    const areas: Record<string, Technique> = {};
+    for (const [k, v] of Object.entries(this.work.areas ?? {})) if (now.has(k)) areas[k] = v;
+    for (const k of keys) {
+      if (technique) areas[k] = technique;
+      else delete areas[k];
+    }
+    this.commit({ ...this.work, areas });
   }
 
   undo(): void {
@@ -714,6 +960,7 @@ export class ImageMode {
     if (view === 'stitches' && p && !this.stroke) {
       const s = this.h.settings;
       if (!s.realistic || !drawThreads(ctx, vp, p, 1, s.threadMm)) drawStitches(ctx, vp, p, 1, shownMarks(s).jumps);
+      this.drawLetters(ctx, vp);
     }
     // Outline of the design area and the brush.
     ctx.save();
@@ -734,6 +981,40 @@ export class ImageMode {
       ctx.stroke();
       ctx.restore();
     }
+  }
+
+  /** Smart: the letter of each area's group on it (one per spot, where they would not overlap). */
+  private drawLetters(ctx: CanvasRenderingContext2D, vp: Viewport): void {
+    const areas = this.result?.areas;
+    const prep = this.prepared;
+    if (!areas?.length || !prep || this.h.settings.image.style !== 'smart') return;
+    const ox = Math.floor(prep.width / 2) * prep.pxMm;
+    const oy = Math.floor(prep.height / 2) * prep.pxMm;
+    const placed: [number, number][] = [];
+    ctx.save();
+    ctx.font = '600 12px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    // Larger areas first: they keep their letter where small ones would crowd it.
+    const hotFirst = (a: AreaInfo) => (this.hotArea === a.key || this.hotGroup === a.letter ? 1 : 0);
+    for (const a of areas.slice().sort((x, y) => hotFirst(y) - hotFirst(x) || y.areaMm2 - x.areaMm2)) {
+      const [x, y] = vp.toScreen(a.at[0] - ox, a.at[1] - oy);
+      if (placed.some(([px, py]) => Math.hypot(px - x, py - y) < 22)) continue;
+      placed.push([x, y]);
+      const hot = this.hotGroup === a.letter || this.hotArea === a.key;
+      const r = hot ? 12 : 10;
+      const w = Math.max(2 * r, ctx.measureText(a.name).width + 10);
+      ctx.beginPath();
+      ctx.roundRect(x - w / 2, y - r, w, 2 * r, r);
+      ctx.fillStyle = hot ? '#fff' : 'rgba(20, 20, 24, 0.82)';
+      ctx.fill();
+      ctx.lineWidth = hot ? 2 : 1;
+      ctx.strokeStyle = hot ? '#111' : 'rgba(255, 255, 255, 0.85)';
+      ctx.stroke();
+      ctx.fillStyle = hot ? '#111' : '#fff';
+      ctx.fillText(a.name, x, y + 0.5);
+    }
+    ctx.restore();
   }
 
   // Panels --------------------------------------------------------------------
@@ -768,20 +1049,33 @@ export class ImageMode {
     out('image-tolerance-out', `${formatNumber(o.tolerance, 2)} mm`);
     $<HTMLInputElement>('image-underlay').checked = o.underlay;
     const angle = $<HTMLSelectElement>('image-angle');
-    if (!angle.options.length) {
-      angle.append(new Option('', 'flow'), new Option('', 'auto'), ...ANGLES.map((a) => new Option(`${a}°`, String(a))));
-    }
-    angle.options[0].text = t('image.angle.flow');
-    angle.options[1].text = t('image.angle.auto');
+    if (!angle.options.length) angle.append(new Option('', 'style'), ...ANGLES.map((a) => new Option(`${a}°`, String(a))));
+    angle.options[0].text = t('image.angle.style');
+    angle.value = o.angle !== null ? String(o.angle) : 'style';
     // Shapes of an SVG are flat, without structure to follow: their rows run straight.
-    angle.options[0].hidden = !!this.svg;
-    angle.value = o.angle !== null ? String(o.angle) : o.flow && !this.svg ? 'flow' : 'auto';
-    $('image-stitch-reset').hidden = !Object.keys(s.stitch).length;
-    $('image-material').textContent = t('image.material', { fabric: fabricLabel(this.h.settings.profile), thread: threadLabel(this.h.settings.profile) });
+    const style = this.svg ? 'flat' : s.style;
+    document.querySelectorAll<HTMLInputElement>('input[name="image-style"]').forEach((el) => {
+      el.checked = el.value === style;
+      el.disabled = el.value !== 'flat' && !!this.svg;
+    });
+    $('image-style-smart').title = t(this.svg ? 'image.style.svg' : 'image.style.smart.hint');
+    $('image-style-dynamic').title = t(this.svg ? 'image.style.svg' : 'image.style.dynamic.hint');
+    const own = Object.keys(s.stitch).length > 0;
+    $('image-stitch-reset').hidden = !own;
+    $('image-fine-own').hidden = !own;
+    this.renderMaterial();
     document.querySelectorAll<HTMLInputElement>('input[name="image-view"]').forEach((el) => (el.checked = el.value === s.view));
     setVal('image-brush', s.brushMm);
     out('image-brush-out', `${formatNumber(s.brushMm, 1)} mm`);
-    $<HTMLButtonElement>('image-strokes-undo').disabled = !this.undoStack.length;
+    for (const [id, cmd, has] of [
+      ['image-strokes-undo', 'image.undoStroke', this.undoStack.length > 0],
+      ['image-strokes-redo', 'image.redoStroke', this.redoStack.length > 0],
+    ] as const) {
+      const b = $<HTMLButtonElement>(id);
+      b.disabled = !has;
+      b.title = commandTitle(getCommand(cmd)!);
+      b.setAttribute('aria-label', b.title);
+    }
     $<HTMLButtonElement>('image-strokes-clear').disabled = !this.work.strokes.length;
     // The prompt for preparing the image with one's own AI, with this design's size and colors:
     // 1 mm in the embroidery as a share of the image width is the smallest detail worth keeping.
@@ -804,17 +1098,57 @@ export class ImageMode {
           ? t('image.info', { name: this.name, w: this.source.width, h: this.source.height })
           : '');
     info.classList.toggle('error', !!this.error);
+    $('image-file').hidden = !this.source && !this.error;
+    $('image-drop').classList.toggle('compact', !!this.source);
+    $('image-views').hidden = !this.source;
     $('image-save-project').hidden = !this.source;
     $('image-clear').hidden = !this.source && !this.error;
+    this.renderSteps();
     this.renderPalette();
+    this.renderAreas();
     this.renderResult();
+  }
+
+  /** The stepper, back, next and take over: where the user is and what is ready. */
+  private renderSteps(): void {
+    const n = this.step;
+    document.body.dataset.imageStep = String(n);
+    const ready: Record<Step, boolean> = { 1: !!this.source, 2: !!this.prepared, 3: !!this.result };
+    document.querySelectorAll<HTMLButtonElement>('.image-stepper [data-goto]').forEach((b) => {
+      const k = Number(b.dataset.goto) as Step;
+      if (k === n) b.setAttribute('aria-current', 'step');
+      else b.removeAttribute('aria-current');
+      b.classList.toggle('ready', ready[k]);
+      b.title = t(`image.cmd.step${k}` as Key);
+    });
+    const back = $<HTMLButtonElement>('image-back');
+    back.hidden = n === 1;
+    const next = $<HTMLButtonElement>('image-next');
+    next.hidden = n === 3;
+    next.disabled = n === 1 && !this.source;
+    next.title = next.disabled ? t('image.noImage') : t(`image.cmd.step${Math.min(3, n + 1)}` as Key);
+    $('image-take').hidden = n !== 3;
+    $('image-cancel').title = t('image.cancel.hint');
+  }
+
+  /** Fabric and thread of step 3 show the material in use. */
+  private renderMaterial(): void {
+    const p = this.h.settings.profile;
+    const fill = (id: string, items: readonly { id: string }[], label: (id: string) => string, value: string) => {
+      const sel = $<HTMLSelectElement>(id);
+      if (sel.options.length !== items.length) sel.replaceChildren(...items.map((x) => new Option('', x.id)));
+      items.forEach((x, i) => (sel.options[i].text = label(x.id)));
+      sel.value = value;
+    };
+    fill('image-fabric', FABRICS, (id) => t(`fabric.${id}` as Key), p.fabric);
+    fill('image-thread', THREADS, (id) => t(`thread.${id}` as Key), p.thread);
   }
 
   private renderPalette(): void {
     const list = $<HTMLUListElement>('image-palette');
     const p = this.prepared;
     if (!p) {
-      list.replaceChildren(Object.assign(document.createElement('li'), { className: 'muted', textContent: t(this.source ? 'image.busy' : 'image.none') }));
+      list.replaceChildren(Object.assign(document.createElement('li'), { className: 'muted', textContent: t(this.source ? 'image.busy' : 'image.noImage') }));
       return;
     }
     const sewn = p.palette.filter((e) => e.sew);
@@ -882,6 +1216,103 @@ export class ImageMode {
     );
   }
 
+  /** Smart: the area groups with their letter, thread and technique; opened, each area of a group. */
+  private renderAreas(): void {
+    const box = $('image-areas');
+    const d = this.result;
+    const smart = this.h.settings.image.style === 'smart' && !this.svg;
+    box.hidden = !smart || !d?.areas?.length;
+    if (box.hidden || !d?.areas) return;
+    const list = $('image-area-list');
+    // A select being used stays as it is until it is let go.
+    if (list.contains(document.activeElement) && document.activeElement instanceof HTMLSelectElement) return;
+    const set = this.work.areas ?? {};
+    const name = (x: Technique | 'run') => t(`image.tech.${x}` as Key);
+    const el = <K extends keyof HTMLElementTagNameMap>(tag: K, className: string, text = '') => Object.assign(document.createElement(tag), { className, textContent: text });
+    const select = (auto: Technique | 'run', value: string, label: string, apply: (t: Technique | null) => void) => {
+      const sel = document.createElement('select');
+      sel.title = t('image.tech.hint');
+      sel.setAttribute('aria-label', label);
+      sel.append(new Option(t('image.tech.auto', { t: name(auto) }), 'auto'), ...TECHNIQUES.map((x) => new Option(name(x), x)));
+      if (value === 'mixed') sel.append(new Option(t('image.tech.mixed'), 'mixed'));
+      sel.value = value;
+      sel.addEventListener('change', () => sel.value !== 'mixed' && apply(sel.value === 'auto' ? null : (sel.value as Technique)));
+      return sel;
+    };
+    const rows: HTMLElement[] = [];
+    for (const g of groupAreas(d.areas, set)) {
+      const li = el('li', `image-area${g.fixed ? ' fixed' : ''}`);
+      const open = this.openGroups.has(g.letter);
+      const several = g.keys.length > 1;
+      const toggle = el('button', 'area-open', open ? '▾' : '▸');
+      toggle.type = 'button';
+      toggle.hidden = !several;
+      toggle.setAttribute('aria-expanded', String(open));
+      toggle.title = t(open ? 'image.area.close' : 'image.area.open');
+      toggle.addEventListener('click', () => {
+        if (open) this.openGroups.delete(g.letter);
+        else this.openGroups.add(g.letter);
+        this.renderAreas();
+      });
+      const sw = el('span', 'sw');
+      const thread = this.prepared?.palette[g.label]?.thread;
+      if (thread) sw.style.background = cssColor(thread);
+      const text = el('span', 'area-text', t(`image.area.${g.reason}` as Key, { n: g.keys.length }));
+      li.append(toggle, el('span', 'letter', g.letter), sw, text, select(g.auto, g.fixed ?? 'auto', `${g.letter}: ${text.textContent}`, (x) => this.setAreas(g.keys, x)));
+      li.addEventListener('pointerenter', () => this.hot(g.letter, null));
+      li.addEventListener('pointerleave', () => this.hot(null, null));
+      rows.push(li);
+      if (!open || !several) continue;
+      // Each area of the group on its own.
+      for (const a of d.areas.filter((x) => x.letter === g.letter)) {
+        const sub = el('li', `image-area sub${set[a.key] ? ' fixed' : ''}${this.hotArea === a.key ? ' hot' : ''}`);
+        sub.dataset.area = a.key;
+        const size = el('span', 'area-text', `${formatNumber(a.areaMm2, a.areaMm2 < 10 ? 1 : 0)} mm²`);
+        sub.append(el('span', ''), el('span', 'letter', a.name), el('span', ''), size, select(a.auto, set[a.key] ?? 'auto', a.name, (x) => this.setAreas([a.key], x)));
+        sub.addEventListener('pointerenter', () => this.hot(null, a.key));
+        sub.addEventListener('pointerleave', () => this.hot(null, null));
+        rows.push(sub);
+      }
+    }
+    list.replaceChildren(...rows);
+  }
+
+  /** Marks an area group's letters, or one area's, on the stage. */
+  private hot(letter: string | null, area: string | null): void {
+    if (this.hotGroup === letter && this.hotArea === area) return;
+    this.hotGroup = letter;
+    this.hotArea = area;
+    this.h.redraw();
+  }
+
+  /**
+   * Smart: a click on the stage opens the row of the area under it (its group opened), marked
+   * until the pointer goes onto the list.
+   */
+  click(x: number, y: number): void {
+    const areas = this.result?.areas;
+    const p = this.prepared;
+    if (!areas?.length || !p || this.h.settings.image.style !== 'smart' || this.h.settings.image.view !== 'stitches' || this.tool !== 'none') return;
+    const px = Math.floor(x / p.pxMm + Math.floor(p.width / 2));
+    const py = Math.floor(y / p.pxMm + Math.floor(p.height / 2));
+    if (px < 0 || py < 0 || px >= p.width || py >= p.height) return;
+    const label = p.labels[py * p.width + px];
+    // The smallest area of that color whose box holds the point.
+    let hit: AreaInfo | null = null;
+    let best = Infinity;
+    for (const a of areas) {
+      const b = boxOf(a.key);
+      if (!b || b.label !== label || px < b.minX || px > b.maxX || py < b.minY || py > b.maxY) continue;
+      const size = (b.maxX - b.minX + 1) * (b.maxY - b.minY + 1);
+      if (size < best) [hit, best] = [a, size];
+    }
+    if (!hit) return this.hot(null, null);
+    this.openGroups.add(hit.letter);
+    this.hot(null, hit.key);
+    this.renderAreas();
+    document.querySelector(`#image-area-list [data-area="${CSS.escape(hit.key)}"]`)?.scrollIntoView({ block: 'nearest' });
+  }
+
   private renderResult(): void {
     const dl = $<HTMLDListElement>('image-result');
     const verdict = $('image-verdict');
@@ -890,10 +1321,17 @@ export class ImageMode {
     take.disabled = !d || !!this.busy;
     $('image-shine').hidden = !d;
     const busyText = this.busy === 'prepare' ? t('image.busy.prepare') : this.busy === 'stitches' ? t('image.busy.stitches') : '';
-    $('image-status').textContent = busyText;
+    // The status in the bar over the stage: what is being computed, or what went wrong.
+    const status = $('image-status');
+    status.textContent = busyText || this.error;
+    status.classList.toggle('busy', !!busyText);
+    status.classList.toggle('error', !busyText && !!this.error);
+    $('image-take-hint').hidden = !d;
     if (!d) {
       dl.replaceChildren();
-      verdict.replaceChildren();
+      verdict.replaceChildren(
+        Object.assign(document.createElement('p'), { className: 'muted small', textContent: this.source ? this.error || t('image.busy') : t('image.noImage') }),
+      );
       return;
     }
     const st = patternStats(d.pattern);
@@ -905,7 +1343,7 @@ export class ImageMode {
       ['image.result.objects', t('image.result.kinds', { fill: count('fill'), satin: count('satin'), run: count('run') })],
       ...(d.objects.some((o) => o.curved) ? [['image.result.curved', formatNumber(d.objects.filter((o) => o.curved).length)] as [Key, string]] : []),
       ['stats.trims', formatNumber(st.trims)],
-      ['image.result.time', t('image.result.minutes', { m: formatNumber(sewingSeconds(st.stitches, st.trims, st.colorChanges, this.h.settings.machineSpm) / 60, 0) })],
+      ['image.result.time', t('image.result.minutes', { m: formatNumber(sewingSeconds(st.stitches, st.trims, st.colorChanges, this.h.settings) / 60, 0) })],
     ];
     dl.replaceChildren(
       ...rows.flatMap(([k, v]) => [Object.assign(document.createElement('dt'), { textContent: t(k) }), Object.assign(document.createElement('dd'), { textContent: v })]),
@@ -921,7 +1359,7 @@ export class ImageMode {
     const box = Object.assign(document.createElement('div'), { className: `verdict ${cls}` });
     const head = Object.assign(document.createElement('div'), { className: 'verdict-head' });
     head.textContent = t((['validation.verdict.safe', 'validation.verdict.caution', 'validation.verdict.critical'] as const)[worst]);
-    box.append(head, Object.assign(document.createElement('p'), { textContent: t(worst ? 'image.verdict.findings' : 'image.verdict.safe', { n: open.length }) }));
+    box.append(head, Object.assign(document.createElement('p'), { textContent: t(worst ? 'image.verdict.check' : 'image.verdict.safe', { n: open.length }) }));
     verdict.replaceChildren(box);
   }
 }
