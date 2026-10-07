@@ -1,9 +1,11 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { buildDemos, decoSampler, flower, lineVariants, patch, towel, type Design } from './helpers/demoProject';
 import { sewObjects, type SewObject } from '../src/model/objects';
 import { JUMP, STITCH, TRIM, type Pattern } from '../src/model/pattern';
 import { listOf, specOf, sewDesign, sewList } from '../src/model/sew';
-import { recolorObjects } from '../src/model/shapeOps';
+import { deleteObjects, recolorObjects } from '../src/model/shapeOps';
+import { parsePattern } from '../src/parsers';
 import { transformSewObject } from '../src/model/reshape';
 import { stitchKinds } from '../src/model/sequence';
 import { remembered } from '../src/model/restitch';
@@ -114,4 +116,50 @@ describe('moving through the list', () => {
       });
     }
   }, 120000);
+});
+
+describe('scaling through the list', () => {
+  it.each([flower, patch].map((f) => [f.name, f] as const))('%s', (_, make) => {
+    const d = make();
+    const p = d.p;
+    const objs = sewObjects(p);
+    const kinds = stitchKinds(p);
+    const box = (q: Pattern, o: SewObject) => {
+      const xs: number[] = [];
+      for (let i = o.first; i <= o.last; i++) if (q.cmd[i] === STITCH) xs.push(q.x[i]);
+      return Math.max(...xs) - Math.min(...xs);
+    };
+    for (const o of objs.filter((x) => x.kind === 'fill' && specOf(p, x))) {
+      const r = transformSewObject(p, objs, o, kinds, [1.25, 0, 0, 1.25, 0, 0], d.T);
+      expect(r?.restitched).toBe(true);
+      const after = sewObjects(r!.pattern);
+      // The same objects; the others keep their stitches, the scaled one is sewn anew about a quarter wider.
+      expect(after.map((x) => x.id)).toEqual(objs.map((x) => x.id));
+      after.forEach((x, k) => {
+        if (k !== o.index) expect(stitchesOf(r!.pattern, x)).toBe(stitchesOf(p, objs[k]));
+      });
+      // (Its stitches end where the rows and the travel do, not exactly on the edge.)
+      const grown = box(r!.pattern, after[o.index]) / box(p, o);
+      expect(grown).toBeGreaterThan(1.1);
+      expect(grown).toBeLessThan(1.45);
+    }
+  }, 120000);
+});
+
+describe('deleting in a file from elsewhere', () => {
+  // Their objects are cut apart without ties: what stays keeps its stitches as they are, no tie added.
+  it.each(['demos/letters.pes', 'demos/overlap.pes', 'demos/sun.dst', 'demos/leather-patch.dst'])('%s', (f) => {
+    const p = parsePattern(readFileSync(new URL(`../public/examples/${f}`, import.meta.url)), f);
+    const objs = sewObjects(p);
+    const all = (q: Pattern, o: SewObject) => {
+      const out: string[] = [];
+      for (let i = o.first; i <= o.last; i++) if (q.cmd[i] === STITCH) out.push(`${q.x[i]},${q.y[i]}`);
+      return out.join(' ');
+    };
+    for (const o of objs) {
+      const q = deleteObjects(p, [o.index], 3)!;
+      const after = sewObjects(q);
+      for (const x of objs.filter((x) => x !== o)) expect(all(q, after.find((y) => y.id === x.id)!)).toBe(all(p, x));
+    }
+  });
 });

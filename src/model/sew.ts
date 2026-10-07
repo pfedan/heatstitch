@@ -46,10 +46,9 @@ function oneKind(m: Remembered, kind: ObjectKind): boolean {
 /**
  * What object `o` of `p` is sewn from, or null when it can only keep its stitches: loosed from its
  * shape, read from stitches, a lettering, a fill that follows its old rows, of more than one kind,
- * or the border around the parts of a fill cut apart.
+ * or the border around the parts of a fill cut apart. `m`: what it remembers, when not as in `p`.
  */
-export function specOf(p: Pattern, o: SewObject): Spec | null {
-  const m = remembered(p, o);
+export function specOf(p: Pattern, o: SewObject, m: Remembered | null | undefined = remembered(p, o)): Spec | null {
   if (!m || m.free || m.hand || m.read || m.lettering || m.borderAt !== undefined) return null;
   const kind = knownKind(m) ?? o.kind;
   if (kind !== o.kind) return null;
@@ -219,7 +218,7 @@ export interface Entry {
   sew?: boolean;
   /** Kept stitches moved, turned or mirrored by this map (world mm), the way in laid anew. */
   map?: Mat;
-  /** What it remembers from now on (null: nothing; else what it remembers in `p`); for kept stitches. */
+  /** What it remembers from now on (null: nothing; else what it remembers in `p`); sewn anew, it is sewn from this. */
   memory?: Remembered | null;
 }
 
@@ -273,7 +272,9 @@ export function sewList(p: Pattern, list: Entry[], trimMm: number, opts: ListOpt
   const colors: ThreadColor[] = [list[0].color];
   let stitches = 0;
   let here: Pt | null = null;
-  const specs = list.map((e) => (e.sew ? specOf(p, e.obj) : null));
+  // What each entry remembers from now on.
+  const known = list.map((e) => (e.memory === undefined ? remembered(p, e.obj) : (e.memory ?? undefined)));
+  const specs = list.map((e, k) => (e.sew ? specOf(p, e.obj, known[k]) : null));
   // Lines and satins sewn ahead (where they start does not depend on the object before).
   const ahead = new Map<number, Sewn>();
   let counted = 0;
@@ -305,6 +306,14 @@ export function sewList(p: Pattern, list: Entry[], trimMm: number, opts: ListOpt
   const keptAt = (k: number) => !specs[k];
   const used = new Set<number>();
   let nextId = Math.max(table.next || 1, ...list.map((e) => e.obj.id + 1));
+  // Kept objects cut off there in `p` already (as files from elsewhere often are, without a tie):
+  // a cut there gives them no tie they did not have.
+  const all = sewObjects(p);
+  // A file without tie-offs (or tie-ins) gets none either.
+  const tiesIn = all.some((x) => x.tieIn);
+  const tiesOff = all.some((x) => x.tieOff);
+  const cutBefore = (o: SewObject) => !tiesIn || o.index === 0 || trimmedBetween(p, all[o.index - 1], o);
+  const cutAfter = (o: SewObject) => !tiesOff || o.index === all.length - 1 || trimmedBetween(p, o, all[o.index + 1]);
   // Kept objects that got a tie-in or tie-off of their own (too small to have one).
   const grown = new Set<number>();
   let tied = false;
@@ -354,10 +363,13 @@ export function sewList(p: Pattern, list: Entry[], trimMm: number, opts: ListOpt
       const color = list[k - 1].thread !== e.thread;
       const [a, b] = [recOf(k - 1, prev.last), recOf(k, o.first)];
       const far = Math.hypot(b.x - a.x, b.y - a.y) / 10 > trimMm;
-      cut = color || apart?.has(k) || (asBefore ? trimmedBetween(p, prev, o) : far || !!whole || linked(p, prev) || linked(p, o));
+      // Objects without a tie that the thread went between untrimmed in `p` (what lay between them
+      // gone) stay joined so: a cut would give them ties.
+      const asWent = !asBefore && !whole && prev.index < o.index && keptAt(k - 1) && !spec && (!prev.tieOff || !o.tieIn) && !trimmedBetween(p, prev, o);
+      cut = color || apart?.has(k) || (asBefore ? trimmedBetween(p, prev, o) : !asWent && (far || !!whole || linked(p, prev) || linked(p, o)));
       if (cut) {
         const end = out[out.length - 1];
-        if (keptAt(k - 1) && !prev.tieOff) tiedOff(k - 1, prev);
+        if (keptAt(k - 1) && !prev.tieOff && !cutAfter(prev)) tiedOff(k - 1, prev);
         out.push({ ...end, cmd: TRIM });
         if (color) {
           out.push({ ...end, cmd: COLOR_CHANGE });
@@ -374,7 +386,7 @@ export function sewList(p: Pattern, list: Entry[], trimMm: number, opts: ListOpt
     // it keeps its stitches, or it is a line or satin (they start where their shape starts).
     const nextSpec = next && specs[k + 1];
     const fixedStart = next && (!nextSpec || nextSpec.kind === 'line' || nextSpec.kind === 'satin');
-    if (fixedStart && nextSpec && !ahead.has(k + 1)) ahead.set(k + 1, sewCached(remembered(p, next.obj)!, nextSpec, { from: [0, 0] }));
+    if (fixedStart && nextSpec && !ahead.has(k + 1)) ahead.set(k + 1, sewCached(known[k + 1]!, nextSpec, { from: [0, 0] }));
     const nextAt = next && recOf(k + 1, next.obj.first);
     const to = !fixedStart ? undefined : nextSpec ? ahead.get(k + 1)?.runs[0][0] : ([nextAt!.x / 10, nextAt!.y / 10] as Pt);
     const later = list.slice(k + 1).map((x) => x.obj);
@@ -382,8 +394,8 @@ export function sewList(p: Pattern, list: Entry[], trimMm: number, opts: ListOpt
     // The first object starts nearest to the origin: taken from its stitches, the start would
     // creep along its edge each time it is sewn again (they are rounded to 0.1 mm).
     const way: Way = { from: here ?? [0, 0], ...(to ? { to } : {}), ...(covers?.length ? { covers } : {}) };
-    const sewn = !spec ? null : ahead.has(k) ? ahead.get(k)! : sewCached(remembered(p, o)!, spec, way);
-    const m = e.memory === undefined ? remembered(p, o) : (e.memory ?? undefined);
+    const sewn = !spec ? null : ahead.has(k) ? ahead.get(k)! : sewCached(known[k]!, spec, way);
+    const m = known[k];
     let memory = m;
     if (sewn && spec) {
       const under = objectRecords(sewn.runs, sewn.under, trimMm, out);
@@ -404,7 +416,7 @@ export function sewList(p: Pattern, list: Entry[], trimMm: number, opts: ListOpt
       } else if (lead === o.first) out.push({ ...recOf(k, o.first), cmd: JUMP });
       if (lead < o.first) copy(lead, o.first);
       copyOwn(k, o.first, o.first + 1);
-      if ((cut || (!prev && !led)) && !o.tieIn) {
+      if ((cut || (!prev && !led)) && !o.tieIn && !cutBefore(o)) {
         out.push(...tieIn(p, o.first).map((r) => mapped(k, r)));
         tied = true;
       }
@@ -423,7 +435,7 @@ export function sewList(p: Pattern, list: Entry[], trimMm: number, opts: ListOpt
   const lastObj = list[list.length - 1].obj;
   if (keptAt(list.length - 1) && lastObj.index === sewObjects(p).length - 1) copy(lastObj.last + 1, p.cmd.length);
   else {
-    if (keptAt(list.length - 1) && !lastObj.tieOff) tiedOff(list.length - 1, lastObj);
+    if (keptAt(list.length - 1) && !lastObj.tieOff && !cutAfter(lastObj)) tiedOff(list.length - 1, lastObj);
     out.push({ ...out[out.length - 1], cmd: TRIM }, { ...out[out.length - 1], cmd: END });
   }
   const raw = withRecords(p, Int32Array.from(out, (r) => r.x), Int32Array.from(out, (r) => r.y), Uint8Array.from(out, (r) => r.cmd), colors);

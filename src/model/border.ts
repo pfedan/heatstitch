@@ -13,6 +13,7 @@ import { lineStitches } from './line';
 import { hasPart, lineParts, partInThread, partOf } from './shadow';
 import { storeForm } from '../shape/path';
 import { unionOf } from '../shape/rasterize';
+import { readBorder } from './readBorder';
 import { recolor } from './recolor';
 
 /**
@@ -338,7 +339,17 @@ function syncOwnBorders(p: Pattern, trimMm: number, drop: ReadonlySet<string>, f
     // Sewn after this object: the fill, or the second thread of its blend.
     const second = m.fill?.deco?.blend ? seconds.get(m.fill.deco.blend.link) : undefined;
     const after = second === undefined ? o : objs[second];
-    const at = byLink.get(b.link);
+    let at = byLink.get(b.link);
+    // A fill from a file that just got its border: the line sewn along its edge in the file is it.
+    if (at === undefined && list.length === 1) {
+      const found = readBorder(p, objs, o, kinds, region);
+      if (found && !mem[found.at]?.outline && sameColor(objs[found.at].color, color)) {
+        const id = mem[found.at]?.id ?? objs[found.at].id;
+        // Its stitches stay the file's (read) until the fill or the border settings change.
+        remember(p, objs[found.at], (mem[found.at] = { region, outline: b.link, border: stitchOf(found.border), read: true, ...(id ? { id } : {}) }));
+        byLink.set(b.link, (at = found.at));
+      }
+    }
     const cur = at === undefined ? undefined : mem[at];
     const target = at === undefined ? null : objs[at];
     const same = target && cur?.border && sameColor(target.color, color) && (second === undefined || !fresh.has(m.fill!.deco!.blend!.link) || at! > second);
