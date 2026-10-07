@@ -12,6 +12,7 @@ import { reorder } from '../src/model/order';
 import { borderLines, borderStitches, sewAlong } from '../src/model/along';
 import { regionOf } from '../src/shape/rasterize';
 import type { Pt } from '../src/digitize/skeleton';
+import { patch } from './helpers/demoProject';
 
 const load = (f: string) => parsePattern(readFileSync(new URL(`../public/examples/${f}`, import.meta.url)), f);
 
@@ -346,5 +347,19 @@ describe('border moved by hand', () => {
     expect(borders[0].color).toMatchObject(lilac);
     expect(borders[0].index).toBe(b.fill + 1);
     expect(remembered(s, objs[b.fill])?.fill?.border?.color).toMatchObject(lilac);
+  });
+});
+
+describe('a border sewn anew', () => {
+  it('stays the same object: its id goes with it (the patch of the demo project)', () => {
+    const d = patch();
+    const q = syncBorders(d.p, d.T);
+    // The demo's border was stored with other settings than its fill now has: it is sewn anew.
+    expect(q).not.toBe(d.p);
+    const ids = (p: Pattern) => sewObjects(p).map((o) => o.id);
+    expect(ids(q)).toEqual(ids(d.p));
+    // And its fill still finds it by its link.
+    const border = sewObjects(q).find((o) => remembered(q, o)?.outline);
+    expect(border && remembered(q, border)?.id).toBe(border?.id);
   });
 });

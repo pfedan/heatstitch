@@ -357,7 +357,8 @@ function syncOwnBorders(p: Pattern, trimMm: number, drop: ReadonlySet<string>, f
       if (target) changes.push({ a: leadOf(p, target), b: target.last, recs: [] });
       return;
     }
-    const memory: Remembered = { region, outline: b.link, border: stitchOf(b) };
+    // Sewn anew, it stays the same object (its id), wherever it goes.
+    const memory: Remembered = { region, outline: b.link, border: stitchOf(b), ...(cur?.id ? { id: cur.id } : {}) };
     let recs = runRecords(runs, trimMm);
     // The very stitches of another border (a fill copied in place): sewn the other way round, so
     // each remembers its own (memory is keyed by stitches).
