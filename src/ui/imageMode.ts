@@ -1,5 +1,6 @@
 import { ImageClient } from '../digitize/client';
 import { digitizeDefaults, shapesOrigin, type DigitizeOptions, type Digitized } from '../digitize/digitize';
+import { groupAreas, TECHNIQUES, type Technique } from '../digitize/smart';
 import { formatNumber, onLangChange, t, type Key } from '../i18n';
 import { nearestThread, NONE, workingSize, type ColorEdit, type PrepareOptions, type ExactLabels, type Prepared, type Stroke } from '../image/prepare';
 import { readSvg, type SvgDesign, type SvgShape } from '../image/svg';
@@ -63,6 +64,8 @@ type Tool = 'none' | 'paint' | 'erase';
 interface Work {
   edits: ColorEdit[];
   strokes: Stroke[];
+  /** Smart: techniques set by hand, by area (AreaInfo.key). */
+  areas?: Record<string, Technique>;
 }
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -252,6 +255,8 @@ export class ImageMode {
   private restored = false;
   /** A picture is being opened. */
   private loading = false;
+  /** Smart: the letter of the area group the pointer is on in the list. */
+  private hotGroup: string | null = null;
 
   constructor(private h: ImageHooks) {
     onLangChange(() => this.render());
@@ -714,7 +719,15 @@ export class ImageMode {
 
   private options(): DigitizeOptions {
     const image = this.h.settings.image;
-    return { ...digitizeDefaults(this.h.settings.profile), trimMm: this.h.settings.trimMm, flow: image.style === 'dynamic', ...image.stitch };
+    // Shapes of an SVG are flat: their rows run straight in every style.
+    const smart = image.style === 'smart' && !this.svg;
+    return {
+      ...digitizeDefaults(this.h.settings.profile),
+      trimMm: this.h.settings.trimMm,
+      flow: image.style === 'dynamic',
+      ...(smart ? { smart, areas: this.work.areas ?? {} } : {}),
+      ...image.stitch,
+    };
   }
 
   /**
@@ -799,9 +812,24 @@ export class ImageMode {
   }
 
   private setWork(w: Work): void {
+    // Only the techniques of areas changed: the prepared image stays.
+    const stitchesOnly = w.edits === this.work.edits && w.strokes === this.work.strokes;
     this.work = w;
     void saveWork(w);
-    this.run('prepare', 0);
+    this.run(stitchesOnly ? 'stitches' : 'prepare', 0);
+  }
+
+  /** Smart: the technique of areas set by hand (null: as Smart chooses), as one undo step. */
+  private setAreas(keys: string[], technique: Technique | null): void {
+    // Only areas of the image as it is now are kept.
+    const now = new Set(this.result?.areas?.map((a) => a.key) ?? []);
+    const areas: Record<string, Technique> = {};
+    for (const [k, v] of Object.entries(this.work.areas ?? {})) if (now.has(k)) areas[k] = v;
+    for (const k of keys) {
+      if (technique) areas[k] = technique;
+      else delete areas[k];
+    }
+    this.commit({ ...this.work, areas });
   }
 
   undo(): void {
@@ -929,6 +957,7 @@ export class ImageMode {
     if (view === 'stitches' && p && !this.stroke) {
       const s = this.h.settings;
       if (!s.realistic || !drawThreads(ctx, vp, p, 1, s.threadMm)) drawStitches(ctx, vp, p, 1, shownMarks(s).jumps);
+      this.drawLetters(ctx, vp);
     }
     // Outline of the design area and the brush.
     ctx.save();
@@ -949,6 +978,39 @@ export class ImageMode {
       ctx.stroke();
       ctx.restore();
     }
+  }
+
+  /** Smart: the letter of each area's group on it (one per spot, where they would not overlap). */
+  private drawLetters(ctx: CanvasRenderingContext2D, vp: Viewport): void {
+    const areas = this.result?.areas;
+    const prep = this.prepared;
+    if (!areas?.length || !prep || this.h.settings.image.style !== 'smart') return;
+    const ox = Math.floor(prep.width / 2) * prep.pxMm;
+    const oy = Math.floor(prep.height / 2) * prep.pxMm;
+    const placed: [number, number][] = [];
+    ctx.save();
+    ctx.font = '600 12px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    // Larger areas first: they keep their letter where small ones would crowd it.
+    for (const a of areas.slice().sort((x, y) => y.areaMm2 - x.areaMm2)) {
+      const [x, y] = vp.toScreen(a.at[0] - ox, a.at[1] - oy);
+      if (placed.some(([px, py]) => Math.hypot(px - x, py - y) < 22)) continue;
+      placed.push([x, y]);
+      const hot = this.hotGroup === a.letter;
+      const r = hot ? 12 : 10;
+      const w = Math.max(2 * r, ctx.measureText(a.letter).width + 10);
+      ctx.beginPath();
+      ctx.roundRect(x - w / 2, y - r, w, 2 * r, r);
+      ctx.fillStyle = hot ? '#fff' : 'rgba(20, 20, 24, 0.82)';
+      ctx.fill();
+      ctx.lineWidth = hot ? 2 : 1;
+      ctx.strokeStyle = hot ? '#111' : 'rgba(255, 255, 255, 0.85)';
+      ctx.stroke();
+      ctx.fillStyle = hot ? '#111' : '#fff';
+      ctx.fillText(a.letter, x, y + 0.5);
+    }
+    ctx.restore();
   }
 
   // Panels --------------------------------------------------------------------
@@ -990,8 +1052,9 @@ export class ImageMode {
     const style = this.svg ? 'flat' : s.style;
     document.querySelectorAll<HTMLInputElement>('input[name="image-style"]').forEach((el) => {
       el.checked = el.value === style;
-      el.disabled = el.value === 'dynamic' && !!this.svg;
+      el.disabled = el.value !== 'flat' && !!this.svg;
     });
+    $('image-style-smart').title = t(this.svg ? 'image.style.svg' : 'image.style.smart.hint');
     $('image-style-dynamic').title = t(this.svg ? 'image.style.svg' : 'image.style.dynamic.hint');
     const own = Object.keys(s.stitch).length > 0;
     $('image-stitch-reset').hidden = !own;
@@ -1038,6 +1101,7 @@ export class ImageMode {
     $('image-clear').hidden = !this.source && !this.error;
     this.renderSteps();
     this.renderPalette();
+    this.renderAreas();
     this.renderResult();
   }
 
@@ -1146,6 +1210,50 @@ export class ImageMode {
         return li;
       }),
     );
+  }
+
+  /** Smart: the area groups with their letter, thread and technique. */
+  private renderAreas(): void {
+    const box = $('image-areas');
+    const d = this.result;
+    const smart = this.h.settings.image.style === 'smart' && !this.svg;
+    box.hidden = !smart || !d?.areas?.length;
+    if (box.hidden || !d?.areas) return;
+    const list = $('image-area-list');
+    // A select being used stays as it is until it is let go.
+    if (list.contains(document.activeElement) && document.activeElement instanceof HTMLSelectElement) return;
+    const name = (x: Technique | 'run') => t(`image.tech.${x}` as Key);
+    const rows = groupAreas(d.areas, this.work.areas).map((g) => {
+      const li = document.createElement('li');
+      li.className = `image-area${g.fixed ? ' fixed' : ''}`;
+      const letter = Object.assign(document.createElement('span'), { className: 'letter', textContent: g.letter });
+      const sw = Object.assign(document.createElement('span'), { className: 'sw' });
+      const thread = this.prepared?.palette[g.label]?.thread;
+      if (thread) sw.style.background = cssColor(thread);
+      const text = Object.assign(document.createElement('span'), { textContent: t(`image.area.${g.reason}` as Key, { n: g.keys.length }) });
+      const sel = document.createElement('select');
+      sel.title = t('image.tech.hint');
+      sel.setAttribute('aria-label', `${g.letter}: ${text.textContent}`);
+      sel.append(new Option(t('image.tech.auto', { t: name(g.auto) }), 'auto'), ...TECHNIQUES.map((x) => new Option(name(x), x)));
+      if (g.fixed === 'mixed') sel.append(new Option(t('image.tech.mixed'), 'mixed'));
+      sel.value = g.fixed ?? 'auto';
+      sel.addEventListener('change', () => {
+        if (sel.value === 'mixed') return;
+        this.setAreas(g.keys, sel.value === 'auto' ? null : (sel.value as Technique));
+      });
+      li.addEventListener('pointerenter', () => this.hot(g.letter));
+      li.addEventListener('pointerleave', () => this.hot(null));
+      li.append(letter, sw, text, sel);
+      return li;
+    });
+    list.replaceChildren(...rows);
+  }
+
+  /** Marks an area group's letters on the stage. */
+  private hot(letter: string | null): void {
+    if (this.hotGroup === letter) return;
+    this.hotGroup = letter;
+    this.h.redraw();
   }
 
   private renderResult(): void {

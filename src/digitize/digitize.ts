@@ -18,6 +18,7 @@ import { transformForm, type Form } from '../shape/path';
 import { lineStitchFor, lineStitches } from '../model/line';
 import type { PathStitch } from '../model/along';
 import { knockOut, rasterize, rasterizeStroke, sharedArea, unionOf } from '../shape/rasterize';
+import { acrossGraph, areaKey, groupOf, letterOf, structure, STRUCTURE, STRUCTURE_MIN_MM2, type AreaInfo, type Reason, type Technique } from './smart';
 
 /**
  * From a prepared label map to a stitch pattern.
@@ -67,6 +68,10 @@ export interface DigitizeOptions {
    * curved rows get shorter stitches where a curve is tighter.
    */
   tolerance: number;
+  /** Smart: each area gets the technique that suits it (see smart.ts); else all follow `flow`. */
+  smart?: boolean;
+  /** Techniques set by hand, by area (AreaInfo.key). */
+  areas?: Record<string, Technique>;
 }
 
 /** Fills smaller than this (mm²) are sewn without underlay; from LARGE_FILL_MM2 crossing layers where the fabric asks for them. */
@@ -146,6 +151,8 @@ export interface DigitizedObject {
   /** A line, sewn along these curves (see model/line.ts), and how. */
   path?: Form;
   line?: PathStitch;
+  /** The area of the image it was sewn for (AreaInfo.key). */
+  area?: string;
 }
 
 /** An area as pixels, in pattern coordinates (0.1 mm records / 10), and the fill it was sewn with. */
@@ -165,6 +172,8 @@ export interface Digitized {
   objects: DigitizedObject[];
   /** Number of the first stitch of each object (counting stitch records from 0), in sewing order. */
   starts: number[];
+  /** The areas of the image, in sewing order, and how each was sewn (images only). */
+  areas?: AreaInfo[];
 }
 
 interface Obj {
@@ -178,6 +187,10 @@ interface Obj {
   body?: Obj;
   /** A blades' body: straight rows at this angle unless the user fixed one. */
   rowAngle?: number;
+  /** Rows follow the image (else as the options say). */
+  flow?: boolean;
+  /** The area as Smart sees it: its key, what it would choose and why, and whether it was set by hand. */
+  smart?: { key: string; auto: Technique | 'run'; reason: Reason; fixed: boolean };
 }
 
 const dist = (p: Pt, q: Pt) => Math.hypot(p[0] - q[0], p[1] - q[1]);
@@ -374,7 +387,7 @@ function sewOne(obj: Obj, pos: Pt, o: DigitizeOptions, satin: SatinParams, angle
     // Fill angles of touching regions sewn already, so neighbours differ.
     const near = angles.filter((a) => touches(a.obj.region, obj.region)).map((a) => a.angle);
     const fp = { spacing: o.spacing, stitch: o.stitch, angle: o.angle, pull: o.pull, ...fillUnder(o, obj.region.areaMm2), tolerance: o.tolerance };
-    const flow = o.flow && o.angle === null && orient && obj.rowAngle === undefined ? flowFill(obj.region, obj.graph, orient, fp, pos) : null;
+    const flow = (obj.flow ?? o.flow) && o.angle === null && orient && obj.rowAngle === undefined ? flowFill(obj.region, obj.graph, orient, fp, pos) : null;
     const res = flow ?? fillRegion(obj.region, { ...fp, angle: o.angle ?? obj.rowAngle ?? null }, pos, near);
     if (res) {
       out = res.runs;
@@ -412,6 +425,8 @@ export function digitize(prep: Prepared, o: DigitizeOptions, name = 'image'): Di
     const graph = skeleton(region);
     const kind = classify(graph, o);
     const obj: Obj = { info: { kind, label, areaMm2: region.areaMm2 }, region, graph, probe: probes(region) };
+    const key = areaKey(label, bbox.minX, bbox.minY, bbox.maxX, bbox.maxY);
+    obj.info.area = key;
     if (!obj.probe.length) continue;
     if (!byColor.has(label)) byColor.set(label, []);
     // Blades on a body (a grass tuft): the blades as satin, then the body as a fill over their
@@ -421,8 +436,9 @@ export function digitize(prep: Prepared, o: DigitizeOptions, name = 'image'): Di
     if (blades) {
       obj.info = { kind: 'satin', label, areaMm2: region.areaMm2 - blades.core.areaMm2 };
       obj.blades = blades;
-      obj.body = { info: { kind: 'fill', label, areaMm2: blades.core.areaMm2 }, region: blades.core, graph: null, probe: probes(blades.core), rowAngle: blades.angle };
+      obj.body = { info: { kind: 'fill', label, areaMm2: blades.core.areaMm2, area: key }, region: blades.core, graph: null, probe: probes(blades.core), rowAngle: blades.angle };
     }
+    choose(obj, key, o, prep.orient);
     byColor.get(label)!.push(obj);
   }
 
@@ -430,6 +446,7 @@ export function digitize(prep: Prepared, o: DigitizeOptions, name = 'image'): Di
   const objects: DigitizedObject[] = [];
   let pos: Pt = [0, 0];
   const angles: { obj: Obj; angle: number }[] = [];
+  const areas: AreaInfo[] = [];
   for (const label of order) {
     const objs = byColor.get(label);
     if (!objs?.length) continue;
@@ -444,6 +461,7 @@ export function digitize(prep: Prepared, o: DigitizeOptions, name = 'image'): Di
       runs.push(...out);
       for (const _ of out) owners.push(objects.length);
       objects.push(obj.info);
+      if (obj.smart) areas.push(areaInfo(obj, o));
       const last = out[out.length - 1];
       pos = last[last.length - 1];
     };
@@ -468,7 +486,73 @@ export function digitize(prep: Prepared, o: DigitizeOptions, name = 'image'): Di
     if (runs.length) blocks.push({ color: palette[label].thread, runs, owners });
   }
   const starts: number[] = [];
-  return { pattern: assemble(blocks, Math.floor(w / 2) * pxMm, Math.floor(h / 2) * pxMm, o.trimMm, name, starts), objects, starts };
+  // Areas of one color that Smart sees alike are one group, with one letter (in sewing order).
+  const letters = new Map<string, string>();
+  for (const a of areas) {
+    const g = groupOf(a);
+    if (!letters.has(g)) letters.set(g, letterOf(letters.size));
+    a.letter = letters.get(g)!;
+  }
+  return { pattern: assemble(blocks, Math.floor(w / 2) * pxMm, Math.floor(h / 2) * pxMm, o.trimMm, name, starts), objects, starts, areas };
+}
+
+/**
+ * The technique of an area: set by hand, else Smart's choice (with the Smart style), else as the
+ * style says for all. Smart keeps strokes, lines and grass tufts as they are found; a small round
+ * area becomes satin across; a fill follows the image where it has clear structure of its own,
+ * else gets straight rows.
+ */
+function choose(obj: Obj, key: string, o: DigitizeOptions, orient?: Orientation): void {
+  const fixed = o.areas?.[key];
+  if (!o.smart && !fixed) return;
+  const r = obj.region;
+  let auto: Technique | 'run';
+  let reason: Reason;
+  let across: Graph | null = null;
+  if (obj.blades) [auto, reason] = ['satin', 'blades'];
+  else if (obj.info.kind === 'run') [auto, reason] = ['run', 'line'];
+  else if (obj.info.kind === 'satin') [auto, reason] = ['satin', 'stroke'];
+  else if ((across = acrossGraph(r, o.satinMax))) [auto, reason] = ['satin', 'round'];
+  else if (r.areaMm2 >= STRUCTURE_MIN_MM2 && structure(r, orient) >= STRUCTURE) [auto, reason] = ['dynamic', 'structure'];
+  else [auto, reason] = ['flat', 'calm'];
+  obj.smart = { key, auto, reason, fixed: !!fixed };
+  const t = fixed ?? (o.smart ? auto : undefined);
+  if (!t || t === 'run') return;
+  if (t === 'satin') {
+    if (obj.blades || obj.info.kind !== 'fill') return;
+    // Across, else along its centerline; filled when the satin would not hold (sewOne).
+    obj.info.kind = 'satin';
+    obj.graph = across ?? acrossGraph(r, o.satinMax, o.satinMax, Infinity) ?? obj.graph;
+    obj.flow = false;
+    return;
+  }
+  // Rows: a stroke or grass tuft set to a fill by hand is filled whole.
+  if (fixed) {
+    obj.blades = undefined;
+    obj.body = undefined;
+    obj.info = { kind: 'fill', label: obj.info.label, areaMm2: r.areaMm2, area: key };
+  }
+  obj.flow = t === 'dynamic';
+}
+
+/** What became of an area, for the list of areas. */
+function areaInfo(obj: Obj, o: DigitizeOptions): AreaInfo {
+  const r = obj.region;
+  let best = -1;
+  let at: Pt = [0, 0];
+  for (let y = 0; y < r.h; y++) {
+    for (let x = 0; x < r.w; x++) {
+      const v = r.mask[y * r.w + x] ? r.inside[y * r.w + x] : -1;
+      if (v > best) {
+        best = v;
+        at = [(x + r.x0 + 0.5) * r.pxMm, (y + r.y0 + 0.5) * r.pxMm];
+      }
+    }
+  }
+  const kind = obj.info.kind;
+  const technique: AreaInfo['technique'] = obj.blades || kind === 'satin' ? 'satin' : kind === 'run' ? 'run' : (obj.flow ?? o.flow) ? 'dynamic' : 'flat';
+  const s = obj.smart!;
+  return { key: s.key, letter: '', label: obj.info.label, areaMm2: Math.round(r.areaMm2 * 10) / 10, at, technique, auto: s.auto, reason: s.reason, fixed: s.fixed };
 }
 
 /**
