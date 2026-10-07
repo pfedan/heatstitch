@@ -5,7 +5,7 @@ import { vectorize } from '../shape/vectorize';
 import { takeOver, wholeArea } from './knockout';
 import { rememberObjects, sewObjects, stitchKey, type SewObject } from './objects';
 import { insertObject } from './addShape';
-import { syncBorders } from './border';
+import { newLink, syncBorders } from './border';
 import { recs } from './jumps';
 import { reorder } from './order';
 import { recolor, sameColor } from './recolor';
@@ -170,6 +170,14 @@ export function duplicateObjects(p: Pattern, which: number[], trimMm: number, of
   // keeps its number); a copied border becomes a line of its own. The copies are found again by
   // their stitches, as parts sewn in for them move them on.
   const nobjs = sewObjects(cur);
+  // Copies of parts of a fill cut apart are a whole of their own (the parts copied together one).
+  const wholes = new Map<string, string>();
+  for (const k of copies) {
+    const m = remembered(cur, nobjs[k]);
+    if (!m?.piece) continue;
+    if (!wholes.has(m.piece)) wholes.set(m.piece, newLink());
+    remember(cur, nobjs[k], { ...m, piece: wholes.get(m.piece) });
+  }
   const keys = copies.map((k) => objectKey(cur, nobjs[k]));
   const next = syncBorders(cur, trimMm);
   const after = sewObjects(next).map((x) => objectKey(next, x));
