@@ -20,6 +20,7 @@ import { reorder } from '../src/model/order';
 import { stitchKinds } from '../src/model/sequence';
 import { deleteObjects, duplicateObject, duplicateObjects, mirrorMatrix, recolorObjects, subtractTop } from '../src/model/shapeOps';
 import { stitchesBefore } from '../src/model/transform';
+import { sewDesign, specOf } from '../src/model/sew';
 import { parsePattern } from '../src/parsers';
 import { rotation, storeForm, translation, type Mat } from '../src/shape/path';
 import { ellipsePath, parsePath, rectPath } from '../src/shape/svgPath';
@@ -705,6 +706,34 @@ function checkExport(p: Pattern): void {
 }
 
 /** The objects of `p` in a line each, to follow a chain (TORTURE_TRACE=1). */
+/**
+ * The design sewn from its object list (stage C, see src/model/sew.ts): the same objects with the
+ * same ids, kinds and threads in the same order, each that knows its shape sewn from it, and sewn
+ * again from the new list it stays as it is.
+ */
+function checkSewDesign(p: Pattern): void {
+  if (!p.cmd.length) return;
+  const objs = sewObjects(p);
+  const q = sewDesign(p, T);
+  checkWellFormed(q);
+  checkObjectList(q);
+  const after = sewObjects(q);
+  const shape = (os: typeof objs) => os.map((o) => `${o.id}:${o.kind}:${o.block}`).join(' ');
+  expect(shape(after), 'objects sewn from the list').toBe(shape(objs));
+  expect(q.colors, 'threads').toEqual(p.colors);
+  expect(objs.filter((o) => specOf(p, o)).length, 'objects sewn from their shape').toBe(after.filter((o) => specOf(q, o)).length);
+  const r = sewDesign(q, T);
+  const ro = sewObjects(r);
+  const moved = after.filter((o, k) => {
+    const b = ro[k];
+    if (!b || b.last - b.first !== o.last - o.first) return true;
+    for (let i = 0; i <= o.last - o.first; i++) if (q.x[o.first + i] !== r.x[b.first + i] || q.y[o.first + i] !== r.y[b.first + i] || q.cmd[o.first + i] !== r.cmd[b.first + i]) return true;
+    return false;
+  });
+  const what = (o: (typeof objs)[number]) => { const m = remembered(q, o); return `${o.index}:${o.kind}:${specOf(q, o)?.kind ?? 'kept'}:${m?.fill?.pattern ?? ''}${m?.outline ? ':border' : ''}${m?.blendOf ? ':blend' : ''}${m?.knockout ? ':ko' : ''}`; };
+  expect(moved.map(what).join(' '), 'sewn again from the new list: objects that changed').toBe('');
+}
+
 function describeObjects(p: Pattern): string {
   return sewObjects(p)
     .map((o) => {
@@ -745,7 +774,10 @@ async function chain(seed: number, steps = STEPS): Promise<void> {
       checkEchoes(p);
       checkLineParts(p);
       checkKnockouts(p);
-      if (op.name === 'save and open' || step === steps - 1) checkExport(p);
+      if (op.name === 'save and open' || step === steps - 1) {
+        checkExport(p);
+        checkSewDesign(p);
+      }
     } catch (e) {
       throw new Error(`${at()}\n${(e as Error).message}`);
     }
