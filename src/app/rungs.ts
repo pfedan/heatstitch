@@ -12,7 +12,7 @@ import { atShare, regionBox, swirlCenters } from '../digitize/deco';
 import { railsFromOutline, stripsOfAreas } from '../digitize/rungs';
 import { areaLoops, suggestSatin } from '../digitize/satinSuggest';
 import { t, type Key } from '../i18n';
-import { bestChain, sectionView, DECO_DEFAULTS, MAX_SWIRLS, type FillSettings, type Rails, type SatinSettings, analyze, remembered, keepShape, remember, restitch, measureSatin, forget, type RestitchResult, type Settings as RestitchSettings } from '../model/restitch';
+import { bestChain, railsArea, sectionView, DECO_DEFAULTS, MAX_SWIRLS, type FillSettings, type Rails, type SatinSettings, analyze, remembered, keepShape, remember, restitch, measureSatin, forget, type RestitchResult, type Settings as RestitchSettings } from '../model/restitch';
 import { ui } from './state';
 
 /** What bindRungs needs from the rest of the app. */
@@ -308,11 +308,26 @@ export function bindRungs(app: RungsApp) {
    */
   function suggestLines(): void {
     const p = app.files.active?.pattern;
-    if (!p || ui.rungObject === null || rungTool.mode !== 'fill') return;
+    if (!p || ui.rungObject === null) return;
     const q = app.seq(p);
     const obj = q.objects[ui.rungObject];
-    const an = obj && analyze(p, obj, q.kinds);
-    const area = an && (remembered(p, obj)?.shape ?? an.fill);
+    if (!obj) return;
+    if (rungTool.sectioned) {
+      // A satin: its area as it opened in the tool (see sectionView), cut and crossed anew.
+      const shape = keepShape(p, obj, q.kinds);
+      const area = shape.shape ?? (shape.columns?.length === 1 ? railsArea(shape.columns[0]) : null);
+      const s = area && suggestSatin(area);
+      if (!s || s.kind !== 'strokes' || !s.ok) {
+        // No whole suggestion from the area: along the columns as they run.
+        if (rungTool.alongRails()) return app.layers.say(t('stitch.suggest.rails'));
+        return app.layers.say(t('stitch.suggest.none'));
+      }
+      rungTool.suggestIn(s.lines, s.cuts);
+      return app.layers.say(t('stitch.suggest.sewn', { n: s.cuts.length + 1 }));
+    }
+    if (rungTool.mode !== 'fill') return;
+    const an = analyze(p, obj, q.kinds);
+    const area = remembered(p, obj)?.shape ?? an.fill;
     if (!area) return;
     const s = suggestSatin(area);
     if (!s || s.kind !== 'strokes') return app.layers.say(t('stitch.suggest.wide'), true);
