@@ -156,4 +156,15 @@ describe('split a fill', () => {
     remember(q, e, { ...remembered(q, e)!, fill: undefined });
     expect(canSplit(q, 0)).toBe(false);
   });
+
+  it('gives the parts ids of their own, the first keeping the id of the fill', () => {
+    const p = design();
+    const before = sewObjects(p).map((o) => o.id);
+    const s = splitFill(p, 0, [[[15, -2], [15, 22]]], T) as { pattern: Pattern; parts: number[] };
+    const ids = sewObjects(s.pattern).map((o) => o.id);
+    expect(ids[s.parts[0]]).toBe(before[0]);
+    expect(new Set(ids).size).toBe(ids.length);
+    // The disc beside keeps its id too.
+    expect(ids[ids.length - 1]).toBe(before[1]);
+  });
 });

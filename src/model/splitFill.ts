@@ -257,6 +257,10 @@ export function splitFill(p: Pattern, o: number, cuts: Pt[][], trimMm: number): 
     if (!next) return null;
     cur = next;
   }
+  // The first part is the fill as it goes on: it keeps its id.
+  const firstPart = sewObjects(cur)[o];
+  const firstMemory = remembered(cur, firstPart);
+  if (firstMemory && firstPart.id !== obj.id) remember(cur, firstPart, { ...firstMemory, id: obj.id });
   // A border in a thread of its own goes with its object.
   if (link) cur = syncBorders(cur, trimMm, new Set([link]));
   return { pattern: cur, parts: forms.map((_, k) => o + k), borderGone };
