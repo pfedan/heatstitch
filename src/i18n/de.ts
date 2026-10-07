@@ -525,6 +525,8 @@ export const deBase = {
   'stitch.band': 'Für das Material empfohlen: {a} bis {b} mm',
   'stitch.densityFrom': 'Abstand am Anfang',
   'stitch.densityTo': 'Abstand am Ende',
+  'stitch.gradient': 'Verlauf',
+  'stitch.gradient.hint': 'Die Reihen werden quer über die Form gleichmäßig lockerer, vom Abstand am Anfang bis zum Abstand am Ende, und behalten dabei ihre Biegung. Für Schattierungen wie einen Bauch mit gewölbten Reihen.',
   'stitch.pattern': 'Muster',
   'stitch.pattern.tatami': 'Tatami',
   'stitch.pattern.tatami.hint': 'Gerade Reihen, Einstichpunkte von Reihe zu Reihe versetzt',

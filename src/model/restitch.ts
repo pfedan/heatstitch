@@ -127,6 +127,8 @@ export interface FillSettings {
   spacing: number;
   /** Gradient: spacing on the far side (mm). */
   spacingEnd: number;
+  /** Rows get further apart evenly from spacing to spacingEnd; curved patterns (follow, guided). */
+  gradient?: boolean;
   /** Tatami: shift of the needle points from row to row (fraction of a stitch; 0 at random). */
   offset: number;
   /** Direction of the rows, degrees 0 to 180 (tatami and gradient). */
@@ -789,6 +791,7 @@ function isFill(f: unknown): f is FillSettings {
     PATTERNS.includes(s.pattern) &&
     [s.spacing, s.spacingEnd, s.offset, s.angle, s.stitch, s.edge].every(finite) &&
     (s.tolerance === undefined || finite(s.tolerance)) &&
+    (s.gradient === undefined || typeof s.gradient === 'boolean') &&
     (s.guides === undefined || (Array.isArray(s.guides) && s.guides.every(isLine))) &&
     (s.underCross === undefined || typeof s.underCross === 'boolean') &&
     (s.underInset === undefined || finite(s.underInset)) &&
@@ -1104,6 +1107,12 @@ export function restoreRemembered(p: Pattern, list: unknown): number {
   return memory.size;
 }
 
+/** Curved patterns that can grow lighter across the shape (FillSettings.gradient). */
+export const CURVED_GRADIENT: FillPattern[] = ['follow', 'guided'];
+
+/** A fill whose rows get further apart across the shape: the gradient pattern, or curved rows set so. */
+export const isGradient = (f: FillSettings): boolean => f.pattern === 'gradient' || (!!f.gradient && CURVED_GRADIENT.includes(f.pattern));
+
 /**
  * Records of the fills sewn open on purpose (gradients), which the coverage check leaves out; null
  * when there are none.
@@ -1111,8 +1120,8 @@ export function restoreRemembered(p: Pattern, list: unknown): number {
 export function openOnPurpose(p: Pattern, objs: SewObject[]): Uint8Array | null {
   let out: Uint8Array | null = null;
   for (const o of objs) {
-    const pat = remembered(p, o)?.fill?.pattern;
-    if (pat !== 'gradient' && !(pat && isOpenPattern(pat))) continue;
+    const f = remembered(p, o)?.fill;
+    if (!f || (!isGradient(f) && !isOpenPattern(f.pattern))) continue;
     out ??= new Uint8Array(p.cmd.length);
     out.fill(1, o.first, o.last + 1);
   }
@@ -1808,6 +1817,7 @@ function newFill(p: Pattern, o: SewObject, a: Analysis, s: FillSettings, reverse
     res = contourFill(r, fp, start);
   } else if (s.pattern === 'spiral') res = spiralFill(r, fp, start);
   else if (s.pattern === 'follow') {
+    if (s.gradient) fp.spacingEnd = s.spacingEnd;
     const lines: [Pt, Pt][] = [];
     for (const pt of a.parts) {
       if (pt.kind !== 'fill' || pt.border) continue;
@@ -1817,6 +1827,7 @@ function newFill(p: Pattern, o: SewObject, a: Analysis, s: FillSettings, reverse
     res = fieldFill(r, f.g, f, fp, start, false, CONTOUR_PEAK);
   } else if (s.pattern === 'guided') {
     if (!s.guides?.length) return null;
+    if (s.gradient) fp.spacingEnd = s.spacingEnd;
     const f = guideField(r, s.guides);
     res = fieldFill(r, f.g, f, fp, start, false, CONTOUR_PEAK);
   } else if ((DECO_PATTERNS as FillPattern[]).includes(s.pattern)) {
