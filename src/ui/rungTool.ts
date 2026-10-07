@@ -888,6 +888,23 @@ export class RungTool implements RungView {
     this.hooks.change(this.result(), true);
   }
 
+  /** Whether the satin is shown in sections of its area (see Rails.split), so its cut lines can be suggested anew. */
+  get sectioned(): boolean {
+    return this.mode === 'satin' && !!this.split;
+  }
+
+  /**
+   * Vorschlagen on a satin: its area cut along `cuts` and crossed by `lines` (see suggestSatin) in
+   * place of its own, sewn anew as one undo step. Spacings and directions go with the parts as on
+   * any cut.
+   */
+  suggestIn(lines: [Pt, Pt][], cuts: [Pt, Pt][]): void {
+    if (!this.sectioned) return;
+    this.cutLines = cuts.map(([a, b]) => [a, b] as [Pt, Pt]);
+    this.selected = null;
+    this.resplit(lines);
+  }
+
   /** Whether the cut lines are not the ones the satin was cut along (they left a part without a column). */
   private cutsChanged(): boolean {
     const stored = this.columns.find((c) => c.rails.split)?.rails.split?.cuts;
@@ -900,11 +917,10 @@ export class RungTool implements RungView {
    * and the trim before it. A part that makes no column or a hole not opened is shown; the
    * stitches then stay as they were until the lines fit.
    */
-  private resplit(): void {
+  private resplit(lines = this.splitLines()): void {
     const sp = this.split;
     if (!sp) return;
     const ks = this.columns.map((_, k) => k).filter((k) => this.parts[k] === sp.part);
-    const lines = this.splitLines();
     // Spacings set at rungs stay at the rung, wherever its part ends up.
     const spaced = ks.flatMap((k) => {
       const c = this.columns[k];
@@ -923,6 +939,14 @@ export class RungTool implements RungView {
     // One chain per area, a trim between areas apart.
     let cols: Rails[] = made.areas.flatMap((strips, a) => strips.map((r) => ({ left: r.left, right: r.right, rungs: r.rungs, chain: a })));
     if (cols.length === old.length) cols = keptOrder(old, cols);
+    else if (this.satin) {
+      // Parts anew: each chain in the order that hides the ways between its parts best, as when
+      // first sewn from the fill (else a part may start far from where the last one ended).
+      const satin = this.satin;
+      const chains = new Map<number, Rails[]>();
+      for (const c of cols) chains.set(c.chain ?? 0, [...(chains.get(c.chain ?? 0) ?? []), c]);
+      cols = [...chains.values()].flatMap((g) => (g.length > 1 ? bestChain(g, satin) : g));
+    }
     for (const c of cols) {
       const cl = cumulative(c.left);
       const spacings = (c.rungs ?? []).flatMap((r) => {
@@ -1019,6 +1043,34 @@ export class RungTool implements RungView {
     this.selected = null;
     if (changed) this.hooks.change(this.result(), true);
     else this.hooks.say('stitch.direction.cornersNone');
+  }
+
+  /**
+   * Vorschlagen along the columns as they are, where the area makes no suggestion (a ring, an
+   * outline letter): rungs at the bends and cut lines at the sharp corners, as one change. False
+   * when there is nothing to add.
+   */
+  alongRails(): boolean {
+    let changed = false;
+    for (const c of this.columns) {
+      const rungs = cornerRungs(c.left, c.right, c.rungs);
+      if (JSON.stringify(rungs) !== JSON.stringify(c.rungs)) {
+        c.rungs = rungs;
+        c.own = true;
+        changed = true;
+      }
+      const la = c.cl[c.cl.length - 1];
+      const lb = c.cr[c.cr.length - 1];
+      let cuts = c.cuts;
+      for (const r of cornerCuts(c.left, c.right, c.own ? c.rungs : (c.rails.rungs ?? []))) cuts = addRung(cuts, r, la, lb) ?? cuts;
+      if (cuts.length !== c.cuts.length) {
+        c.cuts = cuts;
+        changed = true;
+      }
+    }
+    this.selected = null;
+    if (changed) this.hooks.change(this.result(), true);
+    return changed;
   }
 
   /** Cut lines at the sharp corners of each column, those there kept; says so when there are none. */
