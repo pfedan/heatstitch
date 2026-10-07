@@ -305,8 +305,6 @@ const enBase: Record<keyof typeof deBase, string> = {
   'edit.thin.none': 'No rows to thin in the selection (select a fill or zigzag).',
   'edit.undo': 'Undo',
   'edit.redo': 'Redo',
-  'edit.undo.key': 'Ctrl+Z',
-  'edit.redo.key': 'Ctrl+Shift+Z',
   'edit.revert': 'Back to the original',
   'hoop.title': 'Hoop',
   'hoop.hint': 'Pick a hoop to see whether the design fits. Applies to this design.',

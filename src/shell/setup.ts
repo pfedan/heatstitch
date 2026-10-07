@@ -5,6 +5,7 @@ import { FileList, type LoadedFile } from '../ui/fileList';
 import { bindCommandKeys, command, commandTitle, getCommand, keyLabel } from './commands';
 import { createKeyOverview, createPalette } from './palette';
 import { popover } from './popover';
+import { initTooltips } from './tooltip';
 
 export interface ShellApp {
   files: FileList;
@@ -26,6 +27,7 @@ const usable = (id: string) => () => {
  * inspector pages, the command search and the key overview. The areas register their own commands.
  */
 export function initShell(app: ShellApp): void {
+  initTooltips();
   const designPop = popover($('design-button'), $('design-pop'));
   const savePop = popover($('save-button'), $('save-pop'));
   const morePop = popover($('more-button'), $('more-pop'));
@@ -112,6 +114,8 @@ export function initShell(app: ShellApp): void {
     $('palette-key').textContent = keyLabel('Mod+K');
     $('palette-open').title = commandTitle(getCommand('shell.palette')!);
     $('save-button').title = commandTitle(getCommand('shell.save')!);
+    $('undo').title = commandTitle(getCommand('edit.undo')!);
+    $('redo').title = commandTitle(getCommand('edit.redo')!);
   };
   onLangChange(titles);
   titles();

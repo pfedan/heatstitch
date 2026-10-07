@@ -70,12 +70,13 @@ export class ThreadPicker {
       btn.type = 'button';
       btn.className = 'pick';
       btn.style.background = cssColor(c);
-      btn.title = threadTitle(c);
-      btn.setAttribute('aria-label', btn.title);
+      const label = threadTitle(c);
+      btn.title = label;
+      btn.setAttribute('aria-label', label);
       if (current) btn.setAttribute('aria-current', 'true');
       btn.addEventListener('click', () => pick(c));
       // The name shows at once under the colors (the tooltip comes only after a while).
-      const show = () => (name.textContent = btn.title);
+      const show = () => (name.textContent = label);
       btn.addEventListener('pointerenter', show);
       btn.addEventListener('focus', show);
       return btn;
