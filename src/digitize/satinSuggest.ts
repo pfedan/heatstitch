@@ -532,7 +532,7 @@ interface SplitColumn {
  * stitches: the area from its shape, the cut lines where its columns end inside it (against another
  * column, not at the edge). So every satin opens in sections of its area, and the cut lines can always be moved, drawn or taken away again, and the columns made anew.
  */
-export function withSplit<C extends SplitColumn>(columns: C[][], area: Region): C[][] {
+export function withSplit<C extends SplitColumn>(columns: C[][], area: Region, part?: number): C[][] {
   if (columns.some((part) => part.some((r) => r.split))) return columns;
   const { outsides, holes } = areaLoops(area);
   if (!outsides.length) return columns;
@@ -547,7 +547,8 @@ export function withSplit<C extends SplitColumn>(columns: C[][], area: Region): 
   // The part that is the area: its columns lie in it (one in ten may miss, read from an image a
   // tiny column can lie across its own edge).
   const inArea = (c: C) => c.left.length > 1 && c.right.length > 1 && [0.5, 0.25, 0.75].some((sh) => within(at(c, sh)));
-  const k = columns.findIndex((part) => part.length > 0 && part.filter((c) => !inArea(c)).length <= Math.floor(part.length / 10));
+  // `part` given: that one (its area read from its own rails, so it lies in it however it was read).
+  const k = part ?? columns.findIndex((pt) => pt.length > 0 && pt.filter((c) => !inArea(c)).length <= Math.floor(pt.length / 10));
   if (k < 0) return columns;
   const cuts = cutLinesBetween(columns[k], outsides, holes);
   return columns.map((part, j) => (j === k ? part.map((c, i) => (i ? c : { ...c, split: { outlines: outsides, holes, cuts } })) : part));

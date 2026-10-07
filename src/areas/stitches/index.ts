@@ -105,8 +105,6 @@ export function initStitchArea(app: StitchAreaApp): { refresh: () => void } {
   command({ id: 'stitch.pen.toggle', label: 'stitches.cmd.penToggle', group: G, keys: ['T'], bind: false, when: drawing, run: () => rt.setCutMode(!rt.cutMode), palette: false });
   const satinTool = () => rungsOn() && rt.mode === 'satin';
   const dir = () => info()?.direction;
-  command({ id: 'stitch.rungs.corners', label: 'stitches.cmd.corners', group: G, when: satinTool, run: () => rt.corners() });
-  command({ id: 'stitch.rungs.sections', label: 'stitches.cmd.sections', group: G, when: satinTool, run: () => rt.sections() });
   command({ id: 'stitch.rungs.order', label: 'stitches.cmd.order', group: G, when: () => satinTool() && rt.chained, run: () => rt.bestOrder() });
   command({ id: 'stitch.rungs.even', label: 'stitches.cmd.even', group: G, when: () => satinTool() && dir()?.rungs !== 0, run: () => rt.even() });
   command({ id: 'stitch.rungs.follow', label: 'stitches.cmd.follow', group: G, when: () => satinTool() && dir()?.rungs !== null, run: () => rt.follow() });
@@ -296,9 +294,8 @@ export function initStitchArea(app: StitchAreaApp): { refresh: () => void } {
       const d = dir();
       const what = !d ? '' : d.rungs === null ? t('stitches.bar.follow') : d.rungs === 0 ? t('stitches.bar.even') : t('stitches.bar.rungs', { n: d.rungs });
       items.push(title('stitches.bar.direction'), state(d?.cuts ? `${what} · ${t('stitches.bar.cuts', { n: d.cuts + 1 })}` : what, 3), sep(), pen(), sep());
-      // In sections of its area one suggestion does it all (cut lines and rungs); read in columns only, the corners and sections.
-      if (rt.sectioned) items.push(cmdButton('stitch.rungs.suggest', 'stitches.bar.suggest', { icon: ICON.wand, hint: 'stitch.suggest.hint', more: 5 }));
-      else items.push(cmdButton('stitch.rungs.corners', 'stitches.bar.corners', { hint: 'stitch.direction.corners.hint', more: 5 }), cmdButton('stitch.rungs.sections', 'stitches.bar.sections', { hint: 'stitch.sections.hint', more: 6 }));
+      // One suggestion does it all: cut lines and rungs.
+      items.push(cmdButton('stitch.rungs.suggest', 'stitches.bar.suggest', { icon: ICON.wand, hint: 'stitch.suggest.hint', more: 5 }));
       if (rt.chained) items.push(cmdButton('stitch.rungs.order', 'stitches.bar.order', { hint: 'stitch.order.best.hint', more: 7 }));
       items.push(cmdButton('stitch.rungs.even', 'stitches.bar.remove', { hint: 'stitch.direction.even.hint', more: 8 }), cmdButton('stitch.rungs.follow', 'stitch.direction.follow.button', { hint: 'stitch.direction.follow.hint', more: 9 }));
       if (d?.spacingHere !== undefined) items.push(sep(), spacingHere(d.spacingHere));
