@@ -1,4 +1,4 @@
-import { formatNumber, t, type Key } from '../i18n';
+import { formatNumber, getLang, onLangChange, t, type Key } from '../i18n';
 import type { Catalog, Font, FontEntry, FontStyle } from '../lettering/font';
 import { loadFont } from '../lettering/font';
 import { missingIn, type Align, type Lettering, type LetteringShape } from '../lettering/layout';
@@ -56,6 +56,15 @@ const icon = (paths: string) =>
   `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">${paths}</svg>`;
 
 /**
+ * When the card is built anew: for another lettering, font, language or mode, or when the
+ * radius field comes or goes with the shape; else only the values change.
+ */
+export function panelKey(info: LetteringInfo, fontsOpen: boolean, lang: string): string {
+  const l = info.lettering;
+  return [l.id, l.font, !!info.font, !!info.catalog, info.letters, info.letter, l.shape !== 'line', fontsOpen, lang].join('|');
+}
+
+/**
  * The card of a lettering: its text, font, height, alignment, shape and thread, with more
  * settings folded away. Its fields stay while the lettering is edited (the text field keeps the
  * focus while typing); only the values change.
@@ -76,6 +85,10 @@ export class LetteringPanel {
 
   constructor(private hooks: LetteringHooks) {
     $('lettering-close').addEventListener('click', () => hooks.close());
+    onLangChange(() => {
+      this.built = '';
+      this.update(this.info, getLang());
+    });
   }
 
   get open(): boolean {
@@ -91,12 +104,22 @@ export class LetteringPanel {
       this.fontsOpen = false;
       return;
     }
-    // Built anew for another lettering, font, language or mode; else only the values change.
-    const key = [info.lettering.id, info.lettering.font, !!info.font, !!info.catalog, info.letters, info.letter, this.fontsOpen, lang].join('|');
+    const key = panelKey(info, this.fontsOpen, lang);
     if (key !== this.built) {
       this.built = key;
+      // Trying fonts with up and down builds the card anew: the list keeps the focus, or hands
+      // it back to the font button once it closes.
+      const inList = !!document.activeElement?.closest('.font-list');
       this.render();
+      if (inList && this.fontsOpen) this.focusActiveFont();
+      else if (inList) this.body.querySelector<HTMLElement>('.font-current')?.focus();
     } else for (const r of this.refresh) r();
+  }
+
+  private focusActiveFont(): void {
+    const active = this.body.querySelector<HTMLElement>('.font-row.active');
+    active?.scrollIntoView({ block: 'nearest' });
+    active?.focus({ preventScroll: true });
   }
 
   /** Puts the cursor into the text (with all of it selected, for a new lettering). */
@@ -216,7 +239,8 @@ export class LetteringPanel {
       this.fontsOpen = !this.fontsOpen;
       this.built = '';
       this.update(this.info, this.lang);
-      if (this.fontsOpen) this.body.querySelector<HTMLElement>('.font-row.active')?.scrollIntoView({ block: 'nearest' });
+      // The chosen font takes the focus, so up and down try the next fonts right away.
+      if (this.fontsOpen) this.focusActiveFont();
     });
     const parts: (HTMLElement | string)[] = [b];
     if (entry) {
@@ -289,11 +313,14 @@ export class LetteringPanel {
       const i = rows.findIndex((r) => r === document.activeElement);
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         e.preventDefault();
+        // Not on to the page keys, where up and down step to the next design.
+        e.stopPropagation();
         const next = rows[Math.max(0, Math.min(rows.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1)))];
         next.focus();
         rows.forEach((r) => r.classList.toggle('active', r === next));
         this.hooks.change({ ...this.l, font: next.dataset.font! }, false);
       } else if (e.key === 'Escape') {
+        e.stopPropagation();
         this.fontsOpen = false;
         this.set({}, true);
       }

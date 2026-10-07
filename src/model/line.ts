@@ -1,20 +1,22 @@
 import { BORDER_STITCH, BORDER_WIDTH } from '../digitize/border';
 import { TOLERANCE } from '../digitize/run';
+import { echoLines } from '../digitize/echo';
 import type { Pt } from '../digitize/skeleton';
 import { flatten, type Form, type Node } from '../shape/path';
 import { fitCubic } from '../shape/vectorize';
-import { sewAlong, type PathStitch } from './along';
+import { isRunType, sewAlong, type PathStitch } from './along';
 import { runRecords } from './border';
 import { tidy, withRecords } from './edit';
 import { rememberObjects, sewObjects, type SewObject } from './objects';
 import { JUMP, STITCH, type Pattern } from './pattern';
-import { lineFillArea, lineFillOf, remember, remembered, restitch, type FillSettings, type LineFill, type Rec, type Remembered, type RestitchResult, type RunSettings } from './restitch';
+import { lineFillArea, lineFillOf, remember, remembered, restitch, trimBefore, type FillSettings, type LineFill, type Rec, type Remembered, type RestitchResult, type RunSettings } from './restitch';
 import { stitchKinds, TIE_STITCH } from './sequence';
 
 /**
  * Lines: sewn along their curves with the same stitches as the border of a fill (along.ts), so
  * they stay exactly where they were drawn and follow every change of their nodes. The object
- * remembers the line as `path` and how it is sewn as `line` (running, triple or satin stitch).
+ * remembers the line as `path` and how it is sewn as `line` (running or bean stitch, satin, zigzag
+ * or E stitch).
  * Running stitches without curves (from a PES or DST file) get one traced through their stitches
  * the first time they are changed as a line.
  */
@@ -41,7 +43,7 @@ export function lineStitches(form: Form, st: PathStitch, reverse = false, from?:
   let at: Pt | undefined = from;
   for (const x of paths) {
     const pts = x.closed && x.pts.length > 2 && !samePt(x.pts[0], x.pts[x.pts.length - 1]) ? [...x.pts, x.pts[0]] : x.pts;
-    const runs = sewAlong(pts, x.closed, st, at);
+    const runs = st.echo ? echoStitches(pts, x.closed, st, at, reverse) : sewAlong(pts, x.closed, st, at, undefined, reverse);
     out.push(...runs);
     const last = runs[runs.length - 1];
     if (last) at = last[last.length - 1];
@@ -51,6 +53,32 @@ export function lineStitches(form: Form, st: PathStitch, reverse = false, from?:
 
 /** Running stitch along the paths of `form` (see lineStitches). */
 export const lineRuns = (form: Form, s: RunSettings, reverse = false): Pt[][] => lineStitches(form, runAsLine(s), reverse);
+
+/**
+ * A line with its echo (see digitize/echo.ts): the line and its copies one after the other. Running
+ * and triple stitch go from one to the next in a single run, a short stitch across; other stitches
+ * are sewn copy by copy, each with what lies to one side of the line on that same side.
+ */
+function echoStitches(line: Pt[], closed: boolean, st: PathStitch, from?: Pt, reverse = false): Pt[][] {
+  let lines = echoLines(line, closed, st.echo!, isRunType(st.type) ? 0 : st.width + 0.5);
+  if (!lines.length) return [];
+  // From the end nearest the needle.
+  const first = lines[0].line[0];
+  const last = lines[lines.length - 1].line[lines[lines.length - 1].line.length - 1];
+  if (from && Math.hypot(last[0] - from[0], last[1] - from[1]) < Math.hypot(first[0] - from[0], first[1] - from[1])) {
+    lines = lines.reverse().map((l) => ({ ...l, line: l.line.slice().reverse(), back: !l.back }));
+  }
+  const plain = { ...st, echo: undefined };
+  if (!isRunType(st.type) || st.echo!.cut) {
+    const runs = lines.flatMap((l) => sewAlong(l.line, l.closed, plain, undefined, undefined, l.back !== reverse));
+    // Cut: a trim from copy to copy, however near they are.
+    if (st.echo!.cut) runs.forEach((run, k) => k && trimBefore.add(run));
+    return runs;
+  }
+  const all: Pt[] = [];
+  for (const l of lines) for (const q of l.line) if (!all.length || !samePt(all[all.length - 1], q)) all.push(q);
+  return sewAlong(all, false, plain);
+}
 
 const samePt = (a: Pt, b: Pt) => Math.hypot(a[0] - b[0], a[1] - b[1]) < 1e-6;
 

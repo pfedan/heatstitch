@@ -1,5 +1,5 @@
-import { contourFill, type DirField, Grid } from './flow';
-import type { FillResult } from './fill';
+import { contourFill, type DirField, Grid, sewRows } from './flow';
+import type { FillParams, FillResult } from './fill';
 import { sample, type Region } from './region';
 import { runStitch } from './run';
 import type { Pt } from './skeleton';
@@ -46,8 +46,19 @@ export function random(seed: number): () => number {
 // ------------------------------------------------------------------------------------------------
 // Embossing
 
-/** Lines of one tile of each motif, in a unit square (x to the right, y down). */
-const TILES: Record<Motif, Pt[][]> = (() => {
+/**
+ * One tile of each motif: its lines and its width and height, in units of the motif size (the
+ * tile's width in mm). Tiles repeat without gaps, so lines leaving a tile go on in the next one.
+ * Diamonds are a lattice of lines at about 62 degrees, waves run up and down, stars and hearts
+ * stand in rows shifted by half a tile.
+ */
+interface Tile {
+  w: number;
+  h: number;
+  lines: Pt[][];
+}
+
+const TILES: Record<Motif, Tile> = (() => {
   const star = (cx: number, cy: number, r: number): Pt[] => {
     const out: Pt[] = [];
     for (let i = 0; i <= 10; i++) {
@@ -67,55 +78,64 @@ const TILES: Record<Motif, Pt[][]> = (() => {
     }
     return out;
   };
-  const wave: Pt[] = [];
-  for (let i = 0; i <= 24; i++) wave.push([0.5 + 0.2 * Math.sin((2 * Math.PI * i) / 24), i / 24]);
+  const wave = (x: number): Pt[] => Array.from({ length: 33 }, (_, i) => [x + 0.2 * Math.sin((2 * Math.PI * i) / 32), (2.5 * i) / 32] as Pt);
+  const dh = 1.88;
+  const rows = 1.9;
   return {
-    diamonds: [
-      [
-        [0.5, 0],
-        [1, 0.5],
-        [0.5, 1],
-        [0, 0.5],
-        [0.5, 0],
+    diamonds: {
+      w: 1,
+      h: dh,
+      lines: [
+        [
+          [0.5, 0],
+          [1, dh / 2],
+          [0.5, dh],
+          [0, dh / 2],
+          [0.5, 0],
+        ],
       ],
-    ],
-    waves: [wave],
-    stars: [star(0.25, 0.27, 0.21), star(0.75, 0.77, 0.21)],
-    hearts: [heart(0.25, 0.25, 0.19), heart(0.75, 0.75, 0.19)],
+    },
+    waves: { w: 1, h: 2.5, lines: [wave(0.25), wave(0.75)] },
+    stars: { w: 1, h: rows, lines: [star(0.25, rows / 4, 0.4), star(0.75, (3 * rows) / 4, 0.4)] },
+    hearts: { w: 1, h: rows, lines: [heart(0.25, rows / 4, 0.36), heart(0.75, (3 * rows) / 4, 0.36)] },
   };
 })();
 
 /**
  * A row of a fill: the point at u along it is o + u · e (mm). Motifs stand upright on the design
- * whatever the direction of the rows, tiled `size` mm apart from the design origin.
+ * whatever the direction of the rows, tiled from the design origin.
  */
 export interface MotifRow {
   o: Pt;
   e: Pt;
 }
 
-/** Where the row crosses the motif lines between u = lo and hi, sorted. */
+/** Where the row crosses the motif lines between u = lo and hi, sorted; `size` is the tile width (mm). */
 export function motifCrossings(m: Motif, size: number, row: MotifRow, lo: number, hi: number): number[] {
   const { o, e } = row;
+  const tile = TILES[m];
+  const tw = tile.w * size;
+  const th = tile.h * size;
   const a: Pt = [o[0] + e[0] * lo, o[1] + e[1] * lo];
   const z: Pt = [o[0] + e[0] * hi, o[1] + e[1] * hi];
   const out: number[] = [];
-  const i0 = Math.floor(Math.min(a[0], z[0]) / size);
-  const i1 = Math.floor(Math.max(a[0], z[0]) / size);
-  const j0 = Math.floor(Math.min(a[1], z[1]) / size);
-  const j1 = Math.floor(Math.max(a[1], z[1]) / size);
+  const i0 = Math.floor(Math.min(a[0], z[0]) / tw) - 1;
+  const i1 = Math.floor(Math.max(a[0], z[0]) / tw) + 1;
+  const j0 = Math.floor(Math.min(a[1], z[1]) / th) - 1;
+  const j1 = Math.floor(Math.max(a[1], z[1]) / th) + 1;
+  const reach = Math.hypot(tw, th);
   for (let j = j0; j <= j1; j++) {
     for (let i = i0; i <= i1; i++) {
-      // Only tiles the row passes through (its bounding box touches more of them).
-      const cx = (i + 0.5) * size - o[0];
-      const cy = (j + 0.5) * size - o[1];
-      if (Math.abs(cx * e[1] - cy * e[0]) > size * 0.75) continue;
-      for (const line of TILES[m]) {
+      // Only tiles the row passes near (its bounding box touches more of them).
+      const cx = (i + 0.5) * tw - o[0];
+      const cy = (j + 0.5) * th - o[1];
+      if (Math.abs(cx * e[1] - cy * e[0]) > reach) continue;
+      for (const line of tile.lines) {
         for (let k = 1; k < line.length; k++) {
-          const px = (i + line[k - 1][0]) * size;
-          const py = (j + line[k - 1][1]) * size;
-          const dx = (i + line[k][0]) * size - px;
-          const dy = (j + line[k][1]) * size - py;
+          const px = i * tw + line[k - 1][0] * size;
+          const py = j * th + line[k - 1][1] * size;
+          const dx = (line[k][0] - line[k - 1][0]) * size;
+          const dy = (line[k][1] - line[k - 1][1]) * size;
           // Row o + u e meets segment p + t d.
           const den = e[0] * dy - e[1] * dx;
           if (Math.abs(den) < 1e-9) continue;
@@ -132,58 +152,71 @@ export function motifCrossings(m: Motif, size: number, row: MotifRow, lo: number
   return out.sort((x, y) => x - y);
 }
 
-/** Whether a point (mm) lies inside one of the closed lines of the motif (even-odd); waves have no inside. */
-export function motifInside(m: Motif, size: number, p: Pt): boolean {
-  if (m === 'waves') return false;
-  const x = p[0] / size - Math.floor(p[0] / size);
-  const y = p[1] / size - Math.floor(p[1] / size);
-  let inside = false;
-  for (const line of TILES[m]) {
-    for (let i = 1; i < line.length; i++) {
-      const [ax, ay] = line[i - 1];
-      const [bx, by] = line[i];
-      if (ay > y !== by > y && x < ax + ((y - ay) / (by - ay)) * (bx - ax)) inside = !inside;
+/**
+ * Whether point `q` (mm) lies inside the motif: between the two lines of a wave, or within a
+ * diamond, star or heart. Counts the lines crossed on the way to the corner of its tile, which is
+ * outside every motif.
+ */
+export function motifInside(m: Motif, size: number, q: Pt): boolean {
+  const tile = TILES[m];
+  const tw = tile.w * size;
+  const th = tile.h * size;
+  const i = Math.floor(q[0] / tw);
+  const j = Math.floor(q[1] / th);
+  const c: Pt = [i * tw, j * th];
+  let n = 0;
+  for (let dj = -1; dj <= 1; dj++) {
+    for (let di = -1; di <= 1; di++) {
+      for (const line of tile.lines) {
+        for (let k = 1; k < line.length; k++) {
+          const a: Pt = [(i + di) * tw + line[k - 1][0] * size, (j + dj) * th + line[k - 1][1] * size];
+          const b: Pt = [(i + di) * tw + line[k][0] * size, (j + dj) * th + line[k][1] * size];
+          if (crosses(q, c, a, b)) n++;
+        }
+      }
     }
   }
-  return inside;
+  return n % 2 === 1;
+}
+
+/** Whether segment p-q crosses segment a-b (a touching end counts once: half open at b). */
+function crosses(p: Pt, q: Pt, a: Pt, b: Pt): boolean {
+  const d1x = q[0] - p[0];
+  const d1y = q[1] - p[1];
+  const d2x = b[0] - a[0];
+  const d2y = b[1] - a[1];
+  const den = d1x * d2y - d1y * d2x;
+  if (Math.abs(den) < 1e-12) return false;
+  const wx = a[0] - p[0];
+  const wy = a[1] - p[1];
+  const t = (wx * d2y - wy * d2x) / den;
+  const s = (wx * d1y - wy * d1x) / den;
+  return t >= 0 && t <= 1 && s >= 0 && s < 1;
 }
 
 /**
- * Needle points of an embossed row from lo to hi (sorted, u along the row). On every crossing of
- * a motif line lies a needle point, so the points line up into a groove. Between crossings the
- * regular points stay where they are not too close to a crossing; inside a motif the stitches are
- * half as long and their points line up from row to row, so the motif reads as a ribbed surface
- * framed by its groove. No stitch gets longer
- * than 1.4 stitch lengths.
+ * Needle points of an embossed row from lo to hi (sorted, u along the row), as in the program
+ * split of commercial software: on every crossing of a motif line lies a needle point, so the
+ * points of neighbouring rows line up into a groove that draws the motif. The regular points stay
+ * where they are not too close to a crossing (no stitch shorter than about 1.2 mm), and no stitch
+ * gets longer than 1.4 stitch lengths.
  */
-export function embossPoints(cross: number[], regular: number[], len: number, lo: number, hi: number, inside: (u: number) => boolean = () => false): number[] {
+export function embossPoints(cross: number[], regular: number[], len: number, lo: number, hi: number): number[] {
   const near = Math.min(1.2, len * 0.4);
   const ms: number[] = [];
   for (const m of cross) if (!ms.length || m - ms[ms.length - 1] >= 0.6) ms.push(m);
+  const keep = regular.filter((r) => ms.every((m) => Math.abs(r - m) > near));
+  const pts = [...ms, ...keep].sort((x, y) => x - y);
   const out: number[] = [];
-  const bounds = [lo, ...ms, hi];
-  for (let k = 1; k < bounds.length; k++) {
-    const a = bounds[k - 1];
-    const z = bounds[k];
-    const gap = z - a;
-    if (inside((a + z) / 2) && gap > len * 0.7) {
-      // Needle points on one lattice in every row: they line up into fine grooves across the rows.
-      const step = len / 2;
-      for (let u = Math.ceil((a + near / 2) / step) * step; u < z - near / 2; u += step) out.push(u);
-    } else {
-      let prev = a;
-      const keep = regular.filter((r) => r > a + near && r < z - near);
-      for (const u of [...keep, z]) {
-        const g = u - prev;
-        if (g > len * 1.4) {
-          const n = Math.ceil(g / len);
-          for (let i = 1; i < n; i++) out.push(prev + (g * i) / n);
-        }
-        if (u < z) out.push(u);
-        prev = u;
-      }
+  let prev = lo;
+  for (const u of [...pts, hi]) {
+    const g = u - prev;
+    if (g > len * 1.4) {
+      const n = Math.ceil(g / len);
+      for (let i = 1; i < n; i++) out.push(prev + (g * i) / n);
     }
-    if (z < hi) out.push(z);
+    if (u < hi) out.push(u);
+    prev = u;
   }
   return out;
 }
@@ -218,23 +251,55 @@ function fieldOf(r: Region, dir: (p: Pt) => number | null): DirField {
   return { g, c, s };
 }
 
-/** Rows as waves `height` mm high (from crest to middle) and `length` mm long, running at `angle` degrees. */
-export function waveField(r: Region, angle: number, height: number, length: number): DirField {
+/**
+ * Wave rows: every row is the same wave, `height` mm from crest to middle and `length` mm long,
+ * one spacing below the last, running at `angle` degrees. The crests drift a little from row to
+ * row, so the bands look woven, not ruled; on the flanks the rows lie a little closer, which
+ * shades the waves.
+ */
+export function waveFill(r: Region, p: FillParams, angle: number, height: number, length: number, start: Pt): FillResult | null {
   const a = (angle * Math.PI) / 180;
   const e: Pt = [Math.cos(a), Math.sin(a)];
+  const n: Pt = [-e[1], e[0]];
   const k = (2 * Math.PI) / Math.max(1, length);
-  return fieldOf(r, (p) => {
-    const u = p[0] * e[0] + p[1] * e[1];
-    // The rows are v = height · sin(k u): their slope there, turned by the row angle.
-    return a + Math.atan(height * k * Math.cos(k * u));
-  });
+  const [x0, y0, x1, y1] = regionBox(r);
+  const corners: Pt[] = [
+    [x0, y0],
+    [x1, y0],
+    [x0, y1],
+    [x1, y1],
+  ];
+  const us = corners.map((q) => q[0] * e[0] + q[1] * e[1]);
+  const vs = corners.map((q) => q[0] * n[0] + q[1] * n[1]);
+  const step = 0.2;
+  const reach = Math.max(0, p.pull);
+  const rows: Pt[][] = [];
+  const v0 = Math.floor((Math.min(...vs) - height) / p.spacing) * p.spacing + p.spacing / 2;
+  for (let v = v0; v < Math.max(...vs) + height; v += p.spacing) {
+    let row: Pt[] = [];
+    const end = () => {
+      if (row.length > 1 && dist(row[0], row[row.length - 1]) > 1) rows.push(row);
+      row = [];
+    };
+    for (let u = Math.min(...us) - 1; u <= Math.max(...us) + 1; u += step) {
+      const w = v + height * Math.sin(k * u + 0.3 * Math.sin(v / 6));
+      const q: Pt = [e[0] * u + n[0] * w, e[1] * u + n[1] * w];
+      if (sample(r, r.sdf, q[0], q[1]) < reach) row.push(q);
+      else end();
+    }
+    end();
+  }
+  return rows.length ? sewRows(r, rows, p, start, angle) : null;
 }
 
+/** Grain: features about this wide (mm); wood rings, not ripples. */
+const GRAIN_SCALE = 125;
+
 /** Rows that wander softly around `angle` degrees, like wood grain; `strength` 0 to 1. */
-export function grainField(r: Region, angle: number, strength: number, seed: number, scale: number): DirField {
-  const n = noise(seed, scale);
+export function grainField(r: Region, angle: number, strength: number, seed: number, scale = GRAIN_SCALE): DirField {
+  const n = noise(seed, scale, 5);
   const a = (angle * Math.PI) / 180;
-  return fieldOf(r, (p) => a + strength * 0.9 * n(p[0], p[1]));
+  return fieldOf(r, (p) => a + strength * 1.1 * n(p[0], p[1]));
 }
 
 /** Rows that run out from `focus` (mm) like rays. */
@@ -242,9 +307,16 @@ export function rayField(r: Region, focus: Pt): DirField {
   return fieldOf(r, (p) => (dist(p, focus) < 0.3 ? null : Math.atan2(p[1] - focus[1], p[0] - focus[0])));
 }
 
-/** Rows turning around a few points inside the region, the next one turning the other way. */
-export function swirlField(r: Region, seed: number): DirField {
-  const centers = swirlCenters(r, seed);
+/** Rows in rings around `focus` (mm), like Ink/Stitch's circle fill. */
+export function circleField(r: Region, focus: Pt): DirField {
+  return fieldOf(r, (p) => (dist(p, focus) < 0.3 ? null : Math.atan2(p[1] - focus[1], p[0] - focus[0]) + Math.PI / 2));
+}
+
+/**
+ * Rows turning around a few points inside the region (`centers`, mm, or picked by `seed`), the
+ * next one turning the other way.
+ */
+export function swirlField(r: Region, seed: number, centers: Pt[] = swirlCenters(r, seed)): DirField {
   return fieldOf(r, (p) => {
     let vx = 0;
     let vy = 0;

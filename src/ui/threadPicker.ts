@@ -1,9 +1,12 @@
-import { t } from '../i18n';
+import { onLangChange, t } from '../i18n';
 import type { ThreadColor } from '../model/pattern';
-import { pecThreads } from '../parsers/pecPalette';
+import { BROTHER, brotherCatalog, catalogsNow, chooseCatalog, chosenCatalog, closeness, inCatalog, loadCatalogs, nearest, search as searchThreads, threadNumber, type Catalog } from '../threads/catalog';
 
 export const cssColor = (c: ThreadColor) => `rgb(${c.r}, ${c.g}, ${c.b})`;
 export const hexColor = (c: ThreadColor) => '#' + [c.r, c.g, c.b].map((v) => v.toString(16).padStart(2, '0')).join('');
+
+/** Number and name of a thread ("1610 Celestial Blue"), or its color code. */
+export const threadTitle = (c: ThreadColor) => [threadNumber(c), c.name].filter(Boolean).join(' ') || hexColor(c);
 
 export interface PickerOptions {
   /** Identifies what the picker is open for; opening it again for the same key closes it. */
@@ -18,7 +21,8 @@ export interface PickerOptions {
 }
 
 /**
- * Popup with the thread colors of the Brother palette and a free color, next to a swatch button.
+ * Popup with the threads of a catalog (Brother or another maker, searchable by number or name, the
+ * nearest ones to the current color first) and a free color, next to a swatch button.
  * Closes on a pick, Escape, a click elsewhere (except on `trigger` elements, which toggle it) or a
  * resize.
  */
@@ -40,6 +44,7 @@ export class ThreadPicker {
       true,
     );
     window.addEventListener('resize', () => this.close());
+    onLangChange(() => this.close());
   }
 
   close(): void {
@@ -65,7 +70,7 @@ export class ThreadPicker {
       btn.type = 'button';
       btn.className = 'pick';
       btn.style.background = cssColor(c);
-      btn.title = c.name ?? hexColor(c);
+      btn.title = threadTitle(c);
       btn.setAttribute('aria-label', btn.title);
       if (current) btn.setAttribute('aria-current', 'true');
       btn.addEventListener('click', () => pick(c));
@@ -94,21 +99,108 @@ export class ThreadPicker {
       pop.append(row);
     }
 
-    const grid = document.createElement('div');
-    grid.className = 'color-grid';
-    const currentName = o.current.name ?? hexColor(o.current);
+    const currentName = threadTitle(o.current);
     const name = document.createElement('div');
     name.className = 'color-pop-name';
     name.setAttribute('aria-hidden', 'true');
     name.textContent = currentName;
-    let marked = false;
-    for (const c of pecThreads()) {
-      const cur: boolean = !marked && c.r === o.current.r && c.g === o.current.g && c.b === o.current.b;
-      marked ||= cur;
-      grid.append(swatch(c, cur));
-    }
-    pop.append(grid, name);
+
+    // Which maker's threads: the choice is the same for every color list.
+    const select = document.createElement('select');
+    select.className = 'color-pop-catalog';
+    select.setAttribute('aria-label', t('threads.catalog'));
+    const search = document.createElement('input');
+    search.type = 'search';
+    search.className = 'color-pop-search';
+    search.placeholder = t('threads.search');
+    search.setAttribute('aria-label', t('threads.search'));
+    search.autocomplete = 'off';
+    search.enterKeyHint = 'done';
+    const tools = document.createElement('div');
+    tools.className = 'color-pop-tools';
+    tools.append(select, search);
+
+    const near = document.createElement('div');
+    near.className = 'color-pop-near';
+    const grid = document.createElement('div');
+    grid.className = 'color-grid';
     grid.addEventListener('pointerleave', () => (name.textContent = currentName));
+    pop.append(tools, near, grid, name);
+
+    const fillSelect = () => {
+      const all = catalogsNow();
+      const groups: [string, Catalog[]][] = [
+        [t('threads.common'), all.filter((c) => c.common)],
+        [t('threads.more'), all.filter((c) => !c.common)],
+      ];
+      select.replaceChildren(
+        ...groups
+          .filter(([, cs]) => cs.length)
+          .map(([label, cs]) => {
+            const g = document.createElement('optgroup');
+            g.label = label;
+            for (const c of cs) g.append(new Option(`${c.name} (${c.threads.length})`, c.id));
+            return g;
+          }),
+      );
+      select.value = all.some((c) => c.id === chosenCatalog()) ? chosenCatalog() : BROTHER;
+    };
+    const catalog = () => catalogsNow().find((c) => c.id === select.value) ?? brotherCatalog();
+
+    const render = () => {
+      const cat = catalog();
+      name.textContent = currentName;
+      const own = inCatalog(o.current, cat);
+      // Not one of these threads: the nearest ones first, with how close they come.
+      near.replaceChildren();
+      if (!own && !search.value.trim()) {
+        const label = document.createElement('span');
+        label.className = 'muted small';
+        label.textContent = t('threads.nearest');
+        near.append(label);
+        for (const m of nearest(o.current, cat, 3)) {
+          const btn = swatch(m.thread, false);
+          btn.className = 'pick near-pick';
+          btn.title = `${threadTitle(m.thread)} · ${t(`threads.dE.${closeness(m.dE)}`)}`;
+          btn.setAttribute('aria-label', btn.title);
+          const num = document.createElement('span');
+          num.textContent = threadNumber(m.thread) || m.thread.name || '';
+          btn.append(num);
+          near.append(btn);
+        }
+      }
+      near.hidden = !near.childElementCount;
+      const shown = searchThreads(cat, search.value);
+      grid.replaceChildren(...shown.map((c) => swatch(c, c === own)));
+      if (!shown.length) grid.append(Object.assign(document.createElement('p'), { className: 'muted small color-pop-none', textContent: t('threads.none', { catalog: cat.name }) }));
+    };
+
+    select.addEventListener('change', () => {
+      chooseCatalog(select.value);
+      render();
+    });
+    search.addEventListener('input', render);
+    search.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      const first = searchThreads(catalog(), search.value)[0];
+      if (first && search.value.trim()) pick(first);
+    });
+
+    fillSelect();
+    render();
+    if (catalogsNow().length === 1) {
+      void loadCatalogs()
+        .then(() => {
+          if (this.pop !== pop) return;
+          fillSelect();
+          render();
+          this.place(pop, anchor);
+        })
+        .catch(() => {
+          if (this.pop === pop) name.textContent = t('threads.loadFailed');
+        });
+    }
 
     const own = document.createElement('label');
     own.className = 'color-pop-own';
@@ -131,7 +223,15 @@ export class ThreadPicker {
 
     document.body.append(pop);
     this.pop = pop;
-    // Next to the swatch, kept on screen.
+    this.place(pop, anchor);
+    // The current thread, or the search with a keyboard at hand (a touch screen would open its keyboard).
+    const cur = pop.querySelector<HTMLElement>('.color-grid [aria-current]');
+    if (cur) cur.focus({ preventScroll: false });
+    else if (matchMedia('(pointer: fine)').matches) search.focus();
+  }
+
+  /** Next to the swatch, kept on screen. */
+  private place(pop: HTMLElement, anchor: HTMLElement): void {
     const r = anchor.getBoundingClientRect();
     const w = pop.offsetWidth;
     const h = pop.offsetHeight;
@@ -140,6 +240,5 @@ export class ThreadPicker {
     const top = below + h <= window.innerHeight - 8 ? below : Math.max(8, r.top - h - 6);
     pop.style.left = `${left}px`;
     pop.style.top = `${top}px`;
-    (pop.querySelector<HTMLElement>('[aria-current]') ?? pop.querySelector<HTMLElement>('.pick'))?.focus();
   }
 }

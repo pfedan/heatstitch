@@ -1,4 +1,4 @@
-import { formatNumber, getLang, t, type Key } from '../i18n';
+import { formatNumber, getLang, onLangChange, t, type Key } from '../i18n';
 import { openWorst, settledBy } from '../validation/acks';
 import { densityExcess } from '../validation/practice';
 import { fabricOf } from '../validation/profiles';
@@ -98,7 +98,12 @@ export class ValidationPanel {
     private root: HTMLElement,
     private summary: HTMLElement,
     private hooks: PanelHooks,
-  ) {}
+  ) {
+    onLangChange(() => {
+      this.last = [];
+      this.update(this.file, this.selected);
+    });
+  }
 
   /** The zones the list shows, in list order; stepping with n / Shift+n walks these. */
   visible(zones: Zone[]): Zone[] {

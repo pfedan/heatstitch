@@ -1,4 +1,5 @@
 import type { Editor } from '../ui/editor';
+import { isLine } from '../model/reverse';
 import type { FileList } from '../ui/fileList';
 import type { Form, Mat } from '../shape/path';
 import type { FrameTool } from '../ui/frameTool';
@@ -11,11 +12,14 @@ import type { Settings } from '../settings';
 import type { SewObject } from '../model/objects';
 import type { Viewport } from '../render/viewport';
 import { ShapeTool } from '../ui/shapeTool';
-import { deleteObjects, duplicateObject, mirrorMatrix, subtractTop } from '../model/shapeOps';
+import { deleteObjects, duplicateObjects, mirrorMatrix, subtractTop } from '../model/shapeOps';
 import { formOf, reshapeFill } from '../model/reshape';
-import { lineOf, resewLine, lineSettings, fillToLine } from '../model/line';
+import { railsForm, reshapeRails } from '../model/railsForm';
+import { lineOf, resewLine, lineSettings, fillToLine, reshapeLineFill } from '../model/line';
 import { refreshKnockouts } from '../model/knockout';
-import { remembered, rememberedIn, type RestitchResult } from '../model/restitch';
+import { objectKey, remembered, rememberedIn, restitch, type RestitchResult } from '../model/restitch';
+import { syncBorders } from '../model/border';
+import { stitchKey } from '../model/objects';
 import { t, formatNumber, type Key } from '../i18n';
 import { ui } from './state';
 
@@ -51,16 +55,72 @@ export function bindShapes(app: ShapesApp) {
       app.layers.say(t(key), true);
       app.redraw();
     },
+    width: (w) => setLineWidth(w),
   });
+
+  /**
+   * The band of object `o` on the level Form: a line where it covers an area (sewn as satin, or as a
+   * fill along it), or the satin border of a fill; null for running and triple stitch.
+   */
+  function bandOf(p: Pattern, q: Sequence, o: number): { width: number; offset: number } | null {
+    const obj = q.objects[o];
+    const known = obj && remembered(p, obj);
+    if (known?.asLine && known.fill) return { width: known.fill.lineWidth ?? known.asLine.line.width, offset: 0 };
+    const border = known?.fill?.border;
+    if (border?.type === 'satin' || border?.type === 'zigzag') return { width: border.width, offset: border.offset ?? 0 };
+    if (!obj || !isLineObject(p, obj)) return null;
+    const st = lineSettings(p, obj, q.kinds);
+    return st.type === 'satin' || st.type === 'zigzag' ? { width: st.width, offset: 0 } : null;
+  }
+
+  /** The shape tool shows the band of object `o`, when it has one, and knows when its form is a satin column's rails. */
+  function showBand(p: Pattern, q: Sequence, o: number): void {
+    const b = bandOf(p, q, o);
+    shapeTool.band = b?.width ?? null;
+    shapeTool.bandOffset = b?.offset ?? 0;
+    const obj = q.objects[o];
+    shapeTool.rails = !b && !!obj && !isLineObject(p, obj) && !formOf(p, obj, q.kinds) && !!railsForm(p, obj, q.kinds);
+  }
+
+  /**
+   * The selected object's band made `w` mm wide (its grip on the level Form): a line sewn as satin or
+   * as a fill along it, or the satin border of a fill.
+   */
+  function setLineWidth(w: number): void {
+    const p = app.files.active?.pattern;
+    const o = ui.shapeObject;
+    if (!p || o === null) return;
+    const q = app.seq(p);
+    const obj = q.objects[o];
+    if (!obj) return;
+    const known = remembered(p, obj);
+    if (known?.asLine || known?.fill?.border) {
+      const fill = known.fill && structuredClone(known.fill);
+      const r = known.asLine
+        ? reshapeLineFill(p, q.objects, obj, q.kinds, shapeTool.form, app.settings.trimMm, w)
+        : fill?.border && restitch(p, q.objects, [o], { kind: 'fill', s: { ...fill, border: { ...fill.border, width: w } } }, q.kinds, app.settings.trimMm);
+      if (!r || !r.starts.length) {
+        showBand(p, q, o);
+        app.layers.say(t('shape.failed'), true);
+        return app.redraw();
+      }
+      app.applyRestitched(r, 'shape.failed', true);
+      app.layers.say(t('shape.width.set', { w: formatNumber(w, 1) }));
+      followKnockouts();
+      return;
+    }
+    const st = lineSettings(p, obj, q.kinds);
+    if (!sewLine(o, shapeTool.form, { ...st, width: w }, true)) shapeTool.band = st.width;
+    else app.layers.say(t('shape.width.set', { w: formatNumber(w, 1) }));
+    app.redraw();
+  }
 
   /**
    * Objects sewn along a line: drawn or SVG lines (their curves are known) and running stitches of a
    * file (their curve is traced); not the borders of fills and not letters.
    */
   function isLineObject(p: Pattern, o: SewObject): boolean {
-    const m = remembered(p, o);
-    if (m?.path) return true;
-    return o.kind === 'run' && !m?.outline && !m?.lettering;
+    return isLine(p, o);
   }
 
   /** The one selected object of the Ablauf mode, when it has a fill whose outline can be edited, or is a line. */
@@ -68,7 +128,9 @@ export function bindShapes(app: ShapesApp) {
     const obj = q.objects[o];
     // Stitches loosed from their shape are edited as stitches; the shape rests.
     if (!obj || remembered(p, obj)?.free) return null;
-    return isLineObject(p, obj) ? lineOf(p, obj, q.kinds) : formOf(p, obj, q.kinds);
+    if (isLineObject(p, obj)) return lineOf(p, obj, q.kinds);
+    // A satin without an outline (of a file from elsewhere): its two rails.
+    return formOf(p, obj, q.kinds) ?? railsForm(p, obj, q.kinds);
   }
 
   /**
@@ -84,7 +146,10 @@ export function bindShapes(app: ShapesApp) {
     if (!obj) return false;
     const line = path ?? lineOf(p, obj, q.kinds);
     if (!line) return false;
-    const r = resewLine(p, o, line, st ?? lineSettings(p, obj, q.kinds), app.settings.trimMm);
+    const sewn = resewLine(p, o, line, st ?? lineSettings(p, obj, q.kinds), app.settings.trimMm);
+    // Its shadow follows (sewn before it: a new one moves the line one place on).
+    const synced = sewn && syncBorders(sewn.pattern, app.settings.trimMm);
+    const r = sewn && synced && { pattern: synced, key: stitchKey(sewn.pattern, sewn.first, sewn.last) };
     if (!final) {
       ui.flowPreview = r?.pattern ?? null;
       app.redraw();
@@ -98,8 +163,11 @@ export function bindShapes(app: ShapesApp) {
     }
     const hand = remembered(p, obj)?.hand ?? 0;
     app.applyEdit(r.pattern);
-    app.files.setObjects(f, rememberedIn(r.pattern, app.seq(r.pattern).objects));
-    ui.selectedObjects = new Set([o]);
+    const nq = app.seq(r.pattern);
+    app.files.setObjects(f, rememberedIn(r.pattern, nq.objects));
+    const now = nq.objects.findIndex((x) => objectKey(r.pattern, x) === r.key);
+    if (now >= 0 && ui.shapeObject === o) ui.shapeObject = now;
+    ui.selectedObjects = new Set([now >= 0 ? now : o]);
     ui.selectionKey++;
     ui.stitchCache = null;
     if (hand) app.layers.say(t('shape.handReplaced', { n: formatNumber(hand) }));
@@ -125,7 +193,7 @@ export function bindShapes(app: ShapesApp) {
     app.redraw();
   }
 
-  /** Edits the outline of object `o` (level Form); objects without a fill go to their stitches. */
+  /** Edits the outline of object `o` (level Form, with the frame around it); objects without an outline go to their stitches. */
   function enterShape(o: number, fit: boolean): void {
     const p = app.files.active?.pattern;
     if (!p || app.settings.mode !== 'flow') return;
@@ -137,11 +205,12 @@ export function bindShapes(app: ShapesApp) {
       app.editor.setActive(false);
       ui.editObject = null;
     }
-    if (!ui.selectedObjects.has(o) || ui.selectedObjects.size !== 1) app.selectObjects([o], false);
+    ui.formLevel = true;
     shapeTool.open(form);
+    showBand(p, q, o);
     ui.shapeObject = o;
     ui.shapePattern = p;
-    app.frameTool.close();
+    if (!ui.selectedObjects.has(o) || ui.selectedObjects.size !== 1) app.selectObjects([o], false);
     const obj = q.objects[o];
     if (fit) {
       const w = ((obj.maxX - obj.minX) / 10) * app.vp.scale;
@@ -172,6 +241,7 @@ export function bindShapes(app: ShapesApp) {
     const form = shapeTarget(p, q, o);
     if (!form) return closeShape();
     shapeTool.setForm(form);
+    showBand(p, q, o);
     ui.shapeObject = o;
     ui.shapePattern = p;
   }
@@ -189,7 +259,8 @@ export function bindShapes(app: ShapesApp) {
       return;
     }
     const hand = remembered(p, obj)?.hand ?? 0;
-    const r = reshapeFill(p, q.objects, obj, q.kinds, form, app.settings.trimMm);
+    const rails = !formOf(p, obj, q.kinds) && railsForm(p, obj, q.kinds);
+    const r = rails ? reshapeRails(p, q.objects, obj, q.kinds, form, app.settings.trimMm) : reshapeFill(p, q.objects, obj, q.kinds, form, app.settings.trimMm);
     if (!r || !r.starts.length) {
       // Nothing to fill there (too small, or the outline crosses itself away): back to the old one.
       shapeTool.setForm(shapeTarget(p, q, ui.shapeObject) ?? form);
@@ -247,14 +318,58 @@ export function bindShapes(app: ShapesApp) {
     app.layers.say(sel.length === 1 ? t('object.deleted.one') : t('object.deleted', { n: sel.length }));
   }
 
-  function duplicateSelected(): void {
+  /**
+   * The selected objects once more, sewn right after their originals: 2 mm beside them (the
+   * button, Ctrl+C and Ctrl+V), or `inPlace` exactly on them (Ctrl+D). The copies are selected.
+   */
+  function duplicateSelected(inPlace = false): void {
+    duplicate(app.frameObjects(), inPlace);
+  }
+
+  function duplicate(sel: number[], inPlace: boolean): void {
     const p = app.files.active?.pattern;
-    const sel = app.frameObjects();
-    if (!p || sel.length !== 1) return;
-    const r = duplicateObject(p, sel[0], app.settings.trimMm);
+    if (!p || !sel.length) return;
+    const r = duplicateObjects(p, sel, app.settings.trimMm, inPlace ? 0 : undefined);
     if (!r) return app.layers.say(t('frame.failed'), true);
-    takeShapes(r.pattern, [r.index]);
-    app.layers.say(t('object.duplicated'));
+    takeShapes(r.pattern, r.copies);
+    const n = r.copies.length;
+    const said = inPlace ? (n === 1 ? t('object.duplicatedHere.one') : t('object.duplicatedHere', { n })) : n === 1 ? t('object.duplicated') : t('object.duplicated.many', { n });
+    app.layers.say([said, r.nudged ? t('object.duplicatedHere.nudged') : ''].filter(Boolean).join(' '));
+  }
+
+  /** Objects copied with Ctrl+C: their design and their stitches (found again by them for Ctrl+V). */
+  let copied: { file: unknown; keys: string[] } | null = null;
+
+  /** Ctrl+C: remembers the selected objects; false when none is selected (the page copies text then). */
+  function copySelected(): boolean {
+    const f = app.files.active;
+    const p = f?.pattern;
+    const sel = app.frameObjects();
+    if (!p || !sel.length) return false;
+    const q = app.seq(p);
+    copied = { file: f, keys: sel.flatMap((o) => (q.objects[o] ? [objectKey(p, q.objects[o])] : [])) };
+    app.layers.say(sel.length === 1 ? t('object.copied.one') : t('object.copied', { n: sel.length }));
+    return true;
+  }
+
+  /** Ctrl+V: the objects copied last once more, 2 mm beside them (each paste a step further). */
+  function pasteCopied(): boolean {
+    const f = app.files.active;
+    if (!copied || !f?.pattern) return false;
+    if (copied.file !== f) {
+      app.layers.say(t('object.paste.otherDesign'), true);
+      return true;
+    }
+    const p = f.pattern;
+    const q = app.seq(p);
+    const keys = new Set(copied.keys);
+    const sel = q.objects.flatMap((o, i) => (keys.has(objectKey(p, o)) ? [i] : []));
+    if (!sel.length) {
+      app.layers.say(t('object.paste.gone'), true);
+      return true;
+    }
+    duplicate(sel, false);
+    return true;
   }
 
   function mirrorSelected(axis: 'x' | 'y'): void {
@@ -284,5 +399,5 @@ export function bindShapes(app: ShapesApp) {
     app.layers.say([list ? t('object.subtracted', { list }) : '', r.covered ? t('object.subtracted.covered') : ''].filter(Boolean).join(' '));
   }
 
-  return { closeShape, deleteSelected, duplicateSelected, enterShape, followKnockouts, isLineObject, mirrorSelected, sewLine, sewLineAgain, shapeTarget, shapeTool, subtractSelected, syncShape, takeShapes };
+  return { closeShape, copySelected, deleteSelected, duplicateSelected, pasteCopied, enterShape, followKnockouts, isLineObject, mirrorSelected, sewLine, sewLineAgain, shapeTarget, shapeTool, showBand, subtractSelected, syncShape, takeShapes };
 }

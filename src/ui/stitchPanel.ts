@@ -1,4 +1,4 @@
-import { formatNumber, t, type Key } from '../i18n';
+import { formatNumber, onLangChange, t, type Key } from '../i18n';
 import type { ObjectKind } from '../model/objects';
 import { DECO_DEFAULTS, isOpenPattern, OPEN_SIZE, OPEN_SIZE_RANGE, SATIN_SPLIT, UNDERLAYS, type DecoSettings, type FillPattern, type FillSettings, type OpenPattern, type RunSettings, type SatinSettings, type SatinType, type Settings, type ShapeTrust, type Fixed } from '../model/restitch';
 import { fixText } from './fixText';
@@ -12,7 +12,10 @@ import { BORDER_STITCH, BORDER_WIDTH, type BorderType } from '../digitize/border
 import { TOLERANCE } from '../digitize/run';
 import type { ThreadColor } from '../model/pattern';
 import { newLink } from '../model/border';
-import { autoUnder, type PathStitch } from '../model/along';
+import { autoUnder, E_SPACING, isRunType, runLike, spacingOf, ZIGZAG_SPACING, type PathStitch } from '../model/along';
+import { LINE_MOTIFS, MOTIF_PERIOD, MOTIF_WIDTH, motifMaxSize, SIDED_MOTIFS, type LineMotif } from '../digitize/motif';
+import { ECHO_COUNT, ECHO_DEFAULT, ECHO_GAP, ECHO_SIDES, type EchoSide } from '../digitize/echo';
+import { SHADOW_COLOR, SHADOW_DEFAULT_DIST, SHADOW_DIRS, SHADOW_DIST, type ShadowDir } from '../model/shadow';
 import { cssColor, hexColor, ThreadPicker } from './threadPicker';
 import { CROSS_KINDS, GRID_KINDS, MOTIFS, type CrossKind, type GridKind, type Motif } from '../digitize/deco';
 
@@ -21,7 +24,10 @@ const FILL_UNDERS: FillUnder[] = ['off', 'single', 'cross'];
 type BorderChoice = 'off' | BorderType;
 /** What hovering a group of settings shows on the canvas. */
 export type Highlight = 'under' | 'border';
-const BORDERS: BorderChoice[] = ['off', 'run', 'triple', 'satin'];
+/** Kinds of stitch along a line, as buttons: a triple stitch is a running stitch sewn more often. */
+const BORDERS: BorderChoice[] = ['off', 'run', 'satin', 'zigzag', 'e', 'motif'];
+/** How often each stitch of a running stitch is sewn. */
+const REPEATS = ['1', '3', '5'] as const;
 const sameColor = (a: ThreadColor, b: ThreadColor) => a.r === b.r && a.g === b.g && a.b === b.b;
 
 /**
@@ -60,11 +66,15 @@ export interface StitchInfo {
     spacingHere?: number | null;
     /** Chained columns show their order, direction and trims on the canvas. */
     chain?: boolean;
+    /** Some chain has more than one column: their order can be chosen by itself. */
+    order?: boolean;
   };
   /** Rungs drawn across the one selected fill to sew it as satin. */
   draw?: { tool: boolean; lines: number; single: boolean; cuts?: number; cutMode?: boolean };
   /** Guide lines of the one selected fill: whether their tool is on. */
   guide?: { tool: boolean; single: boolean };
+  /** Points of rays, circles and swirls on the one selected fill: whether their tool is on. */
+  points?: { tool: boolean; single: boolean };
   /**
    * Fills with their shape as curves: whether they leave out what later fills cover (`mixed` when
    * only some do), and whether anything lies on top of them at all.
@@ -75,8 +85,9 @@ export interface StitchInfo {
   /**
    * The one selected object is a line (drawn, from an SVG, or a running stitch of a file): how it
    * is sewn along its curve. `traced`: its curve is read from its stitches (none was drawn).
+   * `closed`: all its paths are loops (its echo lies outside or inside, not left or right).
    */
-  path?: { st: PathStitch; traced: boolean };
+  path?: { st: PathStitch; traced: boolean; closed: boolean; color: ThreadColor };
   /** The one selected fill was a wide line, and can be one again. */
   asLine?: boolean;
   /** How deep the selected fills reach at their deepest point (mm; the shallowest of them): an underlay inset beyond it leaves none. */
@@ -84,7 +95,10 @@ export interface StitchInfo {
   /** Thread of the first selected fill (its border is sewn in it unless it has its own). */
   color?: ThreadColor;
   /** The one selected object is the border of a fill in its own thread (the fill's number, or null when gone). */
-  outline?: { fill: number | null };
+  /** A border of its own thread, or the second thread of a color blend (`blend`), following its fill. */
+  outline?: { fill: number | null; blend?: boolean; shadow?: boolean; echo?: boolean };
+  /** The one selected fill can blend into a second thread (see blendObject). */
+  blend?: boolean;
   /** Left out of the correction (`mixed`: only some of the selected objects). */
   lock: boolean | 'mixed';
   /** Stitches loosed from their shape (`mixed`: only some), and whether any selected object has a shape to loose them from. */
@@ -102,13 +116,15 @@ export interface StitchHooks {
   /** Sews the selection anew as another kind: fill or satin, a wide line as a fill and back. */
   convert: (to: 'fill' | 'satin' | 'line') => void;
   /** Rungs of a satin: the tool on or off, corners suggested, all removed, back to the stitches' own direction. */
-  direction: (action: 'tool' | 'corners' | 'sections' | 'even' | 'follow' | 'rung' | 'cut') => void;
+  direction: (action: 'tool' | 'corners' | 'sections' | 'even' | 'follow' | 'rung' | 'cut' | 'order') => void;
   /** The spacing at the selected rung (null: as the column). */
   spacingHere: (v: number | null) => void;
   /** Rungs drawn across a fill: the tool on or off, sewn as satin along them. */
   draw: (action: 'tool' | 'sew') => void;
   /** Guide lines on a fill: their tool on or off (`off` only closes it). */
   guide: (action: 'tool' | 'off') => void;
+  /** Points of rays, circles and swirls: their tool on or off (`off` only closes it). */
+  points: (action: 'tool' | 'off') => void;
   /** Leaving out what later fills cover, on or off for the selected fills. */
   knockout: (on: boolean) => void;
   /** How far the selected fills reach under a satin on top (share of its width). */
@@ -122,37 +138,35 @@ export interface StitchHooks {
   line: (st: PathStitch, final: boolean) => void;
   /** A border object: select its fill, or make it an object of its own (no longer following the fill). */
   outline: (action: 'fill' | 'detach') => void;
+  /** Opens the thread picker for a second color of a blend at `anchor`. */
+  blend: (anchor: HTMLElement) => void;
   /** The selected objects left out of the correction, or not. */
   lock: (on: boolean) => void;
   /** The selected objects' stitches loosed from their shape (true), or sewn from it again (false). */
   free: (on: boolean) => void;
-  /** The one selected fill fades out, and a copy in `color` fades in on the same area: a color blend. */
-  blend: (color: ThreadColor) => void;
 }
 
 const KINDS: ObjectKind[] = ['fill', 'satin', 'run'];
 
 /**
- * The fill patterns as tiles in three groups: classic rows, decorative fills that still cover the
- * area, and open patterns (one line, the fabric showing). `emboss` is tatami with a motif in its
- * needle points: a tile of its own so it is found among the decorative ones.
+ * The fill patterns as tiles in two groups: covering ones (straight, bent and decorative rows) and
+ * open ones (one line, the fabric showing).
  */
-type Tile = FillPattern | 'emboss' | 'fade';
-type TileGroup = 'classic' | 'decor' | 'open';
+type Tile = FillPattern;
+type TileGroup = 'cover' | 'open';
 const GROUPS: Record<TileGroup, Tile[]> = {
-  classic: ['tatami', 'gradient', 'contour', 'spiral', 'follow', 'guided'],
-  decor: ['emboss', 'fade', 'waves', 'grain', 'rays', 'swirl'],
-  open: ['meander', 'maze', 'grid', 'echo', 'cross'],
+  cover: ['tatami', 'gradient', 'contour', 'spiral', 'follow', 'guided', 'waves', 'rays', 'swirl', 'grain', 'circles'],
+  open: ['none', 'meander', 'maze', 'grid', 'echo', 'cross'],
 };
-const TILE_GROUPS: TileGroup[] = ['classic', 'decor', 'open'];
-const tileOf = (s: FillSettings): Tile => (s.pattern === 'tatami' && s.deco?.emboss ? 'emboss' : s.pattern === 'gradient' && s.deco?.fade ? 'fade' : s.pattern);
+const TILE_GROUPS: TileGroup[] = ['cover', 'open'];
+const tileOf = (s: FillSettings): Tile => s.pattern;
 const groupOf = (t: Tile): TileGroup => TILE_GROUPS.find((g) => GROUPS[g].includes(t))!;
 /** Patterns whose rows bend: their stitches get shorter in tight bends. */
-const CURVED: FillPattern[] = ['contour', 'spiral', 'follow', 'waves', 'grain', 'rays', 'swirl'];
+const CURVED: FillPattern[] = ['contour', 'spiral', 'follow', 'waves', 'grain', 'rays', 'swirl', 'circles'];
 /** Patterns with a row direction to set. */
 const ANGLED: FillPattern[] = ['tatami', 'gradient', 'waves', 'grain'];
-/** Where rays start, as shares of the shape's width and height: a 3 × 3 grid. */
-const FOCI: Pt[] = [0, 0.5, 1].flatMap((y) => [0, 0.5, 1].map((x) => [x, y] as Pt));
+/** Patterns with points on the area (the middle of rays and circles, the eyes of swirls). */
+const POINTED: FillPattern[] = ['rays', 'circles', 'swirl'];
 
 /** Small pictures of the fill patterns (24 × 24, drawn with the current color). */
 const SVG = (body: string, w = 1.6) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
@@ -163,18 +177,21 @@ const PATTERN_ICON: Record<Tile, string> = {
   spiral: SVG('<path d="M12 12c0-1 1.5-1.2 2-.2.8 1.6-1 3.2-2.6 3-2.6-.3-3.4-3.6-1.8-5.6 2.2-2.8 6.6-1.8 7.6 1.4 1.3 4-2.2 7.6-6 7.2-4.4-.4-7-5-5.6-9C7 5 11.6 3 15.6 4.2"/>'),
   follow: SVG('<path d="M3 6c5-3 9 3 18 0M3 11c5-3 9 3 18 0M3 16c5-3 9 3 18 0M3 21c5-3 9 3 18 0"/>'),
   guided: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round"><path stroke-width="1.2" opacity=".6" d="M4 4c3 0 5 5 8 5s5-4 8-4M4 15c3 0 5 5 8 5s5-4 8-4"/><path stroke-width="2.4" d="M4 9.5c3 0 5 5 8 5s5-4 8-4"/></svg>',
-  emboss: SVG('<path opacity=".45" d="M3 4.5h18M3 9h18M3 13.5h18M3 18h18"/><path stroke-width="2" d="M12 3.5l6.5 8.5-6.5 8.5-6.5-8.5z"/>', 1.4),
-  fade: SVG('<path d="M3 3.5h18M3 5.5h18M3 8h18M3 11h18M3 15h18M3 20.5h18"/><path opacity=".5" stroke-dasharray="2 2" d="M3 7h18M3 13h18M3 17.5h18M3 19.5h18"/>', 1.3),
   waves: SVG('<path d="M3 7c3-3 6 3 9 0s6-3 9 0M3 12c3-3 6 3 9 0s6-3 9 0M3 17c3-3 6 3 9 0s6-3 9 0"/>'),
   grain: SVG('<path d="M3 5.5c4 1.5 6-2 10-1s6 2 8 .5M3 10.5c3-1.5 7 2 10 0s5-2 8-.5M3 15.5c4 2 6-1.5 9 0s6 2 9 0M3 20c4-1.5 7 1 18-.5"/>'),
   rays: SVG('<path d="M12 21L3 7M12 21L6.5 3.5M12 21V3M12 21l5.5-17.5M12 21l9-14"/>'),
+  circles: SVG('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="3"/>', 1.4),
   swirl: SVG('<path d="M12 12.5c.8-.6.3-2-.8-1.8-1.6.3-1.6 2.7-.2 3.4 2.2 1.1 4.4-1.1 3.8-3.5-.8-3-4.6-3.8-6.8-1.8-3 2.7-1.7 7.8 2.2 8.6 4.6.9 8.2-3.4 7.2-7.9"/><path d="M3 6c2.5-2.2 6-3 9-2.4"/>'),
   meander: SVG('<path d="M4 20c-1.5-3 2-4 .5-7S2.6 8 4.6 6.5 8 7.4 8.3 10s-1.5 4.5.4 6 4.1-.3 4.2-2.6-2.3-4.2-1.3-6.4 4-2.5 5.4-.6.2 4.4 1.7 6.3 3.5.9 3.3 3.3S18 20 16 20"/>'),
   maze: SVG('<path d="M3 3h18v18H3zM7 3v10h5M7 17h10V7M12 7v6"/>'),
   grid: SVG('<path d="M7 2.8l4 2.3v4.6l-4 2.3-4-2.3V5.1zM17 2.8l4 2.3v4.6l-4 2.3-4-2.3V5.1zM12 11.6l4 2.3v4.6L12 20.8l-4-2.3v-4.6z"/>', 1.4),
   echo: SVG('<path d="M12 20.5S3 15 3 9.3a4.6 4.6 0 0 1 9-1.4 4.6 4.6 0 0 1 9 1.4C21 15 12 20.5 12 20.5z"/><path d="M12 15.6s-4.4-2.8-4.4-5.6a2.2 2.2 0 0 1 4.4-.7 2.2 2.2 0 0 1 4.4.7c0 2.8-4.4 5.6-4.4 5.6z"/>', 1.4),
   cross: SVG('<path d="M4 4l6 6M10 4l-6 6M14 4l6 6M20 4l-6 6M4 14l6 6M10 14l-6 6M14 14l6 6M20 14l-6 6"/>'),
+  none: SVG('<rect x="3.5" y="3.5" width="17" height="17" rx="3"/>', 2),
 };
+
+/** No embossing: plain rows. */
+const MOTIF_NONE = SVG('<path d="M4 7h16M4 12h16M4 17h16"/>', 1.4);
 
 /** The motifs of embossing as small pictures. */
 const MOTIF_ICON: Record<Motif, string> = {
@@ -242,7 +259,12 @@ export class StitchPanel {
   constructor(
     private root: HTMLElement,
     private hooks: StitchHooks,
-  ) {}
+  ) {
+    // Drawn anew in the other language, with the values being changed kept.
+    onLangChange(() => {
+      if (this.info && this.key !== -1) this.render();
+    });
+  }
 
   update(info: StitchInfo | null): void {
     this.info = info;
@@ -338,12 +360,13 @@ export class StitchPanel {
     if (info.outline) {
       // Its settings are the fill's: changed there, it follows.
       h.innerHTML = '';
-      h.append(Object.assign(document.createElement('span'), { className: 'kind-icon', innerHTML: KIND_ICON[this.kind] }), t('stitch.outline.title'));
+      const of = info.outline.echo ? 'stitch.echoOf' : info.outline.shadow ? 'stitch.shadowOf' : info.outline.blend ? 'stitch.blendOf' : 'stitch.outline';
+      h.append(Object.assign(document.createElement('span'), { className: 'kind-icon', innerHTML: KIND_ICON[this.kind] }), t(`${of}.title` as Key));
       const row = document.createElement('div');
       row.className = 'direction-buttons';
-      if (info.outline.fill !== null) row.append(this.button('stitch.outline.fill', 'stitch.outline.fill.hint', () => this.hooks.outline('fill'), true));
-      row.append(this.button('stitch.outline.detach', 'stitch.outline.detach.hint', () => this.hooks.outline('detach')));
-      parts.push(Object.assign(document.createElement('p'), { className: 'muted small', textContent: t('stitch.outline.text') }), row);
+      if (info.outline.fill !== null) row.append(info.outline.shadow || info.outline.echo ? this.button('stitch.shadowOf.line', 'stitch.shadowOf.line.hint', () => this.hooks.outline('fill'), true) : this.button('stitch.outline.fill', 'stitch.outline.fill.hint', () => this.hooks.outline('fill'), true));
+      row.append(this.button('stitch.outline.detach', `${of}.detach.hint` as Key, () => this.hooks.outline('detach')));
+      parts.push(Object.assign(document.createElement('p'), { className: 'muted small', textContent: t(`${of}.text` as Key) }), row);
       this.picker.close();
       this.root.replaceChildren(...parts);
       return;
@@ -447,6 +470,11 @@ export class StitchPanel {
           note: (v) => t('stitch.densityNote', { d: formatNumber(1 / v, 1) }),
         });
       const out: HTMLElement[] = [this.patterns(s)];
+      // Empty: its border is all there is to set.
+      if (s.pattern === 'none') {
+        out.push(this.borderGroup(s));
+        return out;
+      }
       // An open pattern is one line: no density, edges or underlay to set.
       if (isOpenPattern(s.pattern)) {
         out.push(
@@ -457,13 +485,13 @@ export class StitchPanel {
         return out;
       }
       const d = this.deco(s);
-      if (tileOf(s) === 'emboss') out.push(...this.embossControls(s));
       if (s.pattern === 'guided') out.push(this.guideTool(s, this.info!.guide));
-      if (tileOf(s) === 'fade') {
+      if (POINTED.includes(s.pattern)) out.push(this.pointTool(s, this.info!.points));
+      if (s.pattern === 'gradient' && d.fade) {
+        // One layer of a two-color blend (see blendObject): its density fades evenly to nothing.
         out.push(
           density('stitch.density', () => s.spacing, (v) => (s.spacing = v)),
-          this.choice<'out' | 'in'>('stitch.fade', ['out', 'in'], d.fade ?? 'out', (v) => `stitch.fade.${v}` as Key, (v) => (d.fade = v)),
-          this.blendField(),
+          this.choice<'out' | 'in'>('stitch.fade', ['out', 'in'], d.fade, (v) => `stitch.fade.${v}` as Key, (v) => (d.fade = v)),
         );
       } else if (s.pattern === 'gradient') {
         out.push(
@@ -471,6 +499,13 @@ export class StitchPanel {
           density('stitch.densityTo', () => s.spacingEnd, (v) => (s.spacingEnd = v)),
         );
       } else out.push(density('stitch.density', () => s.spacing, (v) => (s.spacing = v)));
+      // A gradient is where a color blend is looked for: the same action as in the object panel.
+      if (s.pattern === 'gradient' && this.info!.blend) {
+        const b: HTMLButtonElement = this.button(d.blend ? 'stitch.blend.change' : 'object.blend', 'object.blend.hint', () => this.hooks.blend(b));
+        const row = Object.assign(document.createElement('div'), { className: 'direction-buttons' });
+        row.append(b);
+        out.push(row);
+      }
       if (ANGLED.includes(s.pattern)) out.push(this.angle(s));
       if (s.pattern === 'waves') {
         out.push(
@@ -484,10 +519,9 @@ export class StitchPanel {
           this.reroll(s),
         );
       }
-      if (s.pattern === 'rays') out.push(this.focusPicker(s));
-      if (s.pattern === 'swirl') out.push(this.reroll(s));
+      if (s.pattern === 'swirl') out.push(this.reroll(s, true));
       out.push(this.slider({ label: 'stitch.length', hint: 'stitch.length.hint', min: 1.5, max: 7, step: 0.1, get: () => s.stitch, set: (v) => (s.stitch = v), fmt: mm(1) }));
-      if (s.pattern === 'tatami') out.push(this.offsets(s));
+      if (s.pattern === 'tatami') out.push(this.offsets(s), ...this.embossControls(s));
       // Straight rows cannot stray from their line; curved ones get shorter stitches in tight bends.
       if (CURVED.includes(s.pattern)) out.push(this.toleranceSlider(s));
       out.push(
@@ -776,7 +810,7 @@ export class StitchPanel {
   }
 
   /**
-   * The fill patterns as small pictures under three tabs (classic, decorative, open); picking one
+   * The fill patterns as small pictures under two tabs (covering, open); picking one
    * applies it, pointing at one shows it on the canvas first.
    */
   private patterns(s: FillSettings): HTMLElement {
@@ -809,9 +843,18 @@ export class StitchPanel {
     row.setAttribute('role', 'radiogroup');
     row.setAttribute('aria-label', t(`stitch.group.${group}` as Key));
     const apply = (to: FillSettings, tile: Tile) => {
-      const { emboss, fade, ...rest } = to.deco ?? {};
-      to.pattern = tile === 'emboss' ? 'tatami' : tile === 'fade' ? 'gradient' : tile;
-      to.deco = { ...rest, ...(tile === 'emboss' ? { emboss: emboss ?? 'diamonds' } : {}), ...(tile === 'fade' ? { fade: fade ?? 'out' } : {}) };
+      // Points belong to the pattern they were set for: rays and circles start anew in their place.
+      // A fade and its second thread belong to the gradient: another pattern takes the second one out.
+      const { focus: _f, centers: _c, fade: _d, blend: _b, ...rest } = to.deco ?? {};
+      to.pattern = tile;
+      to.deco = rest;
+      // Empty: only the border is sewn, as the object in its thread (a triple stitch when it had none).
+      if (tile === 'none') {
+        if (to.border) {
+          delete to.border.color;
+          delete to.border.link;
+        } else to.border = { type: 'triple', width: BORDER_WIDTH };
+      }
     };
     for (const tile of GROUPS[group]) {
       const b = document.createElement('button');
@@ -837,6 +880,7 @@ export class StitchPanel {
         // change with the first line.
         if (tile === 'guided' && !s.guides?.length) return this.hooks.guide('tool');
         if (tile !== 'guided' && this.info!.guide?.tool) this.hooks.guide('off');
+        if (!POINTED.includes(tile) && this.info!.points?.tool) this.hooks.points('off');
         this.changed(true);
       });
       // Pointing at a pattern shows it on the canvas before it is picked (guided needs its lines first).
@@ -855,39 +899,13 @@ export class StitchPanel {
     return wrap;
   }
 
-  /** A second thread fading in the other way on the same area: a color blend (one selected fill only). */
-  private blendField(): HTMLElement {
-    const fill = this.info!.color;
-    const wrap = document.createElement('div');
-    wrap.className = 'field stitch-field border-field';
-    const head = Object.assign(document.createElement('span'), { className: 'label', textContent: t('stitch.blend') });
-    const btn = Object.assign(document.createElement('button'), { type: 'button', className: 'border-thread', title: t('stitch.blend.hint') });
-    btn.append(t('stitch.blend.pick'));
-    const one = (this.info!.counts.fill ?? 0) === 1;
-    btn.disabled = !one || !fill;
-    btn.addEventListener('click', () => {
-      if (!fill) return;
-      this.picker.toggle(btn, {
-        key: 'blend',
-        title: t('stitch.blend'),
-        current: fill,
-        onPick: (c) => {
-          this.picker.close();
-          if (!sameColor(c, fill)) this.hooks.blend(c);
-        },
-      });
-    });
-    wrap.append(head, btn, Object.assign(document.createElement('span'), { className: 'muted small', textContent: t(one ? 'stitch.blend.note' : 'stitch.blend.one') }));
-    return wrap;
-  }
-
   /** The settings of decorative and open patterns, made when first set. */
   private deco(s: FillSettings): DecoSettings {
     return (s.deco ??= {});
   }
 
-  /** A new random variant of grain, swirls, meander and maze. */
-  private reroll(s: FillSettings): HTMLElement {
+  /** A new random variant of grain, swirls, meander and maze; for swirls (`points`) new eyes too. */
+  private reroll(s: FillSettings, points = false): HTMLElement {
     const wrap = document.createElement('div');
     wrap.className = 'field stitch-field reroll-row';
     const b = this.button('stitch.reroll', 'stitch.reroll.hint', () => {
@@ -895,6 +913,7 @@ export class StitchPanel {
       let seed = d.seed ?? DECO_DEFAULTS.seed;
       while (seed === (d.seed ?? DECO_DEFAULTS.seed)) seed = 1 + Math.floor(Math.random() * 99999);
       d.seed = seed;
+      if (points) delete d.centers;
       this.changed(true);
     });
     b.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="2" y="2" width="12" height="12" rx="2.5"/><circle cx="5.5" cy="5.5" r=".9" fill="currentColor"/><circle cx="10.5" cy="10.5" r=".9" fill="currentColor"/><circle cx="8" cy="8" r=".9" fill="currentColor"/></svg>';
@@ -903,72 +922,103 @@ export class StitchPanel {
     return wrap;
   }
 
-  /** Embossing: the motif as small pictures, and its size. */
+  /**
+   * Embossing of a tatami: none or a motif drawn by the needle points (small pictures), and its
+   * size when one is set.
+   */
   private embossControls(s: FillSettings): HTMLElement[] {
     const d = this.deco(s);
     const wrap = document.createElement('div');
     wrap.className = 'field stitch-field';
+    wrap.title = t('stitch.motif.hint');
     const head = Object.assign(document.createElement('span'), { className: 'label', textContent: t('stitch.motif') });
     const row = document.createElement('div');
     row.className = 'segmented motif-row';
     row.setAttribute('role', 'radiogroup');
     row.setAttribute('aria-label', t('stitch.motif'));
-    for (const m of MOTIFS) {
+    for (const m of [null, ...MOTIFS] as (Motif | null)[]) {
       const b = document.createElement('button');
       b.type = 'button';
-      const on = (d.emboss ?? 'diamonds') === m;
+      const on = (d.emboss ?? null) === m;
       b.className = on ? 'active' : '';
       b.setAttribute('role', 'radio');
       b.setAttribute('aria-checked', String(on));
-      b.title = t(`stitch.motif.${m}` as Key);
-      b.innerHTML = MOTIF_ICON[m];
-      b.append(Object.assign(document.createElement('span'), { textContent: t(`stitch.motif.${m}` as Key) }));
+      const key = (m ? `stitch.motif.${m}` : 'stitch.motif.none') as Key;
+      b.title = t(key);
+      b.innerHTML = m ? MOTIF_ICON[m] : MOTIF_NONE;
+      b.append(Object.assign(document.createElement('span'), { textContent: t(key) }));
       b.addEventListener('click', () => {
         if (on) return;
-        d.emboss = m;
+        if (m) d.emboss = m;
+        else delete d.emboss;
+        this.hooks.preview(null);
         this.render();
         this.changed(true);
       });
+      // Pointing at a motif shows it on the canvas before it is picked.
+      if (!on) {
+        b.addEventListener('pointerenter', () => {
+          const peek = structuredClone(s);
+          const pd = (peek.deco ??= {});
+          if (m) pd.emboss = m;
+          else delete pd.emboss;
+          this.hooks.preview({ kind: 'fill', s: peek });
+        });
+        b.addEventListener('pointerleave', () => this.hooks.preview(null));
+      }
       row.append(b);
     }
     wrap.append(head, row);
+    if (!d.emboss) return [wrap];
     return [
       wrap,
+      this.choice<'soft' | 'strong'>(
+        'stitch.motifStrength',
+        ['soft', 'strong'],
+        d.embossStrong ? 'strong' : 'soft',
+        (v) => `stitch.motifStrength.${v}` as Key,
+        (v) => (v === 'strong' ? (d.embossStrong = true) : delete d.embossStrong),
+        false,
+        (v) => {
+          if (!v) return this.hooks.preview(null);
+          const peek = structuredClone(s);
+          const pd = (peek.deco ??= {});
+          if (v === 'strong') pd.embossStrong = true;
+          else delete pd.embossStrong;
+          this.hooks.preview({ kind: 'fill', s: peek });
+        },
+      ),
       this.slider({ label: 'stitch.motifSize', hint: 'stitch.motifSize.hint', min: 4, max: 30, step: 0.5, get: () => d.embossSize ?? DECO_DEFAULTS.embossSize, set: (v) => (d.embossSize = v), fmt: (v) => `${formatNumber(v, 1)} mm` }),
     ];
   }
 
-  /** Rays: where they start, on a 3 × 3 grid over the shape. */
-  private focusPicker(s: FillSettings): HTMLElement {
-    const d = this.deco(s);
-    const now = d.focus ?? DECO_DEFAULTS.focus;
+  /** Points of rays, circles and swirls: set and moved on the canvas with their tool. */
+  private pointTool(s: FillSettings, d: StitchInfo['points']): HTMLElement {
     const wrap = document.createElement('div');
-    wrap.className = 'field stitch-field';
-    wrap.title = t('stitch.focus.hint');
-    const head = Object.assign(document.createElement('span'), { className: 'label', textContent: t('stitch.focus') });
-    const grid = document.createElement('div');
-    grid.className = 'focus-grid';
-    grid.setAttribute('role', 'radiogroup');
-    grid.setAttribute('aria-label', t('stitch.focus'));
-    FOCI.forEach((f, i) => {
-      const b = document.createElement('button');
-      b.type = 'button';
-      const on = Math.abs(now[0] - f[0]) < 0.01 && Math.abs(now[1] - f[1]) < 0.01;
-      b.className = on ? 'active' : '';
-      b.setAttribute('role', 'radio');
-      b.setAttribute('aria-checked', String(on));
-      b.setAttribute('aria-label', t(`stitch.focus.${i}` as Key));
-      b.title = t(`stitch.focus.${i}` as Key);
-      b.addEventListener('click', () => {
-        if (on) return;
-        d.focus = [f[0], f[1]];
-        this.render();
-        this.changed(true);
-      });
-      grid.append(b);
-    });
-    wrap.append(head, grid);
+    wrap.className = 'field stitch-field direction-field' + (d?.tool ? ' on' : '');
+    const head = Object.assign(document.createElement('span'), { className: 'label', textContent: t(`stitch.points.${s.pattern}` as Key) });
+    wrap.append(head);
+    if (!d?.single) {
+      wrap.append(Object.assign(document.createElement('span'), { className: 'muted small', textContent: t('stitch.points.single') }));
+      return wrap;
+    }
+    const row = document.createElement('div');
+    row.className = 'direction-buttons';
+    row.append(this.button(d.tool ? 'stitch.direction.done' : 'stitch.points.tool', 'stitch.points.tool.hint', () => this.hooks.points('tool'), !d.tool));
+    wrap.append(row);
+    if (d.tool) wrap.append(Object.assign(document.createElement('span'), { className: 'muted small', textContent: t(s.pattern === 'swirl' ? 'stitch.points.help.swirl' : 'stitch.points.help') }));
     return wrap;
+  }
+
+  /** Points set on the canvas (shares of the shape's extent): the fill is sewn anew around them. */
+  setPoints(points: Pt[]): void {
+    const s = this.draft.fill;
+    if (!s || this.kind !== 'fill' || !POINTED.includes(s.pattern)) return;
+    const d = this.deco(s);
+    if (s.pattern === 'swirl') d.centers = points;
+    else d.focus = points[0];
+    this.render();
+    this.changed(true);
   }
 
   /** Open patterns: distance of the lines (or size of a cell), their kind, the stitch. */
@@ -1119,6 +1169,7 @@ export class StitchPanel {
       row.append(
         this.button('stitch.direction.corners', 'stitch.direction.corners.hint', () => this.hooks.direction('corners')),
         this.button('stitch.sections', 'stitch.sections.hint', () => this.hooks.direction('sections')),
+        ...(d.order ? [this.button('stitch.order.best', 'stitch.order.best.hint', () => this.hooks.direction('order'))] : []),
         this.button('stitch.direction.even.button', 'stitch.direction.even.hint', () => this.hooks.direction('even'), false, d.rungs === 0),
         this.button('stitch.direction.follow.button', 'stitch.direction.follow.hint', () => this.hooks.direction('follow'), false, d.rungs === null),
       );
@@ -1256,7 +1307,7 @@ export class StitchPanel {
   private lineGroup(h: HTMLElement, info: StitchInfo): HTMLElement[] {
     const st = this.lineDraft!;
     h.innerHTML = '';
-    h.append(Object.assign(document.createElement('span'), { className: 'kind-icon', innerHTML: KIND_ICON[st.type === 'satin' ? 'satin' : 'run'] }), t('stitch.line.title'));
+    h.append(Object.assign(document.createElement('span'), { className: 'kind-icon', innerHTML: KIND_ICON[runLike(st.type) ? 'run' : 'satin'] }), t('stitch.line.title'));
     const out: HTMLElement[] = [];
     if (info.hand) {
       const hand = document.createElement('p');
@@ -1277,12 +1328,151 @@ export class StitchPanel {
         false,
       ),
     );
-    if (st.type !== 'satin') {
+    if (isRunType(st.type)) {
       st.tolerance ??= this.tolerance ?? TOLERANCE;
       out.push(this.toleranceSlider(st as { tolerance: number }));
     }
+    out.push(this.echoGroup(st, info.path!.closed, info.path!.color));
+    if (!info.path!.traced) out.push(this.shadowGroup(st, info.path!.color));
     out.push(Object.assign(document.createElement('p'), { className: 'muted small stitch-note', textContent: t(info.path!.traced ? 'stitch.lineTraced' : 'stitch.lineNote') }));
     return out;
+  }
+
+  /**
+   * A line's shadow, as a block of its own: off, or where it falls, how far, in which thread. It is
+   * an object of its own in that thread, sewn before the line (see model/shadow.ts).
+   */
+  private shadowGroup(st: PathStitch, line: ThreadColor): HTMLElement {
+    const box = document.createElement('section');
+    box.className = 'border-group shadow-group';
+    const sh = st.shadow;
+    box.append(
+      Object.assign(document.createElement('h4'), { textContent: t('stitch.shadow') }),
+      Object.assign(document.createElement('p'), { className: 'muted small', textContent: t('stitch.shadow.intro') }),
+      this.choice<ShadowDir | 'off'>('stitch.shadow.dir', ['off', ...SHADOW_DIRS], sh?.dir ?? 'off', (v) => `stitch.shadow.${v}` as Key, (v) => {
+        if (v === 'off') delete st.shadow;
+        else st.shadow = sh ? { ...sh, dir: v } : { color: { ...SHADOW_COLOR }, link: newLink(), dir: v, dist: SHADOW_DEFAULT_DIST };
+      }),
+    );
+    if (!sh) return box;
+    box.append(this.slider({ label: 'stitch.shadow.dist', hint: 'stitch.shadow.dist.hint', min: SHADOW_DIST[0], max: SHADOW_DIST[1], step: 0.1, get: () => sh.dist, set: (v) => (sh.dist = v), fmt: (v) => `${formatNumber(v, 1)} mm` }));
+    const wrap = document.createElement('div');
+    wrap.className = 'field stitch-field border-field';
+    const row = document.createElement('div');
+    row.className = 'border-row';
+    const btn = Object.assign(document.createElement('button'), { type: 'button', className: 'border-thread', title: t('stitch.shadow.thread.hint') });
+    const sw = Object.assign(document.createElement('span'), { className: 'sw' });
+    sw.style.background = cssColor(sh.color);
+    btn.append(sw, sh.color.name ?? (sameColor(sh.color, SHADOW_COLOR) ? t('stitch.shadow.thread.grey') : hexColor(sh.color)));
+    btn.addEventListener('click', () => {
+      this.picker.toggle(btn, {
+        key: 'shadow',
+        title: t('stitch.shadow.thread'),
+        current: sh.color,
+        original: { color: SHADOW_COLOR, label: t('stitch.shadow.thread.grey') },
+        note: t('stitch.shadow.thread.note'),
+        onPick: (c) => {
+          // In the line's own thread a shadow would only be a thicker line.
+          if (sameColor(c, line)) return;
+          sh.color = { ...c };
+          this.render();
+          this.changed(true);
+        },
+      });
+    });
+    row.append(btn);
+    wrap.append(Object.assign(document.createElement('span'), { className: 'label', textContent: t('stitch.shadow.thread') }), row);
+    box.append(wrap);
+    return box;
+  }
+
+  /**
+   * A thread for each copy of an echo, nearest first: the line's, or one of its own (then the
+   * copies of that thread are an object of their own, linked to the line).
+   */
+  private echoThreads(e: NonNullable<PathStitch['echo']>, line: ThreadColor): HTMLElement {
+    const wrap = document.createElement('div');
+    wrap.className = 'field stitch-field border-field';
+    wrap.title = t('stitch.echo.threads.hint');
+    const row = document.createElement('div');
+    row.className = 'border-row echo-threads';
+    for (let k = 1; k <= e.count; k++) {
+      if (e.skip?.includes(k)) continue;
+      const own = e.colors?.[k - 1] ?? null;
+      const btn = Object.assign(document.createElement('button'), { type: 'button', className: 'border-thread', title: own ? (own.name ?? hexColor(own)) : t('stitch.echo.same') });
+      const sw = Object.assign(document.createElement('span'), { className: 'sw' });
+      sw.style.background = cssColor(own ?? line);
+      btn.append(sw, String(k));
+      btn.addEventListener('click', () => {
+        this.picker.toggle(btn, {
+          key: `echo${k}`,
+          title: t('stitch.echo.copy', { n: k }),
+          current: own ?? line,
+          original: { color: line, label: t('stitch.echo.same') },
+          onPick: (c) => {
+            const colors = Array.from({ length: e.count }, (_, i) => e.colors?.[i] ?? null);
+            colors[k - 1] = sameColor(c, line) ? null : { ...c };
+            if (colors.some(Boolean)) {
+              e.colors = colors;
+              e.link ??= newLink();
+            } else delete e.colors;
+            this.render();
+            this.changed(true);
+          },
+        });
+      });
+      row.append(btn);
+    }
+    wrap.append(Object.assign(document.createElement('span'), { className: 'label', textContent: t('stitch.echo.threads') }), row);
+    return wrap;
+  }
+
+  /**
+   * A line's echo, as a block of its own: off, or on which side, how many copies, how far apart.
+   * A closed line has an outside and an inside; an open line one side or the other (which one is
+   * left of its drawing direction is not to be seen, so the side is switched with a button).
+   */
+  private echoGroup(st: PathStitch, closed: boolean, line: ThreadColor): HTMLElement {
+    const box = document.createElement('section');
+    box.className = 'border-group echo-group';
+    type Choice = EchoSide | 'off' | 'one';
+    const now: Choice = !st.echo ? 'off' : closed || st.echo.side === 'both' ? st.echo.side : 'one';
+    const values: Choice[] = closed ? ['off', ...ECHO_SIDES] : ['off', 'one', 'both'];
+    box.append(
+      Object.assign(document.createElement('h4'), { textContent: t('stitch.echo') }),
+      Object.assign(document.createElement('p'), { className: 'muted small', textContent: t('stitch.echo.intro') }),
+      this.choice<Choice>('stitch.echo.side', values, now, (v) => `stitch.echo.${v}` as Key, (v) => {
+        if (v === 'off') delete st.echo;
+        else st.echo = { ...(st.echo ?? ECHO_DEFAULT), side: v === 'one' ? (st.echo && st.echo.side !== 'both' ? st.echo.side : 'out') : v };
+      }),
+    );
+    if (now === 'one') {
+      const row = document.createElement('div');
+      row.className = 'direction-buttons';
+      row.append(
+        this.button('stitch.echo.flip', 'stitch.echo.flip.hint', () => {
+          st.echo!.side = st.echo!.side === 'out' ? 'in' : 'out';
+          this.changed(true);
+        }),
+      );
+      box.append(row);
+    }
+    const e = st.echo;
+    if (!e) return box;
+    // Satin columns side by side need their width.
+    const least = !isRunType(st.type) ? Math.min(ECHO_GAP[1], Math.round((st.width + 0.5) * 10) / 10) : ECHO_GAP[0];
+    box.append(
+      this.slider({ label: 'stitch.echo.count', hint: 'stitch.echo.count.hint', min: ECHO_COUNT[0], max: ECHO_COUNT[1], step: 1, get: () => e.count, set: (v) => (e.count = Math.round(v)), fmt: (v) => formatNumber(v) }),
+      this.slider({ label: 'stitch.echo.gap', hint: 'stitch.echo.gap.hint', min: least, max: ECHO_GAP[1], step: 0.1, get: () => Math.max(least, e.gap), set: (v) => (e.gap = v), fmt: (v) => `${formatNumber(v, 1)} mm` }),
+    );
+    box.append(
+      this.choice<'joined' | 'cut'>('stitch.echo.link', ['joined', 'cut'], e.cut ? 'cut' : 'joined', (v) => `stitch.echo.${v}` as Key, (v) => {
+        if (v === 'cut') e.cut = true;
+        else delete e.cut;
+      }),
+      this.echoThreads(e, line),
+    );
+    return box;
   }
 
   /** Leaving out what lies on top: a switch, taken over at once (the shape itself stays). */
@@ -1322,11 +1512,18 @@ export class StitchPanel {
   pathStitch(st: PathStitch | undefined, set: (v: PathStitch | undefined) => void, off = true, offset = false): HTMLElement[] {
     const mm = (d: number) => (v: number) => `${formatNumber(v, d)} mm`;
     const kinds = off ? BORDERS : BORDERS.filter((v) => v !== 'off');
-    const out = [
-      this.choice<BorderChoice>('stitch.borderType', kinds, st?.type ?? 'off', (v) => `stitch.border.${v}` as Key, (v) => {
-        set(v === 'off' ? undefined : { ...st, type: v, width: st?.width ?? BORDER_WIDTH });
-      }),
-    ];
+    const type = this.choice<BorderChoice>('stitch.borderType', kinds, st ? (isRunType(st.type) ? 'run' : st.type) : 'off', (v) => `stitch.border.${v}` as Key, (v) => {
+        if (v === 'off') return set(undefined);
+        // Each kind starts with its own spacing; a satin's 0.4 mm would make a zigzag a satin.
+        const next: PathStitch = { ...st, type: v, width: st?.width ?? BORDER_WIDTH };
+        delete next.spacing;
+        // A motif needs a few mm to show its figures.
+        if (v === 'motif') next.width = Math.max(next.width, MOTIF_WIDTH);
+        set(next);
+      });
+    // Five or six kinds: in even rows of three, not one left alone on a second row.
+    type.querySelector('.choice-row')?.classList.add('kinds');
+    const out = [type];
     if (!st) return out;
     const change = (f: (s: PathStitch) => void) => (v: number) => {
       f(st);
@@ -1347,12 +1544,65 @@ export class StitchPanel {
         }),
       );
     }
-    if (st.type !== 'satin') {
-      out.push(this.slider({ label: 'stitch.length', hint: 'stitch.runLength.hint', min: 1, max: 6, step: 0.1, get: () => st.length ?? BORDER_STITCH, set: (v) => change((s) => (s.length = v))(v), fmt: mm(1) }));
+    if (isRunType(st.type)) {
+      const times = st.type === 'triple' ? (st.repeat === 5 ? '5' : '3') : '1';
+      out.push(
+        this.choice<(typeof REPEATS)[number]>('stitch.repeat', REPEATS, times, (v) => `stitch.repeat.${v}` as Key, (v) => {
+          st.type = v === '1' ? 'run' : 'triple';
+          if (v === '5') st.repeat = 5;
+          else delete st.repeat;
+          set(st);
+        }, true),
+        this.slider({ label: 'stitch.length', hint: 'stitch.runLength.hint', min: 1, max: 6, step: 0.1, get: () => st.length ?? BORDER_STITCH, set: (v) => change((s) => (s.length = v))(v), fmt: mm(1) }),
+      );
+      return out;
+    }
+    const width = this.slider({ label: offset ? 'stitch.borderWidth' : 'stitch.lineWidth', hint: offset ? 'stitch.borderWidth.hint' : 'stitch.lineWidth.hint', min: 0.8, max: Math.max(6, Math.ceil(st.width)), step: 0.1, get: () => st.width, set: (v) => change((s) => (s.width = v))(v), fmt: mm(1) });
+    if (st.type === 'motif') {
+      const motif = st.motif ?? 'waves';
+      const fits = Math.round(motifMaxSize(motif, spacingOf(st)) * 10) / 10;
+      out.push(
+        this.choice<LineMotif>('stitch.lineMotif', LINE_MOTIFS, motif, (v) => `stitch.lineMotif.${v}` as Key, (v) => {
+          st.motif = v;
+          delete st.spacing;
+          set(st);
+        }, true),
+        this.slider({
+          label: 'stitch.lineMotifSize',
+          hint: 'stitch.lineMotifSize.hint',
+          min: 1,
+          max: 8,
+          step: 0.1,
+          get: () => st.width,
+          set: (v) => change((s) => (s.width = v))(v),
+          fmt: mm(1),
+          // Where the spacing caps the size, only the part below the cap makes a difference.
+          ...(fits < 8 ? { band: [1, fits] as [number, number], bandHint: 'stitch.lineMotifSize.band' as Key } : {}),
+        }),
+        this.slider({ label: 'stitch.gap', hint: 'stitch.motifSpacing.hint', min: 1.5, max: 15, step: 0.1, get: () => spacingOf(st), set: (v) => change((s) => (s.spacing = v === MOTIF_PERIOD[motif] ? undefined : v))(v), fmt: mm(1) }),
+      );
+      if (SIDED_MOTIFS.includes(motif)) out.push(this.sideChoice(st, set, offset));
+      const times = st.repeat === 3 || st.repeat === 5 ? (String(st.repeat) as '3' | '5') : '1';
+      out.push(
+        this.choice<(typeof REPEATS)[number]>('stitch.repeat', REPEATS, times, (v) => `stitch.repeat.${v}` as Key, (v) => {
+          if (v === '1') delete st.repeat;
+          else st.repeat = Number(v);
+          set(st);
+        }, true),
+      );
+      return out;
+    }
+    if (st.type === 'zigzag' || st.type === 'e') {
+      const e = st.type === 'e';
+      out.push(
+        width,
+        this.slider({ label: 'stitch.gap', hint: e ? 'stitch.eSpacing.hint' : 'stitch.zigzagSpacing.hint', min: e ? 1 : 0.5, max: 6, step: 0.1, get: () => spacingOf(st), set: (v) => change((s) => (s.spacing = v === (e ? E_SPACING : ZIGZAG_SPACING) ? undefined : v))(v), fmt: mm(1) }),
+      );
+      if (e) out.push(this.sideChoice(st, set, offset));
       return out;
     }
     out.push(
-      this.slider({ label: offset ? 'stitch.borderWidth' : 'stitch.lineWidth', hint: offset ? 'stitch.borderWidth.hint' : 'stitch.lineWidth.hint', min: 0.8, max: Math.max(6, Math.ceil(st.width)), step: 0.1, get: () => st.width, set: (v) => change((s) => (s.width = v))(v), fmt: mm(1) }),
+      width,
       this.slider({ label: 'stitch.density', hint: 'stitch.satinDensity.hint', min: 0.2, max: 1, step: 0.01, get: () => st.spacing ?? 0.4, set: (v) => change((s) => (s.spacing = v))(v), fmt: mm(2) }),
       this.slider({ label: 'stitch.borderPull', hint: 'stitch.borderPull.hint', min: 0, max: 0.6, step: 0.05, get: () => st.pull ?? 0, set: (v) => change((s) => (s.pull = v || undefined))(v), fmt: mm(2) }),
       this.choice<UnderlayKind | 'off'>('stitch.under.kind', ['off', ...UNDERLAYS], autoUnder(st), (v) => (v === 'off' ? 'stitch.borderUnder.off' : (`stitch.under.${v}` as Key)), (v) => {
@@ -1361,6 +1611,16 @@ export class StitchPanel {
       }, true),
     );
     return out;
+  }
+
+  /** Which side an E stitch's prongs or a motif's figures are on: of a line right or left, of a border inside or outside. */
+  private sideChoice(st: PathStitch, set: (v: PathStitch) => void, border: boolean): HTMLElement {
+    const sides = border ? (['in', 'out'] as const) : (['right', 'left'] as const);
+    return this.choice<(typeof sides)[number]>(st.type === 'e' ? 'stitch.eSide' : 'stitch.motifSide', sides, sides[st.flip ? 1 : 0], (v) => `stitch.eSide.${v}` as Key, (v) => {
+      if (v === sides[1]) st.flip = true;
+      else delete st.flip;
+      set(st);
+    }, true);
   }
 
   /** A fill's border, as a block of its own: what it is, its stitches, its thread. */
@@ -1374,13 +1634,21 @@ export class StitchPanel {
         s.border,
         (b) => {
           if (b) s.border = Object.assign(s.border ?? b, b);
-          else delete s.border;
+          else {
+            delete s.border;
+            // An empty fill is its border: without it, it is filled again (and picking Empty gives a
+            // fill a border).
+            if (s.pattern === 'none') {
+              s.pattern = 'tatami';
+              this.group = null;
+            }
+          }
         },
         true,
         true,
       ),
     );
-    if (s.border) box.append(this.borderThread(s.border));
+    if (s.border && s.pattern !== 'none') box.append(this.borderThread(s.border));
     return this.lights(box, 'border');
   }
 

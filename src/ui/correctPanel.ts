@@ -5,11 +5,11 @@ import type { Fixed } from '../model/restitch';
 import type { Reason } from '../validation/zones';
 import { fixText } from './fixText';
 import { KIND_ICON } from './layersPanel';
-import { formatNumber, getLang, t, type Key } from '../i18n';
+import { formatNumber, getLang, onLangChange, t, type Key } from '../i18n';
 import { patternStats, type Pattern, type PatternStats } from '../model/pattern';
 import type { ValidationResult } from '../validation/validate';
 import type { Settings } from '../settings';
-import { cleanName, isOutputFormat, suggestedName, type OutputFormat } from '../writers';
+import { cleanName, isOutputFormat, type OutputFormat } from '../writers';
 import { FileList, type LoadedFile } from './fileList';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -153,6 +153,7 @@ export class CorrectPanel {
     this.fixAll.addEventListener('click', () => hooks.plan('all'));
     this.fixZone.addEventListener('click', () => hooks.plan('zone'));
     this.hooks = hooks;
+    onLangChange(() => this.last && this.update(this.last));
     this.compareToggle.addEventListener('click', () => hooks.toggleCompare());
     this.selDelete.addEventListener('click', () => hooks.deleteSelection());
     this.selThin.addEventListener('click', () => hooks.thinSelection(Number(this.thinShare.value)));
@@ -172,13 +173,18 @@ export class CorrectPanel {
     const save = () => {
       const f = this.last?.file;
       if (!f || !isOutputFormat(this.saveFormat.value)) return;
-      const name = cleanName(this.saveName.value) || suggestedName(f.fileName, FileList.edited(f) && !FileList.blank(f));
+      const name = cleanName(this.saveName.value) || cleanName(FileList.saveName(f)) || 'design';
       hooks.save(this.saveFormat.value, name);
     };
     this.saveFile.addEventListener('click', save);
     this.saveName.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') save();
     });
+  }
+
+  /** Drops a name typed for saving `f`, so the field offers the design's new name. */
+  forgetName(f: object): void {
+    this.names.delete(f);
   }
 
   /** Shows the correction options again after they were changed elsewhere (a project was opened). */
@@ -221,7 +227,7 @@ export class CorrectPanel {
     const own = f?.pattern?.format;
     this.saveFormat.value = this.s.saveFormat ?? (isOutputFormat(own) ? own : 'pes');
     this.saveExt.textContent = `.${this.saveFormat.value}`;
-    const name = f ? (this.names.get(f) ?? suggestedName(f.fileName, FileList.edited(f) && !FileList.blank(f))) : '';
+    const name = f ? (this.names.get(f) ?? (cleanName(FileList.saveName(f)) || 'design')) : '';
     if (document.activeElement !== this.saveName && this.saveName.value !== name) this.saveName.value = name;
 
     // Drawn anew only when the message changed: the canvas redraws while the pointer is on a row.

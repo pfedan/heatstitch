@@ -560,6 +560,15 @@ export function fieldFill(
   // The rows must not crowd or leave gaps; checked before anything is sewn.
   if (peakDensity(rows) > peak / p.spacing || coverage(r, rows, p.spacing * 0.75) < cover) return null;
 
+  return sewRows(r, rows, p, start, mean);
+}
+
+/**
+ * Curved rows (each a line through the area) sewn one after the other: underlay at `mean` degrees
+ * first when asked, then row after row while the next one starts close by, with travel under rows
+ * not sewn yet between groups.
+ */
+export function sewRows(r: Region, rows: Pt[][], p: FillParams, start: Pt, mean: number): FlowResult {
   const runs: Pt[][] = [];
   const grid = new TravelGrid(p.travel ?? r);
   let pos = p.underlay ? sewUnderlay(r, mean, p, start, grid, runs) : start;

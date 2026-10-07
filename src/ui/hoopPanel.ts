@@ -1,4 +1,4 @@
-import { formatNumber, t } from '../i18n';
+import { formatNumber, onLangChange, t } from '../i18n';
 import { biggerHoop, HOOP_MAX_MM, hoopFit, hoopKey, HOOPS, isListed, type Hoop } from '../model/hoop';
 import type { Bounds } from '../model/pattern';
 import type { Settings } from '../settings';
@@ -38,7 +38,7 @@ export function fileHoopOffer(b: Bounds | undefined, hoop: Hoop | null, fileHoop
  * The hoop picker under the file list: no hoop, the common sewing fields with their brands, or an own
  * size; and the line saying whether the active design fits.
  */
-export function bindHoop(s: Settings, onChange: () => void): { refresh: (b: Bounds | undefined, fileHoop?: Hoop) => void } {
+export function bindHoop(s: Settings, onChange: () => void, fit: (() => void) | null = null): { refresh: (b: Bounds | undefined, fileHoop?: Hoop) => void } {
   const select = $<HTMLSelectElement>('hoop');
   const custom = $<HTMLElement>('hoop-custom');
   const w = $<HTMLInputElement>('hoop-w');
@@ -77,8 +77,10 @@ export function bindHoop(s: Settings, onChange: () => void): { refresh: (b: Boun
   w.addEventListener('change', typed);
   h.addEventListener('change', typed);
 
+  let fromFile: Hoop | undefined;
   const refresh = (b: Bounds | undefined, fileHoop?: Hoop) => {
     bounds = b;
+    fromFile = fileHoop;
     // Rebuilt only for another language, so an open list is not disturbed by redraws.
     if (select.options[0]?.text !== t('hoop.none')) {
       select.replaceChildren(
@@ -109,6 +111,12 @@ export function bindHoop(s: Settings, onChange: () => void): { refresh: (b: Boun
       note.classList.toggle('turned', !!msg?.turned);
       note.classList.toggle('info', !msg);
       const parts: Node[] = [document.createTextNode(text)];
+      // Too big: made smaller to fit, or a bigger hoop.
+      if (msg && !msg.turned && fit) {
+        const btn = Object.assign(document.createElement('button'), { type: 'button', className: 'link', textContent: t('hoop.fit'), title: t('hoop.fit.hint') });
+        btn.addEventListener('click', fit);
+        parts.push(document.createTextNode(' '), btn);
+      }
       if (offer) {
         const btn = Object.assign(document.createElement('button'), {
           type: 'button',
@@ -124,5 +132,6 @@ export function bindHoop(s: Settings, onChange: () => void): { refresh: (b: Boun
       note.replaceChildren(...parts);
     }
   };
+  onLangChange(() => refresh(bounds, fromFile));
   return { refresh };
 }

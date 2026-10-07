@@ -1,7 +1,10 @@
+import { syncBorders } from '../model/border';
 import type { AsideRole } from '../model/aside';
+import type { DrawTool } from '../ui/drawTool';
 import type { Editor } from '../ui/editor';
-import type { FileList } from '../ui/fileList';
-import type { Form } from '../shape/path';
+import { FileList } from '../ui/fileList';
+import { ColorList } from '../ui/colorList';
+import { scaling, type Form, type Mat } from '../shape/path';
 import type { Lettering } from '../lettering/layout';
 import type { Measurement } from '../validation/measure';
 import type { Pattern } from '../model/pattern';
@@ -12,13 +15,15 @@ import type { ShapeTool } from '../ui/shapeTool';
 import { LayersPanel, kindLabel, blockName } from '../ui/layersPanel';
 import { ObjectPanel } from '../ui/objectPanel';
 import { numberInColor, rememberObjects, type SewObject, splitObject } from '../model/objects';
-import { recolor, sameColor } from '../model/recolor';
+import { sameColor } from '../model/recolor';
 import { recordOfStitch } from '../model/sequence';
-import { remembered, measureFill, analyze, unionRegion, remember, restitch, type RestitchResult } from '../model/restitch';
-import { reversible, reverseObjects } from '../model/reverse';
-import { t, type Key } from '../i18n';
+import { remembered, rememberedIn, measureFill, analyze, unionRegion, remember, restitch, type RestitchResult } from '../model/restitch';
+import { isLine, reverseLines, reversible, reverseObjects } from '../model/reverse';
+import { formatNumber, t, type Key } from '../i18n';
 import { ui } from './state';
 import { unionForm, recolorObjects } from '../model/shapeOps';
+import { blendObject } from '../model/blend';
+import { recolorBlock, takeThreads } from '../model/border';
 import { violations, conflicts, reorder } from '../model/order';
 import { wholeArea } from '../model/knockout';
 
@@ -28,11 +33,14 @@ export interface ObjectsApp {
   readonly applyRestitched: (r: RestitchResult | null, failed: Key, remeasure?: boolean) => void;
   readonly closeRungs: () => void;
   readonly closeShape: () => void;
+  readonly commitTransform: (m: Mat) => void;
   readonly deleteSelected: () => void;
+  readonly drawTool: DrawTool;
   readonly duplicateSelected: () => void;
   readonly editor: Editor;
   readonly enterShape: (o: number, fit: boolean) => void;
   readonly files: FileList;
+  readonly followKnockouts: () => void;
   readonly frameObjects: () => number[];
   readonly history: (step: 'undo' | 'redo' | 'revert') => void;
   readonly letteringsOf: (p: Pattern, q: Sequence) => (Lettering | undefined)[];
@@ -46,6 +54,7 @@ export interface ObjectsApp {
   readonly setEditing: (on: boolean) => void;
   readonly settings: Settings;
   readonly shapeTarget: (p: Pattern, q: Sequence, o: number) => Form | null;
+  readonly showBand: (p: Pattern, q: Sequence, o: number) => void;
   readonly shapeTool: ShapeTool;
   readonly showObjectMenu: (o: number, clientX: number, clientY: number) => boolean;
   readonly subtractSelected: () => void;
@@ -83,7 +92,7 @@ export function bindObjects(app: ObjectsApp) {
     // Only the colors change, so the density measurement still holds.
     recolor: (b, color) => {
       const f = app.files.active;
-      if (f?.pattern) app.applyEdit(recolor(f.pattern, b, color), f.measurement);
+      if (f?.pattern) app.applyEdit(recolorBlock(f.pattern, b, color), f.measurement);
     },
     select: (objs, toggle) => selectObjects(objs, toggle),
     hover: (o) => {
@@ -148,15 +157,17 @@ export function bindObjects(app: ObjectsApp) {
     ui.flowPreview = null;
     if (next.size) ui.focusBlock = null;
     if (app.rungTool.active && (next.size !== 1 || !next.has(ui.rungObject!))) app.closeRungs();
-    // While editing an outline, choosing another object goes on with that one's (or back to the objects).
-    if (app.shapeTool.active && (next.size !== 1 || !next.has(ui.shapeObject!))) {
+    // Level Form: the one selected object shows its outline (another one chosen goes on with that one's).
+    if ((app.shapeTool.active || ui.formLevel) && (next.size !== 1 || !next.has(ui.shapeObject!))) {
       const one = next.size === 1 ? [...next][0] : null;
       const p = app.files.active?.pattern;
-      const form = one !== null && p ? app.shapeTarget(p, app.seq(p), one) : null;
+      const form = one !== null && p && ui.formLevel && !ui.letterMode && !app.drawTool.active ? app.shapeTarget(p, app.seq(p), one) : null;
       if (form && one !== null && p) {
         app.shapeTool.open(form);
+        app.showBand(p, app.seq(p), one);
         ui.shapeObject = one;
         ui.shapePattern = p;
+        app.updateLevel();
       } else app.closeShape();
     }
     // While editing points, choosing another object (in the list too) goes on with that one.
@@ -188,8 +199,13 @@ export function bindObjects(app: ObjectsApp) {
     const target = into === null ? undefined : q.blocks[into];
     const recolored = target ? moved.filter((o) => !sameColor(q.objects[o].color, target.color)) : [];
     const starts: number[] = [];
-    const next = reorder(p, q.objects, order, app.settings.trimMm, starts, { into: new Map(recolored.map((o) => [o, into!])) });
+    const next = reorder(p, q.objects, order, app.settings.trimMm, starts, { into: new Map(recolored.map((o) => [o, into!])), whole: true });
     if (next === p) return;
+    // A border or a blend's second thread moved into another color keeps it from now on.
+    if (recolored.length) {
+      const nk = app.seq(next);
+      takeThreads(next, recolored.map((o) => nk.objectAt[recordOfStitch(nk.numbers, starts[order.indexOf(o)] + 1)]).filter((o) => o >= 0));
+    }
     const conflict = coverConflict(q, p, order, movedSet);
     const keepHidden = ui.hiddenBlocks.size;
     app.applyEdit(next, f.measurement);
@@ -202,6 +218,8 @@ export function bindObjects(app: ObjectsApp) {
     ui.selectedObjects = new Set(moved.map(now).filter((o) => o >= 0));
     ui.selectionKey++;
     layers.reveal([...ui.selectedObjects]);
+    // What leaves out the shapes on top follows the new order (same undo step).
+    app.followKnockouts();
     const undo = t('object.undo');
     if (target && recolored.length) {
       const own = q.objects[recolored[0]];
@@ -285,17 +303,30 @@ export function bindObjects(app: ObjectsApp) {
     const p = f?.pattern;
     if (!f || !p || !ui.selectedObjects.size) return;
     const q = app.seq(p);
-    const which = [...ui.selectedObjects].sort((a, b) => a - b).filter((o) => reversible(q.objects[o]));
-    if (!which.length) return;
-    const r = reverseObjects(p, q.objects, which, q.kinds, app.settings.trimMm);
-    const failed = r.failed.length;
+    const selected = [...ui.selectedObjects].sort((a, b) => a - b);
+    // Lines are turned by their curve (in place, so the others keep their numbers), the rest sewn from the other side.
+    const lines = selected.filter((o) => isLine(p, q.objects[o]));
+    const which = selected.filter((o) => !lines.includes(o) && reversible(q.objects[o]));
+    if (!which.length && !lines.length) return;
+    const turned = reverseLines(p, lines, app.settings.trimMm);
+    // Shadows and echo copies in threads of their own follow their lines.
+    const pl = turned.pattern === p ? p : syncBorders(turned.pattern, app.settings.trimMm);
+    const ql = app.seq(pl);
+    const r = which.length ? reverseObjects(pl, ql.objects, which, ql.kinds, app.settings.trimMm) : null;
+    const failed = (r?.failed.length ?? 0) + turned.failed.length;
     const failText = failed ? t(failed === 1 ? 'object.reverse.failed.one' : 'object.reverse.failed', { n: failed }) : null;
-    if (!r.starts.length) {
+    if (!r?.starts.length && pl === p) {
       layers.say(failText ?? '', true);
       return;
     }
     const before = app.orderStats(p);
-    app.applyRestitched({ ...r, failed: [] }, 'stitch.failed');
+    if (r?.starts.length) app.applyRestitched({ ...r, failed: [] }, 'stitch.failed');
+    else {
+      app.applyEdit(pl);
+      app.files.setObjects(f, rememberedIn(pl, app.seq(pl).objects));
+      ui.stitchCache = null;
+      app.redraw();
+    }
     const now = app.files.active?.pattern;
     if (!now) return;
     const after = app.orderStats(now);
@@ -348,6 +379,19 @@ export function bindObjects(app: ObjectsApp) {
       // The objects keep their place in the order, so their indices stay.
       app.takeShapes(next, sel.filter((o) => o < q.objects.length));
     },
+    blend: (c) => {
+      const p = app.files.active?.pattern;
+      if (!p || ui.selectedObjects.size !== 1) return;
+      const o = [...ui.selectedObjects][0];
+      const next = blendObject(p, o, c, app.settings.trimMm);
+      if (!next) return layers.say(t('object.blend.failed'), true);
+      // Both layers selected: the blend shows in full, not dimmed behind the original.
+      const objs = app.seq(next).objects;
+      const link = remembered(next, objs[o])?.fill?.deco?.blend?.link;
+      const partner = objs.findIndex((x) => !!link && remembered(next, x)?.blendOf === link);
+      app.takeShapes(next, partner < 0 ? [o] : [o, partner]);
+      layers.say(t('object.blend.done'));
+    },
     split: splitSelected,
     step: (dir) => {
       const p = app.files.active?.pattern;
@@ -364,10 +408,7 @@ export function bindObjects(app: ObjectsApp) {
     reverse: () => reverseSelected(),
     clear: () => {
       if (app.editor.active) app.setEditing(false);
-      ui.selectedObjects = new Set();
-      ui.selectionKey++;
-      ui.flowPreview = null;
-      app.redraw();
+      selectObjects([], false);
     },
     editStitches: (on) => app.setEditing(on),
     editShape: (on) => {
@@ -376,10 +417,44 @@ export function bindObjects(app: ObjectsApp) {
     },
     deleteNode: () => app.shapeTool.deleteSelected(),
     toggleNode: () => app.shapeTool.toggleSmooth(),
+    resize: (sx, sy) => {
+      const p = app.files.active?.pattern;
+      const sel = app.frameObjects();
+      if (!p || !sel.length) return;
+      const objs = sel.map((o) => app.seq(p).objects[o]);
+      const cx = (Math.min(...objs.map((o) => o.minX)) + Math.max(...objs.map((o) => o.maxX))) / 20;
+      const cy = (Math.min(...objs.map((o) => o.minY)) + Math.max(...objs.map((o) => o.maxY))) / 20;
+      app.commitTransform(scaling(sx, sy, cx, cy));
+    },
+    simplify: () => {
+      const r = app.shapeTool.simplify();
+      if (!r) return layers.say(t('shape.simplify.none'), true);
+      layers.say(t('shape.simplified', { before: formatNumber(r.before), after: formatNumber(r.after) }));
+      app.shapeTool.commit();
+    },
     closeLine: () => app.shapeTool.toggleClosed(),
     deleteSelection: () => app.editor.deleteSelection(),
     splitStitch: () => app.editor.splitSelected(),
   });
 
-  return { layers, mergeBlocked, objectName, objectPanel, selectObjects };
+  // The threads in sewing order, to print, and switching them all to one brand.
+  const colorList = new ColorList();
+  $('color-list').addEventListener('click', () => {
+    const f = app.files.active;
+    if (!f?.pattern) return;
+    colorList.open({
+      pattern: f.pattern,
+      name: FileList.baseName(f) || f.pattern.name,
+      spm: app.settings.machineSpm,
+      apply: (colors) => {
+        const g = app.files.active;
+        if (!g?.pattern) return;
+        let next = g.pattern;
+        colors.forEach((c, b) => (next = recolorBlock(next, b, c)));
+        app.applyEdit(next, g.measurement);
+      },
+    });
+  });
+
+  return { colorList, layers, mergeBlocked, objectName, objectPanel, selectObjects };
 }

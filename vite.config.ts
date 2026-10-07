@@ -52,10 +52,16 @@ export default defineConfig({
       workbox: {
         // A first visit is controlled right away, so the reload button can swap versions in it too.
         clientsClaim: true,
-        // The font list comes along; a font (some 100 KB to 2 MB) only once it is used, then it
+        // The font list and the thread catalogs come along; a font (some 100 KB to 2 MB) only once it is used, then it
         // works offline too.
-        globPatterns: ['**/*.{js,css,html,svg,png,webmanifest,pes}', 'fonts/index.json'],
+        globPatterns: ['**/*.{js,css,html,svg,png,webmanifest,pes}', 'fonts/index.json', 'threads/catalogs.json'],
         runtimeCaching: [
+          // The demo project is not part of the install (some 500 KB); it is kept once it was opened.
+          {
+            urlPattern: /\/examples\/.+\.heatstitch$/,
+            handler: 'StaleWhileRevalidate',
+            options: { cacheName: 'examples', expiration: { maxEntries: 4 } },
+          },
           {
             urlPattern: /\/fonts\/.+\.(json|txt)$/,
             handler: 'StaleWhileRevalidate',

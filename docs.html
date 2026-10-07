@@ -58,8 +58,9 @@
             <li><a href="#de-check">Prüfen, ob ein Stickmuster für meinen Stoff zu dicht ist</a>, und es <a href="#de-correct">korrigieren</a>.</li>
             <li><a href="#de-objects">Ein Objekt anders sticken</a>: Muster, auch dekorative, Abstand, Unterlage, Umrandung, Satinbreite.</li>
             <li><a href="#de-objects">Die Reihenfolge ändern</a> oder <a href="#de-jumps">Fadenschnitte setzen</a>.</li>
-            <li><a href="#de-draw">Eine Form zeichnen</a> oder <a href="#de-lettering">einen Namen sticken</a>.</li>
+            <li><a href="#de-draw">Eine Form zeichnen</a> oder <a href="#de-lettering">einen Namen sticken</a>; <a href="#de-lines">Linien verzieren</a>: Bohnenstich, Zickzack, Motive, Echo, Schatten.</li>
             <li><a href="#de-image">Aus einem Bild, Logo oder SVG ein Stickmuster machen</a>.</li>
+            <li><a href="#de-sequence">Garne meiner Marke wählen</a> und die Farbliste drucken.</li>
             <li><a href="#de-save">Für meine Maschine speichern</a>: PES, DST, JEF, VP3, EXP oder PEC, im passenden Stickrahmen.</li>
           </ul>
         </div>
@@ -92,7 +93,7 @@
 
         <h2 id="de-start">Schnellstart</h2>
         <ol>
-          <li>Eine Stickdatei auf das Dateifeld ziehen: <b>PES</b> und <b>PEC</b> (Brother), <b>DST</b> (Tajima), <b>JEF</b> (Janome), <b>VP3</b> (Pfaff, Husqvarna Viking) oder <b>EXP</b> (Melco). Oder unter <i>Beispiel laden</i> eines wählen: die Katze, die überlappenden Kreise oder das Konfetti. Die beiden Vektorgrafiken (SVG) darunter werden beim Öffnen gestickt: die Kreise als ganze Formen übereinander und der <i>Formen-Benchmark</i>, neun Felder mit dem, was heatstitch aus Formen macht. <i>+ Neu</i> daneben legt ein leeres Stickmuster an, in das du zeichnest oder schreibst: im Ablauf, mit dem zuletzt benutzten Stoff und Garn und dem Stickrahmen 100 × 100 mm, wenn keiner gewählt ist. Beim Speichern heißt es <i>Neues Stickmuster</i>.</li>
+          <li>Eine Stickdatei auf das Dateifeld ziehen: <b>PES</b> und <b>PEC</b> (Brother), <b>DST</b> (Tajima), <b>JEF</b> (Janome), <b>VP3</b> (Pfaff, Husqvarna Viking) oder <b>EXP</b> (Melco). Oder unter <i>Beispiel laden</i> eines wählen: die Katze, die überlappenden Kreise, das Konfetti oder das <i>Demo-Projekt</i> mit sieben Stickmustern (Blume, Musterkarte Dekor, Linienstiche, Linieneffekte, Schriftzug, Aufnäher, Handtuch), in denen jedes Objekt bearbeitet werden kann. Die beiden Vektorgrafiken (SVG) darunter werden beim Öffnen gestickt: die Kreise als ganze Formen übereinander und der <i>Formen-Benchmark</i>, neun Felder mit dem, was heatstitch aus Formen macht. <i>+ Neu</i> daneben legt ein leeres Stickmuster an, in das du zeichnest oder schreibst: im Ablauf, mit dem zuletzt benutzten Stoff und Garn und dem Stickrahmen 100 × 100 mm, wenn keiner gewählt ist. Es heißt <i>Neues Stickmuster</i>, bis du es mit dem Stift umbenennst.</li>
           <li>Oben den Modus wählen: <i>Ablauf</i> (<kbd>1</kbd>) zeigt und bearbeitet das Stickmuster, <i>Dichte</i> (<kbd>2</kbd>) prüft es, <i>Bild</i> (<kbd>3</kbd>) macht aus einem Bild ein neues.</li>
           <li>Im Modus <i>Dichte</i> unter <i>Material</i> <b>Stoff</b> und <b>Garn</b> wählen. Das Urteil steht unter <i>Befunde</i>: <span class="lv safe">Unauffällig</span>, <span class="lv caution">Vorsicht</span> oder <span class="lv critical">Kritisch</span>. Ein Klick auf eine Zone zoomt hin.</li>
           <li>Mit <i>Korrektur vorschlagen</i> die Zonen beheben, mit dem Original vergleichen.</li>
@@ -102,7 +103,7 @@
         <p>
           Links liegen deine <b>Dateien</b> mit Stickrahmen und Speichern, darunter die Einstellungen des Modus, die
           <b>Anzeige</b> (realistische Fäden, Stoff, Markierungen) und die <b>Statistik</b>. In der Mitte ist die
-          Leinwand mit Rückgängig und Wiederholen, dem Schalter <i>Objekte | Form | Stiche</i>, den Zeichenwerkzeugen,
+          Leinwand mit Rückgängig und Wiederholen, dem Schalter <i>Form | Objekte | Stiche</i>, den Zeichenwerkzeugen,
           Einpassen und PNG-Export. Rechts arbeitet der Modus: im Ablauf die Farben und Objekte, das gewählte Objekt
           und die Sprünge, in der Dichte die Befunde und die Korrektur, im Bild die Farben, der Pinsel und das Ergebnis.
           Die beiden Spalten lassen sich an ihrer Kante breiter oder schmaler ziehen.
@@ -112,7 +113,7 @@
           Änderungen bleiben in diesem Browser gespeichert und sind nach dem Neuladen wieder da; <b>×</b> in der
           Dateiliste entfernt eine Datei, <i>Zurück zum Original</i> verwirft alle Änderungen an ihr.
         </p>
-        <p><b>Deine Dateien verlassen nie deinen Computer.</b> heatstitch liest, prüft und speichert sie komplett in deinem Browser. Es gibt keinen Server, der sie empfängt, kein Konto und kein Tracking; die Seite besteht nur aus statischen Dateien auf GitHub Pages. Auch Bilder im Modus <i>Bild</i> bleiben im Browser.</p>
+        <p><b>Deine Dateien verlassen nie deinen Computer.</b> heatstitch liest, prüft und speichert sie komplett in deinem Browser. Es gibt keinen Server, der sie empfängt, kein Konto und kein Tracking; die Seite besteht nur aus statischen Dateien auf GitHub Pages. Auch Bilder im Modus <i>Bild</i> bleiben im Browser. Der Stift neben einer Datei in der Liste (oder ein Doppelklick auf den Namen) benennt ein Stickmuster um: <kbd>Enter</kbd> übernimmt, <kbd>Esc</kbd> behält den alten Namen, ein leerer Name führt zurück zum Dateinamen. Der Name bleibt nach dem Neuladen und im Projekt erhalten, und Speichern schlägt ihn vor.</p>
         <figure>
           <img src="/guide/heatmap-de.jpg" width="1280" height="960" loading="lazy" alt="Die App im Modus Dichte mit drei überlappenden Füllkreisen: die Mitte, wo vier Lagen liegen, ist kritisch markiert, rechts die Befunde" />
           <figcaption><a href="examples/demos/overlap.pes" download>overlap.pes</a> im Modus <i>Dichte</i>: drei Füllkreise und ein Punkt obendrauf. Eine oder zwei Lagen sind unkritisch; wo alle vier liegen, meldet die Prüfung eine kritische Zone.</figcaption>
@@ -134,6 +135,10 @@
         <dl>
           <dt>Farben und Objekte</dt>
           <dd>Die Farben in Stickreihenfolge mit ihrer Stichzahl (mehr im Tooltip). Der Pfeil klappt eine Farbe zu den Objekten auf, die in ihr gestickt werden (siehe <a href="#de-objects">Objekte</a>). Das Auge blendet eine Farbe aus; ein Klick hebt sie hervor und blendet die übrigen ab, Darüberfahren zeigt das als Vorschau, <i>Alle zeigen</i> hebt beides auf. Läuft der Player, markiert ein Punkt die Farbe, die gerade gestickt wird. Ein Klick auf das Farbquadrat ändert das Garn: eines der Brother-Garne, die PES-Dateien speichern, oder eine eigene Farbe; ein Hinweis sagt, wie das gewählte Format sie speichert.</dd>
+          <dt>Garnmarken</dt>
+          <dd>Das Farbquadrat öffnet die Garne einer Marke: Brother (die Palette, die PES-Dateien speichern) oder eine von 71 weiteren Garnlinien wie Madeira, Isacord, Gunold, Gütermann, Mettler, Sulky, Robison-Anton oder Marathon. Nummer oder Name tippen findet ein Garn; ist die aktuelle Farbe keine dieser Marke, stehen die drei nächsten vorn. Die gewählte Marke gilt für jede Farbwahl. Farben auf dem Bildschirm sind nur ungefähr, im Zweifel die Spule neben die Garnkarte halten.</dd>
+          <dt>Farbliste</dt>
+          <dd><i>Farbliste</i> oben an der Liste zeigt die Garne in Stickreihenfolge, mit Stichen und Garnlänge je Farbe, Größe und Stickzeit, bereit zum <i>Drucken</i>. Unter <i>Meine Garnmarke</i> bekommt jede Farbe das nächste Garn deiner Marke dazu; <i>Auf … umstellen</i> gibt dem ganzen Stickmuster diese Garne in einem Schritt (rückgängig mit <kbd>Strg</kbd>+<kbd>Z</kbd>).</dd>
           <dt>Stiche färben nach</dt>
           <dd><i>Garnfarbe</i> zeigt die Farben der Datei. <i>Reihenfolge</i> verläuft von Dunkelblau (zuerst gestickt) bis Gelb (zuletzt). <i>Stichart</i> unterscheidet Satin, Füllung, Steppstich und Vernähstiche; sie wird aus dem Stichverlauf erkannt, denn Stickdateien speichern keine Objekte. <i>Stichlänge</i> markiert kurze Stiche unter 1 mm, lange über 7 mm und sehr lange über 12,1 mm, die Maschinen teilen.</dd>
           <dt>Player</dt>
@@ -167,9 +172,9 @@
           <dt>Reihenfolge optimieren</dt>
           <dd>Der Knopf über der Liste sucht eine Reihenfolge mit weniger Farbwechseln, Schnitten und Wegen und zeigt vorher, was sie spart. Drei Schalter: <i>Farben zusammenfassen</i> stickt alle Objekte eines Garns zusammen, wo keine andere Farbe dazwischen liegen muss; <i>Kürzeste Wege</i> geht von jedem Objekt zum nächstgelegenen, das als Nächstes kommen darf; <i>Richtung umkehren</i> darf Satins und Füllungen von der anderen Seite aus neu sticken, wo das Wege oder Schnitte spart. Wo Objekte überlappen, bleibt oben, was oben liegt. <i>Übernehmen</i> macht daraus einen Schritt, der sich rückgängig machen lässt. Für ein einzelnes Objekt tut <i>Start und Ende tauschen</i> dasselbe: Es beginnt, wo es bisher endete, und der Weg vom oder zum Nachbarn wird oft kürzer.</dd>
           <dt>Verschieben, drehen, skalieren</dt>
-          <dd>Gewählte Objekte bekommen auf der Leinwand einen gestrichelten Rahmen. Im Rahmen ziehen verschiebt sie (<kbd>Umschalt</kbd> hält die Linie), eine Ecke ziehen skaliert (die gegenüberliegende Ecke bleibt; mit <kbd>Umschalt</kbd> Breite und Höhe frei), der runde Griff darüber dreht um die Mitte (<kbd>Umschalt</kbd>: in 15°-Schritten). Die Pfeiltasten schieben um 0,1 mm, mit <kbd>Umschalt</kbd> um 1 mm. Verschieben und Drehen nehmen die Stiche unverändert mit. Skalieren stickt die Objekte in der neuen Größe mit ihren eigenen Einstellungen neu, so stimmen Dichte und Stichlängen weiter. Einen Buchstaben und seinen Rand zusammen wählen, um beide auf einmal zu ändern. Objekte aus Füllung und Satin in einem lassen sich verschieben und drehen, aber noch nicht skalieren.</dd>
+          <dd>Gewählte Objekte bekommen auf der Leinwand einen gestrichelten Rahmen. Im Rahmen ziehen verschiebt sie (<kbd>Umschalt</kbd> hält die Linie), eine Ecke ziehen skaliert (die gegenüberliegende Ecke bleibt; mit <kbd>Umschalt</kbd> Breite und Höhe frei), der runde Griff darüber dreht um die Mitte (<kbd>Umschalt</kbd>: in 15°-Schritten). Die Pfeiltasten schieben um 0,1 mm, mit <kbd>Umschalt</kbd> um 1 mm. Verschieben und Drehen nehmen die Stiche unverändert mit. Skalieren stickt die Objekte in der neuen Größe mit ihren eigenen Einstellungen neu, so stimmen Dichte und Stichlängen weiter. Einen Buchstaben und seinen Rand zusammen wählen, um beide auf einmal zu ändern. Objekte aus Füllung und Satin in einem lassen sich verschieben und drehen, aber noch nicht skalieren. Beim Verschieben rasten Kanten und Mitte an den Kanten und Mitten der anderen Objekte ein und an der Mitte des übrigen Musters, dort, wo die Mitte des Stickrahmens liegen wird; eine dünne Linie zeigt, woran sie gerade hängen, mit <kbd>Alt</kbd> geht es frei. Unter <i>Größe</i> in der Karte <i>Objekt</i> tippst du Breite oder Höhe in mm ein, mit der Kette folgt die andere Seite. Rahmen und Größenfelder gibt es auf den Ebenen <i>Form</i> und <i>Objekte</i> gleichermaßen.</dd>
           <dt>Duplizieren, spiegeln, löschen</dt>
-          <dd>Die Karte <i>Objekt</i> hat eine Reihe Knöpfe: <i>Duplizieren</i> (<kbd>Strg</kbd>+<kbd>D</kbd>) stickt das Objekt noch einmal, 2 mm daneben und gleich danach, samt Umrandung in eigenem Garn; die beiden Spiegel-Knöpfe tauschen links und rechts oder oben und unten um die Mitte der Auswahl; <i>Löschen</i> (<kbd>Entf</kbd>) entfernt die gewählten Objekte, auch das letzte: Das Stickmuster ist dann leer, Rückgängig holt alles zurück. Dieselben Aktionen öffnet ein Rechtsklick auf ein Objekt auf der Leinwand oder in der Liste als Menü, auf dem Touchscreen ein langes Tippen.</dd>
+          <dd>Die Karte <i>Objekt</i> hat eine Reihe Knöpfe: <i>Duplizieren</i> stickt die gewählten Objekte noch einmal, jedes 2 mm neben und gleich nach seinem Original, samt Umrandung, wie <kbd>Strg</kbd>+<kbd>C</kbd> und <kbd>Strg</kbd>+<kbd>V</kbd> (jedes Einfügen einen Schritt weiter); <kbd>Strg</kbd>+<kbd>D</kbd> legt die Kopien genau an dieselbe Stelle, bereit zum Verschieben mit den Pfeiltasten; die beiden Spiegel-Knöpfe tauschen links und rechts oder oben und unten um die Mitte der Auswahl; <i>Löschen</i> (<kbd>Entf</kbd>) entfernt die gewählten Objekte, auch das letzte: Das Stickmuster ist dann leer, Rückgängig holt alles zurück. Dieselben Aktionen öffnet ein Rechtsklick auf ein Objekt auf der Leinwand oder in der Liste als Menü, auf dem Touchscreen ein langes Tippen.</dd>
           <dt>Garn eines Objekts</dt>
           <dd>Ein Klick auf das Farbquadrat neben dem Namen des Objekts wählt sein Garn. Das Garn eines Nachbarn stickt es in dessen Farbe mit; ein anderes gibt ihm eine eigene Farbe an seiner Stelle, mit Farbwechsel.</dd>
           <dt>Zusammenfassen und trennen</dt>
@@ -209,11 +214,11 @@
           <dt>Muster</dt>
           <dd><i>Tatami</i> stickt gerade Reihen; <i>Versatz</i> verschiebt die Einstiche von Reihe zu Reihe um 1/4 (das übliche Tatami), 1/2 (ein Ziegelmuster) bis 1/5 Stich oder zufällig, um Linien zu verbergen. <i>Verlauf</i> öffnet die Reihen quer über die Form von einem Abstand zum anderen, für Schattierung und weiche Kanten. <i>Konturfüllung</i> führt die Reihen entlang des Umrisses, Ring in Ring. <i>Spirale</i> windet eine Linie vom Rand zur Mitte einer runden Form. <i>Wie bisher</i> behält Richtungen und Bögen der jetzigen Reihen; Füllungen aus dem Modus Bild, die dem Bild folgen, und Objekte mit mehreren Winkeln beginnen damit. <i>Geführt</i> lässt die Reihen gezeichneten Leitlinien folgen.</dd>
           <dt>Dekorative Muster</dt>
-          <dd>Die Muster stehen in drei Reitern: <i>Klassisch</i>, <i>Dekor</i> und <i>Offen</i>; ein Punkt am Reiter zeigt, wo das Muster der Auswahl liegt, und beim Zeigen auf eine Kachel erscheint die Vorschau. <b>Dekor</b> deckt wie Tatami: <i>Prägung</i> legt Rauten, Wellen, Sterne oder Herzen nur durch die Lage der Einstiche in die Fläche, die Motive stehen immer aufrecht. <i>Wellen</i>, <i>Maserung</i>, <i>Strahlen</i> und <i>Wirbel</i> lassen die Reihen schwingen, wie Holz fließen, von einem wählbaren Punkt ausstrahlen oder um Wirbel kreisen; <i>Neu würfeln</i> zeigt eine andere Variante. <i>Farbverlauf</i> blendet die Fläche von dicht nach licht aus; mit <i>Zweite Farbe</i> entsteht darüber eine Kopie in einem zweiten Garn, die gegenläufig einblendet, so bleibt die Fläche zusammen so dicht wie vorher. <b>Offen</b> lässt den Stoff durchscheinen: <i>Mäander</i>, <i>Labyrinth</i>, <i>Gitter</i> (Waben, Rauten, Ziegel), <i>Echo</i> und <i>Kreuzstich</i> sind leichte Linienmuster, wahlweise im Dreifachstich, auch für große Flächen. Sie decken absichtlich nicht, darum meldet die Dichteprüfung dort keine Lücken.</dd>
+          <dd>Die Muster stehen in zwei Reitern: <i>Deckend</i> und <i>Offen</i>; ein Punkt am Reiter zeigt, wo das Muster der Auswahl liegt, und beim Zeigen auf eine Kachel erscheint die Vorschau. <b>Deckend</b>: Neben den klassischen Mustern lassen <i>Wellen</i>, <i>Maserung</i>, <i>Strahlen</i>, <i>Kreise</i> und <i>Wirbel</i> die Reihen schwingen, wie Holz fließen, von einem Punkt ausstrahlen, um einen Punkt kreisen oder um Wirbel drehen; <i>Neu würfeln</i> zeigt eine andere Variante. Bei Strahlen, Kreisen und Wirbeln zeigt <i>Auf der Fläche setzen</i> die Punkte auf der Leinwand: dorthin ziehen, wo sie hin sollen; ein Klick in die Fläche setzt einen weiteren Wirbel (bis drei). <i>Prägung</i> unter <i>Tatami</i> legt Rauten, Wellen, Sterne oder Herzen in die Reihen, nur durch die Lage der Einstiche, die Dichte bleibt gleich; die Motive stehen immer aufrecht, und <i>Stärke</i> <i>Deutlich</i> stickt die Stiche im Motiv halb so lang, damit es sich als feinere, mattere Fläche abhebt. <i>Zweite Farbe einblenden</i> im Objektmenü einer Füllung oder beim Muster <i>Verlauf</i> macht einen Farbverlauf: Die Füllung blendet aus, ein zweites Garn blendet auf derselben Fläche gegenläufig ein, zusammen bleibt sie so dicht wie vorher. Die zweite Farbe folgt der Füllung wie eine Umrandung: Form, Richtung und Abstand stellst du bei der Füllung ein; ein anderes Muster oder Löschen nimmt sie mit heraus. <b>Offen</b>: <i>Mäander</i>, <i>Labyrinth</i>, <i>Gitter</i> (Waben, Rauten, Ziegel), <i>Echo</i> und <i>Kreuzstich</i> sind lockere Linienmuster, durch die der Stoff scheint, wahlweise im Dreifachstich, auch für große Flächen. Sie decken absichtlich nicht, darum meldet die Dichteprüfung dort keine Lücken. <i>Leer</i> stickt gar keine Füllung, nur die Umrandung im Garn des Objekts: Die Form bleibt und deckt nichts darunter ab; Umrandung aus oder ein anderes Muster füllt sie wieder.</dd>
         </dl>
         <figure>
-          <img src="/guide/decor-de.jpg" width="1280" height="800" loading="lazy" alt="Der rote Pullover der Katze mit dem Muster Wirbel, rechts die Muster-Reiter Klassisch, Dekor und Offen mit den Dekor-Kacheln" />
-          <figcaption>Der Pullover der Katze im Muster <i>Wirbel</i>: Die Reihen kreisen um Punkte in der Form. Rechts die Reiter <i>Klassisch</i>, <i>Dekor</i> und <i>Offen</i>; <i>Neu würfeln</i> legt die Wirbel anders.</figcaption>
+          <img src="/guide/decor-de.jpg" width="1280" height="800" loading="lazy" alt="Der rote Pullover der Katze mit dem Muster Wirbel, rechts die Muster-Reiter Deckend und Offen mit den Kacheln" />
+          <figcaption>Der Pullover der Katze im Muster <i>Wirbel</i>: Die Reihen kreisen um Punkte in der Form. Rechts die Reiter <i>Deckend</i> und <i>Offen</i> mit den Kacheln; <i>Neu würfeln</i> legt die Wirbel anders.</figcaption>
         </figure>
         <dl>
           <dt>Abstand, Winkel, Stichlänge, Kanten</dt>
@@ -223,7 +228,7 @@
           <dt>Unterlage</dt>
           <dd><i>Aus</i> für kleine Flächen und dünne Stoffe, <i>Quer</i> (eine lockere Lage quer zu den Reihen, zuerst gestickt) oder <i>Kreuz</i> (zwei Lagen über Kreuz, für dehnbare und flauschige Stoffe). Dazu ihr <i>Einzug</i> vom Rand, fest in mm oder anteilig nach der Breite der Fläche, ihr Reihenabstand und <i>Unter späteren Objekten weglassen</i>: Wo spätere Objekte die Füllung ganz bedecken, entfällt die Unterlage, das spart Garn und Dicke unter Satinrändern.</dd>
           <dt>Umrandung</dt>
-          <dd>Eine Linie um die Füllung, nach ihr gestickt: <i>Steppstich</i>, <i>Dreifach</i> oder eine <i>Satinkante</i> mit Breite, Zugausgleich und Unterlage. <i>Lage zur Kante</i> legt sie auf die Kante der Füllung oder nach innen oder außen versetzt. Mit <i>Garn der Umrandung</i> wird sie ein eigenes Objekt in diesem Garn, gestickt gleich nach der Farbe der Füllung; sie folgt weiter der Form der Füllung, wird mit ihr dupliziert und verschoben. Ist so eine Umrandung gewählt, zeigt ihre Karte die Füllung, zu der sie gehört; <i>Lösen</i> macht ein eigenes Objekt daraus.</dd>
+          <dd>Eine Linie um die Füllung mit denselben Stichen wie eine <a href="#de-lines">Linie</a>: <i>Steppstich</i> (auch als Bohnenstich), <i>Satin</i> mit Breite, Zugausgleich und Unterlage, <i>Zickzack</i>, <i>E-Stich</i> oder <i>Motiv</i>. <i>Lage zur Kante</i> legt sie auf die Kante der Füllung oder nach innen oder außen versetzt. Die Umrandung ist ein eigenes Objekt in der Liste, durch einen Fadenschnitt von der Füllung getrennt und gleich nach ihr gestickt, im Garn der Füllung oder mit <i>Garn der Umrandung</i> in einem eigenen. Mit <i>Früher sticken</i>, <i>Später sticken</i> oder Ziehen in der Liste legst du fest, wann sie gestickt wird; sie bleibt mit der Füllung verknüpft, folgt ihrer Form und wird mit ihr dupliziert, bis du sie mit <i>Lösen</i> abtrennst. Ihre Karte zeigt die Füllung, zu der sie gehört; auf der Ebene <i>Form</i> ziehst du die Breite einer Satin-Umrandung am Griff ihres Bandes.</dd>
           <dt>Leitlinien</dt>
           <dd>Das Muster <i>Geführt</i> wählen oder bei einer gewählten Füllung <kbd>g</kbd> drücken und freihändig über die Fläche ziehen: Die Reihen folgen dieser Linie, nah an ihr genau und weiter weg immer ähnlicher. Mit mehreren Linien gehen die Reihen von einer zur nächsten über, so wird aus einem runden Ausschnitt ein gerader Saum. Jede Linie stickt die Füllung beim Loslassen neu. Eine Linie anklicken und <kbd>Entf</kbd> löscht sie; ohne Linien kehrt die Füllung zu geraden Reihen zurück. <kbd>Esc</kbd> oder <i>Fertig</i> schließt das Werkzeug.</dd>
           <dt>Ende nahe am nächsten Objekt</dt>
@@ -246,8 +251,8 @@
         <dl>
           <dt>Muster und Abstand</dt>
           <dd><i>Satin</i> stickt dicht von Schiene zu Schiene; der <i>E-Stich</i> läuft an einer Kante entlang und stickt in Abständen quer hinüber und zurück, für Applikationen (die Kante liegt links in Stichrichtung; <i>Start und Ende tauschen</i> legt sie auf die andere Seite). <i>Abstand</i> ist der Abstand der Stiche auf einer Seite. <i>Abstand nach Breite</i> macht schmale Stellen etwas lockerer und breite etwas dichter, damit die Säule überall gleich deckt.</dd>
-          <dt>Breite</dt>
-          <dd>Je Seite bis 3 mm breiter oder schmaler als jetzt: Zugausgleich. <i>Seiten getrennt</i> stellt links und rechts einzeln, <i>Breite anteilig</i> macht breite Stellen um einen Anteil ihrer Breite breiter als schmale. <i>Nach Stoff</i> setzt den Wert aus dem Material.</dd>
+          <dt>Zugausgleich</dt>
+          <dd>Die Säule je Seite bis 3 mm breiter oder schmaler sticken, weil der Stoff sie beim Sticken zusammenzieht. <i>Seiten getrennt</i> stellt links und rechts einzeln, <i>Zugausgleich anteilig</i> gibt breiten Stellen um einen Anteil ihrer Breite mehr als schmalen. <i>Nach Stoff</i> setzt den Wert aus dem Material. Die Breite der Säule selbst sind ihre Schienen auf der Ebene <i>Form</i>.</dd>
           <dt>Kurze Stiche, Teilen</dt>
           <dd><i>Kurze Stiche in Kurven</i> lässt innen in Kurven jeden zweiten Stich früher enden, damit sich die Einstiche nicht stauen. <i>Teilen ab</i> teilt lange Stiche, damit sie nicht hängen, <i>Versetzt teilen</i> wandert mit den Teilungspunkten, sodass keine Rille längs der Säule entsteht.</dd>
           <dt>Unterlage</dt>
@@ -257,13 +262,13 @@
           <dt>Abstand entlang der Säule</dt>
           <dd>Eine Querlinie anklicken und <i>Abstand hier</i> setzen: Von dort blendet der Abstand zur nächsten Querlinie über, etwa für eine Säule, die am breiten Ende dichter sein soll.</dd>
           <dt>Satin-Abschnitte</dt>
-          <dd>Bei offenen Querlinien <i>Ziehen</i> auf <i>Trennlinie</i> stellen (oder <kbd>t</kbd> drücken; <kbd>Umschalt</kbd>+Ziehen zeichnet jeweils die andere Art) und quer über die Säule ziehen: Eine Trennlinie (hellblau) teilt sie, dort setzt die Säule neu an, und beide Teile treffen sich sauber auf Gehrung, statt sich um eine spitze Ecke zu fächern. <i>Abschnitte vorschlagen</i> setzt Trennlinien an die spitzen Ecken. Die Abschnitte werden ohne Garnschnitt nacheinander gestickt und bleiben ein Objekt; eine Trennlinie anklicken und <kbd>Entf</kbd> drücken entfernt sie. Jeder Abschnitt zeigt dort, wo sein Satin beginnt, seinen Platz in der Reihenfolge: Klick auf die Nummer stickt ihn einen Platz früher, Klick auf den Pfeil dreht ihn um, die Schere schneidet davor.</dd>
+          <dd>Bei offenen Querlinien <i>Ziehen</i> auf <i>Trennlinie</i> stellen (oder <kbd>t</kbd> drücken; <kbd>Umschalt</kbd>+Ziehen zeichnet jeweils die andere Art) und quer über die Säule ziehen: Eine Trennlinie (hellblau) teilt sie, dort setzt die Säule neu an, und beide Teile treffen sich sauber auf Gehrung, statt sich um eine spitze Ecke zu fächern. <i>Abschnitte vorschlagen</i> setzt Trennlinien an die spitzen Ecken. Die Abschnitte werden ohne Garnschnitt nacheinander gestickt und bleiben ein Objekt; eine Trennlinie anklicken und <kbd>Entf</kbd> drücken entfernt sie. Jeder Abschnitt zeigt dort, wo sein Satin beginnt, seinen Platz in der Reihenfolge: Klick auf die Nummer stickt ihn einen Platz früher, Klick auf den Pfeil dreht ihn um, die Schere schneidet davor, ⇄ spiegelt ihn, sodass er auf der anderen Seite beginnt und endet. Eine Säule ohne Trennlinien zeigt Pfeil und ⇄ ebenfalls.</dd>
           <dt>Ein Abschnitt als eigene Säule</dt>
           <dd>In einem Abschnitt darf eine Querlinie auch von einer Seite zurück auf dieselbe laufen oder auf einer Trennlinie enden, etwa gerade quer über den Mittelstrich eines m, dessen innere Schiene an einer Seite des Strichs hinunter und an der anderen wieder hinauf läuft. Der Abschnitt sucht sich dann selbst zwei Schienen, zwischen denen alle seine Querlinien liegen, und eine Trennlinie wird Teil einer Schiene, eine Abkürzung des Pfads. Die Schienen, an denen er gestickt wird, sind gestrichelt zu sehen. Würde eine Querlinie die Säule zu schief machen, fehlt davor eine Trennlinie, und der Hinweis sagt das.</dd>
           <dt>Mit Querlinien zu Satin</dt>
           <dd>Eine Füllung, die für den einfachen Wechsel zu Satin zu breit oder zu ungleich ist, kann trotzdem einer werden: Unter <i>Mit Querlinien zu Satin</i> mindestens zwei Linien quer über die Fläche ziehen, von einem Ende zum anderen. Sie schneiden die Fläche zu einer Säule und legen die Stichrichtung fest; <i>Als Satin sticken</i> stickt sie so, und die Linien bleiben ihre Querlinien.</dd>
           <dt>Eine Füllung in Säulen teilen</dt>
-          <dd>Mit <i>Mit Querlinien zu Satin</i> ziehst du auf einer Füllung auch Trennlinien (Schalter auf <i>Trennlinie</i>, Taste <kbd>t</kbd>, oder <kbd>Umschalt</kbd> beim Ziehen). Sie teilen die Fläche in Teile, etwa die drei Beine eines m vom Bogen, und jeder Teil wird eine Säule für sich: Eine Querlinie darin reicht. Die Teile werden in einem Zug ohne Garnschnitt gestickt: Ein Teil, der an einem anderen hängt, wird zuerst hin und zurück gestickt, und der Weg dazwischen liegt unter Satin, der später kommt. Ein Loch wie in e, R oder o öffnest du mit einer Trennlinie vom Rand hinein (bei mehreren Löchern wie in B oder 8 je eine, auch von Loch zu Loch); der Satin läuft dann um es herum. Ein Teil, der keine Säule ergibt, oder ein noch nicht geöffnetes Loch wird rot umrandet. Unter <i>Richtung festlegen</i> zeigt jeder Teil dort, wo sein Satin beginnt, seinen Platz in der Reihenfolge: Nummer, Pfeil und Schere wie bei den Abschnitten.</dd>
+          <dd>Mit <i>Mit Querlinien zu Satin</i> ziehst du auf einer Füllung auch Trennlinien (Schalter auf <i>Trennlinie</i>, Taste <kbd>t</kbd>, oder <kbd>Umschalt</kbd> beim Ziehen). Sie teilen die Fläche in Teile, etwa die drei Beine eines m vom Bogen, und jeder Teil wird eine Säule für sich: Eine Querlinie darin reicht. Die Teile werden in einem Zug ohne Garnschnitt gestickt: Ein Teil, der an einem anderen hängt, wird zuerst hin und zurück gestickt, und der Weg dazwischen liegt unter Satin, der später kommt. Ein Loch wie in e, R oder o öffnest du mit einer Trennlinie vom Rand hinein (bei mehreren Löchern wie in B oder 8 je eine, auch von Loch zu Loch); der Satin läuft dann um es herum. Ein Teil, der keine Säule ergibt, oder ein noch nicht geöffnetes Loch wird rot umrandet. Unter <i>Richtung festlegen</i> zeigt jeder Teil dort, wo sein Satin beginnt, seinen Platz in der Reihenfolge: Nummer, Pfeil, Schere und ⇄ wie bei den Abschnitten; <i>Beste Reihenfolge</i> wählt Reihenfolge, Richtung und Spiegelung so, dass die Wege zwischen den Teilen unter noch zu stickendem Satin liegen, wie beim ersten Sticken als Satin. Die Trennlinien bleiben bearbeitbar: ein Ende ziehen, eine anklicken und <kbd>Entf</kbd> drücken oder eine neue ziehen, und die Fläche wird neu geteilt. Solange ein Teil keine Querlinie hat oder ein Loch nicht geöffnet ist, bleiben die Stiche, wie sie waren.</dd>
         </dl>
         <figure>
           <img src="/guide/satin-de.jpg" width="1280" height="800" loading="lazy" alt="Die Satinkante des M aus letters.pes mit ihren Querlinien: gelbe Linien quer über die Säule, an jeder Ecke aufgefächert, das Feld Richtung in der Karte" />
@@ -279,23 +284,37 @@
           <dt>Steppstich</dt>
           <dd><i>Stichlänge</i>, <i>Max. Abweichung</i> (so weit darf ein Stich höchstens neben der Kurve liegen; in engen Kurven werden die Stiche dafür kürzer, nie unter 1 mm) und <i>Dreifachstich</i> für eine kräftige Linie. Füllungen mit den Mustern Konturfüllung, Spirale und Wie bisher haben ebenfalls eine max. Abweichung.</dd>
           <dt>Linien</dt>
-          <dd>Linien werden genau entlang ihrer Kurve gestickt: gezeichnete Linien, Linien aus einem SVG (ab 1 mm Breite als Satin in dieser Breite) und die Steppstiche einer Stickdatei, deren Kurve aus ihren Stichen gelesen wird. Unter <i>Linie</i> stellst du ein, wie: <i>Steppstich</i> oder <i>Dreifach</i>, oder <i>Satin</i> mit Breite, Abstand, Zugausgleich und Unterlage. Auf der Ebene <i>Form</i> verschiebst du ihre Knoten, und die Stiche folgen; <i>Linie schließen</i> verbindet die Enden mit einem geraden Stück, <i>Linie öffnen</i> öffnet sie wieder nach dem gewählten Knoten.</dd>
+          <dd>Linien werden genau entlang ihrer Kurve gestickt: gezeichnete Linien, Linien aus einem SVG (ab 1 mm Breite als Satin in dieser Breite) und die Steppstiche einer Stickdatei, deren Kurve aus ihren Stichen gelesen wird. Unter <i>Linie</i> stellst du ein, wie: <i>Steppstich</i> mit <i>Wiederholung</i> einfach, 3-fach oder 5-fach (Bohnenstich, eine kräftigere Linie), Stichlänge und max. Abweichung in Kurven; <i>Satin</i> mit Breite, Abstand, Zugausgleich und Unterlage; <i>Zickzack</i>, ein offener Zickzack mit Breite und Abstand, zum Festheften von Applikationen oder als Zierde; <i>E-Stich</i>, ein Laufstich auf der Linie mit Zacken zu einer Seite (<i>Zacken</i> rechts oder links), der klassische Applikationsstich; oder <i>Motiv</i>, eine kleine Figur entlang der Linie: <i>Wellen</i>, <i>Bögen</i>, <i>Herzen</i> oder <i>Kettstich</i>, mit Größe, Abstand von Figur zu Figur und der Seite bei Bögen und Herzen. Die Umrandung einer Füllung bietet dieselben Stiche; dort zeigen Zacken, Bögen und Herzen nach innen auf die Fläche oder nach außen. <i>Start und Ende tauschen</i> stickt eine Linie von ihrem anderen Ende aus. Auf der Ebene <i>Form</i> verschiebst du ihre Knoten, und die Stiche folgen; <i>Linie schließen</i> verbindet die Enden mit einem geraden Stück, <i>Linie öffnen</i> öffnet sie wieder nach dem gewählten Knoten.</dd>
+          <dt>Echo</dt>
+          <dd>Legt Kopien der Linie im gleichen Abstand daneben, wie beim Echo-Quilten: bei einer offenen Linie auf <i>Eine Seite</i> (<i>Andere Seite</i> legt sie hinüber) oder <i>Beide</i>, bei einer geschlossenen <i>Außen</i>, <i>Innen</i> oder <i>Beide</i>, mit der Zahl der Kopien je Seite und dem Abstand von Linie zu Linie. Linie und Kopien werden in einem Lauf gestickt, mit einem kurzen Stich von einer zur nächsten; <i>Verbindung</i> <i>Schnitt</i> schneidet den Faden dazwischen. Unter <i>Garn je Kopie</i> bekommt eine Kopie ihr eigenes Garn: Solche Kopien sind ein eigenes Objekt, mit der Linie verknüpft und nach ihr gestickt; <i>Lösen</i> trennt sie. Das Echo folgt jeder Änderung der Linie.</dd>
+          <dt>Schatten</dt>
+          <dd>Stickt die Linie (mit ihrem Echo) noch einmal, um den <i>Versatz</i> in eine der vier schrägen Richtungen verschoben, in einem eigenen Garn (zuerst Dunkelgrau) und vor der Linie, so liegt sie obenauf. Der Schatten ist ein eigenes Objekt in der Liste, mit der Linie verknüpft: Er folgt ihr beim Ändern, Verschieben, Drehen und Duplizieren und geht mit ihr, wenn sie gelöscht wird; seine Richtung bleibt, wie bei Licht von einer Seite. <i>Lösen</i> macht ihn zu einer Linie für sich.</dd>
           <dt>Breite Linie als Füllung</dt>
           <dd>Eine Satinlinie lässt sich als Füllung ihrer Fläche sticken: unter <i>Stichart</i> <i>Füllung</i> wählen. Die Fläche kommt weiter aus der Linie und ihrer Breite, mit <i>Enden</i> flach oder rund; <i>Linie</i> macht sie wieder zur selben Linie. Das passt für breite Linien, deren Satinstiche zu lang würden.</dd>
         </dl>
 
         <h2 id="de-shape">Form bearbeiten</h2>
         <p>
-          Der Schalter <i>Objekte | Form | Stiche</i> oben links auf der Leinwand legt fest, worauf ein Klick wirkt.
-          Doppelklick auf eine Füllung, <kbd>Enter</kbd>, <i>Form</i> im Schalter oder <i>Form bearbeiten</i> in der
-          Karte zeigt ihren Umriss als Kurven mit Knoten: Quadrate sind Ecken, Kreise runde Knoten. Einen Knoten
+          Der Schalter <i>Form | Objekte | Stiche</i> oben links auf der Leinwand legt fest, worauf ein Klick wirkt.
+          Die Ebene <i>Form</i> ist die Werkstatt: Hier zeichnest du Formen, wählst sie mit dem Zeiger (<kbd>v</kbd>)
+          und siehst zu einem gewählten Objekt Rahmen und Knoten zugleich. Eine Füllung anklicken, doppelt auf sie
+          klicken, <kbd>Enter</kbd> oder <i>Form bearbeiten</i> in der Karte zeigt ihren Umriss als Kurven mit
+          Knoten: Quadrate sind Ecken, Kreise runde Knoten. Einen Knoten
           ziehen oder einen Griff des gewählten Knotens; den Umriss zwischen zwei Knoten ziehen biegt ihn. Doppelklick
           auf den Umriss setzt dort einen Knoten, <kbd>Entf</kbd> löscht den gewählten, <kbd>c</kbd> macht ihn zur
           Ecke oder rund, die Pfeiltasten schieben ihn. Beim Loslassen wird die Füllung in der neuen Form mit ihren
           Einstellungen neu gestickt. Der Umriss wird einmal aus den Stichen gelesen (oder so übernommen, wie ihn der
           Modus Bild, ein SVG oder das Zeichnen gemacht hat) und danach als Kurven behalten, auch im Projekt; er
-          wandert also nicht. <kbd>Enter</kbd> geht weiter zu den Stichen, <kbd>Esc</kbd> oder ein Klick daneben
-          zurück zu den Objekten.
+          wandert also nicht. Um den Umriss bleibt der Rahmen: Abseits der Knoten im Rahmen ziehen verschiebt die
+          Form. Ein Satin aus einer PES- oder DST-Datei zeigt seine beiden Schienen als Linien: Ziehst du sie, folgen
+          die Einstiche, Paare, Querlinien und Abschnitte bleiben, und er wird mit seinen Einstellungen neu gestickt.
+          Eine Linie, die als Satin oder als Füllung entlang der Linie gestickt wird, zeigt ihr Band gestrichelt mit
+          einem runden Griff an der Kante: Den Griff ziehen macht das Band breiter oder schmaler, die Breite in mm
+          steht daneben; eine Füllung mit Satinrand zeigt das Band des Randes genauso. Wie das Band gefüllt wird
+          (Abstand, Zugausgleich, Unterlage), bleibt auf der Ebene <i>Objekte</i>. Ab 12 Knoten bietet die Karte
+          <i>Vereinfachen</i>: weniger Knoten, höchstens 0,3 mm neben dem alten Umriss, Ecken bleiben Ecken; nochmal
+          drücken vereinfacht weiter. <kbd>Enter</kbd> geht weiter zu den Stichen, <kbd>Esc</kbd> oder ein Klick
+          daneben lässt das Objekt los.
         </p>
 
         <h2 id="de-stitches">Einzelne Stiche</h2>
@@ -323,8 +342,8 @@
 
         <h2 id="de-draw">Formen zeichnen</h2>
         <p>
-          Die Werkzeuge links auf der Leinwand machen neue Formen, die sofort mit den Einstellungen für dein Material
-          gestickt werden. Jede neue Form wird gleich nach dem gewählten Objekt in dessen Garn gestickt, ohne Auswahl
+          Auf der Ebene <i>Form</i> machen die Werkzeuge links auf der Leinwand neue Formen, die sofort mit den
+          Einstellungen für dein Material gestickt werden. Jede neue Form wird gleich nach dem gewählten Objekt in dessen Garn gestickt, ohne Auswahl
           nach dem letzten. Ist keine Datei offen, beginnt die erste Form ein neues Stickmuster; <i>+ Neu</i> in der Dateiliste legt vorher eines mit Stickrahmen an.
         </p>
         <figure>
@@ -333,7 +352,7 @@
         </figure>
         <dl>
           <dt>Werkzeuge</dt>
-          <dd><b>Rechteck</b> (<kbd>m</kbd>) und <b>Ellipse</b> (<kbd>o</kbd>): ziehen; <kbd>Umschalt</kbd> macht ein Quadrat oder einen Kreis, <kbd>Alt</kbd> zeichnet von der Mitte aus, eine Marke zeigt die Größe. <b>Zeichenstift</b> (<kbd>b</kbd>): Klick für Ecken, Ziehen für Rundungen; ein Klick auf den ersten Knoten schließt eine Fläche (Füllung), Doppelklick oder <kbd>Enter</kbd> beendet eine offene Linie (Steppstich), <kbd>Entf</kbd> nimmt den letzten Knoten zurück. <b>Freihand</b> (<kbd>p</kbd>): eine Linie ziehen; sie wird beim Loslassen geglättet und im Steppstich gestickt. Das Werkzeug bleibt für die nächste Form an; <kbd>Esc</kbd> oder ein Klick auf seinen Knopf legt es weg.</dd>
+          <dd><b>Rechteck</b> (<kbd>m</kbd>) und <b>Ellipse</b> (<kbd>o</kbd>): ziehen; <kbd>Umschalt</kbd> macht ein Quadrat oder einen Kreis, <kbd>Alt</kbd> zeichnet von der Mitte aus, eine Marke zeigt die Größe. <b>Zeichenstift</b> (<kbd>b</kbd>): Klick für Ecken, Ziehen für Rundungen; ein Klick auf den ersten Knoten schließt eine Fläche (Füllung), Doppelklick oder <kbd>Enter</kbd> beendet eine offene Linie (Steppstich), <kbd>Entf</kbd> nimmt den letzten Knoten zurück. <b>Freihand</b> (<kbd>p</kbd>): eine Linie ziehen; sie wird beim Loslassen geglättet und im Steppstich gestickt. Nach einer Form ist wieder der <b>Zeiger</b> da (<kbd>v</kbd>, der Pfeil über den Werkzeugen) und die neue Form gewählt, mit Rahmen und Knoten, bereit zum Verschieben oder Nachformen; <kbd>Esc</kbd> legt ein Werkzeug ebenfalls weg. Die Tasten der Werkzeuge wechseln von überall auf die Ebene <i>Form</i>. Jede Form ist ein Schritt, den du rückgängig machen kannst.</dd>
           <dt>Weiter mit der Form</dt>
           <dd>Eine gezeichnete Fläche ist eine Füllung mit allen <a href="#de-settings">Stich-Einstellungen</a>, eine Linie ein Steppstich, der auch Satin oder Füllung werden kann. Mit <i>Obere Form ausschneiden</i> stanzt du Löcher, mit <i>Zu einem Objekt zusammenfassen</i> vereinst du Flächen, und auf der Ebene <i>Form</i> biegst du jeden Umriss weiter.</dd>
           <dt>Formen statt Stiche</dt>
@@ -366,7 +385,7 @@
         </p>
         <figure>
           <img src="/guide/lettering-de.jpg" width="1280" height="800" loading="lazy" alt="Die Beispielkatze mit dem Namen Minka darunter in Pacificlo, rechts die Karte Schriftzug mit der offenen Schriftliste" />
-          <figcaption>Ein Schriftzug unter der Katze. Die Schriftliste zeigt den Text in jeder Schrift, mit den Höhen, für die sie gut ist.</figcaption>
+          <figcaption>Ein Schriftzug unter der Katze. Die Schriftliste zeigt den Text in jeder Schrift, mit den Höhen, für die sie gut ist; die Pfeiltasten probieren sie der Reihe nach.</figcaption>
         </figure>
         <details class="font-table">
           <summary>Die 41 Schriften und ihre Lizenzen</summary>
@@ -587,7 +606,7 @@
           <dt>Farben und Pinsel</dt>
           <dd>In der Farbliste lässt das Häkchen eine Farbe weg, das Farbfeld wählt ein anderes Garn und <i>→</i> legt sie mit einer anderen Farbe zusammen. Ein ≠ warnt, dass kein Garn nah an der Bildfarbe liegt. Eine Farbe anklicken und mit dem <i>Pinsel</i> Flächen von Hand umfärben, oder radieren, wo nichts gestickt werden soll. Bild und Änderungen bleiben nach dem Neuladen erhalten.</dd>
           <dt>Stiche</dt>
-          <dd>Jede Fläche bekommt den Stich, der zu ihrer Form passt: breite Flächen Tatami-Füllstich mit Unterlage, schmale Striche bis <i>Satin bis Breite</i> Satinsäulen, Linien unter 1 mm Steppstich. Abstand und Zugausgleich folgen dem unter <i>Material</i> gewählten Stoff und Garn. Gestickt wird die größte Farbe zuerst, aneinanderstoßende Objekte überlappen 0,2 mm, lange Sprünge werden mit Vernähstichen geschnitten.</dd>
+          <dd>Jede Fläche bekommt den Stich, der zu ihrer Form passt: breite Flächen Tatami-Füllstich mit Unterlage, schmale Striche bis <i>Satin bis Breite</i> Satinsäulen, Linien unter 1 mm Steppstich; Halme wie bei einem Grasbüschel werden Satin, der Boden, an dem sie sich treffen, danach eine Füllung. Abstand und Zugausgleich folgen dem unter <i>Material</i> gewählten Stoff und Garn. Gestickt wird die größte Farbe zuerst, aneinanderstoßende Objekte überlappen 0,2 mm, lange Sprünge werden mit Vernähstichen geschnitten.</dd>
           <dt>Füllrichtung</dt>
           <dd>Mit <i>Folgt dem Bild</i> laufen die Füllreihen wie Fell, Haare oder Striche im Bild, in einfarbigen Flächen entlang der Form. Wo sich die Richtung in einer Fläche ändert, biegen sich die Reihen; wo sie überall gleich ist, bleiben sie gerade in dieser Richtung. <i>Gerade, automatisch</i> oder ein fester Winkel schalten es ab.</dd>
           <dt>Max. Abweichung</dt>
@@ -601,7 +620,7 @@
           <dt>Mit KI vorbereiten</dt>
           <dd>Für Fotos schlägt <i>Bild mit KI vorbereiten</i> unter dem Bildfeld einen Weg vor: das Bild im eigenen KI-Chat hochladen, der Bilder bearbeiten kann, den fertigen Prompt einfügen (er richtet sich nach Breite und Farbanzahl) und das Ergebnis hier laden. heatstitch selbst schickt dabei nichts weg.</dd>
           <dt>Ergebnis</dt>
-          <dd>Stiche, Größe, Nähzeit und die Prüfung für das Material; passt das Stickmuster nicht in den gewählten Stickrahmen, steht das hier. <i>Als Stickmuster übernehmen</i> legt es als PES-Datei in die Dateiliste. Dort lässt es sich in den anderen Modi ansehen, bearbeiten, korrigieren und für die Maschine speichern; seine Objekte behalten Form und Einstellungen.</dd>
+          <dd>Stiche, Größe, Nähzeit und die Prüfung für das Material; passt das Stickmuster nicht in den gewählten Stickrahmen, steht das hier. <i>Als Stickmuster übernehmen</i> legt es als Stickmuster in die Dateiliste. Dort lässt es sich in den anderen Modi ansehen, bearbeiten, korrigieren und für die Maschine speichern; seine Objekte behalten Form und Einstellungen.</dd>
         </dl>
 
         <h2 id="de-display">Anzeige</h2>
@@ -632,7 +651,7 @@
         <h2 id="de-save">Speichern, Stickrahmen und Projekt</h2>
         <ul>
           <li><b>Speichern</b> unter der Dateiliste schreibt die aktuellen Stiche und Farben im gewählten Format, benannt nach Maschinenmarke: PES (Brother, Babylock), DST (Tajima, Profimaschinen), JEF (Janome, Elna), VP3 (Pfaff, Husqvarna), EXP (Melco, Bernina) oder PEC (ältere Brother). Die Wahl bleibt gespeichert. Das Namensfeld schlägt den Namen der Datei vor (nach einer Änderung mit <code>-corrected</code>); was du dort eingibst, benennt die Datei und das Stickmuster darin. Objekte aus der Sticksoftware gehen in Stickdateien verloren.</li>
-          <li><b>Stickrahmen</b> über <i>Speichern</i> sagt, in welchem Stickrahmen das Stickmuster gestickt wird: keiner, ein übliches Stickfeld von 50 × 50 bis 240 × 360 mm mit den Marken, bei denen es üblich ist, oder <i>Eigene Größe</i> in mm. Das Stickfeld steht als gestrichelte Linie um das Stickmuster, mittig, wie Maschinen ein Stickmuster beim Laden zentrieren; <i>Einpassen</i> zeigt dann das ganze Feld. Ist das Stickmuster zu groß, wird die Linie rot, der Teil außerhalb rötlich, und ein Hinweis sagt, um wie viel, mit einem größeren Stickrahmen zum Wählen. Passt es nur um 90° gedreht, an der Maschine drehen. Nennt die Datei in ihrem Kopf einen Stickrahmen (PES ab Version 5, JEF), bietet der Hinweis ihn an; geändert wird nichts, bis du ihn wählst. PES nennt den Stickrahmen 100 × 100 oder 130 × 180 mm, JEF den gewählten Janome-Rahmen.</li>
+          <li><b>Stickrahmen</b> über <i>Speichern</i> sagt, in welchem Stickrahmen das Stickmuster gestickt wird: keiner, ein übliches Stickfeld von 50 × 50 bis 240 × 360 mm mit den Marken, bei denen es üblich ist, oder <i>Eigene Größe</i> in mm. Das Stickfeld steht als gestrichelte Linie um das Stickmuster, mittig, wie Maschinen ein Stickmuster beim Laden zentrieren; <i>Einpassen</i> zeigt dann das ganze Feld. Ist das Stickmuster zu groß, wird die Linie rot, der Teil außerhalb rötlich, und ein Hinweis sagt, um wie viel, mit einem größeren Stickrahmen zum Wählen und <i>Passend verkleinern</i>, das das ganze Stickmuster gleichmäßig verkleinert, bis es mit 1 mm Luft passt, und neu stickt (ein Schritt zum Rückgängigmachen). Passt es nur um 90° gedreht, an der Maschine drehen. Nennt die Datei in ihrem Kopf einen Stickrahmen (PES ab Version 5, JEF), bietet der Hinweis ihn an; geändert wird nichts, bis du ihn wählst. PES nennt den Stickrahmen 100 × 100 oder 130 × 180 mm, JEF den gewählten Janome-Rahmen.</li>
           <li><b>Farben</b>: VP3 behält sie genau, mit Marke und Katalognummer. PES und PEC nutzen die Brother-Palette (aus einer PES gelesene Farben behalten ihren Platz, andere bekommen den nächstgelegenen), JEF die Janome-Palette. DST und EXP speichern keine Farben.</li>
           <li><b>JEF</b> kennt keinen Schnittbefehl: Die Maschine schneidet vor Sprüngen über 3 mm, ein Schnitt vor einem kürzeren Weg geht verloren. Stiche über 12,7 mm werden in gleich lange Stiche geteilt.</li>
           <li>Stoff, Garn, Stofffarbe, Prüfregeln und Stickrahmen gehören zu jedem Stickmuster: Beim Dateiwechsel stehen dessen eigene Werte da, eine Änderung gilt nur für das aktive, und eine neue Datei übernimmt die zuletzt benutzten.</li>
@@ -668,16 +687,17 @@
             <tr><td><kbd>e</kbd></td><td>Zwischen Objekten und Stichen umschalten</td></tr>
             <tr><td><kbd>Umschalt</kbd> / <kbd>Strg</kbd>+Klick</td><td>Objekte zur Auswahl hinzufügen</td></tr>
             <tr><td>Pfeiltasten</td><td>Gewählte Objekte um 0,1 mm schieben (mit <kbd>Umschalt</kbd> 1 mm), auf der Ebene Form den Knoten, auf der Ebene Stiche den Einstich</td></tr>
-            <tr><td><kbd>Strg</kbd>+<kbd>D</kbd>, <kbd>Entf</kbd></td><td>Gewähltes Objekt duplizieren, gewählte Objekte löschen</td></tr>
+            <tr><td><kbd>Strg</kbd>+<kbd>C</kbd>, <kbd>Strg</kbd>+<kbd>V</kbd></td><td>Gewählte Objekte kopieren, 2 mm daneben einfügen</td></tr>
+            <tr><td><kbd>Strg</kbd>+<kbd>D</kbd>, <kbd>Entf</kbd></td><td>Gewählte Objekte genau an derselben Stelle duplizieren, gewählte Objekte löschen</td></tr>
             <tr><td><kbd>Enter</kbd></td><td>Form einer Füllung öffnen, von der Form weiter zu den Stichen; auf einem Schriftzug Buchstaben einzeln</td></tr>
             <tr><td>Doppelklick</td><td>Form einer Füllung oder Stiche eines Satins öffnen; auf der Ebene Form einen Knoten setzen; auf der Ebene Stiche einen Einstich setzen</td></tr>
             <tr><td><kbd>c</kbd>, <kbd>Entf</kbd></td><td>Auf der Ebene Form: Knoten zur Ecke oder rund machen, löschen</td></tr>
             <tr><td><kbd>,</kbd> <kbd>.</kbd>, <kbd>i</kbd>, <kbd>Entf</kbd></td><td>Auf der Ebene Stiche: voriger / nächster Einstich, Stich teilen, löschen</td></tr>
             <tr><td><kbd>r</kbd>, <kbd>g</kbd></td><td>Querlinien eines Satins, Leitlinien einer Füllung</td></tr>
-            <tr><td><kbd>m</kbd> <kbd>o</kbd> <kbd>b</kbd> <kbd>p</kbd></td><td>Rechteck, Ellipse, Zeichenstift, Freihand</td></tr>
+            <tr><td><kbd>v</kbd>, <kbd>m</kbd> <kbd>o</kbd> <kbd>b</kbd> <kbd>p</kbd></td><td>Zeiger der Ebene Form; Rechteck, Ellipse, Zeichenstift, Freihand (Ablauf)</td></tr>
             <tr><td><kbd>t</kbd></td><td>Neuer Schriftzug</td></tr>
             <tr><td><kbd>Esc</kbd></td><td>Werkzeug weglegen, Auswahl oder Zone aufheben, eine Ebene zurück</td></tr>
-            <tr><td><kbd>v</kbd></td><td>Zonen-Markierungen ein/aus (Dichte)</td></tr>
+            <tr><td><kbd>v</kbd></td><td>Zonen-Markierungen ein oder aus (Dichte)</td></tr>
             <tr><td><kbd>c</kbd></td><td>Mit Original vergleichen (Dichte)</td></tr>
             <tr><td><kbd>Strg</kbd>+<kbd>A</kbd></td><td>Alle Einstiche wählen (Dichte, von Hand)</td></tr>
           </tbody>
@@ -735,8 +755,9 @@
             <li><a href="#en-check">Check whether a design is too dense for my fabric</a>, and <a href="#en-correct">correct it</a>.</li>
             <li><a href="#en-objects">Sew an object differently</a>: pattern, decorative ones too, spacing, underlay, border, satin width.</li>
             <li><a href="#en-objects">Change the order</a> or <a href="#en-jumps">set trims</a>.</li>
-            <li><a href="#en-draw">Draw a shape</a> or <a href="#en-lettering">sew a name</a>.</li>
+            <li><a href="#en-draw">Draw a shape</a> or <a href="#en-lettering">sew a name</a>; <a href="#en-lines">decorate lines</a>: bean stitch, zigzag, motifs, echo, shadow.</li>
             <li><a href="#en-image">Turn a picture, logo or SVG into a design</a>.</li>
+            <li><a href="#en-sequence">Pick threads of my brand</a> and print the color list.</li>
             <li><a href="#en-save">Save for my machine</a>: PES, DST, JEF, VP3, EXP or PEC, in the right hoop.</li>
           </ul>
         </div>
@@ -769,7 +790,7 @@
 
         <h2 id="en-start">Quick start</h2>
         <ol>
-          <li>Drop an embroidery file on the file box: <b>PES</b> and <b>PEC</b> (Brother), <b>DST</b> (Tajima), <b>JEF</b> (Janome), <b>VP3</b> (Pfaff, Husqvarna Viking) or <b>EXP</b> (Melco). Or pick one under <i>Load example</i>: the cat, the overlapping circles or the confetti. The two vector graphics (SVG) below them are sewn when opened: the circles as whole shapes on top of each other, and the <i>Shapes benchmark</i>, nine panels with what heatstitch makes of shapes. <i>+ New</i> next to it starts an empty design to draw or write in: in Sequence, with the fabric and thread used last and the 100 × 100 mm hoop when none is chosen. It is saved as <i>New design</i>.</li>
+          <li>Drop an embroidery file on the file box: <b>PES</b> and <b>PEC</b> (Brother), <b>DST</b> (Tajima), <b>JEF</b> (Janome), <b>VP3</b> (Pfaff, Husqvarna Viking) or <b>EXP</b> (Melco). Or pick one under <i>Load example</i>: the cat, the overlapping circles, the confetti or the <i>Demo project</i> with seven designs (flower, decor sampler, line stitches, line effects, lettering, patch, towel), where every object can be edited. The two vector graphics (SVG) below them are sewn when opened: the circles as whole shapes on top of each other, and the <i>Shapes benchmark</i>, nine panels with what heatstitch makes of shapes. <i>+ New</i> next to it starts an empty design to draw or write in: in Sequence, with the fabric and thread used last and the 100 × 100 mm hoop when none is chosen. It is called <i>New design</i> until you rename it with the pencil.</li>
           <li>Pick the mode at the top: <i>Sequence</i> (<kbd>1</kbd>) shows and edits the design, <i>Density</i> (<kbd>2</kbd>) checks it, <i>Image</i> (<kbd>3</kbd>) makes a new one from a picture.</li>
           <li>In the <i>Density</i> mode choose <b>fabric</b> and <b>thread</b> under <i>Material</i>. The verdict is under <i>Findings</i>: <span class="lv safe">Safe</span>, <span class="lv caution">Caution</span> or <span class="lv critical">Critical</span>. A click on a zone zooms to it.</li>
           <li>Fix the zones with <i>Propose corrections</i> and compare with the original.</li>
@@ -779,7 +800,7 @@
         <p>
           On the left are your <b>files</b> with hoop and save, below them the settings of the mode, the
           <b>display</b> (realistic threads, fabric, markers) and the <b>statistics</b>. In the middle is the canvas
-          with undo and redo, the switch <i>Objects | Shape | Stitches</i>, the drawing tools, fit and PNG export. On the
+          with undo and redo, the switch <i>Shape | Objects | Stitches</i>, the drawing tools, fit and PNG export. On the
           right the mode works: in Sequence the colors and objects, the selected object and the jumps; in Density the
           findings and the correction; in Image the colors, the brush and the result. Both columns can be dragged
           wider or narrower at their edge.
@@ -789,7 +810,7 @@
           this browser and are back after a reload; <b>×</b> in the file list removes a file, <i>Back to the original</i>
           drops all edits to it.
         </p>
-        <p><b>Your files never leave your computer.</b> heatstitch reads, checks and saves them entirely in your browser. There is no server receiving them, no account and no tracking; the site consists only of static files on GitHub Pages. Pictures in the <i>Image</i> mode stay in the browser too.</p>
+        <p><b>Your files never leave your computer.</b> heatstitch reads, checks and saves them entirely in your browser. There is no server receiving them, no account and no tracking; the site consists only of static files on GitHub Pages. Pictures in the <i>Image</i> mode stay in the browser too. The pencil next to a file in the list (or a double click on the name) renames a design: <kbd>Enter</kbd> keeps the new name, <kbd>Esc</kbd> the old one, and an empty name goes back to the file name. The name is kept after a reload and in the project, and saving suggests it.</p>
         <figure>
           <img src="/guide/heatmap-en.jpg" width="1280" height="960" loading="lazy" alt="The app in the Density mode with three overlapping fill circles: the middle where four layers meet is marked critical, the findings on the right" />
           <figcaption><a href="examples/demos/overlap.pes" download>overlap.pes</a> in the <i>Density</i> mode: three fill circles and a dot on top. One or two layers are fine; where all four meet, the check reports a critical zone.</figcaption>
@@ -811,6 +832,10 @@
         <dl>
           <dt>Colors and objects</dt>
           <dd>The colors in sewing order with their stitch count (more in the tooltip). The arrow opens a color to the objects sewn in it (see <a href="#en-objects">Objects</a>). The eye hides a color; a click highlights it and dims the others, hovering previews that, <i>Show all</i> clears both. While the player runs, a dot marks the color being sewn. A click on the color square changes the thread: one of the Brother threads PES files store, or an own color; a note says how the chosen format saves it.</dd>
+          <dt>Thread brands</dt>
+          <dd>The color square opens the threads of a brand: Brother (the palette PES files store) or one of 71 other thread lines such as Madeira, Isacord, Gunold, Gütermann, Mettler, Sulky, Robison-Anton or Marathon. Type a number or a name to find a thread; when the current color is not one of that brand, the three nearest come first. The brand you choose stays for every color pick. Colors on screen are only approximate, so hold the spool next to the thread chart when in doubt.</dd>
+          <dt>Color list</dt>
+          <dd><i>Color list</i> at the top of the list shows the threads in sewing order, with stitches and thread length per color, size and sewing time, ready to <i>Print</i>. Under <i>My thread brand</i> each color also gets the nearest thread of your brand; <i>Switch to …</i> gives the whole design those threads in one step (undo with <kbd>Ctrl</kbd>+<kbd>Z</kbd>).</dd>
           <dt>Color stitches by</dt>
           <dd><i>Thread color</i> shows the colors of the file. <i>Order</i> runs from dark blue (sewn first) to yellow (last). <i>Stitch type</i> tells satin, fill, running stitch and tie stitches apart; it is recognized from the stitch path, since embroidery files store no objects. <i>Stitch length</i> marks short stitches under 1 mm, long ones over 7 mm and very long ones over 12.1 mm, which machines split.</dd>
           <dt>Player</dt>
@@ -843,9 +868,9 @@
           <dt>Optimize order</dt>
           <dd>The button above the list looks for an order with fewer color changes, trims and travel and shows beforehand what it saves. Three switches: <i>Combine colors</i> sews all objects of one thread together where no other color has to lie between them; <i>Shortest paths</i> goes from each object to the nearest one allowed next; <i>Reverse direction</i> may sew satins and fills from the other end where that saves travel or trims. Where objects overlap, what is on top stays on top. <i>Apply</i> makes it one undo step. For a single object, <i>Swap start and end</i> does the same: it starts where it used to end, and the way from or to the neighbor is often shorter.</dd>
           <dt>Move, rotate, scale</dt>
-          <dd>Selected objects get a dashed frame on the canvas. Dragging inside the frame moves them (<kbd>Shift</kbd> keeps the line), dragging a corner scales (the opposite corner stays; with <kbd>Shift</kbd> width and height freely), the round handle above rotates around the center (<kbd>Shift</kbd>: in 15° steps). The arrow keys nudge by 0.1 mm, with <kbd>Shift</kbd> by 1 mm. Moving and rotating take the stitches along unchanged. Scaling sews the objects anew at the new size with their own settings, so density and stitch lengths stay right. Select a letter and its border together to change both at once. Objects that are fill and satin in one can be moved and rotated, but not scaled yet.</dd>
+          <dd>Selected objects get a dashed frame on the canvas. Dragging inside the frame moves them (<kbd>Shift</kbd> keeps the line), dragging a corner scales (the opposite corner stays; with <kbd>Shift</kbd> width and height freely), the round handle above rotates around the center (<kbd>Shift</kbd>: in 15° steps). The arrow keys nudge by 0.1 mm, with <kbd>Shift</kbd> by 1 mm. Moving and rotating take the stitches along unchanged. Scaling sews the objects anew at the new size with their own settings, so density and stitch lengths stay right. Select a letter and its border together to change both at once. Objects that are fill and satin in one can be moved and rotated, but not scaled yet. While you move them, their edges and middle snap to the edges and middles of the other objects and to the middle of the rest of the design, which is where the hoop's middle will be; a thin line shows what they hang on, and <kbd>Alt</kbd> moves them freely. Under <i>Size</i> in the <i>Object</i> card, type the width or height in mm; with the chain on, the other side follows. The frame and the size fields work on the levels <i>Shape</i> and <i>Objects</i> alike.</dd>
           <dt>Duplicate, mirror, delete</dt>
-          <dd>The <i>Object</i> card has a row of buttons: <i>Duplicate</i> (<kbd>Ctrl</kbd>+<kbd>D</kbd>) sews the object once more, 2 mm beside it and right after, together with a border in its own thread; the two mirror buttons swap left and right or top and bottom around the center of the selection; <i>Delete</i> (<kbd>Del</kbd>) removes the selected objects, the last one too: the design is then empty, and undo brings everything back. A right click on an object on the canvas or in the list opens the same actions as a menu, a long press on a touchscreen.</dd>
+          <dd>The <i>Object</i> card has a row of buttons: <i>Duplicate</i> sews the selected objects once more, each 2 mm beside and right after its original, border included, as <kbd>Ctrl</kbd>+<kbd>C</kbd> and <kbd>Ctrl</kbd>+<kbd>V</kbd> do (each paste lands a step further); <kbd>Ctrl</kbd>+<kbd>D</kbd> puts the copies exactly in place, ready to move with the arrow keys; the two mirror buttons swap left and right or top and bottom around the center of the selection; <i>Delete</i> (<kbd>Del</kbd>) removes the selected objects, the last one too: the design is then empty, and undo brings everything back. A right click on an object on the canvas or in the list opens the same actions as a menu, a long press on a touchscreen.</dd>
           <dt>Thread of an object</dt>
           <dd>A click on the color square next to the object's name picks its thread. A neighbor's thread sews it along in that color; another one gives it an own color in its place, with a color change.</dd>
           <dt>Combine and split</dt>
@@ -885,11 +910,11 @@
           <dt>Pattern</dt>
           <dd><i>Tatami</i> sews straight rows; <i>Offset</i> shifts the needle points from row to row by 1/4 (the usual tatami), 1/2 (a brick pattern) to 1/5 of a stitch or randomly, to hide lines. <i>Gradient</i> opens the rows across the shape from one spacing to another, for shading and soft edges. <i>Contour fill</i> runs the rows along the outline, ring in ring. <i>Spiral</i> winds one line from the edge to the center of a round shape. <i>As sewn</i> keeps the directions and curves of the current rows; fills from the Image mode that follow the picture and objects with several angles start with it. <i>Guided</i> lets the rows follow drawn guide lines.</dd>
           <dt>Decorative patterns</dt>
-          <dd>The patterns sit in three tabs: <i>Classic</i>, <i>Decor</i> and <i>Open</i>; a dot on a tab shows where the pattern of the selection is, and pointing at a tile previews it. <b>Decor</b> covers like tatami: <i>Embossed</i> lays diamonds, waves, stars or hearts into the area only by where the needle goes in, and the motifs always stand upright. <i>Waves</i>, <i>Grain</i>, <i>Rays</i> and <i>Swirl</i> make the rows swing, flow like wood, fan out from a point you can pick, or circle around eddies; <i>Shuffle</i> shows another variant. <i>Color fade</i> fades the area from dense to light; <i>Second color</i> adds a copy on top in a second thread that fades in the other way, so together the area stays as dense as before. <b>Open</b> lets the fabric show through: <i>Meander</i>, <i>Maze</i>, <i>Grid</i> (honeycomb, diamonds, bricks), <i>Echo</i> and <i>Cross stitch</i> are light line patterns, optionally in triple stitch, also for large areas. They leave gaps on purpose, so the density check reports none there.</dd>
+          <dd>The patterns sit in two tabs: <i>Covering</i> and <i>Open</i>; a dot on a tab shows where the pattern of the selection is, and pointing at a tile previews it. <b>Covering</b>: besides the classic patterns, <i>Waves</i>, <i>Grain</i>, <i>Rays</i>, <i>Circles</i> and <i>Swirl</i> make the rows swing, flow like wood, fan out from a point, ring around a point or circle around eddies; <i>Shuffle</i> shows another variant. For rays, circles and swirls, <i>Set on the area</i> shows the points on the canvas: drag them where you like; a click into the area adds a swirl (up to three). <i>Embossing</i> under <i>Tatami</i> lays diamonds, waves, stars or hearts into the rows, only by where the needle goes in, so the density stays the same; the motifs always stand upright, and <i>Strength</i> <i>Clear</i> sews the stitches inside the motif half as long, so it stands out as a finer, more matte area. <i>Blend in a second color</i> in the object menu of a fill, or under the pattern <i>Gradient</i>, makes a color blend: the fill fades out and a second thread fades in the other way on the same area, so together it stays as dense as before. The second color follows the fill like a border: set shape, direction and spacing at the fill; another pattern or deleting takes it out. <b>Open</b>: <i>Meander</i>, <i>Maze</i>, <i>Grid</i> (honeycomb, diamonds, bricks), <i>Echo</i> and <i>Cross stitch</i> are light line patterns the fabric shows through, optionally in triple stitch, also for large areas. They leave gaps on purpose, so the density check reports none there. <i>Empty</i> sews no fill at all, only the border in the object's thread: the shape stays and covers nothing below; border off or another pattern fills it again.</dd>
         </dl>
         <figure>
-          <img src="/guide/decor-en.jpg" width="1280" height="800" loading="lazy" alt="The red sweater of the cat with the Swirl pattern, on the right the pattern tabs Classic, Decor and Open with the Decor tiles" />
-          <figcaption>The cat's sweater in the <i>Swirl</i> pattern: the rows circle around points in the shape. On the right the tabs <i>Classic</i>, <i>Decor</i> and <i>Open</i>; <i>Shuffle</i> places the eddies differently.</figcaption>
+          <img src="/guide/decor-en.jpg" width="1280" height="800" loading="lazy" alt="The red sweater of the cat with the Swirl pattern, on the right the pattern tabs Covering and Open with their tiles" />
+          <figcaption>The cat's sweater in the <i>Swirl</i> pattern: the rows circle around points in the shape. On the right the tabs <i>Covering</i> and <i>Open</i> with their tiles; <i>Shuffle</i> places the eddies differently.</figcaption>
         </figure>
         <dl>
           <dt>Spacing, angle, stitch length, edges</dt>
@@ -899,7 +924,7 @@
           <dt>Underlay</dt>
           <dd><i>Off</i> for small areas and thin fabrics, <i>Across</i> (one loose layer across the rows, sewn first) or <i>Cross</i> (two layers crosswise, for stretchy and fluffy fabrics). Plus its <i>inset</i> from the edge, fixed in mm or as a share of the area's width, its row spacing and <i>Leave out under later objects</i>: where later objects cover the fill completely, the underlay is dropped, which saves thread and bulk under satin borders.</dd>
           <dt>Border</dt>
-          <dd>A line around the fill, sewn after it: <i>Running stitch</i>, <i>Triple</i> or a <i>satin edge</i> with width, pull compensation and underlay. <i>Position</i> puts it on the edge of the fill or offset inwards or outwards. With <i>Border thread</i> it becomes an object of its own in that thread, sewn right after the color of the fill; it still follows the shape of the fill and is duplicated and moved with it. With such a border selected, its card names the fill it belongs to; <i>Detach</i> makes it an independent object.</dd>
+          <dd>A line around the fill with the same stitches as a <a href="#en-lines">line</a>: <i>Running stitch</i> (also as bean stitch), <i>Satin</i> with width, pull compensation and underlay, <i>Zigzag</i>, <i>E stitch</i> or <i>Motif</i>. <i>Position</i> puts it on the edge of the fill or offset inwards or outwards. The border is an object of its own in the list, trimmed off the fill and sewn right after it, in the fill's thread or, with <i>Border thread</i>, in one of its own. <i>Sew earlier</i>, <i>Sew later</i> or dragging it in the list sets when it is sewn; it stays linked to the fill, follows its shape and is duplicated with it until you take it off with <i>Detach</i>. Its card names the fill it belongs to; on the level <i>Shape</i> you drag the width of a satin border at the grip of its band.</dd>
           <dt>Guide lines</dt>
           <dd>Choose the pattern <i>Guided</i> or press <kbd>g</kbd> with a fill selected and drag freehand across the area: the rows follow this line, exactly near it and more loosely further away. With several lines the rows blend from one to the next, so a round neckline turns into a straight hem. Every line sews the fill anew on release. Click a line and press <kbd>Del</kbd> to delete it; without lines the fill returns to straight rows. <kbd>Esc</kbd> or <i>Done</i> closes the tool.</dd>
           <dt>End near the next object</dt>
@@ -922,8 +947,8 @@
         <dl>
           <dt>Pattern and spacing</dt>
           <dd><i>Satin</i> sews densely from rail to rail; the <i>E stitch</i> runs along one edge and crosses over and back at intervals, for appliqué (the edge lies on the left in sewing direction; <i>Swap start and end</i> puts it on the other side). <i>Spacing</i> is the distance between the stitches on one side. <i>Spacing by width</i> makes narrow parts a little looser and wide parts a little denser, so the column covers evenly everywhere.</dd>
-          <dt>Width</dt>
-          <dd>Per side up to 3 mm wider or narrower than now: pull compensation. <i>Sides separately</i> sets left and right on their own, <i>Width by share</i> widens wide parts by a share of their width more than narrow ones. <i>By fabric</i> sets the value from the material.</dd>
+          <dt>Pull compensation</dt>
+          <dd>Sew the column up to 3 mm wider or narrower on each side, because the fabric pulls it in while stitching. <i>Sides apart</i> sets left and right on their own, <i>Pull comp. by share</i> gives wide parts more by a share of their width than narrow ones. <i>By fabric</i> sets the value from the material. The column's own width is its rails on the level <i>Shape</i>.</dd>
           <dt>Short stitches, split</dt>
           <dd><i>Short stitches in curves</i> lets every other stitch end earlier on the inside of curves so the needle points don't crowd. <i>Split from</i> splits long stitches so they don't snag, <i>Staggered split</i> moves the split points along so no groove runs down the column.</dd>
           <dt>Underlay</dt>
@@ -933,13 +958,13 @@
           <dt>Spacing along the column</dt>
           <dd>Click a rung and set <i>Spacing here</i>: from there the spacing blends to the next rung, say for a column that should be denser at its wide end.</dd>
           <dt>Satin sections</dt>
-          <dd>With the rungs open, switch <i>Draw</i> to <i>Cut line</i> (or press <kbd>t</kbd>; <kbd>Shift</kbd>+drag draws the other kind) and drag across the column: a cut line (light blue) splits it, there the column starts afresh, and both parts meet cleanly in a miter instead of fanning around a sharp corner. <i>Suggest sections</i> puts cut lines at the sharp corners. The sections are sewn one after the other without a trim and stay one object; click a cut line and press <kbd>Del</kbd> to remove it. Each section shows its place in the order where its satin starts: click the number to sew it one place earlier, the arrow to turn it round, the scissors to trim before it.</dd>
+          <dd>With the rungs open, switch <i>Draw</i> to <i>Cut line</i> (or press <kbd>t</kbd>; <kbd>Shift</kbd>+drag draws the other kind) and drag across the column: a cut line (light blue) splits it, there the column starts afresh, and both parts meet cleanly in a miter instead of fanning around a sharp corner. <i>Suggest sections</i> puts cut lines at the sharp corners. The sections are sewn one after the other without a trim and stay one object; click a cut line and press <kbd>Del</kbd> to remove it. Each section shows its place in the order where its satin starts: click the number to sew it one place earlier, the arrow to turn it round, the scissors to trim before it, ⇄ to mirror it so it starts and ends on the other side. A column without cut lines shows the arrow and ⇄ as well.</dd>
           <dt>A section as a column of its own</dt>
           <dd>Within a section a rung may also run from one side back to the same side or end on a cut line, for instance straight across the middle leg of an m whose inner rail runs down one side of the leg and up the other. The section then finds its own two rails so that all its rungs go across, and a cut line becomes part of a rail, a shortcut of the path. The rails it is sewn along show dashed. Where a rung would leave the column lopsided, a cut line before it is missing, and the hint says so.</dd>
           <dt>To satin with rungs</dt>
           <dd>A fill too wide or too uneven for the simple change to satin can still become one: under <i>To satin with rungs</i> drag at least two lines across the area, from one end to the other. They cut the area into a column and set the stitch direction; <i>Sew as satin</i> sews it that way, and the lines stay its rungs.</dd>
           <dt>A fill cut into columns</dt>
-          <dd>With <i>To satin with rungs</i> on a fill you can also draw cut lines (switch to <i>Cut line</i>, press <kbd>t</kbd>, or hold <kbd>Shift</kbd> while drawing). They split the area into parts, for example the three legs of an m from its arch, and each part becomes a column of its own: one rung in it is enough. The parts are sewn as one run without trims: a part that hangs off another is sewn out and back first, and the way between them stays under satin that comes later. A hole, as in e, R or o, is opened with a cut line from the edge into it (with several holes, as in B or 8, one each, also from hole to hole); the satin then goes round it. A part that makes no column or a hole not opened yet is outlined in red. Under <i>Set direction</i> each part shows its place in the order where its satin starts: number, arrow and scissors as with the sections.</dd>
+          <dd>With <i>To satin with rungs</i> on a fill you can also draw cut lines (switch to <i>Cut line</i>, press <kbd>t</kbd>, or hold <kbd>Shift</kbd> while drawing). They split the area into parts, for example the three legs of an m from its arch, and each part becomes a column of its own: one rung in it is enough. The parts are sewn as one run without trims: a part that hangs off another is sewn out and back first, and the way between them stays under satin that comes later. A hole, as in e, R or o, is opened with a cut line from the edge into it (with several holes, as in B or 8, one each, also from hole to hole); the satin then goes round it. A part that makes no column or a hole not opened yet is outlined in red. Under <i>Set direction</i> each part shows its place in the order where its satin starts: number, arrow, scissors and ⇄ as with the sections; <i>Best order</i> picks order, direction and mirroring so the ways between the parts run under satin still to be sewn, as when the fill is first sewn as satin. The cut lines stay editable: drag an end, click one and press <kbd>Del</kbd>, or draw a new one, and the area is cut into parts anew. Until every part has a rung and every hole is open, the stitches stay as they were.</dd>
         </dl>
         <figure>
           <img src="/guide/satin-en.jpg" width="1280" height="800" loading="lazy" alt="The satin border of the M in letters.pes with its rungs shown: yellow lines across the column, fanning out at each corner, the Direction field in the card" />
@@ -955,22 +980,35 @@
           <dt>Running stitch</dt>
           <dd><i>Stitch length</i>, <i>Max. deviation</i> (how far a stitch may lie beside the curve at most; in tight curves the stitches get shorter for that, never under 1 mm) and <i>Triple stitch</i> for a strong line. Fills with the patterns contour fill, spiral and as sewn have a max. deviation too.</dd>
           <dt>Lines</dt>
-          <dd>Lines are sewn exactly along their curve: drawn lines, lines from an SVG (from 1 mm width as satin of that width) and the running stitches of an embroidery file, whose curve is read from their stitches. Under <i>Line</i> you set how: <i>Running stitch</i> or <i>Triple</i>, or <i>Satin</i> with width, spacing, pull compensation and underlay. On the <i>Shape</i> level you move its nodes and the stitches follow; <i>Close the line</i> joins its ends with a straight piece, <i>Open the line</i> opens it again after the selected node.</dd>
+          <dd>Lines are sewn exactly along their curve: drawn lines, lines from an SVG (from 1 mm width as satin of that width) and the running stitches of an embroidery file, whose curve is read from their stitches. Under <i>Line</i> you set how: <i>Running stitch</i> with <i>Repeat</i> single, 3× or 5× (bean stitch, a bolder line), the stitch length and the max. deviation in curves; <i>Satin</i> with width, spacing, pull compensation and underlay; <i>Zigzag</i>, an open zigzag with width and spacing, to tack down appliqué or as decoration; <i>E stitch</i>, a running stitch on the line with prongs to one side (<i>Prongs</i> right or left), the classic appliqué stitch; or <i>Motif</i>, a small figure repeated along the line: <i>Waves</i>, <i>Scallops</i>, <i>Hearts</i> or <i>Chain</i>, with its size, the spacing from one figure to the next and the side for scallops and hearts. The border of a fill offers the same stitches; there prongs, scallops and hearts point inside onto the area or outside. <i>Swap start and end</i> sews a line from its other end. On the <i>Shape</i> level you move its nodes and the stitches follow; <i>Close the line</i> joins its ends with a straight piece, <i>Open the line</i> opens it again after the selected node.</dd>
+          <dt>Echo</dt>
+          <dd>Adds copies of the line at the same distance beside it, as in echo quilting: on <i>One side</i> (<i>Other side</i> moves them across) or <i>Both</i> for an open line, <i>Outside</i>, <i>Inside</i> or <i>Both</i> for a closed one, with the number of copies per side and the distance from line to line. The line and its copies are sewn in one run, a short stitch from one to the next; <i>Between copies</i> <i>Trim</i> cuts the thread instead. Under <i>Thread per copy</i> a copy gets a thread of its own: such copies are an object of their own, linked to the line and sewn after it; <i>Detach</i> separates them. The echo follows every change of the line.</dd>
+          <dt>Shadow</dt>
+          <dd>Sews the line (with its echo) once more, moved by the <i>Offset</i> in one of four diagonal directions, in a thread of its own (dark grey to begin with) and before the line, so the line lies on top. The shadow is an object of its own in the list, linked to the line: it follows it when it is changed, moved, turned or duplicated and goes with it when it is deleted; its direction stays, as with light from one side. <i>Detach</i> makes it a line on its own.</dd>
           <dt>Wide line as fill</dt>
           <dd>A satin line can be sewn as a fill of its area: choose <i>Fill</i> under <i>Stitch type</i>. The area still comes from the line and its width, with <i>Ends</i> flat or round; <i>Line</i> makes it the same line again. That suits wide lines whose satin stitches would get too long.</dd>
         </dl>
 
         <h2 id="en-shape">Edit the shape</h2>
         <p>
-          The switch <i>Objects | Shape | Stitches</i> at the top left of the canvas sets what a click acts on.
-          Double click a fill, press <kbd>Enter</kbd>, pick <i>Shape</i> in the switch or <i>Edit shape</i> in the
-          card to show its outline as curves with nodes: squares are corners, circles smooth nodes. Drag a node or a
+          The switch <i>Shape | Objects | Stitches</i> at the top left of the canvas sets what a click acts on.
+          The level <i>Shape</i> is the workshop: here you draw shapes, pick them with the pointer (<kbd>v</kbd>) and
+          see frame and nodes of a chosen object together. Click a fill, double click it, press <kbd>Enter</kbd> or
+          use <i>Edit shape</i> in the card to show its outline as curves with nodes: squares are corners, circles
+          smooth nodes. Drag a node or a
           handle of the selected node; dragging the outline between two nodes bends it. Double click on the outline
           sets a node there, <kbd>Del</kbd> deletes the selected one, <kbd>c</kbd> makes it a corner or smooth, the
           arrow keys nudge it. On release the fill is sewn anew in the new shape with its settings. The outline is
           read from the stitches once (or taken over as the Image mode, an SVG or drawing made it) and kept as curves
-          from then on, also in the project; so it does not drift. <kbd>Enter</kbd> goes on to the stitches,
-          <kbd>Esc</kbd> or a click beside it back to the objects.
+          from then on, also in the project; so it does not drift. Around the outline stays the frame: drag inside
+          it, away from the nodes, to move the shape. A satin of a PES or DST file shows its two rails as lines: drag
+          them and its needle points follow, its pairs, rungs and sections stay, and it is sewn anew with its
+          settings. A line sewn as satin or as a fill along it shows its band dashed with a round grip on its edge:
+          drag the grip to make the band wider or narrower, its width in mm shows beside it; a fill with a satin
+          border shows the border's band the same way. How the band is filled (spacing, pull compensation, underlay)
+          stays on the level <i>Objects</i>. An outline with 12 nodes or more offers <i>Simplify</i>: fewer nodes, at
+          most 0.3 mm beside the old outline, corners staying corners; press it again to go further. <kbd>Enter</kbd>
+          goes on to the stitches, <kbd>Esc</kbd> or a click beside it lets go of the object.
         </p>
 
         <h2 id="en-stitches">Single stitches</h2>
@@ -998,7 +1036,8 @@
 
         <h2 id="en-draw">Draw shapes</h2>
         <p>
-          The tools on the left of the canvas make new shapes, sewn at once with the settings for your material.
+          On the level <i>Shape</i>, the tools on the left of the canvas make new shapes, sewn at once with the
+          settings for your material.
           Each new shape is sewn right after the selected object in its thread, after the last one with nothing
           selected. With no file open, the first shape starts a new design; <i>+ New</i> in the file list makes one with a hoop first.
         </p>
@@ -1008,7 +1047,7 @@
         </figure>
         <dl>
           <dt>Tools</dt>
-          <dd><b>Rectangle</b> (<kbd>m</kbd>) and <b>Ellipse</b> (<kbd>o</kbd>): drag; <kbd>Shift</kbd> makes a square or a circle, <kbd>Alt</kbd> draws from the center, a tag shows the size. <b>Pen</b> (<kbd>b</kbd>): click for corners, drag for curves; a click on the first node closes an area (fill), double click or <kbd>Enter</kbd> ends an open line (running stitch), <kbd>Del</kbd> takes the last node back. <b>Freehand</b> (<kbd>p</kbd>): drag a line; it is smoothed on release and sewn as running stitch. The tool stays on for the next shape; <kbd>Esc</kbd> or a click on its button puts it away.</dd>
+          <dd><b>Rectangle</b> (<kbd>m</kbd>) and <b>Ellipse</b> (<kbd>o</kbd>): drag; <kbd>Shift</kbd> makes a square or a circle, <kbd>Alt</kbd> draws from the center, a tag shows the size. <b>Pen</b> (<kbd>b</kbd>): click for corners, drag for curves; a click on the first node closes an area (fill), double click or <kbd>Enter</kbd> ends an open line (running stitch), <kbd>Del</kbd> takes the last node back. <b>Freehand</b> (<kbd>p</kbd>): drag a line; it is smoothed on release and sewn as running stitch. After a shape the <b>pointer</b> (<kbd>v</kbd>, the arrow above the tools) is back and the new shape is chosen, with its frame and nodes, ready to be moved or reshaped; <kbd>Esc</kbd> puts a tool away too. The keys of the tools go to the level <i>Shape</i> from anywhere. Every shape is one step you can undo.</dd>
           <dt>Go on with the shape</dt>
           <dd>A drawn area is a fill with all <a href="#en-settings">stitch settings</a>, a line a running stitch that can also become satin or fill. With <i>Cut out top shape</i> you punch holes, with <i>Combine into one object</i> you join areas, and on the <i>Shape</i> level you bend every outline further.</dd>
           <dt>Shapes instead of stitches</dt>
@@ -1041,7 +1080,7 @@
         </p>
         <figure>
           <img src="/guide/lettering-en.jpg" width="1280" height="800" loading="lazy" alt="The example cat with the name Minka set under it in Pacificlo, the Lettering card with the open font list on the right" />
-          <figcaption>A lettering under the cat. The font list shows the text in every font, with the heights it is good for.</figcaption>
+          <figcaption>A lettering under the cat. The font list shows the text in every font, with the heights it is good for; the arrow keys try them one after the other.</figcaption>
         </figure>
         <details class="font-table">
           <summary>The 41 fonts and their licenses</summary>
@@ -1261,7 +1300,7 @@
           <dt>Colors and brush</dt>
           <dd>In the color list the tick leaves a color out, the color field picks another thread, and <i>→</i> merges it into another color. A ≠ warns that no thread is close to the picture's color. Click a color and recolor areas by hand with the <i>brush</i>, or erase where nothing should be sewn. Picture and edits survive a reload.</dd>
           <dt>Stitches</dt>
-          <dd>Every area gets the stitch that fits its shape: wide areas tatami fill with underlay, narrow strokes up to <i>Satin up to width</i> satin columns, lines under 1 mm running stitch. Spacing and pull compensation follow the fabric and thread chosen under <i>Material</i>. The largest color is sewn first, touching objects overlap by 0.2 mm, long jumps are trimmed with tie stitches.</dd>
+          <dd>Every area gets the stitch that fits its shape: wide areas tatami fill with underlay, narrow strokes up to <i>Satin up to width</i> satin columns, lines under 1 mm running stitch; stalks as in a tuft of grass become satin, the ground where they meet a fill sewn after them. Spacing and pull compensation follow the fabric and thread chosen under <i>Material</i>. The largest color is sewn first, touching objects overlap by 0.2 mm, long jumps are trimmed with tie stitches.</dd>
           <dt>Fill direction</dt>
           <dd>With <i>Follows the image</i> the fill rows run like fur, hair or strokes in the picture, in plain areas along the shape. Where the direction changes within an area, the rows curve; where it is the same everywhere, they stay straight in that direction. <i>Straight, automatic</i> or a fixed angle switches it off.</dd>
           <dt>Max. deviation</dt>
@@ -1275,7 +1314,7 @@
           <dt>Prepare with AI</dt>
           <dd>For photos, <i>Prepare the image with AI</i> under the image box suggests a way: upload the picture to your own AI chat that can edit images, paste the ready-made prompt (it follows the width and color count) and load the result here. heatstitch itself sends nothing away.</dd>
           <dt>Result</dt>
-          <dd>Stitches, size, sewing time and the check for the material; if the design does not fit the chosen hoop, it says so here. <i>Take over as design</i> puts it into the file list as a PES file. There it can be viewed, edited, corrected and saved for the machine in the other modes; its objects keep their shape and settings.</dd>
+          <dd>Stitches, size, sewing time and the check for the material; if the design does not fit the chosen hoop, it says so here. <i>Take over as design</i> puts it into the file list as a design. There it can be viewed, edited, corrected and saved for the machine in the other modes; its objects keep their shape and settings.</dd>
         </dl>
 
         <h2 id="en-display">Display</h2>
@@ -1306,7 +1345,7 @@
         <h2 id="en-save">Save, hoop and project</h2>
         <ul>
           <li><b>Save</b> under the file list writes the current stitches and colors in the chosen format, named by machine brand: PES (Brother, Babylock), DST (Tajima, industrial machines), JEF (Janome, Elna), VP3 (Pfaff, Husqvarna), EXP (Melco, Bernina) or PEC (older Brother). The choice is remembered. The name field suggests the file's name (after a change with <code>-corrected</code>); what you type there names the file and the design in it. Objects from embroidery software are lost in embroidery files.</li>
-          <li><b>Hoop</b> above <i>Save</i> says which hoop the design will be sewn in: none, a common sewing field from 50 × 50 to 240 × 360 mm with the brands it is usual for, or <i>Own size</i> in mm. The sewing field stands as a dashed line around the design, centered, as machines center a design when loading it; <i>Fit</i> then shows the whole field. If the design is too big, the line turns red, the part outside is tinted, and a note says by how much, with a larger hoop to pick. If it only fits turned by 90°, turn it at the machine. If the file names a hoop in its header (PES from version 5, JEF), the note offers it; nothing changes until you pick it. PES names the hoop 100 × 100 or 130 × 180 mm, JEF the chosen Janome hoop.</li>
+          <li><b>Hoop</b> above <i>Save</i> says which hoop the design will be sewn in: none, a common sewing field from 50 × 50 to 240 × 360 mm with the brands it is usual for, or <i>Own size</i> in mm. The sewing field stands as a dashed line around the design, centered, as machines center a design when loading it; <i>Fit</i> then shows the whole field. If the design is too big, the line turns red, the part outside is tinted, and a note says by how much, with a larger hoop to pick and <i>Shrink to fit</i>, which makes the whole design smaller, evenly, until it fits with 1 mm to spare, and sews it anew (one undo step). If it only fits turned by 90°, turn it at the machine. If the file names a hoop in its header (PES from version 5, JEF), the note offers it; nothing changes until you pick it. PES names the hoop 100 × 100 or 130 × 180 mm, JEF the chosen Janome hoop.</li>
           <li><b>Colors</b>: VP3 keeps them exactly, with brand and catalog number. PES and PEC use the Brother palette (colors read from a PES keep their slot, others get the nearest), JEF the Janome palette. DST and EXP store no colors.</li>
           <li><b>JEF</b> has no trim command: the machine cuts before jumps over 3 mm, and a trim before a shorter move is lost. Stitches over 12.7 mm are split into equal stitches.</li>
           <li>Fabric, thread, fabric color, checks and hoop belong to each design: switching files shows its own values, a change applies only to the active one, and a new file takes over the last ones used.</li>
@@ -1342,13 +1381,14 @@
             <tr><td><kbd>e</kbd></td><td>Switch between objects and stitches</td></tr>
             <tr><td><kbd>Shift</kbd> / <kbd>Ctrl</kbd>+click</td><td>Add objects to the selection</td></tr>
             <tr><td>Arrow keys</td><td>Nudge selected objects by 0.1 mm (with <kbd>Shift</kbd> 1 mm), on the Shape level the node, on the Stitches level the needle point</td></tr>
-            <tr><td><kbd>Ctrl</kbd>+<kbd>D</kbd>, <kbd>Del</kbd></td><td>Duplicate the selected object, delete the selected objects</td></tr>
+            <tr><td><kbd>Ctrl</kbd>+<kbd>C</kbd>, <kbd>Ctrl</kbd>+<kbd>V</kbd></td><td>Copy the selected objects, paste them 2 mm beside</td></tr>
+            <tr><td><kbd>Ctrl</kbd>+<kbd>D</kbd>, <kbd>Del</kbd></td><td>Duplicate the selected objects exactly in place, delete the selected objects</td></tr>
             <tr><td><kbd>Enter</kbd></td><td>Open the shape of a fill, go on from the shape to the stitches; on a lettering, single letters</td></tr>
             <tr><td>Double click</td><td>Open the shape of a fill or the stitches of a satin; on the Shape level set a node; on the Stitches level set a needle point</td></tr>
             <tr><td><kbd>c</kbd>, <kbd>Del</kbd></td><td>On the Shape level: make a node a corner or smooth, delete it</td></tr>
             <tr><td><kbd>,</kbd> <kbd>.</kbd>, <kbd>i</kbd>, <kbd>Del</kbd></td><td>On the Stitches level: previous / next needle point, split the stitch, delete</td></tr>
             <tr><td><kbd>r</kbd>, <kbd>g</kbd></td><td>Rungs of a satin, guide lines of a fill</td></tr>
-            <tr><td><kbd>m</kbd> <kbd>o</kbd> <kbd>b</kbd> <kbd>p</kbd></td><td>Rectangle, ellipse, pen, freehand</td></tr>
+            <tr><td><kbd>v</kbd>, <kbd>m</kbd> <kbd>o</kbd> <kbd>b</kbd> <kbd>p</kbd></td><td>Pointer of the level Shape; rectangle, ellipse, pen, freehand (Sequence)</td></tr>
             <tr><td><kbd>t</kbd></td><td>New lettering</td></tr>
             <tr><td><kbd>Esc</kbd></td><td>Put the tool away, clear the selection or zone, one level back</td></tr>
             <tr><td><kbd>v</kbd></td><td>Zone markings on/off (Density)</td></tr>

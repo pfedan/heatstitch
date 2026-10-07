@@ -598,7 +598,7 @@ shots.decor = async (lang) => {
   const rows = await objectRows(page);
   const big = rows.map((r) => ({ i: r.i, n: +(r.text.match(/(\d[\d.,]*)\s*$/) || [0, 0])[1].replace(/[.,]/g, '') })).sort((a, b) => b.n - a.n)[0];
   await clickObject(page, big.i);
-  await page.locator('.pattern-groups button', { hasText: lang === 'de' ? 'Dekor' : 'Decor' }).click();
+  await page.locator('.pattern-groups button', { hasText: lang === 'de' ? 'Deckend' : 'Covering' }).click();
   await page.waitForTimeout(500);
   await page.locator('.pattern-tiles [role="radio"]', { hasText: lang === 'de' ? 'Wirbel' : 'Swirl' }).click();
   await page.waitForTimeout(3000);

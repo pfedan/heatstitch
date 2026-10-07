@@ -61,6 +61,12 @@ sends the picture anywhere.
 - **Hoop**: common sewing fields or an own size, drawn around the design, with a note when it does
   not fit (by how much, a larger hoop to pick, or turn it at the machine); PES and JEF name the hoop
 - **Material per design**: fabric, thread, fabric color, checks and hoop belong to each file
+- **Thread catalogs**: threads from 71 thread lines (Madeira, Isacord, Gunold, Gütermann, Mettler,
+  Sulky, Robison-Anton, Marathon and more, besides the Brother palette), search by number or name,
+  the nearest threads of your brand, switch a whole design to it; a printable **color list** in
+  sewing order with stitches and thread length (catalog data from the Ink/Stitch palettes, GPL 3.0,
+  see `public/threads/LICENSE.md`)
+- **Demo project** with seven designs under *Load example*, every object editable
 - Several files at once, examples dropdown, PNG export, installable PWA that works offline and opens
   embroidery files with "Open with"
 

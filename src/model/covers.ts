@@ -4,7 +4,7 @@ import { knockOut } from '../shape/rasterize';
 import { wholeArea } from './knockout';
 import type { SewObject } from './objects';
 import type { Pattern } from './pattern';
-import { columnOf, keepShape, objectKey, railsArea, remembered } from './restitch';
+import { columnOf, keepShape, objectKey, railsArea, remembered, type Remembered } from './restitch';
 import { stitchKinds } from './sequence';
 
 /**
@@ -63,8 +63,14 @@ export function coversOver(p: Pattern, objs: SewObject[], o: SewObject, pxMm: nu
   let k: Uint8Array | null = null;
   const kinds = () => (k ??= stitchKinds(p));
   const reach = reachOf(p, o);
+  // Its own border and second blend thread lie on it on purpose: they leave nothing out of it.
+  const own = remembered(p, o)?.fill;
+  const mine = (m: Remembered | undefined) => (!!m?.outline && m.outline === own?.border?.link) || (!!m?.blendOf && m.blendOf === own?.deco?.blend?.link);
   for (const x of objs) {
     if (x.index <= o.index || !overlapsBox(reachOf(p, x), reach)) continue;
+    if (mine(remembered(p, x))) continue;
+    // An empty fill covers nothing but its border.
+    if (remembered(p, x)?.fill?.pattern === 'none') continue;
     const f = remembered(p, x)?.form;
     const r = f && wholeArea(f, pxMm);
     if (r) {

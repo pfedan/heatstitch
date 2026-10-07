@@ -1,11 +1,18 @@
-import { formatNumber, t, type Key } from '../i18n';
+import { formatNumber, getLang, onLangChange, t, type Key } from '../i18n';
 import type { SewObject } from '../model/objects';
 import type { OrderCost } from '../model/order';
 import type { Settings } from '../settings';
 import { KIND_ICON, kindLabel } from './layersPanel';
 import { cssColor, ThreadPicker } from './threadPicker';
+import { sameColor } from '../model/recolor';
 import type { ThreadColor } from '../model/pattern';
 
+
+/** A chain link: the typed sizes keep their proportions. */
+const SIZE_LOCK = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8.5 11.5 L11.5 8.5" /><path d="M9 6.5 L11 4.5 A2.5 2.5 0 0 1 15.5 9 L13.5 11" /><path d="M11 13.5 L9 15.5 A2.5 2.5 0 0 1 4.5 11 L6.5 9" /></svg>';
+
+/** Nodes from which an outline offers to be simplified. */
+const SIMPLIFY_FROM = 12;
 export interface ObjectInfo {
   objects: SewObject[];
   selected: number[];
@@ -20,7 +27,7 @@ export interface ObjectInfo {
   /** The one selected object has a fill whose outline can be edited. */
   shapeable: boolean;
   /** Its outline is being edited: nodes, and whether the selected one is round (null: none selected). */
-  shaping: { nodes: number; smooth: boolean | null; line?: { closed: boolean } } | null;
+  shaping: { nodes: number; smooth: boolean | null; line?: { closed: boolean }; kind?: 'band' | 'rails' } | null;
   /** The frame is on the one selected object; whether it can be scaled. */
   frame: { canScale: boolean } | null;
   /** Why the selected objects cannot be sewn as one (several selected), or null. */
@@ -29,6 +36,8 @@ export interface ObjectInfo {
   reversible: boolean;
   /** Several fills are selected: the one on top can be cut out of the others. */
   subtractable: boolean;
+  /** The one selected object is a fill that can blend into a second thread: its thread. */
+  blend?: ThreadColor;
 }
 
 export interface ObjectHooks {
@@ -48,6 +57,8 @@ export interface ObjectHooks {
   deleteNode: () => void;
   /** The selected node round or a corner. */
   toggleNode: () => void;
+  /** The outline with fewer nodes. */
+  simplify: () => void;
   /** A line on the level Shape: closed, or opened again. */
   closeLine: () => void;
   deleteSelection: () => void;
@@ -59,10 +70,14 @@ export interface ObjectHooks {
   mirror: (axis: 'x' | 'y') => void;
   /** The top one of the selected fills cut out of the others. */
   subtract: () => void;
+  /** The selected objects scaled by sx, sy about their middle. */
+  resize: (sx: number, sy: number) => void;
   /** The selected objects deleted. */
   remove: () => void;
   /** The selected objects sewn in another thread. */
   thread: (c: ThreadColor) => void;
+  /** The one selected fill fades out, and a copy in `c` fades in on the same area: a color blend. */
+  blend: (c: ThreadColor) => void;
   /** The selected objects kept but not sewn: switched off, or as guides. */
   aside: (role: 'off' | 'guide') => void;
 }
@@ -72,7 +87,8 @@ export interface ObjectAction {
   icon: string;
   label: string;
   hint: string;
-  run: () => void;
+  /** Runs it; `anchor` is the button or menu entry, for a popup that opens next to it. */
+  run: (anchor: HTMLElement) => void;
 }
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -88,6 +104,7 @@ const SHAPE_ICONS = {
   remove: icon('<path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.7 9h5.6l.7-9"/>'),
   off: icon('<path d="M11.5 1.5L4.5 14.5"/><ellipse cx="10.6" cy="3.2" rx="0.5" ry="1"/><path d="M2 2l12 12"/>'),
   guide: icon('<path d="M2 13L14 3" stroke-dasharray="2.4 2"/>'),
+  blend: icon('<path d="M2.5 3.5h11M2.5 6h11M2.5 9h11"/><path d="M2.5 11.5h11M2.5 13.5h11" opacity=".5"/>'),
 };
 
 const REVERSE_ICON =
@@ -105,14 +122,22 @@ export class ObjectPanel {
   private body = $<HTMLElement>('object-body');
   private msg = $<HTMLElement>('object-msg');
   private key: unknown[] = [];
+  /** Typed sizes keep the proportions. */
+  private keepRatio = true;
   private picker = new ThreadPicker('.thread-sw');
+  private info: ObjectInfo | null = null;
 
   constructor(private hooks: ObjectHooks) {
     $('object-close').addEventListener('click', () => hooks.clear());
+    onLangChange(() => {
+      this.key = [];
+      this.update(this.info, getLang());
+    });
   }
 
   update(info: ObjectInfo | null, lang: string): void {
-    const key = [info?.objects, info?.selected.join(), info?.hand.join(), info?.editing?.selection ?? -1, info?.shapeable, info?.shaping?.nodes ?? -1, info?.shaping?.smooth, info?.shaping?.line?.closed, info?.frame?.canScale, lang];
+    this.info = info;
+    const key = [info?.objects, info?.selected.join(), info?.hand.join(), info?.editing?.selection ?? -1, info?.shapeable, info?.shaping?.nodes ?? -1, info?.shaping?.smooth, info?.shaping?.line?.closed, info?.shaping?.kind, info?.frame?.canScale, lang];
     if (key.every((k, i) => k === this.key[i])) return;
     this.key = key;
     this.msg.hidden = true;
@@ -157,7 +182,8 @@ export class ObjectPanel {
       const [w, h] = sizeOf(o);
       row(t('object.stitches'), formatNumber(o.stitches));
       row(t('object.thread'), `${formatNumber(o.threadMm / 1000, 2)} m`);
-      row(t('object.size'), `${formatNumber(w, 1)} × ${formatNumber(h, 1)} mm`);
+      if (!info.frame?.canScale) row(t('object.size'), `${formatNumber(w, 1)} × ${formatNumber(h, 1)} mm`);
+      else this.sizeRow(dl, w, h);
       if (o.sections > 1) row(t('object.sections'), t('object.sectionsValue', { n: o.sections }));
       if (info.hand[0]) row(t('object.hand'), t(info.hand[0] === 1 ? 'object.handValue.one' : 'object.handValue', { n: formatNumber(info.hand[0]) }));
       row(t('object.position'), t('object.positionOf', { k: o.index + 1, n: info.objects.length }));
@@ -167,6 +193,10 @@ export class ObjectPanel {
       head.append(Object.assign(document.createElement('strong'), { textContent: t('object.many', { n: sel.length }) }));
       row(t('object.stitches'), formatNumber(stitches));
       row(t('object.thread'), `${formatNumber(thread / 1000, 2)} m`);
+      const w = (Math.max(...sel.map((o) => o.maxX)) - Math.min(...sel.map((o) => o.minX))) / 10;
+      const h = (Math.max(...sel.map((o) => o.maxY)) - Math.min(...sel.map((o) => o.minY))) / 10;
+      if (!info.frame?.canScale) row(t('object.size'), `${formatNumber(w, 1)} × ${formatNumber(h, 1)} mm`);
+      else this.sizeRow(dl, w, h);
     }
     const actions = document.createElement('div');
     actions.className = 'row-buttons';
@@ -207,7 +237,7 @@ export class ObjectPanel {
         const b = Object.assign(document.createElement('button'), { type: 'button', title: a.hint });
         b.innerHTML = a.icon;
         b.setAttribute('aria-label', a.label);
-        b.addEventListener('click', a.run);
+        b.addEventListener('click', () => a.run(b));
         shapeRow.append(b);
       }
       extraRows.push(shapeRow);
@@ -218,13 +248,27 @@ export class ObjectPanel {
         : [];
     const hint = Object.assign(document.createElement('p'), {
       className: 'muted small',
-      textContent: t(info.editing ? 'object.editHint' : info.shaping ? 'shape.hint' : sel.length === 1 ? 'object.hint' : 'object.hintMany'),
+      textContent: [t(info.editing ? 'object.editHint' : info.shaping ? 'shape.hint' : sel.length === 1 ? 'object.hint' : 'object.hintMany'), info.shaping?.kind ? t(`shape.hint.${info.shaping.kind}`) : ''].filter(Boolean).join(' '),
     });
     const frameHint = info.frame
       ? [Object.assign(document.createElement('p'), { className: 'muted small', textContent: info.frame.canScale ? t('object.frameHint') : `${t('object.frameHint')} ${t('object.frameMixed')}` })]
       : [];
     const tools = sel.length !== 1 ? [] : info.shaping ? [this.shapeTools(info.shaping)] : [this.stitchTools(info)];
     this.body.replaceChildren(head, dl, ...(actions.childElementCount ? [actions] : []), ...extraRows, ...handNote, ...tools, ...frameHint, hint);
+  }
+
+  /** The thread picker for the second color of a blend, at `anchor` (also used by the stitch panel). */
+  pickBlend(anchor: HTMLElement, fill = this.info?.blend): void {
+    if (!fill) return;
+    this.picker.toggle(anchor, {
+      key: 'blend',
+      title: t('object.blend.pick'),
+      current: fill,
+      note: t('object.blend.note'),
+      onPick: (c) => {
+        if (!sameColor(c, fill)) this.hooks.blend(c);
+      },
+    });
   }
 
   /**
@@ -234,8 +278,9 @@ export class ObjectPanel {
   actions(info: ObjectInfo): ObjectAction[] {
     if (info.editing || info.shaping || !info.selected.length) return [];
     const out: ObjectAction[] = [];
-    const add = (icon: string, label: string, hint: string, run: () => void) => out.push({ icon, label, hint, run });
-    if (info.selected.length === 1) add(SHAPE_ICONS.duplicate, t('object.duplicate'), t('object.duplicate.hint'), () => this.hooks.duplicate());
+    const add = (icon: string, label: string, hint: string, run: (anchor: HTMLElement) => void) => out.push({ icon, label, hint, run });
+    add(SHAPE_ICONS.duplicate, t('object.duplicate'), t('object.duplicate.hint'), () => this.hooks.duplicate());
+    if (info.blend) add(SHAPE_ICONS.blend, t('object.blend'), t('object.blend.hint'), (anchor) => this.pickBlend(anchor, info.blend));
     if (info.subtractable) add(SHAPE_ICONS.subtract, t('object.subtract'), t('object.subtract.hint'), () => this.hooks.subtract());
     add(SHAPE_ICONS.mirrorX, t('object.mirrorX.short'), t('object.mirrorX'), () => this.hooks.mirror('x'));
     add(SHAPE_ICONS.mirrorY, t('object.mirrorY.short'), t('object.mirrorY'), () => this.hooks.mirror('y'));
@@ -247,7 +292,45 @@ export class ObjectPanel {
     return out;
   }
 
-  /** Editing the outline of the one selected object: nodes, delete, corner or round, done. */
+  /**
+   * The size of the selection as two fields (mm) to type in, with a lock that keeps the proportions.
+   * A typed size scales the selection about its middle, as the frame does.
+   */
+  private sizeRow(dl: HTMLElement, w: number, h: number): void {
+    const dd = Object.assign(document.createElement('dd'), { className: 'size-edit' });
+    const field = (v: number, label: string) => {
+      const i = Object.assign(document.createElement('input'), { type: 'number', min: '1', max: '1000', step: '0.1', value: v.toFixed(1), title: label });
+      i.setAttribute('aria-label', label);
+      return i;
+    };
+    const iw = field(w, t('object.size.w'));
+    const ih = field(h, t('object.size.h'));
+    const lock = Object.assign(document.createElement('button'), { type: 'button', className: 'size-lock', title: t('object.size.lock') });
+    lock.setAttribute('aria-label', t('object.size.lock'));
+    lock.innerHTML = SIZE_LOCK;
+    const showLock = () => lock.setAttribute('aria-pressed', String(this.keepRatio));
+    showLock();
+    lock.addEventListener('click', () => {
+      this.keepRatio = !this.keepRatio;
+      showLock();
+    });
+    const typed = (which: 'w' | 'h') => {
+      const v = Number((which === 'w' ? iw : ih).value);
+      const old = which === 'w' ? w : h;
+      if (!(v >= 1 && v <= 1000) || old <= 0.05 || Math.abs(v - old) < 0.05) return;
+      const s = v / old;
+      // The other side follows when the lock is on; a side that has no extent (a straight line) stays.
+      const sx = which === 'w' ? s : this.keepRatio && w > 0.05 ? s : 1;
+      const sy = which === 'h' ? s : this.keepRatio && h > 0.05 ? s : 1;
+      this.hooks.resize(sx, sy);
+    };
+    iw.addEventListener('change', () => typed('w'));
+    ih.addEventListener('change', () => typed('h'));
+    dd.append(iw, document.createTextNode('×'), ih, document.createTextNode('mm'), lock);
+    dl.append(Object.assign(document.createElement('dt'), { textContent: t('object.size') }), dd);
+  }
+
+  /** Editing the outline of the one selected object: nodes, delete, corner or round, simplify. */
   private shapeTools(sh: { nodes: number; smooth: boolean | null; line?: { closed: boolean } }): HTMLElement {
     const box = document.createElement('div');
     box.className = 'object-edit';
@@ -263,8 +346,9 @@ export class ObjectPanel {
     row.append(
       button(t('shape.node.delete'), () => this.hooks.deleteNode(), { disabled: sh.smooth === null }),
       button(sh.smooth ? t('shape.node.corner') : t('shape.node.smooth'), () => this.hooks.toggleNode(), { disabled: sh.smooth === null, title: t('shape.node.kind') }),
-      button(t('object.editDone'), () => this.hooks.editShape(false), { primary: true }),
     );
+    // Traced outlines come with many nodes; fewer are easier to grab.
+    if (sh.nodes >= SIMPLIFY_FROM) row.append(button(t('shape.simplify'), () => this.hooks.simplify(), { title: t('shape.simplify.hint') }));
     box.append(row);
     if (sh.line) {
       const close = button(t(sh.line.closed ? 'shape.line.open' : 'shape.line.close'), () => this.hooks.closeLine(), { title: t(sh.line.closed ? 'shape.line.open.hint' : 'shape.line.close.hint') });
@@ -349,6 +433,7 @@ export class OrderCard {
     this.card.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') this.close(true);
     });
+    onLangChange(() => this.isOpen && this.show());
   }
 
   get isOpen(): boolean {

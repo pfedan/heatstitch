@@ -1,6 +1,7 @@
+import { loadCatalogs } from './threads/catalog';
 import './style.css';
 import { WorkerClient } from './density/client';
-import { applyI18n, detectLang, formatNumber, getLang, setLang, t, type Lang } from './i18n';
+import { detectLang, formatNumber, getLang, onLangChange, setLang, t, type Lang } from './i18n';
 import { gridToCanvas } from './render/heatmap';
 import { drawLegend } from './render/legend';
 import { hoopRect } from './render/hoop';
@@ -14,6 +15,8 @@ import { keepObjects, type HandChange } from './model/handEdit';
 import { exportPng } from './ui/export';
 import { FileList, type LoadedFile } from './ui/fileList';
 import { bindHoop } from './ui/hoopPanel';
+import { scaling } from './shape/path';
+import { scaleBlocked } from './model/reshape';
 import { legendSpec } from './ui/legendSpec';
 import { bindProfile } from './ui/profilePanel';
 import { renderStats } from './ui/stats';
@@ -22,7 +25,7 @@ import { acknowledgementOf, settledBy, type Acknowledgement } from './validation
 import type { ValidationResult, Zone } from './validation/validate';
 import { POINTS_MIN_SCALE } from './render/editOverlay';
 import { drawDivider } from './render/compare';
-import { STITCH, type Pattern } from './model/pattern';
+import { STITCH, type Pattern, type ThreadColor } from './model/pattern';
 import type { Measurement } from './validation/measure';
 import { initUpdateNotice } from './ui/updateNotice';
 import { bindFileIo } from './app/fileIo';
@@ -38,13 +41,13 @@ import {
 } from './model/sequence';
 import { stitchAt } from './render/flow';
 import type { Mode } from './settings';
-import { isGuessed, openOnPurpose, remembered, rememberedIn, rememberShapes } from './model/restitch';
+import { isGuessed, isOpenPattern, openOnPurpose, remembered, rememberedIn, rememberShapes } from './model/restitch';
 import { drawAside, drawDrawing } from './render/shapeOverlay';
 import type { LeftOut } from './ui/imageMode';
 import { asideOf, storeAside, type AsideShape } from './model/aside';
 import { type Digitized } from './digitize/digitize';
 import { numberInColor, rememberObjects, sewObjects } from './model/objects';
-import { reversible } from './model/reverse';
+import { isLine, reversible } from './model/reverse';
 import { Player } from './ui/player';
 import { installPanelResize } from './ui/panelResize';
 import type { Key } from './i18n';
@@ -219,7 +222,13 @@ const player = new Player(settings, () => {
   redraw();
 });
 
-const { layers, mergeBlocked, objectName, objectPanel, selectObjects } = bindObjects({
+const { colorList, layers, mergeBlocked, objectName, objectPanel, selectObjects } = bindObjects({
+  get commitTransform() {
+    return commitTransform;
+  },
+  get drawTool() {
+    return drawTool;
+  },
   get applyEdit() {
     return applyEdit;
   },
@@ -286,6 +295,9 @@ const { layers, mergeBlocked, objectName, objectPanel, selectObjects } = bindObj
   get shapeTarget() {
     return shapeTarget;
   },
+  get showBand() {
+    return showBand;
+  },
   get shapeTool() {
     return shapeTool;
   },
@@ -298,12 +310,18 @@ const { layers, mergeBlocked, objectName, objectPanel, selectObjects } = bindObj
   get takeShapes() {
     return takeShapes;
   },
+  get followKnockouts() {
+    return followKnockouts;
+  },
   get updateLevel() {
     return updateLevel;
   },
 });
 
 const { applyRestitched, convertSettings, stitchInfo, stitchPanel } = bindStitches({
+  get objectPanel() {
+    return objectPanel;
+  },
   get applyEdit() {
     return applyEdit;
   },
@@ -355,6 +373,9 @@ const { applyRestitched, convertSettings, stitchInfo, stitchPanel } = bindStitch
   get toggleGuides() {
     return toggleGuides;
   },
+  get togglePoints() {
+    return togglePoints;
+  },
   get toggleRungs() {
     return toggleRungs;
   },
@@ -362,7 +383,7 @@ const { applyRestitched, convertSettings, stitchInfo, stitchPanel } = bindStitch
 
 // Rungs -------------------------------------------------------------------------------------------
 
-const { closeRungs, rungInfo, rungTool, sewAlongLines, syncRungs, toggleGuides, toggleRungs } = bindRungs({
+const { closeRungs, rungInfo, rungTool, sewAlongLines, syncRungs, toggleGuides, togglePoints, toggleRungs } = bindRungs({
   get applyRestitched() {
     return applyRestitched;
   },
@@ -403,7 +424,7 @@ const { closeRungs, rungInfo, rungTool, sewAlongLines, syncRungs, toggleGuides, 
 
 // Shapes and the frame ---------------------------------------------------------------------------
 
-const { closeShape, deleteSelected, duplicateSelected, enterShape, followKnockouts, isLineObject, mirrorSelected, sewLine, sewLineAgain, shapeTarget, shapeTool, subtractSelected, syncShape, takeShapes } = bindShapes({
+const { closeShape, copySelected, deleteSelected, duplicateSelected, pasteCopied, enterShape, followKnockouts, isLineObject, mirrorSelected, sewLine, sewLineAgain, shapeTarget, shapeTool, showBand, subtractSelected, syncShape, takeShapes } = bindShapes({
   get applyEdit() {
     return applyEdit;
   },
@@ -518,6 +539,9 @@ const { commitTransform, drawTool, frameObjects, frameTool, knockoutObjects, set
   },
   get layers() {
     return layers;
+  },
+  get openSelectedForm() {
+    return openSelectedForm;
   },
   get orderCard() {
     return orderCard;
@@ -667,6 +691,11 @@ function flowTooltip(sx: number, sy: number): void {
   tooltip.style.top = `${sy + 14}px`;
 }
 
+function emptyText(): void {
+  const mode = settings.mode;
+  empty.textContent = t(mode === 'flow' ? 'canvas.empty.flow' : mode === 'image' ? 'canvas.empty.image' : 'canvas.empty');
+}
+
 function setMode(mode: Mode): void {
   const previous = document.body.dataset.mode;
   settings.mode = mode;
@@ -684,6 +713,7 @@ function setMode(mode: Mode): void {
     ui.comparing = false;
     ui.hoverZone = null;
   }
+  if (mode === 'flow' && ui.formLevel) openSelectedForm();
   if (mode !== 'flow') {
     if (drawTool.active) setDrawing(null);
     player.pause();
@@ -691,7 +721,7 @@ function setMode(mode: Mode): void {
   }
   controls.refresh();
   updateLevel();
-  empty.textContent = t(mode === 'flow' ? 'canvas.empty.flow' : mode === 'image' ? 'canvas.empty.image' : 'canvas.empty');
+  emptyText();
   tooltip.hidden = true;
   // The image and the loaded file have their own place on the stage.
   if ((previous === 'image') !== (mode === 'image')) fitView();
@@ -713,13 +743,22 @@ function objectInfo(p: Pattern, q: Sequence) {
     numbers: selected.map((o) => numberInColor(q.objects, q.objects[o])),
     hand: selected.map((o) => remembered(p, q.objects[o])?.hand ?? 0),
     editing: editor.active && ui.editObject !== null && selected.length === 1 && selected[0] === ui.editObject ? { selection: editor.selection.size } : null,
-    shapeable: selected.length === 1 && !stitchInfo(p, q).free?.on && (!!stitchInfo(p, q).measured.fill || (!!q.objects[selected[0]] && isLineObject(p, q.objects[selected[0]]))),
-    shaping: shapeTool.active && selected.length === 1 && selected[0] === ui.shapeObject ? { nodes: shapeTool.count, smooth: shapeTool.selectedSmooth, ...(q.objects[selected[0]] && isLineObject(p, q.objects[selected[0]]) ? { line: { closed: shapeTool.closed } } : {}) } : null,
+    shapeable: selected.length === 1 && !stitchInfo(p, q).free?.on && (!!stitchInfo(p, q).measured.fill || !!stitchInfo(p, q).measured.satin || (!!q.objects[selected[0]] && isLineObject(p, q.objects[selected[0]]))),
+    shaping: shapeTool.active && selected.length === 1 && selected[0] === ui.shapeObject ? { nodes: shapeTool.count, smooth: shapeTool.selectedSmooth, ...(shapeTool.band !== null ? { kind: 'band' as const } : shapeTool.rails ? { kind: 'rails' as const } : {}), ...(q.objects[selected[0]] && isLineObject(p, q.objects[selected[0]]) ? { line: { closed: shapeTool.closed } } : {}) } : null,
     frame: frameTool.active ? { canScale: frameTool.canScale } : null,
     mergeBlocked: selected.length > 1 ? mergeBlocked(selected.map((o) => q.objects[o])) : null,
-    reversible: selected.some((o) => reversible(q.objects[o])),
+    reversible: selected.some((o) => reversible(q.objects[o]) || isLine(p, q.objects[o])),
     subtractable: selected.length > 1 && selected.every((o) => q.objects[o].kind === 'fill'),
+    ...blendOf(p, q, selected),
   };
+}
+
+/** The one selected fill can blend into a second thread when it knows its area and is not a line. */
+function blendOf(p: Pattern, q: Sequence, selected: number[]): { blend?: ThreadColor } {
+  if (selected.length !== 1 || editor.active) return {};
+  const o = q.objects[selected[0]];
+  const known = o && remembered(p, o);
+  return known?.fill && known.region && !known.asLine && !known.blendOf && !isOpenPattern(known.fill.pattern) ? { blend: o.color } : {};
 }
 
 // Rendering ------------------------------------------------------------------
@@ -770,6 +809,8 @@ function redraw(): void {
     const p = active?.pattern ?? null;
     const q = p ? seq(p) : null;
     $('player').hidden = !p;
+    $('color-list').hidden = !q?.blocks.length;
+    if (p) colorList.update(p);
     if (settings.mode === 'flow') {
       const current = p && !player.complete ? seq(p).markers.colorStarts.filter((i) => q!.numbers[i] <= Math.max(1, player.pos)).length - 1 : null;
       layers.update(
@@ -791,7 +832,7 @@ function redraw(): void {
       jumpsPanel.update({ list: q?.transitions ?? [], selected: ui.selectedJump, lang: getLang() });
       const objects = !ui.lettering && p && q && ui.selectedObjects.size;
       objectPanel.update(objects ? objectInfo(p, q) : null, getLang());
-      stitchPanel.update(objects ? { ...stitchInfo(p, q), ...rungInfo(p, q) } : null);
+      stitchPanel.update(objects ? { ...stitchInfo(p, q), ...rungInfo(p, q), blend: !!blendOf(p, q, [...ui.selectedObjects]).blend } : null);
       updateOverlapCard();
       letteringPanel.update(ui.lettering && q ? letteringInfo(q) : null, getLang());
       if (ui.focusText && ui.lettering) {
@@ -1017,6 +1058,8 @@ function enterObject(o: number, fit: boolean): void {
   const obj = p ? seq(p).objects[o] : undefined;
   if (!obj) return;
   if (shapeTool.active) closeShape();
+  if (drawTool.active) setDrawing(null);
+  ui.formLevel = false;
   if (!editor.active) editor.setActive(true);
   else editor.reset();
   ui.editObject = o;
@@ -1043,8 +1086,12 @@ function revealRecord(i: number): void {
 }
 
 function setEditing(on: boolean): void {
-  if (on) closeRungs();
-  if (on) closeShape();
+  if (on) {
+    ui.formLevel = false;
+    if (drawTool.active) setDrawing(null);
+    closeRungs();
+    closeShape();
+  }
   if (on && settings.mode === 'flow' && ui.selectedObjects.size === 1) return enterObject([...ui.selectedObjects][0], true);
   editor.setActive(on);
   ui.editObject = null;
@@ -1056,9 +1103,11 @@ function setEditing(on: boolean): void {
 function updateLevel(): void {
   const on = editor.active;
   const shaping = shapeTool.active;
-  const level = on ? 'stitches' : shaping ? 'shape' : 'objects';
+  const level = on ? 'stitches' : ui.formLevel && settings.mode === 'flow' ? 'shape' : 'objects';
   stage.classList.toggle('editing', on);
   stage.classList.toggle('shaping', shaping);
+  stage.classList.toggle('form-level', ui.formLevel && !on && settings.mode === 'flow');
+  $('draw-pointer').setAttribute('aria-pressed', String(!drawTool.kind));
   document.querySelectorAll<HTMLInputElement>('input[name="level"]').forEach((i) => (i.checked = i.value === level));
   const crumb = $('edit-crumb');
   const p = files.active?.pattern;
@@ -1083,6 +1132,8 @@ function updateLevel(): void {
           : 'canvas.hint.edit'
         : shaping
           ? 'canvas.hint.shape'
+          : flow && ui.formLevel && !ui.lettering
+            ? 'canvas.hint.form'
           : flow && ui.letterMode
             ? 'canvas.hint.letters'
             : flow && ui.lettering
@@ -1116,6 +1167,8 @@ function history(step: 'undo' | 'redo' | 'revert'): void {
   ui.correctMessage = null;
   ui.lettering = null;
   ui.letterMode = false;
+  // A kept selection shows the settings of the stitches as they are again (the panels read them anew).
+  ui.selectionKey++;
   syncPlayer();
   recompute();
 }
@@ -1164,6 +1217,10 @@ const { correctPanel, drawPlanCompare, inPlanFrame, movePlanSplit, pinPlan, tune
     return vp;
   },
 });
+files.onRename = (f) => {
+  correctPanel.forgetName(f);
+  redraw();
+};
 
 // Controls, language, export --------------------------------------------------
 
@@ -1179,11 +1236,37 @@ const controls = bindControls(settings, (kind: ChangeKind) => {
   }
 });
 
-const hoopPanel = bindHoop(settings, () => {
-  saveSettings(settings);
-  storeMaterial();
+const hoopPanel = bindHoop(
+  settings,
+  () => {
+    saveSettings(settings);
+    storeMaterial();
+    fitView();
+  },
+  () => fitToHoop(),
+);
+
+/** Room left free on each side when a design is made to fit its hoop (mm). */
+const HOOP_FIT_MARGIN = 1;
+
+/** The whole design made smaller, evenly, until it fits the hoop with HOOP_FIT_MARGIN all round (one undo step). */
+function fitToHoop(): void {
+  const p = files.active?.pattern;
+  const hoop = settings.hoop;
+  if (!p || !hoop || settings.mode === 'image') return;
+  const b = p.bounds;
+  const w = (b.maxX - b.minX) / 10;
+  const h = (b.maxY - b.minY) / 10;
+  const s = Math.floor(Math.min((hoop.w - 2 * HOOP_FIT_MARGIN) / w, (hoop.h - 2 * HOOP_FIT_MARGIN) / h) * 1000) / 1000;
+  if (!(s > 0 && s < 1)) return;
+  const q = seq(p);
+  // Objects of a file that are fill and satin at once cannot be scaled as one.
+  if (q.objects.some((o) => scaleBlocked(p, o, q.kinds))) return layers.say(t('hoop.fit.blocked'), true);
+  const all = q.objects.map((o) => o.index);
+  if (!commitTransform(scaling(s, s, (b.minX + b.maxX) / 20, (b.minY + b.maxY) / 20), all)) return;
+  layers.say(t('hoop.fitted', { pct: formatNumber(Math.round(s * 100)) }) + ' ' + t('object.undo'));
   fitView();
-});
+}
 
 const profile = bindProfile(settings, () => {
   saveSettings(settings);
@@ -1226,7 +1309,7 @@ async function addDigitized(d: Digitized & { leftOut?: LeftOut[] }, name: string
   rememberShapes(added, objs, d.starts, d.objects.map((o) => o.shape), d.objects);
   // Shapes left out on the way in wait under "Not sewn", where it was: at the very back.
   const aside: AsideShape[] = (d.leftOut ?? []).map((s, k) => ({ id: k + 1, role: 'off', kind: 'fill', color: s.color, after: -1, form: s.form, reason: s.reason }));
-  await files.addWithObjects(`${name}.pes`, data.slice().buffer, rememberedIn(added, objs), storeAside(aside));
+  await files.addWithObjects(`${name}.pes`, data.slice().buffer, rememberedIn(added, objs), storeAside(aside), undefined, true);
   if (aside.some((a) => a.reason === 'background')) layers.say(t('aside.backgroundFound'));
 }
 
@@ -1251,54 +1334,73 @@ const { shine, threadsShown } = bindLight({
 });
 
 const langSelect = $<HTMLSelectElement>('lang');
-const applyLang = (l: Lang) => {
-  setLang(l);
-  langSelect.value = l;
-  controls.refresh();
-  profile.refresh();
-  files.render();
-  player.render();
-  imageMode.render();
-  setMode(settings.mode);
+// Every part that writes text itself follows a language change on its own (onLangChange); here
+// only what this file writes. The mode, the selection and the hand edit stay as they are.
+onLangChange(() => {
+  langSelect.value = getLang();
+  emptyText();
+  updateLevel();
+  tooltip.hidden = true;
+  tooltip.replaceChildren();
   redraw();
-};
+});
 langSelect.addEventListener('change', () => {
   settings.lang = langSelect.value as Lang;
   saveSettings(settings);
-  applyLang(settings.lang);
-  ui.asideShown = null;
-  redraw();
+  setLang(settings.lang);
 });
-applyLang(detectLang(settings.lang));
-applyI18n(document.body);
+setLang(detectLang(settings.lang));
+setMode(settings.mode);
 
 $('fit').addEventListener('click', () => fitView());
 document.querySelectorAll<HTMLInputElement>('input[name="level"]').forEach((i) =>
   i.addEventListener('change', () => {
     if (!i.checked) return;
-    if (i.value === 'shape') return chooseShapeLevel();
-    closeShape();
+    if (i.value === 'shape') return setFormLevel(true);
+    setFormLevel(false);
     setEditing(i.value === 'stitches');
   }),
 );
 
-/** Level Form from the switch: the selected object's outline, or a hint to pick one with a fill. */
-function chooseShapeLevel(): void {
-  const p = files.active?.pattern;
-  const o = ui.selectedObjects.size === 1 ? [...ui.selectedObjects][0] : null;
-  if (p && o !== null && shapeTarget(p, seq(p), o)) return enterShape(o, true);
-  layers.say(t(o === null ? 'shape.pick' : 'shape.noFill'), true);
+/**
+ * Level Form on or off. On: the drawing tools show and the one selected object shows its outline;
+ * off: drawing stops and the outline closes (the selection stays).
+ */
+function setFormLevel(on: boolean): void {
+  ui.formLevel = on;
+  if (on) {
+    if (editor.active) {
+      editor.setActive(false);
+      ui.editObject = null;
+    }
+    closeRungs();
+    openSelectedForm();
+  } else {
+    if (drawTool.active) setDrawing(null);
+    closeShape();
+  }
   updateLevel();
   redraw();
 }
-exportBtn.addEventListener('click', () => {
+
+/** Level Form: the outline of the one selected object, when it has one that can be edited. */
+function openSelectedForm(): void {
   const p = files.active?.pattern;
-  if (p) exportPng({ ...scene(), edit: null }, ui.stageW, ui.stageH, stageBg(), p.name || 'pattern');
+  const o = ui.selectedObjects.size === 1 ? [...ui.selectedObjects][0] : null;
+  if (!ui.formLevel || settings.mode !== 'flow' || drawTool.active || ui.letterMode) return;
+  if (p && o !== null && o !== ui.shapeObject && shapeTarget(p, seq(p), o)) enterShape(o, false);
+}
+exportBtn.addEventListener('click', () => {
+  const f = files.active;
+  if (f?.pattern) exportPng({ ...scene(), edit: null }, ui.stageW, ui.stageH, stageBg(), FileList.baseName(f) || 'pattern');
 });
 
 // Opening and saving files and projects: src/app/fileIo.ts
 
 const { adoptMaterial, storeMaterial } = bindFileIo({
+  get setFormLevel() {
+    return setFormLevel;
+  },
   files,
   settings,
   imageMode,
@@ -1314,6 +1416,12 @@ const { adoptMaterial, storeMaterial } = bindFileIo({
 // Keyboard shortcuts --------------------------------------------------------
 
 bindKeys({
+  get selectObjects() {
+    return selectObjects;
+  },
+  get setFormLevel() {
+    return setFormLevel;
+  },
   get closeRungs() {
     return closeRungs;
   },
@@ -1332,8 +1440,14 @@ bindKeys({
   get drawTool() {
     return drawTool;
   },
+  get copySelected() {
+    return copySelected;
+  },
   get duplicateSelected() {
     return duplicateSelected;
+  },
+  get pasteCopied() {
+    return pasteCopied;
   },
   get editor() {
     return editor;
@@ -1528,5 +1642,12 @@ files.render();
 redraw();
 void files.restore();
 void imageMode.restore();
+// The thread catalogs name the numbers of the threads in the list (Brother's too).
+void loadCatalogs()
+  .then(() => {
+    layers.refresh();
+    redraw();
+  })
+  .catch((err) => console.warn('No thread catalogs', err));
 
 $('fabric-tune').addEventListener('click', () => tuneToFabric());

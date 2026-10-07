@@ -53,6 +53,7 @@ export function measureCoverage(
   cols: number,
   rows: number,
   skip?: Uint8Array,
+  gaps = true,
 ): CoverageMeasure {
   const n = cols * rows;
   const cover = new Float32Array(n);
@@ -78,6 +79,9 @@ export function measureCoverage(
       if (c >= 0 && l > longest[c]) longest[c] = Math.min(65535, l);
     }
   }
+  // Gaps cost most of the measuring: a caller that does not look at them (the correction trying
+  // a change for density) leaves them out.
+  if (!gaps) return { cover, gapsLow: new Uint8Array(n), gapsHigh: new Uint8Array(n), longest };
   const owner = ownerOf(p);
   const kinds = stitchKinds(p);
   const rowList = pulledRows(p, kinds);

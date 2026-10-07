@@ -447,6 +447,8 @@ export function stripOfLoop(ring: Pt[], chords: [number, number][], caps: Arc[],
   }
   if (start < 0) return null;
   const at = (i: number) => ends[(start + i) % m].u;
+  // The far ends as they are sewn, by the cap they were chosen as.
+  const tight = new Map<Arc, Arc>();
   // The caps that fit beyond a rung: in the stretch of outline from u0 on for len mm.
   const fitting = (u0: number, len: number): Arc[] => {
     const out = caps.filter(([c0, c1]) => {
@@ -470,10 +472,26 @@ export function stripOfLoop(ring: Pt[], chords: [number, number][], caps: Arc[],
     };
     const d = Array.from({ length: n + 1 }, (_, k) => beyond((len * k) / n));
     const most = Math.max(...d);
-    const near = most - Math.max(0.1, most * 0.05);
-    const first = d.findIndex((x) => x >= near);
-    const last = d.length - 1 - [...d].reverse().findIndex((x) => x >= near);
-    return [...out, [(u0 + (len * first) / n) % total, (u0 + (len * last) / n) % total]];
+    // The stretch round the farthest point that stays this far out (not beyond a dip, such as a
+    // cut line into a hole on the way).
+    const top = d.indexOf(most);
+    const stretch = (near: number): Arc => {
+      let first = top;
+      let last = top;
+      while (first > 0 && d[first - 1] >= near) first--;
+      while (last < n && d[last + 1] >= near) last++;
+      return [(u0 + (len * first) / n) % total, (u0 + (len * last) / n) % total];
+    };
+    // Chosen among the caps as wide as an edge drawn slightly askew, sewn as narrow as a few tenths:
+    // on a long part 5 % eats into its sides round the corners, the rails would stop short of its end.
+    const wide = stretch(most - Math.max(0.1, most * 0.05));
+    // Only where it bends round a corner into the sides: a straight edge stays as it is.
+    const along = fwd(wide[0], wide[1]);
+    // A cut line right at the end (into a hole, say) keeps it as it is, the satin turns there.
+    const close = (x: number, y: number) => Math.min(fwd(x, y), fwd(y, x)) < 0.6;
+    const byCut = caps.some(([c0, c1]) => [c0, c1].some((c) => close(c, wide[0]) || close(c, wide[1])));
+    if (!byCut && along > dist(pointAt(ring, cum, wide[0]), pointAt(ring, cum, wide[1])) * 1.05 + 0.05) tight.set(wide, stretch(most - Math.min(0.15, Math.max(0.1, most * 0.05))));
+    return [...out, wide];
   };
   const capsA = fitting(at(m - 1), fwd(at(m - 1), at(0)));
   const capsB = fitting(at(n - 1), fwd(at(n - 1), at(n)));
@@ -498,9 +516,12 @@ export function stripOfLoop(ring: Pt[], chords: [number, number][], caps: Arc[],
     const out = [pointAt(ring, cum, u0), ...inner.map((x) => x.p), pointAt(ring, cum, (u0 + len) % total)];
     return out.filter((p, i) => !i || dist(p, out[i - 1]) > 1e-6);
   };
-  const { ca, cb } = best;
-  const left = walk(ca[1], best.l);
-  const right = walk(cb[1], best.r).reverse();
+  const ca = tight.get(best.ca) ?? best.ca;
+  const cb = tight.get(best.cb) ?? best.cb;
+  const l = fwd(ca[1], cb[0]);
+  const r = fwd(cb[1], ca[0]);
+  const left = walk(ca[1], l);
+  const right = walk(cb[1], r).reverse();
   if (left.length < 2 || right.length < 2) return null;
   const rungs: Rung[] = [];
   for (let i = 0; i < n; i++) rungs.push([fwd(ca[1], at(i)), fwd(at(m - 1 - i), ca[0])]);
@@ -726,3 +747,51 @@ export function stripsOfOutline(loop: Pt[], lines: [Pt, Pt][], cuts: [Pt, Pt][],
   parts.forEach((_, k) => !parent.has(k) && strips.push(oriented(k)));
   return { strips, parts, bad: -1, hole: -1 };
 }
+
+/**
+ * Areas apart from one another (the dot and the stem of an i), each cut into strips as
+ * stripsOfOutline does, with the holes that lie in it. The first part that makes no column, or the
+ * first hole not opened (by index in `holes`), is said instead.
+ */
+export function stripsOfAreas(outlines: Pt[][], lines: [Pt, Pt][], cuts: [Pt, Pt][], holes: Pt[][] = []): { areas: Strip[][]; bad: Pt[] | null; hole: number } {
+  const areas: Strip[][] = [];
+  for (const o of outlines) {
+    const mine = holes.map((_, j) => j).filter((j) => inside(o, holes[j][0]));
+    const made = stripsOfOutline(o, lines, cuts, mine.map((j) => holes[j]));
+    if (made.hole >= 0) return { areas: [], bad: null, hole: mine[made.hole] };
+    if (made.bad >= 0) return { areas: [], bad: made.parts[made.bad], hole: -1 };
+    areas.push(made.strips);
+  }
+  return { areas, bad: null, hole: -1 };
+}
+
+/**
+ * The cut lines a fill was cut into these columns by (see stripsOfOutline), found again from the
+ * columns: an end of a column inside the fill (another column goes on beyond it, not the edge)
+ * is one. Drawn a little beyond the edge, as by hand.
+ */
+export function cutLinesBetween(cols: { left: Pt[]; right: Pt[] }[], outlines: Pt[][], holes: Pt[][]): [Pt, Pt][] {
+  const within = (q: Pt) => outlines.some((o) => inside(o, q)) && !holes.some((h) => inside(h, q));
+  const cuts: [Pt, Pt][] = [];
+  for (const c of cols) {
+    const n = Math.min(c.left.length, c.right.length);
+    if (n < 2) continue;
+    const ends: [Pt, Pt, Pt][] = [
+      [c.left[0], c.right[0], mid(c.left[1], c.right[1])],
+      [c.left[c.left.length - 1], c.right[c.right.length - 1], mid(c.left[c.left.length - 2], c.right[c.right.length - 2])],
+    ];
+    for (const [a, b, inward] of ends) {
+      const m = mid(a, b);
+      const d = Math.hypot(m[0] - inward[0], m[1] - inward[1]) || 1;
+      if (!within([m[0] + ((m[0] - inward[0]) / d) * 0.4, m[1] + ((m[1] - inward[1]) / d) * 0.4])) continue;
+      // The two columns on either side of one cut line end on it both.
+      if (cuts.some(([p, q]) => Math.hypot((p[0] + q[0]) / 2 - m[0], (p[1] + q[1]) / 2 - m[1]) < 0.3)) continue;
+      const w = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+      const e: Pt = [((b[0] - a[0]) / w) * 0.5, ((b[1] - a[1]) / w) * 0.5];
+      cuts.push([[a[0] - e[0], a[1] - e[1]], [b[0] + e[0], b[1] + e[1]]]);
+    }
+  }
+  return cuts;
+}
+
+const mid = (a: Pt, b: Pt): Pt => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];

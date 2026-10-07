@@ -1,8 +1,9 @@
-import { formatNumber, t, type Key } from '../i18n';
+import { formatNumber, getLang, onLangChange, t, type Key } from '../i18n';
 import { numberInColor, type ObjectKind, type SewObject } from '../model/objects';
 import type { FileFormat, ThreadColor } from '../model/pattern';
 import { sameColor } from '../model/recolor';
 import type { ColorBlock } from '../model/sequence';
+import { threadCode } from '../threads/catalog';
 import { cssColor as css, hexColor as hex, ThreadPicker } from './threadPicker';
 
 export interface LayerHooks {
@@ -110,6 +111,12 @@ export class LayersPanel {
       if (!this.list.contains(e.relatedTarget as Node)) this.clearDrop();
     });
     this.list.addEventListener('drop', (e) => this.dropped(e));
+    // Also outside Ablauf, where the list shows but is not updated.
+    onLangChange(() => {
+      if (!this.st) return;
+      this.key = [];
+      this.update(this.st, getLang());
+    });
   }
 
   /**
@@ -118,6 +125,11 @@ export class LayersPanel {
    */
   reveal(objects: number[]): void {
     this.revealing = objects.length ? objects : null;
+  }
+
+  /** Builds the rows again at the next update (the thread numbers became known). */
+  refresh(): void {
+    this.key = [];
   }
 
   /** Forgets which colors were open (another file). */
@@ -237,7 +249,9 @@ export class LayersPanel {
     name.textContent = blockName(b);
     const sub = document.createElement('span');
     sub.className = 'layer-sub';
-    sub.textContent = t(objs.length === 1 ? 'layers.objects.one' : 'layers.objects', { n: objs.length });
+    const count = t(objs.length === 1 ? 'layers.objects.one' : 'layers.objects', { n: objs.length });
+    const code = threadCode(b.color);
+    sub.textContent = code ? `${code} · ${count}` : count;
     text.append(name, sub);
     const parts = [t('layers.meta', { stitches: formatNumber(b.stitches), thread: formatNumber(b.threadMm / 1000, 1) })];
     if (b.trims) parts.push(t('layers.trims', { n: b.trims }));

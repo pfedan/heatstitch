@@ -1,3 +1,4 @@
+import { onLangChange } from '../i18n';
 import type { ObjectAction } from './objectPanel';
 
 /**
@@ -23,6 +24,7 @@ export class ObjectMenu {
     );
     window.addEventListener('resize', () => this.close());
     window.addEventListener('wheel', () => this.close(), { passive: true });
+    onLangChange(() => this.close());
   }
 
   get isOpen(): boolean {
@@ -48,8 +50,9 @@ export class ObjectMenu {
       b.innerHTML = a.icon;
       b.append(a.label);
       b.addEventListener('click', () => {
+        // Run first: a popup it opens is placed next to the entry before the menu goes.
+        a.run(b);
         this.close();
-        a.run();
       });
       pop.append(b);
     }

@@ -1,4 +1,4 @@
-import { t } from '../i18n';
+import { getLang, onLangChange, t } from '../i18n';
 import { patternStats, STITCH, type Pattern, type PatternStats } from '../model/pattern';
 import { parsePattern, SUPPORTED_EXTENSIONS } from '../parsers';
 import {
@@ -12,10 +12,13 @@ import {
   saveActiveKey,
   saveAside,
   saveMaterial,
+  saveNaming,
   saveObjects,
   saveWorking,
+  titlesOf,
   toStored,
   type StoredPattern,
+  type Titles,
 } from '../storage/fileStore';
 import { backToVersion, keepVersion, restoreRemembered, type StoredObject } from '../model/restitch';
 import { asideFrom, asideOf, inheritAside, setAsideOf, storeAside, type StoredAside } from '../model/aside';
@@ -56,6 +59,18 @@ export interface LoadedFile {
   acks: Acknowledgement[];
   /** This design's fabric, thread, hoop, fabric color and checks. */
   material: Material;
+  /**
+   * The name the user gave the design, as the list shows it: a loaded file keeps the extension only
+   * as long as the user leaves it there (heatstitch objects may join it). Absent while it goes by its file name.
+   */
+  title?: string;
+  /** The name per app language, shown in place of `title` (the demo project's designs); dropped on rename. */
+  titles?: Titles;
+  /**
+   * Made in the app (empty with "Neu", from an image or SVG): it is named without extension, since
+   * the PES behind it is only how it is kept, not a file the user opened.
+   */
+  own: boolean;
 }
 
 interface FileData {
@@ -68,15 +83,27 @@ interface FileData {
   aside?: StoredAside[];
   /** Unchecked; missing parts come from the material last used. */
   material?: unknown;
+  title?: string;
+  titles?: Titles;
+  /** Absent in older records: then a design without stitches counts as made in the app. */
+  own?: boolean;
 }
 
 /** Versions kept per file for undo. */
 const HISTORY = 50;
 
+const EXT = /\.[^.]+$/;
+/** The extension of an embroidery format at the end of a name ("Herz 1.5" has none). */
+const FORMAT_EXT = new RegExp(`(${SUPPORTED_EXTENSIONS.map((e) => e.replace('.', '\\.')).join('|')})$`, 'i');
+
 export class FileList {
   files: LoadedFile[] = [];
   activeId: number | null = null;
   private nextId = 1;
+  /** The file whose name is being edited in the list, with the text typed so far. */
+  private renaming: { id: number; text: string } | null = null;
+  /** Called after a design got another name (the save field suggests the new one). */
+  onRename: (f: LoadedFile) => void = () => {};
 
   constructor(
     private list: HTMLUListElement,
@@ -86,7 +113,9 @@ export class FileList {
     private onValidated: (f: LoadedFile) => void,
     /** The material a new design starts with: the one used last. */
     private defaults: () => Material,
-  ) {}
+  ) {
+    onLangChange(() => this.render());
+  }
 
   /** Gives a design another material, re-classifies it for the new fabric, thread and checks and stores it. */
   setMaterial(f: LoadedFile, m: Material): void {
@@ -114,9 +143,12 @@ export class FileList {
     else this.render();
   }
 
-  /** Adds one file with what is known about its objects (and its own material, else the last used), and activates it. */
-  async addWithObjects(name: string, data: ArrayBuffer, objects: StoredObject[], aside: StoredAside[] = [], material?: Material): Promise<void> {
-    const first = await this.addData([{ name, data, objects, aside, material }], true);
+  /**
+   * Adds one file with what is known about its objects (and its own material, else the last used), and
+   * activates it. `own`: made in the app, so it is named without the extension of the PES behind it.
+   */
+  async addWithObjects(name: string, data: ArrayBuffer, objects: StoredObject[], aside: StoredAside[] = [], material?: Material, own = false): Promise<void> {
+    const first = await this.addData([{ name, data, objects, aside, material, own }], true);
     if (first) this.activate(first.id);
     else this.render();
   }
@@ -126,7 +158,7 @@ export class FileList {
     const stored = await listFiles();
     if (!stored.length) return;
     const first = await this.addData(
-      stored.map((rec) => ({ name: rec.name, data: rec.data, storeKey: rec.key, working: rec.working, acks: acksOf(rec), objects: rec.objects, aside: rec.aside, material: rec.material })),
+      stored.map((rec) => ({ name: rec.name, data: rec.data, storeKey: rec.key, working: rec.working, acks: acksOf(rec), objects: rec.objects, aside: rec.aside, material: rec.material, title: rec.title, titles: titlesOf(rec.titles), own: rec.own })),
       false,
     );
     // Files the user added while we were reading storage keep the focus.
@@ -144,7 +176,7 @@ export class FileList {
   async addProject(list: ProjectFile[], active: number | null): Promise<void> {
     const before = this.files.length;
     const first = await this.addData(
-      list.map((f) => ({ name: f.name, data: f.data.slice().buffer, working: f.working, acks: f.acks, objects: f.objects, aside: f.aside, material: f.material })),
+      list.map((f) => ({ name: f.name, data: f.data.slice().buffer, working: f.working, acks: f.acks, objects: f.objects, aside: f.aside, material: f.material, title: f.title, titles: f.titles, own: f.own })),
       true,
     );
     const wanted = active !== null ? this.files[before + active] : undefined;
@@ -155,7 +187,7 @@ export class FileList {
 
   /** Shows a file that could not be opened, with the reason. */
   addError(name: string, error: string): void {
-    this.files.push({ id: this.nextId++, fileName: name, undo: [], redo: [], acks: [], error, material: this.defaults() });
+    this.files.push({ id: this.nextId++, fileName: name, undo: [], redo: [], acks: [], error, material: this.defaults(), own: false });
     this.render();
   }
 
@@ -168,7 +200,7 @@ export class FileList {
 
   private async addData(list: FileData[], persist: boolean): Promise<LoadedFile | null> {
     let first: LoadedFile | null = null;
-    for (const { name, data, storeKey, working, acks, objects, aside, material } of list) {
+    for (const { name, data, storeKey, working, acks, objects, aside, material, title, titles, own } of list) {
       const entry: LoadedFile = {
         id: this.nextId++,
         fileName: name,
@@ -178,6 +210,9 @@ export class FileList {
         redo: [],
         acks: acks ?? [],
         material: normalizeMaterial(material, this.defaults()),
+        ...(typeof title === 'string' && title.trim() ? { title: title.trim() } : {}),
+        ...(titles ? { titles } : {}),
+        own: own === true,
       };
       // Stored before materials were kept per design: it keeps the one it was last seen with.
       if (storeKey !== undefined && !material) void saveMaterial(storeKey, entry.material);
@@ -187,6 +222,8 @@ export class FileList {
         const original = parsePattern(new Uint8Array(data), name);
         entry.original = original;
         entry.pattern = original;
+        // Before designs knew where they came from, an empty one could only have come from "Neu".
+        if (own === undefined && !original.cmd.includes(STITCH)) entry.own = true;
         if (working) {
           const edited = fromStored(original, working);
           if (edited) {
@@ -215,6 +252,7 @@ export class FileList {
             if (objects?.length) void saveObjects(key, objects);
             if (aside?.length) void saveAside(key, aside);
             void saveMaterial(key, entry.material);
+            if (entry.title || entry.titles || entry.own) void saveNaming(key, entry.title ?? null, entry.own, entry.titles);
           }
         }
       } catch (err) {
@@ -353,6 +391,74 @@ export class FileList {
     return !!f?.original && !f.original.cmd.includes(STITCH);
   }
 
+  /** The design's name without an embroidery extension: the one the user gave it, else its file name. */
+  static baseName(f: LoadedFile): string {
+    const title = FileList.titleOf(f);
+    return title !== undefined ? title.replace(FORMAT_EXT, '').trim() : f.fileName.replace(EXT, '');
+  }
+
+  /** The name the design was given: in the app's language when it has one per language. */
+  private static titleOf(f: LoadedFile): string | undefined {
+    return f.titles?.[getLang()] ?? f.title;
+  }
+
+  /** The name the list shows: the one the user gave it, else loaded embroidery files with their extension, designs made in the app without. */
+  static displayName(f: LoadedFile): string {
+    if (f.error) return f.fileName;
+    return FileList.titleOf(f) ?? FileList.fileDisplayName(f);
+  }
+
+  /** The name a design goes by until the user names it. */
+  private static fileDisplayName(f: LoadedFile): string {
+    return f.own ? f.fileName.replace(EXT, '') : f.fileName;
+  }
+
+  /**
+   * The name a save offers, without extension. An edited embroidery file gets "-corrected", so the
+   * original is not overwritten by mistake; a design made in the app or named by the user keeps its name.
+   */
+  static saveName(f: LoadedFile): string {
+    const base = FileList.baseName(f) || 'design';
+    return FileList.edited(f) && !f.own && !f.title ? `${base}-corrected` : base;
+  }
+
+  /** Gives a design another name, exactly as typed; an empty name (or its file name) goes back to the file name. */
+  rename(f: LoadedFile, name: string): void {
+    const title = name.replace(/[\x00-\x1f]/g, '').trim();
+    const next = title && title !== FileList.fileDisplayName(f) ? title : undefined;
+    if (next === FileList.titleOf(f)) return;
+    // A name the user types is the same in every language.
+    delete f.titles;
+    if (next) f.title = next;
+    else delete f.title;
+    if (f.storeKey !== undefined) void saveNaming(f.storeKey, f.title ?? null, f.own);
+    this.render();
+    this.onRename(f);
+  }
+
+  /** Turns the name of a design in the list into a text field (pencil or double click). */
+  startRename(id: number): void {
+    const f = this.files.find((x) => x.id === id);
+    if (!f?.pattern) return;
+    const text = FileList.displayName(f);
+    this.renaming = { id, text };
+    this.render();
+    const input = this.list.querySelector<HTMLInputElement>('input.rename-input');
+    input?.focus();
+    // Like a file manager: the name is selected, an extension behind it stays as long as one types over the selection.
+    input?.setSelectionRange(0, text.length - (text.match(FORMAT_EXT)?.[0].length ?? 0));
+  }
+
+  /** Ends editing a name: takes the typed text, or with `keep` false leaves the name as it was. */
+  private endRename(keep: boolean): void {
+    const r = this.renaming;
+    if (!r) return;
+    this.renaming = null;
+    const f = this.files.find((x) => x.id === r.id);
+    if (keep && f) this.rename(f, r.text);
+    else this.render();
+  }
+
   activate(id: number | null): void {
     this.activeId = id;
     // Another file's objects may have pushed this one's out of memory meanwhile.
@@ -384,31 +490,76 @@ export class FileList {
   }
 
   render(): void {
+    // A list drawn anew while a name is typed (a measurement came in) keeps the field and its focus.
+    const typing = !!this.renaming && document.activeElement?.classList.contains('rename-input');
+    if (this.renaming && !this.files.some((f) => f.id === this.renaming!.id)) this.renaming = null;
     this.list.replaceChildren(
       ...(this.files.length
         ? this.files.map((f) => this.item(f))
         : [Object.assign(document.createElement('li'), { className: 'muted', textContent: t('files.empty') })]),
     );
+    if (typing) this.list.querySelector<HTMLInputElement>('input.rename-input')?.focus();
+  }
+
+  /** The text field that replaces a name while it is edited; Enter or leaving it takes the name, Escape keeps the old one. */
+  private nameField(f: LoadedFile): HTMLElement {
+    const wrap = document.createElement('span');
+    wrap.className = 'name rename';
+    const input = document.createElement('input');
+    input.className = 'rename-input';
+    input.type = 'text';
+    input.value = this.renaming!.text;
+    input.placeholder = FileList.fileDisplayName(f);
+    input.setAttribute('aria-label', t('files.rename'));
+    input.addEventListener('input', () => {
+      if (this.renaming) this.renaming.text = input.value;
+    });
+    input.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') this.endRename(true);
+      else if (e.key === 'Escape') this.endRename(false);
+    });
+    input.addEventListener('blur', () => {
+      // Drawing the list anew blurs the old field too; only a real leave ends editing.
+      if (input.isConnected) this.endRename(true);
+    });
+    input.addEventListener('click', (e) => e.stopPropagation());
+    input.addEventListener('dblclick', (e) => e.stopPropagation());
+    wrap.append(input);
+    return wrap;
   }
 
   private item(f: LoadedFile): HTMLLIElement {
     const li = document.createElement('li');
     li.classList.toggle('active', f.id === this.activeId);
-    li.title = f.error ? `${t('files.error')}: ${f.error}` : f.fileName;
-    const name = document.createElement('span');
-    name.className = 'name';
-    name.textContent = f.fileName;
-    li.append(name);
+    const shown = FileList.displayName(f);
+    li.title = f.error ? `${t('files.error')}: ${f.error}` : shown;
+    if (this.renaming?.id === f.id) li.append(this.nameField(f));
+    else {
+      const name = document.createElement('span');
+      name.className = 'name';
+      name.textContent = shown;
+      if (!f.error) {
+        name.addEventListener('dblclick', (e) => {
+          e.stopPropagation();
+          this.startRename(f.id);
+        });
+      }
+      li.append(name);
+    }
     if (f.error) {
       const err = document.createElement('span');
       err.className = 'err';
       err.textContent = t('files.error');
       li.append(err);
     } else {
-      const fmt = document.createElement('span');
-      fmt.className = 'fmt';
-      fmt.textContent = f.pattern!.format;
-      li.append(fmt);
+      // The format of a design made in the app is only how it is kept.
+      if (!f.own) {
+        const fmt = document.createElement('span');
+        fmt.className = 'fmt';
+        fmt.textContent = f.pattern!.format;
+        li.append(fmt);
+      }
       if (FileList.edited(f)) {
         const ed = document.createElement('span');
         ed.className = 'edited';
@@ -423,12 +574,25 @@ export class FileList {
       );
       li.append(dot);
       li.addEventListener('click', () => this.activate(f.id));
+      if (this.renaming?.id !== f.id) {
+        const pen = document.createElement('button');
+        pen.type = 'button';
+        pen.className = 'rename-btn';
+        pen.title = t('files.rename');
+        pen.setAttribute('aria-label', `${t('files.rename')}: ${shown}`);
+        pen.innerHTML = '<svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><path d="M11.5 2.5l2 2L6 12l-2.8.8L4 10z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>';
+        pen.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.startRename(f.id);
+        });
+        li.append(pen);
+      }
     }
     const rm = document.createElement('button');
     rm.type = 'button';
     rm.textContent = '×';
     rm.title = t('files.remove');
-    rm.setAttribute('aria-label', `${t('files.remove')}: ${f.fileName}`);
+    rm.setAttribute('aria-label', `${t('files.remove')}: ${shown}`);
     rm.addEventListener('click', (e) => {
       e.stopPropagation();
       this.remove(f.id);

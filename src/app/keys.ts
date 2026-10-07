@@ -18,7 +18,9 @@ export interface KeysApp {
   readonly controls: { refresh: () => void; };
   readonly deleteSelected: () => void;
   readonly drawTool: DrawTool;
-  readonly duplicateSelected: () => void;
+  readonly copySelected: () => boolean;
+  readonly duplicateSelected: (inPlace?: boolean) => void;
+  readonly pasteCopied: () => boolean;
   readonly editor: Editor;
   readonly enterObject: (o: number, fit: boolean) => void;
   readonly enterShape: (o: number, fit: boolean) => void;
@@ -34,10 +36,12 @@ export interface KeysApp {
   readonly player: Player;
   readonly redraw: () => void;
   readonly revealRecord: (i: number) => void;
+  readonly selectObjects: (objs: number[], toggle: boolean) => void;
   readonly rungTool: RungTool;
   readonly setComparing: (on: boolean) => void;
   readonly setDrawing: (kind: DrawKind | null) => void;
   readonly setEditing: (on: boolean) => void;
+  readonly setFormLevel: (on: boolean) => void;
   readonly setLetterMode: (on: boolean) => void;
   readonly setMode: (mode: Mode) => void;
   readonly settings: Settings;
@@ -54,16 +58,29 @@ export function bindKeys(app: KeysApp) {
   const DRAW_KEYS: Record<string, DrawKind> = { m: 'rect', o: 'ellipse', b: 'pen', p: 'free' };
 
   window.addEventListener('keydown', (e) => {
-    if ((e.target as HTMLElement).closest('input, select, textarea')) return;
+    // Space passes a clicked switch (checkbox, radio) to reach the player below, like a button.
+    const field = (e.target as HTMLElement).closest<HTMLElement>('input, select, textarea, [contenteditable]');
+    const toggle = field instanceof HTMLInputElement && (field.type === 'checkbox' || field.type === 'radio');
+    if (field && !(toggle && e.key === ' ')) return;
     const mod = e.ctrlKey || e.metaKey;
     if (mod && !e.altKey && ['z', 'Z', 'y'].includes(e.key)) {
       e.preventDefault();
       app.history(e.key === 'y' || e.shiftKey ? 'redo' : 'undo');
       return;
     }
-    if (mod && !e.altKey && (e.key === 'd' || e.key === 'D') && app.settings.mode === 'flow' && app.frameObjects().length === 1) {
+    // Ctrl+D: a copy exactly in place; Ctrl+C and Ctrl+V: copies 2 mm beside (as the button).
+    const objectKeys = mod && !e.altKey && app.settings.mode === 'flow' && !app.editor.active;
+    if (objectKeys && (e.key === 'd' || e.key === 'D') && app.frameObjects().length) {
       e.preventDefault();
-      app.duplicateSelected();
+      app.duplicateSelected(true);
+      return;
+    }
+    if (objectKeys && (e.key === 'c' || e.key === 'C') && !window.getSelection()?.toString() && app.copySelected()) {
+      e.preventDefault();
+      return;
+    }
+    if (objectKeys && (e.key === 'v' || e.key === 'V') && app.pasteCopied()) {
+      e.preventDefault();
       return;
     }
     if (mod && e.key === 'a' && app.editor.active) {
@@ -90,6 +107,12 @@ export function bindKeys(app: KeysApp) {
         return;
       }
     }
+    // v: the pointer of the level Form (going there from another level).
+    if (app.settings.mode === 'flow' && e.key === 'v' && !ui.letterMode) {
+      if (app.drawTool.active) return app.setDrawing(null);
+      if (!ui.formLevel) return app.setFormLevel(true);
+      return;
+    }
     if (app.settings.mode === 'flow' && !e.shiftKey && e.key in DRAW_KEYS) {
       const kind = DRAW_KEYS[e.key];
       return app.setDrawing(app.drawTool.kind === kind ? null : kind);
@@ -111,7 +134,7 @@ export function bindKeys(app: KeysApp) {
         if (app.shapeTool.selected) {
           app.shapeTool.selected = null;
           app.redraw();
-        } else app.closeShape();
+        } else app.selectObjects([], false);
         return;
       }
       if (e.key === 'Enter' && ui.shapeObject !== null) return app.enterObject(ui.shapeObject, false);
@@ -203,7 +226,14 @@ export function bindKeys(app: KeysApp) {
     }
     if (e.key === 'h') return void document.getElementById('marks-toggle')?.click();
     if (app.settings.mode === 'flow') {
-      if ((e.target as HTMLElement).closest('button') && (e.key === ' ' || e.key === 'Enter')) return;
+      // Enter still presses a focused button; Space always plays, not the button clicked last (Einpassen...).
+      if (toggle || (e.target as HTMLElement).closest('button')) {
+        if (e.key === 'Enter') return;
+        if (e.key === ' ') {
+          e.preventDefault();
+          return app.player.toggle();
+        }
+      }
       if (e.key === 'e') {
         app.closeRungs();
         return app.setEditing(!app.editor.active);
