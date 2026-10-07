@@ -36,6 +36,35 @@ export function railsForm(p: Pattern, o: SewObject, kinds: Uint8Array): Form | n
   return { paths };
 }
 
+/**
+ * The area a satin object covers, for the view of shapes: each column between its rails, as a
+ * closed outline (from railsForm, so the rails it shows on the level Form bound it), or null.
+ */
+export function satinArea(p: Pattern, o: SewObject, kinds: Uint8Array): Form | null {
+  const rails = railsForm(p, o, kinds);
+  if (!rails) return null;
+  const paths: Path[] = [];
+  for (let k = 0; k + 1 < rails.paths.length; k += 2) {
+    const left = flatten(rails.paths[k], 0.2);
+    const right = flatten(rails.paths[k + 1], 0.2);
+    if (left.length < 2 || right.length < 2) continue;
+    // Along the left rail, then back along the right one, whichever way it was traced.
+    const d = (a: Pt, b: Pt) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+    const back = d(left[left.length - 1], right[right.length - 1]) <= d(left[left.length - 1], right[0]) ? right.slice().reverse() : right;
+    const ring = [...left, ...back];
+    // All one way round, so columns that overlap add up (nonzero) instead of cutting holes.
+    let twice = 0;
+    for (let i = 0; i < ring.length; i++) {
+      const [ax, ay] = ring[i];
+      const [bx, by] = ring[(i + 1) % ring.length];
+      twice += ax * by - bx * ay;
+    }
+    if (twice < 0) ring.reverse();
+    paths.push({ nodes: ring.map((q) => ({ p: q, a: q, b: q, smooth: false })), closed: true });
+  }
+  return paths.length ? { paths, nonzero: true } : null;
+}
+
 /** Moves points along one rail as its line was dragged from `from` to `to`. */
 class RailMove {
   private a: Pt[];
