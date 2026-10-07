@@ -303,8 +303,6 @@ export const deBase = {
   'edit.thin.none': 'In der Auswahl wurden keine ausdünnbaren Reihen gefunden (Füllung oder Zickzack auswählen).',
   'edit.undo': 'Rückgängig',
   'edit.redo': 'Wiederholen',
-  'edit.undo.key': 'Strg+Z',
-  'edit.redo.key': 'Strg+Umschalt+Z',
   'edit.revert': 'Zurück zum Original',
   'hoop.title': 'Stickrahmen',
   'hoop.hint': 'Stickrahmen wählen, um zu sehen, ob das Stickmuster hineinpasst. Gilt für dieses Stickmuster.',
