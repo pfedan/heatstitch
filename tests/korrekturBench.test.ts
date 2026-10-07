@@ -15,6 +15,11 @@ import { corpus } from './helpers/korrekturCorpus';
  */
 const run = process.env.BENCH ? describe : describe.skip;
 const ONLY = process.env.BENCH_ONLY;
+/**
+ * Time the search may take per group (ms). The app gives it 0.8 s; here it gets enough to settle
+ * (it stops when nothing improves), so the result does not depend on how fast the machine is.
+ */
+const BUDGET_MS = Number(process.env.BENCH_BUDGET_MS ?? 8000);
 
 run('correction benchmark', () => {
   it('fixes the test set', async () => {
@@ -31,7 +36,7 @@ run('correction benchmark', () => {
         after = chosen.length ? (applyProposals(c.pattern, chosen, 2)?.pattern ?? c.pattern) : c.pattern;
         objects = chosen.length;
       } else {
-        const r = await planFix(c.pattern, c.profile, 'all', { trimMm: 2, solver: (process.env.BENCH_SOLVER as 'lns' | 'mip' | 'both' | undefined) ?? undefined, exact: solveMip, log: process.env.BENCH_LOG ? (s: string) => (globalThis as any).process.stderr.write(`${c.name}: ${s}\n`) : undefined });
+        const r = await planFix(c.pattern, c.profile, 'all', { trimMm: 2, budgetMs: BUDGET_MS, solver: (process.env.BENCH_SOLVER as 'lns' | 'mip' | 'both' | undefined) ?? undefined, exact: solveMip, log: process.env.BENCH_LOG ? (s: string) => (globalThis as any).process.stderr.write(`${c.name}: ${s}\n`) : undefined });
         after = r.pattern;
         objects = r.objects.length;
       }

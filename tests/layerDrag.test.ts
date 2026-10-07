@@ -36,12 +36,15 @@ describe.skipIf(!on)('dragging an object in the list', () => {
   });
 
   it('moves the object into the other color without the file overlay', { timeout: 30_000 }, async () => {
-    // Creme (one object) and Orange (four objects) open; the Creme fill is dragged among the orange ones.
+    // Creme and Orange open; the first Creme fill is dragged among the orange ones.
     await page.click('#layer-list [data-block="0"] [data-part="chev"]');
     await page.click('#layer-list [data-block="1"] [data-part="chev"]');
     const colors = await page.locator('#layer-list .color-row').count();
-    const src = page.locator('#layer-list .layer[data-object]').nth(0);
-    const dst = page.locator('#layer-list .layer[data-object]').nth(3);
+    const countOf = async (b: number) => Number((await page.locator(`#layer-list .color-row[data-block="${b}"] .layer-sub`).innerText()).match(/(\d+)\s*(Objekt|object)/i)![1]);
+    const creme = await countOf(0);
+    const orange = await countOf(1);
+    const src = page.locator('#layer-list .layer[data-object]').filter({ hasText: /Fill|Füllung/ }).first();
+    const dst = page.locator('#layer-list .color-row[data-block="1"] ~ .layer[data-object]').nth(2);
     const a = (await src.boundingBox())!;
     const b = (await dst.boundingBox())!;
     await page.mouse.move(a.x + 40, a.y + a.height / 2);
@@ -69,9 +72,10 @@ describe.skipIf(!on)('dragging an object in the list', () => {
     await page.waitForTimeout(500);
     expect(await page.evaluate(() => document.body.classList.contains('dragging'))).toBe(false);
     expect(await page.locator('.drag-chip').count()).toBe(0);
-    // Creme is empty and gone, the fill is sewn in orange now.
-    expect(await page.locator('#layer-list .color-row').count()).toBe(colors - 1);
-    expect(await page.locator('#layer-list .color-row').first().innerText()).toMatch(/Orange[\s\S]*5/);
+    // The fill is sewn in orange now; Creme keeps the rest (or is gone when it was its only object).
+    expect(await page.locator('#layer-list .color-row').count()).toBe(creme > 1 ? colors : colors - 1);
+    const orangeRow = page.locator('#layer-list .color-row').filter({ hasText: 'Orange' });
+    expect(Number((await orangeRow.locator('.layer-sub').innerText()).match(/(\d+)\s*(Objekt|object)/i)![1])).toBe(orange + 1);
   });
 
   it('still shows the overlay for files dragged in from outside', { timeout: 30_000 }, async () => {
