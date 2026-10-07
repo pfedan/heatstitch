@@ -59,6 +59,11 @@ function reachOf(p: Pattern, o: SewObject): Box {
 
 /** The covers over object `o` from the objects sewn after it (see Cover). */
 export function coversOver(p: Pattern, objs: SewObject[], o: SewObject, pxMm: number, share = SATIN_SHARE): Cover[] {
+  return coversFrom(p, objs.filter((x) => x.index > o.index), o, pxMm, share);
+}
+
+/** The covers over object `o` from the objects `later`, sewn after it (see Cover). */
+export function coversFrom(p: Pattern, later: SewObject[], o: SewObject, pxMm: number, share = SATIN_SHARE): Cover[] {
   const out: Cover[] = [];
   let k: Uint8Array | null = null;
   const kinds = () => (k ??= stitchKinds(p));
@@ -66,8 +71,8 @@ export function coversOver(p: Pattern, objs: SewObject[], o: SewObject, pxMm: nu
   // Its own border and second blend thread lie on it on purpose: they leave nothing out of it.
   const own = remembered(p, o)?.fill;
   const mine = (m: Remembered | undefined) => (!!m?.outline && m.outline === own?.border?.link) || (!!m?.blendOf && m.blendOf === own?.deco?.blend?.link);
-  for (const x of objs) {
-    if (x.index <= o.index || !overlapsBox(reachOf(p, x), reach)) continue;
+  for (const x of later) {
+    if (!overlapsBox(reachOf(p, x), reach)) continue;
     if (mine(remembered(p, x))) continue;
     // An empty fill covers nothing but its border.
     if (remembered(p, x)?.fill?.pattern === 'none') continue;

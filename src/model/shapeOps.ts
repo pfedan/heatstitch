@@ -5,11 +5,12 @@ import { vectorize } from '../shape/vectorize';
 import { takeOver, wholeArea } from './knockout';
 import { rememberObjects, sewObjects, stitchKey, type SewObject } from './objects';
 import { insertObject } from './addShape';
+import { listOf, sewList } from './sew';
 import { newLink, syncBorders } from './border';
 import { recs } from './jumps';
 import { reorder } from './order';
 import { recolor, sameColor } from './recolor';
-import { nextVersion, STITCH, type Pattern, type ThreadColor } from './pattern';
+import { STITCH, type Pattern, type ThreadColor } from './pattern';
 import { forget, objectKey, remember, remembered, restitch, type Remembered } from './restitch';
 import { formOf, reshapeFill, transformSewObject } from './reshape';
 import { stitchKinds } from './sequence';
@@ -83,17 +84,10 @@ const ownBorder = (m: Remembered | undefined): string | undefined => m?.fill?.bo
 
 /** The pattern without the objects `which`, nothing else changed (with all gone, an empty design); null when none of them is there. */
 function removeObjects(p: Pattern, which: number[], trimMm: number): Pattern | null {
-  const objs = sewObjects(p);
   const gone = new Set(which);
-  const order = objs.map((o) => o.index).filter((i) => !gone.has(i));
-  if (order.length === objs.length) return null;
-  if (!order.length) return nextVersion(p, { x: new Int32Array(0), y: new Int32Array(0), cmd: new Uint8Array(0), colors: [], bounds: { minX: 0, minY: 0, maxX: 0, maxY: 0 } });
-  const starts: number[] = [];
-  // Objects that meet where one went stay apart (in one thread they would become one object).
-  const apart = new Set(order.flatMap((o, k) => (k > 0 && order[k - 1] !== o - 1 ? [k] : [])));
-  const next = reorder(p, objs, order, trimMm, starts, { apart });
-  rememberObjects(next, starts);
-  return next;
+  const list = listOf(p);
+  const left = list.filter((e) => !gone.has(e.obj.index));
+  return left.length === list.length ? null : sewList(p, left, trimMm);
 }
 
 /** Object `o` once more, sewn right after it and a little beside it; with the index of the copy. */
