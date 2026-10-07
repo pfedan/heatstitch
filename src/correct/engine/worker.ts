@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 import type { Pattern } from '../../model/pattern';
-import { forgetAll, restoreRemembered, type StoredObject } from '../../model/restitch';
+import { restoreRemembered, type ObjectsAsStored } from '../../model/restitch';
 import type { Acknowledgement } from '../../validation/acks';
 import type { Profile } from '../../validation/profiles';
 import type { Checks } from '../../validation/validate';
@@ -23,7 +23,7 @@ export interface EngineSettings {
 interface Common {
   id: number;
   pattern: Pattern;
-  memory: StoredObject[];
+  memory: ObjectsAsStored;
   profile: Profile;
   settings: EngineSettings;
 }
@@ -41,18 +41,11 @@ export interface EngineResponse {
   error?: string;
 }
 
-/** What the memory of the last request was: the same design asks again without it changing. */
-let memoryKey = '';
-
 /** Answers one request (also used directly, without a worker, in tests). */
 export async function handleEngine(req: EngineRequest): Promise<EngineResponse> {
   try {
-    const key = JSON.stringify(req.memory.map((m) => m.key));
-    if (key !== memoryKey) {
-      forgetAll();
-      restoreRemembered(req.memory);
-      memoryKey = key;
-    }
+    // The design crossed over without its object list: it gets it back.
+    restoreRemembered(req.pattern, req.memory);
     const opt = { trimMm: req.settings.trimMm, checks: req.settings.checks, acks: req.settings.acks };
     if (req.type === 'report') return { id: req.id, report: ampelReport(req.pattern, req.profile, opt) };
     return { id: req.id, fix: await (req.mode === 'direct' ? directFix : restFix)(req.pattern, req.profile, req.target, opt) };

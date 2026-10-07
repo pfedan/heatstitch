@@ -20,7 +20,7 @@ import { rasterize, rasterizeStroke, type LineCap } from '../shape/rasterize';
 import { distanceInside, distanceToSeeds } from '../image/edt';
 import { tidy, withRecords } from './edit';
 import { coversOver, cutAway, type Cover } from './covers';
-import { forgetJoins, holdJoins, joinsIn, knowKinds, rememberObjects, restoreJoin, stitchKey, type ObjectKind, type SewObject } from './objects';
+import { backToVersion, entryOf, hasTable, hold, keepVersion, knowKinds, rememberObjects, setMemory, setObjects, setObjectsFromKeys, stitchIndex, stitchKey, tableOf, type ObjectKind, type PlacedEntry, type SewObject } from './objects';
 import { END, JUMP, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
 import { SATIN, stitchKinds, TIE_STITCH } from './sequence';
 import { letteringFrom } from '../lettering/stored';
@@ -326,6 +326,8 @@ export function planFits(plan: SectionStep[] | undefined, n: number): plan is Se
  * let the shape drift a little with every change.
  */
 export interface Remembered {
+  /** Id of the object this is about (see objects.ts): it goes with it when the object is sewn anew. */
+  id?: number;
   region: Region | null;
   fill?: FillSettings;
   satin?: SatinSettings;
@@ -420,30 +422,10 @@ export interface Fixed {
 }
 
 /**
- * Objects given new stitches here, by their stitches: the next edit starts from the exact shape
- * and the chosen pattern instead of recognizing them again from the stitches (an open gradient
- * or a spiral would not give its shape back as well as dense rows do).
+ * Lets stitches be tried out: until the returned function is called what objects learn is kept
+ * apart, and then it is put back as it was (what the tries remembered goes again).
  */
-const memory = new Map<string, Remembered>();
-const MEMORY_SIZE = 400;
-/** While trying things out (see holdMemory), nothing is forgotten for lack of room. */
-let held = 0;
-
-/**
- * Lets stitches be tried out: until the returned function is called nothing is forgotten, and then
- * memory is put back as it was (what the tries remembered goes again).
- */
-export function holdMemory(): () => void {
-  const saved = new Map(memory);
-  const joins = holdJoins();
-  held++;
-  return () => {
-    held--;
-    memory.clear();
-    for (const [k, v] of saved) memory.set(k, v);
-    joins();
-  };
-}
+export const holdMemory = hold;
 
 /**
  * The kind an object was sewn in, when what it remembers says so without doubt: a border or a
@@ -461,63 +443,30 @@ export function knownKind(r: Remembered | undefined): ObjectKind | undefined {
   return undefined;
 }
 
-knowKinds((p, first, last) => (memory.size ? knownKind(memory.get(stitchKey(p, first, last))) : undefined));
+knowKinds(knownKind);
 
 /** A key for an object's stitches. */
 export const objectKey = (p: Pattern, o: SewObject): string => stitchKey(p, o.first, o.last);
 
+/** Remembers `r` for object `o` of version `p`. */
 export function remember(p: Pattern, o: SewObject, r: Remembered): void {
-  rememberKey(objectKey(p, o), r);
-}
-
-function rememberKey(key: string, r: Remembered): void {
-  memory.delete(key);
-  memory.set(key, r);
-  if (!held && memory.size > MEMORY_SIZE) memory.delete(memory.keys().next().value!);
+  setMemory(p, o.first, o.last, r);
 }
 
 /** Remembers `r` for the stitches from record `first` to `last` (an object's records). */
 export function rememberRange(p: Pattern, first: number, last: number, r: Remembered): void {
-  rememberKey(stitchKey(p, first, last), r);
+  setMemory(p, first, last, r);
 }
 
-/** Forgets what was remembered for an object's stitches (or puts back `r`). */
+/** Forgets what object `o` of `p` remembered (or puts back `r`). */
 export function forget(p: Pattern, o: SewObject, r?: Remembered): void {
-  const key = objectKey(p, o);
-  if (r) rememberKey(key, r);
-  else memory.delete(key);
+  setMemory(p, o.first, o.last, r);
 }
 
-/**
- * What a version of a design knew about its objects while it was the current one. Memory is keyed
- * by stitches, so a later version with the same stitches would otherwise change what an earlier
- * one knows, and memory forgets the oldest entries: undo and redo bring back all of it or nothing.
- */
-interface Known {
-  memory: Map<string, Remembered>;
-  joins: { key: string; join: boolean }[];
-}
-const versions = new WeakMap<Pattern, Known>();
+export { backToVersion, keepVersion };
 
-/** Keeps what `p` knows now as its own: when it becomes the current version, and after it learned something. */
-export function keepVersion(p: Pattern): void {
-  versions.set(p, { memory: new Map(memory), joins: joinsIn(p) });
-}
-
-/** Brings back what version `p` knew when it was kept (undo, redo, another file). False when it never was. */
-export function backToVersion(p: Pattern): boolean {
-  const v = versions.get(p);
-  if (!v) return false;
-  for (const [k, r] of v.memory) rememberKey(k, r);
-  for (const j of v.joins) restoreJoin(j.key, j.join);
-  return true;
-}
-
-/** Forgets everything objects remember, as a fresh page would (tests). */
-export function forgetAll(): void {
-  memory.clear();
-  forgetJoins();
-}
+/** Nothing to forget any more: what objects know belongs to their version (kept for tests that start afresh). */
+export function forgetAll(): void {}
 
 /** The object's shape and stitch type are only guessed from its stitches (a file from elsewhere), not known. */
 export function isGuessed(p: Pattern, o: SewObject): boolean {
@@ -526,7 +475,7 @@ export function isGuessed(p: Pattern, o: SewObject): boolean {
 }
 
 export function remembered(p: Pattern, o: SewObject): Remembered | undefined {
-  return memory.get(objectKey(p, o));
+  return entryOf(p, o.first, o.last)?.memory;
 }
 
 /**
@@ -604,7 +553,7 @@ export function carryOver(before: Pattern, o: SewObject, after: Pattern, first: 
   }
   rememberObjects(after, [a], n);
   const r = remembered(before, o);
-  if (r) rememberKey(stitchKey(after, first, last), r);
+  setMemory(after, first, last, r ?? (o.id ? ({ region: null, read: true, id: o.id } as Remembered) : undefined));
 }
 
 /**
@@ -715,16 +664,99 @@ function storeOne(key: string, r: Remembered): StoredObject {
   };
 }
 
-/** What is remembered about the objects of `p`, to store it with the file. */
-export function rememberedIn(p: Pattern, objects: SewObject[]): StoredObject[] {
-  const out: StoredObject[] = [];
-  for (const o of objects) {
-    const key = objectKey(p, o);
-    const r = memory.get(key);
-    if (r) out.push(storeOne(key, r));
+/** How an object follows another one (its leader), as stored: see StoredEntry.of. */
+export type FollowRole = 'border' | 'blend' | 'shadow' | 'echo';
+
+/** One object of a version as stored (project version 2). */
+export interface StoredEntry {
+  id: number;
+  /** Its first and last stitch, counted from 0 in sewing order. */
+  first: number;
+  last: number;
+  /** Its stitches (see stitchKey) and where the first one is, to find them when the stitches moved. */
+  key: string;
+  at: [number, number];
+  /** What it knows; absent for an object only recognized from its stitches. */
+  memory?: Omit<StoredObject, 'key' | 'join'> & {
+    /** The object it follows (by id) and how: its fill's border, its blend's second thread, its line's shadow or echo copies (n: the nearest copy). */
+    of?: { id: number; role: FollowRole; n?: number };
+  };
+}
+
+/** The object list of a version as stored with the file (project version 2). */
+export interface StoredObjects {
+  v: 2;
+  /** The id the next new object gets. */
+  next: number;
+  objects: StoredEntry[];
+}
+
+/** Objects as stored with a file: a list of project version 2, or what version 1 kept by stitches. */
+export type ObjectsAsStored = StoredObjects | StoredObject[];
+
+/** Whether `v` is an object list as stored by project version 2 (else a list of an older version). */
+export const isStoredObjects = (v: unknown): v is StoredObjects => !!v && typeof v === 'object' && (v as StoredObjects).v === 2 && Array.isArray((v as StoredObjects).objects);
+
+/** The link a leader gives its followers of `role`. */
+function leaderLink(m: Remembered, role: FollowRole): string | undefined {
+  if (role === 'border') return m.fill?.border?.link;
+  if (role === 'blend') return m.fill?.deco?.blend?.link;
+  if (role === 'shadow') return m.line?.shadow?.link;
+  return m.line?.echo?.link;
+}
+
+/** What object `m` follows: the link it names and how. */
+function followed(m: Remembered): { link: string; role: FollowRole; n?: number } | null {
+  if (m.outline) return { link: m.outline, role: 'border' };
+  if (m.blendOf) return { link: m.blendOf, role: 'blend' };
+  if (m.shadowOf) return { link: m.shadowOf, role: 'shadow' };
+  if (m.echoOf) {
+    const k = m.echoOf.lastIndexOf(':');
+    const n = Number(m.echoOf.slice(k + 1));
+    return k > 0 && Number.isInteger(n) ? { link: m.echoOf.slice(0, k), role: 'echo', n } : { link: m.echoOf, role: 'echo' };
   }
-  for (const j of joinsIn(p)) out.push({ key: j.key, region: null, join: j.join });
-  return out;
+  return null;
+}
+
+/** What the objects of `p` are and know, to store it with the file. */
+export function rememberedIn(p: Pattern, _objects?: SewObject[]): StoredObjects {
+  const t = tableOf(p);
+  const ix = stitchIndex(p);
+  // Leaders by the links they give.
+  const leaders = new Map<string, number>();
+  for (const e of t.entries) {
+    const m = e.memory;
+    if (!m) continue;
+    for (const role of ['border', 'blend', 'shadow', 'echo'] as const) {
+      const l = leaderLink(m, role);
+      if (l && !leaders.has(`${role} ${l}`)) leaders.set(`${role} ${l}`, e.id);
+    }
+  }
+  return {
+    v: 2,
+    next: t.next,
+    objects: t.entries.map((e): StoredEntry => {
+      const where = { id: e.id, first: ix.before[e.first], last: ix.before[e.last], key: stitchKey(p, e.first, e.last), at: [p.x[e.first], p.y[e.first]] as [number, number] };
+      if (!e.memory) return where;
+      const { key: _k, outline: _o, blendOf: _b, shadowOf: _s, echoOf: _e, ...stored } = storeOne('', e.memory);
+      const f = followed(e.memory);
+      const leader = f ? leaders.get(`${f.role} ${f.link}`) : undefined;
+      // A follower whose leader is gone keeps naming it, as it did (the next change drops it).
+      const keep = f && (leader === undefined || leader === e.id) ? { [f.role === 'border' ? 'outline' : f.role === 'blend' ? 'blendOf' : f.role === 'shadow' ? 'shadowOf' : 'echoOf']: f.role === 'echo' ? e.memory.echoOf : f.link } : {};
+      return { ...where, memory: { ...stored, ...keep, ...(f && leader !== undefined && leader !== e.id ? { of: { id: leader, role: f.role, ...(f.n !== undefined ? { n: f.n } : {}) } } : {}) } };
+    }),
+  };
+}
+
+/** What object `o` of `p` knows, as stored (to keep it with a shape set aside). */
+export function storedOf(p: Pattern, o: SewObject): StoredObject | undefined {
+  const m = remembered(p, o);
+  return m && storeOne(objectKey(p, o), m);
+}
+
+/** What a stored object knew, back (null when it does not hold). */
+export function memoryFrom(e: StoredObject): Remembered | null {
+  return fromStored({ ...e, key: e.key ?? '' });
 }
 
 const isValue = (v: unknown) => finite(v) || typeof v === 'boolean' || typeof v === 'string';
@@ -1021,22 +1053,53 @@ function fromStored(e: StoredObject): Remembered | null {
   return r;
 }
 
-/** Remembers stored objects again (from storage or a project file); malformed entries are skipped. */
-export function restoreRemembered(list: unknown): number {
+/**
+ * Gives version `p` the objects stored with it: an object list (project version 2), or what an
+ * older project kept by the objects' stitches (version 1: the knowledge of each object and which
+ * sections continued the object before). Malformed entries are skipped. Returns how many objects
+ * know what they are.
+ */
+export function restoreRemembered(p: Pattern, list: unknown): number {
+  // Nothing stored: a version that knows its objects keeps them.
+  if (Array.isArray(list) && !list.length && hasTable(p)) return 0;
+  if (isStoredObjects(list)) {
+    const entries: PlacedEntry[] = [];
+    const ofs: { at: number; of: NonNullable<NonNullable<StoredEntry['memory']>['of']> }[] = [];
+    for (const e of list.objects) {
+      if (!e || !finite(e.id) || !finite(e.first) || !finite(e.last) || typeof e.key !== 'string' || !Array.isArray(e.at) || !e.at.every(finite)) continue;
+      const m = e.memory ? fromStored({ ...e.memory, key: '' } as StoredObject) : null;
+      entries.push({ id: e.id, first: e.first, last: e.last, key: e.key, at: [e.at[0], e.at[1]], ...(m ? { memory: m } : {}) });
+      const of = e.memory?.of;
+      if (m && of && finite(of.id) && ['border', 'blend', 'shadow', 'echo'].includes(of.role)) ofs.push({ at: entries.length - 1, of });
+    }
+    // Followers name their leader's link again.
+    for (const { at, of } of ofs) {
+      const leader = entries.find((x) => x.id === of.id)?.memory;
+      const link = leader && leaderLink(leader, of.role);
+      if (!link) continue;
+      const m = entries[at].memory!;
+      if (of.role === 'border') m.outline = link;
+      else if (of.role === 'blend') m.blendOf = link;
+      else if (of.role === 'shadow') m.shadowOf = link;
+      else m.echoOf = of.n !== undefined ? `${link}:${of.n}` : link;
+    }
+    setObjects(p, entries, finite(list.next) ? list.next : 1);
+    return entries.filter((e) => e.memory).length;
+  }
   if (!Array.isArray(list)) return 0;
-  let n = 0;
+  const joins = new Map<string, boolean>();
+  const memory = new Map<string, Remembered>();
   for (const e of list as StoredObject[]) {
-    if (typeof e?.key === 'string' && typeof e.join === 'boolean') {
-      restoreJoin(e.key, e.join);
-      n++;
+    if (typeof e?.key !== 'string') continue;
+    if (typeof e.join === 'boolean') {
+      joins.set(e.key, e.join);
       continue;
     }
     const r = fromStored(e);
-    if (!r) continue;
-    rememberKey(e.key, r);
-    n++;
+    if (r) memory.set(e.key, r);
   }
-  return n;
+  setObjectsFromKeys(p, joins, memory);
+  return memory.size;
 }
 
 /**

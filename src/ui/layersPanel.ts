@@ -29,6 +29,8 @@ export interface LayerHooks {
   menu: (o: number, x: number, y: number) => void;
   /** The menu of a color block, at the page position or under its button. */
   colorMenu: (block: number, at: { x: number; y: number } | HTMLElement) => void;
+  /** Object `o` is loosed from its shape: offer to sew it from its shape again. */
+  loose: (o: number) => void;
 }
 
 /** A message under the list: what happened, as a warning or not, and an action that goes with it. */
@@ -57,6 +59,8 @@ export interface LayerState {
   names?: ReadonlyMap<number, string>;
   /** Objects whose shape and stitch type are only guessed from their stitches. */
   guessed?: ReadonlySet<number>;
+  /** Objects whose stitches are loosed from their shape (changed by hand). */
+  loose?: ReadonlySet<number>;
 }
 
 /** Every object of the design is only guessed from its stitches. */
@@ -205,7 +209,7 @@ export class LayersPanel {
       }
     }
     if (show) requestAnimationFrame(() => this.list.querySelector<HTMLElement>(`[data-object="${show[0]}"]`)?.scrollIntoView({ block: 'nearest' }));
-    const key = [st.blocks, st.objects, st.selected, st.hidden, st.focus, st.current, lang, st.original, st.names, st.blank, st.guessed];
+    const key = [st.blocks, st.objects, st.selected, st.hidden, st.focus, st.current, lang, st.original, st.names, st.blank, st.guessed, st.loose];
     if (key.every((k, i) => k === this.key[i])) return;
     this.key = key;
     this.st = st;
@@ -322,6 +326,13 @@ export class LayersPanel {
     kind.innerHTML = KIND_ICON[o.kind];
     // Made here or guessed: only marked where both are in one design. About equal: a sign, said in full by the hint.
     const guessed = st.guessed?.has(o.index) && !allGuessed(st) ? h('span', { class: 'layer-guessed', title: t('object.guessedHint'), 'aria-label': t('object.guessed') }, '≈') : null;
+    // Loosed from its shape: the way back is one click on the sign.
+    const loose = st.loose?.has(o.index)
+      ? h('button', { type: 'button', class: 'layer-loose', title: t('object.looseHint'), 'aria-label': t('object.loose'), onclick: (e: Event) => {
+          e.stopPropagation();
+          this.hooks.loose(o.index);
+        } }, icon('obj-unlink'))
+      : null;
     const more = h(
       'button',
       {
@@ -385,6 +396,7 @@ export class LayersPanel {
       kind,
       h('span', { class: 'layer-name' }, st.names?.get(o.index) ?? `${kindLabel(o.kind)} ${numberInColor(siblings, o)}`),
       guessed,
+      loose,
       more,
       h('span', { class: 'layer-meta' }, formatNumber(o.stitches)),
     );

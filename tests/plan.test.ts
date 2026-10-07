@@ -35,7 +35,7 @@ describe('proposals from settings', () => {
   it('proposes wider spacing for dense fills and changes nothing while planning', async () => {
     const p = load('demos/overlap.pes');
     const v = validatePattern(p, KNIT);
-    const before = rememberedIn(p, sewObjects(p)).length;
+    const before = rememberedIn(p, sewObjects(p)).objects.filter((e) => e.memory).length;
     const plan = await planCorrection(p, v, KNIT, ALL_CHECKS, OPT);
     expect(plan.proposals.length).toBeGreaterThan(0);
     for (const x of plan.proposals) {
@@ -43,7 +43,7 @@ describe('proposals from settings', () => {
       expect(x.checked).toBe(true);
     }
     // Planning tries stitches but remembers none of them.
-    expect(rememberedIn(p, sewObjects(p)).length).toBe(before);
+    expect(rememberedIn(p, sewObjects(p)).objects.filter((e) => e.memory).length).toBe(before);
     expect(validatePattern(plan.pattern, KNIT).cautionCells + 4 * validatePattern(plan.pattern, KNIT).criticalCells).toBeLessThan(v.cautionCells + 4 * v.criticalCells);
   });
 

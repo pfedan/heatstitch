@@ -3,8 +3,8 @@ import { formFrom, storeForm, type Form, type StoredPath } from '../shape/path';
 import { addShape, insertObject } from './addShape';
 import { recs, type Rec } from './jumps';
 import { sewObjects, type ObjectKind } from './objects';
-import { STITCH, type Pattern, type ThreadColor } from './pattern';
-import { objectKey, rememberedIn, restoreRemembered, type StoredObject } from './restitch';
+import { nextVersion, STITCH, type Pattern, type ThreadColor } from './pattern';
+import { memoryFrom, remember, storedOf, type StoredObject } from './restitch';
 import { formOf } from './reshape';
 import { deleteObjects } from './shapeOps';
 import { stitchKinds } from './sequence';
@@ -47,7 +47,7 @@ export const asideOf = (p: Pattern | null | undefined): AsideShape[] => (p && as
 
 /** A version of `p` (same stitches) with `list` aside: a new undo step without new stitches. */
 export function withAside(p: Pattern, list: AsideShape[]): Pattern {
-  const next = { ...p };
+  const next = nextVersion(p, {});
   asides.set(next, list);
   return next;
 }
@@ -83,13 +83,11 @@ export function setAside(p: Pattern, which: number[], role: AsideRole, trimMm: n
   const objs = sewObjects(p, kinds);
   const sorted = [...which].sort((a, b) => a - b).filter((o) => objs[o]);
   if (!sorted.length) return null;
-  const memory = rememberedIn(p, sorted.map((o) => objs[o])).filter((m) => m.join === undefined);
   const list = [...asideOf(p)];
   let id = nextId(list);
   sorted.forEach((o, k) => {
     const obj = objs[o];
-    const key = objectKey(p, obj);
-    const known = memory.find((m) => m.key === key);
+    const known = storedOf(p, obj);
     const form = (known?.form && formFrom(known.form)) || (known?.path && formFrom(known.path)) || (obj.kind === 'fill' ? formOf(p, obj, kinds) : obj.kind === 'run' ? lineOf(p, obj.first, obj.last) : null);
     list.push({
       id: id++,
@@ -98,7 +96,7 @@ export function setAside(p: Pattern, which: number[], role: AsideRole, trimMm: n
       color: obj.color,
       // The ones before it that go aside too are not there to follow.
       after: o - 1 - k,
-      records: recs(p, obj.first, obj.last + 1),
+      records: recs(p, obj.first, obj.last + 1).map(({ x, y, cmd }) => ({ x, y, cmd })),
       ...(known ? { memory: known } : {}),
       ...(form ? { form } : {}),
       ...(obj.kind === 'run' ? { line: { width: 0 } } : {}),
@@ -140,7 +138,8 @@ export function sewAgain(p: Pattern, id: number, options: DigitizeOptions): { pa
     r = insertObject(p, a.records, a.color, count ? after : null, options.trimMm);
     if (r && a.memory) {
       const obj = sewObjects(r.pattern).find((o) => stitchesBefore(r!.pattern, o.first) === r!.start);
-      if (obj) restoreRemembered([{ ...a.memory, key: objectKey(r.pattern, obj) }]);
+      const m = obj && memoryFrom(a.memory);
+      if (obj && m) remember(r.pattern, obj, m);
     }
   } else if (a.form) {
     r = addShape(p, { form: a.form, kind: a.line ? 'stroke' : 'fill', ...(a.line ? { width: Math.max(0.4, a.line.width) } : {}) }, a.color, count ? after : null, options);

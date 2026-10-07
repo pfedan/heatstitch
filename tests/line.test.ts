@@ -140,9 +140,9 @@ describe('wide line as a fill', () => {
     expect(m.region!.areaMm2).toBeGreaterThan(140);
     expect(m.region!.areaMm2).toBeLessThan(220);
     // Kept with the project.
-    const stored = JSON.parse(JSON.stringify(rememberedIn(r.pattern, [o])));
-    expect(stored[0].asLine.line.width).toBe(5);
-    restoreRemembered(stored);
+    const stored = structuredClone(rememberedIn(r.pattern, [o]));
+    expect(stored.objects[0].memory!.asLine!.line.width).toBe(5);
+    restoreRemembered(r.pattern, stored);
     expect(remembered(r.pattern, o)?.asLine?.path.paths).toHaveLength(1);
     const back = fillToLine(r.pattern, 0, options.trimMm)!;
     const b = sewObjects(back.pattern)[0];

@@ -96,7 +96,7 @@ async function saveAndOpen(x: At): Promise<At> {
   const back = await decodeProject(bytes);
   const p = fromStored(parsePattern(data, 'rt.dst'), back.files[0].working);
   expect(p, 'opens').toBeTruthy();
-  restoreRemembered(back.files[0].objects);
+  restoreRemembered(p!, back.files[0].objects);
   return { p: p!, o: x.o };
 }
 
@@ -149,7 +149,13 @@ describe('own objects keep what they are through a change and back', () => {
 
     it(`${round ? 'oval' : 'square'} fill: mirrored twice, saved and opened`, async () => {
       const a = fillObject(round);
-      expect(what(await saveAndOpen(mirror(mirror(a))))).toEqual(what(a));
+      const twice = mirror(mirror(a));
+      // Mirrored, the area comes from its curves (the sewn one from the rows); either way a fill.
+      const before = what(twice);
+      expect({ ...before, area: null }).toEqual({ ...what(a), area: null });
+      expect(what(await saveAndOpen(twice))).toEqual(before);
+      // The first version keeps what it knew (it once took what the mirrored copy learned).
+      expect(what(a).area).toBe(what(fillObject(round)).area);
     });
 
     it(`${round ? 'oval' : 'square'} fill: turned twice`, () => {

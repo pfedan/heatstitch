@@ -1,13 +1,18 @@
 import { tagShortStitches, TIE } from '../validation/shortStitches';
-import { COLOR_CHANGE, JUMP, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
+import { COLOR_CHANGE, dropParent, JUMP, parentOf, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
+import type { Remembered } from './restitch';
 import { FILL, SATIN, stitchKinds } from './sequence';
 
 /**
- * The objects of a design as far as the stitches tell them. Digitizing software trims between its
+ * The objects of a design. Every version of a design has a list of its objects in sewing order
+ * (see "The object list of a version" below): each with a fixed id, the records it is sewn in and
+ * what it knows about its shape and stitch type (restitch.ts). The list belongs to the version like
+ * its stitches, so undo brings it back with them. A new version takes the objects over from the
+ * version it was made from; only where its stitches are new and nobody said what they are are they
+ * recognized from the stitches, as in a file from elsewhere: digitizing software trims between its
  * objects (a fill with its underlay, a satin column, an outline), so what the machine sews between
  * two trims is a section of one object; most objects are one section, some are several (see
- * groupSections). An object is the unit that can be sewn earlier or later without changing what
- * it looks like, and every object starts and ends with its thread cut.
+ * groupSections).
  */
 
 export type ObjectKind = 'fill' | 'satin' | 'run';
@@ -15,10 +20,12 @@ export type ObjectKind = 'fill' | 'satin' | 'run';
 export interface SewObject {
   /** Position in sewing order. */
   index: number;
+  /** Fixed id of the object within its design: it stays the same through every change. */
+  id: number;
   /** Color block the object is sewn in. */
   block: number;
   color: ThreadColor;
-  /** Record of the first and last stitch; between them only stitches and jumps. */
+  /** Record of the first and last stitch; between them stitches, jumps and the object's own trims. */
   first: number;
   last: number;
   /** Pieces from trim to trim it is sewn in (its underlay or a fill sewn in parts has more than one). */
@@ -41,10 +48,10 @@ export interface SewObject {
 const GREY: ThreadColor = { r: 128, g: 128, b: 128 };
 
 /**
- * The kind an object was sewn in here, by its stitches (what restitch.ts remembers). It goes before
- * what the stitches suggest: a small spiral fill winds too loosely to be read as one.
+ * The kind an object was sewn in here, by what it remembers (restitch.ts). It goes before what the
+ * stitches suggest: a small spiral fill winds too loosely to be read as one.
  */
-let knownKind: ((p: Pattern, first: number, last: number) => ObjectKind | undefined) | null = null;
+let knownKind: ((m: Remembered | undefined) => ObjectKind | undefined) | null = null;
 
 /** Lets restitch.ts tell sewObjects the kind of the objects it knows (it imports this module). */
 export function knowKinds(f: typeof knownKind): void {
@@ -53,26 +60,37 @@ export function knowKinds(f: typeof knownKind): void {
 
 export function sewObjects(p: Pattern, kinds = stitchKinds(p), tags = tagShortStitches(p)): SewObject[] {
   const out: SewObject[] = [];
-  for (const g of groupSections(p, sections(p, kinds))) {
-    const first = g[0];
-    const last = g[g.length - 1];
-    const i = first.first;
-    const j = last.last;
+  let block = 0;
+  let at = 0;
+  for (const e of tableOf(p).entries) {
+    for (; at < e.first; at++) if (p.cmd[at] === COLOR_CHANGE) block++;
+    const i = e.first;
+    const j = e.last;
     const m = measure(p, kinds, i, j);
     let tieIn = 0;
     while (i + tieIn + 1 <= j && tags[i + tieIn + 1] === TIE) tieIn++;
     let tieOff = 0;
     while (j - tieOff > i + tieIn && tags[j - tieOff] === TIE) tieOff++;
+    let sections = 1;
+    let cut = false;
+    for (let k = i + 1; k <= j; k++) {
+      if (p.cmd[k] === TRIM || p.cmd[k] === COLOR_CHANGE) cut = true;
+      else if (p.cmd[k] === STITCH && cut) {
+        sections++;
+        cut = false;
+      }
+    }
     out.push({
       index: out.length,
-      block: first.block,
-      color: p.colors[first.block] ?? p.colors[p.colors.length - 1] ?? GREY,
+      id: e.id,
+      block,
+      color: p.colors[block] ?? p.colors[p.colors.length - 1] ?? GREY,
       first: i,
       last: j,
-      sections: g.length,
+      sections,
       stitches: m.stitches,
       threadMm: m.thread,
-      kind: knownKind?.(p, i, j) ?? kindOf(p, i, j, m),
+      kind: knownKind?.(e.memory) ?? kindOf(p, i, j, m),
       tieIn,
       tieOff,
       minX: m.minX,
@@ -123,15 +141,23 @@ function kindOf(p: Pattern, i: number, j: number, m: Measure): ObjectKind {
   return kind;
 }
 
-// Sections and how they make up objects ----------------------------------------------------------
+// The object list of a version -------------------------------------------------------------------
 
-/**
- * Sections known to continue the object before them (true) or to start one (false), by their
- * stitches: what the Image mode sewed as one object, and objects given new stitches here. That goes
- * before what the stitches suggest.
- */
-const joins = new Map<string, boolean>();
-const JOINS_SIZE = 4000;
+/** One object of a version: its fixed id, the records of its first and last stitch, what it knows. */
+export interface Entry {
+  id: number;
+  first: number;
+  last: number;
+  memory?: Remembered;
+}
+
+/** The objects of a version in sewing order; `next` is the id the next new object gets. */
+export interface Table {
+  entries: Entry[];
+  next: number;
+}
+
+const tables = new WeakMap<Pattern, Table>();
 
 /** A key for the stitches from record a to b (FNV-1a over their coordinates). */
 export function stitchKey(p: Pattern, a: number, b: number): string {
@@ -154,99 +180,511 @@ export function stitchKey(p: Pattern, a: number, b: number): string {
 
 const sectionKey = (p: Pattern, s: Section) => `s${stitchKey(p, s.first, s.last)}`;
 
-let joinsHeld = 0;
+/** Where the stitches of a version are: the record of each stitch, and the number of the stitches before each record. */
+interface Index {
+  records: Int32Array;
+  before: Int32Array;
+  /** Rolling hashes over the stitches (two of them), to find runs of stitches again in a later version. */
+  h1: Int32Array;
+  h2: Int32Array;
+}
+const indexes = new WeakMap<Pattern, Index>();
+const B1 = 0x01000193;
+const B2 = 0x2545f491;
+let pow1 = new Int32Array([1]);
+let pow2 = new Int32Array([1]);
 
-/** As holdMemory (restitch.ts) for the sections: call the returned function to put them back. */
-export function holdJoins(): () => void {
-  const saved = new Map(joins);
-  joinsHeld++;
-  return () => {
-    joinsHeld--;
-    joins.clear();
-    for (const [k, v] of saved) joins.set(k, v);
-  };
+function powers(n: number): void {
+  if (pow1.length > n) return;
+  const len = Math.max(n + 1, pow1.length * 2);
+  const a = new Int32Array(len);
+  const b = new Int32Array(len);
+  a[0] = b[0] = 1;
+  for (let i = 1; i < len; i++) {
+    a[i] = Math.imul(a[i - 1], B1);
+    b[i] = Math.imul(b[i - 1], B2);
+  }
+  pow1 = a;
+  pow2 = b;
 }
 
-function rememberJoin(key: string, join: boolean): void {
-  joins.delete(key);
-  joins.set(key, join);
-  if (!joinsHeld && joins.size > JOINS_SIZE) joins.delete(joins.keys().next().value!);
+const stitchValue = (x: number, y: number) => Math.imul(x, 0x9e3779b1) ^ Math.imul(y + 0x7f4a7c15, 0x85ebca6b);
+
+/** Where the stitches of `p` are (see Index). */
+export const stitchIndex = (p: Pattern): { records: Int32Array; before: Int32Array } => indexOf(p);
+
+function indexOf(p: Pattern): Index {
+  let ix = indexes.get(p);
+  if (ix) return ix;
+  const n = p.cmd.length;
+  const before = new Int32Array(n + 1);
+  let count = 0;
+  for (let i = 0; i < n; i++) {
+    before[i] = count;
+    if (p.cmd[i] === STITCH) count++;
+  }
+  before[n] = count;
+  const records = new Int32Array(count);
+  const h1 = new Int32Array(count + 1);
+  const h2 = new Int32Array(count + 1);
+  let k = 0;
+  for (let i = 0; i < n; i++) {
+    if (p.cmd[i] !== STITCH) continue;
+    records[k] = i;
+    const v = stitchValue(p.x[i], p.y[i]);
+    h1[k + 1] = (Math.imul(h1[k], B1) + v) | 0;
+    h2[k + 1] = (Math.imul(h2[k], B2) + (v ^ 0x5bd1e995)) | 0;
+    k++;
+  }
+  ix = { records, before, h1, h2 };
+  indexes.set(p, ix);
+  return ix;
+}
+
+/** Hashes of stitches a (inclusive) to b (exclusive). */
+function runHash(ix: Index, a: number, b: number): [number, number] {
+  powers(b - a);
+  return [(ix.h1[b] - Math.imul(ix.h1[a], pow1[b - a])) | 0, (ix.h2[b] - Math.imul(ix.h2[a], pow2[b - a])) | 0];
+}
+
+/** The object list of version `p`: kept with it, taken over from the version it came from, or recognized. */
+export function tableOf(p: Pattern): Table {
+  const t = tables.get(p);
+  if (t) return t;
+  let from = parentOf(p);
+  while (from && !tables.has(from)) from = parentOf(from);
+  const made = derive(p, from ? { p: from, t: tables.get(from)! } : undefined);
+  tables.set(p, made);
+  dropParent(p);
+  return made;
+}
+
+/** Whether version `p` has its object list yet. */
+export const hasTable = (p: Pattern): boolean => tables.has(p);
+
+/**
+ * Lists of versions that learned something lately: where a version made without telling where it
+ * came from (a pattern built anew from records) finds what its objects are.
+ */
+const recent: { p: Pattern; t: Table }[] = [];
+const RECENT = 12;
+
+function noteRecent(p: Pattern, t: Table): void {
+  const k = recent.findIndex((x) => x.p === p);
+  if (k === 0) return;
+  if (k > 0) recent.splice(k, 1);
+  recent.unshift({ p, t });
+  if (recent.length > RECENT) recent.pop();
 }
 
 /**
- * Remembers which sections of `p` make up one object: `starts` are the numbers of the first
- * stitch of each object (counting stitch records from 0, in sewing order), and every object runs
- * up to the next start. Only what `starts` covers is remembered (`end`: number of the stitch after
- * the last object, else to the end).
+ * The objects of `p` from those of the version it came from: each object whose stitches are in `p`
+ * unchanged is the same object, with its id and what it knows. Stitches no object of it had are
+ * found among the objects of versions that learned something lately, and what is left is
+ * recognized from the stitches (sections between trims, grouped as digitizing software makes them).
+ * `hint` gives the grouping and knowledge of a stored older project (see restoreObjects).
+ */
+function derive(p: Pattern, from?: { p: Pattern; t: Table }, hint?: { joins: ReadonlyMap<string, boolean> }): Table {
+  const ix = indexOf(p);
+  const n = ix.records.length;
+  const claimed = new Uint8Array(n);
+  const out: Entry[] = [];
+  const used = new Set<number>();
+  let next = from?.t.next ?? 1;
+  const take = (src: { p: Pattern; t: Table }, keepIds: boolean, onlyKnown: boolean) => {
+    const six = indexOf(src.p);
+    // Stitches of p by their first coordinates, to find where an object's stitches start.
+    const starts = new Map<number, number[]>();
+    for (let k = 0; k < n; k++) {
+      if (claimed[k]) continue;
+      const i = ix.records[k];
+      const key = stitchValue(p.x[i], p.y[i]);
+      const list = starts.get(key);
+      if (list) list.push(k);
+      else starts.set(key, [k]);
+    }
+    for (const e of src.t.entries) {
+      if (onlyKnown && !e.memory) continue;
+      const a = six.before[e.first];
+      const m = six.before[e.last] + 1 - a;
+      if (m <= 0) continue;
+      const [ha, hb] = runHash(six, a, a + m);
+      const fx = src.p.x[e.first];
+      const fy = src.p.y[e.first];
+      for (const k of starts.get(stitchValue(fx, fy)) ?? []) {
+        if (k + m > n || claimed[k] || claimed[k + m - 1]) continue;
+        const [ga, gb] = runHash(ix, k, k + m);
+        if (ga !== ha || gb !== hb) continue;
+        let free = true;
+        for (let j = k; j < k + m && free; j++) if (claimed[j]) free = false;
+        if (!free) continue;
+        // The same stitches again: the same object (a copy of it, the second time).
+        claimed.fill(1, k, k + m);
+        const id = keepIds && !used.has(e.id) ? e.id : 0;
+        if (id) used.add(id);
+        out.push({ id, first: ix.records[k], last: ix.records[k + m - 1], ...(e.memory ? { memory: e.memory } : {}) });
+      }
+    }
+  };
+  if (from) take(from, true, false);
+  if (n && claimed.includes(0)) for (const r of recent) if (r.p !== from?.p && r.p !== p) take(r, false, true);
+  // What is left: recognized, run by run of stitches no object had.
+  const kinds = claimed.includes(0) ? stitchKinds(p) : null;
+  for (let k = 0; k < n; ) {
+    if (claimed[k]) {
+      k++;
+      continue;
+    }
+    let e = k;
+    while (e + 1 < n && !claimed[e + 1]) e++;
+    for (const g of groupSections(p, sections(p, kinds!, ix.records[k], ix.records[e]), hint?.joins)) {
+      out.push({ id: 0, first: g[0].first, last: g[g.length - 1].last });
+    }
+    k = e + 1;
+  }
+  out.sort((a, b) => a.first - b.first);
+  for (const e of out) if (e.id >= next) next = e.id + 1;
+  for (const e of out) {
+    if (e.id) continue;
+    e.id = next++;
+    // What a copy knows is its own: it gets the copy's id.
+    if (e.memory && e.memory.id !== e.id) e.memory = { ...e.memory, id: e.id };
+  }
+  return { entries: out, next };
+}
+
+// Changing the list -----------------------------------------------------------------------------
+
+/** Tries in progress (see hold): each keeps the lists it changed as they were before. */
+const journals: Map<Table, Table>[] = [];
+/** What versions knew when they were kept (see keepVersion). */
+const kept = new WeakMap<Pattern, Table>();
+
+const copyTable = (t: Table): Table => ({ entries: t.entries.map((e) => ({ ...e })), next: t.next });
+
+function changing(t: Table): void {
+  for (const j of journals) if (!j.has(t)) j.set(t, copyTable(t));
+}
+
+function setTable(t: Table, to: Table): void {
+  t.entries = to.entries.map((e) => ({ ...e }));
+  t.next = to.next;
+}
+
+/**
+ * Lets things be tried out: until the returned function is called the object lists that change are
+ * kept as they were, and then they are put back (what the tries learned goes again).
+ */
+export function hold(): () => void {
+  const j = new Map<Table, Table>();
+  journals.push(j);
+  return () => {
+    const k = journals.indexOf(j);
+    if (k >= 0) journals.splice(k, 1);
+    for (const [t, was] of j) setTable(t, was);
+  };
+}
+
+/** Keeps what `p` knows now as its own: undo and redo bring back all of it (see backToVersion). */
+export function keepVersion(p: Pattern): void {
+  kept.set(p, copyTable(tableOf(p)));
+}
+
+/** Brings back what version `p` knew when it was kept (undo, redo, another file). False when it never was. */
+export function backToVersion(p: Pattern): boolean {
+  const v = kept.get(p);
+  if (!v) return false;
+  const t = tableOf(p);
+  changing(t);
+  setTable(t, v);
+  return true;
+}
+
+/** The entry of the object from record `first` to `last` of `p`, if it is one. */
+export function entryOf(p: Pattern, first: number, last: number): Entry | undefined {
+  const list = tableOf(p).entries;
+  let lo = 0;
+  let hi = list.length - 1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (list[mid].first < first) lo = mid + 1;
+    else if (list[mid].first > first) hi = mid - 1;
+    else return list[mid].last === last ? list[mid] : undefined;
+  }
+  return undefined;
+}
+
+/** The entry with id `id` in `p`. */
+export const entryById = (p: Pattern, id: number): Entry | undefined => tableOf(p).entries.find((e) => e.id === id);
+
+/**
+ * Sets what the object from record `first` to `last` knows (its stitches become one object when
+ * they were not). A memory that names another object's id takes that id along when no other
+ * object of `p` has it: an object sewn anew stays the same object.
+ */
+export function setMemory(p: Pattern, first: number, last: number, r: Remembered | undefined): void {
+  let e = entryOf(p, first, last);
+  if (!e) {
+    const ix = indexOf(p);
+    rememberObjects(p, [ix.before[first]], ix.before[last] + 1);
+    e = entryOf(p, first, last);
+    if (!e) return;
+  }
+  const t = tableOf(p);
+  changing(t);
+  if (r?.id !== undefined && r.id !== e.id && r.id > 0 && !t.entries.some((x) => x.id === r.id)) {
+    e.id = r.id;
+    if (r.id >= t.next) t.next = r.id + 1;
+  }
+  if (!r) delete e.memory;
+  else e.memory = r.id === e.id ? r : { ...r, id: e.id };
+  if (r) noteRecent(p, t);
+}
+
+/**
+ * Remembers which stitches of `p` make up one object: `starts` are the numbers of the first
+ * stitch of each object (counting stitches from 0, in sewing order), and every object runs
+ * up to the next start. Only what `starts` covers changes (`end`: number of the stitch after
+ * the last object, else to the end). An object that keeps its stitches keeps what it knows; one
+ * that changes keeps its id where it starts where it did, and knows nothing yet.
  */
 export function rememberObjects(p: Pattern, starts: number[], end = Infinity): void {
   if (!starts.length) return;
-  const number = new Int32Array(p.cmd.length);
-  let n = 0;
-  for (let i = 0; i < p.cmd.length; i++) {
-    number[i] = n;
-    if (p.cmd[i] === STITCH) n++;
-  }
-  let owner = -2;
-  for (const s of sections(p, stitchKinds(p))) {
-    const at = number[s.first];
-    if (at < starts[0] || at >= end) {
-      owner = -2;
-      continue;
+  const t = tableOf(p);
+  const ix = indexOf(p);
+  const n = ix.records.length;
+  const from = Math.max(0, starts[0]);
+  const to = Math.min(end, n);
+  if (from >= to) return;
+  const pieces: [number, number][] = [];
+  starts.forEach((s, k) => {
+    const a = Math.max(s, from);
+    const b = Math.min(k + 1 < starts.length ? starts[k + 1] : to, to) - 1;
+    if (b >= a) pieces.push([a, b]);
+  });
+  const old = t.entries.map((e) => ({ e, a: ix.before[e.first], b: ix.before[e.last] }));
+  if (pieces.every(([a, b]) => old.some((o) => o.a === a && o.b === b)) && old.every((o) => o.b < from || o.a >= to || pieces.some(([a, b]) => o.a === a && o.b === b))) return;
+  changing(t);
+  const out: Entry[] = [];
+  const ids = new Set<number>();
+  const add = (e: Entry) => {
+    out.push(e);
+    ids.add(e.id);
+  };
+  const piece = (a: number, b: number) => ({ first: ix.records[a], last: ix.records[b] });
+  const wanted: { first: number; last: number; owner?: Entry }[] = [];
+  for (const o of old) {
+    if (o.b < from || o.a >= to) wanted.push({ first: o.e.first, last: o.e.last, owner: o.e });
+    else {
+      if (o.a < from) wanted.push(piece(o.a, from - 1));
+      if (o.b >= to) wanted.push(piece(to, o.b));
     }
-    let o = 0;
-    while (o + 1 < starts.length && starts[o + 1] <= at) o++;
-    rememberJoin(sectionKey(p, s), o === owner);
-    owner = o;
   }
-}
-
-/** Number of stitches before each record. */
-function stitchesBefore(p: Pattern): Int32Array {
-  const number = new Int32Array(p.cmd.length + 1);
-  let n = 0;
-  for (let i = 0; i < p.cmd.length; i++) {
-    number[i] = n;
-    if (p.cmd[i] === STITCH) n++;
+  for (const [a, b] of pieces) wanted.push(piece(a, b));
+  wanted.sort((x, y) => x.first - y.first);
+  // Ids: the same stitches keep their object; a changed one keeps the id of the object it starts in.
+  const byRange = new Map(old.map((o) => [`${o.e.first}:${o.e.last}`, o.e]));
+  const containing = (first: number) => t.entries.find((e) => e.first <= first && first <= e.last);
+  for (const w of wanted) {
+    const same = byRange.get(`${w.first}:${w.last}`);
+    if (same && !ids.has(same.id)) add({ ...same });
+    else {
+      const c = containing(w.first);
+      add({ id: c && !ids.has(c.id) ? c.id : 0, first: w.first, last: w.last });
+    }
   }
-  number[p.cmd.length] = n;
-  return number;
+  for (const e of out) if (!e.id) e.id = t.next++;
+  t.entries = out;
 }
 
 /** Sews the objects `objs` (one after the other in one color) as one object from now on. */
 export function joinObjects(p: Pattern, objs: SewObject[]): void {
   if (!objs.length) return;
-  const number = stitchesBefore(p);
-  rememberObjects(p, [number[objs[0].first]], number[objs[objs.length - 1].last + 1]);
+  const ix = indexOf(p);
+  rememberObjects(p, [ix.before[objs[0].first]], ix.before[objs[objs.length - 1].last + 1]);
 }
 
 /** Shows object `o` as its sections from now on, each one an object. */
 export function splitObject(p: Pattern, o: SewObject): void {
-  const number = stitchesBefore(p);
-  const starts = sections(p, stitchKinds(p))
-    .filter((s) => s.first >= o.first && s.last <= o.last)
-    .map((s) => number[s.first]);
-  rememberObjects(p, starts, number[o.last + 1]);
+  const ix = indexOf(p);
+  const starts = sections(p, stitchKinds(p), o.first, o.last).map((s) => ix.before[s.first]);
+  rememberObjects(p, starts, ix.before[o.last + 1]);
 }
 
-/** What is remembered about the sections of `p`, to store it with the file. */
-export function joinsIn(p: Pattern): { key: string; join: boolean }[] {
-  const out: { key: string; join: boolean }[] = [];
-  for (const s of sections(p, stitchKinds(p))) {
-    const key = sectionKey(p, s);
-    const join = joins.get(key);
-    if (join !== undefined) out.push({ key, join });
+/**
+ * The object list of `to`, made from that of `from`: `origin[i]` is the record of `from` that
+ * record i of `to` was (or -1 for a new record). Each object keeps its id and what it knows, and
+ * the new records go with the object they lie in (a stitch added at an object's end, its locks,
+ * goes with it), so changing what lies between objects (a trim, locks) changes no object.
+ */
+export function carryObjects(from: Pattern, to: Pattern, origin: Int32Array): void {
+  const t0 = tableOf(from);
+  const src = t0.entries;
+  const owner = new Int32Array(from.cmd.length).fill(-1);
+  src.forEach((e, k) => owner.fill(k, e.first, e.last + 1));
+  // Each time an object's records come again (a copy) it is another object: its instances.
+  const inst: { k: number; first: number; last: number }[] = [];
+  const current = new Int32Array(src.length).fill(-1);
+  const seen = new Int32Array(from.cmd.length).fill(-1);
+  // Each stitch of `to`: the object of the record it was, else that of the stitches before it
+  // without a trim between, else that of the stitches after it.
+  const of = new Int32Array(to.cmd.length).fill(-1);
+  let run = -1;
+  for (let i = 0; i < to.cmd.length; i++) {
+    const c = to.cmd[i];
+    if (c === TRIM || c === COLOR_CHANGE) run = -1;
+    if (c !== STITCH) continue;
+    const r = origin[i];
+    const k = r >= 0 ? owner[r] : -1;
+    if (k >= 0) {
+      if (current[k] < 0 || seen[r] === current[k]) {
+        current[k] = inst.length;
+        inst.push({ k, first: Infinity, last: -Infinity });
+      }
+      seen[r] = current[k];
+      run = current[k];
+    }
+    of[i] = run;
   }
-  return out;
+  run = -1;
+  for (let i = to.cmd.length - 1; i >= 0; i--) {
+    const c = to.cmd[i];
+    if (c === TRIM || c === COLOR_CHANGE) run = -1;
+    if (c !== STITCH) continue;
+    if (of[i] >= 0) run = of[i];
+    else of[i] = run;
+  }
+  for (let i = 0; i < to.cmd.length; i++) {
+    const n = of[i];
+    if (n < 0) continue;
+    inst[n].first = Math.min(inst[n].first, i);
+    inst[n].last = Math.max(inst[n].last, i);
+  }
+  let next = t0.next;
+  const used = new Set<number>();
+  const entries: Entry[] = [];
+  for (const x of inst) {
+    if (x.first > x.last) continue;
+    const e = src[x.k];
+    // The first keeps the object's id; a copy is an object of its own that knows the same.
+    const id = used.has(e.id) ? next++ : e.id;
+    used.add(id);
+    entries.push({ ...e, id, first: x.first, last: x.last, ...(e.memory && id !== e.id ? { memory: { ...e.memory, id } } : {}) });
+  }
+  entries.sort((a, b) => a.first - b.first);
+  // Objects whose stitches now overlap or that lost the stitches before them: recognized where needed.
+  const clean = entries.filter((e, k) => k === 0 || e.first > entries[k - 1].last);
+  const t: Table = { entries: clean, next };
+  const ix = indexOf(to);
+  const covered = new Uint8Array(ix.records.length);
+  for (const e of clean) covered.fill(1, ix.before[e.first], ix.before[e.last] + 1);
+  if (covered.includes(0)) {
+    const kinds = stitchKinds(to);
+    for (let k = 0; k < covered.length; ) {
+      if (covered[k]) {
+        k++;
+        continue;
+      }
+      let e = k;
+      while (e + 1 < covered.length && !covered[e + 1]) e++;
+      for (const g of groupSections(to, sections(to, kinds, ix.records[k], ix.records[e]))) clean.push({ id: t.next++, first: g[0].first, last: g[g.length - 1].last });
+      k = e + 1;
+    }
+    clean.sort((a, b) => a.first - b.first);
+  }
+  tables.set(to, t);
+  dropParent(to);
 }
 
-export function restoreJoin(key: string, join: boolean): void {
-  rememberJoin(key, join);
+/** An object as stored: its id, its first and last stitch (numbers), its stitches' key and first point, what it knows. */
+export interface PlacedEntry {
+  id: number;
+  first: number;
+  last: number;
+  key: string;
+  at: [number, number];
+  memory?: Remembered;
 }
 
-/** Forgets every section memory, as a fresh page would (tests). */
-export function forgetJoins(): void {
-  joins.clear();
+/**
+ * Sets the object list of `p` as stored with it. Each object is looked for where it was (by its
+ * stitch numbers), else where its stitches are now (the file was written and read again);
+ * objects not found are left out, and the stitches no object covers are recognized.
+ */
+export function setObjects(p: Pattern, list: PlacedEntry[], next: number): void {
+  const ix = indexOf(p);
+  const n = ix.records.length;
+  const claimed = new Uint8Array(n);
+  const ok: Entry[] = [];
+  const ids = new Set<number>();
+  let byStart: Map<string, number[]> | null = null;
+  const fits = (a: number, e: PlacedEntry) => {
+    const m = e.last - e.first + 1;
+    if (a < 0 || a + m > n) return false;
+    for (let k = a; k < a + m; k++) if (claimed[k]) return false;
+    return stitchKey(p, ix.records[a], ix.records[a + m - 1]) === e.key;
+  };
+  for (const e of list) {
+    if (!Number.isInteger(e.id) || e.id <= 0 || ids.has(e.id) || e.last < e.first) continue;
+    let a = fits(e.first, e) ? e.first : -1;
+    if (a < 0) {
+      if (!byStart) {
+        byStart = new Map();
+        for (let k = 0; k < n; k++) {
+          const key = `${p.x[ix.records[k]]},${p.y[ix.records[k]]}`;
+          const l = byStart.get(key);
+          if (l) l.push(k);
+          else byStart.set(key, [k]);
+        }
+      }
+      a = (byStart.get(`${e.at[0]},${e.at[1]}`) ?? []).find((k) => fits(k, e)) ?? -1;
+    }
+    if (a < 0) continue;
+    const b = a + e.last - e.first;
+    claimed.fill(1, a, b + 1);
+    ids.add(e.id);
+    ok.push({ id: e.id, first: ix.records[a], last: ix.records[b], ...(e.memory ? { memory: e.memory.id === e.id ? e.memory : { ...e.memory, id: e.id } } : {}) });
+  }
+  let nextId = Math.max(next || 1, ...ok.map((e) => e.id + 1));
+  if (claimed.includes(0)) {
+    const kinds = stitchKinds(p);
+    for (let k = 0; k < n; ) {
+      if (claimed[k]) {
+        k++;
+        continue;
+      }
+      let e = k;
+      while (e + 1 < n && !claimed[e + 1]) e++;
+      for (const g of groupSections(p, sections(p, kinds, ix.records[k], ix.records[e]))) ok.push({ id: nextId++, first: g[0].first, last: g[g.length - 1].last });
+      k = e + 1;
+    }
+  }
+  ok.sort((a, b) => a.first - b.first);
+  const t = tables.get(p);
+  if (t) {
+    changing(t);
+    t.entries = ok;
+    t.next = nextId;
+  } else tables.set(p, { entries: ok, next: nextId });
+  dropParent(p);
+}
+
+/**
+ * The object list of `p` from what an older project stored (version 1): which sections continued
+ * the object before (`joins`, by their stitches), and what objects knew, by their stitches.
+ */
+export function setObjectsFromKeys(p: Pattern, joins: ReadonlyMap<string, boolean>, memory: ReadonlyMap<string, Remembered>): void {
+  const t = derive(p, undefined, { joins });
+  for (const e of t.entries) {
+    const m = memory.get(stitchKey(p, e.first, e.last));
+    if (m) e.memory = { ...m, id: e.id };
+  }
+  const was = tables.get(p);
+  if (was) {
+    changing(was);
+    setTable(was, t);
+  } else tables.set(p, t);
+  dropParent(p);
 }
 
 /** What is sewn from one trim (or color change) to the next. */
@@ -267,16 +705,17 @@ interface Section {
   dirs?: Map<number, [number, number]>;
 }
 
-function sections(p: Pattern, kinds: Uint8Array): Section[] {
+/** The sections from record a to record b (both stitches). */
+function sections(p: Pattern, kinds: Uint8Array, a = 0, b = p.cmd.length - 1): Section[] {
   const out: Section[] = [];
-  const n = p.cmd.length;
   let block = 0;
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < a; i++) if (p.cmd[i] === COLOR_CHANGE) block++;
+  for (let i = a; i <= b; i++) {
     const c = p.cmd[i];
     if (c === COLOR_CHANGE) block++;
     if (c !== STITCH) continue;
     let j = i;
-    for (let k = i + 1; k < n && (p.cmd[k] === STITCH || p.cmd[k] === JUMP); k++) if (p.cmd[k] === STITCH) j = k;
+    for (let k = i + 1; k <= b && (p.cmd[k] === STITCH || p.cmd[k] === JUMP); k++) if (p.cmd[k] === STITCH) j = k;
     const m = measure(p, kinds, i, j);
     out.push({ block, first: i, last: j, stitches: m.stitches, thread: m.thread, kind: kindOf(p, i, j, m), minX: m.minX, minY: m.minY, maxX: m.maxX, maxY: m.maxY });
     i = j;
@@ -308,7 +747,7 @@ const tiny = (s: Section) => s.stitches < TINY_STITCHES || s.thread < TINY_THREA
  * - a leftover (locks, a few stitches) goes with what it touches.
  * Fills in other directions, or not sewn one after the other, stay apart: that is on purpose.
  */
-function groupSections(p: Pattern, secs: Section[]): Section[][] {
+function groupSections(p: Pattern, secs: Section[], joins?: ReadonlyMap<string, boolean>): Section[][] {
   const cellsOf = (s: Section) => (s.cells ??= threadCells(p, s.first, s.last));
   const dirsOf = (s: Section) => (s.dirs ??= rowDirections(p, s.first, s.last));
   const near = (a: Section, b: Section) => a.block === b.block && boxesMeet(a, b, CELL);
@@ -348,7 +787,7 @@ function groupSections(p: Pattern, secs: Section[]): Section[][] {
     }
     const next = secs[k + 1]?.block === s.block ? secs[k + 1] : undefined;
     const underlayOnly = g.secs.every((x) => tiny(x) || under.has(x));
-    const known = joins.size ? joins.get(sectionKey(p, s)) : undefined;
+    const known = joins?.size ? joins.get(sectionKey(p, s)) : undefined;
     let join = false;
     if (known !== undefined) join = known;
     else if (g.secs.every(tiny)) join = g.secs.some((x) => touch(x, s, 1));

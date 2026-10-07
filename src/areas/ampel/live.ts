@@ -203,7 +203,7 @@ export function createLive(deps: LiveDeps): AmpelEngine {
   function objectsIn(p: Pattern, memory: PlannedFix['memory']): SewObject[] {
     const release = holdMemory();
     try {
-      restoreRemembered(memory);
+      restoreRemembered(p, memory);
       return sewObjects(p);
     } finally {
       release();
@@ -215,7 +215,7 @@ export function createLive(deps: LiveDeps): AmpelEngine {
     const release = holdMemory();
     let skip: Uint8Array | null;
     try {
-      restoreRemembered(memory);
+      restoreRemembered(p, memory);
       skip = openOnPurpose(p, deps.seq(p).objects);
     } finally {
       release();

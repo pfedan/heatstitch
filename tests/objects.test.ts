@@ -64,8 +64,10 @@ describe('objects made of several sections', () => {
     expect(objs[0].kind).toBe('fill');
     // Stored with the file and read again.
     const stored = rememberedIn(p, objs);
-    expect(stored.filter((s) => s.join !== undefined).length).toBe(objs[0].sections);
-    expect(restoreRemembered(JSON.parse(JSON.stringify(stored)))).toBe(stored.length);
+    expect(stored.objects.length).toBe(1);
+    const again = parsePattern(writePattern(d.pattern, 'pes'), 'u.pes');
+    restoreRemembered(again, JSON.parse(JSON.stringify(stored)));
+    expect(sewObjects(again).map((o) => [o.first, o.last, o.id])).toEqual(objs.map((o) => [o.first, o.last, o.id]));
   });
 
   it('replaces the underlay of a fill when it gets new stitches, instead of adding a second one', () => {
@@ -212,11 +214,13 @@ describe('shapes that stay as they are', () => {
     expect(widths[0]).toBeGreaterThan(width(load('demos/letters.pes'), i));
     expect(Math.abs(widths[2] - widths[0])).toBeLessThan(0.05);
     // Stored with the file and read again.
-    const stored = rememberedIn(p, sewObjects(p)).find((s) => s.columns);
+    const all = rememberedIn(p, sewObjects(p));
+    const stored = all.objects.find((s) => s.memory?.columns)?.memory;
     expect(stored?.satin?.edge).toBe(0.3);
-    const again = JSON.parse(JSON.stringify(stored));
-    expect(restoreRemembered([again])).toBe(1);
-    expect(remembered(p, sewObjects(p)[i])?.columns?.[0]?.[0]?.left.length).toBe(stored!.columns![0][0].left.length / 2);
+    // A copy of the stitches without what this session knows, as after a reload.
+    const q = { ...p };
+    expect(restoreRemembered(q, JSON.parse(JSON.stringify(all)))).toBeGreaterThan(0);
+    expect(remembered(q, sewObjects(q)[i])?.columns?.[0]?.[0]?.left.length).toBe(stored!.columns![0][0].left.length / 2);
   });
 });
 

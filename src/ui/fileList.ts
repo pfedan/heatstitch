@@ -20,7 +20,7 @@ import {
   type StoredPattern,
   type Titles,
 } from '../storage/fileStore';
-import { backToVersion, keepVersion, restoreRemembered, type StoredObject } from '../model/restitch';
+import { backToVersion, keepVersion, rememberedIn, restoreRemembered, type ObjectsAsStored } from '../model/restitch';
 import { asideFrom, asideOf, inheritAside, setAsideOf, storeAside, type StoredAside } from '../model/aside';
 import type { ProjectFile } from '../storage/project';
 import { liveAcknowledgements, openWorst, type Acknowledgement } from '../validation/acks';
@@ -85,7 +85,7 @@ interface FileData {
   storeKey?: number;
   working?: StoredPattern;
   acks?: Acknowledgement[];
-  objects?: StoredObject[];
+  objects?: ObjectsAsStored;
   aside?: StoredAside[];
   /** Unchecked; missing parts come from the material last used. */
   material?: unknown;
@@ -157,7 +157,7 @@ export class FileList {
    * Adds one file with what is known about its objects (and its own material, else the last used), and
    * activates it. `own`: made in the app, so it is named without the extension of the PES behind it.
    */
-  async addWithObjects(name: string, data: ArrayBuffer, objects: StoredObject[], aside: StoredAside[] = [], material?: Material, own = false): Promise<void> {
+  async addWithObjects(name: string, data: ArrayBuffer, objects: ObjectsAsStored, aside: StoredAside[] = [], material?: Material, own = false): Promise<void> {
     const first = await this.addData([{ name, data, objects, aside, material, own }], true);
     if (first) this.activate(first.id);
     else this.render();
@@ -211,7 +211,7 @@ export class FileList {
   }
 
   /** Stores what is remembered about the objects of a file's current version. */
-  setObjects(f: LoadedFile, objects: StoredObject[]): void {
+  setObjects(f: LoadedFile, objects: ObjectsAsStored): void {
     // What the objects learned belongs to this version (undo brings it back with it).
     if (f.pattern) keepVersion(f.pattern);
     if (f.storeKey !== undefined) void saveObjects(f.storeKey, objects);
@@ -235,8 +235,6 @@ export class FileList {
       };
       // Stored before materials were kept per design: it keeps the one it was last seen with.
       if (storeKey !== undefined && !material) void saveMaterial(storeKey, entry.material);
-      // Remembered by their stitches, so they apply to whichever version has these objects.
-      if (objects) restoreRemembered(objects);
       try {
         const original = parsePattern(new Uint8Array(data), name);
         entry.original = original;
@@ -258,6 +256,14 @@ export class FileList {
         // Shapes aside belong to the working copy (to the original only while there is none).
         setAsideOf(original, entry.pattern === original ? asideFrom(aside) : []);
         if (entry.pattern !== original) setAsideOf(entry.pattern, asideFrom(aside));
+        // The objects of the version as stored; an older project knew them by their stitches, so
+        // its original knows those that are in it too.
+        if (objects) {
+          restoreRemembered(entry.pattern, objects);
+          if (Array.isArray(objects) && entry.pattern !== original) restoreRemembered(original, objects);
+          // Kept from an older version of the app: kept as an object list from now on.
+          if (!persist && storeKey !== undefined && Array.isArray(objects)) void saveObjects(storeKey, rememberedIn(entry.pattern));
+        }
         entry.stats = patternStats(entry.pattern);
         keepVersion(original);
         if (entry.pattern !== original) keepVersion(entry.pattern);
@@ -269,7 +275,7 @@ export class FileList {
           if (key !== undefined) {
             if (entry.pattern !== original) void saveWorking(key, toStored(entry.pattern));
             if (entry.acks.length) void saveAcks(key, entry.acks);
-            if (objects?.length) void saveObjects(key, objects);
+            if (objects) void saveObjects(key, rememberedIn(entry.pattern));
             if (aside?.length) void saveAside(key, aside);
             void saveMaterial(key, entry.material);
             if (entry.title || entry.titles || entry.own) void saveNaming(key, entry.title ?? null, entry.own, entry.titles);

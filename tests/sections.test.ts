@@ -106,7 +106,7 @@ describe('sections on a real satin', () => {
     const trims = (q: typeof p) => [...q.cmd].filter((c) => c === TRIM).length;
     expect(sewObjects(next).length).toBe(objs.length);
     expect(trims(next)).toBeLessThanOrEqual(trims(p));
-    const stored = rememberedIn(next, sewObjects(next)).find((x) => x.columns);
+    const stored = rememberedIn(next, sewObjects(next)).objects.find((x) => x.memory?.columns)?.memory;
     expect(stored?.columns?.[0][0].cuts?.length).toBe(2);
     forget(p, o);
   });

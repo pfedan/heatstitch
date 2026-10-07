@@ -205,10 +205,10 @@ describe('placing', () => {
     const placed = placeLettering(null, [], sewLettering(f, l, 3), l)!;
     const stored = JSON.parse(JSON.stringify(rememberedIn(placed.pattern, sewObjects(placed.pattern))));
     const back = parsePattern(writePattern(placed.pattern, 'pes'), 'x.pes');
-    restoreRemembered(stored);
+    restoreRemembered(back, stored);
     const found = letteringObjects(back, sewObjects(back), l.id);
     expect(found.length).toBe(placed.objects.length);
-    expect(letteringFrom(stored[0].lettering)).toEqual(l);
+    expect(letteringFrom(stored.objects.find((e: { memory?: { lettering?: unknown } }) => e.memory?.lettering).memory.lettering)).toEqual(l);
   });
 });
 

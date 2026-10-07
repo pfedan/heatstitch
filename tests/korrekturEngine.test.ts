@@ -30,7 +30,7 @@ describe('correction engine', () => {
     // Stored with the project and read back: still taken back exactly.
     const stored = rememberedIn(q, sewObjects(q));
     forgetAll();
-    restoreRemembered(structuredClone(stored));
+    restoreRemembered(q, structuredClone(stored));
     const back = revertFix(q, fixedObjects(q))!;
     expect(back).toBeTruthy();
     expect(same(back, p)).toBe(true);

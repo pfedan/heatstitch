@@ -43,7 +43,7 @@ describe('demo project', () => {
     for (const f of back.files) {
       expect(f.own).toBe(true);
       const p = parsePattern(f.data, f.name);
-      restoreRemembered(f.objects);
+      restoreRemembered(p, f.objects);
       const lost = sewObjects(p).filter((o) => !remembered(p, o));
       expect(lost.map((o) => `${f.title} ${o.index}`), 'objects that forgot what they are after opening').toEqual([]);
     }
