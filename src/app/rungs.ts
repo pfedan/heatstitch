@@ -7,7 +7,10 @@ import type { Sequence } from './types';
 import type { Settings } from '../settings';
 import type { StitchInfo, StitchPanel } from '../ui/stitchPanel';
 import { RungTool } from '../ui/rungTool';
-import { outline, type Region } from '../digitize/region';
+import { expandRegion, outline, type Region } from '../digitize/region';
+
+/** Gaps between columns read from stitches that Vorschlagen closes (mm, each side). */
+const SEAM_MM = 0.6;
 import { atShare, regionBox, swirlCenters } from '../digitize/deco';
 import { railsFromOutline, stripsOfAreas } from '../digitize/rungs';
 import { aroundCuts, areaLoops, suggestSatin } from '../digitize/satinSuggest';
@@ -303,6 +306,15 @@ export function bindRungs(app: RungsApp) {
   }
 
   /**
+   * An area read from rails with its seams closed: columns read from stitches meet with slivers
+   * and notches between them, which would each read as a branch of their own.
+   */
+  function closed(area: Region | null): Region | null {
+    const grown = area && expandRegion(area, SEAM_MM);
+    return (grown && expandRegion(grown, -SEAM_MM)) ?? area;
+  }
+
+  /**
    * Vorschlagen: cut lines and lines across for the selected fill, as a digitizer would set them
    * by hand (see suggestSatin), in place of those drawn. They can be changed before sewing.
    */
@@ -318,7 +330,7 @@ export function bindRungs(app: RungsApp) {
       const rails = rungTool.sectionRails;
       if (!rails) return;
       const known = keepShape(p, obj, q.kinds).shape;
-      const area = known && edgeAlong(outline(known), rails) ? known : railsArea(rails);
+      const area = known && edgeAlong(outline(known), rails) ? known : closed(railsArea(rails));
       const s = area && suggestSatin(area);
       const own = rungTool.handCuts;
       if (area && own.length) {
