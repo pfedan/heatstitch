@@ -12,6 +12,7 @@ import { stitchKinds } from './sequence';
 import { lineStitches } from './line';
 import { hasPart, lineParts, partInThread, partOf } from './shadow';
 import { storeForm } from '../shape/path';
+import { unionOf } from '../shape/rasterize';
 import { recolor } from './recolor';
 
 /**
@@ -227,9 +228,17 @@ function syncOwnBorders(p: Pattern, trimMm: number, drop: ReadonlySet<string>, f
     if (!byLink.has(m.outline)) byLink.set(m.outline, k);
     else remember(p, objs[k], (mem[k] = withoutLink(m)));
   });
+  // The parts of a fill cut apart share one border.
+  const { together, gone } = pieceGroups(p, objs, mem, byLink);
+  const dropped = gone.size ? new Set([...drop, ...gone]) : drop;
   // A copy of a fill gets a border of its own: the first fill keeps the link, later ones a new one.
   const claimed = new Set<string>();
+  for (const g of together.values()) {
+    const l = mem[g[0]]?.fill?.border?.link;
+    if (l) claimed.add(l);
+  }
   mem.forEach((m, k) => {
+    if (together.has(k)) return;
     const b = m?.fill?.border;
     // A border still sewn as the last part of its fill (from before borders were objects) stays so,
     // as does the border of an empty fill (it is all the object is).
@@ -251,6 +260,12 @@ function syncOwnBorders(p: Pattern, trimMm: number, drop: ReadonlySet<string>, f
     // A blend's second thread is sewn as its fill says, without border.
     if (!m?.region || !b?.link || (!b.color && m.borderAt) || m.blendOf || m.fill?.pattern === 'none') return;
     wanted.add(b.link);
+    // Parts of a fill cut apart: one border around all of them, sewn after the last.
+    const group = together.get(k);
+    if (group && group[group.length - 1] !== k) return;
+    const region = group ? unionOf(group.map((j) => mem[j]!.region!)) : m.region;
+    if (!region) return;
+    const whole = group ? wholeOfPieces(group.map((j) => mem[j]!)) : wholeOf(m.region, m);
     const color = b.color ?? o.color;
     // Sewn after this object: the fill, or the second thread of its blend.
     const second = m.fill?.deco?.blend ? seconds.get(m.fill.deco.blend.link) : undefined;
@@ -259,11 +274,11 @@ function syncOwnBorders(p: Pattern, trimMm: number, drop: ReadonlySet<string>, f
     const cur = at === undefined ? undefined : mem[at];
     const target = at === undefined ? null : objs[at];
     const same = target && cur?.border && sameColor(target.color, color) && (second === undefined || !fresh.has(m.fill!.deco!.blend!.link) || at! > second);
-    if (same && sameRegion(cur!.region, m.region) && sameBorder(cur!.border!, b)) return;
+    if (same && sameRegion(cur!.region, region) && sameBorder(cur!.border!, b)) return;
     const from: Pt = [p.x[after.last] / 10, p.y[after.last] / 10];
-    let runs = borderStitches(m.region, b, from, wholeOf(m.region, m));
+    let runs = borderStitches(region, b, from, whole);
     if (!runs.length) return;
-    const memory: Remembered = { region: m.region, outline: b.link, border: stitchOf(b) };
+    const memory: Remembered = { region, outline: b.link, border: stitchOf(b) };
     let recs = runRecords(runs, trimMm);
     // The very stitches of another border (a fill copied in place): sewn the other way round, so
     // each remembers its own (memory is keyed by stitches).
@@ -292,8 +307,83 @@ function syncOwnBorders(p: Pattern, trimMm: number, drop: ReadonlySet<string>, f
     else changes.push({ a: end + 1, b: end, recs, color: { block: after.block, c: color }, memory });
   });
   // Borders whose fill has none of its own thread any more.
-  for (const [link, at] of byLink) if (drop.has(link) && !wanted.has(link)) changes.push({ a: leadOf(p, objs[at]), b: objs[at].last, recs: [] });
+  for (const [link, at] of byLink) if (dropped.has(link) && !wanted.has(link)) changes.push({ a: leadOf(p, objs[at]), b: objs[at].last, recs: [] });
   return syncBlends(applyChanges(p, changes), trimMm, drop);
+}
+
+/**
+ * The parts of fills cut apart (FillSettings.pieces), as groups of objects (indices into `objs`, in
+ * sewing order) that have one border together; every part in the group is given its index. The
+ * parts agree on their border: one changed in the panel (other than the border object sewn now
+ * says) gives its border to all, also none. A copy of parts is a group of its own (its objects
+ * have other ids), with a border of its own; a part alone, or one that can have no border of the
+ * group (an empty fill, a blend), is a fill of its own again. `gone` are links of borders no part
+ * has any more.
+ */
+function pieceGroups(p: Pattern, objs: SewObject[], mem: (Remembered | undefined)[], byLink: Map<string, number>): { together: Map<number, number[]>; gone: Set<string> } {
+  const together = new Map<number, number[]>();
+  const gone = new Set<string>();
+  if (!mem.some((m) => m?.fill?.pieces)) return { together, gone };
+  const set = (k: number, fill: FillSettings) => remember(p, objs[k], (mem[k] = { ...mem[k]!, fill }));
+  const alone = (k: number) => {
+    const { pieces: _p, ...fill } = mem[k]!.fill!;
+    set(k, fill);
+  };
+  const members = new Map<string, number[]>();
+  const copies = new Map<string, number[]>();
+  mem.forEach((m, k) => {
+    const f = m?.fill;
+    if (!f?.pieces) return;
+    if (!m?.region || f.pattern === 'none' || m.blendOf || f.deco?.blend || m.asLine || (f.border && !f.border.color && m.borderAt)) return alone(k);
+    const key = f.pieces.slice().sort((a, b) => a - b).join(' ');
+    const into = f.pieces.includes(objs[k].id) ? members : copies;
+    into.set(key, [...(into.get(key) ?? []), k]);
+  });
+  for (const ks of copies.values()) {
+    if (ks.length < 2) {
+      ks.forEach(alone);
+      continue;
+    }
+    // Copies of parts: parts of their own, with a border of their own.
+    const b = mem[ks[0]]!.fill!.border;
+    const border = b && { ...b, link: newLink() };
+    const pieces = ks.map((k) => objs[k].id);
+    for (const k of ks) set(k, { ...mem[k]!.fill!, pieces, border });
+    together.set(ks[0], ks);
+    ks.forEach((k) => together.set(k, ks));
+  }
+  for (const ks of members.values()) {
+    if (ks.length < 2) {
+      ks.forEach(alone);
+      continue;
+    }
+    // What the border sewn now has: the parts that say otherwise were changed.
+    const sewn = (k: number) => {
+      const b = mem[k]!.fill!.border;
+      const at = b?.link === undefined ? undefined : byLink.get(b.link);
+      const cur = at === undefined ? undefined : mem[at];
+      return !!b && !!cur?.border && sameBorder(cur.border, b) && sameColor(objs[at!].color, b.color ?? objs[k].color);
+    };
+    const anySewn = ks.some(sewn);
+    const source = ks.find((k) => (anySewn ? !sewn(k) : !!mem[k]!.fill!.border)) ?? ks[0];
+    const b = mem[source]!.fill!.border;
+    const border = b && { ...b, link: b.link ?? newLink() };
+    for (const k of ks) {
+      const old = mem[k]!.fill!.border?.link;
+      if (old && old !== border?.link) gone.add(old);
+      const f = mem[k]!.fill!;
+      if (f.border !== border && JSON.stringify(f.border) !== JSON.stringify(border)) set(k, { ...f, border });
+    }
+    ks.forEach((k) => together.set(k, ks));
+  }
+  return { together, gone };
+}
+
+/** The whole area of parts of a fill, before shapes on top were left out; null when nothing was. */
+function wholeOfPieces(ms: Remembered[]): Region | null {
+  const wholes = ms.map((m) => wholeOf(m.region!, m));
+  if (wholes.every((w) => !w)) return null;
+  return unionOf(ms.map((m, k) => wholes[k] ?? m.region!));
 }
 
 /** The records changed as listed (each new object remembering its `memory`), or `p` when nothing changes. */

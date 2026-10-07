@@ -3,10 +3,11 @@ import { digitizeDefaults } from '../src/digitize/digitize';
 import type { Pt } from '../src/digitize/skeleton';
 import type { Region } from '../src/digitize/region';
 import { addShape } from '../src/model/addShape';
-import { sewObjects } from '../src/model/objects';
-import { TRIM, type Pattern } from '../src/model/pattern';
+import { sewObjects, type SewObject } from '../src/model/objects';
+import { syncBorders } from '../src/model/border';
+import { STITCH, TRIM, type Pattern } from '../src/model/pattern';
 import { formOf } from '../src/model/reshape';
-import { remember, remembered, restitch } from '../src/model/restitch';
+import { remember, remembered, restitch, type FillSettings } from '../src/model/restitch';
 import { takeOver, wholeArea } from '../src/model/knockout';
 import { stitchKinds } from '../src/model/sequence';
 import { duplicateObjects, mirrorMatrix } from '../src/model/shapeOps';
@@ -52,6 +53,32 @@ function uncovered(whole: Region, parts: Region[]): number {
     }
   }
   return miss / all;
+}
+
+/** The border objects of `p`. */
+const borders = (p: Pattern) => sewObjects(p).filter((o) => remembered(p, o)?.outline);
+
+/** Stitches of object `o` on the cut at x = 15 mm, away from the rectangle's edges. */
+function nearCut(p: Pattern, o: SewObject): number {
+  let n = 0;
+  for (let i = o.first; i <= o.last; i++) if (p.cmd[i] === STITCH && Math.abs(p.x[i] / 10 - 15) < 1 && p.y[i] / 10 > 3 && p.y[i] / 10 < 17) n++;
+  return n;
+}
+
+const spanX = (p: Pattern, o: SewObject) => {
+  const xs: number[] = [];
+  for (let i = o.first; i <= o.last; i++) if (p.cmd[i] === STITCH) xs.push(p.x[i] / 10);
+  return Math.max(...xs) - Math.min(...xs);
+};
+
+/** The border of fill `o` set as the stitch panel sets it: new stitches, then the borders follow. */
+function setBorder(p: Pattern, o: number, border: FillSettings['border']): Pattern {
+  const kinds = stitchKinds(p);
+  const objs = sewObjects(p, kinds);
+  const fill = remembered(p, objs[o])!.fill!;
+  const link = fill.border?.link;
+  const r = takeOver(restitch(p, objs, [o], { kind: 'fill', s: { ...fill, border: border && { ...border, link } } }, kinds, T))!;
+  return syncBorders(r, T, link ? new Set([link]) : new Set());
 }
 
 const trims = (p: Pattern) => p.cmd.reduce((n, c) => n + (c === TRIM ? 1 : 0), 0);
@@ -139,22 +166,60 @@ describe('split a fill', () => {
     expect(sewObjects(again.pattern)).toHaveLength(4);
   });
 
-  it('takes the border off the parts, and leaves empty fills and fills from a file alone', () => {
+  it('keeps one border around all parts, not along the cut, and leaves empty fills and fills from a file alone', () => {
     const d = design();
     const kinds = stitchKinds(d);
     const objs = sewObjects(d, kinds);
     const fill = remembered(d, objs[0])!.fill!;
-    const p = takeOver(restitch(d, objs, [0], { kind: 'fill', s: { ...fill, border: { type: 'run', width: 2, length: 2.5, tolerance: 0.15 } } }, kinds, T))!;
-    expect(remembered(p, sewObjects(p)[0])?.fill?.border).toBeTruthy();
-    const s = splitFill(p, 0, [[[15, -2], [15, 22]]], T) as { pattern: Pattern; parts: number[]; borderGone: boolean };
-    expect(s.borderGone).toBe(true);
-    for (const k of s.parts) expect(remembered(s.pattern, sewObjects(s.pattern)[k])?.fill?.border).toBeUndefined();
+    const p = syncBorders(takeOver(restitch(d, objs, [0], { kind: 'fill', s: { ...fill, border: { type: 'run', width: 2, length: 2.5, tolerance: 0.15 } } }, kinds, T))!, T);
+    expect(borders(p)).toHaveLength(1);
+    const s = splitFill(p, 0, [[[15, -2], [15, 22]]], T) as { pattern: Pattern; parts: number[] };
+    const ids = s.parts.map((k) => sewObjects(s.pattern)[k].id);
+    const links = s.parts.map((k) => remembered(s.pattern, sewObjects(s.pattern)[k])?.fill?.border?.link);
+    expect(links[0]).toBeTruthy();
+    expect(links[1]).toBe(links[0]);
+    for (const k of s.parts) expect(remembered(s.pattern, sewObjects(s.pattern)[k])?.fill?.pieces).toEqual(ids);
+    // One border, around the whole rectangle and not along the cut.
+    const b = borders(s.pattern);
+    expect(b).toHaveLength(1);
+    expect(nearCut(s.pattern, b[0])).toBe(0);
+    expect(spanX(s.pattern, b[0])).toBeGreaterThan(28);
     const q = design();
     const e = sewObjects(q)[0];
     remember(q, e, { ...remembered(q, e)!, fill: { ...remembered(q, e)!.fill!, pattern: 'none' } });
     expect(canSplit(q, 0)).toBe(false);
     remember(q, e, { ...remembered(q, e)!, fill: undefined });
     expect(canSplit(q, 0)).toBe(false);
+  });
+
+  it('turns the border of all parts on and off from one part', () => {
+    const s = splitFill(design(), 0, [[[15, -2], [15, 22]]], T) as { pattern: Pattern; parts: number[] };
+    expect(borders(s.pattern)).toHaveLength(0);
+    // A satin border set on the second part only: all parts have it, sewn once around them.
+    const on = setBorder(s.pattern, 1, { type: 'satin', width: 2, length: 2.5, tolerance: 0.15 });
+    const fills = (p: Pattern) => sewObjects(p).filter((o) => remembered(p, o)?.fill?.pieces);
+    expect(fills(on).map((o) => remembered(on, o)?.fill?.border?.type)).toEqual(['satin', 'satin']);
+    const b = borders(on);
+    expect(b).toHaveLength(1);
+    expect(nearCut(on, b[0])).toBe(0);
+    // Off on the first part: off for all.
+    const off = setBorder(on, 0, undefined);
+    expect(fills(off).map((o) => remembered(off, o)?.fill?.border)).toEqual([undefined, undefined]);
+    expect(borders(off)).toHaveLength(0);
+  });
+
+  it('gives copies of the parts a border of their own', () => {
+    const s = splitFill(design(), 0, [[[15, -2], [15, 22]]], T) as { pattern: Pattern; parts: number[] };
+    const on = setBorder(s.pattern, 0, { type: 'run', width: 2, length: 2.5, tolerance: 0.15 });
+    const d = duplicateObjects(on, [0, 1], T)!;
+    const b = borders(d.pattern);
+    expect(b).toHaveLength(2);
+    expect(new Set(b.map((o) => remembered(d.pattern, o)?.outline)).size).toBe(2);
+    // One copied part alone is a fill with a border of its own, all around it.
+    const one = duplicateObjects(on, [1], T)!;
+    const copy = sewObjects(one.pattern).find((o) => remembered(one.pattern, o)?.fill && !remembered(one.pattern, o)?.fill?.pieces);
+    expect(copy && copy.id).toBeTruthy();
+    expect(borders(one.pattern)).toHaveLength(2);
   });
 
   it('gives the parts ids of their own, the first keeping the id of the fill', () => {

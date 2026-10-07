@@ -5,7 +5,7 @@ import { regionOf } from '../shape/rasterize';
 import { vectorize } from '../shape/vectorize';
 import type { Form } from '../shape/path';
 import type { FillSettings } from './restitch';
-import { syncBorders } from './border';
+import { newLink, syncBorders } from './border';
 import { takeOver, wholeArea } from './knockout';
 import { sewObjects } from './objects';
 import type { Pattern } from './pattern';
@@ -195,8 +195,6 @@ export interface Split {
   pattern: Pattern;
   /** The parts, as objects of `pattern`, in sewing order. */
   parts: number[];
-  /** The fill had a border, which went (it would run along the cut too). */
-  borderGone: boolean;
 }
 
 /**
@@ -232,9 +230,9 @@ export function splitFill(p: Pattern, o: number, cuts: Pt[][], trimMm: number): 
   if (forms.some((f) => !f.paths.length)) return null;
   const base = known!.fill!.angle;
   const angles = partAngles(forms.length, split.touching, base, cuts);
-  const borderGone = !!known?.fill?.border;
-  const link = known?.fill?.border?.link;
-  const change = (k: number): Partial<FillSettings> => ({ angle: angles[k], ...(borderGone ? { border: undefined } : {}) });
+  // The parts are sewn without border first; then they get the fill's border together.
+  const border = known?.fill?.border;
+  const change = (k: number): Partial<FillSettings> => ({ angle: angles[k], border: undefined });
   // Every further part a new fill right after the fill (the last first, so they come in order), in
   // its shape; then each sewn with the fill's settings, and the fill itself in the shape of the
   // first part (from the last, so the ones before keep their place).
@@ -261,7 +259,22 @@ export function splitFill(p: Pattern, o: number, cuts: Pt[][], trimMm: number): 
   const firstPart = sewObjects(cur)[o];
   const firstMemory = remembered(cur, firstPart);
   if (firstMemory && firstPart.id !== obj.id) remember(cur, firstPart, { ...firstMemory, id: obj.id });
-  // A border in a thread of its own goes with its object.
-  if (link) cur = syncBorders(cur, trimMm, new Set([link]));
-  return { pattern: cur, parts: forms.map((_, k) => o + k), borderGone };
+  // The parts belong together (also the parts of a part cut again): one border around all of
+  // them, the fill's, and not along the cuts.
+  const objs = sewObjects(cur);
+  const ids = forms.map((_, k) => objs[o + k].id);
+  const pieces = [...(known!.fill!.pieces ?? []).filter((id) => id !== obj.id && !ids.includes(id)), ...ids];
+  const link = border?.link;
+  const shared = border && { ...border, link: link ?? newLink() };
+  for (const k of forms.keys()) {
+    const m = remembered(cur, objs[o + k])!;
+    remember(cur, objs[o + k], { ...m, fill: { ...m.fill!, pieces, border: shared } });
+  }
+  // Other parts of the fill this was a part of take its border too.
+  for (const x of objs) {
+    const m = remembered(cur, x);
+    if (m?.fill?.pieces && !ids.includes(x.id) && pieces.includes(x.id)) remember(cur, x, { ...m, fill: { ...m.fill, pieces } });
+  }
+  cur = syncBorders(cur, trimMm, link ? new Set([link]) : new Set());
+  return { pattern: cur, parts: forms.map((_, k) => o + k) };
 }

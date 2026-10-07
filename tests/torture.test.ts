@@ -337,9 +337,14 @@ const OPS: Op[] = [
       if (s === 'whole') return false;
       expect(s, 'a fill cuts apart').toBeTruthy();
       const { pattern, parts } = s!;
-      const hadBorder = !!remembered(p, o)?.fill?.border;
-      if (!hadBorder) expect(sewObjects(pattern).length, 'one object more per part').toBe(d.objects.length + parts.length - 1);
-      expect(parts.every((k) => !remembered(pattern, sewObjects(pattern)[k])?.fill?.border), 'parts have no border').toBe(true);
+      const had = remembered(p, o)?.fill?.border;
+      // Its border stays one object, around all parts (one more where it was sewn in the fill's thread).
+      const inThread = !!had && !had.link;
+      expect(sewObjects(pattern).length, 'one object more per part').toBe(d.objects.length + parts.length - 1 + (inThread ? 1 : 0));
+      const links = parts.map((k) => remembered(pattern, sewObjects(pattern)[k])?.fill?.border?.link);
+      expect(new Set(links).size, 'parts share one border').toBe(1);
+      expect(!!links[0], 'parts keep the border').toBe(!!had);
+      if (had) expect(sewObjects(pattern).filter((x) => remembered(pattern, x)?.outline === links[0]), 'one border object').toHaveLength(1);
       // Invariant: the parts cover the area as it was, no fabric along the cut.
       const kinds = stitchKinds(pattern);
       const objs = sewObjects(pattern, kinds);
@@ -529,11 +534,22 @@ function checkBorders(p: Pattern): void {
   const mem = objs.map((o) => remembered(p, o));
   const problems: string[] = [];
   const fills = new Map<string, number>();
+  // Parts of a fill cut apart share one border (the last part's thread when it has none of its own).
+  const partOf = (k: number, j: number) => !!mem[k]?.fill?.pieces?.includes(objs[j].id) && mem[j]?.fill?.pieces?.join() === mem[k]?.fill?.pieces?.join();
   mem.forEach((m, k) => {
     const b = m?.fill?.border;
     if (!b?.link) return;
-    if (fills.has(b.link)) problems.push(`fills ${fills.get(b.link)} and ${k} share border link ${b.link}`);
+    const j = fills.get(b.link);
+    if (j !== undefined && !(partOf(j, k) && partOf(k, j))) problems.push(`fills ${j} and ${k} share border link ${b.link}`);
+    else if (j !== undefined && JSON.stringify(mem[j]!.fill!.border) !== JSON.stringify(b)) problems.push(`parts ${j} and ${k} differ in their border`);
     fills.set(b.link, k);
+  });
+  // The parts of one fill agree on their border, also on having none.
+  mem.forEach((m, k) => {
+    for (const id of m?.fill?.pieces ?? []) {
+      const j = objs.findIndex((o) => o.id === id);
+      if (j >= 0 && j !== k && partOf(k, j) && partOf(j, k) && JSON.stringify(mem[j]!.fill!.border) !== JSON.stringify(m!.fill!.border)) problems.push(`parts ${k} and ${j} differ in their border`);
+    }
   });
   const borders = new Map<string, number>();
   mem.forEach((m, k) => {

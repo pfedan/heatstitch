@@ -1806,7 +1806,9 @@ export class StitchPanel {
       true,
       true,
     );
-    const box = this.sec('border', 'stitches.sec.border', [parts.type, ...parts.look, ...parts.hold, s.border && s.pattern !== 'none' ? this.borderThread(s.border) : null], extra);
+    // Parts of a fill cut apart have one border together, around all of them.
+    const pieces = s.pieces && s.pieces.length > 1 ? h('p', { class: 'muted small' }, t('stitch.border.pieces', { n: s.pieces.length })) : null;
+    const box = this.sec('border', 'stitches.sec.border', [parts.type, ...parts.look, ...parts.hold, s.border && s.pattern !== 'none' ? this.borderThread(s.border) : null, pieces], extra);
     box.title = t('stitch.border.intro');
     return this.lights(box, 'border');
   }

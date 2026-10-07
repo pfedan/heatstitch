@@ -158,6 +158,11 @@ export interface FillSettings {
   expand?: number;
   /** A border sewn on the edge after the fill; none when not set. */
   border?: BorderSettings;
+  /**
+   * The fill is one of the parts of a fill cut apart (splitFill.ts): the ids of all the parts. They
+   * have one border together, around all of them and not along the cuts (see syncBorders).
+   */
+  pieces?: number[];
   /** Settings of the decorative patterns and of embossing. */
   deco?: DecoSettings;
 }
@@ -795,6 +800,7 @@ function isFill(f: unknown): f is FillSettings {
     (s.underSpacing === undefined || (finite(s.underSpacing) && s.underSpacing > 0)) &&
     (s.expand === undefined || finite(s.expand)) &&
     (s.border === undefined || isBorder(s.border)) &&
+    (s.pieces === undefined || (Array.isArray(s.pieces) && s.pieces.every(finite))) &&
     (s.deco === undefined || isDeco(s.deco)) &&
     typeof s.underlay === 'boolean'
   );
@@ -2636,6 +2642,11 @@ function restitchOnce(
     if (newFillS?.pattern === 'none' && newFillS.border) {
       delete newFillS.border.color;
       delete newFillS.border.link;
+    }
+    // The parts of a fill cut apart stay parts of it, whatever settings the panel had.
+    if (newFillS) {
+      if (known?.fill?.pieces) newFillS.pieces = known.fill.pieces.slice();
+      else delete newFillS.pieces;
     }
     const newSatinS = settings.kind === 'satin' ? structuredClone(reverse ? swappedSides(settings.s) : settings.s) : undefined;
     const after: Remembered = converting

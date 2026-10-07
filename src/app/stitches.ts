@@ -466,7 +466,14 @@ export function bindStitches(app: StitchesApp) {
         remember(p, own, { ...mem, shadowOf: undefined, echoOf: undefined });
       } else {
         if (fm?.fill && blend) remember(p, q.objects[fill], { ...fm, fill: { ...fm.fill, deco: { ...fm.fill.deco, blend: undefined } } });
-        else if (fm?.fill) remember(p, q.objects[fill], { ...fm, fill: { ...fm.fill, border: undefined } });
+        else if (fm?.fill) {
+          // All parts of a fill cut apart share the border: they all forget it.
+          const link = fm.fill.border?.link;
+          q.objects.forEach((o, k) => {
+            const m = k === fill ? fm : remembered(p, o);
+            if (m?.fill && (k === fill || (link && m.fill.border?.link === link))) remember(p, o, { ...m, fill: { ...m.fill, border: undefined } });
+          });
+        }
         remember(p, own, blend ? { ...mem, blendOf: undefined } : { ...mem, outline: undefined, border: undefined });
       }
       if (app.files.active) app.files.setObjects(app.files.active, rememberedIn(p, q.objects));
