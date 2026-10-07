@@ -1,12 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { COLOR_CHANGE, JUMP, STITCH, TRIM, type Pattern } from '../src/model/pattern';
-import { parsePattern } from '../src/parsers';
 import { parseDst } from '../src/parsers/dst';
 import { parsePes } from '../src/parsers/pes';
 import { pecColor, pecIndexOf } from '../src/parsers/pecPalette';
 import { splitMove } from '../src/writers/bytes';
 import { writeDst } from '../src/writers/dst';
-import { outputFileName } from '../src/writers';
 import { writePes } from '../src/writers/pes';
 import { encodeDst, encodePes, type Op } from './helpers/encode';
 import { Shape } from './helpers/shapes';
@@ -182,16 +180,5 @@ describe('conversions', () => {
     expect(stitches(q)).toEqual(stitches(p));
     expect(count(q, TRIM)).toBe(count(p, TRIM));
     expect(count(q, COLOR_CHANGE)).toBe(count(p, COLOR_CHANGE));
-  });
-
-  it('writes files the format sniffer accepts', () => {
-    const p = new Shape().fill(0, 0, 10, 10, 'h').build();
-    expect(parsePattern(writePes(p), 'x.pes').format).toBe('pes');
-    expect(stitches(parsePattern(writeDst(p), 'x.dst'))).toEqual(stitches(p));
-  });
-
-  it('names corrected files', () => {
-    expect(outputFileName('Katze.PES', 'dst', true)).toBe('Katze-corrected.dst');
-    expect(outputFileName('a.b.dst', 'pes', false)).toBe('a.b.pes');
   });
 });

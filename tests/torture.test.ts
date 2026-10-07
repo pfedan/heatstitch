@@ -15,7 +15,7 @@ import { formOf, transformSewObject } from '../src/model/reshape';
 import { canSplit, splitFill } from '../src/model/splitFill';
 import { wholeArea } from '../src/model/knockout';
 import type { Region } from '../src/digitize/region';
-import { backToVersion, forgetAll, keepVersion, objectKey, remember, remembered, rememberedIn, restitch, restoreRemembered, DECO_PATTERNS, OPEN_PATTERNS, type FillSettings, type StoredObjects } from '../src/model/restitch';
+import { backToVersion, keepVersion, objectKey, remember, remembered, rememberedIn, restitch, restoreRemembered, DECO_PATTERNS, OPEN_PATTERNS, type FillSettings, type StoredObjects } from '../src/model/restitch';
 import { reorder } from '../src/model/order';
 import { stitchKinds } from '../src/model/sequence';
 import { deleteObjects, duplicateObject, duplicateObjects, mirrorMatrix, recolorObjects, subtractTop } from '../src/model/shapeOps';
@@ -158,7 +158,6 @@ async function saveAndOpen(d: Doc): Promise<void> {
     image: null,
     settings: projectSettings(structuredClone(DEFAULTS)),
   });
-  forgetAll();
   const back = await decodeProject(bytes);
   const p = fromStored(original, back.files[0].working);
   expect(p, 'project opens').toBeTruthy();
@@ -717,7 +716,6 @@ function describeObjects(p: Pattern): string {
 }
 
 async function chain(seed: number, steps = STEPS): Promise<void> {
-  forgetAll();
   const r = rng(seed);
   const d = new Doc();
   const log: string[] = [];
@@ -763,7 +761,6 @@ describe('torture test', () => {
 
 /** A square with a running border in a thread of its own, made as the app makes it. */
 function borderedSquare(): Doc {
-  forgetAll();
   const d = new Doc();
   shapes(d, addShape(empty, { form: parsePath(rectPath(0, 0, 20, 20, 0, 0), ID), kind: 'fill' }, COLORS[0], null, options)!.pattern);
   shapes(d, addShape(d.cur.p, { form: parsePath(ellipsePath(40, 10, 6, 6), ID), kind: 'fill' }, COLORS[0], 0, options)!.pattern);
@@ -814,7 +811,9 @@ describe('found by the torture test', () => {
   // Chains that failed once (borders on delete, cut out and recolor; knockouts after reopening a
   // project whose curves were stored rounded; a fill leaving out its own satin border): replayed
   // with every run.
-  it.each([3, 4, 9, 11, 12, 16, 18, 24, 34, 38, 101, 389])('chain %i still holds', async (seed) => {
+  // The ones the regular chains above already run with the same steps are not run twice.
+  const regular = (seed: number) => STEPS === 14 && seed >= FIRST_SEED && seed < FIRST_SEED + CHAINS;
+  it.each([3, 4, 9, 11, 12, 16, 18, 24, 34, 38, 101, 389].filter((s) => !regular(s)))('chain %i still holds', async (seed) => {
     await chain(seed, 14);
   });
   // From the first long run (20 steps): a narrow added shape sewn as satin forgot what it was;

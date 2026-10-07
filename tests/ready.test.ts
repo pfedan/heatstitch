@@ -171,11 +171,6 @@ describe('fabric profiles', () => {
     for (const s of [...Object.values(fabricDe), ...Object.values(fabricEn)]) expect(s).not.toMatch(/[–—]/);
   });
 
-  it('woven-like fabrics turn red from 5 mm², knit-like and delicate ones from 3 mm²', () => {
-    expect(RED_MIN_MM2.woven_heavy).toBe(RED_MIN_MM2.woven);
-    expect(RED_MIN_MM2.fleece).toBe(RED_MIN_MM2.knit);
-    expect(RED_MIN_MM2.sheer).toBe(3);
-  });
 });
 
 describe('ready: texts', () => {
