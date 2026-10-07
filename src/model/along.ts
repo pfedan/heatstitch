@@ -7,7 +7,7 @@ import { TOLERANCE } from '../digitize/run';
 import type { Pt } from '../digitize/skeleton';
 import type { UnderlayKind } from '../digitize/satin';
 import { MOTIF_PERIOD, motifStitches, type LineMotif } from '../digitize/motif';
-import { satinRuns, type SatinSettings } from './restitch';
+import { satinRuns, type FringeSide, type SatinSettings } from './restitch';
 
 /**
  * Stitches along a line: the border of a fill (on the edge of its area) and, for drawn lines, a
@@ -38,6 +38,10 @@ export interface PathStitch {
   pull?: number;
   /** Satin: its underlay; along the middle from 1.5 mm width, none below, by default. */
   under?: UnderlayKind | 'off';
+  /** Satin lines only: a ragged edge, stitches up to this far short of the side (mm); see SatinSettings.fringe. */
+  fringe?: number;
+  /** Satin lines only: the fringe on this side of the drawn line only; both by default. */
+  fringeSide?: FringeSide;
   /** Lines only: copies of the line beside it (see digitize/echo.ts); none by default. */
   echo?: LineEcho;
   /** Lines only: a copy beside it in a thread of its own, sewn before it (see shadow.ts). */
@@ -72,8 +76,11 @@ export const spacingOf = (s: PathStitch): number => s.spacing ?? (s.type === 'zi
 /** The satin's underlay when none is chosen (a zigzag and an E stitch have none): by width as any satin (see SATIN_UNDER_MIN). */
 export const autoUnder = (s: PathStitch): UnderlayKind | 'off' => (s.type !== 'satin' ? 'off' : (s.under ?? (s.width >= SATIN_UNDER_MIN ? 'auto' : 'off')));
 
-/** The satin of a line: narrow, underlay along its middle once it is wide enough to need one. */
-const satinOf = (s: PathStitch): SatinSettings => ({
+/**
+ * The satin of a line: narrow, underlay along its middle once it is wide enough to need one. A
+ * line (not a border) keeps its fringe on its side of the drawn line, also sewn the other way (`back`).
+ */
+const satinOf = (s: PathStitch, line = false, back = false): SatinSettings => ({
   spacing: spacingOf(s),
   edge: s.type === 'satin' ? (s.pull ?? 0) : 0,
   short: s.type === 'satin',
@@ -83,7 +90,10 @@ const satinOf = (s: PathStitch): SatinSettings => ({
   stagger: true,
   edgeShare: 0,
   ...(s.type === 'e' ? { type: 'e' as const } : {}),
+  ...(line && s.type === 'satin' && s.fringe ? { fringe: s.fringe, ...(s.fringeSide ? { fringeSide: back ? other(s.fringeSide) : s.fringeSide } : {}) } : {}),
 });
+
+const other = (side: FringeSide): FringeSide => (side === 'left' ? 'right' : 'left');
 
 type Band = { left: Pt[]; right: Pt[] };
 
@@ -154,7 +164,7 @@ export function sewAlong(line: Pt[], closed: boolean, s: PathStitch, start?: Pt,
   if (area && closed) return satinRuns([onEdge(area, borderRails(area, l, s.width, s.offset ?? 0), s)], satinOf(s));
   const rails = lineRails(l, closed, s.width);
   // Prongs of an E stitch on the right of the drawn line (the left rail is on the right on screen, y down).
-  return satinRuns([s.type === 'e' ? eRails(rails, back === !!s.flip) : rails], satinOf(s));
+  return satinRuns([s.type === 'e' ? eRails(rails, back === !!s.flip) : rails], satinOf(s, true, back));
 }
 
 /**

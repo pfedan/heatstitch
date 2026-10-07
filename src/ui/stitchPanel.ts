@@ -1,7 +1,7 @@
 import { SATIN_SPLIT_MAX } from '../material/rules';
 import { formatNumber, onLangChange, t, type Key } from '../i18n';
 import type { ObjectKind } from '../model/objects';
-import { DECO_DEFAULTS, isOpenPattern, OPEN_SIZE, OPEN_SIZE_RANGE, SATIN_SPLIT, UNDERLAYS, type DecoSettings, type FillPattern, type FillSettings, type OpenPattern, type RunSettings, type SatinSettings, type SatinType, type Settings, type ShapeTrust, type Fixed } from '../model/restitch';
+import { DECO_DEFAULTS, isOpenPattern, OPEN_SIZE, OPEN_SIZE_RANGE, SATIN_SPLIT, UNDERLAYS, type DecoSettings, type FillPattern, type FringeSide, type FillSettings, type OpenPattern, type RunSettings, type SatinSettings, type SatinType, type Settings, type ShapeTrust, type Fixed } from '../model/restitch';
 import { fixText } from './fixText';
 import type { UnderlayKind } from '../digitize/satin';
 import type { ShapeOutline } from '../render/scene';
@@ -927,6 +927,15 @@ export class StitchPanel {
     ];
     if (!e) look.push(this.check('stitch.short', 'stitch.short.hint', () => s.short, (v) => (s.short = v)));
     if (!e) look.push(this.check('stitch.byWidth', 'stitch.byWidth.hint', () => !!s.byWidth, (v) => (v ? (s.byWidth = true) : delete s.byWidth)));
+    if (!e) {
+      // Pointing at a side shows its fringe on the canvas before it is picked.
+      const peek = (v: FringeSide | undefined | null) => {
+        if (v === null) return this.hooks.preview(null);
+        const { fringeSide: _f, ...rest } = s;
+        this.hooks.preview({ kind: 'satin', s: v ? { ...rest, fringeSide: v } : rest });
+      };
+      look.push(...this.fringeControls(s, () => {}, peek));
+    }
     look.push(
       this.slider({ label: 'stitch.split', hint: 'stitch.split.hint', min: 4, max: SATIN_SPLIT_MAX, step: 0.5, get: () => s.split ?? SATIN_SPLIT, set: (v) => (s.split = v), fmt: mm(1), auto: this.unset(s, 'split') }),
       this.check('stitch.stagger', 'stitch.stagger.hint', () => s.stagger ?? true, (v) => (s.stagger = v)),
@@ -1008,6 +1017,44 @@ export class StitchPanel {
       this.sec('hold', 'stitches.sec.hold', hold),
       this.sec('tools', 'stitches.sec.tools', tools),
     ];
+  }
+
+  /**
+   * The fringe of a satin (an object, or a satin line): how deep, and on which side (shown once
+   * there is a fringe). `set` takes each change over; `peek` shows a side before it is picked.
+   */
+  private fringeControls(o: { fringe?: number; fringeSide?: FringeSide }, set: () => void, peek?: (side: FringeSide | undefined | null) => void): HTMLElement[] {
+    type Side = 'both' | FringeSide;
+    const side = this.choice<Side>(
+      'stitch.fringeSide',
+      ['both', 'left', 'right'],
+      o.fringeSide ?? 'both',
+      (v) => `stitch.fringeSide.${v}` as Key,
+      (v) => {
+        if (v === 'both') delete o.fringeSide;
+        else o.fringeSide = v;
+        set();
+      },
+      true,
+      peek && ((v) => peek(v === null ? null : v === 'both' ? undefined : v)),
+    );
+    side.style.display = o.fringe ? '' : 'none';
+    const depth = this.slider({
+      label: 'stitch.fringe',
+      hint: 'stitch.fringe.hint',
+      min: 0,
+      max: 5,
+      step: 0.1,
+      get: () => o.fringe ?? 0,
+      set: (v) => {
+        if (v) o.fringe = v;
+        else delete o.fringe;
+        side.style.display = v ? '' : 'none';
+        set();
+      },
+      fmt: (v) => (v ? `${formatNumber(v, 1)} mm` : t('stitch.fringe.off')),
+    });
+    return [depth, side];
   }
 
   private runSections(info: StitchInfo): HTMLElement[] {
@@ -1769,6 +1816,8 @@ export class StitchPanel {
       width,
       this.slider({ label: 'stitch.density', hint: 'stitch.satinDensity.hint', min: 0.2, max: 1, step: 0.01, get: () => st.spacing ?? 0.4, set: (v) => change((s) => (s.spacing = v))(v), fmt: mm(2), auto: unset('spacing') }),
     );
+    // A drawn satin line can be frayed (fur, feathers); a border keeps a clean edge.
+    if (line && !offset) out.look.push(...this.fringeControls(st, () => set(st)));
     out.hold.push(
       this.slider({ label: 'stitch.borderPull', hint: 'stitch.borderPull.hint', min: 0, max: 0.6, step: 0.05, get: () => st.pull ?? 0, set: (v) => change((s) => (s.pull = v || undefined))(v), fmt: mm(2), auto: unset('pull') }),
       this.choice<UnderlayKind | 'off'>('stitch.under.kind', ['off', ...UNDERLAYS], autoUnder(st), (v) => (v === 'off' ? 'stitch.borderUnder.off' : (`stitch.under.${v}` as Key)), (v) => {
