@@ -46,10 +46,9 @@ function oneKind(m: Remembered, kind: ObjectKind): boolean {
 /**
  * What object `o` of `p` is sewn from, or null when it can only keep its stitches: loosed from its
  * shape, read from stitches, a lettering, a fill that follows its old rows, of more than one kind,
- * or the border around the parts of a fill cut apart.
+ * or the border around the parts of a fill cut apart. `m`: what it remembers, when not as in `p`.
  */
-export function specOf(p: Pattern, o: SewObject): Spec | null {
-  const m = remembered(p, o);
+export function specOf(p: Pattern, o: SewObject, m: Remembered | null | undefined = remembered(p, o)): Spec | null {
   if (!m || m.free || m.hand || m.read || m.lettering || m.borderAt !== undefined) return null;
   const kind = knownKind(m) ?? o.kind;
   if (kind !== o.kind) return null;
@@ -219,7 +218,7 @@ export interface Entry {
   sew?: boolean;
   /** Kept stitches moved, turned or mirrored by this map (world mm), the way in laid anew. */
   map?: Mat;
-  /** What it remembers from now on (null: nothing; else what it remembers in `p`); for kept stitches. */
+  /** What it remembers from now on (null: nothing; else what it remembers in `p`); sewn anew, it is sewn from this. */
   memory?: Remembered | null;
 }
 
@@ -273,7 +272,9 @@ export function sewList(p: Pattern, list: Entry[], trimMm: number, opts: ListOpt
   const colors: ThreadColor[] = [list[0].color];
   let stitches = 0;
   let here: Pt | null = null;
-  const specs = list.map((e) => (e.sew ? specOf(p, e.obj) : null));
+  // What each entry remembers from now on.
+  const known = list.map((e) => (e.memory === undefined ? remembered(p, e.obj) : (e.memory ?? undefined)));
+  const specs = list.map((e, k) => (e.sew ? specOf(p, e.obj, known[k]) : null));
   // Lines and satins sewn ahead (where they start does not depend on the object before).
   const ahead = new Map<number, Sewn>();
   let counted = 0;
@@ -374,7 +375,7 @@ export function sewList(p: Pattern, list: Entry[], trimMm: number, opts: ListOpt
     // it keeps its stitches, or it is a line or satin (they start where their shape starts).
     const nextSpec = next && specs[k + 1];
     const fixedStart = next && (!nextSpec || nextSpec.kind === 'line' || nextSpec.kind === 'satin');
-    if (fixedStart && nextSpec && !ahead.has(k + 1)) ahead.set(k + 1, sewCached(remembered(p, next.obj)!, nextSpec, { from: [0, 0] }));
+    if (fixedStart && nextSpec && !ahead.has(k + 1)) ahead.set(k + 1, sewCached(known[k + 1]!, nextSpec, { from: [0, 0] }));
     const nextAt = next && recOf(k + 1, next.obj.first);
     const to = !fixedStart ? undefined : nextSpec ? ahead.get(k + 1)?.runs[0][0] : ([nextAt!.x / 10, nextAt!.y / 10] as Pt);
     const later = list.slice(k + 1).map((x) => x.obj);
@@ -382,8 +383,8 @@ export function sewList(p: Pattern, list: Entry[], trimMm: number, opts: ListOpt
     // The first object starts nearest to the origin: taken from its stitches, the start would
     // creep along its edge each time it is sewn again (they are rounded to 0.1 mm).
     const way: Way = { from: here ?? [0, 0], ...(to ? { to } : {}), ...(covers?.length ? { covers } : {}) };
-    const sewn = !spec ? null : ahead.has(k) ? ahead.get(k)! : sewCached(remembered(p, o)!, spec, way);
-    const m = e.memory === undefined ? remembered(p, o) : (e.memory ?? undefined);
+    const sewn = !spec ? null : ahead.has(k) ? ahead.get(k)! : sewCached(known[k]!, spec, way);
+    const m = known[k];
     let memory = m;
     if (sewn && spec) {
       const under = objectRecords(sewn.runs, sewn.under, trimMm, out);
