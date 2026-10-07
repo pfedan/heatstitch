@@ -200,6 +200,20 @@ function borderedHalves(border: BorderSettings = { ...RUN, color: dark }): { p: 
   return { p: s.pattern, parts: s.parts };
 }
 
+describe('a fill with a pattern cut apart', () => {
+  it('gives a part too small for the pattern plain rows instead of failing the cut', () => {
+    for (const pattern of ['maze', 'grid', 'meander', 'cross'] as const) {
+      const d = withFill(design(), 0, { pattern, deco: { seed: 3, focus: [0.5, 0.5] } });
+      const s = splitFill(d, 0, [[[1.5, -2], [1.5, 22]]], T);
+      expect(s, pattern).not.toBeNull();
+      if (!s || s === 'whole') continue;
+      const mem = memOf(s.pattern);
+      expect(s.parts.map((k) => mem[k]!.fill!.pattern)).toContain(pattern);
+      if (s.plain) expect(s.parts.some((k) => mem[k]!.fill!.pattern === 'tatami')).toBe(true);
+    }
+  });
+});
+
 describe('the border of a fill cut apart', () => {
   it('stays one border around all parts, never along the cut', () => {
     const { p, parts } = borderedHalves({ ...SATIN, color: dark });

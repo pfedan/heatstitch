@@ -98,6 +98,7 @@ export function bindDrawing(app: DrawingApp) {
     let cur = p;
     let sel = [...ui.selectedObjects];
     let parts = 0;
+    let plain = 0;
     // The last fill first, so the ones before keep their place; what comes after moves on by the new parts.
     for (const o of fills) {
       const r = splitFill(cur, o, [line], app.settings.trimMm);
@@ -106,6 +107,7 @@ export function bindDrawing(app: DrawingApp) {
       const added = app.seq(r.pattern).objects.length - app.seq(cur).objects.length;
       sel = sel.flatMap((s) => (s > o ? [s + added] : s === o ? r.parts : [s]));
       parts += r.parts.length;
+      plain += r.plain;
       cur = r.pattern;
     }
     if (cur === p) return app.layers.say(t('cut.whole'), true);
@@ -115,7 +117,7 @@ export function bindDrawing(app: DrawingApp) {
     ui.selectedObjects = new Set(sel);
     ui.selectionKey++;
     app.followKnockouts();
-    app.layers.say(`${t('cut.done', { n: formatNumber(parts) })} ${t('object.undo')}`);
+    app.layers.say(`${t('cut.done', { n: formatNumber(parts) })}${plain ? ` ${t('cut.plain', { n: formatNumber(plain) })}` : ''} ${t('object.undo')}`);
     app.redraw();
   }
 
