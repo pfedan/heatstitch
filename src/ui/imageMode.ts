@@ -1266,7 +1266,7 @@ export class ImageMode {
     const set = this.work.areas ?? {};
     const name = (x: Technique | 'run') => t(`image.tech.${x}` as Key);
     const el = <K extends keyof HTMLElementTagNameMap>(tag: K, className: string, text = '') => Object.assign(document.createElement(tag), { className, textContent: text });
-    const select = (auto: Technique | 'run', value: string, label: string, apply: (t: Technique | null) => void) => {
+    const select = (auto: Technique | 'run', value: string, label: string, offers: readonly Technique[], apply: (t: Technique | null) => void) => {
       const sel = document.createElement('select');
       sel.title = t('image.tech.hint');
       sel.setAttribute('aria-label', label);
@@ -1275,7 +1275,7 @@ export class ImageMode {
       const own = value !== 'auto';
       sel.append(
         new Option(own ? t('image.tech.auto', { t: name(auto) }) : name(auto), 'auto'),
-        ...TECHNIQUES.filter((x) => own || x !== auto).map((x) => new Option(name(x), x)),
+        ...TECHNIQUES.filter((x) => offers.includes(x) && (own || x !== auto)).map((x) => new Option(name(x), x)),
       );
       if (value === 'mixed') sel.append(new Option(t('image.tech.mixed'), 'mixed'));
       sel.value = value;
@@ -1318,7 +1318,7 @@ export class ImageMode {
         const text = el('span', 'area-text', t(`image.area.${g.reason}` as Key, { n: g.keys.length }));
         // The text opens the group too: a larger target than the chevron.
         if (several) text.addEventListener('click', flip);
-        li.append(chevron(open, several, flip), el('span', 'letter', g.letter), text, select(g.auto, g.fixed ?? 'auto', `${g.letter}: ${text.textContent}`, (x) => this.setAreas(g.keys, x)));
+        li.append(chevron(open, several, flip), el('span', 'letter', g.letter), text, select(g.auto, g.fixed ?? 'auto', `${g.letter}: ${text.textContent}`, g.offers, (x) => this.setAreas(g.keys, x)));
         li.addEventListener('pointerenter', () => this.hot(g.letter, null));
         li.addEventListener('pointerleave', () => this.hot(null, null));
         rows.push(li);
@@ -1329,7 +1329,7 @@ export class ImageMode {
           sub.dataset.area = a.key;
           const name = el('span', 'area-text');
           name.append(el('span', 'letter', a.name), `${formatNumber(a.areaMm2, a.areaMm2 < 10 ? 1 : 0)} mm²`);
-          sub.append(el('span', ''), el('span', ''), name, select(a.auto, set[a.key] ?? 'auto', a.name, (x) => this.setAreas([a.key], x)));
+          sub.append(el('span', ''), el('span', ''), name, select(a.auto, set[a.key] ?? 'auto', a.name, a.offers ?? g.offers, (x) => this.setAreas([a.key], x)));
           sub.addEventListener('pointerenter', () => this.hot(null, a.key));
           sub.addEventListener('pointerleave', () => this.hot(null, null));
           rows.push(sub);
