@@ -1,9 +1,10 @@
+import { LOCK_MM, SATIN_SPLIT_MM, SATIN_UNDER_MIN } from '../material/rules';
 import { fillRegion } from '../digitize/fill';
 import { expandRegion } from '../digitize/region';
 import { runStitch, TOLERANCE } from '../digitize/run';
 import { underlayOf, type UnderlayKind } from '../digitize/satin';
 import type { Pt } from '../digitize/skeleton';
-import { columnOf, reversedRails, satinRuns, SATIN_SPLIT, type Rails, type SatinSettings } from '../model/restitch';
+import { columnOf, reversedRails, satinRuns, type Rails, type SatinSettings } from '../model/restitch';
 import { JUMP, STITCH, TRIM } from '../model/pattern';
 import { apply, type Form, type Mat } from '../shape/path';
 import { rasterize } from '../shape/rasterize';
@@ -38,10 +39,11 @@ const pairs = (a: number[]): Pt[] => {
   return out;
 };
 
-/** Underlay for a satin column of `width` (mm): the font's, less where the column is too narrow for it. */
+/** Underlay for a satin column of `width` (mm): the font's, less where the column is too narrow for it (see SATIN_UNDER_MIN). */
 function underlayFor(kind: SatinEl['p']['u'], width: number): UnderlayKind | null {
-  if (kind === 'none' || width < 0.9) return null;
-  if (width < 1.6 && (kind === 'zigzag' || kind === 'both' || kind === 'contour')) return 'center';
+  if (kind === 'none' || width < SATIN_UNDER_MIN) return null;
+  // Up to 2 mm a walk along the middle is all that fits (Ink/Stitch: center walk 1 to 2 mm).
+  if (width < 2 && (kind === 'zigzag' || kind === 'both' || kind === 'contour')) return 'center';
   return kind;
 }
 type SatinEl = Extract<GlyphEl, { k: 's' }>;
@@ -61,7 +63,7 @@ function sewElement(e: GlyphEl, m: Mat, scale: number, turn: number, l: Letterin
       short: true,
       underlay: false,
       tolerance: TOLERANCE,
-      split: e.p.sl && e.p.sl > 0 ? Math.max(3, e.p.sl) : SATIN_SPLIT,
+      split: e.p.sl && e.p.sl > 0 ? Math.max(3, e.p.sl) : SATIN_SPLIT_MM,
       type: e.p.e ? 'e' : 'satin',
     };
     const top = satinRuns([rails], s).filter((r) => r.length > 1);
@@ -129,7 +131,7 @@ export function letteringRuns(font: Font, l: Lettering, lay: Layout = layout(fon
   return out;
 }
 
-/** Lock stitches along the start (or the end) of a run: there and back by 0.5 and 1 mm. */
+/** Lock stitches along the start (or the end) of a run: the half-stitch lock (see LOCK_MM). */
 function lock(run: Pt[], atEnd: boolean): Pt[] {
   const pts = atEnd ? run.slice().reverse() : run;
   const along = (d: number): Pt => {
@@ -144,7 +146,7 @@ function lock(run: Pt[], atEnd: boolean): Pt[] {
     }
     return pts[pts.length - 1];
   };
-  return [along(0.5), along(1), along(0.5), pts[0]];
+  return [along(LOCK_MM / 2), along(LOCK_MM), along(LOCK_MM / 2), pts[0]];
 }
 
 export interface Sewn {

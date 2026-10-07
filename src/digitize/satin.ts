@@ -1,3 +1,4 @@
+import { SATIN_CENTER_MAX } from '../material/rules';
 import { sample, type Region } from './region';
 import { runStitch, TOLERANCE } from './run';
 import type { Branch, Pt } from './skeleton';
@@ -256,25 +257,29 @@ export type UnderlayKind = 'auto' | 'center' | 'contour' | 'zigzag' | 'both';
 const INSET = 0.4;
 
 /**
- * Underlay sewn on the way out along the column (the satin follows on the way back): a center walk
- * for columns up to 4 mm, a zigzag inset 0.4 mm from both rails with 3 mm between penetrations on
- * the same side for wider ones (Wilcom and Ink/Stitch use these by width). The center walk keeps
- * within `tol` of the centerline, so it stays under the satin in tight curves.
+ * Underlay sewn on the way out along the column (the satin follows on the way back), by width (see
+ * SATIN_CENTER_MAX): a center walk for columns up to 4 mm; for wider ones a contour inset 0.4 mm
+ * from both rails, then a zigzag with 3 mm between penetrations on the same side (Ink/Stitch's
+ * underlay tutorial). The center walk keeps within `tol` of the centerline, so it stays under the
+ * satin in tight curves.
  */
 export function underlay(c: Column, tol = TOLERANCE, inset = insetOf(undefined)): Pt[] {
   const parts = byWidth(c);
-  if (parts.length === 1) return c.width <= WIDE ? centerWalk(c, tol) : zigzag(c, inset);
+  if (parts.length === 1) return c.width <= WIDE ? centerWalk(c, tol) : wideUnder(c, tol, inset);
   // Along the column by its width there: a centre walk where narrow, a zigzag where wide.
   const out: Pt[] = [];
   for (const { a, b, wide } of parts) {
     const part = sliceColumn(c, a, b);
-    out.push(...(wide ? zigzag(part, inset) : centerWalk(part, tol)));
+    out.push(...(wide ? wideUnder(part, tol, inset) : centerWalk(part, tol)));
   }
   return out;
 }
 
-/** Wider than this (mm), a column gets a zigzag underlay; up to it a centre walk. */
-const WIDE = 4;
+/** Wider than this (mm), a column gets contour and zigzag underlay; up to it a centre walk. */
+const WIDE = SATIN_CENTER_MAX;
+
+/** Contour (out and back along the rails) then zigzag to the far end, where the satin starts back. */
+const wideUnder = (c: Column, tol: number, inset: (a: Pt, b: Pt) => number): Pt[] => [...contour(c, tol, inset), ...zigzag(c, inset)];
 /** Along a column a stretch counts as wide only this much over WIDE (mm), so a column about 4 mm wide is not cut up. */
 const WIDE_MARGIN = 0.5;
 /** Stretches shorter than this (mm along the middle) go with their neighbours. */
