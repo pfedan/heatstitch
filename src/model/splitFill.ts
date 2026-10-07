@@ -245,9 +245,11 @@ export function splitFill(p: Pattern, o: number, cuts: Pt[][], trimMm: number): 
     const a = addShape(cur, { form: forms[k], kind: 'fill' }, obj.color, o, options);
     if (!a) return null;
     cur = a.pattern;
-    // It is a fill with the fill's settings (also when, small, its stitches would read as a line).
+    // It is a fill with the fill's settings (also when, small, its stitches would read as a line),
+    // and leaves out what lies on top of it as the fill did.
     const part = sewObjects(cur)[o + 1];
-    remember(cur, part, { ...remembered(cur, part), region: remembered(cur, part)?.region ?? null, fill: { ...known!.fill!, ...change(k) } });
+    const leaveOut = known!.knockout ? { knockout: true, ...(known!.overlapShare !== undefined ? { overlapShare: known!.overlapShare } : {}) } : {};
+    remember(cur, part, { ...remembered(cur, part), region: remembered(cur, part)?.region ?? null, fill: { ...known!.fill!, ...change(k) }, ...leaveOut });
   }
   if (sewObjects(cur).length !== sewObjects(p).length + forms.length - 1) return null;
   let plain = 0;
