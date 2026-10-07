@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { checkSections, stripsOfOutline } from '../src/digitize/rungs';
 import type { Pt } from '../src/digitize/skeleton';
 import { sewObjects } from '../src/model/objects';
-import { forget, keepShape, previewPairs, measureSatin, remember, remembered, rememberedIn, restitch, restoreRemembered, reversedRails, satinRuns, type Rails, type SatinSettings } from '../src/model/restitch';
+import { forget, keepShape, previewPairs, sectionView, measureSatin, remember, remembered, rememberedIn, restitch, restoreRemembered, reversedRails, satinRuns, type Rails, type SatinSettings } from '../src/model/restitch';
 import { stitchKinds } from '../src/model/sequence';
 import { transformRemembered } from '../src/model/transform';
 import { parsePattern } from '../src/parsers';
@@ -231,5 +231,23 @@ describe('the sections the rung tool shows', () => {
     const c = checkSections([O], [[[-1, 5], [4, 5]]], [], [hole]);
     expect(c.holes).toEqual([hole]);
     expect(c.strips).toEqual([]);
+  });
+});
+
+describe('satins read from a file', () => {
+  it('each open in sections of its area, the stitches untouched', () => {
+    const f = 'demos/letters.pes';
+    const p = parsePattern(readFileSync(new URL(`../public/examples/${f}`, import.meta.url)), f);
+    const kinds = stitchKinds(p);
+    const satins = sewObjects(p, kinds).filter((x) => x.kind === 'satin');
+    expect(satins.length).toBeGreaterThan(0);
+    for (const o of satins) {
+      const shape = keepShape(p, o, kinds);
+      const columns = sectionView(shape.columns!, shape.shape);
+      const k = columns.findIndex((part) => part[0].split);
+      expect(k).toBeGreaterThanOrEqual(0);
+      // The same columns, only the area added: nothing is sewn anew by opening the tool.
+      expect(columns.map((part) => part.map(({ split: _s, ...c }) => c))).toEqual(shape.columns!.map((part) => part.map(({ split: _s, ...c }) => c)));
+    }
   });
 });

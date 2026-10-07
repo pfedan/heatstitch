@@ -1,5 +1,5 @@
 import { outline, type Region } from './region';
-import { inside, stripsOfAreas } from './rungs';
+import { cutLinesBetween, inside, stripsOfAreas } from './rungs';
 import { skeleton, type Branch, type Graph, type Pt } from './skeleton';
 
 /**
@@ -518,4 +518,32 @@ function openHole(g: Graph, hole: Pt[]): [Pt, Pt] | null {
   const n: Pt = [-t[1], t[0]];
   const w = b.r[i] * 1.2 + 0.3;
   return [add(b.pts[i], n, -w), add(b.pts[i], n, w)];
+}
+
+/** A column as withSplit reads it (see Rails in model/restitch). */
+interface SplitColumn {
+  left: Pt[];
+  right: Pt[];
+  split?: { outlines: Pt[][]; holes: Pt[][]; cuts: [Pt, Pt][] };
+}
+
+/**
+ * A satin that does not know how it was cut (see Rails.split), made from a fill or read from
+ * stitches: the area from its shape, the cut lines where its columns end inside it (against another
+ * column, not at the edge). So every satin opens in sections of its area, and the cut lines can always be moved, drawn or taken away again, and the columns made anew.
+ */
+export function withSplit<C extends SplitColumn>(columns: C[][], area: Region): C[][] {
+  if (columns.some((part) => part.some((r) => r.split))) return columns;
+  const { outsides, holes } = areaLoops(area);
+  if (!outsides.length) return columns;
+  const within = (q: Pt) => outsides.some((o) => inside(o, q)) && !holes.some((h) => inside(h, q));
+  const mid = (c: C): Pt => {
+    const i = c.left.length >> 1;
+    return [(c.left[i][0] + c.right[Math.min(i, c.right.length - 1)][0]) / 2, (c.left[i][1] + c.right[Math.min(i, c.right.length - 1)][1]) / 2];
+  };
+  // The part that is the area: its columns lie in it.
+  const k = columns.findIndex((part) => part.every((c) => c.left.length > 1 && c.right.length > 1 && within(mid(c))));
+  if (k < 0) return columns;
+  const cuts = cutLinesBetween(columns[k], outsides, holes);
+  return columns.map((part, j) => (j === k ? part.map((c, i) => (i ? c : { ...c, split: { outlines: outsides, holes, cuts } })) : part));
 }
