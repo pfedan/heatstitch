@@ -2646,6 +2646,8 @@ function restitchOnce(
           ...(known?.echoOf ? { echoOf: known.echoOf } : {}),
         };
     if (known?.lettering) after.lettering = known.lettering;
+    // The same object with new stitches: it keeps its id.
+    after.id = o.id;
     if (known?.lock) after.lock = true;
     // Up to the object: everything as it was, except the jumps that lead to its first stitch.
     let lead = o.first;

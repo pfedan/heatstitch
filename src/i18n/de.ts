@@ -1030,6 +1030,9 @@ export const deBase = {
   'canvas.hint.draw.free': 'Ziehen: Linie freihand · Esc: Werkzeug weglegen',
   'shape.failed': 'In dieser Form lässt sich nichts füllen. Die alte Form bleibt.',
   'shape.minNodes': 'Eine Fläche braucht mindestens drei Knoten.',
+  'shape.rested': 'Neue Form gespeichert. Die Stiche bleiben, wie du sie von Hand gesetzt hast; die Form ruht als grauer Umriss.',
+  'shape.rested.sew': 'Aus der neuen Form sticken',
+  'shape.rested.sew.hint': 'Stickt das Objekt aus der neuen Form mit seinen Einstellungen neu und ersetzt die Handstiche. Zeigen: Vorschau. Rückgängig holt sie zurück.',
   'shape.handReplaced': 'Neu gestickt; {n} Handänderungen an Einstichen sind dabei ersetzt. Rückgängig holt sie zurück.',
   'shape.handReplaced.one':
     'Neu gestickt; 1 Handänderung an Einstichen ist dabei ersetzt. Rückgängig holt sie zurück.',
