@@ -10,7 +10,7 @@ import { syncBorders } from '../src/model/border';
 import { takeOver } from '../src/model/knockout';
 import { sewObjects } from '../src/model/objects';
 import { COLOR_CHANGE, STITCH, type Pattern } from '../src/model/pattern';
-import { DECO_PATTERNS, OPEN_PATTERNS, openOnPurpose, remembered, restitch, restoreRemembered, rememberedIn, forgetAll, type FillSettings } from '../src/model/restitch';
+import { DECO_PATTERNS, OPEN_PATTERNS, openOnPurpose, remembered, restitch, restoreRemembered, rememberedIn, type FillSettings } from '../src/model/restitch';
 import { stitchKinds } from '../src/model/sequence';
 import { deleteObjects, mirrorMatrix, recolorObjects } from '../src/model/shapeOps';
 import { transformRemembered } from '../src/model/transform';
@@ -239,14 +239,12 @@ describe('decorative fills in the design', () => {
   it('keeps the settings through saving and opening', () => {
     const p = disc();
     const q = sewAs(p, (f) => ({ ...f, pattern: 'rays', deco: { focus: [0.2, 0.7], seed: 4 } }))!;
-    const stored = structuredClone(rememberedIn(q, sewObjects(q)));
-    forgetAll();
-    expect(restoreRemembered(stored)).toBeGreaterThan(0);
+    const stored = structuredClone(rememberedIn(q));
+    expect(restoreRemembered(q, stored)).toBeGreaterThan(0);
     expect(remembered(q, sewObjects(q)[0])?.fill?.deco).toEqual({ focus: [0.2, 0.7], seed: 4 });
     // Settings that make no sense are not taken.
-    forgetAll();
-    for (const e of stored) if (e.fill) (e.fill.deco as Record<string, unknown>).grid = 'triangles';
-    restoreRemembered(stored);
+    for (const e of stored.objects) if (e.memory?.fill) (e.memory.fill.deco as Record<string, unknown>).grid = 'triangles';
+    restoreRemembered(q, stored);
     expect(remembered(q, sewObjects(q)[0])?.fill).toBeUndefined();
   });
 

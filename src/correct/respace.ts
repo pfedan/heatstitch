@@ -1,4 +1,4 @@
-import { computeBounds, STITCH, type Pattern } from '../model/pattern';
+import { computeBounds, nextVersion, STITCH, type Pattern } from '../model/pattern';
 import { tidy } from '../model/edit';
 import { satinMask } from '../validation/satin';
 import { stitchRuns } from './structure';
@@ -282,7 +282,7 @@ function splice(p: Pattern, edits: { from: number; to: number; points: [number, 
   const x = Int32Array.from(xs);
   const y = Int32Array.from(ys);
   const cmd = Uint8Array.from(cs);
-  return tidy({ ...p, x, y, cmd, bounds: computeBounds(x, y, cmd) });
+  return tidy(nextVersion(p, { x, y, cmd, bounds: computeBounds(x, y, cmd) }));
 }
 
 /** Resamples a polyline at `n` points evenly spaced by arc length (first and last kept). */

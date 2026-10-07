@@ -1,7 +1,7 @@
 import { withRecords } from '../../model/edit';
 import { sewObjects } from '../../model/objects';
 import type { Pattern } from '../../model/pattern';
-import { forget, holdMemory, remembered, rememberedIn, restoreRemembered, type Remembered, type StoredObject } from '../../model/restitch';
+import { forget, holdMemory, remembered, rememberedIn, restoreRemembered, type ObjectsAsStored, type Remembered } from '../../model/restitch';
 import type { Profile } from '../../validation/profiles';
 import type { FixTarget } from './cells';
 import { planFix, type FixOptions, type FixResult } from './solve';
@@ -20,7 +20,7 @@ export interface PlannedFix extends FixResult {
   /** Key of the design the fix was worked out on: a fix applies only to it. */
   base: string;
   /** What the objects of the result remember, as stored (it can cross to and from a worker). */
-  memory: StoredObject[];
+  memory: ObjectsAsStored;
 }
 
 export { designKey };
@@ -30,7 +30,7 @@ export async function prepareFix(p: Pattern, profile: Profile, kind: FixTarget, 
   const release = holdMemory();
   try {
     const r = await planFix(p, profile, kind, opt);
-    return { ...r, base: designKey(p), memory: r.pattern === p ? [] : rememberedIn(r.pattern, sewObjects(r.pattern)) };
+    return { ...r, base: designKey(p), memory: r.pattern === p ? [] : rememberedIn(r.pattern) };
   } finally {
     release();
   }
@@ -46,7 +46,7 @@ export function applyFix(p: Pattern, f: PlannedFix): Pattern | null {
   const before = sewObjects(p);
   // What the fix's objects remember first: it includes how its new stitches group into objects,
   // and the indices of the fix count in that grouping.
-  restoreRemembered(f.memory);
+  restoreRemembered(f.pattern, f.memory);
   const after = sewObjects(f.pattern);
   for (const x of f.objects) {
     const o = before[x.index];

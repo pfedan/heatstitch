@@ -1,4 +1,5 @@
-import { tidy, withRecords } from './edit';
+import { tidyKept, withRecords } from './edit';
+import { carryObjects } from './objects';
 import { STITCH, TRIM, type Pattern } from './pattern';
 import type { Transition } from './sequence';
 
@@ -14,11 +15,13 @@ export interface Rec {
   x: number;
   y: number;
   cmd: number;
+  /** The record of the pattern it was taken from (see recs), so its object can follow it. */
+  from?: number;
 }
 
 export const recs = (p: Pattern, a: number, b: number): Rec[] => {
   const out: Rec[] = [];
-  for (let i = a; i < b; i++) out.push({ x: p.x[i], y: p.y[i], cmd: p.cmd[i] });
+  for (let i = a; i < b; i++) out.push({ x: p.x[i], y: p.y[i], cmd: p.cmd[i], from: i });
   return out;
 };
 
@@ -30,11 +33,14 @@ function dir(p: Pattern, a: number, b: number): [number, number] {
   return l > 0 ? [dx / l, dy / l] : [1, 0];
 }
 
-export function build(p: Pattern, list: Rec[]): Pattern {
+export function build(p: Pattern, list: Rec[], src: Pattern = p): Pattern {
   const x = Int32Array.from(list, (r) => r.x);
   const y = Int32Array.from(list, (r) => r.y);
   const cmd = Uint8Array.from(list, (r) => r.cmd);
-  return tidy(withRecords(p, x, y, cmd));
+  const { pattern, kept } = tidyKept(withRecords(p, x, y, cmd));
+  // The objects follow their records (`from`, records of `src`); new ones go with their neighbours.
+  carryObjects(src, pattern, Int32Array.from(kept, (k) => list[k].from ?? -1));
+  return pattern;
 }
 
 /**
@@ -88,5 +94,6 @@ export function setTrims(p: Pattern, list: Transition[], cut: boolean): Pattern 
     }
   }
   out.push(...recs(p, i, p.cmd.length));
+  // The objects stay what they were: what lies between them changed, not they.
   return build(p, out);
 }

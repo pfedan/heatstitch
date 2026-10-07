@@ -1,6 +1,7 @@
 import type { Pattern } from './pattern';
 import { sewObjects, type SewObject } from './objects';
-import { carryOver, keepShape, remember } from './restitch';
+import { carryOver, keepShape, remember, remembered, type Remembered } from './restitch';
+import { partOf } from './shadow';
 import { recordOfStitch, stitchKinds, stitchNumbers } from './sequence';
 
 /** What a hand edit did, so the objects it touched can keep what they remember. */
@@ -25,10 +26,15 @@ export function objectView(p: Pattern): ObjectView {
 }
 
 /**
+/** Whether an object has a shape of its own its stitches can be loosed from (and sewn from again). */
+export const loosable = (m: Remembered | undefined): boolean => !!m && !m.read && !m.lettering && !m.outline && !m.blendOf && !partOf(m) && !!(m.region || m.form || m.path || m.columns);
+
+/**
  * After a change made point by point (`p` became `next`), the objects it touched stay what they
  * were (carryOver: the same sections, shape and settings), and an object that remembered nothing
  * yet keeps the shape read from its stitches before the change, so moving a point does not move
- * its area. The changes by hand are counted. Returns, per touched object of `p`, its index in `next` (-1: gone).
+ * its area. The changes by hand are counted, and an object with a shape of its own is loosed from
+ * it: no setting sews it anew until it is sewn from its shape again. Returns, per touched object of `p`, its index in `next` (-1: gone).
  * `view` gives the objects of a pattern; it is asked for `next` only after its grouping is set.
  */
 export function keepObjects(p: Pattern, next: Pattern, change: HandChange, view: (x: Pattern) => ObjectView = objectView): Map<number, number> {
@@ -62,7 +68,8 @@ export function keepObjects(p: Pattern, next: Pattern, change: HandChange, view:
     const range = end > start ? { first: recordOfStitch(nn, start + 1), last: recordOfStitch(nn, end) } : null;
     // The sections stay one object (see carryOver); what it remembers moves along below.
     if (range) carryOver(p, obj, next, range.first, range.last);
-    return { o, r: { ...r, hand: (r.hand ?? 0) + n }, range };
+    const own = remembered(p, obj);
+    return { o, r: { ...r, hand: (r.hand ?? 0) + n, ...(loosable(own) ? { free: true } : {}) }, range };
   });
   const nq = view(next);
   const out = new Map<number, number>();

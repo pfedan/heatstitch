@@ -1,8 +1,8 @@
-import { COLOR_CHANGE, computeBounds, STITCH, TRIM, type Pattern } from './pattern';
+import { COLOR_CHANGE, computeBounds, nextVersion, STITCH, TRIM, type Pattern } from './pattern';
 
 /** A copy of `p` with new record arrays; bounds are recomputed. */
 export function withRecords(p: Pattern, x: Int32Array, y: Int32Array, cmd: Uint8Array, colors = p.colors): Pattern {
-  return { ...p, x, y, cmd, colors, bounds: computeBounds(x, y, cmd) };
+  return nextVersion(p, { x, y, cmd, colors, bounds: computeBounds(x, y, cmd) });
 }
 
 export function clonePattern(p: Pattern): Pattern {
@@ -58,6 +58,11 @@ export function syncMarks(x: Int32Array, y: Int32Array, cmd: Uint8Array): void {
  * zero-movement records are synced.
  */
 export function tidy(p: Pattern): Pattern {
+  return tidyKept(p).pattern;
+}
+
+/** As tidy, and for each record of the result the record of `p` it is. */
+export function tidyKept(p: Pattern): { pattern: Pattern; kept: Int32Array } {
   const n = p.cmd.length;
   const keep = new Uint8Array(n).fill(1);
   // Stitches per color block, to find empty blocks.
@@ -98,21 +103,23 @@ export function tidy(p: Pattern): Pattern {
     const x = p.x.slice();
     const y = p.y.slice();
     syncMarks(x, y, p.cmd);
-    return withRecords(p, x, y, p.cmd);
+    return { pattern: withRecords(p, x, y, p.cmd), kept: Int32Array.from({ length: n }, (_, i) => i) };
   }
   const m = keep.reduce((a, k) => a + k, 0);
   const x = new Int32Array(m);
   const y = new Int32Array(m);
   const cmd = new Uint8Array(m);
+  const kept = new Int32Array(m);
   let o = 0;
   for (let i = 0; i < n; i++) {
     if (!keep[i]) continue;
     x[o] = p.x[i];
     y[o] = p.y[i];
+    kept[o] = i;
     cmd[o++] = p.cmd[i];
   }
   syncMarks(x, y, cmd);
-  return withRecords(p, x, y, cmd, colors.length ? colors : p.colors.slice(0, 1));
+  return { pattern: withRecords(p, x, y, cmd, colors.length ? colors : p.colors.slice(0, 1)), kept };
 }
 
 /** Records `first` to `last`: where picking and selecting are limited to (an object). */

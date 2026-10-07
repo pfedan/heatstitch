@@ -5,7 +5,7 @@ import { refreshKnockouts, setKnockout, takeOver } from '../src/model/knockout';
 import { rememberObjects, sewObjects } from '../src/model/objects';
 import type { Pattern, ThreadColor } from '../src/model/pattern';
 import { transformSewObject } from '../src/model/reshape';
-import { backToVersion, forgetAll, keepVersion, remembered, rememberedIn, rememberShapes, restitch, restoreRemembered, type StoredObject } from '../src/model/restitch';
+import { backToVersion, forgetAll, keepVersion, remembered, rememberedIn, rememberShapes, restitch, restoreRemembered, type StoredObjects } from '../src/model/restitch';
 import { stitchKinds } from '../src/model/sequence';
 import { parsePattern } from '../src/parsers';
 import { translation, type Mat } from '../src/shape/path';
@@ -71,7 +71,7 @@ async function within<X>(what: string, budget: number, f: () => X | Promise<X>):
   return x;
 }
 
-const knowledge = (p: Pattern): StoredObject[] => rememberedIn(p, sewObjects(p));
+const knowledge = (p: Pattern): StoredObjects => rememberedIn(p, sewObjects(p));
 
 describe.skipIf(!on)('load test: 120 objects', () => {
   /** The design as it is after each step (each kept as a version, as the app does). */
@@ -159,7 +159,7 @@ describe.skipIf(!on)('load test: 120 objects', () => {
       backToVersion(now);
       return back;
     });
-    expect(first.every((m) => !m.knockout)).toBe(true);
+    expect(first.objects.every((e) => !e.memory?.knockout)).toBe(true);
     expect(knowledge(now)).toEqual(known);
   });
 
@@ -174,7 +174,7 @@ describe.skipIf(!on)('load test: 120 objects', () => {
     const q = await within('Projekt öffnen', 2000, async () => {
       const back = await decodeProject(bytes);
       const q = fromStored(original, back.files[0].working)!;
-      restoreRemembered(back.files[0].objects);
+      restoreRemembered(q, back.files[0].objects);
       return q;
     });
     expect(knowledge(q)).toEqual(known);

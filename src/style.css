@@ -3393,6 +3393,35 @@ button.mini-sw.thread-sw {
   font-size: 12px;
 }
 
+.layer .layer-loose {
+  flex: none;
+  margin-left: auto;
+  padding: 2px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  line-height: 0;
+}
+
+.layer .layer-loose:hover,
+.layer .layer-loose:focus-visible {
+  color: var(--text);
+}
+
+.layer .layer-loose .i {
+  width: 14px;
+  height: 14px;
+}
+
+.layer .layer-guessed + .layer-loose {
+  margin-left: 6px;
+}
+
+.layer .layer-loose + .layer-meta {
+  margin-left: 8px;
+}
+
 .layer .layer-guessed + .layer-meta {
   margin-left: 8px;
 }
