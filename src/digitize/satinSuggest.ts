@@ -16,7 +16,7 @@ import { skeleton, type Branch, type Graph, type Pt } from './skeleton';
  *   - at a junction the line that goes on straightest runs through; the others end on its edge
  *     with a cut line along it,
  *   - short spurs (the toe marks of a paw) stay on their column, with a line across along them,
- *   - a line closed into a ring is opened once, at its sharpest bend,
+ *   - a line closed into a ring is opened once, square across where it runs straightest,
  *   - lines across where the column bends (every 30°) and a fan of three at sharp corners.
  *   A thick place the lines run into (a nose on the mouth, a pupil on the ring of an eye) is cut
  *   off where the lines start and planned as a compact shape of its own (see satinShapes).
@@ -49,6 +49,8 @@ const SPUR = 4;
 const TURN_STEP = 30;
 /** Bends sharper than this (degrees, within about a column width) get a fan of three lines. */
 const CORNER = 40;
+/** Bends sharper than this (degrees) are cut along their bisector instead (a mitre). */
+const SHARP = 110;
 
 const sub = (a: Pt, b: Pt): Pt => [a[0] - b[0], a[1] - b[1]];
 const add = (a: Pt, b: Pt, k = 1): Pt => [a[0] + b[0] * k, a[1] + b[1] * k];
@@ -61,6 +63,26 @@ const dot = (a: Pt, b: Pt) => a[0] * b[0] + a[1] * b[1];
 const median = (v: number[]) => {
   const s = v.slice().sort((a, b) => a - b);
   return s.length ? s[s.length >> 1] : 0;
+};
+/** Whether segments ab and cd cross away from their ends (two cut lines from one corner meet there). */
+const cross = (a: Pt, b: Pt, c: Pt, d: Pt) => {
+  const r = sub(b, a);
+  const q = sub(d, c);
+  const den = r[0] * q[1] - r[1] * q[0];
+  if (Math.abs(den) < 1e-12) return false;
+  const w = sub(c, a);
+  const t = (w[0] * q[1] - w[1] * q[0]) / den;
+  const u = (w[0] * r[1] - w[1] * r[0]) / den;
+  const mt = 0.6 / Math.hypot(r[0], r[1]);
+  const mu = 0.6 / Math.hypot(q[0], q[1]);
+  return t > mt && t < 1 - mt && u > mu && u < 1 - mu;
+};
+/** Distance from q to the segment from a to b. */
+const toSegment = (q: Pt, a: Pt, b: Pt) => {
+  const v = sub(b, a);
+  const l2 = dot(v, v);
+  const t = l2 ? Math.max(0, Math.min(1, dot(sub(q, a), v) / l2)) : 0;
+  return dist(q, add(a, v, t));
 };
 const lengthOf = (pts: Pt[]) => pts.reduce((a, p, i) => (i ? a + dist(p, pts[i - 1]) : a), 0);
 const area2 = (ring: Pt[]) => ring.reduce((a, p, i) => a + p[0] * ring[(i + 1) % ring.length][1] - ring[(i + 1) % ring.length][0] * p[1], 0);
@@ -126,10 +148,12 @@ export function suggestSatin(area: Region, graph?: Graph, max = STROKE_MAX): Sat
     const made = finish(g, only, [...split.cuts, ...plans.flatMap((p) => p!.cuts), ...strokes.cuts], [...plans.flatMap((p) => p!.lines), ...strokes.lines], outsides, holes);
     if (made.ok) return made;
   }
-  const { cuts, lines } = planStrokes(g, [...outsides, ...holes]);
-  const made = finish(g, crescent(g) ? 'crescent' : kind, cuts, lines, outsides, holes);
-  if (made.ok || outsides.length !== 1 || !compact(g, outsides[0])) return made;
-  // Lines that make no columns may be a compact shape after all (a dot with a hole off its middle).
+  // Cut lines that cross are kept first (each forks off a line of its own); if that makes no
+  // columns, the later of two is left out (a crossing seen as two forks, a sliver between them).
+  const first = plan(g, outsides, holes, false);
+  const made: SatinSuggestion = { kind: crescent(g) ? 'crescent' : kind, ...(first.ok ? first : [plan(g, outsides, holes, true)].find((x) => x.ok) ?? first) };
+  if (outsides.length !== 1 || !compact(g, outsides[0])) return made;
+  // Lines round a hole in a compact shape: a shape after all (a dot with a highlight off its middle).
   const whole = planShape(wholeShape(outsides, holes, material), material, max);
   const other = whole && finish(g, whole.kind, whole.cuts, whole.lines, outsides, holes);
   return other?.ok ? other : made;
@@ -166,8 +190,25 @@ function compact(g: Graph, outside: Pt[]): boolean {
   return median(g.branches.flatMap((b) => b.r)) >= 0.15 * size;
 }
 
-/** The cut lines in the order that opens the holes, a hole still closed opened, and whether all make columns. */
+/** A plan of this kind made into columns (see columns). */
 function finish(g: Graph, kind: ShapeClass, cuts: [Pt, Pt][], lines: [Pt, Pt][], outsides: Pt[][], holes: Pt[][]): SatinSuggestion {
+  return { kind, ...columns(g, cuts, lines, outsides, holes) };
+}
+
+/** Lines across the strokes of the centerline; `apart`: of two cut lines that cross, the later left out. */
+function plan(g: Graph, outsides: Pt[][], holes: Pt[][], apart: boolean): { cuts: [Pt, Pt][]; lines: [Pt, Pt][]; ok: boolean } {
+  const { cuts, lines } = planStrokes(g, [...outsides, ...holes], apart);
+  // A dot apart from the rest (its centerline hardly a line): one line across its narrow way.
+  for (const o of outsides) {
+    if (lines.some(([a, b]) => inside(o, add(a, sub(b, a), 0.5)))) continue;
+    const line = across(o);
+    if (line) lines.push(line);
+  }
+  return columns(g, cuts, lines, outsides, holes);
+}
+
+/** The cut lines in the order that opens the holes, a hole still closed opened, lines that mislead left out, and whether all make columns. */
+function columns(g: Graph, cuts: [Pt, Pt][], lines: [Pt, Pt][], outsides: Pt[][], holes: Pt[][]): { cuts: [Pt, Pt][]; lines: [Pt, Pt][]; ok: boolean } {
   const ordered = bridgeOrder(cuts, outsides, holes);
   let made = stripsOfAreas(outsides, lines, ordered, holes);
   // A hole still closed (a ring of one line with a ring inside, say): opened where it comes closest.
@@ -178,7 +219,44 @@ function finish(g: Graph, kind: ShapeClass, cuts: [Pt, Pt][], lines: [Pt, Pt][],
     ordered.push(cut);
     made = stripsOfAreas(outsides, lines, bridgeOrder(ordered, outsides, holes), holes);
   }
-  return { kind, cuts: bridgeOrder(ordered, outsides, holes), lines, ok: made.hole < 0 && !made.bad };
+  // A part that makes no column: a line across it that misleads (one through the tip of a hole,
+  // say) is left out, as long as that helps.
+  const cutsNow = bridgeOrder(ordered, outsides, holes);
+  for (let guard = 0; made.bad && guard < 8; guard++) {
+    const bad = made.bad;
+    const same = (b: Pt[] | null) => !!b && b.length === bad.length && dist(b[0], bad[0]) < 1e-6;
+    const mine = (l: [Pt, Pt]) => inside(bad, add(l[0], sub(l[1], l[0]), 0.5));
+    const k = lines.findIndex((l) => mine(l) && !same(stripsOfAreas(outsides, lines.filter((x) => x !== l), cutsNow, holes).bad));
+    if (k >= 0) {
+      lines.splice(k, 1);
+    } else {
+      // Several that do not go together: the part's lines taken one by one, each kept that fits.
+      const rest = lines.filter((l) => !mine(l));
+      const kept: [Pt, Pt][] = [];
+      for (const l of lines.filter(mine)) if (!same(stripsOfAreas(outsides, [...rest, ...kept, l], cutsNow, holes).bad)) kept.push(l);
+      if (!kept.length) break;
+      lines.splice(0, lines.length, ...rest, ...kept);
+    }
+    made = stripsOfAreas(outsides, lines, cutsNow, holes);
+  }
+  return { cuts: cutsNow, lines, ok: made.hole < 0 && !made.bad };
+}
+
+/** A line across a small outline through its middle, its narrow way (along its least spread). */
+function across(ring: Pt[]): [Pt, Pt] | null {
+  if (ring.length < 3) return null;
+  const c: Pt = [0, 0];
+  for (const p of ring) [c[0], c[1]] = [c[0] + p[0] / ring.length, c[1] + p[1] / ring.length];
+  let [xx, xy, yy] = [0, 0, 0];
+  for (const p of ring) {
+    const [dx, dy] = sub(p, c);
+    [xx, xy, yy] = [xx + dx * dx, xy + dx * dy, yy + dy * dy];
+  }
+  // The direction of least spread (the eigenvector of the smaller eigenvalue).
+  const a = 0.5 * Math.atan2(2 * xy, xx - yy) + Math.PI / 2;
+  const d: Pt = [Math.cos(a), Math.sin(a)];
+  const reach = Math.max(...ring.map((p) => dist(p, c))) + 0.5;
+  return [add(c, d, -reach), add(c, d, reach)];
 }
 
 /** A branch end at a junction: the branch and whether it leaves from its end b. */
@@ -220,27 +298,18 @@ function nearest(pts: Pt[], q: Pt): { d: number; t: Pt } {
  * Cut lines and lines across for a drawing of lines (see the class `strokes`). Junctions closer
  * together than their widths are one (two whiskers crossing a cheek a little apart).
  */
-export function planStrokes(g: Graph, rings: Pt[][]): { cuts: [Pt, Pt][]; lines: [Pt, Pt][] } {
+export function planStrokes(g: Graph, rings: Pt[][], apart = false): { cuts: [Pt, Pt][]; lines: [Pt, Pt][] } {
   const B = g.branches;
   // Junctions joined by a branch shorter than their widths are one junction.
   const root = g.nodes.map((_, i) => i);
   const find = (i: number): number => (root[i] === i ? i : (root[i] = find(root[i])));
   const inner = new Set<number>();
   B.forEach((b, k) => {
-    if (b.a !== b.b && lengthOf(b.pts) < g.nodes[b.a].r + g.nodes[b.b].r) {
+    if (b.a !== b.b && lengthOf(b.pts) < 0.75 * (g.nodes[b.a].r + g.nodes[b.b].r)) {
       root[find(b.a)] = find(b.b);
       inner.add(k);
     }
   });
-  const ends = new Map<number, End[]>();
-  B.forEach((b, k) => {
-    if (inner.has(k)) return;
-    for (const atB of [false, true]) {
-      const n = find(atB ? b.b : b.a);
-      ends.set(n, [...(ends.get(n) ?? []), { br: k, atB }]);
-    }
-  });
-  const degree = (n: number) => ends.get(find(n))?.length ?? 0;
   const lenOf = B.map((b) => lengthOf(b.pts));
   const halfOf = B.map((b) => median(b.r));
   // Direction a branch leaves its junction in, over a stretch about as long as the junction is wide.
@@ -250,6 +319,38 @@ export function planStrokes(g: Graph, rings: Pt[][]): { cuts: [Pt, Pt][]; lines:
     const s = Math.min(lenOf[e.br] * 0.5, Math.max(1.5, 2.5 * halfOf[e.br]));
     return norm(sub(pointAlong(pts, s), pts[0]));
   };
+  const endsOf = () => {
+    const m = new Map<number, End[]>();
+    B.forEach((b, k) => {
+      if (inner.has(k)) return;
+      for (const atB of [false, true]) {
+        const n = find(atB ? b.b : b.a);
+        m.set(n, [...(m.get(n) ?? []), { br: k, atB }]);
+      }
+    });
+    return m;
+  };
+  let ends = endsOf();
+  // Two forks of three a little further apart that make a crossing (each line going on straight
+  // through the other fork) are one junction too: one line runs through, the other is cut.
+  const straight = (a: End, b: End) => dot(leaving(a), leaving(b)) < -0.8;
+  B.forEach((b, k) => {
+    const [u, v] = [find(b.a), find(b.b)];
+    if (inner.has(k) || u === v || lenOf[k] > 2 * (g.nodes[b.a].r + g.nodes[b.b].r)) return;
+    const U = (ends.get(u) ?? []).filter((e) => e.br !== k);
+    const V = (ends.get(v) ?? []).filter((e) => e.br !== k);
+    // (Not when another branch joins the two as well: that is a ring, not a crossing.)
+    if (U.length !== 2 || V.length !== 2 || U.some((e) => V.some((f) => f.br === e.br))) return;
+    if ((straight(U[0], V[0]) && straight(U[1], V[1])) || (straight(U[0], V[1]) && straight(U[1], V[0]))) {
+      root[u] = v;
+      inner.add(k);
+      ends = endsOf();
+    }
+  });
+  const degree = (n: number) => ends.get(find(n))?.length ?? 0;
+  const loop = (e: End) => find(B[e.br].a) === find(B[e.br].b);
+  // A cut line just past a hole it does not end on pinches off the line round the hole.
+  const pinch = (p: Pt, q: Pt) => rings.some((r) => !r.includes(p) && !r.includes(q) && r.some((h) => toSegment(h, p, q) < 0.4));
   const key = (e: End) => `${e.br}${e.atB ? 'b' : 'a'}`;
   const partner = new Map<string, End>();
   const cuts: [Pt, Pt][] = [];
@@ -268,29 +369,45 @@ export function planStrokes(g: Graph, rings: Pt[][]): { cuts: [Pt, Pt][]; lines:
     const dirs = es.map(leaving);
     for (let i = 0; i < es.length; i++) {
       for (let j = i + 1; j < es.length; j++) {
-        if (es[i].br === es[j].br && B[es[i].br].a === B[es[i].br].b && es.length > 2) continue;
-        const c = dot(dirs[i], dirs[j]);
+        // A loop's ends never run through (round the loop the line would come back against its
+        // own side): both are cut where they leave, the loop a piece of its own.
+        if (es.length > 2 && (loop(es[i]) || loop(es[j]))) continue;
+        // (Of two lines crossing, both going on about straight, the wider runs through.)
+        const d = dot(dirs[i], dirs[j]);
+        const c = es.length > 3 && d < -0.8 ? -2 - Math.min(halfOf[es[i].br], halfOf[es[j].br]) : d;
         if (c < bestCos) {
           bestCos = c;
           best = [i, j];
         }
       }
     }
-    if (best[0] < 0) continue;
+    // A loop and a single line: the loop closes on itself into a ring, the line cut off at it.
+    if (best[0] < 0) {
+      const a = es.findIndex(loop);
+      const b = es.findIndex((e, k) => k !== a && e.br === es[a]?.br);
+      if (a >= 0 && b >= 0) best = [a, b];
+    }
     const [i, j] = best;
-    partner.set(key(es[i]), es[j]);
-    partner.set(key(es[j]), es[i]);
+    if (i >= 0) {
+      partner.set(key(es[i]), es[j]);
+      partner.set(key(es[j]), es[i]);
+    }
     if (es.length === 2) continue;
-    const rThrough = median([...radiiAway(B[es[i].br], es[i].atB).slice(0, 20), ...radiiAway(B[es[j].br], es[j].atB).slice(0, 20)]);
+    // (Its half width along it: near a junction the skeleton's radius swells.)
+    const rThrough = Math.min(
+      median((i >= 0 ? [es[i], es[j]] : es).flatMap((e) => radiiAway(B[e.br], e.atB).slice(0, 20))),
+      Math.max(...(i >= 0 ? [es[i], es[j]] : es).map((e) => halfOf[e.br])),
+    );
     // Short spurs stay on the column: a line across along each, from its tip.
     const kept: number[] = [];
     es.forEach((e, k) => {
       const b = B[e.br];
       const far = e.atB ? b.a : b.b;
-      // A spur: a free end, short beyond the edge of the through line, not a line crossing it
-      // (one going on straight on the other side, as a whisker over a cheek).
+      // A spur: a free end, short beyond the edge of the through line (at most about three times
+      // its half width), not a line crossing it (one going on straight on the other side, as a
+      // whisker over a cheek).
       const crossing = es.some((_, x) => x !== k && dot(dirs[x], dirs[k]) < -0.94);
-      if (k !== i && k !== j && b.a !== b.b && degree(far) === 1 && !crossing && lenOf[e.br] - rThrough < SPUR * halfOf[e.br]) {
+      if (k !== i && k !== j && b.a !== b.b && degree(far) === 1 && !crossing && lenOf[e.br] - rThrough < Math.min(SPUR * halfOf[e.br], 3 * rThrough)) {
         spurs.add(e.br);
         const pts = away(b, e.atB);
         const tip = pts[pts.length - 1];
@@ -301,46 +418,91 @@ export function planStrokes(g: Graph, rings: Pt[][]): { cuts: [Pt, Pt][]; lines:
     });
     // The others end on the edge of the through line: a cut line between the inner corners of
     // the outline either side of them (where the edge of the line turns into the next one).
-    const center = g.nodes[n].p;
     const angle = (d: Pt) => Math.atan2(d[1], d[0]);
     const round = kept.slice().sort((x, y) => angle(dirs[x]) - angle(dirs[y]));
-    const reach = 3 * g.nodes[n].r + 1.5;
-    const near = rings.flatMap((r) => r.filter((q) => dist(q, center) < reach));
-    /** The outline point nearest the junction between the directions of ends x and y (counterclockwise from x). */
-    const corner = (x: number, y: number): Pt | null => {
-      const a0 = angle(dirs[x]);
-      let span = angle(dirs[y]) - a0;
+    /**
+     * The outline point nearest `center` between the directions of ends x and y (counterclockwise
+     * from x). Seen from where the end being cut leaves (in junctions merged from a few, the
+     * merged middle can lie off to the side).
+     */
+    const corner = (center: Pt, reach: number, x: number, y: number, k: number): Pt | null => {
+      // Between the two ends of a loop: the nearest point of the hole it goes round (a little
+      // toward the end being cut, so the cuts of both ends do not meet in one point).
+      if (es[x].br === es[y].br) {
+        const loop = B[es[x].br].pts;
+        const hole = rings.find((r) => inside(loop, r[0]));
+        if (hole) {
+          const near = Math.min(...hole.map((q) => dist(q, center)));
+          const toward = pointAlong(away(B[es[k].br], es[k].atB), 1.5);
+          let best = hole[0];
+          for (const q of hole) if (dist(q, center) < near + 0.5 && dist(q, toward) < dist(best, toward)) best = q;
+          return best;
+        }
+      }
+      // The ends' directions as seen from `center` (in a merged junction they leave elsewhere).
+      const seen = (z: number) => {
+        const e = es[z];
+        const pts = away(B[e.br], e.atB);
+        return angle(sub(pointAlong(pts, Math.min(lenOf[e.br] * 0.5, Math.max(1.5, 2.5 * halfOf[e.br]))), center));
+      };
+      const a0 = seen(x);
+      // (Not on the hole of a loop here: that lies between the loop's own two ends.)
+      const loops = es.filter(loop).map((e) => B[e.br].pts);
+      let span = seen(y) - a0;
       while (span <= 0) span += 2 * Math.PI;
       let best: Pt | null = null;
-      for (const q of near) {
-        let u = angle(sub(q, center)) - a0;
-        while (u < 0) u += 2 * Math.PI;
-        if (u <= 0.02 || u >= span - 0.02) continue;
-        if (!best || dist(q, center) < dist(best, center)) best = q;
+      for (const r of rings) {
+        if (loops.some((l) => inside(l, r[0]))) continue;
+        for (const q of r) {
+          if (dist(q, center) >= reach) continue;
+          let u = angle(sub(q, center)) - a0;
+          while (u < 0) u += 2 * Math.PI;
+          if (u <= 0.02 || u >= span - 0.02) continue;
+          if (!best || dist(q, center) < dist(best, center)) best = q;
+        }
       }
       return best;
+    };
+    // A cut between corners stays on the area (not across a hole or a notch between them).
+    const within = (p: Pt, q: Pt) => {
+      for (let t = 0.1; t < 0.95; t += 0.1) {
+        const m = add(p, sub(q, p), t);
+        if (rings.filter((r) => inside(r, m)).length % 2 === 0) return false;
+      }
+      return true;
     };
     for (const k of kept) {
       if (k === i || k === j) continue;
       const e = es[k];
       const pts = away(B[e.br], e.atB);
+      // A short link already cut at its other junction: its rest stays on this one's column (a
+      // second cut would leave a sliver between the two).
+      const b = B[e.br];
+      if (trimmed.has(key({ br: e.br, atB: !e.atB })) && lenOf[e.br] < 1.5 * (g.nodes[b.a].r + g.nodes[b.b].r)) {
+        spurs.add(e.br);
+        continue;
+      }
       const at = round.indexOf(k);
       const cw = round[(at + round.length - 1) % round.length];
       const ccw = round[(at + 1) % round.length];
-      const p = corner(cw, k);
-      const q = corner(k, ccw);
+      const own = g.nodes[e.atB ? B[e.br].b : B[e.br].a];
+      const p = corner(own.p, 3 * own.r + 1.5, cw, k, k);
+      const q = corner(own.p, 3 * own.r + 1.5, k, ccw, k);
       let cut: [Pt, Pt];
-      if (p && q && dist(p, q) > 0.2) {
+      if (p && q && dist(p, q) > 0.2 && within(p, q) && !pinch(p, q)) {
         const d = norm(sub(q, p));
         cut = [add(p, d, -0.3), add(q, d, 0.3)];
       } else {
         // No corners found: square across the branch a junction's width out.
-        const c = pointAlong(pts, Math.min(lenOf[e.br] * 0.5, g.nodes[n].r + 0.2));
+        const c = pointAlong(pts, Math.min(lenOf[e.br] * 0.5, Math.max(g.nodes[n].r + 0.2, own.r + halfOf[e.br])));
         const d = dirs[k];
         const w = halfOf[e.br] * 1.2 + 0.3;
         cut = [add(c, [-d[1], d[0]], -w), add(c, [-d[1], d[0]], w)];
       }
-      cuts.push(cut);
+      // Two junctions close together can find the same corners: one cut is enough.
+      // (With `apart`, also one crossing it: between them would be a sliver.)
+      const twin = cuts.some(([a, b]) => Math.min(dist(a, cut[0]) + dist(b, cut[1]), dist(a, cut[1]) + dist(b, cut[0])) < 1 || (apart && cross(a, b, cut[0], cut[1])));
+      if (!twin) cuts.push(cut);
       // Where along the branch the cut lies (lines across keep clear of it).
       const m = add(cut[0], sub(cut[1], cut[0]), 0.5);
       let s = 0;
@@ -419,14 +581,19 @@ export function planStrokes(g: Graph, rings: Pt[][]): { cuts: [Pt, Pt][]; lines:
     const across = (p: Pt, d: Pt): [Pt, Pt] => [add(p, d, -half * 0.6), add(p, d, half * 0.6)];
     const placed: number[] = [];
     const free = (s: number, gap: number) => placed.every((x) => Math.abs(x - s) >= gap) && taken.every((q) => dist(q, pointAlong(st.pts, s)) >= w * 1.2);
-    // A closed ring is opened once, at its sharpest bend.
+    // A closed ring is opened once, square across where it runs straightest (its corners then
+    // lie inside the column, fanned like any other).
     if (st.closed) {
       let k = 0;
-      let most = -1;
+      let least = Infinity;
+      // Not at a junction on it (where a line leaves, cut off there already).
+      const forks = g.nodes.filter((_, x) => degree(x) > 2);
+      const clear = st.pts.map((q) => forks.every((f) => dist(q, f.p) >= f.r + w));
       for (let i = 0; i < n; i++) {
-        const t = turnAt(i, Math.max(0.6, w)).deg;
-        if (t > most) {
-          most = t;
+        if (!clear[i] && clear.some((c) => c)) continue;
+        const t = turnAt(i, Math.max(1, 1.5 * w)).deg;
+        if (t < least) {
+          least = t;
           k = i;
         }
       }
@@ -464,7 +631,13 @@ export function planStrokes(g: Graph, rings: Pt[][]): { cuts: [Pt, Pt][]; lines:
     for (const i of corners) {
       const tt = turnAt(i, hc);
       const bis = norm(sub(tt.din, tt.dout));
-      if (free(cum[i], w * 0.8)) {
+      const l = Math.min(5 * half, (half / Math.max(0.3, Math.cos((tt.deg * Math.PI) / 360))) * 1.1 + 0.3);
+      if (tt.deg >= SHARP && Math.hypot(bis[0], bis[1]) > 0.1 && !pinch(add(st.pts[i], bis, -l), add(st.pts[i], bis, l))) {
+        // Too sharp to fan (the stitches would pile up in the inner corner): cut along the
+        // bisector, a mitre, with a line across either side.
+        cuts.push([add(st.pts[i], bis, -l), add(st.pts[i], bis, l)]);
+        placed.push(cum[i]);
+      } else if (free(cum[i], w * 0.8)) {
         lines.push(across(st.pts[i], Math.hypot(bis[0], bis[1]) > 0.1 ? bis : [-tt.din[1], tt.din[0]]));
         placed.push(cum[i]);
       }
