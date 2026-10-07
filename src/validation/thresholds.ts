@@ -10,21 +10,29 @@ export type Level = typeof SAFE | typeof CAUTION | typeof CRITICAL;
  * (mm/mm²). One fill layer at 0.4 mm row spacing is 2.5 mm/mm², a satin at 0.4 mm spacing
  * (between penetrations on the same side) is 5.0 mm/mm².
  *
- * The values sit between typical constructions, so neither grid position nor smoothing decides
- * the level. Measured peaks: two full fills with underlay up to 6.4, three fills from 7.4, four
- * fills from 9.95, a satin border over a fill (both with underlay) up to 9.0.
+ * Calibrated on professional files and lettering (study 2026-10-06, project files
+ * analysis/kritisch-schwellen.md): a satin column over one fill, both with underlay, reaches 10 to
+ * 15 and is normal digitizing practice ("a single layer of satin stitches over a fully filled area
+ * is rarely problematic", E. Campbell). Embrilliance's density map (US 6,732,008) turns red at six
+ * layers. The limits sit between layer counts, so neither grid position nor smoothing decides the
+ * level. Measured peaks: two full fills with underlay up to 6.4, three fills 7.4 to 7.6, four fills
+ * 9.9 to 10.2, five fills from 12.4.
  */
 export const BASE = {
-  /** Clearly above two stacked fills with underlay, i.e. about three layers. */
-  caution: 7,
-  /** Just below four full fill layers. */
-  critical: 9.5,
   /**
-   * Limits for pure satin. Satin floats on top and only penetrates at its edges, so a border over
-   * one fill is normal. Cells with mixed thread interpolate by their satin share.
+   * Clearly above two stacked fills with underlay, i.e. about three layers: more than designs
+   * usually stack (layered fills should add up to about one normal fill, Melco).
    */
-  satinCaution: 11,
-  satinCritical: 12,
+  caution: 7,
+  /** Five full fill layers, one below Embrilliance's red. */
+  critical: 12,
+  /**
+   * Limits for pure satin. Satin floats on top and only penetrates at its edges, so it counts as one
+   * top layer: satin over a fill with both underlays stays below Critical. Cells with mixed thread
+   * interpolate by their satin share.
+   */
+  satinCaution: 15,
+  satinCritical: 17.5,
 } as const;
 
 /**

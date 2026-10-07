@@ -11,7 +11,10 @@ import { refreshKnockouts, setKnockout } from '../src/model/knockout';
 import { rememberObjects, sewObjects, tableOf } from '../src/model/objects';
 import { COLOR_CHANGE, END, STITCH, type Pattern, type ThreadColor } from '../src/model/pattern';
 import { sameColor } from '../src/model/recolor';
-import { transformSewObject } from '../src/model/reshape';
+import { formOf, transformSewObject } from '../src/model/reshape';
+import { canSplit, splitFill } from '../src/model/splitFill';
+import { wholeArea } from '../src/model/knockout';
+import type { Region } from '../src/digitize/region';
 import { backToVersion, forgetAll, keepVersion, objectKey, remember, remembered, rememberedIn, restitch, restoreRemembered, DECO_PATTERNS, OPEN_PATTERNS, type FillSettings, type StoredObjects } from '../src/model/restitch';
 import { reorder } from '../src/model/order';
 import { stitchKinds } from '../src/model/sequence';
@@ -30,7 +33,7 @@ import { rng } from './helpers/images';
 /**
  * The torture test: random chains of the operations the app offers on objects (add, duplicate (also
  * several, and in place),
- * move, turn, mirror, scale, delete, cut out, recolor, leave out, border in its own thread, empty fill, echo and shadow of a line, undo,
+ * move, turn, mirror, scale, delete, cut out, cut a fill apart, recolor, leave out, border in its own thread, empty fill, echo and shadow of a line, undo,
  * redo, save and open the project, export), done the way the app does them, with the design's
  * invariants checked after every step. A failing chain names its seed and steps, so it can be
  * replayed and turned into a fixed regression test.
@@ -167,6 +170,29 @@ async function saveAndOpen(d: Doc): Promise<void> {
   d.cur = { p: p!, known: d.cur.known };
 }
 
+/** The share of `area` that none of `parts` covers (sampled at its pixels). */
+function uncovered(area: Region, parts: Region[]): number {
+  const at = (r: Region, x: number, y: number) => {
+    const i = Math.floor(x / r.pxMm) - r.x0;
+    const j = Math.floor(y / r.pxMm) - r.y0;
+    return i >= 0 && j >= 0 && i < r.w && j < r.h && !!r.mask[j * r.w + i];
+  };
+  let all = 0;
+  let open = 0;
+  for (let j = 0; j < area.h; j++) {
+    for (let i = 0; i < area.w; i++) {
+      if (!area.mask[j * area.w + i]) continue;
+      all++;
+      const x = (i + area.x0 + 0.5) * area.pxMm;
+      const y = (j + area.y0 + 0.5) * area.pxMm;
+      // A gap counts inside the area only: the outline itself is traced anew for each part.
+      const inner = [-1, 1].every((k) => at(area, x + k * area.pxMm, y) && at(area, x, y + k * area.pxMm));
+      if (inner && !parts.some((q) => at(q, x, y))) open++;
+    }
+  }
+  return all ? open / all : 0;
+}
+
 type Op = { name: string; run: (d: Doc, r: Rand) => boolean | Promise<boolean> };
 
 const OPS: Op[] = [
@@ -288,6 +314,39 @@ const OPS: Op[] = [
       const a = pick(r, d.objects).index;
       const b = pick(r, d.objects).index;
       return a !== b && shapes(d, subtractTop(d.cur.p, [a, b], T)?.pattern);
+    },
+  },
+  {
+    name: 'cut apart',
+    run: (d, r) => {
+      // Zerteilen: a straight cut through the middle of a fill, at a random angle.
+      const p = d.cur.p;
+      const fills = d.objects.filter((o) => canSplit(p, o.index));
+      if (!fills.length) return false;
+      const o = pick(r, fills);
+      const cx = (o.minX + o.maxX) / 20;
+      const cy = (o.minY + o.maxY) / 20;
+      const a = r() * Math.PI;
+      const L = (o.maxX - o.minX + o.maxY - o.minY) / 10;
+      const cut: [number, number][] = [
+        [cx - Math.cos(a) * L, cy - Math.sin(a) * L],
+        [cx + Math.cos(a) * L, cy + Math.sin(a) * L],
+      ];
+      const before = wholeArea(formOf(p, o, stitchKinds(p))!)!;
+      const s = splitFill(p, o.index, [cut], T);
+      if (s === 'whole') return false;
+      expect(s, 'a fill cuts apart').toBeTruthy();
+      const { pattern, parts } = s!;
+      const hadBorder = !!remembered(p, o)?.fill?.border;
+      if (!hadBorder) expect(sewObjects(pattern).length, 'one object more per part').toBe(d.objects.length + parts.length - 1);
+      expect(parts.every((k) => !remembered(pattern, sewObjects(pattern)[k])?.fill?.border), 'parts have no border').toBe(true);
+      // Invariant: the parts cover the area as it was, no fabric along the cut.
+      const kinds = stitchKinds(pattern);
+      const objs = sewObjects(pattern, kinds);
+      const areas = parts.map((k) => wholeArea(formOf(pattern, objs[k], kinds)!)!);
+      expect(areas.every(Boolean), 'every part has an area').toBe(true);
+      expect(uncovered(before, areas), 'parts cover the fill').toBeLessThan(0.005);
+      return shapes(d, syncBorders(pattern, T));
     },
   },
   {

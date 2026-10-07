@@ -171,7 +171,7 @@ export function registerAsideCommands(a: AsideActions): void {
 let actions: ObjectActions | null = null;
 
 /** Shown in a menu only when it applies; the others show, greyed out, also when they cannot run. */
-const OPTIONAL = new Set(['object.blend', 'object.split', 'object.combine', 'object.subtract', 'object.knockout', 'object.openShape', 'object.openStitches', 'object.guide']);
+const OPTIONAL = new Set(['object.blend', 'object.split', 'draw.cut', 'object.combine', 'object.subtract', 'object.knockout', 'object.openShape', 'object.openStitches', 'object.guide']);
 
 const can = (id: string): boolean => {
   const c = getCommand(id);
@@ -198,7 +198,7 @@ export function objectMenuItems(openOrder: () => void): MenuItem[] {
   return [
     ...entries(['object.openShape', 'object.openStitches', '-', 'object.duplicate', 'object.color', 'object.blend', '-']),
     { label: `${t('objects.orderMenu')} …`, run: openOrder, disabled: !ORDER_IDS.some((id) => id !== '-' && can(id)) },
-    ...entries(['-', 'object.mirrorH', 'object.mirrorV', '-', 'object.split', 'object.combine', 'object.subtract']),
+    ...entries(['-', 'object.mirrorH', 'object.mirrorV', '-', 'draw.cut', 'object.split', 'object.combine', 'object.subtract']),
     // A switch: the entry says what a click does now.
     ...(can('object.knockout') ? [actions?.knockoutState() === 'on' ? { label: t('objects.knockout.off'), run: () => runCommand('object.knockout') } : 'object.knockout'] : []),
     ...entries(['-', 'object.putAside', 'object.guide']),

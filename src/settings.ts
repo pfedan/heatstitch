@@ -48,8 +48,13 @@ export const shownMarks = (s: Pick<Settings, 'marks' | 'marksOn'>): Marks =>
 /** What the stage shows in the Bild mode. */
 export type ImageView = 'original' | 'prepared' | 'stitches';
 
+/** How the Bild assistant lays the stitches: straight rows and clean satin, or rows that follow shape and image. */
+export type ImageStyle = 'flat' | 'dynamic';
+export const IMAGE_STYLES: readonly ImageStyle[] = ['flat', 'dynamic'];
+
 export interface ImageSettings {
   prepare: PrepareOptions;
+  style: ImageStyle;
   /** Stitch options the user changed; the others follow the material. */
   stitch: Partial<DigitizeOptions>;
   view: ImageView;
@@ -118,7 +123,7 @@ export interface Settings {
 
 /**
  * A 1 mm blur suppresses aliasing between typical 0.4 mm row spacing and the grid. The thread
- * scale tops out at 12 mm/mm² so both reference thresholds (7 and 9.5) are visible.
+ * scale tops out at 15 mm/mm² so both reference thresholds (7 and 12) are visible.
  */
 export const DEFAULTS: Settings = {
   mode: 'flow',
@@ -152,10 +157,10 @@ export const DEFAULTS: Settings = {
   saveFormat: null,
   hoop: null,
   scales: {
-    thread: { max: 12 },
+    thread: { max: 15 },
     penetrations: { max: 4 },
   },
-  image: { prepare: { ...DEFAULT_PREPARE }, stitch: {}, view: 'stitches', brushMm: 3, introDone: false },
+  image: { prepare: { ...DEFAULT_PREPARE }, style: 'flat', stitch: {}, view: 'stitches', brushMm: 3, introDone: false },
   lang: null,
 };
 
@@ -219,7 +224,7 @@ const width = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v 
 const num = (v: unknown, lo: number, hi: number, fallback: number) =>
   typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : fallback;
 
-export function normalizeImage(i: Partial<ImageSettings> | undefined): ImageSettings {
+export function normalizeImage(i: Partial<ImageSettings> | undefined, oldStyle: ImageStyle = DEFAULTS.image.style): ImageSettings {
   const d = DEFAULTS.image;
   const p: Partial<PrepareOptions> = i?.prepare ?? {};
   const st: Record<string, unknown> = { ...i?.stitch };
@@ -229,7 +234,6 @@ export function normalizeImage(i: Partial<ImageSettings> | undefined): ImageSett
     if (typeof st[k] === 'number' && Number.isFinite(st[k]) && (st[k] as number) >= 0) stitch[k] = st[k] as number;
   }
   if (typeof st.underlay === 'boolean') stitch.underlay = st.underlay;
-  if (typeof st.flow === 'boolean') stitch.flow = st.flow;
   if (typeof st.angle === 'number' && Number.isFinite(st.angle)) stitch.angle = st.angle;
   return {
     prepare: {
@@ -240,6 +244,8 @@ export function normalizeImage(i: Partial<ImageSettings> | undefined): ImageSett
       background: typeof p.background === 'boolean' ? p.background : d.prepare.background,
       threads: typeof p.threads === 'boolean' ? p.threads : d.prepare.threads,
     },
+    // Before the style switch, "follows the image" was a stitch option of its own.
+    style: IMAGE_STYLES.includes(i?.style as ImageStyle) ? i!.style! : typeof st.flow === 'boolean' ? (st.flow ? 'dynamic' : 'flat') : oldStyle,
     stitch,
     view: IMAGE_VIEWS.includes(i?.view as ImageView) ? i!.view! : d.view,
     brushMm: num(i?.brushMm, 0.5, 30, d.brushMm),
