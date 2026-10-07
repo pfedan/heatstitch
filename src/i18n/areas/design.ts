@@ -11,6 +11,8 @@ export const de = {
   'design.view.shapes': 'Formen',
   'design.view.realistic': 'Realistisch',
   'design.view.marksOn': 'Markierungen zeigen (H)',
+  'design.view.stitchesShow': 'Stiche zeigen (S)',
+  'design.view.shapesShow': 'Formen als Flächen zeigen (S)',
   'design.view.marksOff': 'Markierungen ausgeblendet (H)',
   'design.zoom.hint': 'Zoom: Vergrößern, Verkleinern, Originalgröße',
 
@@ -106,6 +108,8 @@ export const en: Record<keyof typeof de, string> = {
   'design.view.shapes': 'Shapes',
   'design.view.realistic': 'Realistic',
   'design.view.marksOn': 'Show marks (H)',
+  'design.view.stitchesShow': 'Show stitches (S)',
+  'design.view.shapesShow': 'Show shapes as flat areas (S)',
   'design.view.marksOff': 'Marks hidden (H)',
   'design.zoom.hint': 'Zoom: in, out, actual size',
 
