@@ -118,6 +118,31 @@ describe('Vorschlagen: satin for a drawing of lines', () => {
     expect(missed).toBe(0);
   });
 
+  it('cuts a loop on a stem off as a ring of its own', () => {
+    // A ring (radius 6, 2 mm wide) with a stem down from its bottom, a lollipop.
+    const ring = (x: number, y: number) => Math.abs(Math.hypot(x - 30, y - 20) - 6) < 1;
+    const { s, strips } = columns(region(any(ring, near([30, 26], [30, 45], 2))));
+    expect(s.ok).toBe(true);
+    // One cut ends the stem at the ring, one opens the ring.
+    expect(s.cuts.length).toBe(2);
+    expect(strips.length).toBe(2);
+  });
+
+  it('cuts a loop with two lines below it off at both its ends', () => {
+    // A ring as above, two legs going down left and right from its bottom (a 人 with a loop on top).
+    const ring = (x: number, y: number) => Math.abs(Math.hypot(x - 30, y - 20) - 6) < 1;
+    const { s } = columns(region(any(ring, near([30, 26], [18, 45], 2), near([30, 26], [42, 45], 2))));
+    expect(s.ok).toBe(true);
+  });
+
+  it('runs one of two lines crossing at a slant through', () => {
+    // Two lines crossing at about 30° (the skeleton makes two forks a little apart).
+    const { s, strips } = columns(region(any(near([8, 24], [52, 36], 2), near([8, 36], [52, 24], 2))));
+    expect(s.ok).toBe(true);
+    expect(s.cuts.length).toBe(2);
+    expect(strips.length).toBe(3);
+  });
+
   it('suggests nothing for a wide area', () => {
     const s = suggestSatin(region((x, y) => Math.hypot(x - 30, y - 30) < 15))!;
     expect(s.kind).toBe('wide');
