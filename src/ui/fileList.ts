@@ -184,13 +184,22 @@ export class FileList {
    * one that was active when it was saved (else the first).
    */
   async addProject(list: ProjectFile[], active: number | null): Promise<void> {
+    // Opening the same project again (say after a reload brought it back) does not list its designs
+    // twice: a design that is already open exactly as the project holds it is shown, not added.
+    const used = new Set<LoadedFile>();
+    const open = list.map((f) => {
+      const o = this.files.find((o) => !used.has(o) && sameDesign(o, f));
+      if (o) used.add(o);
+      return o;
+    });
     const before = this.files.length;
+    const fresh = list.filter((_, i) => !open[i]);
     const first = await this.addData(
-      list.map((f) => ({ name: f.name, data: f.data.slice().buffer, working: f.working, acks: f.acks, objects: f.objects, aside: f.aside, material: f.material, title: f.title, titles: f.titles, own: f.own })),
+      fresh.map((f) => ({ name: f.name, data: f.data.slice().buffer, working: f.working, acks: f.acks, objects: f.objects, aside: f.aside, material: f.material, title: f.title, titles: f.titles, own: f.own })),
       true,
     );
-    const wanted = active !== null ? this.files[before + active] : undefined;
-    const target = wanted?.pattern ? wanted : first;
+    const wanted = active !== null ? (open[active] ?? this.files[before + fresh.indexOf(list[active])]) : undefined;
+    const target = wanted?.pattern ? wanted : (first ?? open.find((o) => o?.pattern));
     if (target) this.activate(target.id);
     else this.render();
   }
@@ -659,4 +668,28 @@ export class FileList {
     li.append(rm);
     return li;
   }
+}
+
+/** True if the open design is the project's design as it was saved: same file, same stitches, same name. */
+export function sameDesign(o: LoadedFile, f: ProjectFile): boolean {
+  if (!o.pattern || !o.original || !o.data || o.fileName !== f.name || (o.title ?? '') !== (f.title ?? '')) return false;
+  if (!sameBytes(o.data, f.data)) return false;
+  const p = o.pattern;
+  const w = f.working;
+  const sameAside = JSON.stringify(storeAside(asideOf(p))) === JSON.stringify(f.aside ?? []);
+  if (!w) return p === o.original && sameAside;
+  if (p === o.original) return false;
+  return (
+    sameAside &&
+    sameBytes(p.cmd, w.cmd) &&
+    sameBytes(new Uint8Array(p.x.buffer, p.x.byteOffset, p.x.byteLength), new Uint8Array(w.x.buffer, w.x.byteOffset, w.x.byteLength)) &&
+    sameBytes(new Uint8Array(p.y.buffer, p.y.byteOffset, p.y.byteLength), new Uint8Array(w.y.buffer, w.y.byteOffset, w.y.byteLength)) &&
+    JSON.stringify(p.colors) === JSON.stringify(w.colors)
+  );
+}
+
+function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
 }
