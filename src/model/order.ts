@@ -406,6 +406,18 @@ export function reorder(p: Pattern, objs: SewObject[], order: number[], trimMm: 
     const byBlock = blockKeys(p, Math.max(...objs.map((o) => o.block), ...into.values()) + 1);
     for (const [o, b] of into) keys[o] = byBlock[b];
   }
+  // Moved by hand: where two objects of the same thread now meet that did not before, their
+  // colors become one (a stop the file had between them stays only where nothing moved).
+  if (whole) {
+    for (let k = 1; k < order.length; k++) {
+      const a = objs[order[k - 1]];
+      const b = objs[order[k]];
+      const ka = keys[a.index];
+      const kb = keys[b.index];
+      if (ka === kb || b.index === a.index + 1 || !sameColor(colorOf(a), colorOf(b))) continue;
+      for (let i = 0; i < keys.length; i++) if (keys[i] === kb) keys[i] = ka;
+    }
+  }
   const linked = (o: SewObject) => !!(remembered(p, o)?.outline || remembered(p, o)?.blendOf || remembered(p, o)?.shadowOf || remembered(p, o)?.echoOf);
   const out: Rec[] = [];
   const colors: ThreadColor[] = [];
