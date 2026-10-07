@@ -529,6 +529,8 @@ const enBase: Record<keyof typeof deBase, string> = {
   'stitch.band': 'Recommended for the material: {a} to {b} mm',
   'stitch.densityFrom': 'Spacing at the start',
   'stitch.densityTo': 'Spacing at the end',
+  'stitch.gradient': 'Gradient',
+  'stitch.gradient.hint': 'The rows get evenly further apart across the shape, from the spacing at the start to the spacing at the end, and keep their curve. For shading such as a belly with bowed rows.',
   'stitch.pattern': 'Pattern',
   'stitch.pattern.tatami': 'Tatami',
   'stitch.pattern.tatami.hint': 'Straight rows, needle points shifted from row to row',

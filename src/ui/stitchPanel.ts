@@ -1,7 +1,7 @@
 import { SATIN_SPLIT_MAX } from '../material/rules';
 import { formatNumber, onLangChange, t, type Key } from '../i18n';
 import type { ObjectKind } from '../model/objects';
-import { DECO_DEFAULTS, isOpenPattern, OPEN_SIZE, OPEN_SIZE_RANGE, SATIN_SPLIT, UNDERLAYS, type DecoSettings, type FillPattern, type FillSettings, type OpenPattern, type RunSettings, type SatinSettings, type SatinType, type Settings, type ShapeTrust, type Fixed } from '../model/restitch';
+import { CURVED_GRADIENT, DECO_DEFAULTS, isOpenPattern, OPEN_SIZE, OPEN_SIZE_RANGE, SATIN_SPLIT, UNDERLAYS, type DecoSettings, type FillPattern, type FillSettings, type OpenPattern, type RunSettings, type SatinSettings, type SatinType, type Settings, type ShapeTrust, type Fixed } from '../model/restitch';
 import { fixText } from './fixText';
 import type { UnderlayKind } from '../digitize/satin';
 import type { ShapeOutline } from '../render/scene';
@@ -728,6 +728,21 @@ export class StitchPanel {
         density('stitch.densityFrom', () => s.spacing, (v) => (s.spacing = v)),
         density('stitch.densityTo', () => s.spacingEnd, (v) => (s.spacingEnd = v)),
       );
+    } else if (CURVED_GRADIENT.includes(s.pattern)) {
+      // Curved rows may grow lighter across the shape too: one switch, then the end spacing.
+      const on = !!s.gradient;
+      out.push(
+        density(on ? 'stitch.densityFrom' : 'stitch.density', () => s.spacing, (v) => (s.spacing = v), !on),
+        this.check('stitch.gradient', 'stitch.gradient.hint', () => on, (v) => {
+          if (v) {
+            s.gradient = true;
+            // An end spacing like the start one would show no change: start from a clear one.
+            if (Math.abs(s.spacingEnd - s.spacing) < 0.05) s.spacingEnd = Math.min(1.2, Math.round(s.spacing * 250) / 100);
+          } else delete s.gradient;
+          this.render();
+        }),
+      );
+      if (on) out.push(density('stitch.densityTo', () => s.spacingEnd, (v) => (s.spacingEnd = v)));
     } else out.push(density('stitch.density', () => s.spacing, (v) => (s.spacing = v), true));
     // A gradient is where a color blend is looked for: the same action as in the object panel.
     if (s.pattern === 'gradient' && this.info!.blend) {

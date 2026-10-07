@@ -242,21 +242,47 @@ const STEP = 0.1;
 /** Below this length a traced row is not kept (mm). */
 const MIN_ROW = 1;
 
+/** Row spacing at a point (mm). */
+type Spacing = (p: Pt) => number;
+
 /**
- * Evenly spaced streamlines of the field over the region, one row spacing apart (see above).
+ * Spacing changing evenly across the shape, as for straight gradient rows (see Frame in fill.ts):
+ * `from` on the side across the rows (at right angles to `angle` degrees) where the rows start,
+ * `to` on the far side, measured over the region's own pixels.
  */
-function streamlines(r: Region, g: Grid, c: Float32Array, s: Float32Array, spacing: number): Pt[][] {
-  const dSep = spacing;
-  const dTest = 0.5 * spacing;
-  const occ = new Occupancy(dSep);
+function spacingAcross(r: Region, angle: number, from: number, to: number): Spacing {
+  const a = (angle * Math.PI) / 180;
+  const n: Pt = [-Math.sin(a), Math.cos(a)];
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (let y = 0; y < r.h; y++) {
+    for (let x = 0; x < r.w; x++) {
+      if (!r.mask[y * r.w + x]) continue;
+      const v = (x + r.x0 + 0.5) * r.pxMm * n[0] + (y + r.y0 + 0.5) * r.pxMm * n[1];
+      lo = Math.min(lo, v);
+      hi = Math.max(hi, v);
+    }
+  }
+  if (!Number.isFinite(lo)) return () => from;
+  const span = Math.max(1e-6, hi - lo);
+  return (p) => from + (to - from) * Math.max(0, Math.min(1, (p[0] * n[0] + p[1] * n[1] - lo) / span));
+}
+
+/**
+ * Evenly spaced streamlines of the field over the region, one row spacing apart (see above). With a
+ * spacing that changes over the region, rows lie as far apart as the spacing where they are
+ * (Jobard & Lefer's streamlines of varying density).
+ */
+function streamlines(r: Region, g: Grid, c: Float32Array, s: Float32Array, spacing: number, at: Spacing = () => spacing, widest = spacing): Pt[][] {
+  const occ = new Occupancy(widest);
   const inside = (p: Pt) => sample(r, r.sdf, p[0], p[1]) < 0;
   const maxSteps = Math.ceil((4 * Math.hypot(r.w, r.h) * r.pxMm) / STEP);
 
   /** One direction from the seed; own points count once they are three spacings behind. */
   const trace = (seed: Pt, d0: Pt): Pt[] => {
     const pts: Pt[] = [seed];
-    const own = new Occupancy(dSep);
-    const lag = Math.ceil((3 * spacing) / STEP);
+    const own = new Occupancy(widest);
+    const lag = Math.ceil((3 * at(seed)) / STEP);
     let p = seed;
     let prev = d0;
     for (let n = 0; n < maxSteps; n++) {
@@ -274,6 +300,7 @@ function streamlines(r: Region, g: Grid, c: Float32Array, s: Float32Array, spaci
         pts.push([p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t]);
         break;
       }
+      const dTest = 0.5 * at(q);
       if (occ.near(q, dTest) || own.near(q, dTest)) break;
       pts.push(q);
       if (pts.length > lag) own.add(pts[pts.length - 1 - lag]);
@@ -290,7 +317,7 @@ function streamlines(r: Region, g: Grid, c: Float32Array, s: Float32Array, spaci
   };
   /** The row through a seed, traced both ways; null if too short. */
   const through = (seed: Pt): Pt[] | null => {
-    if (!inside(seed) || occ.near(seed, dSep * 0.99)) return null;
+    if (!inside(seed) || occ.near(seed, at(seed) * 0.99)) return null;
     const d = directionAt(g, c, s, seed) ?? [1, 0];
     const fwd = trace(seed, d);
     const back = trace(seed, [-d[0], -d[1]]);
@@ -303,14 +330,17 @@ function streamlines(r: Region, g: Grid, c: Float32Array, s: Float32Array, spaci
       let acc = 0;
       for (let i = 1; i < line.length; i++) {
         acc += dist(line[i - 1], line[i]);
-        if (acc < dSep / 2) continue;
+        if (acc < at(line[i]) / 2) continue;
         acc = 0;
         const a = line[Math.max(0, i - 2)];
         const b = line[Math.min(line.length - 1, i + 2)];
         const l = dist(a, b) || 1;
         const nrm: Pt = [-(b[1] - a[1]) / l, (b[0] - a[0]) / l];
         for (const side of [1, -1]) {
-          const seed: Pt = [line[i][0] + nrm[0] * dSep * side, line[i][1] + nrm[1] * dSep * side];
+          // The spacing halfway to the new row, so a row beside a denser one is not seeded too close.
+          const half = at(line[i]) / 2;
+          const d = at([line[i][0] + nrm[0] * half * side, line[i][1] + nrm[1] * half * side]);
+          const seed: Pt = [line[i][0] + nrm[0] * d * side, line[i][1] + nrm[1] * d * side];
           const next = through(seed);
           if (next) {
             commit(next);
@@ -330,7 +360,7 @@ function streamlines(r: Region, g: Grid, c: Float32Array, s: Float32Array, spaci
   }
   for (let j = 0; j < g.gh; j++) {
     for (let i = 0; i < g.gw; i++) {
-      if (g.sdf[j * g.gw + i] > -spacing / 2) continue;
+      if (g.sdf[j * g.gw + i] > -at(g.center(i, j)) / 2) continue;
       const line = through(g.center(i, j));
       if (!line) continue;
       commit(line);
@@ -554,13 +584,17 @@ export function fieldFill(
     return res && { ...res, curved: false };
   }
 
-  // Curved rows.
-  const rows = streamlines(r, g, c, s, p.spacing).map((line) => lengthen(simplify(line, 0.02), p.pull));
+  // Curved rows; with spacingEnd as a gradient across the shape, at right angles to the mean direction.
+  const end = p.spacingEnd ?? p.spacing;
+  const graded = Math.abs(end - p.spacing) >= 1e-3;
+  const at = graded ? spacingAcross(r, mean, p.spacing, end) : undefined;
+  const [dense, open] = [Math.min(p.spacing, end), Math.max(p.spacing, end)];
+  const rows = streamlines(r, g, c, s, p.spacing, at, open).map((line) => lengthen(simplify(line, 0.02), p.pull));
   if (!rows.length) return null;
   // The rows must not crowd or leave gaps; checked before anything is sewn.
-  if (peakDensity(rows) > peak / p.spacing || coverage(r, rows, p.spacing * 0.75) < cover) return null;
+  if (peakDensity(rows) > peak / dense || coverage(r, rows, open * 0.75) < cover) return null;
 
-  return sewRows(r, rows, p, start, mean);
+  return sewRows(r, rows, p, start, mean, open);
 }
 
 /**
@@ -568,14 +602,14 @@ export function fieldFill(
  * first when asked, then row after row while the next one starts close by, with travel under rows
  * not sewn yet between groups.
  */
-export function sewRows(r: Region, rows: Pt[][], p: FillParams, start: Pt, mean: number): FlowResult {
+export function sewRows(r: Region, rows: Pt[][], p: FillParams, start: Pt, mean: number, widest = p.spacing): FlowResult {
   const runs: Pt[][] = [];
   const grid = new TravelGrid(p.travel ?? r);
   let pos = p.underlay ? sewUnderlay(r, mean, p, start, grid, runs) : start;
   const under = pointCount(runs);
   let cur: Pt[] | null = runs.length ? runs[runs.length - 1] : null;
   const todo = rows.slice();
-  const reach = 2.5 * p.spacing + 0.3;
+  const reach = 2.5 * widest + 0.3;
   let count = 0;
   /** Takes row i out of the list, oriented to start at the given end. */
   const take = (i: number, fromEnd: boolean): Pt[] => {
