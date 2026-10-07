@@ -214,6 +214,7 @@ export function bindKeys(app: KeysApp) {
       return;
     }
     if (e.key === 'h') return void document.getElementById('marks-toggle')?.click();
+    if (e.key === 's' && app.settings.mode === 'flow') return void document.querySelector<HTMLElement>('#shapes-seg [aria-pressed="false"]')?.click();
     if (app.settings.mode === 'flow') {
       // Enter still presses a focused button; Space always plays, not the button clicked last (Einpassen...).
       if (toggle || (e.target as HTMLElement).closest('button')) {

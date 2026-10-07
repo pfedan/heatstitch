@@ -39,6 +39,7 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
   const colorBy = document.querySelectorAll<HTMLInputElement>('input[name="color-by"]');
   const markInputs = document.querySelectorAll<HTMLInputElement>('input[data-mark]');
   const marksToggle = $<HTMLButtonElement>('marks-toggle');
+  const shapesSeg = document.querySelectorAll<HTMLButtonElement>('#shapes-seg button');
   const marksBox = document.querySelector<HTMLElement>('fieldset.marks')!;
   const cell = $<HTMLInputElement>('cell');
   const blur = $<HTMLInputElement>('blur');
@@ -131,9 +132,8 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
     });
     marksToggle.setAttribute('aria-pressed', String(s.marksOn));
     marksToggle.title = t(s.marksOn ? 'design.view.marksOn' : 'design.view.marksOff');
+    shapesSeg.forEach((b) => b.setAttribute('aria-pressed', String((b.dataset.shapes === 'on') === s.shapesView)));
     $('view-name').textContent = viewName(s);
-    // On a phone the button shows only the eye; with shapes on it names them, or the flat areas look like a fault.
-    $('view-button').classList.toggle('vb-named', s.mode === 'flow' && s.shapesView);
     $('realistic-sub').classList.toggle('off', !s.realistic);
     marksBox.classList.toggle('all-off', !s.marksOn);
     marksBox.querySelector('legend')!.dataset.off = t('marks.allOff');
@@ -206,6 +206,7 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
       return 'render';
     }),
   );
+  shapesSeg.forEach((b) => on(b, 'click', () => ((s.shapesView = b.dataset.shapes === 'on'), 'render')));
   on(marksToggle, 'click', () => ((s.marksOn = !s.marksOn), 'render'));
   on(cell, 'input', () => ((s.cellMm = Number(cell.value)), 'density'));
   on(blur, 'input', () => ((s.blurMm = Number(blur.value)), 'density'));

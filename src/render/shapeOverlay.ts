@@ -351,6 +351,8 @@ export interface FlatArea {
   form: Form;
   color: { r: number; g: number; b: number };
   alpha: number;
+  /** A drawn line: its curves drawn this wide (mm) instead of filled. */
+  stroke?: number;
 }
 
 /** Objects as flat areas of their thread color, in sewing order, with a thin darker edge. */
@@ -368,9 +370,21 @@ export function drawAreas(ctx: CanvasRenderingContext2D, vp: Viewport, areas: Fl
         const [, b, c, e] = segment(p, k);
         ctx.bezierCurveTo(...S(b), ...S(c), ...S(e));
       }
-      ctx.closePath();
+      if (p.closed || a.stroke === undefined) ctx.closePath();
     }
     ctx.globalAlpha = a.alpha;
+    if (a.stroke !== undefined) {
+      // A line: a band of its width with the same darker edge as the areas (drawn under it).
+      const w = a.stroke * vp.scale;
+      ctx.lineCap = 'butt';
+      ctx.strokeStyle = `rgb(${Math.round(a.color.r * 0.6)}, ${Math.round(a.color.g * 0.6)}, ${Math.round(a.color.b * 0.6)})`;
+      ctx.lineWidth = w + 2;
+      ctx.stroke();
+      ctx.strokeStyle = `rgb(${a.color.r}, ${a.color.g}, ${a.color.b})`;
+      ctx.lineWidth = Math.max(1, w);
+      ctx.stroke();
+      continue;
+    }
     ctx.fillStyle = `rgb(${a.color.r}, ${a.color.g}, ${a.color.b})`;
     ctx.fill(a.form.nonzero ? 'nonzero' : 'evenodd');
     ctx.strokeStyle = `rgb(${Math.round(a.color.r * 0.6)}, ${Math.round(a.color.g * 0.6)}, ${Math.round(a.color.b * 0.6)})`;

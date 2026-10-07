@@ -670,6 +670,11 @@
     min-width: 44px;
   }
 
+  /* Inside its 1px frame, so the segment is as tall as the other keys. */
+  .vb-seg .vb-btn {
+    height: 42px;
+  }
+
   .topbar .design-button,
   .save-button,
   .search-button,
