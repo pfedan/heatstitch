@@ -28,6 +28,7 @@ async function loadPlaywright() {
   throw new Error('Playwright not found: npm i -g playwright && npx playwright install chromium');
 }
 const { chromium } = await loadPlaywright();
+const browsers = new Set();
 
 // ---- harness: browser, app, pages
 async function boot(lang = 'de', viewport = { width: 1280, height: 800 }) {
@@ -35,6 +36,7 @@ async function boot(lang = 'de', viewport = { width: 1280, height: 800 }) {
     executablePath: process.env.PLAYWRIGHT_CHROMIUM || undefined,
     args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'],
   });
+  browsers.add(browser);
   const ctx = await browser.newContext({ viewport, colorScheme: 'dark', locale: lang === 'de' ? 'de-DE' : 'en-US', deviceScaleFactor: 1 });
   const page = await ctx.newPage();
   page.setDefaultTimeout(15000);
@@ -45,10 +47,18 @@ async function boot(lang = 'de', viewport = { width: 1280, height: 800 }) {
   await page.goto(URL);
   await page.waitForTimeout(400);
   // the language select sits in the "⋯" menu; force skips the visibility check
-  await page.selectOption('#lang', lang, { force: true });
+  await setControl(page, '#lang', lang);
+  return { page, close: () => { browsers.delete(browser); return browser.close(); } };
+}
+/** Set a form control that sits in a closed popover (checkbox or select) and tell the app. */
+async function setControl(page, sel, value) {
+  await page.evaluate(([s, v]) => {
+    const el = document.querySelector(s);
+    if (el.type === 'checkbox') el.checked = !!v; else el.value = v;
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  }, [sel, value]);
   await page.waitForTimeout(300);
-  await page.keyboard.press('Escape');
-  return { page, close: () => browser.close() };
 }
 async function loadFile(page, file, wait = 2500) {
   await page.setInputFiles('#file-input', file);
@@ -93,7 +103,7 @@ async function jpeg(page, name, clip) {
 const sidebarTop = (page) => page.evaluate(() => { for (const s of ['.sidebar', '#inspector']) { const el = document.querySelector(s); if (el) el.scrollTop = 0; } });
 /** Realistic threads on/off (the checkbox lives in the view menu; force skips the visibility check). */
 async function realistic(page, on = true) {
-  if (on) await page.check('#realistic', { force: true }); else await page.uncheck('#realistic', { force: true });
+  await setControl(page, '#realistic', on);
   await page.waitForTimeout(1500);
 }
 /** Scroll the right column so the element is at its top (plus an offset in px). */
@@ -394,7 +404,7 @@ shots.jumps = async (lang) => {
 async function density(page, fabric, real = false) {
   await mode(page, 'density');
   await realistic(page, real);
-  await page.selectOption('#fabric', fabric, { force: true });
+  await setControl(page, '#fabric', fabric);
   await page.waitForTimeout(1500);
   await page.evaluate(() => { document.querySelector('#findings-panel').open = true; });
   await sidebarTop(page);
@@ -489,13 +499,13 @@ shots.hoop = async (lang) => {
   await example(page, 'cat');
   await realistic(page, true);
   await tab(page, 'design');
-  await page.selectOption('#hoop', '100x100', { force: true });
+  await setControl(page, '#hoop', '100x100');
   await page.waitForTimeout(600);
   await fit(page);
   await mouseAway(page);
   await sidebarTop(page);
   await jpeg(page, `hoop-${lang}`);
-  await page.selectOption('#hoop', '50x50', { force: true });
+  await setControl(page, '#hoop', '50x50');
   await page.waitForTimeout(600);
   await fit(page);
   await mouseAway(page);
@@ -509,10 +519,10 @@ shots.fabric = async () => {
   const { page, close } = await boot('de');
   await example(page, 'cat');
   await realistic(page, true);
-  await page.locator('#bg-swatches button').nth(2).click({ force: true }); // Natur: a light fabric color
+  await page.evaluate(() => document.querySelectorAll('#bg-swatches button')[2].click()); // Natur: a light fabric color
   await page.waitForTimeout(800);
   for (const look of ['knit', 'leather']) {
-    await page.selectOption('#fabric-look', look, { force: true });
+    await setControl(page, '#fabric-look', look);
     await page.waitForTimeout(2500);
     await mouseAway(page);
     const b = await stageBox(page);
@@ -525,7 +535,7 @@ shots.fabric = async () => {
 shots.save = async (lang) => {
   const { page, close } = await boot(lang);
   await example(page, 'cat');
-  await page.selectOption('#hoop', '100x100', { force: true });
+  await setControl(page, '#hoop', '100x100');
   await page.waitForTimeout(600);
   await page.click('#save-button');
   await page.waitForTimeout(600);
@@ -543,7 +553,7 @@ shots.ready = async (lang) => {
   await example(page, 'cat');
   await realistic(page, true);
   await tab(page, 'design');
-  await page.selectOption('#hoop', '100x100', { force: true });
+  await setControl(page, '#hoop', '100x100');
   await page.waitForTimeout(600);
   await inspectorToText(page, '#inspector', T[lang].ready, -12);
   await mouseAway(page);
@@ -693,6 +703,11 @@ for (const n of list) {
   if (!shots[base]) { console.log('unknown shot', n); continue; }
   const langs = shots[base].length ? (lang ? [lang] : ['de', 'en']) : [null];
   for (const l of langs) {
-    try { await shots[base](l); } catch (e) { console.log('FAILED', n, l, e.message.slice(0, 300)); }
+    try { await shots[base](l); } catch (e) {
+      console.log('FAILED', n, l, e.message.slice(0, 300));
+      for (const b of browsers) await b.close().catch(() => {});
+      browsers.clear();
+    }
   }
 }
+process.exit(0);
