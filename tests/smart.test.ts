@@ -85,7 +85,7 @@ describe('Smart', () => {
   });
 
   it('lists the groups under their thread color, colors as sewn', () => {
-    const g = (letter: string, label: number) => ({ letter, label, reason: 'calm' as const, keys: [letter], areaMm2: 1, auto: 'flat' as const, fixed: null });
+    const g = (letter: string, label: number) => ({ letter, label, reason: 'calm' as const, keys: [letter], areaMm2: 1, auto: 'flat' as const, fixed: null, offers: [] });
     expect(groupsByColor([g('A', 2), g('B', 2), g('C', 0), g('D', 1), g('E', 1)]).map((c) => [c.label, c.groups.map((x) => x.letter)])).toEqual([
       [2, ['A', 'B']],
       [0, ['C']],

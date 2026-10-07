@@ -539,6 +539,47 @@ export function inside(ring: Pt[], q: Pt): boolean {
   return c;
 }
 
+/** Height of the bands the edges of an outline are sorted into for insideOf (mm). */
+const BAND = 0.5;
+const insideTests = new WeakMap<Pt[], (q: Pt) => boolean>();
+
+/**
+ * Whether points lie inside the closed outline, as `inside`, for many points: the edges are sorted
+ * into bands across the outline once, so each point looks only at the edges of its band.
+ * Kept per outline (outlines are not changed in place).
+ */
+export function insideOf(ring: Pt[]): (q: Pt) => boolean {
+  const known = insideTests.get(ring);
+  if (known) return known;
+  let y0 = Infinity;
+  let y1 = -Infinity;
+  for (const p of ring) {
+    y0 = Math.min(y0, p[1]);
+    y1 = Math.max(y1, p[1]);
+  }
+  const n = Math.max(1, Math.ceil((y1 - y0) / BAND) + 1);
+  const bands: number[][] = Array.from({ length: n }, () => []);
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const lo = Math.floor((Math.min(ring[i][1], ring[j][1]) - y0) / BAND);
+    const hi = Math.floor((Math.max(ring[i][1], ring[j][1]) - y0) / BAND);
+    for (let b = lo; b <= hi; b++) bands[b].push(i);
+  }
+  const test = (q: Pt): boolean => {
+    const b = Math.floor((q[1] - y0) / BAND);
+    if (b < 0 || b >= n) return false;
+    let c = false;
+    for (const i of bands[b]) {
+      const j = i === 0 ? ring.length - 1 : i - 1;
+      const [xi, yi] = ring[i];
+      const [xj, yj] = ring[j];
+      if (yi > q[1] !== yj > q[1] && q[0] < ((xj - xi) * (q[1] - yi)) / (yj - yi) + xi) c = !c;
+    }
+    return c;
+  };
+  insideTests.set(ring, test);
+  return test;
+}
+
 /**
  * Where a line drawn inside a closed outline meets it: going out from the line's middle both ways,
  * the first crossing each side (distances along the outline). Null when the middle is outside.

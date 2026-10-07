@@ -280,6 +280,16 @@ export class RungTool implements RungView {
     this.hooks.redraw();
   }
 
+  /** Lines across and cut lines put in place of those drawn (see suggestSatin); `bad` the part that makes no column. */
+  setFillLines(lines: [Pt, Pt][], cuts: [Pt, Pt][], bad: Pt[] | null = null): void {
+    this.lines = lines.map(([a, b]) => [a, b] as [Pt, Pt]);
+    this.cutLines = cuts.map(([a, b]) => [a, b] as [Pt, Pt]);
+    this.selected = null;
+    this.linesChanged();
+    this.bad = bad;
+    this.hooks.redraw();
+  }
+
   /** The lines across the fill changed. */
   private linesChanged(): void {
     this.bad = null;
