@@ -34,6 +34,10 @@ export interface SatinParams {
   stagger?: boolean;
   /** Spacing at each point of the column instead of `spacing` (see spacingAlong in restitch). */
   spacingAt?: number[];
+  /** Fringe on the left side: each stitch ends up to this much short of the rail (mm), see fringe. */
+  fringe?: number;
+  /** Fringe on the right side (mm). */
+  fringeB?: number;
 }
 
 export interface Column {
@@ -190,7 +194,58 @@ export function pairs(c: Column, p: SatinParams, ends?: ColumnEnds): [Pt, Pt][] 
       else ref = q;
     }
   }
+  if (p.fringe || p.fringeB) fringe(comp, p.fringe ?? 0, p.fringeB ?? 0);
   return comp;
+}
+
+/** A fringed stitch keeps at least this long (mm), and this share of the width. */
+const FRINGE_KEEP = 1;
+const FRINGE_KEEP_SHARE = 0.35;
+
+/** A number in [0, 1) for stitch i on a side, the same every time (no state, so restitching repeats it). */
+function hash(i: number, side: number): number {
+  let h = Math.imul(i + 1, 0x9e3779b1) ^ Math.imul(side + 7, 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d);
+  h = Math.imul(h ^ (h >>> 12), 0x297a2d39);
+  return ((h ^ (h >>> 15)) >>> 0) / 4294967296;
+}
+
+/**
+ * A ragged edge (fur, feathers): on each side every stitch ends a different way short of the rail,
+ * up to `a` (left) and `b` (right) mm. Neighbours always differ by at least 30 % of the depth, so the
+ * edge looks frayed rather than wavy; the depths scale with the setting and stay where they are.
+ */
+function fringe(ps: [Pt, Pt][], a: number, b: number): void {
+  let ra = 0.5;
+  let rb = 0.5;
+  ps.forEach(([l, r], i) => {
+    ra = (ra + 0.3 + 0.4 * hash(i, 0)) % 1;
+    rb = (rb + 0.3 + 0.4 * hash(i, 1)) % 1;
+    const w = dist(l, r);
+    if (w < 1e-6) return;
+    const room = Math.max(0, w - Math.max(FRINGE_KEEP, FRINGE_KEEP_SHARE * w));
+    // Each side's share of the room, so also the stitch back from one pair to the next keeps it.
+    const k = a + b > room ? room / (a + b) : 1;
+    const da = a * k * ra;
+    const db = b * k * rb;
+    ps[i] = [lerp(l, r, da / w), lerp(r, l, db / w)];
+  });
+}
+
+/** The column with its rails drawn in by the fringe (left `a`, right `b` mm): where the satin covers on every stitch. */
+export function fringedColumn(c: Column, a: number, b: number): Column {
+  if (!a && !b) return c;
+  const left: Pt[] = [];
+  const right: Pt[] = [];
+  c.left.forEach((l, i) => {
+    const r = c.right[i];
+    const w = dist(l, r);
+    const room = Math.max(0, w - Math.max(FRINGE_KEEP, FRINGE_KEEP_SHARE * w));
+    const k = a + b > room ? room / (a + b) : 1;
+    left.push(w ? lerp(l, r, (a * k) / w) : l);
+    right.push(w ? lerp(r, l, (b * k) / w) : r);
+  });
+  return { ...c, left, right, center: left.map((l, i) => lerp(l, right[i], 0.5)) };
 }
 
 /** Splits a stitch from a to b into equal parts no longer than `max`; returns the points after a. */

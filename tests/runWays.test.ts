@@ -4,6 +4,7 @@ import { sewObjects } from '../src/model/objects';
 import { measureRun, restitch, analyze } from '../src/model/restitch';
 import { stitchKinds } from '../src/model/sequence';
 import { parsePattern } from '../src/parsers';
+import { lineOf, lineSettings, lineStitches } from '../src/model/line';
 import { writePes } from '../src/writers/pes';
 import { Writer, type Pt } from './helpers/designs';
 
@@ -76,5 +77,28 @@ describe('a line sewn anew', () => {
     });
     // No stitch crosses from one stroke to the other.
     for (const [a, b] of anew(p)) expect(Math.abs(a[1] - b[1])).toBeLessThan(1);
+  });
+
+  it('keeps a line sewn there and back as its curve, when sewn anew along it', () => {
+    // A stem with a branch sewn out and back, as feathers are drawn: the curve keeps the branch.
+    const c = curve(16);
+    const branch: Pt[] = Array.from({ length: 6 }, (_, k) => [c[8][0] + k * 0.3, c[8][1] + k * 2]);
+    const p = read((w) => {
+      w.start(c[0]);
+      for (const q of c.slice(1, 9)) w.to(q);
+      for (const q of branch.slice(1)) w.to(q);
+      for (const q of branch.slice(0, -1).reverse()) w.to(q);
+      for (const q of c.slice(9)) w.to(q);
+    });
+    const kinds = stitchKinds(p);
+    const o = sewObjects(p, kinds).find((x) => x.kind === 'run')!;
+    const st = lineSettings(p, o, kinds);
+    expect(st.type).toBe('run');
+    const runs = lineStitches(lineOf(p, o, kinds)!, { ...st, length: 3 });
+    const tip = branch[branch.length - 1];
+    const pts = runs.flat();
+    expect(Math.min(...pts.map((q) => Math.hypot(q[0] - tip[0], q[1] - tip[1])))).toBeLessThan(0.3);
+    const end = c[c.length - 1];
+    expect(Math.min(...pts.map((q) => Math.hypot(q[0] - end[0], q[1] - end[1])))).toBeLessThan(0.3);
   });
 });

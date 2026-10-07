@@ -49,7 +49,9 @@ describe('sewing an object from the other side', () => {
   }, 30000);
 
   it('sews a satin column from its other end', () => {
-    const { r, before } = turn('cat-60mm.pes', 30);
+    // The last satin of the dark brown (an eye's lid).
+    const last = sewObjects(load('cat-60mm.pes')).filter((o) => o.block === 5).pop()!;
+    const { r, before } = turn('cat-60mm.pes', last.index);
     expect(r.failed).toEqual([]);
     const after = pointsOf(r.pattern, objectAt(r.pattern, r.starts[0]));
     expect(mm(after[0], before[before.length - 1])).toBeLessThan(1.5);
@@ -57,8 +59,9 @@ describe('sewing an object from the other side', () => {
   }, 30000);
 
   it('leaves an object with stitches outside its shape as it is', () => {
-    const { p, r } = turn('cat-60mm.pes', 0);
-    expect(r.failed).toEqual([0]);
+    // A piece of the cat's light body whose rows reach beyond the area recognized for it.
+    const { p, r } = turn('cat-60mm.pes', 2);
+    expect(r.failed).toEqual([2]);
     expect(r.starts).toEqual([]);
     expect(r.pattern.cmd.length).toBe(p.cmd.length);
   }, 30000);

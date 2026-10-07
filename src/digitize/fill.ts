@@ -48,7 +48,10 @@ export interface FillParams {
    * every 4 rows (the usual tatami), 1/2 gives a brick pattern; 0 shifts them at random.
    */
   offset?: number;
-  /** Spacing on the far side of the rows (gradient fill): it changes evenly across the shape. */
+  /**
+   * Spacing on the far side of the rows (gradient fill): it changes evenly across the shape. Curved
+   * rows (fieldFill) take it across their mean direction, from the side where straight rows would start.
+   */
   spacingEnd?: number;
   /** The next object starts here: the fill should end near it (straight rows only). */
   end?: Pt;

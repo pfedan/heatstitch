@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { digitizeDefaults } from '../src/digitize/digitize';
 import { addShape } from '../src/model/addShape';
-import { rememberObjects, sewObjects, type ObjectKind, type SewObject } from '../src/model/objects';
+import { backToVersion, keepVersion, rememberObjects, sewObjects, type ObjectKind, type SewObject } from '../src/model/objects';
 import { STITCH, type Pattern } from '../src/model/pattern';
 import { analyze, isGuessed, remember, remembered, rememberedIn, restitch, restoreRemembered, type RestitchResult, DECO_PATTERNS, OPEN_PATTERNS, type FillPattern, type FillSettings, type SatinSettings, type Settings } from '../src/model/restitch';
 import { reverseObjects } from '../src/model/reverse';
 import { transformSewObject } from '../src/model/reshape';
-import { mirrorMatrix } from '../src/model/shapeOps';
+import { duplicateObject, mirrorMatrix } from '../src/model/shapeOps';
 import { fromStored, toStored } from '../src/storage/fileStore';
 import { writePattern } from '../src/writers';
 import { decodeProject, encodeProject, projectSettings } from '../src/storage/project';
@@ -33,6 +33,7 @@ const empty = { name: 'rt', format: 'dst', x: new Int32Array(0), y: new Int32Arr
 
 const FILL: FillSettings = { pattern: 'tatami', spacing: 0.4, spacingEnd: 1, offset: 0.25, angle: 30, stitch: 4, underlay: true, edge: 0, tolerance: 0.15 };
 const SATIN: SatinSettings = { spacing: 0.4, edge: 0, short: true, underlay: true, tolerance: 0.15 };
+const FRINGED: SatinSettings = { ...SATIN, fringe: 1.5, fringeSide: 'right' };
 
 interface At {
   p: Pattern;
@@ -161,6 +162,38 @@ describe('own objects keep what they are through a change and back', () => {
     });
   }
 
+  it('curved rows with a gradient keep it through undo, duplicate, mirror and save', async () => {
+    const a = fillObject(false);
+    keepVersion(a.p);
+    // Rows bowed like a bowl along a guide line, 0.35 mm apart at the top to 1 mm at the bottom.
+    const bowl = Array.from({ length: 11 }, (_, i): [number, number] => {
+      const t = Math.PI * (0.15 + (0.7 * i) / 10);
+      return [19 - 10 * Math.cos(t), 8 + 12 * Math.sin(t)];
+    });
+    const S: FillSettings = { ...FILL, pattern: 'guided', guides: [bowl], spacing: 0.35, spacingEnd: 1, gradient: true };
+    const fillOf = (x: At) => remembered(x.p, sewObjects(x.p, stitchKinds(x.p))[x.o])!.fill!;
+    const b = sew(a, { kind: 'fill', s: S });
+    const kept = (x: At, why: string) => expect({ ...fillOf(x), guides: undefined, angle: undefined }, why).toMatchObject({ pattern: 'guided', spacing: 0.35, spacingEnd: 1, gradient: true });
+    kept(b, 'sewn');
+    // Fewer rows than at 0.35 mm throughout: the gradient was sewn.
+    const even = sew(a, { kind: 'fill', s: { ...S, gradient: undefined } });
+    expect(b.p.cmd.length).toBeLessThan(even.p.cmd.length * 0.85);
+    keepVersion(b.p);
+    // Undo and redo.
+    backToVersion(a.p);
+    expect(fillOf(a).pattern).toBe('tatami');
+    backToVersion(b.p);
+    kept(b, 'redone');
+    kept(mirror(mirror(b)), 'mirrored twice');
+    const d = duplicateObject(b.p, b.o, T)!;
+    expect(d, 'duplicated').toBeTruthy();
+    kept({ p: d.pattern, o: d.index }, 'copy');
+    kept(await saveAndOpen(b), 'saved and opened');
+    // Switched off, it stays off through saving.
+    const off = await saveAndOpen(sew(b, { kind: 'fill', s: { ...S, gradient: undefined } }));
+    expect(fillOf(off).gradient).toBeUndefined();
+  });
+
   it('satin line: E stitch and back', () => {
     const a = sew(satinObject(), { kind: 'satin', s: SATIN });
     const b = sew(a, { kind: 'satin', s: { ...SATIN, type: 'e', spacing: 2.5 } });
@@ -225,6 +258,22 @@ describe('own objects keep what they are through a change and back', () => {
     it(`satin column ${o}: E stitch, mirrored twice, saved and opened`, async () => {
       const a = sew(column(o), { kind: 'satin', s: { ...SATIN, type: 'e', spacing: 2.5 } });
       expect(what(await saveAndOpen(mirror(mirror(a))))).toEqual(what(a));
+    });
+    it(`satin column ${o}: fringe, mirrored twice, saved and opened`, async () => {
+      const a = sew(column(o), { kind: 'satin', s: FRINGED });
+      const ys = (x: At) => {
+        const k = sewObjects(x.p, stitchKinds(x.p))[x.o];
+        return Array.from(x.p.y.subarray(k.first, k.last + 1)).join();
+      };
+      expect(ys(a), 'frayed').not.toBe(ys(column(o)));
+      // Opened again: the very same stitches, and sewn anew the very same fringe.
+      const opened = await saveAndOpen(a);
+      expect(ys(opened)).toBe(ys(a));
+      expect(ys(sew(opened, { kind: 'satin', s: FRINGED }))).toBe(ys(a));
+      const b = await saveAndOpen(mirror(mirror(a)));
+      expect(what(b)).toEqual(what(a));
+      expect(remembered(b.p, sewObjects(b.p, stitchKinds(b.p))[b.o])?.satin).toMatchObject({ fringe: 1.5, fringeSide: 'right' });
+      expect(what(sew(a, { kind: 'satin', s: SATIN }))).toEqual(what(column(o)));
     });
     it(`satin column ${o}: turned twice`, () => {
       const a = column(o);

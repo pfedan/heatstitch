@@ -87,24 +87,47 @@ const CORNER = 40;
 /** Traced curves keep this close to the stitches (mm). */
 const TRACE_TOLERANCE = 0.2;
 
+/** A jump inside a line longer than this (mm) is a jump in its new stitches too, not sewn over. */
+export const RUN_JUMP = 1;
+
 /**
- * The path a running stitch follows, read from its penetrations: without lock stitches and without
- * the way back of a triple stitch.
+ * The ways a running stitch follows, read from its penetrations, one for each stretch between
+ * jumps (the needle does not sew where the line jumped): without lock stitches and without the
+ * way back of a triple stitch. A line sewn there and back (to get to where the next one starts)
+ * stays there and back.
  */
-export function runPoints(p: Pattern, first: number, last: number, kinds?: Uint8Array): Pt[] {
-  const path: Pt[] = [];
+export function runWays(p: Pattern, first: number, last: number, kinds?: Uint8Array): Pt[][] {
   const d = (a: Pt, b: Pt) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+  const raws: Pt[][] = [];
+  let raw: Pt[] = [];
+  let jumped = false;
   for (let i = first; i <= last; i++) {
-    if (p.cmd[i] !== STITCH || (kinds && kinds[i] === TIE_STITCH && i > first && i < last)) continue;
-    const q: Pt = [p.x[i] / 10, p.y[i] / 10];
-    // Back and forth over the same stitch (triple stitch, locks): only once.
-    if (path.length >= 2 && d(q, path[path.length - 2]) < 0.05) {
-      path.pop();
+    if (p.cmd[i] !== STITCH) {
+      jumped = true;
       continue;
     }
-    if (!path.length || d(q, path[path.length - 1]) > 0.05) path.push(q);
+    if (kinds && kinds[i] === TIE_STITCH && i > first) continue;
+    const q: Pt = [p.x[i] / 10, p.y[i] / 10];
+    if (jumped && raw.length && d(q, raw[raw.length - 1]) > RUN_JUMP) {
+      raws.push(raw);
+      raw = [];
+    }
+    jumped = false;
+    if (!raw.length || d(q, raw[raw.length - 1]) > 0.05) raw.push(q);
   }
-  return path;
+  raws.push(raw);
+  const ways: Pt[][] = [];
+  for (const r of raws) {
+    // A triple stitch goes a, b, a, b: once along it is enough.
+    const way: Pt[] = [];
+    for (let k = 0; k < r.length; k++) {
+      const n = way.length;
+      if (n >= 2 && k + 1 < r.length && d(r[k], way[n - 2]) < 0.05 && d(r[k + 1], way[n - 1]) < 0.05) k++;
+      else way.push(r[k]);
+    }
+    if (way.length >= 2) ways.push(way);
+  }
+  return ways;
 }
 
 /** A line of curves through points: corners where it turns sharply, smooth curves between them. */
@@ -153,22 +176,24 @@ export function lineOf(p: Pattern, o: SewObject, kinds?: Uint8Array): Form | nul
   const known = remembered(p, o)?.path;
   if (known) return known;
   if (o.kind !== 'run') return null;
-  return traceLine(runPoints(p, o.first, o.last, kinds ?? stitchKinds(p)));
+  const paths = runWays(p, o.first, o.last, kinds ?? stitchKinds(p)).flatMap((w) => traceLine(w)?.paths ?? []);
+  return paths.length ? { paths } : null;
 }
 
 /** How a line object is sewn now. */
 export function lineSettings(p: Pattern, o: SewObject, kinds?: Uint8Array): PathStitch {
   const known = remembered(p, o);
   if (known?.line) return { ...known.line };
-  const pts = runPoints(p, o.first, o.last, kinds ?? stitchKinds(p));
+  const ways = runWays(p, o.first, o.last, kinds ?? stitchKinds(p));
   // Measured: the usual length of its stitches, and triple when it goes back and forth.
   const lens: number[] = [];
-  for (let i = 1; i < pts.length; i++) lens.push(Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+  for (const w of ways) for (let i = 1; i < w.length; i++) lens.push(Math.hypot(w[i][0] - w[i - 1][0], w[i][1] - w[i - 1][1]));
   lens.sort((a, b) => a - b);
   const length = lens.length ? Math.round(lens[Math.floor(lens.length * 0.75)] * 10) / 10 : BORDER_STITCH;
   let stitches = 0;
   for (let i = o.first; i <= o.last; i++) if (p.cmd[i] === STITCH) stitches++;
-  const triple = stitches > pts.length * 2.4;
+  const points = ways.reduce((n, w) => n + w.length, 0);
+  const triple = stitches > points * 2.4;
   return { type: triple ? 'triple' : 'run', width: BORDER_WIDTH, length: Math.min(6, Math.max(1, length)), tolerance: TOLERANCE };
 }
 
