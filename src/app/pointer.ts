@@ -288,6 +288,10 @@ export function bindPointer(app: PointerApp) {
       if (pressAt && Math.hypot(pos[0] - pressAt[0], pos[1] - pressAt[1]) < 4) pressMode = 'pan';
       else if (e.type === 'pointerup') selectInBand(band);
     }
+    // Bild, Smart: a click on an area opens its row in the list of areas.
+    if (pressAt && e.type === 'pointerup' && e.button === 0 && app.settings.mode === 'image' && Math.hypot(pos[0] - pressAt[0], pos[1] - pressAt[1]) < 4) {
+      app.imageMode.click(...app.vp.toWorld(pos[0], pos[1]));
+    }
     // A press on the frame that did not move is a click like any other.
     const frameClick = pressMode === 'frame' && app.frameTool.dragging !== null && !app.frameTool.up();
     if (pressMode === 'frame' && !frameClick) pressMode = 'move';
