@@ -241,7 +241,7 @@ const REACH = 0.3;
 /** Highest density allowed for curved rows, in times the nominal (where rows meet). */
 const CONTOUR_PEAK = 3;
 /** Half width of the band along the old thread that new travel may follow (mm). */
-const TRAVEL_REACH = 0.5;
+export const TRAVEL_REACH = 0.5;
 const OPEN = 0.36;
 
 /**
@@ -1687,7 +1687,7 @@ function convert(p: Pattern, o: SewObject, parts: Part[], src: ObjectKind, area:
 }
 
 /** Stitches of a fill: its runs, the first `under` points of them its underlay. */
-interface NewFill {
+export interface NewFill {
   runs: Pt[][];
   under: number;
   /** Points of `runs` before the border (all of them without one). */
@@ -1704,27 +1704,59 @@ function newFill(p: Pattern, o: SewObject, a: Analysis, s: FillSettings, reverse
   const segs: number[] = [];
   for (let i = o.first + 1; i <= o.last; i++) if (p.cmd[i] === STITCH && p.cmd[i - 1] === STITCH) segs.push(i);
   const travel = traceRegion(p, segs, TRAVEL_REACH, 0, false) ?? undefined;
-  // Grown or shrunk for the stitches only: the shape kept for the next edit stays as it is.
-  const r = expandRegion(a.fill, s.expand ?? 0);
-  if (!r) return null;
-  // Grown, the travel may also use the new margin, so it stays one piece; shrunk, it stays inside
-  // the smaller area (the old thread runs where nothing is sewn now).
-  const ex = s.expand ?? 0;
-  const way = ex > 0 && travel ? (unionRegion([travel, r]) ?? travel) : ex < 0 ? r : travel;
-  const fp: FillParams = { spacing: s.spacing, stitch: s.stitch, angle: s.angle, pull: s.edge, underlay: s.underlay, underCross: s.underCross, underInset: s.underInset, underInsetShare: s.underInsetShare, underSpacing: s.underSpacing, travel: way, tolerance: s.tolerance };
-  // Under what lies on top completely, no underlay (it would only add thread under it).
-  if (s.underlay && s.underCover && covers?.length) {
-    const left = cutAway(r, covers.map((c) => ({ region: c.region, overlap: UNDER_COVER_MARGIN })));
-    if (left !== r) fp.underArea = left ?? undefined;
-    if (!left) fp.underlay = false;
-  }
   // Reversed, the new stitches start where the old ones ended.
   const start = reverse ? pt10(p, last.e) : pt10(p, first.s);
   // Straight rows end near where the next object starts, when that shortens the way (if nothing
   // else of the object comes after the fill; not when it is sewn the other way round on purpose).
   let next = o.last + 1;
   while (next < p.cmd.length && p.cmd[next] !== STITCH && p.cmd[next] !== END) next++;
-  if (!reverse && a.parts.filter((pt) => !pt.border).pop() === last && next < p.cmd.length && p.cmd[next] === STITCH) fp.end = pt10(p, next);
+  const end = !reverse && a.parts.filter((pt) => !pt.border).pop() === last && next < p.cmd.length && p.cmd[next] === STITCH ? pt10(p, next) : undefined;
+  // A fill that follows its stitches: the direction of the old rows.
+  const rows: [Pt, Pt][] = [];
+  if (s.pattern === 'follow')
+    for (const pt of a.parts) {
+      if (pt.kind !== 'fill' || pt.border) continue;
+      for (let i = pt.s + 1; i <= pt.e; i++) if (p.cmd[i] === STITCH && p.cmd[i - 1] === STITCH && seg(p, i) >= 0.8) rows.push([pt10(p, i - 1), pt10(p, i)]);
+    }
+  return fillRuns(a.fill, s, { start, end, travel, covers, rows });
+}
+
+/** Where and along what a fill is sewn (see fillRuns). */
+export interface FillWay {
+  /** Its stitches start near here. */
+  start: Pt;
+  /** Straight rows end near here (where the next object starts). */
+  end?: Pt;
+  /** Where travel between patches may run besides the area (the old thread). */
+  travel?: Region;
+  /** What lies on top of it (no underlay under what covers it completely). */
+  covers?: Cover[];
+  /** The rows a 'follow' fill follows. */
+  rows?: [Pt, Pt][];
+}
+
+/**
+ * The stitches of a fill in area `area` with settings `s`: everything they depend on is given, so
+ * the same area, settings and way give the same stitches (an empty fill has none here).
+ */
+export function fillRuns(area: Region, s: FillSettings, way: FillWay): NewFill | null {
+  if (s.pattern === 'none') return null;
+  const { start, travel, covers } = way;
+  // Grown or shrunk for the stitches only: the shape kept for the next edit stays as it is.
+  const r = expandRegion(area, s.expand ?? 0);
+  if (!r) return null;
+  // Grown, the travel may also use the new margin, so it stays one piece; shrunk, it stays inside
+  // the smaller area (the old thread runs where nothing is sewn now).
+  const ex = s.expand ?? 0;
+  const tw = ex > 0 && travel ? (unionRegion([travel, r]) ?? travel) : ex < 0 ? r : travel;
+  const fp: FillParams = { spacing: s.spacing, stitch: s.stitch, angle: s.angle, pull: s.edge, underlay: s.underlay, underCross: s.underCross, underInset: s.underInset, underInsetShare: s.underInsetShare, underSpacing: s.underSpacing, travel: tw, tolerance: s.tolerance };
+  // Under what lies on top completely, no underlay (it would only add thread under it).
+  if (s.underlay && s.underCover && covers?.length) {
+    const left = cutAway(r, covers.map((c) => ({ region: c.region, overlap: UNDER_COVER_MARGIN })));
+    if (left !== r) fp.underArea = left ?? undefined;
+    if (!left) fp.underlay = false;
+  }
+  if (way.end) fp.end = way.end;
   let res;
   if (s.pattern === 'gradient') {
     res = fillRegion(r, { ...fp, spacingEnd: s.spacingEnd, ...(s.deco?.fade ? { fade: s.deco.fade } : {}) }, start);
@@ -1732,12 +1764,7 @@ function newFill(p: Pattern, o: SewObject, a: Analysis, s: FillSettings, reverse
     res = contourFill(r, fp, start);
   } else if (s.pattern === 'spiral') res = spiralFill(r, fp, start);
   else if (s.pattern === 'follow') {
-    const lines: [Pt, Pt][] = [];
-    for (const pt of a.parts) {
-      if (pt.kind !== 'fill' || pt.border) continue;
-      for (let i = pt.s + 1; i <= pt.e; i++) if (p.cmd[i] === STITCH && p.cmd[i - 1] === STITCH && seg(p, i) >= 0.8) lines.push([pt10(p, i - 1), pt10(p, i)]);
-    }
-    const f = stitchField(r, lines);
+    const f = stitchField(r, way.rows ?? []);
     res = fieldFill(r, f.g, f, fp, start, false, CONTOUR_PEAK);
   } else if (s.pattern === 'guided') {
     if (!s.guides?.length) return null;
