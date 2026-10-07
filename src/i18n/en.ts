@@ -33,7 +33,7 @@ const enBase: Record<keyof typeof deBase, string> = {
   'files.example.benchmark': 'Shapes benchmark',
   'files.example.loading': 'Stitching the example …',
   'files.example.projects': 'Projects',
-  'files.example.demo': 'Demo project (7 designs)',
+  'files.example.demo': 'Demo project (all features)',
   'files.example.opening': 'Loading the example …',
   'controls.title': 'Display',
   'controls.metric': 'Metric',
