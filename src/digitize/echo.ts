@@ -197,6 +197,15 @@ function nearest(line: Pt[], cum: number[], q: Pt): { s: number; end: boolean; s
       // On screen (y down) the left of the direction (dx, dy) is (dy, -dx).
       const cross = dx * ey - dy * ex;
       side = cross < 0 ? 1 : -1;
+      // Nearest to a corner of the line (not an end): q lies in the wedge outside the corner,
+      // as near to both its sides, so the way the line turns there tells the side (taken from
+      // either side alone it would flip with the smallest shift of the line).
+      const k = raw <= 0 && i > 1 ? i - 1 : raw >= 1 && i < line.length - 1 ? i : -1;
+      if (k > 0) {
+        const turn = (line[k][0] - line[k - 1][0]) * (line[k + 1][1] - line[k][1]) - (line[k][1] - line[k - 1][1]) * (line[k + 1][0] - line[k][0]);
+        // Turning left (on screen) the outside of the corner is on the right.
+        if (Math.abs(turn) > 1e-9) side = turn < 0 ? -1 : 1;
+      }
     }
   }
   return { s, end, side };

@@ -13,6 +13,7 @@ import { wholeArea } from '../src/model/knockout';
 import { stitchKinds } from '../src/model/sequence';
 import { duplicateObjects, mirrorMatrix } from '../src/model/shapeOps';
 import { canSplit, partAngles, splitArea, splitFill } from '../src/model/splitFill';
+import { sewDesign } from '../src/model/sew';
 import type { Mat } from '../src/shape/path';
 import { ellipsePath, parsePath, rectPath } from '../src/shape/svgPath';
 import { DEFAULT_PROFILE } from '../src/validation/profiles';
@@ -336,6 +337,14 @@ describe('the border of a fill cut apart', () => {
     expect(across.length).toBeGreaterThan(2);
     const ys = across.map(([, y]) => y);
     expect(Math.max(...ys) - Math.min(...ys)).toBeLessThan(0.25);
+  });
+
+  it('keeps the border around the parts, with its lines along the cuts, when sewn from the object list', () => {
+    const { p } = borderedHalves({ ...RUN, color: dark, seams: true });
+    const q = sewDesign(p, T);
+    const [b] = borderObjects(p);
+    expect(borderObjects(q)).toEqual([b]);
+    expect(stitchesOf(q, b)).toEqual(stitchesOf(p, b));
   });
 
   it('is stored as the first part naming the whole and the others following it by id', () => {
