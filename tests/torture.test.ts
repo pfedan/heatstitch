@@ -660,7 +660,9 @@ function checkLineParts(p: Pattern): void {
     if (!sameColor(objs[k].color, w.part.color)) problems.push(`part ${k} not in its thread`);
     if (JSON.stringify(storeForm(m!.path!)) !== JSON.stringify(storeForm(w.part.memory.path!)) || JSON.stringify(m!.line) !== JSON.stringify(w.part.memory.line)) problems.push(`part ${k} not what its line says`);
   });
-  for (const [link, w] of want) if (!have.has(link)) problems.push(`line ${w.line} lost its part ${link}`);
+  // A copy with nothing to sew (no room for it beside the line) has no object.
+  const sews = (w: { part: LinePart }) => lineStitches(w.part.memory.path!, w.part.memory.line!).some((run) => run.length > 1);
+  for (const [link, w] of want) if (!have.has(link) && sews(w)) problems.push(`line ${w.line} lost its part ${link}`);
   expect(problems.join('; '), 'line parts').toBe('');
 }
 

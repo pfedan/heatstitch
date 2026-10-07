@@ -44,14 +44,20 @@ function oneKind(m: Remembered, kind: ObjectKind): boolean {
 
 /**
  * What object `o` of `p` is sewn from, or null when it can only keep its stitches: loosed from its
- * shape, read from stitches, a lettering, a fill that follows its old rows, or of more than one kind.
+ * shape, read from stitches, a lettering, a fill that follows its old rows, of more than one kind,
+ * or the border around the parts of a fill cut apart.
  */
 export function specOf(p: Pattern, o: SewObject): Spec | null {
   const m = remembered(p, o);
   if (!m || m.free || m.hand || m.read || m.lettering || m.borderAt !== undefined) return null;
   const kind = knownKind(m) ?? o.kind;
   if (kind !== o.kind) return null;
-  if (m.outline && m.border && m.region) return { kind: 'border', area: m.region, border: m.border, memory: m };
+  if (m.outline && m.border && m.region) {
+    // The border around the parts of a fill cut apart (and its lines along the cuts) is sewn from
+    // the parts together: kept as it is until the parts are sewn from the list as one whole.
+    if (tableOf(p).entries.some((e) => e.memory?.piece && e.memory.fill?.border?.link === m.outline)) return null;
+    return { kind: 'border', area: m.region, border: m.border, memory: m };
+  }
   if (m.path && m.line && !m.asLine) return { kind: 'line', path: m.path, line: m.line };
   if (kind === 'fill' && m.fill && m.fill.pattern !== 'follow' && oneKind(m, 'fill')) {
     const area = m.asLine ? lineFillArea(m.asLine, m.fill) : (m.region ?? (m.form ? rasterize(m.form) : null));
