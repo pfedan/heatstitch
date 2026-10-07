@@ -4,6 +4,8 @@ import { sewObjects, type SewObject } from '../src/model/objects';
 import { JUMP, STITCH, TRIM, type Pattern } from '../src/model/pattern';
 import { listOf, specOf, sewDesign, sewList } from '../src/model/sew';
 import { recolorObjects } from '../src/model/shapeOps';
+import { transformSewObject } from '../src/model/reshape';
+import { stitchKinds } from '../src/model/sequence';
 import { remembered } from '../src/model/restitch';
 import { CRITICAL, validatePattern } from '../src/validation/validate';
 
@@ -91,6 +93,25 @@ describe('recoloring through the list', () => {
       expect(plain(q, after).map((x) => x.id)).toEqual(plain(p, objs).map((x) => x.id));
       expect(plain(q, after).map((x) => stitchesOf(q, x))).toEqual(plain(p, objs).map((x) => stitchesOf(p, x)));
       expect(after[o.index].color).toMatchObject(color);
+    }
+  }, 120000);
+});
+
+describe('moving through the list', () => {
+  it.each(buildDemos().map((d) => [d.title, d] as const))('%s', (_, d) => {
+    const p = d.p;
+    const objs = sewObjects(p);
+    const kinds = stitchKinds(p);
+    for (const o of objs) {
+      const r = transformSewObject(p, objs, o, kinds, [1, 0, 0, 1, 3, -2], d.T);
+      expect(r).toBeTruthy();
+      const after = sewObjects(r!.pattern);
+      // The same objects; the others keep their stitches, the moved one has them 3 mm right, 2 mm up.
+      expect(after.map((x) => x.id)).toEqual(objs.map((x) => x.id));
+      after.forEach((x, k) => {
+        const want = k === o.index ? stitchesOf(p, objs[k]).split(' ').map((s) => s.split(',').map(Number)).map(([a, b]) => `${a + 30},${b - 20}`).join(' ') : stitchesOf(p, objs[k]);
+        expect(stitchesOf(r!.pattern, x)).toBe(want);
+      });
     }
   }, 120000);
 });
