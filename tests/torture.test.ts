@@ -580,7 +580,9 @@ function checkBorders(p: Pattern): void {
     else if (!sameColor(objs[k].color, mem[f]!.fill!.border!.color ?? objs[f].color)) problems.push(`border ${k} not in its thread`);
   });
   // Unless nothing of its edge shows (all of it under shapes on top).
-  const hidden = (m: NonNullable<(typeof mem)[number]>) => !m.piece && !!m.region && borderStitches(m.region, m.fill!.border!, [0, 0], wholeOf(m.region, m)).length === 0;
+  // (A part cut apart on its own, e.g. a copy of one, counts as a whole: its border can vanish too, set inward of a small part.)
+  const alone = (m: NonNullable<(typeof mem)[number]>) => !m.piece || mem.filter((x) => x?.piece === m.piece && x.fill).length === 1;
+  const hidden = (m: NonNullable<(typeof mem)[number]>) => alone(m) && !!m.region && borderStitches(m.region, m.fill!.border!, [0, 0], wholeOf(m.region, m)).length === 0;
   for (const [link, k] of fills) if (!borders.has(link) && !hidden(mem[k]!)) problems.push(`fill ${k} lost its border`);
   expect(problems.join('; '), 'border links').toBe('');
 }
