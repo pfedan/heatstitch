@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { digitize, digitizeDefaults, type DigitizeOptions } from '../src/digitize/digitize';
+import { digitize, digitizeDefaults, sewingOrder, type DigitizeOptions } from '../src/digitize/digitize';
 import { DEFAULT_PREPARE, Preparer, type PrepareOptions } from '../src/image/prepare';
 import { COLOR_CHANGE, STITCH, TRIM, type Pattern } from '../src/model/pattern';
 import { FILL, SATIN, stitchKinds } from '../src/model/sequence';
@@ -209,5 +209,25 @@ describe('digitize', () => {
     const b = make();
     expect(Array.from(a.x)).toEqual(Array.from(b.x));
     expect(Array.from(a.cmd)).toEqual(Array.from(b.cmd));
+  });
+});
+
+describe('sewing order', () => {
+  it('sews an outline after the areas it encloses, the areas largest first', () => {
+    // 0.1 mm per pixel: a red disk (r 10 mm) and a blue disk (r 5 mm), each with a 1 mm black ring.
+    const w = 500;
+    const labels = new Uint8Array(w * w).fill(255);
+    for (let y = 0; y < w; y++) {
+      for (let x = 0; x < w; x++) {
+        const a = Math.hypot(x - 150, y - 250);
+        const b = Math.hypot(x - 400, y - 250);
+        if (a < 100 || b < 50) labels[y * w + x] = a < 100 ? 0 : 1;
+        else if (a < 110 || b < 60) labels[y * w + x] = 2;
+      }
+    }
+    expect(sewingOrder(labels, w, w, 0.1, 3)).toEqual([0, 1, 2]);
+    // Lines alone keep the order by area.
+    const lines = labels.map((l) => (l === 2 ? 2 : 255));
+    expect(sewingOrder(lines, w, w, 0.1, 3)).toEqual([2]);
   });
 });
