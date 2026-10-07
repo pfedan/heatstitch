@@ -241,38 +241,39 @@ const T = {
   en: { rungs: 'Set direction', corners: 'Suggest corners', merge: 'Combine into one object', subtract: 'Cut out top shape', guide: 'As a guide', all: 'Select all', apply: 'Apply selected', proposals: 'Proposals', uncut: 'Not trimmed' },
 };
 
-/** letters.pes in Ablauf with realistic threads, all colors expanded. */
-async function lettersFlow(page) {
-  await loadFile(page, DEMOS + 'letters.pes');
+/** patch.pes (the Aufnäher of the demo project) in Ablauf with realistic threads, the given colors expanded. */
+async function patchFlow(page, ...colors) {
+  await loadFile(page, DEMOS + 'patch.pes');
   await mode(page, 'flow');
   await realistic(page, true);
-  await expandColor(page, 1);
-  await expandColor(page, 2);
+  for (const c of colors) await expandColor(page, c);
 }
+// patch.pes objects: 0 disc fill, 4 satin ring, 5 star fill, 7..10 HEAT, 11..16 STITCH (white satin)
+const PATCH = { disc: 0, ring: 4, star: 5, starPart: 6, S: 11 };
 
-// 4. satin: rungs on the satin border of the M
+// 4. satin: rungs on the satin S of the patch
 shots.satin = async (lang) => {
   const { page, close } = await boot(lang);
-  await lettersFlow(page);
-  await clickObject(page, 4); // Satin 1 = the M
+  await patchFlow(page, 4);
+  await clickObject(page, PATCH.S);
   await clickText(page, T[lang].rungs);
   await clickText(page, T[lang].corners);
   await page.waitForTimeout(600);
-  // zoom onto the M (left letter)
+  // zoom onto the S (left of STITCH)
   const b = await stageBox(page);
-  await zoomTo(page, b.x + 100, b.y + 375, 5);
+  await zoomTo(page, b.x + 212, b.y + 538, 7);
   await inspectorTo(page, '#object-panel');
   await sidebarTop(page);
   await jpeg(page, `satin-${lang}`);
   await close();
 };
 
-// 5. merge: fills of M and K combined into one object
+// 5. merge: the two parts the star was recognized as, combined into one object
 shots.merge = async (lang) => {
   const { page, close } = await boot(lang);
-  await lettersFlow(page);
-  await clickObject(page, 0); // Füllung 1 = M
-  await clickObject(page, 2, true); // Füllung 3 = K
+  await patchFlow(page, 3);
+  await clickObject(page, PATCH.star);
+  await clickObject(page, PATCH.starPart, true);
   await clickText(page, T[lang].merge);
   await page.waitForTimeout(1500);
   await inspectorTo(page, '#object-panel');
@@ -282,15 +283,15 @@ shots.merge = async (lang) => {
   await close();
 };
 
-// 6. stitches: one needle point of the A moved by hand
+// 6. stitches: one needle point of the star moved by hand
 shots.stitches = async (lang) => {
   const { page, close } = await boot(lang);
-  await lettersFlow(page);
-  await clickObject(page, 1); // Füllung 2 = A
+  await patchFlow(page, 3);
+  await clickObject(page, PATCH.star);
   await page.click('#stage .level-switch input[value="stitches"]', { force: true });
   await page.waitForTimeout(800);
   const b = await stageBox(page);
-  await zoomTo(page, b.x + 245, b.y + 375, 3);
+  await zoomTo(page, b.x + 325, b.y + 240, 2);
   const pt = await findNeedlePoint(page, b.width / 2, b.height / 2);
   if (!pt) throw new Error('no needle point found');
   await page.mouse.move(pt.x, pt.y);
@@ -364,10 +365,10 @@ async function density(page, fabric, real = false) {
   await sidebarTop(page);
 }
 
-// 10. findings: letters.pes on woven fabric
+// 10. findings: patch.pes on woven fabric
 shots.findings = async (lang) => {
   const { page, close } = await boot(lang, { width: 1280, height: 960 });
-  await loadFile(page, DEMOS + 'letters.pes');
+  await loadFile(page, DEMOS + 'patch.pes');
   await density(page, 'woven');
   await fit(page);
   await mouseAway(page);
@@ -390,10 +391,10 @@ shots.correct = async (lang) => {
   await close();
 };
 
-// 12. compare: letters.pes corrected, split view with the comparison table
+// 12. compare: patch.pes corrected, split view with the comparison table
 shots.compare = async (lang) => {
   const { page, close } = await boot(lang, { width: 1280, height: 960 });
-  await loadFile(page, DEMOS + 'letters.pes');
+  await loadFile(page, DEMOS + 'patch.pes');
   await density(page, 'woven', true);
   await propose(page, lang);
   await page.locator('#fix-report button', { hasText: T[lang].all }).first().click();
@@ -584,22 +585,21 @@ shots.draw = async (lang) => {
   await close();
 };
 
-// 18. sections (shared): the satin M of letters.pes after Suggest sections, canvas only
+// 18. sections (shared): the satin S of patch.pes after Suggest sections, canvas only
 shots.sections = async () => {
   const { page, close } = await boot('de');
-  await lettersFlow(page);
-  await clickObject(page, 4); // Satin 1 = the M
+  await patchFlow(page, 4);
+  await clickObject(page, PATCH.S);
   await clickText(page, T.de.rungs);
   await page.getByRole('button', { name: 'Abschnitte vorschlagen', exact: true }).first().click();
   await page.waitForTimeout(1500);
   const b = await stageBox(page);
-  await zoomTo(page, b.x + 100, b.y + 375, 3);
+  await zoomTo(page, b.x + 212, b.y + 538, 6);
   const c = await page.locator('#canvas').boundingBox();
-  await jpeg(page, 'sections', { x: c.x + 90, y: c.y + 70, width: c.width - 180, height: c.height - 170 });
+  await jpeg(page, 'sections', { x: c.x + 40, y: c.y + 110, width: c.width - 180, height: c.height - 170 });
   await close();
 };
 
-// 19. decor: an orange fill of the cat with the Swirl pattern, the Decor tab open
 shots.decor = async (lang) => {
   const { page, close } = await boot(lang);
   await example(page, CAT);

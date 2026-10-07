@@ -535,9 +535,11 @@ dropdown sews on opening. `image-example.svg` is the example picture of Image mo
 widths, fine lines), loaded by *Load example image* in that mode.
 
 `public/examples/demos/` holds small synthetic demos for the guide, each with one finding:
-`overlap.pes` (stacked fills), `letters.pes` (fill under satin), `sun.dst` (short stitches on knit),
+`overlap.pes` (stacked fills), `letters.pes` (fill under satin, tests only), `sun.dst` (short stitches on knit),
 `leather-patch.dst` (perforation on leather) and `confetti.pes` (long jumps without trims, short ones
 with trims). They are built with the app's own writers from `tests/helpers/demos.ts`;
+`patch.pes` is the Aufnäher of the demo project saved as PES, the guide's example for satin, sections,
+single stitches and the density check;
 `tests/demos.test.ts` checks that they are up to date and show the described finding. After changing
 designs or writers: `UPDATE_DEMOS=1 npm test`. The guide images live in `public/guide/` and are not
 precached.
