@@ -306,6 +306,14 @@ export function sewList(p: Pattern, list: Entry[], trimMm: number, opts: ListOpt
   const keptAt = (k: number) => !specs[k];
   const used = new Set<number>();
   let nextId = Math.max(table.next || 1, ...list.map((e) => e.obj.id + 1));
+  // Kept objects cut off there in `p` already (as files from elsewhere often are, without a tie):
+  // a cut there gives them no tie they did not have.
+  const all = sewObjects(p);
+  // A file without tie-offs (or tie-ins) gets none either.
+  const tiesIn = all.some((x) => x.tieIn);
+  const tiesOff = all.some((x) => x.tieOff);
+  const cutBefore = (o: SewObject) => !tiesIn || o.index === 0 || trimmedBetween(p, all[o.index - 1], o);
+  const cutAfter = (o: SewObject) => !tiesOff || o.index === all.length - 1 || trimmedBetween(p, o, all[o.index + 1]);
   // Kept objects that got a tie-in or tie-off of their own (too small to have one).
   const grown = new Set<number>();
   let tied = false;
@@ -355,10 +363,13 @@ export function sewList(p: Pattern, list: Entry[], trimMm: number, opts: ListOpt
       const color = list[k - 1].thread !== e.thread;
       const [a, b] = [recOf(k - 1, prev.last), recOf(k, o.first)];
       const far = Math.hypot(b.x - a.x, b.y - a.y) / 10 > trimMm;
-      cut = color || apart?.has(k) || (asBefore ? trimmedBetween(p, prev, o) : far || !!whole || linked(p, prev) || linked(p, o));
+      // Objects without a tie that the thread went between untrimmed in `p` (what lay between them
+      // gone) stay joined so: a cut would give them ties.
+      const asWent = !asBefore && !whole && prev.index < o.index && keptAt(k - 1) && !spec && (!prev.tieOff || !o.tieIn) && !trimmedBetween(p, prev, o);
+      cut = color || apart?.has(k) || (asBefore ? trimmedBetween(p, prev, o) : !asWent && (far || !!whole || linked(p, prev) || linked(p, o)));
       if (cut) {
         const end = out[out.length - 1];
-        if (keptAt(k - 1) && !prev.tieOff) tiedOff(k - 1, prev);
+        if (keptAt(k - 1) && !prev.tieOff && !cutAfter(prev)) tiedOff(k - 1, prev);
         out.push({ ...end, cmd: TRIM });
         if (color) {
           out.push({ ...end, cmd: COLOR_CHANGE });
@@ -405,7 +416,7 @@ export function sewList(p: Pattern, list: Entry[], trimMm: number, opts: ListOpt
       } else if (lead === o.first) out.push({ ...recOf(k, o.first), cmd: JUMP });
       if (lead < o.first) copy(lead, o.first);
       copyOwn(k, o.first, o.first + 1);
-      if ((cut || (!prev && !led)) && !o.tieIn) {
+      if ((cut || (!prev && !led)) && !o.tieIn && !cutBefore(o)) {
         out.push(...tieIn(p, o.first).map((r) => mapped(k, r)));
         tied = true;
       }
@@ -424,7 +435,7 @@ export function sewList(p: Pattern, list: Entry[], trimMm: number, opts: ListOpt
   const lastObj = list[list.length - 1].obj;
   if (keptAt(list.length - 1) && lastObj.index === sewObjects(p).length - 1) copy(lastObj.last + 1, p.cmd.length);
   else {
-    if (keptAt(list.length - 1) && !lastObj.tieOff) tiedOff(list.length - 1, lastObj);
+    if (keptAt(list.length - 1) && !lastObj.tieOff && !cutAfter(lastObj)) tiedOff(list.length - 1, lastObj);
     out.push({ ...out[out.length - 1], cmd: TRIM }, { ...out[out.length - 1], cmd: END });
   }
   const raw = withRecords(p, Int32Array.from(out, (r) => r.x), Int32Array.from(out, (r) => r.y), Uint8Array.from(out, (r) => r.cmd), colors);
