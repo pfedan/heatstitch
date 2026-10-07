@@ -21,7 +21,8 @@ import { recordOfStitch } from '../model/sequence';
 import { rememberObjects, type SewObject } from '../model/objects';
 import { loosable } from '../model/handEdit';
 import { backToOriginal, originalOf } from '../model/original';
-import { shareBorders, syncBorders } from '../model/border';
+import { newLink, shareBorders, syncBorders } from '../model/border';
+import { readBorder } from '../model/readBorder';
 import { t, type Key } from '../i18n';
 import { type ShapeTrust, analyze, remembered, measureFill, measureSatin, measureRun, shapeTrust, type Remembered, remember, rememberedIn, restitch, type Settings as RestitchSettings, type RestitchResult, objectKey } from '../model/restitch';
 import { type StitchInfo, StitchPanel } from '../ui/stitchPanel';
@@ -103,6 +104,11 @@ export function bindStitches(app: StitchesApp) {
     const fixed = ui.selectedObjects.size === 1 && q.objects[[...ui.selectedObjects][0]] ? remembered(p, q.objects[[...ui.selectedObjects][0]])?.fixed : undefined;
     const firstOf = (k: string) => [...ui.selectedObjects].sort((a, b) => a - b).map((o) => q.objects[o]).find((obj) => obj?.kind === k);
     const fillObj = firstOf('fill');
+    // A fill from a file with a line sewn along its edge: that is its border (see syncBorders).
+    if (fillObj && ui.selectedObjects.size === 1 && measured.fill && !measured.fill.border && !remembered(p, fillObj)?.fill) {
+      const found = readBorder(p, q.objects, fillObj, q.kinds);
+      if (found) measured.fill = { ...measured.fill, border: { ...found.border, link: newLink() } };
+    }
     const fabricPull = {
       fill: fillObj ? pullFor(app.settings.profile, 'fill', analyze(p, fillObj, q.kinds).fill?.areaMm2).edge : undefined,
       satin: pullFor(app.settings.profile, 'satin'),
