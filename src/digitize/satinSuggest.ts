@@ -74,13 +74,13 @@ export function areaLoops(area: Region): { outsides: Pt[][]; holes: Pt[][] } {
 }
 
 /** The class of a shape by its skeleton: lines of about even width, or anything else. */
-export function classify(g: Graph): ShapeClass {
+export function classify(g: Graph, max = STROKE_MAX): ShapeClass {
   if (!g.branches.length) return 'wide';
   const rs = g.branches.flatMap((b) => b.r);
   const len = g.branches.reduce((a, b) => a + lengthOf(b.pts), 0);
   const w = 2 * median(rs);
   // A stroke: narrow enough for satin, much longer than wide.
-  const wide = rs.filter((r) => 2 * r > STROKE_MAX).length > rs.length * 0.05;
+  const wide = rs.filter((r) => 2 * r > max).length > rs.length * 0.05;
   return !wide && len > 3 * w ? 'strokes' : 'wide';
 }
 
@@ -104,7 +104,7 @@ export function suggestSatin(area: Region, graph?: Graph, max = STROKE_MAX): Sat
   const { outsides, holes } = areaLoops(area);
   if (!outsides.length) return null;
   const g = graph ?? skeleton(area);
-  const kind = classify(g);
+  const kind = classify(g, max);
   const material = materialOf(outsides, holes);
   // Corners to cut at (spikes, miters): on an area, or on lines wide enough that a turn would pile up.
   if (kind !== 'strokes' || 2 * median(g.branches.flatMap((b) => b.r)) >= MITER_MIN) {
@@ -139,7 +139,7 @@ export function suggestSatin(area: Region, graph?: Graph, max = STROKE_MAX): Sat
 function atCorners(g: Graph, outsides: Pt[][], holes: Pt[][], material: (q: Pt) => boolean, max: number): SatinSuggestion | null {
   const c = cornerCuts(outsides, holes, material, max);
   if (!c.cuts.length) return null;
-  const p = planParts(outsides, holes, c.cuts, c.spikes, g, max, planStrokes);
+  const p = planParts(outsides, holes, c.cuts, c.tips, g, max, planStrokes);
   if (!p) return null;
   const made = finish(g, c.spikes >= c.miters ? 'spikes' : 'frame', p.cuts, p.lines, outsides, holes);
   return made.ok ? made : null;

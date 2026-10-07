@@ -119,10 +119,11 @@ function along(ring: Pt[], s: number): Pt {
  * The cut lines at the corners of an area: spikes cut off at their bases, bands cut on the miter
  * where they turn a corner. `max` is the widest column (mm).
  */
-export function cornerCuts(outsides: Pt[][], holes: Pt[][], material: (q: Pt) => boolean, max: number): { cuts: [Pt, Pt][]; spikes: number; miters: number } {
+export function cornerCuts(outsides: Pt[][], holes: Pt[][], material: (q: Pt) => boolean, max: number): { cuts: [Pt, Pt][]; spikes: number; miters: number; tips: Pt[][] } {
   const cuts: [Pt, Pt][] = [];
   const used = new Set<Bend>();
-  let spikes = 0;
+  /** The corners of each spike, by the index of its cut line (the spikes' come first). */
+  const tipsOf: Pt[][] = [];
   const all: Bend[] = [];
   for (const ring of outsides) {
     const bs = bends(ring, material);
@@ -141,7 +142,8 @@ export function cornerCuts(outsides: Pt[][], holes: Pt[][], material: (q: Pt) =>
       const tips = bs.filter((x) => x.convex && (((x.s - a.s) % total) + total) % total < arc);
       if (!tips.some((x) => x.sharp >= SHARP_DEG)) return;
       const base = dist(a.p, b.p);
-      if (base > max || base < 0.4 || arc < 2.2 * base || !through(material, a.p, b.p)) return;
+      // Up to twice the widest column: a wider spike is cut along its middle too (see spikeLines).
+      if (base > 2 * max || base < 0.4 || arc < 2.2 * base || !through(material, a.p, b.p)) return;
       let depth = 0;
       const u = norm(sub(b.p, a.p));
       for (let x = 0; x < arc; x += 0.2) depth = Math.max(depth, Math.abs(dot(sub(along(pts, a.s + x), a.p), perp(u))));
@@ -152,7 +154,7 @@ export function cornerCuts(outsides: Pt[][], holes: Pt[][], material: (q: Pt) =>
       const d = norm(sub(q, p));
       cuts.push([add(p, d, -0.3), add(q, d, 0.3)]);
       used.add(a).add(b);
-      spikes++;
+      tipsOf.push(tips.map((x) => x.p));
     });
   }
   for (const ring of holes) all.push(...bends(ring, material));
@@ -179,14 +181,14 @@ export function cornerCuts(outsides: Pt[][], holes: Pt[][], material: (q: Pt) =>
     cuts.push([add(o.p, d, -0.3), add(n.p, d, 0.3)]);
     miters++;
   }
-  return { cuts, spikes, miters };
+  return { cuts, spikes: tipsOf.length, miters, tips: tipsOf };
 }
 
 /**
  * Lines across for each part the cut lines leave: a column along it where it is long (by the
  * area's centerline `g` within it), else as a compact shape. Null when a part fits neither.
  */
-export function planParts(outsides: Pt[][], holes: Pt[][], cuts: [Pt, Pt][], spikes: number, g: Graph, max: number, strokes: Strokes): { cuts: [Pt, Pt][]; lines: [Pt, Pt][] } | null {
+export function planParts(outsides: Pt[][], holes: Pt[][], cuts: [Pt, Pt][], tips: Pt[][], g: Graph, max: number, strokes: Strokes): { cuts: [Pt, Pt][]; lines: [Pt, Pt][] } | null {
   const lines: [Pt, Pt][] = [];
   const more: [Pt, Pt][] = [];
   for (const o of outsides) {
@@ -194,10 +196,10 @@ export function planParts(outsides: Pt[][], holes: Pt[][], cuts: [Pt, Pt][], spi
     const { parts, hole } = stripsOfOutline(o, [], cuts, mine);
     if (hole >= 0) return null;
     for (const part of parts) {
-      // A spike: the part on the far side of the only cut line it has, a spike's base.
+      // A spike: the part with its corners beyond the only cut line it has, a spike's base.
       const on = cuts.map((c, k) => ({ c, k })).filter(({ c }) => nearRing(part, add(c[0], sub(c[1], c[0]), 0.5)) < 0.05);
-      const base = on.length === 1 && on[0].k < spikes ? on[0].c : null;
-      const plan = base ? spikeLines(part, base) : planPart(part, g, max, strokes);
+      const base = on.length === 1 && on[0].k < tips.length && tips[on[0].k].some((t) => nearRing(part, t) < 0.3) ? on[0].c : null;
+      const plan = base ? spikeLines(part, base, max) : planPart(part, g, max, strokes);
       if (!plan) return null;
       lines.push(...plan.lines);
       more.push(...plan.cuts);
@@ -221,26 +223,39 @@ function nearRing(ring: Pt[], q: Pt): number {
   return best;
 }
 
-/** A spike sewn from its base to its tip: lines along the base, a third and two thirds of the way up. */
-function spikeLines(part: Pt[], base: [Pt, Pt]): { cuts: [Pt, Pt][]; lines: [Pt, Pt][] } | null {
-  const u = norm(sub(base[1], base[0]));
+/**
+ * A spike sewn from its base to its tip: lines along the base, a third and two thirds of the way
+ * up. Wider at its base than `max`: cut along its middle from the tip, each half sewn across.
+ */
+function spikeLines(part: Pt[], base: [Pt, Pt], max: number): { cuts: [Pt, Pt][]; lines: [Pt, Pt][] } | null {
   const m = add(base[0], sub(base[1], base[0]), 0.5);
-  let n = perp(u);
-  const tip = part.reduce((a, q) => (Math.abs(dot(sub(q, m), n)) > Math.abs(dot(sub(a, m), n)) ? q : a));
-  const h = dot(sub(tip, m), n);
-  if (h < 0) n = [-n[0], -n[1]];
+  const b = norm(sub(base[1], base[0]));
+  // The tip: the middle of the farthest points (a flat end has many).
+  const up = (q: Pt) => Math.abs(dot(sub(q, m), perp(b)));
+  const far = Math.max(...part.map(up));
+  const top = part.filter((q) => up(q) > far - 0.2);
+  const tip: Pt = [top.reduce((s, q) => s + q[0], 0) / top.length, top.reduce((s, q) => s + q[1], 0) / top.length];
+  // Up the spike, and across it.
+  const n = norm(sub(tip, m));
+  const u = perp(n);
+  const h = dist(tip, m);
   const mine = insideOf(part);
+  const split = dist(base[0], base[1]) > max;
   const lines: [Pt, Pt][] = [];
   for (const f of [0.3, 0.6]) {
-    // Through the middle of the spike at that height.
-    const o = add(m, n, Math.abs(h) * f);
+    const o = add(m, n, h * f);
     let [lo, hi] = [Infinity, -Infinity];
     for (let t = -20; t <= 20; t += 0.05) if (mine(add(o, u, t))) [lo, hi] = [Math.min(lo, t), Math.max(hi, t)];
     if (hi - lo < 0.3) continue;
-    const c = add(o, u, (lo + hi) / 2);
-    lines.push([add(c, u, -0.2), add(c, u, 0.2)]);
+    // Through the middle of the spike at that height, or of each half.
+    const at = split ? [lo + (0 - lo) / 2, hi / 2] : [(lo + hi) / 2];
+    for (const t of at) {
+      const c = add(o, u, t);
+      if (mine(c)) lines.push([add(c, u, -0.2), add(c, u, 0.2)]);
+    }
   }
-  return lines.length ? { cuts: [], lines } : null;
+  if (!lines.length) return null;
+  return { cuts: split ? [[add(m, n, -0.3), add(tip, n, 0.3)]] : [], lines };
 }
 
 function planPart(part: Pt[], g: Graph, max: number, strokes: Strokes): { cuts: [Pt, Pt][]; lines: [Pt, Pt][] } | null {
