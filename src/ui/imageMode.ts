@@ -23,12 +23,14 @@ import { FABRICS, THREADS } from '../validation/profiles';
 import { STORAGE_NS } from '../storage/namespace';
 import { command, commandTitle, getCommand } from '../shell/commands';
 import { components, type Components } from '../image/labels';
+import { contentCrop, cropHandleAt, cropOf, cropPixels, cutLabels, dragCrop, isFull, moveStroke, type Crop, type CropHandle } from '../image/crop';
 import '../areas/image/image.css';
 
 /**
  * Bild umwandeln: an assistant in three steps that turns a picture into a design.
  *
- * 1. Bild wählen: the picture, its width, the prompt for preparing it with one's own AI.
+ * 1. Bild wählen: the picture, its width, the cut (a frame dragged on the picture, or to the motif
+ *    by a click), the prompt for preparing it with one's own AI.
  * 2. Farben und Flächen: number of colors, smoothing for photos, smallest region, background and
  *    thread matching; then the user's own changes: per color another thread, merge into another
  *    color, leave out; and brush strokes that paint a color or erase.
@@ -67,6 +69,8 @@ interface Work {
   strokes: Stroke[];
   /** Smart: techniques set by hand, by area (AreaInfo.key). */
   areas?: Record<string, Technique>;
+  /** The part of the picture that is sewn; none for the whole picture. */
+  crop?: Crop;
 }
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -76,9 +80,26 @@ const SOURCE_MAX = 1600;
 const ANGLES = [0, 15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165];
 
 const rgbOf = (c: ThreadColor): Rgb => [c.r, c.g, c.b];
+
+/** The pixels of a canvas for the worker. */
+function rasterOf(canvas: HTMLCanvasElement): Raster {
+  const data = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height);
+  return { width: data.width, height: data.height, data: data.data };
+}
 /** A thread's name, or its color as #rrggbb. */
 const threadName = (c: ThreadColor) => c.name ?? `#${rgbOf(c).map((v) => v.toString(16).padStart(2, '0')).join('')}`;
 const same = (a: Rgb, b: Rgb) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
+
+const sameCrop = (a: Crop | undefined, b: Crop | undefined) => {
+  const p = cropOf(a);
+  const q = cropOf(b);
+  return p.x === q.x && p.y === q.y && p.w === q.w && p.h === q.h;
+};
+
+const CROP_CURSOR: Record<CropHandle, string> = { n: 'ns-resize', s: 'ns-resize', e: 'ew-resize', w: 'ew-resize', nw: 'nwse-resize', se: 'nwse-resize', ne: 'nesw-resize', sw: 'nesw-resize', move: 'move' };
+
+/** Longest side the regions of a vector picture are drawn at, whole, before they are cut. */
+const CUT_MAX = 4096;
 
 const isSvg = (file: File) => file.type === 'image/svg+xml' || /\.svg$/i.test(file.name);
 
@@ -266,6 +287,10 @@ export class ImageMode {
   private veil: { key: string; canvas: HTMLCanvasElement } | null = null;
   /** Smart: the groups opened in the list, by letter, to set their areas one by one. */
   private openGroups = new Set<string>();
+  /** The picture cut to `work.crop`, for the crop it was cut to. */
+  private cut: { crop: Crop | undefined; canvas: HTMLCanvasElement } | null = null;
+  /** A drag on the frame of the cut: where it started and the cut it would give now. */
+  private cropDrag: { handle: CropHandle; from: [number, number]; start: Crop; now: Crop } | null = null;
 
   constructor(private h: ImageHooks) {
     onLangChange(() => this.render());
@@ -335,6 +360,8 @@ export class ImageMode {
         h.save();
         this.render();
         h.redraw();
+        // In step 1 the original shows the whole picture around the cut, the others only the cut.
+        if (this.step === 1 && this.work.crop) h.fit();
       }),
     );
     document.querySelectorAll<HTMLInputElement>('input[name="image-tool"]').forEach((el) =>
@@ -353,6 +380,8 @@ export class ImageMode {
     $('image-strokes-clear').addEventListener('click', () => this.clearStrokes());
     $('image-ai-copy').addEventListener('click', () => void this.copyPrompt());
     $('image-clear').addEventListener('click', () => this.clear());
+    $('image-crop-motif').addEventListener('click', () => this.cropToMotif());
+    $('image-crop-reset').addEventListener('click', () => this.setCrop(undefined));
     $('image-take').addEventListener('click', () => void this.take());
     this.bindSteps();
     this.bindMaterial();
@@ -469,6 +498,7 @@ export class ImageMode {
     this.h.save();
     this.render();
     this.h.redraw();
+    if (this.step === 1 && this.work.crop) this.h.fit();
   }
 
   /**
@@ -554,6 +584,8 @@ export class ImageMode {
     for (const [v, label] of views) {
       command({ id: `image.view.${v}`, label, group: 'shell.group.view', when: () => inImage() && this.h.settings.image.view !== v, run: () => this.setView(v) });
     }
+    command({ id: 'image.crop.motif', label: 'image.crop.motif.cmd', group: G, when: () => inImage() && !!this.source, run: () => this.cropToMotif() });
+    command({ id: 'image.crop.reset', label: 'image.crop.reset.cmd', group: G, when: () => inImage() && !isFull(this.work.crop), run: () => this.setCrop(undefined) });
     command({ id: 'image.ai.copy', label: 'image.ai.copy', group: G, when: inImage, run: () => void this.copyPrompt() });
     command({ id: 'image.stitch.reset', label: 'image.stitch.reset', group: G, when: () => inImage() && Object.keys(this.h.settings.image.stitch).length > 0, run: () => $('image-stitch-reset').click() });
     command({ id: 'image.saveProject', label: 'image.saveProject', group: G, when: () => inImage() && !!this.source, run: () => $('image-save-project').click() });
@@ -572,13 +604,147 @@ export class ImageMode {
   private sizeMm(): [number, number] {
     if (this.prepared) return [this.prepared.width * this.prepared.pxMm, this.prepared.height * this.prepared.pxMm];
     const w = this.h.settings.image.prepare.widthMm;
-    return this.source ? [w, (w * this.source.height) / this.source.width] : [w, w];
+    const pic = this.picture();
+    return pic ? [w, (w * pic.height) / pic.width] : [w, w];
   }
 
-  /** Fits the image into the stage. */
+  /** Fits the image into the stage; while it is cut in step 1, the whole picture around the cut. */
   fit(vp: Viewport, w: number, h: number): void {
+    if (this.cropping) {
+      // A margin keeps the handles on the edge of the picture clear of the stage's edge.
+      const f = this.fullBox();
+      const m = 0.04 * Math.max(f.w, f.h);
+      vp.fit(f.x - m, f.y - m, f.x + f.w + m, f.y + f.h + m, w, h);
+      return;
+    }
     const [W, H] = this.sizeMm();
     vp.fit(-W / 2, -H / 2, W / 2, H / 2, w, h);
+  }
+
+  // Cutting --------------------------------------------------------------------
+
+  /** The picture as it is sewn: cut to the crop (the picture itself without one). */
+  private picture(): HTMLCanvasElement | null {
+    const src = this.source;
+    if (!src) return null;
+    const crop = this.work.crop;
+    if (isFull(crop)) return src;
+    if (this.cut && sameCrop(this.cut.crop, crop)) return this.cut.canvas;
+    const r = cropPixels(crop, src.width, src.height);
+    const canvas = document.createElement('canvas');
+    canvas.width = r.w;
+    canvas.height = r.h;
+    canvas.getContext('2d')!.drawImage(src, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
+    this.cut = { crop, canvas };
+    return canvas;
+  }
+
+  /** The frame of the cut is shown and can be dragged: step 1, the original on the stage. */
+  get cropping(): boolean {
+    return !!this.source && this.step === 1 && this.h.settings.image.view === 'original' && this.h.mode() === 'image';
+  }
+
+  /** The whole picture on the stage (mm), placed so that the cut lies on the design. */
+  private fullBox(): { x: number; y: number; w: number; h: number } {
+    const [W, H] = this.sizeMm();
+    const k = cropOf(this.work.crop);
+    const w = W / k.w;
+    const h = H / k.h;
+    return { x: -W / 2 - k.x * w, y: -H / 2 - k.y * h, w, h };
+  }
+
+  /** A point on the stage as shares of the whole picture. */
+  private toPicture(x: number, y: number): [number, number] {
+    const f = this.fullBox();
+    return [(x - f.x) / f.w, (y - f.y) / f.h];
+  }
+
+  private handleAt(x: number, y: number, tol: number): CropHandle | null {
+    if (!this.cropping) return null;
+    const f = this.fullBox();
+    return cropHandleAt(cropOf(this.work.crop), ...this.toPicture(x, y), tol / f.w, tol / f.h);
+  }
+
+  /** The pointer cursor over the stage at (x, y): the edge or corner it would drag. */
+  cropCursor(x: number, y: number, tol: number): string {
+    const h = this.cropDrag?.handle ?? this.handleAt(x, y, tol);
+    return h ? CROP_CURSOR[h] : '';
+  }
+
+  /** A press on the frame of the cut starts dragging it; false when it is not on the frame. */
+  cropDown(x: number, y: number, tol: number): boolean {
+    const handle = this.handleAt(x, y, tol);
+    if (!handle) return false;
+    const start = cropOf(this.work.crop);
+    this.cropDrag = { handle, from: this.toPicture(x, y), start, now: start };
+    return true;
+  }
+
+  cropMove(x: number, y: number): void {
+    const d = this.cropDrag;
+    if (!d) return;
+    const [px, py] = this.toPicture(x, y);
+    d.now = dragCrop(d.start, d.handle, px - d.from[0], py - d.from[1]);
+    this.renderSize();
+    this.h.redraw();
+  }
+
+  cropUp(): void {
+    const d = this.cropDrag;
+    this.cropDrag = null;
+    if (d && !sameCrop(d.now, d.start)) this.setCrop(d.now);
+    else this.h.redraw();
+  }
+
+  cropCancel(): void {
+    if (!this.cropDrag) return;
+    this.cropDrag = null;
+    this.renderSize();
+    this.h.redraw();
+  }
+
+  /** Cuts the picture to the motif: its plain background around is left out. */
+  private cropToMotif(): void {
+    const src = this.source;
+    if (!src) return;
+    const c = contentCrop(src.getContext('2d')!.getImageData(0, 0, src.width, src.height).data, src.width, src.height);
+    if (c) this.setCrop(c);
+    else {
+      this.cropNote = t('image.crop.noMotif');
+      this.renderSize();
+    }
+  }
+
+  /** A hint under the cut, until the cut changes. */
+  private cropNote = '';
+
+  /**
+   * A new cut, as one undo step. Brush strokes stay on their spot of the picture; techniques set by
+   * hand for areas are dropped, their areas are new ones.
+   */
+  private setCrop(c: Crop | undefined): void {
+    const crop = isFull(c) ? undefined : c;
+    if (sameCrop(crop, this.work.crop)) return;
+    const { areas: _, crop: was, ...rest } = this.work;
+    this.commit({ ...rest, strokes: this.work.strokes.map((s) => moveStroke(s, was, crop)), ...(crop ? { crop } : {}) });
+  }
+
+  /** The cut changed: the worker gets the new picture and everything is computed again. */
+  private recut(): void {
+    const pic = this.picture();
+    if (!pic) return;
+    this.generation++;
+    this.prepared = null;
+    this.preparedImg = null;
+    this.result = null;
+    this.validation = null;
+    this.exact = null;
+    this.cropNote = '';
+    // Posted before any new preparing, so the worker prepares the new picture.
+    this.client.load(rasterOf(pic)).catch((err) => console.error('Loading the cut picture failed', err));
+    this.run('prepare', 0);
+    this.h.redraw();
+    if (this.cropping) this.h.fit();
   }
 
   /** The image of the last session, with its changes. */
@@ -640,6 +806,8 @@ export class ImageMode {
     }
     this.generation++;
     this.source = canvas;
+    this.cut = null;
+    this.cropDrag = null;
     this.svg?.dispose();
     this.svg = svg;
     this.exact = null;
@@ -654,11 +822,9 @@ export class ImageMode {
     this.result = null;
     this.validation = null;
     this.error = '';
-    const data = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height);
-    const raster: Raster = { width: data.width, height: data.height, data: data.data };
     let photo: boolean;
     try {
-      photo = await this.client.load(raster);
+      photo = await this.client.load(rasterOf(this.picture()!));
     } catch (err) {
       this.source = null;
       this.svg?.dispose();
@@ -694,6 +860,8 @@ export class ImageMode {
     this.needPrepare = this.needStitches = false;
     this.busy = null;
     this.source = null;
+    this.cut = null;
+    this.cropDrag = null;
     this.svg?.dispose();
     this.svg = null;
     this.exact = null;
@@ -805,11 +973,23 @@ export class ImageMode {
   /** The SVG's regions at the current working size (drawn again when the size changes). */
   private async exactLabels(): Promise<ExactLabels | undefined> {
     const svg = this.svg;
-    if (!svg || !this.source) return undefined;
-    const { w, h, pxMm } = workingSize(this.h.settings.image.prepare.widthMm, this.source.width, this.source.height);
+    const pic = this.picture();
+    if (!svg || !pic) return undefined;
+    const { w, h, pxMm } = workingSize(this.h.settings.image.prepare.widthMm, pic.width, pic.height);
     if (this.exact?.width === w && this.exact.height === h) return this.exact;
-    const exact = await svg.labels(w, h, pxMm);
-    if (this.svg === svg) this.exact = exact;
+    const crop = this.work.crop;
+    let exact: ExactLabels;
+    if (isFull(crop)) exact = await svg.labels(w, h, pxMm);
+    else {
+      // Drawn whole at the size the cut needs (at most CUT_MAX), then cut.
+      const k = cropOf(crop);
+      const scale = Math.min(1, CUT_MAX / Math.max(w / k.w, h / k.h));
+      const fw = Math.max(1, Math.round((w / k.w) * scale));
+      const fh = Math.max(1, Math.round((h / k.h) * scale));
+      exact = cutLabels(await svg.labels(fw, fh, pxMm / scale), crop, w, h);
+    }
+    // A cut made meanwhile has its own regions.
+    if (this.svg === svg && sameCrop(crop, this.work.crop)) this.exact = exact;
     return exact;
   }
 
@@ -823,9 +1003,11 @@ export class ImageMode {
   private setWork(w: Work): void {
     // Only the techniques of areas changed: the prepared image stays.
     const stitchesOnly = w.edits === this.work.edits && w.strokes === this.work.strokes;
+    const recut = !sameCrop(w.crop, this.work.crop);
     this.work = w;
     void saveWork(w);
-    this.run(stitchesOnly ? 'stitches' : 'prepare', 0);
+    if (recut) this.recut();
+    else this.run(stitchesOnly ? 'stitches' : 'prepare', 0);
   }
 
   /** Smart: the technique of areas set by hand (null: as Smart chooses), as one undo step. */
@@ -951,10 +1133,14 @@ export class ImageMode {
     const view = this.h.settings.image.view;
     const st = this.h.settings;
     if (view === 'stitches' && this.result && st.realistic && st.fabricLook) drawFabric(ctx, vp, st.profile.fabric, background);
+    if (this.cropping) {
+      this.drawCrop(ctx, vp);
+      return;
+    }
     ctx.save();
     if (view === 'original' || !this.preparedImg) {
       ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(this.source, x0, y0, W * vp.scale, H * vp.scale);
+      ctx.drawImage(this.picture()!, x0, y0, W * vp.scale, H * vp.scale);
     } else {
       // Pixels of the prepared image are 0.1 mm or more: shown as they are when zoomed in.
       ctx.imageSmoothingEnabled = vp.scale * this.prepared!.pxMm < 3;
@@ -988,6 +1174,66 @@ export class ImageMode {
       ctx.stroke();
       ctx.restore();
     }
+  }
+
+  /**
+   * Step 1: the whole picture, outside the cut dimmed, the frame of the cut with its handles at the
+   * corners and in the middle of the edges. While dragging, the frame follows the pointer.
+   */
+  private drawCrop(ctx: CanvasRenderingContext2D, vp: Viewport): void {
+    const f = this.fullBox();
+    const [fx, fy] = vp.toScreen(f.x, f.y);
+    const fw = f.w * vp.scale;
+    const fh = f.h * vp.scale;
+    ctx.save();
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(this.source!, fx, fy, fw, fh);
+    const k = this.cropDrag?.now ?? cropOf(this.work.crop);
+    const x = fx + k.x * fw;
+    const y = fy + k.y * fh;
+    const w = k.w * fw;
+    const h = k.h * fh;
+    const full = isFull(k);
+    if (!full) {
+      ctx.fillStyle = 'rgba(13, 11, 16, 0.62)';
+      ctx.beginPath();
+      ctx.rect(fx, fy, fw, fh);
+      ctx.rect(x, y, w, h);
+      ctx.fill('evenodd');
+    }
+    // The frame: white on a dark edge, readable on light and dark pictures.
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(x, y, w, h);
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(x, y, w, h);
+    // Corners as brackets, edges as short bars: they say "drag here" without hiding the picture.
+    const c = Math.min(18, w / 3, h / 3);
+    const e = Math.min(22, w / 4, h / 4);
+    const marks = new Path2D();
+    for (const [px, py, dx, dy] of [[x, y, 1, 1], [x + w, y, -1, 1], [x, y + h, 1, -1], [x + w, y + h, -1, -1]]) {
+      marks.moveTo(px, py + dy * c);
+      marks.lineTo(px, py);
+      marks.lineTo(px + dx * c, py);
+    }
+    for (const [px, py, horizontal] of [[x + w / 2, y, true], [x + w / 2, y + h, true], [x, y + h / 2, false], [x + w, y + h / 2, false]] as const) {
+      if (horizontal) {
+        marks.moveTo(px - e / 2, py);
+        marks.lineTo(px + e / 2, py);
+      } else {
+        marks.moveTo(px, py - e / 2);
+        marks.lineTo(px, py + e / 2);
+      }
+    }
+    ctx.lineCap = 'square';
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
+    ctx.lineWidth = 7;
+    ctx.stroke(marks);
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 4;
+    ctx.stroke(marks);
+    ctx.restore();
   }
 
   /** Smart: everything but the areas under the pointer in the list dimmed, so they stand out whole. */
@@ -1066,10 +1312,7 @@ export class ImageMode {
     };
     const out = (id: string, text: string) => ($<HTMLOutputElement>(id).textContent = text);
     setVal('image-width', s.prepare.widthMm);
-    const [W, H] = this.sizeMm();
-    const over = this.source ? hoopShort(W, H, this.h.settings.hoop) : '';
-    out('image-height', this.source ? t('image.size', { w: formatNumber(W, 0), h: formatNumber(H, 0) }) + (over ? ` · ${over}` : '') : '');
-    $('image-height').classList.toggle('hoop-over', !!over);
+    this.renderSize();
     setVal('image-colors', s.prepare.maxColors);
     out('image-colors-out', String(s.prepare.maxColors));
     setVal('image-smooth', s.prepare.smooth);
@@ -1144,6 +1387,25 @@ export class ImageMode {
     this.renderPalette();
     this.renderAreas();
     this.renderResult();
+  }
+
+  /** The size of the design and the cut, live while the frame is dragged. */
+  private renderSize(): void {
+    let [W, H] = this.sizeMm();
+    const src = this.source;
+    const d = this.cropDrag;
+    if (src && d) H = (W * d.now.h * src.height) / (d.now.w * src.width);
+    const over = src ? hoopShort(W, H, this.h.settings.hoop) : '';
+    const height = $<HTMLOutputElement>('image-height');
+    height.textContent = src ? t('image.size', { w: formatNumber(W, 0), h: formatNumber(H, 0) }) + (over ? ` · ${over}` : '') : '';
+    height.classList.toggle('hoop-over', !!over);
+    $('image-crop').hidden = !src;
+    const crop = d?.now ?? this.work.crop;
+    const cut = !isFull(crop);
+    const px = src ? cropPixels(crop, src.width, src.height) : null;
+    $('image-crop-out').textContent = cut && px ? t('image.crop.cut', { w: px.w, h: px.h }) : t('image.crop.whole');
+    $('image-crop-reset').hidden = !cut;
+    $('image-crop-note').textContent = this.cropNote || t('image.crop.drag');
   }
 
   /** The stepper, back, next and take over: where the user is and what is ready. */
