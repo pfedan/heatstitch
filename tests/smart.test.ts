@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { digitize, digitizeDefaults, type Digitized, type DigitizeOptions } from '../src/digitize/digitize';
 import { buildRegion } from '../src/digitize/region';
-import { acrossGraph, groupAreas, groupsByColor, letterOf, readAreas } from '../src/digitize/smart';
+import { acrossGraph, areaKey, areaPixels, groupAreas, groupsByColor, letterOf, readAreas } from '../src/digitize/smart';
+import { components } from '../src/image/labels';
 import { DEFAULT_PREPARE, Preparer, type Prepared } from '../src/image/prepare';
 import { normalizeImage } from '../src/settings';
 import { DEFAULT_PROFILE } from '../src/validation/profiles';
@@ -90,6 +91,20 @@ describe('Smart', () => {
       [0, ['C']],
       [1, ['D', 'E']],
     ]);
+  });
+
+  it('finds the pixels of an area: its pieces in its box, not a dot inside that is an area of its own', () => {
+    // A ring of color 1 cut in two by color 2, with a dot of color 1 in the middle.
+    const w = 9;
+    const rows = ['111121111', '100020001', '100111001', '100111001', '100020001', '111121111'];
+    const labels = Uint8Array.from(rows.join(''), (c) => Number(c));
+    const comps = components(labels, w, rows.length);
+    const ring = areaKey(1, 0, 0, 8, 5);
+    const dot = areaKey(1, 3, 2, 5, 3);
+    const px = areaPixels(comps, w, rows.length, [{ key: ring }, { key: dot }], [ring]);
+    const at = (x: number, y: number) => px[y * w + x];
+    expect([at(0, 0), at(8, 5), at(4, 0), at(4, 2), at(1, 1)]).toEqual([1, 1, 0, 0, 0]);
+    expect(areaPixels(comps, w, rows.length, [{ key: ring }, { key: dot }], [dot]).reduce((a, b) => a + b, 0)).toBe(6);
   });
 
   it('names groups A to Z, then AA', () => {

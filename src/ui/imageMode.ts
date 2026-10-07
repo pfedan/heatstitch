@@ -1,6 +1,6 @@
 import { ImageClient } from '../digitize/client';
 import { digitizeDefaults, shapesOrigin, type DigitizeOptions, type Digitized } from '../digitize/digitize';
-import { boxOf, groupAreas, groupsByColor, TECHNIQUES, type AreaInfo, type Technique } from '../digitize/smart';
+import { areaPixels, boxOf, groupAreas, groupsByColor, TECHNIQUES, type AreaInfo, type Technique } from '../digitize/smart';
 import { formatNumber, onLangChange, t, type Key } from '../i18n';
 import { nearestThread, NONE, workingSize, type ColorEdit, type PrepareOptions, type ExactLabels, type Prepared, type Stroke } from '../image/prepare';
 import { readSvg, type SvgDesign, type SvgShape } from '../image/svg';
@@ -22,6 +22,7 @@ import { cssColor, ThreadPicker } from './threadPicker';
 import { FABRICS, THREADS } from '../validation/profiles';
 import { STORAGE_NS } from '../storage/namespace';
 import { command, commandTitle, getCommand } from '../shell/commands';
+import { components, type Components } from '../image/labels';
 import '../areas/image/image.css';
 
 /**
@@ -260,6 +261,9 @@ export class ImageMode {
   /** Smart: the area group, or the one area, the pointer is on in the list (or clicked on the stage). */
   private hotGroup: string | null = null;
   private hotArea: string | null = null;
+  /** The pieces of the prepared image, and the veil around the marked areas (for hotKey). */
+  private comps: { of: Prepared; c: Components } | null = null;
+  private veil: { key: string; canvas: HTMLCanvasElement } | null = null;
   /** Smart: the groups opened in the list, by letter, to set their areas one by one. */
   private openGroups = new Set<string>();
 
@@ -962,6 +966,7 @@ export class ImageMode {
     if (view === 'stitches' && p && !this.stroke) {
       const s = this.h.settings;
       if (!s.realistic || !drawThreads(ctx, vp, p, 1, s.threadMm)) drawStitches(ctx, vp, p, 1, shownMarks(s).jumps);
+      this.drawVeil(ctx, x0, y0, W * vp.scale, H * vp.scale);
       this.drawLetters(ctx, vp);
     }
     // Outline of the design area and the brush.
@@ -983,6 +988,36 @@ export class ImageMode {
       ctx.stroke();
       ctx.restore();
     }
+  }
+
+  /** Smart: everything but the areas under the pointer in the list dimmed, so they stand out whole. */
+  private drawVeil(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
+    const areas = this.result?.areas;
+    const p = this.prepared;
+    if (!areas?.length || !p || this.h.settings.image.style !== 'smart' || (!this.hotGroup && !this.hotArea)) return;
+    const keys = areas.filter((a) => a.key === this.hotArea || a.letter === this.hotGroup).map((a) => a.key);
+    if (!keys.length) return;
+    const key = keys.join(' ');
+    if (this.veil?.key !== key || this.comps?.of !== p) {
+      if (this.comps?.of !== p) this.comps = { of: p, c: components(p.labels, p.width, p.height) };
+      const inside = areaPixels(this.comps.c, p.width, p.height, areas, keys);
+      const canvas = Object.assign(document.createElement('canvas'), { width: p.width, height: p.height });
+      const img = new ImageData(p.width, p.height);
+      // Dimmed outside, with a light rim right around the areas: dark threads show too.
+      const W = p.width;
+      for (let i = 0; i < inside.length; i++) {
+        if (inside[i]) continue;
+        const x = i % W;
+        const rim = (x > 0 && inside[i - 1]) || (x + 1 < W && inside[i + 1]) || inside[i - W] || inside[i + W];
+        img.data.set(rim ? [255, 255, 255, 235] : [13, 11, 16, 170], 4 * i);
+      }
+      canvas.getContext('2d')!.putImageData(img, 0, 0);
+      this.veil = { key, canvas };
+    }
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(this.veil.canvas, x, y, w, h);
+    ctx.restore();
   }
 
   /** Smart: the letter of each area's group on it (one per spot, where they would not overlap). */
