@@ -382,7 +382,7 @@ export class ImageMode {
       const now = document.body.dataset.mode;
       if (now === mode) return;
       mode = now;
-      // A picture dropped from elsewhere starts the assistant anew; its load moves on to step 2.
+      // A picture dropped from elsewhere starts the assistant anew, at step 1.
       if (now === 'image' && this.loading) this.step = 1;
       else if (now === 'image' && this.restored && !this.source) this.goStep(1);
       else if (now !== 'image' && this.tool !== 'none') this.setTool('none');
@@ -675,9 +675,9 @@ export class ImageMode {
       if (svg?.widthMm) this.h.settings.image.prepare.widthMm = Math.round(Math.min(400, Math.max(10, svg.widthMm)) * 10) / 10;
       this.h.save();
       void saveImage({ name: file.name, type: file.type, data: bytes });
-      // A new picture chosen in step 1 (or brought in from outside): on to its colors, the next
-      // thing to look at. A later step the user chose while it was opened stays.
-      if (this.step === 1) this.goStep(2);
+      // A new picture chosen in step 1 (or brought in from outside) stays in step 1: its size is
+      // set there first, shown as the original. A later step the user chose while it was opened stays.
+      if (this.step === 1) this.goStep(1);
     }
     this.render();
     this.h.fit();
