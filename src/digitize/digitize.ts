@@ -18,7 +18,7 @@ import { transformForm, type Form } from '../shape/path';
 import { lineStitchFor, lineStitches } from '../model/line';
 import type { PathStitch } from '../model/along';
 import { knockOut, rasterize, rasterizeStroke, sharedArea, unionOf } from '../shape/rasterize';
-import { acrossGraph, areaKey, groupOf, letterOf, structure, STRUCTURE, STRUCTURE_MIN_MM2, type AreaInfo, type Reason, type Technique } from './smart';
+import { acrossGraph, areaKey, boxOf, groupOf, letterOf, structure, STRUCTURE, STRUCTURE_MIN_MM2, type AreaInfo, type Reason, type Technique } from './smart';
 
 /**
  * From a prepared label map to a stitch pattern.
@@ -172,7 +172,7 @@ export interface Digitized {
   objects: DigitizedObject[];
   /** Number of the first stitch of each object (counting stitch records from 0), in sewing order. */
   starts: number[];
-  /** The areas of the image, in sewing order, and how each was sewn (images only). */
+  /** The areas of the image by group and place (see AreaInfo.name), and how each was sewn (images only). */
   areas?: AreaInfo[];
 }
 
@@ -486,13 +486,23 @@ export function digitize(prep: Prepared, o: DigitizeOptions, name = 'image'): Di
     if (runs.length) blocks.push({ color: palette[label].thread, runs, owners });
   }
   const starts: number[] = [];
-  // Areas of one color that Smart sees alike are one group, with one letter (in sewing order).
-  const letters = new Map<string, string>();
-  for (const a of areas) {
-    const g = groupOf(a);
-    if (!letters.has(g)) letters.set(g, letterOf(letters.size));
-    a.letter = letters.get(g)!;
-  }
+  // Areas of one color that Smart sees alike are one group, with one letter; each area of a group
+  // of several is numbered (C1, C2, …), so it can be set on its own. Letters go by color (as sewn)
+  // and kind, numbers by place (top to bottom): neither changes when a technique is changed.
+  const groups = new Map<string, AreaInfo[]>();
+  for (const a of areas) groups.set(groupOf(a), [...(groups.get(groupOf(a)) ?? []), a]);
+  const kinds: Reason[] = ['calm', 'structure', 'round', 'stroke', 'line', 'blades'];
+  const sorted = [...groups.values()].sort((x, y) => rank[x[0].label] - rank[y[0].label] || kinds.indexOf(x[0].reason) - kinds.indexOf(y[0].reason));
+  sorted.forEach((g, k) => {
+    const place = (a: AreaInfo) => boxOf(a.key) ?? { minX: 0, minY: 0 };
+    g.sort((a, b) => place(a).minY - place(b).minY || place(a).minX - place(b).minX);
+    g.forEach((a, n) => {
+      a.letter = letterOf(k);
+      a.name = g.length > 1 ? `${a.letter}${n + 1}` : a.letter;
+    });
+  });
+  // Listed by letter, then number.
+  areas.sort((a, b) => sorted.indexOf(groups.get(groupOf(a))!) - sorted.indexOf(groups.get(groupOf(b))!) || groups.get(groupOf(a))!.indexOf(a) - groups.get(groupOf(b))!.indexOf(b));
   return { pattern: assemble(blocks, Math.floor(w / 2) * pxMm, Math.floor(h / 2) * pxMm, o.trimMm, name, starts), objects, starts, areas };
 }
 
@@ -552,7 +562,7 @@ function areaInfo(obj: Obj, o: DigitizeOptions): AreaInfo {
   const kind = obj.info.kind;
   const technique: AreaInfo['technique'] = obj.blades || kind === 'satin' ? 'satin' : kind === 'run' ? 'run' : (obj.flow ?? o.flow) ? 'dynamic' : 'flat';
   const s = obj.smart!;
-  return { key: s.key, letter: '', label: obj.info.label, areaMm2: Math.round(r.areaMm2 * 10) / 10, at, technique, auto: s.auto, reason: s.reason, fixed: s.fixed };
+  return { key: s.key, letter: '', name: '', label: obj.info.label, areaMm2: Math.round(r.areaMm2 * 10) / 10, at, technique, auto: s.auto, reason: s.reason, fixed: s.fixed };
 }
 
 /**

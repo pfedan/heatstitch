@@ -11,13 +11,13 @@ const BROWN: Rgba = [150, 100, 60, 255];
 const DARK: Rgba = [128, 84, 48, 255];
 
 /**
- * 60 x 30 mm at 0.1 mm: a calm blue square, a small yellow dot, and a brown area with fine
+ * 60 x 30 mm at 0.1 mm: a calm blue square, two small yellow dots, and a brown area with fine
  * diagonal strands (fur) whose two shades are one thread.
  */
 function picture(): Prepared {
   const img = raster(600, 300, (x, y) => {
     if (x >= 20 && x < 170 && y >= 20 && y < 170) return BLUE;
-    if (Math.hypot(x - 250, y - 80) < 16) return YELLOW;
+    if (Math.hypot(x - 250, y - 80) < 16 || Math.hypot(x - 250, y - 220) < 16) return YELLOW;
     if (x >= 300 && x < 560 && y >= 40 && y < 260) return Math.floor((x + y) / 4) % 2 ? BROWN : DARK;
     return WHITE;
   });
@@ -41,10 +41,10 @@ describe('Smart', () => {
   it('gives each area the technique that suits it', () => {
     const d = digitize(prep, options());
     expect(byColor(d, prep, BLUE).map((a) => [a.reason, a.technique])).toEqual([['calm', 'flat']]);
-    expect(byColor(d, prep, YELLOW).map((a) => [a.reason, a.technique])).toEqual([['round', 'satin']]);
+    expect(byColor(d, prep, YELLOW).map((a) => [a.reason, a.technique])).toEqual([['round', 'satin'], ['round', 'satin']]);
     expect(byColor(d, prep, BROWN).map((a) => [a.reason, a.technique])).toEqual([['structure', 'dynamic']]);
     // Letters in sewing order, one per group.
-    expect(d.areas!.map((a) => a.letter)).toEqual(['A', 'B', 'C']);
+    expect(d.areas!.map((a) => a.letter)).toEqual(['A', 'B', 'C', 'C']);
     // The yellow dot is one satin object.
     const dot = d.objects.find((o) => o.area === byColor(d, prep, YELLOW)[0].key)!;
     expect(dot.kind).toBe('satin');
@@ -55,6 +55,12 @@ describe('Smart', () => {
     const dot = byColor(first, prep, YELLOW)[0];
     const fur = byColor(first, prep, BROWN)[0];
     const d = digitize(prep, options({ areas: { [dot.key]: 'flat', [fur.key]: 'flat' } }));
+    // Only that dot: the other one of its group stays satin, and both keep their names.
+    expect(byColor(d, prep, YELLOW).map((a) => [a.name, a.technique, a.fixed])).toEqual([
+      ['C1', 'flat', true],
+      ['C2', 'satin', false],
+    ]);
+    expect(byColor(first, prep, YELLOW).map((a) => a.name)).toEqual(['C1', 'C2']);
     expect(byColor(d, prep, YELLOW)[0]).toMatchObject({ key: dot.key, technique: 'flat', auto: 'satin', fixed: true });
     expect(byColor(d, prep, BROWN)[0]).toMatchObject({ technique: 'flat', auto: 'dynamic', fixed: true });
     expect(d.objects.find((o) => o.area === dot.key)!.kind).toBe('fill');
@@ -65,9 +71,9 @@ describe('Smart', () => {
 
   it('lists alike areas of one color as one group, set by hand for all, some or none', () => {
     const areas = [
-      { key: 'a', letter: 'A', label: 0, areaMm2: 4, at: [0, 0] as [number, number], technique: 'satin' as const, auto: 'satin' as const, reason: 'round' as const, fixed: false },
-      { key: 'b', letter: 'A', label: 0, areaMm2: 5, at: [0, 0] as [number, number], technique: 'satin' as const, auto: 'satin' as const, reason: 'round' as const, fixed: false },
-      { key: 'c', letter: 'B', label: 1, areaMm2: 50, at: [0, 0] as [number, number], technique: 'flat' as const, auto: 'flat' as const, reason: 'calm' as const, fixed: false },
+      { key: 'a', letter: 'A', name: 'A1', label: 0, areaMm2: 4, at: [0, 0] as [number, number], technique: 'satin' as const, auto: 'satin' as const, reason: 'round' as const, fixed: false },
+      { key: 'b', letter: 'A', name: 'A2', label: 0, areaMm2: 5, at: [0, 0] as [number, number], technique: 'satin' as const, auto: 'satin' as const, reason: 'round' as const, fixed: false },
+      { key: 'c', letter: 'B', name: 'B', label: 1, areaMm2: 50, at: [0, 0] as [number, number], technique: 'flat' as const, auto: 'flat' as const, reason: 'calm' as const, fixed: false },
     ];
     const g = groupAreas(areas, { a: 'flat' });
     expect(g.map((x) => [x.letter, x.keys, x.areaMm2, x.fixed])).toEqual([

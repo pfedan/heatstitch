@@ -30,8 +30,10 @@ export type Reason = 'calm' | 'structure' | 'round' | 'stroke' | 'line' | 'blade
 export interface AreaInfo {
   /** Stays the same while only stitch settings change (see areaKey). */
   key: string;
-  /** A, B, C … of its group (groupOf), in sewing order. */
+  /** A, B, C … of its group (groupOf): by color as sewn, then by kind. */
   letter: string;
+  /** Its name: the letter, numbered in a group of several (C1, C2, …). */
+  name: string;
   /** Palette index. */
   label: number;
   areaMm2: number;
@@ -48,6 +50,12 @@ export interface AreaInfo {
 
 /** The key of an area: its color and its bounding box in image pixels. */
 export const areaKey = (label: number, minX: number, minY: number, maxX: number, maxY: number) => `${label}:${minX},${minY},${maxX},${maxY}`;
+
+/** The color and bounding box an area key names, or null. */
+export function boxOf(key: string): { label: number; minX: number; minY: number; maxX: number; maxY: number } | null {
+  const m = /^(\d+):(\d+),(\d+),(\d+),(\d+)$/.exec(key);
+  return m ? { label: +m[1], minX: +m[2], minY: +m[3], maxX: +m[4], maxY: +m[5] } : null;
+}
 
 /**
  * The group of an area: its color and why Smart chose what it chose. A group is listed and set as

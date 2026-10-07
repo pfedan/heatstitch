@@ -1,6 +1,6 @@
 import { ImageClient } from '../digitize/client';
 import { digitizeDefaults, shapesOrigin, type DigitizeOptions, type Digitized } from '../digitize/digitize';
-import { groupAreas, TECHNIQUES, type Technique } from '../digitize/smart';
+import { boxOf, groupAreas, TECHNIQUES, type AreaInfo, type Technique } from '../digitize/smart';
 import { formatNumber, onLangChange, t, type Key } from '../i18n';
 import { nearestThread, NONE, workingSize, type ColorEdit, type PrepareOptions, type ExactLabels, type Prepared, type Stroke } from '../image/prepare';
 import { readSvg, type SvgDesign, type SvgShape } from '../image/svg';
@@ -255,8 +255,11 @@ export class ImageMode {
   private restored = false;
   /** A picture is being opened. */
   private loading = false;
-  /** Smart: the letter of the area group the pointer is on in the list. */
+  /** Smart: the area group, or the one area, the pointer is on in the list (or clicked on the stage). */
   private hotGroup: string | null = null;
+  private hotArea: string | null = null;
+  /** Smart: the groups opened in the list, by letter, to set their areas one by one. */
+  private openGroups = new Set<string>();
 
   constructor(private h: ImageHooks) {
     onLangChange(() => this.render());
@@ -993,13 +996,14 @@ export class ImageMode {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     // Larger areas first: they keep their letter where small ones would crowd it.
-    for (const a of areas.slice().sort((x, y) => y.areaMm2 - x.areaMm2)) {
+    const hotFirst = (a: AreaInfo) => (this.hotArea === a.key || this.hotGroup === a.letter ? 1 : 0);
+    for (const a of areas.slice().sort((x, y) => hotFirst(y) - hotFirst(x) || y.areaMm2 - x.areaMm2)) {
       const [x, y] = vp.toScreen(a.at[0] - ox, a.at[1] - oy);
       if (placed.some(([px, py]) => Math.hypot(px - x, py - y) < 22)) continue;
       placed.push([x, y]);
-      const hot = this.hotGroup === a.letter;
+      const hot = this.hotGroup === a.letter || this.hotArea === a.key;
       const r = hot ? 12 : 10;
-      const w = Math.max(2 * r, ctx.measureText(a.letter).width + 10);
+      const w = Math.max(2 * r, ctx.measureText(a.name).width + 10);
       ctx.beginPath();
       ctx.roundRect(x - w / 2, y - r, w, 2 * r, r);
       ctx.fillStyle = hot ? '#fff' : 'rgba(20, 20, 24, 0.82)';
@@ -1008,7 +1012,7 @@ export class ImageMode {
       ctx.strokeStyle = hot ? '#111' : 'rgba(255, 255, 255, 0.85)';
       ctx.stroke();
       ctx.fillStyle = hot ? '#111' : '#fff';
-      ctx.fillText(a.letter, x, y + 0.5);
+      ctx.fillText(a.name, x, y + 0.5);
     }
     ctx.restore();
   }
@@ -1212,7 +1216,7 @@ export class ImageMode {
     );
   }
 
-  /** Smart: the area groups with their letter, thread and technique. */
+  /** Smart: the area groups with their letter, thread and technique; opened, each area of a group. */
   private renderAreas(): void {
     const box = $('image-areas');
     const d = this.result;
@@ -1222,38 +1226,91 @@ export class ImageMode {
     const list = $('image-area-list');
     // A select being used stays as it is until it is let go.
     if (list.contains(document.activeElement) && document.activeElement instanceof HTMLSelectElement) return;
+    const set = this.work.areas ?? {};
     const name = (x: Technique | 'run') => t(`image.tech.${x}` as Key);
-    const rows = groupAreas(d.areas, this.work.areas).map((g) => {
-      const li = document.createElement('li');
-      li.className = `image-area${g.fixed ? ' fixed' : ''}`;
-      const letter = Object.assign(document.createElement('span'), { className: 'letter', textContent: g.letter });
-      const sw = Object.assign(document.createElement('span'), { className: 'sw' });
-      const thread = this.prepared?.palette[g.label]?.thread;
-      if (thread) sw.style.background = cssColor(thread);
-      const text = Object.assign(document.createElement('span'), { textContent: t(`image.area.${g.reason}` as Key, { n: g.keys.length }) });
+    const el = <K extends keyof HTMLElementTagNameMap>(tag: K, className: string, text = '') => Object.assign(document.createElement(tag), { className, textContent: text });
+    const select = (auto: Technique | 'run', value: string, label: string, apply: (t: Technique | null) => void) => {
       const sel = document.createElement('select');
       sel.title = t('image.tech.hint');
-      sel.setAttribute('aria-label', `${g.letter}: ${text.textContent}`);
-      sel.append(new Option(t('image.tech.auto', { t: name(g.auto) }), 'auto'), ...TECHNIQUES.map((x) => new Option(name(x), x)));
-      if (g.fixed === 'mixed') sel.append(new Option(t('image.tech.mixed'), 'mixed'));
-      sel.value = g.fixed ?? 'auto';
-      sel.addEventListener('change', () => {
-        if (sel.value === 'mixed') return;
-        this.setAreas(g.keys, sel.value === 'auto' ? null : (sel.value as Technique));
+      sel.setAttribute('aria-label', label);
+      sel.append(new Option(t('image.tech.auto', { t: name(auto) }), 'auto'), ...TECHNIQUES.map((x) => new Option(name(x), x)));
+      if (value === 'mixed') sel.append(new Option(t('image.tech.mixed'), 'mixed'));
+      sel.value = value;
+      sel.addEventListener('change', () => sel.value !== 'mixed' && apply(sel.value === 'auto' ? null : (sel.value as Technique)));
+      return sel;
+    };
+    const rows: HTMLElement[] = [];
+    for (const g of groupAreas(d.areas, set)) {
+      const li = el('li', `image-area${g.fixed ? ' fixed' : ''}`);
+      const open = this.openGroups.has(g.letter);
+      const several = g.keys.length > 1;
+      const toggle = el('button', 'area-open', open ? '▾' : '▸');
+      toggle.type = 'button';
+      toggle.hidden = !several;
+      toggle.setAttribute('aria-expanded', String(open));
+      toggle.title = t(open ? 'image.area.close' : 'image.area.open');
+      toggle.addEventListener('click', () => {
+        if (open) this.openGroups.delete(g.letter);
+        else this.openGroups.add(g.letter);
+        this.renderAreas();
       });
-      li.addEventListener('pointerenter', () => this.hot(g.letter));
-      li.addEventListener('pointerleave', () => this.hot(null));
-      li.append(letter, sw, text, sel);
-      return li;
-    });
+      const sw = el('span', 'sw');
+      const thread = this.prepared?.palette[g.label]?.thread;
+      if (thread) sw.style.background = cssColor(thread);
+      const text = el('span', 'area-text', t(`image.area.${g.reason}` as Key, { n: g.keys.length }));
+      li.append(toggle, el('span', 'letter', g.letter), sw, text, select(g.auto, g.fixed ?? 'auto', `${g.letter}: ${text.textContent}`, (x) => this.setAreas(g.keys, x)));
+      li.addEventListener('pointerenter', () => this.hot(g.letter, null));
+      li.addEventListener('pointerleave', () => this.hot(null, null));
+      rows.push(li);
+      if (!open || !several) continue;
+      // Each area of the group on its own.
+      for (const a of d.areas.filter((x) => x.letter === g.letter)) {
+        const sub = el('li', `image-area sub${set[a.key] ? ' fixed' : ''}${this.hotArea === a.key ? ' hot' : ''}`);
+        sub.dataset.area = a.key;
+        const size = el('span', 'area-text', `${formatNumber(a.areaMm2, a.areaMm2 < 10 ? 1 : 0)} mm²`);
+        sub.append(el('span', ''), el('span', 'letter', a.name), el('span', ''), size, select(a.auto, set[a.key] ?? 'auto', a.name, (x) => this.setAreas([a.key], x)));
+        sub.addEventListener('pointerenter', () => this.hot(null, a.key));
+        sub.addEventListener('pointerleave', () => this.hot(null, null));
+        rows.push(sub);
+      }
+    }
     list.replaceChildren(...rows);
   }
 
-  /** Marks an area group's letters on the stage. */
-  private hot(letter: string | null): void {
-    if (this.hotGroup === letter) return;
+  /** Marks an area group's letters, or one area's, on the stage. */
+  private hot(letter: string | null, area: string | null): void {
+    if (this.hotGroup === letter && this.hotArea === area) return;
     this.hotGroup = letter;
+    this.hotArea = area;
     this.h.redraw();
+  }
+
+  /**
+   * Smart: a click on the stage opens the row of the area under it (its group opened), marked
+   * until the pointer goes onto the list.
+   */
+  click(x: number, y: number): void {
+    const areas = this.result?.areas;
+    const p = this.prepared;
+    if (!areas?.length || !p || this.h.settings.image.style !== 'smart' || this.h.settings.image.view !== 'stitches' || this.tool !== 'none') return;
+    const px = Math.floor(x / p.pxMm + Math.floor(p.width / 2));
+    const py = Math.floor(y / p.pxMm + Math.floor(p.height / 2));
+    if (px < 0 || py < 0 || px >= p.width || py >= p.height) return;
+    const label = p.labels[py * p.width + px];
+    // The smallest area of that color whose box holds the point.
+    let hit: AreaInfo | null = null;
+    let best = Infinity;
+    for (const a of areas) {
+      const b = boxOf(a.key);
+      if (!b || b.label !== label || px < b.minX || px > b.maxX || py < b.minY || py > b.maxY) continue;
+      const size = (b.maxX - b.minX + 1) * (b.maxY - b.minY + 1);
+      if (size < best) [hit, best] = [a, size];
+    }
+    if (!hit) return this.hot(null, null);
+    this.openGroups.add(hit.letter);
+    this.hot(null, hit.key);
+    this.renderAreas();
+    document.querySelector(`#image-area-list [data-area="${CSS.escape(hit.key)}"]`)?.scrollIntoView({ block: 'nearest' });
   }
 
   private renderResult(): void {

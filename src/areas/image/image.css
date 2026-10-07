@@ -533,9 +533,9 @@ body[data-mode='image'][data-image-step='1'] .resizer[data-panel='inspector'] {
 
 .image-area {
   display: grid;
-  grid-template-columns: auto auto 1fr auto;
+  grid-template-columns: 18px auto auto 1fr auto;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   padding: 3px 4px;
   border-radius: 6px;
   font-size: 13px;
@@ -544,6 +544,34 @@ body[data-mode='image'][data-image-step='1'] .resizer[data-panel='inspector'] {
 .image-area:hover,
 .image-area:focus-within {
   background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+
+.image-area.sub {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.image-area.sub .letter {
+  background: color-mix(in srgb, var(--ink) 70%, transparent);
+}
+
+.image-area.hot {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.image-area .area-open {
+  width: 18px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.image-area .area-open[hidden] {
+  display: block;
+  visibility: hidden;
 }
 
 .image-area .letter {
