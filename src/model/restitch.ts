@@ -1786,13 +1786,22 @@ export function railsArea(rails: Rails[]): Region | null {
  * stitches) the columns as they are.
  */
 export function sectionView(columns: Rails[][], shape: Region | undefined): Rails[][] {
-  const area = shape ?? (columns.length === 1 ? railsArea(columns[0]) : null);
-  if (!area) return columns;
+  if (!columns.length) return columns;
   const cut = columns.map((part) =>
     part.some((c) => c.cuts?.length && !c.spans?.length) ? part.flatMap((c) => (c.cuts?.length && !c.spans?.length ? sectionsOf(c).map((sec) => ({ ...sec, chain: c.chain ?? 0 })) : [c])) : part,
   );
-  const split = withSplit(cut, area);
-  return split.some((part) => part[0]?.split) ? split : withSplit(columns, area);
+  const known = (cols: Rails[][]) => cols.some((part) => part[0]?.split);
+  if (shape) {
+    for (const cols of [cut, columns]) {
+      const split = withSplit(cols, shape);
+      if (known(split)) return split;
+    }
+  }
+  // No shape, or the columns do not lie in it: the area of the part with the most columns, read
+  // from its own rails (several parts read from stitches: the others as they are).
+  const k = cut.reduce((best, part, j) => (part.length > cut[best].length ? j : best), 0);
+  const area = railsArea(cut[k]);
+  return area ? withSplit(cut, area, k) : columns;
 }
 
 /** The area the stitches of `parts` cover: drawn thick enough that satin stitches close into it. */
