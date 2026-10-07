@@ -1030,6 +1030,8 @@ export const deBase = {
   'canvas.hint.draw.pen': 'Klick: Ecke · Ziehen: Rundung · Klick auf den ersten Knoten: Fläche · Doppelklick oder Enter: Linie · Entf: letzter Knoten weg · Esc: abbrechen',
   'canvas.hint.draw.free': 'Ziehen: Linie freihand · Esc: Werkzeug weglegen',
   'canvas.hint.draw.cut': 'Ziehen: freihand schneiden · Klicken: Pfad, Doppelklick beendet · Umschalt: gerade · Esc: fertig',
+  'cut.plain': '{n} Teile sind für das Muster zu klein und haben gerade Reihen.',
+  'cut.plain.one': '1 Teil ist für das Muster zu klein und hat gerade Reihen.',
   'cut.done': 'In {n} Teile zerteilt, jeder mit eigener Richtung.',
   'cut.whole': 'Der Schnitt teilt die Füllung nicht: Er muss sie ganz durchqueren, von Rand zu Rand.',
   'cut.none': 'Zum Zerteilen erst eine Füllung wählen.',
