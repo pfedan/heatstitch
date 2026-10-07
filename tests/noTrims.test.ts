@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { fillRegion } from '../src/digitize/fill';
+import { removeStitches } from '../src/model/edit';
 import { sewObjects } from '../src/model/objects';
+import { STITCH } from '../src/model/pattern';
 import { parsePattern } from '../src/parsers';
 import { rasterize } from '../src/shape/rasterize';
 import { ellipsePath, parsePath } from '../src/shape/svgPath';
@@ -34,5 +36,19 @@ describe('a design without trims', () => {
     expect(kinds.filter((k) => k === 'fill')).toHaveLength(2);
     expect(kinds[kinds.length - 1]).toBe('run');
     expect(objs.length).toBeLessThanOrEqual(4);
+  });
+
+  it('stays apart when an edit changes neighbouring objects without carrying them over', () => {
+    const p = parsePattern(design(), 'ranke.pes');
+    const objs = sewObjects(p);
+    // One stitch out of the middle of each object, all in one edit.
+    const remove = new Uint8Array(p.cmd.length);
+    for (const o of objs) {
+      let i = Math.floor((o.first + o.last) / 2);
+      while (p.cmd[i] !== STITCH) i++;
+      remove[i] = 1;
+    }
+    const q = removeStitches(p, remove);
+    expect(sewObjects(q).map((o) => o.kind)).toEqual(objs.map((o) => o.kind));
   });
 });
