@@ -165,8 +165,8 @@ describe('max. deviation in Image mode and stitch settings', () => {
     expect(normalizeImage({ stitch: { tolerance: 0.3 } } as never).stitch.tolerance).toBe(0.3);
     expect(normalizeImage({ stitch: { tolerance: 'x' } } as never).stitch.tolerance).toBeUndefined();
     const fill = { pattern: 'tatami', spacing: 0.4, spacingEnd: 1, offset: 0.25, angle: 0, stitch: 4, underlay: true, edge: 0 };
-    expect(restoreRemembered([{ key: 'old', region: null, fill }])).toBe(1);
     const p = parsePattern(readFileSync(new URL('../public/examples/demos/letters.pes', import.meta.url)), 'letters.pes');
+    expect(restoreRemembered(p, [{ key: 'old', region: null, fill }])).toBe(1);
     expect(remembered(p, sewObjects(p, stitchKinds(p))[0])).toBeUndefined();
   });
 });

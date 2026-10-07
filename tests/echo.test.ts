@@ -100,13 +100,13 @@ describe('echo of a line', () => {
     const far = Math.max(...pts.map((q) => distTo(line, q)));
     expect(far).toBeGreaterThan(5.8);
     expect(far).toBeLessThan(6.3);
-    const stored = JSON.parse(JSON.stringify(rememberedIn(r.pattern, [o])));
-    expect(stored[0].line.echo).toEqual({ side: 'out', count: 2, gap: 3 });
-    restoreRemembered(stored);
+    const stored = JSON.parse(JSON.stringify(rememberedIn(r.pattern)));
+    expect(stored.objects[0].memory.line.echo).toEqual({ side: 'out', count: 2, gap: 3 });
+    restoreRemembered(r.pattern, stored);
     expect(lineSettings(r.pattern, o).echo).toEqual({ side: 'out', count: 2, gap: 3 });
     // A broken echo from a file is left out, the line stays.
-    stored[0].line.echo = { side: 'up', count: 99, gap: -1 };
-    restoreRemembered(stored);
+    stored.objects[0].memory.line.echo = { side: 'up', count: 99, gap: -1 };
+    restoreRemembered(r.pattern, stored);
     expect(remembered(r.pattern, o)?.line?.echo).toBeUndefined();
     expect(remembered(r.pattern, o)?.path).toBeDefined();
   });

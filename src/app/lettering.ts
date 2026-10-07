@@ -7,8 +7,8 @@ import type { Sequence } from './types';
 import { STITCH, type ThreadColor, type Pattern } from '../model/pattern';
 import type { Viewport } from '../render/viewport';
 import { LetteringPanel } from '../ui/letteringPanel';
-import { letteringOf, placeLettering, letteringObjects, withoutObjects } from '../lettering/place';
-import { rememberedIn, remembered, remember } from '../model/restitch';
+import { letteringOf, placeLettering, letteringObjects, splitLettering, withoutObjects } from '../lettering/place';
+import { rememberedIn } from '../model/restitch';
 import { sewLettering } from '../lettering/sew';
 import { sewObjects, type SewObject } from '../model/objects';
 import { t, getLang } from '../i18n';
@@ -285,21 +285,20 @@ export function bindLettering(app: LetteringApp) {
     );
   }
 
-  /** The letters become ordinary objects: they forget their lettering. */
+  /** The letters become objects of their own, in one undo step; their text can no longer change. */
   function releaseLettering(): void {
     const f = app.files.active;
     const p = f?.pattern;
     if (!f || !p || !ui.lettering) return;
-    const q = app.seq(p);
-    for (const o of letteringObjects(p, q.objects, ui.lettering.l.id)) {
-      const { lettering: _, ...rest } = remembered(p, o)!;
-      remember(p, o, rest);
-    }
-    q.letterings = undefined;
-    q.letteringNames = undefined;
-    app.files.setObjects(f, rememberedIn(p, q.objects));
+    const l = ui.lettering.l;
+    const font = fontNow(l.font);
+    const r = splitLettering(p, app.seq(p).objects, l, font ? sewLettering(font, l, app.settings.trimMm) : null);
+    if (!r) return;
     ui.lettering = null;
     ui.letterMode = false;
+    app.applyEdit(r.pattern);
+    app.files.setObjects(f, rememberedIn(r.pattern));
+    ui.selectedObjects = new Set(r.objects.map((o) => o.index));
     ui.selectionKey++;
     app.layers.say(t('lettering.released'));
     app.updateLevel();

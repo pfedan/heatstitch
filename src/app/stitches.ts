@@ -19,6 +19,7 @@ import { outline } from '../digitize/region';
 import { recommendedSpacing } from '../validation/profiles';
 import { recordOfStitch } from '../model/sequence';
 import { rememberObjects, type SewObject } from '../model/objects';
+import { loosable } from '../model/handEdit';
 import { syncBorders } from '../model/border';
 import { t, type Key } from '../i18n';
 import { type ShapeTrust, analyze, remembered, measureFill, measureSatin, measureRun, shapeTrust, type Remembered, remember, rememberedIn, restitch, type Settings as RestitchSettings, type RestitchResult, objectKey } from '../model/restitch';
@@ -150,9 +151,6 @@ export function bindStitches(app: StitchesApp) {
       : own.blendOf
         ? fill?.fill?.deco?.blend?.link === own.blendOf
         : !!partOf(own) && hasPart(fill, partOf(own)!);
-
-  /** Whether an object has a shape of its own its stitches can be loosed from (and sewn from again). */
-  const loosable = (m: Remembered | undefined): boolean => !!m && !m.read && !m.lettering && !m.outline && !m.blendOf && !partOf(m) && !!(m.region || m.form || m.path || m.columns);
 
   /**
    * The selected objects loosed from their shape (`on`), or sewn from their resting shape again with
@@ -479,5 +477,5 @@ export function bindStitches(app: StitchesApp) {
     },
   });
 
-  return { applyRestitched, convertSettings, stitchInfo, stitchPanel };
+  return { applyRestitched, convertSettings, looseObjects, stitchInfo, stitchPanel };
 }
