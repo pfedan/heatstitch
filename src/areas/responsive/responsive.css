@@ -579,6 +579,10 @@
   body.rs-drawers .stage-foot {
     bottom: calc(var(--player-h) + 10px + var(--rs-lift, 0px));
     transition: bottom 0.18s ease;
+    /* On a phone the heatmap scale and the view bar do not fit side by side: the scale goes on top. */
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    row-gap: 6px;
   }
 
   /* The four drawing tools share one button with a small menu: the bottom bar fits. */

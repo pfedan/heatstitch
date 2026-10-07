@@ -31,7 +31,7 @@ export const deBase = {
   'files.example.benchmark': 'Formen-Benchmark',
   'files.example.loading': 'Beispiel wird gestickt …',
   'files.example.projects': 'Projekte',
-  'files.example.demo': 'Demo-Projekt (7 Stickmuster)',
+  'files.example.demo': 'Demo-Projekt (alle Funktionen)',
   'files.example.opening': 'Beispiel wird geladen …',
   'controls.title': 'Darstellung',
   'controls.metric': 'Metrik',
