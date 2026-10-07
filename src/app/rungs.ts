@@ -201,7 +201,11 @@ export function bindRungs(app: RungsApp) {
       const area = remembered(p, obj)?.shape ?? an.fill;
       if (!area) return;
       // Lines are drawn near any of its areas.
-      rungTool.openFill(areaLoops(area).outsides.flat());
+      const loops = areaLoops(area);
+      rungTool.openFill(loops.outsides.flat(), { outlines: loops.outsides, holes: loops.holes });
+      // Sections are drawn ahead in the satin it would become.
+      const s = app.convertSettings('satin', app.stitchInfo(p, q));
+      rungTool.satin = s?.kind === 'satin' ? s.s : null;
     }
     ui.rungObject = target.o;
     rungPattern = p;

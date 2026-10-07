@@ -1,8 +1,8 @@
-import { addRung, chordOf, stripsOfAreas, cornerCuts, cornerRungs, cumulative, pointAt, project, rungFromLine, rungRange, seedRungs, type Rung } from '../digitize/rungs';
+import { addRung, checkSections, chordOf, railsFromOutline, stripsOfAreas, cornerCuts, cornerRungs, cumulative, inside, pointAt, project, rungFromLine, rungRange, seedRungs, type Rung } from '../digitize/rungs';
 import { pathLength } from '../digitize/fill';
 import { simplify } from '../digitize/run';
 import type { Pt } from '../digitize/skeleton';
-import { bestChain, reversedRails, sectionPlan, sectionsOf, sewnBack, spanSection, sectionLoops, sectionOfRung, type Rails, type SatinSettings, type SectionLoop, type SectionStep, type Split } from '../model/restitch';
+import { bestChain, previewPairs, reversedRails, sectionPlan, sectionsOf, sewnBack, spanSection, sectionLoops, sectionOfRung, type Rails, type SatinSettings, type SectionLoop, type SectionStep, type Split } from '../model/restitch';
 
 /** Pick radius around the pointer for rung ends, CSS pixels; the line itself a little less. */
 const PICK_END_PX = 10;
@@ -80,6 +80,12 @@ export interface RungPick {
 
 export type RungMode = 'satin' | 'fill' | 'guide' | 'points';
 
+/** A part that makes no column yet, or a hole no cut line opens: outlined, with what is missing. */
+export interface SectionProblem {
+  ring: Pt[];
+  key: 'stitch.problem.part' | 'stitch.problem.hole';
+}
+
 export interface RungView {
   mode: RungMode;
   columns: RungColumn[];
@@ -105,6 +111,12 @@ export interface RungView {
   badges: PieceBadge[];
   /** The control under the pointer. */
   badgeHover: BadgeHit | null;
+  /** Every part or hole that does not work yet, all at once, for as long as it stays so. */
+  readonly problems: SectionProblem[];
+  /** The problem under the pointer (index in `problems`, -1 none) and where the pointer is. */
+  problemHover: number;
+  /** Each section as it will be sewn (its stitch pairs); none for a part with a problem. */
+  readonly previews: [Pt, Pt][][];
 }
 
 export interface RungHooks {
@@ -157,6 +169,10 @@ export class RungTool implements RungView {
   draft: [Pt, Pt] | null = null;
   draftCut = false;
   badgeHover: BadgeHit | null = null;
+  problemHover = -1;
+  /** The fill's outsides and holes (lines drawn on a fill), to check the parts its lines make. */
+  private shape: { outlines: Pt[][]; holes: Pt[][] } | null = null;
+  private checked: { key: string; problems: SectionProblem[]; previews: [Pt, Pt][][] } | null = null;
   /** The satin settings of the object (how its sections are sewn when no order is set). */
   satin: SatinSettings | null = null;
   /** Lines drawn across a satin or a fill are cut lines (Shift draws the other kind). */
@@ -174,10 +190,11 @@ export class RungTool implements RungView {
     this.setColumns(columns);
   }
 
-  /** Starts drawing lines across a fill with this outline. */
-  openFill(loop: Pt[]): void {
+  /** Starts drawing lines across a fill with this outline (`shape`: its areas and holes, to check the parts). */
+  openFill(loop: Pt[], shape: { outlines: Pt[][]; holes: Pt[][] } | null = null): void {
     this.active = true;
     this.mode = 'fill';
+    this.shape = shape;
     this.columns = [];
     this.parts = [];
     this.lines = [];
@@ -217,6 +234,9 @@ export class RungTool implements RungView {
 
   close(): void {
     this.active = false;
+    this.shape = null;
+    this.checked = null;
+    this.problemHover = -1;
     this.points = [];
     this.columns = [];
     this.lines = [];
@@ -435,6 +455,67 @@ export class RungTool implements RungView {
   setCutMode(on: boolean): void {
     this.cutMode = on;
     this.hooks.redraw();
+  }
+
+  get problems(): SectionProblem[] {
+    return this.check().problems;
+  }
+
+  get previews(): [Pt, Pt][][] {
+    return this.check().previews;
+  }
+
+  /**
+   * What the lines make now: the parts and holes that do not work, and the stitch pairs of every
+   * section that does (as sewn, see previewPairs). Worked out again only when something changed.
+   */
+  private check(): { problems: SectionProblem[]; previews: [Pt, Pt][][] } {
+    if (this.mode !== 'satin' && this.mode !== 'fill') return { problems: [], previews: [] };
+    const result = this.mode === 'satin' ? this.result() : null;
+    const key = JSON.stringify([this.mode, this.lines, this.cutLines, this.bad, this.satin, result]);
+    if (this.checked?.key === key) return this.checked;
+    const s = this.satin;
+    const pairsOf = (rails: Rails[]) => (s ? rails.flatMap((r) => previewPairs(r, s)) : []);
+    const problems: SectionProblem[] = [];
+    let previews: [Pt, Pt][][] = [];
+    const found = (c: { parts: Pt[][]; holes: Pt[][] }) => {
+      problems.push(...c.parts.map((ring) => ({ ring, key: 'stitch.problem.part' as const })));
+      problems.push(...c.holes.map((ring) => ({ ring, key: 'stitch.problem.hole' as const })));
+    };
+    if (this.mode === 'fill') {
+      const sh = this.shape;
+      // Only once something is drawn: an untouched fill is not wrong, just not started.
+      if (sh && (this.lines.length || this.cutLines.length)) {
+        if (!this.cutLines.length && !sh.holes.length && sh.outlines.length === 1) {
+          // Sewn as one strip along the lines (as sewAlongLines does).
+          const rails = railsFromOutline(sh.outlines[0], this.lines);
+          if (rails) previews = pairsOf([rails]);
+          else found({ parts: [sh.outlines[0]], holes: [] });
+        } else {
+          const c = checkSections(sh.outlines, this.lines, this.cutLines, sh.holes);
+          found(c);
+          previews = pairsOf(c.strips);
+        }
+      }
+    } else if (result) {
+      const sp = this.split;
+      const c = sp ? checkSections(sp.outlines, this.splitLines(), this.cutLines, sp.holes) : null;
+      if (c && (c.parts.length || c.holes.length)) {
+        // The part cut from the fill as its lines make it now; the stitches stay as they were.
+        found(c);
+        previews = [...pairsOf(result.filter((_, k) => k !== sp!.part).flat()), ...pairsOf(c.strips)];
+      } else previews = pairsOf(result.flat());
+    }
+    if (!problems.length && this.bad) problems.push({ ring: this.bad, key: 'stitch.problem.part' });
+    this.checked = { key, problems, previews };
+    return this.checked;
+  }
+
+  /** The rungs and free rungs of the part cut from a fill, as lines (see resplit). */
+  private splitLines(): [Pt, Pt][] {
+    const sp = this.split;
+    if (!sp) return [];
+    return this.columns.flatMap((c, k) => (this.parts[k] === sp.part ? [...c.rungs.map((r) => this.ends(c, r)), ...c.spans] : []));
   }
 
   /** The sections of a column as closed outlines, with its cut lines as they are now. */
@@ -799,10 +880,7 @@ export class RungTool implements RungView {
     const sp = this.split;
     if (!sp) return;
     const ks = this.columns.map((_, k) => k).filter((k) => this.parts[k] === sp.part);
-    const lines = ks.flatMap((k) => {
-      const c = this.columns[k];
-      return [...c.rungs.map((r) => this.ends(c, r)), ...c.spans];
-    });
+    const lines = this.splitLines();
     // Spacings set at rungs stay at the rung, wherever its part ends up.
     const spaced = ks.flatMap((k) => {
       const c = this.columns[k];
@@ -850,7 +928,10 @@ export class RungTool implements RungView {
     const changed = JSON.stringify(b) !== JSON.stringify(this.badgeHover) || JSON.stringify(h) !== JSON.stringify(this.hover);
     this.badgeHover = b;
     this.hover = h;
-    return changed;
+    // A problem says what is missing while the pointer is on it (not on a line or control there).
+    const was = this.problemHover;
+    this.problemHover = this.active && !b && !h ? this.problems.findIndex((p) => inside(p.ring, [x, y])) : -1;
+    return changed || was !== this.problemHover;
   }
 
   /** Removes the selected rung or line; false when nothing is selected. */

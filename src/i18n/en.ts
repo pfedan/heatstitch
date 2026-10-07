@@ -897,6 +897,8 @@ const enBase: Record<keyof typeof deBase, string> = {
   'stitch.draw.parts': 'Cut lines split the area into parts or open a hole to the edge; each part becomes a column of its own, without trims between them.',
   'stitch.draw.notStripPart': 'A part between the cut lines makes no column (outlined in red). Draw a line right across it there.',
   'stitch.draw.openHole': 'A hole (outlined in red) needs a cut line from the edge into it, or the satin would cover it. With several holes, as in B or 8, one each, also from hole to hole.',
+  'stitch.problem.part': 'This part needs a line right across it.',
+  'stitch.problem.hole': 'This hole needs a cut line from the edge into it.',
   'stitch.draw.cancel': 'Cancel',
   'stitch.draw.notStrip': 'The rungs do not cut the area into a strip: each has to cross the whole area, they must not cross each other, and beyond the first and the last one the area may only go on a little.',
   'order.button': 'Optimize order',
