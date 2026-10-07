@@ -195,6 +195,8 @@ export interface Split {
   pattern: Pattern;
   /** The parts, as objects of `pattern`, in sewing order. */
   parts: number[];
+  /** How many parts were too small for the fill's pattern and got plain rows. */
+  plain: number;
 }
 
 /**
@@ -247,11 +249,20 @@ export function splitFill(p: Pattern, o: number, cuts: Pt[][], trimMm: number): 
     remember(cur, part, { ...remembered(cur, part), region: remembered(cur, part)?.region ?? null, fill: { ...known!.fill!, ...change(k) } });
   }
   if (sewObjects(cur).length !== sewObjects(p).length + forms.length - 1) return null;
+  let plain = 0;
   for (let k = forms.length - 1; k >= 0; k--) {
     const ks = stitchKinds(cur);
     const objs = sewObjects(cur, ks);
-    const r = reshapeFill(cur, objs, objs[o + k], ks, forms[k], trimMm, undefined, { ...known!.fill!, ...change(k) });
-    const next = r && takeOver(r);
+    const settings = { ...known!.fill!, ...change(k) };
+    const r = reshapeFill(cur, objs, objs[o + k], ks, forms[k], trimMm, undefined, settings);
+    let next = r && takeOver(r);
+    // A part too small or too narrow for the fill's pattern (an open grid, a maze) gets plain rows.
+    if (!next && settings.pattern !== 'tatami') {
+      const { deco: _d, ...rest } = settings;
+      const p2 = reshapeFill(cur, objs, objs[o + k], ks, forms[k], trimMm, undefined, { ...rest, pattern: 'tatami' });
+      next = p2 && takeOver(p2);
+      if (next) plain++;
+    }
     if (!next) return null;
     cur = next;
   }
@@ -276,5 +287,5 @@ export function splitFill(p: Pattern, o: number, cuts: Pt[][], trimMm: number): 
     if (m?.fill?.pieces && !ids.includes(x.id) && pieces.includes(x.id)) remember(cur, x, { ...m, fill: { ...m.fill, pieces } });
   }
   cur = syncBorders(cur, trimMm, link ? new Set([link]) : new Set());
-  return { pattern: cur, parts: forms.map((_, k) => o + k) };
+  return { pattern: cur, parts: forms.map((_, k) => o + k), plain };
 }
