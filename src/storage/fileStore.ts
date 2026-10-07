@@ -9,7 +9,7 @@
 
 import { computeBounds, type Pattern, type ThreadColor } from '../model/pattern';
 import type { StoredAside } from '../model/aside';
-import type { StoredObject } from '../model/restitch';
+import type { ObjectsAsStored } from '../model/restitch';
 import { isAcknowledgement, type Acknowledgement } from '../validation/acks';
 import type { Lang } from '../i18n';
 import { STORAGE_NS } from './namespace';
@@ -31,7 +31,7 @@ export interface StoredFile {
   /** Findings the user acknowledged. */
   acks?: Acknowledgement[];
   /** Shapes and fill settings of objects given new stitches, so the next edit starts from them. */
-  objects?: StoredObject[];
+  objects?: ObjectsAsStored;
   /** Shapes of the working copy that are not sewn. */
   aside?: StoredAside[];
   /** Fabric, thread, hoop, fabric color and checks of this design (unchecked, normalize on reading). */
@@ -111,9 +111,9 @@ export function saveAcks(key: number, acks: Acknowledgement[]): Promise<void> {
 }
 
 /** Stores what is remembered about the objects of file `key`. */
-export function saveObjects(key: number, objects: StoredObject[]): Promise<void> {
+export function saveObjects(key: number, objects: ObjectsAsStored): Promise<void> {
   return queue(key, (rec) => {
-    if (objects.length) rec.objects = objects;
+    if (Array.isArray(objects) ? objects.length : objects.objects.length) rec.objects = objects;
     else delete rec.objects;
   });
 }

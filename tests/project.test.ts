@@ -132,19 +132,20 @@ describe('project files', () => {
     remember(q, now, { region: r.regions[0], fill: { ...m, pattern: 'spiral' } });
 
     const stored = rememberedIn(q, sewObjects(q));
-    expect(stored.length).toBe(1);
+    expect(stored.objects.filter((e) => e.memory).length).toBe(1);
     const back = await decodeProject(
       await encodeProject({ files: [{ name: 'overlap.pes', data, working: toStored(q), acks: [], objects: stored }], active: 0, image: null, settings: projectSettings(DEFAULTS) }),
     );
     // As after a reload: the shape is rebuilt from its pixels.
-    expect(restoreRemembered(back.files[0].objects)).toBe(1);
-    const again = remembered(q, now)!;
+    const q2 = fromStored(parsePattern(data, 'overlap.pes'), back.files[0].working)!;
+    expect(restoreRemembered(q2, back.files[0].objects)).toBe(1);
+    const again = remembered(q2, now)!;
     expect(again.region).not.toBe(r.regions[0]);
     expect(again.fill?.pattern).toBe('spiral');
     expect([...again.region!.mask]).toEqual([...r.regions[0]!.mask]);
     expect([...again.region!.sdf]).toEqual([...r.regions[0]!.sdf]);
     const an = analyze(q, now, stitchKinds(q));
-    expect(an.fill).toBe(again.region);
+    expect(an.fill).toBe(remembered(q, now)!.region);
     expect(shapeTrust(q, now, an, 0.4)).toBe('kept');
   }, 30_000);
 
@@ -173,8 +174,9 @@ describe('project files', () => {
     const back = await decodeProject(
       await encodeProject({ files: [{ name: 'overlap.pes', data, working: toStored(q), acks: [], objects: rememberedIn(q, sewObjects(q)) }], active: 0, image: null, settings: projectSettings(DEFAULTS) }),
     );
-    expect(restoreRemembered(back.files[0].objects)).toBe(1);
-    const again = remembered(q, now)!.fill!;
+    const q2 = fromStored(parsePattern(data, 'overlap.pes'), back.files[0].working)!;
+    expect(restoreRemembered(q2, back.files[0].objects)).toBe(1);
+    const again = remembered(q2, now)!.fill!;
     expect(again.pattern).toBe('guided');
     expect(again.guides).toEqual([guide]);
     expect(again.underCross).toBe(true);
@@ -182,9 +184,11 @@ describe('project files', () => {
   }, 30_000);
 
   it('skips stored objects that do not hold together', () => {
-    expect(restoreRemembered([{ key: 'a', region: { x0: 0, y0: 0, w: 2, h: 2, pxMm: 0.1, mask: new Uint8Array(3), areaMm2: 1 } }])).toBe(0);
-    expect(restoreRemembered([{ key: 'b', region: null, fill: { pattern: 'zigzag' } }])).toBe(0);
-    expect(restoreRemembered('nope')).toBe(0);
+    const p = parsePattern(bytesOf('demos/overlap.pes'), 'overlap.pes');
+    expect(restoreRemembered(p, [{ key: 'a', region: { x0: 0, y0: 0, w: 2, h: 2, pxMm: 0.1, mask: new Uint8Array(3), areaMm2: 1 } }])).toBe(0);
+    expect(restoreRemembered(p, [{ key: 'b', region: null, fill: { pattern: 'zigzag' } }])).toBe(0);
+    expect(restoreRemembered(p, 'nope')).toBe(0);
+    expect(restoreRemembered(p, { v: 2, next: 1, objects: [{ id: 1, first: 'x' }] })).toBe(0);
   });
 });
 
@@ -192,8 +196,8 @@ describe('wild stitches in a user\'s project', () => {
   // A user's project: a spiral and a fill with a satin border that showed stray stitches.
   const load = async (name: string) => {
     const file = (await decodeProject(new Uint8Array(readFileSync(new URL('./fixtures/wild-stitches.heatstitch', import.meta.url))))).files.find((f) => f.name === name)!;
-    restoreRemembered(file.objects);
     const p = fromStored(parsePattern(file.data, file.name), file.working)!;
+    restoreRemembered(p, file.objects);
     const kinds = stitchKinds(p);
     return { p, kinds, objs: sewObjects(p, kinds) };
   };
@@ -242,8 +246,8 @@ describe('the kind of an object sewn here', () => {
   it('stays a fill for a small spiral whose loose turns read like a running stitch', async () => {
     // A user's project: two spirals of under 3 mm, made from wide lines, listed as running stitches.
     const file = (await decodeProject(new Uint8Array(readFileSync(new URL('./fixtures/spiral-kind.heatstitch', import.meta.url))))).files[0];
-    restoreRemembered(file.objects);
     const p = fromStored(parsePattern(file.data, file.name), file.working)!;
+    restoreRemembered(p, file.objects);
     const kinds = stitchKinds(p);
     const spirals = sewObjects(p, kinds).filter((o) => remembered(p, o)?.fill?.pattern === 'spiral');
     expect(spirals).toHaveLength(2);

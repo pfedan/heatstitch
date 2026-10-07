@@ -207,9 +207,9 @@ describe('free rungs with the rest of the app', () => {
     const columns = shape.columns!.map((part, k) => part.map((c, j) => (k === 0 && j === 0 ? { ...c, rungs: c.rungs ?? [], spans } : c)));
     remember(p, o, { ...shape, columns, read: false });
     try {
-      const stored = JSON.parse(JSON.stringify(rememberedIn(p, objs).find((x) => x.columns)));
+      const stored = JSON.parse(JSON.stringify(rememberedIn(p, objs)));
       forget(p, o);
-      restoreRemembered([stored]);
+      restoreRemembered(p, stored);
       expect(remembered(p, o)?.columns?.[0][0].spans).toEqual(spans);
       // Mirrored with the object: the rung ends go along.
       const mirrored = transformRemembered(remembered(p, o)!, [-1, 0, 0, 1, 0, 0]);

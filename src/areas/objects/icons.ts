@@ -28,6 +28,7 @@ const PATHS: Record<string, string> = {
   'obj-close': '<path d="M5 5l10 10M15 5 5 15"/>',
   'obj-chevron': '<path d="M8 5.5 12.5 10 8 14.5"/>',
   'obj-link': '<path d="M8.5 11.5l3-3"/><path d="M9 6.5 11 4.5a2.5 2.5 0 0 1 4.5 4.5l-2 2"/><path d="M11 13.5 9 15.5A2.5 2.5 0 0 1 4.5 11l2-2"/>',
+  'obj-unlink': '<path d="M9 6.5 11 4.5a2.5 2.5 0 0 1 4.5 4.5l-2 2"/><path d="M11 13.5 9 15.5A2.5 2.5 0 0 1 4.5 11l2-2"/><path d="M3.5 3.5l2 2M14.5 14.5l2 2"/>',
   'obj-sew': '<path d="M15.5 4.5 6 14"/><ellipse cx="15.2" cy="4.8" rx=".9" ry="1.6" transform="rotate(45 15.2 4.8)"/><path d="M6 14c-1.8 1.8-3.2 1-3 0s1.4-1.2 2.5-.4"/>',
 };
 

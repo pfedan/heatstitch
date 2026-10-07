@@ -94,9 +94,9 @@ describe('order, direction and trims of the sections of a column', () => {
     const columns = shape.columns!.map((part, k) => part.map((c, j) => (k === 0 && j === 0 ? { ...c, plan } : c)));
     remember(p, o, { ...shape, columns, read: false });
     try {
-      const stored = JSON.parse(JSON.stringify(rememberedIn(p, objs).find((x) => x.columns)));
+      const stored = JSON.parse(JSON.stringify(rememberedIn(p, objs)));
       forget(p, o);
-      restoreRemembered([stored]);
+      restoreRemembered(p, stored);
       expect(remembered(p, o)?.columns?.[0][0].plan).toEqual(plan);
       expect(transformRemembered(remembered(p, o)!, [-1, 0, 0, 1, 0, 0]).columns![0][0].plan).toEqual(plan);
     } finally {

@@ -45,6 +45,28 @@ export interface Pattern {
   hoop?: { w: number; h: number };
 }
 
+/**
+ * The version each version of a design was made from. A new version takes over what the objects of
+ * the one before knew (see objects.ts), so every way of making one from another goes through
+ * `nextVersion` (or withRecords, which uses it).
+ */
+const parents = new WeakMap<Pattern, Pattern>();
+
+/** A new version of `p` with `changes`; it knows it came from `p`. */
+export function nextVersion(p: Pattern, changes: Partial<Pattern>): Pattern {
+  const next: Pattern = { ...p, ...changes };
+  parents.set(next, p);
+  return next;
+}
+
+/** The version `p` was made from, if it was made from one. */
+export const parentOf = (p: Pattern): Pattern | undefined => parents.get(p);
+
+/** Forgets where `p` came from (it knows its objects now, or never will). */
+export function dropParent(p: Pattern): void {
+  parents.delete(p);
+}
+
 /** Growable record list used by the parsers. */
 export class PatternBuilder {
   private xs: number[] = [];
