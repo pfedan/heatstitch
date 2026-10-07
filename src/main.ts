@@ -707,6 +707,17 @@ function flowTooltip(sx: number, sy: number): void {
     tooltip.hidden = true;
     return;
   }
+  // On a section that cannot be sewn yet: what it still needs, in place of the stitch.
+  const problem = rungTool.active ? rungTool.problems[rungTool.problemHover] : undefined;
+  if (problem) {
+    tooltip.replaceChildren(Object.assign(document.createElement('div'), { textContent: t(problem.key) }));
+    tooltip.dataset.level = '2';
+    tooltip.hidden = false;
+    const flip = sx > ui.stageW - tooltip.offsetWidth - 30;
+    tooltip.style.left = `${flip ? sx - 12 - tooltip.offsetWidth : sx + 14}px`;
+    tooltip.style.top = `${sy + 14}px`;
+    return;
+  }
   const st = styleFor(p);
   const [x, y] = vp.toWorld(sx, sy);
   const i = stitchAt(p, x * 10, y * 10, Math.max(3, 60 / vp.scale), st.limit, st.alpha);

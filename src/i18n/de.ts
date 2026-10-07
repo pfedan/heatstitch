@@ -895,6 +895,8 @@ export const deBase = {
   'stitch.draw.parts': 'Trennlinien teilen die Fläche in Teile oder öffnen ein Loch zum Rand; jeder Teil wird eine Säule für sich, ohne Garnschnitt dazwischen.',
   'stitch.draw.notStripPart': 'Ein Teil zwischen den Trennlinien ergibt keine Säule (rot umrandet). Zieh dort eine Querlinie, die ihn ganz durchquert.',
   'stitch.draw.openHole': 'Ein Loch (rot umrandet) braucht eine Trennlinie vom Rand hinein, sonst würde der Satin es zudecken. Bei mehreren Löchern wie in B oder 8 je eine, auch von Loch zu Loch.',
+  'stitch.problem.part': 'Hier fehlt eine Querlinie, die den Teil ganz durchquert.',
+  'stitch.problem.hole': 'Dieses Loch braucht eine Trennlinie vom Rand hinein.',
   'stitch.draw.cancel': 'Abbrechen',
   'stitch.draw.notStrip': 'Die Querlinien teilen die Fläche nicht in einen Streifen: Jede muss die Fläche ganz durchqueren, sie dürfen sich nicht kreuzen, und hinter der ersten und der letzten darf die Fläche nur noch kurz weitergehen.',
   'order.button': 'Reihenfolge optimieren',

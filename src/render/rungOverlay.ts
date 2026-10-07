@@ -27,6 +27,20 @@ export function drawRungOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, vie
     ctx.beginPath();
     pts.forEach((p, k) => (k ? ctx.lineTo(...S(p)) : ctx.moveTo(...S(p))));
   };
+  // Each section drawn ahead as it will be sewn: every third stitch line, thin and quiet.
+  ctx.beginPath();
+  for (const sec of view.previews)
+    for (let k = 0; k < sec.length; k += 3) {
+      ctx.moveTo(...S(sec[k][0]));
+      ctx.lineTo(...S(sec[k][1]));
+    }
+  // A faint dark edge keeps them apart from the stitches under them, on light and dark thread.
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
   // Rails: dark under light, so they show on any thread color.
   for (const c of view.columns) {
     for (const rail of [c.left, c.right]) {
@@ -113,15 +127,14 @@ export function drawRungOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, vie
   view.columns.forEach((c, k) => c.cuts.forEach((r, i) => rung(pointAt(c.left, c.cl, r[0]), pointAt(c.right, c.cr, r[1]), k, i, false, true)));
   view.lines.forEach(([a, b], i) => rung(a, b, -1, i, false));
   view.cutLines.forEach(([a, b], i) => rung(a, b, -1, i, false, true));
-  // The part of the fill that made no column.
-  if (view.bad) {
-    ctx.setLineDash([5, 4]);
-    path(view.bad);
-    ctx.strokeStyle = '#ff5a5a';
-    ctx.lineWidth = 2.5;
+  // Sections that cannot be sewn yet (a part no rung crosses, a hole still closed): outlined in red until fixed.
+  view.problems.forEach((pr, k) => {
+    path(pr.ring);
+    ctx.closePath();
+    ctx.strokeStyle = k === view.problemHover ? 'rgba(255, 90, 90, 0.9)' : 'rgba(255, 90, 90, 0.55)';
+    ctx.lineWidth = 2;
     ctx.stroke();
-    ctx.setLineDash([]);
-  }
+  });
   // Guide lines in the same colors.
   view.guides.forEach((g, i) => {
     const sel = same(view.selected, -1, i);

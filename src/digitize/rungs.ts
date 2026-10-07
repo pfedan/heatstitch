@@ -684,7 +684,7 @@ type Strip = { left: Pt[]; right: Pt[]; rungs: Rung[] };
  * all do). `holes` are the outlines of holes in the area: each needs a cut line from the edge into
  * it (see bridgeOf); `hole` is one that has none (-1 when all are opened).
  */
-export function stripsOfOutline(loop: Pt[], lines: [Pt, Pt][], cuts: [Pt, Pt][], holes: Pt[][] = []): { strips: Strip[]; parts: Pt[][]; bad: number; hole: number } {
+export function stripsOfOutline(loop: Pt[], lines: [Pt, Pt][], cuts: [Pt, Pt][], holes: Pt[][] = []): { strips: Strip[]; parts: Pt[][]; bad: number; hole: number; made?: (Strip | null)[]; open?: number[] } {
   const closed = (r: Pt[]) => (dist(r[0], r[r.length - 1]) < 1e-9 ? r : [...r, r[0]]);
   let parts: Pt[][] = [closed(loop)];
   const edges: [Pt, Pt][] = [];
@@ -721,7 +721,7 @@ export function stripsOfOutline(loop: Pt[], lines: [Pt, Pt][], cuts: [Pt, Pt][],
     edges.push([pointAt(parts[k], cum, u), pointAt(parts[k], cum, v)]);
     parts = [...parts.slice(0, k), ...splitRing(parts[k], u, v), ...parts.slice(k + 1)];
   }
-  if (open.length) return { strips: [], parts, bad: -1, hole: which[0] };
+  if (open.length) return { strips: [], parts, bad: -1, hole: which[0], open: which };
   parts = parts.filter((r) => r.length >= 4);
   const same = (p: Pt, q: Pt) => dist(p, q) < 1e-6;
   // The cut lines each part has as an edge (by index in `edges`), as stretches of its outline.
@@ -739,7 +739,7 @@ export function stripsOfOutline(loop: Pt[], lines: [Pt, Pt][], cuts: [Pt, Pt][],
     return stripOfLoop(ring, chords, capsOf[k].map((c) => c.arc), true);
   });
   const bad = made.findIndex((m) => !m);
-  if (bad >= 0) return { strips: [], parts, bad, hole: -1 };
+  if (bad >= 0) return { strips: [], parts, bad, hole: -1, made };
   // The parts as a tree joined at the cut lines they share, from a part at an end (one neighbour).
   const shared = (k: number, j: number) => capsOf[k].find((c) => capsOf[j].some((d) => d.edge === c.edge))?.edge;
   const root = Math.max(0, parts.findIndex((_, k) => parts.filter((_, j) => j !== k && shared(k, j) !== undefined).length <= 1));
@@ -804,6 +804,38 @@ export function stripsOfAreas(outlines: Pt[][], lines: [Pt, Pt][], cuts: [Pt, Pt
     areas.push(made.strips);
   }
   return { areas, bad: null, hole: -1 };
+}
+
+/** What a fill cut by these lines makes: the strips that work, and every part or hole that does not. */
+export interface SectionCheck {
+  /** Strips of the parts that make a column (also where other parts of the same area do not). */
+  strips: Strip[];
+  /** Outlines of the parts that make no column (a line across that crosses them whole is missing). */
+  parts: Pt[][];
+  /** Holes no cut line opens (the satin would cover them). */
+  holes: Pt[][];
+}
+
+/**
+ * All that is wrong with a fill cut into parts at once (stripsOfAreas says only the first), with
+ * the strips of the parts that are fine, so each part can be shown as it would be sewn.
+ */
+export function checkSections(outlines: Pt[][], lines: [Pt, Pt][], cuts: [Pt, Pt][], holes: Pt[][] = []): SectionCheck {
+  const out: SectionCheck = { strips: [], parts: [], holes: [] };
+  for (const o of outlines) {
+    const mine = holes.map((_, j) => j).filter((j) => inside(o, holes[j][0]));
+    const made = stripsOfOutline(o, lines, cuts, mine.map((j) => holes[j]));
+    if (made.hole >= 0) {
+      for (const h of made.open ?? [made.hole]) out.holes.push(holes[mine[h]]);
+      continue;
+    }
+    if (made.bad < 0) {
+      out.strips.push(...made.strips);
+      continue;
+    }
+    (made.made ?? []).forEach((m, k) => (m ? out.strips.push(m) : out.parts.push(made.parts[k])));
+  }
+  return out;
 }
 
 /**

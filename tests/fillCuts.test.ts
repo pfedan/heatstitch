@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { stripsOfOutline } from '../src/digitize/rungs';
+import { checkSections, stripsOfOutline } from '../src/digitize/rungs';
 import type { Pt } from '../src/digitize/skeleton';
 import { sewObjects } from '../src/model/objects';
-import { forget, keepShape, measureSatin, remember, remembered, rememberedIn, restitch, restoreRemembered, reversedRails, satinRuns, type Rails, type SatinSettings } from '../src/model/restitch';
+import { forget, keepShape, previewPairs, measureSatin, remember, remembered, rememberedIn, restitch, restoreRemembered, reversedRails, satinRuns, type Rails, type SatinSettings } from '../src/model/restitch';
 import { stitchKinds } from '../src/model/sequence';
 import { transformRemembered } from '../src/model/transform';
 import { parsePattern } from '../src/parsers';
@@ -204,5 +204,32 @@ describe('chained columns with the rest of the app', () => {
     } finally {
       forget(p, o);
     }
+  });
+});
+
+describe('the sections the rung tool shows', () => {
+  it('marks a part without a line across in red and draws the others ahead', () => {
+    // The m without the line across its middle leg.
+    const c = checkSections([M], LINES.filter((_, k) => k !== 1), CUTS);
+    expect(c.parts.length).toBe(1);
+    expect(c.holes).toEqual([]);
+    expect(c.strips.length).toBe(3);
+    // The red part is the middle leg (between x 13 and 17).
+    expect(c.parts[0].every(([x]) => x > 12.9 && x < 17.1)).toBe(true);
+    // Drawn ahead exactly as sewn: stitch lines across each good column, inside the m.
+    for (const st of c.strips) {
+      const rails: Rails = { left: st.left, right: st.right, rungs: [] };
+      const sec = previewPairs(rails, SATIN);
+      expect(sec.length).toBeGreaterThan(0);
+      expect(sec.flat().length).toBeGreaterThan(10);
+    }
+  });
+
+  it('marks a hole no cut line opens', () => {
+    const O = poly([0, 0], [10, 0], [10, 10], [0, 10], [0, 0]);
+    const hole = poly([3, 3], [7, 3], [7, 7], [3, 7], [3, 3]);
+    const c = checkSections([O], [[[-1, 5], [4, 5]]], [], [hole]);
+    expect(c.holes).toEqual([hole]);
+    expect(c.strips).toEqual([]);
   });
 });

@@ -2257,6 +2257,19 @@ export function satinRuns(rails: Rails[], s: SatinSettings): Pt[][] {
   return runs;
 }
 
+/**
+ * The stitch pairs of a column as it is sewn (each section on its own, with the spacing along it),
+ * to show how it will look before it is sewn. Not turned or mirrored: only where the stitches lie.
+ */
+export function previewPairs(r: Rails, s: SatinSettings): [Pt, Pt][][] {
+  const sp = satinParams(s);
+  const { along } = sewing(s);
+  return sectionsOf(r).map((sec) => {
+    const col = columnOf(sec);
+    return pairs(col, along(col, sec, sp));
+  });
+}
+
 /** Runs of satin with a trim before them wherever they start (asked for, not only for a long way). */
 export const trimBefore = new WeakSet<Pt[]>();
 
