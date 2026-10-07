@@ -78,7 +78,7 @@ describe('shadow of a line', () => {
     expect(shadows).toHaveLength(2);
     expect(new Set(shadows.map((o) => remembered(d.pattern, o)!.shadowOf)).size).toBe(2);
     const stored = JSON.parse(JSON.stringify(rememberedIn(p, sewObjects(p))));
-    restoreRemembered(stored);
+    restoreRemembered(p, stored);
     expect(remembered(p, sewObjects(p)[1])?.line?.shadow).toMatchObject({ link: 's1', dir: 'se', dist: 1 });
   });
 

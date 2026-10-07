@@ -12,7 +12,7 @@ import { rememberObjects, sewObjects } from '../src/model/objects';
 import { COLOR_CHANGE, END, STITCH, type Pattern, type ThreadColor } from '../src/model/pattern';
 import { sameColor } from '../src/model/recolor';
 import { transformSewObject } from '../src/model/reshape';
-import { backToVersion, forgetAll, keepVersion, objectKey, remember, remembered, rememberedIn, restitch, restoreRemembered, DECO_PATTERNS, OPEN_PATTERNS, type FillSettings, type StoredObject } from '../src/model/restitch';
+import { backToVersion, forgetAll, keepVersion, objectKey, remember, remembered, rememberedIn, restitch, restoreRemembered, DECO_PATTERNS, OPEN_PATTERNS, type FillSettings, type StoredObjects } from '../src/model/restitch';
 import { reorder } from '../src/model/order';
 import { stitchKinds } from '../src/model/sequence';
 import { deleteObjects, duplicateObject, duplicateObjects, mirrorMatrix, recolorObjects, subtractTop } from '../src/model/shapeOps';
@@ -55,18 +55,18 @@ const empty = { name: 'torture', format: 'dst', x: new Int32Array(0), y: new Int
 const blank = (p: Pattern) => p.cmd.length === 0;
 
 /** What the app stores about the objects of a version (files.setObjects). */
-const knowledge = (p: Pattern): StoredObject[] => rememberedIn(p, sewObjects(p));
+const knowledge = (p: Pattern): StoredObjects => rememberedIn(p);
 
 interface Version {
   p: Pattern;
-  known: StoredObject[];
+  known: StoredObjects;
 }
 
 /** One design as the app holds it: the current version, undo and redo. */
 class Doc {
   undo: Version[] = [];
   redo: Version[] = [];
-  cur: Version = { p: empty, known: [] };
+  cur: Version = { p: empty, known: { v: 2, next: 1, objects: [] } };
   /** A new undo step (applyEdit). */
   commit(p: Pattern): void {
     if (p === this.cur.p) return;
@@ -159,7 +159,7 @@ async function saveAndOpen(d: Doc): Promise<void> {
   const back = await decodeProject(bytes);
   const p = fromStored(original, back.files[0].working);
   expect(p, 'project opens').toBeTruthy();
-  restoreRemembered(back.files[0].objects);
+  restoreRemembered(p!, back.files[0].objects);
   // A fresh page has no undo history.
   d.undo = [];
   d.redo = [];
@@ -746,23 +746,20 @@ describe('versions keep what they knew', () => {
   /** A pattern of one stitch at (i, i): something else to remember. */
   const other = (i: number): Pattern => ({ ...empty, x: Int32Array.of(i, i), y: Int32Array.of(i, i), cmd: Uint8Array.of(STITCH, END), colors: [COLORS[0]] });
 
-  it('undo brings back what memory had to forget meanwhile', () => {
-    forgetAll();
+  it('a version forgets nothing, however much other versions learn meanwhile', () => {
     const d = new Doc();
     shapes(d, addShape(empty, { form: parsePath(rectPath(0, 0, 20, 20, 0, 0), ID), kind: 'fill' }, COLORS[0], null, options)!.pattern);
     const first = d.cur;
-    // A long session: far more objects remembered than memory holds.
+    // A long session: far more objects remembered than the old memory held (400).
     for (let i = 1; i <= 1000; i++) {
       const q = other(i);
       remember(q, sewObjects(q)[0], { region: null });
     }
-    expect(remembered(first.p, sewObjects(first.p)[0])).toBeUndefined();
-    expect(backToVersion(first.p)).toBe(true);
+    expect(remembered(first.p, sewObjects(first.p)[0])?.form).toBeTruthy();
     expect(knowledge(first.p)).toEqual(first.known);
   });
 
-  it('a later version with the same stitches does not change what an earlier one knew', () => {
-    forgetAll();
+  it('a later version with the same stitches does not change what an earlier one knows', () => {
     const d = new Doc();
     shapes(d, addShape(empty, { form: parsePath(rectPath(0, 0, 20, 20, 0, 0), ID), kind: 'fill' }, COLORS[0], null, options)!.pattern);
     const first = d.cur;
@@ -772,10 +769,9 @@ describe('versions keep what they knew', () => {
     const same = { ...first.p };
     remember(same, o, { ...m, lock: true });
     d.commit(same);
-    expect(remembered(first.p, o)?.lock).toBe(true);
-    backToVersion(first.p);
     expect(remembered(first.p, o)?.lock).toBeUndefined();
-    backToVersion(same);
     expect(remembered(same, o)?.lock).toBe(true);
+    // The same object in both: the same id.
+    expect(sewObjects(same)[0].id).toBe(o.id);
   });
 });
