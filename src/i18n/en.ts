@@ -803,6 +803,8 @@ const enBase: Record<keyof typeof deBase, string> = {
   'stitch.motifSpacing.hint': 'Distance from one figure to the next; adjusted a little so the figures fit the line exactly',
   'stitch.motifSide': 'Side',
   'stitch.border.pieces': 'Part of a fill cut apart: one border runs around all {n} parts, never along the cut. What you set here goes for all of them.',
+  'stitch.border.seams': 'Along the cuts too',
+  'stitch.border.seams.hint': 'A line along each cut between the parts, just one, with the settings of the border.',
   'stitch.border.intro': 'A line around the fill, sewn after it: running or bean stitch, a satin edge, zigzag, E stitch or a motif.',
   'stitch.borderType': 'Kind',
   'stitch.borderOffset': 'Position',

@@ -293,6 +293,37 @@ describe('the border of a fill cut apart', () => {
     expect(borderObjects(again.pattern)).toHaveLength(1);
   });
 
+  it('runs one line along the cut too when asked, and none again when not', () => {
+    const { p, parts } = borderedHalves();
+    const link = memOf(p)[parts[0]]!.fill!.border!.link;
+    const q = withFill(p, parts[1], { border: { ...RUN, color: dark, link, seams: true } });
+    expect(memOf(q)[parts[0]]!.fill!.border!.seams).toBe(true);
+    expect(borderObjects(q)).toHaveLength(1);
+    const along = stitchesOf(q, borderObjects(q)[0]).filter(([x, y]) => Math.abs(x - 15) < 1 && y > 3 && y < 17);
+    expect(along.length).toBeGreaterThan(4);
+    // One line, not one on each part's edge (those lie 0.4 mm apart).
+    const xs = along.map(([x]) => x);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeLessThan(0.25);
+    // It still runs round the outside.
+    const pts = stitchesOf(q, borderObjects(q)[0]);
+    expect(pts.some(([x]) => x < 2) && pts.some(([x]) => x > 28)).toBe(true);
+    const off = withFill(q, parts[0], { border: { ...RUN, color: dark, link } });
+    expect(stitchesOf(off, borderObjects(off)[0]).filter(([x, y]) => Math.abs(x - 15) < 1.5 && y > 3 && y < 17)).toHaveLength(0);
+  });
+
+  it('runs one line along each cut of three parts', () => {
+    const { p, parts } = borderedHalves({ ...RUN, color: dark, seams: true });
+    const again = splitFill(p, parts[1], [[[13, 10], [32, 10]]], T) as { pattern: Pattern; parts: number[] };
+    const q = again.pattern;
+    expect(borderObjects(q)).toHaveLength(1);
+    const pts = stitchesOf(q, borderObjects(q)[0]);
+    expect(pts.filter(([x, y]) => Math.abs(x - 15) < 1 && y > 3 && y < 17).length).toBeGreaterThan(4);
+    const across = pts.filter(([x, y]) => Math.abs(y - 10) < 1 && x > 18 && x < 27);
+    expect(across.length).toBeGreaterThan(2);
+    const ys = across.map(([, y]) => y);
+    expect(Math.max(...ys) - Math.min(...ys)).toBeLessThan(0.25);
+  });
+
   it('is stored as the first part naming the whole and the others following it by id', () => {
     const { p, parts } = borderedHalves();
     const stored = rememberedIn(p);

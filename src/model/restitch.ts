@@ -172,6 +172,8 @@ export interface BorderSettings extends PathStitch {
   color?: ThreadColor;
   /** Marks the border object in its own thread (Remembered.outline). */
   link?: string;
+  /** The parts of a fill cut apart: one line along each cut too (the outer border alone by default). */
+  seams?: boolean;
 }
 
 export interface SatinSettings {
@@ -841,7 +843,7 @@ export function isLineStitch(b: unknown): b is PathStitch {
 
 function isBorder(b: unknown): b is BorderSettings {
   const s = b as BorderSettings | null;
-  return !!s && BORDERS.includes(s.type) && finite(s.width) && [s.length, s.repeat, s.tolerance, s.offset, s.spacing, s.pull].every((v) => v === undefined || finite(v)) && (s.flip === undefined || typeof s.flip === 'boolean') && (s.motif === undefined || LINE_MOTIFS.includes(s.motif)) && (s.under === undefined || s.under === 'off' || UNDERLAYS.includes(s.under)) && (s.color === undefined || isColor(s.color)) && (s.link === undefined || typeof s.link === 'string');
+  return !!s && BORDERS.includes(s.type) && finite(s.width) && [s.length, s.repeat, s.tolerance, s.offset, s.spacing, s.pull].every((v) => v === undefined || finite(v)) && (s.flip === undefined || typeof s.flip === 'boolean') && (s.motif === undefined || LINE_MOTIFS.includes(s.motif)) && (s.under === undefined || s.under === 'off' || UNDERLAYS.includes(s.under)) && (s.color === undefined || isColor(s.color)) && (s.link === undefined || typeof s.link === 'string') && (s.seams === undefined || typeof s.seams === 'boolean');
 }
 
 function isSatin(f: unknown): f is SatinSettings {

@@ -801,6 +801,8 @@ export const deBase = {
   'stitch.motifSpacing.hint': 'Abstand von einer Figur zur nächsten; er wird leicht angepasst, damit die Figuren genau auf die Linie passen',
   'stitch.motifSide': 'Seite',
   'stitch.border.pieces': 'Teil einer zerteilten Füllung: ein Rand läuft um alle {n} Teile, nie am Schnitt entlang. Was du hier einstellst, gilt für alle.',
+  'stitch.border.seams': 'Auch am Schnitt',
+  'stitch.border.seams.hint': 'Eine Linie an jedem Schnitt zwischen den Teilen, genau eine, mit den Einstellungen des Rands.',
   'stitch.border.intro': 'Eine Linie um die Füllung, nach ihr gestickt: Steppstich, Bohnenstich, Satinkante, Zickzack, E-Stich oder ein Motiv.',
   'stitch.borderType': 'Art',
   'stitch.borderOffset': 'Lage zur Kante',

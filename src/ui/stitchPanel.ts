@@ -1810,7 +1810,15 @@ export class StitchPanel {
     // The parts of a fill cut apart have one border around them all: it changes for each of them.
     const pieces = this.info!.pieces ?? 0;
     const shared = pieces > 1 && s.pattern !== 'none' ? h('p', { class: 'muted small' }, t('stitch.border.pieces', { n: pieces })) : null;
-    const box = this.sec('border', 'stitches.sec.border', [shared, parts.type, ...parts.look, ...parts.hold, s.border && s.pattern !== 'none' ? this.borderThread(s.border) : null], extra);
+    const seams =
+      shared && s.border
+        ? this.check('stitch.border.seams', 'stitch.border.seams.hint', () => !!s.border?.seams, (v) => {
+            if (!s.border) return;
+            if (v) s.border.seams = true;
+            else delete s.border.seams;
+          })
+        : null;
+    const box = this.sec('border', 'stitches.sec.border', [shared, seams, parts.type, ...parts.look, ...parts.hold, s.border && s.pattern !== 'none' ? this.borderThread(s.border) : null], extra);
     box.title = t('stitch.border.intro');
     return this.lights(box, 'border');
   }

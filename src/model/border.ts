@@ -3,7 +3,7 @@ import type { Pt } from '../digitize/skeleton';
 import { tidy, withRecords } from './edit';
 import { rememberObjects, sewObjects, stitchKey, type SewObject } from './objects';
 import { COLOR_CHANGE, END, JUMP, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
-import { borderStitches } from './along';
+import { borderStitches, seamStitches } from './along';
 import { wholeOf } from './knockout';
 import { lockAt, objectKey, remember, remembered, trimBefore, type BorderSettings, type FillSettings, type Rec, type Remembered } from './restitch';
 import { expandRegion } from '../digitize/region';
@@ -90,11 +90,12 @@ export function shareBorders(p: Pattern, edited: readonly SewObject[]): void {
   const objs = sewObjects(p);
   for (const e of edited) {
     const m = remembered(p, e);
-    if (!m?.piece || !m.fill) continue;
+    // An empty fill (only its border) is out of its whole.
+    if (!m?.piece || !m.fill || !bordered(m)) continue;
     for (const o of objs) {
       if (o.first === e.first) continue;
       const n = remembered(p, o);
-      if (n?.piece !== m.piece || !n.fill || JSON.stringify(n.fill.border) === JSON.stringify(m.fill.border)) continue;
+      if (n?.piece !== m.piece || !bordered(n) || !n.fill || JSON.stringify(n.fill.border) === JSON.stringify(m.fill.border)) continue;
       const { border: _b, ...rest } = n.fill;
       remember(p, o, { ...n, fill: m.fill.border ? { ...rest, border: { ...m.fill.border } } : rest });
     }
@@ -332,7 +333,8 @@ function syncOwnBorders(p: Pattern, trimMm: number, drop: ReadonlySet<string>, f
     if (!region) return;
     const cuts = list.map((j) => wholeOf(mem[j]!.region!, mem[j]));
     const cutFrom = cuts.some(Boolean) ? areaOf(list.map((j, i) => cuts[i] ?? mem[j]!.region!)) : null;
-    const color = b.color ?? o.color;
+    // In the thread of the first part, when it has none of its own (the parts can be recolored apart).
+    const color = b.color ?? objs[list[0]].color;
     // Sewn after this object: the fill, or the second thread of its blend.
     const second = m.fill?.deco?.blend ? seconds.get(m.fill.deco.blend.link) : undefined;
     const after = second === undefined ? o : objs[second];
@@ -343,6 +345,12 @@ function syncOwnBorders(p: Pattern, trimMm: number, drop: ReadonlySet<string>, f
     if (same && sameRegion(cur!.region, region) && sameBorder(cur!.border!, b)) return;
     const from: Pt = [p.x[after.last] / 10, p.y[after.last] / 10];
     let runs = borderStitches(region, b, from, list.length > 1 ? cutFrom : wholeOf(m.region, m));
+    // One line along each cut too, sewn first (the border on top covers where they end).
+    if (list.length > 1 && b.seams) {
+      const seams = seamStitches(list.map((j) => mem[j]!.region!), region, b, from);
+      const end = seams[seams.length - 1];
+      if (end) runs = [...seams, ...borderStitches(region, b, end[end.length - 1], cutFrom)];
+    }
     if (!runs.length) return;
     const memory: Remembered = { region, outline: b.link, border: stitchOf(b) };
     let recs = runRecords(runs, trimMm);
