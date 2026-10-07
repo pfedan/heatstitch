@@ -553,3 +553,37 @@ export function withSplit<C extends SplitColumn>(columns: C[][], area: Region, p
   const cuts = cutLinesBetween(columns[k], outsides, holes);
   return columns.map((part, j) => (j === k ? part.map((c, i) => (i ? c : { ...c, split: { outlines: outsides, holes, cuts } })) : part));
 }
+
+/** Nearest distance between two segments (0 when they cross). */
+function segGap([a, b]: [Pt, Pt], [c, d]: [Pt, Pt]): number {
+  const side = (p: Pt, q: Pt, r: Pt) => (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]);
+  if (side(a, b, c) * side(a, b, d) < 0 && side(c, d, a) * side(c, d, b) < 0) return 0;
+  const to = (p: Pt, q: Pt, r: Pt) => {
+    const vx = r[0] - q[0];
+    const vy = r[1] - q[1];
+    const l2 = vx * vx + vy * vy;
+    const u = l2 ? Math.max(0, Math.min(1, ((p[0] - q[0]) * vx + (p[1] - q[1]) * vy) / l2)) : 0;
+    return Math.hypot(p[0] - q[0] - u * vx, p[1] - q[1] - u * vy);
+  };
+  return Math.min(to(a, c, d), to(b, c, d), to(c, a, b), to(d, a, b));
+}
+
+/** A suggested cut line this near one drawn by hand is the same cut (mm). */
+const SAME_CUT_MM = 2;
+
+/**
+ * A suggestion around cut lines drawn by hand: those stay; a suggested cut line that crosses one
+ * or comes near it goes, as does a line across that crosses one. When the parts then make no
+ * columns, the cut lines by hand alone with the lines across, if they do.
+ */
+export function aroundCuts(s: { lines: [Pt, Pt][]; cuts: [Pt, Pt][] }, own: [Pt, Pt][], outsides: Pt[][], holes: Pt[][]): { lines: [Pt, Pt][]; cuts: [Pt, Pt][]; ok: boolean } {
+  const lines = s.lines.filter((l) => !own.some((c) => segGap(l, c) === 0));
+  const merged = [...own, ...s.cuts.filter((c) => !own.some((o) => segGap(c, o) < SAME_CUT_MM))];
+  const fits = (cuts: [Pt, Pt][]) => {
+    const made = stripsOfAreas(outsides, lines, cuts, holes);
+    return made.hole < 0 && !made.bad;
+  };
+  if (fits(merged)) return { lines, cuts: merged, ok: true };
+  if (merged.length > own.length && fits(own)) return { lines, cuts: own, ok: true };
+  return { lines, cuts: merged, ok: false };
+}

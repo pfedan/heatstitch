@@ -1779,6 +1779,22 @@ export function railsArea(rails: Rails[]): Region | null {
 }
 
 /**
+ * Whether `rings` (the edge of a satin's shape or of its sections) still run along `columns`: nine
+ * in ten of their points within a millimetre of the columns' area. Not so once a part was cut away
+ * or the satin was drawn anew; that edge is then an old one, and the area is read from the rails.
+ */
+export function edgeAlong(rings: Pt[][], columns: Rails[]): boolean {
+  const pts = rings.flat();
+  const area = pts.length ? railsArea(columns) : null;
+  if (!area) return false;
+  const step = Math.max(1, Math.floor(pts.length / 2000));
+  let n = 0;
+  let near = 0;
+  for (let i = 0; i < pts.length; i += step, n++) if (sample(area, area.sdfBase, pts[i][0], pts[i][1]) <= 1) near++;
+  return near >= n * 0.9;
+}
+
+/**
  * Every satin in sections of its area, wherever it came from (a fill, a file, an image): the area
  * its shape, or read from the rails of its one part. A column cut across (see Rails.cuts) is
  * opened as its sections, so its cut lines are free ones like any other, to move, draw or take
@@ -1791,7 +1807,14 @@ export function sectionView(columns: Rails[][], shape: Region | undefined): Rail
     part.some((c) => c.cuts?.length && !c.spans?.length) ? part.flatMap((c) => (c.cuts?.length && !c.spans?.length ? sectionsOf(c).map((sec) => ({ ...sec, chain: c.chain ?? 0 })) : [c])) : part,
   );
   const known = (cols: Rails[][]) => cols.some((part) => part[0]?.split);
-  if (shape) {
+  // Sections of an area the satin no longer is (a part cut away, say): read anew.
+  if (cut.some((part) => part.some((c) => c.split && !edgeAlong([...c.split.outlines, ...c.split.holes], part)))) {
+    return sectionView(
+      columns.map((part) => part.map(({ split, ...c }) => c)),
+      shape,
+    );
+  }
+  if (shape && edgeAlong(outline(shape), cut.flat())) {
     for (const cols of [cut, columns]) {
       const split = withSplit(cols, shape);
       if (known(split)) return split;

@@ -116,6 +116,7 @@ export function initStitchArea(app: StitchAreaApp): { refresh: () => void } {
     run: () => app.sewAlongLines(),
   });
   command({ id: 'stitch.rungs.suggest', label: 'stitches.cmd.suggest', group: G, when: () => rungsOn() && (rt.mode === 'fill' || rt.sectioned), run: () => app.suggestLines() });
+  command({ id: 'stitch.rungs.clear', label: 'stitches.cmd.clear', group: G, when: () => rungsOn() && (rt.mode === 'fill' ? rt.lines.length + rt.cutLines.length > 0 : rt.sectioned), run: () => rt.clear() });
   command({ id: 'stitch.tool.done', label: 'stitches.cmd.toolDone', group: G, keys: ['Escape'], bind: false, when: rungsOn, run: () => app.closeRungs() });
 
   // What the selected objects are: left out of the correction, loosed, knocked out, linked -------------
@@ -296,8 +297,10 @@ export function initStitchArea(app: StitchAreaApp): { refresh: () => void } {
       items.push(title('stitches.bar.direction'), state(d?.cuts ? `${what} · ${t('stitches.bar.cuts', { n: d.cuts + 1 })}` : what, 3), sep(), pen(), sep());
       // One suggestion does it all: cut lines and rungs.
       items.push(cmdButton('stitch.rungs.suggest', 'stitches.bar.suggest', { icon: ICON.wand, hint: 'stitch.suggest.hint', more: 5 }));
+      if (rt.sectioned) items.push(cmdButton('stitch.rungs.clear', 'stitches.bar.clear', { hint: 'stitch.clear.hint', more: 8 }));
+      else items.push(cmdButton('stitch.rungs.even', 'stitches.bar.remove', { hint: 'stitch.direction.even.hint', more: 8 }));
       if (rt.chained) items.push(cmdButton('stitch.rungs.order', 'stitches.bar.order', { hint: 'stitch.order.best.hint', more: 7 }));
-      items.push(cmdButton('stitch.rungs.even', 'stitches.bar.remove', { hint: 'stitch.direction.even.hint', more: 8 }), cmdButton('stitch.rungs.follow', 'stitch.direction.follow.button', { hint: 'stitch.direction.follow.hint', more: 9 }));
+      items.push(cmdButton('stitch.rungs.follow', 'stitch.direction.follow.button', { hint: 'stitch.direction.follow.hint', more: 9 }));
       if (d?.spacingHere !== undefined) items.push(sep(), spacingHere(d.spacingHere));
       items.push(help(d?.chain ? 'stitch.direction.chain' : 'stitch.direction.help'), cmdButton('stitch.tool.done', 'stitch.direction.done', { primary: true }));
     } else if (tool === 'fill') {
@@ -308,6 +311,7 @@ export function initStitchArea(app: StitchAreaApp): { refresh: () => void } {
         pen(),
         sep(),
         cmdButton('stitch.rungs.suggest', 'stitches.bar.suggest', { icon: ICON.wand, hint: 'stitch.suggest.hint' }),
+        cmdButton('stitch.rungs.clear', 'stitches.bar.clear', { hint: 'stitch.clear.hint', more: 5 }),
         help(rt.cutLines.length ? 'stitch.draw.parts' : 'stitch.draw.help'),
         cmdButton('stitch.tool.done', 'stitch.draw.cancel'),
         cmdButton('stitch.rungs.sew', 'stitch.draw.sew', { primary: true, hint: 'stitch.draw.hint' }),
