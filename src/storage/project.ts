@@ -19,6 +19,7 @@ import { normalizeProfile } from '../validation/profiles';
 import { normalizeChecks } from '../validation/validate';
 import { titlesOf, type StoredPattern, type Titles } from './fileStore';
 import type { StoredWork } from './imageStore';
+import { readCrop } from '../image/crop';
 
 export const PROJECT_EXT = '.heatstitch';
 export const PROJECT_MIME = 'application/x-heatstitch-project';
@@ -222,7 +223,12 @@ function readImage(v: unknown): ProjectImage | null {
     name: i.name,
     type: i.type,
     data: i.data,
-    work: { edits: Array.isArray(w.edits) ? w.edits : [], strokes: Array.isArray(w.strokes) ? w.strokes : [], ...(w.areas ? { areas: readAreas(w.areas) } : {}) },
+    work: {
+      edits: Array.isArray(w.edits) ? w.edits : [],
+      strokes: Array.isArray(w.strokes) ? w.strokes : [],
+      ...(w.areas ? { areas: readAreas(w.areas) } : {}),
+      ...(readCrop(w.crop) ? { crop: readCrop(w.crop) } : {}),
+    },
   };
 }
 
