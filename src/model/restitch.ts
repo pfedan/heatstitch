@@ -14,7 +14,7 @@ import { coverage } from '../digitize/measure';
 import { expandRegion, outline, sample, signedField, type Region } from '../digitize/region';
 import { runStitch, TOLERANCE } from '../digitize/run';
 import { eStitches, fringedColumn, pairs, satinStitches, underlayOf, type Column, type SatinParams, type UnderInset, type UnderlayKind } from '../digitize/satin';
-import { columnFromRungs, cumulative, inside, pointAt, project, reversedRungs, stripOfLoop, tidyRungs, type Arc, type Rung } from '../digitize/rungs';
+import { columnFromRungs, cumulative, inside, insideOf, pointAt, project, reversedRungs, stripOfLoop, tidyRungs, type Arc, type Rung } from '../digitize/rungs';
 import type { Pt } from '../digitize/skeleton';
 import { flatten, formFrom, storeForm, type Form, type StoredPath } from '../shape/path';
 import { rasterize, rasterizeStroke, type LineCap } from '../shape/rasterize';
@@ -987,7 +987,13 @@ export function unionRegion(rs: Region[]): Region | null {
  * Remembers the exact areas the Image mode filled (`shapes`, by object, as `starts`: the number
  * of each object's first stitch), so editing them starts from those instead of the stitches.
  */
-export function rememberShapes(p: Pattern, objs: SewObject[], starts: number[], shapes: (KeptShape | undefined)[], forms: ({ form?: Form; knockout?: boolean; path?: Form; line?: PathStitch } | undefined)[] = []): void {
+export function rememberShapes(
+  p: Pattern,
+  objs: SewObject[],
+  starts: number[],
+  shapes: (KeptShape | undefined)[],
+  forms: ({ form?: Form; knockout?: boolean; path?: Form; line?: PathStitch; columns?: Rails[]; satin?: SatinSettings; satinShape?: Omit<KeptShape, 'fill'> } | undefined)[] = [],
+): void {
   const at = new Map<number, SewObject>();
   let kinds: Uint8Array | undefined;
   let n = 0;
@@ -1008,6 +1014,11 @@ export function rememberShapes(p: Pattern, objs: SewObject[], starts: number[], 
     };
     const f = forms[j];
     if (f?.path) return remember(p, o, { region: null, path: f.path, ...(f.line ? { line: { ...f.line }, parts: one(runLike(f.line.type) ? 'run' : 'satin') } : {}) });
+    // A satin in sections (an image's outline): its columns and the area they were cut from.
+    if (!shape && f?.columns?.length && f.satin && f.satinShape) {
+      const area = regionFrom(f.satinShape);
+      return remember(p, o, { region: null, satin: { ...f.satin }, columns: [f.columns], ...(area ? { shape: area } : {}), parts: one('satin') });
+    }
     // A satin from a vector file keeps its shape: its rails lie on the shape's edge.
     if (!shape && f?.form) return remember(p, o, { region: null, form: f.form, parts: one('satin') });
     // A satin made here (a narrow area): its rails, read from its fresh stitches, so it is known as
@@ -2496,9 +2507,11 @@ function wayBetween(from: Pt, to: Pt, k: number, outlines: Pt[][], columns: Colu
     for (const [x, y] of o) [x0, y0, x1, y1] = [Math.min(x0, x), Math.min(y0, y), Math.max(x1, x), Math.max(y1, y)];
     return [x0, y0, x1, y1];
   });
-  const isIn = (j: number, q: Pt) => q[0] >= boxes[j][0] && q[0] <= boxes[j][2] && q[1] >= boxes[j][1] && q[1] <= boxes[j][3] && inside(outlines[j], q);
+  const tests = outlines.map(insideOf);
+  const isIn = (j: number, q: Pt) => q[0] >= boxes[j][0] && q[0] <= boxes[j][2] && q[1] >= boxes[j][1] && q[1] <= boxes[j][3] && tests[j](q);
   const shows = (q: Pt) => (outlines.some((_, j) => j >= k && isIn(j, q)) ? 0 : outlines.some((_, j) => isIn(j, q)) ? 1 : 3);
-  const cost = (way: Pt[]) => {
+  // Stops counting once over `limit` (a way that costs more than the best one so far is not taken).
+  const cost = (way: Pt[], limit = Infinity) => {
     let seen = 0;
     let all = 0;
     for (let i = 1; i < way.length; i++) {
@@ -2506,6 +2519,7 @@ function wayBetween(from: Pt, to: Pt, k: number, outlines: Pt[][], columns: Colu
       const n = Math.max(1, Math.ceil(d / 0.25));
       for (let j = 0; j < n; j++) seen += (shows(lerp(way[i - 1], way[i], (j + 0.5) / n)) * d) / n;
       all += d;
+      if (seen * 1000 + all > limit) return Infinity;
     }
     return seen * 1000 + all;
   };
@@ -2519,7 +2533,7 @@ function wayBetween(from: Pt, to: Pt, k: number, outlines: Pt[][], columns: Colu
       const b = project(c.center, cum, to).s;
       const mid = subRail(c.center, cum, Math.min(a, b), Math.max(a, b));
       const along = [from, ...(a <= b ? mid : mid.reverse()), to];
-      const v = cost(along);
+      const v = cost(along, best);
       if (v < best) [way, best] = [along, v];
     }
   }
