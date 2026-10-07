@@ -521,16 +521,15 @@ export class LayersPanel {
 
   /**
    * The color block of another thread the dragged objects are dropped into on this row: a drop
-   * between the objects of a color (or at its start) is in it. A drop on a color row's edge,
-   * between two colors, is in none.
+   * between the objects of a color (or at its start) is in it, and so is one on a closed color row. A drop on a color row's edge, between two colors, is in none.
    */
-  private intoBlock(row: HTMLElement, lowerHalf: boolean): number | null {
+  private intoBlock(row: HTMLElement, lowerHalf: boolean, onClosed: boolean): number | null {
     const st = this.st;
     const d = this.drag;
     if (!st || !d || d.block !== null) return null;
     let b: number | null = null;
     if (row.dataset.object !== undefined) b = st.objects[Number(row.dataset.object)].block;
-    else if (lowerHalf && this.open.has(Number(row.dataset.block))) b = Number(row.dataset.block);
+    else if (onClosed || (lowerHalf && this.open.has(Number(row.dataset.block)))) b = Number(row.dataset.block);
     if (b === null) return null;
     const color = st.blocks[b]?.color;
     return color && d.objects.some((o) => !sameColor(st.objects[o].color, color)) ? b : null;
@@ -543,18 +542,18 @@ export class LayersPanel {
    * Among another color they take its thread, unless dropped in the front third of the list or
    * with Alt: then they are sewn there in their own.
    */
-  private target(e: DragEvent): { before: number; row: HTMLElement; after: boolean; among: number | null; into: number | null } | null {
+  private target(e: DragEvent): { before: number; row: HTMLElement; after: boolean; onClosed?: boolean; among: number | null; into: number | null } | null {
     const tg = this.place(e);
     if (!tg) return null;
     const row = (e.target as HTMLElement).closest<HTMLElement>('.layer')!;
     const lower = e.clientY > row.getBoundingClientRect().top + row.getBoundingClientRect().height / 2;
-    const among = this.intoBlock(row, lower);
+    const among = this.intoBlock(row, lower, !!tg.onClosed);
     const list = this.list.getBoundingClientRect();
     const keep = e.altKey || e.clientX < list.left + list.width / 3;
     return { ...tg, among, into: keep ? null : among };
   }
 
-  private place(e: DragEvent): { before: number; row: HTMLElement; after: boolean } | null {
+  private place(e: DragEvent): { before: number; row: HTMLElement; after: boolean; onClosed?: boolean } | null {
     const st = this.st;
     const d = this.drag;
     if (!st || !d) return null;
@@ -575,7 +574,9 @@ export class LayersPanel {
     if (lower && d.block === null && this.open.has(b) && row.dataset.block !== undefined) return { before: objs[0].index, row, after: true };
     const before = lower ? objs[objs.length - 1].index + 1 : objs[0].index;
     const lastRow = lower && this.open.has(b) ? (this.list.querySelector<HTMLElement>(`[data-object="${objs[objs.length - 1].index}"]`) ?? row) : row;
-    return { before, row: lastRow, after: lower };
+    // Objects on a closed color row go to its start or end, and the side chooses the thread as among objects (see target).
+    const onClosed = d.block === null && !this.open.has(b) && row.dataset.block !== undefined;
+    return { before, row: lastRow, after: lower, onClosed };
   }
 
   /** The order with the dragged objects moved in front of object `before`. */
