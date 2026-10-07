@@ -13,7 +13,8 @@ import { COLOR_CHANGE, END, STITCH, type Pattern, type ThreadColor } from '../sr
 import { sameColor } from '../src/model/recolor';
 import { formOf, transformSewObject } from '../src/model/reshape';
 import { canSplit, splitFill } from '../src/model/splitFill';
-import { wholeArea } from '../src/model/knockout';
+import { wholeArea, wholeOf } from '../src/model/knockout';
+import { borderStitches } from '../src/model/along';
 import type { Region } from '../src/digitize/region';
 import { backToVersion, keepVersion, objectKey, remember, remembered, rememberedIn, restitch, restoreRemembered, DECO_PATTERNS, OPEN_PATTERNS, type FillSettings, type StoredObjects } from '../src/model/restitch';
 import { reorder } from '../src/model/order';
@@ -575,7 +576,9 @@ function checkBorders(p: Pattern): void {
     if (f === undefined) problems.push(`border ${k} has no fill`);
     else if (!sameColor(objs[k].color, mem[f]!.fill!.border!.color ?? objs[f].color)) problems.push(`border ${k} not in its thread`);
   });
-  for (const [link, k] of fills) if (!borders.has(link)) problems.push(`fill ${k} lost its border`);
+  // Unless nothing of its edge shows (all of it under shapes on top).
+  const hidden = (m: NonNullable<(typeof mem)[number]>) => !m.piece && !!m.region && borderStitches(m.region, m.fill!.border!, [0, 0], wholeOf(m.region, m)).length === 0;
+  for (const [link, k] of fills) if (!borders.has(link) && !hidden(mem[k]!)) problems.push(`fill ${k} lost its border`);
   expect(problems.join('; '), 'border links').toBe('');
 }
 
@@ -879,7 +882,7 @@ describe('found by the torture test', () => {
   // part given a tie-off): replayed with every run.
   // The ones the regular chains above already run with the same steps are not run twice.
   const regular = (seed: number) => STEPS === 14 && seed >= FIRST_SEED && seed < FIRST_SEED + CHAINS;
-  it.each([3, 4, 9, 11, 12, 16, 18, 24, 34, 38, 101, 389, 1034, 1051, 1062, 2015, 2335].filter((s) => !regular(s)))('chain %i still holds', async (seed) => {
+  it.each([3, 4, 9, 11, 12, 16, 18, 24, 34, 38, 101, 389, 1034, 1051, 1062, 1276, 2015, 2335].filter((s) => !regular(s)))('chain %i still holds', async (seed) => {
     await chain(seed, 14);
   });
   // From the first long run (20 steps): a narrow added shape sewn as satin forgot what it was;
