@@ -2542,6 +2542,9 @@ function restitchOnce(
     if (newArea && an.fill) an = { ...an, fill: newArea };
     const given = typeof settingsFor === 'function' ? settingsFor(o, an, known) : settingsFor;
     if (!given) continue;
+    // A fill given a new area whose stitches no longer read as a fill (a thin sliver of few rows
+    // reads as running stitch): all of it is the fill it remembers being.
+    if (newArea && !an.fill && given.kind === 'fill' && known?.fill && !known.asLine) an = { parts: [{ kind: 'fill', s: o.first, e: o.last }], fill: newArea };
     // A fill along a line: its area is always made from the line, never kept or traced.
     const byLine = !newArea && known?.asLine && given.kind === 'fill' ? lineFillArea(known.asLine, given.s) : null;
     if (byLine && an.fill) an = { ...an, fill: byLine };
@@ -2659,6 +2662,8 @@ function restitchOnce(
           ...(known?.echoOf ? { echoOf: known.echoOf } : {}),
         };
     if (known?.lettering) after.lettering = known.lettering;
+    // The same object with new stitches: it keeps its id.
+    after.id = o.id;
     if (known?.lock) after.lock = true;
     // Up to the object: everything as it was, except the jumps that lead to its first stitch.
     let lead = o.first;
