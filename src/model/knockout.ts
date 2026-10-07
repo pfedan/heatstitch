@@ -1,4 +1,4 @@
-import type { Region } from '../digitize/region';
+import { expandRegion, type Region } from '../digitize/region';
 import type { Form } from '../shape/path';
 import { rasterize } from '../shape/rasterize';
 import { coversOver, cutAway, SATIN_SHARE, type Cover } from './covers';
@@ -20,6 +20,11 @@ import { stitchesBefore } from './transform';
 export { FILL_OVERLAP as KNOCKOUT_OVERLAP } from './covers';
 /** Overlaps smaller than this (mm²) are not worth mentioning. */
 const NOTABLE_MM2 = 1;
+/**
+ * Nor are overlaps no wider than this (mm): a thin strip along an edge, as where the parts of a
+ * cut fill reach under each other, is meant so (no fabric shows between them).
+ */
+const THIN_MM = 0.6;
 
 const rastered = new WeakMap<Form, Region | null>();
 
@@ -171,7 +176,24 @@ export function isCovered(p: Pattern, objs: SewObject[], o: SewObject): boolean 
   const whole = form && wholeArea(form, remembered(p, o)?.region?.pxMm ?? 0.1);
   if (!whole) return false;
   const left = cutAway(whole, coversOver(p, objs, o, whole.pxMm, remembered(p, o)?.overlapShare ?? SATIN_SHARE));
-  return (left?.areaMm2 ?? 0) < whole.areaMm2 - NOTABLE_MM2;
+  if ((left?.areaMm2 ?? 0) >= whole.areaMm2 - NOTABLE_MM2) return false;
+  // What lies under a thin strip only is not covered: the part still sewn, grown by THIN_MM, reaches over it.
+  const near = left && expandRegion(left, THIN_MM);
+  return !near || outside(whole, near) * whole.pxMm * whole.pxMm >= NOTABLE_MM2;
+}
+
+/** Pixels of `a` that `b` does not cover. */
+function outside(a: Region, b: Region): number {
+  let n = 0;
+  for (let j = 0; j < a.h; j++) {
+    const y = j + a.y0 - b.y0;
+    for (let i = 0; i < a.w; i++) {
+      if (!a.mask[j * a.w + i]) continue;
+      const x = i + a.x0 - b.x0;
+      if (x < 0 || y < 0 || x >= b.w || y >= b.h || !b.mask[y * b.w + x]) n++;
+    }
+  }
+  return n;
 }
 
 /**
