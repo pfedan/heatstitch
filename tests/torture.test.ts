@@ -8,7 +8,7 @@ import { ECHO_SIDES } from '../src/digitize/echo';
 import { lineParts, partOf, SHADOW_DIRS, type LinePart } from '../src/model/shadow';
 import { lineStitches, resewLine } from '../src/model/line';
 import { refreshKnockouts, setKnockout } from '../src/model/knockout';
-import { rememberObjects, sewObjects } from '../src/model/objects';
+import { rememberObjects, sewObjects, tableOf } from '../src/model/objects';
 import { COLOR_CHANGE, END, STITCH, type Pattern, type ThreadColor } from '../src/model/pattern';
 import { sameColor } from '../src/model/recolor';
 import { transformSewObject } from '../src/model/reshape';
@@ -589,6 +589,30 @@ function checkLineParts(p: Pattern): void {
   expect(problems.join('; '), 'line parts').toBe('');
 }
 
+/**
+ * The object list of the version: every stitch in exactly one object, the objects in sewing order
+ * without overlap, each with an id of its own, and what an object knows carries its id.
+ */
+function checkObjectList(p: Pattern): void {
+  const t = tableOf(p);
+  const problems: string[] = [];
+  const ids = new Set<number>();
+  let last = -1;
+  for (const e of t.entries) {
+    if (ids.has(e.id)) problems.push(`id ${e.id} twice`);
+    ids.add(e.id);
+    if (e.id >= t.next) problems.push(`id ${e.id} not below next ${t.next}`);
+    if (e.first <= last) problems.push(`object ${e.id} overlaps the one before`);
+    if (e.first > e.last) problems.push(`object ${e.id} is empty`);
+    if (e.memory?.id !== undefined && e.memory.id !== e.id) problems.push(`object ${e.id} knows itself as ${e.memory.id}`);
+    last = e.last;
+  }
+  const owned = new Uint8Array(p.cmd.length);
+  for (const e of t.entries) owned.fill(1, e.first, e.last + 1);
+  for (let i = 0; i < p.cmd.length; i++) if (p.cmd[i] === STITCH && !owned[i]) problems.push(`stitch ${i} in no object`);
+  expect(problems.slice(0, 5).join('; '), 'object list').toBe('');
+}
+
 /** Every object has a key of its own, also copies lying exactly on their originals, so none shares what another remembers. */
 function checkKeys(p: Pattern): void {
   const seen = new Map<string, number>();
@@ -656,6 +680,7 @@ async function chain(seed: number, steps = STEPS): Promise<void> {
       expect(knowledge(p), 'knowledge as stored with this version').toEqual(d.cur.known);
       checkAllKnown(p);
       checkKeys(p);
+      checkObjectList(p);
       checkPartsFit(p);
       checkBorders(p);
       checkEmptyFills(p);

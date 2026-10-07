@@ -518,10 +518,14 @@ export function splitObject(p: Pattern, o: SewObject): void {
  * goes with it), so changing what lies between objects (a trim, locks) changes no object.
  */
 export function carryObjects(from: Pattern, to: Pattern, origin: Int32Array): void {
-  const src = tableOf(from).entries;
+  const t0 = tableOf(from);
+  const src = t0.entries;
   const owner = new Int32Array(from.cmd.length).fill(-1);
   src.forEach((e, k) => owner.fill(k, e.first, e.last + 1));
-  const span = src.map(() => [Infinity, -Infinity]);
+  // Each time an object's records come again (a copy) it is another object: its instances.
+  const inst: { k: number; first: number; last: number }[] = [];
+  const current = new Int32Array(src.length).fill(-1);
+  const seen = new Int32Array(from.cmd.length).fill(-1);
   // Each stitch of `to`: the object of the record it was, else that of the stitches before it
   // without a trim between, else that of the stitches after it.
   const of = new Int32Array(to.cmd.length).fill(-1);
@@ -530,9 +534,17 @@ export function carryObjects(from: Pattern, to: Pattern, origin: Int32Array): vo
     const c = to.cmd[i];
     if (c === TRIM || c === COLOR_CHANGE) run = -1;
     if (c !== STITCH) continue;
-    const o = origin[i] >= 0 ? owner[origin[i]] : -1;
-    if (o >= 0) run = o;
-    of[i] = o >= 0 ? o : run;
+    const r = origin[i];
+    const k = r >= 0 ? owner[r] : -1;
+    if (k >= 0) {
+      if (current[k] < 0 || seen[r] === current[k]) {
+        current[k] = inst.length;
+        inst.push({ k, first: Infinity, last: -Infinity });
+      }
+      seen[r] = current[k];
+      run = current[k];
+    }
+    of[i] = run;
   }
   run = -1;
   for (let i = to.cmd.length - 1; i >= 0; i--) {
@@ -543,19 +555,26 @@ export function carryObjects(from: Pattern, to: Pattern, origin: Int32Array): vo
     else of[i] = run;
   }
   for (let i = 0; i < to.cmd.length; i++) {
-    const k = of[i];
-    if (k < 0) continue;
-    span[k][0] = Math.min(span[k][0], i);
-    span[k][1] = Math.max(span[k][1], i);
+    const n = of[i];
+    if (n < 0) continue;
+    inst[n].first = Math.min(inst[n].first, i);
+    inst[n].last = Math.max(inst[n].last, i);
   }
+  let next = t0.next;
+  const used = new Set<number>();
   const entries: Entry[] = [];
-  src.forEach((e, k) => {
-    if (span[k][0] <= span[k][1]) entries.push({ ...e, first: span[k][0], last: span[k][1] });
-  });
+  for (const x of inst) {
+    if (x.first > x.last) continue;
+    const e = src[x.k];
+    // The first keeps the object's id; a copy is an object of its own that knows the same.
+    const id = used.has(e.id) ? next++ : e.id;
+    used.add(id);
+    entries.push({ ...e, id, first: x.first, last: x.last, ...(e.memory && id !== e.id ? { memory: { ...e.memory, id } } : {}) });
+  }
   entries.sort((a, b) => a.first - b.first);
   // Objects whose stitches now overlap or that lost the stitches before them: recognized where needed.
   const clean = entries.filter((e, k) => k === 0 || e.first > entries[k - 1].last);
-  const t: Table = { entries: clean, next: tableOf(from).next };
+  const t: Table = { entries: clean, next };
   const ix = indexOf(to);
   const covered = new Uint8Array(ix.records.length);
   for (const e of clean) covered.fill(1, ix.before[e.first], ix.before[e.last] + 1);
