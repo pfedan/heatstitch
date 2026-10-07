@@ -15,6 +15,7 @@ import type { ShapeTool } from '../ui/shapeTool';
 import { borderLines } from '../model/along';
 import { borderRanges } from '../model/border';
 import { formOf } from '../model/reshape';
+import { satinArea } from '../model/railsForm';
 import { remembered, underlayRanges, type RestitchResult, analyze } from '../model/restitch';
 import { sewObjects, overlaps, type SewObject } from '../model/objects';
 import { stitchNumbers, stitchKinds, colorBlocks, markers as findMarkers, transitions, sewingSeconds, recordOfStitch, carriedJumps } from '../model/sequence';
@@ -217,6 +218,10 @@ export function bindScene(app: SceneApp) {
       const q = seq(p);
       list = [];
       for (const o of q.objects) {
+        if (o.kind === 'satin') {
+          const area = satinArea(p, o, q.kinds);
+          if (area) list.push({ o, form: area });
+        }
         if (o.kind !== 'fill') continue;
         const form = formOf(p, o, q.kinds);
         if (form?.paths.some((x) => x.closed)) list.push({ o, form });

@@ -4,6 +4,7 @@ import { sewObjects, stitchKey, type SewObject } from '../../model/objects';
 import { STITCH, type Pattern } from '../../model/pattern';
 import {
   analyze,
+  isGradient,
   isOpenPattern,
   remembered,
   restitch,
@@ -153,11 +154,11 @@ export function toolsFor(p: Pattern, objs: SewObject[], o: SewObject, s: Setting
       if (covered && f.underlay && !f.underCover) out.push({ id: 'underCover', changes: [fix('underCover', false, true)], strength: 0, kinds: ['density', 'holes'] });
       if (f.underlay && f.underCross) out.push({ id: 'underCross', changes: [fix('underCross', true, false)], strength: 0, kinds: ['density', 'holes'] });
       if (f.underlay && areaMm2 < SMALL_FILL_MM2 * 2) out.push({ id: 'underlayOff', changes: [fix('underlay', true, false)], strength: areaMm2 < SMALL_FILL_MM2 ? 0 : 0.3, kinds: ['density', 'holes'] });
-      if (f.pattern !== 'gradient') steps(f.spacing, ['density', 'holes']);
+      if (!isGradient(f)) steps(f.spacing, ['density', 'holes']);
       if (f.pattern === 'tatami' && Number.isFinite(f.angle)) out.push({ id: 'angle', changes: [fix('angle', f.angle, (f.angle + 90) % 180)], strength: 1, visible: true, kinds: ['density'] });
     }
     if (want.has('sparse')) {
-      if (f.pattern !== 'gradient' && f.spacing > recMax + 0.005) out.push({ id: `spacing:${round2(recMax)}`, changes: [fix('spacing', f.spacing, round2(recMax))], strength: Math.min(1.5, (1 - recMax / f.spacing) / SPACING_FULL), kinds: ['sparse'] });
+      if (!isGradient(f) && f.spacing > recMax + 0.005) out.push({ id: `spacing:${round2(recMax)}`, changes: [fix('spacing', f.spacing, round2(recMax))], strength: Math.min(1.5, (1 - recMax / f.spacing) / SPACING_FULL), kinds: ['sparse'] });
       if (!f.underlay && areaMm2 >= SMALL_FILL_MM2) out.push({ id: 'underlayOn', changes: [fix('underlay', false, true)], strength: 0, kinds: ['sparse'] });
     }
     if (want.has('gap') && f.edge < MAX_FILL_EDGE - 0.01) {
