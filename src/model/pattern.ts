@@ -45,10 +45,14 @@ export interface Pattern {
   hoop?: { w: number; h: number };
 }
 
-/** Designs as read from a file, before anything was changed (see readFromFile). */
+/** Designs read from a file, and every version made from one (see readFromFile). */
 const read = new WeakSet<Pattern>();
 
-/** Marks `p` as read from a file: its objects are recognized from its stitches once (see objects.ts). */
+/**
+ * Marks `p` as read from a file: its objects are recognized from its stitches, split where their
+ * stitches change (see objects.ts). Its later versions too: stitches changed by an edit that does
+ * not carry its objects over are split the same way, so objects next to each other stay apart.
+ */
 export function readFromFile(p: Pattern): Pattern {
   read.add(p);
   return p;
@@ -67,6 +71,7 @@ const parents = new WeakMap<Pattern, Pattern>();
 export function nextVersion(p: Pattern, changes: Partial<Pattern>): Pattern {
   const next: Pattern = { ...p, ...changes };
   parents.set(next, p);
+  if (read.has(p)) read.add(next);
   return next;
 }
 

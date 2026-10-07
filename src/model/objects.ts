@@ -349,9 +349,9 @@ function derive(p: Pattern, from?: { p: Pattern; t: Table }, hint?: { joins: Rea
   if (from) take(from, true, false);
   if (n && claimed.includes(0)) for (const r of recent) if (r.p !== from?.p && r.p !== p) take(r, false, true);
   // What is left: recognized, run by run of stitches no object had.
-  // A design read from a file is recognized once: its pieces are told apart also where no trim
-  // lies between them. Stitches of a later version that no object had stay as they are sewn.
-  const fresh = !from && !hint && isReadFromFile(p);
+  // A design read from a file (and its versions): its pieces are told apart also where no trim lies
+  // between them, so objects an edit changed side by side do not run together.
+  const fresh = !hint && isReadFromFile(p);
   const kinds = claimed.includes(0) ? stitchKinds(p) : null;
   for (let k = 0; k < n; ) {
     if (claimed[k]) {
