@@ -4,7 +4,7 @@ import type { Form } from '../shape/path';
 import type { LayersPanel } from '../ui/layersPanel';
 import type { Measurement } from '../validation/measure';
 import type { PathStitch } from '../model/along';
-import type { Pattern } from '../model/pattern';
+import { isReadFromFile, type Pattern } from '../model/pattern';
 import type { RungTool } from '../ui/rungTool';
 import type { Sequence } from './types';
 import type { Settings } from '../settings';
@@ -20,6 +20,7 @@ import { recommendedSpacing } from '../validation/profiles';
 import { recordOfStitch } from '../model/sequence';
 import { rememberObjects, type SewObject } from '../model/objects';
 import { loosable } from '../model/handEdit';
+import { backToOriginal, originalOf } from '../model/original';
 import { shareBorders, syncBorders } from '../model/border';
 import { t, type Key } from '../i18n';
 import { type ShapeTrust, analyze, remembered, measureFill, measureSatin, measureRun, shapeTrust, type Remembered, remember, rememberedIn, restitch, type Settings as RestitchSettings, type RestitchResult, objectKey } from '../model/restitch';
@@ -120,6 +121,11 @@ export function bindStitches(app: StitchesApp) {
       info.path = { st: lineSettings(p, one, q.kinds), traced: !remembered(p, one)?.path, closed: !!form?.paths.length && form.paths.every((x) => x.closed), color: one.color };
     }
     if (one && remembered(p, one)?.asLine) info.asLine = true;
+    const orig = app.files.active?.pattern === p ? app.files.active.original : undefined;
+    if (orig && orig !== p && isReadFromFile(orig)) {
+      const was = app.seq(orig).objects;
+      if ([...ui.selectedObjects].some((o) => q.objects[o] && originalOf(p, orig, q.objects[o], q.objects, was))) info.original = true;
+    }
     const own = ui.selectedObjects.size === 1 && q.objects[firstFill] ? remembered(p, q.objects[firstFill]) : undefined;
     if (own?.outline || own?.blendOf) {
       const fill = q.objects.findIndex((o) => partnerOf(remembered(p, o), own));
@@ -427,6 +433,16 @@ export function bindStitches(app: StitchesApp) {
       app.redraw();
     },
     free: (on) => looseObjects(on),
+    original: () => {
+      const f = app.files.active;
+      const p = f?.pattern;
+      if (!f?.original || !p) return;
+      const r = backToOriginal(p, f.original, [...ui.selectedObjects].sort((a, b) => a - b), app.settings.trimMm);
+      if (!r) return;
+      // What the panel shows is measured from the stitches again.
+      applyRestitched(r, 'free.failed', true);
+      app.layers.say(t('original.done'));
+    },
     lock: (on) => {
       const p = app.files.active?.pattern;
       if (!p) return;
