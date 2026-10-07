@@ -158,6 +158,7 @@ export function bindFileIo(app: FileIoApp) {
     if (s.background !== undefined) app.settings.background = s.background;
     if (withImage) {
       Object.assign(app.settings.image.prepare, s.image.prepare);
+      app.settings.image.style = s.image.style;
       for (const k of Object.keys(app.settings.image.stitch)) delete app.settings.image.stitch[k as keyof typeof app.settings.image.stitch];
       Object.assign(app.settings.image.stitch, s.image.stitch);
     }

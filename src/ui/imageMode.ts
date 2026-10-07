@@ -13,7 +13,7 @@ import { drawStitches } from '../render/stitches';
 import { drawThreads } from '../render/threads';
 import { drawFabric } from '../render/fabricGl';
 import type { Viewport } from '../render/viewport';
-import { shownMarks, type ImageView, type Mode, type Settings } from '../settings';
+import { IMAGE_STYLES, shownMarks, type ImageStyle, type ImageView, type Mode, type Settings } from '../settings';
 import { CAUTION, CRITICAL, type ValidationResult } from '../validation/validate';
 import { clearImage, loadImage, saveImage, saveWork, type StoredImage, type StoredWork } from '../storage/imageStore';
 import { hoopShort } from './hoopPanel';
@@ -297,13 +297,18 @@ export class ImageMode {
     check('image-underlay', (v) => (s.stitch.underlay = v), 'stitches');
     const angle = $<HTMLSelectElement>('image-angle');
     angle.addEventListener('change', () => {
-      // Following the image is the default; "straight" switches it off, a number fixes the angle.
+      // The style lays the rows; a number fixes one angle for all fills.
       delete s.stitch.angle;
-      delete s.stitch.flow;
-      if (angle.value === 'auto') s.stitch.flow = false;
-      else if (angle.value !== 'flow') s.stitch.angle = Number(angle.value);
+      if (angle.value !== 'style') s.stitch.angle = Number(angle.value);
       this.changed('stitches');
     });
+    document.querySelectorAll<HTMLInputElement>('input[name="image-style"]').forEach((el) =>
+      el.addEventListener('change', () => {
+        if (!el.checked || !IMAGE_STYLES.includes(el.value as ImageStyle)) return;
+        s.style = el.value as ImageStyle;
+        this.changed('stitches');
+      }),
+    );
     $('image-stitch-reset').addEventListener('click', () => {
       s.stitch = {};
       this.changed('stitches');
@@ -708,7 +713,8 @@ export class ImageMode {
   }
 
   private options(): DigitizeOptions {
-    return { ...digitizeDefaults(this.h.settings.profile), trimMm: this.h.settings.trimMm, ...this.h.settings.image.stitch };
+    const image = this.h.settings.image;
+    return { ...digitizeDefaults(this.h.settings.profile), trimMm: this.h.settings.trimMm, flow: image.style === 'dynamic', ...image.stitch };
   }
 
   /**
@@ -977,15 +983,19 @@ export class ImageMode {
     out('image-tolerance-out', `${formatNumber(o.tolerance, 2)} mm`);
     $<HTMLInputElement>('image-underlay').checked = o.underlay;
     const angle = $<HTMLSelectElement>('image-angle');
-    if (!angle.options.length) {
-      angle.append(new Option('', 'flow'), new Option('', 'auto'), ...ANGLES.map((a) => new Option(`${a}°`, String(a))));
-    }
-    angle.options[0].text = t('image.angle.flow');
-    angle.options[1].text = t('image.angle.auto');
+    if (!angle.options.length) angle.append(new Option('', 'style'), ...ANGLES.map((a) => new Option(`${a}°`, String(a))));
+    angle.options[0].text = t('image.angle.style');
+    angle.value = o.angle !== null ? String(o.angle) : 'style';
     // Shapes of an SVG are flat, without structure to follow: their rows run straight.
-    angle.options[0].hidden = !!this.svg;
-    angle.value = o.angle !== null ? String(o.angle) : o.flow && !this.svg ? 'flow' : 'auto';
-    $('image-stitch-reset').hidden = !Object.keys(s.stitch).length;
+    const style = this.svg ? 'flat' : s.style;
+    document.querySelectorAll<HTMLInputElement>('input[name="image-style"]').forEach((el) => {
+      el.checked = el.value === style;
+      el.disabled = el.value === 'dynamic' && !!this.svg;
+    });
+    $('image-style-dynamic').title = t(this.svg ? 'image.style.svg' : 'image.style.dynamic.hint');
+    const own = Object.keys(s.stitch).length > 0;
+    $('image-stitch-reset').hidden = !own;
+    $('image-fine-own').hidden = !own;
     this.renderMaterial();
     document.querySelectorAll<HTMLInputElement>('input[name="image-view"]').forEach((el) => (el.checked = el.value === s.view));
     setVal('image-brush', s.brushMm);
