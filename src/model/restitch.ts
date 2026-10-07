@@ -1208,14 +1208,15 @@ export function analyze(p: Pattern, o: SewObject, kinds: Uint8Array, known = rem
   }
   // A border in the fill's thread, sewn here as the last part, starts at this record.
   const at = known?.fill?.border && !known.fill.border.color && known.borderAt ? idx[known.borderAt] : undefined;
-  // Running stitch under a satin column (its underlay, also when trimmed off from it) is part of it.
+  // Running stitch under a satin column (its underlay, also when trimmed off from it) is part of it,
+  // and so is a zigzag underlay, whose long stitches back and forth look like fill rows.
   // Not under the fill's own satin border: travel of the fill along its edge lies there too.
   const satinSegs: number[] = [];
   for (let k = 1; k < idx.length; k++) if (kindAt[k] === 'satin' && sewnSeg(k) && !(at !== undefined && idx[k] > at)) satinSegs.push(idx[k]);
   const column = satinSegs.length > 4 ? traceRegion(p, satinSegs, REACH) : null;
   if (column) {
     for (const r of merged) {
-      if (r.kind !== 'run') continue;
+      if (r.kind === 'satin') continue;
       let inside = 0;
       for (let k = r.a; k <= r.b; k++) if (sample(column, column.sdfBase, p.x[idx[k]] / 10, p.y[idx[k]] / 10) < 0.2) inside++;
       if (inside >= (r.b - r.a + 1) * 0.8) r.kind = 'satin';
