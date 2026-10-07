@@ -9,6 +9,9 @@ const ACCENT = '#e0559e';
 /** Cut lines in their own color, so they read apart from the rungs. */
 const CUT = '#6fd3ff';
 
+/** Rungs (and lines across a fill, guide lines, points). */
+const RUNG = 'rgba(255, 214, 102, 0.95)';
+
 const same = (a: RungPick | null, col: number, i: number, cut = false, free = false) => !!a && a.col === col && a.i === i && !!a.cut === cut && !!a.span === free;
 
 /**
@@ -55,15 +58,22 @@ export function drawRungOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, vie
     const hov = same(view.hover, col, i, cut, free);
     const [ax, ay] = S(a);
     const [bx, by] = S(b);
-    ctx.setLineDash(suggested && !sel ? [4, 3] : []);
+    // Each kind keeps its color in every state (selected: an accent halo, hovered: wider), so a
+    // cut line and a rung never look alike while one is picked or dragged.
     ctx.beginPath();
     ctx.moveTo(ax, ay);
     ctx.lineTo(bx, by);
+    if (sel) {
+      ctx.strokeStyle = ACCENT;
+      ctx.lineWidth = 8;
+      ctx.stroke();
+    }
+    ctx.setLineDash(suggested && !sel ? [4, 3] : []);
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
     ctx.lineWidth = sel || hov ? 5 : 4;
     ctx.stroke();
-    ctx.strokeStyle = sel ? ACCENT : hov ? '#ffffff' : cut ? CUT : 'rgba(255, 214, 102, 0.95)';
-    ctx.lineWidth = sel || hov ? 2.5 : 2;
+    ctx.strokeStyle = cut ? CUT : RUNG;
+    ctx.lineWidth = sel || hov ? 2.75 : 2;
     ctx.stroke();
     ctx.setLineDash([]);
     if (label) {
@@ -78,11 +88,17 @@ export function drawRungOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, vie
     }
     for (const [end, x, y] of [[0, ax, ay], [1, bx, by]] as const) {
       const big = hov && view.hover?.end === end;
-      ctx.beginPath();
-      ctx.arc(x, y, big ? 6.5 : 5, 0, Math.PI * 2);
-      ctx.fillStyle = sel ? ACCENT : cut ? CUT : '#ffd666';
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.75)';
-      ctx.lineWidth = 1.5;
+      const r = big ? 6.5 : 5;
+      // Cut lines have square handles, rungs round ones: told apart without the color too.
+      const handle = () => {
+        ctx.beginPath();
+        if (cut) ctx.rect(x - r * 0.9, y - r * 0.9, r * 1.8, r * 1.8);
+        else ctx.arc(x, y, r, 0, Math.PI * 2);
+      };
+      handle();
+      ctx.fillStyle = cut ? CUT : '#ffd666';
+      ctx.strokeStyle = sel ? ACCENT : 'rgba(0, 0, 0, 0.75)';
+      ctx.lineWidth = sel ? 2.5 : 1.5;
       ctx.fill();
       ctx.stroke();
     }
@@ -202,11 +218,15 @@ export function drawRungOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, vie
   }
   if (view.draft) {
     const [a, b] = view.draft;
+    // The line being drawn already in the color of its kind.
     ctx.setLineDash([6, 4]);
     ctx.beginPath();
     ctx.moveTo(...S(a));
     ctx.lineTo(...S(b));
-    ctx.strokeStyle = view.draftCut ? CUT : '#ffffff';
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.lineWidth = 4;
+    ctx.stroke();
+    ctx.strokeStyle = view.draftCut ? CUT : RUNG;
     ctx.lineWidth = 2;
     ctx.stroke();
   }
