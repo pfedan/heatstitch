@@ -719,6 +719,8 @@ interface Section {
   cells?: Set<number>;
   /** Direction of its long stitches per cell, as doubled-angle vectors (lazily). */
   dirs?: Map<number, [number, number]>;
+  /** It goes on from the section before without a trim (a piece, see piecesOf). */
+  piece?: boolean;
 }
 
 /** The sections from record a to record b (both stitches); with `split` also its pieces (see piecesOf). */
@@ -737,7 +739,7 @@ function sections(p: Pattern, kinds: Uint8Array, a = 0, b = p.cmd.length - 1, sp
       const e = k + 1 < pieces.length ? pieces[k + 1].from - 1 : j;
       const m = measure(p, kinds, s, e);
       // Rows side by side are a fill, also when they lie too far apart to cover the area densely.
-      out.push({ block, first: s, last: e, stitches: m.stitches, thread: m.thread, kind: rows ? 'fill' : kindOf(p, s, e, m), minX: m.minX, minY: m.minY, maxX: m.maxX, maxY: m.maxY });
+      out.push({ block, first: s, last: e, stitches: m.stitches, thread: m.thread, kind: rows ? 'fill' : kindOf(p, s, e, m), minX: m.minX, minY: m.minY, maxX: m.maxX, maxY: m.maxY, ...(k ? { piece: true } : {}) });
     });
     i = j;
   }
@@ -747,6 +749,12 @@ function sections(p: Pattern, kinds: Uint8Array, a = 0, b = p.cmd.length - 1, sp
 /** A piece of a section has this many stitches and this much thread (mm) at least. */
 const PIECE_STITCHES = 20;
 const PIECE_THREAD = 8;
+/** A fill piece beside another fill has this much thread (mm) at least to be a fill of its own. */
+const FILL_PIECE = 70;
+/** Rows of fill patches sewn on from one another turn less than this when they are one fill. */
+const SAME_WAY = (1.5 * Math.PI) / 180;
+/** A fill piece this many times as long (thread) as a few rows beside it takes them in. */
+const SCRAP = 30;
 
 /**
  * The pieces of what is sewn from record i to j (stitches, no trim between) start. Many
@@ -764,8 +772,19 @@ function piecesOf(p: Pattern, kinds: Uint8Array, i: number, j: number): { from: 
   const patches = rowPatches(p, i, j);
   // Patches that go on one from the other are one fill (a break in the rows, a turn sewn oddly).
   let id = 0;
+  // The way the rows of each fill run, as a doubled angle (a row and the one back are one way).
+  const ways: [number, number][] = [[0, 0]];
   patches.forEach((pt, n) => {
-    if (!n || !continues(patches[n - 1], pt)) id++;
+    // Rows this far apart are an underlay (or travel back and forth): they go with what covers them.
+    if (median(pt.gaps) >= UNDERLAY_GAP) return;
+    if (!n || !continues(patches[n - 1], pt)) {
+      id++;
+      ways[id] = [0, 0];
+    }
+    for (const r of pt.rows) {
+      ways[id][0] += (r.dir[0] * r.dir[0] - r.dir[1] * r.dir[1]) * r.len;
+      ways[id][1] += 2 * r.dir[0] * r.dir[1] * r.len;
+    }
     // Rows of several stitches are fill rows, also where they are narrow enough to look like satin
     // (one stitch from side to side).
     const fill = pt.rows.filter((r) => r.pts.length >= 3).length * 2 > pt.rows.length;
@@ -805,8 +824,63 @@ function piecesOf(p: Pattern, kinds: Uint8Array, i: number, j: number): { from: 
     if (!big(r)) r.label = k ? pieces[k - 1].label : (pieces[1]?.label ?? r.label);
   });
   pieces = together(pieces);
+  // Running stitch close enough to cover an area is fill (a spiral's tight middle).
+  for (const r of pieces) if (r.label === -1 && kindOf(p, r.from, r.to, measure(p, kinds, r.from, r.to)) === 'fill') r.label = -3;
+  pieces = together(pieces);
+  // A fill sewn on in patches that meet, with its rows exactly the same way, the travel between them
+  // too, is one fill (tatami hopping from patch to patch); rows that turn even a little are another
+  // fill (digitizers turn the rows from area to area).
+  const sameWay = (a: number, b: number) => {
+    const [ax, ay] = ways[a];
+    const [bx, by] = ways[b];
+    const la = Math.hypot(ax, ay);
+    const lb = Math.hypot(bx, by);
+    return la > 0 && lb > 0 && (ax * bx + ay * by) / (la * lb) >= Math.cos(2 * SAME_WAY);
+  };
+  // Pieces meet where their stitches come within a millimetre (on a millimetre grid).
+  const cellsOf = new Map<(typeof pieces)[number], Set<number>>();
+  const cells = (x: (typeof pieces)[number]) => {
+    let c = cellsOf.get(x);
+    if (!c) {
+      c = new Set();
+      for (let q = x.from; q <= x.to; q++) if (p.cmd[q] === STITCH) c.add(Math.round(p.y[q] / 10) * 100000 + Math.round(p.x[q] / 10));
+      cellsOf.set(x, c);
+    }
+    return c;
+  };
+  const meet = (x: (typeof pieces)[number], y: (typeof pieces)[number]) => {
+    const cy = cells(y);
+    for (const c of cells(x)) for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (cy.has(c + dy * 100000 + dx)) return true;
+    return false;
+  };
+  for (let k = 1; k < pieces.length; k++) {
+    const r = pieces[k];
+    if (r.label <= 0) continue;
+    let m = k - 1;
+    while (m >= 0 && pieces[m].label <= 0) m--;
+    if (m < 0 || !sameWay(pieces[m].label, r.label)) continue;
+    if (!meet(pieces[m], r)) continue;
+    const to = pieces[m].label;
+    for (let q = m + 1; q <= k; q++) pieces[q].label = to;
+  }
+  pieces = together(pieces);
+  // A few rows beside another fill (a corner, the start of a patch) are no fill of their own.
+  pieces.forEach((r, k) => {
+    if ((r.label <= 0 && r.label !== -3) || r.thread >= FILL_PIECE) return;
+    const by = [pieces[k - 1], pieces[k + 1]].find((x) => x && x.label > 0 && x.thread >= SCRAP * r.thread && meet(x, r));
+    if (by) r.label = by.label;
+  });
+  pieces = together(pieces);
   if (pieces.length < 2) return [{ from: i, rows: false }];
   return pieces.map((r, k) => ({ from: k ? r.from : i, rows: r.label > 0 }));
+}
+
+/** Rows of a fill lie closer than this (mm); farther apart they are an underlay's. */
+const UNDERLAY_GAP = 1.05;
+
+function median(xs: number[]): number {
+  const s = xs.slice().sort((a, b) => a - b);
+  return s.length ? s[s.length >> 1] : 0;
 }
 
 /** Sections this small (stitches, or thread in mm) are leftovers: locks, a short end. */
@@ -843,6 +917,14 @@ function groupSections(p: Pattern, secs: Section[], joins?: ReadonlyMap<string, 
     return cs.length > 0 && share(cellsOf(s), cs) >= INSIDE;
   };
   const covering = (s: Section) => s.kind === 'fill' || s.kind === 'satin';
+  // The median gap between the rows of a section (mm; 0 when it has none: a zigzag, a run around
+  // the edge, a spiral).
+  const gapOf = new Map<Section, number>();
+  const gap = (s: Section) => {
+    let v = gapOf.get(s);
+    if (v === undefined) gapOf.set(s, (v = median(rowPatches(p, s.first, s.last).flatMap((pt) => pt.gaps))));
+    return v;
+  };
   // Underlay: running stitch covered by the fills (or satins) that follow it in its color, and
   // long stitches back and forth under the satin sewn right after them (read as rows of fill).
   const under = new Set<Section>();
@@ -851,6 +933,12 @@ function groupSections(p: Pattern, secs: Section[], joins?: ReadonlyMap<string, 
     if (s.kind === 'fill') {
       const next = secs[k + 1];
       if (next?.block === s.block && next.kind === 'satin' && onTop(s, [next])) under.add(s);
+      // Stitches under the fill sewn next in its thread without rows of their own, or with rows far
+      // apart: its underlay.
+      else if (!gap(s) || gap(s) >= UNDERLAY_GAP) {
+        const ahead = secs.slice(k + 1, k + 1 + LOOKAHEAD).filter((t) => t.block === s.block && t.kind === 'fill' && gap(t) < UNDERLAY_GAP);
+        if (onTop(s, ahead)) under.add(s);
+      }
       return;
     }
     if (s.kind !== 'run') return;
@@ -868,9 +956,12 @@ function groupSections(p: Pattern, secs: Section[], joins?: ReadonlyMap<string, 
   // A fill piece continues the fills of a group where it touches them with rows in the same direction.
   const sameArea = (g: Group, s: Section) => {
     if (s.kind !== 'fill' || !g.fills.length || g.secs.some((x) => x.kind === 'satin')) return false;
-    const by = g.fills.filter((f) => touch(f, s, CONTACT));
+    // Its underlay runs another way: the rows it meets are the fill's own.
+    const by = g.fills.filter((f) => !under.has(f) && touch(f, s, CONTACT));
     return by.length > 0 && rowsMeet(dirsOf(s), by.map(dirsOf));
   };
+  // Satin columns sewn on from one another without a trim where they meet: one object (a letter).
+  const sameLetter = (g: Group, s: Section) => s.kind === 'satin' && !!s.piece && !g.fills.length && g.secs.some((x) => x.kind === 'satin' && touch(x, s, 1));
   for (let k = 0; k < secs.length; k++) {
     const s = secs[k];
     const g = groups[groups.length - 1];
@@ -888,8 +979,14 @@ function groupSections(p: Pattern, secs: Section[], joins?: ReadonlyMap<string, 
     else if (s.kind === 'run') {
       // Travel between pieces of a fill stays with it; underlay of what comes next goes with that.
       // Travel over what is sewn already in its thread (the fill before it) is hardly seen: it stays with that.
-      join = (!!next && sameArea(g, next) && onTop(s, [...g.fills, next])) || (under.has(s) && underlayOnly) || (!under.has(s) && g.fills.length > 0 && onTop(s, g.fills));
-    } else if (underlayOnly) join = g.secs.some((x) => !tiny(x) && touch(x, s, CONTACT));
+      join =
+        (!!next && sameArea(g, next) && onTop(s, [...g.fills, next])) ||
+        (under.has(s) && underlayOnly) ||
+        (!under.has(s) && g.fills.length > 0 && onTop(s, g.fills)) ||
+        // Underlay of the next column of a letter, sewn on without a trim.
+        (!!s.piece && !!next && sameLetter(g, next));
+    } else if (underlayOnly) join = (under.has(s) && !!s.piece) || g.secs.some((x) => !tiny(x) && touch(x, s, CONTACT));
+    else if (sameLetter(g, s)) join = true;
     else join = sameArea(g, s);
     if (!join) groups.push({ secs: [s], fills: s.kind === 'fill' ? [s] : [] });
     else {

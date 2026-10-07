@@ -54,6 +54,16 @@ describe('objects made of several sections', () => {
     expect(objs.filter((o) => o.kind === 'satin' && o.sections === 1).length).toBe(12);
   });
 
+  it('keeps the areas and letters of the guide patch whole', () => {
+    // A heatstitch patch: a fill with underlay and border, a ring, two lines, ten satin letters.
+    // Read fresh, fills fell apart along their underlay rows and letters into their strokes.
+    const objs = sewObjects(load('demos/patch.pes'));
+    const blocks = [...new Set(objs.map((o) => o.block))].map((b) => objs.filter((o) => o.block === b));
+    expect(blocks.map((b) => b.length)).toEqual([4, 1, 2, 10]);
+    expect(blocks[3].every((o) => o.kind === 'satin')).toBe(true);
+    expect(objs.length).toBe(17);
+  });
+
   it('keeps what the Image mode sewed as one object one, through a PES file', () => {
     const d = uShape();
     const p = parsePattern(writePattern(d.pattern, 'pes'), 'u.pes');
