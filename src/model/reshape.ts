@@ -1,3 +1,4 @@
+import { listOf, sewList } from './sew';
 import { lineSettings, reshapeLineFill, resewLine } from './line';
 import { transformForm, type Form, type Mat } from '../shape/path';
 import { FIT_TOLERANCE, READ_TOLERANCE, vectorize } from '../shape/vectorize';
@@ -148,22 +149,30 @@ export function transformSewObject(p: Pattern, objs: SewObject[], o: SewObject, 
     rememberRange(r.pattern, fresh.first, fresh.last, r.memory[0]);
     return { pattern: r.pattern, first: fresh.first, last: fresh.last, restitched: true };
   }
-  const known = rigid ? remembered(p, o) : keepShape(p, o, kinds);
+  // Moved, turned or mirrored: the stitches go along in the object list, with what it remembers.
+  if (rigid) {
+    const known = remembered(p, o);
+    const list = listOf(p);
+    const k = list.findIndex((e) => e.obj.index === o.index);
+    list[k] = { ...list[k], map: m, memory: known ? transformRemembered(known, m) : null };
+    const next = sewList(p, list, trimMm);
+    const now = sewObjects(next).find((x) => x.id === o.id);
+    return now ? { pattern: next, first: now.first, last: now.last, restitched: false } : null;
+  }
+  const known = keepShape(p, o, kinds);
   // Settings as the object has them now (measured after scaling, the rows would be wider apart).
-  const given = rigid ? null : settingsOf(p, o, kinds);
-  if (!rigid && !given) return null;
+  const given = settingsOf(p, o, kinds);
+  if (!given) return null;
   const moved = transformObject(p, o, m);
   const next = moved.pattern;
   const after = known && transformRemembered(known, m);
   // The objects stay as they were, with what this one remembers on its new stitches.
   keepGrouping(p, objs, o, next, 0);
   if (after) rememberRange(next, moved.first, moved.last, after);
-  if (rigid) return { ...moved, restitched: false };
   const nk = stitchKinds(next);
   const nobjs = sewObjects(next, nk);
   const no = nobjs.find((x) => x.first === moved.first);
   if (!no) return null;
-  if (!given) return null;
   const r = restitch(next, nobjs, [no.index], given, nk, trimMm);
   if (!r.starts.length) return null;
   // The scaled curves stay the shape.
@@ -176,3 +185,4 @@ export function transformSewObject(p: Pattern, objs: SewObject[], o: SewObject, 
   rememberRange(r.pattern, obj.first, obj.last, r.memory[0]);
   return { pattern: r.pattern, first: obj.first, last: obj.last, restitched: true };
 }
+
