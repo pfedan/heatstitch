@@ -23,6 +23,7 @@ import { coversOver, cutAway, type Cover } from './covers';
 import { backToVersion, entryOf, hasTable, hold, keepVersion, knowKinds, rememberObjects, setMemory, setObjects, setObjectsFromKeys, stitchIndex, stitchKey, tableOf, type ObjectKind, type PlacedEntry, type SewObject } from './objects';
 import { END, JUMP, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
 import { SATIN, stitchKinds, TIE_STITCH } from './sequence';
+import { gradientOf, patchArea, patchSpacing, rowPatches, type RowPatch } from './rows';
 import { letteringFrom } from '../lettering/stored';
 import type { Lettering } from '../lettering/layout';
 
@@ -1133,7 +1134,10 @@ export function shapeTrust(p: Pattern, o: SewObject, a: Analysis, spacing: numbe
   if (!a.fill) return 'approximate';
   const known = remembered(p, o);
   if (known?.region === a.fill && !known.read) return 'kept';
-  if (spacing > OPEN_ROWS) return 'approximate';
+  // Open rows read as such: the area lies between them, however far apart they are.
+  const open = openRows.get(a.fill);
+  if (open) spacing = Math.max(spacing, open);
+  else if (spacing > OPEN_ROWS) return 'approximate';
   const runs: Pt[][] = [];
   for (const pt of a.parts) {
     if (pt.kind !== 'fill') continue;
@@ -1178,7 +1182,8 @@ export function analyze(p: Pattern, o: SewObject, kinds: Uint8Array, known = rem
   });
   const others: number[] = [];
   for (let k = 1; k < idx.length; k++) if (sewnSeg(k) && !satin[k]) others.push(idx[k]);
-  const region = known?.region ?? (others.length > 4 ? traceRegion(p, others, REACH, OPEN) : null);
+  const traced = known?.region ?? (others.length > 4 ? traceRegion(p, others, REACH, OPEN) : null);
+  const region = known?.region ?? withOpenRows(p, o, others, traced);
   const inFill = (k: number) => {
     if (!region) return false;
     const i = idx[k];
@@ -1251,6 +1256,47 @@ function sewnParts(idx: number[], known: Remembered | undefined): Part[] | null 
     from = x.end;
   }
   return parts;
+}
+
+/** Rows this far apart or more do not close into an area by traceRegion: they are read as rows (mm). */
+const OPEN_PATCH = 0.5;
+/** Areas that take in open rows, with the widest distance between those rows. */
+const openRows = new WeakMap<Region, number>();
+/** Areas with open rows lately, by the object's stitches (see traced). */
+const withRows = new Map<string, { region: Region | null; open: number }>();
+
+/**
+ * The area `traced` from an object's stitches, with the patches of open rows among the stitches
+ * `segs` (a gradient, a light fill) added as the strips between their rows.
+ */
+function withOpenRows(p: Pattern, o: SewObject, segs: number[], traced: Region | null): Region | null {
+  const key = `${stitchKey(p, o.first, o.last)}:${segs.length}`;
+  let got = withRows.get(key);
+  if (!got) {
+    const open = openPatches(p, segs);
+    const area = open.length ? patchArea(open, traced?.pxMm ?? 0.1) : null;
+    const region = area ? (traced ? unionRegion([traced, area]) : area) : traced;
+    got = { region, open: area ? Math.max(...open.map(patchSpacing)) : 0 };
+    withRows.set(key, got);
+    if (withRows.size > TRACED_SIZE) withRows.delete(withRows.keys().next().value!);
+  }
+  if (!got.region) return null;
+  const r = { ...got.region };
+  if (got.open) openRows.set(r, got.open);
+  return r;
+}
+
+/** The patches of rows further apart than OPEN_PATCH among the stitches `segs` (records). */
+function openPatches(p: Pattern, segs: number[]): RowPatch[] {
+  const out: RowPatch[] = [];
+  // Stretches of stitches one after the other.
+  for (let k = 0; k < segs.length; ) {
+    let e = k;
+    while (e + 1 < segs.length && segs[e + 1] === segs[e] + 1) e++;
+    if (e - k >= 6) for (const pt of rowPatches(p, segs[k] - 1, segs[e])) if (patchSpacing(pt) >= OPEN_PATCH) out.push(pt);
+    k = e + 1;
+  }
+  return out;
 }
 
 /** The parts with a border in the fill's thread, sewn here as the last part, as one part from where it starts. */
@@ -1441,18 +1487,35 @@ function readFill(p: Pattern, a: Analysis): { s: FillSettings; firstRow: number 
   for (const g of segs) all += g.l;
   const curved = segs.length > 10 && rowThread < all * 0.75;
   const sp = Math.round(spacing * 100) / 100;
+  const ang = angle === 180 ? 0 : angle;
+  // Rows that get further apart (or closer) evenly across most of the fill: a gradient.
+  const grad = gradientIn(p, a, all, ang);
   const s: FillSettings = {
-    pattern: curved ? 'follow' : 'tatami',
-    spacing: sp,
-    spacingEnd: Math.min(1.2, Math.round(sp * 2.5 * 100) / 100),
+    pattern: grad ? 'gradient' : curved ? 'follow' : 'tatami',
+    spacing: grad?.spacing ?? sp,
+    spacingEnd: grad?.spacingEnd ?? Math.min(1.2, Math.round(sp * 2.5 * 100) / 100),
     offset: 0.25,
-    angle: angle === 180 ? 0 : angle,
+    angle: ang,
     stitch: Math.round((percentile(rows.map((g) => g.l), 0.8) || 4) * 10) / 10,
     underlay: before > rowThread * 0.06,
     edge: 0,
     tolerance: TOLERANCE,
   };
   return { s, firstRow };
+}
+
+/**
+ * The gradient of the fill parts of `a` (see gradientOf), when the patch of rows it is read from
+ * holds at least half of their thread (`all`, mm); rows at `angle`.
+ */
+function gradientIn(p: Pattern, a: Analysis, all: number, angle: number): { spacing: number; spacingEnd: number } | null {
+  const patches: RowPatch[] = [];
+  for (const pt of a.parts) if (pt.kind === 'fill' && !pt.border) patches.push(...rowPatches(p, pt.s, pt.e));
+  const grad = gradientOf(patches, angle);
+  if (!grad) return null;
+  const largest = patches.reduce((best, x) => (x.rows.length > best.rows.length ? x : best));
+  const thread = largest.rows.reduce((n, r) => n + r.len, 0);
+  return thread >= all * 0.5 ? grad : null;
 }
 
 /**
