@@ -20,7 +20,7 @@ import { recommendedSpacing } from '../validation/profiles';
 import { recordOfStitch } from '../model/sequence';
 import { rememberObjects, type SewObject } from '../model/objects';
 import { loosable } from '../model/handEdit';
-import { syncBorders } from '../model/border';
+import { shareBorders, syncBorders } from '../model/border';
 import { t, type Key } from '../i18n';
 import { type ShapeTrust, analyze, remembered, measureFill, measureSatin, measureRun, shapeTrust, type Remembered, remember, rememberedIn, restitch, type Settings as RestitchSettings, type RestitchResult, objectKey } from '../model/restitch';
 import { type StitchInfo, StitchPanel } from '../ui/stitchPanel';
@@ -108,7 +108,10 @@ export function bindStitches(app: StitchesApp) {
     };
     const defaults = digitizeDefaults(app.settings.profile);
     const auto = { fillSpacing: defaults.spacing, satinSpacing: defaults.satinSpacing, stitch: defaults.stitch };
-    const info: StitchInfo = { key: ui.selectionKey, lock, free, fixed, fabricPull, auto, hand, measured, counts, recommended: recommendedSpacing(app.settings.profile), shape: worst, outlines: shapes, toSatin: stroke, knockout, depth, color: q.objects[firstFill]?.color, area: (fillObj && remembered(p, fillObj)?.region) || undefined };
+    // A part of a fill cut apart: its border goes around all parts.
+    const piece = fillObj && remembered(p, fillObj)?.piece;
+    const pieces = piece ? q.objects.filter((obj) => obj.kind === 'fill' && remembered(p, obj)?.piece === piece).length : 0;
+    const info: StitchInfo = { key: ui.selectionKey, lock, free, fixed, fabricPull, auto, hand, measured, counts, recommended: recommendedSpacing(app.settings.profile), shape: worst, outlines: shapes, toSatin: stroke, knockout, depth, color: q.objects[firstFill]?.color, area: (fillObj && remembered(p, fillObj)?.region) || undefined, ...(pieces > 1 ? { pieces } : {}) };
     const runs = [...ui.selectedObjects].map((o) => q.objects[o]).filter((obj) => obj?.kind === 'run');
     if (runs.length && runs.every((obj) => remembered(p, obj)?.path)) info.line = true;
     const one = ui.selectedObjects.size === 1 ? q.objects[[...ui.selectedObjects][0]] : undefined;
@@ -290,6 +293,8 @@ export function bindStitches(app: StitchesApp) {
     });
     // What the objects remember can change their kind (a fill with a satin border).
     app.seqCache.delete(r.pattern);
+    // The parts of a fill cut apart share the border given to one of them.
+    shareBorders(r.pattern, [...sel].map((o) => nq.objects[o]));
     // Borders in a thread of their own follow their fills; the selection is found again by its stitches.
     const p = syncBorders(r.pattern, app.settings.trimMm, dropLinks);
     dropLinks = new Set();

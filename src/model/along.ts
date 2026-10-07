@@ -213,3 +213,54 @@ export function borderStitches(r: Region, s: PathStitch, from: Pt, whole?: Regio
     satinOf(s),
   );
 }
+
+/**
+ * The lines along the cuts between the parts `parts` of a fill cut apart (in sewing order), one
+ * line per cut: the edge of each part where it lies on a part sewn before it (the one on top shows
+ * its edge), away from the edge of all parts together (`area`), where the border runs.
+ */
+export function seamLines(parts: readonly Region[], area: Region): Pt[][] {
+  const out: Pt[][] = [];
+  for (let k = 1; k < parts.length; k++) {
+    const before = parts.slice(0, k);
+    const keep = (q: Pt) => sample(area, area.sdfBase, q[0], q[1]) < -CUT_EDGE && before.some((r) => sample(r, r.sdfBase, q[0], q[1]) < SEAM_NEAR);
+    for (const l of borderLoops(parts[k], 0)) for (const k2 of keptLines(l, keep)) if (!k2.closed && k2.line.length > 1) out.push(k2.line);
+  }
+  return out;
+}
+
+/**
+ * An edge counts as lying on another part up to this far outside it (mm): the parts reach 0.2 mm
+ * under each other, but their curves are traced from pixels and can come apart a little.
+ */
+const SEAM_NEAR = 0.15;
+
+/** The stitches along the cuts between parts (see seamLines), each line from its end nearest the last stitch. */
+export function seamStitches(parts: readonly Region[], area: Region, s: PathStitch, from: Pt): Pt[][] {
+  const out: Pt[][] = [];
+  let at = from;
+  for (const line of orderedLines(seamLines(parts, area), from)) {
+    const runs = sewAlong(line, false, s, at);
+    out.push(...runs);
+    const last = runs[runs.length - 1];
+    if (last) at = last[last.length - 1];
+  }
+  return out;
+}
+
+/** Open lines, each next the one with an end nearest where the one before ended. */
+function orderedLines(lines: Pt[][], from: Pt): Pt[][] {
+  const left = lines.slice();
+  const out: Pt[][] = [];
+  let at = from;
+  const d = (q: Pt) => Math.hypot(q[0] - at[0], q[1] - at[1]);
+  while (left.length) {
+    let best = 0;
+    for (let i = 1; i < left.length; i++) if (Math.min(d(left[i][0]), d(left[i][left[i].length - 1])) < Math.min(d(left[best][0]), d(left[best][left[best].length - 1]))) best = i;
+    let l = left.splice(best, 1)[0];
+    if (d(l[l.length - 1]) < d(l[0])) l = l.slice().reverse();
+    out.push(l);
+    at = l[l.length - 1];
+  }
+  return out;
+}

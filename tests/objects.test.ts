@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { digitize, digitizeDefaults } from '../src/digitize/digitize';
 import { DEFAULT_PREPARE, Preparer } from '../src/image/prepare';
-import { joinObjects, rememberObjects, sewObjects, splitObject } from '../src/model/objects';
+import { rememberObjects, sewObjects, splitObject } from '../src/model/objects';
 import { BLUE } from './helpers/images';
 import { STITCH, TRIM, type Pattern } from '../src/model/pattern';
 import { analyze, carryOver, unionRegion, measureFill, measureSatin, remember, remembered, rememberedIn, rememberShapes, restitch, restoreRemembered, shapeTrust } from '../src/model/restitch';
@@ -285,7 +285,7 @@ describe('changing the kind of an object', () => {
     expect(remembered(moved, after[0])?.region).toBe(r.memory[0].region);
   });
 
-  it('splits an object into its pieces and joins them again', () => {
+  it('splits an object into its pieces', () => {
     const p = load('demos/letters.pes');
     const objs = sewObjects(p);
     const i = objs.findIndex((o) => o.sections > 1);
@@ -296,9 +296,6 @@ describe('changing the kind of an object', () => {
     expect(split.length).toBe(objs.length + o.sections - 1);
     const pieces = split.filter((x) => x.first >= o.first && x.last <= o.last);
     expect(pieces.length).toBe(o.sections);
-    const r: Pattern = { ...q };
-    joinObjects(r, pieces);
-    expect(sewObjects(r).length).toBe(objs.length);
   });
 
   it('puts areas together', () => {

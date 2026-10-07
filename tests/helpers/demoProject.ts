@@ -12,7 +12,7 @@ import { refreshKnockouts, setKnockout } from '../../src/model/knockout';
 import { rememberObjects, sewObjects } from '../../src/model/objects';
 import type { PathStitch } from '../../src/model/along';
 import type { Pattern, ThreadColor } from '../../src/model/pattern';
-import { forgetAll, keepVersion, remember, remembered, rememberedIn, restitch, restoreRemembered, type FillSettings, type StoredObjects } from '../../src/model/restitch';
+import { keepVersion, remember, remembered, rememberedIn, restitch, restoreRemembered, type FillSettings, type StoredObjects } from '../../src/model/restitch';
 import { stitchKinds } from '../../src/model/sequence';
 import { stitchesBefore } from '../../src/model/transform';
 import { parsePattern } from '../../src/parsers';
@@ -472,7 +472,6 @@ export const DEMO_DESIGNS = [flower, decoSampler, lineStitches, lineVariants, li
 
 /** Builds every design afresh (object memory starts empty). */
 export function buildDemos(): Design[] {
-  forgetAll();
   return DEMO_DESIGNS.map((make) => make());
 }
 
