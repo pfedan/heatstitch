@@ -30,9 +30,10 @@ export function overlapDesign(): Pattern {
     if (i) w.color();
     fill(w, circle(c[0], c[1], 11), { angle: 0.3 + i * 1.05 });
   });
-  // A dot on top of the middle: four layers there.
+  // Two dots on top of the middle: five layers there.
   w.color();
   fill(w, circle(26, 19.5, 4.5), { angle: 2.6 });
+  fill(w, circle(26, 19.5, 4.5), { angle: 1.9 });
   return w.b.build('overlap', 'pes', [RED, BLUE, YELLOW, WHITE]);
 }
 

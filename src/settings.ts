@@ -123,7 +123,7 @@ export interface Settings {
 
 /**
  * A 1 mm blur suppresses aliasing between typical 0.4 mm row spacing and the grid. The thread
- * scale tops out at 12 mm/mm² so both reference thresholds (7 and 9.5) are visible.
+ * scale tops out at 15 mm/mm² so both reference thresholds (7 and 12) are visible.
  */
 export const DEFAULTS: Settings = {
   mode: 'flow',
@@ -157,7 +157,7 @@ export const DEFAULTS: Settings = {
   saveFormat: null,
   hoop: null,
   scales: {
-    thread: { max: 12 },
+    thread: { max: 15 },
     penetrations: { max: 4 },
   },
   image: { prepare: { ...DEFAULT_PREPARE }, style: 'flat', stitch: {}, view: 'stitches', brushMm: 3, introDone: false },

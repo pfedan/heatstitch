@@ -168,14 +168,14 @@ describe('nudging', () => {
 });
 
 describe('automatic correction', () => {
-  it('clears critical density from four stacked fills without thinning them unevenly', () => {
-    const p = layers(4).build();
+  it('clears critical density from five stacked fills without thinning them unevenly', () => {
+    const p = layers(5).build();
     const r = autoCorrect(p, WOVEN, FULL);
     expect(r.report.before.worst).toBe(CRITICAL);
     expect(r.report.after.worst).toBeLessThan(CRITICAL);
     expect(r.report.respaced).toBeGreaterThan(0);
     expect(r.report.threadAfter).toBeLessThan(r.report.threadBefore * 0.9);
-    // What is left needs a look: four stacked layers are a design decision.
+    // What is left needs a look: five stacked layers are a design decision.
     expect(r.report.manual).toBeGreaterThan(0);
   });
 
@@ -188,7 +188,7 @@ describe('automatic correction', () => {
 
   it('by default corrects only critical areas and leaves caution areas untouched', () => {
     expect(DEFAULT_CORRECTION.goal).toBe('critical');
-    const p = layers(3).build();
+    const p = layers(4).build();
     const r = autoCorrect(p, WOVEN, DEFAULT_CORRECTION);
     expect(r.report.before.worst).toBe(CAUTION);
     expect(r.pattern).toBe(p);
@@ -196,7 +196,7 @@ describe('automatic correction', () => {
 
   it('only touches the given region', () => {
     const s = new Shape();
-    for (const cx of [20, 60]) for (let i = 0; i < 4; i++) s.fillAt(cx, 20, 10, i * 0.8 + 0.2);
+    for (const cx of [20, 60]) for (let i = 0; i < 5; i++) s.fillAt(cx, 20, 10, i * 0.8 + 0.2);
     const p = s.build();
     const r = autoCorrect(p, WOVEN, { ...FULL, region: { minX: 5, minY: 5, maxX: 35, maxY: 35 } });
     const v = classify(r.measurement, WOVEN);
