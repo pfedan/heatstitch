@@ -537,12 +537,17 @@ export function withSplit<C extends SplitColumn>(columns: C[][], area: Region): 
   const { outsides, holes } = areaLoops(area);
   if (!outsides.length) return columns;
   const within = (q: Pt) => outsides.some((o) => inside(o, q)) && !holes.some((h) => inside(h, q));
-  const mid = (c: C): Pt => {
-    const i = c.left.length >> 1;
-    return [(c.left[i][0] + c.right[Math.min(i, c.right.length - 1)][0]) / 2, (c.left[i][1] + c.right[Math.min(i, c.right.length - 1)][1]) / 2];
+  // Between the rails at a share of the way along: a short or twisted column (read from an
+  // image) can have its middle just outside its own area, so a quarter or three on is as good.
+  const at = (c: C, share: number): Pt => {
+    const i = Math.round((c.left.length - 1) * share);
+    const j = Math.min(i, c.right.length - 1);
+    return [(c.left[i][0] + c.right[j][0]) / 2, (c.left[i][1] + c.right[j][1]) / 2];
   };
-  // The part that is the area: its columns lie in it.
-  const k = columns.findIndex((part) => part.every((c) => c.left.length > 1 && c.right.length > 1 && within(mid(c))));
+  // The part that is the area: its columns lie in it (one in ten may miss, read from an image a
+  // tiny column can lie across its own edge).
+  const inArea = (c: C) => c.left.length > 1 && c.right.length > 1 && [0.5, 0.25, 0.75].some((sh) => within(at(c, sh)));
+  const k = columns.findIndex((part) => part.length > 0 && part.filter((c) => !inArea(c)).length <= Math.floor(part.length / 10));
   if (k < 0) return columns;
   const cuts = cutLinesBetween(columns[k], outsides, holes);
   return columns.map((part, j) => (j === k ? part.map((c, i) => (i ? c : { ...c, split: { outlines: outsides, holes, cuts } })) : part));
