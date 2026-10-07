@@ -81,8 +81,9 @@ function crossings(rail: Pt[], cum: number[], a: Pt, b: Pt): { s: number; t: num
     const w = sub(p, a);
     const t = (w[0] * q[1] - w[1] * q[0]) / den;
     const u = (w[0] * r[1] - w[1] * r[0]) / den;
-    if (t < 0 || t > 1 || u < 0 || u > 1) continue;
-    out.push({ s: cum[i - 1] + u * (cum[i] - cum[i - 1]), t });
+    // A line through a corner of the rail meets it there (rounding can miss both sides).
+    if (t < 0 || t > 1 || u < -1e-9 || u > 1 + 1e-9) continue;
+    out.push({ s: cum[i - 1] + Math.min(1, Math.max(0, u)) * (cum[i] - cum[i - 1]), t });
   }
   return out;
 }
