@@ -14,7 +14,7 @@ import { skeleton, type Branch, type Graph, type Pt } from './skeleton';
  *   - at a junction the line that goes on straightest runs through; the others end on its edge
  *     with a cut line along it,
  *   - short spurs (the toe marks of a paw) stay on their column, with a line across along them,
- *   - a line closed into a ring is opened once, at its sharpest bend,
+ *   - a line closed into a ring is opened once, square across where it runs straightest,
  *   - lines across where the column bends (every 30°) and a fan of three at sharp corners.
  * - `wide`: too wide or too blotchy for satin; nothing is suggested.
  */
@@ -37,6 +37,8 @@ const SPUR = 4;
 const TURN_STEP = 30;
 /** Bends sharper than this (degrees, within about a column width) get a fan of three lines. */
 const CORNER = 40;
+/** Bends sharper than this (degrees) are cut along their bisector instead (a mitre). */
+const SHARP = 110;
 
 const sub = (a: Pt, b: Pt): Pt => [a[0] - b[0], a[1] - b[1]];
 const add = (a: Pt, b: Pt, k = 1): Pt => [a[0] + b[0] * k, a[1] + b[1] * k];
@@ -237,10 +239,11 @@ export function planStrokes(g: Graph, rings: Pt[][]): { cuts: [Pt, Pt][]; lines:
     es.forEach((e, k) => {
       const b = B[e.br];
       const far = e.atB ? b.a : b.b;
-      // A spur: a free end, short beyond the edge of the through line, not a line crossing it
-      // (one going on straight on the other side, as a whisker over a cheek).
+      // A spur: a free end, short beyond the edge of the through line (at most about three times
+      // its half width), not a line crossing it (one going on straight on the other side, as a
+      // whisker over a cheek).
       const crossing = es.some((_, x) => x !== k && dot(dirs[x], dirs[k]) < -0.94);
-      if (k !== i && k !== j && b.a !== b.b && degree(far) === 1 && !crossing && lenOf[e.br] - rThrough < SPUR * halfOf[e.br]) {
+      if (k !== i && k !== j && b.a !== b.b && degree(far) === 1 && !crossing && lenOf[e.br] - rThrough < Math.min(SPUR * halfOf[e.br], 3 * rThrough)) {
         spurs.add(e.br);
         const pts = away(b, e.atB);
         const tip = pts[pts.length - 1];
@@ -251,22 +254,26 @@ export function planStrokes(g: Graph, rings: Pt[][]): { cuts: [Pt, Pt][]; lines:
     });
     // The others end on the edge of the through line: a cut line between the inner corners of
     // the outline either side of them (where the edge of the line turns into the next one).
-    const center = g.nodes[n].p;
     const angle = (d: Pt) => Math.atan2(d[1], d[0]);
     const round = kept.slice().sort((x, y) => angle(dirs[x]) - angle(dirs[y]));
-    const reach = 3 * g.nodes[n].r + 1.5;
-    const near = rings.flatMap((r) => r.filter((q) => dist(q, center) < reach));
-    /** The outline point nearest the junction between the directions of ends x and y (counterclockwise from x). */
-    const corner = (x: number, y: number): Pt | null => {
+    /**
+     * The outline point nearest `center` between the directions of ends x and y (counterclockwise
+     * from x). Seen from where the end being cut leaves (in junctions merged from a few, the
+     * merged middle can lie off to the side).
+     */
+    const corner = (center: Pt, reach: number, x: number, y: number): Pt | null => {
       const a0 = angle(dirs[x]);
       let span = angle(dirs[y]) - a0;
       while (span <= 0) span += 2 * Math.PI;
       let best: Pt | null = null;
-      for (const q of near) {
-        let u = angle(sub(q, center)) - a0;
-        while (u < 0) u += 2 * Math.PI;
-        if (u <= 0.02 || u >= span - 0.02) continue;
-        if (!best || dist(q, center) < dist(best, center)) best = q;
+      for (const r of rings) {
+        for (const q of r) {
+          if (dist(q, center) >= reach) continue;
+          let u = angle(sub(q, center)) - a0;
+          while (u < 0) u += 2 * Math.PI;
+          if (u <= 0.02 || u >= span - 0.02) continue;
+          if (!best || dist(q, center) < dist(best, center)) best = q;
+        }
       }
       return best;
     };
@@ -277,8 +284,9 @@ export function planStrokes(g: Graph, rings: Pt[][]): { cuts: [Pt, Pt][]; lines:
       const at = round.indexOf(k);
       const cw = round[(at + round.length - 1) % round.length];
       const ccw = round[(at + 1) % round.length];
-      const p = corner(cw, k);
-      const q = corner(k, ccw);
+      const own = g.nodes[e.atB ? B[e.br].b : B[e.br].a];
+      const p = corner(own.p, 3 * own.r + 1.5, cw, k);
+      const q = corner(own.p, 3 * own.r + 1.5, k, ccw);
       let cut: [Pt, Pt];
       if (p && q && dist(p, q) > 0.2) {
         const d = norm(sub(q, p));
@@ -371,14 +379,15 @@ export function planStrokes(g: Graph, rings: Pt[][]): { cuts: [Pt, Pt][]; lines:
     const across = (p: Pt, d: Pt): [Pt, Pt] => [add(p, d, -half * 0.6), add(p, d, half * 0.6)];
     const placed: number[] = [];
     const free = (s: number, gap: number) => placed.every((x) => Math.abs(x - s) >= gap) && taken.every((q) => dist(q, pointAlong(st.pts, s)) >= w * 1.2);
-    // A closed ring is opened once, at its sharpest bend.
+    // A closed ring is opened once, square across where it runs straightest (its corners then
+    // lie inside the column, fanned like any other).
     if (st.closed) {
       let k = 0;
-      let most = -1;
+      let least = Infinity;
       for (let i = 0; i < n; i++) {
-        const t = turnAt(i, Math.max(0.6, w)).deg;
-        if (t > most) {
-          most = t;
+        const t = turnAt(i, Math.max(1, 1.5 * w)).deg;
+        if (t < least) {
+          least = t;
           k = i;
         }
       }
@@ -416,7 +425,13 @@ export function planStrokes(g: Graph, rings: Pt[][]): { cuts: [Pt, Pt][]; lines:
     for (const i of corners) {
       const tt = turnAt(i, hc);
       const bis = norm(sub(tt.din, tt.dout));
-      if (free(cum[i], w * 0.8)) {
+      if (tt.deg >= SHARP && Math.hypot(bis[0], bis[1]) > 0.1) {
+        // Too sharp to fan (the stitches would pile up in the inner corner): cut along the
+        // bisector, a mitre, with a line across either side.
+        const l = Math.min(5 * half, (half / Math.max(0.3, Math.cos((tt.deg * Math.PI) / 360))) * 1.1 + 0.3);
+        cuts.push([add(st.pts[i], bis, -l), add(st.pts[i], bis, l)]);
+        placed.push(cum[i]);
+      } else if (free(cum[i], w * 0.8)) {
         lines.push(across(st.pts[i], Math.hypot(bis[0], bis[1]) > 0.1 ? bis : [-tt.din[1], tt.din[0]]));
         placed.push(cum[i]);
       }
