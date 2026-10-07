@@ -45,6 +45,17 @@ export interface Pattern {
   hoop?: { w: number; h: number };
 }
 
+/** Designs as read from a file, before anything was changed (see readFromFile). */
+const read = new WeakSet<Pattern>();
+
+/** Marks `p` as read from a file: its objects are recognized from its stitches once (see objects.ts). */
+export function readFromFile(p: Pattern): Pattern {
+  read.add(p);
+  return p;
+}
+
+export const isReadFromFile = (p: Pattern): boolean => read.has(p);
+
 /**
  * The version each version of a design was made from. A new version takes over what the objects of
  * the one before knew (see objects.ts), so every way of making one from another goes through

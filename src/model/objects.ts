@@ -1,7 +1,8 @@
 import { tagShortStitches, TIE } from '../validation/shortStitches';
-import { COLOR_CHANGE, dropParent, JUMP, parentOf, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
+import { COLOR_CHANGE, dropParent, isReadFromFile, JUMP, parentOf, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
 import type { Remembered } from './restitch';
 import { FILL, SATIN, stitchKinds } from './sequence';
+import { continues, rowPatches } from './rows';
 
 /**
  * The objects of a design. Every version of a design has a list of its objects in sewing order
@@ -136,9 +137,28 @@ function kindOf(p: Pattern, i: number, j: number, m: Measure): ObjectKind {
   const kind: ObjectKind = fill >= m.thread * 0.3 && fill >= satin ? 'fill' : satin >= m.thread * 0.3 ? 'satin' : 'run';
   // Back and forth along a line (a double run) looks like rows to the recognizer, but covers no area;
   // a line that winds closely over an area (a spiral or contour fill) does.
-  if (kind === 'fill' && coverShare(p, i, j) < AREA) return 'run';
-  if (kind === 'run' && m.stitches > 30 && coverShare(p, i, j) >= DENSE_AREA) return 'fill';
+  if (kind === 'fill' && coverShare(p, i, j) < AREA) return rowShare(p, i, j) >= ROWS_FILL ? 'fill' : 'run';
+  if (kind === 'run' && m.stitches > 30 && (coverShare(p, i, j) >= DENSE_AREA || rowShare(p, i, j) >= ROWS_FILL)) return 'fill';
   return kind;
+}
+
+/** Share of the thread in rows side by side above which open rows (a gradient, a light fill) are a fill. */
+const ROWS_FILL = 0.5;
+
+/** Share of the thread from record a to b that lies in patches of rows (see rows.ts). */
+function rowShare(p: Pattern, a: number, b: number): number {
+  const id = `r${rangeKey(p, a, b)}`;
+  let share = shares.get(id);
+  if (share === undefined) {
+    let all = 0;
+    for (let k = a + 1; k <= b; k++) if (p.cmd[k] === STITCH && p.cmd[k - 1] === STITCH) all += Math.hypot(p.x[k] - p.x[k - 1], p.y[k] - p.y[k - 1]) / 10;
+    let rows = 0;
+    for (const pt of rowPatches(p, a, b)) for (const r of pt.rows) rows += r.len;
+    share = all ? rows / all : 0;
+    shares.set(id, share);
+    if (shares.size > SHARES_SIZE) shares.delete(shares.keys().next().value!);
+  }
+  return share;
 }
 
 // The object list of a version -------------------------------------------------------------------
@@ -329,6 +349,9 @@ function derive(p: Pattern, from?: { p: Pattern; t: Table }, hint?: { joins: Rea
   if (from) take(from, true, false);
   if (n && claimed.includes(0)) for (const r of recent) if (r.p !== from?.p && r.p !== p) take(r, false, true);
   // What is left: recognized, run by run of stitches no object had.
+  // A design read from a file is recognized once: its pieces are told apart also where no trim
+  // lies between them. Stitches of a later version that no object had stay as they are sewn.
+  const fresh = !from && !hint && isReadFromFile(p);
   const kinds = claimed.includes(0) ? stitchKinds(p) : null;
   for (let k = 0; k < n; ) {
     if (claimed[k]) {
@@ -337,7 +360,7 @@ function derive(p: Pattern, from?: { p: Pattern; t: Table }, hint?: { joins: Rea
     }
     let e = k;
     while (e + 1 < n && !claimed[e + 1]) e++;
-    for (const g of groupSections(p, sections(p, kinds!, ix.records[k], ix.records[e]), hint?.joins)) {
+    for (const g of groupSections(p, sections(p, kinds!, ix.records[k], ix.records[e], fresh), hint?.joins)) {
       out.push({ id: 0, first: g[0].first, last: g[g.length - 1].last });
     }
     k = e + 1;
@@ -705,8 +728,8 @@ interface Section {
   dirs?: Map<number, [number, number]>;
 }
 
-/** The sections from record a to record b (both stitches). */
-function sections(p: Pattern, kinds: Uint8Array, a = 0, b = p.cmd.length - 1): Section[] {
+/** The sections from record a to record b (both stitches); with `split` also its pieces (see piecesOf). */
+function sections(p: Pattern, kinds: Uint8Array, a = 0, b = p.cmd.length - 1, split = false): Section[] {
   const out: Section[] = [];
   let block = 0;
   for (let i = 0; i < a; i++) if (p.cmd[i] === COLOR_CHANGE) block++;
@@ -716,11 +739,81 @@ function sections(p: Pattern, kinds: Uint8Array, a = 0, b = p.cmd.length - 1): S
     if (c !== STITCH) continue;
     let j = i;
     for (let k = i + 1; k <= b && (p.cmd[k] === STITCH || p.cmd[k] === JUMP); k++) if (p.cmd[k] === STITCH) j = k;
-    const m = measure(p, kinds, i, j);
-    out.push({ block, first: i, last: j, stitches: m.stitches, thread: m.thread, kind: kindOf(p, i, j, m), minX: m.minX, minY: m.minY, maxX: m.maxX, maxY: m.maxY });
+    const pieces = split ? piecesOf(p, kinds, i, j) : [{ from: i, rows: false }];
+    pieces.forEach(({ from: s, rows }, k) => {
+      const e = k + 1 < pieces.length ? pieces[k + 1].from - 1 : j;
+      const m = measure(p, kinds, s, e);
+      // Rows side by side are a fill, also when they lie too far apart to cover the area densely.
+      out.push({ block, first: s, last: e, stitches: m.stitches, thread: m.thread, kind: rows ? 'fill' : kindOf(p, s, e, m), minX: m.minX, minY: m.minY, maxX: m.maxX, maxY: m.maxY });
+    });
     i = j;
   }
   return out;
+}
+
+/** A piece of a section has this many stitches and this much thread (mm) at least. */
+const PIECE_STITCHES = 20;
+const PIECE_THREAD = 8;
+
+/**
+ * The pieces of what is sewn from record i to j (stitches, no trim between) start. Many
+ * designs sew a whole color without a trim: fill patches, satin columns and lines one after the
+ * other, joined by travel. They are told apart by how their stitches look: satin, the rows of a
+ * patch of fill (each patch apart), other fill, running stitch. Stretches too short to stand on
+ * their own go with the piece before. Each piece starts at `from`; `rows` when it is a patch of
+ * rows. groupSections joins again what belongs together (underlay,
+ * travel inside a fill, pieces of one area).
+ */
+function piecesOf(p: Pattern, kinds: Uint8Array, i: number, j: number): { from: number; rows: boolean }[] {
+  if (j - i < 2 * PIECE_STITCHES) return [{ from: i, rows: false }];
+  const label = new Int32Array(j - i + 1);
+  for (let k = i + 1; k <= j; k++) label[k - i] = kinds[k] === SATIN ? -2 : kinds[k] === FILL ? -3 : -1;
+  const patches = rowPatches(p, i, j);
+  // Patches that go on one from the other are one fill (a break in the rows, a turn sewn oddly).
+  let id = 0;
+  patches.forEach((pt, n) => {
+    if (!n || !continues(patches[n - 1], pt)) id++;
+    // Rows of several stitches are fill rows, also where they are narrow enough to look like satin
+    // (one stitch from side to side).
+    const fill = pt.rows.filter((r) => r.pts.length >= 3).length * 2 > pt.rows.length;
+    for (const r of pt.rows) for (let m = 1; m < r.recs.length; m++) for (let k = r.recs[m - 1] + 1; k <= r.recs[m]; k++) if (fill || label[k - i] !== -2) label[k - i] = id;
+  });
+  // Stretches of one label, from the record their first stitch ends at.
+  const runs: { from: number; to: number; label: number; stitches: number; thread: number }[] = [];
+  for (let k = i + 1; k <= j; k++) {
+    if (p.cmd[k] !== STITCH) continue;
+    const l = p.cmd[k - 1] === STITCH ? Math.hypot(p.x[k] - p.x[k - 1], p.y[k] - p.y[k - 1]) / 10 : 0;
+    const last = runs[runs.length - 1];
+    if (last && last.label === label[k - i]) {
+      last.to = k;
+      last.stitches++;
+      last.thread += l;
+    } else runs.push({ from: k, to: k, label: label[k - i], stitches: 1, thread: l });
+  }
+  const big = (r: (typeof runs)[number]) => r.stitches >= PIECE_STITCHES && r.thread >= PIECE_THREAD;
+  // A stretch between two of one patch (its narrow end, a turn sewn oddly) belongs to it.
+  for (let k = 1; k + 1 < runs.length; k++) if (runs[k - 1].label > 0 && runs[k - 1].label === runs[k + 1].label && runs[k].thread < 4 * PIECE_THREAD) runs[k].label = runs[k - 1].label;
+  // Stretches of one label together; a stretch too short to stand on its own goes with the one
+  // before (the first with the one after).
+  const together = (list: typeof runs) => {
+    const out: typeof runs = [];
+    for (const r of list) {
+      const last = out[out.length - 1];
+      if (last && last.label === r.label) {
+        last.to = r.to;
+        last.stitches += r.stitches;
+        last.thread += r.thread;
+      } else out.push({ ...r });
+    }
+    return out;
+  };
+  let pieces = together(runs);
+  pieces.forEach((r, k) => {
+    if (!big(r)) r.label = k ? pieces[k - 1].label : (pieces[1]?.label ?? r.label);
+  });
+  pieces = together(pieces);
+  if (pieces.length < 2) return [{ from: i, rows: false }];
+  return pieces.map((r, k) => ({ from: k ? r.from : i, rows: r.label > 0 }));
 }
 
 /** Sections this small (stitches, or thread in mm) are leftovers: locks, a short end. */
@@ -794,7 +887,8 @@ function groupSections(p: Pattern, secs: Section[], joins?: ReadonlyMap<string, 
     else if (tiny(s)) join = g.secs.some((x) => touch(x, s, 1)) || !(next && touch(s, next, 1));
     else if (s.kind === 'run') {
       // Travel between pieces of a fill stays with it; underlay of what comes next goes with that.
-      join = (!!next && sameArea(g, next) && onTop(s, [...g.fills, next])) || (under.has(s) && underlayOnly);
+      // Travel over what is sewn already in its thread (the fill before it) is hardly seen: it stays with that.
+      join = (!!next && sameArea(g, next) && onTop(s, [...g.fills, next])) || (under.has(s) && underlayOnly) || (!under.has(s) && g.fills.length > 0 && onTop(s, g.fills));
     } else if (underlayOnly) join = g.secs.some((x) => !tiny(x) && touch(x, s, CONTACT));
     else join = sameArea(g, s);
     if (!join) groups.push({ secs: [s], fills: s.kind === 'fill' ? [s] : [] });

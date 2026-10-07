@@ -15,6 +15,8 @@ type Pt = [number, number];
 
 export interface Row {
   pts: Pt[];
+  /** The record of each point. */
+  recs: number[];
   /** Length along the row (mm). */
   len: number;
   /** From its first to its last point, of length 1. */
@@ -49,23 +51,26 @@ const unit = (a: Pt, b: Pt): Pt => {
 };
 
 /** The stitch points from record a to b, as runs without a jump or trim between them (mm). */
-function runsOf(p: Pattern, a: number, b: number): Pt[][] {
-  const out: Pt[][] = [];
-  let run: Pt[] | null = null;
+function runsOf(p: Pattern, a: number, b: number): { pts: Pt[]; recs: number[] }[] {
+  const out: { pts: Pt[]; recs: number[] }[] = [];
+  let run: { pts: Pt[]; recs: number[] } | null = null;
   for (let i = a; i <= b; i++) {
     if (p.cmd[i] !== STITCH) {
       run = null;
       continue;
     }
-    if (!run || (i > a && p.cmd[i - 1] !== STITCH)) out.push((run = []));
+    if (!run || (i > a && p.cmd[i - 1] !== STITCH)) out.push((run = { pts: [], recs: [] }));
     const q: Pt = [p.x[i] / 10, p.y[i] / 10];
-    if (!run.length || dist(run[run.length - 1], q) >= 0.05) run.push(q);
+    if (!run.pts.length || dist(run.pts[run.pts.length - 1], q) >= 0.05) {
+      run.pts.push(q);
+      run.recs.push(i);
+    }
   }
   return out;
 }
 
-/** A run of stitch points split where the needle turns back. */
-export function rowsOf(pts: Pt[]): Row[] {
+/** A run of stitch points (with their records) split where the needle turns back. */
+export function rowsOf({ pts, recs }: { pts: Pt[]; recs: number[] }): Row[] {
   const cuts = [0];
   for (let i = 1; i < pts.length - 1; i++) {
     const a = unit(pts[i - 1], pts[i]);
@@ -87,7 +92,7 @@ export function rowsOf(pts: Pt[]): Row[] {
     const rp = pts.slice(cuts[k], cuts[k + 1] + 1);
     let len = 0;
     for (let j = 1; j < rp.length; j++) len += dist(rp[j - 1], rp[j]);
-    rows.push({ pts: rp, len, dir: unit(rp[0], rp[rp.length - 1]) });
+    rows.push({ pts: rp, recs: recs.slice(cuts[k], cuts[k + 1] + 1), len, dir: unit(rp[0], rp[rp.length - 1]) });
   }
   return rows;
 }
@@ -237,3 +242,15 @@ export function gradientOf(patches: RowPatch[], angle: number): { spacing: numbe
 
 /** Spacing changes by this factor at least across a gradient. */
 const GRADIENT = 1.35;
+
+/**
+ * Whether patch b goes on with the rows of patch a (sewn right after it): rows in the same
+ * direction (within 20 degrees), b's first row beside a's last one.
+ */
+export function continues(a: RowPatch, b: RowPatch): boolean {
+  const last = a.rows[a.rows.length - 1];
+  const first = b.rows[0];
+  if (Math.abs(dot(last.dir, first.dir)) < Math.cos((20 * Math.PI) / 180)) return false;
+  const g = besides(last, first);
+  return g.overlap > 0.3 && g.gap <= MAX_GAP * 1.5;
+}
