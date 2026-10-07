@@ -334,7 +334,7 @@ export function bindRungs(app: RungsApp) {
     const area = an && (remembered(p, obj)?.shape ?? an.fill);
     if (!area) return;
     const s = suggestSatin(area);
-    if (!s || s.kind !== 'strokes') return app.layers.say(t('stitch.suggest.wide'), true);
+    if (!s || s.kind === 'wide') return app.layers.say(t('stitch.suggest.wide'), true);
     let bad: Pt[] | null = null;
     if (!s.ok) {
       const { outsides, holes } = areaLoops(area);

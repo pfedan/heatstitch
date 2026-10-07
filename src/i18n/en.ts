@@ -865,7 +865,7 @@ const enBase: Record<keyof typeof deBase, string> = {
   'stitch.pen.cut.hint': 'A line drawn splits the column: each section becomes a column of its own, without a trim (key T switches)',
   'stitch.direction.chain': 'On the canvas: click the number to sew the part one place earlier, the arrow to turn its direction round, the scissors to set a trim before it or take it away, ⇄ to start it on the other side (and end on the other side). Cut lines of a fill: drag, delete or draw anew, and the parts are made anew.',
   'stitch.direction.needCut': 'This rung does not fit the column. A cut line before it makes a section of its own where it fits.',
-  'stitch.suggest.hint': 'Sets cut lines and lines across the way you would cut the area by hand: at a crossing the straightest line runs through, the others end on its edge; short spurs stay on. Everything can be moved by hand afterwards.',
+  'stitch.suggest.hint': 'Sets cut lines and lines across the way you would cut the area by hand: at a crossing the straightest line runs through, the others end on its edge; short spurs stay on. Thick places such as a nose or a pupil are cut off: pointed areas fan out from their tip, dots up to 12 mm are split into two halves. Everything can be moved by hand afterwards.',
   'stitch.suggest.wide': 'No satin suggestion for this area: it is too wide or too blotchy for satin. Lines across can still be drawn by hand.',
   'stitch.suggest.done': 'Suggestion set: {n} sections. Move or delete lines, then “Sew as satin”.',
   'stitch.suggest.partly': 'Suggestion set, one part (outlined red) makes no column yet. Draw a line across or a cut line there.',
