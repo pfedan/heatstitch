@@ -41,7 +41,7 @@ describe('correction engine', () => {
     // The cat: object 0 is sewn anew in several sections, and the travel to object 1 changes.
     forgetAll();
     const p = load('cat-60mm.pes');
-    const f = await prepareFix(p, { fabric: 'knit', thread: '40' }, 'density', { trimMm: 2, visible: false, hand: false });
+    const f = await prepareFix(p, { fabric: 'terry', thread: '40' }, 'density', { trimMm: 2, visible: false, hand: false });
     expect(f.objects.length).toBeGreaterThan(0);
     const q = applyFix(p, f)!;
     expect(fixedObjects(q)).toEqual(f.objects.map((x) => x.index));
