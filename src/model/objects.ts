@@ -843,10 +843,17 @@ function groupSections(p: Pattern, secs: Section[], joins?: ReadonlyMap<string, 
     return cs.length > 0 && share(cellsOf(s), cs) >= INSIDE;
   };
   const covering = (s: Section) => s.kind === 'fill' || s.kind === 'satin';
-  // Underlay: running stitch covered by the fills (or satins) that follow it in its color.
+  // Underlay: running stitch covered by the fills (or satins) that follow it in its color, and
+  // long stitches back and forth under the satin sewn right after them (read as rows of fill).
   const under = new Set<Section>();
   secs.forEach((s, k) => {
-    if (s.kind !== 'run' || tiny(s)) return;
+    if (tiny(s)) return;
+    if (s.kind === 'fill') {
+      const next = secs[k + 1];
+      if (next?.block === s.block && next.kind === 'satin' && onTop(s, [next])) under.add(s);
+      return;
+    }
+    if (s.kind !== 'run') return;
     const ahead: Section[] = [];
     for (let m = k + 1; m < secs.length && m <= k + LOOKAHEAD && secs[m].block === s.block; m++) {
       const t = secs[m];
