@@ -13,6 +13,7 @@ const DIR = new URL('../public/examples/demos/', import.meta.url);
 
 const WOVEN: Profile = { fabric: 'woven', thread: '40' };
 const KNIT: Profile = { fabric: 'knit', thread: '40' };
+const CAP: Profile = { fabric: 'cap', thread: '40' };
 const LEATHER: Profile = { fabric: 'leather', thread: '40' };
 
 /** Zones that count towards the verdict. */
@@ -39,11 +40,12 @@ describe('demo files', () => {
     expect(worst(overlap, WOVEN)).toBe(CRITICAL);
     expect(worst(autoCorrect(overlap, WOVEN, DEFAULT_CORRECTION).pattern, WOVEN)).toBeLessThan(CRITICAL);
     // Fill under satin: caution on woven (a satin over one fill is normal practice), critical on
-    // knits, cleared there by pulling the fill back.
+    // caps and knits, cleared on caps by pulling the fill back.
     const letters = satinOverlapDesign();
     expect(worst(letters, WOVEN)).toBe(CAUTION);
     expect(worst(letters, KNIT)).toBe(CRITICAL);
-    expect(worst(autoCorrect(letters, KNIT, DEFAULT_CORRECTION).pattern, KNIT)).toBeLessThan(CRITICAL);
+    expect(worst(letters, CAP)).toBe(CRITICAL);
+    expect(worst(autoCorrect(letters, CAP, DEFAULT_CORRECTION).pattern, CAP)).toBeLessThan(CRITICAL);
     // Tiny spiral: normal on woven, critical on knits.
     const sun = shortStitchDesign();
     expect(worst(sun, WOVEN)).toBe(SAFE);

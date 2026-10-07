@@ -19,8 +19,11 @@ export type Level = typeof SAFE | typeof CAUTION | typeof CRITICAL;
  * 9.9 to 10.2, five fills from 12.4.
  */
 export const BASE = {
-  /** Four stacked fill layers. */
-  caution: 9.5,
+  /**
+   * Clearly above two stacked fills with underlay, i.e. about three layers: more than designs
+   * usually stack (layered fills should add up to about one normal fill, Melco).
+   */
+  caution: 7,
   /** Five full fill layers, one below Embrilliance's red. */
   critical: 12,
   /**

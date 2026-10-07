@@ -68,15 +68,15 @@ describe('thresholds and profiles', () => {
     const th = thresholdsFor(WOVEN);
     expect(densityLimits(th, 0)).toEqual([BASE.caution, BASE.critical]);
     expect(densityLimits(th, 1)).toEqual([BASE.satinCaution, BASE.satinCritical]);
-    expect(classifyDensity(9.49, 0, th)).toBe(SAFE);
-    expect(classifyDensity(9.5, 0, th)).toBe(CAUTION);
+    expect(classifyDensity(6.99, 0, th)).toBe(SAFE);
+    expect(classifyDensity(7, 0, th)).toBe(CAUTION);
     expect(classifyDensity(12, 0, th)).toBe(CRITICAL);
     expect(classifyDensity(12, 1, th)).toBe(SAFE);
     expect(classifyDensity(14, 0.5, th)).toBe(CAUTION);
   });
 
   it('scales the limits with fabric and thread', () => {
-    expect(thresholdsFor({ fabric: 'knit', thread: '40' }).caution).toBeCloseTo(9.5 * 0.85);
+    expect(thresholdsFor({ fabric: 'knit', thread: '40' }).caution).toBeCloseTo(7 * 0.85);
     expect(thresholdsFor({ fabric: 'woven', thread: '12' }).critical).toBeCloseTo(12 * 0.5);
     expect(thresholdsFor({ fabric: 'terry', thread: '30' }).factor).toBeCloseTo(0.65 * 0.8);
     expect(thresholdsFor(WOVEN).holes).toBeNull();
@@ -118,8 +118,8 @@ describe('density tiers (40 wt on woven)', () => {
     expect(peakIn(r, 14, 14, 26, 26)).toBeGreaterThan(5.9);
   });
 
-  it('keeps 3 layers Safe, flags 4 layers as CAUTION and 5 layers as CRITICAL at any angle', () => {
-    expect(validatePattern(layers(3).build(), WOVEN).zones).toEqual([]);
+  it('flags 3 and 4 layers as CAUTION and 5 layers as CRITICAL at any angle', () => {
+    expect(all(inner(validatePattern(layers(3).build(), WOVEN)), CAUTION)).toBe(true);
     expect(all(inner(validatePattern(layers(4).build(), WOVEN)), CAUTION)).toBe(true);
     const r = validatePattern(layers(5).build(), WOVEN);
     expect(all(inner(r), CRITICAL)).toBe(true);
@@ -174,16 +174,16 @@ describe('satin', () => {
 describe('profiles change the verdict without re-measuring', () => {
   const m = measurePattern(fillWithUnderlay(fillWithUnderlay(new Shape(), 0.3), 1.1).build());
 
-  it('two stacked fills: Safe on woven, Caution on terry, Critical with 12 wt', () => {
+  it('two stacked fills: Safe on woven, Caution on knit, Critical with 12 wt', () => {
     expect(classify(m, WOVEN).worst).toBe(SAFE);
-    expect(classify(m, { fabric: 'terry', thread: '40' }).worst).toBe(CAUTION);
+    expect(classify(m, { fabric: 'knit', thread: '40' }).worst).toBe(CAUTION);
     expect(classify(m, { fabric: 'woven', thread: '12' }).worst).toBe(CRITICAL);
   });
 
   it('a 60 wt profile tolerates more than 40 wt', () => {
-    const four = measurePattern(layers(4).build());
-    expect(classify(four, WOVEN).worst).toBe(CAUTION);
-    expect(classify(four, { fabric: 'woven', thread: '60' }).worst).toBe(SAFE);
+    const three = measurePattern(layers(3).build());
+    expect(classify(three, WOVEN).worst).toBe(CAUTION);
+    expect(classify(three, { fabric: 'woven', thread: '60' }).worst).toBe(SAFE);
   });
 });
 
