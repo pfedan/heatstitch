@@ -25,9 +25,10 @@ export const BACKGROUNDS: [string | null, Key][] = [
 
 /** What the view button on the stage says: the look that is on. */
 function viewName(s: Settings): string {
+  // Shapes first: they replace the stitches, realistic or not, and the stage should say so.
+  if (s.mode === 'flow' && s.shapesView) return t('design.view.shapes');
   if (s.realistic && (s.mode === 'flow' || s.mode === 'image' || s.overlay)) return t('design.view.realistic');
   if (s.mode !== 'flow') return t('design.view.title');
-  if (s.shapesView) return t('design.view.shapes');
   if (s.colorBy !== 'thread') return t(`colorBy.${s.colorBy}` as Key);
   return t('design.view.stitches');
 }
@@ -38,6 +39,7 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
   const colorBy = document.querySelectorAll<HTMLInputElement>('input[name="color-by"]');
   const markInputs = document.querySelectorAll<HTMLInputElement>('input[data-mark]');
   const marksToggle = $<HTMLButtonElement>('marks-toggle');
+  const shapesSeg = document.querySelectorAll<HTMLButtonElement>('#shapes-seg button');
   const marksBox = document.querySelector<HTMLElement>('fieldset.marks')!;
   const cell = $<HTMLInputElement>('cell');
   const blur = $<HTMLInputElement>('blur');
@@ -130,6 +132,7 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
     });
     marksToggle.setAttribute('aria-pressed', String(s.marksOn));
     marksToggle.title = t(s.marksOn ? 'design.view.marksOn' : 'design.view.marksOff');
+    shapesSeg.forEach((b) => b.setAttribute('aria-pressed', String((b.dataset.shapes === 'on') === s.shapesView)));
     $('view-name').textContent = viewName(s);
     $('realistic-sub').classList.toggle('off', !s.realistic);
     marksBox.classList.toggle('all-off', !s.marksOn);
@@ -203,6 +206,7 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
       return 'render';
     }),
   );
+  shapesSeg.forEach((b) => on(b, 'click', () => ((s.shapesView = b.dataset.shapes === 'on'), 'render')));
   on(marksToggle, 'click', () => ((s.marksOn = !s.marksOn), 'render'));
   on(cell, 'input', () => ((s.cellMm = Number(cell.value)), 'density'));
   on(blur, 'input', () => ((s.blurMm = Number(blur.value)), 'density'));

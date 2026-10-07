@@ -434,6 +434,25 @@ body[data-mode='flow'] .material-panel .profile-info span:nth-child(2) {
   color: var(--muted);
 }
 
+/* Stitches | shapes: both choices in sight, the one shown in the accent. */
+.vb-seg {
+  display: flex;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  overflow: hidden;
+}
+
+.vb-seg .vb-btn {
+  height: 30px;
+  border-radius: 0;
+  color: var(--muted);
+}
+
+.vb-seg .vb-btn[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
 #marks-toggle {
   position: relative;
   color: var(--accent);
