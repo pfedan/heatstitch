@@ -1047,26 +1047,17 @@ export class RungTool implements RungView {
 
   /**
    * Vorschlagen along the columns as they are, where the area makes no suggestion (a ring, an
-   * outline letter): rungs at the bends and cut lines at the sharp corners, as one change. False
-   * when there is nothing to add.
+   * outline letter, an outline read from an image): rungs at the bends, as one change. No cut
+   * lines at corners: on curls they made fans and new problems. False when there is nothing to add.
    */
   alongRails(): boolean {
     let changed = false;
     for (const c of this.columns) {
       const rungs = cornerRungs(c.left, c.right, c.rungs);
-      if (JSON.stringify(rungs) !== JSON.stringify(c.rungs)) {
-        c.rungs = rungs;
-        c.own = true;
-        changed = true;
-      }
-      const la = c.cl[c.cl.length - 1];
-      const lb = c.cr[c.cr.length - 1];
-      let cuts = c.cuts;
-      for (const r of cornerCuts(c.left, c.right, c.own ? c.rungs : (c.rails.rungs ?? []))) cuts = addRung(cuts, r, la, lb) ?? cuts;
-      if (cuts.length !== c.cuts.length) {
-        c.cuts = cuts;
-        changed = true;
-      }
+      if (JSON.stringify(rungs) === JSON.stringify(c.rungs)) continue;
+      c.rungs = rungs;
+      c.own = true;
+      changed = true;
     }
     this.selected = null;
     if (changed) this.hooks.change(this.result(), true);
