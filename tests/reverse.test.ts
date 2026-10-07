@@ -60,8 +60,8 @@ describe('sewing an object from the other side', () => {
 
   it('leaves an object with stitches outside its shape as it is', () => {
     // A piece of the cat's light body whose rows reach beyond the area recognized for it.
-    const { p, r } = turn('cat-60mm.pes', 2);
-    expect(r.failed).toEqual([2]);
+    const { p, r } = turn('cat-60mm.pes', 1);
+    expect(r.failed).toEqual([1]);
     expect(r.starts).toEqual([]);
     expect(r.pattern.cmd.length).toBe(p.cmd.length);
   }, 30000);
