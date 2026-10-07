@@ -250,4 +250,33 @@ describe('satins read from a file', () => {
       expect(columns.map((part) => part.map(({ split: _s, ...c }) => c))).toEqual(shape.columns!.map((part) => part.map(({ split: _s, ...c }) => c)));
     }
   });
+  it('keep their sections through save and open, mirror and sewing anew', () => {
+    const f = 'demos/letters.pes';
+    const p = parsePattern(readFileSync(new URL(`../public/examples/${f}`, import.meta.url)), f);
+    const kinds = stitchKinds(p);
+    const objs = sewObjects(p, kinds);
+    const o = objs.filter((x) => x.kind === 'satin').at(-1)!;
+    const shape = keepShape(p, o, kinds);
+    const columns = sectionView(shape.columns!, shape.shape);
+    remember(p, o, { ...shape, columns, read: false });
+    try {
+      const stored = JSON.parse(JSON.stringify(rememberedIn(p)));
+      forget(p, o);
+      restoreRemembered(p, stored);
+      const back = remembered(p, o)!;
+      expect(back.columns!.some((part) => part[0].split)).toBe(true);
+      const mirrored = transformRemembered(back, [-1, 0, 0, 1, 0, 0]);
+      const sp = mirrored.columns!.flat().find((c) => c.split)!.split!;
+      const orig = back.columns!.flat().find((c) => c.split)!.split!;
+      expect(sp.outlines[0][0][0]).toBeCloseTo(-orig.outlines[0][0][0], 6);
+      const r = restitch(p, objs, [o.index], (_o, an, known) => {
+        const part = an.parts.find((pt) => pt.kind === 'satin');
+        return part ? { kind: 'satin', s: known?.satin ?? measureSatin(p, part, kinds) } : null;
+      }, kinds, 2);
+      expect(r.failed).toEqual([]);
+      expect(r.memory[0].columns?.some((part) => part[0].split)).toBe(true);
+    } finally {
+      forget(p, o);
+    }
+  });
 });
