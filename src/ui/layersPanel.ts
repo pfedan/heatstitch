@@ -87,6 +87,14 @@ export const blockName = (b: Pick<ColorBlock, 'index' | 'color'>) => `${b.index 
 /** What is dragged in the list: one object (or the selection it belongs to), or a whole color block. */
 type Drag = { objects: number[]; block: number | null };
 
+/** Stands in for the browser's picture of the dragged row, which would cover the drop line and its label. */
+const NO_GHOST = (() => {
+  if (typeof Image === 'undefined') return null;
+  const img = new Image();
+  img.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+  return img;
+})();
+
 /**
  * The color blocks in sewing order, each opening to the objects sewn in it. A color row: a click
  * opens it, the swatch picks another thread, and on hover (always on touch) buttons highlight or
@@ -448,13 +456,52 @@ export class LayersPanel {
     this.drag = d;
     e.dataTransfer?.setData('text/plain', d.objects.join(','));
     if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+    this.showChip(e, d, li);
     li.classList.add('dragging');
     this.list.classList.add('drag-active');
     this.hooks.hover(null);
     this.hooks.focus(null, false);
   }
 
+  /**
+   * A small chip with what is dragged follows the pointer instead of the picture of the whole row.
+   * It keeps to the side of the pointer away from the drop line, so the line's label stays readable.
+   */
+  private showChip(e: DragEvent, d: Drag, li: HTMLLIElement): void {
+    const st = this.st;
+    if (!st || !e.dataTransfer || !NO_GHOST) return;
+    e.dataTransfer.setDragImage(NO_GHOST, 0, 0);
+    const first = st.objects[d.objects[0]];
+    const text =
+      d.objects.length > 1 && d.block === null
+        ? t('objects.color.count', { n: d.objects.length })
+        : (li.querySelector('.layer-name')?.textContent ?? '');
+    const sw = h('span', { class: 'sw' });
+    sw.style.background = css(d.block !== null ? st.blocks[d.block].color : first.color);
+    this.chip = h('div', { class: 'drag-chip', 'aria-hidden': 'true' }, sw, h('span', {}, text));
+    document.body.append(this.chip);
+    this.lineBelow = null;
+    this.placeChip(e);
+    document.addEventListener('dragover', this.followChip);
+  }
+
+  private chip: HTMLElement | null = null;
+  /** Where the drop line is from the pointer: below (true), above (false) or none (null). */
+  private lineBelow: boolean | null = null;
+  private followChip = (e: DragEvent) => this.placeChip(e);
+
+  private placeChip(e: DragEvent): void {
+    const chip = this.chip;
+    if (!chip || (!e.clientX && !e.clientY)) return;
+    const gap = 14;
+    const below = this.lineBelow === true;
+    chip.style.transform = `translate(${e.clientX + gap}px, ${below ? e.clientY - gap - chip.offsetHeight : e.clientY + gap}px)`;
+  }
+
   private dragEnd(): void {
+    document.removeEventListener('dragover', this.followChip);
+    this.chip?.remove();
+    this.chip = null;
     this.drag = null;
     this.list.classList.remove('drag-active');
     const pending = this.pending;
@@ -547,6 +594,7 @@ export class LayersPanel {
     if (!this.drag) return;
     const tg = this.target(e);
     this.clearDrop();
+    this.lineBelow = tg ? tg.after : null;
     if (!tg) return;
     e.preventDefault();
     if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
