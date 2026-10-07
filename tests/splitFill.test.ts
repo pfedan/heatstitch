@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { digitizeDefaults } from '../src/digitize/digitize';
 import type { Pt } from '../src/digitize/skeleton';
@@ -6,16 +7,19 @@ import { addShape } from '../src/model/addShape';
 import { rememberObjects, sewObjects } from '../src/model/objects';
 import { STITCH, TRIM, type Pattern } from '../src/model/pattern';
 import { formOf, transformSewObject } from '../src/model/reshape';
-import { remember, remembered, rememberedIn, restitch, type BorderSettings, type FillSettings } from '../src/model/restitch';
+import { remember, remembered, rememberedIn, restitch, restoreRemembered, type BorderSettings, type FillSettings } from '../src/model/restitch';
 import { shareBorders, syncBorders } from '../src/model/border';
 import { stitchesBefore } from '../src/model/transform';
-import { wholeArea } from '../src/model/knockout';
+import { overlapsIn, wholeArea } from '../src/model/knockout';
 import { stitchKinds } from '../src/model/sequence';
 import { duplicateObjects, mirrorMatrix } from '../src/model/shapeOps';
 import { canSplit, partAngles, splitArea, splitFill } from '../src/model/splitFill';
 import { sewDesign } from '../src/model/sew';
 import type { Mat } from '../src/shape/path';
 import { ellipsePath, parsePath, rectPath } from '../src/shape/svgPath';
+import { parsePattern } from '../src/parsers';
+import { fromStored } from '../src/storage/fileStore';
+import { decodeProject } from '../src/storage/project';
 import { DEFAULT_PROFILE } from '../src/validation/profiles';
 
 const ID: Mat = [1, 0, 0, 1, 0, 0];
@@ -356,5 +360,25 @@ describe('the border of a fill cut apart', () => {
     expect(first.memory!.piece).toBe(memOf(p)[parts[0]]!.piece);
     expect(second.memory!.piece).toBeUndefined();
     expect(second.memory!.of).toEqual({ id: ids[parts[0]], role: 'piece' });
+  });
+});
+
+describe('cutting a fill that leaves out what lies on top', () => {
+  it('gives every part the knockout, so no overlap is asked about after the cut', async () => {
+    // Aufnäher of the demo: the base fill leaves out the star on top of it.
+    const proj = await decodeProject(new Uint8Array(readFileSync(new URL('../public/examples/demo/heatstitch-demo.heatstitch', import.meta.url))));
+    const file = proj.files.find((f) => f.titles?.de === 'Aufnäher')!;
+    const o = parsePattern(file.data, file.name);
+    const p = fromStored(o, file.working) ?? o;
+    restoreRemembered(p, file.objects);
+    expect(remembered(p, sewObjects(p)[0])?.knockout).toBe(true);
+    expect(overlapsIn(p)).toEqual([]);
+    const b = p.bounds;
+    const x = (b.minX + b.maxX) / 20;
+    const s = splitFill(p, 0, [[[x, b.minY / 10 - 5], [x + 3, b.maxY / 10 + 5]]], T) as { pattern: Pattern; parts: number[] };
+    expect(s.parts.length).toBe(2);
+    const objs = sewObjects(s.pattern);
+    for (const k of s.parts) expect(remembered(s.pattern, objs[k])?.knockout).toBe(true);
+    expect(overlapsIn(s.pattern)).toEqual([]);
   });
 });

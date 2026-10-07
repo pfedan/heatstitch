@@ -369,7 +369,7 @@ export class StitchPanel {
   }
 
   private toolKey(info: StitchInfo): string {
-    return JSON.stringify([info.direction?.tool, info.direction?.rungs, info.direction?.cuts, info.draw?.tool, info.guide?.tool, info.points?.tool, info.knockout, info.free]);
+    return JSON.stringify([info.direction?.tool, info.direction?.rungs, info.direction?.cuts, info.draw?.tool, info.guide?.tool, info.points?.tool, info.knockout, info.free, info.original]);
   }
 
   /** What the kind switch knows about the selection (see kindWay). */
