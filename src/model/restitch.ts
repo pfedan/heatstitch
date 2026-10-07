@@ -23,6 +23,7 @@ import { tidy, withRecords } from './edit';
 import { coversOver, cutAway, type Cover } from './covers';
 import { backToVersion, entryOf, hasTable, hold, keepVersion, knowKinds, rememberObjects, setMemory, setObjects, setObjectsFromKeys, stitchIndex, stitchKey, tableOf, type ObjectKind, type PlacedEntry, type SewObject } from './objects';
 import { END, JUMP, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
+import { partFringe } from './fringe';
 import { SATIN, stitchKinds, TIE_STITCH } from './sequence';
 import { gradientOf, patchArea, patchSpacing, rowPatches, type RowPatch } from './rows';
 import { letteringFrom } from '../lettering/stored';
@@ -510,9 +511,12 @@ export function keepShape(p: Pattern, o: SewObject, kinds: Uint8Array): Remember
 
 /** The rails of a satin part as its stitches have them, laid onto the edge of its shape when it is known. */
 function readRails(p: Pattern, pt: Part, kinds: Uint8Array, known?: Remembered): Rails[] {
-  const rails = satinColumns(p, pt, kinds).map((c) => railsOf(p, c)).filter((r): r is Rails => !!r);
+  const rails = penetrationRails(p, pt, kinds);
   const edge = edgeOf(known);
-  return edge ? rails.map((r) => ({ left: onEdge(r.left, r.right, edge), right: onEdge(r.right, r.left, edge) })) : rails;
+  if (edge) return rails.map((r) => ({ left: onEdge(r.left, r.right, edge), right: onEdge(r.right, r.left, edge) }));
+  // A frayed side: its rail along the edge the stitches fall short of (measureSatin reads the fringe).
+  const frayed = partFringe(rails);
+  return frayed ? rails.map((r, k) => frayed.columns[k] ?? r) : rails;
 }
 
 /** The edge of a known shape as closed lines (its curves when drawn), or null. */
@@ -1631,8 +1635,12 @@ export function measureSatin(p: Pattern, pt: Part, kinds: Uint8Array): SatinSett
     else if (kinds[i] !== TIE_STITCH) other += seg(p, i);
   }
   const type: SatinType = all && e * 2 > all ? 'e' : 'satin';
-  const spacing = Math.round(Math.min(type === 'e' ? 6 : 1.5, Math.max(0.15, percentile(steps, 0.5) || 0.4)) * 100) / 100;
-  return { spacing, edge: 0, short: true, underlay: other > satin * 0.03, tolerance: TOLERANCE, type, under: 'auto', split: measuredSplit(p, pt, kinds), stagger: true, edgeShare: 0 };
+  // Frayed: the steps from point to point of the frayed side are longer than the spacing.
+  const frayed = type === 'e' ? null : partFringe(penetrationRails(p, pt, kinds));
+  const step = frayed?.spacing ?? percentile(steps, 0.5);
+  const spacing = Math.round(Math.min(type === 'e' ? 6 : 1.5, Math.max(0.15, step || 0.4)) * 100) / 100;
+  const fringe = frayed ? { fringe: frayed.fringe, ...(frayed.side ? { fringeSide: frayed.side } : {}) } : {};
+  return { spacing, edge: 0, short: true, underlay: other > satin * 0.03, tolerance: TOLERANCE, type, under: 'auto', split: measuredSplit(p, pt, kinds), stagger: true, edgeShare: 0, ...fringe };
 }
 
 /**
@@ -1672,6 +1680,13 @@ function isE(p: Pattern, s: number, e: number): boolean {
     if (p.x[i + 2] === p.x[i] && p.y[i + 2] === p.y[i]) spokes++;
   }
   return tries >= 2 && spokes >= tries * 0.8;
+}
+
+/** The rails of the satin columns of a part, as their penetrations have them. */
+export function penetrationRails(p: Pattern, pt: Part, kinds: Uint8Array): Rails[] {
+  return satinColumns(p, pt, kinds)
+    .map((c) => railsOf(p, c))
+    .filter((r): r is Rails => !!r);
 }
 
 /** Rails of a satin column from its penetrations, filled in between so the spacing can get finer. */
