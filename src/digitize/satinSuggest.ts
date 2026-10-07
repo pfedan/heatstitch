@@ -95,6 +95,12 @@ export function suggestSatin(area: Region, graph?: Graph): SatinSuggestion | nul
   const kind = classify(g);
   if (kind !== 'strokes') return { kind, cuts: [], lines: [], ok: false };
   const { cuts, lines } = planStrokes(g, [...outsides, ...holes]);
+  // A dot apart from the rest (its centerline hardly a line): one line across its narrow way.
+  for (const o of outsides) {
+    if (lines.some(([a, b]) => inside(o, add(a, sub(b, a), 0.5)))) continue;
+    const line = across(o);
+    if (line) lines.push(line);
+  }
   const ordered = bridgeOrder(cuts, outsides, holes);
   let made = stripsOfAreas(outsides, lines, ordered, holes);
   // A hole still closed (a ring of one line with a ring inside, say): opened where it comes closest.
@@ -106,6 +112,23 @@ export function suggestSatin(area: Region, graph?: Graph): SatinSuggestion | nul
     made = stripsOfAreas(outsides, lines, bridgeOrder(ordered, outsides, holes), holes);
   }
   return { kind, cuts: bridgeOrder(ordered, outsides, holes), lines, ok: made.hole < 0 && !made.bad };
+}
+
+/** A line across a small outline through its middle, its narrow way (along its least spread). */
+function across(ring: Pt[]): [Pt, Pt] | null {
+  if (ring.length < 3) return null;
+  const c: Pt = [0, 0];
+  for (const p of ring) [c[0], c[1]] = [c[0] + p[0] / ring.length, c[1] + p[1] / ring.length];
+  let [xx, xy, yy] = [0, 0, 0];
+  for (const p of ring) {
+    const [dx, dy] = sub(p, c);
+    [xx, xy, yy] = [xx + dx * dx, xy + dx * dy, yy + dy * dy];
+  }
+  // The direction of least spread (the eigenvector of the smaller eigenvalue).
+  const a = 0.5 * Math.atan2(2 * xy, xx - yy) + Math.PI / 2;
+  const d: Pt = [Math.cos(a), Math.sin(a)];
+  const reach = Math.max(...ring.map((p) => dist(p, c))) + 0.5;
+  return [add(c, d, -reach), add(c, d, reach)];
 }
 
 /** A branch end at a junction: the branch and whether it leaves from its end b. */
@@ -154,7 +177,7 @@ export function planStrokes(g: Graph, rings: Pt[][]): { cuts: [Pt, Pt][]; lines:
   const find = (i: number): number => (root[i] === i ? i : (root[i] = find(root[i])));
   const inner = new Set<number>();
   B.forEach((b, k) => {
-    if (b.a !== b.b && lengthOf(b.pts) < g.nodes[b.a].r + g.nodes[b.b].r) {
+    if (b.a !== b.b && lengthOf(b.pts) < 0.75 * (g.nodes[b.a].r + g.nodes[b.b].r)) {
       root[find(b.a)] = find(b.b);
       inner.add(k);
     }
@@ -267,7 +290,9 @@ export function planStrokes(g: Graph, rings: Pt[][]): { cuts: [Pt, Pt][]; lines:
         const w = halfOf[e.br] * 1.2 + 0.3;
         cut = [add(c, [-d[1], d[0]], -w), add(c, [-d[1], d[0]], w)];
       }
-      cuts.push(cut);
+      // Two junctions close together can find the same corners: one cut is enough.
+      const twin = cuts.some(([a, b]) => Math.min(dist(a, cut[0]) + dist(b, cut[1]), dist(a, cut[1]) + dist(b, cut[0])) < 1);
+      if (!twin) cuts.push(cut);
       // Where along the branch the cut lies (lines across keep clear of it).
       const m = add(cut[0], sub(cut[1], cut[0]), 0.5);
       let s = 0;
