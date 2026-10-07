@@ -295,7 +295,10 @@ function finish(
   // Exact regions have neither jagged edges nor seams; the filters would only eat fine lines.
   if (!exact) {
     labels = modeFilter(labels, w, h);
-    const labOf = (k: number) => (k === NONE ? null : palette[k].lab);
+    // Judged by the image's own colors: a seam between two threads need not lie between them (a dark
+    // orange edge matched to a dark brown thread), but it does between the colors it blends.
+    const imageLab = palette.map((p) => rgbToLab(...p.source));
+    const labOf = (k: number) => (k === NONE ? null : imageLab[k]);
     // Seams of anti-aliasing: at most 0.5 mm wide, colored between their two neighbours.
     labels = removeSeams(labels, w, h, 0.5 / pxMm, (s, a, b) => {
       const [ls, la, lb] = [labOf(s), labOf(a), labOf(b)];
