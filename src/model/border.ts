@@ -351,7 +351,12 @@ function syncOwnBorders(p: Pattern, trimMm: number, drop: ReadonlySet<string>, f
       const end = seams[seams.length - 1];
       if (end) runs = [...seams, ...borderStitches(region, b, end[end.length - 1], cutFrom)];
     }
-    if (!runs.length) return;
+    // Nothing of its edge shows (all of it under shapes on top): no border to sew, and none left in
+    // its old stitches or thread; it comes back with its edge.
+    if (!runs.length) {
+      if (target) changes.push({ a: leadOf(p, target), b: target.last, recs: [] });
+      return;
+    }
     const memory: Remembered = { region, outline: b.link, border: stitchOf(b) };
     let recs = runRecords(runs, trimMm);
     // The very stitches of another border (a fill copied in place): sewn the other way round, so
