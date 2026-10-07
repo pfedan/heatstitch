@@ -379,6 +379,11 @@ export interface Remembered {
   asLine?: LineFill;
   /** The object is the border of a fill in its own thread: the fill's `border.link`. */
   outline?: string;
+  /**
+   * The fill is a part of a fill cut apart (see splitFill): the parts with the same `piece` are one
+   * whole, with one border around them all (never along the cuts), whose settings each part keeps.
+   */
+  piece?: string;
   /** The object is the second thread of a color blend: the fill's `deco.blend.link` (see syncBlends). */
   blendOf?: string;
   /** The object is the shadow of a line: the line's `line.shadow.link` (see syncShadows). */
@@ -585,6 +590,7 @@ export interface StoredObject {
   asSatin?: StoredRails[];
   asLine?: { path: StoredPath[]; line: PathStitch; cap?: LineCap };
   outline?: string;
+  piece?: string;
   blendOf?: string;
   shadowOf?: string;
   echoOf?: string;
@@ -652,6 +658,7 @@ function storeOne(key: string, r: Remembered): StoredObject {
     ...(r.asSatin ? { asSatin: r.asSatin.map(storeRails) } : {}),
     ...(r.asLine ? { asLine: { path: storeForm(r.asLine.path), line: { ...r.asLine.line }, cap: r.asLine.cap } } : {}),
     ...(r.outline ? { outline: r.outline } : {}),
+    ...(r.piece ? { piece: r.piece } : {}),
     ...(r.blendOf ? { blendOf: r.blendOf } : {}),
     ...(r.shadowOf ? { shadowOf: r.shadowOf } : {}),
     ...(r.echoOf ? { echoOf: r.echoOf } : {}),
@@ -665,7 +672,7 @@ function storeOne(key: string, r: Remembered): StoredObject {
 }
 
 /** How an object follows another one (its leader), as stored: see StoredEntry.of. */
-export type FollowRole = 'border' | 'blend' | 'shadow' | 'echo';
+export type FollowRole = 'border' | 'blend' | 'shadow' | 'echo' | 'piece';
 
 /** One object of a version as stored (project version 2). */
 export interface StoredEntry {
@@ -678,7 +685,10 @@ export interface StoredEntry {
   at: [number, number];
   /** What it knows; absent for an object only recognized from its stitches. */
   memory?: Omit<StoredObject, 'key' | 'join'> & {
-    /** The object it follows (by id) and how: its fill's border, its blend's second thread, its line's shadow or echo copies (n: the nearest copy). */
+    /**
+     * The object it follows (by id) and how: its fill's border, its blend's second thread, its
+     * line's shadow or echo copies (n: the nearest copy), or a part of the same fill cut apart.
+     */
     of?: { id: number; role: FollowRole; n?: number };
   };
 }
@@ -702,6 +712,7 @@ function leaderLink(m: Remembered, role: FollowRole): string | undefined {
   if (role === 'border') return m.fill?.border?.link;
   if (role === 'blend') return m.fill?.deco?.blend?.link;
   if (role === 'shadow') return m.line?.shadow?.link;
+  if (role === 'piece') return m.piece;
   return m.line?.echo?.link;
 }
 
@@ -715,6 +726,8 @@ function followed(m: Remembered): { link: string; role: FollowRole; n?: number }
     const n = Number(m.echoOf.slice(k + 1));
     return k > 0 && Number.isInteger(n) ? { link: m.echoOf.slice(0, k), role: 'echo', n } : { link: m.echoOf, role: 'echo' };
   }
+  // The first part of a fill cut apart names the whole, the others follow it.
+  if (m.piece) return { link: m.piece, role: 'piece' };
   return null;
 }
 
@@ -727,7 +740,7 @@ export function rememberedIn(p: Pattern, _objects?: SewObject[]): StoredObjects 
   for (const e of t.entries) {
     const m = e.memory;
     if (!m) continue;
-    for (const role of ['border', 'blend', 'shadow', 'echo'] as const) {
+    for (const role of ['border', 'blend', 'shadow', 'echo', 'piece'] as const) {
       const l = leaderLink(m, role);
       if (l && !leaders.has(`${role} ${l}`)) leaders.set(`${role} ${l}`, e.id);
     }
@@ -738,11 +751,11 @@ export function rememberedIn(p: Pattern, _objects?: SewObject[]): StoredObjects 
     objects: t.entries.map((e): StoredEntry => {
       const where = { id: e.id, first: ix.before[e.first], last: ix.before[e.last], key: stitchKey(p, e.first, e.last), at: [p.x[e.first], p.y[e.first]] as [number, number] };
       if (!e.memory) return where;
-      const { key: _k, outline: _o, blendOf: _b, shadowOf: _s, echoOf: _e, ...stored } = storeOne('', e.memory);
+      const { key: _k, outline: _o, blendOf: _b, shadowOf: _s, echoOf: _e, piece: _p, ...stored } = storeOne('', e.memory);
       const f = followed(e.memory);
       const leader = f ? leaders.get(`${f.role} ${f.link}`) : undefined;
       // A follower whose leader is gone keeps naming it, as it did (the next change drops it).
-      const keep = f && (leader === undefined || leader === e.id) ? { [f.role === 'border' ? 'outline' : f.role === 'blend' ? 'blendOf' : f.role === 'shadow' ? 'shadowOf' : 'echoOf']: f.role === 'echo' ? e.memory.echoOf : f.link } : {};
+      const keep = f && (leader === undefined || leader === e.id) ? { [f.role === 'border' ? 'outline' : f.role === 'blend' ? 'blendOf' : f.role === 'shadow' ? 'shadowOf' : f.role === 'piece' ? 'piece' : 'echoOf']: f.role === 'echo' ? e.memory.echoOf : f.link } : {};
       return { ...where, memory: { ...stored, ...keep, ...(f && leader !== undefined && leader !== e.id ? { of: { id: leader, role: f.role, ...(f.n !== undefined ? { n: f.n } : {}) } } : {}) } };
     }),
   };
@@ -1034,6 +1047,7 @@ function fromStored(e: StoredObject): Remembered | null {
   const asLine = e.asLine && formFrom(e.asLine.path);
   if (asLine && isLineStitch(e.asLine!.line)) r.asLine = { path: asLine, line: { ...e.asLine!.line }, cap: e.asLine!.cap === 'round' ? 'round' : 'flat' };
   if (typeof e.outline === 'string') r.outline = e.outline;
+  if (typeof e.piece === 'string' && r.fill) r.piece = e.piece;
   if (typeof e.blendOf === 'string') r.blendOf = e.blendOf;
   if (typeof e.shadowOf === 'string') r.shadowOf = e.shadowOf;
   if (typeof e.echoOf === 'string') r.echoOf = e.echoOf;
@@ -1070,7 +1084,7 @@ export function restoreRemembered(p: Pattern, list: unknown): number {
       const m = e.memory ? fromStored({ ...e.memory, key: '' } as StoredObject) : null;
       entries.push({ id: e.id, first: e.first, last: e.last, key: e.key, at: [e.at[0], e.at[1]], ...(m ? { memory: m } : {}) });
       const of = e.memory?.of;
-      if (m && of && finite(of.id) && ['border', 'blend', 'shadow', 'echo'].includes(of.role)) ofs.push({ at: entries.length - 1, of });
+      if (m && of && finite(of.id) && ['border', 'blend', 'shadow', 'echo', 'piece'].includes(of.role)) ofs.push({ at: entries.length - 1, of });
     }
     // Followers name their leader's link again.
     for (const { at, of } of ofs) {
@@ -1081,7 +1095,9 @@ export function restoreRemembered(p: Pattern, list: unknown): number {
       if (of.role === 'border') m.outline = link;
       else if (of.role === 'blend') m.blendOf = link;
       else if (of.role === 'shadow') m.shadowOf = link;
-      else m.echoOf = of.n !== undefined ? `${link}:${of.n}` : link;
+      else if (of.role === 'piece') {
+        if (m.fill) m.piece = link;
+      } else m.echoOf = of.n !== undefined ? `${link}:${of.n}` : link;
     }
     setObjects(p, entries, finite(list.next) ? list.next : 1);
     return entries.filter((e) => e.memory).length;
@@ -2645,6 +2661,7 @@ function restitchOnce(
           ...(known?.asLine && settings.kind === 'fill' ? { asLine: lineFillOf(known.asLine, settings.s) } : {}),
           ...(known?.outline ? { outline: known.outline, border: known.border } : {}),
           ...(known?.blendOf ? { blendOf: known.blendOf } : {}),
+          ...(known?.piece && settings.kind === 'fill' ? { piece: known.piece } : {}),
           ...(known?.shadowOf ? { shadowOf: known.shadowOf } : {}),
           ...(known?.echoOf ? { echoOf: known.echoOf } : {}),
         };

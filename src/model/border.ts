@@ -12,6 +12,7 @@ import { stitchKinds } from './sequence';
 import { lineStitches } from './line';
 import { hasPart, lineParts, partInThread, partOf } from './shadow';
 import { storeForm } from '../shape/path';
+import { unionOf } from '../shape/rasterize';
 import { recolor } from './recolor';
 
 /**
@@ -47,6 +48,58 @@ const withoutLink = ({ outline: _o, border: _b, ...rest }: Remembered): Remember
 
 /** A new link between a fill and its border object. */
 export const newLink = () => Math.random().toString(36).slice(2, 10);
+
+/** Whether `m` is a fill that can have a border object of its own (see syncOwnBorders). */
+const bordered = (m: Remembered | undefined): boolean => !!m?.region && !!m.fill && !m.blendOf && m.fill.pattern !== 'none' && !(m.fill.border && !m.fill.border.color && m.borderAt);
+
+/**
+ * The parts of fills cut apart (Remembered.piece) as wholes: for each object the objects of its
+ * whole in sewing order, itself alone when it is no part (or the only one left).
+ */
+function wholes(mem: readonly (Remembered | undefined)[]): number[][] {
+  const by = new Map<string, number[]>();
+  const out: number[][] = mem.map((_, k) => [k]);
+  mem.forEach((m, k) => {
+    if (!m?.piece || !bordered(m)) return;
+    const list = by.get(m.piece) ?? [];
+    list.push(k);
+    by.set(m.piece, list);
+  });
+  for (const list of by.values()) for (const k of list) out[k] = list;
+  return out;
+}
+
+/** The area of a whole (one region, or the regions of its parts as one), kept while the parts keep theirs. */
+const unions = new WeakMap<Region, { rs: Region[]; u: Region | null }>();
+function areaOf(rs: Region[]): Region | null {
+  if (rs.length === 1) return rs[0];
+  const kept = unions.get(rs[0]);
+  if (kept && kept.rs.length === rs.length && kept.rs.every((r, k) => r === rs[k])) return kept.u;
+  const u = unionOf(rs.filter((r) => r.pxMm === rs[0].pxMm));
+  unions.set(rs[0], { rs, u });
+  return u;
+}
+
+/**
+ * The parts of a fill cut apart share the border of the part `edited` was given (with the panel):
+ * each part of its whole takes over its border settings (and link), so the one border around them
+ * all changes for every part. Call it before syncBorders.
+ */
+export function shareBorders(p: Pattern, edited: readonly SewObject[]): void {
+  if (!edited.length) return;
+  const objs = sewObjects(p);
+  for (const e of edited) {
+    const m = remembered(p, e);
+    if (!m?.piece || !m.fill) continue;
+    for (const o of objs) {
+      if (o.first === e.first) continue;
+      const n = remembered(p, o);
+      if (n?.piece !== m.piece || !n.fill || JSON.stringify(n.fill.border) === JSON.stringify(m.fill.border)) continue;
+      const { border: _b, ...rest } = n.fill;
+      remember(p, o, { ...n, fill: m.fill.border ? { ...rest, border: { ...m.fill.border } } : rest });
+    }
+  }
+}
 
 /** Records of a border (or a drawn line): a jump to its start, its runs with locks, a trim at the end. */
 export function runRecords(runs: Pt[][], trimMm: number): Rec[] {
@@ -227,17 +280,38 @@ function syncOwnBorders(p: Pattern, trimMm: number, drop: ReadonlySet<string>, f
     if (!byLink.has(m.outline)) byLink.set(m.outline, k);
     else remember(p, objs[k], (mem[k] = withoutLink(m)));
   });
-  // A copy of a fill gets a border of its own: the first fill keeps the link, later ones a new one.
-  const claimed = new Set<string>();
-  mem.forEach((m, k) => {
+  // The parts of a fill cut apart share one border: all take the settings of the first one (the
+  // panel gives them to all, see shareBorders; this is for anything else).
+  const whole = wholes(mem);
+  whole.forEach((list, k) => {
+    if (list.length < 2 || list[0] !== k) return;
+    const b = mem[k]!.fill!.border;
+    for (const j of list.slice(1)) {
+      const m = mem[j]!;
+      if (JSON.stringify(m.fill!.border) === JSON.stringify(b)) continue;
+      const { border: _b, ...rest } = m.fill!;
+      remember(p, objs[j], (mem[j] = { ...m, fill: b ? { ...rest, border: { ...b } } : rest }));
+    }
+  });
+  // A copy of a fill gets a border of its own: the first fill (or whole) keeps the link, later ones
+  // a new one (the parts of a whole one together).
+  const claimed = new Map<string, number>();
+  whole.forEach((list, k) => {
+    const m = mem[k];
     const b = m?.fill?.border;
     // A border still sewn as the last part of its fill (from before borders were objects) stays so,
     // as does the border of an empty fill (it is all the object is).
     if (!m?.fill || !b || (!b.color && m.borderAt) || m.fill.pattern === 'none') return;
-    if (b.link && !claimed.has(b.link)) return void claimed.add(b.link);
+    if (b.link && (claimed.get(b.link) ?? list[0]) === list[0]) return void claimed.set(b.link, list[0]);
     // A border without link yet, or the copy of a fill: a link of its own.
+    if (list[0] !== k) {
+      // A later part of a whole takes the link its first part was given.
+      const first = mem[list[0]]!.fill!.border!;
+      remember(p, objs[k], (mem[k] = { ...m, fill: { ...m.fill, border: { ...b, link: first.link } } }));
+      return;
+    }
     remember(p, objs[k], (mem[k] = { ...m, fill: { ...m.fill, border: { ...b, link: newLink() } } }));
-    claimed.add(mem[k]!.fill!.border!.link!);
+    claimed.set(mem[k]!.fill!.border!.link!, k);
   });
   const seconds = new Map<string, number>();
   mem.forEach((m, k) => m?.blendOf && !seconds.has(m.blendOf) && seconds.set(m.blendOf, k));
@@ -251,6 +325,13 @@ function syncOwnBorders(p: Pattern, trimMm: number, drop: ReadonlySet<string>, f
     // A blend's second thread is sewn as its fill says, without border.
     if (!m?.region || !b?.link || (!b.color && m.borderAt) || m.blendOf || m.fill?.pattern === 'none') return;
     wanted.add(b.link);
+    // The parts of a fill cut apart: one border around them all, sewn after the last one.
+    const list = whole[k];
+    if (list[list.length - 1] !== k) return;
+    const region = areaOf(list.map((j) => mem[j]!.region!));
+    if (!region) return;
+    const cuts = list.map((j) => wholeOf(mem[j]!.region!, mem[j]));
+    const cutFrom = cuts.some(Boolean) ? areaOf(list.map((j, i) => cuts[i] ?? mem[j]!.region!)) : null;
     const color = b.color ?? o.color;
     // Sewn after this object: the fill, or the second thread of its blend.
     const second = m.fill?.deco?.blend ? seconds.get(m.fill.deco.blend.link) : undefined;
@@ -259,11 +340,11 @@ function syncOwnBorders(p: Pattern, trimMm: number, drop: ReadonlySet<string>, f
     const cur = at === undefined ? undefined : mem[at];
     const target = at === undefined ? null : objs[at];
     const same = target && cur?.border && sameColor(target.color, color) && (second === undefined || !fresh.has(m.fill!.deco!.blend!.link) || at! > second);
-    if (same && sameRegion(cur!.region, m.region) && sameBorder(cur!.border!, b)) return;
+    if (same && sameRegion(cur!.region, region) && sameBorder(cur!.border!, b)) return;
     const from: Pt = [p.x[after.last] / 10, p.y[after.last] / 10];
-    let runs = borderStitches(m.region, b, from, wholeOf(m.region, m));
+    let runs = borderStitches(region, b, from, list.length > 1 ? cutFrom : wholeOf(m.region, m));
     if (!runs.length) return;
-    const memory: Remembered = { region: m.region, outline: b.link, border: stitchOf(b) };
+    const memory: Remembered = { region, outline: b.link, border: stitchOf(b) };
     let recs = runRecords(runs, trimMm);
     // The very stitches of another border (a fill copied in place): sewn the other way round, so
     // each remembers its own (memory is keyed by stitches).

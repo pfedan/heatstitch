@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { digitizeDefaults } from '../src/digitize/digitize';
 import { addShape } from '../src/model/addShape';
-import { recolorBlock, syncBorders } from '../src/model/border';
+import { recolorBlock, shareBorders, syncBorders } from '../src/model/border';
 import { blendObject } from '../src/model/blend';
 import { MOTIFS } from '../src/digitize/deco';
 import { ECHO_SIDES } from '../src/digitize/echo';
@@ -134,6 +134,7 @@ function restitchFill(d: Doc, o: number, s: FillSettings, drop: Set<string>): bo
       return n >= a && n < r.ends[k];
     });
     if (pieces.length === 1) remember(r.pattern, pieces[0], r.memory[k]);
+    shareBorders(r.pattern, pieces);
   });
   return shapes(d, syncBorders(r.pattern, T, drop));
 }
@@ -339,7 +340,11 @@ const OPS: Op[] = [
       const { pattern, parts } = s!;
       const hadBorder = !!remembered(p, o)?.fill?.border;
       if (!hadBorder) expect(sewObjects(pattern).length, 'one object more per part').toBe(d.objects.length + parts.length - 1);
-      expect(parts.every((k) => !remembered(pattern, sewObjects(pattern)[k])?.fill?.border), 'parts have no border').toBe(true);
+      // Invariant: the parts are one whole and keep the fill's border, one object around them all.
+      const pm = parts.map((k) => remembered(pattern, sewObjects(pattern)[k]));
+      expect(new Set(pm.map((m) => m?.piece)).size, 'parts are one whole').toBe(1);
+      expect(pm[0]?.piece, 'parts are one whole').toBeTruthy();
+      expect(pm.every((m) => !!m?.fill?.border === hadBorder), 'parts keep the border').toBe(true);
       // Invariant: the parts cover the area as it was, no fabric along the cut.
       const kinds = stitchKinds(pattern);
       const objs = sewObjects(pattern, kinds);
@@ -523,7 +528,10 @@ function checkPartsFit(p: Pattern): void {
   expect(problems.join('; '), 'sewn parts that no longer fit').toBe('');
 }
 
-/** Each fill's border is one object, in its own thread or the fill's, and every border has its fill. */
+/**
+ * Each fill's border is one object, in its own thread or the fill's, and every border has its fill.
+ * Only the parts of one fill cut apart share a border (and have the same settings for it).
+ */
 function checkBorders(p: Pattern): void {
   const objs = sewObjects(p);
   const mem = objs.map((o) => remembered(p, o));
@@ -532,8 +540,16 @@ function checkBorders(p: Pattern): void {
   mem.forEach((m, k) => {
     const b = m?.fill?.border;
     if (!b?.link) return;
-    if (fills.has(b.link)) problems.push(`fills ${fills.get(b.link)} and ${k} share border link ${b.link}`);
-    fills.set(b.link, k);
+    const f = fills.get(b.link);
+    if (f !== undefined && (!m!.piece || mem[f]!.piece !== m!.piece)) problems.push(`fills ${f} and ${k} share border link ${b.link}`);
+    if (f === undefined) fills.set(b.link, k);
+  });
+  const pieces = new Map<string, number>();
+  mem.forEach((m, k) => {
+    if (!m?.piece || !m.region || !m.fill || m.fill.pattern === 'none') return;
+    const f = pieces.get(m.piece);
+    if (f === undefined) return void pieces.set(m.piece, k);
+    if (JSON.stringify(mem[f]!.fill!.border) !== JSON.stringify(m.fill.border)) problems.push(`parts ${f} and ${k} of one whole have other borders`);
   });
   const borders = new Map<string, number>();
   mem.forEach((m, k) => {
