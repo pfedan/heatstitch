@@ -54,8 +54,8 @@ const norm = (v: Pt): Pt => {
 const perp = (v: Pt): Pt => [-v[1], v[0]];
 const deg = (a: Pt, b: Pt) => (Math.acos(Math.max(-1, Math.min(1, dot(norm(a), norm(b))))) * 180) / Math.PI;
 
-/** The corners of a closed outline, in order along it. */
-function bends(ring: Pt[], material: (q: Pt) => boolean): Bend[] {
+/** The corners of a closed outline, in order along it (`hole`: the material is outside it). */
+function bends(ring: Pt[], material: (q: Pt) => boolean, hole = false): Bend[] {
   const pts = ring.length > 2 && dist(ring[0], ring[ring.length - 1]) < 1e-9 ? ring.slice(0, -1) : ring;
   const n = pts.length;
   if (n < 8) return [];
@@ -63,6 +63,9 @@ function bends(ring: Pt[], material: (q: Pt) => boolean): Bend[] {
   for (let i = 1; i <= n; i++) cum.push(cum[i - 1] + dist(pts[i - 1], pts[i % n]));
   const total = cum[n];
   const at = (k: number) => pts[((k % n) + n) % n];
+  let area = 0;
+  for (let i = 0; i < n; i++) area += at(i)[0] * at(i + 1)[1] - at(i + 1)[0] * at(i)[1];
+  const left = area > 0 !== hole;
   const turn = (i: number, arm = BEND_ARM) => {
     let a = i;
     let b = i;
@@ -74,7 +77,9 @@ function bends(ring: Pt[], material: (q: Pt) => boolean): Bend[] {
     const dout = norm(sub(at(b), at(i)));
     const m: Pt = [(at(a)[0] + at(b)[0]) / 2, (at(a)[1] + at(b)[1]) / 2];
     const toward = norm(sub(m, at(i)));
-    const convex = material(add(at(i), toward, 0.15));
+    // By which way the outline turns there (a thin tip may have no material a probe's length in).
+    const cross = din[0] * dout[1] - din[1] * dout[0];
+    const convex = Math.abs(cross) > 0.03 ? cross > 0 === left : material(add(at(i), toward, 0.15));
     return { deg: deg(din, dout), convex, into: convex ? toward : ([-toward[0], -toward[1]] as Pt) };
   };
   const ts = pts.map((_, i) => turn(i));
@@ -157,7 +162,7 @@ export function cornerCuts(outsides: Pt[][], holes: Pt[][], material: (q: Pt) =>
       tipsOf.push(tips.map((x) => x.p));
     });
   }
-  for (const ring of holes) all.push(...bends(ring, material));
+  for (const ring of holes) all.push(...bends(ring, material, true));
   // Miters: an outer corner and the inner corner facing it across the band.
   const outer = all.filter((b) => b.convex && b.deg >= 60);
   const inner = all.filter((b) => !b.convex && !used.has(b));
@@ -177,8 +182,11 @@ export function cornerCuts(outsides: Pt[][], holes: Pt[][], material: (q: Pt) =>
   for (const { o, n } of pairs) {
     if (used.has(o) || used.has(n)) continue;
     used.add(o).add(n);
-    const d = norm(sub(n.p, o.p));
-    cuts.push([add(o.p, d, -0.3), add(n.p, d, 0.3)]);
+    // From just beyond each corner, so the line crosses the outline there rather than grazing a vertex.
+    const a = add(o.p, norm(o.into), -0.15);
+    const b = add(n.p, norm(n.into), -0.15);
+    const d = norm(sub(b, a));
+    cuts.push([add(a, d, -0.3), add(b, d, 0.3)]);
     miters++;
   }
   return { cuts, spikes: tipsOf.length, miters, tips: tipsOf };
