@@ -2582,6 +2582,41 @@ button.tool:disabled {
   bottom: -10px;
 }
 
+/* Follows the pointer while a row is dragged, beside the drop line instead of over it. */
+.drag-chip {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  padding: 3px 9px 3px 5px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.18);
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.drag-chip > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.drag-chip .sw {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.15);
+}
+
 .layer-note {
   margin: 8px 0 0;
   font-size: 12px;

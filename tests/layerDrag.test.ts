@@ -54,9 +54,21 @@ describe.skipIf(!on)('dragging an object in the list', () => {
     // The line says which thread it is sewn in.
     const label = await page.locator('#layer-list .drop-after, #layer-list .drop-before').first().evaluate((r) => (r as HTMLElement).dataset.drop ?? '');
     expect(label).toMatch(/Orange/);
+    // What is dragged follows as a small chip that keeps clear of the label on the line.
+    const boxes = await page.evaluate(() => {
+      const row = document.querySelector<HTMLElement>('#layer-list [data-drop]')!;
+      const r = row.getBoundingClientRect();
+      const after = getComputedStyle(row, '::after');
+      const lt = row.classList.contains('drop-after') ? r.bottom - parseFloat(after.bottom) - parseFloat(after.height) : r.top + parseFloat(after.top);
+      const chip = document.querySelector<HTMLElement>('.drag-chip')!.getBoundingClientRect();
+      return { label: [lt, lt + parseFloat(after.height)], chip: [chip.top, chip.bottom], text: document.querySelector('.drag-chip')!.textContent };
+    });
+    expect(boxes.text).toMatch(/Fill|Füllung/);
+    expect(boxes.chip[1] <= boxes.label[0] || boxes.chip[0] >= boxes.label[1]).toBe(true);
     await page.mouse.up();
     await page.waitForTimeout(500);
     expect(await page.evaluate(() => document.body.classList.contains('dragging'))).toBe(false);
+    expect(await page.locator('.drag-chip').count()).toBe(0);
     // Creme is empty and gone, the fill is sewn in orange now.
     expect(await page.locator('#layer-list .color-row').count()).toBe(colors - 1);
     expect(await page.locator('#layer-list .color-row').first().innerText()).toMatch(/Orange[\s\S]*5/);
