@@ -1,5 +1,6 @@
 import { outline, type Region } from './region';
 import { inside, stripsOfAreas } from './rungs';
+import { cornerCuts, planParts } from './satinForms';
 import { blobShape, filled, materialOf, planShape, smallHoles, splitBlobs, wholeShape } from './satinShapes';
 import { skeleton, type Branch, type Graph, type Pt } from './skeleton';
 
@@ -21,10 +22,14 @@ import { skeleton, type Branch, type Graph, type Pt } from './skeleton';
  *   off where the lines start and planned as a compact shape of its own (see satinShapes).
  * - `dot`: a round area, one column across or (up to 12 mm) two halves (see satinShapes).
  * - `pointed`: an area with corners (a triangle), lines across fanning from a corner (see satinShapes).
+ * - `leaf`, `drop`: a long round area pointed at both ends or one, sewn as a dot (see satinShapes).
+ * - `crescent`: a line pointed at both ends bending round (a moon), sewn as one column turning.
+ * - `spikes`: points standing off a body (a star, the bars of an E), each cut off at its base.
+ * - `frame`: a band turning corners (a frame, a block letter), cut on the miter (see satinForms).
  * - `wide`: too wide or too blotchy for satin; nothing is suggested.
  */
 
-export type ShapeClass = 'strokes' | 'dot' | 'pointed' | 'wide';
+export type ShapeClass = 'strokes' | 'dot' | 'pointed' | 'spikes' | 'frame' | 'leaf' | 'drop' | 'crescent' | 'wide';
 
 export interface SatinSuggestion {
   kind: ShapeClass;
@@ -36,6 +41,8 @@ export interface SatinSuggestion {
 
 /** Widest column the strokes planner makes (mm), as the image conversion's satin limit. */
 const STROKE_MAX = 7;
+/** Lines at least this wide (mm) are cut on the miter at sharp corners rather than turned there. */
+const MITER_MIN = 1.5;
 /** An end branch reaching less than this many of its half widths beyond the line it hangs from stays on its column. */
 const SPUR = 4;
 /** A line across every this much turn of the column (degrees). */
@@ -92,22 +99,27 @@ export function offersSections(g: Graph): boolean {
   return [...degree.values()].some((d) => d >= 3);
 }
 
-/** A suggestion for the fill area (null when the area is empty). */
-export function suggestSatin(area: Region, graph?: Graph): SatinSuggestion | null {
+/** A suggestion for the fill area (null when the area is empty); `max` is the longest stitch of a shape's columns (mm). */
+export function suggestSatin(area: Region, graph?: Graph, max = STROKE_MAX): SatinSuggestion | null {
   const { outsides, holes } = areaLoops(area);
   if (!outsides.length) return null;
   const g = graph ?? skeleton(area);
   const kind = classify(g);
   const material = materialOf(outsides, holes);
+  // Corners to cut at (spikes, miters): on an area, or on lines wide enough that a turn would pile up.
+  if (kind !== 'strokes' || 2 * median(g.branches.flatMap((b) => b.r)) >= MITER_MIN) {
+    const made = atCorners(g, outsides, holes, material, max);
+    if (made) return made;
+  }
   if (kind !== 'strokes') {
     // No lines: the area as a whole may be a dot or a pointed shape.
-    const plan = outsides.length === 1 ? planShape(wholeShape(outsides, holes, material), material, STROKE_MAX) : null;
+    const plan = outsides.length === 1 ? planShape(wholeShape(outsides, holes, material), material, max) : null;
     return plan ? finish(g, plan.kind, plan.cuts, plan.lines, outsides, holes) : { kind: 'wide', cuts: [], lines: [], ok: false };
   }
   // Thick places in the lines planned on their own, the lines without them.
   const small = smallHoles(g, holes);
   const split = splitBlobs(small.length ? skeleton(filled(area, small)) : g);
-  const plans = split?.blobs.map((b) => planShape(blobShape(b, split.strokes, outsides, holes, material), material, STROKE_MAX));
+  const plans = split?.blobs.map((b) => planShape(blobShape(b, split.strokes, outsides, holes, material), material, max));
   if (split && plans?.every((p) => p)) {
     const strokes = split.strokes.branches.length ? planStrokes(split.strokes, [...outsides, ...holes]) : { cuts: [], lines: [] };
     const only = !split.strokes.branches.length && plans.length === 1 ? plans[0]!.kind : kind;
@@ -115,12 +127,35 @@ export function suggestSatin(area: Region, graph?: Graph): SatinSuggestion | nul
     if (made.ok) return made;
   }
   const { cuts, lines } = planStrokes(g, [...outsides, ...holes]);
-  const made = finish(g, kind, cuts, lines, outsides, holes);
+  const made = finish(g, crescent(g) ? 'crescent' : kind, cuts, lines, outsides, holes);
   if (made.ok || outsides.length !== 1 || !compact(g, outsides[0])) return made;
   // Lines that make no columns may be a compact shape after all (a dot with a hole off its middle).
-  const whole = planShape(wholeShape(outsides, holes, material), material, STROKE_MAX);
+  const whole = planShape(wholeShape(outsides, holes, material), material, max);
   const other = whole && finish(g, whole.kind, whole.cuts, whole.lines, outsides, holes);
   return other?.ok ? other : made;
+}
+
+/** The area cut at its corners (see satinForms), or null when it has none to cut at or makes no columns so. */
+function atCorners(g: Graph, outsides: Pt[][], holes: Pt[][], material: (q: Pt) => boolean, max: number): SatinSuggestion | null {
+  const c = cornerCuts(outsides, holes, material, max);
+  if (!c.cuts.length) return null;
+  const p = planParts(outsides, holes, c.cuts, c.spikes, g, max, planStrokes);
+  if (!p) return null;
+  const made = finish(g, c.spikes >= c.miters ? 'spikes' : 'frame', p.cuts, p.lines, outsides, holes);
+  return made.ok ? made : null;
+}
+
+/** One line pointed at both ends, bending round by more than a quarter turn: a crescent (a moon). */
+function crescent(g: Graph): boolean {
+  if (g.branches.length !== 1 || g.branches[0].a === g.branches[0].b) return false;
+  const { pts, r } = g.branches[0];
+  if (pts.length < 20) return false;
+  const half = median(r);
+  const k = Math.max(3, Math.round(pts.length / 8));
+  const t0 = norm(sub(pts[k], pts[0]));
+  const t1 = norm(sub(pts[pts.length - 1], pts[pts.length - 1 - k]));
+  const pointed = (rs: number[]) => Math.min(...rs) < 0.5 * half;
+  return pointed(r.slice(0, k)) && pointed(r.slice(-k)) && dot(t0, t1) < Math.cos((100 * Math.PI) / 180);
 }
 
 /** Thick against its size (a dot with a hole), not a drawing of thin lines. */

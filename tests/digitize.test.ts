@@ -122,7 +122,7 @@ describe('digitize', () => {
     expect(objects.map((o) => o.kind)).toEqual(['fill']);
   });
 
-  it('sews a grass tuft as satin blades with a filled base over their starts', () => {
+  it('sews a grass tuft with Smart as satin in sections, the blades cut off at the base', () => {
     // Two tapering blades, 4 mm wide at the bottom, joined by a base 4 mm high: as one satin
     // network the base's columns fanned out and crossed, as one fill the blades got ragged rows.
     const tri = (x: number, y: number, x0: number, x1: number, tx: number, ty: number) => {
@@ -130,12 +130,16 @@ describe('digitize', () => {
       const t = (y - ty) / (26 - ty);
       return x >= tx + (x0 - tx) * t && x <= tx + (x1 - tx) * t;
     };
-    const { pattern, objects } = design(30, (x, y) =>
-      (x > 4 && x < 24 && y >= 26 && y < 30) || tri(x, y, 6, 10, 7, 8) || tri(x, y, 15, 19, 21, 11) ? BLACK : null,
+    const { pattern, objects, areas } = design(
+      30,
+      (x, y) => ((x > 4 && x < 24 && y >= 26 && y < 30) || tri(x, y, 6, 10, 7, 8) || tri(x, y, 15, 19, 21, 11) ? BLACK : null),
+      {},
+      { smart: true },
     );
-    expect(objects.map((o) => o.kind)).toEqual(['satin', 'fill']);
-    expect(objects[1].areaMm2).toBeLessThan(objects[0].areaMm2 + objects[1].areaMm2);
-    expect(kindShare(pattern)[SATIN]).toBeGreaterThan(0.4);
+    expect(objects.map((o) => o.kind)).toEqual(['satin']);
+    expect(areas!.map((a) => a.technique)).toEqual(['sections']);
+    // Blades and base are columns of their own.
+    expect(objects[0].columns!.length).toBeGreaterThanOrEqual(3);
     expect(noCritical(pattern)).toEqual([]);
     // The blades' tips are sewn: stitches reach up to them.
     const pts = stitches(pattern, 30);

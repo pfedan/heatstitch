@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildRegion, type Region } from '../src/digitize/region';
-import { stripsOfAreas } from '../src/digitize/rungs';
+import { inside, stripsOfAreas } from '../src/digitize/rungs';
 import { areaLoops, suggestSatin } from '../src/digitize/satinSuggest';
 import type { Pt } from '../src/digitize/skeleton';
 import { satinRuns, type SatinSettings } from '../src/model/restitch';
@@ -239,6 +239,120 @@ describe('Vorschlagen: mirrored', () => {
       const b = columns(region((x, y) => f(60 - x, y)));
       expect(b.s.ok).toBe(true);
       expect([b.s.cuts.length, b.strips.length]).toEqual([a.s.cuts.length, a.strips.length]);
+    }
+  });
+});
+
+const star = (cx: number, cy: number, R: number, r: number, n = 5): Pt[] =>
+  Array.from({ length: 2 * n }, (_, i) => {
+    const a = -Math.PI / 2 + (i * Math.PI) / n;
+    return [cx + (i % 2 ? r : R) * Math.cos(a), cy + (i % 2 ? r : R) * Math.sin(a)] as Pt;
+  });
+const polygon = (p: Pt[]) => (x: number, y: number) => inside(p, [x, y]);
+const box = (x0: number, y0: number, x1: number, y1: number) => (x: number, y: number) => x >= x0 && x <= x1 && y >= y0 && y <= y1;
+/** A leaf L long and W wide along the x axis turned by `ang`: two circular arcs meeting in its tips. */
+const leaf = (cx: number, cy: number, L: number, W: number, ang = 0) => {
+  const R = (L * L) / 4 / W + W / 4;
+  const d = R - W / 2;
+  return (x: number, y: number) => {
+    const u = (x - cx) * Math.cos(ang) + (y - cy) * Math.sin(ang);
+    const v = -(x - cx) * Math.sin(ang) + (y - cy) * Math.cos(ang);
+    return Math.hypot(u, v - d) < R && Math.hypot(u, v + d) < R;
+  };
+};
+const frame = (x: number, y: number) => box(20, 22, 40, 38)(x, y) && !box(22.5, 24.5, 37.5, 35.5)(x, y);
+const blockE = any(box(23, 20, 27.5, 40), box(23, 20, 35, 24), box(23, 28, 33, 32), box(23, 36, 35, 40));
+const angle = ([a, b]: [Pt, Pt], [c, d]: [Pt, Pt]) => {
+  const u = [b[0] - a[0], b[1] - a[1]];
+  const v = [d[0] - c[0], d[1] - c[1]];
+  return (Math.acos(Math.abs(u[0] * v[0] + u[1] * v[1]) / Math.hypot(u[0], u[1]) / Math.hypot(v[0], v[1])) * 180) / Math.PI;
+};
+
+describe('Vorschlagen: spikes, frames, leaves and crescents', () => {
+  it('cuts the points of a star off at their bases, each sewn from its base to its tip', () => {
+    const r = region(polygon(star(30, 30, 8, 3.5)));
+    const { s, strips } = columns(r);
+    expect(s.ok).toBe(true);
+    expect(s.kind).toBe('spikes');
+    // Five points and the middle.
+    expect(s.cuts.length).toBe(5);
+    expect(strips.length).toBe(6);
+    // Each cut lies across the base of a point: about 3.5 mm from the middle, between two notches.
+    for (const c of s.cuts) expect(Math.hypot(mid(c)[0] - 30, mid(c)[1] - 30)).toBeLessThan(3.4);
+    expect(longest(r)).toBeLessThan(7);
+  });
+
+  it('keeps the stitches of a star within a lower satin limit', () => {
+    const r = region(polygon(star(30, 30, 9, 4.5, 8)));
+    const s = suggestSatin(r, undefined, 4.5)!;
+    expect(s.ok).toBe(true);
+    expect(s.kind).toBe('spikes');
+    // The middle is too wide for one column at 4.5 mm: cut in two halves.
+    expect(s.cuts.length).toBe(9);
+  });
+
+  it('cuts a frame on the miter at its four corners', () => {
+    const r = region(frame);
+    const { s, strips } = columns(r);
+    expect(s.ok).toBe(true);
+    expect(s.kind).toBe('frame');
+    expect(s.cuts.length).toBe(4);
+    expect(strips.length).toBe(4);
+    // Each cut runs from an outer corner to the inner one: on the diagonal, 45° to the sides.
+    const corners: Pt[] = [[21.25, 23.25], [38.75, 23.25], [21.25, 36.75], [38.75, 36.75]];
+    for (const c of corners) expect(s.cuts.some((k) => Math.hypot(mid(k)[0] - c[0], mid(k)[1] - c[1]) < 0.6 && Math.abs(angle(k, [[0, 0], [1, 0]]) - 45) < 8)).toBe(true);
+    // Stitches across the sides, not along them.
+    expect(longest(r)).toBeLessThan(3.6);
+  });
+
+  it('cuts a block letter on the miter at its corners and ends the middle bar on the stem', () => {
+    const { s, strips } = columns(region(blockE));
+    expect(s.ok).toBe(true);
+    expect(s.kind).toBe('frame');
+    expect(strips.length).toBe(4);
+    // The middle bar ends on the stem: a cut along the stem's edge.
+    expect(s.cuts.some((c) => Math.abs(mid(c)[0] - 27.5) < 0.3 && angle(c, [[0, 0], [0, 1]]) < 5)).toBe(true);
+  });
+
+  it('cuts a wide leaf along its vein, the stitches slanting toward its tip', () => {
+    const r = region(leaf(30, 30, 18, 10, 0.4));
+    const { s, strips } = columns(r);
+    expect(s.ok).toBe(true);
+    expect(s.kind).toBe('leaf');
+    expect(s.cuts.length).toBe(1);
+    expect(strips.length).toBe(2);
+    // The vein runs along the leaf, the lines across slant at about 60° to it.
+    expect(angle(s.cuts[0], [[0, 0], [Math.cos(0.4), Math.sin(0.4)]])).toBeLessThan(5);
+    for (const l of s.lines) expect(Math.abs(angle(l, s.cuts[0]) - 60)).toBeLessThan(5);
+    expect(longest(r)).toBeLessThan(7);
+  });
+
+  it('sews a narrow leaf as one column and finds a drop', () => {
+    expect(columns(region(leaf(30, 30, 16, 6))).s.kind).toBe('leaf');
+    const drop: Pt[] = Array.from({ length: 120 }, (_, i) => {
+      const t = (i / 120) * 2 * Math.PI;
+      return [30 + 6.3 * Math.sin(t) * Math.sin(t / 2), 30 - 7 * Math.cos(t)];
+    });
+    const r = region(polygon(drop));
+    const { s } = columns(r);
+    expect(s.ok).toBe(true);
+    expect(s.kind).toBe('drop');
+    expect(longest(r)).toBeLessThan(7);
+  });
+
+  it('sews a crescent as one column turning with it', () => {
+    const { s, strips } = columns(region((x, y) => disk(30, 30, 7)(x, y) && !disk(32.5, 29, 6.2)(x, y)));
+    expect(s.ok).toBe(true);
+    expect(s.kind).toBe('crescent');
+    expect(strips.length).toBe(1);
+  });
+
+  it('plans a mirrored star, frame and leaf the same way', () => {
+    for (const f of [polygon(star(30, 30, 8, 3.5)), blockE, leaf(30, 30, 18, 10, 0.4)]) {
+      const a = columns(region(f));
+      const b = columns(region((x, y) => f(60 - x, y)));
+      expect(b.s.ok).toBe(true);
+      expect([b.s.kind, b.s.cuts.length, b.strips.length]).toEqual([a.s.kind, a.s.cuts.length, a.strips.length]);
     }
   });
 });

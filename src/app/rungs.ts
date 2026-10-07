@@ -342,7 +342,10 @@ export function bindRungs(app: RungsApp) {
       bad = made.hole >= 0 ? holes[made.hole] : made.bad;
     }
     rungTool.setFillLines(s.lines, s.cuts, bad);
-    app.layers.say(t(s.ok ? 'stitch.suggest.done' : 'stitch.suggest.partly', { n: s.cuts.length + 1 }));
+    const n = s.cuts.length + 1;
+    if (!s.ok) app.layers.say(t('stitch.suggest.partly', { n }));
+    else if (s.kind === 'strokes') app.layers.say(t('stitch.suggest.done', { n }));
+    else app.layers.say(t('stitch.suggest.doneAs', { n, shape: t(`stitch.suggest.shape.${s.kind}`) }));
   }
 
   /** Sews the selected fill as satin along the lines drawn across it. */
