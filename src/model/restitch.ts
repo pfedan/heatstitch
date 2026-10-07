@@ -13,7 +13,7 @@ import { isShadow } from './shadow';
 import { coverage } from '../digitize/measure';
 import { expandRegion, outline, sample, signedField, type Region } from '../digitize/region';
 import { runStitch, TOLERANCE } from '../digitize/run';
-import { eStitches, pairs, satinStitches, underlayOf, type Column, type SatinParams, type UnderInset, type UnderlayKind } from '../digitize/satin';
+import { eStitches, fringedColumn, pairs, satinStitches, underlayOf, type Column, type SatinParams, type UnderInset, type UnderlayKind } from '../digitize/satin';
 import { columnFromRungs, cumulative, inside, pointAt, project, reversedRungs, stripOfLoop, tidyRungs, type Arc, type Rung } from '../digitize/rungs';
 import type { Pt } from '../digitize/skeleton';
 import { flatten, formFrom, storeForm, type Form, type StoredPath } from '../shape/path';
@@ -209,7 +209,13 @@ export interface SatinSettings {
   byWidth?: boolean;
   /** `edge` and `edgeShare` follow the fabric (see pullFor). */
   edgeAuto?: boolean;
+  /** A ragged edge (fur, feathers): stitches end up to this far short of the rail (mm), each a different way; none when not set. */
+  fringe?: number;
+  /** The side of the fringe (in sewing direction); both when not set. */
+  fringeSide?: FringeSide;
 }
+
+export type FringeSide = 'left' | 'right';
 
 export type SatinType = 'satin' | 'e';
 export const UNDERLAYS: UnderlayKind[] = ['auto', 'center', 'contour', 'zigzag', 'both'];
@@ -845,7 +851,7 @@ export function isLineStitch(b: unknown): b is PathStitch {
 
 function isBorder(b: unknown): b is BorderSettings {
   const s = b as BorderSettings | null;
-  return !!s && BORDERS.includes(s.type) && finite(s.width) && [s.length, s.repeat, s.tolerance, s.offset, s.spacing, s.pull].every((v) => v === undefined || finite(v)) && (s.flip === undefined || typeof s.flip === 'boolean') && (s.motif === undefined || LINE_MOTIFS.includes(s.motif)) && (s.under === undefined || s.under === 'off' || UNDERLAYS.includes(s.under)) && (s.color === undefined || isColor(s.color)) && (s.link === undefined || typeof s.link === 'string') && (s.seams === undefined || typeof s.seams === 'boolean');
+  return !!s && BORDERS.includes(s.type) && finite(s.width) && [s.length, s.repeat, s.tolerance, s.offset, s.spacing, s.pull].every((v) => v === undefined || finite(v)) && (s.flip === undefined || typeof s.flip === 'boolean') && (s.motif === undefined || LINE_MOTIFS.includes(s.motif)) && (s.under === undefined || s.under === 'off' || UNDERLAYS.includes(s.under)) && (s.color === undefined || isColor(s.color)) && (s.link === undefined || typeof s.link === 'string') && (s.seams === undefined || typeof s.seams === 'boolean') && (s.fringe === undefined || finite(s.fringe)) && (s.fringeSide === undefined || s.fringeSide === 'left' || s.fringeSide === 'right');
 }
 
 function isSatin(f: unknown): f is SatinSettings {
@@ -859,7 +865,9 @@ function isSatin(f: unknown): f is SatinSettings {
     [s.tolerance, s.split, s.edgeShare, s.edgeB, s.underInset, s.underInsetShare].every(optional) &&
     (s.type === undefined || s.type === 'satin' || s.type === 'e') &&
     (s.under === undefined || UNDERLAYS.includes(s.under)) &&
-    (s.stagger === undefined || typeof s.stagger === 'boolean')
+    (s.stagger === undefined || typeof s.stagger === 'boolean') &&
+    optional(s.fringe) &&
+    (s.fringeSide === undefined || s.fringeSide === 'left' || s.fringeSide === 'right')
   );
 }
 
@@ -2141,12 +2149,29 @@ export function spacingAlong(c: Column, r: Rails, base: number, byWidth: boolean
 
 /** Settings for the columns walked from the other end: what was right is left now. */
 export function swappedSides(s: SatinSettings): SatinSettings {
-  return s.edgeB === undefined ? s : { ...s, edge: s.edgeB, edgeB: s.edge };
+  let out = s.edgeB === undefined ? s : { ...s, edge: s.edgeB, edgeB: s.edge };
+  if (s.fringeSide) out = { ...out, fringeSide: s.fringeSide === 'left' ? 'right' : 'left' };
+  return out;
+}
+
+/**
+ * How deep the fringe of settings `s` is on the rails `left` and `right` (mm); an E stitch has none.
+ * The sides the user picks are as seen on screen (y down) along the column: its left is the rail
+ * called right here.
+ */
+function fringeOf(s: SatinSettings): [number, number] {
+  const f = s.type === 'e' ? 0 : Math.max(0, s.fringe ?? 0);
+  return [s.fringeSide === 'left' ? 0 : f, s.fringeSide === 'right' ? 0 : f];
+}
+
+function fringeParams(s: SatinSettings): Pick<SatinParams, 'fringe' | 'fringeB'> {
+  const [a, b] = fringeOf(s);
+  return a || b ? { fringe: a, fringeB: b } : {};
 }
 
 /** The satin's parameters for `pairs` and its stitches. */
 export function satinParams(s: SatinSettings): SatinParams {
-  return { spacing: s.spacing, pull: s.edge, pullB: s.edgeB, pullShare: s.edgeShare ?? 0, splitMm: s.split ?? SATIN_SPLIT, short: s.short && s.type !== 'e', stagger: s.stagger ?? true };
+  return { spacing: s.spacing, pull: s.edge, pullB: s.edgeB, pullShare: s.edgeShare ?? 0, splitMm: s.split ?? SATIN_SPLIT, short: s.short && s.type !== 'e', stagger: s.stagger ?? true, ...fringeParams(s) };
 }
 
 /**
@@ -2192,7 +2217,7 @@ export function satinRuns(rails: Rails[], s: SatinSettings): Pt[][] {
       runs.push(sewR(ps));
       continue;
     }
-    const under = underlayOf(col, s.under ?? 'auto', s.tolerance, underInset(s));
+    const under = underOf(col, s);
     if (!under.atEnd) {
       runs.push([...under.pts, ...sewR(ps)]);
       continue;
@@ -2295,6 +2320,9 @@ const sided = (r: Rails, sew: (ps: [Pt, Pt][]) => Pt[]) => (ps: [Pt, Pt][]) => s
 /** How far a satin's underlay keeps inside its rails, as its settings say. */
 const underInset = (s: SatinSettings): UnderInset => ({ mm: s.underInset, share: s.underInsetShare });
 
+/** The underlay of a column sewn with `s` (walked the way `s` says its sides are): inside the fringe, where every stitch covers it. */
+const underOf = (c: Column, s: SatinSettings) => underlayOf(fringedColumn(c, ...fringeOf(s)), s.under ?? 'auto', s.tolerance, underInset(s));
+
 /** Longest stitch of the run joining two sections that do not meet (mm). */
 const TRAVEL_STEP = 2.5;
 
@@ -2316,7 +2344,7 @@ function apartOf(parts: Rails[]): boolean {
 /** Whether sectionRun sews the satin of these sections back: the last first, each from its end. */
 export function sewnBack(parts: Rails[], s: SatinSettings): boolean {
   if (apartOf(parts)) return true;
-  return s.underlay && parts.every((r) => underlayOf(columnOf(r), s.under ?? 'auto', s.tolerance, underInset(s)).atEnd);
+  return s.underlay && parts.every((r) => underOf(columnOf(r), s).atEnd);
 }
 
 /** The steps a column's sections are sewn in: its plan, or as sectionRun sews them. */
@@ -2375,7 +2403,6 @@ function sectionRun(parts: Rails[], s: SatinSettings, sew: (ps: [Pt, Pt][]) => P
     }
     out.push(...pts);
   };
-  const kind = s.under ?? 'auto';
   // A section sewn as a column of its own may end away from where the next one starts: then all
   // go out first (underlay, or a run along the middle) and the satin comes back over the way.
   const apart = apartOf(parts);
@@ -2383,7 +2410,7 @@ function sectionRun(parts: Rails[], s: SatinSettings, sew: (ps: [Pt, Pt][]) => P
     parts.forEach((r, k) => push(sided(r, sew)(pairs(cols[k], along(cols[k], r, sp)))));
     return out;
   }
-  const unders = cols.map((c) => (s.underlay ? underlayOf(c, kind, s.tolerance, underInset(s)) : { pts: [] as Pt[], atEnd: false }));
+  const unders = cols.map((c) => (s.underlay ? underOf(c, s) : { pts: [] as Pt[], atEnd: false }));
   if (apart) {
     cols.forEach((c, k) => push(unders[k].atEnd ? unders[k].pts : [...unders[k].pts, ...runStitch(c.center, TRAVEL_STEP, s.tolerance)]));
   } else if (!unders.every((u) => u.atEnd)) {
@@ -2433,13 +2460,12 @@ const outlineOf = (r: Rails): Pt[] => {
 function columnRun(r: Rails, s: SatinSettings, sew: (ps: [Pt, Pt][]) => Pt[], along: (col: Column, r: Rails, q: SatinParams) => SatinParams): Pt[] {
   const secs = sectionsOf(r);
   if (secs.length > 1) return sectionRun(secs, s, sew, along);
-  const kind = s.under ?? 'auto';
   const col = columnOf(secs[0]);
   const rev = reversedColumn(col);
   const satinBack = () => sided(r, sew)(pairs(rev, along(rev, reversedRails(secs[0]), satinParams(swappedSides(s)))));
-  const under = s.underlay ? underlayOf(col, kind, s.tolerance, underInset(s)) : null;
+  const under = s.underlay ? underOf(col, s) : null;
   if (under?.atEnd) return [...under.pts, ...satinBack()];
-  const underBack = s.underlay ? underlayOf(rev, kind, s.tolerance, underInset(s)).pts : [];
+  const underBack = s.underlay ? underOf(rev, swappedSides(s)).pts : [];
   return [...runStitch(col.center, TRAVEL_STEP, s.tolerance), ...underBack, ...satinBack()];
 }
 

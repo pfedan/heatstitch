@@ -33,6 +33,7 @@ const empty = { name: 'rt', format: 'dst', x: new Int32Array(0), y: new Int32Arr
 
 const FILL: FillSettings = { pattern: 'tatami', spacing: 0.4, spacingEnd: 1, offset: 0.25, angle: 30, stitch: 4, underlay: true, edge: 0, tolerance: 0.15 };
 const SATIN: SatinSettings = { spacing: 0.4, edge: 0, short: true, underlay: true, tolerance: 0.15 };
+const FRINGED: SatinSettings = { ...SATIN, fringe: 1.5, fringeSide: 'right' };
 
 interface At {
   p: Pattern;
@@ -257,6 +258,22 @@ describe('own objects keep what they are through a change and back', () => {
     it(`satin column ${o}: E stitch, mirrored twice, saved and opened`, async () => {
       const a = sew(column(o), { kind: 'satin', s: { ...SATIN, type: 'e', spacing: 2.5 } });
       expect(what(await saveAndOpen(mirror(mirror(a))))).toEqual(what(a));
+    });
+    it(`satin column ${o}: fringe, mirrored twice, saved and opened`, async () => {
+      const a = sew(column(o), { kind: 'satin', s: FRINGED });
+      const ys = (x: At) => {
+        const k = sewObjects(x.p, stitchKinds(x.p))[x.o];
+        return Array.from(x.p.y.subarray(k.first, k.last + 1)).join();
+      };
+      expect(ys(a), 'frayed').not.toBe(ys(column(o)));
+      // Opened again: the very same stitches, and sewn anew the very same fringe.
+      const opened = await saveAndOpen(a);
+      expect(ys(opened)).toBe(ys(a));
+      expect(ys(sew(opened, { kind: 'satin', s: FRINGED }))).toBe(ys(a));
+      const b = await saveAndOpen(mirror(mirror(a)));
+      expect(what(b)).toEqual(what(a));
+      expect(remembered(b.p, sewObjects(b.p, stitchKinds(b.p))[b.o])?.satin).toMatchObject({ fringe: 1.5, fringeSide: 'right' });
+      expect(what(sew(a, { kind: 'satin', s: SATIN }))).toEqual(what(column(o)));
     });
     it(`satin column ${o}: turned twice`, () => {
       const a = column(o);

@@ -660,7 +660,9 @@ function checkLineParts(p: Pattern): void {
     if (!sameColor(objs[k].color, w.part.color)) problems.push(`part ${k} not in its thread`);
     if (JSON.stringify(storeForm(m!.path!)) !== JSON.stringify(storeForm(w.part.memory.path!)) || JSON.stringify(m!.line) !== JSON.stringify(w.part.memory.line)) problems.push(`part ${k} not what its line says`);
   });
-  for (const [link, w] of want) if (!have.has(link)) problems.push(`line ${w.line} lost its part ${link}`);
+  // A copy with nothing to sew (no room for it beside the line) has no object.
+  const sews = (w: { part: LinePart }) => lineStitches(w.part.memory.path!, w.part.memory.line!).some((run) => run.length > 1);
+  for (const [link, w] of want) if (!have.has(link) && sews(w)) problems.push(`line ${w.line} lost its part ${link}`);
   expect(problems.join('; '), 'line parts').toBe('');
 }
 
@@ -871,6 +873,76 @@ describe('found by the torture test', () => {
   it.each([270, 387, 383, 130, 139, 315, 1124])('long chain %i still holds', async (seed) => {
     await chain(seed, 20);
   }, 60_000);
+});
+
+describe('a satin with a fringe', () => {
+  /** All the invariants the chains check, at once. */
+  const checkAll = (d: Doc) => {
+    const p = d.cur.p;
+    checkWellFormed(p);
+    expect(knowledge(p), 'knowledge as stored with this version').toEqual(d.cur.known);
+    checkAllKnown(p);
+    checkKeys(p);
+    checkObjectList(p);
+    checkPartsFit(p);
+    checkKnockouts(p);
+    checkExport(p);
+    checkSewDesign(p);
+  };
+  /** The fringes of the satin objects, in their order. */
+  const fringes = (d: { cur: Version }) => sewObjects(d.cur.p).map((o) => remembered(d.cur.p, o)?.line).filter((x) => x?.type === 'satin').map((x) => `${x!.fringe}${x!.fringeSide ?? ''}`);
+
+  it('keeps it through duplicate, mirror, knockout, undo, redo and save and open', async () => {
+    const d = new Doc();
+    shapes(d, addShape(empty, { form: parsePath('M5 20 C20 5 35 35 50 20', ID), kind: 'stroke', width: 4 }, COLORS[0], null, options)!.pattern);
+    // As the line panel's Fransen slider: the satin line sewn anew with a fringe.
+    const m = remembered(d.cur.p, d.objects[0])!;
+    expect(m.line?.type, 'a satin line').toBe('satin');
+    const plain = Array.from(d.cur.p.y);
+    const r = resewLine(d.cur.p, 0, m.path!, { ...m.line!, fringe: 1.5, fringeSide: 'left' }, T)!;
+    expect(Array.from(r.pattern.y), 'other stitches').not.toEqual(plain);
+    expect(shapes(d, r.pattern)).toBe(true);
+    checkAll(d);
+    const fringed = d.cur;
+    expect(fringes(d)).toEqual(['1.5left']);
+
+    expect(shapes(d, duplicateObject(d.cur.p, 0, T)?.pattern)).toBe(true);
+    checkAll(d);
+    expect(fringes(d)).toEqual(['1.5left', '1.5left']);
+    expect(transform(d, [1], mirrorMatrix('x', boxOf(d, [1])))).toBe(true);
+    checkAll(d);
+    expect(fringes(d)).toEqual(['1.5left', '1.5left']);
+    // A fill on top that leaves itself out of the satins under it.
+    expect(shapes(d, addShape(d.cur.p, { form: parsePath(ellipsePath(28, 20, 6, 6), ID), kind: 'fill' }, COLORS[1], null, options)?.pattern)).toBe(true);
+    const top = d.objects.findIndex((o) => remembered(d.cur.p, o)?.fill);
+    const k = setKnockout(d.cur.p, [top], true, T);
+    expect(k).toBeTruthy();
+    d.commit(k!.pattern);
+    checkAll(d);
+    expect(fringes(d).every((f) => f === '1.5left'), 'cut satins keep the fringe').toBe(true);
+    const cut = d.cur;
+
+    await saveAndOpen(d);
+    checkAll(d);
+    expect(fringes(d)).toEqual(fringes({ cur: cut }));
+    expect(Array.from(d.cur.p.x)).toEqual(Array.from(cut.p.x));
+
+    // Back to the first fringed version and forward again: all or nothing.
+    d.undo = [fringed];
+    d.redo = [];
+    d.cur = cut;
+    const prev = d.undo.pop()!;
+    d.redo.push(d.cur);
+    d.cur = prev;
+    backToVersion(prev.p);
+    checkAll(d);
+    expect(fringes(d)).toEqual(['1.5left']);
+    const next = d.redo.pop()!;
+    d.cur = next;
+    backToVersion(next.p);
+    checkAll(d);
+    expect(fringes(d)).toEqual(fringes({ cur: cut }));
+  });
 });
 
 describe('versions keep what they knew', () => {

@@ -129,9 +129,12 @@ export interface Transformed {
 export function transformSewObject(p: Pattern, objs: SewObject[], o: SewObject, kinds: Uint8Array, m: Mat, trimMm: number): Transformed | null {
   // Stitches loosed from their shape go along as they are, also scaled (the resting shape with them).
   const rigid = isRigid(m) || !!remembered(p, o)?.free;
-  // A line with its curves: scaled, it is sewn anew along them with its settings.
+  // A line with its curves: scaled or mirrored, it is sewn anew along them with its settings
+  // (mirrored, its stitches would go round its echo copies and satin the other way than sewing it
+  // along the mirrored curves does).
   const line = remembered(p, o)?.path;
-  if (line && !rigid) {
+  const mirrors = m[0] * m[3] - m[1] * m[2] < 0;
+  if (line && (!rigid || (mirrors && !remembered(p, o)?.free))) {
     const r = resewLine(p, o.index, transformForm(line, m), mirroredEcho(lineSettings(p, o, kinds), line, m), trimMm);
     return r && { ...r, restitched: true };
   }
