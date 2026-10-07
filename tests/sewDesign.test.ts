@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { decoSampler, flower, lineVariants, patch, towel, type Design } from './helpers/demoProject';
-import { sewObjects } from '../src/model/objects';
+import { buildDemos, decoSampler, flower, lineVariants, patch, towel, type Design } from './helpers/demoProject';
+import { sewObjects, type SewObject } from '../src/model/objects';
 import { JUMP, STITCH, TRIM, type Pattern } from '../src/model/pattern';
-import { specOf, sewDesign } from '../src/model/sew';
+import { listOf, specOf, sewDesign, sewList } from '../src/model/sew';
 import { CRITICAL, validatePattern } from '../src/validation/validate';
 
 /**
@@ -40,5 +40,32 @@ describe('sewing a design from its object list', () => {
     expect(critical(d, q)).toBeLessThanOrEqual(critical(d, p) + 2);
     // Sewn again from the list it gives: the same stitches.
     expect(same(sewDesign(q, d.T), q)).toBe(true);
+  }, 120000);
+});
+
+/** The stitches of object `o` (0.1 mm), tie-in left out. */
+const stitchesOf = (p: Pattern, o: SewObject) => {
+  const out: string[] = [];
+  for (let i = o.first + o.tieIn; i <= o.last; i++) if (p.cmd[i] === STITCH) out.push(`${p.x[i]},${p.y[i]}`);
+  return out.join(' ');
+};
+
+describe('sewing from a list that keeps the stitches', () => {
+  it.each(buildDemos().map((d) => [d.title, d] as const))('%s', (_, d) => {
+    const p = d.p;
+    // The list as it is gives the design as it is.
+    const q = sewList(p, listOf(p), d.T);
+    expect(same(q, p)).toBe(true);
+    expect(sewObjects(q).map((o) => o.id)).toEqual(sewObjects(p).map((o) => o.id));
+    // Without one object (deleted): the others keep their ids, threads and stitches.
+    const objs = sewObjects(p);
+    for (const gone of objs) {
+      const r = sewList(p, listOf(p).filter((e) => e.obj.index !== gone.index), d.T);
+      const left = sewObjects(r);
+      const before = objs.filter((o) => o !== gone);
+      expect(left.map((o) => o.id)).toEqual(before.map((o) => o.id));
+      expect(left.map((o) => o.color)).toEqual(before.map((o) => o.color));
+      expect(left.map((o) => stitchesOf(r, o))).toEqual(before.map((o) => stitchesOf(p, o)));
+    }
   }, 120000);
 });
