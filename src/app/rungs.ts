@@ -416,7 +416,10 @@ export function bindRungs(app: RungsApp) {
     const q = app.seq(p);
     const obj = q.objects[o];
     const an = obj && analyze(p, obj, q.kinds);
-    const area = an && (remembered(p, obj)?.shape ?? an.fill);
+    const known = obj && remembered(p, obj);
+    // Once a satin: back to the columns it had (kept with the fill), not a new suggestion.
+    if (known?.asSatin?.length) return false;
+    const area = an && (known?.shape ?? an.fill);
     if (!area) return false;
     const s = suggestSatin(area);
     if (!s || s.kind !== 'strokes') return false;
