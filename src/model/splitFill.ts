@@ -4,20 +4,25 @@ import { distanceToSeeds } from '../image/edt';
 import { regionOf } from '../shape/rasterize';
 import { vectorize } from '../shape/vectorize';
 import type { Form } from '../shape/path';
+import type { FillSettings } from './restitch';
+import { syncBorders } from './border';
 import { takeOver, wholeArea } from './knockout';
 import { sewObjects } from './objects';
 import type { Pattern } from './pattern';
 import { formOf, reshapeFill } from './reshape';
-import { analyze, measureFill, remembered } from './restitch';
+import { analyze, remember, remembered } from './restitch';
 import { stitchKinds } from './sequence';
-import { duplicateObjects } from './shapeOps';
+import { addShape } from './addShape';
+import { digitizeDefaults } from '../digitize/digitize';
+import { DEFAULT_PROFILE } from '../validation/profiles';
 
 /**
  * Splitting a fill along cut lines (freehand, a path or a straight line): each part becomes an
  * object of its own, sewn right after the one before (trimmed off it, as objects of one thread are
  * kept apart), with the settings of the fill. Neighbouring
  * parts get mirrored row directions (mirrored at the cut, as the veins of a leaf), and each part
- * reaches OVERLAP_MM under its neighbours, so no fabric shows along the cut.
+ * reaches OVERLAP_MM under its neighbours, so no fabric shows along the cut. A border of the fill
+ * goes: on the parts it would run along the cut too. A fill with a color blend is not cut.
  */
 
 /** Parts reach this far across the cut under their neighbours (mm). */
@@ -190,15 +195,21 @@ export interface Split {
   pattern: Pattern;
   /** The parts, as objects of `pattern`, in sewing order. */
   parts: number[];
+  /** The fill had a border, which went (it would run along the cut too). */
+  borderGone: boolean;
 }
 
-/** Whether object `o` is a fill that can be split (an area sewn with a fill, not a fill sewn as a line). */
+/**
+ * Whether object `o` is a fill that can be split: an area sewn with a fill whose settings Heatstitch
+ * knows (drawn, converted or changed here; fills of a stitch file as it came are not yet), not a
+ * fill sewn as a line, an empty fill or one with a color blend.
+ */
 export function canSplit(p: Pattern, o: number): boolean {
   const kinds = stitchKinds(p);
   const obj = sewObjects(p, kinds)[o];
   if (!obj) return false;
   const known = remembered(p, obj);
-  if (known?.asLine || known?.outline || known?.blendOf) return false;
+  if (!known?.fill || known.asLine || known.outline || known.blendOf || known.fill.deco?.blend || known.fill.pattern === 'none') return false;
   if (!analyze(p, obj, kinds, known).fill) return false;
   const form = formOf(p, obj, kinds);
   return !!form && !!wholeArea(form);
@@ -219,23 +230,34 @@ export function splitFill(p: Pattern, o: number, cuts: Pt[][], trimMm: number): 
   if (!split) return 'whole';
   const forms: Form[] = split.parts.map((r) => vectorize(r));
   if (forms.some((f) => !f.paths.length)) return null;
-  const base = known?.fill?.angle ?? measureFill(p, analyze(p, obj, kinds, known)).angle;
+  const base = known!.fill!.angle;
   const angles = partAngles(forms.length, split.touching, base, cuts);
-  // The fill once more for every further part, each copy right after it.
+  const borderGone = !!known?.fill?.border;
+  const link = known?.fill?.border?.link;
+  const change = (k: number): Partial<FillSettings> => ({ angle: angles[k], ...(borderGone ? { border: undefined } : {}) });
+  // Every further part a new fill right after the fill (the last first, so they come in order), in
+  // its shape; then each sewn with the fill's settings, and the fill itself in the shape of the
+  // first part (from the last, so the ones before keep their place).
   let cur = p;
-  for (let k = 1; k < forms.length; k++) {
-    const d = duplicateObjects(cur, [o], trimMm, 0);
-    if (!d || d.copies[0] !== o + 1) return null;
-    cur = d.pattern;
+  const options = { ...digitizeDefaults(DEFAULT_PROFILE), trimMm };
+  for (let k = forms.length - 1; k >= 1; k--) {
+    const a = addShape(cur, { form: forms[k], kind: 'fill' }, obj.color, o, options);
+    if (!a) return null;
+    cur = a.pattern;
+    // It is a fill with the fill's settings (also when, small, its stitches would read as a line).
+    const part = sewObjects(cur)[o + 1];
+    remember(cur, part, { ...remembered(cur, part), region: remembered(cur, part)?.region ?? null, fill: { ...known!.fill!, ...change(k) } });
   }
-  // Then every copy in the shape of its part (from the last, so the ones before keep their place).
+  if (sewObjects(cur).length !== sewObjects(p).length + forms.length - 1) return null;
   for (let k = forms.length - 1; k >= 0; k--) {
     const ks = stitchKinds(cur);
     const objs = sewObjects(cur, ks);
-    const r = reshapeFill(cur, objs, objs[o + k], ks, forms[k], trimMm, undefined, { angle: angles[k] });
+    const r = reshapeFill(cur, objs, objs[o + k], ks, forms[k], trimMm, undefined, { ...known!.fill!, ...change(k) });
     const next = r && takeOver(r);
     if (!next) return null;
     cur = next;
   }
-  return { pattern: cur, parts: forms.map((_, k) => o + k) };
+  // A border in a thread of its own goes with its object.
+  if (link) cur = syncBorders(cur, trimMm, new Set([link]));
+  return { pattern: cur, parts: forms.map((_, k) => o + k), borderGone };
 }

@@ -819,7 +819,7 @@ function redraw(): void {
       asidePanel.update(aside);
     }
     if (drawTool.preview && settings.mode === 'flow')
-      drawDrawing(ctx, vp, drawTool.preview, { nodes: drawTool.kind === 'pen' ? drawTool.count : 0, closing: drawTool.closing, size: drawTool.size });
+      drawDrawing(ctx, vp, drawTool.preview, { nodes: drawTool.kind === 'pen' || drawTool.kind === 'cut' ? drawTool.count : 0, closing: drawTool.closing, size: drawTool.size });
     if (ui.letterMode) drawLetterBoxes();
     drawPlanCompare();
     checkArea?.draw(ctx);

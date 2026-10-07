@@ -3,11 +3,11 @@ import { digitizeDefaults } from '../src/digitize/digitize';
 import type { Pt } from '../src/digitize/skeleton';
 import type { Region } from '../src/digitize/region';
 import { addShape } from '../src/model/addShape';
-import { wholeArea } from '../src/model/knockout';
 import { sewObjects } from '../src/model/objects';
 import { TRIM, type Pattern } from '../src/model/pattern';
 import { formOf } from '../src/model/reshape';
-import { remembered } from '../src/model/restitch';
+import { remember, remembered, restitch } from '../src/model/restitch';
+import { takeOver, wholeArea } from '../src/model/knockout';
 import { stitchKinds } from '../src/model/sequence';
 import { duplicateObjects, mirrorMatrix } from '../src/model/shapeOps';
 import { canSplit, partAngles, splitArea, splitFill } from '../src/model/splitFill';
@@ -137,5 +137,23 @@ describe('split a fill', () => {
     const again = splitFill(s.pattern, 0, [[[-2, 10], [17, 10]]], T) as { pattern: Pattern; parts: number[] };
     expect(again.parts).toEqual([0, 1]);
     expect(sewObjects(again.pattern)).toHaveLength(4);
+  });
+
+  it('takes the border off the parts, and leaves empty fills and fills from a file alone', () => {
+    const d = design();
+    const kinds = stitchKinds(d);
+    const objs = sewObjects(d, kinds);
+    const fill = remembered(d, objs[0])!.fill!;
+    const p = takeOver(restitch(d, objs, [0], { kind: 'fill', s: { ...fill, border: { type: 'run', width: 2, length: 2.5, tolerance: 0.15 } } }, kinds, T))!;
+    expect(remembered(p, sewObjects(p)[0])?.fill?.border).toBeTruthy();
+    const s = splitFill(p, 0, [[[15, -2], [15, 22]]], T) as { pattern: Pattern; parts: number[]; borderGone: boolean };
+    expect(s.borderGone).toBe(true);
+    for (const k of s.parts) expect(remembered(s.pattern, sewObjects(s.pattern)[k])?.fill?.border).toBeUndefined();
+    const q = design();
+    const e = sewObjects(q)[0];
+    remember(q, e, { ...remembered(q, e)!, fill: { ...remembered(q, e)!.fill!, pattern: 'none' } });
+    expect(canSplit(q, 0)).toBe(false);
+    remember(q, e, { ...remembered(q, e)!, fill: undefined });
+    expect(canSplit(q, 0)).toBe(false);
   });
 });

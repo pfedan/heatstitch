@@ -132,7 +132,7 @@ export function bindPointer(app: PointerApp) {
       const [wx, wy] = app.vp.toWorld(pos[0], pos[1]);
       const flow = app.settings.mode === 'flow';
       if (app.drawTool.active && flow) {
-        app.drawTool.down(wx, wy, app.vp.scale);
+        app.drawTool.down(wx, wy, app.vp.scale, e.shiftKey);
         mode = 'move';
       } else if (ui.letterMode && flow) mode = app.letterDown(wx, wy) ? 'move' : 'pan';
       else if (app.rungTool.active && flow) mode = app.rungTool.down(wx, wy, app.vp.scale, e.shiftKey);
@@ -251,7 +251,7 @@ export function bindPointer(app: PointerApp) {
       app.redraw();
     } else if (
       app.drawTool.active
-        ? app.drawTool.hoverAt(wx, wy, app.vp.scale)
+        ? app.drawTool.hoverAt(wx, wy, app.vp.scale, e.shiftKey)
         : app.rungTool.active
         ? app.rungTool.hoverAt(wx, wy, app.vp.scale)
         : app.shapeTool.active

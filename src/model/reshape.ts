@@ -68,9 +68,14 @@ export function reshapeFill(p: Pattern, objs: SewObject[], o: SewObject, kinds: 
   const cut = knockout ?? !!remembered(p, o)?.knockout;
   const area = sewnArea(p, objs, o, form, cut, known.region?.pxMm ?? 0.1);
   if (!area) return null;
-  const an = analyze(p, o, kinds, remembered(p, o));
-  if (!an.fill) return null;
-  const s = { ...(known.fill ?? measureFill(p, an)), ...change };
+  // Settings it remembers, else measured from its stitches (when they read as a fill).
+  let fill = known.fill;
+  if (!fill) {
+    const an = analyze(p, o, kinds, remembered(p, o));
+    if (!an.fill) return null;
+    fill = measureFill(p, an);
+  }
+  const s = { ...fill, ...change };
   const r = restitch(p, objs, [o.index], { kind: 'fill', s }, kinds, trimMm, undefined, false, undefined, new Map([[o.index, area]]));
   r.memory.forEach((m) => {
     m.form = form;
