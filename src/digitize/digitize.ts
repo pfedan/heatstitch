@@ -1,3 +1,4 @@
+import { LOCK_MM } from '../material/rules';
 import { distanceToSeeds } from '../image/edt';
 import { components, type Components } from '../image/labels';
 import { NONE, type Prepared } from '../image/prepare';
@@ -619,7 +620,7 @@ function touches(a: Region, b: Region): boolean {
 }
 
 /** Lock stitch length (mm): half-stitch lock 0, 0.5, 1, 0.5, 0 along the path, as Ink/Stitch's default. */
-const LOCK = 1;
+const LOCK = LOCK_MM;
 
 /** Point `d` mm along the run from its start (or end, with `fromEnd`). */
 function along(run: Pt[], d: number, fromEnd: boolean): Pt {

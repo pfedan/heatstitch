@@ -834,7 +834,7 @@ const enBase: Record<keyof typeof deBase, string> = {
   'stitch.blendOf.detached': 'The second color is an object of its own now.',
   'stitch.under.kind': 'Kind of underlay',
   'stitch.under.auto': 'Auto',
-  'stitch.under.auto.hint': 'By width: center walk up to 4 mm, zigzag above',
+  'stitch.under.auto.hint': 'By width: center walk up to 4 mm, contour and zigzag above',
   'stitch.under.center': 'Center',
   'stitch.under.center.hint': 'One running stitch along the middle of the column, for narrow columns',
   'stitch.under.contour': 'Edge run',

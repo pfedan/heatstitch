@@ -345,7 +345,8 @@ export const DESIGN_RULES = {
   // https://allstitch.com/pages/embroidering-with-60-weight-thread (40 wt block letters from about 6 to 7 mm,
   // 60 wt from about 3 mm) https://signwarehouse.com/blogs/content/embroidery-thread-weights-explained
   smallTextMm: 6.5,
-  tinyTextMm: 3.5,
+  // Ink/Stitch's lettering docs: under 4 mm lowercase letters often lose clarity.
+  tinyTextMm: 4,
   /** Rule of thumb: designs on caps mostly at most about 5 to 6 cm high. */
   capMaxHeightMm: 55,
   /** Rule of thumb: dense designs and small lettering sew cleaner at most this fast (stitches per minute). */

@@ -1,3 +1,4 @@
+import { SATIN_UNDER_MIN } from '../material/rules';
 import { borderLoops, borderRails, borderRun, keptLines, keptRails, lineRails, orderLoops, type BorderType } from '../digitize/border';
 import type { LineEcho } from '../digitize/echo';
 import type { LineShadow } from './shadow';
@@ -68,8 +69,8 @@ export const ZIGZAG_SPACING = 1.5;
 export const E_SPACING = 2.5;
 export const spacingOf = (s: PathStitch): number => s.spacing ?? (s.type === 'zigzag' ? ZIGZAG_SPACING : s.type === 'e' ? E_SPACING : s.type === 'motif' ? MOTIF_PERIOD[s.motif ?? 'waves'] : 0.4);
 
-/** The satin's underlay when none is chosen (a zigzag and an E stitch have none). */
-export const autoUnder = (s: PathStitch): UnderlayKind | 'off' => (s.type !== 'satin' ? 'off' : (s.under ?? (s.width >= 1.5 ? 'center' : 'off')));
+/** The satin's underlay when none is chosen (a zigzag and an E stitch have none): by width as any satin (see SATIN_UNDER_MIN). */
+export const autoUnder = (s: PathStitch): UnderlayKind | 'off' => (s.type !== 'satin' ? 'off' : (s.under ?? (s.width >= SATIN_UNDER_MIN ? 'auto' : 'off')));
 
 /** The satin of a line: narrow, underlay along its middle once it is wide enough to need one. */
 const satinOf = (s: PathStitch): SatinSettings => ({
