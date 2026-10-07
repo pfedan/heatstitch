@@ -12,6 +12,7 @@ import { isEcho } from '../digitize/echo';
 import { isShadow } from './shadow';
 import { coverage } from '../digitize/measure';
 import { expandRegion, outline, sample, signedField, type Region } from '../digitize/region';
+import { withSplit } from '../digitize/satinSuggest';
 import { runStitch, TOLERANCE } from '../digitize/run';
 import { eStitches, fringedColumn, pairs, satinStitches, underlayOf, type Column, type SatinParams, type UnderInset, type UnderlayKind } from '../digitize/satin';
 import { columnFromRungs, cumulative, inside, insideOf, pointAt, project, reversedRungs, stripOfLoop, tidyRungs, type Arc, type Rung } from '../digitize/rungs';
@@ -1775,6 +1776,23 @@ export function railsArea(rails: Rails[]): Region | null {
     return g ? [g] : [];
   });
   return unionRegion(parts);
+}
+
+/**
+ * Every satin in sections of its area, wherever it came from (a fill, a file, an image): the area
+ * its shape, or read from the rails of its one part. A column cut across (see Rails.cuts) is
+ * opened as its sections, so its cut lines are free ones like any other, to move, draw or take
+ * away. The stitches change only when something does. Without an area (several parts read from
+ * stitches) the columns as they are.
+ */
+export function sectionView(columns: Rails[][], shape: Region | undefined): Rails[][] {
+  const area = shape ?? (columns.length === 1 ? railsArea(columns[0]) : null);
+  if (!area) return columns;
+  const cut = columns.map((part) =>
+    part.some((c) => c.cuts?.length && !c.spans?.length) ? part.flatMap((c) => (c.cuts?.length && !c.spans?.length ? sectionsOf(c).map((sec) => ({ ...sec, chain: c.chain ?? 0 })) : [c])) : part,
+  );
+  const split = withSplit(cut, area);
+  return split.some((part) => part[0]?.split) ? split : withSplit(columns, area);
 }
 
 /** The area the stitches of `parts` cover: drawn thick enough that satin stitches close into it. */

@@ -9,10 +9,10 @@ import type { StitchInfo, StitchPanel } from '../ui/stitchPanel';
 import { RungTool } from '../ui/rungTool';
 import { outline, type Region } from '../digitize/region';
 import { atShare, regionBox, swirlCenters } from '../digitize/deco';
-import { cutLinesBetween, inside, railsFromOutline, stripsOfAreas } from '../digitize/rungs';
+import { railsFromOutline, stripsOfAreas } from '../digitize/rungs';
 import { areaLoops, suggestSatin } from '../digitize/satinSuggest';
 import { t, type Key } from '../i18n';
-import { bestChain, DECO_DEFAULTS, MAX_SWIRLS, type FillSettings, type Rails, type SatinSettings, analyze, remembered, keepShape, remember, restitch, measureSatin, forget, type RestitchResult, type Settings as RestitchSettings } from '../model/restitch';
+import { bestChain, sectionView, DECO_DEFAULTS, MAX_SWIRLS, type FillSettings, type Rails, type SatinSettings, analyze, remembered, keepShape, remember, restitch, measureSatin, forget, type RestitchResult, type Settings as RestitchSettings } from '../model/restitch';
 import { ui } from './state';
 
 /** What bindRungs needs from the rest of the app. */
@@ -192,9 +192,7 @@ export function bindRungs(app: RungsApp) {
       const shape = keepShape(p, obj, q.kinds);
       const columns = shape.columns;
       if (!columns?.length) return app.layers.say(t('stitch.direction.miss'), true);
-      // Made from a fill (sewn in a chain, or still knowing its fill settings): its cut lines again.
-      const fromFill = !!shape.fill || columns.some((part) => part.some((c) => c.chain !== undefined));
-      rungTool.openSatin(shape.shape && fromFill ? withSplit(columns, shape.shape) : columns);
+      rungTool.openSatin(sectionView(columns, shape.shape));
       rungTool.satin = satinOf(p, q, obj);
     } else {
       const an = analyze(p, obj, q.kinds);
@@ -302,27 +300,6 @@ export function bindRungs(app: RungsApp) {
     cancelAnimationFrame(rungFrame);
     rungFrame = 0;
     app.applyRestitched(withRungs(columns), 'stitch.failed');
-  }
-
-  /**
-   * A satin made from a fill that no longer knows how it was cut (see Rails.split): the fill from its
-   * shape, the cut lines where its columns end inside it (against another column, not at the edge).
-   * So the cut lines can always be moved, drawn or taken away again, and the columns made anew.
-   */
-  function withSplit(columns: Rails[][], area: Parameters<typeof outline>[0]): Rails[][] {
-    if (columns.some((part) => part.some((r) => r.split))) return columns;
-    const { outsides, holes } = areaLoops(area);
-    if (!outsides.length) return columns;
-    const within = (q: Pt) => outsides.some((o) => inside(o, q)) && !holes.some((h) => inside(h, q));
-    const mid = (c: Rails): Pt => {
-      const i = c.left.length >> 1;
-      return [(c.left[i][0] + c.right[Math.min(i, c.right.length - 1)][0]) / 2, (c.left[i][1] + c.right[Math.min(i, c.right.length - 1)][1]) / 2];
-    };
-    // The part cut from the fill: its columns lie in it.
-    const k = columns.findIndex((part) => part.every((c) => c.left.length > 1 && c.right.length > 1 && within(mid(c))));
-    if (k < 0) return columns;
-    const cuts = cutLinesBetween(columns[k], outsides, holes);
-    return columns.map((part, j) => (j === k ? part.map((c, i) => (i ? c : { ...c, split: { outlines: outsides, holes, cuts } })) : part));
   }
 
   /**

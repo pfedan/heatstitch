@@ -499,7 +499,8 @@ export class RungTool implements RungView {
       }
     } else if (result) {
       const sp = this.split;
-      const c = sp ? checkSections(sp.outlines, this.splitLines(), this.cutLines, sp.holes) : null;
+      // As sewn, nothing to say; only cut lines not sewn yet can leave a part without a column.
+      const c = sp && this.cutsChanged() ? checkSections(sp.outlines, this.splitLines(), this.cutLines, sp.holes) : null;
       if (c && (c.parts.length || c.holes.length)) {
         // The part cut from the fill as its lines make it now; the stitches stay as they were.
         found(c);
@@ -515,7 +516,25 @@ export class RungTool implements RungView {
   private splitLines(): [Pt, Pt][] {
     const sp = this.split;
     if (!sp) return [];
-    return this.columns.flatMap((c, k) => (this.parts[k] === sp.part ? [...c.rungs.map((r) => this.ends(c, r)), ...c.spans] : []));
+    return this.columns.flatMap((c, k) => {
+      if (this.parts[k] !== sp.part) return [];
+      // Read from stitches and nothing set yet: the stitches' own pairs, every 1.5 mm or so (they
+      // never cross, as suggested rungs at a corner can).
+      if (!c.own && !c.rails.rungs && !c.spans.length && c.left.length === c.right.length && c.left.length > 2) {
+        const out: [Pt, Pt][] = [];
+        let last = -Infinity;
+        c.left.forEach((p, i) => {
+          if (i > 0 && i < c.left.length - 1 && c.cl[i] - last >= 1.5) {
+            out.push([p, c.right[i]]);
+            last = c.cl[i];
+          }
+        });
+        if (out.length) return out;
+      }
+      const lines = [...c.rungs.map((r) => this.ends(c, r)), ...c.spans];
+      // A section without rungs (a corner, read from stitches): across its middle, so it stays a part.
+      return lines.length ? lines : [this.ends(c, [c.cl[c.cl.length - 1] / 2, c.cr[c.cr.length - 1] / 2])];
+    });
   }
 
   /** The sections of a column as closed outlines, with its cut lines as they are now. */
@@ -865,9 +884,14 @@ export class RungTool implements RungView {
    * a rung drawn in such a part makes it fit.
    */
   private commit(): void {
-    const stored = this.columns.find((c) => c.rails.split)?.rails.split?.cuts;
-    if (this.split && JSON.stringify(stored) !== JSON.stringify(this.cutLines)) return this.resplit();
+    if (this.cutsChanged()) return this.resplit();
     this.hooks.change(this.result(), true);
+  }
+
+  /** Whether the cut lines are not the ones the satin was cut along (they left a part without a column). */
+  private cutsChanged(): boolean {
+    const stored = this.columns.find((c) => c.rails.split)?.rails.split?.cuts;
+    return !!this.split && JSON.stringify(stored) !== JSON.stringify(this.cutLines);
   }
 
   /**
