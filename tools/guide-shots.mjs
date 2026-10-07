@@ -291,7 +291,7 @@ shots.stitches = async (lang) => {
   await page.click('#stage .level-switch input[value="stitches"]', { force: true });
   await page.waitForTimeout(800);
   const b = await stageBox(page);
-  await zoomTo(page, b.x + 325, b.y + 240, 2);
+  await zoomTo(page, b.x + 325, b.y + 240, 1);
   const pt = await findNeedlePoint(page, b.width / 2, b.height / 2);
   if (!pt) throw new Error('no needle point found');
   await page.mouse.move(pt.x, pt.y);
@@ -596,7 +596,7 @@ shots.sections = async () => {
   const b = await stageBox(page);
   await zoomTo(page, b.x + 212, b.y + 538, 6);
   const c = await page.locator('#canvas').boundingBox();
-  await jpeg(page, 'sections', { x: c.x + 40, y: c.y + 110, width: c.width - 180, height: c.height - 170 });
+  await jpeg(page, 'sections', { x: c.x + 60, y: c.y + 50, width: c.width - 180, height: c.height - 170 });
   await close();
 };
 
