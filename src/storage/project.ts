@@ -10,6 +10,7 @@
  */
 
 import { normalizeCorrection } from '../correct/auto';
+import { readAreas } from '../digitize/smart';
 import type { StoredAside } from '../model/aside';
 import { isStoredObjects, type ObjectsAsStored } from '../model/restitch';
 import { DEFAULTS, hexColor, normalizeImage, type ImageSettings, type Settings } from '../settings';
@@ -221,7 +222,7 @@ function readImage(v: unknown): ProjectImage | null {
     name: i.name,
     type: i.type,
     data: i.data,
-    work: { edits: Array.isArray(w.edits) ? w.edits : [], strokes: Array.isArray(w.strokes) ? w.strokes : [] },
+    work: { edits: Array.isArray(w.edits) ? w.edits : [], strokes: Array.isArray(w.strokes) ? w.strokes : [], ...(w.areas ? { areas: readAreas(w.areas) } : {}) },
   };
 }
 

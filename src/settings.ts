@@ -48,9 +48,12 @@ export const shownMarks = (s: Pick<Settings, 'marks' | 'marksOn'>): Marks =>
 /** What the stage shows in the Bild mode. */
 export type ImageView = 'original' | 'prepared' | 'stitches';
 
-/** How the Bild assistant lays the stitches: straight rows and clean satin, or rows that follow shape and image. */
-export type ImageStyle = 'flat' | 'dynamic';
-export const IMAGE_STYLES: readonly ImageStyle[] = ['flat', 'dynamic'];
+/**
+ * How the Bild assistant lays the stitches: straight rows and clean satin, rows that follow shape
+ * and image, or Smart: the technique that suits each area (digitize/smart.ts).
+ */
+export type ImageStyle = 'flat' | 'dynamic' | 'smart';
+export const IMAGE_STYLES: readonly ImageStyle[] = ['flat', 'dynamic', 'smart'];
 
 export interface ImageSettings {
   prepare: PrepareOptions;
