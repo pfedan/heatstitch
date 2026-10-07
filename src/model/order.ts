@@ -1,8 +1,8 @@
 import { build, recs, tieIn, tieOff, type Rec } from './jumps';
-import type { SewObject } from './objects';
+import { sewObjects, type SewObject } from './objects';
 import { COLOR_CHANGE, END, JUMP, nextVersion, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
 import { sameColor } from './recolor';
-import { remembered } from './restitch';
+import { remember, remembered } from './restitch';
 
 /**
  * Sewing order of the objects: what the machine sews when. Changing it changes neither the
@@ -455,7 +455,17 @@ export function reorder(p: Pattern, objs: SewObject[], order: number[], trimMm: 
     if (!last.tieOff) out.push(...tieOff(p, last.last));
     out.push({ x: p.x[last.last], y: p.y[last.last], cmd: TRIM }, { x: p.x[last.last], y: p.y[last.last], cmd: END });
   }
-  return build(nextVersion(p, { colors }), out, p);
+  const next = build(nextVersion(p, { colors }), out, p);
+  // A tie-off or tie-in added to an object (one too small to have its own) gives it more stitches:
+  // the parts it was sewn in no longer fit, and the next edit tells them apart anew.
+  for (const o of sewObjects(next)) {
+    const m = remembered(next, o);
+    if (!m?.parts) continue;
+    let n = 0;
+    for (let i = o.first; i <= o.last; i++) if (next.cmd[i] === STITCH) n++;
+    if (m.parts[m.parts.length - 1].end !== n) remember(next, o, { ...m, parts: undefined });
+  }
+  return next;
 }
 
 function stitchesBefore(p: Pattern, at: number): number {
