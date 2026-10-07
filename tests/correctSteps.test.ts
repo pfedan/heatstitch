@@ -135,7 +135,7 @@ describe('correction focus', () => {
 
   it('does not touch thread density with the hole focus on woven fabric', () => {
     const s = new Shape();
-    for (let i = 0; i < 4; i++) s.fillAt(20, 20, 10, i * 0.8 + 0.2);
+    for (let i = 0; i < 5; i++) s.fillAt(20, 20, 10, i * 0.8 + 0.2);
     const p = s.build();
     const r = autoCorrect(p, WOVEN, { ...DEFAULT_CORRECTION, focus: 'holes' });
     expect(r.report.respaced).toBe(0);
@@ -146,7 +146,7 @@ describe('correction focus', () => {
 describe('acknowledged findings', () => {
   it('leaves zones the user acknowledged as they are', () => {
     const s = new Shape();
-    for (let i = 0; i < 4; i++) s.fillAt(20, 20, 10, i * 0.8 + 0.2);
+    for (let i = 0; i < 5; i++) s.fillAt(20, 20, 10, i * 0.8 + 0.2);
     const p = s.build();
     const zones = classify(measurePattern(p), WOVEN).zones;
     const acks: Acknowledgement[] = zones.map((z) => ({ bbox: z.bbox, reason: 'manual' }));
@@ -191,23 +191,24 @@ describe('findings that are normal in practice', () => {
   });
 
   it('accept the patch where two satin columns cross, but not a large stack', () => {
-    const cross = new Shape().satin(0, 10, 20, 4, 0.3);
+    // Dense columns (0.2 mm): two plain ones crossing stay below the satin limit.
+    const cross = new Shape().satin(0, 10, 20, 4, 0.2);
     // A second column across the first one.
     cross.trim().jump(8, 0).to(8, 0);
-    for (let i = 1; i * 0.15 <= 24; i++) cross.to(i % 2 ? 12 : 8, i * 0.15);
+    for (let i = 1; i * 0.1 <= 24; i++) cross.to(i % 2 ? 12 : 8, i * 0.1);
     const v = classify(measurePattern(cross.build()), WOVEN);
     const flagged = v.zones.filter((z) => z.level === CRITICAL);
     expect(flagged.length).toBeGreaterThan(0);
     expect(flagged.every((z) => z.practice === 'satinJoin')).toBe(true);
 
     // Two dense columns on top of each other along their length.
-    const stacked = new Shape().satin(0, 10, 20, 4, 0.3).satin(0, 10, 20, 4, 0.3).build();
+    const stacked = new Shape().satin(0, 10, 20, 4, 0.2).satin(0, 10, 20, 4, 0.2).build();
     const long = classify(measurePattern(stacked), WOVEN).zones.filter((z) => z.level === CRITICAL);
     expect(long.length).toBeGreaterThan(0);
     expect(long.every((z) => !z.practice)).toBe(true);
 
     const s = new Shape();
-    for (let i = 0; i < 4; i++) s.fillAt(20, 20, 10, i * 0.8 + 0.2);
+    for (let i = 0; i < 5; i++) s.fillAt(20, 20, 10, i * 0.8 + 0.2);
     const fills = classify(measurePattern(s.build()), WOVEN);
     expect(fills.zones.find((z) => z.level === CRITICAL)?.practice).toBeUndefined();
   });

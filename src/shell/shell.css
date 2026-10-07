@@ -641,3 +641,73 @@ details.sec[open] > summary {
     animation-duration: 0.01ms !important;
   }
 }
+
+/* Tooltip (src/shell/tooltip.ts) ------------------------------------------------------------------ */
+
+.tip {
+  --tip-bg: var(--ink);
+  --tip-ink: var(--panel);
+  position: fixed;
+  z-index: 1000;
+  width: max-content;
+  max-width: min(280px, calc(100vw - 16px));
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 8px;
+  font: 12px/1.35 system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color: var(--tip-ink);
+  background: var(--tip-bg);
+  border-radius: 6px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  pointer-events: none;
+  white-space: pre-line;
+  overflow-wrap: break-word;
+  opacity: 0;
+  transform: translateY(-2px);
+  transition:
+    opacity 0.12s,
+    transform 0.12s;
+}
+
+.tip[data-side='above'] {
+  transform: translateY(2px);
+}
+
+.tip[data-side='right'] {
+  transform: translateX(-2px);
+}
+
+.tip.on {
+  opacity: 1;
+  transform: none;
+}
+
+.tip-keys {
+  display: flex;
+  gap: 3px;
+  flex: none;
+}
+
+.tip kbd {
+  color: var(--tip-ink);
+  background: color-mix(in srgb, var(--tip-ink) 14%, transparent);
+  border-color: color-mix(in srgb, var(--tip-ink) 28%, transparent);
+  border-bottom-width: 1px;
+}
+
+@media (prefers-color-scheme: dark) {
+  /* Dark interface: a raised dark box with a line, not a bright one. */
+  .tip {
+    --tip-bg: color-mix(in srgb, var(--ink) 12%, var(--panel));
+    --tip-ink: var(--ink);
+    border: 1px solid color-mix(in srgb, var(--ink) 18%, var(--line));
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  }
+}
+
+@media print {
+  .tip {
+    display: none;
+  }
+}

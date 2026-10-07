@@ -8,7 +8,7 @@ import { en } from '../src/i18n/en';
  * Switching the language changes every text at once, without a reload: the app is opened in a
  * browser, brought into a state (an object selected, a menu open, Dichte, Bild, a lettering...),
  * switched over and searched for any text of the other language still on the page, shown or
- * hidden, in text, titles, labels and placeholders. Then back again.
+ * hidden, in text, titles (tooltips), labels and placeholders. Then back again.
  *
  * A part that writes text with t() and keeps it (a panel, a card, a menu) listens with
  * onLangChange (src/i18n); one that forgets shows up here with the key of the text it left behind.
@@ -48,8 +48,9 @@ function pageTexts(page: Page): Promise<[string, string][]> {
       // The language list names each language in its own.
       if (s && !el.closest('script, style, #lang')) out.push([s, where(el)]);
     }
-    for (const el of document.querySelectorAll('[title], [aria-label], [placeholder], optgroup[label]'))
-      for (const a of ['title', 'aria-label', 'placeholder', 'label']) {
+    // data-tip: a title once the tooltip layer took it over (src/shell/tooltip.ts).
+    for (const el of document.querySelectorAll('[title], [data-tip], [aria-label], [placeholder], optgroup[label]'))
+      for (const a of ['title', 'data-tip', 'aria-label', 'placeholder', 'label']) {
         const v = el.getAttribute(a);
         if (v && !el.closest('#lang')) out.push([v, `${where(el)}[${a}]`]);
       }
