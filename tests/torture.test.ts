@@ -8,7 +8,7 @@ import { ECHO_SIDES } from '../src/digitize/echo';
 import { lineParts, partOf, SHADOW_DIRS, type LinePart } from '../src/model/shadow';
 import { lineStitches, resewLine } from '../src/model/line';
 import { refreshKnockouts, setKnockout } from '../src/model/knockout';
-import { rememberObjects, sewObjects, tableOf } from '../src/model/objects';
+import { rememberObjects, sewObjects, tableOf, type SewObject } from '../src/model/objects';
 import { COLOR_CHANGE, END, STITCH, type Pattern, type ThreadColor } from '../src/model/pattern';
 import { sameColor } from '../src/model/recolor';
 import { formOf, transformSewObject } from '../src/model/reshape';
@@ -41,6 +41,13 @@ import { rng } from './helpers/images';
  *
  * TORTURE_CHAINS and TORTURE_STEPS run more of them (e.g. TORTURE_CHAINS=10000 for a long run).
  */
+
+/** The stitches of object `o` (0.1 mm), its tie-in left out. */
+const ownStitches = (p: Pattern, o: SewObject) => {
+  const out: string[] = [];
+  for (let i = o.first + o.tieIn; i <= o.last; i++) if (p.cmd[i] === STITCH) out.push(`${p.x[i]},${p.y[i]}`);
+  return out.join(' ');
+};
 
 const CHAINS = Number(process.env.TORTURE_CHAINS ?? 24);
 const STEPS = Number(process.env.TORTURE_STEPS ?? 14);
@@ -305,7 +312,15 @@ const OPS: Op[] = [
       if (d.objects.length < 2) return false;
       const o = pick(r, d.objects).index;
       if (process.env.TORTURE_TRACE) console.log('delete', o);
-      return shapes(d, deleteObjects(d.cur.p, [o], T));
+      const before = d.cur.p;
+      const next = deleteObjects(before, [o], T);
+      // Sewn from the list without it: what stays keeps its stitches (tie-ins aside).
+      if (next) {
+        const was = new Map(sewObjects(before).map((x) => [x.id, ownStitches(before, x)]));
+        const moved = sewObjects(next).filter((x) => was.get(x.id) !== ownStitches(next, x));
+        expect(moved.map((x) => `${x.id}: other stitches after delete`).join('; ')).toBe('');
+      }
+      return shapes(d, next);
     },
   },
   {

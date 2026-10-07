@@ -3,14 +3,15 @@ import type { Pt } from '../digitize/skeleton';
 import { expandRegion, type Region } from '../digitize/region';
 import type { Form } from '../shape/path';
 import { rasterize } from '../shape/rasterize';
-import { coversOver, type Cover } from './covers';
+import { coversFrom, type Cover } from './covers';
 import { tidyKept, withRecords } from './edit';
 import { wholeOf } from './knockout';
 import { lineStitches } from './line';
 import { setObjects, sewObjects, stitchKey, tableOf, trimmedBetween, type ObjectKind, type PlacedEntry, type SewObject } from './objects';
-import { COLOR_CHANGE, END, JUMP, STITCH, TRIM, type Pattern } from './pattern';
+import { COLOR_CHANGE, END, JUMP, nextVersion, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
+import { tieIn, tieOff } from './jumps';
+import { blockKeys } from './order';
 import { fillRuns, knownKind, TRAVEL_REACH, lineFillArea, lockAt, remembered, satinRuns, trimBefore, type FillSettings, type Rails, type Remembered, type SatinSettings } from './restitch';
-import { stitchKinds } from './sequence';
 
 /**
  * Sewing from the object list (stage C of the object model): what an object is (its shape and
@@ -95,6 +96,46 @@ export function sewOne(spec: Spec, way: Way): { runs: Pt[][]; under: number } | 
   }
 }
 
+type Sewn = { runs: Pt[][]; under: number } | null;
+
+/** What was sewn from a memory, by way (see sewCached): the last few ways only. */
+const sewnFrom = new WeakMap<Remembered, Map<string, Sewn>>();
+const KEPT_WAYS = 4;
+const regionIds = new WeakMap<object, number>();
+let nextRegion = 1;
+const idOf = (o: object) => {
+  let n = regionIds.get(o);
+  if (!n) regionIds.set(o, (n = nextRegion++));
+  return n;
+};
+
+/**
+ * sewOne for object memory `m`, kept with it: an object whose memory and way stay the same is
+ * not sewn again (its memory is not changed in place: a change makes a new one).
+ */
+function wayKey(spec: Spec, way: Way): string {
+  // A line or a satin is sewn the same from wherever the thread comes.
+  if (spec.kind === 'line' || spec.kind === 'satin') return '';
+  return `${way.from[0]},${way.from[1]};${way.to?.[0]},${way.to?.[1]};${(way.covers ?? []).map((c) => `${idOf(c.region)}:${c.overlap}`).join(',')}`;
+}
+
+/** Keeps `sewn` as what memory `m` gives along `way`. */
+function keepSewn(m: Remembered, key: string, sewn: Sewn): void {
+  let kept = sewnFrom.get(m);
+  if (!kept) sewnFrom.set(m, (kept = new Map()));
+  kept.set(key, sewn);
+  if (kept.size > KEPT_WAYS) kept.delete(kept.keys().next().value!);
+}
+
+function sewCached(m: Remembered, spec: Spec, way: Way): Sewn {
+  const key = wayKey(spec, way);
+  const kept = sewnFrom.get(m);
+  if (kept?.has(key)) return kept.get(key)!;
+  const out = sewOne(spec, way);
+  keepSewn(m, key, out);
+  return out;
+}
+
 interface Rec {
   x: number;
   y: number;
@@ -154,6 +195,9 @@ function objectRecords(runs: Pt[][], under: number, trimMm: number, out: Rec[]):
 
 /** What an object sewn anew remembers: the same, without what counted its old stitches. */
 function memoryAfter(m: Remembered, kind: ObjectKind, stitches: number, under: number): Remembered {
+  // Sewn as it was: the same memory (what was sewn from it is kept with it, see sewCached).
+  const same = m.parts?.length === 1 && m.parts[0].kind === kind && m.parts[0].end === stitches && !m.parts[0].border && (m.under ?? 0) === under && m.underFrom === undefined;
+  if (same) return m;
   const out: Remembered = { ...m };
   delete out.parts;
   delete out.under;
@@ -164,65 +208,140 @@ function memoryAfter(m: Remembered, kind: ObjectKind, stitches: number, under: n
   return out;
 }
 
+/** One object in the list a design is sewn from. */
+export interface Entry {
+  /** The object in the design the list was taken from: its stitches and what it remembers. */
+  obj: SewObject;
+  color: ThreadColor;
+  /** Its thread: neighbours with the same thread are sewn in one color block (see blockKeys). */
+  thread: string;
+  /** Sewn anew from what it remembers (when it can be); else it keeps its stitches. */
+  sew?: boolean;
+}
+
+/** The object list of `p` as it is sewn now: every object keeps its stitches. */
+export function listOf(p: Pattern): Entry[] {
+  const objs = sewObjects(p);
+  const keys = blockKeys(p, objs.length ? objs[objs.length - 1].block + 1 : 0);
+  return objs.map((obj) => ({ obj, color: obj.color, thread: keys[obj.block] }));
+}
+
+/** Tied to another object (a border, a blend's second thread, a shadow, an echo copy). */
+function linked(p: Pattern, o: SewObject): boolean {
+  const m = remembered(p, o);
+  return !!(m?.outline || m?.blendOf || m?.shadowOf || m?.echoOf);
+}
+
 /**
  * The design `p` sewn from its object list: each object that can be is sewn from what it
  * remembers (sewOne), starting where the one before ended; the others keep their stitches. Colors,
  * order, the trims between objects and the object ids stay as they are. A new version of `p`.
  */
 export function sewDesign(p: Pattern, trimMm: number): Pattern {
-  const kinds = stitchKinds(p);
-  const objs = sewObjects(p, kinds);
+  return sewList(p, listOf(p).map((e) => ({ ...e, sew: true })), trimMm);
+}
+
+/**
+ * The design sewn from `list` (objects of `p`, in the order they are sewn): entries marked `sew`
+ * are sewn from what they remember where they can be (sewOne), starting where the one before ended;
+ * the others keep their stitches. Between neighbours as in `p`, the thread goes as it went; new
+ * neighbours are joined by a jump, or locked and trimmed when further apart than `trimMm` or tied
+ * to another object; a change of thread trims and stops for the color. A new version of `p` with
+ * the list as its objects (same ids); an empty design for an empty list.
+ */
+export function sewList(p: Pattern, list: Entry[], trimMm: number): Pattern {
   const table = tableOf(p);
+  if (!list.length) return nextVersion(p, { x: new Int32Array(0), y: new Int32Array(0), cmd: new Uint8Array(0), colors: [], bounds: { minX: 0, minY: 0, maxX: 0, maxY: 0 } });
   const out: Rec[] = [];
   const placed: PlacedEntry[] = [];
+  const colors: ThreadColor[] = [list[0].color];
   let stitches = 0;
   let here: Pt | null = null;
+  const specs = list.map((e) => (e.sew ? specOf(p, e.obj) : null));
   // Lines and satins sewn ahead (where they start does not depend on the object before).
-  const ahead = new Map<number, ReturnType<typeof sewOne>>();
+  const ahead = new Map<number, Sewn>();
   const count = (from: number) => {
     for (let k = from; k < out.length; k++) if (out[k].cmd === STITCH) stitches++;
   };
-  objs.forEach((o, k) => {
-    const prev = objs[k - 1];
-    if (prev) {
-      if (prev.block !== o.block) out.push({ ...out[out.length - 1], cmd: TRIM }, { ...out[out.length - 1], cmd: COLOR_CHANGE });
-      else if (trimmedBetween(p, prev, o)) out.push({ ...out[out.length - 1], cmd: TRIM });
-    }
-    const first = stitches;
+  const copy = (a: number, b: number) => {
+    for (let i = a; i < b; i++) out.push({ x: p.x[i], y: p.y[i], cmd: p.cmd[i] });
+  };
+  const keptAt = (k: number) => !specs[k];
+  list.forEach((e, k) => {
+    const o = e.obj;
+    const prev = list[k - 1]?.obj;
+    const spec = specs[k];
     const mark = out.length;
-    const spec = specOf(p, o);
-    const next = objs[k + 1];
+    // How the thread comes here: as in `p` between neighbours there, else anew.
+    const asBefore = !!prev && o.index === prev.index + 1 && o.block === prev.block && list[k - 1].thread === e.thread;
+    let cut = false;
+    // The records that lead to it come from `p` as they are.
+    let led = false;
+    if (!prev) {
+      if (!spec && o.index === 0) led = (copy(0, o.first), true);
+    } else if (asBefore && keptAt(k - 1) && !spec) led = (copy(prev.last + 1, o.first), true);
+    else {
+      const color = list[k - 1].thread !== e.thread;
+      const far = Math.hypot(p.x[o.first] - p.x[prev.last], p.y[o.first] - p.y[prev.last]) / 10 > trimMm;
+      cut = color || (asBefore ? trimmedBetween(p, prev, o) : far || linked(p, prev) || linked(p, o));
+      if (cut) {
+        const end = out[out.length - 1];
+        if (keptAt(k - 1) && !prev.tieOff) out.push(...tieOff(p, prev.last));
+        out.push({ ...end, cmd: TRIM });
+        if (color) {
+          out.push({ ...end, cmd: COLOR_CHANGE });
+          colors.push(e.color);
+        }
+      }
+    }
+    count(mark);
+    const first = stitches;
+    const sewnFrom = out.length;
+    const next = list[k + 1];
     // Straight rows end near where the next object starts, when that is known before it is sewn:
     // it keeps its stitches, or it is a line or satin (they start where their shape starts).
-    const nextSpec = next && specOf(p, next);
+    const nextSpec = next && specs[k + 1];
     const fixedStart = next && (!nextSpec || nextSpec.kind === 'line' || nextSpec.kind === 'satin');
-    if (fixedStart && nextSpec && !ahead.has(k + 1)) ahead.set(k + 1, sewOne(nextSpec, { from: [0, 0] }));
-    const to = !fixedStart ? undefined : nextSpec ? ahead.get(k + 1)?.runs[0][0] : ([p.x[next.first] / 10, p.y[next.first] / 10] as Pt);
-    const covers = spec?.kind === 'fill' && spec.fill.underlay && spec.fill.underCover ? coversOver(p, objs, o, spec.area.pxMm, spec.memory.overlapShare) : undefined;
+    if (fixedStart && nextSpec && !ahead.has(k + 1)) ahead.set(k + 1, sewCached(remembered(p, next.obj)!, nextSpec, { from: [0, 0] }));
+    const to = !fixedStart ? undefined : nextSpec ? ahead.get(k + 1)?.runs[0][0] : ([p.x[next.obj.first] / 10, p.y[next.obj.first] / 10] as Pt);
+    const later = list.slice(k + 1).map((x) => x.obj);
+    const covers = spec?.kind === 'fill' && spec.fill.underlay && spec.fill.underCover ? coversFrom(p, later, o, spec.area.pxMm, spec.memory.overlapShare) : undefined;
     // The first object starts nearest to the origin: taken from its stitches, the start would
     // creep along its edge each time it is sewn again (they are rounded to 0.1 mm).
     const way: Way = { from: here ?? [0, 0], ...(to ? { to } : {}), ...(covers?.length ? { covers } : {}) };
-    const sewn = !spec ? null : ahead.has(k) ? ahead.get(k)! : sewOne(spec, way);
+    const sewn = !spec ? null : ahead.has(k) ? ahead.get(k)! : sewCached(remembered(p, o)!, spec, way);
     const m = remembered(p, o);
     let memory = m;
     if (sewn && spec) {
       const under = objectRecords(sewn.runs, sewn.under, trimMm, out);
-      count(mark);
+      count(sewnFrom);
       memory = memoryAfter(m!, o.kind, stitches - first, under);
+      // The new memory gives the same stitches the same way.
+      if (memory !== m) keepSewn(memory, wayKey(spec, way), sewn);
     } else {
-      // Kept as it is, with the jumps that lead to it.
+      // Kept as it is: after its neighbour in `p` with the jumps that led to it there, else
+      // jumped to (and tied in after a trim, or as a new first object).
       let lead = o.first;
-      while (lead > 0 && p.cmd[lead - 1] === JUMP) lead--;
-      for (let i = lead; i <= o.last; i++) out.push({ x: p.x[i], y: p.y[i], cmd: p.cmd[i] });
-      count(mark);
+      while (asBefore && lead > 0 && p.cmd[lead - 1] === JUMP) lead--;
+      if (led) lead = o.first;
+      else if (lead === o.first) out.push({ x: p.x[o.first], y: p.y[o.first], cmd: JUMP });
+      copy(lead, o.first + 1);
+      if ((cut || (!prev && !led)) && !o.tieIn) out.push(...tieIn(p, o.first));
+      copy(o.first + 1, o.last + 1);
+      count(sewnFrom);
     }
     const last = out.findLastIndex((r) => r.cmd === STITCH);
     here = [out[last].x / 10, out[last].y / 10];
     placed.push({ id: o.id, first, last: stitches - 1, key: '', at: [0, 0], ...(memory ? { memory } : {}) });
   });
   // Cut at the end, as every design made here is.
-  if (out.length) out.push({ ...out[out.length - 1], cmd: TRIM }, { ...out[out.length - 1], cmd: END });
-  const raw = withRecords(p, Int32Array.from(out, (r) => r.x), Int32Array.from(out, (r) => r.y), Uint8Array.from(out, (r) => r.cmd));
+  const lastObj = list[list.length - 1].obj;
+  if (keptAt(list.length - 1) && lastObj.index === sewObjects(p).length - 1) copy(lastObj.last + 1, p.cmd.length);
+  else {
+    if (keptAt(list.length - 1) && !lastObj.tieOff) out.push(...tieOff(p, lastObj.last));
+    out.push({ ...out[out.length - 1], cmd: TRIM }, { ...out[out.length - 1], cmd: END });
+  }
+  const raw = withRecords(p, Int32Array.from(out, (r) => r.x), Int32Array.from(out, (r) => r.y), Uint8Array.from(out, (r) => r.cmd), colors);
   const q = tidyKept(raw).pattern;
   // Keys and first stitches on the new stitches, so the list is found where it is.
   const records: number[] = [];
