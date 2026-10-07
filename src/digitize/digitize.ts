@@ -13,7 +13,7 @@ import { column, pairs, satinStitches, underlay, type Column, type SatinParams }
 import { reverse, skeleton, type Branch, type Graph, type Pt } from './skeleton';
 import { bestChain, satinRuns, type FillSettings, type Rails, type SatinSettings } from '../model/restitch';
 import { stripsOfAreas } from './rungs';
-import { areaLoops, offersSections, suggestSatin, type SatinSuggestion, type ShapeClass } from './satinSuggest';
+import { areaLoops, classify as shapeClass, offersSections, suggestSatin, type SatinSuggestion, type ShapeClass } from './satinSuggest';
 import type { Orientation } from '../image/orientation';
 import { transformForm, type Form } from '../shape/path';
 import { lineStitchFor, lineStitches } from '../model/line';
@@ -373,7 +373,16 @@ function sewRun(o: Obj, start: Pt, tol: number): Pt[][] {
 }
 
 /** Satin that neither piles up nor leaves its region bare. */
-const satinOk = (runs: Pt[][], r: Region, o: DigitizeOptions) => peakDensity(runs) <= (SATIN_PEAK * 2) / o.satinSpacing && coverage(r, runs) >= SATIN_COVER;
+const satinOk = (runs: Pt[][], r: Region, o: DigitizeOptions, skip?: (x: number, y: number) => boolean) =>
+  peakDensity(runs, skip) <= (SATIN_PEAK * 2) / o.satinSpacing && coverage(r, runs) >= SATIN_COVER;
+
+/** Distance from q to the segment from a to b. */
+function toSegment(q: Pt, a: Pt, b: Pt): number {
+  const v: Pt = [b[0] - a[0], b[1] - a[1]];
+  const l2 = v[0] * v[0] + v[1] * v[1];
+  const t = l2 ? Math.max(0, Math.min(1, ((q[0] - a[0]) * v[0] + (q[1] - a[1]) * v[1]) / l2)) : 0;
+  return Math.hypot(q[0] - a[0] - v[0] * t, q[1] - a[1] - v[1] * t);
+}
 
 /**
  * Stitches for one object starting near `pos`: satin that would pile up or leave its region bare is
@@ -391,9 +400,10 @@ function satinSettings(o: DigitizeOptions, p: SatinParams): SatinSettings {
  * area in the order that hides the ways between the columns best. Remembers the columns, so the
  * satin tool can change them later. Nothing when the area makes no columns.
  */
-function sewSections(obj: Obj, o: DigitizeOptions, p: SatinParams): Pt[][] {
+function sewSections(obj: Obj, o: DigitizeOptions, p: SatinParams, graph?: Graph): Pt[][] {
   const r = obj.region;
-  const plan = obj.plan !== undefined ? obj.plan : suggestSatin(r, obj.graph ?? undefined, o.satinMax);
+  // The plan Smart made when it chose the area (see choose), unless asked for another centerline.
+  const plan = !graph && obj.plan !== undefined ? obj.plan : suggestSatin(r, graph ?? obj.graph ?? undefined, o.satinMax);
   if (!plan?.ok) return [];
   const { outsides, holes } = areaLoops(r);
   const made = stripsOfAreas(outsides, plan.lines, plan.cuts, holes);
@@ -412,22 +422,31 @@ function sewSections(obj: Obj, o: DigitizeOptions, p: SatinParams): Pt[][] {
 
 function sewOne(obj: Obj, pos: Pt, o: DigitizeOptions, satin: SatinParams, angles: { obj: Obj; angle: number }[], orient?: Orientation): Pt[][] {
   let out: Pt[][] = [];
+  // As columns cut at the junctions (see satinSuggest), when they hold: where two columns meet
+  // at a cut line they overlap a little on purpose (not counted).
+  const sections = (graph?: Graph): Pt[][] => {
+    const runs = sewSections(obj, o, satin, graph);
+    const cuts = obj.info.columns?.[0]?.split?.cuts ?? [];
+    const seam = (x: number, y: number) => cuts.some(([a, b]) => toSegment([x, y], a, b) < 0.9);
+    if (runs.length && satinOk(runs, obj.region, o, seam)) return runs;
+    delete obj.info.columns;
+    delete obj.info.satin;
+    delete obj.info.satinShape;
+    return [];
+  };
   if (obj.sections) {
-    out = sewSections(obj, o, satin);
+    out = sections();
     // Not made into columns, or the satin would not hold: as a satin along its middle.
-    if (!out.length || !satinOk(out, obj.region, o)) {
-      obj.sections = false;
-      delete obj.info.columns;
-      delete obj.info.satin;
-      delete obj.info.satinShape;
-      out = [];
-    }
+    if (!out.length) obj.sections = false;
   }
   if (obj.info.kind === 'satin' && !obj.sections) {
     out = sewSatin(obj, pos, satin, o.underlay, o.tolerance);
     if (!satinOk(out, obj.region, o)) {
-      obj.info.kind = 'fill';
-      out = [];
+      // A stroke too wide or too bent for one satin along its middle: in columns, else filled.
+      const g = skeleton(obj.region);
+      out = shapeClass(g) === 'strokes' ? sections(g) : [];
+      if (out.length) obj.sections = true;
+      else obj.info.kind = 'fill';
     }
   }
   if (obj.info.kind === 'fill') {

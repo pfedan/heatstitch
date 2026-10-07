@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildRegion, type Region } from '../src/digitize/region';
-import { inside, stripsOfAreas } from '../src/digitize/rungs';
+import { chordOf, inside, stripsOfAreas } from '../src/digitize/rungs';
 import { areaLoops, suggestSatin } from '../src/digitize/satinSuggest';
 import type { Pt } from '../src/digitize/skeleton';
 import { satinRuns, type SatinSettings } from '../src/model/restitch';
@@ -92,6 +92,55 @@ describe('Vorschlagen: satin for a drawing of lines', () => {
       return d > 30 && d < 60 && Math.hypot(mid([a, b])[0] - 40, mid([a, b])[1] - 10) < 1.5;
     });
     expect(slanted.length).toBe(1);
+  });
+
+  it('gives a dot apart from the lines a line across', () => {
+    const { s, strips } = columns(region(any(near([10, 10], [50, 10], 2), (x, y) => Math.hypot(x - 30, y - 20) < 0.8)));
+    expect(s.ok).toBe(true);
+    expect(strips.length).toBe(2);
+  });
+
+  it('finds where a cut line through a corner of the outline meets it', () => {
+    // Cut lines run from corner to corner of the outline, through its points: at any slant both
+    // ends are found (rounding must not miss the corner on both edges that meet there).
+    const ring: Pt[] = [];
+    for (let k = 0; k <= 40; k++) ring.push([k * 0.37, 0.13 * Math.sin(k * 1.7)]);
+    for (let k = 40; k >= 0; k--) ring.push([k * 0.37, 2.1 + 0.11 * Math.cos(k * 1.3)]);
+    ring.push(ring[0]);
+    let missed = 0;
+    for (let k = 3; k < 38; k++) {
+      const p = ring[k];
+      const q = ring[81 - k + 1];
+      const d: Pt = [q[0] - p[0], q[1] - p[1]];
+      const l = Math.hypot(d[0], d[1]);
+      if (!chordOf(ring, [p[0] - (d[0] / l) * 0.3, p[1] - (d[1] / l) * 0.3], [q[0] + (d[0] / l) * 0.3, q[1] + (d[1] / l) * 0.3])) missed++;
+    }
+    expect(missed).toBe(0);
+  });
+
+  it('cuts a loop on a stem off as a ring of its own', () => {
+    // A ring (radius 6, 2 mm wide) with a stem down from its bottom, a lollipop.
+    const ring = (x: number, y: number) => Math.abs(Math.hypot(x - 30, y - 20) - 6) < 1;
+    const { s, strips } = columns(region(any(ring, near([30, 26], [30, 45], 2))));
+    expect(s.ok).toBe(true);
+    // One cut ends the stem at the ring, one opens the ring.
+    expect(s.cuts.length).toBe(2);
+    expect(strips.length).toBe(2);
+  });
+
+  it('cuts a loop with two lines below it off at both its ends', () => {
+    // A ring as above, two legs going down left and right from its bottom (a 人 with a loop on top).
+    const ring = (x: number, y: number) => Math.abs(Math.hypot(x - 30, y - 20) - 6) < 1;
+    const { s } = columns(region(any(ring, near([30, 26], [18, 45], 2), near([30, 26], [42, 45], 2))));
+    expect(s.ok).toBe(true);
+  });
+
+  it('runs one of two lines crossing at a slant through', () => {
+    // Two lines crossing at about 30° (the skeleton makes two forks a little apart).
+    const { s, strips } = columns(region(any(near([8, 24], [52, 36], 2), near([8, 36], [52, 24], 2))));
+    expect(s.ok).toBe(true);
+    expect(s.cuts.length).toBe(2);
+    expect(strips.length).toBe(3);
   });
 
   it('suggests nothing for a wide area', () => {
