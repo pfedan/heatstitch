@@ -524,6 +524,9 @@ async function clickAt(page, x, y, shift = false) {
 shots.draw = async (lang) => {
   const { page, close } = await boot(lang);
   await mode(page, 'flow');
+  // the drawing tools live on the level Form
+  await page.click('.level-switch input[value="shape"]', { force: true });
+  await page.waitForTimeout(500);
   const b = await stageBox(page);
   const cx = b.x + b.width / 2, cy = b.y + b.height / 2;
   // the house body
@@ -534,7 +537,8 @@ shots.draw = async (lang) => {
   await drag(page, cx - 55, cy + 15, cx - 15, cy + 55);
   await page.keyboard.press('Escape'); // leave the tool, the circle stays selected
   await page.waitForTimeout(500);
-  await clickAt(page, cx + 50, cy + 90, true); // add the body to the selection
+  await clickObject(page, 1); // the window, then the body added via the object list
+  await clickObject(page, 0, true);
   await clickText(page, T[lang].subtract);
   await page.waitForTimeout(1500);
   // the roof with the pen: three corners, closed on the first node
@@ -547,8 +551,9 @@ shots.draw = async (lang) => {
   // the sun top right
   await page.click('[data-draw="ellipse"]');
   await drag(page, cx + 150, cy - 150, cx + 205, cy - 95);
-  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape'); // leaves the tool and the selection
   await page.waitForTimeout(500);
+  await clickObject(page, 2); // the sun
   // the sun in its own thread: the color square next to the object name
   await page.locator('#object-body .thread-sw').click();
   await page.waitForTimeout(600);
@@ -563,8 +568,14 @@ shots.draw = async (lang) => {
   await page.waitForTimeout(1200);
   await page.keyboard.press('Escape');
   await page.waitForTimeout(500);
+  // the guide action sits on the level Objekte; back to Form afterwards so the tools show
+  await page.click('.level-switch input[value="objects"]', { force: true });
+  await clickObject(page, 3); // the ground line
   await clickText(page, T[lang].guide);
   await page.waitForTimeout(1200);
+  await page.click('.level-switch input[value="shape"]', { force: true });
+  await page.waitForTimeout(500);
+  await page.keyboard.press('Escape');
   await fit(page);
   await wheelAt(page, cx, cy - 60, 2, 120); // two steps out: the fit leaves out the guide line
   await mouseAway(page);
