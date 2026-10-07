@@ -7,11 +7,13 @@ pictures into new designs. No backend, no uploads: your files never leave your m
 
 ![heatstitch: an embroidered cat as realistic threads, in sewing order and as a density heatmap](public/og-image.jpg)
 
-## Three modes
+## Design, Check, and pictures
 
-Switch at the top of the page, or with the keys `1`, `2` and `3`.
+The start page opens a file, converts a picture, starts empty or shows the examples. At the top the
+app has two pages, **Design** and **Check** (keys `1` and `2`); every action is a command with a
+button, a key and an entry in the command search (`Ctrl+K`).
 
-**Sequence** shows how the machine works through the design and is where you edit it. Colors act as
+**Design** shows how the machine works through the design and is where you edit it. Colors act as
 layers (hide, highlight, recolor), stitches can be colored by thread, order, stitch type or length,
 and a player steps through the design with an estimated sewing time. Each color opens to its
 objects (fill with underlay, satin column, running stitch), recognized from the stitches of any
@@ -21,18 +23,21 @@ underlay, border, satin width and direction, running stitch length. Their outlin
 curves with nodes, and single needle points can be moved. The drawing tools make new shapes, the
 Text tool sets lettering in 41 embroidery fonts, and the jump list trims or untrims jumps.
 
-![Sequence mode with the cat example, realistic threads, color list and jump list](public/guide/cat-en.jpg)
+![Design with the cat example, colors and objects, player and the Design card](public/guide/cat-en.jpg)
 
-**Density** shows the heatmap, checks the design for the chosen fabric and thread and proposes a
-correction (all described below).
+**Check** shows the heatmap, checks the design for the chosen fabric and thread, answers *Will it
+stitch?* with a traffic light per fabric and fixes what it can without visible changes; the
+correction behind it is described below. The **Design** card next to both pages holds hoop, material,
+*Ready to stitch* (stabilizer, needle, speed), threads and figures.
 
-![Density mode with a critical zone where three fills overlap](public/guide/heatmap-en.jpg)
+![Check with a critical zone where three fills overlap](public/guide/heatmap-en.jpg)
 
-**Image** turns any picture, photo or SVG into a design: it reduces the colors to thread colors,
-lets you fix them with a color list and a brush, and generates fill, satin and running stitches (see
+**Convert a picture** (key `3`) turns any picture, photo or SVG into a design in three steps: it
+reduces the colors to thread colors, lets you fix them with a color list and a brush, and generates
+fill, satin and running stitches in the style *Flat*, *Dynamic* or *Smart* (see
 [Image to embroidery](#image-to-embroidery)).
 
-![Image mode with the example flower: fill, satin and running stitches over the prepared image](public/guide/image-en.jpg)
+![Convert a picture with the example flower: fill, satin and running stitches over the prepared image](public/guide/image-en.jpg)
 
 ## Privacy
 
@@ -43,7 +48,7 @@ that same site (the app itself, the example files, the fonts and the check for a
 Loaded files and edits are kept in the browser's IndexedDB so they survive a reload, and removing a
 file from the list deletes it there. After the first visit the app also works offline.
 
-The same holds for pictures in Image mode: they are decoded, prepared and converted in the browser
+The same holds for converted pictures: they are decoded, prepared and converted in the browser
 and kept in IndexedDB together with your color edits and brush strokes. The optional *Prepare the
 image with AI* workflow only suggests a prompt for an AI chat of your choice; heatstitch itself never
 sends the picture anywhere.
@@ -66,8 +71,11 @@ sends the picture anywhere.
   the nearest threads of your brand, switch a whole design to it; a printable **color list** in
   sewing order with stitches and thread length (catalog data from the Ink/Stitch palettes, GPL 3.0,
   see `public/threads/LICENSE.md`)
-- **Demo project** with seven designs under *Load example*, every object editable
-- Several files at once, examples dropdown, PNG export, installable PWA that works offline and opens
+- **Demo project** with eight designs under *See an example*, every object editable
+- **Ready to stitch**: stabilizer, topping, needle, thread, speed and hooping for the chosen fabric
+  and stitch count, a printable **stitch sheet** with the design at 1:1 and the color sequence
+- Several designs at once, examples, PNG export, command search (`Ctrl+K`), tooltips, phone and
+  tablet layouts, installable PWA that works offline and opens
   embroidery files with "Open with"
 
 **Viewing**
@@ -78,18 +86,19 @@ sends the picture anywhere.
   jumps, trims, color changes, start and end and needle points
 - Player with estimated sewing time, statistics, tooltip with density and stitch data
 
-**Editing (Sequence mode)**
+**Editing (Design)**
 
 - **Objects** recognized from the stitches of any file: order by drag or *Optimize order*, move,
   rotate, scale, duplicate, mirror, delete, context menu, combine and split, cut out, don't sew or
-  keep as guide, knock out under later shapes, own thread per object
+  keep as guide, knock out under later shapes, own thread per object, **cut apart** a fill into
+  parts with their own direction (one border around all parts)
 - **Stitch settings** with live preview: fill patterns in three tabs (classic: tatami with offset,
   gradient, contour fill, spiral, as sewn, guided by drawn lines; decor: embossed motifs, waves,
   grain, rays, swirl, color fade with a second color; open: meander, maze, grid, echo, cross
   stitch), spacing, angle, stitch length, edges, expand, underlay
   (off, across, cross, inset, left out under later objects), **border** (running, triple or satin,
   offset, own thread); satin pattern or E stitch, spacing (also by width and per rung), width per
-  side, short stitches in curves, split, underlay kind, **rungs** for the direction and **sections**
+  side, fringe, short stitches in curves, split, underlay kind, **rungs** for the direction and **sections**
   with cut lines (also on a fill: each part a column of its own, order, direction and trims per part);
   running stitch length, max. deviation, triple stitch; lines as running stitch, satin or fill
 - **Shape editing**: the outline of a fill as curves with nodes, kept exactly from then on
@@ -99,11 +108,13 @@ sends the picture anywhere.
   letters, stays text
 - **Jumps**: trim and tie, or remove trims, one jump at a time or by length
 
-**Checking and correcting (Density mode)**
+**Checking and correcting (Check)**
 
 - Checks for the chosen fabric and thread: thread density, short-stitch clusters, perforation on
   leather, coverage and gaps, long stitches; findings as zones with a verdict, practice rules and
   acknowledgements
+- **Will it stitch?**: a traffic light per fabric, *Fix* for invisible changes, visible proposals
+  with before and after, *Take back correction*
 - **Correction** that proposes better settings per object, previews each one before and after, and
   applies the ticked ones in one undo step; *Tune to fabric*; edits by hand; compare with original
 - English / German, guide in both languages
@@ -269,7 +280,7 @@ penetrations.
 - *Thin out* removes 25, 33 or 50 % of the cycles in fills and zigzags that lie mostly inside the
   selection.
 
-In Sequence mode the same level edits the needle points of one object, which keeps its shape and
+In Design the same level edits the needle points of one object, which keeps its shape and
 settings and counts the changes by hand (`src/model/handEdit.ts`).
 
 ### Compare
@@ -302,7 +313,7 @@ Satin direction and sections come from rungs (`src/digitize/rungs.ts`), fill row
 
 ## Lettering
 
-*Text* above the canvas (key `t`, Sequence mode) sets a lettering in one of 41 embroidery fonts
+*Text* in the tool bar (key `T`) sets a lettering in one of 41 embroidery fonts
 from [Ink/Stitch](https://github.com/inkstitch/embroidery-fonts). The fonts were digitized as
 embroidery (satin columns with their rails and rungs, running stitch, fills), not outlines, so they
 sew well. A lettering stays text: its text, font, height in mm, alignment, shape (straight, arcs,
@@ -318,7 +329,7 @@ No Ink/Stitch code is used, only the fonts' data.
 
 ## Image to embroidery
 
-Image mode (key `3`) turns a picture into a design in two steps, both in a Web Worker
+*Convert a picture* (key `3`) turns a picture into a design in three steps, the computing in two, both in a Web Worker
 (`src/digitize/worker.ts`). Every change starts a new run; whatever changes during a run is computed
 afterwards with the latest settings. The picture, color edits and brush strokes stay in the browser
 (IndexedDB, `src/storage/imageStore.ts`). The canvas shows the *Original*, the *Prepared* image or the
@@ -352,8 +363,8 @@ copied.
    neighbor with the longest shared border (as in Goldman's patent US 6,836,695 and in Wilcom).
 
 **SVG** files (`src/image/svg.ts`, `src/shape/svgPath.ts`) skip the raster steps: every shape is
-read with its curves and its color, hidden parts are left out in Image mode and offered for knocking
-out in Sequence mode, a size in mm, cm or inches becomes the width, and lines become running stitch
+read with its curves and its color, hidden parts are left out when converting a picture and offered for
+knocking out when the SVG is opened as a design, a size in mm, cm or inches becomes the width, and lines become running stitch
 or satin by their width.
 
 ### Stitches (`src/digitize/`)
@@ -399,7 +410,7 @@ fill rows end there, satin edges are found there, underlay lies on a contour ins
   moves 15 % of the width inwards. Pull compensation by fabric (woven 0.2 mm, knit 0.35, terry 0.4 per
   side), stitches over 7 mm are split. A network of columns is sewn in one go: each branch out as
   underlay (center walk, zigzag from 4 mm width) and back as satin, like Ink/Stitch's auto-satin. At
-  junctions the first column covers, the others reach 0.3 mm into it. In Sequence mode the same
+  junctions the first column covers, the others reach 0.3 mm into it. In Design the same
   column model is driven by rungs (`rungs.ts`): the direction turns evenly between rungs, sections
   start the column afresh at sharp corners, and a fill can become a satin along drawn rungs.
 - **Running stitch** (`run.ts`): stitches of the chosen length along a path, shortened in curves until
@@ -412,8 +423,8 @@ fill rows end there, satin edges are found there, underlay lies on a contour ins
   40 wt: 0.40 mm between neighboring rows, as measured in the example cat), pull compensation by
   fabric (Wilcom table). Everything can be overridden in the *Stitches* panel.
 
-The generated stitches go through the same check as loaded files. *Take over as design* adds them
-to the file list as a PES file, where their objects keep shape and settings and can be edited,
+The generated stitches go through the same check as loaded files. *Take over* adds them
+to the open designs as a new design, where their objects keep shape and settings and can be edited,
 corrected and saved. For comparison on woven fabric with 40 wt:
 
 | Design | Stitches | Caution zones | Critical zones | Trims |
@@ -422,7 +433,7 @@ corrected and saved. For comparison on woven fabric with 40 wt:
 | Same photo, straight rows | 16,400 | 16 | 3 | 131 |
 | Example cat (professionally digitized) | 9,200 | 15 | 2 | 89 |
 
-The findings mostly sit where satin overlaps the edge of a fill; the correction in Density mode can
+The findings mostly sit where satin overlaps the edge of a fill; the correction in Check can
 take them on afterwards.
 
 ### Prepare the image with AI
@@ -439,10 +450,10 @@ provider when you do this.
 In the realistic thread view the light follows the pointer or the tilt of a phone
 (`src/render/light.ts`; on iPhones after a one-time permission). Thread shines across its fibers, so
 satin columns and fill rows light up or darken by their stitch direction, like turning an embroidered
-patch in your hand, and the shadows move along. On the first converted picture, Image mode switches to
+patch in your hand, and the shadows move along. On the first converted picture, the wizard switches to
 the realistic view and sweeps the light once around the design; every new picture does it again
 (not with the system setting to reduce motion). *✦ As sewn* on the canvas shows it at any time.
-*Light follows pointer and tilt* under *Display* switches it off in all modes. Behind the threads,
+*Light follows pointer and tilt* in the View menu switches it off. Behind the threads,
 *Fabric* draws a procedural texture of the material (`src/render/fabricGl.ts`): woven, cap, knit,
 terry, light fabric or leather, lit like the threads and in the chosen background color.
 
@@ -492,7 +503,7 @@ dropping it on the app opens it again. It holds what embroidery files cannot:
 - acknowledged and reopened findings,
 - the objects' shapes, stitch settings, rungs, guide lines, borders and knock-outs, letterings as
   text, objects not sewn or kept as guides,
-- the image of Image mode with its color changes and brush strokes,
+- the image of *Convert a picture* with its color changes and brush strokes,
 - material profile, fabric color, hoop, checks, correction and order options, trim length, machine
   speed and the image preparation and stitch options.
 
@@ -530,9 +541,9 @@ for how to run it after a UI change.
 ## Example files
 
 `public/examples/` holds real embroidery files to try out, e.g. `cat-60mm.pes` (cat, 60 mm, PES v6),
-and two SVGs (`svg/overlapping-circles.svg`, `svg/shapes-benchmark.svg`) that the *Load example*
-dropdown sews on opening. `image-example.svg` is the example picture of Image mode (fills, satin
-widths, fine lines), loaded by *Load example image* in that mode.
+and two SVGs (`svg/overlapping-circles.svg`, `svg/shapes-benchmark.svg`) that the examples
+sew on opening. `image-example.svg` is the example picture of *Convert a picture* (fills, satin
+widths, fine lines), loaded by *Load example image* there.
 
 `public/examples/demos/` holds small synthetic demos for the guide, each with one finding:
 `overlap.pes` (stacked fills), `letters.pes` (fill under satin, tests only), `sun.dst` (short stitches on knit),
@@ -590,8 +601,12 @@ src/lettering/   Lettering: fonts, layout (lines, arcs, circle), sewing, placing
 src/render/      Viewport, color scale, heatmap, stitch plan, realistic threads and fabric (WebGL),
                  light, legend, overlays (shapes, rungs, editing, validation, hoop), compare view
 src/storage/     IndexedDB stores for files and the image, project files (.heatstitch)
-src/ui/          Panels: file list, hoop, export, layers, object and stitch panel, object menu,
-                 lettering, jumps, player, validation, correction, editor, image mode, thread picker
+src/shell/       App shell: commands, command search, popovers, tooltips, signals
+src/areas/       The areas of the interface: files and start page, design card, objects, shapes and
+                 tools, stitches, lettering, check, traffic light, ready to stitch, image wizard,
+                 responsive layouts
+src/ui/          Panels used by the areas: layers, object and stitch panel, hoop, export, player,
+                 validation, correction, editor, image steps, thread picker, tools
 src/i18n/        Translations EN/DE
 public/examples/ Example embroidery files and SVGs (loadable from the dropdown), guide demos
 public/guide/    Screenshots for the guide (tools/guide-shots.mjs)

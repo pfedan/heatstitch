@@ -29,7 +29,7 @@ async function loadPlaywright() {
 }
 const { chromium } = await loadPlaywright();
 
-// ---- harness: browser, app, modes
+// ---- harness: browser, app, pages
 async function boot(lang = 'de', viewport = { width: 1280, height: 800 }) {
   const browser = await chromium.launch({
     executablePath: process.env.PLAYWRIGHT_CHROMIUM || undefined,
@@ -37,27 +37,51 @@ async function boot(lang = 'de', viewport = { width: 1280, height: 800 }) {
   });
   const ctx = await browser.newContext({ viewport, colorScheme: 'dark', locale: lang === 'de' ? 'de-DE' : 'en-US', deviceScaleFactor: 1 });
   const page = await ctx.newPage();
+  page.setDefaultTimeout(15000);
   page.on('pageerror', (e) => console.log('pageerror:', String(e).slice(0, 200)));
   await page.goto(URL);
   // a clean app: no remembered files or settings from an earlier run
   await page.evaluate(async () => { localStorage.clear(); const dbs = await indexedDB.databases(); for (const d of dbs) indexedDB.deleteDatabase(d.name); });
   await page.goto(URL);
   await page.waitForTimeout(400);
-  await page.selectOption('#lang', lang);
-  await page.waitForTimeout(200);
+  // the language select sits in the "⋯" menu; force skips the visibility check
+  await page.selectOption('#lang', lang, { force: true });
+  await page.waitForTimeout(300);
+  await page.keyboard.press('Escape');
   return { page, close: () => browser.close() };
 }
 async function loadFile(page, file, wait = 2500) {
   await page.setInputFiles('#file-input', file);
   await page.waitForTimeout(wait);
 }
-async function example(page, value, wait = 3000) {
-  await page.selectOption('#load-example', value);
+/** Open an example by its data-cmd (cat, overlap, confetti, demo, ...) from the Stickmuster menu. */
+async function example(page, cmd, wait = 3000) {
+  await page.evaluate((c) => document.querySelector(`#load-example [data-cmd="${c}"]`).click(), cmd);
   await page.waitForTimeout(wait);
 }
+/** Gestalten (flow) or Prüfen (density). */
 async function mode(page, m) {
   await page.click(`#modes input[value="${m}"]`, { force: true });
   await page.waitForTimeout(600);
+}
+/** The inspector tab: object or design. */
+async function tab(page, t) {
+  await page.click(`#insp-tabs [data-tab="${t}"]`);
+  await page.waitForTimeout(400);
+}
+/** The level of the stage: objects, shape or stitches (the hidden radios the breadcrumb drives). */
+async function level(page, v) {
+  await page.click(`input[name="level"][value="${v}"]`, { force: true });
+  await page.waitForTimeout(600);
+}
+/** Run a command by its label through the command search (Strg+K). */
+async function cmd(page, text, wait = 800) {
+  await page.click('#palette-open');
+  await page.waitForTimeout(300);
+  await page.fill('.palette-input', text);
+  await page.waitForTimeout(400);
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(wait);
 }
 
 /** Take the final JPEG (optionally clipped). */
@@ -66,13 +90,11 @@ async function jpeg(page, name, clip) {
   await page.screenshot({ path: FINAL + name + '.jpg', type: 'jpeg', quality: 86, clip });
   console.log('shot', name);
 }
-const sidebarTop = (page) => page.evaluate(() => { document.querySelector('.sidebar').scrollTop = 0; });
-/** Realistic threads on/off via the display details; sidebar back to the top unless asked otherwise. */
-async function realistic(page, on = true, keepScroll = false) {
-  await page.evaluate(() => { document.querySelector('details[data-section="display"]').open = true; });
+const sidebarTop = (page) => page.evaluate(() => { for (const s of ['.sidebar', '#inspector']) { const el = document.querySelector(s); if (el) el.scrollTop = 0; } });
+/** Realistic threads on/off (the checkbox lives in the view menu; force skips the visibility check). */
+async function realistic(page, on = true) {
   if (on) await page.check('#realistic', { force: true }); else await page.uncheck('#realistic', { force: true });
   await page.waitForTimeout(1500);
-  if (!keepScroll) await sidebarTop(page);
 }
 /** Scroll the right column so the element is at its top (plus an offset in px). */
 const inspectorTo = (page, sel, offset = -8) => page.evaluate(([s, o]) => {
@@ -195,20 +217,34 @@ async function propose(page, lang) {
 
 const shots = {};
 
-// 1. cat: Ablauf, realistic, player at 62 %
+const T = {
+  de: { corners: 'Ecken', sections: 'Abschnitte', merge: 'Zu einem Objekt zusammenfassen', subtract: 'Obere Form ausschneiden', guide: 'Als Hilfslinie behalten', all: 'Alle auswählen', apply: 'Ausgewählte übernehmen', uncut: 'Ohne Schnitt', covering: 'Deckend', swirl: 'Wirbel', border: 'Umrandung', ready: 'Bereit zum Sticken', cut: 'Schneiden', newDesign: 'Neues leeres Stickmuster' },
+  en: { corners: 'Corners', sections: 'Sections', merge: 'Combine into one object', subtract: 'Cut out the top shape', guide: 'Keep as a guide', all: 'Select all', apply: 'Apply selected', uncut: 'Not trimmed', covering: 'Covering', swirl: 'Swirl', border: 'Border', ready: 'Ready to stitch', cut: 'Cut', newDesign: 'New empty design' },
+};
+
+// 0. start: the start page "Was möchtest du sticken?"
+shots.start = async (lang) => {
+  const { page, close } = await boot(lang);
+  await mouseAway(page);
+  await jpeg(page, `start-${lang}`);
+  await close();
+};
+
+// 1. cat: Gestalten, realistic, player at 62 %, the Stickmuster card on the right
 shots.cat = async (lang) => {
   const { page, close } = await boot(lang);
-  await example(page, CAT);
-  await mode(page, 'flow');
+  await example(page, 'cat');
   await realistic(page, true);
+  await tab(page, 'design');
   await page.evaluate(() => { const r = document.querySelector('#player-pos'); r.value = Math.round(r.max * 0.62); r.dispatchEvent(new Event('input', { bubbles: true })); });
   await page.waitForTimeout(800);
   await sidebarTop(page);
+  await mouseAway(page);
   await jpeg(page, `cat-${lang}`);
   await close();
 };
 
-// 2. heatmap: overlap.pes in density mode, findings open
+// 2. heatmap: overlap.pes in Prüfen, findings open
 shots.heatmap = async (lang) => {
   const { page, close } = await boot(lang, { width: 1280, height: 960 });
   await loadFile(page, DEMOS + 'overlap.pes');
@@ -217,48 +253,49 @@ shots.heatmap = async (lang) => {
   await page.evaluate(() => { document.querySelector('#findings-panel').open = true; });
   await fit(page);
   await sidebarTop(page);
+  await mouseAway(page);
   await jpeg(page, `heatmap-${lang}`);
   await close();
 };
 
-// 3. objects: cat, color 2 expanded, its first object selected
+// 3. objects: cat, color 2 expanded, its first object selected, the Objekt card
 shots.objects = async (lang) => {
   const { page, close } = await boot(lang);
-  await example(page, CAT);
-  await mode(page, 'flow');
+  await example(page, 'cat');
   await realistic(page, true);
   await expandColor(page, 2);
   const rows = await objectRows(page);
   await clickObject(page, rows[0].i);
   await inspectorTo(page, '#object-panel');
   await sidebarTop(page);
+  await mouseAway(page);
   await jpeg(page, `objects-${lang}`);
   await close();
 };
 
-const T = {
-  de: { rungs: 'Richtung festlegen', corners: 'Ecken vorschlagen', merge: 'Zu einem Objekt zusammenfassen', subtract: 'Obere Form ausschneiden', guide: 'Als Hilfslinie', all: 'Alle auswählen', apply: 'Ausgewählte übernehmen', proposals: 'Vorschläge', uncut: 'Ohne Schnitt' },
-  en: { rungs: 'Set direction', corners: 'Suggest corners', merge: 'Combine into one object', subtract: 'Cut out top shape', guide: 'As a guide', all: 'Select all', apply: 'Apply selected', proposals: 'Proposals', uncut: 'Not trimmed' },
-};
-
-/** patch.pes (the Aufnäher of the demo project) in Ablauf with realistic threads, the given colors expanded. */
+/** patch.pes (the Aufnäher of the demo project) in Gestalten with realistic threads, the given colors expanded. */
 async function patchFlow(page, ...colors) {
   await loadFile(page, DEMOS + 'patch.pes');
-  await mode(page, 'flow');
   await realistic(page, true);
   for (const c of colors) await expandColor(page, c);
 }
 // patch.pes objects: 0 disc fill, 4 satin ring, 5 star fill, 7..10 HEAT, 11..16 STITCH (white satin)
 const PATCH = { disc: 0, ring: 4, star: 5, starPart: 6, S: 11 };
 
+/** The rung tool (R) on the selected satin, then one of its bar buttons. */
+async function rungTool(page, barText) {
+  await page.keyboard.press('r');
+  await page.waitForTimeout(800);
+  await page.locator('#tool-options button', { hasText: new RegExp(`^${barText}$`) }).first().click();
+  await page.waitForTimeout(1200);
+}
+
 // 4. satin: rungs on the satin S of the patch
 shots.satin = async (lang) => {
   const { page, close } = await boot(lang);
   await patchFlow(page, 4);
   await clickObject(page, PATCH.S);
-  await clickText(page, T[lang].rungs);
-  await clickText(page, T[lang].corners);
-  await page.waitForTimeout(600);
+  await rungTool(page, T[lang].corners);
   // zoom onto the S (left of STITCH)
   const b = await stageBox(page);
   await zoomTo(page, b.x + 212, b.y + 538, 7);
@@ -274,8 +311,7 @@ shots.merge = async (lang) => {
   await patchFlow(page, 3);
   await clickObject(page, PATCH.star);
   await clickObject(page, PATCH.starPart, true);
-  await clickText(page, T[lang].merge);
-  await page.waitForTimeout(1500);
+  await cmd(page, T[lang].merge, 1500);
   await inspectorTo(page, '#object-panel');
   await mouseAway(page);
   await sidebarTop(page);
@@ -288,8 +324,8 @@ shots.stitches = async (lang) => {
   const { page, close } = await boot(lang);
   await patchFlow(page, 3);
   await clickObject(page, PATCH.star);
-  await page.click('#stage .level-switch input[value="stitches"]', { force: true });
-  await page.waitForTimeout(800);
+  await level(page, 'stitches');
+  await page.waitForTimeout(400);
   const b = await stageBox(page);
   await zoomTo(page, b.x + 325, b.y + 240, 1);
   const pt = await findNeedlePoint(page, b.width / 2, b.height / 2);
@@ -310,8 +346,7 @@ shots.stitches = async (lang) => {
 // 8. lettering: "Minka" in Pacificlo under the cat, font list open
 shots.lettering = async (lang) => {
   const { page, close } = await boot(lang);
-  await example(page, CAT);
-  await mode(page, 'flow');
+  await example(page, 'cat');
   await realistic(page, true);
   await page.click('#lettering-new');
   await page.waitForTimeout(1500);
@@ -337,12 +372,13 @@ shots.lettering = async (lang) => {
   await close();
 };
 
-// 9. jumps: confetti.pes, an untrimmed long jump selected
+// 9. jumps: confetti.pes in Prüfen, an untrimmed long jump selected
 shots.jumps = async (lang) => {
   const { page, close } = await boot(lang);
   await loadFile(page, DEMOS + 'confetti.pes');
-  await mode(page, 'flow');
+  await mode(page, 'density');
   await realistic(page, true);
+  await page.evaluate(() => { const d = document.querySelector('#jumps-panel'); if (d && 'open' in d) d.open = true; });
   await page.locator('#jumps .f-chip', { hasText: T[lang].uncut }).click();
   await page.waitForTimeout(500);
   await page.locator('#jumps li.jump').first().click();
@@ -350,22 +386,21 @@ shots.jumps = async (lang) => {
   await fit(page);
   await inspectorTo(page, '#jumps-panel');
   await mouseAway(page);
-  await sidebarTop(page);
   await jpeg(page, `jumps-${lang}`);
   await close();
 };
 
-/** Density mode on a file with the given fabric, realistic off, findings open. */
+/** Prüfen on a file with the given fabric, realistic off, findings open. */
 async function density(page, fabric, real = false) {
   await mode(page, 'density');
   await realistic(page, real);
-  await page.selectOption('#fabric', fabric);
+  await page.selectOption('#fabric', fabric, { force: true });
   await page.waitForTimeout(1500);
   await page.evaluate(() => { document.querySelector('#findings-panel').open = true; });
   await sidebarTop(page);
 }
 
-// 10. findings: patch.pes on woven fabric
+// 10. findings: patch.pes on woven fabric, the Ampel "Klappt das?" with its rows
 shots.findings = async (lang) => {
   const { page, close } = await boot(lang, { width: 1280, height: 960 });
   await loadFile(page, DEMOS + 'patch.pes');
@@ -379,14 +414,13 @@ shots.findings = async (lang) => {
 // 11. correct: cat on knit, proposals, hovering the second row
 shots.correct = async (lang) => {
   const { page, close } = await boot(lang, { width: 1280, height: 960 });
-  await example(page, CAT);
+  await example(page, 'cat');
   await density(page, 'knit');
   await propose(page, lang);
   await inspectorTo(page, '#fix-report', -60);
   const row = page.locator('#fix-report .plan-row').nth(1);
   await row.hover();
   await page.waitForTimeout(1200);
-  await sidebarTop(page);
   await jpeg(page, `correct-${lang}`);
   await close();
 };
@@ -406,22 +440,23 @@ shots.compare = async (lang) => {
   await page.waitForTimeout(2000);
   await inspectorTo(page, '#compare-table', -120);
   await mouseAway(page);
-  await sidebarTop(page);
   await jpeg(page, `compare-${lang}`);
   await close();
 };
 
-// 13. image: the example image as stitches
+// 13. image: the example image in step 3, Stiche und Ergebnis
 shots.image = async (lang) => {
   const { page, close } = await boot(lang);
-  await mode(page, 'image');
+  await page.evaluate(() => document.querySelector('#image-start').click());
+  await page.waitForTimeout(1000);
   await page.click('#image-example');
+  await page.waitForTimeout(4000);
+  await page.click('#image-next');
   if (!(await waitText(page, '#image-result', /Stiche|Stitches/, 90000))) throw new Error('no stitches');
   await page.click('input[name="image-view"][value="stitches"]', { force: true });
   await page.waitForTimeout(1000);
   if (!(await page.isChecked('#realistic'))) await realistic(page, true);
   await page.waitForTimeout(1500);
-  await page.evaluate(() => { document.querySelector('#inspector').scrollTop = 150; });
   await sidebarTop(page);
   await mouseAway(page);
   await jpeg(page, `image-${lang}`);
@@ -432,7 +467,6 @@ shots.image = async (lang) => {
 shots.border = async (lang) => {
   const { page, close } = await boot(lang);
   await loadFile(page, DEMOS + 'overlap.pes');
-  await mode(page, 'flow');
   await realistic(page, true);
   await expandColor(page, 1);
   await clickObject(page, 0);
@@ -443,9 +477,8 @@ shots.border = async (lang) => {
   await page.waitForTimeout(600);
   await page.locator('.color-pop .color-grid button.pick').nth(12).click();
   await page.waitForTimeout(2500);
-  await inspectorToText(page, '#object-stitches', lang === 'de' ? 'Umrandung' : 'Border', -12);
+  await inspectorToText(page, '#object-stitches', T[lang].border, -12);
   await mouseAway(page);
-  await sidebarTop(page);
   await jpeg(page, `border-${lang}`);
   await close();
 };
@@ -453,16 +486,16 @@ shots.border = async (lang) => {
 // 15. hoop: the 100 × 100 mm hoop around the cat, then one that is too small
 shots.hoop = async (lang) => {
   const { page, close } = await boot(lang);
-  await example(page, CAT);
-  await mode(page, 'flow');
+  await example(page, 'cat');
   await realistic(page, true);
-  await page.selectOption('#hoop', '100x100');
+  await tab(page, 'design');
+  await page.selectOption('#hoop', '100x100', { force: true });
   await page.waitForTimeout(600);
   await fit(page);
   await mouseAway(page);
   await sidebarTop(page);
   await jpeg(page, `hoop-${lang}`);
-  await page.selectOption('#hoop', '50x50');
+  await page.selectOption('#hoop', '50x50', { force: true });
   await page.waitForTimeout(600);
   await fit(page);
   await mouseAway(page);
@@ -474,15 +507,12 @@ shots.hoop = async (lang) => {
 // 16. fabric (shared): the canvas only, with a textured fabric behind the threads
 shots.fabric = async () => {
   const { page, close } = await boot('de');
-  await example(page, CAT);
-  await mode(page, 'flow');
+  await example(page, 'cat');
   await realistic(page, true);
-  await page.evaluate(() => { document.querySelector('details[data-section="display"]').open = true; });
   await page.locator('#bg-swatches button').nth(2).click({ force: true }); // Natur: a light fabric color
   await page.waitForTimeout(800);
-  await sidebarTop(page);
   for (const look of ['knit', 'leather']) {
-    await page.selectOption('#fabric-look', look);
+    await page.selectOption('#fabric-look', look, { force: true });
     await page.waitForTimeout(2500);
     await mouseAway(page);
     const b = await stageBox(page);
@@ -491,17 +521,61 @@ shots.fabric = async () => {
   await close();
 };
 
-// 17. save: the Dateien panel with hoop 100 × 100 and PES
+// 17. save: the Speichern menu with hoop 100 × 100 and PES
 shots.save = async (lang) => {
   const { page, close } = await boot(lang);
-  await example(page, CAT);
-  await mode(page, 'flow');
-  await page.selectOption('#hoop', '100x100');
-  await page.selectOption('#save-format', 'pes');
+  await example(page, 'cat');
+  await page.selectOption('#hoop', '100x100', { force: true });
   await page.waitForTimeout(600);
-  await sidebarTop(page);
-  const b = await page.locator('section.panel:has(#save-format)').boundingBox();
+  await page.click('#save-button');
+  await page.waitForTimeout(600);
+  await page.click('#save-pop input[name="save-fmt"][value="pes"]', { force: true });
+  await page.waitForTimeout(400);
+  await mouseAway(page);
+  const b = await page.locator('#save-pop').boundingBox();
   await jpeg(page, `save-${lang}`, { x: b.x - 8, y: b.y - 8, width: b.width + 16, height: b.height + 16 });
+  await close();
+};
+
+// 20. ready: the Stickmuster card scrolled to "Bereit zum Sticken"
+shots.ready = async (lang) => {
+  const { page, close } = await boot(lang);
+  await example(page, 'cat');
+  await realistic(page, true);
+  await tab(page, 'design');
+  await page.selectOption('#hoop', '100x100', { force: true });
+  await page.waitForTimeout(600);
+  await inspectorToText(page, '#inspector', T[lang].ready, -12);
+  await mouseAway(page);
+  await jpeg(page, `ready-${lang}`);
+  await close();
+};
+
+// 21. cut: the sweater of the cat cut in two with Zerteilen (X)
+shots.cut = async (lang) => {
+  const { page, close } = await boot(lang);
+  await example(page, 'cat');
+  await realistic(page, true);
+  await expandColor(page, 4); // Rot: the sweater
+  const rows = await objectRows(page);
+  const big = rows.map((r) => ({ i: r.i, n: +(r.text.match(/(\d[\d.,]*)\s*$/) || [0, 0])[1].replace(/[.,]/g, '') })).sort((a, b) => b.n - a.n)[0];
+  await clickObject(page, big.i);
+  await fit(page);
+  await page.keyboard.press('x');
+  await page.waitForTimeout(800);
+  // a straight line across the middle of the selected object (its frame on the stage)
+  const f = await page.evaluate(() => { const c = document.querySelector('#canvas').getBoundingClientRect(); return { x: c.x, y: c.y, w: c.width, h: c.height }; });
+  const box = await page.evaluate(() => globalThis.__selectionBox?.() ?? null);
+  const cx = box ? f.x + box.x + box.w / 2 : f.x + f.w / 2, cy = box ? f.y + box.y + box.h / 2 : f.y + f.h / 2;
+  const half = box ? Math.max(box.w, box.h) * 0.7 : 160;
+  await page.keyboard.down('Shift');
+  await drag(page, cx - half, cy - half * 0.35, cx + half, cy + half * 0.35, 10);
+  await page.keyboard.up('Shift');
+  await page.locator('#tool-options button', { hasText: new RegExp(`^${T[lang].cut}$`) }).first().click();
+  await page.waitForTimeout(2500);
+  await mouseAway(page);
+  await sidebarTop(page);
+  await jpeg(page, `cut-${lang}`);
   await close();
 };
 
@@ -524,10 +598,8 @@ async function clickAt(page, x, y, shift = false) {
 // 7. draw: a small house drawn with the four tools, the ground line as a guide
 shots.draw = async (lang) => {
   const { page, close } = await boot(lang);
-  await mode(page, 'flow');
-  // the drawing tools live on the level Form
-  await page.click('.level-switch input[value="shape"]', { force: true });
-  await page.waitForTimeout(500);
+  await cmd(page, T[lang].newDesign, 1500);
+  await level(page, 'shape');
   const b = await stageBox(page);
   const cx = b.x + b.width / 2, cy = b.y + b.height / 2;
   // the house body
@@ -540,9 +612,9 @@ shots.draw = async (lang) => {
   await page.waitForTimeout(500);
   await clickObject(page, 1); // the window, then the body added via the object list
   await clickObject(page, 0, true);
-  await clickText(page, T[lang].subtract);
-  await page.waitForTimeout(1500);
-  // the roof with the pen: three corners, closed on the first node
+  await cmd(page, T[lang].subtract, 1500);
+  // the roof with the path tool: three corners, closed on the first node
+  await level(page, 'shape');
   await page.click('[data-draw="pen"]');
   await clickAt(page, cx - 105, cy - 12);
   await clickAt(page, cx, cy - 100);
@@ -555,12 +627,13 @@ shots.draw = async (lang) => {
   await page.keyboard.press('Escape'); // leaves the tool and the selection
   await page.waitForTimeout(500);
   await clickObject(page, 2); // the sun
-  // the sun in its own thread: the color square next to the object name
-  await page.locator('#object-body .thread-sw').click();
+  // the sun in its own thread: the color square in the head of the Objekt card
+  await page.locator('#object-body .thread-sw').first().click();
   await page.waitForTimeout(600);
   await page.locator('.color-pop .color-grid button.pick').nth(12).click(); // Yellow
   await page.waitForTimeout(1500);
   // a wavy ground line under the house (freehand), then made a guide
+  await level(page, 'shape');
   await page.click('[data-draw="free"]');
   await page.mouse.move(cx - 200, cy + 160);
   await page.mouse.down();
@@ -569,13 +642,8 @@ shots.draw = async (lang) => {
   await page.waitForTimeout(1200);
   await page.keyboard.press('Escape');
   await page.waitForTimeout(500);
-  // the guide action sits on the level Objekte; back to Form afterwards so the tools show
-  await page.click('.level-switch input[value="objects"]', { force: true });
   await clickObject(page, 3); // the ground line
-  await clickText(page, T[lang].guide);
-  await page.waitForTimeout(1200);
-  await page.click('.level-switch input[value="shape"]', { force: true });
-  await page.waitForTimeout(500);
+  await cmd(page, T[lang].guide, 1200);
   await page.keyboard.press('Escape');
   await fit(page);
   await wheelAt(page, cx, cy - 60, 2, 120); // two steps out: the fit leaves out the guide line
@@ -585,14 +653,12 @@ shots.draw = async (lang) => {
   await close();
 };
 
-// 18. sections (shared): the satin S of patch.pes after Suggest sections, canvas only
+// 18. sections (shared): the satin S of patch.pes after Abschnitte, canvas only
 shots.sections = async () => {
   const { page, close } = await boot('de');
   await patchFlow(page, 4);
   await clickObject(page, PATCH.S);
-  await clickText(page, T.de.rungs);
-  await page.getByRole('button', { name: 'Abschnitte vorschlagen', exact: true }).first().click();
-  await page.waitForTimeout(1500);
+  await rungTool(page, T.de.sections);
   const b = await stageBox(page);
   await zoomTo(page, b.x + 212, b.y + 538, 6);
   const c = await page.locator('#canvas').boundingBox();
@@ -600,22 +666,21 @@ shots.sections = async () => {
   await close();
 };
 
+// 19. decor: the sweater of the cat in the pattern Wirbel, the pattern tabs
 shots.decor = async (lang) => {
   const { page, close } = await boot(lang);
-  await example(page, CAT);
-  await mode(page, 'flow');
+  await example(page, 'cat');
   await realistic(page, true);
   await expandColor(page, 4); // Rot: the sweater
   const rows = await objectRows(page);
   const big = rows.map((r) => ({ i: r.i, n: +(r.text.match(/(\d[\d.,]*)\s*$/) || [0, 0])[1].replace(/[.,]/g, '') })).sort((a, b) => b.n - a.n)[0];
   await clickObject(page, big.i);
-  await page.locator('.pattern-groups button', { hasText: lang === 'de' ? 'Deckend' : 'Covering' }).click();
+  await page.locator('.pattern-groups button', { hasText: T[lang].covering }).click();
   await page.waitForTimeout(500);
-  await page.locator('.pattern-tiles [role="radio"]', { hasText: lang === 'de' ? 'Wirbel' : 'Swirl' }).click();
+  await page.locator('.pattern-tiles [role="radio"]', { hasText: T[lang].swirl }).click();
   await page.waitForTimeout(3000);
   await inspectorTo(page, '.pattern-groups', -60);
   await mouseAway(page);
-  await sidebarTop(page);
   await jpeg(page, `decor-${lang}`);
   await close();
 };
