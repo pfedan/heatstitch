@@ -64,6 +64,10 @@ Garnfarben sind Inhalt, nicht Oberfläche: nie als UI-Farbe verwenden.
   2 bis 4 Möglichkeiten gibt.
 - **Zahlenfelder:** mit Einheit (mm, %), Live-Vorschau beim Ändern, kein "Übernehmen"-Knopf.
 - **Panels:** aufklappbar, Zustand merken. Befunde und Hinweise erscheinen im Panel, nicht als Pop-up.
+- **Tooltip:** eigener, nicht der des Browsers (`src/shell/tooltip.ts`). Im Code weiter einfach `title`
+  setzen: die App übernimmt ihn, zeigt ihn nach kurzer Pause (sofort beim Weiterfahren über eine Leiste),
+  bei Tastatur-Fokus und bei langem Druck auf Touch. Eine Taste am Ende, "Duplizieren (Strg+D)", wird als
+  Taste abgesetzt. Kurz halten: ein Satz, was der Knopf tut.
 - **Menüs:** Kontextmenü am Objekt, schließen mit Esc und Klick daneben.
 - **Dialoge:** keine modalen Dialoge für Arbeitsabläufe. Einzige Ausnahme heute: Druckansicht der
   Farbliste (`src/ui/colorList.ts`).
@@ -77,7 +81,8 @@ Garnfarben sind Inhalt, nicht Oberfläche: nie als UI-Farbe verwenden.
 ## Bedienung und Zugänglichkeit
 
 - Alles per Tastatur erreichbar, sichtbarer Fokus über `:focus-visible` (nie Fokusring entfernen).
-- Tastenkürzel zeigen wir im `title` des Knopfes an (z. B. "Duplizieren (Strg+D)").
+- Tastenkürzel zeigen wir im `title` des Knopfes an (z. B. "Duplizieren (Strg+D)", bei Befehlen über
+  `commandTitle`); der Tooltip setzt sie als Taste ab.
 - Zustand nie nur über Farbe zeigen: Auswahl zusätzlich über Rahmen oder Markierung.
 - Rückgängig stellt immer alles oder nichts wieder her.
 - Fehler als Hinweis direkt am betroffenen Objekt oder Feld, mit Vorschlag zur Behebung.
