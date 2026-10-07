@@ -9,7 +9,7 @@ import type { StitchInfo, StitchPanel } from '../ui/stitchPanel';
 import { RungTool } from '../ui/rungTool';
 import { expandRegion, outline, type Region } from '../digitize/region';
 
-/** How far Vorschlagen closes seams and notches in a satin's area, tried in turn (mm, each side). */
+/** How far Vorschlagen closes the seams of an area read from rails, tried in turn (mm, each side). */
 const SEAMS_MM = [0.3, 0.6];
 import { atShare, regionBox, swirlCenters } from '../digitize/deco';
 import { railsFromOutline, stripsOfAreas } from '../digitize/rungs';
@@ -327,10 +327,11 @@ export function bindRungs(app: RungsApp) {
       const rails = rungTool.sectionRails;
       if (!rails) return;
       const known = keepShape(p, obj, q.kinds).shape;
-      const base = known && edgeAlong(outline(known), rails) ? known : railsArea(rails);
-      // The area with its seams closed too: a suggestion can hang on a notch a pixel wide (and
-      // columns read from stitches meet with slivers between them); the first that makes columns.
-      const tries = base ? [base, ...SEAMS_MM.map((mm) => closed(base, mm))] : [];
+      const fits = !!known && edgeAlong(outline(known), rails);
+      const base = fits ? known : railsArea(rails);
+      // Read from rails, the area with its seams closed too: columns read from stitches meet with
+      // slivers and notches between them, each a branch of its own; the first that makes columns.
+      const tries = base ? [base, ...(fits ? [] : SEAMS_MM.map((mm) => closed(base, mm)))] : [];
       let area: Region | null = null;
       let s: ReturnType<typeof suggestSatin> = null;
       for (const a of tries) {
