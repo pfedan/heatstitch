@@ -5,7 +5,7 @@ import { regionOf } from '../shape/rasterize';
 import { vectorize } from '../shape/vectorize';
 import type { Form } from '../shape/path';
 import type { FillSettings } from './restitch';
-import { syncBorders } from './border';
+import { newLink, syncBorders } from './border';
 import { takeOver, wholeArea } from './knockout';
 import { sewObjects } from './objects';
 import type { Pattern } from './pattern';
@@ -21,8 +21,9 @@ import { DEFAULT_PROFILE } from '../validation/profiles';
  * object of its own, sewn right after the one before (trimmed off it, as objects of one thread are
  * kept apart), with the settings of the fill. Neighbouring
  * parts get mirrored row directions (mirrored at the cut, as the veins of a leaf), and each part
- * reaches OVERLAP_MM under its neighbours, so no fabric shows along the cut. A border of the fill
- * goes: on the parts it would run along the cut too. A fill with a color blend is not cut.
+ * reaches OVERLAP_MM under its neighbours, so no fabric shows along the cut. The parts stay one
+ * whole (Remembered.piece): a border of the fill stays one border around them all, never along the
+ * cut (see syncOwnBorders). A fill with a color blend is not cut.
  */
 
 /** Parts reach this far across the cut under their neighbours (mm). */
@@ -195,8 +196,6 @@ export interface Split {
   pattern: Pattern;
   /** The parts, as objects of `pattern`, in sewing order. */
   parts: number[];
-  /** The fill had a border, which went (it would run along the cut too). */
-  borderGone: boolean;
 }
 
 /**
@@ -232,9 +231,9 @@ export function splitFill(p: Pattern, o: number, cuts: Pt[][], trimMm: number): 
   if (forms.some((f) => !f.paths.length)) return null;
   const base = known!.fill!.angle;
   const angles = partAngles(forms.length, split.touching, base, cuts);
-  const borderGone = !!known?.fill?.border;
-  const link = known?.fill?.border?.link;
-  const change = (k: number): Partial<FillSettings> => ({ angle: angles[k], ...(borderGone ? { border: undefined } : {}) });
+  // The border waits until all parts are there (sewn now, it would run along the cut too).
+  const border = known!.fill!.border;
+  const change = (k: number): Partial<FillSettings> => ({ angle: angles[k], border: undefined });
   // Every further part a new fill right after the fill (the last first, so they come in order), in
   // its shape; then each sewn with the fill's settings, and the fill itself in the shape of the
   // first part (from the last, so the ones before keep their place).
@@ -257,11 +256,16 @@ export function splitFill(p: Pattern, o: number, cuts: Pt[][], trimMm: number): 
     if (!next) return null;
     cur = next;
   }
-  // The first part is the fill as it goes on: it keeps its id.
-  const firstPart = sewObjects(cur)[o];
-  const firstMemory = remembered(cur, firstPart);
-  if (firstMemory && firstPart.id !== obj.id) remember(cur, firstPart, { ...firstMemory, id: obj.id });
-  // A border in a thread of its own goes with its object.
-  if (link) cur = syncBorders(cur, trimMm, new Set([link]));
-  return { pattern: cur, parts: forms.map((_, k) => o + k), borderGone };
+  // The first part is the fill as it goes on: it keeps its id. All parts are one whole (a part cut
+  // again stays in its whole) and keep the fill's border: one around them all, where it was.
+  const piece = known!.piece ?? newLink();
+  const objs = sewObjects(cur);
+  for (let k = 0; k < forms.length; k++) {
+    const m = remembered(cur, objs[o + k]);
+    if (!m?.fill) return null;
+    const { border: _b, ...rest } = m.fill;
+    remember(cur, objs[o + k], { ...m, ...(k ? {} : { id: obj.id }), piece, fill: border ? { ...rest, border: { ...border } } : rest });
+  }
+  cur = syncBorders(cur, trimMm);
+  return { pattern: cur, parts: forms.map((_, k) => o + k) };
 }

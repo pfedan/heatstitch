@@ -64,6 +64,8 @@ export interface StitchInfo {
   hand?: number;
   /** Whether the fill areas are strokes that can be sewn as satin. */
   toSatin: boolean;
+  /** The first selected fill is a part of a fill cut apart: how many parts share its border. */
+  pieces?: number;
   /** Rungs of the one selected satin: whether the tool is on, how many (null: the stitches' own direction). */
   direction?: {
     tool: boolean;
@@ -1806,7 +1808,18 @@ export class StitchPanel {
       true,
       true,
     );
-    const box = this.sec('border', 'stitches.sec.border', [parts.type, ...parts.look, ...parts.hold, s.border && s.pattern !== 'none' ? this.borderThread(s.border) : null], extra);
+    // The parts of a fill cut apart have one border around them all: it changes for each of them.
+    const pieces = this.info!.pieces ?? 0;
+    const shared = pieces > 1 && s.pattern !== 'none' ? h('p', { class: 'muted small' }, t('stitch.border.pieces', { n: pieces })) : null;
+    const seams =
+      shared && s.border
+        ? this.check('stitch.border.seams', 'stitch.border.seams.hint', () => !!s.border?.seams, (v) => {
+            if (!s.border) return;
+            if (v) s.border.seams = true;
+            else delete s.border.seams;
+          })
+        : null;
+    const box = this.sec('border', 'stitches.sec.border', [shared, seams, parts.type, ...parts.look, ...parts.hold, s.border && s.pattern !== 'none' ? this.borderThread(s.border) : null], extra);
     box.title = t('stitch.border.intro');
     return this.lights(box, 'border');
   }
