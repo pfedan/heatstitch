@@ -1,3 +1,4 @@
+import { LOCK_MM, SATIN_SPLIT_MM, SATIN_SPLIT_MAX } from '../material/rules';
 import { SATIN_MAX, satinForArea, type KeptShape } from '../digitize/digitize';
 import { borderStitches, runLike, type PathStitch } from './along';
 import { wholeOf } from './knockout';
@@ -207,8 +208,8 @@ export interface SatinSettings {
 
 export type SatinType = 'satin' | 'e';
 export const UNDERLAYS: UnderlayKind[] = ['auto', 'center', 'contour', 'zigzag', 'both'];
-/** Longest satin stitch before it is split (mm), as the stitch panel starts. */
-export const SATIN_SPLIT = 12;
+/** Longest satin stitch before it is split (mm) when the object does not say (see SATIN_SPLIT_MM). */
+export const SATIN_SPLIT = SATIN_SPLIT_MM;
 
 export interface RunSettings {
   stitch: number;
@@ -1535,7 +1536,19 @@ export function measureSatin(p: Pattern, pt: Part, kinds: Uint8Array): SatinSett
   }
   const type: SatinType = all && e * 2 > all ? 'e' : 'satin';
   const spacing = Math.round(Math.min(type === 'e' ? 6 : 1.5, Math.max(0.15, percentile(steps, 0.5) || 0.4)) * 100) / 100;
-  return { spacing, edge: 0, short: true, underlay: other > satin * 0.03, tolerance: TOLERANCE, type, under: 'auto', split: SATIN_SPLIT, stagger: true, edgeShare: 0 };
+  return { spacing, edge: 0, short: true, underlay: other > satin * 0.03, tolerance: TOLERANCE, type, under: 'auto', split: measuredSplit(p, pt, kinds), stagger: true, edgeShare: 0 };
+}
+
+/**
+ * The split length the stitches show: the default where none is longer (they were split there, or
+ * the column is narrower), else just over the longest, so sewing them anew splits none that the
+ * file did not (an unsplit 9 mm column stays unsplit).
+ */
+function measuredSplit(p: Pattern, pt: Part, kinds: Uint8Array): number {
+  let longest = 0;
+  for (let i = pt.s + 1; i <= pt.e; i++) if (kinds[i] === SATIN && p.cmd[i] === STITCH && p.cmd[i - 1] === STITCH) longest = Math.max(longest, seg(p, i));
+  if (longest <= SATIN_SPLIT_MM + 0.15) return SATIN_SPLIT_MM;
+  return Math.min(SATIN_SPLIT_MAX, Math.ceil(longest * 2) / 2);
 }
 
 export function measureRun(p: Pattern, pt: Part): RunSettings {
@@ -2382,7 +2395,7 @@ export interface Rec {
 }
 
 /** Length of a lock stitch (mm); SHORT_LOCK only to tell an object from one with the very same stitches. */
-const LOCK = 0.7;
+const LOCK = LOCK_MM;
 const SHORT_LOCK = 0.5;
 let lockMm = LOCK;
 
@@ -2529,6 +2542,9 @@ function restitchOnce(
     if (newArea && an.fill) an = { ...an, fill: newArea };
     const given = typeof settingsFor === 'function' ? settingsFor(o, an, known) : settingsFor;
     if (!given) continue;
+    // A fill given a new area whose stitches no longer read as a fill (a thin sliver of few rows
+    // reads as running stitch): all of it is the fill it remembers being.
+    if (newArea && !an.fill && given.kind === 'fill' && known?.fill && !known.asLine) an = { parts: [{ kind: 'fill', s: o.first, e: o.last }], fill: newArea };
     // A fill along a line: its area is always made from the line, never kept or traced.
     const byLine = !newArea && known?.asLine && given.kind === 'fill' ? lineFillArea(known.asLine, given.s) : null;
     if (byLine && an.fill) an = { ...an, fill: byLine };
@@ -2646,6 +2662,8 @@ function restitchOnce(
           ...(known?.echoOf ? { echoOf: known.echoOf } : {}),
         };
     if (known?.lettering) after.lettering = known.lettering;
+    // The same object with new stitches: it keeps its id.
+    after.id = o.id;
     if (known?.lock) after.lock = true;
     // Up to the object: everything as it was, except the jumps that lead to its first stitch.
     let lead = o.first;

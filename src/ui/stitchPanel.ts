@@ -1,3 +1,4 @@
+import { SATIN_SPLIT_MAX } from '../material/rules';
 import { formatNumber, onLangChange, t, type Key } from '../i18n';
 import type { ObjectKind } from '../model/objects';
 import { DECO_DEFAULTS, isOpenPattern, OPEN_SIZE, OPEN_SIZE_RANGE, SATIN_SPLIT, UNDERLAYS, type DecoSettings, type FillPattern, type FillSettings, type OpenPattern, type RunSettings, type SatinSettings, type SatinType, type Settings, type ShapeTrust, type Fixed } from '../model/restitch';
@@ -925,7 +926,7 @@ export class StitchPanel {
     if (!e) look.push(this.check('stitch.short', 'stitch.short.hint', () => s.short, (v) => (s.short = v)));
     if (!e) look.push(this.check('stitch.byWidth', 'stitch.byWidth.hint', () => !!s.byWidth, (v) => (v ? (s.byWidth = true) : delete s.byWidth)));
     look.push(
-      this.slider({ label: 'stitch.split', hint: 'stitch.split.hint', min: 4, max: SATIN_SPLIT, step: 0.5, get: () => s.split ?? SATIN_SPLIT, set: (v) => (s.split = v), fmt: mm(1), auto: this.unset(s, 'split') }),
+      this.slider({ label: 'stitch.split', hint: 'stitch.split.hint', min: 4, max: SATIN_SPLIT_MAX, step: 0.5, get: () => s.split ?? SATIN_SPLIT, set: (v) => (s.split = v), fmt: mm(1), auto: this.unset(s, 'split') }),
       this.check('stitch.stagger', 'stitch.stagger.hint', () => s.stagger ?? true, (v) => (s.stagger = v)),
     );
     const hold: HTMLElement[] = [];
