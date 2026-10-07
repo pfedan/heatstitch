@@ -54,7 +54,7 @@ export interface ProjectImage {
 
 /** The settings that belong to the design rather than to how the app is looked at. */
 export type ProjectSettings = Pick<Settings, 'profile' | 'checks' | 'correction' | 'trimMm' | 'order' | 'machineSpm' | 'trimSeconds' | 'colorSeconds'> & {
-  image: Pick<ImageSettings, 'prepare' | 'stitch'>;
+  image: Pick<ImageSettings, 'prepare' | 'style' | 'stitch'>;
   /** The fabric color the design is shown on (null: the theme's); absent in older projects. */
   background?: string | null;
 };
@@ -89,7 +89,7 @@ export function projectSettings(s: Settings): ProjectSettings {
     machineSpm: s.machineSpm,
     trimSeconds: s.trimSeconds,
     colorSeconds: s.colorSeconds,
-    image: { prepare: s.image.prepare, stitch: s.image.stitch },
+    image: { prepare: s.image.prepare, style: s.image.style, stitch: s.image.stitch },
     background: s.background,
   });
 }
@@ -228,7 +228,8 @@ function readImage(v: unknown): ProjectImage | null {
 function readSettings(v: unknown): ProjectSettings {
   const s = (v ?? {}) as Partial<ProjectSettings>;
   const positive = (x: unknown, d: number) => (typeof x === 'number' && Number.isFinite(x) && x > 0 ? x : d);
-  const image = normalizeImage({ prepare: s.image?.prepare, stitch: s.image?.stitch } as Partial<ImageSettings>);
+  // Projects from before the style switch were converted with rows following the image.
+  const image = normalizeImage({ prepare: s.image?.prepare, style: s.image?.style, stitch: s.image?.stitch } as Partial<ImageSettings>, 'dynamic');
   return {
     profile: normalizeProfile(s.profile),
     checks: normalizeChecks(s.checks),
@@ -242,7 +243,7 @@ function readSettings(v: unknown): ProjectSettings {
     machineSpm: positive(s.machineSpm, DEFAULTS.machineSpm),
     trimSeconds: typeof s.trimSeconds === 'number' && s.trimSeconds >= 0 ? s.trimSeconds : DEFAULTS.trimSeconds,
     colorSeconds: typeof s.colorSeconds === 'number' && s.colorSeconds >= 0 ? s.colorSeconds : DEFAULTS.colorSeconds,
-    image: { prepare: image.prepare, stitch: image.stitch },
+    image: { prepare: image.prepare, style: image.style, stitch: image.stitch },
     ...('background' in s ? { background: hexColor(s.background) } : {}),
   };
 }
