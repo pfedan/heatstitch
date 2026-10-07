@@ -3,7 +3,7 @@ import { SATIN_MAX, satinForArea, type KeptShape } from '../digitize/digitize';
 import { borderStitches, runLike, type PathStitch } from './along';
 import { wholeOf } from './knockout';
 import { LINE_MOTIFS } from '../digitize/motif';
-import { lineStitches, runAsLine } from './line';
+import { lineStitches, runAsLine, runWays } from './line';
 import { chooseAngle, fillRegion, type FillParams } from '../digitize/fill';
 import { contourFill, fieldFill, guideField, stitchField } from '../digitize/flow';
 import { atShare, crossFill, CROSS_KINDS, echoFill, circleField, grainField, GRID_KINDS, gridFill, mazeFill, meanderFill, MOTIFS, rayField, regionBox, swirlField, waveFill, type CrossKind, type GridKind, type Motif, type OpenParams } from '../digitize/deco';
@@ -2511,41 +2511,9 @@ function wayBetween(from: Pt, to: Pt, k: number, outlines: Pt[][], columns: Colu
   return { way, cost: best };
 }
 
-/** A jump inside a line longer than this (mm) is a jump in its new stitches too, not sewn over. */
-const RUN_JUMP = 1;
-
 function newRun(p: Pattern, pt: Part, s: RunSettings, kinds: Uint8Array): Pt[][] | null {
-  // The paths without lock stitches and without the way back of a triple stitch, one for each
-  // stretch between jumps: the needle does not sew where the line jumped.
-  const paths: Pt[][] = [];
-  let path: Pt[] = [];
-  let jumped = false;
-  for (let i = pt.s; i <= pt.e; i++) {
-    if (p.cmd[i] !== STITCH) {
-      jumped = true;
-      continue;
-    }
-    if (kinds[i] === TIE_STITCH && i > pt.s) continue;
-    const q = pt10(p, i);
-    if (jumped && path.length && dist(q, path[path.length - 1]) > RUN_JUMP) {
-      paths.push(path);
-      path = [];
-    }
-    jumped = false;
-    if (!path.length || dist(q, path[path.length - 1]) > 0.05) path.push(q);
-  }
-  paths.push(path);
   const out: Pt[][] = [];
-  for (const raw of paths) {
-    // A triple stitch goes a, b, a, b: once along it is enough. A line sewn there and back (to
-    // get to where the next one starts) stays there and back.
-    const way: Pt[] = [];
-    for (let k = 0; k < raw.length; k++) {
-      const n = way.length;
-      if (n >= 2 && k + 1 < raw.length && dist(raw[k], way[n - 2]) < 0.05 && dist(raw[k + 1], way[n - 1]) < 0.05) k++;
-      else way.push(raw[k]);
-    }
-    if (way.length < 2) continue;
+  for (const way of runWays(p, pt.s, pt.e, kinds)) {
     const pts = runStitch(way, s.stitch, s.tolerance);
     if (!s.triple) {
       out.push(pts);
