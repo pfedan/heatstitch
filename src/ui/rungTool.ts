@@ -154,6 +154,8 @@ export class RungTool implements RungView {
   private split: (Omit<Split, 'cuts'> & { part: number }) | null = null;
   lines: [Pt, Pt][] = [];
   cutLines: [Pt, Pt][] = [];
+  /** Cut lines drawn or moved by hand since the tool opened (as they were then): Vorschlagen keeps them. */
+  private ownCuts: [Pt, Pt][] = [];
   bad: Pt[] | null = null;
   guides: Pt[][] = [];
   sketch: Pt[] | null = null;
@@ -186,6 +188,7 @@ export class RungTool implements RungView {
     this.active = true;
     this.mode = 'satin';
     this.lines = [];
+    this.ownCuts = [];
     this.selected = null;
     this.setColumns(columns);
   }
@@ -199,6 +202,7 @@ export class RungTool implements RungView {
     this.parts = [];
     this.lines = [];
     this.cutLines = [];
+    this.ownCuts = [];
     this.bad = null;
     this.loop = loop;
     this.selected = null;
@@ -759,6 +763,7 @@ export class RungTool implements RungView {
     if (d.kind === 'point') {
       if (d.moved) this.hooks.points?.(this.points.map((p) => [p[0], p[1]] as Pt));
     } else if (d.kind === 'end') {
+      if (d.moved && d.pick.col < 0 && d.pick.cut) this.markOwn(d.pick.i);
       if (this.mode === 'satin' && d.pick.col < 0) {
         if (d.moved) this.resplit();
       }
@@ -779,11 +784,13 @@ export class RungTool implements RungView {
       if (this.mode === 'fill') {
         const list = d.cut ? this.cutLines : this.lines;
         list.push([a, b]);
+        if (d.cut) this.markOwn(list.length - 1);
         this.selected = { col: -1, i: list.length - 1, end: -1, ...(d.cut ? { cut: true } : {}) };
         this.linesChanged();
       } else if (d.cut && this.split) {
         // On a satin cut from a fill every cut line cuts the fill anew.
         this.cutLines.push([a, b]);
+        this.markOwn(this.cutLines.length - 1);
         this.selected = { col: -1, i: this.cutLines.length - 1, end: -1, cut: true };
         this.resplit();
       } else this.addFromLine(a, b, d.cut);
@@ -896,13 +903,59 @@ export class RungTool implements RungView {
   /**
    * Vorschlagen on a satin: its area cut along `cuts` and crossed by `lines` (see suggestSatin) in
    * place of its own, sewn anew as one undo step. Spacings and directions go with the parts as on
-   * any cut.
+   * any cut. With `edge`, the area as it is now in place of the one the satin opened with.
    */
-  suggestIn(lines: [Pt, Pt][], cuts: [Pt, Pt][]): void {
+  suggestIn(lines: [Pt, Pt][], cuts: [Pt, Pt][], edge?: { outlines: Pt[][]; holes: Pt[][] }): void {
     if (!this.sectioned) return;
+    if (edge && this.split) this.split = { ...this.split, outlines: edge.outlines, holes: edge.holes };
     this.cutLines = cuts.map(([a, b]) => [a, b] as [Pt, Pt]);
     this.selected = null;
     this.resplit(lines);
+  }
+
+  /** The columns of the part shown in sections, as they are now. */
+  get sectionRails(): Rails[] | null {
+    return this.split ? this.result()[this.split.part] : null;
+  }
+
+  private markOwn(i: number): void {
+    const c = this.cutLines[i];
+    if (c) this.ownCuts.push([[c[0][0], c[0][1]], [c[1][0], c[1][1]]]);
+  }
+
+  /** The cut lines drawn or moved by hand that are still there. */
+  get handCuts(): [Pt, Pt][] {
+    const at = (a: Pt, b: Pt) => Math.abs(a[0] - b[0]) < 1e-6 && Math.abs(a[1] - b[1]) < 1e-6;
+    this.ownCuts = this.ownCuts.filter((o) => this.cutLines.some((c) => at(c[0], o[0]) && at(c[1], o[1])));
+    return this.ownCuts.map(([a, b]) => [a, b] as [Pt, Pt]);
+  }
+
+  /**
+   * Leeren: every rung and cut line away, to start over (cut lines drawn by hand, then
+   * Vorschlagen). On a satin as one undo step, its sections sewn without rungs.
+   */
+  clear(): void {
+    this.selected = null;
+    this.ownCuts = [];
+    if (this.mode === 'fill') {
+      this.lines = [];
+      this.cutLines = [];
+      this.bad = null;
+      this.linesChanged();
+      return this.hooks.redraw();
+    }
+    if (this.mode !== 'satin') return;
+    for (const c of this.columns) {
+      c.rungs = [];
+      c.spacings = [];
+      c.spans = [];
+      c.own = true;
+    }
+    this.cutLines = [];
+    const out = this.result();
+    // The sections stay as they are sewn, without their cut lines (drawn anew by hand).
+    for (const part of out) for (const r of part) if (r.split) r.split = { ...r.split, cuts: [] };
+    this.hooks.change(out, true);
   }
 
   /** Whether the cut lines are not the ones the satin was cut along (they left a part without a column). */

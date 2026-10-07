@@ -10,9 +10,9 @@ import { RungTool } from '../ui/rungTool';
 import { outline, type Region } from '../digitize/region';
 import { atShare, regionBox, swirlCenters } from '../digitize/deco';
 import { railsFromOutline, stripsOfAreas } from '../digitize/rungs';
-import { areaLoops, suggestSatin } from '../digitize/satinSuggest';
+import { aroundCuts, areaLoops, suggestSatin } from '../digitize/satinSuggest';
 import { t, type Key } from '../i18n';
-import { bestChain, railsArea, sectionView, DECO_DEFAULTS, MAX_SWIRLS, type FillSettings, type Rails, type SatinSettings, analyze, remembered, keepShape, remember, restitch, measureSatin, forget, type RestitchResult, type Settings as RestitchSettings } from '../model/restitch';
+import { bestChain, edgeAlong, railsArea, sectionView, DECO_DEFAULTS, MAX_SWIRLS, type FillSettings, type Rails, type SatinSettings, analyze, remembered, keepShape, remember, restitch, measureSatin, forget, type RestitchResult, type Settings as RestitchSettings } from '../model/restitch';
 import { ui } from './state';
 
 /** What bindRungs needs from the rest of the app. */
@@ -313,27 +313,43 @@ export function bindRungs(app: RungsApp) {
     const obj = q.objects[ui.rungObject];
     if (!obj) return;
     if (rungTool.sectioned) {
-      // A satin: its area as it opened in the tool (see sectionView), cut and crossed anew.
-      const shape = keepShape(p, obj, q.kinds);
-      const area = shape.shape ?? (shape.columns?.length === 1 ? railsArea(shape.columns[0]) : null);
+      // A satin: searched anew in its area as it is now, its shape while that still runs along the
+      // columns (else an old one: a part cut away, say), else read from the rails.
+      const rails = rungTool.sectionRails;
+      if (!rails) return;
+      const known = keepShape(p, obj, q.kinds).shape;
+      const area = known && edgeAlong(outline(known), rails) ? known : railsArea(rails);
       const s = area && suggestSatin(area);
+      const own = rungTool.handCuts;
+      if (area && own.length) {
+        // Cut lines drawn by hand stay; the suggestion fills in around them.
+        const { outsides, holes } = areaLoops(area);
+        const r = aroundCuts(s?.kind === 'strokes' ? s : { lines: [], cuts: [] }, own, outsides, holes);
+        rungTool.suggestIn(r.lines, r.cuts, { outlines: outsides, holes });
+        if (r.ok) app.layers.say(t('stitch.suggest.sewn', { n: r.cuts.length + 1 }));
+        return;
+      }
       if (!s || s.kind !== 'strokes' || !s.ok) {
         // No whole suggestion from the area: along the columns as they run.
         if (rungTool.alongRails()) return app.layers.say(t('stitch.suggest.rails'));
         return app.layers.say(t('stitch.suggest.none'));
       }
-      rungTool.suggestIn(s.lines, s.cuts);
+      const { outsides, holes } = areaLoops(area);
+      rungTool.suggestIn(s.lines, s.cuts, { outlines: outsides, holes });
       return app.layers.say(t('stitch.suggest.sewn', { n: s.cuts.length + 1 }));
     }
     if (rungTool.mode !== 'fill') return;
     const an = analyze(p, obj, q.kinds);
     const area = remembered(p, obj)?.shape ?? an.fill;
     if (!area) return;
-    const s = suggestSatin(area);
-    if (!s || s.kind !== 'strokes') return app.layers.say(t('stitch.suggest.wide'), true);
+    const found = suggestSatin(area);
+    if (!found || found.kind !== 'strokes') return app.layers.say(t('stitch.suggest.wide'), true);
+    const { outsides, holes } = areaLoops(area);
+    // Cut lines drawn by hand stay; the suggestion fills in around them.
+    const own = rungTool.handCuts;
+    const s = own.length ? aroundCuts(found, own, outsides, holes) : found;
     let bad: Pt[] | null = null;
     if (!s.ok) {
-      const { outsides, holes } = areaLoops(area);
       const made = stripsOfAreas(outsides, s.lines, s.cuts, holes);
       bad = made.hole >= 0 ? holes[made.hole] : made.bad;
     }
