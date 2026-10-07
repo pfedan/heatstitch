@@ -7,6 +7,7 @@
 import type { ColorEdit, Stroke } from '../image/prepare';
 import { readAreas, type Technique } from '../digitize/smart';
 import { STORAGE_NS } from './namespace';
+import { readCrop, type Crop } from '../image/crop';
 
 export interface StoredImage {
   name: string;
@@ -19,6 +20,8 @@ export interface StoredWork {
   strokes: Stroke[];
   /** Smart: techniques set by hand, by area. */
   areas?: Record<string, Technique>;
+  /** The part of the picture that is sewn; none for the whole picture. */
+  crop?: Crop;
 }
 
 const STORE = 'image';
@@ -69,7 +72,8 @@ export async function loadImage(): Promise<{ image: StoredImage; work: StoredWor
     const edits = Array.isArray(work?.edits) ? work.edits : [];
     const strokes = Array.isArray(work?.strokes) ? work.strokes : [];
     const areas = readAreas(work?.areas);
-    return { image, work: { edits, strokes, ...(Object.keys(areas).length ? { areas } : {}) } };
+    const crop = readCrop(work?.crop);
+    return { image, work: { edits, strokes, ...(Object.keys(areas).length ? { areas } : {}), ...(crop ? { crop } : {}) } };
   } catch (err) {
     console.warn('Could not read the stored image', err);
     return null;
