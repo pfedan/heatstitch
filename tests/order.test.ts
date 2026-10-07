@@ -114,6 +114,26 @@ describe('sewing order', () => {
     expect(order).toEqual([0, 1]);
   });
 
+  it('joins two blocks of the same thread that meet after a move by hand', () => {
+    const red = { r: 255, g: 0, b: 0 };
+    const blue = { r: 0, g: 0, b: 255 };
+    const w = new Writer();
+    square(w, 0, 0, 10);
+    w.color();
+    square(w, 30, 0, 10); // red again, a stop the file has
+    w.color();
+    square(w, 60, 0, 10);
+    const p = w.b.build('t', 'pes', [red, red, blue]);
+    const objs = sewObjects(p);
+    // The second red square moved in front of the first: the two reds meet anew and are one color.
+    const moved = reorder(p, objs, [1, 0, 2], 3, undefined, { whole: true });
+    expect(moved.colors).toEqual([red, blue]);
+    expect(moveStats(moved).colorChanges).toBe(1);
+    // Nothing moved next to the stop: it stays.
+    const blueFirst = reorder(p, objs, [2, 0, 1], 3, undefined, { whole: true });
+    expect(blueFirst.colors).toEqual([blue, red, red]);
+  });
+
   it('trims new long moves with ties', () => {
     const red = { r: 255, g: 0, b: 0 };
     const w = new Writer();

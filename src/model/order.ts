@@ -1,8 +1,7 @@
-import { build, recs, tieIn, tieOff, type Rec } from './jumps';
-import { sewObjects, type SewObject } from './objects';
-import { COLOR_CHANGE, END, JUMP, nextVersion, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
+import { sewList } from './sew';
+import type { SewObject } from './objects';
+import { COLOR_CHANGE, JUMP, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
 import { sameColor } from './recolor';
-import { remember, remembered } from './restitch';
 
 /**
  * Sewing order of the objects: what the machine sews when. Changing it changes neither the
@@ -406,66 +405,20 @@ export function reorder(p: Pattern, objs: SewObject[], order: number[], trimMm: 
     const byBlock = blockKeys(p, Math.max(...objs.map((o) => o.block), ...into.values()) + 1);
     for (const [o, b] of into) keys[o] = byBlock[b];
   }
-  const linked = (o: SewObject) => !!(remembered(p, o)?.outline || remembered(p, o)?.blendOf || remembered(p, o)?.shadowOf || remembered(p, o)?.echoOf);
-  const out: Rec[] = [];
-  const colors: ThreadColor[] = [];
-  const first = objs[order[0]];
-  colors.push(colorOf(first));
-  // Before the first object: what the file had, or a jump to the new first object.
-  if (first.index === 0) out.push(...recs(p, 0, first.first));
-  else out.push({ x: p.x[first.first], y: p.y[first.first], cmd: JUMP });
-  let sewn = 0;
-  let counted = 0;
-  const sew = (o: SewObject, lockIn: boolean) => {
-    for (; counted < out.length; counted++) if (out[counted].cmd === STITCH) sewn++;
-    // Objects can merge with their neighbours in the new pattern; the caller finds them again by
-    // the number of their first stitch, which no later tidying changes.
-    starts?.push(sewn);
-    out.push(...recs(p, o.first, o.first + 1));
-    if (lockIn && !o.tieIn) out.push(...tieIn(p, o.first));
-    out.push(...recs(p, o.first + 1, o.last + 1));
-  };
-  sew(first, first.index !== 0);
-  for (let k = 1; k < order.length; k++) {
-    const a = objs[order[k - 1]];
-    const b = objs[order[k]];
-    let l = apart?.has(k) && keys[a.index] === keys[b.index] ? 'trim' : link(p, a, b, keys[a.index], keys[b.index], trimMm, fresh);
-    // A border or a blend's second thread stays an object of its own, never joined to a neighbour.
-    if (l === 'jump' && (whole || linked(a) || linked(b))) l = 'trim';
-    if (l === 'original') {
-      out.push(...recs(p, a.last + 1, b.first));
-      sew(b, false);
-      continue;
+  // Moved by hand: where two objects of the same thread now meet that did not before, their
+  // colors become one (a stop the file had between them stays only where nothing moved).
+  if (whole) {
+    for (let k = 1; k < order.length; k++) {
+      const a = objs[order[k - 1]];
+      const b = objs[order[k]];
+      const ka = keys[a.index];
+      const kb = keys[b.index];
+      if (ka === kb || b.index === a.index + 1 || !sameColor(colorOf(a), colorOf(b))) continue;
+      for (let i = 0; i < keys.length; i++) if (keys[i] === kb) keys[i] = ka;
     }
-    const at = { x: p.x[a.last], y: p.y[a.last] };
-    if (l === 'color' || l === 'trim') {
-      if (!a.tieOff) out.push(...tieOff(p, a.last));
-      out.push({ ...at, cmd: TRIM });
-      if (l === 'color') {
-        out.push({ ...at, cmd: COLOR_CHANGE });
-        colors.push(colorOf(b));
-      }
-    }
-    out.push({ x: p.x[b.first], y: p.y[b.first], cmd: JUMP });
-    sew(b, l !== 'jump');
   }
-  const last = objs[order[order.length - 1]];
-  if (last.index === objs.length - 1) out.push(...recs(p, last.last + 1, p.cmd.length));
-  else {
-    if (!last.tieOff) out.push(...tieOff(p, last.last));
-    out.push({ x: p.x[last.last], y: p.y[last.last], cmd: TRIM }, { x: p.x[last.last], y: p.y[last.last], cmd: END });
-  }
-  const next = build(nextVersion(p, { colors }), out, p);
-  // A tie-off or tie-in added to an object (one too small to have its own) gives it more stitches:
-  // the parts it was sewn in no longer fit, and the next edit tells them apart anew.
-  for (const o of sewObjects(next)) {
-    const m = remembered(next, o);
-    if (!m?.parts) continue;
-    let n = 0;
-    for (let i = o.first; i <= o.last; i++) if (next.cmd[i] === STITCH) n++;
-    if (m.parts[m.parts.length - 1].end !== n) remember(next, o, { ...m, parts: undefined });
-  }
-  return next;
+  const list = order.map((i) => ({ obj: objs[i], color: colorOf(objs[i]), thread: keys[i] }));
+  return sewList(p, list, trimMm, { fresh, apart, whole, starts });
 }
 
 function stitchesBefore(p: Pattern, at: number): number {

@@ -3,6 +3,10 @@ import { buildDemos, decoSampler, flower, lineVariants, patch, towel, type Desig
 import { sewObjects, type SewObject } from '../src/model/objects';
 import { JUMP, STITCH, TRIM, type Pattern } from '../src/model/pattern';
 import { listOf, specOf, sewDesign, sewList } from '../src/model/sew';
+import { recolorObjects } from '../src/model/shapeOps';
+import { transformSewObject } from '../src/model/reshape';
+import { stitchKinds } from '../src/model/sequence';
+import { remembered } from '../src/model/restitch';
 import { CRITICAL, validatePattern } from '../src/validation/validate';
 
 /**
@@ -66,6 +70,48 @@ describe('sewing from a list that keeps the stitches', () => {
       expect(left.map((o) => o.id)).toEqual(before.map((o) => o.id));
       expect(left.map((o) => o.color)).toEqual(before.map((o) => o.color));
       expect(left.map((o) => stitchesOf(r, o))).toEqual(before.map((o) => stitchesOf(p, o)));
+    }
+  }, 120000);
+});
+
+describe('recoloring through the list', () => {
+  it.each(buildDemos().map((d) => [d.title, d] as const))('%s', (_, d) => {
+    const p = d.p;
+    const objs = sewObjects(p);
+    const color = { r: 1, g: 2, b: 3 };
+    for (const o of objs) {
+      if (o.color.r === color.r && o.color.g === color.g && o.color.b === color.b) continue;
+      // Objects tied to others (borders, blends, shadows, echoes) take them along: not here.
+      const m = remembered(p, o);
+      if (m?.outline || m?.blendOf || m?.shadowOf || m?.echoOf || m?.fill?.border || m?.fill?.deco?.blend || m?.line?.shadow || m?.line?.echo) continue;
+      const q = recolorObjects(p, [o.index], color, d.T);
+      if (!q) continue;
+      const after = sewObjects(q);
+      // Every object keeps its id and its stitches (borders are sewn anew by syncBorders); the one
+      // recolored is in the new thread.
+      const plain = (r: Pattern, xs: SewObject[]) => xs.filter((x) => !remembered(r, x)?.outline);
+      expect(plain(q, after).map((x) => x.id)).toEqual(plain(p, objs).map((x) => x.id));
+      expect(plain(q, after).map((x) => stitchesOf(q, x))).toEqual(plain(p, objs).map((x) => stitchesOf(p, x)));
+      expect(after[o.index].color).toMatchObject(color);
+    }
+  }, 120000);
+});
+
+describe('moving through the list', () => {
+  it.each(buildDemos().map((d) => [d.title, d] as const))('%s', (_, d) => {
+    const p = d.p;
+    const objs = sewObjects(p);
+    const kinds = stitchKinds(p);
+    for (const o of objs) {
+      const r = transformSewObject(p, objs, o, kinds, [1, 0, 0, 1, 3, -2], d.T);
+      expect(r).toBeTruthy();
+      const after = sewObjects(r!.pattern);
+      // The same objects; the others keep their stitches, the moved one has them 3 mm right, 2 mm up.
+      expect(after.map((x) => x.id)).toEqual(objs.map((x) => x.id));
+      after.forEach((x, k) => {
+        const want = k === o.index ? stitchesOf(p, objs[k]).split(' ').map((s) => s.split(',').map(Number)).map(([a, b]) => `${a + 30},${b - 20}`).join(' ') : stitchesOf(p, objs[k]);
+        expect(stitchesOf(r!.pattern, x)).toBe(want);
+      });
     }
   }, 120000);
 });

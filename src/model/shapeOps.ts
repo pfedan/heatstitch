@@ -4,13 +4,11 @@ import { translation, type Form, type Mat } from '../shape/path';
 import { vectorize } from '../shape/vectorize';
 import { takeOver, wholeArea } from './knockout';
 import { rememberObjects, sewObjects, stitchKey, type SewObject } from './objects';
-import { insertObject } from './addShape';
 import { listOf, sewList } from './sew';
 import { newLink, syncBorders } from './border';
-import { recs } from './jumps';
 import { reorder } from './order';
 import { recolor, sameColor } from './recolor';
-import { STITCH, type Pattern, type ThreadColor } from './pattern';
+import type { Pattern, ThreadColor } from './pattern';
 import { forget, objectKey, remember, remembered, restitch, type Remembered } from './restitch';
 import { formOf, reshapeFill, transformSewObject } from './reshape';
 import { stitchKinds } from './sequence';
@@ -371,28 +369,29 @@ function recolorStitches(p: Pattern, objs: SewObject[], sel: number[], color: Th
     for (const b of blocks) cur = recolor(cur, b, color);
     return cur;
   }
-  let cur = p;
-  for (const o of sel) {
-    const all = sewObjects(cur);
-    const obj = all[o];
-    if (!obj) return null;
-    const records = recs(cur, obj.first, obj.last + 1);
-    const known = remembered(cur, obj);
-    const without = removeObjects(cur, [o], trimMm);
-    if (!without) return null;
-    const r = insertObject(without, records, color, o - 1, trimMm);
-    if (!r) return null;
-    if (known) {
-      const back = sewObjects(r.pattern).find((x) => stitchesUpTo(r.pattern, x.first) === r.start);
-      if (back) remember(r.pattern, back, { ...known, id: obj.id });
-    }
-    cur = r.pattern;
+  // The others, one by one in the list: each sewn in the thread of a neighbour of that color, else
+  // in a color of its own, trimmed off its neighbours (in one thread with them it would become part
+  // of one). Nothing else moves, and every object keeps its id and what it knows.
+  const chosen = new Set(sel);
+  const list = listOf(p);
+  const apart = new Set<number>();
+  const rgb = (a: ThreadColor, b: ThreadColor) => a.r === b.r && a.g === b.g && a.b === b.b;
+  list.forEach((e, k) => {
+    if (!chosen.has(e.obj.index)) return;
+    const prev = list[k - 1];
+    const next = list[k + 1];
+    const host = prev && rgb(prev.color, color) ? prev : next && !chosen.has(next.obj.index) && rgb(next.color, color) ? next : null;
+    e.color = host ? host.color : { ...color };
+    e.thread = host ? host.thread : `own${e.obj.id}`;
+    apart.add(k).add(k + 1);
+  });
+  // Where one now meets a block of its new color, they are one thread.
+  for (let k = 1; k < list.length; k++) {
+    const [a, b] = [list[k - 1], list[k]];
+    if (a.thread === b.thread || !rgb(a.color, b.color) || !(chosen.has(a.obj.index) || chosen.has(b.obj.index))) continue;
+    const was = b.thread;
+    for (const e of list) if (e.thread === was) e.thread = a.thread;
   }
-  return cur;
+  return sewList(p, list, trimMm, { apart });
 }
 
-function stitchesUpTo(p: Pattern, record: number): number {
-  let n = 0;
-  for (let i = 0; i < record; i++) if (p.cmd[i] === STITCH) n++;
-  return n;
-}

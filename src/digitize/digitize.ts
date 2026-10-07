@@ -406,10 +406,7 @@ export function digitize(prep: Prepared, o: DigitizeOptions, name = 'image'): Di
   const { width: w, height: h, pxMm, labels, palette } = prep;
   const comps = components(labels, w, h);
   const satin = satinOf(o);
-  // Colors by sewn area, largest first.
-  const area = new Array(palette.length).fill(0);
-  for (const l of labels) if (l !== NONE) area[l]++;
-  const order = palette.map((_, i) => i).filter((i) => area[i] > 0).sort((a, b) => area[b] - area[a]);
+  const order = sewingOrder(labels, w, h, pxMm, palette.length);
   const rank = new Array(palette.length).fill(-1);
   order.forEach((l, k) => (rank[l] = k));
 
@@ -597,6 +594,38 @@ function keep(obj: Obj, o: DigitizeOptions, imgW: number, imgH: number): KeptSha
       tolerance: o.tolerance,
     },
   };
+}
+
+/** A color this thin on average (mm) is a line color: an outline, strokes, drawn details. */
+const LINE_MM = 1.6;
+
+/**
+ * Colors in sewing order: areas first, largest first, then the line colors (outlines and drawn
+ * details), as digitizers do: an outline sewn after the areas it encloses covers their edges, and
+ * the areas reach under it instead of over it. A color's mean width is 2 × area / perimeter (a
+ * strip of width t and length L has area tL and perimeter about 2L).
+ */
+export function sewingOrder(labels: Uint8Array, w: number, h: number, pxMm: number, colors: number): number[] {
+  const area = new Array(colors).fill(0);
+  const edges = new Array(colors).fill(0);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      const l = labels[i];
+      if (l === NONE) continue;
+      area[l]++;
+      if (x === 0 || labels[i - 1] !== l) edges[l]++;
+      if (x === w - 1 || labels[i + 1] !== l) edges[l]++;
+      if (y === 0 || labels[i - w] !== l) edges[l]++;
+      if (y === h - 1 || labels[i + w] !== l) edges[l]++;
+    }
+  }
+  const used = area.map((_, i) => i).filter((i) => area[i] > 0);
+  // Pixel edges run in steps along slanted and curved edges: about 4/π times the true length.
+  const width = (l: number) => ((2 * area[l]) / (edges[l] * (Math.PI / 4))) * pxMm;
+  // With areas of other colors only: a design of lines alone keeps the order by area.
+  const line = (l: number) => width(l) < LINE_MM && used.some((k) => width(k) >= LINE_MM);
+  return used.sort((a, b) => Number(line(a)) - Number(line(b)) || area[b] - area[a]);
 }
 
 /** Pieces of one color apart by no more than this, with only later colors between them, are one area (mm). */
