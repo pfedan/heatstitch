@@ -1027,7 +1027,7 @@ export function rememberShapes(
     if (!shape) {
       const { read: _read, ...known } = keepShape(p, o, (kinds ??= stitchKinds(p)));
       const area = f?.satinShape ? regionFrom(f.satinShape) : null;
-      return remember(p, o, { ...known, ...(area ? { shape: area } : {}), parts: one('satin') });
+      return remember(p, o, { ...known, ...(area ? { shape: area } : {}), ...(f?.satin ? { satin: { ...f.satin } } : {}), parts: one('satin') });
     }
     const region = regionFrom(shape);
     if (region) remember(p, o, { region, fill: { ...shape.fill }, parts: one('fill'), ...(f?.form ? { form: f.form, ...(f.knockout ? { knockout: true } : {}) } : {}) });
@@ -1816,7 +1816,11 @@ export function sectionView(columns: Rails[][], shape: Region | undefined): Rail
     );
   }
   if (shape && edgeAlong(outline(shape), cut.flat())) {
-    for (const cols of [cut, columns]) {
+    // Parts that make the shape only together (a satin along its middle, sewn in pieces): one part
+    // of it, each piece a chain of its own, so the sections and Vorschlagen take in all of it.
+    const edge = outline(shape);
+    const whole = cut.length > 1 && !known(cut) && !cut.some((part) => edgeAlong(edge, part)) ? [cut.flatMap((part, j) => part.map((c) => ({ ...c, chain: j })))] : null;
+    for (const cols of whole ? [whole] : [cut, columns]) {
       const split = withSplit(cols, shape);
       if (known(split)) return split;
     }

@@ -182,6 +182,8 @@ describe('digitize', () => {
     expect(objects.filter((o) => o.kind === 'satin').length).toBe(1);
     // The satin keeps the area it was made for: the satin tool suggests on it, not on its stitches.
     expect(objects.find((o) => o.kind === 'satin')!.satinShape?.areaMm2).toBeGreaterThan(200);
+    // And how it was sewn, so a change sews it as dense as it was (not as read from its stitches).
+    expect(objects.find((o) => o.kind === 'satin')!.satin?.spacing).toBeGreaterThan(0.3);
     expect(noCritical(pattern)).toEqual([]);
     roundTrips(pattern);
   });

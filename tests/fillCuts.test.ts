@@ -301,6 +301,19 @@ describe('Vorschlagen and Leeren on a satin', () => {
     expect(Math.max(...xs) - Math.min(...xs)).toBeLessThan(6);
   });
 
+  it('takes a satin read in pieces as one area when only all of them make its shape', () => {
+    const shape = railsArea(full)!;
+    // Sewn along its middle in two pieces (read so from its stitches), its shape kept whole.
+    const half = Math.ceil(full.length / 2);
+    const pieces = [full.slice(0, half), full.slice(half)].map((part) => part.map(({ rungs: _r, ...c }) => c));
+    const view = sectionView(pieces, shape);
+    expect(view.length).toBe(1);
+    expect(view[0].length).toBe(full.length);
+    expect(view[0].map((c) => c.chain)).toEqual(full.map((_, k) => (k < half ? 0 : 1)));
+    const sp = view[0][0].split!;
+    expect(edgeAlong([...sp.outlines, ...sp.holes], view[0])).toBe(true);
+  });
+
   it('keeps cut lines drawn by hand and fills in around them', () => {
     const own: [Pt, Pt][] = [[[-1, 15], [5, 15]]];
     const r = aroundCuts({ lines: LINES, cuts: CUTS }, own, [M], []);
