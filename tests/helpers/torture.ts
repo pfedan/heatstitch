@@ -30,7 +30,7 @@ import { decodeProject, encodeProject, projectSettings } from '../../src/storage
 import { DEFAULTS } from '../../src/settings';
 import { DEFAULT_PROFILE } from '../../src/validation/profiles';
 import { tagShortStitches, TIE } from '../../src/validation/shortStitches';
-import { thinSweeps } from '../../src/correct/thin';
+import { thinByHand } from '../../src/correct/thinHand';
 import { keepObjects } from '../../src/model/handEdit';
 import { THIN_SHARES } from '../../src/areas/stitches/state';
 import { writePattern } from '../../src/writers';
@@ -324,7 +324,7 @@ export const OPS: Op[] = [
       const o = pick(r, before);
       const [share] = pick(r, THIN_SHARES);
       const tags = tagShortStitches(p);
-      const t = thinSweeps(p, {
+      const t = thinByHand(p, {
         needAt: (i) => (i >= o.first && i <= o.last && p.cmd[i] === STITCH ? share : 0),
         protect: tags.map((x) => (x === TIE ? 1 : 0)),
       });
@@ -337,6 +337,9 @@ export const OPS: Op[] = [
       expect(after.map((x) => x.id), 'thinned by hand: the same objects').toEqual(before.map((x) => x.id));
       expect(now, 'thinned by hand: the object stays where it was').toBe(o.index);
       expect(after[o.index].last - after[o.index].first, 'thinned by hand: only its own stitches go').toBe(o.last - o.first - t.removed);
+      // Its stitches are only spread wider, never laid outside where they were.
+      const a = after[o.index];
+      expect([a.minX >= o.minX, a.minY >= o.minY, a.maxX <= o.maxX, a.maxY <= o.maxY], 'thinned by hand: stays within its stitches').toEqual([true, true, true, true]);
       d.commit(t.pattern);
       return true;
     },
