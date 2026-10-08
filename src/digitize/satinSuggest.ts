@@ -121,8 +121,11 @@ export function offersSections(g: Graph): boolean {
   return [...degree.values()].some((d) => d >= 3);
 }
 
-/** A suggestion for the fill area (null when the area is empty); `max` is the longest stitch of a shape's columns (mm). */
-export function suggestSatin(area: Region, graph?: Graph, max = STROKE_MAX): SatinSuggestion | null {
+/**
+ * A suggestion for the fill area (null when the area is empty); `max` is the longest stitch of a
+ * shape's columns (mm); `columns`: a compact shape as a column where one fits, not a fan.
+ */
+export function suggestSatin(area: Region, graph?: Graph, max = STROKE_MAX, columns = false): SatinSuggestion | null {
   const { outsides, holes } = areaLoops(area);
   if (!outsides.length) return null;
   const g = graph ?? skeleton(area);
@@ -135,13 +138,13 @@ export function suggestSatin(area: Region, graph?: Graph, max = STROKE_MAX): Sat
   }
   if (kind !== 'strokes') {
     // No lines: the area as a whole may be a dot or a pointed shape.
-    const plan = outsides.length === 1 ? planShape(wholeShape(outsides, holes, material), material, max) : null;
+    const plan = outsides.length === 1 ? planShape(wholeShape(outsides, holes, material), material, max, true, columns) : null;
     return plan ? finish(g, plan.kind, plan.cuts, plan.lines, outsides, holes) : { kind: 'wide', cuts: [], lines: [], ok: false };
   }
   // Thick places in the lines planned on their own, the lines without them.
   const small = smallHoles(g, holes);
   const split = splitBlobs(small.length ? skeleton(filled(area, small)) : g);
-  const plans = split?.blobs.map((b) => planShape(blobShape(b, split.strokes, outsides, holes, material), material, max));
+  const plans = split?.blobs.map((b) => planShape(blobShape(b, split.strokes, outsides, holes, material), material, max, true, columns));
   if (split && plans?.every((p) => p)) {
     const strokes = split.strokes.branches.length ? planStrokes(split.strokes, [...outsides, ...holes]) : { cuts: [], lines: [] };
     const only = !split.strokes.branches.length && plans.length === 1 ? plans[0]!.kind : kind;
@@ -154,7 +157,7 @@ export function suggestSatin(area: Region, graph?: Graph, max = STROKE_MAX): Sat
   const made: SatinSuggestion = { kind: crescent(g) ? 'crescent' : kind, ...(first.ok ? first : [plan(g, outsides, holes, true)].find((x) => x.ok) ?? first) };
   if (outsides.length !== 1 || !compact(g, outsides[0])) return made;
   // Lines round a hole in a compact shape: a shape after all (a dot with a highlight off its middle).
-  const whole = planShape(wholeShape(outsides, holes, material), material, max);
+  const whole = planShape(wholeShape(outsides, holes, material), material, max, true, columns);
   const other = whole && finish(g, whole.kind, whole.cuts, whole.lines, outsides, holes);
   return other?.ok ? other : made;
 }

@@ -404,4 +404,26 @@ describe('Vorschlagen: spikes, frames, leaves and crescents', () => {
       expect([b.s.kind, b.s.cuts.length, b.strips.length]).toEqual([a.s.kind, a.s.cuts.length, a.strips.length]);
     }
   });
+
+  it('miters a ring with round outer corners from the corners of its hole', () => {
+    // A brush-drawn box: 20 × 12 mm with corners round by 3 mm, a sharp 14 × 6 mm hole.
+    const box = (x: number, y: number) => {
+      const [dx, dy] = [Math.max(0, Math.abs(x - 30) - 7), Math.max(0, Math.abs(y - 30) - 3)];
+      return Math.hypot(dx, dy) < 3;
+    };
+    const { s, strips } = columns(region((x, y) => box(x, y) && !(Math.abs(x - 30) < 7 && Math.abs(y - 30) < 3)));
+    expect(s.ok).toBe(true);
+    expect(s.kind).toBe('frame');
+    expect(s.cuts.length).toBe(4);
+    expect(strips.length).toBe(4);
+  });
+
+  it('sews a wide fan as a column when asked', () => {
+    // A quarter of a disc: the fan from its corner would pile up there.
+    const r = region((x, y) => x > 30 && y > 30 && Math.hypot(x - 30, y - 30) < 5);
+    expect(suggestSatin(r)!.kind).toBe('pointed');
+    const s = suggestSatin(r, undefined, 7, true)!;
+    expect(s.ok).toBe(true);
+    expect(s.kind).not.toBe('pointed');
+  });
 });
