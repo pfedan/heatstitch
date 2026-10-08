@@ -347,12 +347,12 @@ export function bindRungs(app: RungsApp) {
       if (area && own.length) {
         // Cut lines drawn by hand stay; the suggestion fills in around them.
         const { outsides, holes } = areaLoops(area);
-        const r = aroundCuts(s?.kind === 'strokes' ? s : { lines: [], cuts: [] }, own, outsides, holes);
+        const r = aroundCuts(s && s.kind !== 'wide' ? s : { lines: [], cuts: [] }, own, outsides, holes);
         rungTool.suggestIn(r.lines, r.cuts, { outlines: outsides, holes });
         if (r.ok) app.layers.say(t('stitch.suggest.sewn', { n: r.cuts.length + 1 }));
         return;
       }
-      if (!area || !s || s.kind !== 'strokes' || !s.ok) {
+      if (!area || !s || s.kind === 'wide' || !s.ok) {
         // No whole suggestion from the area: along the columns as they run.
         if (rungTool.alongRails()) return app.layers.say(t('stitch.suggest.rails'));
         return app.layers.say(t('stitch.suggest.none'));
@@ -366,18 +366,22 @@ export function bindRungs(app: RungsApp) {
     const area = remembered(p, obj)?.shape ?? an.fill;
     if (!area) return;
     const found = suggestSatin(area);
-    if (!found || found.kind !== 'strokes') return app.layers.say(t('stitch.suggest.wide'), true);
+    if (!found || found.kind === 'wide') return app.layers.say(t('stitch.suggest.wide'), true);
     const { outsides, holes } = areaLoops(area);
     // Cut lines drawn by hand stay; the suggestion fills in around them.
     const own = rungTool.handCuts;
-    const s = own.length ? aroundCuts(found, own, outsides, holes) : found;
+    const kind = found.kind;
+    const s = { ...(own.length ? aroundCuts(found, own, outsides, holes) : found), kind };
     let bad: Pt[] | null = null;
     if (!s.ok) {
       const made = stripsOfAreas(outsides, s.lines, s.cuts, holes);
       bad = made.hole >= 0 ? holes[made.hole] : made.bad;
     }
     rungTool.setFillLines(s.lines, s.cuts, bad);
-    app.layers.say(t(s.ok ? 'stitch.suggest.done' : 'stitch.suggest.partly', { n: s.cuts.length + 1 }));
+    const n = s.cuts.length + 1;
+    if (!s.ok) app.layers.say(t('stitch.suggest.partly', { n }));
+    else if (s.kind === 'strokes') app.layers.say(t('stitch.suggest.done', { n }));
+    else app.layers.say(t('stitch.suggest.doneAs', { n, shape: t(`stitch.suggest.shape.${s.kind}`) }));
   }
 
   /**

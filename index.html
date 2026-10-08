@@ -258,6 +258,14 @@
                 <button type="button" id="image-clear" class="link" data-i18n="image.clear" data-i18n-title="image.clear.hint" hidden></button>
               </div>
             </div>
+            <div class="image-crop" id="image-crop" data-i18n-title="image.crop.hint" hidden>
+              <span class="label"><span data-i18n="image.crop"></span> <output id="image-crop-out"></output></span>
+              <div class="image-crop-actions">
+                <button type="button" id="image-crop-motif" data-i18n="image.crop.motif" data-i18n-title="image.crop.motif.hint"></button>
+                <button type="button" id="image-crop-reset" class="link" data-i18n="image.crop.reset" data-i18n-title="image.crop.reset.hint" hidden></button>
+              </div>
+              <p class="muted small" id="image-crop-note"></p>
+            </div>
             <label class="field image-width" data-i18n-title="image.width.hint">
               <span class="label"><span data-i18n="image.width"></span> <output id="image-height"></output></span>
               <input type="number" id="image-width" min="10" max="400" step="1" />

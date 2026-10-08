@@ -2,10 +2,12 @@ name: CI and Pages
 
 # The site is served from the gh-pages branch: main goes to its root, every pull request
 # gets a preview under pr-preview/pr-N/ that is removed again when the PR closes.
+# Other branches are checked through their pull request only: a push to them would run
+# every job a second time next to the pull request's own run.
 
 on:
   push:
-    branches: ['**']
+    branches: [main]
   pull_request:
     types: [opened, reopened, synchronize, closed]
   workflow_dispatch:
