@@ -371,17 +371,26 @@ async function rungTool(page, cmdText) {
 }
 
 // 4. satin: rungs on the satin S of the patch
+/** The brush character 永 from the examples (PR #171), made a satin by its stitch type and opened in the Direction tool (R). */
+async function brushSatin(page) {
+  await example(page, 'brushSvg');
+  await realistic(page, true);
+  await expandColor(page, 1);
+  const rows = await objectRows(page);
+  await clickObject(page, rows[0].i);
+  await page.locator('#object-stitches button', { hasText: /^Satin$/ }).first().click();
+  await page.waitForTimeout(3000);
+  const b = await stageBox(page);
+  await wheelAt(page, b.x + b.width / 2, b.y + b.height / 2, 1, 120);
+  await page.keyboard.press('r');
+  await page.waitForTimeout(2500);
+}
 shots.satin = async (lang) => {
   const { page, close } = await boot(lang);
-  await patchFlow(page, 4);
-  await selectPatchS(page);
-  await page.keyboard.press('r');
-  await page.waitForTimeout(1500);
-  // zoom onto the S (left of STITCH)
-  const b = await stageBox(page);
-  await zoomTo(page, b.x + 212, b.y + 538, 7);
+  await brushSatin(page);
   await inspectorTo(page, '#object-panel');
   await sidebarTop(page);
+  await mouseAway(page);
   await jpeg(page, `satin-${lang}`);
   await close();
 };
@@ -791,13 +800,17 @@ shots.draw = async (lang) => {
 // 18. sections (shared): the satin S of patch.pes after Abschnitte, canvas only
 shots.sections = async () => {
   const { page, close } = await boot('de');
-  await patchFlow(page, 4);
-  await selectPatchS(page);
-  await rungTool(page, T.de.suggest);
-  const b = await stageBox(page);
-  await zoomTo(page, b.x + 212, b.y + 538, 6);
-  const c = await page.locator('#canvas').boundingBox();
-  await jpeg(page, 'sections', { x: c.x + 60, y: c.y + 85, width: c.width - 180, height: c.height - 205 });
+  await brushSatin(page);
+  // the floating view bar would sit over the right foot: hide it in this crop
+  await page.evaluate(() => {
+    const z = Array.from(document.querySelectorAll('*')).find((e) => e.children.length === 0 && /^\d+\s*%$/.test(e.textContent.trim()));
+    let el = z; while (el && !['absolute', 'fixed'].includes(getComputedStyle(el).position)) el = el.parentElement;
+    if (el) el.style.visibility = 'hidden';
+  });
+  const clip = { x: 390, y: 140, width: 540, height: 570 };
+  await cmd(page, T.de.suggest, 6000);
+  await mouseAway(page);
+  await jpeg(page, 'sections', clip);
   await close();
 };
 
