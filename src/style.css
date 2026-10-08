@@ -753,6 +753,10 @@ input[type='range'] {
   min-height: 0;
   overflow-y: auto;
   border-left: 1px solid var(--line);
+  /* No scroll anchoring: the browser picks its anchor in markup order, but in Prüfen the design page
+     comes first in the markup and is shown last, and panels are rebuilt as a whole. Opening a section
+     made the column follow an anchor further down and jump; without it the heading stays put. */
+  overflow-anchor: none;
 }
 
 /* A collapsible section; open it shares the column with the Correction panel, closed only its line stays. */
