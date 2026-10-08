@@ -124,7 +124,9 @@ export function registerObjectCommands(a: ObjectActions): void {
   command({ id: 'object.openShape', label: 'objects.openShape', group: G, icon: 'obj-shape', keys: ['Enter'], bind: false, when: () => !!info()?.shapeable && info()!.selected.length === 1 && !info()!.shaping && !info()!.editing, need: then(one), run: a.openShape });
   // E is edit.stitches (src/areas/stitches); this is the object page's button for the one selected object.
   command({ id: 'object.openStitches', label: 'objects.openStitches', group: G, icon: 'obj-stitches', palette: false, when: () => info()?.selected.length === 1 && !info()!.editing, run: a.openStitches });
-  command({ id: 'object.color', label: 'objects.color', group: G, icon: 'obj-color', when: some, need: then(), run: a.color });
+  // The thread also while the outline is open (level Form, right after drawing): it leaves the outline as it is.
+  const colorable = () => a.flow() && a.frame().length > 0 && !a.lettering() && !a.drawing();
+  command({ id: 'object.color', label: 'objects.color', group: G, icon: 'obj-color', when: colorable, need: () => (colorable() ? undefined : needSome()), run: a.color });
   command({ id: 'object.blend', label: 'objects.blend', group: G, icon: 'obj-blend', when: () => some() && !!info()?.blend, need: then(() => one() ?? 'objects.need.fill'), run: a.blend });
   command({ id: 'object.mirrorH', label: 'objects.mirrorH', group: G, icon: 'obj-mirror-h', when: some, need: then(), run: () => a.mirror('x') });
   command({ id: 'object.mirrorV', label: 'objects.mirrorV', group: G, icon: 'obj-mirror-v', when: some, need: then(), run: () => a.mirror('y') });
