@@ -797,7 +797,7 @@ shots.draw = async (lang) => {
   await close();
 };
 
-// 18. sections (shared): the satin S of patch.pes after Abschnitte, canvas only
+// 18. sections and gestickt (shared): the character 永 after Vorschlagen, and sewn, stage only
 shots.sections = async () => {
   const { page, close } = await boot('de');
   await brushSatin(page);
@@ -811,6 +811,19 @@ shots.sections = async () => {
   await cmd(page, T.de.suggest, 6000);
   await mouseAway(page);
   await jpeg(page, 'sections', clip);
+  // the finished look: tool closed, nothing selected, no jump and trim marks, light not following the mouse
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(600);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(600);
+  await page.mouse.click(920, 600);
+  await page.waitForTimeout(1500);
+  await setControl(page, 'input[data-mark="jumps"]', false);
+  await setControl(page, 'input[data-mark="trims"]', false);
+  await setControl(page, '#live-light', false);
+  await page.waitForTimeout(1500);
+  await mouseAway(page);
+  await jpeg(page, 'gestickt', clip);
   await close();
 };
 
