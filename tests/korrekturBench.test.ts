@@ -6,6 +6,8 @@ import { ampelOf, cellDiff, FIX_KINDS } from '../src/correct/engine/cells';
 import { solveMip } from '../src/correct/engine/mip';
 import { planFix } from '../src/correct/engine/solve';
 import { validateDesign } from '../src/correct/engine/validate';
+import { transitions } from '../src/model/sequence';
+import type { Pattern } from '../src/model/pattern';
 import { ALL_CHECKS } from '../src/validation/validate';
 import { corpus } from './helpers/korrekturCorpus';
 
@@ -21,6 +23,20 @@ const ONLY = process.env.BENCH_ONLY;
  */
 const BUDGET_MS = Number(process.env.BENCH_BUDGET_MS ?? 8000);
 
+/** Trims from this jump length on (mm): the app's default (settings.trimMm), which the demo designs are sewn with too. */
+const TRIM_MM = Number(process.env.BENCH_TRIM_MM ?? 3);
+
+/** The moves between stitches ("Sprünge" in Sprünge und Schnitte) and how many of them are trimmed. */
+const movesOf = (p: Pattern) => {
+  const list = transitions(p);
+  return { moves: list.length, cut: list.filter((x) => x.trimmed).length };
+};
+/**
+ * A fix sews nothing apart that was one: at most this many more moves than before (and a share of
+ * them), and at most one more trim.
+ */
+const MORE_MOVES = (n: number) => 2 + Math.ceil(n * 0.05);
+
 run('correction benchmark', () => {
   it('fixes the test set', async () => {
     const rows = [];
@@ -31,28 +47,30 @@ run('correction benchmark', () => {
       let after = c.pattern;
       let objects = 0;
       if (process.env.BENCH_BASELINE) {
-        const plan = await planCorrection(c.pattern, v, c.profile, ALL_CHECKS, { goal: 'critical', focus: 'both', trimMm: 2 });
+        const plan = await planCorrection(c.pattern, v, c.profile, ALL_CHECKS, { goal: 'critical', focus: 'both', trimMm: TRIM_MM });
         const chosen = plan.proposals.filter((x) => x.checked);
         after = chosen.length ? (applyProposals(c.pattern, chosen, 2)?.pattern ?? c.pattern) : c.pattern;
         objects = chosen.length;
       } else {
-        const r = await planFix(c.pattern, c.profile, 'all', { trimMm: 2, budgetMs: BUDGET_MS, solver: (process.env.BENCH_SOLVER as 'lns' | 'mip' | 'both' | undefined) ?? undefined, exact: solveMip, log: process.env.BENCH_LOG ? (s: string) => (globalThis as any).process.stderr.write(`${c.name}: ${s}\n`) : undefined });
+        const r = await planFix(c.pattern, c.profile, 'all', { trimMm: TRIM_MM, budgetMs: BUDGET_MS, solver: (process.env.BENCH_SOLVER as 'lns' | 'mip' | 'both' | undefined) ?? undefined, exact: solveMip, log: process.env.BENCH_LOG ? (s: string) => (globalThis as any).process.stderr.write(`${c.name}: ${s}\n`) : undefined });
         after = r.pattern;
         objects = r.objects.length;
       }
       const ms = performance.now() - t0;
       const va = validateDesign(after, c.profile);
+      const m0 = movesOf(c.pattern);
+      const m1 = movesOf(after);
       const d = cellDiff(v, va);
       let assessMs: number | undefined;
       let buttons: number | undefined;
       if (process.env.BENCH_ASSESS) {
         // Time until every button of the Ampel is worked out (each kind direct and rest, all together).
         const t1 = performance.now();
-        const r = await assess(c.pattern, c.profile, { trimMm: 2 });
+        const r = await assess(c.pattern, c.profile, { trimMm: TRIM_MM });
         assessMs = Math.round(performance.now() - t1);
         buttons = r.kinds.reduce((a, k) => a + +!!k.direct + +!!k.rest, 0) + +!!r.all;
       }
-      rows.push({ assessMs, buttons, name: c.name, ampel: ampelOf(v).color, ampelAfter: ampelOf(va).color, crit: d.criticalBefore, critAfter: d.criticalAfter, newCrit: d.newCritical, newCaution: d.newCaution, newGapSparse: d.newGapSparse, open: d.open, objects, ms: Math.round(ms) });
+      rows.push({ assessMs, buttons, name: c.name, ampel: ampelOf(v).color, ampelAfter: ampelOf(va).color, crit: d.criticalBefore, critAfter: d.criticalAfter, newCrit: d.newCritical, newCaution: d.newCaution, newGapSparse: d.newGapSparse, open: d.open, moves: m0.moves, movesAfter: m1.moves, cut: m0.cut, cutAfter: m1.cut, objects, ms: Math.round(ms) });
     }
     mkdirSync(new URL('./bench/', import.meta.url), { recursive: true });
     if (process.env.BENCH_CHECK) {
@@ -61,6 +79,8 @@ run('correction benchmark', () => {
       const ref = new Map<string, { critAfter: number }>((JSON.parse(new TextDecoder().decode(readFileSync(new URL('./bench/korrektur.json', import.meta.url)))) as { name: string; critAfter: number }[]).map((r) => [r.name, r]));
       for (const r of rows) {
         expect(r.newCrit, `${r.name}: new critical cells`).toBe(0);
+        expect(r.cutAfter, `${r.name}: trims after`).toBeLessThanOrEqual(r.cut + 1);
+        expect(r.movesAfter, `${r.name}: moves after`).toBeLessThanOrEqual(r.moves + MORE_MOVES(r.moves));
         const was = ref.get(r.name);
         if (was) expect(r.critAfter, `${r.name}: critical after`).toBeLessThanOrEqual(was.critAfter + 1);
       }
