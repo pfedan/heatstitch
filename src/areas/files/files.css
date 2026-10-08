@@ -657,3 +657,63 @@ body.dragging::after {
     width: auto;
   }
 }
+
+/* "Als Projekt speichern" as a split button: the row saves everything, the arrow opens the choice below. */
+.save-split {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+}
+
+.save-split-toggle {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  padding: 0;
+  border: none;
+  border-left: 1px solid var(--line);
+  border-radius: 0 6px 6px 0;
+  background: none;
+  color: var(--muted);
+}
+
+.save-split-toggle:hover,
+.save-split-toggle[aria-expanded='true'] {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+.save-split-toggle .i {
+  transition: transform 0.13s;
+}
+
+.save-split-toggle[aria-expanded='true'] .i {
+  transform: rotate(180deg);
+}
+
+.save-split-menu {
+  margin: 0 6px 4px 30px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.save-split-menu[hidden] {
+  display: none;
+}
+
+.save-split > .pop-row {
+  flex: 1;
+  min-width: 0;
+}
+
+.save-split-toggle[hidden] {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .save-split-toggle .i {
+    transition: none;
+  }
+}

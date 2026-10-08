@@ -186,10 +186,22 @@
                 <svg class="i" aria-hidden="true"><use href="#i-save" /></svg><span data-i18n="save.file"></span>
               </button>
               <div class="save-more">
-                <button type="button" id="save-project" class="pop-row save-row" data-i18n-title="save.project.hint">
-                  <svg class="i" aria-hidden="true"><use href="#i-files-project" /></svg>
-                  <span><span data-i18n="files.cmd.project"></span><small data-i18n="files.save.project.sub"></small></span>
-                </button>
+                <!-- A split button: the row saves everything, the arrow offers the active design on its own. -->
+                <div class="save-split">
+                  <button type="button" id="save-project" class="pop-row save-row" data-i18n-title="save.project.hint">
+                    <svg class="i" aria-hidden="true"><use href="#i-files-project" /></svg>
+                    <span><span data-i18n="files.cmd.project"></span><small data-i18n="files.save.project.sub"></small></span>
+                  </button>
+                  <button type="button" id="save-project-more" class="save-split-toggle" aria-expanded="false" aria-controls="save-project-menu" data-i18n-title="files.save.project.more" data-i18n-aria="files.save.project.more" hidden>
+                    <svg class="i" aria-hidden="true"><use href="#i-chevron-down" /></svg>
+                  </button>
+                </div>
+                <div class="save-split-menu" id="save-project-menu" hidden>
+                  <button type="button" id="save-project-design" class="pop-row save-row" data-i18n-title="files.save.project.single.hint">
+                    <svg class="i" aria-hidden="true"><use href="#i-files-layer" /></svg>
+                    <span><span data-i18n="files.save.project.single"></span><small id="save-project-design-sub"></small></span>
+                  </button>
+                </div>
                 <button type="button" id="export" class="pop-row save-row" data-i18n-title="controls.export.hint">
                   <svg class="i" aria-hidden="true"><use href="#i-image" /></svg>
                   <span><span data-i18n="files.save.png"></span><small data-i18n="files.save.png.sub"></small></span>

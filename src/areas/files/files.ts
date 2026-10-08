@@ -14,7 +14,10 @@ export interface FilesAreaApp {
   setMode(m: Mode): void;
   newDesign(): Promise<void>;
   loadExample(path: string): Promise<void>;
-  saveProject(): Promise<void>;
+  /** Saves everything open, or with `only` just that design. */
+  saveProject(only?: LoadedFile): Promise<void>;
+  /** Whether Bild umwandeln holds a picture, which a whole project takes along. */
+  hasImage(): boolean;
 }
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -26,6 +29,7 @@ const SPRITE = `
 <symbol id="i-files-blank" viewBox="0 0 20 20"><path d="M12.5 3.5 16.5 7.5 7.5 16.5H3.5v-4z" /><path d="m10.5 5.5 4 4" /></symbol>
 <symbol id="i-files-example" viewBox="0 0 20 20"><circle cx="10" cy="8" r="2" /><path d="M10 6a2.5 2.5 0 1 1 2.4-3.2M12 8a2.5 2.5 0 1 1 3.2 2.4M10 10a2.5 2.5 0 1 1-2.4 3.2M8 8a2.5 2.5 0 1 1-3.2-2.4" /><path d="M10 10v7.5M10 15c1.5-1.8 3.2-2.3 4.5-2" /></symbol>
 <symbol id="i-files-project" viewBox="0 0 20 20"><path d="m10 3 7 3.5-7 3.5-7-3.5z" /><path d="m3 10 7 3.5 7-3.5" /><path d="m3 13.5 7 3.5 7-3.5" /></symbol>
+<symbol id="i-files-layer" viewBox="0 0 20 20"><path d="m10 6.5 7 3.5-7 3.5-7-3.5z" /></symbol>
 <symbol id="i-files-print" viewBox="0 0 20 20"><path d="M6 7.5V3.5h8v4" /><rect x="3" y="7.5" width="14" height="6.5" rx="1.5" /><path d="M6 12h8v4.5H6z" /></symbol>
 <symbol id="i-files-check" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7" /><path d="m7 10.2 2 2 4-4.2" /></symbol>
 <symbol id="i-files-alert" viewBox="0 0 20 20"><path d="M10 3.2 17.5 16H2.5z" /><path d="M10 8v3.5" /><circle cx="10" cy="13.7" r=".6" class="fill" /></symbol>
@@ -147,6 +151,7 @@ export function initFilesArea(app: FilesAreaApp): void {
   const revertBtn = $<HTMLButtonElement>('revert');
   command({ id: 'save.file', label: 'files.cmd.save', group: G, icon: 'save', when: () => !!active()?.pattern && notImage() && !saveBtn.disabled, run: () => saveBtn.click() });
   command({ id: 'save.project', label: 'files.cmd.project', group: G, icon: 'files-project', when: () => designs().length > 0, run: () => void app.saveProject() });
+  command({ id: 'save.project.single', label: 'files.cmd.project.single', group: G, icon: 'files-layer', when: () => !!active()?.pattern && notImage() && !$('save-project-more').hidden, run: () => void app.saveProject(active()!) });
   command({ id: 'view.png', label: 'files.cmd.png', group: G, icon: 'image', when: () => notImage() && !pngBtn.disabled, run: () => pngBtn.click() });
   command({ id: 'colorList.open', label: 'files.cmd.colors', group: G, icon: 'files-print', when: () => !!active()?.pattern && !colorBtn.hidden, run: () => colorBtn.click() });
   command({ id: 'edit.revert', label: 'files.cmd.revert', group: 'shell.group.edit', when: () => notImage() && !revertBtn.hidden && !revertBtn.disabled, run: () => revertBtn.click() });
@@ -206,13 +211,39 @@ export function initFilesArea(app: FilesAreaApp): void {
     select.focus();
   }
 
+  // "Als Projekt speichern" as a split button. The arrow is only there when the active design alone
+  // is something else than everything: other designs, or a picture in Bild umwandeln, are open too.
+  const moreBtn = $<HTMLButtonElement>('save-project-more');
+  const oneMenu = $('save-project-menu');
+  const oneBtn = $<HTMLButtonElement>('save-project-design');
+  const showOne = (open: boolean) => {
+    oneMenu.hidden = !open;
+    moreBtn.setAttribute('aria-expanded', String(open));
+  };
+  const showSplit = () => {
+    const f = active();
+    moreBtn.hidden = !f?.pattern || designs().length + (app.hasImage() ? 1 : 0) < 2;
+    showOne(false);
+    if (f?.pattern) $('save-project-design-sub').textContent = t('files.save.project.single.sub', { name: FileList.displayName(f) });
+  };
+  moreBtn.addEventListener('click', () => {
+    const open = moreBtn.getAttribute('aria-expanded') !== 'true';
+    showOne(open);
+    if (open) oneBtn.focus();
+  });
+  oneBtn.addEventListener('click', () => {
+    const f = active();
+    if (f?.pattern) void app.saveProject(f);
+  });
+
   const showSave = () => {
     showFormat();
     showHoop();
+    showSplit();
   };
   new MutationObserver(() => savePop.isOpen() && showSave()).observe($('save-pop'), { attributes: true, attributeFilter: ['hidden'] });
   // Once something is saved or opened elsewhere, the popover has done its job.
-  for (const b of [saveBtn, pngBtn, colorBtn, $('save-project')]) b.addEventListener('click', () => setTimeout(() => savePop.close()));
+  for (const b of [saveBtn, pngBtn, colorBtn, $('save-project'), oneBtn]) b.addEventListener('click', () => setTimeout(() => savePop.close()));
   $('save-name').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') setTimeout(() => savePop.close());
   });
