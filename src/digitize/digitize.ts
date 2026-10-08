@@ -420,6 +420,9 @@ function sewSections(obj: Obj, o: DigitizeOptions, p: SatinParams, graph?: Graph
   return runs;
 }
 
+/** Spots of a satin in sections eased at most (see easePiles), each a round of the satin's check. */
+const EASE_SPOTS = 3;
+
 function sewOne(obj: Obj, pos: Pt, o: DigitizeOptions, satin: SatinParams, angles: { obj: Obj; angle: number }[], orient?: Orientation): Pt[][] {
   let out: Pt[][] = [];
   // As columns cut at the junctions (see satinSuggest), when they hold: where two columns meet
@@ -430,27 +433,28 @@ function sewOne(obj: Obj, pos: Pt, o: DigitizeOptions, satin: SatinParams, angle
     [true, true],
     [false, false],
   ];
-  let eased = false;
+  let eased = 0;
   const sections = (graph?: Graph): Pt[][] => {
     const runs = sewSections(obj, o, satin, graph);
     const cuts = obj.info.columns?.[0]?.split?.cuts ?? [];
     const seam = (x: number, y: number) => cuts.some(([a, b]) => toSegment([x, y], a, b) < 0.9);
     if (runs.length && satinOk(runs, obj.region, o, seam)) return runs;
-    // Piled up somewhere: cut through the spot, as long as that eases it.
-    if (runs.length && !graph && obj.plan?.ok && !eased) {
-      eased = true;
-      const plan = easePiles(obj.region, obj.plan, satinSettings(o, satin), o.satinMax, (SATIN_PEAK * 2) / o.satinSpacing);
+    // Piled up somewhere: cut through the spot, as long as that eases it (a few spots at most).
+    if (runs.length && !graph && obj.plan?.ok && eased < EASE_SPOTS) {
+      eased++;
+      const plan = easePiles(obj.region, obj.plan, satinSettings(o, satin), o.satinMax, (SATIN_PEAK * 2) / o.satinSpacing, runs);
       if (plan !== obj.plan) {
         obj.plan = { ...obj.plan, ...plan };
         return sections();
       }
+      eased = EASE_SPOTS;
     }
     while (!graph && obj.plan?.ok && retries.length) {
       const [columns, crossings] = retries.shift()!;
       const plan = suggestSatin(obj.region, obj.graph ?? undefined, o.satinMax, columns, crossings);
       if (plan?.ok && JSON.stringify(plan) !== JSON.stringify(obj.plan)) {
         obj.plan = plan;
-        eased = false;
+        eased = 0;
         return sections();
       }
     }
@@ -768,6 +772,8 @@ export function sewingOrder(labels: Uint8Array, w: number, h: number, pxMm: numb
 
 /** Pieces of one color apart by no more than this, with only later colors between them, are one area (mm). */
 const BRIDGE = 2.5;
+/** Pieces that reach no deeper than this (mm) into nine tenths of themselves are lines, not bridged. */
+const LINE_DEPTH = 1.5;
 
 interface Bridged {
   /** Components per pixel, with merged pieces and the pixels between them under the first piece. */
@@ -782,7 +788,7 @@ interface Bridged {
  * Pieces of one color that a narrow detail sewn later (a line, a stripe) cuts apart are filled as
  * one area, under the detail: the rows go on underneath it, and the detail is sewn on top, as
  * digitizers do. Only gaps up to BRIDGE wide that are all later colors are bridged (a closing of
- * the color's pixels), never background or colors sewn before.
+ * the color's pixels), never background or colors sewn before, and never between lines.
  */
 function bridge(labels: Uint8Array, comps: Components, w: number, h: number, pxMm: number, rank: number[]): Bridged {
   const out: Bridged = { comp: comps.comp, into: new Set(), boxes: new Map() };
@@ -839,8 +845,16 @@ function bridge(labels: Uint8Array, comps: Components, w: number, h: number, pxM
       if (!pieces.has(root)) pieces.set(root, new Set());
       pieces.get(root)!.add(comps.comp[(Math.floor(i / W) + y0) * w + (i % W) + x0]);
     }
+    // How thick the color is where it is its own: lines are not bridged into one area (see LINE_DEPTH).
+    const inner = distanceToSeeds(Uint8Array.from(own, (v) => 1 - v), W, H, true);
     for (const [root, set] of pieces) {
       if (set.size < 2) continue;
+      const depth: number[] = [];
+      for (let i = 0; i < W * H; i++) if (own[i] && find(i) === root) depth.push(inner[i]);
+      depth.sort((a, b) => a - b);
+      // Lines (an outline cut by the areas it frames): closing the gaps between them would fill those
+      // areas, small ones beside a junction, into the line as thick places.
+      if (depth[Math.floor(depth.length * 0.9)] * pxMm < LINE_DEPTH) continue;
       if (out.comp === comps.comp) out.comp = comps.comp.slice();
       const first = Math.min(...set);
       const box = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
