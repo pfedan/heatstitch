@@ -224,12 +224,15 @@ export function initFilesArea(app: FilesAreaApp): void {
     const f = active();
     moreBtn.hidden = !f?.pattern || designs().length + (app.hasImage() ? 1 : 0) < 2;
     showOne(false);
-    if (f?.pattern) $('save-project-design-sub').textContent = t('files.save.project.single.sub', { name: FileList.displayName(f) });
   };
   moreBtn.addEventListener('click', () => {
     const open = moreBtn.getAttribute('aria-expanded') !== 'true';
     showOne(open);
     if (open) oneBtn.focus();
+  });
+  // Like every menu: a click anywhere else closes it.
+  document.addEventListener('pointerdown', (e) => {
+    if (!oneMenu.hidden && !moreBtn.contains(e.target as Node) && !oneMenu.contains(e.target as Node)) showOne(false);
   });
   oneBtn.addEventListener('click', () => {
     const f = active();
