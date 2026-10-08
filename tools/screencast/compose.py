@@ -256,7 +256,7 @@ def main():
     ap.add_argument('--title', required=True)
     ap.add_argument('--video', required=True, help='output path without extension')
     ap.add_argument('--ablauf', required=True, help='the ablauf.mjs, for the subtitle texts')
-    ap.add_argument('--crf', default='22')
+    ap.add_argument('--crf', default='30')  # about 4 MB per minute, the budget of the concept
     args = ap.parse_args()
 
     tl = json.load(open(os.path.join(args.out, 'timeline.json')))
@@ -325,6 +325,8 @@ def main():
         labels.append(f'[a{j}]')
     total = INTRO + len(frames) / fps + OUTRO
     graph = ';'.join(filters) + f';{"".join(labels)}amix=inputs={len(labels)}:normalize=0,loudnorm=I=-16:TP=-1.5,apad,atrim=0:{total:.3f}[voice]'
+    if not labels:  # a test cut before any voice exists: a silent track keeps the rest the same
+        graph = f'anullsrc=r=48000:cl=stereo,atrim=0:{total:.3f}[voice]'
     # Subtitles in German and English, without the voice's stage directions: as WebVTT for
     # the help page and as switchable tracks inside the MP4.
     script = (

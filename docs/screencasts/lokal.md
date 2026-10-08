@@ -79,6 +79,11 @@ Jede Zeile muss `ok` zeigen. Für eine fehlende Sache steht darunter, was zu tun
    Chromium läuft unsichtbar und rechnet Bild für Bild, der Rechner kann nebenbei weiter
    genutzt werden, darf aber nicht schlafen gehen. Mit `--scenes 3-5` werden nur einzelne
    Szenen aufgenommen (die anderen laufen ohne Bilder mit, damit der Zustand stimmt).
+   Liegt in `OUT` schon eine ganze Aufnahme, ersetzen sie dort nur diese Szenen; danach genügt
+   ein neuer Schnitt.
+   Die Aufnahme läuft in Teilen gleichzeitig, je Teil ein eigenes Chromium; jeder Teil spielt
+   die Szenen davor ohne Bilder durch. Wie viele Teile, sagt `--jobs N`, ohne Angabe die Hälfte
+   der Kerne (höchstens 8), auf Daniels Mac also 7. `--jobs 1` nimmt alles nacheinander auf.
    Hinweise beim Überfahren sind ausgeblendet; eine Szene, die einen zeigen soll, ruft
    `s.tips(true)` auf.
 5. **Schnitt.**

@@ -8,8 +8,10 @@ wie aus einem Guss wirken.
 Speichern oben rechts), Oktober 2026. Die ersten, mit der alten Oberfläche aufgenommenen Videos
 sind verworfen; die Serie entsteht neu nach diesem Konzept.
 
-Begriffe so, wie sie in App und Anleitung (`docs.html`) stehen: Projekt, Stickmuster, Farbe,
-Objekt, Form und Stichart, Stiche; Stickrahmen; Bühne, Karte, Ebene, Ansicht-Menü.
+Begriffe so, wie sie in der App stehen: Projekt, Stickmuster, Farbe, Objekt, Form und Stichart,
+Stiche; Stickrahmen; Bühne, Karte, Ebene, Ansicht-Menü. Die Anleitung (`docs.html`) beschreibt
+teils noch die alte Oberfläche (Leinwand, Modus Bild, Modus Dichte); wo sie abweicht, gilt die
+App und die Tabelle unter Orte und Namen.
 
 ## Spielregeln
 
@@ -35,7 +37,7 @@ Einstieg.
 
 | Nr. | Titel | Inhalt | Demodatei | Länge |
 | --- | --- | --- | --- | --- |
-| 0 | Die heatstitch Oberfläche | Startseite und ihre vier Wege, Kopfleiste (Stickmuster-Menü, Rückgängig, Gestalten und Prüfen, Suchen mit Strg+K, Speichern, Menü ⋯ mit Sprache, Anleitung und Tastenkürzeln), Werkzeugleiste, Farben und Objekte, Bühne mit Brotkrume und Ansichtsleiste, Karten Objekt und Stickmuster, Player, Hinweise beim Überfahren, Rückgängig, alles bleibt im Browser | `cat-60mm.pes` | 2 min |
+| 0 | Die heatstitch Oberfläche | Startseite und ihre vier Wege, Kopfleiste (Stickmuster-Menü, Rückgängig, Gestalten und Prüfen, Suchen mit Strg+K, Speichern, Menü ⋯ mit Sprache, Anleitung und Tastenkürzeln), Werkzeugleiste, Farben und Objekte, Bühne mit Breadcrumb und Ansichtsleiste, Karten Objekt und Stickmuster, Player, Hinweise beim Überfahren, Rückgängig, alles bleibt im Browser | `cat-60mm.pes` | 3 min |
 
 Teil 0 ist der Rundgang: Er zeigt, wo was liegt, und nennt jeden Bereich mit seinem Namen, ohne
 eine Aufgabe zu Ende zu führen. Die anderen Teile setzen ihn nicht voraus; wo sie einen Bereich
@@ -55,7 +57,7 @@ brauchen, nennen sie ihn kurz selbst.
 
 | Nr. | Titel | Inhalt | Demodatei | Länge |
 | --- | --- | --- | --- | --- |
-| 6 | Fertige Stickdatei öffnen | Ziehen oder „Stickdatei öffnen“, Stickrahmen-Vorschlag, Player, Farbe hervorheben und ausblenden, auf einen Stich zeigen, Realistische Fäden | `cat-60mm.pes` | 2 min |
+| 6 | Fertige Stickdatei öffnen | Ziehen oder „Stickdatei öffnen“, Stickrahmen-Vorschlag, Player, Farbe hervorheben und ausblenden, auf einen Stich zeigen, Realistische Fäden | `cat-60mm.pes` | 3 min |
 | 7 | Stickdatei prüfen | Prüfen (Taste 2), die Ampel „Klappt das?“, Stoffe im Vergleich, Befunde lesen, zur schlimmsten Stelle springen, Heatmap, quittieren | `patch.pes` | 2 bis 3 min |
 | 8 | Beheben und vergleichen | Lösungen suchen, Beheben (unsichtbar), Vorschlag vorher und nachher, Übernehmen, Mit Original vergleichen (C), Korrektur zurücknehmen | `cat-60mm.pes` auf Strick | 2 bis 3 min |
 | 9 | Sprünge und Schnitte | Prüfen, Abschnitt Sprünge und Schnitte, Schneiden und vernähen, alle auf einmal nach Länge, in Gestalten Reihenfolge optimieren | `confetti.pes` | 2 min |
@@ -67,7 +69,7 @@ brauchen, nennen sie ihn kurz selbst.
 | --- | --- | --- | --- | --- |
 | 11 | Füllungen | Karte Objekt: Muster (Deckend, Offen), Gestaltung, Umrandung, Stoff und Halt mit Auto und eigenem Wert, Leitlinien (G), Zerteilen (X) | `shapes-benchmark.svg` | 3 min |
 | 12 | Satin und Linien | Satin: Werkzeug Richtung (R), Vorschlagen, Querlinien, Trennlinien und Abschnitte, Füllung per Stichart zu Satin, Zugausgleich, Fransen; Linie: Art, Echo, Schatten | `patch.pes` | 3 min |
-| 13 | Form und einzelne Stiche | Ebenen Objekte, Form, Stiche über die Brotkrume, Doppelklick und Enter, Knoten ziehen, Vereinfachen, Stiche von Hand (E), Ausdünnen | `cat-60mm.pes` | 2 bis 3 min |
+| 13 | Form und einzelne Stiche | Ebenen Objekte, Form, Stiche über den Breadcrumb, Doppelklick und Enter, Knoten ziehen, Vereinfachen, Stiche von Hand (E), Ausdünnen | `cat-60mm.pes` | 2 bis 3 min |
 
 Bild umwandeln hat zwei Videos: Teil 3 für Fotos und PNG, Teil 4 für SVG. Teil 4 zeigt, was
 heatstitch aus Konturen macht: Die schwarzen Umrisse einer Grafik werden Satinsäulen, die der
@@ -100,6 +102,7 @@ Bildschirm stehen, stehen links; im Sprechtext gilt immer die rechte Spalte.
 | Speichern links | Speichern oben rechts |
 | Schrift: Höhe, Form „Bogen oben“, „Mehr“ | Größe, Bogen (Symbole), Buchstabenabstand steht direkt da |
 | Dateiliste | Stickmuster-Menü (Name oben links) |
+| Brotkrume | Breadcrumb (oben links auf der Bühne; der Begriff wird nicht übersetzt) |
 
 ## Bildsprache
 
@@ -212,7 +215,17 @@ Die App muss gebaut und mit `npm run preview` erreichbar sein.
   Befehlssuche) gleich. IDs der alten Oberfläche (`#new-design`, `#hoop`, `#save-format`,
   `#lettering-*`, `#image-*`) gibt es nicht mehr; neue Abläufe nutzen keine IDs.
 - Ein frischer Browser zeigt die Startseite. Der Ablauf beginnt dort und wählt einen ihrer
-  Wege; ein Beispiel lädt er über die Knöpfe unter „Weitere Beispiele“.
+  Wege; ein Beispiel lädt er über die Knöpfe unter „Weitere Beispiele“. Dort stehen „Katze“
+  (`cat-60mm.pes`), „Überlappende Kreise“ (PES und SVG), „Konfetti (Sprünge)“
+  (`confetti.pes`) und „Formen-Benchmark“ (`shapes-benchmark.svg`); dieselben stehen im
+  Stickmuster-Menü unter Beispiele, dort zusätzlich das Demo-Projekt. `patch.pes` und
+  `leather-patch.dst` liegen unter `public/examples/demos/`, aber nicht auf der Startseite; ihre
+  Videos öffnen sie über „Stickdatei öffnen“ (Ziehen, siehe unten).
+- Tasten zeigt die App auf dem Mac als ⌘ und ⇧. Die Aufnahme meldet der Seite deshalb Windows,
+  damit jedes Video „Strg+K“ und „Umschalt“ zeigt, egal auf welchem Rechner es entsteht.
+- Gestalten und Prüfen sind Optionsfelder (`getByRole('radio')`), Objekt und Stickmuster rechts
+  sind Reiter (`getByRole('tab')`), das Auge ist der erste Knopf der Leiste `getByRole('toolbar', { name: 'Ansicht' })`; sein Name folgt der Darstellung („Stiche“, „Realistisch“). Der Knopf
+  des Stickmuster-Menüs trägt den Namen des offenen Stickmusters.
 - Die Hinweise beim Überfahren (`.tip`) blendet die Aufnahme per Stil aus, außer in Szenen,
   die einen Hinweis ausdrücklich zeigen.
 - Ziehen einer Datei aus dem Dateimanager kann der Browser im Container nicht zeigen. Der Ablauf blendet eine kleine Dateikarte ein, die der Zeiger auf das Fenster
