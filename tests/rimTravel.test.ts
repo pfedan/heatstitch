@@ -7,9 +7,9 @@ import { parsePath, ellipsePath } from '../src/shape/svgPath';
 describe('travel grid', () => {
   // A fill with a part left out sews in more sections; the travel between them took the strip
   // between the ends of rows sewn already and the outline, and ran round the edge where it shows.
-  it('counts the strip between sewn row ends and the outline as sewn', () => {
+  it('keeps travel off the strip between sewn row ends and the outline', () => {
     const r = wholeArea(parsePath(ellipsePath(0, 0, 9, 9), [1, 0, 0, 1, 0, 0]))!;
-    const grid = new TravelGrid(r);
+    const grid = new TravelGrid(r, true);
     // Rows across the upper half, ending 0.3 mm inside the outline.
     const spacing = 0.4;
     for (let y = -8; y <= -1; y += spacing) {
@@ -23,7 +23,7 @@ describe('travel grid', () => {
         const [x, y] = grid.center(i, j);
         // Passable cells beside the rows (not at their first and last one, where the band thins out).
         if (grid.depth[c] <= 0.05 || y < -7.5 || y > -1.5 || -sample(r, r.sdf, x, y) > 1) continue;
-        if (!grid.covered[c]) free++;
+        if (!grid.covered[c] && !grid.rowEnds[c]) free++;
       }
     }
     expect(free).toBe(0);

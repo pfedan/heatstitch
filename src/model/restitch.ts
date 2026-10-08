@@ -1940,6 +1940,8 @@ export function fillRuns(area: Region, s: FillSettings, way: FillWay): NewFill |
   const ex = s.expand ?? 0;
   const tw = ex > 0 && travel ? (unionRegion([travel, r]) ?? travel) : ex < 0 ? r : travel;
   const fp: FillParams = { spacing: s.spacing, stitch: s.stitch, angle: s.angle, pull: s.edge, underlay: s.underlay, underCross: s.underCross, underInset: s.underInset, underInsetShare: s.underInsetShare, underSpacing: s.underSpacing, travel: tw, tolerance: s.tolerance };
+  // Parts left out (under what lies on top): travel keeps off the outline beside sewn rows.
+  if (wholeOf(area)) fp.offRowEnds = true;
   // Under what lies on top completely, no underlay (it would only add thread under it).
   if (s.underlay && s.underCover && covers?.length) {
     const left = cutAway(r, covers.map((c) => ({ region: c.region, overlap: UNDER_COVER_MARGIN })));

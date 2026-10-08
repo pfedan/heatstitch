@@ -604,7 +604,7 @@ export function fieldFill(
  */
 export function sewRows(r: Region, rows: Pt[][], p: FillParams, start: Pt, mean: number, widest = p.spacing): FlowResult {
   const runs: Pt[][] = [];
-  const grid = new TravelGrid(p.travel ?? r);
+  const grid = new TravelGrid(p.travel ?? r, p.offRowEnds);
   let pos = p.underlay ? sewUnderlay(r, mean, p, start, grid, runs) : start;
   const under = pointCount(runs);
   let cur: Pt[] | null = runs.length ? runs[runs.length - 1] : null;
@@ -694,7 +694,7 @@ export function contourFill(r: Region, p: FillParams, start: Pt): FillResult | n
   }
   if (!rings.length) return null;
   const runs: Pt[][] = [];
-  const grid = new TravelGrid(p.travel ?? r);
+  const grid = new TravelGrid(p.travel ?? r, p.offRowEnds);
   const angle = chooseAngle(r, p.spacing, []);
   let pos = p.underlay ? sewUnderlay(r, angle, p, start, grid, runs) : start;
   const under = pointCount(runs);
