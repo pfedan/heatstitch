@@ -7,10 +7,11 @@ import type { Graph, Pt } from './skeleton';
  * The Smart style of the Bild assistant: each area of the image gets the technique that suits it,
  * as a digitizer would choose, instead of one style for all.
  *
- * - Strokes stay satin, thin lines running stitch, grass tufts satin blades on a filled base (as
- *   in every style).
+ * - Strokes stay satin, thin lines running stitch (as in every style).
  * - Small round areas (a dot, an eye, a berry) are satin across their length: one smooth column
  *   instead of a few short tatami rows.
+ * - Shapes a digitizer cuts into satin columns (a star, a grass tuft, a frame, a block letter, a
+ *   leaf, a drop, a crescent) are satin in sections (see satinSuggest).
  * - Areas with clear structure of their own in the image (fur, hair, feathers, wood) are filled
  *   with rows that follow it.
  * - Everything else, large calm areas above all, is filled with straight rows: calm, even, and
@@ -25,7 +26,7 @@ export type Technique = 'flat' | 'dynamic' | 'satin' | 'sections';
 export const TECHNIQUES: readonly Technique[] = ['flat', 'dynamic', 'satin', 'sections'];
 
 /** Why Smart chose what it chose for an area (shown in the list of areas). */
-export type Reason = 'calm' | 'structure' | 'round' | 'stroke' | 'line' | 'blades';
+export type Reason = 'calm' | 'structure' | 'round' | 'stroke' | 'line' | 'shape';
 
 /** An area of the image as the assistant sewed it. */
 export interface AreaInfo {
@@ -47,7 +48,7 @@ export interface AreaInfo {
   reason: Reason;
   /** Set by hand. */
   fixed: boolean;
-  /** The techniques it can be set to (satin in sections only where it is a drawing of lines). */
+  /** The techniques it can be set to (satin in sections only for a drawing of lines or a shape cut into columns). */
   offers?: Technique[];
 }
 

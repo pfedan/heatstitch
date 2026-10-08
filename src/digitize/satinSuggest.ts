@@ -1,5 +1,7 @@
 import { outline, type Region } from './region';
 import { cutLinesBetween, inside, stripsOfAreas } from './rungs';
+import { cornerCuts, planParts } from './satinForms';
+import { blobShape, filled, materialOf, planShape, smallHoles, splitBlobs, wholeShape } from './satinShapes';
 import { skeleton, type Branch, type Graph, type Pt } from './skeleton';
 
 /**
@@ -16,10 +18,18 @@ import { skeleton, type Branch, type Graph, type Pt } from './skeleton';
  *   - short spurs (the toe marks of a paw) stay on their column, with a line across along them,
  *   - a line closed into a ring is opened once, square across where it runs straightest,
  *   - lines across where the column bends (every 30°) and a fan of three at sharp corners.
+ *   A thick place the lines run into (a nose on the mouth, a pupil on the ring of an eye) is cut
+ *   off where the lines start and planned as a compact shape of its own (see satinShapes).
+ * - `dot`: a round area, one column across or (up to 12 mm) two halves (see satinShapes).
+ * - `pointed`: an area with corners (a triangle), lines across fanning from a corner (see satinShapes).
+ * - `leaf`, `drop`: a long round area pointed at both ends or one, sewn as a dot (see satinShapes).
+ * - `crescent`: a line pointed at both ends bending round (a moon), sewn as one column turning.
+ * - `spikes`: points standing off a body (a star, the bars of an E), each cut off at its base.
+ * - `frame`: a band turning corners (a frame, a block letter), cut on the miter (see satinForms).
  * - `wide`: too wide or too blotchy for satin; nothing is suggested.
  */
 
-export type ShapeClass = 'strokes' | 'wide';
+export type ShapeClass = 'strokes' | 'dot' | 'pointed' | 'spikes' | 'frame' | 'leaf' | 'drop' | 'crescent' | 'wide';
 
 export interface SatinSuggestion {
   kind: ShapeClass;
@@ -31,6 +41,8 @@ export interface SatinSuggestion {
 
 /** Widest column the strokes planner makes (mm), as the image conversion's satin limit. */
 const STROKE_MAX = 7;
+/** Lines at least this wide (mm) are cut on the miter at sharp corners rather than turned there. */
+const MITER_MIN = 1.5;
 /** An end branch reaching less than this many of its half widths beyond the line it hangs from stays on its column. */
 const SPUR = 4;
 /** A line across every this much turn of the column (degrees). */
@@ -84,13 +96,13 @@ export function areaLoops(area: Region): { outsides: Pt[][]; holes: Pt[][] } {
 }
 
 /** The class of a shape by its skeleton: lines of about even width, or anything else. */
-export function classify(g: Graph): ShapeClass {
+export function classify(g: Graph, max = STROKE_MAX): ShapeClass {
   if (!g.branches.length) return 'wide';
   const rs = g.branches.flatMap((b) => b.r);
   const len = g.branches.reduce((a, b) => a + lengthOf(b.pts), 0);
   const w = 2 * median(rs);
   // A stroke: narrow enough for satin, much longer than wide.
-  const wide = rs.filter((r) => 2 * r > STROKE_MAX).length > rs.length * 0.05;
+  const wide = rs.filter((r) => 2 * r > max).length > rs.length * 0.05;
   return !wide && len > 3 * w ? 'strokes' : 'wide';
 }
 
@@ -109,19 +121,88 @@ export function offersSections(g: Graph): boolean {
   return [...degree.values()].some((d) => d >= 3);
 }
 
-/** A suggestion for the fill area (null when the area is empty). */
-export function suggestSatin(area: Region, graph?: Graph): SatinSuggestion | null {
+/**
+ * A suggestion for the fill area (null when the area is empty); `max` is the longest stitch of a
+ * shape's columns (mm); `columns`: a compact shape as a column where one fits, not a fan;
+ * `crossings`: a thick place where three lines meet planned as a shape too, not only a blot.
+ */
+export function suggestSatin(area: Region, graph?: Graph, max = STROKE_MAX, columns = false, crossings = true): SatinSuggestion | null {
   const { outsides, holes } = areaLoops(area);
   if (!outsides.length) return null;
   const g = graph ?? skeleton(area);
-  const kind = classify(g);
-  if (kind !== 'strokes') return { kind, cuts: [], lines: [], ok: false };
+  const kind = classify(g, max);
+  const material = materialOf(outsides, holes);
+  // Corners to cut at (spikes, miters): on an area, or on lines wide enough that a turn would pile up.
+  if (kind !== 'strokes' || 2 * median(g.branches.flatMap((b) => b.r)) >= MITER_MIN) {
+    const made = atCorners(g, outsides, holes, material, max);
+    if (made) return made;
+  }
+  if (kind !== 'strokes') {
+    // No lines: the area as a whole may be a dot or a pointed shape.
+    const plan = outsides.length === 1 ? planShape(wholeShape(outsides, holes, material), material, max, true, columns) : null;
+    return plan ? finish(g, plan.kind, plan.cuts, plan.lines, outsides, holes) : { kind: 'wide', cuts: [], lines: [], ok: false };
+  }
+  // Thick places in the lines planned on their own, the lines without them.
+  const small = smallHoles(g, holes);
+  const blots = splitBlobs(small.length ? skeleton(filled(area, small)) : g);
+  // Unless asked for, a thick place where three lines or more meet is a crossing, its lines sewn
+  // through it (see planStrokes); a blot sits at the end of a line or between two.
+  const split = crossings || blots?.blobs.every((b) => b.attach.length < 3) ? blots : null;
+  const plans = split?.blobs.map((b) => planShape(blobShape(b, split.strokes, outsides, holes, material), material, max, true, columns));
+  if (split && plans?.every((p) => p)) {
+    const strokes = split.strokes.branches.length ? planStrokes(split.strokes, [...outsides, ...holes]) : { cuts: [], lines: [] };
+    const only = !split.strokes.branches.length && plans.length === 1 ? plans[0]!.kind : kind;
+    const made = finish(g, only, [...split.cuts, ...plans.flatMap((p) => p!.cuts), ...strokes.cuts], [...plans.flatMap((p) => p!.lines), ...strokes.lines], outsides, holes);
+    if (made.ok) return made;
+  }
   // Cut lines that cross are kept first (each forks off a line of its own); if that makes no
   // columns, the later of two is left out (a crossing seen as two forks, a sliver between them).
   const first = plan(g, outsides, holes, false);
-  return { kind, ...(first.ok ? first : [plan(g, outsides, holes, true)].find((x) => x.ok) ?? first) };
+  const made: SatinSuggestion = { kind: crescent(g) ? 'crescent' : kind, ...(first.ok ? first : [plan(g, outsides, holes, true)].find((x) => x.ok) ?? first) };
+  if (outsides.length !== 1 || !compact(g, outsides[0])) return made;
+  // Lines round a hole in a compact shape: a shape after all (a dot with a highlight off its middle).
+  const whole = planShape(wholeShape(outsides, holes, material), material, max, true, columns);
+  const other = whole && finish(g, whole.kind, whole.cuts, whole.lines, outsides, holes);
+  return other?.ok ? other : made;
 }
 
+/** The area cut at its corners (see satinForms), or null when it has none to cut at or makes no columns so. */
+function atCorners(g: Graph, outsides: Pt[][], holes: Pt[][], material: (q: Pt) => boolean, max: number): SatinSuggestion | null {
+  const c = cornerCuts(outsides, holes, material, max);
+  if (!c.cuts.length) return null;
+  const p = planParts(outsides, holes, c.cuts, c.tips, g, max, planStrokes);
+  if (!p) return null;
+  const made = finish(g, c.spikes >= c.miters ? 'spikes' : 'frame', p.cuts, p.lines, outsides, holes);
+  return made.ok ? made : null;
+}
+
+/** One line pointed at both ends, bending round by more than a quarter turn: a crescent (a moon). */
+function crescent(g: Graph): boolean {
+  if (g.branches.length !== 1 || g.branches[0].a === g.branches[0].b) return false;
+  const { pts, r } = g.branches[0];
+  if (pts.length < 20) return false;
+  const half = median(r);
+  const k = Math.max(3, Math.round(pts.length / 8));
+  const t0 = norm(sub(pts[k], pts[0]));
+  const t1 = norm(sub(pts[pts.length - 1], pts[pts.length - 1 - k]));
+  const pointed = (rs: number[]) => Math.min(...rs) < 0.5 * half;
+  return pointed(r.slice(0, k)) && pointed(r.slice(-k)) && dot(t0, t1) < Math.cos((100 * Math.PI) / 180);
+}
+
+/** Thick against its size (a dot with a hole), not a drawing of thin lines. */
+function compact(g: Graph, outside: Pt[]): boolean {
+  const xs = outside.map((p) => p[0]);
+  const ys = outside.map((p) => p[1]);
+  const size = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+  return median(g.branches.flatMap((b) => b.r)) >= 0.15 * size;
+}
+
+/** A plan of this kind made into columns (see columns). */
+function finish(g: Graph, kind: ShapeClass, cuts: [Pt, Pt][], lines: [Pt, Pt][], outsides: Pt[][], holes: Pt[][]): SatinSuggestion {
+  return { kind, ...columns(g, cuts, lines, outsides, holes) };
+}
+
+/** Lines across the strokes of the centerline; `apart`: of two cut lines that cross, the later left out. */
 function plan(g: Graph, outsides: Pt[][], holes: Pt[][], apart: boolean): { cuts: [Pt, Pt][]; lines: [Pt, Pt][]; ok: boolean } {
   const { cuts, lines } = planStrokes(g, [...outsides, ...holes], apart);
   // A dot apart from the rest (its centerline hardly a line): one line across its narrow way.
@@ -130,6 +211,11 @@ function plan(g: Graph, outsides: Pt[][], holes: Pt[][], apart: boolean): { cuts
     const line = across(o);
     if (line) lines.push(line);
   }
+  return columns(g, cuts, lines, outsides, holes);
+}
+
+/** The cut lines in the order that opens the holes, a hole still closed opened, lines that mislead left out, and whether all make columns. */
+function columns(g: Graph, cuts: [Pt, Pt][], lines: [Pt, Pt][], outsides: Pt[][], holes: Pt[][]): { cuts: [Pt, Pt][]; lines: [Pt, Pt][]; ok: boolean } {
   const ordered = bridgeOrder(cuts, outsides, holes);
   let made = stripsOfAreas(outsides, lines, ordered, holes);
   // A hole still closed (a ring of one line with a ring inside, say): opened where it comes closest.
@@ -262,7 +348,10 @@ export function planStrokes(g: Graph, rings: Pt[][], apart = false): { cuts: [Pt
     const V = (ends.get(v) ?? []).filter((e) => e.br !== k);
     // (Not when another branch joins the two as well: that is a ring, not a crossing.)
     if (U.length !== 2 || V.length !== 2 || U.some((e) => V.some((f) => f.br === e.br))) return;
-    if ((straight(U[0], V[0]) && straight(U[1], V[1])) || (straight(U[0], V[1]) && straight(U[1], V[0]))) {
+    // (Each line going on along the link between the forks, not turning back into it.)
+    const along = (e: End, atA: boolean) => dot(leaving(e), leaving({ br: k, atB: !atA })) < 0.2;
+    const through = (x: End, y: End) => straight(x, y) && along(x, true) && along(y, false);
+    if ((through(U[0], V[0]) && through(U[1], V[1])) || (through(U[0], V[1]) && through(U[1], V[0]))) {
       root[u] = v;
       inner.add(k);
       ends = endsOf();
@@ -392,6 +481,25 @@ export function planStrokes(g: Graph, rings: Pt[][], apart = false): { cuts: [Pt
       }
       return true;
     };
+    /** The corners each cut end got, and where along it the cut lies. */
+    const cornered = new Map<number, [Pt, Pt]>();
+    const placeCut = (k: number, cut: [Pt, Pt]) => {
+      const pts = away(B[es[k].br], es[k].atB);
+      const m = add(cut[0], sub(cut[1], cut[0]), 0.5);
+      let s = 0;
+      let bestS = 0;
+      let bestD = Infinity;
+      for (let q2 = 0; q2 < pts.length; q2++) {
+        if (q2) s += dist(pts[q2], pts[q2 - 1]);
+        const d2 = dist(pts[q2], m);
+        if (d2 < bestD) {
+          bestD = d2;
+          bestS = s;
+        }
+      }
+      trimmed.set(key(es[k]), bestS);
+    };
+    const mine = new Map<number, number>();
     for (const k of kept) {
       if (k === i || k === j) continue;
       const e = es[k];
@@ -413,6 +521,7 @@ export function planStrokes(g: Graph, rings: Pt[][], apart = false): { cuts: [Pt
       if (p && q && dist(p, q) > 0.2 && within(p, q) && !pinch(p, q)) {
         const d = norm(sub(q, p));
         cut = [add(p, d, -0.3), add(q, d, 0.3)];
+        cornered.set(k, [p, q]);
       } else {
         // No corners found: square across the branch a junction's width out.
         const c = pointAlong(pts, Math.min(lenOf[e.br] * 0.5, Math.max(g.nodes[n].r + 0.2, own.r + halfOf[e.br])));
@@ -423,21 +532,27 @@ export function planStrokes(g: Graph, rings: Pt[][], apart = false): { cuts: [Pt
       // Two junctions close together can find the same corners: one cut is enough.
       // (With `apart`, also one crossing it: between them would be a sliver.)
       const twin = cuts.some(([a, b]) => Math.min(dist(a, cut[0]) + dist(b, cut[1]), dist(a, cut[1]) + dist(b, cut[0])) < 1 || (apart && cross(a, b, cut[0], cut[1])));
-      if (!twin) cuts.push(cut);
-      // Where along the branch the cut lies (lines across keep clear of it).
-      const m = add(cut[0], sub(cut[1], cut[0]), 0.5);
-      let s = 0;
-      let bestS = 0;
-      let bestD = Infinity;
-      for (let q2 = 0; q2 < pts.length; q2++) {
-        if (q2) s += dist(pts[q2], pts[q2 - 1]);
-        const d2 = dist(pts[q2], m);
-        if (d2 < bestD) {
-          bestD = d2;
-          bestS = s;
-        }
+      if (!twin) {
+        mine.set(k, cuts.length);
+        cuts.push(cut);
       }
-      trimmed.set(key(e), bestS);
+      // Where along the branch the cut lies (lines across keep clear of it).
+      placeCut(k, cut);
+    }
+    // Two lines cut side by side from the same notch between them: the through line would reach
+    // out into the notch in a spike, its stitches fanning into the tip. The wedge goes to one of
+    // the two instead, cut straight across from corner to corner.
+    for (const [k1, [a, n1]] of cornered) {
+      const k2 = round[(round.indexOf(k1) + 1) % round.length];
+      const other = cornered.get(k2);
+      if (k2 === k1 || !other || other[0] !== n1 || !mine.has(k1) || !mine.has(k2)) continue;
+      const b = other[1];
+      if (toSegment(n1, a, b) < rThrough * 0.5 || !within(a, b) || pinch(a, b)) continue;
+      const d = norm(sub(b, a));
+      const k = Math.abs(dot(d, dirs[k1])) <= Math.abs(dot(d, dirs[k2])) ? k1 : k2;
+      const cut: [Pt, Pt] = [add(a, d, -0.3), add(b, d, 0.3)];
+      cuts[mine.get(k)!] = cut;
+      placeCut(k, cut);
     }
   }
 
@@ -473,6 +588,7 @@ export function planStrokes(g: Graph, rings: Pt[][], apart = false): { cuts: [Pt
   });
   B.forEach((_, k) => !used.has(k) && walk({ br: k, atB: false }));
 
+  const forks = g.nodes.filter((_, x) => degree(x) > 2);
   for (const st of strokes) {
     const half = median(st.r);
     const w = 2 * half;
@@ -508,7 +624,6 @@ export function planStrokes(g: Graph, rings: Pt[][], apart = false): { cuts: [Pt
       let k = 0;
       let least = Infinity;
       // Not at a junction on it (where a line leaves, cut off there already).
-      const forks = g.nodes.filter((_, x) => degree(x) > 2);
       const clear = st.pts.map((q) => forks.every((f) => dist(q, f.p) >= f.r + w));
       for (let i = 0; i < n; i++) {
         if (!clear[i] && clear.some((c) => c)) continue;
@@ -570,6 +685,20 @@ export function planStrokes(g: Graph, rings: Pt[][], apart = false): { cuts: [Pt
         lines.push(across(st.pts[k], [-h[1], h[0]]));
         placed.push(s);
       }
+    }
+    // Where a line joins its side, square across: the side jogs there, and the stitches would
+    // otherwise fan toward the cut.
+    for (const f of forks) {
+      let k = -1;
+      let least = Infinity;
+      st.pts.forEach((q, i) => {
+        const d = dist(q, f.p);
+        if (d < least) [least, k] = [d, i];
+      });
+      if (least > f.r * 0.5 || cum[k] < lo || cum[k] > hi || !free(cum[k], w * 0.8)) continue;
+      const h = heading(k, Math.max(0.3, w));
+      lines.push(across(st.pts[k], [-h[1], h[0]]));
+      placed.push(cum[k]);
     }
     // Along the rest: a line each time the column has turned by TURN_STEP since the last one.
     let lastDir: Pt | null = null;

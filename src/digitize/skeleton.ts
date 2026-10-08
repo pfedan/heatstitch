@@ -1,4 +1,8 @@
+import { distanceInside } from '../image/edt';
 import { pixelMm, type Region } from './region';
+
+/** Gaps inside a region smaller than this (mm²) are not holes: the outline drops them too. */
+const HOLE_MIN_MM2 = 0.25;
 
 /**
  * Centerlines of narrow regions, for satin columns and running stitch.
@@ -58,6 +62,23 @@ const bits = (m: number) => {
   return c;
 };
 
+/**
+ * One of the two pixels at the end of a ridge two pixels wide (a line an even number of pixels
+ * wide): its three neighbours side by side in one corner, none farther inside. Thinned in index
+ * order, a vertical such line would otherwise be eaten from its end, pixel pair by pixel pair, in
+ * one pass (each pair ending it in turn), and the line lost. Kept until its twin is gone.
+ */
+function tip(r: Region, i: number, m: number): boolean {
+  if (bits(m) !== 3) return false;
+  const k = [1, 3, 5, 7].find((c) => m === ((7 << (c - 1)) | (7 >> (9 - c))) % 256);
+  if (k === undefined) return false;
+  for (let d = -1; d <= 1; d++) {
+    const n = (k + d + 8) % 8;
+    if (r.inside[i + NY[n] * r.w + NX[n]] > r.inside[i]) return false;
+  }
+  return true;
+}
+
 /** One-pixel skeleton of the region mask (the mask has an empty margin, so no bounds checks). */
 export function thin(r: Region): Uint8Array {
   const s = r.mask.slice();
@@ -69,7 +90,7 @@ export function thin(r: Region): Uint8Array {
     for (const i of order) {
       if (!s[i]) continue;
       const m = neighbourByte(s, r.w, i);
-      if (bits(m) <= 1 || !SIMPLE[m]) continue;
+      if (bits(m) <= 1 || !SIMPLE[m] || tip(r, i, m)) continue;
       s[i] = 0;
       changed = true;
     }
@@ -219,9 +240,47 @@ export function smooth(pts: Pt[], sigma: number, closed: boolean): Pt[] {
 }
 
 /**
+ * The region with its pinholes filled: gaps inside it too small to count as holes (the outline
+ * drops them, see areaLoops), from a speckled scan or a raw threshold. Each would otherwise become
+ * a ring in the skeleton, and a line hundreds of little rings.
+ */
+function withoutPinholes(r: Region): Region {
+  const limit = HOLE_MIN_MM2 / (r.pxMm * r.pxMm);
+  const seen = new Uint8Array(r.mask.length);
+  const mask = r.mask.slice();
+  let filled = false;
+  for (let i = 0; i < mask.length; i++) {
+    if (mask[i] || seen[i]) continue;
+    // One gap, 4-connected (the region is 8-connected, so its gaps are 4-connected).
+    const gap = [i];
+    seen[i] = 1;
+    let open = false;
+    for (let k = 0; k < gap.length; k++) {
+      const j = gap[k];
+      const x = j % r.w;
+      const y = (j - x) / r.w;
+      if (x === 0 || y === 0 || x === r.w - 1 || y === r.h - 1) {
+        open = true;
+        continue;
+      }
+      for (const n of [j - 1, j + 1, j - r.w, j + r.w]) {
+        if (mask[n] || seen[n]) continue;
+        seen[n] = 1;
+        gap.push(n);
+      }
+    }
+    if (open || gap.length >= limit) continue;
+    for (const j of gap) mask[j] = 1;
+    filled = true;
+  }
+  return filled ? { ...r, mask, inside: distanceInside(mask, r.w, r.h) } : r;
+}
+
+/**
  * Skeleton graph of the region in image mm: pruned and smoothed, each branch with its half width.
  */
-export function skeleton(r: Region): Graph {
+export function skeleton(area: Region): Graph {
+  const r = withoutPinholes(area);
   const s = thin(r);
   const { nodes: pixNodes, edges } = trace(s, r.w);
   const center = (cluster: number[]): Pt => {

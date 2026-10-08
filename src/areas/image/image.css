@@ -243,6 +243,37 @@ body[data-mode='image'][data-image-step='1'] .resizer[data-panel='inspector'] {
   font-variant-numeric: tabular-nums;
 }
 
+/* Zuschneiden: the frame is dragged on the stage; here its state and the ways without dragging. */
+.image-crop {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.image-crop[hidden] {
+  display: none;
+}
+
+.image-crop output {
+  color: var(--muted);
+  font-weight: normal;
+}
+
+.image-crop-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+
+.image-crop-actions [hidden] {
+  display: none;
+}
+
+.image-crop p {
+  margin: 0;
+}
+
 .image-wizard .ai-prep {
   margin: 0;
 }
