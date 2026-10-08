@@ -139,7 +139,8 @@ export default {
         await s.wait(2.8);
         s.unlabel();
         const note = s.page.getByText(/^Alle Objekte sind aus den Stichen erkannt/).first();
-        await s.move(note, 0.9);
+        // Over the note too the colors fade; the pointer stays beside it.
+        await s.move([343, 462], 0.9);
         await s.label('Objekte', note, 'below');
         await s.wait(3.8);
         s.unlabel();
