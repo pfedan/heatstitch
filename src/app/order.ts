@@ -5,14 +5,13 @@ import type { Sequence } from './types';
 import type { Viewport } from '../render/viewport';
 import { JumpsPanel } from '../ui/jumpsPanel';
 import { OrderCard } from '../ui/objectPanel';
-import { autoReversible, reverseObjects } from '../model/reverse';
-import { moveStats, optimizePlan, reorder, weigh } from '../model/order';
+import { bestOrder, orderSeconds, orderStats, type OrderChoice } from '../model/bestOrder';
 import { saveSettings, type Settings } from '../settings';
 import { setTrims } from '../model/jumps';
-import { sewingSeconds, recordOfStitch } from '../model/sequence';
+import { recordOfStitch } from '../model/sequence';
 import { t } from '../i18n';
-import { type Pattern, patternStats } from '../model/pattern';
-import { type Remembered, remember, rememberedIn } from '../model/restitch';
+import type { Pattern } from '../model/pattern';
+import { remember, rememberedIn } from '../model/restitch';
 import { ui } from './state';
 
 /** What bindOrder needs from the rest of the app. */
@@ -29,59 +28,28 @@ export interface OrderApp {
 
 /** The stitch order card (better order, fewer colors and trims) and the jumps and trims panel. */
 export function bindOrder(app: OrderApp) {
-  /** Color changes and trims as the statistics count them, travel between objects. */
-  function orderStats(p: Pattern) {
-    const st = patternStats(p);
-    return { colorChanges: st.colorChanges, trims: st.trims, travelMm: moveStats(p).travelMm };
-  }
-
   /**
    * The pattern "Optimize order" found for the active one, kept while its card is open, with the
    * objects sewn from the other side in it (what to remember about their new stitches).
    */
-  let pendingOrder: { p: Pattern; next: Pattern; reversed: { start: number; end: number; memory: Remembered }[] } | null = null;
+  let pendingOrder: (OrderChoice & { p: Pattern }) | null = null;
 
-  /**
-   * The best order for `p` with the options of the card. With "Reverse direction", satins and fills
-   * may also be sewn from the other side; that plan is taken when its real result (after the new
-   * stitches) is better than the best order without it.
-   */
-  function bestOrder(p: Pattern): NonNullable<typeof pendingOrder> | null {
+  /** The best order for `p` with the options of the card, never worse than `p` in what the card shows. */
+  function findOrder(p: Pattern): NonNullable<typeof pendingOrder> | null {
     const q = app.seq(p);
-    const over = app.overOf(q, p);
-    const opts = { ...app.settings.order, trimMm: app.settings.trimMm };
-    const plain = optimizePlan(p, q.objects, over, opts);
-    const plainNext = plain.order.some((o, k) => o !== k) ? reorder(p, q.objects, plain.order, app.settings.trimMm) : p;
-    const best = plainNext === p ? null : { p, next: plainNext, reversed: [] };
-    if (!app.settings.order.reverse) return best;
-    const may = q.objects.map((o) => autoReversible(p, o));
-    // Objects that turn out not to be reversible (stitches outside their shape) are planned without.
-    for (let round = 0; round < 3; round++) {
-      const plan = optimizePlan(p, q.objects, over, opts, may);
-      if (!plan.flip.length) return best;
-      const r = reverseObjects(p, q.objects, plan.flip, q.kinds, app.settings.trimMm, plan.order);
-      if (r.pattern === p) {
-        if (!r.failed.length) return best;
-        for (const o of r.failed) may[o] = false;
-        continue;
-      }
-      // Taken only for a real saving: the new stitches change more than the order does.
-      if (weigh(orderStats(r.pattern)) >= weigh(orderStats(plainNext)) - 2) return best;
-      return { p, next: r.pattern, reversed: r.starts.map((start, k) => ({ start, end: r.ends[k], memory: r.memory[k] })) };
-    }
-    return best;
+    const found = bestOrder(p, { objects: q.objects, kinds: q.kinds, over: app.overOf(q, p) }, { ...app.settings.order, trimMm: app.settings.trimMm }, app.settings);
+    return found && { ...found, p };
   }
 
   const orderCard = new OrderCard(app.settings, {
     preview: () => {
       const p = app.files.active?.pattern;
       if (!p) return null;
-      pendingOrder = bestOrder(p);
+      pendingOrder = findOrder(p);
       const next = pendingOrder?.next ?? p;
       const before = orderStats(p);
       const after = orderStats(next);
-      const secs = (x: Pattern, c: typeof before) => sewingSeconds(app.seq(x).total, c.trims, c.colorChanges, app.settings);
-      return { before, after, beforeSeconds: secs(p, before), afterSeconds: secs(next, after), changed: next !== p, reversed: pendingOrder?.reversed.length ?? 0 };
+      return { before, after, beforeSeconds: orderSeconds(p, before, app.settings), afterSeconds: orderSeconds(next, after, app.settings), changed: next !== p, reversed: pendingOrder?.reversed.length ?? 0 };
     },
     apply: () => {
       const f = app.files.active;

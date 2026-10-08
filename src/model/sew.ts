@@ -7,7 +7,7 @@ import { coversFrom, type Cover } from './covers';
 import { tidyKept, withRecords } from './edit';
 import { wholeOf } from './knockout';
 import { lineStitches } from './line';
-import { setObjects, sewObjects, stitchKey, tableOf, trimmedBetween, type ObjectKind, type PlacedEntry, type SewObject } from './objects';
+import { joinedUncut, setObjects, sewObjects, stitchKey, tableOf, trimmedBetween, type ObjectKind, type PlacedEntry, type SewObject } from './objects';
 import { COLOR_CHANGE, END, JUMP, nextVersion, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
 import { tieIn, tieOff } from './jumps';
 import { blockKeys } from './order';
@@ -230,6 +230,13 @@ export function listOf(p: Pattern): Entry[] {
 }
 
 /** Tied to another object (a border, a blend's second thread, a shadow, an echo copy). */
+/** Is the thread cut after the last object `o` of `p` (none: a design without stitches, cut)? */
+function endsCut(p: Pattern, o: SewObject | undefined): boolean {
+  if (!o) return true;
+  for (let i = o.last + 1; i < p.cmd.length; i++) if (p.cmd[i] === TRIM) return true;
+  return false;
+}
+
 function linked(p: Pattern, o: SewObject): boolean {
   const m = remembered(p, o);
   return !!(m?.outline || m?.blendOf || m?.shadowOf || m?.echoOf);
@@ -364,8 +371,8 @@ export function sewList(p: Pattern, list: Entry[], trimMm: number, opts: ListOpt
       const [a, b] = [recOf(k - 1, prev.last), recOf(k, o.first)];
       const far = Math.hypot(b.x - a.x, b.y - a.y) / 10 > trimMm;
       // Objects without a tie that the thread went between untrimmed in `p` (what lay between them
-      // gone) stay joined so: a cut would give them ties.
-      const asWent = !asBefore && !whole && prev.index < o.index && keptAt(k - 1) && !spec && (!prev.tieOff || !o.tieIn) && !trimmedBetween(p, prev, o);
+      // gone, or sewn the other way round) stay joined so: a cut would give them ties.
+      const asWent = !asBefore && !whole && keptAt(k - 1) && !spec && joinedUncut(p, prev, o);
       cut = color || apart?.has(k) || (asBefore ? trimmedBetween(p, prev, o) : !asWent && (far || !!whole || linked(p, prev) || linked(p, o)));
       if (cut) {
         const end = out[out.length - 1];
@@ -431,9 +438,11 @@ export function sewList(p: Pattern, list: Entry[], trimMm: number, opts: ListOpt
     placed.push({ id, first, last: stitches - 1, key: '', at: [0, 0], ...(memory ? { memory: memory.id === id ? memory : { ...memory, id } } : {}) });
     if (tied) grown.add(placed.length - 1);
   });
-  // Cut at the end, as every design made here is.
+  // Cut at the end, as every design made here is; a file from elsewhere that ends without a cut
+  // (the machine or the hand cuts there anyway) ends so whatever comes last.
   const lastObj = list[list.length - 1].obj;
-  if (keptAt(list.length - 1) && lastObj.index === sewObjects(p).length - 1) copy(lastObj.last + 1, p.cmd.length);
+  if (keptAt(list.length - 1) && lastObj.index === all.length - 1) copy(lastObj.last + 1, p.cmd.length);
+  else if (!endsCut(p, all[all.length - 1])) out.push({ ...out[out.length - 1], cmd: END });
   else {
     if (keptAt(list.length - 1) && !lastObj.tieOff && !cutAfter(lastObj)) tiedOff(list.length - 1, lastObj);
     out.push({ ...out[out.length - 1], cmd: TRIM }, { ...out[out.length - 1], cmd: END });

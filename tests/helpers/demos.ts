@@ -138,6 +138,26 @@ export function confettiDesign(): Pattern {
   return setTrims(p, long, false);
 }
 
+/**
+ * Confetti in a deliberately bad order: 15 dots on a 5 x 3 grid (14 mm), in each color taken
+ * alternately from the left and the right end, the thread carried across every gap untrimmed.
+ */
+export function pingpongConfettiDesign(): Pattern {
+  const w = new Writer();
+  const dots: { c: Pt; red: boolean }[] = [];
+  for (let r = 0; r < 3; r++) for (let k = 0; k < 5; k++) dots.push({ c: [6 + k * 14, 6 + r * 14], red: r !== 1 });
+  [true, false].forEach((red, i) => {
+    if (i) w.color();
+    const row = dots.filter((d) => d.red === red).sort((a, b) => a.c[0] - b.c[0] || a.c[1] - b.c[1]);
+    for (let k = 0; row.length; k++) {
+      const d = k % 2 ? row.pop()! : row.shift()!;
+      fill(w, circle(d.c[0], d.c[1], 2.2 + (k % 2) * 0.4, 32), { angle: 0.6 + k });
+    }
+  });
+  const p = w.b.build('pingpong', 'pes', [RED, BLUE]);
+  return setTrims(p, transitions(p).filter((t) => t.trimmed), false);
+}
+
 export const DEMOS: { file: string; build: () => Pattern }[] = [
   { file: 'overlap.pes', build: overlapDesign },
   { file: 'letters.pes', build: satinOverlapDesign },
