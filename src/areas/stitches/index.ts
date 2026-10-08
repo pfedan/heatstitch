@@ -44,6 +44,7 @@ const ICON = {
   prev: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12 5l-5 5 5 5" /></svg>',
   next: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8 5l5 5-5 5" /></svg>',
   help: '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7" /><path d="M8 8a2 2 0 1 1 2.8 1.8c-.6.3-.8.7-.8 1.4M10 13.6v.1" /></svg>',
+  wand: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 16.5l9-9" /><path d="M11 6l3 3" /><path d="M15 2.5v3M13.5 4h3M16.5 9.5v2M15.5 10.5h2M7.5 3v2M6.5 4h2" /></svg>',
   more: '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="5" cy="10" r="1.2" /><circle cx="10" cy="10" r="1.2" /><circle cx="15" cy="10" r="1.2" /></svg>',
 };
 
@@ -104,8 +105,6 @@ export function initStitchArea(app: StitchAreaApp): { refresh: () => void } {
   command({ id: 'stitch.pen.toggle', label: 'stitches.cmd.penToggle', group: G, keys: ['T'], bind: false, when: drawing, run: () => rt.setCutMode(!rt.cutMode), palette: false });
   const satinTool = () => rungsOn() && rt.mode === 'satin';
   const dir = () => info()?.direction;
-  command({ id: 'stitch.rungs.corners', label: 'stitches.cmd.corners', group: G, when: satinTool, run: () => rt.corners() });
-  command({ id: 'stitch.rungs.sections', label: 'stitches.cmd.sections', group: G, when: satinTool, run: () => rt.sections() });
   command({ id: 'stitch.rungs.order', label: 'stitches.cmd.order', group: G, when: () => satinTool() && rt.chained, run: () => rt.bestOrder() });
   command({ id: 'stitch.rungs.even', label: 'stitches.cmd.even', group: G, when: () => satinTool() && dir()?.rungs !== 0, run: () => rt.even() });
   command({ id: 'stitch.rungs.follow', label: 'stitches.cmd.follow', group: G, when: () => satinTool() && dir()?.rungs !== null, run: () => rt.follow() });
@@ -116,7 +115,8 @@ export function initStitchArea(app: StitchAreaApp): { refresh: () => void } {
     when: () => rungsOn() && rt.mode === 'fill' && rt.lines.length >= (rt.cutLines.length ? 1 : 2),
     run: () => app.sewAlongLines(),
   });
-  command({ id: 'stitch.rungs.suggest', label: 'stitches.cmd.suggest', group: G, when: () => rungsOn() && rt.mode === 'fill', run: () => app.suggestLines() });
+  command({ id: 'stitch.rungs.suggest', label: 'stitches.cmd.suggest', group: G, when: () => rungsOn() && (rt.mode === 'fill' || rt.sectioned), run: () => app.suggestLines() });
+  command({ id: 'stitch.rungs.clear', label: 'stitches.cmd.clear', group: G, when: () => rungsOn() && (rt.mode === 'fill' ? rt.lines.length + rt.cutLines.length > 0 : rt.sectioned), run: () => rt.clear() });
   command({ id: 'stitch.tool.done', label: 'stitches.cmd.toolDone', group: G, keys: ['Escape'], bind: false, when: rungsOn, run: () => app.closeRungs() });
 
   // What the selected objects are: left out of the correction, loosed, knocked out, linked -------------
@@ -295,9 +295,12 @@ export function initStitchArea(app: StitchAreaApp): { refresh: () => void } {
       const d = dir();
       const what = !d ? '' : d.rungs === null ? t('stitches.bar.follow') : d.rungs === 0 ? t('stitches.bar.even') : t('stitches.bar.rungs', { n: d.rungs });
       items.push(title('stitches.bar.direction'), state(d?.cuts ? `${what} · ${t('stitches.bar.cuts', { n: d.cuts + 1 })}` : what, 3), sep(), pen(), sep());
-      items.push(cmdButton('stitch.rungs.corners', 'stitches.bar.corners', { hint: 'stitch.direction.corners.hint', more: 5 }), cmdButton('stitch.rungs.sections', 'stitches.bar.sections', { hint: 'stitch.sections.hint', more: 6 }));
+      // One suggestion does it all: cut lines and rungs.
+      items.push(cmdButton('stitch.rungs.suggest', 'stitches.bar.suggest', { icon: ICON.wand, hint: 'stitch.suggest.hint', more: 5 }));
+      if (rt.sectioned) items.push(cmdButton('stitch.rungs.clear', 'stitches.bar.clear', { hint: 'stitch.clear.hint', more: 8 }));
+      else items.push(cmdButton('stitch.rungs.even', 'stitches.bar.remove', { hint: 'stitch.direction.even.hint', more: 8 }));
       if (rt.chained) items.push(cmdButton('stitch.rungs.order', 'stitches.bar.order', { hint: 'stitch.order.best.hint', more: 7 }));
-      items.push(cmdButton('stitch.rungs.even', 'stitches.bar.remove', { hint: 'stitch.direction.even.hint', more: 8 }), cmdButton('stitch.rungs.follow', 'stitch.direction.follow.button', { hint: 'stitch.direction.follow.hint', more: 9 }));
+      items.push(cmdButton('stitch.rungs.follow', 'stitch.direction.follow.button', { hint: 'stitch.direction.follow.hint', more: 9 }));
       if (d?.spacingHere !== undefined) items.push(sep(), spacingHere(d.spacingHere));
       items.push(help(d?.chain ? 'stitch.direction.chain' : 'stitch.direction.help'), cmdButton('stitch.tool.done', 'stitch.direction.done', { primary: true }));
     } else if (tool === 'fill') {
@@ -307,7 +310,8 @@ export function initStitchArea(app: StitchAreaApp): { refresh: () => void } {
         sep(),
         pen(),
         sep(),
-        cmdButton('stitch.rungs.suggest', 'stitches.bar.suggest', { hint: 'stitch.suggest.hint' }),
+        cmdButton('stitch.rungs.suggest', 'stitches.bar.suggest', { icon: ICON.wand, hint: 'stitch.suggest.hint' }),
+        cmdButton('stitch.rungs.clear', 'stitches.bar.clear', { hint: 'stitch.clear.hint', more: 5 }),
         help(rt.cutLines.length ? 'stitch.draw.parts' : 'stitch.draw.help'),
         cmdButton('stitch.tool.done', 'stitch.draw.cancel'),
         cmdButton('stitch.rungs.sew', 'stitch.draw.sew', { primary: true, hint: 'stitch.draw.hint' }),

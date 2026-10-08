@@ -9,6 +9,9 @@ const ACCENT = '#e0559e';
 /** Cut lines in their own color, so they read apart from the rungs. */
 const CUT = '#6fd3ff';
 
+/** Rungs (and lines across a fill, guide lines, points). */
+const RUNG = 'rgba(255, 214, 102, 0.95)';
+
 const same = (a: RungPick | null, col: number, i: number, cut = false, free = false) => !!a && a.col === col && a.i === i && !!a.cut === cut && !!a.span === free;
 
 /**
@@ -24,6 +27,20 @@ export function drawRungOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, vie
     ctx.beginPath();
     pts.forEach((p, k) => (k ? ctx.lineTo(...S(p)) : ctx.moveTo(...S(p))));
   };
+  // Each section drawn ahead as it will be sewn: every third stitch line, thin and quiet.
+  ctx.beginPath();
+  for (const sec of view.previews)
+    for (let k = 0; k < sec.length; k += 3) {
+      ctx.moveTo(...S(sec[k][0]));
+      ctx.lineTo(...S(sec[k][1]));
+    }
+  // A faint dark edge keeps them apart from the stitches under them, on light and dark thread.
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
   // Rails: dark under light, so they show on any thread color.
   for (const c of view.columns) {
     for (const rail of [c.left, c.right]) {
@@ -55,15 +72,22 @@ export function drawRungOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, vie
     const hov = same(view.hover, col, i, cut, free);
     const [ax, ay] = S(a);
     const [bx, by] = S(b);
-    ctx.setLineDash(suggested && !sel ? [4, 3] : []);
+    // Each kind keeps its color in every state (selected: an accent halo, hovered: wider), so a
+    // cut line and a rung never look alike while one is picked or dragged.
     ctx.beginPath();
     ctx.moveTo(ax, ay);
     ctx.lineTo(bx, by);
+    if (sel) {
+      ctx.strokeStyle = ACCENT;
+      ctx.lineWidth = 8;
+      ctx.stroke();
+    }
+    ctx.setLineDash(suggested && !sel ? [4, 3] : []);
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
     ctx.lineWidth = sel || hov ? 5 : 4;
     ctx.stroke();
-    ctx.strokeStyle = sel ? ACCENT : hov ? '#ffffff' : cut ? CUT : 'rgba(255, 214, 102, 0.95)';
-    ctx.lineWidth = sel || hov ? 2.5 : 2;
+    ctx.strokeStyle = cut ? CUT : RUNG;
+    ctx.lineWidth = sel || hov ? 2.75 : 2;
     ctx.stroke();
     ctx.setLineDash([]);
     if (label) {
@@ -78,11 +102,17 @@ export function drawRungOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, vie
     }
     for (const [end, x, y] of [[0, ax, ay], [1, bx, by]] as const) {
       const big = hov && view.hover?.end === end;
-      ctx.beginPath();
-      ctx.arc(x, y, big ? 6.5 : 5, 0, Math.PI * 2);
-      ctx.fillStyle = sel ? ACCENT : cut ? CUT : '#ffd666';
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.75)';
-      ctx.lineWidth = 1.5;
+      const r = big ? 6.5 : 5;
+      // Cut lines have square handles, rungs round ones: told apart without the color too.
+      const handle = () => {
+        ctx.beginPath();
+        if (cut) ctx.rect(x - r * 0.9, y - r * 0.9, r * 1.8, r * 1.8);
+        else ctx.arc(x, y, r, 0, Math.PI * 2);
+      };
+      handle();
+      ctx.fillStyle = cut ? CUT : '#ffd666';
+      ctx.strokeStyle = sel ? ACCENT : 'rgba(0, 0, 0, 0.75)';
+      ctx.lineWidth = sel ? 2.5 : 1.5;
       ctx.fill();
       ctx.stroke();
     }
@@ -97,15 +127,14 @@ export function drawRungOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, vie
   view.columns.forEach((c, k) => c.cuts.forEach((r, i) => rung(pointAt(c.left, c.cl, r[0]), pointAt(c.right, c.cr, r[1]), k, i, false, true)));
   view.lines.forEach(([a, b], i) => rung(a, b, -1, i, false));
   view.cutLines.forEach(([a, b], i) => rung(a, b, -1, i, false, true));
-  // The part of the fill that made no column.
-  if (view.bad) {
-    ctx.setLineDash([5, 4]);
-    path(view.bad);
-    ctx.strokeStyle = '#ff5a5a';
-    ctx.lineWidth = 2.5;
+  // Sections that cannot be sewn yet (a part no rung crosses, a hole still closed): outlined in red until fixed.
+  view.problems.forEach((pr, k) => {
+    path(pr.ring);
+    ctx.closePath();
+    ctx.strokeStyle = k === view.problemHover ? 'rgba(255, 90, 90, 0.9)' : 'rgba(255, 90, 90, 0.55)';
+    ctx.lineWidth = 2;
     ctx.stroke();
-    ctx.setLineDash([]);
-  }
+  });
   // Guide lines in the same colors.
   view.guides.forEach((g, i) => {
     const sel = same(view.selected, -1, i);
@@ -202,11 +231,15 @@ export function drawRungOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, vie
   }
   if (view.draft) {
     const [a, b] = view.draft;
+    // The line being drawn already in the color of its kind.
     ctx.setLineDash([6, 4]);
     ctx.beginPath();
     ctx.moveTo(...S(a));
     ctx.lineTo(...S(b));
-    ctx.strokeStyle = view.draftCut ? CUT : '#ffffff';
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.lineWidth = 4;
+    ctx.stroke();
+    ctx.strokeStyle = view.draftCut ? CUT : RUNG;
     ctx.lineWidth = 2;
     ctx.stroke();
   }
