@@ -69,7 +69,13 @@ export function keepObjects(p: Pattern, next: Pattern, change: HandChange, view:
     // The sections stay one object (see carryOver); what it remembers moves along below.
     if (range) carryOver(p, obj, next, range.first, range.last);
     const own = remembered(p, obj);
-    return { o, r: { ...r, hand: (r.hand ?? 0) + n, ...(loosable(own) ? { free: true } : {}) }, range };
+    // The parts it was sewn in end where they ended, counted in the stitches it has now.
+    const s0 = obj.first > 0 ? q.numbers[obj.first - 1] : 0;
+    const parts = r.parts
+      ?.map((pt) => ({ ...pt, end: map(s0 + pt.end) - map(s0) }))
+      .filter((pt, k, all) => pt.end > (k ? all[k - 1].end : 0));
+    const mem = { ...r, ...(parts ? { parts } : {}), hand: (r.hand ?? 0) + n, ...(loosable(own) ? { free: true } : {}) };
+    return { o, r: mem, range };
   });
   const nq = view(next);
   const out = new Map<number, number>();

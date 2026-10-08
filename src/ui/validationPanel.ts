@@ -5,6 +5,7 @@ import { fabricOf } from '../validation/profiles';
 import { CAUTION, CRITICAL, type Checks, type Level, type Reason, type ValidationResult, type Zone } from '../validation/validate';
 import type { LoadedFile } from './fileList';
 import { commandTitle, getCommand } from '../shell/commands';
+import { swap } from '../shell/h';
 
 const LEVEL_CLASS = ['safe', 'caution', 'critical'] as const;
 const MSG_KEY: Record<Level, Key> = { 0: 'validation.msg.safe', 1: 'validation.msg.caution', 2: 'validation.msg.critical' };
@@ -124,7 +125,7 @@ export class ValidationPanel {
     this.last = key;
     // Keep the list where the user scrolled it; the selected entry is scrolled into view below.
     const scroll = this.root.querySelector('.val-zones')?.scrollTop ?? 0;
-    this.root.replaceChildren(...this.build(file, selected));
+    swap(this.root, ...this.build(file, selected));
     this.renderSummary(file);
     const list = this.root.querySelector('.val-zones');
     if (list) list.scrollTop = scroll;

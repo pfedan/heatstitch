@@ -6,7 +6,7 @@ import type { ColorBlock } from '../model/sequence';
 import { threadCode, threadNumber } from '../threads/catalog';
 import { cssColor as css, hexColor as hex, ThreadPicker } from './threadPicker';
 import { toast } from '../shell/ui';
-import { h, icon } from '../shell/h';
+import { h, icon, swap } from '../shell/h';
 
 export interface LayerHooks {
   /** Show or hide a color block. */
@@ -246,7 +246,7 @@ export class LayersPanel {
     }
     // A file from elsewhere: all of it is guessed, said once instead of on every row.
     if (allGuessed(st)) rows.push(h('li', { class: 'muted layers-guessed', title: t('object.guessedHint') }, t('layers.allGuessed')));
-    this.list.replaceChildren(...rows);
+    swap(this.list, ...rows);
     if (focusKey) {
       const sel = focusKey.object !== undefined ? `[data-object="${focusKey.object}"]` : `[data-block="${focusKey.block}"]`;
       const row = this.list.querySelector<HTMLElement>(sel);

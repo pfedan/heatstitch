@@ -2,6 +2,7 @@ import { formatNumber, getLang, onLangChange, t, type Key } from '../i18n';
 import type { Transition } from '../model/sequence';
 import type { Settings } from '../settings';
 import { commandTitle, getCommand } from '../shell/commands';
+import { swap } from '../shell/h';
 
 export type JumpFilter = 'all' | 'uncut' | 'cut';
 
@@ -214,7 +215,7 @@ export class JumpsPanel {
     out.push(ul);
     // Keep the list where it was scrolled; the selected one comes into view.
     const scroll = this.root.querySelector('.jump-list')?.scrollTop ?? 0;
-    this.root.replaceChildren(...out);
+    swap(this.root, ...out);
     ul.scrollTop = scroll;
     ul.querySelector('.selected')?.scrollIntoView({ block: 'nearest' });
   }

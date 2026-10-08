@@ -21,7 +21,7 @@ import { SHADOW_COLOR, SHADOW_DEFAULT_DIST, SHADOW_DIRS, SHADOW_DIST, type Shado
 import { cssColor, hexColor, ThreadPicker } from './threadPicker';
 import { CROSS_KINDS, GRID_KINDS, MOTIFS, type CrossKind, type GridKind, type Motif } from '../digitize/deco';
 import { canRun, getCommand, keyLabel, runCommand } from '../shell/commands';
-import { h } from '../shell/h';
+import { h, swap } from '../shell/h';
 import { section } from '../shell/ui';
 import { setThinShare, THIN_SHARES, thinShare } from '../areas/stitches/state';
 import { kindWay, type KindState, type KindWay } from '../areas/stitches/kindWay';
@@ -543,7 +543,7 @@ export class StitchPanel {
 
   private show(parts: HTMLElement[]): void {
     this.picker.close();
-    this.root.replaceChildren(...parts);
+    swap(this.root, ...parts);
     // Its settings went away under the pointer (underlay off): nothing to show any more.
     if (this.lit && !this.root.querySelector(`.lit-${this.lit}`)) this.light(null);
   }
