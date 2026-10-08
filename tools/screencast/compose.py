@@ -325,6 +325,8 @@ def main():
         labels.append(f'[a{j}]')
     total = INTRO + len(frames) / fps + OUTRO
     graph = ';'.join(filters) + f';{"".join(labels)}amix=inputs={len(labels)}:normalize=0,loudnorm=I=-16:TP=-1.5,apad,atrim=0:{total:.3f}[voice]'
+    if not labels:  # a test cut before any voice exists: a silent track keeps the rest the same
+        graph = f'anullsrc=r=48000:cl=stereo,atrim=0:{total:.3f}[voice]'
     # Subtitles in German and English, without the voice's stage directions: as WebVTT for
     # the help page and as switchable tracks inside the MP4.
     script = (

@@ -94,6 +94,8 @@ await page.clock.install();
 await page.goto(APP_URL);
 // Hover hints would pop up wherever the pointer passes; a scene that wants one calls s.tips(true).
 const hideTips = await page.addStyleTag({ content: '.tip { display: none !important; }' });
+// The start page fades in; frame by frame that fade can stay at its first, invisible frame.
+await page.addStyleTag({ content: '.start { animation: none !important; }' });
 // install() alone lets the fake time flow with the real one, so a slow capture would make the
 // stitch player race; paused, the page only moves on by the runFor() of each frame.
 await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000);
