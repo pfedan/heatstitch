@@ -13,6 +13,7 @@ import { column, pairs, satinStitches, underlay, type Column, type SatinParams }
 import { reverse, skeleton, type Branch, type Graph, type Pt } from './skeleton';
 import { bestChain, satinRuns, type FillSettings, type Rails, type SatinSettings } from '../model/restitch';
 import { stripsOfAreas } from './rungs';
+import { easePiles, SATIN_PEAK } from './satinEase';
 import { areaLoops, classify as shapeClass, offersSections, suggestSatin, type SatinSuggestion, type ShapeClass } from './satinSuggest';
 import type { Orientation } from '../image/orientation';
 import { transformForm, type Form } from '../shape/path';
@@ -338,8 +339,6 @@ function sewSatin(o: Obj, start: Pt, p: SatinParams, withUnderlay: boolean, tol:
   return run.length ? [run] : [];
 }
 
-/** Satin denser than this many times its nominal density somewhere is filled instead. */
-const SATIN_PEAK = 2.4;
 /** Satin that leaves more of its region bare than this share is filled instead. */
 const SATIN_COVER = 0.95;
 
@@ -431,16 +430,27 @@ function sewOne(obj: Obj, pos: Pt, o: DigitizeOptions, satin: SatinParams, angle
     [true, true],
     [false, false],
   ];
+  let eased = false;
   const sections = (graph?: Graph): Pt[][] => {
     const runs = sewSections(obj, o, satin, graph);
     const cuts = obj.info.columns?.[0]?.split?.cuts ?? [];
     const seam = (x: number, y: number) => cuts.some(([a, b]) => toSegment([x, y], a, b) < 0.9);
     if (runs.length && satinOk(runs, obj.region, o, seam)) return runs;
+    // Piled up somewhere: cut through the spot, as long as that eases it.
+    if (runs.length && !graph && obj.plan?.ok && !eased) {
+      eased = true;
+      const plan = easePiles(obj.region, obj.plan, satinSettings(o, satin), o.satinMax, (SATIN_PEAK * 2) / o.satinSpacing);
+      if (plan !== obj.plan) {
+        obj.plan = { ...obj.plan, ...plan };
+        return sections();
+      }
+    }
     while (!graph && obj.plan?.ok && retries.length) {
       const [columns, crossings] = retries.shift()!;
       const plan = suggestSatin(obj.region, obj.graph ?? undefined, o.satinMax, columns, crossings);
       if (plan?.ok && JSON.stringify(plan) !== JSON.stringify(obj.plan)) {
         obj.plan = plan;
+        eased = false;
         return sections();
       }
     }

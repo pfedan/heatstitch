@@ -14,6 +14,8 @@ const SEAMS_MM = [0.3, 0.6];
 import { atShare, regionBox, swirlCenters } from '../digitize/deco';
 import { railsFromOutline, stripsOfAreas } from '../digitize/rungs';
 import { aroundCuts, areaLoops, suggestSatin } from '../digitize/satinSuggest';
+import { easePiles } from '../digitize/satinEase';
+import { SATIN_MAX } from '../digitize/digitize';
 import { t, type Key } from '../i18n';
 import { bestChain, edgeAlong, railsArea, sectionView, DECO_DEFAULTS, MAX_SWIRLS, type FillSettings, type Rails, type SatinSettings, analyze, remembered, keepShape, remember, restitch, measureSatin, forget, type RestitchResult, type Settings as RestitchSettings } from '../model/restitch';
 import { ui } from './state';
@@ -358,8 +360,10 @@ export function bindRungs(app: RungsApp) {
         return app.layers.say(t('stitch.suggest.none'));
       }
       const { outsides, holes } = areaLoops(area);
-      rungTool.suggestIn(s.lines, s.cuts, { outlines: outsides, holes });
-      return app.layers.say(t('stitch.suggest.sewn', { n: s.cuts.length + 1 }));
+      // Where it would pile up at the satin's spacing: cut through there too.
+      const plan = rungTool.satin ? easePiles(area, s, rungTool.satin, SATIN_MAX) : s;
+      rungTool.suggestIn(plan.lines, plan.cuts, { outlines: outsides, holes });
+      return app.layers.say(t('stitch.suggest.sewn', { n: plan.cuts.length + 1 }));
     }
     if (rungTool.mode !== 'fill') return;
     const an = analyze(p, obj, q.kinds);
@@ -371,7 +375,9 @@ export function bindRungs(app: RungsApp) {
     // Cut lines drawn by hand stay; the suggestion fills in around them.
     const own = rungTool.handCuts;
     const kind = found.kind;
-    const s = { ...(own.length ? aroundCuts(found, own, outsides, holes) : found), kind };
+    const around = own.length ? aroundCuts(found, own, outsides, holes) : found;
+    // Where it would pile up as satin: cut through there too.
+    const s = { ...(around.ok && rungTool.satin ? { ...around, ...easePiles(area, around, rungTool.satin, SATIN_MAX) } : around), kind };
     let bad: Pt[] | null = null;
     if (!s.ok) {
       const made = stripsOfAreas(outsides, s.lines, s.cuts, holes);
