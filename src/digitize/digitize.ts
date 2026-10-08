@@ -527,8 +527,12 @@ export function digitize(prep: Prepared, o: DigitizeOptions, name = 'image'): Di
       if (!out.length) return;
       if (obj.info.kind === 'fill') obj.info.shape = keep(obj, o, w, h);
       if (obj.sections && obj.info.columns) keepSections(obj, w, h);
-      // A satin along its middle keeps its area too: the satin tool cuts and suggests on it.
-      else if (obj.info.kind === 'satin') keepSatinArea(obj, w, h);
+      // A satin along its middle keeps its area too: the satin tool cuts and suggests on it. And
+      // how it was sewn, so a change sews it as dense as before (not as read from its stitches).
+      else if (obj.info.kind === 'satin') {
+        keepSatinArea(obj, w, h);
+        obj.info.satin = satinSettings(o, satin);
+      }
       runs.push(...out);
       for (const _ of out) owners.push(objects.length);
       objects.push(obj.info);
