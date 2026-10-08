@@ -81,8 +81,9 @@ function crossings(rail: Pt[], cum: number[], a: Pt, b: Pt): { s: number; t: num
     const w = sub(p, a);
     const t = (w[0] * q[1] - w[1] * q[0]) / den;
     const u = (w[0] * r[1] - w[1] * r[0]) / den;
-    if (t < 0 || t > 1 || u < 0 || u > 1) continue;
-    out.push({ s: cum[i - 1] + u * (cum[i] - cum[i - 1]), t });
+    // A line through a corner of the rail meets it there (rounding can miss both sides).
+    if (t < 0 || t > 1 || u < -1e-9 || u > 1 + 1e-9) continue;
+    out.push({ s: cum[i - 1] + Math.min(1, Math.max(0, u)) * (cum[i] - cum[i - 1]), t });
   }
   return out;
 }
@@ -537,6 +538,47 @@ export function inside(ring: Pt[], q: Pt): boolean {
     if (yi > q[1] !== yj > q[1] && q[0] < ((xj - xi) * (q[1] - yi)) / (yj - yi) + xi) c = !c;
   }
   return c;
+}
+
+/** Height of the bands the edges of an outline are sorted into for insideOf (mm). */
+const BAND = 0.5;
+const insideTests = new WeakMap<Pt[], (q: Pt) => boolean>();
+
+/**
+ * Whether points lie inside the closed outline, as `inside`, for many points: the edges are sorted
+ * into bands across the outline once, so each point looks only at the edges of its band.
+ * Kept per outline (outlines are not changed in place).
+ */
+export function insideOf(ring: Pt[]): (q: Pt) => boolean {
+  const known = insideTests.get(ring);
+  if (known) return known;
+  let y0 = Infinity;
+  let y1 = -Infinity;
+  for (const p of ring) {
+    y0 = Math.min(y0, p[1]);
+    y1 = Math.max(y1, p[1]);
+  }
+  const n = Math.max(1, Math.ceil((y1 - y0) / BAND) + 1);
+  const bands: number[][] = Array.from({ length: n }, () => []);
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const lo = Math.floor((Math.min(ring[i][1], ring[j][1]) - y0) / BAND);
+    const hi = Math.floor((Math.max(ring[i][1], ring[j][1]) - y0) / BAND);
+    for (let b = lo; b <= hi; b++) bands[b].push(i);
+  }
+  const test = (q: Pt): boolean => {
+    const b = Math.floor((q[1] - y0) / BAND);
+    if (b < 0 || b >= n) return false;
+    let c = false;
+    for (const i of bands[b]) {
+      const j = i === 0 ? ring.length - 1 : i - 1;
+      const [xi, yi] = ring[i];
+      const [xj, yj] = ring[j];
+      if (yi > q[1] !== yj > q[1] && q[0] < ((xj - xi) * (q[1] - yi)) / (yj - yi) + xi) c = !c;
+    }
+    return c;
+  };
+  insideTests.set(ring, test);
+  return test;
 }
 
 /**

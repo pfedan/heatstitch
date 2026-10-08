@@ -44,6 +44,7 @@ export interface StitchesApp {
   readonly seqCache: WeakMap<Pattern, Sequence>;
   readonly settings: Settings;
   readonly sewAlongLines: () => void;
+  readonly suggestLines: () => void;
   readonly sewLine: (o: number, path: Form | null, st: PathStitch | null, final: boolean) => boolean;
   readonly sewLineAgain: (o: number) => void;
   readonly toggleGuides: () => void;

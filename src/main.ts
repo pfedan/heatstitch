@@ -396,6 +396,9 @@ const { applyRestitched, convertSettings, looseObjects, stitchInfo, stitchPanel 
   get sewAlongLines() {
     return sewAlongLines;
   },
+  get suggestLines() {
+    return suggestLines;
+  },
   get sewLine() {
     return sewLine;
   },
@@ -415,7 +418,7 @@ const { applyRestitched, convertSettings, looseObjects, stitchInfo, stitchPanel 
 
 // Rungs -------------------------------------------------------------------------------------------
 
-const { closeRungs, rungInfo, rungTool, sewAlongLines, syncRungs, toggleGuides, togglePoints, toggleRungs } = bindRungs({
+const { closeRungs, rungInfo, rungTool, sewAlongLines, suggestLines, syncRungs, toggleGuides, togglePoints, toggleRungs } = bindRungs({
   get applyRestitched() {
     return applyRestitched;
   },
@@ -1713,7 +1716,7 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', red
 
 initShell({ files, mode: () => settings.mode, setMode });
 initResponsive();
-const stitchArea = initStitchArea({ files, settings, editor, rungTool, stitchPanel, closeRungs, toggleRungs, toggleGuides, togglePoints, sewAlongLines, setEditing, enterObject, revealRecord, pointsVisible: () => vp.scale >= POINTS_MIN_SCALE, redraw });
+const stitchArea = initStitchArea({ files, settings, editor, rungTool, stitchPanel, closeRungs, toggleRungs, toggleGuides, togglePoints, sewAlongLines, suggestLines, setEditing, enterObject, revealRecord, pointsVisible: () => vp.scale >= POINTS_MIN_SCALE, redraw });
 const design = initDesign({ files, settings, player, vp, stage, fitView, fitToHoop, redraw, applyEdit });
 const ready = initReady({
   files,
