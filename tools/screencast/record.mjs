@@ -63,6 +63,9 @@ const context = await browser.newContext({
   locale: 'de-DE',
   acceptDownloads: true,
 });
+// Key names as on Windows and Linux (Strg+K, Umschalt), also when recording on a Mac, so every
+// video shows the same keys.
+await context.addInitScript(() => Object.defineProperty(Navigator.prototype, 'platform', { get: () => 'Win32' }));
 const page = await context.newPage();
 await page.clock.install();
 await page.goto(APP_URL);
