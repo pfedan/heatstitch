@@ -17,14 +17,13 @@ import { isStroke, SATIN_MAX, pullFor, digitizeDefaults } from '../digitize/digi
 import { lineOf, lineSettings, lineToFill } from '../model/line';
 import { outline } from '../digitize/region';
 import { recommendedSpacing } from '../validation/profiles';
-import { recordOfStitch } from '../model/sequence';
 import { rememberObjects, type SewObject } from '../model/objects';
 import { loosable } from '../model/handEdit';
 import { backToOriginal, originalOf } from '../model/original';
 import { newLink, shareBorders, syncBorders } from '../model/border';
 import { readBorder } from '../model/readBorder';
 import { t, type Key } from '../i18n';
-import { type ShapeTrust, analyze, remembered, measureFill, measureSatin, measureRun, shapeTrust, type Remembered, remember, rememberedIn, restitch, type Settings as RestitchSettings, type RestitchResult, objectKey } from '../model/restitch';
+import { type ShapeTrust, analyze, remembered, measureFill, measureSatin, measureRun, shapeTrust, type Remembered, remember, rememberedIn, restitch, restitchedPieces, type Settings as RestitchSettings, type RestitchResult, objectKey } from '../model/restitch';
 import { type StitchInfo, StitchPanel } from '../ui/stitchPanel';
 import { ui } from './state';
 
@@ -296,12 +295,7 @@ export function bindStitches(app: StitchesApp) {
     const nq = app.seq(r.pattern);
     // An object can come out in several pieces (new trims inside): all of them stay selected.
     const sel = new Set<number>();
-    r.starts.forEach((a, k) => {
-      const pieces = new Set<number>();
-      for (let n = a + 1; n <= r.ends[k]; n++) {
-        const o = nq.objectAt[recordOfStitch(nq.numbers, n)];
-        if (o >= 0) pieces.add(o);
-      }
+    restitchedPieces(r, nq.numbers, nq.objectAt).forEach((pieces, k) => {
       for (const o of pieces) sel.add(o);
       // An object that stayed one keeps its shape and settings for the next edit.
       if (pieces.size === 1) remember(r.pattern, nq.objects[[...pieces][0]], r.memory[k]);
