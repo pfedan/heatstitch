@@ -29,13 +29,17 @@ import { fromStored, toStored } from '../../src/storage/fileStore';
 import { decodeProject, encodeProject, projectSettings } from '../../src/storage/project';
 import { DEFAULTS } from '../../src/settings';
 import { DEFAULT_PROFILE } from '../../src/validation/profiles';
+import { tagShortStitches, TIE } from '../../src/validation/shortStitches';
+import { thinSweeps } from '../../src/correct/thin';
+import { keepObjects } from '../../src/model/handEdit';
+import { THIN_SHARES } from '../../src/areas/stitches/state';
 import { writePattern } from '../../src/writers';
 import { rng } from './images';
 
 /**
  * The torture test: random chains of the operations the app offers on objects (add, duplicate (also
  * several, and in place),
- * move, turn, mirror, scale, delete, cut out, cut a fill apart, recolor, leave out, border in its own thread, empty fill, echo and shadow of a line, undo,
+ * move, turn, mirror, scale, thin out by hand, delete, cut out, cut a fill apart, recolor, leave out, border in its own thread, empty fill, echo and shadow of a line, undo,
  * redo, save and open the project, export), done the way the app does them, with the design's
  * invariants checked after every step. A failing chain names its seed and steps, so it can be
  * replayed and turned into a fixed regression test.
@@ -308,6 +312,33 @@ export const OPS: Op[] = [
       const b = boxOf(d, sel);
       const s = pick(r, [0.8, 1.25]);
       return transform(d, sel, [s, 0, 0, s, b.minX * (1 - s), b.minY * (1 - s)]);
+    },
+  },
+  {
+    // As the app: the stitches of one object selected (Strg+A in it) and thinned out by hand.
+    name: 'thin by hand',
+    run: (d, r) => {
+      if (!d.objects.length) return false;
+      const p = d.cur.p;
+      const before = sewObjects(p);
+      const o = pick(r, before);
+      const [share] = pick(r, THIN_SHARES);
+      const tags = tagShortStitches(p);
+      const t = thinSweeps(p, {
+        needAt: (i) => (i >= o.first && i <= o.last && p.cmd[i] === STITCH ? share : 0),
+        protect: tags.map((x) => (x === TIE ? 1 : 0)),
+      });
+      if (!t.removed) return false;
+      const removed: number[] = [];
+      t.mask.forEach((m, i) => m && removed.push(i));
+      const now = keepObjects(p, t.pattern, { removed }).get(o.index);
+      // Thinning takes stitches out of the object, it never cuts it in two or joins it to another.
+      const after = sewObjects(t.pattern);
+      expect(after.map((x) => x.id), 'thinned by hand: the same objects').toEqual(before.map((x) => x.id));
+      expect(now, 'thinned by hand: the object stays where it was').toBe(o.index);
+      expect(after[o.index].last - after[o.index].first, 'thinned by hand: only its own stitches go').toBe(o.last - o.first - t.removed);
+      d.commit(t.pattern);
+      return true;
     },
   },
   {

@@ -48,6 +48,8 @@ export interface ThinResult {
   removed: number;
   /** Cycles (row pairs, zigzag pairs) removed. */
   cycles: number;
+  /** 1 for each record of the input that was removed. */
+  mask: Uint8Array;
 }
 
 const dist = (p: Pattern, a: number, b: number) => Math.hypot(p.x[b] - p.x[a], p.y[b] - p.y[a]);
@@ -184,5 +186,5 @@ export function thinSweeps(p: Pattern, opts: ThinOptions): ThinResult {
     s = e;
   }
   const count = removed.reduce((a, v) => a + v, 0);
-  return { pattern: count ? removeStitches(p, removed) : p, removed: count, cycles };
+  return { pattern: count ? removeStitches(p, removed) : p, removed: count, cycles, mask: removed };
 }

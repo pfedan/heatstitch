@@ -253,8 +253,11 @@ export class Editor implements EditView {
       protect: tags.map((t) => (t === TIE ? 1 : 0)),
     });
     if (r.removed) {
+      // Said as points removed, so the objects thinned stay what they were (one object each).
+      const removed: number[] = [];
+      r.mask.forEach((m, i) => m && removed.push(i));
       this.selection.clear();
-      this.hooks.commit(r.pattern, null);
+      this.hooks.commit(r.pattern, { removed });
       this.hooks.changed();
     }
     return r.removed;
