@@ -4,7 +4,10 @@
 // zoom per frame) for compose.py, which draws the overlays and builds the video.
 //
 //   node tools/screencast/record.mjs docs/screencasts/01-neues-stickmuster/ablauf.mjs OUT \
-//     [--audio DIR] [--scenes 1-3] [--scale 2]
+//     [--audio DIR] [--scenes 1-3] [--scale 2] [--jobs 4]
+//
+// --jobs N splits the scenes into N parts by length and records them side by side, each part
+// in its own Chromium; a part first runs the scenes before it without frames to reach its state.
 //
 // With --scenes and an earlier full recording in OUT, only those scenes are recorded anew and
 // put in place of the old ones; frames and timeline of all other scenes stay as they were.
@@ -14,7 +17,7 @@
 // global install (/opt/node-tools), in that order.
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const args = process.argv.slice(2);
@@ -26,6 +29,9 @@ const [ablaufPath, outDir] = args;
 const audioDir = opt('--audio', path.join(outDir, 'ton'));
 const scale = Number(opt('--scale', '2'));
 const sceneRange = opt('--scenes', '');
+const jobs = Number(opt('--jobs', '1'));
+// Scenes run without frames still give the page's workers (stitching, density) a moment per frame.
+const dryMs = Number(opt('--dry-ms', '50'));
 const APP_URL = process.env.APP_URL || 'http://localhost:4173/heatstitch/';
 const FPS = 30;
 const W = 1920;
@@ -43,6 +49,11 @@ const ablauf = (await import(pathToFileURL(path.resolve(ablaufPath)).href)).defa
 
 const seconds = (file) =>
   Number(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', file]).toString());
+
+if (jobs > 1 && !sceneRange) {
+  await recordInParts();
+  process.exit(0);
+}
 
 // A scene range over an earlier recording replaces just those scenes: they go to frames-neu/
 // first and are spliced in at the end.
@@ -98,7 +109,7 @@ let dry = false;
 const frame = async () => {
   await page.clock.runFor(1000 / FPS);
   // Workers (stitching, density) run in real time; give them a moment as the capture would.
-  if (dry) return new Promise((r) => setTimeout(r, 150));
+  if (dry) return new Promise((r) => setTimeout(r, dryMs));
   const file = path.join(framesDir, `${String(frameNo).padStart(6, '0')}.jpg`);
   // `scale` 2 renders the page anew at twice the size for this capture.
   const shot = await cdp.send('Page.captureScreenshot', {
@@ -265,4 +276,63 @@ function splice() {
   fs.renameSync(out, oldDir);
   fs.writeFileSync(path.join(outDir, 'timeline.json'), JSON.stringify(merged));
   console.log(`replaced scene(s) ${[...fresh.keys()].join(', ')}: ${merged.frames.length} frames in all`);
+}
+
+/** Records the scenes in `jobs` parts at once and joins their frames and timelines. */
+async function recordInParts() {
+  const ablauf = (await import(pathToFileURL(path.resolve(ablaufPath)).href)).default;
+  const n = ablauf.scenes.length;
+  // Weight of a scene: its speech, which sets its length; 4 s for a scene without speech yet.
+  const weight = ablauf.scenes.map((_, i) => {
+    const audio = path.join(audioDir, `s${String(i + 1).padStart(2, '0')}.wav`);
+    return fs.existsSync(audio) ? seconds(audio) + 1 : 4;
+  });
+  const total = weight.reduce((a, b) => a + b, 0);
+  const parts = [];
+  let from = 1;
+  let sum = 0;
+  for (let i = 1; i <= n; i++) {
+    sum += weight[i - 1];
+    const left = n - i;
+    const open = jobs - parts.length - 1;
+    if (i === n || (sum >= (total * (parts.length + 1)) / jobs && open > 0 && left >= open)) {
+      parts.push([from, i]);
+      from = i + 1;
+    }
+  }
+  const self = fileURLToPath(import.meta.url);
+  const dirs = parts.map((_, k) => path.join(outDir, `teil-${k + 1}`));
+  await Promise.all(
+    parts.map(([a, b], k) => {
+      fs.rmSync(dirs[k], { recursive: true, force: true });
+      fs.mkdirSync(dirs[k], { recursive: true });
+      const child = spawn(
+        process.execPath,
+        [self, ablaufPath, dirs[k], '--audio', audioDir, '--scale', String(scale), '--scenes', `${a}-${b}`, '--dry-ms', String(dryMs)],
+        { stdio: ['ignore', 'pipe', 'inherit'] },
+      );
+      child.stdout.on('data', (d) => process.stdout.write(d));
+      return new Promise((ok, fail) => child.on('exit', (code) => (code ? fail(new Error(`part ${a}-${b} failed`)) : ok())));
+    }),
+  );
+  const framesOut = path.join(outDir, 'frames');
+  fs.rmSync(framesOut, { recursive: true, force: true });
+  fs.mkdirSync(framesOut);
+  let merged = null;
+  const name = (k) => `${String(k).padStart(6, '0')}.jpg`;
+  for (const dir of dirs) {
+    const tl = JSON.parse(fs.readFileSync(path.join(dir, 'timeline.json'), 'utf8'));
+    merged ??= { ...tl, frames: [], scenes: [] };
+    for (const sc of tl.scenes) {
+      const start = merged.frames.length;
+      for (let i = sc.start; i < sc.end; i++) {
+        fs.renameSync(path.join(dir, 'frames', name(i)), path.join(framesOut, name(merged.frames.length)));
+        merged.frames.push(tl.frames[i]);
+      }
+      merged.scenes.push({ ...sc, start, end: merged.frames.length });
+    }
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+  fs.writeFileSync(path.join(outDir, 'timeline.json'), JSON.stringify(merged));
+  console.log(`${parts.length} parts (${parts.map(([a, b]) => `${a}-${b}`).join(', ')}): ${merged.frames.length} frames`);
 }
