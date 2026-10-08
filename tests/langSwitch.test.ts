@@ -81,8 +81,10 @@ const loadCat = async (page: Page) => {
   await page.locator('#layer-list .layer').first().waitFor();
   await wait(page, 500);
 };
+/** A point inside the cat's red sweater, a fill clear of jumps (the middle of the stage meets a jump line). */
+const SWEATER = [0.45, 0.68] as const;
 const selectMiddle = async (page: Page) => {
-  const p = await canvasAt(page);
+  const p = await canvasAt(page, ...SWEATER);
   await page.mouse.click(p.x, p.y);
   await page.locator('#object-panel:not([hidden])').waitFor();
 };
@@ -133,7 +135,7 @@ const STATES: Record<string, (page: Page) => Promise<void>> = {
   },
   'the object menu open': async (page) => {
     await loadCat(page);
-    const p = await canvasAt(page);
+    const p = await canvasAt(page, ...SWEATER);
     await page.mouse.click(p.x, p.y, { button: 'right' });
     await wait(page, 500);
   },
