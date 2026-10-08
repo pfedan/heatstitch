@@ -65,6 +65,10 @@ export function initFilesArea(app: FilesAreaApp): void {
   const active = (): LoadedFile | null => app.files.active;
   const designs = () => app.files.files.filter((f) => f.pattern);
   const notImage = () => app.settings.mode !== 'image';
+  // A design picked while Bild umwandeln is open is shown: the assistant closes (its picture stays for later).
+  app.files.onPick = (f) => {
+    if (f?.pattern && app.settings.mode === 'image') app.setMode('flow');
+  };
 
   // Examples -----------------------------------------------------------------------------------
 
@@ -234,7 +238,7 @@ export function initFilesArea(app: FilesAreaApp): void {
           class: 'start-recent',
           disabled: !f.pattern,
           title: f.error ? `${t('files.error')}: ${f.error}` : FileList.displayName(f),
-          onclick: () => app.files.activate(f.id),
+          onclick: () => app.files.pick(f.id),
         },
         icon('files-recent'),
         h('span', { class: 'start-recent-name' }, FileList.displayName(f)),
