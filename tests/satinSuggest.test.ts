@@ -441,4 +441,12 @@ describe('Vorschlagen: spikes, frames, leaves and crescents', () => {
     expect(s.ok).toBe(true);
     expect(s.kind).not.toBe('pointed');
   });
+
+  it('sews a crossing through when asked, not as a thick place', () => {
+    // Two 3 mm strokes crossing: no part of the plan is a shape of its own.
+    const r = region(any(near([15, 30], [45, 30], 3), near([30, 15], [30, 45], 3)));
+    const s = suggestSatin(r, undefined, 7, false, false)!;
+    expect(s.ok).toBe(true);
+    expect(s.kind).toBe('strokes');
+  });
 });

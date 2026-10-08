@@ -123,9 +123,10 @@ export function offersSections(g: Graph): boolean {
 
 /**
  * A suggestion for the fill area (null when the area is empty); `max` is the longest stitch of a
- * shape's columns (mm); `columns`: a compact shape as a column where one fits, not a fan.
+ * shape's columns (mm); `columns`: a compact shape as a column where one fits, not a fan;
+ * `crossings`: a thick place where three lines meet planned as a shape too, not only a blot.
  */
-export function suggestSatin(area: Region, graph?: Graph, max = STROKE_MAX, columns = false): SatinSuggestion | null {
+export function suggestSatin(area: Region, graph?: Graph, max = STROKE_MAX, columns = false, crossings = true): SatinSuggestion | null {
   const { outsides, holes } = areaLoops(area);
   if (!outsides.length) return null;
   const g = graph ?? skeleton(area);
@@ -143,7 +144,10 @@ export function suggestSatin(area: Region, graph?: Graph, max = STROKE_MAX, colu
   }
   // Thick places in the lines planned on their own, the lines without them.
   const small = smallHoles(g, holes);
-  const split = splitBlobs(small.length ? skeleton(filled(area, small)) : g);
+  const blots = splitBlobs(small.length ? skeleton(filled(area, small)) : g);
+  // Unless asked for, a thick place where three lines or more meet is a crossing, its lines sewn
+  // through it (see planStrokes); a blot sits at the end of a line or between two.
+  const split = crossings || blots?.blobs.every((b) => b.attach.length < 3) ? blots : null;
   const plans = split?.blobs.map((b) => planShape(blobShape(b, split.strokes, outsides, holes, material), material, max, true, columns));
   if (split && plans?.every((p) => p)) {
     const strokes = split.strokes.branches.length ? planStrokes(split.strokes, [...outsides, ...holes]) : { cuts: [], lines: [] };
