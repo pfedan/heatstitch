@@ -41,10 +41,11 @@ describe('sewing a design from its object list', () => {
     expect(made.length).toBeGreaterThan(objs.length / 2);
     // No worse than now.
     expect(Math.abs(count(q, STITCH) - count(p, STITCH)) / count(p, STITCH)).toBeLessThan(0.02);
-    // Travel in fills with parts left out keeps off the outline beside sewn rows; sewn anew, a few
-    // more of those ways become trims (the flower: 16 built, 18 sewn from its list).
-    expect(count(q, TRIM)).toBeLessThanOrEqual(count(p, TRIM) + 3);
-    expect(jumps(q)).toBeLessThan(jumps(p) * 1.15 + 10);
+    expect(count(q, TRIM)).toBeLessThanOrEqual(count(p, TRIM) + 1);
+    // Fills with parts left out plan their order on the travel grid, which may end them elsewhere
+    // than where the next object of the list starts: the flower jumps 252 mm built, 307 mm sewn
+    // from its list (both less than before the plan, 317 and 340 mm).
+    expect(jumps(q)).toBeLessThan(jumps(p) * 1.25 + 10);
     expect(critical(d, q)).toBeLessThanOrEqual(critical(d, p) + 2);
     // Sewn again from the list it gives: the same stitches.
     expect(same(sewDesign(q, d.T), q)).toBe(true);
