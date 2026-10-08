@@ -48,9 +48,9 @@ Ein Rundgang: Er zeigt, wo was liegt, und nennt jeden Bereich mit seinem Namen, 
 
 ## Szene 8
 
-**Bild:** Ganzes Bild. Klick auf den roten Pullover wählt ihn, Etikett Brotkrume. Heranzoomen unten rechts, Etikett Ansichtsleiste, Zeiger über Auge, Zoom, Einpassen.
+**Bild:** Ganzes Bild. Klick auf den roten Pullover wählt ihn, Etikett Breadcrumb. Heranzoomen unten rechts, Etikett Ansichtsleiste, Zeiger über Auge, Zoom, Einpassen.
 
-**Sprechtext:** [focused] In der Mitte liegt die Bühne. Ein Klick wählt ein Objekt. Oben zeigt die Brotkrume, wo du gerade bist. Unten rechts ist die Ansichtsleiste: das Auge für das Ansicht-Menü, daneben Zoom und Einpassen.
+**Sprechtext:** [focused] In der Mitte liegt die Bühne. Ein Klick wählt ein Objekt. Oben zeigt der Breadcrumb, wo du gerade bist. Unten rechts ist die Ansichtsleiste: das Auge für das Ansicht-Menü, daneben Zoom und Einpassen.
 
 ## Szene 9
 

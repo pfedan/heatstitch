@@ -144,8 +144,8 @@ export default {
       },
     },
     {
-      say: '[focused] In der Mitte liegt die Bühne. Ein Klick wählt ein Objekt. Oben zeigt die Brotkrume, wo du gerade bist. Unten rechts ist die Ansichtsleiste: das Auge für das Ansicht-Menü, daneben Zoom und Einpassen.',
-      text: 'In der Mitte liegt die Bühne. Ein Klick wählt ein Objekt. Oben zeigt die Brotkrume, wo du gerade bist. Unten rechts ist die Ansichtsleiste: das Auge für das Ansicht-Menü, daneben Zoom und Einpassen.',
+      say: '[focused] In der Mitte liegt die Bühne. Ein Klick wählt ein Objekt. Oben zeigt der Breadcrumb, wo du gerade bist. Unten rechts ist die Ansichtsleiste: das Auge für das Ansicht-Menü, daneben Zoom und Einpassen.',
+      text: 'In der Mitte liegt die Bühne. Ein Klick wählt ein Objekt. Oben zeigt der Breadcrumb, wo du gerade bist. Unten rechts ist die Ansichtsleiste: das Auge für das Ansicht-Menü, daneben Zoom und Einpassen.',
       textEn: 'In the middle is the stage. A click selects an object. At the top, the breadcrumb shows where you are. At the bottom right is the view bar: the eye for the view menu, next to it zoom and fit.',
       run: async (s) => {
         s.zoomOut();
@@ -155,7 +155,7 @@ export default {
         await s.wait(0.8);
         const crumb = s.page.getByRole('button', { name: /^Ebene:/ });
         await s.move(crumb, 1.0);
-        await s.label('Brotkrume', crumb, 'below');
+        await s.label('Breadcrumb', crumb, 'below');
         await s.wait(2.2);
         s.unlabel();
         const eye = s.page.getByRole('button', { name: 'Stiche', exact: true });

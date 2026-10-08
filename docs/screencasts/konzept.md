@@ -37,7 +37,7 @@ Einstieg.
 
 | Nr. | Titel | Inhalt | Demodatei | Länge |
 | --- | --- | --- | --- | --- |
-| 0 | Die heatstitch Oberfläche | Startseite und ihre vier Wege, Kopfleiste (Stickmuster-Menü, Rückgängig, Gestalten und Prüfen, Suchen mit Strg+K, Speichern, Menü ⋯ mit Sprache, Anleitung und Tastenkürzeln), Werkzeugleiste, Farben und Objekte, Bühne mit Brotkrume und Ansichtsleiste, Karten Objekt und Stickmuster, Player, Hinweise beim Überfahren, Rückgängig, alles bleibt im Browser | `cat-60mm.pes` | 2 min |
+| 0 | Die heatstitch Oberfläche | Startseite und ihre vier Wege, Kopfleiste (Stickmuster-Menü, Rückgängig, Gestalten und Prüfen, Suchen mit Strg+K, Speichern, Menü ⋯ mit Sprache, Anleitung und Tastenkürzeln), Werkzeugleiste, Farben und Objekte, Bühne mit Breadcrumb und Ansichtsleiste, Karten Objekt und Stickmuster, Player, Hinweise beim Überfahren, Rückgängig, alles bleibt im Browser | `cat-60mm.pes` | 2 min |
 
 Teil 0 ist der Rundgang: Er zeigt, wo was liegt, und nennt jeden Bereich mit seinem Namen, ohne
 eine Aufgabe zu Ende zu führen. Die anderen Teile setzen ihn nicht voraus; wo sie einen Bereich
@@ -69,7 +69,7 @@ brauchen, nennen sie ihn kurz selbst.
 | --- | --- | --- | --- | --- |
 | 11 | Füllungen | Karte Objekt: Muster (Deckend, Offen), Gestaltung, Umrandung, Stoff und Halt mit Auto und eigenem Wert, Leitlinien (G), Zerteilen (X) | `shapes-benchmark.svg` | 3 min |
 | 12 | Satin und Linien | Satin: Werkzeug Richtung (R), Vorschlagen, Querlinien, Trennlinien und Abschnitte, Füllung per Stichart zu Satin, Zugausgleich, Fransen; Linie: Art, Echo, Schatten | `patch.pes` | 3 min |
-| 13 | Form und einzelne Stiche | Ebenen Objekte, Form, Stiche über die Brotkrume, Doppelklick und Enter, Knoten ziehen, Vereinfachen, Stiche von Hand (E), Ausdünnen | `cat-60mm.pes` | 2 bis 3 min |
+| 13 | Form und einzelne Stiche | Ebenen Objekte, Form, Stiche über den Breadcrumb, Doppelklick und Enter, Knoten ziehen, Vereinfachen, Stiche von Hand (E), Ausdünnen | `cat-60mm.pes` | 2 bis 3 min |
 
 Bild umwandeln hat zwei Videos: Teil 3 für Fotos und PNG, Teil 4 für SVG. Teil 4 zeigt, was
 heatstitch aus Konturen macht: Die schwarzen Umrisse einer Grafik werden Satinsäulen, die der
@@ -102,6 +102,7 @@ Bildschirm stehen, stehen links; im Sprechtext gilt immer die rechte Spalte.
 | Speichern links | Speichern oben rechts |
 | Schrift: Höhe, Form „Bogen oben“, „Mehr“ | Größe, Bogen (Symbole), Buchstabenabstand steht direkt da |
 | Dateiliste | Stickmuster-Menü (Name oben links) |
+| Brotkrume | Breadcrumb (oben links auf der Bühne; der Begriff wird nicht übersetzt) |
 
 ## Bildsprache
 
