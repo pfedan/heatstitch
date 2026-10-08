@@ -338,7 +338,7 @@ docs/screencasts/
 - Die fertigen Dateien tragen den Schlüssel im Namen, damit sie auch außerhalb ihres Ordners
   eindeutig sind (Website, Download). `compose.py` bekommt dafür
   `--video docs/screencasts/NN-kurzname/NN-kurzname`.
-- Eine Demodatei, die auch in der App unter „Beispiel laden“ stehen soll, liegt dort, wo die
+- Eine Demodatei, die auch in der App unter „Weitere Beispiele“ auf der Startseite stehen soll, liegt dort, wo die
   App ihre Beispiele hat, nicht unter `material/`.
 - Probeaufnahmen, Hörproben und Standbilder kommen nicht ins Repo.
 
