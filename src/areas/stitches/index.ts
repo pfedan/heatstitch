@@ -246,6 +246,8 @@ export function initStitchArea(app: StitchAreaApp): { refresh: () => void } {
     }
     return seg;
   };
+  /** Deletes the selected line: without it, a phone (no Entf key) could only clear all lines at once. */
+  const deleteLine = (): HTMLElement[] => (rt.selected ? [cmdButton('edit.delete', 'edit.delete', { hint: 'stitches.bar.deleteLine.hint' }), sep()] : []);
   /** The share of "Ausdünnen" as three small buttons. */
   const shares = () => {
     const seg = h('div', { class: 'segmented bar-seg', role: 'radiogroup', 'aria-label': t('stitches.thin.share') });
@@ -294,7 +296,7 @@ export function initStitchArea(app: StitchAreaApp): { refresh: () => void } {
     } else if (tool === 'satin') {
       const d = dir();
       const what = !d ? '' : d.rungs === null ? t('stitches.bar.follow') : d.rungs === 0 ? t('stitches.bar.even') : t('stitches.bar.rungs', { n: d.rungs });
-      items.push(title('stitches.bar.direction'), state(d?.cuts ? `${what} · ${t('stitches.bar.cuts', { n: d.cuts + 1 })}` : what, 3), sep(), pen(), sep());
+      items.push(title('stitches.bar.direction'), state(d?.cuts ? `${what} · ${t('stitches.bar.cuts', { n: d.cuts + 1 })}` : what, 3), sep(), pen(), sep(), ...deleteLine());
       // One suggestion does it all: cut lines and rungs.
       items.push(cmdButton('stitch.rungs.suggest', 'stitches.bar.suggest', { icon: ICON.wand, hint: 'stitch.suggest.hint', more: 5 }));
       if (rt.sectioned) items.push(cmdButton('stitch.rungs.clear', 'stitches.bar.clear', { hint: 'stitch.clear.hint', more: 8 }));
@@ -310,6 +312,7 @@ export function initStitchArea(app: StitchAreaApp): { refresh: () => void } {
         sep(),
         pen(),
         sep(),
+        ...deleteLine(),
         cmdButton('stitch.rungs.suggest', 'stitches.bar.suggest', { icon: ICON.wand, hint: 'stitch.suggest.hint' }),
         cmdButton('stitch.rungs.clear', 'stitches.bar.clear', { hint: 'stitch.clear.hint', more: 5 }),
         help(rt.cutLines.length ? 'stitch.draw.parts' : 'stitch.draw.help'),
@@ -318,7 +321,7 @@ export function initStitchArea(app: StitchAreaApp): { refresh: () => void } {
       );
     } else if (tool === 'guide') {
       const n = rt.guides.length;
-      items.push(title('stitches.bar.guides'), state(n ? t(n === 1 ? 'stitch.guide.one' : 'stitch.guide.count', { n }).replace(/\.$/, '') : t('stitches.guides.none')), help('stitch.guide.help'), cmdButton('stitch.tool.done', 'stitch.direction.done', { primary: true }));
+      items.push(title('stitches.bar.guides'), state(n ? t(n === 1 ? 'stitch.guide.one' : 'stitch.guide.count', { n }).replace(/\.$/, '') : t('stitches.guides.none')), ...deleteLine(), help('stitch.guide.help'), cmdButton('stitch.tool.done', 'stitch.direction.done', { primary: true }));
     } else if (tool === 'points') {
       const pattern = panel.fillPattern;
       items.push(
