@@ -1,6 +1,6 @@
 import { listOf, sewList, specOf } from './sew';
 import { lineSettings, reshapeLineFill, resewLine } from './line';
-import { transformForm, type Form, type Mat } from '../shape/path';
+import { bounds, scaling, transformForm, type Form, type Mat } from '../shape/path';
 import { FIT_TOLERANCE, READ_TOLERANCE, vectorize } from '../shape/vectorize';
 import { cutKey, sewnArea } from './knockout';
 import { rememberObjects, sewObjects, type SewObject } from './objects';
@@ -195,5 +195,126 @@ export function transformSewObject(p: Pattern, objs: SewObject[], o: SewObject, 
   if (!obj) return null;
   rememberRange(r.pattern, obj.first, obj.last, r.memory[0]);
   return { pattern: r.pattern, first: obj.first, last: obj.last, restitched: true };
+}
+
+type Seq = (p: Pattern) => { objects: SewObject[]; kinds: Uint8Array };
+const sequenceOf: Seq = (q) => {
+  const kinds = stitchKinds(q);
+  return { objects: sewObjects(q, kinds), kinds };
+};
+
+/** The objects `sel` moved, turned or scaled by `m` together; with the changes by hand it sewed over. */
+export interface TransformedAll {
+  pattern: Pattern;
+  hand: number;
+  restitched: boolean;
+}
+
+/** The objects `sel` (in sewing order) transformed by `m`, the last first so the ones before keep their records. */
+export function transformObjects(p: Pattern, sel: number[], m: Mat, trimMm: number, seq: Seq = sequenceOf): TransformedAll | null {
+  let cur = p;
+  let hand = 0;
+  let restitched = false;
+  for (const o of [...sel].reverse()) {
+    const q = seq(cur);
+    const obj = q.objects[o];
+    if (!obj) return null;
+    hand += remembered(cur, obj)?.hand ?? 0;
+    const r = transformSewObject(cur, q.objects, obj, q.kinds, m, trimMm);
+    if (!r) return null;
+    restitched ||= r.restitched;
+    cur = r.pattern;
+  }
+  return { pattern: cur, hand, restitched };
+}
+
+/**
+ * The objects `sel` scaled by `sx` × `sy` about (cx, cy) in mm so their stitches come out that
+ * much larger, with the map that did it. Sewn anew, an object's stitches reach a little past its
+ * shape (pull compensation, the edge) by as much at any size, so the factors as given would leave
+ * a circle typed 60 mm wide at 59,8 mm. The first trial corrects for that margin where the shapes
+ * are known; then secant steps on what came out, until the stitches have the size asked for to a
+ * twentieth of a millimetre, or the closest trial. Null when the objects cannot be scaled.
+ */
+export function fitScaling(p: Pattern, sel: number[], sx: number, sy: number, cx: number, cy: number, trimMm: number, seq: Seq = sequenceOf): { m: Mat; done: TransformedAll } | null {
+  // Width and height of the stitches in tenths of a millimetre, null when the objects changed.
+  const extent = (q: Pattern): [number, number] | null => {
+    const all = seq(q).objects;
+    if (all.length !== seq(p).objects.length) return null;
+    const objs = sel.map((o) => all[o]);
+    return [Math.max(...objs.map((o) => o.maxX)) - Math.min(...objs.map((o) => o.minX)), Math.max(...objs.map((o) => o.maxY)) - Math.min(...objs.map((o) => o.minY))];
+  };
+  const was = extent(p);
+  if (!was) return null;
+  const goal = [was[0] * sx, was[1] * sy];
+  // A side without extent (a straight line) stays as it is.
+  const fixed = (k: number) => was[k] < 5;
+  // The first guess: the shapes (or lines) grow, the margin of the stitches around them stays.
+  const shapes = sel.map((o) => {
+    const known = remembered(p, seq(p).objects[o]);
+    return known?.form ?? known?.path;
+  });
+  const boxes = shapes.map((f) => f && bounds(f));
+  let f = [sx, sy];
+  let mid: number[] | null = null;
+  if (boxes.every((b) => b)) {
+    const lo = [Math.min(...boxes.map((b) => b!.minX)), Math.min(...boxes.map((b) => b!.minY))];
+    const hi = [Math.max(...boxes.map((b) => b!.maxX)), Math.max(...boxes.map((b) => b!.maxY))];
+    const size = [0, 1].map((k) => (hi[k] - lo[k]) * 10);
+    mid = [0, 1].map((k) => (lo[k] + hi[k]) / 2);
+    f = [0, 1].map((k) => {
+      const g = (goal[k] - (was[k] - size[k])) / size[k];
+      return fixed(k) || !(size[k] > 5) || !(g > f[k] / 2 && g < f[k] * 2) ? f[k] : g;
+    });
+  }
+  // Stitches lie on a 0.1 mm grid: a shape even about its middle (a circle) grows by a tenth at both
+  // ends at once, so its width stays even with the middle on a grid line, odd with it between two.
+  // Its middle goes where the size asked for needs it, at most half a tenth to the side.
+  const shift = (k: number, fk: number) => {
+    if (!mid || fixed(k)) return 0;
+    const c = k ? cy : cx;
+    const u = (c + fk * (mid[k] - c)) * 10;
+    return ((Math.round(goal[k]) % 2 === 0 ? Math.round(u) : Math.floor(u) + 0.5) - u) / 10;
+  };
+  // Per side: the factors tried and the sizes they gave, the size now at factor 1 among them.
+  const tried: [number, number][][] = [[[1, was[0]]], [[1, was[1]]]];
+  let best: { m: Mat; done: TransformedAll } | null = null;
+  let miss = Infinity;
+  // Each trial sews the objects anew: more while they are quick, the closest one is kept.
+  const start = performance.now();
+  for (let step = 0; step < 6 && (step === 0 || performance.now() - start < 1200); step++) {
+    const sc = scaling(f[0], f[1], cx, cy);
+    const m: Mat = [sc[0], sc[1], sc[2], sc[3], sc[4] + shift(0, f[0]), sc[5] + shift(1, f[1])];
+    const done = transformObjects(p, sel, m, trimMm, seq);
+    const got = done && extent(done.pattern);
+    if (!done || !got) return best;
+    const offs = [0, 1].map((k) => (fixed(k) ? 0 : Math.abs(got[k] - goal[k])));
+    if (Math.max(...offs) < miss) {
+      miss = Math.max(...offs);
+      best = { m, done };
+    }
+    if (miss < 0.5) break;
+    let moved = false;
+    for (const k of [0, 1]) {
+      if (fixed(k) || offs[k] < 0.5) continue;
+      const pts = tried[k];
+      pts.push([f[k], got[k]]);
+      // Between the closest factor that came out too small and the closest too large, when there are both.
+      const below = pts.filter((q) => q[1] < goal[k]).sort((u, v) => v[1] - u[1] || v[0] - u[0])[0];
+      const above = pts.filter((q) => q[1] > goal[k]).sort((u, v) => u[1] - v[1] || u[0] - v[0])[0];
+      let [[s0, w0], [s1, w1]] = below && above ? [below, above] : pts.slice(-2);
+      // The same size twice (between two jumps): the slope from the size now instead.
+      if (Math.abs(w1 - w0) < 1e-9) [s0, w0] = pts[0];
+      let g = Math.abs(w1 - w0) < 1e-9 ? f[k] : Math.abs(s1 - s0) < 1e-9 ? (s1 * goal[k]) / w1 : s1 + ((goal[k] - w1) * (s1 - s0)) / (w1 - w0);
+      // The size jumps as the edge falls anew: a factor tried before is halved toward the other side instead.
+      if (below && above && pts.some((q) => Math.abs(q[0] - g) < 1e-9)) g = (below[0] + above[0]) / 2;
+      if (g > f[k] / 2 && g < f[k] * 2 && g !== f[k]) {
+        f[k] = g;
+        moved = true;
+      }
+    }
+    if (!moved) break;
+  }
+  return best;
 }
 
