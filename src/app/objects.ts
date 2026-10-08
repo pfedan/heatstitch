@@ -532,6 +532,7 @@ export function bindObjects(app: ObjectsApp) {
 
   registerObjectCommands({
     flow,
+    blocked: () => (!pattern() ? 'shell.need.design' : app.settings.mode !== 'flow' ? 'shell.need.flow' : app.drawTool.busy ? 'shell.need.drawing' : undefined),
     count,
     frame: () => app.frameObjects(),
     // What the page shows, or worked out now when the selection changed since (a right click selects first).
@@ -547,7 +548,8 @@ export function bindObjects(app: ObjectsApp) {
     drawing: () => app.drawTool.busy,
     typing: () => {
       const el = document.activeElement;
-      return el instanceof HTMLElement && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+      // The command search's own field does not count: it closes before the command runs.
+      return el instanceof HTMLElement && !el.closest('.palette') && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
     },
     hasSelection: () => ui.selectedObjects.size > 0,
     frameActive: () => app.settings.mode === 'flow' && !!objectPanel.current?.frame,
