@@ -78,6 +78,14 @@ const dragFileIn = async (s, from, to) => {
 const REST = [420, 140];
 // Where box flaps and rim meet in the middle of the box, as the design opens (fitted).
 const BOX_MIDDLE = [1022, 650];
+// After Vorschlagen: a cut line where paw, flap and rim meet, a rung on the rim next to it, and
+// the markers of section 7 at the left front corner of the box (scissors, number, arrow).
+const CUT = [1006, 630, 40, 40];
+const RUNG = [1060, 615, 16, 16];
+const MARKERS = [547, 718];
+const SCISSORS = [519, 702, 16, 16];
+const NUMBER = [539, 702, 16, 16];
+const ARROW = [539, 728, 16, 16];
 
 export default {
   title: 'Vom SVG zum Stickmuster',
@@ -208,22 +216,22 @@ export default {
       },
     },
     {
-      say: 'Mit der Taste R öffnest du das Werkzeug Richtung. Hier liegt jeder Satin in Abschnitten seiner Fläche, so wie er gerade gestickt wird.',
-      text: 'Mit der Taste R öffnest du das Werkzeug Richtung. Hier liegt jeder Satin in Abschnitten seiner Fläche, so wie er gerade gestickt wird.',
-      textEn: 'The R key opens the Direction tool. Here every satin lies in sections of its area, just as it is stitched right now.',
+      say: 'Mit der Taste R öffnest du das Werkzeug Richtung. Hier liegt der Satin in Abschnitten, so wie er gerade gestickt wird.',
+      text: 'Mit der Taste R öffnest du das Werkzeug Richtung. Hier liegt der Satin in Abschnitten, so wie er gerade gestickt wird.',
+      textEn: 'The R key opens the Direction tool. Here the satin lies in sections, just as it is stitched right now.',
       run: async (s) => {
         await s.press('r', { label: 'R' });
-        await btn(s, 'Leeren').waitFor();
+        await btn(s, 'Vorschlagen').waitFor();
         await s.wait(0.6);
         const bar = s.page.getByText('Richtung', { exact: true }).first();
         await s.zoom([700, 114, 0, 0], 1.8);
         await s.move(bar, 1.0);
         await s.label('Richtung', bar, 'below');
-        await s.wait(1.8);
+        await s.wait(1.6);
         s.unlabel();
         s.zoomOut();
-        await s.move([1500, 300], 1.0);
-        await s.zoom(BOX_MIDDLE, 2.0);
+        await s.move(REST, 1.0);
+        await s.zoom(BOX_MIDDLE, 2.2);
         await s.wait(3.0);
         s.zoomOut();
       },
@@ -240,16 +248,16 @@ export default {
         await s.click(null, { before: 0.4 });
         s.unlabel();
         s.zoomOut();
-        await s.move([1500, 300], 1.0);
-        await s.zoom(BOX_MIDDLE, 2.0);
+        await s.move(REST, 1.0);
+        await s.zoom(BOX_MIDDLE, 2.2);
         await s.wait(2.4);
         s.zoomOut();
       },
     },
     {
-      say: '[curious] Und jetzt der Zauberstab: „Vorschlagen“ zerlegt die Kontur so, wie man es von Hand tun würde. Trennlinien teilen sie in Abschnitte, Querlinien legen die Stichrichtung fest. An Kreuzungen läuft die geradeste Linie durch, an spitzen Ecken wird auf Gehrung geschnitten.',
-      text: 'Und jetzt der Zauberstab: „Vorschlagen“ zerlegt die Kontur so, wie man es von Hand tun würde. Trennlinien teilen sie in Abschnitte, Querlinien legen die Stichrichtung fest. An Kreuzungen läuft die geradeste Linie durch, an spitzen Ecken wird auf Gehrung geschnitten.',
-      textEn: 'And now the magic wand: “Suggest” splits the outline the way you would by hand. Cut lines divide it into sections, rungs set the stitch direction. At crossings the straightest line runs through, at sharp corners it is cut on the miter.',
+      say: '[curious] Und jetzt der Zauberstab: „Vorschlagen“ zerlegt die Kontur so, wie man es von Hand tun würde. Trennlinien teilen sie in Abschnitte, Querlinien legen die Stichrichtung fest. An Kreuzungen läuft die geradeste Linie durch.',
+      text: 'Und jetzt der Zauberstab: „Vorschlagen“ zerlegt die Kontur so, wie man es von Hand tun würde. Trennlinien teilen sie in Abschnitte, Querlinien legen die Stichrichtung fest. An Kreuzungen läuft die geradeste Linie durch.',
+      textEn: 'And now the magic wand: “Suggest” splits the outline the way you would by hand. Cut lines divide it into sections, rungs set the stitch direction. At crossings the straightest line runs through.',
       run: async (s) => {
         const suggest = btn(s, 'Vorschlagen');
         await s.zoom([700, 114, 0, 0], 1.8);
@@ -257,24 +265,36 @@ export default {
         await s.label('Vorschlagen', suggest, 'below');
         await s.click(null, { before: 0.4 });
         s.unlabel();
-        // Vorschlagen holds the page for a few seconds; the status names the result when done.
         await settle(s, async () => (await s.page.getByText(/^Vorschlag gestickt/).count()) > 0);
         s.zoomOut();
-        await s.move([1500, 300], 1.0);
-        await s.wait(1.6);
+        await s.move(REST, 1.0);
+        await s.wait(1.4);
         await s.zoom(BOX_MIDDLE, 2.6);
-        await s.wait(5.0);
+        await s.wait(1.0);
+        await s.label('Trennlinie', CUT, 'above');
+        await s.wait(2.4);
+        await s.label('Querlinie', RUNG, 'right');
+        await s.wait(2.4);
+        s.unlabel();
         s.zoomOut();
       },
     },
     {
-      say: 'An jedem Abschnitt steht seine Nummer in der Reihenfolge, ein Pfeil für die Richtung und eine Schere für einen Garnschnitt davor. Ein Klick auf den Pfeil dreht die Richtung um.',
-      text: 'An jedem Abschnitt steht seine Nummer in der Reihenfolge, ein Pfeil für die Richtung und eine Schere für einen Garnschnitt davor. Ein Klick auf den Pfeil dreht die Richtung um.',
-      textEn: 'Each section shows its number in the order, an arrow for the direction and scissors for a thread trim before it. A click on the arrow reverses the direction.',
+      say: 'An jedem Abschnitt steht seine Nummer in der Reihenfolge, ein Pfeil für die Richtung und eine Schere für einen Garnschnitt davor. Ein Klick darauf ändert es.',
+      text: 'An jedem Abschnitt steht seine Nummer in der Reihenfolge, ein Pfeil für die Richtung und eine Schere für einen Garnschnitt davor. Ein Klick darauf ändert es.',
+      textEn: 'Each section shows its number in the order, an arrow for the direction and scissors for a thread trim before it. A click changes it.',
       run: async (s) => {
-        await s.zoom(BOX_MIDDLE, 2.6);
-        await s.move(BOX_MIDDLE, 1.0);
-        await s.wait(6.0);
+        // The pointer stays off the stage, so no stitch readout shows next to the markers.
+        await s.move([150, 22], 0.8);
+        await s.zoom(MARKERS, 3.2);
+        await s.wait(0.8);
+        await s.label('Nummer', NUMBER, 'above');
+        await s.wait(2.0);
+        await s.label('Pfeil', ARROW, 'right');
+        await s.wait(2.0);
+        await s.label('Schere', SCISSORS, 'left');
+        await s.wait(2.4);
+        s.unlabel();
         s.zoomOut();
       },
     },
@@ -288,14 +308,14 @@ export default {
         await s.label('Fertig', done, 'below');
         await s.click(null, { before: 0.4 });
         s.unlabel();
+        // Nothing selected, so the realistic threads show without frame and handles.
+        await s.press('Escape', { show: 0 });
         await s.move(REST, 1.2);
-        await s.zoom([1022, 560, 0, 0], 1.6);
-        await s.wait(3.0);
+        await s.wait(1.0);
+        await s.zoom(BOX_MIDDLE, 2.0);
+        await s.wait(4.0);
         s.zoomOut();
-        await s.page.evaluate(() => document.activeElement?.blur());
-        await s.press('Home', { label: 'Pos1', show: 0.3 });
-        await s.press(' ', { label: 'Leertaste', show: 1.0 });
-        await s.wait(6.0);
+        await s.wait(4.0);
       },
     },
   ],

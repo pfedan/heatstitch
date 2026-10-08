@@ -2,13 +2,13 @@
 
 Schlüssel `04-vom-svg-zum-stickmuster`, Demodatei `material/katze-im-karton.svg` (nachgezeichnet aus
 `katze-im-karton.png` mit `material/nachzeichnen.py`: Flächen je Farbe, die schwarzen Konturen als
-Linien mit ihrer Breite, Pupillen als schwarze Flächen), 100 mm breit, etwa 2:20, rund 250 Wörter.
+Linien mit ihrer Breite, Pupillen als schwarze Flächen), 100 mm breit, etwa 2:20, rund 235 Wörter.
 
 Eine SVG mit dunklen Konturen geht durch denselben Assistenten wie ein Foto, aber heatstitch muss
 nichts raten: Jede Farbe der Datei wird ein Garn, Linien werden nach ihrer Breite Steppstich oder
 Satin. Die Konturen der Katze (etwa 1,3 mm breit) werden Satin; alle, die sich berühren, sind ein
-Objekt, Satin 1 unter Black. Im Werkzeug Richtung (R) liegt dieser Satin in Abschnitten seiner
-Fläche; Leeren nimmt alle Linien weg, Vorschlagen setzt Trennlinien und Querlinien neu.
+Objekt, Satin 1 unter Black. Im Werkzeug Richtung (R) liegt dieser Satin in Abschnitten; Leeren
+nimmt alle Linien weg, Vorschlagen zerlegt die Kontur neu in 25 Abschnitte.
 
 Der Zeiger ruht auf der Bühne oben links, damit die realistischen Fäden ihr
 Licht von dort bekommen.
@@ -51,10 +51,10 @@ ganze Kontur ist ausgewählt, rechts die Karte Objekt.
 
 ## Szene 6
 
-**Bild:** Taste R, Tastenkappe R. Oben erscheint die Leiste des Werkzeugs, Etikett Richtung. Auf der
-Bühne liegt die Kontur in Abschnitten, mit Trennlinien und Querlinien, wie sie gestickt wird.
+**Bild:** Taste R, Tastenkappe R. Oben erscheint die Leiste des Werkzeugs, Etikett Richtung. Heranzoomen
+auf die Mitte des Kartons: die Kontur in Abschnitten, wie sie gerade gestickt wird.
 
-**Sprechtext:** Mit der Taste R öffnest du das Werkzeug Richtung. Hier liegt jeder Satin in Abschnitten seiner Fläche, so wie er gerade gestickt wird.
+**Sprechtext:** Mit der Taste R öffnest du das Werkzeug Richtung. Hier liegt der Satin in Abschnitten, so wie er gerade gestickt wird.
 
 ## Szene 7
 
@@ -64,22 +64,22 @@ Bühne liegt die Kontur in Abschnitten, mit Trennlinien und Querlinien, wie sie 
 
 ## Szene 8
 
-**Bild:** Etikett Vorschlagen mit dem Zauberstab, Klick. Die Kontur ist neu zerlegt. Heranzoomen auf die
-Mitte des Kartons, wo Klappen und Kante zusammenkommen: Etikett Trennlinie an einer blauen Linie,
-Etikett Querlinie an einer gelben.
+**Bild:** Etikett Vorschlagen mit dem Zauberstab, Klick. Unten die Meldung „Vorschlag gestickt: 25
+Abschnitte“. Heranzoomen auf die Mitte des Kartons, wo Pfote, Klappen und Kante zusammenkommen:
+Etikett Trennlinie an einer blauen Linie, Etikett Querlinie an einer gelben.
 
-**Sprechtext:** [curious] Und jetzt der Zauberstab: „Vorschlagen“ zerlegt die Kontur so, wie man es von Hand tun würde. Trennlinien teilen sie in Abschnitte, Querlinien legen die Stichrichtung fest. An Kreuzungen läuft die geradeste Linie durch, an spitzen Ecken wird auf Gehrung geschnitten.
+**Sprechtext:** [curious] Und jetzt der Zauberstab: „Vorschlagen“ zerlegt die Kontur so, wie man es von Hand tun würde. Trennlinien teilen sie in Abschnitte, Querlinien legen die Stichrichtung fest. An Kreuzungen läuft die geradeste Linie durch.
 
 ## Szene 9
 
-**Bild:** Weiter herangezoomt an einem Abschnitt: Etiketten an Nummer, Pfeil und Schere. Klick auf den
-Pfeil, die Richtung dreht sich um.
+**Bild:** Nah an der linken vorderen Ecke des Kartons, Abschnitt 7: Etiketten Nummer, Pfeil und Schere.
+Kein Klick (ein umgedrehter Abschnitt ergäbe hier neue Befunde in Prüfen).
 
-**Sprechtext:** An jedem Abschnitt steht seine Nummer in der Reihenfolge, ein Pfeil für die Richtung und eine Schere für einen Garnschnitt davor. Ein Klick auf den Pfeil dreht die Richtung um.
+**Sprechtext:** An jedem Abschnitt steht seine Nummer in der Reihenfolge, ein Pfeil für die Richtung und eine Schere für einen Garnschnitt davor. Ein Klick darauf ändert es.
 
 ## Szene 10
 
-**Bild:** Herauszoomen, Etikett Fertig, Klick. Die Katze mit realistischen Fäden, der Zeiger ruht oben
-links auf der Bühne. Pos1 und Leertaste: der Player stickt.
+**Bild:** Etikett Fertig, Klick, Esc hebt die Auswahl auf. Die Katze mit realistischen Fäden, der
+Zeiger ruht oben links auf der Bühne. Heranzoomen auf die Mitte des Kartons, dann die ganze Katze.
 
 **Sprechtext:** Mit „Fertig“ wird der Satin so neu gestickt. In den realistischen Fäden siehst du die sauberen Säulen. [warm] Viel Spaß beim Sticken!
