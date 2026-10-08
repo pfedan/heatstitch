@@ -344,6 +344,9 @@ function entries(f: Frame, s: Section, pull: number): Entry[] {
   ];
 }
 
+/** How far past its ends a sewn row covers the travel grid (mm). */
+const ROW_END_COVER = 0.35;
+
 /** Grid over the region for travel paths: passable cells and cells covered by sewn rows. */
 export class TravelGrid {
   cell: number;
@@ -378,8 +381,20 @@ export class TravelGrid {
     return j * this.gw + i;
   }
 
-  /** Marks the cells under a sewn row (and half a row spacing to each side). */
+  /**
+   * Marks the cells under a sewn row (and half a row spacing to each side). The row counts a little
+   * past its ends too: the strip between its ends and the edge of the shape is no free way, or
+   * travel would run along the outline beside the sewn rows, where it shows.
+   */
   cover(a: Pt, b: Pt, halfWidth: number): void {
+    const l0 = dist(a, b);
+    if (l0 > 0) {
+      const ext = ROW_END_COVER / l0;
+      [a, b] = [
+        [a[0] - (b[0] - a[0]) * ext, a[1] - (b[1] - a[1]) * ext],
+        [b[0] + (b[0] - a[0]) * ext, b[1] + (b[1] - a[1]) * ext],
+      ];
+    }
     const l = dist(a, b);
     const n = Math.max(1, Math.ceil(l / (this.cell / 2)));
     const nx = l > 0 ? -(b[1] - a[1]) / l : 0;
