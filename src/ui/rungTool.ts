@@ -80,6 +80,9 @@ export interface RungPick {
 
 export type RungMode = 'satin' | 'fill' | 'guide' | 'points';
 
+/** What Vorschlagen sets on one satin part: cut lines and lines across its area, or rungs along its columns. */
+export type SuggestPlan = { part: number; lines: [Pt, Pt][]; cuts: [Pt, Pt][]; edge?: { outlines: Pt[][]; holes: Pt[][] } } | { part: number; rails: true };
+
 /** A part that makes no column yet, or a hole no cut line opens: outlined, with what is missing. */
 export interface SectionProblem {
   ring: Pt[];
@@ -153,16 +156,18 @@ export class RungTool implements RungView {
   /** Which satin part each column belongs to, to give the columns back per part. */
   private parts: number[] = [];
   /**
-   * The fill a satin part was cut from (see Rails.split): its cut lines are `cutLines`, moved,
-   * drawn and removed like on the fill, the part then cut anew.
+   * The area of each satin part (by part; see Rails.split): its cut lines are among `cutLines`,
+   * moved, drawn and removed like on a fill, the part then cut anew.
    */
-  private split: (Omit<Split, 'cuts'> & { part: number }) | null = null;
+  private splits = new Map<number, Omit<Split, 'cuts'>>();
   /**
-   * After Leeren: the columns the part shown in sections is sewn with, while the tool shows only its
-   * area. Lines drawn on it then are `lines` and `cutLines`, as on a fill; once they make columns
-   * the part is sewn anew along them (see resplit).
+   * After Leeren: the columns each part is sewn with, while the tool shows only its area. Lines
+   * drawn on it then are among `lines` and `cutLines`, as on a fill; once they make columns the
+   * part is sewn anew along them (see resplit).
    */
-  private cleared: Rails[] | null = null;
+  private cleared = new Map<number, Rails[]>();
+  /** The part each cut line or line across a satin belongs to (lines drawn later: where they lie, see partAt). */
+  private owner = new WeakMap<[Pt, Pt], number>();
   lines: [Pt, Pt][] = [];
   cutLines: [Pt, Pt][] = [];
   /** Cut lines drawn or moved by hand since the tool opened (as they were then): Vorschlagen keeps them. */
@@ -254,7 +259,7 @@ export class RungTool implements RungView {
     this.problemHover = -1;
     this.points = [];
     this.columns = [];
-    this.cleared = null;
+    this.cleared = new Map();
     this.lines = [];
     this.cutLines = [];
     this.bad = null;
@@ -287,15 +292,15 @@ export class RungTool implements RungView {
         });
       }),
     );
-    this.split = null;
+    this.splits = new Map();
     this.cutLines = [];
-    this.cleared = null;
+    this.cleared = new Map();
     if (this.mode === 'satin') this.lines = [];
     columns.forEach((part, k) => {
       const from = part.find((r) => r.split)?.split;
-      if (!from || this.split) return;
-      this.split = { part: k, outlines: from.outlines, holes: from.holes };
-      this.cutLines = from.cuts.map(([a, b]) => [a, b] as [Pt, Pt]);
+      if (!from) return;
+      this.splits.set(k, { outlines: from.outlines, holes: from.holes });
+      for (const [a, b] of from.cuts) this.cutLines.push(this.owned([a, b], k));
     });
     this.bad = null;
     const s = this.selected;
@@ -336,8 +341,8 @@ export class RungTool implements RungView {
 
   /** How many rungs set the direction (null: the stitches' own, nothing set). */
   get count(): number | null {
-    if (!this.columns.some((c) => c.own) && !this.cleared) return null;
-    return this.columns.reduce((a, c) => a + c.rungs.length + c.spans.length, this.cleared ? this.lines.length : 0);
+    if (!this.columns.some((c) => c.own) && !this.cleared.size) return null;
+    return this.columns.reduce((a, c) => a + c.rungs.length + c.spans.length, this.lines.length);
   }
 
   /**
@@ -423,7 +428,7 @@ export class RungTool implements RungView {
   /** A control clicked: the column turned round, sewn one place earlier, or a trim before it set or taken away. */
   private useBadge(h: BadgeHit): void {
     if (h.step !== undefined) return this.useSectionBadge(h, h.step);
-    const out = this.result();
+    const out = this.sewn();
     const part = this.parts[h.col];
     const cols = out[part];
     const k = this.parts.slice(0, h.col).filter((p) => p === part).length;
@@ -466,7 +471,7 @@ export class RungTool implements RungView {
     } else if (i > 0) plan[i].trim = !plan[i].trim;
     c.plan = plan;
     this.selected = null;
-    this.hooks.change(this.result(), true);
+    this.hooks.change(this.sewn(), true);
   }
 
   /** Lines drawn across a satin from now on are cut lines (true) or rungs. */
@@ -477,11 +482,11 @@ export class RungTool implements RungView {
 
   get edges(): Pt[][] {
     if (this.mode !== 'satin') return [];
-    const sp = this.split;
     const ring = (r: Pt[]): Pt[] => (r.length > 2 && Math.hypot(r[0][0] - r[r.length - 1][0], r[0][1] - r[r.length - 1][1]) > 1e-9 ? [...r, r[0]] : r);
-    // A part cut from an area is its area: the lines between its columns are its cut lines, no rails.
-    const area = sp ? [...sp.outlines, ...sp.holes].map(ring) : [];
-    return [...area, ...this.columns.flatMap((c, k) => (sp && this.parts[k] === sp.part ? [] : [c.left, c.right]))];
+    // A part is its area: the lines between its columns are its cut lines, no rails. A column too
+    // small to have an area of its own (a few stitches) is drawn round as one.
+    const areas = [...this.splits.values()].flatMap((sp) => [...sp.outlines, ...sp.holes].map(ring));
+    return [...areas, ...this.columns.flatMap((c, k) => (this.splits.has(this.parts[k]) ? [] : [ring([...c.left, ...c.right.slice().reverse()])]))];
   }
 
   get problems(): SectionProblem[] {
@@ -524,37 +529,42 @@ export class RungTool implements RungView {
           previews = pairsOf(c.strips);
         }
       }
-    } else if (result && this.cleared && this.split) {
-      // Only its area, after Leeren: as on a fill, not wrong until something is drawn.
-      const sp = this.split;
-      previews = pairsOf(result.filter((_, k) => k !== sp.part).flat());
-      if (this.lines.length || this.cutLines.length) {
-        const c = checkSections(sp.outlines, this.lines, this.cutLines, sp.holes);
-        found(c);
-        previews.push(...pairsOf(c.strips));
-      }
     } else if (result) {
-      const sp = this.split;
-      // As sewn, nothing to say; only cut lines not sewn yet can leave a part without a column.
-      const c = sp && this.cutsChanged() ? checkSections(sp.outlines, this.splitLines(), this.cutLines, sp.holes) : null;
-      if (c && (c.parts.length || c.holes.length)) {
-        // The part cut from the fill as its lines make it now; the stitches stay as they were.
-        found(c);
-        previews = [...pairsOf(result.filter((_, k) => k !== sp!.part).flat()), ...pairsOf(c.strips)];
-      } else previews = pairsOf(result.flat());
+      // Parts shown as their lines make them now, not as sewn.
+      const shown = new Set<number>();
+      for (const [k, sp] of this.splits) {
+        if (this.cleared.has(k)) {
+          // Only its area, after Leeren: as on a fill, not wrong until something is drawn.
+          shown.add(k);
+          const lines = this.linesOf(k);
+          const cuts = this.cutsOf(k);
+          if (!lines.length && !cuts.length) continue;
+          const c = checkSections(sp.outlines, lines, cuts, sp.holes);
+          found(c);
+          previews.push(...pairsOf(c.strips));
+        } else if (this.cutsChanged(k)) {
+          // As sewn, nothing to say; only cut lines not sewn yet can leave a part without a column.
+          // Then the part as its lines make it now; the stitches stay as they were.
+          const c = checkSections(sp.outlines, this.splitLines(k), this.cutsOf(k), sp.holes);
+          if (!c.parts.length && !c.holes.length) continue;
+          shown.add(k);
+          found(c);
+          previews.push(...pairsOf(c.strips));
+        }
+      }
+      previews.push(...pairsOf(result.filter((_, k) => !shown.has(k)).flat()));
     }
     if (!problems.length && this.bad) problems.push({ ring: this.bad, key: 'stitch.problem.part' });
     this.checked = { key, problems, previews };
     return this.checked;
   }
 
-  /** The rungs and free rungs of the part cut from a fill, as lines (see resplit). */
-  private splitLines(): [Pt, Pt][] {
-    const sp = this.split;
-    if (!sp) return [];
-    if (this.cleared) return this.lines.map(([a, b]) => [a, b] as [Pt, Pt]);
+  /** The rungs and free rungs of part `part`, as lines (see resplit). */
+  private splitLines(part: number): [Pt, Pt][] {
+    if (!this.splits.has(part)) return [];
+    if (this.cleared.has(part)) return this.linesOf(part).map(([a, b]) => [a, b] as [Pt, Pt]);
     return this.columns.flatMap((c, k) => {
-      if (this.parts[k] !== sp.part) return [];
+      if (this.parts[k] !== part) return [];
       // Read from stitches and nothing set yet: the stitches' own pairs, every 1.5 mm or so (they
       // never cross, as suggested rungs at a corner can).
       if (!c.own && !c.rails.rungs && !c.spans.length && c.left.length === c.right.length && c.left.length > 2) {
@@ -595,6 +605,40 @@ export class RungTool implements RungView {
       (out[this.parts[k]] ??= []).push(base);
     });
     return out;
+  }
+
+  /** The columns per satin part to sew: as result, a part cleared (see clear) as it is sewn now. */
+  private sewn(): Rails[][] {
+    const out = this.result();
+    for (const [k, cols] of this.cleared) out[k] ??= cols;
+    return out;
+  }
+
+  /** A line of part `part`. */
+  private owned(line: [Pt, Pt], part: number): [Pt, Pt] {
+    this.owner.set(line, part);
+    return line;
+  }
+
+  /** The part a line on a satin belongs to: the one it was drawn for, else the area its middle lies in or it crosses. */
+  private partOf(line: [Pt, Pt]): number | null {
+    return this.owner.get(line) ?? this.partAt(line[0], line[1]);
+  }
+
+  /** The part whose area a line from `a` to `b` lies in (its middle), else one whose edge it crosses. */
+  private partAt(a: Pt, b: Pt): number | null {
+    const m = mid(a, b);
+    for (const [k, sp] of this.splits) if (sp.outlines.some((o) => inside(o, m)) && !sp.holes.some((h) => inside(h, m))) return k;
+    for (const [k, sp] of this.splits) if (sp.outlines.some((o) => chordOf(o, a, b))) return k;
+    return null;
+  }
+
+  private cutsOf(part: number): [Pt, Pt][] {
+    return this.cutLines.filter((l) => this.partOf(l) === part);
+  }
+
+  private linesOf(part: number): [Pt, Pt][] {
+    return this.lines.filter((l) => this.partOf(l) === part);
   }
 
   private ends(c: RungColumn, r: Rung): [Pt, Pt] {
@@ -663,7 +707,7 @@ export class RungTool implements RungView {
     const q: Pt = [x, y];
     if (this.mode !== 'satin') return !this.loop.length || nearLoop(this.loop, x, y);
     // An area without columns (after Leeren): near it, as on a fill.
-    if (this.cleared && this.split?.outlines.some((o) => nearLoop(o, x, y))) return true;
+    for (const k of this.cleared.keys()) if (this.splits.get(k)?.outlines.some((o) => nearLoop(o, x, y))) return true;
     return this.columns.some((c) => {
       const a = project(c.left, c.cl, q);
       const b = project(c.right, c.cr, q);
@@ -761,7 +805,7 @@ export class RungTool implements RungView {
         const { ring, cum } = d.loop;
         const q = pointAt(ring, cum, project(ring, cum, [x, y]).s);
         c.spans[i] = end === 0 ? [q, c.spans[i][1]] : [c.spans[i][0], q];
-        this.hooks.change(this.result(), false);
+        this.hooks.change(this.sewn(), false);
       } else {
         const c = this.columns[col];
         const list = d.pick.cut ? c.cuts : c.rungs;
@@ -772,7 +816,7 @@ export class RungTool implements RungView {
         // A spacing set at the rung goes along with it.
         if (!d.pick.cut && end === 0) for (const sp of c.spacings) if (Math.abs(sp[0] - was) < 0.05) sp[0] = s;
         if (!d.pick.cut) c.own = true;
-        this.hooks.change(this.result(), false);
+        this.hooks.change(this.sewn(), false);
       }
     }
     this.hooks.redraw();
@@ -788,9 +832,9 @@ export class RungTool implements RungView {
     } else if (d.kind === 'end') {
       if (d.moved && d.pick.col < 0 && d.pick.cut) this.markOwn(d.pick.i);
       if (this.mode === 'satin' && d.pick.col < 0) {
-        if (d.moved) this.resplit();
+        if (d.moved) this.resplitOf(this.fillList(d.pick)[d.pick.i]);
       }
-      else if (this.mode === 'satin') this.commit();
+      else if (this.mode === 'satin') this.commit(d.pick.col);
       else this.linesChanged();
     } else if (d.kind === 'sketch' && this.sketch) {
       const line = simplify(this.sketch, this.sketchStep / 3);
@@ -810,17 +854,20 @@ export class RungTool implements RungView {
         if (d.cut) this.markOwn(list.length - 1);
         this.selected = { col: -1, i: list.length - 1, end: -1, ...(d.cut ? { cut: true } : {}) };
         this.linesChanged();
-      } else if (d.cut && this.split) {
-        // On a satin cut from a fill every cut line cuts the fill anew.
-        this.cutLines.push([a, b]);
+      } else if (d.cut && this.splits.size) {
+        // On a satin every cut line cuts the area of its part anew.
+        const k = this.partAt(a, b);
+        if (k === null) return this.hooks.redraw();
+        this.cutLines.push(this.owned([a, b], k));
         this.markOwn(this.cutLines.length - 1);
         this.selected = { col: -1, i: this.cutLines.length - 1, end: -1, cut: true };
-        this.resplit();
-      } else if (this.cleared && this.split?.outlines.some((o) => inside(o, mid(a, b)))) {
-        // On the area alone (after Leeren) a line across as on a fill.
-        this.lines.push([a, b]);
+        this.resplit(k);
+      } else if (!d.cut && this.cleared.has(this.partAt(a, b) ?? -1)) {
+        // On an area alone (after Leeren) a line across as on a fill.
+        const k = this.partAt(a, b)!;
+        this.lines.push(this.owned([a, b], k));
         this.selected = { col: -1, i: this.lines.length - 1, end: -1 };
-        this.resplit();
+        this.resplit(k);
       } else this.addFromLine(a, b, d.cut);
     }
     this.hooks.redraw();
@@ -850,7 +897,7 @@ export class RungTool implements RungView {
             c.rungs = next;
             c.own = true;
             this.selected = { col: k, i: next.findIndex((x) => x[0] === r[0] && x[1] === r[1]), end: -1 };
-            this.commit();
+            this.commit(k);
             return;
           }
           return this.addSpan(k, loops, sec, [pointAt(loop.ring, loop.cum, u), pointAt(loop.ring, loop.cum, v)]);
@@ -874,7 +921,7 @@ export class RungTool implements RungView {
         c.own = true;
       }
       this.selected = { col: k, i: next.findIndex((x) => x[0] === r[0] && x[1] === r[1]), end: -1, ...(cut ? { cut: true } : {}) };
-      this.commit();
+      this.commit(k);
       return;
     }
     this.hooks.say(crossed ? 'stitch.direction.cross' : 'stitch.direction.miss');
@@ -910,7 +957,7 @@ export class RungTool implements RungView {
     c.spans = [...c.spans.filter((x) => !mine.includes(x)), ...kept];
     c.own = true;
     this.selected = { col: k, i: c.spans.indexOf(f), end: -1, span: true };
-    this.commit();
+    this.commit(k);
   }
 
   /**
@@ -918,32 +965,66 @@ export class RungTool implements RungView {
    * the ones it was cut along (they left a part without a column), the fill is cut anew with it:
    * a rung drawn in such a part makes it fit.
    */
-  private commit(): void {
-    if (this.cleared || this.cutsChanged()) return this.resplit();
-    this.hooks.change(this.result(), true);
+  private commit(col?: number): void {
+    const part = col === undefined ? undefined : this.parts[col];
+    const pending = [...this.splits.keys()].find((k) => (part === undefined || k === part) && (this.cleared.has(k) || this.cutsChanged(k)));
+    if (pending !== undefined) {
+      this.resplit(pending);
+      return;
+    }
+    this.hooks.change(this.sewn(), true);
+  }
+
+  /** The part of a line moved or taken away cut anew. */
+  private resplitOf(line: [Pt, Pt] | undefined): void {
+    const k = line ? this.partOf(line) : null;
+    if (k === null) return this.hooks.redraw();
+    this.resplit(k);
   }
 
   /** Whether the satin is shown in sections of its area (see Rails.split), so its cut lines can be suggested anew. */
   get sectioned(): boolean {
-    return this.mode === 'satin' && !!this.split;
+    return this.mode === 'satin' && this.splits.size > 0;
+  }
+
+  /** The satin parts shown in sections of their area. */
+  get sectionParts(): number[] {
+    return this.mode === 'satin' ? [...this.splits.keys()] : [];
   }
 
   /**
-   * Vorschlagen on a satin: its area cut along `cuts` and crossed by `lines` (see suggestSatin) in
-   * place of its own, sewn anew as one undo step. Spacings and directions go with the parts as on
-   * any cut. With `edge`, the area as it is now in place of the one the satin opened with.
+   * Vorschlagen on a satin, all its parts as one undo step: each part's area cut along `cuts` and
+   * crossed by `lines` (see suggestSatin) in place of its own, or with `rails` rungs at the bends
+   * of its columns as they run (see alongRails). Spacings and directions go with the parts as on
+   * any cut. With `edge`, the area as it is now in place of the one the part opened with. False
+   * when nothing changed.
    */
-  suggestIn(lines: [Pt, Pt][], cuts: [Pt, Pt][], edge?: { outlines: Pt[][]; holes: Pt[][] }): void {
-    if (!this.sectioned) return;
-    if (edge && this.split) this.split = { ...this.split, outlines: edge.outlines, holes: edge.holes };
-    this.cutLines = cuts.map(([a, b]) => [a, b] as [Pt, Pt]);
+  suggestParts(plans: SuggestPlan[]): boolean {
+    if (!this.sectioned) return false;
     this.selected = null;
-    this.resplit(lines);
+    let changed = false;
+    for (const p of plans) if ('rails' in p) changed = this.alongRails(new Set([p.part]), false) || changed;
+    for (const p of plans) {
+      if ('rails' in p) continue;
+      const sp = this.splits.get(p.part);
+      if (!sp) continue;
+      if (p.edge) this.splits.set(p.part, { outlines: p.edge.outlines, holes: p.edge.holes });
+      this.cutLines = [...this.cutLines.filter((l) => this.partOf(l) !== p.part), ...p.cuts.map(([a, b]) => this.owned([a, b], p.part))];
+      changed = this.resplit(p.part, p.lines, false) || changed;
+    }
+    if (changed) this.hooks.change(this.sewn(), true);
+    return changed;
   }
 
-  /** The columns of the part shown in sections, as they are now. */
-  get sectionRails(): Rails[] | null {
-    return this.split ? (this.cleared ?? this.result()[this.split.part]) : null;
+  /** Vorschlagen on a satin of one part (see suggestParts). */
+  suggestIn(lines: [Pt, Pt][], cuts: [Pt, Pt][], edge?: { outlines: Pt[][]; holes: Pt[][] }): void {
+    const k = this.sectionParts[0];
+    if (k !== undefined) this.suggestParts([{ part: k, lines, cuts, ...(edge ? { edge } : {}) }]);
+  }
+
+  /** The columns of satin part `part` (shown in sections), as they are now. */
+  sectionRails(part: number): Rails[] | null {
+    return this.splits.has(part) ? (this.cleared.get(part) ?? this.result()[part] ?? null) : null;
   }
 
   private markOwn(i: number): void {
@@ -951,11 +1032,12 @@ export class RungTool implements RungView {
     if (c) this.ownCuts.push([[c[0][0], c[0][1]], [c[1][0], c[1][1]]]);
   }
 
-  /** The cut lines drawn or moved by hand that are still there. */
-  get handCuts(): [Pt, Pt][] {
+  /** The cut lines drawn or moved by hand that are still there (on satin part `part` only, when given). */
+  handCuts(part?: number): [Pt, Pt][] {
     const at = (a: Pt, b: Pt) => Math.abs(a[0] - b[0]) < 1e-6 && Math.abs(a[1] - b[1]) < 1e-6;
     this.ownCuts = this.ownCuts.filter((o) => this.cutLines.some((c) => at(c[0], o[0]) && at(c[1], o[1])));
-    return this.ownCuts.map(([a, b]) => [a, b] as [Pt, Pt]);
+    const mine = part === undefined ? this.ownCuts : this.ownCuts.filter((o) => this.partAt(o[0], o[1]) === part);
+    return mine.map(([a, b]) => [a, b] as [Pt, Pt]);
   }
 
   /**
@@ -975,10 +1057,11 @@ export class RungTool implements RungView {
       return this.hooks.redraw();
     }
     if (this.mode !== 'satin') return;
-    const sp = this.split;
-    if (sp) {
-      this.cleared ??= this.result()[sp.part] ?? [];
-      const keep = this.columns.map((_, k) => k).filter((k) => this.parts[k] !== sp.part);
+    const sectioned = this.splits.size > 0;
+    if (sectioned) {
+      const now = this.result();
+      for (const k of this.splits.keys()) if (!this.cleared.has(k)) this.cleared.set(k, now[k] ?? []);
+      const keep = this.columns.map((_, k) => k).filter((k) => !this.splits.has(this.parts[k]));
       this.columns = keep.map((k) => this.columns[k]);
       this.parts = keep.map((k) => this.parts[k]);
     }
@@ -992,14 +1075,15 @@ export class RungTool implements RungView {
     this.lines = [];
     this.bad = null;
     // Other satin parts go along with the first lines that make columns again.
-    if (sp) return this.hooks.redraw();
-    this.hooks.change(this.result(), true);
+    if (sectioned) return this.hooks.redraw();
+    this.hooks.change(this.sewn(), true);
   }
 
   /** Whether the cut lines are not the ones the satin was cut along (they left a part without a column). */
-  private cutsChanged(): boolean {
-    const stored = this.columns.find((c) => c.rails.split)?.rails.split?.cuts;
-    return !!this.split && JSON.stringify(stored) !== JSON.stringify(this.cutLines);
+  private cutsChanged(part: number): boolean {
+    if (!this.splits.has(part)) return false;
+    const stored = this.columns.find((c, k) => this.parts[k] === part && c.rails.split)?.rails.split?.cuts;
+    return JSON.stringify(stored ?? []) !== JSON.stringify(this.cutsOf(part));
   }
 
   /**
@@ -1008,10 +1092,11 @@ export class RungTool implements RungView {
    * and the trim before it. A part that makes no column or a hole not opened is shown; the
    * stitches then stay as they were until the lines fit.
    */
-  private resplit(lines = this.splitLines()): void {
-    const sp = this.split;
-    if (!sp) return;
-    const ks = this.columns.map((_, k) => k).filter((k) => this.parts[k] === sp.part);
+  private resplit(part: number, lines = this.splitLines(part), commit = true): boolean {
+    const sp = this.splits.get(part);
+    if (!sp) return false;
+    const cuts = this.cutsOf(part);
+    const ks = this.columns.map((_, k) => k).filter((k) => this.parts[k] === part);
     // Spacings set at rungs stay at the rung, wherever its part ends up.
     const spaced = ks.flatMap((k) => {
       const c = this.columns[k];
@@ -1020,15 +1105,19 @@ export class RungTool implements RungView {
         return r ? [{ at: this.ends(c, r)[0], v }] : [];
       });
     });
-    const made = stripsOfAreas(sp.outlines, lines, this.cutLines, sp.holes);
+    const made = stripsOfAreas(sp.outlines, lines, cuts, sp.holes);
     // The area alone (after Leeren): what is missing is shown as on a fill (see check).
-    if ((made.hole >= 0 || made.bad) && this.cleared) return this.hooks.redraw();
+    if ((made.hole >= 0 || made.bad) && this.cleared.has(part)) {
+      this.hooks.redraw();
+      return false;
+    }
     if (made.hole >= 0 || made.bad) {
       this.showBad(made.hole >= 0 ? sp.holes[made.hole] : made.bad!);
-      return this.hooks.say(made.hole >= 0 ? 'stitch.draw.openHole' : 'stitch.draw.notStripPart');
+      this.hooks.say(made.hole >= 0 ? 'stitch.draw.openHole' : 'stitch.draw.notStripPart');
+      return false;
     }
-    const out = this.result();
-    const old = out[sp.part] ?? [];
+    const out = this.sewn();
+    const old = out[part] ?? [];
     // One chain per area, a trim between areas apart.
     let cols: Rails[] = made.areas.flatMap((strips, a) => strips.map((r) => ({ left: r.left, right: r.right, rungs: r.rungs, chain: a })));
     if (cols.length === old.length) cols = keptOrder(old, cols);
@@ -1049,10 +1138,23 @@ export class RungTool implements RungView {
       });
       if (spacings.length) c.spacings = spacings;
     }
-    cols[0].split = { outlines: sp.outlines, holes: sp.holes, cuts: this.cutLines.map(([a, b]) => [a, b] as [Pt, Pt]) };
-    out[sp.part] = cols;
+    cols[0].split = { outlines: sp.outlines, holes: sp.holes, cuts: cuts.map(([a, b]) => [a, b] as [Pt, Pt]) };
+    out[part] = cols;
+    // The other parts keep what was drawn on them and is not sewn yet.
+    const pending = [...this.splits.keys()].filter((k) => k !== part && (this.cleared.has(k) || this.cutsChanged(k)));
+    const keep = pending.map((k) => ({ k, cuts: this.cutsOf(k), lines: this.linesOf(k), cleared: this.cleared.get(k) }));
     this.setColumns(out);
-    this.hooks.change(out, true);
+    for (const p of keep) {
+      this.cutLines = [...this.cutLines.filter((l) => this.partOf(l) !== p.k), ...p.cuts.map((l) => this.owned(l, p.k))];
+      this.lines.push(...p.lines.map((l) => this.owned(l, p.k)));
+      if (!p.cleared) continue;
+      this.cleared.set(p.k, p.cleared);
+      const stay = this.columns.map((_, k) => k).filter((k) => this.parts[k] !== p.k);
+      this.columns = stay.map((k) => this.columns[k]);
+      this.parts = stay.map((k) => this.parts[k]);
+    }
+    if (commit) this.hooks.change(this.sewn(), true);
+    return true;
   }
 
   /** Abandons a drag (a second finger started a pinch). */
@@ -1092,23 +1194,25 @@ export class RungTool implements RungView {
       this.guides.splice(s.i, 1);
       this.hooks.guides(this.guides.map((g) => g.slice()));
     } else if (s.col < 0) {
-      (s.cut ? this.cutLines : this.lines).splice(s.i, 1);
-      this.resplit();
+      const list = s.cut ? this.cutLines : this.lines;
+      const k = list[s.i] ? this.partOf(list[s.i]) : null;
+      list.splice(s.i, 1);
+      if (k !== null) this.resplit(k);
     } else if (s.cut) {
       const c = this.columns[s.col];
       c.cuts = c.cuts.filter((_, i) => i !== s.i);
-      this.commit();
+      this.commit(s.col);
     } else if (s.span) {
       const c = this.columns[s.col];
       c.spans = c.spans.filter((_, i) => i !== s.i);
-      this.commit();
+      this.commit(s.col);
     } else {
       const c = this.columns[s.col];
       const at = c.rungs[s.i][0];
       c.rungs = c.rungs.filter((_, i) => i !== s.i);
       c.spacings = c.spacings.filter(([x]) => Math.abs(x - at) >= 0.05);
       c.own = true;
-      this.commit();
+      this.commit(s.col);
     }
     this.hooks.redraw();
     return true;
@@ -1134,7 +1238,7 @@ export class RungTool implements RungView {
       changed = true;
     }
     this.selected = null;
-    if (changed) this.hooks.change(this.result(), true);
+    if (changed) this.hooks.change(this.sewn(), true);
     else this.hooks.say('stitch.direction.cornersNone');
   }
 
@@ -1143,9 +1247,10 @@ export class RungTool implements RungView {
    * outline letter, an outline read from an image): rungs at the bends, as one change. No cut
    * lines at corners: on curls they made fans and new problems. False when there is nothing to add.
    */
-  alongRails(): boolean {
+  alongRails(parts?: Set<number>, commit = true): boolean {
     let changed = false;
-    for (const c of this.columns) {
+    for (const [k, c] of this.columns.entries()) {
+      if (parts && !parts.has(this.parts[k])) continue;
       const rungs = cornerRungs(c.left, c.right, c.rungs);
       if (JSON.stringify(rungs) === JSON.stringify(c.rungs)) continue;
       c.rungs = rungs;
@@ -1153,7 +1258,7 @@ export class RungTool implements RungView {
       changed = true;
     }
     this.selected = null;
-    if (changed) this.hooks.change(this.result(), true);
+    if (changed && commit) this.hooks.change(this.sewn(), true);
     return changed;
   }
 
@@ -1172,7 +1277,7 @@ export class RungTool implements RungView {
   bestOrder(): void {
     if (this.mode !== 'satin' || !this.satin) return;
     const satin = this.satin;
-    const out = this.result();
+    const out = this.sewn();
     const next = out.map((part) => {
       const groups: Rails[][] = [];
       for (const r of part) {
@@ -1203,7 +1308,7 @@ export class RungTool implements RungView {
       changed = true;
     }
     this.selected = null;
-    if (changed) this.hooks.change(this.result(), true);
+    if (changed) this.hooks.change(this.sewn(), true);
     else this.hooks.say('stitch.sections.none');
   }
 
@@ -1229,7 +1334,7 @@ export class RungTool implements RungView {
     c.spacings.sort((a, b) => a[0] - b[0]);
     // The rung becomes the column's own: its place must stay where the spacing was set.
     c.own = true;
-    this.hooks.change(this.result(), true);
+    this.hooks.change(this.sewn(), true);
   }
 
   /** No rungs: even from end to end. */
@@ -1241,7 +1346,7 @@ export class RungTool implements RungView {
       c.own = true;
     }
     this.selected = null;
-    this.hooks.change(this.result(), true);
+    this.hooks.change(this.sewn(), true);
   }
 
   /** Back to the direction of the stitches (no rungs set). */

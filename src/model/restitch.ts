@@ -1832,12 +1832,20 @@ export function edgeAlong(rings: Pt[][], columns: Rails[]): boolean {
 
 /**
  * Every satin in sections of its area, wherever it came from (a fill, a file, an image): the area
- * its shape, or read from the rails of its one part. A column cut across (see Rails.cuts) is
- * opened as its sections, so its cut lines are free ones like any other, to move, draw or take
- * away. The stitches change only when something does. Without an area (several parts read from
- * stitches) the columns as they are.
+ * its shape, or read from the rails of each of its parts (several pieces read from stitches, each
+ * an area of its own). A column cut across (see Rails.cuts) is opened as its sections, so its cut
+ * lines are free ones like any other, to move, draw or take away. The stitches change only when
+ * something does. Only a part too small to make an area (a few stitches) stays as it is.
  */
 export function sectionView(columns: Rails[][], shape: Region | undefined): Rails[][] {
+  return sectionViewOf(columns, shape).map((part) => {
+    if (part.some((c) => c.split)) return part;
+    const area = railsArea(part);
+    return area ? withSplit([part], area, 0)[0] : part;
+  });
+}
+
+function sectionViewOf(columns: Rails[][], shape: Region | undefined): Rails[][] {
   if (!columns.length) return columns;
   const cut = columns.map((part) =>
     part.some((c) => c.cuts?.length && !c.spans?.length) ? part.flatMap((c) => (c.cuts?.length && !c.spans?.length ? sectionsOf(c).map((sec) => ({ ...sec, chain: c.chain ?? 0 })) : [c])) : part,
@@ -1845,7 +1853,7 @@ export function sectionView(columns: Rails[][], shape: Region | undefined): Rail
   const known = (cols: Rails[][]) => cols.some((part) => part[0]?.split);
   // Sections of an area the satin no longer is (a part cut away, say): read anew.
   if (cut.some((part) => part.some((c) => c.split && !edgeAlong([...c.split.outlines, ...c.split.holes], part)))) {
-    return sectionView(
+    return sectionViewOf(
       columns.map((part) => part.map(({ split, ...c }) => c)),
       shape,
     );
@@ -1860,11 +1868,8 @@ export function sectionView(columns: Rails[][], shape: Region | undefined): Rail
       if (known(split)) return split;
     }
   }
-  // No shape, or the columns do not lie in it: the area of the part with the most columns, read
-  // from its own rails (several parts read from stitches: the others as they are).
-  const k = cut.reduce((best, part, j) => (part.length > cut[best].length ? j : best), 0);
-  const area = railsArea(cut[k]);
-  return area ? withSplit(cut, area, k) : columns;
+  // No shape, or the columns do not lie in it: each part's area read from its own rails (see sectionView).
+  return cut;
 }
 
 /** The area the stitches of `parts` cover: drawn thick enough that satin stitches close into it. */
