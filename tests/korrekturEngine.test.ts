@@ -1,12 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { applyFix, designKey, fixedObjects, prepareFix, revertFix } from '../src/correct/engine/apply';
-import { assess } from '../src/correct/engine/ampel';
+import { assess, directFix } from '../src/correct/engine/ampel';
 import { EngineClient, type WorkerLike } from '../src/correct/engine/client';
 import { handleEngine, type EngineRequest } from '../src/correct/engine/worker';
 import { sewObjects } from '../src/model/objects';
 import { rememberedIn, restoreRemembered } from '../src/model/restitch';
 import { parsePattern } from '../src/parsers';
+import { fromStored } from '../src/storage/fileStore';
+import { decodeProject } from '../src/storage/project';
 import type { Profile } from '../src/validation/profiles';
 
 const WOVEN: Profile = { fabric: 'woven', thread: '40' };
@@ -44,6 +46,25 @@ describe('correction engine', () => {
     expect(fixedObjects(q)).toEqual(f.objects.map((x) => x.index));
     const back = revertFix(q, fixedObjects(q))!;
     expect(same(back, p)).toBe(true);
+  }, 300_000);
+
+  it('takes back a gaps fix on a pattern fill that sewing anew splits into sections', async () => {
+    // Musterkarte Dekor of the demo: closing the gaps sews a decorative fill in sections; taken
+    // back, it must be one object again (and not refused for a wrong object count).
+    const proj = await decodeProject(new Uint8Array(readFileSync(new URL('../public/examples/demo/heatstitch-demo.heatstitch', import.meta.url))));
+    const file = proj.files.find((f) => f.titles?.de === 'Musterkarte Dekor')!;
+    const o = parsePattern(file.data, file.name);
+    const p = fromStored(o, file.working) ?? o;
+    restoreRemembered(p, file.objects);
+    const f = (await directFix(p, WOVEN, 'gaps', { trimMm: 3 }))!;
+    expect(f).toBeTruthy();
+    const q = applyFix(p, f)!;
+    expect(fixedObjects(q).length).toBeGreaterThan(0);
+    const back = revertFix(q, fixedObjects(q))!;
+    expect(back).toBeTruthy();
+    expect(same(back, p)).toBe(true);
+    expect(sewObjects(back).length).toBe(sewObjects(p).length);
+    expect(fixedObjects(back)).toEqual([]);
   }, 300_000);
 
   it('applies a fix only to the design it was worked out on', async () => {

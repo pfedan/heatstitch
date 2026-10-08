@@ -10,6 +10,7 @@ import { RungTool } from '../ui/rungTool';
 import { outline } from '../digitize/region';
 import { atShare, regionBox, swirlCenters } from '../digitize/deco';
 import { cutLinesBetween, inside, railsFromOutline, stripsOfAreas } from '../digitize/rungs';
+import { areaLoops, suggestSatin } from '../digitize/satinSuggest';
 import { t, type Key } from '../i18n';
 import { bestChain, DECO_DEFAULTS, MAX_SWIRLS, type FillSettings, type Rails, type SatinSettings, analyze, remembered, keepShape, remember, restitch, measureSatin, forget, type RestitchResult, type Settings as RestitchSettings } from '../model/restitch';
 import { ui } from './state';
@@ -299,20 +300,6 @@ export function bindRungs(app: RungsApp) {
     app.applyRestitched(withRungs(columns), 'stitch.failed');
   }
 
-  /** Twice the area of a closed outline (mm²). */
-  const area2 = (ring: Pt[]) => ring.reduce((a, p, i) => a + p[0] * ring[(i + 1) % ring.length][1] - ring[(i + 1) % ring.length][0] * p[1], 0);
-
-  /**
-   * The outlines of a fill: its outsides (more than one when its areas lie apart, as the dot and
-   * stem of an i) and its holes (the counter of an e, both of an 8), tiny specks left out.
-   */
-  function areaLoops(area: Parameters<typeof outline>[0]): { outsides: Pt[][]; holes: Pt[][] } {
-    const loops = (outline(area) as Pt[][]).filter((l) => l.length > 2 && Math.abs(area2(l)) > 0.5);
-    // Inside an even number of others: an outside; an odd number: a hole.
-    const depth = (l: Pt[]) => loops.filter((o) => o !== l && inside(o, l[0])).length;
-    return { outsides: loops.filter((l) => depth(l) % 2 === 0), holes: loops.filter((l) => depth(l) % 2 === 1) };
-  }
-
   /**
    * A satin made from a fill that no longer knows how it was cut (see Rails.split): the fill from its
    * shape, the cut lines where its columns end inside it (against another column, not at the edge).
@@ -332,6 +319,33 @@ export function bindRungs(app: RungsApp) {
     if (k < 0) return columns;
     const cuts = cutLinesBetween(columns[k], outsides, holes);
     return columns.map((part, j) => (j === k ? part.map((c, i) => (i ? c : { ...c, split: { outlines: outsides, holes, cuts } })) : part));
+  }
+
+  /**
+   * Vorschlagen: cut lines and lines across for the selected fill, as a digitizer would set them
+   * by hand (see suggestSatin), in place of those drawn. They can be changed before sewing.
+   */
+  function suggestLines(): void {
+    const p = app.files.active?.pattern;
+    if (!p || ui.rungObject === null || rungTool.mode !== 'fill') return;
+    const q = app.seq(p);
+    const obj = q.objects[ui.rungObject];
+    const an = obj && analyze(p, obj, q.kinds);
+    const area = an && (remembered(p, obj)?.shape ?? an.fill);
+    if (!area) return;
+    const s = suggestSatin(area);
+    if (!s || s.kind === 'wide') return app.layers.say(t('stitch.suggest.wide'), true);
+    let bad: Pt[] | null = null;
+    if (!s.ok) {
+      const { outsides, holes } = areaLoops(area);
+      const made = stripsOfAreas(outsides, s.lines, s.cuts, holes);
+      bad = made.hole >= 0 ? holes[made.hole] : made.bad;
+    }
+    rungTool.setFillLines(s.lines, s.cuts, bad);
+    const n = s.cuts.length + 1;
+    if (!s.ok) app.layers.say(t('stitch.suggest.partly', { n }));
+    else if (s.kind === 'strokes') app.layers.say(t('stitch.suggest.done', { n }));
+    else app.layers.say(t('stitch.suggest.doneAs', { n, shape: t(`stitch.suggest.shape.${s.kind}`) }));
   }
 
   /** Sews the selected fill as satin along the lines drawn across it. */
@@ -385,5 +399,5 @@ export function bindRungs(app: RungsApp) {
     app.applyRestitched(r, 'stitch.toSatin.failed', true);
   }
 
-  return { closeRungs, rungInfo, rungTool, sewAlongLines, syncRungs, toggleGuides, togglePoints, toggleRungs };
+  return { closeRungs, rungInfo, rungTool, sewAlongLines, suggestLines, syncRungs, toggleGuides, togglePoints, toggleRungs };
 }

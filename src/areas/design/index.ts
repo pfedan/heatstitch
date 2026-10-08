@@ -127,7 +127,7 @@ export function initDesign(app: DesignApp): { render: () => void } {
   command({ id: 'view.menu', label: 'design.cmd.viewMenu', group: V, icon: 'eye', run: () => viewPop.open() });
   command({ id: 'view.realistic', label: 'design.cmd.realistic', group: V, run: click('#realistic') });
   command({ id: 'view.liveLight', label: 'design.cmd.liveLight', group: V, when: enabled('#live-light'), run: click('#live-light') });
-  command({ id: 'view.shapes', label: 'design.cmd.shapes', group: V, when: flow, run: click('#shapes-view') });
+  command({ id: 'view.shapes', label: 'design.cmd.shapes', group: V, icon: 'view-shapes', keys: ['S'], bind: false, when: flow, run: click('#shapes-seg [aria-pressed="false"]') });
   for (const by of ['thread', 'order', 'kind', 'length'] as const) {
     command({
       id: `view.colorBy.${by}`,

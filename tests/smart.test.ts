@@ -6,7 +6,9 @@ import { components } from '../src/image/labels';
 import { DEFAULT_PREPARE, Preparer, type Prepared } from '../src/image/prepare';
 import { normalizeImage } from '../src/settings';
 import { DEFAULT_PROFILE } from '../src/validation/profiles';
-import { BLUE, raster, WHITE, YELLOW, type Rgba } from './helpers/images';
+import { BLUE, raster, RED, WHITE, YELLOW, type Rgba } from './helpers/images';
+import { inside } from '../src/digitize/rungs';
+import type { Pt } from '../src/digitize/skeleton';
 
 const BROWN: Rgba = [150, 100, 60, 255];
 const DARK: Rgba = [128, 84, 48, 255];
@@ -85,7 +87,7 @@ describe('Smart', () => {
   });
 
   it('lists the groups under their thread color, colors as sewn', () => {
-    const g = (letter: string, label: number) => ({ letter, label, reason: 'calm' as const, keys: [letter], areaMm2: 1, auto: 'flat' as const, fixed: null });
+    const g = (letter: string, label: number) => ({ letter, label, reason: 'calm' as const, keys: [letter], areaMm2: 1, auto: 'flat' as const, fixed: null, offers: [] });
     expect(groupsByColor([g('A', 2), g('B', 2), g('C', 0), g('D', 1), g('E', 1)]).map((c) => [c.label, c.groups.map((x) => x.letter)])).toEqual([
       [2, ['A', 'B']],
       [0, ['C']],
@@ -122,6 +124,27 @@ describe('Smart', () => {
     };
     expect(acrossGraph(region(dot, 20), 7)?.branches).toHaveLength(1);
     expect(acrossGraph(region(big, 40), 7)).toBeNull();
+  });
+
+  it('sews a star and a frame as satin in sections, cut at their corners', () => {
+    // 60 x 30 mm: a red star (points cut off at their bases) and a blue frame (cut on the miter).
+    const star: Pt[] = Array.from({ length: 10 }, (_, i) => {
+      const a = -Math.PI / 2 + (i * Math.PI) / 5;
+      const q = i % 2 ? 35 : 80;
+      return [150 + q * Math.cos(a), 150 + q * Math.sin(a)] as Pt;
+    });
+    const img = raster(600, 300, (x, y) => {
+      if (inside(star, [x, y])) return RED;
+      const inFrame = x >= 320 && x < 560 && y >= 50 && y < 250 && !(x >= 345 && x < 535 && y >= 75 && y < 225);
+      return inFrame ? BLUE : WHITE;
+    });
+    const p = new Preparer(img).run({ ...DEFAULT_PREPARE, widthMm: 60, maxColors: 3 });
+    const d = digitize(p, options());
+    for (const c of [RED, BLUE]) expect(byColor(d, p, c).map((a) => [a.reason, a.technique])).toEqual([['shape', 'sections']]);
+    // Set by hand to rows, it is filled again.
+    const key = byColor(d, p, RED)[0].key;
+    const flat = digitize(p, options({ areas: { [key]: 'flat' } }));
+    expect(flat.objects.find((o) => o.area === key)!.kind).toBe('fill');
   });
 
   it('keeps only known techniques when read, and Smart as a style', () => {

@@ -12,7 +12,7 @@ import type { RungTool } from '../ui/rungTool';
 import type { Sequence } from './types';
 import type { Settings } from '../settings';
 import type { ShapeTool } from '../ui/shapeTool';
-import { borderLines } from '../model/along';
+import { borderLines, type PathStitch } from '../model/along';
 import { borderRanges } from '../model/border';
 import { formOf } from '../model/reshape';
 import { satinArea } from '../model/railsForm';
@@ -210,14 +210,23 @@ export function bindScene(app: SceneApp) {
     return { rgb, alpha: alphaCache.a, limit, carried };
   }
 
-  /** Fills with a known shape, per pattern: drawn as flat areas in the view "Shapes instead of stitches". */
-  const shapeCache = new WeakMap<Pattern, { o: SewObject; form: Form }[]>();
-  function shapesOf(p: Pattern): { o: SewObject; form: Form }[] {
+  /**
+   * Objects with a known shape, per pattern: drawn as flat areas in the view "Shapes instead of
+   * stitches". Drawn lines come as their curves with how they are sewn, drawn in their width.
+   */
+  const shapeCache = new WeakMap<Pattern, { o: SewObject; form: Form; line?: PathStitch }[]>();
+  function shapesOf(p: Pattern): { o: SewObject; form: Form; line?: PathStitch }[] {
     let list = shapeCache.get(p);
     if (!list) {
       const q = seq(p);
       list = [];
       for (const o of q.objects) {
+        const known = remembered(p, o);
+        // Echo and shadow lines sew more than the line itself: those keep their stitches.
+        if (known?.path && known.line && !known.lettering && !known.line.echo && !known.line.shadow) {
+          list.push({ o, form: known.path, line: known.line });
+          continue;
+        }
         if (o.kind === 'satin') {
           const area = satinArea(p, o, q.kinds);
           if (area) list.push({ o, form: area });
@@ -231,6 +240,13 @@ export function bindScene(app: SceneApp) {
     return list;
   }
 
+  /** How wide a line looks: running and triple stitch as thread, the others across their width. */
+  function lineWidthMm(line: PathStitch, threadMm: number): number {
+    if (line.type === 'run') return threadMm;
+    if (line.type === 'triple') return threadMm * 1.6;
+    return line.width + 2 * (line.pull ?? 0);
+  }
+
   let flatAlpha: { from: Float32Array; a: Float32Array } | null = null;
 
   /** The style with the stitches of objects shown as areas left out, and those areas. */
@@ -241,7 +257,7 @@ export function bindScene(app: SceneApp) {
       for (const { o } of list) a.fill(0, o.first, o.last + 1);
       flatAlpha = { from: style.alpha, a };
     }
-    const areas = list.filter(({ o }) => o.first <= style.limit).map(({ o, form }) => ({ form, color: o.color, alpha: style.alpha[o.first] }));
+    const areas = list.filter(({ o }) => o.first <= style.limit).map(({ o, form, line }) => ({ form, color: o.color, alpha: style.alpha[o.first], ...(line ? { stroke: lineWidthMm(line, app.settings.threadMm) } : {}) }));
     return { style: { ...style, alpha: flatAlpha.a }, areas };
   }
 

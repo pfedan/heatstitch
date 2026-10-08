@@ -100,6 +100,10 @@ export function bindPointer(app: PointerApp) {
   let pressMode: 'move' | 'band' | 'pan' | 'frame' = 'pan';
   /** Pointer painting a brush stroke in the Bild mode, or null. */
   let painting: number | null = null;
+  /** Pointer dragging the frame of the cut in the Bild mode, or null. */
+  let cropping: number | null = null;
+  /** How near the frame of the cut a press grabs it (screen pixels). */
+  const cropReach = (e: PointerEvent) => (e.pointerType === 'mouse' ? 10 : 22) / app.vp.scale;
 
   app.canvas.addEventListener('pointerdown', (e) => {
     app.canvas.setPointerCapture(e.pointerId);
@@ -107,6 +111,15 @@ export function bindPointer(app: PointerApp) {
     pointers.set(e.pointerId, pos);
     pressAt = pointers.size === 1 ? pos : null;
     let mode: 'move' | 'band' | 'pan' | 'frame' = 'pan';
+    if (app.settings.mode === 'image' && pointers.size === 1 && e.button === 0 && app.imageMode.cropDown(...app.vp.toWorld(pos[0], pos[1]), cropReach(e))) {
+      cropping = e.pointerId;
+      return;
+    }
+    // A second finger while cutting means zooming: the frame goes back.
+    if (cropping !== null) {
+      cropping = null;
+      app.imageMode.cropCancel();
+    }
     if (app.settings.mode === 'image' && app.imageMode.painting && pointers.size === 1 && e.button === 0) {
       painting = e.pointerId;
       app.imageMode.paintDown(...app.vp.toWorld(pos[0], pos[1]));
@@ -206,9 +219,14 @@ export function bindPointer(app: PointerApp) {
         app.imageMode.paintMove(wx, wy);
         return;
       }
+      if (cropping === e.pointerId) {
+        app.imageMode.cropMove(wx, wy);
+        return;
+      }
+      if (e.pointerType === 'mouse') app.canvas.style.cursor = app.imageMode.cropCursor(wx, wy, cropReach(e));
       app.imageMode.hover(wx, wy);
       if (!prev && app.imageMode.painting) app.redraw();
-    }
+    } else if (app.canvas.style.cursor) app.canvas.style.cursor = '';
     if (app.settings.liveLight && e.pointerType === 'mouse' && app.threadsShown()) {
       lightFromPointer(pos[0], pos[1], ui.stageW, ui.stageH);
       app.redraw();
@@ -274,6 +292,13 @@ export function bindPointer(app: PointerApp) {
   const endPointer = (e: PointerEvent) => {
     const pos = local(e);
     cancelLongPress();
+    if (cropping === e.pointerId) {
+      cropping = null;
+      pointers.delete(e.pointerId);
+      if (e.type === 'pointerup') app.imageMode.cropUp();
+      else app.imageMode.cropCancel();
+      return;
+    }
     if (painting === e.pointerId) {
       painting = null;
       pointers.delete(e.pointerId);

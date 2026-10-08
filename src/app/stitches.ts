@@ -44,6 +44,7 @@ export interface StitchesApp {
   readonly seqCache: WeakMap<Pattern, Sequence>;
   readonly settings: Settings;
   readonly sewAlongLines: () => void;
+  readonly suggestLines: () => void;
   readonly sewLine: (o: number, path: Form | null, st: PathStitch | null, final: boolean) => boolean;
   readonly sewLineAgain: (o: number) => void;
   readonly toggleGuides: () => void;
@@ -327,10 +328,14 @@ export function bindStitches(app: StitchesApp) {
     }
     ui.selectionKey = remeasure ? key + 1 : key;
     // New stitches have a shape they can be loosed from; the outlines follow a changed area (a
-    // fill along a line gets wider), the measured values stay as set in the panel.
+    // fill along a line gets wider), an object of a file sewn anew can go back to the file's
+    // stitches, and the measured values stay as set in the panel.
     const kept = ui.stitchCache && !remeasure && p === r.pattern ? ui.stitchCache.info : null;
     ui.stitchCache = null;
-    if (kept) ui.stitchCache = { p, key: ui.selectionKey, info: { ...kept, free: freeOf(p, app.seq(p)), outlines: stitchInfo(p, app.seq(p)).outlines } };
+    if (kept) {
+      const now = stitchInfo(p, app.seq(p));
+      ui.stitchCache = { p, key: ui.selectionKey, info: { ...kept, free: freeOf(p, app.seq(p)), outlines: now.outlines, original: now.original } };
+    }
     say();
     app.redraw();
   }

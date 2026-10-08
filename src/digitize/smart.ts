@@ -7,10 +7,11 @@ import type { Graph, Pt } from './skeleton';
  * The Smart style of the Bild assistant: each area of the image gets the technique that suits it,
  * as a digitizer would choose, instead of one style for all.
  *
- * - Strokes stay satin, thin lines running stitch, grass tufts satin blades on a filled base (as
- *   in every style).
+ * - Strokes stay satin, thin lines running stitch (as in every style).
  * - Small round areas (a dot, an eye, a berry) are satin across their length: one smooth column
  *   instead of a few short tatami rows.
+ * - Shapes a digitizer cuts into satin columns (a star, a grass tuft, a frame, a block letter, a
+ *   leaf, a drop, a crescent) are satin in sections (see satinSuggest).
  * - Areas with clear structure of their own in the image (fur, hair, feathers, wood) are filled
  *   with rows that follow it.
  * - Everything else, large calm areas above all, is filled with straight rows: calm, even, and
@@ -20,12 +21,12 @@ import type { Graph, Pt } from './skeleton';
  * the same while only stitch settings change.
  */
 
-/** What an area becomes: straight rows, rows that follow the image, or satin. */
-export type Technique = 'flat' | 'dynamic' | 'satin';
-export const TECHNIQUES: readonly Technique[] = ['flat', 'dynamic', 'satin'];
+/** What an area becomes: straight rows, rows that follow the image, satin, or satin in sections (see satinSuggest). */
+export type Technique = 'flat' | 'dynamic' | 'satin' | 'sections';
+export const TECHNIQUES: readonly Technique[] = ['flat', 'dynamic', 'satin', 'sections'];
 
 /** Why Smart chose what it chose for an area (shown in the list of areas). */
-export type Reason = 'calm' | 'structure' | 'round' | 'stroke' | 'line' | 'blades';
+export type Reason = 'calm' | 'structure' | 'round' | 'stroke' | 'line' | 'shape';
 
 /** An area of the image as the assistant sewed it. */
 export interface AreaInfo {
@@ -47,6 +48,8 @@ export interface AreaInfo {
   reason: Reason;
   /** Set by hand. */
   fixed: boolean;
+  /** The techniques it can be set to (satin in sections only for a drawing of lines or a shape cut into columns). */
+  offers?: Technique[];
 }
 
 /** The key of an area: its color and its bounding box in image pixels. */
@@ -75,6 +78,8 @@ export interface AreaGroup {
   auto: Technique | 'run';
   /** Set by hand for all of them; 'mixed' when only for some, or differently. */
   fixed: Technique | 'mixed' | null;
+  /** The techniques all of them can be set to. */
+  offers: Technique[];
 }
 
 /** The groups of the areas, in the order of their letters. */
@@ -83,7 +88,9 @@ export function groupAreas(areas: readonly AreaInfo[], set: Readonly<Record<stri
   for (const a of areas) {
     const k = groupOf(a);
     let g = out.get(k);
-    if (!g) out.set(k, (g = { letter: a.letter, label: a.label, reason: a.reason, keys: [], areaMm2: 0, auto: a.auto, fixed: null }));
+    const offers = a.offers ?? TECHNIQUES.filter((x) => x !== 'sections');
+    if (!g) out.set(k, (g = { letter: a.letter, label: a.label, reason: a.reason, keys: [], areaMm2: 0, auto: a.auto, fixed: null, offers }));
+    else g.offers = g.offers.filter((x) => offers.includes(x));
     g.keys.push(a.key);
     g.areaMm2 += a.areaMm2;
   }
