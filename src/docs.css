@@ -583,15 +583,6 @@ figure img[src*='save-'] {
   background: var(--accent);
 }
 
-.video video {
-  display: block;
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: #141118;
-}
-
 .video-title {
   margin: 6px 0 0;
   font-size: 14px;
@@ -617,5 +608,126 @@ figure img[src*='save-'] {
 @media (max-width: 340px) {
   .video-list {
     grid-template-columns: 1fr;
+  }
+}
+
+/* The player: a medium dialog over the page, full screen one tap away, subtitles off until asked for. */
+.video-dialog {
+  width: min(92vw, 960px);
+  max-width: none;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: 0 8px 28px rgb(0 0 0 / 0.35);
+  overflow: hidden;
+}
+
+.video-dialog::backdrop {
+  background: rgb(0 0 0 / 0.6);
+}
+
+.video-dialog-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 10px 12px 10px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.video-dialog-head b {
+  font-size: 15px;
+}
+
+.video-dialog-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.video-cc {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.video-cc-label {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.video-cc button,
+.video-dialog-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.video-cc button {
+  border-radius: 0;
+  margin-left: -1px;
+}
+
+.video-cc button:first-of-type {
+  border-radius: 6px 0 0 6px;
+  margin-left: 0;
+}
+
+.video-cc button:last-of-type {
+  border-radius: 0 6px 6px 0;
+}
+
+.video-cc button[aria-pressed='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  position: relative;
+  z-index: 1;
+}
+
+.video-cc button:hover,
+.video-dialog-btn:hover {
+  border-color: var(--muted);
+}
+
+.video-cc[hidden] {
+  display: none;
+}
+
+.video-dialog-stage {
+  background: #141118;
+}
+
+.video-dialog-stage video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  max-height: 80vh;
+}
+
+@media (max-width: 560px) {
+  .video-dialog {
+    width: calc(100vw - 16px);
+  }
+
+  .video-dialog-head {
+    padding: 8px 8px 8px 12px;
+  }
+
+  .video-dialog-head b {
+    font-size: 14px;
   }
 }
