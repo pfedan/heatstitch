@@ -99,7 +99,7 @@ export function initShell(app: ShellApp): void {
   command({ id: 'shell.palette', label: 'shell.palette', group: G, keys: ['Mod+K'], run: () => palette.open(), palette: false });
   command({ id: 'shell.keys', label: 'shell.keys.title', group: G, keys: ['?'], run: () => keys.toggle() });
   command({ id: 'shell.designs', label: 'shell.designs.hint', group: G, keys: ['Mod+O'], run: () => designPop.open() });
-  command({ id: 'shell.save', label: 'shell.save.open', group: G, keys: ['Mod+S'], when: () => !!app.files.active?.pattern && app.mode() !== 'image', run: () => savePop.open() });
+  command({ id: 'shell.save', label: 'shell.save.open', group: G, keys: ['Mod+S'], when: () => !!app.files.active?.pattern && app.mode() !== 'image', need: () => (app.files.active?.pattern ? undefined : 'shell.need.design'), run: () => savePop.open() });
   command({ id: 'shell.more', label: 'shell.more', group: G, run: () => morePop.open(), palette: false });
   command({ id: 'mode.flow', label: 'mode.flow', group: 'shell.group.view', keys: ['1'], bind: false, when: () => app.mode() !== 'flow', run: () => app.setMode('flow') });
   command({ id: 'mode.density', label: 'mode.density', group: 'shell.group.view', keys: ['2'], bind: false, when: () => app.mode() !== 'density', run: () => app.setMode('density') });

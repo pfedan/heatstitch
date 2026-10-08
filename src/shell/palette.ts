@@ -1,5 +1,5 @@
-import { onLangChange, t } from '../i18n';
-import { canRun, commands, keyLabel, type Command } from './commands';
+import { onLangChange, t, type Key } from '../i18n';
+import { canRun, commands, keyLabel, needOf, type Command } from './commands';
 import { h } from './h';
 
 /** Folds case and German umlauts so "loschen" finds "Löschen". */
@@ -24,7 +24,9 @@ function score(c: Command, words: string[]): number {
 
 /**
  * The command search (Mod+K): type a few letters, the matching commands that can run now are
- * listed with their keys, Enter runs the first or the chosen one. Closes with Esc or a click beside it.
+ * listed with their keys, Enter runs the first or the chosen one. Matches that can't run now follow
+ * them, dimmed, with what to do first ("Erst ein Objekt wählen"), so a search never ends in nothing
+ * when the command exists. Closes with Esc or a click beside it.
  */
 export function createPalette(): { open: () => void; close: () => void } {
   const input = h('input', {
@@ -39,6 +41,8 @@ export function createPalette(): { open: () => void; close: () => void } {
   document.body.appendChild(back);
 
   let shown: Command[] = [];
+  /** How many of `shown` can run now; they come first, the rest only explain themselves. */
+  let live = 0;
   let at = 0;
   let before: HTMLElement | null = null;
   /** Commands run from here in this visit, the latest first: with nothing typed they lead the list. */
@@ -50,42 +54,56 @@ export function createPalette(): { open: () => void; close: () => void } {
       const i = recent.indexOf(c.id);
       return i < 0 ? recent.length : i;
     };
-    shown = commands()
-      .filter((c) => c.palette !== false && canRun(c))
-      .map((c) => ({ c, s: words.length ? score(c, words) : 0 }))
-      .filter((x) => x.s >= 0)
-      .sort((a, b) => b.s - a.s || (words.length ? 0 : rank(a.c) - rank(b.c)) || t(a.c.group).localeCompare(t(b.c.group)) || t(a.c.label).localeCompare(t(b.c.label)))
-      .map((x) => x.c)
-      // Typed: the best matches. Nothing typed: everything that can run now, to scroll through.
+    const all = commands()
+      .filter((c) => c.palette !== false)
+      .map((c) => ({ c, s: words.length ? score(c, words) : 0, ok: canRun(c), need: undefined as Key | undefined }))
+      .filter((x) => x.s >= 0);
+    for (const x of all) if (!x.ok) x.need = needOf(x.c);
+    // Nothing typed: everything that can run now, to scroll through. Typed: also what can't but says
+    // what to do first; without that only when nothing else matches, instead of "nothing found".
+    const some = all.some((x) => x.ok || x.need);
+    const found = all
+      .filter((x) => x.ok || (words.length > 0 && (x.need || !some)))
+      .sort((a, b) => Number(b.ok) - Number(a.ok) || b.s - a.s || (words.length ? 0 : rank(a.c) - rank(b.c)) || t(a.c.group).localeCompare(t(b.c.group)) || t(a.c.label).localeCompare(t(b.c.label)))
       .slice(0, words.length ? 40 : undefined);
-    at = Math.min(at, Math.max(0, shown.length - 1));
+    shown = found.map((x) => x.c);
+    const needs = found.map((x) => x.need);
+    live = found.filter((x) => x.ok).length;
+    at = Math.min(at, live - 1);
     list.replaceChildren(
       ...(shown.length
         ? shown.map((c, i) =>
-            h(
-              'li',
-              {
-                role: 'option',
-                class: i === at ? 'on' : '',
-                'aria-selected': String(i === at),
-                onmousemove: () => {
-                  if (at !== i) {
-                    at = i;
-                    mark();
-                  }
-                },
-                onclick: () => pick(c),
-              },
-              h('span', { class: 'palette-label' }, t(c.label)),
-              h('span', { class: 'palette-group' }, t(c.group)),
-              c.keys?.length ? h('kbd', null, keyLabel(c.keys[0])) : null,
-            ),
+            i < live
+              ? h(
+                  'li',
+                  {
+                    role: 'option',
+                    class: i === at ? 'on' : '',
+                    'aria-selected': String(i === at),
+                    onmousemove: () => {
+                      if (at !== i) {
+                        at = i;
+                        mark();
+                      }
+                    },
+                    onclick: () => pick(c),
+                  },
+                  h('span', { class: 'palette-label' }, t(c.label)),
+                  h('span', { class: 'palette-group' }, t(c.group)),
+                  c.keys?.length ? h('kbd', null, keyLabel(c.keys[0])) : null,
+                )
+              : h(
+                  'li',
+                  { role: 'option', class: 'off', 'aria-disabled': 'true', 'aria-selected': 'false' },
+                  h('span', { class: 'palette-label' }, t(c.label)),
+                  h('span', { class: 'palette-need' }, t(needs[i] ?? 'shell.need.later')),
+                ),
           )
         : [h('li', { class: 'palette-empty' }, t('shell.palette.none'))]),
     );
   };
   const mark = () => {
-    [...list.children].forEach((li, i) => {
+    [...list.children].slice(0, live).forEach((li, i) => {
       li.classList.toggle('on', i === at);
       li.setAttribute('aria-selected', String(i === at));
     });
@@ -119,10 +137,10 @@ export function createPalette(): { open: () => void; close: () => void } {
     draw();
   });
   input.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowDown') at = Math.min(shown.length - 1, at + 1);
-    else if (e.key === 'ArrowUp') at = Math.max(0, at - 1);
+    if (e.key === 'ArrowDown') at = Math.min(live - 1, at + 1);
+    else if (e.key === 'ArrowUp') at = Math.min(live - 1, Math.max(0, at - 1));
     else if (e.key === 'Enter') {
-      if (shown[at]) pick(shown[at]);
+      if (at >= 0 && shown[at]) pick(shown[at]);
     } else if (e.key === 'Escape') close();
     else return;
     e.preventDefault();
