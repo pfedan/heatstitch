@@ -99,4 +99,59 @@ describe.skipIf(!on)('narrow screens', () => {
     expect(stage!.width).toBeGreaterThan(700);
     await ctx.close();
   });
+  /** A drag with a finger on the stage, in page coordinates. */
+  const fingerDrag = async (page: Page, from: [number, number], to: [number, number]) => {
+    const cdp = await page.context().newCDPSession(page);
+    const at = (i: number) => ({ x: from[0] + ((to[0] - from[0]) * i) / 15, y: from[1] + ((to[1] - from[1]) * i) / 15 });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [at(0)] });
+    for (let i = 1; i <= 15; i++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [at(i)] });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await page.waitForTimeout(1200);
+  };
+  const objectCount = (page: Page) => page.locator('#layer-list .layer[data-object]').count();
+  /** A new rectangle across the middle of the stage, drawn with the finger; it is selected after. */
+  const drawRect = async (page: Page) => {
+    await page.tap('#rs-draw');
+    await page.locator('.rs-draw-row').first().click();
+    await fingerDrag(page, [100, 250], [290, 330]);
+  };
+
+  it('a phone: undo from the menu "…" takes back a cut', { timeout: 40_000 }, async () => {
+    const [ctx, page] = await open(390, 844);
+    await drawRect(page);
+    const before = await objectCount(page);
+    // Zerteilen, the last tool in the drawing menu.
+    await page.tap('#rs-draw');
+    await page.locator('.rs-draw-row').last().click();
+    await fingerDrag(page, [80, 290], [320, 295]);
+    expect(await objectCount(page)).toBe(before + 1);
+    // The undo button of the top bar is out of sight on the phone; its row in the menu works all the same.
+    await page.tap('#more-button');
+    const undo = page.locator('#more-pop .rs-phone-row').first();
+    expect(await undo.isDisabled()).toBe(false);
+    await undo.tap();
+    await page.waitForTimeout(800);
+    expect(await objectCount(page)).toBe(before);
+    await ctx.close();
+  });
+
+  it('a phone: a single rung is deleted with the button in the bar (no Entf key)', { timeout: 40_000 }, async () => {
+    const [ctx, page] = await open(390, 844);
+    await drawRect(page);
+    await page.tap('#tool-direction');
+    await page.waitForTimeout(400);
+    await fingerDrag(page, [150, 230], [150, 350]);
+    await fingerDrag(page, [230, 230], [230, 350]);
+    const bar = page.locator('.stitch-bar');
+    const del = bar.locator('button', { hasText: /^Löschen$|^Delete$/ });
+    // A tap on the first rung selects it (a new one is selected as drawn); the button removes that one only.
+    await page.touchscreen.tap(150, 290);
+    await page.waitForTimeout(500);
+    expect(await bar.innerText()).toMatch(/2 (Querlinien|rungs)/);
+    await del.tap();
+    await page.waitForTimeout(500);
+    expect(await bar.innerText()).toMatch(/1 (Querlinie|rung)\b/);
+    expect(await del.count()).toBe(0);
+    await ctx.close();
+  });
 });

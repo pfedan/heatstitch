@@ -17,9 +17,14 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 
 /** Clicks a button of the page if it is there, shown and enabled: commands that still drive the old controls. */
 const press = (id: string) => () => $<HTMLButtonElement>(id)?.click();
+/**
+ * Whether a button of the top bar can run in this mode. Not whether it is on screen: on the phone
+ * undo and redo live in the menu "…" while their buttons are out of sight.
+ */
 const usable = (id: string) => () => {
   const b = $<HTMLButtonElement>(id);
-  return !!b && !b.disabled && !b.hidden && b.offsetParent !== null;
+  const modes = b?.closest<HTMLElement>('[data-mode]')?.dataset.mode;
+  return !!b && !b.disabled && !b.hidden && (!modes || modes.split(' ').includes(document.body.dataset.mode ?? 'flow'));
 };
 
 /**
