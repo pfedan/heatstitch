@@ -305,8 +305,9 @@ shots.objects = async (lang) => {
   await example(page, 'cat');
   await realistic(page, true);
   await expandColor(page, 2);
+  // the first fill of the orange (the row before it is the outline as a running stitch)
   const rows = await objectRows(page);
-  await clickObject(page, rows[0].i);
+  await clickObject(page, (rows.find((r) => /^(Füllung|Fill)/.test(r.text)) ?? rows[0]).i);
   await inspectorTo(page, '#object-panel');
   await sidebarTop(page);
   await mouseAway(page);
