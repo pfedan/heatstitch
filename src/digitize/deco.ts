@@ -1,6 +1,6 @@
 import { contourFill, type DirField, Grid, sewRows } from './flow';
 import type { FillParams, FillResult } from './fill';
-import { sample, type Region } from './region';
+import { outline, sample, type Region } from './region';
 import { runStitch } from './run';
 import type { Pt } from './skeleton';
 
@@ -443,12 +443,27 @@ function treeLoops(r: Region, cell: number, seed: number, maze: boolean, margin:
   const gw = Math.ceil(bx1 / cell) - i0 + 1;
   const gh = Math.ceil(by1 / cell) - j0 + 1;
   const at = (i: number, j: number): Pt => [(i0 + i + 0.5) * cell, (j0 + j + 0.5) * cell];
-  const ok = new Uint8Array(gw * gh);
-  for (let j = 0; j < gh; j++) for (let i = 0; i < gw; i++) if (sample(r, r.sdf, ...at(i, j)) < -margin) ok[j * gw + i] = 1;
+  // The loop runs through the centers of the cells' quarters (spanning tree coverage, Gabriely and
+  // Rimon): a quarter is free where its center keeps the margin left beyond the quarter cell.
+  const q = cell / 4;
+  const free = (i: number, j: number, dx: number, dy: number) => {
+    const [x, y] = at(i, j);
+    return sample(r, r.sdf, x + dx * q, y + dy * q) < -(margin - q);
+  };
+  // Free quarters per cell, bit (dx > 0) + 2 (dy > 0); a cell with all four free joins the tree.
+  const quarters = new Uint8Array(gw * gh);
+  for (let j = 0; j < gh; j++) {
+    for (let i = 0; i < gw; i++) {
+      let m = 0;
+      for (let b = 0; b < 4; b++) if (free(i, j, b & 1 ? 1 : -1, b & 2 ? 1 : -1)) m |= 1 << b;
+      quarters[j * gw + i] = m;
+    }
+  }
+  const ok = quarters.map((m) => (m === 15 ? 1 : 0));
   const seen = new Uint8Array(gw * gh);
   // Tree edges per cell: bit d for direction d.
   const links = new Uint8Array(gw * gh);
-  const loops: Pt[][] = [];
+  const grown: number[] = [];
   const shuffled = (): number[] => {
     const d = [0, 1, 2, 3];
     for (let i = 3; i > 0; i--) {
@@ -501,16 +516,52 @@ function treeLoops(r: Region, cell: number, seed: number, maze: boolean, margin:
         grow(nk);
       }
     }
-    loops.push(outlineOfTree(root, gw, links, at, cell / 4));
+    grown.push(root);
   }
-  return loops;
+  // Cells along the edge with only two free quarters, on the side of a tree cell, hang on it as
+  // half leaves: the loop turns back through those two quarters (as in full spanning tree
+  // coverage), so the edge keeps no more than about one line spacing free.
+  const half = new Int8Array(gw * gh).fill(-1);
+  const sideFree = (m: number, d: number) => {
+    // The two quarters on side d of a cell (d as in DIRS).
+    const side = d === 0 ? 0b1010 : d === 1 ? 0b1100 : d === 2 ? 0b0101 : 0b0011;
+    return (m & side) === side;
+  };
+  for (const d of shuffledAll(rnd, gw * gh)) {
+    if (ok[d] || !quarters[d]) continue;
+    const ci = d % gw;
+    const cj = Math.floor(d / gw);
+    for (const t of [0, 1, 2, 3]) {
+      const ni = ci + DIRS[t][0];
+      const nj = cj + DIRS[t][1];
+      if (ni < 0 || nj < 0 || ni >= gw || nj >= gh) continue;
+      const nk = nj * gw + ni;
+      if (!ok[nk] || !sideFree(quarters[d], t)) continue;
+      // The tree cell's side towards it is free: it is a whole cell.
+      links[nk] |= 1 << ((t + 2) % 4);
+      links[d] |= 1 << t;
+      half[d] = t;
+      break;
+    }
+  }
+  return grown.map((root) => outlineOfTree(root, gw, links, at, q, half));
+}
+
+/** The numbers 0 to n - 1 in a random order. */
+function shuffledAll(rnd: () => number, n: number): number[] {
+  const a = Array.from({ length: n }, (_, i) => i);
+  for (let i = n - 1; i > 0; i--) {
+    const k = Math.floor(rnd() * (i + 1));
+    [a[i], a[k]] = [a[k], a[i]];
+  }
+  return a;
 }
 
 /**
  * Walks round a tree with it on the left, a quarter cell off its edges, and returns the corners
  * of that walk: at every cell it takes the first link turning right, then straight on, left, back.
  */
-function outlineOfTree(root: number, gw: number, links: Uint8Array, at: (i: number, j: number) => Pt, q: number): Pt[] {
+function outlineOfTree(root: number, gw: number, links: Uint8Array, at: (i: number, j: number) => Pt, q: number, half: Int8Array): Pt[] {
   const right = (d: number) => (d + 1) % 4; // y grows downwards: (1,0) turned right is (0,1)
   const off = (d: number): Pt => DIRS[right(d)];
   const pos = (c: number) => at(c % gw, Math.floor(c / gw));
@@ -545,9 +596,10 @@ function outlineOfTree(root: number, gw: number, links: Uint8Array, at: (i: numb
     if (nd === d) {
       // Straight on: no corner.
     } else if (nd === (d + 2) % 4) {
-      // Dead end: round the cell's far side.
-      out.push([v[0] + q * (o1[0] + DIRS[d][0]), v[1] + q * (o1[1] + DIRS[d][1])]);
-      out.push([v[0] + q * (-o1[0] + DIRS[d][0]), v[1] + q * (-o1[1] + DIRS[d][1])]);
+      // Dead end: round the cell's far side, or for a half leaf its near side (its two free quarters).
+      const f = half[nc] >= 0 ? -1 : 1;
+      out.push([v[0] + q * (o1[0] + f * DIRS[d][0]), v[1] + q * (o1[1] + f * DIRS[d][1])]);
+      out.push([v[0] + q * (-o1[0] + f * DIRS[d][0]), v[1] + q * (-o1[1] + f * DIRS[d][1])]);
     } else {
       const o2 = off(nd);
       out.push([v[0] + q * (o1[0] + o2[0]), v[1] + q * (o1[1] + o2[1])]);
@@ -561,20 +613,44 @@ function outlineOfTree(root: number, gw: number, links: Uint8Array, at: (i: numb
 }
 
 /**
- * A closed loop smoothed `times` times with the weights 1, 2, 1: corners become round bends a
- * fraction of a corridor wide, too little to bring two passes together.
+ * A closed loop of straight runs with every corner rounded to an arc of `radius` mm (less where a
+ * run is too short for both of its ends): unlike smoothing, the runs keep their place, so lines
+ * that lie `2 * radius` apart stay that far apart and a dead end becomes a half circle.
  */
-function smooth(loop: Pt[], times: number): Pt[] {
-  let l = loop.slice(0, -1);
-  for (let t = 0; t < times; t++) {
-    const n = l.length;
-    l = l.map((q, i) => {
-      const a = l[(i + n - 1) % n];
-      const b = l[(i + 1) % n];
-      return [(a[0] + 2 * q[0] + b[0]) / 4, (a[1] + 2 * q[1] + b[1]) / 4] as Pt;
-    });
+function rounded(loop: Pt[], radius: number): Pt[] {
+  // Without repeated points and points in the middle of a straight run.
+  const pts: Pt[] = [];
+  for (const q of loop.slice(0, -1)) if (!pts.length || dist(pts[pts.length - 1], q) > 1e-9) pts.push(q);
+  const n0 = pts.length;
+  const corners = pts.filter((q, i) => {
+    const a = pts[(i + n0 - 1) % n0];
+    const b = pts[(i + 1) % n0];
+    return Math.abs((q[0] - a[0]) * (b[1] - q[1]) - (q[1] - a[1]) * (b[0] - q[0])) > 1e-9;
+  });
+  const n = corners.length;
+  if (n < 3) return loop;
+  const out: Pt[] = [];
+  for (let i = 0; i < n; i++) {
+    const a = corners[(i + n - 1) % n];
+    const c = corners[i];
+    const b = corners[(i + 1) % n];
+    const la = dist(a, c);
+    const lb = dist(c, b);
+    const ua: Pt = [(a[0] - c[0]) / la, (a[1] - c[1]) / la];
+    const ub: Pt = [(b[0] - c[0]) / lb, (b[1] - c[1]) / lb];
+    // Tangent length of an arc of the radius between the two runs.
+    const half = Math.acos(Math.max(-1, Math.min(1, ua[0] * ub[0] + ua[1] * ub[1]))) / 2;
+    const t = Math.min(radius / Math.tan(half), la / 2, lb / 2);
+    const p0: Pt = [c[0] + ua[0] * t, c[1] + ua[1] * t];
+    const p1: Pt = [c[0] + ub[0] * t, c[1] + ub[1] * t];
+    // The arc as a quadratic curve with its control point at the corner.
+    const steps = 6;
+    for (let k = 0; k <= steps; k++) {
+      const s = k / steps;
+      out.push([(1 - s) * (1 - s) * p0[0] + 2 * s * (1 - s) * c[0] + s * s * p1[0], (1 - s) * (1 - s) * p0[1] + 2 * s * (1 - s) * c[1] + s * s * p1[1]]);
+    }
   }
-  return [...l, l[0]];
+  return [...out, out[0]];
 }
 
 /** Points every `step` mm along a closed loop (keeping its corners close enough). */
@@ -590,15 +666,21 @@ function densify(loop: Pt[], step: number): Pt[] {
 }
 
 /**
- * Meander (stippling): a tree outline bent by a smooth warp of the plane, which keeps the line
- * from crossing itself, then rounded. Lines are `size` mm apart.
+ * Meander (stippling): a tree outline with its corners rounded, bent by a smooth warp of the plane,
+ * which keeps the line from crossing itself. Lines are `size` mm apart.
  */
 export function meanderFill(r: Region, p: OpenParams, start: Pt): FillResult | null {
   const cell = 2 * p.size;
   const amp = 0.2 * cell;
   const nx = noise(p.seed * 31 + 1, 3 * cell, 2);
   const ny = noise(p.seed * 31 + 2, 3 * cell, 2);
-  const loops = treeLoops(r, cell, p.seed, false, cell / 4 + amp + 0.2).map((l) => smooth(densify(l, cell / 8).map(([x, y]) => [x + amp * 0.6 * nx(x, y), y + amp * 0.6 * ny(x, y)] as Pt), 8));
+  // The warp fades out towards the edge, so the line can come as close to it as a maze's and is
+  // never pushed out (it moves a point by less than half its depth beyond the 0.2 mm kept free).
+  const warp = ([x, y]: Pt): Pt => {
+    const f = amp * 0.6 * Math.min(1, Math.max(0, (-sample(r, r.sdf, x, y) - 0.2) / (2 * amp)));
+    return [x + f * nx(x, y), y + f * ny(x, y)];
+  };
+  const loops = treeLoops(r, cell, p.seed, false, cell / 4 + 0.2).map((l) => densify(rounded(l, cell / 4), cell / 8).map(warp));
   const runs = sewLoops(loops, start, p);
   return runs.length ? { runs, angle: 0, under: 0 } : null;
 }
@@ -709,17 +791,14 @@ class Graph {
   }
 }
 
-/** Whether a segment lies inside the region by more than `margin` (ends and middle). */
-const segInside = (r: Region, a: Pt, b: Pt, margin: number) =>
-  [a, b, [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] as Pt].every((q) => sample(r, r.sdf, q[0], q[1]) < -margin);
-
 /** A grid of honeycombs, diamonds or bricks `size` mm wide, sewn in one go per connected part. */
 export function gridFill(r: Region, p: OpenParams, kind: GridKind, start: Pt): FillResult | null {
   const [x0, y0, x1, y1] = regionBox(r);
-  const g = new Graph();
   const s = p.size;
+  const pieces: Piece[] = [];
   const add = (a: Pt, b: Pt) => {
-    if (segInside(r, a, b, 0.3)) g.add(a, b);
+    // Each lattice line once, the same way round from either cell it borders.
+    pieces.push(...clipped(r, a[0] < b[0] || (a[0] === b[0] && a[1] < b[1]) ? [a, b] : [b, a], GRID_MARGIN));
   };
   if (kind === 'hex') {
     const rad = s / Math.sqrt(3);
@@ -755,10 +834,105 @@ export function gridFill(r: Region, p: OpenParams, kind: GridKind, start: Pt): F
       }
     }
   }
+  const g = latticeGraph(r, pieces, GRID_MARGIN);
   g.prune();
   let runs = g.walk(start).map((run) => runStitch(run, p.stitch, 0.05));
   if (p.triple) runs = runs.map(tripled);
   return runs.length ? { runs, angle: 0, under: 0 } : null;
+}
+
+/** How far inside the edge a grid stays (mm). */
+const GRID_MARGIN = 0.3;
+/** Lattice pieces shorter than this where the edge cuts them are left out (mm). */
+const MIN_PIECE = 0.4;
+
+/**
+ * The parts of segment ab more than `margin` inside the region: sampled every 0.1 mm, each end
+ * where it crosses that line found by bisection.
+ */
+function clipped(r: Region, [a, b]: [Pt, Pt], margin: number): Piece[] {
+  const len = dist(a, b);
+  const at = (t: number): Pt => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+  const inside = (t: number) => sample(r, r.sdf, ...at(t)) < -margin;
+  const n = Math.max(2, Math.ceil(len / 0.1));
+  const cross = (lo: number, hi: number) => {
+    // inside(lo) differs from inside(hi): the crossing between them.
+    const was = inside(lo);
+    for (let k = 0; k < 14; k++) {
+      const m = (lo + hi) / 2;
+      if (inside(m) === was) lo = m;
+      else hi = m;
+    }
+    return (lo + hi) / 2;
+  };
+  const out: Piece[] = [];
+  let from: number | null = inside(0) ? 0 : null;
+  for (let k = 1; k <= n; k++) {
+    const t0 = (k - 1) / n;
+    const t1 = k / n;
+    const now = inside(t1);
+    if (from === null && now) from = cross(t0, t1);
+    else if (from !== null && !now) {
+      const to = cross(t0, t1);
+      if ((to - from) * len >= MIN_PIECE) out.push(piece(from, to));
+      from = null;
+    }
+  }
+  if (from !== null && (1 - from) * len >= MIN_PIECE) out.push(piece(from, 1));
+  return out;
+
+  function piece(t0: number, t1: number): Piece {
+    return { a: at(t0), b: at(t1), cutA: t0 > 0, cutB: t1 < 1 };
+  }
+}
+
+/** A part of a lattice line, and which of its ends the edge cut. */
+interface Piece {
+  a: Pt;
+  b: Pt;
+  cutA: boolean;
+  cutB: boolean;
+}
+
+/**
+ * A lattice cut by the edge as one graph, the way Ink/Stitch joins fill rows: the line `margin`
+ * inside the edge joins the cut ends, so the lattice reaches the edge all round and is sewn in one
+ * go, with no dead ends sewn twice and no part of the area left out because its cells are cut.
+ */
+function latticeGraph(r: Region, pieces: Piece[], margin: number): Graph {
+  const g = new Graph();
+  const loops = outline(r, -margin, r.sdf).map((l) => l as Pt[]);
+  // Cut ends, put on the nearest point of the line along the edge: per loop, its place along it.
+  const onLoop = loops.map(() => [] as { s: number; q: Pt }[]);
+  const snap = (q: Pt): Pt => {
+    let best = { d: Infinity, loop: -1, s: 0, q };
+    loops.forEach((l, li) => {
+      for (let i = 1; i < l.length; i++) {
+        const a = l[i - 1];
+        const b = l[i];
+        const dx = b[0] - a[0];
+        const dy = b[1] - a[1];
+        const ll = dx * dx + dy * dy;
+        const t = ll > 0 ? Math.max(0, Math.min(1, ((q[0] - a[0]) * dx + (q[1] - a[1]) * dy) / ll)) : 0;
+        const c: Pt = [a[0] + dx * t, a[1] + dy * t];
+        const d = dist(c, q);
+        if (d < best.d) best = { d, loop: li, s: i - 1 + t, q: c };
+      }
+    });
+    // Too far from the line (a crossing where the edge is cut by the region's window): kept as it is.
+    if (best.loop < 0 || best.d > 0.2) return q;
+    onLoop[best.loop].push({ s: best.s, q: best.q });
+    return best.q;
+  };
+  for (const pc of pieces) g.add(pc.cutA ? snap(pc.a) : pc.a, pc.cutB ? snap(pc.b) : pc.b);
+  loops.forEach((l, li) => {
+    const cuts = onLoop[li];
+    if (!cuts.length) return;
+    // The loop's points and the cut ends on it, in order along it.
+    const along = [...l.slice(0, -1).map((q, i) => ({ s: i, q })), ...cuts].sort((x, y) => x.s - y.s);
+    for (let i = 0; i < along.length; i++) g.add(along[i].q, along[(i + 1) % along.length].q);
+  });
+  return g;
 }
 
 /**

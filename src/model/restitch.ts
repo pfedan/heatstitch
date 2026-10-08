@@ -25,7 +25,7 @@ import { coversOver, cutAway, type Cover } from './covers';
 import { backToVersion, entryOf, hasTable, hold, keepVersion, knowKinds, rememberObjects, setMemory, setObjects, setObjectsFromKeys, stitchIndex, stitchKey, tableOf, type ObjectKind, type PlacedEntry, type SewObject } from './objects';
 import { END, JUMP, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
 import { partFringe } from './fringe';
-import { SATIN, stitchKinds, TIE_STITCH } from './sequence';
+import { recordOfStitch, SATIN, stitchKinds, TIE_STITCH } from './sequence';
 import { gradientOf, patchArea, patchSpacing, rowPatches, type RowPatch } from './rows';
 import { letteringFrom } from '../lettering/stored';
 import type { Lettering } from '../lettering/layout';
@@ -2731,6 +2731,21 @@ export interface RestitchResult {
   regions: (Region | null)[];
   /** What to remember about each changed object for the next edit (as `starts`). */
   memory: Remembered[];
+}
+
+/**
+ * The objects of the new pattern that each changed object came out as: one, or several where its
+ * new stitches are trimmed inside (as `starts`). `numbers` and `objectAt` are those of the new pattern.
+ */
+export function restitchedPieces(r: RestitchResult, numbers: Uint32Array, objectAt: Int32Array): Set<number>[] {
+  return r.starts.map((a, k) => {
+    const pieces = new Set<number>();
+    for (let n = a + 1; n <= r.ends[k]; n++) {
+      const o = objectAt[recordOfStitch(numbers, n)];
+      if (o >= 0) pieces.add(o);
+    }
+    return pieces;
+  });
 }
 
 /** Settings for each object: the same for all, or chosen per object (null leaves it as it is). */

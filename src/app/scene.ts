@@ -16,7 +16,7 @@ import { borderLines, type PathStitch } from '../model/along';
 import { borderRanges } from '../model/border';
 import { formOf } from '../model/reshape';
 import { satinArea } from '../model/railsForm';
-import { remembered, underlayRanges, type RestitchResult, analyze } from '../model/restitch';
+import { remembered, underlayRanges, type RestitchResult, analyze, restitchedPieces } from '../model/restitch';
 import { sewObjects, overlaps, type SewObject } from '../model/objects';
 import { stitchNumbers, stitchKinds, colorBlocks, markers as findMarkers, transitions, sewingSeconds, recordOfStitch, carriedJumps } from '../model/sequence';
 import { type Pattern, TRIM, COLOR_CHANGE, STITCH, type ThreadColor } from '../model/pattern';
@@ -188,12 +188,27 @@ export function bindScene(app: SceneApp) {
     return contourCache.lines;
   }
 
+  /**
+   * The selected objects as numbered in `p`. In a preview the selected objects are sewn anew and can
+   * come out in several pieces (trims inside): all of them count, as once the change is applied.
+   */
+  let selectedCache: { p: Pattern; r: RestitchResult; sel: ReadonlySet<number>; out: ReadonlySet<number> } | null = null;
+  function selectedIn(p: Pattern): ReadonlySet<number> {
+    const r = ui.previewResult?.pattern === p ? ui.previewResult : null;
+    if (!r) return ui.selectedObjects;
+    if (selectedCache?.p === p && selectedCache.r === r && selectedCache.sel === ui.selectedObjects) return selectedCache.out;
+    const q = seq(p);
+    const out = new Set(restitchedPieces(r, q.numbers, q.objectAt).flatMap((s) => [...s]));
+    selectedCache = { p, r, sel: ui.selectedObjects, out };
+    return out;
+  }
+
   function styleFor(p: Pattern): StitchStyle {
     const q = seq(p);
     const rgb = (q.colors[app.settings.colorBy] ??= stitchColors(p, app.settings.colorBy, q.kinds));
     const focus = ui.hoverBlock ?? ui.focusBlock;
     // A hovered object wins over the selection, the selection over a highlighted color.
-    const shown = ui.hoverObject !== null ? new Set([ui.hoverObject]) : ui.selectedObjects.size ? ui.selectedObjects : null;
+    const shown = ui.hoverObject !== null ? new Set([ui.hoverObject]) : ui.selectedObjects.size ? selectedIn(p) : null;
     const under = ui.hoverObject === null ? underMask(p) : null;
     const objKey = shown && ui.hoverObject !== null ? `h${ui.hoverObject}` : under ? under : shown;
     if (alphaCache?.p !== p || alphaCache.hidden !== ui.hiddenBlocks || alphaCache.focus !== focus || (alphaCache.objects as unknown) !== objKey) {

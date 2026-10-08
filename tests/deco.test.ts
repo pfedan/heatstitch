@@ -10,8 +10,8 @@ import { syncBorders } from '../src/model/border';
 import { takeOver } from '../src/model/knockout';
 import { sewObjects } from '../src/model/objects';
 import { COLOR_CHANGE, STITCH, type Pattern } from '../src/model/pattern';
-import { DECO_PATTERNS, OPEN_PATTERNS, openOnPurpose, remembered, restitch, restoreRemembered, rememberedIn, type FillSettings } from '../src/model/restitch';
-import { stitchKinds } from '../src/model/sequence';
+import { DECO_PATTERNS, OPEN_PATTERNS, openOnPurpose, remembered, restitch, restitchedPieces, restoreRemembered, rememberedIn, type FillSettings } from '../src/model/restitch';
+import { stitchKinds, stitchNumbers } from '../src/model/sequence';
 import { deleteObjects, mirrorMatrix, recolorObjects } from '../src/model/shapeOps';
 import { transformRemembered } from '../src/model/transform';
 import { ellipsePath, parsePath } from '../src/shape/svgPath';
@@ -148,6 +148,44 @@ describe('open patterns', () => {
     }
   });
 
+  /** The farthest any point of the region (more than 0.3 mm inside) lies from the sewn line (mm). */
+  const farthest = (r: Region, runs: Pt[][]) => {
+    const segs: [Pt, Pt][] = [];
+    for (const run of runs) for (let i = 1; i < run.length; i++) segs.push([run[i - 1], run[i]]);
+    const seg = (q: Pt, a: Pt, b: Pt) => {
+      const dx = b[0] - a[0];
+      const dy = b[1] - a[1];
+      const l = dx * dx + dy * dy;
+      const t = l > 0 ? Math.max(0, Math.min(1, ((q[0] - a[0]) * dx + (q[1] - a[1]) * dy) / l)) : 0;
+      return Math.hypot(a[0] + dx * t - q[0], a[1] + dy * t - q[1]);
+    };
+    const [x0, y0, x1, y1] = regionBox(r);
+    let worst = 0;
+    for (let y = y0; y < y1; y += 0.25) {
+      for (let x = x0; x < x1; x += 0.25) {
+        if (sample(r, r.sdf, x, y) > -0.3) continue;
+        let m = Infinity;
+        for (const [a, b] of segs) m = Math.min(m, seg([x, y], a, b));
+        worst = Math.max(worst, m);
+      }
+    }
+    return worst;
+  };
+
+  it('brings the open patterns up to the edge, also on a shape away from the origin', () => {
+    // A circle 30 mm across, like the one in the shapes example, left and above the origin.
+    const ring = region((x, y) => Math.hypot(x - 15, y - 15) < 14.5);
+    const away = { ...ring, x0: ring.x0 - 600, y0: ring.y0 - 600 };
+    for (const r of [ring, away]) {
+      // A maze or meander whole cell can no longer be left out along the edge: no point is much
+      // farther from the line than the lines lie apart (it was up to 4 and 7 mm at 2.5 mm).
+      expect(farthest(r, mazeFill(r, open, [0, 0])!.runs)).toBeLessThan(2.5);
+      expect(farthest(r, meanderFill(r, open, [0, 0])!.runs)).toBeLessThan(3.2);
+      // The grid's cells cut by the edge stay, joined along it (it was up to 5.7 mm at 6 mm).
+      expect(farthest(r, gridFill(r, { ...open, size: 6 }, 'hex', [0, 0])!.runs)).toBeLessThan(6 / Math.sqrt(3));
+    }
+  });
+
   it('crosses every whole cell of the cross stitch on both diagonals', () => {
     const res = crossFill(square, open, 'full', [5, 5])!;
     const [x0, y0, x1, y1] = regionBox(square);
@@ -225,6 +263,22 @@ describe('decorative fills in the design', () => {
     }
     const e = sewAs(p, (f) => ({ ...f, deco: { emboss: 'stars', embossSize: 12 } }))!;
     expect(remembered(e, sewObjects(e)[0])?.fill?.deco?.emboss).toBe('stars');
+  });
+
+  it('knows every piece a fill comes out in, so a preview shows all of it', () => {
+    // Rays come out in pieces (trims inside); the preview counts them all as the selection, as the
+    // change applied does (a piece left out was drawn faded: a hole with only the underlay).
+    const p = addShape(empty, { form: parsePath(ellipsePath(-60, -60, 15, 15), [...ID]), kind: 'fill' }, red, null, options)!.pattern;
+    const kinds = stitchKinds(p);
+    const objs = sewObjects(p, kinds);
+    const r = restitch(p, objs, [0], { kind: 'fill', s: { ...remembered(p, objs[0])!.fill!, pattern: 'rays', deco: {} } }, kinds, options.trimMm)!;
+    const q = r.pattern;
+    const after = sewObjects(q, stitchKinds(q));
+    const objectAt = new Int32Array(q.cmd.length).fill(-1);
+    for (const o of after) objectAt.fill(o.index, o.first, o.last + 1);
+    const [pieces] = restitchedPieces(r, stitchNumbers(q), objectAt);
+    expect(after.length).toBeGreaterThan(1);
+    expect([...pieces].sort()).toEqual(after.map((o) => o.index));
   });
 
   it('lets open patterns stay open: no density findings for them', () => {
