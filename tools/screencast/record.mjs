@@ -162,11 +162,12 @@ const api = {
       await frame();
     }
   },
-  click: async (target, { move = 0.8, before = 0.25, after = 0.35 } = {}) => {
+  /** `button: 'right'` opens a context menu; the click ring looks the same. */
+  click: async (target, { move = 0.8, before = 0.25, after = 0.35, button = 'left' } = {}) => {
     if (target) await api.move(target, move);
     await api.wait(before);
-    await page.mouse.down();
-    await page.mouse.up();
+    await page.mouse.down({ button });
+    await page.mouse.up({ button });
     state.click = { ...state.cursor };
     await api.wait(after);
   },
