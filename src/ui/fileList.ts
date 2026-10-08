@@ -114,6 +114,8 @@ export class FileList {
   private drawing = false;
   /** Called after a design got another name (the save field suggests the new one). */
   onRename: (f: LoadedFile) => void = () => {};
+  /** Called when the user picks a design (list, keys), not when the app activates one itself. */
+  onPick: (f: LoadedFile | null) => void = () => {};
 
   constructor(
     private list: HTMLUListElement,
@@ -499,6 +501,12 @@ export class FileList {
     this.onActivate(this.active);
   }
 
+  /** The user picks a design: it becomes active and is shown, wherever the user was. */
+  pick(id: number): void {
+    this.activate(id);
+    this.onPick(this.active);
+  }
+
   /**
    * Takes a design out of the list and activates the next one. It stays in storage for a few
    * seconds: the returned function puts it back as it was (with its undo history), until then.
@@ -550,7 +558,7 @@ export class FileList {
     const ok = this.files.filter((f) => f.pattern);
     if (!ok.length) return;
     const i = ok.findIndex((f) => f.id === this.activeId);
-    this.activate(ok[(i + dir + ok.length) % ok.length].id);
+    this.pick(ok[(i + dir + ok.length) % ok.length].id);
   }
 
   render(): void {
@@ -646,7 +654,7 @@ export class FileList {
         worst === CRITICAL ? 'level.critical' : worst === CAUTION ? 'level.caution' : worst === null ? 'validation.pending' : 'level.safe',
       );
       li.append(dot);
-      li.addEventListener('click', () => this.activate(f.id));
+      li.addEventListener('click', () => this.pick(f.id));
       if (this.renaming?.id !== f.id) {
         const pen = document.createElement('button');
         pen.type = 'button';

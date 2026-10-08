@@ -39,7 +39,7 @@ jobs:
       # button click (tests/spaceKey.test.ts); phone and tablet layout (tests/responsive.test.ts); dragging
       # an object in the list (tests/layerDrag.test.ts); a converted image opens fitted (tests/imageTakeFit.test.ts).
       - run: npx playwright install --with-deps chromium
-      - run: npx vitest run tests/langSwitch.test.ts tests/tooltip.test.ts tests/spaceKey.test.ts tests/responsive.test.ts tests/layerDrag.test.ts tests/imageTakeFit.test.ts
+      - run: npx vitest run tests/langSwitch.test.ts tests/tooltip.test.ts tests/spaceKey.test.ts tests/responsive.test.ts tests/layerDrag.test.ts tests/imageTakeFit.test.ts tests/imageAssistantSwitch.test.ts
         env:
           BROWSER_TESTS: '1'
       - run: npm run build
