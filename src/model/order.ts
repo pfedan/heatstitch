@@ -1,5 +1,5 @@
 import { sewList } from './sew';
-import type { SewObject } from './objects';
+import { joinedUncut, type SewObject } from './objects';
 import { COLOR_CHANGE, JUMP, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
 import { sameColor } from './recolor';
 
@@ -11,7 +11,8 @@ import { sameColor } from './recolor';
  * The optimizer works like the "auto sequence" of digitizing software: it sews all objects of one
  * thread together where the layering allows (combining color blocks), and goes from each object to
  * the nearest one that may come next (shortest ways), then straightens out crossings within a
- * color with 2-opt moves. It keeps the original when that is not worse.
+ * color with 2-opt moves. Its costs only model the sewn result: bestOrder sews the best orders
+ * found and proposes one only when the order card shows it better than the original.
  */
 
 export interface OrderOptions {
@@ -59,7 +60,10 @@ type Link = 'color' | 'original' | 'trim' | 'jump';
  */
 function link(p: Pattern, a: SewObject, b: SewObject, keyA: string, keyB: string, trimMm: number, fresh?: ReadonlySet<number>, d = gap(p, a, b)): Link {
   if (keyA !== keyB) return 'color';
-  if (b.index === a.index + 1 && b.block === a.block && !fresh?.has(a.index) && !fresh?.has(b.index)) return 'original';
+  const kept = !fresh?.has(a.index) && !fresh?.has(b.index);
+  if (b.index === a.index + 1 && b.block === a.block && kept) return 'original';
+  // Joined without a cut in the file, they stay so (as sewList keeps them).
+  if (kept && joinedUncut(p, a, b)) return 'jump';
   return d > trimMm ? 'trim' : 'jump';
 }
 
@@ -69,7 +73,26 @@ const flippedSet = (ends: Ends) => {
   return out;
 };
 
-const gap = (p: Pattern, a: SewObject, b: SewObject) => Math.hypot(p.x[b.first] - p.x[a.last], p.y[b.first] - p.y[a.last]) / 10;
+/**
+ * The first and last stitch of an object (records): an object recognized in a file can begin or end
+ * with the jump that leads on, and the way is measured between stitches, as the card does.
+ */
+const firstStitch = (p: Pattern, o: SewObject) => {
+  let i = o.first;
+  while (i < o.last && p.cmd[i] !== STITCH) i++;
+  return i;
+};
+const lastStitch = (p: Pattern, o: SewObject) => {
+  let i = o.last;
+  while (i > o.first && p.cmd[i] !== STITCH) i--;
+  return i;
+};
+
+const gap = (p: Pattern, a: SewObject, b: SewObject) => {
+  const i = lastStitch(p, a);
+  const j = firstStitch(p, b);
+  return Math.hypot(p.x[j] - p.x[i], p.y[j] - p.y[i]) / 10;
+};
 
 /**
  * Where an object would start and end when sewn from the other side (0.1 mm): a fill starts where
@@ -84,14 +107,15 @@ export interface Reversal {
 }
 
 export function reversalOf(p: Pattern, o: SewObject): Reversal {
-  const fx = p.x[o.first];
-  const fy = p.y[o.first];
-  const lx = p.x[o.last];
-  const ly = p.y[o.last];
+  const fx = p.x[firstStitch(p, o)];
+  const fy = p.y[firstStitch(p, o)];
+  const lx = p.x[lastStitch(p, o)];
+  const ly = p.y[lastStitch(p, o)];
   if (o.kind === 'satin' && Math.hypot(lx - fx, ly - fy) < 30) {
     let far = o.first;
     let best = -1;
     for (let i = o.first; i <= o.last; i++) {
+      if (p.cmd[i] !== STITCH) continue;
       const d = (p.x[i] - fx) ** 2 + (p.y[i] - fy) ** 2;
       if (d > best) {
         best = d;
@@ -105,12 +129,18 @@ export function reversalOf(p: Pattern, o: SewObject): Reversal {
 
 /** Start and end of each object as sewn (flip 0) or from the other side (flip 1). */
 class Ends {
+  private firsts: Int32Array;
+  private lasts: Int32Array;
+
   constructor(
     private p: Pattern,
-    private objs: SewObject[],
+    objs: SewObject[],
     private rev: (Reversal | null)[],
     readonly flip: Uint8Array,
-  ) {}
+  ) {
+    this.firsts = Int32Array.from(objs, (o) => firstStitch(p, o));
+    this.lasts = Int32Array.from(objs, (o) => lastStitch(p, o));
+  }
 
   can(i: number): boolean {
     return !!this.rev[i];
@@ -121,10 +151,10 @@ class Ends {
     const p = this.p;
     const ra = this.flip[a] ? this.rev[a] : null;
     const rb = fb ? this.rev[b] : null;
-    const ax = ra ? ra.ex : p.x[this.objs[a].last];
-    const ay = ra ? ra.ey : p.y[this.objs[a].last];
-    const bx = rb ? rb.sx : p.x[this.objs[b].first];
-    const by = rb ? rb.sy : p.y[this.objs[b].first];
+    const ax = ra ? ra.ex : p.x[this.lasts[a]];
+    const ay = ra ? ra.ey : p.y[this.lasts[a]];
+    const bx = rb ? rb.sx : p.x[this.firsts[b]];
+    const by = rb ? rb.sy : p.y[this.firsts[b]];
     return Math.hypot(bx - ax, by - ay) / 10;
   }
 }
@@ -319,21 +349,32 @@ const FLIP_GAIN = 2;
  * reversed when nothing is better.
  */
 export function optimizePlan(p: Pattern, objs: SewObject[], over: number[][], o: OrderOptions, reversible?: readonly boolean[]): OrderPlan {
+  return planCandidates(p, objs, over, o, reversible)[0] ?? { order: objs.map((_, i) => i), flip: [] };
+}
+
+/**
+ * Every order the optimizer finds (and with `reversible` the objects best sewn from the other side
+ * in each), cheapest by the model first, each only when it is cheaper by the model than the
+ * original; empty when nothing is. The model only estimates what the sewn result will be, so the
+ * caller weighs them on what they really give.
+ */
+export function planCandidates(p: Pattern, objs: SewObject[], over: number[][], o: OrderOptions, reversible?: readonly boolean[]): OrderPlan[] {
   const original = objs.map((_, i) => i);
-  if (objs.length < 1) return { order: original, flip: [] };
+  if (objs.length < 1) return [];
   const keys = keysOf(p, objs);
   const rev = objs.map((ob, i) => (reversible?.[i] ? reversalOf(p, ob) : null));
   const plain = noFlips(p, objs);
-  let best: OrderPlan = { order: original, flip: [] };
-  let bestCost = weigh(orderCost(p, objs, original, o.trimMm, plain));
+  const base = weigh(orderCost(p, objs, original, o.trimMm, plain));
+  const found: { plan: OrderPlan; cost: number }[] = [];
   const consider = (order: number[], ends: Ends) => {
     if (violations(order, over).length) return;
     const c = weigh(orderCost(p, objs, order, o.trimMm, ends));
     const flip = [...flippedSet(ends)].sort((a, b) => a - b);
-    if (c < bestCost - 1e-6 - (flip.length > best.flip.length ? FLIP_GAIN : 0)) {
-      best = { order, flip };
-      bestCost = c;
-    }
+    // Sewing some from the other side has to save clearly more than the order alone.
+    if (c >= base - 1e-6 - (flip.length ? FLIP_GAIN : 0)) return;
+    const key = `${order.join(',')}|${flip.join(',')}`;
+    if (found.some((f) => `${f.plan.order.join(',')}|${f.plan.flip.join(',')}` === key)) return;
+    found.push({ plan: { order, flip }, cost: c + (flip.length ? FLIP_GAIN : 0) });
   };
   const flipping = rev.some(Boolean);
   for (const pick of ['original', 'complete'] as ColorPick[]) {
@@ -352,7 +393,7 @@ export function optimizePlan(p: Pattern, objs: SewObject[], over: number[][], o:
     improveFlips(p, objs, original, o.trimMm, ends);
     consider(original, ends);
   }
-  return best;
+  return found.sort((a, b) => a.cost - b.cost).map((f) => f.plan);
 }
 
 /** Turns objects around one at a time where that makes the order cheaper (a few passes). */

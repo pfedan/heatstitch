@@ -1156,6 +1156,16 @@ export function trimmedBetween(p: Pattern, a: SewObject, b: SewObject): boolean 
   return false;
 }
 
+/**
+ * Did the file carry the thread from `a` to `b` without a cut, in whichever order it sews them (no
+ * trim or color change anywhere between them), and does one of them lack its tie? Then sewing one
+ * right after the other keeps them joined so: a cut would give them ties they never had.
+ */
+export function joinedUncut(p: Pattern, a: SewObject, b: SewObject): boolean {
+  if (a.tieOff && b.tieIn) return false;
+  return a.index < b.index ? !trimmedBetween(p, a, b) : !trimmedBetween(p, b, a);
+}
+
 /** Grid cell for the overlap test (0.1 mm). */
 const CELL = 4;
 /** Objects share at least this many cells to count as lying on top of each other. */
