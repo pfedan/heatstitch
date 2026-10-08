@@ -253,6 +253,7 @@ export default {
         const chip = s.page.locator('aside.inspector .stitch-chip', { hasText: 'Von der Korrektur geändert' });
         await until(s, async () => (await group('White').count()) > 0, 'object list');
         await s.click(group('White'), { move: 1.0, before: 0.3, after: 0.4 });
+        await s.wait(2.0);
         await s.tips(true);
         // One letter: picked in the list, then the pointer rests on the chip and its hint shows.
         const show = async (name, sec) => {
@@ -265,7 +266,7 @@ export default {
         };
         await show('Satin 5', 1.6);
         await show('Satin 4', 1.6);
-        await show('Satin 10', 3.2);
+        await show('Satin 10', 4.4);
         // The fill's hint is shown only once it reads as words (it showed a raw key before).
         await s.click(group('Dark Gray'), { move: 1.0, before: 0.3, after: 0.3 });
         await s.click(row('Füllung 1'), { move: 0.7, before: 0.3, after: 0.3 });
@@ -311,7 +312,7 @@ export default {
       },
     },
     {
-      say: 'Rechts unter Vergleich stehen die Zahlen. [proud, warm] Die kritische Fläche schrumpft von 36 auf 6 Quadratmillimeter, und das mit 130 Stichen weniger.',
+      say: 'Rechts unter Vergleich stehen die Zahlen. [proud and warm] Die kritische Fläche schrumpft von 36 auf 6 Quadratmillimeter, und das mit 130 Stichen weniger.',
       text: 'Rechts unter Vergleich stehen die Zahlen. Die kritische Fläche schrumpft von 36 auf 6 Quadratmillimeter, und das mit 130 Stichen weniger.',
       textEn: 'On the right under Compare you find the figures. The critical area shrinks from 36 to 6 square millimetres, and with 130 fewer stitches.',
       run: async (s) => {

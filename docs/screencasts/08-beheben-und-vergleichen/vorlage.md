@@ -58,7 +58,7 @@ Die Datei steht nicht unter „Weitere Beispiele“; sie wird wie im Ordner ins 
 
 **Bild:** Die rechte Spalte rollt zu Vergleich. Heranzoomen auf die Tabelle, Etikett Kritische Fläche an der Zeile (36 und 6 mm²), dann Etikett Stiche.
 
-**Sprechtext:** Rechts unter Vergleich stehen die Zahlen. [proud, warm] Die kritische Fläche schrumpft von 36 auf 6 Quadratmillimeter, und das mit 130 Stichen weniger.
+**Sprechtext:** Rechts unter Vergleich stehen die Zahlen. [proud and warm] Die kritische Fläche schrumpft von 36 auf 6 Quadratmillimeter, und das mit 130 Stichen weniger.
 
 ## Szene 9
 
