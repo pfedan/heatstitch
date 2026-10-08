@@ -15,7 +15,7 @@ const RUNG = 'rgba(255, 214, 102, 0.95)';
 const same = (a: RungPick | null, col: number, i: number, cut = false, free = false) => !!a && a.col === col && a.i === i && !!a.cut === cut && !!a.span === free;
 
 /**
- * The rung tool on the canvas: the rails of the satin as thin lines, each rung as a line across
+ * The rung tool on the canvas: the edges of the satin as thin lines, each rung as a line across
  * with a handle at both ends (dashed while they are only suggested from the stitches), the
  * selected one in the accent color; for a fill the lines drawn across it or the guide lines on it.
  */
@@ -41,17 +41,15 @@ export function drawRungOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, vie
   ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
   ctx.lineWidth = 1;
   ctx.stroke();
-  // Rails: dark under light, so they show on any thread color.
-  for (const c of view.columns) {
-    for (const rail of [c.left, c.right]) {
-      path(rail);
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
-      ctx.lineWidth = 3;
-      ctx.stroke();
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
-      ctx.lineWidth = 1.2;
-      ctx.stroke();
-    }
+  // The satin's edges (its outline; see RungView.edges): dark under light, so they show on any thread color.
+  for (const edge of view.edges) {
+    path(edge);
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
   }
   // A column with free rungs: the rails its sections are sewn along, where a cut line became an edge.
   for (const c of view.columns) {

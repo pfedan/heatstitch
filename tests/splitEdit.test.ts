@@ -8,6 +8,7 @@ import { stitchKinds } from '../src/model/sequence';
 import { transformRemembered } from '../src/model/transform';
 import { parsePattern } from '../src/parsers';
 import { RungTool } from '../src/ui/rungTool';
+import { strayRails } from './helpers/torture';
 
 /** Points every ~0.5 mm along the corners given. */
 function poly(...corners: Pt[]): Pt[] {
@@ -108,6 +109,95 @@ describe('cut lines of a satin cut from a fill', () => {
     expect(changes.length).toBe(1);
     expect(changes[0][0].length).toBe(5);
     expect(changes[0][0].find((c) => c.split)!.split!.cuts.length).toBe(4);
+  });
+});
+
+describe('Leeren on a satin cut from a fill', () => {
+  const SATIN = { spacing: 0.4, edge: 0, short: false, underlay: true, tolerance: 0.15 };
+  const open = () => {
+    const changes: Rails[][][] = [];
+    const said: string[] = [];
+    const tool = new RungTool({ change: (c) => changes.push(c), lines: () => {}, guides: () => {}, redraw: () => {}, say: (k) => said.push(k) });
+    tool.openSatin([cutM()]);
+    tool.satin = SATIN;
+    const draw = (a: Pt, b: Pt, cut = false) => {
+      tool.setCutMode(cut);
+      tool.down(a[0], a[1], 10);
+      tool.dragTo(b[0], b[1]);
+      tool.up();
+    };
+    return { tool, changes, said, draw };
+  };
+  /** Each edge the tool draws lies on the m's outline (no rails between its columns). */
+  const onOutline = (edges: Pt[][]) => edges.flat().every(([x, y]) => M.some((q, i) => i > 0 && segDist([x, y], M[i - 1], q) < 1e-6));
+
+  it('shows the satin by its outline and cut lines only, no rails between its columns', () => {
+    const { tool } = open();
+    expect(tool.columns.length).toBe(4);
+    expect(tool.edges.length).toBe(1);
+    expect(onOutline(tool.edges)).toBe(true);
+  });
+
+  it('leaves the area alone: no columns, no seams, nothing sewn and nothing marked', () => {
+    const { tool, changes } = open();
+    tool.clear();
+    expect(changes.length).toBe(0);
+    expect(tool.columns.length).toBe(0);
+    expect(tool.cutLines.length + tool.lines.length).toBe(0);
+    expect(tool.edges.length).toBe(1);
+    expect(onOutline(tool.edges)).toBe(true);
+    expect(tool.problems).toEqual([]);
+    expect(tool.count).toBe(0);
+  });
+
+  it('sews anew once the lines drawn on the area make columns, as one change', () => {
+    const { tool, changes, said, draw } = open();
+    tool.clear();
+    for (const [a, b] of CUTS) draw(a, b, true);
+    // Cut lines alone make no column yet: shown, not said, and nothing sewn.
+    expect(changes.length).toBe(0);
+    expect(said).toEqual([]);
+    expect(tool.problems.length).toBeGreaterThan(0);
+    for (const [a, b] of LINES.slice(0, 3)) draw(a, b);
+    expect(changes.length).toBe(0);
+    draw(...LINES[3]);
+    expect(changes.length).toBe(1);
+    const part = changes[0][0];
+    expect(part.length).toBe(4);
+    expect(part.find((c) => c.split)!.split!.cuts.length).toBe(3);
+    expect(strayRails(part)).toBe(0);
+    // Back in sections, with the lines drawn as rungs of the columns.
+    expect(tool.columns.length).toBe(4);
+    expect(tool.lines.length).toBe(0);
+    expect(tool.count).toBe(4);
+  });
+
+  it('takes Vorschlagen on the area alone', () => {
+    const { tool, changes } = open();
+    tool.clear();
+    tool.suggestIn(LINES, CUTS);
+    expect(changes.length).toBe(1);
+    expect(changes[0][0].length).toBe(4);
+    expect(strayRails(changes[0][0])).toBe(0);
+  });
+
+  it('a line drawn on the area alone can be taken away again', () => {
+    const { tool, draw } = open();
+    tool.clear();
+    for (const [a, b] of CUTS) draw(a, b, true);
+    draw(...LINES[0]);
+    expect(tool.lines.length).toBe(1);
+    expect(tool.deleteSelected()).toBe(true);
+    expect(tool.lines.length).toBe(0);
+    expect(tool.cutLines.length).toBe(3);
+  });
+
+  it('the torture test tells a seam left without its cut line', () => {
+    const cols = cutM();
+    expect(strayRails(cols)).toBe(0);
+    // As Leeren left it before: the columns kept, their cut lines gone.
+    cols[0].split = { ...cols[0].split!, cuts: [] };
+    expect(strayRails(cols)).toBeGreaterThan(0);
   });
 });
 
@@ -290,3 +380,10 @@ describe('the best order of a chain', () => {
     expect(bestChain(best, S)).toEqual(best);
   });
 });
+
+function segDist(q: Pt, a: Pt, b: Pt): number {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const t = dx || dy ? Math.max(0, Math.min(1, ((q[0] - a[0]) * dx + (q[1] - a[1]) * dy) / (dx * dx + dy * dy))) : 0;
+  return Math.hypot(q[0] - a[0] - t * dx, q[1] - a[1] - t * dy);
+}

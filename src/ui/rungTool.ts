@@ -89,6 +89,11 @@ export interface SectionProblem {
 export interface RungView {
   mode: RungMode;
   columns: RungColumn[];
+  /**
+   * The satin's edges as drawn: the outline and holes of the part shown in sections of its area
+   * (its cut lines are drawn as such), the rails of any other column.
+   */
+  readonly edges: Pt[][];
   /** Lines drawn across a fill. */
   lines: [Pt, Pt][];
   /** Cut lines drawn across a fill: its parts become columns of their own. */
@@ -152,6 +157,12 @@ export class RungTool implements RungView {
    * drawn and removed like on the fill, the part then cut anew.
    */
   private split: (Omit<Split, 'cuts'> & { part: number }) | null = null;
+  /**
+   * After Leeren: the columns the part shown in sections is sewn with, while the tool shows only its
+   * area. Lines drawn on it then are `lines` and `cutLines`, as on a fill; once they make columns
+   * the part is sewn anew along them (see resplit).
+   */
+  private cleared: Rails[] | null = null;
   lines: [Pt, Pt][] = [];
   cutLines: [Pt, Pt][] = [];
   /** Cut lines drawn or moved by hand since the tool opened (as they were then): Vorschlagen keeps them. */
@@ -243,6 +254,7 @@ export class RungTool implements RungView {
     this.problemHover = -1;
     this.points = [];
     this.columns = [];
+    this.cleared = null;
     this.lines = [];
     this.cutLines = [];
     this.bad = null;
@@ -277,6 +289,8 @@ export class RungTool implements RungView {
     );
     this.split = null;
     this.cutLines = [];
+    this.cleared = null;
+    if (this.mode === 'satin') this.lines = [];
     columns.forEach((part, k) => {
       const from = part.find((r) => r.split)?.split;
       if (!from || this.split) return;
@@ -322,8 +336,8 @@ export class RungTool implements RungView {
 
   /** How many rungs set the direction (null: the stitches' own, nothing set). */
   get count(): number | null {
-    if (!this.columns.some((c) => c.own)) return null;
-    return this.columns.reduce((a, c) => a + c.rungs.length + c.spans.length, 0);
+    if (!this.columns.some((c) => c.own) && !this.cleared) return null;
+    return this.columns.reduce((a, c) => a + c.rungs.length + c.spans.length, this.cleared ? this.lines.length : 0);
   }
 
   /**
@@ -461,6 +475,15 @@ export class RungTool implements RungView {
     this.hooks.redraw();
   }
 
+  get edges(): Pt[][] {
+    if (this.mode !== 'satin') return [];
+    const sp = this.split;
+    const ring = (r: Pt[]): Pt[] => (r.length > 2 && Math.hypot(r[0][0] - r[r.length - 1][0], r[0][1] - r[r.length - 1][1]) > 1e-9 ? [...r, r[0]] : r);
+    // A part cut from an area is its area: the lines between its columns are its cut lines, no rails.
+    const area = sp ? [...sp.outlines, ...sp.holes].map(ring) : [];
+    return [...area, ...this.columns.flatMap((c, k) => (sp && this.parts[k] === sp.part ? [] : [c.left, c.right]))];
+  }
+
   get problems(): SectionProblem[] {
     return this.check().problems;
   }
@@ -501,6 +524,15 @@ export class RungTool implements RungView {
           previews = pairsOf(c.strips);
         }
       }
+    } else if (result && this.cleared && this.split) {
+      // Only its area, after Leeren: as on a fill, not wrong until something is drawn.
+      const sp = this.split;
+      previews = pairsOf(result.filter((_, k) => k !== sp.part).flat());
+      if (this.lines.length || this.cutLines.length) {
+        const c = checkSections(sp.outlines, this.lines, this.cutLines, sp.holes);
+        found(c);
+        previews.push(...pairsOf(c.strips));
+      }
     } else if (result) {
       const sp = this.split;
       // As sewn, nothing to say; only cut lines not sewn yet can leave a part without a column.
@@ -520,6 +552,7 @@ export class RungTool implements RungView {
   private splitLines(): [Pt, Pt][] {
     const sp = this.split;
     if (!sp) return [];
+    if (this.cleared) return this.lines.map(([a, b]) => [a, b] as [Pt, Pt]);
     return this.columns.flatMap((c, k) => {
       if (this.parts[k] !== sp.part) return [];
       // Read from stitches and nothing set yet: the stitches' own pairs, every 1.5 mm or so (they
@@ -588,6 +621,7 @@ export class RungTool implements RungView {
       this.columns.forEach((c, k) => c.rungs.forEach((r, i) => consider(k, i, ...this.ends(c, r))));
       this.columns.forEach((c, k) => c.spans.forEach(([a, b], i) => consider(k, i, a, b, false, true)));
       this.columns.forEach((c, k) => c.cuts.forEach((r, i) => consider(k, i, ...this.ends(c, r), true)));
+      this.lines.forEach(([a, b], i) => consider(-1, i, a, b));
       this.cutLines.forEach(([a, b], i) => consider(-1, i, a, b, true));
     }
     else if (this.mode === 'fill') {
@@ -627,20 +661,9 @@ export class RungTool implements RungView {
   /** Whether a line may start here: on or near a column, or near the fill. */
   private near(x: number, y: number): boolean {
     const q: Pt = [x, y];
-    if (this.mode !== 'satin') {
-      if (!this.loop.length) return true;
-      let minX = Infinity;
-      let minY = Infinity;
-      let maxX = -Infinity;
-      let maxY = -Infinity;
-      for (const [px, py] of this.loop) {
-        minX = Math.min(minX, px);
-        minY = Math.min(minY, py);
-        maxX = Math.max(maxX, px);
-        maxY = Math.max(maxY, py);
-      }
-      return x >= minX - 5 && x <= maxX + 5 && y >= minY - 5 && y <= maxY + 5;
-    }
+    if (this.mode !== 'satin') return !this.loop.length || nearLoop(this.loop, x, y);
+    // An area without columns (after Leeren): near it, as on a fill.
+    if (this.cleared && this.split?.outlines.some((o) => nearLoop(o, x, y))) return true;
     return this.columns.some((c) => {
       const a = project(c.left, c.cl, q);
       const b = project(c.right, c.cr, q);
@@ -793,6 +816,11 @@ export class RungTool implements RungView {
         this.markOwn(this.cutLines.length - 1);
         this.selected = { col: -1, i: this.cutLines.length - 1, end: -1, cut: true };
         this.resplit();
+      } else if (this.cleared && this.split?.outlines.some((o) => inside(o, mid(a, b)))) {
+        // On the area alone (after Leeren) a line across as on a fill.
+        this.lines.push([a, b]);
+        this.selected = { col: -1, i: this.lines.length - 1, end: -1 };
+        this.resplit();
       } else this.addFromLine(a, b, d.cut);
     }
     this.hooks.redraw();
@@ -891,7 +919,7 @@ export class RungTool implements RungView {
    * a rung drawn in such a part makes it fit.
    */
   private commit(): void {
-    if (this.cutsChanged()) return this.resplit();
+    if (this.cleared || this.cutsChanged()) return this.resplit();
     this.hooks.change(this.result(), true);
   }
 
@@ -915,7 +943,7 @@ export class RungTool implements RungView {
 
   /** The columns of the part shown in sections, as they are now. */
   get sectionRails(): Rails[] | null {
-    return this.split ? this.result()[this.split.part] : null;
+    return this.split ? (this.cleared ?? this.result()[this.split.part]) : null;
   }
 
   private markOwn(i: number): void {
@@ -932,7 +960,9 @@ export class RungTool implements RungView {
 
   /**
    * Leeren: every rung and cut line away, to start over (cut lines drawn by hand, then
-   * Vorschlagen). On a satin as one undo step, its sections sewn without rungs.
+   * Vorschlagen). A satin cut from an area is its area again, without columns: nothing is sewn
+   * until the lines drawn on it make columns (see resplit), the stitches stay as they were till
+   * then. Other satins as one undo step, sewn without rungs.
    */
   clear(): void {
     this.selected = null;
@@ -945,6 +975,13 @@ export class RungTool implements RungView {
       return this.hooks.redraw();
     }
     if (this.mode !== 'satin') return;
+    const sp = this.split;
+    if (sp) {
+      this.cleared ??= this.result()[sp.part] ?? [];
+      const keep = this.columns.map((_, k) => k).filter((k) => this.parts[k] !== sp.part);
+      this.columns = keep.map((k) => this.columns[k]);
+      this.parts = keep.map((k) => this.parts[k]);
+    }
     for (const c of this.columns) {
       c.rungs = [];
       c.spacings = [];
@@ -952,10 +989,11 @@ export class RungTool implements RungView {
       c.own = true;
     }
     this.cutLines = [];
-    const out = this.result();
-    // The sections stay as they are sewn, without their cut lines (drawn anew by hand).
-    for (const part of out) for (const r of part) if (r.split) r.split = { ...r.split, cuts: [] };
-    this.hooks.change(out, true);
+    this.lines = [];
+    this.bad = null;
+    // Other satin parts go along with the first lines that make columns again.
+    if (sp) return this.hooks.redraw();
+    this.hooks.change(this.result(), true);
   }
 
   /** Whether the cut lines are not the ones the satin was cut along (they left a part without a column). */
@@ -983,12 +1021,14 @@ export class RungTool implements RungView {
       });
     });
     const made = stripsOfAreas(sp.outlines, lines, this.cutLines, sp.holes);
+    // The area alone (after Leeren): what is missing is shown as on a fill (see check).
+    if ((made.hole >= 0 || made.bad) && this.cleared) return this.hooks.redraw();
     if (made.hole >= 0 || made.bad) {
       this.showBad(made.hole >= 0 ? sp.holes[made.hole] : made.bad!);
       return this.hooks.say(made.hole >= 0 ? 'stitch.draw.openHole' : 'stitch.draw.notStripPart');
     }
     const out = this.result();
-    const old = out[sp.part];
+    const old = out[sp.part] ?? [];
     // One chain per area, a trim between areas apart.
     let cols: Rails[] = made.areas.flatMap((strips, a) => strips.map((r) => ({ left: r.left, right: r.right, rungs: r.rungs, chain: a })));
     if (cols.length === old.length) cols = keptOrder(old, cols);
@@ -1051,8 +1091,8 @@ export class RungTool implements RungView {
     } else if (this.mode === 'guide') {
       this.guides.splice(s.i, 1);
       this.hooks.guides(this.guides.map((g) => g.slice()));
-    } else if (s.cut && s.col < 0) {
-      this.cutLines.splice(s.i, 1);
+    } else if (s.col < 0) {
+      (s.cut ? this.cutLines : this.lines).splice(s.i, 1);
       this.resplit();
     } else if (s.cut) {
       const c = this.columns[s.col];
@@ -1215,6 +1255,21 @@ export class RungTool implements RungView {
 
 const sub = (a: Pt, b: Pt): [number, number] => [a[0] - b[0], a[1] - b[1]];
 const mid = (a: Pt, b: Pt): Pt => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+
+/** Whether a point lies in the box around a loop, 5 mm round it. */
+function nearLoop(loop: Pt[], x: number, y: number): boolean {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const [px, py] of loop) {
+    minX = Math.min(minX, px);
+    minY = Math.min(minY, py);
+    maxX = Math.max(maxX, px);
+    maxY = Math.max(maxY, py);
+  }
+  return x >= minX - 5 && x <= maxX + 5 && y >= minY - 5 && y <= maxY + 5;
+}
 
 function segDist(q: Pt, a: Pt, b: Pt): number {
   const v = sub(b, a);
