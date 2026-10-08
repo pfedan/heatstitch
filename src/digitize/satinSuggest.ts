@@ -474,6 +474,25 @@ export function planStrokes(g: Graph, rings: Pt[][], apart = false): { cuts: [Pt
       }
       return true;
     };
+    /** The corners each cut end got, and where along it the cut lies. */
+    const cornered = new Map<number, [Pt, Pt]>();
+    const placeCut = (k: number, cut: [Pt, Pt]) => {
+      const pts = away(B[es[k].br], es[k].atB);
+      const m = add(cut[0], sub(cut[1], cut[0]), 0.5);
+      let s = 0;
+      let bestS = 0;
+      let bestD = Infinity;
+      for (let q2 = 0; q2 < pts.length; q2++) {
+        if (q2) s += dist(pts[q2], pts[q2 - 1]);
+        const d2 = dist(pts[q2], m);
+        if (d2 < bestD) {
+          bestD = d2;
+          bestS = s;
+        }
+      }
+      trimmed.set(key(es[k]), bestS);
+    };
+    const mine = new Map<number, number>();
     for (const k of kept) {
       if (k === i || k === j) continue;
       const e = es[k];
@@ -495,6 +514,7 @@ export function planStrokes(g: Graph, rings: Pt[][], apart = false): { cuts: [Pt
       if (p && q && dist(p, q) > 0.2 && within(p, q) && !pinch(p, q)) {
         const d = norm(sub(q, p));
         cut = [add(p, d, -0.3), add(q, d, 0.3)];
+        cornered.set(k, [p, q]);
       } else {
         // No corners found: square across the branch a junction's width out.
         const c = pointAlong(pts, Math.min(lenOf[e.br] * 0.5, Math.max(g.nodes[n].r + 0.2, own.r + halfOf[e.br])));
@@ -505,21 +525,27 @@ export function planStrokes(g: Graph, rings: Pt[][], apart = false): { cuts: [Pt
       // Two junctions close together can find the same corners: one cut is enough.
       // (With `apart`, also one crossing it: between them would be a sliver.)
       const twin = cuts.some(([a, b]) => Math.min(dist(a, cut[0]) + dist(b, cut[1]), dist(a, cut[1]) + dist(b, cut[0])) < 1 || (apart && cross(a, b, cut[0], cut[1])));
-      if (!twin) cuts.push(cut);
-      // Where along the branch the cut lies (lines across keep clear of it).
-      const m = add(cut[0], sub(cut[1], cut[0]), 0.5);
-      let s = 0;
-      let bestS = 0;
-      let bestD = Infinity;
-      for (let q2 = 0; q2 < pts.length; q2++) {
-        if (q2) s += dist(pts[q2], pts[q2 - 1]);
-        const d2 = dist(pts[q2], m);
-        if (d2 < bestD) {
-          bestD = d2;
-          bestS = s;
-        }
+      if (!twin) {
+        mine.set(k, cuts.length);
+        cuts.push(cut);
       }
-      trimmed.set(key(e), bestS);
+      // Where along the branch the cut lies (lines across keep clear of it).
+      placeCut(k, cut);
+    }
+    // Two lines cut side by side from the same notch between them: the through line would reach
+    // out into the notch in a spike, its stitches fanning into the tip. The wedge goes to one of
+    // the two instead, cut straight across from corner to corner.
+    for (const [k1, [a, n1]] of cornered) {
+      const k2 = round[(round.indexOf(k1) + 1) % round.length];
+      const other = cornered.get(k2);
+      if (k2 === k1 || !other || other[0] !== n1 || !mine.has(k1) || !mine.has(k2)) continue;
+      const b = other[1];
+      if (toSegment(n1, a, b) < rThrough * 0.5 || !within(a, b) || pinch(a, b)) continue;
+      const d = norm(sub(b, a));
+      const k = Math.abs(dot(d, dirs[k1])) <= Math.abs(dot(d, dirs[k2])) ? k1 : k2;
+      const cut: [Pt, Pt] = [add(a, d, -0.3), add(b, d, 0.3)];
+      cuts[mine.get(k)!] = cut;
+      placeCut(k, cut);
     }
   }
 
@@ -555,6 +581,7 @@ export function planStrokes(g: Graph, rings: Pt[][], apart = false): { cuts: [Pt
   });
   B.forEach((_, k) => !used.has(k) && walk({ br: k, atB: false }));
 
+  const forks = g.nodes.filter((_, x) => degree(x) > 2);
   for (const st of strokes) {
     const half = median(st.r);
     const w = 2 * half;
@@ -590,7 +617,6 @@ export function planStrokes(g: Graph, rings: Pt[][], apart = false): { cuts: [Pt
       let k = 0;
       let least = Infinity;
       // Not at a junction on it (where a line leaves, cut off there already).
-      const forks = g.nodes.filter((_, x) => degree(x) > 2);
       const clear = st.pts.map((q) => forks.every((f) => dist(q, f.p) >= f.r + w));
       for (let i = 0; i < n; i++) {
         if (!clear[i] && clear.some((c) => c)) continue;
@@ -652,6 +678,20 @@ export function planStrokes(g: Graph, rings: Pt[][], apart = false): { cuts: [Pt
         lines.push(across(st.pts[k], [-h[1], h[0]]));
         placed.push(s);
       }
+    }
+    // Where a line joins its side, square across: the side jogs there, and the stitches would
+    // otherwise fan toward the cut.
+    for (const f of forks) {
+      let k = -1;
+      let least = Infinity;
+      st.pts.forEach((q, i) => {
+        const d = dist(q, f.p);
+        if (d < least) [least, k] = [d, i];
+      });
+      if (least > f.r * 0.5 || cum[k] < lo || cum[k] > hi || !free(cum[k], w * 0.8)) continue;
+      const h = heading(k, Math.max(0.3, w));
+      lines.push(across(st.pts[k], [-h[1], h[0]]));
+      placed.push(cum[k]);
     }
     // Along the rest: a line each time the column has turned by TURN_STEP since the last one.
     let lastDir: Pt | null = null;
