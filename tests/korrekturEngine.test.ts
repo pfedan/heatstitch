@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { applyFix, designKey, fixedObjects, prepareFix, revertFix } from '../src/correct/engine/apply';
-import { assess, directFix } from '../src/correct/engine/ampel';
+import { assess, directFix, restFix } from '../src/correct/engine/ampel';
 import { EngineClient, type WorkerLike } from '../src/correct/engine/client';
 import { handleEngine, type EngineRequest } from '../src/correct/engine/worker';
 import { sewObjects } from '../src/model/objects';
@@ -112,5 +112,31 @@ describe('correction engine', () => {
     expect(seen.length).toBeGreaterThan(1);
     expect(spawned).toBeLessThanOrEqual(2 + dropped);
     c.dispose();
+  }, 300_000);
+
+  it('offers the same fixes on a slow or busy machine as on a fast one', async () => {
+    // The cat on knit: its fixes for penetrations run into the search budget. Spent as time, a
+    // faster machine searched further than a slower or busy one, and the proposal came and went;
+    // spent as work, it is the same everywhere.
+    const p = load('cat-60mm.pes');
+    const knit: Profile = { fabric: 'knit', thread: '40' };
+    const run = async () => {
+      const d = await directFix(p, knit, 'holes', { trimMm: 2 });
+      const r = await restFix(p, knit, 'holes', { trimMm: 2 });
+      return JSON.stringify([d, r].map((f) => f && { after: f.after, objects: f.objects, base: f.base }));
+    };
+    const here = await run();
+    // Clocks that run ten times slower and ten times faster: a machine ten times faster, and one ten
+    // times slower or busy with other work.
+    const real = performance.now.bind(performance);
+    for (const rate of [0.1, 10]) {
+      const t0 = real();
+      const clock = vi.spyOn(performance, 'now').mockImplementation(() => t0 + (real() - t0) * rate);
+      try {
+        expect(await run(), `clock x${rate}`).toBe(here);
+      } finally {
+        clock.mockRestore();
+      }
+    }
   }, 300_000);
 });
