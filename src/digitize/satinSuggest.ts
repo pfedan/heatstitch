@@ -348,7 +348,10 @@ export function planStrokes(g: Graph, rings: Pt[][], apart = false): { cuts: [Pt
     const V = (ends.get(v) ?? []).filter((e) => e.br !== k);
     // (Not when another branch joins the two as well: that is a ring, not a crossing.)
     if (U.length !== 2 || V.length !== 2 || U.some((e) => V.some((f) => f.br === e.br))) return;
-    if ((straight(U[0], V[0]) && straight(U[1], V[1])) || (straight(U[0], V[1]) && straight(U[1], V[0]))) {
+    // (Each line going on along the link between the forks, not turning back into it.)
+    const along = (e: End, atA: boolean) => dot(leaving(e), leaving({ br: k, atB: !atA })) < 0.2;
+    const through = (x: End, y: End) => straight(x, y) && along(x, true) && along(y, false);
+    if ((through(U[0], V[0]) && through(U[1], V[1])) || (through(U[0], V[1]) && through(U[1], V[0]))) {
       root[u] = v;
       inner.add(k);
       ends = endsOf();
