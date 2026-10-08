@@ -6,6 +6,9 @@
 //   node tools/screencast/record.mjs docs/screencasts/01-neues-stickmuster/ablauf.mjs OUT \
 //     [--audio DIR] [--scenes 1-3] [--scale 2]
 //
+// With --scenes and an earlier full recording in OUT, only those scenes are recorded anew and
+// put in place of the old ones; frames and timeline of all other scenes stay as they were.
+//
 // Needs the built app served (npm run build && npm run preview), APP_URL to point elsewhere.
 // Playwright comes from PLAYWRIGHT_MODULE, the repo's own node_modules or the container's
 // global install (/opt/node-tools), in that order.
@@ -41,8 +44,15 @@ const ablauf = (await import(pathToFileURL(path.resolve(ablaufPath)).href)).defa
 const seconds = (file) =>
   Number(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', file]).toString());
 
-fs.mkdirSync(path.join(outDir, 'frames'), { recursive: true });
-for (const f of fs.readdirSync(path.join(outDir, 'frames'))) fs.unlinkSync(path.join(outDir, 'frames', f));
+// A scene range over an earlier recording replaces just those scenes: they go to frames-neu/
+// first and are spliced in at the end.
+const oldTimeline = (() => {
+  const file = path.join(outDir, 'timeline.json');
+  return sceneRange && fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
+})();
+const framesDir = path.join(outDir, oldTimeline ? 'frames-neu' : 'frames');
+fs.mkdirSync(framesDir, { recursive: true });
+for (const f of fs.readdirSync(framesDir)) fs.unlinkSync(path.join(framesDir, f));
 
 // Page and 2D canvas drawn by Chromium's own software renderer instead of the emulated GPU:
 // two to fourteen times faster in a container, same picture. WebGL stays on SwiftShader.
@@ -89,7 +99,7 @@ const frame = async () => {
   await page.clock.runFor(1000 / FPS);
   // Workers (stitching, density) run in real time; give them a moment as the capture would.
   if (dry) return new Promise((r) => setTimeout(r, 150));
-  const file = path.join(outDir, 'frames', `${String(frameNo).padStart(6, '0')}.jpg`);
+  const file = path.join(framesDir, `${String(frameNo).padStart(6, '0')}.jpg`);
   // `scale` 2 renders the page anew at twice the size for this capture.
   const shot = await cdp.send('Page.captureScreenshot', {
     format: 'jpeg',
@@ -223,9 +233,36 @@ for (const [i, scene] of ablauf.scenes.entries()) {
   const until = start + framesFor(lead + speech + tail);
   while (frameNo < until) await frame();
   timeline.scenes.push({ n, start, end: frameNo, audio: speech ? audio : null, lead, text: scene.text });
-  fs.writeFileSync(path.join(outDir, 'timeline.json'), JSON.stringify(timeline));
+  if (!oldTimeline) fs.writeFileSync(path.join(outDir, 'timeline.json'), JSON.stringify(timeline));
   console.log(`scene ${n}: ${((frameNo - start) / FPS).toFixed(1)} s (speech ${speech.toFixed(1)} s)`);
 }
 
-fs.writeFileSync(path.join(outDir, 'timeline.json'), JSON.stringify(timeline));
 await browser.close();
+if (oldTimeline) splice();
+else fs.writeFileSync(path.join(outDir, 'timeline.json'), JSON.stringify(timeline));
+
+/** Puts the newly recorded scenes in place of the same scenes of the earlier recording. */
+function splice() {
+  const fresh = new Map(timeline.scenes.map((sc) => [sc.n, { sc, dir: framesDir, tl: timeline }]));
+  const ns = [...new Set([...oldTimeline.scenes.map((sc) => sc.n), ...fresh.keys()])].sort((a, b) => a - b);
+  const oldDir = path.join(outDir, 'frames');
+  const out = path.join(outDir, 'frames-zusammen');
+  fs.rmSync(out, { recursive: true, force: true });
+  fs.mkdirSync(out);
+  const merged = { ...oldTimeline, frames: [], scenes: [] };
+  for (const n of ns) {
+    const { sc, dir, tl } = fresh.get(n) ?? { sc: oldTimeline.scenes.find((s) => s.n === n), dir: oldDir, tl: oldTimeline };
+    const start = merged.frames.length;
+    for (let i = sc.start; i < sc.end; i++) {
+      const name = (k) => `${String(k).padStart(6, '0')}.jpg`;
+      fs.renameSync(path.join(dir, name(i)), path.join(out, name(merged.frames.length)));
+      merged.frames.push(tl.frames[i]);
+    }
+    merged.scenes.push({ ...sc, start, end: merged.frames.length });
+  }
+  fs.rmSync(oldDir, { recursive: true, force: true });
+  fs.rmSync(framesDir, { recursive: true, force: true });
+  fs.renameSync(out, oldDir);
+  fs.writeFileSync(path.join(outDir, 'timeline.json'), JSON.stringify(merged));
+  console.log(`replaced scene(s) ${[...fresh.keys()].join(', ')}: ${merged.frames.length} frames in all`);
+}
