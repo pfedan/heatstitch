@@ -228,7 +228,7 @@ before visible ones; the lower object is tried before the upper one; locked obje
 the correction*) stay as they are. Every proposal is tried on the spot and kept only if the result
 in that area does not get worse. Each row says how visible the change is (invisible, barely,
 visible), what it changes and which findings it helps against, and hovering it shows the object
-before and after on the canvas, split inside its frame.
+before and after on the stage, split inside its frame.
 
 What it proposes, in this order:
 
@@ -332,7 +332,7 @@ No Ink/Stitch code is used, only the fonts' data.
 *Convert a picture* (key `3`) turns a picture into a design in three steps, the computing in two, both in a Web Worker
 (`src/digitize/worker.ts`). Every change starts a new run; whatever changes during a run is computed
 afterwards with the latest settings. The picture, color edits and brush strokes stay in the browser
-(IndexedDB, `src/storage/imageStore.ts`). The canvas shows the *Original*, the *Prepared* image or the
+(IndexedDB, `src/storage/imageStore.ts`). The stage shows the *Original*, the *Prepared* image or the
 *Stitches*.
 
 The methods were chosen after research into papers, vendor manuals and the source of open-source
@@ -452,7 +452,7 @@ In the realistic thread view the light follows the pointer or the tilt of a phon
 satin columns and fill rows light up or darken by their stitch direction, like turning an embroidered
 patch in your hand, and the shadows move along. On the first converted picture, the wizard switches to
 the realistic view and sweeps the light once around the design; every new picture does it again
-(not with the system setting to reduce motion). *✦ As sewn* on the canvas shows it at any time.
+(not with the system setting to reduce motion). *✦ As sewn* on the stage shows it at any time.
 *Light follows pointer and tilt* in the View menu switches it off. Behind the threads,
 *Fabric* draws a procedural texture of the material (`src/render/fabricGl.ts`): woven, cap, knit,
 terry, light fabric or leather, lit like the threads and in the chosen background color.
