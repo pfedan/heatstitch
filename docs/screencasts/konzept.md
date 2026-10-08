@@ -48,7 +48,7 @@ einen Satz. Schlüssel: `00-heatstitch-oberflaeche`.
 | 1 | Ein neues Stickmuster | Startseite „Leer anfangen“, Stickrahmen in der Karte Stickmuster, Werkzeugleiste (Ellipse, Pfad), Größe in der Karte Objekt, Garn, Stichart, Player, Speichern | leer | 2 min |
 | 2 | Schrift | Werkzeug Text (T), Schrift aus der Liste, Größe, Bogen, Buchstabenabstand, Garn, Text später ändern | leer | 2 min |
 | 3 | Vom Bild zum Stickmuster | Ein Foto oder PNG: Bild umwandeln (Startseite oder Taste 3), Assistent in drei Schritten: Bild wählen, Farben und Flächen (Höchstens Farben, zusammenlegen, weglassen, Pinsel), Stiche und Ergebnis (Stil, Ergebnis), Übernehmen | `fliegenpilz.jpg` (eigene) | 2 bis 3 min |
-| 13 | Vom SVG zum Stickmuster | Eine SVG mit dunklen Konturen: Bild umwandeln liest Form für Form, jede Farbe wird ein Garn, Konturen werden nach ihrer Breite Satin; dann die Satin-Konturen: Abschnitte und ihre Reihenfolge, Trennlinien, Werkzeug Richtung (R) mit Querlinien, Ecken und Abschnitte vorschlagen, Realistische Fäden | `katze-im-karton.svg` (eigene) | 2 bis 3 min |
+| 13 | Vom SVG zum Stickmuster | Eine SVG mit dunklen Konturen: Bild umwandeln liest Form für Form, jede Farbe wird ein Garn, Konturen werden nach ihrer Breite Satin; dann die Satin-Konturen im Werkzeug Richtung (R): jeder Satin in Abschnitten seiner Fläche, Vorschlagen (Zauberstab) setzt Trenn- und Querlinien, Abschnitte vorgezeichnet wie gestickt, Problemstellen rot umrandet, Reihenfolge, Richtung und Schere je Abschnitt, Leeren, Realistische Fäden | `katze-im-karton.svg` (eigene) | 2 bis 3 min |
 | 4 | Objekte und Reihenfolge | Farben und Objekte, Reihenfolge per Ziehen, Aussparen (Karte über der Liste), Rechtsklick-Menü, Duplizieren und Spiegeln, Einrasten, Garn eines Objekts | `kirschen.svg` (eigene) | 2 min |
 
 ### Stufe 2: Stickdatei ansehen und verbessern
@@ -66,7 +66,7 @@ einen Satz. Schlüssel: `00-heatstitch-oberflaeche`.
 | Nr. | Titel | Inhalt | Demodatei | Länge |
 | --- | --- | --- | --- | --- |
 | 10 | Füllungen | Karte Objekt: Muster (Deckend, Offen), Gestaltung, Umrandung, Stoff und Halt mit Auto und eigenem Wert, Leitlinien (G), Zerteilen (X) | `shapes-benchmark.svg` | 3 min |
-| 11 | Satin und Linien | Satin: Werkzeug Richtung (R), Querlinien, Trennlinien und Abschnitte, Zugausgleich, Fransen; Linie: Art, Echo, Schatten | `patch.pes` | 3 min |
+| 11 | Satin und Linien | Satin: Werkzeug Richtung (R), Vorschlagen, Querlinien, Trennlinien und Abschnitte, Füllung per Stichart zu Satin, Zugausgleich, Fransen; Linie: Art, Echo, Schatten | `patch.pes` | 3 min |
 | 12 | Form und einzelne Stiche | Ebenen Objekte, Form, Stiche über die Brotkrume, Doppelklick und Enter, Knoten ziehen, Vereinfachen, Stiche von Hand (E), Ausdünnen | `cat-60mm.pes` | 2 bis 3 min |
 
 Änderungen gegenüber dem ersten Themenbaum: Teil 6 nimmt `patch.pes` statt `overlap.pes`, weil
@@ -84,9 +84,9 @@ Stufe 1 gleich nach Teil 3; die Nummer 13 bekommt er, weil die Nummern 1 bis 5 v
 sind und bleiben. Demodatei ist die Katze im Karton, die Daniel am 7. Oktober als „Kitty“
 gezeigt hat (Projekt mit `2026-10-07_18-41.png`). Sie liegt nur als PNG vor; für das Video wird sie
 als SVG nachgezeichnet (Flächen je Farbe, schwarze Konturen als Linien mit Breite) und liegt
-dann unter `13-vom-svg-zum-stickmuster/material/`. Aufgenommen wird Teil 13 erst, wenn die
-Satin-Ansichten vereinheitlicht sind (Plan `satin-eine-ansicht.md`), sonst zeigt er eine
-Ansicht, die bald anders aussieht.
+dann unter `13-vom-svg-zum-stickmuster/material/`. Seit #158 öffnet jeder Satin, auch einer aus SVG, Bild oder Stickdatei, im Werkzeug
+Richtung in Abschnitten seiner Fläche, mit einem Knopf Vorschlagen; das ist der Stand, den
+Teil 13 zeigt.
 
 Nicht als eigenes Video: Tastenkürzel und Befehlssuche (erscheinen als Einblendung, wann immer
 eine Taste benutzt wird; Strg+K darf in einem Video einmal als Abkürzung vorkommen), Handy und
