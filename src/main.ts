@@ -2,7 +2,7 @@ import { loadCatalogs } from './threads/catalog';
 import './style.css';
 import './areas/cleanup/cleanup.css';
 import { WorkerClient } from './density/client';
-import { detectLang, formatNumber, getLang, onLangChange, setLang, t, type Lang } from './i18n';
+import { detectLang, docsUrl, formatNumber, getLang, onLangChange, pageLang, setLang, t, type Lang } from './i18n';
 import { gridToCanvas } from './render/heatmap';
 import { drawLegend } from './render/legend';
 import { hoopRect } from './render/hoop';
@@ -1448,7 +1448,9 @@ langSelect.addEventListener('change', () => {
   saveSettings(settings);
   setLang(settings.lang);
 });
-setLang(detectLang(settings.lang));
+// The guide in the app's language; under de/ the app starts in German, whatever was set before.
+onLangChange(() => ($<HTMLAnchorElement>('doc-link').href = docsUrl(getLang())));
+setLang(detectLang(pageLang() ?? settings.lang));
 setMode(settings.mode);
 
 $('fit').addEventListener('click', () => fitView());

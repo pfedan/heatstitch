@@ -22,6 +22,8 @@
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="An embroidered cat in heatstitch, shown three ways: realistic threads, sewing order and density heatmap" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:locale:alternate" content="de_DE" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content="https://pfedan.github.io/heatstitch/og-image.jpg" />
     <meta name="twitter:image:alt" content="An embroidered cat in heatstitch, shown three ways: realistic threads, sewing order and density heatmap" />
@@ -42,7 +44,8 @@
     </header>
 
     <main class="doc">
-      <!-- Both languages are in the page; src/docs.ts shows the one of the app's settings. -->
+      <!-- Both languages are written here; the build makes docs.html (English) and de/docs.html (German) with one each. -->
+      <p class="lang-hint" id="lang-hint" hidden></p>
       <article lang="de">
         <h1>So funktioniert heatstitch</h1>
         <p class="lead">
@@ -1735,6 +1738,27 @@
         <a class="toc-sheet-top" href="#top"><span lang="de">Nach oben</span><span lang="en">To the top</span></a>
       </div>
     </div>
+    <dialog class="video-dialog" id="video-dialog" aria-labelledby="video-dialog-title">
+      <div class="video-dialog-head">
+        <b id="video-dialog-title"></b>
+        <div class="video-dialog-tools">
+          <span class="video-cc" role="group" aria-label="Untertitel / Subtitles">
+            <span class="video-cc-label"><span lang="de">Untertitel</span><span lang="en">Subtitles</span></span>
+            <button type="button" data-cc="off" aria-pressed="true"><span lang="de">Aus</span><span lang="en">Off</span></button>
+            <button type="button" data-cc="de" aria-pressed="false">Deutsch</button>
+            <button type="button" data-cc="en" aria-pressed="false">English</button>
+          </span>
+          <button type="button" class="video-dialog-btn" id="video-full">
+            <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M3 8V3h5M12 3h5v5M17 12v5h-5M8 17H3v-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" /></svg>
+            <span lang="de">Vollbild</span><span lang="en">Full screen</span>
+          </button>
+          <button type="button" class="video-dialog-btn" id="video-close">
+            <span lang="de">Schließen</span><span lang="en">Close</span>
+          </button>
+        </div>
+      </div>
+      <div class="video-dialog-stage" id="video-dialog-stage"></div>
+    </dialog>
     <script type="module" src="/src/docs.ts"></script>
   </body>
 </html>
