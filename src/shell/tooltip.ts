@@ -12,6 +12,9 @@ import { onLangChange } from '../i18n';
  * Shown after a short rest of the mouse, at once while moving along a row of buttons, on keyboard
  * focus and on a long press on touch (which then does not click). A key at the end of the text,
  * "Duplizieren (Strg+D)", is set apart as a key.
+ *
+ * Where a picture says it better than words, `data-tip-img="name"` adds a small screenshot from
+ * public/tips/name.webp (made by tools/tips/shoot.mjs) above the text.
  */
 
 const SHOW_MS = 450;
@@ -75,6 +78,18 @@ function adoptAll(root: ParentNode): void {
   root.querySelectorAll('[title]').forEach(adopt);
 }
 
+const pictures = new Map<string, HTMLImageElement>();
+
+/** The screenshot for `name`, sized before it loads so the box is placed right at once. */
+function picture(name: string): HTMLImageElement {
+  let img = pictures.get(name);
+  if (!img) {
+    img = Object.assign(document.createElement('img'), { className: 'tip-img', src: `${import.meta.env.BASE_URL}tips/${name}.webp`, alt: '', width: 200, height: 125, decoding: 'async' });
+    pictures.set(name, img);
+  }
+  return img;
+}
+
 function render(el: HTMLElement): void {
   const { text, keys } = splitKeys(el.getAttribute('data-tip') ?? '');
   const body = document.createElement('span');
@@ -87,6 +102,9 @@ function render(el: HTMLElement): void {
     for (const key of keys) k.appendChild(Object.assign(document.createElement('kbd'), { textContent: key }));
     parts.push(k);
   }
+  const img = el.getAttribute('data-tip-img');
+  if (img) parts.unshift(picture(img));
+  tip.classList.toggle('has-img', !!img);
   tip.replaceChildren(...parts);
   place(el);
 }

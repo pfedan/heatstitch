@@ -311,17 +311,17 @@
             <h2 id="image-step3-title" data-i18n="image.stitch"></h2>
             <div class="image-styles" role="radiogroup" data-i18n-aria="image.style">
               <span class="label" data-i18n="image.style"></span>
-              <label class="image-style" data-i18n-title="image.style.flat.hint">
+              <label class="image-style" data-i18n-title="image.style.flat.hint" data-tip-img="style-flat">
                 <input type="radio" name="image-style" value="flat" />
                 <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 8h22M5 12h22M5 16h22M5 20h22M5 24h22" /></svg>
                 <b data-i18n="image.style.flat"></b><span data-i18n="image.style.flat.short"></span>
               </label>
-              <label class="image-style" id="image-style-dynamic" data-i18n-title="image.style.dynamic.hint">
+              <label class="image-style" id="image-style-dynamic" data-i18n-title="image.style.dynamic.hint" data-tip-img="style-dynamic">
                 <input type="radio" name="image-style" value="dynamic" />
                 <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M4 10q12-8 24 0M4 15q12-8 24 0M4 20q12-8 24 0M4 25q12-8 24 0" /></svg>
                 <b data-i18n="image.style.dynamic"></b><span data-i18n="image.style.dynamic.short"></span>
               </label>
-              <label class="image-style" id="image-style-smart" data-i18n-title="image.style.smart.hint">
+              <label class="image-style" id="image-style-smart" data-i18n-title="image.style.smart.hint" data-tip-img="style-smart">
                 <input type="radio" name="image-style" value="smart" />
                 <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M4 8h11M4 12h11M4 16h11M18 10q5-4 10 0M18 15q5-4 10 0M18 20q5-4 10 0" /><circle cx="9" cy="24" r="3.2" /></svg>
                 <b data-i18n="image.style.smart"></b><span data-i18n="image.style.smart.short"></span>
@@ -435,7 +435,7 @@
               <label><input type="radio" name="image-view" value="stitches" /><span data-i18n="image.view.stitches"></span></label>
             </div>
             <div class="stage-tools stage-tools-end">
-              <button type="button" id="image-shine" class="tool primary" data-mode="image" data-i18n-title="image.shine.hint" hidden><span aria-hidden="true">✦</span> <span data-i18n="image.shine"></span></button>
+              <button type="button" id="image-shine" class="tool primary" data-mode="image" data-i18n-title="image.shine.hint" data-tip-img="light" hidden><span aria-hidden="true">✦</span> <span data-i18n="image.shine"></span></button>
             </div>
           </div>
           <div class="tool-options" id="tool-options" role="toolbar" hidden></div>
@@ -456,10 +456,10 @@
               <svg class="i" aria-hidden="true"><use href="#i-marks" /></svg>
             </button>
             <div class="vb-seg" id="shapes-seg" role="group" data-mode="flow" data-i18n-aria="design.view.look">
-              <button type="button" class="vb-btn vb-icon" data-shapes="off" aria-pressed="true" data-i18n-aria="design.view.stitchesShow" data-i18n-title="design.view.stitchesShow">
+              <button type="button" class="vb-btn vb-icon" data-shapes="off" aria-pressed="true" data-i18n-aria="design.view.stitchesShow" data-i18n-title="design.view.stitchesShow" data-tip-img="view-stitches">
                 <svg class="i" aria-hidden="true"><use href="#i-view-stitches" /></svg>
               </button>
-              <button type="button" class="vb-btn vb-icon" data-shapes="on" aria-pressed="false" data-i18n-aria="design.view.shapesShow" data-i18n-title="design.view.shapesShow">
+              <button type="button" class="vb-btn vb-icon" data-shapes="on" aria-pressed="false" data-i18n-aria="design.view.shapesShow" data-i18n-title="design.view.shapesShow" data-tip-img="view-shapes">
                 <svg class="i" aria-hidden="true"><use href="#i-view-shapes" /></svg>
               </button>
             </div>
@@ -480,10 +480,10 @@
                     <span class="label"><span data-i18n="controls.threadWidth"></span> <output id="thread-width-out"></output></span>
                     <input type="range" id="thread-width" min="0.02" max="1" step="0.01" />
                   </label>
-                  <label class="check" data-i18n-title="controls.liveLight.hint"><input type="checkbox" id="live-light" /><span data-i18n="controls.liveLight"></span></label>
+                  <label class="check" data-i18n-title="controls.liveLight.hint" data-tip-img="light"><input type="checkbox" id="live-light" /><span data-i18n="controls.liveLight"></span></label>
                   <button type="button" id="allow-tilt" class="link" data-i18n="controls.tilt" hidden></button>
                 </div>
-                <label class="check" data-mode="flow" data-i18n-title="display.shapes.hint"><input type="checkbox" id="shapes-view" /><span data-i18n="display.shapes"></span></label>
+                <label class="check" data-mode="flow" data-i18n-title="display.shapes.hint" data-tip-img="view-shapes"><input type="checkbox" id="shapes-view" /><span data-i18n="display.shapes"></span></label>
               </section>
               <section class="vp-group" data-mode="flow">
                 <h3 data-i18n="colorBy.title"></h3>
