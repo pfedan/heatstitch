@@ -215,6 +215,20 @@ body[data-mode='image'][data-image-step='1'] .resizer[data-panel='inspector'] {
   margin-top: -4px;
 }
 
+/* Pasting is as good a way in as choosing a file: a button of its own. */
+.image-paste {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  font-size: 13px;
+}
+
+.image-paste svg {
+  flex: none;
+}
+
 .image-under-drop .privacy-note {
   margin: 0;
 }
