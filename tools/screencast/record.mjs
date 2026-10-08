@@ -188,7 +188,12 @@ const api = {
       await api.wait(perChar);
     }
   },
+  /** Presses a key and shows it as a key cap for `show` s; `show: 0` presses it without a cap. */
   press: async (key, { label, show = 1.2 } = {}) => {
+    if (!show) {
+      await page.keyboard.press(key);
+      return api.wait(0.1);
+    }
     state.key = label ?? key;
     await api.wait(0.3);
     await page.keyboard.press(key);
