@@ -167,56 +167,30 @@ export default {
       },
     },
     {
-      say: 'heatstitch sucht dabei schon nach Lösungen. Unter Dichte stehen jetzt zwei Wege. Beheben ändert nur, was man kaum sieht. Ein Vorschlag geht weiter, dafür sieht man ihn.',
-      text: 'heatstitch sucht dabei schon nach Lösungen. Unter Dichte stehen jetzt zwei Wege. Beheben ändert nur, was man kaum sieht. Ein Vorschlag geht weiter, dafür sieht man ihn.',
-      textEn: 'Meanwhile heatstitch is already looking for solutions. Under Density there are now two ways. Fix only changes what you can hardly see. A proposal goes further, but you can see it.',
+      say: 'heatstitch sucht dabei schon nach Lösungen. Unter Dichte steht jetzt Beheben. Beheben ändert nur, was man kaum sieht. [pleased] Und hier schafft es alle dreißig Quadratmillimeter.',
+      text: 'heatstitch sucht dabei schon nach Lösungen. Unter Dichte steht jetzt Beheben. Beheben ändert nur, was man kaum sieht. Und hier schafft es alle dreißig Quadratmillimeter.',
+      textEn: 'Meanwhile heatstitch is already looking for solutions. Under Density there is now Fix. Fix only changes what you can hardly see. And here it manages all thirty square millimetres.',
       run: async (s) => {
         const fix = s.page.locator('.ampel-fix').first();
-        const rest = s.page.locator('.ampel-rest').first();
         await s.zoom(reason(s, 'Dichte'), 1.8);
         await s.move(reason(s, 'Dichte').locator('.name'), 0.9);
-        await until(s, async () => (await fix.count()) > 0 && (await rest.count()) > 0 && !/Wird berechnet/.test(await reason(s, 'Dichte').innerText()), 'fixes ready');
-        await s.wait(1.6);
+        await until(s, async () => (await fix.count()) > 0 && !/Wird berechnet/.test(await reason(s, 'Dichte').innerText()), 'fix ready');
+        await s.wait(2.0);
         await s.move(fix, 0.7);
         await s.label('Beheben', fix, 'left');
-        await s.wait(3.0);
-        await s.move(rest, 0.6);
-        await s.label('Vorschlag', rest, 'left');
-        await s.wait(3.0);
+        await s.wait(4.0);
         s.unlabel();
-      },
-    },
-    {
-      say: 'Ein Klick auf Vorschlag zeigt vorher und nachher. Hier würde das H deutlich lockerer gestickt. Mit Übernehmen nimmst du den Vorschlag. Ich schließe ihn und nehme lieber Beheben.',
-      text: 'Ein Klick auf Vorschlag zeigt vorher und nachher. Hier würde das H deutlich lockerer gestickt. Mit Übernehmen nimmst du den Vorschlag. Ich schließe ihn und nehme lieber Beheben.',
-      textEn: 'A click on Proposal shows before and after. Here the H would be stitched much more loosely. With Apply you take the proposal. I close it and prefer Fix.',
-      run: async (s) => {
-        await s.click(s.page.locator('.ampel-rest').first(), { move: 0.5, before: 0.3, after: 0.6 });
-        const look = s.page.locator('.ampel-look');
-        const pic = look.locator('canvas.ampel-compare');
-        await s.zoom(pic, 1.8);
-        await s.wait(0.4);
-        const b = await s.box(pic);
-        await s.move([b.x + b.width * 0.25, b.y + b.height * 0.55], 0.8);
-        await s.label('Vorher', [b.x, b.y, b.width / 2, b.height], 'above');
-        await s.wait(1.6);
-        await s.move([b.x + b.width * 0.75, b.y + b.height * 0.55], 0.8);
-        await s.label('Nachher', [b.x + b.width / 2, b.y, b.width / 2, b.height], 'above');
+        const fig = fix.locator('span').first();
+        await s.move(fig, 0.6);
+        await s.label('30 von 30 mm²', fig, 'below');
         await s.wait(2.4);
-        const take = look.getByRole('button', { name: 'Übernehmen' });
-        await s.move(take, 0.8);
-        await s.label('Übernehmen', take, 'below');
-        await s.wait(2.0);
         s.unlabel();
-        await s.click(look.getByRole('button', { name: 'Schließen' }), { move: 0.8, before: 0.6, after: 0.4 });
-        s.zoomOut();
-        await s.wait(0.4);
       },
     },
     {
-      say: '[delighted] Ein Klick, und aus Riskant wird Mit Vorsicht. Oben bei Prüfen stehen statt sechzehn nur noch vier offene Stellen.',
-      text: 'Ein Klick, und aus Riskant wird Mit Vorsicht. Oben bei Prüfen stehen statt sechzehn nur noch vier offene Stellen.',
-      textEn: 'One click, and Risky becomes With care. Up at Check there are only four open spots instead of sixteen.',
+      say: '[delighted] Ein Klick, und aus Riskant wird Mit Vorsicht. Oben bei Prüfen stehen statt sechzehn nur noch sieben offene Stellen.',
+      text: 'Ein Klick, und aus Riskant wird Mit Vorsicht. Oben bei Prüfen stehen statt sechzehn nur noch sieben offene Stellen.',
+      textEn: 'One click, and Risky becomes With care. Up at Check there are only seven open spots instead of sixteen.',
       run: async (s) => {
         const fix = s.page.locator('.ampel-fix').first();
         await s.zoom([1760, 250, 0, 0], 1.6);
@@ -240,10 +214,11 @@ export default {
       },
     },
     {
-      say: 'Was hat heatstitch gemacht? In Gestalten zeigt die Karte Objekt bei jedem Buchstaben: Von der Korrektur geändert. Beim S ist die Unterlage weg. Beim T liegt sie nur noch in der Mitte. [focused] Beim H rücken die Satinstiche je nach Breite von 0,40 auf 0,42 Millimeter auseinander. Und die Füllung weicht unter der Schrift ein Stück zurück.',
-      text: 'Was hat heatstitch gemacht? In Gestalten zeigt die Karte Objekt bei jedem Buchstaben: Von der Korrektur geändert. Beim S ist die Unterlage weg. Beim T liegt sie nur noch in der Mitte. Beim H rücken die Satinstiche je nach Breite von 0,40 auf 0,42 Millimeter auseinander. Und die Füllung weicht unter der Schrift ein Stück zurück.',
-      textEn: 'What did heatstitch do? In Design, the Object card shows on every letter: Changed by the correction. On the S the underlay is gone. On the T it only runs down the middle. On the H the satin stitches move apart from 0.40 to 0.42 millimetres, depending on the width. And the fill draws back a little from under the lettering.',
+      say: 'Was hat heatstitch gemacht? In Gestalten zeigt die Karte Objekt bei jedem Buchstaben: Von der Korrektur geändert. Beim S ist die Unterlage weg. Beim T liegt sie nur noch in der Mitte. [focused] Und beim E rücken die Satinstiche je nach Breite von 0,41 auf 0,43 Millimeter auseinander.',
+      text: 'Was hat heatstitch gemacht? In Gestalten zeigt die Karte Objekt bei jedem Buchstaben: Von der Korrektur geändert. Beim S ist die Unterlage weg. Beim T liegt sie nur noch in der Mitte. Und beim E rücken die Satinstiche je nach Breite von 0,41 auf 0,43 Millimeter auseinander.',
+      textEn: 'What did heatstitch do? In Design, the Object card shows on every letter: Changed by the correction. On the S the underlay is gone. On the T it only runs down the middle. And on the E the satin stitches move apart from 0.41 to 0.43 millimetres, depending on the width.',
       run: async (s) => {
+        await readout(s, false);
         const design = mode(s, /^Gestalten/);
         await s.move(design, 0.9);
         await s.label('Gestalten', design, 'below');
@@ -264,29 +239,17 @@ export default {
         const show = async (name, sec) => {
           await s.click(row(name), { move: 0.9, before: 0.3, after: 0.3 });
           await until(s, async () => (await chip.count()) > 0, `chip of ${name}`);
-          await s.zoom([1730, 500, 0, 0], 1.7);
+          await s.zoom([1730, 450, 0, 0], 1.7);
           await s.move(chip, 0.8);
           await s.wait(sec);
           s.zoomOut();
         };
         await show('Satin 5', 1.6);
         await show('Satin 4', 1.6);
-        await show('Satin 10', 4.4);
-        // The fill's hint is shown only once it reads as words (it showed a raw key before).
-        await s.click(group('Dark Gray'), { move: 1.0, before: 0.3, after: 0.3 });
-        await s.click(row('Füllung 1'), { move: 0.7, before: 0.3, after: 0.3 });
-        const tip = (await chip.count()) ? await chip.getAttribute('data-tip') : '';
-        if (tip && !/fine\./.test(tip)) {
-          await s.zoom([1730, 500, 0, 0], 1.7);
-          await s.move(chip, 0.8);
-          await s.wait(2.0);
-          s.zoomOut();
-        } else {
-          await s.move([1000, 470], 1.0);
-          await s.wait(2.0);
-        }
+        await show('Satin 2', 4.4);
         await s.tips(false);
         await s.move(REST, 0.8);
+        await readout(s, true);
       },
     },
     {
@@ -300,6 +263,7 @@ export default {
         await until(s, async () => (await fabric(s, 'Strick').count()) > 0, 'Prüfen');
         await s.wait(0.6);
         await s.page.evaluate(() => document.activeElement?.blur());
+        await readout(s, false);
         await s.press('c', { label: 'C', show: 1.0 });
         await until(s, async () => (await btn(s, /^Vergleich beenden/).count()) > 0, 'compare on');
         await s.move([700, 75], 0.9);
@@ -319,9 +283,9 @@ export default {
       },
     },
     {
-      say: 'Rechts unter Vergleich stehen die Zahlen. [proud and warm] Die kritische Fläche schrumpft von 36 auf 6 Quadratmillimeter, und das mit 130 Stichen weniger.',
-      text: 'Rechts unter Vergleich stehen die Zahlen. Die kritische Fläche schrumpft von 36 auf 6 Quadratmillimeter, und das mit 130 Stichen weniger.',
-      textEn: 'On the right under Compare you find the figures. The critical area shrinks from 36 to 6 square millimetres, and with 130 fewer stitches.',
+      say: 'Rechts unter Vergleich stehen die Zahlen. [proud and warm] Die kritische Fläche schrumpft von 36 auf 8 Quadratmillimeter, und das mit 226 Stichen weniger.',
+      text: 'Rechts unter Vergleich stehen die Zahlen. Die kritische Fläche schrumpft von 36 auf 8 Quadratmillimeter, und das mit 226 Stichen weniger.',
+      textEn: 'On the right under Compare you find the figures. The critical area shrinks from 36 to 8 square millimetres, and with 226 fewer stitches.',
       run: async (s) => {
         await s.move([1760, 600], 0.8);
         const title = s.page.getByText('Vergleich', { exact: true }).first();
