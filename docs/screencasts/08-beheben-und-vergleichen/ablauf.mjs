@@ -235,39 +235,79 @@ export default {
       },
     },
     {
-      say: 'Mit der Taste C vergleichst du mit dem Original. Ich ziehe die Trennlinie über die Schrift. [curious] Links glüht das Original, rechts ist die Korrektur viel ruhiger.',
-      text: 'Mit der Taste C vergleichst du mit dem Original. Ich ziehe die Trennlinie über die Schrift. Links glüht das Original, rechts ist die Korrektur viel ruhiger.',
-      textEn: 'With the C key you compare with the original. I drag the dividing line across the lettering. On the left the original glows, on the right the correction is much calmer.',
+      say: 'Was hat heatstitch gemacht? In Gestalten zeigt die Karte Objekt bei jedem Buchstaben: Von der Korrektur geändert. Beim S ist die Unterlage weg. Beim T liegt sie nur noch in der Mitte. [focused] Beim H rücken die Satinstiche je nach Breite von 0,40 auf 0,42 Millimeter auseinander. Und die Füllung weicht unter der Schrift ein Stück zurück.',
+      text: 'Was hat heatstitch gemacht? In Gestalten zeigt die Karte Objekt bei jedem Buchstaben: Von der Korrektur geändert. Beim S ist die Unterlage weg. Beim T liegt sie nur noch in der Mitte. Beim H rücken die Satinstiche je nach Breite von 0,40 auf 0,42 Millimeter auseinander. Und die Füllung weicht unter der Schrift ein Stück zurück.',
+      textEn: 'What did heatstitch do? In Design, the Object card shows on every letter: Changed by the correction. On the S the underlay is gone. On the T it only runs down the middle. On the H the satin stitches move apart from 0.40 to 0.42 millimetres, depending on the width. And the fill draws back a little from under the lettering.',
       run: async (s) => {
-        // The key goes to the stage, not to a button that still has the focus.
+        const design = mode(s, /^Gestalten/);
+        await s.move(design, 0.9);
+        await s.label('Gestalten', design, 'below');
+        await s.wait(0.3);
+        s.keyCap('1');
+        await s.click(null, { before: 0.3, after: 0.5 });
+        s.unlabel();
+        s.keyCap(null);
+        const list = s.page.locator('aside').first();
+        const group = (name) => list.getByRole('listitem').filter({ hasText: name }).getByRole('button', { name: /zeigen$/ }).first();
+        const row = (name) => list.getByRole('button', { name: new RegExp(`^${name} \\d`) });
+        const chip = s.page.locator('aside.inspector .stitch-chip', { hasText: 'Von der Korrektur geändert' });
+        await until(s, async () => (await group('White').count()) > 0, 'object list');
+        await s.click(group('White'), { move: 1.0, before: 0.3, after: 0.4 });
+        await s.tips(true);
+        // One letter: picked in the list, then the pointer rests on the chip and its hint shows.
+        const show = async (name, sec) => {
+          await s.click(row(name), { move: 0.9, before: 0.3, after: 0.3 });
+          await until(s, async () => (await chip.count()) > 0, `chip of ${name}`);
+          await s.zoom([1730, 500, 0, 0], 1.7);
+          await s.move(chip, 0.8);
+          await s.wait(sec);
+          s.zoomOut();
+        };
+        await show('Satin 5', 1.6);
+        await show('Satin 4', 1.6);
+        await show('Satin 10', 3.2);
+        // The fill's hint is shown only once it reads as words (it showed a raw key before).
+        await s.click(group('Dark Gray'), { move: 1.0, before: 0.3, after: 0.3 });
+        await s.click(row('Füllung 1'), { move: 0.7, before: 0.3, after: 0.3 });
+        const tip = (await chip.count()) ? await chip.getAttribute('data-tip') : '';
+        if (tip && !/fine\./.test(tip)) {
+          await s.zoom([1730, 500, 0, 0], 1.7);
+          await s.move(chip, 0.8);
+          await s.wait(2.0);
+          s.zoomOut();
+        } else {
+          await s.move([1000, 470], 1.0);
+          await s.wait(2.0);
+        }
+        await s.tips(false);
+        await s.move(REST, 0.8);
+      },
+    },
+    {
+      say: 'Zurück in Prüfen vergleichst du mit der Taste C mit dem Original. Ich ziehe die Trennlinie über die Schrift. [curious] Links glüht das Original, rechts ist die Korrektur viel ruhiger.',
+      text: 'Zurück in Prüfen vergleichst du mit der Taste C mit dem Original. Ich ziehe die Trennlinie über die Schrift. Links glüht das Original, rechts ist die Korrektur viel ruhiger.',
+      textEn: 'Back in Check, the C key compares with the original. I drag the dividing line across the lettering. On the left the original glows, on the right the correction is much calmer.',
+      run: async (s) => {
+        // The keys go to the stage, not to a button that still has the focus.
+        await s.page.evaluate(() => document.activeElement?.blur());
+        await s.press('2', { label: '2', show: 0.8 });
+        await until(s, async () => (await fabric(s, 'Strick').count()) > 0, 'Prüfen');
+        await s.wait(0.6);
         await s.page.evaluate(() => document.activeElement?.blur());
         await s.press('c', { label: 'C', show: 1.0 });
         await until(s, async () => (await btn(s, /^Vergleich beenden/).count()) > 0, 'compare on');
         await s.move([700, 75], 0.9);
         await s.label('Original', [726, 60, 64, 22], 'below');
-        await s.wait(1.2);
+        await s.wait(1.0);
         await s.move([850, 75], 0.6);
         await s.label('Korrigiert', [810, 60, 72, 22], 'below');
-        await s.wait(1.2);
+        await s.wait(1.0);
         s.unlabel();
         await s.zoom([TEXT[0], TEXT[1], 0, 0], 1.5);
         await s.drag([SPLIT, [390, 640], [900, 640], [640, 640]], { sec: 1.8 });
         await s.wait(0.4);
-      },
-    },
-    {
-      say: 'Was hat heatstitch gemacht? Die Füllung weicht unter den Buchstaben ein Stück zurück. Schmale Buchstaben verzichten auf ihre Unterlage. Und die Satinstiche rücken unmerklich auseinander.',
-      text: 'Was hat heatstitch gemacht? Die Füllung weicht unter den Buchstaben ein Stück zurück. Schmale Buchstaben verzichten auf ihre Unterlage. Und die Satinstiche rücken unmerklich auseinander.',
-      textEn: 'What did heatstitch do? The fill draws back a little from under the letters. Narrow letters do without their underlay. And the satin stitches move imperceptibly further apart.',
-      run: async (s) => {
-        await s.move([700, 560], 1.0);
-        await s.wait(2.4);
-        await s.move([745, 840], 1.0);
-        await s.wait(2.6);
-        await s.move([440, 600], 1.0);
-        await s.wait(2.6);
         s.zoomOut();
-        await s.move(REST, 1.0);
+        await s.move(REST, 0.8);
       },
     },
     {

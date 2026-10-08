@@ -1,6 +1,6 @@
 # Teil 8: Beheben und vergleichen
 
-Schlüssel `08-beheben-und-vergleichen`, Demodatei `public/examples/demos/patch.pes` (Aufnäher 84 × 84 mm: Rand in Tangerine, dunkle Füllung, Stern in Harvest Gold, Satinschrift HEAT STITCH in Weiß, 9.135 Stiche), geprüft für Strick, etwa 2 Minuten, 233 Wörter.
+Schlüssel `08-beheben-und-vergleichen`, Demodatei `public/examples/demos/patch.pes` (Aufnäher 84 × 84 mm: Rand in Tangerine, dunkle Füllung, Stern in Harvest Gold, Satinschrift HEAT STITCH in Weiß, 9.135 Stiche), geprüft für Strick, etwa 2 Minuten, 267 Wörter.
 
 Ziel: Danach kannst du eine zu dichte Stickdatei von heatstitch verbessern lassen, ohne dass man es sieht, weißt, wann ein Vorschlag sichtbar ändert, vergleichst mit dem Original und nimmst die Korrektur bei Bedarf zurück.
 
@@ -44,15 +44,15 @@ Die Datei steht nicht unter „Weitere Beispiele“; sie wird wie im Ordner ins 
 
 ## Szene 6
 
-**Bild:** Tastenkappe C. Auf der Bühne Original links und Korrigiert rechts, Etiketten an beiden Seiten. Heranzoomen auf die Schrift. Der Zeiger zieht die Trennlinie langsam über die Schrift nach links und wieder nach rechts.
+**Bild:** Etikett Gestalten oben, Klick, Tastenkappe 1. Links in der Liste klappt White auf. Klick auf Satin 5: das S ist gewählt. Heranzoomen rechts auf den Chip „Von der Korrektur geändert“, der Hinweis zeigt „Unterlage aus“. Klick auf Satin 4 (das T in HEAT): „Unterlage Mitte statt Auto“. Klick auf Satin 10 (das H in STITCH): „Abstand nach Breite, Abstand 0,40 → 0,42 mm“. Zum Schluss Füllung 1, falls ihr Hinweis bis zur Aufnahme lesbar ist: „Füllung unter Satin zurückgezogen“ (sonst zeigt der Zeiger nur auf die Füllung unter der Schrift).
 
-**Sprechtext:** Mit der Taste C vergleichst du mit dem Original. Ich ziehe die Trennlinie über die Schrift. [curious] Links glüht das Original, rechts ist die Korrektur viel ruhiger.
+**Sprechtext:** Was hat heatstitch gemacht? In Gestalten zeigt die Karte Objekt bei jedem Buchstaben: Von der Korrektur geändert. Beim S ist die Unterlage weg. Beim T liegt sie nur noch in der Mitte. [focused] Beim H rücken die Satinstiche je nach Breite von 0,40 auf 0,42 Millimeter auseinander. Und die Füllung weicht unter der Schrift ein Stück zurück.
 
 ## Szene 7
 
-**Bild:** Die Trennlinie steht mitten in der Schrift, die Bühne bleibt herangezoomt. Der Zeiger zeigt nacheinander auf die Füllung am Rand eines Buchstabens, auf einen schmalen Buchstaben und auf das H.
+**Bild:** Tastenkappe 2, zurück in Prüfen. Tastenkappe C. Auf der Bühne Original links und Korrigiert rechts, Etiketten an beiden Seiten. Heranzoomen auf die Schrift. Der Zeiger zieht die Trennlinie langsam über die Schrift nach links und wieder nach rechts.
 
-**Sprechtext:** Was hat heatstitch gemacht? Die Füllung weicht unter den Buchstaben ein Stück zurück. Schmale Buchstaben verzichten auf ihre Unterlage. Und die Satinstiche rücken unmerklich auseinander.
+**Sprechtext:** Zurück in Prüfen vergleichst du mit der Taste C mit dem Original. Ich ziehe die Trennlinie über die Schrift. [curious] Links glüht das Original, rechts ist die Korrektur viel ruhiger.
 
 ## Szene 8
 
