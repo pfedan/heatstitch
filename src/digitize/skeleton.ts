@@ -58,6 +58,23 @@ const bits = (m: number) => {
   return c;
 };
 
+/**
+ * One of the two pixels at the end of a ridge two pixels wide (a line an even number of pixels
+ * wide): its three neighbours side by side in one corner, none farther inside. Thinned in index
+ * order, a vertical such line would otherwise be eaten from its end, pixel pair by pixel pair, in
+ * one pass (each pair ending it in turn), and the line lost. Kept until its twin is gone.
+ */
+function tip(r: Region, i: number, m: number): boolean {
+  if (bits(m) !== 3) return false;
+  const k = [1, 3, 5, 7].find((c) => m === ((7 << (c - 1)) | (7 >> (9 - c))) % 256);
+  if (k === undefined) return false;
+  for (let d = -1; d <= 1; d++) {
+    const n = (k + d + 8) % 8;
+    if (r.inside[i + NY[n] * r.w + NX[n]] > r.inside[i]) return false;
+  }
+  return true;
+}
+
 /** One-pixel skeleton of the region mask (the mask has an empty margin, so no bounds checks). */
 export function thin(r: Region): Uint8Array {
   const s = r.mask.slice();
@@ -69,7 +86,7 @@ export function thin(r: Region): Uint8Array {
     for (const i of order) {
       if (!s[i]) continue;
       const m = neighbourByte(s, r.w, i);
-      if (bits(m) <= 1 || !SIMPLE[m]) continue;
+      if (bits(m) <= 1 || !SIMPLE[m] || tip(r, i, m)) continue;
       s[i] = 0;
       changed = true;
     }
