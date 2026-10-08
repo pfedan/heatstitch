@@ -81,8 +81,9 @@ Jede Zeile muss `ok` zeigen. Für eine fehlende Sache steht darunter, was zu tun
    Szenen aufgenommen (die anderen laufen ohne Bilder mit, damit der Zustand stimmt).
    Liegt in `OUT` schon eine ganze Aufnahme, ersetzen sie dort nur diese Szenen; danach genügt
    ein neuer Schnitt.
-   Mit `--jobs 4` laufen vier Teile gleichzeitig in je einem eigenen Chromium; jeder Teil spielt
-   die Szenen davor ohne Bilder durch. Auf einem Rechner mit vielen Kernen geht das deutlich schneller.
+   Die Aufnahme läuft in Teilen gleichzeitig, je Teil ein eigenes Chromium; jeder Teil spielt
+   die Szenen davor ohne Bilder durch. Wie viele Teile, sagt `--jobs N`, ohne Angabe die Hälfte
+   der Kerne (höchstens 8), auf Daniels Mac also 7. `--jobs 1` nimmt alles nacheinander auf.
    Hinweise beim Überfahren sind ausgeblendet; eine Szene, die einen zeigen soll, ruft
    `s.tips(true)` auf.
 5. **Schnitt.**

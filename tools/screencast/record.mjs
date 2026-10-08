@@ -4,9 +4,9 @@
 // zoom per frame) for compose.py, which draws the overlays and builds the video.
 //
 //   node tools/screencast/record.mjs docs/screencasts/01-neues-stickmuster/ablauf.mjs OUT \
-//     [--audio DIR] [--scenes 1-3] [--scale 2] [--jobs 4]
+//     [--audio DIR] [--scenes 1-3] [--scale 2] [--jobs N]
 //
-// --jobs N splits the scenes into N parts by length and records them side by side, each part
+// --jobs N (default: half the cores, at most 8) splits the scenes into N parts by length and records them side by side, each part
 // in its own Chromium; a part first runs the scenes before it without frames to reach its state.
 //
 // With --scenes and an earlier full recording in OUT, only those scenes are recorded anew and
@@ -16,6 +16,7 @@
 // Playwright comes from PLAYWRIGHT_MODULE, the repo's own node_modules or the container's
 // global install (/opt/node-tools), in that order.
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -29,7 +30,8 @@ const [ablaufPath, outDir] = args;
 const audioDir = opt('--audio', path.join(outDir, 'ton'));
 const scale = Number(opt('--scale', '2'));
 const sceneRange = opt('--scenes', '');
-const jobs = Number(opt('--jobs', '1'));
+// Parts recorded side by side: half the cores (7 on a 14 core Mac), at most 8.
+const jobs = Number(opt('--jobs', String(Math.max(1, Math.min(8, Math.floor(os.availableParallelism() / 2))))));
 // Scenes run without frames still give the page's workers (stitching, density) a moment per frame.
 const dryMs = Number(opt('--dry-ms', '50'));
 const APP_URL = process.env.APP_URL || 'http://localhost:4173/heatstitch/';
