@@ -22,6 +22,8 @@
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="An embroidered cat in heatstitch, shown three ways: realistic threads, sewing order and density heatmap" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:locale:alternate" content="de_DE" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content="https://pfedan.github.io/heatstitch/og-image.jpg" />
     <meta name="twitter:image:alt" content="An embroidered cat in heatstitch, shown three ways: realistic threads, sewing order and density heatmap" />
@@ -42,7 +44,8 @@
     </header>
 
     <main class="doc">
-      <!-- Both languages are in the page; src/docs.ts shows the one of the app's settings. -->
+      <!-- Both languages are written here; the build makes docs.html (English) and de/docs.html (German) with one each. -->
+      <p class="lang-hint" id="lang-hint" hidden></p>
       <article lang="de">
         <h1>So funktioniert heatstitch</h1>
         <p class="lead">

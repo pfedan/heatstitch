@@ -1,8 +1,13 @@
 import { outline, type Region } from './region';
-import { cutLinesBetween, inside, stripsOfAreas } from './rungs';
+import { columnFromRungs, cutLinesBetween, inside, insideOf, stripsOfAreas, type Rung } from './rungs';
 import { cornerCuts, planParts } from './satinForms';
 import { blobShape, filled, materialOf, planShape, smallHoles, splitBlobs, wholeShape } from './satinShapes';
 import { skeleton, type Branch, type Graph, type Pt } from './skeleton';
+
+/** Steps along a column checked for running across a hole (mm, see covers). */
+const COVER_STEP = 0.5;
+/** A column whose middle runs this far through a hole (mm) covers it. */
+const COVER_MM = 2;
 
 /**
  * "Vorschlagen" in the satin tool: a fill made into satin columns the way a digitizer would cut it
@@ -246,7 +251,16 @@ function columns(g: Graph, cuts: [Pt, Pt][], lines: [Pt, Pt][], outsides: Pt[][]
     }
     made = stripsOfAreas(outsides, lines, cutsNow, holes);
   }
-  return { cuts: cutsNow, lines, ok: made.hole < 0 && !made.bad };
+  // A ring opened by one cut line that goes on beyond (into a line it meets, say) can make a part
+  // whose column runs across the hole, its rails the outside of the ring either side: it would
+  // cover the hole, no columns.
+  return { cuts: cutsNow, lines, ok: made.hole < 0 && !made.bad && !covers(made.areas.flat(), holes) };
+}
+
+/** Whether a column runs across a hole (its middle through the hole for COVER_MM, not round it). */
+export function covers(strips: { left: Pt[]; right: Pt[]; rungs: Rung[] }[], holes: Pt[][]): boolean {
+  const tests = holes.map(insideOf);
+  return strips.some((s) => columnFromRungs(s.left, s.right, s.rungs, COVER_STEP).center.filter((m) => tests.some((t) => t(m))).length * COVER_STEP >= COVER_MM);
 }
 
 /** A line across a small outline through its middle, its narrow way (along its least spread). */

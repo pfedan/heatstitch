@@ -2360,6 +2360,7 @@ export function bestChain(cols: Rails[], s: SatinSettings): Rails[] {
   const outlines = cols.map(outlineOf);
   const columns = cols.map((r) => columnOf(sectionsOf(r)[0]));
   type Step = { c: number; w: number };
+  const between = wayFinder(outlines, columns);
   const cache = new Map<string, number>();
   const score = (order: Step[]) => {
     let v = 0;
@@ -2370,7 +2371,8 @@ export function bestChain(cols: Rails[], s: SatinSettings): Rails[] {
       const key = `${order[k - 1].c}.${order[k - 1].w}>${order[k].c}.${order[k].w}|${later.slice().sort((x, y) => x - y)}`;
       let c = cache.get(key);
       if (c === undefined) {
-        c = wayBetween(p.b, q.a, k, order.map((x) => outlines[x.c]), columns).cost;
+        const after = new Set(later);
+        c = between(p.b, q.a, (j) => after.has(j)).cost;
         cache.set(key, c);
       }
       v += c;
@@ -2528,7 +2530,7 @@ function sectionRun(parts: Rails[], s: SatinSettings, sew: (ps: [Pt, Pt][]) => P
  */
 function chainRun(cols: Rails[], s: SatinSettings, sew: (ps: [Pt, Pt][]) => Pt[], along: (col: Column, r: Rails, q: SatinParams) => SatinParams): Pt[] {
   const columns = cols.map((r) => columnOf(sectionsOf(r)[0]));
-  const outlines = cols.map(outlineOf);
+  const between = wayFinder(cols.map(outlineOf), columns);
   const out: Pt[] = [];
   cols.forEach((r, k) => {
     const pts = columnRun(r, s, sew, along);
@@ -2536,7 +2538,7 @@ function chainRun(cols: Rails[], s: SatinSettings, sew: (ps: [Pt, Pt][]) => Pt[]
     const from = out[out.length - 1];
     // As a running stitch along the way: the middle of a column has a point every few tenths, a
     // stitch to each would pile up needle holes.
-    if (from) out.push(...runStitch(wayBetween(from, pts[0], k, outlines, columns).way, TRAVEL_STEP, s.tolerance).slice(1));
+    if (from) out.push(...runStitch(between(from, pts[0], (j) => j >= k).way, TRAVEL_STEP, s.tolerance).slice(1));
     out.push(...pts);
   });
   return out;
@@ -2563,49 +2565,108 @@ function columnRun(r: Rails, s: SatinSettings, sew: (ps: [Pt, Pt][]) => Pt[], al
   return [...runStitch(col.center, TRAVEL_STEP, s.tolerance), ...underBack, ...satinBack()];
 }
 
-/**
- * The way from one column of a chain to column k: hidden under the columns still to be sewn (k
- * and after) as far as can be, straight on or along the middle of one of them; else as short in
- * sight as it gets (a trim with a cut line avoids it). Its cost: how much of it shows (three
- * times as much off the columns as over sewn satin), then how long it is.
- */
-function wayBetween(from: Pt, to: Pt, k: number, outlines: Pt[][], columns: Column[]): { way: Pt[]; cost: number } {
-  const boxes = outlines.map((o) => {
+const boxes = new WeakMap<Pt[], number[]>();
+/** The bounding box of an outline, [x0, y0, x1, y1]; kept per outline (outlines are not changed in place). */
+function boxOf(o: Pt[]): number[] {
+  let box = boxes.get(o);
+  if (!box) {
     let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
     for (const [x, y] of o) [x0, y0, x1, y1] = [Math.min(x0, x), Math.min(y0, y), Math.max(x1, x), Math.max(y1, y)];
-    return [x0, y0, x1, y1];
-  });
+    box = [x0, y0, x1, y1];
+    boxes.set(o, box);
+  }
+  return box;
+}
+
+const cumulatives = new WeakMap<Pt[], number[]>();
+/** cumulative, kept per line (lines are not changed in place). */
+function cumulativeOf(line: Pt[]): number[] {
+  let cum = cumulatives.get(line);
+  if (!cum) {
+    cum = cumulative(line);
+    cumulatives.set(line, cum);
+  }
+  return cum;
+}
+
+/**
+ * The way from one column of a chain to the next, among `columns` (`outlines[j]` the outline of
+ * column j, `later(j)` whether it is still to be sewn): hidden under the columns still to be sewn
+ * as far as can be, straight on or along the middle of one of them; else as short in sight as it
+ * gets (a trim with a cut line avoids it). Its cost: how much of it shows (three times as much
+ * off the columns as over sewn satin), then how long it is. The ways tried between two points,
+ * and which columns each runs over, are found once for them.
+ */
+function wayFinder(outlines: Pt[][], columns: Column[]): (from: Pt, to: Pt, later: (j: number) => boolean) => { way: Pt[]; cost: number } {
+  const boxes = outlines.map(boxOf);
   const tests = outlines.map(insideOf);
   const isIn = (j: number, q: Pt) => q[0] >= boxes[j][0] && q[0] <= boxes[j][2] && q[1] >= boxes[j][1] && q[1] <= boxes[j][3] && tests[j](q);
-  const shows = (q: Pt) => (outlines.some((_, j) => j >= k && isIn(j, q)) ? 0 : outlines.some((_, j) => isIn(j, q)) ? 1 : 3);
-  // Stops counting once over `limit` (a way that costs more than the best one so far is not taken).
-  const cost = (way: Pt[], limit = Infinity) => {
-    let seen = 0;
-    let all = 0;
+  // A way in steps of at most a quarter mm: for each, its length and the columns it lies over
+  // (`over` from `at[i]` to `at[i + 1]` for step i).
+  type Walked = { way: Pt[]; d: number[]; n: number[]; at: number[]; over: number[] };
+  const walk = (way: Pt[]): Walked => {
+    const w: Walked = { way, d: [], n: [], at: [0], over: [] };
     for (let i = 1; i < way.length; i++) {
       const d = dist(way[i - 1], way[i]);
       const n = Math.max(1, Math.ceil(d / 0.25));
-      for (let j = 0; j < n; j++) seen += (shows(lerp(way[i - 1], way[i], (j + 0.5) / n)) * d) / n;
+      w.d.push(d);
+      w.n.push(n);
+      for (let j = 0; j < n; j++) {
+        const q = lerp(way[i - 1], way[i], (j + 0.5) / n);
+        for (let c = 0; c < outlines.length; c++) if (isIn(c, q)) w.over.push(c);
+        w.at.push(w.over.length);
+      }
+    }
+    return w;
+  };
+  // Stops counting once over `limit` (a way that costs more than the best one so far is not taken).
+  const cost = (w: Walked, later: (j: number) => boolean, limit = Infinity) => {
+    let seen = 0;
+    let all = 0;
+    let q = 0;
+    for (let i = 0; i < w.d.length; i++) {
+      const [d, n] = [w.d[i], w.n[i]];
+      for (let j = 0; j < n; j++, q++) {
+        let shows = w.at[q] === w.at[q + 1] ? 3 : 1;
+        for (let k = w.at[q]; k < w.at[q + 1] && shows; k++) if (later(w.over[k])) shows = 0;
+        seen += (shows * d) / n;
+      }
       all += d;
       if (seen * 1000 + all > limit) return Infinity;
     }
     return seen * 1000 + all;
   };
-  let way: Pt[] = [from, to];
-  let best = cost(way);
-  // Seen less than a little: straight on.
-  if (best >= 0.3 * 1000) {
-    for (const c of columns) {
-      const cum = cumulative(c.center);
-      const a = project(c.center, cum, from).s;
-      const b = project(c.center, cum, to).s;
-      const mid = subRail(c.center, cum, Math.min(a, b), Math.max(a, b));
-      const along = [from, ...(a <= b ? mid : mid.reverse()), to];
-      const v = cost(along, best);
-      if (v < best) [way, best] = [along, v];
+  const straight = new Map<Pt, Map<Pt, Walked>>();
+  const alongs = new Map<Pt, Map<Pt, Walked[]>>();
+  const known = <T>(m: Map<Pt, Map<Pt, T>>, a: Pt, b: Pt, make: () => T): T => {
+    let row = m.get(a);
+    if (!row) m.set(a, (row = new Map()));
+    let v = row.get(b);
+    if (v === undefined) row.set(b, (v = make()));
+    return v;
+  };
+  return (from, to, later) => {
+    const direct = known(straight, from, to, () => walk([from, to]));
+    let way = direct.way;
+    let best = cost(direct, later);
+    // Seen less than a little: straight on.
+    if (best >= 0.3 * 1000) {
+      const ways = known(alongs, from, to, () =>
+        columns.map((c) => {
+          const cum = cumulativeOf(c.center);
+          const a = project(c.center, cum, from).s;
+          const b = project(c.center, cum, to).s;
+          const mid = subRail(c.center, cum, Math.min(a, b), Math.max(a, b));
+          return walk([from, ...(a <= b ? mid : mid.reverse()), to]);
+        }),
+      );
+      for (const w of ways) {
+        const v = cost(w, later, best);
+        if (v < best) [way, best] = [w.way, v];
+      }
     }
-  }
-  return { way, cost: best };
+    return { way, cost: best };
+  };
 }
 
 function newRun(p: Pattern, pt: Part, s: RunSettings, kinds: Uint8Array): Pt[][] | null {

@@ -1,9 +1,27 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
   <url>
     <loc>https://pfedan.github.io/heatstitch/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://pfedan.github.io/heatstitch/" />
+    <xhtml:link rel="alternate" hreflang="de" href="https://pfedan.github.io/heatstitch/de/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://pfedan.github.io/heatstitch/" />
+  </url>
+  <url>
+    <loc>https://pfedan.github.io/heatstitch/de/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://pfedan.github.io/heatstitch/" />
+    <xhtml:link rel="alternate" hreflang="de" href="https://pfedan.github.io/heatstitch/de/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://pfedan.github.io/heatstitch/" />
   </url>
   <url>
     <loc>https://pfedan.github.io/heatstitch/docs.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://pfedan.github.io/heatstitch/docs.html" />
+    <xhtml:link rel="alternate" hreflang="de" href="https://pfedan.github.io/heatstitch/de/docs.html" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://pfedan.github.io/heatstitch/docs.html" />
+  </url>
+  <url>
+    <loc>https://pfedan.github.io/heatstitch/de/docs.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://pfedan.github.io/heatstitch/docs.html" />
+    <xhtml:link rel="alternate" hreflang="de" href="https://pfedan.github.io/heatstitch/de/docs.html" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://pfedan.github.io/heatstitch/docs.html" />
   </url>
 </urlset>

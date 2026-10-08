@@ -41,9 +41,22 @@ a {
   color: var(--accent);
 }
 
-/* With JS only the chosen language is shown; without it both are. */
-html[data-lang='de'] [lang='en'],
-html[data-lang='en'] [lang='de'] {
+/* Only the page's language is shown; the hint to the other one is written in that one. */
+html[data-lang='de'] [lang='en']:not(.lang-hint),
+html[data-lang='en'] [lang='de']:not(.lang-hint) {
+  display: none;
+}
+
+.lang-hint {
+  margin: 0 0 16px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--muted);
+}
+
+.lang-hint[hidden] {
   display: none;
 }
 
