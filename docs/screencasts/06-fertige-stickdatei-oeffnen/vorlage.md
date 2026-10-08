@@ -10,7 +10,7 @@ Das Ziehen der Datei kann der aufgenommene Browser nicht echt zeigen: Eine klein
 
 **Bild:** Startseite „Was möchtest du sticken?“. Der Zeiger ruht.
 
-**Sprechtext:** [warm, inviting] Du hast eine fertige Stickdatei, gekauft, geschenkt oder aus dem Netz? Dann öffne sie in heatstitch und schau genau hin, wie sie gestickt wird.
+**Sprechtext:** [warm and inviting] Du hast eine fertige Stickdatei, gekauft, geschenkt oder aus dem Netz? Dann öffne sie in heatstitch und schau genau hin, wie sie gestickt wird.
 
 ## Szene 2
 
@@ -64,4 +64,4 @@ Das Ziehen der Datei kann der aufgenommene Browser nicht echt zeigen: Eine klein
 
 **Bild:** Heranzoomen unten rechts, Etikett Ansicht-Menü, Klick aufs Auge. Etikett Realistische Fäden, Klick. Esc, Klick auf „Markierungen zeigen“ blendet Sprünge und Schnitte aus. Langsamer Zoom auf die Katze, der Zeiger ruht oben links (das Licht kommt von dort). Dann Abspann.
 
-**Sprechtext:** [proud, warm] Im Ansicht-Menü, unter dem Auge unten rechts, schaltest du „Realistische Fäden“ ein. So siehst du schon vorher, wie die Katze auf dem Stoff wirkt. Jetzt kennst du deine Datei, bevor du etwas an ihr änderst.
+**Sprechtext:** [proud and warm] Im Ansicht-Menü, unter dem Auge unten rechts, schaltest du „Realistische Fäden“ ein. So siehst du schon vorher, wie die Katze auf dem Stoff wirkt. Jetzt kennst du deine Datei, bevor du etwas an ihr änderst.

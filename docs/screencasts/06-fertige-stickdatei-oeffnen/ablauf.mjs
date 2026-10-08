@@ -85,12 +85,12 @@ export default {
   tail: 0.6,
   scenes: [
     {
-      say: '[warm, inviting] Du hast eine fertige Stickdatei, gekauft, geschenkt oder aus dem Netz? Dann öffne sie in heatstitch und schau genau hin, wie sie gestickt wird.',
+      say: '[warm and inviting] Du hast eine fertige Stickdatei, gekauft, geschenkt oder aus dem Netz? Dann öffne sie in heatstitch und schau genau hin, wie sie gestickt wird.',
       text: 'Du hast eine fertige Stickdatei, gekauft, geschenkt oder aus dem Netz? Dann öffne sie in heatstitch und schau genau hin, wie sie gestickt wird.',
       textEn: 'You have a finished embroidery file, bought, a gift or from the web? Then open it in heatstitch and take a close look at how it is stitched.',
       run: async (s) => {
         await s.move([1180, 300], 0.1);
-        await s.wait(5.5);
+        await s.wait(8.0);
         await s.move([1180, 420], 1.5);
       },
     },
@@ -103,12 +103,12 @@ export default {
         await s.zoom([975, 590, 0, 0], 1.5);
         await s.move(open, 0.9);
         await s.label('Stickdatei öffnen', open, 'above');
-        await s.wait(5.6);
+        await s.wait(8.4);
         s.unlabel();
         const cat = btn(s, /^Katze/);
         await s.move(cat, 1.0);
         await s.label('Weitere Beispiele', cat, 'below');
-        await s.wait(3.6);
+        await s.wait(6.5);
         s.unlabel();
         s.zoomOut();
       },
@@ -136,12 +136,12 @@ export default {
         await s.label('Farben', [70, 130, 260, 300], 'right');
         await s.move([343, 150], 0.8);
         await s.move([343, 412], 2.6);
-        await s.wait(1.4);
+        await s.wait(2.8);
         s.unlabel();
         const note = s.page.getByText(/^Alle Objekte sind aus den Stichen erkannt/).first();
         await s.move(note, 0.9);
         await s.label('Objekte', note, 'below');
-        await s.wait(3.4);
+        await s.wait(3.8);
         s.unlabel();
         s.zoomOut();
       },
@@ -208,7 +208,7 @@ export default {
         await s.press('Home', { label: 'Pos1', show: 0.5 });
         await s.press(' ', { label: 'Leertaste', show: 1.0 });
         await s.move([1250, 700], 3.0);
-        await s.wait(6.5);
+        await s.wait(10.0);
       },
     },
     {
@@ -243,7 +243,7 @@ export default {
         await s.page.keyboard.press('End');
         await s.move([200, 285], 1.2);
         await s.label('Rot', [70, 268, 260, 34], 'right');
-        await s.wait(3.6);
+        await s.wait(4.5);
         s.unlabel();
         await s.move([200, 371], 0.8);
         const eye = s.page.getByRole('button', { name: 'Ausblenden' }).first();
@@ -251,7 +251,7 @@ export default {
         await s.click(eye, { move: 0.7, before: 0.4 });
         s.unlabel();
         await s.move([1060, 470], 1.2);
-        await s.wait(3.0);
+        await s.wait(4.0);
         const all = s.page.getByText('Alle zeigen');
         await s.label('Alle zeigen', all, 'right');
         await s.click(all, { move: 1.2, before: 0.5 });
@@ -260,7 +260,7 @@ export default {
       },
     },
     {
-      say: '[proud, warm] Im Ansicht-Menü, unter dem Auge unten rechts, schaltest du „Realistische Fäden“ ein. So siehst du schon vorher, wie die Katze auf dem Stoff wirkt. Jetzt kennst du deine Datei, bevor du etwas an ihr änderst.',
+      say: '[proud and warm] Im Ansicht-Menü, unter dem Auge unten rechts, schaltest du „Realistische Fäden“ ein. So siehst du schon vorher, wie die Katze auf dem Stoff wirkt. Jetzt kennst du deine Datei, bevor du etwas an ihr änderst.',
       text: 'Im Ansicht-Menü, unter dem Auge unten rechts, schaltest du „Realistische Fäden“ ein. So siehst du schon vorher, wie die Katze auf dem Stoff wirkt. Jetzt kennst du deine Datei, bevor du etwas an ihr änderst.',
       textEn: 'In the view menu, under the eye at the bottom right, you turn on “Realistic threads”. So you see in advance how the cat looks on the fabric. Now you know your file before you change anything in it.',
       run: async (s) => {
