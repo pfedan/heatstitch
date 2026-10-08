@@ -16,9 +16,9 @@ import { FrameTool, type SnapTargets } from '../ui/frameTool';
 import { digitizeDefaults, type Digitized, digitizeShapes } from '../digitize/digitize';
 import { nearestThread } from '../image/prepare';
 import { overlapsIn, setKnockout } from '../model/knockout';
-import { rememberedIn, remembered, objectKey } from '../model/restitch';
+import { rememberedIn, objectKey } from '../model/restitch';
 import { rgbToLab } from '../image/color';
-import { scaleBlocked, transformSewObject } from '../model/reshape';
+import { scaleBlocked, transformObjects, type TransformedAll } from '../model/reshape';
 import { stitchesBefore, transformObject } from '../model/transform';
 import { syncBorders } from '../model/border';
 import { canSplit, splitFill } from '../model/splitFill';
@@ -286,9 +286,9 @@ export function bindDrawing(app: DrawingApp) {
 
   /**
    * The selected objects (or `objs`, the selection staying as it is) moved, turned or scaled by `m`
-   * together (one undo step). False when that did not work.
+   * together (one undo step). `done` is that already worked out (see fitScaling). False when that did not work.
    */
-  function commitTransform(m: Mat, objs?: number[]): boolean {
+  function commitTransform(m: Mat, objs?: number[], done?: TransformedAll): boolean {
     const f = app.files.active;
     const p = f?.pattern;
     const sel = objs ?? frameObjects();
@@ -302,23 +302,14 @@ export function bindDrawing(app: DrawingApp) {
       return true;
     }
     const kept = ui.selectedObjects;
-    let cur = p;
-    let hand = 0;
-    let restitched = false;
-    // The last object first: the ones before keep their records. The objects stay as many as they were.
-    for (const o of [...sel].reverse()) {
-      const q = app.seq(cur);
-      const obj = q.objects[o];
-      hand += remembered(cur, obj)?.hand ?? 0;
-      const r = obj && transformSewObject(cur, q.objects, obj, q.kinds, m, app.settings.trimMm);
-      if (!r) {
-        app.layers.say(t('frame.failed'), true);
-        app.redraw();
-        return false;
-      }
-      restitched ||= r.restitched;
-      cur = r.pattern;
+    // The objects stay as many as they were.
+    const r = done ?? transformObjects(p, sel, m, app.settings.trimMm, app.seq);
+    if (!r) {
+      app.layers.say(t('frame.failed'), true);
+      app.redraw();
+      return false;
     }
+    const { pattern: cur, hand, restitched } = r;
     // Borders in a thread of their own go along (sewn anew on the moved area).
     const keys = new Set(sel.map((o) => objectKey(cur, app.seq(cur).objects[o])));
     const synced = syncBorders(cur, app.settings.trimMm);

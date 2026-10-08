@@ -1008,6 +1008,10 @@ function fitView(f: LoadedFile | null = files.active): void {
   }
   const b = f?.pattern?.bounds;
   if (!b) return;
+  // Right after a switch (from Bild umwandeln, say) the stage has its new size and the player is
+  // due, but neither the resize observer nor the next frame has caught up: fit measures what will show.
+  if (stage.clientWidth !== ui.stageW || stage.clientHeight !== ui.stageH) resize();
+  $('player').hidden = false;
   const a = freeArea();
   // With a hoop chosen, fit shows the whole sewing field so the room left is visible.
   const m = f?.material.hoop ? hoopRect(b, f.material.hoop) : null;

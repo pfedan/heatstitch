@@ -30,6 +30,7 @@ import { blendObject } from '../model/blend';
 import { recolorBlock, takeThreads } from '../model/border';
 import { violations, conflicts, reorder } from '../model/order';
 import { wholeArea } from '../model/knockout';
+import { fitScaling, type TransformedAll } from '../model/reshape';
 
 /** What bindObjects needs from the rest of the app. */
 export interface ObjectsApp {
@@ -39,7 +40,7 @@ export interface ObjectsApp {
   readonly applyRestitched: (r: RestitchResult | null, failed: Key, remeasure?: boolean) => void;
   readonly closeRungs: () => void;
   readonly closeShape: () => void;
-  readonly commitTransform: (m: Mat) => void;
+  readonly commitTransform: (m: Mat, objs?: number[], done?: TransformedAll) => void;
   readonly deleteSelected: () => void;
   readonly drawTool: DrawTool;
   readonly duplicateSelected: (inPlace?: boolean) => void;
@@ -515,7 +516,9 @@ export function bindObjects(app: ObjectsApp) {
       const objs = sel.map((o) => app.seq(p).objects[o]);
       const cx = (Math.min(...objs.map((o) => o.minX)) + Math.max(...objs.map((o) => o.maxX))) / 20;
       const cy = (Math.min(...objs.map((o) => o.minY)) + Math.max(...objs.map((o) => o.maxY))) / 20;
-      app.commitTransform(scaling(sx, sy, cx, cy));
+      // The stitches reach a little past the shape, by as much at any size: the factors are fitted so they come out as typed.
+      const fit = ui.lettering ? null : fitScaling(p, sel, sx, sy, cx, cy, app.settings.trimMm, app.seq);
+      app.commitTransform(fit?.m ?? scaling(sx, sy, cx, cy), undefined, fit?.done);
     },
     move: (dx, dy) => {
       if (app.frameObjects().length) app.commitTransform(translation(dx, dy));
