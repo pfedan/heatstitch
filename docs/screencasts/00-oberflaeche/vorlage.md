@@ -30,7 +30,7 @@ Ein Rundgang: Er zeigt, wo was liegt, und nennt jeden Bereich mit seinem Namen, 
 
 ## Szene 5
 
-**Bild:** Etikett Suchen, Tastenkappe Strg+K, die Befehlssuche öffnet, „spiegeln“ wird getippt, Esc. Heranzoomen oben rechts, Etikett Speichern, Klick auf ⋯ zeigt Anleitung, Tastenkürzel, Sprache.
+**Bild:** Etikett Suchen, Tastenkappe Strg+K, die Befehlssuche öffnet, „realistische“ wird getippt und findet „Realistische Fäden“, Esc. Heranzoomen oben rechts, Etikett Speichern, Klick auf ⋯ zeigt Anleitung, Tastenkürzel, Sprache.
 
 **Sprechtext:** Oben rechts findet „Suchen“ jeden Befehl, schneller geht es mit Strg K. Daneben ist Speichern. Im Menü mit den drei Punkten wählst du die Sprache und findest die Anleitung und die Tastenkürzel.
 

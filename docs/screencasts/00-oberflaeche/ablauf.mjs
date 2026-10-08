@@ -99,8 +99,9 @@ export default {
         await s.wait(0.8);
         s.unlabel();
         await s.press('Control+k', { label: 'Strg+K', show: 0.4 });
-        await s.type('spiegeln', { perChar: 0.1 });
-        await s.wait(1.2);
+        // Without a selection only commands that work now are found; Spiegeln would show nothing.
+        await s.type('realistische', { perChar: 0.08 });
+        await s.wait(1.4);
         await s.press('Escape', { show: 0 });
         await s.zoom([1700, 24, 0, 0], 1.8);
         await s.move(btn(s, 'Speichern'), 0.8);
