@@ -528,6 +528,33 @@ shots.image = async (lang) => {
   await close();
 };
 
+
+// 13b. crop: the example image in step 1 with the crop frame after "Auf Motiv zuschneiden"
+shots.crop = async (lang) => {
+  const { page, close } = await boot(lang);
+  await page.evaluate(() => document.querySelector('#image-start').click());
+  await page.waitForTimeout(1000);
+  await page.click('#image-example');
+  await page.waitForTimeout(4000);
+  await page.click('#image-crop-motif');
+  await page.waitForTimeout(1500);
+  // then pull two corners of the frame in, so the outside is dimmed and the width follows the cut
+  const drag = async (x0, y0, x1, y1) => {
+    await page.mouse.move(x0, y0);
+    await page.mouse.down();
+    await page.mouse.move((x0 + x1) / 2, (y0 + y1) / 2, { steps: 6 });
+    await page.mouse.move(x1, y1, { steps: 6 });
+    await page.mouse.up();
+    await page.waitForTimeout(600);
+  };
+  await drag(500, 170, 600, 215);
+  await drag(1080, 748, 980, 690);
+  await sidebarTop(page);
+  await mouseAway(page);
+  await jpeg(page, `crop-${lang}`);
+  await close();
+};
+
 // 14. border: satin border in its own thread around the red circle of overlap.pes
 shots.border = async (lang) => {
   const { page, close } = await boot(lang);
