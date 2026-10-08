@@ -720,6 +720,70 @@ figure img[src*='save-'] {
   display: none;
 }
 
+/* Files that belong to a video: a small menu of downloads, shown only when the video has any. */
+.video-files {
+  position: relative;
+}
+
+.video-files[hidden] {
+  display: none;
+}
+
+.video-files summary {
+  list-style: none;
+}
+
+.video-files summary::-webkit-details-marker {
+  display: none;
+}
+
+.video-files-chevron {
+  transition: transform 0.15s ease;
+}
+
+.video-files[open] .video-files-chevron {
+  transform: rotate(180deg);
+}
+
+.video-files-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 2;
+  min-width: 220px;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 8px 28px rgb(0 0 0 / 0.35);
+}
+
+.video-files-menu a {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 36px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  color: var(--ink);
+  font-size: 13px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.video-files-menu a:hover,
+.video-files-menu a:focus-visible {
+  background: var(--bg);
+}
+
+.video-files-menu small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .video-dialog-stage {
   background: #141118;
 }
@@ -742,5 +806,10 @@ figure img[src*='save-'] {
 
   .video-dialog-head b {
     font-size: 14px;
+  }
+
+  .video-files-menu {
+    right: auto;
+    left: 0;
   }
 }

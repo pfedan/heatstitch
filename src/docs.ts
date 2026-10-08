@@ -83,7 +83,65 @@ document.getElementById('video-full')?.addEventListener('click', () => {
   else v.webkitEnterFullscreen?.();
 });
 
-function openPlayer(base: string, key: string, title: string): void {
+// Files that belong to a video (the embroidery file or picture the video works with) hang in a
+// small menu of the dialog. The page names them on the card; a HEAD request drops the ones the
+// host does not have, and where the host refuses the request the names stay as given.
+const filesMenu = document.getElementById('video-files') as HTMLDetailsElement;
+const filesList = document.getElementById('video-files-menu') as HTMLElement;
+const fileKinds: Record<string, [string, string]> = {
+  pes: ['Stickmuster', 'embroidery file'],
+  dst: ['Stickmuster', 'embroidery file'],
+  svg: ['Vektorgrafik', 'vector image'],
+  jpg: ['Bild', 'image'],
+  jpeg: ['Bild', 'image'],
+  png: ['Bild', 'image'],
+};
+let filesRun = 0;
+
+function offerFiles(base: string, key: string, names: string[]): void {
+  const run = ++filesRun;
+  filesMenu.open = false;
+  filesMenu.hidden = true;
+  filesList.replaceChildren();
+  if (!names.length) return;
+  const items = names.map((name) => {
+    const url = `${base}${key}-${name}`;
+    const li = document.createElement('li');
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    a.append(name);
+    const kind = fileKinds[name.split('.').pop()?.toLowerCase() ?? ''];
+    if (kind) {
+      const small = document.createElement('small');
+      for (const [l, text] of [['de', kind[0]], ['en', kind[1]]]) {
+        const span = document.createElement('span');
+        span.lang = l;
+        span.textContent = text;
+        small.append(span);
+      }
+      a.append(small);
+    }
+    a.addEventListener('click', () => (filesMenu.open = false));
+    li.append(a);
+    const exists = fetch(url, { method: 'HEAD', mode: 'cors' })
+      .then((r) => r.ok)
+      .catch(() => true);
+    return { li, exists };
+  });
+  void Promise.all(items.map((i) => i.exists)).then((found) => {
+    if (run !== filesRun || !dialog.open) return;
+    const kept = items.filter((_, i) => found[i]).map((i) => i.li);
+    filesList.replaceChildren(...kept);
+    filesMenu.hidden = kept.length === 0;
+  });
+}
+dialog.addEventListener('click', (e) => {
+  if (filesMenu.open && !filesMenu.contains(e.target as Node)) filesMenu.open = false;
+});
+dialog.addEventListener('close', () => (filesMenu.open = false));
+
+function openPlayer(base: string, key: string, title: string, files: string[] = []): void {
   const build = (subtitles: boolean) => {
     const v = document.createElement('video');
     v.controls = true;
@@ -111,6 +169,7 @@ function openPlayer(base: string, key: string, title: string): void {
     v.focus();
   };
   dialogTitle.textContent = title;
+  offerFiles(base, key, files);
   dialogStage.replaceChildren();
   if (!dialog.open) dialog.showModal();
   subtitlesAllowed ??= fetch(`${base}${key}.de.vtt`, { mode: 'cors' })
@@ -132,7 +191,8 @@ for (const li of document.querySelectorAll<HTMLElement>('.video[data-key]')) {
     .replace(/\s+/g, ' ')
     .trim();
   const title = [part, name].filter(Boolean).join(' · ');
-  btn?.addEventListener('click', () => openPlayer(li.closest<HTMLElement>('.videos')?.dataset.base ?? '', key, title));
+  const files = (li.dataset.files ?? '').split(/\s+/).filter(Boolean);
+  btn?.addEventListener('click', () => openPlayer(li.closest<HTMLElement>('.videos')?.dataset.base ?? '', key, title, files));
 }
 
 // On narrow screens a button at the thumb opens a sheet with the sections of the shown article
