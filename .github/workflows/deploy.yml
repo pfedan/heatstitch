@@ -56,6 +56,20 @@ jobs:
           path: dist
           include-hidden-files: true
 
+  # Videos, voice takes and other large media live in Cloudflare R2, not in git: one file over 5 MB anywhere
+  # in the history (a video, or a merge that brings back history from before the clean-up) fails here.
+  size:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: |
+          big=$(git rev-list --objects HEAD | git cat-file --batch-check='%(objecttype) %(objectsize) %(rest)' \
+            | awk '$1 == "blob" && $2 > 5000000 { printf "%.1f MB  %s\n", $2 / 1e6, $3 }')
+          if [ -n "$big" ]; then echo "Files over 5 MB in the history, they belong in R2:"; echo "$big"; exit 1; fi
+
   # Every save format read back by pystitch (Ink/Stitch's pyembroidery), an independent reader (tests/oracle.test.ts,
   # scripts/oracle.py): a writer bug that heatstitch's own reader would mirror still shows here.
   oracle:
@@ -128,6 +142,16 @@ jobs:
           folder: dist
           branch: gh-pages
           clean-exclude: pr-preview/
+      # Every deploy and every preview is a commit on gh-pages, each with a whole build, so its history
+      # soon outweighs the code. Keep it one commit deep; the lease skips this when a preview pushed meanwhile.
+      - name: Squash gh-pages to one commit
+        run: |
+          git fetch --depth=1 origin gh-pages
+          head=$(git rev-parse FETCH_HEAD)
+          commit=$(git -c user.name=github-actions -c user.email=github-actions@github.com \
+            commit-tree "$head^{tree}" -m "Site from ${GITHUB_SHA::7}")
+          git push --force-with-lease=refs/heads/gh-pages:$head origin $commit:refs/heads/gh-pages \
+            || echo "::notice::gh-pages changed meanwhile, squashed on the next deploy"
 
   # Fork pull requests only get a read-only token here; fork-preview.yml publishes theirs.
   preview:
