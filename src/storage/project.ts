@@ -79,6 +79,11 @@ export class ProjectError extends Error {
   }
 }
 
+/** The project of one design alone: that file, active, without the other designs and the picture. */
+export function onlyDesign(p: Project, index: number): Project {
+  return { ...p, files: [p.files[index]], active: 0, image: null };
+}
+
 export const isProjectName = (name: string) => name.toLowerCase().endsWith(PROJECT_EXT);
 
 export function projectSettings(s: Settings): ProjectSettings {

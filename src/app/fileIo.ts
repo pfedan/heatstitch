@@ -5,12 +5,12 @@ import type { Pattern } from '../model/pattern';
 import { rememberedIn } from '../model/restitch';
 import { applyMaterial, materialOf, sameMaterial, saveSettings, type Mode, type Settings } from '../settings';
 import { toStored } from '../storage/fileStore';
-import { decodeProject, encodeProject, isProjectName, PROJECT_EXT, PROJECT_MIME, projectSettings, ProjectError, type Project, type ProjectSettings } from '../storage/project';
+import { decodeProject, encodeProject, isProjectName, onlyDesign, PROJECT_EXT, PROJECT_MIME, projectSettings, ProjectError, type Project, type ProjectSettings } from '../storage/project';
 import type { CorrectPanel } from '../ui/correctPanel';
 import { FileList, type LoadedFile } from '../ui/fileList';
 import { digitizeSvg, type ImageMode, type LeftOut } from '../ui/imageMode';
 import { threadWidthMm } from '../validation/profiles';
-import { writePattern } from '../writers';
+import { cleanName, writePattern } from '../writers';
 import { SUPPORTED_EXTENSIONS } from '../parsers';
 import { toast } from '../shell/ui';
 import { initFilesArea } from '../areas/files/files';
@@ -114,12 +114,16 @@ export function bindFileIo(app: FileIoApp) {
     };
   }
 
-  async function saveProject(): Promise<void> {
+  /** Saves everything open as a project, or with `only` that design alone, named after it. */
+  async function saveProject(only?: LoadedFile): Promise<void> {
     if (!app.files.files.some((f) => f.pattern) && !app.imageMode.snapshot()) return;
-    const bytes = await encodeProject(currentProject());
+    const all = currentProject();
+    const index = only ? app.files.files.filter((f) => f.pattern && f.data).indexOf(only) : -1;
+    if (only && index < 0) return;
+    const bytes = await encodeProject(only ? onlyDesign(all, index) : all);
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([bytes as BlobPart], { type: PROJECT_MIME }));
-    a.download = projectName();
+    a.download = only ? `${cleanName(FileList.baseName(only)) || 'design'}${PROJECT_EXT}` : projectName();
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
@@ -267,7 +271,7 @@ export function bindFileIo(app: FileIoApp) {
     if (params.files.length) void openFiles(await Promise.all(params.files.map((h) => h.getFile())));
   });
 
-  initFilesArea({ files: app.files, settings: app.settings, setMode: (m) => app.setMode(m), newDesign, loadExample, saveProject });
+  initFilesArea({ files: app.files, settings: app.settings, setMode: (m) => app.setMode(m), newDesign, loadExample, saveProject, hasImage: () => !!app.imageMode.snapshot() });
 
   return { openFiles, openProject, adoptMaterial, storeMaterial };
 }

@@ -657,3 +657,80 @@ body.dragging::after {
     width: auto;
   }
 }
+
+/* "Als Projekt speichern" as a split button: the row saves everything, a quiet arrow opens a small
+   menu that floats over the rows below (nothing moves). */
+.save-split {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.save-split > .pop-row {
+  flex: 1;
+  min-width: 0;
+}
+
+.save-split-toggle {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-right: 4px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+}
+
+.save-split-toggle[hidden] {
+  display: none;
+}
+
+.save-split-toggle:hover,
+.save-split-toggle[aria-expanded='true'] {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+.save-split-menu {
+  position: absolute;
+  top: calc(100% - 4px);
+  right: 4px;
+  z-index: 1;
+  padding: 4px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+}
+
+.save-split-menu[hidden] {
+  display: none;
+}
+
+.save-split-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px 6px 8px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.save-split-item:hover {
+  background: var(--bg);
+}
+
+.save-split-item .i {
+  color: var(--muted);
+}
