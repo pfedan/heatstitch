@@ -1,78 +1,85 @@
 # Teil 3: Vom Bild zum Stickmuster
 
-**Ziel:** Danach kannst du aus einem Bild (PNG, JPG, auch SVG) ein Stickmuster machen: Farben
-festlegen und zusammenlegen, was nicht gestickt werden soll weglassen, kleine Fehler wegradieren
-und das Ergebnis als Stickmuster übernehmen.
+Schlüssel `03-vom-bild-zum-stickmuster`, Demodatei `material/fliegenpilz.jpg` (1000 × 1000 Pixel, Fliegenpilz mit Verlauf im Hut, Schatten, Marienkäfer und einem einzelnen roten Punkt oben rechts), etwa 2 Minuten, 283 Wörter.
 
-**Demodatei:** `fliegenpilz.jpg` (1000 × 1000 Pixel, JPEG mit leichten Artefakten), wie eine
-Grafik aus dem Netz oder ein eingescanntes Bild: Fliegenpilz mit Farbverlauf auf dem Hut, weichem
-grauem Schatten, Gras, einem Marienkäfer und einem roten Filzstiftfleck oben rechts. Jede Hürde im
-Bild ist absichtlich da und wird im Video mit genau einem Bedienelement gelöst. Bild und Quelle
-(`fliegenpilz-quelle.svg`) liegen unter `material/`.
+Ein Foto oder PNG wird mit dem Assistenten „Bild umwandeln“ in drei Schritten zum Stickmuster. Einstellungen, die einen sauberen Pilz ergeben: Höchstens Farben 10, Dark Fuchsia mit Red zusammengelegt, Warm Gray (Schatten) weggelassen, roter Punkt wegradiert, Stil Flach. Ergebnis: 3.275 Stiche, 57,4 × 55,8 mm, 5 Farben, Unauffällig.
 
-**Länge:** etwa 2:30 (rund 295 Wörter, dazu Pausen für die Aktionen).
+Die realistische Ansicht nimmt ihr Licht von der Seite, auf der der Zeiger über der Bühne steht. Von oben links ist der Hut tiefrot und glänzend, von rechts oder aus der Mitte blass. Der Zeiger ruht deshalb oben links auf der Bühne und wechselt über die Kopfleiste zur rechten Spalte.
 
-**Stimme:** Aoede, de-DE, feste Regieanweisung aus dem Konzept. Regie-Markierungen auf Englisch in
-eckigen Klammern.
+## Szene 1
 
-**Aufnahme:** wie Teil 1 und 2, Chromium mit `--disable-gpu-compositing --disable-accelerated-2d-canvas`.
-Zwei Dinge zeichnet die Aufnahme selbst ins Bild, weil der Browser sie nicht abbildet: das
-Dateikärtchen beim Hineinziehen und die aufgeklappte Liste am Pfeil (native Auswahlliste).
+**Bild:** Startseite „Was möchtest du sticken?“. Der Zeiger fährt zu „Bild umwandeln“, Etikett. Klick, dazu die Tastenkappe 3.
 
-## Szenen
+**Sprechtext:** [warm] Aus einem Foto oder einer Grafik wird in heatstitch ein Stickmuster. Auf der Startseite klickst du dafür auf „Bild umwandeln“, oder du drückst die Taste 3.
 
-| Nr. | Bild und Aktion | Einblendung | Sprechtext |
-| --- | --- | --- | --- |
-| 0 | Vorspann | „Teil 3 · Vom Bild zum Stickmuster“ | (keiner) |
-| 1 | Leere App, Zeiger ruht, dann zum Modus Bild. | | [warm, inviting] In diesem Video wird aus einem Bild ein Stickmuster: ein Fliegenpilz, wie du ihn im Netz findest oder selbst malst. |
-| 2 | Klick oben auf „Bild“. Ein Dateikärtchen „fliegenpilz.jpg“ kommt mit dem Zeiger vom Rand und fällt auf das Feld links. Die gestickte Vorschau erscheint. | Etikett „Bild“, Taste „3“ | Oben wechselst du in den Modus Bild. Dann ziehst du dein Bild einfach links in das Feld. [delighted] Ein paar Sekunden später ist es schon gestickt. |
-| 3 | Klick auf „Original“, dann „Vorbereitet“. Zoom auf den Stiel. | Etikett „Vorbereitet“ | Über der Leinwand schaltest du um. „Vorbereitet“ zeigt, was heatstitch aus dem Bild macht: wenige, glatte Farbflächen. [curious] Aber schau auf den Stiel: Er ist grau, genau wie der Schatten. |
-| 4 | Regler „Höchstens Farben“ von 6 auf 9 ziehen. Stiel wird beige, Schatten eigene Farbe, der Hut bekommt einen dunklen Rand. | Etikett „Höchstens Farben“ | Sechs Farben sind hier zu wenig. Mit neun bekommt der Stiel sein Beige. |
-| 5 | Zoom auf die Farbliste rechts. Klick auf den Pfeil bei „Dark Fuchsia“, Liste klappt auf, Klick auf „Red“. Der Hut ist wieder einfarbig rot. | Etikett „Zusammenlegen“ | Dafür wird der Farbverlauf auf dem Hut jetzt zu zwei Rottönen. Ein Rot genügt: Klick auf den Pfeil und mit Rot zusammenlegen. |
-| 6 | Häkchen bei „Warm Gray“ weg. Der Schatten verschwindet. | | Den Schatten will ich nicht sticken, also nehme ich das Häkchen weg. |
-| 7 | Zoom auf den roten Fleck oben rechts. Pinsel „Radieren“, Größe auf 6 mm, einmal darüber wischen. Fleck ist weg. Zeiger fährt kurz über die fünf Häkchen der Farbliste. | Etikett „Radieren“ | [focused] Bleibt der rote Fleck oben rechts. Rot abwählen geht nicht, sonst fehlt der Hut. Dafür gibt es den Pinsel: Radieren, einmal darüber, und weg ist er. [satisfied] Jetzt sind es wieder fünf Garnfarben wie am Anfang, nur diesmal die richtigen. |
-| 8 | Pinsel „Aus“. Klick auf „Stiche“, dann „Wie gestickt“, Zeiger kreist langsam über den Pilz, das Licht wandert. Kurz auf das Feld „Vorsicht“ mit den zwei dichten Stellen zeigen. | Etikett „Wie gestickt“ | [delighted] Unter „Stiche“ siehst du das Stickmuster, und mit „Wie gestickt“ glänzt das Garn im Licht. Rechts prüft heatstitch die Stiche für deinen Stoff. Zwei Stellen sind etwas dicht, die schaust du dir nach dem Übernehmen im Modus Dichte an. |
-| 9 | Klick auf „Als Stickmuster übernehmen“. Die App wechselt nach Ablauf, der Pilz steht in der Dateiliste. Leertaste, Ablauf spielt schnell. | Taste „Leertaste“ | [proud, warm] Ein Klick auf „Als Stickmuster übernehmen“, und dein Fliegenpilz ist ein ganz normales Stickmuster. Du kannst ihn abspielen, prüfen und als Stickdatei speichern. |
-| 10 | Zurück in „Bild“: Zoom auf „Bild mit KI vorbereiten“ (aufklappen), dann auf das Feld mit dem Hinweis „Bild oder SVG“. | Etikett „Bild mit KI vorbereiten“ | Ein Tipp zum Schluss: Fotos werden viel besser, wenn eine KI sie vorher in eine flache Grafik verwandelt. Den passenden Auftrag kopierst du hier. Und eine SVG-Datei übernimmt heatstitch Form für Form, ganz genau. |
-| 11 | Abspann | Logo und Adresse der App | (keiner) |
+## Szene 2
 
-## Sprechtext am Stück
+**Bild:** Der Assistent öffnet. Heranzoomen oben auf die Schrittleiste, Etiketten Bild wählen, Farben und Flächen, Stiche und Ergebnis.
 
-[warm, inviting] In diesem Video wird aus einem Bild ein Stickmuster: ein Fliegenpilz, wie du ihn im
-Netz findest oder selbst malst.
+**Sprechtext:** Ein Assistent führt dich in drei Schritten: Bild wählen, Farben und Flächen, Stiche und Ergebnis.
 
-Oben wechselst du in den Modus Bild. Dann ziehst du dein Bild einfach links in das Feld. [delighted] Ein
-paar Sekunden später ist es schon gestickt.
+## Szene 3
 
-Über der Leinwand schaltest du um. „Vorbereitet“ zeigt, was heatstitch aus dem Bild macht: wenige,
-glatte Farbflächen. [curious] Aber schau auf den Stiel: Er ist grau, genau wie der Schatten.
+**Bild:** Eine Dateikarte „fliegenpilz.jpg“ mit Vorschaubild kommt mit dem Zeiger vom rechten Rand ins Fenster, die App zeigt „Loslassen zum Öffnen“. Loslassen in der Mitte: das Foto erscheint. Etikett Weiter, Klick.
 
-Sechs Farben sind hier zu wenig. Mit neun bekommt der Stiel sein Beige.
+**Sprechtext:** Zieh dein Bild einfach aus deinem Ordner ins Fenster und lass es los. Ich nehme diesen Fliegenpilz. Mit „Weiter“ geht es zum zweiten Schritt.
 
-Dafür wird der Farbverlauf auf dem Hut jetzt zu zwei Rottönen. Ein Rot genügt: Klick auf den Pfeil und
-mit Rot zusammenlegen.
+## Szene 4
 
-Den Schatten will ich nicht sticken, also nehme ich das Häkchen weg.
+**Bild:** Das vorbereitete Bild in Farbflächen, ohne Hintergrund. Heranzoomen links, Etikett Hintergrund weglassen. Heranzoomen rechts, Etikett Farben über der Liste (White, Red, Leaf Green, Dark Gray, Warm Gray).
 
-[focused] Bleibt der rote Fleck oben rechts. Rot abwählen geht nicht, sonst fehlt der Hut. Dafür gibt
-es den Pinsel: Radieren, einmal darüber, und weg ist er. [satisfied] Jetzt sind es wieder fünf Garnfarben wie am Anfang, nur diesmal die richtigen.
+**Sprechtext:** [curious] Jetzt zerlegt heatstitch das Bild in Flächen. Den weißen Hintergrund lässt es gleich weg. Rechts unter Farben steht jede Farbe als Garn.
 
-[delighted] Unter „Stiche“ siehst du das Stickmuster, und mit „Wie gestickt“ glänzt das Garn im Licht.
-Rechts prüft heatstitch die Stiche für deinen Stoff. Zwei Stellen sind etwas dicht, die schaust du dir nach dem Übernehmen im Modus Dichte an.
+## Szene 5
 
-[proud, warm] Ein Klick auf „Als Stickmuster übernehmen“, und dein Fliegenpilz ist ein ganz normales
-Stickmuster. Du kannst ihn abspielen, prüfen und als Stickdatei speichern.
+**Bild:** Heranzoomen links, Etikett Höchstens Farben (6). Kurz auf den grauen Stiel mit dem grauen Schatten. Der Regler wird auf 10 gezogen; der Stiel wird Beige, der Schatten bleibt Warm Gray, neu kommt Dark Fuchsia am Hutrand.
 
-Ein Tipp zum Schluss: Fotos werden viel besser, wenn eine KI sie vorher in eine flache Grafik
-verwandelt. Den passenden Auftrag kopierst du hier. Und eine SVG-Datei übernimmt heatstitch Form
-für Form, ganz genau.
+**Sprechtext:** Links legst du mit „Höchstens Farben“ fest, wie viele Garne es werden. Bei sechs teilen sich Stiel und Schatten ein Grau. Ich stelle zehn ein. [pleased] Jetzt hat der Stiel sein eigenes Beige.
 
-## Beim Durchspielen aufgefallen
+## Szene 6
 
-- Ergebnis-Kasten zeigte „1 Bereiche“ (Einzahl fehlte), behoben in #102.
-- Grasbüschel wurden als unruhige Füllung gestickt, behoben in #105 (Satin-Halme mit gefülltem Boden).
-  Seitdem meldet die Bewertung zwei dichte Stellen; der Sprechtext in Szene 8 sagt das.
-- Der Pfeil zum Zusammenlegen ist eine native Auswahlliste, deren aufgeklappte Liste keine
-  Aufnahme zeigt. Der Ablauf zeichnet sie nach (nur im Video).
-- Realistische Fäden mit beweglichem Licht im Modus Bild kosten in der Aufnahme etwa 5 s pro Bild
-  (Szene 8 und das Licht nach dem Laden). Das Video braucht dadurch etwa 40 Minuten Aufnahme.
+**Bild:** Der dunkle Streifen am Hutrand. Heranzoomen rechts, Etiketten Dark Fuchsia und zusammenlegen am Pfeil daneben. Klick, Red gewählt: der Hut ist wieder einfarbig rot.
+
+**Sprechtext:** Dafür ist am Hutrand ein dunkles Rot dazugekommen, Dark Fuchsia. Über den Pfeil daneben legst du eine Farbe mit einer anderen zusammen. Ich nehme Red.
+
+## Szene 7
+
+**Bild:** Zeiger auf dem Schatten unter dem Pilz. Heranzoomen rechts, Etikett Häkchen bei Warm Gray, Klick: der Schatten verschwindet.
+
+**Sprechtext:** Den grauen Schatten unter dem Pilz brauche ich nicht. Ohne Häkchen lässt heatstitch eine Farbe weg.
+
+## Szene 8
+
+**Bild:** Heranzoomen auf den roten Punkt oben rechts. Rechts Etiketten Pinsel und Radieren, Klick. Heranzoomen auf den Punkt, der Pinsel wischt ihn in Zickzack-Strichen weg. Etikett Malen.
+
+**Sprechtext:** Bleibt der rote Punkt oben rechts. Unter Pinsel wähle ich Radieren und wische ihn einfach weg. Mit Malen färbst du Flächen von Hand um.
+
+## Szene 9
+
+**Bild:** Etikett Weiter, Klick. Stiche und Ergebnis zeigt den Pilz in realistischen Fäden, leicht herangezoomt.
+
+**Sprechtext:** Weiter geht es zum dritten Schritt, Stiche und Ergebnis. Die Vorschau zeigt dein Motiv schon mit realistischen Fäden.
+
+## Szene 10
+
+**Bild:** Heranzoomen links, Etikett Stil. Klick auf Dynamisch, der Hut bekommt Reihen, die Form und Verlauf folgen; Blick auf die Bühne. Klick zurück auf Flach, Etikett, der Hut wird wieder ruhig und gleichmäßig; Blick auf die Bühne.
+
+**Sprechtext:** Unter Stil wählst du, wie die Stiche laufen. Bei Dynamisch folgen die Reihen der Form und dem Bild. [thoughtful] Für den Fliegenpilz nehme ich Flach, mit geraden Reihen.
+
+## Szene 11
+
+**Bild:** Heranzoomen rechts, Etikett Ergebnis, der Zeiger fährt Stiche, Größe, Farben, Nähzeit ab. Etikett Unauffällig am grünen Kasten.
+
+**Sprechtext:** Rechts im Ergebnis stehen Stiche, Größe, Farben und Nähzeit. [pleased] Unauffällig heißt: keine Bereiche über den Grenzwerten für dieses Material.
+
+## Szene 12
+
+**Bild:** Etikett Übernehmen, Klick. Gestalten öffnet mit dem Stickmuster „fliegenpilz“: fünf Garne links, der Pilz in realistischen Fäden, oben Gestalten, Prüfen und Speichern.
+
+**Sprechtext:** Mit „Übernehmen“ wird daraus ein neues Stickmuster. [delighted] Da ist er, dein Fliegenpilz, fertig zum Gestalten, Prüfen und Speichern.
+
+## Szene 13
+
+**Bild:** Tastenkappen Pos1 und Leertaste, der Pilz wird Stich für Stich gestickt. Dann Abspann.
+
+**Sprechtext:** Mit der Leertaste siehst du, wie die Maschine ihn Stich für Stich stickt. [warm] Viel Spaß beim Sticken!

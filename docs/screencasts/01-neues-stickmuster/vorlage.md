@@ -1,63 +1,65 @@
 # Teil 1: Ein neues Stickmuster
 
-**Ziel:** Danach kannst du ein eigenes Stickmuster aus Formen zeichnen, Größe und Garn
-festlegen, die Stichart wechseln und das Ergebnis ansehen und speichern.
+Schlüssel `01-neues-stickmuster`, Demodatei: keine (Startseite, „Leer anfangen“), etwa 2 Minuten, 263 Wörter.
 
-**Demodatei:** keine. Das Video startet mit leerer App (frischer Browser, Standard-Einstellungen,
-Stoff „Webware, stabil“). Am Ende entsteht ein runder Aufnäher: ein blauer Kreis, 60 mm,
-mit einer weißen Welle als Satin.
+Ziel: ein runder Aufnäher mit einer Welle. Kreis mit der Ellipse, 60 mm, blaues Garn; Welle mit dem Pfad, als Satin 3 mm in Weiß; abspielen, realistische Fäden, als PES speichern.
 
-**Länge:** etwa 1:45 (rund 210 Wörter).
+## Szene 1
 
-**Stimme:** de-DE, feste Regieanweisung aus dem Konzept. Regie-Markierungen auf Englisch in
-eckigen Klammern, sparsam, aber dort, wo Begeisterung oder Konzentration den Satz tragen.
+**Bild:** Startseite „Was möchtest du sticken?“. Der Zeiger ruht, fährt dann auf „Leer anfangen“, Etikett, Klick. Ein leeres Stickmuster mit dem gestrichelten Stickrahmen erscheint.
 
-Der Hinweis „Aussparen“, der nach der Welle rechts erscheint, bleibt im Video unkommentiert stehen.
-Aussparen teilt den Kreis hier in zwei Teile mit einem langen Sprung, das wäre für den Einstieg
-zu viel.
+**Sprechtext:** [warm, inviting] In diesem Video stickst du dein erstes eigenes Muster: einen runden Aufnäher mit einer Welle. Ein frischer Start fragt: Was möchtest du sticken? Du klickst auf „Leer anfangen“.
 
-## Szenen
+## Szene 2
 
-| Nr. | Bild und Aktion | Einblendung | Sprechtext |
-| --- | --- | --- | --- |
-| 0 | Vorspann | „Teil 1 · Ein neues Stickmuster“ | (keiner) |
-| 1 | Leere App, ganzes Bild. Zeiger ruht in der Mitte, wandert dann zu „+ Neu“. | | [warm, inviting] In diesem Video stickst du dein erstes eigenes Muster: einen runden Aufnäher mit einer Welle. Dafür brauchst du nur die Maus und zwei Minuten. |
-| 2 | Klick auf „+ Neu“. Zoom auf den gestrichelten Rahmen, dann kurz auf das Feld Stickrahmen links. | Etikett „Stickrahmen“ | Klick links auf „Neu“. Es entsteht ein leeres Stickmuster. Der gestrichelte Rahmen ist dein Stickrahmen, hier hundert mal hundert Millimeter. |
-| 3 | Zeiger zu den Werkzeugen links auf der Leinwand, Klick auf Ellipse. Umschalt halten, Kreis aufziehen, loslassen. | Taste „Umschalt“, dann Etikett „Füllung“ | Links auf der Leinwand liegen die Zeichenwerkzeuge. [focused] Nimm die Ellipse und zieh mit gedrückter Umschalttaste einen Kreis auf. [short pause] [delighted] Sobald du loslässt, ist er schon gestickt: als Füllung, passend zu deinem Stoff. |
-| 4 | Zoom auf die Karte Objekt rechts. Klick in das Feld Breite, „60“ tippen, Enter. Kreis wächst. | Etikett „Größe“ | Rechts siehst du, wie groß er ist. [casual] Tipp einfach sechzig Millimeter ein, die Höhe geht mit. |
-| 5 | Klick auf das Farbfeld in der Karte, Garnliste öffnet sich, Klick auf Cornflower Blue. | | Ein Klick auf das Farbfeld öffnet die Garne. Ich nehme ein helles Blau. |
-| 6 | Zeichenstift wählen. Fünf Punkte quer über den Kreis: erster Klick, dann viermal kurz ziehen für Rundungen. Enter. | Taste „Enter“ | [focused] Jetzt die Welle. Mit dem Zeichenstift setzt ein Klick eine Ecke, Ziehen macht eine Rundung. Enter beendet die Linie. Eine Linie wird zuerst im Steppstich gestickt. |
-| 7 | Zoom auf die Karte. Art auf „Satin“, Regler Breite auf 3 mm ziehen, Farbfeld, Klick auf White. | Etikett „Satin“ | [enthusiastic] Für eine kräftige Welle stellst du die Art auf Satin, ziehst die Breite auf drei Millimeter und gibst ihr weißes Garn. |
-| 8 | Klick auf eine leere Stelle, Leertaste. Ablauf spielt vom Anfang ab (schnell). | Taste „Leertaste“ | [curious] Mit der Leertaste siehst du, wie die Maschine stickt: erst den blauen Kreis, dann die Welle. |
-| 9 | Links unter Anzeige Klick auf „Realistische Fäden“. Zoom langsam auf den Aufnäher. | | Unter Anzeige zeigt „Realistische Fäden“ dein Muster so, wie es auf dem Stoff aussehen wird. [impressed] Schön, oder? |
-| 10 | Zoom auf Speichern links: Format „PES · Brother, Babylock“ zeigen, Zeiger auf „Speichern“, Klick. | Etikett „Speichern“ | Zum Schluss wählst du links das Format deiner Maschine und speicherst. [short pause] [proud, warm] Fertig ist dein erstes Stickmuster. |
-| 11 | Abspann | Logo und Adresse der App | (keiner) |
+**Bild:** Etikett Stickrahmen am gestrichelten Rahmen. Heranzoomen rechts, Etiketten Karte Stickmuster (Reiter) und Stickrahmen (Auswahl „100 × 100 mm · Brother, Babylock, Janome, Pfaff“), nichts wird geändert.
 
-## Sprechtext am Stück
+**Sprechtext:** Der gestrichelte Rahmen ist dein Stickrahmen. Rechts in der Karte Stickmuster stellst du ihn passend zu deiner Maschine ein. Hundert mal hundert Millimeter reichen für den Aufnäher.
 
-[warm, inviting] In diesem Video stickst du dein erstes eigenes Muster: einen runden Aufnäher mit einer Welle.
-Dafür brauchst du nur die Maus und zwei Minuten.
+## Szene 3
 
-Klick links auf „Neu“. Es entsteht ein leeres Stickmuster. Der gestrichelte Rahmen ist dein
-Stickrahmen, hier hundert mal hundert Millimeter.
+**Bild:** Heranzoomen links, Etikett Ellipse, Klick. Ganzes Bild, Etikett Kreis in der Optionszeile über der Bühne, Klick. Der Zeiger zieht den Kreis auf. Die App meldet „Fläche gezeichnet und als Füllung gestickt.“, Etikett Füllung.
 
-Links auf der Leinwand liegen die Zeichenwerkzeuge. [focused] Nimm die Ellipse und zieh mit gedrückter
-Umschalttaste einen Kreis auf. [short pause] [delighted] Sobald du loslässt, ist er schon gestickt: als Füllung, passend
-zu deinem Stoff.
+**Sprechtext:** Links in der Werkzeugleiste nimmst du die Ellipse. [focused] Oben wählst du „Kreis“ und ziehst ihn auf der Bühne auf. [delighted] Sobald du loslässt, ist er schon gestickt, als Füllung passend zu deinem Stoff.
 
-Rechts siehst du, wie groß er ist. [casual] Tipp einfach sechzig Millimeter ein, die Höhe geht mit.
+## Szene 4
 
-Ein Klick auf das Farbfeld öffnet die Garne. Ich nehme ein helles Blau.
+**Bild:** Heranzoomen rechts, Etikett Größe, Klick in die Breite, „60“ wird getippt, Tastenkappe Enter, die Höhe geht mit. Ganzes Bild, Etikett Fertig in der Optionszeile, Klick.
 
-[focused] Jetzt die Welle. Mit dem Zeichenstift setzt ein Klick eine Ecke, Ziehen macht eine Rundung.
-Enter beendet die Linie. Eine Linie wird zuerst im Steppstich gestickt.
+**Sprechtext:** Rechts in der Karte Objekt steht seine Größe. Tipp sechzig Millimeter ein, die Höhe geht mit. Oben beendet „Fertig“ das Bearbeiten der Form.
 
-[enthusiastic] Für eine kräftige Welle stellst du die Art auf Satin, ziehst die Breite auf drei Millimeter und
-gibst ihr weißes Garn.
+## Szene 5
 
-[curious] Mit der Leertaste siehst du, wie die Maschine stickt: erst den blauen Kreis, dann die Welle.
+**Bild:** Heranzoomen rechts, Etikett Garn am Garn der Karte Objekt, Klick öffnet „Garn dieses Objekts wählen“, Klick auf Cornflower Blue. Der Kreis wird blau.
 
-Unter Anzeige zeigt „Realistische Fäden“ dein Muster so, wie es auf dem Stoff aussehen wird. [impressed] Schön, oder?
+**Sprechtext:** Darüber steht das Garn. Ein Klick öffnet die Farben, ich nehme ein kräftiges Blau. Der Kreis wird sofort blau.
 
-Zum Schluss wählst du links das Format deiner Maschine und speicherst. [short pause] [proud, warm] Fertig ist dein
-erstes Stickmuster.
+## Szene 6
+
+**Bild:** Etikett Pfad in der Werkzeugleiste, Klick. Ein Klick links im Kreis, dann vier gezogene Rundungen: die Welle. Tastenkappe Enter, Klick auf Fertig. Die App meldet „Linie gezeichnet und im Steppstich gestickt.“, Etikett Steppstich.
+
+**Sprechtext:** [focused] Jetzt die Welle, mit dem Pfad. Ein Klick setzt eine Ecke, Ziehen macht eine Rundung. Enter beendet die Linie, dann wieder „Fertig“. Eine Linie wird zuerst im Steppstich gestickt.
+
+## Szene 7
+
+**Bild:** Heranzoomen rechts, Etikett Stichart, Klick auf Satin unter Art, Etikett Breite, der Regler wird von 2,0 auf 3,0 mm gezogen. Klick auf das Garn, Klick auf White. Die Welle ist weiß und kräftig.
+
+**Sprechtext:** [enthusiastic] Für eine kräftige Welle stellst du unter Stichart die Art auf Satin. Die Breite ziehst du auf drei Millimeter, und als Garn nimmst du Weiß.
+
+## Szene 8
+
+**Bild:** Auswahl aufgehoben. Etikett Player, Tastenkappe Leertaste: erst der blaue Kreis, dann die weiße Welle werden Stich für Stich gestickt.
+
+**Sprechtext:** [curious] Mit der Leertaste spielt unten der Player ab, wie die Maschine stickt: erst den blauen Kreis, dann die weiße Welle.
+
+## Szene 9
+
+**Bild:** Heranzoomen unten rechts, Etikett Ansicht-Menü am Auge, Klick. Etikett Realistische Fäden, Klick, Menü schließt. Heranzoomen auf den Aufnäher in realistischen Fäden.
+
+**Sprechtext:** Unten rechts auf der Bühne öffnet das Auge das Ansicht-Menü. Mit „Realistische Fäden“ siehst du dein Muster so, wie es auf dem Stoff aussehen wird. [impressed] Schön, oder?
+
+## Szene 10
+
+**Bild:** Heranzoomen oben rechts, Etikett Speichern, Klick öffnet den Dialog. Etikett „Passt in den Stickrahmen“, Klick auf PES, Etikett, Klick auf Speichern im Dialog (die Datei Neues Stickmuster.pes wird geladen). Ganzes Bild, Zeiger ruht. Dann Abspann.
+
+**Sprechtext:** Zum Schluss klickst du oben rechts auf Speichern. Ganz oben steht, dass alles in den Stickrahmen passt. Wähl das Format deiner Maschine, etwa PES für Brother, und speichere. [proud, warm] Fertig ist dein erstes Stickmuster.

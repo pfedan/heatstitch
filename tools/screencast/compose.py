@@ -27,11 +27,25 @@ ACCENT = (181, 49, 122)
 ACCENT_LIGHT = (224, 85, 158)
 CARD_BG = (20, 17, 24)
 INTRO, OUTRO = 3.0, 3.0
-FONT_DIR = '/usr/share/fonts/opentype/inter'
+# Inter as OTF (Inter-Regular.otf and so on): FONT_DIR, else the usual places on Linux, macOS
+# and Windows.
+FONT_DIRS = [
+    os.environ.get('FONT_DIR', ''),
+    '/usr/share/fonts/opentype/inter',
+    os.path.expanduser('~/.local/share/fonts'),
+    os.path.expanduser('~/Library/Fonts'),
+    '/Library/Fonts',
+    os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Microsoft', 'Windows', 'Fonts'),
+    os.path.join(os.environ.get('WINDIR', 'C:\\Windows'), 'Fonts'),
+]
 
 
 def font(weight, size):
-    return ImageFont.truetype(os.path.join(FONT_DIR, f'Inter-{weight}.otf'), size)
+    for d in FONT_DIRS:
+        path = os.path.join(d, f'Inter-{weight}.otf')
+        if d and os.path.exists(path):
+            return ImageFont.truetype(path, size)
+    raise SystemExit(f'Inter-{weight}.otf not found; install Inter (https://rsms.me/inter) or set FONT_DIR')
 
 
 def ease(t):
@@ -242,7 +256,7 @@ def main():
     ap.add_argument('--title', required=True)
     ap.add_argument('--video', required=True, help='output path without extension')
     ap.add_argument('--ablauf', required=True, help='the ablauf.mjs, for the subtitle texts')
-    ap.add_argument('--crf', default='22')
+    ap.add_argument('--crf', default='30')  # about 4 MB per minute, the budget of the concept
     args = ap.parse_args()
 
     tl = json.load(open(os.path.join(args.out, 'timeline.json')))
@@ -311,6 +325,8 @@ def main():
         labels.append(f'[a{j}]')
     total = INTRO + len(frames) / fps + OUTRO
     graph = ';'.join(filters) + f';{"".join(labels)}amix=inputs={len(labels)}:normalize=0,loudnorm=I=-16:TP=-1.5,apad,atrim=0:{total:.3f}[voice]'
+    if not labels:  # a test cut before any voice exists: a silent track keeps the rest the same
+        graph = f'anullsrc=r=48000:cl=stereo,atrim=0:{total:.3f}[voice]'
     # Subtitles in German and English, without the voice's stage directions: as WebVTT for
     # the help page and as switchable tracks inside the MP4.
     script = (

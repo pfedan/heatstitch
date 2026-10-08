@@ -3,3 +3,5 @@ dist
 dev-dist
 *.log
 oracle/
+docs/screencasts/*/ton/
+__pycache__/

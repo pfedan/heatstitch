@@ -1,69 +1,59 @@
 # Teil 2: Schrift
 
-**Ziel:** Danach kannst du einen Schriftzug setzen, eine passende Schrift und Höhe wählen, ihn in
-einen Bogen legen, Abstand und Garn einstellen und den Text später noch ändern.
+Schlüssel `02-schrift`, Demodatei: keine (Startseite, „Leer anfangen“), etwa 2 Minuten, 270 Wörter.
 
-**Demodatei:** keine. Das Video startet mit leerer App (frischer Browser, Standard-Einstellungen,
-Stoff „Webware, stabil“), Stickrahmen 100 × 100 mm über „+ Neu“. Am Ende steht ein Etikett für
-Selbstgenähtes: oben im Bogen „MIT LIEBE GENÄHT“ (Excalibur KOR, 9 mm, Prussian Blue), darunter der
-Name „Emma“ (Pacificlo, 20 mm, Deep Rose).
+Ein Name entsteht von Grund auf: Werkzeug Text, Schrift aus der Liste, Größe, Bogen, Buchstabenabstand, Garn, danach den Text ändern und das Ergebnis mit Realistische Fäden ansehen. Schrift ist Pacificlo (Schreibschrift, gut von 14 bis 25 mm), Name Emilia, später Jonas, Garn 086 Deep Rose.
 
-**Länge:** etwa 2:00 (rund 220 Wörter, dazu Pausen für die Aktionen).
+## Szene 1
 
-**Stimme:** Aoede, de-DE, feste Regieanweisung aus dem Konzept. Regie-Markierungen auf Englisch in
-eckigen Klammern.
+**Bild:** Startseite „Was möchtest du sticken?“ über der leeren Bühne. Der Zeiger ruht, dann Etikett „Leer anfangen“ und Klick: die leere Bühne mit dem Stickrahmen 100 × 100 mm.
 
-**Aufnahme:** Chromium zusätzlich mit `--disable-gpu-compositing --disable-accelerated-2d-canvas`.
+**Sprechtext:** [inviting] Ein Name auf dem Lätzchen, ein Gruß auf dem Kissen: Mit heatstitch stickst du Schrift in wenigen Schritten. Auf der Startseite fange ich leer an.
 
-## Szenen
+## Szene 2
 
-| Nr. | Bild und Aktion | Einblendung | Sprechtext |
-| --- | --- | --- | --- |
-| 0 | Vorspann | „Teil 2 · Schrift“ | (keiner) |
-| 1 | Leere App, ganzes Bild. Zeiger ruht in der Mitte. | | [warm, inviting] In diesem Video stickst du ein Etikett für Selbstgenähtes: „Mit Liebe genäht“ im Bogen, darunter ein Name. |
-| 2 | Klick auf „+ Neu“, dann über der Leinwand auf „Text“. Tippen: „MIT LIEBE GENÄHT“. Der Schriftzug erscheint rot, rechts die Karte Schriftzug. | Etikett „Text“, Taste „T“ | Klick links auf „Neu“ und dann über der Leinwand auf „Text“. Der Text ist schon markiert, du tippst einfach los. |
-| 3 | Zoom auf die Karte: rote Zeile „zu groß für den Stickrahmen“. | | [curious] Rot heißt hier: zu breit für den Stickrahmen. Das lösen wir gleich mit Schrift und Höhe. |
-| 4 | Klick auf das Feld Schrift, Liste öffnet sich. Langsam scrollen, kurz bei „Manga Impact … ohne Ä“ halten, dann Klick auf „Excalibur KOR“. | Etikett „Schrift“ | Ein Klick auf die Schrift öffnet die Liste, und jede Schrift zeigt gleich deinen Text. [focused] Grau heißt: Hier fehlt ein Buchstabe, zum Beispiel das Ä. Rechts steht, für welche Höhe die Schrift gemacht ist. Ich nehme Excalibur. |
-| 5 | Klick ins Feld Höhe, „9“ tippen, Enter. Rote Zeile verschwindet. Zeiger zeigt auf den grünen Streifen. | Etikett „Höhe“ | Die Höhe gilt für die Großbuchstaben. Neun Millimeter, [delighted] und schon passt alles in den Rahmen. Der grüne Streifen unter dem Regler zeigt, wo die Schrift gut aussieht. |
-| 6 | Bei Form Klick auf „Bogen oben“. Regler Radius auf etwa 45 mm ziehen, der Bogen wird runder. | Etikett „Bogen“ | [enthusiastic] Jetzt kommt der Bogen: Form „Bogen oben“. Mit dem Radius bestimmst du, wie stark er sich krümmt. |
-| 7 | Klick auf „Mehr“, Regler Buchstabenabstand auf +0,5 mm. | Etikett „Buchstabenabstand“ | Unter „Mehr“ bekommen die Buchstaben mit etwas mehr Abstand Luft. |
-| 8 | Klick auf das Garnfeld, Garnliste öffnet sich, Klick auf Prussian Blue. | | Dazu ein dunkles Blau. |
-| 9 | Klick auf leere Stelle, dann „Text“. Tippen: „Frieda“, der Schriftzug erscheint unter dem Bogen. Schrift: Pacificlo. Höhe 20. Garn: Deep Rose. | Etikett „Pacificlo“ | Ein zweiter Klick auf „Text“ setzt den nächsten Schriftzug genau darunter. Für den Namen nehme ich eine Schreibschrift, Pacificlo, zwanzig Millimeter hoch, in Rosa. |
-| 10 | Klick auf leere Stelle. Doppelklick auf „Frieda“, Text ist markiert, „Emma“ tippen. Buchstaben werden an derselben Stelle neu gestickt. | Etikett „Doppelklick“ | [delighted] Das Schöne: Ein Schriftzug bleibt Text. Doppelklick darauf, und aus Frieda wird Emma. Schrift, Garn und Platz bleiben. |
-| 11 | Klick auf leere Stelle, „Einpassen“, Leertaste. Ablauf spielt vom Anfang ab (schnell): erst der blaue Bogen, dann der Name. | Taste „Leertaste“ | Mit der Leertaste siehst du, wie die Maschine stickt: erst den blauen Bogen, dann den Namen. |
-| 12 | Links unter Anzeige Klick auf „Realistische Fäden“. Zoom langsam auf das Etikett. | | [proud, warm] Speichern geht links wie bei jedem Stickmuster. Fertig ist dein Etikett. |
-| 13 | Abspann | Logo und Adresse der App | (keiner) |
+**Bild:** Heranzoomen links, Etikett Text an der Werkzeugleiste. Ganzes Bild, Tastenkappe T: der Schriftzug „Text“ erscheint auf der Bühne. Heranzoomen rechts, Etikett Text am Feld Text in der Karte Objekt, „Emilia“ wird getippt.
 
-## Sprechtext am Stück
+**Sprechtext:** Links in der Werkzeugleiste wählst du Text, oder du drückst die Taste T. Gleich steht ein Schriftzug auf der Bühne. Rechts in der Karte Objekt ist das Feld Text schon bereit. Ich tippe einfach los.
 
-[warm, inviting] In diesem Video stickst du ein Etikett für Selbstgenähtes: „Mit Liebe genäht“ im Bogen,
-darunter ein Name.
+## Szene 3
 
-Klick links auf „Neu“ und dann über der Leinwand auf „Text“. Der Text ist schon markiert, du tippst einfach los.
+**Bild:** Heranzoomen rechts, Etikett Schrift, Klick öffnet die Liste: jede Schrift zeigt „Emilia“. Die Liste scrollt bis Schreibschrift, Klick auf Pacificlo. Ganzes Bild: Emilia in Schreibschrift.
 
-[curious] Rot heißt hier: zu breit für den Stickrahmen. Das lösen wir gleich mit Schrift und Höhe.
+**Sprechtext:** Ein Klick auf Schrift öffnet die Liste. [delighted] Jede Schrift zeigt gleich dein Wort, so siehst du sofort, was passt. Ich scrolle zur Schreibschrift und nehme Pacificlo.
 
-Ein Klick auf die Schrift öffnet die Liste, und jede Schrift zeigt gleich deinen Text. [focused] Grau heißt:
-Hier fehlt ein Buchstabe, zum Beispiel das Ä. Rechts steht, für welche Höhe die Schrift gemacht ist.
-Ich nehme Excalibur.
+## Szene 4
 
-Die Höhe gilt für die Großbuchstaben. Neun Millimeter, [delighted] und schon passt alles in den Rahmen.
-Der grüne Streifen unter dem Regler zeigt, wo die Schrift gut aussieht.
+**Bild:** Heranzoomen rechts, Etikett Größe am Feld. Der Zeiger zeigt auf „Gut von 14 bis 25 mm.“ und auf Maße und Stiche. Im Feld wird 20 getippt, Enter. Ganzes Bild: der Name wird größer.
 
-[enthusiastic] Jetzt kommt der Bogen: Form „Bogen oben“. Mit dem Radius bestimmst du, wie stark er sich krümmt.
+**Sprechtext:** Mit Größe stellst du die Höhe der Großbuchstaben ein, in Millimetern. Darunter steht, welche Größen für diese Schrift gut sind, dazu die Maße und wie viele Stiche es werden. Ich nehme zwanzig.
 
-Unter „Mehr“ bekommen die Buchstaben mit etwas mehr Abstand Luft. Dazu ein dunkles Blau.
+## Szene 5
 
-Ein zweiter Klick auf „Text“ setzt den nächsten Schriftzug genau darunter. Für den Namen nehme ich eine
-Schreibschrift, Pacificlo, zwanzig Millimeter hoch, in Rosa.
+**Bild:** Heranzoomen rechts, Etiketten Bogen und Bogen oben, Klick. Ganzes Bild: der Name wölbt sich. Wieder heran, Etiketten Bogen unten, Kreis (nur gezeigt) und Radius (Regler erscheint mit Bogen oben).
 
-[delighted] Das Schöne: Ein Schriftzug bleibt Text. Doppelklick darauf, und aus Frieda wird Emma.
-Schrift, Garn und Platz bleiben.
+**Sprechtext:** [curious] Jetzt der Bogen. Bogen oben wölbt den Namen nach oben, [delighted] wie ein Regenbogen. Daneben gibt es Bogen unten und Kreis. Mit Radius machst du den Bogen flacher oder runder.
 
-Mit der Leertaste siehst du, wie die Maschine stickt: erst den blauen Bogen, dann den Namen.
+## Szene 6
 
-[proud, warm] Speichern geht links wie bei jedem Stickmuster. Fertig ist dein Etikett.
+**Bild:** Halb herangezoomt (Bühne und Karte), Etikett Buchstabenabstand. Der Regler wird nach rechts gezogen (+1,8 mm), dann zurück auf etwa +0,6 mm; die Buchstaben rücken auseinander und wieder näher.
 
-## Beim Durchspielen aufgefallen
+**Sprechtext:** Darunter liegt der Buchstabenabstand. Nach rechts bekommen die Buchstaben mehr Luft, nach links rücken sie zusammen. Ein kleines Stück reicht.
 
-Beide Punkte (Radius erscheint erst nach erneutem Anwählen, Pfeiltasten in der Schriftliste) sind mit #100 behoben.
+## Szene 7
+
+**Bild:** Heranzoomen rechts unten, Etikett Garn, Klick auf Red öffnet die Garnfarben (Brother), Klick auf 086 Deep Rose. Ganzes Bild: Emilia in Rosa, Etikett Farben und Objekte links, die Farbe dort ist Deep Rose.
+
+**Sprechtext:** Unter Garn und Stiche wählst du das Garn. Ein Klick zeigt die Farben deiner Garnmarke. Ich nehme ein kräftiges Rosa. Links unter Farben und Objekte wechselt die Farbe mit.
+
+## Szene 8
+
+**Bild:** Esc hebt die Auswahl auf. Doppelklick auf das E: der Schriftzug ist gewählt, das Feld Text markiert. Heranzoomen rechts, Etikett Text, „Jonas“ wird getippt. Der Zeiger fährt über Schrift, Größe, Bogen oben und Garn: alles wie vorher. Ganzes Bild: Jonas im selben Bogen.
+
+**Sprechtext:** Und später? [warm] Der Schriftzug bleibt Text. Ein Doppelklick darauf, und das Feld Text ist wieder bereit. Ich tippe Jonas. [pleased] Schrift, Größe, Bogen und Garn bleiben, wie sie waren. Auch eine andere Schrift wählst du jederzeit.
+
+## Szene 9
+
+**Bild:** Heranzoomen unten rechts, Etikett Ansicht-Menü am Auge, Klick. Etikett Realistische Fäden, Klick. Esc schließt das Menü, Heranzoomen auf den Schriftzug mit Fäden. Tastenkappen Pos1 und Leertaste: Jonas wird Stich für Stich gestickt. Dann Abspann.
+
+**Sprechtext:** Unten rechts auf der Bühne öffnet das Auge das Ansicht-Menü. Ich schalte Realistische Fäden ein. [delighted] So sieht dein Schriftzug fertig gestickt aus. Mit der Leertaste siehst du, wie die Maschine ihn Stich für Stich stickt. [warm] Viel Spaß beim Sticken!

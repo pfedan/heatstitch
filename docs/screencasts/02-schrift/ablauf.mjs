@@ -2,68 +2,70 @@
 // Regie) wird mit tools/screencast/tts.mjs vertont, seine Länge bestimmt die Szenenlänge.
 // `text` und `textEn` sind die Untertitel, ohne Regie.
 
-const away = [1480, 200]; // a quiet spot on the canvas, outside the hoop
+const btn = (s, name) => s.page.getByRole('button', { name }).first();
+const card = (s) => s.page.getByRole('complementary').last();
+const height = (s) => s.page.getByRole('spinbutton', { name: 'Höhe der Großbuchstaben' });
+// The sliders of the lettering card have no name of their own; each sits in a row with its
+// status (Radius, Buchstabenabstand).
+const rowOf = (s, name) =>
+  s.page.getByRole('status', { name }).locator('xpath=ancestor::*[.//input[@type="range"]][1]');
+const sliderOf = (s, name) => rowOf(s, name).locator('input[type=range]');
 
-// Shorter moves and pauses where many steps share one sentence.
-let pace = 1;
-
-/** Drags a range slider of the lettering card to a value, then nudges it there exactly. */
-const slide = async (s, label, value, sec = 1.2) => {
-  const input = s.page.locator('#lettering-body label', { hasText: label }).locator('input[type=range]');
-  const b = await s.box(input);
-  const min = Number(await input.getAttribute('min'));
-  const max = Number(await input.getAttribute('max'));
-  const step = Number(await input.getAttribute('step'));
-  const at = (v) => [b.x + 8 + ((v - min) / (max - min)) * (b.width - 16), b.y + b.height / 2];
-  await s.drag([at(Number(await input.inputValue())), at(value)], { sec });
-  for (let i = 0; i < 20; i++) {
-    const v = Number(await input.inputValue());
-    if (Math.abs(v - value) < step / 2) break;
-    await input.press(v < value ? 'ArrowRight' : 'ArrowLeft');
+/** Scrolls a list with the mouse wheel, a little per frame, until `item` is in its middle. */
+const scrollTo = async (s, list, item, { step = 45 } = {}) => {
+  for (let i = 0; i < 200; i++) {
+    const lb = await list.boundingBox();
+    const ib = await item.boundingBox();
+    const d = ib.y + ib.height / 2 - (lb.y + lb.height / 2);
+    if (Math.abs(d) < 8) break;
+    await s.page.mouse.wheel(0, Math.max(-step, Math.min(step, d)));
+    await s.wait(1 / 30);
   }
 };
 
-/** Opens the font list and picks a font, scrolling the list gently until it shows. */
-const pickFont = async (s, id, { pauseAt, step = 40 } = {}) => {
-  await s.click('.font-current', { move: 0.9 * pace });
-  await s.wait(1.2 * pace);
-  const list = s.page.locator('.font-list');
-  const row = s.page.locator(`.font-row[data-font=${id}]`);
-  await s.move(list, 0.7 * pace);
-  for (let i = 0; i < 60; i++) {
-    const lb = await s.box(list);
-    const rb = await s.box(row);
-    if (pauseAt) {
-      const pb = await s.box(s.page.locator(`.font-row[data-font=${pauseAt}]`));
-      if (pb.y + pb.height < lb.y + lb.height - 10) {
-        await s.label('ohne Ä', s.page.locator(`.font-row[data-font=${pauseAt}] .font-tags`), 'left');
-        await s.wait(2.6 * pace);
-        s.unlabel();
-        pauseAt = null;
+/** The x position of a range input's thumb at `value`. */
+const thumbAt = async (s, slider, value) => {
+  const b = await slider.boundingBox();
+  const [min, max] = await slider.evaluate((el) => [Number(el.min), Number(el.max)]);
+  const thumb = 16;
+  return b.x + thumb / 2 + ((value - min) / (max - min)) * (b.width - thumb);
+};
+
+/**
+ * Where the stitches are, read from the stage canvas: `point` lies well inside the leftmost
+ * stroke (a sure hit for a double click), `box` holds all of them.
+ */
+const stitches = (s) =>
+  s.page.evaluate(() => {
+    const c = [...document.querySelectorAll('main canvas')].sort((a, b) => b.width * b.height - a.width * a.height)[0];
+    const r = c.getBoundingClientRect();
+    const { width: w, height: h } = c;
+    const d = c.getContext('2d').getImageData(0, 0, w, h).data;
+    // Thread colors are saturated; stage, hoop, markers and handles are not.
+    const thread = (x, y) => {
+      const i = (y * w + x) * 4;
+      return Math.max(d[i], d[i + 1], d[i + 2]) - Math.min(d[i], d[i + 1], d[i + 2]) > 90;
+    };
+    const fx = r.width / w;
+    const fy = r.height / h;
+    let point = null;
+    let [x0, y0, x1, y1] = [w, h, 0, 0];
+    for (let x = 6; x < w - 6; x += 2)
+      for (let y = 6; y < h - 6; y += 2) {
+        if (!thread(x, y)) continue;
+        [x0, y0, x1, y1] = [Math.min(x0, x), Math.min(y0, y), Math.max(x1, x), Math.max(y1, y)];
+        if (point) continue;
+        let inside = true;
+        for (let dx = -6; dx <= 6 && inside; dx += 2) for (let dy = -6; dy <= 6 && inside; dy += 2) inside = thread(x + dx, y + dy);
+        if (inside) point = [r.x + (x + 4) * fx, r.y + y * fy];
       }
-    }
-    if (!pauseAt && rb.y + rb.height < lb.y + lb.height - 10) break;
-    await s.page.mouse.wheel(0, step);
-    await s.wait(0.07 * pace);
-  }
-  await s.wait(0.6 * pace);
-  await s.click(row, { move: 0.7 * pace, before: 0.4 * pace });
-};
+    return { point, box: [r.x + x0 * fx, r.y + y0 * fy, (x1 - x0) * fx, (y1 - y0) * fy] };
+  });
 
-const setHeight = async (s, mm) => {
-  const h = s.page.locator('.lettering-height');
-  await s.click(h, { move: 0.8 * pace });
-  await s.page.keyboard.press('Control+a');
-  await s.wait(0.3 * pace);
-  await s.type(mm, { perChar: 0.25 * pace });
-  await s.press('Enter', { show: 0.9 * pace });
-};
-
-const pickThread = async (s, name) => {
-  await s.click('.lettering-color', { move: 0.8 * pace });
-  await s.wait(1.0 * pace);
-  await s.click(`.color-pop .pick[title*="${name}"]`, { move: 0.8 * pace, before: 0.4 * pace });
-  await s.wait(0.6 * pace);
+/** A key the viewer needs not see (closing a menu, leaving a field). */
+const quietKey = async (s, key) => {
+  await s.page.keyboard.press(key);
+  await s.wait(0.3);
 };
 
 export default {
@@ -77,172 +79,245 @@ export default {
       'Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.',
   },
   lead: 0.4,
-  tail: 0.7,
+  tail: 0.6,
   scenes: [
     {
-      say: '[warm, inviting] In diesem Video stickst du ein Etikett für Selbstgenähtes: „Mit Liebe genäht“ im Bogen, darunter ein Name.',
-      text: 'In diesem Video stickst du ein Etikett für Selbstgenähtes: „Mit Liebe genäht“ im Bogen, darunter ein Name.',
-      textEn: 'In this video you embroider a label for things you have sewn: “Made with love” in an arc, with a name underneath.',
+      say: '[inviting] Ein Name auf dem Lätzchen, ein Gruß auf dem Kissen: Mit heatstitch stickst du Schrift in wenigen Schritten. Auf der Startseite fange ich leer an.',
+      text: 'Ein Name auf dem Lätzchen, ein Gruß auf dem Kissen: Mit heatstitch stickst du Schrift in wenigen Schritten. Auf der Startseite fange ich leer an.',
+      textEn: 'A name on a bib, a greeting on a pillow: with heatstitch you embroider lettering in a few steps. On the start page I start empty.',
       run: async (s) => {
-        await s.move([960, 600], 0.1);
-        await s.wait(4.5);
-        await s.move('#new-design', 2.0);
-      },
-    },
-    {
-      say: 'Klick links auf „Neu“ und dann über der Leinwand auf „Text“. Der Text ist schon markiert, du tippst einfach los.',
-      text: 'Klick links auf „Neu“ und dann über der Leinwand auf „Text“. Der Text ist schon markiert, du tippst einfach los.',
-      textEn: 'Click “New” on the left and then “Text” above the canvas. The text is already selected, so just start typing.',
-      run: async (s) => {
-        await s.wait(0.4);
-        await s.click(null);
+        await s.move([960, 300], 0.1);
+        await s.wait(8.0);
+        const empty = btn(s, /^Leer anfangen/);
+        await s.move(empty, 1.0);
+        await s.label('Leer anfangen', empty, 'above');
         await s.wait(1.2);
-        await s.label('Text', '#lettering-new', 'below');
-        await s.click('#lettering-new', { move: 1.0 });
+        s.unlabel();
+        await s.click(null, { before: 0.2, after: 0.6 });
+        await s.move([975, 700], 0.8);
+      },
+    },
+    {
+      say: 'Links in der Werkzeugleiste wählst du Text, oder du drückst die Taste T. Gleich steht ein Schriftzug auf der Bühne. Rechts in der Karte Objekt ist das Feld Text schon bereit. Ich tippe einfach los.',
+      text: 'Links in der Werkzeugleiste wählst du Text, oder du drückst die Taste T. Gleich steht ein Schriftzug auf der Bühne. Rechts in der Karte Objekt ist das Feld Text schon bereit. Ich tippe einfach los.',
+      textEn: 'In the toolbar on the left you choose Text, or you press the T key. Right away there is lettering on the stage. On the right, in the Object card, the Text field is already waiting. I just start typing.',
+      run: async (s) => {
+        const tool = s.page.getByRole('toolbar', { name: 'Werkzeuge' }).getByRole('button', { name: 'Text', exact: true });
+        await s.zoom([24, 300, 0, 0], 1.6);
+        await s.move(tool, 1.0);
         await s.wait(1.0);
-        s.unlabel();
-        await s.move([1300, 760], 0.9);
-        await s.type('MIT LIEBE GENÄHT', { perChar: 0.13 });
-        await s.wait(0.8);
-      },
-    },
-    {
-      say: '[curious] Rot heißt hier: zu breit für den Stickrahmen. Das lösen wir gleich mit Schrift und Höhe.',
-      text: 'Rot heißt hier: zu breit für den Stickrahmen. Das lösen wir gleich mit Schrift und Höhe.',
-      textEn: 'Red means: too wide for the hoop. We will fix that in a moment with the font and the height.',
-      run: async (s) => {
-        const size = s.page.locator('.lettering-size');
-        await s.zoom(size, 1.6);
-        await s.move(size, 1.0);
-        await s.wait(4.5);
-        s.zoomOut();
-      },
-    },
-    {
-      say: 'Ein Klick auf die Schrift öffnet die Liste, und jede Schrift zeigt gleich deinen Text. [focused] Grau heißt: Hier fehlt ein Buchstabe, zum Beispiel das Ä. Rechts steht, für welche Höhe die Schrift gemacht ist. Ich nehme Excalibur.',
-      text: 'Ein Klick auf die Schrift öffnet die Liste, und jede Schrift zeigt gleich deinen Text. Grau heißt: Hier fehlt ein Buchstabe, zum Beispiel das Ä. Rechts steht, für welche Höhe die Schrift gemacht ist. Ich nehme Excalibur.',
-      textEn: 'A click on the font opens the list, and every font shows your text right away. Grey means a letter is missing, the Ä for example. On the right it says which height the font is made for. I will take Excalibur.',
-      run: async (s) => {
-        await s.label('Schrift', '.font-current', 'left');
-        await pickFont(s, 'excalibur_KOR', { pauseAt: 'manga_impact' });
-        s.unlabel();
-        await s.wait(0.6);
-      },
-    },
-    {
-      say: 'Die Höhe gilt für die Großbuchstaben. Neun Millimeter, [delighted] und schon passt alles in den Rahmen. Der grüne Streifen unter dem Regler zeigt, wo die Schrift gut aussieht.',
-      text: 'Die Höhe gilt für die Großbuchstaben. Neun Millimeter, und schon passt alles in den Rahmen. Der grüne Streifen unter dem Regler zeigt, wo die Schrift gut aussieht.',
-      textEn: 'The height is that of the capital letters. Nine millimetres, and it all fits the hoop. The green strip under the slider shows where the font looks good.',
-      run: async (s) => {
-        await s.zoom('.lettering-height', 1.5);
-        await s.label('Höhe', '.lettering-height', 'left');
-        await setHeight(s, '9');
-        s.unlabel();
+        await s.label('Text', tool, 'right');
         await s.wait(1.6);
-        await s.move('.band-track', 1.0);
-        await s.label('gute Höhe', '.band-track', 'below');
-        await s.wait(3.0);
         s.unlabel();
+        await s.move([700, 640], 0.8);
         s.zoomOut();
+        await s.press('t', { label: 'T', show: 0.9 });
+        await s.wait(3.2);
+        const field = s.page.getByRole('textbox', { name: 'Text' });
+        await s.zoom([1760, 200, 0, 0], 1.6);
+        await s.move(field, 1.0);
+        await s.wait(1.6);
+        await s.label('Text', field, 'below');
+        await s.wait(2.0);
+        s.unlabel();
+        await s.type('Emilia', { perChar: 0.14 });
+        await s.wait(0.6);
+        s.zoomOut();
+        await s.move([975, 640], 0.9);
       },
     },
     {
-      say: '[enthusiastic] Jetzt kommt der Bogen: Form „Bogen oben“. Mit dem Radius bestimmst du, wie stark er sich krümmt.',
-      text: 'Jetzt kommt der Bogen: Form „Bogen oben“. Mit dem Radius bestimmst du, wie stark er sich krümmt.',
-      textEn: 'Now for the arc: shape “Arc on top”. The radius sets how strongly it bends.',
+      say: 'Ein Klick auf Schrift öffnet die Liste. [delighted] Jede Schrift zeigt gleich dein Wort, so siehst du sofort, was passt. Ich scrolle zur Schreibschrift und nehme Pacificlo.',
+      text: 'Ein Klick auf Schrift öffnet die Liste. Jede Schrift zeigt gleich dein Wort, so siehst du sofort, was passt. Ich scrolle zur Schreibschrift und nehme Pacificlo.',
+      textEn: 'A click on Font opens the list. Every font shows your word right away, so you see at once what fits. I scroll to the script fonts and take Pacificlo.',
       run: async (s) => {
-        const arc = 'button[title="Bogen oben"]';
-        await s.label('Bogen', arc, 'below');
-        await s.click(arc, { move: 1.0 });
-        await s.wait(1.2);
+        const font = btn(s, 'Barstitch regular');
+        await s.zoom([1760, 450, 0, 0], 1.5);
+        await s.move(font, 1.4);
+        await s.label('Schrift', font, 'above');
+        await s.click(null, { before: 0.4, after: 0.4 });
+        await s.wait(0.6);
         s.unlabel();
-        await slide(s, 'Radius', 45, 1.6);
+        const list = s.page.getByRole('listbox', { name: 'Schrift' });
+        await s.move([1760, 560], 0.8);
+        await s.wait(3.6);
+        const pick = s.page.getByRole('option', { name: 'Pacificlo' });
+        await scrollTo(s, list, pick);
+        await s.wait(0.8);
+        await s.click(pick, { move: 0.7, before: 0.4, after: 0.4 });
+        s.zoomOut();
+        await s.move([975, 700], 0.9);
         await s.wait(1.0);
       },
     },
     {
-      say: 'Unter „Mehr“ bekommen die Buchstaben mit etwas mehr Abstand Luft. Dazu ein dunkles Blau.',
-      text: 'Unter „Mehr“ bekommen die Buchstaben mit etwas mehr Abstand Luft. Dazu ein dunkles Blau.',
-      textEn: 'Under “More”, a little more letter spacing gives the letters some air. And a dark blue with it.',
+      say: 'Mit Größe stellst du die Höhe der Großbuchstaben ein, in Millimetern. Darunter steht, welche Größen für diese Schrift gut sind, dazu die Maße und wie viele Stiche es werden. Ich nehme zwanzig.',
+      text: 'Mit Größe stellst du die Höhe der Großbuchstaben ein, in Millimetern. Darunter steht, welche Größen für diese Schrift gut sind, dazu die Maße und wie viele Stiche es werden. Ich nehme zwanzig.',
+      textEn: 'Size sets the height of the capital letters, in millimetres. Below it you see which sizes suit this font, plus the dimensions and how many stitches it takes. I take twenty.',
       run: async (s) => {
-        await s.click('#lettering-body summary', { move: 0.9 });
-        await s.wait(0.6);
-        const spacing = s.page.locator('#lettering-body label', { hasText: 'Buchstabenabstand' });
-        await s.label('Buchstabenabstand', spacing, 'left');
-        await slide(s, 'Buchstabenabstand', 0.5, 1.0);
+        const field = height(s);
+        await s.zoom([1760, 390, 0, 0], 1.7);
+        await s.move(field, 1.0);
+        await s.label('Größe', field, 'above');
+        await s.wait(3.2);
         s.unlabel();
-        await pickThread(s, 'Prussian Blue');
-      },
-    },
-    {
-      say: 'Ein zweiter Klick auf „Text“ setzt den nächsten Schriftzug genau darunter. Für den Namen nehme ich eine Schreibschrift, Pacificlo, zwanzig Millimeter hoch, in Rosa.',
-      text: 'Ein zweiter Klick auf „Text“ setzt den nächsten Schriftzug genau darunter. Für den Namen nehme ich eine Schreibschrift, Pacificlo, zwanzig Millimeter hoch, in Rosa.',
-      textEn: 'A second click on “Text” puts the next lettering right underneath. For the name I take a script font, Pacificlo, twenty millimetres high, in pink.',
-      run: async (s) => {
-        pace = 0.6;
-        await s.click(away, { move: 0.6, after: 0.2 });
-        await s.click('#lettering-new', { move: 0.7, after: 0.2 });
-        await s.wait(0.3);
-        await s.move([1300, 820], 0.5);
-        await s.type('Frieda', { perChar: 0.1 });
-        await s.wait(0.2);
-        await pickFont(s, 'pacificlo', { step: 240 });
-        await s.label('Pacificlo', '.font-current', 'left');
-        await setHeight(s, '20');
-        s.unlabel();
-        await pickThread(s, 'Deep Rose');
-        await s.click(away, { move: 0.6 });
-        pace = 1;
-      },
-    },
-    {
-      say: '[delighted] Das Schöne: Ein Schriftzug bleibt Text. Doppelklick darauf, und aus Frieda wird Emma. Schrift, Garn und Platz bleiben.',
-      text: 'Das Schöne: Ein Schriftzug bleibt Text. Doppelklick darauf, und aus Frieda wird Emma. Schrift, Garn und Platz bleiben.',
-      textEn: 'The nice part: a lettering stays text. Double-click it, and Frieda becomes Emma. Font, thread and place stay.',
-      run: async (s) => {
-        await s.wait(0.3);
-        // The middle of the name, on the stem of the first e, hits a stitch.
-        const target = [1000, 870];
-        await s.move(target, 1.0);
-        await s.label('Doppelklick', [target[0], target[1] + 60, 0, 0], 'below');
-        await s.wait(0.4);
-        await s.page.mouse.dblclick(target[0], target[1]);
-        await s.wait(0.8);
-        s.unlabel();
-        const focused = await s.page.evaluate(() => document.activeElement?.tagName);
-        if (focused !== 'TEXTAREA') throw new Error('double-click did not reach the lettering text');
-        await s.page.keyboard.press('Control+a');
-        await s.move([1300, 860], 0.8);
-        await s.type('Emma', { perChar: 0.2 });
+        await s.move(card(s).getByText(/^Gut von/), 0.9);
+        await s.wait(2.8);
+        await s.move(card(s).getByText(/mm · .* Stiche/), 0.8);
+        await s.wait(2.4);
+        await s.click(field, { move: 0.7, before: 0.2, after: 0.2 });
+        await field.selectText();
+        await s.type('20', { perChar: 0.2 });
+        await quietKey(s, 'Enter');
+        s.zoomOut();
+        await s.move([975, 720], 0.9);
         await s.wait(1.4);
       },
     },
     {
-      say: 'Mit der Leertaste siehst du, wie die Maschine stickt: erst den blauen Bogen, dann den Namen.',
-      text: 'Mit der Leertaste siehst du, wie die Maschine stickt: erst den blauen Bogen, dann den Namen.',
-      textEn: 'The space bar shows you how the machine stitches: first the blue arc, then the name.',
+      say: '[curious] Jetzt der Bogen. Bogen oben wölbt den Namen nach oben, [delighted] wie ein Regenbogen. Daneben gibt es Bogen unten und Kreis. Mit Radius machst du den Bogen flacher oder runder.',
+      text: 'Jetzt der Bogen. Bogen oben wölbt den Namen nach oben, wie ein Regenbogen. Daneben gibt es Bogen unten und Kreis. Mit Radius machst du den Bogen flacher oder runder.',
+      textEn: 'Now the arc. Arc top curves the name upwards, like a rainbow. Next to it are Arc bottom and Circle. Radius makes the arc flatter or rounder.',
       run: async (s) => {
-        await s.click(away, { move: 0.8 });
-        await s.page.evaluate(() => document.activeElement?.blur());
-        await s.page.keyboard.press('Escape');
-        await s.page.keyboard.press('Escape');
-        // Fit, so the whole label is in view (the name reaches below the canvas otherwise).
-        await s.click('text=Einpassen', { move: 0.8 });
-        await s.move([1480, 860], 0.6);
-        await s.press(' ', { label: 'Leertaste', show: 1.0 });
-        await s.wait(5.5);
+        const radio = (name) => s.page.getByRole('radio', { name });
+        await s.zoom([1760, 500, 0, 0], 1.6);
+        await s.move(radio('Bogen oben'), 1.0);
+        await s.label('Bogen', s.page.getByRole('radiogroup', { name: 'Bogen' }), 'above');
+        await s.wait(0.9);
+        await s.label('Bogen oben', radio('Bogen oben'), 'above');
+        await s.click(null, { before: 0.6, after: 0.3 });
+        s.unlabel();
+        s.zoomOut();
+        await s.move([975, 720], 0.9);
+        await s.wait(2.6);
+        await s.zoom([1760, 500, 0, 0], 1.6);
+        await s.move(radio('Bogen unten'), 0.9);
+        await s.label('Bogen unten', radio('Bogen unten'), 'above');
+        await s.wait(1.0);
+        await s.move(radio('Kreis'), 0.6);
+        await s.label('Kreis', radio('Kreis'), 'above');
+        await s.wait(1.0);
+        await s.move(sliderOf(s, 'Radius'), 0.8);
+        await s.label('Radius', sliderOf(s, 'Radius'), 'below');
+        await s.wait(2.6);
+        s.unlabel();
+        s.zoomOut();
       },
     },
     {
-      say: '[proud, warm] Speichern geht links wie bei jedem Stickmuster. Fertig ist dein Etikett.',
-      text: 'Speichern geht links wie bei jedem Stickmuster. Fertig ist dein Etikett.',
-      textEn: 'You save on the left, like any design. Your label is done.',
+      say: 'Darunter liegt der Buchstabenabstand. Nach rechts bekommen die Buchstaben mehr Luft, nach links rücken sie zusammen. Ein kleines Stück reicht.',
+      text: 'Darunter liegt der Buchstabenabstand. Nach rechts bekommen die Buchstaben mehr Luft, nach links rücken sie zusammen. Ein kleines Stück reicht.',
+      textEn: 'Below it is the letter spacing. To the right the letters get more room, to the left they move closer. A little is enough.',
       run: async (s) => {
-        await s.click(s.page.locator('label.check', { hasText: 'Realistische Fäden' }), { move: 1.2 });
-        await s.move([1290, 860], 1.0);
-        await s.zoom([960, 560, 0, 0], 1.35);
-        await s.wait(4.5);
+        const slider = sliderOf(s, 'Buchstabenabstand');
+        const y = (await s.box(slider)).y + 8;
+        const from = await thumbAt(s, slider, 0);
+        // Stage and card together, so the letters move while the thumb does.
+        await s.zoom([1300, 560, 0, 0], 1.3);
+        await s.move([from, y], 1.0);
+        await s.label('Buchstabenabstand', rowOf(s, 'Buchstabenabstand'), 'above');
+        await s.wait(2.4);
+        s.unlabel();
+        await s.drag([[from, y], [await thumbAt(s, slider, 1.8), y], [await thumbAt(s, slider, 0.6), y]], { sec: 1.6 });
         s.zoomOut();
+        await s.move([975, 720], 1.0);
+        await s.wait(0.8);
+      },
+    },
+    {
+      say: 'Unter Garn und Stiche wählst du das Garn. Ein Klick zeigt die Farben deiner Garnmarke. Ich nehme ein kräftiges Rosa. Links unter Farben und Objekte wechselt die Farbe mit.',
+      text: 'Unter Garn und Stiche wählst du das Garn. Ein Klick zeigt die Farben deiner Garnmarke. Ich nehme ein kräftiges Rosa. Links unter Farben und Objekte wechselt die Farbe mit.',
+      textEn: 'Under Thread and stitches you choose the thread. A click shows the colors of your thread brand. I take a strong pink. On the left, under Colors and objects, the color changes too.',
+      run: async (s) => {
+        const thread = btn(s, /^Red$/);
+        await s.zoom([1600, 720, 0, 0], 1.5);
+        await s.move(thread, 1.0);
+        await s.wait(1.0);
+        await s.label('Garn', thread, 'above');
+        await s.wait(1.6);
+        await s.click(null, { before: 0.2, after: 0.4 });
+        s.unlabel();
+        await s.wait(2.6);
+        await s.click(btn(s, '086 Deep Rose'), { move: 1.2, before: 0.6, after: 0.4 });
+        s.zoomOut();
+        const heading = s.page.getByRole('heading', { name: 'Farben und Objekte' });
+        await s.move(s.page.getByRole('button', { name: 'Garnfarbe ändern' }), 1.0);
+        await s.label('Farben und Objekte', heading, 'right');
+        await s.wait(3.0);
+        s.unlabel();
+      },
+    },
+    {
+      say: 'Und später? [warm] Der Schriftzug bleibt Text. Ein Doppelklick darauf, und das Feld Text ist wieder bereit. Ich tippe Jonas. [pleased] Schrift, Größe, Bogen und Garn bleiben, wie sie waren. Auch eine andere Schrift wählst du jederzeit.',
+      text: 'Und später? Der Schriftzug bleibt Text. Ein Doppelklick darauf, und das Feld Text ist wieder bereit. Ich tippe Jonas. Schrift, Größe, Bogen und Garn bleiben, wie sie waren. Auch eine andere Schrift wählst du jederzeit.',
+      textEn: 'And later? The lettering stays text. A double click on it and the Text field is ready again. I type Jonas. Font, size, arc and thread stay as they were. You can pick another font any time, too.',
+      run: async (s) => {
+        // Nothing selected: the lettering is done for now. The first Escape leaves the shape,
+        // the second the selection.
+        await s.page.evaluate(() => document.activeElement?.blur());
+        await quietKey(s, 'Escape');
+        await quietKey(s, 'Escape');
+        await s.move([980, 840], 1.0);
+        await s.wait(1.4);
+        const { point } = await stitches(s);
+        await s.click(point, { move: 1.0, before: 0.3, after: 0 });
+        await s.page.mouse.down({ clickCount: 2 });
+        await s.page.mouse.up({ clickCount: 2 });
+        await s.wait(0.6);
+        const field = s.page.getByRole('textbox', { name: 'Text' });
+        await s.zoom([1760, 380, 0, 0], 1.5);
+        await s.move(field, 0.8);
+        await s.label('Text', field, 'below');
+        await s.wait(1.4);
+        s.unlabel();
+        await s.type('Jonas', { perChar: 0.16 });
+        await s.wait(0.8);
+        // Font, size, arc and thread, as the voice names them.
+        for (const [target, sec] of [
+          [btn(s, 'Pacificlo'), 0.9],
+          [height(s), 0.8],
+          [s.page.getByRole('radio', { name: 'Bogen oben' }), 0.8],
+          [btn(s, /^Deep Rose$/), 1.0],
+        ]) {
+          await s.move(target, 0.6);
+          await s.wait(sec);
+        }
+        s.zoomOut();
+        await s.move([975, 840], 1.0);
+        await s.wait(1.4);
+      },
+    },
+    {
+      say: 'Unten rechts auf der Bühne öffnet das Auge das Ansicht-Menü. Ich schalte Realistische Fäden ein. [delighted] So sieht dein Schriftzug fertig gestickt aus. Mit der Leertaste siehst du, wie die Maschine ihn Stich für Stich stickt. [warm] Viel Spaß beim Sticken!',
+      text: 'Unten rechts auf der Bühne öffnet das Auge das Ansicht-Menü. Ich schalte Realistische Fäden ein. So sieht dein Schriftzug fertig gestickt aus. Mit der Leertaste siehst du, wie die Maschine ihn Stich für Stich stickt. Viel Spaß beim Sticken!',
+      textEn: 'At the bottom right of the stage, the eye opens the view menu. I turn on Realistic threads. This is how your lettering looks when it is stitched. The space bar shows you how the machine stitches it, stitch by stitch. Have fun embroidering!',
+      run: async (s) => {
+        await s.page.evaluate(() => document.activeElement?.blur());
+        await quietKey(s, 'Escape');
+        // Measured in the flat stitch view, before the threads get their sheen.
+        const { box } = await stitches(s);
+        const eye = s.page.getByRole('toolbar', { name: 'Ansicht' }).getByRole('button').first();
+        await s.zoom([1430, 800, 0, 0], 1.4);
+        await s.move(eye, 1.0);
+        await s.wait(1.2);
+        await s.label('Ansicht-Menü', eye, 'above');
+        await s.wait(1.4);
+        await s.click(null, { before: 0.2, after: 0.4 });
+        s.unlabel();
+        const real = s.page.getByRole('checkbox', { name: 'Realistische Fäden' });
+        await s.move(real, 1.0);
+        await s.label('Realistische Fäden', real, 'above');
+        await s.click(null, { before: 0.6, after: 0.6 });
+        s.unlabel();
+        await quietKey(s, 'Escape');
+        await s.move([1300, 900], 1.0);
+        await s.zoom(box, 1.5);
+        await s.wait(2.4);
+        await s.press('Home', { label: 'Pos1', show: 0.4 });
+        await s.press(' ', { label: 'Leertaste', show: 1.0 });
+        await s.wait(4.4);
+        s.zoomOut();
+        await s.wait(1.0);
       },
     },
   ],
