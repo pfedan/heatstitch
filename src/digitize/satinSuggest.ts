@@ -82,6 +82,11 @@ const cross = (a: Pt, b: Pt, c: Pt, d: Pt) => {
   const mu = 0.6 / Math.hypot(q[0], q[1]);
   return t > mt && t < 1 - mt && u > mu && u < 1 - mu;
 };
+/** Whether segments ab and cd cross at all (not only touch at an end). */
+const meets = (a: Pt, b: Pt, c: Pt, d: Pt) => {
+  const side = (p: Pt, q: Pt, r: Pt) => (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]);
+  return side(a, b, c) * side(a, b, d) < 0 && side(c, d, a) * side(c, d, b) < 0;
+};
 /** Distance from q to the segment from a to b. */
 const toSegment = (q: Pt, a: Pt, b: Pt) => {
   const v = sub(b, a);
@@ -796,18 +801,18 @@ export function bridgeOrder(cuts: [Pt, Pt][], outsides: Pt[][], holes: Pt[][]): 
   const open = new Set<number>([-1]);
   const done = new Set<number>();
   const out: [Pt, Pt][] = [];
-  for (let changed = true; changed; ) {
-    changed = false;
-    ends.forEach(([x, y], k) => {
-      if (done.has(k)) return;
-      if ((open.has(x) && !open.has(y)) || (open.has(y) && !open.has(x))) {
-        out.push(cuts[k]);
-        done.add(k);
-        open.add(x);
-        open.add(y);
-        changed = true;
-      }
-    });
+  // A cut line that another crosses (two from one junction) opens a hole only when no other does:
+  // the one crossing it would cut through the opening, and a part would close round the hole again.
+  const crossed = cuts.map(([a, b], k) => cuts.some(([c, d], j) => j !== k && meets(a, b, c, d)));
+  const opens = ([x, y]: [number, number]) => (open.has(x) && !open.has(y)) || (open.has(y) && !open.has(x));
+  for (;;) {
+    const free = ends.findIndex((e, k) => !done.has(k) && !crossed[k] && opens(e));
+    const k = free >= 0 ? free : ends.findIndex((e, j) => !done.has(j) && opens(e));
+    if (k < 0) break;
+    out.push(cuts[k]);
+    done.add(k);
+    open.add(ends[k][0]);
+    open.add(ends[k][1]);
   }
   cuts.forEach((c, k) => !done.has(k) && out.push(c));
   return out;

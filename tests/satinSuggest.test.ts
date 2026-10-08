@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildRegion, type Region } from '../src/digitize/region';
 import { chordOf, inside, stripsOfAreas } from '../src/digitize/rungs';
-import { areaLoops, covers, suggestSatin } from '../src/digitize/satinSuggest';
+import { areaLoops, bridgeOrder, covers, suggestSatin } from '../src/digitize/satinSuggest';
 import type { Pt } from '../src/digitize/skeleton';
 import { satinRuns, type SatinSettings } from '../src/model/restitch';
 
@@ -471,5 +471,26 @@ describe('Vorschlagen: no column across a hole', () => {
   it('says when a column runs across the hole, its rails the frame either side', () => {
     // Rails on the top and the bottom of the frame: its stitches would cover the hole.
     expect(covers([{ left: [[10, 11], [24, 11]], right: [[10, 23], [24, 23]], rungs: [] }], [hole])).toBe(true);
+  });
+});
+
+describe('Vorschlagen: which cut line opens a hole', () => {
+  it('opens a hole with a cut line no other crosses', () => {
+    // A frame round two holes side by side, the bar between them cut three times: twice crossing
+    // (two cut lines from one junction), once on its own.
+    const outsides: Pt[][] = [[[0, 0], [30, 0], [30, 12], [0, 12], [0, 0]]];
+    const holes: Pt[][] = [
+      [[2, 2], [13, 2], [13, 10], [2, 10], [2, 2]],
+      [[17, 2], [28, 2], [28, 10], [17, 10], [17, 2]],
+    ];
+    const fromEdge: [Pt, Pt] = [[1, 6], [3, 6]];
+    const x: [Pt, Pt] = [[12, 5], [18, 7]];
+    const y: [Pt, Pt] = [[12, 7], [18, 5]];
+    const own: [Pt, Pt] = [[12, 9], [18, 9]];
+    const order = bridgeOrder([fromEdge, x, y, own], outsides, holes);
+    expect(order[0]).toBe(fromEdge);
+    // The second hole is opened by the cut line no other crosses: one crossing it would cut
+    // through the opening, and a part would close round the hole again.
+    expect(order[1]).toBe(own);
   });
 });
