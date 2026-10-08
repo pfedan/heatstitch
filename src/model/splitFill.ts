@@ -203,14 +203,15 @@ export interface Split {
 /**
  * Whether object `o` is a fill that can be split: an area sewn with a fill whose settings Heatstitch
  * knows (drawn, converted or changed here; fills of a stitch file as it came are not yet), not a
- * fill sewn as a line, an empty fill or one with a color blend.
+ * fill sewn as a line, an empty fill, one with a color blend or one loosed from its shape.
  */
 export function canSplit(p: Pattern, o: number): boolean {
   const kinds = stitchKinds(p);
   const obj = sewObjects(p, kinds)[o];
   if (!obj) return false;
   const known = remembered(p, obj);
-  if (!known?.fill || known.asLine || known.outline || known.blendOf || known.fill.deco?.blend || known.fill.pattern === 'none') return false;
+  // Loosed from its shape (changed by hand): its stitches are not sewn anew, so not cut apart either.
+  if (!known?.fill || known.free || known.asLine || known.outline || known.blendOf || known.fill.deco?.blend || known.fill.pattern === 'none') return false;
   if (!analyze(p, obj, kinds, known).fill) return false;
   const form = formOf(p, obj, kinds);
   return !!form && !!wholeArea(form);
