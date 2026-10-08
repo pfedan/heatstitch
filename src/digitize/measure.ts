@@ -9,6 +9,11 @@ import type { Pt } from './skeleton';
  * measured instead of predicted. Cells where `skip` holds for their middle are not counted.
  */
 export function peakDensity(runs: Pt[][], skip?: (x: number, y: number) => boolean): number {
+  return peakCell(runs, skip).density;
+}
+
+/** The densest 1 mm cell of the runs (see peakDensity): its density and its middle. */
+export function peakCell(runs: Pt[][], skip?: (x: number, y: number) => boolean): { density: number; at: Pt } {
   const cells = new Map<number, number>();
   for (const run of runs) {
     for (let i = 1; i < run.length; i++) {
@@ -24,16 +29,15 @@ export function peakDensity(runs: Pt[][], skip?: (x: number, y: number) => boole
       }
     }
   }
-  let max = 0;
+  let best = { density: 0, at: [0, 0] as Pt };
   for (const [key, v] of cells) {
-    if (v <= max) continue;
-    if (skip) {
-      const x = Math.round(key / 100003);
-      if (skip(x + 0.5, key - x * 100003 + 0.5)) continue;
-    }
-    max = v;
+    if (v <= best.density) continue;
+    const x = Math.round(key / 100003);
+    const at: Pt = [x + 0.5, key - x * 100003 + 0.5];
+    if (skip?.(at[0], at[1])) continue;
+    best = { density: v, at };
   }
-  return max;
+  return best;
 }
 
 /**

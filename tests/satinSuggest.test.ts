@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildRegion, type Region } from '../src/digitize/region';
 import { chordOf, inside, stripsOfAreas } from '../src/digitize/rungs';
-import { areaLoops, suggestSatin } from '../src/digitize/satinSuggest';
+import { areaLoops, covers, suggestSatin } from '../src/digitize/satinSuggest';
 import type { Pt } from '../src/digitize/skeleton';
 import { satinRuns, type SatinSettings } from '../src/model/restitch';
 
@@ -457,5 +457,19 @@ describe('Vorschlagen: spikes, frames, leaves and crescents', () => {
     const s = suggestSatin(r, undefined, 7, false, false)!;
     expect(s.ok).toBe(true);
     expect(s.kind).toBe('strokes');
+  });
+});
+
+describe('Vorschlagen: no column across a hole', () => {
+  // A square hole 10 mm wide in a frame 2 mm wide.
+  const hole: Pt[] = [[12, 12], [22, 12], [22, 22], [12, 22], [12, 12]];
+  it('takes a column round the hole as it is', () => {
+    // Along the top of the frame, above the hole.
+    expect(covers([{ left: [[10, 10], [24, 10]], right: [[10, 12], [24, 12]], rungs: [] }], [hole])).toBe(false);
+  });
+
+  it('says when a column runs across the hole, its rails the frame either side', () => {
+    // Rails on the top and the bottom of the frame: its stitches would cover the hole.
+    expect(covers([{ left: [[10, 11], [24, 11]], right: [[10, 23], [24, 23]], rungs: [] }], [hole])).toBe(true);
   });
 });
