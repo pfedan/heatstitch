@@ -57,6 +57,11 @@ export interface FillParams {
   end?: Pt;
   /** Where travel between sections may run; the region itself by default. */
   travel?: Region;
+  /**
+   * Travel keeps off the strips past the ends of sewn rows: an area with parts left out sews in
+   * more sections, and its travel would run round the outline beside them, where it shows.
+   */
+  offRowEnds?: boolean;
   /** Curved rows keep this close to their line (mm); TOLERANCE by default. */
   tolerance?: number;
   /** Straight rows put their needle points on the lines of this motif (embossing, see deco.ts). */
@@ -344,6 +349,11 @@ function entries(f: Frame, s: Section, pull: number): Entry[] {
   ];
 }
 
+/** How far past its ends a sewn row reaches the strip along the outline beside it (mm). */
+const ROW_END_STRIP = 0.35;
+/** How far travel may run along those strips (mm); crossing one takes a cell or two. */
+const ROW_END_RUN = 4;
+
 /** Grid over the region for travel paths: passable cells and cells covered by sewn rows. */
 export class TravelGrid {
   cell: number;
@@ -353,8 +363,12 @@ export class TravelGrid {
   oy: number;
   depth: Float32Array;
   covered: Uint8Array;
+  /** Cells just past the ends of sewn rows (with `offRowEnds`): travel may cross them, not run along them. */
+  rowEnds: Uint8Array;
+  offRowEnds: boolean;
 
-  constructor(r: Region) {
+  constructor(r: Region, offRowEnds = false) {
+    this.offRowEnds = offRowEnds;
     this.cell = Math.max(r.pxMm, 0.25);
     this.ox = r.x0 * r.pxMm;
     this.oy = r.y0 * r.pxMm;
@@ -362,6 +376,7 @@ export class TravelGrid {
     this.gh = Math.ceil((r.h * r.pxMm) / this.cell);
     this.depth = new Float32Array(this.gw * this.gh);
     this.covered = new Uint8Array(this.gw * this.gh);
+    this.rowEnds = new Uint8Array(this.gw * this.gh);
     for (let j = 0; j < this.gh; j++) {
       for (let i = 0; i < this.gw; i++) this.depth[j * this.gw + i] = -sample(r, r.sdf, ...this.center(i, j));
     }
@@ -378,12 +393,26 @@ export class TravelGrid {
     return j * this.gw + i;
   }
 
-  /** Marks the cells under a sewn row (and half a row spacing to each side). */
+  /** Marks the cells under a sewn row (and half a row spacing to each side), and the strips past its ends. */
   cover(a: Pt, b: Pt, halfWidth: number): void {
     const l = dist(a, b);
     const n = Math.max(1, Math.ceil(l / (this.cell / 2)));
     const nx = l > 0 ? -(b[1] - a[1]) / l : 0;
     const ny = l > 0 ? (b[0] - a[0]) / l : 0;
+    if (l > 0 && this.offRowEnds) {
+      const ux = (b[0] - a[0]) / l;
+      const uy = (b[1] - a[1]) / l;
+      const m = Math.ceil(ROW_END_STRIP / (this.cell / 2));
+      for (let k = 1; k <= m; k++) {
+        const t = (ROW_END_STRIP * k) / m;
+        for (const o of [-halfWidth, 0, halfWidth]) {
+          for (const [ex, ey] of [[a[0] - ux * t, a[1] - uy * t], [b[0] + ux * t, b[1] + uy * t]]) {
+            const c = this.index([ex + nx * o, ey + ny * o]);
+            if (c >= 0) this.rowEnds[c] = 1;
+          }
+        }
+      }
+    }
     for (let k = 0; k <= n; k++) {
       const x = a[0] + ((b[0] - a[0]) * k) / n;
       const y = a[1] + ((b[1] - a[1]) * k) / n;
@@ -469,11 +498,14 @@ export class TravelGrid {
     if (from[t] < 0 && s !== t) return null;
     const cells: Pt[] = [];
     let onTop = 0;
+    let alongEnds = 0;
     for (let c = t; c >= 0; c = c === s ? -1 : from[c]) {
       cells.push(this.center(c % this.gw, Math.floor(c / this.gw)));
-      if (avoidSewn && this.covered[c] && !this.near(c, a, b)) onTop += this.cell;
+      if (!avoidSewn || this.near(c, a, b)) continue;
+      if (this.covered[c]) onTop += this.cell;
+      else if (this.rowEnds[c]) alongEnds += this.cell;
     }
-    if (onTop > SEWN_CROSSING) return null;
+    if (onTop > SEWN_CROSSING || alongEnds > ROW_END_RUN) return null;
     cells.reverse();
     return [a, ...simplify(cells, this.cell * 0.6).slice(1, -1), b];
   }
@@ -673,7 +705,7 @@ export function fillRegion(r: Region, p: FillParams, start: Pt, neighbours: numb
   const top = rows(r, r.sdf, f, 0);
   if (!top.length) return null;
   const runs: Pt[][] = [];
-  const grid = new TravelGrid(p.travel ?? r);
+  const grid = new TravelGrid(p.travel ?? r, p.offRowEnds);
   const pos = p.underlay ? sewUnderlay(r, angle, p, start, grid, runs) : start;
   const under = pointCount(runs);
   sewAll(f, sections(r, r.sdf, f, top), p.stitch, p.pull, pos, grid, true, runs, p.end);
@@ -814,7 +846,7 @@ export function sewUnderlay(r: Region, angle: number, p: Pick<FillParams, 'spaci
   const base = p.underArea && p.underArea.pxMm === r.pxMm && p.underArea.w === r.w && p.underArea.h === r.h ? p.underArea : r;
   const area = underlayArea(base, p.underInset ?? UNDERLAY_INSET, p.underInsetShare);
   if (area) {
-    const inner = area === r ? grid : new TravelGrid(area);
+    const inner = area === r ? grid : new TravelGrid(area, grid.offRowEnds);
     for (const a of p.underCross ? [angle - 45, angle + 45] : [angle + 90]) {
       const uf = new Frame(a, us);
       const under = rows(area, area.sdf, uf, 0);
@@ -822,5 +854,6 @@ export function sewUnderlay(r: Region, angle: number, p: Pick<FillParams, 'spaci
     }
   }
   grid.covered.fill(0);
+  grid.rowEnds.fill(0);
   return pos;
 }

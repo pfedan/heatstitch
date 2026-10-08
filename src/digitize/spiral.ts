@@ -46,7 +46,7 @@ export function spiralFill(r: Region, p: FillParams, start: Pt): FillResult | nu
   // The underlay first: the spiral begins on the edge in the direction of where it ends (of the
   // start point without one), and the needle travels there inside the shape.
   const runs: Pt[][] = [];
-  const grid = new TravelGrid(p.travel ?? r);
+  const grid = new TravelGrid(p.travel ?? r, p.offRowEnds);
   const pos = p.underlay ? sewUnderlay(r, -45, p, start, grid, runs) : start;
   const under = pointCount(runs);
   const a0 = Math.atan2(pos[1] - cy, pos[0] - cx) / (2 * Math.PI);
