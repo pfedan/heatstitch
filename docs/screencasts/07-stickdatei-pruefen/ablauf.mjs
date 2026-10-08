@@ -127,7 +127,7 @@ export default {
       textEn: 'Before you stitch a finished embroidery file, check whether it will turn out well on your fabric. I drag this patch into the window: a star and the lettering Heat Stitch.',
       run: async (s) => {
         await s.move([960, 300], 0.1);
-        await s.wait(2.6);
+        await s.wait(4.4);
         await dragFileIn(s, [1915, 560], [960, 560]);
         await until(s, async () => (await btn(s, 'patch.pes').count()) > 0, 'patch.pes opens');
         await s.move(REST, 1.2);
@@ -149,12 +149,12 @@ export default {
         s.keyCap(null);
         await until(s, async () => (await btn(s, /^Dichte /).count()) > 0, 'density check');
         await s.move([1500, 960], 1.0);
-        await s.wait(1.6);
+        await s.wait(3.4);
         await s.zoom([1190, 1048, 0, 0], 1.8);
         await s.label('Garnlänge', [1070, 1024, 250, 44], 'above');
         await s.move([1080, 1050], 0.9);
         await s.wait(0.6);
-        await s.move([1300, 1050], 1.6);
+        await s.move([1300, 1050], 2.4);
         await s.wait(0.8);
         s.unlabel();
         s.zoomOut();
@@ -172,7 +172,7 @@ export default {
         await s.wait(2.4);
         await s.move(verdict(s), 0.8);
         await s.label('Mit Vorsicht', verdict(s), 'below');
-        await s.wait(2.6);
+        await s.wait(3.6);
         s.unlabel();
       },
     },
@@ -182,21 +182,23 @@ export default {
       textEn: 'Below, every fabric shows its verdict. Yellow means caution, red means risky. A click checks for that fabric. On knit it gets risky, there are critical spots here. My patch goes on woven fabric, so back again.',
       run: async (s) => {
         await s.zoom([1760, 200, 0, 0], 1.7);
+        await s.move([1700, 140], 0.9);
+        await s.wait(1.6);
         await s.move(fabric(s, 'Jeans'), 0.9);
         await s.label('Vorsicht', fabric(s, 'Jeans'), 'below');
-        await s.wait(1.6);
+        await s.wait(1.8);
         await s.move(fabric(s, 'Fleece'), 0.8);
         await s.label('riskant', fabric(s, 'Fleece'), 'below');
         await s.wait(1.6);
         s.unlabel();
-        await s.click(fabric(s, 'Strick'), { move: 0.8, before: 0.6 });
+        await s.click(fabric(s, 'Strick'), { move: 0.8, before: 0.9 });
         await until(s, async () => /Strick/.test(await verdict(s).innerText()), 'verdict for Strick');
         await s.move([1700, 104], 0.8);
         await s.label('Riskant auf Strick', verdict(s), 'below');
         s.zoomOut();
-        await s.wait(4.2);
+        await s.wait(6.4);
         s.unlabel();
-        await s.click(fabric(s, 'Webware'), { move: 0.9, before: 0.8 });
+        await s.click(fabric(s, 'Webware'), { move: 0.9, before: 1.2 });
         await until(s, async () => /Webware/.test(await verdict(s).innerText()), 'verdict for Webware');
         await s.move(REST, 1.0);
         await s.wait(0.6);
@@ -222,7 +224,7 @@ export default {
         s.unlabel();
         await s.move([1250, 560], 1.2);
         await s.zoom([640, 690, 0, 0], 1.6);
-        await s.wait(5.6);
+        await s.wait(4.0);
         s.zoomOut();
         await s.move([1760, 400], 1.0);
         await scrollAside(s, -3000, 0.9);
@@ -242,7 +244,7 @@ export default {
         s.unlabel();
         s.zoomOut();
         await s.click(null, { before: 0.4, after: 0.8 });
-        await s.wait(1.2);
+        await s.wait(2.2);
         await s.move([800, 470], 1.0);
         await wheelZoom(s, 6, 0.3);
         await s.wait(0.6);
