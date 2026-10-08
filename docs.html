@@ -27,7 +27,7 @@
     <meta name="twitter:image:alt" content="An embroidered cat in heatstitch, shown three ways: realistic threads, sewing order and density heatmap" />
   </head>
   <body>
-    <header class="doc-top">
+    <header class="doc-top" id="top">
       <a class="doc-brand" href="./">
         <img src="/favicon.svg" alt="" width="26" height="26" />
         <span>heatstitch</span>
@@ -1642,6 +1642,23 @@
         </div>
       </article>
     </main>
+
+    <!-- On narrow screens the contents are one tap away: a button at the thumb opens a sheet with the sections (src/docs.ts fills it). -->
+    <button type="button" class="toc-fab" id="toc-open" aria-expanded="false" aria-controls="toc-sheet" hidden>
+      <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="M3 5h14M3 10h14M3 15h9" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none" /></svg>
+      <span class="toc-fab-label"><span lang="de">Inhalt</span><span lang="en">Contents</span></span>
+      <span class="toc-fab-here" id="toc-here"></span>
+    </button>
+    <div class="toc-sheet" id="toc-sheet" hidden>
+      <div class="toc-sheet-panel" role="dialog" aria-modal="true" aria-labelledby="toc-sheet-title">
+        <div class="toc-sheet-head">
+          <b id="toc-sheet-title"><span lang="de">Inhalt</span><span lang="en">Contents</span></b>
+          <button type="button" class="toc-sheet-close" id="toc-close"><span lang="de">Schließen</span><span lang="en">Close</span></button>
+        </div>
+        <nav class="toc-sheet-nav" id="toc-sheet-nav"></nav>
+        <a class="toc-sheet-top" href="#top"><span lang="de">Nach oben</span><span lang="en">To the top</span></a>
+      </div>
+    </div>
     <script type="module" src="/src/docs.ts"></script>
   </body>
 </html>

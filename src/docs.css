@@ -78,6 +78,27 @@ html[data-lang='en'] [lang='de'] {
 .doc-open {
   font-weight: 500;
   text-decoration: none;
+  white-space: nowrap;
+}
+
+/* Phones: a compact header, and room above the contents button at the end of the text. */
+@media (max-width: 480px) {
+  .doc-top {
+    padding: 8px 12px;
+    gap: 8px;
+  }
+
+  .doc-brand {
+    font-size: 16px;
+  }
+
+  .doc-open {
+    font-size: 14px;
+  }
+
+  .doc {
+    padding-bottom: 96px;
+  }
 }
 
 select {
@@ -364,4 +385,133 @@ figure img[src*='save-'] {
 
 .font-table td:nth-child(3) {
   white-space: nowrap;
+}
+
+/* Narrow screens: the contents are one tap away, a button at the thumb opens a sheet of the sections. */
+.toc-fab {
+  position: fixed;
+  right: 16px;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100vw - 32px);
+  padding: 10px 16px 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  box-shadow: 0 4px 18px rgb(0 0 0 / 0.22);
+  cursor: pointer;
+}
+
+.toc-fab[hidden] {
+  display: none;
+}
+
+.toc-fab-here {
+  max-width: 40vw;
+  overflow: hidden;
+  color: var(--muted);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toc-fab-here:empty {
+  display: none;
+}
+
+.toc-fab-here::before {
+  content: '· ';
+}
+
+.toc-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: flex-end;
+  background: rgb(0 0 0 / 0.45);
+}
+
+.toc-sheet[hidden] {
+  display: none;
+}
+
+.toc-sheet-panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-height: min(80vh, 640px);
+  padding: 8px 8px calc(12px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--line);
+  border-radius: 16px 16px 0 0;
+  background: var(--panel);
+  box-shadow: 0 -8px 30px rgb(0 0 0 / 0.3);
+}
+
+.toc-sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px 8px 12px;
+}
+
+.toc-sheet-close {
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.toc-sheet-nav {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  overflow-y: auto;
+  padding: 0 4px;
+}
+
+.toc-sheet-nav a {
+  display: block;
+  padding: 8px 10px;
+  border-radius: 8px;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.3;
+  text-decoration: none;
+}
+
+.toc-sheet-nav a.active {
+  background: var(--bg);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.toc-sheet-top {
+  margin: 8px 12px 0;
+  font-size: 14px;
+}
+
+@media (max-width: 340px) {
+  .toc-sheet-nav {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* On wide screens the rail beside the text does this. */
+@media (min-width: 1100px) {
+  .toc-fab,
+  .toc-sheet {
+    display: none;
+  }
 }
