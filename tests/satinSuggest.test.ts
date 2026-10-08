@@ -58,6 +58,21 @@ describe('Vorschlagen: satin for a drawing of lines', () => {
     expect(strips.length).toBe(2);
   });
 
+  it('squares a line across the bar where the stem of a T joins it', () => {
+    // Where the stem's cut makes its side, the bar's stitches would otherwise fan toward it.
+    const { s } = columns(region(any(near([10, 10], [50, 10], 3), near([22, 10], [22, 40], 3))));
+    expect(s.ok).toBe(true);
+    expect(s.lines.some((l) => Math.abs(mid(l)[0] - 22) < 0.5 && Math.abs(l[0][0] - l[1][0]) < 0.3 && Math.abs(mid(l)[1] - 10) < 1)).toBe(true);
+  });
+
+  it('keeps all four arms of an upright cross', () => {
+    // Even pixel widths, straight up: thinned row by row the upper arm used to be lost.
+    const { s, strips } = columns(region(any(near([30, 5], [30, 50], 4), near([8, 20], [52, 20], 4))));
+    expect(s.ok).toBe(true);
+    expect(s.cuts.length).toBe(2);
+    expect(strips.length).toBe(3);
+  });
+
   it('opens a ring once', () => {
     const ring = (x: number, y: number) => Math.abs(Math.hypot(x - 30, y - 30) - 15) < 1;
     const { s, strips } = columns(region(ring));
