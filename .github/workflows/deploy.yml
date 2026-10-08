@@ -155,7 +155,10 @@ jobs:
 
   # Fork pull requests only get a read-only token here; fork-preview.yml publishes theirs.
   preview:
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && !cancelled() && !failure()
+    # A build cancelled by a newer run of the same PR leaves no site to publish; on close there is no build.
+    if: >-
+      github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository &&
+      !cancelled() && (needs.build.result == 'success' || github.event.action == 'closed')
     needs: build
     runs-on: ubuntu-latest
     permissions:
