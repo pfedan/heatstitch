@@ -162,7 +162,8 @@ export function cornerCuts(outsides: Pt[][], holes: Pt[][], material: (q: Pt) =>
       tipsOf.push(tips.map((x) => x.p));
     });
   }
-  for (const ring of holes) all.push(...bends(ring, material, true));
+  const inHoles = new Set<Bend>();
+  for (const ring of holes) for (const b of bends(ring, material, true)) all.push(b), inHoles.add(b);
   // Miters: an outer corner and the inner corner facing it across the band.
   const outer = all.filter((b) => b.convex && b.deg >= 60);
   const inner = all.filter((b) => !b.convex && !used.has(b));
@@ -189,7 +190,41 @@ export function cornerCuts(outsides: Pt[][], holes: Pt[][], material: (q: Pt) =>
     cuts.push([add(a, d, -0.3), add(b, d, 0.3)]);
     miters++;
   }
+  // A sharp corner of a hole whose outer corner is round (a ring drawn with a brush): the miter
+  // runs along the inner corner's bisector to where the outline turns round it. (An open line
+  // turning a corner keeps one column, with a line across on the bisector; see planStrokes.)
+  for (const n of inner) {
+    if (!inHoles.has(n) || used.has(n) || n.deg < 60 || n.sharp < 0.7 * n.deg) continue;
+    const d = norm(n.into);
+    let t = 0.1;
+    while (t < 1.5 * max && material(add(n.p, d, t))) t += 0.05;
+    if (t >= 1.5 * max || t < 0.4) continue;
+    const e = add(n.p, d, t);
+    if (!through(material, n.p, add(n.p, d, t - 0.1)) || !roundCorner([...outsides, ...holes], material, e, Math.max(1, t))) continue;
+    used.add(n);
+    cuts.push([add(n.p, d, -0.45), add(e, d, 0.3)]);
+    miters++;
+  }
   return { cuts, spikes: tipsOf.length, miters, tips: tipsOf };
+}
+
+/** Whether the outline turns round the material by a corner's worth near q, over `arm` either side. */
+function roundCorner(rings: Pt[][], material: (q: Pt) => boolean, q: Pt, arm: number): boolean {
+  let best = { d: Infinity, r: -1, i: -1 };
+  rings.forEach((ring, r) => ring.forEach((p, i) => {
+    const d = dist(p, q);
+    if (d < best.d) best = { d, r, i };
+  }));
+  if (best.r < 0 || best.d > 0.3) return false;
+  const ring = rings[best.r];
+  const n = ring.length;
+  const at = (k: number) => ring[((k % n) + n) % n];
+  let [a, b, la, lb] = [best.i, best.i, 0, 0];
+  while (la < arm && best.i - a < n / 2) la += dist(at(a), at(--a));
+  while (lb < arm && b - best.i < n / 2) lb += dist(at(b), at(++b));
+  const turn = deg(sub(q, at(a)), sub(at(b), q));
+  // Round the material: the chord between the arms' ends runs through it.
+  return turn >= BEND_DEG && material(add(at(a), sub(at(b), at(a)), 0.5));
 }
 
 /**

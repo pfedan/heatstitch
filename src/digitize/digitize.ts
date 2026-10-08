@@ -424,11 +424,21 @@ function sewOne(obj: Obj, pos: Pt, o: DigitizeOptions, satin: SatinParams, angle
   let out: Pt[][] = [];
   // As columns cut at the junctions (see satinSuggest), when they hold: where two columns meet
   // at a cut line they overlap a little on purpose (not counted).
+  let retried = false;
   const sections = (graph?: Graph): Pt[][] => {
     const runs = sewSections(obj, o, satin, graph);
     const cuts = obj.info.columns?.[0]?.split?.cuts ?? [];
     const seam = (x: number, y: number) => cuts.some(([a, b]) => toSegment([x, y], a, b) < 0.9);
     if (runs.length && satinOk(runs, obj.region, o, seam)) return runs;
+    // A shape whose fan piles up at its corner: once more with a column where one fits.
+    if (!graph && obj.plan?.ok && obj.plan.kind !== 'strokes' && !retried) {
+      retried = true;
+      const plan = suggestSatin(obj.region, obj.graph ?? undefined, o.satinMax, true);
+      if (plan?.ok && JSON.stringify(plan) !== JSON.stringify(obj.plan)) {
+        obj.plan = plan;
+        return sections();
+      }
+    }
     delete obj.info.columns;
     delete obj.info.satin;
     delete obj.info.satinShape;
