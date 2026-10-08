@@ -258,7 +258,10 @@ shots.cat = async (lang) => {
   await example(page, 'cat');
   await realistic(page, true);
   await tab(page, 'design');
-  await page.evaluate(() => { const r = document.querySelector('#player-pos'); r.value = Math.round(r.max * 0.62); r.dispatchEvent(new Event('input', { bubbles: true })); });
+  // fully stitched and without marks: the finished patch, not a half-sewn cat (Daniel, review 2026-10-08)
+  await fit(page);
+  await page.keyboard.press('h');
+  await page.evaluate(() => document.activeElement?.blur());
   await page.waitForTimeout(800);
   await sidebarTop(page);
   await mouseAway(page);
@@ -402,16 +405,23 @@ shots.merge = async (lang) => {
 shots.stitches = async (lang) => {
   const { page, close } = await boot(lang);
   await patchFlow(page, 3);
-  await clickObject(page, (await starParts(page))[0].i);
+  // the whole star: its two recognized parts combined first (as in the merge shot), so nothing is faded
+  const parts = await starParts(page);
+  await clickObject(page, parts[0].i);
+  for (const p of parts.slice(1)) await clickObject(page, p.i, true);
+  await cmd(page, T[lang].merge, 1500);
   await level(page, 'stitches');
   await page.waitForTimeout(400);
   const b = await stageBox(page);
   await zoomTo(page, b.x + 325, b.y + 240, 1);
+  await wheelAt(page, b.x + b.width / 2, b.y + b.height / 2, 2); // two steps closer
+  await page.waitForTimeout(500);
   const pt = await findNeedlePoint(page, b.width / 2, b.height / 2);
   if (!pt) throw new Error('no needle point found');
   await page.mouse.move(pt.x, pt.y);
   await page.mouse.down();
-  for (let i = 1; i <= 6; i++) { await page.mouse.move(pt.x + i * 3, pt.y + i * 2); await page.waitForTimeout(60); }
+  // a shift one can see: about 2 mm sideways, the row bends visibly
+  for (let i = 1; i <= 12; i++) { await page.mouse.move(pt.x + i * 7, pt.y + i * 3); await page.waitForTimeout(50); }
   await page.mouse.up();
   await page.waitForTimeout(800);
   await mouseAway(page);
@@ -730,6 +740,22 @@ shots.draw = async (lang) => {
   await clickAt(page, cx + 105, cy - 12);
   await clickAt(page, cx - 105, cy - 12);
   await page.waitForTimeout(1200);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(400);
+  // the roof in its own thread, a red (Daniel, review 2026-10-08)
+  await clickObject(page, 1); // the roof
+  await page.locator('#object-body .thread-sw').first().click();
+  await page.waitForTimeout(600);
+  // the first clearly red swatch of the grid, whatever the catalog names it
+  const red = await page.evaluate(() => {
+    const all = [...document.querySelectorAll('.color-pop .color-grid button.pick')];
+    const i = all.findIndex((b) => { const m = b.style.background.match(/rgb\((\d+), (\d+), (\d+)\)/); return m && +m[1] > 170 && +m[2] < 70 && +m[3] < 70; });
+    if (i >= 0) all[i].click();
+    return i >= 0 ? all[i].title : `none of ${all.length}: ${all.slice(0, 5).map((b) => b.title).join(' | ')}`;
+  });
+  console.log('roof thread', red);
+  await page.waitForTimeout(1500);
+  await level(page, 'shape');
   // the sun top right
   await page.click('[data-draw="ellipse"]');
   await drag(page, cx + 150, cy - 150, cx + 205, cy - 95);
