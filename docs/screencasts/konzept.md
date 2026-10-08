@@ -224,7 +224,7 @@ Die App muss gebaut und mit `npm run preview` erreichbar sein.
 - Tasten zeigt die App auf dem Mac als ⌘ und ⇧. Die Aufnahme meldet der Seite deshalb Windows,
   damit jedes Video „Strg+K“ und „Umschalt“ zeigt, egal auf welchem Rechner es entsteht.
 - Gestalten und Prüfen sind Optionsfelder (`getByRole('radio')`), Objekt und Stickmuster rechts
-  sind Reiter (`getByRole('tab')`), das Auge der Ansichtsleiste ist der Knopf „Stiche“. Der Knopf
+  sind Reiter (`getByRole('tab')`), das Auge ist der erste Knopf der Leiste `getByRole('toolbar', { name: 'Ansicht' })`; sein Name folgt der Darstellung („Stiche“, „Realistisch“). Der Knopf
   des Stickmuster-Menüs trägt den Namen des offenen Stickmusters.
 - Die Hinweise beim Überfahren (`.tip`) blendet die Aufnahme per Stil aus, außer in Szenen,
   die einen Hinweis ausdrücklich zeigen.

@@ -164,7 +164,8 @@ export default {
         await s.label('Breadcrumb', crumb, 'below');
         await s.wait(3.0);
         s.unlabel();
-        const eye = s.page.getByRole('button', { name: 'Stiche', exact: true });
+        // The eye button is named after the look that is on (Stiche, Realistisch …).
+        const eye = s.page.getByRole('toolbar', { name: 'Ansicht' }).getByRole('button').first();
         await s.zoom([1430, 1000, 0, 0], 1.6);
         await s.move(eye, 1.0);
         await s.label('Ansichtsleiste', [1276, 984, 314, 36], 'above');
