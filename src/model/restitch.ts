@@ -12,6 +12,7 @@ import { isEcho } from '../digitize/echo';
 import { isShadow } from './shadow';
 import { coverage } from '../digitize/measure';
 import { expandRegion, outline, sample, signedField, type Region } from '../digitize/region';
+import { withSplit } from '../digitize/satinSuggest';
 import { runStitch, TOLERANCE } from '../digitize/run';
 import { eStitches, fringedColumn, pairs, satinStitches, underlayOf, type Column, type SatinParams, type UnderInset, type UnderlayKind } from '../digitize/satin';
 import { columnFromRungs, cumulative, inside, insideOf, pointAt, project, reversedRungs, stripOfLoop, tidyRungs, type Arc, type Rung } from '../digitize/rungs';
@@ -1022,10 +1023,11 @@ export function rememberShapes(
     // A satin from a vector file keeps its shape: its rails lie on the shape's edge.
     if (!shape && f?.form) return remember(p, o, { region: null, form: f.form, parts: one('satin') });
     // A satin made here (a narrow area): its rails, read from its fresh stitches, so it is known as
-    // made here and not recognized again from its stitches later.
+    // made here and not recognized again from its stitches later; and the area it was made for.
     if (!shape) {
       const { read: _read, ...known } = keepShape(p, o, (kinds ??= stitchKinds(p)));
-      return remember(p, o, { ...known, parts: one('satin') });
+      const area = f?.satinShape ? regionFrom(f.satinShape) : null;
+      return remember(p, o, { ...known, ...(area ? { shape: area } : {}), parts: one('satin') });
     }
     const region = regionFrom(shape);
     if (region) remember(p, o, { region, fill: { ...shape.fill }, parts: one('fill'), ...(f?.form ? { form: f.form, ...(f.knockout ? { knockout: true } : {}) } : {}) });
@@ -1777,6 +1779,55 @@ export function railsArea(rails: Rails[]): Region | null {
   return unionRegion(parts);
 }
 
+/**
+ * Whether `rings` (the edge of a satin's shape or of its sections) still run along `columns`: nine
+ * in ten of their points within a millimetre of the columns' area. Not so once a part was cut away
+ * or the satin was drawn anew; that edge is then an old one, and the area is read from the rails.
+ */
+export function edgeAlong(rings: Pt[][], columns: Rails[]): boolean {
+  const pts = rings.flat();
+  const area = pts.length ? railsArea(columns) : null;
+  if (!area) return false;
+  const step = Math.max(1, Math.floor(pts.length / 2000));
+  let n = 0;
+  let near = 0;
+  for (let i = 0; i < pts.length; i += step, n++) if (sample(area, area.sdfBase, pts[i][0], pts[i][1]) <= 1) near++;
+  return near >= n * 0.9;
+}
+
+/**
+ * Every satin in sections of its area, wherever it came from (a fill, a file, an image): the area
+ * its shape, or read from the rails of its one part. A column cut across (see Rails.cuts) is
+ * opened as its sections, so its cut lines are free ones like any other, to move, draw or take
+ * away. The stitches change only when something does. Without an area (several parts read from
+ * stitches) the columns as they are.
+ */
+export function sectionView(columns: Rails[][], shape: Region | undefined): Rails[][] {
+  if (!columns.length) return columns;
+  const cut = columns.map((part) =>
+    part.some((c) => c.cuts?.length && !c.spans?.length) ? part.flatMap((c) => (c.cuts?.length && !c.spans?.length ? sectionsOf(c).map((sec) => ({ ...sec, chain: c.chain ?? 0 })) : [c])) : part,
+  );
+  const known = (cols: Rails[][]) => cols.some((part) => part[0]?.split);
+  // Sections of an area the satin no longer is (a part cut away, say): read anew.
+  if (cut.some((part) => part.some((c) => c.split && !edgeAlong([...c.split.outlines, ...c.split.holes], part)))) {
+    return sectionView(
+      columns.map((part) => part.map(({ split, ...c }) => c)),
+      shape,
+    );
+  }
+  if (shape && edgeAlong(outline(shape), cut.flat())) {
+    for (const cols of [cut, columns]) {
+      const split = withSplit(cols, shape);
+      if (known(split)) return split;
+    }
+  }
+  // No shape, or the columns do not lie in it: the area of the part with the most columns, read
+  // from its own rails (several parts read from stitches: the others as they are).
+  const k = cut.reduce((best, part, j) => (part.length > cut[best].length ? j : best), 0);
+  const area = railsArea(cut[k]);
+  return area ? withSplit(cut, area, k) : columns;
+}
+
 /** The area the stitches of `parts` cover: drawn thick enough that satin stitches close into it. */
 function coveredBy(p: Pattern, parts: Part[]): Region | null {
   const segs: number[] = [];
@@ -2255,6 +2306,19 @@ export function satinRuns(rails: Rails[], s: SatinSettings): Pt[][] {
   // Chains are cut apart from what comes before and after them, however near (the dot of an i and its stem).
   runs.forEach((run, k) => k && (chains.has(run) || chains.has(runs[k - 1])) && trimBefore.add(run));
   return runs;
+}
+
+/**
+ * The stitch pairs of a column as it is sewn (each section on its own, with the spacing along it),
+ * to show how it will look before it is sewn. Not turned or mirrored: only where the stitches lie.
+ */
+export function previewPairs(r: Rails, s: SatinSettings): [Pt, Pt][][] {
+  const sp = satinParams(s);
+  const { along } = sewing(s);
+  return sectionsOf(r).map((sec) => {
+    const col = columnOf(sec);
+    return pairs(col, along(col, sec, sp));
+  });
 }
 
 /** Runs of satin with a trim before them wherever they start (asked for, not only for a long way). */

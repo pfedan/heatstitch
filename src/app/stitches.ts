@@ -47,6 +47,8 @@ export interface StitchesApp {
   readonly suggestLines: () => void;
   readonly sewLine: (o: number, path: Form | null, st: PathStitch | null, final: boolean) => boolean;
   readonly sewLineAgain: (o: number) => void;
+  /** Stichart Satin on one fill as R and Vorschlagen do it; false when the shape is not lines (see bindRungs). */
+  readonly convertToSatin: (o: number) => boolean;
   readonly toggleGuides: () => void;
   readonly togglePoints: () => void;
   readonly toggleRungs: () => void;
@@ -388,6 +390,8 @@ export function bindStitches(app: StitchesApp) {
         if (r?.starts.length) app.layers.say(t('stitch.lineFilled'));
         return;
       }
+      // One fill to satin: cut and crossed as by hand (Vorschlagen), the same as with R.
+      if (to === 'satin' && one >= 0 && app.convertToSatin(one)) return;
       const s = convertSettings(to, stitchInfo(p, app.seq(p)));
       if (!s) return;
       const q = app.seq(p);
