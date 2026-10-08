@@ -176,6 +176,8 @@ function hide(): void {
   byTouch = false;
   tip.classList.remove('on');
   tip.hidden = true;
+  // Nothing stays in the hidden box: a text of the old language would otherwise outlive a switch.
+  tip.replaceChildren();
 }
 
 function schedule(el: HTMLElement, ms: number): void {
@@ -305,5 +307,5 @@ export function initTooltips(): void {
   window.addEventListener('resize', hide);
   window.addEventListener('blur', hide);
   // The titles are written anew in the other language and moved again; an open one follows.
-  onLangChange(() => queueMicrotask(() => current && render(current)));
+  onLangChange(() => queueMicrotask(() => (current?.isConnected ? render(current) : hide())));
 }
