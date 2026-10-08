@@ -4,7 +4,7 @@ Schlüssel `13-form-und-einzelne-stiche`, Demodatei `cat-60mm.pes` („Katze“ 
 
 Das ganze Video arbeitet an einem Objekt: der linken Pfote der Katze (Creme, „Füllung 15“, 212 Stiche). Sie ist aus den Stichen erkannt; ihr Umriss hat 34 Knoten und oben eine kleine Schlaufe, die die Erkennung hineingelegt hat. Ohne die Schlaufe hat sie 32 Knoten, Vereinfachen macht daraus 23, und die Pfote wird sauber neu gestickt.
 
-Aufgenommen mit main 8b21718: Ausdünnen legt die gewählten Reihen einer Füllung gleichmäßig weiter (#203, #207); die Pfote hat danach 188 statt 208 Stiche. Etwa 2:41 lang.
+Aufgenommen mit main 8b21718: Ausdünnen legt die gewählten Reihen einer Füllung gleichmäßig weiter (#203, #207); die Pfote hat danach 188 statt 208 Stiche. Etwa 2:38 lang.
 
 ## Szene 1
 
@@ -28,7 +28,7 @@ Aufgenommen mit main 8b21718: Ausdünnen legt die gewählten Reihen einer Füllu
 
 **Bild:** Heranzoomen auf die kleine Schlaufe oben an der Pfote. Klick auf ihren Knoten, Tastenkappe „Entf“. Die Schlaufe ist weg, die Pfote wird neu gestickt, die Leiste zeigt 32 Knoten.
 
-**Sprechtext:** [curious] Hier hat die Erkennung eine kleine Schlaufe gemacht. Ich klicke den Knoten an und drücke Entf. [satisfied] Weg ist sie, und die Pfote wird gleich neu gestickt.
+**Sprechtext:** [curious] Hier hat die Erkennung eine kleine Schlaufe gemacht. Ich klicke den Knoten an und drücke Entfernen. [satisfied] Weg ist sie, und die Pfote wird gleich neu gestickt.
 
 ## Szene 5
 
@@ -58,7 +58,7 @@ Aufgenommen mit main 8b21718: Ausdünnen legt die gewählten Reihen einer Füllu
 
 **Bild:** Doppelklick auf einen Stich, ein neuer Einstich erscheint. Tastenkappe „Entf“, er ist wieder weg, Meldung „1 Einstich gelöscht“.
 
-**Sprechtext:** Ein Doppelklick auf einen Stich setzt dort einen neuen Einstich. Mit Entf löschst du den gewählten wieder.
+**Sprechtext:** Ein Doppelklick auf einen Stich setzt dort einen neuen Einstich. Mit Entfernen löschst du den gewählten wieder.
 
 ## Szene 10
 
@@ -70,4 +70,4 @@ Aufgenommen mit main 8b21718: Ausdünnen legt die gewählten Reihen einer Füllu
 
 **Bild:** Heranzoomen rechts auf die Karte Objekt, Etikett an „Änderungen von Hand“. Tastenkappe „Esc“, zurück zu den Objekten. Der Zeiger fährt links zu Stiche von Hand in der Werkzeugleiste, Etikett, Tastenkappe „E“. Dann Abspann.
 
-**Sprechtext:** Rechts zählt die Karte deine Änderungen von Hand. Esc bringt dich zurück zu den Objekten. Und links in der Werkzeugleiste öffnet Stiche von Hand, Taste E, die Stiche jedes Objekts direkt. [warm] So wird jedes Detail genau so, wie du es willst.
+**Sprechtext:** Rechts zählt die Karte deine Änderungen von Hand. Escape bringt dich zurück zu den Objekten. Und links in der Werkzeugleiste öffnet Stiche von Hand, Taste E, die Stiche jedes Objekts direkt. [warm] So wird jedes Detail genau so, wie du es willst.

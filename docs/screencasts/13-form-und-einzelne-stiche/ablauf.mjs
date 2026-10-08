@@ -107,8 +107,8 @@ export default {
       },
     },
     {
-      say: '[curious] Hier hat die Erkennung eine kleine Schlaufe gemacht. Ich klicke den Knoten an und drücke Entf. [satisfied] Weg ist sie, und die Pfote wird gleich neu gestickt.',
-      text: 'Hier hat die Erkennung eine kleine Schlaufe gemacht. Ich klicke den Knoten an und drücke Entf. Weg ist sie, und die Pfote wird gleich neu gestickt.',
+      say: '[curious] Hier hat die Erkennung eine kleine Schlaufe gemacht. Ich klicke den Knoten an und drücke Entfernen. [satisfied] Weg ist sie, und die Pfote wird gleich neu gestickt.',
+      text: 'Hier hat die Erkennung eine kleine Schlaufe gemacht. Ich klicke den Knoten an und drücke Entfernen. Weg ist sie, und die Pfote wird gleich neu gestickt.',
       textEn: 'Here the detection made a small loop. I click the node and press Delete. It is gone, and the paw is stitched anew right away.',
       run: async (s) => {
         await s.zoom([LOOP[0] - 20, LOOP[1] + 20, 0, 0], 1.8);
@@ -191,8 +191,8 @@ export default {
       },
     },
     {
-      say: 'Ein Doppelklick auf einen Stich setzt dort einen neuen Einstich. Mit Entf löschst du den gewählten wieder.',
-      text: 'Ein Doppelklick auf einen Stich setzt dort einen neuen Einstich. Mit Entf löschst du den gewählten wieder.',
+      say: 'Ein Doppelklick auf einen Stich setzt dort einen neuen Einstich. Mit Entfernen löschst du den gewählten wieder.',
+      text: 'Ein Doppelklick auf einen Stich setzt dort einen neuen Einstich. Mit Entfernen löschst du den gewählten wieder.',
       textEn: 'A double click on a stitch sets a new needle point there. With Delete you remove the selected one again.',
       run: async (s) => {
         await doubleClick(s, ON_STITCH);
@@ -224,8 +224,8 @@ export default {
       },
     },
     {
-      say: 'Rechts zählt die Karte deine Änderungen von Hand. Esc bringt dich zurück zu den Objekten. Und links in der Werkzeugleiste öffnet Stiche von Hand, Taste E, die Stiche jedes Objekts direkt. [warm] So wird jedes Detail genau so, wie du es willst.',
-      text: 'Rechts zählt die Karte deine Änderungen von Hand. Esc bringt dich zurück zu den Objekten. Und links in der Werkzeugleiste öffnet Stiche von Hand, Taste E, die Stiche jedes Objekts direkt. So wird jedes Detail genau so, wie du es willst.',
+      say: 'Rechts zählt die Karte deine Änderungen von Hand. Escape bringt dich zurück zu den Objekten. Und links in der Werkzeugleiste öffnet Stiche von Hand, Taste E, die Stiche jedes Objekts direkt. [warm] So wird jedes Detail genau so, wie du es willst.',
+      text: 'Rechts zählt die Karte deine Änderungen von Hand. Escape bringt dich zurück zu den Objekten. Und links in der Werkzeugleiste öffnet Stiche von Hand, Taste E, die Stiche jedes Objekts direkt. So wird jedes Detail genau so, wie du es willst.',
       textEn: 'On the right, the card counts your changes by hand. Esc takes you back to the objects. And on the left in the toolbar, Stitches by hand, key E, opens the stitches of any object directly. That way every detail turns out exactly as you want it.',
       run: async (s) => {
         const hand = card(s).getByText(/Änderung(en)? von Hand/).first();
