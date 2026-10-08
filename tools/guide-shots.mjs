@@ -240,8 +240,8 @@ async function propose(page, lang) {
 const shots = {};
 
 const T = {
-  de: { corners: 'Querlinien an Ecken vorschlagen', sections: 'Abschnitte an spitzen Ecken vorschlagen', merge: 'Zu einem Objekt zusammenfassen', subtract: 'Obere Form ausschneiden', guide: 'Als Hilfslinie behalten', all: 'Alle auswählen', apply: 'Ausgewählte übernehmen', uncut: 'Ohne Schnitt', covering: 'Deckend', swirl: 'Wirbel', border: 'Umrandung', ready: 'Bereit zum Sticken', cutTool: 'Zerteilen', newDesign: 'Neues leeres Stickmuster' },
-  en: { corners: 'Suggest rungs at corners', sections: 'Suggest sections at sharp corners', merge: 'Combine into one object', subtract: 'Cut out the top shape', guide: 'Keep as a guide', all: 'Select all', apply: 'Apply selected', uncut: 'Not trimmed', covering: 'Covering', swirl: 'Swirl', border: 'Border', ready: 'Ready to stitch', cutTool: 'Cut apart', newDesign: 'New empty design' },
+  de: { suggest: 'Trennlinien und Querlinien vorschlagen', merge: 'Zu einem Objekt zusammenfassen', subtract: 'Obere Form ausschneiden', guide: 'Als Hilfslinie behalten', all: 'Alle auswählen', apply: 'Ausgewählte übernehmen', uncut: 'Ohne Schnitt', covering: 'Deckend', swirl: 'Wirbel', border: 'Umrandung', ready: 'Bereit zum Sticken', cutTool: 'Zerteilen', newDesign: 'Neues leeres Stickmuster' },
+  en: { suggest: 'Suggest cut lines and lines across', merge: 'Combine into one object', subtract: 'Cut out the top shape', guide: 'Keep as a guide', all: 'Select all', apply: 'Apply selected', uncut: 'Not trimmed', covering: 'Covering', swirl: 'Swirl', border: 'Border', ready: 'Ready to stitch', cutTool: 'Cut apart', newDesign: 'New empty design' },
 };
 
 // 0. start: the start page "Was möchtest du sticken?"
@@ -372,7 +372,8 @@ shots.satin = async (lang) => {
   const { page, close } = await boot(lang);
   await patchFlow(page, 4);
   await selectPatchS(page);
-  await rungTool(page, T[lang].corners);
+  await page.keyboard.press('r');
+  await page.waitForTimeout(1500);
   // zoom onto the S (left of STITCH)
   const b = await stageBox(page);
   await zoomTo(page, b.x + 212, b.y + 538, 7);
@@ -766,11 +767,11 @@ shots.sections = async () => {
   const { page, close } = await boot('de');
   await patchFlow(page, 4);
   await selectPatchS(page);
-  await rungTool(page, T.de.sections);
+  await rungTool(page, T.de.suggest);
   const b = await stageBox(page);
   await zoomTo(page, b.x + 212, b.y + 538, 6);
   const c = await page.locator('#canvas').boundingBox();
-  await jpeg(page, 'sections', { x: c.x + 60, y: c.y + 50, width: c.width - 180, height: c.height - 170 });
+  await jpeg(page, 'sections', { x: c.x + 60, y: c.y + 85, width: c.width - 180, height: c.height - 205 });
   await close();
 };
 
