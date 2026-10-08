@@ -36,6 +36,8 @@ export interface Zigzag {
 
 /** Stitches shorter than this are travel or turns, not part of a row (mm). */
 const LONG = 0.8;
+/** Long enough for a row: needle points lie on a 0.1 mm grid, so exactly 0.8 mm must count however it rounds. */
+const isLong = (l: number) => l >= LONG - 1e-9;
 /** Two stitches turn sharply at a zigzag peak: more than this between their directions (degrees). */
 const TURN = 45;
 /** Share of the thread of the long stitches in zigzags for the fill to read as zigzag rows. */
@@ -68,7 +70,7 @@ function peak(a: Pt, b: Pt, c: Pt): boolean {
   const v = sub(c, b);
   const lu = len(u);
   const lv = len(v);
-  if (lu < LONG || lv < LONG) return false;
+  if (!isLong(lu) || !isLong(lv)) return false;
   const cos = (u[0] * v[0] + u[1] * v[1]) / (lu * lv);
   if (cos > Math.cos((TURN * Math.PI) / 180)) return false;
   return len(sub(c, a)) >= Math.max(LONG, 0.35 * (lu + lv));
@@ -85,7 +87,7 @@ export function rowLines(runs: Pt[][], zigzag: boolean): [Pt, Pt][] {
     const zig = run.map((_, i) => zigzag && i > 0 && i < run.length - 1 && peak(run[i - 1], run[i], run[i + 1]));
     for (let i = 1; i < run.length; i++) {
       if (zig[i]) out.push([mid(run[i - 1], run[i]), mid(run[i], run[i + 1])]);
-      else if (!zig[i - 1] && len(sub(run[i], run[i - 1])) >= LONG) out.push([run[i - 1], run[i]]);
+      else if (!zig[i - 1] && isLong(len(sub(run[i], run[i - 1])))) out.push([run[i - 1], run[i]]);
     }
   }
   return out;
@@ -97,7 +99,7 @@ export function rowLines(runs: Pt[][], zigzag: boolean): [Pt, Pt][] {
  */
 export function zigzagOf(runs: Pt[][]): Zigzag | null {
   let thread = 0;
-  for (const run of runs) for (let i = 1; i < run.length; i++) if (len(sub(run[i], run[i - 1])) >= LONG) thread += len(sub(run[i], run[i - 1]));
+  for (const run of runs) for (let i = 1; i < run.length; i++) if (isLong(len(sub(run[i], run[i - 1])))) thread += len(sub(run[i], run[i - 1]));
   // Peaks: a needle point between two stitches that turn sharply, with the course through it.
   const peaks: { b: Pt; course: Pt; side: Pt; ab: Pt; bc: Pt }[] = [];
   const inZig = new Set<string>();
