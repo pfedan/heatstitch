@@ -16,6 +16,8 @@ permissions:
   contents: read
 
 jobs:
+  # The tests run on several machines side by side, the site is built next to them: the run takes as long
+  # as its slowest job instead of all of them one after another. Deploy and preview wait for all of them.
   build:
     if: github.event.action != 'closed'
     runs-on: ubuntu-latest
@@ -29,20 +31,6 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm test
-      # 120 objects, each common operation within a time budget (tests/load.test.ts), alone on the machine.
-      - run: npx vitest run tests/load.test.ts
-        env:
-          LOAD: '1'
-      # Switching the language in a real browser leaves no text of the old one (tests/langSwitch.test.ts);
-      # the app's own tooltip on hover, focus and long press (tests/tooltip.test.ts); Space plays after a
-      # button click (tests/spaceKey.test.ts); phone and tablet layout (tests/responsive.test.ts); dragging
-      # an object in the list (tests/layerDrag.test.ts); a converted image opens fitted (tests/imageTakeFit.test.ts);
-      # opening a section of the right column, scrolled down, does not make it jump (tests/sectionScroll.test.ts).
-      - run: npx playwright install --with-deps chromium
-      - run: npx vitest run tests/langSwitch.test.ts tests/tooltip.test.ts tests/spaceKey.test.ts tests/responsive.test.ts tests/layerDrag.test.ts tests/imageTakeFit.test.ts tests/imageAssistantSwitch.test.ts tests/sectionScroll.test.ts
-        env:
-          BROWSER_TESTS: '1'
       - run: npm run build
         env:
           BASE_PATH: ${{ github.event_name == 'pull_request' && format('/heatstitch/pr-preview/pr-{0}/', github.event.number) || '' }}
@@ -56,6 +44,78 @@ jobs:
           name: site
           path: dist
           include-hidden-files: true
+
+  # All test files, a third on each machine (vitest --shard: every file runs on exactly one of them).
+  test:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    concurrency:
+      group: test-${{ github.ref }}-${{ matrix.shard }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx vitest run --shard=${{ matrix.shard }}/3
+
+  # 120 objects, each common operation within a time budget (tests/load.test.ts), alone on the machine.
+  load:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: load-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx vitest run tests/load.test.ts
+        env:
+          LOAD: '1'
+
+  # Switching the language in a real browser leaves no text of the old one (tests/langSwitch.test.ts);
+  # the app's own tooltip on hover, focus and long press (tests/tooltip.test.ts); Space plays after a
+  # button click (tests/spaceKey.test.ts); phone and tablet layout (tests/responsive.test.ts); dragging
+  # an object in the list (tests/layerDrag.test.ts); a converted image opens fitted (tests/imageTakeFit.test.ts);
+  # opening a section of the right column, scrolled down, does not make it jump (tests/sectionScroll.test.ts).
+  browser:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: browser-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # The browser is kept per Playwright version; the system libraries it needs are installed every time.
+      - id: playwright
+        run: echo "version=$(node -p "require('playwright/package.json').version")" >> "$GITHUB_OUTPUT"
+      - id: browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium
+      - if: steps.browsers.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+      - if: steps.browsers.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+      - run: npx vitest run tests/langSwitch.test.ts tests/tooltip.test.ts tests/spaceKey.test.ts tests/responsive.test.ts tests/layerDrag.test.ts tests/imageTakeFit.test.ts tests/imageAssistantSwitch.test.ts tests/sectionScroll.test.ts
+        env:
+          BROWSER_TESTS: '1'
 
   # Videos, voice takes and other large media live in Cloudflare R2, not in git: one file over 5 MB anywhere
   # in the history (a video, or a merge that brings back history from before the clean-up) fails here.
@@ -123,7 +183,7 @@ jobs:
 
   deploy:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    needs: build
+    needs: [build, test, load, browser]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -156,11 +216,13 @@ jobs:
 
   # Fork pull requests only get a read-only token here; fork-preview.yml publishes theirs.
   preview:
-    # A build cancelled by a newer run of the same PR leaves no site to publish; on close there is no build.
+    # A run cancelled by a newer one of the same PR leaves no site to publish; on close there is no build.
+    # Published only when the tests passed too, as before they ran in the build job.
     if: >-
       github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository &&
-      !cancelled() && (needs.build.result == 'success' || github.event.action == 'closed')
-    needs: build
+      !cancelled() && (github.event.action == 'closed' || (needs.build.result == 'success' &&
+      needs.test.result == 'success' && needs.load.result == 'success' && needs.browser.result == 'success'))
+    needs: [build, test, load, browser]
     runs-on: ubuntu-latest
     permissions:
       contents: write
