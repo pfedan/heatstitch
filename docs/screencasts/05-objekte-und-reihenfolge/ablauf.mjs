@@ -83,13 +83,13 @@ const quietKey = async (s, key) => {
 };
 
 /** Opens the object menu with a right click and picks `item`, with a label on it. */
-const menuPick = async (s, at, item, { label = item, look = 1.2 } = {}) => {
+const menuPick = async (s, at, item, { label = item, look = 1.2, pick = 0.6 } = {}) => {
   await s.click(at, { move: 0.9, before: 0.3, after: 0.5, button: 'right' });
   const entry = s.page.getByRole('menu', { name: 'Objektaktionen' }).getByRole('menuitem', { name: item });
   await s.wait(look);
   await s.move(entry, 0.8);
   await s.label(label, entry, 'right');
-  await s.click(null, { before: 0.6, after: 0.3 });
+  await s.click(null, { before: pick, after: 0.3 });
   s.unlabel();
 };
 
@@ -112,7 +112,7 @@ export default {
       textEn: 'An embroidery design is made of objects, and their order decides what ends up on top. I simply drag these cherries, an SVG, onto the start page.',
       run: async (s) => {
         await s.move([960, 300], 0.1);
-        await s.wait(4.6);
+        await s.wait(6.4);
         await dragFileIn(s, [1915, 640], [975, 600]);
         await s.wait(1.0);
         await s.move([975, 560], 0.8);
@@ -156,23 +156,23 @@ export default {
         await s.zoom([1430, 800, 0, 0], 1.4);
         await s.move(eye, 1.0);
         await s.label('Ansicht-Menü', eye, 'above');
-        await s.click(null, { before: 0.6, after: 0.4 });
+        await s.click(null, { before: 1.2, after: 0.4 });
         s.unlabel();
         const real = s.page.getByRole('checkbox', { name: 'Realistische Fäden' });
         await s.move(real, 0.9);
         await s.label('Realistische Fäden', real, 'above');
-        await s.click(null, { before: 0.5, after: 0.5 });
+        await s.click(null, { before: 1.0, after: 0.6 });
         s.unlabel();
         await quietKey(s, 'Escape');
         s.zoomOut();
         await s.move([960, 420], 1.0);
         await s.zoom(CHERRIES, 1.5);
-        await s.wait(1.0);
+        await s.wait(1.6);
         // Where the highlights should be.
         await s.move([712, 760], 1.0);
-        await s.wait(0.8);
+        await s.wait(1.2);
         await s.move([1180, 778], 0.9);
-        await s.wait(2.2);
+        await s.wait(4.4);
         s.zoomOut();
         await s.wait(0.6);
       },
@@ -186,7 +186,7 @@ export default {
         await s.zoom([200, 400, 0, 0], 1.6);
         await s.move(white, 1.0);
         await s.label('White', white, 'right');
-        await s.wait(1.4);
+        await s.wait(2.6);
         s.unlabel();
         const from = await s.point(white);
         const last = await s.box(objectRow(s, 'Füllung 2').last());
@@ -198,10 +198,10 @@ export default {
         await quietKey(s, 'Escape');
         await s.zoom([640, 520, 0, 0], 1.15);
         await s.move([712, 760], 1.0);
-        await s.wait(1.6);
+        await s.wait(3.6);
         const note = list(s).getByRole('status').filter({ hasText: 'Trotzdem so übernommen' });
         await s.move(note, 1.0);
-        await s.wait(3.0);
+        await s.wait(5.0);
         s.zoomOut();
         await s.wait(0.4);
       },
@@ -215,15 +215,15 @@ export default {
         const knock = hint.getByRole('button', { name: 'Aussparen' });
         await s.zoom([200, 200, 0, 0], 1.7);
         await s.move(hint.getByRole('paragraph'), 1.0);
-        await s.wait(4.6);
+        await s.wait(6.6);
         await s.move(knock, 0.8);
         await s.label('Aussparen', knock, 'below');
-        await s.click(null, { before: 0.8, after: 0.4 });
+        await s.click(null, { before: 1.0, after: 0.4 });
         s.unlabel();
         s.zoomOut();
         await s.move([712, 700], 1.0);
         await s.zoom(CHERRIES, 1.5);
-        await s.wait(3.6);
+        await s.wait(4.6);
         s.zoomOut();
         await s.wait(0.4);
       },
@@ -237,11 +237,11 @@ export default {
         await s.page.evaluate(() => document.activeElement?.blur());
         await quietKey(s, 'Escape');
         await quietKey(s, 'Escape');
-        await s.wait(1.0);
-        await menuPick(s, LEAF, 'Duplizieren', { look: 3.2 });
+        await s.wait(2.4);
+        await menuPick(s, LEAF, 'Duplizieren', { look: 4.6 });
         await s.move([COPY[0] + 60, COPY[1] + 140], 0.9);
         await s.zoom([1200, 190, 0, 0], 1.6);
-        await s.wait(2.6);
+        await s.wait(3.0);
         s.zoomOut();
       },
     },
@@ -252,13 +252,20 @@ export default {
       run: async (s) => {
         await menuPick(s, COPY, 'Waagrecht spiegeln', { look: 0.6 });
         await s.wait(1.0);
+        // Held down while the voice names Einrasten, so the snap line stays in view.
+        await s.move(COPY, 0.6);
+        await s.wait(0.15);
+        await s.page.mouse.down();
+        await s.move([COPY[0] - 280, COPY[1] - 20], 1.6);
+        await s.move([COPY_TO[0] + 30, COPY_TO[1]], 1.4);
         const snap = s.page.getByText('Einrasten', { exact: true });
-        await s.move(snap, 0.9);
         await s.label('Einrasten', snap, 'below');
-        await s.wait(1.4);
+        await s.wait(2.0);
+        await s.move(COPY_TO, 0.8);
+        await s.wait(2.4);
+        await s.page.mouse.up();
         s.unlabel();
-        await s.drag([COPY, [COPY[0] - 280, COPY[1] - 20], COPY_TO], { sec: 1.4 });
-        await s.wait(1.6);
+        await s.wait(1.0);
       },
     },
     {
@@ -266,36 +273,36 @@ export default {
       text: 'Das neue Blatt bekommt ein dunkleres Grün. Rechtsklick, Garn wählen, Deep Green. Nur dieses Objekt wechselt das Garn. In der Liste steht es jetzt als eigene Farbe.',
       textEn: 'The new leaf gets a darker green. Right click, Choose thread, Deep Green. Only this object changes its thread. In the list it now has a color of its own.',
       run: async (s) => {
-        await s.wait(0.8);
+        await s.wait(2.8);
         await menuPick(s, COPY_AT, 'Garn wählen …', { label: 'Garn wählen', look: 0.6 });
-        await s.wait(0.8);
+        await s.wait(0.4);
         const pick = s.page.getByRole('dialog', { name: 'Garn dieses Objekts wählen' }).getByRole('button', { name: '808 Deep Green' });
-        await s.click(pick, { move: 1.0, before: 0.5, after: 0.5 });
+        await s.click(pick, { move: 0.8, before: 0.3, after: 0.5 });
         await s.page.evaluate(() => document.activeElement?.blur());
         await quietKey(s, 'Escape');
         await quietKey(s, 'Escape');
         await s.move([700, 300], 0.8);
-        await s.wait(1.6);
+        await s.wait(0.6);
         const row = colorRow(s, 'Deep Green').locator('.layer-name');
         await s.zoom([200, 330, 0, 0], 1.6);
         await s.move(row, 1.0);
         await s.label('Deep Green', row, 'right');
-        await s.wait(3.0);
+        await s.wait(2.4);
         s.unlabel();
         s.zoomOut();
       },
     },
     {
-      say: '[proud, warm] Fertig sind die Kirschen, mit zwei Blättern und Glanzlichtern obenauf. Mit der Leertaste siehst du, wie die Maschine alles in dieser Reihenfolge stickt. [warm] Viel Spaß beim Sticken!',
+      say: '[proud and warm] Fertig sind die Kirschen, mit zwei Blättern und Glanzlichtern obenauf. Mit der Leertaste siehst du, wie die Maschine alles in dieser Reihenfolge stickt. [warm] Viel Spaß beim Sticken!',
       text: 'Fertig sind die Kirschen, mit zwei Blättern und Glanzlichtern obenauf. Mit der Leertaste siehst du, wie die Maschine alles in dieser Reihenfolge stickt. Viel Spaß beim Sticken!',
       textEn: 'The cherries are done, with two leaves and the highlights on top. The space bar shows you how the machine stitches everything in this order. Have fun embroidering!',
       run: async (s) => {
         await s.move([420, 560], 1.0);
         await s.zoom(ALL, 1.05);
-        await s.wait(2.4);
+        await s.wait(5.2);
         await s.press('Home', { label: 'Pos1', show: 0.4 });
         await s.press(' ', { label: 'Leertaste', show: 1.0 });
-        await s.wait(6.0);
+        await s.wait(4.4);
         s.zoomOut();
         await s.wait(0.6);
       },

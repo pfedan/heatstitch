@@ -77,4 +77,4 @@ eigene Farbe, Etikett Deep Green.
 **Bild:** Esc hebt die Auswahl auf. Heranzoomen auf die Kirschen mit beiden Blättern. Tastenkappen
 Pos1 und Leertaste: das Stickmuster wird in der neuen Reihenfolge gestickt. Dann Abspann.
 
-**Sprechtext:** [proud, warm] Fertig sind die Kirschen, mit zwei Blättern und Glanzlichtern obenauf. Mit der Leertaste siehst du, wie die Maschine alles in dieser Reihenfolge stickt. [warm] Viel Spaß beim Sticken!
+**Sprechtext:** [proud and warm] Fertig sind die Kirschen, mit zwei Blättern und Glanzlichtern obenauf. Mit der Leertaste siehst du, wie die Maschine alles in dieser Reihenfolge stickt. [warm] Viel Spaß beim Sticken!
