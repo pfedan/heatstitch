@@ -145,7 +145,7 @@ export default {
         s.unlabel();
         s.zoomOut();
         await s.zoom([958, 760, 0, 0], 1.8);
-        await s.move([930, 790], 1.0);
+        await s.move([1040, 700], 1.0);
         await s.label('Schnitt', [949, 766, 18, 18], 'above');
         await s.wait(2.6);
         s.unlabel();
@@ -235,7 +235,7 @@ export default {
         await s.wait(3.0);
         const below = btn(s, /^Darunter nicht schneiden/);
         await s.move(below, 0.9);
-        await s.label('Darunter nicht schneiden', below, 'below');
+        await s.label('Darunter nicht schneiden', below, 'above');
         await s.wait(3.6);
         s.unlabel();
         s.zoomOut();
@@ -259,7 +259,7 @@ export default {
         await until(s, async () => (await s.page.getByText('Eine bessere Reihenfolge:').count()) > 0, 'order found');
         const row = s.page.locator('.order-table tr', { hasText: 'Wege' }).first();
         await s.move(row, 0.8);
-        await s.label('kürzere Wege', row, 'below');
+        await s.label('kürzere Wege', row, 'right');
         await s.wait(3.8);
         s.unlabel();
         await s.click(btn(s, 'Übernehmen', true), { move: 0.9, before: 0.4, after: 0.6 });
@@ -273,7 +273,6 @@ export default {
       text: 'Mit der Leertaste siehst du, wie die Maschine jetzt stickt: Punkt für Punkt, ohne Umwege. Viel Spaß beim Sticken!',
       textEn: 'With the space bar you see how the machine stitches now: dot by dot, without detours. Have fun embroidering!',
       run: async (s) => {
-        await s.move(REST, 0.8);
         // At 50× the eight dots would be done in two seconds; 10× lets the eye follow.
         await s.page.getByRole('combobox', { name: /^Tempo/ }).selectOption('10');
         await s.page.evaluate(() => document.activeElement?.blur());
