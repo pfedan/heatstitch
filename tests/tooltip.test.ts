@@ -82,6 +82,14 @@ describe.skipIf(!on)('the tooltip', () => {
       await page.waitForTimeout(200);
       expect(await tipText(page)).toBeNull();
 
+      // A tooltip with a picture shows it above the text.
+      await page.locator('#shapes-seg [data-shapes=on]').hover();
+      await page.waitForTimeout(700);
+      await page.waitForFunction(() => document.querySelector<HTMLImageElement>('#tip .tip-img')?.complete);
+      expect(await page.evaluate(() => document.querySelector<HTMLImageElement>('#tip .tip-img')!.naturalWidth)).toBe(400);
+      await page.mouse.move(5, 890);
+      await page.waitForTimeout(200);
+
       // Language switch: the title is written anew and the tooltip says it in English.
       await page.selectOption('#lang', 'en', { force: true });
       await save.hover();

@@ -79,6 +79,17 @@ bytes, regenerate them and commit the result:
 UPDATE_DEMOS=1 npm test
 ```
 
+### Tooltip pictures
+
+Some tooltips show a small screenshot (`data-tip-img`, pictures in `public/tips/`). They are taken
+from the app itself by `tools/tips/shoot.mjs`. After a change that alters how they look, take them
+anew from a running build:
+
+```sh
+npm run build && npm run preview   # in a second shell
+node tools/tips/shoot.mjs          # or only some: node tools/tips/shoot.mjs echo shadow
+```
+
 ### Fonts
 
 The lettering fonts in `public/fonts/` are converted from the Ink/Stitch font repository, at a fixed

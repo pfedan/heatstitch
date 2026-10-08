@@ -691,6 +691,22 @@ details.sec[open] > summary {
     transform 0.12s;
 }
 
+.tip.has-img {
+  flex-wrap: wrap;
+  max-width: 216px;
+  padding-top: 8px;
+}
+
+/* A small screenshot above the text (data-tip-img), 16:10 like the shots in public/tips. */
+.tip-img {
+  display: block;
+  flex: 0 0 100%;
+  width: 200px;
+  height: 125px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--tip-ink) 10%, transparent);
+}
+
 .tip[data-side='above'] {
   transform: translateY(2px);
 }

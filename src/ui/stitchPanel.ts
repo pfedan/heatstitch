@@ -1371,7 +1371,7 @@ export class StitchPanel {
       }
       row.append(b);
     }
-    const wrap = h('div', { class: 'field stitch-field', title: t('stitch.motif.hint') }, h('span', { class: 'label' }, t('stitch.motif')), row);
+    const wrap = h('div', { class: 'field stitch-field', title: t('stitch.motif.hint'), 'data-tip-img': 'motif' }, h('span', { class: 'label' }, t('stitch.motif')), row);
     if (!d.emboss) return [wrap];
     return [
       wrap,
@@ -1581,7 +1581,7 @@ export class StitchPanel {
    */
   private shadowGroup(st: PathStitch, line: ThreadColor): HTMLElement {
     const sh = st.shadow;
-    const box = h('div', { class: 'fx-group', title: t('stitch.shadow.intro') });
+    const box = h('div', { class: 'fx-group', title: t('stitch.shadow.intro'), 'data-tip-img': 'shadow' });
     box.append(
       this.choice<ShadowDir | 'off'>('stitch.shadow', ['off', ...SHADOW_DIRS], sh?.dir ?? 'off', (v) => `stitch.shadow.${v}` as Key, (v) => {
         if (v === 'off') delete st.shadow;
@@ -1671,7 +1671,7 @@ export class StitchPanel {
     type Choice = EchoSide | 'off' | 'one';
     const now: Choice = !st.echo ? 'off' : closed || st.echo.side === 'both' ? st.echo.side : 'one';
     const values: Choice[] = closed ? ['off', ...ECHO_SIDES] : ['off', 'one', 'both'];
-    const box = h('div', { class: 'fx-group', title: t('stitch.echo.intro') });
+    const box = h('div', { class: 'fx-group', title: t('stitch.echo.intro'), 'data-tip-img': 'echo' });
     box.append(
       this.choice<Choice>('stitch.echo', values, now, (v) => `stitch.echo.${v}` as Key, (v) => {
         if (v === 'off') delete st.echo;
@@ -1895,6 +1895,7 @@ export class StitchPanel {
         : null;
     const box = this.sec('border', 'stitches.sec.border', [shared, seams, parts.type, ...parts.look, ...parts.hold, s.border && s.pattern !== 'none' ? this.borderThread(s.border) : null], extra);
     box.title = t('stitch.border.intro');
+    box.dataset.tipImg = 'border';
     return this.lights(box, 'border');
   }
 

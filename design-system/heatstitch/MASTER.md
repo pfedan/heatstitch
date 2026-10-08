@@ -67,7 +67,9 @@ Garnfarben sind Inhalt, nicht Oberfläche: nie als UI-Farbe verwenden.
 - **Tooltip:** eigener, nicht der des Browsers (`src/shell/tooltip.ts`). Im Code weiter einfach `title`
   setzen: die App übernimmt ihn, zeigt ihn nach kurzer Pause (sofort beim Weiterfahren über eine Leiste),
   bei Tastatur-Fokus und bei langem Druck auf Touch. Eine Taste am Ende, "Duplizieren (Strg+D)", wird als
-  Taste abgesetzt. Kurz halten: ein Satz, was der Knopf tut.
+  Taste abgesetzt. Kurz halten: ein Satz, was der Knopf tut, höchstens 16 Wörter (Test
+  `tests/tooltipTexts.test.ts`). Wo ein Bild mehr sagt als Worte, zeigt `data-tip-img="name"` ein
+  kleines Bildschirmfoto aus `public/tips/` über dem Text (aufgenommen mit `tools/tips/shoot.mjs`).
 - **Menüs:** Kontextmenü am Objekt, schließen mit Esc und Klick daneben.
 - **Dialoge:** keine modalen Dialoge für Arbeitsabläufe. Einzige Ausnahme heute: Druckansicht der
   Farbliste (`src/ui/colorList.ts`).

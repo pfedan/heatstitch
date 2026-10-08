@@ -1383,8 +1383,13 @@ export class ImageMode {
       el.checked = el.value === style;
       el.disabled = el.value !== 'flat' && !!this.svg;
     });
-    $('image-style-smart').title = t(this.svg ? 'image.style.svg' : 'image.style.smart.hint');
-    $('image-style-dynamic').title = t(this.svg ? 'image.style.svg' : 'image.style.dynamic.hint');
+    for (const k of ['smart', 'dynamic'] as const) {
+      const el = $(`image-style-${k}`);
+      // Their picture would show what an SVG cannot get.
+      if (this.svg) delete el.dataset.tipImg;
+      else el.dataset.tipImg = `style-${k}`;
+      el.title = t(this.svg ? 'image.style.svg' : `image.style.${k}.hint`);
+    }
     const own = Object.keys(s.stitch).length > 0;
     $('image-stitch-reset').hidden = !own;
     $('image-fine-own').hidden = !own;
