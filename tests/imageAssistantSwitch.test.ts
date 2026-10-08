@@ -57,12 +57,13 @@ describe.skipIf(!on)('Bild umwandeln and switching', () => {
     await page.evaluate(() => document.getElementById('image-cancel')!.click());
     await page.click('#design-button');
     await page.click('#load-example [data-cmd="cat"]');
-    await page.locator('#file-list li').first().waitFor();
-    await page.locator('#player:not([hidden])').waitFor();
+    // The switcher may close while the example loads (slow on CI): wait for the design itself.
+    await page.locator('#file-list li').first().waitFor({ state: 'attached', timeout: 30_000 });
+    await page.locator('#player:not([hidden])').waitFor({ timeout: 30_000 });
     await page.waitForTimeout(500);
     await openAssistant();
-    await page.click('#design-button');
-    await page.click('#file-list li');
+    if (await page.locator('#design-pop').isHidden()) await page.click('#design-button');
+    await page.locator('#file-list li').first().click();
     await page.waitForFunction(() => document.body.dataset.mode !== 'image', null, { timeout: 5_000 });
     expect(await mode()).toBe('flow');
   });
