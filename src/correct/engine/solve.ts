@@ -217,7 +217,7 @@ export async function planFix(p: Pattern, profile: Profile, kind: FixTarget, opt
     if (fine.objects.length) {
       const objs = objectsOf(fine.pattern);
       pattern = fine.pattern;
-      objects = [...objects, ...fine.objects.map((i) => ({ index: i, kind: objs[i].kind, tools: fine.steps.map((x) => `fine.${x}`), changes: [], knockout: false, visibility: 0, visible: false, hand: 0 }))].sort((a, b) => a.index - b.index);
+      objects = [...objects, ...fine.objects.map((i) => ({ index: i, kind: objs[i].kind, tools: [...new Set(fine.steps)].map((x) => `fine.${x}`), changes: [], knockout: false, visibility: 0, visible: false, hand: 0 }))].sort((a, b) => a.index - b.index);
     }
   }
   const lower = kinds.filter((k) => CAUTION_KINDS.has(k));

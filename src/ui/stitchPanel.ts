@@ -596,7 +596,7 @@ export class StitchPanel {
       chip(warn ? 'warn' : 'ok', t(`stitches.trust.${info.shape}`), `${t(`stitch.shape.${info.shape}`)} ${t('stitch.undo')}`, warn ? 'warn' : 'ok');
     }
     if (info.hand) chip('warn', t('stitches.hand', { n: formatNumber(info.hand) }), t('stitch.hand', { n: formatNumber(info.hand) }), 'warn');
-    if (info.fixed?.length) chip('fix', t('stitches.fixed'), t('plan.fixed', { list: info.fixed.map(fixText).join(', ') }));
+    if (info.fixed?.length) chip('fix', t('stitches.fixed'), t('plan.fixed', { list: [...new Set(info.fixed.map(fixText))].join(', ') }));
     if (info.free?.on) chip('free', t(info.free.on === 'mixed' ? 'stitches.free.some' : 'stitches.free'), t(info.free.on === 'mixed' ? 'free.someText' : 'free.text'));
     if (!chips.length) return null;
     return h('div', { class: 'stitch-status', role: 'status' }, chips);

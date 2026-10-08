@@ -31,6 +31,10 @@ const MAX_NEED = 0.5;
 const ROUNDS = 3;
 const HIDDEN_SHARE = 0.95;
 
+/** The steps of the fine stage; each one also names it in "Von der Korrektur geändert" (fixText). */
+export const FINE_STEPS = ['zeroLength', 'mergeShort', 'pullBack', 'satinShort', 'hiddenRows'] as const;
+export type FineStep = (typeof FINE_STEPS)[number];
+
 export interface FineOptions {
   checks: Checks;
   acks?: readonly Acknowledgement[];
@@ -42,7 +46,7 @@ export interface FineResult {
   pattern: Pattern;
   /** Objects whose stitches changed. */
   objects: number[];
-  steps: string[];
+  steps: FineStep[];
 }
 
 /** Objects of `p` the fine stage may work on: from elsewhere or changed by hand, not locked. */
@@ -59,7 +63,7 @@ export function fineObjects(p: Pattern, skip: Set<number>): Set<number> {
 }
 
 export function fineFix(p: Pattern, v0: ValidationResult, profile: Profile, kinds: FixKind[], opt: FineOptions): FineResult {
-  const steps: string[] = [];
+  const steps: FineStep[] = [];
   if (!opt.objects.size) return { pattern: p, objects: [], steps };
   const n0 = objectsOf(p).length;
   const openCount = (x: ValidationResult) => {
@@ -114,7 +118,7 @@ export function fineFix(p: Pattern, v0: ValidationResult, profile: Profile, kind
     }
     return false;
   };
-  const attempt = (name: string, q: Pattern): boolean => {
+  const attempt = (name: FineStep, q: Pattern): boolean => {
     if (q === cur || objectsOf(q).length !== n0) return false;
     const vq = validateDesign(q, profile, opt.checks, false);
     if (cellDiff(v0, vq, opt.acks).newCritical) return false;
