@@ -405,6 +405,9 @@ const { applyRestitched, convertSettings, looseObjects, stitchInfo, stitchPanel 
   get sewLineAgain() {
     return sewLineAgain;
   },
+  get convertToSatin() {
+    return convertToSatin;
+  },
   get toggleGuides() {
     return toggleGuides;
   },
@@ -418,7 +421,7 @@ const { applyRestitched, convertSettings, looseObjects, stitchInfo, stitchPanel 
 
 // Rungs -------------------------------------------------------------------------------------------
 
-const { closeRungs, rungInfo, rungTool, sewAlongLines, suggestLines, syncRungs, toggleGuides, togglePoints, toggleRungs } = bindRungs({
+const { closeRungs, convertToSatin, rungInfo, rungTool, sewAlongLines, suggestLines, syncRungs, toggleGuides, togglePoints, toggleRungs } = bindRungs({
   get applyRestitched() {
     return applyRestitched;
   },
@@ -705,6 +708,17 @@ function flowTooltip(sx: number, sy: number): void {
   const p = files.active?.pattern;
   if (!p) {
     tooltip.hidden = true;
+    return;
+  }
+  // On a section that cannot be sewn yet: what it still needs, in place of the stitch.
+  const problem = rungTool.active ? rungTool.problems[rungTool.problemHover] : undefined;
+  if (problem) {
+    tooltip.replaceChildren(Object.assign(document.createElement('div'), { textContent: t(problem.key) }));
+    tooltip.dataset.level = '2';
+    tooltip.hidden = false;
+    const flip = sx > ui.stageW - tooltip.offsetWidth - 30;
+    tooltip.style.left = `${flip ? sx - 12 - tooltip.offsetWidth : sx + 14}px`;
+    tooltip.style.top = `${sy + 14}px`;
     return;
   }
   const st = styleFor(p);

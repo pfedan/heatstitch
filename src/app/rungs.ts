@@ -7,12 +7,15 @@ import type { Sequence } from './types';
 import type { Settings } from '../settings';
 import type { StitchInfo, StitchPanel } from '../ui/stitchPanel';
 import { RungTool } from '../ui/rungTool';
-import { outline } from '../digitize/region';
+import { expandRegion, outline, type Region } from '../digitize/region';
+
+/** How far Vorschlagen closes the seams of an area read from rails, tried in turn (mm, each side). */
+const SEAMS_MM = [0.3, 0.6];
 import { atShare, regionBox, swirlCenters } from '../digitize/deco';
-import { cutLinesBetween, inside, railsFromOutline, stripsOfAreas } from '../digitize/rungs';
-import { areaLoops, suggestSatin } from '../digitize/satinSuggest';
+import { railsFromOutline, stripsOfAreas } from '../digitize/rungs';
+import { aroundCuts, areaLoops, suggestSatin } from '../digitize/satinSuggest';
 import { t, type Key } from '../i18n';
-import { bestChain, DECO_DEFAULTS, MAX_SWIRLS, type FillSettings, type Rails, type SatinSettings, analyze, remembered, keepShape, remember, restitch, measureSatin, forget, type RestitchResult, type Settings as RestitchSettings } from '../model/restitch';
+import { bestChain, edgeAlong, railsArea, sectionView, DECO_DEFAULTS, MAX_SWIRLS, type FillSettings, type Rails, type SatinSettings, analyze, remembered, keepShape, remember, restitch, measureSatin, forget, type RestitchResult, type Settings as RestitchSettings } from '../model/restitch';
 import { ui } from './state';
 
 /** What bindRungs needs from the rest of the app. */
@@ -192,16 +195,18 @@ export function bindRungs(app: RungsApp) {
       const shape = keepShape(p, obj, q.kinds);
       const columns = shape.columns;
       if (!columns?.length) return app.layers.say(t('stitch.direction.miss'), true);
-      // Made from a fill (sewn in a chain, or still knowing its fill settings): its cut lines again.
-      const fromFill = !!shape.fill || columns.some((part) => part.some((c) => c.chain !== undefined));
-      rungTool.openSatin(shape.shape && fromFill ? withSplit(columns, shape.shape) : columns);
+      rungTool.openSatin(sectionView(columns, shape.shape));
       rungTool.satin = satinOf(p, q, obj);
     } else {
       const an = analyze(p, obj, q.kinds);
       const area = remembered(p, obj)?.shape ?? an.fill;
       if (!area) return;
       // Lines are drawn near any of its areas.
-      rungTool.openFill(areaLoops(area).outsides.flat());
+      const loops = areaLoops(area);
+      rungTool.openFill(loops.outsides.flat(), { outlines: loops.outsides, holes: loops.holes });
+      // Sections are drawn ahead in the satin it would become.
+      const s = app.convertSettings('satin', app.stitchInfo(p, q));
+      rungTool.satin = s?.kind === 'satin' ? s.s : null;
     }
     ui.rungObject = target.o;
     rungPattern = p;
@@ -300,25 +305,10 @@ export function bindRungs(app: RungsApp) {
     app.applyRestitched(withRungs(columns), 'stitch.failed');
   }
 
-  /**
-   * A satin made from a fill that no longer knows how it was cut (see Rails.split): the fill from its
-   * shape, the cut lines where its columns end inside it (against another column, not at the edge).
-   * So the cut lines can always be moved, drawn or taken away again, and the columns made anew.
-   */
-  function withSplit(columns: Rails[][], area: Parameters<typeof outline>[0]): Rails[][] {
-    if (columns.some((part) => part.some((r) => r.split))) return columns;
-    const { outsides, holes } = areaLoops(area);
-    if (!outsides.length) return columns;
-    const within = (q: Pt) => outsides.some((o) => inside(o, q)) && !holes.some((h) => inside(h, q));
-    const mid = (c: Rails): Pt => {
-      const i = c.left.length >> 1;
-      return [(c.left[i][0] + c.right[Math.min(i, c.right.length - 1)][0]) / 2, (c.left[i][1] + c.right[Math.min(i, c.right.length - 1)][1]) / 2];
-    };
-    // The part cut from the fill: its columns lie in it.
-    const k = columns.findIndex((part) => part.every((c) => c.left.length > 1 && c.right.length > 1 && within(mid(c))));
-    if (k < 0) return columns;
-    const cuts = cutLinesBetween(columns[k], outsides, holes);
-    return columns.map((part, j) => (j === k ? part.map((c, i) => (i ? c : { ...c, split: { outlines: outsides, holes, cuts } })) : part));
+  /** An area with gaps and notches up to twice `mm` closed. */
+  function closed(area: Region, mm: number): Region | null {
+    const grown = expandRegion(area, mm);
+    return grown && expandRegion(grown, -mm);
   }
 
   /**
@@ -327,17 +317,63 @@ export function bindRungs(app: RungsApp) {
    */
   function suggestLines(): void {
     const p = app.files.active?.pattern;
-    if (!p || ui.rungObject === null || rungTool.mode !== 'fill') return;
+    if (!p || ui.rungObject === null) return;
     const q = app.seq(p);
     const obj = q.objects[ui.rungObject];
-    const an = obj && analyze(p, obj, q.kinds);
-    const area = an && (remembered(p, obj)?.shape ?? an.fill);
+    if (!obj) return;
+    if (rungTool.sectioned) {
+      // A satin: searched anew in its area as it is now, its shape while that still runs along the
+      // columns (else an old one: a part cut away, say), else read from the rails.
+      const rails = rungTool.sectionRails;
+      if (!rails) return;
+      const known = keepShape(p, obj, q.kinds).shape;
+      const fits = !!known && edgeAlong(outline(known), rails);
+      const base = fits ? known : railsArea(rails);
+      // Read from rails, the area with its seams closed too: columns read from stitches meet with
+      // slivers and notches between them, each a branch of its own; the first that makes columns.
+      const tries = base ? [base, ...(fits ? [] : SEAMS_MM.map((mm) => closed(base, mm)))] : [];
+      let area: Region | null = null;
+      let s: ReturnType<typeof suggestSatin> = null;
+      for (const a of tries) {
+        const found = a && suggestSatin(a);
+        if (!found) continue;
+        if (!s || found.ok) {
+          area = a;
+          s = found;
+        }
+        if (found.ok) break;
+      }
+      const own = rungTool.handCuts;
+      if (area && own.length) {
+        // Cut lines drawn by hand stay; the suggestion fills in around them.
+        const { outsides, holes } = areaLoops(area);
+        const r = aroundCuts(s && s.kind !== 'wide' ? s : { lines: [], cuts: [] }, own, outsides, holes);
+        rungTool.suggestIn(r.lines, r.cuts, { outlines: outsides, holes });
+        if (r.ok) app.layers.say(t('stitch.suggest.sewn', { n: r.cuts.length + 1 }));
+        return;
+      }
+      if (!area || !s || s.kind === 'wide' || !s.ok) {
+        // No whole suggestion from the area: along the columns as they run.
+        if (rungTool.alongRails()) return app.layers.say(t('stitch.suggest.rails'));
+        return app.layers.say(t('stitch.suggest.none'));
+      }
+      const { outsides, holes } = areaLoops(area);
+      rungTool.suggestIn(s.lines, s.cuts, { outlines: outsides, holes });
+      return app.layers.say(t('stitch.suggest.sewn', { n: s.cuts.length + 1 }));
+    }
+    if (rungTool.mode !== 'fill') return;
+    const an = analyze(p, obj, q.kinds);
+    const area = remembered(p, obj)?.shape ?? an.fill;
     if (!area) return;
-    const s = suggestSatin(area);
-    if (!s || s.kind === 'wide') return app.layers.say(t('stitch.suggest.wide'), true);
+    const found = suggestSatin(area);
+    if (!found || found.kind === 'wide') return app.layers.say(t('stitch.suggest.wide'), true);
+    const { outsides, holes } = areaLoops(area);
+    // Cut lines drawn by hand stay; the suggestion fills in around them.
+    const own = rungTool.handCuts;
+    const kind = found.kind;
+    const s = { ...(own.length ? aroundCuts(found, own, outsides, holes) : found), kind };
     let bad: Pt[] | null = null;
     if (!s.ok) {
-      const { outsides, holes } = areaLoops(area);
       const made = stripsOfAreas(outsides, s.lines, s.cuts, holes);
       bad = made.hole >= 0 ? holes[made.hole] : made.bad;
     }
@@ -346,6 +382,45 @@ export function bindRungs(app: RungsApp) {
     if (!s.ok) app.layers.say(t('stitch.suggest.partly', { n }));
     else if (s.kind === 'strokes') app.layers.say(t('stitch.suggest.done', { n }));
     else app.layers.say(t('stitch.suggest.doneAs', { n, shape: t(`stitch.suggest.shape.${s.kind}`) }));
+  }
+
+  /**
+   * The columns a fill makes along lines across it and cut lines (see stripsOfAreas): parts cut
+   * apart each a column, sewn on one into the next; areas apart each a chain of their own. Or what
+   * stops it: a hole no cut line opens, a part no line crosses, lines that make no strip.
+   */
+  function columnsAlong(area: Region, lines: [Pt, Pt][], cuts: [Pt, Pt][]): { columns: Rails[] } | { hole: Pt[] } | { bad: Pt[] } | { notStrip: true } | null {
+    const { outsides, holes } = areaLoops(area);
+    if (!outsides.length) return null;
+    if (cuts.length || holes.length || outsides.length > 1) {
+      const made = stripsOfAreas(outsides, lines, cuts, holes);
+      if (made.hole >= 0) return { hole: holes[made.hole] };
+      if (made.bad) return { bad: made.bad };
+      const columns: Rails[] = made.areas.flatMap((strips, a) => strips.map((r) => ({ ...r, chain: a })));
+      // The fill and its cut lines kept: the cut lines can be moved later (see Rails.split).
+      columns[0].split = { outlines: outsides, holes, cuts: cuts.map(([a, b]) => [a, b] as [Pt, Pt]) };
+      return { columns };
+    }
+    const rails = railsFromOutline(outsides[0], lines);
+    if (!rails) return { notStrip: true };
+    // Also without cut lines the fill is kept, so they can be drawn later.
+    return { columns: [{ ...rails, chain: 0, split: { outlines: outsides, holes, cuts: [] } }] };
+  }
+
+  /** Sews object `o` (a fill) as satin along `columns`, each chain in the order that hides the ways between its parts best. */
+  function sewColumns(p: Pattern, q: Sequence, o: number, columns: Rails[]): void {
+    const s = app.convertSettings('satin', app.stitchInfo(p, q));
+    if (!s) return;
+    if (s.kind === 'satin' && columns.every((c) => c.chain !== undefined)) {
+      const satin = s.s;
+      const chains = new Map<number, Rails[]>();
+      for (const c of columns) if (c.chain !== undefined) chains.set(c.chain, [...(chains.get(c.chain) ?? []), c]);
+      const split = columns[0].split;
+      columns = [...chains.values()].flatMap((g) => (g.length > 1 ? bestChain(g, satin) : g)).map(({ split: _s, ...c }) => c);
+      if (split && columns.length) columns[0].split = split;
+    }
+    const r = restitch(p, q.objects, [o], s, q.kinds, app.settings.trimMm, 'fill', false, new Map([[o, columns]]));
+    app.applyRestitched(r, 'stitch.toSatin.failed', true);
   }
 
   /** Sews the selected fill as satin along the lines drawn across it. */
@@ -357,47 +432,51 @@ export function bindRungs(app: RungsApp) {
     const an = obj && analyze(p, obj, q.kinds);
     const area = an && (remembered(p, obj)?.shape ?? an.fill);
     if (!area) return;
-    const { outsides, holes } = areaLoops(area);
-    if (!outsides.length) return;
-    let columns: Rails[];
-    if (rungTool.cutLines.length || holes.length || outsides.length > 1) {
-      // Cut into parts: each its own column, sewn on one into the next without a trim; areas apart
-      // each in a chain of their own, a trim between them.
-      const made = stripsOfAreas(outsides, rungTool.lines, rungTool.cutLines, holes);
-      if (made.hole >= 0) {
-        rungTool.showBad(holes[made.hole]);
-        return app.layers.say(t('stitch.draw.openHole'), true);
-      }
-      if (made.bad) {
-        rungTool.showBad(made.bad);
-        return app.layers.say(t('stitch.draw.notStripPart'), true);
-      }
-      columns = made.areas.flatMap((strips, a) => strips.map((r) => ({ ...r, chain: a })));
-      // The fill and its cut lines kept: the cut lines can be moved later (see Rails.split).
-      columns[0].split = { outlines: outsides, holes, cuts: rungTool.cutLines.map(([a, b]) => [a, b] as [Pt, Pt]) };
-    } else {
-      const loop = outsides[0];
-      const rails = railsFromOutline(loop, rungTool.lines);
-      if (!rails) return app.layers.say(t('stitch.draw.notStrip'), true);
-      // Also without cut lines the fill is kept, so they can be drawn later.
-      columns = [{ ...rails, chain: 0, split: { outlines: outsides, holes, cuts: [] } }];
+    const made = columnsAlong(area, rungTool.lines, rungTool.cutLines);
+    if (!made) return;
+    if ('hole' in made) {
+      rungTool.showBad(made.hole);
+      return app.layers.say(t('stitch.draw.openHole'), true);
     }
-    const s = app.convertSettings('satin', app.stitchInfo(p, q));
-    if (!s) return;
-    // Each chain in the order that hides the ways between its parts best.
-    if (s.kind === 'satin' && columns.every((c) => c.chain !== undefined)) {
-      const satin = s.s;
-      const chains = new Map<number, Rails[]>();
-      for (const c of columns) if (c.chain !== undefined) chains.set(c.chain, [...(chains.get(c.chain) ?? []), c]);
-      const split = columns[0].split;
-      columns = [...chains.values()].flatMap((g) => (g.length > 1 ? bestChain(g, satin) : g)).map(({ split: _s, ...c }) => c);
-      if (split && columns.length) columns[0].split = split;
+    if ('bad' in made) {
+      rungTool.showBad(made.bad);
+      return app.layers.say(t('stitch.draw.notStripPart'), true);
     }
+    if ('notStrip' in made) return app.layers.say(t('stitch.draw.notStrip'), true);
     const o = ui.rungObject;
     closeRungs();
-    const r = restitch(p, q.objects, [o], s, q.kinds, app.settings.trimMm, 'fill', false, new Map([[o, columns]]));
-    app.applyRestitched(r, 'stitch.toSatin.failed', true);
+    sewColumns(p, q, o, made.columns);
   }
 
-  return { closeRungs, rungInfo, rungTool, sewAlongLines, suggestLines, syncRungs, toggleGuides, togglePoints, toggleRungs };
+  /**
+   * Stichart Satin on one fill: the same as R and Vorschlagen, then sewn. Where the suggestion
+   * leaves a part open the tool stays open on it, the part outlined in red. False when the shape
+   * is no lines of even width (too wide, a blob): then the fill is sewn as satin as before.
+   */
+  function convertToSatin(o: number): boolean {
+    const p = app.files.active?.pattern;
+    if (!p) return false;
+    const q = app.seq(p);
+    const obj = q.objects[o];
+    const an = obj && analyze(p, obj, q.kinds);
+    const known = obj && remembered(p, obj);
+    // Once a satin: back to the columns it had (kept with the fill), not a new suggestion.
+    if (known?.asSatin?.length) return false;
+    const area = an && (known?.shape ?? an.fill);
+    if (!area) return false;
+    const s = suggestSatin(area);
+    if (!s || s.kind !== 'strokes') return false;
+    const made = s.ok ? columnsAlong(area, s.lines, s.cuts) : null;
+    if (made && 'columns' in made) {
+      sewColumns(p, q, o, made.columns);
+      return true;
+    }
+    // Not all of it: the lines suggested, in the tool, to finish by hand.
+    if (!rungTool.active) toggleRungs();
+    if (!rungTool.active || rungTool.mode !== 'fill') return false;
+    suggestLines();
+    return true;
+  }
+
+  return { closeRungs, convertToSatin, rungInfo, rungTool, sewAlongLines, suggestLines, syncRungs, toggleGuides, togglePoints, toggleRungs };
 }

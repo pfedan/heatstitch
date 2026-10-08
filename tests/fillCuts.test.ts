@@ -1,12 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { stripsOfOutline } from '../src/digitize/rungs';
+import { checkSections, stripsOfOutline } from '../src/digitize/rungs';
 import type { Pt } from '../src/digitize/skeleton';
 import { sewObjects } from '../src/model/objects';
-import { forget, keepShape, measureSatin, remember, remembered, rememberedIn, restitch, restoreRemembered, reversedRails, satinRuns, type Rails, type SatinSettings } from '../src/model/restitch';
+import { edgeAlong, forget, keepShape, previewPairs, railsArea, sectionView, measureSatin, remember, remembered, rememberedIn, restitch, restoreRemembered, reversedRails, satinRuns, type Rails, type SatinSettings } from '../src/model/restitch';
 import { stitchKinds } from '../src/model/sequence';
 import { transformRemembered } from '../src/model/transform';
 import { parsePattern } from '../src/parsers';
+import { aroundCuts } from '../src/digitize/satinSuggest';
 import { BADGE, RungTool } from '../src/ui/rungTool';
 
 const SATIN: SatinSettings = { spacing: 0.4, edge: 0, short: false, underlay: true, tolerance: 0.15 };
@@ -204,5 +205,124 @@ describe('chained columns with the rest of the app', () => {
     } finally {
       forget(p, o);
     }
+  });
+});
+
+describe('the sections the rung tool shows', () => {
+  it('marks a part without a line across in red and draws the others ahead', () => {
+    // The m without the line across its middle leg.
+    const c = checkSections([M], LINES.filter((_, k) => k !== 1), CUTS);
+    expect(c.parts.length).toBe(1);
+    expect(c.holes).toEqual([]);
+    expect(c.strips.length).toBe(3);
+    // The red part is the middle leg (between x 13 and 17).
+    expect(c.parts[0].every(([x]) => x > 12.9 && x < 17.1)).toBe(true);
+    // Drawn ahead exactly as sewn: stitch lines across each good column, inside the m.
+    for (const st of c.strips) {
+      const rails: Rails = { left: st.left, right: st.right, rungs: [] };
+      const sec = previewPairs(rails, SATIN);
+      expect(sec.length).toBeGreaterThan(0);
+      expect(sec.flat().length).toBeGreaterThan(10);
+    }
+  });
+
+  it('marks a hole no cut line opens', () => {
+    const O = poly([0, 0], [10, 0], [10, 10], [0, 10], [0, 0]);
+    const hole = poly([3, 3], [7, 3], [7, 7], [3, 7], [3, 3]);
+    const c = checkSections([O], [[[-1, 5], [4, 5]]], [], [hole]);
+    expect(c.holes).toEqual([hole]);
+    expect(c.strips).toEqual([]);
+  });
+});
+
+describe('satins read from a file', () => {
+  it('each open in sections of its area, the stitches untouched', () => {
+    const f = 'demos/letters.pes';
+    const p = parsePattern(readFileSync(new URL(`../public/examples/${f}`, import.meta.url)), f);
+    const kinds = stitchKinds(p);
+    const satins = sewObjects(p, kinds).filter((x) => x.kind === 'satin');
+    expect(satins.length).toBeGreaterThan(0);
+    for (const o of satins) {
+      const shape = keepShape(p, o, kinds);
+      const columns = sectionView(shape.columns!, shape.shape);
+      const k = columns.findIndex((part) => part[0].split);
+      expect(k).toBeGreaterThanOrEqual(0);
+      // The same columns, only the area added: nothing is sewn anew by opening the tool.
+      expect(columns.map((part) => part.map(({ split: _s, ...c }) => c))).toEqual(shape.columns!.map((part) => part.map(({ split: _s, ...c }) => c)));
+    }
+  });
+  it('keep their sections through save and open, mirror and sewing anew', () => {
+    const f = 'demos/letters.pes';
+    const p = parsePattern(readFileSync(new URL(`../public/examples/${f}`, import.meta.url)), f);
+    const kinds = stitchKinds(p);
+    const objs = sewObjects(p, kinds);
+    const o = objs.filter((x) => x.kind === 'satin').at(-1)!;
+    const shape = keepShape(p, o, kinds);
+    const columns = sectionView(shape.columns!, shape.shape);
+    remember(p, o, { ...shape, columns, read: false });
+    try {
+      const stored = JSON.parse(JSON.stringify(rememberedIn(p)));
+      forget(p, o);
+      restoreRemembered(p, stored);
+      const back = remembered(p, o)!;
+      expect(back.columns!.some((part) => part[0].split)).toBe(true);
+      const mirrored = transformRemembered(back, [-1, 0, 0, 1, 0, 0]);
+      const sp = mirrored.columns!.flat().find((c) => c.split)!.split!;
+      const orig = back.columns!.flat().find((c) => c.split)!.split!;
+      expect(sp.outlines[0][0][0]).toBeCloseTo(-orig.outlines[0][0][0], 6);
+      const r = restitch(p, objs, [o.index], (_o, an, known) => {
+        const part = an.parts.find((pt) => pt.kind === 'satin');
+        return part ? { kind: 'satin', s: known?.satin ?? measureSatin(p, part, kinds) } : null;
+      }, kinds, 2);
+      expect(r.failed).toEqual([]);
+      expect(r.memory[0].columns?.some((part) => part[0].split)).toBe(true);
+    } finally {
+      forget(p, o);
+    }
+  });
+});
+
+describe('Vorschlagen and Leeren on a satin', () => {
+  const strips = stripsOfOutline(M, LINES, CUTS).strips;
+  const full: Rails[] = strips.map((r) => ({ left: r.left, right: r.right, rungs: r.rungs }));
+  const split = { outlines: [M], holes: [], cuts: CUTS };
+
+  it('reads the area anew when a part was cut away, not the one the satin had', () => {
+    const shape = railsArea(full)!;
+    expect(edgeAlong([M], full)).toBe(true);
+    // One leg left, still carrying the sections and the shape of the whole m.
+    const leg = full.filter((c) => Math.abs(len(c.left) - 16) < 1).slice(0, 1);
+    expect(edgeAlong([M], leg)).toBe(false);
+    const view = sectionView([[{ ...leg[0], split }]], shape);
+    const sp = view.flat().find((c) => c.split)?.split;
+    expect(sp).toBeTruthy();
+    expect(edgeAlong([...sp!.outlines, ...sp!.holes], leg)).toBe(true);
+    const xs = sp!.outlines.flat().map((q) => q[0]);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeLessThan(6);
+  });
+
+  it('keeps cut lines drawn by hand and fills in around them', () => {
+    const own: [Pt, Pt][] = [[[-1, 15], [5, 15]]];
+    const r = aroundCuts({ lines: LINES, cuts: CUTS }, own, [M], []);
+    expect(r.ok).toBe(true);
+    expect(r.cuts[0]).toEqual(own[0]);
+    // The suggested cut next to it went, the others stay.
+    expect(r.cuts.length).toBe(3);
+    expect(r.cuts.some((c) => c[0][1] === 16 && c[0][0] === -1)).toBe(false);
+  });
+
+  it('knows which cut lines were drawn or moved by hand, and Leeren takes all away', () => {
+    const tool = new RungTool({ change: () => {}, lines: () => {}, guides: () => {}, redraw: () => {}, say: () => {} });
+    tool.openFill(M);
+    tool.setFillLines(LINES, CUTS);
+    expect(tool.handCuts).toEqual([]);
+    tool.setCutMode(true);
+    tool.down(12, 10, 10);
+    tool.dragTo(18, 10);
+    tool.up();
+    expect(tool.handCuts).toEqual([[[12, 10], [18, 10]]]);
+    tool.clear();
+    expect(tool.lines.length + tool.cutLines.length).toBe(0);
+    expect(tool.handCuts).toEqual([]);
   });
 });
