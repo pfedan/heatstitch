@@ -414,6 +414,13 @@ export class TravelGrid {
 
   /** Marks the cells under a sewn row (and half a row spacing to each side), and the strips past its ends. */
   cover(a: Pt, b: Pt, halfWidth: number): void {
+    this.apply(this.footprint(a, b, halfWidth));
+  }
+
+  /** The cells a sewn row covers (see cover), worked out once for planning, which covers sections again and again. */
+  footprint(a: Pt, b: Pt, halfWidth: number): { under: number[]; ends: number[] } {
+    const under: number[] = [];
+    const ends: number[] = [];
     const l = dist(a, b);
     const nx = l > 0 ? -(b[1] - a[1]) / l : 0;
     const ny = l > 0 ? (b[0] - a[0]) / l : 0;
@@ -426,13 +433,23 @@ export class TravelGrid {
         for (const o of [-halfWidth, 0, halfWidth]) {
           for (const [ex, ey] of [[a[0] - ux * t, a[1] - uy * t], [b[0] + ux * t, b[1] + uy * t]]) {
             const c = this.index([ex + nx * o, ey + ny * o]);
-            if (c >= 0) this.rowEnds[c] = 1;
+            if (c >= 0) ends.push(c);
           }
         }
       }
     }
-    this.stamp(a, b, halfWidth, (c) => (this.covered[c] = 1));
-    if (this.ahead) this.stamp(a, b, halfWidth, (c) => this.ahead![c] > 0 && this.ahead![c]--);
+    this.stamp(a, b, halfWidth, (c) => under.push(c));
+    return { under, ends };
+  }
+
+  /** Marks a footprint sewn: covered, one row less to come, strips past the row ends. */
+  apply(fp: { under: number[]; ends: number[] }): void {
+    const { covered, ahead, rowEnds } = this;
+    for (const c of fp.ends) rowEnds[c] = 1;
+    for (const c of fp.under) {
+      covered[c] = 1;
+      if (ahead && ahead[c] > 0) ahead[c]--;
+    }
   }
 
   /** Counts the cells under a row still to come (see ahead). */
@@ -602,10 +619,7 @@ export class TravelGrid {
 
   /** A* from cell s to t (Dijkstra everywhere with t < 0), at most `limit` cells: the predecessor of each cell. */
   private search(s: number, a: Pt, b: Pt | null, avoidSewn: boolean, t: number, hiddenOnly = false, limit = Infinity): Int32Array {
-    const n = this.gw * this.gh;
-    const cost = new Float64Array(n).fill(Infinity);
-    const from = new Int32Array(n).fill(-1);
-    const done = new Uint8Array(n);
+    const { cost, from, done, touched } = this.buffers();
     const heap = new MinHeap();
     const base = this.weights();
     const { gw, gh, cell, ox, oy, covered, ahead, gone } = this;
@@ -626,6 +640,7 @@ export class TravelGrid {
       return (x - a[0]) ** 2 + (y - a[1]) ** 2 >= 1 && (x - bb[0]) ** 2 + (y - bb[1]) ** 2 >= 1;
     };
     cost[s] = 0;
+    touched.push(s);
     heap.push(s, 0);
     let popped = 0;
     while (heap.size) {
@@ -656,6 +671,7 @@ export class TravelGrid {
         if (hiddenOnly && k >= 4 && shows(ci + STEP_I[k], cj) && shows(ci, cj + STEP_J[k])) continue;
         const nc = cc + w;
         if (nc < cost[q]) {
+          if (cost[q] === Infinity) touched.push(q);
           cost[q] = nc;
           from[q] = c;
           heap.push(q, toT ? nc + Math.sqrt((x - tx) ** 2 + (y - ty) ** 2) : nc);
@@ -667,6 +683,23 @@ export class TravelGrid {
 
   private w0: Float32Array | null = null;
   /** The cost of a step into each cell: higher towards the edges, 0 where travel cannot go. */
+  private bufs: { cost: Float64Array; from: Int32Array; done: Uint8Array; touched: number[] } | null = null;
+  /** The arrays a search works in, set back where the last search touched them (searches run often, mostly over few cells). */
+  private buffers() {
+    if (!this.bufs) {
+      const n = this.gw * this.gh;
+      this.bufs = { cost: new Float64Array(n).fill(Infinity), from: new Int32Array(n).fill(-1), done: new Uint8Array(n), touched: [] };
+    }
+    const { cost, from, done, touched } = this.bufs;
+    for (const q of touched) {
+      cost[q] = Infinity;
+      from[q] = -1;
+      done[q] = 0;
+    }
+    touched.length = 0;
+    return this.bufs;
+  }
+
   private weights(): Float32Array {
     if (!this.w0) {
       this.w0 = new Float32Array(this.depth.length);
@@ -859,8 +892,11 @@ function planning(f: Frame, grid: TravelGrid) {
     grid.rowEnds.set(k[1]);
     if (k[2]) grid.ahead!.set(k[2]);
   };
+  const prints = new Map<Section, { under: number[]; ends: number[] }[]>();
   const cover = (s: Section) => {
-    for (const seg of s) grid.cover(f.at(seg.u0, f.v(seg.k)), f.at(seg.u1, f.v(seg.k)), f.spacing / 2);
+    let fp = prints.get(s);
+    if (!fp) prints.set(s, (fp = s.map((seg) => grid.footprint(f.at(seg.u0, f.v(seg.k)), f.at(seg.u1, f.v(seg.k)), f.spacing / 2))));
+    for (const p of fp) grid.apply(p);
   };
   const stepCost = (from: Pt, to: Pt) => {
     const d = dist(from, to);
@@ -937,9 +973,13 @@ function planOnGrid(f: Frame, secs: Section[], pull: number, start: Pt, grid: Tr
   return { order, cost };
 }
 
-/** Up to this many sections, the order is searched more widely: BEAM plans side by side. */
-const BEAM_SECTIONS = 8;
-const BEAM = 8;
+/**
+ * Up to this many sections, the order is searched more widely: BEAM plans side by side. On random
+ * fills with parts left out, 8 plans for up to 8 sections left 16 trims in 72 fills, 16 for up to 16
+ * left 8 (at about 150 ms a fill), 32 left 3 but took 250 ms: too slow for every edit.
+ */
+const BEAM_SECTIONS = 16;
+const BEAM = 16;
 
 /**
  * Order of a few sections on the travel grid (see planOnGrid), searched more widely: step by step
