@@ -404,6 +404,7 @@ function sewSections(obj: Obj, o: DigitizeOptions, p: SatinParams, graph?: Graph
   const r = obj.region;
   // The plan Smart made when it chose the area (see choose), unless asked for another centerline.
   const plan = !graph && obj.plan !== undefined ? obj.plan : suggestSatin(r, graph ?? obj.graph ?? undefined, o.satinMax);
+  if (!graph) obj.plan = plan;
   if (!plan?.ok) return [];
   const { outsides, holes } = areaLoops(r);
   const made = stripsOfAreas(outsides, plan.lines, plan.cuts, holes);
@@ -424,16 +425,20 @@ function sewOne(obj: Obj, pos: Pt, o: DigitizeOptions, satin: SatinParams, angle
   let out: Pt[][] = [];
   // As columns cut at the junctions (see satinSuggest), when they hold: where two columns meet
   // at a cut line they overlap a little on purpose (not counted).
-  let retried = false;
+  // Plans tried in turn when one piles up: shapes as columns where they fit, not fans; then
+  // crossings sewn through, not as thick places.
+  const retries: [boolean, boolean][] = [
+    [true, true],
+    [false, false],
+  ];
   const sections = (graph?: Graph): Pt[][] => {
     const runs = sewSections(obj, o, satin, graph);
     const cuts = obj.info.columns?.[0]?.split?.cuts ?? [];
     const seam = (x: number, y: number) => cuts.some(([a, b]) => toSegment([x, y], a, b) < 0.9);
     if (runs.length && satinOk(runs, obj.region, o, seam)) return runs;
-    // A shape whose fan piles up at its corner: once more with a column where one fits.
-    if (!graph && obj.plan?.ok && obj.plan.kind !== 'strokes' && !retried) {
-      retried = true;
-      const plan = suggestSatin(obj.region, obj.graph ?? undefined, o.satinMax, true);
+    while (!graph && obj.plan?.ok && retries.length) {
+      const [columns, crossings] = retries.shift()!;
+      const plan = suggestSatin(obj.region, obj.graph ?? undefined, o.satinMax, columns, crossings);
       if (plan?.ok && JSON.stringify(plan) !== JSON.stringify(obj.plan)) {
         obj.plan = plan;
         return sections();
