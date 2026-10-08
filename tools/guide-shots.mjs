@@ -266,6 +266,21 @@ shots.cat = async (lang) => {
   await close();
 };
 
+// 1b. shapes: the cat with the switch Stiche | Formen set to shapes
+shots.shapes = async (lang) => {
+  const { page, close } = await boot(lang);
+  await example(page, 'cat');
+  await page.waitForTimeout(1500);
+  await page.click('#shapes-seg [data-shapes="on"]');
+  await page.waitForTimeout(1500);
+  await page.keyboard.press('h');
+  await page.waitForTimeout(600);
+  await fit(page);
+  await mouseAway(page);
+  await jpeg(page, `shapes-${lang}`);
+  await close();
+};
+
 // 2. heatmap: overlap.pes in Prüfen, findings open
 shots.heatmap = async (lang) => {
   const { page, close } = await boot(lang, { width: 1280, height: 960 });
