@@ -14,6 +14,7 @@ import { writePattern } from '../writers';
 import { SUPPORTED_EXTENSIONS } from '../parsers';
 import { toast } from '../shell/ui';
 import { initFilesArea } from '../areas/files/files';
+import { imageTarget } from './imageTarget';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -48,8 +49,6 @@ export function bindFileIo(app: FileIoApp) {
   const IMAGE_FILE = /\.(png|jpe?g|gif|webp|bmp|svg|avif)$/i;
 
   /** Embroidery files go to the file list, an image to the Bild mode, a project opens everything it holds. */
-  const isSvgFile = (f: File) => f.type === 'image/svg+xml' || /\.svg$/i.test(f.name);
-
   const isImage = (f: File) => f.type.startsWith('image/') || IMAGE_FILE.test(f.name);
   const isStitchFile = (f: File) => SUPPORTED_EXTENSIONS.some((ext) => f.name.toLowerCase().endsWith(ext));
 
@@ -64,9 +63,9 @@ export function bindFileIo(app: FileIoApp) {
     if (unknown.length === 1) toast(t('files.unsupported', { name: unknown[0].name }));
     else if (unknown.length) toast(t('files.unsupported.many', { n: unknown.length, names: unknown.map((f) => f.name).join(', ') }));
     else if (images.length > 1) toast(t('files.oneImage', { name: image.name }));
-    if (image && isSvgFile(image)) {
+    if (image && imageTarget(image, app.settings.mode) === 'digitize') {
       // An SVG of shapes opens as stitches in Ablauf, every shape whole; the Bild mode only for SVGs
-      // that are pictures (embedded photos, many colors).
+      // that are pictures (embedded photos, many colors). In the open assistant it stays there.
       try {
         const d = await digitizeSvg(image, app.settings.image.prepare, { ...digitizeDefaults(app.settings.profile), trimMm: app.settings.trimMm });
         await app.addDigitized(d, image.name.replace(/\.svg$/i, ''));
