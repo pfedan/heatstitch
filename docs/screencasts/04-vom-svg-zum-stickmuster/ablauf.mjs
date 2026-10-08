@@ -5,7 +5,7 @@
 // Bild umwandeln und Vorschlagen rechnen in Echtzeit (Worker, Vorschlagen auf der ganzen Kontur
 // einige Sekunden). Die Szenen warten deshalb in kurzen s.wait-Schritten auf das Ergebnis, damit
 // weiter Bilder entstehen und es auch ohne Bilder (Teile) klappt.
-import { fileURLToPath } from 'node:url';
+import fs from 'node:fs';
 
 const SVG = new URL('./material/katze-im-karton.svg', import.meta.url);
 
@@ -22,10 +22,61 @@ const settle = async (s, ready = async () => true, min = 0.4) => {
   throw new Error('did not settle');
 };
 
+/**
+ * Shows a file card that the pointer carries in from the right edge of the window and drops
+ * onto the app (see Teil 3): the page gets dragenter, dragover and drop with the real file.
+ */
+const dragFileIn = async (s, from, to) => {
+  const text = fs.readFileSync(SVG, 'utf8');
+  await s.move(from, 0.7);
+  await s.page.evaluate(
+    ({ text, x, y }) => {
+      const file = new File([text], 'katze-im-karton.svg', { type: 'image/svg+xml' });
+      const card = document.createElement('div');
+      card.style.cssText =
+        'position:fixed;left:0;top:0;z-index:2147483647;pointer-events:none;display:flex;align-items:center;gap:12px;' +
+        'padding:8px 18px 8px 8px;background:#fff;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.35);' +
+        'font:500 16px Inter,system-ui,sans-serif;color:#1d1a22;white-space:nowrap';
+      const img = document.createElement('img');
+      img.src = URL.createObjectURL(file);
+      img.style.cssText = 'width:64px;height:64px;border-radius:8px;object-fit:contain;background:#fff;border:1px solid #e6e1ea';
+      const name = document.createElement('span');
+      name.textContent = 'katze-im-karton.svg';
+      card.append(img, name);
+      document.body.append(card);
+      const place = (px, py) => (card.style.transform = `translate(${px - 18}px, ${py + 14}px)`);
+      place(x, y);
+      const fire = (type, px, py) => {
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        const target = document.elementFromPoint(px, py) ?? document.body;
+        target.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt, clientX: px, clientY: py }));
+      };
+      fire('dragenter', x, y);
+      const onMove = (e) => {
+        place(e.clientX, e.clientY);
+        fire('dragover', e.clientX, e.clientY);
+      };
+      window.addEventListener('mousemove', onMove, true);
+      window.__dropFile = (px, py) => {
+        window.removeEventListener('mousemove', onMove, true);
+        card.remove();
+        fire('dragover', px, py);
+        fire('drop', px, py);
+        delete window.__dropFile;
+      };
+    },
+    { text, x: from[0], y: from[1] },
+  );
+  await s.move(to, 1.6);
+  await s.wait(0.5);
+  await s.page.evaluate(([x, y]) => window.__dropFile(x, y), to);
+};
+
 // The realistic view takes its light from the pointer's side of the stage: up left the threads
 // shine. The pointer rests there in Gestalten, off the motif, so no stitch readout shows.
 const REST = [420, 140];
-// Where box flaps and rim meet in the middle of the box, after Einpassen (pattern view 304 %).
+// Where box flaps and rim meet in the middle of the box, as the design opens (fitted).
 const BOX_MIDDLE = [1022, 650];
 
 export default {
@@ -58,20 +109,11 @@ export default {
       },
     },
     {
-      say: 'Links im Feld wähle ich diese Katze im Karton. Links steht, was heatstitch gelesen hat: eine SVG mit acht Farben, hundert Millimeter breit.',
-      text: 'Links im Feld wähle ich diese Katze im Karton. Links steht, was heatstitch gelesen hat: eine SVG mit acht Farben, hundert Millimeter breit.',
-      textEn: 'In the field on the left I choose this cat in a box. On the left you see what heatstitch has read: an SVG with eight colors, a hundred millimeters wide.',
+      say: 'Ich ziehe diese Katze im Karton ins Fenster. Links steht, was heatstitch gelesen hat: eine SVG mit acht Farben, hundert Millimeter breit.',
+      text: 'Ich ziehe diese Katze im Karton ins Fenster. Links steht, was heatstitch gelesen hat: eine SVG mit acht Farben, hundert Millimeter breit.',
+      textEn: 'I drag this cat in a box into the window. On the left you see what heatstitch has read: an SVG with eight colors, a hundred millimeters wide.',
       run: async (s) => {
-        // A dropped SVG leaves the assistant and opens as a design right away, even on the drop
-        // zone of step 1. Clicking the zone and choosing the file keeps it in the assistant; the
-        // headless browser shows no file dialog, the chooser gets the file directly.
-        const zone = s.page.locator('.image-drop').first();
-        await s.move(zone, 1.4);
-        await s.label('Bild oder SVG', zone, 'right');
-        const chooser = s.page.waitForEvent('filechooser');
-        await s.click(null, { before: 0.5, after: 0.3 });
-        await (await chooser).setFiles(fileURLToPath(SVG));
-        s.unlabel();
+        await dragFileIn(s, [1912, 760], [1110, 560]);
         const info = s.page.getByText(/^katze-im-karton, SVG mit/);
         await settle(s, async () => (await info.count()) > 0);
         await s.move([1250, 640], 1.0);
@@ -140,8 +182,6 @@ export default {
         await s.click(null, { before: 0.4 });
         s.unlabel();
         await btn(s, /^katze-im-karton/).waitFor();
-        // The new design opens a little too large; Einpassen before the first frame shows it.
-        await btn(s, 'Einpassen').evaluate((b) => b.click());
         await s.wait(0.6);
         await s.move(REST, 1.0);
         await s.wait(1.0);

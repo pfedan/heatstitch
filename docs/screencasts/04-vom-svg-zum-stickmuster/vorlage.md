@@ -10,8 +10,7 @@ Satin. Die Konturen der Katze (etwa 1,3 mm breit) werden Satin; alle, die sich b
 Objekt, Satin 1 unter Black. Im Werkzeug Richtung (R) liegt dieser Satin in Abschnitten seiner
 Fläche; Leeren nimmt alle Linien weg, Vorschlagen setzt Trennlinien und Querlinien neu.
 
-Wie in Teil 3 öffnet das neue Stickmuster etwas zu groß; vor dem ersten Bild im Gestalten wird
-unsichtbar eingepasst. Der Zeiger ruht auf der Bühne oben links, damit die realistischen Fäden ihr
+Der Zeiger ruht auf der Bühne oben links, damit die realistischen Fäden ihr
 Licht von dort bekommen.
 
 ## Szene 1
@@ -22,12 +21,11 @@ Licht von dort bekommen.
 
 ## Szene 2
 
-**Bild:** Der Zeiger fährt links auf das Feld „Bild oder SVG hierher ziehen“, Etikett, Klick: die Katze
-im Karton erscheint (die Datei wird ohne sichtbaren Dateidialog gewählt; hineingezogen würde die SVG
-den Assistenten verlassen und gleich als Stickmuster öffnen). Heranzoomen links auf „katze-im-karton,
-SVG mit 8 Farben“ und die Breite 100 mm, Etiketten.
+**Bild:** Eine Dateikarte „katze-im-karton.svg“ kommt mit dem Zeiger vom rechten Rand und wird in der
+Mitte losgelassen: die Katze im Karton erscheint. Heranzoomen links auf „katze-im-karton, SVG mit 8
+Farben“ und die Breite 100 mm, Etiketten.
 
-**Sprechtext:** Links im Feld wähle ich diese Katze im Karton. Links steht, was heatstitch gelesen hat: eine SVG mit acht Farben, hundert Millimeter breit.
+**Sprechtext:** Ich ziehe diese Katze im Karton ins Fenster. Links steht, was heatstitch gelesen hat: eine SVG mit acht Farben, hundert Millimeter breit.
 
 ## Szene 3
 
