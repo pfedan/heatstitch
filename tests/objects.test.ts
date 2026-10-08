@@ -174,6 +174,26 @@ describe('shapes that stay as they are', () => {
     expect(d.objects.filter((o) => o.areaMm2 > 300).length).toBe(2);
   });
 
+  it('does not join the pieces of a line across a detail sewn later', () => {
+    // Two red lines 1 mm wide with a blue stripe between them, sewn after the red (the red square
+    // keeps red from being sewn last, as lines alone are).
+    const mm = 60;
+    const img = shape(mm * 10, mm * 10, (x, y) => {
+      const X = x / 10;
+      const Y = y / 10;
+      if (X > 10 && X < 40 && Y > 21 && Y < 23) return BLUE;
+      const lines = X > 10 && X < 40 && ((Y > 20 && Y < 21) || (Y > 23 && Y < 24));
+      return lines || (X > 40 && X < 54 && Y > 40 && Y < 54) ? RED : null;
+    }, WHITE);
+    const prep = new Preparer(img).run({ ...DEFAULT_PREPARE, widthMm: mm });
+    const d = digitize(prep, digitizeDefaults(DEFAULT_PROFILE), 'l');
+    const square = d.objects.find((o) => o.areaMm2 > 150)!;
+    const lines = d.objects.filter((o) => o.label === square.label && o !== square);
+    // Each line on its own, not one area with the stripe filled in red.
+    expect(lines.length).toBe(2);
+    for (const o of lines) expect(o.areaMm2).toBeLessThan(40);
+  });
+
   it('keeps the exact areas of the Image mode when taken over', () => {
     const d = uShape();
     const p = parsePattern(writePattern(d.pattern, 'pes'), 'u.pes');
