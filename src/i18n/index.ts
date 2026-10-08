@@ -13,6 +13,17 @@ export function detectLang(stored: string | null): Lang {
   return navigator.language?.toLowerCase().startsWith('de') ? 'de' : 'en';
 }
 
+/** The language of the page's own address (de/ is German, see src/build/langPages.ts), if it has one. */
+export function pageLang(): Lang | null {
+  const l = document.documentElement.dataset.pageLang;
+  return l === 'de' || l === 'en' ? l : null;
+}
+
+/** Where the guide is in this language, with the section hash carried over (#de-check, #en-check). */
+export function docsUrl(l: Lang, hash = ''): string {
+  return `${import.meta.env.BASE_URL}${l === 'de' ? 'de/' : ''}docs.html${hash.replace(/^#(de|en)-/, `#${l}-`)}`;
+}
+
 /**
  * Switches the language at once, without a reload: the static texts (data-i18n) here, everything
  * drawn with t() by whoever listens (see onLangChange).

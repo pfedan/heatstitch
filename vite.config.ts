@@ -1,15 +1,57 @@
 /// <reference types="vitest/config" />
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
+import { readFileSync } from 'node:fs';
+import { langPage, type Page } from './src/build/langPages';
 
 const SITE_BASE = '/heatstitch/';
 // Pull request previews build into a subfolder of the site (see .github/workflows/deploy.yml).
 const base = process.env.BASE_PATH || SITE_BASE;
 const isPreview = base !== SITE_BASE;
 
+const pageOf = (file: string): Page => (file.endsWith('docs.html') ? 'docs' : 'app');
+
+/**
+ * The app and the guide once per language: English at their address, German under de/ (see
+ * src/build/langPages.ts). The build writes de/ from the finished English pages; the dev server
+ * serves de/ the same way.
+ */
+const langPages: Plugin = {
+  name: 'lang-pages',
+  // After Vite wrote the pages, before vite-plugin-pwa lists them, so de/ is precached too.
+  generateBundle: {
+    order: 'post',
+    handler(_, bundle) {
+      for (const file of ['index.html', 'docs.html']) {
+        const asset = bundle[file];
+        if (asset?.type !== 'asset') throw new Error(`lang-pages: ${file} is not in the build`);
+        const html = String(asset.source);
+        this.emitFile({ type: 'asset', fileName: `de/${file}`, source: langPage(html, pageOf(file), 'de') });
+        asset.source = langPage(html, pageOf(file), 'en');
+      }
+    },
+  },
+  transformIndexHtml(html, ctx) {
+    if (!ctx.server || ctx.originalUrl?.includes('/de/')) return html;
+    return langPage(html, pageOf(ctx.path), 'en');
+  },
+  configureServer(server) {
+    server.middlewares.use(async (request, res, next) => {
+      const req = request as { url?: string; originalUrl?: string };
+      const m = /^\/de\/(index\.html|docs\.html)?(?:[?#]|$)/.exec((req.url ?? '').replace(base, '/'));
+      if (!m) return next();
+      const file = m[1] ?? 'index.html';
+      const html = await server.transformIndexHtml(`/${file}`, new TextDecoder().decode(readFileSync(new URL(file, import.meta.url))), req.originalUrl);
+      res.setHeader('Content-Type', 'text/html');
+      res.end(langPage(html, pageOf(file), 'de'));
+    });
+  },
+};
+
 export default defineConfig({
   base,
   plugins: [
+    langPages,
     // Search engines should only index the real site, not the previews.
     isPreview && {
       name: 'preview-noindex',
