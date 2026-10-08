@@ -85,14 +85,15 @@ Jede Zeile muss `ok` zeigen. Für eine fehlende Sache steht darunter, was zu tun
 
    ```sh
    python3 tools/screencast/compose.py OUT --part N --title "Titel aus dem Konzept" \
-     --video docs/screencasts/NN-kurzname/NN-kurzname
+     --video OUT/NN-kurzname
    ```
 
    Schreibt MP4, Untertitel DE und EN und das Poster.
 6. **Abnahme.** Video ansehen, Daniel schickt Änderungen. Geänderte Sätze kosten nur ihre
    eigene Sprachaufnahme neu.
-7. **Ablegen.** Vorlage, Ablauf und `ton/` in den Branch des Videos, Pull Request gegen die
-   Basis. Wohin das fertige Video kommt, regelt das Konzept unter „Website und Hilfeseite“.
+7. **Ablegen.** Nur Vorlage, Ablauf und `material/` in den Branch des Videos, Pull Request
+   gegen die Basis. `ton/` und die fertigen Dateien bleiben draußen (`ton/` steht in
+   `.gitignore`); wohin sie kommen, regelt das Konzept unter „Fertige Dateien“.
 
 ## Gut zu wissen
 

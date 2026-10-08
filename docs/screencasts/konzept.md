@@ -240,28 +240,41 @@ Projektdateien, Dateinamen des fertigen Videos, Adresse auf der Website.
 
 ### Im Repo: `docs/screencasts/`
 
-Hier liegt alles, was das Video wiederholbar macht, und das fertige Ergebnis.
+Hier liegt nur, was das Video wiederholbar macht: Vorlage, Ablauf und Material. Tonspuren
+und fertige Dateien kommen nicht ins Repo.
 
 ```
 docs/screencasts/
   konzept.md                     dieses Dokument
+  lokal.md                       Einrichtung und Befehle für die Aufnahme
   01-neues-stickmuster/          ein Ordner je Video, Name = Schlüssel
     vorlage.md                   Szenen und Sprechtext, abgenommene Fassung
     ablauf.mjs                   Szenen, Sprechtext, Untertitel, Aktionen (Quelle)
-    ton/                         Sprachaufnahmen je Fingerabdruck, takes.json
     material/                    nur falls nötig: Demodatei des Videos und ihre Quelle
-    01-neues-stickmuster.mp4     fertiges Video mit Untertitelspuren
-    01-neues-stickmuster.de.vtt  Untertitel Deutsch
-    01-neues-stickmuster.en.vtt  Untertitel Englisch
-    01-neues-stickmuster.jpg     Poster
+    ton/                         Sprachaufnahmen je Fingerabdruck, takes.json (nicht im Repo)
 ```
 
-- Die fertigen Dateien tragen den Schlüssel im Namen, damit sie auch außerhalb ihres Ordners
-  eindeutig sind (Website, Download). `compose.py` bekommt dafür
-  `--video docs/screencasts/NN-kurzname/NN-kurzname`.
-- Eine Demodatei, die auch in der App unter „Weitere Beispiele“ auf der Startseite stehen soll, liegt dort, wo die
-  App ihre Beispiele hat, nicht unter `material/`.
+- `ton/` steht in `.gitignore`. Die Sprachaufnahmen bleiben bei dem, der aufnimmt, und
+  werden mit dem fertigen Video gesichert (siehe unten); fehlt eine, macht `tts.mjs` sie neu.
+- Eine Demodatei, die auch in der App unter „Weitere Beispiele“ auf der Startseite stehen
+  soll, liegt dort, wo die App ihre Beispiele hat, nicht unter `material/`.
 - Probeaufnahmen, Hörproben und Standbilder kommen nicht ins Repo.
+
+### Fertige Dateien
+
+`compose.py` schreibt sie in den Arbeitsordner der Aufnahme
+(`--video OUT/NN-kurzname`). Sie tragen den Schlüssel im Namen, damit sie auch außerhalb
+ihres Ordners eindeutig sind:
+
+```
+01-neues-stickmuster.mp4         fertiges Video mit Untertitelspuren
+01-neues-stickmuster.de.vtt      Untertitel Deutsch
+01-neues-stickmuster.en.vtt      Untertitel Englisch
+01-neues-stickmuster.jpg         Poster
+```
+
+Nach der Abnahme liegen sie in Cloudflare R2, von wo die Website sie lädt; die Einrichtung
+klärt ein eigener Thread. Bis dahin bleiben sie im Arbeitsordner.
 
 ### In den Projektdateien: `screencasts/`
 
@@ -272,7 +285,7 @@ screencasts/
   notizen/                       Wissen über die Herstellung, für alle Videos
     aufnahme-beschleunigen.md
   01-neues-stickmuster/          Name = Schlüssel, wie im Repo
-    01-neues-stickmuster.mp4     fertiges Video zum Ansehen (Kopie aus dem Repo)
+    01-neues-stickmuster.mp4     fertiges Video zum Ansehen (Kopie)
     vorlage.md                   nur bis zur Abnahme, danach gilt die im Repo
     standbilder/                 szene-NN-stichwort.png, NN = Szene aus der Vorlage
     proben/                      Hörproben, Probeschnitte, verworfene Fassungen
@@ -283,18 +296,17 @@ screencasts/
   `szene-12-ergebnis.png`. So stehen sie in der Reihenfolge des Videos.
 - Proben sagen, was sie prüfen: `hoerprobe-aoede.m4a`, `sprechtext-kore.m4a`,
   `probe-szenen-01-03.mp4`, `gras-v2-kaefer.png`.
-- Eine Datei liegt nur an einer Stelle. Sobald das Video im Repo ist, gelten Vorlage, Ablauf
-  und Untertitel dort; in den Projektdateien bleibt nur das Video als Ansichtskopie. Wird es
-  neu geschnitten, wird die Kopie mit ersetzt.
+- Eine Datei liegt nur an einer Stelle. Sobald Vorlage und Ablauf im Repo sind, gelten sie
+  dort; in den Projektdateien bleibt nur das Video als Ansichtskopie. Wird es neu
+  geschnitten, wird die Kopie mit ersetzt.
 - Leere Unterordner werden nicht angelegt.
 
 ### Website und Hilfeseite
 
 - Größenbudget: etwa 4 MB pro Minute, die ganze Serie bleibt unter 100 MB. Neu gerendert
-  wird nur auf Anfrage, damit das Repo nicht wächst.
-- Die Website liefert `docs/` heute nicht aus. Beim Bauen werden Video, Poster und Untertitel
-  flach nach `videos/` der Website kopiert (`videos/01-neues-stickmuster.mp4`), daher der
-  Schlüssel im Dateinamen.
+  wird nur auf Anfrage.
+- Video, Poster und Untertitel kommen flach aus dem R2-Bucket (`videos/01-neues-stickmuster.mp4`),
+  daher der Schlüssel im Dateinamen. Die Website verweist nur darauf.
 - Die Videos sind nicht Teil des Offline-Speichers der App (zu groß), sie laden nur beim
   Abspielen.
 - Hilfeseite: ein Bereich „Videos“ oben bei „Was möchtest du tun?“, als Karten mit Poster,
