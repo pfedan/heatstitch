@@ -1,5 +1,5 @@
 import { outline, type Region } from './region';
-import { inside, stripsOfAreas } from './rungs';
+import { cutLinesBetween, inside, stripsOfAreas } from './rungs';
 import { cornerCuts, planParts } from './satinForms';
 import { blobShape, filled, materialOf, planShape, smallHoles, splitBlobs, wholeShape } from './satinShapes';
 import { skeleton, type Branch, type Graph, type Pt } from './skeleton';
@@ -814,4 +814,72 @@ function openHole(g: Graph, hole: Pt[]): [Pt, Pt] | null {
   const n: Pt = [-t[1], t[0]];
   const w = b.r[i] * 1.2 + 0.3;
   return [add(b.pts[i], n, -w), add(b.pts[i], n, w)];
+}
+
+/** A column as withSplit reads it (see Rails in model/restitch). */
+interface SplitColumn {
+  left: Pt[];
+  right: Pt[];
+  split?: { outlines: Pt[][]; holes: Pt[][]; cuts: [Pt, Pt][] };
+}
+
+/**
+ * A satin that does not know how it was cut (see Rails.split), made from a fill or read from
+ * stitches: the area from its shape, the cut lines where its columns end inside it (against another
+ * column, not at the edge). So every satin opens in sections of its area, and the cut lines can always be moved, drawn or taken away again, and the columns made anew.
+ */
+export function withSplit<C extends SplitColumn>(columns: C[][], area: Region, part?: number): C[][] {
+  if (columns.some((part) => part.some((r) => r.split))) return columns;
+  const { outsides, holes } = areaLoops(area);
+  if (!outsides.length) return columns;
+  const within = (q: Pt) => outsides.some((o) => inside(o, q)) && !holes.some((h) => inside(h, q));
+  // Between the rails at a share of the way along: a short or twisted column (read from an
+  // image) can have its middle just outside its own area, so a quarter or three on is as good.
+  const at = (c: C, share: number): Pt => {
+    const i = Math.round((c.left.length - 1) * share);
+    const j = Math.min(i, c.right.length - 1);
+    return [(c.left[i][0] + c.right[j][0]) / 2, (c.left[i][1] + c.right[j][1]) / 2];
+  };
+  // The part that is the area: its columns lie in it (one in ten may miss, read from an image a
+  // tiny column can lie across its own edge).
+  const inArea = (c: C) => c.left.length > 1 && c.right.length > 1 && [0.5, 0.25, 0.75].some((sh) => within(at(c, sh)));
+  // `part` given: that one (its area read from its own rails, so it lies in it however it was read).
+  const k = part ?? columns.findIndex((pt) => pt.length > 0 && pt.filter((c) => !inArea(c)).length <= Math.floor(pt.length / 10));
+  if (k < 0) return columns;
+  const cuts = cutLinesBetween(columns[k], outsides, holes);
+  return columns.map((part, j) => (j === k ? part.map((c, i) => (i ? c : { ...c, split: { outlines: outsides, holes, cuts } })) : part));
+}
+
+/** Nearest distance between two segments (0 when they cross). */
+function segGap([a, b]: [Pt, Pt], [c, d]: [Pt, Pt]): number {
+  const side = (p: Pt, q: Pt, r: Pt) => (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]);
+  if (side(a, b, c) * side(a, b, d) < 0 && side(c, d, a) * side(c, d, b) < 0) return 0;
+  const to = (p: Pt, q: Pt, r: Pt) => {
+    const vx = r[0] - q[0];
+    const vy = r[1] - q[1];
+    const l2 = vx * vx + vy * vy;
+    const u = l2 ? Math.max(0, Math.min(1, ((p[0] - q[0]) * vx + (p[1] - q[1]) * vy) / l2)) : 0;
+    return Math.hypot(p[0] - q[0] - u * vx, p[1] - q[1] - u * vy);
+  };
+  return Math.min(to(a, c, d), to(b, c, d), to(c, a, b), to(d, a, b));
+}
+
+/** A suggested cut line this near one drawn by hand is the same cut (mm). */
+const SAME_CUT_MM = 2;
+
+/**
+ * A suggestion around cut lines drawn by hand: those stay; a suggested cut line that crosses one
+ * or comes near it goes, as does a line across that crosses one. When the parts then make no
+ * columns, the cut lines by hand alone with the lines across, if they do.
+ */
+export function aroundCuts(s: { lines: [Pt, Pt][]; cuts: [Pt, Pt][] }, own: [Pt, Pt][], outsides: Pt[][], holes: Pt[][]): { lines: [Pt, Pt][]; cuts: [Pt, Pt][]; ok: boolean } {
+  const lines = s.lines.filter((l) => !own.some((c) => segGap(l, c) === 0));
+  const merged = [...own, ...s.cuts.filter((c) => !own.some((o) => segGap(c, o) < SAME_CUT_MM))];
+  const fits = (cuts: [Pt, Pt][]) => {
+    const made = stripsOfAreas(outsides, lines, cuts, holes);
+    return made.hole < 0 && !made.bad;
+  };
+  if (fits(merged)) return { lines, cuts: merged, ok: true };
+  if (merged.length > own.length && fits(own)) return { lines, cuts: own, ok: true };
+  return { lines, cuts: merged, ok: false };
 }
