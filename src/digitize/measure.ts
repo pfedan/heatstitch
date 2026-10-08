@@ -6,9 +6,9 @@ import type { Pt } from './skeleton';
 /**
  * Thread per area (mm/mm²) at the densest 1 mm cell of the runs. A satin column reaches about
  * 2 / spacing; where a tight bend fans its stitches or columns pile up, the generated satin is
- * measured instead of predicted.
+ * measured instead of predicted. Cells where `skip` holds for their middle are not counted.
  */
-export function peakDensity(runs: Pt[][]): number {
+export function peakDensity(runs: Pt[][], skip?: (x: number, y: number) => boolean): number {
   const cells = new Map<number, number>();
   for (const run of runs) {
     for (let i = 1; i < run.length; i++) {
@@ -25,7 +25,14 @@ export function peakDensity(runs: Pt[][]): number {
     }
   }
   let max = 0;
-  for (const v of cells.values()) max = Math.max(max, v);
+  for (const [key, v] of cells) {
+    if (v <= max) continue;
+    if (skip) {
+      const x = Math.round(key / 100003);
+      if (skip(x + 0.5, key - x * 100003 + 0.5)) continue;
+    }
+    max = v;
+  }
   return max;
 }
 

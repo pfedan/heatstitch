@@ -24,6 +24,7 @@ export interface StitchAreaApp {
   readonly toggleGuides: () => void;
   readonly togglePoints: () => void;
   readonly sewAlongLines: () => void;
+  readonly suggestLines: () => void;
   readonly setEditing: (on: boolean) => void;
   readonly enterObject: (o: number, fit: boolean) => void;
   readonly revealRecord: (i: number) => void;
@@ -115,6 +116,7 @@ export function initStitchArea(app: StitchAreaApp): { refresh: () => void } {
     when: () => rungsOn() && rt.mode === 'fill' && rt.lines.length >= (rt.cutLines.length ? 1 : 2),
     run: () => app.sewAlongLines(),
   });
+  command({ id: 'stitch.rungs.suggest', label: 'stitches.cmd.suggest', group: G, when: () => rungsOn() && rt.mode === 'fill', run: () => app.suggestLines() });
   command({ id: 'stitch.tool.done', label: 'stitches.cmd.toolDone', group: G, keys: ['Escape'], bind: false, when: rungsOn, run: () => app.closeRungs() });
 
   // What the selected objects are: left out of the correction, loosed, knocked out, linked -------------
@@ -304,6 +306,8 @@ export function initStitchArea(app: StitchAreaApp): { refresh: () => void } {
         state(t('stitches.bar.rungs', { n: rt.lines.length }) + (rt.cutLines.length ? ` · ${t('stitches.bar.cuts', { n: rt.cutLines.length + 1 })}` : '')),
         sep(),
         pen(),
+        sep(),
+        cmdButton('stitch.rungs.suggest', 'stitches.bar.suggest', { hint: 'stitch.suggest.hint' }),
         help(rt.cutLines.length ? 'stitch.draw.parts' : 'stitch.draw.help'),
         cmdButton('stitch.tool.done', 'stitch.draw.cancel'),
         cmdButton('stitch.rungs.sew', 'stitch.draw.sew', { primary: true, hint: 'stitch.draw.hint' }),
