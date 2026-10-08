@@ -89,9 +89,9 @@ export default {
       },
     },
     {
-      say: 'Oben rechts findet „Suchen“ jeden Befehl, schneller geht es mit Strg K. Daneben ist Speichern. Im Menü mit den drei Punkten wählst du die Sprache und findest die Anleitung und die Tastenkürzel.',
-      text: 'Oben rechts findet „Suchen“ jeden Befehl, schneller geht es mit Strg+K. Daneben ist Speichern. Im Menü mit den drei Punkten wählst du die Sprache und findest die Anleitung und die Tastenkürzel.',
-      textEn: 'At the top right, “Search” finds every command, even quicker with Ctrl+K. Next to it is Save. In the menu with the three dots you choose the language and find the guide and the keyboard shortcuts.',
+      say: 'Oben rechts findet „Suchen“ jeden Befehl, schneller geht es mit Strg K. Ich schalte so die realistischen Fäden ein. [delighted] Jetzt sieht die Katze aus wie gestickt. Daneben ist Speichern. Im Menü mit den drei Punkten wählst du die Sprache und findest die Anleitung und die Tastenkürzel.',
+      text: 'Oben rechts findet „Suchen“ jeden Befehl, schneller geht es mit Strg+K. Ich schalte so die realistischen Fäden ein. Jetzt sieht die Katze aus wie gestickt. Daneben ist Speichern. Im Menü mit den drei Punkten wählst du die Sprache und findest die Anleitung und die Tastenkürzel.',
+      textEn: 'At the top right, “Search” finds every command, even quicker with Ctrl+K. This is how I turn on realistic threads. Now the cat looks truly embroidered. Next to it is Save. In the menu with the three dots you choose the language and find the guide and the keyboard shortcuts.',
       run: async (s) => {
         s.zoomOut();
         await s.move(btn(s, /^Suchen/), 1.0);
@@ -101,8 +101,13 @@ export default {
         await s.press('Control+k', { label: 'Strg+K', show: 0.4 });
         // Without a selection only commands that work now are found; Spiegeln would show nothing.
         await s.type('realistische', { perChar: 0.08 });
-        await s.wait(1.4);
-        await s.press('Escape', { show: 0 });
+        await s.wait(1.0);
+        await s.press('Enter', { show: 0.4 });
+        await s.move([1300, 560], 1.0);
+        await s.zoom([975, 520, 0, 0], 1.3);
+        await s.wait(4.2);
+        s.zoomOut();
+        await s.wait(0.5);
         await s.zoom([1700, 24, 0, 0], 1.8);
         await s.move(btn(s, 'Speichern'), 0.8);
         await s.label('Speichern', btn(s, 'Speichern'), 'below');
