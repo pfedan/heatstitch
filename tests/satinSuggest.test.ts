@@ -73,6 +73,15 @@ describe('Vorschlagen: satin for a drawing of lines', () => {
     expect(strips.length).toBe(3);
   });
 
+  it('sees past pinholes in a line', () => {
+    // A raw threshold of a speckled scan: single pixels missing all along the bar.
+    const bar = near([10, 20], [50, 20], 3);
+    const { s, strips } = columns(region((x, y) => bar(x, y) && !(Math.round(x * 10) % 7 === 3 && Math.round(y * 10) % 5 === 1)));
+    expect(s.ok).toBe(true);
+    expect(s.cuts).toEqual([]);
+    expect(strips.length).toBe(1);
+  });
+
   it('opens a ring once', () => {
     const ring = (x: number, y: number) => Math.abs(Math.hypot(x - 30, y - 30) - 15) < 1;
     const { s, strips } = columns(region(ring));
