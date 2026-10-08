@@ -57,7 +57,8 @@ describe.skipIf(!on)('Bild umwandeln and switching', () => {
     await page.evaluate(() => document.getElementById('image-cancel')!.click());
     await page.click('#design-button');
     await page.click('#load-example [data-cmd="cat"]');
-    await page.locator('#file-list li').first().waitFor();
+    // In the list (the switcher may already have closed again once the design is open).
+    await page.locator('#file-list li').first().waitFor({ state: 'attached' });
     await page.locator('#player:not([hidden])').waitFor();
     await page.waitForTimeout(500);
     await openAssistant();
