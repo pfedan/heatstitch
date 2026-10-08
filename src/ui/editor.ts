@@ -1,4 +1,4 @@
-import { thinSweeps } from '../correct/thin';
+import { thinByHand } from '../correct/thinHand';
 import { formatNumber } from '../i18n';
 import { insertStitch, moveRecords, nearestSegment, nearestStitch, removeStitches, stitchesInRect, type RecordRange } from '../model/edit';
 import type { HandChange } from '../model/handEdit';
@@ -240,21 +240,24 @@ export class Editor implements EditView {
   }
 
   /**
-   * Thins the rows and zigzags inside the selection by `share` (0.25 removes every fourth row pair).
-   * Returns the number of stitches removed.
+   * Thins out the selection by `share` (see thinByHand): rows and zigzags spread at a wider
+   * spacing, lines with longer stitches. Returns the number of stitches removed.
    */
   thinSelection(share: number): number {
     const p = this.hooks.pattern();
     if (!p || !this.selection.size) return 0;
     const tags = tagShortStitches(p);
     const sel = this.selection;
-    const r = thinSweeps(p, {
+    const r = thinByHand(p, {
       needAt: (i) => (sel.has(i) ? share : 0),
       protect: tags.map((t) => (t === TIE ? 1 : 0)),
     });
     if (r.removed) {
+      // Said as points removed, so the objects thinned stay what they were (one object each).
+      const removed: number[] = [];
+      r.mask.forEach((m, i) => m && removed.push(i));
       this.selection.clear();
-      this.hooks.commit(r.pattern, null);
+      this.hooks.commit(r.pattern, { removed });
       this.hooks.changed();
     }
     return r.removed;

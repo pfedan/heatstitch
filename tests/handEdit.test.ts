@@ -5,6 +5,7 @@ import { keepObjects, objectView } from '../src/model/handEdit';
 import { STITCH, type Pattern } from '../src/model/pattern';
 import { analyze, remembered, restitch, shapeTrust } from '../src/model/restitch';
 import { parsePattern } from '../src/parsers';
+import { Editor } from '../src/ui/editor';
 import { Shape } from './helpers/shapes';
 
 const load = (f: string) => parsePattern(readFileSync(new URL(`../public/examples/${f}`, import.meta.url)), f);
@@ -82,3 +83,32 @@ describe('points edited by hand', () => {
 });
 
 const defaults = { pattern: 'tatami', spacing: 0.45, spacingEnd: 0.45, offset: 0.25, angle: 45, stitch: 3.5, edge: 0, underlay: true, tolerance: 0.15 };
+
+describe('thinned out by hand', () => {
+  it('keeps a thinned fill one object, in its place', () => {
+    // cat-60mm.pes, the paw "Füllung 16" (Creme): thinned by 25 % it fell apart in two objects.
+    const p = load('cat-60mm.pes');
+    const v = objectView(p);
+    const o = 16;
+    let cur = p;
+    const editor = new Editor({
+      pattern: () => cur,
+      range: () => ({ first: objectView(cur).objects[o].first, last: objectView(cur).objects[o].last }),
+      commit: (next, change) => {
+        expect(change && 'removed' in change).toBe(true);
+        expect(keepObjects(cur, next, change!).get(o)).toBe(o);
+        cur = next;
+      },
+      redraw: () => {},
+      changed: () => {},
+    });
+    editor.setActive(true);
+    editor.selectAll();
+    const n = editor.thinSelection(0.25);
+    expect(n).toBeGreaterThan(10);
+    const nv = objectView(cur);
+    expect(nv.objects).toHaveLength(v.objects.length);
+    expect(nv.objects[o].last - nv.objects[o].first).toBe(v.objects[o].last - v.objects[o].first - n);
+    expect(remembered(cur, nv.objects[o])?.hand).toBe(n);
+  });
+});

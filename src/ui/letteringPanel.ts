@@ -35,6 +35,7 @@ export interface LetteringHooks {
 
 import type { Hoop } from '../model/hoop';
 import { hoopShort } from './hoopPanel';
+import { swap } from '../shell/h';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const STYLES: FontStyle[] = ['sans', 'serif', 'script', 'display'];
@@ -193,7 +194,7 @@ export class LetteringPanel {
     const release = Object.assign(document.createElement('button'), { type: 'button', className: 'link lettering-release', textContent: t('lettering.release'), title: t('lettering.release.hint') });
     release.addEventListener('click', () => this.hooks.release());
     parts.push(release);
-    this.body.replaceChildren(...parts);
+    swap(this.body, ...parts);
   }
 
   private field(label: Key, ...content: (HTMLElement | string)[]): HTMLElement {
