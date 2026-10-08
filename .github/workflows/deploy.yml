@@ -113,7 +113,7 @@ jobs:
         run: npx playwright install --with-deps chromium
       - if: steps.browsers.outputs.cache-hit == 'true'
         run: npx playwright install-deps chromium
-      - run: npx vitest run tests/langSwitch.test.ts tests/tooltip.test.ts tests/spaceKey.test.ts tests/responsive.test.ts tests/layerDrag.test.ts tests/imageTakeFit.test.ts tests/imageAssistantSwitch.test.ts tests/sectionScroll.test.ts
+      - run: npx vitest run tests/langSwitch.test.ts tests/tooltip.test.ts tests/spaceKey.test.ts tests/responsive.test.ts tests/layerDrag.test.ts tests/imageTakeFit.test.ts tests/imageAssistantSwitch.test.ts tests/sectionScroll.test.ts tests/panelScroll.test.ts
         env:
           BROWSER_TESTS: '1'
 
