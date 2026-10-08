@@ -74,6 +74,12 @@ export class Field {
   private readonly buckets = new Map<number, number[]>();
   private readonly holeR = HOLE_RADIUS_MM * 10;
   private readonly shortsLevel: number;
+  /**
+   * Work done by swaps so far, in sub-cells and penetrations touched: a measure of search time that
+   * does not depend on the machine or its load, so a search budgeted by it ends at the same point
+   * everywhere (deterministic time, as CPLEX ticks or Gurobi work units).
+   */
+  work = 0;
 
   constructor(
     p: Pattern,
@@ -234,6 +240,7 @@ export class Field {
     const box: [number, number, number, number] = [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[2], b[2]), Math.max(a[3], b[3])];
     if (from.map.cols === 0) box.splice(0, 4, ...b);
     if (to.map.cols === 0) box.splice(0, 4, ...a);
+    this.work += from.map.cols * from.map.rows + to.map.cols * to.map.rows + (from.holes.length + to.holes.length) / 2 + Math.max(0, box[2] - box[0] + 1) * Math.max(0, box[3] - box[1] + 1) * SUB * SUB;
     for (let r = box[1]; r <= box[3]; r++) {
       for (let c = box[0]; c <= box[2]; c++) {
         const i = r * this.cols + c;

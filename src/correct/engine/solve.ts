@@ -67,7 +67,7 @@ export interface FixOptions {
   visible?: boolean;
   /** Also sew objects changed by hand anew from their shape (their hand changes are lost: a proposal). */
   hand?: boolean;
-  /** Time for the search per group (ms). */
+  /** Search per group, in milliseconds of the reference machine: spent as work (Field.work), so the result does not depend on the machine. */
   budgetMs?: number;
   /**
    * Search: large neighbourhoods (default), the exact program, or the program before the search. The
@@ -91,9 +91,20 @@ const HIDDEN = 2.2;
 const MAX_ROUNDS = 3;
 /** Search time per group (ms), and neighbourhoods in a row without a better choice before it stops. */
 const BUDGET_MS = 800;
+/**
+ * Field work (Field.work) the search does per millisecond, measured on the test set (110 to 120
+ * thousand on the cloud machine, 2026-10-08). The budget is given in milliseconds and spent in
+ * work: a slower machine takes longer, but comes to the same choice.
+ */
+const WORK_PER_MS = 110_000;
 const STALE = 40;
 /** Time for the caution kinds (gaps, too open, long stitches), object by object. */
 const LOWER_BUDGET_MS = 6000;
+/**
+ * The caution kinds' tries are counted as work too: each costs about its records plus 0.7 per
+ * validation cell (sewing and checking, fitted on the test set), about 38 of them per millisecond.
+ */
+const LOWER_WORK_PER_MS = 38;
 /** Groups with at most this many combinations are searched completely. */
 const EXHAUSTIVE = 1500;
 
@@ -377,9 +388,10 @@ async function upperFix(p: Pattern, v: ValidationResult, counting: Uint8Array, p
       rec(0);
     } else {
       // Greedy from the current choice, then large neighbourhoods: a few objects at once, exactly.
-      const deadline = performance.now() + (opt.budgetMs ?? BUDGET_MS);
+      // Budgeted by work, not by the clock: the same design gets the same answer on any machine.
+      const end = f.work + (opt.budgetMs ?? BUDGET_MS) * WORK_PER_MS;
       let improved = true;
-      while (improved && performance.now() < deadline) {
+      while (improved && f.work < end) {
         improved = false;
         for (let k = 0; k < g.length; k++) {
           const was = g[k].chosen;
@@ -401,7 +413,7 @@ async function upperFix(p: Pattern, v: ValidationResult, counting: Uint8Array, p
       let seed = 1;
       const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
       let stale = 0;
-      while (performance.now() < deadline && stale < STALE) {
+      while (f.work < end && stale < STALE) {
         g.forEach((c, k) => choose(c, bestChoice[k]));
         // A neighbourhood: one object and those sharing open cells with it, up to five.
         const pivot = Math.floor(rnd() * g.length);
@@ -550,12 +562,12 @@ function lowerFix(p: Pattern, orig: Pattern, v0: ValidationResult, profile: Prof
     for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) if (kinds.some((k) => openFor(x, cnt, r * m.cols + c, k))) n++;
     return n;
   };
-  // Most open cells first, within a time budget: each try sews and checks the whole design.
-  const deadline = performance.now() + LOWER_BUDGET_MS;
+  // Most open cells first, within a work budget (the same tries on any machine): each try sews and checks the whole design.
+  let work = 0;
   const order = objs.map((o) => ({ o, n: taken.has(o.index) ? 0 : openIn(v, o) })).filter((x) => x.n > 0).sort((a, b) => b.n - a.n);
   let curObjs = { p: cur, kinds: kindsArr, objs };
   for (const { o: o0 } of order) {
-    if (opt.stale?.() || performance.now() > deadline) break;
+    if (opt.stale?.() || work > LOWER_BUDGET_MS * LOWER_WORK_PER_MS) break;
     if (taken.has(o0.index)) continue;
     if (curObjs.p !== cur) curObjs = { p: cur, kinds: stitchKinds(cur), objs: objectsOf(cur) };
     const { kinds: ka, objs: now } = curObjs;
@@ -575,6 +587,7 @@ function lowerFix(p: Pattern, orig: Pattern, v0: ValidationResult, profile: Prof
       const next = sewUnit(cur, u, t.changes, !!t.knockout, opt.trimMm);
       if (!next) continue;
       const vn = validateDesign(next, profile, checks, gaps);
+      work += next.cmd.length + 0.7 * vn.level.length;
       const d = cellDiff(v0, vn, opt.acks);
       if (d.newCritical) continue;
       if (openIn(vn, objectsOf(next)[o.index]) >= open) continue;
