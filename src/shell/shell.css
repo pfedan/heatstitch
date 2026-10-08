@@ -307,6 +307,27 @@ kbd {
   cursor: default;
 }
 
+/* Matches that can't run now: dimmed, not choosable, with what to do first instead of the group. */
+.palette-list li.off {
+  cursor: default;
+}
+
+.palette-list li:not(.off) + li.off {
+  margin-top: 4px;
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 6px 6px;
+}
+
+.palette-list li.off .palette-label {
+  opacity: 0.5;
+}
+
+.palette-need {
+  color: var(--muted);
+  font-size: 12px;
+  text-align: right;
+}
+
 .keys-sheet {
   max-height: 76vh;
   overflow-y: auto;
