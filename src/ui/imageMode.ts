@@ -21,9 +21,11 @@ import { hoopShort } from './hoopPanel';
 import { cssColor, ThreadPicker } from './threadPicker';
 import { FABRICS, THREADS } from '../validation/profiles';
 import { STORAGE_NS } from '../storage/namespace';
-import { command, commandTitle, getCommand } from '../shell/commands';
+import { command, commandTitle, getCommand, keyLabel } from '../shell/commands';
 import { components, type Components } from '../image/labels';
 import { contentCrop, cropHandleAt, cropOf, cropPixels, cutLabels, dragCrop, isFull, moveStroke, type Crop, type CropHandle } from '../image/crop';
+import { toast } from '../shell/ui';
+import { clippedImage, fromClipboard, fromTransfer, type ClipData } from './clipboardImage';
 import '../areas/image/image.css';
 
 /**
@@ -305,6 +307,14 @@ export class ImageMode {
       input.value = '';
     });
     $('image-example').addEventListener('click', () => void this.loadExample());
+    $('image-paste').addEventListener('click', () => void this.pasteClipboard());
+    // Strg+V in the assistant opens what was copied: a picture, an SVG, an image file or address.
+    window.addEventListener('paste', (e) => {
+      if (h.mode() !== 'image' || !e.clipboardData) return;
+      if ((e.target as Element | null)?.closest?.('input, select, textarea, [contenteditable]')) return;
+      e.preventDefault();
+      void this.paste(fromTransfer(e.clipboardData));
+    });
 
     // Sliders apply while dragging, typed numbers once they are complete.
     const num = (id: string, read: (v: number) => void, kind: 'prepare' | 'stitches') => {
@@ -536,6 +546,17 @@ export class ImageMode {
       run: () => {
         enter();
         $<HTMLInputElement>('image-input').click();
+      },
+    });
+    command({
+      id: 'image.paste',
+      label: 'image.paste.cmd',
+      group: G,
+      keys: ['Mod+V'],
+      bind: false,
+      run: () => {
+        enter();
+        void this.pasteClipboard();
       },
     });
     command({
@@ -772,6 +793,30 @@ export class ImageMode {
     await saveImage(image);
     await saveWork(work);
     await this.load(new File([image.data], image.name, { type: image.type }), work);
+  }
+
+  /** The button "Aus Zwischenablage einfügen": reads the clipboard, where the browser lets it. */
+  async pasteClipboard(): Promise<void> {
+    let data: ClipData;
+    try {
+      data = await fromClipboard();
+    } catch {
+      // Refused or not offered (older Firefox): Strg+V always works.
+      toast(t('image.paste.keys'));
+      return;
+    }
+    return this.paste(data);
+  }
+
+  /** Opens the picture in the clipboard as a new image of the assistant, or says why there is none. */
+  private async paste(data: ClipData): Promise<void> {
+    const got = await clippedImage(data, t('image.paste.name'));
+    if ('hint' in got) {
+      toast(t(got.hint));
+      return;
+    }
+    if (this.h.mode() !== 'image') this.h.setMode('image');
+    await this.load(got.file);
   }
 
   /** Opens an image; `work` restores stored changes (and keeps the stored settings). */
@@ -1380,6 +1425,7 @@ export class ImageMode {
     info.classList.toggle('error', !!this.error);
     $('image-file').hidden = !this.source && !this.error;
     $('image-drop').classList.toggle('compact', !!this.source);
+    $('image-paste').title = `${t('image.paste.hint')} (${keyLabel('Mod+V')})`;
     $('image-views').hidden = !this.source;
     $('image-save-project').hidden = !this.source;
     $('image-clear').hidden = !this.source && !this.error;

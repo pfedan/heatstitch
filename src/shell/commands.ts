@@ -17,6 +17,12 @@ export interface Command {
   bind?: boolean;
   /** Whether the command can run now; missing means always. */
   when?: () => boolean;
+  /**
+   * While it can't run: what the user has to do first, shown beside it in the command search
+   * ("Erst ein Objekt wählen"). Missing or undefined: nothing the user can do about it here, so
+   * the search names it only when nothing else matches.
+   */
+  need?: () => Key | undefined;
   run: () => void;
   /** false: not offered in the command search (still bound and shown in the overview). */
   palette?: boolean;
@@ -47,6 +53,15 @@ export function canRun(c: Command | string): boolean {
     return cmd.when ? cmd.when() : true;
   } catch {
     return false;
+  }
+}
+
+/** What to do first so a command can run, when it says (see Command.need). */
+export function needOf(c: Command): Key | undefined {
+  try {
+    return c.need?.();
+  } catch {
+    return undefined;
   }
 }
 
