@@ -37,7 +37,7 @@ Einstieg.
 
 | Nr. | Titel | Inhalt | Demodatei | Länge |
 | --- | --- | --- | --- | --- |
-| 0 | Die heatstitch Oberfläche | Startseite und ihre vier Wege, Kopfleiste (Stickmuster-Menü, Rückgängig, Gestalten und Prüfen, Suchen mit Strg+K, Speichern, Menü ⋯ mit Sprache, Anleitung und Tastenkürzeln), Werkzeugleiste, Farben und Objekte, Bühne mit Breadcrumb und Ansichtsleiste, Karten Objekt und Stickmuster, Player, Hinweise beim Überfahren, Rückgängig, alles bleibt im Browser | `cat-60mm.pes` | 2 min |
+| 0 | Die heatstitch Oberfläche | Startseite und ihre vier Wege, Kopfleiste (Stickmuster-Menü, Rückgängig, Gestalten und Prüfen, Suchen mit Strg+K, Speichern, Menü ⋯ mit Sprache, Anleitung und Tastenkürzeln), Werkzeugleiste, Farben und Objekte, Bühne mit Breadcrumb und Ansichtsleiste, Karten Objekt und Stickmuster, Player, Hinweise beim Überfahren, Rückgängig, alles bleibt im Browser | `cat-60mm.pes` | 3 min |
 
 Teil 0 ist der Rundgang: Er zeigt, wo was liegt, und nennt jeden Bereich mit seinem Namen, ohne
 eine Aufgabe zu Ende zu führen. Die anderen Teile setzen ihn nicht voraus; wo sie einen Bereich
@@ -57,7 +57,7 @@ brauchen, nennen sie ihn kurz selbst.
 
 | Nr. | Titel | Inhalt | Demodatei | Länge |
 | --- | --- | --- | --- | --- |
-| 6 | Fertige Stickdatei öffnen | Ziehen oder „Stickdatei öffnen“, Stickrahmen-Vorschlag, Player, Farbe hervorheben und ausblenden, auf einen Stich zeigen, Realistische Fäden | `cat-60mm.pes` | 2 min |
+| 6 | Fertige Stickdatei öffnen | Ziehen oder „Stickdatei öffnen“, Stickrahmen-Vorschlag, Player, Farbe hervorheben und ausblenden, auf einen Stich zeigen, Realistische Fäden | `cat-60mm.pes` | 3 min |
 | 7 | Stickdatei prüfen | Prüfen (Taste 2), die Ampel „Klappt das?“, Stoffe im Vergleich, Befunde lesen, zur schlimmsten Stelle springen, Heatmap, quittieren | `patch.pes` | 2 bis 3 min |
 | 8 | Beheben und vergleichen | Lösungen suchen, Beheben (unsichtbar), Vorschlag vorher und nachher, Übernehmen, Mit Original vergleichen (C), Korrektur zurücknehmen | `cat-60mm.pes` auf Strick | 2 bis 3 min |
 | 9 | Sprünge und Schnitte | Prüfen, Abschnitt Sprünge und Schnitte, Schneiden und vernähen, alle auf einmal nach Länge, in Gestalten Reihenfolge optimieren | `confetti.pes` | 2 min |

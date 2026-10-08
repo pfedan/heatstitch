@@ -256,7 +256,7 @@ def main():
     ap.add_argument('--title', required=True)
     ap.add_argument('--video', required=True, help='output path without extension')
     ap.add_argument('--ablauf', required=True, help='the ablauf.mjs, for the subtitle texts')
-    ap.add_argument('--crf', default='22')
+    ap.add_argument('--crf', default='30')  # about 4 MB per minute, the budget of the concept
     args = ap.parse_args()
 
     tl = json.load(open(os.path.join(args.out, 'timeline.json')))
