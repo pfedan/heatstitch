@@ -16,7 +16,7 @@ Objekt, Form und Stichart, Stiche; Stickrahmen; Bühne, Karte, Ebene, Ansicht-Me
 - Ein Video wird nur auf direkte Anfrage geplant und erstellt.
 - Je Video zuerst die Vorlage: Ablauf (Szenen mit Aktionen), Demodatei und Sprechtext.
   Erst nach dem Ok wird aufgenommen, vertont und geschnitten.
-- Jedes Video steht für sich. Wer nur Teil 7 sieht, braucht Teil 1 bis 6 nicht. Kein Video
+- Jedes Video steht für sich. Wer nur Teil 7 sieht, braucht Teil 0 bis 6 nicht. Kein Video
   verweist auf andere Teile, weder im Bild noch im Sprechtext.
 - Ein Video, ein Ziel. Der Titel sagt, was man danach kann.
 - Jedes Video zeigt den kürzesten Weg, den die Oberfläche anbietet, und nennt das Bedienelement
@@ -25,10 +25,21 @@ Objekt, Form und Stichart, Stiche; Stickrahmen; Bühne, Karte, Ebene, Ansicht-Me
 
 ## Themenbaum
 
-Drei Stufen: erst selbst gestalten, dann eine fremde Stickdatei ansehen und verbessern,
+Vor allem anderen ein Rundgang durch die Oberfläche, dann drei Stufen: erst selbst gestalten, dann eine fremde Stickdatei ansehen und verbessern,
 dann Feinschliff. Die Gruppen folgen der Anleitung (`docs.html`), damit Video und Text
 zusammenpassen. Jedes Video beginnt auf der Startseite „Was möchtest du sticken?“, die ein
 frischer Browser zeigt; ihre vier Wege sind der natürliche Einstieg.
+
+### Stufe 0: Ankommen
+
+| Nr. | Titel | Inhalt | Demodatei | Länge |
+| --- | --- | --- | --- | --- |
+| 0 | Die heatstitch Oberfläche | Startseite und ihre vier Wege, Kopfleiste (Stickmuster-Menü, Rückgängig, Gestalten und Prüfen, Suchen mit Strg+K, Speichern, Menü ⋯ mit Sprache, Anleitung und Tastenkürzeln), Werkzeugleiste, Farben und Objekte, Bühne mit Brotkrume und Ansichtsleiste, Karten Objekt und Stickmuster, Player, Hinweise beim Überfahren, Rückgängig, alles bleibt im Browser | `cat-60mm.pes` | 2 min |
+
+Teil 0 ist der Rundgang: Er zeigt, wo was liegt, und nennt jeden Bereich mit seinem Namen, ohne
+eine Aufgabe zu Ende zu führen. Die anderen Teile setzen ihn nicht voraus; wo sie einen Bereich
+brauchen, nennen sie ihn kurz selbst. Teil 5 kürzt seinen eigenen Rundgang (Szene 4) deshalb auf
+einen Satz. Schlüssel: `00-heatstitch-oberflaeche`.
 
 ### Stufe 1: Selbst gestalten
 
@@ -294,7 +305,7 @@ bleibt bis Szene 5 unkommentiert.
 | 1 | Startseite. | |
 | 2 | Die Dateikarte „katze.pes“ gleitet auf die Startseite, loslassen, die Katze erscheint. Zeiger kurz auf „Stickdatei öffnen“ und „Katze“ unter „Weitere Beispiele“ (vorher zeigen, dann ziehen). | Zieh die Datei einfach auf das Fenster, oder klick auf „Stickdatei öffnen“. Das geht mit PES, DST und den anderen gängigen Formaten. [short pause] Deine Datei bleibt dabei auf deinem Gerät. Ohne eigene Datei probierst du es mit der Katze unter den Beispielen. |
 | 3 | Zoom auf den Hinweis in der Karte Stickmuster rechts, Klick auf „100 × 100 mm wählen“. | wie bisher |
-| 4 | Fünf Etiketten nacheinander: „Gestalten“, „Prüfen“ und „Speichern“ oben, Werkzeugleiste und Liste links, Bühne, Karten rechts, Player unten. | Oben wechselst du zwischen Gestalten und Prüfen, rechts daneben speicherst du. Links liegen die Werkzeuge und die Farben in der Reihenfolge, in der sie gestickt werden. In der Mitte liegt dein Stickmuster auf der Bühne. Rechts stehen die Karten Objekt und Stickmuster, unten der Player. |
+| 4 | Kurz: Etikett „Farben“ an der Liste links, dann „Karten“ rechts. Der ganze Rundgang ist Teil 0. | Links stehen die Farben in der Reihenfolge, in der sie gestickt werden, rechts die Karten zu deinem Stickmuster. |
 | 5 | Mausrad hinein, Zeiger ruht auf einem Stich, die Zeile „Stich … · Füllung · … mm“ erscheint. Ziehen, dann „Einpassen“ unten rechts. | … „Einpassen“ unten rechts zeigt wieder alles. |
 | 7 | Leertaste hält an. Zoom auf den Player: „Stich … · Zeit“, Regler, „Zur nächsten Farbe“. Klick in den Farbstreifen. | Unten steht, beim wievielten Stich du bist und wie lange die Maschine bis hierher braucht. Ein Klick in den Farbstreifen springt dorthin, die Knöpfe springen von Farbe zu Farbe. |
 | 8 | Zeiger auf die Zeile Dunkelbraun links: der Rest wird blass, Auge und „…“ erscheinen. Klick aufs Auge, Dunkelbraun verschwindet. Klick aufs Auge, sie ist wieder da. | Zeigst du links auf eine Farbe, tritt der Rest zurück, [delighted] und du siehst genau, was in Dunkelbraun gestickt wird. Mit dem Auge blendest du eine Farbe aus und wieder ein. |
