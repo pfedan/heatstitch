@@ -19,6 +19,43 @@ select.addEventListener('change', () => {
 });
 show(detectLang(settings.lang));
 
+// A video card becomes the player on a tap; nothing of the video loads before that.
+// The subtitles come from the same host as the video, which needs a CORS request: where that is
+// refused (the guide shown from another origin), the video plays again without them.
+for (const li of document.querySelectorAll<HTMLElement>('.video[data-key]')) {
+  const btn = li.querySelector<HTMLButtonElement>('.video-play');
+  const base = li.closest<HTMLElement>('.videos')?.dataset.base ?? '';
+  const key = li.dataset.key ?? '';
+  const lang = li.closest('article')?.getAttribute('lang') ?? 'de';
+  btn?.addEventListener('click', () => {
+    const play = (subtitles: boolean) => {
+      const v = document.createElement('video');
+      v.controls = true;
+      v.autoplay = true;
+      v.playsInline = true;
+      v.preload = 'metadata';
+      v.poster = `${base}${key}.jpg`;
+      if (subtitles) {
+        v.crossOrigin = 'anonymous';
+        for (const l of ['de', 'en']) {
+          const track = document.createElement('track');
+          track.kind = 'subtitles';
+          track.srclang = l;
+          track.label = l === 'de' ? 'Deutsch' : 'English';
+          track.src = `${base}${key}.${l}.vtt`;
+          if (l === lang) track.default = true;
+          v.append(track);
+        }
+        v.addEventListener('error', () => play(false), { once: true });
+      }
+      v.src = `${base}${key}.mp4`;
+      li.querySelector('.video-play, video')?.replaceWith(v);
+      v.focus();
+    };
+    play(true);
+  });
+}
+
 // On narrow screens a button at the thumb opens a sheet with the sections of the shown article
 // (src/docs.css hides both beside the rail of wide screens); the button names the current section.
 const fab = document.getElementById('toc-open') as HTMLButtonElement;

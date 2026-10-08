@@ -515,3 +515,107 @@ figure img[src*='save-'] {
     display: none;
   }
 }
+
+/* Short videos: poster cards that become a player on a tap, nothing loads before. */
+.videos {
+  margin: 20px 0 8px;
+}
+
+.videos > p {
+  margin: 0 0 10px;
+}
+
+.video-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px 12px;
+}
+
+.video-play {
+  display: block;
+  position: relative;
+  width: 100%;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  background: #141118;
+  cursor: pointer;
+  aspect-ratio: 16 / 9;
+}
+
+.video-play img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.video-badge {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 52px;
+  height: 52px;
+  margin: -26px 0 0 -26px;
+  border-radius: 50%;
+  background: rgba(20, 17, 24, 0.78);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+  transition: transform 0.15s;
+}
+
+.video-badge::after {
+  content: '';
+  position: absolute;
+  left: 21px;
+  top: 16px;
+  border-style: solid;
+  border-width: 10px 0 10px 16px;
+  border-color: transparent transparent transparent #fff;
+}
+
+.video-play:hover .video-badge,
+.video-play:focus-visible .video-badge {
+  transform: scale(1.1);
+  background: var(--accent);
+}
+
+.video video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #141118;
+}
+
+.video-title {
+  margin: 6px 0 0;
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+.video-part,
+.video-length {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.video-length::before {
+  content: '· ';
+}
+
+@media (max-width: 900px) {
+  .video-list {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 340px) {
+  .video-list {
+    grid-template-columns: 1fr;
+  }
+}
