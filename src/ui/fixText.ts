@@ -42,7 +42,18 @@ export function fixText(c: Fixed): string {
       return t('plan.change.byWidth');
     case 'knockout':
       return t('plan.change.knockout');
+    case 'fine.zeroLength':
+      return t('plan.change.fine.zeroLength');
+    case 'fine.mergeShort':
+      return t('plan.change.fine.mergeShort');
+    case 'fine.pullBack':
+      return t('plan.change.fine.pullBack');
+    case 'fine.satinShort':
+      return t('plan.change.fine.satinShort');
+    case 'fine.hiddenRows':
+      return t('plan.change.fine.hiddenRows');
     default:
-      return `${c.field}: ${String(c.from)} → ${String(c.to)}`;
+      // A stitch step of the fine stage this list does not know yet: its kind, never its key.
+      return c.field.startsWith('fine.') ? t('plan.change.fine') : `${c.field}: ${String(c.from)} → ${String(c.to)}`;
   }
 }
