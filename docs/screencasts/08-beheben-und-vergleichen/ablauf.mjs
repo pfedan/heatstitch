@@ -1,0 +1,332 @@
+// Teil 8: Beheben und vergleichen. Szenen wie in vorlage.md; der Sprechtext jeder Szene
+// (`say`, mit englischer Regie) wird mit tools/screencast/tts.mjs vertont, seine Länge bestimmt
+// die Szenenlänge. `text` und `textEn` sind die Untertitel, ohne Regie.
+//
+// Prüfung und Lösungssuche rechnen in Workern in Echtzeit. Wo sie rechnen, wartet die Szene in
+// kurzen s.wait-Schritten auf das Ergebnis, damit weiter Bilder entstehen und es auch ohne
+// Bilder (Teile) klappt. Beim Aufnäher sucht die App die Lösungen von selbst, und ihr Ergebnis
+// ist bei jedem Lauf gleich.
+import fs from 'node:fs';
+
+const FILE = new URL('../../../public/examples/demos/patch.pes', import.meta.url);
+
+const btn = (s, name, exact = false) => s.page.getByRole('button', { name, exact }).first();
+// Gestalten and Prüfen are radio buttons inside their labels.
+const mode = (s, name) => s.page.locator('label', { has: s.page.getByRole('radio', { name }) }).first();
+const fabric = (s, name) => s.page.getByRole('group', { name: 'Für Stoff' }).getByRole('button', { name, exact: true });
+const verdict = (s) => s.page.locator('strong.ampel-verdict').first();
+const reason = (s, name) => s.page.locator('.ampel-reason').filter({ has: s.page.locator('.name', { hasText: name }) }).first();
+const aside = (s) => s.page.locator('aside.inspector');
+
+/** Waits in frames until `ready` holds. */
+const until = async (s, ready, what, sec = 120) => {
+  for (let i = 0; i < sec * 10; i++) {
+    if (await ready()) return;
+    await s.wait(0.1);
+  }
+  throw new Error(`timed out: ${what}`);
+};
+
+/**
+ * Scrolls the right column by `dy` CSS px over `sec`, eased. The wheel would scroll whatever
+ * list lies under the pointer (Befunde has its own), so the column itself is moved.
+ */
+const scrollAside = async (s, dy, sec = 0.8) => {
+  const el = aside(s);
+  const from = await el.evaluate((e) => e.scrollTop);
+  const to = await el.evaluate((e, y) => Math.max(0, Math.min(e.scrollHeight - e.clientHeight, y)), from + dy);
+  const n = Math.max(1, Math.round(sec * 30));
+  for (let i = 1; i <= n; i++) {
+    const k = i / n;
+    const e = k < 0.5 ? 4 * k * k * k : 1 - (-2 * k + 2) ** 3 / 2;
+    await el.evaluate((x, y) => (x.scrollTop = y), from + (to - from) * e);
+    await s.wait(1 / 30);
+  }
+};
+
+/**
+ * Shows a file card that the pointer carries in from the right edge of the window and drops
+ * onto the app. The browser cannot show a drag from the file manager; the card stands in for
+ * it, and the page gets the same dragenter, dragover and drop events with the real file.
+ */
+const dragFileIn = async (s, from, to) => {
+  const b64 = fs.readFileSync(FILE).toString('base64');
+  await s.move(from, 0.7);
+  await s.page.evaluate(
+    ({ b64, x, y }) => {
+      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      const file = new File([bytes], 'patch.pes', { type: 'application/octet-stream' });
+      const card = document.createElement('div');
+      card.style.cssText =
+        'position:fixed;left:0;top:0;z-index:2147483647;pointer-events:none;display:flex;align-items:center;gap:12px;' +
+        'padding:8px 18px 8px 8px;background:#fff;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.35);' +
+        'font:500 16px Inter,system-ui,sans-serif;color:#1d1a22;white-space:nowrap';
+      const icon = document.createElement('div');
+      icon.textContent = 'PES';
+      icon.style.cssText =
+        'width:64px;height:64px;border-radius:8px;display:grid;place-items:center;background:#141118;color:#f7a23b;' +
+        'font:700 15px Inter,system-ui,sans-serif;letter-spacing:.06em';
+      const name = document.createElement('span');
+      name.textContent = 'patch.pes';
+      card.append(icon, name);
+      document.body.append(card);
+      const place = (px, py) => (card.style.transform = `translate(${px - 18}px, ${py + 14}px)`);
+      place(x, y);
+      const fire = (type, px, py) => {
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        const target = document.elementFromPoint(px, py) ?? document.body;
+        target.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt, clientX: px, clientY: py }));
+      };
+      fire('dragenter', x, y);
+      const onMove = (e) => {
+        place(e.clientX, e.clientY);
+        fire('dragover', e.clientX, e.clientY);
+      };
+      window.addEventListener('mousemove', onMove, true);
+      window.__dropFile = (px, py) => {
+        window.removeEventListener('mousemove', onMove, true);
+        card.remove();
+        fire('dragover', px, py);
+        fire('drop', px, py);
+        delete window.__dropFile;
+      };
+    },
+    { b64, x: from[0], y: from[1] },
+  );
+  await s.move(to, 1.6);
+  await s.wait(0.5);
+  await s.page.evaluate(([x, y]) => window.__dropFile(x, y), to);
+};
+
+/** The stage's readout next to the pointer (density, position) off while the pointer sweeps the motif. */
+const readout = (s, on) => s.page.evaluate((show) => document.getElementById('tooltip')?.style.setProperty('visibility', show ? '' : 'hidden'), on);
+
+// Off the motif, so the stage shows no readout next to the pointer.
+const REST = [1500, 160];
+// The handle of the compare line: the middle of the stage.
+const SPLIT = [800, 563];
+// The lettering on the whole stage (300 %).
+const TEXT = [640, 690];
+
+export default {
+  title: 'Beheben und vergleichen',
+  part: 8,
+  voice: {
+    model: 'google/gemini-3.1-flash-tts',
+    voice: 'Aoede',
+    language: 'de-DE',
+    prompt:
+      'Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.',
+  },
+  lead: 0.4,
+  tail: 0.6,
+  scenes: [
+    {
+      say: '[warm] Dieser Aufnäher soll auf ein T-Shirt. Die Schrift liegt in Satin auf einer vollen Füllung, auf dünnem Strick wird das schnell zu dicht. Ich ziehe ihn ins Fenster.',
+      text: 'Dieser Aufnäher soll auf ein T-Shirt. Die Schrift liegt in Satin auf einer vollen Füllung, auf dünnem Strick wird das schnell zu dicht. Ich ziehe ihn ins Fenster.',
+      textEn: 'This patch is going on a T-shirt. The lettering is satin on top of a full fill, and on thin knit that quickly gets too dense. I drag it into the window.',
+      run: async (s) => {
+        await s.move([960, 300], 0.1);
+        await s.wait(5.0);
+        await dragFileIn(s, [1915, 560], [960, 560]);
+        await until(s, async () => (await btn(s, 'patch.pes').count()) > 0, 'patch.pes opens');
+        await s.move(REST, 1.2);
+        await s.wait(1.4);
+      },
+    },
+    {
+      say: 'Oben klickst du auf Prüfen, oder du drückst die Taste 2. Rechts wähle ich den Stoff Strick. [concerned] Die Ampel sagt: Riskant auf Strick. Auf der Bühne leuchten die Buchstaben, dort liegt zu viel Garn.',
+      text: 'Oben klickst du auf Prüfen, oder du drückst die Taste 2. Rechts wähle ich den Stoff Strick. Die Ampel sagt: Riskant auf Strick. Auf der Bühne leuchten die Buchstaben, dort liegt zu viel Garn.',
+      textEn: 'At the top you click Check, or you press the 2 key. On the right I choose the fabric Knit. The traffic light says: Risky on knit. On the stage the letters glow, that is where too much thread lies.',
+      run: async (s) => {
+        const check = mode(s, /^Prüfen/);
+        await s.move(check, 0.9);
+        await s.label('Prüfen', check, 'below');
+        await s.wait(0.5);
+        s.keyCap('2');
+        await s.click(null, { before: 0.3, after: 0.6 });
+        s.unlabel();
+        s.keyCap(null);
+        await until(s, async () => (await fabric(s, 'Strick').count()) > 0 && / auf /.test(await verdict(s).innerText()), 'check');
+        await s.zoom([1760, 200, 0, 0], 1.7);
+        await s.click(fabric(s, 'Strick'), { move: 1.0, before: 0.4 });
+        await until(s, async () => /Strick/.test(await verdict(s).innerText()), 'verdict for Strick');
+        await s.move(verdict(s), 0.8);
+        await s.label('Riskant auf Strick', verdict(s), 'below');
+        await s.wait(2.4);
+        s.unlabel();
+        s.zoomOut();
+        await readout(s, false);
+        await s.move([420, 640], 1.2);
+        await s.move([850, 640], 1.6);
+        await s.move([420, 830], 1.0);
+        await s.move([850, 830], 1.6);
+        await s.move(REST, 1.0);
+        await readout(s, true);
+      },
+    },
+    {
+      say: 'heatstitch sucht dabei schon nach Lösungen. Unter Dichte steht jetzt Beheben. Beheben ändert nur, was man kaum sieht. [pleased] Und hier schafft es alle dreißig Quadratmillimeter.',
+      text: 'heatstitch sucht dabei schon nach Lösungen. Unter Dichte steht jetzt Beheben. Beheben ändert nur, was man kaum sieht. Und hier schafft es alle dreißig Quadratmillimeter.',
+      textEn: 'Meanwhile heatstitch is already looking for solutions. Under Density there is now Fix. Fix only changes what you can hardly see. And here it manages all thirty square millimetres.',
+      run: async (s) => {
+        const fix = s.page.locator('.ampel-fix').first();
+        await s.zoom(reason(s, 'Dichte'), 1.8);
+        await s.move(reason(s, 'Dichte').locator('.name'), 0.9);
+        await until(s, async () => (await fix.count()) > 0 && !/Wird berechnet/.test(await reason(s, 'Dichte').innerText()), 'fix ready');
+        await s.wait(2.0);
+        await s.move(fix, 0.7);
+        await s.label('Beheben', fix, 'left');
+        await s.wait(4.0);
+        s.unlabel();
+        const fig = fix.locator('span').first();
+        await s.move(fig, 0.6);
+        await s.label('30 von 30 mm²', fig, 'below');
+        await s.wait(2.4);
+        s.unlabel();
+      },
+    },
+    {
+      say: '[delighted] Ein Klick, und aus Riskant wird Mit Vorsicht. Oben bei Prüfen stehen statt sechzehn nur noch sieben offene Stellen.',
+      text: 'Ein Klick, und aus Riskant wird Mit Vorsicht. Oben bei Prüfen stehen statt sechzehn nur noch sieben offene Stellen.',
+      textEn: 'One click, and Risky becomes With care. Up at Check there are only seven open spots instead of sixteen.',
+      run: async (s) => {
+        const fix = s.page.locator('.ampel-fix').first();
+        await s.zoom([1760, 250, 0, 0], 1.6);
+        await s.click(fix, { move: 0.8, before: 0.3, after: 0.3 });
+        await until(s, async () => /Vorsicht/.test(await verdict(s).innerText()), 'verdict after fix');
+        await s.move(verdict(s), 0.6);
+        await s.label('Mit Vorsicht auf Strick', verdict(s), 'below');
+        await s.wait(1.6);
+        s.unlabel();
+        s.zoomOut();
+        const check = mode(s, /^Prüfen/);
+        await until(s, async () => (await check.locator('.check-badge').innerText()).trim() !== '16', 'badge');
+        const open = (await check.locator('.check-badge').innerText()).trim();
+        await s.zoom([1000, 24, 0, 0], 1.8);
+        await s.move(check, 1.0);
+        await s.label(`${open} offen`, check, 'below');
+        await s.wait(2.4);
+        s.unlabel();
+        s.zoomOut();
+        await s.move(REST, 0.8);
+      },
+    },
+    {
+      say: 'Was hat heatstitch gemacht? In Gestalten zeigt die Karte Objekt bei jedem Buchstaben: Von der Korrektur geändert. Beim S ist die Unterlage weg. Beim T liegt sie nur noch in der Mitte. [focused] Und beim E rücken die Satinstiche je nach Breite von 0,41 auf 0,43 Millimeter auseinander.',
+      text: 'Was hat heatstitch gemacht? In Gestalten zeigt die Karte Objekt bei jedem Buchstaben: Von der Korrektur geändert. Beim S ist die Unterlage weg. Beim T liegt sie nur noch in der Mitte. Und beim E rücken die Satinstiche je nach Breite von 0,41 auf 0,43 Millimeter auseinander.',
+      textEn: 'What did heatstitch do? In Design, the Object card shows on every letter: Changed by the correction. On the S the underlay is gone. On the T it only runs down the middle. And on the E the satin stitches move apart from 0.41 to 0.43 millimetres, depending on the width.',
+      run: async (s) => {
+        await readout(s, false);
+        const design = mode(s, /^Gestalten/);
+        await s.move(design, 0.9);
+        await s.label('Gestalten', design, 'below');
+        await s.wait(0.3);
+        s.keyCap('1');
+        await s.click(null, { before: 0.3, after: 0.5 });
+        s.unlabel();
+        s.keyCap(null);
+        const list = s.page.locator('aside').first();
+        const group = (name) => list.getByRole('listitem').filter({ hasText: name }).getByRole('button', { name: /zeigen$/ }).first();
+        const row = (name) => list.getByRole('button', { name: new RegExp(`^${name} \\d`) });
+        const chip = s.page.locator('aside.inspector .stitch-chip', { hasText: 'Von der Korrektur geändert' });
+        await until(s, async () => (await group('White').count()) > 0, 'object list');
+        await s.click(group('White'), { move: 1.0, before: 0.3, after: 0.4 });
+        await s.wait(2.0);
+        await s.tips(true);
+        // One letter: picked in the list, then the pointer rests on the chip and its hint shows.
+        const show = async (name, sec) => {
+          await s.click(row(name), { move: 0.9, before: 0.3, after: 0.3 });
+          await until(s, async () => (await chip.count()) > 0, `chip of ${name}`);
+          await s.zoom([1730, 450, 0, 0], 1.7);
+          await s.move(chip, 0.8);
+          await s.wait(sec);
+          s.zoomOut();
+        };
+        await show('Satin 5', 1.6);
+        await show('Satin 4', 1.6);
+        await show('Satin 2', 4.4);
+        await s.tips(false);
+        await s.move(REST, 0.8);
+        await readout(s, true);
+      },
+    },
+    {
+      say: 'Zurück in Prüfen vergleichst du mit der Taste C mit dem Original. Ich ziehe die Trennlinie über die Schrift. [curious] Links glüht das Original, rechts ist die Korrektur viel ruhiger.',
+      text: 'Zurück in Prüfen vergleichst du mit der Taste C mit dem Original. Ich ziehe die Trennlinie über die Schrift. Links glüht das Original, rechts ist die Korrektur viel ruhiger.',
+      textEn: 'Back in Check, the C key compares with the original. I drag the dividing line across the lettering. On the left the original glows, on the right the correction is much calmer.',
+      run: async (s) => {
+        // The keys go to the stage, not to a button that still has the focus.
+        await s.page.evaluate(() => document.activeElement?.blur());
+        await s.press('2', { label: '2', show: 0.8 });
+        await until(s, async () => (await fabric(s, 'Strick').count()) > 0, 'Prüfen');
+        await s.wait(0.6);
+        await s.page.evaluate(() => document.activeElement?.blur());
+        await readout(s, false);
+        await s.press('c', { label: 'C', show: 1.0 });
+        await until(s, async () => (await btn(s, /^Vergleich beenden/).count()) > 0, 'compare on');
+        await s.move([700, 75], 0.9);
+        await s.label('Original', [726, 60, 64, 22], 'below');
+        await s.wait(1.0);
+        await s.move([850, 75], 0.6);
+        await s.label('Korrigiert', [810, 60, 72, 22], 'below');
+        await s.wait(1.0);
+        s.unlabel();
+        await s.zoom([TEXT[0], TEXT[1], 0, 0], 1.5);
+        await readout(s, false);
+        await s.drag([SPLIT, [390, 640], [900, 640], [640, 640]], { sec: 1.8 });
+        await s.wait(0.4);
+        s.zoomOut();
+        await s.move(REST, 0.8);
+        await readout(s, true);
+      },
+    },
+    {
+      say: 'Rechts unter Vergleich stehen die Zahlen. [proud and warm] Die kritische Fläche schrumpft von 36 auf 8 Quadratmillimeter, und das mit 226 Stichen weniger.',
+      text: 'Rechts unter Vergleich stehen die Zahlen. Die kritische Fläche schrumpft von 36 auf 8 Quadratmillimeter, und das mit 226 Stichen weniger.',
+      textEn: 'On the right under Compare you find the figures. The critical area shrinks from 36 to 8 square millimetres, and with 226 fewer stitches.',
+      run: async (s) => {
+        await s.move([1760, 600], 0.8);
+        const title = s.page.getByText('Vergleich', { exact: true }).first();
+        const top = await aside(s).evaluate((el) => el.getBoundingClientRect().top);
+        await scrollAside(s, (await title.boundingBox()).y - top - 380, 1.0);
+        const table = s.page.locator('table', { hasText: 'Kritische Fläche' }).first();
+        await s.zoom(table, 1.8);
+        const crit = table.locator('tr', { hasText: 'Kritische Fläche' });
+        await s.move(crit, 0.8);
+        await s.label('Kritische Fläche', crit, 'below');
+        await s.wait(3.2);
+        const stitches = table.locator('tr', { hasText: 'Stiche' }).first();
+        await s.move(stitches, 0.7);
+        await s.label('Stiche', stitches, 'above');
+        await s.wait(2.4);
+        s.unlabel();
+        s.zoomOut();
+      },
+    },
+    {
+      say: 'Gefällt dir das Ergebnis nicht, klickst du auf Korrektur zurücknehmen. Dann ist alles wieder wie vorher. [warm] So probierst du ohne Risiko. Viel Spaß beim Sticken!',
+      text: 'Gefällt dir das Ergebnis nicht, klickst du auf Korrektur zurücknehmen. Dann ist alles wieder wie vorher. So probierst du ohne Risiko. Viel Spaß beim Sticken!',
+      textEn: 'If you do not like the result, you click Undo correction. Then everything is back to how it was. That way you can try things without risk. Have fun embroidering!',
+      run: async (s) => {
+        await s.page.evaluate(() => document.activeElement?.blur());
+        await s.press('c', { label: 'C', show: 0.8 });
+        await scrollAside(s, -4000, 0.8);
+        const back = s.page.locator('.ampel-revert');
+        await s.zoom([1760, 260, 0, 0], 1.6);
+        await s.move(back, 1.0);
+        await s.label('Korrektur zurücknehmen', back, 'below');
+        await s.wait(1.2);
+        await s.click(null, { before: 0.3, after: 0.5 });
+        s.unlabel();
+        await until(s, async () => /Riskant/.test(await verdict(s).innerText()), 'correction undone');
+        await s.move(verdict(s), 0.8);
+        await s.wait(1.6);
+        s.zoomOut();
+        await s.move(REST, 1.0);
+        await s.wait(3.0);
+      },
+    },
+  ],
+};
