@@ -54,6 +54,8 @@ export interface Variant {
   visible: boolean;
   /** Its thread was predicted from a sewn variant (looser rows, less underlay), not sewn. */
   predicted?: boolean;
+  /** How much more it is sewn apart than now (trims and jumps it adds), in the measure of visibility. */
+  apart?: number;
 }
 
 const round2 = (v: number) => Math.round(v * 100) / 100;
@@ -124,6 +126,9 @@ const measured = new Map<string, { role: Role; settings: Settings | null; why?: 
 function roleNow(p: Pattern, o: SewObject, kinds: Uint8Array, known: ReturnType<typeof remembered>): { role: Role; settings: Settings | null; why?: string } {
   const s = currentSettings(p, o, kinds);
   if (!s) return { role: 'fixed', settings: null, why: 'unknown' };
+  // A line of a kind of its own (motif, zigzag, E stitch...) read as running stitch: sewn anew as one
+  // it would lose its look.
+  if (s.kind === 'run' && known?.line && known.line.type !== 'run' && known.line.type !== 'triple') return { role: 'fixed', settings: null, why: 'line' };
   if (s.kind === 'fill') {
     if (isOpenPattern(s.s.pattern) || s.s.pattern === 'none') return { role: 'fixed', settings: null, why: 'open' };
     const an = analyze(p, o, kinds, known);

@@ -1,7 +1,7 @@
 import { autoUnder, spacingOf } from '../../model/along';
 import { syncBorders } from '../../model/border';
 import { sewObjects, stitchKey, type SewObject } from '../../model/objects';
-import { JUMP, STITCH, type Pattern } from '../../model/pattern';
+import { COLOR_CHANGE, JUMP, STITCH, TRIM, type Pattern } from '../../model/pattern';
 import { remembered, underlayRanges, type Fixed, type Settings } from '../../model/restitch';
 import { stitchKinds } from '../../model/sequence';
 import { fontNow, type Font } from '../../lettering/font';
@@ -146,6 +146,31 @@ export function sewUnit(p: Pattern, u: Unit, changes: Fixed[], knockout: boolean
     if (next && (u.kind === 'border' || (knockout && hasBorder(p, u.owner)))) next = syncBorders(next, trimMm);
   }
   return next && objectsOf(next).length === n ? next : null;
+}
+
+/** Moves from a stitch to the next one over jumps or a trim, and how many of them are trimmed (as Sprünge und Schnitte counts them). */
+export function movesOf(p: Pattern): { moves: number; trims: number } {
+  let moves = 0;
+  let trims = 0;
+  let moved = false;
+  let cut = false;
+  let stitched = false;
+  for (let i = 0; i < p.cmd.length; i++) {
+    const c = p.cmd[i];
+    if (c === JUMP) moved = true;
+    else if (c === TRIM) cut = true;
+    // A new color starts anew (see transitions).
+    else if (c === COLOR_CHANGE) stitched = moved = cut = false;
+    else if (c === STITCH) {
+      if (stitched && (moved || cut)) {
+        moves++;
+        if (cut) trims++;
+      }
+      stitched = true;
+      moved = cut = false;
+    }
+  }
+  return { moves, trims };
 }
 
 /**

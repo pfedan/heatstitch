@@ -1,40 +1,6 @@
 [
  {
   "name": "Blume (woven)",
-  "ampel": "yellow",
-  "ampelAfter": "yellow",
-  "crit": 0,
-  "critAfter": 0,
-  "newCrit": 0,
-  "newCaution": 0,
-  "newGapSparse": 0,
-  "open": {
-   "density": [
-    0,
-    0
-   ],
-   "holes": [
-    0,
-    0
-   ],
-   "gap": [
-    3,
-    3
-   ],
-   "sparse": [
-    0,
-    0
-   ],
-   "long": [
-    0,
-    0
-   ]
-  },
-  "objects": 0,
-  "ms": 1064
- },
- {
-  "name": "Blume (knit)",
   "ampel": "green",
   "ampelAfter": "green",
   "crit": 0,
@@ -64,8 +30,50 @@
     0
    ]
   },
+  "moves": 7,
+  "movesAfter": 7,
+  "cut": 7,
+  "cutAfter": 7,
   "objects": 0,
-  "ms": 125
+  "ms": 149
+ },
+ {
+  "name": "Blume (knit)",
+  "ampel": "yellow",
+  "ampelAfter": "yellow",
+  "crit": 0,
+  "critAfter": 0,
+  "newCrit": 0,
+  "newCaution": 0,
+  "newGapSparse": 0,
+  "open": {
+   "density": [
+    0,
+    0
+   ],
+   "holes": [
+    0,
+    0
+   ],
+   "gap": [
+    0,
+    0
+   ],
+   "sparse": [
+    0,
+    0
+   ],
+   "long": [
+    0,
+    0
+   ]
+  },
+  "moves": 7,
+  "movesAfter": 7,
+  "cut": 7,
+  "cutAfter": 7,
+  "objects": 0,
+  "ms": 136
  },
  {
   "name": "Musterkarte Dekor (woven)",
@@ -98,8 +106,12 @@
     0
    ]
   },
+  "moves": 19,
+  "movesAfter": 17,
+  "cut": 18,
+  "cutAfter": 16,
   "objects": 1,
-  "ms": 3285
+  "ms": 4107
  },
  {
   "name": "Musterkarte Dekor (knit)",
@@ -132,8 +144,12 @@
     0
    ]
   },
+  "moves": 19,
+  "movesAfter": 20,
+  "cut": 18,
+  "cutAfter": 19,
   "objects": 1,
-  "ms": 5743
+  "ms": 7020
  },
  {
   "name": "Linienstiche (woven)",
@@ -166,8 +182,12 @@
     0
    ]
   },
+  "moves": 0,
+  "movesAfter": 0,
+  "cut": 0,
+  "cutAfter": 0,
   "objects": 0,
-  "ms": 337
+  "ms": 413
  },
  {
   "name": "Linienstiche (knit)",
@@ -200,8 +220,12 @@
     0
    ]
   },
+  "moves": 0,
+  "movesAfter": 0,
+  "cut": 0,
+  "cutAfter": 0,
   "objects": 0,
-  "ms": 360
+  "ms": 413
  },
  {
   "name": "Linien mit Parametern (woven)",
@@ -234,15 +258,19 @@
     0
    ]
   },
+  "moves": 22,
+  "movesAfter": 22,
+  "cut": 22,
+  "cutAfter": 22,
   "objects": 0,
-  "ms": 993
+  "ms": 1282
  },
  {
   "name": "Linien mit Parametern (knit)",
   "ampel": "yellow",
   "ampelAfter": "yellow",
   "crit": 8,
-  "critAfter": 0,
+  "critAfter": 8,
   "newCrit": 0,
   "newCaution": 0,
   "newGapSparse": 0,
@@ -253,7 +281,7 @@
    ],
    "holes": [
     8,
-    0
+    8
    ],
    "gap": [
     0,
@@ -268,8 +296,12 @@
     0
    ]
   },
-  "objects": 1,
-  "ms": 1837
+  "moves": 22,
+  "movesAfter": 22,
+  "cut": 22,
+  "cutAfter": 22,
+  "objects": 0,
+  "ms": 1336
  },
  {
   "name": "Linieneffekte (woven)",
@@ -302,8 +334,12 @@
     0
    ]
   },
+  "moves": 0,
+  "movesAfter": 0,
+  "cut": 0,
+  "cutAfter": 0,
   "objects": 0,
-  "ms": 992
+  "ms": 907
  },
  {
   "name": "Linieneffekte (knit)",
@@ -336,8 +372,12 @@
     0
    ]
   },
+  "moves": 0,
+  "movesAfter": 0,
+  "cut": 0,
+  "cutAfter": 0,
   "objects": 1,
-  "ms": 1127
+  "ms": 1179
  },
  {
   "name": "Schriftzug (woven)",
@@ -370,22 +410,26 @@
     0
    ]
   },
+  "moves": 75,
+  "movesAfter": 75,
+  "cut": 19,
+  "cutAfter": 19,
   "objects": 0,
-  "ms": 588
+  "ms": 600
  },
  {
   "name": "Schriftzug (knit)",
   "ampel": "red",
   "ampelAfter": "red",
-  "crit": 6,
-  "critAfter": 6,
+  "crit": 7,
+  "critAfter": 7,
   "newCrit": 0,
-  "newCaution": 11,
-  "newGapSparse": 2,
+  "newCaution": 0,
+  "newGapSparse": 0,
   "open": {
    "density": [
-    6,
-    6
+    7,
+    7
    ],
    "holes": [
     0,
@@ -396,16 +440,20 @@
     16
    ],
    "sparse": [
-    58,
-    57
+    59,
+    59
    ],
    "long": [
     0,
     0
    ]
   },
-  "objects": 1,
-  "ms": 3695
+  "moves": 75,
+  "movesAfter": 75,
+  "cut": 19,
+  "cutAfter": 19,
+  "objects": 0,
+  "ms": 4748
  },
  {
   "name": "Aufnäher (woven)",
@@ -438,22 +486,64 @@
     0
    ]
   },
+  "moves": 29,
+  "movesAfter": 29,
+  "cut": 17,
+  "cutAfter": 17,
   "objects": 0,
-  "ms": 368
+  "ms": 312
  },
  {
   "name": "Aufnäher (knit)",
   "ampel": "red",
   "ampelAfter": "yellow",
-  "crit": 30,
+  "crit": 23,
   "critAfter": 0,
+  "newCrit": 0,
+  "newCaution": 1,
+  "newGapSparse": 0,
+  "open": {
+   "density": [
+    23,
+    0
+   ],
+   "holes": [
+    0,
+    0
+   ],
+   "gap": [
+    0,
+    0
+   ],
+   "sparse": [
+    0,
+    0
+   ],
+   "long": [
+    0,
+    0
+   ]
+  },
+  "moves": 29,
+  "movesAfter": 32,
+  "cut": 17,
+  "cutAfter": 17,
+  "objects": 2,
+  "ms": 2213
+ },
+ {
+  "name": "Handtuch (terry)",
+  "ampel": "red",
+  "ampelAfter": "red",
+  "crit": 22,
+  "critAfter": 4,
   "newCrit": 0,
   "newCaution": 0,
   "newGapSparse": 0,
   "open": {
    "density": [
-    30,
-    0
+    22,
+    4
    ],
    "holes": [
     0,
@@ -472,42 +562,12 @@
     0
    ]
   },
-  "objects": 2,
-  "ms": 1994
- },
- {
-  "name": "Handtuch (terry)",
-  "ampel": "red",
-  "ampelAfter": "yellow",
-  "crit": 27,
-  "critAfter": 0,
-  "newCrit": 0,
-  "newCaution": 6,
-  "newGapSparse": 0,
-  "open": {
-   "density": [
-    27,
-    0
-   ],
-   "holes": [
-    0,
-    0
-   ],
-   "gap": [
-    0,
-    0
-   ],
-   "sparse": [
-    0,
-    0
-   ],
-   "long": [
-    0,
-    0
-   ]
-  },
-  "objects": 2,
-  "ms": 5826
+  "moves": 9,
+  "movesAfter": 10,
+  "cut": 5,
+  "cutAfter": 5,
+  "objects": 1,
+  "ms": 17939
  },
  {
   "name": "Handtuch (woven)",
@@ -540,8 +600,12 @@
     0
    ]
   },
+  "moves": 9,
+  "movesAfter": 9,
+  "cut": 5,
+  "cutAfter": 5,
   "objects": 0,
-  "ms": 334
+  "ms": 422
  },
  {
   "name": "Handtuch (knit)",
@@ -574,8 +638,12 @@
     0
    ]
   },
+  "moves": 9,
+  "movesAfter": 9,
+  "cut": 5,
+  "cutAfter": 5,
   "objects": 0,
-  "ms": 310
+  "ms": 410
  },
  {
   "name": "cat-60mm.pes (woven)",
@@ -608,17 +676,21 @@
     0
    ]
   },
+  "moves": 35,
+  "movesAfter": 35,
+  "cut": 35,
+  "cutAfter": 35,
   "objects": 0,
-  "ms": 194
+  "ms": 159
  },
  {
   "name": "cat-60mm.pes (knit)",
   "ampel": "red",
-  "ampelAfter": "yellow",
+  "ampelAfter": "red",
   "crit": 26,
-  "critAfter": 8,
+  "critAfter": 11,
   "newCrit": 0,
-  "newCaution": 29,
+  "newCaution": 32,
   "newGapSparse": 1,
   "open": {
    "density": [
@@ -627,7 +699,7 @@
    ],
    "holes": [
     26,
-    8
+    11
    ],
    "gap": [
     0,
@@ -642,8 +714,12 @@
     6
    ]
   },
-  "objects": 11,
-  "ms": 29566
+  "moves": 35,
+  "movesAfter": 38,
+  "cut": 35,
+  "cutAfter": 35,
+  "objects": 12,
+  "ms": 17860
  },
  {
   "name": "demos/overlap.pes (woven)",
@@ -676,8 +752,12 @@
     0
    ]
   },
+  "moves": 6,
+  "movesAfter": 4,
+  "cut": 6,
+  "cutAfter": 4,
   "objects": 5,
-  "ms": 805
+  "ms": 1244
  },
  {
   "name": "demos/overlap.pes (knit)",
@@ -710,8 +790,12 @@
     0
    ]
   },
+  "moves": 6,
+  "movesAfter": 4,
+  "cut": 6,
+  "cutAfter": 4,
   "objects": 5,
-  "ms": 390
+  "ms": 543
  },
  {
   "name": "demos/letters.pes (woven)",
@@ -744,8 +828,12 @@
     0
    ]
   },
+  "moves": 24,
+  "movesAfter": 24,
+  "cut": 24,
+  "cutAfter": 24,
   "objects": 0,
-  "ms": 122
+  "ms": 169
  },
  {
   "name": "demos/letters.pes (knit)",
@@ -778,8 +866,88 @@
     4
    ]
   },
+  "moves": 24,
+  "movesAfter": 18,
+  "cut": 24,
+  "cutAfter": 18,
   "objects": 4,
-  "ms": 4209
+  "ms": 4803
+ },
+ {
+  "name": "demos/patch.pes (woven)",
+  "ampel": "yellow",
+  "ampelAfter": "yellow",
+  "crit": 0,
+  "critAfter": 0,
+  "newCrit": 0,
+  "newCaution": 0,
+  "newGapSparse": 0,
+  "open": {
+   "density": [
+    0,
+    0
+   ],
+   "holes": [
+    0,
+    0
+   ],
+   "gap": [
+    0,
+    0
+   ],
+   "sparse": [
+    0,
+    0
+   ],
+   "long": [
+    0,
+    0
+   ]
+  },
+  "moves": 34,
+  "movesAfter": 34,
+  "cut": 19,
+  "cutAfter": 19,
+  "objects": 0,
+  "ms": 471
+ },
+ {
+  "name": "demos/patch.pes (knit)",
+  "ampel": "red",
+  "ampelAfter": "yellow",
+  "crit": 30,
+  "critAfter": 0,
+  "newCrit": 0,
+  "newCaution": 4,
+  "newGapSparse": 0,
+  "open": {
+   "density": [
+    30,
+    0
+   ],
+   "holes": [
+    0,
+    0
+   ],
+   "gap": [
+    0,
+    0
+   ],
+   "sparse": [
+    0,
+    0
+   ],
+   "long": [
+    0,
+    0
+   ]
+  },
+  "moves": 34,
+  "movesAfter": 27,
+  "cut": 19,
+  "cutAfter": 19,
+  "objects": 9,
+  "ms": 11062
  },
  {
   "name": "demos/sun.dst (woven)",
@@ -812,8 +980,12 @@
     0
    ]
   },
+  "moves": 14,
+  "movesAfter": 14,
+  "cut": 14,
+  "cutAfter": 14,
   "objects": 0,
-  "ms": 42
+  "ms": 57
  },
  {
   "name": "demos/sun.dst (knit)",
@@ -846,8 +1018,12 @@
     0
    ]
   },
+  "moves": 14,
+  "movesAfter": 14,
+  "cut": 14,
+  "cutAfter": 14,
   "objects": 1,
-  "ms": 420
+  "ms": 586
  },
  {
   "name": "demos/confetti.pes (woven)",
@@ -880,8 +1056,12 @@
     0
    ]
   },
+  "moves": 14,
+  "movesAfter": 14,
+  "cut": 10,
+  "cutAfter": 10,
   "objects": 0,
-  "ms": 27
+  "ms": 31
  },
  {
   "name": "demos/confetti.pes (knit)",
@@ -914,8 +1094,12 @@
     0
    ]
   },
+  "moves": 14,
+  "movesAfter": 14,
+  "cut": 10,
+  "cutAfter": 10,
   "objects": 0,
-  "ms": 21
+  "ms": 31
  },
  {
   "name": "demos/leather-patch.dst (leather)",
@@ -948,8 +1132,12 @@
     0
    ]
   },
+  "moves": 5,
+  "movesAfter": 5,
+  "cut": 5,
+  "cutAfter": 5,
   "objects": 4,
-  "ms": 891
+  "ms": 1209
  },
  {
   "name": "demos/leather-patch.dst (woven)",
@@ -982,7 +1170,11 @@
     0
    ]
   },
+  "moves": 5,
+  "movesAfter": 5,
+  "cut": 5,
+  "cutAfter": 5,
   "objects": 0,
-  "ms": 75
+  "ms": 134
  }
 ]

@@ -520,6 +520,22 @@ function readRails(p: Pattern, pt: Part, kinds: Uint8Array, known?: Remembered):
   return frayed ? rails.map((r, k) => frayed.columns[k] ?? r) : rails;
 }
 
+/**
+ * Columns the stitches go from one to the next without a trim (a letter sewn in one go, its travel
+ * under the columns still to come) stay in one chain (see Rails.chain): sewn anew, they are joined
+ * the same way, without a trim, instead of as columns of their own with a trim between each two.
+ */
+function chainedAsSewn(p: Pattern, pt: Part, kinds: Uint8Array, rails: Rails[]): Rails[] {
+  if (rails.length < 2) return rails;
+  const cols = satinColumns(p, pt, kinds).filter((c) => railsOf(p, c));
+  if (cols.length !== rails.length) return rails;
+  let chain = 0;
+  return rails.map((r, k) => {
+    if (k) for (let i = cols[k - 1].e + 1; i < cols[k].s; i++) if (p.cmd[i] === TRIM) chain++;
+    return { ...r, chain };
+  });
+}
+
 /** The edge of a known shape as closed lines (its curves when drawn), or null. */
 function edgeOf(known?: Remembered): Pt[][] | null {
   if (known?.form) return known.form.paths.map((path) => flatten(path, 0.05)).filter((l) => l.length > 2);
@@ -2035,14 +2051,52 @@ function openFill(r: Region, s: FillSettings, start: Pt) {
 /** Satin of a border: about the density of a satin column, with a walk along the middle under it when wide enough. */
 /**
  * New satin for a part, along `known` rails (kept from an earlier edit) or the rails its stitches
- * have now. Returns the stitches and the rails used.
+ * have now. Returns the stitches and the rails used. Rails read from stitches the file sewed one
+ * after the other without a trim are also tried as chains (see chainedAsSewn): taken when that joins
+ * the columns, and the part to what comes before and after it, with fewer trims and jumps.
  */
-function newSatin(p: Pattern, pt: Part, s: SatinSettings, kinds: Uint8Array, known?: Rails[], reverse = false, shape?: Remembered): { runs: Pt[][]; rails: Rails[] } | null {
-  let rails = known ?? readRails(p, pt, kinds, shape);
-  // Reversed: the columns from the last to the first, each from its other end (sides swap with it).
-  if (reverse) rails = rails.slice().reverse().map(reversedRails);
-  const runs = satinRuns(rails, reverse ? swappedSides(s) : s);
-  return runs.length ? { runs, rails } : null;
+function newSatin(p: Pattern, pt: Part, s: SatinSettings, kinds: Uint8Array, known?: Rails[], reverse = false, shape?: Remembered, trimMm = 2): { runs: Pt[][]; rails: Rails[] } | null {
+  const sewn = (list: Rails[]) => {
+    // Reversed: the columns from the last to the first, each from its other end (sides swap with it).
+    const rails = reverse ? list.slice().reverse().map(reversedRails) : list;
+    return { runs: satinRuns(rails, reverse ? swappedSides(s) : s), rails };
+  };
+  const read = known ? null : readRails(p, pt, kinds, shape);
+  let best = sewn(known ?? read!);
+  const chained = read && chainedAsSewn(p, pt, kinds, read);
+  if (chained && chained !== read) {
+    const alt = sewn(orderedChains(chained, s));
+    const ends: [Pt, Pt] = reverse ? [pt10(p, pt.e), pt10(p, pt.s)] : [pt10(p, pt.s), pt10(p, pt.e)];
+    if (alt.runs.length && joinCost(alt.runs, ends, trimMm) < joinCost(best.runs, ends, trimMm)) best = alt;
+  }
+  return best.runs.length ? best : null;
+}
+
+/**
+ * What it costs to sew `runs` one after the other from `ends[0]` to `ends[1]` (where the stitches
+ * before and after the part are): a trim ten, a jump one (as restitch joins them, see moveTo).
+ */
+function joinCost(runs: Pt[][], ends: [Pt, Pt], trimMm: number): number {
+  const step = (a: Pt, b: Pt, trim = false) => (trim ? 10 : dist(a, b) <= 1 ? 0 : dist(a, b) <= trimMm ? 1 : 10);
+  let v = runs.length ? step(ends[0], runs[0][0]) + step(runs[runs.length - 1][runs[runs.length - 1].length - 1], ends[1]) : 0;
+  for (let k = 1; k < runs.length; k++) v += step(runs[k - 1][runs[k - 1].length - 1], runs[k][0], trimBefore.has(runs[k]));
+  return v;
+}
+
+/** Up to this many columns a chain is put in its best order (see bestChain); more keep the order they were sewn in. */
+const ORDER_MAX = 16;
+
+/** Each chain of `rails` (next to each other in the list) in its best order, the others as they are. */
+function orderedChains(rails: Rails[], s: SatinSettings): Rails[] {
+  const out: Rails[] = [];
+  for (let k = 0; k < rails.length; ) {
+    let e = k + 1;
+    while (rails[k].chain !== undefined && e < rails.length && rails[e].chain === rails[k].chain) e++;
+    const g = rails.slice(k, e);
+    out.push(...(g.length > 1 && g.length <= ORDER_MAX ? bestChain(g, s) : g));
+    k = e;
+  }
+  return out;
 }
 
 /** Rails walked from the other end: the sides swap, the rungs come along. */
@@ -2427,6 +2481,8 @@ const underOf = (c: Column, s: SatinSettings) => underlayOf(fringedColumn(c, ...
 
 /** Longest stitch of the run joining two sections that do not meet (mm). */
 const TRAVEL_STEP = 2.5;
+/** Up to this far an object is joined to the stitch before it by a stitch, not a jump (mm). */
+const JOIN_MM = TRAVEL_STEP;
 
 const reversedColumn = (col: Column): Column => ({ center: col.center.slice().reverse(), left: col.right.slice().reverse(), right: col.left.slice().reverse(), width: col.width });
 
@@ -2920,7 +2976,7 @@ function restitchOnce(
       if (line) return k === firstPart ? (line.length ? line : null) : 'skip';
       if (together) return !whole ? null : k === firstPart ? whole : 'skip';
       if (settings.kind === 'satin') {
-        const sat = newSatin(p, pt, settings.s, kinds, keptRails?.[satinParts.indexOf(pt)], reverse, known);
+        const sat = newSatin(p, pt, settings.s, kinds, keptRails?.[satinParts.indexOf(pt)], reverse, known, trimMm);
         if (sat) rails.push(sat.rails);
         return sat?.runs ?? null;
       }
@@ -3002,7 +3058,11 @@ function restitchOnce(
     };
     const moveTo = (q: Pt, run: Pt[] | null) => {
       if (first) {
-        out.push({ x: Math.round(q[0] * 10), y: Math.round(q[1] * 10), cmd: JUMP });
+        // From the stitch before, near enough to be a stitch itself, as the file came to the object
+        // without a jump: no jump either (a jump to a point and a stitch there sew the same).
+        const prev = out[out.length - 1];
+        const near = !!prev && prev.cmd === STITCH && lead === o.first && Math.hypot(prev.x / 10 - q[0], prev.y / 10 - q[1]) <= JOIN_MM;
+        if (!near) out.push({ x: Math.round(q[0] * 10), y: Math.round(q[1] * 10), cmd: JUMP });
         objOut = out.length;
         count();
         starts.push(sewn);

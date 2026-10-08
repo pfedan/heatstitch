@@ -10,7 +10,7 @@ import { ALL_CHECKS, type Checks, type ValidationResult } from '../../validation
 import { CAUTION_KINDS, cellDiff, cellKey, countingCells, kindsOf, openFor, type CellDiff, type FixKind, type FixTarget } from './cells';
 import { Field, type Contribution } from './field';
 import { merged, toolSets, toolsFor, type Tool, type Variant } from './variants';
-import { borderTools, designKey, letteringTools, objectsOf, predictable, sewUnit, stitchesOf, unitKey, unitOf, type Unit } from './units';
+import { borderTools, designKey, letteringTools, movesOf, objectsOf, predictable, sewUnit, stitchesOf, unitKey, unitOf, type Unit } from './units';
 import { fineFix, fineObjects } from './fine';
 import type { solveMip } from './mip';
 import { validateDesign } from './validate';
@@ -118,6 +118,8 @@ interface Candidate {
   /** Variants forbidden after a real check failed. */
   banned: Set<number>;
   chosen: number;
+  /** Moves and trims of its objects as they are now (see apartOf). */
+  base: { moves: number; trims: number };
 }
 
 /** Field cell of each validation cell (by world key). */
@@ -295,12 +297,13 @@ async function upperFix(p: Pattern, v: ValidationResult, counting: Uint8Array, p
     const hid = u.objects.reduce((a, i) => a + hidden[i] * objs[i].threadMm, 0) / Math.max(1e-6, u.objects.reduce((a, i) => a + objs[i].threadMm, 0));
     // Sewing over changes by hand shows: a proposal only.
     const hand = u.objects.some((i) => remembered(p, objs[i])?.hand);
-    const visibility = variants.map((x, k) => (!k ? 0 : x.visible || hand ? 1 : x.strength * (1 - hid)));
+    // A trim or a jump a change adds counts like a visible change: a fix does not sew apart what was one.
+    const visibility = variants.map((x, k) => (!k ? 0 : x.visible || hand ? 1 : x.strength * (1 - hid) + (x.apart ?? 0)));
     const banned = new Set<number>();
     variants.forEach((_, k) => {
       if (k && !opt.visible && visibility[k] > (opt.directMax ?? DIRECT_MAX)) banned.add(k);
     });
-    const c: Candidate = { o: owner, unit: u, variants, contributions, visibility, banned, chosen: 0 };
+    const c: Candidate = { o: owner, unit: u, variants, contributions, visibility, banned, chosen: 0, base: built.base };
     unitCand.set(key, c);
     cands.set(idx, c);
     await Promise.resolve();
@@ -443,18 +446,26 @@ async function upperFix(p: Pattern, v: ValidationResult, counting: Uint8Array, p
     // Sew the choice for real and check the whole design.
     const chosen = [...unitCand.values()].filter((c) => c.chosen).sort((a, b) => a.o.index - b.o.index);
     pattern = applyChoice(p, chosen, opt.trimMm, opt.hand);
-    // What was predicted is known now: its real thread replaces the prediction.
+    // What was predicted is known now: its real thread replaces the prediction, and how much
+    // more it is sewn apart counts from now on (too much for a direct fix: tried again without).
+    const apart: Candidate[] = [];
     for (const c of chosen) {
       const x = c.variants[c.chosen];
       if (!x.predicted) continue;
-      const real = f.contribution(stitchesOf(pattern, c.unit.objects));
+      const st = stitchesOf(pattern, c.unit.objects);
+      const real = f.contribution(st);
       f.swap(c.contributions[c.chosen], real, onChange);
       c.contributions[c.chosen] = real;
       x.predicted = false;
+      const more = apartOf(st, c.base) - (x.apart ?? 0);
+      if (more <= 0 || c.visibility[c.chosen] >= 1) continue;
+      x.apart = (x.apart ?? 0) + more;
+      c.visibility[c.chosen] += more;
+      if (!opt.visible && c.visibility[c.chosen] > (opt.directMax ?? DIRECT_MAX)) apart.push(c);
     }
     const after = validateDesign(pattern, v.profile, v.checks);
     const diff = cellDiff(v, after, opt.acks);
-    const bad = blame(p, pattern, chosen, diff, after);
+    const bad = [...new Set([...apart, ...blame(p, pattern, chosen, diff, after)])];
     opt.log?.(`verify t=${Math.round(performance.now() - tStart)}`);
     opt.log?.(`round ${round}: tally ${JSON.stringify(tally)} chosen ${chosen.map((c) => `${c.o.index}:${c.variants[c.chosen].tools.map((t) => t.id).join('+')}`).join(' ')} real new crit ${diff.newCritical} gs ${diff.newGapSparse} crit ${diff.criticalBefore}>${diff.criticalAfter} bad ${bad.map((c) => c.o.index).join(',')}`);
     if (!bad.length) break;
@@ -632,6 +643,19 @@ function sewnHere(p: Pattern, index: number): boolean {
   return !!(m?.fill || m?.satin || m?.path);
 }
 
+/**
+ * What one more trim, and one more jump without a trim, costs a variant, in visibility: two more
+ * trims are more than a change applied directly may show (DIRECT_MAX).
+ */
+const TRIM_COST = 0.35;
+const JUMP_COST = 0.1;
+
+/** How much more stitches `st` are sewn apart than `base` (see TRIM_COST). */
+function apartOf(st: Pattern, base: { moves: number; trims: number }): number {
+  const m = movesOf(st);
+  return Math.max(0, m.trims - base.trims) * TRIM_COST + Math.max(0, m.moves - m.trims - (base.moves - base.trims)) * JUMP_COST;
+}
+
 /** Most variants a unit gets (least visible first). */
 const MAX_VARIANTS = 36;
 
@@ -641,7 +665,7 @@ const MAX_VARIANTS = 36;
  * underlay are predicted from its thread (top stitches scaled, underlay taken away), since sewing a
  * large fill again for every spacing step costs seconds. Predicted variants are sewn when chosen.
  */
-function buildVariants(p: Pattern, f: Field, u: Unit, tools: Tool[], trimMm: number, predictOk: boolean, uncovered: (sx: number, sy: number) => boolean): { variants: Variant[]; contributions: Contribution[] } {
+function buildVariants(p: Pattern, f: Field, u: Unit, tools: Tool[], trimMm: number, predictOk: boolean, uncovered: (sx: number, sy: number) => boolean): { variants: Variant[]; contributions: Contribution[]; base: { moves: number; trims: number } } {
   const pred = predictOk ? tools.filter((t) => predictable(t)) : [];
   const real = tools.filter((t) => !pred.includes(t));
   const realSets: Tool[][] = [[], ...toolSets(real, 6)];
@@ -653,6 +677,7 @@ function buildVariants(p: Pattern, f: Field, u: Unit, tools: Tool[], trimMm: num
   // starts from them sewn here, not from the stitches in the file.
   const foreign = u.kind === 'object' && !sewnHere(p, u.owner);
   const uk = `${unitKey(u)}|${trimMm}`;
+  const base = movesOf(stitchesOf(p, u.objects));
   for (const set of realSets) {
     const knockout = set.some((t) => t.knockout);
     if (!set.length && foreign && !variants.length) {
@@ -680,14 +705,14 @@ function buildVariants(p: Pattern, f: Field, u: Unit, tools: Tool[], trimMm: num
         if (foreign && !all.length) continue;
         const pu = un ? predictable(un)!.under! : 1;
         const c = f.blend(top, under, sc ? predictable(sc)!.scale! : 1, pu === 'covered' ? 1 : pu, pu === 'covered' ? uncovered : undefined);
-        variants.push({ tools: all, changes: merged(all), knockout, stitches: sc || un ? undefined : st, strength: Math.max(0, ...all.map((t) => t.strength)), visible: all.some((t) => t.visible), predicted: !!(sc || un) });
+        variants.push({ tools: all, changes: merged(all), knockout, stitches: sc || un ? undefined : st, strength: Math.max(0, ...all.map((t) => t.strength)), visible: all.some((t) => t.visible), predicted: !!(sc || un), apart: apartOf(st, base) });
         contributions.push(c);
       }
     }
   }
   // The current one first, then the least visible.
   const order = variants.map((_, k) => k).filter((k) => k > 0).sort((a, b) => variants[a].strength - variants[b].strength || variants[a].tools.length - variants[b].tools.length).slice(0, MAX_VARIANTS - 1);
-  return { variants: [variants[0], ...order.map((k) => variants[k])], contributions: [contributions[0], ...order.map((k) => contributions[k])] };
+  return { variants: [variants[0], ...order.map((k) => variants[k])], contributions: [contributions[0], ...order.map((k) => contributions[k])], base };
 }
 
 /**

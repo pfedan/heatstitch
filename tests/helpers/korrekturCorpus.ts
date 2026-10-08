@@ -18,7 +18,7 @@ export interface Case {
 
 const WOVEN: Profile = { fabric: 'woven', thread: '40' };
 const KNIT: Profile = { fabric: 'knit', thread: '40' };
-const FOREIGN = ['cat-60mm.pes', 'demos/overlap.pes', 'demos/letters.pes', 'demos/sun.dst', 'demos/confetti.pes', 'demos/leather-patch.dst'];
+const FOREIGN = ['cat-60mm.pes', 'demos/overlap.pes', 'demos/letters.pes', 'demos/patch.pes', 'demos/sun.dst', 'demos/confetti.pes', 'demos/leather-patch.dst'];
 
 /** Builds the corpus. Own designs first: building them clears the object memory. */
 export function corpus(): Case[] {
