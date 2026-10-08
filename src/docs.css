@@ -78,6 +78,27 @@ html[data-lang='en'] [lang='de'] {
 .doc-open {
   font-weight: 500;
   text-decoration: none;
+  white-space: nowrap;
+}
+
+/* Phones: a compact header, and room above the contents button at the end of the text. */
+@media (max-width: 480px) {
+  .doc-top {
+    padding: 8px 12px;
+    gap: 8px;
+  }
+
+  .doc-brand {
+    font-size: 16px;
+  }
+
+  .doc-open {
+    font-size: 14px;
+  }
+
+  .doc {
+    padding-bottom: 96px;
+  }
 }
 
 select {
@@ -94,6 +115,55 @@ select {
   max-width: 760px;
   margin: 0 auto;
   padding: 24px 16px 64px;
+}
+
+/* On wide screens the table of contents becomes a sticky rail beside the text. */
+@media (min-width: 1100px) {
+  .doc {
+    max-width: 1020px;
+  }
+
+  .doc article {
+    display: grid;
+    grid-template-columns: 200px minmax(0, 760px);
+    gap: 0 44px;
+    align-items: start;
+  }
+
+  .doc article > * {
+    grid-column: 2;
+  }
+
+  .doc article .toc {
+    grid-column: 1;
+    grid-row: 1 / span 4;
+    position: sticky;
+    top: 70px;
+    flex-direction: column;
+    gap: 2px;
+    margin: 12px 0 0;
+    max-height: calc(100vh - 90px);
+    overflow-y: auto;
+  }
+
+  .doc article .toc a {
+    border: none;
+    border-left: 2px solid var(--line);
+    border-radius: 0;
+    background: none;
+    padding: 3px 12px;
+    color: var(--muted);
+  }
+
+  .doc article .toc a:hover {
+    color: var(--ink);
+  }
+
+  .doc article .toc a.active {
+    border-left-color: var(--accent);
+    color: var(--ink);
+    font-weight: 600;
+  }
 }
 
 .doc article + article {
@@ -123,6 +193,37 @@ h2 {
 h3 {
   font-size: 16px;
   margin: 20px 0 4px;
+  scroll-margin-top: 64px;
+}
+
+h2 + h3 {
+  margin-top: 12px;
+}
+
+/* Where to start: one line per task, each linking into the guide. */
+.tasks {
+  margin: 20px 0 8px;
+  padding: 12px 16px 6px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.tasks p {
+  margin: 0 0 4px;
+}
+
+.tasks ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.tasks li {
+  margin: 2px 0;
+}
+
+.terms dt {
+  margin-top: 8px;
 }
 
 .lead {
@@ -248,7 +349,11 @@ figcaption {
 
 /* Narrow pictures (stitch plan, satin sections) would be too tall at full width. */
 figure img[src*='stitchplan'],
-figure img[src*='sections'] {
+figure img[src*='sections'],
+figure img[src*='kinds'],
+figure img[src*='shorts'],
+figure img[src*='/leather.jpg'],
+figure img[src*='save-'] {
   width: auto;
   max-width: 100%;
   max-height: 520px;
@@ -280,4 +385,237 @@ figure img[src*='sections'] {
 
 .font-table td:nth-child(3) {
   white-space: nowrap;
+}
+
+/* Narrow screens: the contents are one tap away, a button at the thumb opens a sheet of the sections. */
+.toc-fab {
+  position: fixed;
+  right: 16px;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100vw - 32px);
+  padding: 10px 16px 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  box-shadow: 0 4px 18px rgb(0 0 0 / 0.22);
+  cursor: pointer;
+}
+
+.toc-fab[hidden] {
+  display: none;
+}
+
+.toc-fab-here {
+  max-width: 40vw;
+  overflow: hidden;
+  color: var(--muted);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toc-fab-here:empty {
+  display: none;
+}
+
+.toc-fab-here::before {
+  content: '· ';
+}
+
+.toc-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: flex-end;
+  background: rgb(0 0 0 / 0.45);
+}
+
+.toc-sheet[hidden] {
+  display: none;
+}
+
+.toc-sheet-panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-height: min(80vh, 640px);
+  padding: 8px 8px calc(12px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--line);
+  border-radius: 16px 16px 0 0;
+  background: var(--panel);
+  box-shadow: 0 -8px 30px rgb(0 0 0 / 0.3);
+}
+
+.toc-sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px 8px 12px;
+}
+
+.toc-sheet-close {
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.toc-sheet-nav {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  overflow-y: auto;
+  padding: 0 4px;
+}
+
+.toc-sheet-nav a {
+  display: block;
+  padding: 8px 10px;
+  border-radius: 8px;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.3;
+  text-decoration: none;
+}
+
+.toc-sheet-nav a.active {
+  background: var(--bg);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.toc-sheet-top {
+  margin: 8px 12px 0;
+  font-size: 14px;
+}
+
+@media (max-width: 340px) {
+  .toc-sheet-nav {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* On wide screens the rail beside the text does this. */
+@media (min-width: 1100px) {
+  .toc-fab,
+  .toc-sheet {
+    display: none;
+  }
+}
+
+/* Short videos: poster cards that become a player on a tap, nothing loads before. */
+.videos {
+  margin: 20px 0 8px;
+}
+
+.videos > p {
+  margin: 0 0 10px;
+}
+
+.video-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px 12px;
+}
+
+.video-play {
+  display: block;
+  position: relative;
+  width: 100%;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  background: #141118;
+  cursor: pointer;
+  aspect-ratio: 16 / 9;
+}
+
+.video-play img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.video-badge {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 52px;
+  height: 52px;
+  margin: -26px 0 0 -26px;
+  border-radius: 50%;
+  background: rgba(20, 17, 24, 0.78);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+  transition: transform 0.15s;
+}
+
+.video-badge::after {
+  content: '';
+  position: absolute;
+  left: 21px;
+  top: 16px;
+  border-style: solid;
+  border-width: 10px 0 10px 16px;
+  border-color: transparent transparent transparent #fff;
+}
+
+.video-play:hover .video-badge,
+.video-play:focus-visible .video-badge {
+  transform: scale(1.1);
+  background: var(--accent);
+}
+
+.video video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #141118;
+}
+
+.video-title {
+  margin: 6px 0 0;
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+.video-part,
+.video-length {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.video-length::before {
+  content: '· ';
+}
+
+@media (max-width: 900px) {
+  .video-list {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 340px) {
+  .video-list {
+    grid-template-columns: 1fr;
+  }
 }
