@@ -27,11 +27,25 @@ ACCENT = (181, 49, 122)
 ACCENT_LIGHT = (224, 85, 158)
 CARD_BG = (20, 17, 24)
 INTRO, OUTRO = 3.0, 3.0
-FONT_DIR = '/usr/share/fonts/opentype/inter'
+# Inter as OTF (Inter-Regular.otf and so on): FONT_DIR, else the usual places on Linux, macOS
+# and Windows.
+FONT_DIRS = [
+    os.environ.get('FONT_DIR', ''),
+    '/usr/share/fonts/opentype/inter',
+    os.path.expanduser('~/.local/share/fonts'),
+    os.path.expanduser('~/Library/Fonts'),
+    '/Library/Fonts',
+    os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Microsoft', 'Windows', 'Fonts'),
+    os.path.join(os.environ.get('WINDIR', 'C:\\Windows'), 'Fonts'),
+]
 
 
 def font(weight, size):
-    return ImageFont.truetype(os.path.join(FONT_DIR, f'Inter-{weight}.otf'), size)
+    for d in FONT_DIRS:
+        path = os.path.join(d, f'Inter-{weight}.otf')
+        if d and os.path.exists(path):
+            return ImageFont.truetype(path, size)
+    raise SystemExit(f'Inter-{weight}.otf not found; install Inter (https://rsms.me/inter) or set FONT_DIR')
 
 
 def ease(t):

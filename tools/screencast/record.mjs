@@ -7,11 +7,12 @@
 //     [--audio DIR] [--scenes 1-3] [--scale 2]
 //
 // Needs the built app served (npm run build && npm run preview), APP_URL to point elsewhere.
-// Playwright comes from the global install (/opt/node-tools) or PLAYWRIGHT_MODULE.
+// Playwright comes from PLAYWRIGHT_MODULE, the repo's own node_modules or the container's
+// global install (/opt/node-tools), in that order.
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const args = process.argv.slice(2);
 const opt = (name, def) => {
@@ -27,7 +28,13 @@ const FPS = 30;
 const W = 1920;
 const H = 1080;
 
-const pwModule = process.env.PLAYWRIGHT_MODULE || '/opt/node-tools/node_modules/playwright/index.mjs';
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const pwModule = [
+  process.env.PLAYWRIGHT_MODULE,
+  path.join(repoRoot, 'node_modules/playwright/index.mjs'),
+  '/opt/node-tools/node_modules/playwright/index.mjs',
+].find((p) => p && fs.existsSync(p));
+if (!pwModule) throw new Error('Playwright not found: run npm install, or set PLAYWRIGHT_MODULE');
 const { chromium } = await import(pathToFileURL(pwModule).href);
 const ablauf = (await import(pathToFileURL(path.resolve(ablaufPath)).href)).default;
 
@@ -59,6 +66,8 @@ const context = await browser.newContext({
 const page = await context.newPage();
 await page.clock.install();
 await page.goto(APP_URL);
+// Hover hints would pop up wherever the pointer passes; a scene that wants one calls s.tips(true).
+const hideTips = await page.addStyleTag({ content: '.tip { display: none !important; }' });
 // install() alone lets the fake time flow with the real one, so a slow capture would make the
 // stitch player race; paused, the page only moves on by the runFor() of each frame.
 await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000);
@@ -176,6 +185,8 @@ const api = {
   zoomOut: () => {
     state.zoom = null;
   },
+  /** Shows or hides the hover hints (.tip), hidden from the start. */
+  tips: (on) => hideTips.evaluate((el, show) => (el.disabled = show), on),
   box: boxOf,
   point: pointOf,
 };

@@ -178,7 +178,8 @@ Hilfeseite.
 
 ## Herstellung
 
-Alles läuft im Container und ist wiederholbar. Ein Video wird aus einer Ablaufdatei erzeugt.
+Alles ist wiederholbar und läuft im Container oder auf dem eigenen Rechner (Einrichtung und
+Befehle: [lokal.md](lokal.md)). Ein Video wird aus einer Ablaufdatei erzeugt.
 
 1. **Ablauf.** Je Video eine Datei mit Szenen. Jede Szene hat einen Sprechtext und die
    Aktionen dazu (klicken, ziehen, Taste, zoomen, Hinweis zeigen).
