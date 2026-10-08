@@ -7,7 +7,7 @@ import { cssColor, ThreadPicker } from './threadPicker';
 import { sameColor } from '../model/recolor';
 import type { ThreadColor } from '../model/pattern';
 import { canRun, commandTitle, getCommand, runCommand } from '../shell/commands';
-import { h, icon } from '../shell/h';
+import { h, icon, swap } from '../shell/h';
 import { objectMenu, showOrderMenu } from './objectMenu';
 
 export interface ObjectInfo {
@@ -130,7 +130,7 @@ export class ObjectPanel {
     const parts: (HTMLElement | null)[] = [this.head(info, sel), this.facts(info, sel), this.geometry(info, sel)];
     // Editing the outline or the points: their tools are the option bar over the stage (areas shapes, stitches).
     if (!info.editing && !info.shaping) parts.push(this.toolbar(), this.more(info, sel));
-    this.body.replaceChildren(...parts.filter((p): p is HTMLElement => !!p));
+    swap(this.body, ...parts.filter((p): p is HTMLElement => !!p));
   }
 
   /** Kind, name and thread of the selection, with the button that clears it. */
@@ -444,7 +444,7 @@ export class OrderCard {
     const cancel = Object.assign(document.createElement('button'), { type: 'button', textContent: t(pv.changed ? 'order.cancel' : 'order.close') });
     cancel.addEventListener('click', () => this.close(true));
     buttons.append(apply, cancel);
-    this.card.replaceChildren(title, table, opts, note, buttons);
+    swap(this.card, title, table, opts, note, buttons);
     (pv.changed ? apply : cancel).focus({ preventScroll: true });
   }
 }

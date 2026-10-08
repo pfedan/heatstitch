@@ -47,3 +47,33 @@ export function icon(name: string): SVGSVGElement {
   svg.appendChild(use);
   return svg;
 }
+
+/**
+ * What a control is, to find the one drawn in its place: its command, text or hint. The hint is read
+ * from `title` or from `data-tip`, where the tooltips move it once the control is shown.
+ */
+const controlKey = (el: Element): string =>
+  `${el.tagName}|${el.getAttribute('data-command') ?? (el.textContent?.trim() || el.getAttribute('data-tip') || el.getAttribute('title') || el.getAttribute('aria-label') || '')}`;
+
+/**
+ * Draws a panel anew: replaces the children of `root` with `children`. A control in it that has the
+ * focus (the button just clicked) gives it up first, while the old children are still there. Removing
+ * it otherwise sends focusout in the middle of the removal, a handler that reads the layout then meets a
+ * half-empty panel, and the scrolled column snaps up to what it can still scroll to: the control the
+ * user is working with jumps out of view. The control drawn in its place takes the focus back, without
+ * scrolling, so the keyboard stays where it was.
+ */
+export function swap(root: Element, ...children: (Node | string)[]): void {
+  const active = document.activeElement;
+  if (!(active instanceof HTMLElement) || active === root || !root.contains(active)) {
+    root.replaceChildren(...children);
+    return;
+  }
+  const key = controlKey(active);
+  const alike = (el: Element) => el.tagName === active.tagName && controlKey(el) === key;
+  const nth = [...root.querySelectorAll(active.tagName)].filter(alike).indexOf(active);
+  active.blur();
+  root.replaceChildren(...children);
+  const next = [...root.querySelectorAll<HTMLElement>(active.tagName)].filter(alike)[nth];
+  if (next && document.activeElement === document.body) next.focus({ preventScroll: true });
+}

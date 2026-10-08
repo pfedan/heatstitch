@@ -1,7 +1,7 @@
 import { onLangChange, t } from '../i18n';
 import type { AsideRole, AsideShape } from '../model/aside';
 import { runCommand } from '../shell/commands';
-import { h, icon } from '../shell/h';
+import { h, icon, swap } from '../shell/h';
 import { KIND_ICON, kindLabel, LONG_PRESS_MS } from './layersPanel';
 import { cssColor } from './threadPicker';
 
@@ -46,7 +46,7 @@ export class AsidePanel {
     this.count = list.length;
     this.shown = list;
     this.summary.replaceChildren(icon('obj-chevron'), h('span', { class: 'aside-title' }, t('aside.title', { n: list.length })));
-    this.list.replaceChildren(...list.map((a, k) => this.row(a, k)));
+    swap(this.list, ...list.map((a, k) => this.row(a, k)));
   }
 
   private row(a: AsideShape, k: number): HTMLLIElement {
