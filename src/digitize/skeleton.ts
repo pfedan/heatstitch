@@ -1,4 +1,8 @@
+import { distanceInside } from '../image/edt';
 import { pixelMm, type Region } from './region';
+
+/** Gaps inside a region smaller than this (mm²) are not holes: the outline drops them too. */
+const HOLE_MIN_MM2 = 0.25;
 
 /**
  * Centerlines of narrow regions, for satin columns and running stitch.
@@ -236,9 +240,47 @@ export function smooth(pts: Pt[], sigma: number, closed: boolean): Pt[] {
 }
 
 /**
+ * The region with its pinholes filled: gaps inside it too small to count as holes (the outline
+ * drops them, see areaLoops), from a speckled scan or a raw threshold. Each would otherwise become
+ * a ring in the skeleton, and a line hundreds of little rings.
+ */
+function withoutPinholes(r: Region): Region {
+  const limit = HOLE_MIN_MM2 / (r.pxMm * r.pxMm);
+  const seen = new Uint8Array(r.mask.length);
+  const mask = r.mask.slice();
+  let filled = false;
+  for (let i = 0; i < mask.length; i++) {
+    if (mask[i] || seen[i]) continue;
+    // One gap, 4-connected (the region is 8-connected, so its gaps are 4-connected).
+    const gap = [i];
+    seen[i] = 1;
+    let open = false;
+    for (let k = 0; k < gap.length; k++) {
+      const j = gap[k];
+      const x = j % r.w;
+      const y = (j - x) / r.w;
+      if (x === 0 || y === 0 || x === r.w - 1 || y === r.h - 1) {
+        open = true;
+        continue;
+      }
+      for (const n of [j - 1, j + 1, j - r.w, j + r.w]) {
+        if (mask[n] || seen[n]) continue;
+        seen[n] = 1;
+        gap.push(n);
+      }
+    }
+    if (open || gap.length >= limit) continue;
+    for (const j of gap) mask[j] = 1;
+    filled = true;
+  }
+  return filled ? { ...r, mask, inside: distanceInside(mask, r.w, r.h) } : r;
+}
+
+/**
  * Skeleton graph of the region in image mm: pruned and smoothed, each branch with its half width.
  */
-export function skeleton(r: Region): Graph {
+export function skeleton(area: Region): Graph {
+  const r = withoutPinholes(area);
   const s = thin(r);
   const { nodes: pixNodes, edges } = trace(s, r.w);
   const center = (cluster: number[]): Pt => {
