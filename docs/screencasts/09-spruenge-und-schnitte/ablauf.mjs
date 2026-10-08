@@ -2,17 +2,16 @@
 // (`say`, mit englischer Regie) wird mit tools/screencast/tts.mjs vertont, seine Länge bestimmt
 // die Szenenlänge. `text` und `textEn` sind die Untertitel, ohne Regie.
 //
-// Demodatei ist das Konfetti der Beispiele in Zickzack-Reihenfolge mit losen Sprüngen
-// (material/konfetti.pes, siehe vorlage.md). Die Prüfung rechnet in Workern in Echtzeit; wo sie
+// Demodatei ist ein Konfetti mit 15 Punkten in Pingpong-Reihenfolge und losen Sprüngen
+// (tests/fixtures/pingpong-confetti.pes, siehe vorlage.md), ins Fenster gezogen als konfetti.pes. Die Prüfung rechnet in Workern in Echtzeit; wo sie
 // neu rechnet, wartet die Szene in kurzen s.wait-Schritten auf das Ergebnis.
 import fs from 'node:fs';
 
-const FILE = new URL('./material/konfetti.pes', import.meta.url);
+const FILE = new URL('../../../tests/fixtures/pingpong-confetti.pes', import.meta.url);
 
 const btn = (s, name, exact = false) => s.page.getByRole('button', { name, exact }).first();
 // Gestalten and Prüfen are radio buttons inside their labels.
 const mode = (s, name) => s.page.locator('label', { has: s.page.getByRole('radio', { name }) }).first();
-const filter = (s, name) => s.page.getByRole('radio', { name }).first();
 const uncutNote = (s) => s.page.getByText(/Sprünge? ab .* ohne Schnitt/).first();
 
 /** Waits in frames until `ready` holds. */
@@ -134,30 +133,30 @@ export default {
       },
     },
     {
-      say: 'Jede kleine Schere auf der Bühne ist ein Schnitt. [concerned] Die dicken Linien quer über das Muster sind Sprünge ohne Schnitt: Dort liegt der Faden später lose auf dem Stoff.',
-      text: 'Jede kleine Schere auf der Bühne ist ein Schnitt. Die dicken Linien quer über das Muster sind Sprünge ohne Schnitt: Dort liegt der Faden später lose auf dem Stoff.',
-      textEn: 'Every little pair of scissors on the stage is a trim. The thick lines across the design are jumps without a trim: there the thread will lie loose on the fabric.',
+      say: '[concerned] Die dicken Linien quer über das Muster sind Sprünge ohne Schnitt: Dort liegt der Faden später lose auf dem Stoff. Nur an einer Stelle zeigt eine kleine Schere einen Schnitt.',
+      text: 'Die dicken Linien quer über das Muster sind Sprünge ohne Schnitt: Dort liegt der Faden später lose auf dem Stoff. Nur an einer Stelle zeigt eine kleine Schere einen Schnitt.',
+      textEn: 'The thick lines across the design are jumps without a trim: there the thread will lie loose on the fabric. Only in one place does a little pair of scissors show a trim.',
       run: async (s) => {
-        await s.zoom([600, 330, 0, 0], 1.8);
-        await s.move([570, 300], 1.0);
-        await s.label('Schnitt', [523, 266, 18, 18], 'above');
-        await s.wait(2.6);
+        await s.zoom([960, 380, 0, 0], 1.3);
+        await s.move([760, 262], 1.0);
+        await s.label('Sprung ohne Schnitt', [740, 238, 460, 34], 'above');
+        await s.move([1180, 246], 2.4);
+        await s.wait(3.0);
         s.unlabel();
         s.zoomOut();
-        await s.zoom([960, 400, 0, 0], 1.2);
-        await s.move([700, 290], 1.0);
-        await s.label('Sprung ohne Schnitt', [700, 276, 500, 30], 'above');
-        await s.move([1200, 306], 2.2);
-        await s.wait(2.4);
+        await s.zoom([958, 760, 0, 0], 1.8);
+        await s.move([930, 790], 1.0);
+        await s.label('Schnitt', [949, 766, 18, 18], 'above');
+        await s.wait(2.6);
         s.unlabel();
         s.zoomOut();
         await s.move(REST, 1.0);
       },
     },
     {
-      say: 'Oben klickst du auf Prüfen, oder du drückst die Taste 2. Rechts klappst du Sprünge und Schnitte auf. Der gelbe Hinweis sagt: Dreizehn lange Sprünge sind nicht geschnitten.',
-      text: 'Oben klickst du auf Prüfen, oder du drückst die Taste 2. Rechts klappst du Sprünge und Schnitte auf. Der gelbe Hinweis sagt: Dreizehn lange Sprünge sind nicht geschnitten.',
-      textEn: 'At the top you click Check, or you press the 2 key. On the right you open Jumps and trims. The yellow note says: thirteen long jumps are not trimmed.',
+      say: 'Oben klickst du auf Prüfen, oder du drückst die Taste 2. Rechts klappst du Sprünge und Schnitte auf. Der gelbe Hinweis sagt: Neunzehn lange Sprünge sind nicht geschnitten.',
+      text: 'Oben klickst du auf Prüfen, oder du drückst die Taste 2. Rechts klappst du Sprünge und Schnitte auf. Der gelbe Hinweis sagt: Neunzehn lange Sprünge sind nicht geschnitten.',
+      textEn: 'At the top you click Check, or you press the 2 key. On the right you open Jumps and trims. The yellow note says: nineteen long jumps are not trimmed.',
       run: async (s) => {
         const check = mode(s, /^Prüfen/);
         await s.move(check, 0.9);
@@ -173,25 +172,26 @@ export default {
         await s.click(heading, { move: 1.0, before: 0.3, after: 0.5 });
         await s.zoom([1760, 260, 0, 0], 1.6);
         await s.move(uncutNote(s), 0.9);
-        await s.label('13 ohne Schnitt', uncutNote(s), 'below');
+        await s.label('19 ohne Schnitt', uncutNote(s), 'below');
         await s.wait(3.6);
         s.unlabel();
       },
     },
     {
-      say: 'Ohne Schnitt zeigt nur diese. Ein Klick auf einen Sprung zeigt ihn auf der Bühne. Dieser ist über sieben Zentimeter lang.',
-      text: 'Ohne Schnitt zeigt nur diese. Ein Klick auf einen Sprung zeigt ihn auf der Bühne. Dieser ist über sieben Zentimeter lang.',
-      textEn: 'Not trimmed shows only these. A click on a jump shows it on the stage. This one is more than seven centimeters long.',
+      say: 'Darunter steht jeder Sprung mit seiner Länge. Ein Klick zeigt ihn auf der Bühne. Dieser ist über sechs Zentimeter lang.',
+      text: 'Darunter steht jeder Sprung mit seiner Länge. Ein Klick zeigt ihn auf der Bühne. Dieser ist über sechs Zentimeter lang.',
+      textEn: 'Below, every jump is listed with its length. A click shows it on the stage. This one is more than six centimeters long.',
       run: async (s) => {
         await s.move([1760, 600], 0.6);
         await scrollAsideTo(s, s.page.getByRole('heading', { name: /Sprünge und Schnitte/ }).first(), 40);
-        await s.click(filter(s, /^Ohne Schnitt/), { move: 0.9, before: 0.3, after: 0.5 });
+        await s.move(s.page.getByText('Sprung 1', { exact: true }).first(), 0.9);
+        await s.wait(1.2);
         const jump = s.page.getByText('Sprung 2', { exact: true }).first();
         await s.click(jump, { move: 0.9, before: 0.4, after: 0.6 });
         s.zoomOut();
         await s.wait(0.6);
         await s.move(REST, 1.0);
-        await s.label('71,2 mm', [740, 525, 120, 40], 'above');
+        await s.label('63,8 mm', [740, 525, 120, 40], 'above');
         await s.wait(2.6);
         s.unlabel();
       },
@@ -251,7 +251,7 @@ export default {
         await until(s, async () => (await btn(s, /Reihenfolge optimieren/).count()) > 0, 'design');
         // Gestalten opens on the jump chosen in Prüfen; Einpassen shows the whole design.
         await s.click(btn(s, 'Einpassen'), { move: 1.0, before: 0.2, after: 0.5 });
-        await s.move([1000, 560], 1.2);
+        await s.move([830, 420], 1.2);
         await s.wait(3.4);
         const opt = btn(s, /Reihenfolge optimieren/);
         await s.zoom([200, 260, 0, 0], 1.8);
@@ -264,7 +264,7 @@ export default {
         s.unlabel();
         await s.click(btn(s, 'Übernehmen', true), { move: 0.9, before: 0.4, after: 0.6 });
         s.zoomOut();
-        await s.move([1000, 560], 1.0);
+        await s.move([830, 420], 1.0);
         await s.wait(1.6);
       },
     },

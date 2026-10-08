@@ -1,18 +1,18 @@
 # Teil 9: Sprünge und Schnitte
 
-Schlüssel `09-spruenge-und-schnitte`, Demodatei `material/konfetti.pes` (67 × 37 mm, 15 Punkte,
-8 in Red und 7 in Electric Blue, 920 Stiche), etwa 2 Minuten, 230 Wörter.
+Schlüssel `09-spruenge-und-schnitte`, Demodatei `tests/fixtures/pingpong-confetti.pes` (61 × 33 mm,
+15 Punkte, oben und unten je fünf in Red, in der Mitte fünf in Electric Blue, 798 Stiche),
+etwa 2 Minuten, 230 Wörter.
 
-Die Demodatei ist aus den Punkten des Konfetti-Beispiels (`public/examples/demos/confetti.pes`)
-gebaut, in einer absichtlich dummen Reihenfolge, wie bei mancher Datei aus dem Netz: Je Farbe
-springt die Nadel immer vom einen Ende zum anderen (links, rechts, links ...), und die langen
-Sprünge sind nicht geschnitten. Auf der Bühne kreuzen sich die losen Fäden quer über das Muster.
-Quelle: `material/konfetti.test.ts` (5 × 3 Raster, 14 mm Abstand, Punkte aus confetti.pes
-kopiert); im normalen Testlauf übersprungen, mit `KONFETTI=1` baut es die Datei neu.
+Die Demodatei ist ein Konfetti in absichtlich dummer Reihenfolge, wie bei mancher Datei aus dem
+Netz: Je Farbe springt die Nadel immer vom einen Ende zum anderen, und kein Sprung ist
+geschnitten. Auf der Bühne kreuzen sich die losen Fäden quer über das Muster. Die Datei ist auch
+der Testfall für Reihenfolge optimieren (`tests/bestOrder.test.ts`). Im Video heißt sie
+konfetti.pes.
 
-Stand mit konfetti.pes: 28 Sprünge, davon 15 geschnitten; „13 Sprünge ab 3,0 mm ohne Schnitt“.
-Sprung 2 (Farbe 1) ist 71,2 mm lang. Nach Schneiden und vernähen steht „Ab Grenze schneiden (12)“.
-Reihenfolge optimieren danach: Wege 59,5 cm → 31,5 cm.
+Stand: 28 Sprünge, davon 0 geschnitten; „19 Sprünge ab 3,0 mm ohne Schnitt“. Sprung 2 (Farbe 1)
+ist 63,8 mm lang. Nach Schneiden und vernähen steht „Ab Grenze schneiden (18)“. Reihenfolge
+optimieren danach: Schnitte 20 → 20, Wege 58,3 cm → 25,7 cm, Stickzeit 2:38 → 2:38.
 
 Die Datei steht nicht unter „Weitere Beispiele“; sie wird wie im Ordner ins Fenster gezogen
 (eine Dateikarte „konfetti.pes“ fährt mit dem Zeiger herein).
@@ -27,40 +27,41 @@ den Faden schneidet, siehst du in heatstitch auf einen Blick. Ich ziehe dieses K
 
 ## Szene 2
 
-**Bild:** Heranzoomen auf den roten Punkt links oben, Etikett Schnitt an einer Schere. Dann auf die dicken
-roten Linien quer über das Muster, Etikett Sprung ohne Schnitt.
+**Bild:** Heranzoomen auf die dicken roten Linien quer über das Muster, Etikett Sprung ohne
+Schnitt, der Zeiger fährt an einer entlang. Dann auf die einzige Schere, Etikett Schnitt.
 
-**Sprechtext:** Jede kleine Schere auf der Bühne ist ein Schnitt. [concerned] Die dicken Linien
-quer über das Muster sind Sprünge ohne Schnitt: Dort liegt der Faden später lose auf dem Stoff.
+**Sprechtext:** [concerned] Die dicken Linien quer über das Muster sind Sprünge ohne Schnitt:
+Dort liegt der Faden später lose auf dem Stoff. Nur an einer Stelle zeigt eine kleine Schere einen
+Schnitt.
 
 ## Szene 3
 
 **Bild:** Etikett Prüfen oben, Klick, dazu die Tastenkappe 2. Die rechte Spalte rollt zum
 Abschnitt Sprünge und Schnitte, Klick klappt ihn auf. Heranzoomen, Etikett am gelben Hinweis
-„13 Sprünge ab 3,0 mm ohne Schnitt“.
+„19 Sprünge ab 3,0 mm ohne Schnitt“.
 
 **Sprechtext:** Oben klickst du auf Prüfen, oder du drückst die Taste 2. Rechts klappst du
-Sprünge und Schnitte auf. Der gelbe Hinweis sagt: Dreizehn lange Sprünge sind nicht geschnitten.
+Sprünge und Schnitte auf. Der gelbe Hinweis sagt: Neunzehn lange Sprünge sind nicht geschnitten.
 
 ## Szene 4
 
-**Bild:** Klick auf den Filter Ohne Schnitt, die Liste zeigt dreizehn Sprünge. Klick auf Sprung 2:
-Er wird auf der Bühne orange gezeichnet, Etikett 71,2 mm.
+**Bild:** Der Zeiger fährt die Liste der Sprünge entlang. Klick auf Sprung 2: Er wird auf der
+Bühne orange gezeichnet, Etikett 63,8 mm.
 
-**Sprechtext:** Ohne Schnitt zeigt nur diese. Ein Klick auf einen Sprung zeigt ihn auf der Bühne.
-Dieser ist über sieben Zentimeter lang.
+**Sprechtext:** Darunter steht jeder Sprung mit seiner Länge. Ein Klick zeigt ihn auf der Bühne.
+Dieser ist über sechs Zentimeter lang.
 
 ## Szene 5
 
 **Bild:** Etikett Schneiden und vernähen, Klick. Der Sprung auf der Bühne wird gestrichelt, der
-Hinweis zählt nur noch zwölf.
+Hinweis zählt nur noch achtzehn.
 
 **Sprechtext:** Schneiden und vernähen sichert den Faden mit ein paar kleinen Stichen. Dann
 schneidet die Maschine und setzt am nächsten Punkt neu an.
 
 ## Szene 6
 
-**Bild:** Heranzoomen auf Schneiden ab, Etikett 3 mm. Klick auf Ab Grenze schneiden (12): Der
+**Bild:** Heranzoomen auf Schneiden ab, Etikett 3 mm. Klick auf Ab Grenze schneiden (18): Der
 gelbe Hinweis verschwindet, Ohne Schnitt steht auf 0. Etikett an Darunter nicht schneiden, ohne
 Klick.
 
