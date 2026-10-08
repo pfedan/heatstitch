@@ -8,8 +8,10 @@ wie aus einem Guss wirken.
 Speichern oben rechts), Oktober 2026. Die ersten, mit der alten Oberfläche aufgenommenen Videos
 sind verworfen; die Serie entsteht neu nach diesem Konzept.
 
-Begriffe so, wie sie in App und Anleitung (`docs.html`) stehen: Projekt, Stickmuster, Farbe,
-Objekt, Form und Stichart, Stiche; Stickrahmen; Bühne, Karte, Ebene, Ansicht-Menü.
+Begriffe so, wie sie in der App stehen: Projekt, Stickmuster, Farbe, Objekt, Form und Stichart,
+Stiche; Stickrahmen; Bühne, Karte, Ebene, Ansicht-Menü. Die Anleitung (`docs.html`) beschreibt
+teils noch die alte Oberfläche (Leinwand, Modus Bild, Modus Dichte); wo sie abweicht, gilt die
+App und die Tabelle unter Orte und Namen.
 
 ## Spielregeln
 
@@ -212,7 +214,17 @@ Die App muss gebaut und mit `npm run preview` erreichbar sein.
   Befehlssuche) gleich. IDs der alten Oberfläche (`#new-design`, `#hoop`, `#save-format`,
   `#lettering-*`, `#image-*`) gibt es nicht mehr; neue Abläufe nutzen keine IDs.
 - Ein frischer Browser zeigt die Startseite. Der Ablauf beginnt dort und wählt einen ihrer
-  Wege; ein Beispiel lädt er über die Knöpfe unter „Weitere Beispiele“.
+  Wege; ein Beispiel lädt er über die Knöpfe unter „Weitere Beispiele“. Dort stehen „Katze“
+  (`cat-60mm.pes`), „Überlappende Kreise“ (PES und SVG), „Konfetti (Sprünge)“
+  (`confetti.pes`) und „Formen-Benchmark“ (`shapes-benchmark.svg`); dieselben stehen im
+  Stickmuster-Menü unter Beispiele, dort zusätzlich das Demo-Projekt. `patch.pes` und
+  `leather-patch.dst` liegen unter `public/examples/demos/`, aber nicht auf der Startseite; ihre
+  Videos öffnen sie über „Stickdatei öffnen“ (Ziehen, siehe unten).
+- Tasten zeigt die App auf dem Mac als ⌘ und ⇧. Die Aufnahme meldet der Seite deshalb Windows,
+  damit jedes Video „Strg+K“ und „Umschalt“ zeigt, egal auf welchem Rechner es entsteht.
+- Gestalten und Prüfen sind Optionsfelder (`getByRole('radio')`), Objekt und Stickmuster rechts
+  sind Reiter (`getByRole('tab')`), das Auge der Ansichtsleiste ist der Knopf „Stiche“. Der Knopf
+  des Stickmuster-Menüs trägt den Namen des offenen Stickmusters.
 - Die Hinweise beim Überfahren (`.tip`) blendet die Aufnahme per Stil aus, außer in Szenen,
   die einen Hinweis ausdrücklich zeigen.
 - Ziehen einer Datei aus dem Dateimanager kann der Browser im Container nicht zeigen. Der Ablauf blendet eine kleine Dateikarte ein, die der Zeiger auf das Fenster
