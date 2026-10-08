@@ -57,7 +57,7 @@
         <section class="videos" aria-label="Videos" data-base="https://pub-204da4fc7b9d4c8696b962420ee54b60.r2.dev/videos/">
           <p><b>Zum Ansehen: kurze Videos</b> Jedes zeigt in zwei bis drei Minuten einen Weg durch die App, mit Stimme und Untertiteln; jedes steht für sich.</p>
           <ul class="video-list">
-            <li class="video" data-key="00-oberflaeche">
+            <li class="video" data-key="00-oberflaeche" data-files="cat-60mm.pes">
               <button type="button" class="video-play" aria-label="Video abspielen: Die heatstitch Oberfläche">
                 <img src="https://pub-204da4fc7b9d4c8696b962420ee54b60.r2.dev/videos/00-oberflaeche.jpg" width="1920" height="1080" loading="lazy" alt="" />
                 <span class="video-badge" aria-hidden="true"></span>
@@ -78,7 +78,7 @@
               </button>
               <p class="video-title"><span class="video-part">Teil 2</span> Schrift <span class="video-length">2:30</span></p>
             </li>
-            <li class="video" data-key="03-vom-bild-zum-stickmuster">
+            <li class="video" data-key="03-vom-bild-zum-stickmuster" data-files="fliegenpilz.jpg">
               <button type="button" class="video-play" aria-label="Video abspielen: Vom Bild zum Stickmuster">
                 <img src="https://pub-204da4fc7b9d4c8696b962420ee54b60.r2.dev/videos/03-vom-bild-zum-stickmuster.jpg" width="1920" height="1080" loading="lazy" alt="" />
                 <span class="video-badge" aria-hidden="true"></span>
@@ -898,7 +898,7 @@
         <section class="videos" aria-label="Videos" data-base="https://pub-204da4fc7b9d4c8696b962420ee54b60.r2.dev/videos/">
           <p><b>To watch: short videos</b> Each shows one way through the app in two to three minutes, with narration and subtitles; each stands on its own.</p>
           <ul class="video-list">
-            <li class="video" data-key="00-oberflaeche">
+            <li class="video" data-key="00-oberflaeche" data-files="cat-60mm.pes">
               <button type="button" class="video-play" aria-label="Play video: The heatstitch interface">
                 <img src="https://pub-204da4fc7b9d4c8696b962420ee54b60.r2.dev/videos/00-oberflaeche.jpg" width="1920" height="1080" loading="lazy" alt="" />
                 <span class="video-badge" aria-hidden="true"></span>
@@ -919,7 +919,7 @@
               </button>
               <p class="video-title"><span class="video-part">Part 2</span> Lettering <span class="video-length">2:30</span></p>
             </li>
-            <li class="video" data-key="03-vom-bild-zum-stickmuster">
+            <li class="video" data-key="03-vom-bild-zum-stickmuster" data-files="fliegenpilz.jpg">
               <button type="button" class="video-play" aria-label="Play video: From a picture to a design">
                 <img src="https://pub-204da4fc7b9d4c8696b962420ee54b60.r2.dev/videos/03-vom-bild-zum-stickmuster.jpg" width="1920" height="1080" loading="lazy" alt="" />
                 <span class="video-badge" aria-hidden="true"></span>
@@ -1748,6 +1748,14 @@
             <button type="button" data-cc="de" aria-pressed="false">Deutsch</button>
             <button type="button" data-cc="en" aria-pressed="false">English</button>
           </span>
+          <details class="video-files" id="video-files" hidden>
+            <summary class="video-dialog-btn">
+              <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M10 3v10m0 0 4-4m-4 4-4-4M4 16h12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" /></svg>
+              <span lang="de">Dateien</span><span lang="en">Files</span>
+              <svg class="video-files-chevron" viewBox="0 0 20 20" width="12" height="12" aria-hidden="true"><path d="m5 8 5 5 5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" /></svg>
+            </summary>
+            <ul class="video-files-menu" id="video-files-menu"></ul>
+          </details>
           <button type="button" class="video-dialog-btn" id="video-full">
             <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M3 8V3h5M12 3h5v5M17 12v5h-5M8 17H3v-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none" /></svg>
             <span lang="de">Vollbild</span><span lang="en">Full screen</span>
