@@ -47,7 +47,8 @@ einen Satz. Schlüssel: `00-heatstitch-oberflaeche`.
 | --- | --- | --- | --- | --- |
 | 1 | Ein neues Stickmuster | Startseite „Leer anfangen“, Stickrahmen in der Karte Stickmuster, Werkzeugleiste (Ellipse, Pfad), Größe in der Karte Objekt, Garn, Stichart, Player, Speichern | leer | 2 min |
 | 2 | Schrift | Werkzeug Text (T), Schrift aus der Liste, Größe, Bogen, Buchstabenabstand, Garn, Text später ändern | leer | 2 min |
-| 3 | Vom Bild zum Stickmuster | Bild umwandeln (Startseite oder Taste 3), Assistent in drei Schritten: Bild wählen, Farben und Flächen (Höchstens Farben, zusammenlegen, weglassen, Pinsel), Stiche und Ergebnis (Stil, Ergebnis), Übernehmen | `fliegenpilz.jpg` (eigene) | 2 bis 3 min |
+| 3 | Vom Bild zum Stickmuster | Ein Foto oder PNG: Bild umwandeln (Startseite oder Taste 3), Assistent in drei Schritten: Bild wählen, Farben und Flächen (Höchstens Farben, zusammenlegen, weglassen, Pinsel), Stiche und Ergebnis (Stil, Ergebnis), Übernehmen | `fliegenpilz.jpg` (eigene) | 2 bis 3 min |
+| 13 | Vom SVG zum Stickmuster | Eine SVG mit dunklen Konturen: Bild umwandeln liest Form für Form, jede Farbe wird ein Garn, Konturen werden nach ihrer Breite Satin; dann die Satin-Konturen: Abschnitte und ihre Reihenfolge, Trennlinien, Werkzeug Richtung (R) mit Querlinien, Ecken und Abschnitte vorschlagen, Realistische Fäden | `katze-im-karton.svg` (eigene) | 2 bis 3 min |
 | 4 | Objekte und Reihenfolge | Farben und Objekte, Reihenfolge per Ziehen, Aussparen (Karte über der Liste), Rechtsklick-Menü, Duplizieren und Spiegeln, Einrasten, Garn eines Objekts | `kirschen.svg` (eigene) | 2 min |
 
 ### Stufe 2: Stickdatei ansehen und verbessern
@@ -75,6 +76,17 @@ das Übliche jetzt in einem Klick, der Werkzeugkasten Korrektur dahinter ist Bet
 kurz vor. Teil 9 zeigt zusätzlich „Bereit zum Sticken“ (Vlies, Nadel) und das Stickblatt. Teil 11
 nimmt das Satin-S aus `patch.pes` statt `sun.dst`, wie die Anleitung. Teil 8 zeigt Sprünge und
 Schnitte jetzt in Prüfen.
+
+Bild umwandeln bekommt zwei Videos: Teil 3 für Fotos und PNG, Teil 13 für SVG. Teil 13 zeigt,
+was heatstitch aus Konturen macht: Die schwarzen Umrisse einer Grafik werden Satinsäulen, die
+der Linie folgen, mit Abschnitten, Trennlinien und Querlinien zum Nacharbeiten. Er steht in
+Stufe 1 gleich nach Teil 3; die Nummer 13 bekommt er, weil die Nummern 1 bis 5 veröffentlicht
+sind und bleiben. Demodatei ist die Katze im Karton, die Daniel am 7. Oktober als „Kitty“
+gezeigt hat (Projekt mit `2026-10-07_18-41.png`). Sie liegt nur als PNG vor; für das Video wird sie
+als SVG nachgezeichnet (Flächen je Farbe, schwarze Konturen als Linien mit Breite) und liegt
+dann unter `13-vom-svg-zum-stickmuster/material/`. Aufgenommen wird Teil 13 erst, wenn die
+Satin-Ansichten vereinheitlicht sind (Plan `satin-eine-ansicht.md`), sonst zeigt er eine
+Ansicht, die bald anders aussieht.
 
 Nicht als eigenes Video: Tastenkürzel und Befehlssuche (erscheinen als Einblendung, wann immer
 eine Taste benutzt wird; Strg+K darf in einem Video einmal als Abkürzung vorkommen), Handy und
