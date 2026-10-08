@@ -30,6 +30,7 @@ const enBase: Record<keyof typeof deBase, string> = {
   'files.example.stitches': 'Embroidery files',
   'files.example.svg': 'Vector graphics (SVG)',
   'files.example.overlapSvg': 'Overlapping circles',
+  'files.example.brushSvg': 'Brush character 永',
   'files.example.benchmark': 'Shapes benchmark',
   'files.example.loading': 'Stitching the example …',
   'files.example.projects': 'Projects',

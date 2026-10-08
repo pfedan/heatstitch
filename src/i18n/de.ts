@@ -28,6 +28,7 @@ export const deBase = {
   'files.example.stitches': 'Stickdateien',
   'files.example.svg': 'Vektorgrafiken (SVG)',
   'files.example.overlapSvg': 'Überlappende Kreise',
+  'files.example.brushSvg': 'Pinselschrift 永',
   'files.example.benchmark': 'Formen-Benchmark',
   'files.example.loading': 'Beispiel wird gestickt …',
   'files.example.projects': 'Projekte',
