@@ -39,41 +39,100 @@ if (hint && pageLang() && wanted !== page) {
   hint.hidden = false;
 }
 
-// A video card becomes the player on a tap; nothing of the video loads before that.
-// The subtitles come from the same host as the video, which needs a CORS request: where that is
-// refused (the guide shown from another origin), the video plays again without them.
+// A video card opens the player in a dialog of medium size, with full screen one tap away.
+// Subtitles are off until asked for. They come from the same host as the video, which needs a
+// CORS request: a first fetch of one subtitle file tells whether that host allows it; where it
+// does not (the guide shown from another origin), the video plays without them and the subtitle
+// switch goes away.
+const dialog = document.getElementById('video-dialog') as HTMLDialogElement;
+const dialogTitle = document.getElementById('video-dialog-title') as HTMLElement;
+const dialogStage = document.getElementById('video-dialog-stage') as HTMLElement;
+const ccGroup = dialog.querySelector<HTMLElement>('.video-cc')!;
+const ccButtons = Array.from(ccGroup.querySelectorAll<HTMLButtonElement>('button[data-cc]'));
+let cc = 'off';
+let player: HTMLVideoElement | null = null;
+let subtitlesAllowed: Promise<boolean> | null = null;
+
+function showSubtitles(which: string): void {
+  cc = which;
+  for (const b of ccButtons) b.setAttribute('aria-pressed', String(b.dataset.cc === which));
+  if (!player) return;
+  for (const t of Array.from(player.textTracks)) t.mode = t.language === which ? 'showing' : 'disabled';
+}
+for (const b of ccButtons) b.addEventListener('click', () => showSubtitles(b.dataset.cc ?? 'off'));
+
+function closePlayer(): void {
+  if (player) {
+    player.pause();
+    player.removeAttribute('src');
+    player.load();
+    player.remove();
+    player = null;
+  }
+  if (dialog.open) dialog.close();
+}
+document.getElementById('video-close')?.addEventListener('click', closePlayer);
+dialog.addEventListener('close', closePlayer);
+dialog.addEventListener('click', (e) => {
+  if (e.target === dialog) closePlayer();
+});
+document.getElementById('video-full')?.addEventListener('click', () => {
+  const v = player as (HTMLVideoElement & { webkitEnterFullscreen?: () => void }) | null;
+  if (!v) return;
+  if (v.requestFullscreen) void v.requestFullscreen();
+  else v.webkitEnterFullscreen?.();
+});
+
+function openPlayer(base: string, key: string, title: string): void {
+  const build = (subtitles: boolean) => {
+    const v = document.createElement('video');
+    v.controls = true;
+    v.autoplay = true;
+    v.playsInline = true;
+    v.preload = 'metadata';
+    v.poster = `${base}${key}.jpg`;
+    if (subtitles) {
+      v.crossOrigin = 'anonymous';
+      for (const l of ['de', 'en']) {
+        const track = document.createElement('track');
+        track.kind = 'subtitles';
+        track.srclang = l;
+        track.label = l === 'de' ? 'Deutsch' : 'English';
+        track.src = `${base}${key}.${l}.vtt`;
+        v.append(track);
+      }
+    }
+    v.src = `${base}${key}.mp4`;
+    player?.remove();
+    player = v;
+    dialogStage.append(v);
+    ccGroup.hidden = !subtitles;
+    showSubtitles(subtitles ? cc : 'off');
+    v.focus();
+  };
+  dialogTitle.textContent = title;
+  dialogStage.replaceChildren();
+  if (!dialog.open) dialog.showModal();
+  subtitlesAllowed ??= fetch(`${base}${key}.de.vtt`, { mode: 'cors' })
+    .then((r) => r.ok)
+    .catch(() => false);
+  void subtitlesAllowed.then((ok) => {
+    if (dialog.open) build(ok);
+  });
+}
+
 for (const li of document.querySelectorAll<HTMLElement>('.video[data-key]')) {
   const btn = li.querySelector<HTMLButtonElement>('.video-play');
-  const base = li.closest<HTMLElement>('.videos')?.dataset.base ?? '';
   const key = li.dataset.key ?? '';
-  const lang = li.closest('article')?.getAttribute('lang') ?? 'de';
-  btn?.addEventListener('click', () => {
-    const play = (subtitles: boolean) => {
-      const v = document.createElement('video');
-      v.controls = true;
-      v.autoplay = true;
-      v.playsInline = true;
-      v.preload = 'metadata';
-      v.poster = `${base}${key}.jpg`;
-      if (subtitles) {
-        v.crossOrigin = 'anonymous';
-        for (const l of ['de', 'en']) {
-          const track = document.createElement('track');
-          track.kind = 'subtitles';
-          track.srclang = l;
-          track.label = l === 'de' ? 'Deutsch' : 'English';
-          track.src = `${base}${key}.${l}.vtt`;
-          if (l === lang) track.default = true;
-          v.append(track);
-        }
-        v.addEventListener('error', () => play(false), { once: true });
-      }
-      v.src = `${base}${key}.mp4`;
-      li.querySelector('.video-play, video')?.replaceWith(v);
-      v.focus();
-    };
-    play(true);
-  });
+  const part = li.querySelector('.video-part')?.textContent?.trim() ?? '';
+  const name = Array.from(li.querySelector('.video-title')?.childNodes ?? [])
+    .filter((n) => n.nodeType === Node.TEXT_NODE)
+    .map((n) => n.textContent)
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const title = [part, name].filter(Boolean).join(' · ');
+  btn?.addEventListener('click', () => openPlayer(li.closest<HTMLElement>('.videos')?.dataset.base ?? '', key, title));
 }
 
 // On narrow screens a button at the thumb opens a sheet with the sections of the shown article
