@@ -99,6 +99,9 @@ const dragFileIn = async (s, from, to) => {
   await s.page.evaluate(([x, y]) => window.__dropFile(x, y), to);
 };
 
+/** The stage's readout next to the pointer (density, position) off while the pointer sweeps the motif. */
+const readout = (s, on) => s.page.evaluate((show) => document.getElementById('tooltip')?.style.setProperty('visibility', show ? '' : 'hidden'), on);
+
 // Off the motif, so the stage shows no readout next to the pointer.
 const REST = [1500, 160];
 // The handle of the compare line: the middle of the stage.
@@ -154,11 +157,13 @@ export default {
         await s.wait(2.4);
         s.unlabel();
         s.zoomOut();
+        await readout(s, false);
         await s.move([420, 640], 1.2);
         await s.move([850, 640], 1.6);
         await s.move([420, 830], 1.0);
         await s.move([850, 830], 1.6);
         await s.move(REST, 1.0);
+        await readout(s, true);
       },
     },
     {
@@ -305,10 +310,12 @@ export default {
         await s.wait(1.0);
         s.unlabel();
         await s.zoom([TEXT[0], TEXT[1], 0, 0], 1.5);
+        await readout(s, false);
         await s.drag([SPLIT, [390, 640], [900, 640], [640, 640]], { sec: 1.8 });
         await s.wait(0.4);
         s.zoomOut();
         await s.move(REST, 0.8);
+        await readout(s, true);
       },
     },
     {
