@@ -62,6 +62,8 @@ export interface FillParams {
    * more sections, and its travel would run round the outline beside them, where it shows.
    */
   offRowEnds?: boolean;
+  /** The whole area this one was cut from (parts left out under what lies on top): travel there is hidden. */
+  whole?: Region;
   /** Curved rows keep this close to their line (mm); TOLERANCE by default. */
   tolerance?: number;
   /** Straight rows put their needle points on the lines of this motif (embossing, see deco.ts). */
@@ -353,6 +355,8 @@ function entries(f: Frame, s: Section, pull: number): Entry[] {
 const ROW_END_STRIP = 0.35;
 /** How far travel may run along those strips (mm); crossing one takes a cell or two. */
 const ROW_END_RUN = 4;
+/** How far travel may show where rows to come are known (mm): crossing the strip at a row end. */
+const BARE_RUN = 1.5;
 
 /** Grid over the region for travel paths: passable cells and cells covered by sewn rows. */
 export class TravelGrid {
@@ -366,8 +370,14 @@ export class TravelGrid {
   /** Cells just past the ends of sewn rows (with `offRowEnds`): travel may cross them, not run along them. */
   rowEnds: Uint8Array;
   offRowEnds: boolean;
+  /**
+   * With `ahead` set (see expect): how many rows still to come cover each cell. Travel there is
+   * hidden, as in the parts left out (`gone`); anywhere else not sewn it shows, like beside row ends.
+   */
+  ahead: Uint16Array | null = null;
+  gone: Uint8Array | null = null;
 
-  constructor(r: Region, offRowEnds = false) {
+  constructor(r: Region, offRowEnds = false, cut?: { whole: Region; area: Region }) {
     this.offRowEnds = offRowEnds;
     this.cell = Math.max(r.pxMm, 0.25);
     this.ox = r.x0 * r.pxMm;
@@ -379,6 +389,15 @@ export class TravelGrid {
     this.rowEnds = new Uint8Array(this.gw * this.gh);
     for (let j = 0; j < this.gh; j++) {
       for (let i = 0; i < this.gw; i++) this.depth[j * this.gw + i] = -sample(r, r.sdf, ...this.center(i, j));
+    }
+    if (cut) {
+      this.gone = new Uint8Array(this.gw * this.gh);
+      for (let j = 0; j < this.gh; j++) {
+        for (let i = 0; i < this.gw; i++) {
+          const q = this.center(i, j);
+          if (sample(cut.whole, cut.whole.sdf, ...q) < 0 && sample(cut.area, cut.area.sdf, ...q) > 0) this.gone[j * this.gw + i] = 1;
+        }
+      }
     }
   }
 
@@ -396,7 +415,6 @@ export class TravelGrid {
   /** Marks the cells under a sewn row (and half a row spacing to each side), and the strips past its ends. */
   cover(a: Pt, b: Pt, halfWidth: number): void {
     const l = dist(a, b);
-    const n = Math.max(1, Math.ceil(l / (this.cell / 2)));
     const nx = l > 0 ? -(b[1] - a[1]) / l : 0;
     const ny = l > 0 ? (b[0] - a[0]) / l : 0;
     if (l > 0 && this.offRowEnds) {
@@ -413,14 +431,42 @@ export class TravelGrid {
         }
       }
     }
+    this.stamp(a, b, halfWidth, (c) => (this.covered[c] = 1));
+    if (this.ahead) this.stamp(a, b, halfWidth, (c) => this.ahead![c] > 0 && this.ahead![c]--);
+  }
+
+  /** Counts the cells under a row still to come (see ahead). */
+  expect(a: Pt, b: Pt, halfWidth: number): void {
+    this.ahead ??= new Uint16Array(this.gw * this.gh);
+    this.stamp(a, b, halfWidth, (c) => this.ahead![c]++);
+  }
+
+  private seen: Uint32Array | null = null;
+  private marks = 0;
+  /** Calls `fn` once for each cell under the row from a to b. */
+  private stamp(a: Pt, b: Pt, halfWidth: number, fn: (c: number) => void): void {
+    const l = dist(a, b);
+    const n = Math.max(1, Math.ceil(l / (this.cell / 2)));
+    const nx = l > 0 ? -(b[1] - a[1]) / l : 0;
+    const ny = l > 0 ? (b[0] - a[0]) / l : 0;
+    this.seen ??= new Uint32Array(this.gw * this.gh);
+    const mark = ++this.marks;
     for (let k = 0; k <= n; k++) {
       const x = a[0] + ((b[0] - a[0]) * k) / n;
       const y = a[1] + ((b[1] - a[1]) * k) / n;
       for (const o of [-halfWidth, 0, halfWidth]) {
         const c = this.index([x + nx * o, y + ny * o]);
-        if (c >= 0) this.covered[c] = 1;
+        if (c >= 0 && this.seen[c] !== mark) {
+          this.seen[c] = mark;
+          fn(c);
+        }
       }
     }
+  }
+
+  /** A cell where travel shows: neither sewn on top of nor hidden by rows to come or a part left out. */
+  private bare(c: number): boolean {
+    return this.ahead ? !this.covered[c] && !this.ahead[c] && !this.gone?.[c] : !!this.rowEnds[c] && !this.covered[c];
   }
 
   /** Within 1 mm of a or b: a path may leave and reach rows sewn already there. */
@@ -453,48 +499,187 @@ export class TravelGrid {
   }
 
   /**
-   * Shortest inside path from a to b (Dijkstra, 8 neighbours); the cost falls towards the middle of
-   * the shape, which keeps travel away from the edges. With `avoidSewn`, cells covered by rows sewn
+   * Shortest inside path from a to b (A*, 8 neighbours); the cost falls towards the middle of the
+   * shape, which keeps travel away from the edges. With `avoidSewn`, cells covered by rows sewn
    * already cost much more, and a path that would still lie on top of them for more than
    * SEWN_CROSSING is refused (null): a jump is cleaner than a visible travel line.
    */
   path(a: Pt, b: Pt, avoidSewn: boolean): Pt[] | null {
+    const w = this.route(a, b, avoidSewn);
+    return w && [a, ...simplify(w.cells, this.cell * 0.6).slice(1, -1), b];
+  }
+
+  /**
+   * The way from a to b as path takes it, or null. Where rows to come are known, a way hidden all
+   * along comes first; only without one may it cross sewn rows or run beside row ends a little.
+   */
+  private route(a: Pt, b: Pt, avoidSewn: boolean, limit = Infinity): { cells: Pt[]; length: number; onTop: number; alongEnds: number } | null {
     const s = this.snap(a);
     const t = this.snap(b);
     if (s < 0 || t < 0) return null;
+    const ok = (x: ReturnType<TravelGrid['walk']>) => !!x && x.onTop <= SEWN_CROSSING && x.alongEnds <= (this.ahead ? BARE_RUN : ROW_END_RUN);
+    if (avoidSewn && this.ahead) {
+      const w = this.walk(this.search(s, a, b, true, t, true, limit), s, t, a, b, true);
+      if (w && ok(w) && w.length < 2 * dist(a, b) + 6) return w;
+    }
+    const w = this.walk(this.search(s, a, b, avoidSewn, t, false, limit), s, t, a, b, avoidSewn);
+    return w && ok(w) ? w : null;
+  }
+
+  /** The cells a hidden way reaches from a (leaving a within 1 mm any way): see reaches. */
+  flood(a: Pt): Uint8Array {
+    const { gw, gh, covered, ahead, gone } = this;
+    const seen = new Uint8Array(gw * gh);
+    const stack: number[] = [];
+    const shows = (q: number) => !!covered[q] || (!!ahead && !ahead[q] && !gone?.[q]);
+    const r = Math.ceil(1 / this.cell);
+    const ci = Math.floor((a[0] - this.ox) / this.cell);
+    const cj = Math.floor((a[1] - this.oy) / this.cell);
+    for (let j = cj - r; j <= cj + r; j++) {
+      for (let i = ci - r; i <= ci + r; i++) {
+        if (i < 0 || j < 0 || i >= gw || j >= gh) continue;
+        const q = j * gw + i;
+        if (this.depth[q] > 0.05 && dist(this.center(i, j), a) < 1) {
+          seen[q] = 1;
+          stack.push(q);
+        }
+      }
+    }
+    while (stack.length) {
+      const c = stack.pop()!;
+      const i0 = c % gw;
+      const j0 = (c - i0) / gw;
+      for (let k = 0; k < 8; k++) {
+        const i = i0 + STEP_I[k];
+        const j = j0 + STEP_J[k];
+        if (i < 0 || j < 0 || i >= gw || j >= gh) continue;
+        const q = j * gw + i;
+        if (seen[q] || this.depth[q] <= 0.05 || shows(q)) continue;
+        if (k >= 4 && shows(j0 * gw + i) && shows(j * gw + i0)) continue;
+        seen[q] = 1;
+        stack.push(q);
+      }
+    }
+    return seen;
+  }
+
+  /** Whether a flood (see flood) gets within 1 mm of b. */
+  reaches(seen: Uint8Array, b: Pt): boolean {
+    const r = Math.ceil(1 / this.cell);
+    const ci = Math.floor((b[0] - this.ox) / this.cell);
+    const cj = Math.floor((b[1] - this.oy) / this.cell);
+    for (let j = Math.max(0, cj - r); j <= Math.min(this.gh - 1, cj + r); j++) {
+      for (let i = Math.max(0, ci - r); i <= Math.min(this.gw - 1, ci + r); i++) {
+        if (seen[j * this.gw + i] && dist(this.center(i, j), b) < 1) return true;
+      }
+    }
+    return false;
+  }
+
+  /** Whether the straight way from a to b stays inside, off sewn rows and hidden all along. */
+  clear(a: Pt, b: Pt): boolean {
+    const l = dist(a, b);
+    const n = Math.ceil(l / (this.cell / 2));
+    for (let k = 1; k < n; k++) {
+      const p: Pt = [a[0] + ((b[0] - a[0]) * k) / n, a[1] + ((b[1] - a[1]) * k) / n];
+      const c = this.index(p);
+      if (c < 0 || this.depth[c] <= 0.05) return false;
+      if (dist(p, a) < 1 || dist(p, b) < 1) continue;
+      if (this.covered[c] || this.bare(c)) return false;
+    }
+    return true;
+  }
+
+  /**
+   * How much the way from a to b costs (see path): its length, and more for each millimetre of it
+   * that shows (on sewn rows, beside row ends); null where only a jump gets there.
+   */
+  length(a: Pt, b: Pt): number | null {
+    // Planning asks often: a search that has to look far and wide counts as no way.
+    const w = this.route(a, b, true, (SEARCH_SPREAD * (2 * dist(a, b) + 6)) / this.cell);
+    return w && w.length + SHOWN_COST * (w.onTop + w.alongEnds);
+  }
+
+  /** A* from cell s to t (Dijkstra everywhere with t < 0), at most `limit` cells: the predecessor of each cell. */
+  private search(s: number, a: Pt, b: Pt | null, avoidSewn: boolean, t: number, hiddenOnly = false, limit = Infinity): Int32Array {
     const n = this.gw * this.gh;
     const cost = new Float64Array(n).fill(Infinity);
     const from = new Int32Array(n).fill(-1);
+    const done = new Uint8Array(n);
     const heap = new MinHeap();
+    const base = this.weights();
+    const { gw, gh, cell, ox, oy, covered, ahead, gone } = this;
+    // Where rows to come are known, only ways short enough to take (see sewAll): inside an ellipse round a and b.
+    const reach = ahead && b ? 2 * dist(a, b) + 6 + 2 * cell : 0;
+    // Towards t, the straight distance left is a lower bound of the cost (A*).
+    const toT = t >= 0;
+    const tx = toT ? ox + ((t % gw) + 0.5) * cell : 0;
+    const ty = toT ? oy + (Math.floor(t / gw) + 0.5) * cell : 0;
+    const bb = b ?? a;
+    // On sewn rows, or where rows to come are known, where it would show (see bare); not within
+    // 1 mm of a or b, where the way leaves and reaches rows.
+    const shows = (i: number, j: number) => {
+      const q = j * gw + i;
+      if (!covered[q] && !(ahead && !ahead[q] && !gone?.[q])) return false;
+      const x = ox + (i + 0.5) * cell;
+      const y = oy + (j + 0.5) * cell;
+      return (x - a[0]) ** 2 + (y - a[1]) ** 2 >= 1 && (x - bb[0]) ** 2 + (y - bb[1]) ** 2 >= 1;
+    };
     cost[s] = 0;
     heap.push(s, 0);
-    const steps: [number, number, number][] = [
-      [1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1],
-      [1, 1, Math.SQRT2], [1, -1, Math.SQRT2], [-1, 1, Math.SQRT2], [-1, -1, Math.SQRT2],
-    ];
+    let popped = 0;
     while (heap.size) {
-      const [c, cc] = heap.pop();
-      if (c === t) break;
-      if (cc > cost[c]) continue;
-      const ci = c % this.gw;
-      const cj = (c - ci) / this.gw;
-      for (const [di, dj, len] of steps) {
-        const i = ci + di;
-        const j = cj + dj;
-        if (i < 0 || j < 0 || i >= this.gw || j >= this.gh) continue;
-        const q = j * this.gw + i;
-        const d = this.depth[q];
-        if (d <= 0.05) continue;
-        const sewn = avoidSewn && this.covered[q] && !this.near(q, a, b);
-        const w = len * (1 + 0.4 / (d + 0.1)) * (sewn ? 12 : 1);
+      const c = heap.pop();
+      if (c === t || ++popped > limit) break;
+      if (done[c]) continue;
+      done[c] = 1;
+      const ci = c % gw;
+      const cj = (c - ci) / gw;
+      const cc = cost[c];
+      for (let k = 0; k < 8; k++) {
+        const i = ci + STEP_I[k];
+        const j = cj + STEP_J[k];
+        if (i < 0 || j < 0 || i >= gw || j >= gh) continue;
+        const q = j * gw + i;
+        const w0 = base[q];
+        if (w0 === 0 || done[q]) continue;
+        let w = STEP_LEN[k] * w0;
+        const x = ox + (i + 0.5) * cell;
+        const y = oy + (j + 0.5) * cell;
+        if (reach && Math.sqrt((x - a[0]) ** 2 + (y - a[1]) ** 2) + Math.sqrt((x - bb[0]) ** 2 + (y - bb[1]) ** 2) > reach) continue;
+        // On sewn rows, or where rows to come are known, where it would show (see bare).
+        if (avoidSewn && shows(i, j)) {
+          if (hiddenOnly) continue;
+          w *= covered[q] ? 12 : 4;
+        }
+        // Hidden only, not diagonally between two cells where it would show (between sewn rows).
+        if (hiddenOnly && k >= 4 && shows(ci + STEP_I[k], cj) && shows(ci, cj + STEP_J[k])) continue;
         const nc = cc + w;
         if (nc < cost[q]) {
           cost[q] = nc;
           from[q] = c;
-          heap.push(q, nc);
+          heap.push(q, toT ? nc + Math.sqrt((x - tx) ** 2 + (y - ty) ** 2) : nc);
         }
       }
     }
+    return from;
+  }
+
+  private w0: Float32Array | null = null;
+  /** The cost of a step into each cell: higher towards the edges, 0 where travel cannot go. */
+  private weights(): Float32Array {
+    if (!this.w0) {
+      this.w0 = new Float32Array(this.depth.length);
+      for (let q = 0; q < this.depth.length; q++) {
+        const d = this.depth[q];
+        this.w0[q] = d <= 0.05 ? 0 : 1 + 0.4 / (d + 0.1);
+      }
+    }
+    return this.w0;
+  }
+
+  /** The cells of the tree's path from s to t, its length, and how much of it lies on sewn rows or along their ends. */
+  private walk(from: Int32Array, s: number, t: number, a: Pt, b: Pt, avoidSewn: boolean): { cells: Pt[]; length: number; onTop: number; alongEnds: number } | null {
     if (from[t] < 0 && s !== t) return null;
     const cells: Pt[] = [];
     let onTop = 0;
@@ -503,54 +688,63 @@ export class TravelGrid {
       cells.push(this.center(c % this.gw, Math.floor(c / this.gw)));
       if (!avoidSewn || this.near(c, a, b)) continue;
       if (this.covered[c]) onTop += this.cell;
-      else if (this.rowEnds[c]) alongEnds += this.cell;
+      else if (this.bare(c)) alongEnds += this.cell;
     }
-    if (onTop > SEWN_CROSSING || alongEnds > ROW_END_RUN) return null;
     cells.reverse();
-    return [a, ...simplify(cells, this.cell * 0.6).slice(1, -1), b];
+    let length = 0;
+    for (let i = 1; i < cells.length; i++) length += dist(cells[i - 1], cells[i]);
+    return { cells, length, onTop, alongEnds };
   }
 }
 
+const STEP_I = [1, -1, 0, 0, 1, 1, -1, -1];
+const STEP_J = [0, 0, 1, -1, 1, -1, 1, -1];
+const STEP_LEN = [1, 1, 1, 1, Math.SQRT2, Math.SQRT2, Math.SQRT2, Math.SQRT2];
+
 class MinHeap {
-  private k: number[] = [];
-  private v: number[] = [];
-  get size(): number {
-    return this.k.length;
-  }
+  private k = new Int32Array(256);
+  private v = new Float64Array(256);
+  size = 0;
   push(key: number, val: number): void {
+    if (this.size === this.k.length) {
+      const k = new Int32Array(this.size * 2);
+      const v = new Float64Array(this.size * 2);
+      k.set(this.k);
+      v.set(this.v);
+      this.k = k;
+      this.v = v;
+    }
     const { k, v } = this;
-    k.push(key);
-    v.push(val);
-    let i = k.length - 1;
+    let i = this.size++;
     while (i > 0) {
       const p = (i - 1) >> 1;
-      if (v[p] <= v[i]) break;
-      [k[p], k[i]] = [k[i], k[p]];
-      [v[p], v[i]] = [v[i], v[p]];
+      if (v[p] <= val) break;
+      k[i] = k[p];
+      v[i] = v[p];
       i = p;
     }
+    k[i] = key;
+    v[i] = val;
   }
-  pop(): [number, number] {
+  /** The key with the smallest value, taken off the heap. */
+  pop(): number {
     const { k, v } = this;
-    const top: [number, number] = [k[0], v[0]];
-    const lk = k.pop()!;
-    const lv = v.pop()!;
-    if (k.length) {
-      k[0] = lk;
-      v[0] = lv;
-      let i = 0;
-      for (;;) {
-        const l = 2 * i + 1;
-        const r = l + 1;
-        let m = i;
-        if (l < k.length && v[l] < v[m]) m = l;
-        if (r < k.length && v[r] < v[m]) m = r;
-        if (m === i) break;
-        [k[m], k[i]] = [k[i], k[m]];
-        [v[m], v[i]] = [v[i], v[m]];
-        i = m;
-      }
+    const top = k[0];
+    const n = --this.size;
+    const lk = k[n];
+    const lv = v[n];
+    let i = 0;
+    for (;;) {
+      const l = 2 * i + 1;
+      if (l >= n) break;
+      const m = l + 1 < n && v[l + 1] < v[l] ? l + 1 : l;
+      if (v[m] >= lv) break;
+      k[i] = k[m];
+      v[i] = v[m];
+      i = m;
     }
+    k[i] = lk;
+    v[i] = lv;
     return top;
   }
 }
@@ -631,10 +825,190 @@ function plan(f: Frame, secs: Section[], pull: number, start: Pt, last?: { s: Se
   return { order, cost };
 }
 
+/** What a trim costs against travel when choosing the order of sections (mm of travel). */
+const TRIM_COST = 25;
+/** How many of the cheapest next steps get a look one step further. */
+const LOOKAHEAD = 3;
+/** How many of the nearest ways on are tried at each step; farther ones would mostly be jumps anyway. */
+const TRIES = 8;
+/** A search while planning looks at no more cells than this many times the longest way it may take. */
+const SEARCH_SPREAD = 80;
+/** What a millimetre of travel that shows costs when choosing the order of sections (mm of travel). */
+const SHOWN_COST = 4;
+/** Ending this close to where the next object starts costs only the distance (mm). */
+const END_NEAR = 3;
+
+/**
+ * What ending away from `end` (where the next object starts) costs when choosing the order: more
+ * than a few millimetres off, as much as a trim, so the next object keeps its start.
+ */
+const endCost = (p: Pt, end: Pt) => {
+  const d = dist(p, end);
+  return d > END_NEAR ? d + TRIM_COST : d;
+};
+
+/**
+ * What planning the order of sections on `grid` needs: the grid's state kept and put back, a
+ * section marked sewn, and what the way from one point to another costs: its length when hidden
+ * enough (and not much of a detour, as sewAll takes it), else a trim.
+ */
+function planning(f: Frame, grid: TravelGrid) {
+  const keep = (): [Uint8Array, Uint8Array, Uint16Array | undefined] => [grid.covered.slice(), grid.rowEnds.slice(), grid.ahead?.slice()];
+  const back = (k: ReturnType<typeof keep>) => {
+    grid.covered.set(k[0]);
+    grid.rowEnds.set(k[1]);
+    if (k[2]) grid.ahead!.set(k[2]);
+  };
+  const cover = (s: Section) => {
+    for (const seg of s) grid.cover(f.at(seg.u0, f.v(seg.k)), f.at(seg.u1, f.v(seg.k)), f.spacing / 2);
+  };
+  const stepCost = (from: Pt, to: Pt) => {
+    const d = dist(from, to);
+    if (d <= 1 || grid.clear(from, to)) return d;
+    const l = grid.length(from, to);
+    return l != null && l < 2 * d + 6 ? l : TRIM_COST + d;
+  };
+  return { keep, back, cover, stepCost };
+}
+
+/**
+ * Order of the sections on the travel grid: the next section is the one reached by the shortest
+ * hidden way (under rows still to come), entered at the end that leaves a hidden way on, too; a
+ * section only reached by a jump costs TRIM_COST. The grid is left as it was.
+ */
+function planOnGrid(f: Frame, secs: Section[], pull: number, start: Pt, grid: TravelGrid, last?: { s: Section; e: Entry }, end?: Pt): { order: { s: Section; e: Entry }[]; cost: number } {
+  const { keep, back, cover, stepCost } = planning(f, grid);
+  const kept = keep();
+  type Cand = { i: number; e: Entry; d: number; c: number };
+  // The `n` cheapest ways from `from` into the sections in `todo` (but `skip`): nearest first, as
+  // no way is shorter than the straight line.
+  const cheapest = (from: Pt, todo: Section[], n: number, skip = -1): Cand[] => {
+    const all: Cand[] = [];
+    todo.forEach((s, i) => {
+      if (i !== skip) for (const e of entries(f, s, pull)) all.push({ i, e, d: dist(from, e.p), c: Infinity });
+    });
+    all.sort((x, y) => x.d - y.d);
+    const best: Cand[] = [];
+    for (const c of all.slice(0, TRIES)) {
+      if (best.length >= n && c.d >= best[n - 1].c) break;
+      c.c = stepCost(from, c.e.p);
+      best.push(c);
+      best.sort((x, y) => x.c - y.c);
+    }
+    return best.slice(0, n);
+  };
+  const todo = secs.filter((s) => s !== last?.s);
+  const order: { s: Section; e: Entry }[] = [];
+  let pos = start;
+  let cost = 0;
+  while (todo.length) {
+    const cands = cheapest(pos, todo, LOOKAHEAD);
+    let best = cands[0];
+    if (cands.length > 1) {
+      // One step further: where the section leaves the needle, and how hidden the way on is.
+      let bs = Infinity;
+      const saved = keep();
+      for (const c of cands) {
+        if (c.c >= bs) break;
+        const s = todo[c.i];
+        cover(s);
+        const out = exitOf(f, s, c.e, pull);
+        const next = todo.length > 1 ? cheapest(out, todo, 1, c.i)[0].c : last ? stepCost(out, last.e.p) : end ? endCost(out, end) : 0;
+        if (c.c + next < bs) {
+          bs = c.c + next;
+          best = c;
+        }
+        back(saved);
+      }
+    }
+    const s = todo.splice(best.i, 1)[0];
+    order.push({ s, e: best.e });
+    cost += best.c;
+    cover(s);
+    pos = exitOf(f, s, best.e, pull);
+  }
+  if (last) {
+    cost += stepCost(pos, last.e.p);
+    order.push(last);
+    pos = exitOf(f, last.s, last.e, pull);
+  }
+  if (end) cost += endCost(pos, end);
+  back(kept);
+  return { order, cost };
+}
+
+/** Up to this many sections, the order is searched more widely: BEAM plans side by side. */
+const BEAM_SECTIONS = 8;
+const BEAM = 8;
+
+/**
+ * Order of a few sections on the travel grid (see planOnGrid), searched more widely: step by step
+ * the BEAM cheapest plans so far each go on into every section left at each of its ends, and the
+ * cheapest of them go on. With `end`, the way there counts too.
+ */
+function beamPlan(f: Frame, secs: Section[], pull: number, start: Pt, grid: TravelGrid, end?: Pt): { order: { s: Section; e: Entry }[]; cost: number } {
+  const { keep, back, cover, stepCost } = planning(f, grid);
+  type Plan = { order: { s: Section; e: Entry }[]; cost: number; pos: Pt; state: ReturnType<typeof keep> };
+  const kept = keep();
+  let beam: Plan[] = [{ order: [], cost: 0, pos: start, state: kept }];
+  for (let depth = 0; depth < secs.length; depth++) {
+    // Every way on, cheapest first by the straight line (no way is shorter); the actual cost is
+    // worked out only while it may still get into the beam.
+    const next: { from: Plan; s: Section; e: Entry; lb: number; cost: number }[] = [];
+    const lastStep = depth === secs.length - 1;
+    for (const b of beam) {
+      for (const s of secs) {
+        if (b.order.some((o) => o.s === s)) continue;
+        for (const e of entries(f, s, pull)) {
+          const tail = end && lastStep ? endCost(exitOf(f, s, e, pull), end) : 0;
+          next.push({ from: b, s, e, lb: b.cost + dist(b.pos, e.p) + tail, cost: Infinity });
+        }
+      }
+    }
+    next.sort((x, y) => x.lb - y.lb);
+    const costed: typeof next = [];
+    let at: Plan | null = null;
+    // Twice as many as go on are worked out, and those that leave sections out of hidden reach rank lower.
+    const wide = 2 * BEAM;
+    for (const n of next.slice(0, BEAM * TRIES)) {
+      if (costed.length >= wide && n.lb >= costed[wide - 1].cost) break;
+      if (at !== n.from) back((at = n.from).state);
+      n.cost = n.lb + stepCost(n.from.pos, n.e.p) - dist(n.from.pos, n.e.p);
+      costed.push(n);
+      costed.sort((x, y) => x.cost - y.cost);
+    }
+    const plans = costed.slice(0, wide).map((n) => {
+      back(n.from.state);
+      cover(n.s);
+      const order = [...n.from.order, { s: n.s, e: n.e }];
+      const pos = exitOf(f, n.s, n.e, pull);
+      // Sections left that no hidden way reaches any more will each need a trim.
+      let stranded = 0;
+      if (!lastStep) {
+        const seen = grid.flood(pos);
+        for (const o of secs) if (!order.some((x) => x.s === o) && !entries(f, o, pull).some((e) => grid.reaches(seen, e.p))) stranded++;
+      }
+      return { order, cost: n.cost, pos, state: keep(), rank: n.cost + TRIM_COST * stranded };
+    });
+    plans.sort((x, y) => x.rank - y.rank);
+    // One plan for each set of sections sewn so far: the beam does not fill with one set in different orders.
+    const sets = new Set<string>();
+    beam = plans
+      .filter((x) => {
+        const key = x.order.map((o) => secs.indexOf(o.s)).sort((a, b) => a - b).join();
+        return !sets.has(key) && !!sets.add(key);
+      })
+      .slice(0, BEAM);
+  }
+  back(kept);
+  return { order: beam[0].order, cost: beam[0].cost };
+}
+
 /**
  * Sews the sections greedily nearest first, connected by travel paths or jumps. With `end`, the
  * section that leaves the needle nearest to it is sewn last, when that makes the ways in between
- * and on to `end` shorter.
+ * and on to `end` shorter. Where parts are left out (the grid knows them), the order and the ends
+ * the sections are entered at are planned on the grid instead (beamPlan, planOnGrid).
  */
 function sewAll(
   f: Frame,
@@ -648,8 +1022,13 @@ function sewAll(
   end?: Pt,
   outer?: TravelGrid,
 ): Pt {
-  let best = plan(f, secs, pull, start, undefined, end);
-  if (end && secs.length) {
+  // Where parts are left out, the order and ends of the sections are planned on the grid, so travel
+  // keeps under rows still to come (and the parts left out) rather than beside the outline.
+  const smart = avoidSewn && !!grid.gone;
+  if (smart) for (const s of secs) for (const seg of s) grid.expect(f.at(seg.u0, f.v(seg.k)), f.at(seg.u1, f.v(seg.k)), f.spacing / 2);
+  const planner = (l?: { s: Section; e: Entry }) => (smart ? planOnGrid(f, secs, pull, start, grid, l, end) : plan(f, secs, pull, start, l, end));
+  let best = smart && secs.length <= BEAM_SECTIONS ? beamPlan(f, secs, pull, start, grid, end) : planner(undefined);
+  if (end && secs.length && !(smart && secs.length <= BEAM_SECTIONS)) {
     let close: { s: Section; e: Entry } | null = null;
     let cd = Infinity;
     for (const s of secs) {
@@ -661,7 +1040,7 @@ function sewAll(
         }
       }
     }
-    const other = close && plan(f, secs, pull, start, close, end);
+    const other = close && planner(close);
     // A little shorter is not worth a different look: at least 2 mm.
     if (other && other.cost < best.cost - 2) best = other;
   }
@@ -705,7 +1084,7 @@ export function fillRegion(r: Region, p: FillParams, start: Pt, neighbours: numb
   const top = rows(r, r.sdf, f, 0);
   if (!top.length) return null;
   const runs: Pt[][] = [];
-  const grid = new TravelGrid(p.travel ?? r, p.offRowEnds);
+  const grid = new TravelGrid(p.travel ?? r, p.offRowEnds, p.whole ? { whole: p.whole, area: r } : undefined);
   const pos = p.underlay ? sewUnderlay(r, angle, p, start, grid, runs) : start;
   const under = pointCount(runs);
   sewAll(f, sections(r, r.sdf, f, top), p.stitch, p.pull, pos, grid, true, runs, p.end);
