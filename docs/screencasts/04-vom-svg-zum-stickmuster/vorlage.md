@@ -2,7 +2,7 @@
 
 Schlüssel `04-vom-svg-zum-stickmuster`, Demodatei `material/katze-im-karton.svg` (nachgezeichnet aus
 `katze-im-karton.png` mit `material/nachzeichnen.py`: Flächen je Farbe, die schwarzen Konturen als
-Linien mit ihrer Breite, Pupillen als schwarze Flächen), 100 mm breit, etwa 2:30, rund 290 Wörter.
+Linien mit ihrer Breite, Pupillen als schwarze Flächen), 100 mm breit, etwa 2:20, rund 250 Wörter.
 
 Eine SVG mit dunklen Konturen geht durch denselben Assistenten wie ein Foto, aber heatstitch muss
 nichts raten: Jede Farbe der Datei wird ein Garn, Linien werden nach ihrer Breite Steppstich oder
