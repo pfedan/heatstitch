@@ -600,9 +600,10 @@ export function fieldFill(
 /**
  * Curved rows (each a line through the area) sewn one after the other: underlay at `mean` degrees
  * first when asked, then row after row while the next one starts close by, with travel under rows
- * not sewn yet between groups.
+ * not sewn yet between groups. `stitched` rows are needle points already (else they are cut into
+ * stitches here).
  */
-export function sewRows(r: Region, rows: Pt[][], p: FillParams, start: Pt, mean: number, widest = p.spacing): FlowResult {
+export function sewRows(r: Region, rows: Pt[][], p: FillParams, start: Pt, mean: number, widest = p.spacing, stitched = false): FlowResult {
   const runs: Pt[][] = [];
   const grid = new TravelGrid(p.travel ?? r, p.offRowEnds);
   let pos = p.underlay ? sewUnderlay(r, mean, p, start, grid, runs) : start;
@@ -654,7 +655,7 @@ export function sewRows(r: Region, rows: Pt[][], p: FillParams, start: Pt, mean:
       group.push(take(ni, nrev));
     }
     const pts: Pt[] = [];
-    for (const row of group) pts.push(...rowStitches({ k: count++, pts: row }, p.stitch, p.tolerance ?? TOLERANCE));
+    for (const row of group) pts.push(...(stitched ? row : rowStitches({ k: count++, pts: row }, p.stitch, p.tolerance ?? TOLERANCE)));
     let travel: Pt[] | null = null;
     if (cur && bd > 1) {
       const path = grid.path(pos, pts[0], true);

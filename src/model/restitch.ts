@@ -6,7 +6,7 @@ import { LINE_MOTIFS } from '../digitize/motif';
 import { lineStitches, runAsLine, runWays } from './line';
 import { chooseAngle, fillRegion, type FillParams } from '../digitize/fill';
 import { contourFill, fieldFill, guideField, stitchField } from '../digitize/flow';
-import { atShare, crossFill, CROSS_KINDS, echoFill, circleField, grainField, GRID_KINDS, gridFill, mazeFill, meanderFill, MOTIFS, rayField, regionBox, swirlField, waveFill, type CrossKind, type GridKind, type Motif, type OpenParams } from '../digitize/deco';
+import { atShare, crossFill, CROSS_KINDS, echoFill, circleField, grainField, GRID_KINDS, gridFill, mazeFill, meanderFill, MOTIFS, rayField, regionBox, swirlField, waveFill, zigzagFill, type CrossKind, type GridKind, type Motif, type OpenParams } from '../digitize/deco';
 import { spiralFill } from '../digitize/spiral';
 import { isEcho } from '../digitize/echo';
 import { isShadow } from './shadow';
@@ -27,6 +27,7 @@ import { END, JUMP, STITCH, TRIM, type Pattern, type ThreadColor } from './patte
 import { partFringe } from './fringe';
 import { recordOfStitch, SATIN, stitchKinds, TIE_STITCH } from './sequence';
 import { gradientOf, patchArea, patchSpacing, rowPatches, type RowPatch } from './rows';
+import { rowLines, zigzagOf, type Zigzag } from './zigzag';
 import { letteringFrom } from '../lettering/stored';
 import type { Lettering } from '../lettering/layout';
 
@@ -1552,6 +1553,24 @@ function readFill(p: Pattern, a: Analysis): { s: FillSettings; firstRow: number 
     edge: 0,
     tolerance: TOLERANCE,
   };
+  // Zigzag rows: they run along the line through the middles of their stitches, a row apart; what
+  // is sewn before the first of them is underlay (when it is more than a way in).
+  const { runs, recs } = rowPoints(p, a);
+  const zig = zigzagOf(runs);
+  if (zig) {
+    const first = recs[zig.first[0]][zig.first[1]];
+    let lead = 0;
+    for (const pt of a.parts) {
+      if (pt.kind !== 'fill') continue;
+      for (let i = pt.s + 1; i <= Math.min(pt.e, first - 1); i++) if (p.cmd[i] === STITCH && p.cmd[i - 1] === STITCH) lead += seg(p, i);
+    }
+    s.pattern = 'follow';
+    s.angle = (Math.round(zig.angle) + 180) % 180;
+    s.spacing = Math.round(zig.spacing * 100) / 100;
+    s.stitch = Math.round(zig.stitch * 10) / 10;
+    s.underlay = lead > zig.thread * 0.06;
+    return { s, firstRow: first };
+  }
   return { s, firstRow };
 }
 
@@ -1901,14 +1920,41 @@ function newFill(p: Pattern, o: SewObject, a: Analysis, s: FillSettings, reverse
   let next = o.last + 1;
   while (next < p.cmd.length && p.cmd[next] !== STITCH && p.cmd[next] !== END) next++;
   const end = !reverse && a.parts.filter((pt) => !pt.border).pop() === last && next < p.cmd.length && p.cmd[next] === STITCH ? pt10(p, next) : undefined;
-  // A fill that follows its stitches: the direction of the old rows.
-  const rows: [Pt, Pt][] = [];
-  if (s.pattern === 'follow')
-    for (const pt of a.parts) {
-      if (pt.kind !== 'fill' || pt.border) continue;
-      for (let i = pt.s + 1; i <= pt.e; i++) if (p.cmd[i] === STITCH && p.cmd[i - 1] === STITCH && seg(p, i) >= 0.8) rows.push([pt10(p, i - 1), pt10(p, i)]);
+  // A fill that follows its stitches: the course of the old rows, and their zigzag when they have one.
+  if (s.pattern !== 'follow') return fillRuns(a.fill, s, { start, end, travel, covers });
+  const { runs } = rowPoints(p, a);
+  const zigzag = zigzagOf(runs) ?? undefined;
+  return fillRuns(a.fill, s, { start, end, travel, covers, rows: rowLines(runs, !!zigzag), zigzag });
+}
+
+/**
+ * The needle points of the fill parts of `a` (not their border), in runs of consecutive stitches
+ * (mm), with the record of each point.
+ */
+function rowPoints(p: Pattern, a: Analysis): { runs: Pt[][]; recs: number[][] } {
+  const runs: Pt[][] = [];
+  const recs: number[][] = [];
+  for (const pt of a.parts) {
+    if (pt.kind !== 'fill' || pt.border) continue;
+    let run: Pt[] = [];
+    let rec: number[] = [];
+    const flush = () => {
+      if (run.length > 1) {
+        runs.push(run);
+        recs.push(rec);
+      }
+      run = [];
+      rec = [];
+    };
+    for (let i = pt.s; i <= pt.e; i++) {
+      if (p.cmd[i] !== STITCH) continue;
+      if (run.length && p.cmd[i - 1] !== STITCH) flush();
+      run.push(pt10(p, i));
+      rec.push(i);
     }
-  return fillRuns(a.fill, s, { start, end, travel, covers, rows });
+    flush();
+  }
+  return { runs, recs };
 }
 
 /** Where and along what a fill is sewn (see fillRuns). */
@@ -1923,6 +1969,8 @@ export interface FillWay {
   covers?: Cover[];
   /** The rows a 'follow' fill follows. */
   rows?: [Pt, Pt][];
+  /** The zigzag of the rows a 'follow' fill follows. */
+  zigzag?: Zigzag;
 }
 
 /**
@@ -1959,6 +2007,7 @@ export function fillRuns(area: Region, s: FillSettings, way: FillWay): NewFill |
   } else if (s.pattern === 'contour') {
     res = contourFill(r, fp, start);
   } else if (s.pattern === 'spiral') res = spiralFill(r, fp, start);
+  else if (s.pattern === 'follow' && way.zigzag?.straight && !s.gradient) res = zigzagFill(r, fp, way.zigzag, start);
   else if (s.pattern === 'follow') {
     if (s.gradient) fp.spacingEnd = s.spacingEnd;
     const f = stitchField(r, way.rows ?? []);

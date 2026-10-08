@@ -292,6 +292,112 @@ export function waveFill(r: Region, p: FillParams, angle: number, height: number
   return rows.length ? sewRows(r, rows, p, start, angle) : null;
 }
 
+/** Zigzag rows (see model/zigzag): their course, from low to high peak, and where the peaks lie. */
+export interface ZigzagRows {
+  angle: number;
+  height: number;
+  /** High peaks at points q with wave · q = phase (modulo 2 pi), low ones half a turn on. */
+  wave: Pt;
+  phase: number;
+}
+
+/** Shorter stitches at the edge go into the peak beside them (mm). */
+const ZIG_SHORT = 0.3;
+
+/**
+ * Straight rows that zigzag, `p.spacing` apart, their peaks where `z` puts them: each row's peaks
+ * lie on the same lines as the next row's, so the slants line up into chevrons (the knit look).
+ * Every stitch runs from peak to peak; where a row leaves the area it ends on the edge. Rows reach
+ * into the area from beyond its edges by half their height, so the edges get as many layers as
+ * the middle.
+ */
+export function zigzagFill(r: Region, p: FillParams, z: ZigzagRows, start: Pt): FillResult | null {
+  const a = (z.angle * Math.PI) / 180;
+  const e: Pt = [Math.cos(a), Math.sin(a)];
+  const n: Pt = [-e[1], e[0]];
+  // Along a row, the wave turns this fast (radians per mm).
+  const ke = z.wave[0] * e[0] + z.wave[1] * e[1];
+  const kn = z.wave[0] * n[0] + z.wave[1] * n[1];
+  if (Math.abs(ke) < 1e-6) return null;
+  const [x0, y0, x1, y1] = regionBox(r);
+  const corners: Pt[] = [
+    [x0, y0],
+    [x1, y0],
+    [x0, y1],
+    [x1, y1],
+  ];
+  const us = corners.map((q) => q[0] * e[0] + q[1] * e[1]);
+  const vs = corners.map((q) => q[0] * n[0] + q[1] * n[1]);
+  const reach = Math.max(0, p.pull);
+  const inside = (q: Pt) => sample(r, r.sdf, q[0], q[1]) < reach;
+  /** Where the stitch from q (inside) towards s (outside) leaves the area. */
+  const edge = (q: Pt, s: Pt): Pt => {
+    let lo = 0;
+    let hi = 1;
+    for (let i = 0; i < 12; i++) {
+      const m = (lo + hi) / 2;
+      if (inside([q[0] + (s[0] - q[0]) * m, q[1] + (s[1] - q[1]) * m])) lo = m;
+      else hi = m;
+    }
+    return [q[0] + (s[0] - q[0]) * lo, q[1] + (s[1] - q[1]) * lo];
+  };
+  const rows: Pt[][] = [];
+  let row: Pt[] = [];
+  const add = (q: Pt) => {
+    const last = row[row.length - 1];
+    if (last && dist(last, q) < ZIG_SHORT) row[row.length - 1] = q;
+    else row.push(q);
+  };
+  const end = () => {
+    let l = 0;
+    for (let i = 1; i < row.length; i++) l += dist(row[i - 1], row[i]);
+    if (row.length > 1 && l > 1) rows.push(row);
+    row = [];
+  };
+  // Peak j of the row at v: on the high side for even j, where the wave reaches phase + j pi.
+  const uMin = Math.min(...us) - 1;
+  const uMax = Math.max(...us) + 1;
+  const v0 = Math.floor((Math.min(...vs) - z.height / 2) / p.spacing) * p.spacing + p.spacing / 2;
+  for (let v = v0; v < Math.max(...vs) + z.height / 2; v += p.spacing) {
+    const at = (j: number): Pt => {
+      const w = v + ((((j % 2) + 2) % 2 === 0 ? 1 : -1) * z.height) / 2;
+      const u = (z.phase + j * Math.PI - kn * w) / ke;
+      return [e[0] * u + n[0] * w, e[1] * u + n[1] * w];
+    };
+    const jAt = (u: number) => (ke * u + kn * v - z.phase) / Math.PI;
+    const margin = Math.ceil((Math.abs(kn) * z.height) / 2 / Math.PI) + 1;
+    const j0 = Math.floor(Math.min(jAt(uMin), jAt(uMax))) - margin;
+    const j1 = Math.ceil(Math.max(jAt(uMin), jAt(uMax))) + margin;
+    let prev = at(j0);
+    let was = inside(prev);
+    for (let j = j0 + 1; j <= j1; j++) {
+      const q = at(j);
+      // Along the stitch in small steps: it may leave the area and come back (a notch).
+      const steps = Math.max(1, Math.ceil(dist(prev, q) / 0.2));
+      let from = prev;
+      for (let s = 1; s <= steps; s++) {
+        const t: Pt = [prev[0] + ((q[0] - prev[0]) * s) / steps, prev[1] + ((q[1] - prev[1]) * s) / steps];
+        const now = inside(t);
+        if (now && !was) add(edge(t, from));
+        else if (!now && was) {
+          add(edge(from, t));
+          end();
+        }
+        was = now;
+        from = t;
+      }
+      if (was) {
+        if (!row.length) add(prev);
+        add(q);
+      }
+      prev = q;
+    }
+    end();
+  }
+  // Rows chain at their ends along the edge, which lie up to a height apart.
+  return rows.length ? sewRows(r, rows, p, start, z.angle, Math.max(p.spacing, (z.height + p.spacing) / 2.5), true) : null;
+}
+
 /** Grain: features about this wide (mm); wood rings, not ripples. */
 const GRAIN_SCALE = 125;
 
