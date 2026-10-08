@@ -81,10 +81,10 @@ export default {
         await s.zoom([960, 24, 0, 0], 1.6);
         await s.move(mode(s, 'Gestalten'), 1.0);
         await s.label('Gestalten', mode(s, 'Gestalten'), 'below');
-        await s.wait(1.6);
+        await s.wait(2.4);
         await s.move(mode(s, /^Prüfen/), 0.6);
         await s.label('Prüfen', mode(s, /^Prüfen/), 'below');
-        await s.wait(1.6);
+        await s.wait(4.5);
         s.unlabel();
       },
     },
@@ -122,8 +122,8 @@ export default {
         await s.zoom([24, 260, 0, 0], 1.8);
         await s.move(btn(s, 'Wählen'), 1.2);
         await s.label('Werkzeugleiste', [8, 60, 32, 400], 'right');
-        await s.wait(1.4);
-        for (const name of ['Rechteck', 'Ellipse', 'Pfad', 'Freihand', 'Text']) await s.move(btn(s, name), 0.55);
+        await s.wait(2.4);
+        for (const name of ['Rechteck', 'Ellipse', 'Pfad', 'Freihand', 'Text']) await s.move(btn(s, name), 0.9);
         await s.wait(0.6);
         s.unlabel();
       },
@@ -136,7 +136,7 @@ export default {
         await s.zoom([200, 300, 0, 0], 1.6);
         await s.move([200, 160], 1.0);
         await s.label('Farben und Objekte', [70, 70, 260, 0], 'below');
-        await s.wait(3.0);
+        await s.wait(4.0);
         s.unlabel();
         await s.click(btn(s, /^Die 18 Objekte zeigen/), { move: 0.8 });
         await s.move([200, 420], 1.2);
@@ -156,16 +156,16 @@ export default {
         const crumb = s.page.getByRole('button', { name: /^Ebene:/ });
         await s.move(crumb, 1.0);
         await s.label('Breadcrumb', crumb, 'below');
-        await s.wait(2.2);
+        await s.wait(3.0);
         s.unlabel();
         const eye = s.page.getByRole('button', { name: 'Stiche', exact: true });
         await s.zoom([1430, 1000, 0, 0], 1.6);
         await s.move(eye, 1.0);
         await s.label('Ansichtsleiste', [1276, 984, 314, 36], 'above');
-        await s.wait(1.8);
+        await s.wait(3.2);
         s.unlabel();
-        await s.move(btn(s, 'Einpassen'), 1.2);
-        await s.wait(0.6);
+        await s.move(btn(s, 'Einpassen'), 1.4);
+        await s.wait(2.4);
         s.zoomOut();
       },
     },
@@ -205,7 +205,7 @@ export default {
         await s.page.evaluate(() => document.activeElement?.blur());
         await s.move(btn(s, /^Abspielen/), 1.0);
         await s.label('Player', [360, 1040, 1230, 34], 'above');
-        await s.wait(1.6);
+        await s.wait(1.1);
         s.unlabel();
         await s.move([975, 700], 0.8);
         await s.press('Home', { label: 'Pos1', show: 0.5 });
