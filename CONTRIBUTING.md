@@ -16,6 +16,9 @@ Open an issue and include:
 
 The app runs entirely in the browser, so nothing about your file reaches us unless you attach it.
 
+For maintainers: a session can be recorded and replayed to reproduce a bug (`heatstitch.record()`
+in the browser console, then save the project); see [docs/aufzeichnung.md](docs/aufzeichnung.md).
+
 ## Setup
 
 You need Node.js 22 (the version CI uses) and npm.
