@@ -14,7 +14,7 @@ import { SATIN_SHARE } from '../model/covers';
 import { currentSettings } from '../correct/plan';
 import { isCovered, setOverlapShare } from '../model/knockout';
 import { isStroke, SATIN_MAX, pullFor, digitizeDefaults } from '../digitize/digitize';
-import { closedForm, closedLineToFill, lineSettings, lineToFill } from '../model/line';
+import { closedLineToFill, lineSettings, lineToFill } from '../model/line';
 import { outline } from '../digitize/region';
 import { recommendedSpacing } from '../validation/profiles';
 import { rememberObjects, type SewObject } from '../model/objects';
@@ -26,7 +26,7 @@ import { t, type Key } from '../i18n';
 import { type ShapeTrust, analyze, remembered, measureFill, measureSatin, measureRun, shapeTrust, type Remembered, remember, rememberedIn, restitch, restitchedPieces, type Settings as RestitchSettings, type RestitchResult, objectKey } from '../model/restitch';
 import { type StitchInfo, StitchPanel } from '../ui/stitchPanel';
 import { ui } from './state';
-import { areaOf, geoUse, guessLine, lineGeoOf } from '../model/geo';
+import { areaOf, fits, geoUse, guessLine, lineGeoOf } from '../model/geo';
 
 /** What bindStitches needs from the rest of the app. */
 export interface StitchesApp {
@@ -127,7 +127,7 @@ export function bindStitches(app: StitchesApp) {
     const one = ui.selectedObjects.size === 1 ? q.objects[[...ui.selectedObjects][0]] : undefined;
     if (one && app.isLineObject(p, one)) {
       const form = guessLine(p, one, q.kinds);
-      info.path = { st: lineSettings(p, one, q.kinds), traced: !lineGeoOf(remembered(p, one)), closed: !!form?.paths.length && form.paths.every((x) => x.closed), color: one.color };
+      info.path = { st: lineSettings(p, one, q.kinds), traced: !lineGeoOf(remembered(p, one)), closed: !!form?.paths.length && form.paths.every((x) => x.closed), fills: fits(form, 'fill'), color: one.color };
     }
     if (one && geoUse(remembered(p, one)) === 'band') info.asLine = true;
     const orig = app.files.active?.pattern === p ? app.files.active.original : undefined;
@@ -381,8 +381,8 @@ export function bindStitches(app: StitchesApp) {
       if (path) {
         const d = digitizeDefaults(app.settings.profile);
         const fill = { pattern: 'tatami' as const, spacing: d.spacing, spacingEnd: Math.min(1.2, Math.round(d.spacing * 250) / 100), offset: 0.25, angle: NaN, stitch: d.stitch, underlay: d.underlay, edge: 0, tolerance: d.tolerance };
-        // A closed line is filled inside and stays its border; an open satin line becomes a fill in its width.
-        const closed = closedForm(path);
+        // A line with a closed path is filled inside and stays its border; an open satin line becomes a fill in its width.
+        const closed = fits(path, 'fill');
         const r = closed ? closedLineToFill(p, one, fill, app.settings.trimMm) : lineToFill(p, one, fill, app.settings.trimMm);
         applyRestitched(r, 'stitch.failed', true);
         if (r?.starts.length) app.layers.say(t(closed ? 'stitch.closedFilled' : 'stitch.lineFilled'));

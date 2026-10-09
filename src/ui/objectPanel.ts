@@ -26,7 +26,7 @@ export interface ObjectInfo {
   /** The one selected object has a fill whose outline can be edited. */
   shapeable: boolean;
   /** Its outline is being edited: nodes, and whether the selected one is round (null: none selected). */
-  shaping: { nodes: number; smooth: boolean | null; line?: { closed: boolean }; kind?: 'band' | 'rails' } | null;
+  shaping: { nodes: number; smooth: boolean | null; line?: { closed: boolean }; kind?: 'band' } | null;
   /** The frame is on the one selected object; whether it can be scaled. */
   frame: { canScale: boolean } | null;
   /** Why the selected objects cannot be sewn as one (several selected), or null. */

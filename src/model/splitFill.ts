@@ -15,7 +15,7 @@ import { stitchKinds } from './sequence';
 import { addShape } from './addShape';
 import { digitizeDefaults } from '../digitize/digitize';
 import { DEFAULT_PROFILE } from '../validation/profiles';
-import { geoUse, guessArea } from './geo';
+import { fits, geoUse, guessArea } from './geo';
 
 /**
  * Splitting a fill along cut lines (freehand, a path or a straight line): each part becomes an
@@ -215,7 +215,7 @@ export function canSplit(p: Pattern, o: number): boolean {
   if (!known?.fill || known.free || geoUse(known) === 'band' || known.outline || known.blendOf || known.fill.deco?.blend || known.fill.pattern === 'none') return false;
   if (!analyze(p, obj, kinds, known).fill) return false;
   const form = guessArea(p, obj, kinds);
-  return !!form && !!wholeArea(form);
+  return fits(form, 'fill') && !!wholeArea(form!);
 }
 
 /**

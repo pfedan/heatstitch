@@ -16,7 +16,6 @@ import type { ShapeTool } from '../ui/shapeTool';
 import { borderLines, type PathStitch } from '../model/along';
 import { echoCopyLines, nearestCopy } from '../model/line';
 import { borderRanges } from '../model/border';
-import { satinArea } from '../model/railsForm';
 import { remembered, underlayRanges, type RestitchResult, analyze, restitchedPieces } from '../model/restitch';
 import { sewObjects, overlaps, type SewObject } from '../model/objects';
 import { stitchNumbers, stitchKinds, colorBlocks, markers as findMarkers, transitions, sewingSeconds, recordOfStitch, carriedJumps } from '../model/sequence';
@@ -24,7 +23,7 @@ import { type Pattern, TRIM, COLOR_CHANGE, STITCH, type ThreadColor } from '../m
 import { type StitchStyle, stitchColors, stitchAlpha } from '../render/flow';
 import { ui } from './state';
 import { wholeOf } from '../model/knockout';
-import { guessArea, lineGeoOf } from '../model/geo';
+import { guessArea, lineGeoOf, satinOutline } from '../model/geo';
 
 /** What bindScene needs from the rest of the app. */
 export interface SceneApp {
@@ -307,7 +306,7 @@ export function bindScene(app: SceneApp) {
           continue;
         }
         if (o.kind === 'satin') {
-          const area = satinArea(p, o, q.kinds);
+          const area = satinOutline(p, o, q.kinds);
           if (area) list.push({ o, form: area });
         }
         if (o.kind !== 'fill') continue;

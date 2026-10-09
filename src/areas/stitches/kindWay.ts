@@ -21,7 +21,7 @@ export interface KindState {
   draw?: { single: boolean; tool: boolean };
   /** An empty fill shown as a line (only its edge is sewn). */
   empty?: boolean;
-  /** A line: whether it can be a fill (a satin line drawn, not read). */
+  /** A line: whether it can be a fill (drawn, not read: one with a closed path, see fits, or a satin line). */
   lineFills?: boolean;
   /** A border, shadow, echo or blend thread, or stitches loosed from their shape: no switch. */
   blocked?: boolean;

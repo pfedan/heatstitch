@@ -3062,14 +3062,17 @@ function restitchOnce(
     const keptRails = (reverse || keptSatin) && known?.columns?.length ? [known.columns.flat()] : known?.columns?.length === satinParts.length ? known.columns : undefined;
     const rails: Rails[][] = [];
     const src = from ?? given.kind;
-    const converting = src !== given.kind;
+    // A satin given a new area (its outline edited on the level Form): sewn over the new area as a
+    // satin made from a fill is, along the guide columns when given.
+    const reshaping = !!newArea && given.kind === 'satin' && src === 'satin';
+    const converting = src !== given.kind || reshaping;
     // The area of the parts that change: the fill area, or for a change of kind the area kept
     // from before or the one the parts cover.
     let area = an.fill;
     // A satin made a fill: its columns, kept so it can become the same satin again; its area is
     // where the columns lie (traced from the stitches it would grow by their thickness each time).
     const satinRails =
-      converting && src === 'satin' ? (known?.columns?.flat() ?? satinParts.flatMap((pt) => satinColumns(p, pt, kinds).map((c) => railsOf(p, c)).filter((r): r is Rails => !!r))) : undefined;
+      converting && src === 'satin' && !reshaping ? (known?.columns?.flat() ?? satinParts.flatMap((pt) => satinColumns(p, pt, kinds).map((c) => railsOf(p, c)).filter((r): r is Rails => !!r))) : undefined;
     // The drawn form is the source of the area when there is one, never traced back from stitches.
     if (converting) area = newArea ?? (known?.form ? rasterize(known.form) : null) ?? known?.shape ?? (src === 'fill' ? an.fill : (railsArea(satinRails ?? []) ?? coveredBy(p, parts.filter((pt) => pt.kind === src))));
     // A fill made from satin gets rows across the area in the direction with the fewest sections.

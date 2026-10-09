@@ -1122,7 +1122,7 @@ const enBase: Record<keyof typeof deBase, string> = {
   'knockout.card.kept': 'Kept. You can still leave out per object in its stitch settings.',
   'shape.hint': 'Drag nodes · Drag a curve: bend · Drag a hollow dot: new node (also at the end of a line)',
   'shape.hint.band': 'Satin line: the round grip on the band changes its width.',
-  'shape.hint.rails': 'The two lines are the edges of the column. Drag to change the width.',
+  'shape.lettering': 'Lettering: change the text, or split it into objects to shape each letter on its own.',
   'shape.nodes': '{n} nodes',
   'shape.none': 'No node selected',
   'shape.line.close': 'Close line',

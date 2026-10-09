@@ -420,7 +420,7 @@ export function initShapes(app: ShapesAreaApp): void {
     const s = app.shapeTool;
     if (s.active) {
       const items: Item[] = [
-        { kind: 'title', text: t('shapes.shape.title'), title: t(s.band !== null ? 'shape.hint.band' : s.rails ? 'shape.hint.rails' : 'shape.hint') },
+        { kind: 'title', text: t('shapes.shape.title'), title: t(s.band !== null ? 'shape.hint.band' : 'shape.hint') },
         { kind: 'hint', text: `${t('shape.nodes', { n: formatNumber(s.count) })} · ${s.selectedSmooth === null ? t('shape.none') : t(s.selectedSmooth ? 'shape.node.smooth' : 'shape.node.corner')}` },
         { kind: 'cmd', id: 'shape.nodeDelete' },
         { kind: 'cmd', id: 'shape.cornerToggle', text: t(s.selectedSmooth ? 'shape.node.corner' : 'shape.node.smooth') },

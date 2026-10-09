@@ -101,7 +101,8 @@ export interface StitchInfo {
    * is sewn along its curve. `traced`: its curve is read from its stitches (none was drawn).
    * `closed`: all its paths are loops (its echo lies outside or inside, not left or right).
    */
-  path?: { st: PathStitch; traced: boolean; closed: boolean; color: ThreadColor };
+  /** A line: how it is sewn, whether its paths are traced from its stitches, all closed (for its echo), and whether it can be filled (see fits). */
+  path?: { st: PathStitch; traced: boolean; closed: boolean; fills: boolean; color: ThreadColor };
   /** The one selected fill was a wide line, and can be one again. */
   asLine?: boolean;
   /** How deep the selected fills reach at their deepest point (mm; the shallowest of them): an underlay inset beyond it leaves none. */
@@ -406,8 +407,8 @@ export class StitchPanel {
       toSatin: info.toSatin,
       draw: info.draw ? { single: info.draw.single, tool: info.draw.tool } : undefined,
       empty: this.emptyLine(),
-      // A drawn line closed all round: filled inside; a satin line: in its width.
-      lineFills: !!info.path && !info.path.traced && (info.path.closed || info.path.st.type === 'satin'),
+      // A drawn line with a closed path: filled inside; a satin line: in its width.
+      lineFills: !!info.path && !info.path.traced && (info.path.fills || info.path.st.type === 'satin'),
       blocked: !!info.outline || !!info.free?.on,
     };
   }
@@ -1187,7 +1188,7 @@ export class StitchPanel {
     if (way === 'draw') return 'stitches.kind.toSatinDraw';
     if (way === 'empty') return 'stitches.kind.toEmpty';
     if (way === 'fill') return 'stitches.kind.fillAgain';
-    return k === 'satin' ? 'stitch.kind.toSatin' : k === 'line' ? 'stitch.kind.toLine' : now === 'line' ? (this.info?.path?.closed ? 'stitch.kind.closedToFill' : 'stitch.kind.lineToFill') : 'stitch.kind.toFill';
+    return k === 'satin' ? 'stitch.kind.toSatin' : k === 'line' ? 'stitch.kind.toLine' : now === 'line' ? (this.info?.path?.fills ? 'stitch.kind.closedToFill' : 'stitch.kind.lineToFill') : 'stitch.kind.toFill';
   }
 
   /** Why `k` cannot be picked now. */
@@ -1197,7 +1198,7 @@ export class StitchPanel {
       if (now !== 'fill' || info.asLine) return 'stitches.kind.notForLine';
       return info.draw?.tool ? 'stitches.kind.drawing' : info.draw?.single ? 'stitch.kind.noSatin' : 'stitches.kind.noSatinMany';
     }
-    if (k === 'fill' && now === 'line' && info.path && !info.path.traced && !info.path.closed) return 'stitches.kind.closeToFill';
+    if (k === 'fill' && now === 'line' && info.path && !info.path.traced && !info.path.fills) return 'stitches.kind.closeToFill';
     return k === 'line' ? 'stitches.kind.lineOnly' : 'stitch.kind.toFill';
   }
 

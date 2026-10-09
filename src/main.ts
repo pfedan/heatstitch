@@ -810,7 +810,7 @@ function objectInfo(p: Pattern, q: Sequence) {
     threadMm: selected.reduce((a, o) => a + (q.objects[o] ? threadOfRange(p, settings.profile.fabric, q.objects[o].first, q.objects[o].last) : 0), 0),
     editing: editor.active && ui.editObject !== null && selected.length === 1 && selected[0] === ui.editObject ? { selection: editor.selection.size } : null,
     shapeable: selected.length === 1 && (stitchInfo(p, q).free?.on ? !!shapeTarget(p, q, selected[0]) : !!stitchInfo(p, q).measured.fill || !!stitchInfo(p, q).measured.satin || (!!q.objects[selected[0]] && isLineObject(p, q.objects[selected[0]]))),
-    shaping: shapeTool.active && selected.length === 1 && selected[0] === ui.shapeObject ? { nodes: shapeTool.count, smooth: shapeTool.selectedSmooth, ...(shapeTool.band !== null ? { kind: 'band' as const } : shapeTool.rails ? { kind: 'rails' as const } : {}), ...(q.objects[selected[0]] && isLineObject(p, q.objects[selected[0]]) ? { line: { closed: shapeTool.closed } } : {}) } : null,
+    shaping: shapeTool.active && selected.length === 1 && selected[0] === ui.shapeObject ? { nodes: shapeTool.count, smooth: shapeTool.selectedSmooth, ...(shapeTool.band !== null ? { kind: 'band' as const } : {}), ...(q.objects[selected[0]] && isLineObject(p, q.objects[selected[0]]) ? { line: { closed: shapeTool.closed } } : {}) } : null,
     frame: frameTool.active ? { canScale: frameTool.canScale } : null,
     mergeBlocked: selected.length > 1 ? mergeBlocked(selected.map((o) => q.objects[o])) : null,
     reversible: selected.some((o) => reversible(q.objects[o]) || sewnAlong(p, q.objects[o])),

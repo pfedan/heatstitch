@@ -12,17 +12,17 @@ import type { SewObject } from '../model/objects';
 import type { Viewport } from '../render/viewport';
 import { ShapeTool } from '../ui/shapeTool';
 import { deleteObjects, duplicateObjects, mirrorMatrix, subtractTop } from '../model/shapeOps';
-import { reshapeFill } from '../model/reshape';
-import { railsForm, reshapeRails } from '../model/railsForm';
+import { reshapeObject } from '../model/reshape';
 import { resewLine, lineSettings, fillToLine, reshapeLineFill } from '../model/line';
 import { refreshKnockouts } from '../model/knockout';
 import { objectKey, remember, remembered, rememberedIn, restitch, type Remembered, type RestitchResult } from '../model/restitch';
 import { rasterize } from '../shape/rasterize';
 import { syncBorders } from '../model/border';
+import { partOf } from '../model/shadow';
 import { stitchKey } from '../model/objects';
 import { t, formatNumber, type Key } from '../i18n';
 import { ui } from './state';
-import { geoUse, guessArea, guessGeo, guessLine, sewnAlong, withGeo } from '../model/geo';
+import { geoUse, guessGeo, guessLine, sewnAlong, withGeo } from '../model/geo';
 
 /** What bindShapes needs from the rest of the app. */
 export interface ShapesApp {
@@ -74,13 +74,11 @@ export function bindShapes(app: ShapesApp) {
     return st.type === 'satin' || st.type === 'zigzag' ? { width: st.width, offset: 0 } : null;
   }
 
-  /** The shape tool shows the band of object `o`, when it has one, and knows when its form is a satin column's rails. */
+  /** The shape tool shows the band of object `o`, when it has one. */
   function showBand(p: Pattern, q: Sequence, o: number): void {
     const b = bandOf(p, q, o);
     shapeTool.band = b?.width ?? null;
     shapeTool.bandOffset = b?.offset ?? 0;
-    const obj = q.objects[o];
-    shapeTool.rails = !b && !!obj && !isLineObject(p, obj) && !guessArea(p, obj, q.kinds) && !!railsForm(p, obj, q.kinds);
   }
 
   /**
@@ -125,15 +123,17 @@ export function bindShapes(app: ShapesApp) {
     return sewnAlong(p, o);
   }
 
-  /** The one selected object of the Ablauf mode, when it has a fill whose outline can be edited, or is a line. */
+  /**
+   * The form of the one selected object of the Ablauf mode, to edit on the level Form: given, or
+   * guessed from its stitches (a satin of a file: the outline of its columns). A letter has none of
+   * its own (its form comes from the font), nor has a border, second blend thread, shadow or echo in
+   * a thread of its own (it follows its fill or line).
+   */
   function shapeTarget(p: Pattern, q: Sequence, o: number): Form | null {
     const obj = q.objects[o];
-    if (!obj) return null;
-    const geo = guessGeo(p, obj, q.kinds);
-    // Stitches loosed from their shape: its resting shape is edited (a satin without one has none).
-    if (geo || remembered(p, obj)?.free || isLineObject(p, obj)) return geo;
-    // A satin without an outline (of a file from elsewhere): its two rails.
-    return railsForm(p, obj, q.kinds);
+    const m = obj && remembered(p, obj);
+    if (!obj || m?.lettering || m?.outline || m?.blendOf || partOf(m)) return null;
+    return guessGeo(p, obj, q.kinds);
   }
 
   /**
@@ -202,7 +202,11 @@ export function bindShapes(app: ShapesApp) {
     if (!p || app.settings.mode !== 'flow') return;
     const q = app.seq(p);
     const form = shapeTarget(p, q, o);
-    if (!form) return app.enterObject(o, fit);
+    if (!form) {
+      // A letter: its form comes from the font.
+      if (q.objects[o] && remembered(p, q.objects[o])?.lettering) app.layers.say(t('shape.lettering'));
+      return app.enterObject(o, fit);
+    }
     app.closeRungs();
     if (app.editor.active) {
       app.editor.setActive(false);
@@ -271,17 +275,15 @@ export function bindShapes(app: ShapesApp) {
     const q = app.seq(p);
     const obj = q.objects[o];
     if (!obj) return false;
-    if (isLineObject(p, obj)) return sewLine(o, form, null, !preview);
     const hand = remembered(p, obj)?.hand ?? 0;
-    const rails = !guessArea(p, obj, q.kinds) && railsForm(p, obj, q.kinds);
-    const r = rails ? reshapeRails(p, q.objects, obj, q.kinds, form, app.settings.trimMm) : reshapeFill(p, q.objects, obj, q.kinds, form, app.settings.trimMm);
+    const r = reshapeObject(p, q.objects, obj, q.kinds, form, app.settings.trimMm);
     if (preview) {
       ui.flowPreview = r?.starts.length ? r.pattern : null;
       app.redraw();
       return !!ui.flowPreview;
     }
     if (!r || !r.starts.length) {
-      // Nothing to fill there (too small, or the outline crosses itself away): back to the old one.
+      // Nothing to sew there (too small, or the outline crosses itself away): back to the old one.
       app.layers.say(t('shape.failed'), true);
       app.redraw();
       return false;

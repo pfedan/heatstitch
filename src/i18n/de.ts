@@ -1120,7 +1120,7 @@ export const deBase = {
   'knockout.card.kept': 'Bleibt so. Aussparen lässt sich je Objekt in den Stich-Einstellungen einschalten.',
   'shape.hint': 'Knoten ziehen · Kurve ziehen: biegen · Hohlen Punkt ziehen: neuer Knoten (auch am Ende einer Linie)',
   'shape.hint.band': 'Satinlinie: Der runde Griff am Band ändert ihre Breite.',
-  'shape.hint.rails': 'Die beiden Linien sind die Kanten der Säule. Ziehen ändert die Breite.',
+  'shape.lettering': 'Schrift: Text ändern oder in Objekte zerlegen, dann lässt sich jeder Buchstabe einzeln formen.',
   'shape.nodes': '{n} Knoten',
   'shape.none': 'Kein Knoten gewählt',
   'shape.line.close': 'Linie schließen',
