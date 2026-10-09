@@ -70,6 +70,29 @@ const toggle = (id, on) => (page) =>
     [id, on],
   );
 
+/**
+ * Picks the object at (x, y) of the canvas, presses the `index`th button of `buttons` in its panel
+ * and clicks the canvas beside the design again, so no selection marks show in the shot.
+ */
+const pressed = (x, y, buttons, index) => async (page) => {
+  await page.mouse.click(x, y);
+  await page.waitForFunction(([sel, i]) => document.querySelectorAll(sel).length > i, [buttons, index], { timeout: 10_000 });
+  await page.evaluate(([sel, i]) => document.querySelectorAll(sel)[i].click(), [buttons, index]);
+  await page.waitForTimeout(3000);
+  await page.mouse.click(420, 300);
+  await page.waitForTimeout(500);
+};
+
+/** The embossing motif `index` (1 to 4, see deco.ts) on the red tatami of the Musterkarte, in the live light. */
+const embossed = (index) => async (page) => {
+  await design('Musterkarte')(page);
+  await pressed(814, 455, '.motif-row button', index)(page);
+  await toggle('live-light', true)(page);
+};
+
+/** The border of the Handtuch's fill as kind `index` of off, run, satin, zigzag, e, motif. */
+const bordered = (index) => async (page) => (await design('Handtuch')(page), pressed(660, 600, '.lit-border .choice-row.kinds button', index)(page));
+
 const shapesView = (page) => page.evaluate(() => document.querySelector('#shapes-seg [data-shapes=on]').click());
 
 /**
@@ -83,11 +106,18 @@ const SHOTS = {
   'view-stitches': [design('Blume'), [640, 260, 320, 200]],
   'view-shapes': [async (page) => (await design('Blume')(page), shapesView(page)), [640, 260, 320, 200]],
   light: [async (page) => (await design('Schriftzug')(page), toggle('live-light', true)(page)), [520, 590, 320, 200]],
-  motif: [async (page) => (await design('Musterkarte')(page), toggle('live-light', true)(page)), [734, 405, 160, 100]],
+  'motif-diamonds': [embossed(1), [754, 418, 120, 75]],
+  'motif-waves': [embossed(2), [754, 418, 120, 75]],
+  'motif-stars': [embossed(3), [754, 418, 120, 75]],
+  'motif-hearts': [embossed(4), [754, 418, 120, 75]],
   'echo-one': [design('Linieneffekte'), [470, 136, 368, 230]],
   'echo-both': [design('Linieneffekte'), [836, 362, 320, 200]],
   shadow: [design('Linien mit Parametern'), [720, 793, 180, 112.5]],
-  border: [design('Handtuch'), [572, 518, 224, 140]],
+  'border-run': [bordered(1), [572, 518, 224, 140]],
+  'border-satin': [bordered(2), [572, 518, 224, 140]],
+  'border-zigzag': [bordered(3), [572, 518, 224, 140]],
+  'border-e': [bordered(4), [572, 518, 224, 140]],
+  'border-motif': [bordered(5), [572, 518, 224, 140]],
 };
 
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--hide-scrollbars'] });

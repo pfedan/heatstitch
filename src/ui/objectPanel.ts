@@ -245,11 +245,11 @@ export class ObjectPanel {
     const times = () => h('span', { class: 'obj-x', 'aria-hidden': 'true' }, '×');
     return h(
       'div',
-      { class: `obj-geom${editable ? '' : ' readonly'}`, title: hint },
-      h('span', { class: 'obj-geom-label' }, t('objects.size')),
+      { class: `obj-geom${editable ? '' : ' readonly'}` },
+      h('span', { class: 'obj-geom-label', title: hint }, t('objects.size')),
       h('span', { class: 'obj-geom-fields' }, field(b.w, t('object.size.w'), (v) => typed('w', v), { min: 1, disabled: !canScale }), times(), field(b.h, t('object.size.h'), (v) => typed('h', v), { min: 1, disabled: !canScale }), unit(), lock),
       h('span', { class: 'obj-geom-label', title: t('objects.pos.hint') }, t('objects.pos')),
-      h('span', { class: 'obj-geom-fields', title: t('objects.pos.hint') }, field(b.cx, t('objects.pos.x'), (v) => moved('x', v), { disabled: !editable }), h('span', { class: 'obj-x', 'aria-hidden': 'true' }, ' '), field(b.cy, t('objects.pos.y'), (v) => moved('y', v), { disabled: !editable }), unit(), h('span', { class: 'obj-lock-space' })),
+      h('span', { class: 'obj-geom-fields' }, field(b.cx, t('objects.pos.x'), (v) => moved('x', v), { disabled: !editable }), h('span', { class: 'obj-x', 'aria-hidden': 'true' }, ' '), field(b.cy, t('objects.pos.y'), (v) => moved('y', v), { disabled: !editable }), unit(), h('span', { class: 'obj-lock-space' })),
     );
   }
 
