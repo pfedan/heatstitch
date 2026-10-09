@@ -185,7 +185,8 @@ Alles ist wiederholbar und läuft im Container oder auf dem eigenen Rechner (Ein
 Befehle: [lokal.md](lokal.md)). Ein Video wird aus einer Ablaufdatei erzeugt.
 
 1. **Ablauf.** Je Video eine Datei mit Szenen. Jede Szene hat einen Sprechtext und die
-   Aktionen dazu (klicken, ziehen, Taste, zoomen, Hinweis zeigen).
+   Aktionen dazu (klicken, ziehen, Taste, zoomen, Hinweis zeigen). Ein erster Entwurf kann aus
+   einer Aufzeichnung in der App entstehen ([Aufzeichnung](../aufzeichnung.md)).
 2. **Stimme zuerst.** Jede Szene wird einzeln vertont. Die Länge der Tonspur bestimmt, wie
    lange die Szene im Bild dauert. So passen Bild und Ton immer zusammen, auch wenn ein Satz
    später geändert wird.

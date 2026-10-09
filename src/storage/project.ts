@@ -70,6 +70,8 @@ export interface Project {
   active: number | null;
   image: ProjectImage | null;
   settings: ProjectSettings;
+  /** A session recorded with the developer console (src/dev/recorder.ts); the app does not read it back. */
+  recording?: unknown;
 }
 
 /** Why a project could not be opened: not a project file (or damaged), or written by a newer version. */
@@ -164,6 +166,7 @@ export async function encodeProject(p: Project, savedAt = new Date()): Promise<U
     active: p.active,
     files: p.files,
     image: p.image,
+    ...(p.recording ? { recording: p.recording } : {}),
   };
   const json = JSON.stringify(doc, (_k, v: unknown) =>
     v instanceof Uint8Array || v instanceof Int32Array || v instanceof Float32Array ? encodeArray(v) : v,

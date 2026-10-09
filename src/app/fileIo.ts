@@ -6,6 +6,7 @@ import type { Pattern } from '../model/pattern';
 import { rememberedIn } from '../model/restitch';
 import { applyMaterial, materialOf, sameMaterial, saveSettings, type Mode, type Settings } from '../settings';
 import { toStored } from '../storage/fileStore';
+import { recordingForSave } from '../dev/console';
 import { decodeProject, encodeProject, isProjectName, onlyDesign, PROJECT_EXT, PROJECT_MIME, projectSettings, ProjectError, type Project, type ProjectSettings } from '../storage/project';
 import type { CorrectPanel } from '../ui/correctPanel';
 import { FileList, type LoadedFile } from '../ui/fileList';
@@ -93,6 +94,7 @@ export function bindFileIo(app: FileIoApp) {
 
   /** Everything open in the app as a project: the files with their edits, the image and the design settings. */
   function currentProject(): Project {
+    const recording = recordingForSave();
     const list = app.files.files.filter((f) => f.pattern && f.data);
     const active = list.findIndex((f) => f === app.files.active);
     const snap = app.imageMode.snapshot();
@@ -113,12 +115,13 @@ export function bindFileIo(app: FileIoApp) {
       active: active >= 0 ? active : null,
       image: snap && { name: snap.image.name, type: snap.image.type, data: new Uint8Array(snap.image.data), work: snap.work },
       settings: projectSettings(app.settings),
+      ...(recording ? { recording } : {}),
     };
   }
 
   /** Saves everything open as a project, or with `only` that design alone, named after it. */
   async function saveProject(only?: LoadedFile): Promise<void> {
-    if (!app.files.files.some((f) => f.pattern) && !app.imageMode.snapshot()) return;
+    if (!app.files.files.some((f) => f.pattern) && !app.imageMode.snapshot() && !recordingForSave()) return;
     const all = currentProject();
     const index = only ? app.files.files.filter((f) => f.pattern && f.data).indexOf(only) : -1;
     if (only && index < 0) return;
@@ -275,5 +278,5 @@ export function bindFileIo(app: FileIoApp) {
 
   initFilesArea({ files: app.files, settings: app.settings, setMode: (m) => app.setMode(m), newDesign, loadExample, saveProject, hasImage: () => !!app.imageMode.snapshot() });
 
-  return { openFiles, openProject, adoptMaterial, storeMaterial, newDesign };
+  return { openFiles, openProject, adoptMaterial, storeMaterial, newDesign, currentProject, saveProject };
 }

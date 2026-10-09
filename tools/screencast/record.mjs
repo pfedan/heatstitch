@@ -89,6 +89,17 @@ const context = await browser.newContext({
 // Key names as on Windows and Linux (Strg+K, Umschalt), also when recording on a Mac, so every
 // video shows the same keys.
 await context.addInitScript(() => Object.defineProperty(Navigator.prototype, 'platform', { get: () => 'Win32' }));
+// Scripts made from a recording (tools/recording) bring the settings of the recorded session.
+if (ablauf.storage) {
+  await context.addInitScript(
+    ({ storage, ns }) => {
+      if (sessionStorage.getItem('replay.storage')) return;
+      for (const [k, v] of Object.entries(storage)) localStorage.setItem(`${ns}.${k}`, v);
+      sessionStorage.setItem('replay.storage', '1');
+    },
+    { storage: ablauf.storage, ns: process.env.STORAGE_NS || 'heatstitch' },
+  );
+}
 const page = await context.newPage();
 await page.clock.install();
 await page.goto(APP_URL);
@@ -230,6 +241,13 @@ const wanted = (i) => {
   const [a, b] = sceneRange.split('-').map(Number);
   return i >= a && i <= (b || a);
 };
+
+// What the first scene starts from (a script made from a recording opens what was open then).
+if (ablauf.prepare) {
+  dry = true;
+  await ablauf.prepare(api);
+  dry = false;
+}
 
 for (const [i, scene] of ablauf.scenes.entries()) {
   const n = i + 1;

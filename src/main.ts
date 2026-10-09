@@ -1,3 +1,5 @@
+// First, so a recording hears input before the app's own handlers (src/dev/tap.ts).
+import './dev/tap';
 import { threadOfRange } from './model/threadUse';
 import { loadCatalogs } from './threads/catalog';
 import './style.css';
@@ -31,6 +33,7 @@ import { STITCH, type Pattern, type ThreadColor } from './model/pattern';
 import type { Measurement } from './validation/measure';
 import { initUpdateNotice } from './ui/updateNotice';
 import { bindFileIo } from './app/fileIo';
+import { installDevConsole } from './dev/console';
 import { writePattern } from './writers';
 import { parsePattern } from './parsers';
 import { ImageMode } from './ui/imageMode';
@@ -1573,7 +1576,7 @@ exportBtn.addEventListener('click', () => {
 
 // Opening and saving files and projects: src/app/fileIo.ts
 
-const { adoptMaterial, storeMaterial, newDesign } = bindFileIo({
+const { adoptMaterial, storeMaterial, newDesign, currentProject, saveProject } = bindFileIo({
   get setFormLevel() {
     return setFormLevel;
   },
@@ -1588,6 +1591,9 @@ const { adoptMaterial, storeMaterial, newDesign } = bindFileIo({
   setMode,
   addDigitized,
 });
+
+// Recording a session from the browser console, for bug reports and tutorials: src/dev/console.ts
+installDevConsole({ canvas, vp, files, redraw, project: currentProject, save: () => saveProject() });
 
 // Measuring ----------------------------------------------------------------
 
