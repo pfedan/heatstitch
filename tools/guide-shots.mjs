@@ -847,6 +847,83 @@ shots.decor = async (lang) => {
   await close();
 };
 
+/** The selected object's thread: the first swatch of the color grid whose color passes `test` (r, g, b). */
+async function pickThread(page, test) {
+  await page.locator('#object-body .thread-sw').first().click();
+  await page.waitForTimeout(600);
+  const got = await page.evaluate((src) => {
+    const ok = new Function('r', 'g', 'b', `return ${src}`);
+    const all = [...document.querySelectorAll('.color-pop .color-grid button.pick')];
+    const i = all.findIndex((b) => { const m = b.style.background.match(/rgb\((\d+), (\d+), (\d+)\)/); return m && ok(+m[1], +m[2], +m[3]); });
+    if (i >= 0) all[i].click();
+    return i >= 0;
+  }, test);
+  if (!got) console.log('no swatch for', test);
+  await page.waitForTimeout(1500);
+}
+
+// 7b. trace: the example flower laid under a new design as its tracing image, half traced:
+// center and petals done, the first leaf drawn, the path tool on the second leaf
+shots.trace = async (lang) => {
+  const { page, close } = await boot(lang);
+  await cmd(page, T[lang].newDesign, 1500);
+  await tab(page, 'design');
+  await page.setInputFiles('.trace-panel input[type=file]', repo + 'public/examples/image-example.svg');
+  await page.waitForTimeout(2500);
+  // laid 90 mm wide in the middle of the 100 x 100 mm hoop: the picture's 400 px are 450 screen px
+  await page.click('[data-command="design.trace.lock"]');
+  await page.waitForTimeout(300);
+  const b = await stageBox(page);
+  const ox = b.x + b.width / 2, oy = b.y + b.height / 2 - 17;
+  const at = (u, v) => [ox + (u - 200) * 1.125, oy + (v - 200) * 1.125];
+  const pen = async (pts, close = true) => {
+    await page.click('[data-draw="pen"]');
+    for (const [u, v] of close ? [...pts, pts[0]] : pts) await clickAt(page, ...at(u, v));
+    await page.waitForTimeout(close ? 1200 : 300);
+  };
+  // the top petal with the ellipse, then the others with the path tool along the picture
+  await page.click('[data-draw="ellipse"]');
+  await drag(page, ...at(166, 30), ...at(234, 154));
+  await page.waitForTimeout(800);
+  await pickThread(page, 'r > 190 && g < 110 && b > 70 && b < 160');
+  for (const deg of [72, 144, 216, 288]) {
+    const a = (deg * Math.PI) / 180;
+    const pts = Array.from({ length: 10 }, (_, k) => {
+      const t = (k / 10) * 2 * Math.PI;
+      const [x, y] = [34 * Math.cos(t), -58 + 62 * Math.sin(t)];
+      return [200 + x * Math.cos(a) - y * Math.sin(a), 150 + x * Math.sin(a) + y * Math.cos(a)];
+    });
+    await pen(pts);
+  }
+  await page.click('[data-draw="ellipse"]');
+  await drag(page, ...at(166, 116), ...at(234, 184));
+  await page.waitForTimeout(800);
+  await pickThread(page, 'r > 220 && g > 170 && b < 80');
+  await pen([[199, 292], [170, 284], [146, 268], [128, 236], [160, 244], [186, 264]]);
+  await pickThread(page, 'g > 140 && r < 120 && b < 110');
+  // nothing selected, so the design page with the tracing image stays in front
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(400);
+  await tab(page, 'design');
+  // the second leaf under way: three nodes set, the path follows the pointer
+  await pen([[201, 262], [232, 254], [256, 234]], false);
+  await page.mouse.move(...at(266, 206));
+  await realistic(page, true);
+  await page.mouse.move(...at(266, 206));
+  await page.waitForTimeout(500);
+  // the stitch tip under the pointer would cover the leaf
+  await page.evaluate(() => { for (const el of document.querySelectorAll('.tooltip, #tooltip')) el.hidden = true; });
+  // the design page with the tracing image (the object page follows the path under way)
+  await sidebarTop(page);
+  for (let k = 0; k < 10; k++) {
+    await page.evaluate(() => document.querySelector('#insp-tabs [data-tab="design"]').click());
+    await page.waitForTimeout(300);
+    if (await page.evaluate(() => document.querySelector('#insp-tabs [data-tab="design"]').getAttribute('aria-selected') === 'true')) break;
+  }
+  await jpeg(page, `trace-${lang}`);
+  await close();
+};
+
 // ---- runner
 const names = process.argv.slice(2);
 const list = names.length ? names : Object.keys(shots);
