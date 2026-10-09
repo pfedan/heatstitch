@@ -146,4 +146,22 @@ describe('shadow of a line', () => {
     expect(shadows.map((x) => remembered(q, x)!.shadowOf).sort()).toEqual(['s1', 's2']);
     for (const x of shadows) for (const [, y] of points(q, x.first, x.last)) expect(y).toBeCloseTo(2, 1);
   });
+  it('right under its line (distance 0) is not sewn, and comes back when moved out (found by the torture test)', () => {
+    // A line sewn there and back reads the same either way round: a shadow on it would share its stitches.
+    for (const repeat of [1, 2]) {
+      let p = empty as Pattern;
+      p = addShape(p, { form: parsePath('M0 0 L30 0', ID), kind: 'stroke', width: 0.4 }, red, null, options)!.pattern;
+      const o = sewObjects(p)[0];
+      const st = { ...lineSettings(p, o), repeat, shadow: { color: grey, link: 's1', angle: 45, dist: 0 } };
+      const under = syncBorders(resewLine(p, o.index, remembered(p, o)!.path!, st, T)!.pattern, T);
+      const objs = sewObjects(under);
+      expect(objs).toHaveLength(1);
+      // The line keeps its shadow, so moving it out brings it back in its thread.
+      expect(remembered(under, objs[0])?.line?.shadow?.dist).toBe(0);
+      const out = syncBorders(resewLine(under, 0, remembered(under, objs[0])!.path!, { ...st, shadow: { ...st.shadow, dist: 1 } }, T)!.pattern, T);
+      expect(sewObjects(out).map((x) => remembered(out, x)?.shadowOf)).toEqual(['s1', undefined]);
+      const back = syncBorders(resewLine(out, 1, remembered(out, sewObjects(out)[1])!.path!, st, T)!.pattern, T);
+      expect(sewObjects(back)).toHaveLength(1);
+    }
+  });
 });

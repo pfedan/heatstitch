@@ -17,7 +17,7 @@ import { SATIN_SHARE } from '../model/covers';
 import { autoUnder, coverOf, E_SPACING, hasPhase, isRunType, REPEAT, spacingOf, timesOf, ZIGZAG_SPACING, type PathStitch } from '../model/along';
 import { LINE_MOTIFS, MOTIF_PERIOD, MOTIF_STITCH, MOTIF_WIDTH, motifMaxSize, SIDED_MOTIFS, type LineMotif } from '../digitize/motif';
 import { ECHO_COUNT, ECHO_DEFAULT, ECHO_GAP, ECHO_PHASE, ECHO_SIDES, type EchoSide } from '../digitize/echo';
-import { SHADOW_COLOR, SHADOW_DEFAULT_ANGLE, SHADOW_DEFAULT_DIST, SHADOW_DIST } from '../model/shadow';
+import { SHADOW_COLOR, SHADOW_DEFAULT_ANGLE, SHADOW_DEFAULT_DIST, SHADOW_DIST, SHADOW_UNDER } from '../model/shadow';
 import { cssColor, hexColor, ThreadPicker } from './threadPicker';
 import { CROSS_KINDS, GRID_KINDS, MOTIFS, type CrossKind, type GridKind, type Motif } from '../digitize/deco';
 import { canRun, getCommand, keyLabel, runCommand } from '../shell/commands';
@@ -1681,6 +1681,8 @@ export class StitchPanel {
         get: () => sh.dist,
         set: (v) => (sh.dist = v),
         fmt: (v) => `${formatNumber(v, 1)} mm`,
+        // At 0 it would be the line once more, stitch on stitch: not sewn (see shadowUnder).
+        note: (v) => (v < SHADOW_UNDER ? t('stitch.shadow.dist.under') : ''),
         ...this.noOverlap(cover, SHADOW_DIST[1]),
         auto: { is: () => sh.dist === SHADOW_DEFAULT_DIST, reset: () => (sh.dist = SHADOW_DEFAULT_DIST) },
       }),

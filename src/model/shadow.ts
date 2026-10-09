@@ -21,13 +21,22 @@ export interface LineShadow {
   dist: number;
 }
 
-/** Up to here the shadow of a line its width apart overlaps the line (mm): 0 lies right under it. */
+/** How far a shadow can lie from its line (mm): at 0 it lies right under it and is not sewn (SHADOW_UNDER). */
 export const SHADOW_DIST: [number, number] = [0, 10];
 /** A new shadow: down right, as light from top left throws it. */
 export const SHADOW_DEFAULT_ANGLE = 45;
 export const SHADOW_DEFAULT_DIST = 1.1;
 /** The thread a new shadow starts with: dark grey. */
 export const SHADOW_COLOR: ThreadColor = { r: 64, g: 64, b: 64 };
+
+/**
+ * A shadow closer to its line than this (mm) lies right under it, stitch on stitch (the design grid
+ * is 0.1 mm): it would only sew the line a second time where nobody sees it, so it is not sewn.
+ */
+export const SHADOW_UNDER = 0.05;
+
+/** Whether shadow `s` lies right under its line, so nothing of it is sewn (see SHADOW_UNDER). */
+export const shadowUnder = (s: LineShadow): boolean => s.dist < SHADOW_UNDER;
 
 export function shadowOffset(s: LineShadow): Pt {
   const a = (s.angle * Math.PI) / 180;
@@ -98,11 +107,12 @@ export function withoutPart(m: Remembered, link: string): Remembered {
   return { ...m, line: { ...st, echo: { ...e, colors, skip: [...(e.skip ?? []), ...gone].sort((a, b) => a - b) } } };
 }
 
-/** The parts of line `m` in threads of their own: its shadow, and its echo copies by thread. */
+/** The parts of line `m` in threads of their own: its shadow (unless right under it), and its echo copies by thread. */
 export function lineParts(m: Remembered): LinePart[] {
   const st = m.line!;
   const out: LinePart[] = [];
-  if (st.shadow) {
+  // Right under the line a shadow has no object: the line keeps it, so it is back once moved out.
+  if (st.shadow && !shadowUnder(st.shadow)) {
     const s = st.shadow;
     out.push({ link: s.link, color: s.color, after: false, memory: { region: null, path: shadowPath(m.path!, s), line: shadowStitch(st), shadowOf: s.link } });
   }
