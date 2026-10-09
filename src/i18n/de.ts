@@ -1117,7 +1117,7 @@ export const deBase = {
   'knockout.card.keep': 'So lassen',
   'knockout.card.keep.hint': 'Alles wird gestickt, wie es in der Datei steht.',
   'knockout.card.kept': 'Bleibt so. Aussparen lässt sich je Objekt in den Stich-Einstellungen einschalten.',
-  'shape.hint': 'Knoten ziehen · Kurve ziehen: biegen · Doppelklick: Knoten setzen',
+  'shape.hint': 'Knoten ziehen · Kurve ziehen: biegen · Hohlen Punkt ziehen: neuer Knoten (auch am Ende einer Linie)',
   'shape.hint.band': 'Satinlinie: Der runde Griff am Band ändert ihre Breite.',
   'shape.hint.rails': 'Die beiden Linien sind die Kanten der Säule. Ziehen ändert die Breite.',
   'shape.nodes': '{n} Knoten',

@@ -199,6 +199,36 @@ export function insertNode(f: Form, path: number, seg: number, t: number): { for
   return { form: g, node: seg + 1 };
 }
 
+/**
+ * A new corner node at `at` before the first node (`end` 0) or after the last one (`end` 1) of an
+ * open path: the line goes on from that end with a straight piece.
+ */
+export function extendPath(f: Form, path: number, end: 0 | 1, at: Pt): { form: Form; node: number } {
+  const g = cloneForm(f);
+  const p = g.paths[path];
+  const n: Node = { p: [...at] as Pt, a: [...at] as Pt, b: [...at] as Pt, smooth: false };
+  if (end === 0) p.nodes.unshift(n);
+  else p.nodes.push(n);
+  return { form: g, node: end === 0 ? 0 : p.nodes.length - 1 };
+}
+
+/**
+ * Unit direction in which an open path leaves its first (`end` 0) or last node (`end` 1): along its
+ * end curve, outward. Null for a path without length there.
+ */
+export function endDirection(p: Path, end: 0 | 1): Pt | null {
+  const n = p.nodes.length;
+  if (n < 2) return null;
+  const at = end === 0 ? p.nodes[0].p : p.nodes[n - 1].p;
+  // The control points of the end curve, from the end inward: the first one off the end gives the tangent.
+  const c = end === 0 ? segment(p, 0) : (segment(p, n - 2).slice().reverse() as [Pt, Pt, Pt, Pt]);
+  for (const q of c.slice(1)) {
+    const d = dist(at, q);
+    if (d > 1e-6) return [(at[0] - q[0]) / d, (at[1] - q[1]) / d];
+  }
+  return null;
+}
+
 /** The form without node `i` of path `path` (null when the path would be too short to keep). */
 export function removeNode(f: Form, path: number, i: number): Form | null {
   const g = cloneForm(f);
