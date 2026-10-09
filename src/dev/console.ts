@@ -5,6 +5,7 @@
  *
  *   heatstitch.record()  starts recording, until the page is reloaded or stop() is called
  *   heatstitch.stop()    ends it; saving the project still writes what was recorded
+ *   heatstitch.discard() ends it and throws it away; saving writes no recording
  *   heatstitch.save()    saves the project with the recording (also when no design is open)
  */
 import type { FileList } from '../ui/fileList';
@@ -96,6 +97,13 @@ export function installDevConsole(app: DevApp): void {
       if (!recorder?.running) return 'Keine Aufzeichnung. / Not recording.';
       recorder.stop();
       return `Aufzeichnung beendet: ${recorder.recording().events.length} Schritte. Projekt speichern oder heatstitch.save(). / Stopped.`;
+    },
+    /** Ends the recording and throws it away: saving writes none, record() starts afresh. */
+    discard(): string {
+      if (!recorder) return 'Keine Aufzeichnung. / Not recording.';
+      recorder.stop();
+      recorder = null;
+      return 'Aufzeichnung verworfen. / Recording discarded.';
     },
     async save(): Promise<void> {
       await app.save();

@@ -18,6 +18,9 @@ Unten links erscheint **● REC**. Die Aufzeichnung läuft bis zum Neuladen der 
 `heatstitch.stop()`. Dann wie gewohnt **Speichern** (Projekt); die Datei enthält die
 Aufzeichnung. `heatstitch.save()` speichert auch, wenn kein Stickmuster offen ist.
 
+Verwerfen: `heatstitch.discard()` beendet die Aufzeichnung und wirft sie weg; danach speichert
+das Projekt keine mehr, und `heatstitch.record()` beginnt eine neue. Neuladen verwirft sie auch.
+
 Was beim Start offen war (Stickmuster, Bild, Einstellungen), kommt mit in die Aufzeichnung.
 Man kann also mitten in der Arbeit anfangen, kurz bevor man den Fehler auslöst.
 
@@ -67,6 +70,6 @@ dem Fenster mit 1920 × 1080 an.
 
 - `src/dev/tap.ts`: hört als Erstes auf Eingaben, damit kein Handler sie vorher abfängt.
 - `src/dev/recorder.ts`: die Aufzeichnung; wird erst mit `heatstitch.record()` geladen.
-- `src/dev/console.ts`: `window.heatstitch` (record, stop, save und für das Abspielen state,
+- `src/dev/console.ts`: `window.heatstitch` (record, stop, discard, save und für das Abspielen state,
   view, setView, toPage).
 - `tools/recording/ablauf.mjs`, `steps.mjs`, `replay.mjs`: Skript schreiben, Schritte, Abspielen.
