@@ -14,10 +14,10 @@ import { TOLERANCE } from '../digitize/run';
 import type { ThreadColor } from '../model/pattern';
 import { newLink } from '../model/border';
 import { SATIN_SHARE } from '../model/covers';
-import { autoUnder, E_SPACING, isRunType, spacingOf, ZIGZAG_SPACING, type PathStitch } from '../model/along';
+import { autoUnder, coverOf, E_SPACING, hasPhase, isRunType, REPEAT, spacingOf, timesOf, ZIGZAG_SPACING, type PathStitch } from '../model/along';
 import { LINE_MOTIFS, MOTIF_PERIOD, MOTIF_WIDTH, motifMaxSize, SIDED_MOTIFS, type LineMotif } from '../digitize/motif';
-import { ECHO_COUNT, ECHO_DEFAULT, ECHO_GAP, ECHO_SIDES, type EchoSide } from '../digitize/echo';
-import { SHADOW_COLOR, SHADOW_DEFAULT_DIST, SHADOW_DIRS, SHADOW_DIST, type ShadowDir } from '../model/shadow';
+import { ECHO_COUNT, ECHO_DEFAULT, ECHO_GAP, ECHO_PHASE, ECHO_SIDES, type EchoSide } from '../digitize/echo';
+import { SHADOW_COLOR, SHADOW_DEFAULT_ANGLE, SHADOW_DEFAULT_DIST, SHADOW_DIST } from '../model/shadow';
 import { cssColor, hexColor, ThreadPicker } from './threadPicker';
 import { CROSS_KINDS, GRID_KINDS, MOTIFS, type CrossKind, type GridKind, type Motif } from '../digitize/deco';
 import { canRun, getCommand, keyLabel, runCommand } from '../shell/commands';
@@ -30,7 +30,8 @@ type FillUnder = 'off' | 'single' | 'cross';
 const FILL_UNDERS: FillUnder[] = ['off', 'single', 'cross'];
 type BorderChoice = 'off' | BorderType;
 /** What hovering a group of settings shows on the canvas. */
-export type Highlight = 'under' | 'border';
+/** What the canvas shows while its settings are pointed at: the underlay, the border, a line's echo copies (all or copy n), its shadow. */
+export type Highlight = 'under' | 'border' | 'copies' | `copy${number}` | 'shadow';
 /** Kinds of stitch along a line, as buttons: a triple stitch is a running stitch sewn more often. */
 const BORDERS: BorderChoice[] = ['off', 'run', 'satin', 'zigzag', 'e', 'motif'];
 /** How often each stitch of a running stitch is sewn. */
@@ -326,6 +327,29 @@ export class StitchPanel {
     onLangChange(() => {
       if (this.info && this.key !== -1) this.render();
     });
+    // What the pointer is on is shown on the canvas. Asked of the panel as a whole on every move: a
+    // part built anew under a still pointer gets no enter or leave of its own.
+    root.addEventListener('pointerover', (e) => this.light(this.litAt(e.target)));
+    root.addEventListener('pointermove', (e) => this.light(this.litAt(e.target)));
+    root.addEventListener('pointerleave', () => this.light(this.litAt(null)));
+  }
+
+  /**
+   * What the settings under `target` show on the canvas, else those holding the keyboard focus (a
+   * click leaves focus too, but the pointer gone means looking at the canvas as it is).
+   */
+  private litAt(target: EventTarget | null): Highlight | null {
+    const of = (n: unknown) => {
+      const el = n instanceof Element ? n.closest<HTMLElement>('[data-lit]') : null;
+      return el && this.root.contains(el) ? (el.dataset.lit as Highlight) : null;
+    };
+    const focus = document.activeElement;
+    return of(target) ?? (focus?.matches(':focus-visible') ? of(focus) : null);
+  }
+
+  /** What is to be shown now: the settings under the pointer, else those with the keyboard focus. */
+  private litNow(): Highlight | null {
+    return this.litAt([...this.root.querySelectorAll('[data-lit]:hover')].at(-1) ?? null);
   }
 
   /** What the panel shows now (null: nothing selected). */
@@ -544,8 +568,8 @@ export class StitchPanel {
   private show(parts: HTMLElement[]): void {
     this.picker.close();
     swap(this.root, ...parts);
-    // Its settings went away under the pointer (underlay off): nothing to show any more.
-    if (this.lit && !this.root.querySelector(`.lit-${this.lit}`)) this.light(null);
+    // Built anew: show what is under the pointer or holds the focus now, or nothing (underlay off took its settings).
+    if (this.lit) this.light(this.litNow());
   }
 
   /** One group of the panel, folded or open as the user left it. */
@@ -640,8 +664,8 @@ export class StitchPanel {
     const st = this.lineDraft!;
     const fx = o.shadow ? this.shadowGroup(st, of.color) : this.echoGroup(st, !!of.closed, of.color);
     const on = o.shadow ? !!st.shadow : !!st.echo;
-    const extra: Key = !on ? 'stitches.sec.off' : o.shadow ? (`stitch.shadow.${st.shadow!.dir}` as Key) : 'stitch.echo';
-    return [top, this.sec('effects', 'stitches.sec.effects', [fx], t(extra))];
+    const extra = !on ? t('stitches.sec.off') : o.shadow ? `${t('stitch.shadow')} ${Math.round(st.shadow!.angle)}°` : t('stitch.echo');
+    return [top, this.sec('effects', 'stitches.sec.effects', [fx], extra)];
   }
 
   /**
@@ -1116,6 +1140,11 @@ export class StitchPanel {
   // Building blocks -------------------------------------------------------------------------------
 
   /** Automatic while `key` of `o` is not set: going back takes it out. */
+  /** Marks on a distance slider where copies `cover` mm wide no longer overlap. */
+  private noOverlap(cover: number, max: number): Pick<SliderDef, 'band' | 'bandHint'> {
+    return cover < max ? { band: [cover, max], bandHint: 'stitch.noOverlap' } : {};
+  }
+
   private unset<T extends object>(o: T, key: keyof T): SliderDef['auto'] {
     return { is: () => o[key] === undefined, reset: () => delete o[key] };
   }
@@ -1457,25 +1486,69 @@ export class StitchPanel {
     return h('div', { class: 'field stitch-field', title: t('stitch.offset.hint') }, h('span', { class: 'label' }, t('stitch.offset')), row);
   }
 
-  /** Angle: a dial that shows the row direction, and a slider. */
+  /** Angle of the rows: 0 to 179 degrees (turned half round they are the same rows). */
   private angle(s: FillSettings): HTMLElement {
+    return this.dial({
+      label: 'stitch.angle',
+      hint: 'stitch.angle.hint',
+      turn: 180,
+      get: () => s.angle,
+      set: (v) => (s.angle = v),
+      fmt: (v) => (Number.isFinite(v) ? `${Math.round(v)}°` : t('stitches.auto')),
+    });
+  }
+
+  /**
+   * An angle: a dial to turn by pointer (its needle shows the angle, clockwise on screen) and a slider
+   * for the keyboard and fine steps, in whole degrees from 0 to `turn` (exclusive). `arrow`: the
+   * needle points one way (a direction), not both (rows).
+   */
+  private dial(d: { label: Key; hint: Key; turn: 180 | 360; arrow?: boolean; get: () => number; set: (v: number) => void; fmt: (v: number) => string }): HTMLElement {
     const out = h('output');
     const needle = h('span');
-    const dial = h('span', { class: 'angle-dial', 'aria-hidden': 'true' }, needle);
-    const input = h('input', { type: 'range', min: '0', max: '175', step: '5', value: String(((Math.round(s.angle / 5) * 5) % 180) || 0) });
+    const dial = h('span', { class: 'angle-dial' + (d.arrow ? ' arrow' : ''), role: 'presentation' }, needle);
+    const now = () => (Number.isFinite(d.get()) ? Math.round(d.get()) % d.turn : 0);
+    const input = h('input', { type: 'range', min: '0', max: String(d.turn - 1), step: '1', value: String(now()), 'aria-label': t(d.label) });
     const show = () => {
-      out.textContent = Number.isFinite(s.angle) ? `${Math.round(s.angle)}°` : t('stitches.auto');
-      // Screen y points down, so the rows' angle turns clockwise.
-      needle.style.transform = `rotate(${Number.isFinite(s.angle) ? s.angle : 0}deg)`;
+      out.textContent = d.fmt(d.get());
+      // Screen y points down, so the angle turns clockwise.
+      needle.style.transform = `rotate(${Number.isFinite(d.get()) ? d.get() : 0}deg)`;
     };
     show();
-    input.addEventListener('input', () => {
-      s.angle = parseFloat(input.value);
-      show();
-      this.changed(false);
-    });
+    const put = (v: number, done: boolean) => {
+      const a = ((Math.round(v) % d.turn) + d.turn) % d.turn;
+      if (a !== d.get()) {
+        d.set(a);
+        input.value = String(a);
+        show();
+        this.changed(false);
+      }
+      if (done) this.changed(true);
+    };
+    input.addEventListener('input', () => put(parseFloat(input.value), false));
     input.addEventListener('change', () => this.changed(true));
-    return h('label', { class: 'field stitch-field', title: t('stitch.angle.hint') }, h('span', { class: 'label' }, h('span', { class: 'name' }, t('stitch.angle')), out), h('span', { class: 'angle-row' }, dial, input));
+    const toward = (e: PointerEvent) => {
+      const r = dial.getBoundingClientRect();
+      return (Math.atan2(e.clientY - (r.top + r.height / 2), e.clientX - (r.left + r.width / 2)) * 180) / Math.PI;
+    };
+    dial.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      dial.setPointerCapture(e.pointerId);
+      dial.classList.add('turning');
+      put(toward(e), false);
+    });
+    dial.addEventListener('pointermove', (e) => {
+      if (dial.hasPointerCapture(e.pointerId)) put(toward(e), false);
+    });
+    const up = (e: PointerEvent) => {
+      if (!dial.hasPointerCapture(e.pointerId)) return;
+      dial.releasePointerCapture(e.pointerId);
+      dial.classList.remove('turning');
+      put(toward(e), true);
+    };
+    dial.addEventListener('pointerup', up);
+    dial.addEventListener('pointercancel', up);
+    return h('label', { class: 'field stitch-field', title: t(d.hint) }, h('span', { class: 'label' }, h('span', { class: 'name' }, t(d.label)), out), h('span', { class: 'angle-row' }, dial, input));
   }
 
   /** A row of buttons, one per value; picking one applies it. Each has `<text>.hint` as its title. */
@@ -1581,15 +1654,17 @@ export class StitchPanel {
    */
   private shadowGroup(st: PathStitch, line: ThreadColor): HTMLElement {
     const sh = st.shadow;
-    const box = h('div', { class: 'fx-group', title: t('stitch.shadow.intro'), 'data-tip-img': 'shadow' });
+    const box = this.lights(h('div', { class: 'fx-group', title: t('stitch.shadow.intro'), 'data-tip-img': 'shadow' }), 'shadow');
     box.append(
-      this.choice<ShadowDir | 'off'>('stitch.shadow', ['off', ...SHADOW_DIRS], sh?.dir ?? 'off', (v) => `stitch.shadow.${v}` as Key, (v) => {
+      this.choice<'off' | 'on'>('stitch.shadow', ['off', 'on'], sh ? 'on' : 'off', (v) => `stitch.shadow.${v}` as Key, (v) => {
         if (v === 'off') delete st.shadow;
-        else st.shadow = sh ? { ...sh, dir: v } : { color: { ...SHADOW_COLOR }, link: newLink(), dir: v, dist: SHADOW_DEFAULT_DIST };
+        else st.shadow = { color: { ...SHADOW_COLOR }, link: newLink(), angle: SHADOW_DEFAULT_ANGLE, dist: SHADOW_DEFAULT_DIST };
       }),
     );
     if (!sh) return box;
+    const cover = Math.round(coverOf(st) * 10) / 10;
     box.append(
+      this.dial({ label: 'stitch.shadow.dir', hint: 'stitch.shadow.dir.hint', turn: 360, arrow: true, get: () => sh.angle, set: (v) => (sh.angle = v), fmt: (v) => `${Math.round(v)}°` }),
       this.slider({
         label: 'stitch.shadow.dist',
         hint: 'stitch.shadow.dist.hint',
@@ -1599,6 +1674,7 @@ export class StitchPanel {
         get: () => sh.dist,
         set: (v) => (sh.dist = v),
         fmt: (v) => `${formatNumber(v, 1)} mm`,
+        ...this.noOverlap(cover, SHADOW_DIST[1]),
         auto: { is: () => sh.dist === SHADOW_DEFAULT_DIST, reset: () => (sh.dist = SHADOW_DEFAULT_DIST) },
       }),
     );
@@ -1639,6 +1715,7 @@ export class StitchPanel {
       const sw = h('span', { class: 'sw' });
       sw.style.background = cssColor(own ?? line);
       btn.append(sw, String(k));
+      this.lights(btn, `copy${k}`);
       btn.addEventListener('click', () => {
         this.picker.toggle(btn, {
           key: `echo${k}`,
@@ -1671,11 +1748,12 @@ export class StitchPanel {
     type Choice = EchoSide | 'off' | 'one';
     const now: Choice = !st.echo ? 'off' : closed || st.echo.side === 'both' ? st.echo.side : 'one';
     const values: Choice[] = closed ? ['off', ...ECHO_SIDES] : ['off', 'one', 'both'];
-    const box = h('div', { class: 'fx-group', title: t('stitch.echo.intro'), 'data-tip-img': 'echo' });
+    const box = this.lights(h('div', { class: 'fx-group', title: t('stitch.echo.intro'), 'data-tip-img': 'echo' }), 'copies');
     box.append(
       this.choice<Choice>('stitch.echo', values, now, (v) => `stitch.echo.${v}` as Key, (v) => {
         if (v === 'off') delete st.echo;
-        else st.echo = { ...(st.echo ?? ECHO_DEFAULT), side: v === 'one' ? (st.echo && st.echo.side !== 'both' ? st.echo.side : 'out') : v };
+        // A new echo keeps its copies apart: a wide stitch at least its width.
+        else st.echo = { ...(st.echo ?? { ...ECHO_DEFAULT, gap: Math.max(ECHO_DEFAULT.gap, Math.ceil(coverOf(st) * 10) / 10) }), side: v === 'one' ? (st.echo && st.echo.side !== 'both' ? st.echo.side : 'out') : v };
       }),
     );
     if (now === 'one') {
@@ -1692,11 +1770,39 @@ export class StitchPanel {
     }
     const e = st.echo;
     if (!e) return box;
-    // Satin columns side by side need their width.
-    const least = !isRunType(st.type) ? Math.min(ECHO_GAP[1], Math.round((st.width + 0.5) * 10) / 10) : ECHO_GAP[0];
+    // Which way round: an open line with copies on both sides has no inside and outside.
+    if (closed || e.side !== 'both') {
+      // Copies inside a closed line lie further in: from the line inward is from outside in.
+      const outward = (e.side === 'in' && closed) === !!e.reverse;
+      box.append(
+        this.choice<'out' | 'in'>('stitch.echo.order', ['out', 'in'], outward ? 'out' : 'in', (v) => `stitch.echo.order.${v}` as Key, (v) => {
+          if ((v === 'out') !== outward) {
+            if (e.reverse) delete e.reverse;
+            else e.reverse = true;
+          }
+        }, true),
+      );
+    }
+    const cover = Math.round(coverOf(st) * 10) / 10;
     box.append(
       this.slider({ label: 'stitch.echo.count', hint: 'stitch.echo.count.hint', min: ECHO_COUNT[0], max: ECHO_COUNT[1], step: 1, get: () => e.count, set: (v) => (e.count = Math.round(v)), fmt: (v) => formatNumber(v) }),
-      this.slider({ label: 'stitch.echo.gap', hint: 'stitch.echo.gap.hint', min: least, max: ECHO_GAP[1], step: 0.1, get: () => Math.max(least, e.gap), set: (v) => (e.gap = v), fmt: (v) => `${formatNumber(v, 1)} mm` }),
+      this.slider({ label: 'stitch.echo.gap', hint: 'stitch.echo.gap.hint', min: ECHO_GAP[0], max: ECHO_GAP[1], step: 0.1, get: () => e.gap, set: (v) => (e.gap = v), fmt: (v) => `${formatNumber(v, 1)} mm`, ...this.noOverlap(cover, ECHO_GAP[1]) }),
+    );
+    if (hasPhase(st.type)) {
+      box.append(
+        this.slider({
+          label: 'stitch.echo.phase',
+          hint: 'stitch.echo.phase.hint',
+          min: ECHO_PHASE[0],
+          max: ECHO_PHASE[1],
+          step: 5,
+          get: () => e.phase ?? 0,
+          set: (v) => (v ? (e.phase = v) : delete e.phase),
+          fmt: (v) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${formatNumber(Math.abs(v), 0)}°`,
+        }),
+      );
+    }
+    box.append(
       this.choice<'joined' | 'cut'>('stitch.echo.link', ['joined', 'cut'], e.cut ? 'cut' : 'joined', (v) => `stitch.echo.${v}` as Key, (v) => {
         if (v === 'cut') e.cut = true;
         else delete e.cut;
@@ -1783,12 +1889,14 @@ export class StitchPanel {
     if (isRunType(st.type)) {
       const times = st.type === 'triple' ? (st.repeat === 5 ? '5' : '3') : '1';
       out.look.push(
-        this.choice<(typeof REPEATS)[number]>('stitch.repeat', REPEATS, times, (v) => `stitch.repeat.${v}` as Key, (v) => {
-          st.type = v === '1' ? 'run' : 'triple';
-          if (v === '5') st.repeat = 5;
-          else delete st.repeat;
-          set(st);
-        }, true),
+        line
+          ? this.repeatRow(st, set)
+          : this.choice<(typeof REPEATS)[number]>('stitch.repeat', REPEATS, times, (v) => `stitch.repeat.${v}` as Key, (v) => {
+              st.type = v === '1' ? 'run' : 'triple';
+              if (v === '5') st.repeat = 5;
+              else delete st.repeat;
+              set(st);
+            }, true),
         this.slider({ label: 'stitch.length', hint: 'stitch.runLength.hint', min: 1, max: 6, step: 0.1, get: () => st.length ?? BORDER_STITCH, set: (v) => change((s) => (s.length = v))(v), fmt: mm(1), auto: unset('length') }),
       );
       return out;
@@ -1820,11 +1928,13 @@ export class StitchPanel {
       if (SIDED_MOTIFS.includes(motif)) out.look.push(this.sideChoice(st, set, offset));
       const times = st.repeat === 3 || st.repeat === 5 ? (String(st.repeat) as '3' | '5') : '1';
       out.look.push(
-        this.choice<(typeof REPEATS)[number]>('stitch.repeat', REPEATS, times, (v) => `stitch.repeat.${v}` as Key, (v) => {
-          if (v === '1') delete st.repeat;
-          else st.repeat = Number(v);
-          set(st);
-        }, true),
+        line
+          ? this.repeatRow(st, set)
+          : this.choice<(typeof REPEATS)[number]>('stitch.repeat', REPEATS, times, (v) => `stitch.repeat.${v}` as Key, (v) => {
+              if (v === '1') delete st.repeat;
+              else st.repeat = Number(v);
+              set(st);
+            }, true),
       );
       return out;
     }
@@ -1835,6 +1945,7 @@ export class StitchPanel {
         this.slider({ label: 'stitch.gap', hint: e ? 'stitch.eSpacing.hint' : 'stitch.zigzagSpacing.hint', min: e ? 1 : 0.5, max: 6, step: 0.1, get: () => spacingOf(st), set: (v) => change((s) => (s.spacing = v === (e ? E_SPACING : ZIGZAG_SPACING) ? undefined : v))(v), fmt: mm(1), auto: unset('spacing') }),
       );
       if (e) out.look.push(this.sideChoice(st, set, offset));
+      if (line && !offset) out.look.push(this.repeatRow(st, set));
       return out;
     }
     out.look.push(
@@ -1842,7 +1953,7 @@ export class StitchPanel {
       this.slider({ label: 'stitch.density', hint: 'stitch.satinDensity.hint', min: 0.2, max: 1, step: 0.01, get: () => st.spacing ?? 0.4, set: (v) => change((s) => (s.spacing = v))(v), fmt: mm(2), auto: unset('spacing') }),
     );
     // A drawn satin line can be frayed (fur, feathers); a border keeps a clean edge.
-    if (line && !offset) out.look.push(...this.fringeControls(st, () => set(st)));
+    if (line && !offset) out.look.push(...this.fringeControls(st, () => set(st)), this.repeatRow(st, set));
     out.hold.push(
       this.slider({ label: 'stitch.borderPull', hint: 'stitch.borderPull.hint', min: 0, max: 0.6, step: 0.05, get: () => st.pull ?? 0, set: (v) => change((s) => (s.pull = v || undefined))(v), fmt: mm(2), auto: unset('pull') }),
       this.choice<UnderlayKind | 'off'>('stitch.under.kind', ['off', ...UNDERLAYS], autoUnder(st), (v) => (v === 'off' ? 'stitch.borderUnder.off' : (`stitch.under.${v}` as Key)), (v) => {
@@ -1851,6 +1962,46 @@ export class StitchPanel {
       }, true),
     );
     return out;
+  }
+
+  /**
+   * How often a line is sewn, 1 to 5: the whole line there and back, or (running stitch and motif,
+   * at an odd number) each stitch there, back and there again as bean stitch.
+   */
+  private repeatRow(st: PathStitch, set: (v: PathStitch) => void): HTMLElement {
+    const run = isRunType(st.type);
+    const beans = run || st.type === 'motif';
+    const n = st.type === 'triple' ? timesOf(st) : Math.min(REPEAT[1], Math.max(REPEAT[0], Math.round(st.repeat ?? 1)));
+    const bean = st.type === 'triple' || (st.type === 'motif' && timesOf(st) > 1);
+    /** `k` times, as bean stitch when it can be and `asBean`. */
+    const put = (k: number, asBean: boolean) => {
+      const b = beans && asBean && k > 1 && k % 2 === 1;
+      if (run) st.type = b ? 'triple' : 'run';
+      if (k === 1 || (st.type === 'triple' && k === 3)) delete st.repeat;
+      else st.repeat = k;
+      // A motif remembers that it goes whole; a running stitch says it by its kind.
+      if (st.type === 'motif' && k > 1 && k % 2 === 1 && !asBean) st.whole = true;
+      else delete st.whole;
+      set(st);
+      this.render();
+      this.changed(true);
+    };
+    const row = h('div', { class: 'segmented choice-row small repeat-row', role: 'radiogroup', 'aria-label': t('stitch.repeat') });
+    for (let k = REPEAT[0]; k <= REPEAT[1]; k++) {
+      const on = k === n;
+      const b = h('button', { type: 'button', class: on ? 'active' : '', role: 'radio', 'aria-checked': String(on) }, t('stitch.repeat.n', { n: k }));
+      b.addEventListener('click', () => {
+        if (k !== n) put(k, k === 1 || n === 1 || n % 2 === 0 ? true : bean);
+      });
+      row.append(b);
+    }
+    const field = h('div', { class: 'field stitch-field', title: t('stitch.repeat.hint') }, h('span', { class: 'label' }, t('stitch.repeat')), row);
+    if (!beans) return field;
+    const odd = n > 1 && n % 2 === 1;
+    const box = h('input', { type: 'checkbox', checked: bean, disabled: !odd });
+    box.addEventListener('change', () => put(n, box.checked));
+    const check = h('label', { class: 'check' + (odd ? '' : ' off'), title: t(odd || n === 1 ? 'stitch.bean.hint' : 'stitch.bean.even') }, box, h('span', null, t('stitch.bean')));
+    return h('div', { class: 'repeat-field' }, field, check);
   }
 
   /** Which side an E stitch's prongs or a motif's figures are on: of a line right or left, of a border inside or outside. */
@@ -1955,14 +2106,12 @@ export class StitchPanel {
   /** While the pointer or focus is on `el`, what it sets (`what`) is shown on the canvas. */
   private lights<E extends HTMLElement>(el: E, what: Highlight): E {
     el.classList.add(`lit-${what}`);
-    el.addEventListener('pointerenter', () => this.light(what));
-    el.addEventListener('pointerleave', () => {
-      if (!el.contains(document.activeElement)) this.light(null);
+    el.dataset.lit = what;
+    // The pointer is followed by the panel (see the constructor); the keyboard focus here.
+    el.addEventListener('focusin', (e) => {
+      if ((e.target as HTMLElement).closest('[data-lit]') === el && (e.target as HTMLElement).matches(':focus-visible')) this.light(what);
     });
-    el.addEventListener('focusin', () => this.light(what));
-    el.addEventListener('focusout', (e) => {
-      if (!el.contains(e.relatedTarget as Node | null) && !el.matches(':hover')) this.light(null);
-    });
+    el.addEventListener('focusout', () => queueMicrotask(() => this.light(this.litNow())));
     return el;
   }
 }

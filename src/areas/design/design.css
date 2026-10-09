@@ -275,6 +275,31 @@ body[data-mode='flow'] .material-panel .profile-info span:nth-child(2) {
   font-size: 13px;
 }
 
+.dt-total {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 0 10px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+}
+
+.dt-total-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dt-total-m {
+  font-variant-numeric: tabular-nums;
+}
+
+.dt-bobbin {
+  color: var(--muted);
+  font-size: 11px;
+}
+
 .dt-listlink {
   margin-top: 4px;
   font-size: 13px;

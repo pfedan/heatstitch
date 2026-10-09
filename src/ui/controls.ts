@@ -39,6 +39,7 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
   const colorBy = document.querySelectorAll<HTMLInputElement>('input[name="color-by"]');
   const markInputs = document.querySelectorAll<HTMLInputElement>('input[data-mark]');
   const marksToggle = $<HTMLButtonElement>('marks-toggle');
+  const spotToggle = $<HTMLButtonElement>('spot-toggle');
   const shapesSeg = document.querySelectorAll<HTMLButtonElement>('#shapes-seg button');
   const marksBox = document.querySelector<HTMLElement>('fieldset.marks')!;
   const cell = $<HTMLInputElement>('cell');
@@ -132,6 +133,8 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
     });
     marksToggle.setAttribute('aria-pressed', String(s.marksOn));
     marksToggle.title = t(s.marksOn ? 'design.view.marksOn' : 'design.view.marksOff');
+    spotToggle.setAttribute('aria-pressed', String(s.autoHighlight));
+    spotToggle.title = t(s.autoHighlight ? 'design.view.spotOn' : 'design.view.spotOff');
     shapesSeg.forEach((b) => b.setAttribute('aria-pressed', String((b.dataset.shapes === 'on') === s.shapesView)));
     $('view-name').textContent = viewName(s);
     $('realistic-sub').classList.toggle('off', !s.realistic);
@@ -208,6 +211,7 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
   );
   shapesSeg.forEach((b) => on(b, 'click', () => ((s.shapesView = b.dataset.shapes === 'on'), 'render')));
   on(marksToggle, 'click', () => ((s.marksOn = !s.marksOn), 'render'));
+  on(spotToggle, 'click', () => ((s.autoHighlight = !s.autoHighlight), 'render'));
   on(cell, 'input', () => ((s.cellMm = Number(cell.value)), 'density'));
   on(blur, 'input', () => ((s.blurMm = Number(blur.value)), 'density'));
   on(includeJumps, 'change', () => ((s.includeJumps = includeJumps.checked), 'density'));

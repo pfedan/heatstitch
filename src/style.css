@@ -2935,8 +2935,8 @@ button.tool:disabled {
 .angle-dial {
   position: relative;
   flex: none;
-  width: 24px;
-  height: 24px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   border: 1px solid var(--line);
   background: repeating-linear-gradient(0deg, transparent 0 3px, transparent 3px 6px);
@@ -2951,6 +2951,42 @@ button.tool:disabled {
   margin-top: -1px;
   border-radius: 1px;
   background: var(--accent);
+}
+
+/* Turned with the pointer: big enough to grab. */
+.angle-dial {
+  cursor: grab;
+  touch-action: none;
+}
+
+.angle-dial.turning {
+  cursor: grabbing;
+  border-color: var(--accent);
+}
+
+/* A direction: the needle from the middle out, with a dot where it points. */
+.angle-dial.arrow span {
+  left: 50%;
+  transform-origin: 0 50%;
+}
+
+.angle-dial.arrow span::after {
+  content: '';
+  position: absolute;
+  right: -2px;
+  top: -2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.repeat-field .check {
+  margin-top: 4px;
+}
+
+.repeat-field .check.off {
+  opacity: 0.5;
 }
 
 .layer-note button.link {

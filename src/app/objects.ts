@@ -648,6 +648,7 @@ export function bindObjects(app: ObjectsApp) {
       pattern: f.pattern,
       name: FileList.baseName(f) || f.pattern.name,
       machine: app.settings,
+      fabric: app.settings.profile.fabric,
       apply: (colors) => {
         const g = app.files.active;
         if (!g?.pattern) return;

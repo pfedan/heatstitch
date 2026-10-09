@@ -13,6 +13,7 @@ const SYMBOLS: Record<string, string> = {
   eye: '<path d="M2.5 10s2.8-5 7.5-5 7.5 5 7.5 5-2.8 5-7.5 5-7.5-5-7.5-5z"/><circle cx="10" cy="10" r="2.2"/>',
   fit: '<path d="M3.5 7.5v-4h4M16.5 7.5v-4h-4M3.5 12.5v4h4M16.5 12.5v4h-4"/>',
   marks: '<path d="M4.5 15.5 15.5 4.5" stroke-dasharray="2.4 2.2"/><circle cx="4.5" cy="15.5" r="2" class="fill"/><circle cx="15.5" cy="4.5" r="2" class="fill"/>',
+  spot: '<circle cx="10" cy="10" r="3" class="fill"/><path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M4.7 15.3l1.4-1.4M13.9 6.1l1.4-1.4"/>',
   'view-stitches': '<path d="M10 2.5c4.6 3.4 4.6 11.6 0 15-4.6-3.4-4.6-11.6 0-15z"/><path d="M7.8 6.6l4.4-1.8M7.1 9.9l5.8-2.4M7.1 13.1l5.8-2.4M7.8 15.7l4.4-1.8" stroke-width="1.4"/>',
   'view-shapes': '<path d="M10 2.5c4.6 3.4 4.6 11.6 0 15-4.6-3.4-4.6-11.6 0-15z" class="fill"/>',
   check: '<path d="m4.5 10.5 3.5 3.5 7.5-8"/>',

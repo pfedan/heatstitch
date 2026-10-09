@@ -13,6 +13,7 @@ import type { Sequence } from './types';
 import type { Settings } from '../settings';
 import type { ShapeTool } from '../ui/shapeTool';
 import { borderLines, type PathStitch } from '../model/along';
+import { echoCopyLines, nearestCopy } from '../model/line';
 import { borderRanges } from '../model/border';
 import { formOf } from '../model/reshape';
 import { satinArea } from '../model/railsForm';
@@ -126,10 +127,16 @@ export function bindScene(app: SceneApp) {
 
   /** The underlay or the border of the selected objects, per record (null while it is not shown). */
   function underMask(p: Pattern): Uint8Array | null {
-    if (!ui.highlight || !ui.selectedObjects.size) return null;
+    if (!ui.highlight || !ui.selectedObjects.size || !app.settings.autoHighlight) return null;
     if (underCache?.p === p && underCache.key === ui.selectionKey && underCache.what === ui.highlight) return underCache.mask;
     const q = seq(p);
     const mask = new Uint8Array(p.cmd.length);
+    if (ui.highlight !== 'under' && ui.highlight !== 'border') {
+      partsMask(p, q, ui.highlight, mask);
+      const any = mask.includes(1) ? mask : null;
+      underCache = { p, key: ui.selectionKey, what: ui.highlight, mask: any };
+      return any;
+    }
     const r = ui.previewResult?.pattern === p ? ui.previewResult : null;
     if (r) {
       // A preview: the new stitches of each object, its first `under` of them.
@@ -158,6 +165,53 @@ export function bindScene(app: SceneApp) {
     const any = mask.includes(1) ? mask : null;
     underCache = { p, key: ui.selectionKey, what: ui.highlight, mask: any };
     return any;
+  }
+
+  /** Per pattern and object: the echo copy each record of it lies on (see nearestCopy). */
+  const copyCache = new WeakMap<Pattern, Map<number, Int8Array>>();
+  function copiesOf(p: Pattern, o: SewObject, form: Form, st: PathStitch): Int8Array {
+    let byObject = copyCache.get(p);
+    if (!byObject) copyCache.set(p, (byObject = new Map()));
+    let k = byObject.get(o.index);
+    if (!k) {
+      const pts: Pt[] = [];
+      for (let i = o.first; i <= o.last; i++) pts.push([p.x[i] / 10, p.y[i] / 10]);
+      k = nearestCopy(echoCopyLines(form, st), pts);
+      byObject.set(o.index, k);
+    }
+    return k;
+  }
+
+  /**
+   * The stitches of the selected lines' echo copies (all, or copy n on either side) or shadows,
+   * in the line itself and in the objects of copies or shadows in threads of their own.
+   */
+  function partsMask(p: Pattern, q: Sequence, what: Highlight, mask: Uint8Array): void {
+    const only = what.startsWith('copy') && what !== 'copies' ? Number(what.slice(4)) : 0;
+    const mark = (o: SewObject, form: Form, st: PathStitch) => {
+      const k = copiesOf(p, o, form, st);
+      for (let i = o.first; i <= o.last; i++) if (p.cmd[i] === STITCH && (only ? Math.abs(k[i - o.first]) === only : k[i - o.first] !== 0)) mask[i] = 1;
+    };
+    for (const index of selectedIn(p)) {
+      const o = q.objects[index];
+      const m = o && remembered(p, o);
+      if (!m?.path || !m.line) continue;
+      // A part selected on its own: its own stitches.
+      if (m.shadowOf) {
+        if (what === 'shadow') mask.fill(1, o.first, o.last + 1);
+        continue;
+      }
+      const link = what === 'shadow' ? m.line.shadow?.link : m.line.echo?.link;
+      if (what !== 'shadow' && m.line.echo) mark(o, m.path, m.line);
+      if (!link) continue;
+      for (const x of q.objects) {
+        const xm = remembered(p, x);
+        if (what === 'shadow' ? xm?.shadowOf === link : xm?.echoOf?.startsWith(`${link}:`) && xm.path && xm.line) {
+          if (what === 'shadow' || !only) mask.fill(1, x.first, x.last + 1);
+          else mark(x, xm!.path!, xm!.line!);
+        }
+      }
+    }
   }
 
   /** The line the border of each selected fill lies on (mm), while the border settings are pointed at. */
@@ -206,9 +260,11 @@ export function bindScene(app: SceneApp) {
   function styleFor(p: Pattern): StitchStyle {
     const q = seq(p);
     const rgb = (q.colors[app.settings.colorBy] ??= stitchColors(p, app.settings.colorBy, q.kinds));
-    const focus = ui.hoverBlock ?? ui.focusBlock;
+    // Without auto highlight only a color picked in the list stands out.
+    const auto = app.settings.autoHighlight;
+    const focus = (auto ? ui.hoverBlock : null) ?? ui.focusBlock;
     // A hovered object wins over the selection, the selection over a highlighted color.
-    const shown = ui.hoverObject !== null ? new Set([ui.hoverObject]) : ui.selectedObjects.size ? selectedIn(p) : null;
+    const shown = !auto ? null : ui.hoverObject !== null ? new Set([ui.hoverObject]) : ui.selectedObjects.size ? selectedIn(p) : null;
     const under = ui.hoverObject === null ? underMask(p) : null;
     const objKey = shown && ui.hoverObject !== null ? `h${ui.hoverObject}` : under ? under : shown;
     if (alphaCache?.p !== p || alphaCache.hidden !== ui.hiddenBlocks || alphaCache.focus !== focus || (alphaCache.objects as unknown) !== objKey) {
@@ -216,8 +272,10 @@ export function bindScene(app: SceneApp) {
       if (shown) {
         for (let i = 0; i < a.length; i++) if (a[i] > 0 && !shown.has(q.objectAt[i])) a[i] = 0.15;
       }
-      // The underlay shown: the rows over it fade, so it can be seen through them.
+      // The underlay shown: the rows over it fade, so it can be seen through them. Parts of a line in
+      // objects of their own (echo copies, a shadow) show in full.
       if (under) for (let i = 0; i < a.length; i++) if (a[i] === 1 && !under[i]) a[i] = 0.3;
+      else if (under[i] && a[i] > 0) a[i] = 1;
       alphaCache = { p, hidden: ui.hiddenBlocks, focus, objects: objKey as ReadonlySet<number> | null, a };
     }
     const limit = app.player.complete ? p.cmd.length - 1 : recordOfStitch(q.numbers, app.player.pos);
@@ -237,9 +295,10 @@ export function bindScene(app: SceneApp) {
       list = [];
       for (const o of q.objects) {
         const known = remembered(p, o);
-        // Echo and shadow lines sew more than the line itself: those keep their stitches.
-        if (known?.path && known.line && !known.lettering && !known.line.echo && !known.line.shadow) {
-          list.push({ o, form: known.path, line: known.line });
+        // A line with an echo: the line and its copies (a shadow is an object of its own).
+        if (known?.path && known.line && !known.lettering) {
+          const form: Form = known.line.echo ? { paths: echoCopyLines(known.path, known.line).map((l) => polyline(l.line, l.closed)) } : known.path;
+          list.push({ o, form, line: known.line });
           continue;
         }
         if (o.kind === 'satin') {
@@ -254,6 +313,9 @@ export function bindScene(app: SceneApp) {
     }
     return list;
   }
+
+  /** A path through points, straight from one to the next. */
+  const polyline = (pts: Pt[], closed: boolean): Form['paths'][number] => ({ closed, nodes: (closed ? pts.slice(0, -1) : pts).map((p) => ({ p, a: p, b: p, smooth: false })) });
 
   /** How wide a line looks: running and triple stitch as thread, the others across their width. */
   function lineWidthMm(line: PathStitch, threadMm: number): number {
@@ -294,7 +356,7 @@ export function bindScene(app: SceneApp) {
       // their shape is edited or the object is dragged: those show their own outline).
       outlines: app.files.active?.pattern && ui.selectedObjects.size && !app.shapeTool.active && app.frameTool.dragging === null ? app.stitchInfo(app.files.active.pattern, seq(app.files.active.pattern)).outlines : undefined,
       under: ui.hoverObject === null ? underMask(p) : null,
-      contour: ui.hoverObject === null && ui.highlight === 'border' ? contourLines(p) : null,
+      contour: ui.hoverObject === null && ui.highlight === 'border' && app.settings.autoHighlight ? contourLines(p) : null,
       rungs: app.rungTool.active ? app.rungTool : null,
       shape: app.shapeTool.active && app.frameTool.dragging === null ? { view: app.shapeTool, handles: app.shapeTool.handles() } : null,
       frame: app.frameTool.active ? { view: app.frameTool, mapped: app.frameTool.mappedCorners() } : null,

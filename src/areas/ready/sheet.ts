@@ -1,3 +1,4 @@
+import { threadMeters, threadUse } from '../../model/threadUse';
 import { formatNumber, getLang, t, type Key } from '../../i18n';
 import type { Hoop } from '../../model/hoop';
 import { blockIndex, colorBlocks, sewingSeconds, type MachineTimes } from '../../model/sequence';
@@ -188,6 +189,7 @@ function colorPage(i: SheetInput, sub: string[]): string {
   const p = i.pattern;
   const blocks = colorBlocks(p);
   const st = patternStats(p);
+  const use = threadUse(p, i.profile.fabric);
   const cat = brandOf(blocks.map((b) => b.color));
   const matches = blocks.map((b) => (cat && !inCatalog(b.color, cat) ? nearest(b.color, cat, 1)[0] : undefined));
   const compare = !!cat && matches.some(Boolean);
@@ -197,12 +199,12 @@ function colorPage(i: SheetInput, sub: string[]): string {
       const alt = !compare
         ? ''
         : `<td class="alt">${m ? `<span class="sw" style="background:${css(m.thread)}"></span><span class="tt"><b>${esc(threadNumber(m.thread) || m.thread.name || '')}</b><span>${esc(t(`threads.dE.${closeness(m.dE)}` as Key))}</span></span>` : `<span class="muted">${esc(t('colorList.already'))}</span>`}</td>`;
-      return `<tr><td class="box"><span></span></td><td class="num">${k + 1}</td><td class="th">${threadCell(b.color)}</td>${alt}<td class="num">${formatNumber(b.stitches)}</td><td class="num">${minutes(sewingSeconds(b.stitches, b.trims, 0, i.machine))}</td></tr>`;
+      return `<tr><td class="box"><span></span></td><td class="num">${k + 1}</td><td class="th">${threadCell(b.color)}</td>${alt}<td class="num">${formatNumber(b.stitches)}</td><td class="num">${threadMeters(use.top[b.index] ?? 0)}</td><td class="num">${minutes(sewingSeconds(b.stitches, b.trims, 0, i.machine))}</td></tr>`;
     })
     .join('');
   const total = sewingSeconds(st.stitches, st.trims, st.colorChanges, i.machine);
-  const head = `<tr><th class="box"><span class="sr">${esc(t('ready.sheet.colDone'))}</span></th><th class="num">#</th><th>${esc(t('ready.sheet.colThread'))}</th>${compare ? `<th>${esc(t('ready.sheet.colIn', { catalog: cat!.name }))}</th>` : ''}<th class="num">${esc(t('ready.sheet.colStitches'))}</th><th class="num">${esc(t('ready.sheet.colTime'))}</th></tr>`;
-  const foot = `<tr class="sum"><td></td><td></td><td colspan="${compare ? 2 : 1}">${esc(t('ready.sheet.total'))}</td><td class="num">${formatNumber(st.stitches)}</td><td class="num">${minutes(total)}</td></tr>`;
+  const head = `<tr><th class="box"><span class="sr">${esc(t('ready.sheet.colDone'))}</span></th><th class="num">#</th><th>${esc(t('ready.sheet.colThread'))}</th>${compare ? `<th>${esc(t('ready.sheet.colIn', { catalog: cat!.name }))}</th>` : ''}<th class="num">${esc(t('ready.sheet.colStitches'))}</th><th class="num">${esc(t('ready.sheet.colThread.m'))}</th><th class="num">${esc(t('ready.sheet.colTime'))}</th></tr>`;
+  const foot = `<tr class="sum"><td></td><td></td><td colspan="${compare ? 2 : 1}">${esc(t('ready.sheet.total'))}</td><td class="num">${formatNumber(st.stitches)}</td><td class="num">${threadMeters(use.topTotal)}</td><td class="num">${minutes(total)}</td></tr>`;
 
   const c = i.card;
   const recipe = c.rows
@@ -220,7 +222,7 @@ ${headLine(i.name, t('ready.sheet.title'), sub)}
 <div class="grow">
 <h2>${esc(t('ready.sheet.colors'))}</h2>
 <table class="list"><thead>${head}</thead><tbody>${rows}</tbody><tfoot>${foot}</tfoot></table>
-<p class="small muted">${esc(t('ready.sheet.timeNote', { spm: formatNumber(i.machine.machineSpm), trim: formatNumber(i.machine.trimSeconds, 1), color: formatNumber(i.machine.colorSeconds) }))}</p>
+<p class="small muted">${esc(t('ready.sheet.threadNote', { m: threadMeters(use.bobbin) }))} ${esc(t('ready.sheet.timeNote', { spm: formatNumber(i.machine.machineSpm), trim: formatNumber(i.machine.trimSeconds, 1), color: formatNumber(i.machine.colorSeconds) }))}</p>
 </div>
 <figure class="overview"><svg viewBox="${n1(p.bounds.minX / 10 - 2)} ${n1(p.bounds.minY / 10 - 2)} ${n1((p.bounds.maxX - p.bounds.minX) / 10 + 4)} ${n1((p.bounds.maxY - p.bounds.minY) / 10 + 4)}" preserveAspectRatio="xMidYMid meet"><use href="#hs-design"/></svg><figcaption>${esc(t('ready.sheet.overview'))}</figcaption></figure>
 </div>

@@ -138,6 +138,7 @@ export function initDesign(app: DesignApp): { render: () => void } {
     });
   }
   // The frame's commands for marks and fit, pointed at this area's controls.
+  command({ id: 'view.spot', label: 'design.cmd.spot', group: V, icon: 'spot', keys: ['A'], bind: false, when: () => mode() === 'flow', run: click('#spot-toggle') });
   command({ id: 'view.marks', label: 'design.cmd.marks', group: V, icon: 'marks', keys: ['H'], bind: false, when: () => mode() !== 'image', run: click('#marks-toggle') });
   for (const id of ['jumps', 'threads', 'trims', 'colors', 'ends', 'points'] as const) {
     const box = `input[data-mark="${id}"]`;
