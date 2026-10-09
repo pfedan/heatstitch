@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { hreflangLinks, langPage, SITE, type Page } from '../src/build/langPages';
 
 const read = (f: string) => new TextDecoder().decode(readFileSync(new URL(`../${f}`, import.meta.url)));
-const source: Record<Page, string> = { app: read('index.html'), docs: read('docs.html') };
+const source: Record<Page, string> = { app: read('index.html'), docs: read('docs.html'), videos: read('videos.html') };
 const head = (html: string) => html.slice(0, html.indexOf('</head>'));
 const meta = (html: string, key: string) => new RegExp(`<meta (?:name|property)="${key}" content="([^"]*)"`).exec(html)?.[1];
 

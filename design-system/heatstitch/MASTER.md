@@ -71,8 +71,10 @@ Garnfarben sind Inhalt, nicht Oberfläche: nie als UI-Farbe verwenden.
   `tests/tooltipTexts.test.ts`). Wo ein Bild mehr sagt als Worte, zeigt `data-tip-img="name"` ein
   kleines Bildschirmfoto aus `public/tips/` über dem Text (aufgenommen mit `tools/tips/shoot.mjs`).
 - **Menüs:** Kontextmenü am Objekt, schließen mit Esc und Klick daneben.
-- **Dialoge:** keine modalen Dialoge für Arbeitsabläufe. Einzige Ausnahme heute: Druckansicht der
-  Farbliste (`src/ui/colorList.ts`).
+- **Dialoge:** keine modalen Dialoge für Arbeitsabläufe. Ausnahmen heute: Druckansicht der
+  Farbliste (`src/ui/colorList.ts`) und der Player der Anleitungsvideos (`src/videos/player.ts`):
+  Ein Video sieht man ohnehin mit voller Aufmerksamkeit an, und Esc, Klick daneben oder
+  Schließen führen genau dorthin zurück, wo man in der Anleitung war.
 
 ## Bewegung
 

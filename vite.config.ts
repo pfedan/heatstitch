@@ -3,13 +3,14 @@ import { defineConfig, type Plugin } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import { readFileSync } from 'node:fs';
 import { langPage, type Page } from './src/build/langPages';
+import { expandVideos } from './src/build/videoHtml';
 
 const SITE_BASE = '/heatstitch/';
 // Pull request previews build into a subfolder of the site (see .github/workflows/deploy.yml).
 const base = process.env.BASE_PATH || SITE_BASE;
 const isPreview = base !== SITE_BASE;
 
-const pageOf = (file: string): Page => (file.endsWith('docs.html') ? 'docs' : 'app');
+const pageOf = (file: string): Page => (file.endsWith('docs.html') ? 'docs' : file.endsWith('videos.html') ? 'videos' : 'app');
 
 /**
  * The app and the guide once per language: English at their address, German under de/ (see
@@ -22,7 +23,7 @@ const langPages: Plugin = {
   generateBundle: {
     order: 'post',
     handler(_, bundle) {
-      for (const file of ['index.html', 'docs.html']) {
+      for (const file of ['index.html', 'docs.html', 'videos.html']) {
         const asset = bundle[file];
         if (asset?.type !== 'asset') throw new Error(`lang-pages: ${file} is not in the build`);
         const html = String(asset.source);
@@ -38,7 +39,7 @@ const langPages: Plugin = {
   configureServer(server) {
     server.middlewares.use(async (request, res, next) => {
       const req = request as { url?: string; originalUrl?: string };
-      const m = /^\/de\/(index\.html|docs\.html)?(?:[?#]|$)/.exec((req.url ?? '').replace(base, '/'));
+      const m = /^\/de\/(index\.html|docs\.html|videos\.html)?(?:[?#]|$)/.exec((req.url ?? '').replace(base, '/'));
       if (!m) return next();
       const file = m[1] ?? 'index.html';
       const html = await server.transformIndexHtml(`/${file}`, new TextDecoder().decode(readFileSync(new URL(file, import.meta.url))), req.originalUrl);
@@ -48,9 +49,16 @@ const langPages: Plugin = {
   },
 };
 
+/** The tutorial videos, written into the guide and the video page from one list (src/build/videoHtml.ts). */
+const videoPages: Plugin = {
+  name: 'video-pages',
+  transformIndexHtml: { order: 'pre', handler: (html) => expandVideos(html) },
+};
+
 export default defineConfig({
   base,
   plugins: [
+    videoPages,
     langPages,
     // Search engines should only index the real site, not the previews.
     isPreview && {
@@ -120,7 +128,7 @@ export default defineConfig({
   ],
   build: {
     rollupOptions: {
-      input: { main: 'index.html', docs: 'docs.html' },
+      input: { main: 'index.html', docs: 'docs.html', videos: 'videos.html' },
     },
   },
   worker: { format: 'es' },
