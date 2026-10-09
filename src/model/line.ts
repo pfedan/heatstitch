@@ -84,7 +84,13 @@ function echoStitches(line: Pt[], closed: boolean, st: PathStitch, from?: Pt, re
     return frac(lengthOf(l.line) / period - turns);
   };
   if (!isRunType(st.type) || e.cut) {
-    const runs = lines.flatMap((l) => sewAlong(l.line, l.closed, plain, undefined, undefined, l.back !== reverse, shiftOf(l)));
+    // A copy that ends where it began (a satin over its underlay) has the next begin at its nearer
+    // end; figures in step keep their way.
+    const runs: Pt[][] = [];
+    for (const l of lines) {
+      const end = runs.at(-1)?.at(-1);
+      runs.push(...sewAlong(l.line, l.closed, plain, hasPhase(st.type) ? undefined : end, undefined, l.back !== reverse, shiftOf(l)));
+    }
     // Cut: a trim from copy to copy, however near they are.
     if (e.cut) runs.forEach((run, k) => k && trimBefore.add(run));
     return runs;
