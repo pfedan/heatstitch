@@ -51,6 +51,7 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
   const opacity = $<HTMLInputElement>('opacity');
   const realistic = $<HTMLInputElement>('realistic');
   const shapesView = $<HTMLInputElement>('shapes-view');
+  const scaleBar = $<HTMLInputElement>('scale-bar-show');
   const threadWidth = $<HTMLInputElement>('thread-width');
   const liveLight = $<HTMLInputElement>('live-light');
   const fabricLook = $<HTMLSelectElement>('fabric-look');
@@ -152,6 +153,7 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
     opacity.disabled = !s.overlay;
     realistic.checked = s.realistic;
     shapesView.checked = s.shapesView;
+    scaleBar.checked = s.scaleBar;
     threadWidth.value = String(s.threadMm);
     threadWidth.disabled = !s.realistic;
     liveLight.checked = s.liveLight;
@@ -225,6 +227,7 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
   on(opacity, 'input', () => ((s.opacity = Number(opacity.value)), 'render'));
   on(realistic, 'change', () => ((s.realistic = realistic.checked), 'render'));
   on(shapesView, 'change', () => ((s.shapesView = shapesView.checked), 'render'));
+  on(scaleBar, 'change', () => ((s.scaleBar = scaleBar.checked), 'render'));
   on(threadWidth, 'input', () => ((s.threadMm = Number(threadWidth.value)), 'render'));
   on(liveLight, 'change', () => ((s.liveLight = liveLight.checked), 'render'));
   fabricLook.addEventListener('change', () => {

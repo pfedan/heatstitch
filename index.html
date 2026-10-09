@@ -385,6 +385,7 @@
 
           <nav class="image-nav" data-i18n-aria="image.steps">
             <button type="button" id="image-back" data-i18n="image.back"></button>
+            <button type="button" id="image-trace" data-i18n="image.traceOnly" data-i18n-title="image.traceOnly.hint" hidden></button>
             <button type="button" id="image-next" class="primary" data-i18n="image.next"></button>
             <button type="button" id="image-take" class="primary" data-i18n="image.takeShort" data-i18n-title="image.take.hint" hidden></button>
           </nav>
@@ -457,6 +458,7 @@
         <div class="empty" id="empty"></div>
         <!-- Foot of the stage, one row above the player: the key hint, the heatmap scale (Prüfen) and the view bar. -->
         <div class="stage-foot" id="stage-foot">
+          <div class="scale-bar" id="scale-bar"></div>
           <p class="hint" id="canvas-hint"></p>
           <canvas id="legend" class="legend" width="260" height="46" data-mode="density"></canvas>
           <div class="view-bar" id="view-bar" role="toolbar" data-i18n-aria="design.view.title">
@@ -480,6 +482,9 @@
               </button>
             </div>
             <span class="vb-sep" aria-hidden="true"></span>
+            <button type="button" id="measure-toggle" class="vb-btn vb-icon" aria-pressed="false" data-i18n-aria="measure.tool">
+              <svg class="i" aria-hidden="true"><use href="#i-ruler" /></svg>
+            </button>
             <button type="button" id="zoom-button" class="vb-btn zoom-button" aria-haspopup="menu" data-i18n-title="design.zoom.hint">
               <span id="zoom-out">100 %</span>
             </button>
@@ -500,6 +505,7 @@
                   <button type="button" id="allow-tilt" class="link" data-i18n="controls.tilt" hidden></button>
                 </div>
                 <label class="check" data-mode="flow" data-i18n-title="display.shapes.hint" data-tip-img="view-shapes"><input type="checkbox" id="shapes-view" /><span data-i18n="display.shapes"></span></label>
+                <label class="check" data-i18n-title="measure.scale.hint"><input type="checkbox" id="scale-bar-show" /><span data-i18n="measure.scale.show"></span></label>
               </section>
               <section class="vp-group" data-mode="flow">
                 <h3 data-i18n="colorBy.title"></h3>

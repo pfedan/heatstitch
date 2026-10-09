@@ -1,4 +1,5 @@
 import type { FileList } from '../ui/fileList';
+import type { TraceScene } from '../render/trace';
 import type { FlatArea } from '../render/shapeOverlay';
 import type { FlowScene } from '../render/scene';
 import type { Form } from '../shape/path';
@@ -36,6 +37,7 @@ export interface SceneApp {
   readonly settings: Settings;
   readonly shapeTool: ShapeTool;
   readonly stitchInfo: (p: Pattern, q: Sequence) => StitchInfo;
+  readonly traceScene: () => TraceScene | null;
 }
 
 /**
@@ -363,6 +365,7 @@ export function bindScene(app: SceneApp) {
       shape: app.shapeTool.active && app.frameTool.dragging === null ? { view: app.shapeTool, handles: app.shapeTool.handles() } : null,
       frame: app.frameTool.active ? { view: app.frameTool, mapped: app.frameTool.mappedCorners() } : null,
       band: ui.objectBand,
+      trace: app.traceScene(),
     };
   }
 

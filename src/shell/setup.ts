@@ -94,8 +94,13 @@ export function initShell(app: ShellApp): void {
       showPage(want);
     } else showPage(page);
   };
-  const watch = new MutationObserver(follow);
-  for (const id of ['object-panel', 'lettering-panel']) watch.observe($(id), { attributes: true, attributeFilter: ['hidden'] });
+  // Only a panel that really appears or goes follows: the panels set `hidden` again on every
+  // redraw (while a path is drawn, on every pointer move), which must not undo a click on a tab.
+  const changed = (rs: MutationRecord[]) => rs.some((r) => (r.oldValue !== null) !== (r.target as Element).hasAttribute('hidden'));
+  const watch = new MutationObserver((rs) => {
+    if (changed(rs)) follow();
+  });
+  for (const id of ['object-panel', 'lettering-panel']) watch.observe($(id), { attributes: true, attributeOldValue: true, attributeFilter: ['hidden'] });
   new MutationObserver(() => showPage(page)).observe(document.body, { attributes: true, attributeFilter: ['data-mode'] });
   follow();
 

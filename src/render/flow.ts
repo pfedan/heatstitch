@@ -403,6 +403,25 @@ export function stitchAt(p: Pattern, x: number, y: number, maxDist: number, limi
   return best;
 }
 
+/** The shown needle point nearest to (x, y) within `maxDist` (all in 0.1 mm), or -1; later ones win ties. */
+export function pointNear(p: Pattern, x: number, y: number, maxDist: number, limit: number, alpha?: Float32Array): number {
+  let best = -1;
+  let bestD = maxDist * maxDist;
+  const end = Math.min(limit, p.cmd.length - 1);
+  for (let i = 0; i <= end; i++) {
+    if (p.cmd[i] !== STITCH || (alpha && alpha[i] <= 0)) continue;
+    const dx = p.x[i] - x;
+    const dy = p.y[i] - y;
+    if (Math.abs(dx) > maxDist || Math.abs(dy) > maxDist) continue;
+    const d = dx * dx + dy * dy;
+    if (d <= bestD) {
+      bestD = d;
+      best = i;
+    }
+  }
+  return best;
+}
+
 /** Fill areas of selected objects: a dashed line with a dark halo, amber where the shape is a guess. */
 export function drawOutlines(ctx: CanvasRenderingContext2D, vp: Viewport, shapes: ShapeOutline[]): void {
   const s = vp.scale;
