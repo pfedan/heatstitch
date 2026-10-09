@@ -495,8 +495,7 @@ body[data-mode='image'][data-image-step='1'] .resizer[data-panel='inspector'] {
   grid-template-columns: 32px 1fr;
   column-gap: 10px;
   align-items: center;
-  /* Room on the right for the ring shown while the style computes, so nothing moves then. */
-  padding: 7px 34px 7px 10px;
+  padding: 7px 10px;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--bg);
@@ -538,15 +537,15 @@ body[data-mode='image'][data-image-step='1'] .resizer[data-panel='inspector'] {
   outline-offset: 2px;
 }
 
-/* While the chosen style computes: a small spinning ring at the right end of its tile. */
+/* While the chosen style computes: a small spinning ring at the right of its name (the names are
+   short, so it never covers text and nothing moves when it shows). */
 .image-style.busy::after {
   content: '';
   position: absolute;
-  top: 50%;
+  top: 9px;
   right: 10px;
-  width: 16px;
-  height: 16px;
-  margin-top: -8px;
+  width: 14px;
+  height: 14px;
   border: 2px solid color-mix(in srgb, var(--accent) 30%, transparent);
   border-top-color: var(--accent);
   border-radius: 50%;
