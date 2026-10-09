@@ -56,7 +56,7 @@ describe('object list', () => {
     const q = setTrims(p, transitions(p), false);
     expect(trims(q)).toBeLessThan(trims(p));
     expect(ids(q)).toEqual(ids(p));
-    for (const [k, o] of sewObjects(q).entries()) expect(remembered(q, o)?.form).toEqual(remembered(p, before[k])?.form);
+    for (const [k, o] of sewObjects(q).entries()) expect(remembered(q, o)?.geo).toEqual(remembered(p, before[k])?.geo);
     // And cut again: still the same two.
     const r = setTrims(q, transitions(q), true);
     expect(ids(r)).toEqual(ids(p));
@@ -93,7 +93,7 @@ describe('object list', () => {
     const line = addShape(p, { form: parsePath('M50 10 C60 0 70 25 85 12', ID), kind: 'stroke', width: 3 }, RED, null, options)!.pattern;
     const lo = sewObjects(line).length - 1;
     const lobj = sewObjects(line)[lo];
-    const again = resewLine(line, lo, remembered(line, lobj)!.path!, { ...lineSettings(line, lobj, stitchKinds(line)), width: 4 }, options.trimMm)!;
+    const again = resewLine(line, lo, remembered(line, lobj)!.geo!, { ...lineSettings(line, lobj, stitchKinds(line)), width: 4 }, options.trimMm)!;
     expect(ids(again.pattern)).toEqual(ids(line));
   });
 
@@ -153,7 +153,7 @@ describe('object list', () => {
     expect(now.id).toBe(o.id);
     expect(remembered(next, now)).toMatchObject({ free: true, hand: 1 });
     // The shape rests with it, for the way back.
-    expect(remembered(next, now)?.form).toEqual(remembered(p, o)?.form);
+    expect(remembered(next, now)?.geo).toEqual(remembered(p, o)?.geo);
     // The version before is as it was (undo).
     expect(remembered(p, o)?.free).toBeUndefined();
   });

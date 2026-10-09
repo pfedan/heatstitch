@@ -88,7 +88,7 @@ describe('moving, turning and scaling objects', () => {
     const nk = stitchKinds(r.pattern);
     const no = sewObjects(r.pattern, nk).find((x) => x.first === r.first)!;
     const known = remembered(r.pattern, no)!;
-    expect(known.form).toBeDefined();
+    expect(known.geo).toBeDefined();
     expect(known.region!.areaMm2 / an.fill!.areaMm2).toBeGreaterThan(2.1);
     expect(known.region!.areaMm2 / an.fill!.areaMm2).toBeLessThan(2.4);
     expect(measureFill(r.pattern, analyze(r.pattern, no, nk, known)).spacing).toBeCloseTo(spacing, 1);
@@ -116,7 +116,7 @@ describe('changing the shape of a fill', () => {
     expect(r.starts).toHaveLength(1);
     const area = rasterize(small)!;
     const kept = r.memory[0];
-    expect(kept.form).toBe(small);
+    expect(kept.geo).toBe(small);
     expect(kept.region!.areaMm2).toBeCloseTo(area.areaMm2, 0);
     // Every stitch of the object lies in (or right at the edge of) the new area.
     const no = sewObjects(r.pattern).find((x) => stitches(r.pattern, 0, x.first - 1) === r.starts[0])!;
@@ -137,11 +137,11 @@ describe('changing the shape of a fill', () => {
     // What applying it remembers (as the app does), then stored and read again.
     remember(r.pattern, no, r.memory[0]);
     const stored = JSON.parse(JSON.stringify(rememberedIn(r.pattern, nobjs), (_k, v) => (v instanceof Uint8Array ? Array.from(v) : v)));
-    const entry = stored.objects.find((e: { memory?: { form?: unknown } }) => e.memory?.form)?.memory;
+    const entry = stored.objects.find((e: { memory?: { geo?: unknown } }) => e.memory?.geo)?.memory;
     expect(entry).toBeDefined();
     entry.region.mask = Uint8Array.from(entry.region.mask);
     stored.objects = stored.objects.filter((e: { memory?: unknown }) => e.memory === entry);
     expect(restoreRemembered(r.pattern, stored)).toBe(1);
-    expect(formArea(remembered(r.pattern, no)!.form!)).toBeCloseTo(formArea(r.memory[0].form!), 1);
+    expect(formArea(remembered(r.pattern, no)!.geo!)).toBeCloseTo(formArea(r.memory[0].geo!), 1);
   });
 });

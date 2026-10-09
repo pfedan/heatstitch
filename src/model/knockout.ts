@@ -98,7 +98,7 @@ function sewAgain(p: Pattern, index: number, knockout: boolean, trimMm: number):
   const kinds = stitchKinds(p);
   const objs = sewObjects(p, kinds);
   const o = objs[index];
-  const form = o && remembered(p, o)?.form;
+  const form = o && areaOf(remembered(p, o));
   if (!form) return null;
   const r = reshapeFill(p, objs, o, kinds, form, trimMm, knockout);
   return r && takeOver(r);
@@ -174,7 +174,7 @@ export function refreshKnockouts(p: Pattern, trimMm: number): { pattern: Pattern
 
 /** Whether fills sewn later cover a noticeable part of the shape of `o`. */
 export function isCovered(p: Pattern, objs: SewObject[], o: SewObject): boolean {
-  const form = remembered(p, o)?.form;
+  const form = areaOf(remembered(p, o));
   const whole = form && wholeArea(form, remembered(p, o)?.region?.pxMm ?? 0.1);
   if (!whole) return false;
   const left = cutAway(whole, coversOver(p, objs, o, whole.pxMm, remembered(p, o)?.overlapShare ?? SATIN_SHARE));

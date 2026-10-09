@@ -4,7 +4,9 @@ import { FIT_TOLERANCE, READ_TOLERANCE, vectorize } from '../shape/vectorize';
 import type { SewObject } from './objects';
 import type { Pattern } from './pattern';
 import { runWays, traceLine } from './line';
-import { analyze, keepShape, remembered, type Rails, type Remembered } from './restitch';
+import { analyze, keepShape, remembered, type FillSettings, type Rails, type Remembered } from './restitch';
+import type { Region } from '../digitize/region';
+import { rasterize, rasterizeStroke } from '../shape/rasterize';
 import { stitchKinds } from './sequence';
 
 /**
@@ -24,49 +26,39 @@ import { stitchKinds } from './sequence';
  */
 export type GeoUse = 'area' | 'line' | 'band';
 
-/** How the form of what an object remembers is sewn, or null when it has none. */
+/**
+ * How the form of what an object remembers is sewn, by its stitch type, or null when it has none:
+ * a fill with a width fills a band along its paths, a stitch along them alone sews a line, else
+ * its closed paths are filled (with a fill or a satin over the area).
+ */
 export function geoUse(m: Remembered | null | undefined): GeoUse | null {
-  if (!m) return null;
-  if (m.asLine && m.fill) return 'band';
-  if (m.path) return 'line';
-  if (m.form) return 'area';
-  return null;
+  if (!m?.geo) return null;
+  if (m.fill?.lineWidth !== undefined) return 'band';
+  if (m.line && !m.fill) return 'line';
+  return 'area';
 }
 
 /** The form an object was given (not guessed), or null. */
-export function geoOf(m: Remembered | null | undefined): Form | null {
-  switch (geoUse(m)) {
-    case 'band':
-      return m!.asLine!.path;
-    case 'line':
-      return m!.path!;
-    case 'area':
-      return m!.form!;
-    default:
-      return null;
-  }
-}
+export const geoOf = (m: Remembered | null | undefined): Form | null => m?.geo ?? null;
 
 /** The form of an object whose closed paths are filled, or null. */
-export const areaOf = (m: Remembered | null | undefined): Form | null => (geoUse(m) === 'area' ? m!.form! : null);
+export const areaOf = (m: Remembered | null | undefined): Form | null => (geoUse(m) === 'area' ? m!.geo! : null);
 
 /** The form of an object sewn along its paths, or null. */
-export const lineGeoOf = (m: Remembered | null | undefined): Form | null => (geoUse(m) === 'line' ? m!.path! : null);
+export const lineGeoOf = (m: Remembered | null | undefined): Form | null => (geoUse(m) === 'line' ? m!.geo! : null);
 
-/**
- * What `m` remembers with `geo` as its form, used as before (`use` for one that had none, or to use
- * it otherwise). Only the form changes: an area rastered from it is the caller's to make anew.
- */
-export function withGeo(m: Remembered, geo: Form, use: GeoUse = geoUse(m) ?? 'area'): Remembered {
-  const { form: _f, path: _p, ...rest } = m;
-  switch (use) {
-    case 'band':
-      return { ...rest, asLine: { ...m.asLine!, path: geo } };
-    case 'line':
-      return { ...rest, path: geo };
-    case 'area':
-      return { ...rest, form: geo };
-  }
+/** What `m` remembers with `geo` as its form. Only the form changes: an area rastered from it is the caller's to make anew. */
+export const withGeo = (m: Remembered, geo: Form): Remembered => ({ ...m, geo });
+
+/** The area of a band: its paths in the fill's width, with its ends (flat when not set). */
+export function bandArea(geo: Form, fill: FillSettings, pxMm = 0.1): Region | null {
+  return fill.lineWidth === undefined ? null : rasterizeStroke(geo, fill.lineWidth, pxMm, fill.lineCap ?? 'flat');
+}
+
+/** The area an object's form gives it: its closed paths, or its band; null for a line or without form. */
+export function geoArea(m: Remembered | null | undefined, pxMm = 0.1): Region | null {
+  const use = geoUse(m);
+  return use === 'area' ? rasterize(m!.geo!, pxMm) : use === 'band' ? bandArea(m!.geo!, m!.fill!, pxMm) : null;
 }
 
 /**

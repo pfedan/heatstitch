@@ -95,7 +95,7 @@ describe.skipIf(!on)('load test: 120 objects', () => {
     keepVersion(p);
     expect(objs.length).toBe(ROWS * COLS);
     expect(objs.every((o) => remembered(p, o))).toBe(true);
-    fills = objs.filter((o) => remembered(p, o)?.form).map((o) => o.index);
+    fills = objs.filter((o) => remembered(p, o)?.geo).map((o) => o.index);
     expect(fills.length).toBe(100);
     whole = p;
   });

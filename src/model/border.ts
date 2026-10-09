@@ -411,6 +411,11 @@ function syncOwnBorders(p: Pattern, trimMm: number, drop: ReadonlySet<string>, f
   return syncBlends(applyChanges(p, changes), trimMm, drop);
 }
 
+/** The links of what follows a fill in a thread of its own: its border and the second thread of its blend. */
+export function followerLinks(m: Remembered | null | undefined): string[] {
+  return [m?.fill?.border?.link, m?.fill?.deco?.blend?.link].filter((l): l is string => !!l);
+}
+
 /** The records changed as listed (each new object remembering its `memory`), or `p` when nothing changes. */
 function applyChanges(p: Pattern, changes: Change[]): Pattern {
   if (!changes.length) return p;

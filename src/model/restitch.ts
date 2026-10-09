@@ -18,7 +18,9 @@ import { eStitches, fringedColumn, pairs, satinStitches, underlayOf, type Column
 import { columnFromRungs, cumulative, inside, insideOf, pointAt, project, reversedRungs, stripOfLoop, tidyRungs, type Arc, type Rung } from '../digitize/rungs';
 import type { Pt } from '../digitize/skeleton';
 import { flatten, formFrom, storeForm, type Form, type StoredPath } from '../shape/path';
-import { rasterize, rasterizeStroke, type LineCap } from '../shape/rasterize';
+import { FIT_TOLERANCE, READ_TOLERANCE, vectorize } from '../shape/vectorize';
+import { BORDER_WIDTH } from '../digitize/border';
+import { rasterize, type LineCap } from '../shape/rasterize';
 import { distanceInside, distanceToSeeds } from '../image/edt';
 import { tidy, withRecords } from './edit';
 import { coversOver, cutAway, type Cover } from './covers';
@@ -30,7 +32,7 @@ import { gradientOf, patchArea, patchSpacing, rowPatches, type RowPatch } from '
 import { rowLines, zigzagOf, type Zigzag } from './zigzag';
 import { letteringFrom } from '../lettering/stored';
 import type { Lettering } from '../lettering/layout';
-import { areaOf, lineGeoOf } from './geo';
+import { areaOf, bandArea, geoArea, geoUse, lineGeoOf } from './geo';
 
 /**
  * New stitches for the objects of a design, with other settings: density, angle, stitch length,
@@ -158,7 +160,7 @@ export interface FillSettings {
   underInsetShare?: number;
   /** Distance between the underlay rows (mm); three times the spacing, at least 1.2 mm, when not set. */
   underSpacing?: number;
-  /** A fill along a line (Remembered.asLine): the width of the line (mm) and how its ends are drawn. */
+  /** A band (see geo.ts): the width of the band along the paths (mm) and how its ends are drawn. */
   lineWidth?: number;
   lineCap?: LineCap;
   /** The area grown (+) or shrunk (-) on all sides before it is filled (mm); 0 when not set. */
@@ -354,13 +356,21 @@ export interface Remembered {
   hand?: number;
   /** The shape was read from the stitches when they were first changed by hand (not exact). */
   read?: boolean;
-  /** The area of an object whose kind was changed here, so changing it back gives the same area. */
+  /**
+   * The area of an object with no form given whose kind was changed here (a satin of a file made a
+   * fill), so changing it back gives the same area. Guessed, not a form (see geo).
+   */
   shape?: Region;
   /**
-   * The fill area as curves, once its shape was changed here (level Form, turned or scaled):
-   * `region` is rastered from it, never the other way round.
+   * Its form (see geo.ts): the paths it was given (drawn, from an SVG, the Image mode, or read and
+   * then edited), the one place of its geometry whatever its stitch type. A fill fills its closed
+   * paths (`region` is rastered from them, never the other way round), a line (`line`) is sewn
+   * along all of them, a fill with `lineWidth` fills a band along them. Changing the stitch type
+   * never changes it. Not set: the object is only known by its stitches (its form is guessed).
    */
-  form?: Form;
+  geo?: Form;
+  /** What its other stitch types were set to, to switch back to them as they were (see Kept). */
+  kept?: Kept;
   /**
    * Parts of `form` that fills sewn later cover are left out of the stitches (computed, the form
    * stays whole). `cut` names the area that was sewn, to see when the shapes on top have changed.
@@ -369,9 +379,7 @@ export interface Remembered {
   cut?: string;
   /** Leaving out: how far it still reaches under a satin on top, as a share of its width (0.3 when not set). */
   overlapShare?: number;
-  /** A drawn line: sewn along these curves (see line.ts), not traced from its stitches. */
-  path?: Form;
-  /** How a line (`path`) is sewn: running, triple or satin stitch along it. */
+  /** How a line is sewn along its paths (`geo`): running, triple or satin stitch, and so on (see line.ts). */
   line?: PathStitch;
   /** This many stitches of the object, from `underFrom` on, are its underlay (sewn here). */
   under?: number;
@@ -385,16 +393,7 @@ export interface Remembered {
    * (see analyze); they hold only while the object has that many stitches.
    */
   parts?: SewnPart[];
-  /**
-   * A fill that was a satin here: the columns it had, so making it a satin again gives the same
-   * satin back instead of one found anew on the area.
-   */
-  asSatin?: Rails[];
-  /**
-   * A fill along a line: the line is its shape (the area is always made from it, in the fill's
-   * lineWidth and lineCap), and how it was sewn as a line, to make it a line again.
-   */
-  asLine?: LineFill;
+
   /** The object is the border of a fill in its own thread: the fill's `border.link`. */
   outline?: string;
   /**
@@ -427,6 +426,18 @@ export interface Remembered {
    * travel from it to the next one) and what it remembered. "Korrektur zurücknehmen" puts exactly these back.
    */
   undo?: { x: Int32Array; y: Int32Array; cmd: Uint8Array; lead: number; trail?: number; memory?: Remembered };
+}
+
+/**
+ * The settings of the stitch types an object had before its stitch type was switched, to switch
+ * back to them as they were: the stitch along its paths (`line`, a line filled or a fill made a
+ * line), its fill (`fill`, a fill made a line) and the satin columns it had (`satin`, a satin made
+ * a fill). The form stays the same throughout.
+ */
+export interface Kept {
+  line?: PathStitch;
+  fill?: FillSettings;
+  satin?: Rails[];
 }
 
 /** A part an object was sewn in: its kind, and the number of the object's stitches up to its last one. */
@@ -611,18 +622,25 @@ export interface StoredObject {
   read?: boolean;
   /** The area of an object whose kind was changed, as `region`. */
   shape?: StoredObject['region'];
-  /** The fill area as curves (see Remembered.form). */
+  /** Its form (see Remembered.geo). */
+  geo?: StoredPath[];
+  /** The settings of its other stitch types (see Remembered.kept). */
+  kept?: { line?: PathStitch; fill?: FillSettings; satin?: StoredRails[] };
+  /** Before project version 3: the form of a fill. */
   form?: StoredPath[];
   knockout?: boolean;
   cut?: string;
   overlapShare?: number;
+  /** Before project version 3: the form of a line. */
   path?: StoredPath[];
   line?: PathStitch;
   under?: number;
   underFrom?: number;
   borderAt?: number;
   parts?: SewnPart[];
+  /** Before project version 3: the satin a fill had been (now kept.satin). */
   asSatin?: StoredRails[];
+  /** Before project version 3: the form of a band and how it was sewn as a line (now geo and kept.line). */
   asLine?: { path: StoredPath[]; line: PathStitch; cap?: LineCap };
   outline?: string;
   piece?: string;
@@ -668,6 +686,14 @@ const storeRails = (c: Rails): StoredRails => ({
   ...(c.split ? { split: { outlines: c.split.outlines.map((o) => o.flat()), holes: c.split.holes.map((h) => h.flat()), cuts: c.split.cuts.flat(2) } } : {}),
 });
 
+const storeLine = (l: PathStitch): PathStitch => ({ ...l, ...(l.echo ? { echo: { ...structuredClone(l.echo), overlap: true } } : {}), ...(l.shadow ? { shadow: { ...l.shadow, color: { ...l.shadow.color } } } : {}) });
+
+const storeKept = (k: Kept): NonNullable<StoredObject['kept']> => ({
+  ...(k.line ? { line: storeLine(k.line) } : {}),
+  ...(k.fill ? { fill: { ...k.fill } } : {}),
+  ...(k.satin ? { satin: k.satin.map(storeRails) } : {}),
+});
+
 /** One object's memory as stored with the file. */
 function storeOne(key: string, r: Remembered): StoredObject {
   const pixels = (g: Region | null) => g && { x0: g.x0, y0: g.y0, w: g.w, h: g.h, pxMm: g.pxMm, mask: g.mask, areaMm2: g.areaMm2 };
@@ -680,18 +706,16 @@ function storeOne(key: string, r: Remembered): StoredObject {
     ...(r.columns ? { columns: r.columns.map((part) => part.map(storeRails)) } : {}),
     ...(r.hand ? { hand: r.hand } : {}),
     ...(r.read ? { read: true } : {}),
-    ...(r.form ? { form: storeForm(r.form) } : {}),
+    ...(r.geo ? { geo: storeForm(r.geo) } : {}),
+    ...(r.kept ? { kept: storeKept(r.kept) } : {}),
     ...(r.knockout ? { knockout: true } : {}),
     ...(r.cut ? { cut: r.cut } : {}),
     ...(r.overlapShare !== undefined ? { overlapShare: r.overlapShare } : {}),
-    ...(r.path ? { path: storeForm(r.path) } : {}),
-    ...(r.line ? { line: { ...r.line, ...(r.line.echo ? { echo: { ...structuredClone(r.line.echo), overlap: true } } : {}), ...(r.line.shadow ? { shadow: { ...r.line.shadow, color: { ...r.line.shadow.color } } } : {}) } } : {}),
+    ...(r.line ? { line: storeLine(r.line) } : {}),
     ...(r.under ? { under: r.under } : {}),
     ...(r.underFrom ? { underFrom: r.underFrom } : {}),
     ...(r.borderAt ? { borderAt: r.borderAt } : {}),
     ...(r.parts ? { parts: r.parts.map((x) => ({ ...x })) } : {}),
-    ...(r.asSatin ? { asSatin: r.asSatin.map(storeRails) } : {}),
-    ...(r.asLine ? { asLine: { path: storeForm(r.asLine.path), line: { ...r.asLine.line }, cap: r.asLine.cap } } : {}),
     ...(r.outline ? { outline: r.outline } : {}),
     ...(r.piece ? { piece: r.piece } : {}),
     ...(r.blendOf ? { blendOf: r.blendOf } : {}),
@@ -1035,14 +1059,14 @@ export function rememberShapes(
       return [{ kind, end }];
     };
     const f = forms[j];
-    if (f?.path) return remember(p, o, { region: null, path: f.path, ...(f.line ? { line: { ...f.line }, parts: one(runLike(f.line.type) ? 'run' : 'satin') } : {}) });
+    if (f?.path) return remember(p, o, { region: null, geo: f.path, ...(f.line ? { line: { ...f.line }, parts: one(runLike(f.line.type) ? 'run' : 'satin') } : {}) });
     // A satin in sections (an image's outline): its columns and the area they were cut from.
     if (!shape && f?.columns?.length && f.satin && f.satinShape) {
       const area = regionFrom(f.satinShape);
       return remember(p, o, { region: null, satin: { ...f.satin }, columns: [f.columns], ...(area ? { shape: area } : {}), parts: one('satin') });
     }
     // A satin from a vector file keeps its shape: its rails lie on the shape's edge.
-    if (!shape && f?.form) return remember(p, o, { region: null, form: f.form, parts: one('satin') });
+    if (!shape && f?.form) return remember(p, o, { region: null, geo: f.form, parts: one('satin') });
     // A satin made here (a narrow area): its rails, read from its fresh stitches, so it is known as
     // made here and not recognized again from its stitches later; and the area it was made for.
     if (!shape) {
@@ -1051,8 +1075,32 @@ export function rememberShapes(
       return remember(p, o, { ...known, ...(area ? { shape: area } : {}), ...(f?.satin ? { satin: { ...f.satin } } : {}), parts: one('satin') });
     }
     const region = regionFrom(shape);
-    if (region) remember(p, o, { region, fill: { ...shape.fill }, parts: one('fill'), ...(f?.form ? { form: f.form, ...(f.knockout ? { knockout: true } : {}) } : {}) });
+    if (!region) return;
+    // A fill of the Image mode: its area traced once, as exactly as the level Form would; from
+    // now on its form is given, like one drawn or from an SVG.
+    const geo = f?.form ?? vectorize(region, FIT_TOLERANCE);
+    remember(p, o, { region, fill: { ...shape.fill }, parts: one('fill'), ...(geo.paths.length ? { geo, ...(f?.form && f.knockout ? { knockout: true } : {}) } : {}) });
   });
+}
+
+/** How a line is sewn, from the file; null when it does not hold. */
+function lineFrom(v: unknown): PathStitch | null {
+  if (!isLineStitch(v)) return null;
+  const l: PathStitch = { ...v };
+  if (l.echo !== undefined) {
+    if (isEcho(l.echo)) {
+      l.echo = structuredClone(l.echo);
+      // Before copies could overlap, a wide stitch kept its copies its width apart, whatever the gap said.
+      if (!isRunType(l.type) && !v.echo?.overlap) l.echo.gap = Math.max(l.echo.gap, Math.min(ECHO_GAP[1], Math.round((l.width + 0.5) * 10) / 10));
+      delete l.echo.overlap;
+    } else delete l.echo;
+  }
+  if (l.shadow !== undefined) {
+    const shadow = shadowFrom(l.shadow);
+    if (shadow) l.shadow = shadow;
+    else delete l.shadow;
+  }
+  return l;
 }
 
 /** One object's memory from the file; null when it does not hold. */
@@ -1069,38 +1117,32 @@ function fromStored(e: StoredObject): Remembered | null {
   if (e.read === true) r.read = true;
   const shape = e.shape ? regionFrom(e.shape) : null;
   if (shape) r.shape = shape;
-  const form = e.form === undefined ? null : formFrom(e.form);
-  if (form) r.form = form;
-  if (form && e.knockout === true) r.knockout = true;
   if (typeof e.cut === 'string') r.cut = e.cut;
   if (finite(e.overlapShare) && e.overlapShare >= 0 && e.overlapShare <= 1) r.overlapShare = e.overlapShare;
-  const path = e.path === undefined ? null : formFrom(e.path);
-  if (path) r.path = path;
-  if (path && isLineStitch(e.line)) {
-    r.line = { ...e.line };
-    if (r.line.echo !== undefined) {
-      if (isEcho(r.line.echo)) {
-        r.line.echo = structuredClone(r.line.echo);
-        // Before copies could overlap, a wide stitch kept its copies its width apart, whatever the gap said.
-        if (!isRunType(r.line.type) && !e.line.echo?.overlap) r.line.echo.gap = Math.max(r.line.echo.gap, Math.min(ECHO_GAP[1], Math.round((r.line.width + 0.5) * 10) / 10));
-        delete r.line.echo.overlap;
-      } else delete r.line.echo;
-    }
-    if (r.line.shadow !== undefined) {
-      const shadow = shadowFrom(r.line.shadow);
-      if (shadow) r.line.shadow = shadow;
-      else delete r.line.shadow;
-    }
+  const line = lineFrom(e.line);
+  const kept: Kept = {};
+  const keptLine = lineFrom(e.kept?.line);
+  if (keptLine) kept.line = keptLine;
+  if (isFill(e.kept?.fill)) kept.fill = { ...e.kept.fill, tolerance: e.kept.fill.tolerance ?? TOLERANCE };
+  const keptSatin = railsFrom([e.kept?.satin ?? e.asSatin])?.[0];
+  if (keptSatin?.length) kept.satin = keptSatin;
+  // Before project version 3 the form had a place for each use: a fill's, a line's, a band's.
+  const band = e.asLine && r.fill ? formFrom(e.asLine.path) : null;
+  const geo = (e.geo === undefined ? null : formFrom(e.geo)) ?? band ?? (e.form === undefined ? null : formFrom(e.form)) ?? (e.path === undefined ? null : formFrom(e.path));
+  if (geo) r.geo = geo;
+  if (band && e.geo === undefined && r.fill && isLineStitch(e.asLine!.line)) {
+    r.fill.lineWidth ??= e.asLine!.line.width;
+    r.fill.lineCap ??= e.asLine!.cap === 'round' ? 'round' : 'flat';
+    kept.line ??= lineFrom(e.asLine!.line) ?? undefined;
   }
+  if (geo && line) r.line = line;
+  if (geo && r.fill && e.knockout === true) r.knockout = true;
+  if (kept.line || kept.fill || kept.satin) r.kept = kept;
   if (finite(e.under) && e.under > 0) r.under = Math.round(e.under);
   if (finite(e.underFrom) && e.underFrom > 0) r.underFrom = Math.round(e.underFrom);
   if (finite(e.borderAt) && e.borderAt > 0) r.borderAt = Math.round(e.borderAt);
   const parts = partsFrom(e.parts);
   if (parts) r.parts = parts;
-  const asSatin = railsFrom([e.asSatin])?.[0];
-  if (asSatin?.length) r.asSatin = asSatin;
-  const asLine = e.asLine && formFrom(e.asLine.path);
-  if (asLine && isLineStitch(e.asLine!.line)) r.asLine = { path: asLine, line: { ...e.asLine!.line }, cap: e.asLine!.cap === 'round' ? 'round' : 'flat' };
   if (typeof e.outline === 'string') r.outline = e.outline;
   if (typeof e.piece === 'string' && r.fill) r.piece = e.piece;
   if (typeof e.blendOf === 'string') r.blendOf = e.blendOf;
@@ -1119,7 +1161,29 @@ function fromStored(e: StoredObject): Remembered | null {
     const memory = undo.memory ? fromStored(undo.memory) : null;
     r.undo = { x: undo.x.slice(), y: undo.y.slice(), cmd: undo.cmd.slice(), lead: Math.round(undo.lead), ...(trail ? { trail } : {}), ...(memory ? { memory } : {}) };
   }
-  return r;
+  return r.fill?.pattern === 'none' ? emptyAsLine(r) : r;
+}
+
+/**
+ * Before project version 3, a fill could be empty: only its border sewn, in its thread. It is the
+ * line along its form that it sews (a fill of a file: along the outline of its area), its fill
+ * kept to fill it again (as tatami, the pattern it had is not known).
+ */
+function emptyAsLine(r: Remembered): Remembered {
+  const geo = r.geo ?? (r.region ? vectorize(r.region, r.read ? READ_TOLERANCE : FIT_TOLERANCE) : null);
+  if (!geo?.paths.length || !r.fill) return r;
+  const { color: _c, link: _l, seams: _s, ...border } = r.fill.border ?? { type: 'triple' as const, width: BORDER_WIDTH };
+  const { border: _b, ...fill } = r.fill;
+  const { fill: _f, knockout: _k, cut: _cut, overlapShare: _o, piece: _p, borderAt: _a, under: _u, underFrom: _uf, ...rest } = r;
+  const end = r.parts?.[r.parts.length - 1]?.end;
+  return {
+    ...rest,
+    region: null,
+    geo,
+    line: border,
+    kept: { ...r.kept, fill: { ...fill, pattern: 'tatami' } },
+    ...(end ? { parts: [{ kind: runLike(border.type) ? 'run' : 'satin', end }] } : {}),
+  };
 }
 
 /**
@@ -3023,13 +3087,17 @@ function restitchOnce(
     // A new area (its shape changed): the old stitches are told apart by the old one, the fill is made in the new one.
     const newArea = areas?.get(o.index);
     if (newArea && an.fill) an = { ...an, fill: newArea };
-    const given = typeof settingsFor === 'function' ? settingsFor(o, an, known) : settingsFor;
-    if (!given) continue;
+    const band = geoUse(known) === 'band';
+    const asked = typeof settingsFor === 'function' ? settingsFor(o, an, known) : settingsFor;
+    if (!asked) continue;
+    // A band stays one when sewn with other fill settings: its width and ends are its own.
+    const given: Settings =
+      band && asked.kind === 'fill' && asked.s.lineWidth === undefined ? { kind: 'fill', s: { ...asked.s, lineWidth: known!.fill!.lineWidth, lineCap: asked.s.lineCap ?? known!.fill!.lineCap } } : asked;
     // A fill given a new area whose stitches no longer read as a fill (a thin sliver of few rows
     // reads as running stitch): all of it is the fill it remembers being.
-    if (newArea && !an.fill && given.kind === 'fill' && known?.fill && !known.asLine) an = { parts: [{ kind: 'fill', s: o.first, e: o.last }], fill: newArea };
-    // A fill along a line: its area is always made from the line, never kept or traced.
-    const byLine = !newArea && known?.asLine && given.kind === 'fill' ? lineFillArea(known.asLine, given.s) : null;
+    if (newArea && !an.fill && given.kind === 'fill' && known?.fill && !band) an = { parts: [{ kind: 'fill', s: o.first, e: o.last }], fill: newArea };
+    // A band: its area is always made from its paths, never kept or traced.
+    const byLine = !newArea && band && given.kind === 'fill' ? bandArea(known!.geo!, given.s) : null;
     if (byLine && an.fill) an = { ...an, fill: byLine };
     // An empty fill is its border only: all of the object is the fill, on the area it keeps.
     const empty = given.kind === 'fill' && given.s.pattern === 'none' && (from ?? 'fill') === 'fill';
@@ -3074,7 +3142,7 @@ function restitchOnce(
     const satinRails =
       converting && src === 'satin' && !reshaping ? (known?.columns?.flat() ?? satinParts.flatMap((pt) => satinColumns(p, pt, kinds).map((c) => railsOf(p, c)).filter((r): r is Rails => !!r))) : undefined;
     // The drawn form is the source of the area when there is one, never traced back from stitches.
-    if (converting) area = newArea ?? (known?.form ? rasterize(known.form) : null) ?? known?.shape ?? (src === 'fill' ? an.fill : (railsArea(satinRails ?? []) ?? coveredBy(p, parts.filter((pt) => pt.kind === src))));
+    if (converting) area = newArea ?? geoArea(known) ?? known?.shape ?? (src === 'fill' ? an.fill : (railsArea(satinRails ?? []) ?? coveredBy(p, parts.filter((pt) => pt.kind === src))));
     // A fill made from satin gets rows across the area in the direction with the fewest sections.
     const settings: Settings =
       converting && given.kind === 'fill' && area
@@ -3083,12 +3151,12 @@ function restitchOnce(
     // All fill parts are one area, filled anew where the first of them was sewn; so are the parts
     // changing kind.
     const together = converting || settings.kind === 'fill';
-    const guide = converting && settings.kind === 'satin' ? (guides?.get(o.index) ?? known?.asSatin) : undefined;
+    const guide = converting && settings.kind === 'satin' ? (guides?.get(o.index) ?? known?.kept?.satin) : undefined;
     const fillS = settings.s as FillSettings;
     const covers = together && !converting && fillS.underlay && fillS.underCover ? coversOver(p, objs, o, an.fill?.pxMm ?? 0.1) : undefined;
     const filled = together && !converting ? newFill(p, o, an, fillS, reverse, covers, known) : null;
     // A drawn line: sewn anew along its curves as a whole.
-    const path = paths?.get(o.index) ?? known?.path;
+    const path = paths?.get(o.index) ?? lineGeoOf(known);
     const lineSt = !converting && path && settings.kind !== 'fill' ? asLine(settings, known?.line) : null;
     const line = lineSt && path ? lineStitches(path, lineSt, reverse) : null;
     const whole = !together ? null : converting ? convert(p, o, parts, src, area, settings, guide) : (filled?.runs ?? null);
@@ -3126,22 +3194,20 @@ function restitchOnce(
     const newSatinS = settings.kind === 'satin' ? structuredClone(reverse ? swappedSides(settings.s) : settings.s) : undefined;
     const after: Remembered = converting
       ? newFillS
-        ? { region: area, fill: newFillS, shape: area ?? undefined, ...(known?.form ? { form: known.form } : {}), ...(satinRails?.length ? { asSatin: satinRails } : {}) }
-        : { region: null, satin: newSatinS, shape: area ?? undefined, ...(known?.form ? { form: known.form } : {}), ...(guide ? { columns: [guide] } : {}) }
+        ? { region: area, fill: newFillS, ...keptOver(known, area, satinRails?.length ? satinRails : undefined) }
+        : { region: null, satin: newSatinS, ...keptOver(known, area), ...(guide ? { columns: [guide] } : {}) }
       : {
           region: an.fill,
           fill: newFillS ?? known?.fill,
           satin: newSatinS ?? known?.satin,
           columns: settings.kind === 'satin' ? (rails.length === satinParts.length ? rails : undefined) : known?.columns,
           shape: known?.shape,
-          ...(known?.form && !newArea ? { form: known.form, ...(known.knockout ? { knockout: true, cut: known.cut } : {}) } : {}),
+          ...(path && lineSt ? { geo: path } : known?.geo && !newArea ? { geo: known.geo, ...(known.knockout ? { knockout: true, cut: known.cut } : {}) } : {}),
           ...(known?.overlapShare !== undefined ? { overlapShare: known.overlapShare } : {}),
-          ...(path && lineSt ? { path, line: lineSt } : {}),
+          ...(path && lineSt ? { line: lineSt } : {}),
           ...(known?.under && !filled ? { under: known.under, ...(known.underFrom ? { underFrom: known.underFrom } : {}) } : {}),
           ...(known?.borderAt && !filled ? { borderAt: known.borderAt } : {}),
-          // Its shape changed: the satin it was no longer fits.
-          ...(known?.asSatin && !newArea ? { asSatin: known.asSatin } : {}),
-          ...(known?.asLine && settings.kind === 'fill' ? { asLine: lineFillOf(known.asLine, settings.s) } : {}),
+          ...keptAfter(known?.kept, !!newArea),
           ...(known?.outline ? { outline: known.outline, border: known.border } : {}),
           ...(known?.blendOf ? { blendOf: known.blendOf } : {}),
           ...(known?.piece && settings.kind === 'fill' ? { piece: known.piece } : {}),
@@ -3279,20 +3345,20 @@ function restitchOnce(
   return { pattern: tidy(withRecords(p, x, y, cmd)), starts, ends, failed, regions, memory };
 }
 
-/** What a fill along a line remembers of it: the line with the width and ends the fill sets. */
-export interface LineFill {
-  path: Form;
-  line: PathStitch;
-  cap?: LineCap;
+/**
+ * What an object whose stitch type changed keeps of before: its form, the area it was sewn on (to
+ * change back on the same one) and the settings of its other stitch types, with `satin` the
+ * columns of the satin it was.
+ */
+function keptOver(known: Remembered | null | undefined, area: Region | null, satin?: Rails[]): Partial<Remembered> {
+  const { satin: _used, ...kept } = known?.kept ?? {};
+  return { shape: area ?? undefined, ...(known?.geo ? { geo: known.geo } : {}), ...keptAfter({ ...kept, ...(satin ? { satin } : {}) }, false) };
 }
 
-/** The line of a fill along it, with the width and ends from the fill's settings. */
-export function lineFillOf(l: LineFill, s: FillSettings): LineFill {
-  return { path: l.path, line: { ...l.line, width: s.lineWidth ?? l.line.width }, cap: s.lineCap ?? l.cap ?? 'flat' };
-}
-
-/** The area of a fill along a line: the line in its width, with its ends. */
-export function lineFillArea(l: LineFill, s?: FillSettings): Region | null {
-  const x = s ? lineFillOf(l, s) : l;
-  return rasterizeStroke(x.path, x.line.width, 0.1, x.cap ?? 'flat');
+/** The settings of other stitch types an object keeps; with its form changed, the satin it was no longer fits. */
+function keptAfter(kept: Kept | undefined, reshaped: boolean): Partial<Remembered> {
+  if (!kept) return {};
+  const { satin, ...rest } = kept;
+  const k: Kept = { ...rest, ...(satin && !reshaped ? { satin } : {}) };
+  return k.line || k.fill || k.satin ? { kept: k } : {};
 }

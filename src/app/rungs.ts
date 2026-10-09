@@ -480,7 +480,7 @@ export function bindRungs(app: RungsApp) {
     const an = obj && analyze(p, obj, q.kinds);
     const known = obj && remembered(p, obj);
     // Once a satin: back to the columns it had (kept with the fill), not a new suggestion.
-    if (known?.asSatin?.length) return false;
+    if (known?.kept?.satin?.length) return false;
     const area = an && (known?.shape ?? an.fill);
     if (!area) return false;
     const s = suggestSatin(area);

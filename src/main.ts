@@ -485,6 +485,9 @@ const { canPaste, closeShape, copySelected, deleteSelected, duplicateSelected, p
   get applyEdit() {
     return applyEdit;
   },
+  get history() {
+    return history;
+  },
   get applyRestitched() {
     return applyRestitched;
   },

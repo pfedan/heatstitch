@@ -41,7 +41,7 @@ describe('shapes aside', () => {
     expect(nobjs).toHaveLength(3);
     expect(nobjs[1].stitches).toBe(disc.stitches);
     expect(nobjs[1].color).toEqual(disc.color);
-    expect(remembered(back.pattern, nobjs[1])?.form).toBeTruthy();
+    expect(remembered(back.pattern, nobjs[1])?.geo).toBeTruthy();
     expect(asideOf(back.pattern)).toHaveLength(0);
   });
 

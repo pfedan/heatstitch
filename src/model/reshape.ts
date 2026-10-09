@@ -1,5 +1,6 @@
 import { listOf, sewList, specOf } from './sew';
-import { lineSettings, reshapeLineFill, resewLine } from './line';
+import { fillToLine, lineSettings, reshapeLineFill, resewLine } from './line';
+import { followerLinks } from './border';
 import { bounds, flatten, scaling, transformForm, type Form, type Mat } from '../shape/path';
 import { cutKey, sewnArea } from './knockout';
 import { rememberObjects, sewObjects, type SewObject } from './objects';
@@ -12,7 +13,7 @@ import { cumulative, cutLinesBetween, pointAt, railsFromOutline, stripsOfAreas, 
 import { rasterize } from '../shape/rasterize';
 import { stitchKinds } from './sequence';
 import { isRigid, mirroredEcho, scaleOf, stitchesBefore, transformObject, transformRemembered } from './transform';
-import { areaOf, geoOf, geoUse, lineGeoOf, outlinePaths, satinOutline, sewnAlong, withGeo } from './geo';
+import { areaOf, fits, geoOf, geoUse, lineGeoOf, outlinePaths, satinOutline, sewnAlong, withGeo } from './geo';
 
 function totalStitches(p: Pattern): number {
   let n = 0;
@@ -52,7 +53,7 @@ function keepGrouping(before: Pattern, objs: SewObject[], o: SewObject, after: P
  * fills cover.
  */
 export function reshapeFill(p: Pattern, objs: SewObject[], o: SewObject, kinds: Uint8Array, form: Form, trimMm: number, knockout?: boolean, change?: Partial<FillSettings>): RestitchResult | null {
-  if (remembered(p, o)?.asLine) return reshapeLineFill(p, objs, o, kinds, form, trimMm);
+  if (geoUse(remembered(p, o)) === 'band') return reshapeLineFill(p, objs, o, kinds, form, trimMm);
   const known = keepShape(p, o, kinds);
   const cut = knockout ?? !!remembered(p, o)?.knockout;
   const area = sewnArea(p, objs, o, form, cut, known.region?.pxMm ?? 0.1);
@@ -67,7 +68,7 @@ export function reshapeFill(p: Pattern, objs: SewObject[], o: SewObject, kinds: 
   const s = { ...fill, ...change };
   const r = restitch(p, objs, [o.index], { kind: 'fill', s }, kinds, trimMm, undefined, false, undefined, new Map([[o.index, area]]));
   r.memory.forEach((m) => {
-    Object.assign(m, withGeo(m, form, 'area'));
+    Object.assign(m, withGeo(m, form));
     if (cut) {
       m.knockout = true;
       m.cut = cutKey(area);
@@ -275,7 +276,7 @@ export function reshapeSatin(p: Pattern, objs: SewObject[], o: SewObject, kinds:
   const before = remembered(p, o)?.shape ?? known.region ?? railsArea(known.columns?.flat() ?? []);
   const guide = columnsOver(geo, area, known.columns?.flat() ?? [], before, satinOutline(p, o, kinds));
   const r = restitch(p, objs, [o.index], { kind: 'satin', s: satin }, kinds, trimMm, undefined, false, guide ? new Map([[o.index, guide]]) : undefined, new Map([[o.index, area]]));
-  r.memory.forEach((m) => Object.assign(m, withGeo(m, geo, 'area')));
+  r.memory.forEach((m) => Object.assign(m, withGeo(m, geo)));
   if (r.starts.length) keepGrouping(p, objs, o, r.pattern, totalStitches(r.pattern) - totalStitches(p));
   return r.starts.length ? r : null;
 }
@@ -285,15 +286,54 @@ export function reshapeSatin(p: Pattern, objs: SewObject[], o: SewObject, kinds:
  * new paths, a fill or a band in its new area, a satin over it. Its stitch type and settings stay.
  * Null when nothing could be sewn there.
  */
+/**
+ * Fills `which` sewn as lines along their paths (see fillToLine), as one result; the links of the
+ * borders and blends in threads of their own that go with them are in `drop`. Null when none could be.
+ */
+export function fillsToLines(p: Pattern, which: number[], trimMm: number, geo?: Form): (RestitchResult & { drop: Set<string> }) | null {
+  let cur = p;
+  const done: number[] = [];
+  const failed: number[] = [];
+  const drop = new Set<string>();
+  for (const o of which) {
+    const m = remembered(cur, sewObjects(cur)[o]);
+    const r = fillToLine(cur, o, trimMm, geo);
+    if (!r) {
+      failed.push(o);
+      continue;
+    }
+    for (const l of followerLinks(m)) drop.add(l);
+    cur = r.pattern;
+    done.push(o);
+  }
+  if (!done.length) return null;
+  const objs = sewObjects(cur);
+  const sewn = done.map((o) => objs[o]);
+  return {
+    pattern: cur,
+    starts: sewn.map((o) => stitchesBefore(cur, o.first)),
+    ends: sewn.map((o) => stitchesBefore(cur, o.last + 1)),
+    failed,
+    regions: sewn.map(() => null),
+    memory: sewn.map((o) => remembered(cur, o)!),
+    drop,
+  };
+}
+
+/** One object sewn anew as a line, as what restitch gives. */
+function asResult(r: { pattern: Pattern; first: number; last: number } | null): RestitchResult | null {
+  if (!r) return null;
+  const memory = remembered(r.pattern, sewObjects(r.pattern).find((x) => x.first === r.first)!)!;
+  return { pattern: r.pattern, starts: [stitchesBefore(r.pattern, r.first)], ends: [stitchesBefore(r.pattern, r.last + 1)], failed: [], regions: [null], memory: [memory] };
+}
+
 export function reshapeObject(p: Pattern, objs: SewObject[], o: SewObject, kinds: Uint8Array, geo: Form, trimMm: number): RestitchResult | null {
   const known = remembered(p, o);
-  if (sewnAlong(p, o)) {
-    const r = resewLine(p, o.index, geo, lineSettings(p, o, kinds), trimMm);
-    if (!r) return null;
-    const memory = remembered(r.pattern, sewObjects(r.pattern).find((x) => x.first === r.first)!)!;
-    return { pattern: r.pattern, starts: [stitchesBefore(r.pattern, r.first)], ends: [stitchesBefore(r.pattern, r.last + 1)], failed: [], regions: [null], memory: [memory] };
-  }
+  if (sewnAlong(p, o)) return asResult(resewLine(p, o.index, geo, lineSettings(p, o, kinds), trimMm));
   if (geoUse(known) === 'band') return reshapeLineFill(p, objs, o, kinds, geo, trimMm);
+  // Its last closed path opened: nothing left to fill, it is sewn along its paths, its fill kept
+  // to fill it again once a path is closed (see fillToLine).
+  if (!fits(geo, 'fill') && (knownKind(known) ?? o.kind) === 'fill') return asResult(fillToLine(p, o.index, trimMm, geo));
   if ((knownKind(known) ?? o.kind) === 'satin') return reshapeSatin(p, objs, o, kinds, geo, trimMm);
   return reshapeFill(p, objs, o, kinds, geo, trimMm);
 }
@@ -340,15 +380,19 @@ export function transformSewObject(p: Pattern, objs: SewObject[], o: SewObject, 
   // A line with its paths: scaled or mirrored, it is sewn anew along them with its settings
   // (mirrored, its stitches would go round its echo copies and satin the other way than sewing it
   // along the mirrored paths does).
+  // Turned, its echo copies are laid out anew too: where a copy starts and the travel to it come
+  // from choices along the turned paths (the nearest point, a pixel grid), so the turned stitches
+  // can part from the copies of the turned line.
   const line = lineGeoOf(known);
   const mirrors = m[0] * m[3] - m[1] * m[2] < 0;
-  if (line && (!rigid || (mirrors && !known?.free))) {
+  const turns = m[0] !== 1 || m[1] !== 0 || m[2] !== 0 || m[3] !== 1;
+  if (line && (!rigid || ((mirrors || (turns && !!known?.line?.echo)) && !known?.free))) {
     const r = resewLine(p, o.index, transformForm(line, m), mirroredEcho(lineSettings(p, o, kinds), line, m), trimMm);
     return r && { ...r, restitched: true };
   }
   // A fill along a line: filled anew along the scaled line, in a width scaled with it.
   if (geoUse(known) === 'band' && !rigid) {
-    const width = (known!.fill!.lineWidth ?? known!.asLine!.line.width) * scaleOf(m);
+    const width = known!.fill!.lineWidth! * scaleOf(m);
     const r = reshapeLineFill(p, objs, o, kinds, transformForm(geoOf(known)!, m), trimMm, width);
     const fresh = r?.starts.length ? sewObjects(r.pattern).find((x) => stitchesBefore(r.pattern, x.first) === r.starts[0]) : undefined;
     if (!r || !fresh) return null;
@@ -392,7 +436,7 @@ export function transformSewObject(p: Pattern, objs: SewObject[], o: SewObject, 
   if (!r.starts.length) return null;
   // The scaled curves stay the shape.
   const scaledArea = areaOf(after);
-  if (scaledArea) r.memory.forEach((x) => Object.assign(x, withGeo(x, scaledArea, 'area')));
+  if (scaledArea) r.memory.forEach((x) => Object.assign(x, withGeo(x, scaledArea)));
   keepGrouping(p, objs, o, r.pattern, totalStitches(r.pattern) - totalStitches(p));
   const fresh = sewObjects(r.pattern);
   const start = r.starts[0];

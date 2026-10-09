@@ -121,7 +121,7 @@ describe('split a fill', () => {
     // Each part knows its form and has its own direction.
     const a = remembered(s.pattern, objs[0])!;
     const b = remembered(s.pattern, objs[1])!;
-    expect(a.form && b.form).toBeTruthy();
+    expect(a.geo && b.geo).toBeTruthy();
     expect(a.fill!.angle).not.toBe(b.fill!.angle);
     // Together they cover the old area.
     expect(uncovered(whole, [areaOf(s.pattern, 0), areaOf(s.pattern, 1)])).toBeLessThan(0.002);
@@ -148,10 +148,11 @@ describe('split a fill', () => {
     expect(sewObjects(again.pattern)).toHaveLength(4);
   });
 
-  it('leaves empty fills and fills from a file alone', () => {
+  it('leaves lines that were fills and fills from a file alone', () => {
     const q = design();
     const e = sewObjects(q)[0];
-    remember(q, e, { ...remembered(q, e)!, fill: { ...remembered(q, e)!.fill!, pattern: 'none' } });
+    const { fill, ...line } = remembered(q, e)!;
+    remember(q, e, { ...line, line: { type: 'run', width: 2 }, kept: { fill: fill! } });
     expect(canSplit(q, 0)).toBe(false);
     remember(q, e, { ...remembered(q, e)!, fill: undefined });
     expect(canSplit(q, 0)).toBe(false);

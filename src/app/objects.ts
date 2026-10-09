@@ -303,7 +303,7 @@ export function bindObjects(app: ObjectsApp) {
     const form = forms.length && forms.every(Boolean) ? unionForm(forms as Form[]) : null;
     const area = form ? wholeArea(form) : fills ? unionRegion(objs.flatMap((o) => remembered(p, o)?.region ?? analyze(p, o, q.kinds).fill ?? [])) : null;
     if (merged >= 0 && fill && area) {
-      remember(target, nq.objects[merged], form ? withGeo({ region: area, fill }, form, 'area') : { region: area, fill });
+      remember(target, nq.objects[merged], form ? withGeo({ region: area, fill }, form) : { region: area, fill });
       const r = restitch(target, nq.objects, [merged], { kind: 'fill', s: fill }, nq.kinds, app.settings.trimMm);
       if (r.starts.length) {
         ui.selectedObjects = new Set([merged]);

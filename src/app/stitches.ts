@@ -14,7 +14,7 @@ import { SATIN_SHARE } from '../model/covers';
 import { currentSettings } from '../correct/plan';
 import { isCovered, setOverlapShare } from '../model/knockout';
 import { isStroke, SATIN_MAX, pullFor, digitizeDefaults } from '../digitize/digitize';
-import { closedLineToFill, lineSettings, lineToFill } from '../model/line';
+import { fillOfLine, lineSettings, lineToFill } from '../model/line';
 import { outline } from '../digitize/region';
 import { recommendedSpacing } from '../validation/profiles';
 import { rememberObjects, type SewObject } from '../model/objects';
@@ -46,7 +46,7 @@ export interface StitchesApp {
   readonly sewAlongLines: () => void;
   readonly suggestLines: () => void;
   readonly sewLine: (o: number, path: Form | null, st: PathStitch | null, final: boolean) => boolean;
-  readonly sewLineAgain: (o: number) => void;
+  readonly sewLineAgain: (objs: number[]) => void;
   /** Stichart Satin on one fill as R and Vorschlagen do it; false when the shape is not lines (see bindRungs). */
   readonly convertToSatin: (o: number) => boolean;
   readonly toggleGuides: () => void;
@@ -127,7 +127,8 @@ export function bindStitches(app: StitchesApp) {
     const one = ui.selectedObjects.size === 1 ? q.objects[[...ui.selectedObjects][0]] : undefined;
     if (one && app.isLineObject(p, one)) {
       const form = guessLine(p, one, q.kinds);
-      info.path = { st: lineSettings(p, one, q.kinds), traced: !lineGeoOf(remembered(p, one)), closed: !!form?.paths.length && form.paths.every((x) => x.closed), fills: fits(form, 'fill'), color: one.color };
+      const m = remembered(p, one);
+      info.path = { st: lineSettings(p, one, q.kinds), traced: !lineGeoOf(m), closed: !!form?.paths.length && form.paths.every((x) => x.closed), fills: fits(form, 'fill'), refill: !!m?.kept?.fill, color: one.color };
     }
     if (one && geoUse(remembered(p, one)) === 'band') info.asLine = true;
     const orig = app.files.active?.pattern === p ? app.files.active.original : undefined;
@@ -276,7 +277,7 @@ export function bindStitches(app: StitchesApp) {
    * Takes over new stitches for the selected objects; `failed` is said for objects left as they
    * were. With `remeasure` (another kind of stitch), the panel measures the objects again.
    */
-  function applyRestitched(r: RestitchResult | null, failed: Key, remeasure = false, find: ((p: Pattern) => number | null) | null = null): void {
+  function applyRestitched(r: RestitchResult | null, failed: Key, remeasure = false, find: ((p: Pattern) => number | null) | null = null, drop?: ReadonlySet<string>): void {
     const f = app.files.active;
     ui.flowPreview = null;
     if (!f || !r) return app.redraw();
@@ -306,7 +307,7 @@ export function bindStitches(app: StitchesApp) {
     // The parts of a fill cut apart share the border given to one of them.
     shareBorders(r.pattern, [...sel].map((o) => nq.objects[o]));
     // Borders in a thread of their own follow their fills; the selection is found again by its stitches.
-    const p = syncBorders(r.pattern, app.settings.trimMm, dropLinks);
+    const p = syncBorders(r.pattern, app.settings.trimMm, drop ?? dropLinks);
     dropLinks = new Set();
     let selNow = sel;
     if (p !== r.pattern) {
@@ -372,18 +373,15 @@ export function bindStitches(app: StitchesApp) {
       const p = app.files.active?.pattern;
       if (!p || !ui.selectedObjects.size) return;
       const one = ui.selectedObjects.size === 1 ? [...ui.selectedObjects][0] : -1;
-      // A wide line: as a fill of its area, and back to the line it was.
-      if (to === 'line') {
-        if (one >= 0) app.sewLineAgain(one);
-        return;
-      }
+      // Fills sewn along their paths as lines, their fills kept to fill them again.
+      if (to === 'line') return app.sewLineAgain([...ui.selectedObjects].sort((a, b) => a - b));
       const path = to === 'fill' && one >= 0 ? lineGeoOf(remembered(p, app.seq(p).objects[one])) : undefined;
       if (path) {
         const d = digitizeDefaults(app.settings.profile);
         const fill = { pattern: 'tatami' as const, spacing: d.spacing, spacingEnd: Math.min(1.2, Math.round(d.spacing * 250) / 100), offset: 0.25, angle: NaN, stitch: d.stitch, underlay: d.underlay, edge: 0, tolerance: d.tolerance };
-        // A line with a closed path is filled inside and stays its border; an open satin line becomes a fill in its width.
-        const closed = fits(path, 'fill');
-        const r = closed ? closedLineToFill(p, one, fill, app.settings.trimMm) : lineToFill(p, one, fill, app.settings.trimMm);
+        // A line that was a fill is filled as it was; one with a closed path is filled inside and stays its border; an open satin line becomes a fill in its width.
+        const closed = fillOfLine(p, one) === 'area';
+        const r = lineToFill(p, one, fill, app.settings.trimMm);
         applyRestitched(r, 'stitch.failed', true);
         if (r?.starts.length) app.layers.say(t(closed ? 'stitch.closedFilled' : 'stitch.lineFilled'));
         return;

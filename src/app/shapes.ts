@@ -12,22 +12,23 @@ import type { SewObject } from '../model/objects';
 import type { Viewport } from '../render/viewport';
 import { ShapeTool } from '../ui/shapeTool';
 import { deleteObjects, duplicateObjects, mirrorMatrix, subtractTop } from '../model/shapeOps';
-import { reshapeObject } from '../model/reshape';
-import { resewLine, lineSettings, fillToLine, reshapeLineFill } from '../model/line';
+import { fillsToLines, reshapeObject } from '../model/reshape';
+import { resewLine, lineSettings, lineToFill, reshapeLineFill } from '../model/line';
 import { refreshKnockouts } from '../model/knockout';
 import { objectKey, remember, remembered, rememberedIn, restitch, type Remembered, type RestitchResult } from '../model/restitch';
 import { rasterize } from '../shape/rasterize';
-import { syncBorders } from '../model/border';
+import { followerLinks, syncBorders } from '../model/border';
 import { partOf } from '../model/shadow';
 import { stitchKey } from '../model/objects';
 import { t, formatNumber, type Key } from '../i18n';
 import { ui } from './state';
-import { geoUse, guessGeo, guessLine, sewnAlong, withGeo } from '../model/geo';
+import { bandArea, fits, fitsOf, geoOf, geoUse, guessGeo, guessLine, sewnAlong, withGeo } from '../model/geo';
 
 /** What bindShapes needs from the rest of the app. */
 export interface ShapesApp {
   readonly applyEdit: (p: Pattern, measurement?: Measurement | undefined) => void;
-  readonly applyRestitched: (r: RestitchResult | null, failed: Key, remeasure?: boolean) => void;
+  readonly applyRestitched: (r: RestitchResult | null, failed: Key, remeasure?: boolean, find?: null, drop?: ReadonlySet<string>) => void;
+  readonly history: (step: 'undo' | 'redo' | 'revert') => void;
   readonly closeRungs: () => void;
   readonly commitTransform: (m: Mat) => void;
   readonly editor: Editor;
@@ -66,7 +67,7 @@ export function bindShapes(app: ShapesApp) {
   function bandOf(p: Pattern, q: Sequence, o: number): { width: number; offset: number } | null {
     const obj = q.objects[o];
     const known = obj && remembered(p, obj);
-    if (geoUse(known) === 'band') return { width: known!.fill!.lineWidth ?? known!.asLine!.line.width, offset: 0 };
+    if (geoUse(known) === 'band') return { width: known!.fill!.lineWidth!, offset: 0 };
     const border = known?.fill?.border;
     if (border?.type === 'satin' || border?.type === 'zigzag') return { width: border.width, offset: border.offset ?? 0 };
     if (!obj || !isLineObject(p, obj)) return null;
@@ -179,21 +180,39 @@ export function bindShapes(app: ShapesApp) {
     return true;
   }
 
-  /** A fill that was a wide line sewn as that line again. */
-  function sewLineAgain(o: number): void {
-    const f = app.files.active;
-    const p = f?.pattern;
-    if (!f || !p) return;
-    const r = fillToLine(p, o, app.settings.trimMm);
-    if (!r) return app.layers.say(t('stitch.failed', { n: 1 }), true);
-    ui.flowPreview = null;
-    app.applyEdit(r.pattern);
-    app.files.setObjects(f, rememberedIn(r.pattern, app.seq(r.pattern).objects));
-    ui.selectedObjects = new Set([o]);
-    ui.selectionKey++;
-    ui.stitchCache = null;
+  /**
+   * Fills `objs` sewn as lines along their paths (one undo step), their fills kept to fill them
+   * again as they were; a band is the line it was again.
+   */
+  function sewLineAgain(objs: number[]): void {
+    const p = app.files.active?.pattern;
+    if (!p || !objs.length) return;
+    const bands = objs.every((o) => geoUse(remembered(p, app.seq(p).objects[o])) === 'band');
+    const r = fillsToLines(p, objs, app.settings.trimMm);
+    if (!r) return app.layers.say(t('stitch.failed', { n: objs.length }), true);
+    app.applyRestitched(r, 'stitch.failed', true, null, r.drop);
+    if (!bands && !r.failed.length) app.layers.say(t('stitch.lineAgain', { n: r.starts.length }));
     followKnockouts();
-    app.redraw();
+  }
+
+  /** Line `o` that was a fill filled again as it was (one undo step). */
+  function fillLineAgain(o: number): void {
+    const p = app.files.active?.pattern;
+    const obj = p && app.seq(p).objects[o];
+    const was = obj && remembered(p, obj)?.kept?.fill;
+    if (!p || !was) return;
+    app.applyRestitched(lineToFill(p, o, was, app.settings.trimMm), 'stitch.failed', true);
+    followKnockouts();
+  }
+
+  /** The open paths of the form of object `o` closed, and the object sewn in it (one undo step). */
+  function closeOpenPaths(o: number): void {
+    const p = app.files.active?.pattern;
+    const obj = p && app.seq(p).objects[o];
+    const geo = obj && geoOf(remembered(p, obj));
+    if (!geo) return;
+    const closed = { ...geo, paths: geo.paths.map((x) => (x.closed || x.nodes.length < 3 ? x : { ...x, closed: true })) };
+    if (sewShape(o, closed)) syncShape();
   }
 
   /** Edits the outline of object `o` (level Form, with the frame around it); objects without an outline go to their stitches. */
@@ -275,7 +294,9 @@ export function bindShapes(app: ShapesApp) {
     const q = app.seq(p);
     const obj = q.objects[o];
     if (!obj) return false;
-    const hand = remembered(p, obj)?.hand ?? 0;
+    const before = remembered(p, obj);
+    const hand = before?.hand ?? 0;
+    const was = guessGeo(p, obj, q.kinds);
     const r = reshapeObject(p, q.objects, obj, q.kinds, form, app.settings.trimMm);
     if (preview) {
       ui.flowPreview = r?.starts.length ? r.pattern : null;
@@ -288,9 +309,20 @@ export function bindShapes(app: ShapesApp) {
       app.redraw();
       return false;
     }
-    app.applyRestitched(r, 'shape.failed', true);
-    if (hand) app.layers.say(t('shape.handReplaced', { n: formatNumber(hand) }));
+    const now = r.memory[0];
+    // Its last closed path opened: a fill is sewn along its paths now; what follows it in a thread of its own goes.
+    const opened = !sewnAlong(p, obj) && geoUse(now) === 'line';
+    app.applyRestitched(r, 'shape.failed', true, null, opened ? new Set(followerLinks(before)) : undefined);
     followKnockouts();
+    if (hand) app.layers.say(t('shape.handReplaced', { n: formatNumber(hand) }));
+    else if (opened) app.layers.say({ text: t('shape.opened'), undo: () => app.history('undo') });
+    else if (geoUse(now) === 'line' && now.kept?.fill && fits(form, 'fill') && !fits(was, 'fill'))
+      app.layers.say({ text: t('shape.closedAgain'), action: { label: t('shape.fillAgain'), run: () => fillLineAgain(o) } });
+    else if (geoUse(now) === 'area' && now.fill) {
+      // Open paths beside closed ones are not filled: said when there are more of them than before.
+      const n = fitsOf(form).openBeside;
+      if (n > fitsOf(was).openBeside) app.layers.say({ text: t('shape.openBeside', { n }), action: { label: t('shape.closePaths', { n }), run: () => closeOpenPaths(o) } });
+    }
     return true;
   }
 
@@ -302,9 +334,12 @@ export function bindShapes(app: ShapesApp) {
     const f = app.files.active;
     const mem = remembered(p, obj);
     if (!f || !mem) return;
-    const use = isLineObject(p, obj) ? 'line' : (geoUse(mem) ?? 'area');
-    const rested: Remembered = withGeo(mem, form, use);
+    const line = isLineObject(p, obj);
+    // A line read from a file is sewn along its form from now on, with the stitch it has.
+    const rested: Remembered = withGeo(line && !mem.line ? { ...mem, line: lineSettings(p, obj) } : mem, form);
+    const use = geoUse(rested);
     if (use === 'area') rested.region = rasterize(form, mem.region?.pxMm ?? 0.1) ?? mem.region;
+    else if (use === 'band') rested.region = bandArea(form, rested.fill!, mem.region?.pxMm ?? 0.1) ?? mem.region;
     const next = nextVersion(p, {});
     remember(next, obj, rested);
     app.applyEdit(next);

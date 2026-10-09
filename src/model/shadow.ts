@@ -115,7 +115,7 @@ export function lineParts(m: Remembered): LinePart[] {
   // Right under the line a shadow has no object: the line keeps it, so it is back once moved out.
   if (st.shadow && !shadowUnder(st.shadow)) {
     const s = st.shadow;
-    out.push({ link: s.link, color: s.color, after: false, memory: withGeo({ region: null, line: shadowStitch(st), shadowOf: s.link }, shadowPath(lineGeoOf(m)!, s), 'line') });
+    out.push({ link: s.link, color: s.color, after: false, memory: withGeo({ region: null, line: shadowStitch(st), shadowOf: s.link }, shadowPath(lineGeoOf(m)!, s)) });
   }
   const e = st.echo;
   if (e?.link && e.colors) {
@@ -134,7 +134,7 @@ export function lineParts(m: Remembered): LinePart[] {
       const link = `${e.link}:${g.rings[0]}`;
       // With the line's phase and order, so its copies keep in step with those of the line.
       const echo = { side: e.side, count: e.count, gap: e.gap, ...(e.cut ? { cut: true } : {}), ...(e.phase ? { phase: e.phase } : {}), ...(e.reverse ? { reverse: true } : {}), only: g.rings };
-      out.push({ link, color: g.color, after: true, memory: withGeo({ region: null, line: { ...plain, echo }, echoOf: link }, lineGeoOf(m)!, 'line') });
+      out.push({ link, color: g.color, after: true, memory: withGeo({ region: null, line: { ...plain, echo }, echoOf: link }, lineGeoOf(m)!) });
     }
   }
   return out;
