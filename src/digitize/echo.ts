@@ -36,11 +36,22 @@ export interface LineEcho {
   only?: number[];
   /** Copies the line leaves out (they went their own way as objects of their own). */
   skip?: number[];
+  /**
+   * Each copy's pattern (a motif's figures, a zigzag's points) this far on from the one before
+   * (degrees of one period, -180 to 180): it adds up from copy to copy. None: all in step.
+   */
+  phase?: number;
+  /** Sewn the other way round: the farthest copy first and the line last (both sides: the outer side first). */
+  reverse?: boolean;
+  /** Stored files only: written since copies may overlap (older files kept wide stitches their width apart). */
+  overlap?: boolean;
 }
 
 export const ECHO_DEFAULT: LineEcho = { side: 'out', count: 2, gap: 3 };
 export const ECHO_COUNT: [number, number] = [1, 6];
-export const ECHO_GAP: [number, number] = [1, 10];
+/** From line to line (mm): below the width of the stitch the copies overlap, at 0 they lie on the line. */
+export const ECHO_GAP: [number, number] = [0, 10];
+export const ECHO_PHASE: [number, number] = [-180, 180];
 
 const isColor = (c: unknown) => {
   const x = c as ThreadColor | null;
@@ -62,6 +73,8 @@ export function isEcho(e: unknown): e is LineEcho {
     (x.cut === undefined || typeof x.cut === 'boolean') &&
     (x.colors === undefined || (Array.isArray(x.colors) && x.colors.every((c) => c === null || isColor(c)))) &&
     (x.link === undefined || typeof x.link === 'string') &&
+    (x.phase === undefined || (Number.isFinite(x.phase) && x.phase >= ECHO_PHASE[0] && x.phase <= ECHO_PHASE[1])) &&
+    (x.reverse === undefined || typeof x.reverse === 'boolean') &&
     [x.only, x.skip].every((l) => l === undefined || (Array.isArray(l) && l.every((k) => Number.isInteger(k) && k >= 1 && k <= ECHO_COUNT[1])))
   );
 }
@@ -88,41 +101,49 @@ function lengthOf(l: Pt[]): number {
 /**
  * The lines an echo of `line` is sewn along, in the order to sew them, each from the end nearest
  * where the one before ended: the line itself first when the copies lie on one side, or the
- * farthest copy on the inner (right) side first when they lie on both. `closed`: the line is a
- * loop (its first point repeated at the end); its copies are loops too. `gap` is at least
- * `minGap` (a satin needs its width).
+ * farthest copy on the inner (right) side first when they lie on both; `e.reverse` turns that
+ * round. `closed`: the line is a loop (its first point repeated at the end); its copies are loops
+ * too. `gap` is at least `minGap`. `returns`: each line is sewn back to where it started (an even
+ * number of passes), so the next starts near there.
  */
-export function echoLines(line: Pt[], closed: boolean, e: LineEcho, minGap = 0): EchoLine[] {
-  const base = { line, closed, back: false };
+export function echoLines(line: Pt[], closed: boolean, e: LineEcho, minGap = 0, returns = false): EchoLine[] {
+  const base: EchoLine = { line, closed, back: false, k: 0 };
   if (line.length < 2) return [base];
   const gap = Math.max(e.gap, minGap);
   const n = Math.max(1, Math.round(e.count));
   // The line with its copies in its own thread, or only the copies asked for.
   const rings = new Set(e.only ?? ownCopies(e));
   const levels: number[] = [];
-  if (e.side === 'both') for (let k = n; k >= 1; k--) if (rings.has(k)) levels.push(-k * gap);
+  if (e.side === 'both') for (let k = n; k >= 1; k--) if (rings.has(k)) levels.push(-k);
   if (!e.only) levels.push(0);
-  for (let k = 1; k <= n; k++) if (rings.has(k)) levels.push((e.side === 'in' ? -k : k) * gap);
+  for (let k = 1; k <= n; k++) if (rings.has(k)) levels.push(e.side === 'in' ? -k : k);
   if (!levels.length) return [];
-  const field = distanceField(line, n * gap + 1);
+  if (e.reverse) levels.reverse();
+  const field = gap >= ON_LINE ? distanceField(line, n * gap + 1, gap) : null;
   const out: EchoLine[] = [];
   const turn = closed ? Math.sign(area(line)) : 0;
   let at: Pt | null = null;
-  for (const lv of levels) {
-    const pieces = lv === 0 ? [base] : copiesAt(field, line, closed, lv).map((pc) => ({ ...pc, back: pc.closed && Math.sign(area(pc.line)) !== turn }));
-    for (const pc of order(pieces, at)) {
+  for (const k of levels) {
+    // No gap: each copy lies on the line.
+    const pieces = k === 0 ? [base] : !field ? [{ ...base, k }] : copiesAt(field, line, closed, k * gap).map((pc) => ({ ...pc, back: pc.closed && Math.sign(area(pc.line)) !== turn, k }));
+    for (const pc of order(pieces, at, returns)) {
       out.push(pc);
-      at = pc.line[pc.line.length - 1];
+      at = returns && !pc.closed ? pc.line[0] : pc.line[pc.line.length - 1];
     }
   }
   return out;
 }
+
+/** Copies nearer the line than this (mm) lie on it. */
+const ON_LINE = 0.05;
 
 /** A line to sew: `back` when it runs against the drawn direction of the line it echoes (what lies to one side of it stays there). */
 export interface EchoLine {
   line: Pt[];
   closed: boolean;
   back: boolean;
+  /** Which copy: 1 nearest, negative on the inner (right) side, 0 the line itself. */
+  k: number;
 }
 
 /** Twice the signed area of a loop: its sign tells which way round it goes. */
@@ -137,8 +158,8 @@ interface Field {
   d: Float32Array;
 }
 
-/** Distance (mm) of each pixel to the line, out to `reach` mm around it. */
-function distanceField(line: Pt[], reach: number): Field {
+/** Distance (mm) of each pixel to the line, out to `reach` mm around it; pixels fine enough for copies `gap` apart. */
+function distanceField(line: Pt[], reach: number, gap: number): Field {
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
@@ -150,7 +171,8 @@ function distanceField(line: Pt[], reach: number): Field {
     maxY = Math.max(maxY, y);
   }
   const span = (maxX - minX + 2 * reach) * (maxY - minY + 2 * reach);
-  const px = Math.max(0.1, Math.sqrt(span / MAX_PIXELS));
+  // A few pixels from copy to copy at least, so near copies stay smooth.
+  const px = Math.max(Math.min(0.1, Math.max(0.02, gap / 4)), Math.sqrt(span / MAX_PIXELS));
   const x0 = Math.floor((minX - reach) / px) - 2;
   const y0 = Math.floor((minY - reach) / px) - 2;
   const w = Math.ceil((maxX + reach) / px) + 2 - x0;
@@ -265,7 +287,7 @@ function copiesAt(f: Field, line: Pt[], closed: boolean, level: number): { line:
 }
 
 /** The pieces of one copy, each from its end (or for loops, its point) nearest where the needle is; the first stays as it is when nothing was sewn yet. */
-function order(pieces: EchoLine[], from: Pt | null): EchoLine[] {
+function order(pieces: EchoLine[], from: Pt | null, returns = false): EchoLine[] {
   if (!from) return pieces;
   const todo = pieces.slice();
   const out: EchoLine[] = [];
@@ -296,8 +318,8 @@ function order(pieces: EchoLine[], from: Pt | null): EchoLine[] {
       l = l.slice().reverse();
       back = !back;
     }
-    out.push({ line: l, closed: pc.closed, back });
-    at = l[l.length - 1];
+    out.push({ line: l, closed: pc.closed, back, k: pc.k });
+    at = returns && !pc.closed ? l[0] : l[l.length - 1];
   }
   return out;
 }

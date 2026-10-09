@@ -31,7 +31,7 @@ const FINE = 0.1;
 /** Shortest stitch of a motif (mm): the figures are small, the needle needs room. */
 const MIN_STITCH = 0.6;
 /** Longest stitch of a motif (mm), and how close its stitches keep to the figure: small figures need short stitches to stay round. */
-const MOTIF_STITCH = 1.2;
+export const MOTIF_STITCH = 1.2;
 const MOTIF_TOLERANCE = 0.05;
 
 /** A line by arc length: the point at `s` mm and the unit normal there (to the right on screen, y down). */
@@ -71,24 +71,31 @@ function frame(line: Pt[], closed: boolean) {
 /**
  * The needle points of `motif` along `line` (closed: first point repeated at the end): `width` mm
  * across, one figure every `period` mm, on the side `side` (1: the normal's, -1: the other).
+ * `shift`: the figures start this share of a period later (0 to 1; an open line then begins and
+ * ends with part of a figure).
  */
-export function motifStitches(line: Pt[], closed: boolean, motif: LineMotif, width: number, period: number, side: 1 | -1 = 1): Pt[] {
+export function motifStitches(line: Pt[], closed: boolean, motif: LineMotif, width: number, period: number, side: 1 | -1 = 1, shift = 0, stitch = MOTIF_STITCH): Pt[] {
   const f = frame(line, closed);
   if (f.total < 0.5) return [];
   const count = Math.max(1, Math.round(f.total / Math.max(0.5, period)));
   const d = f.total / count;
+  const o = (((shift % 1) + 1) % 1) * d;
   const fine: Pt[] = [];
   const run = (a: number, b: number) => {
     for (let s = a; s < b; s += FINE) fine.push(f.at(s));
     fine.push(f.at(b));
   };
-  if (motif === 'waves') {
+  /** A figure that is an offset from the line, sampled finely along it. */
+  const along = (off: (s: number) => number) => {
     const n = Math.ceil(f.total / FINE);
     for (let i = 0; i <= n; i++) {
       const s = (f.total * i) / n;
-      fine.push(f.at(s, (width / 2) * Math.sin((2 * Math.PI * s) / d)));
+      fine.push(f.at(s, off(s)));
     }
-  } else if (motif === 'scallops') {
+  };
+  if (motif === 'waves') along((s) => (width / 2) * Math.sin((2 * Math.PI * (s - o)) / d));
+  else if (motif === 'scallops' && o > 0) along((s) => width * side * Math.abs(Math.sin((Math.PI * (s - o)) / d)));
+  else if (motif === 'scallops') {
     const h = width * side;
     for (let k = 0; k < count; k++) {
       const steps = Math.max(8, Math.ceil(d / FINE));
@@ -101,8 +108,10 @@ export function motifStitches(line: Pt[], closed: boolean, motif: LineMotif, wid
     // A heart on the line every period, hanging from it; a running stitch between them.
     const size = Math.min(width, motifMaxSize('hearts', d));
     let s = 0;
-    for (let k = 0; k < count; k++) {
-      const at = k * d + d / 2;
+    // Shifted on an open line: the hearts that still hang on it.
+    for (let k = closed || !o ? 0 : -1; k < count; k++) {
+      const at = o + k * d + d / 2;
+      if (!closed && (at < 0 || at > f.total)) continue;
       run(s, at);
       fine.push(...heart(f, at, size, side));
       s = at;
@@ -111,8 +120,8 @@ export function motifStitches(line: Pt[], closed: boolean, motif: LineMotif, wid
   } else {
     // Chain stitch look: a teardrop loop forward from each point, the next starting inside it.
     const link = d * 1.35;
-    for (let k = 0; k < count; k++) {
-      const s0 = k * d;
+    for (let k = closed || !o ? 0 : -1; k < count; k++) {
+      const s0 = o + k * d;
       const steps = Math.max(12, Math.ceil((2 * link) / FINE));
       for (let i = 0; i <= steps; i++) {
         const t = (2 * Math.PI * i) / steps;
@@ -122,7 +131,7 @@ export function motifStitches(line: Pt[], closed: boolean, motif: LineMotif, wid
       run(s0, Math.min(f.total, s0 + d));
     }
   }
-  const pts = runStitch(fine, MOTIF_STITCH, MOTIF_TOLERANCE);
+  const pts = runStitch(fine, Math.max(MIN_STITCH, stitch), MOTIF_TOLERANCE);
   return dropShort(pts);
 }
 

@@ -2,6 +2,7 @@ import { formatNumber, getLang, t } from '../../i18n';
 import { recolorBlock } from '../../model/border';
 import type { Pattern, ThreadColor } from '../../model/pattern';
 import { colorBlocks, type ColorBlock } from '../../model/sequence';
+import { threadMeters, threadUse } from '../../model/threadUse';
 import { canRun, runCommand } from '../../shell/commands';
 import { h } from '../../shell/h';
 import { toast } from '../../shell/ui';
@@ -24,7 +25,8 @@ export function createThreads(app: DesignApp): { el: HTMLElement; render: (p: Pa
   const state = h('p', { class: 'dt-state muted', role: 'status' });
   const switchBtn = h('button', { type: 'button', class: 'dt-switch', onclick: () => switchAll() });
   const listBtn = h('button', { type: 'button', class: 'link dt-listlink', onclick: () => runCommand('colorList.open') });
-  const el = h('div', { class: 'dt' }, list, h('label', { class: 'dt-brandrow' }, brandLabel, brand), h('div', { class: 'dt-actions' }, state, switchBtn), listBtn);
+  const total = h('p', { class: 'dt-total' });
+  const el = h('div', { class: 'dt' }, list, total, h('label', { class: 'dt-brandrow' }, brandLabel, brand), h('div', { class: 'dt-actions' }, state, switchBtn), listBtn);
 
   brand.addEventListener('change', () => {
     chooseCatalog(brand.value);
@@ -70,11 +72,12 @@ export function createThreads(app: DesignApp): { el: HTMLElement; render: (p: Pa
     // The color list may only be opened while the frame offers it.
     listBtn.disabled = !canRun('colorList.open');
     const cats = catalogsNow();
-    const key = [getLang(), chosenCatalog(), catalogPicked(), cats.length].join('|');
+    const key = [getLang(), chosenCatalog(), catalogPicked(), cats.length, app.settings.profile.fabric].join('|');
     if (last === key && blocksOf === p) return summary;
     last = key;
     blocksOf = p;
     blocks = colorBlocks(p);
+    const use = threadUse(p, app.settings.profile.fabric);
     const spools = new Set(blocks.map((b) => spoolKey(b.color))).size;
     summary = blocks.length ? t('design.threads.count', { colors: blocks.length, spools, n: blocks.length === 1 && spools === 1 ? 1 : 0 }) : '';
 
@@ -91,15 +94,22 @@ export function createThreads(app: DesignApp): { el: HTMLElement; render: (p: Pa
         sw.style.background = cssColor(b.color);
         return h(
           'li',
-          { class: 'dt-row', title: `${b.color.name ?? hexColor(b.color)}${code ? ` · ${code}` : ''} · ${formatNumber(b.stitches)} ${t('stats.stitches')}` },
+          { class: 'dt-row', title: `${b.color.name ?? hexColor(b.color)}${code ? ` · ${code}` : ''} · ${formatNumber(b.stitches)} ${t('stats.stitches')} · ${t('design.threads.length', { m: threadMeters(use.top[b.index] ?? 0) })}` },
           h('span', { class: 'dt-num' }, String(b.index + 1)),
           sw,
           h('span', { class: 'dt-text' }, h('span', { class: 'dt-name' }, b.color.name || hexColor(b.color)), code ? h('span', { class: 'dt-code' }, code) : null),
-          h('span', { class: 'dt-count' }, formatNumber(b.stitches)),
+          h('span', { class: 'dt-count' }, `${threadMeters(use.top[b.index] ?? 0)} m`),
         );
       }),
     );
     if (!blocks.length) list.append(h('li', { class: 'muted dt-none' }, t('design.threads.none')));
+    // All the thread, and the bobbin thread small below: estimates (see threadUse).
+    total.hidden = !blocks.length;
+    total.title = t('design.threads.estimate');
+    total.replaceChildren(
+      h('span', { class: 'dt-total-row' }, h('span', null, t('design.threads.total')), h('span', { class: 'dt-total-m' }, `${threadMeters(use.topTotal)} m`)),
+      h('span', { class: 'dt-bobbin' }, t('design.threads.bobbin', { m: threadMeters(use.bobbin) })),
+    );
 
     // The brand: the same choice as in the thread picker and the color list.
     brandLabel.textContent = t('design.threads.brand');

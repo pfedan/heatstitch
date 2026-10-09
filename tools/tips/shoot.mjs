@@ -84,7 +84,8 @@ const SHOTS = {
   'view-shapes': [async (page) => (await design('Blume')(page), shapesView(page)), [640, 260, 320, 200]],
   light: [async (page) => (await design('Schriftzug')(page), toggle('live-light', true)(page)), [520, 590, 320, 200]],
   motif: [async (page) => (await design('Musterkarte')(page), toggle('live-light', true)(page)), [734, 405, 160, 100]],
-  echo: [design('Linien mit Parametern'), [720, 662, 180, 112.5]],
+  'echo-one': [design('Linieneffekte'), [470, 136, 368, 230]],
+  'echo-both': [design('Linieneffekte'), [836, 362, 320, 200]],
   shadow: [design('Linien mit Parametern'), [720, 793, 180, 112.5]],
   border: [design('Handtuch'), [572, 518, 224, 140]],
 };

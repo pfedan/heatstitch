@@ -48,6 +48,8 @@ describe('tooltip pictures', () => {
       if (m[0].includes('${k}')) ['style-smart', 'style-dynamic'].forEach((n) => used.add(n));
       else used.add(m[1] ?? m[2] ?? m[3]);
     }
+    // Pictures by value on the buttons of a choice (stitchPanel's pictured).
+    for (const m of text.matchAll(/pictured\([\s\S]*?\{([^}]*)\},\s*'/g)) for (const n of m[1].matchAll(/'([\w-]+)'/g)) used.add(n[1]);
   }
   const shipped = Object.keys(import.meta.glob('../public/tips/*.webp')).map((f) => f.slice('../public/tips/'.length, -'.webp'.length));
 

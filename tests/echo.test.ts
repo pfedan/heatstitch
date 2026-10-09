@@ -101,7 +101,8 @@ describe('echo of a line', () => {
     expect(far).toBeGreaterThan(5.8);
     expect(far).toBeLessThan(6.3);
     const stored = JSON.parse(JSON.stringify(rememberedIn(r.pattern)));
-    expect(stored.objects[0].memory.line.echo).toEqual({ side: 'out', count: 2, gap: 3 });
+    // Marked as written since copies may overlap: read back as it is.
+    expect(stored.objects[0].memory.line.echo).toEqual({ side: 'out', count: 2, gap: 3, overlap: true });
     restoreRemembered(r.pattern, stored);
     expect(lineSettings(r.pattern, o).echo).toEqual({ side: 'out', count: 2, gap: 3 });
     // A broken echo from a file is left out, the line stays.

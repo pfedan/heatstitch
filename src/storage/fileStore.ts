@@ -10,6 +10,7 @@
 import { computeBounds, type Pattern, type ThreadColor } from '../model/pattern';
 import type { StoredAside } from '../model/aside';
 import type { ObjectsAsStored } from '../model/restitch';
+import type { StoredTrace } from '../model/trace';
 import { isAcknowledgement, type Acknowledgement } from '../validation/acks';
 import type { Lang } from '../i18n';
 import { STORAGE_NS } from './namespace';
@@ -42,6 +43,8 @@ export interface StoredFile {
   titles?: Titles;
   /** Made in the app (empty with "Neu", from an image or SVG) rather than loaded as an embroidery file. */
   own?: boolean;
+  /** The tracing image of the working copy with its view (unchecked, read with readTrace). */
+  trace?: StoredTrace;
 }
 
 const DB_NAME = STORAGE_NS;
@@ -123,6 +126,14 @@ export function saveAside(key: number, aside: StoredAside[]): Promise<void> {
   return queue(key, (rec) => {
     if (aside.length) rec.aside = aside;
     else delete rec.aside;
+  });
+}
+
+/** Stores the tracing image of file `key` (null: it has none). */
+export function saveTrace(key: number, trace: StoredTrace | null): Promise<void> {
+  return queue(key, (rec) => {
+    if (trace) rec.trace = trace;
+    else delete rec.trace;
   });
 }
 

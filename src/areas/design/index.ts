@@ -13,6 +13,8 @@ import type { FileList } from '../../ui/fileList';
 import type { Player } from '../../ui/player';
 import { addIcons } from './icons';
 import { createThreads } from './threads';
+import { createTraceSection } from './trace';
+import type { TraceControl } from '../../app/trace';
 
 /** What the area needs from the rest of the app. */
 export interface DesignApp {
@@ -25,6 +27,7 @@ export interface DesignApp {
   readonly fitToHoop: () => void;
   readonly redraw: () => void;
   readonly applyEdit: (p: Pattern, m?: Measurement) => void;
+  readonly trace: TraceControl;
 }
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -52,18 +55,22 @@ export function initDesign(app: DesignApp): { render: () => void } {
     return d;
   };
   const summary = () => Object.assign(document.createElement('span'), { className: 'sec-sum' });
-  const sums = { hoop: summary(), material: summary(), threads: summary(), stats: summary() };
+  const sums = { hoop: summary(), trace: summary(), material: summary(), threads: summary(), stats: summary() };
   const threads = createThreads(app);
+  const trace = createTraceSection(app);
   const secs = {
     hoop: titled(section('design.hoop', 'hoop.title', [$('hoop-panel')], { extra: sums.hoop }), 'hoop.title'),
+    trace: titled(section('design.trace', 'design.trace.title', [trace.el], { extra: sums.trace }), 'design.trace.title'),
     material: titled(section('design.material', 'profile.title', [$('material-panel')], { extra: sums.material }), 'profile.title'),
     threads: titled(section('design.threads', 'design.threads.title', [threads.el], { extra: sums.threads }), 'design.threads.title'),
     stats: titled(section('design.stats', 'stats.title', [$('stats-panel')], { extra: sums.stats }), 'stats.title'),
   };
   secs.threads.dataset.mode = 'flow';
+  // The tracing image is only drawn in Ablauf (Gestalten).
+  secs.trace.dataset.mode = 'flow';
   const empty = Object.assign(document.createElement('p'), { className: 'insp-empty muted design-empty' });
   empty.dataset.i18n = 'design.empty';
-  page.replaceChildren(empty, secs.hoop, secs.material, secs.threads, secs.stats);
+  page.replaceChildren(empty, secs.hoop, secs.trace, secs.material, secs.threads, secs.stats);
   applyI18n(page);
 
   /** Shows the design page with one section open and in view, focusing `focus` in it. */
@@ -138,6 +145,7 @@ export function initDesign(app: DesignApp): { render: () => void } {
     });
   }
   // The frame's commands for marks and fit, pointed at this area's controls.
+  command({ id: 'view.spot', label: 'design.cmd.spot', group: V, icon: 'spot', keys: ['A'], bind: false, when: () => mode() === 'flow', run: click('#spot-toggle') });
   command({ id: 'view.marks', label: 'design.cmd.marks', group: V, icon: 'marks', keys: ['H'], bind: false, when: () => mode() !== 'image', run: click('#marks-toggle') });
   for (const id of ['jumps', 'threads', 'trims', 'colors', 'ends', 'points'] as const) {
     const box = `input[data-mark="${id}"]`;
@@ -210,6 +218,7 @@ export function initDesign(app: DesignApp): { render: () => void } {
     },
     run: () => app.fitToHoop(),
   });
+  command({ id: 'design.traceSection', label: 'design.cmd.traceSection', group: D, when: () => designOpen() && flow(), run: () => reveal(secs.trace) });
   command({ id: 'design.material', label: 'design.cmd.material', group: D, when: designOpen, run: () => reveal(secs.material, 'fabric') });
   command({ id: 'design.threads', label: 'design.cmd.threads', group: D, when: () => designOpen() && flow(), run: () => reveal(secs.threads) });
   command({ id: 'design.brand', label: 'design.cmd.brand', group: D, when: () => flow() && threads.canSwitch(), run: () => threads.switchAll() });
@@ -254,6 +263,7 @@ export function initDesign(app: DesignApp): { render: () => void } {
     sums.hoop.classList.toggle('bad', !!fit && !fit.fits);
     sums.material.textContent = `${t(`fabric.${s.profile.fabric}` as Key).split(',')[0]}, ${s.profile.thread} wt`;
     sums.threads.textContent = threads.render(p);
+    sums.trace.textContent = trace.render();
     const st = f!.stats;
     sums.stats.textContent = st ? `${formatNumber(st.stitches)} ${t('stats.stitches')}` : '';
   };

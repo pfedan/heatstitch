@@ -55,6 +55,8 @@ export interface ImageHooks {
   validate: (p: Pattern) => Promise<ValidationResult>;
   /** Adds the design to the file list, with what is known about its objects. */
   takeOver: (d: Digitized, name: string) => Promise<void>;
+  /** Lays the picture under the design as a tracing image, `size` mm, without stitches. */
+  traceOnly: (picture: HTMLCanvasElement, name: string, size: [number, number]) => Promise<void>;
   mode: () => Mode;
   setMode: (m: Mode) => void;
 }
@@ -122,7 +124,7 @@ async function decodeSvg(file: File): Promise<{ canvas: HTMLCanvasElement; svg: 
 }
 
 /** Draws the image into a canvas, at most SOURCE_MAX on its longer side (vector images at that size). */
-async function decode(file: Blob): Promise<HTMLCanvasElement> {
+export async function decode(file: Blob): Promise<HTMLCanvasElement> {
   const url = URL.createObjectURL(file);
   try {
     const img = new Image();
@@ -167,6 +169,12 @@ function threadsFor(colors: Rgb[], brother: boolean): { threads: ThreadColor[]; 
  * it, so an image open in the Bild mode stays as it is.
  */
 /** A shape of a file that is not sewn when it comes in (a background), with its thread. */
+/** The picture a design was sewn from, with its size in mm (centered on the design's origin). */
+export interface SewnFrom {
+  picture: HTMLCanvasElement;
+  size: [number, number];
+}
+
 export interface LeftOut {
   form: Form;
   color: ThreadColor;
@@ -204,7 +212,7 @@ export function backgroundOf(shapes: SvgShape[]): number {
   return area >= BACKGROUND_SOLID * size(own) ? 0 : -1;
 }
 
-export async function digitizeSvg(file: File, prepare: PrepareOptions, options: DigitizeOptions): Promise<Digitized & { leftOut?: LeftOut[] }> {
+export async function digitizeSvg(file: File, prepare: PrepareOptions, options: DigitizeOptions): Promise<Digitized & { leftOut?: LeftOut[]; source?: SewnFrom }> {
   const vector = await decodeSvg(file);
   if (!vector) throw new Error('not an SVG of shapes');
   const { canvas, svg } = vector;
@@ -223,7 +231,8 @@ export async function digitizeSvg(file: File, prepare: PrepareOptions, options: 
       const shapes = bg >= 0 ? all.filter((_, k) => k !== bg) : all;
       const mapped = shapes.map((s) => ({ ...s, color: index[s.color] }));
       const size = { w: widthMm, h: widthMm * svg.aspect };
-      const d = await client.digitizeShapes(mapped, threads, options, size, false, name);
+      const source: SewnFrom = { picture: canvas, size: [size.w, size.h] };
+      const d = { ...(await client.digitizeShapes(mapped, threads, options, size, false, name)), source };
       if (bg < 0) return d;
       const [cx, cy] = shapesOrigin(size);
       // Its threads are only those of the shapes sewn; the background keeps its own color.
@@ -233,7 +242,7 @@ export async function digitizeSvg(file: File, prepare: PrepareOptions, options: 
     const { w, h, pxMm } = workingSize(widthMm, canvas.width, canvas.height);
     const exact = await svg.labels(w, h, pxMm);
     await client.prepare({ ...prepare, widthMm, smooth: 0 }, [], [], exact);
-    return await client.digitize(options, name);
+    return { ...(await client.digitize(options, name)), source: { picture: canvas, size: [widthMm, widthMm * svg.aspect] } };
   } finally {
     client.dispose();
     svg.dispose();
@@ -393,6 +402,7 @@ export class ImageMode {
     $('image-crop-motif').addEventListener('click', () => this.cropToMotif());
     $('image-crop-reset').addEventListener('click', () => this.setCrop(undefined));
     $('image-take').addEventListener('click', () => void this.take());
+    $('image-trace').addEventListener('click', () => void this.traceOnly());
     this.bindSteps();
     this.bindMaterial();
     this.registerCommands();
@@ -472,6 +482,20 @@ export class ImageMode {
     if (!d || this.busy) return;
     this.setTool('none');
     await this.h.takeOver(d, this.name || 'image');
+  }
+
+  /** The picture goes under the design to trace by hand; no stitches are made from it. */
+  private async traceOnly(): Promise<void> {
+    const pic = this.picture();
+    if (!pic) return;
+    this.setTool('none');
+    await this.h.traceOnly(pic, this.name || 'image', this.sizeMm());
+  }
+
+  /** The picture as it is sewn (cut to the crop) with its size in mm, for the tracing image of a design made from it. */
+  traceSource(): SewnFrom | null {
+    const picture = this.picture();
+    return picture ? { picture, size: this.sizeMm() } : null;
   }
 
   private async loadExample(): Promise<void> {
@@ -1382,6 +1406,10 @@ export class ImageMode {
     document.querySelectorAll<HTMLInputElement>('input[name="image-style"]').forEach((el) => {
       el.checked = el.value === style;
       el.disabled = el.value !== 'flat' && !!this.svg;
+      // The chosen style shows a small ring while its stitches are computed.
+      const tile = el.closest('label')!;
+      tile.classList.toggle('busy', el.checked && !!this.busy);
+      tile.setAttribute('aria-busy', String(el.checked && !!this.busy));
     });
     for (const k of ['smart', 'dynamic'] as const) {
       const el = $(`image-style-${k}`);
@@ -1478,6 +1506,7 @@ export class ImageMode {
     next.disabled = n === 1 && !this.source;
     next.title = next.disabled ? t('image.noImage') : t(`image.cmd.step${Math.min(3, n + 1)}` as Key);
     $('image-take').hidden = n !== 3;
+    $('image-trace').hidden = n !== 1 || !this.source;
     $('image-cancel').title = t('image.cancel.hint');
   }
 

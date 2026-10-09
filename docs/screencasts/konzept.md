@@ -322,8 +322,18 @@ screencasts/
   daher der Schlüssel im Dateinamen. Die Website verweist nur darauf.
 - Die Videos sind nicht Teil des Offline-Speichers der App (zu groß), sie laden nur beim
   Abspielen.
-- Hilfeseite: ein Bereich „Videos“ oben bei „Was möchtest du tun?“, als Karten mit Poster,
-  Titel und Länge. Ein Klick spielt das Video direkt auf der Seite. Zusätzlich führt in jedem
-  passenden Abschnitt der Anleitung ein kleiner Link „Im Video ansehen“ zum Video.
+- Hilfeseite: Jedes fertige Video gehört ins Handbuch. Alle Angaben zu einem Video stehen an
+  einer Stelle, in `src/videos/catalog.ts` (Teil, Titel, Länge, Gruppe, Ziel in einem Satz,
+  Dateien zum Mitmachen); der Build schreibt daraus die Karten oben in der Anleitung, die Links
+  neben ihren Abschnitten, die Videoseite (`videos.html`, nach Gruppen) und das „Weiter mit“
+  im Player. Ein neues Video braucht drei Schritte: Eintrag im Katalog; Kartenbild aus dem
+  Poster mit `python3 tools/screencast/karte.py <key>.jpg --out public/guide/videos` (die
+  Bühne des Posters in 4:3, ein Zehntel der Größe); und in `docs.html` neben jedem passenden
+  Abschnitt ein `<!-- video:ref de <key> -->` (und `en`). `tests/videos.test.ts` prüft, dass
+  jedes Video im Katalog eine Karte, ein Kartenbild und in beiden Sprachen einen Abschnitt hat.
+- Der Player öffnet sich als mittelgroßer Dialog über der Seite, Vollbild mit einem Klick.
+  Darunter stehen der vorige und der nächste Teil; am Ende bietet er den nächsten Teil an, ohne
+  ihn selbst zu starten. Untertitel: auf der englischen Seite von Anfang an Englisch (die
+  Stimme ist Deutsch), auf der deutschen aus; eine eigene Wahl merkt sich die Seite.
 - Englisch: zuerst nur Deutsch. Eine englische Fassung wäre später aus demselben Ablauf
   möglich (App auf Englisch, englische Stimme, neue Aufnahme).

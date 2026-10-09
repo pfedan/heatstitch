@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { hreflangLinks, langPage, SITE, type Page } from '../src/build/langPages';
 
 const read = (f: string) => new TextDecoder().decode(readFileSync(new URL(`../${f}`, import.meta.url)));
-const source: Record<Page, string> = { app: read('index.html'), docs: read('docs.html') };
+const source: Record<Page, string> = { app: read('index.html'), docs: read('docs.html'), videos: read('videos.html') };
 const head = (html: string) => html.slice(0, html.indexOf('</head>'));
 const meta = (html: string, key: string) => new RegExp(`<meta (?:name|property)="${key}" content="([^"]*)"`).exec(html)?.[1];
 
@@ -38,7 +38,7 @@ describe('one address per language', () => {
   it('the German app starts in German; the app at its own address keeps choosing by settings and browser', () => {
     const de = langPage(source.app, 'app', 'de');
     expect(de).toContain('data-page-lang="de"');
-    expect(head(de)).toMatch(/<title>heatstitch: Stickdateien/);
+    expect(head(de)).toMatch(/<title>heatstitch: kostenlose Sticksoftware/);
     expect(meta(de, 'twitter:title')).toBe(meta(de, 'og:title'));
     expect(de).toContain('href="docs.html"');
     expect(langPage(source.app, 'app', 'en')).not.toContain('data-page-lang');

@@ -1,3 +1,4 @@
+import { threadMeters, threadUse } from '../model/threadUse';
 import type { DensityGrid } from '../density/grid';
 import { formatNumber, t, type Key } from '../i18n';
 import type { LoadedFile } from './fileList';
@@ -22,7 +23,7 @@ export function renderStats(
     rows.push(
       ['stats.stitches', formatNumber(st.stitches)],
       ['design.stats.time', t('design.stats.min', { m: formatNumber(min, min < 10 ? 1 : 0) }), 'time'],
-      ['design.stats.thread', `${formatNumber(st.threadLength / 1000, 1)} m`],
+      ['design.stats.thread', file?.pattern ? `${threadMeters(threadUse(file.pattern, s.profile.fabric).topTotal)} m` : `${formatNumber(st.threadLength / 1000, 1)} m`],
       ['stats.colors', formatNumber(st.colorChanges)],
       ['design.stats.trims', formatNumber(st.trims)],
       ['stats.jumps', formatNumber(st.jumps)],

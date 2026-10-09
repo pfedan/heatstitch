@@ -423,7 +423,15 @@ function sewSections(obj: Obj, o: DigitizeOptions, p: SatinParams, graph?: Graph
 /** Spots of a satin in sections eased at most (see easePiles), each a round of the satin's check. */
 const EASE_SPOTS = 3;
 
-function sewOne(obj: Obj, pos: Pt, o: DigitizeOptions, satin: SatinParams, angles: { obj: Obj; angle: number }[], orient?: Orientation): Pt[][] {
+/** What sewing an object depended on besides the object and the options (see Sewn). */
+interface Used {
+  /** Where the needle came from. */
+  pos?: boolean;
+  /** Fill angles of touching objects sewn before. */
+  near?: number[];
+}
+
+function sewOne(obj: Obj, pos: Pt, o: DigitizeOptions, satin: SatinParams, angles: { obj: Obj; angle: number }[], orient?: Orientation, used: Used = {}): Pt[][] {
   let out: Pt[][] = [];
   // As columns cut at the junctions (see satinSuggest), when they hold: where two columns meet
   // at a cut line they overlap a little on purpose (not counted).
@@ -469,6 +477,7 @@ function sewOne(obj: Obj, pos: Pt, o: DigitizeOptions, satin: SatinParams, angle
     if (!out.length) obj.sections = false;
   }
   if (obj.info.kind === 'satin' && !obj.sections) {
+    used.pos = true;
     out = sewSatin(obj, pos, satin, o.underlay, o.tolerance);
     if (!satinOk(out, obj.region, o)) {
       // A stroke too wide or too bent for one satin along its middle: in columns, else filled.
@@ -481,6 +490,8 @@ function sewOne(obj: Obj, pos: Pt, o: DigitizeOptions, satin: SatinParams, angle
   if (obj.info.kind === 'fill') {
     // Fill angles of touching regions sewn already, so neighbours differ.
     const near = angles.filter((a) => touches(a.obj.region, obj.region)).map((a) => a.angle);
+    used.pos = true;
+    used.near = near;
     const fp = { spacing: o.spacing, stitch: o.stitch, angle: o.angle, pull: o.pull, ...fillUnder(o, obj.region.areaMm2), tolerance: o.tolerance };
     const flow = (obj.flow ?? o.flow) && o.angle === null && orient ? flowFill(obj.region, obj.graph, orient, fp, pos) : null;
     const res = flow ?? fillRegion(obj.region, { ...fp, angle: o.angle ?? null }, pos, near);
@@ -493,35 +504,112 @@ function sewOne(obj: Obj, pos: Pt, o: DigitizeOptions, satin: SatinParams, angle
       obj.info.kind = 'run';
     }
   }
-  if (obj.info.kind === 'run' && obj.graph?.branches.length) out = sewRun(obj, pos, o.tolerance);
+  if (obj.info.kind === 'run' && obj.graph?.branches.length) {
+    used.pos = true;
+    out = sewRun(obj, pos, o.tolerance);
+  }
   return out.filter((r) => r.length > 1);
 }
 
+/** An area as found in the image, before its technique is chosen (see Memo). */
+interface Found {
+  region: Region;
+  graph: Graph;
+  kind: Kind;
+  probe: Pt[];
+  /** Smart's look at it, once asked for (see choose). */
+  look?: Look;
+  /** Lines across it along its whole length, once set to satin by hand (see choose). */
+  long?: Graph | null;
+  run: number;
+}
+
+/** An object as sewn, and what that depended on besides the object and the options (see Used). */
+interface Sewn {
+  out: Pt[][];
+  pos?: Pt;
+  near?: number[];
+  /** The object after sewing: what became of it, and the plan it was sewn by. */
+  info: DigitizedObject;
+  plan?: SatinSuggestion | null;
+  sections?: boolean;
+  /** The fill angle it passed on to touching objects sewn after it. */
+  angle?: number;
+  run: number;
+}
+
+/**
+ * What digitize keeps of one prepared image for the next run on it: the colors' order, the areas
+ * as found and as Smart looked at them, and each object as sewn. When the technique of one area
+ * changes, only that area is sewn anew, and after it only the objects whose start (the needle's
+ * last place) or whose touching fill angles moved with it. The result is exactly the same as
+ * sewn from scratch: an object is taken from here only when everything it was sewn from is the same.
+ */
+interface Memo {
+  comps: Components;
+  order: number[];
+  rank: number[];
+  bridged: Bridged;
+  found: Map<string, Found>;
+  sewn: Map<string, Sewn>;
+  run: number;
+}
+
+const memos = new WeakMap<Prepared, Memo>();
+/** Runs an entry is kept unused: going back and forth (undo, redo) finds it still there. */
+const KEEP_RUNS = 3;
+
+function memoOf(prep: Prepared): Memo {
+  let m = memos.get(prep);
+  if (!m) {
+    const { width: w, height: h, pxMm, labels, palette } = prep;
+    const comps = components(labels, w, h);
+    const order = sewingOrder(labels, w, h, pxMm, palette.length);
+    const rank = new Array(palette.length).fill(-1);
+    order.forEach((l, k) => (rank[l] = k));
+    m = { comps, order, rank, bridged: bridge(labels, comps, w, h, pxMm, rank), found: new Map(), sewn: new Map(), run: 0 };
+    memos.set(prep, m);
+  }
+  return m;
+}
+
+const samePt = (p: Pt, q: Pt) => p[0] === q[0] && p[1] === q[1];
+const sameNums = (a: number[], b: number[]) => a.length === b.length && a.every((v, k) => v === b[k]);
+
 export function digitize(prep: Prepared, o: DigitizeOptions, name = 'image'): Digitized {
   const { width: w, height: h, pxMm, labels, palette } = prep;
-  const comps = components(labels, w, h);
+  const memo = memoOf(prep);
+  const run = ++memo.run;
+  const { comps, order, rank, bridged } = memo;
   const satin = satinOf(o);
-  const order = sewingOrder(labels, w, h, pxMm, palette.length);
-  const rank = new Array(palette.length).fill(-1);
-  order.forEach((l, k) => (rank[l] = k));
+  // Areas are found by the overlap and the satin widths; objects sewn by all options but the techniques set by hand.
+  const findKey = `${o.overlap}|${o.satinMin}|${o.satinMax}`;
+  const sewKey = JSON.stringify({ ...o, areas: undefined });
 
-  const bridged = bridge(labels, comps, w, h, pxMm, rank);
   const byColor = new Map<number, Obj[]>();
+  const memoKey = new Map<Obj, string>();
   for (let c = 0; c < comps.label.length; c++) {
     const label = comps.label[c];
     if (label === NONE || comps.area[c] < 2 || bridged.into.has(c)) continue;
     const merged = bridged.boxes.get(c);
     const bbox = merged ?? { minX: comps.minX[c], minY: comps.minY[c], maxX: comps.maxX[c], maxY: comps.maxY[c] };
-    const map = merged ? bridged.comp : comps.comp;
-    const region = buildRegion(map, labels, w, c, label, bbox, h, pxMm, o.overlap, (l) => l !== NONE && rank[l] > rank[label]);
-    const graph = skeleton(region);
-    const kind = classify(graph, o);
-    const obj: Obj = { info: { kind, label, areaMm2: region.areaMm2 }, region, graph, probe: probes(region) };
+    let found = memo.found.get(`${c}|${findKey}`);
+    if (!found) {
+      const map = merged ? bridged.comp : comps.comp;
+      const region = buildRegion(map, labels, w, c, label, bbox, h, pxMm, o.overlap, (l) => l !== NONE && rank[l] > rank[label]);
+      const graph = skeleton(region);
+      found = { region, graph, kind: classify(graph, o), probe: probes(region), run };
+      memo.found.set(`${c}|${findKey}`, found);
+    }
+    found.run = run;
+    const { region, graph, kind, probe } = found;
+    const obj: Obj = { info: { kind, label, areaMm2: region.areaMm2 }, region, graph, probe };
     const key = areaKey(label, bbox.minX, bbox.minY, bbox.maxX, bbox.maxY);
     obj.info.area = key;
     if (!obj.probe.length) continue;
     if (!byColor.has(label)) byColor.set(label, []);
-    choose(obj, key, o, prep.orient);
+    choose(obj, key, o, found, prep.orient);
+    memoKey.set(obj, `${c}|${o.areas?.[key] ?? ''}|${sewKey}`);
     byColor.get(label)!.push(obj);
   }
 
@@ -530,6 +618,34 @@ export function digitize(prep: Prepared, o: DigitizeOptions, name = 'image'): Di
   let pos: Pt = [0, 0];
   const angles: { obj: Obj; angle: number }[] = [];
   const areas: AreaInfo[] = [];
+  /** An object sewn from where the needle is, or as sewn before when that is all the same. */
+  const sew = (obj: Obj): Pt[][] => {
+    const key = memoKey.get(obj)!;
+    const was = memo.sewn.get(key);
+    const near = () => angles.filter((a) => touches(a.obj.region, obj.region)).map((a) => a.angle);
+    if (was && (!was.pos || samePt(was.pos, pos)) && (!was.near || sameNums(was.near, near()))) {
+      was.run = run;
+      obj.info = { ...was.info };
+      obj.plan = was.plan;
+      obj.sections = was.sections;
+      if (was.angle !== undefined) angles.push({ obj, angle: was.angle });
+      return was.out;
+    }
+    const used: Used = {};
+    const n = angles.length;
+    const out = sewOne(obj, pos, o, satin, angles, prep.orient, used);
+    memo.sewn.set(key, {
+      out,
+      ...(used.pos ? { pos } : {}),
+      ...(used.near ? { near: used.near } : {}),
+      info: { ...obj.info },
+      plan: obj.plan,
+      sections: obj.sections,
+      ...(angles.length > n ? { angle: angles[n].angle } : {}),
+      run,
+    });
+    return out;
+  };
   for (const label of order) {
     const objs = byColor.get(label);
     if (!objs?.length) continue;
@@ -537,7 +653,7 @@ export function digitize(prep: Prepared, o: DigitizeOptions, name = 'image'): Di
     const owners: number[] = [];
     const rankOf = (x: Obj) => (x.info.kind === 'fill' ? 0 : 1);
     const place = (obj: Obj) => {
-      const out = sewOne(obj, pos, o, satin, angles, prep.orient);
+      const out = sew(obj);
       if (!out.length) return;
       if (obj.info.kind === 'fill') obj.info.shape = keep(obj, o, w, h);
       if (obj.sections && obj.info.columns) keepSections(obj, w, h);
@@ -591,6 +707,7 @@ export function digitize(prep: Prepared, o: DigitizeOptions, name = 'image'): Di
   });
   // Listed by letter, then number.
   areas.sort((a, b) => sorted.indexOf(groups.get(groupOf(a))!) - sorted.indexOf(groups.get(groupOf(b))!) || groups.get(groupOf(a))!.indexOf(a) - groups.get(groupOf(b))!.indexOf(b));
+  for (const m of [memo.found, memo.sewn] as Map<string, { run: number }>[]) for (const [k, v] of m) if (v.run <= run - KEEP_RUNS) m.delete(k);
   return { pattern: assemble(blocks, Math.floor(w / 2) * pxMm, Math.floor(h / 2) * pxMm, o.trimMm, name, starts), objects, starts, areas };
 }
 
@@ -601,9 +718,53 @@ export function digitize(prep: Prepared, o: DigitizeOptions, name = 'image'): Di
  * satinSuggest) becomes satin in sections; a fill follows the image where it has clear structure
  * of its own, else gets straight rows.
  */
-function choose(obj: Obj, key: string, o: DigitizeOptions, orient?: Orientation): void {
+function choose(obj: Obj, key: string, o: DigitizeOptions, found: Found, orient?: Orientation): void {
   const fixed = o.areas?.[key];
   if (!o.smart && !fixed) return;
+  const r = obj.region;
+  const { auto, reason, offers, sections, plan, across } = (found.look ??= look(obj, o, orient));
+  obj.plan = plan;
+  obj.smart = { key, auto, reason, fixed: !!fixed, offers };
+  let t = fixed ?? (o.smart ? auto : undefined);
+  if (t === 'sections' && !sections) t = 'satin';
+  if (!t || t === 'run') return;
+  if (t === 'sections') {
+    obj.info.kind = 'satin';
+    obj.sections = true;
+    obj.flow = false;
+    return;
+  }
+  if (t === 'satin') {
+    if (obj.info.kind !== 'fill') return;
+    // Across, else along its centerline; filled when the satin would not hold (sewOne).
+    obj.info.kind = 'satin';
+    if (!across && found.long === undefined) found.long = acrossGraph(r, o.satinMax, o.satinMax, Infinity);
+    obj.graph = across ?? found.long ?? obj.graph;
+    obj.flow = false;
+    return;
+  }
+  // Rows: a stroke set to a fill by hand is filled whole.
+  if (fixed) {
+    obj.info = { kind: 'fill', label: obj.info.label, areaMm2: r.areaMm2, area: key };
+  }
+  obj.flow = t === 'dynamic';
+}
+
+/** Smart's look at an area: what it would choose and why, and what that rests on (see choose). */
+interface Look {
+  auto: Technique | 'run';
+  reason: Reason;
+  /** The techniques it can be set to. */
+  offers: Technique[];
+  /** It can be sewn as satin in sections. */
+  sections: boolean;
+  /** The cut lines and lines across of a shape cut into columns (see shapeOf). */
+  plan?: SatinSuggestion | null;
+  /** Lines across a small round area. */
+  across: Graph | null;
+}
+
+function look(obj: Obj, o: DigitizeOptions, orient?: Orientation): Look {
   const r = obj.region;
   let auto: Technique | 'run';
   let reason: Reason;
@@ -621,29 +782,7 @@ function choose(obj: Obj, key: string, o: DigitizeOptions, orient?: Orientation)
   else if ((across = acrossGraph(r, o.satinMax))) [auto, reason] = ['satin', 'round'];
   else if (r.areaMm2 >= STRUCTURE_MIN_MM2 && structure(r, orient) >= STRUCTURE) [auto, reason] = ['dynamic', 'structure'];
   else [auto, reason] = ['flat', 'calm'];
-  obj.smart = { key, auto, reason, fixed: !!fixed, offers };
-  let t = fixed ?? (o.smart ? auto : undefined);
-  if (t === 'sections' && !sections) t = 'satin';
-  if (!t || t === 'run') return;
-  if (t === 'sections') {
-    obj.info.kind = 'satin';
-    obj.sections = true;
-    obj.flow = false;
-    return;
-  }
-  if (t === 'satin') {
-    if (obj.info.kind !== 'fill') return;
-    // Across, else along its centerline; filled when the satin would not hold (sewOne).
-    obj.info.kind = 'satin';
-    obj.graph = across ?? acrossGraph(r, o.satinMax, o.satinMax, Infinity) ?? obj.graph;
-    obj.flow = false;
-    return;
-  }
-  // Rows: a stroke set to a fill by hand is filled whole.
-  if (fixed) {
-    obj.info = { kind: 'fill', label: obj.info.label, areaMm2: r.areaMm2, area: key };
-  }
-  obj.flow = t === 'dynamic';
+  return { auto, reason, offers, sections, plan: obj.plan, across };
 }
 
 /** Shapes Smart sews as satin in sections by itself (others only when set so by hand). */

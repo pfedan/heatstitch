@@ -19,6 +19,8 @@ export interface ObjectInfo {
   numbers: number[];
   /** Per selected object: points changed by hand since it was last given new stitches. */
   hand: number[];
+  /** Top thread of the selected objects, estimated (see threadUse; mm). */
+  threadMm: number;
   /** Its points are being edited (one object), and how many of them are selected. */
   editing: { selection: number } | null;
   /** The one selected object has a fill whose outline can be edited. */
@@ -168,7 +170,7 @@ export class ObjectPanel {
   /** Stitches and thread, where it is sewn and what it lies on; parts and changes by hand. */
   private facts(info: ObjectInfo, sel: SewObject[]): HTMLElement {
     const stitches = sel.reduce((a, o) => a + o.stitches, 0);
-    const thread = sel.reduce((a, o) => a + o.threadMm, 0);
+    const thread = info.threadMm;
     const lines: string[] = [t('objects.facts', { stitches: formatNumber(stitches), thread: formatNumber(thread / 1000, 2) })];
     if (sel.length === 1) {
       const o = sel[0];

@@ -5,7 +5,7 @@ import { partOf } from './shadow';
 import { recordOfStitch, stitchKinds, stitchNumbers } from './sequence';
 
 /** What a hand edit did, so the objects it touched can keep what they remember. */
-export type HandChange = { moved: number[] } | { removed: number[] } | { inserted: number };
+export type HandChange = { moved: number[] } | { removed: number[] } | { inserted: number; count?: number };
 
 /** The objects of a pattern as the caller has them (cached), or as worked out here. */
 export interface ObjectView {
@@ -39,19 +39,22 @@ export const loosable = (m: Remembered | undefined): boolean => !!m && !m.read &
  */
 export function keepObjects(p: Pattern, next: Pattern, change: HandChange, view: (x: Pattern) => ObjectView = objectView): Map<number, number> {
   const q = view(p);
-  // Records touched in `p` (an inserted point splits the stitch that ends at its index).
+  // Records touched in `p`. New points go in before record `inserted`, after the one before it: they
+  // belong to that one's object (at an object's thread end the record after is no longer its own).
   const touched = 'moved' in change ? change.moved : 'removed' in change ? change.removed : [change.inserted];
+  const added = 'inserted' in change ? (change.count ?? 1) : 0;
   const counts = new Map<number, number>();
   for (const i of touched) {
-    const o = q.objectAt[i] ?? -1;
-    if (o >= 0) counts.set(o, (counts.get(o) ?? 0) + 1);
+    const o = added ? (i > 0 && q.objectAt[i - 1] >= 0 ? q.objectAt[i - 1] : (q.objectAt[i] ?? -1)) : (q.objectAt[i] ?? -1);
+    if (o >= 0) counts.set(o, (counts.get(o) ?? 0) + (added || 1));
   }
   // Stitch numbers (from 0) in `p`, and where they are in `next`.
   const num = (i: number) => q.numbers[i] - 1;
   const removed = 'removed' in change ? change.removed.map(num).sort((a, b) => a - b) : [];
-  const inserted = 'inserted' in change ? num(change.inserted) : -1;
+  // Stitches before the new points: their number from 0.
+  const inserted = 'inserted' in change ? (change.inserted > 0 ? q.numbers[change.inserted - 1] : 0) : -1;
   const map = (n: number) => {
-    if (inserted >= 0) return n >= inserted ? n + 1 : n;
+    if (inserted >= 0) return n >= inserted ? n + added : n;
     let k = 0;
     while (k < removed.length && removed[k] < n) k++;
     return n - k;
