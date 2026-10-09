@@ -442,8 +442,11 @@ function sewOne(obj: Obj, pos: Pt, o: DigitizeOptions, satin: SatinParams, angle
     [false, false],
   ];
   let eased = 0;
+  // Plans sewn already (as JSON): another try that comes back to one of them would only pile up the same way.
+  const tried = new Set<string>();
   const sections = (graph?: Graph): Pt[][] => {
     const runs = sewSections(obj, o, satin, graph);
+    if (!graph && obj.plan) tried.add(JSON.stringify(obj.plan));
     const cuts = obj.info.columns?.[0]?.split?.cuts ?? [];
     const seam = (x: number, y: number) => cuts.some(([a, b]) => toSegment([x, y], a, b) < 0.9);
     if (runs.length && satinOk(runs, obj.region, o, seam)) return runs;
@@ -460,7 +463,7 @@ function sewOne(obj: Obj, pos: Pt, o: DigitizeOptions, satin: SatinParams, angle
     while (!graph && obj.plan?.ok && retries.length) {
       const [columns, crossings] = retries.shift()!;
       const plan = suggestSatin(obj.region, obj.graph ?? undefined, o.satinMax, columns, crossings);
-      if (plan?.ok && JSON.stringify(plan) !== JSON.stringify(obj.plan)) {
+      if (plan?.ok && !tried.has(JSON.stringify(plan))) {
         obj.plan = plan;
         eased = 0;
         return sections();

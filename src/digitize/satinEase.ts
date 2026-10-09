@@ -1,6 +1,6 @@
 import { peakCell } from './measure';
 import { sample, type Region } from './region';
-import { stripsOfAreas } from './rungs';
+import { cutParts, inside, partsOf, stripsOfParts, type Parts } from './rungs';
 import { areaLoops } from './satinSuggest';
 import type { Pt } from './skeleton';
 import { bestChain, satinRuns, type Rails, type SatinSettings } from '../model/restitch';
@@ -35,28 +35,45 @@ function toSegment(q: Pt, a: Pt, b: Pt): number {
 export function easePiles(area: Region, plan: { cuts: [Pt, Pt][]; lines: [Pt, Pt][] }, s: SatinSettings, max: number, limit = (SATIN_PEAK * 2) / s.spacing, runs?: Pt[][]): { cuts: [Pt, Pt][]; lines: [Pt, Pt][] } {
   const { outsides, holes } = areaLoops(area);
   const material = (q: Pt) => sample(area, area.sdfBase, q[0], q[1]) < 0;
-  const sew = (cuts: [Pt, Pt][], near?: Pt): Pt[][] | null => {
-    const made = stripsOfAreas(outsides, plan.lines, cuts, holes);
-    if (made.bad || made.hole >= 0) return null;
-    const columns: Rails[] = made.areas.flatMap((strips, a) => {
-      let chain: Rails[] = strips.map((x) => ({ ...x, chain: a }));
-      if (!near) return chain;
-      // Near the spot, in the order the satin is sewn in (see sewSections): the measure it gets there.
-      chain = chain.filter((c) => [...c.left, ...c.right].some((q) => Math.hypot(q[0] - near[0], q[1] - near[1]) < EASE_NEAR));
-      return chain.length > 1 ? bestChain(chain, s) : chain;
-    });
-    return satinRuns(columns, s);
+  // Each outline cut into parts by the cut lines so far, once per round (see partsOf): a cut tried
+  // cuts one of those parts further and leaves the rest, and their columns, as they were.
+  const partsOfAll = (cuts: [Pt, Pt][]): Parts[] => outsides.map((o) => partsOf(o, cuts, holes.filter((h) => inside(o, h[0]))));
+  const columnsOf = new Map<Parts, Rails[] | null>();
+  const columns = (p: Parts, chain: number): Rails[] | null => {
+    let c = columnsOf.get(p);
+    if (c === undefined) {
+      const made = stripsOfParts(p, plan.lines);
+      c = made.bad >= 0 || made.hole >= 0 ? null : made.strips.map((x) => ({ ...x, chain }));
+      columnsOf.set(p, c);
+    }
+    return c;
+  };
+  const sew = (base: Parts[], cut?: [Pt, Pt], near?: Pt): Pt[][] | null => {
+    const all: Rails[] = [];
+    for (let a = 0; a < base.length; a++) {
+      const own = columns((cut && cutParts(base[a], cut)) || base[a], a);
+      if (!own) return null;
+      let chain = own;
+      if (near) {
+        // Near the spot, in the order the satin is sewn in (see sewSections): the measure it gets there.
+        chain = chain.filter((c) => [...c.left, ...c.right].some((q) => Math.hypot(q[0] - near[0], q[1] - near[1]) < EASE_NEAR));
+        if (chain.length > 1) chain = bestChain(chain, s);
+      }
+      all.push(...chain);
+    }
+    return satinRuns(all, s);
   };
   // Where columns meet at cut lines they overlap on purpose: not counted there (as when the satin
   // is checked), so the spot eased is one that piles up.
   const seam = (cuts: [Pt, Pt][]) => (x: number, y: number) => cuts.some(([a, b]) => toSegment([x, y], a, b) < SEAM_MM);
   let cuts = plan.cuts.slice();
-  const all = runs ?? sew(cuts);
+  let base = partsOfAll(cuts);
+  const all = runs ?? sew(base);
   if (!all) return plan;
   let peak = peakCell(all, seam(cuts));
   for (let n = 0; n < EASE_MAX && peak.density > limit; n++) {
     // Measured the same way with and without a cut: only the columns near the spot.
-    const here = sew(cuts, peak.at);
+    const here = sew(base, undefined, peak.at);
     if (!here) break;
     const now = peakCell(here, seam(cuts));
     let best: { density: number; at: Pt; cut: [Pt, Pt] } | null = null;
@@ -79,7 +96,7 @@ export function easePiles(area: Region, plan: { cuts: [Pt, Pt][]; lines: [Pt, Pt
           [c[0] - u[0] * (back + 0.3), c[1] - u[1] * (back + 0.3)],
           [c[0] + u[0] * (ahead + 0.3), c[1] + u[1] * (ahead + 0.3)],
         ];
-        const near = sew([...cuts, cut], peak.at);
+        const near = sew(base, cut, peak.at);
         if (!near) continue;
         const p = peakCell(near, seam([...cuts, cut]));
         if (!best || p.density < best.density) best = { ...p, cut };
@@ -87,6 +104,7 @@ export function easePiles(area: Region, plan: { cuts: [Pt, Pt][]; lines: [Pt, Pt
     }
     if (!best || best.density >= now.density) break;
     cuts = [...cuts, best.cut];
+    base = partsOfAll(cuts);
     // Eased here; whether it piles up elsewhere now is for the satin's own check to tell.
     peak = best;
   }
