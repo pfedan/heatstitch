@@ -86,6 +86,12 @@ export function bindKeys(app: KeysApp) {
       return;
     }
     if (mod || e.altKey) return;
+    // Stitching on: Enter and Esc end it (the level stays Stiche).
+    if (app.editor.active && app.editor.penOn && (e.key === 'Escape' || e.key === 'Enter')) {
+      e.preventDefault();
+      app.editor.setPen(false);
+      return;
+    }
     if (e.key === 'Escape' && ui.planPin) return app.pinPlan(null);
     if (app.drawTool.active && app.settings.mode === 'flow') {
       if (e.key === 'Escape') {
@@ -233,9 +239,16 @@ export function bindKeys(app: KeysApp) {
       if (e.key === 't' && !app.editor.active && !app.shapeTool.active && !app.rungTool.active) return void app.newLettering();
       if (app.editor.active) {
         if (e.key === 'Escape') return app.setEditing(false);
-        if (e.key === ',' || e.key === '.') {
+        // , and . go one needle point on, with Shift ten (the key's place counts, as for the player).
+        if (e.key === ',' || e.key === '.' || (e.shiftKey && (e.code === 'Comma' || e.code === 'Period'))) {
           e.preventDefault();
-          const i = app.editor.step(e.key === '.' ? 1 : -1);
+          const i = app.editor.step(e.key === '.' || e.code === 'Period' ? 1 : -1, e.shiftKey ? 10 : 1);
+          if (i >= 0) app.revealRecord(i);
+          return;
+        }
+        if (e.key === 'Home' || e.key === 'End') {
+          e.preventDefault();
+          const i = app.editor.toEnd(e.key === 'Home' ? 'first' : 'end');
           if (i >= 0) app.revealRecord(i);
           return;
         }

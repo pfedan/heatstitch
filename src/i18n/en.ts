@@ -1129,6 +1129,7 @@ const enBase: Record<keyof typeof deBase, string> = {
   'level.objects': 'Objects',
   'level.label': 'What to edit',
   'canvas.hint.edit': 'Click: select needle point · Shift+drag: rectangle · Double-click: insert · Del: delete · Esc: done',
+  'canvas.hint.pen': 'Click: set the next needle point · Drag: move the view · Backspace: take back the last · Enter or Esc: done',
   'canvas.hint.flowEdit': 'Drag: move needle point · Double-click: insert needle point · Del: delete · , and .: previous/next needle point · Esc: back',
   'tooltip.stitch': 'Stitch {i} · {kind} · {len} mm',
   'jumps.rule': 'All at once by length',

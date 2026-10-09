@@ -1090,6 +1090,13 @@ const editor = new Editor({
     const o = p && ui.editObject !== null ? seq(p).objects[ui.editObject] : undefined;
     return o ? { first: o.first, last: o.last } : NO_RANGE;
   },
+  ends: () => {
+    const p = files.active?.pattern;
+    const o = p && settings.mode === 'flow' && ui.editObject !== null ? seq(p).objects[ui.editObject] : undefined;
+    return o ? { first: o.first, end: o.last - o.tieOff, last: o.last } : null;
+  },
+  reveal: (i) => revealRecord(i),
+  penChanged: () => updateLevel(),
   redraw,
   changed: redraw,
 });
@@ -1165,13 +1172,37 @@ function enterObject(o: number, fit: boolean): void {
   else editor.reset();
   ui.editObject = o;
   if (!ui.selectedObjects.has(o) || ui.selectedObjects.size !== 1) selectObjects([o], false);
+  // The bar over the stage changes with the level: it is laid out before the free room is measured.
+  updateLevel();
+  stitchArea?.refresh();
   if (fit) {
     const w = ((obj.maxX - obj.minX) / 10) * vp.scale;
     const h = ((obj.maxY - obj.minY) / 10) * vp.scale;
-    if (Math.max(w / ui.stageW, h / ui.stageH) < 0.4) vp.fit(obj.minX / 10, obj.minY / 10, obj.maxX / 10, obj.maxY / 10, ui.stageW, ui.stageH, 60);
+    if (Math.max(w / ui.stageW, h / ui.stageH) < 0.4) {
+      // Into the room the bars over the stage leave free, so its start and end are not under them.
+      const [top, bottom] = stageInsets();
+      vp.fit(obj.minX / 10, obj.minY / 10, obj.maxX / 10, obj.maxY / 10, ui.stageW, ui.stageH - top - bottom, 60);
+      vp.pan(0, top);
+    }
   }
-  updateLevel();
   redraw();
+}
+
+/** How far the bars over the stage reach down from its top, and the view bar and player up from its bottom (CSS px). */
+function stageInsets(): [number, number] {
+  const box = stage.getBoundingClientRect();
+  let low = box.top;
+  for (const el of stage.querySelectorAll<HTMLElement>('.stage-top > *')) {
+    const r = el.getBoundingClientRect();
+    if (r.height && getComputedStyle(el).display !== 'none') low = Math.max(low, r.bottom);
+  }
+  // The view bar at the foot of the stage and the player under it.
+  let high = box.bottom;
+  for (const el of [$('player'), ...stage.querySelectorAll<HTMLElement>('#stage-foot > *')]) {
+    const r = el.getBoundingClientRect();
+    if (r.height && r.top < box.bottom && getComputedStyle(el).display !== 'none' && getComputedStyle(el).visibility !== 'hidden') high = Math.min(high, r.top);
+  }
+  return [low - box.top, Math.max(0, box.bottom - high)];
 }
 
 /** Pans so that record `i` is on the stage (not under the tools or the player). */
@@ -1180,8 +1211,12 @@ function revealRecord(i: number): void {
   if (!p) return;
   const [sx, sy] = vp.toScreen(p.x[i] / 10, p.y[i] / 10);
   const m = 80;
+  // Not under the bars over the stage either.
+  const [top, bottom] = stageInsets();
+  const t = Math.max(m, top + 40);
+  const b = Math.max(m, bottom + 40);
   const dx = sx < m ? m - sx : sx > ui.stageW - m ? ui.stageW - m - sx : 0;
-  const dy = sy < m ? m - sy : sy > ui.stageH - m ? ui.stageH - m - sy : 0;
+  const dy = sy < t ? t - sy : sy > ui.stageH - b ? ui.stageH - b - sy : 0;
   if (dx || dy) vp.pan(dx, dy);
   redraw();
 }
@@ -1206,6 +1241,7 @@ function updateLevel(): void {
   const shaping = shapeTool.active;
   const level = on ? 'stitches' : ui.formLevel && settings.mode === 'flow' ? 'shape' : 'objects';
   stage.classList.toggle('editing', on);
+  stage.classList.toggle('stitch-pen', on && editor.penOn);
   stage.classList.toggle('shaping', shaping);
   stage.classList.toggle('form-level', ui.formLevel && !on && settings.mode === 'flow');
   document.querySelectorAll<HTMLInputElement>('input[name="level"]').forEach((i) => (i.checked = i.value === level));
@@ -1225,7 +1261,9 @@ function updateLevel(): void {
       : drawTool.kind && flow
         ? `canvas.hint.draw.${drawTool.kind}`
       : on
-        ? flow
+        ? editor.penOn
+          ? 'canvas.hint.pen'
+          : flow
           ? 'canvas.hint.flowEdit'
           : 'canvas.hint.edit'
         : shaping

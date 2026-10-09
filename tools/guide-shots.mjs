@@ -442,6 +442,31 @@ shots.stitches = async (lang) => {
   await close();
 };
 
+// 6b. stitch on: the red line of the cat's ball of wool, "Weitersticken" on, two needle points set
+// after its thread end, the third one under the pointer with its length; start and end marked
+shots.stitchOn = async (lang) => {
+  const { page, close } = await boot(lang);
+  await example(page, 'cat');
+  await realistic(page, true);
+  await expandColor(page, 4);
+  await clickObject(page, 33);
+  await page.keyboard.press('e');
+  await page.waitForTimeout(1500);
+  // the thread end towards the middle (a drag beside its stitches moves the view), two steps closer
+  await page.mouse.move(700, 620);
+  await page.mouse.down();
+  for (let i = 1; i <= 10; i++) { await page.mouse.move(700 + 15.1 * i, 620 - 16.2 * i); await page.waitForTimeout(30); }
+  await page.mouse.up();
+  await wheelAt(page, 560, 450, 2);
+  await page.keyboard.press('w');
+  await page.waitForTimeout(200);
+  for (const [x, y] of [[505, 470], [460, 430]]) { await page.mouse.move(x, y); await page.waitForTimeout(100); await page.mouse.click(x, y); await page.waitForTimeout(300); }
+  await page.mouse.move(440, 360);
+  await page.waitForTimeout(500);
+  await jpeg(page, `stitch-on-${lang}`);
+  await close();
+};
+
 // 8. lettering: "Minka" in Pacificlo under the cat, font list open
 shots.lettering = async (lang) => {
   const { page, close } = await boot(lang);

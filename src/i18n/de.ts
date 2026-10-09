@@ -1127,6 +1127,7 @@ export const deBase = {
   'level.objects': 'Objekte',
   'level.label': 'Was bearbeiten',
   'canvas.hint.edit': 'Klick: Einstich wählen · Umschalt+Ziehen: Rechteck · Doppelklick: einfügen · Entf: löschen · Esc: fertig',
+  'canvas.hint.pen': 'Klick: nächsten Einstich setzen · Ziehen: Ansicht schieben · Rücktaste: letzten zurück · Enter oder Esc: fertig',
   'canvas.hint.flowEdit': 'Ziehen: Einstich verschieben · Doppelklick: Einstich einfügen · Entf: löschen · , und .: voriger/nächster Einstich · Esc: zurück',
   'tooltip.stitch': 'Stich {i} · {kind} · {len} mm',
   'jumps.rule': 'Alle auf einmal nach Länge',

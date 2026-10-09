@@ -78,8 +78,8 @@ export function bindPointer(app: PointerApp) {
   /** Tooltip for the side of the divider the pointer is on. */
   function showTooltip(sx: number, sy: number): void {
     if (app.settings.mode === 'image') return;
-    // The width grip shows its own label.
-    if (app.shapeTool.active && (app.shapeTool.bandDragging || app.shapeTool.hover?.part === 'width')) {
+    // The width grip shows its own label, and stitching on the stitch to be set shows its length.
+    if ((app.shapeTool.active && (app.shapeTool.bandDragging || app.shapeTool.hover?.part === 'width')) || (app.editor.active && app.editor.penOn)) {
       app.tooltip.hidden = true;
       return;
     }
@@ -411,6 +411,11 @@ export function bindPointer(app: PointerApp) {
       app.imageMode.leave();
       app.redraw();
     }
+    // No preview of the next stitch while the pointer is away.
+    if (app.editor.active) {
+      app.editor.leave();
+      app.redraw();
+    }
   });
   /** Whether a rubber band may select objects now (level Objects, no tool open). */
   function bandAllowed(): boolean {
@@ -490,7 +495,8 @@ export function bindPointer(app: PointerApp) {
       return;
     }
     if (app.editor.active) {
-      app.editor.insertAt(x, y, app.vp.scale);
+      // Stitching on, each click of the two set a point already.
+      if (!app.editor.penOn) app.editor.insertAt(x, y, app.vp.scale);
       return;
     }
     const p = app.files.active?.pattern;

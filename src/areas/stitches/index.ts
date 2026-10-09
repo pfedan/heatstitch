@@ -11,6 +11,7 @@ import { h } from '../../shell/h';
 import { showMenu, toast, type MenuItem } from '../../shell/ui';
 import { effect } from '../../shell/signal';
 import { setThinShare, THIN_SHARES, thinShare } from './state';
+import { STITCH } from '../../model/pattern';
 
 /** What the area "Stiche" needs from the rest of the app. */
 export interface StitchAreaApp {
@@ -45,6 +46,9 @@ const ICON = {
   next: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8 5l5 5-5 5" /></svg>',
   help: '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7" /><path d="M8 8a2 2 0 1 1 2.8 1.8c-.6.3-.8.7-.8 1.4M10 13.6v.1" /></svg>',
   wand: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 16.5l9-9" /><path d="M11 6l3 3" /><path d="M15 2.5v3M13.5 4h3M16.5 9.5v2M15.5 10.5h2M7.5 3v2M6.5 4h2" /></svg>',
+  pen: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 16l4-7 4 5 3-6" /><circle cx="3" cy="16" r="1.5" class="node" /><circle cx="7" cy="9" r="1.5" class="node" /><circle cx="11" cy="14" r="1.5" class="node" /><path d="M14 8l3.5-4.5" stroke-dasharray="1.6 1.8" /><circle cx="17.5" cy="3.5" r="1.5" /></svg>',
+  first: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5v10" /><path d="M14 5l-5 5 5 5" /></svg>',
+  last: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M15 5v10" /><path d="M6 5l5 5-5 5" /></svg>',
   more: '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="5" cy="10" r="1.2" /><circle cx="10" cy="10" r="1.2" /><circle cx="15" cy="10" r="1.2" /></svg>',
 };
 
@@ -152,10 +156,20 @@ export function initStitchArea(app: StitchAreaApp): { refresh: () => void } {
       if (ed.active && ed.selection.size) {
         const n = ed.selection.size;
         ed.deleteSelection();
-        toast(t('stitches.deleted', { n: formatNumber(n) }), undoAction());
+        // Stitching on, the key takes back the point set last, as a pen does: no note for that.
+        if (!ed.penOn) toast(t('stitches.deleted', { n: formatNumber(n) }), undoAction());
       } else if (rt.deleteSelected()) app.redraw();
     },
   });
+  command({ id: 'edit.pen', label: 'stitches.cmd.pen', group: G, keys: ['W'], when: () => ed.active && !ed.penOn && (!!ed.ends || ed.selection.size === 1), run: () => ed.setPen(true) });
+  command({ id: 'edit.penDone', label: 'stitches.cmd.penDone', group: G, when: () => ed.active && ed.penOn, run: () => ed.setPen(false) });
+  command({ id: 'edit.penBack', label: 'stitches.cmd.penBack', group: G, when: () => ed.active && ed.penOn && ed.selection.size === 1, run: () => ed.deleteSelection() });
+  command({ id: 'edit.first', label: 'stitches.cmd.first', group: G, keys: ['Home'], bind: false, when: () => ed.active && !!ed.ends, run: () => toEnd('first') });
+  command({ id: 'edit.last', label: 'stitches.cmd.last', group: G, keys: ['End'], bind: false, when: () => ed.active && !!ed.ends, run: () => toEnd('end') });
+  const toEnd = (which: 'first' | 'end') => {
+    const i = ed.toEnd(which);
+    if (i >= 0) app.revealRecord(i);
+  };
   command({ id: 'edit.split', label: 'stitches.cmd.split', group: G, keys: ['I'], bind: false, when: () => ed.active && ed.selection.size === 1, run: () => void ed.splitSelected() });
   command({
     id: 'edit.thin',
@@ -258,10 +272,42 @@ export function initStitchArea(app: StitchAreaApp): { refresh: () => void } {
     return seg;
   };
 
+  /**
+   * Where the work is: the number (from 1) of the selected needle point among those of the object
+   * (or the design), and how many there are; stitching on, the one a click goes on from (anchor).
+   */
+  function where(): { i: number; n: number } | null {
+    const p = app.files.active?.pattern;
+    const a = ed.penOn ? ed.anchor() : ed.selection.size === 1 ? [...ed.selection][0] : -1;
+    if (!p || a < 0) return null;
+    const r = ed.range;
+    const lo = r?.first ?? 0;
+    const hi = Math.min(r?.last ?? p.cmd.length - 1, p.cmd.length - 1);
+    let i = 0;
+    let n = 0;
+    for (let k = lo; k <= hi; k++) {
+      if (p.cmd[k] !== STITCH) continue;
+      n++;
+      if (k <= a) i++;
+    }
+    return { i, n };
+  }
+
+  /** "Weitersticken": on and off, pressed while on. */
+  function penButton(): HTMLElement {
+    const on = ed.penOn;
+    const c = getCommand(on ? 'edit.penDone' : 'edit.pen')!;
+    const b = h('button', { type: 'button', class: 'bar-btn', title: `${t('stitches.bar.pen.hint')} (${keyLabel('W')})`, 'aria-pressed': String(on), disabled: !canRun(c) });
+    b.insertAdjacentHTML('beforeend', ICON.pen);
+    b.append(h('span', null, t('stitches.bar.pen')));
+    b.addEventListener('click', () => runCommand(c.id));
+    return b;
+  }
+
   function barState(): string {
     const mode = app.settings.mode;
     if (mode === 'image') return '';
-    if (ed.active) return JSON.stringify(['edit', ed.selection.size, ed.range !== null, app.pointsVisible(), thinShare(), mode]);
+    if (ed.active) return JSON.stringify(['edit', ed.selection.size, ed.range !== null, app.pointsVisible(), thinShare(), mode, ed.penOn, where()]);
     if (!rungsOn()) return '';
     const d = dir();
     return JSON.stringify([rt.mode, rt.cutMode, rt.lines.length, rt.cutLines.length, rt.guides.length, d?.rungs, d?.cuts, d?.spacingHere, d?.chain, rt.chained, !!rt.selected, info()?.measured.fill?.pattern]);
@@ -273,12 +319,26 @@ export function initStitchArea(app: StitchAreaApp): { refresh: () => void } {
     const tool = rungsOn() ? rt.mode : null;
     if (app.settings.mode === 'image') {
       /* Bild draws no stitches */
+    } else if (ed.active && ed.penOn) {
+      // Stitching on: what the next click does, the way back, and done.
+      const at = where();
+      items.push(
+        state(at ? t('stitches.bar.penAt', { i: formatNumber(at.i + 1) }) : t('stitches.bar.penNeed')),
+        sep(),
+        penButton(),
+        cmdButton('edit.penBack', 'stitches.bar.penBack', { hint: 'stitches.bar.penBack.hint' }),
+        help('stitches.pen.help', 4),
+        cmdButton('edit.penDone', 'object.editDone', { primary: true }),
+      );
     } else if (ed.active) {
       const n = ed.selection.size;
       const seen = ed.range !== null || app.pointsVisible();
+      const at = n === 1 ? where() : null;
       // The crumb over the stage already says "› Stiche": the bar starts with what is selected.
       items.push(
-        state(n ? t(n === 1 ? 'edit.selection.one' : 'edit.selection', { n: formatNumber(n) }) : seen ? t('edit.none') : t('stitches.bar.zoom')),
+        state(at ? t('stitches.bar.at', { i: formatNumber(at.i), n: formatNumber(at.n) }) : n ? t(n === 1 ? 'edit.selection.one' : 'edit.selection', { n: formatNumber(n) }) : seen ? t('edit.none') : t('stitches.bar.zoom')),
+        sep(),
+        penButton(),
         sep(),
         cmdButton('edit.selectAll', 'stitches.bar.all', { more: 3 }),
         cmdButton('edit.delete', 'edit.delete'),
@@ -286,8 +346,10 @@ export function initStitchArea(app: StitchAreaApp): { refresh: () => void } {
         sep(),
         spare(h('span', { class: 'bar-group' }, cmdButton('edit.thin', 'edit.thin'), shares()), 5, 'edit.thin'),
         sep(),
+        cmdButton('edit.first', null, { icon: ICON.first, hint: 'stitches.bar.first', more: 6 }),
         cmdButton('edit.prev', null, { icon: ICON.prev, more: 6 }),
         cmdButton('edit.next', null, { icon: ICON.next, more: 6 }),
+        cmdButton('edit.last', null, { icon: ICON.last, hint: 'stitches.bar.last', more: 6 }),
         help(app.settings.mode === 'flow' ? 'canvas.hint.flowEdit' : 'edit.hint', 7),
         cmdButton('edit.done', 'object.editDone', { primary: true }),
       );

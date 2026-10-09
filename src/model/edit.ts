@@ -221,3 +221,69 @@ export function insertStitch(p: Pattern, at: number, x: number, y: number): Patt
   nc.set(p.cmd.subarray(at), at + 1);
   return withRecords(p, nx, ny, nc);
 }
+
+/** Where an object's thread starts and ends: its first penetration, the last before its tie-off, its last record. */
+export interface ThreadEnds {
+  first: number;
+  end: number;
+  last: number;
+}
+
+/**
+ * The thread end of `ends` and the records of its tie-off, when record `at` lies at or after the
+ * end (a new stitch there continues the thread, so the tie-off has to go along); otherwise null.
+ */
+export function atThreadEnd(p: Pattern, at: number, ends: ThreadEnds | null | undefined): { end: number; tie: number[] } | null {
+  if (!ends || at < ends.end || at > ends.last) return null;
+  const tie: number[] = [];
+  for (let i = ends.end + 1; i <= ends.last; i++) if (p.cmd[i] === STITCH) tie.push(i);
+  return { end: ends.end, tie };
+}
+
+/**
+ * The points (0.1 mm) a stitch from (ax, ay) to (bx, by) is sewn in: the end alone, or, where it is
+ * longer than `max`, evenly spaced points on the way so no stitch is longer.
+ */
+export function stitchesTo(ax: number, ay: number, bx: number, by: number, max: number): [number, number][] {
+  const n = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / max - 1e-9));
+  const out: [number, number][] = [];
+  for (let k = 1; k <= n; k++) out.push([Math.round(ax + ((bx - ax) * k) / n), Math.round(ay + ((by - ay) * k) / n)]);
+  return out;
+}
+
+/**
+ * New penetrations `pts` (0.1 mm) sewn one after another right after record `after`: the stitch
+ * that went on from there now starts at the last of them. The records of `tie` (a tie-off after the
+ * thread end) move along by as much as the thread end moved, so the thread stays locked where it
+ * now ends.
+ */
+export function sewOn(p: Pattern, after: number, pts: readonly [number, number][], tie: readonly number[] = []): Pattern {
+  const n = p.cmd.length;
+  const k = pts.length;
+  const at = after + 1;
+  const x = new Int32Array(n + k);
+  const y = new Int32Array(n + k);
+  const cmd = new Uint8Array(n + k);
+  x.set(p.x.subarray(0, at));
+  y.set(p.y.subarray(0, at));
+  cmd.set(p.cmd.subarray(0, at));
+  pts.forEach(([px, py], j) => {
+    x[at + j] = px;
+    y[at + j] = py;
+    cmd[at + j] = STITCH;
+  });
+  x.set(p.x.subarray(at), at + k);
+  y.set(p.y.subarray(at), at + k);
+  cmd.set(p.cmd.subarray(at), at + k);
+  if (k && tie.length) {
+    const dx = pts[k - 1][0] - p.x[after];
+    const dy = pts[k - 1][1] - p.y[after];
+    for (const i of tie) {
+      const j = i >= at ? i + k : i;
+      x[j] += dx;
+      y[j] += dy;
+    }
+  }
+  syncMarks(x, y, cmd);
+  return withRecords(p, x, y, cmd);
+}

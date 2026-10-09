@@ -246,7 +246,10 @@ export class LayersPanel {
     }
     // A file from elsewhere: all of it is guessed, said once instead of on every row.
     if (allGuessed(st)) rows.push(h('li', { class: 'muted layers-guessed', title: t('object.guessedHint') }, t('layers.allGuessed')));
+    // Built anew, the rows stay where they were in the list (a change to an object keeps it in view).
+    const top = this.list.scrollTop;
     swap(this.list, ...rows);
+    this.list.scrollTop = top;
     if (focusKey) {
       const sel = focusKey.object !== undefined ? `[data-object="${focusKey.object}"]` : `[data-block="${focusKey.block}"]`;
       const row = this.list.querySelector<HTMLElement>(sel);
