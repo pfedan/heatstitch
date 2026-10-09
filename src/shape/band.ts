@@ -80,15 +80,54 @@ export function bandGrip(f: Form, w: number, offset = 0): { at: Pt; mid: Pt; n: 
   if (pts.length < 2) return null;
   const c = shiftOf(pts, p.closed, offset);
   const cum = cumulative(pts);
-  const half = cum[cum.length - 1] / 2;
-  const on = pointAt(pts, cum, half);
-  let i = cum.findIndex((v) => v >= half);
+  const at = gripAlong(p, pts, cum);
+  const on = pointAt(pts, cum, at);
+  let i = cum.findIndex((v) => v >= at);
   if (i < 0) i = pts.length - 1;
   const n = normal(pts, i);
   const mid: Pt = [on[0] + n[0] * c, on[1] + n[1] * c];
   // Round a closed path the grip sits on the outer edge, off the nodes of an area's outline.
   const side = p.closed ? shiftOf(pts, true, 1) : 1;
   return { at: [mid[0] + (side * n[0] * w) / 2, mid[1] + (side * n[1] * w) / 2], mid, n };
+}
+
+/**
+ * Where along the path (mm) the grip sits: halfway along its longest stretch from node to node, so
+ * it never lies on a node and hides it (a line bent in its middle has a node halfway); of stretches
+ * alike, the one nearest halfway along the whole path.
+ */
+function gripAlong(p: Form['paths'][number], pts: Pt[], cum: number[]): number {
+  const total = cum[cum.length - 1];
+  const half = total / 2;
+  // Each node's place along the path: the nearest sample, in order.
+  const marks: number[] = [];
+  let from = 0;
+  for (const nd of p.nodes) {
+    let best = from;
+    let bd = Infinity;
+    for (let k = from; k < pts.length; k++) {
+      const d = Math.hypot(pts[k][0] - nd.p[0], pts[k][1] - nd.p[1]);
+      if (d < bd) {
+        bd = d;
+        best = k;
+      }
+    }
+    marks.push(cum[best]);
+    from = best;
+  }
+  if (!p.closed || marks[marks.length - 1] < total - 1e-6) marks.push(total);
+  if (marks[0] > 1e-6) marks.unshift(0);
+  let at = half;
+  let longest = -1;
+  for (let k = 1; k < marks.length; k++) {
+    const len = marks[k] - marks[k - 1];
+    const mid = (marks[k] + marks[k - 1]) / 2;
+    if (len > longest + 1e-6 || (Math.abs(len - longest) <= 1e-6 && Math.abs(mid - half) < Math.abs(at - half))) {
+      longest = len;
+      at = mid;
+    }
+  }
+  return at;
 }
 
 /** The width a drag of the grip to `q` gives: twice its distance across the line, rounded to 0.1 mm. */
