@@ -2705,6 +2705,17 @@ function cumulativeOf(line: Pt[]): number[] {
   return cum;
 }
 
+/** The first index in the rising list `xs` with a value above `x` (at or above with `orAt`). */
+function firstAbove(xs: number[], x: number, orAt = false): number {
+  let [lo, hi] = [0, xs.length];
+  while (lo < hi) {
+    const m = (lo + hi) >> 1;
+    if (xs[m] > x || (orAt && xs[m] === x)) hi = m;
+    else lo = m + 1;
+  }
+  return lo;
+}
+
 /**
  * The way from one column of a chain to the next, among `columns` (`outlines[j]` the outline of
  * column j, `later(j)` whether it is still to be sewn): hidden under the columns still to be sewn
@@ -2717,43 +2728,6 @@ function wayFinder(outlines: Pt[][], columns: Column[]): (from: Pt, to: Pt, late
   const boxes = outlines.map(boxOf);
   const tests = outlines.map(insideOf);
   const isIn = (j: number, q: Pt) => q[0] >= boxes[j][0] && q[0] <= boxes[j][2] && q[1] >= boxes[j][1] && q[1] <= boxes[j][3] && tests[j](q);
-  // A way in steps of at most a quarter mm: for each, its length and the columns it lies over
-  // (`over` from `at[i]` to `at[i + 1]` for step i).
-  type Walked = { way: Pt[]; d: number[]; n: number[]; at: number[]; over: number[] };
-  const walk = (way: Pt[]): Walked => {
-    const w: Walked = { way, d: [], n: [], at: [0], over: [] };
-    for (let i = 1; i < way.length; i++) {
-      const d = dist(way[i - 1], way[i]);
-      const n = Math.max(1, Math.ceil(d / 0.25));
-      w.d.push(d);
-      w.n.push(n);
-      for (let j = 0; j < n; j++) {
-        const q = lerp(way[i - 1], way[i], (j + 0.5) / n);
-        for (let c = 0; c < outlines.length; c++) if (isIn(c, q)) w.over.push(c);
-        w.at.push(w.over.length);
-      }
-    }
-    return w;
-  };
-  // Stops counting once over `limit` (a way that costs more than the best one so far is not taken).
-  const cost = (w: Walked, later: (j: number) => boolean, limit = Infinity) => {
-    let seen = 0;
-    let all = 0;
-    let q = 0;
-    for (let i = 0; i < w.d.length; i++) {
-      const [d, n] = [w.d[i], w.n[i]];
-      for (let j = 0; j < n; j++, q++) {
-        let shows = w.at[q] === w.at[q + 1] ? 3 : 1;
-        for (let k = w.at[q]; k < w.at[q + 1] && shows; k++) if (later(w.over[k])) shows = 0;
-        seen += (shows * d) / n;
-      }
-      all += d;
-      if (seen * 1000 + all > limit) return Infinity;
-    }
-    return seen * 1000 + all;
-  };
-  const straight = new Map<Pt, Map<Pt, Walked>>();
-  const alongs = new Map<Pt, Map<Pt, Walked[]>>();
   const known = <T>(m: Map<Pt, Map<Pt, T>>, a: Pt, b: Pt, make: () => T): T => {
     let row = m.get(a);
     if (!row) m.set(a, (row = new Map()));
@@ -2761,6 +2735,79 @@ function wayFinder(outlines: Pt[][], columns: Column[]): (from: Pt, to: Pt, late
     if (v === undefined) row.set(b, (v = make()));
     return v;
   };
+  // A way in steps of at most a quarter mm, each step over a set of columns. Steps in a row over
+  // the same columns are one part: its share of the length of each piece of the way, and the
+  // columns (`over` from `at[i]` to `at[i + 1]` for part i). `ends[k]` is the first part after
+  // piece k of the way, `d` the length of each piece.
+  type Walked = { way: Pt[]; d: number[]; ends: number[]; len: number[]; at: number[]; over: number[] };
+  const walk = (way: Pt[]): Walked => {
+    const w: Walked = { way, d: [], ends: [], len: [], at: [0], over: [] };
+    let last: number[] | null = null;
+    for (let i = 1; i < way.length; i++) {
+      const d = dist(way[i - 1], way[i]);
+      const n = Math.max(1, Math.ceil(d / 0.25));
+      w.d.push(d);
+      last = null;
+      for (const here of overOf(way[i - 1], way[i], n)) {
+        if (last && same(last, here)) w.len[w.len.length - 1] += d / n;
+        else {
+          w.over.push(...here);
+          w.at.push(w.over.length);
+          w.len.push(d / n);
+          last = here;
+        }
+      }
+      w.ends.push(w.len.length);
+    }
+    return w;
+  };
+  // The columns under each step of a piece of a way. Ways along the middle of a column share its
+  // pieces, so each is looked at once.
+  const pieces = new Map<Pt, Map<Pt, number[][]>>();
+  const overOf = (a: Pt, b: Pt, n: number) =>
+    known(pieces, a, b, () =>
+      Array.from({ length: n }, (_, j) => {
+        const q = lerp(a, b, (j + 0.5) / n);
+        const here: number[] = [];
+        for (let c = 0; c < outlines.length; c++) if (isIn(c, q)) here.push(c);
+        return here;
+      }),
+    );
+  const same = (a: number[], b: number[]) => a.length === b.length && a.every((x, k) => x === b[k]);
+  // Stops counting once over `limit` (a way that costs more than the best one so far is not taken).
+  const cost = (w: Walked, later: (j: number) => boolean, limit = Infinity) => {
+    let seen = 0;
+    let all = 0;
+    let q = 0;
+    for (let i = 0; i < w.d.length; i++) {
+      for (; q < w.ends[i]; q++) {
+        let shows = w.at[q] === w.at[q + 1] ? 3 : 1;
+        for (let k = w.at[q]; k < w.at[q + 1] && shows; k++) if (later(w.over[k])) shows = 0;
+        seen += shows * w.len[q];
+      }
+      all += w.d[i];
+      if (seen * 1000 + all > limit) return Infinity;
+    }
+    return seen * 1000 + all;
+  };
+  // Where a point lies along the middle of each column (how far, and the point there), found once
+  // for it: the first piece of each way from it along a column is then the same every time.
+  const centers = columns.map((c) => ({ line: c.center, cum: cumulativeOf(c.center) }));
+  const along = new Map<Pt, { s: number; p: Pt }[]>();
+  const alongOf = (q: Pt) => {
+    let v = along.get(q);
+    if (!v)
+      along.set(
+        q,
+        (v = centers.map((c) => {
+          const s = project(c.line, c.cum, q).s;
+          return { s, p: pointAt(c.line, c.cum, s) };
+        })),
+      );
+    return v;
+  };
+  const straight = new Map<Pt, Map<Pt, Walked>>();
+  const alongs = new Map<Pt, Map<Pt, Walked[]>>();
   return (from, to, later) => {
     const direct = known(straight, from, to, () => walk([from, to]));
     let way = direct.way;
@@ -2768,12 +2815,12 @@ function wayFinder(outlines: Pt[][], columns: Column[]): (from: Pt, to: Pt, late
     // Seen less than a little: straight on.
     if (best >= 0.3 * 1000) {
       const ways = known(alongs, from, to, () =>
-        columns.map((c) => {
-          const cum = cumulativeOf(c.center);
-          const a = project(c.center, cum, from).s;
-          const b = project(c.center, cum, to).s;
-          const mid = subRail(c.center, cum, Math.min(a, b), Math.max(a, b));
-          return walk([from, ...(a <= b ? mid : mid.reverse()), to]);
+        centers.map((c, k) => {
+          const [a, b] = [alongOf(from)[k], alongOf(to)[k]];
+          const [lo, hi] = a.s <= b.s ? [a, b] : [b, a];
+          // The middle from one to the other (as subRail, with the points found before).
+          const mid = [lo.p, ...c.line.slice(firstAbove(c.cum, lo.s + 1e-6), firstAbove(c.cum, hi.s - 1e-6, true)), hi.p];
+          return walk([from, ...(a.s <= b.s ? mid : mid.reverse()), to]);
         }),
       );
       for (const w of ways) {
