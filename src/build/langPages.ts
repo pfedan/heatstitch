@@ -21,12 +21,12 @@ export function pagePath(page: Page, lang: Lang): string {
 
 const DE: Record<Page, { title: string; description: string; ogTitle: string; ogDescription: string }> = {
   app: {
-    title: 'heatstitch: Stickdateien (PES, DST) im Browser ansehen, bearbeiten und prüfen',
+    title: 'heatstitch: kostenlose Sticksoftware im Browser (PES, DST, JEF)',
     description:
-      'Kostenloser Stick-Editor im Browser: PES, DST, JEF, VP3, EXP oder SVG öffnen, Reihenfolge, Füllmuster und einzelne Stiche bearbeiten, die Stichdichte prüfen und für deine Stickmaschine speichern.',
-    ogTitle: 'heatstitch: Stickdateien ansehen, bearbeiten und prüfen',
+      'Stickmuster kostenlos im Browser erstellen und bearbeiten: Bilder in Stiche umwandeln, Schrift setzen, PES-, DST-, JEF-, VP3- oder EXP-Dateien bearbeiten und die Stichdichte prüfen.',
+    ogTitle: 'heatstitch: kostenlose Sticksoftware im Browser',
     ogDescription:
-      'Reihenfolge, Objekte, Füllmuster und einzelne Stiche, dazu eine Dichteprüfung, die zu Dichtes behebt. Macht aus Bildern und SVG Stiche. Kostenlos, und deine Dateien verlassen nie dein Gerät.',
+      'Macht aus Bildern und SVG Stiche, setzt Schrift in 41 Stickschriften, bearbeitet Objekte und einzelne Stiche, und eine Dichteprüfung behebt, was zu dicht ist. Speichert PES, DST, JEF, VP3 und EXP. Deine Dateien verlassen nie dein Gerät.',
   },
   docs: {
     title: 'heatstitch Anleitung: Stickdateien ansehen, bearbeiten, zeichnen und prüfen',
