@@ -123,16 +123,18 @@ describe('digitize', () => {
   });
 
   it('sews a grass tuft with Smart as satin in sections, the blades cut off at the base', () => {
-    // Two tapering blades, 4 mm wide at the bottom, joined by a base 4 mm high: as one satin
+    // Two tapering blades, 4 mm wide at the bottom, joined by a base 4.5 mm high: as one satin
     // network the base's columns fanned out and crossed, as one fill the blades got ragged rows.
+    // (A base 4 mm high sits right at the satin's density limit at its end, where its middle,
+    // its underlay and the way into it meet: a hair either way decides between satin and fill.)
     const tri = (x: number, y: number, x0: number, x1: number, tx: number, ty: number) => {
-      if (y < ty || y > 26) return false;
-      const t = (y - ty) / (26 - ty);
+      if (y < ty || y > 25.5) return false;
+      const t = (y - ty) / (25.5 - ty);
       return x >= tx + (x0 - tx) * t && x <= tx + (x1 - tx) * t;
     };
     const { pattern, objects, areas } = design(
       30,
-      (x, y) => ((x > 4 && x < 24 && y >= 26 && y < 30) || tri(x, y, 6, 10, 7, 8) || tri(x, y, 15, 19, 21, 11) ? BLACK : null),
+      (x, y) => ((x > 4 && x < 24 && y >= 25.5 && y < 30) || tri(x, y, 6, 10, 7, 8) || tri(x, y, 15, 19, 21, 11) ? BLACK : null),
       {},
       { smart: true },
     );
