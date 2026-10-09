@@ -112,8 +112,9 @@ export default defineConfig({
         ],
         // Only crawlers and link previews fetch the social image.
         globIgnores: ['og-image.jpg'],
-        // Navigations into a preview must reach the network, not the cached app shell.
-        navigateFallbackDenylist: [/\/pr-preview\//],
+        // Navigations into a preview must reach the network, not the cached app shell. So must a file
+        // opened on its own, such as a guide picture in a new tab: everything with an extension but .html.
+        navigateFallbackDenylist: [/\/pr-preview\//, /\/[^/?]*\.(?!html(?:\?|$))[^/?]*(?:\?.*)?$/],
       },
     }),
   ],
