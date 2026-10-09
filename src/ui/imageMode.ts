@@ -1406,6 +1406,10 @@ export class ImageMode {
     document.querySelectorAll<HTMLInputElement>('input[name="image-style"]').forEach((el) => {
       el.checked = el.value === style;
       el.disabled = el.value !== 'flat' && !!this.svg;
+      // The chosen style shows a small ring while its stitches are computed.
+      const tile = el.closest('label')!;
+      tile.classList.toggle('busy', el.checked && !!this.busy);
+      tile.setAttribute('aria-busy', String(el.checked && !!this.busy));
     });
     for (const k of ['smart', 'dynamic'] as const) {
       const el = $(`image-style-${k}`);
