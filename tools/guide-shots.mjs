@@ -284,6 +284,28 @@ shots.shapes = async (lang) => {
   await close();
 };
 
+// 1c. measure: the cat, realistic, the tool Messen across the basket, the scale bar bottom left
+shots.measure = async (lang) => {
+  const { page, close } = await boot(lang);
+  await example(page, 'cat');
+  await realistic(page, true);
+  await page.keyboard.press('h');
+  await fit(page);
+  await page.keyboard.press('l');
+  // Alt: the ends where they are put, not on a needle point under them
+  await page.keyboard.down('Alt');
+  await page.mouse.move(776, 604);
+  await page.mouse.down();
+  await page.mouse.move(850, 604, { steps: 8 });
+  await page.mouse.move(931, 604, { steps: 8 });
+  await page.mouse.up();
+  await page.keyboard.up('Alt');
+  await page.mouse.move(1100, 700);
+  await page.waitForTimeout(600);
+  await jpeg(page, `measure-${lang}`);
+  await close();
+};
+
 // 2. heatmap: overlap.pes in Prüfen, findings open
 shots.heatmap = async (lang) => {
   const { page, close } = await boot(lang, { width: 1280, height: 960 });

@@ -234,7 +234,7 @@
           <dt>Farben und Objekte</dt>
           <dd>Die Liste links: die Farben in Stickreihenfolge, jede mit Garnname und Nummer, Objektzahl und Stichen; der Pfeil klappt sie zu ihren Objekten auf. Ganz oben <i>Reihenfolge optimieren</i>, ganz unten der Block <i>Nicht gestickt</i>. Mehr dazu unter <a href="#de-sequence">Ablauf und Farben</a> und <a href="#de-objects">Objekte</a>.</dd>
           <dt>Bühne</dt>
-          <dd>In der Mitte das Stickmuster. Die Brotkrume oben links nennt das gewählte Objekt und die <b>Ebene</b>: <i>Objekte</i> (ganze Objekte wählen und ordnen), <i>Form</i> (Umriss bearbeiten) oder <i>Stiche</i> (einzelne Einstiche); ein Klick darauf wechselt, <kbd>Esc</kbd> geht eine Ebene zurück. Unten rechts die Ansichtsleiste: das Auge öffnet das <a href="#de-display">Ansicht-Menü</a>, daneben die Zoomstufe und <i>Einpassen</i> (<kbd>F</kbd> oder Doppelklick auf eine leere Stelle). Mausrad, Ziehen und zwei Finger zoomen und verschieben.</dd>
+          <dd>In der Mitte das Stickmuster. Die Brotkrume oben links nennt das gewählte Objekt und die <b>Ebene</b>: <i>Objekte</i> (ganze Objekte wählen und ordnen), <i>Form</i> (Umriss bearbeiten) oder <i>Stiche</i> (einzelne Einstiche); ein Klick darauf wechselt, <kbd>Esc</kbd> geht eine Ebene zurück. Unten rechts die Ansichtsleiste: das Auge öffnet das <a href="#de-display">Ansicht-Menü</a>, daneben <i>Messen</i> (<kbd>L</kbd>), die Zoomstufe und <i>Einpassen</i> (<kbd>F</kbd> oder Doppelklick auf eine leere Stelle). Unten links der Maßstab. Mausrad, Ziehen und zwei Finger zoomen und verschieben.</dd>
           <dt>Player</dt>
           <dd>Die Leiste unter der Bühne stickt das Stickmuster Stich für Stich nach, siehe <a href="#de-sequence">Ablauf</a>.</dd>
           <dt>Karten rechts</dt>
@@ -837,6 +837,15 @@
           </dd>
           <dt>Zoom</dt>
           <dd>Mausrad, Pinch oder <kbd>+</kbd> und <kbd>-</kbd>; <kbd>0</kbd> zeigt das Stickmuster in Originalgröße, <kbd>F</kbd> oder ein Doppelklick auf eine leere Stelle passt es ein. Ist ein Stickrahmen gewählt, zeigt <i>Einpassen</i> das ganze Stickfeld.</dd>
+          <dt>Maßstab</dt>
+          <dd>Unten links auf der Bühne zeigt ein schwarz-weißer Balken, wie groß das Stickmuster bei diesem Zoom ist: zwei Abschnitte von 1, 5, 10, 15, 20 mm und so weiter (ganz nah auch 0,1 bis 0,5 mm), höchstens 120 Pixel breit. Ausschalten mit <i>Maßstab</i> im Ansicht-Menü.</dd>
+          <dt>Messen</dt>
+          <dd>Das Lineal in der Leiste unten rechts (Taste <kbd>L</kbd>) misst den Abstand zwischen zwei Punkten in mm: ziehen, oder zwei Punkte nacheinander klicken oder antippen. Die Länge steht an der Linie, darüber Breite, Höhe und Winkel; der Winkel zählt wie bei der Füllung. Die Enden lassen sich danach verschieben, ein Klick daneben misst neu. Ab etwa 160 % Zoom rasten die Enden auf Einstichen ein, so misst du genau eine Stichlänge (<kbd>Alt</kbd>: frei setzen); <kbd>Umschalt</kbd> hält die Linie in 15°-Schritten. <kbd>Esc</kbd> löscht die Messung, noch einmal <kbd>Esc</kbd> oder <i>Fertig</i> legt das Werkzeug weg. Messen ändert nichts am Stickmuster und geht auch in <i>Prüfen</i>.
+            <figure>
+              <img src="/guide/measure-de.jpg" width="1280" height="800" loading="lazy" alt="Die Katze mit dem Werkzeug Messen: eine Linie quer über den Korb mit 16,1 mm, oben Breite, Höhe und Winkel, unten links der Maßstab 0, 5, 10 mm" />
+              <figcaption>Der Korb ist 16,1 mm breit. Unten links der Maßstab, unten rechts das Lineal.</figcaption>
+            </figure>
+          </dd>
         </dl>
         <div class="fig-pair">
           <figure>
@@ -913,6 +922,7 @@
             <tr><td><kbd>F</kbd> oder Doppelklick, <kbd>+</kbd> <kbd>-</kbd> <kbd>0</kbd></td><td>Einpassen; vergrößern, verkleinern, Originalgröße</td></tr>
             <tr><td><kbd>H</kbd>, <kbd>S</kbd></td><td>Alle Markierungen ein oder aus; Stiche oder Formen zeigen</td></tr>
             <tr><td><kbd>Umschalt</kbd>+<kbd>B</kbd></td><td>Vorlage zum Abpausen ein- oder ausblenden</td></tr>
+            <tr><td><kbd>L</kbd></td><td>Messen: Abstand zwischen zwei Punkten</td></tr>
             <tr><td><kbd>J</kbd> <kbd>K</kbd> oder <kbd>↓</kbd> <kbd>↑</kbd></td><td>Nächstes / voriges Stickmuster</td></tr>
             <tr><td><kbd>Strg</kbd>+<kbd>Z</kbd> / <kbd>Strg</kbd>+<kbd>Umschalt</kbd>+<kbd>Z</kbd></td><td>Rückgängig / wiederholen</td></tr>
             <tr><td><kbd>Leertaste</kbd>, <kbd>,</kbd> <kbd>.</kbd>, <kbd>Pos1</kbd> <kbd>Ende</kbd></td><td>Player: abspielen oder anhalten, ein Stich zurück oder vor (mit <kbd>Umschalt</kbd> 100), zum Anfang oder Ende</td></tr>
@@ -1165,7 +1175,7 @@
           <dt>Colors and objects</dt>
           <dd>The list on the left: the colors in sewing order, each with thread name and number, object count and stitches; the arrow opens it to its objects. At the very top <i>Optimize order</i>, at the bottom the <i>Not sewn</i> block. More under <a href="#en-sequence">Sequence and colors</a> and <a href="#en-objects">Objects</a>.</dd>
           <dt>Stage</dt>
-          <dd>The design in the middle. The breadcrumb at the top left names the selected object and the <b>level</b>: <i>Objects</i> (pick and order whole objects), <i>Shape</i> (edit the outline) or <i>Stitches</i> (single needle points); a click on it switches, <kbd>Esc</kbd> goes one level back. At the bottom right the view bar: the eye opens the <a href="#en-display">View menu</a>, next to it the zoom level and <i>Fit</i> (<kbd>F</kbd> or a double click on an empty spot). Mouse wheel, dragging and two fingers zoom and pan.</dd>
+          <dd>The design in the middle. The breadcrumb at the top left names the selected object and the <b>level</b>: <i>Objects</i> (pick and order whole objects), <i>Shape</i> (edit the outline) or <i>Stitches</i> (single needle points); a click on it switches, <kbd>Esc</kbd> goes one level back. At the bottom right the view bar: the eye opens the <a href="#en-display">View menu</a>, next to it <i>Measure</i> (<kbd>L</kbd>), the zoom level and <i>Fit</i> (<kbd>F</kbd> or a double click on an empty spot). The scale bar at the bottom left. Mouse wheel, dragging and two fingers zoom and pan.</dd>
           <dt>Player</dt>
           <dd>The bar under the stage sews the design stitch by stitch, see <a href="#en-sequence">Sequence</a>.</dd>
           <dt>Cards on the right</dt>
@@ -1760,6 +1770,15 @@
           </dd>
           <dt>Zoom</dt>
           <dd>Mouse wheel, pinch or <kbd>+</kbd> and <kbd>-</kbd>; <kbd>0</kbd> shows the design at actual size, <kbd>F</kbd> or a double click on an empty spot fits it in. With a hoop chosen, <i>Fit</i> shows the whole sewing field.</dd>
+          <dt>Scale bar</dt>
+          <dd>At the bottom left of the stage a black and white bar shows how large the design is at this zoom: two parts of 1, 5, 10, 15, 20 mm and so on (0.1 to 0.5 mm when zoomed in close), at most 120 pixels wide. Switch it off with <i>Scale bar</i> in the View menu.</dd>
+          <dt>Measure</dt>
+          <dd>The ruler in the bar at the bottom right (key <kbd>L</kbd>) measures the distance between two points in mm: drag, or click or tap two points one after the other. The length stands at the line, width, height and angle above; the angle counts as for a fill. The ends can be moved afterwards, a click elsewhere measures anew. From about 160 % zoom the ends snap to needle points, so you measure exactly one stitch length (<kbd>Alt</kbd>: place freely); <kbd>Shift</kbd> holds the line to 15° steps. <kbd>Esc</kbd> clears the measurement, <kbd>Esc</kbd> again or <i>Done</i> puts the tool away. Measuring changes nothing in the design and works in <i>Check</i> too.
+            <figure>
+              <img src="/guide/measure-en.jpg" width="1280" height="800" loading="lazy" alt="The cat with the Measure tool: a line across the basket reading 16.1 mm, width, height and angle above, the scale bar 0, 5, 10 mm at the bottom left" />
+              <figcaption>The basket is 16.1 mm wide. The scale bar at the bottom left, the ruler at the bottom right.</figcaption>
+            </figure>
+          </dd>
         </dl>
         <div class="fig-pair">
           <figure>
@@ -1836,6 +1855,7 @@
             <tr><td><kbd>F</kbd> or double click, <kbd>+</kbd> <kbd>-</kbd> <kbd>0</kbd></td><td>Fit; zoom in, zoom out, actual size</td></tr>
             <tr><td><kbd>H</kbd>, <kbd>S</kbd></td><td>All markers on or off; show stitches or shapes</td></tr>
             <tr><td><kbd>Shift</kbd>+<kbd>B</kbd></td><td>Show or hide the tracing image</td></tr>
+            <tr><td><kbd>L</kbd></td><td>Measure the distance between two points</td></tr>
             <tr><td><kbd>J</kbd> <kbd>K</kbd> or <kbd>↓</kbd> <kbd>↑</kbd></td><td>Next / previous design</td></tr>
             <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd></td><td>Undo / redo</td></tr>
             <tr><td><kbd>Space</kbd>, <kbd>,</kbd> <kbd>.</kbd>, <kbd>Home</kbd> <kbd>End</kbd></td><td>Player: play or pause, one stitch back or forward (with <kbd>Shift</kbd> 100), to the start or end</td></tr>
