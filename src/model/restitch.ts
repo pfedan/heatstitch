@@ -1,6 +1,6 @@
 import { LOCK_MM, SATIN_SPLIT_MM, SATIN_SPLIT_MAX } from '../material/rules';
 import { SATIN_MAX, satinForArea, type KeptShape } from '../digitize/digitize';
-import { borderStitches, runLike, type PathStitch } from './along';
+import { borderStitches, isRunType, runLike, type PathStitch } from './along';
 import { wholeOf } from './knockout';
 import { LINE_MOTIFS } from '../digitize/motif';
 import { lineStitches, runAsLine, runWays } from './line';
@@ -8,8 +8,8 @@ import { chooseAngle, fillRegion, type FillParams } from '../digitize/fill';
 import { contourFill, fieldFill, guideField, stitchField } from '../digitize/flow';
 import { atShare, crossFill, CROSS_KINDS, echoFill, circleField, grainField, GRID_KINDS, gridFill, mazeFill, meanderFill, MOTIFS, rayField, regionBox, swirlField, waveFill, zigzagFill, type CrossKind, type GridKind, type Motif, type OpenParams } from '../digitize/deco';
 import { spiralFill } from '../digitize/spiral';
-import { isEcho } from '../digitize/echo';
-import { isShadow } from './shadow';
+import { ECHO_GAP, isEcho } from '../digitize/echo';
+import { shadowFrom } from './shadow';
 import { coverage } from '../digitize/measure';
 import { expandRegion, outline, sample, signedField, type Region } from '../digitize/region';
 import { withSplit } from '../digitize/satinSuggest';
@@ -216,6 +216,8 @@ export interface SatinSettings {
   fringe?: number;
   /** The side of the fringe (in sewing direction); both when not set. */
   fringeSide?: FringeSide;
+  /** Lines only, never stored: see SatinParams.lead. */
+  lead?: number;
 }
 
 export type FringeSide = 'left' | 'right';
@@ -681,7 +683,7 @@ function storeOne(key: string, r: Remembered): StoredObject {
     ...(r.cut ? { cut: r.cut } : {}),
     ...(r.overlapShare !== undefined ? { overlapShare: r.overlapShare } : {}),
     ...(r.path ? { path: storeForm(r.path) } : {}),
-    ...(r.line ? { line: { ...r.line, ...(r.line.echo ? { echo: structuredClone(r.line.echo) } : {}), ...(r.line.shadow ? { shadow: { ...r.line.shadow, color: { ...r.line.shadow.color } } } : {}) } } : {}),
+    ...(r.line ? { line: { ...r.line, ...(r.line.echo ? { echo: { ...structuredClone(r.line.echo), overlap: true } } : {}), ...(r.line.shadow ? { shadow: { ...r.line.shadow, color: { ...r.line.shadow.color } } } : {}) } } : {}),
     ...(r.under ? { under: r.under } : {}),
     ...(r.underFrom ? { underFrom: r.underFrom } : {}),
     ...(r.borderAt ? { borderAt: r.borderAt } : {}),
@@ -873,7 +875,7 @@ export function isLineStitch(b: unknown): b is PathStitch {
 
 function isBorder(b: unknown): b is BorderSettings {
   const s = b as BorderSettings | null;
-  return !!s && BORDERS.includes(s.type) && finite(s.width) && [s.length, s.repeat, s.tolerance, s.offset, s.spacing, s.pull].every((v) => v === undefined || finite(v)) && (s.flip === undefined || typeof s.flip === 'boolean') && (s.motif === undefined || LINE_MOTIFS.includes(s.motif)) && (s.under === undefined || s.under === 'off' || UNDERLAYS.includes(s.under)) && (s.color === undefined || isColor(s.color)) && (s.link === undefined || typeof s.link === 'string') && (s.seams === undefined || typeof s.seams === 'boolean') && (s.fringe === undefined || finite(s.fringe)) && (s.fringeSide === undefined || s.fringeSide === 'left' || s.fringeSide === 'right');
+  return !!s && BORDERS.includes(s.type) && finite(s.width) && [s.length, s.repeat, s.tolerance, s.offset, s.spacing, s.pull, s.stitch].every((v) => v === undefined || finite(v)) && (s.flip === undefined || typeof s.flip === 'boolean') && (s.motif === undefined || LINE_MOTIFS.includes(s.motif)) && (s.under === undefined || s.under === 'off' || UNDERLAYS.includes(s.under)) && (s.color === undefined || isColor(s.color)) && (s.link === undefined || typeof s.link === 'string') && (s.seams === undefined || typeof s.seams === 'boolean') && (s.whole === undefined || typeof s.whole === 'boolean') && (s.fringe === undefined || finite(s.fringe)) && (s.fringeSide === undefined || s.fringeSide === 'left' || s.fringeSide === 'right');
 }
 
 function isSatin(f: unknown): f is SatinSettings {
@@ -1075,11 +1077,16 @@ function fromStored(e: StoredObject): Remembered | null {
   if (path && isLineStitch(e.line)) {
     r.line = { ...e.line };
     if (r.line.echo !== undefined) {
-      if (isEcho(r.line.echo)) r.line.echo = structuredClone(r.line.echo);
-      else delete r.line.echo;
+      if (isEcho(r.line.echo)) {
+        r.line.echo = structuredClone(r.line.echo);
+        // Before copies could overlap, a wide stitch kept its copies its width apart, whatever the gap said.
+        if (!isRunType(r.line.type) && !e.line.echo?.overlap) r.line.echo.gap = Math.max(r.line.echo.gap, Math.min(ECHO_GAP[1], Math.round((r.line.width + 0.5) * 10) / 10));
+        delete r.line.echo.overlap;
+      } else delete r.line.echo;
     }
     if (r.line.shadow !== undefined) {
-      if (isShadow(r.line.shadow)) r.line.shadow = { ...r.line.shadow, color: { ...r.line.shadow.color } };
+      const shadow = shadowFrom(r.line.shadow);
+      if (shadow) r.line.shadow = shadow;
       else delete r.line.shadow;
     }
   }
@@ -2366,7 +2373,7 @@ function fringeParams(s: SatinSettings): Pick<SatinParams, 'fringe' | 'fringeB'>
 
 /** The satin's parameters for `pairs` and its stitches. */
 export function satinParams(s: SatinSettings): SatinParams {
-  return { spacing: s.spacing, pull: s.edge, pullB: s.edgeB, pullShare: s.edgeShare ?? 0, splitMm: s.split ?? SATIN_SPLIT, short: s.short && s.type !== 'e', stagger: s.stagger ?? true, ...fringeParams(s) };
+  return { spacing: s.spacing, pull: s.edge, pullB: s.edgeB, pullShare: s.edgeShare ?? 0, splitMm: s.split ?? SATIN_SPLIT, short: s.short && s.type !== 'e', stagger: s.stagger ?? true, ...fringeParams(s), ...(s.lead ? { lead: s.lead } : {}) };
 }
 
 /**

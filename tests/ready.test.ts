@@ -3,6 +3,7 @@ import { cardView } from '../src/areas/ready/card';
 import { designFigures } from '../src/areas/ready/figures';
 import { extraLayers, recipeCard, RECIPES, type DesignFigures } from '../src/areas/ready/recipes';
 import { BOX, layout, sheetHtml } from '../src/areas/ready/sheet';
+import { threadMeters, threadUse } from '../src/model/threadUse';
 import { de, en } from '../src/i18n/areas/ready';
 import { de as fabricDe, en as fabricEn } from '../src/i18n/areas/fabrics';
 import { de as ampelDe, en as ampelEn } from '../src/i18n/areas/ampel';
@@ -221,6 +222,10 @@ describe('ready: stitch sheet', () => {
     expect(m![2]).toBe(m![4]);
     expect(html).toContain('@page');
     expect(html).toContain('Test &#60;1&#62;');
+    // The thread it takes, per color and in all, and the bobbin thread.
+    const use = threadUse(p, 'woven');
+    expect(html).toContain(`>${threadMeters(use.topTotal)}<`);
+    expect(html).toContain(threadMeters(use.bobbin));
   });
 
   it('splits a design larger than a sheet into overlapping sheets', () => {

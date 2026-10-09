@@ -73,6 +73,8 @@ export interface Settings {
   marks: Marks;
   /** Global switch for all markers on the canvas; off leaves the chosen ones as they are and shows none. */
   marksOn: boolean;
+  /** Pointing at an object, a part or its settings, or selecting it, fades the rest; off, nothing fades (a color focus from the list still does). */
+  autoHighlight: boolean;
   /** Open state of the collapsible sidebar sections, by id. */
   sections: Record<string, boolean>;
   /** Machine speed in stitches per minute, for the sewing time and the player. */
@@ -135,6 +137,7 @@ export const DEFAULTS: Settings = {
   colorBy: 'thread',
   marks: { jumps: true, trims: true, colors: false, ends: false, points: false, threads: true },
   marksOn: true,
+  autoHighlight: true,
   sections: { display: true, stats: false, advanced: false, findings: true },
   machineSpm: 800,
   trimSeconds: TRIM_SECONDS,
@@ -192,6 +195,7 @@ export function loadSettings(): Settings {
       colorBy: COLOR_BY.includes(s.colorBy as ColorBy) ? s.colorBy! : 'thread',
       marks: { ...DEFAULTS.marks, ...(showJumps !== undefined ? { jumps: showJumps } : {}), ...s.marks },
       marksOn: typeof s.marksOn === 'boolean' ? s.marksOn : DEFAULTS.marksOn,
+      autoHighlight: typeof s.autoHighlight === 'boolean' ? s.autoHighlight : DEFAULTS.autoHighlight,
       // Findings closed with the old × stay closed as a collapsed section.
       sections: { ...DEFAULTS.sections, ...(findingsOpen === false ? { findings: false } : {}), ...s.sections },
       machineSpm: typeof s.machineSpm === 'number' && s.machineSpm > 0 ? s.machineSpm : DEFAULTS.machineSpm,

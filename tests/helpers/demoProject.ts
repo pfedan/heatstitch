@@ -152,8 +152,8 @@ export class Design {
     this.restitchLine(index, { echo: { side, count, gap, ...(colors ? { colors, link: this.link('e') } : {}) } });
   }
 
-  shadow(index: number, color: ThreadColor, dir: 'se' | 'sw' | 'ne' | 'nw' = 'se', dist = 0.8): void {
-    this.restitchLine(index, { shadow: { color, link: this.link('s'), dir, dist } });
+  shadow(index: number, color: ThreadColor, angle = 45, dist = 1.1): void {
+    this.restitchLine(index, { shadow: { color, link: this.link('s'), angle, dist } });
   }
 
   /** The fill `index` sewn anew with the settings `s` (the stitch panel). */
@@ -398,9 +398,9 @@ export function lineVariants(): Design {
     ]],
     // Schatten: close below right, further below right, above left.
     [navy, [
-      { st: { type: 'satin', width: 2 }, width: 2, then: (x, i) => x.shadow(i, grey, 'se', 0.5) },
-      { st: { type: 'satin', width: 2 }, width: 2, then: (x, i) => x.shadow(i, grey, 'se', 1.5) },
-      { st: { type: 'satin', width: 2 }, width: 2, then: (x, i) => x.shadow(i, grey, 'nw', 1.2) },
+      { st: { type: 'satin', width: 2 }, width: 2, then: (x, i) => x.shadow(i, grey, 45, 0.5 * Math.SQRT2) },
+      { st: { type: 'satin', width: 2 }, width: 2, then: (x, i) => x.shadow(i, grey, 45, 1.5 * Math.SQRT2) },
+      { st: { type: 'satin', width: 2 }, width: 2, then: (x, i) => x.shadow(i, grey, 225, 1.2 * Math.SQRT2) },
     ]],
   ];
   rows.forEach(([color, cells], r) =>
@@ -422,7 +422,7 @@ export function lineEffects(): Design {
   const b = d.line('M12 52 C30 32 70 32 88 52', teal, { type: 'run' });
   d.echo(b, 'both', 2, 2.2, [sky, navy]);
   const c = d.line(heart(50, 78, 14), red, { type: 'satin', width: 2.5 }, 2.5);
-  d.shadow(c, grey, 'se', 1);
+  d.shadow(c, grey, 45, Math.SQRT2);
   const s = d.line(star(50, 78, 6, 0.5), yellow, { type: 'triple', repeat: 3 });
   d.echo(s, 'out', 1, 2, [orange]);
   d.cutJumps();

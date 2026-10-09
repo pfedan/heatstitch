@@ -5,7 +5,7 @@ import { recolorBlock, shareBorders, syncBorders } from '../../src/model/border'
 import { blendObject } from '../../src/model/blend';
 import { MOTIFS } from '../../src/digitize/deco';
 import { ECHO_SIDES } from '../../src/digitize/echo';
-import { lineParts, partOf, SHADOW_DIRS, type LinePart } from '../../src/model/shadow';
+import { lineParts, partOf, type LinePart } from '../../src/model/shadow';
 import { lineStitches, resewLine } from '../../src/model/line';
 import { refreshKnockouts, setKnockout } from '../../src/model/knockout';
 import { rememberObjects, sewObjects, tableOf, type SewObject } from '../../src/model/objects';
@@ -324,8 +324,22 @@ export const OPS: Op[] = [
       const old = m.line!.echo;
       // Now and then copies in threads of their own, or trimmed apart.
       const colors = r() < 0.4 ? Array.from({ length: count }, () => (r() < 0.5 ? null : pick(r, COLORS.filter((c) => !sameColor(c, o.color))))) : undefined;
-      const echo = r() < 0.25 ? undefined : { side: pick(r, ECHO_SIDES), count, gap: between(r, 1.5, 5), ...(r() < 0.3 ? { cut: true } : {}), ...(colors?.some(Boolean) ? { colors, link: old?.link ?? `e${Math.floor(r() * 1e9).toString(36)}` } : {}) };
-      const next = resewLine(d.cur.p, o.index, m.path!, { ...m.line!, echo }, T);
+      // Copies apart or overlapping (0 to 10 mm), their figures in step or shifted, sewn either way round.
+      const echo =
+        r() < 0.25
+          ? undefined
+          : {
+              side: pick(r, ECHO_SIDES),
+              count,
+              gap: r() < 0.1 ? 0 : between(r, 0.2, 6),
+              ...(r() < 0.3 ? { cut: true } : {}),
+              ...(r() < 0.4 ? { phase: Math.round(between(r, -180, 180)) } : {}),
+              ...(r() < 0.3 ? { reverse: true } : {}),
+              ...(colors?.some(Boolean) ? { colors, link: old?.link ?? `e${Math.floor(r() * 1e9).toString(36)}` } : {}),
+            };
+      // Now and then sewn more than once: the whole line there and back, or a motif as bean stitch.
+      const repeat = r() < 0.3 ? pick(r, [2, 3, 4, 5]) : m.line!.repeat;
+      const next = resewLine(d.cur.p, o.index, m.path!, { ...m.line!, echo, ...(repeat && m.line!.type !== 'triple' ? { repeat } : {}), ...(r() < 0.3 ? { whole: true } : {}) }, T);
       // As the app: a shadow follows its line.
       return !!next && shapes(d, syncBorders(next.pattern, T));
     },
@@ -340,7 +354,7 @@ export const OPS: Op[] = [
       const m = remembered(d.cur.p, o)!;
       const old = m.line!.shadow;
       const colors = COLORS.filter((c) => !sameColor(c, o.color));
-      const shadow = old && r() < 0.3 ? undefined : { color: pick(r, colors), link: old?.link ?? `s${Math.floor(r() * 1e9).toString(36)}`, dir: pick(r, SHADOW_DIRS), dist: between(r, 0.3, 3) };
+      const shadow = old && r() < 0.3 ? undefined : { color: pick(r, colors), link: old?.link ?? `s${Math.floor(r() * 1e9).toString(36)}`, angle: Math.floor(r() * 360), dist: between(r, 0, 10) };
       const next = resewLine(d.cur.p, o.index, m.path!, { ...m.line!, shadow }, T);
       return !!next && shapes(d, syncBorders(next.pattern, T));
     },
@@ -763,7 +777,7 @@ export function checkBlends(p: Pattern): void {
 }
 
 /**
- * A line's stitches are what its curve and settings (with its echo) sew: every stitch lies on the
+ * A line's stitches are what its curve and settings (with its echo, sewn more than once) sew: every stitch lies on the
  * lines sewn anew from them, and every one of those lines has stitches, so an echo that moved,
  * turned, mirrored, scaled, was undone or saved never parts from what the line remembers.
  */
@@ -782,7 +796,7 @@ export function checkEchoes(p: Pattern): void {
   };
   for (const o of sewObjects(p)) {
     const m = remembered(p, o);
-    if (!m?.path || !m.line?.echo) continue;
+    if (!m?.path || !m.line || (!m.line.echo && !((m.line.repeat ?? 1) > 1))) continue;
     const fresh = lineStitches(m.path, m.line).flat();
     const sewn: [number, number][] = [];
     for (let i = o.first; i <= o.last; i++) if (p.cmd[i] === STITCH) sewn.push([p.x[i] / 10, p.y[i] / 10]);

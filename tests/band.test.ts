@@ -28,6 +28,13 @@ describe('band of a satin line', () => {
     expect(Math.abs(g.at[1])).toBeCloseTo(3);
   });
 
+  it('keeps its grip off a node halfway along (a line bent in its middle)', () => {
+    const bent: Form = { paths: [{ closed: false, nodes: ([[0, 0], [10, -6], [20, 0]] as [number, number][]).map((p) => ({ p, a: p, b: p, smooth: false })) }] };
+    const g = bandGrip(bent, 2)!;
+    const off = Math.min(...bent.paths[0].nodes.map((n) => Math.hypot(n.p[0] - g.mid[0], n.p[1] - g.mid[1])));
+    expect(off).toBeGreaterThan(5);
+  });
+
   it('reads the width across the line, whatever the pointer does along it', () => {
     const g = bandGrip(line, 6)!;
     expect(draggedWidth(g, [10, 4])).toBe(8);

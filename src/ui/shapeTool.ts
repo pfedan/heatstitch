@@ -118,13 +118,11 @@ export class ShapeTool implements ShapeView {
     return this.drag?.pick.part === 'width';
   }
 
-  /** What lies under the pointer: a shown handle, a node, the width grip, or a curve. */
+  /** What lies under the pointer: a shown handle, a node, the width grip, or a curve (in that order). */
   pickAt(x: number, y: number, scale: number): ShapePick | null {
     const r = PICK_PX / scale;
     let best: ShapePick | null = null;
     let bd = r;
-    const grip = this.band !== null ? bandGrip(this.form, this.band, this.bandOffset) : null;
-    if (grip && Math.hypot(grip.at[0] - x, grip.at[1] - y) < r) return { part: 'width' };
     for (const h of this.handles()) {
       const q = this.form.paths[h.path].nodes[h.i][h.part];
       const d = Math.hypot(q[0] - x, q[1] - y);
@@ -144,6 +142,9 @@ export class ShapeTool implements ShapeView {
       }),
     );
     if (best) return best;
+    // After the nodes: on a narrow satin the grip lies close to the line and must not cover them.
+    const grip = this.band !== null ? bandGrip(this.form, this.band, this.bandOffset) : null;
+    if (grip && Math.hypot(grip.at[0] - x, grip.at[1] - y) < r) return { part: 'width' };
     const near = nearestOnForm(this.form, [x, y]);
     if (near && near.d < PICK_CURVE_PX / scale) return { path: near.path, seg: near.seg, t: near.t, part: 'curve' };
     return null;
