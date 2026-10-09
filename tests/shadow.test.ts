@@ -5,7 +5,7 @@ import { syncBorders } from '../src/model/border';
 import { lineSettings, resewLine } from '../src/model/line';
 import { sewObjects } from '../src/model/objects';
 import { STITCH, TRIM, type Pattern } from '../src/model/pattern';
-import { remembered, rememberedIn, restoreRemembered } from '../src/model/restitch';
+import { objectKey, remembered, rememberedIn, restoreRemembered } from '../src/model/restitch';
 import { deleteObjects, duplicateObject, recolorObjects } from '../src/model/shapeOps';
 import { transformSewObject } from '../src/model/reshape';
 import { stitchKinds } from '../src/model/sequence';
@@ -124,5 +124,23 @@ describe('shadow of a line', () => {
     const alone = deleteObjects(p, [1], T)!;
     expect(remembered(alone, sewObjects(alone)[0])?.line?.echo?.skip).toEqual([2, 3]);
     expect(syncBorders(alone, T)).toBe(alone);
+  });
+
+  it('landing on the very stitches of another line, is sewn the other way round (found by the torture test)', () => {
+    // The shadow copied (a line of its own 2 mm beside it), and that copy shaded back onto the line.
+    const p = shaded({ dir: 'nw', dist: 2.4 });
+    const copy = duplicateObject(p, 0, T)!;
+    const objs = sewObjects(copy.pattern);
+    const c = objs[copy.index];
+    const m = remembered(copy.pattern, c)!;
+    expect(m.shadowOf).toBeUndefined();
+    const st = { ...m.line!, shadow: { color: blue, link: 's2', dir: 'se' as const, dist: 0.4 } };
+    const q = syncBorders(resewLine(copy.pattern, c.index, m.path!, st, T)!.pattern, T);
+    const keys = sewObjects(q).map((o) => objectKey(q, o));
+    expect(new Set(keys).size).toBe(keys.length);
+    // Each still knows what it is.
+    const mem = sewObjects(q).map((o) => remembered(q, o)!);
+    expect(mem.filter((x) => x.shadowOf === 's2')).toHaveLength(1);
+    expect(mem.filter((x) => x.line?.shadow?.link === 's1')).toHaveLength(1);
   });
 });
