@@ -109,7 +109,7 @@ describe('object list', () => {
     expect(remembered(p, o)?.knockout).toBeUndefined();
   });
 
-  it('stores the list as format 2 and reads it back on the stitches of the file', async () => {
+  it('stores the list as format 3 and reads it back on the stitches of the file', async () => {
     const p = twoFills();
     const stored = rememberedIn(p);
     expect(isStoredObjects(stored)).toBe(true);
@@ -121,7 +121,7 @@ describe('object list', () => {
     restoreRemembered(q, back.files[0].objects);
     expect(ids(q)).toEqual(ids(p));
     expect(sewObjects(q).map((o) => remembered(q, o)?.fill?.pattern)).toEqual(sewObjects(p).map((o) => remembered(p, o)?.fill?.pattern));
-    expect(PROJECT_VERSION).toBe(2);
+    expect(PROJECT_VERSION).toBe(3);
   });
 
   it('converts a project of version 1 when it is opened, and saves it as version 2', async () => {

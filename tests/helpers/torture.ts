@@ -1,7 +1,7 @@
 import { expect } from 'vitest';
 import { digitizeDefaults } from '../../src/digitize/digitize';
 import { addShape } from '../../src/model/addShape';
-import { recolorBlock, shareBorders, syncBorders } from '../../src/model/border';
+import { followerLinks, recolorBlock, shareBorders, syncBorders } from '../../src/model/border';
 import { blendObject } from '../../src/model/blend';
 import { MOTIFS } from '../../src/digitize/deco';
 import { ECHO_SIDES } from '../../src/digitize/echo';
@@ -773,9 +773,16 @@ export const SHAPE_OPS: Op[] = [
       const dx = between(r, -1.5, 1.5);
       const dy = between(r, -1.5, 1.5);
       const by = (q: [number, number]): [number, number] => [q[0] + dx, q[1] + dy];
-      const next: Form = { ...geo, paths: geo.paths.map((x, j) => (j !== k ? x : { ...x, nodes: x.nodes.map((n, m) => (m !== i ? n : { ...n, p: by(n.p), a: by(n.a), b: by(n.b) })) })) };
+      // Now and then a path opened or closed (the last closed one of a fill opened: it becomes a line, its fill kept).
+      const toggle = r() < 0.15 && (geo.paths[k].closed || nodes.length >= 3);
+      const next: Form = toggle
+        ? { ...geo, paths: geo.paths.map((x, j) => (j !== k ? x : { ...x, closed: !x.closed })) }
+        : { ...geo, paths: geo.paths.map((x, j) => (j !== k ? x : { ...x, nodes: x.nodes.map((n, m) => (m !== i ? n : { ...n, p: by(n.p), a: by(n.a), b: by(n.b) })) })) };
+      const before = remembered(p, o);
       const res = reshapeObject(p, objs, o, kinds, next, T);
-      return !!res && took(d, res);
+      // As the app: what follows a fill sewn as a line now goes with it.
+      const opened = !!res && geoUse(res.memory[0]) === 'line' && !!before?.fill;
+      return !!res && took(d, res, opened ? new Set(followerLinks(before)) : undefined);
     },
   },
 ];
@@ -814,6 +821,35 @@ export const LINE_OPS: Op[] = [
       const fill: FillSettings = { pattern: 'tatami', spacing: s.spacing, spacingEnd: 1, offset: 0.25, angle: NaN, stitch: s.stitch, underlay: s.underlay, edge: 0, tolerance: s.tolerance };
       const res = lineToFill(d.cur.p, o.index, fill, T);
       return !!res && took(d, res);
+    },
+  },
+  {
+    name: 'switch there and back',
+    run: (d, r) => {
+      // A fill made a line and filled again (the kind switch twice): the same form, the same fill.
+      const fills = d.objects.filter((o) => {
+        const m = remembered(d.cur.p, o);
+        return !!m?.fill && !!areaOf(m) && !m.free && !m.outline && !m.blendOf && !m.piece && !m.knockout;
+      });
+      if (!fills.length) return false;
+      const o = pick(r, fills);
+      const m = remembered(d.cur.p, o)!;
+      const line = fillsToLines(d.cur.p, [o.index], T);
+      if (!line) return false;
+      const back = lineToFill(line.pattern, o.index, m.fill!, T);
+      if (!back?.starts.length) return false;
+      const n = back.memory[0];
+      const plain = (f: FillSettings) => {
+        const { border, ...rest } = structuredClone(f);
+        if (border) {
+          delete border.color;
+          delete border.link;
+        }
+        return sortedJson({ ...rest, ...(border ? { border } : {}) });
+      };
+      expect(sortedJson(storeForm(n.geo!)), 'the form, switched there and back').toBe(sortedJson(storeForm(m.geo!)));
+      expect(plain(n.fill!), 'the fill, switched there and back').toBe(plain(m.fill!));
+      return took(d, back, line.drop);
     },
   },
   {

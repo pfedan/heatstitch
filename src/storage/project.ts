@@ -12,7 +12,7 @@
 import { normalizeCorrection } from '../correct/auto';
 import { readAreas } from '../digitize/smart';
 import type { StoredAside } from '../model/aside';
-import { isStoredObjects, type ObjectsAsStored } from '../model/restitch';
+import { compactStored, isStoredObjects, type ObjectsAsStored } from '../model/restitch';
 import { DEFAULTS, hexColor, normalizeImage, type ImageSettings, type Settings } from '../settings';
 import { isAcknowledgement, type Acknowledgement } from '../validation/acks';
 import { normalizeProfile } from '../validation/profiles';
@@ -24,8 +24,11 @@ import { readTrace, type StoredTrace } from '../model/trace';
 
 export const PROJECT_EXT = '.heatstitch';
 export const PROJECT_MIME = 'application/x-heatstitch-project';
-/** Raised whenever the content changes in a way older versions would misread. */
-export const PROJECT_VERSION = 2;
+/**
+ * Raised whenever the content changes in a way older versions would misread. 3: the vector model
+ * (each object's form in one place, no pixel mask next to the curves it is rastered from).
+ */
+export const PROJECT_VERSION = 3;
 const MAGIC = 'heatstitch-project';
 
 export interface ProjectFile {
@@ -164,7 +167,7 @@ export async function encodeProject(p: Project, savedAt = new Date()): Promise<U
     savedAt: savedAt.toISOString(),
     settings: p.settings,
     active: p.active,
-    files: p.files,
+    files: p.files.map((f) => ({ ...f, objects: compactStored(f.objects) })),
     image: p.image,
     ...(p.recording ? { recording: p.recording } : {}),
   };

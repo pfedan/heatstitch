@@ -337,10 +337,11 @@ export function lineToFill(p: Pattern, index: number, s: FillSettings, trimMm: n
   if (how === 'band') fill = { ...(was ?? s), lineWidth: was?.lineWidth ?? line.width, lineCap: was?.lineCap ?? 'flat' };
   else {
     if (!fits(geo, 'fill')) return null;
-    // Its echo and shadow go: they belong to a line.
+    // The line its border, as it is sewn now (a fill that had none gets none again); its echo
+    // and shadow go: they belong to a line.
     const { echo: _e, shadow: _s, fringe: _f, fringeSide: _fs, ...border } = line;
-    const { lineWidth: _w, lineCap: _c, ...rest } = was ?? s;
-    fill = { ...rest, border };
+    const { lineWidth: _w, lineCap: _c, border: _b, ...rest } = was ?? s;
+    fill = { ...rest, ...(!was || was.border ? { border } : {}) };
   }
   const area = how === 'band' ? bandArea(geo, fill) : rasterize(geo);
   if (!area) return null;

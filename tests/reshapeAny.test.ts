@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { addShape } from '../src/model/addShape';
-import { geoOf, guessGeo, satinOutline } from '../src/model/geo';
+import { fits, geoOf, geoUse, guessGeo, satinOutline } from '../src/model/geo';
+import { lineToFill } from '../src/model/line';
 import { sewObjects } from '../src/model/objects';
 import { reshapeObject } from '../src/model/reshape';
 import { keepShape, remembered } from '../src/model/restitch';
@@ -89,4 +90,31 @@ describe('one way back from the level Form', () => {
     expect(geoOf(r.memory[0])).toEqual(longer);
     expect(sewObjects(r.pattern)[0].maxY / 10).toBeCloseTo(30, 0);
   });
+
+  it('sews a fill whose last closed path is opened as a line, its fill kept, and fills it again once closed', () => {
+    const a = addShape(empty, { form: parsePath(rectPath(0, 0, 20, 20, 0, 0), ID), kind: 'fill' }, COLORS[0], null, options)!;
+    const p = a.pattern;
+    const kinds = stitchKinds(p);
+    const objs = sewObjects(p, kinds);
+    const fill = remembered(p, objs[0])!.fill!;
+    const geo = guessGeo(p, objs[0], kinds)!;
+    const open = { ...geo, paths: geo.paths.map((x) => ({ ...x, closed: false })) };
+    expect(fits(open, 'fill')).toBe(false);
+    const r = reshapeObject(p, objs, objs[0], kinds, open, T)!;
+    expect(r).not.toBeNull();
+    const m = r.memory[0];
+    expect(geoUse(m)).toBe('line');
+    expect(geoOf(m)).toEqual(open);
+    expect(m.kept?.fill).toEqual(fill);
+    expect(sewObjects(r.pattern)[0].kind).toBe('run');
+    // Closed again: still a line (filling it is offered), Füllung fills it as it was.
+    const q = r.pattern;
+    const qk = stitchKinds(q);
+    const closed = reshapeObject(q, sewObjects(q, qk), sewObjects(q, qk)[0], qk, geo, T)!;
+    expect(geoUse(closed.memory[0])).toBe('line');
+    const back = lineToFill(closed.pattern, 0, fill, T)!;
+    expect(back.memory[0].fill?.pattern).toBe(fill.pattern);
+    expect(geoOf(back.memory[0])).toEqual(geo);
+  });
 });
+

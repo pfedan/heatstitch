@@ -20,7 +20,7 @@ import type { Pt } from '../digitize/skeleton';
 import { flatten, formFrom, storeForm, type Form, type StoredPath } from '../shape/path';
 import { FIT_TOLERANCE, READ_TOLERANCE, vectorize } from '../shape/vectorize';
 import { BORDER_WIDTH } from '../digitize/border';
-import { rasterize, type LineCap } from '../shape/rasterize';
+import { rasterize, regionOf, type LineCap } from '../shape/rasterize';
 import { distanceInside, distanceToSeeds } from '../image/edt';
 import { tidy, withRecords } from './edit';
 import { coversOver, cutAway, type Cover } from './covers';
@@ -624,6 +624,14 @@ export interface StoredObject {
   shape?: StoredObject['region'];
   /** Its form (see Remembered.geo). */
   geo?: StoredPath[];
+  /** `region` is the form rastered on this grid (mm per pixel), not stored (see compactStored). */
+  regionPx?: number;
+  /** ... grown by this margin (mm). */
+  regionGrow?: number;
+  /** `shape` is the form rastered on this grid, not stored. */
+  shapePx?: number;
+  /** ... grown by this margin (mm). */
+  shapeGrow?: number;
   /** The settings of its other stitch types (see Remembered.kept). */
   kept?: { line?: PathStitch; fill?: FillSettings; satin?: StoredRails[] };
   /** Before project version 3: the form of a fill. */
@@ -752,19 +760,85 @@ export interface StoredEntry {
   };
 }
 
-/** The object list of a version as stored with the file (project version 2). */
+/**
+ * The object list of a version as stored with the file: project version 3 (each form in `geo`, see
+ * StoredObject), or 2 (forms in `form`, `path` and `asLine`, read as version 3).
+ */
 export interface StoredObjects {
-  v: 2;
+  v: 2 | 3;
   /** The id the next new object gets. */
   next: number;
   objects: StoredEntry[];
 }
 
-/** Objects as stored with a file: a list of project version 2, or what version 1 kept by stitches. */
+/** Objects as stored with a file: a list of project version 2 or 3, or what version 1 kept by stitches. */
 export type ObjectsAsStored = StoredObjects | StoredObject[];
 
-/** Whether `v` is an object list as stored by project version 2 (else a list of an older version). */
-export const isStoredObjects = (v: unknown): v is StoredObjects => !!v && typeof v === 'object' && (v as StoredObjects).v === 2 && Array.isArray((v as StoredObjects).objects);
+/** Whether `v` is an object list as stored by project version 2 or 3 (else a list of version 1). */
+export const isStoredObjects = (v: unknown): v is StoredObjects => !!v && typeof v === 'object' && ((v as StoredObjects).v === 2 || (v as StoredObjects).v === 3) && Array.isArray((v as StoredObjects).objects);
+
+/**
+ * The object list as written to a project file: an area that is just the form rastered (a fill's
+ * or a band's, the area a satin was a fill on), or that grown by a margin (the pull compensation
+ * an SVG or drawn fill is sewn with), is not kept as pixels: only the grid it is rastered on
+ * (`regionPx`, `shapePx`) and the margin (`regionGrow`, `shapeGrow`; mm, of the area's signed
+ * distance). Opened, it is rastered from the form again, pixel for pixel as before. Areas that are
+ * more than that (left out under shapes on top, read from stitches) stay.
+ */
+export function compactStored(list: ObjectsAsStored): ObjectsAsStored {
+  if (!isStoredObjects(list) || list.v !== 3) return list;
+  return { ...list, objects: list.objects.map((e) => (e.memory ? { ...e, memory: compactOne(e.memory) } : e)) };
+}
+
+/** How `g` comes from the form of `r` rastered: on its grid, grown by a margin (0: as it is); null when it does not. */
+function rasteredAs(r: Remembered, g: StoredObject['region'] | undefined): { px: number; grow?: number } | null {
+  if (!g) return null;
+  const a = geoArea(r, g.pxMm);
+  if (!a || a.x0 !== g.x0 || a.y0 !== g.y0 || a.w !== g.w || a.h !== g.h || a.mask.length !== g.mask.length) return null;
+  if (a.mask.every((v, i) => v === g.mask[i])) return { px: g.pxMm };
+  // Grown (or shrunk) by a margin: the pixels nearer the form's edge than it are in.
+  let inside = -Infinity;
+  let outside = Infinity;
+  for (let i = 0; i < g.mask.length; i++) {
+    if (g.mask[i]) inside = Math.max(inside, a.sdf[i]);
+    else outside = Math.min(outside, a.sdf[i]);
+  }
+  if (!(inside < outside)) return null;
+  const grow = Number.isFinite(outside) ? (inside + outside) / 2 : inside + 1;
+  return grownArea(a, grow).mask.every((v, i) => v === g.mask[i]) ? { px: g.pxMm, grow } : null;
+}
+
+/** Area `a` grown by `grow` mm (shrunk when negative): the pixels whose signed distance is below it. */
+function grownArea(a: Region, grow: number): Region {
+  return regionOf(Uint8Array.from(a.sdf, (d) => (d < grow ? 1 : 0)), a.x0, a.y0, a.w, a.h, a.pxMm) ?? a;
+}
+
+/** An area kept as how it is rastered from the form (see compactStored). */
+function rasteredArea(r: Remembered, px: unknown, grow: unknown): Region | null {
+  if (!finite(px) || px <= 0) return null;
+  const a = geoArea(r, px);
+  return a && finite(grow) ? grownArea(a, grow) : a;
+}
+
+function compactOne<T extends StoredObject | NonNullable<StoredEntry['memory']>>(m: T): T {
+  const geo = m.geo && formFrom(m.geo);
+  if (!geo) return m;
+  const r: Remembered = { region: null, geo, fill: m.fill, line: m.line };
+  const out = { ...m };
+  const region = rasteredAs(r, m.region);
+  if (region) {
+    out.region = null;
+    out.regionPx = region.px;
+    if (region.grow !== undefined) out.regionGrow = region.grow;
+  }
+  const shape = rasteredAs(r, m.shape);
+  if (shape) {
+    delete out.shape;
+    out.shapePx = shape.px;
+    if (shape.grow !== undefined) out.shapeGrow = shape.grow;
+  }
+  return out;
+}
 
 /** The link a leader gives its followers of `role`. */
 function leaderLink(m: Remembered, role: FollowRole): string | undefined {
@@ -805,7 +879,7 @@ export function rememberedIn(p: Pattern, _objects?: SewObject[]): StoredObjects 
     }
   }
   return {
-    v: 2,
+    v: 3,
     next: t.next,
     objects: t.entries.map((e): StoredEntry => {
       const where = { id: e.id, first: ix.before[e.first], last: ix.before[e.last], key: stitchKey(p, e.first, e.last), at: [p.x[e.first], p.y[e.first]] as [number, number] };
@@ -1138,6 +1212,9 @@ function fromStored(e: StoredObject): Remembered | null {
   if (geo && line) r.line = line;
   if (geo && r.fill && e.knockout === true) r.knockout = true;
   if (kept.line || kept.fill || kept.satin) r.kept = kept;
+  // Areas that are only the form rastered come from it (see compactStored).
+  if (geo && !e.region && e.regionPx !== undefined) r.region = rasteredArea(r, e.regionPx, e.regionGrow);
+  if (geo && !e.shape && e.shapePx !== undefined) r.shape = rasteredArea(r, e.shapePx, e.shapeGrow) ?? undefined;
   if (finite(e.under) && e.under > 0) r.under = Math.round(e.under);
   if (finite(e.underFrom) && e.underFrom > 0) r.underFrom = Math.round(e.underFrom);
   if (finite(e.borderAt) && e.borderAt > 0) r.borderAt = Math.round(e.borderAt);
