@@ -901,25 +901,19 @@ shots.trace = async (lang) => {
   await pickThread(page, 'r > 220 && g > 170 && b < 80');
   await pen([[199, 292], [170, 284], [146, 268], [128, 236], [160, 244], [186, 264]]);
   await pickThread(page, 'g > 140 && r < 120 && b < 110');
-  // nothing selected, so the design page with the tracing image stays in front
-  await page.keyboard.press('Escape');
-  await page.waitForTimeout(400);
-  await tab(page, 'design');
   // the second leaf under way: three nodes set, the path follows the pointer
   await pen([[201, 262], [232, 254], [256, 234]], false);
   await page.mouse.move(...at(266, 206));
   await realistic(page, true);
   await page.mouse.move(...at(266, 206));
   await page.waitForTimeout(500);
+  // the design page with the tracing image, while the path is under way
+  await tab(page, 'design');
+  await page.mouse.move(...at(268, 204));
+  await page.waitForTimeout(400);
   // the stitch tip under the pointer would cover the leaf
   await page.evaluate(() => { for (const el of document.querySelectorAll('.tooltip, #tooltip')) el.hidden = true; });
-  // the design page with the tracing image (the object page follows the path under way)
   await sidebarTop(page);
-  for (let k = 0; k < 10; k++) {
-    await page.evaluate(() => document.querySelector('#insp-tabs [data-tab="design"]').click());
-    await page.waitForTimeout(300);
-    if (await page.evaluate(() => document.querySelector('#insp-tabs [data-tab="design"]').getAttribute('aria-selected') === 'true')) break;
-  }
   await jpeg(page, `trace-${lang}`);
   await close();
 };
