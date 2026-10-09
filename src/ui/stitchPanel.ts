@@ -15,7 +15,7 @@ import type { ThreadColor } from '../model/pattern';
 import { newLink } from '../model/border';
 import { SATIN_SHARE } from '../model/covers';
 import { autoUnder, coverOf, E_SPACING, hasPhase, isRunType, REPEAT, spacingOf, timesOf, ZIGZAG_SPACING, type PathStitch } from '../model/along';
-import { LINE_MOTIFS, MOTIF_PERIOD, MOTIF_WIDTH, motifMaxSize, SIDED_MOTIFS, type LineMotif } from '../digitize/motif';
+import { LINE_MOTIFS, MOTIF_PERIOD, MOTIF_STITCH, MOTIF_WIDTH, motifMaxSize, SIDED_MOTIFS, type LineMotif } from '../digitize/motif';
 import { ECHO_COUNT, ECHO_DEFAULT, ECHO_GAP, ECHO_PHASE, ECHO_SIDES, type EchoSide } from '../digitize/echo';
 import { SHADOW_COLOR, SHADOW_DEFAULT_ANGLE, SHADOW_DEFAULT_DIST, SHADOW_DIST } from '../model/shadow';
 import { cssColor, hexColor, ThreadPicker } from './threadPicker';
@@ -1934,6 +1934,7 @@ export class StitchPanel {
           ...(fits < 8 ? { band: [1, fits] as [number, number], bandHint: 'stitch.lineMotifSize.band' as Key } : {}),
         }),
         this.slider({ label: 'stitch.gap', hint: 'stitch.motifSpacing.hint', min: 1.5, max: 15, step: 0.1, get: () => spacingOf(st), set: (v) => change((s) => (s.spacing = v === MOTIF_PERIOD[motif] ? undefined : v))(v), fmt: mm(1), auto: unset('spacing') }),
+        this.slider({ label: 'stitch.length', hint: 'stitch.motifLength.hint', min: 0.8, max: 3, step: 0.1, get: () => st.stitch ?? MOTIF_STITCH, set: (v) => change((s) => (s.stitch = v))(v), fmt: mm(1), auto: unset('stitch') }),
       );
       if (SIDED_MOTIFS.includes(motif)) out.look.push(this.sideChoice(st, set, offset));
       const times = st.repeat === 3 || st.repeat === 5 ? (String(st.repeat) as '3' | '5') : '1';

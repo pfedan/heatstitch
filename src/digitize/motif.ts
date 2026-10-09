@@ -31,7 +31,7 @@ const FINE = 0.1;
 /** Shortest stitch of a motif (mm): the figures are small, the needle needs room. */
 const MIN_STITCH = 0.6;
 /** Longest stitch of a motif (mm), and how close its stitches keep to the figure: small figures need short stitches to stay round. */
-const MOTIF_STITCH = 1.2;
+export const MOTIF_STITCH = 1.2;
 const MOTIF_TOLERANCE = 0.05;
 
 /** A line by arc length: the point at `s` mm and the unit normal there (to the right on screen, y down). */
@@ -74,7 +74,7 @@ function frame(line: Pt[], closed: boolean) {
  * `shift`: the figures start this share of a period later (0 to 1; an open line then begins and
  * ends with part of a figure).
  */
-export function motifStitches(line: Pt[], closed: boolean, motif: LineMotif, width: number, period: number, side: 1 | -1 = 1, shift = 0): Pt[] {
+export function motifStitches(line: Pt[], closed: boolean, motif: LineMotif, width: number, period: number, side: 1 | -1 = 1, shift = 0, stitch = MOTIF_STITCH): Pt[] {
   const f = frame(line, closed);
   if (f.total < 0.5) return [];
   const count = Math.max(1, Math.round(f.total / Math.max(0.5, period)));
@@ -131,7 +131,7 @@ export function motifStitches(line: Pt[], closed: boolean, motif: LineMotif, wid
       run(s0, Math.min(f.total, s0 + d));
     }
   }
-  const pts = runStitch(fine, MOTIF_STITCH, MOTIF_TOLERANCE);
+  const pts = runStitch(fine, Math.max(MIN_STITCH, stitch), MOTIF_TOLERANCE);
   return dropShort(pts);
 }
 

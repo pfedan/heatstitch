@@ -272,9 +272,10 @@ export function bindScene(app: SceneApp) {
       if (shown) {
         for (let i = 0; i < a.length; i++) if (a[i] > 0 && !shown.has(q.objectAt[i])) a[i] = 0.15;
       }
-      // The underlay shown: the rows over it fade, so it can be seen through them. Parts of a line in
-      // objects of their own (echo copies, a shadow) show in full.
-      if (under) for (let i = 0; i < a.length; i++) if (a[i] === 1 && !under[i]) a[i] = 0.3;
+      // The underlay shown: the rows over it fade, so it can be seen through them. Echo copies or a
+      // shadow shown: they stand out as a selected object does, the rest (the line too) fades as far.
+      const fade = ui.highlight === 'under' || ui.highlight === 'border' ? 0.3 : 0.15;
+      if (under) for (let i = 0; i < a.length; i++) if (a[i] === 1 && !under[i]) a[i] = fade;
       else if (under[i] && a[i] > 0) a[i] = 1;
       alphaCache = { p, hidden: ui.hiddenBlocks, focus, objects: objKey as ReadonlySet<number> | null, a };
     }
@@ -355,7 +356,8 @@ export function bindScene(app: SceneApp) {
       // The areas as recognized on the file itself, also while a change is previewed (not while
       // their shape is edited or the object is dragged: those show their own outline).
       outlines: app.files.active?.pattern && ui.selectedObjects.size && !app.shapeTool.active && app.frameTool.dragging === null ? app.stitchInfo(app.files.active.pattern, seq(app.files.active.pattern)).outlines : undefined,
-      under: ui.hoverObject === null ? underMask(p) : null,
+      // Drawn over the stitches for the underlay and the border; echo copies and a shadow show as they are sewn.
+      under: ui.hoverObject === null && (ui.highlight === 'under' || ui.highlight === 'border') ? underMask(p) : null,
       contour: ui.hoverObject === null && ui.highlight === 'border' && app.settings.autoHighlight ? contourLines(p) : null,
       rungs: app.rungTool.active ? app.rungTool : null,
       shape: app.shapeTool.active && app.frameTool.dragging === null ? { view: app.shapeTool, handles: app.shapeTool.handles() } : null,

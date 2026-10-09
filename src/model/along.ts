@@ -32,6 +32,8 @@ export interface PathStitch {
   whole?: boolean;
   /** Motif stitch: the figure repeated along the line (waves by default); `width` is its size across. */
   motif?: LineMotif;
+  /** Motif stitch: its longest stitch (mm), shorter where the figure bends; MOTIF_STITCH by default. */
+  stitch?: number;
   /** Curves keep this close to the line (mm); TOLERANCE by default. */
   tolerance?: number;
   /** A border lies this far outside the edge (mm; inside when negative); on the edge by default. */
@@ -199,7 +201,7 @@ function sewOnce(line: Pt[], closed: boolean, s: PathStitch, start?: Pt, area?: 
   if (s.type === 'motif') {
     // Like the prongs of an E stitch: on a border inward (outward with flip), on a line to its right.
     const right = area ? rightInside(area, l) !== !!s.flip : back === !!s.flip;
-    const run = repeated(motifStitches(l, closed, s.motif ?? 'waves', s.width, spacingOf(s), right ? 1 : -1, shift), timesOf(s));
+    const run = repeated(motifStitches(l, closed, s.motif ?? 'waves', s.width, spacingOf(s), right ? 1 : -1, shift, s.stitch), timesOf(s));
     return run.length > 1 ? [run] : [];
   }
   if (area && closed) return satinRuns([onEdge(area, borderRails(area, l, s.width, s.offset ?? 0), s)], satinOf(s));

@@ -74,14 +74,23 @@ function echoStitches(line: Pt[], closed: boolean, st: PathStitch, from?: Pt, re
   if (free && from && Math.hypot(last[0] - from[0], last[1] - from[1]) < Math.hypot(first[0] - from[0], first[1] - from[1])) {
     lines = lines.reverse().map((l) => ({ ...l, line: l.line.slice().reverse(), back: !l.back }));
   }
+  // A motif fits whole figures into each line. The copies of an open line get as many as the line
+  // itself, stretched a little where a copy is longer, so none gets a figure more and runs out of
+  // step; the rings of a loop fit their own, as many as the line's figure length gives.
   const plain = { ...st, echo: undefined };
+  const figures = Math.max(1, Math.round(lengthOf(line) / Math.max(0.5, spacingOf(st))));
+  const periodOf = (l: EchoLine): number => {
+    if (st.type !== 'motif') return spacingOf(st);
+    const d = lengthOf(line) / figures;
+    return l.closed ? lengthOf(l.line) / Math.max(1, Math.round(lengthOf(l.line) / d)) : lengthOf(l.line) / figures;
+  };
+  const stitchOf = (l: EchoLine): PathStitch => (st.type === 'motif' ? { ...plain, spacing: periodOf(l) } : plain);
   const shiftOf = (l: EchoLine): number => {
     if (!hasPhase(st.type)) return 0;
     const turns = (Math.abs(l.k) * (e.phase ?? 0)) / 360;
     if (!l.back || l.closed) return frac(turns);
     // Sewn against the way it was drawn: the figures counted from its far end.
-    const period = st.type === 'motif' ? lengthOf(l.line) / Math.max(1, Math.round(lengthOf(l.line) / Math.max(0.5, spacingOf(st)))) : spacingOf(st);
-    return frac(lengthOf(l.line) / period - turns);
+    return frac(lengthOf(l.line) / periodOf(l) - turns);
   };
   if (!isRunType(st.type) || e.cut) {
     // A copy that ends where it began (a satin over its underlay) has the next begin at its nearer
@@ -89,7 +98,7 @@ function echoStitches(line: Pt[], closed: boolean, st: PathStitch, from?: Pt, re
     const runs: Pt[][] = [];
     for (const l of lines) {
       const end = runs.at(-1)?.at(-1);
-      runs.push(...sewAlong(l.line, l.closed, plain, hasPhase(st.type) ? undefined : end, undefined, l.back !== reverse, shiftOf(l)));
+      runs.push(...sewAlong(l.line, l.closed, stitchOf(l), hasPhase(st.type) ? undefined : end, undefined, l.back !== reverse, shiftOf(l)));
     }
     // Cut: a trim from copy to copy, however near they are.
     if (e.cut) runs.forEach((run, k) => k && trimBefore.add(run));

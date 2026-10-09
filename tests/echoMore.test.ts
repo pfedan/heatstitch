@@ -6,7 +6,7 @@ import { passesOf, sewAlong, timesOf, type PathStitch } from '../src/model/along
 import { echoCopyLines, lineStitches, nearestCopy } from '../src/model/line';
 import { rememberedIn, restoreRemembered, remembered } from '../src/model/restitch';
 import { sewObjects } from '../src/model/objects';
-import { shadowFrom, shadowOffset } from '../src/model/shadow';
+import { lineParts, shadowFrom, shadowOffset } from '../src/model/shadow';
 import { addShape } from '../src/model/addShape';
 import { digitizeDefaults } from '../src/digitize/digitize';
 import { lineSettings, resewLine } from '../src/model/line';
@@ -69,6 +69,53 @@ describe('echo copies, nearer and further', () => {
 });
 
 describe('echo phase', () => {
+  it('keeps phase and order for copies in a thread of their own', () => {
+    const black = { r: 0, g: 0, b: 0 };
+    const st: PathStitch = { type: 'motif', width: 3, echo: { side: 'out', count: 2, gap: 3, phase: 30, reverse: true, colors: [null, black], link: 'e' } as never };
+    const parts = lineParts({ region: null, path: lineForm(straight), line: st } as never);
+    expect(parts).toHaveLength(1);
+    expect(parts[0].memory.line!.echo).toMatchObject({ phase: 30, reverse: true, only: [2] });
+  });
+
+  it('sews a copy in a thread of its own on the same figures as in the line', () => {
+    const bow: Pt[] = Array.from({ length: 41 }, (_, i) => [i * 2, 3 * Math.sin(i / 8)]);
+    const echo = { side: 'out' as const, count: 2, gap: 3.4, phase: 30 };
+    const st: PathStitch = { type: 'motif', width: 3, echo: { ...echo, cut: true } };
+    const together = lineStitches(lineForm(bow), st);
+    const own = lineParts({ region: null, path: lineForm(bow), line: { ...st, echo: { ...echo, colors: [null, { r: 0, g: 0, b: 0 }], link: 'e' } } } as never)[0].memory;
+    const alone = lineStitches(own.path!, own.line!).flat();
+    // The second copy is the last run of the line with both copies; its curve and the one sewn alone match.
+    const near = (q: Pt, l: Pt[]) => Math.min(...l.slice(1).map((b, j) => {
+      const a = l[j];
+      const dx = b[0] - a[0], dy = b[1] - a[1];
+      const t = Math.max(0, Math.min(1, ((q[0] - a[0]) * dx + (q[1] - a[1]) * dy) / (dx * dx + dy * dy || 1)));
+      return Math.hypot(q[0] - a[0] - t * dx, q[1] - a[1] - t * dy);
+    }));
+    const k2 = together[together.length - 1];
+    for (const q of alone) expect(near(q, k2)).toBeLessThan(0.1);
+  });
+
+  it('gives every copy of a motif as many figures as the line, so they stay in step', () => {
+    // A gentle arc: the outer copies are a little longer, right where rounding would add a figure.
+    const R = 200;
+    const arc: Pt[] = Array.from({ length: 81 }, (_, i) => {
+      const a = (-77.4 / R / 2) + (77.4 / R) * (i / 80);
+      return [R * Math.sin(a), R - R * Math.cos(a)];
+    });
+    const st: PathStitch = { type: 'motif', motif: 'waves', width: 3.4, echo: { side: 'in', count: 2, gap: 3.4, cut: true } };
+    const runs = lineStitches(lineForm(arc), st);
+    expect(runs).toHaveLength(3);
+    // Waves around each copy: count the crests by the distance from the arc's centre.
+    const crests = runs.map((run) => {
+      const r = run.map(([x, y]) => Math.hypot(x, y - R));
+      const mid = r.reduce((a, b) => a + b, 0) / r.length;
+      let n = 0;
+      for (let i = 1; i < r.length; i++) if ((r[i - 1] - mid) * (r[i] - mid) < 0) n++;
+      return n;
+    });
+    expect(crests).toEqual([crests[0], crests[0], crests[0]]);
+  });
+
   it('shifts a motif by a share of its period', () => {
     const a = motifStitches(straight, false, 'waves', 3, 5, 1, 0);
     const b = motifStitches(straight, false, 'waves', 3, 5, 1, 0.25);
@@ -157,5 +204,26 @@ describe('shadow by angle', () => {
     expect(dx).toBeCloseTo(-1, 1);
     expect(dy).toBeCloseTo(-1, 1);
     expect(shadowFrom({ color: red, link: 's', angle: 400, dist: 1 })).toBeNull();
+  });
+});
+
+describe('motif stitch length', () => {
+  it('sews longer stitches where asked, shorter in the bends', () => {
+    const short = motifStitches(straight, false, 'waves', 3, 5);
+    const long = motifStitches(straight, false, 'waves', 3, 5, 1, 0, 2.5);
+    expect(long.length).toBeLessThan(short.length);
+    const lengths = (pts: Pt[]) => pts.slice(1).map((q, i) => Math.hypot(q[0] - pts[i][0], q[1] - pts[i][1]));
+    expect(Math.max(...lengths(long))).toBeGreaterThan(Math.max(...lengths(short)));
+    expect(Math.max(...lengths(long))).toBeLessThan(2.5 + 0.6);
+  });
+
+  it('keeps its stitch length through save and load', () => {
+    const a = addShape(empty, { form: parsePath('M0 0 L40 0', ID), kind: 'stroke', width: 0.4 }, red, null, options)!;
+    const o = sewObjects(a.pattern)[0];
+    const st: PathStitch = { ...lineSettings(a.pattern, o), type: 'motif', width: 3, stitch: 2 };
+    const r = resewLine(a.pattern, 0, remembered(a.pattern, o)!.path!, st, options.trimMm)!;
+    const stored = JSON.parse(JSON.stringify(rememberedIn(r.pattern)));
+    restoreRemembered(r.pattern, stored);
+    expect(lineSettings(r.pattern, sewObjects(r.pattern)[0]).stitch).toBe(2);
   });
 });

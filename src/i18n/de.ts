@@ -817,6 +817,7 @@ export const deBase = {
   'stitch.lineMotifSize.hint': 'Wie weit das Motiv quer zur Linie reicht',
   'stitch.lineMotifSize.band': 'Bis {b} mm, darüber berühren sich die Figuren',
   'stitch.motifSpacing.hint': 'Abstand von Figur zu Figur',
+  'stitch.motifLength.hint': 'Längster Stich; in engen Bögen werden die Stiche kürzer, damit die Figur rund bleibt',
   'stitch.motifSide': 'Seite',
   'stitch.border.pieces': 'Teil einer zerteilten Füllung: ein Rand läuft um alle {n} Teile, nie am Schnitt entlang. Was du hier einstellst, gilt für alle.',
   'stitch.border.seams': 'Auch am Schnitt',

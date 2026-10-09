@@ -121,7 +121,8 @@ export function lineParts(m: Remembered): LinePart[] {
     for (const g of groups.values()) {
       // Named by its nearest copy, so it keeps its link when its thread changes.
       const link = `${e.link}:${g.rings[0]}`;
-      const echo = { side: e.side, count: e.count, gap: e.gap, ...(e.cut ? { cut: true } : {}), only: g.rings };
+      // With the line's phase and order, so its copies keep in step with those of the line.
+      const echo = { side: e.side, count: e.count, gap: e.gap, ...(e.cut ? { cut: true } : {}), ...(e.phase ? { phase: e.phase } : {}), ...(e.reverse ? { reverse: true } : {}), only: g.rings };
       out.push({ link, color: g.color, after: true, memory: { region: null, path: m.path, line: { ...plain, echo }, echoOf: link } });
     }
   }

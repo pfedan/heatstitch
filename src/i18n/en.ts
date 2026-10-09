@@ -819,6 +819,7 @@ const enBase: Record<keyof typeof deBase, string> = {
   'stitch.lineMotifSize.hint': 'How far the motif reaches across the line',
   'stitch.lineMotifSize.band': 'Up to {b} mm, beyond that the figures touch',
   'stitch.motifSpacing.hint': 'Distance from figure to figure',
+  'stitch.motifLength.hint': 'Longest stitch; in tight curves the stitches get shorter so the figure stays round',
   'stitch.motifSide': 'Side',
   'stitch.border.pieces': 'Part of a fill cut apart: one border runs around all {n} parts, never along the cut. What you set here goes for all of them.',
   'stitch.border.seams': 'Along the cuts too',
