@@ -3,6 +3,7 @@ import { transformForm, type Form } from '../shape/path';
 import type { PathStitch } from './along';
 import type { ThreadColor } from './pattern';
 import type { Remembered } from './restitch';
+import { lineGeoOf, withGeo } from './geo';
 
 /**
  * The shadow of a line: the line once more, a little beside it in a thread of its own, sewn before
@@ -75,7 +76,7 @@ export const partOf = (m: Remembered | undefined): string | undefined => m?.shad
 
 /** Whether line `m` has the part linked by `link`. */
 export const hasPart = (m: Remembered | undefined, link: string): boolean =>
-  !!m?.path && !partOf(m) && (m.line?.shadow?.link === link || (!!m.line?.echo?.link && link.startsWith(`${m.line.echo.link}:`)));
+  !!m && !!lineGeoOf(m) && !partOf(m) && (m.line?.shadow?.link === link || (!!m.line?.echo?.link && link.startsWith(`${m.line.echo.link}:`)));
 
 /** Line `m` with its part `link` in thread `color` from now on. */
 export function partInThread(m: Remembered, link: string, color: ThreadColor): Remembered {
@@ -114,7 +115,7 @@ export function lineParts(m: Remembered): LinePart[] {
   // Right under the line a shadow has no object: the line keeps it, so it is back once moved out.
   if (st.shadow && !shadowUnder(st.shadow)) {
     const s = st.shadow;
-    out.push({ link: s.link, color: s.color, after: false, memory: { region: null, path: shadowPath(m.path!, s), line: shadowStitch(st), shadowOf: s.link } });
+    out.push({ link: s.link, color: s.color, after: false, memory: withGeo({ region: null, line: shadowStitch(st), shadowOf: s.link }, shadowPath(lineGeoOf(m)!, s), 'line') });
   }
   const e = st.echo;
   if (e?.link && e.colors) {
@@ -133,7 +134,7 @@ export function lineParts(m: Remembered): LinePart[] {
       const link = `${e.link}:${g.rings[0]}`;
       // With the line's phase and order, so its copies keep in step with those of the line.
       const echo = { side: e.side, count: e.count, gap: e.gap, ...(e.cut ? { cut: true } : {}), ...(e.phase ? { phase: e.phase } : {}), ...(e.reverse ? { reverse: true } : {}), only: g.rings };
-      out.push({ link, color: g.color, after: true, memory: { region: null, path: m.path, line: { ...plain, echo }, echoOf: link } });
+      out.push({ link, color: g.color, after: true, memory: withGeo({ region: null, line: { ...plain, echo }, echoOf: link }, lineGeoOf(m)!, 'line') });
     }
   }
   return out;

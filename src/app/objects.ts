@@ -22,7 +22,7 @@ import { numberInColor, rememberObjects, type SewObject, splitObject } from '../
 import { sameColor } from '../model/recolor';
 import { recordOfStitch } from '../model/sequence';
 import { remembered, rememberedIn, measureFill, analyze, unionRegion, remember, restitch, type RestitchResult } from '../model/restitch';
-import { isLine, reverseLines, reversible, reverseObjects } from '../model/reverse';
+import { reverseLines, reversible, reverseObjects } from '../model/reverse';
 import { t, type Key } from '../i18n';
 import { ui } from './state';
 import { unionForm, recolorObjects } from '../model/shapeOps';
@@ -31,6 +31,7 @@ import { recolorBlock, takeThreads } from '../model/border';
 import { violations, conflicts, reorder } from '../model/order';
 import { wholeArea } from '../model/knockout';
 import { fitScaling, type TransformedAll } from '../model/reshape';
+import { areaOf, sewnAlong, withGeo } from '../model/geo';
 
 /** What bindObjects needs from the rest of the app. */
 export interface ObjectsApp {
@@ -298,11 +299,11 @@ export function bindObjects(app: ObjectsApp) {
     const fills = objs.every((o) => o.kind === 'fill');
     const fill = fills ? (remembered(p, objs[0])?.fill ?? measureFill(p, analyze(p, objs[0], q.kinds))) : null;
     // Fills with curves become one outline (editable as a shape), the others one area.
-    const forms = fills ? objs.map((o) => remembered(p, o)?.form) : [];
+    const forms = fills ? objs.map((o) => areaOf(remembered(p, o))) : [];
     const form = forms.length && forms.every(Boolean) ? unionForm(forms as Form[]) : null;
     const area = form ? wholeArea(form) : fills ? unionRegion(objs.flatMap((o) => remembered(p, o)?.region ?? analyze(p, o, q.kinds).fill ?? [])) : null;
     if (merged >= 0 && fill && area) {
-      remember(target, nq.objects[merged], form ? { region: area, fill, form } : { region: area, fill });
+      remember(target, nq.objects[merged], form ? withGeo({ region: area, fill }, form, 'area') : { region: area, fill });
       const r = restitch(target, nq.objects, [merged], { kind: 'fill', s: fill }, nq.kinds, app.settings.trimMm);
       if (r.starts.length) {
         ui.selectedObjects = new Set([merged]);
@@ -330,7 +331,7 @@ export function bindObjects(app: ObjectsApp) {
     const q = app.seq(p);
     const selected = [...ui.selectedObjects].sort((a, b) => a - b);
     // Lines are turned by their curve (in place, so the others keep their numbers), the rest sewn from the other side.
-    const lines = selected.filter((o) => isLine(p, q.objects[o]));
+    const lines = selected.filter((o) => sewnAlong(p, q.objects[o]));
     const which = selected.filter((o) => !lines.includes(o) && reversible(q.objects[o]));
     if (!which.length && !lines.length) return;
     const turned = reverseLines(p, lines, app.settings.trimMm);
@@ -476,7 +477,7 @@ export function bindObjects(app: ObjectsApp) {
     const p = app.files.active?.pattern;
     if (!p) return null;
     const objs = app.seq(p).objects;
-    const shaped = app.frameObjects().map((o) => objs[o] && remembered(p, objs[o])).filter((m) => !!m?.form && !m.free);
+    const shaped = app.frameObjects().map((o) => objs[o] && remembered(p, objs[o])).filter((m) => !!areaOf(m) && !m!.free);
     if (!shaped.length) return null;
     return shaped.every((m) => !!m?.knockout) ? 'on' : 'off';
   }

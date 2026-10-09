@@ -4,6 +4,7 @@ import { lineSettings } from './line';
 import type { SewObject } from './objects';
 import { isReadFromFile, STITCH, type Pattern } from './pattern';
 import { analyze, measureSatin, penetrationRails, remembered, type BorderSettings } from './restitch';
+import { geoOf } from './geo';
 
 /**
  * A border read from a file: running or satin stitch sewn along the edge of a fill, as an object
@@ -58,7 +59,7 @@ function settingsOf(p: Pattern, o: SewObject, kinds: Uint8Array): BorderSettings
 /** Whether object `o` of a file is still as read: nothing made or kept here. */
 function asRead(p: Pattern, o: SewObject): boolean {
   const m = remembered(p, o);
-  return !m || !(m.fill || m.satin || m.path || m.line || m.outline || m.border || m.form || m.shape || m.hand || m.free);
+  return !m || !(m.fill || m.satin || geoOf(m) || m.line || m.outline || m.border || m.shape || m.hand || m.free);
 }
 
 /**

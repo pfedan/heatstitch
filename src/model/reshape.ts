@@ -1,30 +1,13 @@
 import { listOf, sewList, specOf } from './sew';
 import { lineSettings, reshapeLineFill, resewLine } from './line';
 import { bounds, scaling, transformForm, type Form, type Mat } from '../shape/path';
-import { FIT_TOLERANCE, READ_TOLERANCE, vectorize } from '../shape/vectorize';
 import { cutKey, sewnArea } from './knockout';
 import { rememberObjects, sewObjects, type SewObject } from './objects';
 import { STITCH, type Pattern } from './pattern';
 import { analyze, keepShape, measureFill, measureRun, measureSatin, remembered, rememberRange, restitch, type FillSettings, type RestitchResult, type Settings } from './restitch';
 import { stitchKinds } from './sequence';
 import { isRigid, mirroredEcho, scaleOf, stitchesBefore, transformObject, transformRemembered } from './transform';
-
-/**
- * The fill area of an object as curves: the curves it was given here, else its area (kept or
- * read from the stitches) traced. Null for objects without a fill.
- */
-export function formOf(p: Pattern, o: SewObject, kinds: Uint8Array): Form | null {
-  const known = remembered(p, o);
-  // A fill along a line: its shape is the line.
-  if (known?.asLine && known.fill) return known.asLine.path;
-  if (known?.form) return known.form;
-  const an = analyze(p, o, kinds, known);
-  if (!an.fill || !an.parts.some((pt) => pt.kind === 'fill')) return null;
-  // The exact area of a design made here, or one read from the stitches (rougher).
-  const exact = known && !known.read && known.region === an.fill;
-  const f = vectorize(an.fill, exact ? FIT_TOLERANCE : READ_TOLERANCE);
-  return f.paths.length ? f : null;
-}
+import { areaOf, geoOf, geoUse, lineGeoOf, withGeo } from './geo';
 
 function totalStitches(p: Pattern): number {
   let n = 0;
@@ -79,7 +62,7 @@ export function reshapeFill(p: Pattern, objs: SewObject[], o: SewObject, kinds: 
   const s = { ...fill, ...change };
   const r = restitch(p, objs, [o.index], { kind: 'fill', s }, kinds, trimMm, undefined, false, undefined, new Map([[o.index, area]]));
   r.memory.forEach((m) => {
-    m.form = form;
+    Object.assign(m, withGeo(m, form, 'area'));
     if (cut) {
       m.knockout = true;
       m.cut = cutKey(area);
@@ -133,7 +116,7 @@ export function transformSewObject(p: Pattern, objs: SewObject[], o: SewObject, 
   // A line with its curves: scaled or mirrored, it is sewn anew along them with its settings
   // (mirrored, its stitches would go round its echo copies and satin the other way than sewing it
   // along the mirrored curves does).
-  const line = remembered(p, o)?.path;
+  const line = lineGeoOf(remembered(p, o));
   const mirrors = m[0] * m[3] - m[1] * m[2] < 0;
   if (line && (!rigid || (mirrors && !remembered(p, o)?.free))) {
     const r = resewLine(p, o.index, transformForm(line, m), mirroredEcho(lineSettings(p, o, kinds), line, m), trimMm);
@@ -141,9 +124,9 @@ export function transformSewObject(p: Pattern, objs: SewObject[], o: SewObject, 
   }
   // A fill along a line: filled anew along the scaled line, in a width scaled with it.
   const along = remembered(p, o);
-  if (along?.asLine && along.fill && !rigid) {
-    const width = (along.fill.lineWidth ?? along.asLine.line.width) * scaleOf(m);
-    const r = reshapeLineFill(p, objs, o, kinds, transformForm(along.asLine.path, m), trimMm, width);
+  if (geoUse(along) === 'band' && !rigid) {
+    const width = (along!.fill!.lineWidth ?? along!.asLine!.line.width) * scaleOf(m);
+    const r = reshapeLineFill(p, objs, o, kinds, transformForm(geoOf(along)!, m), trimMm, width);
     const fresh = r?.starts.length ? sewObjects(r.pattern).find((x) => stitchesBefore(r.pattern, x.first) === r.starts[0]) : undefined;
     if (!r || !fresh) return null;
     rememberRange(r.pattern, fresh.first, fresh.last, r.memory[0]);
@@ -187,7 +170,8 @@ export function transformSewObject(p: Pattern, objs: SewObject[], o: SewObject, 
   const r = restitch(next, nobjs, [no.index], given, nk, trimMm);
   if (!r.starts.length) return null;
   // The scaled curves stay the shape.
-  if (after?.form) r.memory.forEach((x) => (x.form = after.form));
+  const scaledArea = areaOf(after);
+  if (scaledArea) r.memory.forEach((x) => Object.assign(x, withGeo(x, scaledArea, 'area')));
   keepGrouping(p, objs, o, r.pattern, totalStitches(r.pattern) - totalStitches(p));
   const fresh = sewObjects(r.pattern);
   const start = r.starts[0];
@@ -252,7 +236,7 @@ export function fitScaling(p: Pattern, sel: number[], sx: number, sy: number, cx
   // The first guess: the shapes (or lines) grow, the margin of the stitches around them stays.
   const shapes = sel.map((o) => {
     const known = remembered(p, seq(p).objects[o]);
-    return known?.form ?? known?.path;
+    return areaOf(known) ?? lineGeoOf(known);
   });
   const boxes = shapes.map((f) => f && bounds(f));
   let f = [sx, sy];

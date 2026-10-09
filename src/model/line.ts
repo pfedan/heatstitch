@@ -250,15 +250,6 @@ export function traceLine(pts: Pt[]): Form | null {
   return { paths: [{ closed, nodes }] };
 }
 
-/** The curves of a line object: remembered, or traced through its running stitches. */
-export function lineOf(p: Pattern, o: SewObject, kinds?: Uint8Array): Form | null {
-  const known = remembered(p, o)?.path;
-  if (known) return known;
-  if (o.kind !== 'run') return null;
-  const paths = runWays(p, o.first, o.last, kinds ?? stitchKinds(p)).flatMap((w) => traceLine(w)?.paths ?? []);
-  return paths.length ? { paths } : null;
-}
-
 /** How a line object is sewn now. */
 export function lineSettings(p: Pattern, o: SewObject, kinds?: Uint8Array): PathStitch {
   const known = remembered(p, o);

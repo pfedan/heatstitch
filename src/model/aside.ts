@@ -5,9 +5,9 @@ import { recs, type Rec } from './jumps';
 import { sewObjects, type ObjectKind } from './objects';
 import { nextVersion, STITCH, type Pattern, type ThreadColor } from './pattern';
 import { memoryFrom, remember, storedOf, type StoredObject } from './restitch';
-import { formOf } from './reshape';
 import { deleteObjects } from './shapeOps';
 import { stitchKinds } from './sequence';
+import { guessArea } from './geo';
 
 /**
  * Shapes that are not sewn: switched off (kept with their stitches and settings, to sew them again
@@ -64,7 +64,7 @@ export function setAsideOf(p: Pattern, list: AsideShape[]): void {
 const nextId = (list: AsideShape[]) => list.reduce((m, a) => Math.max(m, a.id), 0) + 1;
 
 /** The points of a running stitch as an open line of corners. */
-function lineOf(p: Pattern, first: number, last: number): Form | null {
+function pointsLine(p: Pattern, first: number, last: number): Form | null {
   const nodes = [];
   for (let i = first; i <= last; i++) {
     if (p.cmd[i] !== STITCH) continue;
@@ -88,7 +88,7 @@ export function setAside(p: Pattern, which: number[], role: AsideRole, trimMm: n
   sorted.forEach((o, k) => {
     const obj = objs[o];
     const known = storedOf(p, obj);
-    const form = (known?.form && formFrom(known.form)) || (known?.path && formFrom(known.path)) || (obj.kind === 'fill' ? formOf(p, obj, kinds) : obj.kind === 'run' ? lineOf(p, obj.first, obj.last) : null);
+    const form = (known?.form && formFrom(known.form)) || (known?.path && formFrom(known.path)) || (obj.kind === 'fill' ? guessArea(p, obj, kinds) : obj.kind === 'run' ? pointsLine(p, obj.first, obj.last) : null);
     list.push({
       id: id++,
       role,

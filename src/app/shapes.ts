@@ -1,5 +1,4 @@
 import type { Editor } from '../ui/editor';
-import { isLine } from '../model/reverse';
 import type { FileList } from '../ui/fileList';
 import type { Form, Mat } from '../shape/path';
 import type { FrameTool } from '../ui/frameTool';
@@ -13,9 +12,9 @@ import type { SewObject } from '../model/objects';
 import type { Viewport } from '../render/viewport';
 import { ShapeTool } from '../ui/shapeTool';
 import { deleteObjects, duplicateObjects, mirrorMatrix, subtractTop } from '../model/shapeOps';
-import { formOf, reshapeFill } from '../model/reshape';
+import { reshapeFill } from '../model/reshape';
 import { railsForm, reshapeRails } from '../model/railsForm';
-import { lineOf, resewLine, lineSettings, fillToLine, reshapeLineFill } from '../model/line';
+import { resewLine, lineSettings, fillToLine, reshapeLineFill } from '../model/line';
 import { refreshKnockouts } from '../model/knockout';
 import { objectKey, remember, remembered, rememberedIn, restitch, type Remembered, type RestitchResult } from '../model/restitch';
 import { rasterize } from '../shape/rasterize';
@@ -23,6 +22,7 @@ import { syncBorders } from '../model/border';
 import { stitchKey } from '../model/objects';
 import { t, formatNumber, type Key } from '../i18n';
 import { ui } from './state';
+import { geoUse, guessArea, guessGeo, guessLine, sewnAlong, withGeo } from '../model/geo';
 
 /** What bindShapes needs from the rest of the app. */
 export interface ShapesApp {
@@ -66,7 +66,7 @@ export function bindShapes(app: ShapesApp) {
   function bandOf(p: Pattern, q: Sequence, o: number): { width: number; offset: number } | null {
     const obj = q.objects[o];
     const known = obj && remembered(p, obj);
-    if (known?.asLine && known.fill) return { width: known.fill.lineWidth ?? known.asLine.line.width, offset: 0 };
+    if (geoUse(known) === 'band') return { width: known!.fill!.lineWidth ?? known!.asLine!.line.width, offset: 0 };
     const border = known?.fill?.border;
     if (border?.type === 'satin' || border?.type === 'zigzag') return { width: border.width, offset: border.offset ?? 0 };
     if (!obj || !isLineObject(p, obj)) return null;
@@ -80,7 +80,7 @@ export function bindShapes(app: ShapesApp) {
     shapeTool.band = b?.width ?? null;
     shapeTool.bandOffset = b?.offset ?? 0;
     const obj = q.objects[o];
-    shapeTool.rails = !b && !!obj && !isLineObject(p, obj) && !formOf(p, obj, q.kinds) && !!railsForm(p, obj, q.kinds);
+    shapeTool.rails = !b && !!obj && !isLineObject(p, obj) && !guessArea(p, obj, q.kinds) && !!railsForm(p, obj, q.kinds);
   }
 
   /**
@@ -95,9 +95,10 @@ export function bindShapes(app: ShapesApp) {
     const obj = q.objects[o];
     if (!obj) return;
     const known = remembered(p, obj);
-    if (known?.asLine || known?.fill?.border) {
-      const fill = known.fill && structuredClone(known.fill);
-      const r = known.asLine
+    const band = geoUse(known) === 'band';
+    if (band || known?.fill?.border) {
+      const fill = known!.fill && structuredClone(known!.fill);
+      const r = band
         ? reshapeLineFill(p, q.objects, obj, q.kinds, shapeTool.form, app.settings.trimMm, w)
         : fill?.border && restitch(p, q.objects, [o], { kind: 'fill', s: { ...fill, border: { ...fill.border, width: w } } }, q.kinds, app.settings.trimMm);
       if (!r || !r.starts.length) {
@@ -121,18 +122,18 @@ export function bindShapes(app: ShapesApp) {
    * file (their curve is traced); not the borders of fills and not letters.
    */
   function isLineObject(p: Pattern, o: SewObject): boolean {
-    return isLine(p, o);
+    return sewnAlong(p, o);
   }
 
   /** The one selected object of the Ablauf mode, when it has a fill whose outline can be edited, or is a line. */
   function shapeTarget(p: Pattern, q: Sequence, o: number): Form | null {
     const obj = q.objects[o];
     if (!obj) return null;
+    const geo = guessGeo(p, obj, q.kinds);
     // Stitches loosed from their shape: its resting shape is edited (a satin without one has none).
-    if (remembered(p, obj)?.free) return isLineObject(p, obj) ? lineOf(p, obj, q.kinds) : formOf(p, obj, q.kinds);
-    if (isLineObject(p, obj)) return lineOf(p, obj, q.kinds);
+    if (geo || remembered(p, obj)?.free || isLineObject(p, obj)) return geo;
     // A satin without an outline (of a file from elsewhere): its two rails.
-    return formOf(p, obj, q.kinds) ?? railsForm(p, obj, q.kinds);
+    return railsForm(p, obj, q.kinds);
   }
 
   /**
@@ -146,7 +147,7 @@ export function bindShapes(app: ShapesApp) {
     const q = app.seq(p);
     const obj = q.objects[o];
     if (!obj) return false;
-    const line = path ?? lineOf(p, obj, q.kinds);
+    const line = path ?? guessLine(p, obj, q.kinds);
     if (!line) return false;
     const sewn = resewLine(p, o, line, st ?? lineSettings(p, obj, q.kinds), app.settings.trimMm);
     // Its shadow follows (sewn before it: a new one moves the line one place on).
@@ -272,7 +273,7 @@ export function bindShapes(app: ShapesApp) {
     if (!obj) return false;
     if (isLineObject(p, obj)) return sewLine(o, form, null, !preview);
     const hand = remembered(p, obj)?.hand ?? 0;
-    const rails = !formOf(p, obj, q.kinds) && railsForm(p, obj, q.kinds);
+    const rails = !guessArea(p, obj, q.kinds) && railsForm(p, obj, q.kinds);
     const r = rails ? reshapeRails(p, q.objects, obj, q.kinds, form, app.settings.trimMm) : reshapeFill(p, q.objects, obj, q.kinds, form, app.settings.trimMm);
     if (preview) {
       ui.flowPreview = r?.starts.length ? r.pattern : null;
@@ -299,11 +300,9 @@ export function bindShapes(app: ShapesApp) {
     const f = app.files.active;
     const mem = remembered(p, obj);
     if (!f || !mem) return;
-    const rested: Remembered = isLineObject(p, obj)
-      ? { ...mem, path: form }
-      : mem.asLine && mem.fill
-        ? { ...mem, asLine: { ...mem.asLine, path: form } }
-        : { ...mem, form, region: rasterize(form, mem.region?.pxMm ?? 0.1) ?? mem.region };
+    const use = isLineObject(p, obj) ? 'line' : (geoUse(mem) ?? 'area');
+    const rested: Remembered = withGeo(mem, form, use);
+    if (use === 'area') rested.region = rasterize(form, mem.region?.pxMm ?? 0.1) ?? mem.region;
     const next = nextVersion(p, {});
     remember(next, obj, rested);
     app.applyEdit(next);

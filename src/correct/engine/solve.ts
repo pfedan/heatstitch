@@ -14,6 +14,7 @@ import { borderTools, designKey, letteringTools, movesOf, objectsOf, predictable
 import { fineFix, fineObjects } from './fine';
 import type { solveMip } from './mip';
 import { validateDesign } from './validate';
+import { lineGeoOf } from '../../model/geo';
 
 /**
  * The correction engine (plans/korrektur-engine-review.md). For one kind of finding, or all of
@@ -640,7 +641,7 @@ function coveredAfter(f: Field, base: Contribution[], index: number): (sx: numbe
 /** Whether object `index` was sewn here (its settings are remembered, not measured from stitches). */
 function sewnHere(p: Pattern, index: number): boolean {
   const m = remembered(p, objectsOf(p)[index]);
-  return !!(m?.fill || m?.satin || m?.path);
+  return !!(m?.fill || m?.satin || lineGeoOf(m));
 }
 
 /**

@@ -9,13 +9,13 @@ import { coversOver } from '../src/model/covers';
 import { STITCH } from '../src/model/pattern';
 import { rememberObjects } from '../src/model/objects';
 import { syncBorders } from '../src/model/border';
-import { formOf } from '../src/model/reshape';
 import { stitchKinds } from '../src/model/sequence';
 import { deleteObjects, duplicateObject, duplicateObjects, mirrorMatrix, recolorObjects, subtractTop, unionForm } from '../src/model/shapeOps';
 import { transformSewObject } from '../src/model/reshape';
 import type { Mat } from '../src/shape/path';
 import { ellipsePath, parsePath, rectPath } from '../src/shape/svgPath';
 import { DEFAULT_PROFILE } from '../src/validation/profiles';
+import { guessArea } from '../src/model/geo';
 
 const ID: Mat = [1, 0, 0, 1, 0, 0];
 const options = digitizeDefaults(DEFAULT_PROFILE);
@@ -32,7 +32,7 @@ function design(): Pattern {
 
 const area = (p: Pattern, o: number) => {
   const objs = sewObjects(p);
-  return wholeArea(formOf(p, objs[o], stitchKinds(p))!)!.areaMm2;
+  return wholeArea(guessArea(p, objs[o], stitchKinds(p))!)!.areaMm2;
 };
 
 describe('shape operations', () => {

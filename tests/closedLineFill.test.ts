@@ -4,12 +4,12 @@ import { closedLineToFill } from '../src/model/line';
 import { addShape } from '../src/model/addShape';
 import { rememberObjects, sewObjects } from '../src/model/objects';
 import { remember, remembered, rememberedIn, restitch, restoreRemembered, type FillSettings } from '../src/model/restitch';
-import { formOf } from '../src/model/reshape';
 import { stitchKinds } from '../src/model/sequence';
 import { STITCH, type Pattern } from '../src/model/pattern';
 import { parsePath } from '../src/shape/svgPath';
 import { DEFAULT_PROFILE } from '../src/validation/profiles';
 import type { Mat } from '../src/shape/path';
+import { guessArea } from '../src/model/geo';
 
 const ID: Mat = [1, 0, 0, 1, 0, 0];
 const options = digitizeDefaults(DEFAULT_PROFILE);
@@ -43,7 +43,7 @@ describe('a closed line filled inside', () => {
       expect(a.o.kind).toBe('fill');
       // The line is the outline of the fill, and still sewn along it as its border.
       expect(a.m.form).toEqual(form);
-      expect(formOf(a.q, a.o, stitchKinds(a.q))).toEqual(form);
+      expect(guessArea(a.q, a.o, stitchKinds(a.q))).toEqual(form);
       expect(a.m.path).toBeUndefined();
       expect(a.m.line).toBeUndefined();
       expect(a.m.fill?.border).toMatchObject({ type: line.type, width: line.width });

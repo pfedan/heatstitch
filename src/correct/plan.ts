@@ -2,25 +2,7 @@ import { coversOver } from '../model/covers';
 import { setKnockout, isCovered, takeOver } from '../model/knockout';
 import { sewObjects, type ObjectKind, type SewObject } from '../model/objects';
 import { STITCH, TRIM, type Pattern } from '../model/pattern';
-import {
-  analyze,
-  holdMemory,
-  measureFill,
-  measureRun,
-  measureSatin,
-  objectKey,
-  isGradient,
-  isOpenPattern,
-  openOnPurpose,
-  remember,
-  remembered,
-  restitch,
-  shapeTrust,
-  SATIN_SPLIT,
-  type Fixed,
-  type Remembered,
-  type Settings,
-} from '../model/restitch';
+import { analyze, holdMemory, measureFill, measureRun, measureSatin, objectKey, isGradient, isOpenPattern, openOnPurpose, remember, remembered, restitch, shapeTrust, SATIN_SPLIT, type Fixed, type Remembered, type Settings } from '../model/restitch';
 import { stitchKinds } from '../model/sequence';
 import { digitizeDefaults, fillUnder, pullFor } from '../digitize/digitize';
 import { withRecords } from '../model/edit';
@@ -29,6 +11,7 @@ import { measurePattern } from '../validation/measure';
 import { fabricOf, recommendedSpacing, type Profile } from '../validation/profiles';
 import { classify, CRITICAL, type Checks, type Reason, type ValidationResult, type Zone } from '../validation/validate';
 import type { CorrectionFocus } from './auto';
+import { areaOf, geoOf } from '../model/geo';
 
 /**
  * Korrektur 2.0: the correction as a digitizer would do it. Instead of moving stitches it changes
@@ -274,7 +257,7 @@ function candidates(p: Pattern, objs: SewObject[], o: SewObject, s: Settings, re
   if (s.kind === 'fill') {
     const f = s.s;
     if (tooMuch) {
-      if (known?.form && !known.knockout && isCovered(p, objs, o)) out.push({ changes: [], knockout: true, visibility: 'invisible', reason: 'density' });
+      if (areaOf(known) && !known!.knockout && isCovered(p, objs, o)) out.push({ changes: [], knockout: true, visibility: 'invisible', reason: 'density' });
       if (f.underlay && !f.underCover && coversOver(p, objs, o, 0.1).length) out.push({ changes: [fix('underCover', false, true)], visibility: 'invisible', reason: 'density' });
       if (f.underlay && f.underCross) out.push({ changes: [fix('underCross', true, false)], visibility: 'invisible', reason: 'density' });
       if (f.underlay && areaMm2 < SMALL_FILL_MM2) out.push({ changes: [fix('underlay', true, false)], visibility: 'invisible', reason: 'density' });
@@ -564,7 +547,7 @@ export function applyProposals(p: Pattern, chosen: Proposal[], trimMm: number): 
 }
 
 /** An object that remembers its shape exactly (moving its stitches would lose that). */
-const keepsShape = (m: Remembered | undefined) => !!m && !m.read && !m.free && !!(m.region || m.fill || m.satin || m.form || m.path || m.columns);
+const keepsShape = (m: Remembered | undefined) => !!m && !m.read && !m.free && !!(m.region || m.fill || m.satin || geoOf(m) || m.columns);
 
 /**
  * Where the fine correction on the stitches is left to do after the proposals (`after`: the

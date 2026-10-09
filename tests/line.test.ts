@@ -4,13 +4,14 @@ import { fillToLine, lineSettings, lineToFill, resewLine, traceLine } from '../s
 import { addShape } from '../src/model/addShape';
 import { rememberObjects, sewObjects } from '../src/model/objects';
 import { remember, remembered, rememberedIn, restitch, restoreRemembered, type FillSettings } from '../src/model/restitch';
-import { formOf, reshapeFill, transformSewObject } from '../src/model/reshape';
+import { reshapeFill, transformSewObject } from '../src/model/reshape';
 import { takeOver } from '../src/model/knockout';
 import { stitchKinds } from '../src/model/sequence';
 import { STITCH, type Pattern } from '../src/model/pattern';
 import { parsePath } from '../src/shape/svgPath';
 import { DEFAULT_PROFILE } from '../src/validation/profiles';
 import type { Mat } from '../src/shape/path';
+import { guessArea } from '../src/model/geo';
 
 const ID: Mat = [1, 0, 0, 1, 0, 0];
 const options = digitizeDefaults(DEFAULT_PROFILE);
@@ -165,7 +166,7 @@ describe('wide line as a fill', () => {
     // The line is the shape: no outline traced from its area, and the shape to edit is the line.
     expect(a.m.form).toBeUndefined();
     expect(a.m.fill).toMatchObject({ lineWidth: 5, lineCap: 'flat' });
-    expect(formOf(a.q, a.o, stitchKinds(a.q))).toBe(a.m.asLine!.path);
+    expect(guessArea(a.q, a.o, stitchKinds(a.q))).toBe(a.m.asLine!.path);
     // The area is the line in its width, flat at the ends: about 5 × 33 mm.
     expect(a.m.region!.areaMm2).toBeGreaterThan(150);
     expect(a.m.region!.areaMm2).toBeLessThan(185);

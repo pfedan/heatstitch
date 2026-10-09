@@ -6,6 +6,7 @@ import type { SewObject } from './objects';
 import type { Pattern } from './pattern';
 import { columnOf, keepShape, objectKey, railsArea, remembered, type Remembered } from './restitch';
 import { stitchKinds } from './sequence';
+import { areaOf } from './geo';
 
 /**
  * What objects sewn later cover of an object: fills whose shape is known as curves, and satins
@@ -28,7 +29,7 @@ const satinCache = new Map<string, { region: Region; width: number } | null>();
 const CACHE_SIZE = 200;
 
 /** The area of a satin object and its median width, or null when its columns are not known. */
-function satinArea(p: Pattern, x: SewObject, kinds: () => Uint8Array): { region: Region; width: number } | null {
+function satinCover(p: Pattern, x: SewObject, kinds: () => Uint8Array): { region: Region; width: number } | null {
   const key = objectKey(p, x);
   const known = remembered(p, x);
   // Remembered columns can change without the stitches (rails moved): not cached then.
@@ -52,7 +53,7 @@ const overlapsBox = (a: Box, b: Box) => a.minX <= b.maxX && b.minX <= a.maxX && 
  * leave out what lies on top (else what covers it would depend on what it left out last time).
  */
 function reachOf(p: Pattern, o: SewObject): Box {
-  const f = remembered(p, o)?.form;
+  const f = areaOf(remembered(p, o));
   const b = f && bounds(f);
   return b ? { minX: b.minX * 10 - 1, minY: b.minY * 10 - 1, maxX: b.maxX * 10 + 1, maxY: b.maxY * 10 + 1 } : o;
 }
@@ -76,14 +77,14 @@ export function coversFrom(p: Pattern, later: SewObject[], o: SewObject, pxMm: n
     if (mine(remembered(p, x))) continue;
     // An empty fill covers nothing but its border.
     if (remembered(p, x)?.fill?.pattern === 'none') continue;
-    const f = remembered(p, x)?.form;
+    const f = areaOf(remembered(p, x));
     const r = f && wholeArea(f, pxMm);
     if (r) {
       out.push({ region: r, overlap: FILL_OVERLAP });
       continue;
     }
     if (x.kind !== 'satin' || pxMm !== 0.1) continue;
-    const s = satinArea(p, x, kinds);
+    const s = satinCover(p, x, kinds);
     if (s) out.push({ region: s.region, overlap: s.width * share });
   }
   return out;

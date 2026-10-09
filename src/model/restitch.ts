@@ -30,6 +30,7 @@ import { gradientOf, patchArea, patchSpacing, rowPatches, type RowPatch } from '
 import { rowLines, zigzagOf, type Zigzag } from './zigzag';
 import { letteringFrom } from '../lettering/stored';
 import type { Lettering } from '../lettering/layout';
+import { areaOf, lineGeoOf } from './geo';
 
 /**
  * New stitches for the objects of a design, with other settings: density, angle, stitch length,
@@ -457,7 +458,7 @@ export const holdMemory = hold;
 export function knownKind(r: Remembered | undefined): ObjectKind | undefined {
   if (!r || r.read || r.lettering) return undefined;
   if (r.outline && r.border) return runLike(r.border.type) ? 'run' : 'satin';
-  if (r.path && r.line) return runLike(r.line.type) ? 'run' : 'satin';
+  if (lineGeoOf(r) && r.line) return runLike(r.line.type) ? 'run' : 'satin';
   if (r.fill && !r.satin) return 'fill';
   if (r.satin && !r.fill) return 'satin';
   // Both settings (a fill made satin, or back): the columns only a satin keeps.
@@ -541,7 +542,8 @@ function chainedAsSewn(p: Pattern, pt: Part, kinds: Uint8Array, rails: Rails[]):
 
 /** The edge of a known shape as closed lines (its curves when drawn), or null. */
 function edgeOf(known?: Remembered): Pt[][] | null {
-  if (known?.form) return known.form.paths.map((path) => flatten(path, 0.05)).filter((l) => l.length > 2);
+  const area = areaOf(known);
+  if (area) return area.paths.map((path) => flatten(path, 0.05)).filter((l) => l.length > 2);
   if (known?.shape) return outline(known.shape) as Pt[][];
   return null;
 }

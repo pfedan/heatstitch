@@ -3,12 +3,13 @@ import { describe, expect, it } from 'vitest';
 import { sample } from '../src/digitize/region';
 import { sewObjects, type SewObject } from '../src/model/objects';
 import { STITCH, type Pattern } from '../src/model/pattern';
-import { formOf, reshapeFill, scaleBlocked, transformSewObject } from '../src/model/reshape';
+import { reshapeFill, scaleBlocked, transformSewObject } from '../src/model/reshape';
 import { analyze, measureFill, remember, remembered, rememberedIn, restoreRemembered } from '../src/model/restitch';
 import { stitchKinds } from '../src/model/sequence';
 import { parsePattern } from '../src/parsers';
 import { formArea, rotation, scaling, transformForm, translation } from '../src/shape/path';
 import { rasterize } from '../src/shape/rasterize';
+import { guessArea } from '../src/model/geo';
 
 const load = (f: string) => parsePattern(readFileSync(new URL(`../public/examples/${f}`, import.meta.url)), f);
 
@@ -98,7 +99,7 @@ describe('changing the shape of a fill', () => {
   it('traces the fill area as curves', () => {
     const { p, kinds, objs } = setup('demos/letters.pes');
     const o = fillOf(p, objs, kinds);
-    const f = formOf(p, o, kinds)!;
+    const f = guessArea(p, o, kinds)!;
     expect(f.paths.length).toBeGreaterThan(0);
     const area = analyze(p, o, kinds).fill!.areaMm2;
     expect(Math.abs(formArea(f) - area) / area).toBeLessThan(0.05);
@@ -107,7 +108,7 @@ describe('changing the shape of a fill', () => {
   it('fills the new shape and leaves nothing of the old stitches outside it', () => {
     const { p, kinds, objs } = setup('demos/letters.pes');
     const o = fillOf(p, objs, kinds);
-    const f = formOf(p, o, kinds)!;
+    const f = guessArea(p, o, kinds)!;
     const [cx, cy] = center(p, o);
     // Shrunk to 70 % around its middle.
     const small = transformForm(f, scaling(0.7, 0.7, cx, cy));
@@ -129,7 +130,7 @@ describe('changing the shape of a fill', () => {
   it('stores the curves with the file and reads them back', () => {
     const { p, kinds, objs } = setup('demos/letters.pes');
     const o = fillOf(p, objs, kinds);
-    const f = formOf(p, o, kinds)!;
+    const f = guessArea(p, o, kinds)!;
     const r = reshapeFill(p, objs, o, kinds, transformForm(f, translation(1, 1)), 7)!;
     const nobjs = sewObjects(r.pattern);
     const no = nobjs.find((x) => stitches(r.pattern, 0, x.first - 1) === r.starts[0])!;

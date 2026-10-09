@@ -11,7 +11,7 @@ import { refreshKnockouts, setKnockout } from '../../src/model/knockout';
 import { rememberObjects, sewObjects, tableOf, type SewObject } from '../../src/model/objects';
 import { COLOR_CHANGE, END, STITCH, type Pattern, type ThreadColor } from '../../src/model/pattern';
 import { sameColor } from '../../src/model/recolor';
-import { formOf, transformSewObject } from '../../src/model/reshape';
+import { transformSewObject } from '../../src/model/reshape';
 import { canSplit, splitFill } from '../../src/model/splitFill';
 import { wholeArea, wholeOf } from '../../src/model/knockout';
 import { borderStitches } from '../../src/model/along';
@@ -40,6 +40,7 @@ import { rng } from './images';
 import { inheritTrace, movedTrace, readTrace, setTraceOf, sizedTrace, storeTrace, traceFrom, traceOf, withTrace, type Trace } from '../../src/model/trace';
 import { areaLoops, suggestSatin } from '../../src/digitize/satinSuggest';
 import { stripsOfAreas } from '../../src/digitize/rungs';
+import { geoOf, guessArea, withGeo } from '../../src/model/geo';
 
 /**
  * The torture test: random chains of the operations the app offers on objects (add, duplicate (also
@@ -560,7 +561,7 @@ export const OPS: Op[] = [
         [cx - Math.cos(a) * L, cy - Math.sin(a) * L],
         [cx + Math.cos(a) * L, cy + Math.sin(a) * L],
       ];
-      const before = wholeArea(formOf(p, o, stitchKinds(p))!)!;
+      const before = wholeArea(guessArea(p, o, stitchKinds(p))!)!;
       const s = splitFill(p, o.index, [cut], T);
       if (s === 'whole') return false;
       expect(s, 'a fill cuts apart').toBeTruthy();
@@ -575,7 +576,7 @@ export const OPS: Op[] = [
       // Invariant: the parts cover the area as it was, no fabric along the cut.
       const kinds = stitchKinds(pattern);
       const objs = sewObjects(pattern, kinds);
-      const areas = parts.map((k) => wholeArea(formOf(pattern, objs[k], kinds)!)!);
+      const areas = parts.map((k) => wholeArea(guessArea(pattern, objs[k], kinds)!)!);
       expect(areas.every(Boolean), 'every part has an area').toBe(true);
       expect(uncovered(before, areas), 'parts cover the fill').toBeLessThan(0.005);
       return shapes(d, syncBorders(pattern, T));
@@ -592,7 +593,7 @@ export const OPS: Op[] = [
       const fills = d.objects.filter((o) => remembered(p, o)?.fill && !remembered(p, o)?.fill?.border && !remembered(p, o)?.asSatin && !remembered(p, o)?.outline);
       if (!fills.length) return false;
       const o = pick(r, fills);
-      const area = wholeArea(formOf(p, o, kinds)!);
+      const area = wholeArea(guessArea(p, o, kinds)!);
       const s = area && suggestSatin(area);
       if (!area || !s || s.kind === 'wide' || !s.ok) return false;
       const { outsides, holes } = areaLoops(area);
@@ -871,6 +872,27 @@ export function checkFillForms(p: Pattern): void {
     if (m.path || m.line) problems.push(`${o.index}: a fill that is also a line`);
   }
   expect(problems.join('; '), 'fill outlines').toBe('');
+}
+
+/** JSON with the keys of every object in order (typed arrays as lists), to compare what objects remember. */
+const sortedJson = (v: unknown): string =>
+  JSON.stringify(v, (_k, x) => (ArrayBuffer.isView(x) ? Array.from(x as Uint8Array) : x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => (a < b ? -1 : 1))) : x));
+
+/**
+ * One form per object (vector model rule 1): never two of its places used at once, and taking its
+ * form and putting it back changes nothing.
+ */
+export function checkOneGeo(p: Pattern): void {
+  const problems: string[] = [];
+  for (const o of sewObjects(p)) {
+    const m = remembered(p, o);
+    if (!m) continue;
+    const places = [m.form && 'form', m.path && 'path', m.asLine && m.fill && 'band'].filter(Boolean);
+    if (places.length > 1) problems.push(`${o.index}: form in ${places.join(' and ')}`);
+    const geo = geoOf(m);
+    if (geo && sortedJson(withGeo(m, geo)) !== sortedJson(m)) problems.push(`${o.index}: its form put back changes it`);
+  }
+  expect(problems.join('; '), 'one form').toBe('');
 }
 
 /** An empty fill is its border, in its own thread: it has one, without a thread or link of its own, and no object is its border. */
@@ -1174,6 +1196,7 @@ function checkStep(d: Doc, full: boolean): void {
   checkBorders(p);
   checkEmptyFills(p);
   checkFillForms(p);
+  checkOneGeo(p);
   checkBlends(p);
   checkEchoes(p);
   checkLineParts(p);

@@ -15,6 +15,7 @@ import { storeForm } from '../shape/path';
 import { unionOf } from '../shape/rasterize';
 import { readBorder } from './readBorder';
 import { recolor } from './recolor';
+import { lineGeoOf } from './geo';
 
 /**
  * Borders of fills in a thread of their own. A border in the fill's thread is part of the fill
@@ -185,7 +186,7 @@ export function syncShadows(p: Pattern, trimMm: number): Pattern {
   const kinds = stitchKinds(p);
   const objs = sewObjects(p, kinds);
   const mem = objs.map((o) => remembered(p, o));
-  const isLine = (m: Remembered | undefined) => !!m?.path && !!m.line && !partOf(m);
+  const isLine = (m: Remembered | undefined) => !!lineGeoOf(m) && !!m!.line && !partOf(m);
   if (!mem.some((m) => partOf(m) || (isLine(m) && (m!.line!.shadow || m!.line!.echo?.link)))) return p;
   const byLink = new Map<string, number>();
   mem.forEach((m, k) => {
@@ -219,8 +220,10 @@ export function syncShadows(p: Pattern, trimMm: number): Pattern {
       const cur = at === undefined ? undefined : mem[at];
       const target = at === undefined ? null : objs[at];
       const same = target && sameColor(target.color, part.color);
-      if (same && cur?.path && JSON.stringify(storeForm(cur.path)) === JSON.stringify(storeForm(part.memory.path!)) && JSON.stringify(cur.line) === JSON.stringify(part.memory.line)) continue;
-      const runs = lineStitches(part.memory.path!, part.memory.line!);
+      const curGeo = lineGeoOf(cur);
+      const partGeo = lineGeoOf(part.memory)!;
+      if (same && curGeo && JSON.stringify(storeForm(curGeo)) === JSON.stringify(storeForm(partGeo)) && JSON.stringify(cur!.line) === JSON.stringify(part.memory.line)) continue;
+      const runs = lineStitches(partGeo, part.memory.line!);
       if (!runs.length) continue;
       let recs = runRecords(runs, trimMm);
       // The very stitches of another object (a shadow landing on a line, say): sewn the other way

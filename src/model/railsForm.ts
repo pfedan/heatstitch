@@ -5,6 +5,7 @@ import type { Pattern } from './pattern';
 import type { SewObject } from './objects';
 import { analyze, forget, keepShape, measureSatin, remember, remembered, restitch, type Rails, type RestitchResult } from './restitch';
 import { traceLine } from './line';
+import { geoOf } from './geo';
 
 /**
  * A satin of a file from elsewhere (or one whose rails are known, but no outline) on the level Form:
@@ -15,7 +16,7 @@ import { traceLine } from './line';
 /** Whether the object is satin only (no fill in it), not a lettering and not sewn along a line. */
 function satinOnly(p: Pattern, o: SewObject, kinds: Uint8Array): boolean {
   const known = remembered(p, o);
-  if (known?.path || known?.asLine || known?.lettering || known?.form) return false;
+  if (geoOf(known) || known?.lettering) return false;
   const an = analyze(p, o, kinds, known);
   return an.parts.some((pt) => pt.kind === 'satin') && !an.parts.some((pt) => pt.kind === 'fill');
 }

@@ -14,7 +14,7 @@ import { SATIN_SHARE } from '../model/covers';
 import { currentSettings } from '../correct/plan';
 import { isCovered, setOverlapShare } from '../model/knockout';
 import { isStroke, SATIN_MAX, pullFor, digitizeDefaults } from '../digitize/digitize';
-import { closedForm, closedLineToFill, lineOf, lineSettings, lineToFill } from '../model/line';
+import { closedForm, closedLineToFill, lineSettings, lineToFill } from '../model/line';
 import { outline } from '../digitize/region';
 import { recommendedSpacing } from '../validation/profiles';
 import { rememberObjects, type SewObject } from '../model/objects';
@@ -26,6 +26,7 @@ import { t, type Key } from '../i18n';
 import { type ShapeTrust, analyze, remembered, measureFill, measureSatin, measureRun, shapeTrust, type Remembered, remember, rememberedIn, restitch, restitchedPieces, type Settings as RestitchSettings, type RestitchResult, objectKey } from '../model/restitch';
 import { type StitchInfo, StitchPanel } from '../ui/stitchPanel';
 import { ui } from './state';
+import { areaOf, geoUse, guessLine, lineGeoOf } from '../model/geo';
 
 /** What bindStitches needs from the rest of the app. */
 export interface StitchesApp {
@@ -95,7 +96,7 @@ export function bindStitches(app: StitchesApp) {
     const hand = [...ui.selectedObjects].reduce((a, o) => a + (q.objects[o] ? (remembered(p, q.objects[o])?.hand ?? 0) : 0), 0);
     const firstFill = [...ui.selectedObjects].sort((a, b) => a - b).find((o) => q.objects[o]?.kind === 'fill') ?? [...ui.selectedObjects][0];
     // Fills with curves can leave out what lies on top.
-    const shaped = [...ui.selectedObjects].map((o) => q.objects[o]).filter((obj) => obj && remembered(p, obj)?.form);
+    const shaped = [...ui.selectedObjects].map((o) => q.objects[o]).filter((obj) => obj && areaOf(remembered(p, obj)));
     const ons = new Set(shaped.map((obj) => !!remembered(p, obj)?.knockout));
     const knockout: StitchInfo['knockout'] = shaped.length
       ? { on: ons.size > 1 ? 'mixed' : ons.has(true), covered: shaped.some((obj) => isCovered(p, q.objects, obj)), share: remembered(p, shaped[0])?.overlapShare ?? SATIN_SHARE }
@@ -122,13 +123,13 @@ export function bindStitches(app: StitchesApp) {
     const pieces = piece ? q.objects.filter((obj) => obj.kind === 'fill' && remembered(p, obj)?.piece === piece).length : 0;
     const info: StitchInfo = { key: ui.selectionKey, lock, free, fixed, fabricPull, auto, hand, measured, counts, recommended: recommendedSpacing(app.settings.profile), shape: worst, outlines: shapes, toSatin: stroke, knockout, depth, color: q.objects[firstFill]?.color, area: (fillObj && remembered(p, fillObj)?.region) || undefined, ...(pieces > 1 ? { pieces } : {}) };
     const runs = [...ui.selectedObjects].map((o) => q.objects[o]).filter((obj) => obj?.kind === 'run');
-    if (runs.length && runs.every((obj) => remembered(p, obj)?.path)) info.line = true;
+    if (runs.length && runs.every((obj) => lineGeoOf(remembered(p, obj)))) info.line = true;
     const one = ui.selectedObjects.size === 1 ? q.objects[[...ui.selectedObjects][0]] : undefined;
     if (one && app.isLineObject(p, one)) {
-      const form = lineOf(p, one, q.kinds);
-      info.path = { st: lineSettings(p, one, q.kinds), traced: !remembered(p, one)?.path, closed: !!form?.paths.length && form.paths.every((x) => x.closed), color: one.color };
+      const form = guessLine(p, one, q.kinds);
+      info.path = { st: lineSettings(p, one, q.kinds), traced: !lineGeoOf(remembered(p, one)), closed: !!form?.paths.length && form.paths.every((x) => x.closed), color: one.color };
     }
-    if (one && remembered(p, one)?.asLine) info.asLine = true;
+    if (one && geoUse(remembered(p, one)) === 'band') info.asLine = true;
     const orig = app.files.active?.pattern === p ? app.files.active.original : undefined;
     if (orig && orig !== p && isReadFromFile(orig)) {
       const was = app.seq(orig).objects;
@@ -152,8 +153,8 @@ export function bindStitches(app: StitchesApp) {
       info.outline = { fill: line >= 0 ? line : null, shadow: shade!.shadowOf ? true : undefined, echo: shade!.echoOf ? true : undefined };
       const lo = line >= 0 ? q.objects[line] : undefined;
       const lm = lo && remembered(p, lo);
-      if (lo && lm?.path && lm.line && !lm.free) {
-        const form = lineOf(p, lo, q.kinds);
+      if (lo && lm && lineGeoOf(lm) && lm.line && !lm.free) {
+        const form = guessLine(p, lo, q.kinds);
         info.outline.of = { line: lineSettings(p, lo, q.kinds), closed: !!form?.paths.length && form.paths.every((x) => x.closed), color: lo.color };
       }
     }
@@ -376,7 +377,7 @@ export function bindStitches(app: StitchesApp) {
         if (one >= 0) app.sewLineAgain(one);
         return;
       }
-      const path = to === 'fill' && one >= 0 ? remembered(p, app.seq(p).objects[one])?.path : undefined;
+      const path = to === 'fill' && one >= 0 ? lineGeoOf(remembered(p, app.seq(p).objects[one])) : undefined;
       if (path) {
         const d = digitizeDefaults(app.settings.profile);
         const fill = { pattern: 'tatami' as const, spacing: d.spacing, spacingEnd: Math.min(1.2, Math.round(d.spacing * 250) / 100), offset: 0.25, angle: NaN, stitch: d.stitch, underlay: d.underlay, edge: 0, tolerance: d.tolerance };

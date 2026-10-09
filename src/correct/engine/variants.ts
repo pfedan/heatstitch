@@ -2,21 +2,12 @@ import { coversOver } from '../../model/covers';
 import { setKnockout, takeOver } from '../../model/knockout';
 import { sewObjects, stitchKey, type SewObject } from '../../model/objects';
 import { STITCH, type Pattern } from '../../model/pattern';
-import {
-  analyze,
-  isGradient,
-  isOpenPattern,
-  remembered,
-  restitch,
-  SATIN_SPLIT,
-  shapeTrust,
-  type Fixed,
-  type Settings,
-} from '../../model/restitch';
+import { analyze, isGradient, isOpenPattern, remembered, restitch, SATIN_SPLIT, shapeTrust, type Fixed, type Settings } from '../../model/restitch';
 import { stitchKinds } from '../../model/sequence';
 import { currentSettings } from '../plan';
 import { fabricOf, recommendedSpacing, type Profile } from '../../validation/profiles';
 import type { FixKind } from './cells';
+import { areaOf } from '../../model/geo';
 
 /**
  * What the engine may change on one object, as variants: each a set of settings changes (the same
@@ -155,7 +146,7 @@ export function toolsFor(p: Pattern, objs: SewObject[], o: SewObject, s: Setting
     const f = s.s;
     const covered = dense ? coversOver(p, objs, o, 0.1).length > 0 : false;
     if (dense) {
-      if (covered && known?.form && !known.knockout) out.push({ id: 'knockout', changes: [], knockout: true, strength: 0, kinds: ['density', 'holes'] });
+      if (covered && areaOf(known) && !known!.knockout) out.push({ id: 'knockout', changes: [], knockout: true, strength: 0, kinds: ['density', 'holes'] });
       if (covered && f.underlay && !f.underCover) out.push({ id: 'underCover', changes: [fix('underCover', false, true)], strength: 0, kinds: ['density', 'holes'] });
       if (f.underlay && f.underCross) out.push({ id: 'underCross', changes: [fix('underCross', true, false)], strength: 0, kinds: ['density', 'holes'] });
       if (f.underlay && areaMm2 < SMALL_FILL_MM2 * 2) out.push({ id: 'underlayOff', changes: [fix('underlay', true, false)], strength: areaMm2 < SMALL_FILL_MM2 ? 0 : 0.3, kinds: ['density', 'holes'] });
