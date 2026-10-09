@@ -24,6 +24,11 @@ export function docsUrl(l: Lang, hash = ''): string {
   return `${import.meta.env.BASE_URL}${l === 'de' ? 'de/' : ''}docs.html${hash.replace(/^#(de|en)-/, `#${l}-`)}`;
 }
 
+/** Where the video page is in this language, with a group's hash carried over (#de-file, #en-file). */
+export function videosUrl(l: Lang, hash = ''): string {
+  return `${import.meta.env.BASE_URL}${l === 'de' ? 'de/' : ''}videos.html${hash.replace(/^#(de|en)-/, `#${l}-`)}`;
+}
+
 /**
  * Switches the language at once, without a reload: the static texts (data-i18n) here, everything
  * drawn with t() by whoever listens (see onLangChange).

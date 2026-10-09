@@ -24,4 +24,16 @@
     <xhtml:link rel="alternate" hreflang="de" href="https://pfedan.github.io/heatstitch/de/docs.html" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://pfedan.github.io/heatstitch/docs.html" />
   </url>
+  <url>
+    <loc>https://pfedan.github.io/heatstitch/videos.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://pfedan.github.io/heatstitch/videos.html" />
+    <xhtml:link rel="alternate" hreflang="de" href="https://pfedan.github.io/heatstitch/de/videos.html" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://pfedan.github.io/heatstitch/videos.html" />
+  </url>
+  <url>
+    <loc>https://pfedan.github.io/heatstitch/de/videos.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://pfedan.github.io/heatstitch/videos.html" />
+    <xhtml:link rel="alternate" hreflang="de" href="https://pfedan.github.io/heatstitch/de/videos.html" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://pfedan.github.io/heatstitch/videos.html" />
+  </url>
 </urlset>

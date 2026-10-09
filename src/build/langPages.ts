@@ -10,13 +10,13 @@
  */
 
 export type Lang = 'de' | 'en';
-export type Page = 'app' | 'docs';
+export type Page = 'app' | 'docs' | 'videos';
 
 export const SITE = 'https://pfedan.github.io/heatstitch/';
 
 /** Where a page lives, relative to the site's base. */
 export function pagePath(page: Page, lang: Lang): string {
-  return (lang === 'de' ? 'de/' : '') + (page === 'docs' ? 'docs.html' : '');
+  return (lang === 'de' ? 'de/' : '') + (page === 'app' ? '' : `${page}.html`);
 }
 
 const DE: Record<Page, { title: string; description: string; ogTitle: string; ogDescription: string }> = {
@@ -35,6 +35,13 @@ const DE: Record<Page, { title: string; description: string; ogTitle: string; og
     ogTitle: 'heatstitch Anleitung: Stickdateien ansehen, bearbeiten und prüfen',
     ogDescription:
       'Reihenfolge und Sprünge, Objekte und Füllmuster, Formen, Schrift, einzelne Stiche, Dichteprüfung und Korrektur, Bilder zu Stichen, Stickrahmen und Formate, in wenigen Minuten erklärt.',
+  },
+  videos: {
+    title: 'heatstitch Videos: kurze Anleitungen zum Sticken im Browser',
+    description:
+      'Kurze Videos mit Stimme zeigen heatstitch Schritt für Schritt: die Oberfläche, ein erstes Stickmuster, Schrift, Bilder zu Stichen, Objekte und Reihenfolge, Stickdateien öffnen und prüfen, Dichte beheben, Sprünge und Schnitte, Speichern, Füllungen, Satin und einzelne Stiche.',
+    ogTitle: 'heatstitch in Videos: kurze Anleitungen zum Sticken',
+    ogDescription: 'Kurze Videos von zwei bis drei Minuten, mit den Dateien zum Mitmachen: vom ersten Stickmuster bis zur fertigen Stickdatei.',
   },
 };
 
@@ -75,7 +82,7 @@ export function langPage(html: string, page: Page, lang: Lang): string {
   // The app at its own address is everyone's (x-default): it starts in the language of the
   // settings or the browser, as before. Under de/ it starts in German.
   let out = page === 'app' && lang === 'en' ? html : replaceOnce(html, /<html lang="[a-z]+"/, `<html lang="${lang}" data-lang="${lang}" data-page-lang="${lang}"`, 'html element');
-  if (page === 'docs') {
+  if (page !== 'app') {
     const other = lang === 'de' ? 'en' : 'de';
     out = replaceOnce(out, new RegExp(`\\s*<article lang="${other}">[\\s\\S]*?</article>`), '', `article ${other}`);
   }
@@ -100,6 +107,6 @@ function german(html: string, page: Page): string {
     out = setMeta(out, 'twitter:title', t.ogTitle);
     out = setMeta(out, 'twitter:description', t.ogDescription);
   }
-  // "./" (the app) and "docs.html" (the guide) stay in de/; files of the site are one folder up.
-  return out.replace(/(\s(?:href|src)=")(?!https?:|\/|#|data:|mailto:|\.\/|docs\.html)([^"]+")/g, '$1../$2');
+  // "./" (the app), "docs.html" (the guide) and "videos.html" stay in de/; files of the site are one folder up.
+  return out.replace(/(\s(?:href|src)=")(?!https?:|\/|#|data:|mailto:|\.\/|(?:docs|videos)\.html)([^"]+")/g, '$1../$2');
 }
