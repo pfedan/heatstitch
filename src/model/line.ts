@@ -1,10 +1,10 @@
 import { BORDER_STITCH, BORDER_WIDTH } from '../digitize/border';
 import { TOLERANCE } from '../digitize/run';
-import { echoLines } from '../digitize/echo';
+import { echoLines, type EchoLine } from '../digitize/echo';
 import type { Pt } from '../digitize/skeleton';
 import { flatten, type Form, type Node } from '../shape/path';
 import { fitCubic } from '../shape/vectorize';
-import { isRunType, sewAlong, type PathStitch } from './along';
+import { hasPhase, isRunType, passesOf, sewAlong, spacingOf, type PathStitch } from './along';
 import { runRecords } from './border';
 import { tidy, withRecords } from './edit';
 import { rememberObjects, sewObjects, type SewObject } from './objects';
@@ -55,29 +55,92 @@ export function lineStitches(form: Form, st: PathStitch, reverse = false, from?:
 export const lineRuns = (form: Form, s: RunSettings, reverse = false): Pt[][] => lineStitches(form, runAsLine(s), reverse);
 
 /**
- * A line with its echo (see digitize/echo.ts): the line and its copies one after the other. Running
- * and triple stitch go from one to the next in a single run, a short stitch across; other stitches
- * are sewn copy by copy, each with what lies to one side of the line on that same side.
+ * A line with its echo (see digitize/echo.ts): the line and its copies one after the other, in the
+ * order the echo asks for. Running and triple stitch go from one to the next in a single run, a
+ * short stitch across; other stitches are sewn copy by copy, each with what lies to one side of the
+ * line on that same side. A zigzag, E stitch or motif keeps its figures in step from copy to copy,
+ * counted from where the line was drawn to start, each copy the echo's phase on from the one before.
  */
 function echoStitches(line: Pt[], closed: boolean, st: PathStitch, from?: Pt, reverse = false): Pt[][] {
-  let lines = echoLines(line, closed, st.echo!, isRunType(st.type) ? 0 : st.width + 0.5);
+  const e = st.echo!;
+  const passes = passesOf(st);
+  let lines = echoLines(line, closed, e, 0, !closed && passes % 2 === 0);
   if (!lines.length) return [];
-  // From the end nearest the needle.
+  // From the end nearest the needle, where the order allows it: copies on both sides of an open line
+  // have no inside or outside.
   const first = lines[0].line[0];
   const last = lines[lines.length - 1].line[lines[lines.length - 1].line.length - 1];
-  if (from && Math.hypot(last[0] - from[0], last[1] - from[1]) < Math.hypot(first[0] - from[0], first[1] - from[1])) {
+  const free = !closed && e.side === 'both';
+  if (free && from && Math.hypot(last[0] - from[0], last[1] - from[1]) < Math.hypot(first[0] - from[0], first[1] - from[1])) {
     lines = lines.reverse().map((l) => ({ ...l, line: l.line.slice().reverse(), back: !l.back }));
   }
   const plain = { ...st, echo: undefined };
-  if (!isRunType(st.type) || st.echo!.cut) {
-    const runs = lines.flatMap((l) => sewAlong(l.line, l.closed, plain, undefined, undefined, l.back !== reverse));
+  const shiftOf = (l: EchoLine): number => {
+    if (!hasPhase(st.type)) return 0;
+    const turns = (Math.abs(l.k) * (e.phase ?? 0)) / 360;
+    if (!l.back || l.closed) return frac(turns);
+    // Sewn against the way it was drawn: the figures counted from its far end.
+    const period = st.type === 'motif' ? lengthOf(l.line) / Math.max(1, Math.round(lengthOf(l.line) / Math.max(0.5, spacingOf(st)))) : spacingOf(st);
+    return frac(lengthOf(l.line) / period - turns);
+  };
+  if (!isRunType(st.type) || e.cut) {
+    const runs = lines.flatMap((l) => sewAlong(l.line, l.closed, plain, undefined, undefined, l.back !== reverse, shiftOf(l)));
     // Cut: a trim from copy to copy, however near they are.
-    if (st.echo!.cut) runs.forEach((run, k) => k && trimBefore.add(run));
+    if (e.cut) runs.forEach((run, k) => k && trimBefore.add(run));
     return runs;
+  }
+  if (passes > 1) {
+    // Each copy there and back on its own, then on to the next.
+    const all: Pt[] = [];
+    for (const l of lines) for (const run of sewAlong(l.line, l.closed, plain)) for (const q of run) if (!all.length || !samePt(all[all.length - 1], q)) all.push(q);
+    return all.length > 1 ? [all] : [];
   }
   const all: Pt[] = [];
   for (const l of lines) for (const q of l.line) if (!all.length || !samePt(all[all.length - 1], q)) all.push(q);
   return sewAlong(all, false, plain);
+}
+
+const frac = (v: number) => ((v % 1) + 1) % 1;
+
+/** The lines the echo of a line along `form` lies on, each with its copy number (see EchoLine.k). */
+export function echoCopyLines(form: Form, st: PathStitch): EchoLine[] {
+  if (!st.echo) return [];
+  return form.paths.flatMap((p) => {
+    const pts = flatten(p);
+    if (pts.length < 2) return [];
+    const loop = p.closed && pts.length > 2 && !samePt(pts[0], pts[pts.length - 1]) ? [...pts, pts[0]] : pts;
+    return echoLines(loop, p.closed, st.echo!);
+  });
+}
+
+/** For each point (mm), the copy number of the echo line nearest to it (0: the line itself). */
+export function nearestCopy(lines: EchoLine[], pts: Pt[]): Int8Array {
+  const out = new Int8Array(pts.length);
+  pts.forEach((q, i) => {
+    let best = Infinity;
+    for (const l of lines) {
+      for (let j = 1; j < l.line.length; j++) {
+        const a = l.line[j - 1];
+        const b = l.line[j];
+        const dx = b[0] - a[0];
+        const dy = b[1] - a[1];
+        const l2 = dx * dx + dy * dy;
+        const t = l2 > 0 ? Math.max(0, Math.min(1, ((q[0] - a[0]) * dx + (q[1] - a[1]) * dy) / l2)) : 0;
+        const d = (q[0] - a[0] - t * dx) ** 2 + (q[1] - a[1] - t * dy) ** 2;
+        if (d < best) {
+          best = d;
+          out[i] = l.k;
+        }
+      }
+    }
+  });
+  return out;
+}
+
+function lengthOf(l: Pt[]): number {
+  let s = 0;
+  for (let i = 1; i < l.length; i++) s += Math.hypot(l[i][0] - l[i - 1][0], l[i][1] - l[i - 1][1]);
+  return s;
 }
 
 const samePt = (a: Pt, b: Pt) => Math.hypot(a[0] - b[0], a[1] - b[1]) < 1e-6;

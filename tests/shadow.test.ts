@@ -35,7 +35,7 @@ function shaded(shadow: Partial<LineShadow> = {}, before = false): Pattern {
   p = addShape(p, { form: parsePath('M0 0 L30 0', ID), kind: 'stroke', width: 0.4 }, red, before ? 0 : null, options)!.pattern;
   const objs = sewObjects(p);
   const o = objs[objs.length - 1];
-  const st = { ...lineSettings(p, o), shadow: { color: grey, link: 's1', dir: 'se' as const, dist: 1, ...shadow } };
+  const st = { ...lineSettings(p, o), shadow: { color: grey, link: 's1', angle: 45, dist: Math.SQRT2, ...shadow } };
   const r = resewLine(p, o.index, remembered(p, o)!.path!, st, T)!;
   return syncBorders(r.pattern, T);
 }
@@ -79,7 +79,7 @@ describe('shadow of a line', () => {
     expect(new Set(shadows.map((o) => remembered(d.pattern, o)!.shadowOf)).size).toBe(2);
     const stored = JSON.parse(JSON.stringify(rememberedIn(p, sewObjects(p))));
     restoreRemembered(p, stored);
-    expect(remembered(p, sewObjects(p)[1])?.line?.shadow).toMatchObject({ link: 's1', dir: 'se', dist: 1 });
+    expect(remembered(p, sewObjects(p)[1])?.line?.shadow).toMatchObject({ link: 's1', angle: 45, dist: Math.SQRT2 });
   });
 
   it('turned off, the shadow goes; deleted alone, the line has none', () => {

@@ -22,8 +22,14 @@ export interface PathStitch {
   width: number;
   /** Stitch length of running and triple stitch (mm); BORDER_STITCH by default. */
   length?: number;
-  /** Triple stitch: each stitch this many times, 3 (by default) or 5. A motif: 1 (by default), 3 or 5. */
+  /**
+   * How often it is sewn, 1 to 5 (once by default). A triple stitch: each stitch this many times,
+   * 3 (by default) or 5 (bean stitch). A motif: each stitch, at an odd number unless `whole`. A
+   * running stitch, a satin, a zigzag, an E stitch: the whole line, there and back.
+   */
   repeat?: number;
+  /** A motif repeated: the whole line there and back instead of each stitch (bean stitch). */
+  whole?: boolean;
   /** Motif stitch: the figure repeated along the line (waves by default); `width` is its size across. */
   motif?: LineMotif;
   /** Curves keep this close to the line (mm); TOLERANCE by default. */
@@ -54,8 +60,29 @@ export const isRunType = (t: BorderType): boolean => t === 'run' || t === 'tripl
 /** Sewn as one line of running stitches (a motif too): an object of the kind Steppstich. */
 export const runLike = (t: BorderType): boolean => isRunType(t) || t === 'motif';
 
-/** How often each stitch of a running stitch is sewn. */
-export const timesOf = (s: PathStitch): number => (s.type === 'triple' ? (s.repeat === 5 ? 5 : 3) : s.type === 'motif' && (s.repeat === 3 || s.repeat === 5) ? s.repeat : 1);
+/** How often a line can be sewn. */
+export const REPEAT: [number, number] = [1, 5];
+
+const repeatOf = (s: PathStitch): number => Math.min(REPEAT[1], Math.max(REPEAT[0], Math.round(s.repeat ?? 1)));
+
+/** How often each stitch of a running stitch is sewn (bean stitch): an odd number. */
+export const timesOf = (s: PathStitch): number => (s.type === 'triple' ? (s.repeat === 5 ? 5 : 3) : s.type === 'motif' && !s.whole && repeatOf(s) % 2 ? repeatOf(s) : 1);
+
+/** How often the whole line is sewn, there and back: what is not sewn as bean stitch. */
+export const passesOf = (s: PathStitch): number => (s.type === 'triple' || timesOf(s) > 1 ? 1 : repeatOf(s));
+
+/** Kinds of stitch whose figures repeat along the line: an echo shifts them from copy to copy (LineEcho.phase). */
+export const hasPhase = (t: BorderType): boolean => t === 'motif' || t === 'zigzag' || t === 'e';
+
+/**
+ * How wide the stitches of a line lie on the fabric (mm): copies of it (echo, shadow) nearer than
+ * this overlap it. A running stitch about a thread wide.
+ */
+export function coverOf(s: PathStitch): number {
+  if (s.type === 'run') return 0.4;
+  if (s.type === 'triple') return 0.6;
+  return s.width + (s.type === 'satin' ? 2 * (s.pull ?? 0) : 0);
+}
 
 /** Each stitch of a running stitch sewn `times` times: there, back, there ... */
 function repeated(pts: Pt[], times: number): Pt[] {
@@ -139,7 +166,21 @@ function onEdge<B extends Band>(r: Region, b: B, s: PathStitch): B {
  * area's corners (the rails do not fold over there). `reversed`: the line runs against the way it
  * was drawn (an E stitch keeps its prongs on the side of the drawn line all the same).
  */
-export function sewAlong(line: Pt[], closed: boolean, s: PathStitch, start?: Pt, area?: Region, reversed = false): Pt[][] {
+export function sewAlong(line: Pt[], closed: boolean, s: PathStitch, start?: Pt, area?: Region, reversed = false, shift = 0): Pt[][] {
+  const passes = area ? 1 : passesOf(s);
+  const once = sewOnce(line, closed, s, start, area, reversed, shift);
+  if (passes < 2 || !once.length) return once;
+  // Sewn again: back over the same needle points (a loop round again), the satin without its underlay.
+  const again = autoUnder(s) === 'off' ? once : sewOnce(line, closed, { ...s, under: 'off' }, start, area, reversed, shift);
+  const pass = again.flat();
+  const back = closed ? pass : pass.slice().reverse();
+  const out = once.map((r) => r.slice());
+  for (let k = 1; k < passes; k++) out[out.length - 1].push(...(k % 2 ? back : pass).slice(1));
+  return out;
+}
+
+/** The stitches along `line` sewn once (see sewAlong); `shift`: a share of the period a zigzag, E stitch or motif starts later. */
+function sewOnce(line: Pt[], closed: boolean, s: PathStitch, start?: Pt, area?: Region, reversed = false, shift = 0): Pt[][] {
   if (line.length < 2) return [];
   let l = line;
   let back = reversed;
@@ -158,13 +199,14 @@ export function sewAlong(line: Pt[], closed: boolean, s: PathStitch, start?: Pt,
   if (s.type === 'motif') {
     // Like the prongs of an E stitch: on a border inward (outward with flip), on a line to its right.
     const right = area ? rightInside(area, l) !== !!s.flip : back === !!s.flip;
-    const run = repeated(motifStitches(l, closed, s.motif ?? 'waves', s.width, spacingOf(s), right ? 1 : -1), timesOf(s));
+    const run = repeated(motifStitches(l, closed, s.motif ?? 'waves', s.width, spacingOf(s), right ? 1 : -1, shift), timesOf(s));
     return run.length > 1 ? [run] : [];
   }
   if (area && closed) return satinRuns([onEdge(area, borderRails(area, l, s.width, s.offset ?? 0), s)], satinOf(s));
   const rails = lineRails(l, closed, s.width);
+  const lead = shift > 0 && s.type !== 'satin' ? shift * spacingOf(s) : 0;
   // Prongs of an E stitch on the right of the drawn line (the left rail is on the right on screen, y down).
-  return satinRuns([s.type === 'e' ? eRails(rails, back === !!s.flip) : rails], satinOf(s, true, back));
+  return satinRuns([s.type === 'e' ? eRails(rails, back === !!s.flip) : rails], { ...satinOf(s, true, back), ...(lead ? { lead } : {}) });
 }
 
 /**

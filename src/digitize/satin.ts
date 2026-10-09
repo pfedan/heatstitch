@@ -38,6 +38,8 @@ export interface SatinParams {
   fringe?: number;
   /** Fringe on the right side (mm). */
   fringeB?: number;
+  /** The second pair this far after the first (mm) instead of `spacing`: the pattern starts later (an echo copy's phase). */
+  lead?: number;
 }
 
 export interface Column {
@@ -166,7 +168,7 @@ export function pairs(c: Column, p: SatinParams, ends?: ColumnEnds): [Pt, Pt][] 
       const d = norm(sub(c.right[last], c.left[last]));
       const perp = (a: Pt, b: Pt) => Math.abs((b[0] - a[0]) * d[1] - (b[1] - a[1]) * d[0]);
       const adv = Math.max(perp(c.left[last], c.left[i]), perp(c.right[last], c.right[i]));
-      if (adv < (p.spacingAt?.[last] ?? p.spacing) && i < n - 1) continue;
+      if (adv < (out.length === 1 && p.lead ? p.lead : (p.spacingAt?.[last] ?? p.spacing)) && i < n - 1) continue;
       if (adv < 0.1) continue;
     }
     out.push([c.left[i], c.right[i]]);
