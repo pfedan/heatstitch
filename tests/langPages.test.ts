@@ -38,7 +38,7 @@ describe('one address per language', () => {
   it('the German app starts in German; the app at its own address keeps choosing by settings and browser', () => {
     const de = langPage(source.app, 'app', 'de');
     expect(de).toContain('data-page-lang="de"');
-    expect(head(de)).toMatch(/<title>heatstitch: Stickdateien/);
+    expect(head(de)).toMatch(/<title>heatstitch: kostenlose Sticksoftware/);
     expect(meta(de, 'twitter:title')).toBe(meta(de, 'og:title'));
     expect(de).toContain('href="docs.html"');
     expect(langPage(source.app, 'app', 'en')).not.toContain('data-page-lang');
