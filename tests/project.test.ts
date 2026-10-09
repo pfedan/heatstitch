@@ -8,7 +8,7 @@ import { stitchKinds } from '../src/model/sequence';
 import { parsePattern } from '../src/parsers';
 import { DEFAULTS } from '../src/settings';
 import { fromStored, toStored } from '../src/storage/fileStore';
-import { decodeProject, encodeProject, projectSettings, ProjectError, type Project } from '../src/storage/project';
+import { decodeProject, encodeProject, onlyDesign, projectSettings, ProjectError, type Project } from '../src/storage/project';
 
 const bytesOf = (f: string) => new Uint8Array(readFileSync(new URL(`../public/examples/${f}`, import.meta.url)));
 
@@ -35,6 +35,20 @@ function sample(): Project {
 }
 
 describe('project files', () => {
+  it('saves one design alone: only that file, active, with its edits and without the picture', async () => {
+    const p = sample();
+    const back = await decodeProject(await encodeProject(onlyDesign(p, 0)));
+    expect(back.files.map((f) => f.name)).toEqual(['cat-60mm.pes']);
+    expect(back.active).toBe(0);
+    expect(back.image).toBeNull();
+    expect(back.files[0].working).toEqual(p.files[0].working);
+    expect(back.files[0].acks).toEqual(p.files[0].acks);
+    expect(back.settings).toEqual(p.settings);
+    // The whole project is left as it was.
+    expect(p.files).toHaveLength(2);
+    expect(p.image).not.toBeNull();
+  });
+
   it('keeps the name a design was given and whether it was made in the app', async () => {
     const p = sample();
     p.files[0] = { ...p.files[0], title: 'Katze für Oma' };

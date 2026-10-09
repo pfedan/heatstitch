@@ -2,7 +2,7 @@ import type { Editor } from '../ui/editor';
 import type { FileList } from '../ui/fileList';
 import type { LayersPanel } from '../ui/layersPanel';
 import type { LeftOut } from '../ui/imageMode';
-import type { Mat } from '../shape/path';
+import { compose, type Mat } from '../shape/path';
 import type { Measurement } from '../validation/measure';
 import type { OrderCard } from '../ui/objectPanel';
 import type { RungTool } from '../ui/rungTool';
@@ -19,12 +19,27 @@ import { overlapsIn, setKnockout } from '../model/knockout';
 import { rememberedIn, objectKey } from '../model/restitch';
 import { rgbToLab } from '../image/color';
 import { scaleBlocked, transformObjects, type TransformedAll } from '../model/reshape';
-import { stitchesBefore, transformObject } from '../model/transform';
+import { isRigid, stitchesBefore, transformObject } from '../model/transform';
+import { LiveResew, type LiveResult } from '../resew/client';
 import { syncBorders } from '../model/border';
 import { canSplit, splitFill } from '../model/splitFill';
 import { t, formatNumber } from '../i18n';
 import { type NewShape, addShape } from '../model/addShape';
 import { ui } from './state';
+
+/** The map undoing `m`. */
+const invert = (m: Mat): Mat => {
+  const d = m[0] * m[3] - m[1] * m[2];
+  const a = m[3] / d;
+  const b = -m[1] / d;
+  const c = -m[2] / d;
+  const e = m[0] / d;
+  return [a, b, c, e, -(a * m[4] + c * m[5]), -(b * m[4] + e * m[5])];
+};
+
+/** A map too close to doing nothing to be worth applying. */
+const nearIdentity = (m: Mat): boolean =>
+  Math.abs(m[0] - 1) < 1e-6 && Math.abs(m[3] - 1) < 1e-6 && Math.abs(m[1]) < 1e-6 && Math.abs(m[2]) < 1e-6 && Math.abs(m[4]) < 1e-3 && Math.abs(m[5]) < 1e-3;
 
 /** What bindDrawing needs from the rest of the app. */
 export interface DrawingApp {
@@ -214,6 +229,41 @@ export function bindDrawing(app: DrawingApp) {
   // The frame around the one selected object (level Objects): move, turn, scale.
   let frameFrame = 0;
   let pendingFrame: Mat | null = null;
+  // Scaling is sewn anew in a worker while dragging; the newest result back, shown stretched by what
+  // the frame did since (nothing, once the pointer rests).
+  let live: LiveResult | null = null;
+  let asked: Mat | null = null;
+  const resewer = new LiveResew((r) => {
+    if (frameTool.dragging === null || r.from !== app.files.active?.pattern) return;
+    live = r;
+    showFrame();
+  });
+
+  /** The selection as the frame has it now, in the next frame of the screen. */
+  function showFrame(): void {
+    if (frameFrame) return;
+    frameFrame = requestAnimationFrame(() => {
+      frameFrame = 0;
+      const p = app.files.active?.pattern;
+      const m = pendingFrame;
+      if (!p || !m) return;
+      const objs = frameObjects();
+      // A lettering is set anew when let go, the rest is sewn anew as it grows.
+      const scales = !isRigid(m) && !ui.lettering;
+      if (scales && m !== asked) resewer.ask(p, objs, m, app.settings.trimMm);
+      asked = m;
+      // From the newest stitches sewn for this drag, else the ones there were.
+      const base = scales && live?.from === p ? live.pattern : p;
+      const map = base === p ? m : compose(m, invert(live!.m));
+      // The stitches dragged along as they are (scaling sews them anew when let go, or before). The
+      // last object first, so the records of the ones before stay where they are.
+      const at = app.seq(base).objects;
+      let next = base;
+      if (!nearIdentity(map)) for (const o of [...objs].reverse()) next = transformObject(next, at[o], map).pattern;
+      ui.flowPreview = next !== p ? next : null;
+      app.redraw();
+    });
+  }
 
   const frameTool = new FrameTool({
     change: (m, final) => {
@@ -222,20 +272,13 @@ export function bindDrawing(app: DrawingApp) {
         cancelAnimationFrame(frameFrame);
         frameFrame = 0;
         ui.flowPreview = null;
+        resewer.stop();
+        live = null;
+        asked = null;
         return commitTransform(m);
       }
       pendingFrame = m;
-      if (frameFrame) return;
-      frameFrame = requestAnimationFrame(() => {
-        frameFrame = 0;
-        const p = app.files.active?.pattern;
-        // The stitches dragged along as they are; scaling sews them anew when let go. The last
-        // object first, so the records of the ones before stay where they are.
-        let next = p ?? null;
-        if (p && pendingFrame) for (const o of frameObjects().reverse()) next = transformObject(next!, app.seq(p).objects[o], pendingFrame).pattern;
-        ui.flowPreview = next !== p ? next : null;
-        app.redraw();
-      });
+      showFrame();
     },
   });
 

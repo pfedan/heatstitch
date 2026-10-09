@@ -282,6 +282,41 @@ describe('satins read from a file', () => {
   });
 });
 
+describe('a satin of several pieces read from a file', () => {
+  it('gives every piece an area of its own, kept through save and open, mirror and sewing anew', () => {
+    const f = 'cat-60mm.pes';
+    const p = parsePattern(readFileSync(new URL(`../public/examples/${f}`, import.meta.url)), f);
+    const kinds = stitchKinds(p);
+    const objs = sewObjects(p, kinds);
+    const o = objs[46];
+    const shape = keepShape(p, o, kinds);
+    expect(shape.columns!.length, 'pieces').toBeGreaterThan(3);
+    const columns = sectionView(shape.columns!, shape.shape);
+    expect(columns.every((part) => part.some((c) => c.split)), 'every piece in sections').toBe(true);
+    remember(p, o, { ...shape, columns, read: false });
+    try {
+      const stored = JSON.parse(JSON.stringify(rememberedIn(p)));
+      forget(p, o);
+      restoreRemembered(p, stored);
+      const back = remembered(p, o)!;
+      expect(back.columns!.every((part) => part.some((c) => c.split))).toBe(true);
+      const mirrored = transformRemembered(back, [-1, 0, 0, 1, 0, 0]);
+      expect(mirrored.columns!.every((part) => part.some((c) => c.split))).toBe(true);
+      const r = restitch(p, objs, [o.index], (_o, an, known) => {
+        const part = an.parts.find((pt) => pt.kind === 'satin');
+        return part ? { kind: 'satin', s: known?.satin ?? measureSatin(p, part, kinds) } : null;
+      }, kinds, 2);
+      expect(r.failed).toEqual([]);
+      expect(r.memory[0].columns?.length).toBe(columns.length);
+      expect(r.memory[0].columns?.every((part) => part.some((c) => c.split))).toBe(true);
+      // Opened again, as it is: the same pieces, nothing read anew.
+      expect(sectionView(r.memory[0].columns!, r.memory[0].shape).map((part) => part.length)).toEqual(columns.map((part) => part.length));
+    } finally {
+      forget(p, o);
+    }
+  });
+});
+
 describe('Vorschlagen and Leeren on a satin', () => {
   const strips = stripsOfOutline(M, LINES, CUTS).strips;
   const full: Rails[] = strips.map((r) => ({ left: r.left, right: r.right, rungs: r.rungs }));
@@ -328,14 +363,14 @@ describe('Vorschlagen and Leeren on a satin', () => {
     const tool = new RungTool({ change: () => {}, lines: () => {}, guides: () => {}, redraw: () => {}, say: () => {} });
     tool.openFill(M);
     tool.setFillLines(LINES, CUTS);
-    expect(tool.handCuts).toEqual([]);
+    expect(tool.handCuts()).toEqual([]);
     tool.setCutMode(true);
     tool.down(12, 10, 10);
     tool.dragTo(18, 10);
     tool.up();
-    expect(tool.handCuts).toEqual([[[12, 10], [18, 10]]]);
+    expect(tool.handCuts()).toEqual([[[12, 10], [18, 10]]]);
     tool.clear();
     expect(tool.lines.length + tool.cutLines.length).toBe(0);
-    expect(tool.handCuts).toEqual([]);
+    expect(tool.handCuts()).toEqual([]);
   });
 });

@@ -16,7 +16,7 @@ import { canSplit, splitFill } from '../../src/model/splitFill';
 import { wholeArea, wholeOf } from '../../src/model/knockout';
 import { borderStitches } from '../../src/model/along';
 import type { Region } from '../../src/digitize/region';
-import { backToVersion, keepVersion, objectKey, remember, remembered, rememberedIn, restitch, restoreRemembered, DECO_PATTERNS, OPEN_PATTERNS, type FillSettings, type StoredObjects } from '../../src/model/restitch';
+import { backToVersion, edgeAlong, keepVersion, objectKey, remember, remembered, rememberedIn, restitch, restoreRemembered, DECO_PATTERNS, OPEN_PATTERNS, type FillSettings, type Rails, type StoredObjects } from '../../src/model/restitch';
 import { reorder } from '../../src/model/order';
 import { stitchKinds } from '../../src/model/sequence';
 import { deleteObjects, duplicateObject, duplicateObjects, mirrorMatrix, recolorObjects, subtractTop } from '../../src/model/shapeOps';
@@ -36,6 +36,8 @@ import { Editor } from '../../src/ui/editor';
 import { THIN_SHARES } from '../../src/areas/stitches/state';
 import { writePattern } from '../../src/writers';
 import { rng } from './images';
+import { areaLoops, suggestSatin } from '../../src/digitize/satinSuggest';
+import { stripsOfAreas } from '../../src/digitize/rungs';
 
 /**
  * The torture test: random chains of the operations the app offers on objects (add, duplicate (also
@@ -141,7 +143,11 @@ export function restitchFill(d: Doc, o: number, s: FillSettings, drop: Set<strin
   const p = d.cur.p;
   const kinds = stitchKinds(p);
   const objs = sewObjects(p, kinds);
-  const r = restitch(p, objs, [o], { kind: 'fill', s }, kinds, T);
+  return took(d, restitch(p, objs, [o], { kind: 'fill', s }, kinds, T), drop);
+}
+
+/** New stitches taken over as the app does: each object remembers what it is made of. */
+function took(d: Doc, r: ReturnType<typeof restitch>, drop = new Set<string>()): boolean {
   if (!r.starts.length) return false;
   r.starts.forEach((a, k) => rememberObjects(r.pattern, [a], r.ends[k]));
   const now = sewObjects(r.pattern);
@@ -474,6 +480,31 @@ export const OPS: Op[] = [
       expect(areas.every(Boolean), 'every part has an area').toBe(true);
       expect(uncovered(before, areas), 'parts cover the fill').toBeLessThan(0.005);
       return shapes(d, syncBorders(pattern, T));
+    },
+  },
+  {
+    name: 'satin in sections',
+    run: (d, r) => {
+      // A fill sewn as satin along what Vorschlagen suggests (R on the fill, Vorschlagen, sewn): each
+      // part a column, the area and its cut lines kept with them (see Rails.split).
+      const p = d.cur.p;
+      const kinds = stitchKinds(p);
+      // A fill with a border of its own is left out: what becomes of the border is another question.
+      const fills = d.objects.filter((o) => remembered(p, o)?.fill && !remembered(p, o)?.fill?.border && !remembered(p, o)?.asSatin && !remembered(p, o)?.outline);
+      if (!fills.length) return false;
+      const o = pick(r, fills);
+      const area = wholeArea(formOf(p, o, kinds)!);
+      const s = area && suggestSatin(area);
+      if (!area || !s || s.kind === 'wide' || !s.ok) return false;
+      const { outsides, holes } = areaLoops(area);
+      const made = stripsOfAreas(outsides, s.lines, s.cuts, holes);
+      if (made.hole >= 0 || made.bad) return false;
+      const columns: Rails[] = made.areas.flatMap((strips, a) => strips.map((c) => ({ ...c, chain: a })));
+      if (!columns.length) return false;
+      columns[0].split = { outlines: outsides, holes, cuts: s.cuts.map(([a, b]) => [a, b]) };
+      const satin = { spacing: 0.4, edge: 0.1, short: true, underlay: true, tolerance: 0.15 };
+      const res = restitch(p, sewObjects(p, kinds), [o.index], { kind: 'satin', s: satin }, kinds, T, 'fill', false, new Map([[o.index, columns]]));
+      return !res.failed.length && took(d, res);
     },
   },
   {
@@ -829,6 +860,40 @@ export function checkKeys(p: Pattern): void {
   expect(problems.join('; '), 'objects sharing what they remember').toBe('');
 }
 
+/**
+ * The rail points of a satin part shown in sections of its area (see Rails.split) that lie neither
+ * on the area's edge nor on one of its cut lines: a part is its area cut along its cut lines, so
+ * nothing else may run between its columns (a seam left after the cut lines went, say). A part
+ * whose area no longer runs along its columns (cut away since) is read anew and not counted.
+ */
+export function strayRails(part: Rails[]): number {
+  const sp = part.find((c) => c.split)?.split;
+  if (!sp || !edgeAlong([...sp.outlines, ...sp.holes], part)) return 0;
+  const segs: [number, number, number, number][] = [];
+  for (const ring of [...sp.outlines, ...sp.holes]) ring.forEach((a, i) => segs.push([...a, ...ring[(i + 1) % ring.length]] as [number, number, number, number]));
+  for (const [a, b] of sp.cuts) segs.push([a[0], a[1], b[0], b[1]]);
+  const off = (x: number, y: number) =>
+    segs.every(([ax, ay, bx, by]) => {
+      const dx = bx - ax;
+      const dy = by - ay;
+      const t = dx || dy ? Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy))) : 0;
+      return Math.hypot(x - ax - t * dx, y - ay - t * dy) > 0.05;
+    });
+  return part.reduce((n, c) => n + [...c.left, ...c.right].filter(([x, y]) => off(x, y)).length, 0);
+}
+
+/** Every satin shown in sections of its area is that area cut along its cut lines (see strayRails). */
+export function checkSatinSections(p: Pattern): void {
+  const problems: string[] = [];
+  for (const o of sewObjects(p)) {
+    remembered(p, o)?.columns?.forEach((part, j) => {
+      const n = strayRails(part);
+      if (n) problems.push(`object ${o.index} part ${j}: ${n} rail points neither on its edge nor on a cut line`);
+    });
+  }
+  expect(problems.join('; '), 'satin sections').toBe('');
+}
+
 /** What leaves out the shapes on top fits the shapes on top now. */
 export function checkKnockouts(p: Pattern): void {
   expect(refreshKnockouts(p, T)?.changed ?? [], 'fills whose left-out parts are out of date').toEqual([]);
@@ -919,6 +984,7 @@ export async function chain(seed: number, steps = STEPS): Promise<void> {
       checkEchoes(p);
       checkLineParts(p);
       checkKnockouts(p);
+      checkSatinSections(p);
       if (op.name === 'save and open' || step === steps - 1) {
         checkExport(p);
         checkSewDesign(p);

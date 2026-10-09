@@ -1,5 +1,6 @@
 import './docs.css';
 import { detectLang, docsUrl, pageLang, type Lang } from './i18n';
+import { initImageView } from './docsImageView';
 import { loadSettings, saveSettings } from './settings';
 
 // Each language has its own address (docs.html, de/docs.html, see src/build/langPages.ts) and only
@@ -264,3 +265,5 @@ select.addEventListener('change', () => {
 });
 fillSheet();
 markAll();
+
+initImageView();
