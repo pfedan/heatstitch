@@ -743,6 +743,7 @@ const enBase: Record<keyof typeof deBase, string> = {
   'stitch.bean.even': 'Bean stitch needs an odd number',
   'stitch.shadow.dist': 'Distance',
   'stitch.shadow.dist.hint': 'How far the shadow lies beside the line, in its direction',
+  'stitch.shadow.dist.under': 'Lies right under the line and is not sewn',
   'stitch.shadow.thread': 'Thread',
   'stitch.shadow.thread.hint': 'Pick the thread of the shadow',
   'stitch.shadow.thread.grey': 'Dark grey',

@@ -357,7 +357,7 @@ export const OPS: Op[] = [
       const m = remembered(d.cur.p, o)!;
       const old = m.line!.shadow;
       const colors = COLORS.filter((c) => !sameColor(c, o.color));
-      const shadow = old && r() < 0.3 ? undefined : { color: pick(r, colors), link: old?.link ?? `s${Math.floor(r() * 1e9).toString(36)}`, angle: Math.floor(r() * 360), dist: between(r, 0, 10) };
+      const shadow = old && r() < 0.3 ? undefined : { color: pick(r, colors), link: old?.link ?? `s${Math.floor(r() * 1e9).toString(36)}`, angle: Math.floor(r() * 360), dist: r() < 0.15 ? 0 : between(r, 0, 10) };
       const next = resewLine(d.cur.p, o.index, m.path!, { ...m.line!, shadow }, T);
       return !!next && shapes(d, syncBorders(next.pattern, T));
     },

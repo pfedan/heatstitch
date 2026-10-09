@@ -741,6 +741,7 @@ export const deBase = {
   'stitch.bean.even': 'Bohnenstich geht nur bei ungerader Zahl',
   'stitch.shadow.dist': 'Abstand',
   'stitch.shadow.dist.hint': 'So weit liegt der Schatten in seiner Richtung neben der Linie',
+  'stitch.shadow.dist.under': 'Liegt ganz unter der Linie und wird nicht gestickt',
   'stitch.shadow.thread': 'Garn',
   'stitch.shadow.thread.hint': 'Das Garn des Schattens wählen',
   'stitch.shadow.thread.grey': 'Dunkelgrau',
