@@ -1654,12 +1654,17 @@ export class StitchPanel {
    */
   private shadowGroup(st: PathStitch, line: ThreadColor): HTMLElement {
     const sh = st.shadow;
-    const box = this.lights(h('div', { class: 'fx-group', title: t('stitch.shadow.intro'), 'data-tip-img': 'shadow' }), 'shadow');
+    const box = this.lights(h('div', { class: 'fx-group' }), 'shadow');
     box.append(
-      this.choice<'off' | 'on'>('stitch.shadow', ['off', 'on'], sh ? 'on' : 'off', (v) => `stitch.shadow.${v}` as Key, (v) => {
-        if (v === 'off') delete st.shadow;
-        else st.shadow = { color: { ...SHADOW_COLOR }, link: newLink(), angle: SHADOW_DEFAULT_ANGLE, dist: SHADOW_DEFAULT_DIST };
-      }),
+      pictured(
+        this.choice<'off' | 'on'>('stitch.shadow', ['off', 'on'], sh ? 'on' : 'off', (v) => `stitch.shadow.${v}` as Key, (v) => {
+          if (v === 'off') delete st.shadow;
+          else st.shadow = { color: { ...SHADOW_COLOR }, link: newLink(), angle: SHADOW_DEFAULT_ANGLE, dist: SHADOW_DEFAULT_DIST };
+        }),
+        ['off', 'on'],
+        { on: 'shadow' },
+        'stitch.shadow.intro',
+      ),
     );
     if (!sh) return box;
     const cover = Math.round(coverOf(st) * 10) / 10;
@@ -1748,13 +1753,18 @@ export class StitchPanel {
     type Choice = EchoSide | 'off' | 'one';
     const now: Choice = !st.echo ? 'off' : closed || st.echo.side === 'both' ? st.echo.side : 'one';
     const values: Choice[] = closed ? ['off', ...ECHO_SIDES] : ['off', 'one', 'both'];
-    const box = this.lights(h('div', { class: 'fx-group', title: t('stitch.echo.intro'), 'data-tip-img': 'echo' }), 'copies');
+    const box = this.lights(h('div', { class: 'fx-group' }), 'copies');
     box.append(
-      this.choice<Choice>('stitch.echo', values, now, (v) => `stitch.echo.${v}` as Key, (v) => {
-        if (v === 'off') delete st.echo;
-        // A new echo keeps its copies apart: a wide stitch at least its width.
-        else st.echo = { ...(st.echo ?? { ...ECHO_DEFAULT, gap: Math.max(ECHO_DEFAULT.gap, Math.ceil(coverOf(st) * 10) / 10) }), side: v === 'one' ? (st.echo && st.echo.side !== 'both' ? st.echo.side : 'out') : v };
-      }),
+      pictured(
+        this.choice<Choice>('stitch.echo', values, now, (v) => `stitch.echo.${v}` as Key, (v) => {
+          if (v === 'off') delete st.echo;
+          // A new echo keeps its copies apart: a wide stitch at least its width.
+          else st.echo = { ...(st.echo ?? { ...ECHO_DEFAULT, gap: Math.max(ECHO_DEFAULT.gap, Math.ceil(coverOf(st) * 10) / 10) }), side: v === 'one' ? (st.echo && st.echo.side !== 'both' ? st.echo.side : 'out') : v };
+        }),
+        values,
+        { one: 'echo-one', out: 'echo-one', in: 'echo-one', both: 'echo-both' },
+        'stitch.echo.intro',
+      ),
     );
     if (now === 'one') {
       box.append(
@@ -2114,4 +2124,19 @@ export class StitchPanel {
     el.addEventListener('focusout', () => queueMicrotask(() => this.light(this.litNow())));
     return el;
   }
+}
+
+/**
+ * A choice of `values` whose buttons show a picture in their tooltip (`imgs` by value, see
+ * shell/tooltip.ts) and whose label says what the setting is (`intro`): the pictures sit on what
+ * they show, not on the whole group, where the tooltip came and went with every move.
+ */
+function pictured<T extends string>(field: HTMLElement, values: readonly T[], imgs: Partial<Record<T, string>>, intro: Key): HTMLElement {
+  field.querySelectorAll<HTMLElement>('.choice-row button').forEach((b, i) => {
+    const img = imgs[values[i]];
+    if (img) b.dataset.tipImg = img;
+  });
+  const label = field.querySelector<HTMLElement>('.label');
+  if (label) label.title = t(intro);
+  return field;
 }
