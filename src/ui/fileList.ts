@@ -14,6 +14,7 @@ import {
   saveMaterial,
   saveNaming,
   saveObjects,
+  saveTrace,
   saveWorking,
   titlesOf,
   toStored,
@@ -22,6 +23,7 @@ import {
 } from '../storage/fileStore';
 import { backToVersion, keepVersion, rememberedIn, restoreRemembered, type ObjectsAsStored } from '../model/restitch';
 import { asideFrom, asideOf, inheritAside, setAsideOf, storeAside, type StoredAside } from '../model/aside';
+import { inheritTrace, readTrace, setTraceOf, storeTrace, traceFrom, traceOf, TRACE_VIEW, type StoredTrace, type TraceView } from '../model/trace';
 import type { ProjectFile } from '../storage/project';
 import { liveAcknowledgements, openWorst, type Acknowledgement } from '../validation/acks';
 import { normalizeMaterial, type Material } from '../settings';
@@ -77,6 +79,8 @@ export interface LoadedFile {
    * the PES behind it is only how it is kept, not a file the user opened.
    */
   own: boolean;
+  /** Whether the tracing image (traceOf the pattern) is shown and locked; kept while undo takes the image away and back. */
+  traceView: TraceView;
 }
 
 interface FileData {
@@ -93,6 +97,8 @@ interface FileData {
   titles?: Titles;
   /** Absent in older records: then a design without stitches counts as made in the app. */
   own?: boolean;
+  /** The tracing image with its view (unchecked, read with readTrace). */
+  trace?: unknown;
 }
 
 /** Versions kept per file for undo. */
@@ -159,8 +165,8 @@ export class FileList {
    * Adds one file with what is known about its objects (and its own material, else the last used), and
    * activates it. `own`: made in the app, so it is named without the extension of the PES behind it.
    */
-  async addWithObjects(name: string, data: ArrayBuffer, objects: ObjectsAsStored, aside: StoredAside[] = [], material?: Material, own = false): Promise<void> {
-    const first = await this.addData([{ name, data, objects, aside, material, own }], true);
+  async addWithObjects(name: string, data: ArrayBuffer, objects: ObjectsAsStored, aside: StoredAside[] = [], material?: Material, own = false, trace?: StoredTrace): Promise<void> {
+    const first = await this.addData([{ name, data, objects, aside, material, own, trace }], true);
     if (first) this.activate(first.id);
     else this.render();
   }
@@ -170,7 +176,7 @@ export class FileList {
     const stored = await listFiles();
     if (!stored.length) return;
     const first = await this.addData(
-      stored.map((rec) => ({ name: rec.name, data: rec.data, storeKey: rec.key, working: rec.working, acks: acksOf(rec), objects: rec.objects, aside: rec.aside, material: rec.material, title: rec.title, titles: titlesOf(rec.titles), own: rec.own })),
+      stored.map((rec) => ({ name: rec.name, data: rec.data, storeKey: rec.key, working: rec.working, acks: acksOf(rec), objects: rec.objects, aside: rec.aside, material: rec.material, title: rec.title, titles: titlesOf(rec.titles), own: rec.own, trace: rec.trace })),
       false,
     );
     // Files the user added while we were reading storage keep the focus.
@@ -197,7 +203,7 @@ export class FileList {
     const before = this.files.length;
     const fresh = list.filter((_, i) => !open[i]);
     const first = await this.addData(
-      fresh.map((f) => ({ name: f.name, data: f.data.slice().buffer, working: f.working, acks: f.acks, objects: f.objects, aside: f.aside, material: f.material, title: f.title, titles: f.titles, own: f.own })),
+      fresh.map((f) => ({ name: f.name, data: f.data.slice().buffer, working: f.working, acks: f.acks, objects: f.objects, aside: f.aside, material: f.material, title: f.title, titles: f.titles, own: f.own, trace: f.trace })),
       true,
     );
     const wanted = active !== null ? (open[active] ?? this.files[before + fresh.indexOf(list[active])]) : undefined;
@@ -208,7 +214,7 @@ export class FileList {
 
   /** Shows a file that could not be opened, with the reason. */
   addError(name: string, error: string): void {
-    this.files.push({ id: this.nextId++, fileName: name, undo: [], redo: [], acks: [], error, material: this.defaults(), own: false });
+    this.files.push({ id: this.nextId++, fileName: name, undo: [], redo: [], acks: [], error, material: this.defaults(), own: false, traceView: { ...TRACE_VIEW } });
     this.render();
   }
 
@@ -221,7 +227,8 @@ export class FileList {
 
   private async addData(list: FileData[], persist: boolean): Promise<LoadedFile | null> {
     let first: LoadedFile | null = null;
-    for (const { name, data, storeKey, working, acks, objects, aside, material, title, titles, own } of list) {
+    for (const { name, data, storeKey, working, acks, objects, aside, material, title, titles, own, trace } of list) {
+      const stored = readTrace(trace);
       const entry: LoadedFile = {
         id: this.nextId++,
         fileName: name,
@@ -234,6 +241,7 @@ export class FileList {
         ...(typeof title === 'string' && title.trim() ? { title: title.trim() } : {}),
         ...(titles ? { titles } : {}),
         own: own === true,
+        traceView: stored ? { shown: stored.shown !== false, locked: stored.locked === true } : { ...TRACE_VIEW },
       };
       // Stored before materials were kept per design: it keeps the one it was last seen with.
       if (storeKey !== undefined && !material) void saveMaterial(storeKey, entry.material);
@@ -258,6 +266,9 @@ export class FileList {
         // Shapes aside belong to the working copy (to the original only while there is none).
         setAsideOf(original, entry.pattern === original ? asideFrom(aside) : []);
         if (entry.pattern !== original) setAsideOf(entry.pattern, asideFrom(aside));
+        // The tracing image lies under both: going back to the original does not take it away.
+        setTraceOf(original, stored && traceFrom(stored));
+        if (entry.pattern !== original) setTraceOf(entry.pattern, stored && traceFrom(stored));
         // The objects of the version as stored; an older project knew them by their stitches, so
         // its original knows those that are in it too.
         if (objects) {
@@ -279,6 +290,7 @@ export class FileList {
             if (entry.acks.length) void saveAcks(key, entry.acks);
             if (objects) void saveObjects(key, rememberedIn(entry.pattern));
             if (aside?.length) void saveAside(key, aside);
+            if (stored) void saveTrace(key, stored);
             void saveMaterial(key, entry.material);
             if (entry.title || entry.titles || entry.own) void saveNaming(key, entry.title ?? null, entry.own, entry.titles);
           }
@@ -339,6 +351,8 @@ export class FileList {
     }
     // A new version keeps the shapes aside of the one before; undo and redo bring back their own.
     inheritAside(f.pattern, p);
+    inheritTrace(f.pattern, p);
+    const traceChanged = traceOf(p) !== traceOf(f.pattern);
     // A version seen before (undo, redo, back to the original) knows again what it knew then; a new one keeps what it knows now.
     if (!backToVersion(p)) keepVersion(p);
     f.pattern = p;
@@ -347,6 +361,8 @@ export class FileList {
     if (f.storeKey !== undefined) {
       void saveWorking(f.storeKey, p === f.original ? null : toStored(p));
       void saveAside(f.storeKey, storeAside(asideOf(p)));
+      // The picture is only written again when it changed, not with every stitch edit.
+      if (traceChanged) this.storeTrace(f, p);
     }
     if (opts.measurement) {
       this.store(f, p, opts.measurement);
@@ -358,6 +374,17 @@ export class FileList {
       this.render();
       this.runValidation(f, p);
     }
+  }
+
+  /** Shows or hides, locks or frees the tracing image of a design (no undo step: it is how it is looked at). */
+  setTraceView(f: LoadedFile, view: Partial<TraceView>): void {
+    f.traceView = { ...f.traceView, ...view };
+    if (f.storeKey !== undefined && f.pattern) this.storeTrace(f, f.pattern);
+  }
+
+  private storeTrace(f: LoadedFile, p: Pattern): void {
+    const t = traceOf(p);
+    void saveTrace(f.storeKey!, t && storeTrace(t, f.traceView));
   }
 
   /** Replaces the file's acknowledgements and stores them with the file. */

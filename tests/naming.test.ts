@@ -7,7 +7,7 @@ const pattern = (): Pattern => ({ name: '', format: 'pes', x: new Int32Array(0),
 
 function file(fileName: string, extra: Partial<LoadedFile> = {}): LoadedFile {
   const p = pattern();
-  return { id: 1, fileName, pattern: p, original: p, undo: [], redo: [], acks: [], material: materialOf(structuredClone(DEFAULTS)), own: false, ...extra };
+  return { id: 1, fileName, pattern: p, original: p, undo: [], redo: [], acks: [], material: materialOf(structuredClone(DEFAULTS)), own: false, traceView: { shown: true, locked: false }, ...extra };
 }
 
 describe('design names', () => {

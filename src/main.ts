@@ -44,7 +44,7 @@ import { stitchAt } from './render/flow';
 import type { Mode } from './settings';
 import { isGuessed, isOpenPattern, openOnPurpose, remembered, rememberedIn, rememberShapes } from './model/restitch';
 import { drawAside, drawDrawing } from './render/shapeOverlay';
-import type { LeftOut } from './ui/imageMode';
+import type { LeftOut, SewnFrom } from './ui/imageMode';
 import { asideOf, storeAside, type AsideShape } from './model/aside';
 import { type Digitized } from './digitize/digitize';
 import { numberInColor, rememberObjects, sewObjects } from './model/objects';
@@ -77,6 +77,7 @@ import { initCheck } from './areas/check/check';
 import { initAmpel } from './areas/ampel/ampel';
 import { initResponsive } from './areas/responsive/responsive';
 import type { ZoneDecision } from './ui/validationPanel';
+import { bindTrace } from './app/trace';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -124,6 +125,16 @@ const files = new FileList(
   },
   () => materialOf(settings),
 );
+
+// The tracing image of the design: src/app/trace.ts
+const trace = bindTrace({
+  files,
+  settings,
+  applyEdit: (p) => applyEdit(p, files.active?.measurement),
+  redraw: () => redraw(),
+  newDesign: () => newDesign(),
+  busy: () => drawTool.active || ui.letterMode || rungTool.active || shapeTool.active || editor.active,
+});
 
 /** Per zone of `v`: whether it still counts with the active file's decisions. */
 const countedFor = (v: ValidationResult | null | undefined): boolean[] | null =>
@@ -203,6 +214,9 @@ installPanelResize($('layout'), settings.panels, () => saveSettings(settings));
 const { NO_COLORS, NO_RANGE, flowScene, overOf, playerModel, resetFlow, seq, seqCache, styleFor } = bindScene({
   get files() {
     return files;
+  },
+  get traceScene() {
+    return trace.traceScene;
   },
   get frameTool() {
     return frameTool;
@@ -1015,10 +1029,16 @@ function fitView(f: LoadedFile | null = files.active): void {
   const a = freeArea();
   // With a hoop chosen, fit shows the whole sewing field so the room left is visible.
   const m = f?.material.hoop ? hoopRect(b, f.material.hoop) : null;
-  if (m) vp.fit(Math.min(m.x, b.minX / 10), Math.min(m.y, b.minY / 10), Math.max(m.x + m.w, b.maxX / 10), Math.max(m.y + m.h, b.maxY / 10), a.w, a.h, 56);
   // A new, empty design without a hoop: 10 x 10 cm to draw into, not a point blown up.
-  else if (!f!.pattern!.cmd.includes(STITCH)) vp.fit(-50, -50, 50, 50, a.w, a.h);
-  else vp.fit(b.minX / 10, b.minY / 10, b.maxX / 10, b.maxY / 10, a.w, a.h);
+  const box = m
+    ? [Math.min(m.x, b.minX / 10), Math.min(m.y, b.minY / 10), Math.max(m.x + m.w, b.maxX / 10), Math.max(m.y + m.h, b.maxY / 10)]
+    : !f!.pattern!.cmd.includes(STITCH)
+      ? [-50, -50, 50, 50]
+      : [b.minX / 10, b.minY / 10, b.maxX / 10, b.maxY / 10];
+  // A shown tracing image is part of what there is to see.
+  const tb = f === files.active ? trace.bounds() : null;
+  if (tb) box.splice(0, 4, Math.min(box[0], tb.minX), Math.min(box[1], tb.minY), Math.max(box[2], tb.maxX), Math.max(box[3], tb.maxY));
+  vp.fit(box[0], box[1], box[2], box[3], a.w, a.h, m ? 56 : undefined);
   vp.pan(a.x, a.y);
   redraw();
 }
@@ -1390,8 +1410,13 @@ const imageMode = new ImageMode({
   },
   validate: async (p) => classify(await validator.measure(p, openOnPurpose(p, seq(p).objects) ?? undefined), settings.profile, settings.checks),
   takeOver: async (d, name) => {
-    await addDigitized(d, name);
+    await addDigitized({ ...d, source: imageMode.traceSource() ?? undefined }, name);
     setMode('flow');
+  },
+  traceOnly: async (picture, name, size) => {
+    setMode('flow');
+    await trace.layPicture(picture, name, size);
+    fitView();
   },
   mode: () => settings.mode,
   setMode: (m) => setMode(m),
@@ -1401,7 +1426,7 @@ const imageMode = new ImageMode({
  * Adds stitches made from an image to the file list, with the objects as the Image mode sewed them
  * (it trims inside some, between pieces of a fill) and the exact areas of its fills.
  */
-async function addDigitized(d: Digitized & { leftOut?: LeftOut[] }, name: string): Promise<void> {
+async function addDigitized(d: Digitized & { leftOut?: LeftOut[]; source?: SewnFrom }, name: string): Promise<void> {
   const data = writePattern(d.pattern, 'pes');
   const added = parsePattern(data, `${name}.pes`);
   rememberObjects(added, d.starts);
@@ -1409,7 +1434,9 @@ async function addDigitized(d: Digitized & { leftOut?: LeftOut[] }, name: string
   rememberShapes(added, objs, d.starts, d.objects.map((o) => o.shape), d.objects);
   // Shapes left out on the way in wait under "Not sewn", where it was: at the very back.
   const aside: AsideShape[] = (d.leftOut ?? []).map((s, k) => ({ id: k + 1, role: 'off', kind: 'fill', color: s.color, after: -1, form: s.form, reason: s.reason }));
-  await files.addWithObjects(`${name}.pes`, data.slice().buffer, rememberedIn(added, objs), storeAside(aside), undefined, true);
+  // The picture stays with the design, exactly under its stitches, to look at again later.
+  const source = d.source ? await trace.sourceTrace(d.source.picture, name, d.source.size).catch(() => undefined) : undefined;
+  await files.addWithObjects(`${name}.pes`, data.slice().buffer, rememberedIn(added, objs), storeAside(aside), undefined, true, source);
   if (aside.some((a) => a.reason === 'background')) layers.say(t('aside.backgroundFound'));
 }
 
@@ -1498,7 +1525,7 @@ exportBtn.addEventListener('click', () => {
 
 // Opening and saving files and projects: src/app/fileIo.ts
 
-const { adoptMaterial, storeMaterial } = bindFileIo({
+const { adoptMaterial, storeMaterial, newDesign } = bindFileIo({
   get setFormLevel() {
     return setFormLevel;
   },
@@ -1640,6 +1667,9 @@ const { showObjectMenu } = bindPointer({
   get canvas() {
     return canvas;
   },
+  get traceTool() {
+    return trace.traceTool;
+  },
   get closeShape() {
     return closeShape;
   },
@@ -1737,7 +1767,7 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', red
 initShell({ files, mode: () => settings.mode, setMode });
 initResponsive();
 const stitchArea = initStitchArea({ files, settings, editor, rungTool, stitchPanel, closeRungs, toggleRungs, toggleGuides, togglePoints, sewAlongLines, suggestLines, setEditing, enterObject, revealRecord, pointsVisible: () => vp.scale >= POINTS_MIN_SCALE, redraw });
-const design = initDesign({ files, settings, player, vp, stage, fitView, fitToHoop, redraw, applyEdit });
+const design = initDesign({ files, settings, player, vp, stage, fitView, fitToHoop, redraw, applyEdit, trace });
 const ready = initReady({
   files,
   settings,

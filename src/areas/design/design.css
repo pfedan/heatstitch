@@ -890,3 +890,103 @@ body[data-mode='flow'] .stage:has(.player.folded:not([hidden])) .stage-foot {
   font: inherit;
   color: var(--ink);
 }
+
+/* Tracing image (Vorlage) -------------------------------------------------------------------------- */
+
+.trace-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.trace-hint,
+.trace-note {
+  margin: 0;
+  color: var(--muted);
+}
+
+.trace-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.trace-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  align-self: stretch;
+}
+
+.trace-thumb {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--bg);
+}
+
+.trace-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.trace-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.trace-size {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.trace-tools {
+  display: flex;
+  flex: none;
+  gap: 2px;
+}
+
+.trace-tools .trace-btn {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 5px;
+}
+
+/* Hidden or locked shows in the symbol itself (crossed eye, closed lock) and with a frame. */
+.trace-tools .trace-btn[aria-pressed='true'] {
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.trace-tools .trace-btn[data-command='design.trace.remove']:not(:disabled):hover {
+  color: #c0392b;
+}
+
+.trace-width {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+
+.trace-width input {
+  width: 5.5em;
+  font-variant-numeric: tabular-nums;
+}
+
+.trace-replace {
+  font-size: 12px;
+}

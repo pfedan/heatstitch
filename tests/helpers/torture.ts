@@ -35,6 +35,7 @@ import { keepObjects } from '../../src/model/handEdit';
 import { THIN_SHARES } from '../../src/areas/stitches/state';
 import { writePattern } from '../../src/writers';
 import { rng } from './images';
+import { inheritTrace, movedTrace, readTrace, setTraceOf, sizedTrace, storeTrace, traceFrom, traceOf, withTrace, type Trace } from '../../src/model/trace';
 import { areaLoops, suggestSatin } from '../../src/digitize/satinSuggest';
 import { stripsOfAreas } from '../../src/digitize/rungs';
 
@@ -81,25 +82,34 @@ export const knowledge = (p: Pattern): StoredObjects => rememberedIn(p);
 export interface Version {
   p: Pattern;
   known: StoredObjects;
+  /** The tracing image this version should have (what the ops laid, not what the pattern says). */
+  trace: Trace | null;
 }
 
 /** One design as the app holds it: the current version, undo and redo. */
 export class Doc {
   undo: Version[] = [];
   redo: Version[] = [];
-  cur: Version = { p: empty, known: { v: 2, next: 1, objects: [] } };
+  cur: Version = { p: empty, known: { v: 2, next: 1, objects: [] }, trace: null };
   /** A new undo step (applyEdit). */
-  commit(p: Pattern): void {
+  commit(p: Pattern, trace = this.cur.trace): void {
     if (p === this.cur.p) return;
     if (this.cur.p !== empty) this.undo.push(this.cur);
     this.redo = [];
+    // As files.setPattern: a new version keeps the tracing image of the one before.
+    inheritTrace(this.cur.p, p);
     keepVersion(p);
-    this.cur = { p, known: knowledge(p) };
+    this.cur = { p, known: knowledge(p), trace };
   }
   /** The same undo step, changed (followKnockouts: record false). */
   amend(p: Pattern): void {
+    inheritTrace(this.cur.p, p);
     keepVersion(p);
-    this.cur = { p, known: knowledge(p) };
+    this.cur = { p, known: knowledge(p), trace: this.cur.trace };
+  }
+  /** Lays, moves or removes the tracing image (one undo step, the stitches as they are). */
+  commitTrace(t: Trace | null): void {
+    this.commit(withTrace(this.cur.p, t), t);
   }
   get objects() {
     return blank(this.cur.p) ? [] : sewObjects(this.cur.p);
@@ -175,8 +185,10 @@ export function boxOf(d: Doc, sel: number[]) {
 export async function saveAndOpen(d: Doc): Promise<void> {
   const data = writePattern(d.cur.p, 'dst');
   const original = parsePattern(data, 'torture.dst');
+  const t = traceOf(d.cur.p);
+  const view = { shown: true, locked: false };
   const bytes = await encodeProject({
-    files: [{ name: 'torture.dst', data, working: toStored(d.cur.p), acks: [], objects: knowledge(d.cur.p) }],
+    files: [{ name: 'torture.dst', data, working: toStored(d.cur.p), acks: [], objects: knowledge(d.cur.p), ...(t ? { trace: storeTrace(t, view) } : {}) }],
     active: 0,
     image: null,
     settings: projectSettings(structuredClone(DEFAULTS)),
@@ -185,11 +197,71 @@ export async function saveAndOpen(d: Doc): Promise<void> {
   const p = fromStored(original, back.files[0].working);
   expect(p, 'project opens').toBeTruthy();
   restoreRemembered(p!, back.files[0].objects);
+  // As files.addData: the tracing image read back lies under the opened version.
+  const stored = readTrace(back.files[0].trace);
+  expect(!!stored, 'the tracing image comes back').toBe(!!t);
+  if (stored) expect({ shown: stored.shown, locked: stored.locked }, 'with its view').toEqual(view);
+  setTraceOf(p!, stored && traceFrom(stored));
   // A fresh page has no undo history.
   d.undo = [];
   d.redo = [];
   keepVersion(p!);
-  d.cur = { p: p!, known: d.cur.known };
+  d.cur = { p: p!, known: d.cur.known, trace: d.cur.trace };
+}
+
+/** Bytes standing in for a picture: the model never looks inside. */
+const PICTURE = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3, 4]);
+
+/** What can happen to the tracing image, interleaved with the ops when a chain asks for it. */
+export const TRACE_OPS: Op[] = [
+  {
+    name: 'lay tracing image',
+    run: (d, r) => {
+      const w = between(r, 20, 150);
+      d.commitTrace({ name: 'vorlage', type: 'image/png', data: PICTURE, x: between(r, -80, 40), y: between(r, -80, 40), w, h: w * between(r, 0.4, 2) });
+      return true;
+    },
+  },
+  {
+    name: 'move tracing image',
+    run: (d, r) => {
+      const t = traceOf(d.cur.p);
+      if (!t) return false;
+      d.commitTrace(movedTrace(t, between(r, -30, 30), between(r, -30, 30)));
+      return true;
+    },
+  },
+  {
+    name: 'size tracing image',
+    run: (d, r) => {
+      const t = traceOf(d.cur.p);
+      if (!t) return false;
+      d.commitTrace(sizedTrace(t, between(r, 1, 3000)));
+      return true;
+    },
+  },
+  {
+    name: 'remove tracing image',
+    run: (d) => {
+      if (!traceOf(d.cur.p)) return false;
+      d.commitTrace(null);
+      return true;
+    },
+  },
+];
+
+/**
+ * The tracing image is exactly the one laid last (undo and redo bring back their own, every edit
+ * keeps it, a project brings it back), lies where it can be drawn, and is no part of the stitches.
+ */
+export function checkTrace(d: Doc): void {
+  const t = traceOf(d.cur.p);
+  const want = d.cur.trace;
+  if (!want) return expect(t, 'no tracing image').toBeNull();
+  expect(t, 'the tracing image laid last').toEqual(want);
+  expect([t!.x, t!.y, t!.w, t!.h].every(Number.isFinite), 'placed in finite mm').toBe(true);
+  expect(t!.w > 0 && t!.h > 0, 'with a size').toBe(true);
+  expect(Math.abs(t!.h / t!.w - want.h / want.w), 'keeps its aspect ratio').toBeLessThan(1e-9);
 }
 
 /** The share of `area` that none of `parts` covers (sampled at its pixels). */
@@ -884,14 +956,31 @@ export function describeObjects(p: Pattern): string {
     .join('');
 }
 
-export async function chain(seed: number, steps = STEPS): Promise<void> {
+/**
+ * A chain of random ops on one design, checked after each. `trace`: the tracing image is laid,
+ * moved, sized and removed in between, from a random stream of its own (the ops of a seed stay the
+ * ones it always had).
+ */
+export async function chain(seed: number, steps = STEPS, opts: { trace?: boolean } = {}): Promise<void> {
   const r = rng(seed);
+  const rt = rng(seed + 7919);
   const d = new Doc();
   const log: string[] = [];
   const at = () => `seed ${seed}: ${log.join(' > ')}`;
   for (let step = 0; step < steps; step++) {
     const op = blank(d.cur.p) ? OPS[0] : pick(r, OPS);
     let done: boolean;
+    if (opts.trace && rt() < 0.4) {
+      const top = pick(rt, TRACE_OPS);
+      if (await top.run(d, rt)) {
+        log.push(top.name);
+        try {
+          checkTrace(d);
+        } catch (e) {
+          throw new Error(`${at()}\n${(e as Error).message}`);
+        }
+      }
+    }
     try {
       done = await op.run(d, r);
     } catch (e) {
@@ -915,6 +1004,7 @@ export async function chain(seed: number, steps = STEPS): Promise<void> {
       checkLineParts(p);
       checkKnockouts(p);
       checkSatinSections(p);
+      checkTrace(d);
       if (op.name === 'save and open' || step === steps - 1) {
         checkExport(p);
         checkSewDesign(p);

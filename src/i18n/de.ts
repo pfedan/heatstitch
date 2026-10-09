@@ -1212,6 +1212,8 @@ export const deBase = {
   'image.verdict.safe': 'Keine Bereiche über den Grenzwerten für dieses Material.',
   'image.take': 'Als Stickmuster übernehmen',
   'image.take.hint': 'Legt die Stiche als Stickmuster an, zum Prüfen und Speichern.',
+  'image.traceOnly': 'Nur abpausen',
+  'image.traceOnly.hint': 'Legt das Bild als Vorlage unter das Stickmuster, ohne Stiche daraus zu machen.',
   'image.busy.prepare': 'Bereite Bild vor …',
   'image.busy.stitches': 'Erzeuge Stiche …',
   'controls.liveLight': 'Licht folgt Maus und Neigung',

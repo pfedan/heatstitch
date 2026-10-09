@@ -17,6 +17,11 @@ const SYMBOLS: Record<string, string> = {
   'view-shapes': '<path d="M10 2.5c4.6 3.4 4.6 11.6 0 15-4.6-3.4-4.6-11.6 0-15z" class="fill"/>',
   check: '<path d="m4.5 10.5 3.5 3.5 7.5-8"/>',
   alert: '<path d="M10 3.5 17.5 16h-15z"/><path d="M10 8.5v3.5"/><circle cx="10" cy="14.2" r=".5" class="fill"/>',
+  'eye-off': '<path d="M3 3l14 14"/><path d="M8.2 5.2A7.7 7.7 0 0 1 10 5c4 0 6.5 3.4 7.2 5a9.6 9.6 0 0 1-2.1 2.9M5.3 6.9A9.3 9.3 0 0 0 2.8 10c.7 1.6 3.2 5 7.2 5a7 7 0 0 0 2.9-.6"/>',
+  lock: '<rect x="4.5" y="9" width="11" height="8" rx="1.5"/><path d="M7 9V6.5a3 3 0 0 1 6 0V9"/>',
+  unlock: '<rect x="4.5" y="9" width="11" height="8" rx="1.5"/><path d="M7 9V6.5a3 3 0 0 1 5.8-1.1"/>',
+  trash: '<path d="M3.5 5.5h13M8 5.5V3.5h4v2M5.5 5.5l.8 11h7.4l.8-11M8.5 8.5v5M11.5 8.5v5"/>',
+  'trace-image': '<rect x="3" y="4" width="14" height="12" rx="1.5"/><circle cx="7.5" cy="8.2" r="1.4"/><path d="m3.5 14.5 4.2-4 3 2.8 2.3-2 3.5 3.2"/>',
   list: '<path d="M7.5 5.5h9M7.5 10h9M7.5 14.5h9"/><circle cx="4" cy="5.5" r=".7" class="fill"/><circle cx="4" cy="10" r=".7" class="fill"/><circle cx="4" cy="14.5" r=".7" class="fill"/>',
 };
 

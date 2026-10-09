@@ -1214,6 +1214,8 @@ const enBase: Record<keyof typeof deBase, string> = {
   'image.verdict.safe': 'No areas above the limits for this material.',
   'image.take': 'Take over as design',
   'image.take.hint': 'Adds the stitches as a design, to check and save.',
+  'image.traceOnly': 'Trace only',
+  'image.traceOnly.hint': 'Lays the picture under the design to trace by hand, without making stitches.',
   'image.busy.prepare': 'Preparing image …',
   'image.busy.stitches': 'Generating stitches …',
   'controls.liveLight': 'Light follows pointer and tilt',
