@@ -39,6 +39,7 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
   const colorBy = document.querySelectorAll<HTMLInputElement>('input[name="color-by"]');
   const markInputs = document.querySelectorAll<HTMLInputElement>('input[data-mark]');
   const marksToggle = $<HTMLButtonElement>('marks-toggle');
+  const spotToggle = $<HTMLButtonElement>('spot-toggle');
   const shapesSeg = document.querySelectorAll<HTMLButtonElement>('#shapes-seg button');
   const marksBox = document.querySelector<HTMLElement>('fieldset.marks')!;
   const cell = $<HTMLInputElement>('cell');
@@ -50,6 +51,7 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
   const opacity = $<HTMLInputElement>('opacity');
   const realistic = $<HTMLInputElement>('realistic');
   const shapesView = $<HTMLInputElement>('shapes-view');
+  const scaleBar = $<HTMLInputElement>('scale-bar-show');
   const threadWidth = $<HTMLInputElement>('thread-width');
   const liveLight = $<HTMLInputElement>('live-light');
   const fabricLook = $<HTMLSelectElement>('fabric-look');
@@ -132,6 +134,8 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
     });
     marksToggle.setAttribute('aria-pressed', String(s.marksOn));
     marksToggle.title = t(s.marksOn ? 'design.view.marksOn' : 'design.view.marksOff');
+    spotToggle.setAttribute('aria-pressed', String(s.autoHighlight));
+    spotToggle.title = t(s.autoHighlight ? 'design.view.spotOn' : 'design.view.spotOff');
     shapesSeg.forEach((b) => b.setAttribute('aria-pressed', String((b.dataset.shapes === 'on') === s.shapesView)));
     $('view-name').textContent = viewName(s);
     $('realistic-sub').classList.toggle('off', !s.realistic);
@@ -149,6 +153,7 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
     opacity.disabled = !s.overlay;
     realistic.checked = s.realistic;
     shapesView.checked = s.shapesView;
+    scaleBar.checked = s.scaleBar;
     threadWidth.value = String(s.threadMm);
     threadWidth.disabled = !s.realistic;
     liveLight.checked = s.liveLight;
@@ -208,6 +213,7 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
   );
   shapesSeg.forEach((b) => on(b, 'click', () => ((s.shapesView = b.dataset.shapes === 'on'), 'render')));
   on(marksToggle, 'click', () => ((s.marksOn = !s.marksOn), 'render'));
+  on(spotToggle, 'click', () => ((s.autoHighlight = !s.autoHighlight), 'render'));
   on(cell, 'input', () => ((s.cellMm = Number(cell.value)), 'density'));
   on(blur, 'input', () => ((s.blurMm = Number(blur.value)), 'density'));
   on(includeJumps, 'change', () => ((s.includeJumps = includeJumps.checked), 'density'));
@@ -221,6 +227,7 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
   on(opacity, 'input', () => ((s.opacity = Number(opacity.value)), 'render'));
   on(realistic, 'change', () => ((s.realistic = realistic.checked), 'render'));
   on(shapesView, 'change', () => ((s.shapesView = shapesView.checked), 'render'));
+  on(scaleBar, 'change', () => ((s.scaleBar = scaleBar.checked), 'render'));
   on(threadWidth, 'input', () => ((s.threadMm = Number(threadWidth.value)), 'render'));
   on(liveLight, 'change', () => ((s.liveLight = liveLight.checked), 'render'));
   fabricLook.addEventListener('change', () => {

@@ -1,3 +1,5 @@
+import type { FabricId } from '../material/fabrics';
+import { threadMeters, threadUse } from '../model/threadUse';
 import { formatNumber, onLangChange, t } from '../i18n';
 import { blockIndex, colorBlocks, sewingSeconds, type MachineTimes } from '../model/sequence';
 import { forEachThreadSegment, patternStats, type Pattern, type ThreadColor } from '../model/pattern';
@@ -9,6 +11,8 @@ export interface ColorListInfo {
   name: string;
   /** Machine speed for the sewing time. */
   machine: MachineTimes;
+  /** The fabric, for the thread it takes (see threadUse). */
+  fabric: FabricId;
   /** All color blocks get these threads, as one edit. */
   apply: (colors: ThreadColor[]) => void;
 }
@@ -67,7 +71,8 @@ export class ColorList {
 
   private render(): void {
     const d = this.dialog!;
-    const { pattern: p, name, machine } = this.info!;
+    const { pattern: p, name, machine, fabric } = this.info!;
+    const use = threadUse(p, fabric);
     const blocks = colorBlocks(p);
     const st = patternStats(p);
     const all = catalogsNow();
@@ -97,7 +102,8 @@ export class ColorList {
       [t('colorList.size'), `${formatNumber(w, 1)} × ${formatNumber(h, 1)} mm`],
       [t('colorList.stitches'), formatNumber(st.stitches)],
       [t('colorList.changes'), t('colorList.changesValue', { colors: blocks.length, spools })],
-      [t('colorList.thread'), `${formatNumber(st.threadLength / 1000, 1)} m`],
+      [t('colorList.thread'), t('colorList.threadValue', { m: threadMeters(use.topTotal) })],
+      [t('colorList.bobbin'), t('colorList.threadValue', { m: threadMeters(use.bobbin) })],
       [t('colorList.time'), t('stats.minutes', { m: formatNumber(sewingSeconds(st.stitches, st.trims, st.colorChanges, machine) / 60) })],
     ];
     for (const [k, v] of rows) facts.append(el('dt', '', k), el('dd', '', v));
@@ -115,7 +121,7 @@ export class ColorList {
     const body = el('tbody');
     blocks.forEach((b, i) => {
       const tr = el('tr');
-      tr.append(el('td', 'num', String(i + 1)), threadCell(b.color), el('td', 'num', formatNumber(b.stitches)), el('td', 'num', formatNumber(b.threadMm / 1000, 1)));
+      tr.append(el('td', 'num', String(i + 1)), threadCell(b.color), el('td', 'num', formatNumber(b.stitches)), el('td', 'num', threadMeters(use.top[b.index] ?? 0)));
       if (compare) {
         const m = matches[i];
         const td = m ? threadCell(m.thread, t(`threads.dE.${closeness(m.dE)}`)) : el('td', 'muted', t('colorList.already'));

@@ -20,6 +20,7 @@ import { normalizeChecks } from '../validation/validate';
 import { titlesOf, type StoredPattern, type Titles } from './fileStore';
 import type { StoredWork } from './imageStore';
 import { readCrop } from '../image/crop';
+import { readTrace, type StoredTrace } from '../model/trace';
 
 export const PROJECT_EXT = '.heatstitch';
 export const PROJECT_MIME = 'application/x-heatstitch-project';
@@ -45,6 +46,8 @@ export interface ProjectFile {
   titles?: Titles;
   /** Made in the app rather than loaded as an embroidery file (absent in older projects). */
   own?: boolean;
+  /** The tracing image of the working copy with its view (absent: none, or an older project). */
+  trace?: StoredTrace;
 }
 
 export interface ProjectImage {
@@ -208,6 +211,7 @@ export async function decodeProject(bytes: Uint8Array): Promise<Project> {
         ...(typeof e.title === 'string' && e.title.trim() ? { title: e.title.trim() } : {}),
         ...(titlesOf(e.titles) ? { titles: titlesOf(e.titles) } : {}),
         ...(e.own === true ? { own: true } : {}),
+        ...(readTrace(e.trace) ? { trace: readTrace(e.trace)! } : {}),
       },
     ];
   });

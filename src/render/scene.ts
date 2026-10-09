@@ -1,4 +1,5 @@
 import type { DensityGrid } from '../density/grid';
+import { drawTrace, drawTraceFrame, type TraceScene } from './trace';
 import { STITCH, type Pattern } from '../model/pattern';
 import type { Markers, Transition } from '../model/sequence';
 import { shownMarks, type Settings } from '../settings';
@@ -54,6 +55,8 @@ export interface FlowScene {
   areas?: FlatArea[] | null;
   /** Rubber band (mm) selecting the objects inside it, while it is dragged. */
   band?: { x0: number; y0: number; x1: number; y1: number } | null;
+  /** The design's tracing image, while it is shown. */
+  trace?: TraceScene | null;
 }
 
 /** The stitches of one object on their own, and which records are its underlay. */
@@ -100,12 +103,14 @@ export function drawScene(ctx: CanvasRenderingContext2D, w: number, h: number, s
   if (flow) {
     if (!pattern) return;
     const st = flow.style;
+    if (flow.trace) drawTrace(ctx, vp, flow.trace);
     if (flow.areas?.length) drawAreas(ctx, vp, flow.areas);
     if (!s.realistic || !drawThreads(ctx, vp, pattern, 1, s.threadMm, st)) drawFlatStitches(ctx, vp, pattern, st, 1);
     const marks = shownMarks(s);
     if (marks.jumps) drawJumps(ctx, vp, pattern, st.limit, st.alpha, st.carried?.jumps);
     drawMarkers(ctx, vp, pattern, { markers: flow.markers, marks, limit: st.limit, alpha: st.alpha }, w, h);
     if (s.hoop) drawHoop(ctx, vp, pattern.bounds, s.hoop);
+    if (flow.trace) drawTraceFrame(ctx, vp, flow.trace);
     if (flow.hover && flow.hover !== flow.selected) drawTransition(ctx, vp, pattern, flow.hover, false);
     if (flow.selected) drawTransition(ctx, vp, pattern, flow.selected, true);
     if (flow.outlines?.length) drawOutlines(ctx, vp, flow.outlines);

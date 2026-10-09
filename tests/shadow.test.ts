@@ -35,7 +35,7 @@ function shaded(shadow: Partial<LineShadow> = {}, before = false): Pattern {
   p = addShape(p, { form: parsePath('M0 0 L30 0', ID), kind: 'stroke', width: 0.4 }, red, before ? 0 : null, options)!.pattern;
   const objs = sewObjects(p);
   const o = objs[objs.length - 1];
-  const st = { ...lineSettings(p, o), shadow: { color: grey, link: 's1', dir: 'se' as const, dist: 1, ...shadow } };
+  const st = { ...lineSettings(p, o), shadow: { color: grey, link: 's1', angle: 45, dist: Math.SQRT2, ...shadow } };
   const r = resewLine(p, o.index, remembered(p, o)!.path!, st, T)!;
   return syncBorders(r.pattern, T);
 }
@@ -79,7 +79,7 @@ describe('shadow of a line', () => {
     expect(new Set(shadows.map((o) => remembered(d.pattern, o)!.shadowOf)).size).toBe(2);
     const stored = JSON.parse(JSON.stringify(rememberedIn(p, sewObjects(p))));
     restoreRemembered(p, stored);
-    expect(remembered(p, sewObjects(p)[1])?.line?.shadow).toMatchObject({ link: 's1', dir: 'se', dist: 1 });
+    expect(remembered(p, sewObjects(p)[1])?.line?.shadow).toMatchObject({ link: 's1', angle: 45, dist: Math.SQRT2 });
   });
 
   it('turned off, the shadow goes; deleted alone, the line has none', () => {
@@ -126,21 +126,24 @@ describe('shadow of a line', () => {
     expect(syncBorders(alone, T)).toBe(alone);
   });
 
-  it('landing on the very stitches of another line, is sewn the other way round (found by the torture test)', () => {
-    // The shadow copied (a line of its own 2 mm beside it), and that copy shaded back onto the line.
-    const p = shaded({ dir: 'nw', dist: 2.4 });
-    const copy = duplicateObject(p, 0, T)!;
-    const objs = sewObjects(copy.pattern);
-    const c = objs[copy.index];
-    const m = remembered(copy.pattern, c)!;
-    expect(m.shadowOf).toBeUndefined();
-    const st = { ...m.line!, shadow: { color: blue, link: 's2', dir: 'se' as const, dist: 0.4 } };
-    const q = syncBorders(resewLine(copy.pattern, c.index, m.path!, st, T)!.pattern, T);
-    const keys = sewObjects(q).map((o) => objectKey(q, o));
+  it('landing on the very stitches of another shadow, is sewn the other way round (found by the torture test)', () => {
+    // Two lines 4 mm apart, each with a shadow 2 mm toward the other: both shadows fall on one line.
+    // (Starting 0.02 mm off the grid, so no lock stitch rounds one way here and the other way there.)
+    let p = empty as Pattern;
+    for (const [y, link, angle] of [[0, 's1', 90], [4, 's2', 270]] as const) {
+      p = addShape(p, { form: parsePath(`M0.02 ${y} L30.02 ${y}`, ID), kind: 'stroke', width: 0.4 }, red, null, options)!.pattern;
+      const objs = sewObjects(p);
+      const o = objs[objs.length - 1];
+      const st = { ...lineSettings(p, o), shadow: { color: grey, link, angle, dist: 2 } };
+      p = syncBorders(resewLine(p, o.index, remembered(p, o)!.path!, st, T)!.pattern, T);
+    }
+    const q = p;
+    const objs = sewObjects(q);
+    const keys = objs.map((x) => objectKey(q, x));
     expect(new Set(keys).size).toBe(keys.length);
-    // Each still knows what it is.
-    const mem = sewObjects(q).map((o) => remembered(q, o)!);
-    expect(mem.filter((x) => x.shadowOf === 's2')).toHaveLength(1);
-    expect(mem.filter((x) => x.line?.shadow?.link === 's1')).toHaveLength(1);
+    // Each still knows what it is, and both lie where they fall.
+    const shadows = objs.filter((x) => remembered(q, x)?.shadowOf);
+    expect(shadows.map((x) => remembered(q, x)!.shadowOf).sort()).toEqual(['s1', 's2']);
+    for (const x of shadows) for (const [, y] of points(q, x.first, x.last)) expect(y).toBeCloseTo(2, 1);
   });
 });

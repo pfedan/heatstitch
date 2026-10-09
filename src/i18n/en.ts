@@ -11,6 +11,7 @@ import { en as ready } from './areas/ready';
 import { en as ampel } from './areas/ampel';
 import { en as responsive } from './areas/responsive';
 import { en as fabrics } from './areas/fabrics';
+import { en as measure } from './areas/measure';
 
 
 const enBase: Record<keyof typeof deBase, string> = {
@@ -722,16 +723,24 @@ const enBase: Record<keyof typeof deBase, string> = {
   'stitch.shadow.dir': 'Direction',
   'stitch.shadow.off': 'Off',
   'stitch.shadow.off.hint': 'No shadow',
-  'stitch.shadow.se': '↘',
-  'stitch.shadow.se.hint': 'Down to the right',
-  'stitch.shadow.sw': '↙',
-  'stitch.shadow.sw.hint': 'Down to the left',
-  'stitch.shadow.ne': '↗',
-  'stitch.shadow.ne.hint': 'Up to the right',
-  'stitch.shadow.nw': '↖',
-  'stitch.shadow.nw.hint': 'Up to the left',
-  'stitch.shadow.dist': 'Offset',
-  'stitch.shadow.dist.hint': 'How far the shadow lies beside the line, across and down',
+  'stitch.shadow.on': 'On',
+  'stitch.shadow.on.hint': 'An offset copy under the line',
+  'stitch.shadow.dir.hint': 'Where the shadow falls: turn the circle or drag the slider',
+  'stitch.noOverlap': 'From {a} mm nothing overlaps',
+  'stitch.echo.phase': 'Phase',
+  'stitch.echo.phase.hint': 'Each copy shifts its pattern this far against the one before; it adds up',
+  'stitch.echo.order': 'Order',
+  'stitch.echo.order.out': 'Inside → out',
+  'stitch.echo.order.out.hint': 'Sew from the inside out',
+  'stitch.echo.order.in': 'Outside → in',
+  'stitch.echo.order.in.hint': 'Sew from the outside in',
+  'stitch.repeat.hint': 'How often the line is sewn; an even number ends at its start',
+  'stitch.repeat.n': '{n}×',
+  'stitch.bean': 'Bean stitch',
+  'stitch.bean.hint': 'Every stitch there, back, there instead of the whole line there and back',
+  'stitch.bean.even': 'Bean stitch needs an odd number',
+  'stitch.shadow.dist': 'Distance',
+  'stitch.shadow.dist.hint': 'How far the shadow lies beside the line, in its direction',
   'stitch.shadow.thread': 'Thread',
   'stitch.shadow.thread.hint': 'Pick the thread of the shadow',
   'stitch.shadow.thread.grey': 'Dark grey',
@@ -773,7 +782,7 @@ const enBase: Record<keyof typeof deBase, string> = {
   'stitch.echo.count': 'Copies per side',
   'stitch.echo.count.hint': 'How many copies lie beside the line',
   'stitch.echo.gap': 'Distance',
-  'stitch.echo.gap.hint': 'From line to line. Wide stitches need at least their width.',
+  'stitch.echo.gap.hint': 'From line to line. Below the width of the stitch the copies overlap.',
   'stitch.border.zigzag': 'Zigzag',
   'stitch.border.zigzag.hint': 'An open zigzag across the line: tacks down appliqué or decorates an edge',
   'stitch.border.e': 'E stitch',
@@ -811,6 +820,7 @@ const enBase: Record<keyof typeof deBase, string> = {
   'stitch.lineMotifSize.hint': 'How far the motif reaches across the line',
   'stitch.lineMotifSize.band': 'Up to {b} mm, beyond that the figures touch',
   'stitch.motifSpacing.hint': 'Distance from figure to figure',
+  'stitch.motifLength.hint': 'Longest stitch; in tight curves the stitches get shorter so the figure stays round',
   'stitch.motifSide': 'Side',
   'stitch.border.pieces': 'Part of a fill cut apart: one border runs around all {n} parts, never along the cut. What you set here goes for all of them.',
   'stitch.border.seams': 'Along the cuts too',
@@ -968,6 +978,8 @@ const enBase: Record<keyof typeof deBase, string> = {
   'colorList.changes': 'Colors',
   'colorList.changesValue': '{colors} in sewing order, {spools} threads',
   'colorList.thread': 'Thread',
+  'colorList.bobbin': 'Bobbin thread',
+  'colorList.threadValue': 'about {m} m',
   'colorList.time': 'Sewing time',
   'colorList.colThread': 'Thread',
   'colorList.colStitches': 'Stitches',
@@ -1215,6 +1227,8 @@ const enBase: Record<keyof typeof deBase, string> = {
   'image.verdict.safe': 'No areas above the limits for this material.',
   'image.take': 'Take over as design',
   'image.take.hint': 'Adds the stitches as a design, to check and save.',
+  'image.traceOnly': 'Trace only',
+  'image.traceOnly.hint': 'Lays the picture under the design to trace by hand, without making stitches.',
   'image.busy.prepare': 'Preparing image …',
   'image.busy.stitches': 'Generating stitches …',
   'controls.liveLight': 'Light follows pointer and tilt',
@@ -1304,4 +1318,4 @@ const enBase: Record<keyof typeof deBase, string> = {
   'canvas.hint.letters': 'Drag letters: move · Arrow keys: nudge · Esc: back to the lettering',
 };
 
-export const en: Record<keyof typeof de, string> = { ...enBase, ...shell, ...files, ...objects, ...shapes, ...stitches, ...check, ...image, ...design, ...ready, ...ampel, ...responsive, ...fabrics };
+export const en: Record<keyof typeof de, string> = { ...enBase, ...shell, ...files, ...objects, ...shapes, ...stitches, ...check, ...image, ...design, ...ready, ...ampel, ...responsive, ...fabrics, ...measure };

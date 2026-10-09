@@ -73,6 +73,8 @@ export interface Settings {
   marks: Marks;
   /** Global switch for all markers on the canvas; off leaves the chosen ones as they are and shows none. */
   marksOn: boolean;
+  /** Pointing at an object, a part or its settings, or selecting it, fades the rest; off, nothing fades (a color focus from the list still does). */
+  autoHighlight: boolean;
   /** Open state of the collapsible sidebar sections, by id. */
   sections: Record<string, boolean>;
   /** Machine speed in stitches per minute, for the sewing time and the player. */
@@ -97,6 +99,8 @@ export interface Settings {
   realistic: boolean;
   /** Ablauf: objects with a known shape drawn as flat areas of their color instead of stitches. */
   shapesView: boolean;
+  /** A scale bar of round millimetres at the foot of the stage. */
+  scaleBar: boolean;
   /** Color behind the stitches (the fabric), as #rrggbb; null follows the light or dark theme. */
   background: string | null;
   /** In the realistic view the background shows the profile's fabric (weave, knit, leather) in that color. */
@@ -133,6 +137,7 @@ export const DEFAULTS: Settings = {
   colorBy: 'thread',
   marks: { jumps: true, trims: true, colors: false, ends: false, points: false, threads: true },
   marksOn: true,
+  autoHighlight: true,
   sections: { display: true, stats: false, advanced: false, findings: true },
   machineSpm: 800,
   trimSeconds: TRIM_SECONDS,
@@ -148,6 +153,7 @@ export const DEFAULTS: Settings = {
   opacity: 0.6,
   realistic: false,
   shapesView: false,
+  scaleBar: true,
   background: null,
   fabricLook: true,
   threadMm: threadWidthMm(DEFAULT_PROFILE),
@@ -189,6 +195,7 @@ export function loadSettings(): Settings {
       colorBy: COLOR_BY.includes(s.colorBy as ColorBy) ? s.colorBy! : 'thread',
       marks: { ...DEFAULTS.marks, ...(showJumps !== undefined ? { jumps: showJumps } : {}), ...s.marks },
       marksOn: typeof s.marksOn === 'boolean' ? s.marksOn : DEFAULTS.marksOn,
+      autoHighlight: typeof s.autoHighlight === 'boolean' ? s.autoHighlight : DEFAULTS.autoHighlight,
       // Findings closed with the old × stay closed as a collapsed section.
       sections: { ...DEFAULTS.sections, ...(findingsOpen === false ? { findings: false } : {}), ...s.sections },
       machineSpm: typeof s.machineSpm === 'number' && s.machineSpm > 0 ? s.machineSpm : DEFAULTS.machineSpm,
@@ -207,6 +214,7 @@ export function loadSettings(): Settings {
       background: hexColor(s.background),
       liveLight: typeof s.liveLight === 'boolean' ? s.liveLight : DEFAULTS.liveLight,
       fabricLook: typeof s.fabricLook === 'boolean' ? s.fabricLook : DEFAULTS.fabricLook,
+      scaleBar: typeof s.scaleBar === 'boolean' ? s.scaleBar : DEFAULTS.scaleBar,
       panels: { side: width(s.panels?.side), inspector: width(s.panels?.inspector) },
       checks: normalizeChecks(s.checks),
       correction: normalizeCorrection(s.correction),

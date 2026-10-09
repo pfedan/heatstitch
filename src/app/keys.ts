@@ -1,5 +1,6 @@
 import type { DrawKind, DrawTool } from '../ui/drawTool';
 import type { Editor } from '../ui/editor';
+import type { MeasureTool } from '../ui/measureTool';
 import type { FrameTool } from '../ui/frameTool';
 import type { OrderCard } from '../ui/objectPanel';
 import type { Player } from '../ui/player';
@@ -29,6 +30,7 @@ export interface KeysApp {
   readonly frameObjects: () => number[];
   readonly frameTool: FrameTool;
   readonly history: (step: 'undo' | 'redo' | 'revert') => void;
+  readonly measure: MeasureTool;
   readonly letterMoved: (at: number, dx0: number, dy0: number, wx: number, wy: number, final: boolean) => void;
   readonly newLettering: () => Promise<void>;
   readonly orderCard: OrderCard;
@@ -93,6 +95,13 @@ export function bindKeys(app: KeysApp) {
       return;
     }
     if (e.key === 'Escape' && ui.planPin) return app.pinPlan(null);
+    // Measuring: Esc drops the measurement first, then ends the tool.
+    if (e.key === 'Escape' && app.measure.active && app.settings.mode !== 'image') {
+      if (app.measure.busy) app.measure.clear();
+      else app.measure.stop();
+      app.redraw();
+      return;
+    }
     if (app.drawTool.active && app.settings.mode === 'flow') {
       if (e.key === 'Escape') {
         if (app.drawTool.busy) {
@@ -220,6 +229,7 @@ export function bindKeys(app: KeysApp) {
       return;
     }
     if (e.key === 'h') return void document.getElementById('marks-toggle')?.click();
+    if (e.key === 'a' && app.settings.mode === 'flow') return void document.getElementById('spot-toggle')?.click();
     if (e.key === 's' && app.settings.mode === 'flow') return void document.querySelector<HTMLElement>('#shapes-seg [aria-pressed="false"]')?.click();
     if (app.settings.mode === 'flow') {
       // Enter still presses a focused button; Space always plays, not the button clicked last (Einpassen...).

@@ -1,3 +1,4 @@
+import { threadOfRange } from './model/threadUse';
 import { loadCatalogs } from './threads/catalog';
 import './style.css';
 import './areas/cleanup/cleanup.css';
@@ -40,11 +41,13 @@ import {
   SATIN,
   TIE_STITCH,
 } from './model/sequence';
-import { stitchAt } from './render/flow';
+import { pointNear, stitchAt } from './render/flow';
+import { drawMeasure } from './render/measure';
+import { MeasureTool } from './ui/measureTool';
 import type { Mode } from './settings';
 import { isGuessed, isOpenPattern, openOnPurpose, remembered, rememberedIn, rememberShapes } from './model/restitch';
 import { drawAside, drawDrawing } from './render/shapeOverlay';
-import type { LeftOut } from './ui/imageMode';
+import type { LeftOut, SewnFrom } from './ui/imageMode';
 import { asideOf, storeAside, type AsideShape } from './model/aside';
 import { type Digitized } from './digitize/digitize';
 import { numberInColor, rememberObjects, sewObjects } from './model/objects';
@@ -53,6 +56,7 @@ import { Player } from './ui/player';
 import { installPanelResize } from './ui/panelResize';
 import type { Key } from './i18n';
 import type { Sequence } from './app/types';
+import type { DrawKind } from './ui/drawTool';
 import { ui } from './app/state';
 import { bindRungs } from './app/rungs';
 import { bindPointer } from './app/pointer';
@@ -72,11 +76,13 @@ import { initStitchArea } from './areas/stitches';
 import { initDesign } from './areas/design';
 import { initReady } from './areas/ready';
 import { initShapes, refreshShapes } from './areas/shapes';
+import { initMeasure } from './areas/measure';
 import { runCommand } from './shell/commands';
 import { initCheck } from './areas/check/check';
 import { initAmpel } from './areas/ampel/ampel';
 import { initResponsive } from './areas/responsive/responsive';
 import type { ZoneDecision } from './ui/validationPanel';
+import { bindTrace } from './app/trace';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -124,6 +130,16 @@ const files = new FileList(
   },
   () => materialOf(settings),
 );
+
+// The tracing image of the design: src/app/trace.ts
+const trace = bindTrace({
+  files,
+  settings,
+  applyEdit: (p) => applyEdit(p, files.active?.measurement),
+  redraw: () => redraw(),
+  newDesign: () => newDesign(),
+  busy: () => drawTool.active || ui.letterMode || rungTool.active || shapeTool.active || editor.active || measureTool.active,
+});
 
 /** Per zone of `v`: whether it still counts with the active file's decisions. */
 const countedFor = (v: ValidationResult | null | undefined): boolean[] | null =>
@@ -203,6 +219,9 @@ installPanelResize($('layout'), settings.panels, () => saveSettings(settings));
 const { NO_COLORS, NO_RANGE, flowScene, overOf, playerModel, resetFlow, seq, seqCache, styleFor } = bindScene({
   get files() {
     return files;
+  },
+  get traceScene() {
+    return trace.traceScene;
   },
   get frameTool() {
     return frameTool;
@@ -788,6 +807,7 @@ function objectInfo(p: Pattern, q: Sequence) {
     layering: selected.map((o) => ({ below: over[o].length, above: over.filter((l) => l.includes(o)).length })),
     numbers: selected.map((o) => numberInColor(q.objects, q.objects[o])),
     hand: selected.map((o) => remembered(p, q.objects[o])?.hand ?? 0),
+    threadMm: selected.reduce((a, o) => a + (q.objects[o] ? threadOfRange(p, settings.profile.fabric, q.objects[o].first, q.objects[o].last) : 0), 0),
     editing: editor.active && ui.editObject !== null && selected.length === 1 && selected[0] === ui.editObject ? { selection: editor.selection.size } : null,
     shapeable: selected.length === 1 && (stitchInfo(p, q).free?.on ? !!shapeTarget(p, q, selected[0]) : !!stitchInfo(p, q).measured.fill || !!stitchInfo(p, q).measured.satin || (!!q.objects[selected[0]] && isLineObject(p, q.objects[selected[0]]))),
     shaping: shapeTool.active && selected.length === 1 && selected[0] === ui.shapeObject ? { nodes: shapeTool.count, smooth: shapeTool.selectedSmooth, ...(shapeTool.band !== null ? { kind: 'band' as const } : shapeTool.rails ? { kind: 'rails' as const } : {}), ...(q.objects[selected[0]] && isLineObject(p, q.objects[selected[0]]) ? { line: { closed: shapeTool.closed } } : {}) } : null,
@@ -812,6 +832,8 @@ function blendOf(p: Pattern, q: Sequence, selected: number[]): { blend?: ThreadC
 let frame = 0;
 /** What the check area draws on the stage (src/areas/check). */
 let checkArea: { draw: (ctx: CanvasRenderingContext2D) => void } | null = null;
+/** The measuring tool's button and the scale bar (src/areas/measure). */
+let measureArea: { render: () => void } | null = null;
 /** The traffic light "Klappt das?" (src/areas/ampel). */
 let ampel: { update: () => void } | null = null;
 function redraw(): void {
@@ -820,6 +842,7 @@ function redraw(): void {
     frame = 0;
     const dpr = window.devicePixelRatio || 1;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    measureArea?.render();
     if (settings.mode === 'image') {
       imageMode.draw(ctx, ui.stageW, ui.stageH, vp, stageBg());
       empty.hidden = imageMode.hasImage;
@@ -839,6 +862,7 @@ function redraw(): void {
     if (drawTool.preview && settings.mode === 'flow')
       drawDrawing(ctx, vp, drawTool.preview, { nodes: drawTool.kind === 'pen' || drawTool.kind === 'cut' ? drawTool.count : 0, closing: drawTool.closing, size: drawTool.size });
     if (ui.letterMode) drawLetterBoxes();
+    if (measureTool.active) drawMeasure(ctx, vp, measureTool, ui.stageW, ui.stageH);
     drawPlanCompare();
     checkArea?.draw(ctx);
     ampel?.update();
@@ -1015,10 +1039,16 @@ function fitView(f: LoadedFile | null = files.active): void {
   const a = freeArea();
   // With a hoop chosen, fit shows the whole sewing field so the room left is visible.
   const m = f?.material.hoop ? hoopRect(b, f.material.hoop) : null;
-  if (m) vp.fit(Math.min(m.x, b.minX / 10), Math.min(m.y, b.minY / 10), Math.max(m.x + m.w, b.maxX / 10), Math.max(m.y + m.h, b.maxY / 10), a.w, a.h, 56);
   // A new, empty design without a hoop: 10 x 10 cm to draw into, not a point blown up.
-  else if (!f!.pattern!.cmd.includes(STITCH)) vp.fit(-50, -50, 50, 50, a.w, a.h);
-  else vp.fit(b.minX / 10, b.minY / 10, b.maxX / 10, b.maxY / 10, a.w, a.h);
+  const box = m
+    ? [Math.min(m.x, b.minX / 10), Math.min(m.y, b.minY / 10), Math.max(m.x + m.w, b.maxX / 10), Math.max(m.y + m.h, b.maxY / 10)]
+    : !f!.pattern!.cmd.includes(STITCH)
+      ? [-50, -50, 50, 50]
+      : [b.minX / 10, b.minY / 10, b.maxX / 10, b.maxY / 10];
+  // A shown tracing image is part of what there is to see.
+  const tb = f === files.active ? trace.bounds() : null;
+  if (tb) box.splice(0, 4, Math.min(box[0], tb.minX), Math.min(box[1], tb.minY), Math.max(box[2], tb.maxX), Math.max(box[3], tb.maxY));
+  vp.fit(box[0], box[1], box[2], box[3], a.w, a.h, m ? 56 : undefined);
   vp.pan(a.x, a.y);
   redraw();
 }
@@ -1428,8 +1458,13 @@ const imageMode = new ImageMode({
   },
   validate: async (p) => classify(await validator.measure(p, openOnPurpose(p, seq(p).objects) ?? undefined), settings.profile, settings.checks),
   takeOver: async (d, name) => {
-    await addDigitized(d, name);
+    await addDigitized({ ...d, source: imageMode.traceSource() ?? undefined }, name);
     setMode('flow');
+  },
+  traceOnly: async (picture, name, size) => {
+    setMode('flow');
+    await trace.layPicture(picture, name, size);
+    fitView();
   },
   mode: () => settings.mode,
   setMode: (m) => setMode(m),
@@ -1439,7 +1474,7 @@ const imageMode = new ImageMode({
  * Adds stitches made from an image to the file list, with the objects as the Image mode sewed them
  * (it trims inside some, between pieces of a fill) and the exact areas of its fills.
  */
-async function addDigitized(d: Digitized & { leftOut?: LeftOut[] }, name: string): Promise<void> {
+async function addDigitized(d: Digitized & { leftOut?: LeftOut[]; source?: SewnFrom }, name: string): Promise<void> {
   const data = writePattern(d.pattern, 'pes');
   const added = parsePattern(data, `${name}.pes`);
   rememberObjects(added, d.starts);
@@ -1447,7 +1482,9 @@ async function addDigitized(d: Digitized & { leftOut?: LeftOut[] }, name: string
   rememberShapes(added, objs, d.starts, d.objects.map((o) => o.shape), d.objects);
   // Shapes left out on the way in wait under "Not sewn", where it was: at the very back.
   const aside: AsideShape[] = (d.leftOut ?? []).map((s, k) => ({ id: k + 1, role: 'off', kind: 'fill', color: s.color, after: -1, form: s.form, reason: s.reason }));
-  await files.addWithObjects(`${name}.pes`, data.slice().buffer, rememberedIn(added, objs), storeAside(aside), undefined, true);
+  // The picture stays with the design, exactly under its stitches, to look at again later.
+  const source = d.source ? await trace.sourceTrace(d.source.picture, name, d.source.size).catch(() => undefined) : undefined;
+  await files.addWithObjects(`${name}.pes`, data.slice().buffer, rememberedIn(added, objs), storeAside(aside), undefined, true, source);
   if (aside.some((a) => a.reason === 'background')) layers.say(t('aside.backgroundFound'));
 }
 
@@ -1536,7 +1573,7 @@ exportBtn.addEventListener('click', () => {
 
 // Opening and saving files and projects: src/app/fileIo.ts
 
-const { adoptMaterial, storeMaterial } = bindFileIo({
+const { adoptMaterial, storeMaterial, newDesign } = bindFileIo({
   get setFormLevel() {
     return setFormLevel;
   },
@@ -1552,9 +1589,31 @@ const { adoptMaterial, storeMaterial } = bindFileIo({
   addDigitized,
 });
 
+// Measuring ----------------------------------------------------------------
+
+/** The tool Messen (src/areas/measure): its ends snap to the shown needle points once they can be told apart. */
+const measureTool = new MeasureTool({
+  snap: (x, y, reach) => {
+    const p = files.active?.pattern;
+    // Only where stitches are drawn: not over shapes, nor over the heatmap without the stitch plan.
+    const shown = settings.mode === 'flow' ? !settings.shapesView : settings.mode === 'density' && settings.overlay;
+    if (!p || !shown || vp.scale < POINTS_MIN_SCALE) return null;
+    const st = settings.mode === 'flow' ? styleFor(p) : null;
+    const i = pointNear(p, x * 10, y * 10, reach * 10, st?.limit ?? p.cmd.length, st?.alpha);
+    return i >= 0 ? [p.x[i] / 10, p.y[i] / 10] : null;
+  },
+  redraw: () => redraw(),
+});
+/** Picking a drawing tool (or Wählen) ends measuring: one tool has the pointer at a time. */
+const pickTool = (kind: DrawKind | null) => {
+  measureTool.stop();
+  setDrawing(kind);
+};
+
 // Keyboard shortcuts --------------------------------------------------------
 
 bindKeys({
+  measure: measureTool,
   get selectObjects() {
     return selectObjects;
   },
@@ -1675,8 +1734,12 @@ bindKeys({
 // Zoom, pan, pinch, tooltip ---------------------------------------------------
 
 const { showObjectMenu } = bindPointer({
+  measure: measureTool,
   get canvas() {
     return canvas;
+  },
+  get traceTool() {
+    return trace.traceTool;
   },
   get closeShape() {
     return closeShape;
@@ -1775,7 +1838,8 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', red
 initShell({ files, mode: () => settings.mode, setMode });
 initResponsive();
 const stitchArea = initStitchArea({ files, settings, editor, rungTool, stitchPanel, closeRungs, toggleRungs, toggleGuides, togglePoints, sewAlongLines, suggestLines, setEditing, enterObject, revealRecord, pointsVisible: () => vp.scale >= POINTS_MIN_SCALE, redraw });
-const design = initDesign({ files, settings, player, vp, stage, fitView, fitToHoop, redraw, applyEdit });
+const design = initDesign({ files, settings, player, vp, stage, fitView, fitToHoop, redraw, applyEdit, trace });
+measureArea = initMeasure({ settings, vp, stage, measure: measureTool, stopDrawing: () => drawTool.active && setDrawing(null), redraw });
 const ready = initReady({
   files,
   settings,
@@ -1785,7 +1849,7 @@ const ready = initReady({
     return hs.length ? Math.min(...hs) : null;
   },
 });
-initShapes({ settings, setMode, files, seq, objectName, drawTool, setDrawing, shapeTool, enterShape, shapeTarget, isLineObject, frameTool, editor, setEditing, setFormLevel, newLettering, setLetterMode, letteringPanel, selectObjects, redraw });
+initShapes({ settings, setMode, files, seq, objectName, drawTool, setDrawing: pickTool, measure: measureTool, shapeTool, enterShape, shapeTarget, isLineObject, frameTool, editor, setEditing, setFormLevel, newLettering, setLetterMode, letteringPanel, selectObjects, redraw });
 checkArea = initCheck({
   settings,
   files,
