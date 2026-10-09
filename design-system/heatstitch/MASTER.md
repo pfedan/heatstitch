@@ -70,6 +70,11 @@ Garnfarben sind Inhalt, nicht Oberfläche: nie als UI-Farbe verwenden.
   Taste abgesetzt. Kurz halten: ein Satz, was der Knopf tut, höchstens 16 Wörter (Test
   `tests/tooltipTexts.test.ts`). Wo ein Bild mehr sagt als Worte, zeigt `data-tip-img="name"` ein
   kleines Bildschirmfoto aus `public/tips/` über dem Text (aufgenommen mit `tools/tips/shoot.mjs`).
+  **Kein Tooltip auf dem Hintergrund eines Panels, Abschnitts oder Felds**, das Knöpfe mit eigenem
+  Tooltip enthält: Beim Fahren über die Einstellungen wechselt er sonst ständig mit deren Tooltips und
+  flackert. Was die Einstellung als Ganzes ist, steht im Tooltip ihrer Beschriftung (`.label`); Bilder
+  sitzen auf den einzelnen Optionen, je Option ein Beispielfoto (`pictured` in
+  `src/ui/stitchPanel.ts`).
 - **Menüs:** Kontextmenü am Objekt, schließen mit Esc und Klick daneben.
 - **Dialoge:** keine modalen Dialoge für Arbeitsabläufe. Ausnahmen heute: Druckansicht der
   Farbliste (`src/ui/colorList.ts`) und der Player der Anleitungsvideos (`src/videos/player.ts`):

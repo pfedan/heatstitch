@@ -1329,7 +1329,7 @@ export class StitchPanel {
       }
       row.append(b);
     }
-    return h('div', { class: 'field stitch-field', title: t(`stitch.pattern.${now}.hint` as Key) }, h('span', { class: 'label' }, t('stitch.pattern')), tabs, row);
+    return h('div', { class: 'field stitch-field' }, h('span', { class: 'label' }, t('stitch.pattern')), tabs, row);
   }
 
   /**
@@ -1402,7 +1402,7 @@ export class StitchPanel {
       }
       row.append(b);
     }
-    const wrap = h('div', { class: 'field stitch-field', title: t('stitch.motif.hint'), 'data-tip-img': 'motif' }, h('span', { class: 'label' }, t('stitch.motif')), row);
+    const wrap = pictured(h('div', { class: 'field stitch-field' }, h('span', { class: 'label' }, t('stitch.motif')), row), ['none', ...MOTIFS], { diamonds: 'motif-diamonds', waves: 'motif-waves', stars: 'motif-stars', hearts: 'motif-hearts' }, 'stitch.motif.hint');
     if (!d.emboss) return [wrap];
     return [
       wrap,
@@ -1743,7 +1743,7 @@ export class StitchPanel {
       });
       row.append(btn);
     }
-    return h('div', { class: 'field stitch-field border-field', title: t('stitch.echo.threads.hint') }, h('span', { class: 'label' }, t('stitch.echo.threads')), row);
+    return h('div', { class: 'field stitch-field border-field' }, h('span', { class: 'label', title: t('stitch.echo.threads.hint') }, t('stitch.echo.threads')), row);
   }
 
   /**
@@ -2057,9 +2057,8 @@ export class StitchPanel {
             else delete s.border.seams;
           })
         : null;
+    pictured(parts.type, BORDERS, { run: 'border-run', satin: 'border-satin', zigzag: 'border-zigzag', e: 'border-e', motif: 'border-motif' }, 'stitch.border.intro');
     const box = this.sec('border', 'stitches.sec.border', [shared, seams, parts.type, ...parts.look, ...parts.hold, s.border && s.pattern !== 'none' ? this.borderThread(s.border) : null], extra);
-    box.title = t('stitch.border.intro');
-    box.dataset.tipImg = 'border';
     return this.lights(box, 'border');
   }
 
@@ -2135,7 +2134,7 @@ export class StitchPanel {
  * they show, not on the whole group, where the tooltip came and went with every move.
  */
 function pictured<T extends string>(field: HTMLElement, values: readonly T[], imgs: Partial<Record<T, string>>, intro: Key): HTMLElement {
-  field.querySelectorAll<HTMLElement>('.choice-row button').forEach((b, i) => {
+  field.querySelectorAll<HTMLElement>('.segmented button').forEach((b, i) => {
     const img = imgs[values[i]];
     if (img) b.dataset.tipImg = img;
   });

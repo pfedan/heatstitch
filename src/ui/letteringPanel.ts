@@ -485,7 +485,7 @@ export class LetteringPanel {
     row.className = 'lettering-height-row';
     row.append(num, Object.assign(document.createElement('span'), { textContent: 'mm', className: 'muted' }), track);
     const f = this.field('shapes.lettering.size', row, note, this.sizeLine());
-    f.title = t('lettering.height.hint');
+    f.querySelector<HTMLElement>('.label')!.title = t('lettering.height.hint');
     num.title = t('lettering.height');
     return f;
   }
