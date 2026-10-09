@@ -2,6 +2,7 @@ import type { DrawTool } from '../ui/drawTool';
 import type { Editor } from '../ui/editor';
 import type { FileList, LoadedFile } from '../ui/fileList';
 import type { FrameTool } from '../ui/frameTool';
+import type { TraceTool } from '../ui/traceTool';
 import type { ImageMode } from '../ui/imageMode';
 import type { MeasureTool } from '../ui/measureTool';
 import type { Lettering } from '../lettering/layout';
@@ -54,6 +55,7 @@ export interface PointerApp {
   readonly styleFor: (p: Pattern) => StitchStyle;
   readonly threadsShown: () => boolean;
   readonly tooltip: HTMLElement;
+  readonly traceTool: TraceTool;
   readonly vp: Viewport;
 }
 
@@ -104,7 +106,7 @@ export function bindPointer(app: PointerApp) {
   /** Where a one-finger or mouse press started, to tell a click from a drag. */
   let pressAt: [number, number] | null = null;
   /** What the press started as: a point drag, a rectangle or panning (a click when it did not move). */
-  let pressMode: 'move' | 'band' | 'pan' | 'frame' = 'pan';
+  let pressMode: 'move' | 'band' | 'pan' | 'frame' | 'trace' = 'pan';
   /** Pointer painting a brush stroke in the Bild mode, or null. */
   let painting: number | null = null;
   /** Pointer dragging the frame of the cut in the Bild mode, or null. */
@@ -117,7 +119,7 @@ export function bindPointer(app: PointerApp) {
     const pos = local(e);
     pointers.set(e.pointerId, pos);
     pressAt = pointers.size === 1 ? pos : null;
-    let mode: 'move' | 'band' | 'pan' | 'frame' = 'pan';
+    let mode: 'move' | 'band' | 'pan' | 'frame' | 'trace' = 'pan';
     if (app.settings.mode === 'image' && pointers.size === 1 && e.button === 0 && app.imageMode.cropDown(...app.vp.toWorld(pos[0], pos[1]), cropReach(e))) {
       cropping = e.pointerId;
       return;
@@ -164,6 +166,8 @@ export function bindPointer(app: PointerApp) {
       else if (app.shapeTool.active && flow && app.shapeTool.pickAt(wx, wy, app.vp.scale)) mode = app.shapeTool.down(wx, wy, app.vp.scale);
       else if (app.frameTool.active && flow && app.frameTool.down(wx, wy, app.vp.scale) !== null) mode = 'frame';
       else if (app.shapeTool.active && flow) mode = 'pan';
+      // The tracing image, while it is not locked: its corners, and its inside where no object lies.
+      else if (flow && app.traceTool.down(wx, wy, app.vp.scale, () => objectAt(pos) >= 0)) mode = 'trace';
       else mode = app.editor.down(wx, wy, pos[0], pos[1], e.shiftKey, app.vp.scale);
       // Shift+drag where it would pan: a rubber band adds the objects inside it to the selection.
       if (mode === 'pan' && e.shiftKey && bandAllowed()) {
@@ -197,6 +201,7 @@ export function bindPointer(app: PointerApp) {
           pressAt = null;
           app.editor.cancel();
           app.frameTool.cancel();
+          app.traceTool.cancel();
           ui.flowPreview = null;
           app.redraw();
         }, LONG_PRESS_MS),
@@ -209,6 +214,7 @@ export function bindPointer(app: PointerApp) {
       app.rungTool.cancel();
       app.shapeTool.cancel();
       app.drawTool.abortPress();
+      app.traceTool.cancel();
       app.measure.abortPress();
       ui.letterDrag = null;
       if (app.frameTool.dragging !== null) {
@@ -265,7 +271,7 @@ export function bindPointer(app: PointerApp) {
         ui.objectBand.x1 = wx;
         ui.objectBand.y1 = wy;
       } else if (pointers.size === 1) {
-        if (!app.measure.dragTo(wx, wy, { shift: e.shiftKey, alt: e.altKey, touch: e.pointerType !== 'mouse' }) && !app.drawTool.dragTo(wx, wy, e.shiftKey, e.altKey) && !app.letterDragTo(wx, wy) && !app.rungTool.dragTo(wx, wy) && !app.shapeTool.dragTo(wx, wy) && !app.frameTool.dragTo(wx, wy, e.shiftKey, app.vp.scale, e.altKey) && !app.editor.dragTo(wx, wy, pos[0], pos[1])) app.vp.pan(pos[0] - prev[0], pos[1] - prev[1]);
+        if (!app.measure.dragTo(wx, wy, { shift: e.shiftKey, alt: e.altKey, touch: e.pointerType !== 'mouse' }) && !app.drawTool.dragTo(wx, wy, e.shiftKey, e.altKey) && !app.letterDragTo(wx, wy) && !app.rungTool.dragTo(wx, wy) && !app.shapeTool.dragTo(wx, wy) && !app.frameTool.dragTo(wx, wy, e.shiftKey, app.vp.scale, e.altKey) && !app.traceTool.dragTo(wx, wy) && !app.editor.dragTo(wx, wy, pos[0], pos[1])) app.vp.pan(pos[0] - prev[0], pos[1] - prev[1]);
       } else if (pointers.size === 2) {
         pointers.set(e.pointerId, pos);
         const [a, b] = [...pointers.values()];
@@ -288,9 +294,11 @@ export function bindPointer(app: PointerApp) {
         ? app.rungTool.hoverAt(wx, wy, app.vp.scale)
         : app.shapeTool.active
           ? [app.shapeTool.hoverAt(wx, wy, app.vp.scale), app.frameTool.active && app.frameTool.hoverAt(wx, wy, app.vp.scale)].some(Boolean)
-          : (app.frameTool.active && app.frameTool.hoverAt(wx, wy, app.vp.scale)) || app.editor.hoverAt(wx, wy, app.vp.scale)
+          : (app.frameTool.active && app.frameTool.hoverAt(wx, wy, app.vp.scale)) ||
+            [app.traceTool.hoverAt(wx, wy, app.vp.scale, () => objectAt(pos) >= 0), app.editor.hoverAt(wx, wy, app.vp.scale)].some(Boolean)
     )
       app.redraw();
+    if (app.settings.mode === 'flow' && !app.drawTool.active) app.canvas.style.cursor = app.traceTool.cursor();
     if (!prev) app.canvas.classList.toggle('on-frame', app.frameTool.active && app.frameTool.hover !== null && !(app.shapeTool.active && app.shapeTool.hover));
     if (e.pointerType === 'mouse' || pointers.size <= 1) showTooltip(pos[0], pos[1]);
   });
@@ -331,6 +339,9 @@ export function bindPointer(app: PointerApp) {
     if (pressAt && e.type === 'pointerup' && e.button === 0 && app.settings.mode === 'image' && Math.hypot(pos[0] - pressAt[0], pos[1] - pressAt[1]) < 4) {
       app.imageMode.click(...app.vp.toWorld(pos[0], pos[1]));
     }
+    // A drag of the tracing image lays it there; a press on it that did not move is a click like any other.
+    if (pressMode === 'trace') pressMode = e.type === 'pointerup' && app.traceTool.up() ? 'move' : 'pan';
+    if (pressMode === 'pan') app.traceTool.cancel();
     // A press on the frame that did not move is a click like any other.
     const frameClick = pressMode === 'frame' && app.frameTool.dragging !== null && !app.frameTool.up();
     if (pressMode === 'frame' && !frameClick) pressMode = 'move';

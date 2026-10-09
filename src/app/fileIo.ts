@@ -1,6 +1,7 @@
 import { t } from '../i18n';
 import { digitizeDefaults, type Digitized } from '../digitize/digitize';
 import { asideOf, storeAside } from '../model/aside';
+import { storeTrace, traceOf } from '../model/trace';
 import type { Pattern } from '../model/pattern';
 import { rememberedIn } from '../model/restitch';
 import { applyMaterial, materialOf, sameMaterial, saveSettings, type Mode, type Settings } from '../settings';
@@ -8,7 +9,7 @@ import { toStored } from '../storage/fileStore';
 import { decodeProject, encodeProject, isProjectName, onlyDesign, PROJECT_EXT, PROJECT_MIME, projectSettings, ProjectError, type Project, type ProjectSettings } from '../storage/project';
 import type { CorrectPanel } from '../ui/correctPanel';
 import { FileList, type LoadedFile } from '../ui/fileList';
-import { digitizeSvg, type ImageMode, type LeftOut } from '../ui/imageMode';
+import { digitizeSvg, type ImageMode, type LeftOut, type SewnFrom } from '../ui/imageMode';
 import { threadWidthMm } from '../validation/profiles';
 import { cleanName, writePattern } from '../writers';
 import { SUPPORTED_EXTENSIONS } from '../parsers';
@@ -31,7 +32,7 @@ export interface FileIoApp {
   /** The objects of a pattern, as the stitch sequence knows them. */
   seq(p: Pattern): { objects: Parameters<typeof rememberedIn>[1] };
   setMode(mode: Mode): void;
-  addDigitized(d: Digitized & { leftOut?: LeftOut[] }, name: string): Promise<void>;
+  addDigitized(d: Digitized & { leftOut?: LeftOut[]; source?: SewnFrom }, name: string): Promise<void>;
 }
 
 /**
@@ -107,6 +108,7 @@ export function bindFileIo(app: FileIoApp) {
         ...(f.title ? { title: f.title } : {}),
         ...(f.titles ? { titles: f.titles } : {}),
         ...(f.own ? { own: true } : {}),
+        ...(traceOf(f.pattern) ? { trace: storeTrace(traceOf(f.pattern)!, f.traceView) } : {}),
       })),
       active: active >= 0 ? active : null,
       image: snap && { name: snap.image.name, type: snap.image.type, data: new Uint8Array(snap.image.data), work: snap.work },
@@ -273,5 +275,5 @@ export function bindFileIo(app: FileIoApp) {
 
   initFilesArea({ files: app.files, settings: app.settings, setMode: (m) => app.setMode(m), newDesign, loadExample, saveProject, hasImage: () => !!app.imageMode.snapshot() });
 
-  return { openFiles, openProject, adoptMaterial, storeMaterial };
+  return { openFiles, openProject, adoptMaterial, storeMaterial, newDesign };
 }
