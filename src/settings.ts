@@ -97,6 +97,8 @@ export interface Settings {
   realistic: boolean;
   /** Ablauf: objects with a known shape drawn as flat areas of their color instead of stitches. */
   shapesView: boolean;
+  /** A scale bar of round millimetres at the foot of the stage. */
+  scaleBar: boolean;
   /** Color behind the stitches (the fabric), as #rrggbb; null follows the light or dark theme. */
   background: string | null;
   /** In the realistic view the background shows the profile's fabric (weave, knit, leather) in that color. */
@@ -148,6 +150,7 @@ export const DEFAULTS: Settings = {
   opacity: 0.6,
   realistic: false,
   shapesView: false,
+  scaleBar: true,
   background: null,
   fabricLook: true,
   threadMm: threadWidthMm(DEFAULT_PROFILE),
@@ -207,6 +210,7 @@ export function loadSettings(): Settings {
       background: hexColor(s.background),
       liveLight: typeof s.liveLight === 'boolean' ? s.liveLight : DEFAULTS.liveLight,
       fabricLook: typeof s.fabricLook === 'boolean' ? s.fabricLook : DEFAULTS.fabricLook,
+      scaleBar: typeof s.scaleBar === 'boolean' ? s.scaleBar : DEFAULTS.scaleBar,
       panels: { side: width(s.panels?.side), inspector: width(s.panels?.inspector) },
       checks: normalizeChecks(s.checks),
       correction: normalizeCorrection(s.correction),

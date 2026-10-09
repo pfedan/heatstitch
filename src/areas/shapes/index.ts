@@ -10,6 +10,7 @@ import type { Editor } from '../../ui/editor';
 import type { FrameTool } from '../../ui/frameTool';
 import type { LetteringPanel } from '../../ui/letteringPanel';
 import type { ShapeTool } from '../../ui/shapeTool';
+import type { MeasureTool } from '../../ui/measureTool';
 import { FileList } from '../../ui/fileList';
 import { canSplit } from '../../model/splitFill';
 import { ui } from '../../app/state';
@@ -27,6 +28,7 @@ export interface ShapesAreaApp {
   readonly objectName: (q: Sequence, i: number) => string;
   readonly drawTool: DrawTool;
   readonly setDrawing: (kind: DrawKind | null) => void;
+  readonly measure: MeasureTool;
   readonly shapeTool: ShapeTool;
   readonly enterShape: (o: number, fit: boolean) => void;
   readonly shapeTarget: (p: Pattern, q: Sequence, o: number) => Form | null;
@@ -366,6 +368,7 @@ export function initShapes(app: ShapesAreaApp): void {
   type Item = { kind: 'title'; text: string; title?: string } | { kind: 'hint'; text: string } | { kind: 'cmd'; id: string; text?: string; toggle?: boolean; on?: boolean; primary?: boolean } | { kind: 'sep' };
 
   function barItems(): Item[] {
+    if (app.measure.active && app.settings.mode !== 'image') return measureItems();
     if (!flow()) return [];
     const snap: Item = { kind: 'cmd', id: 'frame.snap', text: t('shapes.snap'), toggle: true, on: app.frameTool.snap };
     const d = app.drawTool;
@@ -427,6 +430,22 @@ export function initShapes(app: ShapesAreaApp): void {
     return [];
   }
 
+  /** Messen: how to measure, then the parts of the distance; Fertig ends the tool. */
+  function measureItems(): Item[] {
+    const m = app.measure;
+    const r = m.result;
+    const touch = matchMedia('(pointer: coarse)').matches;
+    const mm = (v: number) => formatNumber(v, 1);
+    // On a phone the parts come short, so Fertig stays in sight.
+    const hint = r && !m.open ? t(matchMedia('(max-width: 760px)').matches ? 'measure.result.short' : 'measure.result', { dx: mm(r.dx), dy: mm(r.dy), a: formatNumber(Math.round(r.angle) % 180) }) : t(m.open ? (touch ? 'measure.next.touch' : 'measure.next') : touch ? 'measure.how.touch' : 'measure.how');
+    return [
+      { kind: 'title', text: t('measure.tool'), title: t('measure.tool.hint') },
+      { kind: 'hint', text: hint },
+      { kind: 'sep' },
+      { kind: 'cmd', id: 'tool.measure', text: t('object.editDone'), primary: true },
+    ];
+  }
+
   function renderBar(): void {
     const items = barItems();
     const key = JSON.stringify(items.map((i) => (i.kind === 'cmd' ? [i.id, i.text, i.on, canRun(i.id)] : i)));
@@ -462,7 +481,7 @@ export function initShapes(app: ShapesAreaApp): void {
   function refresh(): void {
     for (const b of railButtons) {
       const id = b.dataset.command!;
-      if (id === 'tool.select') b.setAttribute('aria-pressed', String(!app.drawTool.kind));
+      if (id === 'tool.select') b.setAttribute('aria-pressed', String(!app.drawTool.kind && !app.measure.active));
       else if (id.startsWith('draw.')) b.setAttribute('aria-pressed', String(app.drawTool.kind === id.slice(5)));
       if (id === 'draw.cut') b.disabled = !canRun(id);
     }
