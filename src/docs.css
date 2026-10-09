@@ -813,3 +813,76 @@ figure img[src*='save-'] {
     left: 0;
   }
 }
+
+/* Pictures open in a plain full screen view on a tap (src/docsImageView.ts). */
+figure img {
+  cursor: zoom-in;
+}
+
+figure img:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.image-view-open {
+  overflow: hidden;
+}
+
+.image-view {
+  width: 100vw;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: #0e0c12;
+  overflow: hidden;
+  touch-action: none;
+  overscroll-behavior: contain;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.image-view::backdrop {
+  background: #0e0c12;
+}
+
+.image-view img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: none;
+  transform-origin: 0 0;
+  cursor: grab;
+  -webkit-user-drag: none;
+}
+
+.image-view img:active {
+  cursor: grabbing;
+}
+
+.image-view-close {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  right: max(12px, env(safe-area-inset-right));
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid rgb(255 255 255 / 0.25);
+  border-radius: 50%;
+  background: rgb(0 0 0 / 0.55);
+  color: #fff;
+  cursor: pointer;
+}
+
+.image-view-close:hover {
+  background: rgb(0 0 0 / 0.8);
+}
+
+.image-view-close:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
