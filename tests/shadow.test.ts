@@ -5,7 +5,7 @@ import { syncBorders } from '../src/model/border';
 import { lineSettings, resewLine } from '../src/model/line';
 import { sewObjects } from '../src/model/objects';
 import { STITCH, TRIM, type Pattern } from '../src/model/pattern';
-import { remembered, rememberedIn, restoreRemembered } from '../src/model/restitch';
+import { objectKey, remembered, rememberedIn, restoreRemembered } from '../src/model/restitch';
 import { deleteObjects, duplicateObject, recolorObjects } from '../src/model/shapeOps';
 import { transformSewObject } from '../src/model/reshape';
 import { stitchKinds } from '../src/model/sequence';
@@ -124,5 +124,26 @@ describe('shadow of a line', () => {
     const alone = deleteObjects(p, [1], T)!;
     expect(remembered(alone, sewObjects(alone)[0])?.line?.echo?.skip).toEqual([2, 3]);
     expect(syncBorders(alone, T)).toBe(alone);
+  });
+
+  it('landing on the very stitches of another shadow, is sewn the other way round (found by the torture test)', () => {
+    // Two lines 4 mm apart, each with a shadow 2 mm toward the other: both shadows fall on one line.
+    // (Starting 0.02 mm off the grid, so no lock stitch rounds one way here and the other way there.)
+    let p = empty as Pattern;
+    for (const [y, link, angle] of [[0, 's1', 90], [4, 's2', 270]] as const) {
+      p = addShape(p, { form: parsePath(`M0.02 ${y} L30.02 ${y}`, ID), kind: 'stroke', width: 0.4 }, red, null, options)!.pattern;
+      const objs = sewObjects(p);
+      const o = objs[objs.length - 1];
+      const st = { ...lineSettings(p, o), shadow: { color: grey, link, angle, dist: 2 } };
+      p = syncBorders(resewLine(p, o.index, remembered(p, o)!.path!, st, T)!.pattern, T);
+    }
+    const q = p;
+    const objs = sewObjects(q);
+    const keys = objs.map((x) => objectKey(q, x));
+    expect(new Set(keys).size).toBe(keys.length);
+    // Each still knows what it is, and both lie where they fall.
+    const shadows = objs.filter((x) => remembered(q, x)?.shadowOf);
+    expect(shadows.map((x) => remembered(q, x)!.shadowOf).sort()).toEqual(['s1', 's2']);
+    for (const x of shadows) for (const [, y] of points(q, x.first, x.last)) expect(y).toBeCloseTo(2, 1);
   });
 });

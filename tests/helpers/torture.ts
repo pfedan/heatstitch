@@ -32,6 +32,8 @@ import { DEFAULT_PROFILE } from '../../src/validation/profiles';
 import { tagShortStitches, TIE } from '../../src/validation/shortStitches';
 import { thinByHand } from '../../src/correct/thinHand';
 import { keepObjects } from '../../src/model/handEdit';
+import { Editor } from '../../src/ui/editor';
+import { stitchBefore } from '../../src/model/edit';
 import { THIN_SHARES } from '../../src/areas/stitches/state';
 import { writePattern } from '../../src/writers';
 import { rng } from './images';
@@ -437,6 +439,85 @@ export const OPS: Op[] = [
     },
   },
   {
+    // As the app: stitches level in one object, "Weitersticken" on, one to three clicks from its
+    // thread end (or after a point picked in it), each its own undo step.
+    name: 'stitch on by hand',
+    run: (d, r) => {
+      if (!d.objects.length) return false;
+      const before = sewObjects(d.cur.p);
+      const o0 = pick(r, before);
+      let o = o0.index;
+      const others = new Map(before.map((x) => [x.id, ownStitches(d.cur.p, x)]));
+      const before0 = d.cur.p;
+      const obj = () => sewObjects(d.cur.p)[o];
+      const editor = new Editor({
+        pattern: () => d.cur.p,
+        range: () => ({ first: obj().first, last: obj().last }),
+        ends: () => ({ first: obj().first, end: obj().last - obj().tieOff, last: obj().last }),
+        commit: (next, change) => {
+          const moved = keepObjects(d.cur.p, next, change!);
+          o = moved.get(o) ?? -1;
+          d.commit(next);
+        },
+        redraw: () => {},
+        changed: () => {},
+      });
+      editor.setActive(true);
+      const fromEnd = r() < 0.7;
+      if (!fromEnd) {
+        const pts: number[] = [];
+        for (let i = o0.first; i < o0.last - o0.tieOff; i++) if (d.cur.p.cmd[i] === STITCH) pts.push(i);
+        if (!pts.length) return false;
+        editor.selection = new Set([pick(r, pts)]);
+      }
+      editor.setPen(true);
+      const clicks = 1 + Math.floor(r() * 3);
+      const cur = () => [...editor.selection][0] ?? obj().last - obj().tieOff;
+      for (let k = 0; k < clicks; k++) {
+        const i = cur();
+        // 2 to 5 mm on in some direction: never a tie, never the same spot.
+        const a = r() * Math.PI * 2;
+        const len = between(r, 2, 5);
+        const x = d.cur.p.x[i] / 10 + Math.cos(a) * len;
+        const y = d.cur.p.y[i] / 10 + Math.sin(a) * len;
+        // Far from other points, so it does not snap into another hole (scale 1000: within 0.08 mm).
+        editor.down(x, y, 0, 0, false, 1000);
+        editor.up();
+        expect(o, 'stitched on: the object stays').toBe(o0.index);
+      }
+      const after = sewObjects(d.cur.p);
+      expect(after.map((x) => x.id), 'stitched on: the same objects').toEqual(before.map((x) => x.id));
+      expect(after[o].stitches, 'stitched on: one stitch more per click').toBe(o0.stitches + clicks);
+      for (const x of after) if (x.index !== o) expect(ownStitches(d.cur.p, x), 'stitched on: the others stay as they were').toBe(others.get(x.id));
+      if (fromEnd) {
+        // The thread ends at the last click, locked by the tie-off that came along: what is sewn after
+        // it stays as close to it as the tie-off was to the old end (each turn may round by 0.1 mm).
+        const a = after[o];
+        const p = d.cur.p;
+        const last = [...editor.selection][0];
+        const reach = (q: Pattern, end: number, to: number) => {
+          let m = 0;
+          for (let i = end + 1; i <= to; i++) if (q.cmd[i] === STITCH) m = Math.max(m, Math.hypot(q.x[i] - q.x[end], q.y[i] - q.y[end]));
+          return m;
+        };
+        expect(last, 'stitched on: the last point set is the last of the object, its tie-off aside').toBe(a.last - o0.tieOff);
+        expect(reach(p, last, a.last), 'stitched on: the tie-off goes along').toBeLessThanOrEqual(reach(before0, o0.last - o0.tieOff, o0.last) + clicks);
+        // Turned with the last stitch: a tie-off on the line of the old last stitch is on the line
+        // of the new one (as far off it as it was, rounding aside), not sticking out sideways.
+        const off = (q: Pattern, end: number, to: number) => {
+          const prev = stitchBefore(q, end);
+          const [ux, uy] = [q.x[end] - q.x[prev], q.y[end] - q.y[prev]];
+          const n = Math.hypot(ux, uy);
+          let m = 0;
+          if (n) for (let i = end + 1; i <= to; i++) if (q.cmd[i] === STITCH) m = Math.max(m, Math.abs((q.x[i] - q.x[end]) * uy - (q.y[i] - q.y[end]) * ux) / n);
+          return m;
+        };
+        if (stitchBefore(before0, o0.last - o0.tieOff) >= o0.first) expect(off(p, last, a.last), 'stitched on: the tie-off turns with the last stitch').toBeLessThanOrEqual(off(before0, o0.last - o0.tieOff, o0.last) + clicks);
+      }
+      return true;
+    },
+  },
+  {
     name: 'delete',
     run: (d, r) => {
       if (d.objects.length < 2) return false;
@@ -796,7 +877,8 @@ export function checkEchoes(p: Pattern): void {
   };
   for (const o of sewObjects(p)) {
     const m = remembered(p, o);
-    if (!m?.path || !m.line || (!m.line.echo && !((m.line.repeat ?? 1) > 1))) continue;
+    // Loosed from its curve (changed by hand), a line keeps the stitches it was given instead.
+    if (!m?.path || !m.line || m.free || (!m.line.echo && !((m.line.repeat ?? 1) > 1))) continue;
     const fresh = lineStitches(m.path, m.line).flat();
     const sewn: [number, number][] = [];
     for (let i = o.first; i <= o.last; i++) if (p.cmd[i] === STITCH) sewn.push([p.x[i] / 10, p.y[i] / 10]);

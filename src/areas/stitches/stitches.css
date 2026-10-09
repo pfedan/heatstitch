@@ -321,6 +321,17 @@
   margin-left: 2px;
 }
 
+/* Weitersticken while on: pressed, in a light accent tone (the accent itself is for "Fertig"). */
+.stitch-bar .bar-btn[aria-pressed='true'] {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  border-color: var(--accent);
+  color: var(--ink);
+}
+
+.stitch-bar .bar-btn .node {
+  fill: currentColor;
+}
+
 .bar-title {
   padding: 0 4px 0 2px;
   font-weight: 600;

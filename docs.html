@@ -459,11 +459,35 @@
           oder mit den Pfeiltasten schieben (0,1 mm, mit <kbd>Umschalt</kbd> 0,5 mm); ein Etikett zeigt die beiden
           Stiche an diesem Punkt, orange unter 1 mm, rot über 12,1 mm. Doppelklick auf einen Stich setzt dort einen
           Einstich, <kbd>I</kbd> teilt den Stich zum gewählten Einstich, <kbd>Entf</kbd> löscht. <kbd>,</kbd> und
-          <kbd>.</kbd> gehen in Nähreihenfolge von Einstich zu Einstich. <kbd>Umschalt</kbd>+Ziehen wählt ein
+          <kbd>.</kbd> gehen in Nähreihenfolge von Einstich zu Einstich (mit <kbd>Umschalt</kbd> zehn auf einmal),
+          <kbd>Pos1</kbd> und <kbd>Ende</kbd> springen zum Anfang und zum Fadenende des Objekts; die Zeile über der
+          Bühne nennt, der wievielte Einstich gewählt ist. <kbd>Umschalt</kbd>+Ziehen wählt ein
           Rechteck, <kbd>Strg</kbd>+<kbd>A</kbd> alles, und <i>Ausdünnen</i> unter <i>Werkzeuge</i> nimmt aus der
           Auswahl jeden vierten, dritten oder zweiten Einstich heraus (25, 33 oder 50 %). Ein Klick auf ein anderes
           Objekt macht mit diesem weiter; <kbd>Esc</kbd> führt zurück zu den Objekten.
         </p>
+        <p>
+          Wo das Objekt anfängt und wo sein Faden endet, zeigen zwei Marken: ein runder Punkt mit einem Pfeil in
+          Stichrichtung (<i>Anfang</i>) und ein Quadrat (<i>Ende</i>). Ein gewählter Einstich zeigt seinen Weg: die
+          Stiche davor und danach in Nähreihenfolge, zur Seite hin blasser, mit kleinen Pfeilen in die Richtung, in
+          der der Faden läuft. So sieht man, woher die Nadel kommt und wohin sie geht, auch mitten in einer Füllung.
+          Beim Zeigen auf einen Einstich erscheint derselbe Weg zart, noch vor dem Klick.
+        </p>
+        <p>
+          <i>Weitersticken</i> (<kbd>W</kbd>) in der Zeile über der Bühne setzt Einstiche per Klick: Jeder Klick
+          setzt einen neuen Einstich hinter den gewählten, ohne Auswahl am Fadenende des Objekts, und der neue ist
+          dann gewählt, so stickst du Klick für Klick weiter. Eine Linie vom letzten Einstich zum Zeiger zeigt vorher,
+          wie lang der Stich wird; mitten im Objekt zeigt eine gestrichelte Linie, wie der Faden danach weiterläuft.
+          Ein Klick nahe an einem vorhandenen Einstich trifft genau dieses Loch. Ein Stich über 12 mm wird in
+          gleich lange Stiche geteilt, wie eine Maschine sie sticken kann. Am Fadenende geht das Vernähen mit, der
+          Faden bleibt also gesichert, wo er jetzt endet. Ziehen schiebt dabei die Ansicht, die
+          <kbd>Rücktaste</kbd> nimmt den letzten Einstich zurück, <kbd>Enter</kbd> oder <kbd>Esc</kbd> beenden.
+          Jeder Klick ist ein Schritt für <kbd>Strg</kbd>+<kbd>Z</kbd>.
+        </p>
+        <figure>
+          <img src="/guide/stitch-on-de.jpg" width="1280" height="800" loading="lazy" alt="Die rote Linie am Wollknäuel der Katze auf der Ebene Stiche: Anfang und Ende markiert, Weitersticken an, zwei neue Einstiche nach dem Fadenende, der nächste unter dem Zeiger mit seiner Länge" />
+          <figcaption>Weitersticken an der roten Linie der <a href="examples/cat-60mm.pes" download>Katze</a>: Zwei Klicks haben am Fadenende zwei Einstiche gesetzt, das Vernähen ist mitgegangen (<i>Ende</i>), die Linie zum Zeiger zeigt den nächsten Stich mit 1,7 mm.</figcaption>
+        </figure>
         <p>
           Das Objekt behält Form, Zusammenhalt und Einstellungen, seine Karte zählt die Änderungen von Hand. Neue
           Stich-Einstellungen, eine andere Stichart oder Zusammenfassen sticken es aus seiner Form neu und ersetzen
@@ -473,7 +497,7 @@
         </p>
         <figure>
           <img src="/guide/stitches-de.jpg" width="1280" height="800" loading="lazy" alt="Der Stern aus patch.pes auf der Ebene Stiche: seine Einstiche als Punkte, einer gewählt mit den Längen seiner beiden Stiche, die Karte Objekt mit den Änderungen von Hand" />
-          <figcaption>Der Stern aus <a href="examples/demos/patch.pes" download>patch.pes</a>, zu einem Objekt zusammengefasst, auf der Ebene <i>Stiche</i>: ein Einstich zur Seite gezogen, die Reihe knickt sichtbar, das Etikett zeigt die beiden Stichlängen, die Karte zählt die Änderung.</figcaption>
+          <figcaption>Der Stern aus <a href="examples/demos/patch.pes" download>patch.pes</a>, zu einem Objekt zusammengefasst, auf der Ebene <i>Stiche</i>: ein Einstich zur Seite gezogen, die Reihe knickt sichtbar, das Etikett zeigt die beiden Stichlängen, der Weg des Fadens davor und danach ist mit Pfeilen hervorgehoben, die Karte zählt die Änderung.</figcaption>
         </figure>
 
         <h2 id="de-draw">Formen zeichnen</h2>
@@ -939,6 +963,7 @@
             <tr><td>Doppelklick</td><td>Form oder Stiche öffnen; auf der Ebene Form einen Knoten setzen; auf der Ebene Stiche einen Einstich setzen</td></tr>
             <tr><td><kbd>C</kbd>, <kbd>Entf</kbd></td><td>Auf der Ebene Form: Knoten zur Ecke oder rund machen, löschen</td></tr>
             <tr><td><kbd>,</kbd> <kbd>.</kbd>, <kbd>I</kbd>, <kbd>Entf</kbd></td><td>Auf der Ebene Stiche: voriger / nächster Einstich, Stich teilen, löschen</td></tr>
+            <tr><td><kbd>W</kbd>, <kbd>Pos1</kbd> <kbd>Ende</kbd></td><td>Auf der Ebene Stiche: Weitersticken (Einstiche per Klick setzen), zum Anfang / Fadenende des Objekts</td></tr>
             <tr><td><kbd>T</kbd></td><td>Im Werkzeug Richtung: Querlinie oder Trennlinie ziehen</td></tr>
             <tr><td><kbd>Esc</kbd></td><td>Werkzeug weglegen, Auswahl oder Zone aufheben, eine Ebene zurück</td></tr>
             <tr><td><kbd>N</kbd> / <kbd>Umschalt</kbd>+<kbd>N</kbd>, <kbd>V</kbd></td><td>Prüfen: nächste / vorige Zone, Markierungen ein oder aus</td></tr>
@@ -1399,11 +1424,35 @@
           arrow keys (0.1 mm, with <kbd>Shift</kbd> 0.5 mm); a label shows the two stitches at this point, orange
           under 1 mm, red over 12.1 mm. Double click on a stitch sets a needle point there, <kbd>I</kbd> splits the
           stitch to the selected needle point, <kbd>Del</kbd> deletes. <kbd>,</kbd> and <kbd>.</kbd> step from needle
-          point to needle point in sewing order. <kbd>Shift</kbd>+drag selects a rectangle, <kbd>Ctrl</kbd>+<kbd>A</kbd>
+          point to needle point in sewing order (with <kbd>Shift</kbd> ten at a time), <kbd>Home</kbd> and
+          <kbd>End</kbd> jump to the start and the thread end of the object; the line above the stage says which
+          needle point is selected. <kbd>Shift</kbd>+drag selects a rectangle, <kbd>Ctrl</kbd>+<kbd>A</kbd>
           everything, and <i>Thin out</i> under <i>Tools</i> takes every fourth, third or second needle point out of
           the selection (25, 33 or 50 %). A click on another object continues with it; <kbd>Esc</kbd> leads back to
           the objects.
         </p>
+        <p>
+          Two marks show where the object starts and where its thread ends: a round dot with an arrow in the
+          direction of sewing (<i>Start</i>) and a square (<i>End</i>). A selected needle point shows its way: the
+          stitches before and after it in sewing order, fading to the sides, with small arrows in the direction the
+          thread runs. So you see where the needle comes from and where it goes, even in the middle of a fill.
+          Pointing at a needle point shows the same way faintly, before the click.
+        </p>
+        <p>
+          <i>Stitch on</i> (<kbd>W</kbd>) in the line above the stage sets needle points by clicking: each click
+          sets a new needle point after the selected one, or at the object's thread end when none is selected, and
+          the new one is selected then, so you stitch on click by click. A line from the last needle point to the
+          pointer shows beforehand how long the stitch will be; in the middle of an object a dashed line shows how
+          the thread goes on afterwards. A click close to an existing needle point hits exactly that hole. A stitch
+          over 12 mm is split into stitches of equal length, as a machine can sew them. At the thread end the tie-off
+          goes along, so the thread stays locked where it now ends. Dragging moves the view meanwhile,
+          <kbd>Backspace</kbd> takes back the last needle point, <kbd>Enter</kbd> or <kbd>Esc</kbd> end it. Each
+          click is one step for <kbd>Ctrl</kbd>+<kbd>Z</kbd>.
+        </p>
+        <figure>
+          <img src="/guide/stitch-on-en.jpg" width="1280" height="800" loading="lazy" alt="The red line at the cat's ball of wool at the level Stitches: start and end marked, Stitch on turned on, two new needle points after the thread end, the next one under the pointer with its length" />
+          <figcaption>Stitching on at the red line of the <a href="examples/cat-60mm.pes" download>cat</a>: two clicks set two needle points at the thread end, the tie-off went along (<i>End</i>), and the line to the pointer shows the next stitch with 1.7 mm.</figcaption>
+        </figure>
         <p>
           The object keeps its shape, cohesion and settings, and its card counts the changes by hand. New stitch
           settings, another stitch type or combining sew it anew from its shape and replace these changes; the card
@@ -1413,7 +1462,7 @@
         </p>
         <figure>
           <img src="/guide/stitches-en.jpg" width="1280" height="800" loading="lazy" alt="The star of patch.pes opened at the level Stitches: its needle points as dots, one selected with the lengths of its two stitches, the Object card with the changes by hand" />
-          <figcaption>The star of <a href="examples/demos/patch.pes" download>patch.pes</a>, combined into one object, at the <i>Stitches</i> level: one needle point pulled aside, the row bends visibly, the label shows the two stitch lengths, the card counts the change.</figcaption>
+          <figcaption>The star of <a href="examples/demos/patch.pes" download>patch.pes</a>, combined into one object, at the <i>Stitches</i> level: one needle point pulled aside, the row bends visibly, the label shows the two stitch lengths, the way of the thread before and after it is marked with arrows, the card counts the change.</figcaption>
         </figure>
 
         <h2 id="en-draw">Draw shapes</h2>
@@ -1874,6 +1923,7 @@
             <tr><td>Double click</td><td>Open shape or stitches; on the Shape level set a node; on the Stitches level set a needle point</td></tr>
             <tr><td><kbd>C</kbd>, <kbd>Del</kbd></td><td>On the Shape level: make the node a corner or smooth, delete it</td></tr>
             <tr><td><kbd>,</kbd> <kbd>.</kbd>, <kbd>I</kbd>, <kbd>Del</kbd></td><td>On the Stitches level: previous / next needle point, split the stitch, delete</td></tr>
+            <tr><td><kbd>W</kbd>, <kbd>Home</kbd> <kbd>End</kbd></td><td>On the Stitches level: stitch on (set needle points by clicking), to the start / thread end of the object</td></tr>
             <tr><td><kbd>T</kbd></td><td>In the Direction tool: draw a rung or a cut line</td></tr>
             <tr><td><kbd>Esc</kbd></td><td>Put the tool away, clear the selection or zone, one level back</td></tr>
             <tr><td><kbd>N</kbd> / <kbd>Shift</kbd>+<kbd>N</kbd>, <kbd>V</kbd></td><td>Check: next / previous zone, markers on or off</td></tr>

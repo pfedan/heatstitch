@@ -206,6 +206,8 @@ export function syncShadows(p: Pattern, trimMm: number): Pattern {
     remember(p, objs[k], (mem[k] = { ...m!, line }));
     [line.shadow?.link, line.echo?.link].forEach((l) => l && claimed.add(l));
   });
+  let keys: Set<string> | null = null;
+  const taken = () => (keys ??= new Set(objs.map((o) => objectKey(p, o))));
   const changes: Change[] = [];
   const wanted = new Set<string>();
   objs.forEach((o, k) => {
@@ -220,7 +222,11 @@ export function syncShadows(p: Pattern, trimMm: number): Pattern {
       if (same && cur?.path && JSON.stringify(storeForm(cur.path)) === JSON.stringify(storeForm(part.memory.path!)) && JSON.stringify(cur.line) === JSON.stringify(part.memory.line)) continue;
       const runs = lineStitches(part.memory.path!, part.memory.line!);
       if (!runs.length) continue;
-      const recs = runRecords(runs, trimMm);
+      let recs = runRecords(runs, trimMm);
+      // The very stitches of another object (a shadow landing on a line, say): sewn the other way
+      // round, so each remembers its own (memory is keyed by stitches).
+      if (taken().has(keyOf(recs)) && (!target || keyOf(recs) !== objectKey(p, target))) recs = runRecords(runs.slice().reverse().map((run) => run.slice().reverse()), trimMm);
+      taken().add(keyOf(recs));
       const memory = part.memory;
       if (same) {
         changes.push({ a: leadOf(p, target), b: target.last, recs, memory });
