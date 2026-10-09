@@ -14,7 +14,7 @@ import { SATIN_SHARE } from '../model/covers';
 import { currentSettings } from '../correct/plan';
 import { isCovered, setOverlapShare } from '../model/knockout';
 import { isStroke, SATIN_MAX, pullFor, digitizeDefaults } from '../digitize/digitize';
-import { lineOf, lineSettings, lineToFill } from '../model/line';
+import { closedForm, closedLineToFill, lineOf, lineSettings, lineToFill } from '../model/line';
 import { outline } from '../digitize/region';
 import { recommendedSpacing } from '../validation/profiles';
 import { rememberObjects, type SewObject } from '../model/objects';
@@ -376,12 +376,15 @@ export function bindStitches(app: StitchesApp) {
         if (one >= 0) app.sewLineAgain(one);
         return;
       }
-      if (to === 'fill' && one >= 0 && remembered(p, app.seq(p).objects[one])?.path) {
+      const path = to === 'fill' && one >= 0 ? remembered(p, app.seq(p).objects[one])?.path : undefined;
+      if (path) {
         const d = digitizeDefaults(app.settings.profile);
         const fill = { pattern: 'tatami' as const, spacing: d.spacing, spacingEnd: Math.min(1.2, Math.round(d.spacing * 250) / 100), offset: 0.25, angle: NaN, stitch: d.stitch, underlay: d.underlay, edge: 0, tolerance: d.tolerance };
-        const r = lineToFill(p, one, fill, app.settings.trimMm);
+        // A closed line is filled inside and stays its border; an open satin line becomes a fill in its width.
+        const closed = closedForm(path);
+        const r = closed ? closedLineToFill(p, one, fill, app.settings.trimMm) : lineToFill(p, one, fill, app.settings.trimMm);
         applyRestitched(r, 'stitch.failed', true);
-        if (r?.starts.length) app.layers.say(t('stitch.lineFilled'));
+        if (r?.starts.length) app.layers.say(t(closed ? 'stitch.closedFilled' : 'stitch.lineFilled'));
         return;
       }
       // One fill to satin: cut and crossed as by hand (Vorschlagen), the same as with R.

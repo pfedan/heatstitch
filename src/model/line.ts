@@ -4,6 +4,7 @@ import { echoLines, type EchoLine } from '../digitize/echo';
 import type { Pt } from '../digitize/skeleton';
 import { flatten, type Form, type Node } from '../shape/path';
 import { fitCubic } from '../shape/vectorize';
+import { rasterize } from '../shape/rasterize';
 import { hasPhase, isRunType, passesOf, sewAlong, spacingOf, type PathStitch } from './along';
 import { runRecords } from './border';
 import { tidy, withRecords } from './edit';
@@ -343,6 +344,32 @@ export function lineToFill(p: Pattern, index: number, s: FillSettings, trimMm: n
   r.memory.forEach((m) => {
     delete m.form;
     m.asLine = asLine;
+  });
+  return r;
+}
+
+/** Whether a line's form is closed all round (it encloses an area that can be filled). */
+export const closedForm = (f: Form | null | undefined): boolean => !!f?.paths.length && f.paths.every((x) => x.closed);
+
+/**
+ * A closed line filled inside with `s` (the area its loops enclose, even-odd), the line staying on
+ * its edge as the fill's border with its stitch; its echo and shadow go. The fill remembers the line
+ * as its outline. Null when the line is open or encloses nothing.
+ */
+export function closedLineToFill(p: Pattern, index: number, s: FillSettings, trimMm: number): RestitchResult | null {
+  const kinds = stitchKinds(p);
+  const objs = sewObjects(p, kinds);
+  const o = objs[index];
+  const known = o && remembered(p, o);
+  if (!o || !known?.path || !known.line || known.free || !closedForm(known.path)) return null;
+  const area = rasterize(known.path);
+  if (!area) return null;
+  const { echo: _e, shadow: _s, fringe: _f, fringeSide: _fs, ...border } = known.line;
+  const r = restitch(p, objs, [index], { kind: 'fill', s: { ...s, border } }, kinds, trimMm, o.kind, false, undefined, new Map([[index, area]]));
+  r.memory.forEach((m) => {
+    m.form = known.path!;
+    delete m.path;
+    delete m.line;
   });
   return r;
 }
