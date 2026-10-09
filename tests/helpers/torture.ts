@@ -23,7 +23,7 @@ import { deleteObjects, duplicateObject, duplicateObjects, mirrorMatrix, recolor
 import { stitchesBefore } from '../../src/model/transform';
 import { sewDesign, specOf } from '../../src/model/sew';
 import { parsePattern } from '../../src/parsers';
-import { insertNode, rotation, segments, storeForm, translation, type Form, type Mat } from '../../src/shape/path';
+import { extendPath, insertNode, rotation, segments, storeForm, translation, type Form, type Mat } from '../../src/shape/path';
 import { ellipsePath, parsePath, rectPath } from '../../src/shape/svgPath';
 import { fromStored, toStored } from '../../src/storage/fileStore';
 import { decodeProject, encodeProject, projectSettings } from '../../src/storage/project';
@@ -45,7 +45,7 @@ import { stripsOfAreas } from '../../src/digitize/rungs';
  * The torture test: random chains of the operations the app offers on objects (add, duplicate (also
  * several, and in place),
  * move, turn, mirror, scale, thin out by hand, delete, cut out, cut a fill apart, recolor, leave out, border in its own thread, empty fill, echo and shadow of a line,
- * a line's nodes edited (put in, closed, opened), a closed line filled inside, undo,
+ * a line's nodes edited (put in, added at an end, closed, opened), a closed line filled inside, undo,
  * redo, save and open the project, export), done the way the app does them, with the design's
  * invariants checked after every step. A failing chain names its seed and steps, so it can be
  * replayed and turned into a fixed regression test.
@@ -751,7 +751,7 @@ export const LINE_OPS: Op[] = [
   {
     name: 'edit line',
     run: (d, r) => {
-      // As the level Form: a node put in on a curve, or the line closed or opened.
+      // As the level Form: a node put in on a curve or added beyond an end, or the line closed or opened.
       const lines = d.objects.filter((o) => remembered(d.cur.p, o)?.path && remembered(d.cur.p, o)?.line && !remembered(d.cur.p, o)?.free && !partOf(remembered(d.cur.p, o)));
       if (!lines.length) return false;
       const o = pick(r, lines);
@@ -759,9 +759,10 @@ export const LINE_OPS: Op[] = [
       const form = m.path!;
       const k = Math.floor(r() * form.paths.length);
       const path = form.paths[k];
-      const how = pick(r, ['insert', 'toggle'] as const);
+      const how = pick(r, ['insert', 'extend', 'toggle'] as const);
       let next: Form;
       if (how === 'insert' && segments(path)) next = insertNode(form, k, Math.floor(r() * segments(path)), between(r, 0.1, 0.9)).form;
+      else if (how === 'extend' && !path.closed) next = extendPath(form, k, pick(r, [0, 1] as const), [between(r, 0, 60), between(r, 0, 60)]).form;
       else if (how === 'toggle' && (path.closed || path.nodes.length >= 3)) next = { ...form, paths: form.paths.map((x, j) => (j === k ? { ...x, closed: !x.closed } : x)) };
       else return false;
       const sewn = resewLine(d.cur.p, o.index, next, m.line!, T);

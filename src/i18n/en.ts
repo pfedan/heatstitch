@@ -1119,7 +1119,7 @@ const enBase: Record<keyof typeof deBase, string> = {
   'knockout.card.keep': 'Keep as is',
   'knockout.card.keep.hint': 'Everything is sewn as it is in the file.',
   'knockout.card.kept': 'Kept. You can still leave out per object in its stitch settings.',
-  'shape.hint': 'Drag nodes · Drag a curve: bend · Double-click: add a node',
+  'shape.hint': 'Drag nodes · Drag a curve: bend · Drag a hollow dot: new node (also at the end of a line)',
   'shape.hint.band': 'Satin line: the round grip on the band changes its width.',
   'shape.hint.rails': 'The two lines are the edges of the column. Drag to change the width.',
   'shape.nodes': '{n} nodes',

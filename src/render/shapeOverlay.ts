@@ -85,6 +85,7 @@ export function drawShapeOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, vi
     ctx.fill();
     ctx.stroke();
   }
+  drawGhosts(ctx, vp, view, h);
   view.form.paths.forEach((p, path) =>
     p.nodes.forEach((n, i) => {
       const [x, y] = S(n.p);
@@ -102,6 +103,48 @@ export function drawShapeOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, vi
   );
   if (view.band !== null) drawWidthGrip(ctx, vp, view, h?.part === 'width');
   ctx.restore();
+}
+
+/**
+ * New nodes to drag out: small hollow dots in the middle of the curves, and beyond each end of a
+ * line a dot with a plus, joined to its end by a dashed stub. The hovered one in the accent color.
+ */
+function drawGhosts(ctx: CanvasRenderingContext2D, vp: Viewport, view: ShapeView, h: ShapePick | null): void {
+  for (const g of view.ghosts(vp.scale)) {
+    const [x, y] = vp.toScreen(g.at[0], g.at[1]);
+    const on = !!h && h.part === g.part && h.path === g.path && (h.part === 'mid' ? g.part === 'mid' && h.seg === g.seg : h.part === 'end' && g.part === 'end' && h.end === g.end);
+    if (g.part === 'end' && g.from) {
+      const [fx, fy] = vp.toScreen(g.from[0], g.from[1]);
+      ctx.beginPath();
+      ctx.moveTo(fx, fy);
+      ctx.lineTo(x, y);
+      ctx.setLineDash([3, 3]);
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.45)';
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+      ctx.strokeStyle = on ? ACCENT : 'rgba(255, 255, 255, 0.85)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    const r = g.part === 'end' ? (on ? 7.5 : 6.5) : on ? 5.5 : 4;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = on ? ACCENT : 'rgba(255, 255, 255, 0.85)';
+    ctx.strokeStyle = on ? 'rgba(0, 0, 0, 0.8)' : 'rgba(0, 0, 0, 0.55)';
+    ctx.lineWidth = 1.2;
+    ctx.fill();
+    ctx.stroke();
+    if (g.part !== 'end') continue;
+    ctx.beginPath();
+    ctx.moveTo(x - 3, y);
+    ctx.lineTo(x + 3, y);
+    ctx.moveTo(x, y - 3);
+    ctx.lineTo(x, y + 3);
+    ctx.strokeStyle = on ? '#ffffff' : 'rgba(0, 0, 0, 0.75)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
 }
 
 /** The round grip on the band's edge, from the middle of the line; its width in mm while hovered or dragged. */

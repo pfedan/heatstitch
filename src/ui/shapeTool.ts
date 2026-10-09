@@ -1,16 +1,31 @@
 import { simplifyMore } from '../shape/simplify';
 import { bandGrip, draggedWidth } from '../shape/band';
 import type { Pt } from '../digitize/skeleton';
-import { cloneForm, insertNode, moveHandle, moveNode, nearestOnForm, removeNode, segment, segments, setSmooth, type Form } from '../shape/path';
+import { bezier, cloneForm, endDirection, extendPath, insertNode, moveHandle, moveNode, nearestOnForm, removeNode, segment, segments, setSmooth, type Form } from '../shape/path';
 
 /** Pick radius around the pointer for nodes and handles, CSS pixels; curves a little more. */
 const PICK_PX = 9;
 const PICK_CURVE_PX = 7;
 /** A double-click this close to the outline puts a node there. */
 const INSERT_PX = 14;
+/** New nodes to drag out: a hollow dot in the middle of each curve this long on screen (CSS pixels), and one this far beyond each end of a line. */
+const GHOST_MIN_PX = 40;
+const GHOST_END_PX = 28;
 
-/** A node, one of its handles (a: in, b: out), a curve at parameter t, or the width grip of a satin line. */
-export type ShapePick = { path: number; i: number; part: 'p' | 'a' | 'b' } | { path: number; seg: number; t: number; part: 'curve' } | { part: 'width' };
+/**
+ * A node, one of its handles (a: in, b: out), a curve at parameter t, the width grip of a satin
+ * line, or a new node still to be dragged out: in the middle of curve `seg`, or beyond end `end` of a
+ * line (0: its first node, 1: its last).
+ */
+export type ShapePick =
+  | { path: number; i: number; part: 'p' | 'a' | 'b' }
+  | { path: number; seg: number; t: number; part: 'curve' }
+  | { part: 'width' }
+  | { path: number; seg: number; part: 'mid' }
+  | { path: number; end: 0 | 1; part: 'end' };
+
+/** A new node to drag out, where it lies (world mm); `from`: the end node it goes on from. */
+export type Ghost = ({ path: number; seg: number; part: 'mid' } | { path: number; end: 0 | 1; part: 'end' }) & { at: Pt; from?: Pt };
 
 export interface ShapeView {
   form: Form;
@@ -24,6 +39,8 @@ export interface ShapeView {
   bandOffset: number;
   /** Whether the width grip is being dragged. */
   readonly bandDragging: boolean;
+  /** New nodes to drag out at this zoom (pixels per mm). */
+  ghosts(scale: number): Ghost[];
 }
 
 export interface ShapeHooks {
@@ -36,12 +53,14 @@ export interface ShapeHooks {
   width: (w: number) => void;
 }
 
-type Drag = { pick: ShapePick; from: Pt; start: Form; band: number | null } | null;
+/** `added`: a new node was put in on the press (its form and selection before, for cancel). */
+type Drag = { pick: ShapePick; from: Pt; start: Form; band: number | null; added?: { form: Form; selected: { path: number; i: number } | null } } | null;
 
 /**
  * The outline of a fill on the canvas, as curves with nodes: nodes and their handles are dragged,
  * a curve dragged bends, a double-click on it puts a node there, Delete removes the selected node
- * and C makes it round or a corner. Every change ends in `change`; while dragging only the
+ * and C makes it round or a corner. New nodes are dragged out of hollow dots (as in map editors and
+ * QGIS's vertex tool): one in the middle of each curve, one beyond each end of a line. Every change ends in `change`; while dragging only the
  * outline moves. Coordinates are world millimetres.
  */
 export class ShapeTool implements ShapeView {
@@ -118,7 +137,32 @@ export class ShapeTool implements ShapeView {
     return this.drag?.pick.part === 'width';
   }
 
-  /** What lies under the pointer: a shown handle, a node, the width grip, or a curve (in that order). */
+  /**
+   * New nodes to drag out: the middle of each curve long enough on screen to leave room beside its
+   * nodes, and, on a line (not a satin's rails), a dot beyond each end. None while dragging.
+   */
+  ghosts(scale: number): Ghost[] {
+    if (this.drag && this.moved) return [];
+    const out: Ghost[] = [];
+    this.form.paths.forEach((p, path) => {
+      for (let seg = 0; seg < segments(p); seg++) {
+        const c = segment(p, seg);
+        if (Math.hypot(c[3][0] - c[0][0], c[3][1] - c[0][1]) * scale < GHOST_MIN_PX) continue;
+        out.push({ path, seg, part: 'mid', at: bezier(c, 0.5) });
+      }
+      if (p.closed || this.rails) return;
+      for (const end of [0, 1] as const) {
+        const dir = endDirection(p, end);
+        if (!dir) continue;
+        const from = p.nodes[end === 0 ? 0 : p.nodes.length - 1].p;
+        const k = GHOST_END_PX / scale;
+        out.push({ path, end, part: 'end', at: [from[0] + dir[0] * k, from[1] + dir[1] * k], from });
+      }
+    });
+    return out;
+  }
+
+  /** What lies under the pointer: a shown handle, a node, the width grip, a new node, or a curve (in that order). */
   pickAt(x: number, y: number, scale: number): ShapePick | null {
     const r = PICK_PX / scale;
     let best: ShapePick | null = null;
@@ -145,6 +189,14 @@ export class ShapeTool implements ShapeView {
     // After the nodes: on a narrow satin the grip lies close to the line and must not cover them.
     const grip = this.band !== null ? bandGrip(this.form, this.band, this.bandOffset) : null;
     if (grip && Math.hypot(grip.at[0] - x, grip.at[1] - y) < r) return { part: 'width' };
+    for (const g of this.ghosts(scale)) {
+      const d = Math.hypot(g.at[0] - x, g.at[1] - y);
+      if (d < bd) {
+        bd = d;
+        best = g.part === 'mid' ? { path: g.path, seg: g.seg, part: 'mid' } : { path: g.path, end: g.end, part: 'end' };
+      }
+    }
+    if (best) return best;
     const near = nearestOnForm(this.form, [x, y]);
     if (near && near.d < PICK_CURVE_PX / scale) return { path: near.path, seg: near.seg, t: near.t, part: 'curve' };
     return null;
@@ -155,6 +207,20 @@ export class ShapeTool implements ShapeView {
     const pick = this.pickAt(x, y, scale);
     if (!pick) {
       return 'pan';
+    }
+    if (pick.part === 'mid' || pick.part === 'end') {
+      // A new node put in where the dot is, selected and dragged on from there; taken over on release.
+      const ghost = this.ghosts(scale).find((g) => g.path === pick.path && (g.part === 'mid' ? pick.part === 'mid' && g.seg === pick.seg : pick.part === 'end' && g.end === pick.end));
+      if (!ghost) return 'pan';
+      const was = { form: this.form, selected: this.selected };
+      const { form, node } = pick.part === 'mid' ? insertNode(this.form, pick.path, pick.seg, 0.5) : extendPath(this.form, pick.path, pick.end, ghost.at);
+      this.form = form;
+      this.selected = { path: pick.path, i: node };
+      this.drag = { pick: { path: pick.path, i: node, part: 'p' }, from: [x, y], start: form, band: this.band, added: was };
+      this.moved = false;
+      this.dirty = true;
+      this.hooks.redraw();
+      return 'move';
     }
     if (pick.part === 'p') this.selected = { path: pick.path, i: pick.i };
     this.drag = { pick, from: [x, y], start: this.form, band: this.band };
@@ -201,7 +267,7 @@ export class ShapeTool implements ShapeView {
       else this.hooks.redraw();
       return;
     }
-    if (this.moved) this.hooks.change(this.form);
+    if (this.moved || d.added) this.hooks.change(this.form);
     else if (d.pick.part === 'curve') {
       this.selected = null;
       this.hooks.redraw();
@@ -210,7 +276,8 @@ export class ShapeTool implements ShapeView {
 
   cancel(): void {
     if (this.drag) {
-      this.form = this.drag.start;
+      this.form = this.drag.added?.form ?? this.drag.start;
+      if (this.drag.added) this.selected = this.drag.added.selected;
       this.band = this.drag.band;
     }
     this.drag = null;
@@ -224,7 +291,8 @@ export class ShapeTool implements ShapeView {
 
   hoverAt(x: number, y: number, scale: number): boolean {
     const h = this.pickAt(x, y, scale);
-    const key = (p: ShapePick | null) => (!p ? '' : p.part === 'width' ? 'w' : `${p.path}:${p.part === 'curve' ? `c${p.seg}` : `${p.i}${p.part}`}`);
+    const key = (p: ShapePick | null) =>
+      !p ? '' : p.part === 'width' ? 'w' : `${p.path}:${p.part === 'curve' ? `c${p.seg}` : p.part === 'mid' ? `m${p.seg}` : p.part === 'end' ? `e${p.end}` : `${p.i}${p.part}`}`;
     if (key(h) === key(this.hover)) return false;
     this.hover = h;
     return true;
