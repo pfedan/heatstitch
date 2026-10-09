@@ -836,7 +836,7 @@ figure img:focus-visible {
   margin: 0;
   padding: 0;
   border: 0;
-  background: #0e0c12;
+  background: rgb(14 12 18 / 0);
   overflow: hidden;
   touch-action: none;
   overscroll-behavior: contain;
@@ -845,7 +845,33 @@ figure img:focus-visible {
 }
 
 .image-view::backdrop {
-  background: #0e0c12;
+  background: transparent;
+}
+
+/* The view grows out of the picture on the page and shrinks back (180 ms, src/docsImageView.ts). */
+.image-view,
+.image-view-close {
+  transition: background-color 180ms ease-out, opacity 180ms ease-out;
+}
+
+.image-view.shown {
+  background-color: #0e0c12;
+}
+
+.image-view:not(.shown) .image-view-close {
+  opacity: 0;
+}
+
+.image-view img.moving {
+  transition: transform 180ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .image-view,
+  .image-view-close,
+  .image-view img.moving {
+    transition: none;
+  }
 }
 
 .image-view img {
