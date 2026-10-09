@@ -3,14 +3,11 @@ import type { Viewport } from './viewport';
 
 /**
  * The tracing image under the stitches, and its frame while it can be moved. The picture is
- * dimmed by a fixed amount, as embroidery programs do with their backdrops: enough to draw along,
- * never so strong that it competes with the stitches.
+ * dimmed as embroidery programs do with their backdrops (by default half, see TRACE_OPACITY), so
+ * it does not compete with the stitches; how much is set per design.
  */
 
 const ACCENT = '#e0559e';
-/** How much of the picture shows. */
-export const TRACE_ALPHA = 0.5;
-
 /** Which part of the frame the pointer is on: the inside (move) or a corner (0..3: top left, top right, bottom right, bottom left). */
 export type TracePart = 'move' | 0 | 1 | 2 | 3;
 
@@ -18,6 +15,8 @@ export interface TraceScene {
   trace: Trace;
   /** The decoded picture; null while it is being decoded. */
   img: CanvasImageSource | null;
+  /** How much of the picture shows, 0..1. */
+  opacity: number;
   /** Shown with its frame (not locked). */
   frame: boolean;
   hover: TracePart | null;
@@ -57,7 +56,7 @@ export function drawTrace(ctx: CanvasRenderingContext2D, vp: Viewport, s: TraceS
   const t = s.trace;
   const [x, y] = vp.toScreen(t.x, t.y);
   ctx.save();
-  ctx.globalAlpha = TRACE_ALPHA;
+  ctx.globalAlpha = s.opacity;
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(s.img, x, y, t.w * vp.scale, t.h * vp.scale);
   ctx.restore();

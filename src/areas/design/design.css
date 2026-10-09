@@ -990,3 +990,7 @@ body[data-mode='flow'] .stage:has(.player.folded:not([hidden])) .stage-foot {
 .trace-replace {
   font-size: 12px;
 }
+
+.trace-opacity {
+  align-self: stretch;
+}

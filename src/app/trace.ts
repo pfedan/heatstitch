@@ -47,12 +47,15 @@ export function bindTrace(app: TraceApp) {
     },
   });
 
+  /** The opacity while its slider is dragged (stored when let go). */
+  let opacityPreview: number | null = null;
+
   /** The image as the canvas shows it now, or null. */
   function traceScene(): TraceScene | null {
     const t = traceTool.preview ?? shown();
     if (!t) return null;
     const frame = !!movable();
-    return { trace: t, img: traceImage(t, app.redraw), frame, hover: frame ? traceTool.hover : null, dragging: traceTool.dragging };
+    return { trace: t, img: traceImage(t, app.redraw), opacity: opacityPreview ?? view().opacity, frame, hover: frame ? traceTool.hover : null, dragging: traceTool.dragging };
   }
 
   /** Lays the design `f` a new tracing image (one undo step), with `view`. */
@@ -77,7 +80,8 @@ export function bindTrace(app: TraceApp) {
     const place = size
       ? { x: center[0] - size[0] / 2, y: center[1] - size[1] / 2, w: size[0], h: size[1] }
       : placeTrace(enc.aspect, center, f.material.hoop);
-    lay(f, { name, type: enc.type, data: enc.data, ...place }, { shown: true, locked: false });
+    // A new picture keeps how strongly the design shows its picture.
+    lay(f, { name, type: enc.type, data: enc.data, ...place }, { ...f.traceView, shown: true, locked: false });
   }
 
   /** Lays an image file under the active design. Throws when it cannot be read as a picture. */
@@ -102,6 +106,13 @@ export function bindTrace(app: TraceApp) {
     traceTool.cancel();
     app.files.setTraceView(f, v);
     app.redraw();
+  }
+
+  /** Shows the image with `opacity` while its slider moves; `done` keeps it for the design (no undo step, like the eye). */
+  function setOpacity(opacity: number, done: boolean): void {
+    opacityPreview = done ? null : opacity;
+    if (done) setView({ opacity });
+    else app.redraw();
   }
 
   /** Takes the tracing image away (one undo step). */
@@ -132,7 +143,7 @@ export function bindTrace(app: TraceApp) {
     return t ? { minX: t.x, minY: t.y, maxX: t.x + t.w, maxY: t.y + t.h } : null;
   };
 
-  return { traceTool, traceScene, layPicture, layFile, sourceTrace, setView, remove, resize, bounds };
+  return { traceTool, traceScene, layPicture, layFile, sourceTrace, setView, setOpacity, remove, resize, bounds };
 }
 
 export type TraceControl = ReturnType<typeof bindTrace>;

@@ -1,9 +1,9 @@
 import { formatNumber, onLangChange, t, type Key } from '../../i18n';
-import { traceOf, TRACE_MAX_MM, TRACE_MIN_MM, type Trace } from '../../model/trace';
+import { traceOf, TRACE_MAX_MM, TRACE_MIN_MM, TRACE_OPACITY, TRACE_OPACITY_MAX, TRACE_OPACITY_MIN, type Trace } from '../../model/trace';
 import type { TraceControl } from '../../app/trace';
 import { command } from '../../shell/commands';
 import { h, icon, swap } from '../../shell/h';
-import { toast } from '../../shell/ui';
+import { slider, toast } from '../../shell/ui';
 import type { FileList } from '../../ui/fileList';
 import type { Settings } from '../../settings';
 
@@ -64,16 +64,51 @@ export function createTraceSection(app: TraceSectionApp): { el: HTMLElement; ren
   width.addEventListener('input', () => app.trace.resize(Number(width.value), false));
   width.addEventListener('change', () => app.trace.resize(Number(width.value), true));
 
+  // The opacity slider is made once, so dragging it survives the section being drawn anew.
+  const percent = (v: number) => `${formatNumber(Math.round(v * 100))} %`;
+  const opacity = slider({
+    label: t('design.trace.opacity'),
+    min: TRACE_OPACITY_MIN,
+    max: TRACE_OPACITY_MAX,
+    step: 0.05,
+    value: TRACE_OPACITY,
+    format: percent,
+    auto: { on: true, hint: t('design.trace.opacity.reset'), reset: () => setOpacity(TRACE_OPACITY) },
+    oninput: (v) => app.trace.setOpacity(v, false),
+    onchange: (v) => setOpacity(v),
+  });
+  opacity.classList.add('trace-opacity');
+  const opacityInput = opacity.querySelector('input')!;
+  const setOpacity = (v: number) => {
+    app.trace.setOpacity(v, true);
+    showOpacity(v);
+  };
+  /** The slider, its value and its dot (on while the default is used) for `v`. */
+  const showOpacity = (v: number) => {
+    if (document.activeElement !== opacityInput) opacityInput.value = String(v);
+    opacity.querySelector('output')!.textContent = percent(v);
+    const dot = opacity.querySelector<HTMLButtonElement>('.auto-dot')!;
+    const on = Math.abs(v - TRACE_OPACITY) < 1e-6;
+    dot.classList.toggle('on', on);
+    dot.disabled = on;
+  };
+  onLangChange(() => {
+    opacity.querySelector('.label > span')!.textContent = t('design.trace.opacity');
+    const dot = opacity.querySelector<HTMLButtonElement>('.auto-dot')!;
+    dot.title = t('design.trace.opacity.reset');
+    dot.setAttribute('aria-label', t('design.trace.opacity.reset'));
+  });
+
   /** What the section shows was drawn for; it is drawn anew only when that changes (not every frame). */
-  let drawn: { tr: Trace | null; shown?: boolean; locked?: boolean; mode: string; sum: string } | null = null;
+  let drawn: { tr: Trace | null; shown?: boolean; locked?: boolean; opacity?: number; mode: string; sum: string } | null = null;
 
   /** Fills the section; returns what its head says while it is closed. */
   const render = (force = false): string => {
     const tr = current();
     const v = view();
-    if (!force && drawn && drawn.tr === tr && drawn.shown === v?.shown && drawn.locked === v?.locked && drawn.mode === app.settings.mode) return drawn.sum;
+    if (!force && drawn && drawn.tr === tr && drawn.shown === v?.shown && drawn.locked === v?.locked && drawn.opacity === v?.opacity && drawn.mode === app.settings.mode) return drawn.sum;
     const sum = draw(tr);
-    drawn = { tr, shown: v?.shown, locked: v?.locked, mode: app.settings.mode, sum };
+    drawn = { tr, shown: v?.shown, locked: v?.locked, opacity: v?.opacity, mode: app.settings.mode, sum };
     return sum;
   };
 
@@ -90,6 +125,7 @@ export function createTraceSection(app: TraceSectionApp): { el: HTMLElement; ren
     // The width field keeps what is being typed into it.
     if (document.activeElement !== width) width.value = String(Math.round(tr.w));
     width.setAttribute('aria-label', t('design.trace.width'));
+    showOpacity(v.opacity);
     const size = `${formatNumber(Math.round(tr.w))} × ${formatNumber(Math.round(tr.h))} mm`;
     swap(
       el,
@@ -107,6 +143,7 @@ export function createTraceSection(app: TraceSectionApp): { el: HTMLElement; ren
         ),
       ),
       h('label', { class: 'trace-width' }, h('span', null, t('design.trace.width')), width, h('span', null, 'mm')),
+      opacity,
       ...(v.shown && !v.locked && app.settings.mode === 'flow' ? [h('p', { class: 'trace-note' }, t('design.trace.free'))] : []),
       h('button', { type: 'button', class: 'link trace-replace', onclick: pick }, t('design.trace.replace')),
       file,

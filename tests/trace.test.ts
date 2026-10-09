@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { inheritTrace, placeTrace, readTrace, sizedTrace, storeTrace, traceFrom, traceOf, withTrace, TRACE_MAX_MM, TRACE_MIN_MM, type Trace } from '../src/model/trace';
+import { inheritTrace, placeTrace, readTrace, sizedTrace, storeTrace, traceFrom, traceOf, withTrace, TRACE_MAX_MM, TRACE_MIN_MM, TRACE_OPACITY, TRACE_OPACITY_MAX, TRACE_OPACITY_MIN, type Trace } from '../src/model/trace';
 import { hoopFit } from '../src/model/hoop';
 import { parsePattern } from '../src/parsers';
 import { DEFAULTS } from '../src/settings';
@@ -50,7 +50,7 @@ describe('tracing image', () => {
   });
 
   it('is read back only when usable', () => {
-    expect(readTrace(storeTrace(trace(), { shown: false, locked: true }))).toEqual({ ...trace(), shown: false, locked: true });
+    expect(readTrace(storeTrace(trace(), { shown: false, locked: true, opacity: 0.3 }))).toEqual({ ...trace(), shown: false, locked: true, opacity: 0.3 });
     expect(readTrace({ ...trace(), w: 0 })).toBeNull();
     expect(readTrace({ ...trace(), x: Number.NaN })).toBeNull();
     expect(readTrace({ ...trace(), type: 'text/html' })).toBeNull();
@@ -58,11 +58,15 @@ describe('tracing image', () => {
     expect(readTrace('nonsense')).toBeNull();
     // Older pages stored no view: shown and free.
     const { name, type, data: d, x, y, w, h } = trace();
-    expect(readTrace({ name, type, data: d, x, y, w, h })).toMatchObject({ shown: true, locked: false });
+    expect(readTrace({ name, type, data: d, x, y, w, h })).toMatchObject({ shown: true, locked: false, opacity: TRACE_OPACITY });
+    // An opacity out of range is brought back into it.
+    expect(readTrace({ ...trace(), opacity: 0 })!.opacity).toBe(TRACE_OPACITY_MIN);
+    expect(readTrace({ ...trace(), opacity: 7 })!.opacity).toBe(TRACE_OPACITY_MAX);
+    expect(readTrace({ ...trace(), opacity: 'dunkel' })!.opacity).toBe(TRACE_OPACITY);
   });
 
   it('comes back with a project, also with the design saved alone, and only with its design', async () => {
-    const t = storeTrace(trace(), { shown: false, locked: true });
+    const t = storeTrace(trace(), { shown: false, locked: true, opacity: 0.3 });
     const project = {
       files: [
         { name: 'cat-60mm.pes', data, acks: [], objects: [], trace: t },

@@ -24,13 +24,27 @@ export interface Trace {
 export interface TraceView {
   shown: boolean;
   locked: boolean;
+  /** How much of the picture shows over the fabric, 0..1: less makes the stitches stand out. */
+  opacity: number;
 }
 
 /** A trace with its view, as projects and the page storage keep it. */
 export type StoredTrace = Trace & Partial<TraceView>;
 
+const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+
+/** How much of the picture shows by default: enough to draw along, never competing with the stitches. */
+export const TRACE_OPACITY = 0.5;
+/** The faintest and the strongest picture the slider gives. */
+export const TRACE_OPACITY_MIN = 0.1;
+export const TRACE_OPACITY_MAX = 1;
+
 /** A freshly laid image is shown and can be moved right away. */
-export const TRACE_VIEW: TraceView = { shown: true, locked: false };
+export const TRACE_VIEW: TraceView = { shown: true, locked: false, opacity: TRACE_OPACITY };
+
+/** A usable opacity from anything stored: the default when there is none. */
+export const traceOpacity = (v: unknown): number =>
+  finite(v) ? Math.min(TRACE_OPACITY_MAX, Math.max(TRACE_OPACITY_MIN, v)) : TRACE_OPACITY;
 
 /** Smallest side in mm: smaller would leave nothing to trace and nothing to grab. */
 export const TRACE_MIN_MM = 5;
@@ -85,8 +99,6 @@ export function placeTrace(aspect: number, center: [number, number], room: { w: 
   return { x: center[0] - w / 2, y: center[1] - h / 2, w, h };
 }
 
-const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
-
 /** A trace read from a project or the page storage, or null when it is not a usable one. */
 export function readTrace(v: unknown): StoredTrace | null {
   const t = v as Partial<StoredTrace> | null;
@@ -103,11 +115,12 @@ export function readTrace(v: unknown): StoredTrace | null {
     h: t.h!,
     shown: t.shown !== false,
     locked: t.locked === true,
+    opacity: traceOpacity(t.opacity),
   };
 }
 
 /** The trace and its view as kept in a project or the page storage. */
-export const storeTrace = (t: Trace, view: TraceView): StoredTrace => ({ name: t.name, type: t.type, data: t.data, x: t.x, y: t.y, w: t.w, h: t.h, shown: view.shown, locked: view.locked });
+export const storeTrace = (t: Trace, view: TraceView): StoredTrace => ({ name: t.name, type: t.type, data: t.data, x: t.x, y: t.y, w: t.w, h: t.h, shown: view.shown, locked: view.locked, opacity: view.opacity });
 
 /** The trace part of a stored one (without its view). */
 export const traceFrom = (s: StoredTrace): Trace => ({ name: s.name, type: s.type, data: s.data, x: s.x, y: s.y, w: s.w, h: s.h });

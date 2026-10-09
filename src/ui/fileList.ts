@@ -23,7 +23,7 @@ import {
 } from '../storage/fileStore';
 import { backToVersion, keepVersion, rememberedIn, restoreRemembered, type ObjectsAsStored } from '../model/restitch';
 import { asideFrom, asideOf, inheritAside, setAsideOf, storeAside, type StoredAside } from '../model/aside';
-import { inheritTrace, readTrace, setTraceOf, storeTrace, traceFrom, traceOf, TRACE_VIEW, type StoredTrace, type TraceView } from '../model/trace';
+import { inheritTrace, readTrace, setTraceOf, storeTrace, traceFrom, traceOf, traceOpacity, TRACE_VIEW, type StoredTrace, type TraceView } from '../model/trace';
 import type { ProjectFile } from '../storage/project';
 import { liveAcknowledgements, openWorst, type Acknowledgement } from '../validation/acks';
 import { normalizeMaterial, type Material } from '../settings';
@@ -241,7 +241,7 @@ export class FileList {
         ...(typeof title === 'string' && title.trim() ? { title: title.trim() } : {}),
         ...(titles ? { titles } : {}),
         own: own === true,
-        traceView: stored ? { shown: stored.shown !== false, locked: stored.locked === true } : { ...TRACE_VIEW },
+        traceView: stored ? { shown: stored.shown !== false, locked: stored.locked === true, opacity: traceOpacity(stored.opacity) } : { ...TRACE_VIEW },
       };
       // Stored before materials were kept per design: it keeps the one it was last seen with.
       if (storeKey !== undefined && !material) void saveMaterial(storeKey, entry.material);

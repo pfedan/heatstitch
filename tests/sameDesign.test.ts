@@ -11,7 +11,7 @@ const data = new Uint8Array(readFileSync(new URL('../public/examples/demos/overl
 function open(edit = false): LoadedFile {
   const original = parsePattern(data, 'overlap.pes');
   const pattern = edit ? { ...original, x: original.x.slice(), y: original.y.slice(), cmd: original.cmd.slice() } : original;
-  return { id: 1, fileName: 'overlap.pes', data, original, pattern, undo: [], redo: [], acks: [], material: materialOf(DEFAULTS), own: false, traceView: { shown: true, locked: false } };
+  return { id: 1, fileName: 'overlap.pes', data, original, pattern, undo: [], redo: [], acks: [], material: materialOf(DEFAULTS), own: false, traceView: { shown: true, locked: false, opacity: 0.5 } };
 }
 
 // A saved project holds its own copy of the stitches.

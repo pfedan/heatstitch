@@ -186,7 +186,7 @@ export async function saveAndOpen(d: Doc): Promise<void> {
   const data = writePattern(d.cur.p, 'dst');
   const original = parsePattern(data, 'torture.dst');
   const t = traceOf(d.cur.p);
-  const view = { shown: true, locked: false };
+  const view = { shown: true, locked: false, opacity: 0.35 };
   const bytes = await encodeProject({
     files: [{ name: 'torture.dst', data, working: toStored(d.cur.p), acks: [], objects: knowledge(d.cur.p), ...(t ? { trace: storeTrace(t, view) } : {}) }],
     active: 0,
@@ -200,7 +200,7 @@ export async function saveAndOpen(d: Doc): Promise<void> {
   // As files.addData: the tracing image read back lies under the opened version.
   const stored = readTrace(back.files[0].trace);
   expect(!!stored, 'the tracing image comes back').toBe(!!t);
-  if (stored) expect({ shown: stored.shown, locked: stored.locked }, 'with its view').toEqual(view);
+  if (stored) expect({ shown: stored.shown, locked: stored.locked, opacity: stored.opacity }, 'with its view').toEqual(view);
   setTraceOf(p!, stored && traceFrom(stored));
   // A fresh page has no undo history.
   d.undo = [];
