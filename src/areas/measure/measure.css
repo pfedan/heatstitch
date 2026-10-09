@@ -1,0 +1,88 @@
+/*
+ * Scale bar at the left of the stage's foot: a black and a white part of round millimetres. Its box
+ * keeps one width (SCALE_BAR_PX and room for the numbers), so the hint beside it stays put while
+ * zooming. Black and white on the dark glass of the hint read on any fabric color.
+ */
+.scale-bar {
+  flex: none;
+  box-sizing: border-box;
+  width: 168px;
+  padding: 5px 30px 3px 10px;
+  border-radius: 6px;
+  background: rgba(13, 11, 16, 0.55);
+  color: #d8d2e0;
+  pointer-events: none;
+}
+
+.scale-bar[hidden] {
+  display: none;
+}
+
+.sb-bar {
+  display: flex;
+  width: calc(2 * var(--sb-part, 50px));
+  height: 6px;
+  outline: 1px solid rgba(255, 255, 255, 0.85);
+}
+
+.sb-bar > span {
+  flex: 1 1 0;
+}
+
+.sb-bar > span:first-child {
+  background: #000;
+}
+
+.sb-bar > span:last-child {
+  background: #fff;
+}
+
+.sb-nums {
+  position: relative;
+  height: 14px;
+  margin-top: 2px;
+  font-size: 11px;
+  line-height: 14px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.sb-nums > span {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+}
+
+.sb-nums > span:nth-child(1) {
+  left: 0;
+}
+
+.sb-nums > span:nth-child(2) {
+  left: var(--sb-part, 50px);
+}
+
+.sb-nums > span:nth-child(3) {
+  left: calc(2 * var(--sb-part, 50px));
+}
+
+/* The unit stands after the last number, which itself stays centered under its tick. */
+.sb-nums > span[data-unit]::after {
+  content: '\00a0' attr(data-unit);
+  position: absolute;
+  left: 100%;
+}
+
+/* Start page or Bild without a picture: nothing to measure yet. */
+.stage:has(#empty:not([hidden])) .scale-bar {
+  visibility: hidden;
+}
+
+.stage.measuring canvas#canvas {
+  cursor: crosshair;
+}
+
+/* The tool is on: filled like a tool of the rail. */
+#measure-toggle[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--accent-ink);
+}

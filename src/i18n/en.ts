@@ -11,6 +11,7 @@ import { en as ready } from './areas/ready';
 import { en as ampel } from './areas/ampel';
 import { en as responsive } from './areas/responsive';
 import { en as fabrics } from './areas/fabrics';
+import { en as measure } from './areas/measure';
 
 
 const enBase: Record<keyof typeof deBase, string> = {
@@ -1303,4 +1304,4 @@ const enBase: Record<keyof typeof deBase, string> = {
   'canvas.hint.letters': 'Drag letters: move · Arrow keys: nudge · Esc: back to the lettering',
 };
 
-export const en: Record<keyof typeof de, string> = { ...enBase, ...shell, ...files, ...objects, ...shapes, ...stitches, ...check, ...image, ...design, ...ready, ...ampel, ...responsive, ...fabrics };
+export const en: Record<keyof typeof de, string> = { ...enBase, ...shell, ...files, ...objects, ...shapes, ...stitches, ...check, ...image, ...design, ...ready, ...ampel, ...responsive, ...fabrics, ...measure };

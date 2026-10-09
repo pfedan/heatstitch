@@ -3,6 +3,7 @@ import type { Editor } from '../ui/editor';
 import type { FileList, LoadedFile } from '../ui/fileList';
 import type { FrameTool } from '../ui/frameTool';
 import type { ImageMode } from '../ui/imageMode';
+import type { MeasureTool } from '../ui/measureTool';
 import type { Lettering } from '../lettering/layout';
 import type { OrderCard } from '../ui/objectPanel';
 import type { Pattern } from '../model/pattern';
@@ -37,6 +38,7 @@ export interface PointerApp {
   readonly letterDown: (x: number, y: number) => boolean;
   readonly letterDragTo: (x: number, y: number) => boolean;
   readonly letterUp: () => void;
+  readonly measure: MeasureTool;
   readonly letteringsOf: (p: Pattern, q: Sequence) => (Lettering | undefined)[];
   readonly movePlanSplit: (sx: number) => void;
   readonly orderCard: OrderCard;
@@ -78,6 +80,11 @@ export function bindPointer(app: PointerApp) {
   /** Tooltip for the side of the divider the pointer is on. */
   function showTooltip(sx: number, sy: number): void {
     if (app.settings.mode === 'image') return;
+    // While measuring, the label on the line says what counts; a tip would cover it.
+    if (app.measure.active) {
+      app.tooltip.hidden = true;
+      return;
+    }
     // The width grip shows its own label.
     if (app.shapeTool.active && (app.shapeTool.bandDragging || app.shapeTool.hover?.part === 'width')) {
       app.tooltip.hidden = true;
@@ -144,7 +151,11 @@ export function bindPointer(app: PointerApp) {
     if (pointers.size === 1 && e.button === 0) {
       const [wx, wy] = app.vp.toWorld(pos[0], pos[1]);
       const flow = app.settings.mode === 'flow';
-      if (app.drawTool.active && flow) {
+      // Measuring goes before every other tool: it changes nothing, so it may lie over any of them.
+      if (app.measure.active) {
+        app.measure.down(wx, wy, app.vp.scale, { shift: e.shiftKey, alt: e.altKey, touch: e.pointerType !== 'mouse' });
+        mode = 'move';
+      } else if (app.drawTool.active && flow) {
         app.drawTool.down(wx, wy, app.vp.scale, e.shiftKey);
         mode = 'move';
       } else if (ui.letterMode && flow) mode = app.letterDown(wx, wy) ? 'move' : 'pan';
@@ -198,6 +209,7 @@ export function bindPointer(app: PointerApp) {
       app.rungTool.cancel();
       app.shapeTool.cancel();
       app.drawTool.abortPress();
+      app.measure.abortPress();
       ui.letterDrag = null;
       if (app.frameTool.dragging !== null) {
         app.frameTool.cancel();
@@ -253,7 +265,7 @@ export function bindPointer(app: PointerApp) {
         ui.objectBand.x1 = wx;
         ui.objectBand.y1 = wy;
       } else if (pointers.size === 1) {
-        if (!app.drawTool.dragTo(wx, wy, e.shiftKey, e.altKey) && !app.letterDragTo(wx, wy) && !app.rungTool.dragTo(wx, wy) && !app.shapeTool.dragTo(wx, wy) && !app.frameTool.dragTo(wx, wy, e.shiftKey, app.vp.scale, e.altKey) && !app.editor.dragTo(wx, wy, pos[0], pos[1])) app.vp.pan(pos[0] - prev[0], pos[1] - prev[1]);
+        if (!app.measure.dragTo(wx, wy, { shift: e.shiftKey, alt: e.altKey, touch: e.pointerType !== 'mouse' }) && !app.drawTool.dragTo(wx, wy, e.shiftKey, e.altKey) && !app.letterDragTo(wx, wy) && !app.rungTool.dragTo(wx, wy) && !app.shapeTool.dragTo(wx, wy) && !app.frameTool.dragTo(wx, wy, e.shiftKey, app.vp.scale, e.altKey) && !app.editor.dragTo(wx, wy, pos[0], pos[1])) app.vp.pan(pos[0] - prev[0], pos[1] - prev[1]);
       } else if (pointers.size === 2) {
         pointers.set(e.pointerId, pos);
         const [a, b] = [...pointers.values()];
@@ -268,7 +280,9 @@ export function bindPointer(app: PointerApp) {
       pointers.set(e.pointerId, pos);
       app.redraw();
     } else if (
-      app.drawTool.active
+      app.measure.active
+        ? app.measure.hoverAt(wx, wy, app.vp.scale, { shift: e.shiftKey, alt: e.altKey, touch: e.pointerType !== 'mouse' })
+        : app.drawTool.active
         ? app.drawTool.hoverAt(wx, wy, app.vp.scale, e.shiftKey)
         : app.rungTool.active
         ? app.rungTool.hoverAt(wx, wy, app.vp.scale)
@@ -382,6 +396,8 @@ export function bindPointer(app: PointerApp) {
       app.stage.classList.remove('splitting');
     }
     if (pointers.size === 1 && pointers.has(e.pointerId)) {
+      if (e.type === 'pointerup') app.measure.up();
+      else app.measure.abortPress();
       app.drawTool.up(...app.vp.toWorld(pos[0], pos[1]), e.shiftKey, e.altKey);
       app.letterUp();
       app.rungTool.up();
@@ -414,7 +430,7 @@ export function bindPointer(app: PointerApp) {
   });
   /** Whether a rubber band may select objects now (level Objects, no tool open). */
   function bandAllowed(): boolean {
-    return app.settings.mode === 'flow' && !!app.files.active?.pattern && !app.editor.active && !app.shapeTool.active && !app.rungTool.active && !app.drawTool.active && !app.orderCard.isOpen && !ui.letterMode;
+    return app.settings.mode === 'flow' && !!app.files.active?.pattern && !app.measure.active && !app.editor.active && !app.shapeTool.active && !app.rungTool.active && !app.drawTool.active && !app.orderCard.isOpen && !ui.letterMode;
   }
 
   /** The object under `pos` (on the stage), or -1. */
@@ -448,7 +464,7 @@ export function bindPointer(app: PointerApp) {
   /** Opens the menu for the object under `pos` (on the stage), selecting it first; false when there is none. */
   function openObjectMenu(pos: [number, number], clientX: number, clientY: number): boolean {
     const p = app.files.active?.pattern;
-    if (!p || app.settings.mode !== 'flow' || app.editor.active || app.shapeTool.active || app.rungTool.active || app.drawTool.active || app.orderCard.isOpen || ui.letterMode) return false;
+    if (!p || app.settings.mode !== 'flow' || app.measure.active || app.editor.active || app.shapeTool.active || app.rungTool.active || app.drawTool.active || app.orderCard.isOpen || ui.letterMode) return false;
     const st = app.styleFor(p);
     const [x, y] = app.vp.toWorld(pos[0], pos[1]);
     const i = stitchAt(p, x * 10, y * 10, Math.max(3, 60 / app.vp.scale), st.limit, st.alpha);
@@ -479,6 +495,8 @@ export function bindPointer(app: PointerApp) {
   app.canvas.addEventListener('dblclick', (e) => {
     const pos = local(e);
     const [x, y] = app.vp.toWorld(pos[0], pos[1]);
+    // Measuring: two quick clicks are two ends, not a reason to fit the view.
+    if (app.measure.active) return;
     if (app.drawTool.active) {
       // The pen ends an open line; the other tools ignore it.
       app.drawTool.finish(false);
