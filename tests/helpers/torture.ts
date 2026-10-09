@@ -6,7 +6,7 @@ import { blendObject } from '../../src/model/blend';
 import { MOTIFS } from '../../src/digitize/deco';
 import { ECHO_SIDES } from '../../src/digitize/echo';
 import { lineParts, partOf, type LinePart } from '../../src/model/shadow';
-import { lineStitches, resewLine } from '../../src/model/line';
+import { closedForm, closedLineToFill, lineStitches, resewLine } from '../../src/model/line';
 import { refreshKnockouts, setKnockout } from '../../src/model/knockout';
 import { rememberObjects, sewObjects, tableOf, type SewObject } from '../../src/model/objects';
 import { COLOR_CHANGE, END, STITCH, type Pattern, type ThreadColor } from '../../src/model/pattern';
@@ -23,7 +23,7 @@ import { deleteObjects, duplicateObject, duplicateObjects, mirrorMatrix, recolor
 import { stitchesBefore } from '../../src/model/transform';
 import { sewDesign, specOf } from '../../src/model/sew';
 import { parsePattern } from '../../src/parsers';
-import { rotation, storeForm, translation, type Mat } from '../../src/shape/path';
+import { insertNode, rotation, segments, storeForm, translation, type Form, type Mat } from '../../src/shape/path';
 import { ellipsePath, parsePath, rectPath } from '../../src/shape/svgPath';
 import { fromStored, toStored } from '../../src/storage/fileStore';
 import { decodeProject, encodeProject, projectSettings } from '../../src/storage/project';
@@ -42,7 +42,8 @@ import { stripsOfAreas } from '../../src/digitize/rungs';
 /**
  * The torture test: random chains of the operations the app offers on objects (add, duplicate (also
  * several, and in place),
- * move, turn, mirror, scale, thin out by hand, delete, cut out, cut a fill apart, recolor, leave out, border in its own thread, empty fill, echo and shadow of a line, undo,
+ * move, turn, mirror, scale, thin out by hand, delete, cut out, cut a fill apart, recolor, leave out, border in its own thread, empty fill, echo and shadow of a line,
+ * a line's nodes edited (put in, closed, opened), a closed line filled inside, undo,
  * redo, save and open the project, export), done the way the app does them, with the design's
  * invariants checked after every step. A failing chain names its seed and steps, so it can be
  * replayed and turned into a fixed regression test.
@@ -661,6 +662,46 @@ export const OPS: Op[] = [
 ];
 
 /** The records are a pattern the writers and the app can work with. */
+/**
+ * The nodes of lines edited, and closed lines filled. Drawn from a stream of their own beside the
+ * regular chain (as the tracing image), so the chains of OPS stay as they were for the seeds above.
+ */
+export const LINE_OPS: Op[] = [
+  {
+    name: 'edit line',
+    run: (d, r) => {
+      // As the level Form: a node put in on a curve, or the line closed or opened.
+      const lines = d.objects.filter((o) => remembered(d.cur.p, o)?.path && remembered(d.cur.p, o)?.line && !remembered(d.cur.p, o)?.free && !partOf(remembered(d.cur.p, o)));
+      if (!lines.length) return false;
+      const o = pick(r, lines);
+      const m = remembered(d.cur.p, o)!;
+      const form = m.path!;
+      const k = Math.floor(r() * form.paths.length);
+      const path = form.paths[k];
+      const how = pick(r, ['insert', 'toggle'] as const);
+      let next: Form;
+      if (how === 'insert' && segments(path)) next = insertNode(form, k, Math.floor(r() * segments(path)), between(r, 0.1, 0.9)).form;
+      else if (how === 'toggle' && (path.closed || path.nodes.length >= 3)) next = { ...form, paths: form.paths.map((x, j) => (j === k ? { ...x, closed: !x.closed } : x)) };
+      else return false;
+      const sewn = resewLine(d.cur.p, o.index, next, m.line!, T);
+      return !!sewn && shapes(d, syncBorders(sewn.pattern, T));
+    },
+  },
+  {
+    name: 'fill closed line',
+    run: (d, r) => {
+      // As the kind switch on a closed line: Füllung fills it inside, the line its border.
+      const lines = d.objects.filter((o) => remembered(d.cur.p, o)?.line && !remembered(d.cur.p, o)?.free && !partOf(remembered(d.cur.p, o)) && closedForm(remembered(d.cur.p, o)?.path));
+      if (!lines.length) return false;
+      const o = pick(r, lines);
+      const s = digitizeDefaults(DEFAULT_PROFILE);
+      const fill: FillSettings = { pattern: 'tatami', spacing: s.spacing, spacingEnd: 1, offset: 0.25, angle: NaN, stitch: s.stitch, underlay: s.underlay, edge: 0, tolerance: s.tolerance };
+      const res = closedLineToFill(d.cur.p, o.index, fill, T);
+      return !!res && took(d, res);
+    },
+  },
+];
+
 export function checkWellFormed(p: Pattern): void {
   const n = p.cmd.length;
   expect(p.x.length, 'x per record').toBe(n);
@@ -736,6 +777,18 @@ export function checkBorders(p: Pattern): void {
   const hidden = (m: NonNullable<(typeof mem)[number]>) => alone(m) && !!m.region && borderStitches(m.region, m.fill!.border!, [0, 0], wholeOf(m.region, m)).length === 0;
   for (const [link, k] of fills) if (!borders.has(link) && !hidden(mem[k]!)) problems.push(`fill ${k} lost its border`);
   expect(problems.join('; '), 'border links').toBe('');
+}
+
+/** A fill's outline is closed all round (a line filled inside was closed; one sewn along it has none). */
+export function checkFillForms(p: Pattern): void {
+  const problems: string[] = [];
+  for (const o of sewObjects(p)) {
+    const m = remembered(p, o);
+    if (!m?.fill || !m.form) continue;
+    if (!closedForm(m.form)) problems.push(`${o.index}: a fill with an open outline`);
+    if (m.path || m.line) problems.push(`${o.index}: a fill that is also a line`);
+  }
+  expect(problems.join('; '), 'fill outlines').toBe('');
 }
 
 /** An empty fill is its border, in its own thread: it has one, without a thread or link of its own, and no object is its border. */
@@ -978,6 +1031,7 @@ export function describeObjects(p: Pattern): string {
 export async function chain(seed: number, steps = STEPS, opts: { trace?: boolean } = {}): Promise<void> {
   const r = rng(seed);
   const rt = rng(seed + 7919);
+  const rl = rng(seed + 104729);
   const d = new Doc();
   const log: string[] = [];
   const at = () => `seed ${seed}: ${log.join(' > ')}`;
@@ -995,6 +1049,18 @@ export async function chain(seed: number, steps = STEPS, opts: { trace?: boolean
         }
       }
     }
+    // Now and then a line edited or filled, beside the chain.
+    if (!blank(d.cur.p) && rl() < 0.3) {
+      const lop = pick(rl, LINE_OPS);
+      if (await lop.run(d, rl)) {
+        log.push(lop.name);
+        try {
+          checkStep(d, false);
+        } catch (e) {
+          throw new Error(`${at()}\n${(e as Error).message}`);
+        }
+      }
+    }
     try {
       done = await op.run(d, r);
     } catch (e) {
@@ -1005,30 +1071,37 @@ export async function chain(seed: number, steps = STEPS, opts: { trace?: boolean
     const p = d.cur.p;
     if (process.env.TORTURE_TRACE) console.log(op.name, describeObjects(p));
     try {
-      checkWellFormed(p);
-      expect(knowledge(p), 'knowledge as stored with this version').toEqual(d.cur.known);
-      checkAllKnown(p);
-      checkKeys(p);
-      checkObjectList(p);
-      checkPartsFit(p);
-      checkBorders(p);
-      checkEmptyFills(p);
-      checkBlends(p);
-      checkEchoes(p);
-      checkLineParts(p);
-      checkKnockouts(p);
-      checkSatinSections(p);
-      checkTrace(d);
-      if (op.name === 'save and open' || step === steps - 1) {
-        checkExport(p);
-        checkSewDesign(p);
-      }
+      checkStep(d, op.name === 'save and open' || step === steps - 1);
     } catch (e) {
       throw new Error(`${at()}\n${(e as Error).message}`);
     }
   }
 }
 
+
+/** All the invariants, after a step; `full`: also the export and sewing the design. */
+function checkStep(d: Doc, full: boolean): void {
+  const p = d.cur.p;
+  checkWellFormed(p);
+  expect(knowledge(p), 'knowledge as stored with this version').toEqual(d.cur.known);
+  checkAllKnown(p);
+  checkKeys(p);
+  checkObjectList(p);
+  checkPartsFit(p);
+  checkBorders(p);
+  checkEmptyFills(p);
+  checkFillForms(p);
+  checkBlends(p);
+  checkEchoes(p);
+  checkLineParts(p);
+  checkKnockouts(p);
+  checkSatinSections(p);
+  checkTrace(d);
+  if (full) {
+    checkExport(p);
+    checkSewDesign(p);
+  }
+}
 
 /** A square with a running border in a thread of its own, made as the app makes it. */
 export function borderedSquare(): Doc {

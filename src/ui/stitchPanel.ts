@@ -406,7 +406,8 @@ export class StitchPanel {
       toSatin: info.toSatin,
       draw: info.draw ? { single: info.draw.single, tool: info.draw.tool } : undefined,
       empty: this.emptyLine(),
-      lineFills: info.path?.st.type === 'satin' && !info.path.traced,
+      // A drawn line closed all round: filled inside; a satin line: in its width.
+      lineFills: !!info.path && !info.path.traced && (info.path.closed || info.path.st.type === 'satin'),
       blocked: !!info.outline || !!info.free?.on,
     };
   }
@@ -1186,7 +1187,7 @@ export class StitchPanel {
     if (way === 'draw') return 'stitches.kind.toSatinDraw';
     if (way === 'empty') return 'stitches.kind.toEmpty';
     if (way === 'fill') return 'stitches.kind.fillAgain';
-    return k === 'satin' ? 'stitch.kind.toSatin' : k === 'line' ? 'stitch.kind.toLine' : now === 'line' ? 'stitch.kind.lineToFill' : 'stitch.kind.toFill';
+    return k === 'satin' ? 'stitch.kind.toSatin' : k === 'line' ? 'stitch.kind.toLine' : now === 'line' ? (this.info?.path?.closed ? 'stitch.kind.closedToFill' : 'stitch.kind.lineToFill') : 'stitch.kind.toFill';
   }
 
   /** Why `k` cannot be picked now. */
@@ -1196,6 +1197,7 @@ export class StitchPanel {
       if (now !== 'fill' || info.asLine) return 'stitches.kind.notForLine';
       return info.draw?.tool ? 'stitches.kind.drawing' : info.draw?.single ? 'stitch.kind.noSatin' : 'stitches.kind.noSatinMany';
     }
+    if (k === 'fill' && now === 'line' && info.path && !info.path.traced && !info.path.closed) return 'stitches.kind.closeToFill';
     return k === 'line' ? 'stitches.kind.lineOnly' : 'stitch.kind.toFill';
   }
 

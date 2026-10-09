@@ -234,7 +234,16 @@ export function initShapes(app: ShapesAreaApp): void {
       app.shapeTool.commit();
     },
   });
-  command({ id: 'shape.closeLine', label: 'shape.line.close', group: SHAPE, when: lineOpen(false), run: () => void app.shapeTool.toggleClosed() });
+  command({
+    id: 'shape.closeLine',
+    label: 'shape.line.close',
+    group: SHAPE,
+    when: lineOpen(false),
+    run: () => {
+      // Closed, a line can be filled: said where it is found.
+      if (app.shapeTool.toggleClosed()) toast(t('shape.line.closed'));
+    },
+  });
   command({ id: 'shape.openLine', label: 'shape.line.open', group: SHAPE, when: lineOpen(true), run: () => void app.shapeTool.toggleClosed() });
   command({
     id: 'frame.snap',
