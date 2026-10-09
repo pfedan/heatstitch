@@ -5,11 +5,18 @@ import { keepObjects, objectView, type HandChange } from '../src/model/handEdit'
 import { STITCH, type Pattern } from '../src/model/pattern';
 import { remembered } from '../src/model/restitch';
 import { parsePattern } from '../src/parsers';
+import { addShape } from '../src/model/addShape';
+import { digitizeDefaults } from '../src/digitize/digitize';
+import { parsePath } from '../src/shape/svgPath';
+import { DEFAULT_PROFILE } from '../src/validation/profiles';
+import type { Mat } from '../src/shape/path';
 import { Editor, HAND_MAX } from '../src/ui/editor';
 import { tagShortStitches, TIE } from '../src/validation/shortStitches';
 import { Shape } from './helpers/shapes';
 
 const load = (f: string) => parsePattern(readFileSync(new URL(`../public/examples/${f}`, import.meta.url)), f);
+const ID: Mat = [1, 0, 0, 1, 0, 0];
+const options = digitizeDefaults(DEFAULT_PROFILE);
 const SCALE = 20; // px per mm, zoomed in far enough to pick penetrations
 
 /**
@@ -57,7 +64,7 @@ describe('stitching on, click by click', () => {
     }
   });
 
-  it('sews new points after a record and takes the tie-off along', () => {
+  it('sews new points after a record and takes the tie-off along, turned with the last stitch', () => {
     const p = new Shape().to(0, 0).to(1, 0).to(2, 0).to(2.1, 0).to(2, 0).build();
     const ends: ThreadEnds = { first: 0, end: 2, last: 4 };
     const end = atThreadEnd(p, 2, ends)!;
@@ -65,7 +72,8 @@ describe('stitching on, click by click', () => {
     expect(atThreadEnd(p, 1, ends)).toBeNull();
     const q = sewOn(p, 2, [[30, 10]], end.tie);
     expect(Array.from(q.x)).toEqual([0, 10, 20, 30, 31, 30]);
-    expect(Array.from(q.y)).toEqual([0, 0, 0, 10, 10, 10]);
+    // The tie-off ran on along the last stitch (east); now the last stitch goes north-east, so does it.
+    expect(Array.from(q.y)).toEqual([0, 0, 0, 10, 11, 10]);
   });
 
   it('goes on from the thread end of an object, which stays the same object', () => {
@@ -185,5 +193,37 @@ describe('stitching on, click by click', () => {
     let n = 0;
     for (let k = b.first + 1; k <= i; k++) if (p.cmd[k] === STITCH) n++;
     expect(n).toBe(10);
+  });
+
+  it('turns a tie-off sewn back along the last stitch with the new last stitch, so it stays hidden in it', () => {
+    // A line drawn in the app: its tie-off runs back along its last stitch (lockAt).
+    let p = { x: new Int32Array(0), y: new Int32Array(0), cmd: new Uint8Array(0), colors: [] } as unknown as Pattern;
+    p = addShape(p, { form: parsePath('M0 0 L20 0', ID), kind: 'stroke', width: 0.4 }, { r: 200, g: 30, b: 30 }, null, options)!.pattern;
+    const { state, editor, obj } = inObject(p, 0);
+    const b = obj();
+    const end = b.last - b.tieOff;
+    expect(b.tieOff).toBeGreaterThan(0);
+    editor.setPen(true);
+    // On at a right angle: 3 mm down, then 3 mm back to the left.
+    click(editor, p.x[end] / 10, p.y[end] / 10 + 3);
+    click(editor, p.x[end] / 10 - 3, p.y[end] / 10 + 3);
+    const a = obj();
+    const q = state.pattern;
+    const e = a.last - a.tieOff;
+    const [ex, ey] = pos(q, e);
+    expect([ex, ey]).toEqual([p.x[end] - 30, p.y[end] + 30]);
+    // Every tie-off point lies on the last stitch now (going right from the end), none off it.
+    for (let i = e + 1; i <= a.last; i++) {
+      if (q.cmd[i] !== STITCH) continue;
+      expect(Math.abs(q.y[i] - ey)).toBeLessThanOrEqual(1);
+      expect(q.x[i]).toBeGreaterThanOrEqual(ex);
+      expect(q.x[i]).toBeLessThanOrEqual(ex + 30);
+    }
+    // Taken back, the tie-off is back along the stitch before.
+    editor.deleteSelection();
+    const c = obj();
+    const r = state.pattern;
+    const [cx, cy] = pos(r, c.last - c.tieOff);
+    for (let i = c.last - c.tieOff + 1; i <= c.last; i++) if (r.cmd[i] === STITCH) expect(Math.abs(r.x[i] - cx)).toBeLessThanOrEqual(1), expect(r.y[i]).toBeLessThanOrEqual(cy);
   });
 });

@@ -254,8 +254,7 @@ export function stitchesTo(ax: number, ay: number, bx: number, by: number, max: 
 /**
  * New penetrations `pts` (0.1 mm) sewn one after another right after record `after`: the stitch
  * that went on from there now starts at the last of them. The records of `tie` (a tie-off after the
- * thread end) move along by as much as the thread end moved, so the thread stays locked where it
- * now ends.
+ * thread end) go along to where the thread now ends, turned with its last stitch (see turnTie).
  */
 export function sewOn(p: Pattern, after: number, pts: readonly [number, number][], tie: readonly number[] = []): Pattern {
   const n = p.cmd.length;
@@ -276,14 +275,48 @@ export function sewOn(p: Pattern, after: number, pts: readonly [number, number][
   y.set(p.y.subarray(at), at + k);
   cmd.set(p.cmd.subarray(at), at + k);
   if (k && tie.length) {
-    const dx = pts[k - 1][0] - p.x[after];
-    const dy = pts[k - 1][1] - p.y[after];
-    for (const i of tie) {
-      const j = i >= at ? i + k : i;
-      x[j] += dx;
-      y[j] += dy;
-    }
+    const prev = stitchBefore(p, after);
+    const [bx, by] = pts[k - 1];
+    const [cx, cy] = k > 1 ? pts[k - 2] : [p.x[after], p.y[after]];
+    const from: Stitch = [p.x[prev], p.y[prev], p.x[after], p.y[after]];
+    turn(x, y, tie.map((i) => (i >= at ? i + k : i)), from, [cx, cy, bx, by]);
   }
   syncMarks(x, y, cmd);
   return withRecords(p, x, y, cmd);
+}
+
+/** A stitch as the points it goes from and to (0.1 mm): [fromX, fromY, toX, toY]. */
+export type Stitch = [number, number, number, number];
+
+/** The penetration before record `i` (itself when there is none). */
+export function stitchBefore(p: Pattern, i: number): number {
+  for (let j = i - 1; j >= 0; j--) if (p.cmd[j] === STITCH) return j;
+  return i;
+}
+
+/**
+ * The tie-off records `tie` taken from the thread end of stitch `from` to the end of stitch `to`,
+ * turned as the last stitch turned: a tie-off sewn back along the last stitch (as ours are, and as
+ * Wilcom sews its own on lines and satins) stays on the stitch line, hidden in it, instead of
+ * sticking out where the thread used to come from. Where either stitch has no length it is only moved.
+ */
+export function turnTie(p: Pattern, tie: readonly number[], from: Stitch, to: Stitch): Pattern {
+  const x = p.x.slice();
+  const y = p.y.slice();
+  turn(x, y, tie, from, to);
+  syncMarks(x, y, p.cmd);
+  return withRecords(p, x, y, p.cmd.slice());
+}
+
+function turn(x: Int32Array, y: Int32Array, tie: readonly number[], [fx, fy, ax, ay]: Stitch, [gx, gy, bx, by]: Stitch): void {
+  const still = (fx === ax && fy === ay) || (gx === bx && gy === by);
+  const a = still ? 0 : Math.atan2(by - gy, bx - gx) - Math.atan2(ay - fy, ax - fx);
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  for (const i of tie) {
+    const dx = x[i] - ax;
+    const dy = y[i] - ay;
+    x[i] = Math.round(bx + dx * c - dy * s);
+    y[i] = Math.round(by + dx * s + dy * c);
+  }
 }

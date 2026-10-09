@@ -33,6 +33,7 @@ import { tagShortStitches, TIE } from '../../src/validation/shortStitches';
 import { thinByHand } from '../../src/correct/thinHand';
 import { keepObjects } from '../../src/model/handEdit';
 import { Editor } from '../../src/ui/editor';
+import { stitchBefore } from '../../src/model/edit';
 import { THIN_SHARES } from '../../src/areas/stitches/state';
 import { writePattern } from '../../src/writers';
 import { rng } from './images';
@@ -404,7 +405,7 @@ export const OPS: Op[] = [
       for (const x of after) if (x.index !== o) expect(ownStitches(d.cur.p, x), 'stitched on: the others stay as they were').toBe(others.get(x.id));
       if (fromEnd) {
         // The thread ends at the last click, locked by the tie-off that came along: what is sewn after
-        // it stays as close to it as the tie-off was to the old end.
+        // it stays as close to it as the tie-off was to the old end (each turn may round by 0.1 mm).
         const a = after[o];
         const p = d.cur.p;
         const last = [...editor.selection][0];
@@ -414,7 +415,18 @@ export const OPS: Op[] = [
           return m;
         };
         expect(last, 'stitched on: the last point set is the last of the object, its tie-off aside').toBe(a.last - o0.tieOff);
-        expect(reach(p, last, a.last), 'stitched on: the tie-off goes along').toBeLessThanOrEqual(reach(before0, o0.last - o0.tieOff, o0.last) + 1);
+        expect(reach(p, last, a.last), 'stitched on: the tie-off goes along').toBeLessThanOrEqual(reach(before0, o0.last - o0.tieOff, o0.last) + clicks);
+        // Turned with the last stitch: a tie-off on the line of the old last stitch is on the line
+        // of the new one (as far off it as it was, rounding aside), not sticking out sideways.
+        const off = (q: Pattern, end: number, to: number) => {
+          const prev = stitchBefore(q, end);
+          const [ux, uy] = [q.x[end] - q.x[prev], q.y[end] - q.y[prev]];
+          const n = Math.hypot(ux, uy);
+          let m = 0;
+          if (n) for (let i = end + 1; i <= to; i++) if (q.cmd[i] === STITCH) m = Math.max(m, Math.abs((q.x[i] - q.x[end]) * uy - (q.y[i] - q.y[end]) * ux) / n);
+          return m;
+        };
+        if (stitchBefore(before0, o0.last - o0.tieOff) >= o0.first) expect(off(p, last, a.last), 'stitched on: the tie-off turns with the last stitch').toBeLessThanOrEqual(off(before0, o0.last - o0.tieOff, o0.last) + clicks);
       }
       return true;
     },

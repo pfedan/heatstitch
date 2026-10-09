@@ -1,6 +1,6 @@
 import { thinByHand } from '../correct/thinHand';
 import { formatNumber } from '../i18n';
-import { atThreadEnd, insertStitch, moveRecords, nearestSegment, nearestStitch, removeStitches, sewOn, stitchesInRect, stitchesTo, type RecordRange, type ThreadEnds } from '../model/edit';
+import { atThreadEnd, insertStitch, moveRecords, nearestSegment, nearestStitch, removeStitches, sewOn, stitchBefore, stitchesInRect, stitchesTo, turnTie, type RecordRange, type ThreadEnds } from '../model/edit';
 import type { HandChange } from '../model/handEdit';
 import { STITCH, type Pattern } from '../model/pattern';
 import { POINTS_MIN_SCALE } from '../render/editOverlay';
@@ -421,7 +421,10 @@ export class Editor implements EditView {
     let before = removed[0] - 1;
     while (before >= 0 && (p.cmd[before] !== STITCH || this.selection.has(before))) before--;
     const first = this.range?.first ?? 0;
-    if (end?.tie.length && before >= first) p = moveRecords(p, end.tie, p.x[before] - p.x[end.end], p.y[before] - p.y[end.end]);
+    if (end?.tie.length && before >= first) {
+      const prev = stitchBefore(p, before);
+      p = turnTie(p, end.tie, [p.x[before], p.y[before], p.x[end.end], p.y[end.end]], [p.x[prev], p.y[prev], p.x[before], p.y[before]]);
+    }
     // The thread now ends at the one before, the same tie-off after it (the deleted record is gone).
     this.tail = end && before === end.end - 1 && before >= first ? { at: before, span: end.tie.length ? end.tie[end.tie.length - 1] - end.end : 0 } : null;
     const mask = new Uint8Array(p.cmd.length);
