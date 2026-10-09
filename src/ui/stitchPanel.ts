@@ -176,9 +176,9 @@ const KINDS: ObjectKind[] = ['fill', 'satin', 'run'];
 
 /**
  * The fill patterns as tiles in two groups: covering ones (straight, bent and decorative rows) and
- * open ones (one line, the fabric showing).
+ * open ones (one line, the fabric showing). Empty (none) sews the object as a line along its form.
  */
-type Tile = FillPattern;
+type Tile = FillPattern | 'none';
 type TileGroup = 'cover' | 'open';
 const GROUPS: Record<TileGroup, Tile[]> = {
   cover: ['tatami', 'gradient', 'contour', 'spiral', 'follow', 'guided', 'waves', 'rays', 'swirl', 'grain', 'circles'],
@@ -1248,8 +1248,9 @@ export class StitchPanel {
         this.hooks.preview(null);
         this.pickPattern(tile);
       });
-      // Pointing at a pattern shows it on the canvas before it is picked (guided needs its lines first).
-      if (tile !== now && tile !== 'guided' && !blocked) {
+      // Pointing at a pattern shows it on the canvas before it is picked (guided needs its lines first;
+      // empty is the line, sewn when picked).
+      if (tile !== now && tile !== 'guided' && tile !== 'none' && !blocked) {
         b.addEventListener('pointerenter', () => {
           const peek = structuredClone(s);
           setPattern(peek, tile);

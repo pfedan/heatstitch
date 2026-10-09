@@ -8,7 +8,7 @@ import { analyze, measureFill } from '../src/model/restitch';
 import { stitchKinds } from '../src/model/sequence';
 import { parsePattern } from '../src/parsers';
 import { rng } from './helpers/images';
-import { STEPS, Doc, pick, restitchFill, OPS, checkAllKnown, checkBorders, checkKeys, describeObjects } from './helpers/torture';
+import { STEPS, Doc, pick, restitchFill, OPS, checkAllKnown, checkBorders, checkKeys, checkOneGeo, describeObjects } from './helpers/torture';
 
 describe('borders read from a file', () => {
   /** The letters of the demo file, moved `dx` mm (other stitches: nothing known from another chain is taken over). */
@@ -48,6 +48,7 @@ describe('borders read from a file', () => {
         // (A file read has no END record: the records are checked by the app-made chains in torture.test.ts.)
         checkKeys(d.cur.p);
         checkBorders(d.cur.p);
+        checkOneGeo(d.cur.p);
       } catch (e) {
         throw new Error(`seed ${seed}: ${log.join(' > ')}\n${(e as Error).message}`);
       }

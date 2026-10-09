@@ -52,7 +52,7 @@ const withoutLink = ({ outline: _o, border: _b, ...rest }: Remembered): Remember
 export const newLink = () => Math.random().toString(36).slice(2, 10);
 
 /** Whether `m` is a fill that can have a border object of its own (see syncOwnBorders). */
-const bordered = (m: Remembered | undefined): boolean => !!m?.region && !!m.fill && !m.blendOf && m.fill.pattern !== 'none' && !(m.fill.border && !m.fill.border.color && m.borderAt);
+const bordered = (m: Remembered | undefined): boolean => !!m?.region && !!m.fill && !m.blendOf && !(m.fill.border && !m.fill.border.color && m.borderAt);
 
 /**
  * The parts of fills cut apart (Remembered.piece) as wholes: for each object the objects of its
@@ -312,7 +312,7 @@ function syncOwnBorders(p: Pattern, trimMm: number, drop: ReadonlySet<string>, f
     const b = m?.fill?.border;
     // A border still sewn as the last part of its fill (from before borders were objects) stays so,
     // as does the border of an empty fill (it is all the object is).
-    if (!m?.fill || !b || (!b.color && m.borderAt) || m.fill.pattern === 'none') return;
+    if (!m?.fill || !b || (!b.color && m.borderAt)) return;
     if (b.link && (claimed.get(b.link) ?? list[0]) === list[0]) return void claimed.set(b.link, list[0]);
     // A border without link yet, or the copy of a fill: a link of its own.
     if (list[0] !== k) {
@@ -334,7 +334,7 @@ function syncOwnBorders(p: Pattern, trimMm: number, drop: ReadonlySet<string>, f
     const m = mem[k];
     const b = m?.fill?.border;
     // A blend's second thread is sewn as its fill says, without border.
-    if (!m?.region || !b?.link || (!b.color && m.borderAt) || m.blendOf || m.fill?.pattern === 'none') return;
+    if (!m?.region || !b?.link || (!b.color && m.borderAt) || m.blendOf) return;
     wanted.add(b.link);
     // The parts of a fill cut apart: one border around them all, sewn after the last one.
     const list = whole[k];

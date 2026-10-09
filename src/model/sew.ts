@@ -64,7 +64,6 @@ export function specOf(p: Pattern, o: SewObject, m: Remembered | null | undefine
   if (kind === 'fill' && m.fill && m.fill.pattern !== 'follow' && oneKind(m, 'fill')) {
     const area = use === 'band' ? bandArea(geoOf(m)!, m.fill) : (m.region ?? (use === 'area' ? rasterize(geoOf(m)!) : null));
     if (!area) return null;
-    if (m.fill.pattern === 'none' && !m.fill.border) return null;
     return { kind: 'fill', area, fill: m.fill, memory: m };
   }
   if (kind === 'satin' && m.satin && m.columns?.length && oneKind(m, 'satin')) return { kind: 'satin', columns: m.columns, satin: m.satin };
@@ -85,8 +84,6 @@ export function sewOne(spec: Spec, way: Way): { runs: Pt[][]; under: number } | 
     case 'border':
       return ok(borderStitches(spec.area, spec.border, way.from, wholeOf(spec.area, spec.memory)));
     case 'fill': {
-      // An empty fill is its border only, in its thread.
-      if (spec.fill.pattern === 'none') return ok(borderStitches(spec.area, spec.fill.border!, way.from, wholeOf(spec.area, spec.memory)));
       // Travel may run where it is hidden: across the whole area where shapes on top left parts
       // out (knockout), and a little beyond the edge where the rows end (as far as travel along
       // an old thread may, TRAVEL_REACH).

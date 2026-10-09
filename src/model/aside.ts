@@ -4,10 +4,10 @@ import { addShape, insertObject } from './addShape';
 import { recs, type Rec } from './jumps';
 import { sewObjects, type ObjectKind } from './objects';
 import { nextVersion, STITCH, type Pattern, type ThreadColor } from './pattern';
-import { memoryFrom, remember, storedOf, type StoredObject } from './restitch';
+import { memoryFrom, remember, remembered, storedOf, type StoredObject } from './restitch';
 import { deleteObjects } from './shapeOps';
 import { stitchKinds } from './sequence';
-import { guessArea } from './geo';
+import { geoOf, geoUse, guessArea } from './geo';
 
 /**
  * Shapes that are not sewn: switched off (kept with their stitches and settings, to sew them again
@@ -88,7 +88,9 @@ export function setAside(p: Pattern, which: number[], role: AsideRole, trimMm: n
   sorted.forEach((o, k) => {
     const obj = objs[o];
     const known = storedOf(p, obj);
-    const form = (known?.form && formFrom(known.form)) || (known?.path && formFrom(known.path)) || (obj.kind === 'fill' ? guessArea(p, obj, kinds) : obj.kind === 'run' ? pointsLine(p, obj.first, obj.last) : null);
+    const m = remembered(p, obj);
+    const geo = m && geoUse(m) !== 'band' ? geoOf(m) : null;
+    const form = geo || (obj.kind === 'fill' ? guessArea(p, obj, kinds) : obj.kind === 'run' ? pointsLine(p, obj.first, obj.last) : null);
     list.push({
       id: id++,
       role,

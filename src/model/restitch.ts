@@ -1,6 +1,6 @@
 import { LOCK_MM, SATIN_SPLIT_MM, SATIN_SPLIT_MAX } from '../material/rules';
 import { SATIN_MAX, satinForArea, type KeptShape } from '../digitize/digitize';
-import { borderStitches, isRunType, runLike, type PathStitch } from './along';
+import { isRunType, runLike, type PathStitch } from './along';
 import { wholeOf } from './knockout';
 import { LINE_MOTIFS } from '../digitize/motif';
 import { lineStitches, runAsLine, runWays } from './line';
@@ -53,7 +53,7 @@ import { areaOf, bandArea, geoArea, geoUse, lineGeoOf } from './geo';
  * the directions and curves of the rows sewn now (follow), or along lines drawn on it (guided);
  * or not at all (none): only its border is sewn, in its thread, as the whole object.
  */
-export type FillPattern = 'tatami' | 'gradient' | 'contour' | 'spiral' | 'follow' | 'guided' | DecoPattern | OpenPattern | 'none';
+export type FillPattern = 'tatami' | 'gradient' | 'contour' | 'spiral' | 'follow' | 'guided' | DecoPattern | OpenPattern;
 /** Dense fills with curved rows laid on a field drawn from a few numbers (see deco.ts). */
 export type DecoPattern = 'waves' | 'grain' | 'rays' | 'swirl' | 'circles';
 /** One line through the area, the fabric showing between (see deco.ts). */
@@ -909,7 +909,7 @@ const isValue = (v: unknown) => finite(v) || typeof v === 'boolean' || typeof v 
 const isFixed = (x: unknown): x is Fixed => !!x && typeof (x as Fixed).field === 'string' && isValue((x as Fixed).from) && isValue((x as Fixed).to);
 /** Underlay is left out only this far inside what covers it (mm), so its edge stays held. */
 const UNDER_COVER_MARGIN = 0.5;
-const PATTERNS: FillPattern[] = ['tatami', 'gradient', 'contour', 'spiral', 'follow', 'guided', ...DECO_PATTERNS, ...OPEN_PATTERNS, 'none'];
+const PATTERNS: FillPattern[] = ['tatami', 'gradient', 'contour', 'spiral', 'follow', 'guided', ...DECO_PATTERNS, ...OPEN_PATTERNS];
 const isLine = (l: unknown) => Array.isArray(l) && l.length >= 2 && l.every((q) => Array.isArray(q) && q.length === 2 && q.every(finite));
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
@@ -1179,6 +1179,9 @@ function lineFrom(v: unknown): PathStitch | null {
 
 /** One object's memory from the file; null when it does not hold. */
 function fromStored(e: StoredObject): Remembered | null {
+  // Before project version 3 a fill could be empty (see emptyAsLine).
+  const empty = (e?.fill?.pattern as string) === 'none';
+  if (empty) e = { ...e, fill: { ...e.fill!, pattern: 'tatami' } };
   if (typeof e?.key !== 'string' || (e.fill !== undefined && !isFill(e.fill))) return null;
   const region = e.region ? regionFrom(e.region) : null;
   if (e.region && !region) return null;
@@ -1238,13 +1241,13 @@ function fromStored(e: StoredObject): Remembered | null {
     const memory = undo.memory ? fromStored(undo.memory) : null;
     r.undo = { x: undo.x.slice(), y: undo.y.slice(), cmd: undo.cmd.slice(), lead: Math.round(undo.lead), ...(trail ? { trail } : {}), ...(memory ? { memory } : {}) };
   }
-  return r.fill?.pattern === 'none' ? emptyAsLine(r) : r;
+  return empty ? emptyAsLine(r) : r;
 }
 
 /**
- * Before project version 3, a fill could be empty: only its border sewn, in its thread. It is the
- * line along its form that it sews (a fill of a file: along the outline of its area), its fill
- * kept to fill it again (as tatami, the pattern it had is not known).
+ * Before project version 3, a fill could be empty (pattern none): only its border sewn, in its
+ * thread. It is the line along its form that it sews (a fill of a file: along the outline of its
+ * area), its fill kept to fill it again (as tatami, the pattern it had is not known).
  */
 function emptyAsLine(r: Remembered): Remembered {
   const geo = r.geo ?? (r.region ? vectorize(r.region, r.read ? READ_TOLERANCE : FIT_TOLERANCE) : null);
@@ -1258,7 +1261,7 @@ function emptyAsLine(r: Remembered): Remembered {
     region: null,
     geo,
     line: border,
-    kept: { ...r.kept, fill: { ...fill, pattern: 'tatami' } },
+    kept: { ...r.kept, fill },
     ...(end ? { parts: [{ kind: runLike(border.type) ? 'run' : 'satin', end }] } : {}),
   };
 }
@@ -2074,8 +2077,7 @@ export interface NewFill {
   border: number;
 }
 
-function newFill(p: Pattern, o: SewObject, a: Analysis, s: FillSettings, reverse = false, covers?: Cover[], known?: Remembered): NewFill | null {
-  if (s.pattern === 'none') return emptyFill(p, o, a, s, reverse, known);
+function newFill(p: Pattern, o: SewObject, a: Analysis, s: FillSettings, reverse = false, covers?: Cover[]): NewFill | null {
   const first = a.parts.find((pt) => pt.kind === 'fill' && !pt.border);
   const last = a.parts.filter((pt) => pt.kind === 'fill' && !pt.border).pop();
   if (!a.fill || !first || !last) return null;
@@ -2146,10 +2148,9 @@ export interface FillWay {
 
 /**
  * The stitches of a fill in area `area` with settings `s`: everything they depend on is given, so
- * the same area, settings and way give the same stitches (an empty fill has none here).
+ * the same area, settings and way give the same stitches.
  */
 export function fillRuns(area: Region, s: FillSettings, way: FillWay): NewFill | null {
-  if (s.pattern === 'none') return null;
   const { start, travel, covers } = way;
   // Grown or shrunk for the stitches only: the shape kept for the next edit stays as it is.
   const r = expandRegion(area, s.expand ?? 0);
@@ -2215,13 +2216,6 @@ export function fillRuns(area: Region, s: FillSettings, way: FillWay): NewFill |
  * An empty fill: its border only, in its thread, as all of the object (there is no fill to trim it
  * off). Where shapes on top left out its area (knockout), the edges they cut get none.
  */
-function emptyFill(p: Pattern, o: SewObject, a: Analysis, s: FillSettings, reverse: boolean, known?: Remembered): NewFill | null {
-  if (!a.fill || !s.border) return null;
-  const from = pt10(p, reverse ? o.last : o.first);
-  const runs = borderStitches(a.fill, s.border, from, known ? wholeOf(a.fill, known) : null).filter((run) => run.length > 1);
-  return runs.length ? { runs, under: 0, border: runs.reduce((n, run) => n + run.length, 0) } : null;
-}
-
 /** A dense fill with curved rows: wave rows, or rows on one of the decorative fields. */
 function decoFill(r: Region, s: FillSettings, fp: FillParams, start: Pt) {
   const d = { ...DECO_DEFAULTS, ...s.deco };
@@ -3176,17 +3170,7 @@ function restitchOnce(
     // A band: its area is always made from its paths, never kept or traced.
     const byLine = !newArea && band && given.kind === 'fill' ? bandArea(known!.geo!, given.s) : null;
     if (byLine && an.fill) an = { ...an, fill: byLine };
-    // An empty fill is its border only: all of the object is the fill, on the area it keeps.
-    const empty = given.kind === 'fill' && given.s.pattern === 'none' && (from ?? 'fill') === 'fill';
-    if (empty) {
-      const area = an.fill ?? known?.region ?? null;
-      if (!area) {
-        failed.push(o.index);
-        continue;
-      }
-      an = { parts: [{ kind: 'fill', s: o.first, e: o.last }], fill: area };
-    }
-    if (reverse && !empty) {
+    if (reverse) {
       // Turned around as a whole: its underlay and travel are made anew with it.
       const whole = wholeObject(p, o, an, given.kind);
       if (!whole) {
@@ -3231,7 +3215,7 @@ function restitchOnce(
     const guide = converting && settings.kind === 'satin' ? (guides?.get(o.index) ?? known?.kept?.satin) : undefined;
     const fillS = settings.s as FillSettings;
     const covers = together && !converting && fillS.underlay && fillS.underCover ? coversOver(p, objs, o, an.fill?.pxMm ?? 0.1) : undefined;
-    const filled = together && !converting ? newFill(p, o, an, fillS, reverse, covers, known) : null;
+    const filled = together && !converting ? newFill(p, o, an, fillS, reverse, covers) : null;
     // A drawn line: sewn anew along its curves as a whole.
     const path = paths?.get(o.index) ?? lineGeoOf(known);
     const lineSt = !converting && path && settings.kind !== 'fill' ? asLine(settings, known?.line) : null;
@@ -3263,11 +3247,6 @@ function restitchOnce(
     // Copies all the way down: the panel goes on changing its settings (a border's thread, guides)
     // in place, and what the object remembers must not change with them.
     const newFillS = settings.kind === 'fill' ? structuredClone(settings.s) : undefined;
-    // An empty fill's border is the object itself, in its thread: no thread or link of its own.
-    if (newFillS?.pattern === 'none' && newFillS.border) {
-      delete newFillS.border.color;
-      delete newFillS.border.link;
-    }
     const newSatinS = settings.kind === 'satin' ? structuredClone(reverse ? swappedSides(settings.s) : settings.s) : undefined;
     const after: Remembered = converting
       ? newFillS

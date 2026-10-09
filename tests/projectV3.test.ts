@@ -85,7 +85,7 @@ describe('project version 3', () => {
     // An empty fill as version 2 kept it: its form, its border only, in its thread.
     const e = list.objects.find((x) => x.memory?.form && x.memory.fill && !x.memory.knockout && !x.memory.fill.border?.link)!;
     expect(e).toBeDefined();
-    e.memory!.fill = { ...e.memory!.fill!, pattern: 'none', border: { type: 'triple', width: 2 } };
+    e.memory!.fill = { ...e.memory!.fill!, pattern: 'none' as never, border: { type: 'triple', width: 2 } };
     const p = fromStored(parsePattern(f.data, f.name), f.working) ?? parsePattern(f.data, f.name);
     restoreRemembered(p, list);
     const o = sewObjects(p).find((x) => x.id === e.id)!;

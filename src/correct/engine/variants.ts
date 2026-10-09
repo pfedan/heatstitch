@@ -121,7 +121,7 @@ function roleNow(p: Pattern, o: SewObject, kinds: Uint8Array, known: ReturnType<
   // it would lose its look.
   if (s.kind === 'run' && known?.line && known.line.type !== 'run' && known.line.type !== 'triple') return { role: 'fixed', settings: null, why: 'line' };
   if (s.kind === 'fill') {
-    if (isOpenPattern(s.s.pattern) || s.s.pattern === 'none') return { role: 'fixed', settings: null, why: 'open' };
+    if (isOpenPattern(s.s.pattern)) return { role: 'fixed', settings: null, why: 'open' };
     const an = analyze(p, o, kinds, known);
     if (shapeTrust(p, o, an, s.s.spacing) === 'approximate') return { role: 'fixed', settings: null, why: 'guessed' };
   }

@@ -827,7 +827,7 @@ function blendOf(p: Pattern, q: Sequence, selected: number[]): { blend?: ThreadC
   if (selected.length !== 1 || editor.active) return {};
   const o = q.objects[selected[0]];
   const known = o && remembered(p, o);
-  return known?.fill && known.region && geoUse(known) !== 'band' && !known.blendOf && known.fill.pattern !== 'none' && !isOpenPattern(known.fill.pattern) ? { blend: o.color } : {};
+  return known?.fill && known.region && geoUse(known) !== 'band' && !known.blendOf && !isOpenPattern(known.fill.pattern) ? { blend: o.color } : {};
 }
 
 // Rendering ------------------------------------------------------------------

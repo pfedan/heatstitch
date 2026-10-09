@@ -112,17 +112,12 @@ export function transformRemembered(r: Remembered, m: Mat): Remembered {
   const use = geoUse(r);
   if (r.geo) out.geo = transformForm(r.geo, m);
   if (use === 'line' && r.line) out.line = mirroredEcho(r.line, r.geo!, m);
-  if (use === 'area') out.region = rasterize(out.geo!, r.region?.pxMm ?? 0.1);
+  if (!r.geo) {
+    // A form read from the stitches stays a guess (no curves are kept): its area moved as pixels where
+    // that is exact, else traced, turned and rastered again.
+    if (r.region) out.region = shiftRegion(r.region, m) ?? rasterize(transformForm(vectorize(r.region), m), r.region.pxMm);
+  } else if (use === 'area') out.region = rasterize(out.geo!, r.region?.pxMm ?? 0.1);
   else if (use === 'band' && r.region) out.region = shiftRegion(r.region, m) ?? bandArea(out.geo!, out.fill!, r.region.pxMm);
-  else if (!r.geo && r.region) {
-    const shifted = shiftRegion(r.region, m);
-    if (shifted) out.region = shifted;
-    else {
-      // Traced once; from now on the curves are the shape.
-      out.geo = transformForm(vectorize(r.region), m);
-      out.region = rasterize(out.geo, r.region.pxMm);
-    }
-  }
   if (r.shape) out.shape = shiftRegion(r.shape, m) ?? rasterize(transformForm(vectorize(r.shape), m), r.shape.pxMm) ?? undefined;
   if (r.columns) {
     out.columns = r.columns.map((part) =>

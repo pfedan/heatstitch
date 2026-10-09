@@ -925,7 +925,7 @@ export function checkBorders(p: Pattern): void {
   });
   const pieces = new Map<string, number>();
   mem.forEach((m, k) => {
-    if (!m?.piece || !m.region || !m.fill || m.fill.pattern === 'none') return;
+    if (!m?.piece || !m.region || !m.fill) return;
     const f = pieces.get(m.piece);
     if (f === undefined) return void pieces.set(m.piece, k);
     if (JSON.stringify(mem[f]!.fill!.border) !== JSON.stringify(m.fill.border)) problems.push(`parts ${f} and ${k} of one whole have other borders`);
@@ -966,6 +966,8 @@ export function checkOneGeo(p: Pattern): void {
     if (m.kept?.fill && m.fill) problems.push(`${o.index}: keeps the fill it is`);
     if (m.kept?.line && geoUse(m) === 'line') problems.push(`${o.index}: keeps the line it is`);
     if (m.kept && !geoOf(m)) problems.push(`${o.index}: keeps stitch types without a form`);
+    // Known and guessed apart (rule 6): a form only read from the stitches is never kept as curves.
+    if (m.read && m.geo) problems.push(`${o.index}: a form read from its stitches kept as known`);
     const geo = geoOf(m);
     if (geo && sortedJson(withGeo(m, geo)) !== sortedJson(m)) problems.push(`${o.index}: its form put back changes it`);
   }
@@ -991,7 +993,7 @@ export function checkEmptyFills(p: Pattern): void {
   const problems: string[] = [];
   for (const o of sewObjects(p)) {
     const m = remembered(p, o);
-    if (m?.fill?.pattern === 'none' || m?.kept?.fill?.pattern === 'none') problems.push(`${o.index}: an empty fill`);
+    if ((m?.fill?.pattern as string) === 'none' || (m?.kept?.fill?.pattern as string) === 'none') problems.push(`${o.index}: an empty fill`);
   }
   expect(problems.join('; '), 'empty fills').toBe('');
 }

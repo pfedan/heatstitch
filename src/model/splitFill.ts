@@ -212,7 +212,7 @@ export function canSplit(p: Pattern, o: number): boolean {
   if (!obj) return false;
   const known = remembered(p, obj);
   // Loosed from its shape (changed by hand): its stitches are not sewn anew, so not cut apart either.
-  if (!known?.fill || known.free || geoUse(known) === 'band' || known.outline || known.blendOf || known.fill.deco?.blend || known.fill.pattern === 'none') return false;
+  if (!known?.fill || known.free || geoUse(known) === 'band' || known.outline || known.blendOf || known.fill.deco?.blend) return false;
   if (!analyze(p, obj, kinds, known).fill) return false;
   const form = guessArea(p, obj, kinds);
   return fits(form, 'fill') && !!wholeArea(form!);

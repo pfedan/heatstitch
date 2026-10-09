@@ -88,7 +88,8 @@ describe('moving, turning and scaling objects', () => {
     const nk = stitchKinds(r.pattern);
     const no = sewObjects(r.pattern, nk).find((x) => x.first === r.first)!;
     const known = remembered(r.pattern, no)!;
-    expect(known.geo).toBeDefined();
+    // Its form was read from the stitches: still a guess, scaled as pixels, no curves kept (rule 6).
+    expect(known.geo).toBeUndefined();
     expect(known.region!.areaMm2 / an.fill!.areaMm2).toBeGreaterThan(2.1);
     expect(known.region!.areaMm2 / an.fill!.areaMm2).toBeLessThan(2.4);
     expect(measureFill(r.pattern, analyze(r.pattern, no, nk, known)).spacing).toBeCloseTo(spacing, 1);
