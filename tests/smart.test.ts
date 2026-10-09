@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { digitize, digitizeDefaults, type Digitized, type DigitizeOptions } from '../src/digitize/digitize';
 import { buildRegion } from '../src/digitize/region';
-import { acrossGraph, areaKey, areaPixels, groupAreas, groupsByColor, letterOf, readAreas } from '../src/digitize/smart';
+import { acrossGraph, areaKey, areaPixels, groupAreas, groupsByColor, letterOf, readAreas, type Technique } from '../src/digitize/smart';
 import { components } from '../src/image/labels';
 import { DEFAULT_PREPARE, Preparer, type Prepared } from '../src/image/prepare';
 import { normalizeImage } from '../src/settings';
@@ -70,6 +70,22 @@ describe('Smart', () => {
     expect(d.objects.find((o) => o.area === fur.key)!.curved).toBeFalsy();
     // Flat and Dynamisch do not know the areas: all as the style says.
     expect(digitize(prep, options({ smart: false })).areas).toEqual([]);
+  });
+
+  it('sews a change of technique, back and forth, as sewn from scratch', () => {
+    // The same image again sews what did not change as before (see Memo in digitize.ts); a copy
+    // of the prepared image is sewn from scratch.
+    const first = digitize(prep, options());
+    const steps: Partial<DigitizeOptions>[] = [];
+    let areas: Record<string, Technique> = {};
+    for (const a of first.areas!) {
+      for (const t of a.offers!.filter((x) => x !== a.technique)) {
+        areas = { ...areas, [a.key]: t };
+        steps.push({ areas });
+      }
+    }
+    steps.push({ areas: {} }, { areas, spacing: 0.5 }, { areas, satinMax: 5 }, { smart: false, areas }, {});
+    for (const s of steps) expect(digitize(prep, options(s))).toEqual(digitize({ ...prep }, options(s)));
   });
 
   it('lists alike areas of one color as one group, set by hand for all, some or none', () => {
