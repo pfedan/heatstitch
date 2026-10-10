@@ -204,7 +204,7 @@ export interface Split {
 /**
  * Whether object `o` is a fill that can be split: an area sewn with a fill whose settings Heatstitch
  * knows (drawn, converted or changed here; fills of a stitch file as it came are not yet), not a
- * fill sewn as a line, an empty fill, one with a color blend or one loosed from its shape.
+ * fill sewn as a line, one with a color blend or one loosed from its shape.
  */
 export function canSplit(p: Pattern, o: number): boolean {
   const kinds = stitchKinds(p);

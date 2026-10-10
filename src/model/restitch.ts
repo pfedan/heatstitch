@@ -2212,10 +2212,6 @@ export function fillRuns(area: Region, s: FillSettings, way: FillWay): NewFill |
   return { runs, under, border };
 }
 
-/**
- * An empty fill: its border only, in its thread, as all of the object (there is no fill to trim it
- * off). Where shapes on top left out its area (knockout), the edges they cut get none.
- */
 /** A dense fill with curved rows: wave rows, or rows on one of the decorative fields. */
 function decoFill(r: Region, s: FillSettings, fp: FillParams, start: Pt) {
   const d = { ...DECO_DEFAULTS, ...s.deco };

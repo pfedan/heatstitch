@@ -780,6 +780,7 @@ export const SHAPE_OPS: Op[] = [
         : { ...geo, paths: geo.paths.map((x, j) => (j !== k ? x : { ...x, nodes: x.nodes.map((n, m) => (m !== i ? n : { ...n, p: by(n.p), a: by(n.a), b: by(n.b) })) })) };
       const before = remembered(p, o);
       const res = reshapeObject(p, objs, o, kinds, next, T);
+      if (process.env.TORTURE_TRACE) console.log('edit outline', o.index, toggle ? 'toggle' : 'move');
       // As the app: what follows a fill sewn as a line now goes with it.
       const opened = !!res && geoUse(res.memory[0]) === 'line' && !!before?.fill;
       return !!res && took(d, res, opened ? new Set(followerLinks(before)) : undefined);
@@ -1250,6 +1251,7 @@ export async function chain(seed: number, steps = STEPS, opts: { trace?: boolean
       const lop = pick(rl, LINE_OPS);
       if (await lop.run(d, rl)) {
         log.push(lop.name);
+        if (process.env.TORTURE_TRACE) console.log(lop.name, describeObjects(d.cur.p));
         try {
           checkStep(d, false);
         } catch (e) {
@@ -1262,6 +1264,7 @@ export async function chain(seed: number, steps = STEPS, opts: { trace?: boolean
       const sop = pick(rs, SHAPE_OPS);
       if (await sop.run(d, rs)) {
         log.push(sop.name);
+        if (process.env.TORTURE_TRACE) console.log(sop.name, describeObjects(d.cur.p));
         try {
           checkStep(d, false);
         } catch (e) {

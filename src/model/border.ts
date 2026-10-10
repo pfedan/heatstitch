@@ -92,7 +92,6 @@ export function shareBorders(p: Pattern, edited: readonly SewObject[]): void {
   const objs = sewObjects(p);
   for (const e of edited) {
     const m = remembered(p, e);
-    // An empty fill (only its border) is out of its whole.
     if (!m?.piece || !m.fill || !bordered(m)) continue;
     for (const o of objs) {
       if (o.first === e.first) continue;
@@ -310,8 +309,7 @@ function syncOwnBorders(p: Pattern, trimMm: number, drop: ReadonlySet<string>, f
   whole.forEach((list, k) => {
     const m = mem[k];
     const b = m?.fill?.border;
-    // A border still sewn as the last part of its fill (from before borders were objects) stays so,
-    // as does the border of an empty fill (it is all the object is).
+    // A border still sewn as the last part of its fill (from before borders were objects) stays so.
     if (!m?.fill || !b || (!b.color && m.borderAt)) return;
     if (b.link && (claimed.get(b.link) ?? list[0]) === list[0]) return void claimed.set(b.link, list[0]);
     // A border without link yet, or the copy of a fill: a link of its own.

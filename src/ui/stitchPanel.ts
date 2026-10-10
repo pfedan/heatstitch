@@ -622,10 +622,7 @@ export class StitchPanel {
     return [top, this.sec('effects', 'stitches.sec.effects', [fx], extra)];
   }
 
-  /**
-   * An empty fill as a line: its edge is all that is sewn, in the object's thread, so the border's
-   * settings are the line's ("nur Kontur"). Füllung fills it again.
-   */
+  /** The sections of a fill's settings: its look, what holds it, its tools. */
   private fillSections(info: StitchInfo): HTMLElement[] {
     const s = this.draft.fill!;
     const open = isOpenPattern(s.pattern);

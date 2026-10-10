@@ -822,7 +822,7 @@ function objectInfo(p: Pattern, q: Sequence) {
   };
 }
 
-/** The one selected fill can blend into a second thread when it knows its area and is not a line (an empty fill shows as one). */
+/** The one selected fill can blend into a second thread when it knows its area and is not a band. */
 function blendOf(p: Pattern, q: Sequence, selected: number[]): { blend?: ThreadColor } {
   if (selected.length !== 1 || editor.active) return {};
   const o = q.objects[selected[0]];

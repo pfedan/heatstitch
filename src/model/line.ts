@@ -8,9 +8,9 @@ import { rasterize } from '../shape/rasterize';
 import { hasPhase, isRunType, passesOf, sewAlong, spacingOf, type PathStitch } from './along';
 import { runRecords } from './border';
 import { tidy, withRecords } from './edit';
-import { rememberObjects, sewObjects, type SewObject } from './objects';
+import { rememberObjects, sewObjects, stitchKey, type SewObject } from './objects';
 import { JUMP, STITCH, type Pattern } from './pattern';
-import { analyze, measureFill, remember, remembered, restitch, trimBefore, type FillSettings, type Rec, type Remembered, type RestitchResult, type RunSettings } from './restitch';
+import { analyze, measureFill, objectKey, remember, remembered, restitch, trimBefore, type FillSettings, type Rec, type Remembered, type RestitchResult, type RunSettings } from './restitch';
 import { stitchKinds, TIE_STITCH } from './sequence';
 import { bandArea, fits, geoOf, geoUse, guessArea, lineGeoOf } from './geo';
 import { partOf } from './shadow';
@@ -274,6 +274,16 @@ export function lineSettings(p: Pattern, o: SewObject, kinds?: Uint8Array): Path
  * otherwise stays. Null when nothing could be sewn.
  */
 export function resewLine(p: Pattern, index: number, path: Form, st: PathStitch, trimMm: number, reverse = false): { pattern: Pattern; first: number; last: number } | null {
+  const r = resewOnce(p, index, path, st, trimMm, reverse);
+  if (!r) return r;
+  // New stitches that are the very stitches of another object (a copy lying exactly on its
+  // original): sewn from the other end, so each remembers its own (memory is keyed by stitches).
+  const keys = sewObjects(r.pattern).filter((x) => x.first !== r.first).map((x) => objectKey(r.pattern, x));
+  if (!keys.includes(stitchKey(r.pattern, r.first, r.last))) return r;
+  return resewOnce(p, index, path, st, trimMm, !reverse) ?? r;
+}
+
+function resewOnce(p: Pattern, index: number, path: Form, st: PathStitch, trimMm: number, reverse: boolean): { pattern: Pattern; first: number; last: number } | null {
   const objs = sewObjects(p);
   const o = objs[index];
   if (!o) return null;
