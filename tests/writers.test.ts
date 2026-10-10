@@ -74,6 +74,28 @@ describe('DST writer', () => {
     expect(stitches(q)).toEqual(stitches(p));
   });
 
+  it('writes a trim as moving jumps, never zero-length ones, and keeps it on repeated saves', () => {
+    // No move after the cut, 0.1, 0.5 and 2 mm: each a cut, each jump moves, the stitches stay.
+    for (const to of [1, 1.1, 1.5, 3]) {
+      const p = new Shape().to(0, 0).to(1, 0).trim().to(to, 0).to(to, 1).build();
+      const data = writeDst(p);
+      const q = parseDst(data);
+      expect(count(q, TRIM)).toBe(1);
+      expect(stitches(q)).toEqual(stitches(p));
+      for (let k = 1; k < q.cmd.length; k++) if (q.cmd[k] === JUMP) expect([q.x[k], q.y[k]]).not.toEqual([q.x[k - 1], q.y[k - 1]]);
+      expect(writeDst(q)).toEqual(data);
+    }
+  });
+
+  it('writes a color change that moves nothing, the jump after it on its own', () => {
+    const p = new Shape().to(0, 0).to(1, 0).color().jump(4, 0).to(4, 1).build();
+    const data = writeDst(p);
+    const rec = (k: number) => Array.from(data.subarray(512 + 3 * k, 515 + 3 * k));
+    const change = [0, 1, 2, 3].find((k) => (rec(k)[2] & 0xc3) === 0xc3)!;
+    expect(rec(change)).toEqual([0, 0, 0xc3]);
+    expect(stitches(parseDst(data))).toEqual(stitches(p));
+  });
+
   it('splits long stitches into jumps and one stitch, keeping the penetrations', () => {
     const p = new Shape().to(0, 0).to(30, 0).to(30, 1).build(); // a 30 mm stitch
     const q = parseDst(writeDst(p));

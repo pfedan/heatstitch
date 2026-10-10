@@ -1719,6 +1719,21 @@ export function checkExport(p: Pattern): void {
   let k = 0;
   for (const c of readCuts) if (c === meantCuts[k]) k++;
   expect(meantCuts.slice(k)[0], 'cut lost in JEF').toBeUndefined();
+
+  // DST keeps every cut too, and never writes a jump that does not move (some machines skip those).
+  const dstData = writePattern(p, 'dst');
+  const zero: number[] = [];
+  for (let i = 512; i + 2 < dstData.length; i += 3) {
+    const [b0, b1, b2] = [dstData[i], dstData[i + 1], dstData[i + 2]];
+    if ((b2 & 0xf3) === 0xf3) break;
+    if ((b2 & 0xc3) === 0x83 && !b0 && !b1 && !(b2 & 0x3c)) zero.push((i - 512) / 3);
+  }
+  expect(zero.slice(0, 5), 'zero-length jumps in DST').toEqual([]);
+  const dst = parsePattern(dstData, 'torture.dst');
+  const dstCuts = cuts(dst, dst.x[firstStitch(dst)], dst.y[firstStitch(dst)]);
+  k = 0;
+  for (const c of dstCuts) if (c === meantCuts[k]) k++;
+  expect(meantCuts.slice(k)[0], 'cut lost in DST').toBeUndefined();
 }
 
 /** The objects of `p` in a line each, to follow a chain (TORTURE_TRACE=1). */

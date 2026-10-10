@@ -1,4 +1,4 @@
-import { JUMP, PatternBuilder, STITCH, TRIM, type Command, type Pattern } from '../../src/model/pattern';
+import { COLOR_CHANGE, JUMP, PatternBuilder, STITCH, TRIM, type Command, type Pattern } from '../../src/model/pattern';
 
 /** Builds synthetic patterns in absolute millimetres (y down). */
 export class Shape {
@@ -21,6 +21,11 @@ export class Shape {
 
   trim(): this {
     this.b.mark(TRIM);
+    return this;
+  }
+
+  color(): this {
+    this.b.mark(COLOR_CHANGE);
     return this;
   }
 
