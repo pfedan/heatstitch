@@ -343,8 +343,8 @@ export class ShapeTool implements ShapeView {
   }
 
   /**
-   * A line closed (its ends joined by a straight piece) or opened: after the selected node, else
-   * where it was closed. Lines only; for areas the outline stays closed.
+   * A path closed (its ends joined by a straight piece) or opened: after the selected node, else
+   * where it was closed. A fill whose last closed path opens is sewn as a line (see reshapeObject).
    */
   toggleClosed(): boolean {
     const k = this.selected?.path ?? 0;

@@ -182,7 +182,11 @@ export class LayersPanel {
     if (this.catcher) return this.catcher(notice);
     if (!notice.text) return;
     const a = notice.action;
-    if (!a && !notice.warn) {
+    // Where the list is a drawer that is closed (phone, tablet), a note under it would not be seen:
+    // it comes at the bottom of the stage, its action with it.
+    const unseen = document.body.classList.contains('rs-drawers') && !document.getElementById('layout')?.classList.contains('rs-side-open');
+    if (unseen && a) return toast(notice.text, { label: a.label, run: a.run });
+    if (!a && (!notice.warn || unseen)) {
       const undo = notice.undo;
       toast(notice.text, undo ? { label: t('objects.undo'), run: undo } : undefined);
       return;

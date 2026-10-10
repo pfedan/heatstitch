@@ -50,6 +50,8 @@ const ICON = {
   first: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5v10" /><path d="M14 5l-5 5 5 5" /></svg>',
   last: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M15 5v10" /><path d="M6 5l5 5-5 5" /></svg>',
   more: '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="5" cy="10" r="1.2" /><circle cx="10" cy="10" r="1.2" /><circle cx="15" cy="10" r="1.2" /></svg>',
+  trash: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 5.5h13M8 5.5V3.5h4v2M5.5 5.5l.8 11h7.4l.8-11M8.5 8.5v5M11.5 8.5v5" /></svg>',
+  back: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 15l4-7 3.5 4" /><circle cx="3" cy="15" r="1.5" class="node" /><circle cx="7" cy="8" r="1.5" class="node" /><path d="M17.5 12h-5M14.5 9.5 12 12l2.5 2.5" /></svg>',
 };
 
 /**
@@ -222,7 +224,7 @@ export function initStitchArea(app: StitchAreaApp): { refresh: () => void } {
       disabled: !canRun(c),
     });
     if (opts.pressed !== undefined) b.setAttribute('aria-pressed', String(opts.pressed));
-    if (!text) b.setAttribute('aria-label', t(c.label));
+    if (!text) b.setAttribute('aria-label', t(opts.hint ?? c.label));
     if (opts.icon) b.insertAdjacentHTML('beforeend', opts.icon);
     if (text) b.append(h('span', null, t(text)));
     b.addEventListener('click', () => {
@@ -261,7 +263,7 @@ export function initStitchArea(app: StitchAreaApp): { refresh: () => void } {
     return seg;
   };
   /** Deletes the selected line: without it, a phone (no Entf key) could only clear all lines at once. */
-  const deleteLine = (): HTMLElement[] => (rt.selected ? [cmdButton('edit.delete', 'edit.delete', { hint: 'stitches.bar.deleteLine.hint' }), sep()] : []);
+  const deleteLine = (): HTMLElement[] => (rt.selected ? [cmdButton('edit.delete', null, { icon: ICON.trash, hint: 'stitches.bar.deleteLine.hint' }), sep()] : []);
   /** The share of "Ausdünnen" as three small buttons. */
   const shares = () => {
     const seg = h('div', { class: 'segmented bar-seg', role: 'radiogroup', 'aria-label': t('stitches.thin.share') });
@@ -328,7 +330,7 @@ export function initStitchArea(app: StitchAreaApp): { refresh: () => void } {
         state(at ? t('stitches.bar.penAt', { i: formatNumber(at.i + 1) }) : t('stitches.bar.penNeed')),
         sep(),
         penButton(),
-        cmdButton('edit.penBack', 'stitches.bar.penBack', { hint: 'stitches.bar.penBack.hint' }),
+        cmdButton('edit.penBack', null, { icon: ICON.back, hint: 'stitches.bar.penBack.hint' }),
         help('stitches.pen.help', 4),
         cmdButton('edit.penDone', 'object.editDone', { primary: true }),
       );
@@ -343,7 +345,7 @@ export function initStitchArea(app: StitchAreaApp): { refresh: () => void } {
         penButton(),
         sep(),
         cmdButton('edit.selectAll', 'stitches.bar.all', { more: 3 }),
-        cmdButton('edit.delete', 'edit.delete'),
+        cmdButton('edit.delete', null, { icon: ICON.trash }),
         cmdButton('edit.split', 'edit.split', { hint: 'edit.split.hint', more: 4 }),
         sep(),
         spare(h('span', { class: 'bar-group' }, cmdButton('edit.thin', 'edit.thin'), shares()), 5, 'edit.thin'),
