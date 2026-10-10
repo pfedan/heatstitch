@@ -1,7 +1,8 @@
 import { COLOR_CHANGE, END, JUMP, STITCH, TRIM, type Pattern } from '../model/pattern';
-import { jefIndexOf } from '../parsers/jefPalette';
+import { jefColor, JEF_SLOTS } from '../parsers/jefPalette';
 import type { Hoop } from '../model/hoop';
 import { ByteWriter, extents, splitMove } from './bytes';
+import { uniqueSlots } from './threadSlots';
 
 /** Largest move per JEF record and axis (signed byte). */
 export const JEF_MAX_DELTA = 127;
@@ -35,17 +36,10 @@ export function jefHoopCode(hoop: Hoop): number | null {
   return codes[`${hoop.w}x${hoop.h}`] ?? null;
 }
 
-/** Janome palette slot per color block; neighbors that would land on the same slot get the next nearest. */
+/** Janome palette slot per color block: each distinct color its own. */
 function palette(p: Pattern, blocks: number): number[] {
-  const out: number[] = [];
-  for (let k = 0; k < blocks; k++) {
-    const c = p.colors[k] ?? p.colors[p.colors.length - 1] ?? { r: 0, g: 0, b: 0 };
-    let index = jefIndexOf(c);
-    const prev = k > 0 ? (p.colors[k - 1] ?? c) : null;
-    if (prev && index === out[k - 1] && (prev.r !== c.r || prev.g !== c.g || prev.b !== c.b)) index = jefIndexOf(c, index);
-    out.push(index);
-  }
-  return out;
+  const colors = Array.from({ length: blocks }, (_, k) => p.colors[k] ?? p.colors[p.colors.length - 1] ?? { r: 0, g: 0, b: 0 });
+  return uniqueSlots(colors, JEF_SLOTS, jefColor);
 }
 
 const stamp = (d: Date) =>
@@ -54,9 +48,11 @@ const stamp = (d: Date) =>
     .join('');
 
 /**
- * Writes a Janome JEF file. JEF has no trim command: machines (and pyembroidery) cut before a move
- * longer than 3 mm, so a TRIM is not written. Long stitches are split into equal stitches, since
- * long jumps would read as cuts; after a cut the way to the next stitch is jumps. Colors are rounded to the Janome palette.
+ * Writes a Janome JEF file. JEF has no trim command: a cut is written as three zero-length jumps, as
+ * pyembroidery and Ink/Stitch write it (Janome machines cut on three in a row, readers on one), so
+ * it holds however short the move after it is. A zero-length jump is therefore never written for
+ * anything else. Long stitches are split into equal stitches, since long jumps would read as cuts;
+ * after a cut the way to the next stitch is jumps. Colors are rounded to the Janome palette.
  */
 export function writeJef(p: Pattern, date = new Date(), hoop: Hoop | null = null): Uint8Array {
   const recs = new ByteWriter();
@@ -77,24 +73,36 @@ export function writeJef(p: Pattern, date = new Date(), hoop: Hoop | null = null
   };
   // Nothing is sewn yet: the way to the first stitch is jumps, not a stitch from the origin.
   let trimmed = true;
+  // A cut since the last stitch, written right before the next record.
+  let cut = false;
+  const writeCut = () => {
+    if (cut) for (let k = 0; k < 3; k++) rec(0, 0, 0x02);
+    cut = false;
+  };
   for (let i = 0; i < p.cmd.length; i++) {
     const c = p.cmd[i];
     if (c === END) break;
     if (c === STITCH) {
+      writeCut();
       // After a cut the way there may be jumps; otherwise they would read as a cut.
       const pieces = splitMove(p.x[i] - cx, p.y[i] - cy, JEF_MAX_DELTA);
       pieces.forEach(([dx, dy], k) => rec(dx, dy, trimmed && k < pieces.length - 1 ? 0x02 : null));
       trimmed = false;
     } else if (c === TRIM) {
+      // Only thread that was sewn can be cut.
+      if (!trimmed) cut = true;
       trimmed = true;
     } else if (c === JUMP) {
-      for (const [dx, dy] of splitMove(p.x[i] - cx, p.y[i] - cy, JEF_MAX_DELTA)) rec(dx, dy, 0x02);
+      writeCut();
+      for (const [dx, dy] of splitMove(p.x[i] - cx, p.y[i] - cy, JEF_MAX_DELTA)) if (dx || dy) rec(dx, dy, 0x02);
     } else if (c === COLOR_CHANGE) {
+      writeCut();
       rec(0, 0, 0x01);
       blocks++;
       trimmed = true;
     }
   }
+  writeCut();
   recs.bytes([0x80, 0x10]);
 
   const b = extents(p);
