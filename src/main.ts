@@ -424,6 +424,9 @@ const { applyRestitched, convertSettings, looseObjects, stitchInfo, stitchPanel 
   get sewLineAgain() {
     return sewLineAgain;
   },
+  get satinLineAgain() {
+    return satinLineAgain;
+  },
   get convertToSatin() {
     return convertToSatin;
   },
@@ -481,7 +484,7 @@ const { closeRungs, convertToSatin, rungInfo, rungTool, sewAlongLines, suggestLi
 
 // Shapes and the frame ---------------------------------------------------------------------------
 
-const { canPaste, closeShape, copySelected, deleteSelected, duplicateSelected, pasteCopied, enterShape, followKnockouts, isLineObject, mirrorSelected, sewLine, sewLineAgain, shapeTarget, shapeTool, showBand, subtractSelected, syncShape, takeShapes } = bindShapes({
+const { canPaste, closeShape, copySelected, deleteSelected, duplicateSelected, pasteCopied, enterShape, followKnockouts, isLineObject, mirrorSelected, satinLineAgain, sewLine, sewLineAgain, shapeTarget, shapeTool, showBand, subtractSelected, syncShape, takeShapes } = bindShapes({
   get applyEdit() {
     return applyEdit;
   },

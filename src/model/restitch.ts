@@ -432,12 +432,14 @@ export interface Remembered {
  * The settings of the stitch types an object had before its stitch type was switched, to switch
  * back to them as they were: the stitch along its paths (`line`, a line filled or a fill made a
  * line), its fill (`fill`, a fill made a line) and the satin columns it had (`satin`, a satin made
- * a fill). The form stays the same throughout.
+ * a fill or a line) with the satin's settings (`satinSettings`, a satin made a line). The form stays
+ * the same throughout.
  */
 export interface Kept {
   line?: PathStitch;
   fill?: FillSettings;
   satin?: Rails[];
+  satinSettings?: SatinSettings;
 }
 
 /** A part an object was sewn in: its kind, and the number of the object's stitches up to its last one. */
@@ -633,7 +635,7 @@ export interface StoredObject {
   /** ... grown by this margin (mm). */
   shapeGrow?: number;
   /** The settings of its other stitch types (see Remembered.kept). */
-  kept?: { line?: PathStitch; fill?: FillSettings; satin?: StoredRails[] };
+  kept?: { line?: PathStitch; fill?: FillSettings; satin?: StoredRails[]; satinSettings?: SatinSettings };
   /** Before project version 3: the form of a fill. */
   form?: StoredPath[];
   knockout?: boolean;
@@ -700,6 +702,7 @@ const storeKept = (k: Kept): NonNullable<StoredObject['kept']> => ({
   ...(k.line ? { line: storeLine(k.line) } : {}),
   ...(k.fill ? { fill: { ...k.fill } } : {}),
   ...(k.satin ? { satin: k.satin.map(storeRails) } : {}),
+  ...(k.satinSettings ? { satinSettings: { ...k.satinSettings } } : {}),
 });
 
 /** One object's memory as stored with the file. */
@@ -1203,6 +1206,7 @@ function fromStored(e: StoredObject): Remembered | null {
   if (isFill(e.kept?.fill)) kept.fill = { ...e.kept.fill, tolerance: e.kept.fill.tolerance ?? TOLERANCE };
   const keptSatin = railsFrom([e.kept?.satin ?? e.asSatin])?.[0];
   if (keptSatin?.length) kept.satin = keptSatin;
+  if (isSatin(e.kept?.satinSettings)) kept.satinSettings = { ...e.kept.satinSettings, tolerance: e.kept.satinSettings.tolerance ?? TOLERANCE };
   // Before project version 3 the form had a place for each use: a fill's, a line's, a band's.
   const band = e.asLine && r.fill ? formFrom(e.asLine.path) : null;
   const geo = (e.geo === undefined ? null : formFrom(e.geo)) ?? band ?? (e.form === undefined ? null : formFrom(e.form)) ?? (e.path === undefined ? null : formFrom(e.path));
@@ -1214,7 +1218,7 @@ function fromStored(e: StoredObject): Remembered | null {
   }
   if (geo && line) r.line = line;
   if (geo && r.fill && e.knockout === true) r.knockout = true;
-  if (kept.line || kept.fill || kept.satin) r.kept = kept;
+  if (kept.line || kept.fill || kept.satin || kept.satinSettings) r.kept = kept;
   // Areas that are only the form rastered come from it (see compactStored).
   if (geo && !e.region && e.regionPx !== undefined) r.region = rasteredArea(r, e.regionPx, e.regionGrow);
   if (geo && !e.shape && e.shapePx !== undefined) r.shape = rasteredArea(r, e.shapePx, e.shapeGrow) ?? undefined;
@@ -3942,7 +3946,7 @@ function restitchOnce(
  * columns of the satin it was.
  */
 function keptOver(known: Remembered | null | undefined, area: Region | null, satin?: Rails[]): Partial<Remembered> {
-  const { satin: _used, ...kept } = known?.kept ?? {};
+  const { satin: _used, satinSettings: _with, ...kept } = known?.kept ?? {};
   return { shape: area ?? undefined, ...(known?.geo ? { geo: known.geo } : {}), ...keptAfter({ ...kept, ...(satin ? { satin } : {}) }, false) };
 }
 
@@ -3951,5 +3955,5 @@ function keptAfter(kept: Kept | undefined, reshaped: boolean): Partial<Remembere
   if (!kept) return {};
   const { satin, ...rest } = kept;
   const k: Kept = { ...rest, ...(satin && !reshaped ? { satin } : {}) };
-  return k.line || k.fill || k.satin ? { kept: k } : {};
+  return k.line || k.fill || k.satin || k.satinSettings ? { kept: k } : {};
 }

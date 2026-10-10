@@ -24,6 +24,8 @@ export interface KindState {
    * closed path, see fits, or a satin line).
    */
   lineFills?: boolean;
+  /** A line that was a satin over an area (its satin kept); `closed`: its form has a closed path again. */
+  lineSatin?: { closed: boolean };
   /** A border, shadow, echo or blend thread, or stitches loosed from their shape: no switch. */
   blocked?: boolean;
 }
@@ -32,7 +34,9 @@ export interface KindState {
 export function kindWay(k: KindState, to: 'fill' | 'satin' | 'line'): KindWay | null {
   if (k.blocked || !k.now || k.now === to) return null;
   if (to === 'fill') return k.now === 'satin' || (k.now === 'line' && k.lineFills) ? 'convert' : null;
-  if (k.now !== 'fill') return null;
+  // A satin over an area sewn along its edge, its satin kept; Satin brings it back once it is closed.
+  if (k.now === 'satin') return to === 'line' ? 'convert' : null;
+  if (k.now === 'line') return to === 'satin' && k.lineSatin?.closed ? 'convert' : null;
   if (to === 'satin') {
     if (k.asLine) return null;
     if (k.toSatin) return 'convert';

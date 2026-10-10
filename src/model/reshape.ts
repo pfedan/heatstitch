@@ -4,8 +4,8 @@ import { followerLinks } from './border';
 import { bounds, flatten, scaling, transformForm, type Form, type Mat } from '../shape/path';
 import { cutKey, sewnArea } from './knockout';
 import { rememberObjects, sewObjects, type SewObject } from './objects';
-import { STITCH, type Pattern } from './pattern';
-import { analyze, keepShape, knownKind, measureFill, measureRun, measureSatin, railsArea, remembered, rememberRange, restitch, type FillSettings, type Rails, type RestitchResult, type Settings } from './restitch';
+import { nextVersion, STITCH, type Pattern } from './pattern';
+import { analyze, keepShape, knownKind, measureFill, measureRun, measureSatin, railsArea, remember, remembered, rememberRange, restitch, type FillSettings, type Rails, type RestitchResult, type Settings } from './restitch';
 import type { Pt } from '../digitize/skeleton';
 import type { Region } from '../digitize/region';
 import { areaLoops } from '../digitize/satinSuggest';
@@ -331,11 +331,48 @@ export function reshapeObject(p: Pattern, objs: SewObject[], o: SewObject, kinds
   const known = remembered(p, o);
   if (sewnAlong(p, o)) return asResult(resewLine(p, o.index, geo, lineSettings(p, o, kinds), trimMm));
   if (geoUse(known) === 'band') return reshapeLineFill(p, objs, o, kinds, geo, trimMm);
-  // Its last closed path opened: nothing left to fill, it is sewn along its paths, its fill kept
-  // to fill it again once a path is closed (see fillToLine).
-  if (!fits(geo, 'fill') && (knownKind(known) ?? o.kind) === 'fill') return asResult(fillToLine(p, o.index, trimMm, geo));
-  if ((knownKind(known) ?? o.kind) === 'satin') return reshapeSatin(p, objs, o, kinds, geo, trimMm);
+  // Its last closed path opened: nothing left to fill, it is sewn along its paths, its fill (or
+  // satin) kept to sew it so again once a path is closed (see fillToLine).
+  const kind = knownKind(known) ?? o.kind;
+  if (!fits(geo, 'fill') && (kind === 'fill' || kind === 'satin')) return asResult(fillToLine(p, o.index, trimMm, geo));
+  if (kind === 'satin') return reshapeSatin(p, objs, o, kinds, geo, trimMm);
   return reshapeFill(p, objs, o, kinds, geo, trimMm);
+}
+
+/**
+ * Line `index` that was a satin over an area sewn as that satin again (see fillToLine), over the
+ * area of its closed paths: with the satin settings it kept, its stitches going across as before
+ * where the area allows (else as a satin made from a fill finds them). The line is kept to sew it
+ * along its paths again. Null when it keeps no satin, has no closed path or nothing was sewn.
+ */
+export function lineToSatin(p: Pattern, index: number, trimMm: number): RestitchResult | null {
+  const kinds = stitchKinds(p);
+  const objs = sewObjects(p, kinds);
+  const o = objs[index];
+  const known = o && remembered(p, o);
+  const geo = lineGeoOf(known);
+  const satin = known?.kept?.satinSettings;
+  if (!o || !known?.line || !geo || known.free || !satin || !fits(geo, 'fill')) return null;
+  const area = rasterize(geo);
+  if (!area) return null;
+  const cols = known.kept?.satin ?? [];
+  const guide = cols.length ? columnsOver(geo, area, cols, railsArea(cols), null) : null;
+  // Columns that no longer fit its area are not taken (restitch would take the kept ones).
+  let from = p;
+  if (!guide && cols.length) {
+    from = nextVersion(p, {});
+    const { satin: _s, ...kept } = known.kept!;
+    remember(from, o, { ...known, kept });
+  }
+  const line = known.line;
+  const r = restitch(from, objs, [index], { kind: 'satin', s: satin }, kinds, trimMm, o.kind, false, guide ? new Map([[index, guide]]) : undefined, new Map([[index, area]]));
+  if (!r.starts.length) return null;
+  r.memory.forEach((m) => {
+    m.geo = geo;
+    const { satin: _s, satinSettings: _w, ...kept } = m.kept ?? {};
+    m.kept = { ...kept, line: structuredClone(line) };
+  });
+  return r;
 }
 
 /** Why an object cannot be scaled (its parts would need different settings), or null. */

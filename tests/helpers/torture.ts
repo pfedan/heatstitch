@@ -11,7 +11,7 @@ import { refreshKnockouts, setKnockout } from '../../src/model/knockout';
 import { rememberObjects, sewObjects, tableOf, type SewObject } from '../../src/model/objects';
 import { COLOR_CHANGE, END, STITCH, type Pattern, type ThreadColor } from '../../src/model/pattern';
 import { sameColor } from '../../src/model/recolor';
-import { fillsToLines, reshapeObject, transformSewObject } from '../../src/model/reshape';
+import { fillsToLines, lineToSatin, reshapeObject, transformSewObject } from '../../src/model/reshape';
 import { canSplit, splitFill } from '../../src/model/splitFill';
 import { wholeArea, wholeOf } from '../../src/model/knockout';
 import { borderStitches } from '../../src/model/along';
@@ -748,6 +748,40 @@ export const OPS: Op[] = [
  * regular chain (as the tracing image), so the chains of OPS stay as they were for the seeds above.
  */
 /**
+ * Satins over an area made lines along their edge and satins again (the kind switch). Drawn from a
+ * stream of their own, so the chains of the other ops stay as they were for the seeds above.
+ */
+export const SATIN_OPS: Op[] = [
+  {
+    name: 'satin there and back',
+    run: (d, r) => {
+      // A satin over an area made a line (the kind switch, or its last path opened) and a satin
+      // again: the same form, the same satin settings; the line it was is kept.
+      const lines = d.objects.filter((o) => remembered(d.cur.p, o)?.kept?.satinSettings && fits(lineGeoOf(remembered(d.cur.p, o)), 'fill') && !remembered(d.cur.p, o)?.free);
+      if (lines.length && r() < 0.5) {
+        const o = pick(r, lines);
+        const m = remembered(d.cur.p, o)!;
+        const back = lineToSatin(d.cur.p, o.index, T);
+        if (!back) return false;
+        const n = back.memory[0];
+        expect(sortedJson(storeForm(n.geo!)), 'the form, sewn as satin again').toBe(sortedJson(storeForm(m.geo!)));
+        expect(sortedJson(n.satin), 'the satin, sewn as satin again').toBe(sortedJson(m.kept!.satinSettings));
+        expect(n.kept?.line, 'the line it was, kept').toEqual(m.line);
+        return took(d, back);
+      }
+      const satins = d.objects.filter((o) => {
+        const m = remembered(d.cur.p, o);
+        return o.kind === 'satin' && !!m && !!areaOf(m) && !m.free && !m.lettering && !partOf(m);
+      });
+      if (!satins.length) return false;
+      const o = pick(r, satins);
+      const res = fillToLine(d.cur.p, o.index, T);
+      return !!res && shapes(d, syncBorders(res.pattern, T));
+    },
+  },
+];
+
+/**
  * Outlines edited on the level Form, as the app does (one way back for every kind, see
  * reshapeObject): a node of a fill, a satin over an area, a band or a line moved a little.
  */
@@ -964,7 +998,11 @@ export function checkOneGeo(p: Pattern): void {
     // One stitch type on it: a fill is not also a line, and keeps no settings of what it is.
     if (m.fill && m.line) problems.push(`${o.index}: a fill that is also a line`);
     if (m.fill && m.satin) problems.push(`${o.index}: a fill that is also a satin`);
+    if (m.satin && m.line) problems.push(`${o.index}: a satin that is also a line`);
     if (m.kept?.fill && m.fill) problems.push(`${o.index}: keeps the fill it is`);
+    if (m.kept?.satinSettings && m.satin) problems.push(`${o.index}: keeps the satin it is`);
+    // A satin kept to sew it again over its area is kept by a line along that area's edge.
+    if (m.kept?.satinSettings && geoUse(m) !== 'line') problems.push(`${o.index}: keeps a satin and is not a line`);
     if (m.kept?.line && geoUse(m) === 'line') problems.push(`${o.index}: keeps the line it is`);
     if (m.kept && !geoOf(m)) problems.push(`${o.index}: keeps stitch types without a form`);
     // Known and guessed apart (rule 6): a form only read from the stitches is never kept as curves.
@@ -984,6 +1022,7 @@ export function checkFits(p: Pattern): void {
     if (!m || !geo || m.free) continue;
     const use = geoUse(m);
     if (use === 'area' && m.fill && !fits(geo, 'fill')) problems.push(`${o.index}: a fill of a form with no closed area`);
+    if (use === 'area' && m.satin && !fits(geo, 'fill')) problems.push(`${o.index}: a satin over a form with no closed area`);
     if ((use === 'line' || use === 'band') && !fits(geo, 'line')) problems.push(`${o.index}: a line without a path`);
   }
   expect(problems.join('; '), 'stitch type fits its form').toBe('');
@@ -1229,6 +1268,7 @@ export async function chain(seed: number, steps = STEPS, opts: { trace?: boolean
   const rt = rng(seed + 7919);
   const rl = rng(seed + 104729);
   const rs = rng(seed + 15485863);
+  const rsat = rng(seed + 32452843);
   const d = new Doc();
   const log: string[] = [];
   const at = () => `seed ${seed}: ${log.join(' > ')}`;
@@ -1252,6 +1292,19 @@ export async function chain(seed: number, steps = STEPS, opts: { trace?: boolean
       if (await lop.run(d, rl)) {
         log.push(lop.name);
         if (process.env.TORTURE_TRACE) console.log(lop.name, describeObjects(d.cur.p));
+        try {
+          checkStep(d, false);
+        } catch (e) {
+          throw new Error(`${at()}\n${(e as Error).message}`);
+        }
+      }
+    }
+    // Now and then a satin over an area made a line, or a satin again, beside the chain.
+    if (!blank(d.cur.p) && rsat() < 0.15) {
+      const sat = pick(rsat, SATIN_OPS);
+      if (await sat.run(d, rsat)) {
+        log.push(sat.name);
+        if (process.env.TORTURE_TRACE) console.log(sat.name, describeObjects(d.cur.p));
         try {
           checkStep(d, false);
         } catch (e) {
