@@ -1,4 +1,5 @@
-import { appliqueDefaults, cutForm, type AppliqueSettings } from './applique';
+import { chooseAngle } from '../digitize/fill';
+import { appliqueDefaults, cutForm, stopsIn, type AppliqueSettings } from './applique';
 import { followerLinks, syncBorders } from './border';
 import { fillArea, fits, geoUse } from './geo';
 import { sewObjects, type SewObject } from './objects';
@@ -37,9 +38,13 @@ function asApplique(m: Remembered, s: AppliqueSettings): Remembered {
 function asFill(m: Remembered, fill: FillSettings): Remembered {
   const { applique: _a, kept, parts: _p, under: _u, underFrom: _f, borderAt: _b, ...rest } = m;
   const { fill: was, ...others } = kept ?? {};
-  const f = was ?? fill;
-  const out: Remembered = { ...rest, fill: f, ...(Object.keys(others).length ? { kept: others } : {}) };
+  const out: Remembered = { ...rest, fill: was ?? fill, ...(Object.keys(others).length ? { kept: others } : {}) };
   if (m.geo) out.region = fillArea(out);
+  // A fill given without an angle (NaN: the rows' direction left open) gets the one with the
+  // fewest sections on its area, as a satin made a fill does: rows need a direction to be sewn.
+  const f = out.fill!;
+  const area = out.region ?? m.region;
+  if (!Number.isFinite(f.angle) && area) out.fill = { ...f, angle: chooseAngle(area, f.spacing, []) };
   return out;
 }
 
@@ -68,10 +73,13 @@ function resew(p: Pattern, which: number[], memory: (m: Remembered, o: SewObject
   if (!changed) return null;
   const q = sewList(p, list, trimMm, { fresh });
   const objs = sewObjects(q);
-  // Each one sewn from what it was given: an appliqué that could not be sewn (too small) keeps its stitches, which is no appliqué.
+  // Each one sewn from what it was given: one that could not be sewn (an appliqué too small, a fill
+  // without rows) keeps its old stitches, and with them the stops it had or lacked, so its stops
+  // tell (an appliqué stops twice inside, anything else never).
   for (const k of which) {
     const o = objs.find((x) => x.id === list[k]?.obj.id);
-    if (!o || !remembered(q, o)) return null;
+    const m = o && remembered(q, o);
+    if (!o || !m || stopsIn(q, o.first, o.last).length !== (m.applique ? 2 : 0)) return null;
   }
   return syncBorders(q, trimMm, drop);
 }
