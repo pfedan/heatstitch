@@ -639,7 +639,8 @@ export const OPS: Op[] = [
       // their ground (under them).
       const p = d.cur.p;
       const which = [...new Set([0, 1, 2].slice(0, 1 + Math.floor(r() * 3)).map(() => pick(r, d.objects).index))];
-      const gap = Math.round(between(r, -1.5, 6) * 10) / 10;
+      // Close round, as in use: a contour grows the design, and fills grown far make later steps slow.
+      const gap = Math.round(between(r, -1, 3) * 10) / 10;
       const c = addContour(p, which, gap, options);
       if (!c) return false;
       const objs = sewObjects(c.pattern);
@@ -656,7 +657,7 @@ export const OPS: Op[] = [
       expect(objs.length, 'a contour is one object more').toBe(sewObjects(p).length + 1);
       const gone = deleteObjects(c.pattern, [c.index], T);
       expect(gone && sewObjects(gone).map((x) => x.id), 'deleted again: the objects as before').toEqual(sewObjects(p).map((x) => x.id));
-      if (r() < 0.5 || !fits(geo, 'fill')) return shapes(d, c.pattern);
+      if (r() < 0.7 || !fits(geo, 'fill')) return shapes(d, c.pattern);
       const b = behindCovered(c.pattern, c.index, T);
       const s = digitizeDefaults(DEFAULT_PROFILE);
       const fill: FillSettings = { pattern: 'tatami', spacing: s.spacing, spacingEnd: 1, offset: 0.25, angle: NaN, stitch: s.stitch, underlay: s.underlay, edge: 0, tolerance: s.tolerance };
