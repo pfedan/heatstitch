@@ -21,7 +21,7 @@ import { backToVersion, edgeAlong, keepVersion, objectKey, remember, remembered,
 import { reorder } from '../../src/model/order';
 import { stitchKinds } from '../../src/model/sequence';
 import { addContour, behindCovered, gapReader } from '../../src/model/contour';
-import { combineLines, deleteObjects, duplicateObject, duplicateObjects, mirrorMatrix, recolorObjects, subtractTop } from '../../src/model/shapeOps';
+import { combineLines, deleteObjects, duplicateObject, duplicateObjects, gatherObjects, mergeLeads, mirrorMatrix, recolorObjects, subtractTop, threadOfAFill } from '../../src/model/shapeOps';
 import { stitchesBefore } from '../../src/model/transform';
 import { sewDesign, specOf } from '../../src/model/sew';
 import { parsePattern } from '../../src/parsers';
@@ -427,6 +427,43 @@ export const OPS: Op[] = [
       expect(count(after!), 'combined lines: nodes less joined ends').toBe(count(before) - (c.joined ? c.joined.joints.filter((x) => !x.bridged).length + c.joined.closed : 0));
       expect(c.joined?.joints.every((x) => !x.bridged) ?? true, 'Zusammenfassen bridges no gap').toBe(true);
       return shapes(d, c.pattern);
+    },
+  },
+  {
+    name: 'combine across colors',
+    run: (d, r) => {
+      // Zusammenfassen of objects in several threads: first all of them into the thread with the
+      // most of them, where its biggest object is sewn (the rest as in the app, by the same calls).
+      const p = d.cur.p;
+      const free = d.objects.filter((o) => !threadOfAFill(p, o));
+      if (new Set(free.map((o) => o.block)).size < 2) return false;
+      const a = pick(r, free);
+      const b = pick(r, free.filter((o) => o.block !== a.block));
+      const more = free.filter((o) => o !== a && o !== b && r() < 0.2);
+      const objs = [a, b, ...more].sort((x, y) => x.index - y.index);
+      // Now and then the next color, as the message offers (two blocks can have one thread).
+      const leads = mergeLeads(objs);
+      const lead = leads[r() < 0.7 ? 0 : leads.length - 1];
+      const g = gatherObjects(p, objs.map((o) => o.index), lead, T);
+      expect(g, 'gathered objects stay objects').toBeTruthy();
+      const now = sewObjects(g!.pattern);
+      const was = new Map(d.objects.map((o) => [o.id, o]));
+      // The gathered: one after the other from the lead on, all in its thread, each with its stitches.
+      expect(g!.which, 'gathered one after the other, the lead first').toEqual(g!.which.map((_, k) => g!.which[0] + k));
+      expect(now[g!.which[0]].id, 'the lead first').toBe(d.objects[lead].id);
+      for (const k of g!.which) {
+        expect(now[k].block, 'gathered into one color block').toBe(now[g!.which[0]].block);
+        expect(sameColor(now[k].color, d.objects[lead].color), 'in the lead\'s thread').toBe(true);
+        expect(now[k].stitches, 'a gathered object keeps its stitches').toBe(was.get(now[k].id)!.stitches);
+        expect(remembered(g!.pattern, now[k]), 'a gathered object keeps what it knows').toEqual(remembered(p, was.get(now[k].id)!));
+      }
+      // The others keep their order and thread.
+      const ids = new Set(objs.map((o) => o.id));
+      const rest = (list: SewObject[]) => list.filter((o) => !ids.has(o.id) && !threadOfAFill(p, was.get(o.id) ?? o));
+      expect(rest(now).map((o) => o.id), 'the others keep their order').toEqual(rest(d.objects).map((o) => o.id));
+      for (const o of rest(now)) expect(sameColor(o.color, was.get(o.id)!.color), 'the others keep their thread').toBe(true);
+      expect(now.length, 'no object lost or made').toBe(d.objects.length);
+      return shapes(d, g!.pattern);
     },
   },
   {

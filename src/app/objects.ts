@@ -12,7 +12,7 @@ import type { RungTool } from '../ui/rungTool';
 import type { Sequence } from './types';
 import type { Settings } from '../settings';
 import type { ShapeTool } from '../ui/shapeTool';
-import { LayersPanel, kindLabel, blockName } from '../ui/layersPanel';
+import { LayersPanel, kindLabel, blockName, type Notice } from '../ui/layersPanel';
 import { ObjectPanel, type ObjectInfo, type OrderCard } from '../ui/objectPanel';
 import { menuAt, objectMenu } from '../ui/objectMenu';
 import { colorMenuItems, registerObjectCommands, type Shift } from '../areas/objects/commands';
@@ -25,7 +25,7 @@ import { remembered, rememberedIn, measureFill, analyze, unionRegion, remember, 
 import { reverseLines, reversible, reverseObjects } from '../model/reverse';
 import { t, type Key } from '../i18n';
 import { ui } from './state';
-import { combineLines, unionForm, recolorObjects } from '../model/shapeOps';
+import { combineLines, gatherObjects, mergeLeads, threadOfAFill, unionForm, recolorObjects } from '../model/shapeOps';
 import { runCommand } from '../shell/commands';
 import { loadOps, opsReady } from '../shape/ops';
 import { blendObject } from '../model/blend';
@@ -277,18 +277,59 @@ export function bindObjects(app: ObjectsApp) {
   /**
    * Sews the selected objects as one: they move to where the first one is sewn (as when moving
    * them, also where that puts one over what lay on it, with a warning), and fills become one area,
-   * sewn anew with the first one's settings.
+   * sewn anew with the first one's settings. Objects of several colors first go into one thread:
+   * the color with the most thread among them, or the one `lead` is sewn in; they are sewn where
+   * its biggest object is, with its settings, and the message offers the next color instead.
    */
-  function mergeObjects(): void {
+  function mergeObjects(chosen?: number[], lead?: number): void {
     const f = app.files.active;
-    const p = f?.pattern;
-    if (!f || !p || ui.selectedObjects.size < 2) return;
+    const base = f?.pattern;
+    const picked = chosen ?? [...ui.selectedObjects];
+    if (!f || !base || picked.length < 2) return;
     // Outlines are joined on their curves: the libraries for that load on first use.
-    if (!opsReady()) return void loadOps().then(mergeObjects);
+    if (!opsReady()) return void loadOps().then(() => mergeObjects(chosen, lead));
+    const q0 = app.seq(base);
+    const all = [...picked].sort((a, b) => a - b);
+    const objs0 = all.map((o) => q0.objects[o]);
+    if (mergeBlocked(objs0)) return;
+    // Several threads: all of them where the lead is sewn, in its thread, the lead first (one undo step).
+    const leads = new Set(objs0.map((o) => o.block)).size > 1 ? mergeLeads(objs0) : [];
+    const head = lead ?? leads[0];
+    let p = base;
+    let sel = all;
+    let gatherWarning: string | null = null;
+    if (head !== undefined) {
+      // Among themselves the objects become one: only what lies between them and the others counts.
+      const order = [...q0.objects.keys()].filter((o) => !all.includes(o));
+      order.splice(order.filter((o) => o < head).length, 0, ...all);
+      gatherWarning = coverWarning(coverConflict(q0, base, order, new Set(all)), (o) => objectName(q0, o));
+      const g = gatherObjects(base, all, head, app.settings.trimMm);
+      if (!g) return void layers.say(t('object.merge.failed'), true);
+      p = g.pattern;
+      sel = g.which;
+    }
     const q = app.seq(p);
-    const sel = [...ui.selectedObjects].sort((a, b) => a - b);
     const objs = sel.map((o) => q.objects[o]);
-    if (mergeBlocked(objs)) return;
+    // What the message says at the end: the color taken, and the next one to take instead (one
+    // after the other, round all colors of the objects).
+    const name = (o: number) => q0.objects[o].color.name || blockName(q0.blocks[q0.objects[o].block]);
+    const colorNote = head !== undefined && leads.length > 1 ? t('object.merge.inColor', { color: name(head) }) : '';
+    const other = head !== undefined && leads.length > 1 ? leads[(Math.max(0, leads.indexOf(head)) + 1) % leads.length] : undefined;
+    const instead = () => {
+      if (other === undefined) return undefined;
+      const after = f.pattern;
+      return {
+        label: t('object.merge.instead', { color: name(other) }),
+        title: t('object.merge.instead.hint'),
+        run: () => {
+          if (app.files.active !== f || f.pattern !== after) return;
+          app.history('undo');
+          if (f.pattern === base) mergeObjects(all, other);
+        },
+      };
+    };
+    const say = (text: string, warning: string | null, undo: () => void, action: Notice['action'] = instead()) =>
+      layers.say({ text: [warning, text, colorNote].filter(Boolean).join(' '), warn: !!warning, ...(action ? { action } : { undo }) });
     // Lines become one line with all their paths, touching ends joined.
     const lines = combineLines(p, sel, app.settings.trimMm);
     if (lines) {
@@ -297,18 +338,16 @@ export function bindObjects(app: ObjectsApp) {
       ui.selectionKey++;
       const k = lines.joined?.joints.length ?? 0;
       const closed = !!lines.joined?.closed;
-      layers.say({
-        text: k ? t('object.lines.joinedEnds', { n: sel.length, k }) + (closed ? ' ' + t('shape.joined.closed') : '') : t('object.lines.joined', { n: sel.length }),
-        ...(closed ? { action: { label: t('shape.fillInside'), run: () => runCommand('stitch.kind.fill') } } : { undo: undoable() }),
-      });
+      const text = k ? t('object.lines.joinedEnds', { n: sel.length, k }) + (closed ? ' ' + t('shape.joined.closed') : '') : t('object.lines.joined', { n: sel.length });
+      say(text, gatherWarning, undoable(), closed ? { label: t('shape.fillInside'), run: () => void runCommand('stitch.kind.fill') } : instead());
       app.redraw();
       return;
     }
     const set = new Set(sel);
     const order = [...q.objects.keys()].filter((o) => o < sel[0] || (o > sel[0] && !set.has(o)));
     order.splice(sel[0], 0, ...sel);
-    const warning = coverWarning(coverConflict(q, p, order, set), (o) => objectName(q, o));
-    const done = (n: number) => layers.say({ text: [warning, t('object.merged', { n })].filter(Boolean).join(' '), warn: !!warning, undo: undoable() });
+    const warning = gatherWarning ?? coverWarning(coverConflict(q, p, order, set), (o) => objectName(q, o));
+    const done = (n: number) => say(t('object.merged', { n }), warning, undoable());
     const starts: number[] = [];
     const next = reorder(p, q.objects, order, app.settings.trimMm, starts);
     // A new pattern also when nothing moved: undo goes back to the one that shows them apart.
@@ -329,7 +368,8 @@ export function bindObjects(app: ObjectsApp) {
       if (r.starts.length) {
         ui.selectedObjects = new Set([merged]);
         app.applyRestitched(r, 'stitch.failed', true);
-        if (form) layers.say({ text: t('object.joined', { n: sel.length }), undo: undoable() });
+        if (head !== undefined) app.followKnockouts();
+        if (form) say(t('object.joined', { n: sel.length }), warning, undoable());
         else done(sel.length);
         return;
       }
@@ -337,6 +377,7 @@ export function bindObjects(app: ObjectsApp) {
     app.applyEdit(target);
     if (merged >= 0) ui.selectedObjects = new Set([merged]);
     ui.selectionKey++;
+    if (head !== undefined) app.followKnockouts();
     done(sel.length);
     app.redraw();
   }
@@ -385,7 +426,9 @@ export function bindObjects(app: ObjectsApp) {
 
   /** Why the objects cannot be sewn as one, or null. */
   function mergeBlocked(objs: SewObject[]): Key | null {
-    if (objs.some((o) => o.block !== objs[0].block)) return 'object.merge.color';
+    // A border, a blend's second thread or a shadow belongs to its fill, also in a thread of its own.
+    const p = app.files.active?.pattern;
+    if (p && objs.some((o) => o.block !== objs[0].block) && objs.some((o) => threadOfAFill(p, o))) return 'object.merge.part';
     const together = objs.every((o, k) => !k || o.index === objs[k - 1].index + 1);
     if (!together && objs.some((o) => o.kind !== 'fill')) return 'object.merge.kind';
     return null;
