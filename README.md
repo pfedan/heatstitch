@@ -419,7 +419,9 @@ fill rows end there, satin edges are found there, underlay lies on a contour ins
   turns into rings over four turns. Branches (a dumbbell, a heart's lobes) and the rings round holes
   get spirals of their own, sewn from their middle out before the line passes them, so the travel
   lies under rows still to come. The last line before the ridge in the middle moves so that the gap
-  across the ridge and the one to the line before come out equal.
+  across the ridge and the one to the line before come out equal. Each stitch ends at the best of a
+  few lengths, the one furthest from the needle points sewn before (Mitchell's best candidate, a blue
+  noise sampling), so the needle points of neighboring turns show neither spokes nor steps.
 - **Fill rows follow the image** (default; `src/digitize/flow.ts`, `src/image/orientation.ts`): a
   direction field from the structure tensor of the original picture (Förstner & Gülch 1987, Bigün &
   Granlund 1987; as in coherence-enhancing abstraction, Weickert 1999, and Coherent Line Drawing, Kang

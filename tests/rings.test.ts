@@ -161,6 +161,15 @@ describe('spiral and contour fill in any shape', () => {
     }
   });
 
+  it('keeps the needle points of neighbouring turns from lining up into spokes or steps', () => {
+    // A needle point within 1.125 spacings of one on another turn lies almost straight beside it.
+    // An even split per turn with a growing offset put a third to two thirds of them there.
+    const beside = (run: Pt[]) => run.filter((q, i) => run.some((o, j) => Math.abs(j - i) > 3 && Math.hypot(o[0] - q[0], o[1] - q[1]) < 1.125 * S)).length / run.length;
+    for (const name of ['oval', 'leaf', 'L']) {
+      for (const fill of [contourFill, spiralFill]) expect(beside(fill(regions[name], params, [0, 0])!.runs[0]), name).toBeLessThan(0.12);
+    }
+  });
+
   it('starts at the edge nearest the needle and ends inside', () => {
     const r = regions.oval;
     const res = spiralFill(r, params, [25, 0])!;

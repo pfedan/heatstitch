@@ -54,8 +54,10 @@ const FOLD_COS = -0.5;
 const BLEND = 4;
 /** Moves of the last line are evened out over this many ring points to each side. */
 const SMOOTH = 3;
-/** Shift of the needle points from turn to turn, as a share of a stitch: they would line up into spokes otherwise. */
-const GOLDEN = 0.618034;
+/** Needle points: the shortest stitch as a share of the longest that fits, how many lengths are tried, and how far a needle point counts as near (mm). */
+const SHORTEST = 0.7;
+const CANDIDATES = 6;
+const NEAR = 1.2;
 
 interface Ring {
   pts: Pt[];
@@ -113,8 +115,9 @@ export function ringFill(r: Region, p: FillParams, start: Pt, mode: RingMode, an
 
   let cur: Pt[] | null = runs.length ? runs[runs.length - 1] : null;
   let turn = 0;
+  const needles = new Needles();
   for (const line of lines) {
-    const pts = stitches(line, p.stitch, p.tolerance ?? TOLERANCE, turn);
+    const pts = stitches(line, p.stitch, p.tolerance ?? TOLERANCE, turn, needles);
     turn += line.turns.length;
     if (pts.length < 2) continue;
     const bd = dist(pos, pts[0]);
@@ -135,35 +138,112 @@ export function ringFill(r: Region, p: FillParams, start: Pt, mode: RingMode, an
   return { runs, angle, under };
 }
 
+/** Needle points sewn so far, to find the nearest one to a point. */
+class Needles {
+  private cells = new Map<number, Pt[]>();
+
+  add(q: Pt): void {
+    const k = this.key(Math.floor(q[0] / NEAR), Math.floor(q[1] / NEAR));
+    const c = this.cells.get(k);
+    if (c) c.push(q);
+    else this.cells.set(k, [q]);
+  }
+
+  /** Distance from q to the nearest needle point (at most NEAR), leaving out those in `skip`. */
+  near(q: Pt, skip: Pt[]): number {
+    const i = Math.floor(q[0] / NEAR);
+    const j = Math.floor(q[1] / NEAR);
+    let best = NEAR;
+    for (let di = -1; di <= 1; di++) {
+      for (let dj = -1; dj <= 1; dj++) {
+        for (const p of this.cells.get(this.key(i + di, j + dj)) ?? []) if (!skip.includes(p)) best = Math.min(best, dist(p, q));
+      }
+    }
+    return best;
+  }
+
+  private key(i: number, j: number): number {
+    return (i + 65536) * 131072 + (j + 65536);
+  }
+}
+
 /**
- * Needle points along a line, at most `len` apart and shorter in curves (as a running stitch).
- * Each turn has one needle point fixed at a share of a stitch past its start that grows by the
- * golden ratio from turn to turn, so the needle points of neighbouring turns never line up; sharp
- * corners get one too.
+ * Needle points along a line, at most `len` apart and shorter in curves (as a running stitch), and
+ * one at each sharp corner. Each stitch ends at the best of a few lengths between SHORTEST and the
+ * longest that fits: the one furthest from the needle points sewn before (Mitchell's best
+ * candidate, a blue noise sampling). Needle points of neighbouring turns thus neither line up into
+ * spokes nor fall into a regular pattern (as an even split per turn with a fixed or growing offset
+ * does, seen as steps or diagonal lines), and the area looks like even thread.
  */
-function stitches(line: Line, len: number, tol: number, first: number): Pt[] {
+function stitches(line: Line, len: number, tol: number, first: number, needles: Needles): Pt[] {
   const simple = Math.min(0.1, tol / 2);
   const pts = simplify(line.pts, simple);
   tol = Math.max(0.02, tol - simple);
   if (pts.length < 2) return pts;
   const path = new Path(pts);
-  // Arc lengths of the turns' starts (found again on the simplified line) and of sharp corners.
   const cuts: number[] = [];
-  const along = new Path(line.pts);
-  line.turns.forEach((i, k) => cuts.push(along.cum[i] * (path.total / (along.total || 1)) + ((((first + k) * GOLDEN) % 1) * len)));
   for (let i = 1; i < pts.length - 1; i++) {
     const a = [pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]];
     const b = [pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]];
     const cos = (a[0] * b[0] + a[1] * b[1]) / (Math.hypot(a[0], a[1]) * Math.hypot(b[0], b[1]) || 1);
     if (cos < Math.SQRT1_2) cuts.push(path.cum[i]);
   }
-  cuts.sort((x, y) => x - y);
   const marks = [0];
   for (const c of cuts) if (c - marks[marks.length - 1] >= MIN_CURVE_STITCH && path.total - c >= MIN_CURVE_STITCH) marks.push(c);
   marks.push(path.total);
   const out: Pt[] = [pts[0]];
-  for (let m = 1; m < marks.length; m++) for (const a of path.marks(marks[m - 1], marks[m], len, tol)) out.push(path.at(a));
+  needles.add(pts[0]);
+  const min = Math.min(MIN_CURVE_STITCH, len);
+  // The same needle points each time the object is sewn.
+  let n = first * 7919;
+  for (let m = 1; m < marks.length; m++) {
+    const to = marks[m];
+    let a = marks[m - 1];
+    while (to - a > 1e-9) {
+      // The longest stitch that stays within tol of the line (as Path.marks).
+      let hi = Math.min(a + len, to);
+      if (path.deviation(a, hi) > tol) {
+        let lo = Math.min(a + min, hi);
+        if (path.deviation(a, lo) <= tol) {
+          for (let it = 0; it < 14 && hi - lo > 0.01; it++) {
+            const c = (lo + hi) / 2;
+            if (path.deviation(a, c) <= tol) lo = c;
+            else hi = c;
+          }
+        }
+        hi = lo;
+      }
+      let b = hi;
+      if (hi < to) {
+        const lo = Math.max(a + SHORTEST * (hi - a), Math.min(hi, a + min));
+        // No short stitch left over before the corner or the end.
+        const cap = to - min;
+        const skip = out.slice(-3);
+        let best = -Infinity;
+        for (let k = 0; k < CANDIDATES; k++) {
+          let c = lo + (hi - lo) * hash(n++);
+          if (c > cap) c = Math.max(a + (to - a) / 2, cap);
+          const score = needles.near(path.at(c), skip) + 0.02 * (c - a);
+          if (score > best) {
+            best = score;
+            b = c;
+          }
+        }
+      }
+      const q = path.at(b);
+      out.push(q);
+      needles.add(q);
+      a = b;
+    }
+  }
   return out;
+}
+
+/** A number in [0, 1) from an integer, the same each time. */
+function hash(n: number): number {
+  let x = Math.imul(n ^ 0x9e3779b9, 0x85ebca6b);
+  x = Math.imul(x ^ (x >>> 13), 0xc2b2ae35);
+  return ((x ^ (x >>> 16)) >>> 0) / 4294967296;
 }
 
 /** Depth inside the area (mm) and its gradient, from the region's signed distance field. */
