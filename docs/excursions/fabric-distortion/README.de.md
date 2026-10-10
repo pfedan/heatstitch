@@ -2,9 +2,9 @@
 
 *Ein Rechenexperiment, kein Teil der App. Stand Oktober 2026.*
 
-> **English summary.** Can the total fabric distortion of an embroidery design be predicted, and every stitch be pre-corrected in sewing order? We simulated the example cat (`public/examples/cat-60mm.pes`, 8,445 stitches) as an orthotropic membrane in the hoop, adding each stitch as a pre-tensioned embedded thread in sewing order, then releasing the hoop. Needle positions were corrected with the displacement adjustment method known from sheet metal springback compensation. With plausible (unmeasured) material values, most of the correction is a uniform enlargement of 0.6 to 0.8 %; the remaining per-stitch part is 0.04 mm on average on woven fabric (below the 0.1 mm resolution of embroidery files) and up to 0.37 mm on jersey. The method works; its value depends entirely on measured fabric data.
+*[English version](README.md). Die Beschriftungen in den Bildern sind englisch.*
 
-![Die Katze, Stich für Stich gestickt: der Stoff verzieht sich im Rahmen, dann wird ausgespannt (Verschiebung 15-fach überhöht)](bilder/katze-woven-ablauf.webp)
+![Die Katze, Stich für Stich gestickt: der Stoff verzieht sich im Rahmen, dann wird ausgespannt (Verschiebung 15-fach überhöht)](images/cat-woven-sewing.webp)
 
 *Die Katze auf Webware, Stich für Stich. Der Untergrund zeigt, wie weit sich der Stoff gerade verschoben hat (hell = mehr), das Raster ist 2 mm. Am Ende wird ausgespannt. Alle Verschiebungen sind 15-fach überhöht.*
 
@@ -22,7 +22,7 @@ Daraus die Frage: **Kann man den Gesamtverzug eines Stickmusters vorausberechnen
 
 ## Das Modell
 
-![Modell in vier Schritten: im Rahmen, Stich zieht, Ausspannen, Korrektur](bilder/modell.svg)
+![Modell in vier Schritten: im Rahmen, Stich zieht, Ausspannen, Korrektur](images/model.de.svg)
 
 1. **Stoff und Vlies** sind eine ebene, dünne, elastische Haut mit unterschiedlicher Steifigkeit längs und quer (orthotrope Membran). Sie wird als Dreiecksnetz mit 1 mm Kantenlänge über einen Stickrahmen von 100 × 100 mm gelegt, am Rand festgehalten und um 0,3 % vorgedehnt, wie beim straffen Einspannen.
 2. **Stiche in Stickreihenfolge.** Die Maschine sticht in festen Rahmenkoordinaten $p$. Unter der Nadel liegt aber der Stoffpunkt $X$, der durch die bisherigen Stiche schon um $u(X)$ gewandert ist: $X = p - u(X)$, gelöst per Fixpunkt. Jeder Stich wird zwischen seinen beiden Stoffpunkten als Fadenstück eingebettet, so wie Bewehrungsstäbe in einem FEM-Modell aus Beton. Seine Ruhelänge ist 2 % kürzer als die Strecke beim Einstechen. Auf starrem Stoff zöge er also mit $T = EA \cdot 0{,}02 \approx 0{,}4\,\mathrm{N}$. Danach versteift er den Stoff, wie es eine bestickte Fläche tut. Nach je 100 Stichen wird das Gleichgewicht neu gelöst.
@@ -43,7 +43,7 @@ Fast alle Ergebnisse wachsen proportional zum Fadenzug und umgekehrt zur Stoffst
 
 ## Der berechnete Verzug
 
-![Soll, Ergebnis nach dem Ausspannen (10-fach überhöht) und Verschiebungsfeld des Stoffs, Webware](bilder/katze-woven-verzug.webp)
+![Soll, Ergebnis nach dem Ausspannen (10-fach überhöht) und Verschiebungsfeld des Stoffs, Webware](images/cat-woven-distortion.webp)
 
 *Links die Stickdatei. Mitte: so liegen die Stiche nach dem Ausspannen, die Abweichung 10-fach überhöht, grau dahinter das Soll. Rechts: wie weit sich jeder Punkt des Stoffs verschoben hat.*
 
@@ -56,7 +56,7 @@ Das Motiv zieht sich insgesamt zusammen, am stärksten an den Rändern großer F
 
 Auf Jersey sieht es ähnlich aus, nur stärker:
 
-![Verzug auf Jersey](bilder/katze-knit-verzug.webp)
+![Verzug auf Jersey](images/cat-knit-distortion.webp)
 
 ## Wie die Korrektur je Stich aussieht
 
@@ -65,13 +65,13 @@ Die Korrektur ist ein Vektor je Einstich: Um so viel und in diese Richtung muss 
 - **Globaler Anteil:** die beste affine Abbildung (Maßstab, Scherung, Verschiebung) über alle Einstiche. Das ist, was man auch mit „Größe ändern“ erreicht.
 - **Örtlicher Anteil:** der Rest. Nur er braucht wirklich eine Rechnung je Stich.
 
-![Korrektur je Stich: gesamt, örtlich, Richtung und über die Stickreihenfolge](bilder/katze-woven-korrektur.webp)
+![Korrektur je Stich: gesamt, örtlich, Richtung und über die Stickreihenfolge](images/cat-woven-correction.webp)
 
 *Oben links: jeder Stich gefärbt nach seiner gesamten Korrektur. Oben Mitte: nur der örtliche Anteil. Oben rechts: wohin die Nadel ausweicht, jeder 25. Einstich, 20-fach überhöht. Unten: die Korrektur über die Stickreihenfolge, Punkte in Garnfarbe (gesamt), die Linie zeigt den örtlichen Anteil.*
 
 Die Nahaufnahme zeigt, wohin die Nadel ausweicht. In den Füllungen laufen die Pfeile meist **längs der Stichrichtung**, also genau in der Richtung, in der auch der Zugausgleich wirkt. Das Modell findet diesen Effekt von selbst, ohne dass er eingestellt wurde. Auf Jersey ist der Effekt etwa doppelt so groß:
 
-![Nahaufnahme linke untere Ecke, Webware und Jersey](bilder/katze-detail.webp)
+![Nahaufnahme linke untere Ecke, Webware und Jersey](images/cat-detail.webp)
 
 | | Webware | Jersey |
 |---|---|---|
@@ -105,29 +105,29 @@ Die geplante Dichte-Prüfreihe (Dichteleiter auf Webware und Frottee) stickt 25 
 
 ## Selbst nachrechnen
 
-Alles liegt in [skripte/](skripte/). Gebraucht werden Node (für das Einlesen der PES über Heatstitch selbst) und Python mit `numpy`, `scipy` und `matplotlib`; für das Video zusätzlich `ffmpeg`.
+Alles liegt in [scripts/](scripts/). Gebraucht werden Node (für das Einlesen der PES über Heatstitch selbst) und Python mit `numpy`, `scipy` und `matplotlib`; für das Video zusätzlich `ffmpeg`.
 
 ```sh
 # im Repo-Wurzelverzeichnis
-cp docs/ausfluege/stoffverzug/skripte/katze-pes.vitest.ts tests/zz-katze-pes.test.ts
-KATZE=dump npx vitest run tests/zz-katze-pes.test.ts       # Stiche nach skripte/ergebnis/
+cp docs/excursions/fabric-distortion/scripts/cat-pes.vitest.ts tests/zz-cat-pes.test.ts
+CAT=dump npx vitest run tests/zz-cat-pes.test.ts       # Stiche nach scripts/output/
 
-cd docs/ausfluege/stoffverzug/skripte
+cd docs/excursions/fabric-distortion/scripts
 python3 run.py woven        # Simulation und Korrektur, Webware (run.py knit für Jersey)
 python3 plot.py woven       # Verzug- und Korrekturbild
 python3 detail.py           # Nahaufnahme (braucht woven und knit)
 python3 video.py woven 15   # Ablauf als Video, 15-fach überhöht
 
 cd ../../../..
-KATZE=write npx vitest run tests/zz-katze-pes.test.ts      # korrigierte Katzen als PES
-rm tests/zz-katze-pes.test.ts
+CAT=write npx vitest run tests/zz-cat-pes.test.ts      # korrigierte Katzen als PES
+rm tests/zz-cat-pes.test.ts
 ```
 
 | Datei | Inhalt |
 |---|---|
-| [sim.py](skripte/sim.py) | Netz, Membran, eingebettete Fäden, Lauf in Stickreihenfolge, Ausspannen |
-| [run.py](skripte/run.py) | ein Lauf ohne Korrektur, dann Displacement Adjustment |
-| [plot.py](skripte/plot.py), [detail.py](skripte/detail.py), [video.py](skripte/video.py) | Bilder und Video |
-| [katze-pes.vitest.ts](skripte/katze-pes.vitest.ts) | liest die Katze mit Heatstitch ein und schreibt die korrigierten PES |
+| [sim.py](scripts/sim.py) | Netz, Membran, eingebettete Fäden, Lauf in Stickreihenfolge, Ausspannen |
+| [run.py](scripts/run.py) | ein Lauf ohne Korrektur, dann Displacement Adjustment |
+| [plot.py](scripts/plot.py), [detail.py](scripts/detail.py), [video.py](scripts/video.py) | Bilder und Video |
+| [cat-pes.vitest.ts](scripts/cat-pes.vitest.ts) | liest die Katze mit Heatstitch ein und schreibt die korrigierten PES |
 
 Die korrigierten PES lassen sich in Heatstitch öffnen und mit dem Original vergleichen. Zum Sticken sind sie nicht gedacht, solange die Stoffwerte nicht gemessen sind.
