@@ -38,6 +38,7 @@ import { Editor } from '../../src/ui/editor';
 import { stitchBefore } from '../../src/model/edit';
 import { THIN_SHARES } from '../../src/areas/stitches/state';
 import { writePattern } from '../../src/writers';
+import { pecOwnSlot, PEC_APPLIQUE } from '../../src/parsers/pecPalette';
 import { loadedOriginal, originalOf } from '../../src/model/original';
 import { rng } from './images';
 import { readFileSync } from 'node:fs';
@@ -1686,6 +1687,11 @@ export function checkExport(p: Pattern): void {
   const meant = groups((k) => threadKey(p.colors[k] ?? p.colors[p.colors.length - 1]));
   const jef = parsePattern(writePattern(p, 'jef'), 'torture.jef');
   expect(groups((k) => String(back.colors[k]?.pecIndex)), 'PEC slots').toEqual(meant);
+  // Brother's appliqué steps (62 to 64) only for a color that was one.
+  const applique = Array.from({ length: blocks }, (_, k) => back.colors[k]?.pecIndex ?? 0).filter(
+    (s, k) => s >= PEC_APPLIQUE && pecOwnSlot(p.colors[k] ?? p.colors[p.colors.length - 1]) !== s,
+  );
+  expect(applique, 'threads on appliqué slots').toEqual([]);
   expect(groups((k) => threadKey(jef.colors[k])), 'Janome slots').toEqual(meant);
 
   // Every cut survives JEF, however short the move after it (the format cuts on zero-length jumps).

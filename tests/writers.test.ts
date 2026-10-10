@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { COLOR_CHANGE, JUMP, PatternBuilder, STITCH, TRIM, type Pattern, type ThreadColor } from '../src/model/pattern';
 import { parseDst } from '../src/parsers/dst';
 import { parsePes } from '../src/parsers/pes';
-import { pecColor } from '../src/parsers/pecPalette';
+import { pecColor, pecThreads } from '../src/parsers/pecPalette';
 import { splitMove } from '../src/writers/bytes';
 import { writeDst } from '../src/writers/dst';
 import { writePes } from '../src/writers/pes';
@@ -179,6 +179,15 @@ describe('PES writer', () => {
     expect(new Set(slots.slice(0, 3)).size).toBe(3);
     expect(slots[3]).toBe(slots[0]);
     expect(slots.map((s) => pecColor(s!).name)).toEqual(['Gray', 'Red', 'Silver', 'Gray']);
+  });
+
+  it('never puts a thread on the appliqué slots 62 to 64, but keeps an appliqué step read from a file', () => {
+    // Orange (255,153,0) used to land on slot 62, which Brother machines show as "Applique Material".
+    expect(slotsOf({ r: 255, g: 153, b: 0 })[0]).toBeLessThan(62);
+    expect(slotsOf({ r: 255, g: 200, b: 200 }, { r: 255, g: 240, b: 141 }).every((s) => s! < 62)).toBe(true);
+    expect(slotsOf({ ...pecColor(62), name: 'Orange' })[0]).toBeLessThan(62);
+    expect(slotsOf(pecColor(62), pecColor(64))).toEqual([62, 64]);
+    expect(pecThreads().some((t) => t.pecIndex! >= 62)).toBe(false);
   });
 
   it('keeps the slot a color was read with, unless another color has it', () => {

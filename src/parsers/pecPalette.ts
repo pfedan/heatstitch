@@ -64,10 +64,25 @@ const PEC: [number, number, number, string][] = [
   [9, 91, 166, 'Electric Blue'],
   [240, 249, 112, 'Lemon Yellow'],
   [227, 243, 91, 'Fresh Green'],
-  [255, 153, 0, 'Orange'],
-  [255, 240, 141, 'Cream Yellow'],
+  // 62 to 64 are no threads: Brother machines show them as appliqué steps (libpes, checked on an
+  // Innov-is 955; pystitch leaves them out too). The colors are only how they are drawn.
+  [255, 153, 0, 'Applique Material'],
+  [255, 240, 141, 'Applique Position'],
   [255, 200, 200, 'Applique'],
 ];
+
+/** First of the appliqué slots (62 to 64), which no thread may take. */
+export const PEC_APPLIQUE = 62;
+
+/**
+ * The PEC slot a color may keep when saved: its own, unless that is an appliqué slot it does not
+ * carry as one (a color read from such a file keeps the step, one merely drawn alike does not).
+ */
+export function pecOwnSlot(c: ThreadColor): number | undefined {
+  const i = c.pecIndex;
+  if (i === undefined || i < 1 || i >= PEC.length) return undefined;
+  return i < PEC_APPLIQUE || c.name === PEC[i][3] ? i : undefined;
+}
 
 export function pecColor(index: number): ThreadColor {
   const i = index >= 0 && index < PEC.length ? index : 0;
@@ -75,11 +90,11 @@ export function pecColor(index: number): ThreadColor {
   return { r, g, b, name, pecIndex: i };
 }
 
-/** The palette as thread colors (without "unknown"), each color once, for choosing a thread. */
+/** The palette as thread colors (without "unknown" and the appliqué steps), each color once, for choosing a thread. */
 export function pecThreads(): ThreadColor[] {
   const seen = new Set<string>();
   const out: ThreadColor[] = [];
-  for (let i = 1; i < PEC.length; i++) {
+  for (let i = 1; i < PEC_APPLIQUE; i++) {
     const key = PEC[i].slice(0, 3).join(',');
     if (seen.has(key)) continue;
     seen.add(key);
@@ -88,8 +103,6 @@ export function pecThreads(): ThreadColor[] {
   return out;
 }
 
-/** Number of PEC palette slots, "unknown" (0) included. */
-export const PEC_SLOTS = PEC.length;
 
 /** Distinct colors for formats without color info (DST). */
 const DEFAULTS = [2, 5, 14, 13, 7, 12, 32, 20, 25, 37, 55, 33];

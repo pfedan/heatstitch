@@ -1,7 +1,7 @@
 import type { Hoop } from '../model/hoop';
 import { COLOR_CHANGE, END, JUMP, STITCH, TRIM, type Pattern } from '../model/pattern';
 import { PEC_STITCH_OFFSET } from '../parsers/pes';
-import { pecColor, PEC_SLOTS } from '../parsers/pecPalette';
+import { pecColor, pecOwnSlot, PEC_APPLIQUE } from '../parsers/pecPalette';
 import { ByteWriter, extents, headerLabel, splitMove } from './bytes';
 import { ICON_H, ICON_STRIDE, pecIcons } from './pecGraphics';
 import { uniqueSlots } from './threadSlots';
@@ -18,11 +18,15 @@ function blockCount(p: Pattern): number {
   return n;
 }
 
-/** PEC palette slot per color block (never 0, "unknown"): each distinct color its own. */
+/**
+ * PEC palette slot per color block (never 0, "unknown"): each distinct color its own. The appliqué
+ * slots (62 to 64) only for a color read from one.
+ */
 function pecSlots(p: Pattern): number[] {
   const colors = Array.from({ length: blockCount(p) }, (_, k) => p.colors[k] ?? p.colors[p.colors.length - 1] ?? { r: 0, g: 0, b: 0 });
-  const slots = Array.from({ length: PEC_SLOTS - 1 }, (_, i) => i + 1);
-  return uniqueSlots(colors, slots, pecColor, (c) => c.pecIndex);
+  const kept = new Set(colors.map(pecOwnSlot).filter((s): s is number => s !== undefined && s >= PEC_APPLIQUE));
+  const slots = Array.from({ length: PEC_APPLIQUE - 1 }, (_, i) => i + 1).concat([...kept].sort((a, b) => a - b));
+  return uniqueSlots(colors, slots, pecColor, pecOwnSlot);
 }
 
 function longValue(out: ByteWriter, v: number, flag: number): void {
