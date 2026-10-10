@@ -96,7 +96,7 @@ sends the picture anywhere.
 - **Stitch settings** with live preview: fill patterns in three tabs (classic: tatami with offset,
   gradient, contour fill, spiral, as sewn, guided by drawn lines; decor: embossed motifs, waves,
   grain, rays, swirl, color fade with a second color; open: meander, maze, grid, echo, cross
-  stitch), spacing, angle, stitch length, edges, expand, underlay
+  stitch, crosshatch), spacing, angle, stitch length, edges, expand, underlay
   (off, across, cross, inset, left out under later objects), **border** (running, triple or satin,
   offset, own thread); satin pattern or E stitch, spacing (also by width and per rung), width per
   side, fringe, short stitches in curves, split, underlay kind, **rungs** for the direction and **sections**
@@ -393,6 +393,17 @@ fill rows end there, satin edges are found there, underlay lies on a contour ins
   inside, under rows not sewn yet (like Ink/Stitch's underpath); where it would lie on sewn rows for
   more than 2 mm, it jumps instead. The other patterns (gradient, contour fill, spiral, guided) are
   in `flow.ts` and `spiral.ts`.
+- **Crosshatch** (`crosshatchFill` in `src/digitize/fill.ts`): the tatami machinery twice, at the fill
+  angle ±45°, like the diamond crosshatch of commercial software (two layers at right angles). Each
+  layer's rows are 1.6 mm apart, four times a usual fill's spacing, so both together lay half its
+  thread, as a light fill; no underlay and no pull compensation, as the fabric is meant to show.
+  Travel shows between sparse rows, so it keeps to the lines thread lies on: in the first layer the
+  rows still to come of both layers (they cross, so they form a net that reaches everywhere), in the
+  second the rows sewn already, which it only doubles. The way is found on the travel grid and laid
+  exactly onto those lines; it may be up to five times the straight distance before a trim, since
+  the locks of a trim show in a light fill. Read from an embroidery file, two directions at right
+  angles with about as much thread each, sewn one after the other in evenly spaced sparse rows, are
+  recognized as crosshatch, its area the net closed across its holes.
 - **Fill rows follow the image** (default; `src/digitize/flow.ts`, `src/image/orientation.ts`): a
   direction field from the structure tensor of the original picture (Förstner & Gülch 1987, Bigün &
   Granlund 1987; as in coherence-enhancing abstraction, Weickert 1999, and Coherent Line Drawing, Kang

@@ -4,7 +4,7 @@ import { isRunType, runLike, type PathStitch } from './along';
 import { wholeOf } from './knockout';
 import { LINE_MOTIFS } from '../digitize/motif';
 import { lineStitches, runAsLine, runWays } from './line';
-import { chooseAngle, fillRegion, type FillParams } from '../digitize/fill';
+import { chooseAngle, CROSSHATCH_HALF, crosshatchFill, fillRegion, type FillParams } from '../digitize/fill';
 import { contourFill, fieldFill, guideField, stitchField } from '../digitize/flow';
 import { atShare, crossFill, CROSS_KINDS, echoFill, circleField, grainField, GRID_KINDS, gridFill, mazeFill, meanderFill, MOTIFS, rayField, regionBox, swirlField, waveFill, zigzagFill, type CrossKind, type GridKind, type Motif, type OpenParams } from '../digitize/deco';
 import { spiralFill } from '../digitize/spiral';
@@ -57,9 +57,12 @@ import { deriveAreas } from './derived';
 export type FillPattern = 'tatami' | 'gradient' | 'contour' | 'spiral' | 'follow' | 'guided' | DecoPattern | OpenPattern;
 /** Dense fills with curved rows laid on a field drawn from a few numbers (see deco.ts). */
 export type DecoPattern = 'waves' | 'grain' | 'rays' | 'swirl' | 'circles';
-/** One line through the area, the fabric showing between (see deco.ts). */
-export type OpenPattern = 'meander' | 'maze' | 'grid' | 'echo' | 'cross';
-export const OPEN_PATTERNS: OpenPattern[] = ['meander', 'maze', 'grid', 'echo', 'cross'];
+/**
+ * Light on purpose, the fabric showing between: one line through the area (see deco.ts), or two
+ * sparse layers of rows crossing (crosshatch, see crosshatchFill).
+ */
+export type OpenPattern = 'meander' | 'maze' | 'grid' | 'echo' | 'cross' | 'crosshatch';
+export const OPEN_PATTERNS: OpenPattern[] = ['meander', 'maze', 'grid', 'echo', 'cross', 'crosshatch'];
 export const DECO_PATTERNS: DecoPattern[] = ['waves', 'grain', 'rays', 'swirl', 'circles'];
 export const isOpenPattern = (p: FillPattern): p is OpenPattern => (OPEN_PATTERNS as FillPattern[]).includes(p);
 
@@ -117,9 +120,11 @@ export const MAX_SWIRLS = 3;
 const CIRCLES_FOCUS: Pt = [0.5, 0.5];
 
 /** Open patterns: distance between lines or cell size when none is set (mm). */
-export const OPEN_SIZE: Record<OpenPattern, number> = { meander: 2.5, maze: 2.5, grid: 6, echo: 3, cross: 2.5 };
+// Crosshatch: rows 1.6 mm apart in each layer, four times a usual fill's 0.4 mm: the two layers
+// together lay half its thread, as a light fill (0.8 mm), and leave diamonds of fabric between.
+export const OPEN_SIZE: Record<OpenPattern, number> = { meander: 2.5, maze: 2.5, grid: 6, echo: 3, cross: 2.5, crosshatch: 1.6 };
 /** Open patterns: the range of `size` (mm). */
-export const OPEN_SIZE_RANGE: Record<OpenPattern, [number, number]> = { meander: [1.2, 8], maze: [1.2, 8], grid: [3, 20], echo: [1.2, 10], cross: [1.5, 6] };
+export const OPEN_SIZE_RANGE: Record<OpenPattern, [number, number]> = { meander: [1.2, 8], maze: [1.2, 8], grid: [3, 20], echo: [1.2, 10], cross: [1.5, 6], crosshatch: [1, 4] };
 /**
  * Decorative fields may crowd rows more than a plain curved fill before they give up (in times the
  * nominal density): rows meet at the start of rays and wind tight at the eye of a swirl, as in the
@@ -1463,8 +1468,10 @@ export function analyze(p: Pattern, o: SewObject, kinds: Uint8Array, known = rem
   });
   const others: number[] = [];
   for (let k = 1; k < idx.length; k++) if (sewnSeg(k) && !satin[k]) others.push(idx[k]);
-  const traced = known?.region ?? (others.length > 4 ? traceRegion(p, others, REACH, OPEN) : null);
-  const region = known?.region ?? withOpenRows(p, o, others, traced);
+  // A crosshatch: its net closed across its holes is its area (see hatchOf).
+  const hatch = known?.region ? null : hatchOf(p, others);
+  const traced = known?.region ?? (hatch ? traceRegion(p, others, hatch.size * HATCH_CLOSE) : others.length > 4 ? traceRegion(p, others, REACH, OPEN) : null);
+  const region = known?.region ?? (hatch ? withHatch(traced, hatch.size) : withOpenRows(p, o, others, traced));
   const inFill = (k: number) => {
     if (!region) return false;
     const i = idx[k];
@@ -1565,6 +1572,96 @@ function withOpenRows(p: Pattern, o: SewObject, segs: number[], traced: Region |
   if (!got.region) return null;
   const r = { ...got.region };
   if (got.open) openRows.set(r, got.open);
+  return r;
+}
+
+/** A crosshatch's net is closed into an area by this share of its row spacing: just past half, the middle of its squares. */
+const HATCH_CLOSE = 0.6;
+/**
+ * Each layer of a crosshatch has this share of its long stitches' thread at least, both together
+ * this much (the rest is travel, which may cut across where something on top hides it), and the
+ * lighter layer this share of the other.
+ */
+const HATCH_LAYER = 0.25;
+const HATCH_BOTH = 0.55;
+const HATCH_EVEN = 0.6;
+/** The first layer is sewn before the second: this share of each lies on its side of the other. */
+const HATCH_ORDER = 0.8;
+/** Rows of a crosshatch lie this far apart (mm): sparser than a fill, denser than a grid of lines. */
+const HATCH_SPACING: [number, number] = [0.9, OPEN_SIZE_RANGE.crosshatch[1] + 0.5];
+
+/** A crosshatch read from its stitches: the angle between its layers, their row spacing, the stitch length. */
+interface Hatch {
+  angle: number;
+  size: number;
+  stitch: number;
+}
+
+/**
+ * Whether the stitches `segs` (records) are a crosshatch (see crosshatchFill), and how: their long
+ * stitches run in two directions at right angles, each about as much, sewn one layer after the
+ * other, in rows of an even spacing far apart. A dense fill with crossing underlay has its rows'
+ * direction above all; a grid of lines (gridFill) sews both directions by turns.
+ */
+function hatchOf(p: Pattern, segs: number[]): Hatch | null {
+  const long: { i: number; l: number; d: number }[] = [];
+  for (const i of segs) {
+    const l = seg(p, i);
+    if (l >= 1.2) long.push({ i, l, d: ((((Math.atan2(p.y[i] - p.y[i - 1], p.x[i] - p.x[i - 1]) * 180) / Math.PI) % 180) + 180) % 180 });
+  }
+  if (long.length < 40) return null;
+  const apart = (a: number, b: number) => Math.min(Math.abs(a - b) % 180, 180 - (Math.abs(a - b) % 180));
+  // The direction with the most thread within a few degrees.
+  const bins = new Float64Array(180);
+  for (const g of long) bins[Math.round(g.d) % 180] += g.l;
+  let best = 0;
+  let most = -1;
+  for (let a = 0; a < 180; a++) {
+    let v = 0;
+    for (let k = -3; k <= 3; k++) v += bins[(a + k + 180) % 180];
+    if (v > most) [most, best] = [v, a];
+  }
+  const all = long.reduce((t, g) => t + g.l, 0);
+  const layers = [best, (best + 90) % 180].map((a) => long.filter((g) => apart(g.d, a) <= 6));
+  const thread = layers.map((l) => l.reduce((t, g) => t + g.l, 0));
+  if (Math.min(...thread) < all * HATCH_LAYER || thread[0] + thread[1] < all * HATCH_BOTH || Math.min(...thread) < Math.max(...thread) * HATCH_EVEN) return null;
+  // Sewn one layer after the other: most of the first before the middle of the second, and back.
+  const middle = (l: typeof long) => l[Math.floor(l.length / 2)].i;
+  const [first, second] = middle(layers[0]) < middle(layers[1]) ? layers : [layers[1], layers[0]];
+  const before = (l: typeof long, at: number) => l.filter((g) => g.i < at).length / l.length;
+  if (before(first, middle(second)) < HATCH_ORDER || 1 - before(second, middle(first)) < HATCH_ORDER) return null;
+  // The spacing of each layer: from row to row across it, the rows found as stitches on one line.
+  const spacing = (l: typeof long) => {
+    const a = (Math.round(l.reduce((t, g) => t + g.d, 0) / l.length) * Math.PI) / 180;
+    const vs = l.map((g) => ((p.x[g.i] + p.x[g.i - 1]) / 20) * -Math.sin(a) + ((p.y[g.i] + p.y[g.i - 1]) / 20) * Math.cos(a)).sort((x, y) => x - y);
+    const rows: number[] = [];
+    for (const v of vs) if (!rows.length || v - rows[rows.length - 1] > 0.3) rows.push(v);
+    const gaps = rows.slice(1).map((v, k) => v - rows[k]);
+    return percentile(gaps, 0.5);
+  };
+  const sp = layers.map(spacing);
+  const size = (sp[0] + sp[1]) / 2;
+  if (!(size >= HATCH_SPACING[0] && size <= HATCH_SPACING[1]) || Math.max(...sp) > Math.min(...sp) * 1.3) return null;
+  // The first layer's direction as its stitches have it on average (doubled angles, as they run both ways).
+  let sx = 0;
+  let sy = 0;
+  for (const g of first) {
+    sx += g.l * Math.cos((g.d * Math.PI) / 90);
+    sy += g.l * Math.sin((g.d * Math.PI) / 90);
+  }
+  const firstDir = (Math.atan2(sy, sx) * 90) / Math.PI;
+  return {
+    angle: ((Math.round(firstDir + CROSSHATCH_HALF) % 180) + 180) % 180,
+    size: Math.round(size * 10) / 10,
+    stitch: Math.round((percentile([...first, ...second].map((g) => g.l), 0.8) || 3) * 10) / 10,
+  };
+}
+
+/** The area of a crosshatch, kept with its spacing for shapeTrust (see openRows). */
+function withHatch(traced: Region | null, size: number): Region | null {
+  if (!traced) return null;
+  const r = { ...traced };
+  openRows.set(r, size);
   return r;
 }
 
@@ -1711,6 +1808,16 @@ export function measureFill(p: Pattern, a: Analysis): FillSettings {
 }
 
 function readFill(p: Pattern, a: Analysis): { s: FillSettings; firstRow: number } {
+  // Two light layers crossing: a crosshatch, with the spacing of each layer.
+  const fillSegs: number[] = [];
+  for (const pt of a.parts) if (pt.kind === 'fill') for (let i = pt.s + 1; i <= pt.e; i++) if (p.cmd[i] === STITCH && p.cmd[i - 1] === STITCH) fillSegs.push(i);
+  const hatch = hatchOf(p, fillSegs);
+  if (hatch) {
+    // A usual fill a quarter of its spacing apart, should it become one (see OPEN_SIZE).
+    const spacing = Math.round((hatch.size / 4) * 100) / 100;
+    const s: FillSettings = { pattern: 'crosshatch', spacing, spacingEnd: Math.min(1.2, Math.round(spacing * 250) / 100), offset: 0.25, angle: hatch.angle, stitch: hatch.stitch, underlay: false, edge: 0, tolerance: TOLERANCE, deco: { size: hatch.size } };
+    return { s, firstRow: fillSegs[0] ?? Infinity };
+  }
   const segs: { i: number; l: number; a: number }[] = [];
   for (const pt of a.parts) {
     if (pt.kind !== 'fill') continue;
@@ -2263,7 +2370,7 @@ export function fillRuns(area: Region, s: FillSettings, way: FillWay): NewFill |
   } else if ((DECO_PATTERNS as FillPattern[]).includes(s.pattern)) {
     res = decoFill(r, s, fp, start);
   } else if (isOpenPattern(s.pattern)) {
-    res = openFill(r, s, start);
+    res = openFill(r, s, fp, start);
   } else {
     const d = s.deco;
     res = fillRegion(r, { ...fp, offset: s.offset, ...(s.pattern === 'tatami' && d?.emboss ? { emboss: { motif: d.emboss, size: d.embossSize ?? DECO_DEFAULTS.embossSize, strong: !!d.embossStrong } } : {}) }, start);
@@ -2300,12 +2407,13 @@ function decoFill(r: Region, s: FillSettings, fp: FillParams, start: Pt) {
   return fieldFill(r, f.g, f, fp, start, true, s.pattern === 'grain' ? DECO_PEAK : DECO_PEAK_POINT);
 }
 
-/** One of the open patterns: no underlay, no pull, one line. */
-function openFill(r: Region, s: FillSettings, start: Pt) {
+/** One of the open patterns: no underlay, no pull; one line, or crosshatch's two layers of rows. */
+function openFill(r: Region, s: FillSettings, fp: FillParams, start: Pt) {
   const pat = s.pattern as OpenPattern;
   const d = { ...DECO_DEFAULTS, ...s.deco };
   const [lo, hi] = OPEN_SIZE_RANGE[pat];
   const p: OpenParams = { size: Math.min(hi, Math.max(lo, d.size ?? OPEN_SIZE[pat])), stitch: Math.min(s.stitch, 3), seed: d.seed, triple: d.triple };
+  if (pat === 'crosshatch') return crosshatchFill(r, { ...fp, spacing: p.size, stitch: p.stitch, angle: Number.isFinite(s.angle) ? s.angle : 0, pull: 0, underlay: false }, start);
   if (pat === 'meander') return meanderFill(r, p, start);
   if (pat === 'maze') return mazeFill(r, p, start);
   if (pat === 'echo') return echoFill(r, p, start);
