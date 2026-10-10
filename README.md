@@ -60,7 +60,8 @@ sends the picture anywhere.
 - Read and write **PES** and **PEC** (Brother), **DST** (Tajima), **JEF** (Janome), **VP3** (Pfaff,
   Husqvarna Viking) and **EXP** (Melco), with own writers (no pyembroidery); PES reads the thread
   list of versions 5 to 10 with real colors, names and catalog numbers
-- **SVG** import as whole shapes with their curves, colors and size; fine lines as running stitch
+- **SVG** import as whole shapes with their curves, colors and size; fine lines as running stitch; a line
+  drawing of touching strokes as redwork, in one go without trims
 - **Project files** (`.heatstitch`) that keep everything embroidery files drop: originals and edits,
   shapes, settings, rungs, guide lines, letterings, acknowledged findings, the image, material
 - **Hoop**: common sewing fields or an own size, drawn around the design, with a note when it does
@@ -101,7 +102,8 @@ sends the picture anywhere.
   offset, own thread); satin pattern or E stitch, spacing (also by width and per rung), width per
   side, fringe, short stitches in curves, split, underlay kind, **rungs** for the direction and **sections**
   with cut lines (also on a fill: each part a column of its own, order, direction and trims per part);
-  running stitch length, max. deviation, triple stitch; lines as running stitch, satin or fill
+  running stitch length, max. deviation, triple stitch; lines as running stitch, satin or fill;
+  **redwork**: a line of many paths in one go, each line out and back, no trims where they touch
 - **Shape editing**: the outline of a fill as curves with nodes, kept exactly from then on; close,
   open, join and split paths, nodes at crossings, fill inside; an opened fill or satin is sewn as a
   line and filled again once a path is closed; the border is the fill's own line, along open paths
@@ -419,6 +421,14 @@ fill rows end there, satin edges are found there, underlay lies on a contour ins
   start the column afresh at sharp corners, and a fill can become a satin along drawn rungs.
 - **Running stitch** (`run.ts`): stitches of the chosen length along a path, shortened in curves until
   none lies further off the curve than the max. deviation (0.15 mm by default), never under 1 mm.
+- **Redwork** (`redwork.ts`): a line of many paths in one go. The paths become a planar graph (split
+  where they cross or touch, lines up to 0.5 mm apart bridged where they are closest, the snap of
+  joining paths; nodes closer than 0.5 mm along a line merged, so crossings at a shallow angle give no heap of
+  short stitches). Every edge is doubled, one copy each way, so each connected part has an Euler
+  circuit; the one taken is Tarry's depth-first traversal (1895), which leaves an edge back the way
+  it came only after everything beyond it is sewn: the first pass lies below, the way back on top,
+  over the same needle points. Parts that do not touch follow each other, the nearest next. SVG lines
+  in running stitch whose paths touch are sewn this way from the start.
 - **Order:** colors by area, the largest first; within a color fills before satin and lines, each time
   the nearest object. Objects sewn earlier reach 0.2 mm under later neighbors. Up to 1 mm apart a
   stitch, up to 3 mm a jump, beyond that a tie-off (0, 0.5, 1, 0.5, 0 mm along the thread), trim, jump

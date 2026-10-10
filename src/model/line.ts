@@ -1,10 +1,11 @@
-import { BORDER_STITCH, BORDER_WIDTH } from '../digitize/border';
+import { BORDER_STITCH, BORDER_WIDTH, borderRun } from '../digitize/border';
+import { redworkGraph, redworkRuns, redworkWalks } from '../digitize/redwork';
 import { TOLERANCE } from '../digitize/run';
 import { echoLines, type EchoLine } from '../digitize/echo';
 import type { Pt } from '../digitize/skeleton';
 import { flatten, type Form, type Node } from '../shape/path';
 import { fitCubic } from '../shape/vectorize';
-import { hasPhase, isRunType, passesOf, sewAlong, spacingOf, type PathStitch } from './along';
+import { hasPhase, isRedwork, isRunType, passesOf, sewAlong, spacingOf, type PathStitch } from './along';
 import { runRecords } from './border';
 import { tidy, withRecords } from './edit';
 import { rememberObjects, sewObjects, stitchKey, type SewObject } from './objects';
@@ -40,6 +41,11 @@ export const runAsLine = (s: RunSettings, width = BORDER_WIDTH): PathStitch => (
 /** The stitches along the paths of `form`, one after the other, each from the end nearest the one before (the first from `from` when given). */
 export function lineStitches(form: Form, st: PathStitch, reverse = false, from?: Pt): Pt[][] {
   let paths = form.paths.map((p) => ({ pts: flatten(p), closed: p.closed })).filter((x) => x.pts.length >= 2);
+  if (isRedwork(st)) {
+    // All paths in one go where they touch, each line there and back over the same needle points.
+    const runs = redworkRuns(paths, (pts) => borderRun(pts, 1, st.tolerance ?? TOLERANCE, st.length), from);
+    return reverse ? runs.reverse().map((r) => r.slice().reverse()) : runs;
+  }
   if (reverse) paths = paths.reverse().map((x) => ({ ...x, pts: x.pts.slice().reverse() }));
   const out: Pt[][] = [];
   let at: Pt | undefined = from;
@@ -51,6 +57,15 @@ export function lineStitches(form: Form, st: PathStitch, reverse = false, from?:
     if (last) at = last[last.length - 1];
   }
   return out;
+}
+
+/**
+ * Whether redwork saves jumps on the paths of `form`: they touch, so they make fewer connected
+ * parts than there are paths. A line of such paths is sewn as redwork to begin with.
+ */
+export function redworkHelps(form: Form): boolean {
+  const paths = form.paths.map((p) => ({ pts: flatten(p), closed: p.closed })).filter((x) => x.pts.length >= 2);
+  return paths.length > 1 && redworkWalks(redworkGraph(paths)).length < paths.length;
 }
 
 /** Running stitch along the paths of `form` (see lineStitches). */

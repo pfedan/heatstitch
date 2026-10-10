@@ -14,7 +14,7 @@ import { TOLERANCE } from '../digitize/run';
 import type { ThreadColor } from '../model/pattern';
 import { newLink } from '../model/border';
 import { SATIN_SHARE } from '../model/covers';
-import { autoUnder, coverOf, E_SPACING, hasPhase, isRunType, REPEAT, spacingOf, timesOf, ZIGZAG_SPACING, type PathStitch } from '../model/along';
+import { autoUnder, coverOf, E_SPACING, hasPhase, isRedwork, isRunType, REPEAT, spacingOf, timesOf, ZIGZAG_SPACING, type PathStitch } from '../model/along';
 import { LINE_MOTIFS, MOTIF_PERIOD, MOTIF_STITCH, MOTIF_WIDTH, motifMaxSize, SIDED_MOTIFS, type LineMotif } from '../digitize/motif';
 import { ECHO_COUNT, ECHO_DEFAULT, ECHO_GAP, ECHO_PHASE, ECHO_SIDES, type EchoSide } from '../digitize/echo';
 import { SHADOW_COLOR, SHADOW_DEFAULT_ANGLE, SHADOW_DEFAULT_DIST, SHADOW_DIST, SHADOW_UNDER } from '../model/shadow';
@@ -1838,6 +1838,13 @@ export class StitchPanel {
     }
     if (isRunType(st.type)) {
       const times = st.type === 'triple' ? (st.repeat === 5 ? '5' : '3') : '1';
+      // A line of many paths in one go (redwork): each there and back, so it has no count of its own.
+      const red = line && !st.echo ? this.redworkCheck(st, set) : null;
+      if (red && isRedwork(st)) {
+        out.look.push(red, this.slider({ label: 'stitch.length', hint: 'stitch.runLength.hint', min: 1, max: 6, step: 0.1, get: () => st.length ?? BORDER_STITCH, set: (v) => change((s) => (s.length = v))(v), fmt: mm(1), auto: unset('length') }));
+        return out;
+      }
+      if (red) out.look.push(red);
       out.look.push(
         line
           ? this.repeatRow(st, set)
@@ -1954,6 +1961,20 @@ export class StitchPanel {
     box.addEventListener('change', () => put(n, box.checked));
     const check = h('label', { class: 'check' + (odd ? '' : ' off'), title: t(odd || n === 1 ? 'stitch.bean.hint' : 'stitch.bean.even') }, box, h('span', null, t('stitch.bean')));
     return h('div', { class: 'repeat-field' }, field, check);
+  }
+
+  /** Redwork for a line in running stitch: all its paths in one go, each there and back (see PathStitch.redwork). */
+  private redworkCheck(st: PathStitch, set: (v: PathStitch) => void): HTMLElement {
+    return this.check('stitch.redwork', 'stitch.redwork.hint', () => isRedwork(st), (v) => {
+      if (v) {
+        st.type = 'run';
+        st.redwork = true;
+        delete st.repeat;
+        delete st.whole;
+      } else delete st.redwork;
+      set(st);
+      this.render();
+    });
   }
 
   /** Which side an E stitch's prongs or a motif's figures are on: of a line right or left, of a border inside or outside. */

@@ -55,6 +55,11 @@ export interface PathStitch {
   echo?: LineEcho;
   /** Lines only: a copy beside it in a thread of its own, sewn before it (see shadow.ts). */
   shadow?: LineShadow;
+  /**
+   * Lines in running stitch only: all paths in one go, each line there and back without a trim
+   * where they touch (redwork, see digitize/redwork.ts); path by path by default.
+   */
+  redwork?: boolean;
 }
 
 /** Sewn as a running stitch (once or more often), not across a band. */
@@ -73,6 +78,9 @@ export const timesOf = (s: PathStitch): number => (s.type === 'triple' ? (s.repe
 
 /** How often the whole line is sewn, there and back: what is not sewn as bean stitch. */
 export const passesOf = (s: PathStitch): number => (s.type === 'triple' || timesOf(s) > 1 ? 1 : repeatOf(s));
+
+/** Whether a line is sewn as redwork: a running stitch (once) without echo, see PathStitch.redwork. */
+export const isRedwork = (s: PathStitch): boolean => !!s.redwork && s.type === 'run' && !s.echo;
 
 /** Kinds of stitch whose figures repeat along the line: an echo shifts them from copy to copy (LineEcho.phase). */
 export const hasPhase = (t: BorderType): boolean => t === 'motif' || t === 'zigzag' || t === 'e';

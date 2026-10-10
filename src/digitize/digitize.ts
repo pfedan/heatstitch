@@ -17,7 +17,7 @@ import { easePiles, SATIN_PEAK } from './satinEase';
 import { areaLoops, classify as shapeClass, offersSections, suggestSatin, type SatinSuggestion, type ShapeClass } from './satinSuggest';
 import type { Orientation } from '../image/orientation';
 import { transformForm, type Form } from '../shape/path';
-import { lineStitchFor, lineStitches } from '../model/line';
+import { lineStitchFor, lineStitches, redworkHelps } from '../model/line';
 import type { PathStitch } from '../model/along';
 import { knockOut, rasterize, rasterizeStroke, sharedArea, unionOf } from '../shape/rasterize';
 import { acrossGraph, areaKey, boxOf, groupOf, letterOf, structure, STRUCTURE, STRUCTURE_MIN_MM2, type AreaInfo, type Reason, type Technique } from './smart';
@@ -1256,6 +1256,8 @@ export function digitizeShapes(shapes: ShapeInput[], threads: ThreadColor[], o: 
       if (!isFill) {
         // Lines are sewn along their curves, so they stay exact and can be edited as lines.
         const line = lineStitchFor(it.sh.width ?? 0.4, o.tolerance);
+        // A drawing of touching strokes in running stitch: in one go, without trims (redwork).
+        if (line.type === 'run' && redworkHelps(it.form)) line.redwork = true;
         const sewn = lineStitches(it.form, line, false, pos);
         if (!sewn.length) continue;
         runs.push(...sewn);

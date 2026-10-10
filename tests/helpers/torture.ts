@@ -15,7 +15,8 @@ import { fillsToLines, lineToSatin, reshapeFill, reshapeObject, transformSewObje
 import { canSplit, splitFill } from '../../src/model/splitFill';
 import { cutKey, sewnArea, wholeArea, wholeOf } from '../../src/model/knockout';
 import { unionOf } from '../../src/shape/rasterize';
-import { borderStitches } from '../../src/model/along';
+import { borderStitches, isRedwork, isRunType } from '../../src/model/along';
+import { redworkGraph, redworkWalks } from '../../src/digitize/redwork';
 import type { Region } from '../../src/digitize/region';
 import { backToVersion, edgeAlong, keepVersion, objectKey, remember, remembered, rememberedIn, restitch, restoreRemembered, DECO_PATTERNS, OPEN_PATTERNS, type BorderSettings, type FillSettings, type Rails, type Remembered, type StoredObjects } from '../../src/model/restitch';
 import { reorder } from '../../src/model/order';
@@ -1186,6 +1187,35 @@ export const SHAPE_OPS: Op[] = [
   },
 ];
 
+/**
+ * Redwork switched on or off for a line in running stitch, as the line panel does. Drawn from a
+ * stream of its own, so the chains of the other ops stay as they were for the seeds above.
+ */
+export const REDWORK_OPS: Op[] = [
+  {
+    name: 'redwork',
+    run: (d, r) => {
+      const lines = d.objects.filter((o) => {
+        const m = remembered(d.cur.p, o);
+        return lineGeoOf(m) && m?.line && isRunType(m.line.type) && !m.line.echo && !m.free && !partOf(m);
+      });
+      if (!lines.length) return false;
+      const o = pick(r, lines);
+      const m = remembered(d.cur.p, o)!;
+      const st = { ...m.line! };
+      if (isRedwork(st)) delete st.redwork;
+      else {
+        st.type = 'run';
+        st.redwork = true;
+        delete st.repeat;
+        delete st.whole;
+      }
+      const sewn = resewLine(d.cur.p, o.index, m.geo!, st, T);
+      return !!sewn && shapes(d, syncBorders(sewn.pattern, T));
+    },
+  },
+];
+
 export const LINE_OPS: Op[] = [
   {
     name: 'edit line',
@@ -1497,7 +1527,7 @@ export function checkEchoes(p: Pattern): void {
     const m = remembered(p, o);
     // Loosed from its curve (changed by hand), a line keeps the stitches it was given instead; so
     // does a shadow or echo object changed by hand (it is sewn anew only when its line changes).
-    if (!lineGeoOf(m) || !m!.line || m!.free || (partOf(m) && m!.hand) || (!m!.line.echo && !((m!.line.repeat ?? 1) > 1))) continue;
+    if (!lineGeoOf(m) || !m!.line || m!.free || (partOf(m) && m!.hand) || (!m!.line.echo && !((m!.line.repeat ?? 1) > 1) && !isRedwork(m!.line))) continue;
     const fresh = lineStitches(m!.geo!, m!.line).flat();
     const sewn: [number, number][] = [];
     for (let i = o.first; i <= o.last; i++) if (p.cmd[i] === STITCH) sewn.push([p.x[i] / 10, p.y[i] / 10]);
@@ -1506,6 +1536,24 @@ export function checkEchoes(p: Pattern): void {
     if (off > 0.6 || missing > 0.6) problems.push(`line ${o.index}: stitches ${off.toFixed(2)} mm off its echo, echo ${missing.toFixed(2)} mm from its stitches`);
   }
   expect(problems.join('; '), 'echoes that parted from their lines').toBe('');
+}
+
+/**
+ * A line sewn as redwork has no trim inside where its paths touch: at most one less than the parts
+ * its paths make (parts far apart are trimmed between, as any line's paths).
+ */
+export function checkRedwork(p: Pattern): void {
+  const problems: string[] = [];
+  for (const o of sewObjects(p)) {
+    const m = remembered(p, o);
+    if (!lineGeoOf(m) || !m!.line || m!.free || !isRedwork(m!.line)) continue;
+    const lines = m!.geo!.paths.map((x) => ({ pts: flatten(x), closed: x.closed })).filter((x) => x.pts.length >= 2);
+    const parts = redworkWalks(redworkGraph(lines)).length;
+    let trims = 0;
+    for (let i = o.first; i < o.last; i++) if (p.cmd[i] === TRIM) trims++;
+    if (trims > Math.max(0, parts - 1)) problems.push(`redwork line ${o.index}: ${trims} trims inside, ${parts} parts`);
+  }
+  expect(problems.join('; '), 'redwork lines trimmed where their paths touch').toBe('');
 }
 
 /**
@@ -1766,6 +1814,7 @@ export async function chain(seed: number, steps = STEPS, opts: { trace?: boolean
   const rs = rng(seed + 15485863);
   const rsat = rng(seed + 32452843);
   const rlet = rng(seed + 49979687);
+  const rred = rng(seed + 67867967);
   const d = new Doc();
   const log: string[] = [];
   const at = () => `seed ${seed}: ${log.join(' > ')}`;
@@ -1789,6 +1838,19 @@ export async function chain(seed: number, steps = STEPS, opts: { trace?: boolean
       if (await lop.run(d, rl)) {
         log.push(lop.name);
         if (process.env.TORTURE_TRACE) console.log(lop.name, describeObjects(d.cur.p));
+        try {
+          checkStep(d, false);
+        } catch (e) {
+          throw new Error(`${at()}\n${(e as Error).message}`);
+        }
+      }
+    }
+    // Now and then a line sewn as redwork, or path by path again, beside the chain.
+    if (!blank(d.cur.p) && rred() < 0.15) {
+      const red = pick(rred, REDWORK_OPS);
+      if (await red.run(d, rred)) {
+        log.push(red.name);
+        if (process.env.TORTURE_TRACE) console.log(red.name, describeObjects(d.cur.p));
         try {
           checkStep(d, false);
         } catch (e) {
@@ -1885,6 +1947,7 @@ function checkStep(d: Doc, full: boolean): void {
   checkFits(p);
   checkBlends(p);
   checkEchoes(p);
+  checkRedwork(p);
   checkLineParts(p);
   checkKnockouts(p);
   checkAreas(p);
