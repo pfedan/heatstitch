@@ -9,7 +9,7 @@ import { partOf, type LinePart } from '../../src/model/shadow';
 import { fillToLine, lineStitches, lineToFill, resewLine } from '../../src/model/line';
 import { refreshKnockouts, setKnockout } from '../../src/model/knockout';
 import { rememberObjects, sewObjects, tableOf, type SewObject } from '../../src/model/objects';
-import { COLOR_CHANGE, END, STITCH, type Pattern, type ThreadColor } from '../../src/model/pattern';
+import { COLOR_CHANGE, END, STITCH, TRIM, type Pattern, type ThreadColor } from '../../src/model/pattern';
 import { sameColor } from '../../src/model/recolor';
 import { fillsToLines, lineToSatin, reshapeFill, reshapeObject, transformSewObject } from '../../src/model/reshape';
 import { canSplit, splitFill } from '../../src/model/splitFill';
@@ -21,7 +21,7 @@ import { backToVersion, edgeAlong, keepVersion, objectKey, remember, remembered,
 import { reorder } from '../../src/model/order';
 import { stitchKinds } from '../../src/model/sequence';
 import { addContour, behindCovered, gapReader } from '../../src/model/contour';
-import { combineLines, deleteObjects, duplicateObject, duplicateObjects, mirrorMatrix, recolorObjects, subtractTop } from '../../src/model/shapeOps';
+import { combineLines, deleteObjects, duplicateObject, duplicateObjects, gatherObjects, mergeLeads, mirrorMatrix, recolorObjects, subtractTop, threadOfAFill } from '../../src/model/shapeOps';
 import { stitchesBefore } from '../../src/model/transform';
 import { sewDesign, specOf } from '../../src/model/sew';
 import { parsePattern } from '../../src/parsers';
@@ -432,6 +432,43 @@ export const OPS: Op[] = [
       expect(count(after!), 'combined lines: nodes less joined ends').toBe(count(before) - (c.joined ? c.joined.joints.filter((x) => !x.bridged).length + c.joined.closed : 0));
       expect(c.joined?.joints.every((x) => !x.bridged) ?? true, 'Zusammenfassen bridges no gap').toBe(true);
       return shapes(d, c.pattern);
+    },
+  },
+  {
+    name: 'combine across colors',
+    run: (d, r) => {
+      // Zusammenfassen of objects in several threads: first all of them into the thread with the
+      // most of them, where its biggest object is sewn (the rest as in the app, by the same calls).
+      const p = d.cur.p;
+      const free = d.objects.filter((o) => !threadOfAFill(p, o));
+      if (new Set(free.map((o) => o.block)).size < 2) return false;
+      const a = pick(r, free);
+      const b = pick(r, free.filter((o) => o.block !== a.block));
+      const more = free.filter((o) => o !== a && o !== b && r() < 0.2);
+      const objs = [a, b, ...more].sort((x, y) => x.index - y.index);
+      // Now and then the next color, as the message offers (two blocks can have one thread).
+      const leads = mergeLeads(objs);
+      const lead = leads[r() < 0.7 ? 0 : leads.length - 1];
+      const g = gatherObjects(p, objs.map((o) => o.index), lead, T);
+      expect(g, 'gathered objects stay objects').toBeTruthy();
+      const now = sewObjects(g!.pattern);
+      const was = new Map(d.objects.map((o) => [o.id, o]));
+      // The gathered: one after the other from the lead on, all in its thread, each with its stitches.
+      expect(g!.which, 'gathered one after the other, the lead first').toEqual(g!.which.map((_, k) => g!.which[0] + k));
+      expect(now[g!.which[0]].id, 'the lead first').toBe(d.objects[lead].id);
+      for (const k of g!.which) {
+        expect(now[k].block, 'gathered into one color block').toBe(now[g!.which[0]].block);
+        expect(sameColor(now[k].color, d.objects[lead].color), 'in the lead\'s thread').toBe(true);
+        expect(now[k].stitches, 'a gathered object keeps its stitches').toBe(was.get(now[k].id)!.stitches);
+        expect(remembered(g!.pattern, now[k]), 'a gathered object keeps what it knows').toEqual(remembered(p, was.get(now[k].id)!));
+      }
+      // The others keep their order and thread.
+      const ids = new Set(objs.map((o) => o.id));
+      const rest = (list: SewObject[]) => list.filter((o) => !ids.has(o.id) && !threadOfAFill(p, was.get(o.id) ?? o));
+      expect(rest(now).map((o) => o.id), 'the others keep their order').toEqual(rest(d.objects).map((o) => o.id));
+      for (const o of rest(now)) expect(sameColor(o.color, was.get(o.id)!.color), 'the others keep their thread').toBe(true);
+      expect(now.length, 'no object lost or made').toBe(d.objects.length);
+      return shapes(d, g!.pattern);
     },
   },
   {
@@ -1635,6 +1672,47 @@ export function checkExport(p: Pattern): void {
   const oy = Number(b[0]?.split(',')[1]) - Number(a[0]?.split(',')[1]);
   const moved = a.map((s) => s.split(',').map(Number)).map(([x, y]) => `${x + ox},${y + oy}`);
   expect(b, 'stitches read back from PES').toEqual(moved);
+
+  // Different threads get different PEC and Janome slots, the same thread the same slot.
+  const blocks = 1 + p.cmd.filter((c) => c === COLOR_CHANGE).length;
+  const threadKey = (c: ThreadColor | undefined) => (c ? `${c.r},${c.g},${c.b},${c.pecIndex ?? ''}` : '');
+  const groups = (key: (k: number) => string) => {
+    const first = new Map<string, number>();
+    return Array.from({ length: blocks }, (_, k) => {
+      if (!first.has(key(k))) first.set(key(k), k);
+      return first.get(key(k));
+    });
+  };
+  const meant = groups((k) => threadKey(p.colors[k] ?? p.colors[p.colors.length - 1]));
+  const jef = parsePattern(writePattern(p, 'jef'), 'torture.jef');
+  expect(groups((k) => String(back.colors[k]?.pecIndex)), 'PEC slots').toEqual(meant);
+  expect(groups((k) => threadKey(jef.colors[k])), 'Janome slots').toEqual(meant);
+
+  // Every cut survives JEF, however short the move after it (the format cuts on zero-length jumps).
+  const cuts = (q: Pattern, x0: number, y0: number) => {
+    const out: string[] = [];
+    let sewn = false;
+    let pending = false;
+    for (let i = 0; i < q.cmd.length; i++) {
+      if (q.cmd[i] === TRIM && sewn) {
+        pending = true;
+        sewn = false;
+      } else if (q.cmd[i] === COLOR_CHANGE) {
+        sewn = false;
+      } else if (q.cmd[i] === STITCH) {
+        if (pending) out.push(`${q.x[i] - x0},${q.y[i] - y0}`);
+        pending = false;
+        sewn = true;
+      }
+    }
+    return out;
+  };
+  const firstStitch = (q: Pattern) => q.cmd.indexOf(STITCH);
+  const meantCuts = cuts(p, p.x[firstStitch(p)], p.y[firstStitch(p)]);
+  const readCuts = cuts(jef, jef.x[firstStitch(jef)], jef.y[firstStitch(jef)]);
+  let k = 0;
+  for (const c of readCuts) if (c === meantCuts[k]) k++;
+  expect(meantCuts.slice(k)[0], 'cut lost in JEF').toBeUndefined();
 }
 
 /** The objects of `p` in a line each, to follow a chain (TORTURE_TRACE=1). */

@@ -1,15 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { addShape } from '../src/model/addShape';
+import { syncBorders } from '../src/model/border';
+import { partOf } from '../src/model/shadow';
 import { resewLine } from '../src/model/line';
 import { setKnockout } from '../src/model/knockout';
 import { sewObjects } from '../src/model/objects';
 import { END, STITCH, type Pattern } from '../src/model/pattern';
 import { sameColor } from '../src/model/recolor';
-import { backToVersion, remember, remembered } from '../src/model/restitch';
-import { deleteObjects, duplicateObject, mirrorMatrix, recolorObjects, subtractTop } from '../src/model/shapeOps';
+import { backToVersion, lockAt, remember, remembered, withShortLocks } from '../src/model/restitch';
+import { deleteObjects, duplicateObject, duplicateObjects, mirrorMatrix, recolorObjects, subtractTop } from '../src/model/shapeOps';
 import { ellipsePath, parsePath, rectPath } from '../src/shape/svgPath';
 import { loadOps } from '../src/shape/ops';
-import { CHAINS, FIRST_SEED, ID, options, T, COLORS, empty, knowledge, Doc, shapes, transform, boxOf, saveAndOpen, checkWellFormed, checkAllKnown, checkPartsFit, checkBorders, checkObjectList, checkKeys, checkKnockouts, checkExport, checkSewDesign, checkFollowers, chain, borderedSquare, borderOf, squareOf, type Version } from './helpers/torture';
+import { CHAINS, FIRST_SEED, ID, options, T, COLORS, empty, knowledge, Doc, shapes, transform, boxOf, saveAndOpen, checkWellFormed, checkAllKnown, checkPartsFit, checkBorders, checkObjectList, checkKeys, checkKnockouts, checkExport, checkSewDesign, checkFollowers, checkEchoes, chain, borderedSquare, borderOf, squareOf, type Version } from './helpers/torture';
 
 describe('torture test', () => {
   const seeds = Array.from({ length: CHAINS }, (_, k) => FIRST_SEED + k);
@@ -58,6 +60,39 @@ describe('found by the torture test', () => {
     const d = borderedSquare();
     expect(subtractTop(d.cur.p, [0, borderOf(d)], T)).toBeNull();
     checkBorders(d.cur.p);
+  });
+
+  it('a short lock differs from the usual one, also where the first stitch is shorter than a lock', () => {
+    // Sewn anew, a fill may come out with the very stitches of its copy in place (a fill whose
+    // border was taken off): then it is sewn with short locks, which must tell it apart.
+    for (const first of [0.35, 0.42, 0.6, 2]) {
+      const run: [number, number][] = [[10, 10], [10 + first, 10], [15, 10]];
+      for (const atEnd of [false, true]) expect(withShortLocks(() => lockAt(run, atEnd))).not.toEqual(lockAt(run, atEnd));
+    }
+  });
+
+  it('a copy in place of an echo changed by hand is a line of its own, loosed from its curve', () => {
+    const d = new Doc();
+    shapes(d, addShape(empty, { form: parsePath('M5 5 L40 20 L10 40', ID), kind: 'stroke', width: 2 }, COLORS[0], null, options)!.pattern);
+    const m = remembered(d.cur.p, d.objects[0])!;
+    const echo = { side: 'both' as const, count: 2, gap: 5, colors: [COLORS[1], null], link: 'e1' };
+    shapes(d, syncBorders(resewLine(d.cur.p, 0, m.geo!, { ...m.line!, echo }, T)!.pattern, T));
+    const part = d.objects.findIndex((o) => partOf(remembered(d.cur.p, o)));
+    expect(part).toBeGreaterThan(0);
+    // One of its stitches moved 1 mm by hand, as the stitch editor does.
+    const q = { ...d.cur.p, x: d.cur.p.x.slice() };
+    const o = d.objects[part];
+    const i = o.first + Math.floor((o.last - o.first) / 2);
+    q.x[i] += 10;
+    remember(q, sewObjects(q)[part], { ...remembered(d.cur.p, o)!, hand: 1 });
+    d.commit(q);
+    checkEchoes(d.cur.p);
+    shapes(d, duplicateObjects(d.cur.p, [part], T, 0)?.pattern);
+    const copies = d.objects.filter((x) => !partOf(remembered(d.cur.p, x)) && remembered(d.cur.p, x)?.hand);
+    expect(copies).toHaveLength(1);
+    expect(remembered(d.cur.p, copies[0])?.free).toBe(true);
+    checkEchoes(d.cur.p);
+    checkKeys(d.cur.p);
   });
 
   it('recoloring a border gives its fill that border thread', () => {

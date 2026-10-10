@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { COLOR_CHANGE, JUMP, STITCH, TRIM, type Pattern } from '../src/model/pattern';
+import { COLOR_CHANGE, JUMP, PatternBuilder, STITCH, TRIM, type Pattern, type ThreadColor } from '../src/model/pattern';
 import { parseDst } from '../src/parsers/dst';
 import { parsePes } from '../src/parsers/pes';
-import { pecColor, pecIndexOf } from '../src/parsers/pecPalette';
+import { pecColor } from '../src/parsers/pecPalette';
 import { splitMove } from '../src/writers/bytes';
 import { writeDst } from '../src/writers/dst';
 import { writePes } from '../src/writers/pes';
@@ -158,10 +158,31 @@ describe('PES writer', () => {
     expect(data[pec + 512 + len]).toBe(0x00);
   });
 
+  const slotsOf = (...colors: ThreadColor[]) => {
+    const b = new PatternBuilder();
+    for (let k = 0; k < colors.length; k++) {
+      if (k) b.mark(COLOR_CHANGE);
+      b.add(10, 0, STITCH);
+    }
+    return parsePes(writePes(b.build('t', 'dst', colors))).colors.map((c) => c.pecIndex);
+  };
+
   it('maps colors without a palette slot to the nearest PEC thread', () => {
-    expect(pecIndexOf({ r: 236, g: 20, b: 30 })).toBe(5); // red
-    expect(pecIndexOf({ r: 0, g: 0, b: 0 })).toBe(20); // black, not "unknown"
-    expect(pecIndexOf(pecColor(13))).toBe(13);
+    expect(slotsOf({ r: 236, g: 20, b: 30 })).toEqual([5]); // red
+    expect(slotsOf({ r: 0, g: 0, b: 0 })).toEqual([20]); // black, not "unknown"
+    expect(slotsOf(pecColor(13))).toEqual([13]);
+  });
+
+  it('gives every distinct color its own PEC slot, the same color the same slot', () => {
+    // Two grays round to the same PEC thread; the second gets the next nearest, not a violet.
+    const slots = slotsOf({ r: 128, g: 128, b: 128 }, { r: 200, g: 0, b: 0 }, { r: 133, g: 131, b: 130 }, { r: 128, g: 128, b: 128 });
+    expect(new Set(slots.slice(0, 3)).size).toBe(3);
+    expect(slots[3]).toBe(slots[0]);
+    expect(slots.map((s) => pecColor(s!).name)).toEqual(['Gray', 'Red', 'Silver', 'Gray']);
+  });
+
+  it('keeps the slot a color was read with, unless another color has it', () => {
+    expect(slotsOf(pecColor(39), { ...pecColor(39), pecIndex: undefined })).toEqual([39, 16]);
   });
 });
 
