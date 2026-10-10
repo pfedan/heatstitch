@@ -1,6 +1,6 @@
 import { isReadFromFile, nextVersion, readFromFile, type Pattern } from '../model/pattern';
 import { transformObjects } from '../model/reshape';
-import { rememberedIn, restoreRemembered, type StoredObjects } from '../model/restitch';
+import { designObjects, rememberedIn, restitch, restoreRemembered, type Remembered, type Settings, type StoredObjects } from '../model/restitch';
 import type { Mat } from '../shape/path';
 
 /**
@@ -44,4 +44,23 @@ export function unship(s: Shipped, from?: Pattern): Pattern {
 export function resew(p: Pattern, sel: number[], m: Mat, trimMm: number): Shipped | null {
   const r = transformObjects(p, sel, m, trimMm);
   return r && ship(r.pattern, true);
+}
+
+/** New stitches for objects as the stitch settings would give them (see restitch), to be looked at. */
+export interface ShippedRestitch {
+  pattern: Shipped;
+  starts: number[];
+  ends: number[];
+  failed: number[];
+  memory: Remembered[];
+}
+
+/**
+ * The objects `which` of `p` sewn anew with `s`, as the stitch panel shows them while a setting is
+ * pointed at or dragged. With what they know, so the preview looks the same as once applied.
+ */
+export function restitchShipped(p: Pattern, which: number[], s: Settings, trimMm: number): ShippedRestitch {
+  const { kinds, objects } = designObjects(p);
+  const r = restitch(p, objects, which, s, kinds, trimMm);
+  return { pattern: ship(r.pattern), starts: r.starts, ends: r.ends, failed: r.failed, memory: r.memory };
 }

@@ -16,9 +16,9 @@ import type { ShapeTool } from '../ui/shapeTool';
 import { borderLines, type PathStitch } from '../model/along';
 import { echoCopyLines, nearestCopy } from '../model/line';
 import { borderRanges } from '../model/border';
-import { borderOf, remembered, underlayRanges, type RestitchResult, analyze, restitchedPieces } from '../model/restitch';
-import { sewObjects, overlaps, type SewObject } from '../model/objects';
-import { stitchNumbers, stitchKinds, colorBlocks, markers as findMarkers, transitions, sewingSeconds, recordOfStitch, carriedJumps } from '../model/sequence';
+import { borderOf, designObjects, remembered, underlayRanges, type RestitchResult, analyze, restitchedPieces } from '../model/restitch';
+import { overlaps, type SewObject } from '../model/objects';
+import { stitchNumbers, colorBlocks, markers as findMarkers, transitions, sewingSeconds, recordOfStitch, carriedJumps } from '../model/sequence';
 import { type Pattern, TRIM, COLOR_CHANGE, STITCH, type ThreadColor } from '../model/pattern';
 import { type StitchStyle, stitchColors, stitchAlpha } from '../render/flow';
 import { ui } from './state';
@@ -58,10 +58,7 @@ export function bindScene(app: SceneApp) {
       if (p.cmd[i] === TRIM) cut = true;
       else if (p.cmd[i] === STITCH) cut = false;
     }
-    const kinds = stitchKinds(p);
-    const objects = sewObjects(p, kinds);
-    // A fill with a satin border in its thread has more satin than fill thread, and stays a fill.
-    for (const o of objects) if (o.kind === 'satin' && remembered(p, o)?.borderAt) o.kind = 'fill';
+    const { kinds, objects } = designObjects(p);
     const objectAt = new Int32Array(p.cmd.length).fill(-1);
     for (const o of objects) objectAt.fill(o.index, o.first, o.last + 1);
     q = {
