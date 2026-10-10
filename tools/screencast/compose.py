@@ -25,7 +25,7 @@ W, H = 1920, 1080
 SS = 2  # overlays are drawn at twice the size and scaled down, for smooth edges
 ACCENT = (181, 49, 122)
 ACCENT_LIGHT = (224, 85, 158)
-CARD_BG = (20, 17, 24)
+CARD_BG = (27, 16, 38)  # #1b1026, the background of the logo (public/pwa-512.png): no edge around it
 INTRO, OUTRO = 3.0, 3.0
 # Inter as OTF (Inter-Regular.otf and so on): FONT_DIR, else the usual places on Linux, macOS
 # and Windows.
