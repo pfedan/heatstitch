@@ -2,7 +2,8 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { digitizeDefaults, digitizeShapes, type ShapeInput } from '../src/digitize/digitize';
 import { syncBorders } from '../src/model/border';
 import { digitizedFile } from '../src/model/digitized';
-import { deleteObjects } from '../src/model/shapeOps';
+import { deleteObjects, duplicateObjects } from '../src/model/shapeOps';
+import { refreshKnockouts, setKnockout } from '../src/model/knockout';
 import { sewObjects } from '../src/model/objects';
 import { STITCH, type Pattern } from '../src/model/pattern';
 import { remember, remembered, rememberedIn, restoreRemembered, withLine, type BorderSettings } from '../src/model/restitch';
@@ -166,5 +167,16 @@ describe('the echo of a border set off the edge', () => {
     // The copy itself 2 mm further out.
     expect(points(q, copy.o.first, copy.o.last).every((p) => Math.abs(outside(p) - line - 2) < 0.15)).toBe(true);
     expect(syncBorders(q, options.trimMm)).toBe(q);
+  });
+});
+
+describe('fills with a border that leave out what lies on top', () => {
+  it('settle in one go when copied over each other', () => {
+    let p = withBorder(bordered(), (b) => ({ ...b, type: 'satin', width: 2, color: threads[1], link: 'k1' }));
+    p = setKnockout(p, [view(p).findIndex((x) => x.m.fill)], true, options.trimMm)!.pattern;
+    const copy = duplicateObjects(p, [view(p).findIndex((x) => x.m.fill)], options.trimMm, 3)!.pattern;
+    const once = refreshKnockouts(copy, options.trimMm)?.pattern ?? copy;
+    expect(view(once).filter((x) => x.m.fill && x.m.knockout)).toHaveLength(2);
+    expect(refreshKnockouts(once, options.trimMm)?.changed ?? []).toEqual([]);
   });
 });

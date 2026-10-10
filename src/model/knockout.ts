@@ -168,8 +168,9 @@ export function refreshKnockouts(p: Pattern, trimMm: number): { pattern: Pattern
   const changed: number[] = [];
   // The objects are found again only when one was sewn anew (with many objects that is most of the time).
   let objs = sewObjects(cur);
-  const count = objs.length;
-  for (let index = 0; index < count; index++) {
+  // From the top down: what an object leaves out lies after it, the borders of fills sewn anew
+  // among it, so those are sewn anew (and their borders synced) first.
+  for (let index = objs.length - 1; index >= 0; index--) {
     const o = objs[index];
     const known = o && remembered(cur, o);
     const form = areaOf(known);
@@ -178,11 +179,11 @@ export function refreshKnockouts(p: Pattern, trimMm: number): { pattern: Pattern
     if (cutKey(area) === known.cut) continue;
     const next = sewAgain(cur, index, true, trimMm);
     if (!next) continue;
-    cur = next;
+    cur = syncBorders(next, trimMm);
     objs = sewObjects(cur);
-    changed.push(index);
+    changed.unshift(index);
   }
-  return changed.length ? { pattern: syncBorders(cur, trimMm), changed } : null;
+  return changed.length ? { pattern: cur, changed } : null;
 }
 
 /** Whether fills sewn later cover a noticeable part of the shape of `o`. */
