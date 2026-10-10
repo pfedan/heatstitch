@@ -110,7 +110,8 @@ Ink/Stitch's code is GPL: read it to understand the font format, but never copy 
 
 Every pull request is built and uploaded as a preview version of the site, at
 `https://pr-N-heatstitch.<account>.workers.dev`. A bot comment on the PR links it. Pull requests from
-forks get theirs once their run has been approved (`.github/workflows/fork-preview.yml`).
+forks get theirs once their run has been approved (`.github/workflows/fork-preview.yml`). When the PR
+is closed, its address shows a short note that leads to heatstitch.app instead (`cloudflare/closed/`).
 
 A preview has an address of its own, so it shares nothing with heatstitch.app: no stored files, no
 settings, no service worker. `PREVIEW=1` (set by the workflow) marks the build: it ships no service

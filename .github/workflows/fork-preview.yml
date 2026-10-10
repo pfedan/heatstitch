@@ -10,6 +10,9 @@ on:
   workflow_run:
     workflows: [CI and Pages]
     types: [completed]
+  # Closing a fork's pull request retires its preview; this checks out our own base branch, never the fork.
+  pull_request_target:
+    types: [closed]
 
 permissions:
   contents: read
@@ -75,3 +78,31 @@ jobs:
             :rocket: Preview: ${{ steps.upload.outputs.url }}
 
             Built from ${{ github.event.workflow_run.head_sha }}. It has an address of its own, so nothing in it touches what is stored on heatstitch.app.
+
+  retire:
+    if: >-
+      github.event_name == 'pull_request_target' &&
+      github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - id: upload
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PR: ${{ github.event.number }}
+        run: npx --yes wrangler@4.149.0 versions upload --assets cloudflare/closed --preview-alias "pr-$PR" --message "PR $PR closed"
+      - if: steps.upload.outcome == 'success'
+        uses: marocchino/sticky-pull-request-comment@67d0dec7b07ed060a405f9b2a64b8ab319fdd7db # v2.9.2
+        with:
+          header: pr-preview
+          number: ${{ github.event.number }}
+          message: |
+            The preview is retired: its address now shows a short note that leads to heatstitch.app.
