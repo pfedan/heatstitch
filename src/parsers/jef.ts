@@ -1,7 +1,10 @@
 import { COLOR_CHANGE, JUMP, PatternBuilder, STITCH, TRIM, type Pattern, type ThreadColor } from '../model/pattern';
 import { jefColor } from './jefPalette';
 
-/** JEF has no trim command; a move longer than this (0.1 mm, either axis) is cut, as pyembroidery reads it. */
+/**
+ * JEF has no trim command: a zero-length jump is a cut (heatstitch, pyembroidery and Ink/Stitch
+ * write three), and so is a move longer than this (0.1 mm, either axis), as pyembroidery reads it.
+ */
 export const JEF_TRIM_DISTANCE = 30;
 
 const signed8 = (v: number): number => (v > 0x7f ? v - 0x100 : v);
@@ -49,7 +52,10 @@ export function parseJef(data: Uint8Array, fileName = ''): Pattern {
     const dx = signed8(data[i]);
     const dy = -signed8(data[i + 1]);
     i += 2;
-    if (b1 === 0x02) {
+    if (b1 === 0x02 && dx === 0 && dy === 0) {
+      if (!cut) trimAt.push(b.length);
+      cut = true;
+    } else if (b1 === 0x02) {
       if (runStart < 0) {
         runStart = b.length;
         runDx = runDy = 0;
@@ -79,7 +85,7 @@ export function parseJef(data: Uint8Array, fileName = ''): Pattern {
   return p;
 }
 
-/** Inserts a record of `cmd` (at the previous position) before each given record index. */
+/** Inserts a record of `cmd` (at the previous position) before each given record index (the length: at the end). */
 export function insertBefore(p: Pattern, at: number[], cmd: number): Pattern {
   const n = p.cmd.length + at.length;
   const x = new Int32Array(n);
@@ -97,6 +103,13 @@ export function insertBefore(p: Pattern, at: number[], cmd: number): Pattern {
     x[o] = p.x[i];
     y[o] = p.y[i];
     c[o++] = p.cmd[i];
+  }
+  // A cut after the last record.
+  for (; k < at.length; k++) {
+    const last = p.cmd.length - 1;
+    x[o] = last >= 0 ? p.x[last] : 0;
+    y[o] = last >= 0 ? p.y[last] : 0;
+    c[o++] = cmd;
   }
   return { ...p, x, y, cmd: c };
 }

@@ -9,7 +9,7 @@ import { partOf, type LinePart } from '../../src/model/shadow';
 import { fillToLine, lineStitches, lineToFill, resewLine } from '../../src/model/line';
 import { refreshKnockouts, setKnockout } from '../../src/model/knockout';
 import { rememberObjects, sewObjects, tableOf, type SewObject } from '../../src/model/objects';
-import { COLOR_CHANGE, END, STITCH, type Pattern, type ThreadColor } from '../../src/model/pattern';
+import { COLOR_CHANGE, END, STITCH, TRIM, type Pattern, type ThreadColor } from '../../src/model/pattern';
 import { sameColor } from '../../src/model/recolor';
 import { fillsToLines, lineToSatin, reshapeFill, reshapeObject, transformSewObject } from '../../src/model/reshape';
 import { canSplit, splitFill } from '../../src/model/splitFill';
@@ -1516,6 +1516,47 @@ export function checkExport(p: Pattern): void {
   const oy = Number(b[0]?.split(',')[1]) - Number(a[0]?.split(',')[1]);
   const moved = a.map((s) => s.split(',').map(Number)).map(([x, y]) => `${x + ox},${y + oy}`);
   expect(b, 'stitches read back from PES').toEqual(moved);
+
+  // Different threads get different PEC and Janome slots, the same thread the same slot.
+  const blocks = 1 + p.cmd.filter((c) => c === COLOR_CHANGE).length;
+  const threadKey = (c: ThreadColor | undefined) => (c ? `${c.r},${c.g},${c.b},${c.pecIndex ?? ''}` : '');
+  const groups = (key: (k: number) => string) => {
+    const first = new Map<string, number>();
+    return Array.from({ length: blocks }, (_, k) => {
+      if (!first.has(key(k))) first.set(key(k), k);
+      return first.get(key(k));
+    });
+  };
+  const meant = groups((k) => threadKey(p.colors[k] ?? p.colors[p.colors.length - 1]));
+  const jef = parsePattern(writePattern(p, 'jef'), 'torture.jef');
+  expect(groups((k) => String(back.colors[k]?.pecIndex)), 'PEC slots').toEqual(meant);
+  expect(groups((k) => threadKey(jef.colors[k])), 'Janome slots').toEqual(meant);
+
+  // Every cut survives JEF, however short the move after it (the format cuts on zero-length jumps).
+  const cuts = (q: Pattern, x0: number, y0: number) => {
+    const out: string[] = [];
+    let sewn = false;
+    let pending = false;
+    for (let i = 0; i < q.cmd.length; i++) {
+      if (q.cmd[i] === TRIM && sewn) {
+        pending = true;
+        sewn = false;
+      } else if (q.cmd[i] === COLOR_CHANGE) {
+        sewn = false;
+      } else if (q.cmd[i] === STITCH) {
+        if (pending) out.push(`${q.x[i] - x0},${q.y[i] - y0}`);
+        pending = false;
+        sewn = true;
+      }
+    }
+    return out;
+  };
+  const firstStitch = (q: Pattern) => q.cmd.indexOf(STITCH);
+  const meantCuts = cuts(p, p.x[firstStitch(p)], p.y[firstStitch(p)]);
+  const readCuts = cuts(jef, jef.x[firstStitch(jef)], jef.y[firstStitch(jef)]);
+  let k = 0;
+  for (const c of readCuts) if (c === meantCuts[k]) k++;
+  expect(meantCuts.slice(k)[0], 'cut lost in JEF').toBeUndefined();
 }
 
 /** The objects of `p` in a line each, to follow a chain (TORTURE_TRACE=1). */
