@@ -44,10 +44,9 @@ describe('a closed line filled inside', () => {
       // The line is the outline of the fill, and still sewn along it as its border.
       expect(a.m.geo).toEqual(form);
       expect(guessArea(a.q, a.o, stitchKinds(a.q))).toEqual(form);
-      // The line's stitch is kept to switch back.
-      expect(a.m.line).toBeUndefined();
+      // The line stays beside the fill as its border; its stitch is kept to switch back.
       expect(a.m.kept?.line).toEqual(line);
-      expect(a.m.fill?.border).toMatchObject({ type: line.type, width: line.width });
+      expect(a.m.line).toMatchObject({ type: line.type, width: line.width });
       expect(a.m.region!.areaMm2).toBeGreaterThan(560);
       expect(a.m.region!.areaMm2).toBeLessThan(640);
       // Stitches inside, not only on the edge.
@@ -64,9 +63,8 @@ describe('a closed line filled inside', () => {
     const p = addShape(empty, { form, kind: 'stroke', width: 0.4 }, red, null, options)!.pattern;
     const a = take(lineToFill(p, 0, fs, options.trimMm, 'area')!);
     const kinds = stitchKinds(a.q);
-    const { border: _b, ...plain } = a.m.fill!;
-    const b = take(restitch(a.q, sewObjects(a.q, kinds), [0], { kind: 'fill', s: plain }, kinds, options.trimMm));
-    expect(b.m.fill?.border).toBeUndefined();
+    const b = take(restitch(a.q, sewObjects(a.q, kinds), [0], { kind: 'fill', s: a.m.fill!, line: null }, kinds, options.trimMm));
+    expect(b.m.line).toBeUndefined();
     expect(b.m.geo).toEqual(form);
   });
 

@@ -88,7 +88,7 @@ describe('recoloring through the list', () => {
       if (o.color.r === color.r && o.color.g === color.g && o.color.b === color.b) continue;
       // Objects tied to others (borders, blends, shadows, echoes) take them along: not here.
       const m = remembered(p, o);
-      if (m?.outline || m?.blendOf || m?.shadowOf || m?.echoOf || m?.fill?.border || m?.fill?.deco?.blend || m?.line?.shadow || m?.line?.echo) continue;
+      if (m?.outline || m?.blendOf || m?.shadowOf || m?.echoOf || m?.line || m?.fill?.deco?.blend || m?.line?.shadow || m?.line?.echo) continue;
       const q = recolorObjects(p, [o.index], color, d.T);
       if (!q) continue;
       const after = sewObjects(q);

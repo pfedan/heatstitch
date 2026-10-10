@@ -74,9 +74,9 @@ export interface LinePart {
 /** The link of the line part object `m` is (shadow or echo copies), if it is one. */
 export const partOf = (m: Remembered | undefined): string | undefined => m?.shadowOf ?? m?.echoOf;
 
-/** Whether line `m` has the part linked by `link`. */
+/** Whether line `m` (or the border of fill `m`, its line too) has the part linked by `link`. */
 export const hasPart = (m: Remembered | undefined, link: string): boolean =>
-  !!m && !!lineGeoOf(m) && !partOf(m) && (m.line?.shadow?.link === link || (!!m.line?.echo?.link && link.startsWith(`${m.line.echo.link}:`)));
+  !!m && (!!lineGeoOf(m) || !!m.fill) && !partOf(m) && (m.line?.shadow?.link === link || (!!m.line?.echo?.link && link.startsWith(`${m.line.echo.link}:`)));
 
 /** Line `m` with its part `link` in thread `color` from now on. */
 export function partInThread(m: Remembered, link: string, color: ThreadColor): Remembered {
@@ -109,13 +109,18 @@ export function withoutPart(m: Remembered, link: string): Remembered {
 }
 
 /** The parts of line `m` in threads of their own: its shadow (unless right under it), and its echo copies by thread. */
-export function lineParts(m: Remembered): LinePart[] {
-  const st = m.line!;
+export const lineParts = (m: Remembered): LinePart[] => linePartsOf(m.line!, lineGeoOf(m)!);
+
+/**
+ * The parts in threads of their own of a line sewn with `st` along `form`: a line object's, or a
+ * fill's border along the edge it runs on (see borderForm), sewn as lines.
+ */
+export function linePartsOf(st: PathStitch, form: Form): LinePart[] {
   const out: LinePart[] = [];
   // Right under the line a shadow has no object: the line keeps it, so it is back once moved out.
   if (st.shadow && !shadowUnder(st.shadow)) {
     const s = st.shadow;
-    out.push({ link: s.link, color: s.color, after: false, memory: withGeo({ region: null, line: shadowStitch(st), shadowOf: s.link }, shadowPath(lineGeoOf(m)!, s)) });
+    out.push({ link: s.link, color: s.color, after: false, memory: withGeo({ region: null, line: shadowStitch(st), shadowOf: s.link }, shadowPath(form, s)) });
   }
   const e = st.echo;
   if (e?.link && e.colors) {
@@ -134,7 +139,7 @@ export function lineParts(m: Remembered): LinePart[] {
       const link = `${e.link}:${g.rings[0]}`;
       // With the line's phase and order, so its copies keep in step with those of the line.
       const echo = { side: e.side, count: e.count, gap: e.gap, ...(e.cut ? { cut: true } : {}), ...(e.phase ? { phase: e.phase } : {}), ...(e.reverse ? { reverse: true } : {}), only: g.rings };
-      out.push({ link, color: g.color, after: true, memory: withGeo({ region: null, line: { ...plain, echo }, echoOf: link }, lineGeoOf(m)!) });
+      out.push({ link, color: g.color, after: true, memory: withGeo({ region: null, line: { ...plain, echo }, echoOf: link }, form) });
     }
   }
   return out;
