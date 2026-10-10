@@ -13,6 +13,7 @@ import { normalizeCorrection } from '../correct/auto';
 import { readAreas } from '../digitize/smart';
 import type { StoredAside } from '../model/aside';
 import { compactStored, isStoredObjects, type ObjectsAsStored } from '../model/restitch';
+import { dropDerived } from '../model/derived';
 import { DEFAULTS, hexColor, normalizeImage, type ImageSettings, type Settings } from '../settings';
 import { isAcknowledgement, type Acknowledgement } from '../validation/acks';
 import { normalizeProfile } from '../validation/profiles';
@@ -159,6 +160,15 @@ async function through(data: Uint8Array, stream: CompressionStream | Decompressi
 
 // Writing and reading -------------------------------------------------------------------------
 
+/**
+ * The object list as written to the file: no area that opening makes again, from the form
+ * (compactStored) or from the fill a border or blend follows (dropDerived).
+ */
+function storedObjects(list: ObjectsAsStored): ObjectsAsStored {
+  const out = compactStored(list);
+  return isStoredObjects(list) && isStoredObjects(out) && out.v === 3 ? dropDerived(list, out) : out;
+}
+
 /** The project as the bytes of a .heatstitch file. */
 export async function encodeProject(p: Project, savedAt = new Date()): Promise<Uint8Array> {
   const doc = {
@@ -167,7 +177,7 @@ export async function encodeProject(p: Project, savedAt = new Date()): Promise<U
     savedAt: savedAt.toISOString(),
     settings: p.settings,
     active: p.active,
-    files: p.files.map((f) => ({ ...f, objects: compactStored(f.objects) })),
+    files: p.files.map((f) => ({ ...f, objects: storedObjects(f.objects) })),
     image: p.image,
     ...(p.recording ? { recording: p.recording } : {}),
   };
