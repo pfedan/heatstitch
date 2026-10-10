@@ -41,7 +41,11 @@ import { rng } from './images';
 import { inheritTrace, movedTrace, readTrace, setTraceOf, sizedTrace, storeTrace, traceFrom, traceOf, withTrace, type Trace } from '../../src/model/trace';
 import { areaLoops, suggestSatin } from '../../src/digitize/satinSuggest';
 import { stripsOfAreas } from '../../src/digitize/rungs';
+import { areaOfForm, loadOps, subtractForm } from '../../src/shape/ops';
 import { areaOf, fillArea, fits, formKey, geoOf, geoUse, guessArea, guessGeo, lineGeoOf, openOf, withGeo } from '../../src/model/geo';
+
+// Joining and cutting run on the curves (paper.js), loaded once.
+await loadOps();
 
 /**
  * The torture test: random chains of the operations the app offers on objects (add, duplicate (also
@@ -132,6 +136,24 @@ export function follow(d: Doc): void {
 }
 
 /** The app's takeShapes: a new version, then the knockouts follow. */
+/**
+ * Ausschneiden on the curves: what is left of the lower fill `o` (now `left` in `next`) does not
+ * overlap the cutter `top`, and is exactly the old form without the cutter.
+ */
+function checkCut(p: Pattern, o: number, top: number, next: Pattern, left: number): void {
+  const kinds = stitchKinds(p);
+  const objs = sewObjects(p, kinds);
+  const cutter = guessArea(p, objs[top], kinds)!;
+  const was = guessArea(p, objs[o], kinds)!;
+  const now = guessArea(next, sewObjects(next)[left], stitchKinds(next));
+  expect(now, 'a cut fill keeps a form').toBeTruthy();
+  const area = areaOfForm(now!);
+  const outside = subtractForm(now!, cutter);
+  expect(area - (outside ? areaOfForm(outside) : 0), 'cut fill and cutter overlap (mm²)').toBeLessThan(0.01);
+  const want = subtractForm(was, cutter);
+  expect(Math.abs(area - (want ? areaOfForm(want) : 0)), 'cut fill is the old form without the cutter (mm²)').toBeLessThan(Math.max(0.01, 1e-3 * area));
+}
+
 export function shapes(d: Doc, next: Pattern | null | undefined): boolean {
   if (!next) return false;
   d.commit(next);
@@ -544,7 +566,11 @@ export const OPS: Op[] = [
       if (d.objects.length < 2) return false;
       const a = pick(r, d.objects).index;
       const b = pick(r, d.objects).index;
-      return a !== b && shapes(d, subtractTop(d.cur.p, [a, b], T)?.pattern);
+      if (a === b) return false;
+      const p = d.cur.p;
+      const s = subtractTop(p, [a, b], T);
+      if (s?.cut.length) checkCut(p, Math.min(a, b), Math.max(a, b), s.pattern, s.cut[0]);
+      return shapes(d, s?.pattern);
     },
   },
   {

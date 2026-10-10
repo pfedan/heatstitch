@@ -1,8 +1,7 @@
 import { hasPart, partInThread, partOf, withoutPart } from './shadow';
-import { knockOut, unionOf } from '../shape/rasterize';
 import { translation, type Form, type Mat } from '../shape/path';
-import { vectorize } from '../shape/vectorize';
-import { takeOver, wholeArea } from './knockout';
+import { areaOfForm, subtractForm, unionForms } from '../shape/ops';
+import { takeOver } from './knockout';
 import { rememberObjects, sewObjects, stitchKey, type SewObject } from './objects';
 import { listOf, sewList } from './sew';
 import { newLink, syncBorders } from './border';
@@ -252,13 +251,17 @@ export function mirrorMatrix(axis: 'x' | 'y', box: { minX: number; minY: number;
   return axis === 'x' ? [-1, 0, 0, 1, 2 * cx, 0] : [1, 0, 0, -1, 0, 2 * cy];
 }
 
-/** The one outline of several fill shapes together (null when one of them has no fill). */
+/** Below this a form counts as empty (mm²): what is left of a cut is a sliver, not an area. */
+const NO_AREA = 0.05;
+
+/**
+ * The one outline of several fill shapes together, joined on their curves (null when one of them
+ * has no fill). Needs `loadOps()`.
+ */
 export function unionForm(forms: Form[]): Form | null {
-  const areas = forms.map((f) => wholeArea(f));
-  if (areas.some((a) => !a)) return null;
-  const all = unionOf(areas as NonNullable<(typeof areas)[number]>[]);
-  const f = all && vectorize(all);
-  return f?.paths.length ? f : null;
+  if (forms.some((f) => !f.paths.some((p) => p.closed && p.nodes.length > 1))) return null;
+  const f = unionForms(forms);
+  return f && areaOfForm(f) >= NO_AREA ? f : null;
 }
 
 export interface Subtracted {
@@ -271,7 +274,7 @@ export interface Subtracted {
 
 /**
  * The last of the objects `which` (the one sewn on top) cut out of the others, and gone itself.
- * Only fills take part. Null when it cut nothing.
+ * Only fills take part; they are cut on their curves (needs `loadOps()`). Null when it cut nothing.
  */
 export function subtractTop(p: Pattern, which: number[], trimMm: number): Subtracted | null {
   const sorted = [...which].sort((a, b) => a - b);
@@ -285,23 +288,20 @@ export function subtractTop(p: Pattern, which: number[], trimMm: number): Subtra
   const isBorder = (o: number) => !!objs[o] && !!(remembered(cur, objs[o])?.outline || remembered(cur, objs[o])?.blendOf || partOf(remembered(cur, objs[o])));
   if (isBorder(top)) return null;
   const cutter = guessArea(cur, objs[top], kinds);
-  const hole = cutter && wholeArea(cutter);
-  if (!hole) return null;
+  if (!cutter || areaOfForm(cutter) < NO_AREA) return null;
   const gone = [top];
   const cut: number[] = [];
   for (const o of sorted.filter((x) => !isBorder(x))) {
     const obj = objs[o];
     const form = obj && guessArea(cur, obj, kinds);
-    const whole = form && wholeArea(form);
-    if (!whole) continue;
-    const left = knockOut(whole, [hole], 0);
-    if (left === whole) continue;
-    if (!left) {
-      gone.push(o);
-      continue;
-    }
-    const shape = vectorize(left);
-    if (!shape.paths.length) {
+    if (!form) continue;
+    const before = areaOfForm(form);
+    if (before < NO_AREA) continue;
+    const shape = subtractForm(form, cutter);
+    const after = shape ? areaOfForm(shape) : 0;
+    // Cut on the curves: an untouched form keeps its area to rounding.
+    if (before - after < 1e-6 * before) continue;
+    if (!shape || after < NO_AREA) {
       gone.push(o);
       continue;
     }

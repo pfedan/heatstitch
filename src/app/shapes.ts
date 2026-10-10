@@ -12,6 +12,7 @@ import type { SewObject } from '../model/objects';
 import type { Viewport } from '../render/viewport';
 import { ShapeTool } from '../ui/shapeTool';
 import { deleteObjects, duplicateObjects, mirrorMatrix, subtractTop } from '../model/shapeOps';
+import { loadOps, opsReady } from '../shape/ops';
 import { fillsToLines, reshapeObject } from '../model/reshape';
 import { resewLine, lineSettings, lineToFill, reshapeLineFill } from '../model/line';
 import { refreshKnockouts } from '../model/knockout';
@@ -498,6 +499,8 @@ export function bindShapes(app: ShapesApp) {
     const p = app.files.active?.pattern;
     const sel = app.frameObjects();
     if (!p || sel.length < 2) return;
+    // Cut on the curves: the libraries for that load on first use.
+    if (!opsReady()) return void loadOps().then(subtractSelected);
     const r = subtractTop(p, sel, app.settings.trimMm);
     if (!r) return app.layers.say(t('object.subtract.nothing'), true);
     takeShapes(r.pattern, r.cut);
