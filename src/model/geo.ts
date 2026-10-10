@@ -6,7 +6,7 @@ import type { Pattern } from './pattern';
 import { runWays, traceLine } from './line';
 import { analyze, keepShape, remembered, type FillSettings, type Rails, type Remembered } from './restitch';
 import type { Region } from '../digitize/region';
-import { rasterize, rasterizeStroke } from '../shape/rasterize';
+import { rasterize, rasterizeStroke, regionOf } from '../shape/rasterize';
 import { stitchKinds } from './sequence';
 
 /**
@@ -53,6 +53,26 @@ export const withGeo = (m: Remembered, geo: Form): Remembered => ({ ...m, geo })
 /** The area of a band: its paths in the fill's width, with its ends (flat when not set). */
 export function bandArea(geo: Form, fill: FillSettings, pxMm = 0.1): Region | null {
   return fill.lineWidth === undefined ? null : rasterizeStroke(geo, fill.lineWidth, pxMm, fill.lineCap ?? 'flat');
+}
+
+/** Area `a` grown by `grow` mm (shrunk when negative): the pixels whose signed distance is below it. */
+export function grownArea(a: Region, grow: number): Region {
+  return regionOf(Uint8Array.from(a.sdf, (d) => (d < grow ? 1 : 0)), a.x0, a.y0, a.w, a.h, a.pxMm) ?? a;
+}
+
+/** The form's area grown by `grow` mm (see FillSettings.areaGrow); as rastered when 0. */
+export const grownForm = (geo: Form, pxMm = 0.1, grow = 0): Region | null => {
+  const a = rasterize(geo, pxMm);
+  return a && grow ? grownArea(a, grow) : a;
+};
+
+/**
+ * The area an object is sewn on, from its form: its closed paths grown by the pull compensation it
+ * was made with (`fill.areaGrow`), or its band; null for a line or without form. What a fill
+ * leaves out under shapes on top comes off this (see knockout.ts).
+ */
+export function fillArea(m: Remembered | null | undefined, pxMm = 0.1): Region | null {
+  return geoUse(m) === 'area' ? grownForm(m!.geo!, pxMm, m!.fill?.areaGrow ?? 0) : geoArea(m, pxMm);
 }
 
 /** The area an object's form gives it: its closed paths, or its band; null for a line or without form. */

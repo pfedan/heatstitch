@@ -16,13 +16,12 @@ import { fillsToLines, reshapeObject } from '../model/reshape';
 import { resewLine, lineSettings, lineToFill, reshapeLineFill } from '../model/line';
 import { refreshKnockouts } from '../model/knockout';
 import { objectKey, remember, remembered, rememberedIn, restitch, type Remembered, type RestitchResult } from '../model/restitch';
-import { rasterize } from '../shape/rasterize';
 import { followerLinks, syncBorders } from '../model/border';
 import { partOf } from '../model/shadow';
 import { stitchKey } from '../model/objects';
 import { t, formatNumber, type Key } from '../i18n';
 import { ui } from './state';
-import { bandArea, fits, fitsOf, geoOf, geoUse, guessGeo, guessLine, sewnAlong, withGeo } from '../model/geo';
+import { bandArea, fillArea, fits, fitsOf, geoOf, geoUse, guessGeo, guessLine, sewnAlong, withGeo } from '../model/geo';
 
 /** What bindShapes needs from the rest of the app. */
 export interface ShapesApp {
@@ -338,7 +337,7 @@ export function bindShapes(app: ShapesApp) {
     // A line read from a file is sewn along its form from now on, with the stitch it has.
     const rested: Remembered = withGeo(line && !mem.line ? { ...mem, line: lineSettings(p, obj) } : mem, form);
     const use = geoUse(rested);
-    if (use === 'area') rested.region = rasterize(form, mem.region?.pxMm ?? 0.1) ?? mem.region;
+    if (use === 'area') rested.region = fillArea(rested, mem.region?.pxMm ?? 0.1) ?? mem.region;
     else if (use === 'band') rested.region = bandArea(form, rested.fill!, mem.region?.pxMm ?? 0.1) ?? mem.region;
     const next = nextVersion(p, {});
     remember(next, obj, rested);

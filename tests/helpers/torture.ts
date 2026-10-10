@@ -1,7 +1,7 @@
 import { expect } from 'vitest';
 import { digitizeDefaults } from '../../src/digitize/digitize';
 import { addShape } from '../../src/model/addShape';
-import { followerLinks, recolorBlock, shareBorders, syncBorders } from '../../src/model/border';
+import { followerLinks, recolorBlock, sameRegion, shareBorders, syncBorders } from '../../src/model/border';
 import { blendObject } from '../../src/model/blend';
 import { MOTIFS } from '../../src/digitize/deco';
 import { ECHO_SIDES } from '../../src/digitize/echo';
@@ -13,7 +13,8 @@ import { COLOR_CHANGE, END, STITCH, type Pattern, type ThreadColor } from '../..
 import { sameColor } from '../../src/model/recolor';
 import { fillsToLines, reshapeObject, transformSewObject } from '../../src/model/reshape';
 import { canSplit, splitFill } from '../../src/model/splitFill';
-import { wholeArea, wholeOf } from '../../src/model/knockout';
+import { sewnArea, wholeArea, wholeOf } from '../../src/model/knockout';
+import { unionOf } from '../../src/shape/rasterize';
 import { borderStitches } from '../../src/model/along';
 import type { Region } from '../../src/digitize/region';
 import { backToVersion, edgeAlong, keepVersion, objectKey, remember, remembered, rememberedIn, restitch, restoreRemembered, DECO_PATTERNS, OPEN_PATTERNS, type FillSettings, type Rails, type StoredObjects } from '../../src/model/restitch';
@@ -40,7 +41,7 @@ import { rng } from './images';
 import { inheritTrace, movedTrace, readTrace, setTraceOf, sizedTrace, storeTrace, traceFrom, traceOf, withTrace, type Trace } from '../../src/model/trace';
 import { areaLoops, suggestSatin } from '../../src/digitize/satinSuggest';
 import { stripsOfAreas } from '../../src/digitize/rungs';
-import { areaOf, fits, geoOf, geoUse, guessArea, guessGeo, lineGeoOf, withGeo } from '../../src/model/geo';
+import { areaOf, fillArea, fits, geoOf, geoUse, guessArea, guessGeo, lineGeoOf, withGeo } from '../../src/model/geo';
 
 /**
  * The torture test: random chains of the operations the app offers on objects (add, duplicate (also
@@ -1164,6 +1165,44 @@ export function checkKnockouts(p: Pattern): void {
   expect(refreshKnockouts(p, T)?.changed ?? [], 'fills whose left-out parts are out of date').toEqual([]);
 }
 
+/**
+ * The area a fill is sewn on comes from its form (masks from the form): its form rastered and grown
+ * by the pull compensation it was made with, without what lies on top where it leaves that out.
+ * Leaving out, reshaping, turning, duplicating and undo never lose the pull compensation.
+ */
+export function checkAreas(p: Pattern): void {
+  const objs = sewObjects(p);
+  const problems: string[] = [];
+  for (const o of objs) {
+    const m = remembered(p, o);
+    if (!m?.region || !m.fill || m.free || m.hand || m.read || m.lettering || geoUse(m) !== 'area') continue;
+    const want = m.knockout ? sewnArea(p, objs, o, m.geo!, true, m.region.pxMm) : fillArea(m, m.region.pxMm);
+    if (!sameRegion(want, m.region)) problems.push(`${o.index}: area ${m.region.areaMm2.toFixed(1)} mm² is not its form's ${want?.areaMm2.toFixed(1)} mm² (grow ${m.fill.areaGrow ?? 0}${m.knockout ? ', left out' : ''})`);
+  }
+  expect(problems, 'areas not from their form').toEqual([]);
+}
+
+/**
+ * A border and a blend's second thread in a thread of their own have no area of their own: theirs
+ * is the area of their fill (of all its parts together) after every step, not only after the next
+ * change to some fill.
+ */
+export function checkFollowers(p: Pattern): void {
+  const objs = sewObjects(p);
+  const mem = objs.map((o) => remembered(p, o));
+  const problems: string[] = [];
+  mem.forEach((m, k) => {
+    const link = m?.outline ?? m?.blendOf;
+    if (!m?.region || !link) return;
+    const leaders = mem.filter((x) => !!x?.region && !x.outline && !x.blendOf && (m.outline ? x.fill?.border?.link === link : x.fill?.deco?.blend?.link === link));
+    if (!leaders.length) return;
+    const rs = leaders.map((x) => x!.region!);
+    const area = rs.length === 1 ? rs[0] : unionOf(rs.filter((r) => r.pxMm === rs[0].pxMm));
+    if (!sameRegion(area, m.region)) problems.push(`${m.outline ? 'border' : 'blend'} ${k}: not on the area of its fill`);
+  });
+  expect(problems, 'followers off their leader').toEqual([]);
+}
+
 /** Exported and read back, the stitches are the same. */
 export function checkExport(p: Pattern): void {
   const stitches = (q: Pattern) => {
@@ -1307,6 +1346,8 @@ function checkStep(d: Doc, full: boolean): void {
   checkEchoes(p);
   checkLineParts(p);
   checkKnockouts(p);
+  checkAreas(p);
+  checkFollowers(p);
   checkSatinSections(p);
   checkTrace(d);
   if (full) {
