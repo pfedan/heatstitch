@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { digitizeDefaults } from '../src/digitize/digitize';
 import { addShape } from '../src/model/addShape';
 import { wholeArea } from '../src/model/knockout';
@@ -17,6 +17,9 @@ import type { Mat } from '../src/shape/path';
 import { ellipsePath, parsePath, rectPath } from '../src/shape/svgPath';
 import { DEFAULT_PROFILE } from '../src/validation/profiles';
 import { guessArea } from '../src/model/geo';
+import { areaOfForm, loadOps } from '../src/shape/ops';
+
+beforeAll(loadOps);
 
 const ID: Mat = [1, 0, 0, 1, 0, 0];
 const options = digitizeDefaults(DEFAULT_PROFILE);
@@ -80,6 +83,8 @@ describe('shape operations', () => {
   it('joins outlines into one', () => {
     const f = unionForm([parsePath(rectPath(0, 0, 10, 10, 0, 0), ID), parsePath(rectPath(5, 0, 10, 10, 0, 0), ID)])!;
     expect(f.paths).toHaveLength(1);
+    // On the curves: exactly the two squares less what they share.
+    expect(areaOfForm(f)).toBeCloseTo(150, 6);
     expect(wholeArea(f)!.areaMm2).toBeCloseTo(150, -1);
   });
 
@@ -93,6 +98,9 @@ describe('shape operations', () => {
     expect(r.cut).toEqual([0]);
     // Half the disc came out of the square.
     expect(before - area(r.pattern, 0)).toBeCloseTo((Math.PI * 36) / 2, -1);
+    // The cut runs on the disc's curve: the form lost exactly half the disc.
+    const objs = sewObjects(r.pattern);
+    expect(400 - areaOfForm(guessArea(r.pattern, objs[0], stitchKinds(r.pattern))!)).toBeCloseTo(areaOfForm(parsePath(ellipsePath(20, 10, 6, 6), ID)) / 2, 4);
     // Nothing to cut: no change.
     expect(subtractTop(p, [0, 2], options.trimMm)).toBeNull();
   });

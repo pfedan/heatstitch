@@ -12,17 +12,17 @@ import type { SewObject } from '../model/objects';
 import type { Viewport } from '../render/viewport';
 import { ShapeTool } from '../ui/shapeTool';
 import { deleteObjects, duplicateObjects, mirrorMatrix, subtractTop } from '../model/shapeOps';
+import { loadOps, opsReady } from '../shape/ops';
 import { fillsToLines, lineToSatin, reshapeObject } from '../model/reshape';
 import { resewLine, lineSettings, lineToFill, reshapeLineFill } from '../model/line';
 import { refreshKnockouts } from '../model/knockout';
 import { objectKey, remember, remembered, rememberedIn, restitch, type Remembered, type RestitchResult } from '../model/restitch';
-import { rasterize } from '../shape/rasterize';
 import { followerLinks, syncBorders } from '../model/border';
 import { partOf } from '../model/shadow';
 import { stitchKey } from '../model/objects';
 import { t, formatNumber, type Key } from '../i18n';
 import { ui } from './state';
-import { bandArea, fits, fitsOf, geoOf, geoUse, guessGeo, guessLine, sewnAlong, withGeo } from '../model/geo';
+import { bandArea, fillArea, fits, fitsOf, geoOf, geoUse, guessGeo, guessLine, sewnAlong, withGeo } from '../model/geo';
 
 /** What bindShapes needs from the rest of the app. */
 export interface ShapesApp {
@@ -349,7 +349,7 @@ export function bindShapes(app: ShapesApp) {
     // A line read from a file is sewn along its form from now on, with the stitch it has.
     const rested: Remembered = withGeo(line && !mem.line ? { ...mem, line: lineSettings(p, obj) } : mem, form);
     const use = geoUse(rested);
-    if (use === 'area') rested.region = rasterize(form, mem.region?.pxMm ?? 0.1) ?? mem.region;
+    if (use === 'area') rested.region = fillArea(rested, mem.region?.pxMm ?? 0.1) ?? mem.region;
     else if (use === 'band') rested.region = bandArea(form, rested.fill!, mem.region?.pxMm ?? 0.1) ?? mem.region;
     const next = nextVersion(p, {});
     remember(next, obj, rested);
@@ -509,6 +509,8 @@ export function bindShapes(app: ShapesApp) {
     const p = app.files.active?.pattern;
     const sel = app.frameObjects();
     if (!p || sel.length < 2) return;
+    // Cut on the curves: the libraries for that load on first use.
+    if (!opsReady()) return void loadOps().then(subtractSelected);
     const r = subtractTop(p, sel, app.settings.trimMm);
     if (!r) return app.layers.say(t('object.subtract.nothing'), true);
     takeShapes(r.pattern, r.cut);

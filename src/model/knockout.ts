@@ -1,6 +1,6 @@
 import { expandRegion, type Region } from '../digitize/region';
+import { syncBorders } from './border';
 import type { Form } from '../shape/path';
-import { rasterize } from '../shape/rasterize';
 import { coversOver, cutAway, SATIN_SHARE, type Cover } from './covers';
 import { rememberObjects, sewObjects, type SewObject } from './objects';
 import type { Pattern } from './pattern';
@@ -8,7 +8,7 @@ import { remember, remembered, rememberRange, type Remembered, type RestitchResu
 import { reshapeFill } from './reshape';
 import { stitchKinds } from './sequence';
 import { stitchesBefore } from './transform';
-import { areaOf } from './geo';
+import { areaOf, grownForm } from './geo';
 
 /**
  * Leaving out what lies underneath: a fill whose shape is known as curves can leave out the parts
@@ -27,17 +27,26 @@ const NOTABLE_MM2 = 1;
  */
 const THIN_MM = 0.6;
 
-const rastered = new WeakMap<Form, Region | null>();
+const rastered = new WeakMap<Form, Map<string, Region | null>>();
 
-/** The whole area of a form (cached per form; forms are not changed in place). */
-export function wholeArea(form: Form, pxMm = 0.1): Region | null {
-  let r = rastered.get(form);
-  if (r === undefined || (r && r.pxMm !== pxMm)) {
-    r = rasterize(form, pxMm);
-    rastered.set(form, r);
+/**
+ * The whole area of a form, grown by `grow` mm (the pull compensation it is sewn with, see
+ * FillSettings.areaGrow). Cached per form; forms are not changed in place.
+ */
+export function wholeArea(form: Form, pxMm = 0.1, grow = 0): Region | null {
+  let byKey = rastered.get(form);
+  if (!byKey) rastered.set(form, (byKey = new Map()));
+  const key = `${pxMm} ${grow}`;
+  let r = byKey.get(key);
+  if (r === undefined) {
+    r = grownForm(form, pxMm, grow);
+    byKey.set(key, r);
   }
   return r;
 }
+
+/** How far the area of `m` reaches beyond its form (mm, see FillSettings.areaGrow). */
+const growOf = (m: Remembered | null | undefined): number => m?.fill?.areaGrow ?? 0;
 
 /** Areas with parts left out, and the whole area they were cut from. */
 const cutFrom = new WeakMap<Region, Region>();
@@ -46,9 +55,12 @@ const cutFrom = new WeakMap<Region, Region>();
 const lastCut = new WeakMap<Region, { covers: Cover[]; cut: Region | null }>();
 const sameCovers = (a: Cover[], b: Cover[]) => a.length === b.length && a.every((c, k) => c.region === b[k].region && c.overlap === b[k].overlap);
 
-/** The area to sew for `form` as object `o`: whole, or without what later fills and satins cover. */
-export function sewnArea(p: Pattern, objs: SewObject[], o: SewObject, form: Form, knockout: boolean, pxMm = 0.1): Region | null {
-  const whole = wholeArea(form, pxMm);
+/**
+ * The area to sew for `form` as object `o`: whole (grown by the pull compensation it was made with),
+ * or without what later fills and satins cover.
+ */
+export function sewnArea(p: Pattern, objs: SewObject[], o: SewObject, form: Form, knockout: boolean, pxMm = 0.1, grow = growOf(remembered(p, o))): Region | null {
+  const whole = wholeArea(form, pxMm, grow);
   if (!whole || !knockout) return whole;
   const covers = coversOver(p, objs, o, pxMm, remembered(p, o)?.overlapShare ?? SATIN_SHARE);
   // The same shapes on top as last time (areas are cached per form): the same area is left.
@@ -66,7 +78,7 @@ export function sewnArea(p: Pattern, objs: SewObject[], o: SewObject, form: Form
  */
 export function wholeOf(r: Region, m?: Remembered | null): Region | null {
   // After a reload only the shape is known: its whole area, for the area remembered with it.
-  const w = cutFrom.get(r) ?? (areaOf(m) && m!.knockout && m!.region === r ? wholeArea(areaOf(m)!, r.pxMm) : null);
+  const w = cutFrom.get(r) ?? (areaOf(m) && m!.knockout && m!.region === r ? wholeArea(areaOf(m)!, r.pxMm, growOf(m)) : null);
   return w && w !== r ? w : null;
 }
 
@@ -122,7 +134,8 @@ export function setKnockout(p: Pattern, which: number[], on: boolean, trimMm: nu
     objs = sewObjects(cur);
     changed++;
   }
-  return changed ? { pattern: cur, changed } : null;
+  // Its border and blend in a thread of their own follow the area it is sewn on now, in the same step.
+  return changed ? { pattern: syncBorders(cur, trimMm), changed } : null;
 }
 
 /**
@@ -143,7 +156,7 @@ export function setOverlapShare(p: Pattern, which: number[], share: number, trim
     const next = sewAgain(cur, index, true, trimMm);
     if (next) cur = next;
   }
-  return changed ? { pattern: cur, changed } : null;
+  return changed ? { pattern: syncBorders(cur, trimMm), changed } : null;
 }
 
 /**
@@ -169,13 +182,14 @@ export function refreshKnockouts(p: Pattern, trimMm: number): { pattern: Pattern
     objs = sewObjects(cur);
     changed.push(index);
   }
-  return changed.length ? { pattern: cur, changed } : null;
+  return changed.length ? { pattern: syncBorders(cur, trimMm), changed } : null;
 }
 
 /** Whether fills sewn later cover a noticeable part of the shape of `o`. */
 export function isCovered(p: Pattern, objs: SewObject[], o: SewObject): boolean {
-  const form = areaOf(remembered(p, o));
-  const whole = form && wholeArea(form, remembered(p, o)?.region?.pxMm ?? 0.1);
+  const known = remembered(p, o);
+  const form = areaOf(known);
+  const whole = form && wholeArea(form, known?.region?.pxMm ?? 0.1, growOf(known));
   if (!whole) return false;
   const left = cutAway(whole, coversOver(p, objs, o, whole.pxMm, remembered(p, o)?.overlapShare ?? SATIN_SHARE));
   if ((left?.areaMm2 ?? 0) >= whole.areaMm2 - NOTABLE_MM2) return false;

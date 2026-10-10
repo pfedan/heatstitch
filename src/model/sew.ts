@@ -2,7 +2,6 @@ import { borderStitches, type PathStitch } from './along';
 import type { Pt } from '../digitize/skeleton';
 import { expandRegion, type Region } from '../digitize/region';
 import { apply, type Form, type Mat } from '../shape/path';
-import { rasterize } from '../shape/rasterize';
 import { coversFrom, type Cover } from './covers';
 import { tidyKept, withRecords } from './edit';
 import { wholeOf } from './knockout';
@@ -12,7 +11,7 @@ import { COLOR_CHANGE, END, JUMP, nextVersion, STITCH, TRIM, type Pattern, type 
 import { tieIn, tieOff } from './jumps';
 import { blockKeys } from './order';
 import { fillRuns, knownKind, TRAVEL_REACH, lockAt, remember, remembered, satinRuns, trimBefore, type FillSettings, type Rails, type Remembered, type SatinSettings } from './restitch';
-import { bandArea, geoOf, geoUse } from './geo';
+import { bandArea, fillArea, geoOf, geoUse } from './geo';
 
 /**
  * Sewing from the object list (stage C of the object model): what an object is (its shape and
@@ -62,7 +61,7 @@ export function specOf(p: Pattern, o: SewObject, m: Remembered | null | undefine
   const use = geoUse(m);
   if (use === 'line' && m.line) return { kind: 'line', path: geoOf(m)!, line: m.line };
   if (kind === 'fill' && m.fill && m.fill.pattern !== 'follow' && oneKind(m, 'fill')) {
-    const area = use === 'band' ? bandArea(geoOf(m)!, m.fill) : (m.region ?? (use === 'area' ? rasterize(geoOf(m)!) : null));
+    const area = use === 'band' ? bandArea(geoOf(m)!, m.fill) : (m.region ?? (use === 'area' ? fillArea(m) : null));
     if (!area) return null;
     return { kind: 'fill', area, fill: m.fill, memory: m };
   }
