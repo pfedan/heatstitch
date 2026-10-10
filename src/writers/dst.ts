@@ -154,6 +154,9 @@ export function writeDst(p: Pattern): Uint8Array {
       const j = runEnd(i);
       if (trimmed || runRecords(i, j, cx, cy) < DST_TRIM_JUMP_COUNT) {
         for (let k = i; k < j; k++) {
+          // A first jump to where the needle already is (a design that starts at the origin) is
+          // left out: some machines skip zero-length jumps.
+          if (!records && p.x[k] === cx && p.y[k] === cy) continue;
           for (const [dx, dy] of splitMove(p.x[k] - cx, p.y[k] - cy, DST_MAX_DELTA)) emit(dx, dy, 'jump');
         }
       } else {
