@@ -91,7 +91,8 @@ sends the picture anywhere.
 - **Objects** recognized from the stitches of any file: order by drag or *Optimize order*, move,
   rotate, scale, duplicate, mirror, delete, context menu, combine and split, cut out, don't sew or
   keep as guide, knock out under later shapes, own thread per object, **cut apart** a fill into
-  parts with their own direction (one border around all parts)
+  parts with their own direction (one border around all parts), **contour around** the selection
+  at a set distance (a patch edge as satin, a patch ground as fill)
 - **Stitch settings** with live preview: fill patterns in three tabs (classic: tatami with offset,
   gradient, contour fill, spiral, as sewn, guided by drawn lines; decor: embossed motifs, waves,
   grain, rays, swirl, color fade with a second color; open: meander, maze, grid, echo, cross
@@ -101,7 +102,10 @@ sends the picture anywhere.
   side, fringe, short stitches in curves, split, underlay kind, **rungs** for the direction and **sections**
   with cut lines (also on a fill: each part a column of its own, order, direction and trims per part);
   running stitch length, max. deviation, triple stitch; lines as running stitch, satin or fill
-- **Shape editing**: the outline of a fill as curves with nodes, kept exactly from then on
+- **Shape editing**: the outline of a fill as curves with nodes, kept exactly from then on; close,
+  open, join and split paths, nodes at crossings, fill inside; an opened fill or satin is sewn as a
+  line and filled again once a path is closed; the border is the fill's own line, along open paths
+  too, with echo, shadow and fringe
 - **Single stitches**: move, insert, split and delete needle points; release an object from its shape
 - **Drawing**: rectangle, ellipse, pen, freehand, sewn at once with the material's settings
 - **Lettering** in 41 fonts from Ink/Stitch: height, alignment, arcs and circle, spacing, single
