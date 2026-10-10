@@ -1,18 +1,18 @@
 """
-Verzug eines Stickmusters Stich für Stich simulieren und je Stich vorab korrigieren.
+Simulate the fabric distortion of an embroidery design stitch by stitch, and pre-correct every stitch.
 
-Modell (siehe ../verzug-vorausberechnen.md, Abschnitt 3):
-- Stoff mit Vlies: ebene, lineare, orthotrope Membran (Dreiecke, CST), im Stickrahmen am Rand
-  festgehalten und um e0 vorgedehnt.
-- Jeder Stich: eingebetteter Stab (wie Bewehrung in FEM) zwischen den beiden Stoffpunkten unter den
-  Einstichen, zugeschaltet in Stickreihenfolge. Er bekommt eine Ruhelänge (1 - s) mal seiner Länge
-  beim Einstechen: Mit starrem Stoff zöge jeder Stich mit T = EA * s.
-- Die Nadel trifft Rahmenkoordinaten. Welcher Stoffpunkt darunter liegt, hängt von allen bisherigen
-  Stichen ab: X = p - u(X), per Fixpunkt.
-- Ausspannen: Rand frei, Vordehnung weg, alle Stiche behalten ihre Ruhelänge.
-- Korrektur: Displacement Adjustment (Gan und Wagoner 2004): p <- p - (f(p) - Soll), wiederholt.
+Model (see ../README.md, "The model"):
+- Fabric plus stabilizer: a flat, linear, orthotropic membrane (CST triangles), held at the edge of
+  the hoop and pre-stretched by e0.
+- Every stitch: an embedded bar (like rebar in an FE model) between the two fabric points under its
+  needle holes, added in sewing order. Its rest length is (1 - s) times its length when sewn: on
+  rigid fabric every stitch would pull with T = EA * s.
+- The needle hits hoop coordinates. Which fabric point lies under it depends on all earlier
+  stitches: X = p - u(X), solved by fixed-point iteration.
+- Unhooping: free edge, no pre-stretch, every stitch keeps its rest length.
+- Correction: displacement adjustment (Gan and Wagoner 2004): p <- p - (f(p) - target), repeated.
 
-Werte sind Annahmen in plausibler Größe (Abschnitt "Annahmen" in README.md), nicht gemessen.
+The material values are plausible guesses, not measurements (see "Assumptions" in ../README.md).
 """
 import json
 import sys
@@ -32,13 +32,13 @@ class Fabric:
         return np.linalg.inv(S)
 
 
-# Membransteifigkeit in N/mm (Stoff plus Vlies), x = Kette bzw. Maschenstäbchen.
-WOVEN = Fabric(Ex=40.0, Ey=30.0, G=4.0, nu=0.2, name='Webware mit Reißvlies')
-KNIT = Fabric(Ex=8.0, Ey=3.0, G=1.0, nu=0.3, name='Jersey mit Schneidvlies')
+# Membrane stiffness in N/mm (fabric plus stabilizer), x = warp or wale direction.
+WOVEN = Fabric(Ex=40.0, Ey=30.0, G=4.0, nu=0.2, name='woven with tear-away')
+KNIT = Fabric(Ex=8.0, Ey=3.0, G=1.0, nu=0.3, name='jersey with cut-away')
 
 
 class Mesh:
-    """Strukturiertes Dreiecksnetz über den Stickrahmen."""
+    """Structured triangle mesh over the hoop."""
 
     def __init__(self, cx, cy, size, h):
         n = int(round(size / h))
@@ -58,13 +58,13 @@ class Mesh:
         self.ndof = 2 * len(self.P)
 
     def locate(self, X):
-        """Dreieck und Formfunktionen je Punkt (Punkte außerhalb werden an den Rand geklemmt)."""
+        """Triangle and shape functions per point (points outside are clamped to the edge)."""
         n, h = self.n, self.h
         fx = np.clip((X[:, 0] - self.x0) / h, 0, n - 1e-9)
         fy = np.clip((X[:, 1] - self.y0) / h, 0, n - 1e-9)
         i, j = np.floor(fx).astype(int), np.floor(fy).astype(int)
         lx, ly = fx - i, fy - j
-        upper = lx >= ly  # Dreieck (a, b, c), sonst (a, c, d)
+        upper = lx >= ly  # triangle (a, b, c), else (a, c, d)
         a = j * (n + 1) + i
         b, c, d = a + 1, a + n + 2, a + n + 1
         nodes = np.where(upper[:, None], np.c_[a, b, c], np.c_[a, c, d])
@@ -101,7 +101,7 @@ class Mesh:
 
 
 def stitch_segments(d):
-    """Stiche als Paare aufeinanderfolgender Einstiche (0,1 mm -> mm)."""
+    """Stitches as pairs of consecutive needle points (0.1 mm -> mm)."""
     x, y, cmd = np.array(d['x']) / 10.0, np.array(d['y']) / 10.0, np.array(d['cmd'])
     segs, color, k = [], [], 0
     for i in range(1, len(cmd)):
@@ -119,7 +119,7 @@ class Sim:
         self.Kf = mesh.stiffness(fab)
 
     def _thread_system(self, Xa, Xb, d, c):
-        """Steifigkeit und Last der Stäbe: Energie k/2 (d.(ub-ua) + c)^2."""
+        """Stiffness and load of the bars: energy k/2 (d.(ub-ua) + c)^2."""
         m = self.m
         na, Na = m.locate(Xa)
         nb, Nb = m.locate(Xb)
@@ -141,7 +141,7 @@ class Sim:
         return K, F
 
     def run(self, needle, segs, frames=None):
-        """needle: Nadelpositionen (Rahmenkoordinaten) je Einstich. Gibt Stoffpunkte, Rahmen- und Endlage."""
+        """needle: needle positions (hoop coordinates) per needle point. Returns fabric points, hoop and final positions."""
         m = self.m
         fixed = np.r_[2 * m.boundary, 2 * m.boundary + 1]
         free = np.setdiff1d(np.arange(m.ndof), fixed)
@@ -158,8 +158,8 @@ class Sim:
             return U
 
         U = solve(K, F)
-        mat = np.full_like(needle, np.nan)  # Stoffpunkt (natürliche Lage) je Einstich
-        hoop = np.full_like(needle, np.nan)  # Lage im Rahmen direkt nach dem Einstich
+        mat = np.full_like(needle, np.nan)  # fabric point (natural state) per needle point
+        hoop = np.full_like(needle, np.nan)  # position in the hoop right after it was sewn
         D_all, C_all, A_all, B_all = [], [], [], []
         ends = np.unique(np.r_[segs - 1, segs])
         order = np.argsort(ends)
@@ -182,7 +182,7 @@ class Sim:
             Lh = np.maximum(np.linalg.norm(vec, axis=1), 0.05)
             d = vec / Lh[:, None]
             L0 = (1 - self.s) * Lh
-            c = (d * (Xb - Xa)).sum(1) - L0  # Dehnung bei u = 0 in natürlicher Lage
+            c = (d * (Xb - Xa)).sum(1) - L0  # elongation at u = 0 in the natural state
             Kt, Ft = self._thread_system(Xa, Xb, d, c)
             K = K + Kt
             F = F + Ft
@@ -191,7 +191,7 @@ class Sim:
                 frames.append((g0 + len(gs), U.copy()))
             A_all.append(Xa); B_all.append(Xb); D_all.append(d); C_all.append(c)
         hoop_end = mat + m.interp(U, mat)
-        # Ausspannen: Rand frei, Vordehnung weg. Kleine Federn an allen Knoten halten Starrkörperbewegung fest.
+        # Unhooping: free edge, no pre-stretch. Tiny springs on all nodes hold the rigid body motion.
         Kr = K + sp.identity(m.ndof) * 1e-6
         Ufree = spla.spsolve(Kr.tocsc(), F)
         final = mat + m.interp(Ufree, mat)
@@ -199,7 +199,7 @@ class Sim:
 
 
 def rigid_fit(src, dst, w=None):
-    """Beste Drehung und Verschiebung src -> dst (Kabsch), ohne Maßstab."""
+    """Best rotation and translation src -> dst (Kabsch), no scale."""
     w = np.ones(len(src)) if w is None else w
     cs, cd = (w[:, None] * src).sum(0) / w.sum(), (w[:, None] * dst).sum(0) / w.sum()
     H = ((src - cs) * w[:, None]).T @ (dst - cd)
