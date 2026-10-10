@@ -2,7 +2,8 @@ import { ImageClient } from '../digitize/client';
 import { digitizeDefaults, shapesOrigin, type DigitizeOptions, type Digitized } from '../digitize/digitize';
 import { areaPixels, boxOf, groupAreas, groupsByColor, TECHNIQUES, type AreaInfo, type Technique } from '../digitize/smart';
 import { formatNumber, onLangChange, t, type Key } from '../i18n';
-import { nearestThread, NONE, workingSize, type ColorEdit, type PrepareOptions, type ExactLabels, type Prepared, type Stroke } from '../image/prepare';
+import { matchThreads } from '../image/threadMatch';
+import { NONE, workingSize, type ColorEdit, type PrepareOptions, type ExactLabels, type Prepared, type Stroke } from '../image/prepare';
 import { readSvg, type SvgDesign, type SvgShape } from '../image/svg';
 import { transformForm, type Form } from '../shape/path';
 import { rasterize } from '../shape/rasterize';
@@ -148,13 +149,15 @@ export async function decode(file: Blob): Promise<HTMLCanvasElement> {
 }
 
 /**
- * Threads for the colors of a vector file: the nearest Brother threads (colors landing on the same
- * thread share it), or the colors themselves. `index` maps each color to its thread.
+ * Threads for the colors of a vector file: Brother threads chosen together, so colors that tell
+ * apart keep apart (only colors too close to tell apart share one), or the colors themselves.
+ * `index` maps each color to its thread.
  */
 function threadsFor(colors: Rgb[], brother: boolean): { threads: ThreadColor[]; index: number[] } {
   const threads: ThreadColor[] = [];
-  const index = colors.map((c) => {
-    const t = brother ? nearestThread(rgbToLab(...c)).thread : { r: c[0], g: c[1], b: c[2] };
+  const matched = brother ? matchThreads(colors.map((c) => rgbToLab(...c))) : [];
+  const index = colors.map((c, k) => {
+    const t = brother ? matched[k].thread : { r: c[0], g: c[1], b: c[2] };
     const same = threads.findIndex((x) => (brother ? x.pecIndex === t.pecIndex : x.r === t.r && x.g === t.g && x.b === t.b));
     if (same >= 0) return same;
     threads.push(t);

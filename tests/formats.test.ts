@@ -54,6 +54,13 @@ describe('readers agree with pyembroidery', () => {
     expect(count(p, COLOR_CHANGE)).toBe(e.colorChanges);
   });
 
+  it('a PES that starts sewing at the origin: the first record sits where Brother puts its opening move', () => {
+    // pyembroidery 1.5.1 writes records from byte 528 on; here the first is a 2-byte stitch.
+    const p = parsePattern(fixture('origin-start.pes'), 'origin-start.pes');
+    expect(stitches(p)).toEqual([[0, 0], [20, 0], [20, 20], [0, 20], [0, 0], [10, 10], [200, 100], [230, 100], [230, 130]]);
+    expect(count(p, TRIM)).toBe(1);
+  });
+
   it('reads JEF colors from the Janome palette', () => {
     expect(rgb(parsePattern(fixture('sun.jef'), 'sun.jef'))).toEqual(expected.files['sun.jef'].colors);
   });

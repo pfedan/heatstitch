@@ -1,11 +1,12 @@
 import type { ThreadColor } from '../model/pattern';
-import { pecThreads } from '../parsers/pecPalette';
 import { deltaE2000, labToRgb, rgbToLab, type Lab, type Rgb } from './color';
 import { bilateral } from './filters';
+import { distanceToSeeds } from './edt';
 import { mergeSmall, modeFilter, removeBackground, removeSeams } from './labels';
 import { orientation, type Orientation } from './orientation';
 import { NONE, quantize, type Quantized } from './quantize';
 import { resizeArea, toLab, type LabImage, type Raster } from './raster';
+import { matchThreads, nearestThread } from './threadMatch';
 
 /**
  * Turns any image into an image that can be embroidered: a few flat thread colors, regions large
@@ -112,21 +113,7 @@ export interface ExactLabels {
   colors: Rgb[];
 }
 
-const THREADS = pecThreads().map((t) => ({ t, lab: rgbToLab(t.r, t.g, t.b) }));
-
-/** Nearest Brother thread by CIEDE2000. */
-export function nearestThread(lab: Lab): { thread: ThreadColor; deltaE: number } {
-  let best = THREADS[0];
-  let bd = Infinity;
-  for (const c of THREADS) {
-    const d = deltaE2000(lab, c.lab);
-    if (d < bd) {
-      bd = d;
-      best = c;
-    }
-  }
-  return { thread: best.t, deltaE: bd };
-}
+export { nearestThread };
 
 const sameRgb = (a: Rgb, b: Rgb) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
 
@@ -241,14 +228,16 @@ function finish(
 ): Prepared {
   const { width: w, height: h } = img;
   const exact = !!sources;
-  // Clusters, then thread matching: clusters that land on the same thread become one color.
+  // Clusters, then thread matching, all colors together: clusters that land on the same thread
+  // (only those too close to tell apart) become one color.
   let palette: PaletteEntry[] = [];
   const map = new Uint8Array(256).fill(NONE);
+  const matched = o.threads ? matchThreads(centers, exact ? undefined : ownShare(raw, centers, w, h, pxMm)) : [];
   centers.forEach((lab, k) => {
     const source = sources?.[k] ?? labToRgb(...lab);
     let entry: PaletteEntry;
     if (o.threads) {
-      const { thread, deltaE } = nearestThread(lab);
+      const { thread, deltaE } = matched[k];
       const same = palette.findIndex((p) => p.thread.pecIndex === thread.pecIndex);
       if (same >= 0) {
         map[k] = same;
@@ -298,13 +287,7 @@ function finish(
     // Judged by the image's own colors: a seam between two threads need not lie between them (a dark
     // orange edge matched to a dark brown thread), but it does between the colors it blends.
     const imageLab = palette.map((p) => rgbToLab(...p.source));
-    const labOf = (k: number) => (k === NONE ? null : imageLab[k]);
-    // Seams of anti-aliasing: at most 0.5 mm wide, colored between their two neighbours.
-    labels = removeSeams(labels, w, h, 0.5 / pxMm, (s, a, b) => {
-      const [ls, la, lb] = [labOf(s), labOf(a), labOf(b)];
-      if (!ls || !la || !lb) return false;
-      return distanceToSegment(ls, la, lb) < 12;
-    });
+    labels = withoutSeams(labels, w, h, pxMm, (k) => (k === NONE ? null : imageLab[k]));
   }
   // After the seams, so the seams along the background's edge go too.
   if (o.background) labels = removeBackground(labels, w, h);
@@ -328,6 +311,48 @@ function finish(
   });
   for (let i = 0; i < labels.length; i++) if (labels[i] !== NONE) labels[i] = index[labels[i]];
   return { width: w, height: h, pxMm, labels, palette };
+}
+
+/** Seams of anti-aliasing: at most 0.5 mm wide, colored between their two neighbours. */
+function withoutSeams(labels: Uint8Array, w: number, h: number, pxMm: number, labOf: (k: number) => Lab | null): Uint8Array {
+  return removeSeams(labels, w, h, 0.5 / pxMm, (s, a, b) => {
+    const [ls, la, lb] = [labOf(s), labOf(a), labOf(b)];
+    if (!ls || !la || !lb) return false;
+    return distanceToSegment(ls, la, lb) < 12;
+  });
+}
+
+/**
+ * How much of each cluster is a color of the image's own (0 to 1) rather than the blend along an
+ * edge between two others: a cluster colored between two others counts by the share of its pixels
+ * more than half the seam width (0.25 mm) from any other cluster, so a thin band along an edge
+ * hardly counts, a small area like an eye fully. A cluster of a color of its own always counts.
+ */
+function ownShare(raw: Uint8Array, centers: Lab[], w: number, h: number, pxMm: number): number[] {
+  const n = centers.length;
+  const between = centers.map((c, k) =>
+    centers.some((a, i) => i !== k && centers.some((b, j) => j > i && j !== k && distanceToSegment(c, a, b) < 12)),
+  );
+  if (!between.some(Boolean)) return centers.map(() => 1);
+  const edge = new Uint8Array(raw.length);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      const l = raw[i];
+      if ((x > 0 && raw[i - 1] !== l) || (x + 1 < w && raw[i + 1] !== l) || (y > 0 && raw[i - w] !== l) || (y + 1 < h && raw[i + w] !== l)) edge[i] = 1;
+    }
+  }
+  const dist = distanceToSeeds(edge, w, h);
+  const half = 0.25 / pxMm;
+  const all = new Array<number>(n).fill(0);
+  const core = new Array<number>(n).fill(0);
+  for (let i = 0; i < raw.length; i++) {
+    const l = raw[i];
+    if (l === NONE || l >= n) continue;
+    all[l]++;
+    if (dist[i] > half) core[l]++;
+  }
+  return centers.map((_, k) => (between[k] ? (all[k] ? core[k] / all[k] : 0) : 1));
 }
 
 /** Euclidean distance in Lab from p to the segment a-b. */
