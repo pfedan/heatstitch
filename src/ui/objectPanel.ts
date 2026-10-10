@@ -6,6 +6,7 @@ import { KIND_ICON, kindLabel } from './layersPanel';
 import { cssColor, ThreadPicker } from './threadPicker';
 import { sameColor } from '../model/recolor';
 import type { ThreadColor } from '../model/pattern';
+import { GAP_MAX, GAP_MIN } from '../model/contour';
 import { canRun, commandTitle, getCommand, runCommand } from '../shell/commands';
 import { h, icon, swap } from '../shell/h';
 import { objectMenu, showOrderMenu } from './objectMenu';
@@ -37,6 +38,8 @@ export interface ObjectInfo {
   subtractable: boolean;
   /** The one selected object is a fill that can blend into a second thread: its thread. */
   blend?: ThreadColor;
+  /** The one selected object is a contour whose distance can be changed: that distance (mm). */
+  contour?: number | null;
 }
 
 export interface ObjectHooks {
@@ -49,6 +52,8 @@ export interface ObjectHooks {
   thread: (c: ThreadColor) => void;
   /** The one selected fill fades out, and a copy in `c` fades in on the same area: a color blend. */
   blend: (c: ThreadColor) => void;
+  /** The selected contour at distance `d` (mm): shown, or taken over when `final`; false when nothing is left. NaN: back as it is. */
+  gap: (d: number, final: boolean) => boolean;
 }
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -118,7 +123,7 @@ export class ObjectPanel {
 
   update(info: ObjectInfo | null, lang: string): void {
     this.info = info;
-    const key = [info?.objects, info?.selected.join(), info?.hand.join(), info?.editing?.selection ?? -1, info?.shapeable, info?.shaping?.nodes ?? -1, info?.shaping?.smooth, info?.shaping?.line?.closed, info?.shaping?.kind, info?.frame?.canScale, !!info?.frame, info?.blend, info?.mergeBlocked, info?.reversible, lang];
+    const key = [info?.objects, info?.selected.join(), info?.hand.join(), info?.editing?.selection ?? -1, info?.shapeable, info?.shaping?.nodes ?? -1, info?.shaping?.smooth, info?.shaping?.line?.closed, info?.shaping?.kind, info?.frame?.canScale, !!info?.frame, info?.blend, info?.mergeBlocked, info?.reversible, info?.contour, lang];
     if (key.every((k, i) => k === this.key[i])) return;
     this.key = key;
     this.msg.hidden = true;
@@ -250,7 +255,50 @@ export class ObjectPanel {
       h('span', { class: 'obj-geom-fields' }, field(b.w, t('object.size.w'), (v) => typed('w', v), { min: 1, disabled: !canScale }), times(), field(b.h, t('object.size.h'), (v) => typed('h', v), { min: 1, disabled: !canScale }), unit(), lock),
       h('span', { class: 'obj-geom-label', title: t('objects.pos.hint') }, t('objects.pos')),
       h('span', { class: 'obj-geom-fields' }, field(b.cx, t('objects.pos.x'), (v) => moved('x', v), { disabled: !editable }), h('span', { class: 'obj-x', 'aria-hidden': 'true' }, ' '), field(b.cy, t('objects.pos.y'), (v) => moved('y', v), { disabled: !editable }), unit(), h('span', { class: 'obj-lock-space' })),
+      ...(info.contour != null ? this.gapRow(info.contour, unit) : []),
     );
+  }
+
+  /** The distance of a fresh contour: shown live while typed or stepped, taken over on Enter or leaving. */
+  private gapRow(d: number, unit: () => HTMLElement): HTMLElement[] {
+    const label = t('object.contour.gap');
+    const shown = formatNumber(d, 1);
+    const i = h('input', { type: 'text', inputmode: 'decimal', autocomplete: 'off', spellcheck: false, value: shown, title: label, 'aria-label': label, class: 'obj-gap' });
+    const read = () => Number(i.value.trim().replace(/\s/g, '').replace(',', '.'));
+    const ok = (n: number) => Number.isFinite(n) && n >= GAP_MIN && n <= GAP_MAX;
+    let taken = false;
+    i.addEventListener('input', () => {
+      const n = read();
+      if (ok(n)) this.hooks.gap(n, false);
+    });
+    i.addEventListener('change', () => {
+      const n = read();
+      if (ok(n) && i.value.trim() !== shown) {
+        taken = true;
+        if (!this.hooks.gap(n, true)) i.value = shown;
+      } else {
+        i.value = shown;
+        this.hooks.gap(NaN, false);
+      }
+    });
+    i.addEventListener('blur', () => {
+      if (!taken && read() === d) this.hooks.gap(NaN, false);
+    });
+    i.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        i.value = shown;
+        this.hooks.gap(NaN, false);
+        i.blur();
+      } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        // A step of 0.1 mm (1 mm with Shift), as in the fields above.
+        e.preventDefault();
+        const n = read();
+        if (!Number.isFinite(n)) return;
+        i.value = formatNumber(Math.min(GAP_MAX, Math.max(GAP_MIN, n + (e.key === 'ArrowUp' ? 1 : -1) * (e.shiftKey ? 1 : 0.1))), 1);
+        i.dispatchEvent(new Event('change'));
+      }
+    });
+    return [h('span', { class: 'obj-geom-label', title: t('object.contour.gap.hint') }, label), h('span', { class: 'obj-geom-fields' }, i, unit())];
   }
 
   /** The object commands as a row of icon buttons; the rest in the menu behind "…". */
@@ -278,12 +326,14 @@ export class ObjectPanel {
       add('object.split');
       add('object.blend');
       add('object.reverse');
+      add('object.contour');
     } else {
       // Shown also when it cannot be: the reason is its hint.
       const b = commandButton('object.combine', { text: true });
       if (b && info.mergeBlocked) b.title = t(info.mergeBlocked);
       if (b) out.push(b);
       add('object.subtract');
+      add('object.contour');
       add('draw.cut');
       add('object.reverse');
     }

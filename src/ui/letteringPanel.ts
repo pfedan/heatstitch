@@ -1,3 +1,4 @@
+import { getCommand, runCommand } from '../shell/commands';
 import { formatNumber, getLang, onLangChange, t, type Key } from '../i18n';
 import type { Catalog, Font, FontEntry, FontStyle } from '../lettering/font';
 import { loadFont } from '../lettering/font';
@@ -193,6 +194,13 @@ export class LetteringPanel {
     parts.push(single);
     const release = Object.assign(document.createElement('button'), { type: 'button', className: 'link lettering-release', textContent: t('lettering.release'), title: t('lettering.release.hint') });
     release.addEventListener('click', () => this.hooks.release());
+    // A contour around the text (a sticker edge, a patch): the same command as on the object page.
+    const contour = getCommand('object.contour');
+    if (contour) {
+      const b = Object.assign(document.createElement('button'), { type: 'button', className: 'link lettering-release', textContent: t(contour.label), title: t('object.contour.hint') });
+      b.addEventListener('click', () => runCommand('object.contour'));
+      parts.push(b);
+    }
     parts.push(release);
     swap(this.body, ...parts);
   }

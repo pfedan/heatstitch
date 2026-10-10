@@ -19,6 +19,7 @@ const PATHS: Record<string, string> = {
   'obj-split': '<circle cx="5.5" cy="5.5" r="2.2"/><circle cx="5.5" cy="14.5" r="2.2"/><path d="M7.4 6.7 16.5 14M7.4 13.3 16.5 6"/>',
   'obj-combine': '<path d="M4 4.5h4.5a3 3 0 0 1 3 3v8.5M16 4.5h-1.5a3 3 0 0 0-3 3M8.5 13.5l3 3 3-3"/>',
   'obj-subtract': '<path d="M3.5 3.5h9v4.2a5 5 0 0 0-4.8 4.8H3.5z"/><circle cx="12.5" cy="12.5" r="4" stroke-dasharray="1.6 1.6"/>',
+  'obj-contour': '<rect x="6.5" y="6.5" width="7" height="7" rx="1"/><rect x="3" y="3" width="14" height="14" rx="4" stroke-dasharray="2 1.6"/>',
   'obj-knockout': '<rect x="3" y="3" width="9.5" height="9.5" rx="1"/><circle cx="12.5" cy="12.5" r="4.5"/><path d="M5 6l3-3M5 9.5 9.5 5M8 12.5l2-2" opacity=".7"/>',
   'obj-blend': '<path d="M3.5 5h13M3.5 8h13M3.5 11h13"/><path d="M3.5 14h13M3.5 17h13" opacity=".45"/>',
   'obj-color': '<path d="M10 2.8s-5 5.3-5 9a5 5 0 0 0 10 0c0-3.7-5-9-5-9z"/>',

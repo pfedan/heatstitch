@@ -1,3 +1,4 @@
+import { behindCovered } from '../model/contour';
 import type { ObjectPanel } from '../ui/objectPanel';
 import type { FileList } from '../ui/fileList';
 import type { Form } from '../shape/path';
@@ -387,9 +388,12 @@ export function bindStitches(app: StitchesApp) {
         const fill = { pattern: 'tatami' as const, spacing: d.spacing, spacingEnd: Math.min(1.2, Math.round(d.spacing * 250) / 100), offset: 0.25, angle: NaN, stitch: d.stitch, underlay: d.underlay, edge: 0, tolerance: d.tolerance };
         // A line that was a fill is filled as it was; one with a closed path is filled inside and stays its border; an open satin line becomes a fill in its width.
         const closed = fillOfLine(p, one) === 'area';
-        const r = lineToFill(p, one, fill, app.settings.trimMm);
+        // A closed line around objects sewn before it (a contour) goes under them first: filled
+        // on top it would cover them. Both in one undo step.
+        const behind = closed ? behindCovered(p, one, app.settings.trimMm) : null;
+        const r = lineToFill(behind?.pattern ?? p, behind?.index ?? one, fill, app.settings.trimMm);
         applyRestitched(r, 'stitch.failed', true);
-        if (r?.starts.length) app.layers.say(t(closed ? 'stitch.closedFilled' : 'stitch.lineFilled'));
+        if (r?.starts.length) app.layers.say([t(closed ? 'stitch.closedFilled' : 'stitch.lineFilled'), behind ? t(behind.covered === 1 ? 'stitch.filledBehind.one' : 'stitch.filledBehind', { n: behind.covered }) : ''].filter(Boolean).join(' '));
         return;
       }
       // A line that was a satin over an area: sewn as that satin again.

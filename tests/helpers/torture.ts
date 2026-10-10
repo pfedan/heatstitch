@@ -20,6 +20,7 @@ import type { Region } from '../../src/digitize/region';
 import { backToVersion, edgeAlong, keepVersion, objectKey, remember, remembered, rememberedIn, restitch, restoreRemembered, DECO_PATTERNS, OPEN_PATTERNS, type BorderSettings, type FillSettings, type Rails, type Remembered, type StoredObjects } from '../../src/model/restitch';
 import { reorder } from '../../src/model/order';
 import { stitchKinds } from '../../src/model/sequence';
+import { addContour, behindCovered, gapReader } from '../../src/model/contour';
 import { combineLines, deleteObjects, duplicateObject, duplicateObjects, mirrorMatrix, recolorObjects, subtractTop } from '../../src/model/shapeOps';
 import { stitchesBefore } from '../../src/model/transform';
 import { sewDesign, specOf } from '../../src/model/sew';
@@ -629,6 +630,39 @@ export const OPS: Op[] = [
       const s = subtractTop(p, [a, b], T);
       if (s?.cut.length) checkCut(p, Math.min(a, b), Math.max(a, b), s.pattern, s.cut[0]);
       return shapes(d, s?.pattern);
+    },
+  },
+  {
+    name: 'contour around',
+    run: (d, r) => {
+      // Kontur drumherum: a line at a distance around one or more objects, then perhaps filled as
+      // their ground (under them).
+      const p = d.cur.p;
+      const which = [...new Set([0, 1, 2].slice(0, 1 + Math.floor(r() * 3)).map(() => pick(r, d.objects).index))];
+      const gap = Math.round(between(r, -1.5, 6) * 10) / 10;
+      const c = addContour(p, which, gap, options);
+      if (!c) return false;
+      const objs = sewObjects(c.pattern);
+      const geo = lineGeoOf(remembered(c.pattern, objs[c.index]));
+      expect(geo, 'a contour is a line').toBeTruthy();
+      // Every point of it lies the distance from what it goes round.
+      const read = gapReader(c.source);
+      const off = geo!.paths.flatMap((x) => flatten(x, 0.1)).map((q) => Math.abs(read(q) - gap));
+      expect(Math.max(...off), `contour ${gap} mm: off by (mm)`).toBeLessThan(0.05);
+      // It adds itself and changes nothing else: undo takes it away whole.
+      const was = new Map(sewObjects(p).map((x) => [x.id, ownStitches(p, x)]));
+      const changed = objs.filter((x) => x.index !== c.index && was.get(x.id) !== ownStitches(c.pattern, x));
+      expect(changed.map((x) => `${x.id}: other stitches after a contour`).join('; ')).toBe('');
+      expect(objs.length, 'a contour is one object more').toBe(sewObjects(p).length + 1);
+      const gone = deleteObjects(c.pattern, [c.index], T);
+      expect(gone && sewObjects(gone).map((x) => x.id), 'deleted again: the objects as before').toEqual(sewObjects(p).map((x) => x.id));
+      if (r() < 0.5 || !fits(geo, 'fill')) return shapes(d, c.pattern);
+      const b = behindCovered(c.pattern, c.index, T);
+      const s = digitizeDefaults(DEFAULT_PROFILE);
+      const fill: FillSettings = { pattern: 'tatami', spacing: s.spacing, spacingEnd: 1, offset: 0.25, angle: NaN, stitch: s.stitch, underlay: s.underlay, edge: 0, tolerance: s.tolerance };
+      if (b) expect(sewObjects(b.pattern)[b.index].id, 'moved under: the same contour').toBe(objs[c.index].id);
+      const res = lineToFill(b?.pattern ?? c.pattern, b?.index ?? c.index, fill, T);
+      return res ? took(d, res) : shapes(d, c.pattern);
     },
   },
   {
@@ -1397,7 +1431,7 @@ export function checkFollowers(p: Pattern): void {
     const area = rs.length === 1 ? rs[0] : unionOf(rs.filter((r) => r.pxMm === rs[0].pxMm));
     if (!sameRegion(area, m.region)) problems.push(`${m.outline ? 'border' : 'blend'} ${k}: not on the area of its fill`);
   });
-  expect(problems, 'followers off their leader').toEqual([]);
+  expect(problems.join('; '), 'followers off their leader').toBe('');
 }
 
 /** Exported and read back, the stitches are the same. */

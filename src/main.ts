@@ -358,6 +358,12 @@ const { colorList, layers, mergeBlocked, objectName, objectPanel, selectObjects 
   get subtractSelected() {
     return subtractSelected;
   },
+  get contourSelected() {
+    return contourSelected;
+  },
+  get setContourGap() {
+    return setContourGap;
+  },
   get takeShapes() {
     return takeShapes;
   },
@@ -484,7 +490,7 @@ const { closeRungs, convertToSatin, rungInfo, rungTool, sewAlongLines, suggestLi
 
 // Shapes and the frame ---------------------------------------------------------------------------
 
-const { canPaste, closeShape, copySelected, deleteSelected, duplicateSelected, pasteCopied, enterShape, followKnockouts, isLineObject, mirrorSelected, satinLineAgain, sewLine, sewLineAgain, shapeTarget, shapeTool, showBand, subtractSelected, syncShape, takeShapes } = bindShapes({
+const { canPaste, closeShape, contourGap, contourGrip, contourSelected, copySelected, deleteSelected, duplicateSelected, pasteCopied, enterShape, followKnockouts, isLineObject, mirrorSelected, satinLineAgain, sewLine, sewLineAgain, shapeTarget, shapeTool, showBand, setContourGap, subtractSelected, syncShape, takeShapes } = bindShapes({
   get applyEdit() {
     return applyEdit;
   },
@@ -582,6 +588,12 @@ const { asidePanel, putAside } = bindAside({
 // Drawing new shapes ---------------------------------------------------------
 
 const { commitTransform, drawTool, frameObjects, frameTool, knockoutObjects, setDrawing, syncFrame, updateOverlapCard } = bindDrawing({
+  get contourGrip() {
+    return contourGrip;
+  },
+  get setContourGap() {
+    return setContourGap;
+  },
   get addDigitized() {
     return addDigitized;
   },
@@ -821,6 +833,7 @@ function objectInfo(p: Pattern, q: Sequence) {
     mergeBlocked: selected.length > 1 ? mergeBlocked(selected.map((o) => q.objects[o])) : null,
     reversible: selected.some((o) => reversible(q.objects[o]) || sewnAlong(p, q.objects[o])),
     subtractable: selected.length > 1 && selected.every((o) => q.objects[o].kind === 'fill'),
+    contour: selected.length === 1 && !shapeTool.active ? contourGap(p, q, selected[0]) : null,
     ...blendOf(p, q, selected),
   };
 }
