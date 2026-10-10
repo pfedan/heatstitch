@@ -2,7 +2,7 @@ import type { Region } from '../digitize/region';
 import { bounds } from '../shape/path';
 import { knockOut } from '../shape/rasterize';
 import { wholeArea } from './knockout';
-import type { SewObject } from './objects';
+import { sewObjects as sewObjectsOf, type SewObject } from './objects';
 import type { Pattern } from './pattern';
 import { borderOf, columnOf, keepShape, objectKey, railsArea, remembered, type Remembered } from './restitch';
 import { stitchKinds } from './sequence';
@@ -73,9 +73,15 @@ export function coversFrom(p: Pattern, later: SewObject[], o: SewObject, pxMm: n
   const known = remembered(p, o);
   const own = known?.fill;
   const mine = (m: Remembered | undefined) => (!!m?.outline && m.outline === borderOf(known)?.link) || (!!m?.blendOf && m.blendOf === own?.deco?.blend?.link);
+  let before: SewObject[] | null = null;
+  const filled = () => (before ??= sewObjectsOf(p).filter((f) => f.index < o.index));
   for (const x of later) {
     if (!overlapsBox(reachOf(p, x), reach)) continue;
-    if (mine(remembered(p, x))) continue;
+    const m = remembered(p, x);
+    if (mine(m)) continue;
+    // The border of a fill sewn before that leaves `o` out runs beside `o`, not on it: `o` leaves
+    // nothing out for it (else each would leave out the other's border, and neither settle).
+    if (m?.outline && filled().some((f) => leavesOut(p, f, m.outline!, reach))) continue;
     const f = areaOf(remembered(p, x));
     const r = f && wholeArea(f, pxMm);
     if (r) {
@@ -87,6 +93,12 @@ export function coversFrom(p: Pattern, later: SewObject[], o: SewObject, pxMm: n
     if (s) out.push({ region: s.region, overlap: s.width * share });
   }
   return out;
+}
+
+/** Whether `f` is a fill with the border `link` that leaves out what lies on top, reaching over `reach`. */
+function leavesOut(p: Pattern, f: SewObject, link: string, reach: Box): boolean {
+  const m = remembered(p, f);
+  return !!m?.knockout && borderOf(m)?.link === link && overlapsBox(reachOf(p, f), reach);
 }
 
 /** `base` without what the covers cover beyond their overlap; null when nothing is left. */
