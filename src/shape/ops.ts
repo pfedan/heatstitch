@@ -210,7 +210,7 @@ export function splitForm(f: Form, cuts: Pt[][], overlap: number, minPart: numbe
     const out = c.slice();
     out[0] = carry(c[0], c[1]);
     out[out.length - 1] = carry(c[c.length - 1], c[c.length - 2]);
-    return out;
+    return smoothLine(out);
   });
   if (!lines.length) return null;
   const o = new C.ClipperOffset(2, 0.0005 * SCALE);
@@ -260,11 +260,15 @@ export function splitForm(f: Form, cuts: Pt[][], overlap: number, minPart: numbe
     });
     own[best].push(c.g!);
   }
-  // Each part reaches under its neighbours: grown, and held to the area (whose curves stay).
+  // Each part reaches under its neighbours: by the strip along the cuts where it lies beside them,
+  // held to the area (whose curves stay).
+  const strip = overlap > 0 ? stripAlong(lines, overlap) : null;
   const parts: Form[] = [];
   for (const group of own) {
     const base = group.length > 1 ? unionForms(group)! : group[0];
-    const grown = overlap > 0 ? offsetForm(base, overlap) : base;
+    const beside = strip && offsetForm(base, overlap * 1.5);
+    const under = beside && intersectForms(strip, beside);
+    const grown = under ? unionForms([base, under]) : base;
     const part = grown && intersectForms(grown, f);
     if (!part) return null;
     parts.push(part);
@@ -278,6 +282,48 @@ export function splitForm(f: Form, cuts: Pt[][], overlap: number, minPart: numbe
   return { parts, touching };
 }
 
+/** How far a drawn cut may be smoothed from its points (mm): a hand is not this exact. */
+const CUT_FIT = 0.1;
+
+/**
+ * A drawn line as the curve through it (corners stay), in points close enough to read as that
+ * curve: its points one by one would be sewn as small kinks along the cut.
+ */
+function smoothLine(raw: Pt[]): Pt[] {
+  const pts = raw.filter((q, i) => !i || dist(q, raw[i - 1]) > MIN_EDGE);
+  if (pts.length < 3) return pts;
+  const limit = (CORNER_DEG * Math.PI) / 180;
+  const breaks = [0];
+  for (let i = 1; i < pts.length - 1; i++) {
+    const u = unit(pts[i - 1], pts[i]);
+    const v = unit(pts[i], pts[i + 1]);
+    if (Math.acos(Math.max(-1, Math.min(1, u[0] * v[0] + u[1] * v[1]))) > limit) breaks.push(i);
+  }
+  breaks.push(pts.length - 1);
+  const nodes: Node[] = [];
+  for (let r = 0; r + 1 < breaks.length; r++) {
+    const run = pts.slice(breaks[r], breaks[r + 1] + 1);
+    const curves = run.length < 3 ? [[run[0], run[0], run[1], run[1]] as Pt[]] : fitCubic(run, unit(run[0], run[1]), unit(run[run.length - 1], run[run.length - 2]), CUT_FIT);
+    for (const [p0, c1, c2, p3] of curves) {
+      if (!nodes.length) nodes.push({ p: p0, a: p0, b: c1, smooth: false });
+      else nodes[nodes.length - 1].b = c1;
+      nodes.push({ p: p3, a: c2, b: p3, smooth: false });
+    }
+  }
+  return flattened({ closed: false, nodes }, FLAT / 10);
+}
+
+/** The strip `w` wide on either side of open lines (ends cut square), as curves. */
+function stripAlong(lines: Pt[][], w: number): Form | null {
+  const C = needClipper();
+  const o = new C.ClipperOffset(2, FLAT * SCALE);
+  for (const l of lines) o.addPath(toInt(l), C.JoinType.Round, C.EndType.Butt);
+  const sol: Paths64 = [];
+  o.execute(w * SCALE, sol);
+  const paths = sol.filter((r) => r.length > 2).map((r) => fitRing(r.map((q) => [q.x / SCALE, q.y / SCALE] as Pt)));
+  return paths.length ? { paths } : null;
+}
+
 // Offsetting ------------------------------------------------------------------------------------
 
 /** Clipper works in integers: 0.1 µm. */
@@ -286,6 +332,8 @@ const SCALE = 1e4;
 const FLAT = 0.01;
 /** Largest distance of the fitted curves from the offset polygon (mm). */
 const FIT = 0.03;
+/** How far along the polygon on either side a corner is measured (mm). */
+const CORNER_SPAN = 0.3;
 /** Polygon edges shorter than this are left out before fitting (mm). */
 const MIN_EDGE = 0.005;
 /** Turn at a polygon point that makes a corner of the fitted curves (degrees). */
@@ -365,8 +413,29 @@ function fitRing(ring: Pt[]): Path {
     const v2 = unit(pts[i], pts[(i + 1) % n]);
     return Math.acos(Math.max(-1, Math.min(1, v1[0] * v2[0] + v1[1] * v2[1])));
   };
+  // The turn seen over CORNER_SPAN on either side: a round join of a small offset is flattened in
+  // steps that each turn a lot, yet as a whole it turns little.
+  const reach = (i: number, dir: 1 | -1) => {
+    let j = i;
+    for (let len = 0, s = 0; len < CORNER_SPAN && s < n / 2; s++) {
+      const next = (j + dir + n) % n;
+      len += dist(pts[j], pts[next]);
+      j = next;
+    }
+    return j;
+  };
+  const span = (i: number) => {
+    const v1 = unit(pts[reach(i, -1)], pts[i]);
+    const v2 = unit(pts[i], pts[reach(i, 1)]);
+    return Math.acos(Math.max(-1, Math.min(1, v1[0] * v2[0] + v1[1] * v2[1])));
+  };
   const limit = (CORNER_DEG * Math.PI) / 180;
-  let breaks = pts.map((_, i) => i).filter((i) => turn(i) > limit);
+  const seen = pts.map((_, i) => (turn(i) > limit / 8 ? span(i) : 0));
+  // One corner where it turns most, not every point near it.
+  const near = (i: number, j: number) => Math.min(Math.abs(i - j), n - Math.abs(i - j));
+  let breaks = pts
+    .map((_, i) => i)
+    .filter((i) => seen[i] > limit && pts.every((_, j) => j === i || near(i, j) > 8 || dist(pts[i], pts[j]) > CORNER_SPAN || turn(j) < turn(i) || (turn(j) === turn(i) && j > i)));
   const corner = new Set(breaks);
   // A round loop is cut in two to have ends to fit between.
   if (breaks.length === 0) breaks = [0, Math.floor(n / 2)];
