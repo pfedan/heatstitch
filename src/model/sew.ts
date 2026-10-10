@@ -1,4 +1,4 @@
-import { borderStitches, type PathStitch } from './along';
+import { borderStitches, openStitches, type PathStitch } from './along';
 import type { Pt } from '../digitize/skeleton';
 import { expandRegion, type Region } from '../digitize/region';
 import { apply, type Form, type Mat } from '../shape/path';
@@ -10,8 +10,8 @@ import { joinedUncut, setObjects, sewObjects, stitchKey, tableOf, trimmedBetween
 import { COLOR_CHANGE, END, JUMP, nextVersion, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
 import { tieIn, tieOff } from './jumps';
 import { blockKeys } from './order';
-import { fillRuns, knownKind, TRAVEL_REACH, lockAt, remember, remembered, satinRuns, trimBefore, type FillSettings, type Rails, type Remembered, type SatinSettings } from './restitch';
-import { bandArea, fillArea, geoOf, geoUse } from './geo';
+import { borderOf, fillRuns, knownKind, TRAVEL_REACH, lockAt, remember, remembered, satinRuns, trimBefore, type FillSettings, type Rails, type Remembered, type SatinSettings } from './restitch';
+import { bandArea, fillArea, formKey, geoOf, geoUse, openOf } from './geo';
 
 /**
  * Sewing from the object list (stage C of the object model): what an object is (its shape and
@@ -26,7 +26,7 @@ export type Spec =
   | { kind: 'line'; path: Form; line: PathStitch }
   | { kind: 'fill'; area: Region; fill: FillSettings; memory: Remembered }
   | { kind: 'satin'; columns: Rails[][]; satin: SatinSettings }
-  | { kind: 'border'; area: Region; border: PathStitch; memory: Remembered };
+  | { kind: 'border'; area: Region; border: PathStitch; memory: Remembered; open: Form | null };
 
 /** Where an object is sewn from and to. */
 export interface Way {
@@ -55,8 +55,12 @@ export function specOf(p: Pattern, o: SewObject, m: Remembered | null | undefine
   if (m.outline && m.border && m.region) {
     // The border around the parts of a fill cut apart (and its lines along the cuts) is sewn from
     // the parts together: kept as it is until the parts are sewn from the list as one whole.
-    if (tableOf(p).entries.some((e) => e.memory?.piece && e.memory.fill?.border?.link === m.outline)) return null;
-    return { kind: 'border', area: m.region, border: m.border, memory: m };
+    const entries = tableOf(p).entries;
+    if (entries.some((e) => e.memory?.piece && borderOf(e.memory)?.link === m.outline)) return null;
+    // Along its fill's open paths too, as they were when it was sewn.
+    const open = openOf(entries.find((e) => borderOf(e.memory)?.link === m.outline)?.memory);
+    if ((open ? formKey(open) : undefined) !== m.along) return null;
+    return { kind: 'border', area: m.region, border: m.border, memory: m, open };
   }
   const use = geoUse(m);
   if (use === 'line' && m.line) return { kind: 'line', path: geoOf(m)!, line: m.line };
@@ -80,8 +84,12 @@ export function sewOne(spec: Spec, way: Way): { runs: Pt[][]; under: number } | 
       return ok(lineStitches(spec.path, spec.line));
     case 'satin':
       return ok(spec.columns.flatMap((rails) => satinRuns(rails, spec.satin)));
-    case 'border':
-      return ok(borderStitches(spec.area, spec.border, way.from, wholeOf(spec.area, spec.memory)));
+    case 'border': {
+      const whole = wholeOf(spec.area, spec.memory);
+      const runs = borderStitches(spec.area, spec.border, way.from, whole);
+      const end = runs[runs.length - 1];
+      return ok(spec.open ? [...runs, ...openStitches(spec.open, spec.border, end ? end[end.length - 1] : way.from, spec.area, whole)] : runs);
+    }
     case 'fill': {
       // Travel may run where it is hidden: across the whole area where shapes on top left parts
       // out (knockout), and a little beyond the edge where the rows end (as far as travel along

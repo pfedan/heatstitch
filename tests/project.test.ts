@@ -241,7 +241,7 @@ describe('wild stitches in a user\'s project', () => {
     // The fill's travel along its edge lies under its own satin border; it was taken for the
     // satin's underlay, kept as it was and sewn on top of the new border with every edit.
     const { p, kinds, objs } = await load('shapes-benchmark.pes');
-    const o = objs.find((x) => remembered(p, x)?.fill?.border?.type === 'satin' && remembered(p, x)?.knockout)!;
+    const o = objs.find((x) => remembered(p, x)?.line?.type === 'satin' && remembered(p, x)?.knockout)!;
     const parts = analyze(p, o, kinds).parts;
     expect(parts.filter((pt) => !pt.border).map((pt) => pt.kind)).not.toContain('satin');
 

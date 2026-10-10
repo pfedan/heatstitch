@@ -2,7 +2,7 @@ import type { Region } from '../digitize/region';
 import { unionOf } from '../shape/rasterize';
 import { sewObjects } from './objects';
 import type { Pattern } from './pattern';
-import { regionFrom, remembered, type Remembered, type StoredObjects, type StoredObject } from './restitch';
+import { borderOf, regionFrom, remembered, type Remembered, type StoredObjects, type StoredObject } from './restitch';
 
 /**
  * Areas a project file does not store because they come from another object (see
@@ -17,7 +17,7 @@ import { regionFrom, remembered, type Remembered, type StoredObjects, type Store
 /** Whether `x` is the fill (or a part of the fill) follower `m` lies on. */
 const followsFill = (m: Remembered, x: Remembered | undefined): boolean => {
   const link = m.outline ?? m.blendOf;
-  return !!link && !!x?.region && !x.outline && !x.blendOf && (m.outline ? x.fill?.border?.link === link : x.fill?.deco?.blend?.link === link);
+  return !!link && !!x?.region && !x.outline && !x.blendOf && (m.outline ? borderOf(x)?.link === link : x.fill?.deco?.blend?.link === link);
 };
 
 /** The area a follower lies on: its fill's, or that of all parts of its fill together. */
@@ -56,11 +56,11 @@ export function dropDerived(list: StoredObjects, out: StoredObjects): StoredObje
     const role = m?.of?.role;
     if (!e.memory || !m?.region || (role !== 'border' && role !== 'blend')) return e;
     // The link opening names it by again, and the fills (parts) that give it.
-    const lead = byId.get(m.of!.id)?.memory?.fill;
-    const link = role === 'border' ? lead?.border?.link : lead?.deco?.blend?.link;
+    const lead = byId.get(m.of!.id)?.memory;
+    const link = role === 'border' ? (lead?.fill ? lead.line?.link : undefined) : lead?.fill?.deco?.blend?.link;
     const fills = list.objects.filter((x) => {
       const f = x.memory;
-      return !!link && !!f?.region && f.of?.role !== 'border' && f.of?.role !== 'blend' && (role === 'border' ? f.fill?.border?.link === link : f.fill?.deco?.blend?.link === link);
+      return !!link && !!f?.region && f.of?.role !== 'border' && f.of?.role !== 'blend' && (role === 'border' ? !!f.fill && f.line?.link === link : f.fill?.deco?.blend?.link === link);
     });
     let area: Pick<Region, 'x0' | 'y0' | 'w' | 'h' | 'pxMm' | 'mask'> | null = fills.length === 1 ? fills[0].memory!.region : null;
     if (fills.length > 1) {

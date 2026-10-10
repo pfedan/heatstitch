@@ -10,7 +10,7 @@ import { takeOver, wholeArea } from './knockout';
 import { sewObjects } from './objects';
 import type { Pattern } from './pattern';
 import { reshapeFill } from './reshape';
-import { analyze, remember, remembered } from './restitch';
+import { analyze, borderOf, remember, remembered, withLine } from './restitch';
 import { stitchKinds } from './sequence';
 import { addShape } from './addShape';
 import { digitizeDefaults } from '../digitize/digitize';
@@ -236,8 +236,8 @@ export function splitFill(p: Pattern, o: number, cuts: Pt[][], trimMm: number): 
   const base = known!.fill!.angle;
   const angles = partAngles(forms.length, split.touching, base, cuts);
   // The border waits until all parts are there (sewn now, it would run along the cut too).
-  const border = known!.fill!.border;
-  const change = (k: number): Partial<FillSettings> => ({ angle: angles[k], border: undefined });
+  const border = borderOf(known);
+  const change = (k: number): Partial<FillSettings> => ({ angle: angles[k] });
   // Every further part a new fill right after the fill (the last first, so they come in order), in
   // its shape; then each sewn with the fill's settings, and the fill itself in the shape of the
   // first part (from the last, so the ones before keep their place).
@@ -278,8 +278,7 @@ export function splitFill(p: Pattern, o: number, cuts: Pt[][], trimMm: number): 
   for (let k = 0; k < forms.length; k++) {
     const m = remembered(cur, objs[o + k]);
     if (!m?.fill) return null;
-    const { border: _b, ...rest } = m.fill;
-    remember(cur, objs[o + k], { ...m, ...(k ? {} : { id: obj.id }), piece, fill: border ? { ...rest, border: { ...border } } : rest });
+    remember(cur, objs[o + k], withLine({ ...m, ...(k ? {} : { id: obj.id }), piece }, border && { ...border }));
   }
   cur = syncBorders(cur, trimMm);
   return { pattern: cur, parts: forms.map((_, k) => o + k), plain };

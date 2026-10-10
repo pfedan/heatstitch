@@ -75,7 +75,7 @@ describe('a border in a thread of its own', () => {
     const on = setKnockout(d.p, [big], true, d.T)!;
     const objs = sewObjects(on.pattern);
     const fill = remembered(on.pattern, objs[big])!;
-    const border = objs.map((o) => remembered(on.pattern, o)).find((m) => m?.outline === fill.fill!.border!.link)!;
+    const border = objs.map((o) => remembered(on.pattern, o)).find((m) => m?.outline === fill.line!.link)!;
     expect(sameRegion(border.region, fill.region)).toBe(true);
   });
 });
