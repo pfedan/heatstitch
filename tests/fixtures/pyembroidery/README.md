@@ -13,3 +13,20 @@ for fmt in ['jef', 'exp', 'vp3', 'pec']:
     pe.write(o, f'tests/fixtures/pyembroidery/sun.{fmt}')
 pe.write(o, 'tests/fixtures/pyembroidery/sun-v6.pes', {'version': '6t'})
 ```
+
+`origin-start.pes` (pyembroidery 1.5.1, PES version 1) starts sewing at the origin, so its first
+record at PEC byte 528 is a 2-byte stitch instead of Brother's opening move:
+
+```python
+import pyembroidery as pe
+p = pe.EmbPattern()
+p.add_thread(0xed171f)
+for x, y in [(0, 0), (20, 0), (20, 20), (0, 20), (0, 0), (10, 10)]:
+    p.add_stitch_absolute(pe.STITCH, x, y)
+p.add_command(pe.TRIM)
+p.add_stitch_absolute(pe.JUMP, 200, 100)
+for x, y in [(200, 100), (230, 100), (230, 130)]:
+    p.add_stitch_absolute(pe.STITCH, x, y)
+p.add_command(pe.END)
+pe.write_pes(p, 'tests/fixtures/pyembroidery/origin-start.pes', {'version': '1'})
+```

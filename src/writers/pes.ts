@@ -2,7 +2,7 @@ import type { Hoop } from '../model/hoop';
 import { COLOR_CHANGE, END, JUMP, STITCH, TRIM, type Pattern } from '../model/pattern';
 import { PEC_STITCH_OFFSET } from '../parsers/pes';
 import { pecColor, pecOwnSlot, PEC_APPLIQUE } from '../parsers/pecPalette';
-import { ByteWriter, extents, headerLabel, splitMove } from './bytes';
+import { ByteWriter, extents, headerLabel, splitMove, stitchExtents } from './bytes';
 import { ICON_H, ICON_STRIDE, pecIcons } from './pecGraphics';
 import { uniqueSlots } from './threadSlots';
 
@@ -91,7 +91,9 @@ function encodeStitches(out: ByteWriter, p: Pattern): void {
 export function writePec(out: ByteWriter, p: Pattern): void {
   const start = out.length;
   const blocks = Math.min(256, blockCount(p));
-  const b = extents(p);
+  // As Brother writes it: the size is that of the stitches, and the first record moves from their
+  // top left corner to the origin, where the stitch records start.
+  const b = stitchExtents(p);
 
   out.ascii(`LA:${headerLabel(p.name, 16).padEnd(16, ' ')}\r`);
   out.fill(0x20, 12);
@@ -110,10 +112,11 @@ export function writePec(out: ByteWriter, p: Pattern): void {
   out.u16(b.maxY - b.minY);
   out.u16(0x1e0);
   out.u16(0x1b0);
-  // Bytes 528 to 531 are a long-form jump. heatstitch's reader skips them, other readers
-  // (pyembroidery, machines) execute it, so it must not move.
-  longValue(out, 0, JUMP_FLAG);
-  longValue(out, 0, JUMP_FLAG);
+  // Bytes 528 to 531: that opening move, a long-form jump. heatstitch's reader (like pystitch)
+  // leaves it out, pyembroidery executes it. Beyond the 12-bit range it stays at the origin.
+  const reach = (v: number) => (Math.abs(v) <= PEC_MAX_DELTA ? v : 0);
+  longValue(out, reach(-b.minX), JUMP_FLAG);
+  longValue(out, reach(-b.minY), JUMP_FLAG);
   if (out.length !== start + PEC_STITCH_OFFSET) throw new Error('PEC header size mismatch');
   encodeStitches(out, p);
   out.patch(lengthAt, out.length - (start + 512), 3);

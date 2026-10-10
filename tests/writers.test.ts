@@ -145,6 +145,18 @@ describe('PES writer', () => {
     expect(stitches(q)).toEqual(stitches(p));
   });
 
+  it('writes the PEC size and opening move as Brother does: the stitches alone', () => {
+    // Stitches from (-3,-2) to (37,18) mm, a jump far outside them, and the origin outside too.
+    const p = new Shape().jump(-60, -40).to(-3, -2).to(37, -2).trim().jump(80, 50).to(37, 18).build();
+    const data = writePes(p);
+    const pec = new DataView(data.buffer).getUint32(8, true);
+    const view = new DataView(data.buffer, pec);
+    expect([view.getUint16(520, true), view.getUint16(522, true)]).toEqual([400, 200]);
+    // A long-form jump (0x9...) of (30, 20) in 1/10 mm: from the top left corner to the origin.
+    expect([view.getUint16(528), view.getUint16(530)]).toEqual([0x9000 | 30, 0x9000 | 20]);
+    expect(stitches(parsePes(data))).toEqual(stitches(p));
+  });
+
   it('writes the PEC length so the thumbnails can be found', () => {
     const p = parsePes(encodePes(pesOps, [5, 20, 29]));
     const data = writePes(p);
