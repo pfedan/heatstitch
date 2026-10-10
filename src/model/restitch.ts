@@ -33,6 +33,7 @@ import { rowLines, zigzagOf, type Zigzag } from './zigzag';
 import { letteringFrom } from '../lettering/stored';
 import type { Lettering } from '../lettering/layout';
 import { areaOf, bandArea, fillArea, geoArea, geoUse, grownArea, lineGeoOf } from './geo';
+import { deriveAreas } from './derived';
 
 /**
  * New stitches for the objects of a design, with other settings: density, angle, stitch length,
@@ -633,6 +634,8 @@ export interface StoredObject {
   geo?: StoredPath[];
   /** `region` is the form rastered on this grid (mm per pixel), not stored (see compactStored). */
   regionPx?: number;
+  /** `region` is not stored: it is the area of the fill this border or blend follows (see model/derived.ts). */
+  derived?: 'leader';
   /** ... grown by this margin (mm). */
   regionGrow?: number;
   /** `shape` is the form rastered on this grid, not stored. */
@@ -1059,7 +1062,7 @@ function railsFrom(list: unknown): Rails[][] | undefined {
 }
 
 /** A region from its pixels (null when malformed). */
-function regionFrom(g: NonNullable<StoredObject['region']>): Region | null {
+export function regionFrom(g: NonNullable<StoredObject['region']>): Region | null {
   const { x0, y0, w, h, pxMm, mask, areaMm2 } = g;
   if (![x0, y0, w, h, pxMm, areaMm2].every(finite) || !(mask instanceof Uint8Array)) return null;
   if (w < 1 || h < 1 || pxMm <= 0 || mask.length !== w * h) return null;
@@ -1291,10 +1294,13 @@ export function restoreRemembered(p: Pattern, list: unknown): number {
   if (isStoredObjects(list)) {
     const entries: PlacedEntry[] = [];
     const ofs: { at: number; of: NonNullable<NonNullable<StoredEntry['memory']>['of']> }[] = [];
+    // Followers whose area is their fill's, given once all objects are known (see model/derived.ts).
+    const derived = new Set<number>();
     for (const e of list.objects) {
       if (!e || !finite(e.id) || !finite(e.first) || !finite(e.last) || typeof e.key !== 'string' || !Array.isArray(e.at) || !e.at.every(finite)) continue;
       const m = e.memory ? fromStored({ ...e.memory, key: '' } as StoredObject) : null;
       entries.push({ id: e.id, first: e.first, last: e.last, key: e.key, at: [e.at[0], e.at[1]], ...(m ? { memory: m } : {}) });
+      if (m && !m.region && e.memory?.derived === 'leader') derived.add(e.id);
       const of = e.memory?.of;
       if (m && of && finite(of.id) && ['border', 'blend', 'shadow', 'echo', 'piece'].includes(of.role)) ofs.push({ at: entries.length - 1, of });
     }
@@ -1312,6 +1318,7 @@ export function restoreRemembered(p: Pattern, list: unknown): number {
       } else m.echoOf = of.n !== undefined ? `${link}:${of.n}` : link;
     }
     setObjects(p, entries, finite(list.next) ? list.next : 1);
+    if (derived.size) deriveAreas(p, derived);
     return entries.filter((e) => e.memory).length;
   }
   if (!Array.isArray(list)) return 0;
