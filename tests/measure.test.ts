@@ -10,18 +10,19 @@ const tool = (snap: MeasureHooks['snap'] = () => null) => {
 };
 
 describe('scale bar', () => {
-  it('steps through 0.1, 0.2, 0.5, 1, 5, then multiples of 5 mm, as long as two parts fit', () => {
+  it('steps through 1, 2.5 and 5 in every power of ten, as long as two parts fit', () => {
     const at = (pxPerMm: number) => scaleStep(pxPerMm, 120);
     expect(at(400)).toBe(0.1);
-    expect(at(250)).toBe(0.2);
+    expect(at(200)).toBe(0.25);
     expect(at(100)).toBe(0.5);
     expect(at(40)).toBe(1);
+    expect(at(20)).toBe(2.5);
     expect(at(10)).toBe(5);
     expect(at(6)).toBe(10);
-    expect(at(4)).toBe(15);
-    expect(at(3)).toBe(20);
     expect(at(2.4)).toBe(25);
-    expect(at(0.05)).toBe(1200);
+    expect(at(1.2)).toBe(50);
+    expect(at(0.6)).toBe(100);
+    expect(at(0.05)).toBe(1000);
   });
 
   it('never draws the bar wider than its room, at any zoom of the stage', () => {
@@ -29,7 +30,10 @@ describe('scale bar', () => {
       const step = scaleStep(s, 120);
       // At the highest zoom even 0.1 mm parts are 40 px each.
       expect(2 * step * s).toBeLessThanOrEqual(120 + 1e-9);
-      expect([0.1, 0.2, 0.5, 1].includes(step) || step % 5 === 0).toBe(true);
+      const m = step / 10 ** Math.floor(Math.log10(step) + 1e-9);
+      expect([1, 2.5, 5].some((k) => Math.abs(m - k) < 1e-9)).toBe(true);
+      // Never less than 40 % of the room, except at the smallest step.
+      if (step > 0.1) expect(2 * step * s).toBeGreaterThanOrEqual(0.4 * 120 - 1e-9);
     }
   });
 });
