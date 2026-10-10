@@ -3593,10 +3593,24 @@ export interface Rec {
   cmd: number;
 }
 
-/** Length of a lock stitch (mm); SHORT_LOCK only to tell an object from one with the very same stitches. */
+/**
+ * Length of a lock stitch (mm); short only to tell an object from one with the very same stitches:
+ * then at most SHORT_LOCK and at most half the run's first stitch, so it differs from the usual one
+ * also where that stitch is shorter than a lock.
+ */
 const LOCK = LOCK_MM;
 const SHORT_LOCK = 0.5;
-let lockMm = LOCK;
+let shortLock = false;
+
+/** `f` with short locks (see LOCK). */
+export function withShortLocks<T>(f: () => T): T {
+  shortLock = true;
+  try {
+    return f();
+  } finally {
+    shortLock = false;
+  }
+}
 
 /** Lock stitches at the start of a run of points (0.1 mm records), the half-stitch lock. */
 export function lockAt(run: Pt[], atEnd: boolean): Rec[] {
@@ -3610,7 +3624,7 @@ export function lockAt(run: Pt[], atEnd: boolean): Rec[] {
     }
   }
   const d = dist(a, b) || 1;
-  const t = Math.min(lockMm, d) / d;
+  const t = (shortLock ? Math.min(SHORT_LOCK, d / 2) : Math.min(LOCK, d)) / d;
   const m = lerp(a, b, t / 2);
   const f = lerp(a, b, t);
   const r = (q: Pt): Rec => ({ x: Math.round(q[0] * 10), y: Math.round(q[1] * 10), cmd: STITCH });
@@ -3689,13 +3703,8 @@ export function restitch(
     const back = once(true);
     if (fits(back)) return back;
   }
-  lockMm = SHORT_LOCK;
-  try {
-    const short = once(reverse);
-    return fits(short) ? short : r;
-  } finally {
-    lockMm = LOCK;
-  }
+  const short = withShortLocks(() => once(reverse));
+  return fits(short) ? short : r;
 }
 
 /** Whether an object sewn anew in `r` has the stitches of another object. */
