@@ -11,9 +11,9 @@ import { refreshKnockouts, setKnockout } from '../../src/model/knockout';
 import { rememberObjects, sewObjects, tableOf, type SewObject } from '../../src/model/objects';
 import { COLOR_CHANGE, END, STITCH, type Pattern, type ThreadColor } from '../../src/model/pattern';
 import { sameColor } from '../../src/model/recolor';
-import { fillsToLines, reshapeObject, transformSewObject } from '../../src/model/reshape';
+import { fillsToLines, reshapeFill, reshapeObject, transformSewObject } from '../../src/model/reshape';
 import { canSplit, splitFill } from '../../src/model/splitFill';
-import { sewnArea, wholeArea, wholeOf } from '../../src/model/knockout';
+import { cutKey, sewnArea, wholeArea, wholeOf } from '../../src/model/knockout';
 import { unionOf } from '../../src/shape/rasterize';
 import { borderStitches } from '../../src/model/along';
 import type { Region } from '../../src/digitize/region';
@@ -1257,7 +1257,9 @@ export function checkAreas(p: Pattern): void {
   for (const o of objs) {
     const m = remembered(p, o);
     if (!m?.region || !m.fill || m.free || m.hand || m.read || m.lettering || geoUse(m) !== 'area') continue;
-    const want = m.knockout ? sewnArea(p, objs, o, m.geo!, true, m.region.pxMm) : fillArea(m, m.region.pxMm);
+    let want = m.knockout ? sewnArea(p, objs, o, m.geo!, true, m.region.pxMm) : fillArea(m, m.region.pxMm);
+    // Leaving out with nothing sewable left: sewn whole, `cut` naming the rest it could not be sewn on.
+    if (m.knockout && !sameRegion(want, m.region) && m.cut === cutKey(want) && !reshapeFill(p, objs, o, stitchKinds(p), m.geo!, T, true)?.starts.length) want = fillArea(m, m.region.pxMm);
     if (!sameRegion(want, m.region)) problems.push(`${o.index}: area ${m.region.areaMm2.toFixed(1)} mm² is not its form's ${want?.areaMm2.toFixed(1)} mm² (grow ${m.fill.areaGrow ?? 0}${m.knockout ? ', left out' : ''})`);
   }
   expect(problems, 'areas not from their form').toEqual([]);
