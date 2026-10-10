@@ -95,7 +95,7 @@ sends the picture anywhere.
   parts with their own direction (one border around all parts), **contour around** the selection
   at a set distance (a patch edge as satin, a patch ground as fill)
 - **Stitch settings** with live preview: fill patterns in three tabs (classic: tatami with offset,
-  gradient, contour fill, spiral, as sewn, guided by drawn lines; decor: embossed motifs, waves,
+  gradient, contour fill without a seam, spiral for any shape, as sewn, guided by drawn lines; decor: embossed motifs, waves,
   grain, rays, swirl, color fade with a second color; open: meander, maze, grid, echo, cross
   stitch), spacing, angle, stitch length, edges, expand, underlay
   (off, across, cross, inset, left out under later objects), **border** (running, triple or satin,
@@ -407,7 +407,19 @@ fill rows end there, satin edges are found there, underlay lies on a contour ins
   check quiet on knit; two would reach Caution, so stable fabric gets none, and fleece, terry, light
   and sheer fabric neither (lower limits). Not for contour fill and curved rows, which have no
   sections side by side on one lattice. The other patterns (gradient, contour fill, spiral, guided)
-  are in `flow.ts` and `spiral.ts`.
+  are in `flow.ts`, `rings.ts` and `spiral.ts`.
+- **Contour fill and spiral** (`src/digitize/rings.ts`): rings are level lines of the distance field,
+  one spacing apart all round; each ring knows the one it lies in, a tree that branches where the
+  shape narrows and has more roots where it has holes. Each ring is shifted along the field's gradient
+  by a share of a spacing that runs from minus a half at its start to plus a half at its end, so it
+  ends exactly where the next ring begins and neighboring turns stay one spacing apart: for the
+  spiral evenly round the turn (ring to ring interpolation as in spiral pocket milling, Held and
+  Spielberger 2009), for the contour fill over a few millimetres at the start of each ring, so no
+  radial seam of steps and doubled needle points. Beside the edge and where branches leave, a spiral
+  turns into rings over four turns. Branches (a dumbbell, a heart's lobes) and the rings round holes
+  get spirals of their own, sewn from their middle out before the line passes them, so the travel
+  lies under rows still to come. The last line before the ridge in the middle moves so that the gap
+  across the ridge and the one to the line before come out equal.
 - **Fill rows follow the image** (default; `src/digitize/flow.ts`, `src/image/orientation.ts`): a
   direction field from the structure tensor of the original picture (Förstner & Gülch 1987, Bigün &
   Granlund 1987; as in coherence-enhancing abstraction, Weickert 1999, and Coherent Line Drawing, Kang

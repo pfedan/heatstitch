@@ -1,7 +1,8 @@
 import type { Orientation } from '../image/orientation';
 import { chooseAngle, fillRegion, pathLength, pointCount, sewUnderlay, TRAVEL_STITCH, TRAVEL_TOLERANCE, TravelGrid, type FillParams, type FillResult } from './fill';
 import { coverage, peakDensity } from './measure';
-import { outline, sample, type Region } from './region';
+import { sample, type Region } from './region';
+import { ringFill } from './rings';
 import { MIN_CURVE_STITCH, Path, runStitch, simplify, TOLERANCE } from './run';
 import type { Graph, Pt } from './skeleton';
 
@@ -673,67 +674,13 @@ export function sewRows(r: Region, rows: Pt[][], p: FillParams, start: Pt, mean:
   return { runs, angle: mean, curved: true, under };
 }
 
-/** Rings shorter than this are left out of a contour fill (mm). */
-const MIN_RING = 1;
-
 /**
  * Contour fill as rings at even distances inside the edge (Ink/Stitch's contour fill): the level
  * lines of the area's distance field, the first half a spacing inside the edge (moved out by
  * `pull`), each next one a spacing further in. Every ring is exactly one spacing from its
  * neighbours all round, so the rows neither crowd nor open up, also in narrow and bent shapes.
- * Each ring starts at its point nearest the needle; travel to a ring further away runs under rows
- * not sewn yet.
+ * Each ring passes on to the next over a few millimetres, without a step (see rings.ts).
  */
 export function contourFill(r: Region, p: FillParams, start: Pt): FillResult | null {
-  const rings: Pt[][] = [];
-  const first = Math.min(p.pull, p.spacing / 2) - p.spacing / 2;
-  for (let k = 0; ; k++) {
-    const level = first - k * p.spacing;
-    const loops = outline(r, level, r.sdf).filter((l) => pathLength(l as Pt[]) >= MIN_RING) as Pt[][];
-    if (!loops.length) break;
-    rings.push(...loops.map((l) => simplify(l, 0.02)));
-  }
-  if (!rings.length) return null;
-  const runs: Pt[][] = [];
-  const grid = new TravelGrid(p.travel ?? r, p.offRowEnds);
-  const angle = chooseAngle(r, p.spacing, []);
-  let pos = p.underlay ? sewUnderlay(r, angle, p, start, grid, runs) : start;
-  const under = pointCount(runs);
-  let cur: Pt[] | null = runs.length ? runs[runs.length - 1] : null;
-  const todo = rings.slice();
-  let count = 0;
-  while (todo.length) {
-    // The ring with the point nearest the needle, sewn from there round to it again.
-    let bi = 0;
-    let bk = 0;
-    let bd = Infinity;
-    todo.forEach((ring, i) =>
-      ring.forEach((q, k) => {
-        const d = dist(pos, q);
-        if (d < bd) {
-          bd = d;
-          bi = i;
-          bk = k;
-        }
-      }),
-    );
-    const ring = todo.splice(bi, 1)[0];
-    const open = ring.slice(0, -1);
-    const k0 = bk % open.length;
-    const loop = [...open.slice(k0), ...open.slice(0, k0), open[k0]];
-    const pts = rowStitches({ k: count++, pts: loop }, p.stitch, p.tolerance ?? TOLERANCE);
-    let travel: Pt[] | null = null;
-    if (cur && bd > 1) {
-      const path = grid.path(pos, pts[0], true);
-      if (path && pathLength(path) < 2 * bd + 6) travel = runStitch(path, TRAVEL_STITCH, TRAVEL_TOLERANCE);
-    } else if (cur) travel = [pos, pts[0]];
-    if (cur && travel) cur.push(...travel.slice(1), ...pts.slice(1));
-    else {
-      cur = pts;
-      runs.push(cur);
-    }
-    for (let i = 1; i < loop.length; i++) grid.cover(loop[i - 1], loop[i], p.spacing / 2);
-    pos = pts[pts.length - 1];
-  }
-  return { runs, angle, under };
+  return ringFill(r, p, start, 'contour', chooseAngle(r, p.spacing, []));
 }
