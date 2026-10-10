@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { STITCH, type Pattern } from '../src/model/pattern';
 import { rememberObjects, sewObjects } from '../src/model/objects';
 import { measureRun, remember, remembered, restitch, type RestitchResult } from '../src/model/restitch';
-import { backToOriginal, originalOf } from '../src/model/original';
+import { backToOriginal, loadedOriginal, originalOf } from '../src/model/original';
 import { stitchKinds } from '../src/model/sequence';
 import { parsePattern } from '../src/parsers';
 import { writePes } from '../src/writers/pes';
@@ -86,5 +86,18 @@ describe('back to the original stitches', () => {
     const o = eobjs[1];
     remember(edited, o, { ...remembered(edited, o)!, piece: 'p1' });
     expect(originalOf(edited, orig, o, sewObjects(edited))).toBeNull();
+  });
+
+  it('offers none in a design made in the app, whose file only holds where it began', () => {
+    const orig = read();
+    const edited = longer(orig, 1);
+    const eobjs = sewObjects(edited);
+    const o = eobjs.find((x) => x.id === sewObjects(orig)[1].id)!;
+    // Read from elsewhere: the way back is there.
+    expect(originalOf(edited, loadedOriginal({ original: orig, own: false }), o, eobjs)).not.toBeNull();
+    // Made in the app (from a picture, as the shapes benchmark): its file is read anew on every
+    // load, and an id there names some other object (a spiral came back as a piece of a fan).
+    expect(loadedOriginal({ original: orig, own: true })).toBeUndefined();
+    expect(originalOf(edited, loadedOriginal({ original: orig, own: true }), o, eobjs)).toBeNull();
   });
 });
