@@ -3103,6 +3103,10 @@ body.preview-busy #canvas {
   grid-template-columns: repeat(3, 1fr);
 }
 
+.choice-row.kinds.four {
+  grid-template-columns: repeat(4, 1fr);
+}
+
 .choice-row.small button {
   font-size: 11px;
   padding: 4px 4px;

@@ -14,8 +14,8 @@ import { TOLERANCE } from '../digitize/run';
 import type { ThreadColor } from '../model/pattern';
 import { newLink } from '../model/border';
 import { SATIN_SHARE } from '../model/covers';
-import { autoUnder, coverOf, E_SPACING, hasPhase, isRedwork, isRunType, REPEAT, spacingOf, timesOf, ZIGZAG_SPACING, type PathStitch } from '../model/along';
-import { LINE_MOTIFS, MOTIF_PERIOD, MOTIF_STITCH, MOTIF_WIDTH, motifMaxSize, SIDED_MOTIFS, type LineMotif } from '../digitize/motif';
+import { autoUnder, coverOf, E_SPACING, hasPhase, isRedwork, isRunType, layersOf, REPEAT, spacingOf, timesOf, ZIGZAG_SPACING, type PathStitch } from '../model/along';
+import { HAND_WIDTH, isHandStitch, LINE_MOTIFS, MOTIF_PERIOD, MOTIF_STITCH, MOTIF_WIDTH, motifMaxSize, SIDED_MOTIFS, type LineMotif } from '../digitize/motif';
 import { ECHO_COUNT, ECHO_DEFAULT, ECHO_GAP, ECHO_PHASE, ECHO_SIDES, type EchoSide } from '../digitize/echo';
 import { SHADOW_COLOR, SHADOW_DEFAULT_ANGLE, SHADOW_DEFAULT_DIST, SHADOW_DIST, SHADOW_UNDER } from '../model/shadow';
 import { cssColor, hexColor, ThreadPicker } from './threadPicker';
@@ -1862,12 +1862,23 @@ export class StitchPanel {
     if (st.type === 'motif') {
       const motif = st.motif ?? 'waves';
       const fits = Math.round(motifMaxSize(motif, spacingOf(st)) * 10) / 10;
+      const hand = isHandStitch(motif);
+      const motifs = this.choice<LineMotif>('stitch.lineMotif', LINE_MOTIFS, motif, (v) => `stitch.lineMotif.${v}` as Key, (v) => {
+        // A hand stitch starts at its own size and sews its stitches in bundles: from or to one, the
+        // size and the repeat start afresh.
+        if (isHandStitch(v) || hand) {
+          st.width = isHandStitch(v) ? HAND_WIDTH[v] : MOTIF_WIDTH;
+          delete st.repeat;
+          delete st.whole;
+        }
+        st.motif = v;
+        delete st.spacing;
+        set(st);
+      }, true);
+      // Four figures, then four hand stitches: two rows of four.
+      motifs.querySelector('.choice-row')?.classList.add('kinds', 'four');
       out.look.push(
-        this.choice<LineMotif>('stitch.lineMotif', LINE_MOTIFS, motif, (v) => `stitch.lineMotif.${v}` as Key, (v) => {
-          st.motif = v;
-          delete st.spacing;
-          set(st);
-        }, true),
+        motifs,
         this.slider({
           label: 'stitch.lineMotifSize',
           hint: 'stitch.lineMotifSize.hint',
@@ -1881,8 +1892,20 @@ export class StitchPanel {
           ...(fits < 8 ? { band: [1, fits] as [number, number], bandHint: 'stitch.lineMotifSize.band' as Key } : {}),
         }),
         this.slider({ label: 'stitch.gap', hint: 'stitch.motifSpacing.hint', min: 1.5, max: 15, step: 0.1, get: () => spacingOf(st), set: (v) => change((s) => (s.spacing = v === MOTIF_PERIOD[motif] ? undefined : v))(v), fmt: mm(1), auto: unset('spacing') }),
-        this.slider({ label: 'stitch.length', hint: 'stitch.motifLength.hint', min: 0.8, max: 3, step: 0.1, get: () => st.stitch ?? MOTIF_STITCH, set: (v) => change((s) => (s.stitch = v))(v), fmt: mm(1), auto: unset('stitch') }),
       );
+      // A hand stitch's stitches are its figure: straight from point to point, no length to set.
+      if (hand) {
+        out.look.push(
+          this.choice<(typeof REPEATS)[number]>('stitch.repeat', REPEATS, String(layersOf(st)) as (typeof REPEATS)[number], (v) => `stitch.handLayers.${v}` as Key, (v) => {
+            if (v === '3') delete st.repeat;
+            else st.repeat = Number(v);
+            delete st.whole;
+            set(st);
+          }, true),
+        );
+        return out;
+      }
+      out.look.push(this.slider({ label: 'stitch.length', hint: 'stitch.motifLength.hint', min: 0.8, max: 3, step: 0.1, get: () => st.stitch ?? MOTIF_STITCH, set: (v) => change((s) => (s.stitch = v))(v), fmt: mm(1), auto: unset('stitch') }));
       if (SIDED_MOTIFS.includes(motif)) out.look.push(this.sideChoice(st, set, offset));
       const times = st.repeat === 3 || st.repeat === 5 ? (String(st.repeat) as '3' | '5') : '1';
       out.look.push(

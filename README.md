@@ -103,7 +103,10 @@ sends the picture anywhere.
   side, fringe, short stitches in curves, split, underlay kind, **rungs** for the direction and **sections**
   with cut lines (also on a fill: each part a column of its own, order, direction and trims per part);
   running stitch length, max. deviation, triple stitch; lines as running stitch, satin or fill;
-  **redwork**: a line of many paths in one go, each line out and back, no trims where they touch
+  **redwork**: a line of many paths in one go, each line out and back, no trims where they touch;
+  line motifs (waves, scallops, hearts, chain) and **hand stitches** imitated by machine: stem,
+  feather, Cretan and chevron stitch, each stitch sewn 1, 3 or 5 times over the same holes like
+  stranded floss, whole figures per piece between corners
 - **Shape editing**: the outline of a fill as curves with nodes, kept exactly from then on; close,
   open, join and split paths, nodes at crossings, fill inside; an opened fill or satin is sewn as a
   line and filled again once a path is closed; the border is the fill's own line, along open paths

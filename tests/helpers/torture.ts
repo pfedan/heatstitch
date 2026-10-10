@@ -5,6 +5,7 @@ import { followerLinks, partHolders, recolorBlock, sameRegion, shareBorders, syn
 import { blendObject } from '../../src/model/blend';
 import { MOTIFS } from '../../src/digitize/deco';
 import { ECHO_SIDES } from '../../src/digitize/echo';
+import { HAND_STITCHES, HAND_WIDTH, LINE_MOTIFS } from '../../src/digitize/motif';
 import { partOf, type LinePart } from '../../src/model/shadow';
 import { fillToLine, lineStitches, lineToFill, resewLine } from '../../src/model/line';
 import { refreshKnockouts, setKnockout } from '../../src/model/knockout';
@@ -952,6 +953,56 @@ export const OPS: Op[] = [
  * Satins over an area made lines along their edge and satins again (the kind switch). Drawn from a
  * stream of their own, so the chains of the other ops stay as they were for the seeds above.
  */
+/**
+ * Lines sewn as a motif, mostly a hand stitch (stem, feather, Cretan, chevron). Drawn from a stream
+ * of their own, so the chains of the other ops stay as they were for the seeds above.
+ */
+export const HAND_OPS: Op[] = [
+  {
+    name: 'hand stitch',
+    run: (d, r) => {
+      // As the line panel: a motif picked, often a hand stitch at its own size, sewn 1, 3 or 5 times.
+      const lines = d.objects.filter((o) => lineGeoOf(remembered(d.cur.p, o)) && remembered(d.cur.p, o)?.line && !partOf(remembered(d.cur.p, o)));
+      if (!lines.length) return false;
+      const o = pick(r, lines);
+      const m = remembered(d.cur.p, o)!;
+      const motif = r() < 0.7 ? pick(r, HAND_STITCHES) : pick(r, LINE_MOTIFS);
+      const hand = (HAND_STITCHES as string[]).includes(motif);
+      const width = hand && r() < 0.5 ? HAND_WIDTH[motif as keyof typeof HAND_WIDTH] : between(r, 1, 6);
+      const repeat = r() < 0.4 ? pick(r, [1, 5]) : undefined;
+      const st = { ...m.line!, type: 'motif' as const, motif, width, ...(r() < 0.3 ? { spacing: between(r, 1.5, 8) } : {}) };
+      delete st.repeat;
+      delete st.whole;
+      if (repeat) st.repeat = repeat;
+      const next = resewLine(d.cur.p, o.index, m.geo!, st, T);
+      if (!next) return false;
+      // Invariant: a hand stitch stays within its size of the line (half of it to each side), at
+      // corners and ends too; copies beside it (echo) lie further out on purpose.
+      if (hand && !st.echo) {
+        const path = m.geo!.paths.flatMap((q) => {
+          const f = flatten(q);
+          return q.closed && f.length ? [f, [f[f.length - 1], f[0]]] : [f];
+        });
+        const off = (x: number, y: number) =>
+          Math.min(
+            ...path.flatMap((f) =>
+              f.slice(1).map((b, i) => {
+                const a = f[i];
+                const dx = b[0] - a[0], dy = b[1] - a[1];
+                const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (y - a[1]) * dy) / (dx * dx + dy * dy || 1)));
+                return Math.hypot(x - a[0] - dx * t, y - a[1] - dy * t);
+              }),
+            ),
+          );
+        let far = 0;
+        for (let i = next.first; i <= next.last; i++) if (next.pattern.cmd[i] === STITCH) far = Math.max(far, off(next.pattern.x[i] / 10, next.pattern.y[i] / 10));
+        expect(far, `${motif} within its size of the line`).toBeLessThan(width / 2 + 0.6);
+      }
+      return shapes(d, syncBorders(next.pattern, T));
+    },
+  },
+];
+
 /** A script font whose letters run into each other (loaded from the app's fonts). */
 const SCRIPT = JSON.parse(readFileSync(new URL('../../public/fonts/pacificlo.json', import.meta.url), 'utf8')) as Font;
 addFont(SCRIPT);
@@ -1815,6 +1866,7 @@ export async function chain(seed: number, steps = STEPS, opts: { trace?: boolean
   const rsat = rng(seed + 32452843);
   const rlet = rng(seed + 49979687);
   const rred = rng(seed + 67867967);
+  const rhand = rng(seed + 86028121);
   const d = new Doc();
   const log: string[] = [];
   const at = () => `seed ${seed}: ${log.join(' > ')}`;
@@ -1864,6 +1916,18 @@ export async function chain(seed: number, steps = STEPS, opts: { trace?: boolean
       if (await sat.run(d, rsat)) {
         log.push(sat.name);
         if (process.env.TORTURE_TRACE) console.log(sat.name, describeObjects(d.cur.p));
+        try {
+          checkStep(d, false);
+        } catch (e) {
+          throw new Error(`${at()}\n${(e as Error).message}`);
+        }
+      }
+    }
+    // Now and then a line sewn as a hand stitch, beside the chain.
+    if (!blank(d.cur.p) && rhand() < 0.15) {
+      const hop = pick(rhand, HAND_OPS);
+      if (await hop.run(d, rhand)) {
+        log.push(hop.name);
         try {
           checkStep(d, false);
         } catch (e) {
