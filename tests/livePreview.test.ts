@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { sewObjects } from '../src/model/objects';
-import { designObjects, remembered, restitch, restoreRemembered, type Settings } from '../src/model/restitch';
+import { designObjects, remembered, rememberedIn, restitch, restoreRemembered, type Settings } from '../src/model/restitch';
 import { parsePattern } from '../src/parsers';
 import { restitchShipped, ship, unship } from '../src/resew/live';
 import { decodeProject } from '../src/storage/project';
@@ -27,6 +27,9 @@ function check(p: Pattern, which: number[], s: Settings): void {
   const marks = (m: (typeof here.memory)[number]) => [m.under, m.underFrom, m.borderAt, m.line];
   expect(structuredClone(sent.memory).map(marks)).toEqual(here.memory.map(marks));
   expect(sewObjects(back).map((o) => [o.first, o.last])).toEqual(sewObjects(here.pattern).map((o) => [o.first, o.last]));
+  // Everything the objects know, so taking the result over gives the same design as sewing it here.
+  expect(structuredClone(rememberedIn(back))).toEqual(structuredClone(rememberedIn(here.pattern)));
+  expect(structuredClone(sent.memory)).toEqual(structuredClone(here.memory));
 }
 
 describe('stitch settings sewn in the worker while pointed at', () => {

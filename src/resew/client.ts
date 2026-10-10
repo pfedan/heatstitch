@@ -75,6 +75,10 @@ export interface PreviewResult {
   from: Pattern;
   settings: Settings;
   result: RestitchResult | null;
+  /** The worker stopped working before it answered: nothing was sewn. */
+  lost?: true;
+  /** The same result once more, as a design of its own (one that was shown has caches of its own). */
+  again?: () => RestitchResult | null;
 }
 
 /**
@@ -93,7 +97,14 @@ export class LivePreview {
   /** Without a worker (it failed to start) the caller sews on its own. */
   failed = false;
 
-  constructor(private got: (r: PreviewResult) => void) {}
+  /**
+   * With `newestOnly` a result comes back only when no later settings wait (taking settings over:
+   * an older result would be built on and then replaced).
+   */
+  constructor(
+    private got: (r: PreviewResult) => void,
+    private newestOnly = false,
+  ) {}
 
   /** Asks for the objects `which` of `p` sewn with `settings`. */
   ask(p: Pattern, which: number[], settings: Settings, trimMm: number): void {
@@ -129,12 +140,14 @@ export class LivePreview {
       }
       this.worker.onmessage = (e: MessageEvent<RestitchResponse>) => this.answer(e.data);
       this.worker.onerror = () => {
+        const b = this.busy;
         this.worker?.terminate();
         this.worker = null;
         this.loaded = null;
         this.busy = null;
         this.waiting = null;
         this.failed = true;
+        if (b) this.got({ from: b.from, settings: b.settings, result: null, lost: true });
       };
     }
     if (this.loaded !== w.from) {
@@ -151,9 +164,10 @@ export class LivePreview {
     if (!b || b.id !== r.id) return;
     this.busy = null;
     // Shown also when later settings wait (a slider still dragged): the newest there is.
+    if (this.newestOnly && this.waiting) return this.next();
     const d = r.done;
-    const result = d ? { pattern: unship(d.pattern, b.from), starts: d.starts, ends: d.ends, failed: d.failed, regions: [], memory: d.memory } : null;
-    this.got({ from: b.from, settings: b.settings, result });
+    const make = (): RestitchResult | null => (d ? { pattern: unship(structuredClone(d.pattern), b.from), starts: d.starts, ends: d.ends, failed: d.failed, regions: [], memory: structuredClone(d.memory) } : null);
+    this.got({ from: b.from, settings: b.settings, result: make(), again: make });
     this.next();
   }
 }

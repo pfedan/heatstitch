@@ -367,10 +367,23 @@ export function bindStitches(app: StitchesApp) {
   // live and the newest settings come next; shown while they are still the ones wanted.
   let wanted: { p: Pattern; key: number } | null = null;
   let busyTimer = 0;
+  /** The last preview sewn and what for: picking those same settings on that design takes it over at once. */
+  let shown: { p: Pattern; key: number; settings: string; again: () => RestitchResult | null } | null = null;
   const livePreview = new LivePreview((r) => {
     if (!wanted || wanted.p !== r.from || wanted.key !== ui.selectionKey || app.files.active?.pattern !== r.from) return;
     showPreview(r.result);
+    if (r.again) shown = { p: r.from, key: ui.selectionKey, settings: JSON.stringify(r.settings), again: r.again };
   });
+  // Settings taken over are sewn in a worker too: the page never stops, also on a large fill. Only
+  // the newest settings are taken over, and only onto the design and selection they were set for.
+  let taking: { p: Pattern; key: number; failed: Key; find: ((p: Pattern) => number | null) | null; drop: ReadonlySet<string> } | null = null;
+  const taker = new LivePreview((r) => {
+    const w = taking;
+    taking = null;
+    busy();
+    if (!w || w.p !== r.from || w.key !== ui.selectionKey || app.files.active?.pattern !== r.from) return;
+    applyRestitched(r.lost ? restitched(r.settings) : r.result, w.failed, false, w.find, w.drop);
+  }, true);
   function showPreview(r: RestitchResult | null): void {
     ui.previewResult = r;
     ui.flowPreview = r?.pattern ?? null;
@@ -380,9 +393,9 @@ export function bindStitches(app: StitchesApp) {
   /** The canvas says it is working on a preview, once one takes longer than a moment. */
   function busy(): void {
     window.clearTimeout(busyTimer);
-    const on = livePreview.pending;
-    if (!on) return void document.body.classList.remove('preview-busy');
-    busyTimer = window.setTimeout(() => document.body.classList.toggle('preview-busy', livePreview.pending), 200);
+    const pending = () => livePreview.pending || taker.pending;
+    if (!pending()) return void document.body.classList.remove('preview-busy');
+    busyTimer = window.setTimeout(() => document.body.classList.toggle('preview-busy', pending()), 200);
   }
   function stopPreview(): void {
     wanted = null;
@@ -406,12 +419,22 @@ export function bindStitches(app: StitchesApp) {
     },
     peeking: () => app.settings.hoverPreview,
     apply: (s) => {
+      const ready = shown;
       stopPreview();
       const pat = s.kind === 'fill' ? s.s.pattern : null;
+      const failed: Key = pat === 'spiral' ? 'stitch.failedSpiral' : pat === 'contour' || pat === 'follow' ? 'stitch.failedCurved' : pat === 'guided' ? 'stitch.guide.failed' : 'stitch.failed';
       const p = app.files.active?.pattern;
-      if (p) dropLinks = linksOf(p, targets());
+      const which = targets();
+      if (!p || !which.length) return applyRestitched(null, failed);
+      const drop = linksOf(p, which);
       const find = dependentFinder();
-      applyRestitched(restitched(s), pat === 'spiral' ? 'stitch.failedSpiral' : pat === 'contour' || pat === 'follow' ? 'stitch.failedCurved' : pat === 'guided' ? 'stitch.guide.failed' : 'stitch.failed', false, find);
+      // Pointed at before: those stitches are already sewn.
+      if (ready && ready.p === p && ready.key === ui.selectionKey && ready.settings === JSON.stringify(s)) return applyRestitched(ready.again(), failed, false, find, drop);
+      // Without a worker it is sewn here, rather than not at all.
+      if (taker.failed) return applyRestitched(restitched(s), failed, false, find, drop);
+      taking = { p, key: ui.selectionKey, failed, find, drop };
+      taker.ask(p, which, s, app.settings.trimMm);
+      busy();
     },
     convert: (to) => {
       const p = app.files.active?.pattern;

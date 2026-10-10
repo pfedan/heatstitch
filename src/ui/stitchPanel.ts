@@ -463,6 +463,8 @@ export class StitchPanel {
   /** Settings pointed at, shown before they are picked, when the display settings allow it; null ends that. */
   private peek(s: Settings | null): void {
     if (s && !this.hooks.peeking()) return;
+    // With the fill's border as picking would sew it, so a click takes the preview over as it is.
+    if (s?.kind === 'fill' && !('line' in s)) s = { ...s, line: this.draft.border ? structuredClone(this.draft.border) : null };
     this.hooks.preview(s);
   }
 
