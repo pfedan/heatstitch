@@ -40,6 +40,11 @@ import { THIN_SHARES } from '../../src/areas/stitches/state';
 import { writePattern } from '../../src/writers';
 import { loadedOriginal, originalOf } from '../../src/model/original';
 import { rng } from './images';
+import { readFileSync } from 'node:fs';
+import { addFont, type Font } from '../../src/lettering/font';
+import { layout, LETTERING_DEFAULTS, type Lettering } from '../../src/lettering/layout';
+import { letteringObjects, placeLettering } from '../../src/lettering/place';
+import { letteringRuns, sewLettering } from '../../src/lettering/sew';
 import { inheritTrace, movedTrace, readTrace, setTraceOf, sizedTrace, storeTrace, traceFrom, traceOf, withTrace, type Trace } from '../../src/model/trace';
 import { areaLoops, suggestSatin } from '../../src/digitize/satinSuggest';
 import { stripsOfAreas } from '../../src/digitize/rungs';
@@ -909,6 +914,146 @@ export const OPS: Op[] = [
  * Satins over an area made lines along their edge and satins again (the kind switch). Drawn from a
  * stream of their own, so the chains of the other ops stay as they were for the seeds above.
  */
+/** A script font whose letters run into each other (loaded from the app's fonts). */
+const SCRIPT = JSON.parse(readFileSync(new URL('../../public/fonts/pacificlo.json', import.meta.url), 'utf8')) as Font;
+addFont(SCRIPT);
+
+/** The letterings of a design, each once. */
+function letteringsIn(p: Pattern): Lettering[] {
+  const out = new Map<string, Lettering>();
+  for (const o of sewObjects(p)) {
+    const l = remembered(p, o)?.lettering;
+    if (l && !out.has(l.id)) out.set(l.id, l);
+  }
+  return [...out.values()];
+}
+
+/**
+ * Letterings in a script, set close so the letters run into each other, and set anew (as the app
+ * does when the text, spacing or place changes). Drawn from a stream of their own, so the chains of
+ * the other ops stay as they were for the seeds above.
+ */
+export const LETTERING_OPS: Op[] = [
+  {
+    name: 'add lettering',
+    run: (d, r) => {
+      const l: Lettering = {
+        ...LETTERING_DEFAULTS,
+        id: `L${Math.floor(r() * 1e6)}`,
+        text: pick(r, ['Herz', 'Lisa', 'Anna', 'Mama\nOma']),
+        font: SCRIPT.id,
+        height: between(r, 10, 20),
+        spacing: pick(r, [0, -1, -2.5]),
+        x: between(r, 0, 40),
+        y: between(r, 10, 60),
+        angle: pick(r, [0, 0, 30]),
+        color: pick(r, COLORS),
+      };
+      const placed = placeLettering(blank(d.cur.p) ? null : d.cur.p, [], sewLettering(SCRIPT, l, T), l);
+      return shapes(d, placed?.pattern);
+    },
+  },
+  {
+    name: 'edit lettering',
+    run: (d, r) => {
+      const ls = letteringsIn(d.cur.p);
+      if (!ls.length) return false;
+      const old = pick(r, ls);
+      const l = { ...old, text: pick(r, ['Herzlich', 'Lisa', 'Sophie']), spacing: pick(r, [0, -1.5, -3]), x: old.x + between(r, -5, 5) };
+      const placed = placeLettering(d.cur.p, letteringObjects(d.cur.p, d.objects, old.id), sewLettering(SCRIPT, l, T), l);
+      return shapes(d, placed?.pattern);
+    },
+  },
+];
+
+/**
+ * Letters that overlap are sewn there once: as each lettering of the design is sewn from its text,
+ * a letter under one sewn after it leaves out only stitches that do not show (wholly under the
+ * satin on top), has no more thread under it than before, and every piece still starts and ends
+ * where the font has it (the joins and trims are the font's). What lies on top is read from the
+ * stitches of the letters on top (as Embrilliance does), not from the outlines the code under test uses.
+ */
+export function checkLetterings(p: Pattern): void {
+  expect(letteringProblems(p).join('; '), 'overlapping letters').toBe('');
+}
+
+/** What checkLetterings finds wrong. */
+export function letteringProblems(p: Pattern): string[] {
+  const problems: string[] = [];
+  for (const l of letteringsIn(p)) {
+    if (l.font !== SCRIPT.id) continue;
+    const lay = layout(SCRIPT, l);
+    const runs = letteringRuns(SCRIPT, l, lay);
+    const whole = letteringRuns(SCRIPT, l, lay, true);
+    if (runs.length !== whole.length) problems.push(`${l.id}: ${whole.length} pieces became ${runs.length}`);
+    runs.forEach((run, k) => {
+      const w = whole[k].pts;
+      const [a, z] = [run.pts[0], run.pts[run.pts.length - 1]];
+      if (a[0] !== w[0][0] || a[1] !== w[0][1] || z[0] !== w[w.length - 1][0] || z[1] !== w[w.length - 1][1]) problems.push(`${l.id}: piece ${k} starts or ends elsewhere`);
+    });
+    // Where the satin and fill stitches of each letter lie, as the font sews them: thread 0.4 mm
+    // thick, the gaps between neighbouring stitches (their spacing) closed.
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const run of whole) for (const [x, y] of run.pts) [minX, minY, maxX, maxY] = [Math.min(minX, x), Math.min(minY, y), Math.max(maxX, x), Math.max(maxY, y)];
+    const PX = 0.1;
+    const W = Math.ceil((maxX - minX) / PX) + 8;
+    const H = Math.ceil((maxY - minY) / PX) + 8;
+    const cell = (x: number, y: number) => Math.floor((y - minY) / PX + 4) * W + Math.floor((x - minX) / PX + 4);
+    const sewnBy = lay.letters.map(() => new Uint8Array(W * H));
+    for (const run of whole) {
+      if (!run.leaves) continue;
+      const m = sewnBy[run.letter];
+      for (let i = 1; i < run.pts.length; i++) {
+        const [a, b] = [run.pts[i - 1], run.pts[i]];
+        const n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / (PX / 2)));
+        for (let t = 0; t <= n; t++) {
+          const x = a[0] + ((b[0] - a[0]) * t) / n;
+          const y = a[1] + ((b[1] - a[1]) * t) / n;
+          for (let dy = -0.2; dy <= 0.2; dy += PX) for (let dx = -0.2; dx <= 0.2; dx += PX) m[cell(x + dx, y + dy)] = 1;
+        }
+      }
+    }
+    // The letters in sewing order: those after a run's letter lie on top of it.
+    const order: number[] = [];
+    for (const run of runs) if (order[order.length - 1] !== run.letter) order.push(run.letter);
+    const wholly = (later: Uint8Array[], a: [number, number], b: [number, number]) => {
+      const n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / PX));
+      for (let t = 0; t <= n; t++) {
+        const k = cell(a[0] + ((b[0] - a[0]) * t) / n, a[1] + ((b[1] - a[1]) * t) / n);
+        if (!later.some((m) => m[k])) return false;
+      }
+      return true;
+    };
+    runs.forEach((run, k) => {
+      if (!run.leaves) return;
+      const later = order.slice(order.lastIndexOf(run.letter) + 1).map((li) => sewnBy[li]);
+      const kept = new Set(run.pts.slice(1).map((q, i) => `${run.pts[i]} ${q}`));
+      const w = whole[k].pts;
+      let before = 0;
+      let after = 0;
+      for (let i = 1; i < w.length; i++) {
+        const under = later.length > 0 && wholly(later, w[i - 1], w[i]);
+        // A stitch that shows is never left out.
+        if (!under && !kept.has(`${w[i - 1]} ${w[i]}`)) {
+          problems.push(`${l.id}: letter ${run.letter} lost the stitch (${w[i - 1][0].toFixed(1)}, ${w[i - 1][1].toFixed(1)}) to (${w[i][0].toFixed(1)}, ${w[i][1].toFixed(1)}), which shows`);
+          break;
+        }
+        if (under) before += Math.hypot(w[i][0] - w[i - 1][0], w[i][1] - w[i - 1][1]);
+      }
+      for (let i = 1; i < run.pts.length; i++) {
+        const [a, b] = [run.pts[i - 1], run.pts[i]];
+        if (later.length && wholly(later, a, b)) after += Math.hypot(b[0] - a[0], b[1] - a[1]);
+      }
+      // Under later letters there is less thread than before, never more.
+      if (after > before + 1e-6) problems.push(`${l.id}: letter ${run.letter} has ${after.toFixed(1)} mm of thread under later letters, ${before.toFixed(1)} mm before`);
+    });
+  }
+  return problems;
+}
+
 export const SATIN_OPS: Op[] = [
   {
     name: 'satin there and back',
@@ -1204,6 +1349,17 @@ const sortedJson = (v: unknown): string =>
   JSON.stringify(v, (_k, x) => (ArrayBuffer.isView(x) ? Array.from(x as Uint8Array) : x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => (a < b ? -1 : 1))) : x));
 
 /**
+ * Whether `n` holds what `m` holds: the same fields, each the same value (compared as JSON where it
+ * is not the same object; a large area is not turned into JSON when it is the same one).
+ */
+function samePutBack(m: Remembered, n: Remembered): boolean {
+  const a = Object.keys(m).filter((k) => m[k as keyof Remembered] !== undefined).sort();
+  const b = Object.keys(n).filter((k) => n[k as keyof Remembered] !== undefined).sort();
+  if (a.join() !== b.join()) return false;
+  return a.every((k) => m[k as keyof Remembered] === n[k as keyof Remembered] || sortedJson(m[k as keyof Remembered]) === sortedJson(n[k as keyof Remembered]));
+}
+
+/**
  * One form per object (vector model rule 1): never two of its places used at once, and taking its
  * form and putting it back changes nothing.
  */
@@ -1227,7 +1383,7 @@ export function checkOneGeo(p: Pattern): void {
     // Known and guessed apart (rule 6): a form only read from the stitches is never kept as curves.
     if (m.read && m.geo) problems.push(`${o.index}: a form read from its stitches kept as known`);
     const geo = geoOf(m);
-    if (geo && sortedJson(withGeo(m, geo)) !== sortedJson(m)) problems.push(`${o.index}: its form put back changes it`);
+    if (geo && !samePutBack(m, withGeo(m, geo))) problems.push(`${o.index}: its form put back changes it`);
   }
   expect(problems.join('; '), 'one form').toBe('');
 }
@@ -1531,6 +1687,7 @@ export async function chain(seed: number, steps = STEPS, opts: { trace?: boolean
   const rl = rng(seed + 104729);
   const rs = rng(seed + 15485863);
   const rsat = rng(seed + 32452843);
+  const rlet = rng(seed + 49979687);
   const d = new Doc();
   const log: string[] = [];
   const at = () => `seed ${seed}: ${log.join(' > ')}`;
@@ -1567,6 +1724,19 @@ export async function chain(seed: number, steps = STEPS, opts: { trace?: boolean
       if (await sat.run(d, rsat)) {
         log.push(sat.name);
         if (process.env.TORTURE_TRACE) console.log(sat.name, describeObjects(d.cur.p));
+        try {
+          checkStep(d, false);
+        } catch (e) {
+          throw new Error(`${at()}\n${(e as Error).message}`);
+        }
+      }
+    }
+    // Now and then a lettering set or set anew, beside the chain.
+    if (rlet() < 0.15) {
+      const lop = blank(d.cur.p) ? LETTERING_OPS[0] : pick(rlet, LETTERING_OPS);
+      if (await lop.run(d, rlet)) {
+        log.push(lop.name);
+        if (process.env.TORTURE_TRACE) console.log(lop.name, describeObjects(d.cur.p));
         try {
           checkStep(d, false);
         } catch (e) {
@@ -1625,6 +1795,7 @@ function checkStep(d: Doc, full: boolean): void {
   checkAreas(p);
   checkFollowers(p);
   checkSatinSections(p);
+  checkLetterings(p);
   checkTrace(d);
   if (full) {
     checkExport(p);
