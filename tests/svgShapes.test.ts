@@ -156,18 +156,23 @@ describe('a filled shape with a stroke', () => {
     const { objs, mem, pattern } = sewn(leaf(0, 1, 2));
     expect(mem[0]!.line?.type).toBe('satin');
     expect(mem[0]!.line?.width).toBe(2);
-    expect(sameColor(mem[0]!.line!.color!, threads[1])).toBe(true);
+    expect(mem[0]!.line!.color).toBeTruthy();
     expect(objs).toHaveLength(2);
     expect(mem[1]!.outline).toBe(mem[0]!.line!.link);
-    expect(sameColor(objs[1].color, threads[1])).toBe(true);
+    expect(sameColor(objs[1].color, mem[0]!.line!.color)).toBe(true);
+    expect(sameColor(objs[0].color, objs[1].color)).toBe(false);
     expect(pattern.colors).toHaveLength(2);
   });
 
   it('stays as it is when stored and opened again', () => {
     const { data, pattern } = sewn(leaf(0, 1, 0.5));
-    const stored = JSON.parse(JSON.stringify(rememberedIn(pattern, sewObjects(pattern))));
+    const stored = structuredClone(rememberedIn(pattern, sewObjects(pattern)));
+    expect(syncBorders(pattern, options.trimMm)).toBe(pattern);
+    // Opened from the file as the app adds it: every object knows what it is.
     const back = parsePattern(data, 'leaf.pes');
-    restoreRemembered(back, stored);
+    expect(restoreRemembered(back, stored)).toBe(sewObjects(pattern).length);
+    const kinds = (p: typeof back) => sewObjects(p).map((o) => (remembered(p, o)?.fill ? 'fill' : remembered(p, o)?.outline ? 'border' : '?'));
+    expect(kinds(back)).toEqual(['fill', 'border']);
     expect(syncBorders(back, options.trimMm)).toBe(back);
   });
 

@@ -348,9 +348,10 @@ export function lineToFill(p: Pattern, index: number, s: FillSettings, trimMm: n
   if (how === 'band') fill = { ...(was ?? s), lineWidth: was?.lineWidth ?? line.width, lineCap: was?.lineCap ?? 'flat' };
   else {
     if (!fits(geo, 'fill')) return null;
-    // The line stays beside the fill as its border, as it is sewn now (a fill that had none gets
-    // none again); its echo and shadow go: they belong to a line.
-    const { echo: _e, shadow: _s, fringe: _f, fringeSide: _fs, ...edge } = line;
+    // The line stays beside the fill as its border, as it is sewn now with its echo, shadow and
+    // fringe (a fill that had none gets none again); the side of a fringe was the drawn line's, a
+    // border's is inside or outside: frayed on both.
+    const { fringeSide: _fs, ...edge } = line;
     const { lineWidth: _w, lineCap: _c, ...rest } = was ?? s;
     fill = rest;
     if (!was || !known.kept?.unbordered) border = edge;

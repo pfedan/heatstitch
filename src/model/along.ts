@@ -47,9 +47,9 @@ export interface PathStitch {
   pull?: number;
   /** Satin: its underlay; along the middle from 1.5 mm width, none below, by default. */
   under?: UnderlayKind | 'off';
-  /** Satin lines only: a ragged edge, stitches up to this far short of the side (mm); see SatinSettings.fringe. */
+  /** Satin lines and borders only: a ragged edge, stitches up to this far short of the side (mm); see SatinSettings.fringe. */
   fringe?: number;
-  /** Satin lines only: the fringe on this side of the drawn line only; both by default. */
+  /** The fringe on this side only, both by default: of a line, this side of the drawn line; of a border, left inside and right outside. */
   fringeSide?: FringeSide;
   /** Lines only: copies of the line beside it (see digitize/echo.ts); none by default. */
   echo?: LineEcho;
@@ -263,10 +263,12 @@ export function borderStitches(r: Region, s: PathStitch, from: Pt, whole?: Regio
     return out;
   }
   // One satin (zigzag, E stitch) over all loops: its underlay first, then the satin, as satinRuns sews them.
-  return satinRuns(
-    loops.flatMap((l) => (keep ? keptRails(r, l, s.width, off, keep) : [borderRails(r, l, s.width, off)]).map((b) => onEdge(r, b, s))),
-    satinOf(s),
-  );
+  const bands = loops.flatMap((l) => (keep ? keptRails(r, l, s.width, off, keep) : [borderRails(r, l, s.width, off)]).map((b) => onEdge(r, b, s)));
+  if (!(s.type === 'satin' && s.fringe)) return satinRuns(bands, satinOf(s));
+  // Frayed: every band with its left rail inside, so the fringe is on the side asked for (a
+  // border's fringeSide: left inside, right outside).
+  const inward = bands.map((b) => (leftInside(r, b) ? b : { ...b, left: b.right, right: b.left }));
+  return satinRuns(inward, { ...satinOf(s), fringe: s.fringe, ...(s.fringeSide ? { fringeSide: other(s.fringeSide) } : {}) });
 }
 
 /**
@@ -276,7 +278,8 @@ export function borderStitches(r: Region, s: PathStitch, from: Pt, whole?: Regio
  * out, as the edge is there. Its offset is the edge's: an open path has no inside or outside.
  */
 export function openStitches(open: Form, s: PathStitch, from: Pt, r: Region, whole?: Region | null): Pt[][] {
-  const st: PathStitch = { ...s, offset: undefined };
+  // An open path has no inside or outside: frayed on both sides.
+  const st: PathStitch = { ...s, offset: undefined, fringeSide: undefined };
   const covered = whole ? (q: Pt) => sample(whole, whole.sdfBase, q[0], q[1]) < 0 && sample(r, r.sdfBase, q[0], q[1]) > CUT_EDGE : null;
   const lines = open.paths.filter((p) => !p.closed).flatMap((p) => {
     const pts = flatten(p);

@@ -987,13 +987,15 @@ export class StitchPanel {
    * The fringe of a satin (an object, or a satin line): how deep, and on which side (shown once
    * there is a fringe). `set` takes each change over; `peek` shows a side before it is picked.
    */
-  private fringeControls(o: { fringe?: number; fringeSide?: FringeSide }, set: () => void, peek?: (side: FringeSide | undefined | null) => void): HTMLElement[] {
+  private fringeControls(o: { fringe?: number; fringeSide?: FringeSide }, set: () => void, peek?: (side: FringeSide | undefined | null) => void, border = false): HTMLElement[] {
     type Side = 'both' | FringeSide;
+    // A border has an inside (left) and an outside (right) instead.
+    const sides: Record<Side, string> = border ? { both: 'both', left: 'in', right: 'out' } : { both: 'both', left: 'left', right: 'right' };
     const side = this.choice<Side>(
       'stitch.fringeSide',
-      ['both', 'left', 'right'],
+      border ? ['both', 'right', 'left'] : ['both', 'left', 'right'],
       o.fringeSide ?? 'both',
-      (v) => `stitch.fringeSide.${v}` as Key,
+      (v) => `stitch.fringeSide.${sides[v]}` as Key,
       (v) => {
         if (v === 'both') delete o.fringeSide;
         else o.fringeSide = v;
@@ -1889,8 +1891,9 @@ export class StitchPanel {
       width,
       this.slider({ label: 'stitch.density', hint: 'stitch.satinDensity.hint', min: 0.2, max: 1, step: 0.01, get: () => st.spacing ?? 0.4, set: (v) => change((s) => (s.spacing = v))(v), fmt: mm(2), auto: unset('spacing') }),
     );
-    // A drawn satin line can be frayed (fur, feathers); a border keeps a clean edge.
+    // A satin line or border can be frayed (fur, feathers): a border inside, outside or both.
     if (line && !offset) out.look.push(...this.fringeControls(st, () => set(st)), this.repeatRow(st, set));
+    else if (offset) out.look.push(...this.fringeControls(st, () => set(st), undefined, true));
     out.hold.push(
       this.slider({ label: 'stitch.borderPull', hint: 'stitch.borderPull.hint', min: 0, max: 0.6, step: 0.05, get: () => st.pull ?? 0, set: (v) => change((s) => (s.pull = v || undefined))(v), fmt: mm(2), auto: unset('pull') }),
       this.choice<UnderlayKind | 'off'>('stitch.under.kind', ['off', ...UNDERLAYS], autoUnder(st), (v) => (v === 'off' ? 'stitch.borderUnder.off' : (`stitch.under.${v}` as Key)), (v) => {
@@ -1976,7 +1979,10 @@ export class StitchPanel {
         : null;
     pictured(parts.type, BORDERS, { run: 'border-run', satin: 'border-satin', zigzag: 'border-zigzag', e: 'border-e', motif: 'border-motif' }, 'stitch.border.intro');
     const extra = d.border ? t(`stitch.border.${isRunType(d.border.type) ? 'run' : d.border.type}` as Key) : t('stitches.sec.off');
-    const box = this.sec('border', 'stitches.sec.border', [shared, seams, parts.type, ...parts.look, ...parts.hold, d.border ? this.borderThread(d.border) : null], extra);
+    // What a line can do around the shape too: echo copies and a shadow, shown once there is a border.
+    const color = this.info!.color;
+    const fx = d.border && color ? [this.echoGroup(d.border, true, d.border.color ?? color), this.shadowGroup(d.border, d.border.color ?? color)] : [];
+    const box = this.sec('border', 'stitches.sec.border', [shared, seams, parts.type, ...parts.look, ...parts.hold, d.border ? this.borderThread(d.border) : null, ...fx], extra);
     return this.lights(box, 'border');
   }
 

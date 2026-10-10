@@ -1,11 +1,11 @@
 import { expect } from 'vitest';
 import { digitizeDefaults } from '../../src/digitize/digitize';
 import { addShape } from '../../src/model/addShape';
-import { followerLinks, recolorBlock, shareBorders, syncBorders } from '../../src/model/border';
+import { followerLinks, partHolders, recolorBlock, shareBorders, syncBorders } from '../../src/model/border';
 import { blendObject } from '../../src/model/blend';
 import { MOTIFS } from '../../src/digitize/deco';
 import { ECHO_SIDES } from '../../src/digitize/echo';
-import { lineParts, partOf, type LinePart } from '../../src/model/shadow';
+import { partOf, type LinePart } from '../../src/model/shadow';
 import { fillToLine, lineStitches, lineToFill, resewLine } from '../../src/model/line';
 import { refreshKnockouts, setKnockout } from '../../src/model/knockout';
 import { rememberObjects, sewObjects, tableOf, type SewObject } from '../../src/model/objects';
@@ -23,7 +23,7 @@ import { deleteObjects, duplicateObject, duplicateObjects, mirrorMatrix, recolor
 import { stitchesBefore } from '../../src/model/transform';
 import { sewDesign, specOf } from '../../src/model/sew';
 import { parsePattern } from '../../src/parsers';
-import { extendPath, insertNode, rotation, segments, storeForm, translation, type Form, type Mat } from '../../src/shape/path';
+import { bounds as boundsOf, extendPath, flatten, insertNode, rotation, segments, storeForm, translation, type Form, type Mat } from '../../src/shape/path';
 import { ellipsePath, parsePath, rectPath } from '../../src/shape/svgPath';
 import { fromStored, toStored } from '../../src/storage/fileStore';
 import { decodeProject, encodeProject, projectSettings } from '../../src/storage/project';
@@ -40,7 +40,7 @@ import { rng } from './images';
 import { inheritTrace, movedTrace, readTrace, setTraceOf, sizedTrace, storeTrace, traceFrom, traceOf, withTrace, type Trace } from '../../src/model/trace';
 import { areaLoops, suggestSatin } from '../../src/digitize/satinSuggest';
 import { stripsOfAreas } from '../../src/digitize/rungs';
-import { areaOf, fits, geoOf, geoUse, guessArea, guessGeo, lineGeoOf, withGeo } from '../../src/model/geo';
+import { areaOf, fits, formKey, geoOf, geoUse, guessArea, guessGeo, lineGeoOf, openOf, withGeo } from '../../src/model/geo';
 
 /**
  * The torture test: random chains of the operations the app offers on objects (add, duplicate (also
@@ -635,13 +635,20 @@ export const OPS: Op[] = [
   {
     name: 'border',
     run: (d, r) => {
-      const fills = d.objects.filter((o) => remembered(d.cur.p, o)?.fill && geoUse(remembered(d.cur.p, o)) !== 'band');
+      // As the panel: a blend's second thread has its fill's settings, no border of its own.
+      const fills = d.objects.filter((o) => remembered(d.cur.p, o)?.fill && !remembered(d.cur.p, o)?.blendOf && geoUse(remembered(d.cur.p, o)) !== 'band');
       if (!fills.length) return false;
       const o = pick(r, fills);
       const m = remembered(d.cur.p, o)!;
       const old = m.line?.link;
       if (old && r() < 0.4) return restitchFill(d, o.index, m.fill!, new Set([old]), null);
-      const border = { type: pick(r, ['run', 'satin'] as const), width: 2, length: 2.5, tolerance: 0.15, color: r() < 0.4 ? undefined : pick(r, COLORS), link: old ?? `l${Math.floor(r() * 1e9).toString(36)}` };
+      const id = () => `l${Math.floor(r() * 1e9).toString(36)}`;
+      const type = pick(r, ['run', 'satin'] as const);
+      // What a line can do, a border can too: echo copies (some in threads of their own), a shadow, a fringe.
+      const echo = r() < 0.3 ? { side: pick(r, ['out', 'in', 'both'] as const), count: 1 + Math.floor(r() * 2), gap: 2, ...(r() < 0.5 ? { colors: [pick(r, COLORS)], link: id() } : {}) } : undefined;
+      const shadow = r() < 0.25 ? { color: pick(r, COLORS), link: id(), angle: 45, dist: 1.1 } : undefined;
+      const fringe = type === 'satin' && r() < 0.3 ? { fringe: 0.6, ...(r() < 0.5 ? { fringeSide: pick(r, ['left', 'right'] as const) } : {}) } : {};
+      const border = { type, width: 2, length: 2.5, tolerance: 0.15, color: r() < 0.4 ? undefined : pick(r, COLORS), link: old ?? id(), ...(echo ? { echo } : {}), ...(shadow ? { shadow } : {}), ...fringe };
       return restitchFill(d, o.index, m.fill!, new Set(), border);
     },
   },
@@ -787,6 +794,30 @@ export const SHAPE_OPS: Op[] = [
       return !!res && took(d, res, opened ? new Set(followerLinks(before)) : undefined);
     },
   },
+  {
+    // A vein in a leaf: an open path inside a fill, which the fill leaves unfilled and its border runs along.
+    name: 'add open path',
+    run: (d, r) => {
+      const p = d.cur.p;
+      const kinds = stitchKinds(p);
+      const objs = sewObjects(p, kinds);
+      const can = objs.filter((o) => {
+        const m = remembered(p, o);
+        return !!areaOf(m) && !!m!.fill && !m!.piece && !m!.free;
+      });
+      if (!can.length) return false;
+      const o = pick(r, can);
+      const geo = areaOf(remembered(p, o))!;
+      const b = boundsOf(geo);
+      if (!b) return false;
+      const at = (u: number, v: number): [number, number] => [b.minX + (b.maxX - b.minX) * u, b.minY + (b.maxY - b.minY) * v];
+      const a = at(between(r, 0.3, 0.45), between(r, 0.3, 0.7));
+      const z = at(between(r, 0.55, 0.7), between(r, 0.3, 0.7));
+      const vein = { closed: false, nodes: [a, z].map((q) => ({ p: q, a: q, b: q, smooth: false })) };
+      const res = reshapeObject(p, objs, o, kinds, { ...geo, paths: [...geo.paths, vein] }, T);
+      return !!res && took(d, res);
+    },
+  },
 ];
 
 export const LINE_OPS: Op[] = [
@@ -847,6 +878,8 @@ export const LINE_OPS: Op[] = [
         if (border) {
           delete border.color;
           delete border.link;
+          // A fringe's side is the drawn line's or the border's (inside, outside): it goes on the way.
+          delete border.fringeSide;
         }
         return sortedJson({ fill: x.fill, ...(border ? { border } : {}) });
       };
@@ -947,6 +980,21 @@ export function checkBorders(p: Pattern): void {
   const alone = (m: NonNullable<(typeof mem)[number]>) => !m.piece || mem.filter((x) => x?.piece === m.piece && x?.fill).length === 1;
   const hidden = (m: NonNullable<(typeof mem)[number]>) => alone(m) && !!m.region && borderStitches(m.region, m.line!, [0, 0], wholeOf(m.region, m)).length === 0;
   for (const [link, k] of fills) if (!borders.has(link) && !hidden(mem[k]!)) problems.push(`fill ${k} lost its border`);
+  // A fill's open paths (a vein in a leaf): its border runs along them, where nothing lies on top.
+  for (const [link, k] of fills) {
+    const m = mem[k]!;
+    const open = alone(m) ? openOf(m) : null;
+    const at = borders.get(link);
+    if (!open || at === undefined || mem[at]?.read) continue;
+    if (mem[at]!.along !== formKey(open)) problems.push(`border ${at} not sewn along the open paths of fill ${k}`);
+    if (m.knockout) continue;
+    const sewn: [number, number][] = [];
+    for (let i = objs[at].first; i <= objs[at].last; i++) if (p.cmd[i] === STITCH) sewn.push([p.x[i] / 10, p.y[i] / 10]);
+    for (const path of open.paths) {
+      const far = flatten(path).filter((_, j) => j % 10 === 5).some((q) => !sewn.some((s) => Math.hypot(s[0] - q[0], s[1] - q[1]) < 1.5 + (m.line!.width ?? 0)));
+      if (far) problems.push(`border ${at} misses an open path of fill ${k}`);
+    }
+  }
   expect(problems.join('; '), 'border links').toBe('');
 }
 
@@ -1048,8 +1096,9 @@ export function checkEchoes(p: Pattern): void {
   };
   for (const o of sewObjects(p)) {
     const m = remembered(p, o);
-    // Loosed from its curve (changed by hand), a line keeps the stitches it was given instead.
-    if (!lineGeoOf(m) || !m!.line || m!.free || (!m!.line.echo && !((m!.line.repeat ?? 1) > 1))) continue;
+    // Loosed from its curve (changed by hand), a line keeps the stitches it was given instead; so
+    // does a shadow or echo object changed by hand (it is sewn anew only when its line changes).
+    if (!lineGeoOf(m) || !m!.line || m!.free || (partOf(m) && m!.hand) || (!m!.line.echo && !((m!.line.repeat ?? 1) > 1))) continue;
     const fresh = lineStitches(m!.geo!, m!.line).flat();
     const sewn: [number, number][] = [];
     for (let i = o.first; i <= o.last; i++) if (p.cmd[i] === STITCH) sewn.push([p.x[i] / 10, p.y[i] / 10]);
@@ -1069,9 +1118,11 @@ export function checkLineParts(p: Pattern): void {
   const mem = objs.map((o) => remembered(p, o));
   const problems: string[] = [];
   const want = new Map<string, { line: number; part: LinePart }>();
-  mem.forEach((m, k) => {
-    if (!lineGeoOf(m) || !m!.line || partOf(m)) return;
-    for (const part of lineParts(m!)) {
+  // A line's parts, and those of a fill's border (a border can do what a line can).
+  const { holds, partsOf } = partHolders(mem);
+  mem.forEach((_, k) => {
+    if (!holds(k)) return;
+    for (const part of partsOf(k)) {
       if (want.has(part.link)) problems.push(`lines ${want.get(part.link)!.line} and ${k} share part ${part.link}`);
       want.set(part.link, { line: k, part });
     }
