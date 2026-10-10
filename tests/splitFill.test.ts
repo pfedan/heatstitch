@@ -171,11 +171,14 @@ describe('split a fill', () => {
 });
 
 /** Object `o` with new fill settings, taken over as the app's panel does (applyRestitched). */
-function withFill(p: Pattern, o: number, change: Partial<FillSettings>): Pattern {
+function withFill(p: Pattern, o: number, settings: Partial<FillSettings> & { border?: BorderSettings }): Pattern {
   const kinds = stitchKinds(p);
   const objs = sewObjects(p, kinds);
-  const drop = new Set([remembered(p, objs[o])?.fill?.border?.link ?? ''].filter(Boolean));
-  const r = restitch(p, objs, [o], { kind: 'fill', s: { ...remembered(p, objs[o])!.fill!, ...change } }, kinds, T);
+  const drop = new Set([remembered(p, objs[o])?.line?.link ?? ''].filter(Boolean));
+  // The border beside the fill: as given (none when given as undefined), else the one it has.
+  const { border, ...change } = settings;
+  const line = 'border' in settings ? (border ?? null) : undefined;
+  const r = restitch(p, objs, [o], { kind: 'fill', s: { ...remembered(p, objs[o])!.fill!, ...change }, line }, kinds, T);
   r.starts.forEach((a, k) => rememberObjects(r.pattern, [a], r.ends[k]));
   const now = sewObjects(r.pattern);
   const edited = now.filter((x) => {
@@ -229,12 +232,12 @@ describe('the border of a fill cut apart', () => {
     const [a, b] = parts.map((k) => mem[k]!);
     expect(a.piece).toBeTruthy();
     expect(b.piece).toBe(a.piece);
-    expect(a.fill!.border).toEqual(b.fill!.border);
-    expect(a.fill!.border!.link).toBeTruthy();
+    expect(a.line).toEqual(b.line);
+    expect(a.line!.link).toBeTruthy();
     // One border object, in its thread, after the parts.
     const borders = borderObjects(p);
     expect(borders).toHaveLength(1);
-    expect(mem[borders[0]]!.outline).toBe(a.fill!.border!.link);
+    expect(mem[borders[0]]!.outline).toBe(a.line!.link);
     expect(borders[0]).toBeGreaterThan(parts[1]);
     expect(sewObjects(p)[borders[0]].color).toEqual(dark);
     // Around the whole rectangle (all four sides), not along the cut at x = 15.
@@ -254,15 +257,15 @@ describe('the border of a fill cut apart', () => {
 
   it('changes for every part when one part is given another border, and goes when one part has none', () => {
     const { p, parts } = borderedHalves();
-    const q = withFill(p, parts[1], { border: { ...SATIN, color: dark, link: memOf(p)[parts[1]]!.fill!.border!.link } });
+    const q = withFill(p, parts[1], { border: { ...SATIN, color: dark, link: memOf(p)[parts[1]]!.line!.link } });
     const mem = memOf(q);
-    expect(mem[parts[0]]!.fill!.border!.type).toBe('satin');
-    expect(mem[parts[1]]!.fill!.border!.type).toBe('satin');
+    expect(mem[parts[0]]!.line!.type).toBe('satin');
+    expect(mem[parts[1]]!.line!.type).toBe('satin');
     expect(borderObjects(q)).toHaveLength(1);
     expect(mem[borderObjects(q)[0]]!.border!.type).toBe('satin');
     const off = withFill(q, parts[0], { border: undefined });
     expect(borderObjects(off)).toHaveLength(0);
-    expect(memOf(off).some((m) => m?.fill?.border)).toBe(false);
+    expect(memOf(off).some((m) => m?.line)).toBe(false);
     // On again at the other part: around both again.
     const on = withFill(off, parts[1], { border: { ...RUN } });
     expect(borderObjects(on)).toHaveLength(1);
@@ -293,8 +296,8 @@ describe('the border of a fill cut apart', () => {
     expect(c0.piece).toBeTruthy();
     expect(c1.piece).toBe(c0.piece);
     expect(c0.piece).not.toBe(mem[parts[0]]!.piece);
-    expect(c0.fill!.border!.link).toBe(c1.fill!.border!.link);
-    expect(c0.fill!.border!.link).not.toBe(mem[parts[0]]!.fill!.border!.link);
+    expect(c0.line!.link).toBe(c1.line!.link);
+    expect(c0.line!.link).not.toBe(mem[parts[0]]!.line!.link);
     expect(borderObjects(d.pattern)).toHaveLength(2);
     // One part copied alone: a fill with a border of its own.
     const one = duplicateObjects(p, [parts[1]], T)!;
@@ -316,9 +319,9 @@ describe('the border of a fill cut apart', () => {
 
   it('runs one line along the cut too when asked, and none again when not', () => {
     const { p, parts } = borderedHalves();
-    const link = memOf(p)[parts[0]]!.fill!.border!.link;
+    const link = memOf(p)[parts[0]]!.line!.link;
     const q = withFill(p, parts[1], { border: { ...RUN, color: dark, link, seams: true } });
-    expect(memOf(q)[parts[0]]!.fill!.border!.seams).toBe(true);
+    expect(memOf(q)[parts[0]]!.line!.seams).toBe(true);
     expect(borderObjects(q)).toHaveLength(1);
     const along = stitchesOf(q, borderObjects(q)[0]).filter(([x, y]) => Math.abs(x - 15) < 1 && y > 3 && y < 17);
     expect(along.length).toBeGreaterThan(4);

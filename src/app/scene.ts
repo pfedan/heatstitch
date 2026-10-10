@@ -2,7 +2,7 @@ import type { FileList } from '../ui/fileList';
 import type { TraceScene } from '../render/trace';
 import type { FlatArea } from '../render/shapeOverlay';
 import type { FlowScene } from '../render/scene';
-import type { Form } from '../shape/path';
+import { flatten, type Form } from '../shape/path';
 import type { FrameTool } from '../ui/frameTool';
 import type { Highlight, StitchInfo } from '../ui/stitchPanel';
 import type { LayersPanel } from '../ui/layersPanel';
@@ -16,14 +16,14 @@ import type { ShapeTool } from '../ui/shapeTool';
 import { borderLines, type PathStitch } from '../model/along';
 import { echoCopyLines, nearestCopy } from '../model/line';
 import { borderRanges } from '../model/border';
-import { remembered, underlayRanges, type RestitchResult, analyze, restitchedPieces } from '../model/restitch';
+import { borderOf, remembered, underlayRanges, type RestitchResult, analyze, restitchedPieces } from '../model/restitch';
 import { sewObjects, overlaps, type SewObject } from '../model/objects';
 import { stitchNumbers, stitchKinds, colorBlocks, markers as findMarkers, transitions, sewingSeconds, recordOfStitch, carriedJumps } from '../model/sequence';
 import { type Pattern, TRIM, COLOR_CHANGE, STITCH, type ThreadColor } from '../model/pattern';
 import { type StitchStyle, stitchColors, stitchAlpha } from '../render/flow';
 import { ui } from './state';
 import { wholeOf } from '../model/knockout';
-import { guessArea, lineGeoOf, satinOutline } from '../model/geo';
+import { guessArea, lineGeoOf, openOf, satinOutline } from '../model/geo';
 
 /** What bindScene needs from the rest of the app. */
 export interface SceneApp {
@@ -236,9 +236,11 @@ export function bindScene(app: SceneApp) {
       const region = m?.region ?? analyze(p, obj, q.kinds).fill;
       if (!region) continue;
       // While a change is previewed, the border where it would go.
-      const b = r ? r.memory[0]?.fill?.border : m?.fill?.border;
+      const b = r ? borderOf(r.memory[0]) : borderOf(m);
       // Without the edges shapes on top cut: no border goes there.
       out.push(...borderLines(region, b?.offset ?? 0, wholeOf(region, m)).map((l) => l.line));
+      // Along its open paths too.
+      for (const path of openOf(m)?.paths ?? []) out.push(flatten(path));
     }
     contourCache = { p, key: ui.selectionKey, r, lines: out.length ? out : null };
     return contourCache.lines;

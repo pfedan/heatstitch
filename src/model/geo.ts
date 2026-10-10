@@ -1,5 +1,5 @@
 import type { Pt } from '../digitize/skeleton';
-import { flatten, type Form, type Path } from '../shape/path';
+import { flatten, storeForm, type Form, type Path } from '../shape/path';
 import { FIT_TOLERANCE, READ_TOLERANCE, vectorize } from '../shape/vectorize';
 import type { SewObject } from './objects';
 import type { Pattern } from './pattern';
@@ -198,6 +198,28 @@ export function fitsOf(geo: Form | null | undefined): Fit {
   const closed = paths.filter((x) => x.closed && pathArea(x) > 1e-3);
   const fill = closed.length > 0;
   return { fill, line: paths.length > 0, openBeside: fill ? paths.filter((x) => !x.closed).length : 0 };
+}
+
+/**
+ * The open paths of a filled form, which its fill leaves out and its border sews along (see
+ * openStitches); null when it has none, for a band (its paths are the middle of its area) and
+ * without a form.
+ */
+export function openOf(m: Remembered | null | undefined): Form | null {
+  if (geoUse(m) !== 'area') return null;
+  const paths = m!.geo!.paths.filter((x) => !x.closed && x.nodes.length >= 2);
+  return paths.length ? { paths } : null;
+}
+
+/** A name for a form, the same for the same paths (FNV-1a over its stored numbers). */
+export function formKey(f: Form): string {
+  let h = 0x811c9dc5;
+  const text = JSON.stringify(storeForm(f));
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(36) + text.length.toString(36);
 }
 
 /** Whether form `geo` allows stitch type `s` (see Fit). */

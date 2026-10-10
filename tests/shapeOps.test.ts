@@ -4,7 +4,7 @@ import { addShape } from '../src/model/addShape';
 import { wholeArea } from '../src/model/knockout';
 import { sewObjects } from '../src/model/objects';
 import type { Pattern } from '../src/model/pattern';
-import { analyze, measureFill, objectKey, remember, remembered, restitch, type FillSettings, type RestitchResult } from '../src/model/restitch';
+import { analyze, measureFill, objectKey, remember, remembered, restitch, type BorderSettings, type FillSettings, type RestitchResult } from '../src/model/restitch';
 import { coversOver } from '../src/model/covers';
 import { STITCH } from '../src/model/pattern';
 import { rememberObjects } from '../src/model/objects';
@@ -138,8 +138,8 @@ describe('duplicating', () => {
     const p0 = addShape(empty, { form: parsePath(rectPath(0, 0, 20, 20, 0, 0), ID), kind: 'fill' }, red, null, options)!.pattern;
     const kinds = stitchKinds(p0);
     const objs = sewObjects(p0, kinds);
-    const s = { ...measureFill(p0, analyze(p0, objs[0], kinds)), border: { type: 'run' as const, width: 2, color: blue, link: 'b1' } };
-    const r = restitch(p0, objs, [0], { kind: 'fill', s }, kinds, options.trimMm);
+    const s = measureFill(p0, analyze(p0, objs[0], kinds));
+    const r = restitch(p0, objs, [0], { kind: 'fill', s, line: { type: 'run', width: 2, color: blue, link: 'b1' } }, kinds, options.trimMm);
     rememberObjects(r.pattern, [r.starts[0]], r.ends[0]);
     remember(r.pattern, sewObjects(r.pattern)[0], r.memory[0]);
     const p = syncBorders(r.pattern, options.trimMm);
@@ -149,8 +149,8 @@ describe('duplicating', () => {
     const after = sewObjects(d.pattern);
     expect(after).toHaveLength(4);
     expect(d.pattern.colors).toHaveLength(2);
-    const fills = after.filter((o) => remembered(d.pattern, o)?.fill?.border?.link);
-    const links = fills.map((o) => remembered(d.pattern, o)!.fill!.border!.link);
+    const fills = after.filter((o) => remembered(d.pattern, o)?.line?.link);
+    const links = fills.map((o) => remembered(d.pattern, o)!.line!.link);
     expect(new Set(links).size).toBe(2);
     // Each fill has its border, the copy's beside the copy.
     for (const [k, link] of links.entries()) {
@@ -168,10 +168,11 @@ describe('duplicating', () => {
 });
 
 /** A fill of `p` (object `o`) sewn anew with settings `s`, as the stitch panel does. */
-function sewWith(p: Pattern, o: number, s: FillSettings, drop: string[] = []): Pattern {
+function sewWith(p: Pattern, o: number, settings: FillSettings & { border?: BorderSettings }, drop: string[] = []): Pattern {
   const kinds = stitchKinds(p);
   const objs = sewObjects(p, kinds);
-  const r = restitch(p, objs, [o], { kind: 'fill', s }, kinds, options.trimMm);
+  const { border, ...s } = settings;
+  const r = restitch(p, objs, [o], { kind: 'fill', s, line: border ?? null }, kinds, options.trimMm);
   expect(r.starts).toHaveLength(1);
   rememberObjects(r.pattern, [r.starts[0]], r.ends[0]);
   const at = sewObjects(r.pattern).find((x) => {
@@ -241,7 +242,7 @@ describe('duplicating several, and in place', () => {
     const objs = sewObjects(d.pattern);
     const keys = objs.map((o) => objectKey(d.pattern, o));
     expect(new Set(keys).size).toBe(keys.length);
-    const links = objs.flatMap((o) => remembered(d.pattern, o)?.fill?.border?.link ?? []);
+    const links = objs.flatMap((o) => remembered(d.pattern, o)?.line?.link ?? []);
     expect(new Set(links).size).toBe(2);
     for (const l of links) expect(objs.filter((o) => remembered(d.pattern, o)?.outline === l)).toHaveLength(1);
   });
@@ -306,7 +307,7 @@ describe('empty fill: a line along the form', () => {
     const filled = take(lineToFill(p, 0, fill, options.trimMm));
     const f = remembered(filled, sewObjects(filled)[0])!;
     expect(f.fill?.pattern).toBe('contour');
-    expect(f.fill?.border).toMatchObject({ type: 'run', width: 2 });
+    expect(f.line).toMatchObject({ type: 'run', width: 2 });
     expect(f.geo).toBe(form);
     expect(sewObjects(filled)[0].stitches).toBeGreaterThan(before / 2);
   });

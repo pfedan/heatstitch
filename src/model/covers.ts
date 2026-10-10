@@ -4,7 +4,7 @@ import { knockOut } from '../shape/rasterize';
 import { wholeArea } from './knockout';
 import type { SewObject } from './objects';
 import type { Pattern } from './pattern';
-import { columnOf, keepShape, objectKey, railsArea, remembered, type Remembered } from './restitch';
+import { borderOf, columnOf, keepShape, objectKey, railsArea, remembered, type Remembered } from './restitch';
 import { stitchKinds } from './sequence';
 import { areaOf } from './geo';
 
@@ -70,8 +70,9 @@ export function coversFrom(p: Pattern, later: SewObject[], o: SewObject, pxMm: n
   const kinds = () => (k ??= stitchKinds(p));
   const reach = reachOf(p, o);
   // Its own border and second blend thread lie on it on purpose: they leave nothing out of it.
-  const own = remembered(p, o)?.fill;
-  const mine = (m: Remembered | undefined) => (!!m?.outline && m.outline === own?.border?.link) || (!!m?.blendOf && m.blendOf === own?.deco?.blend?.link);
+  const known = remembered(p, o);
+  const own = known?.fill;
+  const mine = (m: Remembered | undefined) => (!!m?.outline && m.outline === borderOf(known)?.link) || (!!m?.blendOf && m.blendOf === own?.deco?.blend?.link);
   for (const x of later) {
     if (!overlapsBox(reachOf(p, x), reach)) continue;
     if (mine(remembered(p, x))) continue;

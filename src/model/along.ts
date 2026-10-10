@@ -1,5 +1,6 @@
 import { SATIN_UNDER_MIN } from '../material/rules';
-import { borderLoops, borderRails, borderRun, keptLines, keptRails, lineRails, orderLoops, type BorderType } from '../digitize/border';
+import { borderLoops, borderRails, borderRun, keptLines, keptOpen, keptRails, lineRails, orderLoops, type BorderType } from '../digitize/border';
+import { flatten, type Form } from '../shape/path';
 import type { LineEcho } from '../digitize/echo';
 import type { LineShadow } from './shadow';
 import { sample, type Region } from '../digitize/region';
@@ -266,6 +267,42 @@ export function borderStitches(r: Region, s: PathStitch, from: Pt, whole?: Regio
     loops.flatMap((l) => (keep ? keptRails(r, l, s.width, off, keep) : [borderRails(r, l, s.width, off)]).map((b) => onEdge(r, b, s))),
     satinOf(s),
   );
+}
+
+/**
+ * The stitches of a fill's border along the open paths of its form (the fill leaves them unfilled,
+ * see geo.ts), each from the end nearest the needle, starting near `from`. Where shapes on top
+ * cover the fill (`r` the area sewn, `whole` the area before they were left out) they are left
+ * out, as the edge is there. Its offset is the edge's: an open path has no inside or outside.
+ */
+export function openStitches(open: Form, s: PathStitch, from: Pt, r: Region, whole?: Region | null): Pt[][] {
+  const st: PathStitch = { ...s, offset: undefined };
+  const covered = whole ? (q: Pt) => sample(whole, whole.sdfBase, q[0], q[1]) < 0 && sample(r, r.sdfBase, q[0], q[1]) > CUT_EDGE : null;
+  const lines = open.paths.filter((p) => !p.closed).flatMap((p) => {
+    const pts = flatten(p);
+    return pts.length < 2 ? [] : covered ? keptOpen(pts, (q) => !covered(q)) : [pts];
+  });
+  const out: Pt[][] = [];
+  let at = from;
+  const todo = lines.slice();
+  while (todo.length) {
+    // The nearest end next.
+    let best = 0;
+    let flip = false;
+    let bestD = Infinity;
+    todo.forEach((l, k) => {
+      const a = Math.hypot(l[0][0] - at[0], l[0][1] - at[1]);
+      const b = Math.hypot(l[l.length - 1][0] - at[0], l[l.length - 1][1] - at[1]);
+      if (a < bestD) [bestD, best, flip] = [a, k, false];
+      if (b < bestD) [bestD, best, flip] = [b, k, true];
+    });
+    const [line] = todo.splice(best, 1);
+    const runs = sewAlong(flip ? line.slice().reverse() : line, false, st, at);
+    out.push(...runs);
+    const last = runs[runs.length - 1];
+    if (last) at = last[last.length - 1];
+  }
+  return out;
 }
 
 /**

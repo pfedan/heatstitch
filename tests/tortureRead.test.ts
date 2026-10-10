@@ -31,7 +31,7 @@ describe('borders read from a file', () => {
       const fill = objs.filter((o) => o.kind === 'fill')[k];
       const found = readBorder(p, objs, fill, kinds);
       expect(found, `letter ${k} has its border`).not.toBeNull();
-      restitchFill(d, fill.index, { ...measureFill(p, analyze(p, fill, kinds)), border: { ...found!.border, link: `read${k}` } }, new Set());
+      restitchFill(d, fill.index, measureFill(p, analyze(p, fill, kinds)), new Set(), { ...found!.border, link: `read${k}` });
       // Invariant: still eight objects, each letter with its one border, the satin it had.
       expect(d.objects, 'no second border').toHaveLength(8);
       checkBorders(d.cur.p);

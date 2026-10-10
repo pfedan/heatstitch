@@ -1,7 +1,7 @@
 import { SATIN_SPLIT_MAX } from '../material/rules';
 import { formatNumber, onLangChange, t, type Key } from '../i18n';
 import type { ObjectKind } from '../model/objects';
-import { CURVED_GRADIENT, DECO_DEFAULTS, isOpenPattern, OPEN_SIZE, OPEN_SIZE_RANGE, SATIN_SPLIT, UNDERLAYS, type DecoSettings, type FillPattern, type FringeSide, type FillSettings, type OpenPattern, type RunSettings, type SatinSettings, type SatinType, type Settings, type ShapeTrust, type Fixed } from '../model/restitch';
+import { CURVED_GRADIENT, DECO_DEFAULTS, isOpenPattern, OPEN_SIZE, OPEN_SIZE_RANGE, SATIN_SPLIT, UNDERLAYS, type BorderSettings, type DecoSettings, type FillPattern, type FringeSide, type FillSettings, type OpenPattern, type RunSettings, type SatinSettings, type SatinType, type Settings, type ShapeTrust, type Fixed } from '../model/restitch';
 import { fixText } from './fixText';
 import type { UnderlayKind } from '../digitize/satin';
 import type { ShapeOutline } from '../render/scene';
@@ -49,8 +49,8 @@ const sameColor = (a: ThreadColor, b: ThreadColor) => a.r === b.r && a.g === b.g
 export interface StitchInfo {
   /** Changes when the user selects something else, so the values are measured again. */
   key: number;
-  /** Kinds among the selected objects, and what the first object of each kind has now. */
-  measured: Partial<{ fill: FillSettings; satin: SatinSettings; run: RunSettings }>;
+  /** Kinds among the selected objects, and what the first object of each kind has now (the first fill's border beside its fill). */
+  measured: Partial<{ fill: FillSettings; border: BorderSettings; satin: SatinSettings; run: RunSettings }>;
   /** Recommended fill spacing for the material (mm). */
   recommended: [number, number];
   /** Values chosen automatically for the material: what "Nach Stoff" gives. */
@@ -117,7 +117,7 @@ export interface StitchInfo {
    * or a shadow or echo copies following their line. `of`: the settings of the fill or line it
    * follows, set here as they are there (not for a blend: its settings are all of its fill's).
    */
-  outline?: { fill: number | null; blend?: boolean; shadow?: boolean; echo?: boolean; of?: { fill?: FillSettings; line?: PathStitch; closed?: boolean; color: ThreadColor } };
+  outline?: { fill: number | null; blend?: boolean; shadow?: boolean; echo?: boolean; of?: { fill?: FillSettings; border?: BorderSettings; line?: PathStitch; closed?: boolean; color: ThreadColor } };
   /** The area of the first selected fill, the same while its shape stays: what it was before is kept for it. */
   area?: object;
   /** The one selected fill can blend into a second thread (see blendObject). */
@@ -290,7 +290,7 @@ export class StitchPanel {
   private kind: ObjectKind = 'fill';
   /** Settings of the one selected line while they are changed (see StitchInfo.path). */
   private lineDraft: PathStitch | null = null;
-  private draft: Partial<{ fill: FillSettings; satin: SatinSettings; run: RunSettings }> = {};
+  private draft: StitchInfo['measured'] = {};
   private info: StitchInfo | null = null;
   private frame = 0;
   /** Max. deviation chosen last: the next objects start with it (they cannot be measured for it). */
@@ -370,7 +370,7 @@ export class StitchPanel {
     // A border, shadow or echo: the settings changed are its fill's or line's.
     const of = info.outline?.of;
     if (of) {
-      this.draft = of.fill ? { fill: structuredClone(of.fill) } : {};
+      this.draft = of.fill ? { fill: structuredClone(of.fill), ...(of.border ? { border: structuredClone(of.border) } : {}) } : {};
       this.lineDraft = of.line ? structuredClone(of.line) : null;
       if (of.fill) this.kind = 'fill';
     }
@@ -458,7 +458,7 @@ export class StitchPanel {
   }
 
   private settings(): Settings {
-    if (this.kind === 'fill') return { kind: 'fill', s: { ...this.draft.fill! } };
+    if (this.kind === 'fill') return { kind: 'fill', s: { ...this.draft.fill! }, line: this.draft.border ? structuredClone(this.draft.border) : null };
     if (this.kind === 'satin') return { kind: 'satin', s: { ...this.draft.satin! } };
     return { kind: 'run', s: { ...this.draft.run! } };
   }
@@ -610,11 +610,7 @@ export class StitchPanel {
     if (o.fill !== null) actions.append(this.button(o.shadow || o.echo ? 'stitch.shadowOf.line' : 'stitch.outline.fill', o.shadow || o.echo ? 'stitch.shadowOf.line.hint' : 'stitch.outline.fill.hint', () => this.hooks.outline('fill')));
     actions.append(this.button('stitch.outline.detach', `${which}.detach.hint` as Key, () => this.hooks.outline('detach')));
     const top = h('div', { class: 'follower-head' }, head, actions);
-    if (of.fill) {
-      const s = this.draft.fill!;
-      const border = s.border ? t(`stitch.border.${isRunType(s.border.type) ? 'run' : s.border.type}` as Key) : t('stitches.sec.off');
-      return [top, this.borderSection(s, border)];
-    }
+    if (of.fill) return [top, this.borderSection()];
     const st = this.lineDraft!;
     const fx = o.shadow ? this.shadowGroup(st, of.color) : this.echoGroup(st, !!of.closed, of.color);
     const on = o.shadow ? !!st.shadow : !!st.echo;
@@ -643,11 +639,10 @@ export class StitchPanel {
     if (!info.asLine && info.draw) tools.push(this.toolRow('stitch.direction', 'stitches.tool.toSatin', 'stitch.draw.hint', !!info.draw.tool, info.draw.single ? null : t('stitch.direction.single')));
     if (info.knockout) tools.push(this.knockoutSwitch(info.knockout));
     tools.push(this.handRow(), this.lockSwitch(info.lock), info.free?.can ? this.looseRow() : null, this.originalRow(info));
-    const border = s.border ? t(`stitch.border.${isRunType(s.border.type) ? 'run' : s.border.type}` as Key) : t('stitches.sec.off');
     return [
       this.sec('kind', 'stitches.sec.kind', [this.kindSwitch(info), this.patterns(s)], t(`stitch.pattern.${s.pattern}` as Key)),
       this.sec('look', 'stitches.sec.look', look),
-      this.borderSection(s, border),
+      this.borderSection(),
       hold.some(Boolean) ? this.sec('hold', 'stitches.sec.hold', hold) : null,
       this.sec('tools', 'stitches.sec.tools', tools),
     ].filter((x): x is HTMLDetailsElement => !!x);
@@ -1956,13 +1951,14 @@ export class StitchPanel {
     }, true);
   }
 
-  /** A fill's border, as a group of its own: what it is, its stitches, its thread. */
-  private borderSection(s: FillSettings, extra: string): HTMLElement {
+  /** A fill's border (the line beside its fill), as a group of its own: what it is, its stitches, its thread. */
+  private borderSection(): HTMLElement {
+    const d = this.draft;
     const parts = this.pathStitch(
-      s.border,
+      d.border,
       (b) => {
-        if (b) s.border = Object.assign(s.border ?? b, b);
-        else delete s.border;
+        if (b) d.border = Object.assign(d.border ?? b, b);
+        else delete d.border;
       },
       true,
       true,
@@ -1971,15 +1967,16 @@ export class StitchPanel {
     const pieces = this.info!.pieces ?? 0;
     const shared = pieces > 1 ? h('p', { class: 'muted small' }, t('stitch.border.pieces', { n: pieces })) : null;
     const seams =
-      shared && s.border
-        ? this.check('stitch.border.seams', 'stitch.border.seams.hint', () => !!s.border?.seams, (v) => {
-            if (!s.border) return;
-            if (v) s.border.seams = true;
-            else delete s.border.seams;
+      shared && d.border
+        ? this.check('stitch.border.seams', 'stitch.border.seams.hint', () => !!d.border?.seams, (v) => {
+            if (!d.border) return;
+            if (v) d.border.seams = true;
+            else delete d.border.seams;
           })
         : null;
     pictured(parts.type, BORDERS, { run: 'border-run', satin: 'border-satin', zigzag: 'border-zigzag', e: 'border-e', motif: 'border-motif' }, 'stitch.border.intro');
-    const box = this.sec('border', 'stitches.sec.border', [shared, seams, parts.type, ...parts.look, ...parts.hold, s.border ? this.borderThread(s.border) : null], extra);
+    const extra = d.border ? t(`stitch.border.${isRunType(d.border.type) ? 'run' : d.border.type}` as Key) : t('stitches.sec.off');
+    const box = this.sec('border', 'stitches.sec.border', [shared, seams, parts.type, ...parts.look, ...parts.hold, d.border ? this.borderThread(d.border) : null], extra);
     return this.lights(box, 'border');
   }
 
@@ -1987,7 +1984,7 @@ export class StitchPanel {
    * The border's thread: the fill's, or one of its own (then it is sewn as an object of its own in
    * that thread, right after the fill's color, and follows the fill's shape).
    */
-  private borderThread(b: NonNullable<FillSettings['border']>): HTMLElement {
+  private borderThread(b: BorderSettings): HTMLElement {
     const fill = this.info!.color;
     const now = b.color ?? fill;
     const btn = h('button', { type: 'button', class: 'border-thread', title: t('stitch.borderThread.hint') + (b.color ? ` ${t('stitch.borderThread.own')}` : '') });

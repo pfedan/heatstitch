@@ -213,6 +213,23 @@ export function keptLines(loop: Pt[], keep: (q: Pt) => boolean): { line: Pt[]; c
     .filter((l) => l.closed || lengthOf(l.line) >= MIN_LOOP);
 }
 
+/** The pieces of an open line where `keep` holds (checked every 0.2 mm): the whole line when it holds everywhere. */
+export function keptOpen(line: Pt[], keep: (q: Pt) => boolean): Pt[][] {
+  const pts = resample(line, 0.2);
+  if (pts.every(keep)) return [line];
+  const out: Pt[][] = [];
+  let piece: Pt[] = [];
+  for (const q of pts) {
+    if (keep(q)) piece.push(q);
+    else {
+      if (piece.length > 1 && lengthOf(piece) >= MIN_LOOP) out.push(piece);
+      piece = [];
+    }
+  }
+  if (piece.length > 1 && lengthOf(piece) >= MIN_LOOP) out.push(piece);
+  return out;
+}
+
 /** borderRails cut where `keep` does not hold at the line they are centered on: one rails pair per piece. */
 export function keptRails(r: Region, loop: Pt[], w: number, level: number, keep: (q: Pt) => boolean): { left: Pt[]; right: Pt[] }[] {
   const { left, right, center } = railsAlong(r, loop, w, level);

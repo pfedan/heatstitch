@@ -16,7 +16,7 @@ import { canSplit, splitFill } from '../../src/model/splitFill';
 import { wholeArea, wholeOf } from '../../src/model/knockout';
 import { borderStitches } from '../../src/model/along';
 import type { Region } from '../../src/digitize/region';
-import { backToVersion, edgeAlong, keepVersion, objectKey, remember, remembered, rememberedIn, restitch, restoreRemembered, DECO_PATTERNS, OPEN_PATTERNS, type FillSettings, type Rails, type StoredObjects } from '../../src/model/restitch';
+import { backToVersion, edgeAlong, keepVersion, objectKey, remember, remembered, rememberedIn, restitch, restoreRemembered, DECO_PATTERNS, OPEN_PATTERNS, type BorderSettings, type FillSettings, type Rails, type Remembered, type StoredObjects } from '../../src/model/restitch';
 import { reorder } from '../../src/model/order';
 import { stitchKinds } from '../../src/model/sequence';
 import { deleteObjects, duplicateObject, duplicateObjects, mirrorMatrix, recolorObjects, subtractTop } from '../../src/model/shapeOps';
@@ -152,11 +152,12 @@ export function transform(d: Doc, sel: number[], m: Mat): boolean {
 }
 
 /** The app's applyRestitched for one fill with new settings (here: its border). */
-export function restitchFill(d: Doc, o: number, s: FillSettings, drop: Set<string>): boolean {
+/** Fill `o` sewn anew with `s` and, when given, the border `line` beside it (null: none; not given: the one it has). */
+export function restitchFill(d: Doc, o: number, s: FillSettings, drop: Set<string>, line?: BorderSettings | null): boolean {
   const p = d.cur.p;
   const kinds = stitchKinds(p);
   const objs = sewObjects(p, kinds);
-  return took(d, restitch(p, objs, [o], { kind: 'fill', s }, kinds, T), drop);
+  return took(d, restitch(p, objs, [o], { kind: 'fill', s, line }, kinds, T), drop);
 }
 
 /** New stitches taken over as the app does: each object remembers what it is made of. */
@@ -566,13 +567,13 @@ export const OPS: Op[] = [
       if (s === 'whole') return false;
       expect(s, 'a fill cuts apart').toBeTruthy();
       const { pattern, parts } = s!;
-      const hadBorder = !!remembered(p, o)?.fill?.border;
+      const hadBorder = !!remembered(p, o)?.line;
       if (!hadBorder) expect(sewObjects(pattern).length, 'one object more per part').toBe(d.objects.length + parts.length - 1);
       // Invariant: the parts are one whole and keep the fill's border, one object around them all.
       const pm = parts.map((k) => remembered(pattern, sewObjects(pattern)[k]));
       expect(new Set(pm.map((m) => m?.piece)).size, 'parts are one whole').toBe(1);
       expect(pm[0]?.piece, 'parts are one whole').toBeTruthy();
-      expect(pm.every((m) => !!m?.fill?.border === hadBorder), 'parts keep the border').toBe(true);
+      expect(pm.every((m) => !!m?.line === hadBorder), 'parts keep the border').toBe(true);
       // Invariant: the parts cover the area as it was, no fabric along the cut.
       const kinds = stitchKinds(pattern);
       const objs = sewObjects(pattern, kinds);
@@ -591,7 +592,7 @@ export const OPS: Op[] = [
       const kinds = stitchKinds(p);
       // A fill with a border of its own is left out: what becomes of the border is another question.
       // Nor the second thread of a blend: it follows its fill (the kind switch is off for it).
-      const fills = d.objects.filter((o) => remembered(p, o)?.fill && !remembered(p, o)?.fill?.border && !remembered(p, o)?.kept?.satin && !remembered(p, o)?.outline && !remembered(p, o)?.blendOf);
+      const fills = d.objects.filter((o) => remembered(p, o)?.fill && !remembered(p, o)?.line && !remembered(p, o)?.kept?.satin && !remembered(p, o)?.outline && !remembered(p, o)?.blendOf);
       if (!fills.length) return false;
       const o = pick(r, fills);
       const area = wholeArea(guessArea(p, o, kinds)!);
@@ -637,11 +638,11 @@ export const OPS: Op[] = [
       const fills = d.objects.filter((o) => remembered(d.cur.p, o)?.fill && geoUse(remembered(d.cur.p, o)) !== 'band');
       if (!fills.length) return false;
       const o = pick(r, fills);
-      const fill = remembered(d.cur.p, o)!.fill!;
-      const old = fill.border?.link;
-      if (old && r() < 0.4) return restitchFill(d, o.index, { ...fill, border: undefined }, new Set([old]));
+      const m = remembered(d.cur.p, o)!;
+      const old = m.line?.link;
+      if (old && r() < 0.4) return restitchFill(d, o.index, m.fill!, new Set([old]), null);
       const border = { type: pick(r, ['run', 'satin'] as const), width: 2, length: 2.5, tolerance: 0.15, color: r() < 0.4 ? undefined : pick(r, COLORS), link: old ?? `l${Math.floor(r() * 1e9).toString(36)}` };
-      return restitchFill(d, o.index, { ...fill, border }, new Set());
+      return restitchFill(d, o.index, m.fill!, new Set(), border);
     },
   },
   {
@@ -840,16 +841,17 @@ export const LINE_OPS: Op[] = [
       const back = lineToFill(line.pattern, o.index, m.fill!, T);
       if (!back?.starts.length) return false;
       const n = back.memory[0];
-      const plain = (f: FillSettings) => {
-        const { border, ...rest } = structuredClone(f);
+      // The fill and the border beside it, without the border's thread and link (sewn as a line between).
+      const plain = (x: Remembered) => {
+        const border = x.line && structuredClone(x.line);
         if (border) {
           delete border.color;
           delete border.link;
         }
-        return sortedJson({ ...rest, ...(border ? { border } : {}) });
+        return sortedJson({ fill: x.fill, ...(border ? { border } : {}) });
       };
       expect(sortedJson(storeForm(n.geo!)), 'the form, switched there and back').toBe(sortedJson(storeForm(m.geo!)));
-      expect(plain(n.fill!), 'the fill, switched there and back').toBe(plain(m.fill!));
+      expect(plain(n), 'the fill and its border, switched there and back').toBe(plain(m));
       return took(d, back, line.drop);
     },
   },
@@ -863,7 +865,7 @@ export const LINE_OPS: Op[] = [
       });
       if (!fills.length) return false;
       const o = pick(r, fills);
-      const old = remembered(d.cur.p, o)!.fill!.border?.link;
+      const old = remembered(d.cur.p, o)!.line?.link;
       const res = fillToLine(d.cur.p, o.index, T);
       // As the app: a border in a thread of its own goes with the fill.
       return !!res && shapes(d, syncBorders(res.pattern, T, old ? new Set([old]) : undefined));
@@ -918,7 +920,7 @@ export function checkBorders(p: Pattern): void {
   const problems: string[] = [];
   const fills = new Map<string, number>();
   mem.forEach((m, k) => {
-    const b = m?.fill?.border;
+    const b = m?.line;
     if (!b?.link) return;
     const f = fills.get(b.link);
     if (f !== undefined && (!m!.piece || mem[f]!.piece !== m!.piece)) problems.push(`fills ${f} and ${k} share border link ${b.link}`);
@@ -929,7 +931,7 @@ export function checkBorders(p: Pattern): void {
     if (!m?.piece || !m.region || !m.fill) return;
     const f = pieces.get(m.piece);
     if (f === undefined) return void pieces.set(m.piece, k);
-    if (JSON.stringify(mem[f]!.fill!.border) !== JSON.stringify(m.fill.border)) problems.push(`parts ${f} and ${k} of one whole have other borders`);
+    if (JSON.stringify(mem[f]!.line) !== JSON.stringify(m.line)) problems.push(`parts ${f} and ${k} of one whole have other borders`);
   });
   const borders = new Map<string, number>();
   mem.forEach((m, k) => {
@@ -938,12 +940,12 @@ export function checkBorders(p: Pattern): void {
     borders.set(m.outline, k);
     const f = fills.get(m.outline);
     if (f === undefined) problems.push(`border ${k} has no fill`);
-    else if (!sameColor(objs[k].color, mem[f]!.fill!.border!.color ?? objs[f].color)) problems.push(`border ${k} not in its thread`);
+    else if (!sameColor(objs[k].color, mem[f]!.line!.color ?? objs[f].color)) problems.push(`border ${k} not in its thread`);
   });
   // Unless nothing of its edge shows (all of it under shapes on top).
   // (A part cut apart on its own, e.g. a copy of one, counts as a whole: its border can vanish too, set inward of a small part.)
   const alone = (m: NonNullable<(typeof mem)[number]>) => !m.piece || mem.filter((x) => x?.piece === m.piece && x?.fill).length === 1;
-  const hidden = (m: NonNullable<(typeof mem)[number]>) => alone(m) && !!m.region && borderStitches(m.region, m.fill!.border!, [0, 0], wholeOf(m.region, m)).length === 0;
+  const hidden = (m: NonNullable<(typeof mem)[number]>) => alone(m) && !!m.region && borderStitches(m.region, m.line!, [0, 0], wholeOf(m.region, m)).length === 0;
   for (const [link, k] of fills) if (!borders.has(link) && !hidden(mem[k]!)) problems.push(`fill ${k} lost its border`);
   expect(problems.join('; '), 'border links').toBe('');
 }
@@ -961,8 +963,10 @@ export function checkOneGeo(p: Pattern): void {
   for (const o of sewObjects(p)) {
     const m = remembered(p, o);
     if (!m) continue;
-    // One stitch type on it: a fill is not also a line, and keeps no settings of what it is.
-    if (m.fill && m.line) problems.push(`${o.index}: a fill that is also a line`);
+    // One stitch type on it, and keeps no settings of what it is. A line beside a fill is its
+    // border (the only place a border is): its thread and link are a border's only.
+    if (m.fill && 'border' in m.fill) problems.push(`${o.index}: a border in the fill's settings`);
+    if (!m.fill && m.line && (m.line.color || m.line.link || m.line.seams)) problems.push(`${o.index}: a line with a border's thread or link`);
     if (m.fill && m.satin) problems.push(`${o.index}: a fill that is also a satin`);
     if (m.kept?.fill && m.fill) problems.push(`${o.index}: keeps the fill it is`);
     if (m.kept?.line && geoUse(m) === 'line') problems.push(`${o.index}: keeps the line it is`);
@@ -1213,7 +1217,7 @@ export function describeObjects(p: Pattern): string {
   return sewObjects(p)
     .map((o) => {
       const m = remembered(p, o);
-      const what = !m ? 'UNKNOWN' : [m.geo && `geo:${geoUse(m)}`, m.fill && 'fill', m.line && 'line', m.kept && `kept:${Object.keys(m.kept).join('+')}`, m.knockout && 'knockout', m.fill?.border?.link && `border->${m.fill.border.link}`, m.outline && `outline=${m.outline}`, m.blendOf && `blendOf=${m.blendOf}`, m.fill?.deco?.blend && `blend->${m.fill.deco.blend.link}`].filter(Boolean).join(' ');
+      const what = !m ? 'UNKNOWN' : [m.geo && `geo:${geoUse(m)}`, m.fill && 'fill', m.line && 'line', m.kept && `kept:${Object.keys(m.kept).join('+')}`, m.knockout && 'knockout', m.line?.link && `border->${m.line.link}`, m.outline && `outline=${m.outline}`, m.blendOf && `blendOf=${m.blendOf}`, m.fill?.deco?.blend && `blend->${m.fill.deco.blend.link}`].filter(Boolean).join(' ');
       return `\n  ${o.index} ${objectKey(p, o)} ${o.kind} block ${o.block} rgb(${o.color.r},${o.color.g},${o.color.b}) ${what}`;
     })
     .join('');
@@ -1321,9 +1325,9 @@ export function borderedSquare(): Doc {
   shapes(d, addShape(empty, { form: parsePath(rectPath(0, 0, 20, 20, 0, 0), ID), kind: 'fill' }, COLORS[0], null, options)!.pattern);
   shapes(d, addShape(d.cur.p, { form: parsePath(ellipsePath(40, 10, 6, 6), ID), kind: 'fill' }, COLORS[0], 0, options)!.pattern);
   const fill = remembered(d.cur.p, d.objects[0])!.fill!;
-  restitchFill(d, 0, { ...fill, border: { type: 'run', width: 2, length: 2.5, tolerance: 0.15, color: COLORS[1], link: 'sq' } }, new Set());
+  restitchFill(d, 0, fill, new Set(), { type: 'run', width: 2, length: 2.5, tolerance: 0.15, color: COLORS[1], link: 'sq' });
   return d;
 }
 
 export const borderOf = (d: Doc) => d.objects.findIndex((o) => remembered(d.cur.p, o)?.outline === 'sq');
-export const squareOf = (d: Doc) => d.objects.find((o) => remembered(d.cur.p, o)?.fill?.border?.link === 'sq');
+export const squareOf = (d: Doc) => d.objects.find((o) => remembered(d.cur.p, o)?.line?.link === 'sq');

@@ -15,7 +15,7 @@ import { deleteObjects, duplicateObjects, mirrorMatrix, subtractTop } from '../m
 import { fillsToLines, reshapeObject } from '../model/reshape';
 import { resewLine, lineSettings, lineToFill, reshapeLineFill } from '../model/line';
 import { refreshKnockouts } from '../model/knockout';
-import { objectKey, remember, remembered, rememberedIn, restitch, type Remembered, type RestitchResult } from '../model/restitch';
+import { borderOf, objectKey, remember, remembered, rememberedIn, restitch, type Remembered, type RestitchResult } from '../model/restitch';
 import { rasterize } from '../shape/rasterize';
 import { followerLinks, syncBorders } from '../model/border';
 import { partOf } from '../model/shadow';
@@ -68,7 +68,7 @@ export function bindShapes(app: ShapesApp) {
     const obj = q.objects[o];
     const known = obj && remembered(p, obj);
     if (geoUse(known) === 'band') return { width: known!.fill!.lineWidth!, offset: 0 };
-    const border = known?.fill?.border;
+    const border = borderOf(known);
     if (border?.type === 'satin' || border?.type === 'zigzag') return { width: border.width, offset: border.offset ?? 0 };
     if (!obj || !isLineObject(p, obj)) return null;
     const st = lineSettings(p, obj, q.kinds);
@@ -95,11 +95,12 @@ export function bindShapes(app: ShapesApp) {
     if (!obj) return;
     const known = remembered(p, obj);
     const band = geoUse(known) === 'band';
-    if (band || known?.fill?.border) {
+    const border = borderOf(known);
+    if (band || border) {
       const fill = known!.fill && structuredClone(known!.fill);
       const r = band
         ? reshapeLineFill(p, q.objects, obj, q.kinds, shapeTool.form, app.settings.trimMm, w)
-        : fill?.border && restitch(p, q.objects, [o], { kind: 'fill', s: { ...fill, border: { ...fill.border, width: w } } }, q.kinds, app.settings.trimMm);
+        : fill && border && restitch(p, q.objects, [o], { kind: 'fill', s: fill, line: { ...border, width: w } }, q.kinds, app.settings.trimMm);
       if (!r || !r.starts.length) {
         showBand(p, q, o);
         app.layers.say(t('shape.failed'), true);
