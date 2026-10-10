@@ -599,6 +599,9 @@ shots.image = async (lang) => {
   await page.waitForTimeout(1000);
   await page.click('#image-example');
   await page.waitForTimeout(4000);
+  // the example stays in step 1 (where it can be cropped), so two steps forward
+  await page.click('#image-next');
+  await page.waitForTimeout(1500);
   await page.click('#image-next');
   if (!(await waitText(page, '#image-result', /Stiche|Stitches/, 90000))) throw new Error('no stitches');
   await page.click('input[name="image-view"][value="stitches"]', { force: true });
