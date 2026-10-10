@@ -4,7 +4,7 @@ import { expandRegion } from '../digitize/region';
 import { runStitch, TOLERANCE } from '../digitize/run';
 import { underlayOf, type UnderlayKind } from '../digitize/satin';
 import type { Pt } from '../digitize/skeleton';
-import { columnOf, reversedRails, satinRuns, type Rails, type SatinSettings } from '../model/restitch';
+import { columnOf, reversedRails, satinRuns, swappedSides, type Rails, type SatinSettings } from '../model/restitch';
 import { JUMP, STITCH, TRIM } from '../model/pattern';
 import { apply, type Form, type Mat } from '../shape/path';
 import { rasterize } from '../shape/rasterize';
@@ -68,16 +68,20 @@ function sewElement(e: GlyphEl, m: Mat, scale: number, turn: number, l: Letterin
     if (back) rails = reversedRails(rails);
     const width = columnOf(rails).width;
     const under = underlayFor(e.p.u, width);
-    const s: SatinSettings = {
+    const given: SatinSettings = {
       spacing: Math.max(0.15, e.p.sp * l.density),
       edge: e.p.pc,
       edgeShare: e.p.ps,
+      ...(e.p.pcb !== undefined ? { edgeB: e.p.pcb } : {}),
+      ...(e.p.psb !== undefined ? { edgeShareB: e.p.psb } : {}),
       short: true,
       underlay: false,
       tolerance: TOLERANCE,
       split: e.p.sl && e.p.sl > 0 ? Math.max(3, e.p.sl) : SATIN_SPLIT_MM,
       type: e.p.e ? 'e' : 'satin',
     };
+    // Walked the other way, the rails swap, and so does what each side is given.
+    const s = back ? swappedSides(given) : given;
     const top = satinRuns([rails], s).filter((r) => r.length > 1);
     const cover = top.length && s.type === 'satin' ? () => satinCover(rails) : null;
     if (!top.length || !l.underlay || under === null) return { runs: top, leaves: true, cover };

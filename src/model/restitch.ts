@@ -217,6 +217,8 @@ export interface SatinSettings {
   edgeShare?: number;
   /** The right side gets this instead of `edge` (mm), when set. */
   edgeB?: number;
+  /** The right side gets this instead of `edgeShare`, when set. */
+  edgeShareB?: number;
   /** Spacing grows on narrow and shrinks on wide parts of the column (see widthFactor). */
   byWidth?: boolean;
   /** `edge` and `edgeShare` follow the fabric (see pullFor). */
@@ -1026,7 +1028,7 @@ function isSatin(f: unknown): f is SatinSettings {
     [s.spacing, s.edge].every(finite) &&
     typeof s.short === 'boolean' &&
     typeof s.underlay === 'boolean' &&
-    [s.tolerance, s.split, s.edgeShare, s.edgeB, s.underInset, s.underInsetShare].every(optional) &&
+    [s.tolerance, s.split, s.edgeShare, s.edgeB, s.edgeShareB, s.underInset, s.underInsetShare].every(optional) &&
     (s.type === undefined || s.type === 'satin' || s.type === 'e') &&
     (s.under === undefined || UNDERLAYS.includes(s.under)) &&
     (s.stagger === undefined || typeof s.stagger === 'boolean') &&
@@ -2556,6 +2558,7 @@ export function spacingAlong(c: Column, r: Rails, base: number, byWidth: boolean
 /** Settings for the columns walked from the other end: what was right is left now. */
 export function swappedSides(s: SatinSettings): SatinSettings {
   let out = s.edgeB === undefined ? s : { ...s, edge: s.edgeB, edgeB: s.edge };
+  if (s.edgeShareB !== undefined) out = { ...out, edgeShare: s.edgeShareB, edgeShareB: s.edgeShare ?? 0 };
   if (s.fringeSide) out = { ...out, fringeSide: s.fringeSide === 'left' ? 'right' : 'left' };
   return out;
 }
@@ -2577,7 +2580,7 @@ function fringeParams(s: SatinSettings): Pick<SatinParams, 'fringe' | 'fringeB'>
 
 /** The satin's parameters for `pairs` and its stitches. */
 export function satinParams(s: SatinSettings): SatinParams {
-  return { spacing: s.spacing, pull: s.edge, pullB: s.edgeB, pullShare: s.edgeShare ?? 0, splitMm: s.split ?? SATIN_SPLIT, short: s.short && s.type !== 'e', stagger: s.stagger ?? true, ...fringeParams(s), ...(s.lead ? { lead: s.lead } : {}) };
+  return { spacing: s.spacing, pull: s.edge, pullB: s.edgeB, pullShare: s.edgeShare ?? 0, pullShareB: s.edgeShareB, splitMm: s.split ?? SATIN_SPLIT, short: s.short && s.type !== 'e', stagger: s.stagger ?? true, ...fringeParams(s), ...(s.lead ? { lead: s.lead } : {}) };
 }
 
 /**
