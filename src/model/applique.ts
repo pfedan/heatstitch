@@ -150,7 +150,7 @@ export function cutForm(m: { geo?: Form; region: Region | null }): Form | null {
 const n2 = (v: number) => String(Math.round(v * 1000) / 1000);
 
 /**
- * The cut lines of the pieces `forms` as an SVG at true size (1 mm = 1 mm, for a cutting plotter or
+ * The cutting templates of the pieces `forms` as an SVG at true size (1 mm = 1 mm, for a cutting plotter or
  * to print and cut by hand): one closed path per piece, black hairline, no fill; laid at the origin
  * with a 2 mm margin so the plotter's software places them where it likes.
  */
@@ -191,4 +191,31 @@ export function cutLinesSvg(forms: Form[]): string | null {
     return `<path d="${d}" fill="none" stroke="#000" stroke-width="0.1" fill-rule="${f.nonzero ? 'nonzero' : 'evenodd'}"/>`;
   });
   return `<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${n2(w)}mm" height="${n2(h)}mm" viewBox="0 0 ${n2(w)} ${n2(h)}">\n${paths.join('\n')}\n</svg>\n`;
+}
+
+/** An appliqué's piece of fabric, for the view: its records, the stops it is laid on and cut at, its outline. */
+export interface Piece {
+  first: number;
+  last: number;
+  /** The stop to lay the fabric on, and the one to cut it off (records). */
+  place: number;
+  trim: number;
+  /** The outline it is cut along (mm). */
+  form: Form;
+  fabric: AppliqueFabric;
+  color: ThreadColor;
+}
+
+/** The pieces of fabric of the appliqués of `p`, in sewing order. */
+export function appliquePieces(p: Pattern): Piece[] {
+  const out: Piece[] = [];
+  for (const e of tableOf(p).entries) {
+    const m = e.memory;
+    if (!m?.applique) continue;
+    const stops = stopsIn(p, e.first, e.last);
+    const form = cutForm(m);
+    if (stops.length !== 2 || !form) continue;
+    out.push({ first: e.first, last: e.last, place: stops[0], trim: stops[1], form, fabric: m.applique.fabric, color: m.applique.color });
+  }
+  return out;
 }

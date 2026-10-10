@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { addShape } from '../src/model/addShape';
-import { appliqueStops, cutLinesSvg, tackInset } from '../src/model/applique';
+import { appliquePieces, appliqueStops, cutLinesSvg, innerStops, tackInset } from '../src/model/applique';
+import { sheetHtml } from '../src/areas/ready/sheet';
+import { cardView } from '../src/areas/ready/card';
+import { recipeCard } from '../src/areas/ready/recipes';
+import { t } from '../src/i18n';
 import { cutForms, fromApplique, setApplique, toApplique } from '../src/model/appliqueOps';
 import { colorBlocks } from '../src/model/sequence';
 import { sewObjects } from '../src/model/objects';
@@ -9,7 +13,7 @@ import { remembered } from '../src/model/restitch';
 import { reorder } from '../src/model/order';
 import { recolor } from '../src/model/recolor';
 import { ellipsePath, parsePath, rectPath } from '../src/shape/svgPath';
-import { COLORS, Doc, ID, T, empty, options, saveAndOpen, shapes, transform, checkWellFormed, checkSewDesign, checkExport } from './helpers/torture';
+import { COLORS, Doc, ID, T, empty, options, saveAndOpen, shapes, transform, checkWellFormed, checkSewDesign, checkExport, checkAppliques, restitchFill } from './helpers/torture';
 import { mirrorMatrix, duplicateObject } from '../src/model/shapeOps';
 import { rotation, translation } from '../src/shape/path';
 import { measurePattern } from '../src/validation/measure';
@@ -126,7 +130,39 @@ describe('appliqué', () => {
     expect(m.gapsLow.reduce((a, b) => a + b, 0)).toBe(0);
   });
 
-  it('gives its cut line as an SVG at true size', () => {
+  it('shows its piece of fabric from the first stop, cut at the second', () => {
+    const d = design();
+    const p = d.cur.p;
+    const [x] = appliquePieces(p);
+    expect(x.fabric).toBe('woven');
+    expect(p.cmd[x.place]).toBe(COLOR_CHANGE);
+    expect(p.cmd[x.trim]).toBe(COLOR_CHANGE);
+    expect(x.first < x.place && x.place < x.trim && x.trim < x.last).toBe(true);
+    expect(x.form.paths.every((path) => path.closed)).toBe(true);
+  });
+
+  it('a border put after a fill before it goes after its edge, not between its parts', () => {
+    // The square before the appliqué gets a border in another thread: it goes after the color's run.
+    const d = design();
+    expect(restitchFill(d, 0, remembered(d.cur.p, d.objects[0])!.fill!, new Set(), { type: 'run', width: 2, length: 2.5, tolerance: 0.15, link: 'b1', color: COLORS[2] })).toBe(true);
+    const p = d.cur.p;
+    checkAppliques(p);
+    const a = sewObjects(p).find((o) => remembered(p, o)?.applique)!;
+    const border = sewObjects(p).find((o) => remembered(p, o)?.outline === 'b1')!;
+    expect(border.first).toBeGreaterThan(a.last);
+  });
+
+  it('names its stops on the stitch sheet and keeps them out of the list of threads to change', () => {
+    const d = design();
+    const p = d.cur.p;
+    const html = sheetHtml({ pattern: p, name: 'A', hoop: null, profile: { fabric: 'woven', thread: '40' }, machine: { machineSpm: 800, trimSeconds: 3, colorSeconds: 30 }, card: cardView(recipeCard('woven', '40', { stitches: 3000, perCm2: 60, largestFillCm2: 5, widthMm: 50, heightMm: 40, minLetterMm: null })) });
+    const rows = html.match(/<tr class="stop">/g) ?? [];
+    expect(rows).toHaveLength(2);
+    expect(html.indexOf(t('applique.stop.place'))).toBeLessThan(html.indexOf(t('applique.stop.trim')));
+    expect(innerStops(p)).toEqual(new Set([1, 2]));
+  });
+
+  it('gives its cutting template as an SVG at true size', () => {
     const d = design();
     const svg = cutLinesSvg(cutForms(d.cur.p))!;
     expect(svg).toContain('width="34mm"');

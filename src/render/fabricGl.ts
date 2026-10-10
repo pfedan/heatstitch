@@ -16,8 +16,11 @@ import type { Viewport } from './viewport';
  * and only the slow, cloudy unevenness of real cloth is left.
  */
 
+/** A look the shader draws: a ground fabric, or felt (only laid on as appliqué, see model/applique.ts). */
+export type FabricLook = FabricId | 'felt';
+
 /** Per material: shader number, yarn pitch in mm (sets when detail fades in) and relief depth. */
-const LOOK: Record<FabricId, { kind: number; pitch: number; relief: number }> = {
+const LOOK: Record<FabricLook, { kind: number; pitch: number; relief: number }> = {
   woven: { kind: 0, pitch: 0.26, relief: 1 },
   // Denim and canvas: the twill of the cap with thicker yarns and deeper ribs.
   woven_heavy: { kind: 1, pitch: 0.46, relief: 1.45 },
@@ -28,6 +31,8 @@ const LOOK: Record<FabricId, { kind: number; pitch: number; relief: number }> = 
   light: { kind: 4, pitch: 0.13, relief: 0.45 },
   sheer: { kind: 7, pitch: 0.16, relief: 0.55 },
   leather: { kind: 5, pitch: 0.5, relief: 0.7 },
+  // Felt: fibers of about a third of a millimetre show, the mat is flat (shallow relief).
+  felt: { kind: 8, pitch: 0.3, relief: 0.55 },
 };
 
 const VS = `#version 300 es
@@ -252,6 +257,50 @@ Surf leather(vec2 p, float pitch) {
   return s;
 }
 
+// Felt: no yarns and no grid, a mat of short fibers pressed together lying every way. Drawn as a
+// random fiber network (as non-wovens are modeled: straight fiber segments with random centers and
+// angles, a Poisson segment process): per cell three slightly bent fibers, found as in Worley noise
+// by searching the 3 x 3 cells around the point, over filtered noise (fbm) for the cloudy density
+// of the mat and its fuzz. Filtered noise alone reads as paper or suede; the segments give the
+// fine hairs felt shows. The fibers lie low in the mat, so the relief is shallow and the sheen weak.
+Surf felt(vec2 p, float pitch) {
+  vec2 c = p / pitch;
+  float mat = fbm(c * 0.35);
+  float fuzz = noise(c * 2.3);
+  Surf s;
+  s.fiber = vec2(0.0);
+  // The fibers add up (a soft web), not the top one alone (which would read as straw).
+  float web = 0.0;
+  float top = 0.0;
+  vec2 cell = floor(c);
+  for (int dy = -1; dy <= 1; dy++) for (int dx = -1; dx <= 1; dx++) {
+    vec2 cc = cell + vec2(dx, dy);
+    for (int k = 0; k < 4; k++) {
+      vec2 rnd = hash22(cc + float(k) * 11.7);
+      float ang = hash2(cc + float(k) * 3.1) * 3.14159;
+      vec2 ax = vec2(cos(ang), sin(ang));
+      vec2 d = c - (cc + rnd);
+      float along = dot(d, ax);
+      float len = 0.7 + 0.6 * rnd.x;
+      if (abs(along) >= len) continue;
+      // Bent a little, thinner toward its ends.
+      float across = dot(d, vec2(-ax.y, ax.x)) + 0.3 * (rnd.y - 0.5) * along * along;
+      float r = abs(across) / (0.06 * (1.0 - 0.4 * abs(along) / len));
+      if (r >= 1.0) continue;
+      float f = (1.0 - r * r) * (0.4 + 0.6 * rnd.y);
+      web += f;
+      if (f > top) {
+        top = f;
+        s.fiber = normalize(ax + vec2(-ax.y, ax.x) * 0.6 * (rnd.y - 0.5) * along);
+      }
+    }
+  }
+  web = min(web, 1.6);
+  s.h = -0.1 + 0.35 * mat + 0.12 * fuzz + 0.16 * web;
+  s.tint = (mat - 0.5) * 0.5 + (fuzz - 0.5) * 0.25 + (web - 0.5) * 0.15;
+  return s;
+}
+
 Surf surf(vec2 p) {
   if (u_kind == 0) return weave(p, u_pitch, 3);
   if (u_kind == 1) return weave(p, u_pitch, 4);
@@ -260,6 +309,7 @@ Surf surf(vec2 p) {
   if (u_kind == 4) return weave(p, u_pitch, 2);
   if (u_kind == 6) return fleece(p, u_pitch);
   if (u_kind == 7) return sheer(p, u_pitch);
+  if (u_kind == 8) return felt(p, u_pitch);
   return leather(p, u_pitch);
 }
 
@@ -278,7 +328,8 @@ vec3 shadeAt(Surf s, vec3 N, vec3 base, vec3 L) {
     float th = dot(T, H);
     float sinTH = sqrt(max(1.0 - th * th, 0.0));
     // Spun cotton has a soft, wide sheen; the fine and the sheer fabric shine more, like silk.
-    float gloss = u_kind == 4 || u_kind == 7 ? 0.22 : 0.07;
+    // Felt is matt: its fibers lie every way and scatter the light.
+    float gloss = u_kind == 4 || u_kind == 7 ? 0.22 : u_kind == 8 ? 0.012 : 0.07;
     lit += (base * 0.6 + 0.04) * pow(sinTH, 24.0) * gloss * 3.0 * smoothstep(0.0, 0.6, s.h);
   } else {
     // Leather: a broad, slightly glossy highlight on the pebbles.
@@ -358,7 +409,7 @@ export class GlFabricRenderer {
    * Draws `fabric` in `rgb` (0..255) over the whole w x h device pixel canvas. `vp` is in CSS
    * pixels and `dpr` maps them to device pixels; `light` is the light of the thread view.
    */
-  draw(fabric: FabricId, rgb: [number, number, number], vp: Viewport, dpr: number, w: number, h: number, light: readonly [number, number]): void {
+  draw(fabric: FabricLook, rgb: [number, number, number], vp: Pick<Viewport, 'scale' | 'offsetX' | 'offsetY'>, dpr: number, w: number, h: number, light: readonly [number, number]): void {
     const key = [fabric, rgb, vp.scale, vp.offsetX, vp.offsetY, dpr, w, h, light].join();
     if (key === this.shown) return;
     this.shown = key;
@@ -435,6 +486,41 @@ export function drawFabric(ctx: CanvasRenderingContext2D, vp: Viewport, fabric: 
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.drawImage(gl.canvas, 0, 0);
+  ctx.restore();
+  return true;
+}
+
+/** A renderer of its own for appliqué pieces, so the ground keeps its picture (see GlFabricRenderer.shown). */
+let pieceGl: GlFabricRenderer | null = null;
+
+/**
+ * Draws `fabric` in `rgb` into the CSS pixel box `box` [x0, y0, x1, y1] of the canvas, in the light
+ * of the thread view, where the clip set on `ctx` lets it (an appliqué's piece of fabric). Only the
+ * box is shaded. Returns false when WebGL2 is not available.
+ */
+export function drawFabricIn(ctx: CanvasRenderingContext2D, vp: Viewport, fabric: FabricLook, rgb: [number, number, number], box: [number, number, number, number]): boolean {
+  if (unavailable) return false;
+  if (!pieceGl || pieceGl.lost) {
+    try {
+      pieceGl = new GlFabricRenderer(document.createElement('canvas'));
+    } catch {
+      unavailable = true;
+      pieceGl = null;
+      return false;
+    }
+  }
+  const dpr = ctx.getTransform().a;
+  const { width: cw, height: ch } = ctx.canvas;
+  const x0 = Math.max(0, Math.floor(box[0] * dpr));
+  const y0 = Math.max(0, Math.floor(box[1] * dpr));
+  const x1 = Math.min(cw, Math.ceil(box[2] * dpr));
+  const y1 = Math.min(ch, Math.ceil(box[3] * dpr));
+  if (x1 <= x0 || y1 <= y0) return true;
+  // The same world under the box as on the whole canvas: the offset moves with the box.
+  pieceGl.draw(fabric, rgb, { scale: vp.scale, offsetX: vp.offsetX - x0 / dpr, offsetY: vp.offsetY - y0 / dpr }, dpr, x1 - x0, y1 - y0, lightDir());
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.drawImage(pieceGl.canvas, 0, 0, x1 - x0, y1 - y0, x0, y0, x1 - x0, y1 - y0);
   ctx.restore();
   return true;
 }

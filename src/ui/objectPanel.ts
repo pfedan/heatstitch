@@ -2,7 +2,7 @@ import { formatNumber, getLang, onLangChange, t, type Key } from '../i18n';
 import type { SewObject } from '../model/objects';
 import type { OrderCost } from '../model/order';
 import type { Settings } from '../settings';
-import { KIND_ICON, kindLabel } from './layersPanel';
+import { APPLIQUE_ICON, KIND_ICON, kindLabel } from './layersPanel';
 import { cssColor, ThreadPicker } from './threadPicker';
 import { sameColor } from '../model/recolor';
 import type { ThreadColor } from '../model/pattern';
@@ -39,6 +39,8 @@ export interface ObjectInfo {
   blend?: ThreadColor;
   /** The one selected object is a contour whose distance can be changed: that distance (mm). */
   contour?: number | null;
+  /** The one selected object is an appliqué. */
+  applique?: boolean;
 }
 
 export interface ObjectHooks {
@@ -120,9 +122,9 @@ export class ObjectPanel {
   private head(info: ObjectInfo, sel: SewObject[]): HTMLElement {
     const one = sel.length === 1 ? sel[0] : null;
     const kind = h('span', { class: `kind-icon kind-${one?.kind ?? 'many'}` });
-    if (one) kind.innerHTML = KIND_ICON[one.kind];
+    if (one) kind.innerHTML = info.applique ? APPLIQUE_ICON : KIND_ICON[one.kind];
     else kind.append(icon('obj-duplicate'));
-    const title = one ? `${kindLabel(one.kind)} ${info.numbers[0]}` : t('object.many', { n: sel.length });
+    const title = one ? `${info.applique ? t('applique.name') : kindLabel(one.kind)} ${info.numbers[0]}` : t('object.many', { n: sel.length });
     // The thread: one swatch per thread of the selection, a click chooses another for all of them.
     const colors: ThreadColor[] = [];
     for (const o of sel) if (!colors.some((c) => sameColor(c, o.color))) colors.push(o.color);

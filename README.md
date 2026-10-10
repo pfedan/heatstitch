@@ -107,6 +107,9 @@ sends the picture anywhere.
   line motifs (waves, scallops, hearts, chain) and **hand stitches** imitated by machine: stem,
   feather, Cretan and chevron stitch, each stitch sewn 1, 3 or 5 times over the same holes like
   stranded floss, whole figures per piece between corners
+- **Appliqué** as one object: placement line, stop, tack-down just inside, stop, satin or E stitch
+  edge, all in one thread; the fabric (felt, cotton, denim and more, in any color) shows under the
+  edge in the realistic view and in the player; cutting template as SVG at 1:1
 - **Shape editing**: the outline of a fill as curves with nodes, kept exactly from then on; close,
   open, join and split paths, nodes at crossings, fill inside; an opened fill or satin is sewn as a
   line and filled again once a path is closed; the border is the fill's own line, along open paths

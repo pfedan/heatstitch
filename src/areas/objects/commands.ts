@@ -131,7 +131,7 @@ export function registerObjectCommands(a: ObjectActions): void {
   command({ id: 'object.blend', label: 'objects.blend', group: G, icon: 'obj-blend', when: () => some() && !!info()?.blend, need: then(() => one() ?? 'objects.need.fill'), run: a.blend });
   command({ id: 'object.mirrorH', label: 'objects.mirrorH', group: G, icon: 'obj-mirror-h', when: some, need: then(), run: () => a.mirror('x') });
   command({ id: 'object.mirrorV', label: 'objects.mirrorV', group: G, icon: 'obj-mirror-v', when: some, need: then(), run: () => a.mirror('y') });
-  command({ id: 'object.split', label: 'objects.split', group: G, icon: 'obj-split', when: () => some() && info()?.selected.length === 1 && (info()!.objects[info()!.selected[0]]?.sections ?? 0) > 1, need: then(() => one() ?? 'objects.need.parts'), run: a.split });
+  command({ id: 'object.split', label: 'objects.split', group: G, icon: 'obj-split', when: () => some() && info()?.selected.length === 1 && !info()!.applique && (info()!.objects[info()!.selected[0]]?.sections ?? 0) > 1, need: then(() => one() ?? 'objects.need.parts'), run: a.split });
   command({ id: 'object.combine', label: 'objects.combine', group: G, icon: 'obj-combine', when: () => some() && (info()?.selected.length ?? 0) > 1 && !info()!.mergeBlocked, need: several(() => ((info()?.selected.length ?? 0) > 1 ? (info()?.mergeBlocked ?? undefined) : 'objects.need.two')), run: a.combine });
   command({ id: 'object.subtract', label: 'objects.subtract', group: G, icon: 'obj-subtract', when: () => some() && !!info()?.subtractable, need: several(() => ((info()?.selected.length ?? 0) > 1 ? undefined : 'objects.need.two')), run: a.subtract });
   // Also around a lettering (a contour around a text), not while an outline or points are edited.

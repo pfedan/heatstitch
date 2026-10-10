@@ -188,7 +188,7 @@ export interface StitchHooks {
   appliqueKind: (on: boolean) => void;
   /** The selected appliqués with settings `s`: shown while sliding (`final` false), then applied. */
   applique: (s: AppliqueSettings, final: boolean) => void;
-  /** The cut line of the selected appliqués saved as an SVG. */
+  /** The cutting template of the selected appliqués saved as an SVG. */
   cutLine: () => void;
 }
 
@@ -479,7 +479,7 @@ export class StitchPanel {
     this.hooks.outline(action);
   }
 
-  /** The cut line of the selected appliqués, as an SVG to save. */
+  /** The cutting template of the selected appliqués, as an SVG to save. */
   cutLine(): void {
     this.hooks.cutLine();
   }
@@ -1102,7 +1102,7 @@ export class StitchPanel {
 
   /**
    * An appliqué: its edge (satin or E stitch, how wide) and the fabric laid on (kind and color, for
-   * the view), the cut line for a plotter. The rest (placement, tack-down, stops) is automatic.
+   * the view), the cutting template for a plotter. The rest (placement, tack-down, stops) is automatic.
    */
   private appliqueSections(info: StitchInfo): HTMLElement[] {
     const s = this.appliqueDraft!;
