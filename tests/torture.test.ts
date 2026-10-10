@@ -18,8 +18,8 @@ describe('torture test', () => {
   it.each(seeds)('chain %i keeps the design consistent', async (seed) => {
     await chain(seed);
     // Some chains build large designs (a contour filled as the ground, scaled up, left out under
-    // others): slower runners need more than the 30 s default.
-  }, 60_000);
+    // others, a contour around a lettering): slower runners need more than the 30 s default.
+  }, 120_000);
 });
 
 describe('found by the torture test', () => {
