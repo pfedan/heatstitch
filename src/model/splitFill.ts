@@ -2,7 +2,7 @@ import type { Pt } from '../digitize/skeleton';
 import { splitForm } from '../shape/ops';
 import type { FillSettings } from './restitch';
 import { newLink, syncBorders } from './border';
-import { takeOver, wholeArea } from './knockout';
+import { cutKey, sewnArea, takeOver, wholeArea } from './knockout';
 import { sewObjects } from './objects';
 import type { Pattern } from './pattern';
 import { reshapeFill } from './reshape';
@@ -143,6 +143,18 @@ export function splitFill(p: Pattern, o: number, cuts: Pt[][], trimMm: number): 
       const t = reshapeFill(cur, objs, objs[o + k], ks, forms[k], trimMm, undefined, { ...rest, pattern: 'tatami' });
       next = t && takeOver(t);
       if (next) plain++;
+    }
+    // A part that leaves out what lies on top, with nothing sewable left there (all of it under a
+    // later fill): sewn whole as long as that stays so, as sewCut does (knockout.ts).
+    if (!next && known!.knockout) {
+      const w = reshapeFill(cur, objs, objs[o + k], ks, forms[k], trimMm, false, settings);
+      const whole = w && takeOver(w);
+      const at = whole && sewObjects(whole)[o + k];
+      const m = at && remembered(whole, at);
+      if (m) {
+        remember(whole!, at!, { ...m, knockout: true, cut: cutKey(sewnArea(cur, objs, objs[o + k], forms[k], true, m.region?.pxMm ?? 0.1)) });
+        next = whole;
+      }
     }
     if (!next) return null;
     cur = next;

@@ -6,7 +6,7 @@ const PICK_PX = 10;
 /** Distance of the turn handle above the frame, CSS pixels. */
 export const TURN_PX = 26;
 
-export type FramePart = 'move' | 'turn' | 0 | 1 | 2 | 3;
+export type FramePart = 'move' | 'turn' | 'gap' | 0 | 1 | 2 | 3;
 
 export interface Box {
   minX: number;
@@ -27,6 +27,20 @@ export interface FrameView {
   turn: number;
   /** Where a move snapped (world mm), drawn as a line across the stage; null: not snapped that way. */
   snapped: { x: number | null; y: number | null };
+  /** The distance grip of a contour: where it sits, and the distance (mm) while dragged. */
+  gap: ContourGrip | null;
+  gapValue: number;
+  /** Where the grip is being dragged (world mm). */
+  gapDrag: Pt | null;
+}
+
+/** The grip that sets the distance of a contour: where it sits on it, and the distance a point lies at (mm). */
+export interface ContourGrip {
+  at: Pt;
+  read: (q: Pt) => number;
+  /** Distances it allows (mm). */
+  min: number;
+  max: number;
 }
 
 /** Lines a moved frame snaps to (world mm): edges and middles of the other objects, the middle of the rest. */
@@ -61,6 +75,8 @@ export function snapMove(box: Box, dx: number, dy: number, targets: SnapTargets,
 export interface FrameHooks {
   /** Shown while dragging (`final` false) or taken over (true). */
   change: (m: Mat, final: boolean) => void;
+  /** The contour at distance `d` (mm) by its grip: shown, or taken over when `final`; NaN: back as it was. */
+  gap?: (d: number, final: boolean) => void;
 }
 
 /** Corners in the order top left, top right, bottom right, bottom left. */
@@ -89,6 +105,9 @@ export class FrameTool implements FrameView {
   targets: SnapTargets | null = null;
   /** Snapping on (the switch in the tool bar); Alt while dragging moves freely either way. */
   snap = true;
+  gap: ContourGrip | null = null;
+  gapValue = 0;
+  gapDrag: Pt | null = null;
   private from: Pt = [0, 0];
   private moved = false;
 
@@ -104,6 +123,7 @@ export class FrameTool implements FrameView {
 
   close(): void {
     this.active = false;
+    this.gap = null;
     this.snapped = { x: null, y: null };
     this.dragging = null;
     this.hover = null;
@@ -114,6 +134,8 @@ export class FrameTool implements FrameView {
     if (!this.active) return null;
     const r = PICK_PX / scale;
     const b = this.box;
+    // The grip lies on the contour, on the frame's side: it goes first.
+    if (this.gap && Math.hypot(x - this.gap.at[0], y - this.gap.at[1]) < r) return 'gap';
     const cx = (b.minX + b.maxX) / 2;
     if (Math.hypot(x - cx, y - (b.minY - TURN_PX / scale)) < r) return 'turn';
     if (this.canScale) {
@@ -149,6 +171,19 @@ export class FrameTool implements FrameView {
     const b = this.box;
     const cx = (b.minX + b.maxX) / 2;
     const cy = (b.minY + b.maxY) / 2;
+    if (part === 'gap') {
+      const g = this.gap;
+      if (!g) return true;
+      this.gapDrag = [x, y];
+      // In steps of 0.1 mm (1 mm with Shift).
+      const step = shift ? 1 : 0.1;
+      const d = Math.min(g.max, Math.max(g.min, Math.round(g.read([x, y]) / step) * step));
+      if (Math.abs(d - this.gapValue) > 1e-9) {
+        this.gapValue = d;
+        this.hooks.gap?.(d, false);
+      }
+      return true;
+    }
     if (part === 'move') {
       let dx = Math.round((x - fx) * 10) / 10;
       let dy = Math.round((y - fy) * 10) / 10;
@@ -195,17 +230,22 @@ export class FrameTool implements FrameView {
   /** Ends a drag; true when it was one (not a click). */
   up(): boolean {
     const was = this.dragging !== null && this.moved;
+    const gap = this.dragging === 'gap';
     const m = this.m;
     this.dragging = null;
     this.snapped = { x: null, y: null };
     this.moved = false;
-    if (was) this.hooks.change(m, true);
+    this.gapDrag = null;
+    if (was && gap) this.hooks.gap?.(this.gapValue, true);
+    else if (was) this.hooks.change(m, true);
     this.m = IDENTITY;
     this.turn = 0;
     return was;
   }
 
   cancel(): void {
+    if (this.dragging === 'gap' && this.moved) this.hooks.gap?.(NaN, false);
+    this.gapDrag = null;
     this.dragging = null;
     this.snapped = { x: null, y: null };
     this.moved = false;

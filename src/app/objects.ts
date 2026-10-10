@@ -74,6 +74,8 @@ export interface ObjectsApp {
   readonly shapeTool: ShapeTool;
   readonly showObjectMenu: (o: number, clientX: number, clientY: number) => boolean;
   readonly subtractSelected: () => void;
+  readonly contourSelected: () => void;
+  readonly setContourGap: (d: number, final: boolean) => boolean;
   readonly takeShapes: (next: Pattern, select: number[]) => void;
   readonly updateLevel: () => void;
 }
@@ -543,6 +545,12 @@ export function bindObjects(app: ObjectsApp) {
     move: (dx, dy) => {
       if (app.frameObjects().length) app.commitTransform(translation(dx, dy));
     },
+    gap: (d, final) => {
+      if (!final) return app.setContourGap(d, false);
+      let done = false;
+      withUndo(() => (done = app.setContourGap(d, true)));
+      return done;
+    },
   });
 
   const pattern = () => app.files.active?.pattern ?? null;
@@ -607,6 +615,7 @@ export function bindObjects(app: ObjectsApp) {
     split: () => splitSelected(),
     combine: () => mergeObjects(),
     subtract: () => withUndo(app.subtractSelected),
+    contour: () => withUndo(app.contourSelected),
     knockoutState,
     knockout: () => {
       const on = knockoutState() !== 'on';

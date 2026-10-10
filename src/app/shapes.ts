@@ -22,7 +22,11 @@ import { partOf } from '../model/shadow';
 import { stitchKey } from '../model/objects';
 import { t, formatNumber, type Key } from '../i18n';
 import { ui } from './state';
-import { bandArea, fillArea, fits, fitsOf, geoOf, geoUse, guessGeo, guessLine, sewnAlong, withGeo } from '../model/geo';
+import { bandArea, fillArea, fits, fitsOf, formKey, geoOf, geoUse, guessGeo, guessLine, sewnAlong, withGeo } from '../model/geo';
+import { addContour, contourAt, CONTOUR_GAP, GAP_MAX, GAP_MIN, gapReader } from '../model/contour';
+import type { ContourGrip } from '../ui/frameTool';
+import { flatten } from '../shape/path';
+import type { Pt } from '../digitize/skeleton';
 
 /** What bindShapes needs from the rest of the app. */
 export interface ShapesApp {
@@ -520,8 +524,95 @@ export function bindShapes(app: ShapesApp) {
     app.layers.say([list ? t('object.subtracted', { list }) : '', r.covered ? t('object.subtracted.covered') : ''].filter(Boolean).join(' '));
   }
 
+  /**
+   * Contours made in this session, per file by object id: what they go round, and the distance of
+   * each form they had (undo brings an earlier one back). The distance can be changed while the
+   * contour still has one of these forms; once reshaped, or after loading, it is a line like any other.
+   */
+  const contours = new WeakMap<object, Map<number, { source: Form; gaps: Map<string, number> }>>();
+
+  function contourMemo(o: number): { source: Form; gaps: Map<string, number> } | null {
+    const f = app.files.active;
+    const obj = f?.pattern && app.seq(f.pattern).objects[o];
+    return (f && obj && contours.get(f)?.get(obj.id)) ?? null;
+  }
+
+  /** The distance of contour `o` (mm), while it can be changed; null otherwise. */
+  function contourGap(p: Pattern, q: Sequence, o: number): number | null {
+    const obj = q.objects[o];
+    const m = obj && remembered(p, obj);
+    const memo = contourMemo(o);
+    if (!memo || geoUse(m) !== 'line') return null;
+    return memo.gaps.get(formKey(m!.geo!)) ?? null;
+  }
+
+  /**
+   * The grip of contour `o` while its distance can be changed: on its right side (where the frame has
+   * no handle), reading how far the pointer lies from what it goes round.
+   */
+  function contourGrip(p: Pattern, q: Sequence, o: number): (ContourGrip & { d: number }) | null {
+    const d = contourGap(p, q, o);
+    const memo = d === null ? null : contourMemo(o);
+    const geo = memo && geoOf(remembered(p, q.objects[o]));
+    if (d === null || !memo || !geo) return null;
+    let at: Pt | null = null;
+    for (const path of geo.paths) for (const pt of flatten(path, 0.2)) if (!at || pt[0] > at[0]) at = pt;
+    return at && { at, read: gapReader(memo.source), min: GAP_MIN, max: GAP_MAX, d };
+  }
+
+  /** A contour around the selected objects (one for all), selected (one undo step). */
+  function contourSelected(): void {
+    const f = app.files.active;
+    const sel = app.frameObjects();
+    if (!f?.pattern || !sel.length) return;
+    if (!opsReady()) return void loadOps().then(contourSelected);
+    const r = addContour(f.pattern, sel, CONTOUR_GAP, { trimMm: app.settings.trimMm });
+    if (!r) return app.layers.say(t('object.contour.nothing'), true);
+    const obj = app.seq(r.pattern).objects[r.index];
+    const geo = remembered(r.pattern, obj)?.geo;
+    if (geo) {
+      const list = contours.get(f) ?? new Map();
+      contours.set(f, list);
+      list.set(obj.id, { source: r.source, gaps: new Map([[formKey(geo), CONTOUR_GAP]]) });
+    }
+    if (ui.lettering) ui.lettering = null;
+    takeShapes(r.pattern, [r.index]);
+    app.layers.say(r.missing ? t(r.missing === 1 ? 'object.contour.missing.one' : 'object.contour.missing', { n: r.missing }) : t('object.contoured', { d: formatNumber(CONTOUR_GAP, 1) }));
+  }
+
+  /**
+   * The selected contour `d` mm from what it goes round: shown (`final` false, the grip being
+   * dragged or a value being typed) or taken over (one undo step). False when nothing is left at `d`;
+   * NaN only takes the preview away.
+   */
+  function setContourGap(d: number, final: boolean): boolean {
+    const sel = [...ui.selectedObjects];
+    const memo = sel.length === 1 ? contourMemo(sel[0]) : null;
+    if (!memo || !Number.isFinite(d)) {
+      // Back as it is: the preview goes.
+      if (ui.flowPreview) {
+        ui.flowPreview = null;
+        app.redraw();
+      }
+      return false;
+    }
+    if (!opsReady()) {
+      if (final) void loadOps().then(() => setContourGap(d, final));
+      return false;
+    }
+    const form = contourAt(memo.source, d);
+    if (!form) {
+      ui.flowPreview = null;
+      if (final) app.layers.say(t('object.contour.empty'), true);
+      app.redraw();
+      return false;
+    }
+    if (final) memo.gaps.set(formKey(form), d);
+    return sewLine(sel[0], form, null, final);
+  }
+
   /** Whether Ctrl+V has something to paste. */
   const canPaste = (): boolean => !!copied;
 
-  return { canPaste, closeShape, copySelected, deleteSelected, duplicateSelected, pasteCopied, enterShape, followKnockouts, isLineObject, mirrorSelected, satinLineAgain, sewLine, sewLineAgain, shapeTarget, shapeTool, showBand, subtractSelected, syncShape, takeShapes };
+  return { canPaste, closeShape, contourGap, contourGrip, contourSelected, copySelected, deleteSelected, setContourGap, duplicateSelected, pasteCopied, enterShape, followKnockouts, isLineObject, mirrorSelected, satinLineAgain, sewLine, sewLineAgain, shapeTarget, shapeTool, showBand, subtractSelected, syncShape, takeShapes };
 }

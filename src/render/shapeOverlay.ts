@@ -1,4 +1,4 @@
-import { formatNumber } from '../i18n';
+import { formatNumber, t } from '../i18n';
 import type { Pt } from '../digitize/skeleton';
 import { segment, segments, type Form } from '../shape/path';
 import { corners, TURN_PX, type FrameView } from '../ui/frameTool';
@@ -231,6 +231,23 @@ export function drawFrame(ctx: CanvasRenderingContext2D, vp: Viewport, f: FrameV
   ctx.lineWidth = 1.2;
   ctx.stroke();
   handle(hx, hy, true, f.hover === 'turn' || f.dragging === 'turn');
+  // The distance grip of a contour: a diamond on it (where the pointer is while it is dragged).
+  if (f.gap) {
+    const [gx, gy] = S(f.gapDrag ?? f.gap.at);
+    const on = f.hover === 'gap' || f.dragging === 'gap';
+    const r = on ? 7.5 : 6.5;
+    ctx.beginPath();
+    ctx.moveTo(gx, gy - r);
+    ctx.lineTo(gx + r, gy);
+    ctx.lineTo(gx, gy + r);
+    ctx.lineTo(gx - r, gy);
+    ctx.closePath();
+    ctx.fillStyle = on ? ACCENT : '#ffffff';
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
+    ctx.lineWidth = 1.5;
+    ctx.fill();
+    ctx.stroke();
+  }
   // What the move hangs on: a thin line in the accent color across the stage.
   if (f.dragging === 'move' && (f.snapped.x !== null || f.snapped.y !== null)) {
     ctx.beginPath();
@@ -253,6 +270,7 @@ export function drawFrame(ctx: CanvasRenderingContext2D, vp: Viewport, f: FrameV
     let text = '';
     if (f.dragging === 'move') text = `${formatNumber(m[4], 1)} / ${formatNumber(m[5], 1)} mm`;
     else if (f.dragging === 'turn') text = `${formatNumber(f.turn, 1)}°`;
+    else if (f.dragging === 'gap') text = `${t('object.contour.gap')} ${formatNumber(f.gapValue, 1)} mm`;
     else {
       const w = (f.box.maxX - f.box.minX) * Math.abs(m[0]);
       const h = (f.box.maxY - f.box.minY) * Math.abs(m[3]);
@@ -260,8 +278,10 @@ export function drawFrame(ctx: CanvasRenderingContext2D, vp: Viewport, f: FrameV
     }
     const xs = pts.map((q) => q[0]);
     const ys = pts.map((q) => q[1]);
-    const lx = (Math.min(...xs) + Math.max(...xs)) / 2;
-    const ly = Math.max(...ys) + 18;
+    // The distance by the grip itself (it moves in and out, the frame stays).
+    const grip = f.dragging === 'gap' && f.gapDrag ? S(f.gapDrag) : null;
+    const lx = grip ? grip[0] : (Math.min(...xs) + Math.max(...xs)) / 2;
+    const ly = grip ? grip[1] - 24 : Math.max(...ys) + 18;
     ctx.font = '600 12px system-ui, sans-serif';
     const tw = ctx.measureText(text).width;
     ctx.fillStyle = 'rgba(0, 0, 0, 0.72)';

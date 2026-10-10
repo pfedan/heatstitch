@@ -350,7 +350,8 @@ export function subtractTop(p: Pattern, which: number[], trimMm: number): Subtra
   const without = deleteObjects(cur, gone, trimMm);
   if (!without) return null;
   const shift = (o: number) => o - gone.filter((g) => g < o).length;
-  return { pattern: without, cut: cut.map(shift), covered: gone.length - 1 };
+  // A border in a thread of its own follows its fill's new outline.
+  return { pattern: syncBorders(without, trimMm), cut: cut.map(shift), covered: gone.length - 1 };
 }
 
 /**

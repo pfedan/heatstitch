@@ -8,16 +8,31 @@ import { sameColor } from '../src/model/recolor';
 import { backToVersion, remember, remembered } from '../src/model/restitch';
 import { deleteObjects, duplicateObject, mirrorMatrix, recolorObjects, subtractTop } from '../src/model/shapeOps';
 import { ellipsePath, parsePath, rectPath } from '../src/shape/svgPath';
-import { CHAINS, FIRST_SEED, ID, options, T, COLORS, empty, knowledge, Doc, shapes, transform, boxOf, saveAndOpen, checkWellFormed, checkAllKnown, checkPartsFit, checkBorders, checkObjectList, checkKeys, checkKnockouts, checkExport, checkSewDesign, chain, borderedSquare, borderOf, squareOf, type Version } from './helpers/torture';
+import { loadOps } from '../src/shape/ops';
+import { CHAINS, FIRST_SEED, ID, options, T, COLORS, empty, knowledge, Doc, shapes, transform, boxOf, saveAndOpen, checkWellFormed, checkAllKnown, checkPartsFit, checkBorders, checkObjectList, checkKeys, checkKnockouts, checkExport, checkSewDesign, checkFollowers, chain, borderedSquare, borderOf, squareOf, type Version } from './helpers/torture';
 
 describe('torture test', () => {
   const seeds = Array.from({ length: CHAINS }, (_, k) => FIRST_SEED + k);
   it.each(seeds)('chain %i keeps the design consistent', async (seed) => {
     await chain(seed);
-  });
+    // Some chains build large designs (a contour filled as the ground, scaled up, left out under
+    // others): slower runners need more than the 30 s default.
+  }, 60_000);
 });
 
 describe('found by the torture test', () => {
+  it('cutting out of a fill takes its border in a thread of its own along', async () => {
+    await loadOps();
+    const d = borderedSquare();
+    // A disc over the square's edge, in the square's thread and in the border's.
+    for (const color of [COLORS[0], COLORS[1]]) {
+      const p = addShape(d.cur.p, { form: parsePath(ellipsePath(18, 10, 5, 5), ID), kind: 'fill' }, color, null, options)!.pattern;
+      const c = subtractTop(p, [0, sewObjects(p).length - 1], T)!;
+      expect(c.cut).toEqual([0]);
+      checkFollowers(c.pattern);
+    }
+  });
+
   it('deleting a border leaves its fill without one, and undo brings both back', () => {
     const d = borderedSquare();
     const before = d.cur;

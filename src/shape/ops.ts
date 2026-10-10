@@ -336,6 +336,8 @@ const FIT = 0.03;
 const CORNER_SPAN = 0.3;
 /** Polygon edges shorter than this are left out before fitting (mm). */
 const MIN_EDGE = 0.005;
+/** How far a polygon kept to work on may lie from the exact one (mm). */
+const SIMPLE = 0.002;
 /** Turn at a polygon point that makes a corner of the fitted curves (degrees). */
 const CORNER_DEG = 35;
 
@@ -363,9 +365,10 @@ const toInt = (pts: Pt[]) => pts.map(([x, y]) => ({ x: Math.round(x * SCALE), y:
 
 /**
  * The area of `f` grown by `d` mm (shrunk when negative), round at the corners. Lines (open paths)
- * count with `lineWidth`: their band grows by `d` too. Null when nothing is left.
+ * count with `lineWidth`: their band grows by `d` too. Null when nothing is left. Without `fit` the
+ * result stays polygons (straight nodes 0.01 mm off the curve): for working on, without a fit's error.
  */
-export function offsetForm(f: Form, d: number, lineWidth = 0): Form | null {
+export function offsetForm(f: Form, d: number, lineWidth = 0, fit = true): Form | null {
   const C = needClipper();
   // Offsetting reads holes from the turning sense of the paths: settle the fill rule first.
   const c = new C.Clipper64();
@@ -391,8 +394,43 @@ export function offsetForm(f: Form, d: number, lineWidth = 0): Form | null {
   u.addSubject(parts);
   const sol: Paths64 = [];
   u.execute(C.ClipType.Union, C.FillRule.NonZero, sol);
-  const paths = sol.filter((r) => r.length > 2).map((r) => fitRing(r.map((q) => [q.x / SCALE, q.y / SCALE] as Pt)));
-  return paths.length ? { paths } : null;
+  return formOf(sol, fit);
+}
+
+/** Clipper's rings as a form: fitted as curves, or as they are. */
+function formOf(rings: Paths64, fit: boolean): Form | null {
+  // Polygons to work on keep only the points that matter (within SIMPLE): the next offset puts an
+  // arc at every point, and the round joins of this one are points 0.01 mm apart.
+  const kept = fit ? rings : needClipper().simplifyPaths(rings, SIMPLE * SCALE, true);
+  const pts = kept.filter((r) => r.length > 2).map((r) => r.map((q) => [q.x / SCALE, q.y / SCALE] as Pt));
+  const paths = pts.map((r) => (fit ? fitRing(r) : { closed: true, nodes: r.map((q) => ({ p: q, a: q, b: q, smooth: false })) }));
+  // Clipper turns holes the other way round: read nonzero they stay holes, also next to other forms.
+  return paths.length ? (fit ? { paths } : { paths, nonzero: true }) : null;
+}
+
+/**
+ * The area a thread `w` mm wide covers along every path of `f` (closed ones all round, not filled),
+ * round at the ends and corners: what a line sews. Null when nothing is left; `fit` as in offsetForm.
+ */
+export function bandForm(f: Form, w: number, fit = true): Form | null {
+  const C = needClipper();
+  const ways = f.paths.filter((p) => p.nodes.length > 1);
+  if (!ways.length || !(w > 0)) return null;
+  const parts: Paths64 = [];
+  for (const closed of [true, false]) {
+    const list = ways.filter((p) => p.closed === closed);
+    if (!list.length) continue;
+    const o = new C.ClipperOffset(2, FLAT * SCALE);
+    o.addPaths(list.map((p) => toInt(flattened(p, FLAT))), C.JoinType.Round, closed ? C.EndType.Joined : C.EndType.Round);
+    const out: Paths64 = [];
+    o.execute((w / 2) * SCALE, out);
+    parts.push(...out);
+  }
+  const u = new C.Clipper64();
+  u.addSubject(parts);
+  const sol: Paths64 = [];
+  u.execute(C.ClipType.Union, C.FillRule.NonZero, sol);
+  return formOf(sol, fit);
 }
 
 /** A closed polygon as curves: sharp turns stay corners, the rest is fitted within FIT. */

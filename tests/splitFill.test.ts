@@ -10,7 +10,7 @@ import { transformSewObject } from '../src/model/reshape';
 import { remember, remembered, rememberedIn, restitch, restoreRemembered, type BorderSettings, type FillSettings } from '../src/model/restitch';
 import { shareBorders, syncBorders } from '../src/model/border';
 import { stitchesBefore } from '../src/model/transform';
-import { overlapsIn, wholeArea } from '../src/model/knockout';
+import { overlapsIn, setKnockout, wholeArea } from '../src/model/knockout';
 import { stitchKinds } from '../src/model/sequence';
 import { duplicateObjects, mirrorMatrix } from '../src/model/shapeOps';
 import { canSplit, OVERLAP_MM, partAngles, splitFill } from '../src/model/splitFill';
@@ -152,6 +152,19 @@ describe('split a fill', () => {
     expect(uncovered(whole, [areaOf(s.pattern, 0), areaOf(s.pattern, 1)])).toBeLessThan(0.002);
     // One trim between the two parts (objects of one thread are kept apart by trims).
     expect(trims(s.pattern)).toBe(before + 1);
+  });
+
+  it('cuts a fill that leaves out apart where one part lies all under a later fill', () => {
+    // Found by the torture test (seed 1062): the covered part has nothing to be sewn on.
+    let p = addShape(empty, { form: parsePath(rectPath(0, 0, 30, 20, 0, 0), ID), kind: 'fill' }, green, null, options)!.pattern;
+    p = addShape(p, { form: parsePath(rectPath(14, -2, 20, 24, 0, 0), ID), kind: 'fill' }, red, 0, options)!.pattern;
+    p = setKnockout(p, [0], true, T)!.pattern;
+    const s = splitFill(p, 0, [[[15, -5], [15, 25]]], T);
+    expect(s && s !== 'whole').toBe(true);
+    const parts = (s as Exclude<typeof s, null | 'whole'>).parts.map((o) => remembered((s as { pattern: Pattern }).pattern, sewObjects((s as { pattern: Pattern }).pattern)[o])!);
+    expect(parts).toHaveLength(2);
+    // Sewn whole until what covers it changes, and still leaving out.
+    expect(parts.every((m) => m.knockout)).toBe(true);
   });
 
   it('says when a cut does not cut the fill apart, and splits only fills', () => {

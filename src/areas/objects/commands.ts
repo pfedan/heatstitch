@@ -48,6 +48,7 @@ export interface ObjectActions {
   split(): void;
   combine(): void;
   subtract(): void;
+  contour(): void;
   /** Whether the selected fills leave out what lies on them: all, some or none (null: no fills). */
   knockoutState(): 'on' | 'off' | null;
   knockout(): void;
@@ -133,6 +134,9 @@ export function registerObjectCommands(a: ObjectActions): void {
   command({ id: 'object.split', label: 'objects.split', group: G, icon: 'obj-split', when: () => some() && info()?.selected.length === 1 && (info()!.objects[info()!.selected[0]]?.sections ?? 0) > 1, need: then(() => one() ?? 'objects.need.parts'), run: a.split });
   command({ id: 'object.combine', label: 'objects.combine', group: G, icon: 'obj-combine', when: () => some() && (info()?.selected.length ?? 0) > 1 && !info()!.mergeBlocked, need: several(() => ((info()?.selected.length ?? 0) > 1 ? (info()?.mergeBlocked ?? undefined) : 'objects.need.two')), run: a.combine });
   command({ id: 'object.subtract', label: 'objects.subtract', group: G, icon: 'obj-subtract', when: () => some() && !!info()?.subtractable, need: several(() => ((info()?.selected.length ?? 0) > 1 ? undefined : 'objects.need.two')), run: a.subtract });
+  // Also around a lettering (a contour around a text), not while an outline or points are edited.
+  const around = () => a.flow() && a.frame().length > 0 && !a.drawing() && !info()?.shaping && !info()?.editing;
+  command({ id: 'object.contour', label: 'objects.contour', group: G, icon: 'obj-contour', when: around, need: () => (around() ? undefined : needSome()), run: a.contour });
   command({ id: 'object.knockout', label: 'objects.knockout', group: G, icon: 'obj-knockout', when: () => some() && a.knockoutState() !== null, need: then(() => 'objects.need.fill'), run: a.knockout });
   command({ id: 'object.overlapCut', label: 'objects.overlapCut', group: G, icon: 'obj-knockout', when: () => a.flow() && a.overlapShown(), need: a.blocked, run: a.overlapCut });
   command({ id: 'object.putAside', label: 'objects.putAside', group: G, icon: 'obj-aside', when: () => some() && a.count() > a.frame().length, need: then(), run: () => a.aside('off') });
@@ -215,7 +219,7 @@ export function objectMenuItems(openOrder: () => void): MenuItem[] {
   return [
     ...entries(['object.openShape', 'object.openStitches', '-', 'object.duplicate', 'object.color', 'object.blend', '-']),
     { label: `${t('objects.orderMenu')} …`, run: openOrder, disabled: !ORDER_IDS.some((id) => id !== '-' && can(id)) },
-    ...entries(['-', 'object.mirrorH', 'object.mirrorV', '-', 'draw.cut', 'object.split', 'object.combine', 'object.subtract']),
+    ...entries(['-', 'object.mirrorH', 'object.mirrorV', '-', 'draw.cut', 'object.split', 'object.combine', 'object.subtract', 'object.contour']),
     // A switch: the entry says what a click does now.
     ...(can('object.knockout') ? [actions?.knockoutState() === 'on' ? { label: t('objects.knockout.off'), run: () => runCommand('object.knockout') } : 'object.knockout'] : []),
     ...entries(['-', 'object.putAside', 'object.guide']),

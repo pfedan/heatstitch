@@ -11,5 +11,6 @@ describe('found by the torture test', () => {
   const regular = (seed: number) => STEPS === 14 && seed >= FIRST_SEED && seed < FIRST_SEED + CHAINS;
   it.each([3, 4, 9, 11, 12, 16, 18, 24, 34, 38, 101, 165, 288, 389, 1034, 1051, 1062, 1276, 2015, 2335].filter((s) => !regular(s)))('chain %i still holds', async (seed) => {
     await chain(seed, 14);
-  });
+    // A new step changes what the chains do: some build large designs and take longer than most.
+  }, 60_000);
 });

@@ -12,7 +12,7 @@ import type { ShapeTool } from '../ui/shapeTool';
 import type { ThreadColor, Pattern } from '../model/pattern';
 import type { Pt } from '../digitize/skeleton';
 import { DrawTool, type DrawKind } from '../ui/drawTool';
-import { FrameTool, type SnapTargets } from '../ui/frameTool';
+import { FrameTool, type ContourGrip, type SnapTargets } from '../ui/frameTool';
 import { digitizeDefaults, type Digitized, digitizeShapes } from '../digitize/digitize';
 import { nearestThread } from '../image/prepare';
 import { overlapsIn, setKnockout } from '../model/knockout';
@@ -48,6 +48,8 @@ export interface DrawingApp {
   readonly applyEdit: (p: Pattern, measurement?: Measurement | undefined) => void;
   readonly closeRungs: () => void;
   readonly closeShape: () => void;
+  readonly contourGrip: (p: Pattern, q: Sequence, o: number) => (ContourGrip & { d: number }) | null;
+  readonly setContourGap: (d: number, final: boolean) => boolean;
   readonly editor: Editor;
   readonly files: FileList;
   readonly followKnockouts: () => void;
@@ -268,6 +270,7 @@ export function bindDrawing(app: DrawingApp) {
   }
 
   const frameTool = new FrameTool({
+    gap: (d, final) => void app.setContourGap(d, final),
     change: (m, final) => {
       if (final) {
         pendingFrame = null;
@@ -312,6 +315,9 @@ export function bindDrawing(app: DrawingApp) {
       maxY: Math.max(...objs.map((o) => o.maxY)) / 10,
     };
     frameTool.open(box, objs.every((o) => scaleBlocked(p, o, q.kinds) === null), snapTargets(q.objects.filter((o) => !ui.selectedObjects.has(o.index))));
+    const grip = sel.length === 1 ? app.contourGrip(p, q, sel[0]) : null;
+    frameTool.gap = grip;
+    if (grip) frameTool.gapValue = grip.d;
   }
 
   /** What a moved selection snaps to: the edges and middles of the other objects, and the middle of them all. */
