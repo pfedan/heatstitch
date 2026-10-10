@@ -13,7 +13,7 @@ import type { Viewport } from '../render/viewport';
 import { ShapeTool } from '../ui/shapeTool';
 import { deleteObjects, duplicateObjects, mirrorMatrix, subtractTop } from '../model/shapeOps';
 import { loadOps, opsReady } from '../shape/ops';
-import { fillsToLines, reshapeObject } from '../model/reshape';
+import { fillsToLines, lineToSatin, reshapeObject } from '../model/reshape';
 import { resewLine, lineSettings, lineToFill, reshapeLineFill } from '../model/line';
 import { refreshKnockouts } from '../model/knockout';
 import { borderOf, objectKey, remember, remembered, rememberedIn, restitch, type Remembered, type RestitchResult } from '../model/restitch';
@@ -189,10 +189,11 @@ export function bindShapes(app: ShapesApp) {
     const p = app.files.active?.pattern;
     if (!p || !objs.length) return;
     const bands = objs.every((o) => geoUse(remembered(p, app.seq(p).objects[o])) === 'band');
+    const satins = objs.every((o) => app.seq(p).objects[o]?.kind === 'satin');
     const r = fillsToLines(p, objs, app.settings.trimMm);
     if (!r) return app.layers.say(t('stitch.failed', { n: objs.length }), true);
     app.applyRestitched(r, 'stitch.failed', true, null, r.drop);
-    if (!bands && !r.failed.length) app.layers.say(t('stitch.lineAgain', { n: r.starts.length }));
+    if (!bands && !r.failed.length) app.layers.say(t(satins ? 'stitch.lineAgainSatin' : 'stitch.lineAgain', { n: r.starts.length }));
     followKnockouts();
   }
 
@@ -203,6 +204,14 @@ export function bindShapes(app: ShapesApp) {
     const was = obj && remembered(p, obj)?.kept?.fill;
     if (!p || !was) return;
     app.applyRestitched(lineToFill(p, o, was, app.settings.trimMm), 'stitch.failed', true);
+    followKnockouts();
+  }
+
+  /** Line `o` that was a satin over an area sewn as that satin again (one undo step). */
+  function satinLineAgain(o: number): void {
+    const p = app.files.active?.pattern;
+    if (!p) return;
+    app.applyRestitched(lineToSatin(p, o, app.settings.trimMm), 'stitch.toSatin.failed', true);
     followKnockouts();
   }
 
@@ -316,7 +325,9 @@ export function bindShapes(app: ShapesApp) {
     app.applyRestitched(r, 'shape.failed', true, null, opened ? new Set(followerLinks(before)) : undefined);
     followKnockouts();
     if (hand) app.layers.say(t('shape.handReplaced', { n: formatNumber(hand) }));
-    else if (opened) app.layers.say({ text: t('shape.opened'), undo: () => app.history('undo') });
+    else if (opened) app.layers.say({ text: t(now.kept?.satinSettings ? 'shape.openedSatin' : 'shape.opened'), undo: () => app.history('undo') });
+    else if (geoUse(now) === 'line' && now.kept?.satinSettings && fits(form, 'fill') && !fits(was, 'fill'))
+      app.layers.say({ text: t('shape.closedAgain'), action: { label: t('shape.satinAgain'), run: () => satinLineAgain(o) } });
     else if (geoUse(now) === 'line' && now.kept?.fill && fits(form, 'fill') && !fits(was, 'fill'))
       app.layers.say({ text: t('shape.closedAgain'), action: { label: t('shape.fillAgain'), run: () => fillLineAgain(o) } });
     else if (geoUse(now) === 'area' && now.fill) {
@@ -512,5 +523,5 @@ export function bindShapes(app: ShapesApp) {
   /** Whether Ctrl+V has something to paste. */
   const canPaste = (): boolean => !!copied;
 
-  return { canPaste, closeShape, copySelected, deleteSelected, duplicateSelected, pasteCopied, enterShape, followKnockouts, isLineObject, mirrorSelected, sewLine, sewLineAgain, shapeTarget, shapeTool, showBand, subtractSelected, syncShape, takeShapes };
+  return { canPaste, closeShape, copySelected, deleteSelected, duplicateSelected, pasteCopied, enterShape, followKnockouts, isLineObject, mirrorSelected, satinLineAgain, sewLine, sewLineAgain, shapeTarget, shapeTool, showBand, subtractSelected, syncShape, takeShapes };
 }

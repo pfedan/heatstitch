@@ -239,9 +239,9 @@ export function initShapes(app: ShapesAreaApp): void {
   // The outline of the one selected object (level Form).
   const shaping = () => flow() && app.shapeTool.active;
   /**
-   * The object on the level Form is a line (else a fill), or null when its paths cannot be opened
-   * or closed. A path is a path whatever it is sewn with: a fill whose last closed one is opened is
-   * sewn as a line, a band is a line already (its width the fill).
+   * The object on the level Form is a line (else a fill or a satin over an area), or null when its
+   * paths cannot be opened or closed. A path is a path whatever it is sewn with: a fill or a satin
+   * whose last closed one is opened is sewn as a line, a band is a line already (its width the fill).
    */
   const shapedLine = (): boolean | null => {
     const p = pattern();
@@ -250,7 +250,7 @@ export function initShapes(app: ShapesAreaApp): void {
     const obj = app.seq(p).objects[o];
     if (!obj) return null;
     if (app.isLineObject(p, obj)) return true;
-    return obj.kind === 'fill' && app.shapeTool.band === null ? false : null;
+    return (obj.kind === 'fill' || obj.kind === 'satin') && app.shapeTool.band === null ? false : null;
   };
   const lineOpen = (closed: boolean) => () => shapedLine() !== null && app.shapeTool.closed === closed && app.shapeTool.count >= 2;
   command({ id: 'shape.nodeDelete', label: 'shape.node.delete', group: SHAPE, keys: ['Delete'], bind: false, when: () => shaping() && app.shapeTool.selectedSmooth !== null, run: () => void app.shapeTool.deleteSelected() });
@@ -277,7 +277,8 @@ export function initShapes(app: ShapesAreaApp): void {
       // was opened says it as it is sewn again, with Wieder füllen.
       const p = pattern();
       const obj = p && ui.shapeObject !== null ? app.seq(p).objects[ui.shapeObject] : undefined;
-      const tell = shapedLine() && !(p && obj && remembered(p, obj)?.kept?.fill);
+      const kept = p && obj ? remembered(p, obj)?.kept : undefined;
+      const tell = shapedLine() && !kept?.fill && !kept?.satinSettings;
       if (app.shapeTool.toggleClosed() && tell) toast(t('shape.line.closed'));
     },
   });

@@ -105,7 +105,7 @@ export interface StitchInfo {
    * A line: how it is sewn, whether its paths are traced from its stitches, all closed (for its
    * echo), whether it can be filled (see fits), and whether it was a fill (kept, to fill it again).
    */
-  path?: { st: PathStitch; traced: boolean; closed: boolean; fills: boolean; refill?: boolean; color: ThreadColor };
+  path?: { st: PathStitch; traced: boolean; closed: boolean; fills: boolean; refill?: boolean; resatin?: boolean; color: ThreadColor };
   /** The one selected fill was a wide line, and can be one again. */
   asLine?: boolean;
   /** How deep the selected fills reach at their deepest point (mm; the shallowest of them): an underlay inset beyond it leaves none. */
@@ -392,6 +392,7 @@ export class StitchPanel {
       draw: info.draw ? { single: info.draw.single, tool: info.draw.tool } : undefined,
       // A line that was a fill: filled as it was; a drawn line with a closed path: filled inside; a satin line: in its width.
       lineFills: !!info.path && !info.path.traced && (info.path.refill || info.path.fills || info.path.st.type === 'satin'),
+      lineSatin: info.path?.resatin ? { closed: info.path.fills } : undefined,
       blocked: !!info.outline || !!info.free?.on,
     };
   }
@@ -1108,14 +1109,15 @@ export class StitchPanel {
   private wayHint(k: 'fill' | 'satin' | 'line', way: KindWay, now: ReturnType<StitchPanel['nowKind']>): Key {
     if (way === 'draw') return 'stitches.kind.toSatinDraw';
     const path = this.info?.path;
-    if (k === 'line') return this.info?.asLine ? 'stitch.kind.toLine' : 'stitches.kind.toEmpty';
-    if (k === 'satin') return 'stitch.kind.toSatin';
+    if (k === 'line') return this.info?.asLine ? 'stitch.kind.toLine' : now === 'satin' ? 'stitches.kind.satinToLine' : 'stitches.kind.toEmpty';
+    if (k === 'satin') return now === 'line' ? 'stitches.kind.satinAgain' : 'stitch.kind.toSatin';
     if (now !== 'line') return 'stitch.kind.toFill';
     return path?.refill ? 'stitches.kind.fillAgain' : path?.fills ? 'stitch.kind.closedToFill' : 'stitch.kind.lineToFill';
   }
 
   /** Why `k` cannot be picked now. */
   private blockedHint(k: 'fill' | 'satin' | 'line', now: ReturnType<StitchPanel['nowKind']>, info: StitchInfo): Key {
+    if (k === 'satin' && now === 'line' && info.path?.resatin) return 'stitches.kind.closeToSatin';
     if (k === 'satin' && now === 'line' && this.kindState().lineFills) return 'stitches.kind.satinViaFill';
     if (k === 'satin') {
       if (now !== 'fill' || info.asLine) return 'stitches.kind.notForLine';

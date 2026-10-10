@@ -47,6 +47,7 @@ export interface StitchesApp {
   readonly suggestLines: () => void;
   readonly sewLine: (o: number, path: Form | null, st: PathStitch | null, final: boolean) => boolean;
   readonly sewLineAgain: (objs: number[]) => void;
+  readonly satinLineAgain: (o: number) => void;
   /** Stichart Satin on one fill as R and Vorschlagen do it; false when the shape is not lines (see bindRungs). */
   readonly convertToSatin: (o: number) => boolean;
   readonly toggleGuides: () => void;
@@ -133,7 +134,7 @@ export function bindStitches(app: StitchesApp) {
     if (one && app.isLineObject(p, one)) {
       const form = guessLine(p, one, q.kinds);
       const m = remembered(p, one);
-      info.path = { st: lineSettings(p, one, q.kinds), traced: !lineGeoOf(m), closed: !!form?.paths.length && form.paths.every((x) => x.closed), fills: fits(form, 'fill'), refill: !!m?.kept?.fill, color: one.color };
+      info.path = { st: lineSettings(p, one, q.kinds), traced: !lineGeoOf(m), closed: !!form?.paths.length && form.paths.every((x) => x.closed), fills: fits(form, 'fill'), refill: !!m?.kept?.fill, resatin: !!m?.kept?.satinSettings, color: one.color };
     }
     if (one && geoUse(remembered(p, one)) === 'band') info.asLine = true;
     const orig = app.files.active?.pattern === p ? app.files.active.original : undefined;
@@ -391,6 +392,8 @@ export function bindStitches(app: StitchesApp) {
         if (r?.starts.length) app.layers.say(t(closed ? 'stitch.closedFilled' : 'stitch.lineFilled'));
         return;
       }
+      // A line that was a satin over an area: sewn as that satin again.
+      if (to === 'satin' && one >= 0 && remembered(p, app.seq(p).objects[one])?.kept?.satinSettings) return app.satinLineAgain(one);
       // One fill to satin: cut and crossed as by hand (Vorschlagen), the same as with R.
       if (to === 'satin' && one >= 0 && app.convertToSatin(one)) return;
       const s = convertSettings(to, stitchInfo(p, app.seq(p)));

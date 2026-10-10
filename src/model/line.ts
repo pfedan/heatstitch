@@ -9,9 +9,9 @@ import { runRecords } from './border';
 import { tidy, withRecords } from './edit';
 import { rememberObjects, sewObjects, stitchKey, type SewObject } from './objects';
 import { JUMP, STITCH, type Pattern } from './pattern';
-import { analyze, borderOf, measureFill, objectKey, remember, remembered, restitch, trimBefore, type BorderSettings, type FillSettings, type Rec, type Remembered, type RestitchResult, type RunSettings } from './restitch';
+import { analyze, borderOf, measureFill, measureSatin, objectKey, remember, remembered, restitch, trimBefore, type Analysis, type BorderSettings, type FillSettings, type Rec, type Remembered, type RestitchResult, type RunSettings } from './restitch';
 import { stitchKinds, TIE_STITCH } from './sequence';
-import { bandArea, fits, geoOf, geoUse, grownForm, guessArea, lineGeoOf } from './geo';
+import { bandArea, fits, geoOf, geoUse, grownForm, guessArea, lineGeoOf, satinOutline } from './geo';
 import { partOf } from './shadow';
 
 /**
@@ -393,8 +393,9 @@ export function reshapeLineFill(p: Pattern, objs: SewObject[], o: SewObject, kin
  * A fill sewn as a line along its paths (`geo` when its form changes with it), its fill kept to
  * fill it again as it was (see lineToFill): a band in its width, with the stitch it had as a line;
  * an area along its edge, with its border's stitch (a running stitch without one). A fill of a file
- * is sewn along the outline of its area, which is its form from now on. Null when it has no area
- * or nothing is sewn.
+ * is sewn along the outline of its area, which is its form from now on. A satin over an area is
+ * sewn along its edge the same way, its satin settings kept to sew it as satin again
+ * (see lineToSatin). Null when it has no area or nothing is sewn.
  */
 export function fillToLine(p: Pattern, index: number, trimMm: number, geo?: Form): { pattern: Pattern; first: number; last: number } | null {
   const kinds = stitchKinds(p);
@@ -403,6 +404,7 @@ export function fillToLine(p: Pattern, index: number, trimMm: number, geo?: Form
   if (!o || known?.free || known?.outline || known?.blendOf || known?.lettering || partOf(known)) return null;
   const an = known?.fill ? null : analyze(p, o, kinds, known);
   const fill = known?.fill ?? (an?.fill && an.parts.some((pt) => pt.kind === 'fill') ? measureFill(p, an) : null);
+  if (!fill && an && !an.fill && an.parts.some((pt) => pt.kind === 'satin')) return satinToLine(p, o, kinds, an, trimMm, geo);
   geo ??= (fill && (geoOf(known) ?? guessArea(p, o, kinds))) ?? undefined;
   if (!fill || !geo) return null;
   const was = known?.kept?.line;
@@ -424,6 +426,36 @@ export function fillToLine(p: Pattern, index: number, trimMm: number, geo?: Form
       geo,
       line: st,
       kept: { ...kept, fill: structuredClone(fill), ...(edge || fill.lineWidth !== undefined ? {} : { unbordered: true as const }) },
+      id: o.id,
+      ...(known?.lock ? { lock: true } : {}),
+    });
+  }
+  return r;
+}
+
+/**
+ * A satin over an area sewn as a line along its edge (see fillToLine): in running stitch (or the
+ * stitch it had as a line), its satin settings kept to sew it as satin again. Its columns are not
+ * kept: they belong to the area it had, the satin again finds them anew in the area it has then.
+ */
+function satinToLine(p: Pattern, o: SewObject, kinds: Uint8Array, an: Analysis, trimMm: number, geo?: Form): { pattern: Pattern; first: number; last: number } | null {
+  const known = remembered(p, o);
+  const part = an.parts.find((pt) => pt.kind === 'satin')!;
+  const satin = known?.satin ?? measureSatin(p, part, kinds);
+  geo ??= geoOf(known) ?? satinOutline(p, o, kinds) ?? undefined;
+  if (!geo) return null;
+  const was = known?.kept?.line;
+  const st: PathStitch = was ? { ...was } : runAsLine(LINE_RUN);
+  const r = resewLine(p, o.index, geo, st, trimMm);
+  if (!r) return null;
+  const fresh = sewObjects(r.pattern).find((x) => x.first === r.first);
+  if (fresh) {
+    const { line: _l, unbordered: _u, satin: _s, satinSettings: _w, ...kept } = known?.kept ?? {};
+    remember(r.pattern, fresh, {
+      region: null,
+      geo,
+      line: st,
+      kept: { ...kept, satinSettings: structuredClone(satin) },
       id: o.id,
       ...(known?.lock ? { lock: true } : {}),
     });
