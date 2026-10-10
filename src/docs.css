@@ -538,6 +538,67 @@ figure img[src*='save-'] {
   }
 }
 
+/* At the top of the guide: one tile that leads to the video page, with a small picture of it. */
+.videos-link {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 20px 0 8px;
+  padding: 10px 16px 10px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--ink);
+  text-decoration: none;
+  transition: border-color 0.15s;
+}
+
+.videos-link:hover {
+  border-color: var(--accent);
+}
+
+.videos-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.videos-link img {
+  flex: none;
+  width: 220px;
+  height: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #141118;
+}
+
+.videos-link-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 15px;
+  line-height: 1.4;
+}
+
+.videos-link-text b {
+  font-size: 16px;
+}
+
+.videos-link-cta {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+@media (max-width: 560px) {
+  .videos-link {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .videos-link img {
+    width: 100%;
+  }
+}
+
 /* Short videos: cards with the stage of the video (src/build/videoHtml.ts), a player on a tap, nothing loads before. */
 .videos {
   margin: 20px 0 8px;
