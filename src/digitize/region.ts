@@ -38,7 +38,7 @@ const MARGIN = 6;
 const fields: { w: number; h: number; pxMm: number; hash: number; mask: Uint8Array; field: Float32Array }[] = [];
 const FIELDS = 12;
 
-function maskHash(mask: Uint8Array): number {
+export function maskHash(mask: Uint8Array): number {
   let h = 2166136261;
   for (let i = 0; i < mask.length; i++) if (mask[i]) h = Math.imul(h ^ i, 16777619);
   return h >>> 0;
@@ -54,7 +54,7 @@ export function signedField(mask: Uint8Array, w: number, h: number, pxMm: number
   return field;
 }
 
-function sameMask(a: Uint8Array, b: Uint8Array): boolean {
+export function sameMask(a: Uint8Array, b: Uint8Array): boolean {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) if (!a[i] !== !b[i]) return false;
   return true;
