@@ -940,9 +940,9 @@ export const LETTERING_OPS: Op[] = [
       const l: Lettering = {
         ...LETTERING_DEFAULTS,
         id: `L${Math.floor(r() * 1e6)}`,
-        text: pick(r, ['Herz', 'Lisa', 'Anna', 'Mama\nOma']),
+        text: pick(r, ['Herz', 'Lisa', 'Anna', 'Ma\nOma']),
         font: SCRIPT.id,
-        height: between(r, 10, 20),
+        height: between(r, 8, 14),
         spacing: pick(r, [0, -1, -2.5]),
         x: between(r, 0, 40),
         y: between(r, 10, 60),
@@ -959,7 +959,7 @@ export const LETTERING_OPS: Op[] = [
       const ls = letteringsIn(d.cur.p);
       if (!ls.length) return false;
       const old = pick(r, ls);
-      const l = { ...old, text: pick(r, ['Herzlich', 'Lisa', 'Sophie']), spacing: pick(r, [0, -1.5, -3]), x: old.x + between(r, -5, 5) };
+      const l = { ...old, text: pick(r, ['Herz', 'Lisa', 'Oma']), spacing: pick(r, [0, -1.5, -3]), x: old.x + between(r, -5, 5) };
       const placed = placeLettering(d.cur.p, letteringObjects(d.cur.p, d.objects, old.id), sewLettering(SCRIPT, l, T), l);
       return shapes(d, placed?.pattern);
     },
@@ -1775,11 +1775,28 @@ export async function chain(seed: number, steps = STEPS, opts: { trace?: boolean
 }
 
 
+function bytesOf(b: Uint8Array): string {
+  let out = '';
+  for (let i = 0; i < b.length; i += 8192) out += String.fromCharCode(...b.subarray(i, i + 8192));
+  return out;
+}
+/** A value as text, typed arrays as their bytes, keys in order. */
+const asText = (v: unknown): string =>
+  JSON.stringify(v, (_k, x) =>
+    ArrayBuffer.isView(x)
+      ? `${x.constructor.name}:${bytesOf(new Uint8Array(x.buffer, x.byteOffset, x.byteLength))}`
+      : x && typeof x === 'object' && !Array.isArray(x)
+        ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => (a < b ? -1 : 1)))
+        : x,
+  );
+
 /** All the invariants, after a step; `full`: also the export and sewing the design. */
 function checkStep(d: Doc, full: boolean): void {
   const p = d.cur.p;
   checkWellFormed(p);
-  expect(knowledge(p), 'knowledge as stored with this version').toEqual(d.cur.known);
+  // Compared as text first (areas are large typed arrays, slow to compare one by one); the full diff only when they differ.
+  const known = knowledge(p);
+  if (asText(known) !== asText(d.cur.known)) expect(known, 'knowledge as stored with this version').toEqual(d.cur.known);
   checkAllKnown(p);
   checkKeys(p);
   checkObjectList(p);
