@@ -14,7 +14,7 @@ import { hasPart, partOf, withoutPart } from '../model/shadow';
 import { SATIN_SHARE } from '../model/covers';
 import { currentSettings } from '../correct/plan';
 import { isCovered, setOverlapShare } from '../model/knockout';
-import { isStroke, SATIN_MAX, pullFor, digitizeDefaults } from '../digitize/digitize';
+import { strokeLike, SATIN_MAX, pullFor, digitizeDefaults } from '../digitize/digitize';
 import { fillOfLine, lineSettings, lineToFill } from '../model/line';
 import { outline } from '../digitize/region';
 import { recommendedSpacing } from '../validation/profiles';
@@ -98,7 +98,7 @@ export function bindStitches(app: StitchesApp) {
         for (const v of an.fill.sdf) if (-v > deep) deep = -v;
         depth = Math.min(depth ?? Infinity, deep);
         // Satin needs a stroke: narrow, about even in width (the same test as in Image mode).
-        if (stroke && an.parts.some((pt) => pt.kind === 'fill')) stroke = !!isStroke(remembered(p, obj)?.shape ?? an.fill, SATIN_MAX);
+        if (stroke && an.parts.some((pt) => pt.kind === 'fill')) stroke = strokeLike(remembered(p, obj)?.shape ?? an.fill, SATIN_MAX);
       }
     }
     const hand = [...ui.selectedObjects].reduce((a, o) => a + (q.objects[o] ? (remembered(p, q.objects[o])?.hand ?? 0) : 0), 0);

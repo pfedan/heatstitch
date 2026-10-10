@@ -1,6 +1,6 @@
 import { expandRegion, type Region } from '../digitize/region';
 import { syncBorders } from './border';
-import type { Form } from '../shape/path';
+import { storeForm, type Form } from '../shape/path';
 import { coversOver, cutAway, SATIN_SHARE, type Cover } from './covers';
 import { rememberObjects, sewObjects, type SewObject } from './objects';
 import type { Pattern } from './pattern';
@@ -39,11 +39,22 @@ export function wholeArea(form: Form, pxMm = 0.1, grow = 0): Region | null {
   const key = `${pxMm} ${grow}`;
   let r = byKey.get(key);
   if (r === undefined) {
-    r = grownForm(form, pxMm, grow);
+    // The same curves as another form object (a design back from a worker, or loaded again): rastered once.
+    const same = `${key} ${JSON.stringify(storeForm(form))}`;
+    r = byContent.get(same);
+    if (r === undefined) {
+      r = grownForm(form, pxMm, grow);
+      byContent.set(same, r);
+      if (byContent.size > CONTENT_KEEP) byContent.delete(byContent.keys().next().value!);
+    }
     byKey.set(key, r);
   }
   return r;
 }
+
+/** Whole areas by their curves, the last few (see wholeArea). */
+const byContent = new Map<string, Region | null>();
+const CONTENT_KEEP = 24;
 
 /** How far the area of `m` reaches beyond its form (mm, see FillSettings.areaGrow). */
 const growOf = (m: Remembered | null | undefined): number => m?.fill?.areaGrow ?? 0;

@@ -7,7 +7,7 @@ import { fabricOf, recommendedSpacing, type Profile } from '../validation/profil
 import { fillRegion } from './fill';
 import { flowFill } from './flow';
 import { coverage, peakDensity } from './measure';
-import { buildRegion, type Region } from './region';
+import { buildRegion, maskHash, sameMask, type Region } from './region';
 import { runStitch, TOLERANCE } from './run';
 import { column, pairs, satinStitches, underlay, type Column, type SatinParams } from './satin';
 import { reverse, skeleton, type Branch, type Graph, type Pt } from './skeleton';
@@ -368,6 +368,21 @@ export function isStroke(r: Region, satinMax = SATIN_MAX): Graph | null {
   const graph = skeleton(r);
   return classify(graph, { satinMax, satinMin: 0 } as DigitizeOptions) === 'satin' ? graph : null;
 }
+
+/**
+ * Whether area `r` is a stroke (see isStroke), remembered for the last few areas by their pixels:
+ * the stitch panel asks again for the same area after each change of its stitches.
+ */
+export function strokeLike(r: Region, satinMax = SATIN_MAX): boolean {
+  const key = `${satinMax} ${r.x0} ${r.y0} ${r.w} ${r.h} ${r.pxMm} ${maskHash(r.mask)}`;
+  const hit = strokes.find((c) => c.key === key && sameMask(c.mask, r.mask));
+  if (hit) return hit.stroke;
+  const stroke = !!isStroke(r, satinMax);
+  strokes.push({ key, mask: r.mask.slice(), stroke });
+  if (strokes.length > 16) strokes.shift();
+  return stroke;
+}
+const strokes: { key: string; mask: Uint8Array; stroke: boolean }[] = [];
 
 function sewRun(o: Obj, start: Pt, tol: number): Pt[][] {
   const line = (b: Branch, fa: boolean, fb: boolean) => runStitch(column(o.region, b, fa, fb).center, 2, tol);
