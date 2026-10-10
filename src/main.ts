@@ -44,6 +44,7 @@ import { MeasureTool } from './ui/measureTool';
 import type { Mode } from './settings';
 import { isGuessed, isOpenPattern, openOnPurpose, remembered, rememberedIn } from './model/restitch';
 import { digitizedFile } from './model/digitized';
+import { loadOps } from './shape/ops';
 import { drawAside, drawDrawing } from './render/shapeOverlay';
 import type { LeftOut, SewnFrom } from './ui/imageMode';
 import { asideOf, storeAside, type AsideShape } from './model/aside';
@@ -1919,6 +1920,8 @@ files.render();
 redraw();
 void files.restore();
 void imageMode.restore();
+// The operations on curves, loaded early: a border's echo and shadow lie on its offset curve (see borderForm).
+void loadOps().catch(() => {});
 // The thread catalogs name the numbers of the threads in the list (Brother's too).
 void loadCatalogs()
   .then(() => {

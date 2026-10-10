@@ -11,6 +11,7 @@ import { fillRegion } from '../digitize/fill';
 import { stitchKinds } from './sequence';
 import { hasPart, lineParts, linePartsOf, partInThread, partOf, type LinePart } from './shadow';
 import { storeForm, type Form, type Path } from '../shape/path';
+import { offsetForm, opsReady } from '../shape/ops';
 import { borderLoops } from '../digitize/border';
 import { simplify } from '../digitize/run';
 import { echoCopyLines, lineStitches } from './line';
@@ -51,18 +52,21 @@ const sameBorder = (a: BorderSettings, b: BorderSettings) => {
 /**
  * The line a fill's border runs on, as a form: the edge of `region` (the fill's area, all its parts
  * when it is cut apart) or `st.offset` from it, and the open paths of the fill's form. Its echo and
- * shadow lie along it. On the edge of a form given, the edge is the form's own closed paths.
+ * shadow lie along it. With a form given, the edge is the form's own closed paths, offset on its
+ * curves by the pull compensation and `st.offset` (src/shape/ops.ts, once loaded); else the edge
+ * of the pixels.
  */
 export function borderForm(m: Remembered, region: Region, st: BorderSettings): Form {
-  const off = st.offset ?? 0;
+  const by = (st.offset ?? 0) + (m.fill?.areaGrow ?? 0);
   const area = formArea(m);
+  const closed = area && sameRegion(region, m.region) ? { ...area, paths: area.paths.filter((x) => x.closed) } : null;
+  const curves = closed && (!by ? closed : opsReady() ? offsetForm(closed, by) : null);
   const edge: Path[] =
-    area && !off && sameRegion(region, m.region)
-      ? area.paths.filter((x) => x.closed)
-      : borderLoops(region, off).map((l) => {
-          const pts = simplify(l, EDGE_TOLERANCE);
-          return { closed: true, nodes: (samePt(pts[0], pts[pts.length - 1]) ? pts.slice(0, -1) : pts).map((q) => ({ p: q, a: q, b: q, smooth: false })) };
-        });
+    curves?.paths ??
+    borderLoops(region, st.offset ?? 0).map((l) => {
+      const pts = simplify(l, EDGE_TOLERANCE);
+      return { closed: true, nodes: (samePt(pts[0], pts[pts.length - 1]) ? pts.slice(0, -1) : pts).map((q) => ({ p: q, a: q, b: q, smooth: false })) };
+    });
   return { paths: [...edge, ...(openOf(m)?.paths ?? [])] };
 }
 
