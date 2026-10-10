@@ -1,0 +1,285 @@
+<!doctype html>
+<!--
+  The old address pfedan.github.io/heatstitch/ after the move to heatstitch.app. Every page of the old
+  site is this one (tools/moved/build.mjs), so every old link lands on the same page at the new address.
+  Someone who kept files or settings in the app at the old address takes them along: the browser keeps
+  them per address, so the new one can't read them. One click opens heatstitch.app/umzug.html in a small
+  window (a browser only allows that after a click); this page sends it everything stored under
+  "heatstitch", it writes it there and closes, and this tab goes on to the new address.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>heatstitch moved to heatstitch.app</title>
+    <link rel="canonical" href="https://heatstitch.app/" />
+    <noscript><meta http-equiv="refresh" content="0; url=https://heatstitch.app/" /></noscript>
+    <style>
+      :root {
+        --bg: #f4f2f7;
+        --panel: #ffffff;
+        --ink: #1d1a22;
+        --muted: #6b6475;
+        --line: #e2dde9;
+        --accent: #b5317a;
+        --accent-ink: #ffffff;
+        color-scheme: light dark;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #141118;
+          --panel: #1e1a24;
+          --ink: #ece8f1;
+          --muted: #a49cb0;
+          --line: #2f2938;
+          --accent: #e0559e;
+          --accent-ink: #14060d;
+        }
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: var(--bg);
+        color: var(--ink);
+        font: 14px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif;
+      }
+      main {
+        box-sizing: border-box;
+        width: min(420px, calc(100vw - 32px));
+        padding: 24px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 18px;
+      }
+      p {
+        margin: 0 0 16px;
+        color: var(--muted);
+      }
+      button,
+      a.go {
+        display: inline-block;
+        min-height: 44px;
+        padding: 0 18px;
+        border: 0;
+        border-radius: 8px;
+        background: var(--accent);
+        color: var(--accent-ink);
+        font: inherit;
+        font-weight: 600;
+        line-height: 44px;
+        text-decoration: none;
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.6;
+        cursor: progress;
+      }
+      button:focus-visible,
+      a:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      #hint {
+        margin: 16px 0 0;
+      }
+      #hint a {
+        color: var(--accent);
+      }
+      [hidden] {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <main hidden>
+      <h1 id="title"></h1>
+      <p id="text"></p>
+      <button id="go" type="button"></button>
+      <p id="hint" hidden></p>
+    </main>
+    <script>
+      (function () {
+        var NEW = 'https://heatstitch.app';
+        var DONE = 'heatstitch.movedTo';
+        var de = /^\/heatstitch\/de\//.test(location.pathname) || /^de\b/i.test(navigator.language || '');
+        // The same page at the new address; previews are gone, their links go to the app.
+        var path = location.pathname.replace(/^\/heatstitch(?=\/|$)/, '').replace(/^\/pr-preview\/[^/]+/, '') || '/';
+        var target = NEW + path + location.search + location.hash;
+        var T = de
+          ? {
+              title: 'heatstitch ist umgezogen',
+              text: 'heatstitch wohnt jetzt unter heatstitch.app. Deine gespeicherten Stickmuster und Einstellungen kommen mit.',
+              go: 'Weiter zu heatstitch.app',
+              busy: 'Wird übertragen…',
+              blocked: 'Dein Browser hat das kleine Übertragungsfenster blockiert. Erlaube Pop-ups für diese Seite und klicke noch einmal, oder ',
+              without: 'gehe ohne deine Dateien weiter',
+              lang: 'de',
+            }
+          : {
+              title: 'heatstitch has moved',
+              text: 'heatstitch now lives at heatstitch.app. Your saved designs and settings come along.',
+              go: 'Continue to heatstitch.app',
+              busy: 'Moving…',
+              blocked: 'Your browser blocked the small window that carries your files. Allow pop-ups for this page and click again, or ',
+              without: 'continue without your files',
+              lang: 'en',
+            };
+
+        function go() {
+          location.replace(target);
+        }
+
+        function storage() {
+          try {
+            return window.localStorage;
+          } catch (e) {
+            return null;
+          }
+        }
+
+        /** Everything the app keeps in localStorage. The origin is shared with other pfedan.github.io sites. */
+        function settings() {
+          var out = {};
+          var ls = storage();
+          if (!ls) return out;
+          for (var i = 0; i < ls.length; i++) {
+            var k = ls.key(i);
+            if (k && k.indexOf('heatstitch.') === 0 && k !== DONE) out[k] = ls.getItem(k);
+          }
+          return out;
+        }
+
+        function request(r) {
+          return new Promise(function (resolve, reject) {
+            r.onsuccess = function () {
+              resolve(r.result);
+            };
+            r.onerror = function () {
+              reject(r.error);
+            };
+          });
+        }
+
+        /** A whole database, or null when there is none: opening one that doesn't exist must not create it. */
+        function dump(name) {
+          return new Promise(function (resolve) {
+            var created = false;
+            var req;
+            try {
+              req = indexedDB.open(name);
+            } catch (e) {
+              return resolve(null);
+            }
+            req.onupgradeneeded = function () {
+              created = true;
+              req.transaction.abort();
+            };
+            req.onerror = function () {
+              resolve(null);
+            };
+            req.onsuccess = function () {
+              var db = req.result;
+              if (created || !db.objectStoreNames.length) {
+                db.close();
+                return resolve(null);
+              }
+              var names = Array.prototype.slice.call(db.objectStoreNames);
+              var tx = db.transaction(names, 'readonly');
+              Promise.all(
+                names.map(function (n) {
+                  var s = tx.objectStore(n);
+                  return Promise.all([request(s.getAllKeys()), request(s.getAll())]).then(function (r) {
+                    return {
+                      name: n,
+                      keyPath: s.keyPath,
+                      autoIncrement: s.autoIncrement,
+                      keys: r[0],
+                      values: r[1],
+                    };
+                  });
+                }),
+              ).then(
+                function (stores) {
+                  db.close();
+                  resolve({ name: name, version: db.version, stores: stores });
+                },
+                function () {
+                  db.close();
+                  resolve(null);
+                },
+              );
+            };
+          });
+        }
+
+        var ls = storage();
+        if (ls && ls.getItem(DONE)) return go();
+        Promise.all([dump('heatstitch'), dump('heatstitch.image')]).then(function (dbs) {
+          dbs = dbs.filter(function (d) {
+            return d && d.stores.some(function (s) {
+              return s.keys.length;
+            });
+          });
+          var data = { settings: settings(), dbs: dbs };
+          if (!dbs.length && !Object.keys(data.settings).length) return go();
+          show(data);
+        });
+
+        function show(data) {
+          document.documentElement.lang = T.lang;
+          document.title = T.title;
+          document.getElementById('title').textContent = T.title;
+          document.getElementById('text').textContent = T.text;
+          var button = document.getElementById('go');
+          var hint = document.getElementById('hint');
+          button.textContent = T.go;
+          document.querySelector('main').hidden = false;
+          button.focus();
+
+          var popup = null;
+          addEventListener('message', function (e) {
+            if (e.origin !== NEW || !popup || e.source !== popup) return;
+            if (e.data && e.data.type === 'heatstitch-move-ready') popup.postMessage({ type: 'heatstitch-move', data: data }, NEW);
+            if (e.data && e.data.type === 'heatstitch-move-done') {
+              try {
+                ls.setItem(DONE, new Date().toISOString());
+              } catch (err) {}
+              go();
+            }
+          });
+
+          button.addEventListener('click', function () {
+            popup = window.open(NEW + '/umzug.html', 'heatstitch-move', 'popup,width=420,height=240');
+            if (!popup) {
+              hint.textContent = T.blocked;
+              var a = document.createElement('a');
+              a.href = target;
+              a.textContent = T.without;
+              hint.appendChild(a);
+              hint.appendChild(document.createTextNode('.'));
+              hint.hidden = false;
+              return;
+            }
+            hint.hidden = true;
+            button.disabled = true;
+            button.textContent = T.busy;
+            // Closed before it was done: the button works again.
+            var watch = setInterval(function () {
+              if (!popup.closed) return;
+              clearInterval(watch);
+              button.disabled = false;
+              button.textContent = T.go;
+            }, 500);
+          });
+        }
+      })();
+    </script>
+  </body>
+</html>
