@@ -109,7 +109,7 @@
    "source": "Grand Hotel Marif",
    "chars": "!\"&'()+,-.0123456789:;=?ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz«»ÀÁÂÃÄÆÇÈÉÊËÌÍÎÏÑÔÕÖÚÛÜßàáâãäæçèéêëìíîïñôõöùúûüĨĩĽľŒœŨũ‘’",
    "cases": "Aa",
-   "kb": 372
+   "kb": 371
   },
   {
    "id": "barstitch_bold",
@@ -169,7 +169,7 @@
    "source": "Marcellus SC",
    "chars": "!&'(),-./0123456789:;=?@ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz¡¿ÄÆÈÉÊËÖÜßàáâäæçèéêëìíîïñòóôöùúûüŒœ‘’",
    "cases": "Aa",
-   "kb": 171
+   "kb": 170
   },
   {
    "id": "caffeine_tiny",
@@ -292,7 +292,7 @@
    "source": "Excalibur Nouveau",
    "chars": "!\"%&'()*,-./0123456789:;?ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz«»ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÑÒÓÔÕÖØÙÚÛÜßàáâãäåæçèéêëìíîïñòóôõöøùúûüŒœ–—‘’“”„•",
    "cases": "Aa",
-   "kb": 422
+   "kb": 421
   },
   {
    "id": "fold_inkstitch",
@@ -339,7 +339,7 @@
    "source": "Magnolia Script",
    "chars": "!\"%&'()+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ\\_abcdefghijklmnopqrstuvwxyz{}°ÄÈÉÊËÖ×Üßàâäæçèéêëîïôöùûüœ‘’",
    "cases": "Aa",
-   "kb": 247
+   "kb": 246
   },
   {
    "id": "mam_script",

@@ -2,6 +2,13 @@ import { COLOR_CHANGE, JUMP, PatternBuilder, STITCH, TRIM, type Pattern, type Th
 import { pecColor } from './pecPalette';
 
 export const PEC_COLOR_COUNT_OFFSET = 48;
+/**
+ * Where the stitch records of a PEC block begin. Brother (and pystitch, and heatstitch) put a move
+ * there first, a long-form jump to the stitches' origin; pyembroidery puts its first record there,
+ * which may be anything.
+ */
+export const PEC_RECORDS_OFFSET = 528;
+/** Where the stitches begin after Brother's opening move. */
 export const PEC_STITCH_OFFSET = 532;
 
 const signed12 = (v: number): number => {
@@ -156,6 +163,12 @@ function applyChart(colors: ThreadColor[], chart: ThreadColor[]): ThreadColor[] 
   });
 }
 
+/** A long-form jump or trim in both coordinates at `i` (4 bytes). */
+function isLongMove(data: Uint8Array, i: number): boolean {
+  const move = (v: number) => (v & 0x80) !== 0 && (v & 0x30) !== 0;
+  return i + 3 < data.length && move(data[i]) && move(data[i + 2]);
+}
+
 /** Parses a PEC block starting at `pec` (the "LA:" label). */
 export function parsePec(data: Uint8Array, pec: number, fileName = ''): Pattern {
   const label = new TextDecoder('latin1').decode(data.subarray(pec + 3, pec + 19)).trim();
@@ -164,7 +177,10 @@ export function parsePec(data: Uint8Array, pec: number, fileName = ''): Pattern 
   for (let i = 0; i < colorCount; i++) colors.push(pecColor(data[pec + PEC_COLOR_COUNT_OFFSET + 1 + i]));
 
   const b = new PatternBuilder();
-  let i = pec + PEC_STITCH_OFFSET;
+  // Brother's opening move only places the design (from its top left corner to the origin): left
+  // out, the stitches stay where they were drawn. Anything else there is the first record.
+  let i = pec + PEC_RECORDS_OFFSET;
+  if (isLongMove(data, i)) i += 4;
   const next = (): number => (i < data.length ? data[i++] : 0xff);
   let blocks = 1;
 

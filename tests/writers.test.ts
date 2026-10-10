@@ -5,7 +5,7 @@ import { parsePes } from '../src/parsers/pes';
 import { parseSew } from '../src/parsers/sew';
 import { sewColor } from '../src/parsers/sewPalette';
 import { parseXxx } from '../src/parsers/xxx';
-import { pecColor } from '../src/parsers/pecPalette';
+import { pecColor, pecThreads } from '../src/parsers/pecPalette';
 import { splitMove } from '../src/writers/bytes';
 import { writeDst } from '../src/writers/dst';
 import { writePes } from '../src/writers/pes';
@@ -76,6 +76,28 @@ describe('DST writer', () => {
     const q = parseDst(writeDst(p));
     expect(count(q, TRIM)).toBe(1);
     expect(stitches(q)).toEqual(stitches(p));
+  });
+
+  it('writes a trim as moving jumps, never zero-length ones, and keeps it on repeated saves', () => {
+    // No move after the cut, 0.1, 0.5 and 2 mm: each a cut, each jump moves, the stitches stay.
+    for (const to of [1, 1.1, 1.5, 3]) {
+      const p = new Shape().to(0, 0).to(1, 0).trim().to(to, 0).to(to, 1).build();
+      const data = writeDst(p);
+      const q = parseDst(data);
+      expect(count(q, TRIM)).toBe(1);
+      expect(stitches(q)).toEqual(stitches(p));
+      for (let k = 1; k < q.cmd.length; k++) if (q.cmd[k] === JUMP) expect([q.x[k], q.y[k]]).not.toEqual([q.x[k - 1], q.y[k - 1]]);
+      expect(writeDst(q)).toEqual(data);
+    }
+  });
+
+  it('writes a color change that moves nothing, the jump after it on its own', () => {
+    const p = new Shape().to(0, 0).to(1, 0).color().jump(4, 0).to(4, 1).build();
+    const data = writeDst(p);
+    const rec = (k: number) => Array.from(data.subarray(512 + 3 * k, 515 + 3 * k));
+    const change = [0, 1, 2, 3].find((k) => (rec(k)[2] & 0xc3) === 0xc3)!;
+    expect(rec(change)).toEqual([0, 0, 0xc3]);
+    expect(stitches(parseDst(data))).toEqual(stitches(p));
   });
 
   it('splits long stitches into jumps and one stitch, keeping the penetrations', () => {
@@ -149,6 +171,18 @@ describe('PES writer', () => {
     expect(stitches(q)).toEqual(stitches(p));
   });
 
+  it('writes the PEC size and opening move as Brother does: the stitches alone', () => {
+    // Stitches from (-3,-2) to (37,18) mm, a jump far outside them, and the origin outside too.
+    const p = new Shape().jump(-60, -40).to(-3, -2).to(37, -2).trim().jump(80, 50).to(37, 18).build();
+    const data = writePes(p);
+    const pec = new DataView(data.buffer).getUint32(8, true);
+    const view = new DataView(data.buffer, pec);
+    expect([view.getUint16(520, true), view.getUint16(522, true)]).toEqual([400, 200]);
+    // A long-form jump (0x9...) of (30, 20) in 1/10 mm: from the top left corner to the origin.
+    expect([view.getUint16(528), view.getUint16(530)]).toEqual([0x9000 | 30, 0x9000 | 20]);
+    expect(stitches(parsePes(data))).toEqual(stitches(p));
+  });
+
   it('writes the PEC length so the thumbnails can be found', () => {
     const p = parsePes(encodePes(pesOps, [5, 20, 29]));
     const data = writePes(p);
@@ -183,6 +217,15 @@ describe('PES writer', () => {
     expect(new Set(slots.slice(0, 3)).size).toBe(3);
     expect(slots[3]).toBe(slots[0]);
     expect(slots.map((s) => pecColor(s!).name)).toEqual(['Gray', 'Red', 'Silver', 'Gray']);
+  });
+
+  it('never puts a thread on the appliqué slots 62 to 64, but keeps an appliqué step read from a file', () => {
+    // Orange (255,153,0) used to land on slot 62, which Brother machines show as "Applique Material".
+    expect(slotsOf({ r: 255, g: 153, b: 0 })[0]).toBeLessThan(62);
+    expect(slotsOf({ r: 255, g: 200, b: 200 }, { r: 255, g: 240, b: 141 }).every((s) => s! < 62)).toBe(true);
+    expect(slotsOf({ ...pecColor(62), name: 'Orange' })[0]).toBeLessThan(62);
+    expect(slotsOf(pecColor(62), pecColor(64))).toEqual([62, 64]);
+    expect(pecThreads().some((t) => t.pecIndex! >= 62)).toBe(false);
   });
 
   it('keeps the slot a color was read with, unless another color has it', () => {
