@@ -29,7 +29,7 @@ npm run dev        # dev server with hot reload
 npm test           # unit tests (Vitest)
 npm run typecheck  # TypeScript only
 npm run build      # typecheck + production build into dist/
-npm run preview    # serve the build: http://localhost:4173/heatstitch/
+npm run preview    # serve the build: http://localhost:4173/
 ```
 
 There is no backend and no separate lint step; `tsc` in strict mode is the gate.
@@ -108,25 +108,16 @@ Ink/Stitch's code is GPL: read it to understand the font format, but never copy 
 
 ## Pull request previews
 
-Every pull request from a branch in this repository is built and deployed to
-`https://pfedan.github.io/heatstitch/pr-preview/pr-N/`. A bot comment on the PR links it, and the
-preview is removed when the PR is closed. Pull requests from forks are tested and built, but get no
-preview because the workflow can't write to the repository from a fork.
+Every pull request is built and uploaded as a preview version of the site, at
+`https://pr-N-heatstitch.<account>.workers.dev`. A bot comment on the PR links it. Pull requests from
+forks get theirs once their run has been approved (`.github/workflows/fork-preview.yml`).
 
-A preview shares the origin with the real site, so the build keeps them apart:
-
-- `BASE_PATH` (set by the workflow) moves the build into the subfolder (`vite.config.ts`).
-- The service worker is built self-destroying in previews, and the real site's worker never answers
-  navigations under `/pr-preview/`.
-- Stored files and settings get a per-preview namespace (`src/storage/namespace.ts`), so a preview
-  never touches what the real site stored.
-- Previews are marked `noindex`.
-
-If your change touches paths, storage keys, the IndexedDB schema or the PWA setup, check it in the
-preview as well as locally. To test a preview build locally:
+A preview has an address of its own, so it shares nothing with heatstitch.app: no stored files, no
+settings, no service worker. `PREVIEW=1` (set by the workflow) marks the build: it ships no service
+worker, so a reload always shows the latest push, and it is marked `noindex`. To build one locally:
 
 ```sh
-BASE_PATH=/heatstitch/pr-preview/pr-0/ npm run build
+PREVIEW=1 npm run build
 ```
 
 ## English and German

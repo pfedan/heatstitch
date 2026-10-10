@@ -3,7 +3,7 @@
 View, edit and check embroidery files right in the browser, draw shapes and lettering, and turn
 pictures into new designs. No backend, no uploads: your files never leave your machine.
 
-**Try it: <https://pfedan.github.io/heatstitch/>** · **Guide: [docs.html](https://pfedan.github.io/heatstitch/docs.html)** (English and German)
+**Try it: <https://heatstitch.app/>** · **Guide: [docs.html](https://heatstitch.app/docs.html)** (English and German)
 
 ![heatstitch: an embroidered cat as realistic threads, in sewing order and as a density heatmap](public/og-image.jpg)
 
@@ -523,7 +523,7 @@ npm install
 npm run dev       # dev server
 npm test          # unit tests (Vitest)
 npm run build     # typecheck + production build into dist/
-npm run preview   # view the build locally: http://localhost:4173/heatstitch/
+npm run preview   # view the build locally: http://localhost:4173/
 ```
 
 The tests generate their DST/PES fixtures synthetically (`tests/helpers/encode.ts`) and check, among
@@ -561,11 +561,21 @@ precached.
 
 ## Deployment
 
-`.github/workflows/deploy.yml` tests and builds every push. The site is served from the `gh-pages`
-branch: pushes to `main` go to its root at <https://pfedan.github.io/heatstitch/>, and every pull
-request gets a preview under `pr-preview/pr-N/` (linked in a PR comment) that is removed again when
-the PR closes. Previews only run for branches in this repository, not for forks. One-time setup:
-*Settings → Pages → Source: Deploy from a branch*, `gh-pages`, `/ (root)`.
+`.github/workflows/deploy.yml` tests and builds every push. The site is served by Cloudflare at
+<https://heatstitch.app/>, as the static assets of a Worker (`wrangler.jsonc`, `cloudflare/worker.js`):
+every file at exactly its path, `/` and `/de/` get their `index.html`. Pushes to `main` deploy there;
+every pull request gets a preview version at `https://pr-N-heatstitch.<account>.workers.dev` (linked
+in a PR comment), an address of its own that never reaches heatstitch.app. Fork pull requests get theirs
+from `.github/workflows/fork-preview.yml`.
+
+The old address <https://pfedan.github.io/heatstitch/> (the `gh-pages` branch, *Settings → Pages →
+Deploy from a branch*) carries the moving page from `tools/moved/`. Browsers keep stored files per
+address, so it takes along what someone kept there: one click opens `public/umzug.html` on
+heatstitch.app in a small window, which writes it there. Its `sw.js` replaces the old service worker,
+so installed copies update too, and every old link goes to the same page at the new address.
+
+One-time setup: the repository secrets `CLOUDFLARE_API_TOKEN` (template *Edit Cloudflare Workers*)
+and `CLOUDFLARE_ACCOUNT_ID`. The first deploy creates the Worker and connects heatstitch.app.
 
 ## Format notes
 

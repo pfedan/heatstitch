@@ -1,7 +1,8 @@
 name: CI and Pages
 
-# The site is served from the gh-pages branch: main goes to its root, every pull request
-# gets a preview under pr-preview/pr-N/ that is removed again when the PR closes.
+# The site is served by Cloudflare at https://heatstitch.app (wrangler.jsonc): main goes there, every
+# pull request gets a preview of its own at https://pr-N-heatstitch.<account>.workers.dev. The old
+# address pfedan.github.io/heatstitch/ (the gh-pages branch) keeps a moving page (tools/moved/).
 # Other branches are checked through their pull request only: a push to them would run
 # every job a second time next to the pull request's own run.
 
@@ -9,7 +10,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    types: [opened, reopened, synchronize, closed]
+    types: [opened, reopened, synchronize]
   workflow_dispatch:
 
 permissions:
@@ -33,11 +34,7 @@ jobs:
       - run: npm ci
       - run: npm run build
         env:
-          BASE_PATH: ${{ github.event_name == 'pull_request' && format('/heatstitch/pr-preview/pr-{0}/', github.event.number) || '' }}
-      # Without it, Pages runs Jekyll over the branch and drops files starting with an underscore.
-      # The one at the root covers the previews too; a copy in a preview would outlive its removal.
-      - if: github.event_name != 'pull_request'
-        run: touch dist/.nojekyll
+          PREVIEW: ${{ github.event_name == 'pull_request' && '1' || '' }}
       - if: github.ref == 'refs/heads/main' || github.event_name == 'pull_request'
         uses: actions/upload-artifact@v4
         with:
@@ -191,55 +188,72 @@ jobs:
       group: deploy-main
       cancel-in-progress: false
     steps:
-      # The deploy action pushes with git, so it needs a checkout. Both it and the preview
-      # action retry when the other one pushed to gh-pages in the meantime.
+      # wrangler.jsonc and cloudflare/worker.js come from the checkout, the site from the build.
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: site
           path: dist
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npx --yes wrangler@4.149.0 deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      # Only once heatstitch.app is up: the old address becomes the moving page (tools/moved/), which takes
+      # stored designs along and sends every old link to the same page there. Rewritten whole each time.
+      - run: node tools/moved/build.mjs dist-moved
       - uses: JamesIves/github-pages-deploy-action@v4
         with:
-          folder: dist
+          folder: dist-moved
           branch: gh-pages
-          clean-exclude: pr-preview/
-      # Every deploy and every preview is a commit on gh-pages, each with a whole build, so its history
-      # soon outweighs the code. Keep it one commit deep; the lease skips this when a preview pushed meanwhile.
-      - name: Squash gh-pages to one commit
-        run: |
-          git fetch --depth=1 origin gh-pages
-          head=$(git rev-parse FETCH_HEAD)
-          commit=$(git -c user.name=github-actions -c user.email=github-actions@github.com \
-            commit-tree "$head^{tree}" -m "Site from ${GITHUB_SHA::7}")
-          git push --force-with-lease=refs/heads/gh-pages:$head origin $commit:refs/heads/gh-pages \
-            || echo "::notice::gh-pages changed meanwhile, squashed on the next deploy"
+          clean: true
+          single-commit: true
 
-  # Fork pull requests only get a read-only token here; fork-preview.yml publishes theirs.
+  # Fork pull requests get no secrets here; fork-preview.yml uploads theirs.
   preview:
-    # A run cancelled by a newer one of the same PR leaves no site to publish; on close there is no build.
-    # Published only when the tests passed too, as before they ran in the build job.
+    # A run cancelled by a newer one of the same PR leaves no site to publish.
+    # Published only when the tests passed too.
     if: >-
-      github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository &&
-      !cancelled() && (github.event.action == 'closed' || (needs.build.result == 'success' &&
-      needs.test.result == 'success' && needs.load.result == 'success' && needs.browser.result == 'success'))
+      github.event_name == 'pull_request' && github.event.action != 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository && !cancelled() &&
+      needs.build.result == 'success' && needs.test.result == 'success' &&
+      needs.load.result == 'success' && needs.browser.result == 'success'
     needs: [build, test, load, browser]
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
       pull-requests: write
     concurrency:
       group: preview-${{ github.ref }}
       cancel-in-progress: false
     steps:
-      # The action pushes with git, so it needs a checkout too.
       - uses: actions/checkout@v4
-      - if: github.event.action != 'closed'
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: site
           path: dist
-      - uses: rossjrw/pr-preview-action@v1
+      # A version of the Worker that never reaches heatstitch.app, under an alias that stays the same for
+      # the whole PR. Before the Worker's first deploy (or without the Cloudflare secrets) there is none to
+      # add a version to: the PR then just has no preview, its checks stay green.
+      - uses: actions/setup-node@v4
         with:
-          source-dir: dist
-          preview-branch: gh-pages
-          umbrella-dir: pr-preview
+          node-version: 22
+      - id: upload
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PR: ${{ github.event.number }}
+        run: |
+          npx --yes wrangler@4.149.0 versions upload --preview-alias "pr-$PR" --message "PR $PR" | tee upload.log
+          echo "url=$(grep -o 'Preview Alias URL: https://[^ ]*' upload.log | cut -d' ' -f4)" >> "$GITHUB_OUTPUT"
+      - if: steps.upload.outputs.url
+        uses: marocchino/sticky-pull-request-comment@67d0dec7b07ed060a405f9b2a64b8ab319fdd7db # v2.9.2
+        with:
+          header: pr-preview
+          message: |
+            :rocket: Preview: ${{ steps.upload.outputs.url }}
+
+            Built from ${{ github.event.pull_request.head.sha }}. It has an address of its own, so nothing in it touches what is stored on heatstitch.app.

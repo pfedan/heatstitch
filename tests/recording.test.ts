@@ -29,7 +29,7 @@ function recording() {
     format: 'heatstitch-recording',
     version: 1,
     started: '2026-10-09T20:00:00.000Z',
-    url: 'http://localhost/heatstitch/',
+    url: 'http://localhost/',
     lang: 'de',
     mac: true,
     viewport: { w: 1440, h: 900 },

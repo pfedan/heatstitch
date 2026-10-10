@@ -57,7 +57,7 @@ describe('the tutorial videos', () => {
   it('the German video page keeps its links in de/ and the files of the site one folder up', () => {
     const de = langPage(expandVideos(read('videos.html')), 'videos', 'de');
     expect(de).not.toContain('<article lang="en">');
-    expect(de).toContain('<link rel="canonical" href="https://pfedan.github.io/heatstitch/de/videos.html" />');
+    expect(de).toContain('<link rel="canonical" href="https://heatstitch.app/de/videos.html" />');
     expect(de).toMatch(/<title>heatstitch Videos/);
     expect(de).toContain('href="docs.html"');
     const docs = langPage(expandVideos(read('docs.html')), 'docs', 'de');

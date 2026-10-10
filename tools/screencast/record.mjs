@@ -34,7 +34,7 @@ const sceneRange = opt('--scenes', '');
 const jobs = Number(opt('--jobs', String(Math.max(1, Math.min(8, Math.floor(os.availableParallelism() / 2))))));
 // Scenes run without frames still give the page's workers (stitching, density) a moment per frame.
 const dryMs = Number(opt('--dry-ms', '50'));
-const APP_URL = process.env.APP_URL || 'http://localhost:4173/heatstitch/';
+const APP_URL = process.env.APP_URL || 'http://localhost:4173/';
 const FPS = 30;
 const W = 1920;
 const H = 1080;

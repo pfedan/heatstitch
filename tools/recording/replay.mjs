@@ -21,7 +21,7 @@ if (!input) {
   console.error('node tools/recording/replay.mjs projekt.heatstitch|ablauf.mjs [OUT_DIR] [--headed] [--slow]');
   process.exit(2);
 }
-const APP_URL = process.env.APP_URL || 'http://localhost:4173/heatstitch/';
+const APP_URL = process.env.APP_URL || 'http://localhost:4173/';
 const STORAGE_NS = process.env.STORAGE_NS || 'heatstitch';
 // --slow keeps the recorded pauses and pointer paths, to watch along with --headed.
 const slow = flags.has('--slow');
