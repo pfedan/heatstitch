@@ -18,6 +18,9 @@ import { embossPoints, motifCrossings, motifInside, type Motif } from './deco';
  * - Between sections the needle travels inside the region on a shortest path that avoids rows sewn
  *   already, so later rows cover it (Ink/Stitch's underpath); where it would run on top of sewn rows
  *   for more than 2 mm, the needle jumps instead.
+ * - Gap rows (`gapRows`): where two sections meet, the one sewn first runs on for a row or two into
+ *   the other, under its rows to come, so stretchy fabric pulled apart in between shows no gap at
+ *   the join (Wilcom's segment overlap rows, Ink/Stitch's gap fill rows).
  */
 
 export interface FillParams {
@@ -74,6 +77,11 @@ export interface FillParams {
    * area makes a color blend as dense as one fill (see blend.ts in model).
    */
   fade?: 'out' | 'in';
+  /**
+   * Rows a section sews on into a touching section sewn later (gap rows, see sectionJoins); 0 or
+   * unset sews none. Straight rows at an even spacing only.
+   */
+  gapRows?: number;
 }
 
 export interface FillResult {
@@ -88,6 +96,8 @@ interface Seg {
   k: number;
   u0: number;
   u1: number;
+  /** A gap row: sewn by the section next to the one whose row it is (see sectionJoins). */
+  gap?: true;
 }
 
 type Section = Seg[];
@@ -275,6 +285,94 @@ function sections(r: Region, field: Float32Array, f: Frame, rowList: Seg[][]): S
     open = next;
   }
   return all;
+}
+
+/** Most gap rows a section sews on into its neighbour. */
+export const GAP_ROWS_MAX = 2;
+/** Sections that touch along less than this (mm) get no gap rows: no gap worth covering opens there. */
+const JOIN_MIN = 1;
+
+/** Rows one section can sew on into a touching one (gap rows), nearest first. */
+interface Join {
+  to: Section;
+  rows: Seg[];
+}
+
+/** Where each section touches others across its first row (`lo`) and across its last (`hi`). */
+type Joins = Map<Section, { lo: Join[]; hi: Join[] }>;
+
+/**
+ * Gap rows at the joins of sections (segment overlap): where a section's first or last row lies
+ * beside a row of another section, the rows of that other section next to it, up to `n`, each cut
+ * to where the rows before it reach, so they stay on the stretch both share and taper with the
+ * shape (Wilcom's overlap rows; Ink/Stitch repeats the last row offset, gap_fill_rows). Sewn by the
+ * section that comes first (see sewAll), they lie under the later rows on the same lines and needle
+ * points, so they do not show; where the fabric is pulled apart between the two sections they fill
+ * the gap that would open at the join.
+ */
+function sectionJoins(r: Region, f: Frame, secs: Section[], n: number): Joins {
+  const byRow = new Map<number, { seg: Seg; s: Section }[]>();
+  for (const s of secs) for (const seg of s) byRow.set(seg.k, [...(byRow.get(seg.k) ?? []), { seg, s }]);
+  const rowOf = (s: Section, k: number) => (k >= s[0].k && k <= s[s.length - 1].k ? s[k - s[0].k] : null);
+  const inside = (u: number, v: number) => sample(r, r.sdf, ...f.at(u, v)) < f.spacing / 2;
+  const across = (s: Section, edge: Seg, dir: 1 | -1): Join[] => {
+    const out: Join[] = [];
+    for (const { seg, s: t } of byRow.get(edge.k + dir) ?? []) {
+      if (t === s) continue;
+      let u0 = Math.max(edge.u0, seg.u0);
+      let u1 = Math.min(edge.u1, seg.u1);
+      if (u1 - u0 < JOIN_MIN) continue;
+      // The rows must touch: no slit of the shape between them.
+      const vMid = (f.v(edge.k) + f.v(seg.k)) / 2;
+      if (![u0 + 0.3, (u0 + u1) / 2, u1 - 0.3].every((u) => inside(u, vMid))) continue;
+      const rows: Seg[] = [{ k: seg.k, u0, u1, gap: true }];
+      for (let j = 2; j <= n; j++) {
+        const next = rowOf(t, edge.k + dir * j);
+        if (!next) break;
+        u0 = Math.max(u0, next.u0);
+        u1 = Math.min(u1, next.u1);
+        if (u1 - u0 < JOIN_MIN) break;
+        rows.push({ k: next.k, u0, u1, gap: true });
+      }
+      out.push({ to: t, rows });
+    }
+    return out;
+  };
+  const joins: Joins = new Map();
+  for (const s of secs) joins.set(s, { lo: across(s, s[0], -1), hi: across(s, s[s.length - 1], 1) });
+  return joins;
+}
+
+/**
+ * The sections in this sewing order with their gap rows (see sectionJoins). At each end a section
+ * sews on into the touching section sewn after it (along the longest stretch, if several), so the
+ * gap rows lie under that one's rows. Where a section's end touches more than one later section (the
+ * shape splits there), only one of those joins gets gap rows that way; the later section at another
+ * such join sews its gap rows back onto the earlier one's last row instead, on the same line and
+ * needle points, so every join is covered. Rows stay in order of k.
+ */
+function withGapRows(order: Section[], joins: Joins): Section[] {
+  const rank = new Map(order.map((s, i) => [s, i]));
+  const covered = new Set<string>();
+  const pair = (a: Section, b: Section) => [rank.get(a), rank.get(b)].sort().join();
+  const len = (x: Join) => x.rows[0].u1 - x.rows[0].u0;
+  const pick = (s: Section, list: Join[], ok: (x: Join) => boolean): Join | null => {
+    let best: Join | null = null;
+    for (const x of list) if (ok(x) && (!best || len(x) > len(best))) best = x;
+    if (best) covered.add(pair(s, best.to));
+    return best;
+  };
+  const ends = order.map((s) => {
+    const j = joins.get(s)!;
+    const later = (x: Join) => rank.get(x.to)! > rank.get(s)!;
+    return { s, j, lo: pick(s, j.lo, later), hi: pick(s, j.hi, later) };
+  });
+  return ends.map(({ s, j, lo, hi }) => {
+    const back = (x: Join) => rank.get(x.to)! < rank.get(s)! && !covered.has(pair(s, x.to));
+    lo ??= pick(s, j.lo, back);
+    hi ??= pick(s, j.hi, back);
+    return lo || hi ? [...(lo?.rows.slice().reverse() ?? []), ...s, ...(hi?.rows ?? [])] : s;
+  });
 }
 
 /** Points of one row from u `from` to `to` (row index k for the stagger). */
@@ -1044,6 +1142,67 @@ function beamPlan(f: Frame, secs: Section[], pull: number, start: Pt, grid: Trav
   return { order: beam[0].order, cost: beam[0].cost };
 }
 
+/** A turn from row to row up to this long along the rows (mm) is as usual; see turnCost. */
+const TURN_FREE = 1;
+
+/**
+ * What the turns to and from gap rows cost a section entered this way (mm): a gap row is shorter
+ * than the row beside it where the shape splits or narrows there, and the turn at the end where
+ * they differ runs along between the two rows; the turns at the end where both reach the edge are
+ * free (up to TURN_FREE).
+ */
+function turnCost(s: Section, e: Entry): number {
+  const list = e.reversed ? s.slice().reverse() : s;
+  let cost = 0;
+  for (let i = 0; i + 1 < list.length; i++) {
+    const [a, b] = [list[i], list[i + 1]];
+    if (!a.gap && !b.gap) continue;
+    // Row i ends where row i + 1 starts: at their high ends (u1) when row i runs forward.
+    const fwd = (i % 2 === 0) !== e.flip;
+    const d = fwd ? Math.abs(a.u1 - b.u1) : Math.abs(a.u0 - b.u0);
+    cost += Math.max(0, d - TURN_FREE);
+  }
+  return cost;
+}
+
+/**
+ * Where to start the rows of sections sewn in this order, each from the end (first or last row) the
+ * plan chose (`planned`): at the start or at the end of that row, whichever makes the cheapest way
+ * through them all (Viterbi). On `grid` a way costs what planning counts (hidden travel, else a
+ * trim), else its straight length; with `end`, the way there counts too.
+ */
+function entriesFor(f: Frame, secs: Section[], planned: Entry[], pull: number, start: Pt, grid: TravelGrid | null, end?: Pt): { s: Section; e: Entry }[] {
+  const plan = grid ? planning(f, grid) : null;
+  const kept = plan?.keep();
+  const step = plan ? plan.stepCost : dist;
+  type State = { e: Entry; cost: number; from: number };
+  const layers: State[][] = [];
+  let prev: { p: Pt; cost: number }[] = [{ p: start, cost: 0 }];
+  secs.forEach((s, i) => {
+    const layer = entries(f, s, pull).filter((e) => e.reversed === planned[i].reversed).map((e) => {
+      let best = { cost: Infinity, from: 0 };
+      const turns = turnCost(s, e);
+      prev.forEach((q, j) => {
+        const c = q.cost + step(q.p, e.p) + turns;
+        if (c < best.cost) best = { cost: c, from: j };
+      });
+      return { e, ...best };
+    });
+    layers.push(layer);
+    plan?.cover(s);
+    prev = layer.map((x) => ({ p: exitOf(f, s, x.e, pull), cost: x.cost }));
+  });
+  if (kept) plan!.back(kept);
+  const total = prev.map((q) => q.cost + (end ? (grid ? endCost(q.p, end) : dist(q.p, end)) : 0));
+  let at = total.indexOf(Math.min(...total));
+  const out: { s: Section; e: Entry }[] = [];
+  for (let i = secs.length - 1; i >= 0; i--) {
+    out.unshift({ s: secs[i], e: layers[i][at].e });
+    at = layers[i][at].from;
+  }
+  return out;
+}
+
 /**
  * Sews the sections greedily nearest first, connected by travel paths or jumps. With `end`, the
  * section that leaves the needle nearest to it is sewn last, when that makes the ways in between
@@ -1061,32 +1220,44 @@ function sewAll(
   runs: Pt[][],
   end?: Pt,
   outer?: TravelGrid,
+  joins?: Joins,
 ): Pt {
   // Where parts are left out, the order and ends of the sections are planned on the grid, so travel
   // keeps under rows still to come (and the parts left out) rather than beside the outline.
   const smart = avoidSewn && !!grid.gone;
   if (smart) for (const s of secs) for (const seg of s) grid.expect(f.at(seg.u0, f.v(seg.k)), f.at(seg.u1, f.v(seg.k)), f.spacing / 2);
-  const planner = (l?: { s: Section; e: Entry }) => (smart ? planOnGrid(f, secs, pull, start, grid, l, end) : plan(f, secs, pull, start, l, end));
-  let best = smart && secs.length <= BEAM_SECTIONS ? beamPlan(f, secs, pull, start, grid, end) : planner(undefined);
-  if (end && secs.length && !(smart && secs.length <= BEAM_SECTIONS)) {
-    let close: { s: Section; e: Entry } | null = null;
-    let cd = Infinity;
-    for (const s of secs) {
-      for (const e of entries(f, s, pull)) {
-        const d = dist(exitOf(f, s, e, pull), end);
-        if (d < cd) {
-          cd = d;
-          close = { s, e };
+  const order = (secs: Section[]) => {
+    const planner = (l?: { s: Section; e: Entry }) => (smart ? planOnGrid(f, secs, pull, start, grid, l, end) : plan(f, secs, pull, start, l, end));
+    let best = smart && secs.length <= BEAM_SECTIONS ? beamPlan(f, secs, pull, start, grid, end) : planner(undefined);
+    if (end && secs.length && !(smart && secs.length <= BEAM_SECTIONS)) {
+      let close: { s: Section; e: Entry } | null = null;
+      let cd = Infinity;
+      for (const s of secs) {
+        for (const e of entries(f, s, pull)) {
+          const d = dist(exitOf(f, s, e, pull), end);
+          if (d < cd) {
+            cd = d;
+            close = { s, e };
+          }
         }
       }
+      const other = close && planner(close);
+      // A little shorter is not worth a different look: at least 2 mm.
+      if (other && other.cost < best.cost - 2) best = other;
     }
-    const other = close && planner(close);
-    // A little shorter is not worth a different look: at least 2 mm.
-    if (other && other.cost < best.cost - 2) best = other;
+    return best.order;
+  };
+  let todo = order(secs);
+  if (joins) {
+    // Gap rows go with the section sewn first, which only the order tells. The order stays, and
+    // each section is entered from the same row; with gap rows its rows may run the other way, so
+    // which end of that row it starts at is chosen anew.
+    const grown = withGapRows(todo.map((o) => o.s), joins);
+    if (grown.some((g, i) => g !== todo[i].s)) todo = entriesFor(f, grown, todo.map((o) => o.e), pull, start, smart ? grid : null, end);
   }
   let pos = start;
   let cur: Pt[] | null = runs.length ? runs[runs.length - 1] : null;
-  for (const { s, e } of best.order) {
+  for (const { s, e } of todo) {
     const bd = dist(pos, e.p);
     const pts = sewSection(f, s, len, pull, e.reversed, e.flip);
     // Travel to the entry: straight when close, else along the inside of the shape.
@@ -1127,7 +1298,9 @@ export function fillRegion(r: Region, p: FillParams, start: Pt, neighbours: numb
   const grid = new TravelGrid(p.travel ?? r, p.offRowEnds, p.whole ? { whole: p.whole, area: r } : undefined);
   const pos = p.underlay ? sewUnderlay(r, angle, p, start, grid, runs) : start;
   const under = pointCount(runs);
-  sewAll(f, sections(r, r.sdf, f, top), p.stitch, p.pull, pos, grid, true, runs, p.end);
+  const secs = sections(r, r.sdf, f, top);
+  const gap = f.gradient ? 0 : Math.min(GAP_ROWS_MAX, Math.max(0, Math.round(p.gapRows ?? 0)));
+  sewAll(f, secs, p.stitch, p.pull, pos, grid, true, runs, p.end, undefined, gap && secs.length > 1 ? sectionJoins(r, f, secs, gap) : undefined);
   return { runs, angle, under };
 }
 

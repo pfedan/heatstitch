@@ -24,6 +24,8 @@ export function fixText(c: Fixed): string {
       return t('plan.change.under', { a: t(UNDER[String(c.from)] ?? 'stitch.under.auto'), b: t(UNDER[String(c.to)] ?? 'stitch.under.auto') });
     case 'edge':
       return t('plan.change.edge', { a: signed(c.from), b: signed(c.to) });
+    case 'gapRows':
+      return t(Number(c.to) > 0 ? 'plan.change.gapRowsOn' : 'plan.change.gapRowsOff');
     case 'short':
       return t('plan.change.short');
     case 'split':

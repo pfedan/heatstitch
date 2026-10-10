@@ -175,6 +175,11 @@ export interface FillSettings {
   areaGrow?: number;
   /** Settings of the decorative patterns and of embossing. */
   deco?: DecoSettings;
+  /**
+   * Gap rows where sections of straight rows meet (see FillParams.gapRows): by the fabric the fill
+   * was made for (Fabric.gapRows), none when not set. Not a setting of the panel.
+   */
+  gapRows?: number;
 }
 
 /**
@@ -980,6 +985,7 @@ function isFill(f: unknown): f is FillSettings {
     (s.underSpacing === undefined || (finite(s.underSpacing) && s.underSpacing > 0)) &&
     (s.expand === undefined || finite(s.expand)) &&
     (s.areaGrow === undefined || finite(s.areaGrow)) &&
+    (s.gapRows === undefined || (Number.isInteger(s.gapRows) && s.gapRows >= 0)) &&
     ((s as { border?: unknown }).border === undefined || isBorder((s as { border?: unknown }).border)) &&
     (s.deco === undefined || isDeco(s.deco)) &&
     typeof s.underlay === 'boolean'
@@ -2230,7 +2236,7 @@ export function fillRuns(area: Region, s: FillSettings, way: FillWay): NewFill |
   // the smaller area (the old thread runs where nothing is sewn now).
   const ex = s.expand ?? 0;
   const tw = ex > 0 && travel ? (unionRegion([travel, r]) ?? travel) : ex < 0 ? r : travel;
-  const fp: FillParams = { spacing: s.spacing, stitch: s.stitch, angle: s.angle, pull: s.edge, underlay: s.underlay, underCross: s.underCross, underInset: s.underInset, underInsetShare: s.underInsetShare, underSpacing: s.underSpacing, travel: tw, tolerance: s.tolerance };
+  const fp: FillParams = { spacing: s.spacing, stitch: s.stitch, angle: s.angle, pull: s.edge, underlay: s.underlay, underCross: s.underCross, underInset: s.underInset, underInsetShare: s.underInsetShare, underSpacing: s.underSpacing, travel: tw, tolerance: s.tolerance, ...(s.gapRows ? { gapRows: s.gapRows } : {}) };
   // Parts left out (under what lies on top): travel keeps off the outline beside sewn rows.
   const whole = wholeOf(area);
   if (whole) {

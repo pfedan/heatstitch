@@ -267,6 +267,8 @@ const enBase: Record<keyof typeof deBase, string> = {
   'plan.change.underCross': 'Underlay crossed instead of one layer',
   'plan.change.under': 'Underlay {b} instead of {a}',
   'plan.change.edge': 'Edges {a} → {b} mm (pull compensation)',
+  'plan.change.gapRowsOn': 'Fill sections overlap by a row (against gaps on stretchy fabric)',
+  'plan.change.gapRowsOff': 'Fill sections without overlap',
   'plan.change.short': 'Short stitches in curves',
   'plan.change.split': 'Split from {a} → {b} mm',
   'plan.change.stagger': 'Splits staggered',

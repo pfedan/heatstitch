@@ -63,6 +63,8 @@ export interface DigitizeOptions {
   underCross?: boolean;
   /** Satin stitches longer than this are split (mm): where the fabric would let them snag. */
   splitMm?: number;
+  /** Gap rows where sections of a fill meet (see FillParams.gapRows), by the fabric; none when not set. */
+  gapRows?: number;
   /** Jumps longer than this are trimmed (mm). */
   trimMm: number;
   /**
@@ -85,6 +87,9 @@ export function fillUnder(o: Pick<DigitizeOptions, 'underlay' | 'underCross'>, a
   if (!o.underlay || areaMm2 < SMALL_FILL_MM2) return { underlay: false };
   return o.underCross && areaMm2 >= LARGE_FILL_MM2 ? { underlay: true, underCross: true } : { underlay: true };
 }
+
+/** Gap rows of the options as fill settings: left out when none, as in fills made before them. */
+export const gapOf = (o: Pick<DigitizeOptions, 'gapRows'>): { gapRows?: number } => (o.gapRows ? { gapRows: o.gapRows } : {});
 
 /**
  * Pull compensation "by fabric" for an object here (see the stitch card): a fill's edges grow with
@@ -128,6 +133,7 @@ export function digitizeDefaults(profile: Profile): DigitizeOptions {
     underlay: true,
     underCross: fabric.pull === 'high',
     splitMm: fabric.longMm,
+    gapRows: fabric.gapRows,
     trimMm: 3,
     tolerance: TOLERANCE,
   };
@@ -514,7 +520,7 @@ function sewOne(obj: Obj, pos: Pt, o: DigitizeOptions, satin: SatinParams, angle
     const near = angles.filter((a) => touches(a.obj.region, obj.region)).map((a) => a.angle);
     used.pos = true;
     used.near = near;
-    const fp = { spacing: o.spacing, stitch: o.stitch, angle: o.angle, pull: o.pull, ...fillUnder(o, obj.region.areaMm2), tolerance: o.tolerance };
+    const fp = { spacing: o.spacing, stitch: o.stitch, angle: o.angle, pull: o.pull, ...fillUnder(o, obj.region.areaMm2), tolerance: o.tolerance, ...gapOf(o) };
     const flow = (obj.flow ?? o.flow) && o.angle === null && orient ? flowFill(obj.region, obj.graph, orient, fp, pos) : null;
     const res = flow ?? fillRegion(obj.region, { ...fp, angle: o.angle ?? null }, pos, near);
     if (res) {
@@ -896,6 +902,7 @@ function keep(obj: Obj, o: DigitizeOptions, imgW: number, imgH: number): KeptSha
       ...fillUnder(o, obj.region.areaMm2),
       edge: 0,
       tolerance: o.tolerance,
+      ...gapOf(o),
     },
   };
 }

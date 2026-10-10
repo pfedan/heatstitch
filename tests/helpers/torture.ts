@@ -19,6 +19,7 @@ import { unionOf } from '../../src/shape/rasterize';
 import { borderStitches, isRedwork, isRunType } from '../../src/model/along';
 import { redworkGraph, redworkWalks } from '../../src/digitize/redwork';
 import type { Region } from '../../src/digitize/region';
+import { GAP_ROWS_MAX } from '../../src/digitize/fill';
 import { backToVersion, edgeAlong, keepVersion, objectKey, remember, remembered, rememberedIn, restitch, restoreRemembered, DECO_PATTERNS, OPEN_PATTERNS, type BorderSettings, type FillSettings, type Rails, type Remembered, type StoredObjects } from '../../src/model/restitch';
 import { reorder } from '../../src/model/order';
 import { stitchKinds } from '../../src/model/sequence';
@@ -1177,6 +1178,33 @@ export const SATIN_OPS: Op[] = [
  * Outlines edited on the level Form, as the app does (one way back for every kind, see
  * reshapeObject): a node of a fill, a satin over an area, a band or a line moved a little.
  */
+/** What digitizing on knit (jersey) gives: gap rows where sections of a fill meet. */
+export const knitOptions = digitizeDefaults({ fabric: 'knit', thread: '40' });
+
+/**
+ * Fills on knit in shapes sewn in several sections (a frame or ring), with gap rows. Drawn from a stream of
+ * their own, so the chains of the other ops stay as they were for the seeds above.
+ */
+export const KNIT_OPS: Op[] = [
+  {
+    name: 'add knit fill',
+    run: (d, r) => {
+      const x = between(r, 0, 40);
+      const y = between(r, 0, 40);
+      const w = between(r, 14, 30);
+      const h = between(r, 14, 30);
+      const t = between(r, 4, Math.min(w, h) / 3);
+      // A frame or a ring: at any angle the rows split around the hole and join again past it.
+      const hole = r() < 0.5 ? rectPath(x + t, y + t, w - 2 * t, h - 2 * t, 0, 0) : ellipsePath(x + w / 2, y + h / 2, w / 2 - t, h / 2 - t);
+      const path = `${r() < 0.5 ? rectPath(x, y, w, h, 0, 0) : ellipsePath(x + w / 2, y + h / 2, w / 2, h / 2)} ${hole}`;
+      const objs = d.objects;
+      const after = objs.length && r() < 0.5 ? pick(r, objs).index : null;
+      const a = addShape(d.cur.p, { form: parsePath(path, ID), kind: 'fill' }, pick(r, COLORS), after, knitOptions);
+      return shapes(d, a?.pattern);
+    },
+  },
+];
+
 export const SHAPE_OPS: Op[] = [
   {
     name: 'edit outline',
@@ -1757,6 +1785,24 @@ export function checkFollowers(p: Pattern): void {
   expect(problems.join('; '), 'followers off their leader').toBe('');
 }
 
+/**
+ * Gap rows (see sectionJoins in digitize/fill.ts) belong to a fill's settings: a fill made with them
+ * keeps them through every step (duplicated, mirrored, left out, undone, saved and opened; the
+ * knowledge check compares them with what was stored), as a whole number up to GAP_ROWS_MAX, also
+ * in a fill kept beside a line, and never on a satin.
+ */
+export function checkGapRows(p: Pattern): void {
+  const problems: string[] = [];
+  const ok = (g: number | undefined) => g === undefined || (Number.isInteger(g) && g >= 0 && g <= GAP_ROWS_MAX);
+  for (const o of sewObjects(p)) {
+    const m = remembered(p, o);
+    if (!ok(m?.fill?.gapRows)) problems.push(`${o.index}: gap rows ${m!.fill!.gapRows}`);
+    if (!ok(m?.kept?.fill?.gapRows)) problems.push(`${o.index}: kept fill with gap rows ${m!.kept!.fill!.gapRows}`);
+    if (m?.satin && 'gapRows' in m.satin) problems.push(`${o.index}: a satin with gap rows`);
+  }
+  expect(problems.join('; '), 'gap rows').toBe('');
+}
+
 /** Exported and read back, the stitches are the same. */
 export function checkExport(p: Pattern): void {
   const stitches = (q: Pattern) => {
@@ -1858,7 +1904,7 @@ export function describeObjects(p: Pattern): string {
  * moved, sized and removed in between, from a random stream of its own (the ops of a seed stay the
  * ones it always had).
  */
-export async function chain(seed: number, steps = STEPS, opts: { trace?: boolean } = {}): Promise<void> {
+export async function chain(seed: number, steps = STEPS, opts: { trace?: boolean; knit?: boolean } = {}): Promise<void> {
   const r = rng(seed);
   const rt = rng(seed + 7919);
   const rl = rng(seed + 104729);
@@ -1867,6 +1913,7 @@ export async function chain(seed: number, steps = STEPS, opts: { trace?: boolean
   const rlet = rng(seed + 49979687);
   const rred = rng(seed + 67867967);
   const rhand = rng(seed + 86028121);
+  const rknit = rng(seed + 104395301);
   const d = new Doc();
   const log: string[] = [];
   const at = () => `seed ${seed}: ${log.join(' > ')}`;
@@ -1948,6 +1995,20 @@ export async function chain(seed: number, steps = STEPS, opts: { trace?: boolean
         }
       }
     }
+    // Now and then a fill on knit, with gap rows, beside the chain (not in chains replayed by seed,
+    // which stay as they were found).
+    if (opts.knit && rknit() < 0.12) {
+      const kop = pick(rknit, KNIT_OPS);
+      if (await kop.run(d, rknit)) {
+        log.push(kop.name);
+        if (process.env.TORTURE_TRACE) console.log(kop.name, describeObjects(d.cur.p));
+        try {
+          checkStep(d, false);
+        } catch (e) {
+          throw new Error(`${at()}\n${(e as Error).message}`);
+        }
+      }
+    }
     // Now and then an outline edited on the level Form, beside the chain.
     if (!blank(d.cur.p) && rs() < 0.25) {
       const sop = pick(rs, SHAPE_OPS);
@@ -2018,6 +2079,7 @@ function checkStep(d: Doc, full: boolean): void {
   checkFollowers(p);
   checkSatinSections(p);
   checkLetterings(p);
+  checkGapRows(p);
   checkTrace(d);
   if (full) {
     checkExport(p);

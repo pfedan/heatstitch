@@ -273,7 +273,7 @@ acknowledged are not touched; the correction only makes sure they don't get wors
 
 *Tune to fabric* under *Material* lists the settings that fit the chosen fabric and thread better
 (spacing in the recommended range, underlay by size, long satin stitches split, pull compensation by
-fabric) and applies them on click; designs made in heatstitch get these rules from the start.
+fabric, gap rows in fills on knit) and applies them on click; designs made in heatstitch get these rules from the start.
 
 ![Correction panel with proposals and the before/after preview](public/guide/correct-en.jpg)
 
@@ -396,8 +396,15 @@ fill rows end there, satin edges are found there, underlay lies on a contour ins
   (Goldman's patent), preferably 30° apart from touching areas. Underlay: rows turned by 90°, three
   times the spacing, 0.4 mm inside the edge. Between sections the thread travels the shortest way
   inside, under rows not sewn yet (like Ink/Stitch's underpath); where it would lie on sewn rows for
-  more than 2 mm, it jumps instead. The other patterns (gradient, contour fill, spiral, guided) are
-  in `flow.ts` and `spiral.ts`.
+  more than 2 mm, it jumps instead. **Gap rows** on knit (jersey): where two sections meet, the one
+  sewn first sews one row on into the other, under its rows, on the same lines and needle points, so
+  the join does not open where the fabric stretches between them (Wilcom's segment overlap rows,
+  Ink/Stitch's gap fill rows). Where a section's end meets two (the shape splits), the second join
+  gets its row from the later section, on top of the first one's last row. One row keeps the density
+  check quiet on knit; two would reach Caution, so stable fabric gets none, and fleece, terry, light
+  and sheer fabric neither (lower limits). Not for contour fill and curved rows, which have no
+  sections side by side on one lattice. The other patterns (gradient, contour fill, spiral, guided)
+  are in `flow.ts` and `spiral.ts`.
 - **Fill rows follow the image** (default; `src/digitize/flow.ts`, `src/image/orientation.ts`): a
   direction field from the structure tensor of the original picture (Förstner & Gülch 1987, Bigün &
   Granlund 1987; as in coherence-enhancing abstraction, Weickert 1999, and Coherent Line Drawing, Kang
@@ -438,7 +445,7 @@ fill rows end there, satin edges are found there, underlay lies on a contour ins
   and tie-in; the same at color changes.
 - **Defaults** by material (`digitizeDefaults`): spacing from the profile's recommendation (woven
   40 wt: 0.40 mm between neighboring rows, as measured in the example cat), pull compensation by
-  fabric (Wilcom table). Everything can be overridden in the *Stitches* panel.
+  fabric (Wilcom table), gap rows on knit. Everything can be overridden in the *Stitches* panel.
 
 The generated stitches go through the same check as loaded files. *Take over* adds them
 to the open designs as a new design, where their objects keep shape and settings and can be edited,

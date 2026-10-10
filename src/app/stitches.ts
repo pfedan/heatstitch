@@ -14,7 +14,7 @@ import { hasPart, partOf, withoutPart } from '../model/shadow';
 import { SATIN_SHARE } from '../model/covers';
 import { currentSettings } from '../correct/plan';
 import { isCovered, setOverlapShare } from '../model/knockout';
-import { strokeLike, SATIN_MAX, pullFor, digitizeDefaults } from '../digitize/digitize';
+import { strokeLike, SATIN_MAX, pullFor, digitizeDefaults, gapOf } from '../digitize/digitize';
 import { fillOfLine, lineSettings, lineToFill } from '../model/line';
 import { outline } from '../digitize/region';
 import { recommendedSpacing } from '../validation/profiles';
@@ -361,7 +361,7 @@ export function bindStitches(app: StitchesApp) {
     const s = info.measured.satin;
     if (!s) return null;
     const spacing = s.spacing;
-    return { kind: 'fill', s: { pattern: 'tatami', spacing, spacingEnd: Math.min(1.2, Math.round(spacing * 250) / 100), offset: 0.25, angle: NaN, stitch: 4, underlay: s.underlay, edge: 0, tolerance: s.tolerance } };
+    return { kind: 'fill', s: { pattern: 'tatami', spacing, spacingEnd: Math.min(1.2, Math.round(spacing * 250) / 100), offset: 0.25, angle: NaN, stitch: 4, underlay: s.underlay, edge: 0, tolerance: s.tolerance, ...gapOf(digitizeDefaults(app.settings.profile)) } };
   }
 
   // Settings pointed at or dragged are sewn in a worker (a large fill takes seconds), so the page stays
@@ -446,7 +446,7 @@ export function bindStitches(app: StitchesApp) {
       const path = to === 'fill' && one >= 0 ? lineGeoOf(remembered(p, app.seq(p).objects[one])) : undefined;
       if (path) {
         const d = digitizeDefaults(app.settings.profile);
-        const fill = { pattern: 'tatami' as const, spacing: d.spacing, spacingEnd: Math.min(1.2, Math.round(d.spacing * 250) / 100), offset: 0.25, angle: NaN, stitch: d.stitch, underlay: d.underlay, edge: 0, tolerance: d.tolerance };
+        const fill = { pattern: 'tatami' as const, spacing: d.spacing, spacingEnd: Math.min(1.2, Math.round(d.spacing * 250) / 100), offset: 0.25, angle: NaN, stitch: d.stitch, underlay: d.underlay, edge: 0, tolerance: d.tolerance, ...gapOf(d) };
         // A line that was a fill is filled as it was; one with a closed path is filled inside and stays its border; an open satin line becomes a fill in its width.
         const closed = fillOfLine(p, one) === 'area';
         // A closed line around objects sewn before it (a contour) goes under them first: filled

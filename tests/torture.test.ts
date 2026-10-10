@@ -16,7 +16,7 @@ import { CHAINS, FIRST_SEED, ID, options, T, COLORS, empty, knowledge, Doc, shap
 describe('torture test', () => {
   const seeds = Array.from({ length: CHAINS }, (_, k) => FIRST_SEED + k);
   it.each(seeds)('chain %i keeps the design consistent', async (seed) => {
-    await chain(seed);
+    await chain(seed, undefined, { knit: true });
     // Some chains build large designs (a contour filled as the ground, scaled up, left out under
     // others, a contour around a lettering): slower runners need more than the 30 s default.
   }, 120_000);

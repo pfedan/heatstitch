@@ -468,14 +468,15 @@ async function plan(p: Pattern, v: ValidationResult, profile: Profile, checks: C
 /**
  * "Auf Stoff abstimmen": the settings that suit the material better, by the rules alone (no
  * finding needed): spacing into the recommended range, underlay by size and fabric, satins split
- * where they would snag, pull compensation for objects that follow the fabric. Locked objects and
- * objects whose shape is not certain are left out.
+ * where they would snag, pull compensation for objects that follow the fabric, gap rows in fills by
+ * the fabric. Locked objects and objects whose shape is not certain are left out.
  */
 export function planFabric(p: Pattern, profile: Profile): Proposal[] {
   const kinds = stitchKinds(p);
   const objs = sewObjects(p, kinds);
   const [recMin, recMax] = recommendedSpacing(profile);
   const longMm = fabricOf(profile).longMm;
+  const gapRows = fabricOf(profile).gapRows;
   const under = digitizeDefaults(profile);
   const out: Proposal[] = [];
   let id = 0;
@@ -501,6 +502,8 @@ export function planFabric(p: Pattern, profile: Profile): Proposal[] {
         const e = pullFor(profile, 'fill', area).edge;
         if (Math.abs(e - f.edge) > 0.005) changes.push(fix('edge', f.edge, e)), slight();
       }
+      // Gap rows by the fabric, where rows can be straight (they lie under the rows sewn later).
+      if (GAP_PATTERNS.includes(f.pattern) && (f.gapRows ?? 0) !== gapRows) changes.push(fix('gapRows', f.gapRows ?? 0, gapRows));
     } else {
       const t = s.s;
       if (Math.abs(into(t.spacing) - t.spacing) > 0.005) changes.push(fix('spacing', t.spacing, into(t.spacing))), slight();
@@ -517,6 +520,9 @@ export function planFabric(p: Pattern, profile: Profile): Proposal[] {
   }
   return out;
 }
+
+/** Fill patterns sewn in straight rows (follow and guided where their rows run straight), which gap rows apply to. */
+const GAP_PATTERNS: readonly string[] = ['tatami', 'follow', 'guided'];
 
 /**
  * Takes over the proposals `chosen` (all from one plan on `p`): each object sewn anew with its

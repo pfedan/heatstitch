@@ -265,6 +265,8 @@ export const deBase = {
   'plan.change.underCross': 'Unterlage gekreuzt statt einlagig',
   'plan.change.under': 'Unterlage {b} statt {a}',
   'plan.change.edge': 'Kanten {a} → {b} mm (Zugausgleich)',
+  'plan.change.gapRowsOn': 'Füllabschnitte überlappen eine Reihe (gegen Lücken auf dehnbarem Stoff)',
+  'plan.change.gapRowsOff': 'Füllabschnitte ohne Überlappung',
   'plan.change.short': 'Kurze Stiche in Kurven',
   'plan.change.split': 'Teilen ab {a} → {b} mm',
   'plan.change.stagger': 'Teilungen versetzt',
