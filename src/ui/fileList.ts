@@ -101,8 +101,42 @@ interface FileData {
   trace?: unknown;
 }
 
-/** Versions kept per file for undo. */
+/** Versions kept per file for undo, at most. */
 const HISTORY = 50;
+/**
+ * Bytes of stitch records the versions of one file may hold together. Large designs keep fewer
+ * steps, so a phone does not run out of memory (100 000 stitches take about 0.9 MB per version).
+ */
+const HISTORY_BYTES = 64 * 1024 * 1024;
+/** Steps kept however large the design is. */
+const HISTORY_MIN = 10;
+
+/**
+ * Drops the oldest undo steps beyond HISTORY, or beyond HISTORY_BYTES once HISTORY_MIN are kept.
+ * Versions share record arrays where an edit left them alone (a recolor keeps x and y), so each
+ * buffer counts once, from the newest version on.
+ */
+export function trimUndo(undo: Pattern[], current: Pattern): void {
+  if (undo.length > HISTORY) undo.splice(0, undo.length - HISTORY);
+  const seen = new Set<ArrayBufferLike>();
+  const bytes = (p: Pattern): number => {
+    let n = 0;
+    for (const a of [p.x, p.y, p.cmd]) {
+      if (seen.has(a.buffer)) continue;
+      seen.add(a.buffer);
+      n += a.buffer.byteLength;
+    }
+    return n;
+  };
+  let total = bytes(current);
+  for (let k = undo.length - 1; k >= 0; k--) {
+    total += bytes(undo[k]);
+    if (total > HISTORY_BYTES && undo.length - k > HISTORY_MIN) {
+      undo.splice(0, k + 1);
+      return;
+    }
+  }
+}
 /** How long a removed design can still be brought back (a little longer than its note shows). */
 const REMOVE_GRACE_MS = 8000;
 
@@ -346,7 +380,7 @@ export class FileList {
     if (!f.pattern || p === f.pattern) return;
     if (opts.record !== false) {
       f.undo.push(f.pattern);
-      if (f.undo.length > HISTORY) f.undo.shift();
+      trimUndo(f.undo, p);
       f.redo = [];
     }
     // A new version keeps the shapes aside of the one before; undo and redo bring back their own.

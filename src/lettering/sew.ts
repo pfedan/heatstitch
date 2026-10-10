@@ -9,7 +9,8 @@ import { JUMP, STITCH, TRIM } from '../model/pattern';
 import { apply, type Form, type Mat } from '../shape/path';
 import { rasterize } from '../shape/rasterize';
 import type { Font, GlyphEl } from './font';
-import { layout, type Layout, type Lettering } from './layout';
+import { layout, type Layout, type Lettering, type Placed } from './layout';
+import { fillCover, leaveOutCovered, satinCover, type Cover } from './overlap';
 
 /**
  * Stitches for a lettering: every letter's elements as the font digitized them, sewn at the
@@ -30,6 +31,8 @@ interface Run {
   line: number;
   /** Index of its letter in the layout. */
   letter: number;
+  /** Satin or fill: it leaves out what lies under later letters (running stitch stays whole). */
+  leaves: boolean;
 }
 
 const dist = (a: Pt, b: Pt) => Math.hypot(a[0] - b[0], a[1] - b[1]);
@@ -48,8 +51,17 @@ function underlayFor(kind: SatinEl['p']['u'], width: number): UnderlayKind | nul
 }
 type SatinEl = Extract<GlyphEl, { k: 's' }>;
 
-/** The runs of one element, in the design (mm). */
-function sewElement(e: GlyphEl, m: Mat, scale: number, turn: number, l: Lettering, back: boolean): Pt[][] {
+/**
+ * The runs of one element, in the design (mm), and what it covers: worked out when asked (only
+ * where letters meet), none for running stitch and the open E stitch, which hide nothing.
+ */
+interface Sewing {
+  runs: Pt[][];
+  leaves: boolean;
+  cover: (() => Cover | null) | null;
+}
+
+function sewElement(e: GlyphEl, m: Mat, scale: number, turn: number, l: Lettering, back: boolean): Sewing {
   const tf = (pts: Pt[]) => pts.map((q) => apply(m, q));
   if (e.k === 's') {
     let rails: Rails = { left: tf(pairs(e.l)), right: tf(pairs(e.r)), rungs: pairs(e.g).map(([a, b]) => [a * scale, b * scale] as [number, number]) };
@@ -67,30 +79,31 @@ function sewElement(e: GlyphEl, m: Mat, scale: number, turn: number, l: Letterin
       type: e.p.e ? 'e' : 'satin',
     };
     const top = satinRuns([rails], s).filter((r) => r.length > 1);
-    if (!top.length || !l.underlay || under === null) return top;
+    const cover = top.length && s.type === 'satin' ? () => satinCover(rails) : null;
+    if (!top.length || !l.underlay || under === null) return { runs: top, leaves: true, cover };
     // As the font is digitized: the underlay comes back to the start, the satin ends at the end
     // of its column, where the font goes on (its next element starts there).
     const col = columnOf(rails);
     const u = underlayOf(col, under, TOLERANCE);
     const home = u.atEnd ? runStitch(col.center.slice().reverse(), 2, TOLERANCE) : [];
-    return [[...u.pts, ...home, ...top[0]], ...top.slice(1)];
+    return { runs: [[...u.pts, ...home, ...top[0]], ...top.slice(1)], leaves: true, cover };
   }
   if (e.k === 'r') {
     let path = tf(pairs(e.d));
     if (back) path = path.slice().reverse();
-    if (path.length < 2) return [];
+    if (path.length < 2) return { runs: [], leaves: false, cover: null };
     const pts = e.p.m ? path : runStitch(path, Math.max(0.5, e.p.len), TOLERANCE);
-    if (!e.p.tr) return [pts];
+    if (!e.p.tr) return { runs: [pts], leaves: false, cover: null };
     const out: Pt[] = [pts[0]];
     for (let i = 1; i < pts.length; i++) out.push(pts[i], pts[i - 1], pts[i]);
-    return [out];
+    return { runs: [out], leaves: false, cover: null };
   }
   const form: Form = {
     paths: e.d.map((loop) => ({ closed: true, nodes: pairs(loop).map((q) => apply(m, q)).map((p) => ({ p, a: p, b: p, smooth: false })) })),
   };
   const r0 = rasterize(form);
   const r = r0 && expandRegion(r0, e.p.ex ?? 0);
-  if (!r) return [];
+  if (!r) return { runs: [], leaves: false, cover: null };
   const first = form.paths[0].nodes[0].p;
   const res = fillRegion(
     r,
@@ -105,12 +118,43 @@ function sewElement(e: GlyphEl, m: Mat, scale: number, turn: number, l: Letterin
     },
     first,
   );
-  return res?.runs.filter((run) => run.length > 1) ?? [];
+  const runs = res?.runs.filter((run) => run.length > 1) ?? [];
+  return { runs, leaves: true, cover: runs.length ? () => fillCover(r) : null };
 }
 
-/** Every run of the lettering in sewing order. */
-export function letteringRuns(font: Font, l: Lettering, lay: Layout = layout(font, l)): Run[] {
-  const out: Run[] = [];
+type Box = [number, number, number, number];
+/** Bounds of runs (mm), a little grown: a satin reaches beyond its stitches by its pull compensation. */
+function boxOf(runs: Pt[][]): Box {
+  const b: Box = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const run of runs) {
+    for (const [x, y] of run) {
+      b[0] = Math.min(b[0], x - 0.5);
+      b[1] = Math.min(b[1], y - 0.5);
+      b[2] = Math.max(b[2], x + 0.5);
+      b[3] = Math.max(b[3], y + 0.5);
+    }
+  }
+  return b;
+}
+const meet = (a: Box, b: Box) => a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && b[1] <= a[3];
+
+/** Whether a stitch of one letter lies wholly under another letter of `line`. */
+function runInto(line: (Sewing & { at: number })[]): boolean {
+  const boxes = line.map((s) => boxOf(s.runs));
+  return line.some((s, k) => {
+    if (!s.leaves) return false;
+    const on = line.flatMap((x, j) => (x.cover && x.at !== s.at && meet(boxes[k], boxes[j]) ? [x.cover()] : [])).filter((c): c is Cover => !!c);
+    return on.length > 0 && s.runs.some((run) => leaveOutCovered(run, on) !== run);
+  });
+}
+
+/**
+ * Every run of the lettering in sewing order. Where a letter lies on one sewn before, that one
+ * leaves out the stitches it hides (see overlap.ts), unless `all` asks for every stitch; running
+ * stitch stays whole.
+ */
+export function letteringRuns(font: Font, l: Lettering, lay: Layout = layout(font, l), all = false): Run[] {
+  const sewn: (Sewing & { letter: Placed; at: number })[] = [];
   // Lines in turn; a line sewn back runs from its last letter to its first.
   const lines = new Map<number, typeof lay.letters>();
   for (const p of lay.letters) {
@@ -118,16 +162,46 @@ export function letteringRuns(font: Font, l: Lettering, lay: Layout = layout(fon
     lines.get(p.line)!.push(p);
   }
   const index = new Map(lay.letters.map((p, i) => [p, i]));
-  for (const [, letters] of [...lines].sort((a, b) => a[0] - b[0])) {
-    const order = letters[0]?.back ? letters.slice().reverse() : letters;
-    for (const p of order) {
+  const sewLine = (letters: Placed[], back: boolean) => {
+    const out: (Sewing & { letter: Placed; at: number })[] = [];
+    for (const p of back ? letters.slice().reverse() : letters) {
       if (!p.glyph) continue;
       const scale = Math.hypot(p.m[0], p.m[1]);
       const turn = (Math.atan2(p.m[1], p.m[0]) * 180) / Math.PI;
-      const els = p.back ? p.glyph.e.slice().reverse() : p.glyph.e;
-      for (const e of els) for (const pts of sewElement(e, p.m, scale, turn, l, p.back)) out.push({ pts, word: p.word, line: p.line, letter: index.get(p)! });
+      const els = back ? p.glyph.e.slice().reverse() : p.glyph.e;
+      for (const e of els) out.push({ ...sewElement(e, p.m, scale, turn, l, back), letter: p, at: index.get(p)! });
     }
+    return out;
+  };
+  for (const [, letters] of [...lines].sort((a, b) => a[0] - b[0])) {
+    let line = sewLine(letters, false);
+    // A line whose letters run into each other is sewn in writing direction, each letter on the
+    // one before it as written; else it may be sewn back (shorter ways).
+    if (letters[0]?.back) {
+      if (runInto(line)) for (const p of letters) p.back = false;
+      else line = sewLine(letters, true);
+    }
+    sewn.push(...line);
   }
+  const boxes = sewn.map((s) => boxOf(s.runs));
+  const covers = new Map<number, Cover | null>();
+  const coverOf = (k: number) => {
+    if (!covers.has(k)) covers.set(k, sewn[k].cover!());
+    return covers.get(k)!;
+  };
+  const out: Run[] = [];
+  sewn.forEach((s, k) => {
+    // What the other letters sewn after it cover, where they reach it.
+    const on: Cover[] = [];
+    if (s.leaves && !all) {
+      for (let j = k + 1; j < sewn.length; j++) {
+        if (!sewn[j].cover || sewn[j].at === s.at || !meet(boxes[k], boxes[j])) continue;
+        const c = coverOf(j);
+        if (c) on.push(c);
+      }
+    }
+    for (const pts of s.runs) out.push({ pts: leaveOutCovered(pts, on), word: s.letter.word, line: s.letter.line, letter: s.at, leaves: s.leaves });
+  });
   return out;
 }
 

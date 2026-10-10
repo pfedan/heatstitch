@@ -88,27 +88,5 @@ export function jefColor(index: number): ThreadColor {
   return { r: e[0], g: e[1], b: e[2], name: e[3] };
 }
 
-/** Perceptual color distance ("red mean"), as pyembroidery uses. */
-function distance(r1: number, g1: number, b1: number, r2: number, g2: number, b2: number): number {
-  const rm = Math.round((r1 + r2) / 2);
-  const r = r1 - r2;
-  const g = g1 - g2;
-  const b = b1 - b2;
-  return (((512 + rm) * r * r) >> 8) + 4 * g * g + (((767 - rm) * b * b) >> 8);
-}
-
-/** Nearest palette entry (never 0, "stop"), optionally skipping one index. */
-export function jefIndexOf(c: ThreadColor, skip = -1): number {
-  let best = 1;
-  let bestD = Infinity;
-  for (let i = 1; i < JEF.length; i++) {
-    const e = JEF[i];
-    if (!e || i === skip) continue;
-    const d = distance(c.r, c.g, c.b, e[0], e[1], e[2]);
-    if (d <= bestD) {
-      bestD = d;
-      best = i;
-    }
-  }
-  return best;
-}
+/** The usable Janome palette slots (never 0, "stop"). */
+export const JEF_SLOTS = JEF.flatMap((e, i) => (e && i > 0 ? [i] : []));

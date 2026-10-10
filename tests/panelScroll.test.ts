@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Browser, Page } from 'playwright';
 import type { ViteDevServer } from 'vite';
+import { launchChromium } from './helpers/browser';
 
 /**
  * Clicking a setting of the object page, scrolled down, leaves the column where it was: the setting
@@ -45,10 +46,9 @@ describe.skipIf(!on)('clicking a setting of the object page', () => {
 
   beforeAll(async () => {
     const { createServer } = await import('vite');
-    const { chromium } = await import('playwright');
     server = await createServer({ server: { port: 0, strictPort: false }, logLevel: 'error' });
     await server.listen();
-    browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
+    browser = await launchChromium();
     page = await browser.newPage({ viewport: { width: 1600, height: 1000 }, locale: 'en-US' });
     await page.goto(server.resolvedUrls!.local[0]);
     await page.evaluate(() => document.querySelector<HTMLButtonElement>('#load-example [data-example="examples/svg/shapes-benchmark.svg"]')!.click());
