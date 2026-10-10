@@ -152,6 +152,8 @@ export interface SvgShape {
   form: Form;
   /** Stroke width in mm (strokes only), at least MIN_LINE_MM. */
   width?: number;
+  /** The element it was painted by (its place in the file): the fill and the stroke of one element share it. */
+  element?: number;
 }
 
 /** The outline of a basic shape or path as path data, in its user units; null for text and the like. */
@@ -416,7 +418,7 @@ export async function readSvg(text: string): Promise<SvgDesign | null> {
         // Layout px to mm.
         const s = designMm / lw;
         const out: SvgShape[] = [];
-        for (const q of paints) {
+        for (const [element, q] of paints.entries()) {
           if (q.el.closest('marker, pattern') || drawnByBrowser(q.el, root)) return null;
           const d = geometry(q.el);
           if (d === null) return null;
@@ -428,9 +430,9 @@ export async function readSvg(text: string): Promise<SvgDesign | null> {
           if (q.fill >= 0) {
             const closed = { paths: form.paths.filter((p) => p.nodes.length > 2 || p.closed).map((p) => ({ ...p, closed: true })) };
             const nonzero = getComputedStyle(q.el).fillRule !== 'evenodd';
-            if (closed.paths.length) out.push({ color: q.fill, kind: 'fill', form: nonzero ? { ...closed, nonzero } : closed });
+            if (closed.paths.length) out.push({ color: q.fill, kind: 'fill', form: nonzero ? { ...closed, nonzero } : closed, element });
           }
-          if (q.stroke >= 0) out.push({ color: q.stroke, kind: 'stroke', form, width: Math.max(MIN_LINE_MM, q.strokePx * s) });
+          if (q.stroke >= 0) out.push({ color: q.stroke, kind: 'stroke', form, width: Math.max(MIN_LINE_MM, q.strokePx * s), element });
         }
         return out;
       },

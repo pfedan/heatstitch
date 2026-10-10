@@ -322,7 +322,7 @@ export function bindShapes(app: ShapesApp) {
     else if (geoUse(now) === 'area' && now.fill) {
       // Open paths beside closed ones are not filled: said when there are more of them than before.
       const n = fitsOf(form).openBeside;
-      if (n > fitsOf(was).openBeside) app.layers.say({ text: t('shape.openBeside', { n }), action: { label: t('shape.closePaths', { n }), run: () => closeOpenPaths(o) } });
+      if (n > fitsOf(was).openBeside) app.layers.say({ text: t(borderOf(now) ? 'shape.openBesideBorder' : 'shape.openBeside', { n }), action: { label: t('shape.closePaths', { n }), run: () => closeOpenPaths(o) } });
     }
     return true;
   }

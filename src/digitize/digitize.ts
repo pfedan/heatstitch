@@ -11,7 +11,7 @@ import { buildRegion, type Region } from './region';
 import { runStitch, TOLERANCE } from './run';
 import { column, pairs, satinStitches, underlay, type Column, type SatinParams } from './satin';
 import { reverse, skeleton, type Branch, type Graph, type Pt } from './skeleton';
-import { bestChain, satinRuns, type FillSettings, type Rails, type SatinSettings } from '../model/restitch';
+import { bestChain, satinRuns, type BorderSettings, type FillSettings, type Rails, type SatinSettings } from '../model/restitch';
 import { stripsOfAreas } from './rungs';
 import { easePiles, SATIN_PEAK } from './satinEase';
 import { areaLoops, classify as shapeClass, offersSections, suggestSatin, type SatinSuggestion, type ShapeClass } from './satinSuggest';
@@ -153,6 +153,8 @@ export interface DigitizedObject {
   /** A line, sewn along these curves (see model/line.ts), and how. */
   path?: Form;
   line?: PathStitch;
+  /** A fill of a vector file with the stroke of its shape: that stroke as its border (sewn by syncBorders). */
+  border?: BorderSettings;
   /** The area of the image it was sewn for (AreaInfo.key). */
   area?: string;
   /**
@@ -1151,6 +1153,8 @@ export interface ShapeInput {
   kind: 'fill' | 'stroke';
   form: Form;
   width?: number;
+  /** The element of the file it was painted by: a fill and the stroke of the same element share it. */
+  element?: number;
 }
 
 /** Shapes smaller than this (mm²) are left out, as specks. */
@@ -1186,6 +1190,15 @@ export function digitizeShapes(shapes: ShapeInput[], threads: ThreadColor[], o: 
     items.push({ sh, form, whole });
   }
   for (let k = items.length - 1; k >= 0; k--) if (items[k].whole.areaMm2 < SPECK_MM2) items.splice(k, 1);
+  // The stroke of a filled shape all of whose paths are closed (as SVG paints it, right after its
+  // fill): the border of that fill, once it is sewn as a fill (see below).
+  const edgeOf = new Map<number, number>();
+  items.forEach((it, k) => {
+    const next = items[k + 1];
+    if (it.sh.kind !== 'fill' || it.sh.element === undefined || next?.sh.kind !== 'stroke' || next.sh.element !== it.sh.element) return;
+    if (next.form.paths.every((x) => x.closed)) edgeOf.set(k, k + 1);
+  });
+  const edges = new Set<number>();
   const satin = satinOf(o);
   // Blocks of one thread, each a list of item indices.
   const blocks: { color: number; items: number[] }[] = [];
@@ -1221,6 +1234,7 @@ export function digitizeShapes(shapes: ShapeInput[], threads: ThreadColor[], o: 
       const it = items[k];
       let region = it.whole;
       const isFill = it.sh.kind === 'fill';
+      if (edges.has(k)) continue;
       if (!isFill) {
         // Lines are sewn along their curves, so they stay exact and can be edited as lines.
         const line = lineStitchFor(it.sh.width ?? 0.4, o.tolerance);
@@ -1248,6 +1262,13 @@ export function digitizeShapes(shapes: ShapeInput[], threads: ThreadColor[], o: 
         if (isFill) {
           obj.info.form = it.form;
           obj.info.knockout = knockout;
+          const e = edgeOf.get(k);
+          if (e !== undefined) {
+            // In the fill's thread, or one of its own.
+            const line = lineStitchFor(items[e].sh.width ?? 0.4, o.tolerance);
+            obj.info.border = { ...line, ...(items[e].sh.color === it.sh.color ? {} : { color: { ...threads[items[e].sh.color] } }) };
+            edges.add(e);
+          }
         }
       } else if (obj.info.kind === 'satin' && isFill && !knockout) obj.info.form = it.form;
       runs.push(...sewn);

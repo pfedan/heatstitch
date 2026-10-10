@@ -1127,6 +1127,8 @@ export const deBase = {
   'shape.fillAgain': 'Wieder füllen',
   'shape.openBeside': '{n} offene Pfade werden nicht gefüllt.',
   'shape.openBeside.one': '1 offener Pfad wird nicht gefüllt.',
+  'shape.openBesideBorder': '{n} offene Pfade werden nicht gefüllt. Der Rand läuft sie entlang.',
+  'shape.openBesideBorder.one': '1 offener Pfad wird nicht gefüllt. Der Rand läuft ihn entlang.',
   'shape.closePaths': 'Pfade schließen',
   'shape.closePaths.one': 'Pfad schließen',
   'shape.lettering': 'Schrift: Text ändern oder in Objekte zerlegen, dann lässt sich jeder Buchstabe einzeln formen.',

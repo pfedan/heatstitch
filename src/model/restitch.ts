@@ -1133,7 +1133,7 @@ export function rememberShapes(
   objs: SewObject[],
   starts: number[],
   shapes: (KeptShape | undefined)[],
-  forms: ({ form?: Form; knockout?: boolean; path?: Form; line?: PathStitch; columns?: Rails[]; satin?: SatinSettings; satinShape?: Omit<KeptShape, 'fill'> } | undefined)[] = [],
+  forms: ({ form?: Form; knockout?: boolean; path?: Form; line?: PathStitch; border?: BorderSettings; columns?: Rails[]; satin?: SatinSettings; satinShape?: Omit<KeptShape, 'fill'> } | undefined)[] = [],
 ): void {
   const at = new Map<number, SewObject>();
   let kinds: Uint8Array | undefined;
@@ -1174,7 +1174,7 @@ export function rememberShapes(
     // A fill of the Image mode: its area traced once, as exactly as the level Form would; from
     // now on its form is given, like one drawn or from an SVG.
     const geo = f?.form ?? vectorize(region, FIT_TOLERANCE);
-    remember(p, o, { region, fill: { ...shape.fill }, parts: one('fill'), ...(geo.paths.length ? { geo, ...(f?.form && f.knockout ? { knockout: true } : {}) } : {}) });
+    remember(p, o, { region, fill: { ...shape.fill }, parts: one('fill'), ...(geo.paths.length ? { geo, ...(f?.form && f.knockout ? { knockout: true } : {}) } : {}), ...(f?.border ? { line: structuredClone(f.border) } : {}) });
   });
 }
 

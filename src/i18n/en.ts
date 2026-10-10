@@ -1129,6 +1129,8 @@ const enBase: Record<keyof typeof deBase, string> = {
   'shape.fillAgain': 'Fill again',
   'shape.openBeside': '{n} open paths are not filled.',
   'shape.openBeside.one': '1 open path is not filled.',
+  'shape.openBesideBorder': '{n} open paths are not filled. The border runs along them.',
+  'shape.openBesideBorder.one': '1 open path is not filled. The border runs along it.',
   'shape.closePaths': 'Close paths',
   'shape.closePaths.one': 'Close path',
   'shape.lettering': 'Lettering: change the text, or split it into objects to shape each letter on its own.',
