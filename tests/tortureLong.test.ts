@@ -9,4 +9,10 @@ describe('found by the torture test', () => {
   it.each([270, 387, 383, 130, 139, 315, 1124])('long chain %i still holds', async (seed) => {
     await chain(seed, 20);
   }, 60_000);
+
+  // Lines combined where the second one's shadow is sewn before the first: the combined line was
+  // looked for at its old place.
+  it.each([89])('chain %i still holds', async (seed) => {
+    await chain(seed);
+  }, 60_000);
 });

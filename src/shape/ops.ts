@@ -1,5 +1,5 @@
 import type { Pt } from '../digitize/skeleton';
-import { bezier, segment, segments, type Form, type Node, type Path } from './path';
+import { bezier, insertNode, segment, segments, type Form, type Node, type Path } from './path';
 import { fitCubic } from './vectorize';
 
 /**
@@ -108,6 +108,65 @@ export function areaOfForm(f: Form): number {
   type Settled = { resolveCrossings(): Settled; reorient(nonZero: boolean, clockwise: boolean): Settled; area: number };
   const item = (toPaper(f) as unknown as Settled).resolveCrossings().reorient(!!f.nonzero, true);
   return Math.abs(item.area);
+}
+
+// Crossings -------------------------------------------------------------------------------------
+
+/** One path as paper.js sees it, open or closed. */
+function pathToPaper(p: Path): InstanceType<PaperScope['Path']> {
+  const P = needPaper();
+  const segs = p.nodes.map((n) => new P.Segment(new P.Point(n.p[0], n.p[1]), new P.Point(n.a[0] - n.p[0], n.a[1] - n.p[1]), new P.Point(n.b[0] - n.p[0], n.b[1] - n.p[1])));
+  return new P.Path({ segments: segs, closed: p.closed, insert: false });
+}
+
+/** A crossing this near a node is that node (curve time). */
+const AT_NODE = 1e-4;
+
+/**
+ * The form with a node wherever its paths cross (themselves or each other), the curves split
+ * exactly there so the outline stays as it was; null when nothing crosses. Touching without
+ * crossing does not count.
+ */
+export function withCrossingNodes(f: Form): { form: Form; added: number } | null {
+  const items = f.paths.map((p) => (p.nodes.length >= 2 ? pathToPaper(p) : null));
+  type Loc = { seg: number; t: number };
+  const at: Loc[][] = f.paths.map(() => []);
+  type CurveLoc = { index: number; time: number; intersection: CurveLoc | null };
+  const crossings = (a: unknown, b: unknown) => (a as { getCrossings(b: unknown): CurveLoc[] }).getCrossings(b);
+  for (let i = 0; i < items.length; i++) {
+    if (!items[i]) continue;
+    for (let j = i; j < items.length; j++) {
+      if (!items[j]) continue;
+      for (const loc of crossings(items[i], items[j])) {
+        at[i].push({ seg: loc.index, t: loc.time });
+        // (Crossing itself, both places are on this path.)
+        if (loc.intersection) at[j].push({ seg: loc.intersection.index, t: loc.intersection.time });
+      }
+    }
+  }
+  let form = f;
+  let added = 0;
+  at.forEach((locs, k) => {
+    // From the last curve back, and within a curve from its end back: the earlier places keep their curve and time.
+    const sorted = locs.filter((l) => l.t > AT_NODE && l.t < 1 - AT_NODE).sort((x, y) => y.seg - x.seg || y.t - x.t);
+    let seg = -1;
+    let upper = 1;
+    let last = Infinity;
+    for (const l of sorted) {
+      if (l.seg !== seg) {
+        seg = l.seg;
+        upper = 1;
+        last = Infinity;
+      }
+      // A crossing met twice (a path crossing itself is found from both sides).
+      if (Math.abs(l.t - last) < AT_NODE) continue;
+      form = insertNode(form, k, l.seg, l.t / upper).form;
+      upper = l.t;
+      last = l.t;
+      added++;
+    }
+  });
+  return added ? { form, added } : null;
 }
 
 // Offsetting ------------------------------------------------------------------------------------

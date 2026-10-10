@@ -20,7 +20,7 @@ import type { Region } from '../../src/digitize/region';
 import { backToVersion, edgeAlong, keepVersion, objectKey, remember, remembered, rememberedIn, restitch, restoreRemembered, DECO_PATTERNS, OPEN_PATTERNS, type BorderSettings, type FillSettings, type Rails, type Remembered, type StoredObjects } from '../../src/model/restitch';
 import { reorder } from '../../src/model/order';
 import { stitchKinds } from '../../src/model/sequence';
-import { deleteObjects, duplicateObject, duplicateObjects, mirrorMatrix, recolorObjects, subtractTop } from '../../src/model/shapeOps';
+import { combineLines, deleteObjects, duplicateObject, duplicateObjects, mirrorMatrix, recolorObjects, subtractTop } from '../../src/model/shapeOps';
 import { stitchesBefore } from '../../src/model/transform';
 import { sewDesign, specOf } from '../../src/model/sew';
 import { parsePattern } from '../../src/parsers';
@@ -41,8 +41,9 @@ import { rng } from './images';
 import { inheritTrace, movedTrace, readTrace, setTraceOf, sizedTrace, storeTrace, traceFrom, traceOf, withTrace, type Trace } from '../../src/model/trace';
 import { areaLoops, suggestSatin } from '../../src/digitize/satinSuggest';
 import { stripsOfAreas } from '../../src/digitize/rungs';
-import { areaOfForm, loadOps, subtractForm } from '../../src/shape/ops';
-import { areaOf, fillArea, fits, formKey, geoOf, geoUse, guessArea, guessGeo, lineGeoOf, openOf, withGeo } from '../../src/model/geo';
+import { areaOfForm, loadOps, subtractForm, withCrossingNodes } from '../../src/shape/ops';
+import { joinEnd, joinOpenPaths, splitPathAt, JOIN_SNAP_MM, type Joined } from '../../src/shape/join';
+import { areaOf, fillArea, fits, formKey, geoOf, geoUse, guessArea, guessGeo, guessLine, lineGeoOf, openOf, withGeo } from '../../src/model/geo';
 
 // Joining and cutting run on the curves (paper.js), loaded once.
 await loadOps();
@@ -135,7 +136,22 @@ export function follow(d: Doc): void {
   if (r) d.amend(r.pattern);
 }
 
-/** The app's takeShapes: a new version, then the knockouts follow. */
+/** Nodes in a form. */
+const count = (f: Form) => f.paths.reduce((a, p) => a + p.nodes.length, 0);
+
+/**
+ * Verbinden: nodes are the sum less the ends made one (a joint within 0.5 mm, a chain closed), and
+ * a path is closed by the join exactly when its ends met within 0.5 mm.
+ */
+function checkJoined(before: Form, j: Joined): void {
+  const merged = j.joints.filter((x) => !x.bridged).length + j.closed;
+  expect(count(j.form), 'joined: nodes less the ends made one').toBe(count(before) - merged);
+  for (const x of j.joints) expect(x.bridged, `a gap of ${x.gap} mm`).toBe(x.gap > JOIN_SNAP_MM);
+  const wasClosed = before.paths.filter((p) => p.closed).length;
+  expect(j.form.paths.filter((p) => p.closed).length, 'joined: chains closed').toBe(wasClosed + j.closed);
+  for (const p of j.form.paths) if (!p.closed && p.nodes.length > 2) expect(Math.hypot(p.nodes[0].p[0] - p.nodes.at(-1)!.p[0], p.nodes[0].p[1] - p.nodes.at(-1)!.p[1]) > JOIN_SNAP_MM || before.paths.includes(p), 'an open chain whose ends meet').toBe(true);
+}
+
 /**
  * Ausschneiden on the curves: what is left of the lower fill `o` (now `left` in `next`) does not
  * overlap the cutter `top`, and is exactly the old form without the cutter.
@@ -154,6 +170,7 @@ function checkCut(p: Pattern, o: number, top: number, next: Pattern, left: numbe
   expect(Math.abs(area - (want ? areaOfForm(want) : 0)), 'cut fill is the old form without the cutter (mm²)').toBeLessThan(Math.max(0.01, 1e-3 * area));
 }
 
+/** The app's takeShapes: a new version, then the knockouts follow. */
 export function shapes(d: Doc, next: Pattern | null | undefined): boolean {
   if (!next) return false;
   d.commit(next);
@@ -338,6 +355,47 @@ export const OPS: Op[] = [
       const pts = [0, 1, 2].map(() => `${between(r, 0, 60)} ${between(r, 0, 60)}`);
       const a = addShape(d.cur.p, { form: parsePath(`M${pts[0]} L${pts[1]} L${pts[2]}`, ID), kind: 'stroke', width: pick(r, [0, 2]) }, pick(r, COLORS), null, options);
       return shapes(d, a?.pattern);
+    },
+  },
+  {
+    name: 'add line at an end',
+    run: (d, r) => {
+      // As SVG files bring outlines in pieces: a line beginning at (or just beside) the end of another, sewn right after it.
+      const lines = d.objects.filter((o) => lineGeoOf(remembered(d.cur.p, o)) && !partOf(remembered(d.cur.p, o)) && remembered(d.cur.p, o)?.line);
+      const o = lines.length ? pick(r, lines) : null;
+      const open = o && remembered(d.cur.p, o)!.geo!.paths.find((p) => !p.closed && p.nodes.length >= 2);
+      if (!o || !open) return false;
+      const at = open.nodes[open.nodes.length - 1].p;
+      const gap = pick(r, [0, 0.3, 2]);
+      const a = r() * 2 * Math.PI;
+      const s = [at[0] + gap * Math.cos(a), at[1] + gap * Math.sin(a)];
+      const pts = [0, 1].map(() => `${between(r, 0, 60)} ${between(r, 0, 60)}`);
+      const form = parsePath(`M${s[0]} ${s[1]} L${pts[0]} L${pts[1]}`, ID);
+      const added = addShape(d.cur.p, { form, kind: 'stroke', width: 0 }, o.color, o.index, options);
+      return shapes(d, added?.pattern);
+    },
+  },
+  {
+    name: 'combine lines',
+    run: (d, r) => {
+      // Zusammenfassen of lines sewn one after the other in one thread: one line, touching ends joined.
+      const p = d.cur.p;
+      const line = (o: SewObject) => lineGeoOf(remembered(p, o)) && !partOf(remembered(p, o));
+      const pairs = d.objects.flatMap((o, k) => (k + 1 < d.objects.length && line(o) && line(d.objects[k + 1]) && o.block === d.objects[k + 1].block ? [k] : []));
+      if (!pairs.length) return false;
+      const k = pick(r, pairs);
+      const which = [k, k + 1];
+      const c = combineLines(p, which, T);
+      if (!c) return false;
+      const kinds = stitchKinds(p);
+      const objs = sewObjects(p, kinds);
+      const before: Form = { paths: which.flatMap((i) => (lineGeoOf(remembered(p, objs[i])) ?? guessLine(p, objs[i], kinds))!.paths) };
+      const after = remembered(c.pattern, sewObjects(c.pattern)[c.index])?.geo;
+      expect(after, 'combined lines keep a form').toBeTruthy();
+      if (c.joined) checkJoined(before, c.joined);
+      expect(count(after!), 'combined lines: nodes less joined ends').toBe(count(before) - (c.joined ? c.joined.joints.filter((x) => !x.bridged).length + c.joined.closed : 0));
+      expect(c.joined?.joints.every((x) => !x.bridged) ?? true, 'Zusammenfassen bridges no gap').toBe(true);
+      return shapes(d, c.pattern);
     },
   },
   {
@@ -859,9 +917,26 @@ export const LINE_OPS: Op[] = [
       const form = m.geo!;
       const k = Math.floor(r() * form.paths.length);
       const path = form.paths[k];
-      const how = pick(r, ['insert', 'extend', 'toggle'] as const);
+      const how = pick(r, ['insert', 'extend', 'toggle', 'join', 'split', 'crossings'] as const);
       let next: Form;
-      if (how === 'insert' && segments(path)) next = insertNode(form, k, Math.floor(r() * segments(path)), between(r, 0.1, 0.9)).form;
+      if (how === 'join') {
+        // Verbinden: all open paths into one, or one end to the nearest other.
+        const end = pick(r, [null, 0, 1] as const);
+        const j = end === null ? joinOpenPaths(form, true) : joinEnd(form, k, end);
+        if (!j) return false;
+        checkJoined(form, j);
+        next = j.form;
+      } else if (how === 'split') {
+        const s = splitPathAt(form, k, 1 + Math.floor(r() * Math.max(1, path.nodes.length - 2)));
+        if (!s) return false;
+        expect(count(s), 'a split path has its node twice').toBe(count(form) + 1);
+        next = s;
+      } else if (how === 'crossings') {
+        const c = withCrossingNodes(form);
+        if (!c) return false;
+        expect(count(c.form), 'a node at each crossing').toBe(count(form) + c.added);
+        next = c.form;
+      } else if (how === 'insert' && segments(path)) next = insertNode(form, k, Math.floor(r() * segments(path)), between(r, 0.1, 0.9)).form;
       else if (how === 'extend' && !path.closed) next = extendPath(form, k, pick(r, [0, 1] as const), [between(r, 0, 60), between(r, 0, 60)]).form;
       else if (how === 'toggle' && (path.closed || path.nodes.length >= 3)) next = { ...form, paths: form.paths.map((x, j) => (j === k ? { ...x, closed: !x.closed } : x)) };
       else return false;
@@ -1262,7 +1337,7 @@ export function checkAreas(p: Pattern): void {
     if (m.knockout && !sameRegion(want, m.region) && m.cut === cutKey(want) && !reshapeFill(p, objs, o, stitchKinds(p), m.geo!, T, true)?.starts.length) want = fillArea(m, m.region.pxMm);
     if (!sameRegion(want, m.region)) problems.push(`${o.index}: area ${m.region.areaMm2.toFixed(1)} mm² is not its form's ${want?.areaMm2.toFixed(1)} mm² (grow ${m.fill.areaGrow ?? 0}${m.knockout ? ', left out' : ''})`);
   }
-  expect(problems, 'areas not from their form').toEqual([]);
+  expect(problems.join('; '), 'areas not from their form').toBe('');
 }
 
 /**
