@@ -222,6 +222,8 @@ export function objectMenuItems(openOrder: () => void): MenuItem[] {
     ...entries(['-', 'object.mirrorH', 'object.mirrorV', '-', 'draw.cut', 'object.split', 'object.combine', 'object.subtract', 'object.contour']),
     // A switch: the entry says what a click does now.
     ...(can('object.knockout') ? [actions?.knockoutState() === 'on' ? { label: t('objects.knockout.off'), run: () => runCommand('object.knockout') } : 'object.knockout'] : []),
+    // An appliqué: its cut line for a plotter or to print.
+    ...(can('stitch.cutLine') ? ['stitch.cutLine'] : []),
     ...entries(['-', 'object.putAside', 'object.guide']),
     '-',
     'object.delete',

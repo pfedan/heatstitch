@@ -7,7 +7,7 @@ import type { UnderlayKind } from '../digitize/satin';
 import type { ShapeOutline } from '../render/scene';
 import { UNDERLAY_INSET } from '../digitize/fill';
 import type { Pt } from '../digitize/skeleton';
-import { KIND_ICON, kindLabel } from './layersPanel';
+import { APPLIQUE_ICON, KIND_ICON, kindLabel } from './layersPanel';
 import type { LineCap } from '../shape/rasterize';
 import { BORDER_STITCH, BORDER_WIDTH, type BorderType } from '../digitize/border';
 import { TOLERANCE } from '../digitize/run';
@@ -25,6 +25,14 @@ import { h, swap } from '../shell/h';
 import { section } from '../shell/ui';
 import { setThinShare, THIN_SHARES, thinShare } from '../areas/stitches/state';
 import { kindWay, type KindState, type KindWay } from '../areas/stitches/kindWay';
+import { APPLIQUE_FABRICS, APPLIQUE_WIDTHS, type AppliqueFabric, type AppliqueSettings } from '../model/applique';
+
+/** The kinds on the kind switch: the three of a design's objects and appliqué. */
+type SwitchKind = 'fill' | 'satin' | 'line' | 'applique';
+
+
+/** The usual width of an appliqué's edge (mm): 2.5 to 4 in digitizing guides. */
+const APPLIQUE_BAND: [number, number] = [2.5, 4];
 
 type FillUnder = 'off' | 'single' | 'cross';
 const FILL_UNDERS: FillUnder[] = ['off', 'single', 'cross'];
@@ -132,6 +140,10 @@ export interface StitchInfo {
   original?: boolean;
   /** Pull compensation by the fabric for the first selected fill and satin (see pullFor). */
   fabricPull?: { fill?: number; satin?: { edge: number; edgeShare?: number } };
+  /** All selected objects are appliqués: the settings of the first, its thread. */
+  applique?: { s: AppliqueSettings; color: ThreadColor };
+  /** Some selected object can be made an appliqué (a closed area with a shape). */
+  canApplique?: boolean;
 }
 
 export interface StitchHooks {
@@ -172,6 +184,12 @@ export interface StitchHooks {
   free: (on: boolean) => void;
   /** The selected objects of a file from elsewhere sewn with the stitches the file had again. */
   original: () => void;
+  /** The selected objects made appliqués (true) or fills again (false). */
+  appliqueKind: (on: boolean) => void;
+  /** The selected appliqués with settings `s`: shown while sliding (`final` false), then applied. */
+  applique: (s: AppliqueSettings, final: boolean) => void;
+  /** The cut line of the selected appliqués saved as an SVG. */
+  cutLine: () => void;
 }
 
 const KINDS: ObjectKind[] = ['fill', 'satin', 'run'];
@@ -292,6 +310,8 @@ export class StitchPanel {
   private kind: ObjectKind = 'fill';
   /** Settings of the one selected line while they are changed (see StitchInfo.path). */
   private lineDraft: PathStitch | null = null;
+  /** Settings of the selected appliqués while they are changed (see StitchInfo.applique). */
+  private appliqueDraft: AppliqueSettings | null = null;
   private draft: StitchInfo['measured'] = {};
   private info: StitchInfo | null = null;
   private frame = 0;
@@ -352,7 +372,7 @@ export class StitchPanel {
 
   update(info: StitchInfo | null): void {
     this.info = info;
-    if (!info || !Object.keys(info.measured).length) {
+    if (!info || (!Object.keys(info.measured).length && !info.applique)) {
       this.root.replaceChildren();
       this.key = -1;
       return;
@@ -367,6 +387,7 @@ export class StitchPanel {
     this.group = null;
     this.draft = structuredClone(info.measured);
     this.lineDraft = info.path ? structuredClone(info.path.st) : null;
+    this.appliqueDraft = info.applique ? structuredClone(info.applique.s) : null;
     if (this.tolerance !== null) for (const k of KINDS) if (this.draft[k]) this.draft[k]!.tolerance = this.tolerance;
     if (!info.measured[this.kind]) this.kind = KINDS.find((k) => info.measured[k])!;
     // A border, shadow or echo: the settings changed are its fill's or line's.
@@ -400,11 +421,18 @@ export class StitchPanel {
   }
 
   /** Whether the selection can be sewn as `to` now (see the kind switch). */
-  canConvert(to: 'fill' | 'satin' | 'line'): boolean {
+  canConvert(to: SwitchKind): boolean {
+    if (to === 'applique') return !this.appliqueDraft && !!this.current?.canApplique;
+    if (this.appliqueDraft) return to === 'fill';
     return kindWay(this.kindState(), to) !== null;
   }
 
-  convert(to: 'fill' | 'satin' | 'line'): void {
+  convert(to: SwitchKind): void {
+    if (to === 'applique' || this.appliqueDraft) {
+      if (!this.canConvert(to)) return;
+      this.hooks.preview(null);
+      return this.hooks.appliqueKind(to === 'applique');
+    }
     const way = kindWay(this.kindState(), to);
     if (!way) return;
     this.hooks.preview(null);
@@ -451,6 +479,11 @@ export class StitchPanel {
     this.hooks.outline(action);
   }
 
+  /** The cut line of the selected appliqués, as an SVG to save. */
+  cutLine(): void {
+    this.hooks.cutLine();
+  }
+
   /** The kind switch's position: a line, a fill, a satin, or none (running stitches). */
   private nowKind(): 'fill' | 'satin' | 'line' | null {
     const info = this.info;
@@ -475,6 +508,22 @@ export class StitchPanel {
   }
 
   private changed(final: boolean): void {
+    if (this.appliqueDraft) {
+      const send = () => {
+        if (this.appliqueDraft) this.hooks.applique(structuredClone(this.appliqueDraft), final);
+      };
+      if (final) {
+        cancelAnimationFrame(this.frame);
+        this.frame = 0;
+        return send();
+      }
+      if (this.frame) return;
+      this.frame = requestAnimationFrame(() => {
+        this.frame = 0;
+        send();
+      });
+      return;
+    }
     if (this.lineDraft) {
       const st = structuredClone(this.lineDraft);
       if (final) {
@@ -512,6 +561,11 @@ export class StitchPanel {
     const parts: HTMLElement[] = [];
     if (info.outline) {
       parts.push(...(info.outline.of ? this.followerSections(info) : [this.outlineBlock(info)]));
+      return this.show(parts);
+    }
+    if (this.appliqueDraft) {
+      if (info.free?.on) parts.push(this.sec('tools', 'stitches.sec.tools', [...this.freeRows(info.free.on), this.handRow(), this.lockSwitch(info.lock)]));
+      else parts.push(...this.appliqueSections(info));
       return this.show(parts);
     }
     const present = KINDS.filter((k) => info.measured[k]);
@@ -1046,6 +1100,60 @@ export class StitchPanel {
     ];
   }
 
+  /**
+   * An appliqué: its edge (satin or E stitch, how wide) and the fabric laid on (kind and color, for
+   * the view), the cut line for a plotter. The rest (placement, tack-down, stops) is automatic.
+   */
+  private appliqueSections(info: StitchInfo): HTMLElement[] {
+    const s = this.appliqueDraft!;
+    const steps = h('p', { class: 'muted small applique-steps' }, t('applique.steps'));
+    const edge = this.choice<'satin' | 'e'>('applique.edge', ['satin', 'e'], s.edge, (v) => `applique.edge.${v}` as Key, (v) => (s.edge = v));
+    const width = this.slider({
+      label: 'applique.width',
+      hint: 'applique.width.hint',
+      min: APPLIQUE_WIDTHS[0],
+      max: APPLIQUE_WIDTHS[1],
+      step: 0.1,
+      get: () => s.width,
+      set: (v) => (s.width = v),
+      fmt: (v) => `${formatNumber(v, 1)} mm`,
+      band: APPLIQUE_BAND,
+      bandHint: 'applique.width.band',
+    });
+    const fabric = this.choice<AppliqueFabric>('applique.fabric', APPLIQUE_FABRICS, s.fabric, (v) => `applique.fabric.${v}` as Key, (v) => (s.fabric = v), true);
+    fabric.querySelector('.choice-row')?.classList.add('kinds');
+    const cut = h('div', { class: 'tool-row' }, this.button('applique.cut', 'applique.cut.hint', () => this.hooks.cutLine()));
+    return [
+      this.sec('kind', 'stitches.sec.kind', [this.kindSwitch(info), steps], t('applique.kind')),
+      this.sec('appliqueEdge', 'applique.sec.edge', [edge, width], `${t(`applique.edge.${s.edge}` as Key)} ${formatNumber(s.width, 1)} mm`),
+      this.sec('appliqueFabric', 'applique.sec.fabric', [fabric, this.fabricColor(s, info.applique!.color)], t(`applique.fabric.${s.fabric}` as Key)),
+      this.sec('tools', 'stitches.sec.tools', [cut, this.handRow(), this.lockSwitch(info.lock), info.free?.can ? this.looseRow() : null]),
+    ];
+  }
+
+  /** The color of an appliqué's fabric: the thread's at first, any other from the picker. */
+  private fabricColor(s: AppliqueSettings, thread: ThreadColor): HTMLElement {
+    const btn = h('button', { type: 'button', class: 'border-thread', title: t('applique.color.hint') });
+    const sw = h('span', { class: 'sw' });
+    sw.style.background = cssColor(s.color);
+    btn.append(sw, sameColor(s.color, thread) ? t('applique.color.thread') : (s.color.name ?? hexColor(s.color)));
+    btn.addEventListener('click', () => {
+      this.picker.toggle(btn, {
+        key: 'applique',
+        title: t('applique.color'),
+        current: s.color,
+        original: { color: thread, label: t('applique.color.thread') },
+        note: t('applique.color.note'),
+        onPick: (c) => {
+          s.color = { r: c.r, g: c.g, b: c.b };
+          this.render();
+          this.changed(true);
+        },
+      });
+    });
+    return h('div', { class: 'field stitch-field border-field' }, h('span', { class: 'label' }, t('applique.color')), h('div', { class: 'border-row' }, btn));
+  }
+
   /** A line: how it is sewn along its curve, its echo and shadow. */
   private lineSections(info: StitchInfo): HTMLElement[] {
     const st = this.lineDraft!;
@@ -1093,20 +1201,32 @@ export class StitchPanel {
     ];
   }
 
-  /** Füllung, Satin, Linie: picking another one sews the objects anew in that kind. */
+  /** Füllung, Satin, Linie, Applikation: picking another one sews the objects anew in that kind. */
   private kindSwitch(info: StitchInfo): HTMLElement {
-    const now = this.nowKind();
+    const applique = !!this.appliqueDraft;
+    const now = applique ? 'applique' : this.nowKind();
     const row = h('div', { class: 'segmented kind-switch', role: 'radiogroup', 'aria-label': t('stitch.kind') });
-    for (const k of ['fill', 'satin', 'line'] as const) {
+    for (const k of ['fill', 'satin', 'line', 'applique'] as const) {
       const on = k === now;
       const b = h('button', { type: 'button', class: on ? 'active' : '', role: 'radio', 'aria-checked': String(on) });
-      b.innerHTML = `<span class="kind-icon">${KIND_ICON[k === 'line' ? 'run' : k]}</span>`;
-      b.append(k === 'line' ? t('stitch.kind.line') : kindLabel(k));
-      const way = on ? null : kindWay(this.kindState(), k);
-      b.disabled = !on && !way;
+      b.innerHTML = `<span class="kind-icon">${k === 'applique' ? APPLIQUE_ICON : KIND_ICON[k === 'line' ? 'run' : k]}</span>`;
+      b.append(k === 'line' ? t('stitch.kind.line') : k === 'applique' ? t('applique.kind') : kindLabel(k));
       const cmd = getCommand(`stitch.kind.${k}`);
       const key = cmd?.keys?.[0] ? ` (${keyLabel(cmd.keys[0])})` : '';
-      if (!on) b.title = way ? t(this.wayHint(k, way, now)) + key : t(this.blockedHint(k, now, info));
+      if (k === 'applique' || applique) {
+        // Appliqué and back: a fill becomes one, an appliqué a fill again (satin and line from there).
+        const can = !on && this.canConvert(k);
+        b.disabled = !on && !can;
+        if (!on) b.title = can ? t(k === 'applique' ? 'applique.kind.to' : 'applique.kind.back') + key : t(k === 'applique' ? 'applique.kind.none' : 'applique.kind.fillFirst');
+        b.addEventListener('click', () => {
+          if (!on) this.convert(k);
+        });
+        row.append(b);
+        continue;
+      }
+      const way = on ? null : kindWay(this.kindState(), k);
+      b.disabled = !on && !way;
+      if (!on) b.title = way ? t(this.wayHint(k, way, now as ReturnType<StitchPanel['nowKind']>)) + key : t(this.blockedHint(k, now as ReturnType<StitchPanel['nowKind']>, info));
       b.addEventListener('click', () => {
         if (!on) this.convert(k);
       });

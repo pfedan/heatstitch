@@ -18,6 +18,8 @@ import { cutKey, sewnArea, wholeArea, wholeOf } from '../../src/model/knockout';
 import { unionOf } from '../../src/shape/rasterize';
 import { borderStitches, isRedwork, isRunType } from '../../src/model/along';
 import { redworkGraph, redworkWalks } from '../../src/digitize/redwork';
+import { APPLIQUE_FABRICS, innerStops } from '../../src/model/applique';
+import { appliquesOf, canApplique, fromApplique, setApplique, toApplique } from '../../src/model/appliqueOps';
 import type { Region } from '../../src/digitize/region';
 import { GAP_ROWS_MAX } from '../../src/digitize/fill';
 import { backToVersion, edgeAlong, keepVersion, objectKey, remember, remembered, rememberedIn, restitch, restoreRemembered, DECO_PATTERNS, OPEN_PATTERNS, type BorderSettings, type FillSettings, type Rails, type Remembered, type StoredObjects } from '../../src/model/restitch';
@@ -459,8 +461,14 @@ export const OPS: Op[] = [
       // The gathered: one after the other from the lead on, all in its thread, each with its stitches.
       expect(g!.which, 'gathered one after the other, the lead first').toEqual(g!.which.map((_, k) => g!.which[0] + k));
       expect(now[g!.which[0]].id, 'the lead first').toBe(d.objects[lead].id);
+      // An appliqué's stops are no change of thread: the blocks after them count as the one before.
+      const inner = innerStops(g!.pattern);
+      const head = (b: number) => {
+        while (b > 0 && inner.has(b)) b--;
+        return b;
+      };
       for (const k of g!.which) {
-        expect(now[k].block, 'gathered into one color block').toBe(now[g!.which[0]].block);
+        expect(head(now[k].block), 'gathered into one color block').toBe(head(now[g!.which[0]].block));
         expect(sameColor(now[k].color, d.objects[lead].color), 'in the lead\'s thread').toBe(true);
         expect(now[k].stitches, 'a gathered object keeps its stitches').toBe(was.get(now[k].id)!.stitches);
         expect(remembered(g!.pattern, now[k]), 'a gathered object keeps what it knows').toEqual(remembered(p, was.get(now[k].id)!));
@@ -1003,6 +1011,63 @@ export const HAND_OPS: Op[] = [
     },
   },
 ];
+
+/**
+ * Appliqués: a fill made one (one object in three parts with two stops, see applique.ts), its edge,
+ * width and fabric changed, and made a fill again. Drawn from a stream of their own, so the chains
+ * of the other ops stay as they were for the seeds above.
+ */
+export const APPLIQUE_OPS: Op[] = [
+  {
+    name: 'make applique',
+    run: (d, r) => {
+      const can = d.objects.filter((o) => canApplique(d.cur.p, o));
+      if (!can.length) return false;
+      return shapes(d, toApplique(d.cur.p, [pick(r, can).index], T, r() < 0.5 ? { fabric: pick(r, APPLIQUE_FABRICS) } : {}));
+    },
+  },
+  {
+    name: 'set applique',
+    run: (d, r) => {
+      const as = appliquesOf(d.cur.p).filter((o) => !remembered(d.cur.p, o)?.free);
+      if (!as.length) return false;
+      const change = pick(r, [{ edge: 'e' as const }, { edge: 'satin' as const }, { width: between(r, 2, 4.5) }, { fabric: pick(r, APPLIQUE_FABRICS), color: pick(r, COLORS) }]);
+      return shapes(d, setApplique(d.cur.p, [pick(r, as).index], change, T));
+    },
+  },
+  {
+    name: 'applique to fill',
+    run: (d, r) => {
+      const as = appliquesOf(d.cur.p).filter((o) => !remembered(d.cur.p, o)?.free);
+      if (!as.length) return false;
+      return shapes(d, fromApplique(d.cur.p, [pick(r, as).index], { pattern: 'tatami', spacing: 0.4, spacingEnd: 1, offset: 0.25, angle: NaN, stitch: 4, underlay: true, edge: 0, tolerance: 0.15 }, T));
+    },
+  },
+];
+
+/**
+ * Each appliqué stops twice inside, in its own thread: the blocks it goes on in have the color of
+ * the block it starts in (else a stop would become a change of thread), and it knows its area.
+ */
+export function checkAppliques(p: Pattern): void {
+  const problems: string[] = [];
+  const blockAt = (i: number) => {
+    let b = 0;
+    for (let k = 0; k < i; k++) if (p.cmd[k] === COLOR_CHANGE) b++;
+    return b;
+  };
+  for (const o of sewObjects(p)) {
+    const m = remembered(p, o);
+    if (!m?.applique) continue;
+    if (!m.region) problems.push(`${o.index}: no area`);
+    const stops: number[] = [];
+    for (let i = o.first; i <= o.last; i++) if (p.cmd[i] === COLOR_CHANGE) stops.push(i);
+    if (stops.length !== 2) problems.push(`${o.index}: ${stops.length} stops`);
+    const b = blockAt(o.first);
+    for (let k = 1; k <= stops.length; k++) if (!sameColor(p.colors[b + k], p.colors[b])) problems.push(`${o.index}: block ${b + k} in another thread`);
+  }
+  expect(problems.join('; '), 'appliqués').toBe('');
+}
 
 /** A script font whose letters run into each other (loaded from the app's fonts). */
 const SCRIPT = JSON.parse(readFileSync(new URL('../../public/fonts/pacificlo.json', import.meta.url), 'utf8')) as Font;
@@ -1893,7 +1958,7 @@ export function describeObjects(p: Pattern): string {
   return sewObjects(p)
     .map((o) => {
       const m = remembered(p, o);
-      const what = !m ? 'UNKNOWN' : [m.geo && `geo:${geoUse(m)}`, m.fill && 'fill', m.line && 'line', m.kept && `kept:${Object.keys(m.kept).join('+')}`, m.knockout && 'knockout', m.line?.link && `border->${m.line.link}`, m.outline && `outline=${m.outline}`, m.blendOf && `blendOf=${m.blendOf}`, m.fill?.deco?.blend && `blend->${m.fill.deco.blend.link}`].filter(Boolean).join(' ');
+      const what = !m ? 'UNKNOWN' : [m.applique && `applique:${m.applique.edge}`, m.geo && `geo:${geoUse(m)}`, m.fill && 'fill', m.line && 'line', m.kept && `kept:${Object.keys(m.kept).join('+')}`, m.knockout && 'knockout', m.line?.link && `border->${m.line.link}`, m.outline && `outline=${m.outline}`, m.blendOf && `blendOf=${m.blendOf}`, m.fill?.deco?.blend && `blend->${m.fill.deco.blend.link}`].filter(Boolean).join(' ');
       return `\n  ${o.index} ${objectKey(p, o)} ${o.kind} block ${o.block} rgb(${o.color.r},${o.color.g},${o.color.b}) ${what}`;
     })
     .join('');
@@ -1914,6 +1979,7 @@ export async function chain(seed: number, steps = STEPS, opts: { trace?: boolean
   const rred = rng(seed + 67867967);
   const rhand = rng(seed + 86028121);
   const rknit = rng(seed + 104395301);
+  const rapp = rng(seed + 122949823);
   const d = new Doc();
   const log: string[] = [];
   const at = () => `seed ${seed}: ${log.join(' > ')}`;
@@ -2009,6 +2075,19 @@ export async function chain(seed: number, steps = STEPS, opts: { trace?: boolean
         }
       }
     }
+    // Now and then an appliqué made, changed or made a fill again, beside the chain.
+    if (!blank(d.cur.p) && rapp() < 0.25) {
+      const aop = pick(rapp, APPLIQUE_OPS);
+      if (await aop.run(d, rapp)) {
+        log.push(aop.name);
+        if (process.env.TORTURE_TRACE) console.log(aop.name, describeObjects(d.cur.p));
+        try {
+          checkStep(d, false);
+        } catch (e) {
+          throw new Error(`${at()}\n${(e as Error).message}`);
+        }
+      }
+    }
     // Now and then an outline edited on the level Form, beside the chain.
     if (!blank(d.cur.p) && rs() < 0.25) {
       const sop = pick(rs, SHAPE_OPS);
@@ -2080,6 +2159,7 @@ function checkStep(d: Doc, full: boolean): void {
   checkSatinSections(p);
   checkLetterings(p);
   checkGapRows(p);
+  checkAppliques(p);
   checkTrace(d);
   if (full) {
     checkExport(p);

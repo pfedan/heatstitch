@@ -43,6 +43,7 @@ import { drawMeasure } from './render/measure';
 import { MeasureTool } from './ui/measureTool';
 import type { Mode } from './settings';
 import { isGuessed, isOpenPattern, openOnPurpose, remembered, rememberedIn } from './model/restitch';
+import { innerStops } from './model/applique';
 import { digitizedFile } from './model/digitized';
 import { loadOps } from './shape/ops';
 import { drawAside, drawDrawing } from './render/shapeOverlay';
@@ -926,6 +927,7 @@ function redraw(): void {
           names: p && q ? letteringNames(p, q) : undefined,
           guessed: p && q ? (q.guessed ??= new Set(q.objects.filter((o) => isGuessed(p, o)).map((o) => o.index))) : undefined,
           loose: p && q ? looseOf(p, q) : undefined,
+          ...(p && q ? appliqueRows(p, q) : {}),
         },
         getLang(),
       );
@@ -1181,6 +1183,17 @@ function looseOf(p: Pattern, q: Sequence): ReadonlySet<number> {
   const key = list.join(',');
   if (q.loose?.key !== key) q.loose = { key, set: new Set(list) };
   return q.loose.set;
+}
+
+/** The appliqués of the list and the blocks they go on in after their stops (one row with the block before). */
+let appliqueSeen: { key: string; inner: ReadonlySet<number>; appliques: ReadonlySet<number> } | null = null;
+function appliqueRows(p: Pattern, q: Sequence): { inner?: ReadonlySet<number>; appliques?: ReadonlySet<number> } {
+  const appliques = q.objects.filter((o) => remembered(p, o)?.applique).map((o) => o.index);
+  if (!appliques.length) return {};
+  const inner = [...innerStops(p)];
+  const key = `${appliques.join(',')}|${inner.join(',')}`;
+  if (appliqueSeen?.key !== key) appliqueSeen = { key, inner: new Set(inner), appliques: new Set(appliques) };
+  return { inner: appliqueSeen.inner, appliques: appliqueSeen.appliques };
 }
 
 /** Says that object `id` is loosed from its shape, with the button that sews it from its shape again. */

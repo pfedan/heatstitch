@@ -5,7 +5,7 @@ import { bounds, flatten, scaling, transformForm, type Form, type Mat } from '..
 import { cutKey, sewnArea } from './knockout';
 import { rememberObjects, sewObjects, type SewObject } from './objects';
 import { nextVersion, STITCH, type Pattern } from './pattern';
-import { analyze, bestChain, keepShape, knownKind, measureFill, measureRun, measureSatin, railsArea, remember, remembered, rememberRange, restitch, type FillSettings, type Rails, type RestitchResult, type SatinSettings, type Settings } from './restitch';
+import { analyze, bestChain, keepShape, knownKind, measureFill, measureRun, measureSatin, railsArea, remember, remembered, rememberRange, restitch, type FillSettings, type Rails, type Remembered, type RestitchResult, type SatinSettings, type Settings } from './restitch';
 import type { Pt } from '../digitize/skeleton';
 import type { Region } from '../digitize/region';
 import { areaLoops, columnsAlong, suggestSatin } from '../digitize/satinSuggest';
@@ -13,7 +13,7 @@ import { cumulative, cutLinesBetween, pointAt, railsFromOutline, stripsOfAreas, 
 import { rasterize } from '../shape/rasterize';
 import { stitchKinds } from './sequence';
 import { isRigid, mirroredEcho, scaleOf, stitchesBefore, transformObject, transformRemembered } from './transform';
-import { areaOf, fits, geoOf, geoUse, lineGeoOf, outlinePaths, satinOutline, sewnAlong, withGeo } from './geo';
+import { areaOf, fillArea, fits, geoOf, geoUse, lineGeoOf, outlinePaths, satinOutline, sewnAlong, withGeo } from './geo';
 
 function totalStitches(p: Pattern): number {
   let n = 0;
@@ -320,6 +320,17 @@ export function fillsToLines(p: Pattern, which: number[], trimMm: number, geo?: 
   };
 }
 
+/** Appliqué `o` sewn anew from `m` in its place. */
+function resewApplique(p: Pattern, o: SewObject, m: Remembered, trimMm: number): { pattern: Pattern; first: number; last: number } | null {
+  if (!m.region) return null;
+  const list = listOf(p);
+  const k = list.findIndex((e) => e.obj.index === o.index);
+  list[k] = { ...list[k], sew: true, memory: m };
+  const next = sewList(p, list, trimMm, { fresh: new Set([o.index]) });
+  const now = sewObjects(next).find((x) => x.id === o.id);
+  return now && remembered(next, now)?.applique ? { pattern: next, first: now.first, last: now.last } : null;
+}
+
 /** One object sewn anew as a line, as what restitch gives. */
 function asResult(r: { pattern: Pattern; first: number; last: number } | null): RestitchResult | null {
   if (!r) return null;
@@ -329,6 +340,8 @@ function asResult(r: { pattern: Pattern; first: number; last: number } | null): 
 
 export function reshapeObject(p: Pattern, objs: SewObject[], o: SewObject, kinds: Uint8Array, geo: Form, trimMm: number): RestitchResult | null {
   const known = remembered(p, o);
+  // An appliqué on its new outline; opened, there is no piece of fabric left to sew on: not taken.
+  if (known?.applique) return fits(geo, 'fill') ? asResult(resewApplique(p, o, { ...known, geo, region: fillArea({ region: null, geo }) }, trimMm)) : null;
   if (sewnAlong(p, o)) return asResult(resewLine(p, o.index, geo, lineSettings(p, o, kinds), trimMm));
   if (geoUse(known) === 'band') return reshapeLineFill(p, objs, o, kinds, geo, trimMm);
   // Its last closed path opened: nothing left to fill, it is sewn along its paths, its fill (or

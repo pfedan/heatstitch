@@ -37,6 +37,12 @@ export interface CoverageMeasure {
   longest: Uint16Array;
 }
 
+/**
+ * In `skip`: a record of the placement line of an appliqué. The fabric laid on inside it covers the
+ * ground, as thread does: no gap opens on it (its inside has no stitches on purpose).
+ */
+export const PATCH = 2;
+
 /** Cells count as stitched area from this mean density on (mm/mm²); a running stitch has about 0.3. */
 const STITCHED = 0.9;
 
@@ -87,10 +93,16 @@ export function measureCoverage(
   const rowList = pulledRows(p, kinds);
   const grid = { ox: originX, oy: originY, W: cols * PER, H: rows * PER };
   const sewn = threadRaster(p, rowList, owner, null, grid);
+  const patches = skip ? patchRaster(p, skip, grid) : null;
+  const pulled = (pull: { share: number; cap: number }) => {
+    const own = threadRaster(p, rowList, owner, pull, grid);
+    if (patches) for (let i = 0; i < own.length; i++) if (!own[i] && patches[i]) own[i] = patches[i];
+    return own;
+  };
   return {
     cover,
-    gapsLow: gapCells(threadRaster(p, rowList, owner, PULL.low, grid), sewn, grid, cols, rows),
-    gapsHigh: gapCells(threadRaster(p, rowList, owner, PULL.high, grid), sewn, grid, cols, rows),
+    gapsLow: gapCells(pulled(PULL.low), sewn, grid, cols, rows),
+    gapsHigh: gapCells(pulled(PULL.high), sewn, grid, cols, rows),
     longest,
   };
 }
@@ -105,7 +117,7 @@ const cellAt = (x: number, y: number, ox: number, oy: number, cols: number, rows
 function cellsOf(p: Pattern, mark: Uint8Array, ox: number, oy: number, cols: number, rows: number): Uint8Array {
   const out = new Uint8Array(cols * rows);
   for (let i = 1; i < p.cmd.length; i++) {
-    if (!mark[i] || p.cmd[i] !== STITCH || p.cmd[i - 1] !== STITCH) continue;
+    if (mark[i] !== 1 || p.cmd[i] !== STITCH || p.cmd[i - 1] !== STITCH) continue;
     const ax = p.x[i - 1];
     const ay = p.y[i - 1];
     const k = Math.max(1, Math.ceil(Math.hypot(p.x[i] - ax, p.y[i] - ay) / 5));
@@ -118,6 +130,51 @@ function cellsOf(p: Pattern, mark: Uint8Array, ox: number, oy: number, cols: num
           const y = cy + dy;
           if (x >= 0 && y >= 0 && x < cols && y < rows) out[y * cols + x] = 1;
         }
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * The fabric of the appliqués on the gap raster: per pixel inside a placement line (records marked
+ * PATCH, each run of stitches one loop, even-odd as a scanline fill), an owner of its own (negative:
+ * it does not pull), else 0.
+ */
+function patchRaster(p: Pattern, skip: Uint8Array, g: Grid): Int32Array | null {
+  const loops: { pts: [number, number][]; id: number }[] = [];
+  let cur: [number, number][] | null = null;
+  let id = 0;
+  let inPatch = false;
+  for (let i = 0; i < p.cmd.length; i++) {
+    const on = skip[i] === PATCH;
+    if (on && !inPatch) id++;
+    inPatch = on || (inPatch && p.cmd[i] !== STITCH);
+    if (on && p.cmd[i] === STITCH) {
+      if (!cur) loops.push({ pts: (cur = []), id: -(0x40000000 + id) });
+      cur.push([p.x[i] / 10, p.y[i] / 10]);
+    } else if (p.cmd[i] !== STITCH || !on) cur = null;
+  }
+  const rings = loops.filter((l) => l.pts.length >= 3);
+  if (!rings.length) return null;
+  const { W, H } = g;
+  const out = new Int32Array(W * H);
+  const xs: number[] = [];
+  for (let y = 0; y < H; y++) {
+    const wy = g.oy + (y + 0.5) * PX;
+    for (const { pts, id: pid } of rings) {
+      xs.length = 0;
+      for (let k = 0; k < pts.length; k++) {
+        const [ax, ay] = pts[k];
+        const [bx, by] = pts[(k + 1) % pts.length];
+        if (ay <= wy === by <= wy) continue;
+        xs.push(ax + ((wy - ay) / (by - ay)) * (bx - ax));
+      }
+      xs.sort((a, b) => a - b);
+      for (let k = 0; k + 1 < xs.length; k += 2) {
+        const x0 = Math.max(0, Math.ceil((xs[k] - g.ox) / PX - 0.5));
+        const x1 = Math.min(W - 1, Math.floor((xs[k + 1] - g.ox) / PX - 0.5));
+        for (let x = x0; x <= x1; x++) out[y * W + x] = out[y * W + x] ? 0 : pid;
       }
     }
   }

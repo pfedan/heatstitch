@@ -1,3 +1,5 @@
+import { appliqueFrom, stopsIn, storeApplique, type AppliqueSettings } from './applique';
+import { PATCH } from '../validation/coverage';
 import { LOCK_MM, SATIN_SPLIT_MM, SATIN_SPLIT_MAX } from '../material/rules';
 import { SATIN_MAX, satinForArea, type KeptShape } from '../digitize/digitize';
 import { isRunType, runLike, type PathStitch } from './along';
@@ -431,6 +433,11 @@ export interface Remembered {
   along?: string;
   /** The lettering the object belongs to (it is sewn anew from its text, see lettering/). */
   lettering?: Lettering;
+  /**
+   * An appliqué (see applique.ts): a piece of fabric on its area (`region`, from `geo` when it has
+   * one), sewn on in three parts with stops between them.
+   */
+  applique?: AppliqueSettings;
   /** The correction leaves the object as it is (set by hand). */
   lock?: boolean;
   /**
@@ -492,6 +499,8 @@ export const holdMemory = hold;
  */
 export function knownKind(r: Remembered | undefined): ObjectKind | undefined {
   if (!r || r.read || r.lettering) return undefined;
+  // An appliqué: most of its thread is the satin (or E stitch) of its cover edge.
+  if (r.applique) return 'satin';
   if (r.outline && r.border) return runLike(r.border.type) ? 'run' : 'satin';
   if (lineGeoOf(r) && r.line) return runLike(r.line.type) ? 'run' : 'satin';
   if (r.fill && !r.satin) return 'fill';
@@ -702,6 +711,7 @@ export interface StoredObject {
   border?: BorderSettings;
   along?: string;
   lettering?: Lettering;
+  applique?: AppliqueSettings;
   lock?: boolean;
   free?: boolean;
   fixed?: Fixed[];
@@ -779,6 +789,7 @@ function storeOne(key: string, r: Remembered): StoredObject {
     ...(r.border ? { border: { ...r.border } } : {}),
     ...(r.along ? { along: r.along } : {}),
     ...(r.lettering ? { lettering: r.lettering } : {}),
+    ...(r.applique ? { applique: storeApplique(r.applique) } : {}),
     ...(r.lock ? { lock: true } : {}),
     ...(r.free ? { free: true } : {}),
     ...(r.fixed?.length ? { fixed: r.fixed.map((x) => ({ ...x })) } : {}),
@@ -1294,6 +1305,8 @@ function fromStored(e: StoredObject): Remembered | null {
   if (typeof e.along === 'string' && r.border) r.along = e.along;
   const lettering = e.lettering === undefined ? null : letteringFrom(e.lettering);
   if (lettering) r.lettering = lettering;
+  const applique = e.applique === undefined ? null : appliqueFrom(e.applique);
+  if (applique && (r.region || geo)) r.applique = applique;
   if (e.lock === true) r.lock = true;
   if (e.free === true) r.free = true;
   const fixed = Array.isArray(e.fixed) ? e.fixed.filter(isFixed).map((x) => ({ ...x })) : [];
@@ -1391,12 +1404,21 @@ export const CURVED_GRADIENT: FillPattern[] = ['follow', 'guided'];
 export const isGradient = (f: FillSettings): boolean => f.pattern === 'gradient' || (!!f.gradient && CURVED_GRADIENT.includes(f.pattern));
 
 /**
- * Records of the fills sewn open on purpose (gradients), which the coverage check leaves out; null
- * when there are none.
+ * Records of the fills sewn open on purpose (gradients), which the coverage check leaves out (1),
+ * and of the placement lines of appliqués, whose fabric counts as covered (PATCH); null when there
+ * are none.
  */
 export function openOnPurpose(p: Pattern, objs: SewObject[]): Uint8Array | null {
   let out: Uint8Array | null = null;
   for (const o of objs) {
+    // An appliqué: its placement line (up to the first stop) encloses the fabric, which covers.
+    if (remembered(p, o)?.applique) {
+      const stop = stopsIn(p, o.first, o.last)[0];
+      if (stop === undefined) continue;
+      out ??= new Uint8Array(p.cmd.length);
+      out.fill(PATCH, o.first, stop);
+      continue;
+    }
     const f = remembered(p, o)?.fill;
     if (!f || (!isGradient(f) && !isOpenPattern(f.pattern))) continue;
     out ??= new Uint8Array(p.cmd.length);

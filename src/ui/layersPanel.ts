@@ -61,6 +61,10 @@ export interface LayerState {
   guessed?: ReadonlySet<number>;
   /** Objects whose stitches are loosed from their shape (changed by hand). */
   loose?: ReadonlySet<number>;
+  /** Blocks an appliqué goes on in after its stops: shown as one with the block before (one thread). */
+  inner?: ReadonlySet<number>;
+  /** Objects that are appliqués. */
+  appliques?: ReadonlySet<number>;
 }
 
 /** Every object of the design is only guessed from its stitches. */
@@ -72,6 +76,10 @@ export const LONG_PRESS_MS = 500;
 const KIND_KEY: Record<ObjectKind, Key> = { fill: 'object.fill', satin: 'object.satin', run: 'object.run' };
 
 /** Small pictures of the three kinds: rows, a zigzag column, a dashed line. */
+/** An appliqué (a piece of fabric with its edge round it), in the list and on the kind switch. */
+export const APPLIQUE_ICON =
+  '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.2 4.2 12.3 3 12.8 12.2 3.7 12.8Z" fill="currentColor" fill-opacity=".28" stroke="none"/><path d="M3.2 4.2 12.3 3 12.8 12.2 3.7 12.8Z" stroke="currentColor" stroke-width="2.2" fill="none" stroke-linejoin="round" stroke-dasharray="0.9 0.7"/></svg>';
+
 export const KIND_ICON: Record<ObjectKind, string> = {
   fill: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3.5h12M2 6.5h12M2 9.5h12M2 12.5h12" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round"/></svg>',
   satin:
@@ -228,7 +236,7 @@ export class LayersPanel {
       }
     }
     if (show) requestAnimationFrame(() => this.list.querySelector<HTMLElement>(`[data-object="${show[0]}"]`)?.scrollIntoView({ block: 'nearest' }));
-    const key = [st.blocks, st.objects, st.selected, st.hidden, st.focus, st.current, lang, st.original, st.names, st.blank, st.guessed, st.loose];
+    const key = [st.blocks, st.objects, st.selected, st.hidden, st.focus, st.current, lang, st.original, st.names, st.blank, st.guessed, st.loose, st.inner, st.appliques];
     if (key.every((k, i) => k === this.key[i])) return;
     this.key = key;
     this.st = st;
@@ -243,8 +251,19 @@ export class LayersPanel {
     const focusKey = had?.closest<HTMLElement>('.layer')?.dataset;
     const focusPart = had?.dataset.part;
     const rows: HTMLLIElement[] = [];
-    for (const b of st.blocks) {
-      const objs = st.objects.filter((o) => o.block === b.index);
+    // An appliqué's stops are no change of thread: the blocks after them are one row with its own.
+    const head = (b: number) => {
+      while (b > 0 && st.inner?.has(b)) b--;
+      return b;
+    };
+    for (const b0 of st.blocks) {
+      if (st.inner?.has(b0.index)) continue;
+      let b = b0;
+      for (let k = b0.index + 1; st.inner?.has(k) && st.blocks[k]; k++) {
+        const n = st.blocks[k];
+        b = { ...b, last: n.last, stitches: b.stitches + n.stitches, threadMm: b.threadMm + n.threadMm, trims: b.trims + n.trims };
+      }
+      const objs = st.objects.filter((o) => head(o.block) === b.index);
       rows.push(this.colorRow(b, objs, st));
       if (this.open.has(b.index)) for (const o of objs) rows.push(this.objectRow(o, objs, st));
     }
@@ -345,7 +364,8 @@ export class LayersPanel {
   private objectRow(o: SewObject, siblings: SewObject[], st: LayerState): HTMLLIElement {
     const selected = st.selected.has(o.index);
     const kind = h('span', { class: `kind-icon kind-${o.kind}` });
-    kind.innerHTML = KIND_ICON[o.kind];
+    const applique = !!st.appliques?.has(o.index);
+    kind.innerHTML = applique ? APPLIQUE_ICON : KIND_ICON[o.kind];
     // Made here or guessed: only marked where both are in one design. About equal: a sign, said in full by the hint.
     const guessed = st.guessed?.has(o.index) && !allGuessed(st) ? h('span', { class: 'layer-guessed', title: t('object.guessedHint'), 'aria-label': t('object.guessed') }, '≈') : null;
     // Loosed from its shape: the way back is one click on the sign.
@@ -416,7 +436,7 @@ export class LayersPanel {
         },
       },
       kind,
-      h('span', { class: 'layer-name' }, st.names?.get(o.index) ?? `${kindLabel(o.kind)} ${numberInColor(siblings, o)}`),
+      h('span', { class: 'layer-name' }, st.names?.get(o.index) ?? `${applique ? t('applique.name') : kindLabel(o.kind)} ${numberInColor(siblings, o)}`),
       guessed,
       loose,
       more,
