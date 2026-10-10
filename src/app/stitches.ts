@@ -398,7 +398,8 @@ export function bindStitches(app: StitchesApp) {
         stopPreview();
         return showPreview(null);
       }
-      if (livePreview.failed) return showPreview(restitched(s));
+      // Never sewn here: without its worker there is no preview rather than a page that stops.
+      if (livePreview.failed) return showPreview(null);
       wanted = { p, key: ui.selectionKey };
       livePreview.ask(p, which, s, app.settings.trimMm);
       busy();
