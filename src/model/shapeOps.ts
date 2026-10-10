@@ -56,18 +56,18 @@ export function deleteObjects(p: Pattern, which: number[], trimMm: number): Patt
   for (const o of bare) {
     const m = mem[o.index]!;
     const at = sewObjects(next).find((x) => objectKey(next, x) === objectKey(p, o));
-    if (at) remember(next, at, withLine(m, undefined));
+    if (at) remember(next, at, (mem[o.index] = withLine(m, undefined)));
   }
   // Fills whose second thread goes alone: they fade out on their own from now on.
-  // Lines whose shadow or echo copies go alone: they have them no more.
+  // Lines (and borders of fills) whose shadow or echo copies go alone: they have them no more.
   for (const o of objs) {
     let m = mem[o.index];
-    if (gone.has(o.index) || !m || !lineGeoOf(m)) continue;
+    if (gone.has(o.index) || !m?.line) continue;
     const parts = [...gone].map((g) => partOf(mem[g])).filter((l): l is string => !!l && hasPart(m, l));
     if (!parts.length) continue;
     for (const l of parts) m = withoutPart(m, l);
     const at = sewObjects(next).find((x) => objectKey(next, x) === objectKey(p, o));
-    if (at) remember(next, at, m);
+    if (at) remember(next, at, (mem[o.index] = m));
   }
   for (const o of objs) {
     const m = mem[o.index];
