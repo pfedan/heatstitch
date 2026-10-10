@@ -1,0 +1,159 @@
+<!doctype html>
+<!--
+  Takes along what someone kept in the app at the old address pfedan.github.io/heatstitch/ (see
+  tools/moved/index.html, which opens this page in a small window after a click). It only listens to
+  the window that opened it, from the old address; it writes the databases and settings it gets here
+  and closes. What is already stored here stays: a design is added next to the ones here, a setting
+  or the Bild mode's picture only comes along where there is none yet.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>heatstitch</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: #f4f2f7;
+        color: #6b6475;
+        font: 14px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif;
+      }
+      @media (prefers-color-scheme: dark) {
+        body {
+          background: #141118;
+          color: #a49cb0;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <p id="text"></p>
+    <script>
+      (function () {
+        var OLD = 'https://pfedan.github.io';
+        var de = /^de\b/i.test(navigator.language || '');
+        document.getElementById('text').textContent = de ? 'Deine Stickmuster werden übertragen…' : 'Moving your designs…';
+        var opener = window.opener;
+        if (!opener) return location.replace('/');
+
+        function request(r) {
+          return new Promise(function (resolve, reject) {
+            r.onsuccess = function () {
+              resolve(r.result);
+            };
+            r.onerror = function () {
+              reject(r.error);
+            };
+          });
+        }
+
+        function done(tx) {
+          return new Promise(function (resolve, reject) {
+            tx.oncomplete = resolve;
+            tx.onerror = tx.onabort = function () {
+              reject(tx.error);
+            };
+          });
+        }
+
+        /** Opens the database with every store the old one had; an app that is newer here keeps its version. */
+        function open(dump) {
+          function attempt(version) {
+            return new Promise(function (resolve, reject) {
+              var req = version ? indexedDB.open(dump.name, version) : indexedDB.open(dump.name);
+              req.onupgradeneeded = function () {
+                var db = req.result;
+                dump.stores.forEach(function (s) {
+                  if (!db.objectStoreNames.contains(s.name))
+                    db.createObjectStore(s.name, { keyPath: s.keyPath, autoIncrement: s.autoIncrement });
+                });
+              };
+              req.onsuccess = function () {
+                resolve(req.result);
+              };
+              req.onerror = function (e) {
+                e.preventDefault();
+                reject(req.error);
+              };
+            });
+          }
+          return attempt(dump.version).catch(function (err) {
+            if (err && err.name === 'VersionError') return attempt(0);
+            throw err;
+          });
+        }
+
+        function restore(dump) {
+          return open(dump).then(function (db) {
+            var names = dump.stores
+              .map(function (s) {
+                return s.name;
+              })
+              .filter(function (n) {
+                return db.objectStoreNames.contains(n);
+              });
+            if (!names.length) return db.close();
+            var tx = db.transaction(names, 'readwrite');
+            var finished = done(tx);
+            dump.stores.forEach(function (s) {
+              if (names.indexOf(s.name) < 0) return;
+              var store = tx.objectStore(s.name);
+              store.count().onsuccess = function (e) {
+                var empty = e.target.result === 0;
+                s.values.forEach(function (value, i) {
+                  var key = s.keys[i];
+                  if (empty) {
+                    // An exact copy: the keys stay, so the open file and its settings still match.
+                    if (s.keyPath === null) store.put(value, key);
+                    else store.put(value);
+                  } else if (s.autoIncrement && typeof s.keyPath === 'string') {
+                    // Next to what is here already: a new key, nothing is overwritten.
+                    delete value[s.keyPath];
+                    store.add(value);
+                  } else if (s.autoIncrement) {
+                    store.add(value);
+                  } else {
+                    // A fixed slot (the Bild mode's picture): only where there is none yet.
+                    store.get(key).onsuccess = function (g) {
+                      if (g.target.result === undefined) store.put(value, key);
+                    };
+                  }
+                });
+              };
+            });
+            return finished.then(function () {
+              db.close();
+            });
+          });
+        }
+
+        addEventListener('message', function (e) {
+          if (e.origin !== OLD || e.source !== opener || !e.data || e.data.type !== 'heatstitch-move') return;
+          var data = e.data.data || {};
+          var settings = data.settings || {};
+          Promise.all((data.dbs || []).map(restore))
+            .then(function () {
+              Object.keys(settings).forEach(function (k) {
+                if (k.indexOf('heatstitch.') === 0 && localStorage.getItem(k) === null) localStorage.setItem(k, settings[k]);
+              });
+              opener.postMessage({ type: 'heatstitch-move-done' }, OLD);
+              window.close();
+            })
+            .catch(function () {
+              document.getElementById('text').textContent = de
+                ? 'Das hat nicht geklappt. Deine Stickmuster sind unter der alten Adresse weiter da.'
+                : 'That did not work. Your designs are still there at the old address.';
+            });
+        });
+        opener.postMessage({ type: 'heatstitch-move-ready' }, OLD);
+      })();
+    </script>
+  </body>
+</html>

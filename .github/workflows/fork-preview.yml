@@ -1,16 +1,15 @@
 name: Fork previews
 
-# Pull requests from forks only get a read-only token, so "CI and Pages" can build them but
-# not publish the preview. This workflow does that part with this repository's token, once
-# the fork's run has been approved and its build passed. It never runs code from the fork:
-# it only copies the built site to gh-pages under pr-preview/pr-N/.
+# Pull requests from forks get no secrets, so "CI and Pages" can build them but not upload the
+# preview. This workflow does that part with this repository's secrets, once the fork's run has
+# been approved and its build passed. It never runs code from the fork: it uploads the built site
+# with our own wrangler.jsonc and cloudflare/worker.js as a preview version at
+# https://pr-N-heatstitch.<account>.workers.dev, an address of its own that never reaches heatstitch.app.
 
 on:
   workflow_run:
     workflows: [CI and Pages]
     types: [completed]
-  pull_request_target:
-    types: [closed]
 
 permissions:
   contents: read
@@ -29,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       actions: read
-      contents: write
+      contents: read
       pull-requests: write
     steps:
       # GitHub does not link fork runs to their pull request, so look it up by the fork's
@@ -44,7 +43,7 @@ jobs:
             --jq "map(select(.head.sha == \"$SHA\")) | .[0].number // empty")
           echo "number=$number" >> "$GITHUB_OUTPUT"
           echo "Pull request: ${number:-none open at $SHA}"
-      # The action pushes with git, so it needs a checkout. This is our own main branch.
+      # Our own main branch: the Worker and its configuration never come from the fork.
       - if: steps.pr.outputs.number
         uses: actions/checkout@v4
       - if: steps.pr.outputs.number
@@ -55,40 +54,24 @@ jobs:
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ github.token }}
       - if: steps.pr.outputs.number
-        id: preview
-        uses: rossjrw/pr-preview-action@v1
+        uses: actions/setup-node@v4
         with:
-          source-dir: dist
-          preview-branch: gh-pages
-          umbrella-dir: pr-preview
-          action: deploy
-          pr-number: ${{ steps.pr.outputs.number }}
-          deploy-commit-message: Deploy preview for PR ${{ steps.pr.outputs.number }}
-          # Its own comment looks the pull request up in the event, which a workflow_run lacks.
-          comment: false
+          node-version: 22
       - if: steps.pr.outputs.number
+        id: upload
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PR: ${{ steps.pr.outputs.number }}
+        run: |
+          npx --yes wrangler@4.149.0 versions upload --preview-alias "pr-$PR" --message "PR $PR (fork)" | tee upload.log
+          echo "url=$(grep -o 'Preview Alias URL: https://[^ ]*' upload.log | cut -d' ' -f4)" >> "$GITHUB_OUTPUT"
+      - if: steps.upload.outputs.url
         uses: marocchino/sticky-pull-request-comment@67d0dec7b07ed060a405f9b2a64b8ab319fdd7db # v2.9.2
         with:
           header: pr-preview
           number: ${{ steps.pr.outputs.number }}
           message: |
-            :rocket: Preview: ${{ steps.preview.outputs.preview-url }}
+            :rocket: Preview: ${{ steps.upload.outputs.url }}
 
-            Built to [`gh-pages`](${{ github.server_url }}/${{ github.repository }}/tree/gh-pages) at ${{ steps.preview.outputs.action-start-time }}. It is ready once the [Pages deployment](${{ github.server_url }}/${{ github.repository }}/deployments) is done.
-
-  remove:
-    if: >-
-      github.event_name == 'pull_request_target' &&
-      github.event.pull_request.head.repo.full_name != github.repository
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-    steps:
-      # pull_request_target checks out our own base branch, never the fork.
-      - uses: actions/checkout@v4
-      - uses: rossjrw/pr-preview-action@v1
-        with:
-          preview-branch: gh-pages
-          umbrella-dir: pr-preview
-          action: remove
+            Built from ${{ github.event.workflow_run.head_sha }}. It has an address of its own, so nothing in it touches what is stored on heatstitch.app.

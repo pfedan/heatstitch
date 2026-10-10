@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const APP_URL = process.env.APP_URL || 'http://localhost:4173/heatstitch/';
+const APP_URL = process.env.APP_URL || 'http://localhost:4173/';
 const OUT = path.join(root, 'public/tips');
 const DEBUG = process.env.TIPS_DEBUG;
 const PICTURE = path.join(root, 'docs/screencasts/03-vom-bild-zum-stickmuster/material/fliegenpilz.jpg');

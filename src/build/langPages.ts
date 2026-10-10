@@ -12,7 +12,7 @@
 export type Lang = 'de' | 'en';
 export type Page = 'app' | 'docs' | 'videos';
 
-export const SITE = 'https://pfedan.github.io/heatstitch/';
+export const SITE = 'https://heatstitch.app/';
 
 /** Where a page lives, relative to the site's base. */
 export function pagePath(page: Page, lang: Lang): string {

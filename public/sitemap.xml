@@ -1,39 +1,39 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
   <url>
-    <loc>https://pfedan.github.io/heatstitch/</loc>
-    <xhtml:link rel="alternate" hreflang="en" href="https://pfedan.github.io/heatstitch/" />
-    <xhtml:link rel="alternate" hreflang="de" href="https://pfedan.github.io/heatstitch/de/" />
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://pfedan.github.io/heatstitch/" />
+    <loc>https://heatstitch.app/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://heatstitch.app/" />
+    <xhtml:link rel="alternate" hreflang="de" href="https://heatstitch.app/de/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://heatstitch.app/" />
   </url>
   <url>
-    <loc>https://pfedan.github.io/heatstitch/de/</loc>
-    <xhtml:link rel="alternate" hreflang="en" href="https://pfedan.github.io/heatstitch/" />
-    <xhtml:link rel="alternate" hreflang="de" href="https://pfedan.github.io/heatstitch/de/" />
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://pfedan.github.io/heatstitch/" />
+    <loc>https://heatstitch.app/de/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://heatstitch.app/" />
+    <xhtml:link rel="alternate" hreflang="de" href="https://heatstitch.app/de/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://heatstitch.app/" />
   </url>
   <url>
-    <loc>https://pfedan.github.io/heatstitch/docs.html</loc>
-    <xhtml:link rel="alternate" hreflang="en" href="https://pfedan.github.io/heatstitch/docs.html" />
-    <xhtml:link rel="alternate" hreflang="de" href="https://pfedan.github.io/heatstitch/de/docs.html" />
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://pfedan.github.io/heatstitch/docs.html" />
+    <loc>https://heatstitch.app/docs.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://heatstitch.app/docs.html" />
+    <xhtml:link rel="alternate" hreflang="de" href="https://heatstitch.app/de/docs.html" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://heatstitch.app/docs.html" />
   </url>
   <url>
-    <loc>https://pfedan.github.io/heatstitch/de/docs.html</loc>
-    <xhtml:link rel="alternate" hreflang="en" href="https://pfedan.github.io/heatstitch/docs.html" />
-    <xhtml:link rel="alternate" hreflang="de" href="https://pfedan.github.io/heatstitch/de/docs.html" />
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://pfedan.github.io/heatstitch/docs.html" />
+    <loc>https://heatstitch.app/de/docs.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://heatstitch.app/docs.html" />
+    <xhtml:link rel="alternate" hreflang="de" href="https://heatstitch.app/de/docs.html" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://heatstitch.app/docs.html" />
   </url>
   <url>
-    <loc>https://pfedan.github.io/heatstitch/videos.html</loc>
-    <xhtml:link rel="alternate" hreflang="en" href="https://pfedan.github.io/heatstitch/videos.html" />
-    <xhtml:link rel="alternate" hreflang="de" href="https://pfedan.github.io/heatstitch/de/videos.html" />
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://pfedan.github.io/heatstitch/videos.html" />
+    <loc>https://heatstitch.app/videos.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://heatstitch.app/videos.html" />
+    <xhtml:link rel="alternate" hreflang="de" href="https://heatstitch.app/de/videos.html" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://heatstitch.app/videos.html" />
   </url>
   <url>
-    <loc>https://pfedan.github.io/heatstitch/de/videos.html</loc>
-    <xhtml:link rel="alternate" hreflang="en" href="https://pfedan.github.io/heatstitch/videos.html" />
-    <xhtml:link rel="alternate" hreflang="de" href="https://pfedan.github.io/heatstitch/de/videos.html" />
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://pfedan.github.io/heatstitch/videos.html" />
+    <loc>https://heatstitch.app/de/videos.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://heatstitch.app/videos.html" />
+    <xhtml:link rel="alternate" hreflang="de" href="https://heatstitch.app/de/videos.html" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://heatstitch.app/videos.html" />
   </url>
 </urlset>

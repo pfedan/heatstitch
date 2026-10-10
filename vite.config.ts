@@ -5,10 +5,10 @@ import { readFileSync } from 'node:fs';
 import { langPage, type Page } from './src/build/langPages';
 import { expandVideos } from './src/build/videoHtml';
 
-const SITE_BASE = '/heatstitch/';
-// Pull request previews build into a subfolder of the site (see .github/workflows/deploy.yml).
-const base = process.env.BASE_PATH || SITE_BASE;
-const isPreview = base !== SITE_BASE;
+// The site lives at the root of heatstitch.app; pull request previews get their own address
+// (see .github/workflows/deploy.yml), so every build uses the same base. PREVIEW=1 marks a preview build.
+const base = '/';
+const isPreview = !!process.env.PREVIEW;
 
 const pageOf = (file: string): Page => (file.endsWith('docs.html') ? 'docs' : file.endsWith('videos.html') ? 'videos' : 'app');
 
@@ -67,8 +67,8 @@ export default defineConfig({
         html.replace('<meta name="robots" content="index, follow" />', '<meta name="robots" content="noindex" />'),
     },
     VitePWA({
-      // A preview shares the origin and the scope of the real site's service worker, so it
-      // ships none and removes any it finds instead of caching itself over the real app.
+      // A preview changes with every push and is only looked at a few times, so it ships no
+      // service worker: a reload always shows the latest push instead of a cached one.
       selfDestroying: isPreview,
       // The app asks before switching to a new version (see src/ui/updateNotice.ts).
       registerType: 'prompt',
@@ -118,11 +118,11 @@ export default defineConfig({
             options: { cacheName: 'fonts', expiration: { maxEntries: 120 } },
           },
         ],
-        // Only crawlers and link previews fetch the social image.
-        globIgnores: ['og-image.jpg'],
-        // Navigations into a preview must reach the network, not the cached app shell. So must a file
-        // opened on its own, such as a guide picture in a new tab: everything with an extension but .html.
-        navigateFallbackDenylist: [/\/pr-preview\//, /\/[^/?]*\.(?!html(?:\?|$))[^/?]*(?:\?.*)?$/],
+        // Only crawlers and link previews fetch the social image; the moving page only opens once.
+        globIgnores: ['og-image.jpg', 'umzug.html'],
+        // A file opened on its own, such as a guide picture in a new tab, must reach the network, not the
+        // cached app shell: everything with an extension but .html. So must the moving page (public/umzug.html).
+        navigateFallbackDenylist: [/\/umzug\.html(?:\?|$)/, /\/[^/?]*\.(?!html(?:\?|$))[^/?]*(?:\?.*)?$/],
       },
     }),
   ],

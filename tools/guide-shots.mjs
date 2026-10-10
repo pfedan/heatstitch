@@ -6,7 +6,7 @@
 //
 // Writes JPEGs into public/guide/. Needs Playwright (global or local install) with Chromium;
 // PLAYWRIGHT_CHROMIUM may point at a Chrome binary, GUIDE_URL at the served app
-// (default http://localhost:4173/heatstitch/). Look at every new image before committing it.
+// (default http://localhost:4173/). Look at every new image before committing it.
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -15,7 +15,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.join(here, '..') + path.sep;
 const FINAL = path.join(repo, 'public', 'guide') + path.sep;
 const DEMOS = path.join(repo, 'public', 'examples', 'demos') + path.sep;
-const URL = process.env.GUIDE_URL ?? 'http://localhost:4173/heatstitch/';
+const URL = process.env.GUIDE_URL ?? 'http://localhost:4173/';
 const CAT = 'examples/cat-60mm.pes';
 
 /** Playwright from the local node_modules or a global install. */

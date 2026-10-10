@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://pfedan.github.io/heatstitch/sitemap.xml
+Sitemap: https://heatstitch.app/sitemap.xml

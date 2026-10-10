@@ -9,7 +9,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const APP_URL = process.env.APP_URL || 'http://localhost:4173/heatstitch/';
+const APP_URL = process.env.APP_URL || 'http://localhost:4173/';
 let failed = false;
 
 const report = (ok, name, detail, hint) => {
