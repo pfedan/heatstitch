@@ -949,6 +949,8 @@ const enBase: Record<keyof typeof deBase, string> = {
   'stitch.fringe': 'Fringe',
   'stitch.fringe.hint': 'Ragged edge like fur or feathers',
   'stitch.fringe.off': 'Off',
+  'stitch.rough': 'Irregular',
+  'stitch.rough.hint': 'Width and spacing change from stitch to stitch, like fur, grass or sewn by hand',
   'stitch.fringeSide': 'Fringe on',
   'stitch.fringeSide.both': 'Both sides',
   'stitch.fringeSide.both.hint': 'Fray both edges, for fur for example',

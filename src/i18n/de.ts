@@ -947,6 +947,8 @@ export const deBase = {
   'stitch.fringe': 'Fransen',
   'stitch.fringe.hint': 'Ausgefranster Rand wie Fell oder Federn',
   'stitch.fringe.off': 'Aus',
+  'stitch.rough': 'Unregelmäßig',
+  'stitch.rough.hint': 'Breite und Abstand wechseln von Stich zu Stich, wie Fell, Gras oder von Hand gestickt',
   'stitch.fringeSide': 'Fransen an',
   'stitch.fringeSide.both': 'Beiden Seiten',
   'stitch.fringeSide.both.hint': 'Beide Kanten ausfransen, etwa für Fell',

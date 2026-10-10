@@ -964,6 +964,26 @@ export class StitchPanel {
         this.peek({ kind: 'satin', s: v ? { ...rest, fringeSide: v } : rest });
       };
       look.push(...this.fringeControls(s, () => {}, peek));
+      look.push(
+        this.slider({
+          label: 'stitch.rough',
+          hint: 'stitch.rough.hint',
+          min: 0,
+          max: 1,
+          step: 0.05,
+          get: () => s.rough ?? 0,
+          set: (v) => {
+            if (!v) {
+              delete s.rough;
+              return;
+            }
+            s.rough = v;
+            // Picked once: copies, the project file and a stronger setting keep the same stitches.
+            s.roughSeed ??= 1 + Math.floor(Math.random() * 1e6);
+          },
+          fmt: (v) => (v ? `${formatNumber(v * 100, 0)} %` : t('stitch.fringe.off')),
+        }),
+      );
     }
     look.push(
       this.slider({ label: 'stitch.split', hint: 'stitch.split.hint', min: 4, max: SATIN_SPLIT_MAX, step: 0.5, get: () => s.split ?? SATIN_SPLIT, set: (v) => (s.split = v), fmt: mm(1), auto: this.unset(s, 'split') }),

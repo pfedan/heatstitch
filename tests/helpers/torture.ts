@@ -219,7 +219,7 @@ export function restitchFill(d: Doc, o: number, s: FillSettings, drop: Set<strin
 }
 
 /** New stitches taken over as the app does: each object remembers what it is made of. */
-function took(d: Doc, r: ReturnType<typeof restitch> | null, drop: ReadonlySet<string> = new Set()): boolean {
+export function took(d: Doc, r: ReturnType<typeof restitch> | null, drop: ReadonlySet<string> = new Set()): boolean {
   if (!r?.starts.length) return false;
   r.starts.forEach((a, k) => rememberObjects(r.pattern, [a], r.ends[k]));
   const now = sewObjects(r.pattern);
@@ -807,7 +807,8 @@ export const OPS: Op[] = [
       const columns: Rails[] = made.areas.flatMap((strips, a) => strips.map((c) => ({ ...c, chain: a })));
       if (!columns.length) return false;
       columns[0].split = { outlines: outsides, holes, cuts: s.cuts.map(([a, b]) => [a, b]) };
-      const satin = { spacing: 0.4, edge: 0.1, short: true, underlay: true, tolerance: 0.15 };
+      // Every other one irregular (without drawing from r, so the chains stay as they were).
+      const satin = { spacing: 0.4, edge: 0.1, short: true, underlay: true, tolerance: 0.15, ...(o.index % 2 ? { rough: 0.5, roughSeed: 11 } : {}) };
       const res = restitch(p, sewObjects(p, kinds), [o.index], { kind: 'satin', s: satin }, kinds, T, 'fill', false, new Map([[o.index, columns]]));
       return !res.failed.length && took(d, res);
     },

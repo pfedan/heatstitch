@@ -7,11 +7,13 @@ import { setKnockout } from '../src/model/knockout';
 import { sewObjects } from '../src/model/objects';
 import { END, STITCH, TRIM, type Pattern } from '../src/model/pattern';
 import { sameColor } from '../src/model/recolor';
-import { backToVersion, lockAt, remember, remembered, withShortLocks } from '../src/model/restitch';
+import { backToVersion, lockAt, remember, remembered, restitch, withShortLocks, type SatinSettings } from '../src/model/restitch';
+import { stitchKinds } from '../src/model/sequence';
+import { currentSettings } from '../src/correct/plan';
 import { deleteObjects, duplicateObject, duplicateObjects, mirrorMatrix, recolorObjects, subtractTop } from '../src/model/shapeOps';
 import { ellipsePath, parsePath, rectPath } from '../src/shape/svgPath';
 import { loadOps } from '../src/shape/ops';
-import { CHAINS, FIRST_SEED, ID, options, T, COLORS, empty, knowledge, Doc, shapes, transform, boxOf, saveAndOpen, checkWellFormed, checkAllKnown, checkPartsFit, checkBorders, checkObjectList, checkKeys, checkKnockouts, checkExport, checkSewDesign, checkFollowers, checkEchoes, checkRedwork, chain, borderedSquare, borderOf, squareOf, type Version } from './helpers/torture';
+import { CHAINS, FIRST_SEED, ID, options, T, COLORS, empty, knowledge, Doc, shapes, transform, boxOf, saveAndOpen, checkWellFormed, checkAllKnown, checkPartsFit, checkBorders, checkObjectList, checkKeys, checkKnockouts, checkExport, checkSewDesign, checkFollowers, checkEchoes, checkRedwork, chain, borderedSquare, borderOf, squareOf, took, type Version } from './helpers/torture';
 
 describe('torture test', () => {
   const seeds = Array.from({ length: CHAINS }, (_, k) => FIRST_SEED + k);
@@ -281,5 +283,83 @@ describe('versions keep what they knew', () => {
     expect(remembered(same, o)?.lock).toBe(true);
     // The same object in both: the same id.
     expect(sewObjects(same)[0].id).toBe(o.id);
+  });
+});
+
+describe('an irregular satin', () => {
+  const checkAll = (d: Doc) => {
+    const p = d.cur.p;
+    checkWellFormed(p);
+    expect(knowledge(p), 'knowledge as stored with this version').toEqual(d.cur.known);
+    checkAllKnown(p);
+    checkKeys(p);
+    checkObjectList(p);
+    checkPartsFit(p);
+    checkKnockouts(p);
+    checkExport(p);
+    checkSewDesign(p);
+  };
+  /** The irregular settings of the satin objects, in their order. */
+  const rough = (d: { cur: Version }) => sewObjects(d.cur.p).map((o) => remembered(d.cur.p, o)?.satin).filter((s) => s).map((s) => `${s!.rough}/${s!.roughSeed}`);
+  /** The stitches of object k, from its first stitch. */
+  const shape = (p: Pattern, k: number) => {
+    const o = sewObjects(p)[k];
+    const pts: number[][] = [];
+    for (let i = o.first; i <= o.last; i++) if (p.cmd[i] === STITCH) pts.push([p.x[i] - p.x[o.first], p.y[i] - p.y[o.first]]);
+    return pts;
+  };
+
+  it('keeps its seed and its stitches through duplicate, mirror, undo and save and open', async () => {
+    const d = new Doc();
+    // A bar 4 mm wide: drawn, it is sewn as satin.
+    shapes(d, addShape(empty, { form: parsePath(rectPath(5, 10, 30, 4, 0, 0), ID), kind: 'fill' }, COLORS[0], null, options)!.pattern);
+    expect(d.objects[0].kind, 'a satin').toBe('satin');
+    const plain = d.cur;
+    // As the stitch card's Unregelmäßig slider: sewn anew with a seed picked once.
+    const cur = currentSettings(d.cur.p, d.objects[0], stitchKinds(d.cur.p))!;
+    expect(cur.kind).toBe('satin');
+    const res = restitch(d.cur.p, d.objects, [0], { kind: 'satin', s: { ...(cur.s as SatinSettings), rough: 0.6, roughSeed: 4242 } }, stitchKinds(d.cur.p), T);
+    expect(took(d, res)).toBe(true);
+    checkAll(d);
+    expect(rough(d)).toEqual(['0.6/4242']);
+    const sewn = shape(d.cur.p, 0);
+    expect(sewn).not.toEqual(shape(plain.p, 0));
+    const irregular = d.cur;
+
+    // A copy: the same seed, the same stitches (moved).
+    expect(shapes(d, duplicateObject(d.cur.p, 0, T)?.pattern)).toBe(true);
+    checkAll(d);
+    expect(rough(d)).toEqual(['0.6/4242', '0.6/4242']);
+    expect(shape(d.cur.p, 1)).toEqual(sewn);
+    // Mirrored: still the seed.
+    expect(transform(d, [1], mirrorMatrix('x', boxOf(d, [1])))).toBe(true);
+    checkAll(d);
+    expect(rough(d)).toEqual(['0.6/4242', '0.6/4242']);
+    const mirrored = d.cur;
+
+    await saveAndOpen(d);
+    checkAll(d);
+    expect(rough(d)).toEqual(['0.6/4242', '0.6/4242']);
+    expect(Array.from(d.cur.p.x)).toEqual(Array.from(mirrored.p.x));
+    // Sewn anew after opening (as any change does): the very same stitches.
+    const again = restitch(d.cur.p, d.objects, [0], { kind: 'satin', s: remembered(d.cur.p, d.objects[0])!.satin! }, stitchKinds(d.cur.p), T);
+    expect(took(d, again)).toBe(true);
+    expect(shape(d.cur.p, 0)).toEqual(sewn);
+
+    // Back to before it was irregular and forward again: all or nothing.
+    d.undo = [plain];
+    d.redo = [];
+    d.cur = irregular;
+    const prev = d.undo.pop()!;
+    d.redo.push(d.cur);
+    d.cur = prev;
+    backToVersion(prev.p);
+    checkAll(d);
+    expect(rough(d), 'not irregular').toEqual([]);
+    const next = d.redo.pop()!;
+    d.cur = next;
+    backToVersion(next.p);
+    checkAll(d);
+    expect(rough(d)).toEqual(['0.6/4242']);
   });
 });

@@ -40,6 +40,10 @@ export interface SatinParams {
   fringeB?: number;
   /** The second pair this far after the first (mm) instead of `spacing`: the pattern starts later (an echo copy's phase). */
   lead?: number;
+  /** Irregular satin (fur, grass, a hand-sewn look), 0 to 1: see roughen. */
+  rough?: number;
+  /** Which irregular satin: the same seed gives the same stitches every time. */
+  seed?: number;
 }
 
 export interface Column {
@@ -168,7 +172,10 @@ export function pairs(c: Column, p: SatinParams, ends?: ColumnEnds): [Pt, Pt][] 
       const d = norm(sub(c.right[last], c.left[last]));
       const perp = (a: Pt, b: Pt) => Math.abs((b[0] - a[0]) * d[1] - (b[1] - a[1]) * d[0]);
       const adv = Math.max(perp(c.left[last], c.left[i]), perp(c.right[last], c.right[i]));
-      if (adv < (out.length === 1 && p.lead ? p.lead : (p.spacingAt?.[last] ?? p.spacing)) && i < n - 1) continue;
+      const base = out.length === 1 && p.lead ? p.lead : (p.spacingAt?.[last] ?? p.spacing);
+      // Irregular: each pair a different way nearer or further than the spacing.
+      const sp = p.rough ? base * (1 + ROUGH_SPACING * p.rough * (2 * hash(out.length, 2, p.seed) - 1)) : base;
+      if (adv < sp && i < n - 1) continue;
       if (adv < 0.1) continue;
     }
     out.push([c.left[i], c.right[i]]);
@@ -187,6 +194,7 @@ export function pairs(c: Column, p: SatinParams, ends?: ColumnEnds): [Pt, Pt][] 
     }
     return [[a[0] + u[0] * ea, a[1] + u[1] * ea], [b[0] - u[0] * eb, b[1] - u[1] * eb]];
   });
+  if (p.rough) roughen(comp, p.rough, p.seed ?? 0);
   // Short stitches on the inside of curves.
   for (const side of p.short === false ? [] : ([0, 1] as const)) {
     let ref = comp.length ? comp[0][side] : null;
@@ -204,9 +212,12 @@ export function pairs(c: Column, p: SatinParams, ends?: ColumnEnds): [Pt, Pt][] 
 const FRINGE_KEEP = 1;
 const FRINGE_KEEP_SHARE = 0.35;
 
-/** A number in [0, 1) for stitch i on a side, the same every time (no state, so restitching repeats it). */
-function hash(i: number, side: number): number {
-  let h = Math.imul(i + 1, 0x9e3779b1) ^ Math.imul(side + 7, 0x85ebca6b);
+/**
+ * A number in [0, 1) for stitch i on a side, the same every time (no state, so restitching repeats
+ * it); another `seed` gives other numbers (seed 0: the fringe's, as before seeds).
+ */
+function hash(i: number, side: number, seed = 0): number {
+  let h = Math.imul(i + 1, 0x9e3779b1) ^ Math.imul(side + 7, 0x85ebca6b) ^ (seed ? Math.imul(seed | 0, 0x27d4eb2f) : 0);
   h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d);
   h = Math.imul(h ^ (h >>> 12), 0x297a2d39);
   return ((h ^ (h >>> 15)) >>> 0) / 4294967296;
@@ -231,6 +242,28 @@ function fringe(ps: [Pt, Pt][], a: number, b: number): void {
     const da = a * k * ra;
     const db = b * k * rb;
     ps[i] = [lerp(l, r, da / w), lerp(r, l, db / w)];
+  });
+}
+
+/**
+ * Irregular satin, as Ink/Stitch's random width and zigzag spacing (re-implemented): each needle
+ * point reaches up to ROUGH_OUT of the width beyond its rail or up to ROUGH_IN short of it, each
+ * side on its own, and the spacing varies by up to ROUGH_SPACING (see pairs), all times `k` (0 to
+ * 1). Uniform and independent from stitch to stitch, from a hash of the stitch and the seed, so the
+ * edge looks hand-sewn or furry and comes out the same each time.
+ */
+export const ROUGH_OUT = 0.2;
+export const ROUGH_IN = 0.1;
+const ROUGH_SPACING = 0.25;
+
+function roughen(ps: [Pt, Pt][], k: number, seed: number): void {
+  ps.forEach(([a, b], i) => {
+    const w = dist(a, b);
+    if (w < 1e-6) return;
+    const u = norm(sub(a, b));
+    const ea = w * k * ((ROUGH_OUT + ROUGH_IN) * hash(i, 3, seed) - ROUGH_IN);
+    const eb = w * k * ((ROUGH_OUT + ROUGH_IN) * hash(i, 4, seed) - ROUGH_IN);
+    ps[i] = [[a[0] + u[0] * ea, a[1] + u[1] * ea], [b[0] - u[0] * eb, b[1] - u[1] * eb]];
   });
 }
 
