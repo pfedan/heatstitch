@@ -941,6 +941,7 @@ function redraw(): void {
       $<HTMLButtonElement>('order-optimize').disabled = !q || q.objects.length < 2;
     }
     refreshShapes();
+    updateHint();
     panel.update(active, ui.selectedZone);
     // Jumps and trims show in Gestalten and in Prüfen.
     jumpsPanel.update({ list: q?.transitions ?? [], selected: ui.selectedJump, lang: getLang() });
@@ -1294,17 +1295,26 @@ function updateLevel(): void {
   stage.classList.toggle('shaping', shaping);
   stage.classList.toggle('form-level', ui.formLevel && !on && settings.mode === 'flow');
   document.querySelectorAll<HTMLInputElement>('input[name="level"]').forEach((i) => (i.checked = i.value === level));
-  const flow = settings.mode === 'flow';
   refreshShapes();
+  updateHint();
+}
+
+/** The hint at the foot of the stage: what the mouse, the keys or the fingers do here. */
+function updateHint(): void {
+  const on = editor.active;
+  const shaping = shapeTool.active;
+  const flow = settings.mode === 'flow';
   const mode = settings.mode;
+  // Objects in the frame: the bar over the stage has their steps, the hint how to move them.
+  const framed = flow && frameTool.active && ui.selectedObjects.size > 0 && !drawTool.kind && !on && !shaping && !ui.formLevel && !ui.lettering;
   // Fingers have no wheel, Shift or keys: on a touch screen the hint says the gestures, and only
   // where no bar over the stage says what to do already.
   if (matchMedia('(pointer: coarse)').matches) {
     const base = !drawTool.kind && !on && !shaping && !ui.formLevel && !ui.lettering;
-    $('canvas-hint').textContent = mode === 'image' ? t('responsive.hint.view') : !base ? '' : flow ? t('responsive.hint.flow') : t('responsive.hint.check');
+    setHint(mode === 'image' ? t('responsive.hint.view') : framed ? t('responsive.opt.frame') : !base ? '' : flow ? t('responsive.hint.flow') : t('responsive.hint.check'));
     return;
   }
-  $('canvas-hint').textContent = t(
+  setHint(t(
     mode === 'image'
       ? 'canvas.hint.image'
       : drawTool.kind && flow
@@ -1323,10 +1333,17 @@ function updateLevel(): void {
             ? 'canvas.hint.letters'
             : flow && ui.lettering
               ? 'canvas.hint.lettering'
+              : framed
+                ? 'shapes.opt.frame'
               : flow
                 ? 'canvas.hint.flow'
                 : 'canvas.hint',
-  );
+  ));
+}
+
+function setHint(text: string): void {
+  const el = $('canvas-hint');
+  if (el.textContent !== text) el.textContent = text;
 }
 
 function setComparing(on: boolean): void {

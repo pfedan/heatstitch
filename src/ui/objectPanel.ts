@@ -7,9 +7,8 @@ import { cssColor, ThreadPicker } from './threadPicker';
 import { sameColor } from '../model/recolor';
 import type { ThreadColor } from '../model/pattern';
 import { GAP_MAX, GAP_MIN } from '../model/contour';
-import { canRun, commandTitle, getCommand, runCommand } from '../shell/commands';
+import { canRun, runCommand } from '../shell/commands';
 import { h, icon, swap } from '../shell/h';
-import { objectMenu, showOrderMenu } from './objectMenu';
 
 export interface ObjectInfo {
   objects: SewObject[];
@@ -67,31 +66,10 @@ function box(objs: SewObject[]): { w: number; h: number; cx: number; cy: number 
   return { w: (maxX - minX) / 10, h: (maxY - minY) / 10, cx: (minX + maxX) / 20, cy: (minY + maxY) / 20 };
 }
 
-/** A button that runs a command: its icon, its label and key as the hint, disabled by its rule. */
-function commandButton(id: string, opts: { text?: boolean; cls?: string } = {}): HTMLButtonElement | null {
-  const c = getCommand(id);
-  if (!c) return null;
-  const b = h(
-    'button',
-    {
-      type: 'button',
-      class: `${opts.text ? 'obj-text-btn' : 'icon obj-icon-btn'} ${opts.cls ?? ''}`.trim(),
-      title: commandTitle(c),
-      'aria-label': t(c.label),
-      'data-command': id,
-      disabled: !canRun(c),
-      onclick: () => runCommand(id),
-    },
-    opts.text ? h('span', null, t(c.label)) : c.icon ? icon(c.icon) : null,
-  );
-  return b;
-}
-
 /**
  * The top of the object page: what is selected (name, kind, thread), its size and place, where it
- * is sewn, and a row of buttons for the object commands; below come the stitch settings
- * (#object-stitches). While the outline or the points are edited the buttons give way to the option
- * bar over the stage.
+ * is sewn; below come the stitch settings (#object-stitches). What can be done with the selection
+ * stands in the bar under the breadcrumb (areas shapes), as on the levels Form and Stiche.
  * Explanations are hints on the elements, not paragraphs.
  */
 export class ObjectPanel {
@@ -135,8 +113,6 @@ export class ObjectPanel {
     this.panel.hidden = false;
     const sel = info.selected.map((i) => info.objects[i]);
     const parts: (HTMLElement | null)[] = [this.head(info, sel), this.facts(info, sel), this.geometry(info, sel)];
-    // Editing the outline or the points: their tools are the option bar over the stage (areas shapes, stitches).
-    if (!info.editing && !info.shaping) parts.push(this.toolbar(), this.more(info, sel));
     swap(this.body, ...parts.filter((p): p is HTMLElement => !!p));
   }
 
@@ -299,45 +275,6 @@ export class ObjectPanel {
       }
     });
     return [h('span', { class: 'obj-geom-label', title: t('object.contour.gap.hint') }, label), h('span', { class: 'obj-geom-fields' }, i, unit())];
-  }
-
-  /** The object commands as a row of icon buttons; the rest in the menu behind "…". */
-  private toolbar(): HTMLElement {
-    const order = h('button', { type: 'button', class: 'icon obj-icon-btn', title: t('objects.orderMenu'), 'aria-label': t('objects.orderMenu'), 'aria-haspopup': 'menu', onclick: () => showOrderMenu(order) }, icon('obj-order'));
-    const more = h('button', { type: 'button', class: 'icon obj-icon-btn', title: t('objects.more'), 'aria-label': t('objects.more'), 'aria-haspopup': 'menu', onclick: () => objectMenu.open(more) }, icon('more'));
-    const ids = ['object.duplicate', 'object.mirrorH', 'object.mirrorV', '|', 'object.earlier', 'object.later', 'order', '|', 'object.delete', 'more'];
-    return h(
-      'div',
-      { class: 'obj-toolbar', role: 'toolbar', 'aria-label': t('object.menu') },
-      ids.map((id) => (id === '|' ? h('span', { class: 'obj-sep', 'aria-hidden': 'true' }) : id === 'order' ? order : id === 'more' ? more : commandButton(id))),
-    );
-  }
-
-  /** Bigger steps that apply to this selection only: its outline, its points, parts, merging, cutting. */
-  private more(info: ObjectInfo, sel: SewObject[]): HTMLElement | null {
-    const out: HTMLElement[] = [];
-    const add = (id: string) => {
-      if (canRun(id)) out.push(commandButton(id, { text: true })!);
-    };
-    if (sel.length === 1) {
-      add('object.openShape');
-      add('object.openStitches');
-      add('draw.cut');
-      add('object.split');
-      add('object.blend');
-      add('object.reverse');
-      add('object.contour');
-    } else {
-      // Shown also when it cannot be: the reason is its hint.
-      const b = commandButton('object.combine', { text: true });
-      if (b && info.mergeBlocked) b.title = t(info.mergeBlocked);
-      if (b) out.push(b);
-      add('object.subtract');
-      add('object.contour');
-      add('draw.cut');
-      add('object.reverse');
-    }
-    return out.length ? h('div', { class: 'obj-actions' }, out) : null;
   }
 
   /** The thread picker for the selection, at `anchor` (the thread chip when none is given). */

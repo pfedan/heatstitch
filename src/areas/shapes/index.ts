@@ -19,6 +19,7 @@ import { STORAGE_NS } from '../../storage/namespace';
 import { canRun, command, getCommand, keyLabel, runCommand } from '../../shell/commands';
 import { h, icon } from '../../shell/h';
 import { showMenu, toast } from '../../shell/ui';
+import { objectMenu, showOrderMenu } from '../../ui/objectMenu';
 import { loadOps, opsReady } from '../../shape/ops';
 import type { Joined } from '../../shape/join';
 
@@ -49,6 +50,9 @@ export interface ShapesAreaApp {
 
 /** From this many nodes on, an outline offers to be simplified (traced outlines come with many). */
 const SIMPLIFY_FROM = 12;
+
+/** An icon of the sprite in index.html (as icon() of src/shell/h.ts), as markup for the options bar. */
+const spriteIcon = (name: string) => `<svg class="i" aria-hidden="true"><use href="#i-${name}"/></svg>`;
 
 /**
  * Icons of the options bar, drawn like the tool rail's (20 × 20, stroked; `node` squares filled):
@@ -451,7 +455,13 @@ export function initShapes(app: ShapesAreaApp): void {
   const bar = $('tool-options');
   let barKey = '';
 
-  type Item = { kind: 'title'; text: string; title?: string } | { kind: 'hint'; text: string } | { kind: 'cmd'; id: string; text?: string; toggle?: boolean; on?: boolean; primary?: boolean; icon?: string; tip?: string } | { kind: 'sep' };
+  type Item =
+    | { kind: 'title'; text: string; title?: string }
+    | { kind: 'hint'; text: string }
+    // icon alone, or with `words` the icon and the text
+    | { kind: 'cmd'; id: string; text?: string; toggle?: boolean; on?: boolean; primary?: boolean; icon?: string; tip?: string; words?: boolean }
+    | { kind: 'menu'; menu: 'order' | 'more' }
+    | { kind: 'sep' };
 
   function barItems(): Item[] {
     if (app.measure.active && app.settings.mode !== 'image') return measureItems();
@@ -515,9 +525,42 @@ export function initShapes(app: ShapesAreaApp): void {
       return items;
     }
     if (ui.lettering) return [{ kind: 'title', text: t('lettering.title'), title: t('canvas.hint.lettering') }, { kind: 'cmd', id: 'lettering.letters' }, snap, { kind: 'hint', text: t('shapes.opt.lettering') }];
-    if (app.frameTool.active) return [snap, { kind: 'hint', text: t(matchMedia('(pointer: coarse)').matches ? 'responsive.opt.frame' : 'shapes.opt.frame') }];
+    if (app.frameTool.active) return ui.selectedObjects.size ? objectItems(snap) : [snap, { kind: 'hint', text: t(matchMedia('(pointer: coarse)').matches ? 'responsive.opt.frame' : 'shapes.opt.frame') }];
     if (shapeLevel() && !app.editor.active) return [{ kind: 'title', text: t('level.shape') }, { kind: 'hint', text: t('shapes.opt.formPick') }];
     return [];
+  }
+
+  /**
+   * Objekte: what can be done with the selection (src/areas/objects/commands), where the levels Form
+   * and Stiche have theirs. The steps for everything first, then the ones for this selection with
+   * a word each, as they are harder to tell by their icon; all the rest is in the menu "…". On a
+   * phone only icons, and fewer: mirroring upright and the order are in that menu too.
+   */
+  function objectItems(snap: Item): Item[] {
+    const phone = matchMedia('(max-width: 760px)').matches;
+    const many = ui.selectedObjects.size > 1;
+    const own: [string, Key][] = many
+      ? [['object.combine', 'objects.bar.combine'], ['object.subtract', 'objects.bar.subtract'], ['object.contour', 'objects.bar.contour']]
+      : [['object.openShape', 'objects.openShape'], ['object.split', 'objects.bar.split'], ['object.contour', 'objects.bar.contour']];
+    const cmd = (id: string, words?: Key): Item => {
+      const c = getCommand(id)!;
+      // Not possible now: the tooltip says why (two colors cannot be combined, ...).
+      const need = canRun(c) ? undefined : c.need?.();
+      return { kind: 'cmd', id, icon: spriteIcon(c.icon!), text: words && !phone ? t(words) : undefined, words: !!words && !phone, tip: need ? t(need) : undefined };
+    };
+    return [
+      snap,
+      { kind: 'sep' },
+      cmd('object.duplicate'),
+      cmd('object.mirrorH'),
+      ...(phone ? [] : [cmd('object.mirrorV'), { kind: 'menu', menu: 'order' } as Item]),
+      { kind: 'sep' },
+      // Combining stays in sight when the selection cannot be combined: its tooltip says why.
+      ...own.filter(([id]) => canRun(id) || (id === 'object.combine' && getCommand(id))).map(([id, words]) => cmd(id, words)),
+      { kind: 'sep' },
+      cmd('object.delete'),
+      { kind: 'menu', menu: 'more' },
+    ];
   }
 
   /** Messen: how to measure, then the parts of the distance; Fertig ends the tool. */
@@ -542,12 +585,23 @@ export function initShapes(app: ShapesAreaApp): void {
     if (key === barKey) return;
     barKey = key;
     bar.hidden = !items.length;
+    // Only the bar of the objects has menus: its hint (how to move them) stays at the stage's foot.
+    bar.classList.toggle('for-objects', items.some((i) => i.kind === 'menu'));
     bar.setAttribute('aria-label', t('shapes.opt.label'));
     bar.replaceChildren(
       ...items.map((i) => {
         if (i.kind === 'title') return h('span', { class: 'opt-title', title: i.title ?? '' }, i.text);
         if (i.kind === 'hint') return h('span', { class: 'opt-hint' }, i.text);
         if (i.kind === 'sep') return h('span', { class: 'opt-sep', 'aria-hidden': 'true' });
+        if (i.kind === 'menu') {
+          const label = t(i.menu === 'order' ? 'objects.orderMenu' : 'objects.more');
+          const m: HTMLButtonElement = h(
+            'button',
+            { type: 'button', class: 'opt opt-icon', title: label, 'aria-label': label, 'aria-haspopup': 'menu', onclick: () => (i.menu === 'order' ? showOrderMenu(m) : objectMenu.open(m)) },
+            icon(i.menu === 'order' ? 'obj-order' : 'more'),
+          );
+          return m;
+        }
         const c = getCommand(i.id)!;
         const key = c.keys?.[0];
         const hint = i.tip ?? (i.id === 'frame.snap' ? t('shapes.snap.hint') : i.id === 'draw.square' ? t('shapes.opt.square.hint') : i.id === 'draw.center' ? t('shapes.opt.center.hint') : t(c.label));
@@ -555,18 +609,19 @@ export function initShapes(app: ShapesAreaApp): void {
           'button',
           {
             type: 'button',
-            class: `opt${i.toggle ? ' opt-toggle' : ''}${i.primary ? ' primary' : ''}${i.icon ? ' opt-icon' : ''}`,
+            class: `opt${i.toggle ? ' opt-toggle' : ''}${i.primary ? ' primary' : ''}${i.icon && !i.words ? ' opt-icon' : ''}`,
+            'data-command': i.id,
             disabled: !canRun(c),
             title: `${hint}${key ? ` (${keyLabel(key)})` : ''}`,
             'aria-pressed': i.toggle ? String(!!i.on) : undefined,
             // An icon only: its words are the name (and the tooltip says what it does).
-            'aria-label': i.icon ? (i.text ?? t(c.label)) : undefined,
+            'aria-label': i.icon && !i.words ? (i.text ?? t(c.label)) : undefined,
             onclick: () => runCommand(i.id),
           },
           i.toggle && !i.icon ? h('span', { class: 'opt-check', 'aria-hidden': 'true' }) : null,
-          i.icon ? null : (i.text ?? t(c.label)),
         );
         if (i.icon) b.insertAdjacentHTML('beforeend', i.icon);
+        if (!i.icon || i.words) b.append(i.text ?? t(c.label));
         return b;
       }),
     );
