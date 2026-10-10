@@ -1,8 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { digitizeDefaults, digitizeShapes, type ShapeInput } from '../src/digitize/digitize';
 import { syncBorders } from '../src/model/border';
 import { digitizedFile } from '../src/model/digitized';
-import { deleteObjects } from '../src/model/shapeOps';
+import { deleteObjects, duplicateObjects } from '../src/model/shapeOps';
+import { refreshKnockouts, setKnockout } from '../src/model/knockout';
 import { sewObjects } from '../src/model/objects';
 import { STITCH, type Pattern } from '../src/model/pattern';
 import { remember, remembered, rememberedIn, restoreRemembered, withLine, type BorderSettings } from '../src/model/restitch';
@@ -10,7 +11,8 @@ import { parsePattern } from '../src/parsers';
 import { writePattern } from '../src/writers';
 import { fromStored, toStored } from '../src/storage/fileStore';
 import { parsePath } from '../src/shape/svgPath';
-import type { Mat } from '../src/shape/path';
+import { flatten, type Mat } from '../src/shape/path';
+import { loadOps } from '../src/shape/ops';
 import { DEFAULT_PROFILE } from '../src/validation/profiles';
 
 const ID: Mat = [1, 0, 0, 1, 0, 0];
@@ -147,5 +149,34 @@ describe('a frayed satin border', () => {
     const inn = sides('left');
     expect(inn.inn).toBeGreaterThan(0.4);
     expect(inn.out).toBeLessThan(0.3);
+  });
+});
+
+describe('the echo of a border set off the edge', () => {
+  beforeAll(loadOps);
+
+  it('lies on the offset curve of the form, its pull compensation and the border offset in', () => {
+    const q = withBorder(bordered(), (b) => ({ ...b, offset: 1, echo: { side: 'out', count: 1, gap: 2, colors: [threads[1]], link: 'e9' } }));
+    const fill = view(q).find((x) => x.m.fill)!.m;
+    const copy = view(q).find((x) => x.m.echoOf)!;
+    // The line the copy echoes: the form grown by the pull compensation and set 1 mm off, on its curves.
+    const line = (fill.fill!.areaGrow ?? 0) + 1;
+    const d = copy.m.geo!.paths.flatMap((p) => flatten(p)).map(outside);
+    expect(Math.min(...d)).toBeGreaterThan(line - 0.03);
+    expect(Math.max(...d)).toBeLessThan(line + 0.03);
+    // The copy itself 2 mm further out.
+    expect(points(q, copy.o.first, copy.o.last).every((p) => Math.abs(outside(p) - line - 2) < 0.15)).toBe(true);
+    expect(syncBorders(q, options.trimMm)).toBe(q);
+  });
+});
+
+describe('fills with a border that leave out what lies on top', () => {
+  it('settle in one go when copied over each other', () => {
+    let p = withBorder(bordered(), (b) => ({ ...b, type: 'satin', width: 2, color: threads[1], link: 'k1' }));
+    p = setKnockout(p, [view(p).findIndex((x) => x.m.fill)], true, options.trimMm)!.pattern;
+    const copy = duplicateObjects(p, [view(p).findIndex((x) => x.m.fill)], options.trimMm, 3)!.pattern;
+    const once = refreshKnockouts(copy, options.trimMm)?.pattern ?? copy;
+    expect(view(once).filter((x) => x.m.fill && x.m.knockout)).toHaveLength(2);
+    expect(refreshKnockouts(once, options.trimMm)?.changed ?? []).toEqual([]);
   });
 });
