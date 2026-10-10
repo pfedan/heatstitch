@@ -89,6 +89,8 @@ export function encodePes(ops: Op[], colorIndices: number[], label = 'TEST'): Ui
   pec[517] = 0x31;
   pec[518] = 0xff;
   pec[519] = 0xf0;
+  // Brother's opening move: a long-form jump, here of (0, 0).
+  pec.splice(528, 4, 0x90, 0x00, 0x90, 0x00);
 
   let color = 0;
   let pendingTrim = false;
