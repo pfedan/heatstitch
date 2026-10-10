@@ -10,10 +10,11 @@ import { reorder } from './order';
 import { recolor, sameColor } from './recolor';
 import type { Pattern, ThreadColor } from './pattern';
 import { forget, objectKey, remember, remembered, restitch, type Remembered } from './restitch';
-import { formOf, reshapeFill, transformSewObject } from './reshape';
+import { reshapeFill, transformSewObject } from './reshape';
 import { stitchKinds } from './sequence';
 import { stitchesBefore } from './transform';
-import { autoReversible, isLine, ownSettings, reverseLines } from './reverse';
+import { autoReversible, ownSettings, reverseLines } from './reverse';
+import { guessArea, lineGeoOf, sewnAlong } from './geo';
 
 /**
  * Working with objects as shapes: deleting, duplicating, mirroring, and combining fills by their
@@ -60,7 +61,7 @@ export function deleteObjects(p: Pattern, which: number[], trimMm: number): Patt
   // Lines whose shadow or echo copies go alone: they have them no more.
   for (const o of objs) {
     let m = mem[o.index];
-    if (gone.has(o.index) || !m?.path) continue;
+    if (gone.has(o.index) || !m || !lineGeoOf(m)) continue;
     const parts = [...gone].map((g) => partOf(mem[g])).filter((l): l is string => !!l && hasPart(m, l));
     if (!parts.length) continue;
     for (const l of parts) m = withoutPart(m, l);
@@ -202,7 +203,7 @@ function inPlace(p: Pattern, k: number, trimMm: number): { pattern: Pattern; nud
   // (memory is keyed by stitches): it is put back.
   const kept = objs.map((x) => remembered(p, x));
   let next: Pattern | null = null;
-  if (isLine(p, o) && !known?.hand) {
+  if (sewnAlong(p, o) && !known?.hand) {
     // A line also goes the smallest step beside it: sewn back along itself (an echo on both sides,
     // a line there and back) it would otherwise have the very stitches of its copy.
     const beside = moved(p, k, translation(0.1, 0), trimMm);
@@ -283,14 +284,14 @@ export function subtractTop(p: Pattern, which: number[], trimMm: number): Subtra
   // blend's second thread).
   const isBorder = (o: number) => !!objs[o] && !!(remembered(cur, objs[o])?.outline || remembered(cur, objs[o])?.blendOf || partOf(remembered(cur, objs[o])));
   if (isBorder(top)) return null;
-  const cutter = formOf(cur, objs[top], kinds);
+  const cutter = guessArea(cur, objs[top], kinds);
   const hole = cutter && wholeArea(cutter);
   if (!hole) return null;
   const gone = [top];
   const cut: number[] = [];
   for (const o of sorted.filter((x) => !isBorder(x))) {
     const obj = objs[o];
-    const form = obj && formOf(cur, obj, kinds);
+    const form = obj && guessArea(cur, obj, kinds);
     const whole = form && wholeArea(form);
     if (!whole) continue;
     const left = knockOut(whole, [hole], 0);

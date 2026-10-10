@@ -185,7 +185,7 @@ describe('lines sewn from their other end', () => {
       // It remembers the turned curve: settings changed later keep the direction.
       const [o] = sewObjects(r.pattern);
       const known = remembered(r.pattern, o)!;
-      const again = resewLine(r.pattern, 0, known.path!, known.line!, 7)!;
+      const again = resewLine(r.pattern, 0, known.geo!, known.line!, 7)!;
       expect(stitched(again.pattern)[0][0]).toBeGreaterThan(28);
       // Twice turned is as before.
       expect(stitched(reverseLines(r.pattern, [0], 7).pattern)[0][0]).toBeLessThan(1);

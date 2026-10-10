@@ -16,8 +16,6 @@ import type { ShapeTool } from '../ui/shapeTool';
 import { borderLines, type PathStitch } from '../model/along';
 import { echoCopyLines, nearestCopy } from '../model/line';
 import { borderRanges } from '../model/border';
-import { formOf } from '../model/reshape';
-import { satinArea } from '../model/railsForm';
 import { remembered, underlayRanges, type RestitchResult, analyze, restitchedPieces } from '../model/restitch';
 import { sewObjects, overlaps, type SewObject } from '../model/objects';
 import { stitchNumbers, stitchKinds, colorBlocks, markers as findMarkers, transitions, sewingSeconds, recordOfStitch, carriedJumps } from '../model/sequence';
@@ -25,6 +23,7 @@ import { type Pattern, TRIM, COLOR_CHANGE, STITCH, type ThreadColor } from '../m
 import { type StitchStyle, stitchColors, stitchAlpha } from '../render/flow';
 import { ui } from './state';
 import { wholeOf } from '../model/knockout';
+import { guessArea, lineGeoOf, satinOutline } from '../model/geo';
 
 /** What bindScene needs from the rest of the app. */
 export interface SceneApp {
@@ -197,20 +196,21 @@ export function bindScene(app: SceneApp) {
     for (const index of selectedIn(p)) {
       const o = q.objects[index];
       const m = o && remembered(p, o);
-      if (!m?.path || !m.line) continue;
+      const path = lineGeoOf(m);
+      if (!m || !path || !m.line) continue;
       // A part selected on its own: its own stitches.
       if (m.shadowOf) {
         if (what === 'shadow') mask.fill(1, o.first, o.last + 1);
         continue;
       }
       const link = what === 'shadow' ? m.line.shadow?.link : m.line.echo?.link;
-      if (what !== 'shadow' && m.line.echo) mark(o, m.path, m.line);
+      if (what !== 'shadow' && m.line.echo) mark(o, path, m.line);
       if (!link) continue;
       for (const x of q.objects) {
         const xm = remembered(p, x);
-        if (what === 'shadow' ? xm?.shadowOf === link : xm?.echoOf?.startsWith(`${link}:`) && xm.path && xm.line) {
+        if (what === 'shadow' ? xm?.shadowOf === link : xm?.echoOf?.startsWith(`${link}:`) && lineGeoOf(xm) && xm.line) {
           if (what === 'shadow' || !only) mask.fill(1, x.first, x.last + 1);
-          else mark(x, xm!.path!, xm!.line!);
+          else mark(x, lineGeoOf(xm)!, xm!.line!);
         }
       }
     }
@@ -299,17 +299,18 @@ export function bindScene(app: SceneApp) {
       for (const o of q.objects) {
         const known = remembered(p, o);
         // A line with an echo: the line and its copies (a shadow is an object of its own).
-        if (known?.path && known.line && !known.lettering) {
-          const form: Form = known.line.echo ? { paths: echoCopyLines(known.path, known.line).map((l) => polyline(l.line, l.closed)) } : known.path;
+        const path = lineGeoOf(known);
+        if (known && path && known.line && !known.lettering) {
+          const form: Form = known.line.echo ? { paths: echoCopyLines(path, known.line).map((l) => polyline(l.line, l.closed)) } : path;
           list.push({ o, form, line: known.line });
           continue;
         }
         if (o.kind === 'satin') {
-          const area = satinArea(p, o, q.kinds);
+          const area = satinOutline(p, o, q.kinds);
           if (area) list.push({ o, form: area });
         }
         if (o.kind !== 'fill') continue;
-        const form = formOf(p, o, q.kinds);
+        const form = guessArea(p, o, q.kinds);
         if (form?.paths.some((x) => x.closed)) list.push({ o, form });
       }
       shapeCache.set(p, list);

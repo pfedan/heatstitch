@@ -13,6 +13,7 @@ import type { ShapeTool } from '../../ui/shapeTool';
 import type { MeasureTool } from '../../ui/measureTool';
 import { FileList } from '../../ui/fileList';
 import { canSplit } from '../../model/splitFill';
+import { remembered } from '../../model/restitch';
 import { ui } from '../../app/state';
 import { STORAGE_NS } from '../../storage/namespace';
 import { canRun, command, getCommand, keyLabel, runCommand } from '../../shell/commands';
@@ -46,6 +47,22 @@ export interface ShapesAreaApp {
 
 /** From this many nodes on, an outline offers to be simplified (traced outlines come with many). */
 const SIMPLIFY_FROM = 12;
+
+/**
+ * Icons of the options bar, drawn like the tool rail's (20 × 20, stroked; `node` squares filled):
+ * for the steps on nodes and paths, whose words would crowd the bar on a phone.
+ */
+const ICON = {
+  nodeDelete: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 16C5 9.5 7.5 6.8 10 5.8" /><rect x="9.6" y="3.4" width="3.6" height="3.6" rx=".6" class="node" /><path d="M13 12l4.5 4.5M17.5 12 13 16.5" /></svg>',
+  corner: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 16.5 10 4.5l6.5 12" /><rect x="8.3" y="2.8" width="3.4" height="3.4" rx=".5" class="node" /></svg>',
+  smooth: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 16C4.5 7 15.5 7 16.5 16" /><path d="M4 9.25h12" stroke-dasharray="1.4 1.6" /><rect x="8.3" y="7.55" width="3.4" height="3.4" rx=".5" class="node" /></svg>',
+  simplify: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 12l2.5-4 2 3 2.5-5 2 4 2.5-5 3.5 3" opacity=".45" /><path d="M2.5 16C7 9 12.5 9 17.5 12" /></svg>',
+  pathOpen: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10.5 4H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V9.5" /><rect x="9.3" y="2.3" width="3.4" height="3.4" rx=".5" class="node" /><rect x="14.3" y="7.8" width="3.4" height="3.4" rx=".5" class="node" /></svg>',
+  pathClose: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10.5 4H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V9.5" /><path d="M12.8 4H14a2 2 0 0 1 2 2v1.6" stroke-dasharray="1.3 1.3" /><rect x="9.3" y="2.3" width="3.4" height="3.4" rx=".5" class="node" /><rect x="14.3" y="7.8" width="3.4" height="3.4" rx=".5" class="node" /></svg>',
+  snap: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4.5 3.5H8v6a2 2 0 0 0 4 0v-6h3.5v6a5.5 5.5 0 0 1-11 0z" /><path d="M4.5 6.5H8M12 6.5h3.5" /></svg>',
+  back: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 15l4-7 3.5 4" /><rect x="1.8" y="13.8" width="2.4" height="2.4" rx=".4" class="node" /><rect x="5.8" y="6.8" width="2.4" height="2.4" rx=".4" class="node" /><path d="M17.5 12h-5M14.5 9.5 12 12l2.5 2.5" /></svg>',
+  cancel: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5 5 15" /></svg>',
+};
 const SNAP_KEY = `${STORAGE_NS}.shapes.snap`;
 
 let refreshHook: (() => void) | null = null;
@@ -213,13 +230,21 @@ export function initShapes(app: ShapesAreaApp): void {
 
   // The outline of the one selected object (level Form).
   const shaping = () => flow() && app.shapeTool.active;
-  const lineOpen = (closed: boolean) => () => {
+  /**
+   * The object on the level Form is a line (else a fill), or null when its paths cannot be opened
+   * or closed. A path is a path whatever it is sewn with: a fill whose last closed one is opened is
+   * sewn as a line, a band is a line already (its width the fill).
+   */
+  const shapedLine = (): boolean | null => {
     const p = pattern();
     const o = ui.shapeObject;
-    if (!shaping() || !p || o === null) return false;
+    if (!shaping() || !p || o === null) return null;
     const obj = app.seq(p).objects[o];
-    return !!obj && app.isLineObject(p, obj) && app.shapeTool.closed === closed && app.shapeTool.count >= 2;
+    if (!obj) return null;
+    if (app.isLineObject(p, obj)) return true;
+    return obj.kind === 'fill' && app.shapeTool.band === null ? false : null;
   };
+  const lineOpen = (closed: boolean) => () => shapedLine() !== null && app.shapeTool.closed === closed && app.shapeTool.count >= 2;
   command({ id: 'shape.nodeDelete', label: 'shape.node.delete', group: SHAPE, keys: ['Delete'], bind: false, when: () => shaping() && app.shapeTool.selectedSmooth !== null, run: () => void app.shapeTool.deleteSelected() });
   command({ id: 'shape.cornerToggle', label: 'shapes.cmd.corner', group: SHAPE, keys: ['C'], bind: false, when: () => shaping() && app.shapeTool.selectedSmooth !== null, run: () => void app.shapeTool.toggleSmooth() });
   command({
@@ -236,15 +261,19 @@ export function initShapes(app: ShapesAreaApp): void {
   });
   command({
     id: 'shape.closeLine',
-    label: 'shape.line.close',
+    label: 'shape.path.close',
     group: SHAPE,
     when: lineOpen(false),
     run: () => {
-      // Closed, a line can be filled: said where it is found.
-      if (app.shapeTool.toggleClosed()) toast(t('shape.line.closed'));
+      // Closed, a line can be filled: said where it is found. A fill sewn as a line since its path
+      // was opened says it as it is sewn again, with Wieder füllen.
+      const p = pattern();
+      const obj = p && ui.shapeObject !== null ? app.seq(p).objects[ui.shapeObject] : undefined;
+      const tell = shapedLine() && !(p && obj && remembered(p, obj)?.kept?.fill);
+      if (app.shapeTool.toggleClosed() && tell) toast(t('shape.line.closed'));
     },
   });
-  command({ id: 'shape.openLine', label: 'shape.line.open', group: SHAPE, when: lineOpen(true), run: () => void app.shapeTool.toggleClosed() });
+  command({ id: 'shape.openLine', label: 'shape.path.open', group: SHAPE, when: lineOpen(true), run: () => void app.shapeTool.toggleClosed() });
   command({
     id: 'frame.snap',
     label: 'shapes.cmd.snap',
@@ -374,12 +403,12 @@ export function initShapes(app: ShapesAreaApp): void {
   const bar = $('tool-options');
   let barKey = '';
 
-  type Item = { kind: 'title'; text: string; title?: string } | { kind: 'hint'; text: string } | { kind: 'cmd'; id: string; text?: string; toggle?: boolean; on?: boolean; primary?: boolean } | { kind: 'sep' };
+  type Item = { kind: 'title'; text: string; title?: string } | { kind: 'hint'; text: string } | { kind: 'cmd'; id: string; text?: string; toggle?: boolean; on?: boolean; primary?: boolean; icon?: string; tip?: string } | { kind: 'sep' };
 
   function barItems(): Item[] {
     if (app.measure.active && app.settings.mode !== 'image') return measureItems();
     if (!flow()) return [];
-    const snap: Item = { kind: 'cmd', id: 'frame.snap', text: t('shapes.snap'), toggle: true, on: app.frameTool.snap };
+    const snap: Item = { kind: 'cmd', id: 'frame.snap', text: t('shapes.snap'), toggle: true, on: app.frameTool.snap, icon: ICON.snap };
     const d = app.drawTool;
     if (d.kind === 'rect' || d.kind === 'ellipse') {
       return [
@@ -395,10 +424,10 @@ export function initShapes(app: ShapesAreaApp): void {
         // Before the first node the hint says what to do; then the ways to go on.
         ...(d.count
           ? ([
-              { kind: 'cmd', id: 'draw.undoNode' },
+              { kind: 'cmd', id: 'draw.undoNode', icon: ICON.back },
               { kind: 'cmd', id: 'draw.closeArea' },
               { kind: 'cmd', id: 'draw.finishLine' },
-              { kind: 'cmd', id: 'draw.cancel' },
+              { kind: 'cmd', id: 'draw.cancel', icon: ICON.cancel },
             ] as Item[])
           : [{ kind: 'hint', text: t('shapes.opt.pen') } as Item]),
       ];
@@ -408,9 +437,9 @@ export function initShapes(app: ShapesAreaApp): void {
         { kind: 'title', text: t('shapes.tool.cut'), title: t('shapes.tool.cut.hint') },
         ...(d.count
           ? ([
-              { kind: 'cmd', id: 'draw.undoNode' },
+              { kind: 'cmd', id: 'draw.undoNode', icon: ICON.back },
               { kind: 'cmd', id: 'draw.finishLine', text: t('shapes.cut.finish'), primary: d.count >= 2 },
-              { kind: 'cmd', id: 'draw.cancel' },
+              { kind: 'cmd', id: 'draw.cancel', icon: ICON.cancel },
             ] as Item[])
           : ([{ kind: 'hint', text: t('shapes.opt.cut') }, { kind: 'sep' }, { kind: 'cmd', id: 'tool.select', text: t('object.editDone'), primary: true }] as Item[])),
       ];
@@ -420,14 +449,15 @@ export function initShapes(app: ShapesAreaApp): void {
     const s = app.shapeTool;
     if (s.active) {
       const items: Item[] = [
-        { kind: 'title', text: t('shapes.shape.title'), title: t(s.band !== null ? 'shape.hint.band' : s.rails ? 'shape.hint.rails' : 'shape.hint') },
+        { kind: 'title', text: t('shapes.shape.title'), title: t(s.band !== null ? 'shape.hint.band' : 'shape.hint') },
         { kind: 'hint', text: `${t('shape.nodes', { n: formatNumber(s.count) })} · ${s.selectedSmooth === null ? t('shape.none') : t(s.selectedSmooth ? 'shape.node.smooth' : 'shape.node.corner')}` },
-        { kind: 'cmd', id: 'shape.nodeDelete' },
-        { kind: 'cmd', id: 'shape.cornerToggle', text: t(s.selectedSmooth ? 'shape.node.corner' : 'shape.node.smooth') },
+        { kind: 'cmd', id: 'shape.nodeDelete', icon: ICON.nodeDelete },
+        // What a tap makes of the selected node.
+        s.selectedSmooth ? { kind: 'cmd', id: 'shape.cornerToggle', icon: ICON.corner, tip: t('shape.node.toCorner') } : { kind: 'cmd', id: 'shape.cornerToggle', icon: ICON.smooth, tip: t('shape.node.toSmooth') },
       ];
-      if (s.count >= SIMPLIFY_FROM) items.push({ kind: 'cmd', id: 'shape.simplify' });
-      if (canRun('shape.closeLine')) items.push({ kind: 'cmd', id: 'shape.closeLine' });
-      if (canRun('shape.openLine')) items.push({ kind: 'cmd', id: 'shape.openLine' });
+      if (s.count >= SIMPLIFY_FROM) items.push({ kind: 'cmd', id: 'shape.simplify', icon: ICON.simplify, tip: t('shape.simplify.hint') });
+      if (canRun('shape.closeLine')) items.push({ kind: 'cmd', id: 'shape.closeLine', icon: ICON.pathClose, tip: t('shape.path.close.hint') });
+      if (canRun('shape.openLine')) items.push({ kind: 'cmd', id: 'shape.openLine', icon: ICON.pathOpen, tip: t('shape.path.open.hint') });
       // Fertig as in the bar of the stitches by hand: back to the objects (as Esc). The level Stiche
       // is in the crumb's menu and on the key E.
       items.push({ kind: 'sep' }, snap, { kind: 'cmd', id: 'level.up', text: t('object.editDone'), primary: true });
@@ -457,7 +487,7 @@ export function initShapes(app: ShapesAreaApp): void {
 
   function renderBar(): void {
     const items = barItems();
-    const key = JSON.stringify(items.map((i) => (i.kind === 'cmd' ? [i.id, i.text, i.on, canRun(i.id)] : i)));
+    const key = JSON.stringify(items.map((i) => (i.kind === 'cmd' ? [i.id, i.text, i.on, i.icon, canRun(i.id)] : i)));
     if (key === barKey) return;
     barKey = key;
     bar.hidden = !items.length;
@@ -469,20 +499,24 @@ export function initShapes(app: ShapesAreaApp): void {
         if (i.kind === 'sep') return h('span', { class: 'opt-sep', 'aria-hidden': 'true' });
         const c = getCommand(i.id)!;
         const key = c.keys?.[0];
-        const hint = i.id === 'frame.snap' ? t('shapes.snap.hint') : i.id === 'draw.square' ? t('shapes.opt.square.hint') : i.id === 'draw.center' ? t('shapes.opt.center.hint') : t(c.label);
-        return h(
+        const hint = i.tip ?? (i.id === 'frame.snap' ? t('shapes.snap.hint') : i.id === 'draw.square' ? t('shapes.opt.square.hint') : i.id === 'draw.center' ? t('shapes.opt.center.hint') : t(c.label));
+        const b = h(
           'button',
           {
             type: 'button',
-            class: `opt${i.toggle ? ' opt-toggle' : ''}${i.primary ? ' primary' : ''}`,
+            class: `opt${i.toggle ? ' opt-toggle' : ''}${i.primary ? ' primary' : ''}${i.icon ? ' opt-icon' : ''}`,
             disabled: !canRun(c),
             title: `${hint}${key ? ` (${keyLabel(key)})` : ''}`,
             'aria-pressed': i.toggle ? String(!!i.on) : undefined,
+            // An icon only: its words are the name (and the tooltip says what it does).
+            'aria-label': i.icon ? (i.text ?? t(c.label)) : undefined,
             onclick: () => runCommand(i.id),
           },
-          i.toggle ? h('span', { class: 'opt-check', 'aria-hidden': 'true' }) : null,
-          i.text ?? t(c.label),
+          i.toggle && !i.icon ? h('span', { class: 'opt-check', 'aria-hidden': 'true' }) : null,
+          i.icon ? null : (i.text ?? t(c.label)),
         );
+        if (i.icon) b.insertAdjacentHTML('beforeend', i.icon);
+        return b;
       }),
     );
   }

@@ -36,7 +36,7 @@ function shaded(shadow: Partial<LineShadow> = {}, before = false): Pattern {
   const objs = sewObjects(p);
   const o = objs[objs.length - 1];
   const st = { ...lineSettings(p, o), shadow: { color: grey, link: 's1', angle: 45, dist: Math.SQRT2, ...shadow } };
-  const r = resewLine(p, o.index, remembered(p, o)!.path!, st, T)!;
+  const r = resewLine(p, o.index, remembered(p, o)!.geo!, st, T)!;
   return syncBorders(r.pattern, T);
 }
 
@@ -86,7 +86,7 @@ describe('shadow of a line', () => {
     const p = shaded();
     const o = sewObjects(p)[1];
     const st = { ...lineSettings(p, o), shadow: undefined };
-    const r = resewLine(p, 1, remembered(p, o)!.path!, st, T)!;
+    const r = resewLine(p, 1, remembered(p, o)!.geo!, st, T)!;
     const q = syncBorders(r.pattern, T);
     expect(sewObjects(q)).toHaveLength(1);
     const alone = deleteObjects(p, [0], T)!;
@@ -106,7 +106,7 @@ describe('shadow of a line', () => {
     const a = addShape(empty, { form: parsePath('M0 0 L30 0', ID), kind: 'stroke', width: 0.4 }, red, null, options)!;
     const o = sewObjects(a.pattern)[0];
     const st = { ...lineSettings(a.pattern, o), echo: { side: 'out' as const, count: 3, gap: 3, cut: true, colors: [null, blue, blue], link: 'e1' } };
-    const r = resewLine(a.pattern, 0, remembered(a.pattern, o)!.path!, st, T)!;
+    const r = resewLine(a.pattern, 0, remembered(a.pattern, o)!.geo!, st, T)!;
     const p = syncBorders(r.pattern, T);
     const objs = sewObjects(p);
     expect(objs).toHaveLength(2);
@@ -135,7 +135,7 @@ describe('shadow of a line', () => {
       const objs = sewObjects(p);
       const o = objs[objs.length - 1];
       const st = { ...lineSettings(p, o), shadow: { color: grey, link, angle, dist: 2 } };
-      p = syncBorders(resewLine(p, o.index, remembered(p, o)!.path!, st, T)!.pattern, T);
+      p = syncBorders(resewLine(p, o.index, remembered(p, o)!.geo!, st, T)!.pattern, T);
     }
     const q = p;
     const objs = sewObjects(q);
@@ -153,14 +153,14 @@ describe('shadow of a line', () => {
       p = addShape(p, { form: parsePath('M0 0 L30 0', ID), kind: 'stroke', width: 0.4 }, red, null, options)!.pattern;
       const o = sewObjects(p)[0];
       const st = { ...lineSettings(p, o), repeat, shadow: { color: grey, link: 's1', angle: 45, dist: 0 } };
-      const under = syncBorders(resewLine(p, o.index, remembered(p, o)!.path!, st, T)!.pattern, T);
+      const under = syncBorders(resewLine(p, o.index, remembered(p, o)!.geo!, st, T)!.pattern, T);
       const objs = sewObjects(under);
       expect(objs).toHaveLength(1);
       // The line keeps its shadow, so moving it out brings it back in its thread.
       expect(remembered(under, objs[0])?.line?.shadow?.dist).toBe(0);
-      const out = syncBorders(resewLine(under, 0, remembered(under, objs[0])!.path!, { ...st, shadow: { ...st.shadow, dist: 1 } }, T)!.pattern, T);
+      const out = syncBorders(resewLine(under, 0, remembered(under, objs[0])!.geo!, { ...st, shadow: { ...st.shadow, dist: 1 } }, T)!.pattern, T);
       expect(sewObjects(out).map((x) => remembered(out, x)?.shadowOf)).toEqual(['s1', undefined]);
-      const back = syncBorders(resewLine(out, 1, remembered(out, sewObjects(out)[1])!.path!, st, T)!.pattern, T);
+      const back = syncBorders(resewLine(out, 1, remembered(out, sewObjects(out)[1])!.geo!, st, T)!.pattern, T);
       expect(sewObjects(back)).toHaveLength(1);
     }
   });

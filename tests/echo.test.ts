@@ -45,7 +45,7 @@ function echoed(path: string, echo = { side: 'out' as const, count: 2, gap: 3 })
   const a = addShape(empty, { form: parsePath(path, ID), kind: 'stroke', width: 0.4 }, red, null, options)!;
   const o = sewObjects(a.pattern)[0];
   const st = { ...lineSettings(a.pattern, o), echo };
-  return resewLine(a.pattern, 0, remembered(a.pattern, o)!.path!, st, options.trimMm)!;
+  return resewLine(a.pattern, 0, remembered(a.pattern, o)!.geo!, st, options.trimMm)!;
 }
 
 describe('echo of a line', () => {
@@ -96,7 +96,7 @@ describe('echo of a line', () => {
     expect(sewObjects(r.pattern)).toHaveLength(1);
     const pts = points(r.pattern, o.first, o.last);
     // Stitches on the copies, up to 6 mm from the line.
-    const line = flatten(remembered(r.pattern, o)!.path!.paths[0]);
+    const line = flatten(remembered(r.pattern, o)!.geo!.paths[0]);
     const far = Math.max(...pts.map((q) => distTo(line, q)));
     expect(far).toBeGreaterThan(5.8);
     expect(far).toBeLessThan(6.3);
@@ -109,7 +109,7 @@ describe('echo of a line', () => {
     stored.objects[0].memory.line.echo = { side: 'up', count: 99, gap: -1 };
     restoreRemembered(r.pattern, stored);
     expect(remembered(r.pattern, o)?.line?.echo).toBeUndefined();
-    expect(remembered(r.pattern, o)?.path).toBeDefined();
+    expect(remembered(r.pattern, o)?.geo).toBeDefined();
   });
 
   it('stays when the stitch changes, and when the line is copied or scaled', () => {
@@ -136,7 +136,7 @@ describe('echo of a line', () => {
     const o = sewObjects(m.pattern)[0];
     expect(lineSettings(m.pattern, o).echo?.side).toBe('in');
     // Sewn anew from what it remembers: still below, where the mirror put it.
-    const again = resewLine(m.pattern, 0, remembered(m.pattern, o)!.path!, lineSettings(m.pattern, o), 7)!;
+    const again = resewLine(m.pattern, 0, remembered(m.pattern, o)!.geo!, lineSettings(m.pattern, o), 7)!;
     const ys = points(again.pattern, again.first, again.last).map((q) => q[1]);
     expect(Math.max(...ys)).toBeGreaterThan(5.5);
     expect(Math.min(...ys)).toBeGreaterThan(-0.2);
@@ -160,7 +160,7 @@ describe('echo of a line', () => {
     const objs = sewObjects(r.pattern, kinds);
     const m = transformSewObject(r.pattern, objs, objs[0], kinds, [-1, 0, 0, 1, 40, 0], 7)!;
     const o = sewObjects(m.pattern)[0];
-    const again = resewLine(m.pattern, 0, remembered(m.pattern, o)!.path!, lineSettings(m.pattern, o), 7)!;
+    const again = resewLine(m.pattern, 0, remembered(m.pattern, o)!.geo!, lineSettings(m.pattern, o), 7)!;
     expect(points(m.pattern, o.first, o.last)).toEqual(points(again.pattern, again.first, again.last));
   });
 
@@ -179,7 +179,7 @@ describe('echo of a line', () => {
     const a = addShape(empty, { form: parsePath('M0 0 L30 0', ID), kind: 'stroke', width: 0.4 }, red, null, options)!;
     const o = sewObjects(a.pattern)[0];
     const st = { ...lineSettings(a.pattern, o), type: 'e' as const, width: 2, echo: { side: 'out' as const, count: 2, gap: 4 } };
-    const r = resewLine(a.pattern, 0, remembered(a.pattern, o)!.path!, st, options.trimMm)!;
+    const r = resewLine(a.pattern, 0, remembered(a.pattern, o)!.geo!, st, options.trimMm)!;
     const ys = points(r.pattern, r.first, r.last).map((q) => q[1]);
     // The line at 0, its copies at -4 and -8, all prongs pointing the same way (down).
     for (const y of ys) expect([0, -4, -8].some((l) => y > l - 0.2 && y < l + 2.2)).toBe(true);

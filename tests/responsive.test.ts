@@ -135,6 +135,23 @@ describe.skipIf(!on)('narrow screens', () => {
     await ctx.close();
   });
 
+  it('a phone: a fill\'s outline is opened with the icon in the bar, and the fill is sewn as a line', { timeout: 40_000 }, async () => {
+    const [ctx, page] = await open(390, 844);
+    // Drawn, the rectangle is on the level Form already.
+    await drawRect(page);
+    // A corner tapped (where the drag started): the path opens after it.
+    await page.touchscreen.tap(100, 250);
+    await page.waitForTimeout(400);
+    await page.getByRole('button', { name: /^(Pfad öffnen|Open path)$/ }).tap();
+    await page.waitForTimeout(1200);
+    expect(await page.locator('body').innerText()).toMatch(/Offene Form|Open shape/);
+    // Closed again with the icon in its place: it says it can be filled again.
+    await page.getByRole('button', { name: /^(Pfad schließen|Close path)$/ }).tap();
+    await page.waitForTimeout(1200);
+    expect(await page.locator('body').innerText()).toMatch(/wieder geschlossen|closed again/);
+    await ctx.close();
+  });
+
   it('a phone: a single rung is deleted with the button in the bar (no Entf key)', { timeout: 40_000 }, async () => {
     const [ctx, page] = await open(390, 844);
     await drawRect(page);
@@ -143,7 +160,7 @@ describe.skipIf(!on)('narrow screens', () => {
     await fingerDrag(page, [150, 230], [150, 350]);
     await fingerDrag(page, [230, 230], [230, 350]);
     const bar = page.locator('.stitch-bar');
-    const del = bar.locator('button', { hasText: /^Löschen$|^Delete$/ });
+    const del = bar.getByRole('button', { name: /^(Die gewählte Linie löschen|Delete the selected line)$/ });
     // A tap on the first rung selects it (a new one is selected as drawn); the button removes that one only.
     await page.touchscreen.tap(150, 290);
     await page.waitForTimeout(500);

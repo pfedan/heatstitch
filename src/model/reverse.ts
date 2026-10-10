@@ -3,8 +3,9 @@ import { reorder } from './order';
 import type { Pattern } from './pattern';
 import { measureFill, measureSatin, remembered, restitch, type RestitchResult, type SettingsFor } from './restitch';
 import { recordOfStitch, stitchKinds, stitchNumbers } from './sequence';
-import { lineOf, lineSettings, resewLine } from './line';
+import { lineSettings, resewLine } from './line';
 import type { Form } from '../shape/path';
+import { guessLine } from './geo';
 
 /**
  * Sewing satins and fills from the other side: start and end swap. A satin column is sewn from
@@ -14,13 +15,6 @@ import type { Form } from '../shape/path';
  */
 
 export const reversible = (o: SewObject) => o.kind === 'fill' || o.kind === 'satin';
-
-/** A line: drawn (it remembers its curve) or the running stitch of a file, read as one. Turned by its curve (reverseLines). */
-export function isLine(p: Pattern, o: SewObject): boolean {
-  const m = remembered(p, o);
-  if (m?.path) return true;
-  return o.kind === 'run' && !m?.outline && !m?.lettering;
-}
 
 /** The same curves, drawn the other way round: the last path first, each from its end (a closed one from the same node). */
 export function reversedForm(f: Form): Form {
@@ -48,7 +42,7 @@ export function reverseLines(p: Pattern, which: number[], trimMm: number): { pat
   for (const index of which) {
     const kinds = stitchKinds(pattern);
     const o = sewObjects(pattern, kinds)[index];
-    const path = o && lineOf(pattern, o, kinds);
+    const path = o && guessLine(pattern, o, kinds);
     if (!o || !path) {
       failed.push(index);
       continue;

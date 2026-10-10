@@ -17,12 +17,12 @@ describe('kind switch', () => {
     expect(kindWay(fill({ draw: { single: false, tool: false } }), 'satin')).toBeNull();
   });
 
-  it('makes a closed fill a line of its edge, and fills it again', () => {
-    expect(kindWay(fill(), 'line')).toBe('empty');
-    const empty = fill({ now: 'line', empty: true });
-    expect(kindWay(empty, 'fill')).toBe('fill');
-    expect(kindWay(empty, 'satin')).toBeNull();
-    expect(kindWay(empty, 'line')).toBeNull();
+  it('makes a fill a line along its paths, and fills that line again', () => {
+    expect(kindWay(fill(), 'line')).toBe('convert');
+    const was = { now: 'line' as const, lineFills: true };
+    expect(kindWay(was, 'fill')).toBe('convert');
+    expect(kindWay(was, 'satin')).toBeNull();
+    expect(kindWay(was, 'line')).toBeNull();
   });
 
   it('keeps a fill made from a line going back to its line', () => {

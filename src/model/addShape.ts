@@ -55,7 +55,7 @@ export function addLine(p: Pattern, form: Form, st: PathStitch, color: ThreadCol
   const r = insertObject(p, runRecords(runs, options.trimMm), color, after, options.trimMm);
   if (!r) return null;
   const obj = sewObjects(r.pattern).find((o) => stitchesBefore(r.pattern, o.first) === r.start);
-  if (obj) remember(r.pattern, obj, { region: null, path: form, line: { ...st } });
+  if (obj) remember(r.pattern, obj, { region: null, geo: form, line: { ...st } });
   return r;
 }
 

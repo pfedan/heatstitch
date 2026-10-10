@@ -14,6 +14,7 @@ import { thinSweeps } from '../thin';
 import { cellDiff, countingCells, openFor, type FixKind } from './cells';
 import { objectsOf } from './units';
 import { validateDesign } from './validate';
+import { lineGeoOf } from '../../model/geo';
 
 /**
  * The fine stage: stitch work that does not show, on objects whose settings cannot be changed here
@@ -56,7 +57,7 @@ export function fineObjects(p: Pattern, skip: Set<number>): Set<number> {
     if (skip.has(o.index)) continue;
     const m = remembered(p, o);
     if (m?.lock || m?.free || m?.lettering) continue;
-    const here = !!(m?.fill || m?.satin || m?.path);
+    const here = !!(m?.fill || m?.satin || lineGeoOf(m));
     if (!here || m?.hand) out.add(o.index);
   }
   return out;

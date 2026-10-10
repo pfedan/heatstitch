@@ -3,6 +3,7 @@ import { sewObjects, type SewObject } from './objects';
 import { carryOver, keepShape, remember, remembered, type Remembered } from './restitch';
 import { partOf } from './shadow';
 import { recordOfStitch, stitchKinds, stitchNumbers } from './sequence';
+import { geoOf } from './geo';
 
 /** What a hand edit did, so the objects it touched can keep what they remember. */
 export type HandChange = { moved: number[] } | { removed: number[] } | { inserted: number; count?: number };
@@ -27,7 +28,7 @@ export function objectView(p: Pattern): ObjectView {
 
 /**
 /** Whether an object has a shape of its own its stitches can be loosed from (and sewn from again). */
-export const loosable = (m: Remembered | undefined): boolean => !!m && !m.read && !m.lettering && !m.outline && !m.blendOf && !partOf(m) && !!(m.region || m.form || m.path || m.columns);
+export const loosable = (m: Remembered | undefined): boolean => !!m && !m.read && !m.lettering && !m.outline && !m.blendOf && !partOf(m) && !!(m.region || geoOf(m) || m.columns);
 
 /**
  * After a change made point by point (`p` became `next`), the objects it touched stay what they

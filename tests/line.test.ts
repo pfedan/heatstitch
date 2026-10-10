@@ -4,13 +4,14 @@ import { fillToLine, lineSettings, lineToFill, resewLine, traceLine } from '../s
 import { addShape } from '../src/model/addShape';
 import { rememberObjects, sewObjects } from '../src/model/objects';
 import { remember, remembered, rememberedIn, restitch, restoreRemembered, type FillSettings } from '../src/model/restitch';
-import { formOf, reshapeFill, transformSewObject } from '../src/model/reshape';
+import { reshapeFill, transformSewObject } from '../src/model/reshape';
 import { takeOver } from '../src/model/knockout';
 import { stitchKinds } from '../src/model/sequence';
 import { STITCH, type Pattern } from '../src/model/pattern';
 import { parsePath } from '../src/shape/svgPath';
 import { DEFAULT_PROFILE } from '../src/validation/profiles';
 import type { Mat } from '../src/shape/path';
+import { guessArea } from '../src/model/geo';
 
 const ID: Mat = [1, 0, 0, 1, 0, 0];
 const options = digitizeDefaults(DEFAULT_PROFILE);
@@ -31,7 +32,7 @@ describe('drawn lines', () => {
     const a = addShape(empty, { form, kind: 'stroke', width: 0.4 }, red, null, options)!;
     const [o] = sewObjects(a.pattern);
     expect(o.kind).toBe('run');
-    expect(remembered(a.pattern, o)?.path).toBeDefined();
+    expect(remembered(a.pattern, o)?.geo).toBeDefined();
     const pts = points(a.pattern, o.first, o.last);
     // Every penetration lies on the line (the corner is one of them).
     for (const [x, y] of pts) expect(Math.min(Math.abs(y), Math.abs(x - 30))).toBeLessThan(0.11);
@@ -47,7 +48,7 @@ describe('drawn lines', () => {
     const next = takeOver(r)!;
     const [o] = sewObjects(next);
     expect(points(next, o.first, o.last).length).toBeGreaterThan(before * 1.8);
-    expect(remembered(next, o)?.path).toBeDefined();
+    expect(remembered(next, o)?.geo).toBeDefined();
   });
 
   it('carry their curves when scaled', () => {
@@ -56,7 +57,7 @@ describe('drawn lines', () => {
     const objs = sewObjects(a.pattern, kinds);
     const r = transformSewObject(a.pattern, objs, objs[0], kinds, [2, 0, 0, 2, 0, 0], 7)!;
     const [o] = sewObjects(r.pattern);
-    const path = remembered(r.pattern, o)?.path;
+    const path = remembered(r.pattern, o)?.geo;
     expect(path?.paths[0].nodes[2].p).toEqual([60, 40]);
     // Still on the (scaled) line, not stretched stitches.
     for (const [x, y] of points(r.pattern, o.first, o.last)) expect(Math.min(Math.abs(y), Math.abs(x - 60))).toBeLessThan(0.11);
@@ -71,7 +72,7 @@ describe('lines of all kinds', () => {
     const [o] = sewObjects(a.pattern);
     expect(o.kind).toBe('satin');
     const m = remembered(a.pattern, o);
-    expect(m?.path).toBeDefined();
+    expect(m?.geo).toBeDefined();
     expect(m?.line?.type).toBe('satin');
     expect(m?.line?.width).toBe(2);
   });
@@ -99,8 +100,8 @@ describe('lines of all kinds', () => {
     const r = resewLine(c.pattern, 1, form, { type: 'satin', width: 2 }, 7)!;
     const objs = sewObjects(r.pattern);
     expect(objs.map((o) => o.kind)).toEqual(['run', 'satin', 'run']);
-    expect(remembered(r.pattern, objs[0])?.path).toBeDefined();
-    expect(remembered(r.pattern, objs[2])?.path).toBeDefined();
+    expect(remembered(r.pattern, objs[0])?.geo).toBeDefined();
+    expect(remembered(r.pattern, objs[2])?.geo).toBeDefined();
   });
 
   it('trace a curve through the running stitch of a file', () => {
@@ -134,21 +135,23 @@ describe('wide line as a fill', () => {
     remember(r.pattern, o, r.memory[0]);
     expect(o.kind).toBe('fill');
     const m = remembered(r.pattern, o)!;
-    expect(m.asLine?.line.width).toBe(5);
-    expect(m.path).toBeUndefined();
+    expect(m.fill).toMatchObject({ lineWidth: 5, lineCap: 'flat' });
+    expect(m.kept?.line?.width).toBe(5);
+    expect(m.geo).toBe(remembered(p, sewObjects(p)[0])!.geo);
     // About the area of a 5 mm band along a curve of about 33 mm.
     expect(m.region!.areaMm2).toBeGreaterThan(140);
     expect(m.region!.areaMm2).toBeLessThan(220);
     // Kept with the project.
     const stored = structuredClone(rememberedIn(r.pattern, [o]));
-    expect(stored.objects[0].memory!.asLine!.line.width).toBe(5);
+    expect(stored.objects[0].memory!.fill!.lineWidth).toBe(5);
     restoreRemembered(r.pattern, stored);
-    expect(remembered(r.pattern, o)?.asLine?.path.paths).toHaveLength(1);
+    expect(remembered(r.pattern, o)?.geo?.paths).toHaveLength(1);
     const back = fillToLine(r.pattern, 0, options.trimMm)!;
     const b = sewObjects(back.pattern)[0];
     expect(b.kind).toBe('satin');
-    expect(remembered(back.pattern, b)).toMatchObject({ path: form, line: { type: 'satin', width: 5 } });
+    expect(remembered(back.pattern, b)).toMatchObject({ geo: form, line: { type: 'satin', width: 5 } });
     expect(remembered(back.pattern, b)?.fill).toBeUndefined();
+    expect(remembered(back.pattern, b)?.kept?.fill?.lineWidth).toBe(5);
   });
 
   it('makes its area from the line each time: no outline of its own, width and ends from the fill, the line edited', () => {
@@ -163,9 +166,9 @@ describe('wide line as a fill', () => {
     };
     const a = take(lineToFill(p, 0, fs, options.trimMm));
     // The line is the shape: no outline traced from its area, and the shape to edit is the line.
-    expect(a.m.form).toBeUndefined();
+    expect(a.m.geo).toEqual(form);
     expect(a.m.fill).toMatchObject({ lineWidth: 5, lineCap: 'flat' });
-    expect(formOf(a.q, a.o, stitchKinds(a.q))).toBe(a.m.asLine!.path);
+    expect(guessArea(a.q, a.o, stitchKinds(a.q))).toBe(a.m.geo);
     // The area is the line in its width, flat at the ends: about 5 × 33 mm.
     expect(a.m.region!.areaMm2).toBeGreaterThan(150);
     expect(a.m.region!.areaMm2).toBeLessThan(185);
@@ -175,11 +178,11 @@ describe('wide line as a fill', () => {
     expect(round.m.region!.areaMm2 - a.m.region!.areaMm2).toBeCloseTo(Math.PI * 2.5 * 2.5, -1);
     const wide = take(restitch(a.q, sewObjects(a.q, kinds), [0], { kind: 'fill', s: { ...a.m.fill!, lineWidth: 8 } }, kinds, options.trimMm));
     expect(wide.m.region!.areaMm2 / a.m.region!.areaMm2).toBeGreaterThan(1.4);
-    expect(wide.m.asLine!.line.width).toBe(8);
+    expect(wide.m.fill!.lineWidth).toBe(8);
     // Its line edited: the area follows the new line.
     const moved = parsePath('M0 20 C10 30 20 10 30 20', ID);
     const e = take(reshapeFill(a.q, sewObjects(a.q, kinds), a.o, kinds, moved, options.trimMm));
-    expect(e.m.asLine!.path).toBe(moved);
+    expect(e.m.geo).toBe(moved);
     expect(e.o.minY / 10).toBeGreaterThan(10);
     // Scaled: the line and its width scale, the area is made anew from them.
     const big = transformSewObject(a.q, sewObjects(a.q, kinds), a.o, kinds, [2, 0, 0, 2, 0, 0], options.trimMm)!;

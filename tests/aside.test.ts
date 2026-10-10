@@ -32,6 +32,8 @@ describe('shapes aside', () => {
     const [a] = asideOf(next);
     expect(a.role).toBe('off');
     expect(a.kind).toBe('fill');
+    // Its own form, not one read from the stitches.
+    expect(a.form).toEqual(remembered(p, disc)?.geo);
     expect(a.form?.paths[0].nodes).toHaveLength(4);
     expect(a.after).toBe(0);
     // The version before has none: undo brings the object back.
@@ -41,7 +43,7 @@ describe('shapes aside', () => {
     expect(nobjs).toHaveLength(3);
     expect(nobjs[1].stitches).toBe(disc.stitches);
     expect(nobjs[1].color).toEqual(disc.color);
-    expect(remembered(back.pattern, nobjs[1])?.form).toBeTruthy();
+    expect(remembered(back.pattern, nobjs[1])?.geo).toBeTruthy();
     expect(asideOf(back.pattern)).toHaveLength(0);
   });
 
@@ -51,6 +53,7 @@ describe('shapes aside', () => {
     const [a] = asideOf(next);
     expect(a.role).toBe('guide');
     expect(a.form?.paths[0].closed).toBe(false);
+    expect(a.form).toEqual(remembered(p, sewObjects(p)[2])?.geo);
     const off = setAsideRole(next, a.id, 'off')!;
     expect(asideOf(off)[0].role).toBe('off');
     expect(sewObjects(off)).toHaveLength(2);

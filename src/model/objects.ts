@@ -323,7 +323,10 @@ function derive(p: Pattern, from?: { p: Pattern; t: Table }, hint?: { joins: Rea
       if (list) list.push(k);
       else starts.set(key, [k]);
     }
-    for (const e of src.t.entries) {
+    // Longer objects first: an object whose stitches lie again inside a longer one (an echo copy
+    // right on its line, gap 0) does not take them from it.
+    const longest = src.t.entries.map((e) => ({ e, m: six.before[e.last] + 1 - six.before[e.first] })).sort((x, y) => y.m - x.m);
+    for (const { e } of longest) {
       if (onlyKnown && !e.memory) continue;
       const a = six.before[e.first];
       const m = six.before[e.last] + 1 - a;

@@ -4,18 +4,19 @@ import { addShape } from '../src/model/addShape';
 import { wholeArea } from '../src/model/knockout';
 import { sewObjects } from '../src/model/objects';
 import type { Pattern } from '../src/model/pattern';
-import { analyze, measureFill, objectKey, remember, remembered, restitch, type FillSettings } from '../src/model/restitch';
+import { analyze, measureFill, objectKey, remember, remembered, restitch, type FillSettings, type RestitchResult } from '../src/model/restitch';
 import { coversOver } from '../src/model/covers';
 import { STITCH } from '../src/model/pattern';
 import { rememberObjects } from '../src/model/objects';
 import { syncBorders } from '../src/model/border';
-import { formOf } from '../src/model/reshape';
 import { stitchKinds } from '../src/model/sequence';
 import { deleteObjects, duplicateObject, duplicateObjects, mirrorMatrix, recolorObjects, subtractTop, unionForm } from '../src/model/shapeOps';
-import { transformSewObject } from '../src/model/reshape';
+import { fillsToLines, transformSewObject } from '../src/model/reshape';
+import { lineToFill } from '../src/model/line';
 import type { Mat } from '../src/shape/path';
 import { ellipsePath, parsePath, rectPath } from '../src/shape/svgPath';
 import { DEFAULT_PROFILE } from '../src/validation/profiles';
+import { guessArea } from '../src/model/geo';
 
 const ID: Mat = [1, 0, 0, 1, 0, 0];
 const options = digitizeDefaults(DEFAULT_PROFILE);
@@ -32,7 +33,7 @@ function design(): Pattern {
 
 const area = (p: Pattern, o: number) => {
   const objs = sewObjects(p);
-  return wholeArea(formOf(p, objs[o], stitchKinds(p))!)!.areaMm2;
+  return wholeArea(guessArea(p, objs[o], stitchKinds(p))!)!.areaMm2;
 };
 
 describe('shape operations', () => {
@@ -41,7 +42,7 @@ describe('shape operations', () => {
     const next = deleteObjects(p, [1], options.trimMm)!;
     expect(sewObjects(next)).toHaveLength(2);
     // The others keep their curves.
-    expect(remembered(next, sewObjects(next)[1])?.form).toBeTruthy();
+    expect(remembered(next, sewObjects(next)[1])?.geo).toBeTruthy();
     const empty = deleteObjects(p, [0, 1, 2], options.trimMm)!;
     expect(empty.cmd).toHaveLength(0);
     expect(sewObjects(empty)).toHaveLength(0);
@@ -57,7 +58,7 @@ describe('shape operations', () => {
     expect(objs).toHaveLength(4);
     expect(d.index).toBe(3);
     expect(objs[3].minX - objs[2].minX).toBeCloseTo(20, -1);
-    expect(remembered(d.pattern, objs[3])?.form).toBeTruthy();
+    expect(remembered(d.pattern, objs[3])?.geo).toBeTruthy();
     expect(objs[3].block).toBe(objs[2].block);
   });
 
@@ -72,7 +73,7 @@ describe('shape operations', () => {
     expect(m.minX).toBeCloseTo(o.minX, -1);
     expect(m.maxX).toBeCloseTo(o.maxX, -1);
     // The wide side of the triangle is on the right now.
-    const form = remembered(r.pattern, m)!.form!;
+    const form = remembered(r.pattern, m)!.geo!;
     expect(Math.max(...form.paths[0].nodes.filter((n) => n.p[1] < 1).map((n) => n.p[0]))).toBeGreaterThan(18);
   });
 
@@ -105,7 +106,7 @@ describe('shape operations', () => {
     expect(objs).toHaveLength(3);
     expect(objs[2].color).toEqual(yellow);
     expect(objs[0].color).toEqual(red);
-    expect(remembered(a, objs[2])?.form).toBeTruthy();
+    expect(remembered(a, objs[2])?.geo).toBeTruthy();
     // In blue, next to the blue disc: sewn along in its thread.
     const b = recolorObjects(p, [2], blue, options.trimMm)!;
     objs = sewObjects(b);
@@ -128,7 +129,7 @@ describe('duplicating', () => {
       const objs = sewObjects(d.pattern);
       expect(objs).toHaveLength(3);
       expect(objs[o + 1].kind).toBe('satin');
-      expect(remembered(d.pattern, objs[o + 1])?.path).toBeTruthy();
+      expect(remembered(d.pattern, objs[o + 1])?.geo).toBeTruthy();
       expect(objs[o + 1].minX - objs[o].minX).toBeCloseTo(20, -1);
     }
   });
@@ -199,7 +200,7 @@ describe('duplicating several, and in place', () => {
       expect(objs[c].minX - objs[o].minX).toBeCloseTo(20, -1);
       expect(objs[c].minY - objs[o].minY).toBeCloseTo(20, -1);
       expect(objs[c].block).toBe(objs[o].block);
-      expect(remembered(d.pattern, objs[c])?.form).toBeTruthy();
+      expect(remembered(d.pattern, objs[c])?.geo).toBeTruthy();
     }
   });
 
@@ -214,7 +215,7 @@ describe('duplicating several, and in place', () => {
     box(d.pattern, 2).forEach((v, k) => expect(Math.abs(v - box(d.pattern, 1)[k])).toBeLessThanOrEqual(3));
     // Different stitches, so each has its own memory (memory is keyed by stitches).
     expect(objectKey(d.pattern, objs[2])).not.toBe(objectKey(d.pattern, objs[1]));
-    expect(remembered(d.pattern, objs[2])?.form).toBeTruthy();
+    expect(remembered(d.pattern, objs[2])?.geo).toBeTruthy();
     // It starts near where the original ends: no long way back.
     const end = objs[1].last;
     const start = objs[2].first;
@@ -228,7 +229,7 @@ describe('duplicating several, and in place', () => {
     const objs = sewObjects(d.pattern);
     expect(objs).toHaveLength(2);
     expect(objectKey(d.pattern, objs[1])).not.toBe(objectKey(d.pattern, objs[0]));
-    expect(remembered(d.pattern, objs[1])?.path).toBeTruthy();
+    expect(remembered(d.pattern, objs[1])?.geo).toBeTruthy();
     box(d.pattern, 1).forEach((v, k) => expect(Math.abs(v - box(d.pattern, 0)[k])).toBeLessThanOrEqual(2));
   });
 
@@ -258,60 +259,76 @@ describe('duplicating several, and in place', () => {
   });
 });
 
-describe('empty fill', () => {
-  it('sews only the border, in the fill\'s thread, and fills again with another pattern', () => {
+/** New stitches taken over as the app does (applyRestitched): each object remembers what it is made of. */
+function take(r: RestitchResult | null, drop: ReadonlySet<string> = new Set()): Pattern {
+  expect(r?.starts.length).toBeGreaterThan(0);
+  r!.starts.forEach((a, k) => rememberObjects(r!.pattern, [a], r!.ends[k]));
+  const objs = sewObjects(r!.pattern);
+  r!.starts.forEach((a, k) => {
+    const at = objs.find((x) => {
+      let n = 0;
+      for (let i = 0; i < x.first; i++) if (r!.pattern.cmd[i] === STITCH) n++;
+      return n === a;
+    })!;
+    remember(r!.pattern, at, r!.memory[k]);
+  });
+  return syncBorders(r!.pattern, options.trimMm, drop);
+}
+
+describe('empty fill: a line along the form', () => {
+  it('sews only the edge, in the fill\'s thread, and fills again as it was', () => {
     const p0 = design();
     const fill = remembered(p0, sewObjects(p0)[0])!.fill!;
-    const bordered = sewWith(p0, 0, { ...fill, border: { type: 'run', width: 2, color: blue, link: 'b1' } });
+    const bordered = sewWith(p0, 0, { ...fill, pattern: 'contour', border: { type: 'run', width: 2, color: blue, link: 'b1' } });
     expect(sewObjects(bordered)).toHaveLength(4);
     const before = sewObjects(bordered)[0].stitches;
-    const p = sewWith(bordered, 0, { ...fill, pattern: 'none', border: { type: 'run', width: 2, color: blue, link: 'b1' } }, ['b1']);
+    const form = remembered(bordered, sewObjects(bordered)[0])!.geo;
+    const r = fillsToLines(bordered, [0], options.trimMm)!;
+    expect([...r.drop]).toEqual(['b1']);
+    const p = take(r, r.drop);
     const objs = sewObjects(p);
-    // The border object went: the empty fill is its border, in the fill's (red) thread.
+    // The border object went: the line is sewn with the border's stitch, in the fill's (red) thread.
     expect(objs).toHaveLength(3);
     expect(objs[0].color).toMatchObject(red);
     expect(objs[0].stitches).toBeLessThan(before / 4);
     const m = remembered(p, objs[0])!;
-    expect(m.fill!.pattern).toBe('none');
-    expect(m.fill!.border).toMatchObject({ type: 'run' });
-    expect(m.fill!.border!.link).toBeUndefined();
-    expect(m.fill!.border!.color).toBeUndefined();
-    expect(m.form).toBeTruthy();
+    expect(m.fill).toBeUndefined();
+    expect(m.geo).toBe(form);
+    expect(m.line).toMatchObject({ type: 'run', width: 2 });
+    expect(m.kept?.fill?.pattern).toBe('contour');
     // Along the edge only: no stitch deep inside the square.
     for (let i = objs[0].first; i <= objs[0].last; i++) {
       if (p.cmd[i] !== STITCH) continue;
       const d = Math.min(p.x[i], p.y[i], 200 - p.x[i], 200 - p.y[i]);
       expect(d).toBeLessThan(15);
     }
-    // Sewn again as it is (another border stitch), it stays empty.
-    const again = sewWith(p, 0, { ...m.fill!, border: { type: 'triple', width: 2 } });
-    expect(sewObjects(again)).toHaveLength(3);
-    expect(remembered(again, sewObjects(again)[0])!.fill!.pattern).toBe('none');
-    // Filled again: the border is an object of its own once more.
-    const filled = sewWith(p, 0, { ...m.fill!, pattern: 'tatami' });
-    expect(sewObjects(filled)).toHaveLength(4);
+    // Filled again: as it was, its line its border (in its thread now).
+    const filled = take(lineToFill(p, 0, fill, options.trimMm));
+    const f = remembered(filled, sewObjects(filled)[0])!;
+    expect(f.fill?.pattern).toBe('contour');
+    expect(f.fill?.border).toMatchObject({ type: 'run', width: 2 });
+    expect(f.geo).toBe(form);
     expect(sewObjects(filled)[0].stitches).toBeGreaterThan(before / 2);
   });
 
   it('covers nothing for the objects below', () => {
     const p0 = design();
-    // The blue disc lies on the red square: it covers part of it, empty it covers nothing.
+    // The blue disc lies on the red square: it covers part of it, as a line it covers nothing.
     const objs0 = sewObjects(p0);
     expect(coversOver(p0, objs0, objs0[0], 0.1).length).toBeGreaterThan(0);
-    const fill = remembered(p0, objs0[1])!.fill!;
-    const p = sewWith(p0, 1, { ...fill, pattern: 'none', border: { type: 'run', width: 2 } });
+    const p = take(fillsToLines(p0, [1], options.trimMm));
     const objs = sewObjects(p);
     expect(coversOver(p, objs, objs[0], 0.1)).toHaveLength(0);
   });
 
-  it('copies in place and mirrors with the border only', () => {
+  it('copies in place with the line only', () => {
     const p0 = design();
-    const fill = remembered(p0, sewObjects(p0)[2])!.fill!;
-    const p = sewWith(p0, 2, { ...fill, pattern: 'none', border: { type: 'triple', width: 2 } });
+    const p = take(fillsToLines(p0, [2], options.trimMm));
     const d = duplicateObjects(p, [2], options.trimMm, 0)!;
     const objs = sewObjects(d.pattern);
     expect(objs).toHaveLength(4);
-    expect(remembered(d.pattern, objs[3])!.fill!.pattern).toBe('none');
+    expect(remembered(d.pattern, objs[3])!.kept?.fill).toBeDefined();
+    expect(remembered(d.pattern, objs[3])!.line).toBeDefined();
     expect(objectKey(d.pattern, objs[3])).not.toBe(objectKey(d.pattern, objs[2]));
   });
 });

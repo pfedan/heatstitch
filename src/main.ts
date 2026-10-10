@@ -39,11 +39,7 @@ import { parsePattern } from './parsers';
 import { ImageMode } from './ui/imageMode';
 import { sweep } from './render/light';
 import { classify } from './validation/validate';
-import {
-  FILL,
-  SATIN,
-  TIE_STITCH,
-} from './model/sequence';
+import { FILL, SATIN, TIE_STITCH } from './model/sequence';
 import { pointNear, stitchAt } from './render/flow';
 import { drawMeasure } from './render/measure';
 import { MeasureTool } from './ui/measureTool';
@@ -54,7 +50,7 @@ import type { LeftOut, SewnFrom } from './ui/imageMode';
 import { asideOf, storeAside, type AsideShape } from './model/aside';
 import { type Digitized } from './digitize/digitize';
 import { numberInColor, rememberObjects, sewObjects } from './model/objects';
-import { isLine, reversible } from './model/reverse';
+import { reversible } from './model/reverse';
 import { Player } from './ui/player';
 import { installPanelResize } from './ui/panelResize';
 import type { Key } from './i18n';
@@ -86,6 +82,7 @@ import { initAmpel } from './areas/ampel/ampel';
 import { initResponsive } from './areas/responsive/responsive';
 import type { ZoneDecision } from './ui/validationPanel';
 import { bindTrace } from './app/trace';
+import { geoUse, sewnAlong } from './model/geo';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -488,6 +485,9 @@ const { canPaste, closeShape, copySelected, deleteSelected, duplicateSelected, p
   get applyEdit() {
     return applyEdit;
   },
+  get history() {
+    return history;
+  },
   get applyRestitched() {
     return applyRestitched;
   },
@@ -813,21 +813,21 @@ function objectInfo(p: Pattern, q: Sequence) {
     threadMm: selected.reduce((a, o) => a + (q.objects[o] ? threadOfRange(p, settings.profile.fabric, q.objects[o].first, q.objects[o].last) : 0), 0),
     editing: editor.active && ui.editObject !== null && selected.length === 1 && selected[0] === ui.editObject ? { selection: editor.selection.size } : null,
     shapeable: selected.length === 1 && (stitchInfo(p, q).free?.on ? !!shapeTarget(p, q, selected[0]) : !!stitchInfo(p, q).measured.fill || !!stitchInfo(p, q).measured.satin || (!!q.objects[selected[0]] && isLineObject(p, q.objects[selected[0]]))),
-    shaping: shapeTool.active && selected.length === 1 && selected[0] === ui.shapeObject ? { nodes: shapeTool.count, smooth: shapeTool.selectedSmooth, ...(shapeTool.band !== null ? { kind: 'band' as const } : shapeTool.rails ? { kind: 'rails' as const } : {}), ...(q.objects[selected[0]] && isLineObject(p, q.objects[selected[0]]) ? { line: { closed: shapeTool.closed } } : {}) } : null,
+    shaping: shapeTool.active && selected.length === 1 && selected[0] === ui.shapeObject ? { nodes: shapeTool.count, smooth: shapeTool.selectedSmooth, ...(shapeTool.band !== null ? { kind: 'band' as const } : {}), ...(q.objects[selected[0]] && isLineObject(p, q.objects[selected[0]]) ? { line: { closed: shapeTool.closed } } : {}) } : null,
     frame: frameTool.active ? { canScale: frameTool.canScale } : null,
     mergeBlocked: selected.length > 1 ? mergeBlocked(selected.map((o) => q.objects[o])) : null,
-    reversible: selected.some((o) => reversible(q.objects[o]) || isLine(p, q.objects[o])),
+    reversible: selected.some((o) => reversible(q.objects[o]) || sewnAlong(p, q.objects[o])),
     subtractable: selected.length > 1 && selected.every((o) => q.objects[o].kind === 'fill'),
     ...blendOf(p, q, selected),
   };
 }
 
-/** The one selected fill can blend into a second thread when it knows its area and is not a line (an empty fill shows as one). */
+/** The one selected fill can blend into a second thread when it knows its area and is not a band. */
 function blendOf(p: Pattern, q: Sequence, selected: number[]): { blend?: ThreadColor } {
   if (selected.length !== 1 || editor.active) return {};
   const o = q.objects[selected[0]];
   const known = o && remembered(p, o);
-  return known?.fill && known.region && !known.asLine && !known.blendOf && known.fill.pattern !== 'none' && !isOpenPattern(known.fill.pattern) ? { blend: o.color } : {};
+  return known?.fill && known.region && geoUse(known) !== 'band' && !known.blendOf && !isOpenPattern(known.fill.pattern) ? { blend: o.color } : {};
 }
 
 // Rendering ------------------------------------------------------------------

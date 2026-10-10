@@ -4,9 +4,10 @@ import { sewObjects } from '../src/model/objects';
 import { measureRun, restitch, analyze } from '../src/model/restitch';
 import { stitchKinds } from '../src/model/sequence';
 import { parsePattern } from '../src/parsers';
-import { lineOf, lineSettings, lineStitches } from '../src/model/line';
+import { lineSettings, lineStitches } from '../src/model/line';
 import { writePes } from '../src/writers/pes';
 import { Writer, type Pt } from './helpers/designs';
+import { guessLine } from '../src/model/geo';
 
 /** A line of running stitches sewn the way hobby designs sew their details, read back from a file. */
 function read(sew: (w: Writer) => void): Pattern {
@@ -94,7 +95,7 @@ describe('a line sewn anew', () => {
     const o = sewObjects(p, kinds).find((x) => x.kind === 'run')!;
     const st = lineSettings(p, o, kinds);
     expect(st.type).toBe('run');
-    const runs = lineStitches(lineOf(p, o, kinds)!, { ...st, length: 3 });
+    const runs = lineStitches(guessLine(p, o, kinds)!, { ...st, length: 3 });
     const tip = branch[branch.length - 1];
     const pts = runs.flat();
     expect(Math.min(...pts.map((q) => Math.hypot(q[0] - tip[0], q[1] - tip[1])))).toBeLessThan(0.3);

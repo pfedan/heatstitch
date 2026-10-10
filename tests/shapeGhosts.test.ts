@@ -37,9 +37,6 @@ describe('new nodes dragged out of hollow dots', () => {
     expect(t.ghosts(3).filter((x) => x.part === 'mid')).toHaveLength(1);
     const closed = tool(parsePath('M0 0 L20 0 L20 10 Z', [1, 0, 0, 1, 0, 0])).t;
     expect(closed.ghosts(4).some((x) => x.part === 'end')).toBe(false);
-    // A satin's rails are not made longer.
-    t.rails = true;
-    expect(t.ghosts(4).some((x) => x.part === 'end')).toBe(false);
   });
 
   it('a dot pressed puts the node in, dragged it follows, released it is taken over as one step', () => {

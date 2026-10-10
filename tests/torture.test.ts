@@ -78,7 +78,7 @@ describe('a satin with a fringe', () => {
     const m = remembered(d.cur.p, d.objects[0])!;
     expect(m.line?.type, 'a satin line').toBe('satin');
     const plain = Array.from(d.cur.p.y);
-    const r = resewLine(d.cur.p, 0, m.path!, { ...m.line!, fringe: 1.5, fringeSide: 'left' }, T)!;
+    const r = resewLine(d.cur.p, 0, m.geo!, { ...m.line!, fringe: 1.5, fringeSide: 'left' }, T)!;
     expect(Array.from(r.pattern.y), 'other stitches').not.toEqual(plain);
     expect(shapes(d, r.pattern)).toBe(true);
     checkAll(d);
@@ -137,7 +137,7 @@ describe('versions keep what they knew', () => {
       const q = other(i);
       remember(q, sewObjects(q)[0], { region: null });
     }
-    expect(remembered(first.p, sewObjects(first.p)[0])?.form).toBeTruthy();
+    expect(remembered(first.p, sewObjects(first.p)[0])?.geo).toBeTruthy();
     expect(knowledge(first.p)).toEqual(first.known);
   });
 

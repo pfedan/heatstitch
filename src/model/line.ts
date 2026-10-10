@@ -8,16 +8,18 @@ import { rasterize } from '../shape/rasterize';
 import { hasPhase, isRunType, passesOf, sewAlong, spacingOf, type PathStitch } from './along';
 import { runRecords } from './border';
 import { tidy, withRecords } from './edit';
-import { rememberObjects, sewObjects, type SewObject } from './objects';
+import { rememberObjects, sewObjects, stitchKey, type SewObject } from './objects';
 import { JUMP, STITCH, type Pattern } from './pattern';
-import { lineFillArea, lineFillOf, remember, remembered, restitch, trimBefore, type FillSettings, type LineFill, type Rec, type Remembered, type RestitchResult, type RunSettings } from './restitch';
+import { analyze, measureFill, objectKey, remember, remembered, restitch, trimBefore, type FillSettings, type Rec, type Remembered, type RestitchResult, type RunSettings } from './restitch';
 import { stitchKinds, TIE_STITCH } from './sequence';
+import { bandArea, fits, geoOf, geoUse, guessArea, lineGeoOf } from './geo';
+import { partOf } from './shadow';
 
 /**
  * Lines: sewn along their curves with the same stitches as the border of a fill (along.ts), so
  * they stay exactly where they were drawn and follow every change of their nodes. The object
- * remembers the line as `path` and how it is sewn as `line` (running or bean stitch, satin, zigzag
- * or E stitch).
+ * remembers its paths as its form (`geo`) and how it is sewn along them as `line` (running or bean
+ * stitch, satin, zigzag or E stitch).
  * Running stitches without curves (from a PES or DST file) get one traced through their stitches
  * the first time they are changed as a line.
  */
@@ -250,15 +252,6 @@ export function traceLine(pts: Pt[]): Form | null {
   return { paths: [{ closed, nodes }] };
 }
 
-/** The curves of a line object: remembered, or traced through its running stitches. */
-export function lineOf(p: Pattern, o: SewObject, kinds?: Uint8Array): Form | null {
-  const known = remembered(p, o)?.path;
-  if (known) return known;
-  if (o.kind !== 'run') return null;
-  const paths = runWays(p, o.first, o.last, kinds ?? stitchKinds(p)).flatMap((w) => traceLine(w)?.paths ?? []);
-  return paths.length ? { paths } : null;
-}
-
 /** How a line object is sewn now. */
 export function lineSettings(p: Pattern, o: SewObject, kinds?: Uint8Array): PathStitch {
   const known = remembered(p, o);
@@ -281,6 +274,16 @@ export function lineSettings(p: Pattern, o: SewObject, kinds?: Uint8Array): Path
  * otherwise stays. Null when nothing could be sewn.
  */
 export function resewLine(p: Pattern, index: number, path: Form, st: PathStitch, trimMm: number, reverse = false): { pattern: Pattern; first: number; last: number } | null {
+  const r = resewOnce(p, index, path, st, trimMm, reverse);
+  if (!r) return r;
+  // New stitches that are the very stitches of another object (a copy lying exactly on its
+  // original): sewn from the other end, so each remembers its own (memory is keyed by stitches).
+  const keys = sewObjects(r.pattern).filter((x) => x.first !== r.first).map((x) => objectKey(r.pattern, x));
+  if (!keys.includes(stitchKey(r.pattern, r.first, r.last))) return r;
+  return resewOnce(p, index, path, st, trimMm, !reverse) ?? r;
+}
+
+function resewOnce(p: Pattern, index: number, path: Form, st: PathStitch, trimMm: number, reverse: boolean): { pattern: Pattern; first: number; last: number } | null {
   const objs = sewObjects(p);
   const o = objs[index];
   if (!o) return null;
@@ -311,7 +314,7 @@ export function resewLine(p: Pattern, index: number, path: Form, st: PathStitch,
   const fresh = sewObjects(next).find((x) => stitchesUpTo(next, x.first) === before);
   if (!fresh) return null;
   const known = remembered(p, o);
-  const memory: Remembered = { ...(known ?? { region: null }), region: null, path, line: { ...st }, id: o.id };
+  const memory: Remembered = { ...(known ?? { region: null }), region: null, geo: path, line: { ...st }, id: o.id };
   // Stitches set by hand are gone with the old ones.
   delete memory.hand;
   delete memory.free;
@@ -326,81 +329,105 @@ function stitchesUpTo(p: Pattern, record: number): number {
 }
 
 /**
- * A wide line sewn as a fill of the area it covers. The line stays its shape (`asLine`): the area
- * is made from it each time (in the fill's lineWidth, with flat or round ends), its curve is what
- * is edited, and it can be a line again. Null when the line has no area.
+ * A line sewn as a fill, its paths staying its form and its stitch kept to switch back (see
+ * fillToLine): the area its closed paths enclose, the line staying on its edge as the fill's
+ * border (`area`), or the band along its paths in its width (`band`, a wide line or one with open
+ * paths). A line that was a fill is filled as it was. Null when there is nothing to fill.
  */
-export function lineToFill(p: Pattern, index: number, s: FillSettings, trimMm: number): RestitchResult | null {
+export function lineToFill(p: Pattern, index: number, s: FillSettings, trimMm: number, how: 'area' | 'band' = fillOfLine(p, index) ?? 'band'): RestitchResult | null {
   const kinds = stitchKinds(p);
   const objs = sewObjects(p, kinds);
   const o = objs[index];
   const known = o && remembered(p, o);
-  if (!o || !known?.path || !known.line) return null;
-  const asLine: LineFill = { path: known.path, line: { ...known.line }, cap: 'flat' };
-  const fill: FillSettings = { ...s, lineWidth: known.line.width, lineCap: 'flat' };
-  const area = lineFillArea(asLine, fill);
+  const geo = lineGeoOf(known);
+  if (!o || !known?.line || !geo || known.free) return null;
+  const line = known.line;
+  const was = known.kept?.fill;
+  let fill: FillSettings;
+  if (how === 'band') fill = { ...(was ?? s), lineWidth: was?.lineWidth ?? line.width, lineCap: was?.lineCap ?? 'flat' };
+  else {
+    if (!fits(geo, 'fill')) return null;
+    // The line its border, as it is sewn now (a fill that had none gets none again); its echo
+    // and shadow go: they belong to a line.
+    const { echo: _e, shadow: _s, fringe: _f, fringeSide: _fs, ...border } = line;
+    const { lineWidth: _w, lineCap: _c, border: _b, ...rest } = was ?? s;
+    fill = { ...rest, ...(!was || was.border ? { border } : {}) };
+  }
+  const area = how === 'band' ? bandArea(geo, fill) : rasterize(geo);
   if (!area) return null;
   const r = restitch(p, objs, [index], { kind: 'fill', s: fill }, kinds, trimMm, o.kind, false, undefined, new Map([[index, area]]));
   r.memory.forEach((m) => {
-    delete m.form;
-    m.asLine = asLine;
+    m.geo = geo;
+    const { fill: _k, ...kept } = m.kept ?? {};
+    m.kept = { ...kept, line: structuredClone(line) };
   });
   return r;
 }
 
-/** Whether a line's form is closed all round (it encloses an area that can be filled). */
-export const closedForm = (f: Form | null | undefined): boolean => !!f?.paths.length && f.paths.every((x) => x.closed);
-
-/**
- * A closed line filled inside with `s` (the area its loops enclose, even-odd), the line staying on
- * its edge as the fill's border with its stitch; its echo and shadow go. The fill remembers the line
- * as its outline. Null when the line is open or encloses nothing.
- */
-export function closedLineToFill(p: Pattern, index: number, s: FillSettings, trimMm: number): RestitchResult | null {
-  const kinds = stitchKinds(p);
-  const objs = sewObjects(p, kinds);
-  const o = objs[index];
+/** How line `index` is filled (see lineToFill): as it was, else inside when it is closed all round, else in its width. Null for no line. */
+export function fillOfLine(p: Pattern, index: number): 'area' | 'band' | null {
+  const o = sewObjects(p)[index];
   const known = o && remembered(p, o);
-  if (!o || !known?.path || !known.line || known.free || !closedForm(known.path)) return null;
-  const area = rasterize(known.path);
-  if (!area) return null;
-  const { echo: _e, shadow: _s, fringe: _f, fringeSide: _fs, ...border } = known.line;
-  const r = restitch(p, objs, [index], { kind: 'fill', s: { ...s, border } }, kinds, trimMm, o.kind, false, undefined, new Map([[index, area]]));
-  r.memory.forEach((m) => {
-    m.form = known.path!;
-    delete m.path;
-    delete m.line;
-  });
-  return r;
+  const geo = lineGeoOf(known);
+  if (!geo) return null;
+  if (known!.kept?.fill) return known!.kept.fill.lineWidth !== undefined ? 'band' : 'area';
+  return fits(geo, 'fill') ? 'area' : 'band';
 }
 
-/** A fill along a line sewn along `path` now (its line edited on the level Shape, or scaled with `width`). */
+/** A band sewn along `path` now (its paths edited on the level Form, or scaled with `width`). */
 export function reshapeLineFill(p: Pattern, objs: SewObject[], o: SewObject, kinds: Uint8Array, path: Form, trimMm: number, width?: number): RestitchResult | null {
   const known = remembered(p, o);
-  if (!known?.asLine || !known.fill) return null;
-  const fill: FillSettings = width === undefined ? known.fill : { ...known.fill, lineWidth: width };
-  const asLine: LineFill = { ...lineFillOf(known.asLine, fill), path };
-  const area = lineFillArea(asLine);
+  if (geoUse(known) !== 'band') return null;
+  const fill: FillSettings = width === undefined ? known!.fill! : { ...known!.fill!, lineWidth: width };
+  const area = bandArea(path, fill);
   if (!area) return null;
   const r = restitch(p, objs, [o.index], { kind: 'fill', s: fill }, kinds, trimMm, undefined, false, undefined, new Map([[o.index, area]]));
-  r.memory.forEach((m) => {
-    delete m.form;
-    m.asLine = asLine;
-  });
+  r.memory.forEach((m) => (m.geo = path));
   return r;
 }
 
-/** A fill that was a line (lineToFill) sewn as that line again; null when it was none. */
-export function fillToLine(p: Pattern, index: number, trimMm: number): { pattern: Pattern; first: number; last: number } | null {
-  const o = sewObjects(p)[index];
-  const known0 = o && remembered(p, o);
-  const was = known0?.asLine && (known0.fill ? lineFillOf(known0.asLine, known0.fill) : known0.asLine);
-  if (!was) return null;
-  const r = resewLine(p, index, was.path, was.line, trimMm);
+/**
+ * A fill sewn as a line along its paths (`geo` when its form changes with it), its fill kept to
+ * fill it again as it was (see lineToFill): a band in its width, with the stitch it had as a line;
+ * an area along its edge, with its border's stitch (a running stitch without one). A fill of a file
+ * is sewn along the outline of its area, which is its form from now on. Null when it has no area
+ * or nothing is sewn.
+ */
+export function fillToLine(p: Pattern, index: number, trimMm: number, geo?: Form): { pattern: Pattern; first: number; last: number } | null {
+  const kinds = stitchKinds(p);
+  const o = sewObjects(p, kinds)[index];
+  const known = o && remembered(p, o);
+  if (!o || known?.free || known?.outline || known?.blendOf || known?.lettering || partOf(known)) return null;
+  const an = known?.fill ? null : analyze(p, o, kinds, known);
+  const fill = known?.fill ?? (an?.fill && an.parts.some((pt) => pt.kind === 'fill') ? measureFill(p, an) : null);
+  geo ??= (fill && (geoOf(known) ?? guessArea(p, o, kinds))) ?? undefined;
+  if (!fill || !geo) return null;
+  const was = known?.kept?.line;
+  let st: PathStitch;
+  if (fill.lineWidth !== undefined) st = { ...(was ?? lineStitchFor(fill.lineWidth)), width: fill.lineWidth };
+  else if (fill.border) {
+    const { color: _c, link: _l, seams: _s, ...border } = fill.border;
+    st = { ...was, ...border };
+  } else st = was ? { ...was } : runAsLine(LINE_RUN);
+  const r = resewLine(p, index, geo, st, trimMm);
   if (!r) return null;
-  // A line only: what it remembered as a fill goes.
+  // A line only: its fill is kept, everything it was sewn as a fill goes.
   const fresh = sewObjects(r.pattern).find((x) => x.first === r.first);
-  const known = fresh && remembered(r.pattern, fresh);
-  if (fresh && known) remember(r.pattern, fresh, { region: null, path: known.path, line: known.line, ...(known.lock ? { lock: true } : {}) });
+  if (fresh) {
+    const { line: _l, ...kept } = known?.kept ?? {};
+    const filled: FillSettings = structuredClone(fill);
+    if (filled.border) {
+      delete filled.border.color;
+      delete filled.border.link;
+    }
+    remember(r.pattern, fresh, {
+      region: null,
+      geo,
+      line: st,
+      kept: { ...kept, fill: filled },
+      id: o.id,
+      ...(known?.lock ? { lock: true } : {}),
+    });
+  }
   return r;
 }

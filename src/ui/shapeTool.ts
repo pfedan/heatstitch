@@ -71,8 +71,6 @@ export class ShapeTool implements ShapeView {
   dirty = false;
   band: number | null = null;
   bandOffset = 0;
-  /** The form is the two rails of a satin column (its edges), not an outline or a line. */
-  rails = false;
   private drag: Drag = null;
   private moved = false;
 
@@ -95,7 +93,6 @@ export class ShapeTool implements ShapeView {
     this.dirty = false;
     this.band = null;
     this.bandOffset = 0;
-    this.rails = false;
   }
 
   /** The form anew (after new stitches); the selected node stays while it is still there. */
@@ -150,7 +147,7 @@ export class ShapeTool implements ShapeView {
         if (Math.hypot(c[3][0] - c[0][0], c[3][1] - c[0][1]) * scale < GHOST_MIN_PX) continue;
         out.push({ path, seg, part: 'mid', at: bezier(c, 0.5) });
       }
-      if (p.closed || this.rails) return;
+      if (p.closed) return;
       for (const end of [0, 1] as const) {
         const dir = endDirection(p, end);
         if (!dir) continue;
@@ -346,8 +343,8 @@ export class ShapeTool implements ShapeView {
   }
 
   /**
-   * A line closed (its ends joined by a straight piece) or opened: after the selected node, else
-   * where it was closed. Lines only; for areas the outline stays closed.
+   * A path closed (its ends joined by a straight piece) or opened: after the selected node, else
+   * where it was closed. A fill whose last closed path opens is sewn as a line (see reshapeObject).
    */
   toggleClosed(): boolean {
     const k = this.selected?.path ?? 0;

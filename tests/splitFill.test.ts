@@ -6,7 +6,7 @@ import type { Region } from '../src/digitize/region';
 import { addShape } from '../src/model/addShape';
 import { rememberObjects, sewObjects } from '../src/model/objects';
 import { STITCH, TRIM, type Pattern } from '../src/model/pattern';
-import { formOf, transformSewObject } from '../src/model/reshape';
+import { transformSewObject } from '../src/model/reshape';
 import { remember, remembered, rememberedIn, restitch, restoreRemembered, type BorderSettings, type FillSettings } from '../src/model/restitch';
 import { shareBorders, syncBorders } from '../src/model/border';
 import { stitchesBefore } from '../src/model/transform';
@@ -21,6 +21,7 @@ import { parsePattern } from '../src/parsers';
 import { fromStored } from '../src/storage/fileStore';
 import { decodeProject } from '../src/storage/project';
 import { DEFAULT_PROFILE } from '../src/validation/profiles';
+import { guessArea } from '../src/model/geo';
 
 const ID: Mat = [1, 0, 0, 1, 0, 0];
 const options = digitizeDefaults(DEFAULT_PROFILE);
@@ -38,7 +39,7 @@ function design(): Pattern {
 
 const areaOf = (p: Pattern, o: number): Region => {
   const objs = sewObjects(p);
-  return wholeArea(formOf(p, objs[o], stitchKinds(p))!)!;
+  return wholeArea(guessArea(p, objs[o], stitchKinds(p))!)!;
 };
 
 /** Share of the pixels of `whole` that none of `parts` covers. */
@@ -120,7 +121,7 @@ describe('split a fill', () => {
     // Each part knows its form and has its own direction.
     const a = remembered(s.pattern, objs[0])!;
     const b = remembered(s.pattern, objs[1])!;
-    expect(a.form && b.form).toBeTruthy();
+    expect(a.geo && b.geo).toBeTruthy();
     expect(a.fill!.angle).not.toBe(b.fill!.angle);
     // Together they cover the old area.
     expect(uncovered(whole, [areaOf(s.pattern, 0), areaOf(s.pattern, 1)])).toBeLessThan(0.002);
@@ -147,10 +148,11 @@ describe('split a fill', () => {
     expect(sewObjects(again.pattern)).toHaveLength(4);
   });
 
-  it('leaves empty fills and fills from a file alone', () => {
+  it('leaves lines that were fills and fills from a file alone', () => {
     const q = design();
     const e = sewObjects(q)[0];
-    remember(q, e, { ...remembered(q, e)!, fill: { ...remembered(q, e)!.fill!, pattern: 'none' } });
+    const { fill, ...line } = remembered(q, e)!;
+    remember(q, e, { ...line, line: { type: 'run', width: 2 }, kept: { fill: fill! } });
     expect(canSplit(q, 0)).toBe(false);
     remember(q, e, { ...remembered(q, e)!, fill: undefined });
     expect(canSplit(q, 0)).toBe(false);

@@ -144,7 +144,7 @@ export class Design {
   restitchLine(index: number, st: Partial<PathStitch>): void {
     const o = this.objects[index];
     const m = remembered(this.p, o)!;
-    const next = resewLine(this.p, o.index, m.path!, { ...lineSettings(this.p, o), ...st }, this.T);
+    const next = resewLine(this.p, o.index, m.geo!, { ...lineSettings(this.p, o), ...st }, this.T);
     this.take(next && syncBorders(next.pattern, this.T));
   }
 

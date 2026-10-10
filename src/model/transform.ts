@@ -8,7 +8,8 @@ import { vectorize } from '../shape/vectorize';
 import { syncMarks, tidy, withRecords } from './edit';
 import type { SewObject } from './objects';
 import { JUMP, STITCH, type Pattern } from './pattern';
-import type { Rails, Remembered } from './restitch';
+import type { FillSettings, Rails, Remembered } from './restitch';
+import { bandArea, geoUse } from './geo';
 
 /** A map that only moves, by whole records (0.1 mm) in both directions. */
 export function isShift(m: Mat): boolean {
@@ -105,29 +106,30 @@ export function mirroredEcho(st: PathStitch, path: Form, m: Mat): PathStitch {
  */
 export function transformRemembered(r: Remembered, m: Mat): Remembered {
   const out: Remembered = { ...r };
-  let form = r.form;
-  if (!form && r.region) {
-    const shifted = shiftRegion(r.region, m);
-    if (shifted) out.region = shifted;
-    // Traced once; from now on the curves are the shape.
-    else form = vectorize(r.region);
-  }
-  if (form) {
-    out.form = transformForm(form, m);
-    out.region = rasterize(out.form, r.region?.pxMm ?? 0.1);
-  }
-  if (r.path) out.path = transformForm(r.path, m);
-  if (r.path && r.line) out.line = mirroredEcho(r.line, r.path, m);
-  if (r.shape) out.shape = shiftRegion(r.shape, m) ?? rasterize(transformForm(vectorize(r.shape), m), r.shape.pxMm) ?? undefined;
   const s = scaleOf(m);
+  const mapFill = (f: FillSettings): FillSettings => ({ ...f, ...(f.lineWidth ? { lineWidth: f.lineWidth * s } : {}), angle: mapAngle(m, f.angle), ...(f.guides ? { guides: f.guides.map((g) => mapPts(m, g)) } : {}) });
+  if (r.fill) out.fill = mapFill(r.fill);
+  const use = geoUse(r);
+  if (r.geo) out.geo = transformForm(r.geo, m);
+  if (use === 'line' && r.line) out.line = mirroredEcho(r.line, r.geo!, m);
+  if (!r.geo) {
+    // A form read from the stitches stays a guess (no curves are kept): its area moved as pixels where
+    // that is exact, else traced, turned and rastered again.
+    if (r.region) out.region = shiftRegion(r.region, m) ?? rasterize(transformForm(vectorize(r.region), m), r.region.pxMm);
+  } else if (use === 'area') out.region = rasterize(out.geo!, r.region?.pxMm ?? 0.1);
+  else if (use === 'band' && r.region) out.region = shiftRegion(r.region, m) ?? bandArea(out.geo!, out.fill!, r.region.pxMm);
+  if (r.shape) out.shape = shiftRegion(r.shape, m) ?? rasterize(transformForm(vectorize(r.shape), m), r.shape.pxMm) ?? undefined;
   if (r.columns) {
     out.columns = r.columns.map((part) =>
       part.map((c) => mapRails(m, s, c)),
     );
   }
-  if (r.asSatin) out.asSatin = r.asSatin.map((c) => mapRails(m, s, c));
-  if (r.asLine) out.asLine = { ...r.asLine, path: transformForm(r.asLine.path, m), line: { ...r.asLine.line, width: r.asLine.line.width * s } };
-  if (r.fill) out.fill = { ...r.fill, ...(r.fill.lineWidth ? { lineWidth: r.fill.lineWidth * s } : {}), angle: mapAngle(m, r.fill.angle), ...(r.fill.guides ? { guides: r.fill.guides.map((g) => mapPts(m, g)) } : {}) };
+  if (r.kept) {
+    out.kept = { ...r.kept };
+    if (r.kept.satin) out.kept.satin = r.kept.satin.map((c) => mapRails(m, s, c));
+    if (r.kept.fill) out.kept.fill = mapFill(r.kept.fill);
+    if (r.kept.line && r.geo) out.kept.line = mirroredEcho(r.kept.line, r.geo, m);
+  }
   // The middle of rays and circles and the eyes of swirls stay on the same spots of the shape:
   // mirrored and turned with it.
   const deco = r.fill?.deco;

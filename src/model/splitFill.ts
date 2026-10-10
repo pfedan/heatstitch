@@ -9,12 +9,13 @@ import { newLink, syncBorders } from './border';
 import { takeOver, wholeArea } from './knockout';
 import { sewObjects } from './objects';
 import type { Pattern } from './pattern';
-import { formOf, reshapeFill } from './reshape';
+import { reshapeFill } from './reshape';
 import { analyze, remember, remembered } from './restitch';
 import { stitchKinds } from './sequence';
 import { addShape } from './addShape';
 import { digitizeDefaults } from '../digitize/digitize';
 import { DEFAULT_PROFILE } from '../validation/profiles';
+import { fits, geoUse, guessArea } from './geo';
 
 /**
  * Splitting a fill along cut lines (freehand, a path or a straight line): each part becomes an
@@ -203,7 +204,7 @@ export interface Split {
 /**
  * Whether object `o` is a fill that can be split: an area sewn with a fill whose settings Heatstitch
  * knows (drawn, converted or changed here; fills of a stitch file as it came are not yet), not a
- * fill sewn as a line, an empty fill, one with a color blend or one loosed from its shape.
+ * fill sewn as a line, one with a color blend or one loosed from its shape.
  */
 export function canSplit(p: Pattern, o: number): boolean {
   const kinds = stitchKinds(p);
@@ -211,10 +212,10 @@ export function canSplit(p: Pattern, o: number): boolean {
   if (!obj) return false;
   const known = remembered(p, obj);
   // Loosed from its shape (changed by hand): its stitches are not sewn anew, so not cut apart either.
-  if (!known?.fill || known.free || known.asLine || known.outline || known.blendOf || known.fill.deco?.blend || known.fill.pattern === 'none') return false;
+  if (!known?.fill || known.free || geoUse(known) === 'band' || known.outline || known.blendOf || known.fill.deco?.blend) return false;
   if (!analyze(p, obj, kinds, known).fill) return false;
-  const form = formOf(p, obj, kinds);
-  return !!form && !!wholeArea(form);
+  const form = guessArea(p, obj, kinds);
+  return fits(form, 'fill') && !!wholeArea(form!);
 }
 
 /**
@@ -226,7 +227,7 @@ export function splitFill(p: Pattern, o: number, cuts: Pt[][], trimMm: number): 
   const kinds = stitchKinds(p);
   const obj = sewObjects(p, kinds)[o];
   const known = remembered(p, obj);
-  const form = formOf(p, obj, kinds)!;
+  const form = guessArea(p, obj, kinds)!;
   const whole = wholeArea(form)!;
   const split = splitArea(whole, cuts);
   if (!split) return 'whole';
