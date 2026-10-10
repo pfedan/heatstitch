@@ -2008,7 +2008,7 @@ function railsOf(p: Pattern, c: { s: number; e: number }): Rails | null {
 
 /**
  * A rail read from penetrations without the dents short stitches leave on the inside of a curve
- * (a penetration moved 15 % of the width towards the other rail, every second one or so): a point
+ * (a penetration moved 15 or 30 % of the width towards the other rail, every second one or so): a point
  * that lies nearer the other rail than the line between its close neighbours goes back onto it.
  */
 function undent(rail: Pt[], other: Pt[]): Pt[] {

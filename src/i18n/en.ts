@@ -546,7 +546,7 @@ const enBase: Record<keyof typeof deBase, string> = {
   'stitch.width': 'Pull compensation',
   'stitch.width.hint': 'Column wider (+) or narrower (−) because the fabric pulls in',
   'stitch.short': 'Short stitches in curves',
-  'stitch.short.hint': 'On curves every other stitch ends earlier so nothing piles up',
+  'stitch.short.hint': 'Inside curves stitches end earlier in steps, more the tighter the curve, so nothing piles up',
   'stitch.underlay.satin': 'Stitches under the column hold the fabric and lift it',
   'stitch.runLength.hint': 'Length of each stitch along the line',
   'stitch.triple': 'Triple stitch',

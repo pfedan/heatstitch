@@ -11,8 +11,8 @@ import type { Branch, Pt } from './skeleton';
  *
  * - pairs are spaced so the rail that moves more advances by `spacing`, measured perpendicular to
  *   the previous stitch; on curves the inner side gets denser,
- * - which the short-stitch rule relieves: a penetration closer than 0.25 mm to the last full one on
- *   the same rail is moved 15 % of the width towards the other rail,
+ * - which the short-stitch rule relieves: a penetration too close to the last full one on the same
+ *   rail is moved in towards the other rail, 15 % and 30 % of the width by turns (see SHORT_DIST),
  * - pull compensation widens every pair outwards from its middle,
  * - stitches longer than the split length are divided evenly.
  */
@@ -55,8 +55,18 @@ export interface Column {
   width: number;
 }
 
+/**
+ * Short stitches (Ink/Stitch's short stitch inset, re-implemented): on the inside of a curve the
+ * needle points of one rail crowd. One closer to the last full one on its rail than SHORT_DIST, or
+ * than SHORT_SHARE of the spacing where that is more (on a looser satin: the inside no more than
+ * twice as dense as the spacing), moves in towards the other rail; while they keep coming that close, by SHORT_INSETS of
+ * the width in turn (Ink/Stitch's multi-level "15 30"). So the tighter the curve, the more points
+ * fall short, spread over three lines instead of piling up on one; never further than a third of
+ * the split length, so a split stitch keeps its parts.
+ */
 const SHORT_DIST = 0.25;
-const SHORT_INSET = 0.15;
+const SHORT_SHARE = 0.5;
+const SHORT_INSETS = [0.15, 0.3];
 
 const sub = (a: Pt, b: Pt): Pt => [a[0] - b[0], a[1] - b[1]];
 const norm = (v: Pt): Pt => {
@@ -163,6 +173,8 @@ export function pairs(c: Column, p: SatinParams, ends?: ColumnEnds): [Pt, Pt][] 
   const n = c.center.length;
   if (n < 2) return [];
   const out: [Pt, Pt][] = [];
+  // The spacing at each pair (for the short stitches).
+  const spacings: number[] = [];
   let last = -1;
   for (let i = 0; i < n; i++) {
     const w = dist(c.left[i], c.right[i]);
@@ -179,6 +191,7 @@ export function pairs(c: Column, p: SatinParams, ends?: ColumnEnds): [Pt, Pt][] 
       if (adv < 0.1) continue;
     }
     out.push([c.left[i], c.right[i]]);
+    spacings.push(p.spacingAt?.[i] ?? p.spacing);
     last = i;
   }
   // Pull compensation: each pair widened outwards from its middle (never turned inside out).
@@ -195,13 +208,22 @@ export function pairs(c: Column, p: SatinParams, ends?: ColumnEnds): [Pt, Pt][] 
     return [[a[0] + u[0] * ea, a[1] + u[1] * ea], [b[0] - u[0] * eb, b[1] - u[1] * eb]];
   });
   if (p.rough) roughen(comp, p.rough, p.seed ?? 0);
-  // Short stitches on the inside of curves.
+  // Short stitches on the inside of curves (see SHORT_DIST).
   for (const side of p.short === false ? [] : ([0, 1] as const)) {
     let ref = comp.length ? comp[0][side] : null;
+    let run = 0;
     for (let i = 1; i < comp.length; i++) {
       const q = comp[i][side];
-      if (ref && dist(q, ref) < SHORT_DIST) comp[i][side] = lerp(q, comp[i][1 - side], SHORT_INSET);
-      else ref = q;
+      const other = comp[i][1 - side];
+      if (ref && dist(q, ref) < Math.max(SHORT_DIST, SHORT_SHARE * spacings[i])) {
+        const w = dist(q, other);
+        const k = w > 1e-9 ? Math.min(SHORT_INSETS[run % SHORT_INSETS.length], p.splitMm / 3 / w) : 0;
+        comp[i][side] = lerp(q, other, k);
+        run++;
+      } else {
+        ref = q;
+        run = 0;
+      }
     }
   }
   if (p.fringe || p.fringeB) fringe(comp, p.fringe ?? 0, p.fringeB ?? 0);

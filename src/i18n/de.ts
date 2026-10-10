@@ -544,7 +544,7 @@ export const deBase = {
   'stitch.width': 'Zugausgleich',
   'stitch.width.hint': 'Säule breiter (+) oder schmaler (−), weil der Stoff sich zusammenzieht',
   'stitch.short': 'Kurze Stiche in Kurven',
-  'stitch.short.hint': 'In Kurven endet jeder zweite Stich früher, damit nichts staut',
+  'stitch.short.hint': 'Innen in Kurven enden Stiche gestaffelt früher, je enger die Kurve, desto mehr, damit nichts staut',
   'stitch.underlay.satin': 'Stiche unter der Säule halten den Stoff und heben sie an',
   'stitch.runLength.hint': 'Länge der einzelnen Stiche entlang der Linie',
   'stitch.triple': 'Dreifachstich',

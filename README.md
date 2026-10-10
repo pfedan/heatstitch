@@ -439,8 +439,11 @@ fill rows end there, satin edges are found there, underlay lies on a contour ins
   *Fill direction* swaps it for straight rows or a fixed angle.
 - **Satin:** the edges are measured from the centerline at right angles to the border (the "stroke
   normals" of Goldman's patent). 0.4 mm between penetrations on the same side, measured on the side
-  that advances more; on the inside of curves every penetration that comes too close (under 0.25 mm)
-  moves 15 % of the width inwards. Pull compensation by fabric (woven 0.2 mm, knit 0.35, terry 0.4 per
+  that advances more; on the inside of curves every penetration that comes too close (under 0.25 mm,
+  or half the spacing on a looser satin) moves inwards, 15 % and 30 % of the width by turns while
+  they keep coming close (Ink/Stitch's multi-level short stitch inset), so a tight curve spreads its
+  needle points over three lines.
+  Pull compensation by fabric (woven 0.2 mm, knit 0.35, terry 0.4 per
   side), stitches over 7 mm are split. A network of columns is sewn in one go: each branch out as
   underlay (center walk, zigzag from 4 mm width) and back as satin, like Ink/Stitch's auto-satin. At
   junctions the first column covers, the others reach 0.3 mm into it. In Design the same
