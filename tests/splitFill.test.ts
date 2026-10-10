@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { digitizeDefaults } from '../src/digitize/digitize';
 import type { Pt } from '../src/digitize/skeleton';
 import type { Region } from '../src/digitize/region';
@@ -13,9 +13,10 @@ import { stitchesBefore } from '../src/model/transform';
 import { overlapsIn, wholeArea } from '../src/model/knockout';
 import { stitchKinds } from '../src/model/sequence';
 import { duplicateObjects, mirrorMatrix } from '../src/model/shapeOps';
-import { canSplit, partAngles, splitArea, splitFill } from '../src/model/splitFill';
+import { canSplit, OVERLAP_MM, partAngles, splitFill } from '../src/model/splitFill';
+import { areaOfForm, loadOps, splitForm, subtractForm, unionForms } from '../src/shape/ops';
 import { sewDesign } from '../src/model/sew';
-import type { Mat } from '../src/shape/path';
+import type { Form, Mat } from '../src/shape/path';
 import { ellipsePath, parsePath, rectPath } from '../src/shape/svgPath';
 import { parsePattern } from '../src/parsers';
 import { fromStored } from '../src/storage/fileStore';
@@ -24,6 +25,8 @@ import { DEFAULT_PROFILE } from '../src/validation/profiles';
 import { guessArea } from '../src/model/geo';
 
 const ID: Mat = [1, 0, 0, 1, 0, 0];
+
+beforeAll(loadOps);
 const options = digitizeDefaults(DEFAULT_PROFILE);
 const T = options.trimMm;
 const green = { r: 60, g: 170, b: 70 };
@@ -66,33 +69,55 @@ function uncovered(whole: Region, parts: Region[]): number {
 const trims = (p: Pattern) => p.cmd.reduce((n, c) => n + (c === TRIM ? 1 : 0), 0);
 
 describe('split a fill', () => {
+  const rect = parsePath(rectPath(0, 0, 30, 20, 0, 0), ID);
+  /** Area of `whole` that none of `parts` covers (mm²). */
+  const uncoveredMm2 = (whole: Form, parts: Form[]) => {
+    const left = subtractForm(whole, unionForms(parts)!);
+    return left ? areaOfForm(left) : 0;
+  };
+  const split = (cuts: Pt[][]) => splitForm(rect, cuts, OVERLAP_MM, 0.5, 2);
+
   it('cuts an area along a straight line into two parts that overlap a little and leave no gap', () => {
-    const whole = areaOf(design(), 0);
-    const s = splitArea(whole, [[[15, -2], [15, 22]]])!;
+    const s = split([[[15, -2], [15, 22]]])!;
     expect(s.parts).toHaveLength(2);
     expect(s.touching).toEqual([[0, 1]]);
-    const sum = s.parts.reduce((a, r) => a + r.areaMm2, 0);
     // Both halves, each reaching 0.2 mm under the other along the 20 mm cut.
-    expect(sum).toBeGreaterThan(whole.areaMm2);
-    expect(sum - whole.areaMm2).toBeLessThan(20 * 0.2 * 2 + 3);
-    expect(uncovered(whole, s.parts)).toBe(0);
+    const sum = s.parts.reduce((a, f) => a + areaOfForm(f), 0);
+    expect(sum - 600).toBeCloseTo(2 * 20 * OVERLAP_MM, 1);
+    expect(uncoveredMm2(rect, s.parts)).toBeLessThan(1e-6);
+    // Cut on the curves: the corners of the rectangle are corners of the parts, where they were.
+    const nodes = s.parts.flatMap((f) => f.paths.flatMap((p) => p.nodes.map((n) => `${n.p[0]},${n.p[1]}`)));
+    for (const c of ['0,0', '30,0', '30,20', '0,20']) expect(nodes).toContain(c);
   });
 
   it('takes a cut that stops just short of the edge through to it, and leaves an area whole that is not cut apart', () => {
-    const whole = areaOf(design(), 0);
-    expect(splitArea(whole, [[[10, 1], [10, 19]]])?.parts).toHaveLength(2);
-    expect(splitArea(whole, [[[10, 5], [10, 15]]])).toBeNull();
-    expect(splitArea(whole, [[[40, -2], [40, 22]]])).toBeNull();
+    expect(split([[[10, 1], [10, 19]]])?.parts).toHaveLength(2);
+    expect(split([[[10, 5], [10, 15]]])).toBeNull();
+    expect(split([[[40, -2], [40, 22]]])).toBeNull();
   });
 
   it('cuts freehand and along a path with corners', () => {
-    const whole = areaOf(design(), 0);
     const wave: Pt[] = Array.from({ length: 40 }, (_, k) => [-1 + k * 0.8, 10 + 4 * Math.sin(k / 4)]);
-    expect(splitArea(whole, [wave])?.parts).toHaveLength(2);
+    const w = split([wave])!;
+    expect(w.parts).toHaveLength(2);
+    // A drawn line (40 points) cuts as curves: no nodes on top of each other, fewer than its points.
+    for (const f of w.parts)
+      for (const p of f.paths) {
+        p.nodes.forEach((n, i) => expect(Math.hypot(n.p[0] - p.nodes[(i + 1) % p.nodes.length].p[0], n.p[1] - p.nodes[(i + 1) % p.nodes.length].p[1])).toBeGreaterThan(0.004));
+        expect(p.nodes.length).toBeLessThan(25);
+      }
     const path: Pt[] = [[-2, 4], [12, 16], [20, 3], [32, 12]];
-    const s = splitArea(whole, [path])!;
+    const s = split([path])!;
     expect(s.parts.length).toBeGreaterThanOrEqual(2);
-    expect(uncovered(whole, s.parts)).toBe(0);
+    expect(uncoveredMm2(rect, s.parts)).toBeLessThan(1e-6);
+  });
+
+  it('cuts a disc on its curve: the parts keep its nodes', () => {
+    const disc = parsePath(ellipsePath(0, 0, 10, 10), ID);
+    const s = splitForm(disc, [[[-12, 0.5], [12, 0.5]]], OVERLAP_MM, 0.5, 2)!;
+    const nodes = s.parts.flatMap((f) => f.paths.flatMap((p) => p.nodes.map((n) => `${n.p[0]},${n.p[1]}`)));
+    for (const n of disc.paths[0].nodes) expect(nodes).toContain(`${n.p[0]},${n.p[1]}`);
+    expect(uncoveredMm2(disc, s.parts)).toBeLessThan(1e-6);
   });
 
   it('mirrors the rows of neighbouring parts at the cut', () => {

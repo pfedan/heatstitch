@@ -445,7 +445,11 @@ function syncOwnBorders(p: Pattern, trimMm: number, drop: ReadonlySet<string>, f
     // Its fill's open paths: the border runs along them too (a vein in a leaf).
     const open = list.length === 1 ? openOf(m) : null;
     const along = open ? formKey(open) : undefined;
-    if (same && sameRegion(cur!.region, region) && sameBorder(cur!.border!, b) && cur!.along === along) return;
+    // Parts cut apart exactly add up to the same region, yet need a line along each new cut: those
+    // are checked by the stitches they come to below.
+    const seamy = list.length > 1 && !!b.seams;
+    const unchanged = same && sameRegion(cur!.region, region) && sameBorder(cur!.border!, b) && cur!.along === along;
+    if (unchanged && !seamy) return;
     const from: Pt = [p.x[after.last] / 10, p.y[after.last] / 10];
     const uncut = list.length > 1 ? cutFrom : wholeOf(m.region, m);
     let runs = borderStitches(region, b, from, uncut);
@@ -477,6 +481,7 @@ function syncOwnBorders(p: Pattern, trimMm: number, drop: ReadonlySet<string>, f
     // Sewn anew, it stays the same object (its id), wherever it goes.
     const memory: Remembered = { region, outline: b.link, border: stitchOf(b), ...(along ? { along } : {}), ...(cur?.id ? { id: cur.id } : {}) };
     let recs = runRecords(runs, trimMm);
+    if (unchanged && keyOf(recs) === objectKey(p, target!)) return;
     // The very stitches of another border (a fill copied in place): sewn the other way round, so
     // each remembers its own (memory is keyed by stitches).
     if (taken().has(keyOf(recs)) && (!target || keyOf(recs) !== objectKey(p, target))) {
