@@ -23,6 +23,7 @@ import { isRigid, stitchesBefore, transformObject } from '../model/transform';
 import { LiveResew, type LiveResult } from '../resew/client';
 import { syncBorders } from '../model/border';
 import { canSplit, splitFill } from '../model/splitFill';
+import { loadOps, opsReady } from '../shape/ops';
 import { t, formatNumber } from '../i18n';
 import { type NewShape, addShape } from '../model/addShape';
 import { ui } from './state';
@@ -105,6 +106,7 @@ export function bindDrawing(app: DrawingApp) {
    * with its own row direction, the parts selected after it (so a next cut can go on).
    */
   function cutSelected(line: Pt[]): void {
+    if (!opsReady()) return void loadOps().then(() => cutSelected(line));
     const f = app.files.active;
     const p = f?.pattern;
     if (!f || !p) return;
