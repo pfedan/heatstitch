@@ -26,6 +26,7 @@ import { reverseLines, reversible, reverseObjects } from '../model/reverse';
 import { t, type Key } from '../i18n';
 import { ui } from './state';
 import { unionForm, recolorObjects } from '../model/shapeOps';
+import { loadOps, opsReady } from '../shape/ops';
 import { blendObject } from '../model/blend';
 import { recolorBlock, takeThreads } from '../model/border';
 import { violations, conflicts, reorder } from '../model/order';
@@ -279,6 +280,8 @@ export function bindObjects(app: ObjectsApp) {
     const f = app.files.active;
     const p = f?.pattern;
     if (!f || !p || ui.selectedObjects.size < 2) return;
+    // Outlines are joined on their curves: the libraries for that load on first use.
+    if (!opsReady()) return void loadOps().then(mergeObjects);
     const q = app.seq(p);
     const sel = [...ui.selectedObjects].sort((a, b) => a - b);
     const objs = sel.map((o) => q.objects[o]);
@@ -301,7 +304,7 @@ export function bindObjects(app: ObjectsApp) {
     // Fills with curves become one outline (editable as a shape), the others one area.
     const forms = fills ? objs.map((o) => areaOf(remembered(p, o))) : [];
     const form = forms.length && forms.every(Boolean) ? unionForm(forms as Form[]) : null;
-    const area = form ? wholeArea(form) : fills ? unionRegion(objs.flatMap((o) => remembered(p, o)?.region ?? analyze(p, o, q.kinds).fill ?? [])) : null;
+    const area = form ? wholeArea(form, 0.1, fill?.areaGrow ?? 0) : fills ? unionRegion(objs.flatMap((o) => remembered(p, o)?.region ?? analyze(p, o, q.kinds).fill ?? [])) : null;
     if (merged >= 0 && fill && area) {
       remember(target, nq.objects[merged], form ? withGeo({ region: area, fill }, form) : { region: area, fill });
       const r = restitch(target, nq.objects, [merged], { kind: 'fill', s: fill }, nq.kinds, app.settings.trimMm);
