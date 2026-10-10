@@ -33,8 +33,9 @@ body[data-mode='density'] .stage-foot .view-bar {
   margin-left: 0;
 }
 
-/* The bars over the stage say what to do with the tool: the hint below would only repeat it. */
-.stage:has(.tool-options:not([hidden]), .stitch-bar:not([hidden])) .stage-foot .hint,
+/* The bars over the stage say what to do with the tool: the hint below would only repeat it. The bar of
+   the objects has steps, no hint: there the hint below says how to move them. */
+.stage:has(.tool-options:not([hidden]):not(.for-objects), .stitch-bar:not([hidden])) .stage-foot .hint,
 /* Start page or Bild without a picture: nothing to zoom or show yet. */
 .stage:has(#empty:not([hidden])) .stage-foot .hint,
 .stage:has(#empty:not([hidden])) .view-bar {
