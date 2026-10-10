@@ -1451,6 +1451,41 @@ export function checkEmptyFills(p: Pattern): void {
   expect(problems.join('; '), 'empty fills').toBe('');
 }
 
+/**
+ * A crosshatch fill (sewn from its shape, not changed by hand) is its two layers: its rows' full
+ * stitches lie at its angle ±45 degrees, both directions about as much, through duplicate, mirror,
+ * knockout, undo and saving (see crosshatchFill).
+ */
+export function checkCrosshatch(p: Pattern): void {
+  const problems: string[] = [];
+  for (const o of sewObjects(p)) {
+    const m = remembered(p, o);
+    const f = m?.fill;
+    if (f?.pattern !== 'crosshatch' || m!.hand || m!.free || m!.read) continue;
+    const angle = Number.isFinite(f.angle) ? f.angle : 0;
+    const len = Math.min(f.stitch, 3);
+    const layer = [0, 0];
+    let all = 0;
+    for (let i = o.first + 1; i <= o.last; i++) {
+      if (p.cmd[i] !== STITCH || p.cmd[i - 1] !== STITCH) continue;
+      const dx = (p.x[i] - p.x[i - 1]) / 10;
+      const dy = (p.y[i] - p.y[i - 1]) / 10;
+      // A full stitch of a row: travel and the steps from row to row are shorter.
+      if (Math.abs(Math.hypot(dx, dy) - len) > 0.06) continue;
+      all++;
+      const d = (((Math.atan2(dy, dx) * 180) / Math.PI) % 180 + 180) % 180;
+      [angle - 45, angle + 45].forEach((a, k) => {
+        const off = Math.abs(d - a) % 180;
+        if (Math.min(off, 180 - off) < 4) layer[k]++;
+      });
+    }
+    if (all < 40) continue;
+    if (layer[0] + layer[1] < all * 0.9) problems.push(`${o.index}: rows off the layers (${layer[0] + layer[1]} of ${all})`);
+    if (Math.min(...layer) < all * 0.25) problems.push(`${o.index}: one layer only (${layer.join(' and ')} of ${all})`);
+  }
+  expect(problems.join('; '), 'crosshatch layers').toBe('');
+}
+
 /** Each blending fill has one second thread in its blend thread, and every second thread its fill. */
 export function checkBlends(p: Pattern): void {
   const objs = sewObjects(p);
@@ -1905,6 +1940,7 @@ function checkStep(d: Doc, full: boolean): void {
   checkOneGeo(p);
   checkFits(p);
   checkBlends(p);
+  checkCrosshatch(p);
   checkEchoes(p);
   checkLineParts(p);
   checkKnockouts(p);

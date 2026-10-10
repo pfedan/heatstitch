@@ -23,15 +23,15 @@ const DE: Record<Page, { title: string; description: string; ogTitle: string; og
   app: {
     title: 'heatstitch: kostenlose Sticksoftware im Browser (PES, DST, JEF)',
     description:
-      'Stickmuster kostenlos im Browser erstellen und bearbeiten: Bilder in Stiche umwandeln, Schrift setzen, PES-, DST-, JEF-, VP3- oder EXP-Dateien bearbeiten und die Stichdichte prüfen.',
+      'Stickmuster kostenlos im Browser erstellen und bearbeiten: Bilder in Stiche umwandeln, Schrift setzen, PES-, DST-, JEF-, VP3-, EXP- oder XXX-Dateien bearbeiten und die Stichdichte prüfen.',
     ogTitle: 'heatstitch: kostenlose Sticksoftware im Browser',
     ogDescription:
-      'Macht aus Bildern und SVG Stiche, setzt Schrift in 41 Stickschriften, bearbeitet Objekte und einzelne Stiche, und eine Dichteprüfung behebt, was zu dicht ist. Speichert PES, DST, JEF, VP3 und EXP. Deine Dateien verlassen nie dein Gerät.',
+      'Macht aus Bildern und SVG Stiche, setzt Schrift in 41 Stickschriften, bearbeitet Objekte und einzelne Stiche, und eine Dichteprüfung behebt, was zu dicht ist. Speichert PES, DST, JEF, VP3, EXP und XXX. Deine Dateien verlassen nie dein Gerät.',
   },
   docs: {
     title: 'heatstitch Anleitung: Stickdateien ansehen, bearbeiten, zeichnen und prüfen',
     description:
-      'Wie heatstitch die Reihenfolge von Stickdateien (PES, DST, JEF, VP3, EXP, PEC) zeigt, Objekte mit anderen Füllmustern, Umrandungen und Satin-Einstellungen neu stickt, Formen und einzelne Stiche bearbeitet, Formen und Schrift zeichnet, die Stichdichte für deinen Stoff prüft, Bilder in Stiche umwandelt und das Ergebnis für Maschine und Stickrahmen speichert.',
+      'Wie heatstitch die Reihenfolge von Stickdateien (PES, DST, JEF, VP3, EXP, XXX, PEC, SEW) zeigt, Objekte mit anderen Füllmustern, Umrandungen und Satin-Einstellungen neu stickt, Formen und einzelne Stiche bearbeitet, Formen und Schrift zeichnet, die Stichdichte für deinen Stoff prüft, Bilder in Stiche umwandelt und das Ergebnis für Maschine und Stickrahmen speichert.',
     ogTitle: 'heatstitch Anleitung: Stickdateien ansehen, bearbeiten und prüfen',
     ogDescription:
       'Reihenfolge und Sprünge, Objekte und Füllmuster, Formen, Schrift, einzelne Stiche, Dichteprüfung und Korrektur, Bilder zu Stichen, Stickrahmen und Formate, in wenigen Minuten erklärt.',

@@ -58,8 +58,9 @@ sends the picture anywhere.
 **Files and formats**
 
 - Read and write **PES** and **PEC** (Brother), **DST** (Tajima), **JEF** (Janome), **VP3** (Pfaff,
-  Husqvarna Viking) and **EXP** (Melco), with own writers (no pyembroidery); PES reads the thread
-  list of versions 5 to 10 with real colors, names and catalog numbers
+  Husqvarna Viking), **EXP** (Melco) and **XXX** (Singer), with own writers (no pyembroidery); read
+  **SEW** (older Janome); PES reads the thread list of versions 5 to 10 with real colors, names and
+  catalog numbers
 - **SVG** import as whole shapes with their curves, colors and size; fine lines as running stitch
 - **Project files** (`.heatstitch`) that keep everything embroidery files drop: originals and edits,
   shapes, settings, rungs, guide lines, letterings, acknowledged findings, the image, material
@@ -96,7 +97,7 @@ sends the picture anywhere.
 - **Stitch settings** with live preview: fill patterns in three tabs (classic: tatami with offset,
   gradient, contour fill, spiral, as sewn, guided by drawn lines; decor: embossed motifs, waves,
   grain, rays, swirl, color fade with a second color; open: meander, maze, grid, echo, cross
-  stitch), spacing, angle, stitch length, edges, expand, underlay
+  stitch, crosshatch), spacing, angle, stitch length, edges, expand, underlay
   (off, across, cross, inset, left out under later objects), **border** (running, triple or satin,
   offset, own thread); satin pattern or E stitch, spacing (also by width and per rung), width per
   side, fringe, short stitches in curves, split, underlay kind, **rungs** for the direction and **sections**
@@ -393,6 +394,17 @@ fill rows end there, satin edges are found there, underlay lies on a contour ins
   inside, under rows not sewn yet (like Ink/Stitch's underpath); where it would lie on sewn rows for
   more than 2 mm, it jumps instead. The other patterns (gradient, contour fill, spiral, guided) are
   in `flow.ts` and `spiral.ts`.
+- **Crosshatch** (`crosshatchFill` in `src/digitize/fill.ts`): the tatami machinery twice, at the fill
+  angle ±45°, like the diamond crosshatch of commercial software (two layers at right angles). Each
+  layer's rows are 1.6 mm apart, four times a usual fill's spacing, so both together lay half its
+  thread, as a light fill; no underlay and no pull compensation, as the fabric is meant to show.
+  Travel shows between sparse rows, so it keeps to the lines thread lies on: in the first layer the
+  rows still to come of both layers (they cross, so they form a net that reaches everywhere), in the
+  second the rows sewn already, which it only doubles. The way is found on the travel grid and laid
+  exactly onto those lines; it may be up to five times the straight distance before a trim, since
+  the locks of a trim show in a light fill. Read from an embroidery file, two directions at right
+  angles with about as much thread each, sewn one after the other in evenly spaced sparse rows, are
+  recognized as crosshatch, its area the net closed across its holes.
 - **Fill rows follow the image** (default; `src/digitize/flow.ts`, `src/image/orientation.ts`): a
   direction field from the structure tensor of the original picture (Förstner & Gülch 1987, Bigün &
   Granlund 1987; as in coherence-enhancing abstraction, Weickert 1999, and Coherent Line Drawing, Kang
@@ -493,6 +505,14 @@ saved in embroidery files: objects of the original software are lost. With a hoo
   catalog number. A block never starts at x or y exactly 0, because pyembroidery (and Ink/Stitch)
   skips such a start.
 - **EXP:** two bytes per stitch, explicit trims and color changes, no colors.
+- **XXX:** two bytes per stitch, explicit trims and color changes, exact RGB colors. Jumps stay
+  within 8.0 mm and stitches within 12.3 mm per axis, longer moves are split into equal pieces:
+  a Singer Superb EM200 loses the excess of longer jumps and the design drifts, and stitches from
+  12.4 mm on would need the 16-bit 0x7D record that older firmwares do not know. After a cut the way
+  to the next stitch is jumps.
+- **SEW** (read only): the older Janome format, palette indices into its own 79-color table, two
+  bytes per stitch from offset 0x1D78. It has no trim command, and like pyembroidery heatstitch
+  guesses no cuts from it.
 - The tests (`tests/writers.test.ts`, `tests/formats.test.ts`) check read → write → read for every
   format. `tests/fixtures/pyembroidery/` holds files written by pyembroidery 1.5.1 and what it reads
   back; heatstitch's readers must agree. CI also reads every written file back with pystitch (see
@@ -596,7 +616,7 @@ and `CLOUDFLARE_ACCOUNT_ID`. The first deploy creates the Worker and connects he
 src/main.ts      App start; wires the modules in src/app/ together
 src/app/         State, pointer input, keyboard, drawing, shapes, rungs, lettering, order,
                  correction, file I/O, light
-src/parsers/     DST, PES, PEC, JEF, VP3 and EXP parsers, PEC and Janome palettes
+src/parsers/     DST, PES, PEC, JEF, VP3, EXP, XXX and SEW parsers, PEC, Janome and SEW palettes
 src/model/       Pattern data model, objects recognized from stitches, sewing anew (restitch),
                  shape operations, knock-out, border, lines, transform, order, jumps, hoop, project
                  edits with undo
@@ -610,7 +630,7 @@ src/validation/  Measurement, profiles, thresholds, satin detection, short-stitc
                  coverage and long-stitch rules, zones, practice rules, acknowledgements
 src/correct/     Correction: proposals (plan), fine correction on stitches (pullback, satin short
                  stitches, respacing, thinning, separating penetrations)
-src/writers/     DST, PES, PEC, JEF, VP3 and EXP writers (PEC block, preview images)
+src/writers/     DST, PES, PEC, JEF, VP3, EXP and XXX writers (PEC block, preview images)
 src/lettering/   Lettering: fonts, layout (lines, arcs, circle), sewing, placing into a design
 src/render/      Viewport, color scale, heatmap, stitch plan, realistic threads and fabric (WebGL),
                  light, legend, overlays (shapes, rungs, editing, validation, hoop), compare view

@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Browser, Page } from 'playwright';
 import type { ViteDevServer } from 'vite';
+import { launchChromium } from './helpers/browser';
 
 /**
  * Bild umwandeln and the other ways in: an SVG dropped into the open assistant stays there (like a
@@ -25,10 +26,9 @@ describe.skipIf(!on)('Bild umwandeln and switching', () => {
 
   beforeAll(async () => {
     const { createServer } = await import('vite');
-    const { chromium } = await import('playwright');
     server = await createServer({ server: { port: 0, strictPort: false }, logLevel: 'error' });
     await server.listen();
-    browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
+    browser = await launchChromium();
     page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
     await page.goto(server.resolvedUrls!.local[0]);
     await page.waitForTimeout(500);

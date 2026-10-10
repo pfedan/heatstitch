@@ -74,10 +74,25 @@ function run<T>(mode: IDBTransactionMode, op: (s: IDBObjectStore) => IDBRequest<
   );
 }
 
+let persistAsked = false;
+
+/**
+ * Asks the browser, once, to keep what is stored even when the disk runs low; otherwise it may
+ * clear designs and their edits without a word. Chrome and Safari decide by themselves, Firefox
+ * asks the user in a small bar.
+ */
+function keepStored(): void {
+  if (persistAsked) return;
+  persistAsked = true;
+  navigator.storage?.persist?.().catch(() => undefined);
+}
+
 /** Stores a file and returns its key, or null if storage failed. */
 export async function putFile(name: string, data: ArrayBuffer): Promise<number | null> {
   try {
-    return (await run('readwrite', (s) => s.add({ name, data }))) as number;
+    const key = (await run('readwrite', (s) => s.add({ name, data }))) as number;
+    keepStored();
+    return key;
   } catch (err) {
     console.warn('Could not store file', err);
     return null;

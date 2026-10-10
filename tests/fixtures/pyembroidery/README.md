@@ -30,3 +30,16 @@ for x, y in [(200, 100), (230, 100), (230, 130)]:
 p.add_command(pe.END)
 pe.write_pes(p, 'tests/fixtures/pyembroidery/origin-start.pes', {'version': '1'})
 ```
+
+`sun.xxx` and `sun.sew` were added later, written by pystitch 1.0.1 (Ink/Stitch's fork, the version
+CI uses for the oracle) from the same design and threads, and their entries added to `expected.json`
+the same way. SEW stores indices into the Janome SEW table, taken from `catalog_number`:
+
+```python
+import pystitch as pe
+# o as above
+pe.write(o, 'tests/fixtures/pyembroidery/sun.xxx')
+for t, n in zip(o.threadlist, ['12', '10', '6']):  # Blue, Red, Green
+    t.catalog_number = n
+pe.write(o, 'tests/fixtures/pyembroidery/sun.sew')
+```

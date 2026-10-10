@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>heatstitch: free embroidery software in your browser (PES, DST, JEF)</title>
-    <meta name="description" content="Create and edit machine embroidery designs for free in your browser: turn pictures into stitches, add lettering, edit PES, DST, JEF, VP3 or EXP files and check the stitch density." />
+    <meta name="description" content="Create and edit machine embroidery designs for free in your browser: turn pictures into stitches, add lettering, edit PES, DST, JEF, VP3, EXP or XXX files and check the stitch density." />
     <meta name="robots" content="index, follow" />
     <meta name="google-site-verification" content="21LDxZv4RAGa6qj35UiGGIhoBbT7soYVnhDlPPMpf_s" />
     <link rel="canonical" href="https://heatstitch.app/" />
@@ -20,7 +20,7 @@
     <meta property="og:site_name" content="heatstitch" />
     <meta property="og:url" content="https://heatstitch.app/" />
     <meta property="og:title" content="heatstitch: free embroidery software in your browser" />
-    <meta property="og:description" content="Turns pictures and SVG into stitches, sets lettering in 41 embroidery fonts, edits objects and single stitches, and a density check fixes what is too dense. Saves PES, DST, JEF, VP3 and EXP. Your files never leave your device." />
+    <meta property="og:description" content="Turns pictures and SVG into stitches, sets lettering in 41 embroidery fonts, edits objects and single stitches, and a density check fixes what is too dense. Saves PES, DST, JEF, VP3, EXP and XXX. Your files never leave your device." />
     <meta property="og:image" content="https://heatstitch.app/og-image.jpg" />
     <meta property="og:image:type" content="image/jpeg" />
     <meta property="og:image:width" content="1200" />
@@ -32,7 +32,7 @@
     <!-- Twitter / X -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="heatstitch: free embroidery software in your browser" />
-    <meta name="twitter:description" content="Turns pictures and SVG into stitches, sets lettering in 41 embroidery fonts, edits objects and single stitches, and a density check fixes what is too dense. Saves PES, DST, JEF, VP3 and EXP. Your files never leave your device." />
+    <meta name="twitter:description" content="Turns pictures and SVG into stitches, sets lettering in 41 embroidery fonts, edits objects and single stitches, and a density check fixes what is too dense. Saves PES, DST, JEF, VP3, EXP and XXX. Your files never leave your device." />
     <meta name="twitter:image" content="https://heatstitch.app/og-image.jpg" />
     <meta name="twitter:image:alt" content="An embroidered cat in heatstitch, shown three ways: realistic threads, sewing order and density heatmap" />
 
@@ -43,7 +43,7 @@
         "name": "heatstitch",
         "url": "https://heatstitch.app/",
         "image": "https://heatstitch.app/og-image.jpg",
-        "description": "Free browser-based embroidery software for hobby embroiderers: turn pictures and SVG into stitches, set lettering, draw shapes, edit PES, DST, JEF, VP3 and EXP files down to single stitches, and check and correct the stitch density.",
+        "description": "Free browser-based embroidery software for hobby embroiderers: turn pictures and SVG into stitches, set lettering, draw shapes, edit PES, DST, JEF, VP3, EXP and XXX files down to single stitches, and check and correct the stitch density.",
         "applicationCategory": "DesignApplication",
         "operatingSystem": "Any (web browser)",
         "browserRequirements": "Requires JavaScript. WebGL2 for the realistic thread view.",
@@ -52,7 +52,7 @@
         "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
         "softwareHelp": { "@type": "CreativeWork", "url": "https://heatstitch.app/docs.html" },
         "featureList": [
-          "Opens PES, DST, JEF, VP3, EXP and PEC embroidery files, pictures, SVG drawings and .heatstitch projects",
+          "Opens PES, DST, JEF, VP3, EXP, XXX, PEC and SEW embroidery files, pictures, SVG drawings and .heatstitch projects",
           "Sewing sequence player with color layers, stitch type and order coloring",
           "Objects per color: reorder by drag or optimize the order, combine and split",
           "Sew objects anew: fill patterns (tatami, gradient, contour, spiral), spacing, angle, underlay, satin width",
@@ -62,7 +62,7 @@
           "Thread length and needle penetration density heatmaps",
           "Checks density, short-stitch clusters and perforation for fabric and thread weight",
           "Automatic and manual stitch correction with undo and side by side comparison",
-          "Saves designs as PES, DST, JEF, VP3 or EXP, with the hoop for your machine",
+          "Saves designs as PES, DST, JEF, VP3, EXP or XXX, with the hoop for your machine",
           "Turns images, photos and SVG files into embroidery files: color reduction to thread colors, brush touch-up, fill, satin and running stitch",
           "Saves the whole workspace as a .heatstitch project",
           "Realistic thread preview",
@@ -95,7 +95,7 @@
             <svg class="i" aria-hidden="true"><use href="#i-chevron-down" /></svg>
           </button>
           <div class="popover design-pop" id="design-pop" role="dialog" data-i18n-aria="files.title" hidden>
-            <input type="file" id="file-input" accept=".dst,.pes,.pec,.jef,.exp,.vp3,.svg,.DST,.PES,.PEC,.JEF,.EXP,.VP3,.SVG,.heatstitch,image/*" multiple hidden />
+            <input type="file" id="file-input" accept=".dst,.pes,.pec,.jef,.exp,.vp3,.xxx,.sew,.svg,.DST,.PES,.PEC,.JEF,.EXP,.VP3,.XXX,.SEW,.SVG,.heatstitch,image/*" multiple hidden />
             <div class="dp-actions">
               <button type="button" id="new-design" class="dp-action" data-i18n-title="files.new.hint">
                 <svg class="i" aria-hidden="true"><use href="#i-plus" /></svg><span data-i18n="files.pop.new"></span>
@@ -164,6 +164,7 @@
                   <label class="fmt-opt"><input type="radio" name="save-fmt" value="jef" /><b>JEF</b><span data-i18n="files.fmt.jef"></span></label>
                   <label class="fmt-opt"><input type="radio" name="save-fmt" value="vp3" /><b>VP3</b><span data-i18n="files.fmt.vp3"></span></label>
                   <label class="fmt-opt"><input type="radio" name="save-fmt" value="exp" /><b>EXP</b><span data-i18n="files.fmt.exp"></span></label>
+                  <label class="fmt-opt"><input type="radio" name="save-fmt" value="xxx" /><b>XXX</b><span data-i18n="files.fmt.xxx"></span></label>
                   <label class="fmt-opt"><input type="radio" name="save-fmt" value="pec" /><b>PEC</b><span data-i18n="files.fmt.pec"></span></label>
                 </div>
                 <p class="fmt-note" id="save-fmt-note" data-i18n-title="save.note"></p>
@@ -175,6 +176,7 @@
                 <option value="jef" data-i18n="save.fmt.jef"></option>
                 <option value="vp3" data-i18n="save.fmt.vp3"></option>
                 <option value="exp" data-i18n="save.fmt.exp"></option>
+                <option value="xxx" data-i18n="save.fmt.xxx"></option>
                 <option value="pec" data-i18n="save.fmt.pec"></option>
               </select>
               <label class="save-field">
