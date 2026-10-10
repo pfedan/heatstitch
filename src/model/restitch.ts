@@ -3013,7 +3013,7 @@ const sided = (r: Rails, sew: (ps: [Pt, Pt][]) => Pt[]) => (ps: [Pt, Pt][]) => s
 const underInset = (s: SatinSettings): UnderInset => ({ mm: s.underInset, share: s.underInsetShare });
 
 /** The underlay of a column sewn with `s` (walked the way `s` says its sides are): inside the fringe, where every stitch covers it. */
-const underOf = (c: Column, s: SatinSettings) => underlayOf(fringedColumn(c, ...fringeOf(s)), s.under ?? 'auto', s.tolerance, underInset(s));
+const underOf = (c: Column, s: SatinSettings, oneWay = false) => underlayOf(fringedColumn(c, ...fringeOf(s)), s.under ?? 'auto', s.tolerance, underInset(s), oneWay);
 
 /** Longest stitch of the run joining two sections that do not meet (mm). */
 const TRAVEL_STEP = 2.5;
@@ -3159,7 +3159,8 @@ function columnRun(r: Rails, s: SatinSettings, sew: (ps: [Pt, Pt][]) => Pt[], al
   const col = columnOf(secs[0]);
   const rev = reversedColumn(col);
   const satinBack = () => sided(r, sew)(pairs(rev, along(rev, reversedRails(secs[0]), satinParams(swappedSides(s)))));
-  const under = s.underlay ? underOf(col, s) : null;
+  // Out and back without a run along the middle: the zigzag sewn out only (see underlayOf).
+  const under = s.underlay ? underOf(col, s, true) : null;
   if (under?.atEnd) return [...under.pts, ...satinBack()];
   const underBack = s.underlay ? underOf(rev, swappedSides(s)).pts : [];
   return [...runStitch(col.center, TRAVEL_STEP, s.tolerance), ...underBack, ...satinBack()];

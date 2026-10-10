@@ -310,33 +310,63 @@ export function eStitches(ps: [Pt, Pt][], p: SatinParams): Pt[] {
 /** Kinds of satin underlay: by the column's width, along the middle, along both rails, zigzag, rails and zigzag. */
 export type UnderlayKind = 'auto' | 'center' | 'contour' | 'zigzag' | 'both';
 
-/** Inset of the contour and zigzag underlay from the rails (mm), at most a fourth of the width. */
+/** Inset of the contour underlay from the rails (mm), at most a fourth of the width; the zigzag's is half of it. */
 const INSET = 0.4;
 
 /**
- * Underlay sewn on the way out along the column (the satin follows on the way back), by width (see
- * SATIN_CENTER_MAX): a center walk for columns up to 4 mm; for wider ones a contour inset 0.4 mm
- * from both rails, then a zigzag with 3 mm between penetrations on the same side (Ink/Stitch's
- * underlay tutorial). The center walk keeps within `tol` of the centerline, so it stays under the
- * satin in tight curves.
+ * Underlay sewn on the way out along the column, ending at its far end (the satin follows on the
+ * way back), by width (see SATIN_CENTER_MAX): a center walk for columns up to 4 mm; for wider ones
+ * a contour inset 0.4 mm from both rails, then one zigzag with 3 mm between penetrations on the
+ * same side (Ink/Stitch's underlay tutorial). The center walk keeps within `tol` of the centerline,
+ * so it stays under the satin in tight curves. The image conversion walks its columns this way;
+ * objects get underlayOf, whose zigzag goes out and back.
  */
-export function underlay(c: Column, tol = TOLERANCE, inset = insetOf(undefined)): Pt[] {
+export function underlay(c: Column, tol = TOLERANCE, inset = insetOf(undefined), zig = insetOf(undefined, true)): Pt[] {
   const parts = byWidth(c);
-  if (parts.length === 1) return c.width <= WIDE ? centerWalk(c, tol) : wideUnder(c, tol, inset);
+  if (parts.length === 1) return c.width <= WIDE ? centerWalk(c, tol) : wideUnder(c, tol, inset, zig);
   // Along the column by its width there: a centre walk where narrow, a zigzag where wide.
   const out: Pt[] = [];
   for (const { a, b, wide } of parts) {
     const part = sliceColumn(c, a, b);
-    out.push(...(wide ? wideUnder(part, tol, inset) : centerWalk(part, tol)));
+    out.push(...(wide ? wideUnder(part, tol, inset, zig) : centerWalk(part, tol)));
   }
   return out;
 }
+
+/**
+ * The underlay by width with a double zigzag where the column is wide (German underlay: edge run
+ * and zigzag out and back). It ends back at the start where any stretch is wide: there the narrow
+ * stretches walk their centre out and back on the same holes, the wide ones get edge run and the
+ * first zigzag on the way out and the second zigzag on the way back.
+ */
+function autoUnder(c: Column, tol: number, inset: Inset, zig: Inset): { pts: Pt[]; atEnd: boolean } {
+  const parts = byWidth(c);
+  if (parts.length === 1) return c.width <= WIDE ? { pts: centerWalk(c, tol), atEnd: true } : { pts: [...contour(c, tol, inset), ...doubleZigzag(c, zig)], atEnd: false };
+  const out: Pt[] = [];
+  const back: Pt[][] = [];
+  for (const { a, b, wide } of parts) {
+    const part = sliceColumn(c, a, b);
+    if (wide) {
+      const [there, home] = zigzags(part, zig);
+      out.push(...contour(part, tol, inset), ...there);
+      back.push(home);
+    } else {
+      const walk = centerWalk(part, tol);
+      out.push(...walk);
+      back.push(walk.slice().reverse());
+    }
+  }
+  return { pts: [...out, ...back.reverse().flat()], atEnd: false };
+}
+
+/** How far underlay keeps inside a rung from a to b, as a fraction of its length. */
+type Inset = (a: Pt, b: Pt) => number;
 
 /** Wider than this (mm), a column gets contour and zigzag underlay; up to it a centre walk. */
 const WIDE = SATIN_CENTER_MAX;
 
 /** Contour (out and back along the rails) then zigzag to the far end, where the satin starts back. */
-const wideUnder = (c: Column, tol: number, inset: (a: Pt, b: Pt) => number): Pt[] => [...contour(c, tol, inset), ...zigzag(c, inset)];
+const wideUnder = (c: Column, tol: number, inset: Inset, zig: Inset): Pt[] => [...contour(c, tol, inset), ...zigzags(c, zig)[0]];
 /** Along a column a stretch counts as wide only this much over WIDE (mm), so a column about 4 mm wide is not cut up. */
 const WIDE_MARGIN = 0.5;
 /** Stretches shorter than this (mm along the middle) go with their neighbours. */
@@ -391,30 +421,103 @@ export interface UnderInset {
   share?: number;
 }
 
-/** The inset across a rung from a to b, as a fraction of its length (at most 45 % from each side). */
-const insetOf = (ins: UnderInset | undefined) => (a: Pt, b: Pt) => {
+/**
+ * The inset across a rung from a to b, as a fraction of its length (at most 45 % from each side).
+ * `half`: the zigzag's when none is set, half the edge run's (as Ink/Stitch's default), so the
+ * zigzag also carries the satin's edge beside the edge run.
+ */
+const insetOf = (ins: UnderInset | undefined, half = false): Inset => (a: Pt, b: Pt) => {
   const w = Math.max(dist(a, b), 1e-6);
   if (ins?.share !== undefined) return Math.min(0.45, Math.max(0, ins.share));
   if (ins?.mm !== undefined) return Math.min(0.45 * w, Math.max(0, ins.mm)) / w;
-  return Math.min(INSET, w / 4) / w;
+  return Math.min(INSET, w / 4) / w / (half ? 2 : 1);
 };
 
-function zigzag(c: Column, inset = insetOf(undefined)): Pt[] {
-  const out: Pt[] = [];
-  let lastS = -Infinity;
-  let s = 0;
-  let side = 0;
-  for (let i = 0; i < c.center.length; i++) {
-    if (i > 0) s += dist(c.center[i - 1], c.center[i]);
-    if (s - lastS < 1.5 && i < c.center.length - 1) continue;
+/** Between penetrations of the zigzag underlay (mm along the middle, alternating sides): 3 mm on one side. */
+const ZIGZAG_STEP = 1.5;
+
+/**
+ * The zigzag underlay as two passes over the same stations every ZIGZAG_STEP along the column: out
+ * from the left rail, then back starting on the other rail at the far end, so at each station the
+ * second pass meets the side the first one left out and the two cross between stations, the
+ * double zigzag (cross-hatch) of Wilcom and Ink/Stitch, which holds the fabric in both diagonals.
+ */
+function zigzags(c: Column, inset = insetOf(undefined, true)): [Pt[], Pt[]] {
+  const side = (i: number, j: number) => {
     const a = c.left[i];
     const b = c.right[i];
     const k = inset(a, b);
-    out.push(side === 0 ? lerp(a, b, k) : lerp(b, a, k));
-    side = 1 - side;
-    lastS = s;
+    return j === 0 ? lerp(a, b, k) : lerp(b, a, k);
+  };
+  // Whether a zigzag stitch from station i to j (either way across) would cross a rail: round the
+  // inside of a sharp corner, where it would cut across what is not the column. Any part of the
+  // rails, as rungs may slant far along them.
+  const near = railGrid(c);
+  const cuts = (i: number, j: number) => [[side(i, 0), side(j, 1)], [side(i, 1), side(j, 0)]].some(([p, q]) => near(p, q).some(([a, b]) => crossing(p, q, a, b)));
+  // Every ZIGZAG_STEP along the middle, or sooner where a stitch would leave the column.
+  const at: number[] = [0];
+  let sc = 0;
+  for (let i = 1; i < c.center.length; i++) {
+    sc += dist(c.center[i - 1], c.center[i]);
+    if (sc < ZIGZAG_STEP && i < c.center.length - 1) continue;
+    // Back towards the last station until the stitches stay inside, yet not nearer than a third
+    // of the step: where rails slant so much that no station helps, more would only pile up.
+    const last = at[at.length - 1];
+    let j = i;
+    while (j - 1 > last && dist(c.center[j - 1], c.center[last]) >= ZIGZAG_STEP / 3 && cuts(last, j)) j--;
+    at.push(j);
+    i = j;
+    sc = 0;
   }
-  return out;
+  const out = at.map((i, n) => side(i, n % 2));
+  const back = at.map((i, n) => side(i, 1 - (n % 2))).reverse();
+  return [out, back];
+}
+
+/** Cells of the grid railGrid sorts the rails' segments into (mm). */
+const RAIL_CELL = 1;
+
+/** The segments of both rails, found by the cells of a grid: those near the segment p-q. */
+function railGrid(c: Column): (p: Pt, q: Pt) => [Pt, Pt][] {
+  const cells = new Map<string, [Pt, Pt][]>();
+  const span = (a: number, b: number) => [Math.floor(Math.min(a, b) / RAIL_CELL), Math.floor(Math.max(a, b) / RAIL_CELL)];
+  for (const rail of [c.left, c.right]) {
+    for (let k = 0; k + 1 < rail.length; k++) {
+      const [x0, x1] = span(rail[k][0], rail[k + 1][0]);
+      const [y0, y1] = span(rail[k][1], rail[k + 1][1]);
+      for (let x = x0; x <= x1; x++) {
+        for (let y = y0; y <= y1; y++) {
+          const key = `${x},${y}`;
+          const list = cells.get(key);
+          if (list) list.push([rail[k], rail[k + 1]]);
+          else cells.set(key, [[rail[k], rail[k + 1]]]);
+        }
+      }
+    }
+  }
+  return (p, q) => {
+    const [x0, x1] = span(p[0], q[0]);
+    const [y0, y1] = span(p[1], q[1]);
+    const out = new Set<[Pt, Pt]>();
+    for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) for (const s of cells.get(`${x},${y}`) ?? []) out.add(s);
+    return [...out];
+  };
+}
+
+/** Whether the segments p-q and a-b cross (not only touch). */
+function crossing(p: Pt, q: Pt, a: Pt, b: Pt): boolean {
+  const o = (u: Pt, v: Pt, w: Pt) => (v[0] - u[0]) * (w[1] - u[1]) - (v[1] - u[1]) * (w[0] - u[0]);
+  const d1 = o(p, q, a);
+  const d2 = o(p, q, b);
+  const d3 = o(a, b, p);
+  const d4 = o(a, b, q);
+  return d1 * d2 < 0 && d3 * d4 < 0;
+}
+
+/** Both zigzag passes: out to the far end and back to the start. */
+function doubleZigzag(c: Column, inset = insetOf(undefined, true)): Pt[] {
+  const [out, back] = zigzags(c, inset);
+  return [...out, ...back];
 }
 
 /** Out along the left rail and back along the right one, both inset. */
@@ -426,13 +529,20 @@ function contour(c: Column, tol: number, inset = insetOf(undefined)): Pt[] {
 
 /**
  * The underlay of `kind` for the column, and whether it ends at the column's far end (then the
- * satin comes back over it) or back where it started (then the satin goes out over it).
+ * satin comes back over it) or back where it started (then the satin goes out over it). A zigzag
+ * is sewn out and back (see zigzags), so it ends where it started; `oneWay` (a column that has to
+ * come home, in a chain) sews it out only, so it ends at the far end and needs no run out along
+ * the middle on top (more thread where columns meet).
  */
-export function underlayOf(c: Column, kind: UnderlayKind, tol = TOLERANCE, ins?: UnderInset): { pts: Pt[]; atEnd: boolean } {
+export function underlayOf(c: Column, kind: UnderlayKind, tol = TOLERANCE, ins?: UnderInset, oneWay = false): { pts: Pt[]; atEnd: boolean } {
   const k = insetOf(ins);
+  const z = insetOf(ins, true);
   if (kind === 'center') return { pts: centerWalk(c, tol), atEnd: true };
-  if (kind === 'zigzag') return { pts: zigzag(c, k), atEnd: true };
   if (kind === 'contour') return { pts: contour(c, tol, k), atEnd: false };
-  if (kind === 'both') return { pts: [...contour(c, tol, k), ...zigzag(c, k)], atEnd: true };
-  return { pts: underlay(c, tol, k), atEnd: true };
+  if (oneWay && kind === 'zigzag') return { pts: zigzags(c, z)[0], atEnd: true };
+  if (oneWay && kind === 'both') return { pts: [...contour(c, tol, k), ...zigzags(c, z)[0]], atEnd: true };
+  if (oneWay) return { pts: underlay(c, tol, k, z), atEnd: true };
+  if (kind === 'zigzag') return { pts: doubleZigzag(c, z), atEnd: false };
+  if (kind === 'both') return { pts: [...contour(c, tol, k), ...doubleZigzag(c, z)], atEnd: false };
+  return autoUnder(c, tol, k, z);
 }
