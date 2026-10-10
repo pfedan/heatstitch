@@ -353,8 +353,11 @@ describe('border moved by hand', () => {
 describe('a border sewn anew', () => {
   it('stays the same object: its id goes with it (the patch of the demo project)', () => {
     const d = patch();
+    // Its fill's border gets wider: the border is sewn anew.
+    const fill = sewObjects(d.p).find((o) => remembered(d.p, o)?.fill?.border?.link)!;
+    const m = remembered(d.p, fill)!;
+    remember(d.p, fill, { ...m, fill: { ...m.fill!, border: { ...m.fill!.border!, width: m.fill!.border!.width + 1 } } });
     const q = syncBorders(d.p, d.T);
-    // The demo's border was stored with other settings than its fill now has: it is sewn anew.
     expect(q).not.toBe(d.p);
     const ids = (p: Pattern) => sewObjects(p).map((o) => o.id);
     expect(ids(q)).toEqual(ids(d.p));

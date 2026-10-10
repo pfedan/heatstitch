@@ -535,15 +535,15 @@
   "name": "Handtuch (terry)",
   "ampel": "red",
   "ampelAfter": "red",
-  "crit": 22,
-  "critAfter": 4,
+  "crit": 24,
+  "critAfter": 6,
   "newCrit": 0,
   "newCaution": 0,
   "newGapSparse": 0,
   "open": {
    "density": [
-    22,
-    4
+    24,
+    6
    ],
    "holes": [
     0,
@@ -562,12 +562,12 @@
     0
    ]
   },
-  "moves": 9,
-  "movesAfter": 10,
-  "cut": 5,
-  "cutAfter": 5,
+  "moves": 11,
+  "movesAfter": 12,
+  "cut": 7,
+  "cutAfter": 7,
   "objects": 1,
-  "ms": 17939
+  "ms": 16500
  },
  {
   "name": "Handtuch (woven)",
@@ -600,12 +600,12 @@
     0
    ]
   },
-  "moves": 9,
-  "movesAfter": 9,
-  "cut": 5,
-  "cutAfter": 5,
+  "moves": 11,
+  "movesAfter": 11,
+  "cut": 7,
+  "cutAfter": 7,
   "objects": 0,
-  "ms": 422
+  "ms": 436
  },
  {
   "name": "Handtuch (knit)",
@@ -638,12 +638,12 @@
     0
    ]
   },
-  "moves": 9,
-  "movesAfter": 9,
-  "cut": 5,
-  "cutAfter": 5,
+  "moves": 11,
+  "movesAfter": 11,
+  "cut": 7,
+  "cutAfter": 7,
   "objects": 0,
-  "ms": 410
+  "ms": 415
  },
  {
   "name": "cat-60mm.pes (woven)",
