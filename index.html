@@ -188,6 +188,21 @@
                 <svg class="i" aria-hidden="true"><use href="#i-save" /></svg><span data-i18n="save.file"></span>
               </button>
               <div class="save-more">
+                <!-- Only in browsers that can write into a folder: the row saves into the remembered stick folder, the arrow picks another. -->
+                <div class="save-split" id="stick-split" hidden>
+                  <button type="button" id="save-stick" class="pop-row save-row" data-i18n-title="files.save.stick.hint">
+                    <svg class="i" aria-hidden="true"><use href="#i-files-stick" /></svg>
+                    <span><span data-i18n="files.save.stick"></span><small id="save-stick-sub"></small></span>
+                  </button>
+                  <button type="button" id="save-stick-more" class="save-split-toggle" aria-expanded="false" aria-controls="save-stick-menu" data-i18n-title="files.save.stick.more" data-i18n-aria="files.save.stick.more" hidden>
+                    <svg class="i" aria-hidden="true"><use href="#i-chevron-down" /></svg>
+                  </button>
+                  <div class="save-split-menu" id="save-stick-menu" hidden>
+                    <button type="button" id="save-stick-other" class="save-split-item">
+                      <svg class="i" aria-hidden="true"><use href="#i-files-open" /></svg><span data-i18n="files.save.stick.other"></span>
+                    </button>
+                  </div>
+                </div>
                 <!-- A split button: the row saves everything, the arrow offers the active design on its own. -->
                 <div class="save-split">
                   <button type="button" id="save-project" class="pop-row save-row" data-i18n-title="save.project.hint">
