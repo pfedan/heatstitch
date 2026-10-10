@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { geoOf, geoUse } from '../src/model/geo';
 import { sewObjects } from '../src/model/objects';
-import { compactStored, remember, remembered, rememberedIn, restoreRemembered, type StoredObjects } from '../src/model/restitch';
+import { compactStored, remember, remembered, rememberedIn, restoreRemembered, type FillSettings, type StoredObjects } from '../src/model/restitch';
 import { fromStored } from '../src/storage/fileStore';
 import { parsePattern } from '../src/parsers';
 import { storeForm } from '../src/shape/path';
@@ -83,9 +83,9 @@ describe('project version 3', () => {
     const list = structuredClone(f.objects) as StoredObjects;
     expect(list.v).toBe(2);
     // An empty fill as version 2 kept it: its form, its border only, in its thread.
-    const e = list.objects.find((x) => x.memory?.form && x.memory.fill && !x.memory.knockout && !x.memory.fill.border?.link)!;
+    const e = list.objects.find((x) => x.memory?.form && x.memory.fill && !x.memory.knockout && !x.memory.line?.link)!;
     expect(e).toBeDefined();
-    e.memory!.fill = { ...e.memory!.fill!, pattern: 'none' as never, border: { type: 'triple', width: 2 } };
+    e.memory!.fill = { ...e.memory!.fill!, pattern: 'none' as never, border: { type: 'triple', width: 2 } } as FillSettings;
     const p = fromStored(parsePattern(f.data, f.name), f.working) ?? parsePattern(f.data, f.name);
     restoreRemembered(p, list);
     const o = sewObjects(p).find((x) => x.id === e.id)!;

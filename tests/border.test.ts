@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { rememberObjects, sewObjects, type SewObject } from '../src/model/objects';
 import { STITCH, type Pattern } from '../src/model/pattern';
-import { analyze, measureFill, remember, remembered, restitch, underlayRanges, type FillSettings } from '../src/model/restitch';
+import { analyze, measureFill, remember, remembered, restitch, underlayRanges, withLine, type BorderSettings, type FillSettings } from '../src/model/restitch';
 import { stitchKinds } from '../src/model/sequence';
 import { parsePattern } from '../src/parsers';
 import { sample } from '../src/digitize/region';
@@ -17,10 +17,14 @@ import { patch } from './helpers/demoProject';
 const load = (f: string) => parsePattern(readFileSync(new URL(`../public/examples/${f}`, import.meta.url)), f);
 
 /** The pattern after a restitch, with its objects remembered as the app does. */
-function apply(p: Pattern, which: number, s: FillSettings) {
+/** Fill settings and the border beside them (none when not set). */
+type Bordered = FillSettings & { border?: BorderSettings };
+
+function apply(p: Pattern, which: number, settings: Bordered) {
   const kinds = stitchKinds(p);
   const objs = sewObjects(p, kinds);
-  const r = restitch(p, objs, [which], { kind: 'fill', s }, kinds, 7);
+  const { border, ...s } = settings;
+  const r = restitch(p, objs, [which], { kind: 'fill', s, line: border ?? null }, kinds, 7);
   expect(r.failed).toEqual([]);
   rememberObjects(r.pattern, [r.starts[0]], r.ends[0]);
   const q = r.pattern;
@@ -34,13 +38,13 @@ function apply(p: Pattern, which: number, s: FillSettings) {
 }
 
 /** The pattern after a restitch with its borders made (as the app does), with the fill and its border object. */
-function applyAll(p: Pattern, which: number, s: FillSettings) {
+function applyAll(p: Pattern, which: number, s: Bordered) {
   const a = apply(p, which, s);
   const q = syncBorders(a.q, 7);
   const kinds = stitchKinds(q);
   const objs = sewObjects(q, kinds);
   const fill = objs.find((x) => remembered(q, x)?.region && sameAt(q, x, a.q, a.o))!;
-  const link = remembered(q, fill)?.fill?.border?.link;
+  const link = remembered(q, fill)?.line?.link;
   const border = link ? objs.find((x) => remembered(q, x)?.outline === link) : undefined;
   return { ...a, q, kinds, objs, o: fill, border };
 }
@@ -94,7 +98,7 @@ describe('fill border', () => {
     expect(analyze(a.q, a.o, a.kinds).parts.some((pt) => pt.border)).toBe(false);
     // A new spacing makes it anew, not twice.
     const one = stitches(a.q, a.border!.first, a.border!.last);
-    const b = applyAll(a.q, a.o.index, { ...base, spacing: base.spacing, border: { ...remembered(a.q, a.o)!.fill!.border! } });
+    const b = applyAll(a.q, a.o.index, { ...base, spacing: base.spacing, border: { ...remembered(a.q, a.o)!.line! } });
     expect(b.border).toBeDefined();
     expect(Math.abs(stitches(b.q, b.border!.first, b.border!.last) - one)).toBeLessThan(one * 0.05);
     expect(b.objs.filter((x) => remembered(b.q, x)?.outline)).toHaveLength(1);
@@ -105,7 +109,7 @@ describe('fill border', () => {
     expect(plain.border).toBeUndefined();
     const sat = applyAll(p, o.index, { ...base, border: { type: 'satin', width: 3 } });
     expect(stitches(sat.q, sat.border!.first, sat.border!.last)).toBeGreaterThan(200);
-    const link = remembered(sat.q, sat.o)!.fill!.border!.link!;
+    const link = remembered(sat.q, sat.o)!.line!.link!;
     const off = apply(sat.q, sat.o.index, base);
     const gone = syncBorders(off.q, 7, new Set([link]));
     expect(sewObjects(gone, stitchKinds(gone)).some((x) => remembered(gone, x)?.outline)).toBe(false);
@@ -162,13 +166,13 @@ describe('border in a thread of its own', () => {
     const border = nobjs.find((x) => remembered(next, x)?.outline === 'l1')!;
     expect(border).toBeDefined();
     expect(border.color).toMatchObject(red);
-    expect(border.block).toBe(nobjs.find((x) => remembered(next, x)?.fill?.border?.link === 'l1')!.block + 1);
+    expect(border.block).toBe(nobjs.find((x) => remembered(next, x)?.line?.link === 'l1')!.block + 1);
     // Nothing changed: nothing to do.
     expect(syncBorders(next, 7)).toBe(next);
     // Taken away with its link dropped.
-    const fill = nobjs.find((x) => remembered(next, x)?.fill?.border?.link === 'l1')!;
+    const fill = nobjs.find((x) => remembered(next, x)?.line?.link === 'l1')!;
     const m = remembered(next, fill)!;
-    remember(next, fill, { ...m, fill: { ...m.fill!, border: undefined } });
+    remember(next, fill, withLine(m, undefined));
     const gone = syncBorders(next, 7, new Set(['l1']));
     expect(gone.colors.length).toBe(a.q.colors.length);
     expect(sewObjects(gone, stitchKinds(gone)).some((x) => remembered(gone, x)?.outline)).toBe(false);
@@ -227,11 +231,11 @@ it('remembers its border apart from the settings it was sewn with, which the pan
   const p = load('cat-60mm.pes');
   const kinds = stitchKinds(p);
   const o = sewObjects(p, kinds)[1];
-  const s = { ...measureFill(p, analyze(p, o, kinds)), pattern: 'tatami' as const, border: { type: 'satin' as const, width: 2 } as FillSettings['border'] };
+  const s = { ...measureFill(p, analyze(p, o, kinds)), pattern: 'tatami' as const, border: { type: 'satin' as const, width: 2 } as BorderSettings };
   const a = apply(p, o.index, s);
   // The thread is picked in the panel: its settings change in place.
   s.border!.color = { r: 1, g: 2, b: 3 };
-  expect(remembered(a.q, a.o)?.fill?.border?.color).toBeUndefined();
+  expect(remembered(a.q, a.o)?.line?.color).toBeUndefined();
   // So the next change finds the border in the fill and moves it to its own thread.
   const b = apply(a.q, a.o.index, { ...s, border: { ...s.border!, link: 'k' } });
   const plain = apply(p, o.index, { ...s, border: undefined });
@@ -346,7 +350,7 @@ describe('border moved by hand', () => {
     expect(borders).toHaveLength(1);
     expect(borders[0].color).toMatchObject(lilac);
     expect(borders[0].index).toBe(b.fill + 1);
-    expect(remembered(s, objs[b.fill])?.fill?.border?.color).toMatchObject(lilac);
+    expect(remembered(s, objs[b.fill])?.line?.color).toMatchObject(lilac);
   });
 });
 
@@ -354,9 +358,9 @@ describe('a border sewn anew', () => {
   it('stays the same object: its id goes with it (the patch of the demo project)', () => {
     const d = patch();
     // Its fill's border gets wider: the border is sewn anew.
-    const fill = sewObjects(d.p).find((o) => remembered(d.p, o)?.fill?.border?.link)!;
+    const fill = sewObjects(d.p).find((o) => remembered(d.p, o)?.fill && remembered(d.p, o)?.line?.link)!;
     const m = remembered(d.p, fill)!;
-    remember(d.p, fill, { ...m, fill: { ...m.fill!, border: { ...m.fill!.border!, width: m.fill!.border!.width + 1 } } });
+    remember(d.p, fill, { ...m, line: { ...m.line!, width: m.line!.width + 1 } });
     const q = syncBorders(d.p, d.T);
     expect(q).not.toBe(d.p);
     const ids = (p: Pattern) => sewObjects(p).map((o) => o.id);

@@ -23,7 +23,7 @@ import { backToOriginal, originalOf } from '../model/original';
 import { newLink, shareBorders, syncBorders } from '../model/border';
 import { readBorder } from '../model/readBorder';
 import { t, type Key } from '../i18n';
-import { type ShapeTrust, analyze, remembered, measureFill, measureSatin, measureRun, shapeTrust, type Remembered, remember, rememberedIn, restitch, restitchedPieces, type Settings as RestitchSettings, type RestitchResult, objectKey } from '../model/restitch';
+import { type ShapeTrust, analyze, borderOf, withLine, remembered, measureFill, measureSatin, measureRun, shapeTrust, type Remembered, remember, rememberedIn, restitch, restitchedPieces, type Settings as RestitchSettings, type RestitchResult, objectKey } from '../model/restitch';
 import { type StitchInfo, StitchPanel } from '../ui/stitchPanel';
 import { ui } from './state';
 import { areaOf, fits, geoUse, guessLine, lineGeoOf } from '../model/geo';
@@ -78,7 +78,12 @@ export function bindStitches(app: StitchesApp) {
         if (pt.kind === 'run' && an.parts[j - 1]?.kind === 'fill' && an.parts[j + 1]?.kind === 'fill' && !an.parts[j + 1].border) continue;
         if (!seen.has(pt.kind)) counts[pt.kind] = (counts[pt.kind] ?? 0) + 1;
         seen.add(pt.kind);
-        if (pt.kind === 'fill') measured.fill ??= remembered(p, obj)?.fill ?? measureFill(p, an);
+        if (pt.kind === 'fill' && !measured.fill) {
+          // The first fill's settings, and its border beside them.
+          measured.fill = remembered(p, obj)?.fill ?? measureFill(p, an);
+          const b = borderOf(remembered(p, obj));
+          if (b) measured.border = b;
+        }
         else if (pt.kind === 'satin') measured.satin ??= remembered(p, obj)?.satin ?? measureSatin(p, pt, q.kinds);
         else measured.run ??= measureRun(p, pt);
       }
@@ -108,9 +113,9 @@ export function bindStitches(app: StitchesApp) {
     const firstOf = (k: string) => [...ui.selectedObjects].sort((a, b) => a - b).map((o) => q.objects[o]).find((obj) => obj?.kind === k);
     const fillObj = firstOf('fill');
     // A fill from a file with a line sewn along its edge: that is its border (see syncBorders).
-    if (fillObj && ui.selectedObjects.size === 1 && measured.fill && !measured.fill.border && !remembered(p, fillObj)?.fill) {
+    if (fillObj && ui.selectedObjects.size === 1 && measured.fill && !measured.border && !remembered(p, fillObj)?.fill) {
       const found = readBorder(p, q.objects, fillObj, q.kinds);
-      if (found) measured.fill = { ...measured.fill, border: { ...found.border, link: newLink() } };
+      if (found) measured.border = { ...found.border, link: newLink() };
     }
     const fabricPull = {
       fill: fillObj ? pullFor(app.settings.profile, 'fill', analyze(p, fillObj, q.kinds).fill?.areaMm2).edge : undefined,
@@ -142,8 +147,8 @@ export function bindStitches(app: StitchesApp) {
       info.outline = { fill: fill >= 0 ? fill : null, blend: !own.outline };
       // A border's settings are its fill's: shown and set here as they are there.
       const fm = fill >= 0 ? remembered(p, q.objects[fill]) : undefined;
-      if (own.outline && fm?.fill?.border && !fm.free) {
-        info.outline.of = { fill: structuredClone(fm.fill), color: q.objects[fill].color };
+      if (own.outline && fm?.fill && borderOf(fm) && !fm.free) {
+        info.outline.of = { fill: structuredClone(fm.fill), border: structuredClone(borderOf(fm)!), color: q.objects[fill].color };
         info.color = q.objects[fill].color;
       }
     }
@@ -166,7 +171,7 @@ export function bindStitches(app: StitchesApp) {
   /** Whether `fill` is the fill the border or second blend thread `own` belongs to. */
   const partnerOf = (fill: Remembered | undefined, own: Remembered): boolean =>
     own.outline
-      ? fill?.fill?.border?.link === own.outline
+      ? borderOf(fill)?.link === own.outline
       : own.blendOf
         ? fill?.fill?.deco?.blend?.link === own.blendOf
         : !!partOf(own) && hasPart(fill, partOf(own)!);
@@ -266,8 +271,8 @@ export function bindStitches(app: StitchesApp) {
     return new Set(
       which
         .flatMap((o) => {
-          const f = q.objects[o] && remembered(p, q.objects[o])?.fill;
-          return [f?.border?.link ?? '', f?.deco?.blend?.link ?? ''];
+          const m = q.objects[o] && remembered(p, q.objects[o]);
+          return [borderOf(m)?.link ?? '', m?.fill?.deco?.blend?.link ?? ''];
         })
         .filter(Boolean),
     );
@@ -498,8 +503,8 @@ export function bindStitches(app: StitchesApp) {
         remember(p, own, { ...mem, shadowOf: undefined, echoOf: undefined });
       } else {
         if (fm?.fill && blend) remember(p, q.objects[fill], { ...fm, fill: { ...fm.fill, deco: { ...fm.fill.deco, blend: undefined } } });
-        else if (fm?.fill) remember(p, q.objects[fill], { ...fm, fill: { ...fm.fill, border: undefined } });
-        remember(p, own, blend ? { ...mem, blendOf: undefined } : { ...mem, outline: undefined, border: undefined });
+        else if (fm?.fill) remember(p, q.objects[fill], withLine(fm, undefined));
+        remember(p, own, blend ? { ...mem, blendOf: undefined } : { ...mem, outline: undefined, border: undefined, along: undefined });
       }
       if (app.files.active) app.files.setObjects(app.files.active, rememberedIn(p, q.objects));
       ui.selectionKey++;

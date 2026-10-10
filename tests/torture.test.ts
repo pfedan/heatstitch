@@ -24,7 +24,7 @@ describe('found by the torture test', () => {
     expect(borderOf(d)).toBeGreaterThan(0);
     shapes(d, deleteObjects(d.cur.p, [borderOf(d)], T));
     expect(borderOf(d)).toBe(-1);
-    expect(d.objects.every((o) => !remembered(d.cur.p, o)?.fill?.border)).toBe(true);
+    expect(d.objects.every((o) => !remembered(d.cur.p, o)?.line)).toBe(true);
     checkBorders(d.cur.p);
     // The square's stitches did not change, yet the version before still knows its border.
     backToVersion(before.p);
@@ -49,7 +49,7 @@ describe('found by the torture test', () => {
     const d = borderedSquare();
     shapes(d, recolorObjects(d.cur.p, [borderOf(d)], COLORS[2], T));
     expect(sameColor(squareOf(d)!.color, COLORS[0])).toBe(true);
-    expect(sameColor(remembered(d.cur.p, squareOf(d)!)!.fill!.border!.color, COLORS[2])).toBe(true);
+    expect(sameColor(remembered(d.cur.p, squareOf(d)!)!.line!.color, COLORS[2])).toBe(true);
     checkBorders(d.cur.p);
   });
 });
