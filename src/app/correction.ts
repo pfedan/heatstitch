@@ -7,7 +7,9 @@ import type { PlanPreview, Sequence } from './types';
 import type { WorkerClient } from '../density/client';
 import { Viewport } from '../render/viewport';
 import { cssColor } from '../ui/threadPicker';
-import { downloadPattern } from '../writers';
+import { downloadPattern, writePattern } from '../writers';
+import { saveToStick } from '../storage/stick';
+import { toast } from '../shell/ui';
 import { drawBeforeAfter, drawPanels } from '../render/compare';
 import { gridToCanvas } from '../render/heatmap';
 import { kindLabel } from '../ui/layersPanel';
@@ -436,6 +438,16 @@ export function bindCorrection(app: CorrectionApp) {
     save: (format, name) => {
       const f = app.files.active;
       if (f?.pattern) downloadPattern({ ...f.pattern, name }, format, `${name}.${format}`, { hoop: f.material.hoop });
+    },
+    stick: (format, name, pick) => {
+      const f = app.files.active;
+      if (!f?.pattern) return;
+      const data = writePattern({ ...f.pattern, name }, format, { hoop: f.material.hoop });
+      void saveToStick(data, name, format, pick).then((r) => {
+        if (r.ok) toast(t(r.cleaned ? 'files.save.stick.cleaned' : 'files.save.stick.done', { file: r.file, folder: r.folder, n: r.cleaned }));
+        else if (!r.cancelled) toast(t('files.save.stick.failed', { folder: r.folder }));
+        document.dispatchEvent(new Event('stick-changed'));
+      });
     },
     optionsChanged: () => saveSettings(app.settings),
   });

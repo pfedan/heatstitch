@@ -5,6 +5,7 @@ import { command, runCommand } from '../../shell/commands';
 import { h, icon } from '../../shell/h';
 import { toast } from '../../shell/ui';
 import { FileList, type LoadedFile } from '../../ui/fileList';
+import { canSaveToStick, stickName } from '../../storage/stick';
 import { hoopLabel, hoopMessage } from '../../ui/hoopPanel';
 
 /** What the area "Dateien" needs from the app: the file list and the ways to open and save. */
@@ -36,6 +37,7 @@ const SPRITE = `
 <symbol id="i-files-hoop" viewBox="0 0 20 20"><rect x="3" y="3" width="14" height="14" rx="4" /><rect x="5.5" y="5.5" width="9" height="9" rx="2" stroke-dasharray="2 1.6" /></symbol>
 <symbol id="i-files-x" viewBox="0 0 20 20"><path d="m6 6 8 8M14 6l-8 8" /></symbol>
 <symbol id="i-files-lock" viewBox="0 0 20 20"><path d="M6.5 9V6.5a3.5 3.5 0 0 1 7 0V9" /><rect x="4.5" y="9" width="11" height="8" rx="1.5" /></symbol>
+<symbol id="i-files-stick" viewBox="0 0 20 20"><rect x="5.5" y="7.5" width="9" height="10" rx="1.5" /><path d="M7.5 7.5v-4h5v4" /><path d="M9 5h.01M11 5h.01" /></symbol>
 <symbol id="i-files-recent" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7" /><path d="M10 6v4l2.5 1.5" /></symbol>`;
 
 function addSprite(): void {
@@ -239,14 +241,47 @@ export function initFilesArea(app: FilesAreaApp): void {
     if (f?.pattern) void app.saveProject(f);
   });
 
+  // "Auf den Stick" where the browser can write into a folder, with the remembered folder's name.
+  const stickSplit = $('stick-split');
+  const stickBtn = $<HTMLButtonElement>('save-stick');
+  const stickSub = $('save-stick-sub');
+  const stickMore = $<HTMLButtonElement>('save-stick-more');
+  const stickMenu = $('save-stick-menu');
+  const stickOther = $<HTMLButtonElement>('save-stick-other');
+  const showStickMenu = (open: boolean) => {
+    stickMenu.hidden = !open;
+    stickMore.setAttribute('aria-expanded', String(open));
+  };
+  const showStick = async () => {
+    stickSplit.hidden = !canSaveToStick() || !active()?.pattern;
+    if (stickSplit.hidden) return;
+    const folder = await stickName();
+    stickSub.textContent = folder ? t('files.save.stick.sub', { folder }) : t('files.save.stick.sub.pick');
+    stickMore.hidden = !folder;
+    stickBtn.disabled = saveBtn.disabled;
+    showStickMenu(false);
+  };
+  stickMore.addEventListener('click', () => {
+    const open = stickMore.getAttribute('aria-expanded') !== 'true';
+    showStickMenu(open);
+    if (open) stickOther.focus();
+  });
+  document.addEventListener('pointerdown', (e) => {
+    if (!stickMenu.hidden && !stickMore.contains(e.target as Node) && !stickMenu.contains(e.target as Node)) showStickMenu(false);
+  });
+  document.addEventListener('stick-changed', () => void showStick());
+  onLangChange(() => void showStick());
+  command({ id: 'save.stick', label: 'files.cmd.stick', group: G, icon: 'files-stick', when: () => !!active()?.pattern && notImage() && canSaveToStick() && !saveBtn.disabled, run: () => stickBtn.click() });
+
   const showSave = () => {
     showFormat();
     showHoop();
     showSplit();
+    void showStick();
   };
   new MutationObserver(() => savePop.isOpen() && showSave()).observe($('save-pop'), { attributes: true, attributeFilter: ['hidden'] });
   // Once something is saved or opened elsewhere, the popover has done its job.
-  for (const b of [saveBtn, pngBtn, colorBtn, $('save-project'), oneBtn]) b.addEventListener('click', () => setTimeout(() => savePop.close()));
+  for (const b of [saveBtn, pngBtn, colorBtn, $('save-project'), oneBtn, stickBtn, stickOther]) b.addEventListener('click', () => setTimeout(() => savePop.close()));
   $('save-name').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') setTimeout(() => savePop.close());
   });

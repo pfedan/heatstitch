@@ -37,6 +37,8 @@ export interface CorrectHooks {
   revert: () => void;
   /** Saves the open file; `name` is the file name without extension (also the design name in the header). */
   save: (format: OutputFormat, name: string) => void;
+  /** Saves it straight onto the stick; with `pick`, into a folder chosen now. */
+  stick: (format: OutputFormat, name: string, pick: boolean) => void;
   /** Correction options changed (settings need saving). */
   optionsChanged: () => void;
 }
@@ -160,13 +162,22 @@ export class CorrectPanel {
       const f = this.last?.file;
       if (f) this.names.set(f, this.saveName.value);
     });
-    const save = () => {
+    const target = () => {
       const f = this.last?.file;
-      if (!f || !isOutputFormat(this.saveFormat.value)) return;
-      const name = cleanName(this.saveName.value) || cleanName(FileList.saveName(f)) || 'design';
-      hooks.save(this.saveFormat.value, name);
+      if (!f || !isOutputFormat(this.saveFormat.value)) return null;
+      return { format: this.saveFormat.value, name: cleanName(this.saveName.value) || cleanName(FileList.saveName(f)) || 'design' };
+    };
+    const save = () => {
+      const to = target();
+      if (to) hooks.save(to.format, to.name);
     };
     this.saveFile.addEventListener('click', save);
+    const stick = (pick: boolean) => {
+      const to = target();
+      if (to) hooks.stick(to.format, to.name, pick);
+    };
+    $('save-stick').addEventListener('click', () => stick(false));
+    $('save-stick-other').addEventListener('click', () => stick(true));
     this.saveName.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') save();
     });
