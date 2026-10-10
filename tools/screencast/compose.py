@@ -207,7 +207,7 @@ def outro_card():
     return card([
         ('', (font('Regular', 10), CARD_BG), 30 * SS, False),
         ('heatstitch', (font('Bold', 64 * SS), (255, 255, 255)), 90 * SS, False),
-        ('pfedan.github.io/heatstitch', (font('Medium', 34 * SS), (190, 182, 200)), 60 * SS, False),
+        ('heatstitch.app', (font('Medium', 34 * SS), (190, 182, 200)), 60 * SS, False),
     ])
 
 

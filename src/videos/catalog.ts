@@ -12,7 +12,7 @@
 export type Lang = 'de' | 'en';
 type Text = Record<Lang, string>;
 
-export const VIDEO_BASE = 'https://pub-204da4fc7b9d4c8696b962420ee54b60.r2.dev/videos/';
+export const VIDEO_BASE = 'https://media.heatstitch.app/videos/';
 
 export type GroupId = 'start' | 'design' | 'file' | 'detail';
 
