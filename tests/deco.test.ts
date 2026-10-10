@@ -10,7 +10,7 @@ import { syncBorders } from '../src/model/border';
 import { takeOver } from '../src/model/knockout';
 import { sewObjects } from '../src/model/objects';
 import { COLOR_CHANGE, STITCH, type Pattern } from '../src/model/pattern';
-import { DECO_PATTERNS, OPEN_PATTERNS, openOnPurpose, remembered, restitch, restitchedPieces, restoreRemembered, rememberedIn, type FillSettings } from '../src/model/restitch';
+import { DECO_PATTERNS, OPEN_PATTERNS, openOnPurpose, remembered, restitch, restitchedPieces, restoreRemembered, rememberedIn, type BorderSettings, type FillSettings } from '../src/model/restitch';
 import { stitchKinds, stitchNumbers } from '../src/model/sequence';
 import { deleteObjects, mirrorMatrix, recolorObjects } from '../src/model/shapeOps';
 import { transformRemembered } from '../src/model/transform';
@@ -245,10 +245,10 @@ function disc(): Pattern {
   return addShape(empty, { form: parsePath(ellipsePath(0, 0, 15, 15), [...ID]), kind: 'fill' }, red, null, options)!.pattern;
 }
 
-function sewAs(p: Pattern, s: (f: FillSettings) => FillSettings): Pattern | null {
+function sewAs(p: Pattern, s: (f: FillSettings) => FillSettings, line?: BorderSettings): Pattern | null {
   const kinds = stitchKinds(p);
   const objs = sewObjects(p, kinds);
-  return takeOver(restitch(p, objs, [0], { kind: 'fill', s: s(remembered(p, objs[0])!.fill!) }, kinds, options.trimMm));
+  return takeOver(restitch(p, objs, [0], { kind: 'fill', s: s(remembered(p, objs[0])!.fill!), line }, kinds, options.trimMm));
 }
 
 describe('decorative fills in the design', () => {
@@ -333,7 +333,7 @@ describe('decorative fills in the design', () => {
   it('sews the border of a blend after its second thread, also in the fill thread', () => {
     const p = disc();
     const fill = remembered(p, sewObjects(p)[0])!.fill!;
-    const bordered = sewAs(p, () => ({ ...fill, border: { type: 'satin', width: 2, length: 2.5, tolerance: 0.15 } }))!;
+    const bordered = sewAs(p, () => fill, { type: 'satin', width: 2, length: 2.5, tolerance: 0.15 })!;
     expect(sewObjects(bordered)).toHaveLength(1);
     const q = blendObject(bordered, 0, blue, options.trimMm)!;
     const objs = sewObjects(q);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { sewObjects } from '../src/model/objects';
-import { railsForm, satinArea } from '../src/model/railsForm';
+import { satinOutline } from '../src/model/geo';
 import { analyze } from '../src/model/restitch';
 import { FILL, RUNNING, SATIN, stitchKinds } from '../src/model/sequence';
 import { formArea } from '../src/shape/path';
@@ -40,9 +40,10 @@ describe('a satin over an underlay back and forth', () => {
     const o = objs[0];
     expect(o.kind).toBe('satin');
     expect(analyze(p, o, kinds).parts.map((pt) => pt.kind)).not.toContain('fill');
-    expect(railsForm(p, o, kinds)?.paths).toHaveLength(2);
-    // 30 mm long, 4 mm wide.
-    const area = satinArea(p, o, kinds);
+    // One closed outline around its one column: 30 mm long, 4 mm wide.
+    const area = satinOutline(p, o, kinds);
+    expect(area?.paths).toHaveLength(1);
+    expect(area!.paths[0].closed).toBe(true);
     expect(area).not.toBeNull();
     expect(formArea(area!)).toBeGreaterThan(120 * 0.85);
     expect(formArea(area!)).toBeLessThan(120 * 1.15);

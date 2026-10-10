@@ -12,7 +12,7 @@ import { refreshKnockouts, setKnockout } from '../../src/model/knockout';
 import { rememberObjects, sewObjects } from '../../src/model/objects';
 import type { PathStitch } from '../../src/model/along';
 import type { Pattern, ThreadColor } from '../../src/model/pattern';
-import { keepVersion, remember, remembered, rememberedIn, restitch, restoreRemembered, type FillSettings, type StoredObjects } from '../../src/model/restitch';
+import { keepVersion, remember, remembered, rememberedIn, restitch, restoreRemembered, type BorderSettings, type FillSettings, type StoredObjects } from '../../src/model/restitch';
 import { stitchKinds } from '../../src/model/sequence';
 import { stitchesBefore } from '../../src/model/transform';
 import { parsePattern } from '../../src/parsers';
@@ -144,7 +144,7 @@ export class Design {
   restitchLine(index: number, st: Partial<PathStitch>): void {
     const o = this.objects[index];
     const m = remembered(this.p, o)!;
-    const next = resewLine(this.p, o.index, m.path!, { ...lineSettings(this.p, o), ...st }, this.T);
+    const next = resewLine(this.p, o.index, m.geo!, { ...lineSettings(this.p, o), ...st }, this.T);
     this.take(next && syncBorders(next.pattern, this.T));
   }
 
@@ -157,10 +157,10 @@ export class Design {
   }
 
   /** The fill `index` sewn anew with the settings `s` (the stitch panel). */
-  restitchFill(index: number, s: FillSettings, drop = new Set<string>()): void {
+  restitchFill(index: number, s: FillSettings, drop = new Set<string>(), line?: BorderSettings | null): void {
     const kinds = stitchKinds(this.p);
     const objs = sewObjects(this.p, kinds);
-    const r = restitch(this.p, objs, [index], { kind: 'fill', s }, kinds, this.T);
+    const r = restitch(this.p, objs, [index], { kind: 'fill', s, line }, kinds, this.T);
     if (!r.starts.length) throw new Error(`${this.title}: fill ${index} not sewn anew`);
     r.starts.forEach((a, k) => rememberObjects(r.pattern, [a], r.ends[k]));
     const now = sewObjects(r.pattern);
@@ -181,7 +181,7 @@ export class Design {
   /** A border on the edge of fill `index`, in `color` (its own thread) or the fill's. */
   border(index: number, type: 'run' | 'triple' | 'satin', width = 2, color?: ThreadColor): void {
     const s = this.settingsOf(index);
-    this.restitchFill(index, { ...s, border: { type, width, length: 2.5, tolerance: 0.15, ...(color ? { color } : {}), link: this.link('b') } });
+    this.restitchFill(index, s, undefined, { type, width, length: 2.5, tolerance: 0.15, ...(color ? { color } : {}), link: this.link('b') });
   }
 
   /** A two-thread blend: fill `index` fades out, `color` fades in on the same area. */

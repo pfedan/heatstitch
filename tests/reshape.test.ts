@@ -3,12 +3,13 @@ import { describe, expect, it } from 'vitest';
 import { sample } from '../src/digitize/region';
 import { sewObjects, type SewObject } from '../src/model/objects';
 import { STITCH, type Pattern } from '../src/model/pattern';
-import { formOf, reshapeFill, scaleBlocked, transformSewObject } from '../src/model/reshape';
+import { reshapeFill, scaleBlocked, transformSewObject } from '../src/model/reshape';
 import { analyze, measureFill, remember, remembered, rememberedIn, restoreRemembered } from '../src/model/restitch';
 import { stitchKinds } from '../src/model/sequence';
 import { parsePattern } from '../src/parsers';
 import { formArea, rotation, scaling, transformForm, translation } from '../src/shape/path';
 import { rasterize } from '../src/shape/rasterize';
+import { guessArea } from '../src/model/geo';
 
 const load = (f: string) => parsePattern(readFileSync(new URL(`../public/examples/${f}`, import.meta.url)), f);
 
@@ -87,7 +88,8 @@ describe('moving, turning and scaling objects', () => {
     const nk = stitchKinds(r.pattern);
     const no = sewObjects(r.pattern, nk).find((x) => x.first === r.first)!;
     const known = remembered(r.pattern, no)!;
-    expect(known.form).toBeDefined();
+    // Its form was read from the stitches: still a guess, scaled as pixels, no curves kept (rule 6).
+    expect(known.geo).toBeUndefined();
     expect(known.region!.areaMm2 / an.fill!.areaMm2).toBeGreaterThan(2.1);
     expect(known.region!.areaMm2 / an.fill!.areaMm2).toBeLessThan(2.4);
     expect(measureFill(r.pattern, analyze(r.pattern, no, nk, known)).spacing).toBeCloseTo(spacing, 1);
@@ -98,7 +100,7 @@ describe('changing the shape of a fill', () => {
   it('traces the fill area as curves', () => {
     const { p, kinds, objs } = setup('demos/letters.pes');
     const o = fillOf(p, objs, kinds);
-    const f = formOf(p, o, kinds)!;
+    const f = guessArea(p, o, kinds)!;
     expect(f.paths.length).toBeGreaterThan(0);
     const area = analyze(p, o, kinds).fill!.areaMm2;
     expect(Math.abs(formArea(f) - area) / area).toBeLessThan(0.05);
@@ -107,7 +109,7 @@ describe('changing the shape of a fill', () => {
   it('fills the new shape and leaves nothing of the old stitches outside it', () => {
     const { p, kinds, objs } = setup('demos/letters.pes');
     const o = fillOf(p, objs, kinds);
-    const f = formOf(p, o, kinds)!;
+    const f = guessArea(p, o, kinds)!;
     const [cx, cy] = center(p, o);
     // Shrunk to 70 % around its middle.
     const small = transformForm(f, scaling(0.7, 0.7, cx, cy));
@@ -115,7 +117,7 @@ describe('changing the shape of a fill', () => {
     expect(r.starts).toHaveLength(1);
     const area = rasterize(small)!;
     const kept = r.memory[0];
-    expect(kept.form).toBe(small);
+    expect(kept.geo).toBe(small);
     expect(kept.region!.areaMm2).toBeCloseTo(area.areaMm2, 0);
     // Every stitch of the object lies in (or right at the edge of) the new area.
     const no = sewObjects(r.pattern).find((x) => stitches(r.pattern, 0, x.first - 1) === r.starts[0])!;
@@ -129,18 +131,18 @@ describe('changing the shape of a fill', () => {
   it('stores the curves with the file and reads them back', () => {
     const { p, kinds, objs } = setup('demos/letters.pes');
     const o = fillOf(p, objs, kinds);
-    const f = formOf(p, o, kinds)!;
+    const f = guessArea(p, o, kinds)!;
     const r = reshapeFill(p, objs, o, kinds, transformForm(f, translation(1, 1)), 7)!;
     const nobjs = sewObjects(r.pattern);
     const no = nobjs.find((x) => stitches(r.pattern, 0, x.first - 1) === r.starts[0])!;
     // What applying it remembers (as the app does), then stored and read again.
     remember(r.pattern, no, r.memory[0]);
     const stored = JSON.parse(JSON.stringify(rememberedIn(r.pattern, nobjs), (_k, v) => (v instanceof Uint8Array ? Array.from(v) : v)));
-    const entry = stored.objects.find((e: { memory?: { form?: unknown } }) => e.memory?.form)?.memory;
+    const entry = stored.objects.find((e: { memory?: { geo?: unknown } }) => e.memory?.geo)?.memory;
     expect(entry).toBeDefined();
     entry.region.mask = Uint8Array.from(entry.region.mask);
     stored.objects = stored.objects.filter((e: { memory?: unknown }) => e.memory === entry);
     expect(restoreRemembered(r.pattern, stored)).toBe(1);
-    expect(formArea(remembered(r.pattern, no)!.form!)).toBeCloseTo(formArea(r.memory[0].form!), 1);
+    expect(formArea(remembered(r.pattern, no)!.geo!)).toBeCloseTo(formArea(r.memory[0].geo!), 1);
   });
 });

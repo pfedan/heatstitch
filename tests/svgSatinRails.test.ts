@@ -58,13 +58,13 @@ describe('satin from a vector file', () => {
     const { d, p, objs, o, edge } = imported(0.014);
     expect(d.objects[0].kind).toBe('satin');
     try {
-      expect(remembered(p, o)?.form).toBeTruthy();
+      expect(remembered(p, o)?.geo).toBeTruthy();
       const cols = keepShape(p, o, stitchKinds(p)).columns!;
       expect(off(cols, edge)).toBeLessThan(0.05);
       // Sewn again: still a satin, the shape kept.
       const r = restitch(p, objs, [o.index], { kind: 'satin', s: SATIN }, stitchKinds(p), 2);
       expect(r.failed).toEqual([]);
-      expect(r.memory[0].form).toBeTruthy();
+      expect(r.memory[0].geo).toBeTruthy();
       // Read from the stitches alone (a file from elsewhere): no dents of short stitches either.
       forget(p, o);
       expect(dents(keepShape(p, o, stitchKinds(p)).columns!)).toBe(0);

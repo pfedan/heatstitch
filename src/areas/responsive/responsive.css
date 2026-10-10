@@ -695,7 +695,8 @@
     min-height: 40px;
   }
 
-  .stitch-bar .bar-btn.icon-only {
+  .stitch-bar .bar-btn.icon-only,
+  .stage .tool-options button.opt.opt-icon {
     width: 40px;
   }
 

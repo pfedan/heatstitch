@@ -14,7 +14,7 @@ import { SATIN_SHARE } from '../model/covers';
 import { currentSettings } from '../correct/plan';
 import { isCovered, setOverlapShare } from '../model/knockout';
 import { isStroke, SATIN_MAX, pullFor, digitizeDefaults } from '../digitize/digitize';
-import { closedForm, closedLineToFill, lineOf, lineSettings, lineToFill } from '../model/line';
+import { fillOfLine, lineSettings, lineToFill } from '../model/line';
 import { outline } from '../digitize/region';
 import { recommendedSpacing } from '../validation/profiles';
 import { rememberObjects, type SewObject } from '../model/objects';
@@ -23,9 +23,10 @@ import { backToOriginal, originalOf } from '../model/original';
 import { newLink, shareBorders, syncBorders } from '../model/border';
 import { readBorder } from '../model/readBorder';
 import { t, type Key } from '../i18n';
-import { type ShapeTrust, analyze, remembered, measureFill, measureSatin, measureRun, shapeTrust, type Remembered, remember, rememberedIn, restitch, restitchedPieces, type Settings as RestitchSettings, type RestitchResult, objectKey } from '../model/restitch';
+import { type ShapeTrust, analyze, borderOf, withLine, remembered, measureFill, measureSatin, measureRun, shapeTrust, type Remembered, remember, rememberedIn, restitch, restitchedPieces, type Settings as RestitchSettings, type RestitchResult, objectKey } from '../model/restitch';
 import { type StitchInfo, StitchPanel } from '../ui/stitchPanel';
 import { ui } from './state';
+import { areaOf, fits, geoUse, guessLine, lineGeoOf } from '../model/geo';
 
 /** What bindStitches needs from the rest of the app. */
 export interface StitchesApp {
@@ -45,7 +46,8 @@ export interface StitchesApp {
   readonly sewAlongLines: () => void;
   readonly suggestLines: () => void;
   readonly sewLine: (o: number, path: Form | null, st: PathStitch | null, final: boolean) => boolean;
-  readonly sewLineAgain: (o: number) => void;
+  readonly sewLineAgain: (objs: number[]) => void;
+  readonly satinLineAgain: (o: number) => void;
   /** Stichart Satin on one fill as R and Vorschlagen do it; false when the shape is not lines (see bindRungs). */
   readonly convertToSatin: (o: number) => boolean;
   readonly toggleGuides: () => void;
@@ -77,7 +79,12 @@ export function bindStitches(app: StitchesApp) {
         if (pt.kind === 'run' && an.parts[j - 1]?.kind === 'fill' && an.parts[j + 1]?.kind === 'fill' && !an.parts[j + 1].border) continue;
         if (!seen.has(pt.kind)) counts[pt.kind] = (counts[pt.kind] ?? 0) + 1;
         seen.add(pt.kind);
-        if (pt.kind === 'fill') measured.fill ??= remembered(p, obj)?.fill ?? measureFill(p, an);
+        if (pt.kind === 'fill' && !measured.fill) {
+          // The first fill's settings, and its border beside them.
+          measured.fill = remembered(p, obj)?.fill ?? measureFill(p, an);
+          const b = borderOf(remembered(p, obj));
+          if (b) measured.border = b;
+        }
         else if (pt.kind === 'satin') measured.satin ??= remembered(p, obj)?.satin ?? measureSatin(p, pt, q.kinds);
         else measured.run ??= measureRun(p, pt);
       }
@@ -95,7 +102,7 @@ export function bindStitches(app: StitchesApp) {
     const hand = [...ui.selectedObjects].reduce((a, o) => a + (q.objects[o] ? (remembered(p, q.objects[o])?.hand ?? 0) : 0), 0);
     const firstFill = [...ui.selectedObjects].sort((a, b) => a - b).find((o) => q.objects[o]?.kind === 'fill') ?? [...ui.selectedObjects][0];
     // Fills with curves can leave out what lies on top.
-    const shaped = [...ui.selectedObjects].map((o) => q.objects[o]).filter((obj) => obj && remembered(p, obj)?.form);
+    const shaped = [...ui.selectedObjects].map((o) => q.objects[o]).filter((obj) => obj && areaOf(remembered(p, obj)));
     const ons = new Set(shaped.map((obj) => !!remembered(p, obj)?.knockout));
     const knockout: StitchInfo['knockout'] = shaped.length
       ? { on: ons.size > 1 ? 'mixed' : ons.has(true), covered: shaped.some((obj) => isCovered(p, q.objects, obj)), share: remembered(p, shaped[0])?.overlapShare ?? SATIN_SHARE }
@@ -107,9 +114,9 @@ export function bindStitches(app: StitchesApp) {
     const firstOf = (k: string) => [...ui.selectedObjects].sort((a, b) => a - b).map((o) => q.objects[o]).find((obj) => obj?.kind === k);
     const fillObj = firstOf('fill');
     // A fill from a file with a line sewn along its edge: that is its border (see syncBorders).
-    if (fillObj && ui.selectedObjects.size === 1 && measured.fill && !measured.fill.border && !remembered(p, fillObj)?.fill) {
+    if (fillObj && ui.selectedObjects.size === 1 && measured.fill && !measured.border && !remembered(p, fillObj)?.fill) {
       const found = readBorder(p, q.objects, fillObj, q.kinds);
-      if (found) measured.fill = { ...measured.fill, border: { ...found.border, link: newLink() } };
+      if (found) measured.border = { ...found.border, link: newLink() };
     }
     const fabricPull = {
       fill: fillObj ? pullFor(app.settings.profile, 'fill', analyze(p, fillObj, q.kinds).fill?.areaMm2).edge : undefined,
@@ -122,13 +129,14 @@ export function bindStitches(app: StitchesApp) {
     const pieces = piece ? q.objects.filter((obj) => obj.kind === 'fill' && remembered(p, obj)?.piece === piece).length : 0;
     const info: StitchInfo = { key: ui.selectionKey, lock, free, fixed, fabricPull, auto, hand, measured, counts, recommended: recommendedSpacing(app.settings.profile), shape: worst, outlines: shapes, toSatin: stroke, knockout, depth, color: q.objects[firstFill]?.color, area: (fillObj && remembered(p, fillObj)?.region) || undefined, ...(pieces > 1 ? { pieces } : {}) };
     const runs = [...ui.selectedObjects].map((o) => q.objects[o]).filter((obj) => obj?.kind === 'run');
-    if (runs.length && runs.every((obj) => remembered(p, obj)?.path)) info.line = true;
+    if (runs.length && runs.every((obj) => lineGeoOf(remembered(p, obj)))) info.line = true;
     const one = ui.selectedObjects.size === 1 ? q.objects[[...ui.selectedObjects][0]] : undefined;
     if (one && app.isLineObject(p, one)) {
-      const form = lineOf(p, one, q.kinds);
-      info.path = { st: lineSettings(p, one, q.kinds), traced: !remembered(p, one)?.path, closed: !!form?.paths.length && form.paths.every((x) => x.closed), color: one.color };
+      const form = guessLine(p, one, q.kinds);
+      const m = remembered(p, one);
+      info.path = { st: lineSettings(p, one, q.kinds), traced: !lineGeoOf(m), closed: !!form?.paths.length && form.paths.every((x) => x.closed), fills: fits(form, 'fill'), refill: !!m?.kept?.fill, resatin: !!m?.kept?.satinSettings, color: one.color };
     }
-    if (one && remembered(p, one)?.asLine) info.asLine = true;
+    if (one && geoUse(remembered(p, one)) === 'band') info.asLine = true;
     const orig = app.files.active?.pattern === p ? app.files.active.original : undefined;
     if (orig && orig !== p && isReadFromFile(orig)) {
       const was = app.seq(orig).objects;
@@ -140,8 +148,8 @@ export function bindStitches(app: StitchesApp) {
       info.outline = { fill: fill >= 0 ? fill : null, blend: !own.outline };
       // A border's settings are its fill's: shown and set here as they are there.
       const fm = fill >= 0 ? remembered(p, q.objects[fill]) : undefined;
-      if (own.outline && fm?.fill?.border && !fm.free) {
-        info.outline.of = { fill: structuredClone(fm.fill), color: q.objects[fill].color };
+      if (own.outline && fm?.fill && borderOf(fm) && !fm.free) {
+        info.outline.of = { fill: structuredClone(fm.fill), border: structuredClone(borderOf(fm)!), color: q.objects[fill].color };
         info.color = q.objects[fill].color;
       }
     }
@@ -152,8 +160,8 @@ export function bindStitches(app: StitchesApp) {
       info.outline = { fill: line >= 0 ? line : null, shadow: shade!.shadowOf ? true : undefined, echo: shade!.echoOf ? true : undefined };
       const lo = line >= 0 ? q.objects[line] : undefined;
       const lm = lo && remembered(p, lo);
-      if (lo && lm?.path && lm.line && !lm.free) {
-        const form = lineOf(p, lo, q.kinds);
+      if (lo && lm && lineGeoOf(lm) && lm.line && !lm.free) {
+        const form = guessLine(p, lo, q.kinds);
         info.outline.of = { line: lineSettings(p, lo, q.kinds), closed: !!form?.paths.length && form.paths.every((x) => x.closed), color: lo.color };
       }
     }
@@ -164,7 +172,7 @@ export function bindStitches(app: StitchesApp) {
   /** Whether `fill` is the fill the border or second blend thread `own` belongs to. */
   const partnerOf = (fill: Remembered | undefined, own: Remembered): boolean =>
     own.outline
-      ? fill?.fill?.border?.link === own.outline
+      ? borderOf(fill)?.link === own.outline
       : own.blendOf
         ? fill?.fill?.deco?.blend?.link === own.blendOf
         : !!partOf(own) && hasPart(fill, partOf(own)!);
@@ -264,8 +272,8 @@ export function bindStitches(app: StitchesApp) {
     return new Set(
       which
         .flatMap((o) => {
-          const f = q.objects[o] && remembered(p, q.objects[o])?.fill;
-          return [f?.border?.link ?? '', f?.deco?.blend?.link ?? ''];
+          const m = q.objects[o] && remembered(p, q.objects[o]);
+          return [borderOf(m)?.link ?? '', m?.fill?.deco?.blend?.link ?? ''];
         })
         .filter(Boolean),
     );
@@ -275,7 +283,7 @@ export function bindStitches(app: StitchesApp) {
    * Takes over new stitches for the selected objects; `failed` is said for objects left as they
    * were. With `remeasure` (another kind of stitch), the panel measures the objects again.
    */
-  function applyRestitched(r: RestitchResult | null, failed: Key, remeasure = false, find: ((p: Pattern) => number | null) | null = null): void {
+  function applyRestitched(r: RestitchResult | null, failed: Key, remeasure = false, find: ((p: Pattern) => number | null) | null = null, drop?: ReadonlySet<string>): void {
     const f = app.files.active;
     ui.flowPreview = null;
     if (!f || !r) return app.redraw();
@@ -305,7 +313,7 @@ export function bindStitches(app: StitchesApp) {
     // The parts of a fill cut apart share the border given to one of them.
     shareBorders(r.pattern, [...sel].map((o) => nq.objects[o]));
     // Borders in a thread of their own follow their fills; the selection is found again by its stitches.
-    const p = syncBorders(r.pattern, app.settings.trimMm, dropLinks);
+    const p = syncBorders(r.pattern, app.settings.trimMm, drop ?? dropLinks);
     dropLinks = new Set();
     let selNow = sel;
     if (p !== r.pattern) {
@@ -371,22 +379,21 @@ export function bindStitches(app: StitchesApp) {
       const p = app.files.active?.pattern;
       if (!p || !ui.selectedObjects.size) return;
       const one = ui.selectedObjects.size === 1 ? [...ui.selectedObjects][0] : -1;
-      // A wide line: as a fill of its area, and back to the line it was.
-      if (to === 'line') {
-        if (one >= 0) app.sewLineAgain(one);
-        return;
-      }
-      const path = to === 'fill' && one >= 0 ? remembered(p, app.seq(p).objects[one])?.path : undefined;
+      // Fills sewn along their paths as lines, their fills kept to fill them again.
+      if (to === 'line') return app.sewLineAgain([...ui.selectedObjects].sort((a, b) => a - b));
+      const path = to === 'fill' && one >= 0 ? lineGeoOf(remembered(p, app.seq(p).objects[one])) : undefined;
       if (path) {
         const d = digitizeDefaults(app.settings.profile);
         const fill = { pattern: 'tatami' as const, spacing: d.spacing, spacingEnd: Math.min(1.2, Math.round(d.spacing * 250) / 100), offset: 0.25, angle: NaN, stitch: d.stitch, underlay: d.underlay, edge: 0, tolerance: d.tolerance };
-        // A closed line is filled inside and stays its border; an open satin line becomes a fill in its width.
-        const closed = closedForm(path);
-        const r = closed ? closedLineToFill(p, one, fill, app.settings.trimMm) : lineToFill(p, one, fill, app.settings.trimMm);
+        // A line that was a fill is filled as it was; one with a closed path is filled inside and stays its border; an open satin line becomes a fill in its width.
+        const closed = fillOfLine(p, one) === 'area';
+        const r = lineToFill(p, one, fill, app.settings.trimMm);
         applyRestitched(r, 'stitch.failed', true);
         if (r?.starts.length) app.layers.say(t(closed ? 'stitch.closedFilled' : 'stitch.lineFilled'));
         return;
       }
+      // A line that was a satin over an area: sewn as that satin again.
+      if (to === 'satin' && one >= 0 && remembered(p, app.seq(p).objects[one])?.kept?.satinSettings) return app.satinLineAgain(one);
       // One fill to satin: cut and crossed as by hand (Vorschlagen), the same as with R.
       if (to === 'satin' && one >= 0 && app.convertToSatin(one)) return;
       const s = convertSettings(to, stitchInfo(p, app.seq(p)));
@@ -499,8 +506,8 @@ export function bindStitches(app: StitchesApp) {
         remember(p, own, { ...mem, shadowOf: undefined, echoOf: undefined });
       } else {
         if (fm?.fill && blend) remember(p, q.objects[fill], { ...fm, fill: { ...fm.fill, deco: { ...fm.fill.deco, blend: undefined } } });
-        else if (fm?.fill) remember(p, q.objects[fill], { ...fm, fill: { ...fm.fill, border: undefined } });
-        remember(p, own, blend ? { ...mem, blendOf: undefined } : { ...mem, outline: undefined, border: undefined });
+        else if (fm?.fill) remember(p, q.objects[fill], withLine(fm, undefined));
+        remember(p, own, blend ? { ...mem, blendOf: undefined } : { ...mem, outline: undefined, border: undefined, along: undefined });
       }
       if (app.files.active) app.files.setObjects(app.files.active, rememberedIn(p, q.objects));
       ui.selectionKey++;

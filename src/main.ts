@@ -34,27 +34,23 @@ import type { Measurement } from './validation/measure';
 import { initUpdateNotice } from './ui/updateNotice';
 import { bindFileIo } from './app/fileIo';
 import { installDevConsole } from './dev/console';
-import { writePattern } from './writers';
-import { parsePattern } from './parsers';
 import { ImageMode } from './ui/imageMode';
 import { sweep } from './render/light';
 import { classify } from './validation/validate';
-import {
-  FILL,
-  SATIN,
-  TIE_STITCH,
-} from './model/sequence';
+import { FILL, SATIN, TIE_STITCH } from './model/sequence';
 import { pointNear, stitchAt } from './render/flow';
 import { drawMeasure } from './render/measure';
 import { MeasureTool } from './ui/measureTool';
 import type { Mode } from './settings';
-import { isGuessed, isOpenPattern, openOnPurpose, remembered, rememberedIn, rememberShapes } from './model/restitch';
+import { isGuessed, isOpenPattern, openOnPurpose, remembered, rememberedIn } from './model/restitch';
+import { digitizedFile } from './model/digitized';
+import { loadOps } from './shape/ops';
 import { drawAside, drawDrawing } from './render/shapeOverlay';
 import type { LeftOut, SewnFrom } from './ui/imageMode';
 import { asideOf, storeAside, type AsideShape } from './model/aside';
 import { type Digitized } from './digitize/digitize';
-import { numberInColor, rememberObjects, sewObjects } from './model/objects';
-import { isLine, reversible } from './model/reverse';
+import { numberInColor, sewObjects } from './model/objects';
+import { reversible } from './model/reverse';
 import { Player } from './ui/player';
 import { installPanelResize } from './ui/panelResize';
 import type { Key } from './i18n';
@@ -86,6 +82,7 @@ import { initAmpel } from './areas/ampel/ampel';
 import { initResponsive } from './areas/responsive/responsive';
 import type { ZoneDecision } from './ui/validationPanel';
 import { bindTrace } from './app/trace';
+import { geoUse, sewnAlong } from './model/geo';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -427,6 +424,9 @@ const { applyRestitched, convertSettings, looseObjects, stitchInfo, stitchPanel 
   get sewLineAgain() {
     return sewLineAgain;
   },
+  get satinLineAgain() {
+    return satinLineAgain;
+  },
   get convertToSatin() {
     return convertToSatin;
   },
@@ -484,9 +484,12 @@ const { closeRungs, convertToSatin, rungInfo, rungTool, sewAlongLines, suggestLi
 
 // Shapes and the frame ---------------------------------------------------------------------------
 
-const { canPaste, closeShape, copySelected, deleteSelected, duplicateSelected, pasteCopied, enterShape, followKnockouts, isLineObject, mirrorSelected, sewLine, sewLineAgain, shapeTarget, shapeTool, showBand, subtractSelected, syncShape, takeShapes } = bindShapes({
+const { canPaste, closeShape, copySelected, deleteSelected, duplicateSelected, pasteCopied, enterShape, followKnockouts, isLineObject, mirrorSelected, satinLineAgain, sewLine, sewLineAgain, shapeTarget, shapeTool, showBand, subtractSelected, syncShape, takeShapes } = bindShapes({
   get applyEdit() {
     return applyEdit;
+  },
+  get history() {
+    return history;
   },
   get applyRestitched() {
     return applyRestitched;
@@ -813,21 +816,21 @@ function objectInfo(p: Pattern, q: Sequence) {
     threadMm: selected.reduce((a, o) => a + (q.objects[o] ? threadOfRange(p, settings.profile.fabric, q.objects[o].first, q.objects[o].last) : 0), 0),
     editing: editor.active && ui.editObject !== null && selected.length === 1 && selected[0] === ui.editObject ? { selection: editor.selection.size } : null,
     shapeable: selected.length === 1 && (stitchInfo(p, q).free?.on ? !!shapeTarget(p, q, selected[0]) : !!stitchInfo(p, q).measured.fill || !!stitchInfo(p, q).measured.satin || (!!q.objects[selected[0]] && isLineObject(p, q.objects[selected[0]]))),
-    shaping: shapeTool.active && selected.length === 1 && selected[0] === ui.shapeObject ? { nodes: shapeTool.count, smooth: shapeTool.selectedSmooth, ...(shapeTool.band !== null ? { kind: 'band' as const } : shapeTool.rails ? { kind: 'rails' as const } : {}), ...(q.objects[selected[0]] && isLineObject(p, q.objects[selected[0]]) ? { line: { closed: shapeTool.closed } } : {}) } : null,
+    shaping: shapeTool.active && selected.length === 1 && selected[0] === ui.shapeObject ? { nodes: shapeTool.count, smooth: shapeTool.selectedSmooth, ...(shapeTool.band !== null ? { kind: 'band' as const } : {}), ...(q.objects[selected[0]] && isLineObject(p, q.objects[selected[0]]) ? { line: { closed: shapeTool.closed } } : {}) } : null,
     frame: frameTool.active ? { canScale: frameTool.canScale } : null,
     mergeBlocked: selected.length > 1 ? mergeBlocked(selected.map((o) => q.objects[o])) : null,
-    reversible: selected.some((o) => reversible(q.objects[o]) || isLine(p, q.objects[o])),
+    reversible: selected.some((o) => reversible(q.objects[o]) || sewnAlong(p, q.objects[o])),
     subtractable: selected.length > 1 && selected.every((o) => q.objects[o].kind === 'fill'),
     ...blendOf(p, q, selected),
   };
 }
 
-/** The one selected fill can blend into a second thread when it knows its area and is not a line (an empty fill shows as one). */
+/** The one selected fill can blend into a second thread when it knows its area and is not a band. */
 function blendOf(p: Pattern, q: Sequence, selected: number[]): { blend?: ThreadColor } {
   if (selected.length !== 1 || editor.active) return {};
   const o = q.objects[selected[0]];
   const known = o && remembered(p, o);
-  return known?.fill && known.region && !known.asLine && !known.blendOf && known.fill.pattern !== 'none' && !isOpenPattern(known.fill.pattern) ? { blend: o.color } : {};
+  return known?.fill && known.region && geoUse(known) !== 'band' && !known.blendOf && !isOpenPattern(known.fill.pattern) ? { blend: o.color } : {};
 }
 
 // Rendering ------------------------------------------------------------------
@@ -1478,11 +1481,8 @@ const imageMode = new ImageMode({
  * (it trims inside some, between pieces of a fill) and the exact areas of its fills.
  */
 async function addDigitized(d: Digitized & { leftOut?: LeftOut[]; source?: SewnFrom }, name: string): Promise<void> {
-  const data = writePattern(d.pattern, 'pes');
-  const added = parsePattern(data, `${name}.pes`);
-  rememberObjects(added, d.starts);
+  const { data, pattern: added } = digitizedFile(d, name, settings.trimMm);
   const objs = sewObjects(added);
-  rememberShapes(added, objs, d.starts, d.objects.map((o) => o.shape), d.objects);
   // Shapes left out on the way in wait under "Not sewn", where it was: at the very back.
   const aside: AsideShape[] = (d.leftOut ?? []).map((s, k) => ({ id: k + 1, role: 'off', kind: 'fill', color: s.color, after: -1, form: s.form, reason: s.reason }));
   // The picture stays with the design, exactly under its stitches, to look at again later.
@@ -1923,6 +1923,8 @@ files.render();
 redraw();
 void files.restore();
 void imageMode.restore();
+// The operations on curves, loaded early: a border's echo and shadow lie on its offset curve (see borderForm).
+void loadOps().catch(() => {});
 // The thread catalogs name the numbers of the threads in the list (Brother's too).
 void loadCatalogs()
   .then(() => {

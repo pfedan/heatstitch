@@ -29,7 +29,7 @@ describe('addShape', () => {
     expect(c.pattern.colors).toHaveLength(2);
     expect(objs[1].block).toBe(0);
     // The new one keeps its curves.
-    expect(remembered(c.pattern, objs[1])?.form?.paths[0].nodes).toHaveLength(4);
+    expect(remembered(c.pattern, objs[1])?.geo?.paths[0].nodes).toHaveLength(4);
   });
 
   it('sews a line as running stitch', () => {

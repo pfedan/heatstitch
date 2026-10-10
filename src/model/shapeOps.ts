@@ -1,19 +1,21 @@
 import { hasPart, partInThread, partOf, withoutPart } from './shadow';
-import { knockOut, unionOf } from '../shape/rasterize';
 import { translation, type Form, type Mat } from '../shape/path';
-import { vectorize } from '../shape/vectorize';
-import { takeOver, wholeArea } from './knockout';
+import { areaOfForm, subtractForm, unionForms } from '../shape/ops';
+import { joinOpenPaths, type Joined } from '../shape/join';
+import { lineSettings, resewLine } from './line';
+import { takeOver } from './knockout';
 import { rememberObjects, sewObjects, stitchKey, type SewObject } from './objects';
 import { listOf, sewList } from './sew';
 import { newLink, syncBorders } from './border';
 import { reorder } from './order';
 import { recolor, sameColor } from './recolor';
 import type { Pattern, ThreadColor } from './pattern';
-import { forget, objectKey, remember, remembered, restitch, type Remembered } from './restitch';
-import { formOf, reshapeFill, transformSewObject } from './reshape';
+import { borderOf, forget, withLine, objectKey, remember, remembered, restitch, type Remembered } from './restitch';
+import { reshapeFill, transformSewObject } from './reshape';
 import { stitchKinds } from './sequence';
 import { stitchesBefore } from './transform';
-import { autoReversible, isLine, ownSettings, reverseLines } from './reverse';
+import { autoReversible, ownSettings, reverseLines } from './reverse';
+import { guessArea, guessLine, lineGeoOf, sewnAlong } from './geo';
 
 /**
  * Working with objects as shapes: deleting, duplicating, mirroring, and combining fills by their
@@ -54,18 +56,18 @@ export function deleteObjects(p: Pattern, which: number[], trimMm: number): Patt
   for (const o of bare) {
     const m = mem[o.index]!;
     const at = sewObjects(next).find((x) => objectKey(next, x) === objectKey(p, o));
-    if (at) remember(next, at, { ...m, fill: { ...m.fill!, border: undefined } });
+    if (at) remember(next, at, (mem[o.index] = withLine(m, undefined)));
   }
   // Fills whose second thread goes alone: they fade out on their own from now on.
-  // Lines whose shadow or echo copies go alone: they have them no more.
+  // Lines (and borders of fills) whose shadow or echo copies go alone: they have them no more.
   for (const o of objs) {
     let m = mem[o.index];
-    if (gone.has(o.index) || !m?.path) continue;
+    if (gone.has(o.index) || !m?.line) continue;
     const parts = [...gone].map((g) => partOf(mem[g])).filter((l): l is string => !!l && hasPart(m, l));
     if (!parts.length) continue;
     for (const l of parts) m = withoutPart(m, l);
     const at = sewObjects(next).find((x) => objectKey(next, x) === objectKey(p, o));
-    if (at) remember(next, at, m);
+    if (at) remember(next, at, (mem[o.index] = m));
   }
   for (const o of objs) {
     const m = mem[o.index];
@@ -78,7 +80,7 @@ export function deleteObjects(p: Pattern, which: number[], trimMm: number): Patt
 }
 
 /** The link of a fill's border (an object of its own), if it has one. */
-const ownBorder = (m: Remembered | undefined): string | undefined => m?.fill?.border?.link;
+const ownBorder = (m: Remembered | undefined): string | undefined => borderOf(m)?.link;
 
 /** The pattern without the objects `which`, nothing else changed (with all gone, an empty design); null when none of them is there. */
 function removeObjects(p: Pattern, which: number[], trimMm: number): Pattern | null {
@@ -202,7 +204,7 @@ function inPlace(p: Pattern, k: number, trimMm: number): { pattern: Pattern; nud
   // (memory is keyed by stitches): it is put back.
   const kept = objs.map((x) => remembered(p, x));
   let next: Pattern | null = null;
-  if (isLine(p, o) && !known?.hand) {
+  if (sewnAlong(p, o) && !known?.hand) {
     // A line also goes the smallest step beside it: sewn back along itself (an echo on both sides,
     // a line there and back) it would otherwise have the very stitches of its copy.
     const beside = moved(p, k, translation(0.1, 0), trimMm);
@@ -251,13 +253,48 @@ export function mirrorMatrix(axis: 'x' | 'y', box: { minX: number; minY: number;
   return axis === 'x' ? [-1, 0, 0, 1, 2 * cx, 0] : [1, 0, 0, -1, 0, 2 * cy];
 }
 
-/** The one outline of several fill shapes together (null when one of them has no fill). */
+/** Below this a form counts as empty (mm²): what is left of a cut is a sliver, not an area. */
+const NO_AREA = 0.05;
+
+/**
+ * The one outline of several fill shapes together, joined on their curves (null when one of them
+ * has no fill). Needs `loadOps()`.
+ */
 export function unionForm(forms: Form[]): Form | null {
-  const areas = forms.map((f) => wholeArea(f));
-  if (areas.some((a) => !a)) return null;
-  const all = unionOf(areas as NonNullable<(typeof areas)[number]>[]);
-  const f = all && vectorize(all);
-  return f?.paths.length ? f : null;
+  if (forms.some((f) => !f.paths.some((p) => p.closed && p.nodes.length > 1))) return null;
+  const f = unionForms(forms);
+  return f && areaOfForm(f) >= NO_AREA ? f : null;
+}
+
+/** Whether `o` is a line of its own (not a border, echo, shadow or blend part of another). */
+function plainLine(p: Pattern, o: SewObject): boolean {
+  const m = remembered(p, o);
+  return sewnAlong(p, o) && !m?.outline && !m?.blendOf && !partOf(m) && !m?.lettering;
+}
+
+/**
+ * The lines `which` (one after the other, in one thread) as one line with all their paths, sewn
+ * with the settings of the first: ends within 0.5 mm are joined into one node, a chain whose ends
+ * meet is closed (see joinOpenPaths). Null when they are not all such lines or nothing could be sewn.
+ */
+export function combineLines(p: Pattern, which: number[], trimMm: number): { pattern: Pattern; index: number; joined: Joined | null } | null {
+  const sel = [...new Set(which)].sort((a, b) => a - b);
+  const kinds = stitchKinds(p);
+  const objs = sewObjects(p, kinds);
+  if (sel.length < 2 || sel.some((o, k) => !objs[o] || (k && o !== sel[k - 1] + 1) || objs[o].block !== objs[sel[0]].block || !plainLine(p, objs[o]))) return null;
+  const forms = sel.map((o) => lineGeoOf(remembered(p, objs[o])) ?? guessLine(p, objs[o], kinds));
+  if (forms.some((f) => !f)) return null;
+  const all: Form = { paths: forms.flatMap((f) => f!.paths) };
+  const joined = joinOpenPaths(all, false);
+  const r = resewLine(p, sel[0], joined?.form ?? all, lineSettings(p, objs[sel[0]], kinds), trimMm);
+  const rest = r && deleteObjects(r.pattern, sel.slice(1), trimMm);
+  if (!rest) return null;
+  // Its shadow and echo copies in threads of their own follow the new paths. The parts of the
+  // others go with them, and may have been sewn before it: it is found again by its id.
+  const pattern = syncBorders(rest, trimMm);
+  const id = sewObjects(r.pattern)[sel[0]].id;
+  const index = sewObjects(pattern).findIndex((o) => o.id === id);
+  return index < 0 ? null : { pattern, index, joined };
 }
 
 export interface Subtracted {
@@ -270,7 +307,7 @@ export interface Subtracted {
 
 /**
  * The last of the objects `which` (the one sewn on top) cut out of the others, and gone itself.
- * Only fills take part. Null when it cut nothing.
+ * Only fills take part; they are cut on their curves (needs `loadOps()`). Null when it cut nothing.
  */
 export function subtractTop(p: Pattern, which: number[], trimMm: number): Subtracted | null {
   const sorted = [...which].sort((a, b) => a - b);
@@ -283,24 +320,21 @@ export function subtractTop(p: Pattern, which: number[], trimMm: number): Subtra
   // blend's second thread).
   const isBorder = (o: number) => !!objs[o] && !!(remembered(cur, objs[o])?.outline || remembered(cur, objs[o])?.blendOf || partOf(remembered(cur, objs[o])));
   if (isBorder(top)) return null;
-  const cutter = formOf(cur, objs[top], kinds);
-  const hole = cutter && wholeArea(cutter);
-  if (!hole) return null;
+  const cutter = guessArea(cur, objs[top], kinds);
+  if (!cutter || areaOfForm(cutter) < NO_AREA) return null;
   const gone = [top];
   const cut: number[] = [];
   for (const o of sorted.filter((x) => !isBorder(x))) {
     const obj = objs[o];
-    const form = obj && formOf(cur, obj, kinds);
-    const whole = form && wholeArea(form);
-    if (!whole) continue;
-    const left = knockOut(whole, [hole], 0);
-    if (left === whole) continue;
-    if (!left) {
-      gone.push(o);
-      continue;
-    }
-    const shape = vectorize(left);
-    if (!shape.paths.length) {
+    const form = obj && guessArea(cur, obj, kinds);
+    if (!form) continue;
+    const before = areaOfForm(form);
+    if (before < NO_AREA) continue;
+    const shape = subtractForm(form, cutter);
+    const after = shape ? areaOfForm(shape) : 0;
+    // Cut on the curves: an untouched form keeps its area to rounding.
+    if (before - after < 1e-6 * before) continue;
+    if (!shape || after < NO_AREA) {
       gone.push(o);
       continue;
     }
@@ -352,7 +386,7 @@ export function recolorObjects(p: Pattern, which: number[], color: ThreadColor, 
     const at = sewObjects(cur).find((x) => objectKey(cur, x) === objectKey(p, objs[f]));
     if (at && partOf(mem[o])) remember(cur, at, partInThread(m, partOf(mem[o])!, color));
     else if (at && mem[o]!.blendOf) remember(cur, at, { ...m, fill: { ...m.fill!, deco: { ...m.fill!.deco, blend: { ...m.fill!.deco!.blend!, color: { ...color } } } } });
-    else if (at) remember(cur, at, { ...m, fill: { ...m.fill!, border: { ...m.fill!.border!, color: sameColor(at.color, color) ? undefined : { ...color } } } });
+    else if (at) remember(cur, at, withLine(m, { ...m.line!, color: sameColor(at.color, color) ? undefined : { ...color } }));
   }
   next = syncBorders(cur, trimMm);
   return next === p ? null : next;

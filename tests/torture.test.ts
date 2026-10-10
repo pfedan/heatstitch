@@ -24,7 +24,7 @@ describe('found by the torture test', () => {
     expect(borderOf(d)).toBeGreaterThan(0);
     shapes(d, deleteObjects(d.cur.p, [borderOf(d)], T));
     expect(borderOf(d)).toBe(-1);
-    expect(d.objects.every((o) => !remembered(d.cur.p, o)?.fill?.border)).toBe(true);
+    expect(d.objects.every((o) => !remembered(d.cur.p, o)?.line)).toBe(true);
     checkBorders(d.cur.p);
     // The square's stitches did not change, yet the version before still knows its border.
     backToVersion(before.p);
@@ -49,7 +49,7 @@ describe('found by the torture test', () => {
     const d = borderedSquare();
     shapes(d, recolorObjects(d.cur.p, [borderOf(d)], COLORS[2], T));
     expect(sameColor(squareOf(d)!.color, COLORS[0])).toBe(true);
-    expect(sameColor(remembered(d.cur.p, squareOf(d)!)!.fill!.border!.color, COLORS[2])).toBe(true);
+    expect(sameColor(remembered(d.cur.p, squareOf(d)!)!.line!.color, COLORS[2])).toBe(true);
     checkBorders(d.cur.p);
   });
 });
@@ -78,7 +78,7 @@ describe('a satin with a fringe', () => {
     const m = remembered(d.cur.p, d.objects[0])!;
     expect(m.line?.type, 'a satin line').toBe('satin');
     const plain = Array.from(d.cur.p.y);
-    const r = resewLine(d.cur.p, 0, m.path!, { ...m.line!, fringe: 1.5, fringeSide: 'left' }, T)!;
+    const r = resewLine(d.cur.p, 0, m.geo!, { ...m.line!, fringe: 1.5, fringeSide: 'left' }, T)!;
     expect(Array.from(r.pattern.y), 'other stitches').not.toEqual(plain);
     expect(shapes(d, r.pattern)).toBe(true);
     checkAll(d);
@@ -137,7 +137,7 @@ describe('versions keep what they knew', () => {
       const q = other(i);
       remember(q, sewObjects(q)[0], { region: null });
     }
-    expect(remembered(first.p, sewObjects(first.p)[0])?.form).toBeTruthy();
+    expect(remembered(first.p, sewObjects(first.p)[0])?.geo).toBeTruthy();
     expect(knowledge(first.p)).toEqual(first.known);
   });
 

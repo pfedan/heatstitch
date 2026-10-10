@@ -72,7 +72,7 @@ describe('echo phase', () => {
   it('keeps phase and order for copies in a thread of their own', () => {
     const black = { r: 0, g: 0, b: 0 };
     const st: PathStitch = { type: 'motif', width: 3, echo: { side: 'out', count: 2, gap: 3, phase: 30, reverse: true, colors: [null, black], link: 'e' } as never };
-    const parts = lineParts({ region: null, path: lineForm(straight), line: st } as never);
+    const parts = lineParts({ region: null, geo: lineForm(straight), line: st } as never);
     expect(parts).toHaveLength(1);
     expect(parts[0].memory.line!.echo).toMatchObject({ phase: 30, reverse: true, only: [2] });
   });
@@ -82,8 +82,8 @@ describe('echo phase', () => {
     const echo = { side: 'out' as const, count: 2, gap: 3.4, phase: 30 };
     const st: PathStitch = { type: 'motif', width: 3, echo: { ...echo, cut: true } };
     const together = lineStitches(lineForm(bow), st);
-    const own = lineParts({ region: null, path: lineForm(bow), line: { ...st, echo: { ...echo, colors: [null, { r: 0, g: 0, b: 0 }], link: 'e' } } } as never)[0].memory;
-    const alone = lineStitches(own.path!, own.line!).flat();
+    const own = lineParts({ region: null, geo: lineForm(bow), line: { ...st, echo: { ...echo, colors: [null, { r: 0, g: 0, b: 0 }], link: 'e' } } } as never)[0].memory;
+    const alone = lineStitches(own.geo!, own.line!).flat();
     // The second copy is the last run of the line with both copies; its curve and the one sewn alone match.
     const near = (q: Pt, l: Pt[]) => Math.min(...l.slice(1).map((b, j) => {
       const a = l[j];
@@ -171,7 +171,7 @@ describe('a line sewn more than once', () => {
     const a = addShape(empty, { form: parsePath('M0 0 L40 0', ID), kind: 'stroke', width: 0.4 }, red, null, options)!;
     const o = sewObjects(a.pattern)[0];
     const st: PathStitch = { ...lineSettings(a.pattern, o), type: 'motif', width: 3, repeat: 3, whole: true, echo: { side: 'out', count: 2, gap: 1, phase: -45, reverse: true } };
-    const r = resewLine(a.pattern, 0, remembered(a.pattern, o)!.path!, st, options.trimMm)!;
+    const r = resewLine(a.pattern, 0, remembered(a.pattern, o)!.geo!, st, options.trimMm)!;
     const stored = JSON.parse(JSON.stringify(rememberedIn(r.pattern)));
     restoreRemembered(r.pattern, stored);
     const back = lineSettings(r.pattern, sewObjects(r.pattern)[0]);
@@ -182,7 +182,7 @@ describe('a line sewn more than once', () => {
     const a = addShape(empty, { form: parsePath('M0 0 L40 0', ID), kind: 'stroke', width: 3 }, red, null, options)!;
     const o = sewObjects(a.pattern)[0];
     const st: PathStitch = { ...lineSettings(a.pattern, o), type: 'satin', width: 3, echo: { side: 'out', count: 1, gap: 1 } };
-    const r = resewLine(a.pattern, 0, remembered(a.pattern, o)!.path!, st, options.trimMm)!;
+    const r = resewLine(a.pattern, 0, remembered(a.pattern, o)!.geo!, st, options.trimMm)!;
     const stored = JSON.parse(JSON.stringify(rememberedIn(r.pattern)));
     delete stored.objects[0].memory.line.echo.overlap;
     restoreRemembered(r.pattern, stored);
@@ -221,7 +221,7 @@ describe('motif stitch length', () => {
     const a = addShape(empty, { form: parsePath('M0 0 L40 0', ID), kind: 'stroke', width: 0.4 }, red, null, options)!;
     const o = sewObjects(a.pattern)[0];
     const st: PathStitch = { ...lineSettings(a.pattern, o), type: 'motif', width: 3, stitch: 2 };
-    const r = resewLine(a.pattern, 0, remembered(a.pattern, o)!.path!, st, options.trimMm)!;
+    const r = resewLine(a.pattern, 0, remembered(a.pattern, o)!.geo!, st, options.trimMm)!;
     const stored = JSON.parse(JSON.stringify(rememberedIn(r.pattern)));
     restoreRemembered(r.pattern, stored);
     expect(lineSettings(r.pattern, sewObjects(r.pattern)[0]).stitch).toBe(2);
