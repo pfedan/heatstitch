@@ -4,15 +4,23 @@ import { formatNumber, t } from '../i18n';
 export const SCALE_BAR_PX = 120;
 
 /**
- * Length of one part of the scale bar (mm): the longest of 0.1, 0.2, 0.5, 1, 5, 10, 15, 20, 25, ...
- * whose two parts fit into `maxPx` at `pxPerMm`. Below 1 mm a 0.2 keeps the numbers of a short
- * bar from running into each other at the highest zoom.
+ * Length of one part of the scale bar (mm): the longest of 1, 2.5 and 5 times a power of ten
+ * (..., 0.5, 1, 2.5, 5, 10, 25, 50, 100, ...) whose two parts fit into `maxPx` at `pxPerMm`. Each
+ * step is at most 2.5 times the one before, so the bar never shrinks below 40 % of its room.
  */
 export function scaleStep(pxPerMm: number, maxPx = SCALE_BAR_PX): number {
   const most = maxPx / (2 * pxPerMm);
-  if (most >= 10) return Math.floor(most / 5) * 5;
-  for (const s of [5, 1, 0.5, 0.2]) if (most >= s) return s;
-  return 0.1;
+  let e = Math.floor(Math.log10(most));
+  // Below a tenth of a mm the bar would only show the fabric's weave: 0.1 is the smallest step.
+  if (e < -1) return 0.1;
+  for (;;) {
+    const base = 10 ** e;
+    for (const m of [5, 2.5, 1]) {
+      const s = Math.round(m * base * 1000) / 1000;
+      if (s <= most + 1e-9) return s;
+    }
+    e--;
+  }
 }
 
 /**
@@ -43,8 +51,11 @@ export class ScaleBar {
     if (!force && step === this.step && px === this.px) return;
     this.step = step;
     this.px = px;
-    const digits = step < 1 ? 1 : 0;
-    const n = (k: number) => formatNumber(k * step, k ? digits : 0);
+    // Whole numbers without a decimal place: 0, 2,5, 5 and 0, 0,25, 0,5.
+    const n = (k: number) => {
+      const v = Math.round(k * step * 1000) / 1000;
+      return formatNumber(v, Number.isInteger(v) ? 0 : String(v).split('.')[1].length);
+    };
     this.root.style.setProperty('--sb-part', `${px}px`);
     this.labels[0].textContent = n(0);
     this.labels[1].textContent = n(1);
