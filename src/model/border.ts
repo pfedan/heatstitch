@@ -360,7 +360,11 @@ function syncOwnBorders(p: Pattern, trimMm: number, drop: ReadonlySet<string>, f
     const cur = at === undefined ? undefined : mem[at];
     const target = at === undefined ? null : objs[at];
     const same = target && cur?.border && sameColor(target.color, color) && (second === undefined || !fresh.has(m.fill!.deco!.blend!.link) || at! > second);
-    if (same && sameRegion(cur!.region, region) && sameBorder(cur!.border!, b)) return;
+    // Parts cut apart exactly add up to the same region, yet need a line along each new cut: those
+    // are checked by the stitches they come to below.
+    const seamy = list.length > 1 && !!b.seams;
+    const unchanged = same && sameRegion(cur!.region, region) && sameBorder(cur!.border!, b);
+    if (unchanged && !seamy) return;
     const from: Pt = [p.x[after.last] / 10, p.y[after.last] / 10];
     let runs = borderStitches(region, b, from, list.length > 1 ? cutFrom : wholeOf(m.region, m));
     // One line along each cut too, sewn first (the border on top covers where they end).
@@ -378,6 +382,7 @@ function syncOwnBorders(p: Pattern, trimMm: number, drop: ReadonlySet<string>, f
     // Sewn anew, it stays the same object (its id), wherever it goes.
     const memory: Remembered = { region, outline: b.link, border: stitchOf(b), ...(cur?.id ? { id: cur.id } : {}) };
     let recs = runRecords(runs, trimMm);
+    if (unchanged && keyOf(recs) === objectKey(p, target!)) return;
     // The very stitches of another border (a fill copied in place): sewn the other way round, so
     // each remembers its own (memory is keyed by stitches).
     if (taken().has(keyOf(recs)) && (!target || keyOf(recs) !== objectKey(p, target))) {

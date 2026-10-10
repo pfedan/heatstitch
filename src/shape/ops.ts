@@ -169,6 +169,115 @@ export function withCrossingNodes(f: Form): { form: Form; added: number } | null
   return added ? { form, added } : null;
 }
 
+// Cutting apart ---------------------------------------------------------------------------------
+
+/** The cut is taken out as a band this wide (mm): the parts are separate, their edges on the cut. */
+const CUT_BAND = 0.002;
+
+/** A fill cut apart: its parts (largest first, each reaching under its neighbours) and which touch. */
+export interface SplitForms {
+  parts: Form[];
+  touching: [number, number][];
+}
+
+/** The areas both forms cover; null when none. */
+export function intersectForms(a: Form, b: Form): Form | null {
+  return fromPaper(toPaper(a).intersect(toPaper(b), { insert: false }), [a, b]);
+}
+
+/**
+ * Form `f` cut along the polylines `cuts` (world mm), on its curves: the parts keep the nodes and
+ * curves of `f`; along a cut each reaches `overlap` mm under its neighbour. A cut that ends inside
+ * the area within `reach` mm of its edge is taken on to it. Pieces under `minPart` mm² are no part of
+ * their own; they go to the nearest part. Null when the cuts leave it in one piece. Needs loadOps.
+ */
+export function splitForm(f: Form, cuts: Pt[][], overlap: number, minPart: number, reach: number): SplitForms | null {
+  const P = needPaper();
+  const C = needClipper();
+  const whole = toPaper(f);
+  // Ends that stop short inside are carried on to the edge.
+  const carry = (end: Pt, before: Pt): Pt => {
+    if (!whole.contains(new P.Point(end[0], end[1]))) return end;
+    const d = dist(end, before);
+    if (!d) return end;
+    const u: Pt = [(end[0] - before[0]) / d, (end[1] - before[1]) / d];
+    for (let t = 0.05; t <= reach; t += 0.05) {
+      if (!whole.contains(new P.Point(end[0] + u[0] * t, end[1] + u[1] * t))) return [end[0] + u[0] * (t + 0.1), end[1] + u[1] * (t + 0.1)];
+    }
+    return end;
+  };
+  const lines = cuts.filter((c) => c.length >= 2).map((c) => {
+    const out = c.slice();
+    out[0] = carry(c[0], c[1]);
+    out[out.length - 1] = carry(c[c.length - 1], c[c.length - 2]);
+    return out;
+  });
+  if (!lines.length) return null;
+  const o = new C.ClipperOffset(2, 0.0005 * SCALE);
+  for (const l of lines) o.addPath(toInt(l), C.JoinType.Round, C.EndType.Butt);
+  const band: Paths64 = [];
+  o.execute((CUT_BAND / 2) * SCALE, band);
+  if (!band.length) return null;
+  const cutter = new P.CompoundPath({ insert: false });
+  cutter.fillRule = 'nonzero';
+  for (const r of band) cutter.addChild(new P.Path({ segments: r.map((q) => new P.Point(q.x / SCALE, q.y / SCALE)), closed: true, insert: false }));
+  const rest = whole.subtract(cutter, { insert: false });
+  // The pieces: each outline with the holes in it.
+  type PPath = InstanceType<PaperScope['Path']>;
+  const kids = (('children' in rest && rest.children ? rest.children : [rest]) as PPath[]).filter((k) => k.segments.length > 1 && Math.abs(k.area) > 1e-9);
+  const depth = kids.map((k) => kids.filter((j) => j !== k && j.contains(k.interiorPoint)).length);
+  const outers = kids.filter((_, i) => depth[i] % 2 === 0);
+  const pieces = outers.map((k) => [k]);
+  kids.forEach((k, i) => {
+    if (depth[i] % 2 === 0) return;
+    const holders = outers.map((x, n) => ({ x, n })).filter(({ x }) => x.contains(k.interiorPoint));
+    const own = holders.sort((a, b) => Math.abs(a.x.area) - Math.abs(b.x.area))[0];
+    if (own) pieces[own.n].push(k);
+  });
+  const forms = pieces.map((ps) => {
+    const cp = new P.CompoundPath({ insert: false });
+    cp.fillRule = 'evenodd';
+    for (const k of ps) cp.addChild(k.clone({ insert: false }));
+    return fromPaper(cp, [f]);
+  });
+  const sized = forms.map((g, i) => ({ g, i, a: g ? areaOfForm(g) : 0 })).filter((x) => x.g);
+  // Largest first; as large, the one nearer the top, then the left (reading order).
+  const top = (x: { i: number }) => pieces[x.i][0].bounds;
+  const kept = sized.filter((x) => x.a >= minPart).sort((a, b) => (Math.abs(b.a - a.a) > 1e-6 * Math.max(a.a, b.a) ? b.a - a.a : top(a).top - top(b).top || top(a).left - top(b).left));
+  if (kept.length < 2) return null;
+  // Crumbs to the nearest part.
+  const own = kept.map((k) => [k.g!]);
+  for (const c of sized.filter((x) => x.a < minPart)) {
+    const at = pieces[c.i][0].interiorPoint;
+    let best = 0;
+    let bestD = Infinity;
+    kept.forEach((k, n) => {
+      const d = pieces[k.i][0].getNearestPoint(at).getDistance(at);
+      if (d < bestD) {
+        bestD = d;
+        best = n;
+      }
+    });
+    own[best].push(c.g!);
+  }
+  // Each part reaches under its neighbours: grown, and held to the area (whose curves stay).
+  const parts: Form[] = [];
+  for (const group of own) {
+    const base = group.length > 1 ? unionForms(group)! : group[0];
+    const grown = overlap > 0 ? offsetForm(base, overlap) : base;
+    const part = grown && intersectForms(grown, f);
+    if (!part) return null;
+    parts.push(part);
+  }
+  const touching: [number, number][] = [];
+  for (let a = 0; a < parts.length; a++)
+    for (let b = a + 1; b < parts.length; b++) {
+      const both = intersectForms(parts[a], kept[b].g!);
+      if (both && areaOfForm(both) > 1e-4) touching.push([a, b]);
+    }
+  return { parts, touching };
+}
+
 // Offsetting ------------------------------------------------------------------------------------
 
 /** Clipper works in integers: 0.1 µm. */
