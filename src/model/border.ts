@@ -8,7 +8,21 @@ import { wholeOf } from './knockout';
 import { borderOf, lockAt, objectKey, remember, remembered, trimBefore, withLine, type BorderSettings, type FillSettings, type Rec, type Remembered } from './restitch';
 import { expandRegion } from '../digitize/region';
 import { fillRegion } from '../digitize/fill';
-import { stitchKinds } from './sequence';
+import { blockIndex, stitchKinds } from './sequence';
+import { innerStops } from './applique';
+
+/**
+ * The end of the thread's run from record `i` on: the last record before the color change that
+ * closes it (or the end), and the block that change closes. The stops inside an appliqué close
+ * none: what is put after a block never lands between an appliqué's parts.
+ */
+function runEnd(p: Pattern, i: number): { end: number; block: number } {
+  const inner = innerStops(p);
+  const blocks = inner.size ? blockIndex(p) : null;
+  let end = i;
+  while (end + 1 < p.cmd.length && p.cmd[end + 1] !== END && (p.cmd[end + 1] !== COLOR_CHANGE || (!!blocks && inner.has(blocks[end + 1] + 1)))) end++;
+  return { end, block: blocks ? blocks[end] : -1 };
+}
 import { hasPart, lineParts, linePartsOf, partInThread, partOf, type LinePart } from './shadow';
 import { storeForm, type Form, type Path } from '../shape/path';
 import { offsetForm, opsReady } from '../shape/ops';
@@ -320,9 +334,11 @@ export function syncShadows(p: Pattern, trimMm: number): Pattern {
         continue;
       }
       if (target) changes.push({ a: leadOf(p, target), b: target.last, recs: [] });
-      // Where each color block ends (its color change).
+      // Where each color block ends (its color change); the blocks an appliqué goes on in after its
+      // stops are one with the block it starts in.
       const ends: number[] = [];
-      for (let i = 0; i < p.cmd.length && ends.length <= o.block; i++) if (p.cmd[i] === COLOR_CHANGE) ends.push(i);
+      for (let i = 0; i < p.cmd.length; i++) if (p.cmd[i] === COLOR_CHANGE) ends.push(i);
+      const inner = innerStops(p);
       if (part.after) {
         // After the line's block, or after the block of its last copies sewn after it, so nearer
         // copies come first: at the start of the next block when that has the thread.
@@ -331,7 +347,7 @@ export function syncShadows(p: Pattern, trimMm: number): Pattern {
           const l = x?.echoOf;
           if (l && l !== part.link && hasPart(m, l) && objs[j].block > after) after = objs[j].block;
         });
-        for (let i = ends.length ? ends[ends.length - 1] + 1 : 0; i < p.cmd.length && ends.length <= after; i++) if (p.cmd[i] === COLOR_CHANGE) ends.push(i);
+        while (inner.has(after + 1)) after++;
         const end = ends[after] ?? p.cmd.length - 1;
         const next = p.cmd[end] === COLOR_CHANGE ? p.colors[after + 1] : undefined;
         if (next && sameColor(next, part.color)) changes.push({ a: end + 1, b: end, recs, memory });
@@ -340,12 +356,14 @@ export function syncShadows(p: Pattern, trimMm: number): Pattern {
       }
       // Before: at the end of the last block before the line's with its thread, so shadows share
       // a thread change; else a block of its own right before.
-      let into = o.block - 1;
-      while (into >= 0 && !sameColor(p.colors[into], part.color)) into--;
+      let head = o.block;
+      while (head > 0 && inner.has(head)) head--;
+      let into = head - 1;
+      while (into >= 0 && (!sameColor(p.colors[into], part.color) || inner.has(into + 1))) into--;
       if (into >= 0) changes.push({ a: ends[into], b: ends[into] - 1, recs, memory });
       else {
-        const start = o.block > 0 ? ends[o.block - 1] + 1 : 0;
-        changes.push({ a: start, b: start - 1, recs, before: { block: o.block, c: part.color }, memory });
+        const start = head > 0 ? ends[head - 1] + 1 : 0;
+        changes.push({ a: start, b: start - 1, recs, before: { block: head, c: part.color }, memory });
       }
     }
   });
@@ -504,11 +522,11 @@ function syncOwnBorders(p: Pattern, trimMm: number, drop: ReadonlySet<string>, f
     }
     // After the last record of its color block (before the change that closes it); at the start
     // of the next block when that one has the border's thread already.
-    let end = after.last;
-    while (end + 1 < p.cmd.length && p.cmd[end + 1] !== COLOR_CHANGE && p.cmd[end + 1] !== END) end++;
-    const next = p.cmd[end + 1] === COLOR_CHANGE ? p.colors[after.block + 1] : undefined;
+    const { end, block } = runEnd(p, after.last);
+    const closes = block < 0 ? after.block : block;
+    const next = p.cmd[end + 1] === COLOR_CHANGE ? p.colors[closes + 1] : undefined;
     if (next && sameColor(next, color)) changes.push({ a: end + 2, b: end + 1, recs, memory });
-    else changes.push({ a: end + 1, b: end, recs, color: { block: after.block, c: color }, memory });
+    else changes.push({ a: end + 1, b: end, recs, color: { block: closes, c: color }, memory });
   });
   // Borders whose fill has none of its own thread any more.
   for (const [link, at] of byLink) if (drop.has(link) && !wanted.has(link)) changes.push({ a: leadOf(p, objs[at]), b: objs[at].last, recs: [] });
@@ -665,11 +683,11 @@ export function syncBlends(p: Pattern, trimMm: number, drop: ReadonlySet<string>
     }
     if (target) changes.push({ a: leadOf(p, target), b: target.last, recs: [] });
     // After the last record of the fill's color block, as a border of its own thread.
-    let end = o.last;
-    while (end + 1 < p.cmd.length && p.cmd[end + 1] !== COLOR_CHANGE && p.cmd[end + 1] !== END) end++;
-    const next = p.cmd[end + 1] === COLOR_CHANGE ? p.colors[o.block + 1] : undefined;
+    const { end, block } = runEnd(p, o.last);
+    const closes = block < 0 ? o.block : block;
+    const next = p.cmd[end + 1] === COLOR_CHANGE ? p.colors[closes + 1] : undefined;
     if (next && sameColor(next, b.color)) changes.push({ a: end + 2, b: end + 1, recs, memory });
-    else changes.push({ a: end + 1, b: end, recs, color: { block: o.block, c: b.color }, memory });
+    else changes.push({ a: end + 1, b: end, recs, color: { block: closes, c: b.color }, memory });
   });
   for (const [link, at] of byLink) {
     if (wanted.has(link)) continue;

@@ -143,7 +143,8 @@ describe('satin stitches', () => {
     const u = underlayOf(columnOf({ left: line(0, 10, 0), right: line(0, 10, 4) }), 'contour');
     expect(u.atEnd).toBe(false);
     expect(Math.hypot(u.pts[0][0] - u.pts[u.pts.length - 1][0], u.pts[0][1] - u.pts[u.pts.length - 1][1])).toBeLessThan(4.1);
-    expect(underlayOf(columnOf({ left: line(0, 10, 0), right: line(0, 10, 4) }), 'both').atEnd).toBe(true);
+    // Edge run and the zigzag out and back: home again too.
+    expect(underlayOf(columnOf({ left: line(0, 10, 0), right: line(0, 10, 4) }), 'both').atEnd).toBe(false);
   });
 });
 

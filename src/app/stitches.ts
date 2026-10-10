@@ -1,6 +1,6 @@
 import { behindCovered } from '../model/contour';
 import type { ObjectPanel } from '../ui/objectPanel';
-import type { FileList } from '../ui/fileList';
+import { FileList } from '../ui/fileList';
 import type { Form } from '../shape/path';
 import type { LayersPanel } from '../ui/layersPanel';
 import type { Measurement } from '../validation/measure';
@@ -14,7 +14,7 @@ import { hasPart, partOf, withoutPart } from '../model/shadow';
 import { SATIN_SHARE } from '../model/covers';
 import { currentSettings } from '../correct/plan';
 import { isCovered, setOverlapShare } from '../model/knockout';
-import { strokeLike, SATIN_MAX, pullFor, digitizeDefaults } from '../digitize/digitize';
+import { strokeLike, SATIN_MAX, pullFor, digitizeDefaults, gapOf } from '../digitize/digitize';
 import { fillOfLine, lineSettings, lineToFill } from '../model/line';
 import { outline } from '../digitize/region';
 import { recommendedSpacing } from '../validation/profiles';
@@ -29,6 +29,8 @@ import { type StitchInfo, StitchPanel } from '../ui/stitchPanel';
 import { LivePreview } from '../resew/client';
 import { ui } from './state';
 import { areaOf, fits, geoUse, guessLine, lineGeoOf } from '../model/geo';
+import { canApplique, cutForms, fromApplique, setApplique, toApplique } from '../model/appliqueOps';
+import { cutLinesSvg } from '../model/applique';
 
 /** What bindStitches needs from the rest of the app. */
 export interface StitchesApp {
@@ -130,6 +132,14 @@ export function bindStitches(app: StitchesApp) {
     const piece = fillObj && remembered(p, fillObj)?.piece;
     const pieces = piece ? q.objects.filter((obj) => obj.kind === 'fill' && remembered(p, obj)?.piece === piece).length : 0;
     const info: StitchInfo = { key: ui.selectionKey, lock, free, fixed, fabricPull, auto, hand, measured, counts, recommended: recommendedSpacing(app.settings.profile), shape: worst, outlines: shapes, toSatin: stroke, knockout, depth, color: q.objects[firstFill]?.color, area: (fillObj && remembered(p, fillObj)?.region) || undefined, ...(pieces > 1 ? { pieces } : {}) };
+    // Appliqués: their own settings (all selected are one), or the switch to make one.
+    const sel = [...ui.selectedObjects].sort((a, b) => a - b).map((o) => q.objects[o]).filter(Boolean);
+    const firstApplique = sel.length && sel.every((o) => remembered(p, o)?.applique) ? sel[0] : undefined;
+    if (firstApplique) {
+      info.applique = { s: structuredClone(remembered(p, firstApplique)!.applique!), color: firstApplique.color };
+      // Its edge is no satin of its own and its area no fill to leave out: those settings do not apply.
+      delete info.knockout;
+    } else if (sel.some((o) => canApplique(p, o))) info.canApplique = true;
     const runs = [...ui.selectedObjects].map((o) => q.objects[o]).filter((obj) => obj?.kind === 'run');
     if (runs.length && runs.every((obj) => lineGeoOf(remembered(p, obj)))) info.line = true;
     const one = ui.selectedObjects.size === 1 ? q.objects[[...ui.selectedObjects][0]] : undefined;
@@ -361,7 +371,7 @@ export function bindStitches(app: StitchesApp) {
     const s = info.measured.satin;
     if (!s) return null;
     const spacing = s.spacing;
-    return { kind: 'fill', s: { pattern: 'tatami', spacing, spacingEnd: Math.min(1.2, Math.round(spacing * 250) / 100), offset: 0.25, angle: NaN, stitch: 4, underlay: s.underlay, edge: 0, tolerance: s.tolerance } };
+    return { kind: 'fill', s: { pattern: 'tatami', spacing, spacingEnd: Math.min(1.2, Math.round(spacing * 250) / 100), offset: 0.25, angle: NaN, stitch: 4, underlay: s.underlay, edge: 0, tolerance: s.tolerance, ...gapOf(digitizeDefaults(app.settings.profile)) } };
   }
 
   // Settings pointed at or dragged are sewn in a worker (a large fill takes seconds), so the page stays
@@ -446,7 +456,7 @@ export function bindStitches(app: StitchesApp) {
       const path = to === 'fill' && one >= 0 ? lineGeoOf(remembered(p, app.seq(p).objects[one])) : undefined;
       if (path) {
         const d = digitizeDefaults(app.settings.profile);
-        const fill = { pattern: 'tatami' as const, spacing: d.spacing, spacingEnd: Math.min(1.2, Math.round(d.spacing * 250) / 100), offset: 0.25, angle: NaN, stitch: d.stitch, underlay: d.underlay, edge: 0, tolerance: d.tolerance };
+        const fill = { pattern: 'tatami' as const, spacing: d.spacing, spacingEnd: Math.min(1.2, Math.round(d.spacing * 250) / 100), offset: 0.25, angle: NaN, stitch: d.stitch, underlay: d.underlay, edge: 0, tolerance: d.tolerance, ...gapOf(d) };
         // A line that was a fill is filled as it was; one with a closed path is filled inside and stays its border; an open satin line becomes a fill in its width.
         const closed = fillOfLine(p, one) === 'area';
         // A closed line around objects sewn before it (a contour) goes under them first: filled
@@ -517,6 +527,46 @@ export function bindStitches(app: StitchesApp) {
       app.redraw();
     },
     free: (on) => looseObjects(on),
+    appliqueKind: (on) => {
+      const p = app.files.active?.pattern;
+      if (!p || !ui.selectedObjects.size) return;
+      const which = [...ui.selectedObjects].sort((a, b) => a - b);
+      const d = digitizeDefaults(app.settings.profile);
+      const fill = { pattern: 'tatami' as const, spacing: d.spacing, spacingEnd: Math.min(1.2, Math.round(d.spacing * 250) / 100), offset: 0.25, angle: NaN, stitch: d.stitch, underlay: d.underlay, edge: 0, tolerance: d.tolerance };
+      const next = on ? toApplique(p, which, app.settings.trimMm) : fromApplique(p, which, fill, app.settings.trimMm);
+      if (!next) return app.layers.say(t(on ? 'applique.failed' : 'stitch.failed', { n: which.length }), true);
+      ui.flowPreview = null;
+      app.takeShapes(next, which);
+      app.layers.say(`${t(on ? 'applique.done' : 'applique.undone')} ${t('object.undo')}`);
+    },
+    applique: (st, final) => {
+      const p = app.files.active?.pattern;
+      if (!p || !ui.selectedObjects.size) return;
+      const which = [...ui.selectedObjects].sort((a, b) => a - b);
+      const next = setApplique(p, which, st, app.settings.trimMm);
+      // While sliding the new stitches are only shown; let go, they are taken over (one undo step).
+      if (!final) {
+        ui.flowPreview = next;
+        return app.redraw();
+      }
+      ui.flowPreview = null;
+      if (!next) return app.redraw();
+      app.takeShapes(next, which);
+    },
+    cutLine: () => {
+      const f = app.files.active;
+      const p = f?.pattern;
+      if (!f || !p) return;
+      const svg = cutLinesSvg(cutForms(p, [...ui.selectedObjects].sort((a, b) => a - b)));
+      if (!svg) return app.layers.say(t('applique.cut.none'), true);
+      const name = `${FileList.baseName(f).replace(/[\\/:*?"<>|]+/g, '_') || 'design'}-cut.svg`;
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
+      a.download = name;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      app.layers.say(t('applique.cut.done', { name }));
+    },
     original: () => {
       const f = app.files.active;
       const p = f?.pattern;

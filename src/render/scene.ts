@@ -17,6 +17,7 @@ import { drawHeatmap } from './heatmap';
 import { drawStitches } from './stitches';
 import { drawThreads } from './threads';
 import { drawFabric } from './fabricGl';
+import { drawPieces, hasPieces, underPieces } from './applique';
 import { drawHoop } from './hoop';
 import { drawValidation, drawZoneHighlight, type Counted } from './validationOverlay';
 import type { Viewport } from './viewport';
@@ -102,9 +103,15 @@ export function drawScene(ctx: CanvasRenderingContext2D, w: number, h: number, s
   if (s.realistic && s.fabricLook) drawFabric(ctx, vp, s.profile.fabric, background);
   if (flow) {
     if (!pattern) return;
-    const st = flow.style;
+    let st = flow.style;
     if (flow.trace) drawTrace(ctx, vp, flow.trace);
     if (flow.areas?.length) drawAreas(ctx, vp, flow.areas);
+    // Appliqués: their fabric under the threads from the stop it is laid on; in the realistic view
+    // their placement lines lie under it.
+    if (hasPieces(pattern)) {
+      drawPieces(ctx, vp, pattern, st.limit, st.alpha, 1, s.realistic && s.fabricLook);
+      if (s.realistic) st = { ...st, alpha: underPieces(pattern, st.alpha, st.limit) };
+    }
     if (!s.realistic || !drawThreads(ctx, vp, pattern, 1, s.threadMm, st)) drawFlatStitches(ctx, vp, pattern, st, 1);
     const marks = shownMarks(s);
     if (marks.jumps) drawJumps(ctx, vp, pattern, st.limit, st.alpha, st.carried?.jumps);
@@ -132,6 +139,7 @@ export function drawScene(ctx: CanvasRenderingContext2D, w: number, h: number, s
   const edit = scene.edit;
   const opacity = edit ? Math.max(0.85, s.overlay ? s.opacity : 0) : s.overlay ? s.opacity : 0;
   if (pattern && opacity > 0) {
+    if (hasPieces(pattern)) drawPieces(ctx, vp, pattern, pattern.cmd.length - 1, null, opacity, s.realistic && s.fabricLook);
     if (!s.realistic || !drawThreads(ctx, vp, pattern, opacity, s.threadMm)) drawStitches(ctx, vp, pattern, opacity, false);
   }
   // Markers belong to the stitch plan: shown with it, not on the bare heatmap.

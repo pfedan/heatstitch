@@ -6,7 +6,7 @@ import { sewObjects as sewObjectsOf, type SewObject } from './objects';
 import type { Pattern } from './pattern';
 import { borderOf, columnOf, keepShape, objectKey, railsArea, remembered, type Remembered } from './restitch';
 import { stitchKinds } from './sequence';
-import { areaOf } from './geo';
+import { areaOf, appliqueArea } from './geo';
 
 /**
  * What objects sewn later cover of an object: fills whose shape is known as curves, and satins
@@ -82,7 +82,8 @@ export function coversFrom(p: Pattern, later: SewObject[], o: SewObject, pxMm: n
     // The border of a fill sewn before that leaves `o` out runs beside `o`, not on it: `o` leaves
     // nothing out for it (else each would leave out the other's border, and neither settle).
     if (m?.outline && filled().some((f) => leavesOut(p, f, m.outline!, reach))) continue;
-    const f = areaOf(remembered(p, x));
+    // An appliqué's fabric covers its area as a fill does.
+    const f = areaOf(m) ?? appliqueArea(m);
     const r = f && wholeArea(f, pxMm);
     if (r) {
       out.push({ region: r, overlap: FILL_OVERLAP });

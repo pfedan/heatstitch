@@ -1,4 +1,5 @@
 import { JUMP, STITCH, type Pattern, type ThreadColor } from '../model/pattern';
+import { innerStops } from '../model/applique';
 import { blockIndex, FILL, RUNNING, SATIN, stitchKinds, TIE_STITCH, type CarriedJumps, type Markers, type Transition } from '../model/sequence';
 import type { ColorBy, Marks } from '../settings';
 import { SHORT_STITCH_MM } from '../validation/thresholds';
@@ -113,8 +114,11 @@ export function stitchAlpha(p: Pattern, hidden: ReadonlySet<number>, focus: numb
   const out = new Float32Array(n).fill(1);
   if (!hidden.size && focus === null) return out;
   const blocks = blockIndex(p);
+  // The blocks an appliqué goes on in after its stops are hidden and focused with the one it starts in.
+  const inner = innerStops(p);
   for (let i = 0; i < n; i++) {
-    const b = blocks[i];
+    let b = blocks[i];
+    while (b > 0 && inner.has(b)) b--;
     out[i] = hidden.has(b) ? 0 : focus !== null && b !== focus ? 0.15 : 1;
   }
   return out;

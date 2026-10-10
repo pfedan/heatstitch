@@ -93,6 +93,8 @@ export function writeDst(p: Pattern): Uint8Array {
   /** Consecutive jump records just written. */
   let streak = 0;
   let colorChanges = 0;
+  /** Whether the last record written was a color change (or none was written yet). */
+  let afterColor = true;
   let minX = 0;
   let minY = 0;
   let maxX = 0;
@@ -104,6 +106,7 @@ export function writeDst(p: Pattern): Uint8Array {
     cy += dy;
     records++;
     streak = kind === 'jump' ? streak + 1 : 0;
+    afterColor = kind === 'color';
     if (cx < minX) minX = cx;
     if (cx > maxX) maxX = cx;
     if (cy < minY) minY = cy;
@@ -154,6 +157,10 @@ export function writeDst(p: Pattern): Uint8Array {
       const j = runEnd(i);
       if (trimmed || runRecords(i, j, cx, cy) < DST_TRIM_JUMP_COUNT) {
         for (let k = i; k < j; k++) {
+          // A jump to where the needle already is, first in the design or in a color (a design that
+          // starts at the origin, a color that starts where the last one ended), is left out: some
+          // machines skip zero-length jumps.
+          if (afterColor && p.x[k] === cx && p.y[k] === cy) continue;
           for (const [dx, dy] of splitMove(p.x[k] - cx, p.y[k] - cy, DST_MAX_DELTA)) emit(dx, dy, 'jump');
         }
       } else {

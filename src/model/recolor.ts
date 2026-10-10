@@ -1,3 +1,4 @@
+import { innerStops } from './applique';
 import { nextVersion, type Pattern, type ThreadColor } from './pattern';
 
 /**
@@ -7,7 +8,12 @@ import { nextVersion, type Pattern, type ThreadColor } from './pattern';
 export function recolor(p: Pattern, block: number, color: ThreadColor): Pattern {
   const last = p.colors[p.colors.length - 1] ?? { r: 128, g: 128, b: 128 };
   const colors = Array.from({ length: Math.max(p.colors.length, block + 1) }, (_, i) => p.colors[i] ?? last);
-  colors[block] = { ...color };
+  // An appliqué stops inside, in its own thread: the blocks it goes on in take the thread with it.
+  const inner = innerStops(p);
+  let b = block;
+  while (b > 0 && inner.has(b)) b--;
+  do colors[b++] = { ...color };
+  while (inner.has(b) && b < colors.length);
   return nextVersion(p, { colors });
 }
 

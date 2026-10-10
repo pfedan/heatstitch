@@ -5,6 +5,7 @@ import { followerLinks, partHolders, recolorBlock, sameRegion, shareBorders, syn
 import { blendObject } from '../../src/model/blend';
 import { MOTIFS } from '../../src/digitize/deco';
 import { ECHO_SIDES } from '../../src/digitize/echo';
+import { HAND_STITCHES, HAND_WIDTH, LINE_MOTIFS } from '../../src/digitize/motif';
 import { partOf, type LinePart } from '../../src/model/shadow';
 import { fillToLine, lineStitches, lineToFill, resewLine } from '../../src/model/line';
 import { refreshKnockouts, setKnockout } from '../../src/model/knockout';
@@ -15,8 +16,12 @@ import { fillsToLines, lineToSatin, reshapeFill, reshapeObject, transformSewObje
 import { canSplit, splitFill } from '../../src/model/splitFill';
 import { cutKey, sewnArea, wholeArea, wholeOf } from '../../src/model/knockout';
 import { unionOf } from '../../src/shape/rasterize';
-import { borderStitches } from '../../src/model/along';
+import { borderStitches, isRedwork, isRunType } from '../../src/model/along';
+import { redworkGraph, redworkWalks } from '../../src/digitize/redwork';
+import { APPLIQUE_FABRICS, innerStops } from '../../src/model/applique';
+import { appliquesOf, canApplique, fromApplique, setApplique, toApplique } from '../../src/model/appliqueOps';
 import type { Region } from '../../src/digitize/region';
+import { GAP_ROWS_MAX } from '../../src/digitize/fill';
 import { backToVersion, edgeAlong, keepVersion, objectKey, remember, remembered, rememberedIn, restitch, restoreRemembered, DECO_PATTERNS, OPEN_PATTERNS, type BorderSettings, type FillSettings, type Rails, type Remembered, type StoredObjects } from '../../src/model/restitch';
 import { reorder } from '../../src/model/order';
 import { stitchKinds } from '../../src/model/sequence';
@@ -215,7 +220,7 @@ export function restitchFill(d: Doc, o: number, s: FillSettings, drop: Set<strin
 }
 
 /** New stitches taken over as the app does: each object remembers what it is made of. */
-function took(d: Doc, r: ReturnType<typeof restitch> | null, drop: ReadonlySet<string> = new Set()): boolean {
+export function took(d: Doc, r: ReturnType<typeof restitch> | null, drop: ReadonlySet<string> = new Set()): boolean {
   if (!r?.starts.length) return false;
   r.starts.forEach((a, k) => rememberObjects(r.pattern, [a], r.ends[k]));
   const now = sewObjects(r.pattern);
@@ -457,8 +462,14 @@ export const OPS: Op[] = [
       // The gathered: one after the other from the lead on, all in its thread, each with its stitches.
       expect(g!.which, 'gathered one after the other, the lead first').toEqual(g!.which.map((_, k) => g!.which[0] + k));
       expect(now[g!.which[0]].id, 'the lead first').toBe(d.objects[lead].id);
+      // An appliqué's stops are no change of thread: the blocks after them count as the one before.
+      const inner = innerStops(g!.pattern);
+      const head = (b: number) => {
+        while (b > 0 && inner.has(b)) b--;
+        return b;
+      };
       for (const k of g!.which) {
-        expect(now[k].block, 'gathered into one color block').toBe(now[g!.which[0]].block);
+        expect(head(now[k].block), 'gathered into one color block').toBe(head(now[g!.which[0]].block));
         expect(sameColor(now[k].color, d.objects[lead].color), 'in the lead\'s thread').toBe(true);
         expect(now[k].stitches, 'a gathered object keeps its stitches').toBe(was.get(now[k].id)!.stitches);
         expect(remembered(g!.pattern, now[k]), 'a gathered object keeps what it knows').toEqual(remembered(p, was.get(now[k].id)!));
@@ -797,7 +808,8 @@ export const OPS: Op[] = [
       const columns: Rails[] = made.areas.flatMap((strips, a) => strips.map((c) => ({ ...c, chain: a })));
       if (!columns.length) return false;
       columns[0].split = { outlines: outsides, holes, cuts: s.cuts.map(([a, b]) => [a, b]) };
-      const satin = { spacing: 0.4, edge: 0.1, short: true, underlay: true, tolerance: 0.15 };
+      // Every other one irregular (without drawing from r, so the chains stay as they were).
+      const satin = { spacing: 0.4, edge: 0.1, short: true, underlay: true, tolerance: 0.15, ...(o.index % 2 ? { rough: 0.5, roughSeed: 11 } : {}) };
       const res = restitch(p, sewObjects(p, kinds), [o.index], { kind: 'satin', s: satin }, kinds, T, 'fill', false, new Map([[o.index, columns]]));
       return !res.failed.length && took(d, res);
     },
@@ -952,6 +964,113 @@ export const OPS: Op[] = [
  * Satins over an area made lines along their edge and satins again (the kind switch). Drawn from a
  * stream of their own, so the chains of the other ops stay as they were for the seeds above.
  */
+/**
+ * Lines sewn as a motif, mostly a hand stitch (stem, feather, Cretan, chevron). Drawn from a stream
+ * of their own, so the chains of the other ops stay as they were for the seeds above.
+ */
+export const HAND_OPS: Op[] = [
+  {
+    name: 'hand stitch',
+    run: (d, r) => {
+      // As the line panel: a motif picked, often a hand stitch at its own size, sewn 1, 3 or 5 times.
+      const lines = d.objects.filter((o) => lineGeoOf(remembered(d.cur.p, o)) && remembered(d.cur.p, o)?.line && !partOf(remembered(d.cur.p, o)));
+      if (!lines.length) return false;
+      const o = pick(r, lines);
+      const m = remembered(d.cur.p, o)!;
+      const motif = r() < 0.7 ? pick(r, HAND_STITCHES) : pick(r, LINE_MOTIFS);
+      const hand = (HAND_STITCHES as string[]).includes(motif);
+      const width = hand && r() < 0.5 ? HAND_WIDTH[motif as keyof typeof HAND_WIDTH] : between(r, 1, 6);
+      const repeat = r() < 0.4 ? pick(r, [1, 5]) : undefined;
+      const st = { ...m.line!, type: 'motif' as const, motif, width, ...(r() < 0.3 ? { spacing: between(r, 1.5, 8) } : {}) };
+      delete st.repeat;
+      delete st.whole;
+      if (repeat) st.repeat = repeat;
+      const next = resewLine(d.cur.p, o.index, m.geo!, st, T);
+      if (!next) return false;
+      // Invariant: a hand stitch stays within its size of the line (half of it to each side), at
+      // corners and ends too; copies beside it (echo) lie further out on purpose.
+      if (hand && !st.echo) {
+        const path = m.geo!.paths.flatMap((q) => {
+          const f = flatten(q);
+          return q.closed && f.length ? [f, [f[f.length - 1], f[0]]] : [f];
+        });
+        const off = (x: number, y: number) =>
+          Math.min(
+            ...path.flatMap((f) =>
+              f.slice(1).map((b, i) => {
+                const a = f[i];
+                const dx = b[0] - a[0], dy = b[1] - a[1];
+                const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (y - a[1]) * dy) / (dx * dx + dy * dy || 1)));
+                return Math.hypot(x - a[0] - dx * t, y - a[1] - dy * t);
+              }),
+            ),
+          );
+        let far = 0;
+        for (let i = next.first; i <= next.last; i++) if (next.pattern.cmd[i] === STITCH) far = Math.max(far, off(next.pattern.x[i] / 10, next.pattern.y[i] / 10));
+        expect(far, `${motif} within its size of the line`).toBeLessThan(width / 2 + 0.6);
+      }
+      return shapes(d, syncBorders(next.pattern, T));
+    },
+  },
+];
+
+/**
+ * Appliqués: a fill made one (one object in three parts with two stops, see applique.ts), its edge,
+ * width and fabric changed, and made a fill again. Drawn from a stream of their own, so the chains
+ * of the other ops stay as they were for the seeds above.
+ */
+export const APPLIQUE_OPS: Op[] = [
+  {
+    name: 'make applique',
+    run: (d, r) => {
+      const can = d.objects.filter((o) => canApplique(d.cur.p, o));
+      if (!can.length) return false;
+      return shapes(d, toApplique(d.cur.p, [pick(r, can).index], T, r() < 0.5 ? { fabric: pick(r, APPLIQUE_FABRICS) } : {}));
+    },
+  },
+  {
+    name: 'set applique',
+    run: (d, r) => {
+      const as = appliquesOf(d.cur.p).filter((o) => !remembered(d.cur.p, o)?.free);
+      if (!as.length) return false;
+      const change = pick(r, [{ edge: 'e' as const }, { edge: 'satin' as const }, { width: between(r, 2, 4.5) }, { fabric: pick(r, APPLIQUE_FABRICS), color: pick(r, COLORS) }]);
+      return shapes(d, setApplique(d.cur.p, [pick(r, as).index], change, T));
+    },
+  },
+  {
+    name: 'applique to fill',
+    run: (d, r) => {
+      const as = appliquesOf(d.cur.p).filter((o) => !remembered(d.cur.p, o)?.free);
+      if (!as.length) return false;
+      return shapes(d, fromApplique(d.cur.p, [pick(r, as).index], { pattern: 'tatami', spacing: 0.4, spacingEnd: 1, offset: 0.25, angle: NaN, stitch: 4, underlay: true, edge: 0, tolerance: 0.15 }, T));
+    },
+  },
+];
+
+/**
+ * Each appliqué stops twice inside, in its own thread: the blocks it goes on in have the color of
+ * the block it starts in (else a stop would become a change of thread), and it knows its area.
+ */
+export function checkAppliques(p: Pattern): void {
+  const problems: string[] = [];
+  const blockAt = (i: number) => {
+    let b = 0;
+    for (let k = 0; k < i; k++) if (p.cmd[k] === COLOR_CHANGE) b++;
+    return b;
+  };
+  for (const o of sewObjects(p)) {
+    const m = remembered(p, o);
+    if (!m?.applique) continue;
+    if (!m.region) problems.push(`${o.index}: no area`);
+    const stops: number[] = [];
+    for (let i = o.first; i <= o.last; i++) if (p.cmd[i] === COLOR_CHANGE) stops.push(i);
+    if (stops.length !== 2) problems.push(`${o.index}: ${stops.length} stops`);
+    const b = blockAt(o.first);
+    for (let k = 1; k <= stops.length; k++) if (!sameColor(p.colors[b + k], p.colors[b])) problems.push(`${o.index}: block ${b + k} in another thread`);
+  }
+  expect(problems.join('; '), 'appliqués').toBe('');
+}
+
 /** A script font whose letters run into each other (loaded from the app's fonts). */
 const SCRIPT = JSON.parse(readFileSync(new URL('../../public/fonts/pacificlo.json', import.meta.url), 'utf8')) as Font;
 addFont(SCRIPT);
@@ -1126,6 +1245,33 @@ export const SATIN_OPS: Op[] = [
  * Outlines edited on the level Form, as the app does (one way back for every kind, see
  * reshapeObject): a node of a fill, a satin over an area, a band or a line moved a little.
  */
+/** What digitizing on knit (jersey) gives: gap rows where sections of a fill meet. */
+export const knitOptions = digitizeDefaults({ fabric: 'knit', thread: '40' });
+
+/**
+ * Fills on knit in shapes sewn in several sections (a frame or ring), with gap rows. Drawn from a stream of
+ * their own, so the chains of the other ops stay as they were for the seeds above.
+ */
+export const KNIT_OPS: Op[] = [
+  {
+    name: 'add knit fill',
+    run: (d, r) => {
+      const x = between(r, 0, 40);
+      const y = between(r, 0, 40);
+      const w = between(r, 14, 30);
+      const h = between(r, 14, 30);
+      const t = between(r, 4, Math.min(w, h) / 3);
+      // A frame or a ring: at any angle the rows split around the hole and join again past it.
+      const hole = r() < 0.5 ? rectPath(x + t, y + t, w - 2 * t, h - 2 * t, 0, 0) : ellipsePath(x + w / 2, y + h / 2, w / 2 - t, h / 2 - t);
+      const path = `${r() < 0.5 ? rectPath(x, y, w, h, 0, 0) : ellipsePath(x + w / 2, y + h / 2, w / 2, h / 2)} ${hole}`;
+      const objs = d.objects;
+      const after = objs.length && r() < 0.5 ? pick(r, objs).index : null;
+      const a = addShape(d.cur.p, { form: parsePath(path, ID), kind: 'fill' }, pick(r, COLORS), after, knitOptions);
+      return shapes(d, a?.pattern);
+    },
+  },
+];
+
 export const SHAPE_OPS: Op[] = [
   {
     name: 'edit outline',
@@ -1183,6 +1329,35 @@ export const SHAPE_OPS: Op[] = [
       const vein = { closed: false, nodes: [a, z].map((q) => ({ p: q, a: q, b: q, smooth: false })) };
       const res = reshapeObject(p, objs, o, kinds, { ...geo, paths: [...geo.paths, vein] }, T);
       return !!res && took(d, res);
+    },
+  },
+];
+
+/**
+ * Redwork switched on or off for a line in running stitch, as the line panel does. Drawn from a
+ * stream of its own, so the chains of the other ops stay as they were for the seeds above.
+ */
+export const REDWORK_OPS: Op[] = [
+  {
+    name: 'redwork',
+    run: (d, r) => {
+      const lines = d.objects.filter((o) => {
+        const m = remembered(d.cur.p, o);
+        return lineGeoOf(m) && m?.line && isRunType(m.line.type) && !m.line.echo && !m.free && !partOf(m);
+      });
+      if (!lines.length) return false;
+      const o = pick(r, lines);
+      const m = remembered(d.cur.p, o)!;
+      const st = { ...m.line! };
+      if (isRedwork(st)) delete st.redwork;
+      else {
+        st.type = 'run';
+        st.redwork = true;
+        delete st.repeat;
+        delete st.whole;
+      }
+      const sewn = resewLine(d.cur.p, o.index, m.geo!, st, T);
+      return !!sewn && shapes(d, syncBorders(sewn.pattern, T));
     },
   },
 ];
@@ -1533,7 +1708,7 @@ export function checkEchoes(p: Pattern): void {
     const m = remembered(p, o);
     // Loosed from its curve (changed by hand), a line keeps the stitches it was given instead; so
     // does a shadow or echo object changed by hand (it is sewn anew only when its line changes).
-    if (!lineGeoOf(m) || !m!.line || m!.free || (partOf(m) && m!.hand) || (!m!.line.echo && !((m!.line.repeat ?? 1) > 1))) continue;
+    if (!lineGeoOf(m) || !m!.line || m!.free || (partOf(m) && m!.hand) || (!m!.line.echo && !((m!.line.repeat ?? 1) > 1) && !isRedwork(m!.line))) continue;
     const fresh = lineStitches(m!.geo!, m!.line).flat();
     const sewn: [number, number][] = [];
     for (let i = o.first; i <= o.last; i++) if (p.cmd[i] === STITCH) sewn.push([p.x[i] / 10, p.y[i] / 10]);
@@ -1542,6 +1717,24 @@ export function checkEchoes(p: Pattern): void {
     if (off > 0.6 || missing > 0.6) problems.push(`line ${o.index}: stitches ${off.toFixed(2)} mm off its echo, echo ${missing.toFixed(2)} mm from its stitches`);
   }
   expect(problems.join('; '), 'echoes that parted from their lines').toBe('');
+}
+
+/**
+ * A line sewn as redwork has no trim inside where its paths touch: at most one less than the parts
+ * its paths make (parts far apart are trimmed between, as any line's paths).
+ */
+export function checkRedwork(p: Pattern): void {
+  const problems: string[] = [];
+  for (const o of sewObjects(p)) {
+    const m = remembered(p, o);
+    if (!lineGeoOf(m) || !m!.line || m!.free || !isRedwork(m!.line)) continue;
+    const lines = m!.geo!.paths.map((x) => ({ pts: flatten(x), closed: x.closed })).filter((x) => x.pts.length >= 2);
+    const parts = redworkWalks(redworkGraph(lines)).length;
+    let trims = 0;
+    for (let i = o.first; i < o.last; i++) if (p.cmd[i] === TRIM) trims++;
+    if (trims > Math.max(0, parts - 1)) problems.push(`redwork line ${o.index}: ${trims} trims inside, ${parts} parts`);
+  }
+  expect(problems.join('; '), 'redwork lines trimmed where their paths touch').toBe('');
 }
 
 /**
@@ -1694,6 +1887,24 @@ export function checkFollowers(p: Pattern): void {
   expect(problems.join('; '), 'followers off their leader').toBe('');
 }
 
+/**
+ * Gap rows (see sectionJoins in digitize/fill.ts) belong to a fill's settings: a fill made with them
+ * keeps them through every step (duplicated, mirrored, left out, undone, saved and opened; the
+ * knowledge check compares them with what was stored), as a whole number up to GAP_ROWS_MAX, also
+ * in a fill kept beside a line, and never on a satin.
+ */
+export function checkGapRows(p: Pattern): void {
+  const problems: string[] = [];
+  const ok = (g: number | undefined) => g === undefined || (Number.isInteger(g) && g >= 0 && g <= GAP_ROWS_MAX);
+  for (const o of sewObjects(p)) {
+    const m = remembered(p, o);
+    if (!ok(m?.fill?.gapRows)) problems.push(`${o.index}: gap rows ${m!.fill!.gapRows}`);
+    if (!ok(m?.kept?.fill?.gapRows)) problems.push(`${o.index}: kept fill with gap rows ${m!.kept!.fill!.gapRows}`);
+    if (m?.satin && 'gapRows' in m.satin) problems.push(`${o.index}: a satin with gap rows`);
+  }
+  expect(problems.join('; '), 'gap rows').toBe('');
+}
+
 /** Exported and read back, the stitches are the same. */
 export function checkExport(p: Pattern): void {
   const stitches = (q: Pattern) => {
@@ -1804,7 +2015,7 @@ export function describeObjects(p: Pattern): string {
   return sewObjects(p)
     .map((o) => {
       const m = remembered(p, o);
-      const what = !m ? 'UNKNOWN' : [m.geo && `geo:${geoUse(m)}`, m.fill && 'fill', m.line && 'line', m.kept && `kept:${Object.keys(m.kept).join('+')}`, m.knockout && 'knockout', m.line?.link && `border->${m.line.link}`, m.outline && `outline=${m.outline}`, m.blendOf && `blendOf=${m.blendOf}`, m.fill?.deco?.blend && `blend->${m.fill.deco.blend.link}`].filter(Boolean).join(' ');
+      const what = !m ? 'UNKNOWN' : [m.applique && `applique:${m.applique.edge}`, m.geo && `geo:${geoUse(m)}`, m.fill && 'fill', m.line && 'line', m.kept && `kept:${Object.keys(m.kept).join('+')}`, m.knockout && 'knockout', m.line?.link && `border->${m.line.link}`, m.outline && `outline=${m.outline}`, m.blendOf && `blendOf=${m.blendOf}`, m.fill?.deco?.blend && `blend->${m.fill.deco.blend.link}`].filter(Boolean).join(' ');
       return `\n  ${o.index} ${objectKey(p, o)} ${o.kind} block ${o.block} rgb(${o.color.r},${o.color.g},${o.color.b}) ${what}`;
     })
     .join('');
@@ -1815,13 +2026,17 @@ export function describeObjects(p: Pattern): string {
  * moved, sized and removed in between, from a random stream of its own (the ops of a seed stay the
  * ones it always had).
  */
-export async function chain(seed: number, steps = STEPS, opts: { trace?: boolean } = {}): Promise<void> {
+export async function chain(seed: number, steps = STEPS, opts: { trace?: boolean; knit?: boolean } = {}): Promise<void> {
   const r = rng(seed);
   const rt = rng(seed + 7919);
   const rl = rng(seed + 104729);
   const rs = rng(seed + 15485863);
   const rsat = rng(seed + 32452843);
   const rlet = rng(seed + 49979687);
+  const rred = rng(seed + 67867967);
+  const rhand = rng(seed + 86028121);
+  const rknit = rng(seed + 104395301);
+  const rapp = rng(seed + 122949823);
   const d = new Doc();
   const log: string[] = [];
   const at = () => `seed ${seed}: ${log.join(' > ')}`;
@@ -1852,6 +2067,19 @@ export async function chain(seed: number, steps = STEPS, opts: { trace?: boolean
         }
       }
     }
+    // Now and then a line sewn as redwork, or path by path again, beside the chain.
+    if (!blank(d.cur.p) && rred() < 0.15) {
+      const red = pick(rred, REDWORK_OPS);
+      if (await red.run(d, rred)) {
+        log.push(red.name);
+        if (process.env.TORTURE_TRACE) console.log(red.name, describeObjects(d.cur.p));
+        try {
+          checkStep(d, false);
+        } catch (e) {
+          throw new Error(`${at()}\n${(e as Error).message}`);
+        }
+      }
+    }
     // Now and then a satin over an area made a line, or a satin again, beside the chain.
     if (!blank(d.cur.p) && rsat() < 0.15) {
       const sat = pick(rsat, SATIN_OPS);
@@ -1865,12 +2093,51 @@ export async function chain(seed: number, steps = STEPS, opts: { trace?: boolean
         }
       }
     }
+    // Now and then a line sewn as a hand stitch, beside the chain.
+    if (!blank(d.cur.p) && rhand() < 0.15) {
+      const hop = pick(rhand, HAND_OPS);
+      if (await hop.run(d, rhand)) {
+        log.push(hop.name);
+        try {
+          checkStep(d, false);
+        } catch (e) {
+          throw new Error(`${at()}\n${(e as Error).message}`);
+        }
+      }
+    }
     // Now and then a lettering set or set anew, beside the chain.
     if (rlet() < 0.15) {
       const lop = blank(d.cur.p) ? LETTERING_OPS[0] : pick(rlet, LETTERING_OPS);
       if (await lop.run(d, rlet)) {
         log.push(lop.name);
         if (process.env.TORTURE_TRACE) console.log(lop.name, describeObjects(d.cur.p));
+        try {
+          checkStep(d, false);
+        } catch (e) {
+          throw new Error(`${at()}\n${(e as Error).message}`);
+        }
+      }
+    }
+    // Now and then a fill on knit, with gap rows, beside the chain (not in chains replayed by seed,
+    // which stay as they were found).
+    if (opts.knit && rknit() < 0.12) {
+      const kop = pick(rknit, KNIT_OPS);
+      if (await kop.run(d, rknit)) {
+        log.push(kop.name);
+        if (process.env.TORTURE_TRACE) console.log(kop.name, describeObjects(d.cur.p));
+        try {
+          checkStep(d, false);
+        } catch (e) {
+          throw new Error(`${at()}\n${(e as Error).message}`);
+        }
+      }
+    }
+    // Now and then an appliqué made, changed or made a fill again, beside the chain.
+    if (!blank(d.cur.p) && rapp() < 0.25) {
+      const aop = pick(rapp, APPLIQUE_OPS);
+      if (await aop.run(d, rapp)) {
+        log.push(aop.name);
+        if (process.env.TORTURE_TRACE) console.log(aop.name, describeObjects(d.cur.p));
         try {
           checkStep(d, false);
         } catch (e) {
@@ -1942,12 +2209,15 @@ function checkStep(d: Doc, full: boolean): void {
   checkBlends(p);
   checkCrosshatch(p);
   checkEchoes(p);
+  checkRedwork(p);
   checkLineParts(p);
   checkKnockouts(p);
   checkAreas(p);
   checkFollowers(p);
   checkSatinSections(p);
   checkLetterings(p);
+  checkGapRows(p);
+  checkAppliques(p);
   checkTrace(d);
   if (full) {
     checkExport(p);

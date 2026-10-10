@@ -41,7 +41,7 @@ export interface ShapesApp {
   readonly frameObjects: () => number[];
   readonly frameTool: FrameTool;
   readonly layers: LayersPanel;
-  readonly objectName: (q: Sequence, i: number) => string;
+  readonly objectName: (q: Sequence, i: number, p?: Pattern) => string;
   readonly recompute: () => void;
   readonly redraw: () => void;
   readonly selectObjects: (objs: number[], toggle: boolean) => void;

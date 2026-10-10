@@ -2,6 +2,7 @@ import { sewList } from './sew';
 import { joinedUncut, type SewObject } from './objects';
 import { COLOR_CHANGE, JUMP, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
 import { sameColor } from './recolor';
+import { innerStops } from './applique';
 
 /**
  * Sewing order of the objects: what the machine sews when. Changing it changes neither the
@@ -38,9 +39,13 @@ export interface OrderCost {
 export function blockKeys(p: Pattern, blocks: number): string[] {
   const out: string[] = [];
   const key = (c: ThreadColor | undefined) => (c ? `${c.r},${c.g},${c.b},${c.name ?? ''}` : '?');
+  // A stop inside an object (an appliqué's fabric laid on or cut off) belongs to it: the block it
+  // opens is sewn in the thread of the block before, what follows it in that block too.
+  const inner = innerStops(p);
   for (let b = 0; b < blocks; b++) {
     const c = p.colors[b] ?? p.colors[p.colors.length - 1];
-    out.push(b > 0 && sameColor(c, p.colors[b - 1] ?? p.colors[p.colors.length - 1]) ? `stop${b}:${key(c)}` : key(c));
+    if (inner.has(b)) out.push(out[b - 1]);
+    else out.push(b > 0 && sameColor(c, p.colors[b - 1] ?? p.colors[p.colors.length - 1]) ? `stop${b}:${key(c)}` : key(c));
   }
   return out;
 }

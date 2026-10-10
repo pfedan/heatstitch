@@ -67,7 +67,8 @@ export function reverseLines(p: Pattern, which: number[], trimMm: number): { pat
 export function autoReversible(p: Pattern, o: SewObject): boolean {
   if (!reversible(o)) return false;
   const known = remembered(p, o);
-  if (known?.hand) return false;
+  // An appliqué's parts and stops come in their order: it is sewn as it is.
+  if (known?.hand || known?.applique) return false;
   return o.kind === 'satin' || (!!known?.region && !known.read);
 }
 

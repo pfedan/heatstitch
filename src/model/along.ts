@@ -7,7 +7,7 @@ import { sample, type Region } from '../digitize/region';
 import { TOLERANCE } from '../digitize/run';
 import type { Pt } from '../digitize/skeleton';
 import type { UnderlayKind } from '../digitize/satin';
-import { MOTIF_PERIOD, motifStitches, type LineMotif } from '../digitize/motif';
+import { HAND_LAYERS, isHandStitch, MOTIF_PERIOD, motifStitches, type LineMotif } from '../digitize/motif';
 import { satinRuns, type FringeSide, type SatinSettings } from './restitch';
 
 /**
@@ -55,6 +55,11 @@ export interface PathStitch {
   echo?: LineEcho;
   /** Lines only: a copy beside it in a thread of its own, sewn before it (see shadow.ts). */
   shadow?: LineShadow;
+  /**
+   * Lines in running stitch only: all paths in one go, each line there and back without a trim
+   * where they touch (redwork, see digitize/redwork.ts); path by path by default.
+   */
+  redwork?: boolean;
 }
 
 /** Sewn as a running stitch (once or more often), not across a band. */
@@ -68,11 +73,24 @@ export const REPEAT: [number, number] = [1, 5];
 
 const repeatOf = (s: PathStitch): number => Math.min(REPEAT[1], Math.max(REPEAT[0], Math.round(s.repeat ?? 1)));
 
+/** A motif that imitates a hand stitch: its stitches lie in bundles of their own (see handStitches). */
+export const isHand = (s: PathStitch): boolean => s.type === 'motif' && isHandStitch(s.motif);
+
+/**
+ * How often each stitch of a hand stitch is sewn: 1, 3 (by default) or 5. Not more, and not on top
+ * of a bean stitch or the whole line again: the bundles meet in shared holes, and five layers is
+ * what the density check still takes.
+ */
+export const layersOf = (s: PathStitch): number => (s.repeat === 1 ? 1 : s.repeat === 5 ? 5 : HAND_LAYERS);
+
 /** How often each stitch of a running stitch is sewn (bean stitch): an odd number. */
-export const timesOf = (s: PathStitch): number => (s.type === 'triple' ? (s.repeat === 5 ? 5 : 3) : s.type === 'motif' && !s.whole && repeatOf(s) % 2 ? repeatOf(s) : 1);
+export const timesOf = (s: PathStitch): number => (s.type === 'triple' ? (s.repeat === 5 ? 5 : 3) : s.type === 'motif' && !isHand(s) && !s.whole && repeatOf(s) % 2 ? repeatOf(s) : 1);
 
 /** How often the whole line is sewn, there and back: what is not sewn as bean stitch. */
-export const passesOf = (s: PathStitch): number => (s.type === 'triple' || timesOf(s) > 1 ? 1 : repeatOf(s));
+export const passesOf = (s: PathStitch): number => (s.type === 'triple' || isHand(s) || timesOf(s) > 1 ? 1 : repeatOf(s));
+
+/** Whether a line is sewn as redwork: a running stitch (once) without echo, see PathStitch.redwork. */
+export const isRedwork = (s: PathStitch): boolean => !!s.redwork && s.type === 'run' && !s.echo;
 
 /** Kinds of stitch whose figures repeat along the line: an echo shifts them from copy to copy (LineEcho.phase). */
 export const hasPhase = (t: BorderType): boolean => t === 'motif' || t === 'zigzag' || t === 'e';
@@ -202,7 +220,7 @@ function sewOnce(line: Pt[], closed: boolean, s: PathStitch, start?: Pt, area?: 
   if (s.type === 'motif') {
     // Like the prongs of an E stitch: on a border inward (outward with flip), on a line to its right.
     const right = area ? rightInside(area, l) !== !!s.flip : back === !!s.flip;
-    const run = repeated(motifStitches(l, closed, s.motif ?? 'waves', s.width, spacingOf(s), right ? 1 : -1, shift, s.stitch), timesOf(s));
+    const run = repeated(motifStitches(l, closed, s.motif ?? 'waves', s.width, spacingOf(s), right ? 1 : -1, shift, s.stitch, layersOf(s)), timesOf(s));
     return run.length > 1 ? [run] : [];
   }
   if (area && closed) return satinRuns([onEdge(area, borderRails(area, l, s.width, s.offset ?? 0), s)], satinOf(s));

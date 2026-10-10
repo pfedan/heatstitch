@@ -1,3 +1,5 @@
+import { appliqueFrom, stopsIn, storeApplique, type AppliqueSettings } from './applique';
+import { PATCH } from '../validation/coverage';
 import { LOCK_MM, SATIN_SPLIT_MM, SATIN_SPLIT_MAX } from '../material/rules';
 import { SATIN_MAX, satinForArea, type KeptShape } from '../digitize/digitize';
 import { isRunType, runLike, type PathStitch } from './along';
@@ -14,7 +16,7 @@ import { coverage } from '../digitize/measure';
 import { expandRegion, outline, sample, signedField, type Region } from '../digitize/region';
 import { withSplit } from '../digitize/satinSuggest';
 import { runStitch, TOLERANCE } from '../digitize/run';
-import { eStitches, fringedColumn, pairs, satinStitches, underlayOf, type Column, type SatinParams, type UnderInset, type UnderlayKind } from '../digitize/satin';
+import { eStitches, fringedColumn, pairs, ROUGH_IN, satinStitches, underlayOf, type Column, type SatinParams, type UnderInset, type UnderlayKind } from '../digitize/satin';
 import { columnFromRungs, cumulative, inside, insideOf, pointAt, project, reversedRungs, stripOfLoop, tidyRungs, type Arc, type Rung } from '../digitize/rungs';
 import type { Pt } from '../digitize/skeleton';
 import { flatten, formFrom, storeForm, type Form, type StoredPath } from '../shape/path';
@@ -180,6 +182,11 @@ export interface FillSettings {
   areaGrow?: number;
   /** Settings of the decorative patterns and of embossing. */
   deco?: DecoSettings;
+  /**
+   * Gap rows where sections of straight rows meet (see FillParams.gapRows): by the fabric the fill
+   * was made for (Fabric.gapRows), none when not set. Not a setting of the panel.
+   */
+  gapRows?: number;
 }
 
 /**
@@ -232,8 +239,14 @@ export interface SatinSettings {
   fringe?: number;
   /** The side of the fringe (in sewing direction); both when not set. */
   fringeSide?: FringeSide;
+  /** Irregular satin (fur, grass, a hand-sewn look), 0 to 1: width and spacing vary from stitch to stitch (see roughen); none when not set. */
+  rough?: number;
+  /** Which irregular satin: set once when it is turned on, kept by copies and the project file, so it comes out the same. */
+  roughSeed?: number;
   /** Lines only, never stored: see SatinParams.lead. */
   lead?: number;
+  /** Never stored: the free ends satinRuns shortens by push compensation (see pushEnds). */
+  push?: PushEnd[];
 }
 
 export type FringeSide = 'left' | 'right';
@@ -433,6 +446,11 @@ export interface Remembered {
   along?: string;
   /** The lettering the object belongs to (it is sewn anew from its text, see lettering/). */
   lettering?: Lettering;
+  /**
+   * An appliqué (see applique.ts): a piece of fabric on its area (`region`, from `geo` when it has
+   * one), sewn on in three parts with stops between them.
+   */
+  applique?: AppliqueSettings;
   /** The correction leaves the object as it is (set by hand). */
   lock?: boolean;
   /**
@@ -494,6 +512,8 @@ export const holdMemory = hold;
  */
 export function knownKind(r: Remembered | undefined): ObjectKind | undefined {
   if (!r || r.read || r.lettering) return undefined;
+  // An appliqué: most of its thread is the satin (or E stitch) of its cover edge.
+  if (r.applique) return 'satin';
   if (r.outline && r.border) return runLike(r.border.type) ? 'run' : 'satin';
   if (lineGeoOf(r) && r.line) return runLike(r.line.type) ? 'run' : 'satin';
   if (r.fill && !r.satin) return 'fill';
@@ -704,6 +724,7 @@ export interface StoredObject {
   border?: BorderSettings;
   along?: string;
   lettering?: Lettering;
+  applique?: AppliqueSettings;
   lock?: boolean;
   free?: boolean;
   fixed?: Fixed[];
@@ -781,6 +802,7 @@ function storeOne(key: string, r: Remembered): StoredObject {
     ...(r.border ? { border: { ...r.border } } : {}),
     ...(r.along ? { along: r.along } : {}),
     ...(r.lettering ? { lettering: r.lettering } : {}),
+    ...(r.applique ? { applique: storeApplique(r.applique) } : {}),
     ...(r.lock ? { lock: true } : {}),
     ...(r.free ? { free: true } : {}),
     ...(r.fixed?.length ? { fixed: r.fixed.map((x) => ({ ...x })) } : {}),
@@ -987,6 +1009,7 @@ function isFill(f: unknown): f is FillSettings {
     (s.underSpacing === undefined || (finite(s.underSpacing) && s.underSpacing > 0)) &&
     (s.expand === undefined || finite(s.expand)) &&
     (s.areaGrow === undefined || finite(s.areaGrow)) &&
+    (s.gapRows === undefined || (Number.isInteger(s.gapRows) && s.gapRows >= 0)) &&
     ((s as { border?: unknown }).border === undefined || isBorder((s as { border?: unknown }).border)) &&
     (s.deco === undefined || isDeco(s.deco)) &&
     typeof s.underlay === 'boolean'
@@ -1022,7 +1045,7 @@ export function isLineStitch(b: unknown): b is PathStitch {
 
 function isBorder(b: unknown): b is BorderSettings {
   const s = b as BorderSettings | null;
-  return !!s && BORDERS.includes(s.type) && finite(s.width) && [s.length, s.repeat, s.tolerance, s.offset, s.spacing, s.pull, s.stitch].every((v) => v === undefined || finite(v)) && (s.flip === undefined || typeof s.flip === 'boolean') && (s.motif === undefined || LINE_MOTIFS.includes(s.motif)) && (s.under === undefined || s.under === 'off' || UNDERLAYS.includes(s.under)) && (s.color === undefined || isColor(s.color)) && (s.link === undefined || typeof s.link === 'string') && (s.seams === undefined || typeof s.seams === 'boolean') && (s.whole === undefined || typeof s.whole === 'boolean') && (s.fringe === undefined || finite(s.fringe)) && (s.fringeSide === undefined || s.fringeSide === 'left' || s.fringeSide === 'right');
+  return !!s && BORDERS.includes(s.type) && finite(s.width) && [s.length, s.repeat, s.tolerance, s.offset, s.spacing, s.pull, s.stitch].every((v) => v === undefined || finite(v)) && (s.flip === undefined || typeof s.flip === 'boolean') && (s.motif === undefined || LINE_MOTIFS.includes(s.motif)) && (s.under === undefined || s.under === 'off' || UNDERLAYS.includes(s.under)) && (s.color === undefined || isColor(s.color)) && (s.link === undefined || typeof s.link === 'string') && (s.seams === undefined || typeof s.seams === 'boolean') && (s.whole === undefined || typeof s.whole === 'boolean') && (s.redwork === undefined || typeof s.redwork === 'boolean') && (s.fringe === undefined || finite(s.fringe)) && (s.fringeSide === undefined || s.fringeSide === 'left' || s.fringeSide === 'right');
 }
 
 function isSatin(f: unknown): f is SatinSettings {
@@ -1038,6 +1061,8 @@ function isSatin(f: unknown): f is SatinSettings {
     (s.under === undefined || UNDERLAYS.includes(s.under)) &&
     (s.stagger === undefined || typeof s.stagger === 'boolean') &&
     optional(s.fringe) &&
+    optional(s.rough) &&
+    optional(s.roughSeed) &&
     (s.fringeSide === undefined || s.fringeSide === 'left' || s.fringeSide === 'right')
   );
 }
@@ -1295,6 +1320,8 @@ function fromStored(e: StoredObject): Remembered | null {
   if (typeof e.along === 'string' && r.border) r.along = e.along;
   const lettering = e.lettering === undefined ? null : letteringFrom(e.lettering);
   if (lettering) r.lettering = lettering;
+  const applique = e.applique === undefined ? null : appliqueFrom(e.applique);
+  if (applique && (r.region || geo)) r.applique = applique;
   if (e.lock === true) r.lock = true;
   if (e.free === true) r.free = true;
   const fixed = Array.isArray(e.fixed) ? e.fixed.filter(isFixed).map((x) => ({ ...x })) : [];
@@ -1392,12 +1419,21 @@ export const CURVED_GRADIENT: FillPattern[] = ['follow', 'guided'];
 export const isGradient = (f: FillSettings): boolean => f.pattern === 'gradient' || (!!f.gradient && CURVED_GRADIENT.includes(f.pattern));
 
 /**
- * Records of the fills sewn open on purpose (gradients), which the coverage check leaves out; null
- * when there are none.
+ * Records of the fills sewn open on purpose (gradients), which the coverage check leaves out (1),
+ * and of the placement lines of appliqués, whose fabric counts as covered (PATCH); null when there
+ * are none.
  */
 export function openOnPurpose(p: Pattern, objs: SewObject[]): Uint8Array | null {
   let out: Uint8Array | null = null;
   for (const o of objs) {
+    // An appliqué: its placement line (up to the first stop) encloses the fabric, which covers.
+    if (remembered(p, o)?.applique) {
+      const stop = stopsIn(p, o.first, o.last)[0];
+      if (stop === undefined) continue;
+      out ??= new Uint8Array(p.cmd.length);
+      out.fill(PATCH, o.first, stop);
+      continue;
+    }
     const f = remembered(p, o)?.fill;
     if (!f || (!isGradient(f) && !isOpenPattern(f.pattern))) continue;
     out ??= new Uint8Array(p.cmd.length);
@@ -2081,7 +2117,7 @@ function railsOf(p: Pattern, c: { s: number; e: number }): Rails | null {
 
 /**
  * A rail read from penetrations without the dents short stitches leave on the inside of a curve
- * (a penetration moved 15 % of the width towards the other rail, every second one or so): a point
+ * (a penetration moved 15 or 30 % of the width towards the other rail, every second one or so): a point
  * that lies nearer the other rail than the line between its close neighbours goes back onto it.
  */
 function undent(rail: Pt[], other: Pt[]): Pt[] {
@@ -2339,7 +2375,7 @@ export function fillRuns(area: Region, s: FillSettings, way: FillWay): NewFill |
   // the smaller area (the old thread runs where nothing is sewn now).
   const ex = s.expand ?? 0;
   const tw = ex > 0 && travel ? (unionRegion([travel, r]) ?? travel) : ex < 0 ? r : travel;
-  const fp: FillParams = { spacing: s.spacing, stitch: s.stitch, angle: s.angle, pull: s.edge, underlay: s.underlay, underCross: s.underCross, underInset: s.underInset, underInsetShare: s.underInsetShare, underSpacing: s.underSpacing, travel: tw, tolerance: s.tolerance };
+  const fp: FillParams = { spacing: s.spacing, stitch: s.stitch, angle: s.angle, pull: s.edge, underlay: s.underlay, underCross: s.underCross, underInset: s.underInset, underInsetShare: s.underInsetShare, underSpacing: s.underSpacing, travel: tw, tolerance: s.tolerance, ...(s.gapRows ? { gapRows: s.gapRows } : {}) };
   // Parts left out (under what lies on top): travel keeps off the outline beside sewn rows.
   const whole = wholeOf(area);
   if (whole) {
@@ -2688,14 +2724,123 @@ function fringeParams(s: SatinSettings): Pick<SatinParams, 'fringe' | 'fringeB'>
 
 /** The satin's parameters for `pairs` and its stitches. */
 export function satinParams(s: SatinSettings): SatinParams {
-  return { spacing: s.spacing, pull: s.edge, pullB: s.edgeB, pullShare: s.edgeShare ?? 0, pullShareB: s.edgeShareB, splitMm: s.split ?? SATIN_SPLIT, short: s.short && s.type !== 'e', stagger: s.stagger ?? true, ...fringeParams(s), ...(s.lead ? { lead: s.lead } : {}) };
+  return { spacing: s.spacing, pull: s.edge, pullB: s.edgeB, pullShare: s.edgeShare ?? 0, pullShareB: s.edgeShareB, splitMm: s.split ?? SATIN_SPLIT, short: s.short && s.type !== 'e', stagger: s.stagger ?? true, ...fringeParams(s), ...(s.lead ? { lead: s.lead } : {}), ...roughParams(s) };
 }
+
+/** The irregular satin of settings `s` (an E stitch has none). */
+function roughParams(s: SatinSettings): Pick<SatinParams, 'rough' | 'seed'> {
+  const k = s.type === 'e' ? 0 : Math.min(1, Math.max(0, s.rough ?? 0));
+  return k ? { rough: k, seed: s.roughSeed ?? 0 } : {};
+}
+
+type Along = (col: Column, r: Rails, q: SatinParams) => SatinParams;
+/** Seeds of the columns of an object this far apart (a prime), so no two irregular columns look alike. */
+const COLUMN_SEED = 7919;
+/** `along` for the k-th column of an object: an irregular satin gets a seed of its own there. */
+const seeded = (along: Along, k: number): Along => (k ? (col, r, q) => { const p = along(col, r, q); return p.rough ? { ...p, seed: (p.seed ?? 0) + COLUMN_SEED * k } : p; } : along);
+
+/**
+ * Push compensation. Known: satin pushes the fabric out along the column at its ends, so a column
+ * comes out longer than drawn (Wilcom on push and pull; Ink/Stitch's "push compensation" shortens
+ * the column at start and end). Guessed: how much. As much as the pull compensation the column
+ * gets per side at that end, which follows the fabric and the width (0.2 mm on woven fabric, about
+ * 0.4 mm on knit and terry at 4 mm), at most PUSH_MAX. Only where the satin follows the fabric
+ * (edgeAuto) and only at free ends: not where the column meets another of the object (a cut line
+ * between sections, a miter, a column joining another), not on a ring that closes on itself.
+ */
+const PUSH_MAX = 0.5;
+/** An end this close to another column of the object meets it (mm). */
+const PUSH_TOUCH = 0.3;
+/** The width at an end is the widest within this far of it (mm), so a round end counts as wide as the column. */
+const PUSH_REACH = 1;
+
+/** Where a column is shortened by push compensation: the middle of its end and by how much (mm). */
+export interface PushEnd {
+  at: Pt;
+  mm: number;
+}
+
+/** The free ends of the columns `rails` (one object) and how much each is shortened; none unless the satin follows the fabric. */
+export function pushEnds(rails: Rails[], s: SatinSettings): PushEnd[] {
+  if (!s.edgeAuto || s.type === 'e' || !rails.length) return [];
+  const outlines = rails.map(outlineOf);
+  const touches = (q: Pt, o: Pt[]) => {
+    const [x0, y0, x1, y1] = boxOf(o);
+    if (q[0] < x0 - PUSH_TOUCH || q[0] > x1 + PUSH_TOUCH || q[1] < y0 - PUSH_TOUCH || q[1] > y1 + PUSH_TOUCH) return false;
+    if (inside(o, q)) return true;
+    for (let i = 1; i < o.length; i++) if (toSegment(q, o[i - 1], o[i]) < PUSH_TOUCH) return true;
+    return false;
+  };
+  const pull = (s.edge + (s.edgeB ?? s.edge)) / 2;
+  const out: PushEnd[] = [];
+  rails.forEach((r, k) => {
+    if (r.left.length < 2 || r.right.length < 2) return;
+    const a = mid(r.left[0], r.right[0]);
+    const b = mid(r.left[r.left.length - 1], r.right[r.right.length - 1]);
+    if (dist(a, b) < PUSH_TOUCH) return;
+    const col = columnOf(r);
+    const cum = cumulative(col.center);
+    const len = cum[cum.length - 1];
+    for (const [at, fromEnd] of [[a, false], [b, true]] as const) {
+      if (outlines.some((o, j) => j !== k && touches(at, o))) continue;
+      let w = 0;
+      for (let i = 0; i < cum.length; i++) if ((fromEnd ? len - cum[i] : cum[i]) <= PUSH_REACH) w = Math.max(w, dist(col.left[i], col.right[i]));
+      const mm = Math.min(PUSH_MAX, pull + w * (s.edgeShare ?? 0));
+      if (mm > 0.01) out.push({ at, mm });
+    }
+  });
+  return out;
+}
+
+/** A column shortest kept by push compensation: never more than a fourth of it at each end. */
+const PUSH_SHARE = 0.25;
+
+/** The column shortened at the ends `ends` names (see pushEnds), else as it is. */
+export function pushedColumn(col: Column, ends: PushEnd[] | undefined): Column {
+  if (!ends?.length || col.center.length < 2) return col;
+  const n = col.center.length;
+  const near = (q: Pt) => ends.find((e) => dist(e.at, q) < 1e-3)?.mm ?? 0;
+  const cum = cumulative(col.center);
+  const len = cum[n - 1];
+  const s0 = Math.min(near(mid(col.left[0], col.right[0])), len * PUSH_SHARE);
+  const s1 = Math.min(near(mid(col.left[n - 1], col.right[n - 1])), len * PUSH_SHARE);
+  if (!s0 && !s1) return col;
+  const at = (s: number) => {
+    let i = 1;
+    while (i < n - 1 && cum[i] < s) i++;
+    const t = cum[i] > cum[i - 1] ? Math.min(1, Math.max(0, (s - cum[i - 1]) / (cum[i] - cum[i - 1]))) : 0;
+    return { i, l: lerp(col.left[i - 1], col.left[i], t), r: lerp(col.right[i - 1], col.right[i], t), c: lerp(col.center[i - 1], col.center[i], t) };
+  };
+  const a = at(s0);
+  const b = at(len - s1);
+  const keep = (arr: Pt[]) => arr.slice(a.i, b.i);
+  return {
+    center: [a.c, ...keep(col.center).filter((_, j) => cum[a.i + j] > s0 && cum[a.i + j] < len - s1), b.c],
+    left: [a.l, ...keep(col.left).filter((_, j) => cum[a.i + j] > s0 && cum[a.i + j] < len - s1), b.l],
+    right: [a.r, ...keep(col.right).filter((_, j) => cum[a.i + j] > s0 && cum[a.i + j] < len - s1), b.r],
+    width: col.width,
+  };
+}
+
+const mid = (a: Pt, b: Pt): Pt => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+/** Distance from q to the segment from a to b. */
+function toSegment(q: Pt, a: Pt, b: Pt): number {
+  const v: Pt = [b[0] - a[0], b[1] - a[1]];
+  const l2 = v[0] * v[0] + v[1] * v[1];
+  const t = l2 ? Math.max(0, Math.min(1, ((q[0] - a[0]) * v[0] + (q[1] - a[1]) * v[1]) / l2)) : 0;
+  return Math.hypot(q[0] - a[0] - v[0] * t, q[1] - a[1] - v[1] * t);
+}
+
+/** The column of `r` as satinRuns sews it with `s`: shortened at its free ends (see pushEnds). */
+const columnFor = (r: Rails, s: SatinSettings): Column => pushedColumn(columnOf(r), s.push);
 
 /**
  * Satin along each pair of rails: with underlay, the underlay first (out along the column, or out
  * and back for a contour underlay) and the satin over it the other way.
  */
-export function satinRuns(rails: Rails[], s: SatinSettings): Pt[][] {
+export function satinRuns(rails: Rails[], given: SatinSettings): Pt[][] {
+  const ends = pushEnds(rails, given);
+  const s = ends.length ? { ...given, push: ends } : given;
   const runs: Pt[][] = [];
   const chains = new WeakSet<Pt[]>();
   const sp = satinParams(s);
@@ -2708,7 +2853,7 @@ export function satinRuns(rails: Rails[], s: SatinSettings): Pt[][] {
       const chain: Rails[] = [];
       for (; k < rails.length && rails[k].chain === whole.chain; k++) chain.push(rails[k]);
       k--;
-      const run = chainRun(chain, s, sew, along);
+      const run = chainRun(chain, s, sew, along, k - chain.length + 1);
       if (run.length) {
         chains.add(run);
         runs.push(run);
@@ -2717,17 +2862,18 @@ export function satinRuns(rails: Rails[], s: SatinSettings): Pt[][] {
     }
     const parts = sectionsOf(whole);
     if (parts.length > 1 && planFits(whole.plan, parts.length)) {
-      runs.push(...plannedRuns(parts, whole.plan, s, sew, along));
+      runs.push(...plannedRuns(parts, whole.plan, s, sew, seeded(along, k)));
       continue;
     }
     if (parts.length > 1) {
-      const run = sectionRun(parts, s, sew, along);
+      const run = sectionRun(parts, s, sew, seeded(along, k));
       if (run.length) runs.push(run);
       continue;
     }
     const r = parts[0];
-    const col = columnOf(r);
-    const ps = pairs(col, along(col, r, sp));
+    const col = columnFor(r, s);
+    const at = seeded(along, k);
+    const ps = pairs(col, at(col, r, sp));
     if (ps.length < 2) continue;
     const sewR = sided(whole, sew);
     if (!s.underlay) {
@@ -2741,7 +2887,7 @@ export function satinRuns(rails: Rails[], s: SatinSettings): Pt[][] {
     }
     // Underlay out along the column, satin back (its sides swap with the direction).
     const rev = reversedColumn(col);
-    runs.push([...under.pts, ...sewR(pairs(rev, along(rev, reversedRails(r), satinParams(swappedSides(s)))))]);
+    runs.push([...under.pts, ...sewR(pairs(rev, at(rev, reversedRails(r), satinParams(swappedSides(s)))))]);
   }
   // Chains are cut apart from what comes before and after them, however near (the dot of an i and its stem).
   runs.forEach((run, k) => k && (chains.has(run) || chains.has(runs[k - 1])) && trimBefore.add(run));
@@ -3096,7 +3242,12 @@ const sided = (r: Rails, sew: (ps: [Pt, Pt][]) => Pt[]) => (ps: [Pt, Pt][]) => s
 const underInset = (s: SatinSettings): UnderInset => ({ mm: s.underInset, share: s.underInsetShare });
 
 /** The underlay of a column sewn with `s` (walked the way `s` says its sides are): inside the fringe, where every stitch covers it. */
-const underOf = (c: Column, s: SatinSettings) => underlayOf(fringedColumn(c, ...fringeOf(s)), s.under ?? 'auto', s.tolerance, underInset(s));
+const underOf = (c: Column, s: SatinSettings, oneWay = false) => {
+  // An irregular satin falls short of its rails by up to ROUGH_IN of the width: the underlay keeps inside that too.
+  const short = (roughParams(s).rough ?? 0) * ROUGH_IN * c.width;
+  const [a, b] = fringeOf(s);
+  return underlayOf(fringedColumn(c, a + short, b + short), s.under ?? 'auto', s.tolerance, underInset(s), oneWay);
+};
 
 /** Longest stitch of the run joining two sections that do not meet (mm). */
 const TRAVEL_STEP = 2.5;
@@ -3168,7 +3319,7 @@ function plannedRuns(secs: Rails[], plan: SectionStep[], s: SatinSettings, sew: 
 
 function sectionRun(parts: Rails[], s: SatinSettings, sew: (ps: [Pt, Pt][]) => Pt[], along: (col: Column, r: Rails, q: SatinParams) => SatinParams): Pt[] {
   const sp = satinParams(s);
-  const cols = parts.map(columnOf);
+  const cols = parts.map((r) => columnFor(r, s));
   const out: Pt[] = [];
   const push = (pts: Pt[]) => {
     // Sections that do not meet (one sewn as a column of its own) are joined by a run between them.
@@ -3209,13 +3360,13 @@ function sectionRun(parts: Rails[], s: SatinSettings, sew: (ps: [Pt, Pt][]) => P
  * one column to the next goes through the columns, along the middle of one that is sewn later,
  * not across the fabric.
  */
-function chainRun(cols: Rails[], s: SatinSettings, sew: (ps: [Pt, Pt][]) => Pt[], along: (col: Column, r: Rails, q: SatinParams) => SatinParams): Pt[] {
+function chainRun(cols: Rails[], s: SatinSettings, sew: (ps: [Pt, Pt][]) => Pt[], along: (col: Column, r: Rails, q: SatinParams) => SatinParams, first = 0): Pt[] {
   const columns = cols.map((r) => columnOf(sectionsOf(r)[0]));
   const { between } = wayModel(cols.map(outlineOf), columns);
   const later = new Uint8Array(cols.length);
   const out: Pt[] = [];
   cols.forEach((r, k) => {
-    const pts = columnRun(r, s, sew, along);
+    const pts = columnRun(r, s, sew, seeded(along, first + k));
     if (!pts.length) return;
     const from = out[out.length - 1];
     // As a running stitch along the way: the middle of a column has a point every few tenths, a
@@ -3239,10 +3390,11 @@ const outlineOf = (r: Rails): Pt[] => {
 function columnRun(r: Rails, s: SatinSettings, sew: (ps: [Pt, Pt][]) => Pt[], along: (col: Column, r: Rails, q: SatinParams) => SatinParams): Pt[] {
   const secs = sectionsOf(r);
   if (secs.length > 1) return sectionRun(secs, s, sew, along);
-  const col = columnOf(secs[0]);
+  const col = columnFor(secs[0], s);
   const rev = reversedColumn(col);
   const satinBack = () => sided(r, sew)(pairs(rev, along(rev, reversedRails(secs[0]), satinParams(swappedSides(s)))));
-  const under = s.underlay ? underOf(col, s) : null;
+  // Out and back without a run along the middle: the zigzag sewn out only (see underlayOf).
+  const under = s.underlay ? underOf(col, s, true) : null;
   if (under?.atEnd) return [...under.pts, ...satinBack()];
   const underBack = s.underlay ? underOf(rev, swappedSides(s)).pts : [];
   return [...runStitch(col.center, TRAVEL_STEP, s.tolerance), ...underBack, ...satinBack()];
