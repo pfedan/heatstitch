@@ -615,17 +615,29 @@ export function initShapes(app: ShapesAreaApp): void {
             title: `${hint}${key ? ` (${keyLabel(key)})` : ''}`,
             'aria-pressed': i.toggle ? String(!!i.on) : undefined,
             // An icon only: its words are the name (and the tooltip says what it does).
-            'aria-label': i.icon && !i.words ? (i.text ?? t(c.label)) : undefined,
+            'aria-label': i.icon ? (i.words ? t(c.label) : (i.text ?? t(c.label))) : undefined,
             onclick: () => runCommand(i.id),
           },
           i.toggle && !i.icon ? h('span', { class: 'opt-check', 'aria-hidden': 'true' }) : null,
         );
         if (i.icon) b.insertAdjacentHTML('beforeend', i.icon);
-        if (!i.icon || i.words) b.append(i.text ?? t(c.label));
+        if (i.words) b.append(h('span', { class: 'opt-words' }, i.text ?? t(c.label)));
+        else if (!i.icon) b.append(i.text ?? t(c.label));
         return b;
       }),
     );
+    fitBar();
   }
+
+  /** Words that do not fit in one row (a narrow stage) give way to their icons; the tooltip keeps them. */
+  function fitBar(): void {
+    bar.classList.remove('compact');
+    if (bar.hidden || !bar.querySelector('.opt-words')) return;
+    const first = bar.firstElementChild as HTMLElement;
+    const last = bar.lastElementChild as HTMLElement;
+    if (last.offsetTop > first.offsetTop + first.offsetHeight / 2) bar.classList.add('compact');
+  }
+  new ResizeObserver(fitBar).observe(bar.parentElement!);
 
   function refresh(): void {
     for (const b of railButtons) {

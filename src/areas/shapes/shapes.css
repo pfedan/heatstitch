@@ -252,6 +252,17 @@
   padding: 0;
 }
 
+/* Too narrow for the words of the objects' steps: icons only, as on a phone. */
+.tool-options.compact button.opt:has(.opt-words) {
+  justify-content: center;
+  width: 28px;
+  padding: 0;
+}
+
+.tool-options.compact .opt-words {
+  display: none;
+}
+
 .tool-options button.opt svg {
   width: 16px;
   height: 16px;
