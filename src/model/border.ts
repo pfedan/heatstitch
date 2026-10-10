@@ -271,7 +271,9 @@ export function syncShadows(p: Pattern, trimMm: number): Pattern {
     const l = partOf(m);
     if (!l) return;
     if (!byLink.has(l)) byLink.set(l, k);
-    else remember(p, objs[k], (mem[k] = { ...m!, shadowOf: undefined, echoOf: undefined }));
+    // A copy of a part is a line of its own; changed by hand, its stitches are loosed from its curve
+    // (as a line changed by hand), no longer sewn anew with a line.
+    else remember(p, objs[k], (mem[k] = { ...m!, shadowOf: undefined, echoOf: undefined, ...(m!.hand ? { free: true } : {}) }));
   });
   // A copy of a line gets links of its own.
   const claimed = new Set<string>();
