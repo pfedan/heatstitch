@@ -1928,7 +1928,17 @@ function undent(rail: Pt[], other: Pt[]): Pt[] {
 }
 
 /** A satin column between two rails, filled in between so the spacing can get finer. */
-export function columnOf({ left, right, rungs }: Rails): Column {
+const columnsOf = new WeakMap<Rails, { left: Pt[]; right: Pt[]; rungs?: Rung[]; col: Column }>();
+/** columnOf, kept per rails object while its rails and rungs stay the same (they are not changed in place). */
+export function columnOf(r: Rails): Column {
+  const known = columnsOf.get(r);
+  if (known && known.left === r.left && known.right === r.right && known.rungs === r.rungs) return known.col;
+  const col = columnOfRails(r);
+  columnsOf.set(r, { left: r.left, right: r.right, rungs: r.rungs, col });
+  return col;
+}
+
+function columnOfRails({ left, right, rungs }: Rails): Column {
   if (rungs) return columnFromRungs(left, right, rungs);
   const L: Pt[] = [];
   const R: Pt[] = [];
@@ -2593,75 +2603,318 @@ function sewing(s: SatinSettings) {
   return { sew, along };
 }
 
+/** How a column of a chain may be sewn (as given, turned round, mirrored, both): where its run starts and ends. */
+type Way = { r: Rails; a?: Pt; b?: Pt };
+
+/** Chains up to this many columns get their best order outright (see bestChain); longer ones are searched. */
+const EXACT_MAX = 11;
+
+/**
+ * Which columns of a chain are still to be sewn, as flags and (up to MASK_MAX columns) as bits,
+ * for costing the ways between columns (see wayModel.costOf).
+ */
+class Later {
+  flags: Uint8Array;
+  mask = 0;
+  constructor(public n: number) {
+    this.flags = new Uint8Array(n);
+  }
+  /** Only the columns not in `set` (bits) are still to be sewn. */
+  from(set: number): void {
+    const full = this.n >= 31 ? -1 : (1 << this.n) - 1;
+    this.mask = ~set & full;
+    if (this.n > MASK_MAX) for (let j = 0; j < this.n; j++) this.flags[j] = (set >> j) & 1 ? 0 : 1;
+  }
+  /** The columns at positions `lo` on of `cs` are still to be sewn. */
+  resetFrom(cs: Int32Array, lo: number): void {
+    this.mask = 0;
+    for (let k = 0; k < cs.length; k++) {
+      const on = k >= lo ? 1 : 0;
+      this.flags[cs[k]] = on;
+      if (on && cs[k] < 31) this.mask |= 1 << cs[k];
+    }
+  }
+  /** Column c is sewn now. */
+  clear(c: number): void {
+    this.flags[c] = 0;
+    if (c < 31) this.mask &= ~(1 << c);
+  }
+}
+
 /**
  * The columns of a chain (see Rails.chain) in the order, directions and sides (Rails.mirror) that
  * show the least of the way between them: under columns still to be sewn rather than over sewn
- * satin, over satin rather than across the fabric, then the shortest. Starts from the order given
- * and changes it only where that is better: one column turned round, mirrored or moved at a time,
- * as long as that helps.
+ * satin, over satin rather than across the fabric, then the shortest (see wayModel). Short chains
+ * get the best order there is, found over all orders at once (see exactChain); longer ones are
+ * searched from the order given, a column turned, mirrored or moved or a stretch turned round
+ * at a time, as long as that helps (see searchedChain).
  */
 export function bestChain(cols: Rails[], s: SatinSettings): Rails[] {
-  if (cols.length < 2 && !cols.some((c) => sectionsOf(c).length > 1)) return cols;
+  if (cols.length < 2) return cols;
+  const n = cols.length;
   const { sew, along } = sewing(s);
-  // Each column in its four ways (as given, turned round, mirrored, both): where its run starts and ends.
-  const ways = cols.map((c) => {
+  const ways: Way[][] = cols.map((c) => {
     const turned = reversedRails(c);
     return [c, turned, { ...c, mirror: !c.mirror }, { ...turned, mirror: !c.mirror }].map((r) => {
       const run = columnRun(r, s, sew, along);
       return { r, a: run[0], b: run[run.length - 1] };
     });
   });
-  const outlines = cols.map(outlineOf);
-  const columns = cols.map((r) => columnOf(sectionsOf(r)[0]));
-  type Step = { c: number; w: number };
-  const between = wayFinder(outlines, columns);
-  const cache = new Map<string, number>();
-  const score = (order: Step[]) => {
-    let v = 0;
-    for (let k = 1; k < order.length; k++) {
-      const [p, q] = [ways[order[k - 1].c][order[k - 1].w], ways[order[k].c][order[k].w]];
-      if (!p.b || !q.a) continue;
-      const later = order.slice(k).map((x) => x.c);
-      const key = `${order[k - 1].c}.${order[k - 1].w}>${order[k].c}.${order[k].w}|${later.slice().sort((x, y) => x - y)}`;
-      let c = cache.get(key);
-      if (c === undefined) {
-        const after = new Set(later);
-        c = between(p.b, q.a, (j) => after.has(j)).cost;
-        cache.set(key, c);
-      }
-      v += c;
+  const model = wayModel(cols.map(outlineOf), cols.map((r) => columnOf(sectionsOf(r)[0])));
+  // Where the runs start and end, each point once (the start is the same mirrored or not).
+  const points: Pt[] = [];
+  const ids = new Map<string, number>();
+  const idOf = (p?: Pt): number => {
+    if (!p) return -1;
+    const key = `${p[0]},${p[1]}`;
+    let id = ids.get(key);
+    if (id === undefined) {
+      ids.set(key, (id = points.length));
+      points.push(p);
     }
-    return v;
+    return id;
   };
-  let cur: Step[] = cols.map((_, c) => ({ c, w: 0 }));
-  let best = score(cur);
-  for (let round = 0; round < 50; round++) {
-    let found: Step[] | null = null;
-    cur.forEach((x, k) => {
-      for (let w = 0; w < 4; w++) {
-        if (w === x.w) continue;
-        const next = cur.map((y, j) => (j === k ? { c: y.c, w } : y));
-        const v = score(next);
-        if (v < best - 1e-6) [found, best] = [next, v];
-      }
-      for (let j = 0; j < cur.length; j++) {
-        if (j === k) continue;
-        const next = cur.filter((_, i) => i !== k);
-        next.splice(j, 0, x);
-        const v = score(next);
-        if (v < best - 1e-6) [found, best] = [next, v];
-      }
-    });
-    if (!found) break;
-    cur = found;
-  }
+  const starts = new Int32Array(n * 4).map((_, k) => idOf(ways[k >> 2][k & 3].a));
+  const ends = new Int32Array(n * 4).map((_, k) => idOf(ways[k >> 2][k & 3].b));
+  // The ways tried from the end of one run to the start of another, costed once.
+  const tried: (Costed[] | null)[] = Array.from({ length: points.length * points.length }, () => null);
+  const later = new Later(n);
+  /** What the way from column c sewn way w to column d sewn way x costs, with `later` the columns still to be sewn. */
+  const travel = (c: number, w: number, d: number, x: number): number => {
+    const p = ends[c * 4 + w];
+    const q = starts[d * 4 + x];
+    if (p < 0 || q < 0) return 0;
+    const key = p * points.length + q;
+    const t = tried[key] ?? (tried[key] = model.costed(points[p], points[q]));
+    return model.costOf(t, later);
+  };
+  /** The least the way from column c sewn way w to column d sewn way x can cost: straight there. */
+  const atLeast = (c: number, w: number, d: number, x: number): number => {
+    const p = ends[c * 4 + w];
+    const q = starts[d * 4 + x];
+    return p < 0 || q < 0 ? 0 : dist(points[p], points[q]);
+  };
+  const steps = n <= EXACT_MAX ? exactChain(n, travel, later) : searchedChain(n, travel, atLeast, later);
   // Mirrored or not: only where set.
-  return cur.map(({ c, w }) => {
+  return steps.map(({ c, w }) => {
     const r = ways[c][w].r;
     if (r.mirror) return r;
     const { mirror: _m, ...rest } = r;
     return rest;
   });
+}
+
+/** A column of a chain in its order: which, and sewn which way (see bestChain). */
+type Step = { c: number; w: number };
+
+/**
+ * The best order of a short chain: over the sewn columns as a set and the last one of them with
+ * its way, the cheapest way to have got there (Held-Karp), as what a way between two columns
+ * costs depends only on which columns are still to be sewn.
+ */
+function exactChain(n: number, travel: (c: number, w: number, d: number, x: number) => number, later: Later): Step[] {
+  const N = n * 4;
+  const full = (1 << n) - 1;
+  const best = new Float64Array((full + 1) * N).fill(Infinity);
+  const from = new Int32Array((full + 1) * N).fill(-1);
+  // Among orders that cost the same, the one that changes the least: a column sewn another way
+  // or not following the one before it as given costs a touch.
+  for (let c = 0; c < n; c++) for (let w = 0; w < 4; w++) best[(1 << c) * N + c * 4 + w] = w ? TIE : 0;
+  for (let set = 1; set < full; set++) {
+    const base = set * N;
+    later.from(set);
+    for (let c = 0; c < n; c++) {
+      if (!((set >> c) & 1)) continue;
+      for (let w = 0; w < 4; w++) {
+        const v = best[base + c * 4 + w];
+        if (v === Infinity) continue;
+        for (let d = 0; d < n; d++) {
+          if ((set >> d) & 1) continue;
+          const to = (set | (1 << d)) * N + d * 4;
+          const u = v + (d === c + 1 ? 0 : TIE);
+          for (let x = 0; x < 4; x++) {
+            const t = u + travel(c, w, d, x) + (x ? TIE : 0);
+            if (t < best[to + x]) {
+              best[to + x] = t;
+              from[to + x] = base + c * 4 + w;
+            }
+          }
+        }
+      }
+    }
+  }
+  let end = full * N;
+  for (let k = full * N; k < (full + 1) * N; k++) if (best[k] < best[end]) end = k;
+  const steps: Step[] = [];
+  for (let k = end; k >= 0; k = from[k]) steps.push({ c: ((k % N) / 4) | 0, w: k % 4 });
+  return steps.reverse();
+}
+
+/** What a change from the order given costs when it does not help otherwise (see exactChain). */
+const TIE = 1e-4;
+
+/** How often a long chain's search is shaken up and searched again (see searchedChain). */
+const SHAKES = 12;
+
+/**
+ * A good order of a long chain. From the order given, the best of these changes as long as one
+ * helps: a column sewn another way, a stretch of up to three columns moved elsewhere (turned
+ * round or not), a longer stretch turned round. Only the ways a change touches are costed anew
+ * (those before it see the same columns later, those after it too). Then the order is shaken up
+ * (two stretches swapped, a few columns sewn another way) and searched again, a few times, and
+ * the best order found is kept.
+ */
+function searchedChain(n: number, travel: (c: number, w: number, d: number, x: number) => number, atLeast: (c: number, w: number, d: number, x: number) => number, later: Later): Step[] {
+  const cs = new Int32Array(n).map((_, c) => c);
+  const ws = new Int32Array(n);
+  // A change tried: where the columns of positions lo to hi of the changed order are found in the order now.
+  let posOf: (i: number) => number = (i) => i;
+  let wayAt: (i: number) => number = (i) => ws[posOf(i)];
+  /**
+   * What the ways into positions lo to hi cost, summed (the way into position k from k - 1), in
+   * the changed order; Infinity once over `limit`.
+   */
+  const costOf = (lo: number, hi: number, limit = Infinity): number => {
+    lo = Math.max(lo, 1);
+    later.resetFrom(cs, lo - 1);
+    let v = 0;
+    let c = cs[posOf(lo - 1)];
+    let w = wayAt(lo - 1);
+    for (let k = lo; k <= hi; k++) {
+      const d = cs[posOf(k)];
+      const x = wayAt(k);
+      later.clear(c);
+      v += travel(c, w, d, x);
+      if (v >= limit) return Infinity;
+      [c, w] = [d, x];
+    }
+    return v;
+  };
+  /** The least the ways into positions lo to hi can cost in the changed order. */
+  const leastOf = (lo: number, hi: number): number => {
+    let v = 0;
+    for (let k = Math.max(lo, 1); k <= hi; k++) v += atLeast(cs[posOf(k - 1)], wayAt(k - 1), cs[posOf(k)], wayAt(k));
+    return v;
+  };
+  const terms = new Float64Array(n);
+  const refresh = () => {
+    posOf = (i) => i;
+    wayAt = (i) => ws[i];
+    for (let k = 1; k < n; k++) terms[k] = costOf(k, k);
+  };
+  const sum = (lo: number, hi: number) => {
+    let v = 0;
+    for (let k = Math.max(lo, 1); k <= hi; k++) v += terms[k];
+    return v;
+  };
+  const total = () => sum(1, n - 1);
+  /** A round over the columns: for each, the best change that moves or turns it, applied at once; whether any helped. */
+  const improve = (): boolean => {
+    let helped = false;
+    for (let k = 0; k < n; k++) {
+      let gain = 1e-6;
+      const found: { apply: (() => void) | null } = { apply: null };
+      const offer = (lo: number, hi: number, change: () => void) => {
+        hi = Math.min(hi, n - 1);
+        const now = sum(lo, hi);
+        // Worth costing only where the ways could get cheaper by more than the best change so far.
+        if (now - leastOf(lo, hi) <= gain) return;
+        const g = now - costOf(lo, hi, now - gain);
+        if (g > gain) [gain, found.apply] = [g, change];
+      };
+      // Sewn another way.
+      posOf = (i) => i;
+      for (let w = 0; w < 4; w++) {
+        if (w === ws[k]) continue;
+        wayAt = (i) => (i === k ? w : ws[i]);
+        offer(k, k + 1, () => {
+          ws[k] = w;
+        });
+      }
+      wayAt = (i) => ws[posOf(i)];
+      // A stretch of len columns from k moved to start at j, turned round or not.
+      for (let len = 1; len <= 3 && k + len <= n; len++) {
+        for (let j = 0; j + len <= n; j++) {
+          if (j === k) continue;
+          for (const turned of len > 1 ? [false, true] : [false]) {
+            if (j < k) posOf = (i) => (i < j || i >= k + len ? i : i < j + len ? (turned ? k + len - 1 - (i - j) : k + i - j) : i - len);
+            else posOf = (i) => (i < k || i >= j + len ? i : i < j ? i + len : turned ? k + len - 1 - (i - j) : k + i - j);
+            offer(Math.min(j, k), Math.max(j, k) + len, () => {
+              const block = Array.from({ length: len }, (_, m) => [cs[k + m], ws[k + m]]);
+              if (turned) block.reverse();
+              const rest = Array.from({ length: n }, (_, i) => [cs[i], ws[i]]).filter((_, i) => i < k || i >= k + len);
+              rest.splice(j, 0, ...block);
+              rest.forEach(([c, w], i) => ((cs[i] = c), (ws[i] = w)));
+            });
+          }
+        }
+      }
+      // A stretch from k to j turned round.
+      for (let j = k + 3; j < n; j++) {
+        posOf = (i) => (i < k || i > j ? i : k + j - i);
+        offer(k, j + 1, () => {
+          for (let a = k, b = j; a < b; a++, b--) {
+            [cs[a], cs[b]] = [cs[b], cs[a]];
+            [ws[a], ws[b]] = [ws[b], ws[a]];
+          }
+        });
+      }
+      posOf = (i) => i;
+      if (found.apply) {
+        found.apply();
+        refresh();
+        helped = true;
+      }
+    }
+    return helped;
+  };
+  const search = () => {
+    refresh();
+    for (let round = 0; round < 200 && improve(); round++);
+  };
+  search();
+  let best = { v: total(), cs: cs.slice(), ws: ws.slice() };
+  // Shaken up: from the best so far, two stretches swapped and a few columns sewn another way.
+  let seed = 0x9e3779b9;
+  const random = () => {
+    seed = (seed + 0x6d2b79f5) >>> 0;
+    let x = seed;
+    x = Math.imul(x ^ (x >>> 15), x | 1);
+    x ^= x + Math.imul(x ^ (x >>> 7), x | 61);
+    return ((x ^ (x >>> 14)) >>> 0) / 4294967296;
+  };
+  for (let shake = 0; shake < SHAKES; shake++) {
+    cs.set(best.cs);
+    ws.set(best.ws);
+    const cuts = [0, 0, 0].map(() => 1 + Math.floor(random() * (n - 1))).sort((a, b) => a - b);
+    const [a, b, c] = cuts;
+    const seq = Array.from({ length: n }, (_, i) => [best.cs[i], best.ws[i]]);
+    const shaken = [...seq.slice(0, a), ...seq.slice(b, c), ...seq.slice(a, b), ...seq.slice(c)];
+    shaken.forEach(([x, w], i) => ((cs[i] = x), (ws[i] = w)));
+    for (let m = 0; m < 2; m++) ws[Math.floor(random() * n)] = Math.floor(random() * 4);
+    search();
+    const v = total();
+    if (v < best.v - 1e-6) best = { v, cs: cs.slice(), ws: ws.slice() };
+  }
+  return Array.from(best.cs, (c, i) => ({ c, w: best.ws[i] }));
+}
+
+/** What the ways between the columns of a chain cost in the order given (as bestChain scores them; for measuring). */
+export function chainCost(cols: Rails[], s: SatinSettings): number {
+  const { sew, along } = sewing(s);
+  const ends = cols.map((r) => {
+    const run = columnRun(r, s, sew, along);
+    return { a: run[0], b: run[run.length - 1] };
+  });
+  const { between } = wayModel(cols.map(outlineOf), cols.map((r) => columnOf(sectionsOf(r)[0])));
+  const later = new Uint8Array(cols.length);
+  let v = 0;
+  for (let k = 1; k < cols.length; k++) {
+    if (!ends[k - 1].b || !ends[k].a) continue;
+    later.fill(0, 0, k).fill(1, k);
+    v += between(ends[k - 1].b, ends[k].a, later).cost;
+  }
+  return v;
 }
 
 /** Satin of a column or section that starts on its other rail when it is mirrored (see Rails.mirror). */
@@ -2786,7 +3039,8 @@ function sectionRun(parts: Rails[], s: SatinSettings, sew: (ps: [Pt, Pt][]) => P
  */
 function chainRun(cols: Rails[], s: SatinSettings, sew: (ps: [Pt, Pt][]) => Pt[], along: (col: Column, r: Rails, q: SatinParams) => SatinParams): Pt[] {
   const columns = cols.map((r) => columnOf(sectionsOf(r)[0]));
-  const between = wayFinder(cols.map(outlineOf), columns);
+  const { between } = wayModel(cols.map(outlineOf), columns);
+  const later = new Uint8Array(cols.length);
   const out: Pt[] = [];
   cols.forEach((r, k) => {
     const pts = columnRun(r, s, sew, along);
@@ -2794,7 +3048,8 @@ function chainRun(cols: Rails[], s: SatinSettings, sew: (ps: [Pt, Pt][]) => Pt[]
     const from = out[out.length - 1];
     // As a running stitch along the way: the middle of a column has a point every few tenths, a
     // stitch to each would pile up needle holes.
-    if (from) out.push(...runStitch(between(from, pts[0], (j) => j >= k).way, TRAVEL_STEP, s.tolerance).slice(1));
+    later.fill(0, 0, k).fill(1, k);
+    if (from) out.push(...runStitch(between(from, pts[0], later).way, TRAVEL_STEP, s.tolerance).slice(1));
     out.push(...pts);
   });
   return out;
@@ -2857,17 +3112,136 @@ function firstAbove(xs: number[], x: number, orAt = false): number {
 }
 
 /**
- * The way from one column of a chain to the next, among `columns` (`outlines[j]` the outline of
- * column j, `later(j)` whether it is still to be sewn): hidden under the columns still to be sewn
- * as far as can be, straight on or along the middle of one of them; else as short in sight as it
- * gets (a trim with a cut line avoids it). Its cost: how much of it shows (three times as much
- * off the columns as over sewn satin), then how long it is. The ways tried between two points,
- * and which columns each runs over, are found once for them.
+ * A way in steps of at most a quarter mm, each step over a set of columns. Steps in a row over
+ * the same columns are one part: its share of the length of each piece of the way, and the
+ * columns (`over` from `at[i]` to `at[i + 1]` for part i). `ends[k]` is the first part after
+ * piece k of the way, `d` the length of each piece.
  */
-function wayFinder(outlines: Pt[][], columns: Column[]): (from: Pt, to: Pt, later: (j: number) => boolean) => { way: Pt[]; cost: number } {
+type Walked = { way: Pt[]; d: number[]; ends: number[]; len: number[]; at: number[]; over: number[] };
+/** Columns of a chain as bits in one number: up to this many. */
+const MASK_MAX = 30;
+/** How much of a way lies over one set of columns (none: across the fabric). */
+type Group = { len: number; over: number[]; mask: number };
+/**
+ * A way between two columns of a chain, costed: its length over each set of columns, in all, and
+ * the least it can cost (its part across the fabric shows whatever is sewn later).
+ */
+type Costed = { groups: Group[]; len: number; floor: number };
+
+/** How far along a line its nearest point to q lies (as project, without its allocations). */
+function nearestAlong(line: Pt[], cum: number[], q: Pt): number {
+  let best = 0;
+  let bestD = Infinity;
+  for (let i = 1; i < line.length; i++) {
+    const [ax, ay] = line[i - 1];
+    const vx = line[i][0] - ax;
+    const vy = line[i][1] - ay;
+    const l2 = vx * vx + vy * vy;
+    let u = l2 > 0 ? ((q[0] - ax) * vx + (q[1] - ay) * vy) / l2 : 0;
+    u = u < 0 ? 0 : u > 1 ? 1 : u;
+    const dx = ax + vx * u - q[0];
+    const dy = ay + vy * u - q[1];
+    const d = dx * dx + dy * dy;
+    if (d < bestD) {
+      bestD = d;
+      best = cum[i - 1] + u * (cum[i] - cum[i - 1]);
+    }
+  }
+  return best;
+}
+
+/** Cells of the grid an outline's edges are sorted into for insideGridOf (mm). */
+const GRID = 0.5;
+const gridTests = new WeakMap<Pt[], (q: Pt) => boolean>();
+
+/**
+ * Whether points lie inside the closed outline (as `inside`, even-odd), for very many points:
+ * the edges are sorted into cells of a grid once; a point takes the state of its cell's middle
+ * (found once, with the test in bands) and changes it for each edge of the cell crossed on the
+ * way from the middle to it. Kept per outline (outlines are not changed in place).
+ */
+function insideGridOf(ring: Pt[]): (q: Pt) => boolean {
+  const known = gridTests.get(ring);
+  if (known) return known;
+  const banded = insideOf(ring);
+  const [x0, y0, x1, y1] = boxOf(ring);
+  const nx = Math.max(1, Math.floor((x1 - x0) / GRID) + 1);
+  const ny = Math.max(1, Math.floor((y1 - y0) / GRID) + 1);
+  const edges: number[][] = Array.from({ length: nx * ny }, () => []);
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [[ax, ay], [bx, by]] = [ring[i], ring[j]];
+    const cx0 = Math.floor((Math.min(ax, bx) - x0) / GRID);
+    const cx1 = Math.floor((Math.max(ax, bx) - x0) / GRID);
+    const cy0 = Math.floor((Math.min(ay, by) - y0) / GRID);
+    const cy1 = Math.floor((Math.max(ay, by) - y0) / GRID);
+    for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) edges[cy * nx + cx].push(i);
+  }
+  // The state at the middle of each cell: -1 until asked for.
+  const states = new Int8Array(nx * ny).fill(-1);
+  const test = (q: Pt): boolean => {
+    const cx = Math.floor((q[0] - x0) / GRID);
+    const cy = Math.floor((q[1] - y0) / GRID);
+    if (cx < 0 || cy < 0 || cx >= nx || cy >= ny) return false;
+    const cell = cy * nx + cx;
+    const mx = x0 + (cx + 0.5) * GRID;
+    const my = y0 + (cy + 0.5) * GRID;
+    let state = states[cell];
+    if (state < 0) states[cell] = state = banded([mx, my]) ? 1 : 0;
+    let c = !!state;
+    const dx = q[0] - mx;
+    const dy = q[1] - my;
+    for (const i of edges[cell]) {
+      const j = i === 0 ? ring.length - 1 : i - 1;
+      const [xi, yi] = ring[i];
+      const [xj, yj] = ring[j];
+      // Which side of the line from the middle to q each end lies on: the edge crosses it where
+      // they differ; then where along the line, before q.
+      const si = dx * (yi - my) - dy * (xi - mx);
+      const sj = dx * (yj - my) - dy * (xj - mx);
+      if (si > 0 === sj > 0) continue;
+      const f = si / (si - sj);
+      const t = ((xi + (xj - xi) * f - mx) * dx + (yi + (yj - yi) * f - my) * dy) / (dx * dx + dy * dy);
+      if (t >= 0 && t < 1) c = !c;
+    }
+    return c;
+  };
+  gridTests.set(ring, test);
+  return test;
+}
+
+/** Cells of the grid that says which columns a point may lie in (mm). */
+const CELL = 1;
+
+/**
+ * The ways from one column of a chain to the next, among `columns` (`outlines[j]` the outline of
+ * column j): hidden under the columns still to be sewn as far as can be, straight on or along
+ * the middle of one of them; else as short in sight as it gets (a trim with a cut line avoids
+ * it). A way's cost: how much of it shows (three times as much off the columns as over sewn
+ * satin), then how long it is. `between` walks the ways between two points and picks the best
+ * for sewing; `costed` and `costOf` cost them for bestChain, which asks about the same ways with
+ * many different sets of columns still to be sewn: what each way runs over is found once, and
+ * only summed per set.
+ */
+function wayModel(outlines: Pt[][], columns: Column[]) {
   const boxes = outlines.map(boxOf);
-  const tests = outlines.map(insideOf);
+  const tests = outlines.map(insideGridOf);
   const isIn = (j: number, q: Pt) => q[0] >= boxes[j][0] && q[0] <= boxes[j][2] && q[1] >= boxes[j][1] && q[1] <= boxes[j][3] && tests[j](q);
+  // Which columns may hold a point: those whose box covers its cell of the grid.
+  let [gx0, gy0, gx1, gy1] = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const b of boxes) [gx0, gy0, gx1, gy1] = [Math.min(gx0, b[0]), Math.min(gy0, b[1]), Math.max(gx1, b[2]), Math.max(gy1, b[3])];
+  const gw = Math.max(1, Math.ceil((gx1 - gx0) / CELL) + 1);
+  const gh = Math.max(1, Math.ceil((gy1 - gy0) / CELL) + 1);
+  const cells: number[][] = Array.from({ length: gw * gh }, () => []);
+  boxes.forEach((b, j) => {
+    for (let y = Math.floor((b[1] - gy0) / CELL); y <= Math.floor((b[3] - gy0) / CELL); y++)
+      for (let x = Math.floor((b[0] - gx0) / CELL); x <= Math.floor((b[2] - gx0) / CELL); x++) cells[y * gw + x].push(j);
+  });
+  const none: number[] = [];
+  const mayHold = (q: Pt): number[] => {
+    const x = Math.floor((q[0] - gx0) / CELL);
+    const y = Math.floor((q[1] - gy0) / CELL);
+    return x < 0 || y < 0 || x >= gw || y >= gh ? none : cells[y * gw + x];
+  };
   const known = <T>(m: Map<Pt, Map<Pt, T>>, a: Pt, b: Pt, make: () => T): T => {
     let row = m.get(a);
     if (!row) m.set(a, (row = new Map()));
@@ -2875,11 +3249,7 @@ function wayFinder(outlines: Pt[][], columns: Column[]): (from: Pt, to: Pt, late
     if (v === undefined) row.set(b, (v = make()));
     return v;
   };
-  // A way in steps of at most a quarter mm, each step over a set of columns. Steps in a row over
-  // the same columns are one part: its share of the length of each piece of the way, and the
-  // columns (`over` from `at[i]` to `at[i + 1]` for part i). `ends[k]` is the first part after
-  // piece k of the way, `d` the length of each piece.
-  type Walked = { way: Pt[]; d: number[]; ends: number[]; len: number[]; at: number[]; over: number[] };
+  /** The way walked: which columns lie under each of its steps (see Walked). */
   const walk = (way: Pt[]): Walked => {
     const w: Walked = { way, d: [], ends: [], len: [], at: [0], over: [] };
     let last: number[] | null = null;
@@ -2915,14 +3285,14 @@ function wayFinder(outlines: Pt[][], columns: Column[]): (from: Pt, to: Pt, late
     );
   const same = (a: number[], b: number[]) => a.length === b.length && a.every((x, k) => x === b[k]);
   // Stops counting once over `limit` (a way that costs more than the best one so far is not taken).
-  const cost = (w: Walked, later: (j: number) => boolean, limit = Infinity) => {
+  const walkedCost = (w: Walked, later: Uint8Array, limit = Infinity) => {
     let seen = 0;
     let all = 0;
     let q = 0;
     for (let i = 0; i < w.d.length; i++) {
       for (; q < w.ends[i]; q++) {
         let shows = w.at[q] === w.at[q + 1] ? 3 : 1;
-        for (let k = w.at[q]; k < w.at[q + 1] && shows; k++) if (later(w.over[k])) shows = 0;
+        for (let k = w.at[q]; k < w.at[q + 1] && shows; k++) if (later[w.over[k]]) shows = 0;
         seen += shows * w.len[q];
       }
       all += w.d[i];
@@ -2940,7 +3310,7 @@ function wayFinder(outlines: Pt[][], columns: Column[]): (from: Pt, to: Pt, late
       along.set(
         q,
         (v = centers.map((c) => {
-          const s = project(c.line, c.cum, q).s;
+          const s = nearestAlong(c.line, c.cum, q);
           return { s, p: pointAt(c.line, c.cum, s) };
         })),
       );
@@ -2948,27 +3318,196 @@ function wayFinder(outlines: Pt[][], columns: Column[]): (from: Pt, to: Pt, late
   };
   const straight = new Map<Pt, Map<Pt, Walked>>();
   const alongs = new Map<Pt, Map<Pt, Walked[]>>();
-  return (from, to, later) => {
-    const direct = known(straight, from, to, () => walk([from, to]));
-    let way = direct.way;
-    let best = cost(direct, later);
-    // Seen less than a little: straight on.
+  /** The ways tried from one point to another: straight on first, then along the middle of each column. */
+  const ways = (from: Pt, to: Pt): Walked[] => [
+    known(straight, from, to, () => walk([from, to])),
+    ...known(alongs, from, to, () =>
+      centers.map((c, k) => {
+        const [a, b] = [alongOf(from)[k], alongOf(to)[k]];
+        const [lo, hi] = a.s <= b.s ? [a, b] : [b, a];
+        // The middle from one to the other (as subRail, with the points found before).
+        const mid = [lo.p, ...c.line.slice(firstAbove(c.cum, lo.s + 1e-6), firstAbove(c.cum, hi.s - 1e-6, true)), hi.p];
+        return walk([from, ...(a.s <= b.s ? mid : mid.reverse()), to]);
+      }),
+    ),
+  ];
+  /** The best of the ways tried (`later[j]` set where column j is still to be sewn): seen less than a little, straight on. */
+  const pick = (tried: Walked[], later: Uint8Array): { way: Pt[]; cost: number } => {
+    let way = tried[0].way;
+    let best = walkedCost(tried[0], later);
     if (best >= 0.3 * 1000) {
-      const ways = known(alongs, from, to, () =>
-        centers.map((c, k) => {
-          const [a, b] = [alongOf(from)[k], alongOf(to)[k]];
-          const [lo, hi] = a.s <= b.s ? [a, b] : [b, a];
-          // The middle from one to the other (as subRail, with the points found before).
-          const mid = [lo.p, ...c.line.slice(firstAbove(c.cum, lo.s + 1e-6), firstAbove(c.cum, hi.s - 1e-6, true)), hi.p];
-          return walk([from, ...(a.s <= b.s ? mid : mid.reverse()), to]);
-        }),
-      );
-      for (const w of ways) {
-        const v = cost(w, later, best);
-        if (v < best) [way, best] = [w.way, v];
+      for (let k = 1; k < tried.length; k++) {
+        const v = walkedCost(tried[k], later, best);
+        if (v < best) [way, best] = [tried[k].way, v];
       }
     }
     return { way, cost: best };
+  };
+  // --- The ways between columns costed for bestChain, without walking them ---
+  // The length of a way over each set of columns (`over`, as bits in `mask` up to MASK_MAX
+  // columns): what it costs follows from which of them are still to be sewn, in any order.
+  const n = outlines.length;
+  const keyOf = (over: number[]): number | string => (n <= MASK_MAX ? over.reduce((m, j) => m | (1 << j), 0) : over.join(','));
+  const add = (groups: Map<number | string, Group>, over: number[], len: number) => {
+    const key = keyOf(over);
+    const g = groups.get(key);
+    if (g) g.len += len;
+    else groups.set(key, { len, over, mask: n <= MASK_MAX ? (key as number) : 0 });
+  };
+  /** Adds the samples of the straight piece from a to b (as walk takes them) to `groups`; its length. */
+  const sampleInto = (groups: Map<number | string, Group>, a: Pt, b: Pt): number => {
+    const d = dist(a, b);
+    const m = Math.max(1, Math.ceil(d / 0.25));
+    for (let j = 0; j < m; j++) {
+      const q = lerp(a, b, (j + 0.5) / m);
+      const here: number[] = [];
+      for (const c of mayHold(q)) if (isIn(c, q)) here.push(c);
+      add(groups, here, d / m);
+    }
+    return d;
+  };
+  // Along the middle of each column, piece by piece: the length over each set of columns up to
+  // each point (sums[key][i] up to the start of piece i), found once, so a stretch of the middle
+  // is costed from its two ends.
+  type Prefix = { over: Map<number | string, number[]>; sums: Map<number | string, Float64Array>; d: Float64Array };
+  const prefixes: (Prefix | null)[] = columns.map(() => null);
+  const prefixOf = (k: number): Prefix => {
+    let pre = prefixes[k];
+    if (pre) return pre;
+    const line = centers[k].line;
+    const m = Math.max(0, line.length - 1);
+    const per: Map<number | string, Group>[] = [];
+    const d = new Float64Array(m + 1);
+    for (let i = 0; i < m; i++) {
+      const g = new Map<number | string, Group>();
+      d[i + 1] = d[i] + sampleInto(g, line[i], line[i + 1]);
+      per.push(g);
+    }
+    pre = { over: new Map(), sums: new Map(), d };
+    per.forEach((g, i) => {
+      for (const [key, x] of g) {
+        let sums = pre!.sums.get(key);
+        if (!sums) {
+          pre!.sums.set(key, (sums = new Float64Array(m + 1)));
+          pre!.over.set(key, x.over);
+        }
+        sums[i + 1] = x.len;
+      }
+    });
+    for (const sums of pre.sums.values()) for (let i = 1; i <= m; i++) sums[i] += sums[i - 1];
+    prefixes[k] = pre;
+    return pre;
+  };
+  /** A piece of a way, sampled: its length over each set of columns, and in all. */
+  type Piece = { groups: Group[]; len: number };
+  const piece = (a: Pt, b: Pt): Piece => {
+    const groups = new Map<number | string, Group>();
+    const len = sampleInto(groups, a, b);
+    return { groups: [...groups.values()], len };
+  };
+  const pieceCosted = (a: Pt, b: Pt): Costed => {
+    const x = piece(a, b);
+    return costedOf(x.groups, x.len);
+  };
+  /** Pieces summed into one way. */
+  const joined = (pieces: Piece[]): Costed => {
+    const groups = new Map<number | string, Group>();
+    let len = 0;
+    for (const x of pieces) {
+      len += x.len;
+      for (const g of x.groups) add(groups, g.over, g.len);
+    }
+    return costedOf([...groups.values()], len);
+  };
+  const costedOf = (groups: Group[], len: number): Costed => {
+    let bare = 0;
+    for (const g of groups) if (g.over.length === 0) bare += g.len;
+    return { groups, len, floor: bare * 3 * 1000 + len };
+  };
+  // From a point to the middle of each column: the straight piece to where it meets the middle,
+  // and from there to the next point of the middle either way (as the way along the middle takes
+  // them, see ways). Sampled once per point and column: every way along that middle from or to
+  // the point starts with them.
+  type Reach = { to: Piece; up: Piece; down: Piece; i0: number; i1: number };
+  const reaches = new Map<Pt, Reach[]>();
+  const reachOf = (q: Pt): Reach[] => {
+    let v = reaches.get(q);
+    if (!v)
+      reaches.set(
+        q,
+        (v = alongOf(q).map((at, k) => {
+          const c = centers[k];
+          const i0 = firstAbove(c.cum, at.s + 1e-6);
+          const i1 = firstAbove(c.cum, at.s - 1e-6, true);
+          return { to: piece(q, at.p), up: i0 < c.line.length ? piece(at.p, c.line[i0]) : { groups: [], len: 0 }, down: i1 > 0 ? piece(c.line[i1 - 1], at.p) : { groups: [], len: 0 }, i0, i1 };
+        })),
+      );
+    return v;
+  };
+  /** The ways from one point to another, costed: straight on first, then along the middle of each column. */
+  const costed = (from: Pt, to: Pt): Costed[] => {
+    const out: Costed[] = [pieceCosted(from, to)];
+    const [rf, rt] = [reachOf(from), reachOf(to)];
+    const [af, at] = [alongOf(from), alongOf(to)];
+    for (let k = 0; k < n; k++) {
+      const upward = af[k].s <= at[k].s;
+      const [lo, hi] = upward ? [rf[k], rt[k]] : [rt[k], rf[k]];
+      const [loP, hiP] = upward ? [af[k].p, at[k].p] : [at[k].p, af[k].p];
+      const pieces: Piece[] = [rf[k].to];
+      const [i0, i1] = [lo.i0, hi.i1];
+      if (i0 < i1) {
+        pieces.push(lo.up);
+        if (i1 - 1 > i0) {
+          const pre = prefixOf(k);
+          const groups: Group[] = [];
+          for (const [key, sums] of pre.sums) {
+            const v = sums[i1 - 1] - sums[i0];
+            if (v > 0) groups.push({ len: v, over: pre.over.get(key)!, mask: n <= MASK_MAX ? (key as number) : 0 });
+          }
+          pieces.push({ groups, len: pre.d[i1 - 1] - pre.d[i0] });
+        }
+        pieces.push(hi.down);
+      } else pieces.push(piece(loP, hiP));
+      pieces.push(rt[k].to);
+      out.push(joined(pieces));
+    }
+    // Straight on first, then the ways along a middle from the one that can cost the least on (see costOf).
+    const alongs = out.splice(1).sort((a, b) => a.floor - b.floor);
+    out.push(...alongs);
+    return out;
+  };
+  /** What a costed way costs with `later` still to be sewn. */
+  const oneOf = (t: Costed, later: Later): number => {
+    let seen = 0;
+    const groups = t.groups;
+    const mask = later.mask;
+    for (let i = 0; i < groups.length; i++) {
+      const g = groups[i];
+      if (g.over.length === 0) seen += 3 * g.len;
+      else if (n <= MASK_MAX ? (g.mask & mask) === 0 : !g.over.some((j) => later.flags[j])) seen += g.len;
+    }
+    return seen * 1000 + t.len;
+  };
+  /**
+   * What the best of the costed ways costs with `later` still to be sewn (as pick chooses). The
+   * ways are looked at from the one that can cost the least on, up to the one that cannot cost
+   * less than the best so far.
+   */
+  const costOf = (tried: Costed[], later: Later): number => {
+    let best = oneOf(tried[0], later);
+    if (best >= 0.3 * 1000) {
+      for (let k = 1; k < tried.length && tried[k].floor < best; k++) {
+        const v = oneOf(tried[k], later);
+        if (v < best) best = v;
+      }
+    }
+    return best;
+  };
+  return {
+    /** The best way from one point to another (`later[j]` set where column j is still to be sewn), and what it costs. */
+    between: (from: Pt, to: Pt, later: Uint8Array) => pick(ways(from, to), later),
+    costed,
+    costOf,
   };
 }
 
