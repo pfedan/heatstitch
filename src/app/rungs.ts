@@ -12,12 +12,13 @@ import { expandRegion, outline, type Region } from '../digitize/region';
 /** How far Vorschlagen closes the seams of an area read from rails, tried in turn (mm, each side). */
 const SEAMS_MM = [0.3, 0.6];
 import { atShare, regionBox, swirlCenters } from '../digitize/deco';
-import { railsFromOutline, stripsOfAreas } from '../digitize/rungs';
-import { aroundCuts, areaLoops, suggestSatin } from '../digitize/satinSuggest';
+import { stripsOfAreas } from '../digitize/rungs';
+import { aroundCuts, areaLoops, columnsAlong, suggestSatin } from '../digitize/satinSuggest';
 import { easePiles } from '../digitize/satinEase';
 import { SATIN_MAX } from '../digitize/digitize';
 import { t, type Key } from '../i18n';
-import { bestChain, edgeAlong, railsArea, sectionView, DECO_DEFAULTS, MAX_SWIRLS, type FillSettings, type Rails, type SatinSettings, analyze, remembered, keepShape, remember, restitch, measureSatin, forget, type RestitchResult, type Settings as RestitchSettings } from '../model/restitch';
+import { edgeAlong, railsArea, sectionView, DECO_DEFAULTS, MAX_SWIRLS, type FillSettings, type Rails, type SatinSettings, analyze, remembered, keepShape, remember, restitch, measureSatin, forget, type RestitchResult, type Settings as RestitchSettings } from '../model/restitch';
+import { inChainOrder } from '../model/reshape';
 import { ui } from './state';
 
 /** What bindRungs needs from the rest of the app. */
@@ -403,41 +404,11 @@ export function bindRungs(app: RungsApp) {
     else app.layers.say(t('stitch.suggest.doneAs', { n, shape: t(`stitch.suggest.shape.${s.kind}`) }));
   }
 
-  /**
-   * The columns a fill makes along lines across it and cut lines (see stripsOfAreas): parts cut
-   * apart each a column, sewn on one into the next; areas apart each a chain of their own. Or what
-   * stops it: a hole no cut line opens, a part no line crosses, lines that make no strip.
-   */
-  function columnsAlong(area: Region, lines: [Pt, Pt][], cuts: [Pt, Pt][]): { columns: Rails[] } | { hole: Pt[] } | { bad: Pt[] } | { notStrip: true } | null {
-    const { outsides, holes } = areaLoops(area);
-    if (!outsides.length) return null;
-    if (cuts.length || holes.length || outsides.length > 1) {
-      const made = stripsOfAreas(outsides, lines, cuts, holes);
-      if (made.hole >= 0) return { hole: holes[made.hole] };
-      if (made.bad) return { bad: made.bad };
-      const columns: Rails[] = made.areas.flatMap((strips, a) => strips.map((r) => ({ ...r, chain: a })));
-      // The fill and its cut lines kept: the cut lines can be moved later (see Rails.split).
-      columns[0].split = { outlines: outsides, holes, cuts: cuts.map(([a, b]) => [a, b] as [Pt, Pt]) };
-      return { columns };
-    }
-    const rails = railsFromOutline(outsides[0], lines);
-    if (!rails) return { notStrip: true };
-    // Also without cut lines the fill is kept, so they can be drawn later.
-    return { columns: [{ ...rails, chain: 0, split: { outlines: outsides, holes, cuts: [] } }] };
-  }
-
   /** Sews object `o` (a fill) as satin along `columns`, each chain in the order that hides the ways between its parts best. */
   function sewColumns(p: Pattern, q: Sequence, o: number, columns: Rails[]): void {
     const s = app.convertSettings('satin', app.stitchInfo(p, q));
     if (!s) return;
-    if (s.kind === 'satin' && columns.every((c) => c.chain !== undefined)) {
-      const satin = s.s;
-      const chains = new Map<number, Rails[]>();
-      for (const c of columns) if (c.chain !== undefined) chains.set(c.chain, [...(chains.get(c.chain) ?? []), c]);
-      const split = columns[0].split;
-      columns = [...chains.values()].flatMap((g) => (g.length > 1 ? bestChain(g, satin) : g)).map(({ split: _s, ...c }) => c);
-      if (split && columns.length) columns[0].split = split;
-    }
+    if (s.kind === 'satin') columns = inChainOrder(columns, s.s);
     const r = restitch(p, q.objects, [o], s, q.kinds, app.settings.trimMm, 'fill', false, new Map([[o, columns]]));
     app.applyRestitched(r, 'stitch.toSatin.failed', true);
   }

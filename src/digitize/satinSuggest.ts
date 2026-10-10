@@ -1,5 +1,6 @@
 import { outline, type Region } from './region';
-import { columnFromRungs, cutLinesBetween, inside, insideOf, stripsOfAreas, type Rung } from './rungs';
+import { columnFromRungs, cutLinesBetween, inside, insideOf, railsFromOutline, stripsOfAreas, type Rung } from './rungs';
+import type { Rails } from '../model/restitch';
 import { cornerCuts, planParts } from './satinForms';
 import { blobShape, filled, materialOf, planShape, smallHoles, splitBlobs, wholeShape } from './satinShapes';
 import { skeleton, type Branch, type Graph, type Pt } from './skeleton';
@@ -901,4 +902,27 @@ export function aroundCuts(s: { lines: [Pt, Pt][]; cuts: [Pt, Pt][] }, own: [Pt,
   if (fits(merged)) return { lines, cuts: merged, ok: true };
   if (merged.length > own.length && fits(own)) return { lines, cuts: own, ok: true };
   return { lines, cuts: merged, ok: false };
+}
+
+/**
+ * The columns a fill makes along lines across it and cut lines (see stripsOfAreas): parts cut
+ * apart each a column, sewn on one into the next; areas apart each a chain of their own. Or what
+ * stops it: a hole no cut line opens, a part no line crosses, lines that make no strip.
+ */
+export function columnsAlong(area: Region, lines: [Pt, Pt][], cuts: [Pt, Pt][]): { columns: Rails[] } | { hole: Pt[] } | { bad: Pt[] } | { notStrip: true } | null {
+  const { outsides, holes } = areaLoops(area);
+  if (!outsides.length) return null;
+  if (cuts.length || holes.length || outsides.length > 1) {
+    const made = stripsOfAreas(outsides, lines, cuts, holes);
+    if (made.hole >= 0) return { hole: holes[made.hole] };
+    if (made.bad) return { bad: made.bad };
+    const columns: Rails[] = made.areas.flatMap((strips, a) => strips.map((r) => ({ ...r, chain: a })));
+    // The fill and its cut lines kept: the cut lines can be moved later (see Rails.split).
+    columns[0].split = { outlines: outsides, holes, cuts: cuts.map(([a, b]) => [a, b] as [Pt, Pt]) };
+    return { columns };
+  }
+  const rails = railsFromOutline(outsides[0], lines);
+  if (!rails) return { notStrip: true };
+  // Also without cut lines the fill is kept, so they can be drawn later.
+  return { columns: [{ ...rails, chain: 0, split: { outlines: outsides, holes, cuts: [] } }] };
 }

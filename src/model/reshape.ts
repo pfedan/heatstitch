@@ -5,10 +5,10 @@ import { bounds, flatten, scaling, transformForm, type Form, type Mat } from '..
 import { cutKey, sewnArea } from './knockout';
 import { rememberObjects, sewObjects, type SewObject } from './objects';
 import { nextVersion, STITCH, type Pattern } from './pattern';
-import { analyze, keepShape, knownKind, measureFill, measureRun, measureSatin, railsArea, remember, remembered, rememberRange, restitch, type FillSettings, type Rails, type RestitchResult, type Settings } from './restitch';
+import { analyze, bestChain, keepShape, knownKind, measureFill, measureRun, measureSatin, railsArea, remember, remembered, rememberRange, restitch, type FillSettings, type Rails, type RestitchResult, type SatinSettings, type Settings } from './restitch';
 import type { Pt } from '../digitize/skeleton';
 import type { Region } from '../digitize/region';
-import { areaLoops } from '../digitize/satinSuggest';
+import { areaLoops, columnsAlong, suggestSatin } from '../digitize/satinSuggest';
 import { cumulative, cutLinesBetween, pointAt, railsFromOutline, stripsOfAreas, stripsOfOutline, type Rung } from '../digitize/rungs';
 import { rasterize } from '../shape/rasterize';
 import { stitchKinds } from './sequence';
@@ -341,9 +341,10 @@ export function reshapeObject(p: Pattern, objs: SewObject[], o: SewObject, kinds
 
 /**
  * Line `index` that was a satin over an area sewn as that satin again (see fillToLine), over the
- * area of its closed paths: with the satin settings it kept, its stitches going across as before
- * where the area allows (else as a satin made from a fill finds them). The line is kept to sew it
- * along its paths again. Null when it keeps no satin, has no closed path or nothing was sewn.
+ * area of its closed paths, with the satin settings it kept. Its columns are found anew in that
+ * area, as the kind switch finds them for a fill (suggested lines across, else the satin of the
+ * area as a whole). The line is kept to sew it along its paths again. Null when it keeps no satin,
+ * has no closed path or nothing was sewn.
  */
 export function lineToSatin(p: Pattern, index: number, trimMm: number): RestitchResult | null {
   const kinds = stitchKinds(p);
@@ -355,13 +356,14 @@ export function lineToSatin(p: Pattern, index: number, trimMm: number): Restitch
   if (!o || !known?.line || !geo || known.free || !satin || !fits(geo, 'fill')) return null;
   const area = rasterize(geo);
   if (!area) return null;
-  const cols = known.kept?.satin ?? [];
-  const guide = cols.length ? columnsOver(geo, area, cols, railsArea(cols), null) : null;
-  // Columns that no longer fit its area are not taken (restitch would take the kept ones).
+  const suggested = suggestSatin(area);
+  const made = suggested?.kind === 'strokes' && suggested.ok ? columnsAlong(area, suggested.lines, suggested.cuts) : null;
+  const guide = made && 'columns' in made ? inChainOrder(made.columns, satin) : null;
+  // Columns kept from a satin it was before it was a fill are of another area: not taken.
   let from = p;
-  if (!guide && cols.length) {
+  if (known.kept?.satin) {
     from = nextVersion(p, {});
-    const { satin: _s, ...kept } = known.kept!;
+    const { satin: _s, ...kept } = known.kept;
     remember(from, o, { ...known, kept });
   }
   const line = known.line;
@@ -373,6 +375,17 @@ export function lineToSatin(p: Pattern, index: number, trimMm: number): Restitch
     m.kept = { ...kept, line: structuredClone(line) };
   });
   return r;
+}
+
+/** Columns of chains (see columnsAlong), each chain in the order that hides the ways between its parts best. */
+export function inChainOrder(columns: Rails[], satin: SatinSettings): Rails[] {
+  if (!columns.every((c) => c.chain !== undefined)) return columns;
+  const chains = new Map<number, Rails[]>();
+  for (const c of columns) chains.set(c.chain!, [...(chains.get(c.chain!) ?? []), c]);
+  const split = columns[0].split;
+  const out: Rails[] = [...chains.values()].flatMap((g) => (g.length > 1 ? bestChain(g, satin) : g)).map(({ split: _s, ...c }) => c);
+  if (split && out.length) out[0].split = split;
+  return out;
 }
 
 /** Why an object cannot be scaled (its parts would need different settings), or null. */

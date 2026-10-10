@@ -40,7 +40,8 @@ describe('a satin over an area opened on the level Form', () => {
     // A drawn satin measures its settings and columns from its stitches.
     const satin = m.kept!.satinSettings!;
     expect(satin.spacing).toBeGreaterThan(0.2);
-    expect(m.kept?.satin?.length).toBeGreaterThan(0);
+    // Its columns belong to the area it had: found anew once it is closed again.
+    expect(m.kept?.satin).toBeUndefined();
     // Closed again: still a line (as a fill opened and closed), Wieder Satin sews it as it was.
     const line = sewObjects(r.pattern);
     const closed = reshapeObject(r.pattern, line, line[0], stitchKinds(r.pattern), geo, T)!;
@@ -54,11 +55,9 @@ describe('a satin over an area opened on the level Form', () => {
     expect(n.kept?.satinSettings).toBeUndefined();
     expect(n.kept?.line?.type).toBe('run');
     expect(sewObjects(back.pattern)[0].kind).toBe('satin');
-    // Along the columns it had: the stitches a satin gets over the same outline.
-    const same = reshapeObject(p, objs, o, kinds, geo, T)!;
+    // Over the same area as before it was opened.
     const now = sewObjects(back.pattern)[0];
-    const ref = sewObjects(same.pattern)[0];
-    expect(now.last - now.first).toBe(ref.last - ref.first);
+    for (const k of ['minX', 'minY', 'maxX', 'maxY'] as const) expect(Math.abs(now[k] - o[k])).toBeLessThan(5);
   });
 
   it('is sewn as satin again over an outline changed while it was a line', () => {
@@ -80,7 +79,6 @@ describe('a satin over an area opened on the level Form', () => {
     const q = r.pattern;
     const back = memoryFrom(structuredClone(storedOf(q, sewObjects(q)[0])!))!;
     expect(back.kept?.satinSettings).toEqual(r.memory[0].kept!.satinSettings);
-    expect(back.kept?.satin?.length).toBe(r.memory[0].kept!.satin!.length);
   });
 
   it('makes a satin of a file a line along the outline of its columns', () => {
