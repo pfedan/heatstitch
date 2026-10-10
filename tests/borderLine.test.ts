@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { digitizeDefaults, digitizeShapes, type ShapeInput } from '../src/digitize/digitize';
 import { syncBorders } from '../src/model/border';
 import { digitizedFile } from '../src/model/digitized';
+import { deleteObjects } from '../src/model/shapeOps';
 import { sewObjects } from '../src/model/objects';
 import { STITCH, type Pattern } from '../src/model/pattern';
 import { remember, remembered, rememberedIn, restoreRemembered, withLine, type BorderSettings } from '../src/model/restitch';
@@ -108,6 +109,19 @@ describe('a border can do what a line can', () => {
     const q = withBorder(bordered(), (b) => ({ ...b, echo: { side: 'out', count: 1, gap: 2, colors: [threads[1]], link: 'e3' }, shadow: { color: { r: 64, g: 64, b: 64 }, link: 's3', angle: 0, dist: 1 } }));
     const r = withBorder(q, ({ echo: _e, shadow: _s, ...b }) => b);
     expect(view(r)).toHaveLength(2);
+  });
+
+  it('has a shadow or echo copy deleted on its own no more', () => {
+    const q = withBorder(bordered(), (b) => ({ ...b, echo: { side: 'out', count: 1, gap: 2, colors: [threads[1]], link: 'e4' }, shadow: { color: { r: 64, g: 64, b: 64 }, link: 's4', angle: 0, dist: 1 } }));
+    const shadow = view(q).findIndex((x) => x.m.shadowOf === 's4');
+    const r = deleteObjects(q, [shadow], options.trimMm)!;
+    const echo = view(r).findIndex((x) => x.m.echoOf);
+    const s = deleteObjects(r, [echo], options.trimMm)!;
+    const fill = view(s).find((x) => x.m.fill)!.m;
+    expect(fill.line?.shadow).toBeUndefined();
+    expect(fill.line?.echo?.colors).toEqual([null]);
+    // Synced again, they do not come back.
+    expect(view(syncBorders(s, options.trimMm)).map((x) => !!(x.m.shadowOf || x.m.echoOf))).toEqual([false, false]);
   });
 });
 
