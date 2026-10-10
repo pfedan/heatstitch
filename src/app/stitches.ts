@@ -20,7 +20,7 @@ import { outline } from '../digitize/region';
 import { recommendedSpacing } from '../validation/profiles';
 import { rememberObjects, type SewObject } from '../model/objects';
 import { loosable } from '../model/handEdit';
-import { backToOriginal, originalOf } from '../model/original';
+import { backToOriginal, loadedOriginal, originalOf } from '../model/original';
 import { newLink, shareBorders, syncBorders } from '../model/border';
 import { readBorder } from '../model/readBorder';
 import { t, type Key } from '../i18n';
@@ -139,7 +139,7 @@ export function bindStitches(app: StitchesApp) {
       info.path = { st: lineSettings(p, one, q.kinds), traced: !lineGeoOf(m), closed: !!form?.paths.length && form.paths.every((x) => x.closed), fills: fits(form, 'fill'), refill: !!m?.kept?.fill, resatin: !!m?.kept?.satinSettings, color: one.color };
     }
     if (one && geoUse(remembered(p, one)) === 'band') info.asLine = true;
-    const orig = app.files.active?.pattern === p ? app.files.active.original : undefined;
+    const orig = app.files.active?.pattern === p ? loadedOriginal(app.files.active) : undefined;
     if (orig && orig !== p && isReadFromFile(orig)) {
       const was = app.seq(orig).objects;
       if ([...ui.selectedObjects].some((o) => q.objects[o] && originalOf(p, orig, q.objects[o], q.objects, was))) info.original = true;
@@ -520,8 +520,9 @@ export function bindStitches(app: StitchesApp) {
     original: () => {
       const f = app.files.active;
       const p = f?.pattern;
-      if (!f?.original || !p) return;
-      const r = backToOriginal(p, f.original, [...ui.selectedObjects].sort((a, b) => a - b), app.settings.trimMm);
+      const orig = f && loadedOriginal(f);
+      if (!orig || !p) return;
+      const r = backToOriginal(p, orig, [...ui.selectedObjects].sort((a, b) => a - b), app.settings.trimMm);
       if (!r) return;
       // What the panel shows is measured from the stitches again.
       applyRestitched(r, 'free.failed', true);

@@ -5,6 +5,13 @@ import { remembered, type Rec, type Remembered, type RestitchResult } from './re
 import { stitchKinds } from './sequence';
 
 /**
+ * The stitches a design had in the file it was loaded from, to go back to. None for a design made
+ * in the app (new, from a picture, a lettering): its file only holds where it began, and its
+ * objects there are told apart anew on every load, so an id there names some other object.
+ */
+export const loadedOriginal = (f: { original?: Pattern; own: boolean }): Pattern | undefined => (f.own ? undefined : f.original);
+
+/**
  * The way back to an object's own stitches in a file from elsewhere: the object of `original` it
  * was when the file was read (same id), as long as it is still that one object here (not cut into
  * parts, not a copy) and its stitches are not those any more. Null otherwise.

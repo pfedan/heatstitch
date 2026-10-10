@@ -7,6 +7,7 @@ import { readBorder } from '../src/model/readBorder';
 import { analyze, measureFill } from '../src/model/restitch';
 import { stitchKinds } from '../src/model/sequence';
 import { parsePattern } from '../src/parsers';
+import { writePattern } from '../src/writers';
 import { rng } from './helpers/images';
 import { STEPS, Doc, pick, restitchFill, OPS, checkAllKnown, checkBorders, checkKeys, checkOneGeo, describeObjects } from './helpers/torture';
 
@@ -22,7 +23,11 @@ describe('borders read from a file', () => {
   it.each(Array.from({ length: Number(process.env.TORTURE_READ_CHAINS ?? 6) }, (_, k) => k + 1))('chain %i keeps each letter and the satin along it one fill and its border', async (seed) => {
     const r = rng(seed);
     const d = new Doc();
-    d.commit(letters(seed * 7));
+    // As the app opens a file: read from its bytes, which stay behind it.
+    const data = writePattern(letters(seed * 7), 'pes');
+    const read = parsePattern(data, 'letters.pes');
+    d.commit(read);
+    d.file = { name: 'letters.pes', data, original: read, own: false };
     // Each letter takes the satin sewn along its edge in the file as its border, as the panel offers it.
     for (let k = 0; k < 4; k++) {
       const p = d.cur.p;

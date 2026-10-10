@@ -168,7 +168,7 @@ export function bindLettering(app: LetteringApp) {
       const placed = placeLettering(null, [], sewn, l, t('lettering.title'));
       if (!placed) return;
       const data = writePattern(placed.pattern, 'pes');
-      await app.files.addWithObjects(`${t('lettering.title')}.pes`, data.slice().buffer, rememberedIn(placed.pattern, sewObjects(placed.pattern)));
+      await app.files.addWithObjects(`${t('lettering.title')}.pes`, data.slice().buffer, rememberedIn(placed.pattern, sewObjects(placed.pattern)), [], undefined, true);
       const np = app.files.active?.pattern;
       if (!np) return;
       const nb = np.bounds;

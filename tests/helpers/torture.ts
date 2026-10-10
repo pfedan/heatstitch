@@ -38,6 +38,7 @@ import { Editor } from '../../src/ui/editor';
 import { stitchBefore } from '../../src/model/edit';
 import { THIN_SHARES } from '../../src/areas/stitches/state';
 import { writePattern } from '../../src/writers';
+import { loadedOriginal, originalOf } from '../../src/model/original';
 import { rng } from './images';
 import { inheritTrace, movedTrace, readTrace, setTraceOf, sizedTrace, storeTrace, traceFrom, traceOf, withTrace, type Trace } from '../../src/model/trace';
 import { areaLoops, suggestSatin } from '../../src/digitize/satinSuggest';
@@ -102,6 +103,12 @@ export class Doc {
   undo: Version[] = [];
   redo: Version[] = [];
   cur: Version = { p: empty, known: { v: 2, next: 1, objects: [] }, trace: null };
+  /**
+   * The file behind the design, as files.addData keeps it: its bytes, never written again, and the
+   * pattern read from them. A design made in the app (`own`) gets one where it is first saved, as one
+   * taken over from a picture has the stitches it began with; one read from elsewhere has its file.
+   */
+  file: { name: string; data: Uint8Array; original: Pattern; own: boolean } | null = null;
   /** A new undo step (applyEdit). */
   commit(p: Pattern, trace = this.cur.trace): void {
     if (p === this.cur.p) return;
@@ -229,12 +236,17 @@ export function boxOf(d: Doc, sel: number[]) {
 
 /** Saved as a project and opened again on a fresh page; the knowledge must come back whole. */
 export async function saveAndOpen(d: Doc): Promise<void> {
-  const data = writePattern(d.cur.p, 'dst');
-  const original = parsePattern(data, 'torture.dst');
+  if (!d.file) {
+    const first = writePattern(d.cur.p, 'dst');
+    d.file = { name: 'torture.dst', data: first, original: parsePattern(first, 'torture.dst'), own: true };
+  }
+  const data = d.file.data;
+  const back0 = wayBack(d.cur.p, d.file);
+  const original = parsePattern(data, d.file.name);
   const t = traceOf(d.cur.p);
   const view = { shown: true, locked: false, opacity: 0.35 };
   const bytes = await encodeProject({
-    files: [{ name: 'torture.dst', data, working: toStored(d.cur.p), acks: [], objects: knowledge(d.cur.p), ...(t ? { trace: storeTrace(t, view) } : {}) }],
+    files: [{ name: d.file.name, data, working: toStored(d.cur.p), acks: [], objects: knowledge(d.cur.p), ...(t ? { trace: storeTrace(t, view) } : {}) }],
     active: 0,
     image: null,
     settings: projectSettings(structuredClone(DEFAULTS)),
@@ -253,6 +265,24 @@ export async function saveAndOpen(d: Doc): Promise<void> {
   d.redo = [];
   keepVersion(p!);
   d.cur = { p: p!, known: d.cur.known, trace: d.cur.trace };
+  d.file = { ...d.file, original };
+  // Originalstiche: the same objects offer the same stitches of the file as before; a design made
+  // in the app none (its file is read anew, and an id there names some other object).
+  const back1 = wayBack(p!, d.file);
+  if (d.file.own) expect(back1, 'a design made in the app offers no stitches of a file').toEqual([]);
+  expect(back1, 'the way back to the stitches of the file, after save and open').toEqual(back0);
+}
+
+/** The objects of `p` that offer stitches of the file behind it (Originalstiche): their ids, with where those stitches lie in the file. */
+export function wayBack(p: Pattern, file: { original: Pattern; own: boolean }): string[] {
+  const orig = loadedOriginal(file);
+  if (!orig || blank(p)) return [];
+  const objs = sewObjects(p);
+  const was = sewObjects(orig);
+  return objs.flatMap((o) => {
+    const w = originalOf(p, orig, o, objs, was);
+    return w ? [`${o.id}: ${w.first}-${w.last}`] : [];
+  });
 }
 
 /** Bytes standing in for a picture: the model never looks inside. */
