@@ -413,9 +413,13 @@ function toSegment(q: Pt, a: Pt, b: Pt): number {
  * filled instead, a region too thin to fill becomes running stitch. Fills note their angle in
  * `angles`, so touching fills sewn later run another way. Runs of fewer than two points are left out.
  */
-/** The satin settings the image's satins are sewn with, as an object keeps them. */
+/**
+ * The satin settings the image's satins are sewn with, as an object keeps them. Their pull
+ * compensation is the fabric's (see satinOf), so it follows the fabric (edgeAuto), as on a satin
+ * made in the stitch card; with it come the shortened free ends (see pushEnds).
+ */
 function satinSettings(o: DigitizeOptions, p: SatinParams): SatinSettings {
-  return { spacing: p.spacing, edge: round2(p.pull), edgeShare: Math.round((p.pullShare ?? 0) * 1000) / 1000, short: true, underlay: o.underlay, tolerance: o.tolerance, ...(Number.isFinite(p.splitMm) ? { split: p.splitMm } : {}) };
+  return { spacing: p.spacing, edge: round2(p.pull), edgeShare: Math.round((p.pullShare ?? 0) * 1000) / 1000, edgeAuto: true, short: true, underlay: o.underlay, tolerance: o.tolerance, ...(Number.isFinite(p.splitMm) ? { split: p.splitMm } : {}) };
 }
 
 /**

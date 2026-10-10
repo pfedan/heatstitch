@@ -280,7 +280,7 @@ export const deBase = {
   'tune.head.one': 'Für {fabric} passt eine Einstellung besser',
   'tune.none': 'Alles passt schon zu {fabric}.',
   'stitch.edgeAuto.hint': 'Kanten nach Stoff und Größe der Füllung. Ein eigener Wert schaltet es aus.',
-  'stitch.edgeAuto.satin.hint': 'Zugausgleich nach Stoff und Breite der Säule. Ein eigener Wert schaltet es aus.',
+  'stitch.edgeAuto.satin.hint': 'Nach Stoff und Breite der Säule, freie Enden etwas kürzer. Ein eigener Wert schaltet es aus.',
   'plan.change.edgeShare': 'Breite nach Säule {a} → {b} %',
   'plan.change.byWidth': 'Abstand nach Breite',
   'plan.change.fine': 'Stiche unsichtbar nachgebessert',

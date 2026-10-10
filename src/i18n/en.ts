@@ -282,7 +282,7 @@ const enBase: Record<keyof typeof deBase, string> = {
   'tune.head.one': 'One setting suits {fabric} better',
   'tune.none': 'Everything suits {fabric} already.',
   'stitch.edgeAuto.hint': 'Edges by fabric and size of the fill. A value of your own turns it off.',
-  'stitch.edgeAuto.satin.hint': 'Pull compensation by fabric and column width. A value of your own turns it off.',
+  'stitch.edgeAuto.satin.hint': 'By fabric and column width, free ends a little shorter. Your own value turns it off.',
   'plan.change.edgeShare': 'Width by column {a} → {b} %',
   'plan.change.byWidth': 'Spacing by width',
   'plan.change.fine': 'Stitches touched up invisibly',

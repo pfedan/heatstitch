@@ -234,6 +234,8 @@ export interface SatinSettings {
   fringeSide?: FringeSide;
   /** Lines only, never stored: see SatinParams.lead. */
   lead?: number;
+  /** Never stored: the free ends satinRuns shortens by push compensation (see pushEnds). */
+  push?: PushEnd[];
 }
 
 export type FringeSide = 'left' | 'right';
@@ -2609,10 +2611,107 @@ export function satinParams(s: SatinSettings): SatinParams {
 }
 
 /**
+ * Push compensation. Known: satin pushes the fabric out along the column at its ends, so a column
+ * comes out longer than drawn (Wilcom on push and pull; Ink/Stitch's "push compensation" shortens
+ * the column at start and end). Guessed: how much. As much as the pull compensation the column
+ * gets per side at that end, which follows the fabric and the width (0.2 mm on woven fabric, about
+ * 0.4 mm on knit and terry at 4 mm), at most PUSH_MAX. Only where the satin follows the fabric
+ * (edgeAuto) and only at free ends: not where the column meets another of the object (a cut line
+ * between sections, a miter, a column joining another), not on a ring that closes on itself.
+ */
+const PUSH_MAX = 0.5;
+/** An end this close to another column of the object meets it (mm). */
+const PUSH_TOUCH = 0.3;
+/** The width at an end is the widest within this far of it (mm), so a round end counts as wide as the column. */
+const PUSH_REACH = 1;
+
+/** Where a column is shortened by push compensation: the middle of its end and by how much (mm). */
+export interface PushEnd {
+  at: Pt;
+  mm: number;
+}
+
+/** The free ends of the columns `rails` (one object) and how much each is shortened; none unless the satin follows the fabric. */
+export function pushEnds(rails: Rails[], s: SatinSettings): PushEnd[] {
+  if (!s.edgeAuto || s.type === 'e' || !rails.length) return [];
+  const outlines = rails.map(outlineOf);
+  const touches = (q: Pt, o: Pt[]) => {
+    const [x0, y0, x1, y1] = boxOf(o);
+    if (q[0] < x0 - PUSH_TOUCH || q[0] > x1 + PUSH_TOUCH || q[1] < y0 - PUSH_TOUCH || q[1] > y1 + PUSH_TOUCH) return false;
+    if (inside(o, q)) return true;
+    for (let i = 1; i < o.length; i++) if (toSegment(q, o[i - 1], o[i]) < PUSH_TOUCH) return true;
+    return false;
+  };
+  const pull = (s.edge + (s.edgeB ?? s.edge)) / 2;
+  const out: PushEnd[] = [];
+  rails.forEach((r, k) => {
+    if (r.left.length < 2 || r.right.length < 2) return;
+    const a = mid(r.left[0], r.right[0]);
+    const b = mid(r.left[r.left.length - 1], r.right[r.right.length - 1]);
+    if (dist(a, b) < PUSH_TOUCH) return;
+    const col = columnOf(r);
+    const cum = cumulative(col.center);
+    const len = cum[cum.length - 1];
+    for (const [at, fromEnd] of [[a, false], [b, true]] as const) {
+      if (outlines.some((o, j) => j !== k && touches(at, o))) continue;
+      let w = 0;
+      for (let i = 0; i < cum.length; i++) if ((fromEnd ? len - cum[i] : cum[i]) <= PUSH_REACH) w = Math.max(w, dist(col.left[i], col.right[i]));
+      const mm = Math.min(PUSH_MAX, pull + w * (s.edgeShare ?? 0));
+      if (mm > 0.01) out.push({ at, mm });
+    }
+  });
+  return out;
+}
+
+/** A column shortest kept by push compensation: never more than a fourth of it at each end. */
+const PUSH_SHARE = 0.25;
+
+/** The column shortened at the ends `ends` names (see pushEnds), else as it is. */
+export function pushedColumn(col: Column, ends: PushEnd[] | undefined): Column {
+  if (!ends?.length || col.center.length < 2) return col;
+  const n = col.center.length;
+  const near = (q: Pt) => ends.find((e) => dist(e.at, q) < 1e-3)?.mm ?? 0;
+  const cum = cumulative(col.center);
+  const len = cum[n - 1];
+  const s0 = Math.min(near(mid(col.left[0], col.right[0])), len * PUSH_SHARE);
+  const s1 = Math.min(near(mid(col.left[n - 1], col.right[n - 1])), len * PUSH_SHARE);
+  if (!s0 && !s1) return col;
+  const at = (s: number) => {
+    let i = 1;
+    while (i < n - 1 && cum[i] < s) i++;
+    const t = cum[i] > cum[i - 1] ? Math.min(1, Math.max(0, (s - cum[i - 1]) / (cum[i] - cum[i - 1]))) : 0;
+    return { i, l: lerp(col.left[i - 1], col.left[i], t), r: lerp(col.right[i - 1], col.right[i], t), c: lerp(col.center[i - 1], col.center[i], t) };
+  };
+  const a = at(s0);
+  const b = at(len - s1);
+  const keep = (arr: Pt[]) => arr.slice(a.i, b.i);
+  return {
+    center: [a.c, ...keep(col.center).filter((_, j) => cum[a.i + j] > s0 && cum[a.i + j] < len - s1), b.c],
+    left: [a.l, ...keep(col.left).filter((_, j) => cum[a.i + j] > s0 && cum[a.i + j] < len - s1), b.l],
+    right: [a.r, ...keep(col.right).filter((_, j) => cum[a.i + j] > s0 && cum[a.i + j] < len - s1), b.r],
+    width: col.width,
+  };
+}
+
+const mid = (a: Pt, b: Pt): Pt => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+/** Distance from q to the segment from a to b. */
+function toSegment(q: Pt, a: Pt, b: Pt): number {
+  const v: Pt = [b[0] - a[0], b[1] - a[1]];
+  const l2 = v[0] * v[0] + v[1] * v[1];
+  const t = l2 ? Math.max(0, Math.min(1, ((q[0] - a[0]) * v[0] + (q[1] - a[1]) * v[1]) / l2)) : 0;
+  return Math.hypot(q[0] - a[0] - v[0] * t, q[1] - a[1] - v[1] * t);
+}
+
+/** The column of `r` as satinRuns sews it with `s`: shortened at its free ends (see pushEnds). */
+const columnFor = (r: Rails, s: SatinSettings): Column => pushedColumn(columnOf(r), s.push);
+
+/**
  * Satin along each pair of rails: with underlay, the underlay first (out along the column, or out
  * and back for a contour underlay) and the satin over it the other way.
  */
-export function satinRuns(rails: Rails[], s: SatinSettings): Pt[][] {
+export function satinRuns(rails: Rails[], given: SatinSettings): Pt[][] {
+  const ends = pushEnds(rails, given);
+  const s = ends.length ? { ...given, push: ends } : given;
   const runs: Pt[][] = [];
   const chains = new WeakSet<Pt[]>();
   const sp = satinParams(s);
@@ -2643,7 +2742,7 @@ export function satinRuns(rails: Rails[], s: SatinSettings): Pt[][] {
       continue;
     }
     const r = parts[0];
-    const col = columnOf(r);
+    const col = columnFor(r, s);
     const ps = pairs(col, along(col, r, sp));
     if (ps.length < 2) continue;
     const sewR = sided(whole, sew);
@@ -3085,7 +3184,7 @@ function plannedRuns(secs: Rails[], plan: SectionStep[], s: SatinSettings, sew: 
 
 function sectionRun(parts: Rails[], s: SatinSettings, sew: (ps: [Pt, Pt][]) => Pt[], along: (col: Column, r: Rails, q: SatinParams) => SatinParams): Pt[] {
   const sp = satinParams(s);
-  const cols = parts.map(columnOf);
+  const cols = parts.map((r) => columnFor(r, s));
   const out: Pt[] = [];
   const push = (pts: Pt[]) => {
     // Sections that do not meet (one sewn as a column of its own) are joined by a run between them.
@@ -3156,7 +3255,7 @@ const outlineOf = (r: Rails): Pt[] => {
 function columnRun(r: Rails, s: SatinSettings, sew: (ps: [Pt, Pt][]) => Pt[], along: (col: Column, r: Rails, q: SatinParams) => SatinParams): Pt[] {
   const secs = sectionsOf(r);
   if (secs.length > 1) return sectionRun(secs, s, sew, along);
-  const col = columnOf(secs[0]);
+  const col = columnFor(secs[0], s);
   const rev = reversedColumn(col);
   const satinBack = () => sided(r, sew)(pairs(rev, along(rev, reversedRails(secs[0]), satinParams(swappedSides(s)))));
   // Out and back without a run along the middle: the zigzag sewn out only (see underlayOf).

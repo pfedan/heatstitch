@@ -100,7 +100,7 @@ sends the picture anywhere.
   stitch), spacing, angle, stitch length, edges, expand, underlay
   (off, across, cross, inset, left out under later objects), **border** (running, triple or satin,
   offset, own thread); satin pattern or E stitch, spacing (also by width and per rung), width per
-  side, fringe, short stitches in curves, split, underlay kind (the zigzag sewn out and back, crossing), **rungs** for the direction and **sections**
+  side (by fabric: free ends also shortened against push), fringe, short stitches in curves, split, underlay kind (the zigzag sewn out and back, crossing), **rungs** for the direction and **sections**
   with cut lines (also on a fill: each part a column of its own, order, direction and trims per part);
   running stitch length, max. deviation, triple stitch; lines as running stitch, satin or fill;
   **redwork**: a line of many paths in one go, each line out and back, no trims where they touch;
