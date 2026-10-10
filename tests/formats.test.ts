@@ -142,6 +142,33 @@ describe('writers', () => {
     expect(s.length).toBe(stitches(p).length + 1); // 20 mm in two stitches
   });
 
+  it('JEF: a cut before a short move survives as three zero-length jumps', () => {
+    // 3 mm and 0.5 mm after the cut: too short for a cut by jump length.
+    for (const to of [8, 5.5]) {
+      const p = new Shape().to(0, 0).to(5, 0).trim().jump(to, 0).to(to, 1).to(12, 1).build();
+      const data = writeJef(p);
+      const q = parsePattern(data, 'out.jef');
+      expect(count(q, TRIM), `${to}`).toBe(1);
+      expect(stitches(q)).toEqual(stitches(p));
+      const zeroJumps = [...data.subarray(new DataView(data.buffer).getUint32(0, true))].join(',').split('128,2,0,0').length - 1;
+      expect(zeroJumps).toBe(3);
+    }
+  });
+
+  it('JEF: a jump of no length is not written, it would read as a cut', () => {
+    const p = new Shape().to(0, 0).to(5, 0).jump(5, 0).to(6, 0).build();
+    expect(count(parsePattern(writeJef(p), 'out.jef'), TRIM)).toBe(0);
+  });
+
+  it('JEF: different colors get different Janome threads, even when not neighbors', () => {
+    const p = example('demos/sun.dst');
+    const black = jefColor(1);
+    p.colors = [black, jefColor(2), { ...black, r: black.r + 3 }];
+    const q = parsePattern(writeJef(p), 'out.jef');
+    expect(q.colors[0]).toEqual(black);
+    expect(q.colors[2]).not.toEqual(q.colors[0]);
+  });
+
   it('JEF: the way to the first stitch is jumps, not a stitch from the middle', () => {
     const p = new Shape().to(0, 30).to(1, 30).build();
     const q = parsePattern(writeJef(p), 'out.jef');

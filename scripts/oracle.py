@@ -21,6 +21,8 @@ FORMATS = ["pes", "dst", "jef", "vp3", "exp", "xxx", "pec"]
 CUTS = {"pes", "pec", "exp", "xxx"}
 # Formats that keep exact RGB.
 EXACT_COLORS = {"vp3", "xxx"}
+# Formats that store a palette slot per color.
+PALETTES = {"pes", "pec", "jef"}
 
 
 def read(path):
@@ -63,6 +65,12 @@ def check(name, fmt, meant):
         problems.append(f"{cuts} cuts, meant {meant['trims']}")
     if fmt in EXACT_COLORS and colors != meant["colors"]:
         problems.append(f"colors {colors}, meant {meant['colors']}")
+    if fmt in PALETTES and len(meant["colors"]) == len(colors):
+        # Palette formats round colors, but different threads must stay different.
+        m = meant["colors"]
+        n = len(m)
+        if any(m[i] != m[j] and colors[i] == colors[j] for i in range(n) for j in range(i)):
+            problems.append(f"colors {colors} do not tell apart {meant['colors']}")
     return problems
 
 

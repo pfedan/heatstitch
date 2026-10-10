@@ -1,9 +1,10 @@
 import type { Hoop } from '../model/hoop';
 import { COLOR_CHANGE, END, JUMP, STITCH, TRIM, type Pattern } from '../model/pattern';
 import { PEC_STITCH_OFFSET } from '../parsers/pes';
-import { pecIndexOf } from '../parsers/pecPalette';
+import { pecColor, PEC_SLOTS } from '../parsers/pecPalette';
 import { ByteWriter, extents, headerLabel, splitMove } from './bytes';
 import { ICON_H, ICON_STRIDE, pecIcons } from './pecGraphics';
+import { uniqueSlots } from './threadSlots';
 
 /** Largest move per PEC record and axis (12-bit long form). */
 export const PEC_MAX_DELTA = 2047;
@@ -17,8 +18,12 @@ function blockCount(p: Pattern): number {
   return n;
 }
 
-const colorOfBlock = (p: Pattern, block: number) =>
-  pecIndexOf(p.colors[block] ?? p.colors[p.colors.length - 1] ?? { r: 0, g: 0, b: 0 });
+/** PEC palette slot per color block (never 0, "unknown"): each distinct color its own. */
+function pecSlots(p: Pattern): number[] {
+  const colors = Array.from({ length: blockCount(p) }, (_, k) => p.colors[k] ?? p.colors[p.colors.length - 1] ?? { r: 0, g: 0, b: 0 });
+  const slots = Array.from({ length: PEC_SLOTS - 1 }, (_, i) => i + 1);
+  return uniqueSlots(colors, slots, pecColor, (c) => c.pecIndex);
+}
 
 function longValue(out: ByteWriter, v: number, flag: number): void {
   const code = (v & 0xfff) | 0x8000 | (flag << 8);
@@ -89,7 +94,8 @@ export function writePec(out: ByteWriter, p: Pattern): void {
   out.bytes([0xff, 0x00, ICON_STRIDE, ICON_H]);
   out.fill(0x20, 12);
   out.u8(blocks - 1);
-  for (let k = 0; k < blocks; k++) out.u8(colorOfBlock(p, k));
+  const slots = pecSlots(p);
+  for (let k = 0; k < blocks; k++) out.u8(slots[k]);
   out.fill(0x20, start + 512 - out.length);
 
   out.bytes([0x00, 0x00]);
@@ -145,7 +151,8 @@ function writeEmbObjects(out: ByteWriter, p: Pattern, field: Hoop): void {
   let sections = 0;
   const colorLog: [number, number][] = [];
   let block = 0;
-  let code = colorOfBlock(p, 0);
+  const slots = pecSlots(p);
+  let code = slots[0];
   let stitchedX = 0;
   let stitchedY = 0;
   const segment = (flag: number, pts: [number, number][]) => {
@@ -176,7 +183,7 @@ function writeEmbObjects(out: ByteWriter, p: Pattern, field: Hoop): void {
       ]);
       i = j;
     } else {
-      if (c === COLOR_CHANGE) code = colorOfBlock(p, ++block);
+      if (c === COLOR_CHANGE) code = slots[++block];
       i++;
     }
   }
