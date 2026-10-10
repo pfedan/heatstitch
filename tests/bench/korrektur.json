@@ -1,44 +1,6 @@
 [
  {
   "name": "Blume (woven)",
-  "ampel": "green",
-  "ampelAfter": "green",
-  "crit": 0,
-  "critAfter": 0,
-  "newCrit": 0,
-  "newCaution": 0,
-  "newGapSparse": 0,
-  "open": {
-   "density": [
-    0,
-    0
-   ],
-   "holes": [
-    0,
-    0
-   ],
-   "gap": [
-    0,
-    0
-   ],
-   "sparse": [
-    0,
-    0
-   ],
-   "long": [
-    0,
-    0
-   ]
-  },
-  "moves": 7,
-  "movesAfter": 7,
-  "cut": 7,
-  "cutAfter": 7,
-  "objects": 0,
-  "ms": 149
- },
- {
-  "name": "Blume (knit)",
   "ampel": "yellow",
   "ampelAfter": "yellow",
   "crit": 0,
@@ -56,8 +18,8 @@
     0
    ],
    "gap": [
-    0,
-    0
+    38,
+    38
    ],
    "sparse": [
     0,
@@ -73,7 +35,45 @@
   "cut": 7,
   "cutAfter": 7,
   "objects": 0,
-  "ms": 136
+  "ms": 3395
+ },
+ {
+  "name": "Blume (knit)",
+  "ampel": "yellow",
+  "ampelAfter": "yellow",
+  "crit": 0,
+  "critAfter": 0,
+  "newCrit": 0,
+  "newCaution": 1,
+  "newGapSparse": 1,
+  "open": {
+   "density": [
+    0,
+    0
+   ],
+   "holes": [
+    0,
+    0
+   ],
+   "gap": [
+    8,
+    6
+   ],
+   "sparse": [
+    0,
+    0
+   ],
+   "long": [
+    0,
+    0
+   ]
+  },
+  "moves": 7,
+  "movesAfter": 7,
+  "cut": 7,
+  "cutAfter": 7,
+  "objects": 1,
+  "ms": 1987
  },
  {
   "name": "Musterkarte Dekor (woven)",
@@ -111,7 +111,7 @@
   "cut": 18,
   "cutAfter": 16,
   "objects": 1,
-  "ms": 4107
+  "ms": 4347
  },
  {
   "name": "Musterkarte Dekor (knit)",
@@ -149,7 +149,7 @@
   "cut": 18,
   "cutAfter": 19,
   "objects": 1,
-  "ms": 7020
+  "ms": 7791
  },
  {
   "name": "Linienstiche (woven)",
@@ -187,7 +187,7 @@
   "cut": 0,
   "cutAfter": 0,
   "objects": 0,
-  "ms": 413
+  "ms": 484
  },
  {
   "name": "Linienstiche (knit)",
@@ -225,7 +225,7 @@
   "cut": 0,
   "cutAfter": 0,
   "objects": 0,
-  "ms": 413
+  "ms": 416
  },
  {
   "name": "Linien mit Parametern (woven)",
@@ -263,7 +263,7 @@
   "cut": 22,
   "cutAfter": 22,
   "objects": 0,
-  "ms": 1282
+  "ms": 1410
  },
  {
   "name": "Linien mit Parametern (knit)",
@@ -301,7 +301,7 @@
   "cut": 22,
   "cutAfter": 22,
   "objects": 0,
-  "ms": 1336
+  "ms": 1372
  },
  {
   "name": "Linieneffekte (woven)",
@@ -339,7 +339,7 @@
   "cut": 0,
   "cutAfter": 0,
   "objects": 0,
-  "ms": 907
+  "ms": 970
  },
  {
   "name": "Linieneffekte (knit)",
@@ -402,8 +402,8 @@
     0
    ],
    "sparse": [
-    59,
-    59
+    87,
+    87
    ],
    "long": [
     0,
@@ -412,10 +412,10 @@
   },
   "moves": 75,
   "movesAfter": 75,
-  "cut": 19,
-  "cutAfter": 19,
+  "cut": 20,
+  "cutAfter": 20,
   "objects": 0,
-  "ms": 600
+  "ms": 619
  },
  {
   "name": "Schriftzug (knit)",
@@ -436,12 +436,12 @@
     0
    ],
    "gap": [
-    16,
-    16
+    32,
+    32
    ],
    "sparse": [
-    59,
-    59
+    77,
+    77
    ],
    "long": [
     0,
@@ -450,10 +450,10 @@
   },
   "moves": 75,
   "movesAfter": 75,
-  "cut": 19,
-  "cutAfter": 19,
+  "cut": 20,
+  "cutAfter": 20,
   "objects": 0,
-  "ms": 4748
+  "ms": 5398
  },
  {
   "name": "Aufnäher (woven)",
@@ -486,26 +486,26 @@
     0
    ]
   },
-  "moves": 29,
-  "movesAfter": 29,
+  "moves": 26,
+  "movesAfter": 26,
   "cut": 17,
   "cutAfter": 17,
   "objects": 0,
-  "ms": 312
+  "ms": 348
  },
  {
   "name": "Aufnäher (knit)",
   "ampel": "red",
   "ampelAfter": "yellow",
-  "crit": 23,
-  "critAfter": 0,
+  "crit": 35,
+  "critAfter": 2,
   "newCrit": 0,
-  "newCaution": 1,
+  "newCaution": 2,
   "newGapSparse": 0,
   "open": {
    "density": [
-    23,
-    0
+    35,
+    2
    ],
    "holes": [
     0,
@@ -524,26 +524,26 @@
     0
    ]
   },
-  "moves": 29,
-  "movesAfter": 32,
+  "moves": 26,
+  "movesAfter": 29,
   "cut": 17,
-  "cutAfter": 17,
+  "cutAfter": 18,
   "objects": 2,
-  "ms": 2213
+  "ms": 2342
  },
  {
   "name": "Handtuch (terry)",
   "ampel": "red",
-  "ampelAfter": "red",
-  "crit": 24,
-  "critAfter": 6,
+  "ampelAfter": "yellow",
+  "crit": 39,
+  "critAfter": 2,
   "newCrit": 0,
-  "newCaution": 0,
+  "newCaution": 72,
   "newGapSparse": 0,
   "open": {
    "density": [
-    24,
-    6
+    39,
+    2
    ],
    "holes": [
     0,
@@ -562,17 +562,17 @@
     0
    ]
   },
-  "moves": 11,
-  "movesAfter": 12,
-  "cut": 7,
-  "cutAfter": 7,
-  "objects": 1,
-  "ms": 16500
+  "moves": 16,
+  "movesAfter": 20,
+  "cut": 12,
+  "cutAfter": 11,
+  "objects": 2,
+  "ms": 8657
  },
  {
   "name": "Handtuch (woven)",
-  "ampel": "green",
-  "ampelAfter": "green",
+  "ampel": "yellow",
+  "ampelAfter": "yellow",
   "crit": 0,
   "critAfter": 0,
   "newCrit": 0,
@@ -600,12 +600,12 @@
     0
    ]
   },
-  "moves": 11,
-  "movesAfter": 11,
-  "cut": 7,
-  "cutAfter": 7,
+  "moves": 16,
+  "movesAfter": 16,
+  "cut": 12,
+  "cutAfter": 12,
   "objects": 0,
-  "ms": 436
+  "ms": 440
  },
  {
   "name": "Handtuch (knit)",
@@ -638,12 +638,12 @@
     0
    ]
   },
-  "moves": 11,
-  "movesAfter": 11,
-  "cut": 7,
-  "cutAfter": 7,
+  "moves": 16,
+  "movesAfter": 16,
+  "cut": 12,
+  "cutAfter": 12,
   "objects": 0,
-  "ms": 415
+  "ms": 436
  },
  {
   "name": "cat-60mm.pes (woven)",
@@ -681,7 +681,7 @@
   "cut": 35,
   "cutAfter": 35,
   "objects": 0,
-  "ms": 159
+  "ms": 160
  },
  {
   "name": "cat-60mm.pes (knit)",
@@ -690,7 +690,7 @@
   "crit": 26,
   "critAfter": 11,
   "newCrit": 0,
-  "newCaution": 32,
+  "newCaution": 33,
   "newGapSparse": 1,
   "open": {
    "density": [
@@ -717,9 +717,9 @@
   "moves": 35,
   "movesAfter": 38,
   "cut": 35,
-  "cutAfter": 35,
+  "cutAfter": 36,
   "objects": 12,
-  "ms": 17860
+  "ms": 19220
  },
  {
   "name": "demos/overlap.pes (woven)",
@@ -757,7 +757,7 @@
   "cut": 6,
   "cutAfter": 4,
   "objects": 5,
-  "ms": 1244
+  "ms": 1140
  },
  {
   "name": "demos/overlap.pes (knit)",
@@ -795,7 +795,7 @@
   "cut": 6,
   "cutAfter": 4,
   "objects": 5,
-  "ms": 543
+  "ms": 544
  },
  {
   "name": "demos/letters.pes (woven)",
@@ -833,7 +833,7 @@
   "cut": 24,
   "cutAfter": 24,
   "objects": 0,
-  "ms": 169
+  "ms": 167
  },
  {
   "name": "demos/letters.pes (knit)",
@@ -871,7 +871,7 @@
   "cut": 24,
   "cutAfter": 18,
   "objects": 4,
-  "ms": 4803
+  "ms": 5063
  },
  {
   "name": "demos/patch.pes (woven)",
@@ -909,7 +909,7 @@
   "cut": 19,
   "cutAfter": 19,
   "objects": 0,
-  "ms": 471
+  "ms": 494
  },
  {
   "name": "demos/patch.pes (knit)",
@@ -918,7 +918,7 @@
   "crit": 30,
   "critAfter": 0,
   "newCrit": 0,
-  "newCaution": 4,
+  "newCaution": 3,
   "newGapSparse": 0,
   "open": {
    "density": [
@@ -947,7 +947,7 @@
   "cut": 19,
   "cutAfter": 19,
   "objects": 9,
-  "ms": 11062
+  "ms": 11183
  },
  {
   "name": "demos/sun.dst (woven)",
@@ -985,7 +985,7 @@
   "cut": 14,
   "cutAfter": 14,
   "objects": 0,
-  "ms": 57
+  "ms": 65
  },
  {
   "name": "demos/sun.dst (knit)",
@@ -1023,7 +1023,7 @@
   "cut": 14,
   "cutAfter": 14,
   "objects": 1,
-  "ms": 586
+  "ms": 668
  },
  {
   "name": "demos/confetti.pes (woven)",
@@ -1061,7 +1061,7 @@
   "cut": 10,
   "cutAfter": 10,
   "objects": 0,
-  "ms": 31
+  "ms": 43
  },
  {
   "name": "demos/confetti.pes (knit)",
@@ -1137,7 +1137,7 @@
   "cut": 5,
   "cutAfter": 5,
   "objects": 4,
-  "ms": 1209
+  "ms": 1278
  },
  {
   "name": "demos/leather-patch.dst (woven)",
@@ -1175,6 +1175,6 @@
   "cut": 5,
   "cutAfter": 5,
   "objects": 0,
-  "ms": 134
+  "ms": 97
  }
 ]

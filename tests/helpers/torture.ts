@@ -43,6 +43,7 @@ import { Editor } from '../../src/ui/editor';
 import { stitchBefore } from '../../src/model/edit';
 import { THIN_SHARES } from '../../src/areas/stitches/state';
 import { writePattern } from '../../src/writers';
+import { pecOwnSlot, PEC_APPLIQUE } from '../../src/parsers/pecPalette';
 import { loadedOriginal, originalOf } from '../../src/model/original';
 import { rng } from './images';
 import { readFileSync } from 'node:fs';
@@ -1625,6 +1626,41 @@ export function checkEmptyFills(p: Pattern): void {
   expect(problems.join('; '), 'empty fills').toBe('');
 }
 
+/**
+ * A crosshatch fill (sewn from its shape, not changed by hand) is its two layers: its rows' full
+ * stitches lie at its angle ±45 degrees, both directions about as much, through duplicate, mirror,
+ * knockout, undo and saving (see crosshatchFill).
+ */
+export function checkCrosshatch(p: Pattern): void {
+  const problems: string[] = [];
+  for (const o of sewObjects(p)) {
+    const m = remembered(p, o);
+    const f = m?.fill;
+    if (f?.pattern !== 'crosshatch' || m!.hand || m!.free || m!.read) continue;
+    const angle = Number.isFinite(f.angle) ? f.angle : 0;
+    const len = Math.min(f.stitch, 3);
+    const layer = [0, 0];
+    let all = 0;
+    for (let i = o.first + 1; i <= o.last; i++) {
+      if (p.cmd[i] !== STITCH || p.cmd[i - 1] !== STITCH) continue;
+      const dx = (p.x[i] - p.x[i - 1]) / 10;
+      const dy = (p.y[i] - p.y[i - 1]) / 10;
+      // A full stitch of a row: travel and the steps from row to row are shorter.
+      if (Math.abs(Math.hypot(dx, dy) - len) > 0.06) continue;
+      all++;
+      const d = (((Math.atan2(dy, dx) * 180) / Math.PI) % 180 + 180) % 180;
+      [angle - 45, angle + 45].forEach((a, k) => {
+        const off = Math.abs(d - a) % 180;
+        if (Math.min(off, 180 - off) < 4) layer[k]++;
+      });
+    }
+    if (all < 40) continue;
+    if (layer[0] + layer[1] < all * 0.9) problems.push(`${o.index}: rows off the layers (${layer[0] + layer[1]} of ${all})`);
+    if (Math.min(...layer) < all * 0.25) problems.push(`${o.index}: one layer only (${layer.join(' and ')} of ${all})`);
+  }
+  expect(problems.join('; '), 'crosshatch layers').toBe('');
+}
+
 /** Each blending fill has one second thread in its blend thread, and every second thread its fill. */
 export function checkBlends(p: Pattern): void {
   const objs = sewObjects(p);
@@ -1897,6 +1933,11 @@ export function checkExport(p: Pattern): void {
   const meant = groups((k) => threadKey(p.colors[k] ?? p.colors[p.colors.length - 1]));
   const jef = parsePattern(writePattern(p, 'jef'), 'torture.jef');
   expect(groups((k) => String(back.colors[k]?.pecIndex)), 'PEC slots').toEqual(meant);
+  // Brother's appliqué steps (62 to 64) only for a color that was one.
+  const applique = Array.from({ length: blocks }, (_, k) => back.colors[k]?.pecIndex ?? 0).filter(
+    (s, k) => s >= PEC_APPLIQUE && pecOwnSlot(p.colors[k] ?? p.colors[p.colors.length - 1]) !== s,
+  );
+  expect(applique, 'threads on appliqué slots').toEqual([]);
   expect(groups((k) => threadKey(jef.colors[k])), 'Janome slots').toEqual(meant);
 
   // Every cut survives JEF, however short the move after it (the format cuts on zero-length jumps).
@@ -1924,6 +1965,21 @@ export function checkExport(p: Pattern): void {
   let k = 0;
   for (const c of readCuts) if (c === meantCuts[k]) k++;
   expect(meantCuts.slice(k)[0], 'cut lost in JEF').toBeUndefined();
+
+  // DST keeps every cut too, and never writes a jump that does not move (some machines skip those).
+  const dstData = writePattern(p, 'dst');
+  const zero: number[] = [];
+  for (let i = 512; i + 2 < dstData.length; i += 3) {
+    const [b0, b1, b2] = [dstData[i], dstData[i + 1], dstData[i + 2]];
+    if ((b2 & 0xf3) === 0xf3) break;
+    if ((b2 & 0xc3) === 0x83 && !b0 && !b1 && !(b2 & 0x3c)) zero.push((i - 512) / 3);
+  }
+  expect(zero.slice(0, 5), 'zero-length jumps in DST').toEqual([]);
+  const dst = parsePattern(dstData, 'torture.dst');
+  const dstCuts = cuts(dst, dst.x[firstStitch(dst)], dst.y[firstStitch(dst)]);
+  k = 0;
+  for (const c of dstCuts) if (c === meantCuts[k]) k++;
+  expect(meantCuts.slice(k)[0], 'cut lost in DST').toBeUndefined();
 }
 
 /** The objects of `p` in a line each, to follow a chain (TORTURE_TRACE=1). */
@@ -2151,6 +2207,7 @@ function checkStep(d: Doc, full: boolean): void {
   checkOneGeo(p);
   checkFits(p);
   checkBlends(p);
+  checkCrosshatch(p);
   checkEchoes(p);
   checkRedwork(p);
   checkLineParts(p);

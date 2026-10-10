@@ -1,4 +1,4 @@
-/** Minimal DST/PES writers used only to build synthetic test fixtures. */
+/** Minimal DST/PES/XXX/SEW writers used only to build synthetic test fixtures. */
 
 export type Op = { type: 'stitch' | 'jump' | 'trim' | 'color'; dx?: number; dy?: number };
 
@@ -89,6 +89,8 @@ export function encodePes(ops: Op[], colorIndices: number[], label = 'TEST'): Ui
   pec[517] = 0x31;
   pec[518] = 0xff;
   pec[519] = 0xf0;
+  // Brother's opening move: a long-form jump, here of (0, 0).
+  pec.splice(528, 4, 0x90, 0x00, 0x90, 0x00);
 
   let color = 0;
   let pendingTrim = false;
@@ -110,4 +112,42 @@ export function encodePes(ops: Op[], colorIndices: number[], label = 'TEST'): Ui
   }
   pec.push(0xff);
   return Uint8Array.from([...head, ...pec]);
+}
+
+const byte = (v: number) => v & 0xff;
+const XXX_CODE = { jump: 0x01, trim: 0x03, color: 0x08 } as const;
+
+/** Ops use y down. Singer XXX: 256-byte header, 7F commands, a 7D long stitch, RGB colors after the end. */
+export function encodeXxx(ops: Op[], colors: [number, number, number][]): Uint8Array {
+  const head: number[] = Array.from({ length: 0x100 }, () => 0);
+  head[0x27] = colors.length;
+  const recs: number[] = [];
+  for (const op of ops) {
+    const dx = op.dx ?? 0;
+    const dy = op.dy ?? 0;
+    if (op.type === 'stitch') {
+      if (Math.abs(dx) > 123 || Math.abs(dy) > 123) recs.push(0x7d, byte(dx), byte(dx >> 8), byte(-dy), byte(-dy >> 8));
+      else recs.push(byte(dx), byte(-dy));
+    } else recs.push(0x7f, XXX_CODE[op.type], byte(dx), byte(-dy));
+  }
+  recs.push(0x7f, 0x7f, 0x02, 0x14, 0, 0);
+  for (const [r, g, b] of colors) recs.push(0, r, g, b);
+  return Uint8Array.from([...head, ...recs]);
+}
+
+/** Ops use y down. Janome SEW: color count and palette indices, stitches from 0x1D78. No trims. */
+export function encodeSew(ops: Op[], colorIndices: number[]): Uint8Array {
+  const head: number[] = Array.from({ length: 0x1d78 }, () => 0);
+  head[0] = colorIndices.length;
+  colorIndices.forEach((c, k) => (head[2 + 2 * k] = c));
+  const recs: number[] = [];
+  for (const op of ops) {
+    const dx = byte(op.dx ?? 0);
+    const dy = byte(-(op.dy ?? 0));
+    if (op.type === 'stitch') recs.push(dx, dy);
+    else if (op.type === 'jump') recs.push(0x80, 0x02, dx, dy);
+    else if (op.type === 'color') recs.push(0x80, 0x01, 0, 0);
+  }
+  recs.push(0x80, 0x10);
+  return Uint8Array.from([...head, ...recs]);
 }

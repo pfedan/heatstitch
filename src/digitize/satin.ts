@@ -30,6 +30,8 @@ export interface SatinParams {
   pullB?: number;
   /** Added to each side in proportion to the column's width there (0.1 = 10 %). */
   pullShare?: number;
+  /** Added to the right side instead of `pullShare`; the sides can differ. */
+  pullShareB?: number;
   /** Split stitches staggered from stitch to stitch, so the split points do not line up into a groove. */
   stagger?: boolean;
   /** Spacing at each point of the column instead of `spacing` (see spacingAlong in restitch). */
@@ -199,7 +201,7 @@ export function pairs(c: Column, p: SatinParams, ends?: ColumnEnds): [Pt, Pt][] 
     const u = norm(sub(a, b));
     const w = dist(a, b);
     let ea = p.pull + w * (p.pullShare ?? 0);
-    let eb = (p.pullB ?? p.pull) + w * (p.pullShare ?? 0);
+    let eb = (p.pullB ?? p.pull) + w * (p.pullShareB ?? p.pullShare ?? 0);
     if (ea + eb < -w * 0.8) {
       const k = (-w * 0.8) / (ea + eb);
       ea *= k;

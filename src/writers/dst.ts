@@ -44,17 +44,45 @@ export function encodeDstRecord(dx: number, dy: number, kind: 'stitch' | 'jump' 
   return [b[0], b[1], b[2]];
 }
 
+/** Size of the wobble a trim is sewn as when the move after it is too short to split (1/10 mm). */
+const WOBBLE = 2;
+
+/**
+ * The DST_TRIM_JUMP_COUNT jumps a trim followed by the move (dx, dy) is written as: the move split
+ * into as many equal jumps when each still moves, otherwise a wobble out and back that ends there.
+ * None of them is zero.
+ */
+export function trimJumps(dx: number, dy: number): [number, number][] {
+  const k = DST_TRIM_JUMP_COUNT;
+  const pieces = splitMove(dx, dy, DST_MAX_DELTA);
+  if (pieces.length >= k) return pieces;
+  if (Math.max(Math.abs(dx), Math.abs(dy)) >= k) {
+    const out: [number, number][] = [];
+    for (let s = 1; s <= k; s++) {
+      const px = Math.round((dx * s) / k) - Math.round((dx * (s - 1)) / k);
+      const py = Math.round((dy * s) / k) - Math.round((dy * (s - 1)) / k);
+      out.push([px, py]);
+    }
+    if (out.every(([x, y]) => x || y)) return out;
+  }
+  // Out, back across, and to the end; the sign keeps the last step from being zero.
+  const w = dx === -WOBBLE && dy === -WOBBLE ? -WOBBLE : WOBBLE;
+  return [[w, w], [-2 * w, -2 * w], [w + dx, w + dy]];
+}
+
 /**
  * Writes a Tajima DST file.
  *
  * DST has no trim command: a run of DST_TRIM_JUMP_COUNT or more jumps means "trim" (the reader
  * turns such a run into TRIM followed by the original jumps). So a TRIM is written as nothing when
- * the jump run after it is already long enough, and padded with zero jumps otherwise; trims never
- * grow on repeated saves. Untrimmed jump runs that would reach that length are merged into as few
- * records as possible so they do not turn into trims. Long stitches are split into jumps plus one
- * final stitch (no extra needle penetrations), or into equal stitches when that would need enough
- * jumps to read as a trim. A color change carries the move of a directly following jump, as the
- * reader expects. DST stores no thread colors.
+ * the jump run after it is already long enough; otherwise the move after it is split into that many
+ * jumps, or, when it is too short for that, sewn as a small wobble that ends where the move does
+ * (pyembroidery writes +0.2, -0.4, +0.2 mm). Never as zero-length jumps: some machines ignore those
+ * (Bastidor issue 64). Trims never grow on repeated saves. Untrimmed jump runs that would reach that
+ * length are merged into as few records as possible so they do not turn into trims. Long stitches
+ * are split into jumps plus one final stitch (no extra needle penetrations), or into equal stitches
+ * when that would need enough jumps to read as a trim. A color change moves nothing (as pyembroidery
+ * writes it); a jump after it follows on its own. DST stores no thread colors.
  */
 export function writeDst(p: Pattern): Uint8Array {
   const n = p.cmd.length;
@@ -114,8 +142,13 @@ export function writeDst(p: Pattern): Uint8Array {
       if (trimmed) continue; // repeated trim
       let j = i + 1;
       while (j < n && p.cmd[j] === TRIM) j++;
-      const have = j < n && p.cmd[j] === JUMP ? runRecords(j, runEnd(j), cx, cy) : 0;
-      for (let k = have; k < DST_TRIM_JUMP_COUNT; k++) emit(0, 0, 'jump');
+      const end = j < n && p.cmd[j] === JUMP ? runEnd(j) : j;
+      const have = end > j ? runRecords(j, end, cx, cy) : 0;
+      if (have < DST_TRIM_JUMP_COUNT) {
+        const [tx, ty] = end > j ? [p.x[end - 1] - cx, p.y[end - 1] - cy] : [0, 0];
+        for (const [dx, dy] of trimJumps(tx, ty)) emit(dx, dy, 'jump');
+        i = end - 1;
+      }
       trimmed = true;
     } else if (c === JUMP) {
       const j = runEnd(i);
@@ -130,15 +163,7 @@ export function writeDst(p: Pattern): Uint8Array {
     } else if (c === COLOR_CHANGE) {
       trimmed = false;
       colorChanges++;
-      const next = i + 1;
-      const dx = next < n && p.cmd[next] === JUMP ? p.x[next] - cx : 0;
-      const dy = next < n && p.cmd[next] === JUMP ? p.y[next] - cy : 0;
-      if ((dx || dy) && Math.abs(dx) <= DST_MAX_DELTA && Math.abs(dy) <= DST_MAX_DELTA) {
-        emit(dx, dy, 'color');
-        i = next;
-      } else {
-        emit(0, 0, 'color');
-      }
+      emit(0, 0, 'color');
     }
   }
 

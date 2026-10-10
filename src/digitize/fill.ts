@@ -117,6 +117,8 @@ export const TRAVEL_TOLERANCE = 0.4;
 /** Travel may run on top of sewn rows for this long (mm); a longer way becomes a jump. */
 const SEWN_CROSSING = 2;
 const RAD = Math.PI / 180;
+/** How far the step between two sparse rows may cut outside the outline (mm). */
+const SPARSE_SLACK = 0.25;
 
 const dist = (p: Pt, q: Pt) => Math.hypot(p[0] - q[0], p[1] - q[1]);
 
@@ -133,6 +135,13 @@ class Frame {
   emboss?: { motif: Motif; size: number; strong?: boolean };
   /** Density falling evenly across the shape (out) or rising (in); see FillParams.fade. */
   fade?: 'out' | 'in';
+  /**
+   * Sparse rows (crosshatch): the half width each row covers for travel, its thread only. Dense
+   * rows cover the ground between them, half a spacing to each side.
+   */
+  lane?: number;
+  /** Sparse rows: travel laid onto the lines thread lies on (see crosshatchFill), not cut across them. */
+  onLines?: (path: Pt[]) => Pt[];
   constructor(
     angleDeg: number,
     public spacing: number,
@@ -173,6 +182,10 @@ class Frame {
     this.vs = vs;
     this.k0 = 0;
     return [0, vs.length - 1];
+  }
+  /** The half width a row covers (see lane). */
+  get half(): number {
+    return this.lane ?? this.spacing / 2;
   }
   v(k: number): number {
     if (!this.vs) return k * this.spacing;
@@ -257,7 +270,10 @@ function sections(r: Region, field: Float32Array, f: Frame, rowList: Seg[][]): S
   const all: Section[] = [];
   let open: Section[] = [];
   const overlaps = (a: Seg, b: Seg) => a.u0 < b.u1 && b.u0 < a.u1;
-  const inside = (u: number, v: number) => sample(r, field, ...f.at(u, v)) < Math.max(f.spacing, f.v(1) - f.v(0)) / 2;
+  // The step from row to row may cut a corner by half a row; sparse rows lie far apart, and their
+  // steps keep near the outline instead.
+  const slack = f.lane !== undefined ? SPARSE_SLACK : Math.max(f.spacing, f.v(1) - f.v(0)) / 2;
+  const inside = (u: number, v: number) => sample(r, field, ...f.at(u, v)) < slack;
   for (const segs of rowList) {
     const k = segs[0].k;
     const live = open.filter((s) => s[s.length - 1].k === k - 1);
@@ -474,6 +490,16 @@ export class TravelGrid {
    */
   ahead: Uint16Array | null = null;
   gone: Uint8Array | null = null;
+  /**
+   * Sparse rows crossing (crosshatch): a sewn row is a way for travel like a row still to come,
+   * along it travel only doubles its thread (see crosshatchFill). Its cells join `gone`, never
+   * `covered`.
+   */
+  layered = false;
+  /** How much longer than the straight way travel may be (times, plus 6 mm); longer ways become jumps. */
+  detour = 2;
+  /** What a jump costs against travel when planning the order of sections (mm of travel). */
+  trimCost = TRIM_COST;
 
   constructor(r: Region, offRowEnds = false, cut?: { whole: Region; area: Region }) {
     this.offRowEnds = offRowEnds;
@@ -497,6 +523,11 @@ export class TravelGrid {
         }
       }
     }
+  }
+
+  /** The longest way travel may take between two points `d` apart. */
+  way(d: number): number {
+    return this.detour * d + 6;
   }
 
   center(i: number, j: number): Pt {
@@ -542,11 +573,12 @@ export class TravelGrid {
 
   /** Marks a footprint sewn: covered, one row less to come, strips past the row ends. */
   apply(fp: { under: number[]; ends: number[] }): void {
-    const { covered, ahead, rowEnds } = this;
+    const { covered, ahead, gone, rowEnds, layered } = this;
     for (const c of fp.ends) rowEnds[c] = 1;
     for (const c of fp.under) {
-      covered[c] = 1;
       if (ahead && ahead[c] > 0) ahead[c]--;
+      if (layered && gone) gone[c] = 1;
+      else covered[c] = 1;
     }
   }
 
@@ -635,7 +667,7 @@ export class TravelGrid {
     const ok = (x: ReturnType<TravelGrid['walk']>) => !!x && x.onTop <= SEWN_CROSSING && x.alongEnds <= (this.ahead ? BARE_RUN : ROW_END_RUN);
     if (avoidSewn && this.ahead) {
       const w = this.walk(this.search(s, a, b, true, t, true, limit), s, t, a, b, true);
-      if (w && ok(w) && w.length < 2 * dist(a, b) + 6) return w;
+      if (w && ok(w) && w.length < this.way(dist(a, b))) return w;
     }
     const w = this.walk(this.search(s, a, b, avoidSewn, t, false, limit), s, t, a, b, avoidSewn);
     return w && ok(w) ? w : null;
@@ -711,7 +743,7 @@ export class TravelGrid {
    */
   length(a: Pt, b: Pt): number | null {
     // Planning asks often: a search that has to look far and wide counts as no way.
-    const w = this.route(a, b, true, (SEARCH_SPREAD * (2 * dist(a, b) + 6)) / this.cell);
+    const w = this.route(a, b, true, (SEARCH_SPREAD * this.way(dist(a, b))) / this.cell);
     return w && w.length + SHOWN_COST * (w.onTop + w.alongEnds);
   }
 
@@ -722,7 +754,7 @@ export class TravelGrid {
     const base = this.weights();
     const { gw, gh, cell, ox, oy, covered, ahead, gone } = this;
     // Where rows to come are known, only ways short enough to take (see sewAll): inside an ellipse round a and b.
-    const reach = ahead && b ? 2 * dist(a, b) + 6 + 2 * cell : 0;
+    const reach = ahead && b ? this.way(dist(a, b)) + 2 * cell : 0;
     // Towards t, the straight distance left is a lower bound of the cost (A*).
     const toT = t >= 0;
     const tx = toT ? ox + ((t % gw) + 0.5) * cell : 0;
@@ -984,23 +1016,25 @@ const endCost = (p: Pt, end: Pt) => {
  * enough (and not much of a detour, as sewAll takes it), else a trim.
  */
 function planning(f: Frame, grid: TravelGrid) {
-  const keep = (): [Uint8Array, Uint8Array, Uint16Array | undefined] => [grid.covered.slice(), grid.rowEnds.slice(), grid.ahead?.slice()];
+  // Sewn rows of layered rows are ways (see TravelGrid.layered): `gone` changes too.
+  const keep = (): [Uint8Array, Uint8Array, Uint16Array | undefined, Uint8Array | undefined] => [grid.covered.slice(), grid.rowEnds.slice(), grid.ahead?.slice(), grid.layered ? grid.gone?.slice() : undefined];
   const back = (k: ReturnType<typeof keep>) => {
     grid.covered.set(k[0]);
     grid.rowEnds.set(k[1]);
     if (k[2]) grid.ahead!.set(k[2]);
+    if (k[3]) grid.gone!.set(k[3]);
   };
   const prints = new Map<Section, { under: number[]; ends: number[] }[]>();
   const cover = (s: Section) => {
     let fp = prints.get(s);
-    if (!fp) prints.set(s, (fp = s.map((seg) => grid.footprint(f.at(seg.u0, f.v(seg.k)), f.at(seg.u1, f.v(seg.k)), f.spacing / 2))));
+    if (!fp) prints.set(s, (fp = s.map((seg) => grid.footprint(f.at(seg.u0, f.v(seg.k)), f.at(seg.u1, f.v(seg.k)), f.half))));
     for (const p of fp) grid.apply(p);
   };
   const stepCost = (from: Pt, to: Pt) => {
     const d = dist(from, to);
     if (d <= 1 || grid.clear(from, to)) return d;
     const l = grid.length(from, to);
-    return l != null && l < 2 * d + 6 ? l : TRIM_COST + d;
+    return l != null && l < grid.way(d) ? l : grid.trimCost + d;
   };
   return { keep, back, cover, stepCost };
 }
@@ -1126,7 +1160,7 @@ function beamPlan(f: Frame, secs: Section[], pull: number, start: Pt, grid: Trav
         const seen = grid.flood(pos);
         for (const o of secs) if (!order.some((x) => x.s === o) && !entries(f, o, pull).some((e) => grid.reaches(seen, e.p))) stranded++;
       }
-      return { order, cost: n.cost, pos, state: keep(), rank: n.cost + TRIM_COST * stranded };
+      return { order, cost: n.cost, pos, state: keep(), rank: n.cost + grid.trimCost * stranded };
     });
     plans.sort((x, y) => x.rank - y.rank);
     // One plan for each set of sections sewn so far: the beam does not fill with one set in different orders.
@@ -1225,7 +1259,7 @@ function sewAll(
   // Where parts are left out, the order and ends of the sections are planned on the grid, so travel
   // keeps under rows still to come (and the parts left out) rather than beside the outline.
   const smart = avoidSewn && !!grid.gone;
-  if (smart) for (const s of secs) for (const seg of s) grid.expect(f.at(seg.u0, f.v(seg.k)), f.at(seg.u1, f.v(seg.k)), f.spacing / 2);
+  if (smart) for (const s of secs) for (const seg of s) grid.expect(f.at(seg.u0, f.v(seg.k)), f.at(seg.u1, f.v(seg.k)), f.half);
   const order = (secs: Section[]) => {
     const planner = (l?: { s: Section; e: Entry }) => (smart ? planOnGrid(f, secs, pull, start, grid, l, end) : plan(f, secs, pull, start, l, end));
     let best = smart && secs.length <= BEAM_SECTIONS ? beamPlan(f, secs, pull, start, grid, end) : planner(undefined);
@@ -1265,14 +1299,14 @@ function sewAll(
     if (cur && bd > 1) {
       // Where the grid has no way (from outside it, or between its parts), the outer one may.
       const path = grid.path(pos, pts[0], avoidSewn) ?? outer?.path(pos, pts[0], avoidSewn);
-      if (path && pathLength(path) < 2 * bd + 6) travel = runStitch(path, TRAVEL_STITCH, TRAVEL_TOLERANCE);
+      if (path && pathLength(path) < grid.way(bd)) travel = f.onLines ? runStitch(f.onLines(path), TRAVEL_STITCH, LINE_TOLERANCE) : runStitch(path, TRAVEL_STITCH, TRAVEL_TOLERANCE);
     } else if (cur) travel = [pos, pts[0]];
     if (cur && travel) cur.push(...travel.slice(1), ...pts.slice(1));
     else {
       cur = pts;
       runs.push(cur);
     }
-    for (const seg of s) grid.cover(f.at(seg.u0, f.v(seg.k)), f.at(seg.u1, f.v(seg.k)), f.spacing / 2);
+    for (const seg of s) grid.cover(f.at(seg.u0, f.v(seg.k)), f.at(seg.u1, f.v(seg.k)), f.half);
     pos = pts[pts.length - 1];
   }
   return pos;
@@ -1302,6 +1336,135 @@ export function fillRegion(r: Region, p: FillParams, start: Pt, neighbours: numb
   const gap = f.gradient ? 0 : Math.min(GAP_ROWS_MAX, Math.max(0, Math.round(p.gapRows ?? 0)));
   sewAll(f, secs, p.stitch, p.pull, pos, grid, true, runs, p.end, undefined, gap && secs.length > 1 ? sectionJoins(r, f, secs, gap) : undefined);
   return { runs, angle, under };
+}
+
+/** Crosshatch: the two layers cross at this angle each side of the fill angle (degrees), at right angles to each other. */
+export const CROSSHATCH_HALF = 45;
+/**
+ * Crosshatch: the half width of the thread a sparse row covers for travel, in cells of the travel
+ * grid: enough for its cells to join side by side at any angle, so travel can follow it.
+ */
+const CROSSHATCH_LANE = 0.8;
+/** Crosshatch: travel along its net may take this many times the straight way (see TravelGrid.detour). */
+const CROSSHATCH_DETOUR = 5;
+/** Crosshatch: what a jump costs when planning (mm of travel); its locks show in a light fill. */
+const CROSSHATCH_TRIM = 60;
+/** Travel laid onto a line of thread is taken this far from a point to the line (mm). */
+const ONTO_LINE = 0.45;
+/** Travel along lines of thread keeps this close to them (mm): it hides under the thread. */
+const LINE_TOLERANCE = 0.05;
+
+/**
+ * A travel path laid onto the rows of two crossing lattices (each row k at v = k * spacing): each
+ * point near a row onto it, near two onto where they cross. Between two points not on one row the
+ * path turns at crossings: from a row of one lattice straight onto a row of the other, or between
+ * two rows of one lattice along the row of the other nearest its middle. A corner outside the
+ * area `r` is left out. The grid finds the way only to its cells, and cuts corners near its ends.
+ */
+function ontoLines(frames: Frame[], r: Region): (path: Pt[]) => Pt[] {
+  type On = { q: Pt; on: (number | null)[] };
+  const cross = (k0: number, k1: number): Pt => {
+    // q·n0 = k0·s0 and q·n1 = k1·s1.
+    const [a, b] = frames;
+    const det = a.n[0] * b.n[1] - a.n[1] * b.n[0];
+    const va = k0 * a.spacing;
+    const vb = k1 * b.spacing;
+    return [(va * b.n[1] - vb * a.n[1]) / det, (a.n[0] * vb - b.n[0] * va) / det];
+  };
+  const rowsAt = (q: Pt, near: number) =>
+    frames.map((f) => {
+      const v = q[0] * f.n[0] + q[1] * f.n[1];
+      const k = Math.round(v / f.spacing);
+      return Math.abs(v - k * f.spacing) <= near ? k : null;
+    });
+  const inside = (q: Pt) => sample(r, r.sdf, q[0], q[1]) < 0;
+  const snap = (q: Pt): On => {
+    const on = rowsAt(q, ONTO_LINE);
+    const i = on.findIndex((k) => k !== null);
+    if (i < 0) return { q, on };
+    const f = frames[i];
+    const d = q[0] * f.n[0] + q[1] * f.n[1] - on[i]! * f.spacing;
+    const at: Pt = on[0] !== null && on[1] !== null ? cross(on[0], on[1]) : [q[0] - d * f.n[0], q[1] - d * f.n[1]];
+    // Near the outline a row may end before the point: it stays where the grid had it.
+    return inside(at) ? { q: at, on } : { q, on: [null, null] };
+  };
+  // The ways round the corners between p and q, best first.
+  const corners = (p: On, q: On): Pt[][] => {
+    for (let i = 0; i < 2; i++) if (p.on[i] !== null && p.on[i] === q.on[i]) return [];
+    const ways: Pt[][] = [];
+    for (let i = 0; i < 2; i++) {
+      const j = 1 - i;
+      const pi = p.on[i];
+      const qj = q.on[j];
+      if (pi !== null && qj !== null) ways.push([i === 0 ? cross(pi, qj) : cross(qj, pi)]);
+    }
+    for (let i = 0; i < 2; i++) {
+      const pi = p.on[i];
+      const qi = q.on[i];
+      if (pi === null || qi === null || pi === qi) continue;
+      // Two rows of one lattice: across along the other's row nearest the middle.
+      const f = frames[1 - i];
+      const mid: Pt = [(p.q[0] + q.q[0]) / 2, (p.q[1] + q.q[1]) / 2];
+      const m = Math.round((mid[0] * f.n[0] + mid[1] * f.n[1]) / f.spacing);
+      ways.push(i === 0 ? [cross(pi, m), cross(qi, m)] : [cross(m, pi), cross(m, qi)]);
+    }
+    return ways;
+  };
+  return (path) => {
+    // The ends are where rows start and end: they stay, on their row.
+    const pts: On[] = path.map((q, i) => (i === 0 || i === path.length - 1 ? { q, on: rowsAt(q, 0.05) } : snap(q)));
+    const out: Pt[] = [pts[0].q];
+    for (let i = 1; i < pts.length; i++) {
+      const c = corners(pts[i - 1], pts[i]).find((w) => w.every(inside));
+      if (c) out.push(...c);
+      out.push(pts[i].q);
+    }
+    return out;
+  };
+}
+
+/**
+ * Crosshatch (Kreuzschraffur): two sparse tatami layers, `p.spacing` apart each, at the fill angle
+ * ±CROSSHATCH_HALF, the second sewn on the first; a light, lacy fill the fabric shows through, as
+ * the cross hatch fills of commercial software. No underlay and no pull: what is sewn shows.
+ *
+ * Travel is what gives a sparse fill away: between the rows it shows. So a row only covers its
+ * thread (Frame.lane), and travel keeps to lines thread lies on: rows still to come, of both
+ * layers while the first is sewn, which hide it, and rows sewn already, which it only doubles
+ * (TravelGrid.layered). The two layers cross, so their lines form a net that reaches everywhere,
+ * and the way found on the grid is laid exactly onto it (ontoLines). Such a way may be longer than
+ * usual before the thread jumps, as the locks of a trim show in a light fill. The second layer
+ * starts where the way from the end of the first is cheapest, so near it.
+ */
+export function crosshatchFill(r: Region, p: FillParams, start: Pt): FillResult | null {
+  const angle = p.angle ?? 0;
+  const grid = new TravelGrid(p.travel ?? r, p.offRowEnds, p.whole ? { whole: p.whole, area: r } : undefined);
+  grid.gone ??= new Uint8Array(grid.gw * grid.gh);
+  // A jump in a light fill leaves two locks that show; travel along the net does not.
+  grid.detour = CROSSHATCH_DETOUR;
+  grid.trimCost = CROSSHATCH_TRIM;
+  grid.layered = true;
+  const lane = CROSSHATCH_LANE * grid.cell;
+  const layers = [angle - CROSSHATCH_HALF, angle + CROSSHATCH_HALF].map((a) => {
+    const f = new Frame(a, p.spacing, p.spacing, p.offset ?? 1 / STAGGERS);
+    f.lane = lane;
+    const top = rows(r, r.sdf, f, 0);
+    return { f, secs: top.length ? sections(r, r.sdf, f, top) : [] };
+  });
+  if (!layers.some((l) => l.secs.length)) return null;
+  const lines = (l: (typeof layers)[number], fn: (a: Pt, b: Pt) => void) => {
+    for (const s of l.secs) for (const seg of s) fn(l.f.at(seg.u0, l.f.v(seg.k)), l.f.at(seg.u1, l.f.v(seg.k)));
+  };
+  const [one, two] = layers;
+  one.f.onLines = two.f.onLines = ontoLines([one.f, two.f], r);
+  // The first layer's travel may also hide under the second layer's rows (sewAll counts its own).
+  lines(two, (a, b) => grid.expect(a, b, lane));
+  const runs: Pt[][] = [];
+  const pos = sewAll(one.f, one.secs, p.stitch, 0, start, grid, true, runs);
+  // Its own rows still to come are counted anew (the first layer's are a way already, see layered).
+  grid.ahead?.fill(0);
+  sewAll(two.f, two.secs, p.stitch, 0, pos, grid, true, runs, p.end);
+  return { runs, angle, under: 0 };
 }
 
 /**
