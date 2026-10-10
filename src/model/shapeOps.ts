@@ -288,8 +288,13 @@ export function combineLines(p: Pattern, which: number[], trimMm: number): { pat
   const joined = joinOpenPaths(all, false);
   const r = resewLine(p, sel[0], joined?.form ?? all, lineSettings(p, objs[sel[0]], kinds), trimMm);
   const rest = r && deleteObjects(r.pattern, sel.slice(1), trimMm);
-  // Its shadow and echo copies in threads of their own follow the new paths.
-  return rest ? { pattern: syncBorders(rest, trimMm), index: sel[0], joined } : null;
+  if (!rest) return null;
+  // Its shadow and echo copies in threads of their own follow the new paths. The parts of the
+  // others go with them, and may have been sewn before it: it is found again by its id.
+  const pattern = syncBorders(rest, trimMm);
+  const id = sewObjects(r.pattern)[sel[0]].id;
+  const index = sewObjects(pattern).findIndex((o) => o.id === id);
+  return index < 0 ? null : { pattern, index, joined };
 }
 
 export interface Subtracted {
