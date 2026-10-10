@@ -1,6 +1,8 @@
 import { hasPart, partInThread, partOf, withoutPart } from './shadow';
 import { translation, type Form, type Mat } from '../shape/path';
 import { areaOfForm, subtractForm, unionForms } from '../shape/ops';
+import { joinOpenPaths, type Joined } from '../shape/join';
+import { lineSettings, resewLine } from './line';
 import { takeOver } from './knockout';
 import { rememberObjects, sewObjects, stitchKey, type SewObject } from './objects';
 import { listOf, sewList } from './sew';
@@ -13,7 +15,7 @@ import { reshapeFill, transformSewObject } from './reshape';
 import { stitchKinds } from './sequence';
 import { stitchesBefore } from './transform';
 import { autoReversible, ownSettings, reverseLines } from './reverse';
-import { guessArea, lineGeoOf, sewnAlong } from './geo';
+import { guessArea, guessLine, lineGeoOf, sewnAlong } from './geo';
 
 /**
  * Working with objects as shapes: deleting, duplicating, mirroring, and combining fills by their
@@ -262,6 +264,32 @@ export function unionForm(forms: Form[]): Form | null {
   if (forms.some((f) => !f.paths.some((p) => p.closed && p.nodes.length > 1))) return null;
   const f = unionForms(forms);
   return f && areaOfForm(f) >= NO_AREA ? f : null;
+}
+
+/** Whether `o` is a line of its own (not a border, echo, shadow or blend part of another). */
+function plainLine(p: Pattern, o: SewObject): boolean {
+  const m = remembered(p, o);
+  return sewnAlong(p, o) && !m?.outline && !m?.blendOf && !partOf(m) && !m?.lettering;
+}
+
+/**
+ * The lines `which` (one after the other, in one thread) as one line with all their paths, sewn
+ * with the settings of the first: ends within 0.5 mm are joined into one node, a chain whose ends
+ * meet is closed (see joinOpenPaths). Null when they are not all such lines or nothing could be sewn.
+ */
+export function combineLines(p: Pattern, which: number[], trimMm: number): { pattern: Pattern; index: number; joined: Joined | null } | null {
+  const sel = [...new Set(which)].sort((a, b) => a - b);
+  const kinds = stitchKinds(p);
+  const objs = sewObjects(p, kinds);
+  if (sel.length < 2 || sel.some((o, k) => !objs[o] || (k && o !== sel[k - 1] + 1) || objs[o].block !== objs[sel[0]].block || !plainLine(p, objs[o]))) return null;
+  const forms = sel.map((o) => lineGeoOf(remembered(p, objs[o])) ?? guessLine(p, objs[o], kinds));
+  if (forms.some((f) => !f)) return null;
+  const all: Form = { paths: forms.flatMap((f) => f!.paths) };
+  const joined = joinOpenPaths(all, false);
+  const r = resewLine(p, sel[0], joined?.form ?? all, lineSettings(p, objs[sel[0]], kinds), trimMm);
+  const rest = r && deleteObjects(r.pattern, sel.slice(1), trimMm);
+  // Its shadow and echo copies in threads of their own follow the new paths.
+  return rest ? { pattern: syncBorders(rest, trimMm), index: sel[0], joined } : null;
 }
 
 export interface Subtracted {

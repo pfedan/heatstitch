@@ -1,4 +1,6 @@
 import { simplifyMore } from '../shape/simplify';
+import { joinEnd, joinOpenPaths, splitPathAt, type Joined } from '../shape/join';
+import { withCrossingNodes } from '../shape/ops';
 import { bandGrip, draggedWidth } from '../shape/band';
 import type { Pt } from '../digitize/skeleton';
 import { bezier, cloneForm, endDirection, extendPath, insertNode, moveHandle, moveNode, nearestOnForm, removeNode, segment, segments, setSmooth, type Form } from '../shape/path';
@@ -374,6 +376,64 @@ export class ShapeTool implements ShapeView {
     this.selected = null;
     this.hooks.change(this.form);
     return true;
+  }
+
+  /** Open paths in the form (two or more can be joined). */
+  get openPaths(): number {
+    return this.form.paths.filter((p) => !p.closed && p.nodes.length >= 2).length;
+  }
+
+  /** The end of an open path the selected node is: 0 its first, 1 its last; null otherwise. */
+  get selectedEnd(): 0 | 1 | null {
+    const s = this.selected;
+    const p = s && this.form.paths[s.path];
+    if (!s || !p || p.closed || p.nodes.length < 2) return null;
+    return s.i === 0 ? 0 : s.i === p.nodes.length - 1 ? 1 : null;
+  }
+
+  /**
+   * Paths joined at their ends (Verbinden): the selected end with the nearest end of another open
+   * path, else all open paths into one, nearest ends first. Ends within 0.5 mm are one node, farther
+   * ones get a straight piece. Null when nothing joins.
+   */
+  join(): Joined | null {
+    const s = this.selected;
+    const end = this.selectedEnd;
+    const j = s && end !== null ? joinEnd(this.form, s.path, end) : joinOpenPaths(this.form, true);
+    if (!j) return null;
+    this.form = j.form;
+    this.selected = null;
+    this.hooks.change(this.form);
+    return j;
+  }
+
+  /** Whether the selected node lies inside an open path (where it can be split). */
+  get canSplit(): boolean {
+    const s = this.selected;
+    const p = s && this.form.paths[s.path];
+    return !!s && !!p && !p.closed && s.i > 0 && s.i < p.nodes.length - 1;
+  }
+
+  /** The open path split at the selected node into two. */
+  splitHere(): boolean {
+    const s = this.selected;
+    const f = s && splitPathAt(this.form, s.path, s.i);
+    if (!s || !f) return false;
+    this.form = f;
+    // The node stays selected: the end of the first part.
+    this.selected = { path: s.path, i: s.i };
+    this.hooks.change(this.form);
+    return true;
+  }
+
+  /** A node wherever the paths cross, the outline unchanged (needs loadOps); how many were put in. */
+  crossingNodes(): number {
+    const r = withCrossingNodes(this.form);
+    if (!r) return 0;
+    this.form = r.form;
+    this.selected = null;
+    this.hooks.change(this.form);
+    return r.added;
   }
 
   /** The selected node moved by (dx, dy) mm. */

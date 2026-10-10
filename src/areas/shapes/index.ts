@@ -19,6 +19,8 @@ import { STORAGE_NS } from '../../storage/namespace';
 import { canRun, command, getCommand, keyLabel, runCommand } from '../../shell/commands';
 import { h, icon } from '../../shell/h';
 import { showMenu, toast } from '../../shell/ui';
+import { loadOps, opsReady } from '../../shape/ops';
+import type { Joined } from '../../shape/join';
 
 /** What the area "shapes" needs from the rest of the app. */
 export interface ShapesAreaApp {
@@ -59,6 +61,12 @@ const ICON = {
   simplify: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 12l2.5-4 2 3 2.5-5 2 4 2.5-5 3.5 3" opacity=".45" /><path d="M2.5 16C7 9 12.5 9 17.5 12" /></svg>',
   pathOpen: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10.5 4H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V9.5" /><rect x="9.3" y="2.3" width="3.4" height="3.4" rx=".5" class="node" /><rect x="14.3" y="7.8" width="3.4" height="3.4" rx=".5" class="node" /></svg>',
   pathClose: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10.5 4H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V9.5" /><path d="M12.8 4H14a2 2 0 0 1 2 2v1.6" stroke-dasharray="1.3 1.3" /><rect x="9.3" y="2.3" width="3.4" height="3.4" rx=".5" class="node" /><rect x="14.3" y="7.8" width="3.4" height="3.4" rx=".5" class="node" /></svg>',
+  // Two ends, a dashed piece between them.
+  join: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 15.5C3.5 10 5 8 7.6 7.6" /><path d="M12.4 7.6C15 8 16.5 10 17.5 15.5" /><path d="M9.6 7.6h.8" stroke-dasharray="1.2 1.2" /><rect x="6.3" y="5.9" width="3.4" height="3.4" rx=".5" class="node" /><rect x="10.3" y="5.9" width="3.4" height="3.4" rx=".5" class="node" /></svg>',
+  // A curve cut apart at a node.
+  split: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 15C4 10 6 8.2 8 7.6" /><path d="M12 7.6C14 8.2 16 10 17.5 15" /><rect x="6.5" y="6" width="3.2" height="3.2" rx=".5" class="node" /><rect x="10.3" y="6" width="3.2" height="3.2" rx=".5" class="node" /><path d="M10 2.5v3M10 10.5v3" /></svg>',
+  // Two crossing curves, a node where they cross.
+  crossings: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 16C6 6 12 4 17 4" /><path d="M3 4c5 0 11 2 14 12" /><rect x="8.3" y="6.6" width="3.4" height="3.4" rx=".5" class="node" /></svg>',
   snap: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4.5 3.5H8v6a2 2 0 0 0 4 0v-6h3.5v6a5.5 5.5 0 0 1-11 0z" /><path d="M4.5 6.5H8M12 6.5h3.5" /></svg>',
   back: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 15l4-7 3.5 4" /><rect x="1.8" y="13.8" width="2.4" height="2.4" rx=".4" class="node" /><rect x="5.8" y="6.8" width="2.4" height="2.4" rx=".4" class="node" /><path d="M17.5 12h-5M14.5 9.5 12 12l2.5 2.5" /></svg>',
   cancel: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5 5 15" /></svg>',
@@ -273,6 +281,45 @@ export function initShapes(app: ShapesAreaApp): void {
       if (app.shapeTool.toggleClosed() && tell) toast(t('shape.line.closed'));
     },
   });
+  /** What a join did, in words; a closed path offers to fill inside when it can be filled. */
+  const sayJoined = (j: Joined) => {
+    const bridges = j.joints.filter((x) => x.bridged);
+    const mm = (v: number) => formatNumber(v, 1);
+    const text = [
+      bridges.length === 0 ? t('shape.joined') : bridges.length === 1 ? t('shape.joined.bridge', { mm: mm(bridges[0].gap) }) : t('shape.joined.bridges', { n: bridges.length, mm: mm(bridges.reduce((a, x) => a + x.gap, 0)) }),
+      j.closed ? t('shape.joined.closed') : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+    // Filled as Stichart › Füllung does, once the new stitches are there.
+    const fill = j.closed && shapedLine() ? { label: t('shape.fillInside'), run: () => runCommand('stitch.kind.fill') } : undefined;
+    toast(text, fill);
+  };
+  command({
+    id: 'shape.join',
+    label: 'shape.join',
+    group: SHAPE,
+    keys: ['Mod+J'],
+    when: () => shaping() && app.shapeTool.openPaths >= 2,
+    run: () => {
+      const j = app.shapeTool.join();
+      if (j) sayJoined(j);
+      else toast(t('shape.join.none'));
+    },
+  });
+  command({ id: 'shape.split', label: 'shape.split', group: SHAPE, when: () => shaping() && app.shapeTool.canSplit, run: () => void app.shapeTool.splitHere() });
+  command({
+    id: 'shape.crossings',
+    label: 'shape.crossings',
+    group: SHAPE,
+    when: () => shaping() && app.shapeTool.count >= 2,
+    run: async () => {
+      // Crossings are found on the curves: the library for that loads on first use.
+      if (!opsReady()) await loadOps();
+      const n = app.shapeTool.crossingNodes();
+      toast(n ? t('shape.crossings.done', { n: formatNumber(n) }) : t('shape.crossings.none'));
+    },
+  });
   command({ id: 'shape.openLine', label: 'shape.path.open', group: SHAPE, when: lineOpen(true), run: () => void app.shapeTool.toggleClosed() });
   command({
     id: 'frame.snap',
@@ -458,6 +505,9 @@ export function initShapes(app: ShapesAreaApp): void {
       if (s.count >= SIMPLIFY_FROM) items.push({ kind: 'cmd', id: 'shape.simplify', icon: ICON.simplify, tip: t('shape.simplify.hint') });
       if (canRun('shape.closeLine')) items.push({ kind: 'cmd', id: 'shape.closeLine', icon: ICON.pathClose, tip: t('shape.path.close.hint') });
       if (canRun('shape.openLine')) items.push({ kind: 'cmd', id: 'shape.openLine', icon: ICON.pathOpen, tip: t('shape.path.open.hint') });
+      if (canRun('shape.split')) items.push({ kind: 'cmd', id: 'shape.split', icon: ICON.split, tip: t('shape.split.hint') });
+      if (canRun('shape.join')) items.push({ kind: 'cmd', id: 'shape.join', icon: ICON.join, tip: t('shape.join.hint') });
+      if (canRun('shape.crossings')) items.push({ kind: 'cmd', id: 'shape.crossings', icon: ICON.crossings, tip: t('shape.crossings.hint') });
       // Fertig as in the bar of the stitches by hand: back to the objects (as Esc). The level Stiche
       // is in the crumb's menu and on the key E.
       items.push({ kind: 'sep' }, snap, { kind: 'cmd', id: 'level.up', text: t('object.editDone'), primary: true });

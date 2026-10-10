@@ -25,7 +25,8 @@ import { remembered, rememberedIn, measureFill, analyze, unionRegion, remember, 
 import { reverseLines, reversible, reverseObjects } from '../model/reverse';
 import { t, type Key } from '../i18n';
 import { ui } from './state';
-import { unionForm, recolorObjects } from '../model/shapeOps';
+import { combineLines, unionForm, recolorObjects } from '../model/shapeOps';
+import { runCommand } from '../shell/commands';
 import { loadOps, opsReady } from '../shape/ops';
 import { blendObject } from '../model/blend';
 import { recolorBlock, takeThreads } from '../model/border';
@@ -286,6 +287,21 @@ export function bindObjects(app: ObjectsApp) {
     const sel = [...ui.selectedObjects].sort((a, b) => a - b);
     const objs = sel.map((o) => q.objects[o]);
     if (mergeBlocked(objs)) return;
+    // Lines become one line with all their paths, touching ends joined.
+    const lines = combineLines(p, sel, app.settings.trimMm);
+    if (lines) {
+      app.applyEdit(lines.pattern);
+      ui.selectedObjects = new Set([lines.index]);
+      ui.selectionKey++;
+      const k = lines.joined?.joints.length ?? 0;
+      const closed = !!lines.joined?.closed;
+      layers.say({
+        text: k ? t('object.lines.joinedEnds', { n: sel.length, k }) + (closed ? ' ' + t('shape.joined.closed') : '') : t('object.lines.joined', { n: sel.length }),
+        ...(closed ? { action: { label: t('shape.fillInside'), run: () => runCommand('stitch.kind.fill') } } : { undo: undoable() }),
+      });
+      app.redraw();
+      return;
+    }
     const set = new Set(sel);
     const order = [...q.objects.keys()].filter((o) => o < sel[0] || (o > sel[0] && !set.has(o)));
     order.splice(sel[0], 0, ...sel);

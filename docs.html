@@ -207,7 +207,7 @@
           <dt>Garn eines Objekts</dt>
           <dd>Ein Klick auf das Farbquadrat im Kopf der Karte <i>Objekt</i> wählt sein Garn. Das Garn eines Nachbarn stickt es in dessen Farbe mit; ein anderes gibt ihm eine eigene Farbe an seiner Stelle, mit Farbwechsel.</dd>
           <dt>Zusammenfassen und trennen</dt>
-          <dd>Sind mehrere Objekte einer Farbe ausgewählt, macht <i>Zu einem Objekt zusammenfassen</i> im Menü eines daraus. Es wird an der Stelle des ersten gestickt; vorher wird geprüft, ob das die Lagen erlaubt. Füllungen werden dabei eine Fläche mit einem Umriss und mit den Einstellungen der ersten neu gestickt, sodass das Muster über alles durchläuft. Die Umrisse werden genau auf ihren Kurven vereint: Knoten und Rundungen bleiben, wo sie waren, neu sind nur die Punkte, an denen sie sich schneiden. Liegen andere Objekte dazwischen, geht das nur mit Füllungen. Umgekehrt zerlegt <i>In Teile trennen</i> ein Objekt, das in mehreren Teilen gestickt wird, in diese Teile, zum Beispiel um die Unterlage einzeln zu sehen.</dd>
+          <dd>Sind mehrere Objekte einer Farbe ausgewählt, macht <i>Zu einem Objekt zusammenfassen</i> im Menü eines daraus. Es wird an der Stelle des ersten gestickt; vorher wird geprüft, ob das die Lagen erlaubt. Füllungen werden dabei eine Fläche mit einem Umriss und mit den Einstellungen der ersten neu gestickt, sodass das Muster über alles durchläuft. Die Umrisse werden genau auf ihren Kurven vereint: Knoten und Rundungen bleiben, wo sie waren, neu sind nur die Punkte, an denen sie sich schneiden. Linien werden eine Linie mit allen ihren Pfaden, gestickt mit den Einstellungen der ersten; Enden, die sich berühren (bis 0,5 mm), werden dabei verbunden, und schließt sich so ein Pfad, füllt <i>Innen füllen</i> im Hinweis die Fläche darin, zum Beispiel bei einem Herz, das aus zwei Hälften einer SVG kommt. Liegen andere Objekte dazwischen, geht das nur mit Füllungen. Umgekehrt zerlegt <i>In Teile trennen</i> ein Objekt, das in mehreren Teilen gestickt wird, in diese Teile, zum Beispiel um die Unterlage einzeln zu sehen.</dd>
           <dt id="de-cut">Zerteilen</dt>
           <dd>Das Werkzeug <i>Zerteilen</i> (<kbd>X</kbd>) schneidet eine gewählte Füllung in Teile: eine Linie quer über die Fläche ziehen (freihand), klicken für einen Pfad mit Ecken, mit <kbd>Umschalt</kbd> gerade; beim Ziehen schneidet das Loslassen, beim Pfad <i>Schneiden</i>. Jeder Teil wird ein Objekt für sich mit denselben Einstellungen und einer eigenen Stichrichtung, etwa um ein Blatt in zwei Hälften mit Winkeln wie Adern zu sticken, oder um eine große Fläche in Stücke zu teilen, die nacheinander gestickt weniger ziehen. Hat die Füllung eine Umrandung, läuft weiter ein Rand um alle Teile zusammen, nie am Schnitt entlang; <i>Auch am Schnitt</i> in der Umrandung legt dort zusätzlich eine einfache Linie. Was du an der Umrandung einstellst, gilt für alle Teile. Das Werkzeug gibt es für Füllungen, die heatstitch als Form kennt; eine nur aus den Stichen erkannte Füllung (≈) wird dazu erst einmal neu gestickt, etwa über eine Einstellung.
             <figure>
@@ -365,7 +365,13 @@
           Breite in mm steht daneben; eine Füllung mit Satinrand zeigt das Band des Randes genauso. Wie das Band
           gefüllt wird (Abstand, Zugausgleich, Unterlage), bleibt in der Karte <i>Objekt</i>. Ab 12 Knoten bietet
           die Karte <i>Vereinfachen</i>: weniger Knoten, höchstens 0,3 mm neben dem alten Umriss, Ecken bleiben
-          Ecken; nochmal drücken vereinfacht weiter. <kbd>Enter</kbd> geht weiter zu den Stichen, <kbd>Esc</kbd>
+          Ecken; nochmal drücken vereinfacht weiter. Hat eine Form mehrere offene Pfade, verbindet <i>Verbinden</i>
+          (<kbd>Strg</kbd>+<kbd>J</kbd>) das gewählte Ende mit dem nächsten Ende eines anderen Pfads, ohne gewählten
+          Knoten alle offenen Pfade, die nächsten Enden zuerst: Enden bis 0,5 mm auseinander werden ein Knoten,
+          weiter entfernte bekommen ein gerades Stück dazwischen, und der Hinweis sagt, wie lang es ist. Treffen sich
+          danach Anfang und Ende, ist der Pfad geschlossen, und <i>Innen füllen</i> im Hinweis füllt ihn.
+          <i>Knoten an Kreuzungen</i> setzt einen Knoten, wo sich Pfade kreuzen, ohne die Form zu ändern;
+          <i>Pfad hier teilen</i> teilt einen offenen Pfad am gewählten Knoten in zwei. <kbd>Enter</kbd> geht weiter zu den Stichen, <kbd>Esc</kbd>
           oder ein Klick daneben führt zurück zu den Objekten.
         </p>
 
@@ -1110,7 +1116,7 @@
           <dt>Thread of an object</dt>
           <dd>A click on the color square in the head of the <i>Object</i> card picks its thread. A neighbor's thread sews it along in that color; another one gives it an own color in its place, with a color change.</dd>
           <dt>Combine and split</dt>
-          <dd>With several objects of one color selected, <i>Combine into one object</i> in the menu makes one of them. It is sewn in the place of the first; before that, the layers are checked. Fills become one area with one outline and are sewn anew with the settings of the first, so the pattern runs through everything. The outlines are joined exactly on their curves: nodes and curves stay where they were, only the points where they cross are new. With other objects in between, only fills can be combined. The other way round, <i>Split into parts</i> takes an object sewn in several parts apart into them, for example to see the underlay on its own.</dd>
+          <dd>With several objects of one color selected, <i>Combine into one object</i> in the menu makes one of them. It is sewn in the place of the first; before that, the layers are checked. Fills become one area with one outline and are sewn anew with the settings of the first, so the pattern runs through everything. The outlines are joined exactly on their curves: nodes and curves stay where they were, only the points where they cross are new. Lines become one line with all their paths, sewn with the settings of the first; ends that touch (up to 0.5 mm) are joined, and when that closes a path, <i>Fill inside</i> in the notice fills the area in it, for example a heart that comes from an SVG in two halves. With other objects in between, only fills can be combined. The other way round, <i>Split into parts</i> takes an object sewn in several parts apart into them, for example to see the underlay on its own.</dd>
           <dt id="en-cut">Cut apart</dt>
           <dd>The <i>Cut apart</i> tool (<kbd>X</kbd>) cuts a selected fill into parts: drag a line across the area (freehand), click for a path with corners, hold <kbd>Shift</kbd> for straight; when dragging, letting go cuts, with a path <i>Cut</i> does. Each part becomes an object of its own with the same settings and its own stitch direction, say to sew a leaf in two halves with angles like veins, or to split a large area into pieces that pull less when sewn one after the other. If the fill has a border, one border still runs around all parts together, never along the cut; <i>Along the cuts too</i> in the border adds a single line there. What you set on the border applies to all parts. The tool is there for fills heatstitch knows as a shape; a fill only recognized from the stitches (≈) is first sewn anew for it, say through a setting.
             <figure>
@@ -1266,7 +1272,13 @@
           grip to make the band wider or narrower, its width in mm shows beside it; a fill with a satin border shows
           the border's band the same way. How the band is filled (spacing, pull compensation, underlay) stays in the
           <i>Object</i> card. An outline with 12 nodes or more offers <i>Simplify</i>: fewer nodes, at most 0.3 mm
-          beside the old outline, corners staying corners; press it again to go further. <kbd>Enter</kbd> goes on to
+          beside the old outline, corners staying corners; press it again to go further. When a shape has several
+          open paths, <i>Join</i> (<kbd>Ctrl</kbd>+<kbd>J</kbd>) joins the selected end to the nearest end of another
+          path, without a selected node all open paths, nearest ends first: ends up to 0.5 mm apart become one node,
+          ends farther apart get a straight piece between them, and the notice says how long it is. When start and
+          end then meet, the path is closed, and <i>Fill inside</i> in the notice fills it. <i>Nodes at crossings</i>
+          puts a node where paths cross without changing the shape; <i>Split path here</i> splits an open path at the
+          selected node into two. <kbd>Enter</kbd> goes on to
           the stitches, <kbd>Esc</kbd> or a click beside it leads back to the objects.
         </p>
 
