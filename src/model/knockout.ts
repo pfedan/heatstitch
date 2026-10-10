@@ -117,6 +117,29 @@ function sewAgain(p: Pattern, index: number, knockout: boolean, trimMm: number):
 }
 
 /**
+ * Object `index`, which leaves out what lies on top, sewn anew on what is left of it. When nothing
+ * sewable is left (all of it covered, or a strip too thin to fill), it is sewn whole as long as
+ * the shapes on top stay so: it still leaves out (`knockout`), and `cut` names the area it could
+ * not be sewn on, so it is not tried again until that changes. Null when neither worked.
+ */
+function sewCut(p: Pattern, index: number, trimMm: number): Pattern | null {
+  const cut = sewAgain(p, index, true, trimMm);
+  if (cut) return cut;
+  const objs = sewObjects(p);
+  const o = objs[index];
+  const known = o && remembered(p, o);
+  const form = areaOf(known);
+  if (!known || !form) return null;
+  const left = cutKey(sewnArea(p, objs, o, form, true, known.region?.pxMm ?? 0.1));
+  const whole = sewAgain(p, index, false, trimMm);
+  const w = whole && sewObjects(whole)[index];
+  const m = w && remembered(whole, w);
+  if (!m) return null;
+  remember(whole, w, { ...m, knockout: true, cut: left });
+  return whole;
+}
+
+/**
  * Turns leaving out on or off for the objects `which` (indices in sewing order); only fills with
  * curves take part. Null when nothing changed.
  */
@@ -153,7 +176,7 @@ export function setOverlapShare(p: Pattern, which: number[], share: number, trim
     remember(cur, o, { ...known, overlapShare: share });
     changed++;
     if (!known.knockout) continue;
-    const next = sewAgain(cur, index, true, trimMm);
+    const next = sewCut(cur, index, trimMm);
     if (next) cur = next;
   }
   return changed ? { pattern: syncBorders(cur, trimMm), changed } : null;
@@ -177,7 +200,7 @@ export function refreshKnockouts(p: Pattern, trimMm: number): { pattern: Pattern
     if (!known || !form || known.free || !known.knockout) continue;
     const area = sewnArea(cur, objs, o, form, true, known.region?.pxMm ?? 0.1);
     if (cutKey(area) === known.cut) continue;
-    const next = sewAgain(cur, index, true, trimMm);
+    const next = sewCut(cur, index, trimMm);
     if (!next) continue;
     cur = syncBorders(next, trimMm);
     objs = sewObjects(cur);
