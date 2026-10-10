@@ -20,7 +20,7 @@ import type { Pt } from '../digitize/skeleton';
 import { flatten, formFrom, storeForm, type Form, type StoredPath } from '../shape/path';
 import { FIT_TOLERANCE, READ_TOLERANCE, vectorize } from '../shape/vectorize';
 import { BORDER_WIDTH } from '../digitize/border';
-import { rasterize, regionOf, type LineCap } from '../shape/rasterize';
+import { rasterize, type LineCap } from '../shape/rasterize';
 import { distanceInside, distanceToSeeds } from '../image/edt';
 import { tidy, withRecords } from './edit';
 import { coversOver, cutAway, type Cover } from './covers';
@@ -32,7 +32,7 @@ import { gradientOf, patchArea, patchSpacing, rowPatches, type RowPatch } from '
 import { rowLines, zigzagOf, type Zigzag } from './zigzag';
 import { letteringFrom } from '../lettering/stored';
 import type { Lettering } from '../lettering/layout';
-import { areaOf, bandArea, geoArea, geoUse, lineGeoOf } from './geo';
+import { areaOf, bandArea, fillArea, geoArea, geoUse, grownArea, lineGeoOf } from './geo';
 
 /**
  * New stitches for the objects of a design, with other settings: density, angle, stitch length,
@@ -165,6 +165,13 @@ export interface FillSettings {
   lineCap?: LineCap;
   /** The area grown (+) or shrunk (-) on all sides before it is filled (mm); 0 when not set. */
   expand?: number;
+  /**
+   * How far the area it is sewn on reaches beyond its form (mm; 0 when not set): the pull
+   * compensation of the fabric a drawn or SVG fill was made for. The area is always rastered from
+   * the form and grown by this (see fillArea in geo.ts), so leaving out, reshaping and turning keep
+   * it. Not a setting of the panel.
+   */
+  areaGrow?: number;
   /** Settings of the decorative patterns and of embossing. */
   deco?: DecoSettings;
 }
@@ -829,10 +836,6 @@ function rasteredAs(r: Remembered, g: StoredObject['region'] | undefined): { px:
   return grownArea(a, grow).mask.every((v, i) => v === g.mask[i]) ? { px: g.pxMm, grow } : null;
 }
 
-/** Area `a` grown by `grow` mm (shrunk when negative): the pixels whose signed distance is below it. */
-function grownArea(a: Region, grow: number): Region {
-  return regionOf(Uint8Array.from(a.sdf, (d) => (d < grow ? 1 : 0)), a.x0, a.y0, a.w, a.h, a.pxMm) ?? a;
-}
 
 /** An area kept as how it is rastered from the form (see compactStored). */
 function rasteredArea(r: Remembered, px: unknown, grow: unknown): Region | null {
@@ -961,6 +964,7 @@ function isFill(f: unknown): f is FillSettings {
     (s.underInsetShare === undefined || finite(s.underInsetShare)) &&
     (s.underSpacing === undefined || (finite(s.underSpacing) && s.underSpacing > 0)) &&
     (s.expand === undefined || finite(s.expand)) &&
+    (s.areaGrow === undefined || finite(s.areaGrow)) &&
     ((s as { border?: unknown }).border === undefined || isBorder((s as { border?: unknown }).border)) &&
     (s.deco === undefined || isDeco(s.deco)) &&
     typeof s.underlay === 'boolean'
@@ -1174,7 +1178,10 @@ export function rememberShapes(
     // A fill of the Image mode: its area traced once, as exactly as the level Form would; from
     // now on its form is given, like one drawn or from an SVG.
     const geo = f?.form ?? vectorize(region, FIT_TOLERANCE);
-    remember(p, o, { region, fill: { ...shape.fill }, parts: one('fill'), ...(geo.paths.length ? { geo, ...(f?.form && f.knockout ? { knockout: true } : {}) } : {}), ...(f?.border ? { line: structuredClone(f.border) } : {}) });
+    // A form given (drawn, from an SVG): its area is the form grown by the pull compensation, kept
+    // with the fill so the area is the same whenever it is rastered again (see fillArea).
+    const fill: FillSettings = { ...shape.fill, ...(f?.form && shape.grow ? { areaGrow: shape.grow } : {}) };
+    remember(p, o, { region, fill, parts: one('fill'), ...(geo.paths.length ? { geo, ...(f?.form && f.knockout ? { knockout: true } : {}) } : {}), ...(f?.border ? { line: structuredClone(f.border) } : {}) });
   });
 }
 
@@ -1245,6 +1252,12 @@ function fromStored(e: StoredObject): Remembered | null {
   // Areas that are only the form rastered come from it (see compactStored).
   if (geo && !e.region && e.regionPx !== undefined) r.region = rasteredArea(r, e.regionPx, e.regionGrow);
   if (geo && !e.shape && e.shapePx !== undefined) r.shape = rasteredArea(r, e.shapePx, e.shapeGrow) ?? undefined;
+  // Saved before the pull compensation was kept with the fill (see FillSettings.areaGrow): it is the
+  // margin its area has around the form, where that area is exactly the form grown (else none).
+  if (r.fill && r.fill.areaGrow === undefined && !r.knockout && geoUse(r) === 'area') {
+    const grow = e.regionPx !== undefined ? (finite(e.regionGrow) ? e.regionGrow : 0) : (rasteredAs(r, e.region ?? undefined)?.grow ?? 0);
+    if (grow) r.fill.areaGrow = grow;
+  }
   if (finite(e.under) && e.under > 0) r.under = Math.round(e.under);
   if (finite(e.underFrom) && e.underFrom > 0) r.underFrom = Math.round(e.underFrom);
   if (finite(e.borderAt) && e.borderAt > 0) r.borderAt = Math.round(e.borderAt);
@@ -3766,7 +3779,7 @@ function restitchOnce(
     const satinRails =
       converting && src === 'satin' && !reshaping ? (known?.columns?.flat() ?? satinParts.flatMap((pt) => satinColumns(p, pt, kinds).map((c) => railsOf(p, c)).filter((r): r is Rails => !!r))) : undefined;
     // The drawn form is the source of the area when there is one, never traced back from stitches.
-    if (converting) area = newArea ?? geoArea(known) ?? known?.shape ?? (src === 'fill' ? an.fill : (railsArea(satinRails ?? []) ?? coveredBy(p, parts.filter((pt) => pt.kind === src))));
+    if (converting) area = newArea ?? fillArea(known) ?? known?.shape ?? (src === 'fill' ? an.fill : (railsArea(satinRails ?? []) ?? coveredBy(p, parts.filter((pt) => pt.kind === src))));
     // A fill made from satin gets rows across the area in the direction with the fewest sections.
     const settings: Settings =
       converting && given.kind === 'fill' && area
@@ -3809,7 +3822,7 @@ function restitchOnce(
     // What the object is made of afterwards, for the next edit.
     // Copies all the way down: the panel goes on changing its settings (a border's thread, guides)
     // in place, and what the object remembers must not change with them.
-    const newFillS = settings.kind === 'fill' ? structuredClone(settings.s) : undefined;
+    const newFillS = settings.kind === 'fill' ? ownGrow(structuredClone(settings.s), known) : undefined;
     const newSatinS = settings.kind === 'satin' ? structuredClone(reverse ? swappedSides(settings.s) : settings.s) : undefined;
     const after: Remembered = converting
       ? newFillS
@@ -3969,6 +3982,17 @@ function restitchOnce(
  * change back on the same one) and the settings of its other stitch types, with `satin` the
  * columns of the satin it was.
  */
+/**
+ * Fill settings `s` given to object `known` with the pull compensation of its own area (see
+ * FillSettings.areaGrow): it belongs to the object's form, not to settings taken over from another.
+ */
+function ownGrow(s: FillSettings, known: Remembered | null | undefined): FillSettings {
+  delete s.areaGrow;
+  const grow = known?.fill?.areaGrow ?? known?.kept?.fill?.areaGrow;
+  if (grow) s.areaGrow = grow;
+  return s;
+}
+
 function keptOver(known: Remembered | null | undefined, area: Region | null, satin?: Rails[]): Partial<Remembered> {
   const { satin: _used, ...kept } = known?.kept ?? {};
   return { shape: area ?? undefined, ...(known?.geo ? { geo: known.geo } : {}), ...keptAfter({ ...kept, ...(satin ? { satin } : {}) }, false) };

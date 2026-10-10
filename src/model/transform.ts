@@ -9,7 +9,7 @@ import { syncMarks, tidy, withRecords } from './edit';
 import type { SewObject } from './objects';
 import { JUMP, STITCH, type Pattern } from './pattern';
 import type { FillSettings, Rails, Remembered } from './restitch';
-import { bandArea, geoUse } from './geo';
+import { bandArea, fillArea, geoUse } from './geo';
 
 /** A map that only moves, by whole records (0.1 mm) in both directions. */
 export function isShift(m: Mat): boolean {
@@ -116,7 +116,7 @@ export function transformRemembered(r: Remembered, m: Mat): Remembered {
     // A form read from the stitches stays a guess (no curves are kept): its area moved as pixels where
     // that is exact, else traced, turned and rastered again.
     if (r.region) out.region = shiftRegion(r.region, m) ?? rasterize(transformForm(vectorize(r.region), m), r.region.pxMm);
-  } else if (use === 'area') out.region = rasterize(out.geo!, r.region?.pxMm ?? 0.1);
+  } else if (use === 'area') out.region = fillArea(out, r.region?.pxMm ?? 0.1);
   else if (use === 'band' && r.region) out.region = shiftRegion(r.region, m) ?? bandArea(out.geo!, out.fill!, r.region.pxMm);
   if (r.shape) out.shape = shiftRegion(r.shape, m) ?? rasterize(transformForm(vectorize(r.shape), m), r.shape.pxMm) ?? undefined;
   if (r.columns) {

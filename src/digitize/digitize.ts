@@ -176,6 +176,8 @@ export interface KeptShape {
   mask: Uint8Array;
   areaMm2: number;
   fill: FillSettings;
+  /** How far the area reaches beyond the shape it was made from (mm): the pull compensation. */
+  grow?: number;
 }
 
 export interface Digitized {
@@ -868,6 +870,7 @@ function keep(obj: Obj, o: DigitizeOptions, imgW: number, imgH: number): KeptSha
     pxMm: r.pxMm,
     mask,
     areaMm2: area * r.pxMm * r.pxMm,
+    ...(o.pull ? { grow: o.pull } : {}),
     fill: {
       pattern: obj.info.curved ? 'follow' : 'tatami',
       spacing,

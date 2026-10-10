@@ -4,7 +4,6 @@ import { echoLines, type EchoLine } from '../digitize/echo';
 import type { Pt } from '../digitize/skeleton';
 import { flatten, type Form, type Node } from '../shape/path';
 import { fitCubic } from '../shape/vectorize';
-import { rasterize } from '../shape/rasterize';
 import { hasPhase, isRunType, passesOf, sewAlong, spacingOf, type PathStitch } from './along';
 import { runRecords } from './border';
 import { tidy, withRecords } from './edit';
@@ -12,7 +11,7 @@ import { rememberObjects, sewObjects, stitchKey, type SewObject } from './object
 import { JUMP, STITCH, type Pattern } from './pattern';
 import { analyze, borderOf, measureFill, objectKey, remember, remembered, restitch, trimBefore, type BorderSettings, type FillSettings, type Rec, type Remembered, type RestitchResult, type RunSettings } from './restitch';
 import { stitchKinds, TIE_STITCH } from './sequence';
-import { bandArea, fits, geoOf, geoUse, guessArea, lineGeoOf } from './geo';
+import { bandArea, fits, geoOf, geoUse, grownForm, guessArea, lineGeoOf } from './geo';
 import { partOf } from './shadow';
 
 /**
@@ -356,7 +355,8 @@ export function lineToFill(p: Pattern, index: number, s: FillSettings, trimMm: n
     fill = rest;
     if (!was || !known.kept?.unbordered) border = edge;
   }
-  const area = how === 'band' ? bandArea(geo, fill) : rasterize(geo);
+  // Filled again, a fill is sewn on its area as it was (grown by its pull compensation, see fillArea).
+  const area = how === 'band' ? bandArea(geo, fill) : grownForm(geo, 0.1, was?.areaGrow ?? 0);
   if (!area) return null;
   const r = restitch(p, objs, [index], { kind: 'fill', s: fill, line: border }, kinds, trimMm, o.kind, false, undefined, new Map([[index, area]]));
   r.memory.forEach((m) => {
