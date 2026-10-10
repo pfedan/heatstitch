@@ -16,11 +16,11 @@ except ImportError:
     import pyembroidery as pe
 
 OUT = Path(__file__).resolve().parent.parent / "oracle"
-FORMATS = ["pes", "dst", "jef", "vp3", "exp", "pec"]
+FORMATS = ["pes", "dst", "jef", "vp3", "exp", "xxx", "pec"]
 # Formats with a cut command (JEF and DST cut by jump length, so their counts differ by design).
-CUTS = {"pes", "pec", "exp"}
+CUTS = {"pes", "pec", "exp", "xxx"}
 # Formats that keep exact RGB.
-EXACT_COLORS = {"vp3"}
+EXACT_COLORS = {"vp3", "xxx"}
 
 
 def read(path):
@@ -48,8 +48,8 @@ def check(name, fmt, meant):
     stitches, cuts, changes, colors = read(OUT / f"{name}.{fmt}")
     want = [tuple(s) for s in meant["stitches"]]
     problems = []
-    if fmt == "jef":
-        # JEF splits stitches longer than 12.7 mm into equal ones: every meant stitch must be there.
+    if fmt in ("jef", "xxx"):
+        # JEF and XXX split stitches longer than 12.7 and 12.3 mm into equal ones: every meant stitch must be there.
         have = set(relative(stitches))
         missing = [s for s in relative(want) if s not in have]
         if missing:
