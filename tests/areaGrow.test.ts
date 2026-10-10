@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { sameRegion } from '../src/model/border';
 import { fillArea } from '../src/model/geo';
-import { setKnockout } from '../src/model/knockout';
+import { refreshKnockouts, setKnockout } from '../src/model/knockout';
 import { sewObjects } from '../src/model/objects';
-import { reshapeFill } from '../src/model/reshape';
+import { reshapeFill, transformSewObject } from '../src/model/reshape';
 import { remembered, type Remembered } from '../src/model/restitch';
 import { stitchKinds } from '../src/model/sequence';
+import { duplicateObjects } from '../src/model/shapeOps';
 import type { Pattern } from '../src/model/pattern';
 import { Design, THREADS } from './helpers/demoProject';
 
@@ -75,7 +76,31 @@ describe('a border in a thread of its own', () => {
     const on = setKnockout(d.p, [big], true, d.T)!;
     const objs = sewObjects(on.pattern);
     const fill = remembered(on.pattern, objs[big])!;
-    const border = objs.map((o) => remembered(on.pattern, o)).find((m) => m?.outline === fill.fill!.border!.link)!;
+    const border = objs.map((o) => remembered(on.pattern, o)).find((m) => m?.outline === fill.line!.link)!;
     expect(sameRegion(border.region, fill.region)).toBe(true);
+  });
+});
+
+describe('a fill that leaves out what lies on top', () => {
+  it('is sewn whole while a copy in place covers all but a strip too thin to fill, and leaves out again when it moves', () => {
+    // On woven fabric: 0.2 mm pull compensation.
+    const d = new Design('Kopie', { fabric: 'woven', thread: '40' });
+    // A maze cannot be sewn on a ring that thin.
+    const big = d.fill(rect(10, 10, 15, 15), THREADS.yellow, { pattern: 'maze', deco: { seed: 1, focus: [0.5, 0.5] } });
+    d.fill(rect(30, 10, 10, 10), THREADS.navy, { angle: 0 });
+    const on = setKnockout(d.p, [big], true, d.T)!.pattern;
+    const cut = memoryOf(on, big).region!;
+    // Ctrl+D: the copy lies exactly on it; only its pull compensation would be left, a thin ring.
+    const dup = duplicateObjects(on, [big], d.T, 0)!;
+    const covered = refreshKnockouts(dup.pattern, d.T)!.pattern;
+    const m = memoryOf(covered, big);
+    expect(m.knockout).toBe(true);
+    expect(sameRegion(m.region, fillArea(m))).toBe(true);
+    // Nothing more to do until the shapes on top change.
+    expect(refreshKnockouts(covered, d.T)).toBeNull();
+    const objs = sewObjects(covered);
+    const away = transformSewObject(covered, objs, objs[dup.copies[0]], stitchKinds(covered), [1, 0, 0, 1, 100, 0], d.T)!.pattern;
+    const back = refreshKnockouts(away, d.T)!.pattern;
+    expect(sameRegion(memoryOf(back, big).region, cut)).toBe(true);
   });
 });

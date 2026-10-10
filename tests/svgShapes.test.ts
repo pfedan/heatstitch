@@ -4,6 +4,12 @@ import { formFrom, storeForm, type Mat } from '../src/shape/path';
 import { knockOut, rasterize, rasterizeStroke } from '../src/shape/rasterize';
 import { ellipsePath, parsePath, pointsPath, rectPath } from '../src/shape/svgPath';
 import { DEFAULT_PROFILE } from '../src/validation/profiles';
+import { syncBorders } from '../src/model/border';
+import { digitizedFile } from '../src/model/digitized';
+import { sewObjects } from '../src/model/objects';
+import { sameColor } from '../src/model/recolor';
+import { remembered, rememberedIn, restoreRemembered } from '../src/model/restitch';
+import { parsePattern } from '../src/parsers';
 
 const ID: Mat = [1, 0, 0, 1, 0, 0];
 const threads = [
@@ -119,5 +125,61 @@ describe('digitizeShapes', () => {
     });
     const d = digitizeShapes(star, threads, options, { w: 40, h: 40 }, false);
     expect(d.objects).toHaveLength(1);
+  });
+});
+
+describe('a filled shape with a stroke', () => {
+  const options = digitizeDefaults(DEFAULT_PROFILE);
+  const leaf = (fill: number, stroke: number, width: number, d = 'M2 2 H22 V14 H2 Z'): ShapeInput[] => [
+    { color: fill, kind: 'fill', form: parsePath(d, ID), element: 0 },
+    { color: stroke, kind: 'stroke', width, form: parsePath(d, ID), element: 0 },
+  ];
+  const sewn = (shapes: ShapeInput[]) => {
+    const d = digitizeShapes(shapes, threads, options, { w: 24, h: 16 }, false);
+    const f = digitizedFile(d, 'leaf', options.trimMm);
+    return { d, ...f, objs: sewObjects(f.pattern), mem: sewObjects(f.pattern).map((o) => remembered(f.pattern, o)) };
+  };
+
+  it('in the same thread is one object: a fill with its stroke as border', () => {
+    const { d, objs, mem, pattern } = sewn(leaf(0, 0, 0.5));
+    expect(d.objects).toHaveLength(1);
+    expect(mem[0]!.fill).toBeTruthy();
+    expect(mem[0]!.line?.type).toBe('run');
+    expect(mem[0]!.line?.color).toBeUndefined();
+    // Sewn right after the fill, as its border, in the same thread.
+    expect(objs).toHaveLength(2);
+    expect(mem[1]!.outline).toBe(mem[0]!.line!.link);
+    expect(pattern.colors).toHaveLength(1);
+  });
+
+  it('in another thread is a fill with a border in that thread; a wide stroke is satin', () => {
+    const { objs, mem, pattern } = sewn(leaf(0, 1, 2));
+    expect(mem[0]!.line?.type).toBe('satin');
+    expect(mem[0]!.line?.width).toBe(2);
+    expect(mem[0]!.line!.color).toBeTruthy();
+    expect(objs).toHaveLength(2);
+    expect(mem[1]!.outline).toBe(mem[0]!.line!.link);
+    expect(sameColor(objs[1].color, mem[0]!.line!.color)).toBe(true);
+    expect(sameColor(objs[0].color, objs[1].color)).toBe(false);
+    expect(pattern.colors).toHaveLength(2);
+  });
+
+  it('stays as it is when stored and opened again', () => {
+    const { data, pattern } = sewn(leaf(0, 1, 0.5));
+    const stored = structuredClone(rememberedIn(pattern, sewObjects(pattern)));
+    expect(syncBorders(pattern, options.trimMm)).toBe(pattern);
+    // Opened from the file as the app adds it: every object knows what it is.
+    const back = parsePattern(data, 'leaf.pes');
+    expect(restoreRemembered(back, stored)).toBe(sewObjects(pattern).length);
+    const kinds = (p: typeof back) => sewObjects(p).map((o) => (remembered(p, o)?.fill ? 'fill' : remembered(p, o)?.outline ? 'border' : '?'));
+    expect(kinds(back)).toEqual(['fill', 'border']);
+    expect(syncBorders(back, options.trimMm)).toBe(back);
+  });
+
+  it('with an open path keeps the stroke a line of its own', () => {
+    const d = digitizeShapes(leaf(0, 0, 0.5, 'M2 2 H22 V14 H2 Z M5 8 L19 8'), threads, options, { w: 24, h: 16 }, false);
+    expect(d.objects).toHaveLength(2);
+    expect(d.objects[0].border).toBeUndefined();
+    expect(d.objects[1].path).toBeTruthy();
   });
 });

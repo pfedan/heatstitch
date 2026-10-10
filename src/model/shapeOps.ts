@@ -8,12 +8,12 @@ import { newLink, syncBorders } from './border';
 import { reorder } from './order';
 import { recolor, sameColor } from './recolor';
 import type { Pattern, ThreadColor } from './pattern';
-import { forget, objectKey, remember, remembered, restitch, type Remembered } from './restitch';
+import { borderOf, forget, withLine, objectKey, remember, remembered, restitch, type Remembered } from './restitch';
 import { reshapeFill, transformSewObject } from './reshape';
 import { stitchKinds } from './sequence';
 import { stitchesBefore } from './transform';
 import { autoReversible, ownSettings, reverseLines } from './reverse';
-import { guessArea, lineGeoOf, sewnAlong } from './geo';
+import { guessArea, sewnAlong } from './geo';
 
 /**
  * Working with objects as shapes: deleting, duplicating, mirroring, and combining fills by their
@@ -54,18 +54,18 @@ export function deleteObjects(p: Pattern, which: number[], trimMm: number): Patt
   for (const o of bare) {
     const m = mem[o.index]!;
     const at = sewObjects(next).find((x) => objectKey(next, x) === objectKey(p, o));
-    if (at) remember(next, at, { ...m, fill: { ...m.fill!, border: undefined } });
+    if (at) remember(next, at, (mem[o.index] = withLine(m, undefined)));
   }
   // Fills whose second thread goes alone: they fade out on their own from now on.
-  // Lines whose shadow or echo copies go alone: they have them no more.
+  // Lines (and borders of fills) whose shadow or echo copies go alone: they have them no more.
   for (const o of objs) {
     let m = mem[o.index];
-    if (gone.has(o.index) || !m || !lineGeoOf(m)) continue;
+    if (gone.has(o.index) || !m?.line) continue;
     const parts = [...gone].map((g) => partOf(mem[g])).filter((l): l is string => !!l && hasPart(m, l));
     if (!parts.length) continue;
     for (const l of parts) m = withoutPart(m, l);
     const at = sewObjects(next).find((x) => objectKey(next, x) === objectKey(p, o));
-    if (at) remember(next, at, m);
+    if (at) remember(next, at, (mem[o.index] = m));
   }
   for (const o of objs) {
     const m = mem[o.index];
@@ -78,7 +78,7 @@ export function deleteObjects(p: Pattern, which: number[], trimMm: number): Patt
 }
 
 /** The link of a fill's border (an object of its own), if it has one. */
-const ownBorder = (m: Remembered | undefined): string | undefined => m?.fill?.border?.link;
+const ownBorder = (m: Remembered | undefined): string | undefined => borderOf(m)?.link;
 
 /** The pattern without the objects `which`, nothing else changed (with all gone, an empty design); null when none of them is there. */
 function removeObjects(p: Pattern, which: number[], trimMm: number): Pattern | null {
@@ -353,7 +353,7 @@ export function recolorObjects(p: Pattern, which: number[], color: ThreadColor, 
     const at = sewObjects(cur).find((x) => objectKey(cur, x) === objectKey(p, objs[f]));
     if (at && partOf(mem[o])) remember(cur, at, partInThread(m, partOf(mem[o])!, color));
     else if (at && mem[o]!.blendOf) remember(cur, at, { ...m, fill: { ...m.fill!, deco: { ...m.fill!.deco, blend: { ...m.fill!.deco!.blend!, color: { ...color } } } } });
-    else if (at) remember(cur, at, { ...m, fill: { ...m.fill!, border: { ...m.fill!.border!, color: sameColor(at.color, color) ? undefined : { ...color } } } });
+    else if (at) remember(cur, at, withLine(m, { ...m.line!, color: sameColor(at.color, color) ? undefined : { ...color } }));
   }
   next = syncBorders(cur, trimMm);
   return next === p ? null : next;

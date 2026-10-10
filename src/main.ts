@@ -34,8 +34,6 @@ import type { Measurement } from './validation/measure';
 import { initUpdateNotice } from './ui/updateNotice';
 import { bindFileIo } from './app/fileIo';
 import { installDevConsole } from './dev/console';
-import { writePattern } from './writers';
-import { parsePattern } from './parsers';
 import { ImageMode } from './ui/imageMode';
 import { sweep } from './render/light';
 import { classify } from './validation/validate';
@@ -44,12 +42,14 @@ import { pointNear, stitchAt } from './render/flow';
 import { drawMeasure } from './render/measure';
 import { MeasureTool } from './ui/measureTool';
 import type { Mode } from './settings';
-import { isGuessed, isOpenPattern, openOnPurpose, remembered, rememberedIn, rememberShapes } from './model/restitch';
+import { isGuessed, isOpenPattern, openOnPurpose, remembered, rememberedIn } from './model/restitch';
+import { digitizedFile } from './model/digitized';
+import { loadOps } from './shape/ops';
 import { drawAside, drawDrawing } from './render/shapeOverlay';
 import type { LeftOut, SewnFrom } from './ui/imageMode';
 import { asideOf, storeAside, type AsideShape } from './model/aside';
 import { type Digitized } from './digitize/digitize';
-import { numberInColor, rememberObjects, sewObjects } from './model/objects';
+import { numberInColor, sewObjects } from './model/objects';
 import { reversible } from './model/reverse';
 import { Player } from './ui/player';
 import { installPanelResize } from './ui/panelResize';
@@ -1481,11 +1481,8 @@ const imageMode = new ImageMode({
  * (it trims inside some, between pieces of a fill) and the exact areas of its fills.
  */
 async function addDigitized(d: Digitized & { leftOut?: LeftOut[]; source?: SewnFrom }, name: string): Promise<void> {
-  const data = writePattern(d.pattern, 'pes');
-  const added = parsePattern(data, `${name}.pes`);
-  rememberObjects(added, d.starts);
+  const { data, pattern: added } = digitizedFile(d, name, settings.trimMm);
   const objs = sewObjects(added);
-  rememberShapes(added, objs, d.starts, d.objects.map((o) => o.shape), d.objects);
   // Shapes left out on the way in wait under "Not sewn", where it was: at the very back.
   const aside: AsideShape[] = (d.leftOut ?? []).map((s, k) => ({ id: k + 1, role: 'off', kind: 'fill', color: s.color, after: -1, form: s.form, reason: s.reason }));
   // The picture stays with the design, exactly under its stitches, to look at again later.
@@ -1926,6 +1923,8 @@ files.render();
 redraw();
 void files.restore();
 void imageMode.restore();
+// The operations on curves, loaded early: a border's echo and shadow lie on its offset curve (see borderForm).
+void loadOps().catch(() => {});
 // The thread catalogs name the numbers of the threads in the list (Brother's too).
 void loadCatalogs()
   .then(() => {

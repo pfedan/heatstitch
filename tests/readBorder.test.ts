@@ -4,7 +4,7 @@ import { newLink, syncBorders } from '../src/model/border';
 import { rememberObjects, sewObjects, type SewObject } from '../src/model/objects';
 import { STITCH, type Pattern } from '../src/model/pattern';
 import { readBorder } from '../src/model/readBorder';
-import { analyze, measureFill, remember, remembered, restitch, type FillSettings } from '../src/model/restitch';
+import { analyze, measureFill, remember, remembered, restitch, type BorderSettings, type FillSettings } from '../src/model/restitch';
 import { stitchKinds } from '../src/model/sequence';
 import { parsePattern } from '../src/parsers';
 
@@ -17,17 +17,18 @@ const points = (p: Pattern, o: SewObject) => {
 };
 
 /** Fill `which` sewn anew with `s`, its objects remembered and its borders made, as the app does. */
-function apply(p: Pattern, which: number, s: FillSettings) {
+function apply(p: Pattern, which: number, settings: FillSettings & { border?: BorderSettings }) {
   const kinds = stitchKinds(p);
   const objs = sewObjects(p, kinds);
-  const r = restitch(p, objs, [which], { kind: 'fill', s }, kinds, 7);
+  const { border, ...s } = settings;
+  const r = restitch(p, objs, [which], { kind: 'fill', s, line: border ?? null }, kinds, 7);
   expect(r.failed).toEqual([]);
   rememberObjects(r.pattern, [r.starts[0]], r.ends[0]);
   const now = sewObjects(r.pattern);
   remember(r.pattern, now[which], r.memory[0]);
   const q = syncBorders(r.pattern, 7);
   const after = sewObjects(q);
-  const link = s.border?.link;
+  const link = border?.link;
   return { q, objs: after, borders: after.filter((o) => link && remembered(q, o)?.outline === link) };
 }
 

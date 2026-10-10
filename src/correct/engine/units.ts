@@ -2,7 +2,7 @@ import { autoUnder, spacingOf } from '../../model/along';
 import { syncBorders } from '../../model/border';
 import { sewObjects, stitchKey, type SewObject } from '../../model/objects';
 import { COLOR_CHANGE, JUMP, STITCH, TRIM, type Pattern } from '../../model/pattern';
-import { remembered, underlayRanges, type Fixed, type Settings } from '../../model/restitch';
+import { borderOf, remembered, underlayRanges, type BorderSettings, type Fixed, type Settings } from '../../model/restitch';
 import { stitchKinds } from '../../model/sequence';
 import { fontNow, type Font } from '../../lettering/font';
 import type { Lettering } from '../../lettering/layout';
@@ -20,7 +20,7 @@ import { roleOf, sewWith, type Tool } from './variants';
  */
 export type Unit =
   | { kind: 'object'; owner: number; objects: number[]; settings: Settings }
-  | { kind: 'border'; owner: number; objects: number[]; settings: Settings & { kind: 'fill' } }
+  | { kind: 'border'; owner: number; objects: number[]; settings: Settings & { kind: 'fill' }; line: BorderSettings }
   | { kind: 'lettering'; owner: number; objects: number[]; lettering: Lettering; font: Font };
 
 const round2 = (v: number) => Math.round(v * 100) / 100;
@@ -30,7 +30,7 @@ const SPACING_FULL = 0.15;
 /** Whether fill `index` has a border in a thread of its own. */
 function hasBorder(p: Pattern, index: number): boolean {
   const objs = objectsOf(p);
-  const link = remembered(p, objs[index])?.fill?.border?.link;
+  const link = borderOf(remembered(p, objs[index]))?.link;
   return !!link && objs.some((x) => remembered(p, x)?.outline === link);
 }
 
@@ -51,11 +51,12 @@ export function unitOf(p: Pattern, objs: SewObject[], o: SewObject, kinds: Uint8
     return { kind: 'lettering', owner: list[0].index, objects: list.map((x) => x.index), lettering: known.lettering, font };
   }
   if (known?.outline) {
-    const fill = objs.find((x) => remembered(p, x)?.fill?.border?.link === known.outline);
+    const fill = objs.find((x) => borderOf(remembered(p, x))?.link === known.outline);
     if (!fill) return { why: 'derived' };
+    const line = borderOf(remembered(p, fill));
     const r = roleOf(p, objs, fill, kinds, allowHand);
-    if (r.role !== 'settings' || r.settings?.kind !== 'fill' || !r.settings.s.border) return { why: r.why ?? 'derived' };
-    return { kind: 'border', owner: fill.index, objects: [o.index], settings: r.settings as Settings & { kind: 'fill' } };
+    if (r.role !== 'settings' || r.settings?.kind !== 'fill' || !line) return { why: r.why ?? 'derived' };
+    return { kind: 'border', owner: fill.index, objects: [o.index], settings: r.settings as Settings & { kind: 'fill' }, line };
   }
   if (known?.blendOf || known?.shadowOf || known?.echoOf) return { why: 'derived' };
   const r = roleOf(p, objs, o, kinds, allowHand);
@@ -83,7 +84,7 @@ export function designKey(p: Pattern): string {
 
 /** Tools on a border sewn in a thread of its own (set on its fill). */
 export function borderTools(u: Unit & { kind: 'border' }, want: Set<FixKind>, profile: Profile): Tool[] {
-  const b = u.settings.s.border!;
+  const b = u.line;
   const out: Tool[] = [];
   if (b.type !== 'satin') return out;
   const [, recMax] = recommendedSpacing(profile);
@@ -140,7 +141,13 @@ export function sewUnit(p: Pattern, u: Unit, changes: Fixed[], knockout: boolean
     const sewn = sewLettering(u.font, l, trimMm);
     next = placeLettering(p, u.objects.map((i) => objs[i]), sewn, l)?.pattern ?? null;
   } else {
-    const s = changes.length || force ? ({ kind: u.settings.kind, s: withChanges(u.settings.s, changes) } as Settings) : null;
+    // A border's changes are to the line beside its fill ("border.spacing"), the fill stays as it is.
+    const s =
+      !changes.length && !force
+        ? null
+        : u.kind === 'border'
+          ? { kind: 'fill' as const, s: u.settings.s, line: withChanges({ border: u.line }, changes).border }
+          : ({ kind: u.settings.kind, s: withChanges(u.settings.s, changes) } as Settings);
     next = sewWith(p, u.owner, s, knockout, trimMm);
     // The border follows the fill's shape and its own settings: sewn anew only when those change.
     if (next && (u.kind === 'border' || (knockout && hasBorder(p, u.owner)))) next = syncBorders(next, trimMm);

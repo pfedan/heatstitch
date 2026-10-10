@@ -9,7 +9,7 @@ import { runRecords } from './border';
 import { tidy, withRecords } from './edit';
 import { rememberObjects, sewObjects, stitchKey, type SewObject } from './objects';
 import { JUMP, STITCH, type Pattern } from './pattern';
-import { analyze, measureFill, measureSatin, objectKey, remember, remembered, restitch, trimBefore, type Analysis, type FillSettings, type Rec, type Remembered, type RestitchResult, type RunSettings } from './restitch';
+import { analyze, borderOf, measureFill, measureSatin, objectKey, remember, remembered, restitch, trimBefore, type Analysis, type BorderSettings, type FillSettings, type Rec, type Remembered, type RestitchResult, type RunSettings } from './restitch';
 import { stitchKinds, TIE_STITCH } from './sequence';
 import { bandArea, fits, geoOf, geoUse, grownForm, guessArea, lineGeoOf, satinOutline } from './geo';
 import { partOf } from './shadow';
@@ -343,22 +343,25 @@ export function lineToFill(p: Pattern, index: number, s: FillSettings, trimMm: n
   const line = known.line;
   const was = known.kept?.fill;
   let fill: FillSettings;
+  let border: BorderSettings | null = null;
   if (how === 'band') fill = { ...(was ?? s), lineWidth: was?.lineWidth ?? line.width, lineCap: was?.lineCap ?? 'flat' };
   else {
     if (!fits(geo, 'fill')) return null;
-    // The line its border, as it is sewn now (a fill that had none gets none again); its echo
-    // and shadow go: they belong to a line.
-    const { echo: _e, shadow: _s, fringe: _f, fringeSide: _fs, ...border } = line;
-    const { lineWidth: _w, lineCap: _c, border: _b, ...rest } = was ?? s;
-    fill = { ...rest, ...(!was || was.border ? { border } : {}) };
+    // The line stays beside the fill as its border, as it is sewn now with its echo, shadow and
+    // fringe (a fill that had none gets none again); the side of a fringe was the drawn line's, a
+    // border's is inside or outside: frayed on both.
+    const { fringeSide: _fs, ...edge } = line;
+    const { lineWidth: _w, lineCap: _c, ...rest } = was ?? s;
+    fill = rest;
+    if (!was || !known.kept?.unbordered) border = edge;
   }
   // Filled again, a fill is sewn on its area as it was (grown by its pull compensation, see fillArea).
   const area = how === 'band' ? bandArea(geo, fill) : grownForm(geo, 0.1, was?.areaGrow ?? 0);
   if (!area) return null;
-  const r = restitch(p, objs, [index], { kind: 'fill', s: fill }, kinds, trimMm, o.kind, false, undefined, new Map([[index, area]]));
+  const r = restitch(p, objs, [index], { kind: 'fill', s: fill, line: border }, kinds, trimMm, o.kind, false, undefined, new Map([[index, area]]));
   r.memory.forEach((m) => {
     m.geo = geo;
-    const { fill: _k, ...kept } = m.kept ?? {};
+    const { fill: _k, unbordered: _u, ...kept } = m.kept ?? {};
     m.kept = { ...kept, line: structuredClone(line) };
   });
   return r;
@@ -405,10 +408,11 @@ export function fillToLine(p: Pattern, index: number, trimMm: number, geo?: Form
   geo ??= (fill && (geoOf(known) ?? guessArea(p, o, kinds))) ?? undefined;
   if (!fill || !geo) return null;
   const was = known?.kept?.line;
+  const edge = borderOf(known);
   let st: PathStitch;
   if (fill.lineWidth !== undefined) st = { ...(was ?? lineStitchFor(fill.lineWidth)), width: fill.lineWidth };
-  else if (fill.border) {
-    const { color: _c, link: _l, seams: _s, ...border } = fill.border;
+  else if (edge) {
+    const { color: _c, link: _l, seams: _s, ...border } = edge;
     st = { ...was, ...border };
   } else st = was ? { ...was } : runAsLine(LINE_RUN);
   const r = resewLine(p, index, geo, st, trimMm);
@@ -416,17 +420,12 @@ export function fillToLine(p: Pattern, index: number, trimMm: number, geo?: Form
   // A line only: its fill is kept, everything it was sewn as a fill goes.
   const fresh = sewObjects(r.pattern).find((x) => x.first === r.first);
   if (fresh) {
-    const { line: _l, ...kept } = known?.kept ?? {};
-    const filled: FillSettings = structuredClone(fill);
-    if (filled.border) {
-      delete filled.border.color;
-      delete filled.border.link;
-    }
+    const { line: _l, unbordered: _u, ...kept } = known?.kept ?? {};
     remember(r.pattern, fresh, {
       region: null,
       geo,
       line: st,
-      kept: { ...kept, fill: filled },
+      kept: { ...kept, fill: structuredClone(fill), ...(edge || fill.lineWidth !== undefined ? {} : { unbordered: true as const }) },
       id: o.id,
       ...(known?.lock ? { lock: true } : {}),
     });
@@ -451,7 +450,7 @@ function satinToLine(p: Pattern, o: SewObject, kinds: Uint8Array, an: Analysis, 
   if (!r) return null;
   const fresh = sewObjects(r.pattern).find((x) => x.first === r.first);
   if (fresh) {
-    const { line: _l, satin: _s, satinSettings: _w, ...kept } = known?.kept ?? {};
+    const { line: _l, unbordered: _u, satin: _s, satinSettings: _w, ...kept } = known?.kept ?? {};
     remember(r.pattern, fresh, {
       region: null,
       geo,
