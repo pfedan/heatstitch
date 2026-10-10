@@ -286,6 +286,8 @@ const SCALE = 1e4;
 const FLAT = 0.01;
 /** Largest distance of the fitted curves from the offset polygon (mm). */
 const FIT = 0.03;
+/** Polygon edges shorter than this are left out before fitting (mm). */
+const MIN_EDGE = 0.005;
 /** Turn at a polygon point that makes a corner of the fitted curves (degrees). */
 const CORNER_DEG = 35;
 
@@ -346,7 +348,9 @@ export function offsetForm(f: Form, d: number, lineWidth = 0): Form | null {
 }
 
 /** A closed polygon as curves: sharp turns stay corners, the rest is fitted within FIT. */
-function fitRing(raw: Pt[]): Path {
+function fitRing(ring: Pt[]): Path {
+  // Points on top of each other (Clipper rounds to its grid) would read as corners.
+  const raw = ring.filter((q, i) => dist(q, ring[(i + 1) % ring.length]) > MIN_EDGE);
   // The fit checks its error only at the points: long straight edges get points in between.
   const pts: Pt[] = [];
   for (let i = 0; i < raw.length; i++) {

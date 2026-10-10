@@ -98,7 +98,14 @@ describe('split a fill', () => {
 
   it('cuts freehand and along a path with corners', () => {
     const wave: Pt[] = Array.from({ length: 40 }, (_, k) => [-1 + k * 0.8, 10 + 4 * Math.sin(k / 4)]);
-    expect(split([wave])?.parts).toHaveLength(2);
+    const w = split([wave])!;
+    expect(w.parts).toHaveLength(2);
+    // A drawn line (40 points) cuts as curves: no nodes on top of each other, fewer than its points.
+    for (const f of w.parts)
+      for (const p of f.paths) {
+        p.nodes.forEach((n, i) => expect(Math.hypot(n.p[0] - p.nodes[(i + 1) % p.nodes.length].p[0], n.p[1] - p.nodes[(i + 1) % p.nodes.length].p[1])).toBeGreaterThan(0.004));
+        expect(p.nodes.length).toBeLessThan(25);
+      }
     const path: Pt[] = [[-2, 4], [12, 16], [20, 3], [32, 12]];
     const s = split([path])!;
     expect(s.parts.length).toBeGreaterThanOrEqual(2);
