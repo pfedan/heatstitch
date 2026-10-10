@@ -1,9 +1,9 @@
-import { overlaps, sewObjects, type SewObject } from './objects';
+import { overlaps, type SewObject } from './objects';
 import { moveStats, planCandidates, reorder, type OrderCost, type OrderOptions } from './order';
 import { patternStats, type Pattern } from './pattern';
-import { remembered, type Remembered } from './restitch';
+import { designObjects, type Remembered } from './restitch';
 import { autoReversible, reverseObjects } from './reverse';
-import { sewingSeconds, stitchKinds, stitchNumbers, type MachineTimes } from './sequence';
+import { sewingSeconds, stitchNumbers, type MachineTimes } from './sequence';
 
 /** What the order card shows: color changes and trims as the statistics count them, travel between objects. */
 export function orderStats(p: Pattern): OrderCost {
@@ -30,10 +30,7 @@ export interface BestOrderInput {
 }
 
 export const orderInput = (p: Pattern): BestOrderInput => {
-  const kinds = stitchKinds(p);
-  const objects = sewObjects(p, kinds);
-  // A fill with a satin border in its thread has more satin than fill thread, and stays a fill.
-  for (const o of objects) if (o.kind === 'satin' && remembered(p, o)?.borderAt) o.kind = 'fill';
+  const { kinds, objects } = designObjects(p);
   return { objects, kinds, over: overlaps(p, objects) };
 };
 

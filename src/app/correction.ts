@@ -410,8 +410,8 @@ export function bindCorrection(app: CorrectionApp) {
       app.redraw();
     },
     hoverProposal: (ids) => {
-      // Away from the list, the held proposal comes back.
-      const show = ids ?? ui.planPin;
+      // Away from the list, the held proposal comes back; pointing shows one only when the display settings allow it.
+      const show = (app.settings.hoverPreview ? ids : null) ?? ui.planPin;
       ui.planHover = show && proposalsBox(show);
       showPlanPreview(show);
       app.redraw();

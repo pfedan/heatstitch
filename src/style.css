@@ -2817,6 +2817,11 @@ button.tool:disabled {
   height: 15px;
 }
 
+/* A setting pointed at is being sewn for its preview (a large fill takes a moment). */
+body.preview-busy #object-stitches button:hover {
+  cursor: progress;
+}
+
 .pattern-tiles {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

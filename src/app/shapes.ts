@@ -380,7 +380,7 @@ export function bindShapes(app: ShapesApp) {
         title: t('shape.rested.sew.hint'),
         run: () => void fromShape(false),
         preview: (on) => {
-          if (on) fromShape(true);
+          if (on && app.settings.hoverPreview) fromShape(true);
           else {
             ui.flowPreview = null;
             app.redraw();

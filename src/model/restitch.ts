@@ -24,7 +24,7 @@ import { rasterize, type LineCap } from '../shape/rasterize';
 import { distanceInside, distanceToSeeds } from '../image/edt';
 import { tidy, withRecords } from './edit';
 import { coversOver, cutAway, type Cover } from './covers';
-import { backToVersion, entryOf, hasTable, hold, keepVersion, knowKinds, rememberObjects, setMemory, setObjects, setObjectsFromKeys, stitchIndex, stitchKey, tableOf, type ObjectKind, type PlacedEntry, type SewObject } from './objects';
+import { backToVersion, entryOf, hasTable, sewObjects, hold, keepVersion, knowKinds, rememberObjects, setMemory, setObjects, setObjectsFromKeys, stitchIndex, stitchKey, tableOf, type ObjectKind, type PlacedEntry, type SewObject } from './objects';
 import { END, JUMP, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
 import { partFringe } from './fringe';
 import { recordOfStitch, SATIN, stitchKinds, TIE_STITCH } from './sequence';
@@ -535,6 +535,15 @@ export function isGuessed(p: Pattern, o: SewObject): boolean {
 
 export function remembered(p: Pattern, o: SewObject): Remembered | undefined {
   return entryOf(p, o.first, o.last)?.memory;
+}
+
+/** The objects of `p` as the editor numbers them, and the kind of each stitch. */
+export function designObjects(p: Pattern): { kinds: Uint8Array; objects: SewObject[] } {
+  const kinds = stitchKinds(p);
+  const objects = sewObjects(p, kinds);
+  // A fill with a satin border in its thread has more satin than fill thread, and stays a fill.
+  for (const o of objects) if (o.kind === 'satin' && remembered(p, o)?.borderAt) o.kind = 'fill';
+  return { kinds, objects };
 }
 
 /**

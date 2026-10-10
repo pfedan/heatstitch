@@ -454,6 +454,8 @@ const enBase: Record<keyof typeof deBase, string> = {
   'object.guide.hint': 'Keep it as a guide that is never sewn.',
   'display.shapes': 'Shapes instead of stitches',
   'display.shapes.hint': 'Show shapes as flat areas instead of stitches',
+  'display.hoverPreview': 'Preview on hover',
+  'display.hoverPreview.hint': 'Shows a pattern or setting on the stage as soon as you point at it.',
   'object.thread.hint': 'Choose the thread of this object',
   'object.thread.note': 'The same thread as a neighbour: it is sewn along in that color. Otherwise it gets a color of its own at its place.',
   'object.duplicate': 'Duplicate',

@@ -452,6 +452,8 @@ export const deBase = {
   'object.guide.hint': 'Als Hilfslinie behalten, die nie gestickt wird.',
   'display.shapes': 'Formen statt Stiche',
   'display.shapes.hint': 'Formen als flache Flächen statt Stichen zeigen',
+  'display.hoverPreview': 'Vorschau beim Zeigen',
+  'display.hoverPreview.hint': 'Zeigt ein Muster oder eine Einstellung schon beim Darauf-Zeigen auf der Bühne.',
   'object.thread.hint': 'Garn dieses Objekts wählen',
   'object.thread.note': 'Gleiches Garn wie ein Nachbar: Es wird in dessen Farbe mitgestickt. Sonst bekommt es eine eigene Farbe an seiner Stelle.',
   'object.duplicate': 'Duplizieren',

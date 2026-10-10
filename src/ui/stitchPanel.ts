@@ -136,6 +136,8 @@ export interface StitchInfo {
 
 export interface StitchHooks {
   preview: (s: Settings | null) => void;
+  /** Pointing at a setting shows it on the canvas (display settings: preview on hover). */
+  peeking: () => boolean;
   apply: (s: Settings) => void;
   /** Sews the selection anew as another kind: fill or satin, a wide line as a fill and back. */
   convert: (to: 'fill' | 'satin' | 'line') => void;
@@ -458,6 +460,12 @@ export class StitchPanel {
     return null;
   }
 
+  /** Settings pointed at, shown before they are picked, when the display settings allow it; null ends that. */
+  private peek(s: Settings | null): void {
+    if (s && !this.hooks.peeking()) return;
+    this.hooks.preview(s);
+  }
+
   private settings(): Settings {
     if (this.kind === 'fill') return { kind: 'fill', s: { ...this.draft.fill! }, line: this.draft.border ? structuredClone(this.draft.border) : null };
     if (this.kind === 'satin') return { kind: 'satin', s: { ...this.draft.satin! } };
@@ -750,7 +758,7 @@ export class StitchPanel {
           },
           false,
           // Pointing at another kind shows it on the canvas before it is picked.
-          (v) => this.hooks.preview(v === null ? null : { kind: 'fill', s: { ...s, underlay: v !== 'off', underCross: v === 'cross' } }),
+          (v) => this.peek(v === null ? null : { kind: 'fill', s: { ...s, underlay: v !== 'off', underCross: v === 'cross' } }),
         ),
       ),
     ];
@@ -895,9 +903,9 @@ export class StitchPanel {
     if (!e) {
       // Pointing at a side shows its fringe on the canvas before it is picked.
       const peek = (v: FringeSide | undefined | null) => {
-        if (v === null) return this.hooks.preview(null);
+        if (v === null) return this.peek(null);
         const { fringeSide: _f, ...rest } = s;
-        this.hooks.preview({ kind: 'satin', s: v ? { ...rest, fringeSide: v } : rest });
+        this.peek({ kind: 'satin', s: v ? { ...rest, fringeSide: v } : rest });
       };
       look.push(...this.fringeControls(s, () => {}, peek));
     }
@@ -1250,9 +1258,9 @@ export class StitchPanel {
         b.addEventListener('pointerenter', () => {
           const peek = structuredClone(s);
           setPattern(peek, tile);
-          this.hooks.preview({ kind: 'fill', s: peek });
+          this.peek({ kind: 'fill', s: peek });
         });
-        b.addEventListener('pointerleave', () => this.hooks.preview(null));
+        b.addEventListener('pointerleave', () => this.peek(null));
       }
       row.append(b);
     }
@@ -1322,9 +1330,9 @@ export class StitchPanel {
           const pd = (peek.deco ??= {});
           if (m) pd.emboss = m;
           else delete pd.emboss;
-          this.hooks.preview({ kind: 'fill', s: peek });
+          this.peek({ kind: 'fill', s: peek });
         });
-        b.addEventListener('pointerleave', () => this.hooks.preview(null));
+        b.addEventListener('pointerleave', () => this.peek(null));
       }
       row.append(b);
     }
@@ -1340,12 +1348,12 @@ export class StitchPanel {
         (v) => (v === 'strong' ? (d.embossStrong = true) : delete d.embossStrong),
         false,
         (v) => {
-          if (!v) return this.hooks.preview(null);
+          if (!v) return this.peek(null);
           const peek = structuredClone(s);
           const pd = (peek.deco ??= {});
           if (v === 'strong') pd.embossStrong = true;
           else delete pd.embossStrong;
-          this.hooks.preview({ kind: 'fill', s: peek });
+          this.peek({ kind: 'fill', s: peek });
         },
       ),
       this.slider({ label: 'stitch.motifSize', hint: 'stitch.motifSize.hint', min: 4, max: 30, step: 0.5, get: () => d.embossSize ?? DECO_DEFAULTS.embossSize, set: (v) => (d.embossSize = v), fmt: (v) => `${formatNumber(v, 1)} mm`, auto: this.unset(d, 'embossSize') }),
