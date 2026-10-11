@@ -261,22 +261,42 @@ function columnsOfArea(area: Region, cols: Rails[], before: Region | null): Rail
   return null;
 }
 
+/** The columns the kind switch suggests for an area (lines across, cut where it branches), in sewing order; null when none fit. */
+function suggestedColumns(area: Region, satin: SatinSettings): Rails[] | null {
+  const suggested = suggestSatin(area);
+  const made = suggested?.kind === 'strokes' && suggested.ok ? columnsAlong(area, suggested.lines, suggested.cuts) : null;
+  return made && 'columns' in made ? inChainOrder(made.columns, satin) : null;
+}
+
 /**
  * New stitches for satin `o` over the area of `geo` (its outline edited): with its own satin
  * settings, its stitches going across as before where the new area allows (else as a satin made
  * from a fill finds them). Null when nothing could be sewn.
  */
-export function reshapeSatin(p: Pattern, objs: SewObject[], o: SewObject, kinds: Uint8Array, geo: Form, trimMm: number): RestitchResult | null {
-  const area = rasterize(geo);
+export function reshapeSatin(p: Pattern, objs: SewObject[], o: SewObject, kinds: Uint8Array, geo: Form, trimMm: number, knockout?: boolean): RestitchResult | null {
+  // With `knockout` (as the object had it, unless given): over the area without what later objects cover, as a fill is.
+  const cut = knockout ?? !!remembered(p, o)?.knockout;
+  const area = cut ? sewnArea(p, objs, o, geo, true, remembered(p, o)?.region?.pxMm ?? 0.1) : rasterize(geo);
   if (!area) return null;
   const known = keepShape(p, o, kinds);
   const part = analyze(p, o, kinds, remembered(p, o)).parts.find((pt) => pt.kind === 'satin');
   const satin = known.satin ?? (part ? measureSatin(p, part, kinds) : null);
   if (!satin) return null;
   const before = remembered(p, o)?.shape ?? known.region ?? railsArea(known.columns?.flat() ?? []);
-  const guide = columnsOver(geo, area, known.columns?.flat() ?? [], before, satinOutline(p, o, kinds));
+  const cols = known.columns?.flat() ?? [];
+  // Cut by shapes on top its outline stays as it is, so the columns are found over the area left, not along the outline.
+  const guide = cut ? (columnsOfArea(area, cols, before) ?? suggestedColumns(area, satin)) : columnsOver(geo, area, cols, before, satinOutline(p, o, kinds));
   const r = restitch(p, objs, [o.index], { kind: 'satin', s: satin }, kinds, trimMm, undefined, false, guide ? new Map([[o.index, guide]]) : undefined, new Map([[o.index, area]]));
-  r.memory.forEach((m) => Object.assign(m, withGeo(m, geo)));
+  r.memory.forEach((m) => {
+    Object.assign(m, withGeo(m, geo));
+    if (cut) {
+      m.knockout = true;
+      m.cut = cutKey(area);
+    } else {
+      delete m.knockout;
+      delete m.cut;
+    }
+  });
   if (r.starts.length) keepGrouping(p, objs, o, r.pattern, totalStitches(r.pattern) - totalStitches(p));
   return r.starts.length ? r : null;
 }
