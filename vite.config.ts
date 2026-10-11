@@ -4,6 +4,10 @@ import { VitePWA } from 'vite-plugin-pwa';
 import { readFileSync } from 'node:fs';
 import { langPage, type Page } from './src/build/langPages';
 import { expandVideos } from './src/build/videoHtml';
+import { watchPage } from './src/build/watchPage';
+import { sitemap } from './src/build/sitemap';
+import { videoByKey, VIDEOS, watchPath } from './src/videos/catalog';
+import { APP_NAVIGATION, APP_PAGES } from './src/build/pageCache';
 
 // The site lives at the root of heatstitch.app; pull request previews get their own address
 // (see .github/workflows/deploy.yml), so every build uses the same base. PREVIEW=1 marks a preview build.
@@ -30,6 +34,14 @@ const langPages: Plugin = {
         this.emitFile({ type: 'asset', fileName: `de/${file}`, source: langPage(html, pageOf(file), 'de') });
         asset.source = langPage(html, pageOf(file), 'en');
       }
+      // The page of each video in both languages, from the template, which is not served itself.
+      const template = bundle['video.html'];
+      if (template?.type !== 'asset') throw new Error('lang-pages: video.html is not in the build');
+      for (const v of VIDEOS)
+        for (const lang of ['en', 'de'] as const)
+          this.emitFile({ type: 'asset', fileName: watchPath(v.key, lang), source: watchPage(String(template.source), v, lang) });
+      delete bundle['video.html'];
+      this.emitFile({ type: 'asset', fileName: 'sitemap.xml', source: sitemap() });
     },
   },
   transformIndexHtml(html, ctx) {
@@ -39,7 +51,21 @@ const langPages: Plugin = {
   configureServer(server) {
     server.middlewares.use(async (request, res, next) => {
       const req = request as { url?: string; originalUrl?: string };
-      const m = /^\/de\/(index\.html|docs\.html|videos\.html)?(?:[?#]|$)/.exec((req.url ?? '').replace(base, '/'));
+      const path = (req.url ?? '').replace(base, '/');
+      const watch = /^\/(de\/)?videos\/([\w-]+)\.html(?:[?#]|$)/.exec(path);
+      const video = watch && videoByKey(watch[2]);
+      if (video) {
+        const html = await server.transformIndexHtml('/video.html', new TextDecoder().decode(readFileSync(new URL('video.html', import.meta.url))), req.originalUrl);
+        res.setHeader('Content-Type', 'text/html');
+        res.end(watchPage(html, video, watch[1] ? 'de' : 'en'));
+        return;
+      }
+      if (path === '/sitemap.xml') {
+        res.setHeader('Content-Type', 'application/xml');
+        res.end(sitemap());
+        return;
+      }
+      const m = /^\/de\/(index\.html|docs\.html|videos\.html)?(?:[?#]|$)/.exec(path);
       if (!m) return next();
       const file = m[1] ?? 'index.html';
       const html = await server.transformIndexHtml(`/${file}`, new TextDecoder().decode(readFileSync(new URL(file, import.meta.url))), req.originalUrl);
@@ -77,13 +103,13 @@ export default defineConfig({
         name: 'heatstitch',
         short_name: 'heatstitch',
         description: 'View, edit and check DST and PES embroidery files, and turn pictures into stitches',
-        theme_color: '#1b1026',
+        theme_color: '#0b1424',
         background_color: '#141118',
         display: 'standalone',
         icons: [
           { src: 'pwa-192.png', sizes: '192x192', type: 'image/png' },
           { src: 'pwa-512.png', sizes: '512x512', type: 'image/png' },
-          { src: 'pwa-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+          { src: 'pwa-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
         file_handlers: [
           {
@@ -102,9 +128,10 @@ export default defineConfig({
       workbox: {
         // A first visit is controlled right away, so the reload button can swap versions in it too.
         clientsClaim: true,
-        // The font list and the thread catalogs come along; a font (some 100 KB to 2 MB) only once it is used, then it
-        // works offline too. The tooltip pictures are small and come along.
-        globPatterns: ['**/*.{js,css,html,svg,png,webmanifest,pes}', 'tips/*.webp', 'fonts/index.json', 'threads/catalogs.json'],
+        // Only the app's own pages are installed; the guide, the video page and the moving page always come
+        // from the server (src/build/pageCache.ts). The font list and the thread catalogs come along; a font
+        // (some 100 KB to 2 MB) only once it is used, then it works offline too. The tooltip pictures are small and come along.
+        globPatterns: [...APP_PAGES, '**/*.{js,css,svg,png,webmanifest,pes}', 'tips/*.webp', 'fonts/index.json', 'threads/catalogs.json'],
         runtimeCaching: [
           // The demo project is not part of the install (some 500 KB); it is kept once it was opened.
           {
@@ -118,17 +145,17 @@ export default defineConfig({
             options: { cacheName: 'fonts', expiration: { maxEntries: 120 } },
           },
         ],
-        // Only crawlers and link previews fetch the social image; the moving page only opens once.
-        globIgnores: ['og-image.jpg', 'umzug.html'],
-        // A file opened on its own, such as a guide picture in a new tab, must reach the network, not the
-        // cached app shell: everything with an extension but .html. So must the moving page (public/umzug.html).
-        navigateFallbackDenylist: [/\/umzug\.html(?:\?|$)/, /\/[^/?]*\.(?!html(?:\?|$))[^/?]*(?:\?.*)?$/],
+        // Only crawlers and link previews fetch the social image.
+        globIgnores: ['og-image.jpg'],
+        // The cached app answers only the app's own addresses. Any other page or file opened on its own (the
+        // guide, sitemap.xml, a guide picture in a new tab) reaches the server untouched.
+        navigateFallbackAllowlist: [APP_NAVIGATION],
       },
     }),
   ],
   build: {
     rollupOptions: {
-      input: { main: 'index.html', docs: 'docs.html', videos: 'videos.html' },
+      input: { main: 'index.html', docs: 'docs.html', videos: 'videos.html', watch: 'video.html' },
     },
   },
   worker: { format: 'es' },

@@ -828,7 +828,8 @@ export const OPS: Op[] = [
   {
     name: 'knockout',
     run: (d, r) => {
-      const fills = d.objects.filter((o) => areaOf(remembered(d.cur.p, o)) && remembered(d.cur.p, o)?.fill);
+      // As the app offers it (knockoutState): every object with a drawn area, also one sewn as satin.
+      const fills = d.objects.filter((o) => areaOf(remembered(d.cur.p, o)) && !remembered(d.cur.p, o)?.free);
       if (!fills.length) return false;
       const o = pick(r, fills);
       const k = setKnockout(d.cur.p, [o.index], !remembered(d.cur.p, o)!.knockout, T);
@@ -1037,7 +1038,7 @@ export const APPLIQUE_OPS: Op[] = [
     run: (d, r) => {
       const as = appliquesOf(d.cur.p).filter((o) => !remembered(d.cur.p, o)?.free);
       if (!as.length) return false;
-      const change = pick(r, [{ edge: 'e' as const }, { edge: 'satin' as const }, { width: between(r, 2, 4.5) }, { fabric: pick(r, APPLIQUE_FABRICS), color: pick(r, COLORS) }]);
+      const change = pick(r, [{ edge: 'e' as const }, { edge: 'satin' as const }, { edge: 'run' as const, run: pick(r, [{ type: 'run' as const, width: 0 }, { type: 'run' as const, width: 0, repeat: 2 }, { type: 'triple' as const, width: 0 }, { type: 'triple' as const, width: 0, repeat: 5 }]) }, { width: between(r, 2, 4.5) }, { fabric: pick(r, APPLIQUE_FABRICS), color: pick(r, COLORS) }]);
       return shapes(d, setApplique(d.cur.p, [pick(r, as).index], change, T));
     },
   },
@@ -1355,7 +1356,7 @@ export const REDWORK_OPS: Op[] = [
       const st = { ...m.line! };
       if (isRedwork(st)) delete st.redwork;
       else {
-        st.type = 'run';
+        st.type = r() < 0.3 ? 'triple' : 'run';
         st.redwork = true;
         delete st.repeat;
         delete st.whole;

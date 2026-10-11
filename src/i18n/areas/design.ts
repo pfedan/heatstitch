@@ -15,8 +15,8 @@ export const de = {
   'design.view.shapesShow': 'Formen als Flächen zeigen (S)',
   'design.view.marksOff': 'Markierungen ausgeblendet (H)',
   'design.view.spot': 'Auto-Hervorheben',
-  'design.view.spotOn': 'Auto-Hervorheben an: Zeigen und Auswählen hebt hervor, der Rest wird blass (A)',
-  'design.view.spotOff': 'Auto-Hervorheben aus: nichts wird blass (A)',
+  'design.view.spotOn': 'Auto-Hervorheben an: Gewähltes tritt hervor, der Rest wird blass (A)',
+  'design.view.spotOff': 'Auto-Hervorheben aus: nichts wird blass, auch nicht bei Auswahl (A)',
   'design.zoom.hint': 'Zoom: Vergrößern, Verkleinern, Originalgröße',
 
   // Commands
@@ -143,8 +143,8 @@ export const en: Record<keyof typeof de, string> = {
   'design.view.shapesShow': 'Show shapes as flat areas (S)',
   'design.view.marksOff': 'Marks hidden (H)',
   'design.view.spot': 'Auto highlight',
-  'design.view.spotOn': 'Auto highlight on: pointing and selecting highlight, the rest fades (A)',
-  'design.view.spotOff': 'Auto highlight off: nothing fades (A)',
+  'design.view.spotOn': 'Auto highlight on: the selection stands out, the rest fades (A)',
+  'design.view.spotOff': 'Auto highlight off: nothing fades, not even on selection (A)',
   'design.zoom.hint': 'Zoom: in, out, actual size',
 
   'design.cmd.viewMenu': 'Open the view menu',

@@ -33,9 +33,13 @@ const PAW = [600, 880];
 const LOOP = [940, 283];
 const CORNER = [871, 457];
 const ROUND = [719, 424];
-const EDGE = [1097, 727];
+// A hollow dot halfway along the lower right curve; dragged out it becomes a new node.
+const HOLLOW = [1079, 847];
 const POINT = [1088, 613];
 const ON_STITCH = [1050, 700];
+// The last needle point ("Ende") at the tip of the upper toe, and three clicks for a small claw.
+const END = [1232, 151];
+const CLAW = [[1318, 96], [1250, 162], [1330, 146]];
 // Beside the paw, so the stage shows no stitch readout next to the pointer.
 const REST = [1500, 860];
 
@@ -44,10 +48,10 @@ export default {
   part: 13,
   voice: {
     model: 'google/gemini-3.1-flash-tts',
-    voice: 'Aoede',
+    voice: 'Gacrux',
     language: 'de-DE',
     prompt:
-      'Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.',
+      'Speak German like a seasoned embroidery master teaching a workshop: mature, composed, precise, quietly authoritative but kind. Every word placed with care, with understated pride.',
   },
   lead: 0.4,
   tail: 0.6,
@@ -86,11 +90,18 @@ export default {
       },
     },
     {
-      say: 'Ein Doppelklick öffnet die Form. Jetzt siehst du den Umriss mit seinen Knoten. Quadrate sind Ecken, Kreise sind runde Knoten.',
-      text: 'Ein Doppelklick öffnet die Form. Jetzt siehst du den Umriss mit seinen Knoten. Quadrate sind Ecken, Kreise sind runde Knoten.',
-      textEn: 'A double click opens the shape. Now you see the outline with its nodes. Squares are corners, circles are round nodes.',
+      say: 'Darunter liegt die Aktionsleiste mit Form bearbeiten. Schneller geht ein Doppelklick. Jetzt siehst du den Umriss mit seinen Knoten. Quadrate sind Ecken, Kreise sind runde Knoten.',
+      text: 'Darunter liegt die Aktionsleiste mit Form bearbeiten. Schneller geht ein Doppelklick. Jetzt siehst du den Umriss mit seinen Knoten. Quadrate sind Ecken, Kreise sind runde Knoten.',
+      textEn: 'Below it is the action bar with Edit shape. A double click is quicker. Now you see the outline with its nodes. Squares are corners, circles are round nodes.',
       run: async (s) => {
-        await doubleClick(s, PAW);
+        const edit = btn(s, 'Form bearbeiten', true);
+        await s.zoom([620, 140, 0, 0], 1.8);
+        await s.move(edit, 1.0);
+        await s.label('Form bearbeiten', edit, 'below');
+        await s.wait(2.4);
+        s.unlabel();
+        s.zoomOut();
+        await doubleClick(s, PAW, { move: 1.0 });
         await until(s, async () => (await options(s).getByText(/Knoten/).count()) > 0, 'shape opens');
         await s.move([1480, 560], 1.0);
         await s.wait(1.6);
@@ -125,9 +136,9 @@ export default {
       },
     },
     {
-      say: 'Aus Stichen erkannte Formen haben oft mehr Knoten als nötig. Vereinfachen in der Leiste über der Bühne nimmt welche weg, ohne die Form sichtbar zu ändern. Aus 32 werden 23 Knoten.',
-      text: 'Aus Stichen erkannte Formen haben oft mehr Knoten als nötig. Vereinfachen in der Leiste über der Bühne nimmt welche weg, ohne die Form sichtbar zu ändern. Aus 32 werden 23 Knoten.',
-      textEn: 'Shapes detected from stitches often have more nodes than they need. Simplify in the bar above the stage takes some away without visibly changing the shape. 32 nodes become 23.',
+      say: 'Erkannte Formen haben oft mehr Knoten als nötig. Das Symbol Vereinfachen nimmt welche weg, ohne die Form sichtbar zu ändern. Aus 32 werden 23 Knoten.',
+      text: 'Erkannte Formen haben oft mehr Knoten als nötig. Das Symbol Vereinfachen nimmt welche weg, ohne die Form sichtbar zu ändern. Aus 32 werden 23 Knoten.',
+      textEn: 'Detected shapes often have more nodes than they need. The Simplify icon takes some away without visibly changing the shape. 32 nodes become 23.',
       run: async (s) => {
         const simplify = btn(s, 'Vereinfachen', true);
         await s.zoom([700, 160, 0, 0], 1.8);
@@ -148,14 +159,18 @@ export default {
       },
     },
     {
-      say: 'Einen Knoten ziehst du einfach mit der Maus. Ich mache die Pfote unten etwas runder. Beim Loslassen stickt heatstitch sie mit ihren Einstellungen neu.',
-      text: 'Einen Knoten ziehst du einfach mit der Maus. Ich mache die Pfote unten etwas runder. Beim Loslassen stickt heatstitch sie mit ihren Einstellungen neu.',
-      textEn: 'You simply drag a node with the mouse. I make the paw a little rounder at the bottom. When you let go, heatstitch stitches it anew with its settings.',
+      say: 'Knoten ziehst du einfach mit der Maus. Ziehst du einen der hohlen Punkte dazwischen, entsteht dort ein neuer Knoten. So mache ich die Pfote unten etwas runder.',
+      text: 'Knoten ziehst du einfach mit der Maus. Ziehst du einen der hohlen Punkte dazwischen, entsteht dort ein neuer Knoten. So mache ich die Pfote unten etwas runder.',
+      textEn: 'You simply drag nodes with the mouse. Drag one of the hollow dots between them, and a new node appears there. That way I make the paw a little rounder at the bottom.',
       run: async (s) => {
-        await s.zoom([EDGE[0], EDGE[1] - 40, 0, 0], 1.5);
-        await s.wait(1.4);
-        await s.drag([EDGE, [EDGE[0] + 40, EDGE[1] + 22]], { sec: 1.4 });
-        await s.move([EDGE[0] + 160, EDGE[1] + 90], 0.8);
+        await s.zoom([HOLLOW[0] + 20, HOLLOW[1] - 40, 0, 0], 1.6);
+        await s.move([HOLLOW[0] + 90, HOLLOW[1] - 70], 1.0);
+        await s.wait(1.2);
+        await s.label('hohler Punkt', [HOLLOW[0] - 6, HOLLOW[1] - 6, 12, 12], 'left');
+        await s.wait(2.4);
+        s.unlabel();
+        await s.drag([HOLLOW, [HOLLOW[0] + 51, HOLLOW[1] + 33]], { sec: 1.6 });
+        await s.move([HOLLOW[0] + 170, HOLLOW[1] - 40], 0.8);
         await s.wait(2.4);
         s.zoomOut();
         await s.move([1480, 560], 1.0);
@@ -182,31 +197,55 @@ export default {
       },
     },
     {
-      say: 'Einen Einstich ziehst du an eine andere Stelle. Das kleine Etikett zeigt dabei, wie lang die beiden Stiche daran werden.',
-      text: 'Einen Einstich ziehst du an eine andere Stelle. Das kleine Etikett zeigt dabei, wie lang die beiden Stiche daran werden.',
-      textEn: 'You drag a needle point to another spot. The small tag shows how long the two stitches at it become.',
+      say: 'Ich wähle einen Einstich. Pfeile zeigen, wie der Faden läuft. Ziehst du ihn, zeigt das Etikett, wie lang die beiden Stiche daran werden.',
+      text: 'Ich wähle einen Einstich. Pfeile zeigen, wie der Faden läuft. Ziehst du ihn, zeigt das Etikett, wie lang die beiden Stiche daran werden.',
+      textEn: 'I select a needle point. Arrows show how the thread runs. Drag it, and the tag shows how long the two stitches at it become.',
       run: async (s) => {
+        await s.click(POINT, { move: 0.8, before: 0.3, after: 0.4 });
+        await s.move([POINT[0] + 60, POINT[1] + 110], 0.8);
+        await s.wait(2.4);
+        await s.move(POINT, 0.6);
         await s.drag([POINT, [POINT[0] + 12, POINT[1] + 20], [POINT[0] + 22, POINT[1] + 36]], { sec: 1.6 });
         await s.wait(2.6);
+        s.zoomOut();
       },
     },
     {
-      say: 'Ein Doppelklick auf einen Stich setzt dort einen neuen Einstich. Mit Entfernen löschst du den gewählten wieder.',
-      text: 'Ein Doppelklick auf einen Stich setzt dort einen neuen Einstich. Mit Entfernen löschst du den gewählten wieder.',
-      textEn: 'A double click on a stitch sets a new needle point there. With Delete you remove the selected one again.',
+      say: 'Oben endet der Faden, dort steht Ende. Ich wähle den letzten Einstich und drücke W für Weitersticken. Jeder Klick hängt nun einen Einstich an. Enter beendet.',
+      text: 'Oben endet der Faden, dort steht Ende. Ich wähle den letzten Einstich und drücke W für Weitersticken. Jeder Klick hängt nun einen Einstich an. Enter beendet.',
+      textEn: 'At the top the thread ends; it says End there. I select the last needle point and press W to continue stitching. Each click now adds a needle point. Enter finishes.',
       run: async (s) => {
+        await s.zoom([END[0] + 20, END[1] + 40, 0, 0], 1.8);
+        await s.move([END[0] + 70, END[1] + 90], 1.0);
+        await s.wait(1.8);
+        await s.click(END, { move: 0.8, before: 0.3, after: 0.6 });
+        await s.press('w', { label: 'W', show: 1.4 });
+        await s.wait(1.0);
+        for (const p of CLAW) await s.click(p, { move: 0.7, before: 0.2, after: 0.5 });
+        await s.move([END[0] + 120, END[1] + 110], 0.6);
+        await s.press('Enter', { show: 1.2 });
+        await s.wait(1.0);
+        s.zoomOut();
+      },
+    },
+    {
+      say: 'Ein Doppelklick auf einen Stich setzt einen neuen Einstich. Entfernen löscht ihn wieder.',
+      text: 'Ein Doppelklick auf einen Stich setzt einen neuen Einstich. Entfernen löscht ihn wieder.',
+      textEn: 'A double click on a stitch sets a new needle point. Delete removes it again.',
+      run: async (s) => {
+        await s.zoom([ON_STITCH[0], ON_STITCH[1] - 20, 0, 0], 1.8);
         await doubleClick(s, ON_STITCH);
-        await s.wait(2.4);
+        await s.wait(1.8);
         await s.press('Delete', { label: 'Entf', show: 1.4 });
-        await s.wait(1.6);
+        await s.wait(1.0);
         s.zoomOut();
         await s.move(REST, 1.0);
       },
     },
     {
-      say: 'Ist eine Stelle zu dicht, wählst du mit Strg+A alle Einstiche und klickst auf Ausdünnen. Bei 25 Prozent nimmt heatstitch jeden vierten Einstich heraus.',
-      text: 'Ist eine Stelle zu dicht, wählst du mit Strg+A alle Einstiche und klickst auf Ausdünnen. Bei 25 Prozent nimmt heatstitch jeden vierten Einstich heraus.',
-      textEn: 'If a spot is too dense, select all needle points with Ctrl+A and click Thin out. At 25 percent, heatstitch takes out every fourth needle point.',
+      say: 'Ist eine Stelle zu dicht, wählst du mit Strg+A alle Einstiche und klickst auf Ausdünnen. Bei 25 Prozent legt heatstitch die Reihen gleichmäßig weiter auseinander.',
+      text: 'Ist eine Stelle zu dicht, wählst du mit Strg+A alle Einstiche und klickst auf Ausdünnen. Bei 25 Prozent legt heatstitch die Reihen gleichmäßig weiter auseinander.',
+      textEn: 'If a spot is too dense, select all needle points with Ctrl+A and click Thin out. At 25 percent, heatstitch spreads the rows evenly further apart.',
       run: async (s) => {
         await s.press('Control+a', { label: 'Strg+A', show: 1.4 });
         const thin = options(s).getByRole('button', { name: 'Ausdünnen' });
@@ -224,9 +263,9 @@ export default {
       },
     },
     {
-      say: 'Rechts zählt die Karte deine Änderungen von Hand. Escape bringt dich zurück zu den Objekten. Und links in der Werkzeugleiste öffnet Stiche von Hand, Taste E, die Stiche jedes Objekts direkt. [warm] So wird jedes Detail genau so, wie du es willst.',
-      text: 'Rechts zählt die Karte deine Änderungen von Hand. Escape bringt dich zurück zu den Objekten. Und links in der Werkzeugleiste öffnet Stiche von Hand, Taste E, die Stiche jedes Objekts direkt. So wird jedes Detail genau so, wie du es willst.',
-      textEn: 'On the right, the card counts your changes by hand. Esc takes you back to the objects. And on the left in the toolbar, Stitches by hand, key E, opens the stitches of any object directly. That way every detail turns out exactly as you want it.',
+      say: 'Rechts zählt die Karte deine Änderungen von Hand. Escape bringt dich zurück zu den Objekten. Links in der Werkzeugleiste öffnet Stiche von Hand, Taste E, die Stiche jedes Objekts direkt. [warm, proud] So wird jedes Detail genau so, wie du es willst.',
+      text: 'Rechts zählt die Karte deine Änderungen von Hand. Escape bringt dich zurück zu den Objekten. Links in der Werkzeugleiste öffnet Stiche von Hand, Taste E, die Stiche jedes Objekts direkt. So wird jedes Detail genau so, wie du es willst.',
+      textEn: 'On the right, the card counts your changes by hand. Esc takes you back to the objects. On the left in the toolbar, Stitches by hand, key E, opens the stitches of any object directly. That way every detail turns out exactly as you want it.',
       run: async (s) => {
         const hand = card(s).getByText(/Änderung(en)? von Hand/).first();
         await s.zoom([1760, 260, 0, 0], 1.8);

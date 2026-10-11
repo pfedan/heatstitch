@@ -115,12 +115,13 @@ Karten fest neben der Bühne; die Schubladen für kleine Bildschirme kommen nich
 leeren Bühne. Szene 1 jedes Videos ruht auf diesem Bild; der erste Klick ist einer der vier Wege
 oder ein Beispiel. So beginnt jedes Video an derselben Stelle, wie bei den Nutzern.
 
-**Vorspann (3 s).** Dunkler Grund (`#141118`), heatstitch-Logo, Titel in Weiß, darunter
-„Teil 3“ in der Akzentfarbe (`#e0559e`), eine feine Stichlinie als Linie unter dem
-Titel. Ruhige Blende in die App.
+**Vorspann (3 s).** Das gestickte heatstitch-Logo (H mit Faden und Nadel, Schriftzug
+HEATSTITCH; `tools/screencast/logo.jpg`, aus Daniels Vorlage) auf dem Nachtblau dieser Vorlage
+(`#030913`, zur Mitte heller), darunter „Teil 3“ in der Akzentfarbe (`#e0559e`) und der Titel
+in Weiß mit einer feinen Stichlinie darunter. Ruhige Blende in die App.
 
-**Abspann (3 s).** Gleicher Grund, Logo und die Adresse der App. Kein Verweis auf andere
-Teile, kein Logo-Feuerwerk.
+**Abspann (3 s).** Gleicher Grund, das Logo größer und die Adresse der App. Kein Verweis auf
+andere Teile, kein Logo-Feuerwerk.
 
 **Maus.** Ein eingeblendeter Zeiger (weißer Pfeil mit dunklem Rand, etwas größer als normal),
 der sich weich bewegt und nie springt. Ein Klick zeigt einen kurzen Ring in der Akzentfarbe.
@@ -160,15 +161,15 @@ Hilfeseite.
 
 - Sprachsynthese mit Google Gemini TTS über Replicate (`google/gemini-3.1-flash-tts`),
   Sprache `de-DE`.
-- Eine Stimme für die ganze Serie: Aoede (beim Pilot aus Kore, Aoede und Charon gewählt).
+- Eine Stimme für die ganze Serie: Gacrux (im Oktober 2026 statt Aoede gewählt, Stil „Stickmeisterin im Kurs“).
 - Jeder Auftrag an Replicate läuft nur einmal je identischem Auftrag. `tools/screencast/tts.mjs`
   legt jede Aufnahme unter einem Fingerabdruck aus Modell, Stimme, Sprache, Anweisung und Text
   in `ton/` neben dem Ablauf ab und fragt nur fehlende an.
 - Regieanweisungen immer auf Englisch, der Sprechtext auf Deutsch. Feste Anweisung für alle
   Videos (Feld `prompt`):
-  "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing
-  a friend something on the computer. Natural pace, small pauses between thoughts. Let real
-  enthusiasm show when something nice happens."
+  "Speak German like a seasoned embroidery master teaching a workshop: mature, composed,
+  precise, quietly authoritative but kind. Every word placed with care, with understated
+  pride."
 - Regie im Text als englische Markierungen in eckigen Klammern, etwa `[enthusiastic]`,
   `[delighted]`, `[focused]`, `[curious]`, `[proud, warm]`, `[short pause]`. Gern mehrere pro
   Video, wo Begeisterung oder Konzentration den Satz tragen, aber nicht in jedem Satz.
@@ -325,9 +326,12 @@ screencasts/
   Abspielen.
 - Hilfeseite: Jedes fertige Video gehört ins Handbuch. Alle Angaben zu einem Video stehen an
   einer Stelle, in `src/videos/catalog.ts` (Teil, Titel, Länge, Gruppe, Ziel in einem Satz,
-  Dateien zum Mitmachen); der Build schreibt daraus die Karten oben in der Anleitung, die Links
-  neben ihren Abschnitten, die Videoseite (`videos.html`, nach Gruppen) und das „Weiter mit“
-  im Player. Ein neues Video braucht drei Schritte: Eintrag im Katalog; Kartenbild aus dem
+  Dateien zum Mitmachen, Datum der Veröffentlichung); der Build schreibt daraus die Karten oben
+  in der Anleitung, die Links neben ihren Abschnitten, die Videoseite (`videos.html`, nach
+  Gruppen), das „Weiter mit“ im Player, die eigene Seite jedes Videos (`videos/<key>.html` und
+  `de/videos/<key>.html`, mit schema.org-VideoObject, `src/build/watchPage.ts`) und die
+  `sitemap.xml` mit Google-Video-Einträgen (`src/build/sitemap.ts`). Google indexiert ein Video
+  nur auf einer Seite, auf der es der Hauptinhalt ist; der Player über der Seite zählt nicht. Ein neues Video braucht drei Schritte: Eintrag im Katalog; Kartenbild aus dem
   Poster mit `python3 tools/screencast/karte.py <key>.jpg --out public/guide/videos` (die
   Bühne des Posters in 4:3, ein Zehntel der Größe); und in `docs.html` neben jedem passenden
   Abschnitt ein `<!-- video:ref de <key> -->` (und `en`). `tests/videos.test.ts` prüft, dass

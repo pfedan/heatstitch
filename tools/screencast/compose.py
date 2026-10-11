@@ -25,7 +25,10 @@ W, H = 1920, 1080
 SS = 2  # overlays are drawn at twice the size and scaled down, for smooth edges
 ACCENT = (181, 49, 122)
 ACCENT_LIGHT = (224, 85, 158)
-CARD_BG = (27, 16, 38)  # #1b1026, the background of the logo (public/pwa-512.png): no edge around it
+# The cards show the embroidered logo (logo.jpg, cut from Daniel's picture of it) on the night
+# blue of that picture: lighter in the middle, darker to the edges, as in the picture itself.
+CARD_BG = (3, 9, 19)
+CARD_GLOW = (8, 16, 29)
 INTRO, OUTRO = 3.0, 3.0
 # Inter as OTF (Inter-Regular.otf and so on): FONT_DIR, else the usual places on Linux, macOS
 # and Windows.
@@ -177,14 +180,39 @@ def stitch_line(d, x1, x2, y, color, width):
         x += 28 * SS
 
 
-def card(lines, logo_size=150):
-    img = Image.new('RGB', (W * SS, H * SS), CARD_BG)
+def card_ground():
+    """The night blue ground: a soft glow in the middle fading to CARD_BG at the edges."""
+    small = Image.new('RGB', (W // 8, H // 8))
+    px = small.load()
+    for y in range(small.height):
+        for x in range(small.width):
+            d = math.hypot((x - small.width / 2) / (small.width / 2), (y - small.height / 2) / (small.height / 2))
+            t = min(1.0, d / 1.1) ** 1.5
+            px[x, y] = tuple(round(CARD_GLOW[i] * (1 - t) + CARD_BG[i] * t) for i in range(3))
+    return small.resize((W * SS, H * SS), Image.BICUBIC)
+
+
+def logo_picture(height):
+    """logo.jpg at `height` (2x px), its edges faded out so no square shows on the ground."""
+    logo = Image.open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logo.jpg')).convert('RGB')
+    logo = logo.resize((round(logo.width * height / logo.height), height), Image.LANCZOS)
+    mask = Image.new('L', (logo.width // 4, logo.height // 4))
+    px = mask.load()
+    for y in range(mask.height):
+        for x in range(mask.width):
+            edge = min(x, y, mask.width - 1 - x, mask.height - 1 - y) / (0.2 * min(mask.size))
+            px[x, y] = round(255 * ease(min(1.0, edge)))
+    return logo, mask.resize(logo.size, Image.BICUBIC)
+
+
+def card(lines, logo_height):
+    img = card_ground()
     d = ImageDraw.Draw(img)
-    logo = Image.open(os.path.join(ROOT, 'public', 'pwa-512.png')).convert('RGBA').resize((logo_size * SS, logo_size * SS), Image.LANCZOS)
-    total = logo_size * SS + sum(l[2] for l in lines)
+    logo, mask = logo_picture(logo_height * SS)
+    total = logo.height + sum(l[2] for l in lines)
     y = (H * SS - total) / 2
-    img.paste(logo, (int((W * SS - logo.width) / 2), int(y)), logo)
-    y += logo.width
+    img.paste(logo, (int((W * SS - logo.width) / 2), int(y)), mask)
+    y += logo.height
     for text, (fnt, color), height, rule in lines:
         l, t, r, b = d.textbbox((0, 0), text, font=fnt)
         x = (W * SS - (r - l)) / 2
@@ -197,18 +225,15 @@ def card(lines, logo_size=150):
 
 def intro_card(part, title):
     return card([
-        ('', (font('Regular', 10), CARD_BG), 40 * SS, False),
         (f'Teil {part}', (font('SemiBold', 40 * SS), ACCENT_LIGHT), 70 * SS, False),
         (title, (font('Bold', 84 * SS), (255, 255, 255)), 110 * SS, True),
-    ])
+    ], logo_height=600)
 
 
 def outro_card():
     return card([
-        ('', (font('Regular', 10), CARD_BG), 30 * SS, False),
-        ('heatstitch', (font('Bold', 64 * SS), (255, 255, 255)), 90 * SS, False),
-        ('heatstitch.app', (font('Medium', 34 * SS), (190, 182, 200)), 60 * SS, False),
-    ])
+        ('heatstitch.app', (font('Medium', 40 * SS), (190, 196, 210)), 80 * SS, False),
+    ], logo_height=780)
 
 
 def blend(a, b, t):

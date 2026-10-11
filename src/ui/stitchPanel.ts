@@ -14,7 +14,7 @@ import { TOLERANCE } from '../digitize/run';
 import type { ThreadColor } from '../model/pattern';
 import { newLink } from '../model/border';
 import { SATIN_SHARE } from '../model/covers';
-import { autoUnder, coverOf, E_SPACING, hasPhase, isCord, isRedwork, isRunType, layersOf, REPEAT, spacingOf, timesOf, ZIGZAG_SPACING, type PathStitch } from '../model/along';
+import { autoUnder, coverOf, E_SPACING, hasPhase, isCord, isRedwork, isRunType, layersOf, passesOf, REPEAT, spacingOf, timesOf, ZIGZAG_SPACING, type PathStitch } from '../model/along';
 import { CORD_STEP, CORD_STEP_RANGE, HAND_WIDTH, isHandStitch, LINE_MOTIFS, MOTIF_PERIOD, MOTIF_STITCH, MOTIF_WIDTH, motifMaxSize, SIDED_MOTIFS, type LineMotif } from '../digitize/motif';
 import { ECHO_COUNT, ECHO_DEFAULT, ECHO_GAP, ECHO_PHASE, ECHO_SIDES, type EchoSide } from '../digitize/echo';
 import { SHADOW_COLOR, SHADOW_DEFAULT_ANGLE, SHADOW_DEFAULT_DIST, SHADOW_DIST, SHADOW_UNDER } from '../model/shadow';
@@ -25,7 +25,7 @@ import { h, swap } from '../shell/h';
 import { section } from '../shell/ui';
 import { setThinShare, THIN_SHARES, thinShare } from '../areas/stitches/state';
 import { kindWay, type KindState, type KindWay } from '../areas/stitches/kindWay';
-import { APPLIQUE_FABRICS, APPLIQUE_WIDTHS, type AppliqueFabric, type AppliqueSettings } from '../model/applique';
+import { APPLIQUE_FABRICS, APPLIQUE_RUN, APPLIQUE_WIDTHS, runEdgeOf, TACK_STITCH, type AppliqueFabric, type AppliqueSettings } from '../model/applique';
 
 /** The kinds on the kind switch: the three of a design's objects and appliqué. */
 type SwitchKind = 'fill' | 'satin' | 'line' | 'applique';
@@ -1122,13 +1122,20 @@ export class StitchPanel {
   }
 
   /**
-   * An appliqué: its edge (satin or E stitch, how wide) and the fabric laid on (kind and color, for
+   * An appliqué: its edge (satin or E stitch and how wide, or a running stitch as a line's) and the fabric laid on (kind and color, for
    * the view), the cutting template for a plotter. The rest (placement, tack-down, stops) is automatic.
    */
   private appliqueSections(info: StitchInfo): HTMLElement[] {
     const s = this.appliqueDraft!;
     const steps = h('p', { class: 'muted small applique-steps' }, t('applique.steps'));
-    const edge = this.choice<'satin' | 'e'>('applique.edge', ['satin', 'e'], s.edge, (v) => `applique.edge.${v}` as Key, (v) => (s.edge = v));
+    const edge = this.choice<AppliqueSettings['edge']>('applique.edge', ['satin', 'e', 'run'], s.edge, (v) => `applique.edge.${v}` as Key, (v) => (s.edge = v));
+    const run = s.edge === 'run' ? (s.run ??= structuredClone(APPLIQUE_RUN)) : null;
+    const edgeRows = run
+      ? [
+          this.repeatRow(run, (v) => (s.run = v)),
+          this.slider({ label: 'stitch.length', hint: 'stitch.runLength.hint', min: 1, max: 6, step: 0.1, get: () => run.length ?? TACK_STITCH, set: (v) => (run.length = v), fmt: (v) => `${formatNumber(v, 1)} mm` }),
+        ]
+      : [];
     const width = this.slider({
       label: 'applique.width',
       hint: 'applique.width.hint',
@@ -1146,7 +1153,7 @@ export class StitchPanel {
     const cut = h('div', { class: 'tool-row' }, this.button('applique.cut', 'applique.cut.hint', () => this.hooks.cutLine()));
     return [
       this.sec('kind', 'stitches.sec.kind', [this.kindSwitch(info), steps], t('applique.kind')),
-      this.sec('appliqueEdge', 'applique.sec.edge', [edge, width], `${t(`applique.edge.${s.edge}` as Key)} ${formatNumber(s.width, 1)} mm`),
+      this.sec('appliqueEdge', 'applique.sec.edge', run ? [edge, ...edgeRows] : [edge, width], run ? `${t('applique.edge.run')} ${t('stitch.repeat.n', { n: timesOf(runEdgeOf(s)) * passesOf(runEdgeOf(s)) })}` : `${t(`applique.edge.${s.edge}` as Key)} ${formatNumber(s.width, 1)} mm`),
       this.sec('appliqueFabric', 'applique.sec.fabric', [fabric, this.fabricColor(s, info.applique!.color)], t(`applique.fabric.${s.fabric}` as Key)),
       this.sec('tools', 'stitches.sec.tools', [cut, this.handRow(), this.lockSwitch(info.lock), info.free?.can ? this.looseRow() : null]),
     ];
@@ -1991,7 +1998,12 @@ export class StitchPanel {
       // A line of many paths in one go (redwork): each there and back, so it has no count of its own.
       const red = line && !st.echo ? this.redworkCheck(st, set) : null;
       if (red && isRedwork(st)) {
-        out.look.push(red, this.slider({ label: 'stitch.length', hint: 'stitch.runLength.hint', min: 1, max: 6, step: 0.1, get: () => st.length ?? BORDER_STITCH, set: (v) => change((s) => (s.length = v))(v), fmt: mm(1), auto: unset('length') }));
+        const bean = this.check('stitch.redworkBean', 'stitch.redworkBean.hint', () => st.type === 'triple', (v) => {
+          st.type = v ? 'triple' : 'run';
+          set(st);
+          this.render();
+        });
+        out.look.push(red, bean, this.slider({ label: 'stitch.length', hint: 'stitch.runLength.hint', min: 1, max: 6, step: 0.1, get: () => st.length ?? BORDER_STITCH, set: (v) => change((s) => (s.length = v))(v), fmt: mm(1), auto: unset('length') }));
         return out;
       }
       if (red) out.look.push(red);
@@ -2154,11 +2166,11 @@ export class StitchPanel {
     return h('div', { class: 'repeat-field' }, field, check);
   }
 
-  /** Redwork for a line in running stitch: all its paths in one go, each there and back (see PathStitch.redwork). */
+  /** Redwork for a line in running or triple stitch: all its paths in one go, each there and back (see PathStitch.redwork). */
   private redworkCheck(st: PathStitch, set: (v: PathStitch) => void): HTMLElement {
     return this.check('stitch.redwork', 'stitch.redwork.hint', () => isRedwork(st), (v) => {
       if (v) {
-        st.type = 'run';
+        if (st.type !== 'triple') st.type = 'run';
         st.redwork = true;
         delete st.repeat;
         delete st.whole;

@@ -139,7 +139,10 @@ async function clickText(page, text) {
 }
 async function wheelAt(page, x, y, steps, delta = -120) {
   await page.mouse.move(x, y);
+  // Ctrl with the wheel zooms; the plain wheel pans.
+  await page.keyboard.down('Control');
   for (let i = 0; i < steps; i++) { await page.mouse.wheel(0, delta); await page.waitForTimeout(80); }
+  await page.keyboard.up('Control');
   await page.waitForTimeout(400);
 }
 
@@ -599,6 +602,9 @@ shots.image = async (lang) => {
   await page.waitForTimeout(1000);
   await page.click('#image-example');
   await page.waitForTimeout(4000);
+  // the example stays in step 1 (where it can be cropped), so two steps forward
+  await page.click('#image-next');
+  await page.waitForTimeout(1500);
   await page.click('#image-next');
   if (!(await waitText(page, '#image-result', /Stiche|Stitches/, 90000))) throw new Error('no stitches');
   await page.click('input[name="image-view"][value="stitches"]', { force: true });

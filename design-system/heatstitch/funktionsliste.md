@@ -275,7 +275,7 @@ Allgemein: ignoriert, solange der Fokus in `input`, `select`, `textarea` oder `[
 
 **PWA / Shell**
 - Service Worker mit `registerType: 'prompt'`: neue Version nur nach Klick auf "Neu laden"; `clientsClaim`; offline lauffähig (JS, CSS, HTML, Bilder, Beispiel-PES, Schriftliste, Garnkataloge vorgecacht; Demo-Projekt und Schriften erst nach Gebrauch). vite.config.ts:19-75.
-- Manifest: Name "heatstitch", `display: standalone`, Theme #1b1026, Icons 192/512 (+maskable), `file_handlers` für .dst .pes .pec .jef .exp .vp3 .heatstitch .png .jpg .jpeg .webp .svg; verarbeitet über `launchQueue` in src/app/fileIo.ts:252-254 (Datei-Worker).
+- Manifest: Name "heatstitch", `display: standalone`, Theme #0b1424, Icons 192/512 und eigenes maskable 512 (Logo: tools/brand/icons.mjs aus public/favicon.svg), `file_handlers` für .dst .pes .pec .jef .exp .vp3 .heatstitch .png .jpg .jpeg .webp .svg; verarbeitet über `launchQueue` in src/app/fileIo.ts:252-254 (Datei-Worker).
 - PR-Previews: kein SW (selbstzerstörend), `noindex`, eigener Storage-Namespace.
 - `<noscript>`-Hinweis mit Link auf die Anleitung (index.html:74-76). SEO-/OG-/JSON-LD-Metadaten im Kopf (index.html:6-71), englisch, nicht übersetzt.
 - `html lang` wird bei Sprachwechsel gesetzt; alle `data-i18n`, `data-i18n-title`, `data-i18n-aria`, `data-i18n-label` werden neu gefüllt (i18n/index.ts:20-25, 55ff.).

@@ -28,15 +28,16 @@ describe('the tutorial videos', () => {
     for (const v of VIDEOS) expect(existsSync(new URL(`../public/${cardPath(v.key)}`, import.meta.url)), v.key).toBe(true);
   });
 
-  it('the guide shows every video at the top and beside at least one section, in both languages', () => {
+  it('the guide links every video beside at least one section and lists none at the top, in both languages', () => {
     const docs = expandVideos(read('docs.html'));
     expect(docs).not.toContain('<!-- video:');
     expect(count(docs, '<dialog class="video-dialog"')).toBe(1);
     for (const l of ['de', 'en']) {
       const a = article(docs, l);
+      expect(count(a, '<li class="video"'), `${l} cards at the top`).toBe(0);
+      expect(a, `${l} link to the video page`).toContain('href="videos.html"');
       for (const v of VIDEOS) {
-        expect(count(a, `<li class="video" id="video-${v.key}"`), `${l} card ${v.key}`).toBe(1);
-        expect(a, `${l} section link ${v.key}`).toContain(`class="video-ref" href="videos.html#video-${v.key}"`);
+        expect(a, `${l} section link ${v.key}`).toContain(`class="video-ref" href="videos/${v.key}.html"`);
       }
     }
   });
@@ -61,7 +62,8 @@ describe('the tutorial videos', () => {
     expect(de).toMatch(/<title>heatstitch Videos/);
     expect(de).toContain('href="docs.html"');
     const docs = langPage(expandVideos(read('docs.html')), 'docs', 'de');
-    expect(docs).toContain('href="videos.html#video-02-schrift"');
+    expect(docs).toContain('href="videos/02-schrift.html"');
+    expect(de).toContain('<a class="video-play" href="videos/02-schrift.html"');
   });
 
   it('a placeholder naming an unknown video stops the build', () => {

@@ -1295,7 +1295,7 @@ function fromStored(e: StoredObject): Remembered | null {
     kept.line ??= lineFrom(e.asLine!.line) ?? undefined;
   }
   if (line && (geo || r.fill)) r.line = line;
-  if (geo && r.fill && e.knockout === true) r.knockout = true;
+  if (geo && e.knockout === true) r.knockout = true;
   if (kept.line || kept.fill || kept.satin || kept.satinSettings) r.kept = kept;
   // Areas that are only the form rastered come from it (see compactStored).
   if (geo && !e.region && e.regionPx !== undefined) r.region = rasteredArea(r, e.regionPx, e.regionGrow);

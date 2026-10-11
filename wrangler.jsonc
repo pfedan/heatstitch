@@ -11,7 +11,9 @@
     "binding": "ASSETS",
     // Every file at exactly its path (docs.html stays docs.html), as on GitHub Pages; the Worker adds index.html.
     "html_handling": "none",
-    "not_found_handling": "none"
+    "not_found_handling": "none",
+    // A request a file matches (docs.html, sitemap.xml, ...) is answered by that file; the Worker never runs for it.
+    "run_worker_first": false
   },
   "routes": [{ "pattern": "heatstitch.app", "custom_domain": true }],
   // The site is only at heatstitch.app; workers.dev only carries the previews.

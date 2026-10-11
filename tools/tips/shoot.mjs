@@ -1,13 +1,17 @@
 // Takes the small screenshots some tooltips show (data-tip-img, see src/shell/tooltip.ts) from the
 // app itself: the demo project and the screencast's fly agaric, realistic threads, no marks. Each is
 // a 16:10 crop of the canvas, written as public/tips/<name>.webp at twice the tooltip's 200 x 125.
+// A few are short loops instead (MOVES below): the pointer glides over the design, drawn into each
+// frame, and ffmpeg (libwebp_anim) joins the frames into an animated WebP.
 //
 //   npm run build && npm run preview      (in a second shell)
 //   node tools/tips/shoot.mjs [name ...]  (all when none is named)
 //
 // APP_URL points elsewhere than the preview; --full also writes each whole page next to the crop
 // (as <name>.full.png in the scratch folder TIPS_DEBUG) to find a new crop.
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
@@ -120,6 +124,55 @@ const SHOTS = {
   'border-motif': [bordered(5), [572, 518, 224, 140]],
 };
 
+/**
+ * name: [how to get there, crop, pointer path]. The path is [x, y, seconds to glide there, seconds to
+ * rest, click there] in page pixels; the real mouse follows, so hover effects show. The loop starts
+ * and ends at the same spot, so it joins up without a jump.
+ */
+const MOVES = {
+  // Auto-Hervorheben: a click picks an object, it stands out and the rest goes pale; a click beside
+  // the design brings all back.
+  spot: [
+    design('Blume'),
+    [463, 165, 704, 440],
+    [
+      [1060, 480, 0, 0.5],
+      [910, 285, 0.7, 1.3, true],
+      [815, 395, 0.6, 1.3, true],
+      [665, 395, 0.6, 1.3, true],
+      [1060, 480, 0.7, 0.9, true],
+    ],
+  ],
+};
+const FPS = 12;
+
+/** The arrow pointer of the screencasts (tools/screencast/compose.py), drawn into a frame. */
+const drawPointer = (ctx, x, y, s, ring) => {
+  // A click: a ring that grows and fades, as in the screencasts.
+  if (ring !== null) {
+    ctx.beginPath();
+    ctx.arc(x, y, (6 + 16 * ring) * s, 0, 2 * Math.PI);
+    ctx.lineWidth = 2.5 * s;
+    ctx.strokeStyle = `rgba(222, 77, 140, ${0.9 * (1 - ring)})`;
+    ctx.stroke();
+  }
+  const pts = [[0, 0], [0, 22], [5.5, 17], [9, 25.5], [12.5, 24], [9, 16], [16, 16]];
+  const path = (dx, dy) => {
+    ctx.beginPath();
+    pts.forEach(([px, py], i) => ctx[i ? 'lineTo' : 'moveTo'](x + px * s + dx, y + py * s + dy));
+    ctx.closePath();
+  };
+  path(2 * s, 3 * s);
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.27)';
+  ctx.fill();
+  path(0, 0);
+  ctx.fillStyle = '#fff';
+  ctx.fill();
+  ctx.lineWidth = 1.4 * s;
+  ctx.strokeStyle = '#19141e';
+  ctx.stroke();
+};
+
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--hide-scrollbars'] });
 const page = await browser.newPage({ viewport: { width: 1600, height: 1000 }, locale: 'de-DE', colorScheme: 'light' });
 await page.goto(APP_URL);
@@ -162,5 +215,68 @@ for (const [name, [setup, [x, y, w, h]]] of Object.entries(SHOTS)) {
   );
   fs.writeFileSync(path.join(OUT, `${name}.webp`), Buffer.from(webp, 'base64'));
   console.log(`${name}.webp`);
+}
+const ease = (t) => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);
+
+for (const [name, [setup, [x, y, w, h], moves]] of Object.entries(MOVES)) {
+  if (wanted.length && !wanted.includes(name)) continue;
+  await toggle('live-light', false)(page);
+  await setup(page);
+  await page.evaluate(() => document.querySelector('#shapes-seg [data-shapes=off]').click());
+  await page.evaluate(() => {
+    const spot = document.getElementById('spot-toggle');
+    if (spot.getAttribute('aria-pressed') !== 'true') spot.click();
+  });
+  // The stitch info under the pointer would cover the design.
+  const quiet = await page.addStyleTag({ content: '#tooltip { visibility: hidden !important; }' });
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), `tip-${name}-`));
+  let n = 0;
+  let at = moves[0].slice(0, 2);
+  let ring = null;
+  const frame = async () => {
+    await page.waitForTimeout(40);
+    const shot = await cdp.send('Page.captureScreenshot', { format: 'png', clip: { x, y, width: w, height: h, scale: 1 } });
+    const png = await page.evaluate(
+      async ([png, W, H, px, py, w, draw, ring]) => {
+        const img = new Image();
+        img.src = `data:image/png;base64,${png}`;
+        await img.decode();
+        const c = Object.assign(document.createElement('canvas'), { width: W, height: H });
+        const ctx = c.getContext('2d');
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, W, H);
+        new Function('ctx', 'x', 'y', 's', 'ring', `(${draw})(ctx, x, y, s, ring)`)(ctx, px, py, (1.1 * W) / w, ring);
+        return c.toDataURL('image/png').split(',')[1];
+      },
+      [shot.data, W, H, ((at[0] - x) * W) / w, ((at[1] - y) * H) / h, w, drawPointer.toString(), ring],
+    );
+    fs.writeFileSync(path.join(dir, `${String(n++).padStart(4, '0')}.png`), Buffer.from(png, 'base64'));
+  };
+  await page.mouse.move(...at);
+  await page.waitForTimeout(1500);
+  for (const [tx, ty, glide, rest, click] of moves) {
+    const from = at;
+    const steps = Math.round(glide * FPS);
+    for (let i = 1; i <= steps; i++) {
+      const t = ease(i / steps);
+      at = [from[0] + (tx - from[0]) * t, from[1] + (ty - from[1]) * t];
+      await page.mouse.move(...at);
+      await frame();
+    }
+    at = [tx, ty];
+    await page.mouse.move(tx, ty);
+    if (click) await page.mouse.click(tx, ty);
+    const still = Math.round(rest * FPS);
+    for (let i = 0; i < still; i++) {
+      ring = click && i < 5 ? i / 5 : null;
+      await frame();
+    }
+    ring = null;
+  }
+  // prettier-ignore
+  execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-framerate', String(FPS), '-i', path.join(dir, '%04d.png'), '-c:v', 'libwebp_anim', '-lossless', '0', '-quality', '70', '-loop', '0', path.join(OUT, `${name}.webp`)]);
+  fs.rmSync(dir, { recursive: true });
+  await quiet.evaluate((el) => el.remove());
+  console.log(`${name}.webp (${n} frames)`);
 }
 await browser.close();

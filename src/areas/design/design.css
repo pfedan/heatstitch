@@ -478,17 +478,32 @@ body[data-mode='flow'] .material-panel .profile-info span:nth-child(2) {
   color: var(--accent-ink);
 }
 
-#marks-toggle {
+/* The view switches of the bar: on in the accent color on a light tint (pressed in), off grey and
+   struck through. Lighter than a tool that is on (#measure-toggle), which is filled. */
+#marks-toggle,
+#spot-toggle {
   position: relative;
   color: var(--accent);
 }
 
-#marks-toggle[aria-pressed='false'] {
+#marks-toggle[aria-pressed='true'],
+#spot-toggle[aria-pressed='true'] {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+#marks-toggle[aria-pressed='true']:hover,
+#spot-toggle[aria-pressed='true']:hover {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+#marks-toggle[aria-pressed='false'],
+#spot-toggle[aria-pressed='false'] {
   color: var(--muted);
 }
 
 /* Off: struck through, so the state does not hang on color alone. */
-#marks-toggle[aria-pressed='false']::after {
+#marks-toggle[aria-pressed='false']::after,
+#spot-toggle[aria-pressed='false']::after {
   content: '';
   position: absolute;
   left: 8px;

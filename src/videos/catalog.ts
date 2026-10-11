@@ -34,6 +34,8 @@ export interface Video {
   goal: Text;
   /** Files the video works with, to follow along (on R2 as `<key>-<file>`). */
   files: string[];
+  /** When the video went into the guide, ISO 8601 with its time zone (uploadDate for search engines). */
+  published: string;
 }
 
 export const GROUPS: Group[] = [
@@ -64,10 +66,11 @@ export const VIDEOS: Video[] = [
     key: '00-oberflaeche',
     part: 0,
     title: { de: 'Die heatstitch Oberfläche', en: 'The heatstitch interface' },
-    length: '2:58',
+    length: '3:52',
     group: 'start',
     goal: { de: 'Du weißt, wo was liegt: Kopfleiste, Werkzeuge, Farben und Objekte, Bühne, Karten und Player.', en: 'You know where everything is: header, tools, colors and objects, stage, cards and player.' },
     files: ['cat-60mm.pes'],
+    published: '2026-10-11T12:55:22+02:00',
   },
   {
     key: '01-neues-stickmuster',
@@ -77,6 +80,7 @@ export const VIDEOS: Video[] = [
     group: 'design',
     goal: { de: 'Du stickst dein erstes eigenes Muster, einen runden Aufnäher mit einer Welle, vom leeren Stickrahmen bis zur PES-Datei.', en: 'You make your first design of your own, a round patch with a wave, from the empty hoop to the PES file.' },
     files: [],
+    published: '2026-10-08T21:32:32+02:00',
   },
   {
     key: '02-schrift',
@@ -86,24 +90,37 @@ export const VIDEOS: Video[] = [
     group: 'design',
     goal: { de: 'Du setzt einen Namen in Stickschrift, im Bogen und in deiner Garnfarbe, und änderst ihn später jederzeit.', en: 'You set a name in an embroidery font, on an arc and in your thread color, and change it any time later.' },
     files: [],
+    published: '2026-10-08T21:32:32+02:00',
   },
   {
     key: '03-vom-bild-zum-stickmuster',
     part: 3,
     title: { de: 'Vom Bild zum Stickmuster', en: 'From a picture to a design' },
-    length: '2:43',
+    length: '3:14',
     group: 'design',
     goal: { de: 'Du machst aus einem Foto oder einer Grafik ein Stickmuster: Farben wählen, Flächen aufräumen, Stil festlegen.', en: 'You turn a photo or a graphic into a design: pick the colors, tidy the areas, choose a style.' },
     files: ['fliegenpilz.jpg'],
+    published: '2026-10-11T14:16:58+02:00',
+  },
+  {
+    key: '04-vom-svg-zum-stickmuster',
+    part: 4,
+    title: { de: 'Vom SVG zum Stickmuster', en: 'From SVG to a design' },
+    length: '2:41',
+    group: 'design',
+    goal: { de: 'Du machst aus einer SVG ein Stickmuster mit sauberen Satin-Konturen und legst ihre Abschnitte im Werkzeug Richtung neu an.', en: 'You turn an SVG into a design with clean satin outlines and lay out their sections anew in the Direction tool.' },
+    files: ['katze-im-karton.svg'],
+    published: '2026-10-11T14:09:10+02:00',
   },
   {
     key: '05-objekte-und-reihenfolge',
     part: 5,
     title: { de: 'Objekte und Reihenfolge', en: 'Objects and sequence' },
-    length: '2:31',
+    length: '2:50',
     group: 'design',
-    goal: { de: 'Du bringst Objekte in die richtige Reihenfolge, sparst Überlappungen aus und duplizierst und spiegelst sie.', en: 'You put objects in the right order, knock out overlaps, and duplicate and mirror them.' },
+    goal: { de: 'Du bringst Objekte in die richtige Reihenfolge, sparst Überlappungen aus, duplizierst und spiegelst sie und gibst einem Objekt ein eigenes Garn.', en: 'You put objects in the right order, knock out overlaps, duplicate and mirror them, and give one object a thread of its own.' },
     files: ['kirschen.svg'],
+    published: '2026-10-11T14:05:52+02:00',
   },
   {
     key: '06-fertige-stickdatei-oeffnen',
@@ -113,6 +130,7 @@ export const VIDEOS: Video[] = [
     group: 'file',
     goal: { de: 'Du öffnest eine fertige Stickdatei, wählst den Stickrahmen und siehst zu, wie die Maschine sie stickt.', en: 'You open a finished embroidery file, choose the hoop and watch how the machine sews it.' },
     files: ['katze.pes'],
+    published: '2026-10-08T21:32:32+02:00',
   },
   {
     key: '07-stickdatei-pruefen',
@@ -122,6 +140,7 @@ export const VIDEOS: Video[] = [
     group: 'file',
     goal: { de: 'Du siehst vor dem ersten Stich, ob eine Datei auf deinem Stoff gut wird und wo nicht.', en: 'Before the first stitch, you see whether a file works on your fabric and where it does not.' },
     files: ['patch.pes'],
+    published: '2026-10-08T21:32:32+02:00',
   },
   {
     key: '08-beheben-und-vergleichen',
@@ -131,6 +150,7 @@ export const VIDEOS: Video[] = [
     group: 'file',
     goal: { de: 'Du lässt zu dichte Stellen beheben, vergleichst mit dem Original und nimmst die Korrektur bei Bedarf zurück.', en: 'You let spots that are too dense be fixed, compare with the original and undo the correction if you like.' },
     files: ['patch.pes'],
+    published: '2026-10-09T12:22:19+02:00',
   },
   {
     key: '09-spruenge-und-schnitte',
@@ -140,6 +160,7 @@ export const VIDEOS: Video[] = [
     group: 'file',
     goal: { de: 'Du sorgst dafür, dass lange Sprünge geschnitten werden, und kürzt die Wege mit einer besseren Reihenfolge.', en: 'You make sure long jumps are trimmed and shorten the travel with a better order.' },
     files: ['konfetti.pes'],
+    published: '2026-10-08T21:32:32+02:00',
   },
   {
     key: '10-vorschau-und-speichern',
@@ -149,6 +170,7 @@ export const VIDEOS: Video[] = [
     group: 'file',
     goal: { de: 'Du siehst dein Stickmuster wie echt auf dem Stoff, legst Vlies und Nadel bereit und speicherst für deine Maschine.', en: 'You see your design as if real on the fabric, get stabilizer and needle ready and save for your machine.' },
     files: ['aufnaeher-67.dst'],
+    published: '2026-10-08T21:32:32+02:00',
   },
   {
     key: '11-fuellungen',
@@ -158,26 +180,32 @@ export const VIDEOS: Video[] = [
     group: 'detail',
     goal: { de: 'Du stellst Muster, Umrandung und Halt einer Füllung ein, zerteilst sie und lenkst ihre Reihen mit Leitlinien.', en: 'You set the pattern, border and hold of a fill, split it and steer its rows with guide lines.' },
     files: ['shapes-benchmark.svg'],
+    published: '2026-10-09T12:22:19+02:00',
   },
   {
     key: '12-satin-und-linien',
     part: 12,
     title: { de: 'Satin und Linien', en: 'Satin and lines' },
-    length: '2:58',
+    length: '3:27',
     group: 'detail',
     goal: { de: 'Du machst aus einer Füllung glänzenden Satin und gibst Linien Fransen, Wiederholung, Echo und Schatten.', en: 'You turn a fill into shiny satin and give lines fringe, repeats, echo and shadow.' },
     files: ['abzeichen.svg'],
+    published: '2026-10-11T12:48:05+02:00',
   },
   {
     key: '13-form-und-einzelne-stiche',
     part: 13,
     title: { de: 'Form und einzelne Stiche', en: 'Shape and single stitches' },
-    length: '2:38',
+    length: '3:20',
     group: 'detail',
-    goal: { de: 'Du änderst die Form eines Objekts an seinen Knoten und setzt, verschiebst und dünnst einzelne Stiche aus.', en: "You change an object's shape at its nodes and add, move and thin out single stitches." },
+    goal: { de: 'Du änderst die Form eines Objekts an seinen Knoten und setzt, verschiebst, ergänzt und dünnst einzelne Stiche aus.', en: "You change an object's shape at its nodes and add, move, extend and thin out single stitches." },
     files: ['cat-60mm.pes'],
+    published: '2026-10-11T13:04:55+02:00',
   },
 ];
+
+/** The video's own page (its watch page), relative to the site's base. */
+export const watchPath = (key: string, lang: Lang): string => `${lang === 'de' ? 'de/' : ''}videos/${key}.html`;
 
 /** The card picture, relative to the site's base. */
 export const cardPath = (key: string): string => `guide/videos/${key}.webp`;
@@ -188,4 +216,10 @@ export const videoByKey = (key: string): Video | undefined => VIDEOS.find((v) =>
 export const seconds = (length: string): number => {
   const [m, s] = length.split(':').map(Number);
   return m * 60 + s;
+};
+
+/** An m:ss length as an ISO 8601 duration (PT2M58S), as schema.org wants it. */
+export const isoDuration = (length: string): string => {
+  const [m, s] = length.split(':').map(Number);
+  return `PT${m ? `${m}M` : ''}${s}S`;
 };

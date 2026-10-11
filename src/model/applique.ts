@@ -15,8 +15,9 @@ import { COLOR_CHANGE, type Pattern, type ThreadColor } from './pattern';
  * 1. the placement line, a running stitch on the outline, then a stop: the fabric is laid on;
  * 2. the tack-down line, a running stitch a little inside the outline, then a stop: the fabric
  *    sticking out is cut off close to it;
- * 3. the cover edge over the cut edge: a satin centered on the outline, or an E stitch with its
- *    edge on the outline and its prongs inward.
+ * 3. the cover edge over the cut edge: a satin centered on the outline, an E stitch with its
+ *    edge on the outline and its prongs inward, or a running stitch over the tack-down (once, more
+ *    often or as bean stitch, as a line's): a raw edge, for felt and fabrics that do not fray.
  *
  * This is how digitizing software builds appliqué (Bernina/Wilcom: placement line, tack-down,
  * cover stitch; buttery-stitches, MIT, sews the same three passes with the tack-down on the
@@ -32,10 +33,12 @@ import { COLOR_CHANGE, type Pattern, type ThreadColor } from './pattern';
 export type AppliqueFabric = FabricId | 'felt';
 
 export interface AppliqueSettings {
-  /** The cover edge: a satin over the cut edge, or an E stitch (blanket stitch) along it. */
-  edge: 'satin' | 'e';
-  /** Width of the cover edge (mm). */
+  /** The cover edge: a satin over the cut edge, an E stitch (blanket stitch) along it, or a running stitch over the tack-down. */
+  edge: 'satin' | 'e' | 'run';
+  /** Width of the cover edge (mm); a running edge has none. */
   width: number;
+  /** A running edge: its stitch length, how often and whether as bean stitch (as a line's, see repeatRow). */
+  run?: PathStitch;
   /** The fabric laid on, and its color. */
   fabric: AppliqueFabric;
   color: ThreadColor;
@@ -58,6 +61,15 @@ export const TACK_STITCH = 2;
 export const tackInset = (width: number): number => Math.min(1, Math.max(0.5, width * 0.3));
 
 /** An appliqué of `color` as a new one is: cotton in the thread's color, a satin edge. */
+/** A running edge as a new one is: once along, stitches as long as the tack-down's. */
+export const APPLIQUE_RUN: PathStitch = { type: 'run', width: 0, length: TACK_STITCH };
+
+/** The running stitch of a running edge, as sewn: a running or triple stitch along its line. */
+export function runEdgeOf(s: AppliqueSettings): PathStitch {
+  const r = s.run ?? APPLIQUE_RUN;
+  return { type: r.type === 'triple' ? 'triple' : 'run', width: 0, length: r.length ?? TACK_STITCH, ...(r.repeat ? { repeat: r.repeat } : {}) };
+}
+
 export const appliqueDefaults = (color: ThreadColor): AppliqueSettings => ({ edge: 'satin', width: APPLIQUE_WIDTH, fabric: 'woven', color: { r: color.r, g: color.g, b: color.b } });
 
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
@@ -66,16 +78,18 @@ const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFi
 export function appliqueFrom(v: unknown): AppliqueSettings | null {
   const s = v as AppliqueSettings | null;
   if (!s || typeof s !== 'object') return null;
-  if (s.edge !== 'satin' && s.edge !== 'e') return null;
+  if (s.edge !== 'satin' && s.edge !== 'e' && s.edge !== 'run') return null;
   if (!finite(s.width) || s.width <= 0) return null;
   if (s.fabric !== 'felt' && !FABRICS.some((f) => f.id === s.fabric)) return null;
   const c = s.color;
   if (!c || ![c.r, c.g, c.b].every(finite)) return null;
-  return { edge: s.edge, width: Math.min(APPLIQUE_WIDTHS[1], Math.max(APPLIQUE_WIDTHS[0], s.width)), fabric: s.fabric, color: { r: c.r, g: c.g, b: c.b } };
+  const r = s.run as PathStitch | undefined;
+  const run = r && typeof r === 'object' && (r.type === 'run' || r.type === 'triple') && finite(r.length ?? 1) && finite(r.repeat ?? 1) ? runEdgeOf({ ...s, run: r }) : null;
+  return { edge: s.edge, width: Math.min(APPLIQUE_WIDTHS[1], Math.max(APPLIQUE_WIDTHS[0], s.width)), ...(run ? { run } : {}), fabric: s.fabric, color: { r: c.r, g: c.g, b: c.b } };
 }
 
 /** The settings as stored (a copy). */
-export const storeApplique = (s: AppliqueSettings): AppliqueSettings => ({ ...s, color: { r: s.color.r, g: s.color.g, b: s.color.b } });
+export const storeApplique = (s: AppliqueSettings): AppliqueSettings => ({ ...s, ...(s.run ? { run: { ...s.run } } : {}), color: { r: s.color.r, g: s.color.g, b: s.color.b } });
 
 /** Runs the machine stops before (the fabric laid on, cut off): see objectRecords. */
 export const stopBefore = new WeakSet<Pt[]>();
@@ -91,10 +105,13 @@ export interface AppliqueParts {
 export function appliqueParts(area: Region, s: AppliqueSettings, from: Pt): AppliqueParts {
   const place = borderStitches(area, { type: 'run', width: 0, length: PLACE_STITCH }, from);
   const end = (runs: Pt[][], or: Pt) => runs[runs.length - 1]?.[runs[runs.length - 1].length - 1] ?? or;
-  const tack = borderStitches(area, { type: 'run', width: 0, length: TACK_STITCH, offset: -tackInset(s.width) }, end(place, from));
+  // A running edge has no width: the tack-down as close inside as for the narrowest cover.
+  const inset = tackInset(s.edge === 'run' ? 0 : s.width);
+  const tack = borderStitches(area, { type: 'run', width: 0, length: TACK_STITCH, offset: -inset }, end(place, from));
   // A shape too thin for the tack-down inside: it is sewn on the outline, over the placement line.
   const held = tack.length ? tack : borderStitches(area, { type: 'run', width: 0, length: TACK_STITCH }, end(place, from));
-  const edge: PathStitch = s.edge === 'e' ? { type: 'e', width: s.width } : { type: 'satin', width: s.width };
+  // A running edge goes over the tack-down, hiding it.
+  const edge: PathStitch = s.edge === 'run' ? { ...runEdgeOf(s), ...(tack.length ? { offset: -inset } : {}) } : s.edge === 'e' ? { type: 'e', width: s.width } : { type: 'satin', width: s.width };
   const cover = borderStitches(area, edge, end(held, from));
   return { place, tack: held, cover };
 }
