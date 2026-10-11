@@ -114,7 +114,7 @@ export function registerObjectCommands(a: ObjectActions): void {
   };
 
   // While stitches are edited by hand, Mod+A selects all their needle points (edit.selectAll).
-  command({ id: 'object.selectAll', label: 'objects.selectAll', group: G, keys: ['Mod+A'], when: () => a.flow() && a.count() > 0 && !a.typing() && !canRun('edit.selectAll'), need: () => a.blocked() ?? (a.count() === 0 ? 'objects.need.empty' : undefined), run: a.selectAll });
+  command({ id: 'object.selectAll', label: 'objects.selectAll', group: G, keys: ['Mod+A'], when: () => a.flow() && a.count() > 0 && !a.typing() && !canRun('edit.selectAll') && !canRun('shape.selectAll'), need: () => a.blocked() ?? (a.count() === 0 ? 'objects.need.empty' : undefined), run: a.selectAll });
   command({ id: 'object.clear', label: 'objects.clear', group: G, keys: ['Escape'], bind: false, when: a.hasSelection, run: a.clear });
   // Mod+D and Delete are read by src/app/keys.ts; the rules here are the same ones it asks.
   command({ id: 'object.duplicate', label: 'objects.duplicate', group: G, icon: 'obj-duplicate', when: some, need: then(), run: () => a.duplicate() });

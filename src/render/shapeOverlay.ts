@@ -14,8 +14,8 @@ const isNode = (h: ShapePick | null, path: number, i: number, part: 'p' | 'a' | 
 
 /**
  * A fill's outline as curves: the curves dark under light (amber while changed and not sewn yet),
- * nodes as squares (corners) or circles (round), the selected node in the accent color with its
- * handles.
+ * nodes as squares (corners) or circles (round), the selected nodes in the accent color (one alone
+ * with its handles).
  */
 export function drawShapeOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, view: ShapeView, handles: { path: number; i: number; part: 'a' | 'b' }[]): void {
   const S = (p: Pt) => vp.toScreen(p[0], p[1]);
@@ -89,7 +89,7 @@ export function drawShapeOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, vi
   view.form.paths.forEach((p, path) =>
     p.nodes.forEach((n, i) => {
       const [x, y] = S(n.p);
-      const sel = view.selected?.path === path && view.selected.i === i;
+      const sel = view.isSelected(path, i);
       const r = sel || isNode(h, path, i, 'p') ? 5.5 : 4.5;
       ctx.beginPath();
       if (n.smooth) ctx.arc(x, y, r, 0, Math.PI * 2);

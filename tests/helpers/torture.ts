@@ -30,7 +30,7 @@ import { combineLines, deleteObjects, duplicateObject, duplicateObjects, gatherO
 import { stitchesBefore } from '../../src/model/transform';
 import { sewDesign, specOf } from '../../src/model/sew';
 import { parsePattern } from '../../src/parsers';
-import { bounds as boundsOf, extendPath, flatten, insertNode, rotation, segments, storeForm, translation, type Form, type Mat } from '../../src/shape/path';
+import { bounds as boundsOf, extendPath, flatten, insertNode, moveNodes, nodesOf, removeNodes, rotation, segments, setSmooth, storeForm, translation, type Form, type Mat } from '../../src/shape/path';
 import { ellipsePath, parsePath, rectPath } from '../../src/shape/svgPath';
 import { fromStored, toStored } from '../../src/storage/fileStore';
 import { decodeProject, encodeProject, projectSettings } from '../../src/storage/project';
@@ -1335,6 +1335,45 @@ export const SHAPE_OPS: Op[] = [
 ];
 
 /**
+ * A whole loop of an outline edited on the level Form, as after a double-click on it (or a frame
+ * around its nodes): moved, taken away (a hole, a piece; only while another loop stays) or made
+ * round or corners. Drawn from a stream of its own, so the chains of the other ops stay as they were.
+ */
+export const LOOP_OPS: Op[] = [
+  {
+    name: 'edit loop',
+    run: (d, r) => {
+      const p = d.cur.p;
+      const kinds = stitchKinds(p);
+      const objs = sewObjects(p, kinds);
+      const can = objs.filter((o) => {
+        const m = remembered(p, o);
+        return !!m && !m.free && !m.lettering && !m.outline && !m.blendOf && !partOf(m);
+      });
+      if (!can.length) return false;
+      const o = pick(r, can);
+      const geo = guessGeo(p, o, kinds);
+      if (!geo?.paths.length) return false;
+      const k = Math.floor(r() * geo.paths.length);
+      const loop = nodesOf(geo, k);
+      const how = r();
+      let next: Form | null;
+      if (how < 0.4 && geo.paths.length > 1) next = removeNodes(geo, loop);
+      else if (how < 0.7) {
+        const round = !loop.every((n) => geo.paths[k].nodes[n.i].smooth);
+        next = loop.reduce((f, n) => setSmooth(f, n.path, n.i, round), geo);
+      } else next = moveNodes(geo, loop, between(r, -2, 2), between(r, -2, 2));
+      if (!next) return false;
+      const before = remembered(p, o);
+      const res = reshapeObject(p, objs, o, kinds, next, T);
+      if (process.env.TORTURE_TRACE) console.log('edit loop', o.index, how);
+      const opened = !!res && geoUse(res.memory[0]) === 'line' && !!before?.fill;
+      return !!res && took(d, res, opened ? new Set(followerLinks(before)) : undefined);
+    },
+  },
+];
+
+/**
  * Redwork switched on or off for a line in running stitch, as the line panel does. Drawn from a
  * stream of its own, so the chains of the other ops stay as they were for the seeds above.
  */
@@ -2038,6 +2077,7 @@ export async function chain(seed: number, steps = STEPS, opts: { trace?: boolean
   const rhand = rng(seed + 86028121);
   const rknit = rng(seed + 104395301);
   const rapp = rng(seed + 122949823);
+  const rloop = rng(seed + 141650939);
   const d = new Doc();
   const log: string[] = [];
   const at = () => `seed ${seed}: ${log.join(' > ')}`;
@@ -2152,6 +2192,19 @@ export async function chain(seed: number, steps = STEPS, opts: { trace?: boolean
       if (await sop.run(d, rs)) {
         log.push(sop.name);
         if (process.env.TORTURE_TRACE) console.log(sop.name, describeObjects(d.cur.p));
+        try {
+          checkStep(d, false);
+        } catch (e) {
+          throw new Error(`${at()}\n${(e as Error).message}`);
+        }
+      }
+    }
+    // Now and then a whole loop of an outline moved, taken away or rounded, beside the chain.
+    if (!blank(d.cur.p) && rloop() < 0.12) {
+      const lop = pick(rloop, LOOP_OPS);
+      if (await lop.run(d, rloop)) {
+        log.push(lop.name);
+        if (process.env.TORTURE_TRACE) console.log(lop.name, describeObjects(d.cur.p));
         try {
           checkStep(d, false);
         } catch (e) {

@@ -258,6 +258,7 @@ export function initShapes(app: ShapesAreaApp): void {
   };
   const lineOpen = (closed: boolean) => () => shapedLine() !== null && app.shapeTool.closed === closed && app.shapeTool.count >= 2;
   command({ id: 'shape.nodeDelete', label: 'shape.node.delete', group: SHAPE, keys: ['Delete'], bind: false, when: () => shaping() && app.shapeTool.selectedSmooth !== null, run: () => void app.shapeTool.deleteSelected() });
+  command({ id: 'shape.selectAll', label: 'shapes.cmd.selectAll', group: SHAPE, keys: ['Mod+A'], bind: false, when: () => shaping() && app.shapeTool.count > 0, run: () => (app.shapeTool.selectAll(), app.redraw()) });
   command({ id: 'shape.cornerToggle', label: 'shapes.cmd.corner', group: SHAPE, keys: ['C'], bind: false, when: () => shaping() && app.shapeTool.selectedSmooth !== null, run: () => void app.shapeTool.toggleSmooth() });
   command({
     id: 'shape.simplify',
@@ -508,7 +509,7 @@ export function initShapes(app: ShapesAreaApp): void {
     if (s.active) {
       const items: Item[] = [
         { kind: 'title', text: t('shapes.shape.title'), title: t(s.band !== null ? 'shape.hint.band' : 'shape.hint') },
-        { kind: 'hint', text: `${t('shape.nodes', { n: formatNumber(s.count) })} · ${s.selectedSmooth === null ? t('shape.none') : t(s.selectedSmooth ? 'shape.node.smooth' : 'shape.node.corner')}` },
+        { kind: 'hint', text: `${t('shape.nodes', { n: formatNumber(s.count) })} · ${s.selectedSmooth === null ? t('shape.none') : s.selCount > 1 ? t('shape.picked', { n: formatNumber(s.selCount) }) : t(s.selectedSmooth ? 'shape.node.smooth' : 'shape.node.corner')}` },
         { kind: 'cmd', id: 'shape.nodeDelete', icon: ICON.nodeDelete },
         // What a tap makes of the selected node.
         s.selectedSmooth ? { kind: 'cmd', id: 'shape.cornerToggle', icon: ICON.corner, tip: t('shape.node.toCorner') } : { kind: 'cmd', id: 'shape.cornerToggle', icon: ICON.smooth, tip: t('shape.node.toSmooth') },

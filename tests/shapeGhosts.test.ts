@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { ShapeTool } from '../src/ui/shapeTool';
+import { describe, expect, it, vi } from 'vitest';
+import { DOUBLE_MS, ShapeTool } from '../src/ui/shapeTool';
 import { endDirection, extendPath, type Form } from '../src/shape/path';
 import { parsePath } from '../src/shape/svgPath';
 
@@ -52,9 +52,14 @@ describe('new nodes dragged out of hollow dots', () => {
   });
 
   it('a click on a middle dot is enough: the node stays where the dot was', () => {
+    vi.useFakeTimers();
     const { t, taken } = tool(line());
     t.down(10, 0, 4);
     t.up();
+    // Sewn a moment later: the click could be the first of a double-click.
+    expect(taken).toHaveLength(0);
+    vi.advanceTimersByTime(DOUBLE_MS);
+    vi.useRealTimers();
     expect(taken).toHaveLength(1);
     expect(taken[0].paths[0].nodes.map((n) => n.p)).toEqual([[0, 0], [10, 0], [20, 0], [20, 10]]);
   });
