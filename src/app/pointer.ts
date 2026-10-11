@@ -350,7 +350,7 @@ export function bindPointer(app: PointerApp) {
         : app.rungTool.active
         ? app.rungTool.hoverAt(wx, wy, app.vp.scale)
         : app.shapeTool.active
-          ? [app.shapeTool.hoverAt(wx, wy, app.vp.scale), app.frameTool.active && app.frameTool.hoverAt(wx, wy, app.vp.scale)].some(Boolean)
+          ? [app.shapeTool.hoverAt(wx, wy, app.vp.scale), app.frameTool.active && app.frameTool.hoverAt(wx, wy, app.vp.scale, !!app.shapeTool.hover)].some(Boolean)
           : (app.frameTool.active && app.frameTool.hoverAt(wx, wy, app.vp.scale)) ||
             [app.traceTool.hoverAt(wx, wy, app.vp.scale, () => objectAt(pos) >= 0), app.editor.hoverAt(wx, wy, app.vp.scale)].some(Boolean)
     )

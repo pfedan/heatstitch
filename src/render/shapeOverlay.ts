@@ -1,6 +1,6 @@
 import { formatNumber, t } from '../i18n';
 import type { Pt } from '../digitize/skeleton';
-import { segment, segments, type Form } from '../shape/path';
+import { apply, segment, segments, type Form } from '../shape/path';
 import { corners, TURN_PX, type FrameView } from '../ui/frameTool';
 import type { ShapePick, ShapeView } from '../ui/shapeTool';
 import type { Viewport } from './viewport';
@@ -189,10 +189,11 @@ function drawWidthGrip(ctx: CanvasRenderingContext2D, vp: Viewport, view: ShapeV
  * be scaled) and a round turn handle above it; while dragging, the frame as it will be and a
  * label with the new size, the turn or the distance moved.
  */
-export function drawFrame(ctx: CanvasRenderingContext2D, vp: Viewport, f: FrameView, mapped: Pt[]): void {
+export function drawFrame(ctx: CanvasRenderingContext2D, vp: Viewport, f: FrameView): void {
   const S = (p: Pt) => vp.toScreen(p[0], p[1]);
   ctx.save();
-  const pts = (f.dragging !== null ? mapped : corners(f.box)).map(S);
+  // As it will be while dragging (the map is the identity otherwise).
+  const pts = corners(f.shown(vp.scale)).map((q) => S(apply(f.m, q)));
   ctx.beginPath();
   pts.forEach(([x, y], k) => (k ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
   ctx.closePath();
