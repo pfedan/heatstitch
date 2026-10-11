@@ -2,6 +2,8 @@
 
 Schlüssel `12-satin-und-linien`, Demodatei `material/abzeichen.svg` (eigene, 60 × 60 mm: oranger Ring als Kontur 4 mm breit, gelber Stern als Fläche, blaue Welle als dünne Linie), etwa 3 Minuten, rund 300 Wörter.
 
+Die Bühne zeigt das ganze Video über die realistische Ansicht (Realistische Fäden), schon vor dem Start eingeschaltet und ohne Kommentar.
+
 Die Datei wird wie im Ordner ins Fenster gezogen (eine Dateikarte „abzeichen.svg“ fährt mit dem Zeiger herein). heatstitch liest sie Form für Form: Der Ring wird eine Linie mit Art Satin, der Stern eine Füllung, die Welle eine Linie im Steppstich.
 
 Warum nicht `patch.pes` wie im Konzept: Dort sind alle Formen aus den Stichen geschätzt. Der Stern daraus ergibt als Satin schräge, unruhige Säulen, kein gutes Vorbild. Mit einer sauberen SVG zeigt das Video, was Satin kann, und jeder kann es mit derselben Datei nachmachen.
@@ -74,6 +76,6 @@ Warum nicht `patch.pes` wie im Konzept: Dort sind alle Formen aus den Stichen ge
 
 ## Szene 12
 
-**Bild:** Auswahl aufheben, das Auge unten rechts auf der Bühne, Realistische Fäden ein. Das fertige Abzeichen mit Glanz und Schatten. Dann Abspann.
+**Bild:** Auswahl aufheben. Das fertige Abzeichen mit Glanz und Schatten. Dann Abspann.
 
 **Sprechtext:** [proud warm] Satin für die glänzenden Flächen, Linien für Ränder und Wellen, und das Abzeichen ist fertig. Viel Spaß beim Sticken!

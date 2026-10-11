@@ -30,8 +30,6 @@ const card = (s) => s.page.locator('#inspector');
 const field = (s, name) =>
   s.page.locator('label.field').filter({ has: s.page.locator('.name', { hasText: new RegExp(`^${name}$`) }) }).first();
 const slider = (s, name) => field(s, name).locator('input[type=range]');
-const eye = (s) => s.page.getByRole('toolbar', { name: 'Ansicht' }).getByRole('button').first();
-const viewMenu = (s) => s.page.locator('#view-pop');
 const row = (s, name) => s.page.getByText(name, { exact: true }).first();
 
 /** Waits in frames until `ready` holds. */
@@ -146,6 +144,11 @@ export default {
     language: 'de-DE',
     prompt:
       'Speak German like a seasoned embroidery master teaching a workshop: mature, composed, precise, quietly authoritative but kind. Every word placed with care, with understated pride.',
+  },
+  // The whole video shows the stitches in the realistic view, switched on before the app loads
+  // (record.mjs writes these settings to localStorage), so no scene has to mention it.
+  storage: {
+    'settings.v3': JSON.stringify({ mode: 'flow', realistic: true }),
   },
   lead: 0.4,
   tail: 0.6,
@@ -402,10 +405,6 @@ export default {
       run: async (s) => {
         // The Richtung slider still has the focus and would keep the Escape for itself.
         await s.page.evaluate(() => document.activeElement?.blur());
-        await s.press('Escape', { show: 0 });
-        await s.click(eye(s), { move: 1.0, before: 0.3, after: 0.4 });
-        const real = viewMenu(s).getByText('Realistische Fäden', { exact: true }).first();
-        await s.click(real, { move: 0.8, before: 0.3, after: 0.5 });
         await s.press('Escape', { show: 0 });
         await s.move(REST, 1.2);
         await s.wait(4.0);
