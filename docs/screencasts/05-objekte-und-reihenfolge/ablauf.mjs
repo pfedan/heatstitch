@@ -76,21 +76,14 @@ const dragFileIn = async (s, from, to) => {
   await s.page.evaluate(([x, y]) => window.__dropFile(x, y), to);
 };
 
+/** The action bar below the breadcrumb, and one of its buttons. */
+const actions = (s) => s.page.getByRole('toolbar', { name: 'Werkzeug-Optionen' });
+const act = (s, name) => actions(s).getByRole('button', { name, exact: true });
+
 /** A key the viewer needs not see (closing a menu, leaving a field). */
 const quietKey = async (s, key) => {
   await s.page.keyboard.press(key);
   await s.wait(0.3);
-};
-
-/** Opens the object menu with a right click and picks `item`, with a label on it. */
-const menuPick = async (s, at, item, { label = item, look = 1.2, pick = 0.6 } = {}) => {
-  await s.click(at, { move: 0.9, before: 0.3, after: 0.5, button: 'right' });
-  const entry = s.page.getByRole('menu', { name: 'Objektaktionen' }).getByRole('menuitem', { name: item });
-  await s.wait(look);
-  await s.move(entry, 0.8);
-  await s.label(label, entry, 'right');
-  await s.click(null, { before: pick, after: 0.3 });
-  s.unlabel();
 };
 
 export default {
@@ -98,10 +91,10 @@ export default {
   part: 5,
   voice: {
     model: 'google/gemini-3.1-flash-tts',
-    voice: 'Aoede',
+    voice: 'Gacrux',
     language: 'de-DE',
     prompt:
-      'Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.',
+      'Speak German like a seasoned embroidery master teaching a workshop: mature, composed, precise, quietly authoritative but kind. Every word placed with care, with understated pride.',
   },
   lead: 0.4,
   tail: 0.6,
@@ -130,12 +123,12 @@ export default {
         await s.label('Farben und Objekte', heading, 'right');
         await s.wait(1.6);
         s.unlabel();
-        for (const name of ['Dark Olive', 'Leaf Green', 'White', 'Red']) {
+        for (const name of ['Dark Olive', 'Moss Green', 'White', 'Dark Fuchsia']) {
           await s.move(colorRow(s, name).locator('.layer-name'), 0.7);
           await s.wait(0.5);
         }
         await s.wait(1.4);
-        const chev = colorRow(s, 'Red').getByRole('button', { name: /zeigen$/ });
+        const chev = colorRow(s, 'Dark Fuchsia').getByRole('button', { name: /zeigen$/ });
         await s.click(chev, { move: 0.7, before: 0.4, after: 0.6 });
         // Stage and list together, so the cherry lights up where the pointer points.
         await s.zoom([640, 520, 0, 0], 1.15);
@@ -178,9 +171,9 @@ export default {
       },
     },
     {
-      say: 'Die Reihenfolge änderst du per Ziehen. Ich ziehe White unter Red. [delighted] Schon liegen die Glanzlichter obenauf. Darunter steht, dass Weiß jetzt das Rot teilweise abdeckt. Genau das wollen wir.',
-      text: 'Die Reihenfolge änderst du per Ziehen. Ich ziehe White unter Red. Schon liegen die Glanzlichter obenauf. Darunter steht, dass Weiß jetzt das Rot teilweise abdeckt. Genau das wollen wir.',
-      textEn: 'You change the order by dragging. I drag White below Red. Right away the highlights lie on top. Below, it says that white now partly covers the red. That is exactly what we want.',
+      say: 'Die Reihenfolge änderst du per Ziehen. Ich ziehe White unter Dark Fuchsia. [delighted] Schon liegen die Glanzlichter obenauf. Darunter steht, dass White jetzt Dark Fuchsia teilweise abdeckt. Genau das wollen wir.',
+      text: 'Die Reihenfolge änderst du per Ziehen. Ich ziehe White unter Dark Fuchsia. Schon liegen die Glanzlichter obenauf. Darunter steht, dass White jetzt Dark Fuchsia teilweise abdeckt. Genau das wollen wir.',
+      textEn: 'You change the order by dragging. I drag White below Dark Fuchsia. Right away the highlights lie on top. Below, it says that White now partly covers Dark Fuchsia. That is exactly what we want.',
       run: async (s) => {
         const white = colorRow(s, 'White').locator('.layer-name');
         await s.zoom([200, 400, 0, 0], 1.6);
@@ -229,16 +222,27 @@ export default {
       },
     },
     {
-      say: 'Jetzt ein zweites Blatt. Ein Rechtsklick auf das Blatt öffnet ein Menü mit allem, was du mit einem Objekt tun kannst. Ich wähle Duplizieren. Die Kopie liegt fast genau auf dem Original.',
-      text: 'Jetzt ein zweites Blatt. Ein Rechtsklick auf das Blatt öffnet ein Menü mit allem, was du mit einem Objekt tun kannst. Ich wähle Duplizieren. Die Kopie liegt fast genau auf dem Original.',
-      textEn: 'Now a second leaf. A right click on the leaf opens a menu with everything you can do with an object. I choose Duplicate. The copy lies almost exactly on the original.',
+      say: 'Jetzt ein zweites Blatt. Ich klicke das Blatt an. Unter dem Breadcrumb erscheint die Aktionsleiste mit allem, was du mit einem Objekt tun kannst; dasselbe gibt es per Rechtsklick. Ich klicke auf Duplizieren. Die Kopie liegt fast genau auf dem Original.',
+      text: 'Jetzt ein zweites Blatt. Ich klicke das Blatt an. Unter dem Breadcrumb erscheint die Aktionsleiste mit allem, was du mit einem Objekt tun kannst; dasselbe gibt es per Rechtsklick. Ich klicke auf Duplizieren. Die Kopie liegt fast genau auf dem Original.',
+      textEn: 'Now a second leaf. I click the leaf. Below the breadcrumb, the action bar appears with everything you can do with an object; a right click offers the same. I click Duplicate. The copy lies almost exactly on the original.',
       run: async (s) => {
         // Nothing selected after knocking out: the first Escape leaves the shape, the second the selection.
         await s.page.evaluate(() => document.activeElement?.blur());
         await quietKey(s, 'Escape');
         await quietKey(s, 'Escape');
-        await s.wait(2.4);
-        await menuPick(s, LEAF, 'Duplizieren', { look: 4.6 });
+        await s.wait(1.6);
+        await s.click(LEAF, { move: 1.0, before: 0.3, after: 0.6 });
+        await s.zoom([610, 110, 0, 0], 1.8);
+        await s.move([620, 170], 0.9);
+        await s.label('Aktionsleiste', actions(s), 'below');
+        await s.wait(7.4);
+        s.unlabel();
+        const dup = act(s, 'Duplizieren');
+        await s.move(dup, 0.8);
+        await s.label('Duplizieren', dup, 'below');
+        await s.click(null, { before: 1.0, after: 0.4 });
+        s.unlabel();
+        s.zoomOut();
         await s.move([COPY[0] + 60, COPY[1] + 140], 0.9);
         await s.zoom([1200, 190, 0, 0], 1.6);
         await s.wait(3.0);
@@ -246,20 +250,25 @@ export default {
       },
     },
     {
-      say: 'Noch ein Rechtsklick, Waagrecht spiegeln. Dann ziehe ich die Kopie nach links. Einrasten ist an: [focused] Eine Linie zeigt, wann das Blatt genau auf der Höhe des anderen sitzt.',
-      text: 'Noch ein Rechtsklick, Waagrecht spiegeln. Dann ziehe ich die Kopie nach links. Einrasten ist an: Eine Linie zeigt, wann das Blatt genau auf der Höhe des anderen sitzt.',
-      textEn: 'Another right click, Flip horizontally. Then I drag the copy to the left. Snap is on: a line shows when the leaf sits exactly at the height of the other one.',
+      say: 'Daneben liegt Waagrecht spiegeln. Dann ziehe ich die Kopie nach links. Einrasten ist an: [focused] Eine Linie zeigt, wann das Blatt genau auf der Höhe des anderen sitzt.',
+      text: 'Daneben liegt Waagrecht spiegeln. Dann ziehe ich die Kopie nach links. Einrasten ist an: Eine Linie zeigt, wann das Blatt genau auf der Höhe des anderen sitzt.',
+      textEn: 'Next to it is Flip horizontally. Then I drag the copy to the left. Snap is on: a line shows when the leaf sits exactly at the height of the other one.',
       run: async (s) => {
-        await menuPick(s, COPY, 'Waagrecht spiegeln', { look: 0.6 });
-        await s.wait(1.0);
+        const flip = act(s, 'Waagrecht spiegeln');
+        await s.zoom([610, 110, 0, 0], 1.8);
+        await s.move(flip, 0.9);
+        await s.label('Waagrecht spiegeln', flip, 'below');
+        await s.click(null, { before: 1.0, after: 0.4 });
+        s.unlabel();
+        s.zoomOut();
+        await s.wait(0.8);
         // Held down while the voice names Einrasten, so the snap line stays in view.
-        await s.move(COPY, 0.6);
+        await s.move(COPY, 0.8);
         await s.wait(0.15);
         await s.page.mouse.down();
         await s.move([COPY[0] - 280, COPY[1] - 20], 1.6);
         await s.move([COPY_TO[0] + 30, COPY_TO[1]], 1.4);
-        const snap = s.page.getByText('Einrasten', { exact: true });
-        await s.label('Einrasten', snap, 'below');
+        await s.label('Einrasten', act(s, 'Einrasten'), 'below');
         await s.wait(2.0);
         await s.move(COPY_TO, 0.8);
         await s.wait(2.4);
@@ -269,15 +278,24 @@ export default {
       },
     },
     {
-      say: 'Das neue Blatt bekommt ein dunkleres Grün. Rechtsklick, Garn wählen, Deep Green. Nur dieses Objekt wechselt das Garn. In der Liste steht es jetzt als eigene Farbe.',
-      text: 'Das neue Blatt bekommt ein dunkleres Grün. Rechtsklick, Garn wählen, Deep Green. Nur dieses Objekt wechselt das Garn. In der Liste steht es jetzt als eigene Farbe.',
-      textEn: 'The new leaf gets a darker green. Right click, Choose thread, Deep Green. Only this object changes its thread. In the list it now has a color of its own.',
+      say: 'Das neue Blatt bekommt ein dunkleres Grün. Rechts in der Karte Objekt klicke ich auf sein Garn und wähle Deep Green. Nur dieses Objekt wechselt das Garn. In der Liste steht es jetzt als eigene Farbe.',
+      text: 'Das neue Blatt bekommt ein dunkleres Grün. Rechts in der Karte Objekt klicke ich auf sein Garn und wähle Deep Green. Nur dieses Objekt wechselt das Garn. In der Liste steht es jetzt als eigene Farbe.',
+      textEn: 'The new leaf gets a darker green. On the right, in the Object card, I click its thread and choose Deep Green. Only this object changes its thread. In the list it now has a color of its own.',
       run: async (s) => {
-        await s.wait(2.8);
-        await menuPick(s, COPY_AT, 'Garn wählen …', { label: 'Garn wählen', look: 0.6 });
-        await s.wait(0.4);
+        const thread = s.page.getByRole('button', { name: /^Garn dieses Objekts wählen/ }).first();
+        await s.wait(1.4);
+        await s.zoom([1700, 150, 0, 0], 1.8);
+        await s.move(thread, 1.0);
+        await s.label('Garn', thread, 'below');
+        await s.click(null, { before: 1.6, after: 0.4 });
+        s.unlabel();
+        s.zoomOut();
         const pick = s.page.getByRole('dialog', { name: 'Garn dieses Objekts wählen' }).getByRole('button', { name: '808 Deep Green' });
-        await s.click(pick, { move: 0.8, before: 0.3, after: 0.5 });
+        await s.wait(1.2);
+        await s.move(pick, 0.9);
+        await s.label('808 Deep Green', pick, 'left');
+        await s.click(null, { before: 1.0, after: 0.5 });
+        s.unlabel();
         await s.page.evaluate(() => document.activeElement?.blur());
         await quietKey(s, 'Escape');
         await quietKey(s, 'Escape');
