@@ -816,7 +816,8 @@ export const OPS: Op[] = [
   {
     name: 'knockout',
     run: (d, r) => {
-      const fills = d.objects.filter((o) => areaOf(remembered(d.cur.p, o)) && remembered(d.cur.p, o)?.fill);
+      // As the app offers it (knockoutState): every object with a drawn area, also one sewn as satin.
+      const fills = d.objects.filter((o) => areaOf(remembered(d.cur.p, o)) && !remembered(d.cur.p, o)?.free);
       if (!fills.length) return false;
       const o = pick(r, fills);
       const k = setKnockout(d.cur.p, [o.index], !remembered(d.cur.p, o)!.knockout, T);

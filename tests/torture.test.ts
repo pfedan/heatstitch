@@ -248,6 +248,66 @@ describe('a satin with a fringe', () => {
   });
 });
 
+describe('a narrow drawn area sewn as satin', () => {
+  /** The objects that leave out what lies on top, and the kind each is sewn as. */
+  const state = (d: { cur: Version }) => sewObjects(d.cur.p).map((o) => `${o.kind}${remembered(d.cur.p, o)?.knockout ? ':ko' : ''}`);
+  /** Stitches of object `index` inside the box (mm), which an object on top covers. */
+  const inside = (d: { cur: Version }, index: number, [x0, y0, x1, y1]: number[]) => {
+    const o = sewObjects(d.cur.p)[index];
+    let n = 0;
+    for (let i = o.first; i <= o.last; i++) {
+      const [x, y] = [d.cur.p.x[i] / 10, d.cur.p.y[i] / 10];
+      if (d.cur.p.cmd[i] === STITCH && x > x0 && x < x1 && y > y0 && y < y1) n++;
+    }
+    return n;
+  };
+
+  it('leaves out what lies on top, through duplicate, mirror, undo, redo and save and open', async () => {
+    await loadOps();
+    const d = new Doc();
+    // A strip 5 mm high: narrow enough that the drawn area is sewn as one satin column.
+    shapes(d, addShape(empty, { form: parsePath(rectPath(0, 20, 60, 5, 0, 0), ID), kind: 'fill' }, COLORS[0], null, options)!.pattern);
+    expect(state(d)).toEqual(['satin']);
+    shapes(d, addShape(d.cur.p, { form: parsePath(rectPath(25, 15, 10, 15, 0, 0), ID), kind: 'fill' }, COLORS[1], null, options)!.pattern);
+    const box = [26, 16, 34, 29];
+    expect(inside(d, 0, box)).toBeGreaterThan(0);
+    // Offered by the app (it has a drawn area), so leaving out must do something.
+    const k = setKnockout(d.cur.p, [0], true, T);
+    expect(k, 'the satin is left out under the square').toBeTruthy();
+    d.commit(k!.pattern);
+    checkAll(d);
+    expect(state(d)[0]).toBe('satin:ko');
+    expect(inside(d, 0, box), 'no stitches of the strip under the square').toBe(0);
+    undoRedo(d, () => expect(state(d)[0]).toBe('satin:ko'));
+
+    // The square moved away: the strip follows and is whole again.
+    expect(transform(d, [1], [1, 0, 0, 1, 0, 20])).toBe(true);
+    checkAll(d);
+    expect(inside(d, 0, box)).toBeGreaterThan(0);
+    expect(transform(d, [1], [1, 0, 0, 1, 0, -20])).toBe(true);
+    checkAll(d);
+    expect(inside(d, 0, box)).toBe(0);
+
+    expect(shapes(d, duplicateObject(d.cur.p, 0, T)?.pattern)).toBe(true);
+    checkAll(d);
+    expect(transform(d, [d.objects.length - 1], mirrorMatrix('x', boxOf(d, [d.objects.length - 1])))).toBe(true);
+    checkAll(d);
+    const before = d.cur;
+    await saveAndOpen(d);
+    checkAll(d);
+    expect(state(d)).toEqual(state({ cur: before }));
+    expect(Array.from(d.cur.p.x)).toEqual(Array.from(before.p.x));
+
+    // Off again: sewn whole as the satin it was.
+    const off = setKnockout(d.cur.p, [0], false, T);
+    expect(off).toBeTruthy();
+    d.commit(off!.pattern);
+    checkAll(d);
+    expect(state(d)[0]).toBe('satin');
+    expect(inside(d, 0, box)).toBeGreaterThan(0);
+  });
+});
+
 describe('versions keep what they knew', () => {
   /** A pattern of one stitch at (i, i): something else to remember. */
   const other = (i: number): Pattern => ({ ...empty, x: Int32Array.of(i, i), y: Int32Array.of(i, i), cmd: Uint8Array.of(STITCH, END), colors: [COLORS[0]] });
