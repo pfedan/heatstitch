@@ -202,6 +202,16 @@ export const VIDEOS: Video[] = [
     files: ['cat-60mm.pes'],
     published: '2026-10-11T13:04:55+02:00',
   },
+  {
+    key: '16-formen-verbinden-und-schneiden',
+    part: 16,
+    title: { de: 'Formen verbinden und schneiden', en: 'Combining and cutting shapes' },
+    length: '2:28',
+    group: 'design',
+    goal: { de: 'Du fasst Formen zusammen, schneidest eine Form aus einer anderen, legst eine Kontur drumherum und verbindest oder teilst Pfade.', en: 'You combine shapes, cut one shape out of another, lay a contour around them, and join or split paths.' },
+    files: [],
+    published: '2026-10-11T21:32:30+02:00',
+  },
 ];
 
 /** The video's own page (its watch page), relative to the site's base. */
