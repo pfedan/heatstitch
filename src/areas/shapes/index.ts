@@ -526,7 +526,12 @@ export function initShapes(app: ShapesAreaApp): void {
     }
     if (ui.lettering) return [{ kind: 'title', text: t('lettering.title'), title: t('canvas.hint.lettering') }, { kind: 'cmd', id: 'lettering.letters' }, snap, { kind: 'hint', text: t('shapes.opt.lettering') }];
     if (app.frameTool.active) return ui.selectedObjects.size ? objectItems(snap) : [snap, { kind: 'hint', text: t(matchMedia('(pointer: coarse)').matches ? 'responsive.opt.frame' : 'shapes.opt.frame') }];
-    if (shapeLevel() && !app.editor.active) return [{ kind: 'title', text: t('level.shape') }, { kind: 'hint', text: t('shapes.opt.formPick') }];
+    if (shapeLevel() && !app.editor.active) {
+      // A new design has nothing to click yet: the hint says how to begin.
+      const p = app.files.active?.pattern;
+      const empty = !p || !app.seq(p).objects.length;
+      return [{ kind: 'title', text: t('level.shape') }, { kind: 'hint', text: t(empty ? 'shapes.opt.formEmpty' : 'shapes.opt.formPick') }];
+    }
     return [];
   }
 

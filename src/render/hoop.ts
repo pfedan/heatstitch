@@ -5,21 +5,27 @@ import type { Viewport } from './viewport';
 /** Corner radius of the drawn sewing field, mm. */
 const RADIUS_MM = 6;
 
-/** The sewing field centered on the design, turned when the design only fits that way (mm). */
-export function hoopRect(b: Bounds, hoop: Hoop): { x: number; y: number; w: number; h: number; fits: boolean } {
+/** Where the machine puts the middle of the hoop: the middle of the design (mm). */
+export const hoopCenter = (b: Bounds): [number, number] => [(b.minX + b.maxX) / 20, (b.minY + b.maxY) / 20];
+
+/**
+ * The sewing field centered on the design (or on `at`, mm), turned when the design only fits that
+ * way (mm).
+ */
+export function hoopRect(b: Bounds, hoop: Hoop, at?: readonly [number, number] | null): { x: number; y: number; w: number; h: number; fits: boolean } {
   const f = hoopFit(b, hoop);
   const [w, h] = f.turned ? [hoop.h, hoop.w] : [hoop.w, hoop.h];
-  const cx = (b.minX + b.maxX) / 20;
-  const cy = (b.minY + b.maxY) / 20;
+  const [cx, cy] = at ?? hoopCenter(b);
   return { x: cx - w / 2, y: cy - h / 2, w, h, fits: f.fits || f.turned };
 }
 
 /**
- * The sewing field of the chosen hoop as a dashed rounded line with a small cross in its middle.
- * When the design sticks out, the line turns red and the part outside is tinted.
+ * The sewing field of the chosen hoop as a dashed rounded line with a small cross in its middle,
+ * around `at` when given (mm). When the design sticks out, the line turns red and the part outside
+ * is tinted.
  */
-export function drawHoop(ctx: CanvasRenderingContext2D, vp: Viewport, b: Bounds, hoop: Hoop): void {
-  const r = hoopRect(b, hoop);
+export function drawHoop(ctx: CanvasRenderingContext2D, vp: Viewport, b: Bounds, hoop: Hoop, at?: readonly [number, number] | null): void {
+  const r = hoopRect(b, hoop, at);
   const [x0, y0] = vp.toScreen(r.x, r.y);
   const [x1, y1] = vp.toScreen(r.x + r.w, r.y + r.h);
   const rad = Math.min(RADIUS_MM * vp.scale, (x1 - x0) / 4, (y1 - y0) / 4);
@@ -60,4 +66,43 @@ export function drawHoop(ctx: CanvasRenderingContext2D, vp: Viewport, b: Bounds,
   ctx.strokeStyle = color;
   ctx.stroke();
   ctx.restore();
+}
+
+/** How long the drawn hoop takes to follow the design's middle after a change (ms). */
+const GLIDE_MS = 220;
+
+/**
+ * Where the hoop is drawn. It stays where it is while an object is dragged (its stitches are only a
+ * preview then), so the object moves and not the stage; once the change is made, the hoop glides
+ * to the new middle of the design. A lone object dragged would otherwise carry the hoop along with
+ * it, which looks just like moving the view.
+ */
+export class HoopGlide {
+  private shown: [number, number] | null = null;
+  private from: [number, number] = [0, 0];
+  private to: [number, number] = [0, 0];
+  private t0 = 0;
+  private of: unknown = null;
+
+  /**
+   * The middle to draw the hoop around for the made design with bounds `b` (`of` names the design:
+   * another one is shown at once), and whether it is still on its way there.
+   */
+  at(b: Bounds, of: unknown, now: number, still: boolean): { at: [number, number]; moving: boolean } {
+    const target = hoopCenter(b);
+    if (!this.shown || of !== this.of || still) {
+      this.of = of;
+      this.shown = this.from = this.to = target;
+      return { at: target, moving: false };
+    }
+    if (target[0] !== this.to[0] || target[1] !== this.to[1]) {
+      this.from = this.shown;
+      this.to = target;
+      this.t0 = now;
+    }
+    const k = Math.min(1, Math.max(0, (now - this.t0) / GLIDE_MS));
+    const e = 1 - (1 - k) ** 3;
+    this.shown = [this.from[0] + (this.to[0] - this.from[0]) * e, this.from[1] + (this.to[1] - this.from[1]) * e];
+    return { at: this.shown, moving: k < 1 };
+  }
 }
