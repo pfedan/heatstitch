@@ -47,13 +47,21 @@ const thumbAt = async (s, sl, value) => {
   return [b.x + 8 + ((b.width - 16) * (value - min)) / (max - min), b.y + b.height / 2];
 };
 
-/** Wheel steps over `at`, a few frames apart, so the stage zooms in smoothly. */
+/**
+ * Ctrl + wheel steps over `at`, a few frames apart, so the stage zooms in smoothly. The plain
+ * wheel pans the stage (#287); Ctrl + wheel zooms before and after that change.
+ */
 const wheelZoom = async (s, at, steps, delta = -100) => {
   await s.move(at, 0.6);
+  s.keyCap('Strg + Mausrad');
+  await s.page.keyboard.down('Control');
   for (let i = 0; i < steps; i++) {
     await s.page.mouse.wheel(0, delta);
     await s.wait(0.12);
   }
+  await s.page.keyboard.up('Control');
+  await s.wait(0.4);
+  s.keyCap(null);
 };
 
 // Over the stage, off the shapes; the pointer rests here while the voice speaks.
@@ -67,10 +75,10 @@ export default {
   part: 11,
   voice: {
     model: 'google/gemini-3.1-flash-tts',
-    voice: 'Aoede',
+    voice: 'Gacrux',
     language: 'de-DE',
     prompt:
-      'Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.',
+      'Speak German like a seasoned embroidery master teaching a workshop: mature, composed, precise, quietly authoritative but kind. Every word placed with care, with understated pride.',
   },
   lead: 0.4,
   tail: 0.6,
@@ -94,9 +102,9 @@ export default {
       },
     },
     {
-      say: 'Ich klicke auf den grünen Kreis und zoome mit dem Mausrad heran. Im Ansicht-Menü schalte ich Realistische Fäden ein. So siehst du jede Änderung, wie sie gestickt aussieht.',
-      text: 'Ich klicke auf den grünen Kreis und zoome mit dem Mausrad heran. Im Ansicht-Menü schalte ich Realistische Fäden ein. So siehst du jede Änderung, wie sie gestickt aussieht.',
-      textEn: 'I click the green circle and zoom in with the mouse wheel. In the View menu I turn on Realistic threads. That way you see every change as it will look stitched.',
+      say: 'Ich klicke auf den grünen Kreis und zoome mit Strg und Mausrad heran. Im Ansicht-Menü schalte ich Realistische Fäden ein. So siehst du jede Änderung, wie sie gestickt aussieht.',
+      text: 'Ich klicke auf den grünen Kreis und zoome mit Strg und Mausrad heran. Im Ansicht-Menü schalte ich Realistische Fäden ein. So siehst du jede Änderung, wie sie gestickt aussieht.',
+      textEn: 'I click the green circle and zoom in with Ctrl and the mouse wheel. In the View menu I turn on Realistic threads. That way you see every change as it will look stitched.',
       run: async (s) => {
         await s.click(CIRCLE, { move: 1.0, before: 0.3, after: 0.4 });
         // Off the shapes, a drag moves the stage; the circle comes to the middle.
@@ -149,9 +157,9 @@ export default {
       },
     },
     {
-      say: 'Unter Offen zieht eine Linie ein Muster, und der Stoff scheint durch. Echo legt Linien im gleichen Abstand zum Rand, wie beim Quilten. [delighted] Leicht und schnell gestickt. Ich bleibe aber bei Deckend und nehme wieder Tatami.',
-      text: 'Unter Offen zieht eine Linie ein Muster, und der Stoff scheint durch. Echo legt Linien im gleichen Abstand zum Rand, wie beim Quilten. Leicht und schnell gestickt. Ich bleibe aber bei Deckend und nehme wieder Tatami.',
-      textEn: 'Under Open, a single line draws a pattern and the fabric shows through. Echo lays lines at the same distance from the edge, as in quilting. Light and quick to stitch. But I stay with Covering and take Tatami again.',
+      say: 'Unter Offen zieht eine Linie ein Muster, und der Stoff scheint durch. Echo legt Linien im gleichen Abstand zum Rand, wie beim Quilten. Daneben kreuzt die Kreuzschraffur zwei Lagen gerader Linien. [delighted] Leicht und schnell gestickt. Ich bleibe aber bei Deckend und nehme wieder Tatami.',
+      text: 'Unter Offen zieht eine Linie ein Muster, und der Stoff scheint durch. Echo legt Linien im gleichen Abstand zum Rand, wie beim Quilten. Daneben kreuzt die Kreuzschraffur zwei Lagen gerader Linien. Leicht und schnell gestickt. Ich bleibe aber bei Deckend und nehme wieder Tatami.',
+      textEn: 'Under Open, a single line draws a pattern and the fabric shows through. Echo lays lines at the same distance from the edge, as in quilting. Next to it, Crosshatch crosses two layers of straight lines. Light and quick to stitch. But I stay with Covering and take Tatami again.',
       run: async (s) => {
         await s.zoom([1760, 640, 0, 0], 1.6);
         await s.click(group(s, 'Offen'), { move: 1.0, before: 0.3, after: 0.4 });
@@ -164,7 +172,15 @@ export default {
         s.unlabel();
         s.zoomOut();
         await s.move(REST, 1.0);
-        await s.wait(4.2);
+        await s.wait(2.6);
+        // Pointing at Kreuzschraffur shows it on the stage in advance, without choosing it.
+        const hatch = tile(s, 'Kreuzschraffur');
+        await s.move(hatch, 1.0);
+        await s.label('Kreuzschraffur', hatch, 'left');
+        await s.wait(2.8);
+        s.unlabel();
+        await s.move(tile(s, 'Echo'), 0.6);
+        await s.wait(1.2);
         await s.zoom([1760, 640, 0, 0], 1.6);
         await s.click(group(s, 'Deckend'), { move: 1.0, before: 0.3, after: 0.4 });
         await s.click(tile(s, 'Tatami'), { move: 0.8, before: 0.3, after: 0.4 });
@@ -207,9 +223,9 @@ export default {
       },
     },
     {
-      say: 'Unter Umrandung bekommt die Füllung eine Linie um den Rand, nach ihr gestickt. Eine Satinkante deckt den Rand sauber ab.',
-      text: 'Unter Umrandung bekommt die Füllung eine Linie um den Rand, nach ihr gestickt. Eine Satinkante deckt den Rand sauber ab.',
-      textEn: 'Under Border the fill gets a line around its edge, stitched after it. A satin edge covers the edge neatly.',
+      say: 'Unter Umrandung bekommt die Füllung eine Linie um den Rand, nach ihr gestickt. Eine Satinkante deckt den Rand sauber ab. Darunter gibt es Fransen, Echo und Schatten für besondere Kanten.',
+      text: 'Unter Umrandung bekommt die Füllung eine Linie um den Rand, nach ihr gestickt. Eine Satinkante deckt den Rand sauber ab. Darunter gibt es Fransen, Echo und Schatten für besondere Kanten.',
+      textEn: 'Under Border the fill gets a line around its edge, stitched after it. A satin edge covers the edge neatly. Below it you find fringes, echo and shadow for special edges.',
       run: async (s) => {
         const heading = card(s).getByText('Umrandung', { exact: true }).first();
         await s.move([1760, 600], 0.6);
@@ -225,7 +241,17 @@ export default {
         s.unlabel();
         s.zoomOut();
         await s.move(REST, 1.0);
-        await s.wait(2.0);
+        await s.wait(1.6);
+        await s.zoom([1760, 760, 0, 0], 1.6);
+        for (const word of ['Fransen', 'Echo', 'Schatten']) {
+          const name = card(s).getByText(word, { exact: true }).first();
+          await s.move(name, 0.7);
+          await s.label(word, name, 'left');
+          await s.wait(0.7);
+        }
+        s.unlabel();
+        s.zoomOut();
+        await s.move(REST, 1.0);
       },
     },
     {
