@@ -1,6 +1,8 @@
 # Teil 1: Ein neues Stickmuster
 
-Schlüssel `01-neues-stickmuster`, Demodatei: keine (Startseite, „Leer anfangen“), etwa 2 Minuten, 263 Wörter.
+Schlüssel `01-neues-stickmuster`, Demodatei: keine (Startseite, „Leer anfangen“), 2:43 lang mit der Stimme Gacrux, rund 255 Wörter.
+
+Neu aufgenommen im Oktober 2026 (main e9d6d55): gleicher Ablauf und Sprechtext (nur Szene 9 schlichter, ohne die realistische Ansicht anzupreisen), neues Bild (Logo, Aktionsleiste unter dem Breadcrumb, Maßstab unten links). Stimme abweichend von der Serie: Gacrux.
 
 Ziel: ein runder Aufnäher mit einer Welle. Kreis mit der Ellipse, 60 mm, blaues Garn; Welle mit dem Pfad, als Satin 3 mm in Weiß; abspielen, realistische Fäden, als PES speichern.
 
@@ -56,7 +58,7 @@ Ziel: ein runder Aufnäher mit einer Welle. Kreis mit der Ellipse, 60 mm, blaues
 
 **Bild:** Heranzoomen unten rechts, Etikett Ansicht-Menü am Auge, Klick. Etikett Realistische Fäden, Klick, Menü schließt. Heranzoomen auf den Aufnäher in realistischen Fäden.
 
-**Sprechtext:** Unten rechts auf der Bühne öffnet das Auge das Ansicht-Menü. Mit „Realistische Fäden“ siehst du dein Muster so, wie es auf dem Stoff aussehen wird. [impressed] Schön, oder?
+**Sprechtext:** Unten rechts auf der Bühne öffnet das Auge das Ansicht-Menü. Dort schalte ich Realistische Fäden ein.
 
 ## Szene 10
 
