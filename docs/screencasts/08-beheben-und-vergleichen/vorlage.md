@@ -1,12 +1,12 @@
 # Teil 8: Beheben und vergleichen
 
-Schlüssel `08-beheben-und-vergleichen`, Demodatei `public/examples/demos/patch.pes` (Aufnäher 84 × 84 mm: Rand in Tangerine, dunkle Füllung, Stern in Harvest Gold, Satinschrift HEAT STITCH in Weiß, 9.135 Stiche), geprüft für Strick, etwa 2 Minuten, 228 Wörter.
+Schlüssel `08-beheben-und-vergleichen`, Demodatei `public/examples/demos/patch.pes` (Aufnäher 84 × 84 mm: Rand in Tangerine, dunkle Füllung, Stern in Harvest Gold, Satinschrift HEAT STITCH in Weiß, 9.135 Stiche), geprüft für Strick, etwa 2 Minuten 30, 228 Wörter. Stimme Gacrux.
 
 Ziel: Danach kannst du eine zu dichte Stickdatei von heatstitch verbessern lassen, ohne dass man es sieht, vergleichst mit dem Original und nimmst die Korrektur bei Bedarf zurück.
 
 Stand mit dem Aufnäher auf Strick (main mit #201): „Riskant auf Strick“, Dichte 30 mm² kritisch an 16 Stellen, Prüfen zeigt 16. Bei einem so kleinen Stickmuster sucht heatstitch die Lösungen von selbst („Wird berechnet“, einige Sekunden). Danach: „Beheben 30 von 30 mm²“; einen Vorschlag gibt es nicht mehr, weil das unsichtbare Beheben schon alles schafft. Das Ergebnis ist bei jedem Lauf gleich.
 
-Was Beheben ändert (aus den Hinweisen an „Von der Korrektur geändert“): neun Satinbuchstaben, keine Füllung. Ohne Unterlage oder nur mit Unterlage in der Mitte (S: „Unterlage aus“, T in HEAT: „Unterlage Mitte statt Auto“), etwas weiterer Abstand (E: „Abstand nach Breite, Abstand 0,41 → 0,43 mm“). Danach „Mit Vorsicht auf Strick“, Prüfen zeigt 7, kritische Fläche 8 statt 36 mm² im Vergleich, 8.909 statt 9.135 Stiche.
+Was Beheben ändert (aus den Hinweisen an „Von der Korrektur geändert“): neun Satinbuchstaben, keine Füllung. Ohne Unterlage oder nur mit Unterlage in der Mitte (S: „Unterlage aus“, T in HEAT: „Unterlage Mitte statt Auto“), etwas weiterer Abstand (E: „Abstand nach Breite, Abstand 0,41 → 0,43 mm“). Danach „Mit Vorsicht auf Strick“, Prüfen zeigt 6, kritische Fläche 7 statt 36 mm² im Vergleich, 8.883 statt 9.135 Stiche (Stand nach #272).
 
 Überdeckende Füllungen aussparen kommt in diesem Aufnäher nicht vor (die Schrift ist Satin, keine Füllung); das zeigt die Korrektur zum Beispiel bei „Überlappende Kreise“.
 
@@ -32,9 +32,9 @@ Die Datei steht nicht unter „Weitere Beispiele“; sie wird wie im Ordner ins 
 
 ## Szene 4
 
-**Bild:** Klick auf Beheben. Die Ampel springt auf Gelb, Etikett Mit Vorsicht auf Strick. Heranzoomen oben, Etikett 7 offen an Prüfen.
+**Bild:** Klick auf Beheben. Die Ampel springt auf Gelb, Etikett Mit Vorsicht auf Strick. Heranzoomen oben, Etikett 6 offen an Prüfen.
 
-**Sprechtext:** [delighted] Ein Klick, und aus Riskant wird Mit Vorsicht. Oben bei Prüfen stehen statt sechzehn nur noch sieben offene Stellen.
+**Sprechtext:** [delighted] Ein Klick, und aus Riskant wird Mit Vorsicht. Oben bei Prüfen stehen statt sechzehn nur noch sechs offene Stellen.
 
 ## Szene 5
 
@@ -50,9 +50,9 @@ Die Datei steht nicht unter „Weitere Beispiele“; sie wird wie im Ordner ins 
 
 ## Szene 7
 
-**Bild:** Die rechte Spalte rollt zu Vergleich. Heranzoomen auf die Tabelle, Etikett Kritische Fläche an der Zeile (36 und 8 mm²), dann Etikett Stiche (9.135 und 8.909).
+**Bild:** Die rechte Spalte rollt zu Vergleich. Heranzoomen auf die Tabelle, Etikett Kritische Fläche an der Zeile (36 und 7 mm²), dann Etikett Stiche (9.135 und 8.883).
 
-**Sprechtext:** Rechts unter Vergleich stehen die Zahlen. [proud and warm] Die kritische Fläche schrumpft von 36 auf 8 Quadratmillimeter, und das mit 226 Stichen weniger.
+**Sprechtext:** Rechts unter Vergleich stehen die Zahlen. [proud and warm] Die kritische Fläche schrumpft von 36 auf 7 Quadratmillimeter, und das mit 252 Stichen weniger.
 
 ## Szene 8
 

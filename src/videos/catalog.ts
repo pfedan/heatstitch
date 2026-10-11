@@ -146,11 +146,11 @@ export const VIDEOS: Video[] = [
     key: '08-beheben-und-vergleichen',
     part: 8,
     title: { de: 'Beheben und vergleichen', en: 'Fixing and comparing' },
-    length: '2:19',
+    length: '2:27',
     group: 'file',
     goal: { de: 'Du lässt zu dichte Stellen beheben, vergleichst mit dem Original und nimmst die Korrektur bei Bedarf zurück.', en: 'You let spots that are too dense be fixed, compare with the original and undo the correction if you like.' },
     files: ['patch.pes'],
-    published: '2026-10-09T12:22:19+02:00',
+    published: '2026-10-11T21:01:36+02:00',
   },
   {
     key: '09-spruenge-und-schnitte',
