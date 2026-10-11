@@ -66,18 +66,58 @@ export function bindPointer(app: PointerApp) {
     return [e.clientX - r.left, e.clientY - r.top];
   };
 
+  // Wheel and trackpad, as in Figma, Miro or tldraw: scrolling (two fingers swiping, or the mouse
+  // wheel) pans, a pinch zooms around the pointer. Browsers report a trackpad pinch as a wheel with
+  // ctrlKey set; Ctrl or Cmd with the mouse wheel zooms the same way. Safari reports the pinch as
+  // gesture events instead (on a touch screen besides the pointers). The page never scrolls.
+  /** Pixels per wheel line, and the steepest zoom step one wheel event may take. */
+  const LINE_PX = 16;
+  const ZOOM_STEP = 18;
+  let gestureScale = 0;
   app.canvas.addEventListener(
     'wheel',
     (e) => {
       e.preventDefault();
       const [sx, sy] = local(e);
-      const delta = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
-      app.vp.zoomAt(sx, sy, Math.exp(-delta * 0.0015));
+      const unit = e.deltaMode === 1 ? LINE_PX : e.deltaMode === 2 ? app.canvas.clientHeight : 1;
+      if (e.ctrlKey || e.metaKey) {
+        if (gestureScale) return;
+        // A pinch sends many small deltas, a mouse wheel notch one large one: the cap keeps a notch
+        // a gentle step while the pinch follows the fingers.
+        const d = Math.max(-ZOOM_STEP, Math.min(ZOOM_STEP, e.deltaY * unit));
+        app.vp.zoomAt(sx, sy, Math.exp(-d * 0.01));
+      } else {
+        let dx = e.deltaX * unit;
+        let dy = e.deltaY * unit;
+        // Shift with a plain mouse wheel scrolls sideways where the browser does not already.
+        if (e.shiftKey && !dx) [dx, dy] = [dy, 0];
+        app.vp.pan(-dx, -dy);
+      }
       showTooltip(sx, sy);
       app.redraw();
     },
     { passive: false },
   );
+  type Gesture = UIEvent & { scale: number; clientX: number; clientY: number };
+  app.canvas.addEventListener('gesturestart', (e) => {
+    e.preventDefault();
+    gestureScale = (e as Gesture).scale || 1;
+  });
+  app.canvas.addEventListener('gesturechange', (e) => {
+    e.preventDefault();
+    const g = e as Gesture;
+    // On a touch screen Safari sends these besides the pointers, which pinch already.
+    if (!gestureScale || !g.scale || pointers.size) return;
+    const [sx, sy] = local(g);
+    app.vp.zoomAt(sx, sy, g.scale / gestureScale);
+    gestureScale = g.scale;
+    showTooltip(sx, sy);
+    app.redraw();
+  });
+  app.canvas.addEventListener('gestureend', (e) => {
+    e.preventDefault();
+    gestureScale = 0;
+  });
 
   /** Tooltip for the side of the divider the pointer is on. */
   function showTooltip(sx: number, sy: number): void {

@@ -42,12 +42,14 @@ const scrollAside = async (s, dy, sec = 0.8) => {
   }
 };
 
-/** Zooms the stage with the mouse wheel, one notch per `step` s, at the pointer. */
+/** Zooms the stage with Ctrl and the mouse wheel, one notch per `step` s, at the pointer. */
 const wheelZoom = async (s, notches, step = 0.25) => {
+  await s.page.keyboard.down('Control');
   for (let i = 0; i < Math.abs(notches); i++) {
-    await s.page.mouse.wheel(0, notches > 0 ? 100 : -100);
+    await s.page.mouse.wheel(0, notches > 0 ? 15 : -15);
     await s.wait(step);
   }
+  await s.page.keyboard.up('Control');
 };
 
 /**

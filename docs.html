@@ -149,7 +149,7 @@
           <dt>Farben und Objekte</dt>
           <dd>Die Liste links: die Farben in Stickreihenfolge, jede mit Garnname und Nummer, Objektzahl und Stichen; der Pfeil klappt sie zu ihren Objekten auf. Ganz oben <i>Reihenfolge optimieren</i>, ganz unten der Block <i>Nicht gestickt</i>. Mehr dazu unter <a href="#de-sequence">Ablauf und Farben</a> und <a href="#de-objects">Objekte</a>.</dd>
           <dt>Bühne</dt>
-          <dd>In der Mitte das Stickmuster. Die Brotkrume oben links nennt das gewählte Objekt und die <b>Ebene</b>: <i>Objekte</i> (ganze Objekte wählen und ordnen), <i>Form</i> (Umriss bearbeiten) oder <i>Stiche</i> (einzelne Einstiche); ein Klick darauf wechselt, <kbd>Esc</kbd> geht eine Ebene zurück. Unten rechts die Ansichtsleiste: das Auge öffnet das <a href="#de-display">Ansicht-Menü</a>, daneben <i>Messen</i> (<kbd>L</kbd>), die Zoomstufe und <i>Einpassen</i> (<kbd>F</kbd> oder Doppelklick auf eine leere Stelle). Unten links der Maßstab. Mausrad, Ziehen und zwei Finger zoomen und verschieben.</dd>
+          <dd>In der Mitte das Stickmuster. Die Brotkrume oben links nennt das gewählte Objekt und die <b>Ebene</b>: <i>Objekte</i> (ganze Objekte wählen und ordnen), <i>Form</i> (Umriss bearbeiten) oder <i>Stiche</i> (einzelne Einstiche); ein Klick darauf wechselt, <kbd>Esc</kbd> geht eine Ebene zurück. Unten rechts die Ansichtsleiste: das Auge öffnet das <a href="#de-display">Ansicht-Menü</a>, daneben <i>Messen</i> (<kbd>L</kbd>), die Zoomstufe und <i>Einpassen</i> (<kbd>F</kbd> oder Doppelklick auf eine leere Stelle). Unten links der Maßstab. Zwei Finger auf dem Trackpad, das Mausrad und Ziehen verschieben; Pinch oder <kbd>Strg</kbd>/<kbd>⌘</kbd>+Mausrad zoomen.</dd>
           <dt>Player</dt>
           <dd>Die Leiste unter der Bühne stickt das Stickmuster Stich für Stich nach, siehe <a href="#de-sequence">Ablauf</a>.</dd>
           <dt>Karten rechts</dt>
@@ -837,7 +837,7 @@
           <dt>Vorschau beim Zeigen</dt>
           <dd>Zeigst du auf ein Muster, eine Unterlage, eine Prägung oder einen Vorschlag, siehst du das Ergebnis schon auf der Bühne, bevor du klickst. Große Flächen werden dafür im Hintergrund gestickt, auch beim Klick: Die Seite bleibt bedienbar, und es zählt immer das, worauf du gerade zeigst; der Zeiger dreht sich, solange es rechnet. Hast du schon gezeigt, übernimmt der Klick die fertige Vorschau sofort. Wer das ruhiger mag, schaltet <i>Vorschau beim Zeigen</i> im Ansicht-Menü aus: Dann ändert sich die Bühne erst beim Klick. Ziehen an einem Regler zeigt die Stiche weiter live.</dd>
           <dt>Zoom</dt>
-          <dd>Mausrad, Pinch oder <kbd>+</kbd> und <kbd>-</kbd>; <kbd>0</kbd> zeigt das Stickmuster in Originalgröße, <kbd>F</kbd> oder ein Doppelklick auf eine leere Stelle passt es ein. Ist ein Stickrahmen gewählt, zeigt <i>Einpassen</i> das ganze Stickfeld.</dd>
+          <dd>Pinch, <kbd>Strg</kbd>/<kbd>⌘</kbd>+Mausrad oder <kbd>+</kbd> und <kbd>-</kbd>; Wischen mit zwei Fingern, das Mausrad (mit <kbd>Umschalt</kbd> seitwärts) oder Ziehen verschiebt; <kbd>0</kbd> zeigt das Stickmuster in Originalgröße, <kbd>F</kbd> oder ein Doppelklick auf eine leere Stelle passt es ein. Ist ein Stickrahmen gewählt, zeigt <i>Einpassen</i> das ganze Stickfeld.</dd>
           <dt>Maßstab</dt>
           <dd>Unten links auf der Bühne zeigt ein schwarz-weißer Balken, wie groß das Stickmuster bei diesem Zoom ist: zwei Abschnitte von 1, 2,5 oder 5 mm mal einer Zehnerpotenz (… 1, 2,5, 5, 10, 25, 50, 100 mm …, ganz nah bis 0,1 mm), höchstens 120 Pixel breit. Ausschalten mit <i>Maßstab</i> im Ansicht-Menü.</dd>
           <dt>Messen</dt>
@@ -921,7 +921,8 @@
             <tr><td><kbd>1</kbd> / <kbd>2</kbd> / <kbd>3</kbd></td><td>Gestalten / Prüfen / Bild umwandeln</td></tr>
             <tr><td><kbd>Strg</kbd>+<kbd>K</kbd>, <kbd>?</kbd></td><td>Befehl suchen, Tastenkürzel zeigen</td></tr>
             <tr><td><kbd>Strg</kbd>+<kbd>O</kbd>, <kbd>Strg</kbd>+<kbd>S</kbd></td><td>Datei öffnen, Speichern</td></tr>
-            <tr><td><kbd>Mausrad</kbd> / Pinch, Ziehen</td><td>Zoomen, verschieben</td></tr>
+            <tr><td>Pinch / <kbd>Strg</kbd>+<kbd>Mausrad</kbd></td><td>Zoomen</td></tr>
+            <tr><td>Wischen / <kbd>Mausrad</kbd>, Ziehen</td><td>Verschieben</td></tr>
             <tr><td><kbd>F</kbd> oder Doppelklick, <kbd>+</kbd> <kbd>-</kbd> <kbd>0</kbd></td><td>Einpassen; vergrößern, verkleinern, Originalgröße</td></tr>
             <tr><td><kbd>H</kbd>, <kbd>S</kbd>, <kbd>A</kbd></td><td>Alle Markierungen ein oder aus; Stiche oder Formen zeigen; Auto-Hervorheben ein oder aus</td></tr>
             <tr><td><kbd>Umschalt</kbd>+<kbd>B</kbd></td><td>Vorlage zum Abpausen ein- oder ausblenden</td></tr>
@@ -1093,7 +1094,7 @@
           <dt>Colors and objects</dt>
           <dd>The list on the left: the colors in sewing order, each with thread name and number, object count and stitches; the arrow opens it to its objects. At the very top <i>Optimize order</i>, at the bottom the <i>Not sewn</i> block. More under <a href="#en-sequence">Sequence and colors</a> and <a href="#en-objects">Objects</a>.</dd>
           <dt>Stage</dt>
-          <dd>The design in the middle. The breadcrumb at the top left names the selected object and the <b>level</b>: <i>Objects</i> (pick and order whole objects), <i>Shape</i> (edit the outline) or <i>Stitches</i> (single needle points); a click on it switches, <kbd>Esc</kbd> goes one level back. At the bottom right the view bar: the eye opens the <a href="#en-display">View menu</a>, next to it <i>Measure</i> (<kbd>L</kbd>), the zoom level and <i>Fit</i> (<kbd>F</kbd> or a double click on an empty spot). The scale bar at the bottom left. Mouse wheel, dragging and two fingers zoom and pan.</dd>
+          <dd>The design in the middle. The breadcrumb at the top left names the selected object and the <b>level</b>: <i>Objects</i> (pick and order whole objects), <i>Shape</i> (edit the outline) or <i>Stitches</i> (single needle points); a click on it switches, <kbd>Esc</kbd> goes one level back. At the bottom right the view bar: the eye opens the <a href="#en-display">View menu</a>, next to it <i>Measure</i> (<kbd>L</kbd>), the zoom level and <i>Fit</i> (<kbd>F</kbd> or a double click on an empty spot). The scale bar at the bottom left. Two fingers on the trackpad, the mouse wheel and dragging pan; pinch or <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+wheel zooms.</dd>
           <dt>Player</dt>
           <dd>The bar under the stage sews the design stitch by stitch, see <a href="#en-sequence">Sequence</a>.</dd>
           <dt>Cards on the right</dt>
@@ -1772,7 +1773,7 @@
           <dt>Preview on hover</dt>
           <dd>When you point at a pattern, an underlay, an emboss motif or a proposal, the stage shows the result before you click. Large areas are sewn for it in the background, also on a click: the page stays responsive, and what counts is always what you point at right now; the pointer spins while it works. After pointing, a click takes the finished preview over at once. If you prefer it calmer, switch off <i>Preview on hover</i> in the View menu: the stage then only changes on a click. Dragging a slider still shows the stitches live.</dd>
           <dt>Zoom</dt>
-          <dd>Mouse wheel, pinch or <kbd>+</kbd> and <kbd>-</kbd>; <kbd>0</kbd> shows the design at actual size, <kbd>F</kbd> or a double click on an empty spot fits it in. With a hoop chosen, <i>Fit</i> shows the whole sewing field.</dd>
+          <dd>Pinch, <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+wheel or <kbd>+</kbd> and <kbd>-</kbd>; a two finger swipe, the mouse wheel (sideways with <kbd>Shift</kbd>) or dragging pans; <kbd>0</kbd> shows the design at actual size, <kbd>F</kbd> or a double click on an empty spot fits it in. With a hoop chosen, <i>Fit</i> shows the whole sewing field.</dd>
           <dt>Scale bar</dt>
           <dd>At the bottom left of the stage a black and white bar shows how large the design is at this zoom: two parts of 1, 2.5 or 5 mm times a power of ten (… 1, 2.5, 5, 10, 25, 50, 100 mm …, down to 0.1 mm when zoomed in close), at most 120 pixels wide. Switch it off with <i>Scale bar</i> in the View menu.</dd>
           <dt>Measure</dt>
@@ -1856,7 +1857,8 @@
             <tr><td><kbd>1</kbd> / <kbd>2</kbd> / <kbd>3</kbd></td><td>Design / Check / Convert a picture</td></tr>
             <tr><td><kbd>Ctrl</kbd>+<kbd>K</kbd>, <kbd>?</kbd></td><td>Search commands, show shortcuts</td></tr>
             <tr><td><kbd>Ctrl</kbd>+<kbd>O</kbd>, <kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>Open a file, save</td></tr>
-            <tr><td><kbd>Mouse wheel</kbd> / pinch, drag</td><td>Zoom, pan</td></tr>
+            <tr><td>Pinch / <kbd>Ctrl</kbd>+<kbd>wheel</kbd></td><td>Zoom</td></tr>
+            <tr><td>Swipe / <kbd>wheel</kbd>, drag</td><td>Pan</td></tr>
             <tr><td><kbd>F</kbd> or double click, <kbd>+</kbd> <kbd>-</kbd> <kbd>0</kbd></td><td>Fit; zoom in, zoom out, actual size</td></tr>
             <tr><td><kbd>H</kbd>, <kbd>S</kbd>, <kbd>A</kbd></td><td>All markers on or off; show stitches or shapes; auto highlight on or off</td></tr>
             <tr><td><kbd>Shift</kbd>+<kbd>B</kbd></td><td>Show or hide the tracing image</td></tr>

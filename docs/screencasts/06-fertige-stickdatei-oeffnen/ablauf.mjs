@@ -56,12 +56,17 @@ const dragFileIn = async (s, from, to, sec = 1.8) => {
   await s.page.evaluate(([x, y]) => window.__dropFile(x, y), to);
 };
 
-/** Turns the mouse wheel in small steps, one per frame, so the zoom glides. */
+/**
+ * Turns the mouse wheel with Ctrl in small steps, one per frame, so the zoom glides. `dy` is in
+ * the units of the first recording, when a wheel pixel zoomed 0.15 times as much as now.
+ */
 const wheel = async (s, dy, steps = 8) => {
+  await s.page.keyboard.down('Control');
   for (let i = 0; i < steps; i++) {
-    await s.page.mouse.wheel(0, dy / steps);
+    await s.page.mouse.wheel(0, (dy * 0.15) / steps);
     await s.wait(1 / 30);
   }
+  await s.page.keyboard.up('Control');
 };
 
 /** Drags the player knob from one share of the slider to another. */
