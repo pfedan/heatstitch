@@ -126,11 +126,11 @@ export const VIDEOS: Video[] = [
     key: '06-fertige-stickdatei-oeffnen',
     part: 6,
     title: { de: 'Fertige Stickdatei öffnen', en: 'Opening a finished embroidery file' },
-    length: '2:38',
+    length: '2:54',
     group: 'file',
     goal: { de: 'Du öffnest eine fertige Stickdatei, wählst den Stickrahmen und siehst zu, wie die Maschine sie stickt.', en: 'You open a finished embroidery file, choose the hoop and watch how the machine sews it.' },
     files: ['katze.pes'],
-    published: '2026-10-08T21:32:32+02:00',
+    published: '2026-10-11T20:49:43+02:00',
   },
   {
     key: '07-stickdatei-pruefen',

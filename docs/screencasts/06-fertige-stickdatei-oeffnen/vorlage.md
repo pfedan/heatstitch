@@ -38,9 +38,9 @@ Das Ziehen der Datei kann der aufgenommene Browser nicht echt zeigen: Eine klein
 
 ## Szene 6
 
-**Bild:** Tastenkappe Mausrad, die Bühne zoomt aufs Gesicht. Der Zeiger ruht auf einem Stich, heranzoomen: „Stich 610 · Füllung · 2,5 mm“. Ein zweiter Stich. Kurz ziehen, Etikett Einpassen, Klick.
+**Bild:** Tastenkappe Strg + Mausrad, die Bühne zoomt aufs Gesicht. Der Zeiger ruht auf einem Stich, heranzoomen: „Stich 610 · Füllung · 2,5 mm“. Ein zweiter Stich. Kurz ziehen, Etikett Einpassen, Klick.
 
-**Sprechtext:** Mit dem Mausrad zoomst du hinein. [focused] Zeigst du auf einen Stich, steht daneben, der wievielte er ist, welche Stichart und wie lang. Ziehen verschiebt das Bild, „Einpassen“ zeigt wieder alles.
+**Sprechtext:** Mit Strg und Mausrad zoomst du hinein. [focused] Zeigst du auf einen Stich, steht daneben, der wievielte er ist, welche Stichart und wie lang. Ziehen oder das Mausrad allein verschiebt das Bild, „Einpassen“ zeigt wieder alles.
 
 ## Szene 7
 
@@ -62,6 +62,6 @@ Das Ziehen der Datei kann der aufgenommene Browser nicht echt zeigen: Eine klein
 
 ## Szene 10
 
-**Bild:** Heranzoomen unten rechts, Etikett Ansicht-Menü, Klick aufs Auge. Etikett Realistische Fäden, Klick. Esc, Klick auf „Markierungen zeigen“ blendet Sprünge und Schnitte aus. Langsamer Zoom auf die Katze, der Zeiger ruht oben links (das Licht kommt von dort). Dann Abspann.
+**Bild:** Heranzoomen unten rechts, Etikett Ansicht-Menü, Klick aufs Auge. Etikett Realistische Fäden, Klick. Esc, Klick auf „Markierungen zeigen“ blendet Sprünge und Schnitte aus. Kurzer Zoom auf die Katze, der Zeiger ruht oben links (das Licht kommt von dort). Dann Abspann.
 
-**Sprechtext:** [proud and warm] Im Ansicht-Menü, unter dem Auge unten rechts, schaltest du „Realistische Fäden“ ein. So siehst du schon vorher, wie die Katze auf dem Stoff wirkt. Jetzt kennst du deine Datei, bevor du etwas an ihr änderst.
+**Sprechtext:** Zum Schluss schalte ich unter dem Auge unten rechts noch „Realistische Fäden“ ein. [proud and warm] Jetzt kennst du deine Datei, bevor du etwas an ihr änderst.
