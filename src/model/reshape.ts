@@ -9,7 +9,7 @@ import { analyze, bestChain, keepShape, knownKind, measureFill, measureRun, meas
 import type { Pt } from '../digitize/skeleton';
 import type { Region } from '../digitize/region';
 import { areaLoops, columnsAlong, suggestSatin } from '../digitize/satinSuggest';
-import { cumulative, cutLinesBetween, pointAt, railsFromOutline, stripsOfAreas, stripsOfOutline, type Rung } from '../digitize/rungs';
+import { cumulative, cutLinesBetween, cutPieces, pointAt, railsFromOutline, stripsOfAreas, stripsOfOutline, type Rung } from '../digitize/rungs';
 import { rasterize } from '../shape/rasterize';
 import { stitchKinds } from './sequence';
 import { isRigid, mirroredEcho, scaleOf, stitchesBefore, transformObject, transformRemembered } from './transform';
@@ -149,7 +149,9 @@ function nearestOn(q: Pt, [a, b]: [Pt, Pt]): Pt {
 }
 
 /** Distance from point `q` to the segment from `a` to `b`. */
-const nearLine = (q: Pt, seg: [Pt, Pt]): number => Math.hypot(...sub(q, nearestOn(q, seg)));
+const nearSeg = (q: Pt, seg: [Pt, Pt]): number => Math.hypot(...sub(q, nearestOn(q, seg)));
+/** Distance from q to a cut line (straight or bent). */
+const nearLine = (q: Pt, cut: Pt[]): number => Math.min(...cutPieces(cut).map((s) => nearSeg(q, s)));
 
 /**
  * The satin columns for `area` that keep the directions of `cols` (the satin's columns before):

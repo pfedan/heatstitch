@@ -1,6 +1,6 @@
 import { peakCell } from './measure';
 import { sample, type Region } from './region';
-import { cutParts, inside, partsOf, stripsOfParts, type Parts } from './rungs';
+import { cutParts, cutPieces, inside, partsOf, stripsOfParts, type Cut, type Parts } from './rungs';
 import { areaLoops } from './satinSuggest';
 import type { Pt } from './skeleton';
 import { bestChain, satinRuns, type Rails, type SatinSettings } from '../model/restitch';
@@ -32,12 +32,12 @@ function toSegment(q: Pt, a: Pt, b: Pt): number {
  * see peakDensity; SATIN_PEAK times its own by default) and a cut helps. Cuts no longer than `max`
  * (mm). The plan as it was when none does. `runs`: the satin as sewn from the plan, when known.
  */
-export function easePiles(area: Region, plan: { cuts: [Pt, Pt][]; lines: [Pt, Pt][] }, s: SatinSettings, max: number, limit = (SATIN_PEAK * 2) / s.spacing, runs?: Pt[][]): { cuts: [Pt, Pt][]; lines: [Pt, Pt][] } {
+export function easePiles<C extends Cut>(area: Region, plan: { cuts: C[]; lines: [Pt, Pt][] }, s: SatinSettings, max: number, limit = (SATIN_PEAK * 2) / s.spacing, runs?: Pt[][]): { cuts: (C | [Pt, Pt])[]; lines: [Pt, Pt][] } {
   const { outsides, holes } = areaLoops(area);
   const material = (q: Pt) => sample(area, area.sdfBase, q[0], q[1]) < 0;
   // Each outline cut into parts by the cut lines so far, once per round (see partsOf): a cut tried
   // cuts one of those parts further and leaves the rest, and their columns, as they were.
-  const partsOfAll = (cuts: [Pt, Pt][]): Parts[] => outsides.map((o) => partsOf(o, cuts, holes.filter((h) => inside(o, h[0]))));
+  const partsOfAll = (cuts: Cut[]): Parts[] => outsides.map((o) => partsOf(o, cuts, holes.filter((h) => inside(o, h[0]))));
   const columnsOf = new Map<Parts, Rails[] | null>();
   const columns = (p: Parts, chain: number): Rails[] | null => {
     let c = columnsOf.get(p);
@@ -65,8 +65,8 @@ export function easePiles(area: Region, plan: { cuts: [Pt, Pt][]; lines: [Pt, Pt
   };
   // Where columns meet at cut lines they overlap on purpose: not counted there (as when the satin
   // is checked), so the spot eased is one that piles up.
-  const seam = (cuts: [Pt, Pt][]) => (x: number, y: number) => cuts.some(([a, b]) => toSegment([x, y], a, b) < SEAM_MM);
-  let cuts = plan.cuts.slice();
+  const seam = (cuts: Cut[]) => (x: number, y: number) => cuts.some((c) => cutPieces(c).some(([a, b]) => toSegment([x, y], a, b) < SEAM_MM));
+  let cuts: (C | [Pt, Pt])[] = plan.cuts.slice();
   let base = partsOfAll(cuts);
   const all = runs ?? sew(base);
   if (!all) return plan;
