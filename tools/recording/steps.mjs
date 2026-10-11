@@ -75,10 +75,18 @@ export async function stroke(s, start, moves, { button = 0, mods = [] } = {}) {
   await hold(s, mods, false);
 }
 
-/** Zooms with the wheel at a point of the design. */
+/** Zooms with Ctrl and the wheel at a point of the design (the plain wheel pans). */
 export async function wheel(s, point, dy) {
   await s.move(await stage(s, ...point), 0.3);
-  await s.page.mouse.wheel(0, dy);
+  await s.page.keyboard.down('Control');
+  // The stage caps each wheel event's zoom step, so a whole pinch replays as a run of events.
+  for (let left = dy; Math.abs(left) > 0.5; ) {
+    const d = Math.max(-18, Math.min(18, left));
+    await s.page.mouse.wheel(0, d);
+    left -= d;
+    await s.wait(1 / 30);
+  }
+  await s.page.keyboard.up('Control');
   await s.wait(0.3);
 }
 

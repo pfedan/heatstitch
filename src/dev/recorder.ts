@@ -380,7 +380,8 @@ export async function startRecorder(app: DevApp): Promise<Recorder> {
   });
 
   on<WheelEvent>(window, 'wheel', (e) => {
-    if (!e.isTrusted || !onStage(e)) return;
+    // Only zooming is a step worth replaying (a pinch or Ctrl with the wheel); scrolling pans.
+    if (!e.isTrusted || !onStage(e) || !(e.ctrlKey || e.metaKey)) return;
     const delta = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
     const prev = last();
     const at = toMm(e);

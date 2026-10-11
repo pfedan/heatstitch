@@ -139,7 +139,10 @@ async function clickText(page, text) {
 }
 async function wheelAt(page, x, y, steps, delta = -120) {
   await page.mouse.move(x, y);
+  // Ctrl with the wheel zooms; the plain wheel pans.
+  await page.keyboard.down('Control');
   for (let i = 0; i < steps; i++) { await page.mouse.wheel(0, delta); await page.waitForTimeout(80); }
+  await page.keyboard.up('Control');
   await page.waitForTimeout(400);
 }
 
