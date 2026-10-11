@@ -161,15 +161,15 @@ Hilfeseite.
 
 - Sprachsynthese mit Google Gemini TTS über Replicate (`google/gemini-3.1-flash-tts`),
   Sprache `de-DE`.
-- Eine Stimme für die ganze Serie: Aoede (beim Pilot aus Kore, Aoede und Charon gewählt).
+- Eine Stimme für die ganze Serie: Gacrux (im Oktober 2026 statt Aoede gewählt, Stil „Stickmeisterin im Kurs“).
 - Jeder Auftrag an Replicate läuft nur einmal je identischem Auftrag. `tools/screencast/tts.mjs`
   legt jede Aufnahme unter einem Fingerabdruck aus Modell, Stimme, Sprache, Anweisung und Text
   in `ton/` neben dem Ablauf ab und fragt nur fehlende an.
 - Regieanweisungen immer auf Englisch, der Sprechtext auf Deutsch. Feste Anweisung für alle
   Videos (Feld `prompt`):
-  "Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing
-  a friend something on the computer. Natural pace, small pauses between thoughts. Let real
-  enthusiasm show when something nice happens."
+  "Speak German like a seasoned embroidery master teaching a workshop: mature, composed,
+  precise, quietly authoritative but kind. Every word placed with care, with understated
+  pride."
 - Regie im Text als englische Markierungen in eckigen Klammern, etwa `[enthusiastic]`,
   `[delighted]`, `[focused]`, `[curious]`, `[proud, warm]`, `[short pause]`. Gern mehrere pro
   Video, wo Begeisterung oder Konzentration den Satz tragen, aber nicht in jedem Satz.

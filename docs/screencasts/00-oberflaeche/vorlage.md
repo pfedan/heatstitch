@@ -1,6 +1,6 @@
 # Teil 0: Die heatstitch Oberfläche
 
-Schlüssel `00-oberflaeche`, Demodatei `cat-60mm.pes` (Startseite, Weitere Beispiele, „Katze“), etwa 2 Minuten, 287 Wörter.
+Schlüssel `00-oberflaeche`, Demodatei `cat-60mm.pes` (Startseite, Weitere Beispiele, „Katze“), etwa 3 Minuten, 338 Wörter. Stimme Gacrux.
 
 Ein Rundgang: Er zeigt, wo was liegt, und nennt jeden Bereich mit seinem Namen, ohne eine Aufgabe zu Ende zu führen.
 
@@ -48,35 +48,41 @@ Ein Rundgang: Er zeigt, wo was liegt, und nennt jeden Bereich mit seinem Namen, 
 
 ## Szene 8
 
-**Bild:** Ganzes Bild. Klick auf den roten Pullover wählt ihn, Etikett Breadcrumb. Heranzoomen unten rechts, Etikett Ansichtsleiste, Zeiger über Auge, Zoom, Einpassen.
+**Bild:** Ganzes Bild. Klick auf den roten Pullover wählt ihn, Etikett Breadcrumb. Heranzoomen oben links auf die Aktionsleiste unter dem Breadcrumb (Einrasten, Duplizieren, Spiegeln, Reihenfolge, Form bearbeiten, Kontur, Löschen, ⋯), Etikett Aktionsleiste, dann Etiketten Duplizieren und Spiegeln, der Zeiger endet auf „Form bearbeiten“.
 
-**Sprechtext:** [focused] In der Mitte liegt die Bühne. Ein Klick wählt ein Objekt. Oben zeigt der Breadcrumb, wo du gerade bist. Unten rechts ist die Ansichtsleiste: das Auge für das Ansicht-Menü, daneben Zoom und Einpassen.
+**Sprechtext:** [focused] In der Mitte liegt die Bühne. Ein Klick wählt ein Objekt. Oben zeigt der Breadcrumb, wo du gerade bist. Darunter erscheint die Aktionsleiste. Hier liegt, was du mit dem gewählten Objekt tun kannst, etwa duplizieren, spiegeln oder die Form bearbeiten.
 
 ## Szene 9
 
-**Bild:** Heranzoomen rechts. Etiketten Karte Objekt, Größe, Stichart. Klick auf den Reiter Stickmuster, Etikett Karte Stickmuster.
+**Bild:** Heranzoomen unten rechts, Etikett Ansichtsleiste, der Zeiger fährt Auge, Auto-Hervorheben (Etikett Hervorheben), Messen (Etikett), Zoom und Einpassen ab. Dann heranzoomen unten links, Etikett Maßstab.
 
-**Sprechtext:** Rechts liegen die Karten. Die Karte Objekt zeigt alles zum gewählten Objekt, etwa Größe und Stichart. Die Karte Stickmuster gilt für das ganze Muster: Stickrahmen, Stoff und Garne.
+**Sprechtext:** Unten rechts ist die Ansichtsleiste: das Auge für das Ansicht-Menü, daneben Hervorheben, Messen, Zoom und Einpassen. Unten links zeigt der Maßstab, wie groß alles wirklich ist.
 
 ## Szene 10
+
+**Bild:** Heranzoomen rechts. Etiketten Karte Objekt, Größe, Mitte, Stichart. Klick auf den Reiter Stickmuster, Etikett Karte Stickmuster, Etikett Vorlage beim Durchfahren, der Zeiger endet bei Stoff und Garn.
+
+**Sprechtext:** Rechts liegen die Karten. Die Karte Objekt zeigt die Eigenschaften des gewählten Objekts, etwa Größe, Mitte und Stichart. Die Karte Stickmuster gilt für das ganze Muster: Stickrahmen, Vorlage, Stoff und Garn.
+
+## Szene 11
 
 **Bild:** Esc hebt die Auswahl auf. Etikett Player. Tastenkappen Pos1 und Leertaste, die Katze wird Stich für Stich gestickt.
 
 **Sprechtext:** Unten ist der Player. [delighted] Mit der Leertaste siehst du, wie die Maschine Stich für Stich stickt.
 
-## Szene 11
+## Szene 12
 
 **Bild:** Hinweise beim Überfahren eingeschaltet. Heranzoomen links, Hinweis bei Ellipse („Ellipse: auf der Bühne aufziehen, O“) und Text („Neuer Schriftzug, T“).
 
 **Sprechtext:** Fährst du mit der Maus über einen Knopf, erklärt ein Hinweis, was er tut, und nennt die passende Taste.
 
-## Szene 12
+## Szene 13
 
 **Bild:** Tastenkappen Strg+A und Entf: die ganze Katze ist weg. Klick auf Rückgängig: sie ist wieder da.
 
 **Sprechtext:** Und keine Angst vor Fehlern. Ist etwas weg, holt Rückgängig es zurück, Schritt für Schritt.
 
-## Szene 13
+## Szene 14
 
 **Bild:** Ganzes Bild, Zeiger ruht. Dann Abspann.
 

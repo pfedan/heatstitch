@@ -11,10 +11,10 @@ export default {
   part: 0,
   voice: {
     model: 'google/gemini-3.1-flash-tts',
-    voice: 'Aoede',
+    voice: 'Gacrux',
     language: 'de-DE',
     prompt:
-      'Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.',
+      'Speak German like a seasoned embroidery master teaching a workshop: mature, composed, precise, quietly authoritative but kind. Every word placed with care, with understated pride.',
   },
   lead: 0.4,
   tail: 0.6,
@@ -150,9 +150,9 @@ export default {
       },
     },
     {
-      say: '[focused] In der Mitte liegt die Bühne. Ein Klick wählt ein Objekt. Oben zeigt der Breadcrumb, wo du gerade bist. Unten rechts ist die Ansichtsleiste: das Auge für das Ansicht-Menü, daneben Zoom und Einpassen.',
-      text: 'In der Mitte liegt die Bühne. Ein Klick wählt ein Objekt. Oben zeigt der Breadcrumb, wo du gerade bist. Unten rechts ist die Ansichtsleiste: das Auge für das Ansicht-Menü, daneben Zoom und Einpassen.',
-      textEn: 'In the middle is the stage. A click selects an object. At the top, the breadcrumb shows where you are. At the bottom right is the view bar: the eye for the view menu, next to it zoom and fit.',
+      say: '[focused] In der Mitte liegt die Bühne. Ein Klick wählt ein Objekt. Oben zeigt der Breadcrumb, wo du gerade bist. Darunter erscheint die Aktionsleiste. Hier liegt, was du mit dem gewählten Objekt tun kannst, etwa duplizieren, spiegeln oder die Form bearbeiten.',
+      text: 'In der Mitte liegt die Bühne. Ein Klick wählt ein Objekt. Oben zeigt der Breadcrumb, wo du gerade bist. Darunter erscheint die Aktionsleiste. Hier liegt, was du mit dem gewählten Objekt tun kannst, etwa duplizieren, spiegeln oder die Form bearbeiten.',
+      textEn: 'In the middle is the stage. A click selects an object. At the top, the breadcrumb shows where you are. Below it the action bar appears. It holds what you can do with the selected object, such as duplicate, mirror or edit the shape.',
       run: async (s) => {
         s.zoomOut();
         await s.move([975, 400], 1.2);
@@ -162,33 +162,76 @@ export default {
         const crumb = s.page.getByRole('button', { name: /^Ebene:/ });
         await s.move(crumb, 1.0);
         await s.label('Breadcrumb', crumb, 'below');
-        await s.wait(3.0);
-        s.unlabel();
-        // The eye button is named after the look that is on (Stiche, Realistisch …).
-        const eye = s.page.getByRole('toolbar', { name: 'Ansicht' }).getByRole('button').first();
-        await s.zoom([1430, 1000, 0, 0], 1.6);
-        await s.move(eye, 1.0);
-        await s.label('Ansichtsleiste', [1276, 984, 314, 36], 'above');
-        await s.wait(3.2);
-        s.unlabel();
-        await s.move(btn(s, 'Einpassen'), 1.4);
         await s.wait(2.4);
+        s.unlabel();
+        const bar = s.page.getByRole('toolbar', { name: 'Werkzeug-Optionen' });
+        await s.zoom([620, 160, 0, 0], 1.8);
+        await s.move(btn(s, 'Einrasten'), 1.0);
+        await s.label('Aktionsleiste', bar, 'below');
+        await s.wait(3.4);
+        s.unlabel();
+        await s.move(btn(s, 'Duplizieren'), 0.7);
+        await s.label('Duplizieren', btn(s, 'Duplizieren'), 'below');
+        await s.wait(0.9);
+        await s.move(btn(s, 'Waagrecht spiegeln'), 0.5);
+        await s.label('Spiegeln', [447, 100, 64, 26], 'below');
+        await s.wait(0.9);
+        await s.move(btn(s, 'Form bearbeiten'), 0.7);
+        s.unlabel();
+        await s.wait(1.6);
         s.zoomOut();
       },
     },
     {
-      say: 'Rechts liegen die Karten. Die Karte Objekt zeigt alles zum gewählten Objekt, etwa Größe und Stichart. Die Karte Stickmuster gilt für das ganze Muster: Stickrahmen, Stoff und Garne.',
-      text: 'Rechts liegen die Karten. Die Karte Objekt zeigt alles zum gewählten Objekt, etwa Größe und Stichart. Die Karte Stickmuster gilt für das ganze Muster: Stickrahmen, Stoff und Garne.',
-      textEn: 'On the right are the cards. The Object card shows everything about the selected object, such as size and stitch type. The Design card covers the whole design: hoop, fabric and threads.',
+      say: 'Unten rechts ist die Ansichtsleiste: das Auge für das Ansicht-Menü, daneben Hervorheben, Messen, Zoom und Einpassen. Unten links zeigt der Maßstab, wie groß alles wirklich ist.',
+      text: 'Unten rechts ist die Ansichtsleiste: das Auge für das Ansicht-Menü, daneben Hervorheben, Messen, Zoom und Einpassen. Unten links zeigt der Maßstab, wie groß alles wirklich ist.',
+      textEn: 'At the bottom right is the view bar: the eye for the view menu, next to it highlight, measure, zoom and fit. At the bottom left, the scale shows how big everything really is.',
+      run: async (s) => {
+        const view = s.page.getByRole('toolbar', { name: 'Ansicht' });
+        // The eye button is named after the look that is on (Stiche, Realistisch …).
+        const eye = view.getByRole('button').first();
+        await s.zoom([1400, 1000, 0, 0], 1.7);
+        await s.move(eye, 1.0);
+        await s.label('Ansichtsleiste', view, 'above');
+        await s.wait(2.4);
+        s.unlabel();
+        await s.move(btn(s, 'Auto-Hervorheben'), 0.7);
+        await s.label('Hervorheben', btn(s, 'Auto-Hervorheben'), 'above');
+        await s.wait(0.8);
+        await s.move(btn(s, 'Messen'), 0.6);
+        await s.label('Messen', btn(s, 'Messen'), 'above');
+        await s.wait(0.6);
+        s.unlabel();
+        await s.move(view.getByRole('button', { name: /%/ }), 0.5);
+        await s.wait(0.4);
+        await s.move(btn(s, 'Einpassen'), 0.5);
+        await s.wait(0.8);
+        s.zoomOut();
+        const scale = s.page.locator('.scale-bar');
+        await s.zoom([520, 1000, 0, 0], 1.7);
+        await s.move(scale, 1.2);
+        await s.label('Maßstab', scale, 'above');
+        await s.wait(2.8);
+        s.unlabel();
+        s.zoomOut();
+      },
+    },
+    {
+      say: 'Rechts liegen die Karten. Die Karte Objekt zeigt die Eigenschaften des gewählten Objekts, etwa Größe, Mitte und Stichart. Die Karte Stickmuster gilt für das ganze Muster: Stickrahmen, Vorlage, Stoff und Garn.',
+      text: 'Rechts liegen die Karten. Die Karte Objekt zeigt die Eigenschaften des gewählten Objekts, etwa Größe, Mitte und Stichart. Die Karte Stickmuster gilt für das ganze Muster: Stickrahmen, Vorlage, Stoff und Garn.',
+      textEn: 'On the right are the cards. The Object card shows the properties of the selected object, such as size, center and stitch type. The Design card covers the whole design: hoop, template, fabric and thread.',
       run: async (s) => {
         await s.zoom([1760, 380, 0, 0], 1.7);
         await s.move(s.page.getByRole('tab', { name: 'Objekt' }), 1.0);
         await s.label('Karte Objekt', [1610, 60, 150, 26], 'below');
-        await s.wait(1.4);
+        await s.wait(2.2);
         s.unlabel();
         await s.move(s.page.getByLabel('Breite in mm'), 0.8);
         await s.label('Größe', s.page.getByLabel('Breite in mm'), 'below');
-        await s.wait(1.3);
+        await s.wait(0.9);
+        await s.move(s.page.getByLabel('Mitte X in mm'), 0.6);
+        await s.label('Mitte', s.page.getByLabel('Mitte X in mm'), 'below');
+        await s.wait(0.9);
         const stitch = s.page.getByText('Stichart', { exact: true }).first();
         await s.move(stitch, 0.8);
         await s.label('Stichart', stitch, 'below');
@@ -197,9 +240,19 @@ export default {
         const tab = s.page.getByRole('tab', { name: 'Stickmuster' });
         await s.click(tab, { move: 0.9 });
         await s.label('Karte Stickmuster', tab, 'below');
-        await s.move([1760, 300], 0.9);
-        await s.wait(3.0);
+        await s.move([1700, 160], 0.9);
+        await s.wait(1.6);
         s.unlabel();
+        const tpl = s.page.getByText('Vorlage', { exact: true }).first();
+        await s.move(tpl, 0.8);
+        await s.label('Vorlage', tpl, 'below');
+        await s.wait(0.9);
+        s.unlabel();
+        // Stoff and Garn, the first two rows under Material.
+        await s.move([1650, 459], 0.7);
+        await s.wait(0.5);
+        await s.move([1650, 496], 0.5);
+        await s.wait(1.2);
         s.zoomOut();
       },
     },
