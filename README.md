@@ -73,7 +73,7 @@ sends the picture anywhere.
   the nearest threads of your brand, switch a whole design to it; a printable **color list** in
   sewing order with stitches and thread length (catalog data from the Ink/Stitch palettes, GPL 3.0,
   see `public/threads/LICENSE.md`)
-- **Demo project** with eight designs under *See an example*, every object editable
+- **Demo project** with thirteen designs under *See an example*, every object editable
 - **Ready to stitch**: stabilizer, topping, needle, thread, speed and hooping for the chosen fabric
   and stitch count, a printable **stitch sheet** with the design at 1:1 and the color sequence
 - Several designs at once, examples, PNG export, command search (`Ctrl+K`), tooltips, phone and
