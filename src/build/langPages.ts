@@ -107,6 +107,7 @@ function german(html: string, page: Page): string {
     out = setMeta(out, 'twitter:title', t.ogTitle);
     out = setMeta(out, 'twitter:description', t.ogDescription);
   }
-  // "./" (the app), "docs.html" (the guide) and "videos.html" stay in de/; files of the site are one folder up.
-  return out.replace(/(\s(?:href|src)=")(?!https?:|\/|#|data:|mailto:|\.\/|(?:docs|videos)\.html)([^"]+")/g, '$1../$2');
+  // "./" (the app), "docs.html" (the guide), "videos.html" and the pages of the videos ("videos/<key>.html")
+  // stay in de/; files of the site are one folder up.
+  return out.replace(/(\s(?:href|src)=")(?!https?:|\/|#|data:|mailto:|\.\/|(?:docs|videos)\.html|videos\/)([^"]+")/g, '$1../$2');
 }

@@ -646,7 +646,9 @@ public/examples/ Example embroidery files and SVGs (loadable from the dropdown),
 public/guide/    Screenshots for the guide (tools/guide-shots.mjs)
 public/fonts/    Embroidery fonts from Ink/Stitch with their licenses (tools/fonts/convert.mjs)
 docs.html        Guide EN/DE (src/docs.ts, src/docs.css)
-public/og-image.jpg, robots.txt, sitemap.xml  Social media preview image, crawlers
+videos.html      Video page EN/DE; video.html is the template of each video's own page (src/build/watchPage.ts)
+src/build/       Build steps: pages per language, videos, sitemap.xml with the videos (src/build/sitemap.ts)
+public/og-image.jpg, robots.txt  Social media preview image, crawlers
 ```
 
 ## Contributing

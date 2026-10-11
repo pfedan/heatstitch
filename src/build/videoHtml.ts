@@ -13,6 +13,9 @@
 
 import { cardPath, GROUPS, seconds, VIDEO_BASE, VIDEOS, videoByKey, type Lang, type Video } from '../videos/catalog';
 
+/** The video's own page, relative to the guide and the video page (in de/ too, see langPages.ts). */
+const watchHref = (key: string): string => `videos/${key}.html`;
+
 const T = {
   play: { de: 'Video abspielen', en: 'Play video' },
   part: { de: 'Teil', en: 'Part' },
@@ -34,11 +37,11 @@ function card(v: Video, lang: Lang, wide: boolean, pad: string): string {
   const title = esc(v.title[lang]);
   const lines = [
     `<li class="video" id="video-${v.key}" data-key="${v.key}">`,
-    `  <button type="button" class="video-play" aria-label="${T.play[lang]}: ${title} (${v.length})">`,
+    `  <a class="video-play" href="${watchHref(v.key)}" aria-label="${T.play[lang]}: ${title} (${v.length})">`,
     `    ${thumb(v, 'video-thumb')}`,
     `    <span class="video-badge" aria-hidden="true"></span>`,
     `    <span class="video-length" aria-hidden="true">${v.length}</span>`,
-    `  </button>`,
+    `  </a>`,
     `  <div class="video-text">`,
     `    <p class="video-title"><span class="video-part">${T.part[lang]} ${v.part}</span> ${title}</p>`,
   ];
@@ -75,7 +78,7 @@ export function videoRef(lang: Lang, keys: string[], pad = '        '): string {
     const v = videoByKey(key);
     if (!v) throw new Error(`video:ref names an unknown video: ${key}`);
     return [
-      `  <a class="video-ref" href="videos.html#video-${v.key}" data-key="${v.key}">`,
+      `  <a class="video-ref" href="${watchHref(v.key)}" data-key="${v.key}">`,
       `    ${thumb(v, 'video-ref-thumb')}`,
       `    <span class="video-ref-text"><small>${T.video[lang]} · ${v.length}</small>${esc(v.title[lang])}</span>`,
       `  </a>`,

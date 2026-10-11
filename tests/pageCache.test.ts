@@ -23,6 +23,8 @@ describe('service worker scope', () => {
       '/videos.html',
       '/de/videos.html?x=1',
       '/umzug.html',
+      '/videos/02-schrift.html',
+      '/de/videos/02-schrift.html',
       '/sitemap.xml',
       '/robots.txt',
       '/guide/cat-de.jpg',
