@@ -76,11 +76,11 @@ export const VIDEOS: Video[] = [
     key: '01-neues-stickmuster',
     part: 1,
     title: { de: 'Ein neues Stickmuster', en: 'A new embroidery design' },
-    length: '2:27',
+    length: '2:43',
     group: 'design',
     goal: { de: 'Du stickst dein erstes eigenes Muster, einen runden Aufnäher mit einer Welle, vom leeren Stickrahmen bis zur PES-Datei.', en: 'You make your first design of your own, a round patch with a wave, from the empty hoop to the PES file.' },
     files: [],
-    published: '2026-10-08T21:32:32+02:00',
+    published: '2026-10-11T20:31:13+02:00',
   },
   {
     key: '02-schrift',

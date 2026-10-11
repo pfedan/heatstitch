@@ -27,10 +27,10 @@ export default {
   part: 1,
   voice: {
     model: 'google/gemini-3.1-flash-tts',
-    voice: 'Aoede',
+    voice: 'Gacrux',
     language: 'de-DE',
     prompt:
-      'Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.',
+      'Speak German like a seasoned embroidery master teaching a workshop: mature, composed, precise, quietly authoritative but kind. Every word placed with care, with understated pride.',
   },
   lead: 0.4,
   tail: 0.6,
@@ -45,7 +45,7 @@ export default {
         // it can stay at opacity 0. Without the animation it shows as for users.
         await s.page.addStyleTag({ content: '.start { animation: none !important; }' });
         await s.move([960, 300], 0.1);
-        await s.wait(7.0);
+        await s.wait(10.5);
         await s.move(empty, 1.4);
         await s.label('Leer anfangen', empty, 'left');
         await s.wait(1.6);
@@ -229,9 +229,9 @@ export default {
       },
     },
     {
-      say: 'Unten rechts auf der Bühne öffnet das Auge das Ansicht-Menü. Mit „Realistische Fäden“ siehst du dein Muster so, wie es auf dem Stoff aussehen wird. [impressed] Schön, oder?',
-      text: 'Unten rechts auf der Bühne öffnet das Auge das Ansicht-Menü. Mit „Realistische Fäden“ siehst du dein Muster so, wie es auf dem Stoff aussehen wird. Schön, oder?',
-      textEn: 'At the bottom right of the stage, the eye opens the view menu. With “Realistic threads” you see your design the way it will look on the fabric. Nice, isn’t it?',
+      say: 'Unten rechts auf der Bühne öffnet das Auge das Ansicht-Menü. Dort schalte ich Realistische Fäden ein.',
+      text: 'Unten rechts auf der Bühne öffnet das Auge das Ansicht-Menü. Dort schalte ich Realistische Fäden ein.',
+      textEn: 'At the bottom right of the stage, the eye opens the view menu. There I turn on Realistic threads.',
       run: async (s) => {
         // The player may still run; Ende shows all stitches.
         await s.page.keyboard.press('End');
@@ -250,7 +250,7 @@ export default {
         s.zoomOut();
         await s.move([1330, 820], 1.0);
         await s.zoom([975, 564, 0, 0], 1.35);
-        await s.wait(4.8);
+        await s.wait(2.4);
         s.zoomOut();
       },
     },
