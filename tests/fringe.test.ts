@@ -75,7 +75,8 @@ describe('satin with a fringe', () => {
     const satinLen = satinRuns([COLUMN], SATIN)[0].length;
     const under = run.slice(0, run.length - satinLen);
     expect(under.length).toBe(plain.length - satinLen);
-    for (const [, y] of under) expect(y).toBeGreaterThanOrEqual(2 + 0.3);
+    // Inside the fringe by the zigzag's inset (half the edge run's 0.4 mm).
+    for (const [, y] of under) expect(y).toBeGreaterThanOrEqual(2 + 0.15);
   });
 
   it('has no fringe on an E stitch', () => {

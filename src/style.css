@@ -2719,6 +2719,15 @@ button.tool:disabled {
   margin: 4px 0;
 }
 
+/* Four kinds side by side: the icon over its name, so "Applikation" fits a quarter of the panel. */
+.kind-switch button {
+  flex-direction: column;
+  gap: 2px;
+  padding: 5px 2px;
+  min-width: 0;
+  line-height: 1.2;
+}
+
 .kind-switch button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
@@ -3101,6 +3110,10 @@ body.preview-busy #canvas {
 .choice-row.kinds {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
+}
+
+.choice-row.kinds.four {
+  grid-template-columns: repeat(4, 1fr);
 }
 
 .choice-row.small button {
@@ -3614,6 +3627,14 @@ button.mini-sw.thread-sw {
   text-align: right;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+/* An appliqué's stop: the machine stops, the same thread goes on. */
+.cl-table .cl-stop td {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  padding-left: calc(2em + 12px);
 }
 
 .cl-table th.num:first-child,

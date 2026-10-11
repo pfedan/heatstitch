@@ -48,6 +48,8 @@ const ANTI_COS = -0.9;
  * sweep's passes, and would otherwise make the row bend at its end.
  */
 const ROW_TURN_COS = 0.9;
+/** A row is at most this much longer along its stitches than from end to end (a bend of about 120 degrees). */
+const ROW_ARC = 1.2;
 
 const len = (p: Pattern, a: number, b: number) => Math.hypot(p.x[b] - p.x[a], p.y[b] - p.y[a]);
 
@@ -74,7 +76,13 @@ export function fillRowEnds(p: Pattern, runs = stitchRuns(p), mask = satinMask(p
       if (k + 1 >= t.length) return false;
       const a = t[k];
       const b = t[k + 1];
-      if (len(p, a, b) < ROW_MIN) return false;
+      const chord = len(p, a, b);
+      if (chord < ROW_MIN) return false;
+      // A row runs across the shape, straight or gently bent; a long arc between two turns is a
+      // stretch of a ring (a spiral or contour fill), whose chord can lie beside anything.
+      let along = 0;
+      for (let i = a + 1; i <= b; i++) along += len(p, i - 1, i);
+      if (along > ROW_ARC * chord) return false;
       let satin = true;
       for (let i = a + 1; i <= b; i++) if (!mask[i]) satin = false;
       return !satin;

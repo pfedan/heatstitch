@@ -9,6 +9,7 @@ import type { Profile } from '../../validation/profiles';
 import type { Basis } from './recipes';
 import { markIcon, type CardView, type Note } from './card';
 import { spriteMarkup } from './icons';
+import { appliqueStops } from '../../model/applique';
 
 /**
  * The printable stitch sheet: page 1 the design at true size (1:1 in mm) with crosshair, center,
@@ -193,13 +194,20 @@ function colorPage(i: SheetInput, sub: string[]): string {
   const cat = brandOf(blocks.map((b) => b.color));
   const matches = blocks.map((b) => (cat && !inCatalog(b.color, cat) ? nearest(b.color, cat, 1)[0] : undefined));
   const compare = !!cat && matches.some(Boolean);
+  // An appliqué's stops: the machine stops as for a new color, the same thread goes on after the
+  // fabric is laid on or cut off. Said in a row of its own before the block it opens.
+  const stops = appliqueStops(p);
+  const stopRow = (k: number) => {
+    const what = stops.get(k);
+    return what ? `<tr class="stop"><td class="box"><span></span></td><td class="num"></td><td colspan="${compare ? 5 : 4}"><b>${esc(t(`applique.stop.${what}`))}</b> <span>${esc(t(`applique.stop.${what}.text`))}</span></td></tr>` : '';
+  };
   const rows = blocks
     .map((b, k) => {
       const m = matches[k];
       const alt = !compare
         ? ''
         : `<td class="alt">${m ? `<span class="sw" style="background:${css(m.thread)}"></span><span class="tt"><b>${esc(threadNumber(m.thread) || m.thread.name || '')}</b><span>${esc(t(`threads.dE.${closeness(m.dE)}` as Key))}</span></span>` : `<span class="muted">${esc(t('colorList.already'))}</span>`}</td>`;
-      return `<tr><td class="box"><span></span></td><td class="num">${k + 1}</td><td class="th">${threadCell(b.color)}</td>${alt}<td class="num">${formatNumber(b.stitches)}</td><td class="num">${threadMeters(use.top[b.index] ?? 0)}</td><td class="num">${minutes(sewingSeconds(b.stitches, b.trims, 0, i.machine))}</td></tr>`;
+      return `${stopRow(k)}<tr><td class="box"><span></span></td><td class="num">${k + 1}</td><td class="th">${threadCell(b.color)}</td>${alt}<td class="num">${formatNumber(b.stitches)}</td><td class="num">${threadMeters(use.top[b.index] ?? 0)}</td><td class="num">${minutes(sewingSeconds(b.stitches, b.trims, 0, i.machine))}</td></tr>`;
     })
     .join('');
   const total = sewingSeconds(st.stitches, st.trims, st.colorChanges, i.machine);
@@ -278,6 +286,8 @@ table { border-collapse: collapse; width: 100%; }
 .list th, .list td { padding: 1.2mm 1.5mm; border-bottom: 0.2mm solid #bbb; text-align: left; vertical-align: middle; }
 .list th { font-size: 8.5pt; font-weight: 600; border-bottom: 0.3mm solid #000; }
 .list tr { break-inside: avoid; }
+.list .stop td { background: #f1f1f1; font-size: 9pt; }
+.list .stop td span { color: #333; }
 .list .sum td { font-weight: 600; border-bottom: 0; border-top: 0.3mm solid #000; }
 .num { text-align: right !important; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .box { width: 7mm; }

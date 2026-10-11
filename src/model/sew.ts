@@ -10,6 +10,8 @@ import { joinedUncut, setObjects, sewObjects, stitchKey, tableOf, trimmedBetween
 import { COLOR_CHANGE, END, JUMP, nextVersion, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
 import { tieIn, tieOff } from './jumps';
 import { blockKeys } from './order';
+import { blockIndex } from './sequence';
+import { appliqueRuns, stopBefore, type AppliqueSettings } from './applique';
 import { borderOf, fillRuns, knownKind, TRAVEL_REACH, lockAt, remember, remembered, satinRuns, trimBefore, type FillSettings, type Rails, type Remembered, type SatinSettings } from './restitch';
 import { bandArea, fillArea, formKey, geoOf, geoUse, openOf } from './geo';
 
@@ -26,7 +28,8 @@ export type Spec =
   | { kind: 'line'; path: Form; line: PathStitch }
   | { kind: 'fill'; area: Region; fill: FillSettings; memory: Remembered }
   | { kind: 'satin'; columns: Rails[][]; satin: SatinSettings }
-  | { kind: 'border'; area: Region; border: PathStitch; memory: Remembered; open: Form | null };
+  | { kind: 'border'; area: Region; border: PathStitch; memory: Remembered; open: Form | null }
+  | { kind: 'applique'; area: Region; applique: AppliqueSettings };
 
 /** Where an object is sewn from and to. */
 export interface Way {
@@ -50,6 +53,10 @@ function oneKind(m: Remembered, kind: ObjectKind): boolean {
  */
 export function specOf(p: Pattern, o: SewObject, m: Remembered | null | undefined = remembered(p, o)): Spec | null {
   if (!m || m.free || m.hand || m.read || m.lettering || m.borderAt !== undefined) return null;
+  if (m.applique) {
+    const area = m.region ?? fillArea(m);
+    return area ? { kind: 'applique', area, applique: m.applique } : null;
+  }
   const kind = knownKind(m) ?? o.kind;
   if (kind !== o.kind) return null;
   if (m.outline && m.border && m.region) {
@@ -84,6 +91,8 @@ export function sewOne(spec: Spec, way: Way): { runs: Pt[][]; under: number } | 
       return ok(lineStitches(spec.path, spec.line));
     case 'satin':
       return ok(spec.columns.flatMap((rails) => satinRuns(rails, spec.satin)));
+    case 'applique':
+      return ok(appliqueRuns(spec.area, spec.applique, way.from));
     case 'border': {
       const whole = wholeOf(spec.area, spec.memory);
       const runs = borderStitches(spec.area, spec.border, way.from, whole);
@@ -176,9 +185,12 @@ function objectRecords(runs: Pt[][], under: number, trimMm: number, out: Rec[]):
       last = run[0];
     } else {
       const d = Math.hypot(run[0][0] - last![0], run[0][1] - last![1]);
-      if (d > trimMm || trimBefore.has(run)) {
+      const stop = stopBefore.has(run);
+      if (d > trimMm || trimBefore.has(run) || stop) {
         for (const r of lockAt(runs[k - 1], true)) push(r);
         push({ ...out[out.length - 1], cmd: TRIM });
+        // A stop in the same thread (an appliqué's fabric laid on or cut off): the color block it opens is the caller's.
+        if (stop) push({ ...out[out.length - 1], cmd: COLOR_CHANGE });
         push(at(run[0], JUMP));
         for (const r of lockAt(run, false)) push(r);
         last = run[0];
@@ -317,6 +329,12 @@ export function sewList(p: Pattern, list: Entry[], trimMm: number, opts: ListOpt
     for (let j = 1; j <= steps; j++) out.push(from ? { x: Math.round(from.x + ((to.x - from.x) * j) / steps), y: Math.round(from.y + ((to.y - from.y) * j) / steps), cmd: JUMP } : { ...to, cmd: JUMP });
   };
   const keptAt = (k: number) => !specs[k];
+  /** Stops inside an object (an appliqué) from record `a` of `out` on: each opens a block in its thread. */
+  const stopsFrom = (a: number, color: ThreadColor) => {
+    for (let i = a; i < out.length; i++) if (out[i].cmd === COLOR_CHANGE) colors.push(color);
+  };
+  // The block each record of `p` is sewn in: an object with stops inside ends in a later block than it starts.
+  const blockOf = blockIndex(p);
   const used = new Set<number>();
   let nextId = Math.max(table.next || 1, ...list.map((e) => e.obj.id + 1));
   // Kept objects cut off there in `p` already (as files from elsewhere often are, without a tie):
@@ -346,10 +364,10 @@ export function sewList(p: Pattern, list: Entry[], trimMm: number, opts: ListOpt
     const spec = specs[k];
     const mark = out.length;
     // How the thread comes here: as in `p` between neighbours there, else anew.
-    const asBefore = !!prev && o.index === prev.index + 1 && o.block === prev.block && list[k - 1].thread === e.thread && !fresh?.has(o.index) && !fresh?.has(prev.index);
+    const asBefore = !!prev && o.index === prev.index + 1 && o.block === blockOf[prev.last] && list[k - 1].thread === e.thread && !fresh?.has(o.index) && !fresh?.has(prev.index);
     // A change of thread between neighbours as in `p` stays as it was there.
     const colorAsBefore =
-      !!prev && o.index === prev.index + 1 && o.block === prev.block + 1 && list[k - 1].thread !== e.thread && !fresh?.has(o.index) && !fresh?.has(prev.index) && !apart?.has(k);
+      !!prev && o.index === prev.index + 1 && o.block === blockOf[prev.last] + 1 && list[k - 1].thread !== e.thread && !fresh?.has(o.index) && !fresh?.has(prev.index) && !apart?.has(k);
     let cut = false;
     // The records that lead to it come from `p` as they are.
     let led = false;
@@ -413,7 +431,8 @@ export function sewList(p: Pattern, list: Entry[], trimMm: number, opts: ListOpt
     if (sewn && spec) {
       const under = objectRecords(sewn.runs, sewn.under, trimMm, out);
       count(sewnFrom);
-      memory = memoryAfter(m!, o.kind, stitches - first, under);
+      stopsFrom(sewnFrom, e.color);
+      memory = memoryAfter(m!, spec.kind === 'applique' ? 'satin' : o.kind, stitches - first, under);
       // The new memory gives the same stitches the same way.
       if (memory !== m) keepSewn(memory, wayKey(spec, way), sewn);
     } else {
@@ -435,6 +454,7 @@ export function sewList(p: Pattern, list: Entry[], trimMm: number, opts: ListOpt
       }
       copyOwn(k, o.first + 1, o.last + 1);
       count(sewnFrom);
+      stopsFrom(sewnFrom, e.color);
     }
     const last = out.findLastIndex((r) => r.cmd === STITCH);
     here = [out[last].x / 10, out[last].y / 10];

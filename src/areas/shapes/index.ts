@@ -29,7 +29,7 @@ export interface ShapesAreaApp {
   readonly setMode: (m: Mode) => void;
   readonly files: FileList;
   readonly seq: (p: Pattern) => Sequence;
-  readonly objectName: (q: Sequence, i: number) => string;
+  readonly objectName: (q: Sequence, i: number, p?: Pattern) => string;
   readonly drawTool: DrawTool;
   readonly setDrawing: (kind: DrawKind | null) => void;
   readonly measure: MeasureTool;
@@ -388,7 +388,7 @@ export function initShapes(app: ShapesAreaApp): void {
       return t('lettering.name', { text: text.length > 20 ? `${text.slice(0, 19)}…` : text });
     }
     const o = app.editor.active ? ui.editObject : ui.shapeObject ?? one();
-    if (o !== null && q.objects[o]) return app.objectName(q, o).replace(/\s*\(.*\)$/, '');
+    if (o !== null && q.objects[o]) return app.objectName(q, o, app.files.active?.pattern).replace(/\s*\(.*\)$/, '');
     if (app.editor.active) return null;
     const n = ui.selectedObjects.size;
     return n > 1 ? t('shapes.crumb.objects', { n: formatNumber(n) }) : null;

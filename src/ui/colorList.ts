@@ -1,4 +1,5 @@
 import type { FabricId } from '../material/fabrics';
+import { appliqueStops } from '../model/applique';
 import { threadMeters, threadUse } from '../model/threadUse';
 import { formatNumber, onLangChange, t } from '../i18n';
 import { blockIndex, colorBlocks, sewingSeconds, type MachineTimes } from '../model/sequence';
@@ -119,7 +120,18 @@ export class ColorList {
     table.append(el('thead'));
     table.tHead!.append(hr);
     const body = el('tbody');
+    // An appliqué's stops: a row of their own before the block they open (the same thread goes on).
+    const stops = appliqueStops(p);
     blocks.forEach((b, i) => {
+      const stop = stops.get(i);
+      if (stop) {
+        const sr = el('tr', 'cl-stop');
+        const td = el('td', '', t(`applique.stop.${stop}`));
+        td.colSpan = compare ? 5 : 4;
+        td.title = t(`applique.stop.${stop}.text`);
+        sr.append(td);
+        body.append(sr);
+      }
       const tr = el('tr');
       tr.append(el('td', 'num', String(i + 1)), threadCell(b.color), el('td', 'num', formatNumber(b.stitches)), el('td', 'num', threadMeters(use.top[b.index] ?? 0)));
       if (compare) {

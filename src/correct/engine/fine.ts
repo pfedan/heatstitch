@@ -56,7 +56,7 @@ export function fineObjects(p: Pattern, skip: Set<number>): Set<number> {
   for (const o of objectsOf(p)) {
     if (skip.has(o.index)) continue;
     const m = remembered(p, o);
-    if (m?.lock || m?.free || m?.lettering) continue;
+    if (m?.lock || m?.free || m?.lettering || m?.applique) continue;
     const here = !!(m?.fill || m?.satin || lineGeoOf(m));
     if (!here || m?.hand) out.add(o.index);
   }

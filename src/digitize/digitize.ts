@@ -17,7 +17,7 @@ import { easePiles, SATIN_PEAK } from './satinEase';
 import { areaLoops, classify as shapeClass, offersSections, suggestSatin, type SatinSuggestion, type ShapeClass } from './satinSuggest';
 import type { Orientation } from '../image/orientation';
 import { transformForm, type Form } from '../shape/path';
-import { lineStitchFor, lineStitches } from '../model/line';
+import { lineStitchFor, lineStitches, redworkHelps } from '../model/line';
 import type { PathStitch } from '../model/along';
 import { knockOut, rasterize, rasterizeStroke, sharedArea, unionOf } from '../shape/rasterize';
 import { acrossGraph, areaKey, boxOf, groupOf, letterOf, structure, STRUCTURE, STRUCTURE_MIN_MM2, type AreaInfo, type Reason, type Technique } from './smart';
@@ -63,6 +63,8 @@ export interface DigitizeOptions {
   underCross?: boolean;
   /** Satin stitches longer than this are split (mm): where the fabric would let them snag. */
   splitMm?: number;
+  /** Gap rows where sections of a fill meet (see FillParams.gapRows), by the fabric; none when not set. */
+  gapRows?: number;
   /** Jumps longer than this are trimmed (mm). */
   trimMm: number;
   /**
@@ -85,6 +87,9 @@ export function fillUnder(o: Pick<DigitizeOptions, 'underlay' | 'underCross'>, a
   if (!o.underlay || areaMm2 < SMALL_FILL_MM2) return { underlay: false };
   return o.underCross && areaMm2 >= LARGE_FILL_MM2 ? { underlay: true, underCross: true } : { underlay: true };
 }
+
+/** Gap rows of the options as fill settings: left out when none, as in fills made before them. */
+export const gapOf = (o: Pick<DigitizeOptions, 'gapRows'>): { gapRows?: number } => (o.gapRows ? { gapRows: o.gapRows } : {});
 
 /**
  * Pull compensation "by fabric" for an object here (see the stitch card): a fill's edges grow with
@@ -128,6 +133,7 @@ export function digitizeDefaults(profile: Profile): DigitizeOptions {
     underlay: true,
     underCross: fabric.pull === 'high',
     splitMm: fabric.longMm,
+    gapRows: fabric.gapRows,
     trimMm: 3,
     tolerance: TOLERANCE,
   };
@@ -407,9 +413,13 @@ function toSegment(q: Pt, a: Pt, b: Pt): number {
  * filled instead, a region too thin to fill becomes running stitch. Fills note their angle in
  * `angles`, so touching fills sewn later run another way. Runs of fewer than two points are left out.
  */
-/** The satin settings the image's satins are sewn with, as an object keeps them. */
+/**
+ * The satin settings the image's satins are sewn with, as an object keeps them. Their pull
+ * compensation is the fabric's (see satinOf), so it follows the fabric (edgeAuto), as on a satin
+ * made in the stitch card; with it come the shortened free ends (see pushEnds).
+ */
 function satinSettings(o: DigitizeOptions, p: SatinParams): SatinSettings {
-  return { spacing: p.spacing, edge: round2(p.pull), edgeShare: Math.round((p.pullShare ?? 0) * 1000) / 1000, short: true, underlay: o.underlay, tolerance: o.tolerance, ...(Number.isFinite(p.splitMm) ? { split: p.splitMm } : {}) };
+  return { spacing: p.spacing, edge: round2(p.pull), edgeShare: Math.round((p.pullShare ?? 0) * 1000) / 1000, edgeAuto: true, short: true, underlay: o.underlay, tolerance: o.tolerance, ...(Number.isFinite(p.splitMm) ? { split: p.splitMm } : {}) };
 }
 
 /**
@@ -514,7 +524,7 @@ function sewOne(obj: Obj, pos: Pt, o: DigitizeOptions, satin: SatinParams, angle
     const near = angles.filter((a) => touches(a.obj.region, obj.region)).map((a) => a.angle);
     used.pos = true;
     used.near = near;
-    const fp = { spacing: o.spacing, stitch: o.stitch, angle: o.angle, pull: o.pull, ...fillUnder(o, obj.region.areaMm2), tolerance: o.tolerance };
+    const fp = { spacing: o.spacing, stitch: o.stitch, angle: o.angle, pull: o.pull, ...fillUnder(o, obj.region.areaMm2), tolerance: o.tolerance, ...gapOf(o) };
     const flow = (obj.flow ?? o.flow) && o.angle === null && orient ? flowFill(obj.region, obj.graph, orient, fp, pos) : null;
     const res = flow ?? fillRegion(obj.region, { ...fp, angle: o.angle ?? null }, pos, near);
     if (res) {
@@ -896,6 +906,7 @@ function keep(obj: Obj, o: DigitizeOptions, imgW: number, imgH: number): KeptSha
       ...fillUnder(o, obj.region.areaMm2),
       edge: 0,
       tolerance: o.tolerance,
+      ...gapOf(o),
     },
   };
 }
@@ -1256,6 +1267,8 @@ export function digitizeShapes(shapes: ShapeInput[], threads: ThreadColor[], o: 
       if (!isFill) {
         // Lines are sewn along their curves, so they stay exact and can be edited as lines.
         const line = lineStitchFor(it.sh.width ?? 0.4, o.tolerance);
+        // A drawing of touching strokes in running stitch: in one go, without trims (redwork).
+        if (line.type === 'run' && redworkHelps(it.form)) line.redwork = true;
         const sewn = lineStitches(it.form, line, false, pos);
         if (!sewn.length) continue;
         runs.push(...sewn);

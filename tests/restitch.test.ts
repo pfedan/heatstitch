@@ -97,6 +97,24 @@ describe('restitching objects', () => {
     expect(r.ends[0] - r.starts[0]).toBeGreaterThan(o.stitches * 1.5);
   });
 
+  it('reads a spiral or contour fill as one fill from its stitches alone, whatever the stitch length', () => {
+    // Its rings turn by more than a fill row may at a few needle points; the stretches of ring
+    // between them are arcs, not rows, so neither the underlay nor a few turns split off.
+    const { p, kinds, objs } = setup('demos/overlap.pes');
+    for (const o of objs.filter((x) => x.kind === 'fill').slice(0, 3)) {
+      const m = measureFill(p, analyze(p, o, kinds));
+      for (const pattern of ['spiral', 'contour'] as const) {
+        for (const stitch of [2, 3, 4]) {
+          const r = restitch(p, objs, [o.index], { kind: 'fill', s: { ...m, pattern, stitch } }, kinds, 7);
+          const q = r.pattern;
+          const [a, b] = [recordOf(q, r.starts[0] + 1), recordOf(q, r.ends[0])];
+          const kindsOf = sewObjects(q).filter((x) => x.last >= a && x.first <= b).map((x) => x.kind);
+          expect(kindsOf, `${o.index} ${pattern} ${stitch}`).toEqual(['fill']);
+        }
+      }
+    }
+  });
+
   it('keeps a spiral an object of fill, with its shape for the next edit', () => {
     const { p, kinds, objs } = setup('demos/overlap.pes');
     const o = firstOf(objs, 'fill');

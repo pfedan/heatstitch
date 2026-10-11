@@ -61,7 +61,8 @@ sends the picture anywhere.
   Husqvarna Viking), **EXP** (Melco) and **XXX** (Singer), with own writers (no pyembroidery); read
   **SEW** (older Janome); PES reads the thread list of versions 5 to 10 with real colors, names and
   catalog numbers
-- **SVG** import as whole shapes with their curves, colors and size; fine lines as running stitch
+- **SVG** import as whole shapes with their curves, colors and size; fine lines as running stitch; a line
+  drawing of touching strokes as redwork, in one go without trims
 - **Project files** (`.heatstitch`) that keep everything embroidery files drop: originals and edits,
   shapes, settings, rungs, guide lines, letterings, acknowledged findings, the image, material
 - **Hoop**: common sewing fields or an own size, drawn around the design, with a note when it does
@@ -95,14 +96,21 @@ sends the picture anywhere.
   parts with their own direction (one border around all parts), **contour around** the selection
   at a set distance (a patch edge as satin, a patch ground as fill)
 - **Stitch settings** with live preview: fill patterns in three tabs (classic: tatami with offset,
-  gradient, contour fill, spiral, as sewn, guided by drawn lines; decor: embossed motifs, waves,
+  gradient, contour fill without a seam, spiral for any shape, as sewn, guided by drawn lines; decor: embossed motifs, waves,
   grain, rays, swirl, color fade with a second color; open: meander, maze, grid, echo, cross
   stitch, crosshatch), spacing, angle, stitch length, edges, expand, underlay
   (off, across, cross, inset, left out under later objects), **border** (running, triple or satin,
   offset, own thread); satin pattern or E stitch, spacing (also by width and per rung), width per
-  side, fringe, short stitches in curves, split, underlay kind, **rungs** for the direction and **sections**
+  side (by fabric: free ends also shortened against push), fringe, irregular (width and spacing varying from stitch to stitch, kept by a seed), short stitches in curves, split, underlay kind (the zigzag sewn out and back, crossing), **rungs** for the direction and **sections**
   with cut lines (also on a fill: each part a column of its own, order, direction and trims per part);
-  running stitch length, max. deviation, triple stitch; lines as running stitch, satin or fill
+  running stitch length, max. deviation, triple stitch; lines as running stitch, satin or fill;
+  **redwork**: a line of many paths in one go, each line out and back, no trims where they touch;
+  line motifs (waves, scallops, hearts, chain) and **hand stitches** imitated by machine: stem,
+  feather, Cretan and chevron stitch, each stitch sewn 1, 3 or 5 times over the same holes like
+  stranded floss, whole figures per piece between corners
+- **Appliqué** as one object: placement line, stop, tack-down just inside, stop, satin or E stitch
+  edge, all in one thread; the fabric (felt, cotton, denim and more, in any color) shows under the
+  edge in the realistic view and in the player; cutting template as SVG at 1:1
 - **Shape editing**: the outline of a fill as curves with nodes, kept exactly from then on; close,
   open, join and split paths, nodes at crossings, fill inside; an opened fill or satin is sewn as a
   line and filled again once a path is closed; the border is the fill's own line, along open paths
@@ -269,7 +277,7 @@ acknowledged are not touched; the correction only makes sure they don't get wors
 
 *Tune to fabric* under *Material* lists the settings that fit the chosen fabric and thread better
 (spacing in the recommended range, underlay by size, long satin stitches split, pull compensation by
-fabric) and applies them on click; designs made in heatstitch get these rules from the start.
+fabric, gap rows in fills on knit) and applies them on click; designs made in heatstitch get these rules from the start.
 
 ![Correction panel with proposals and the before/after preview](public/guide/correct-en.jpg)
 
@@ -392,8 +400,29 @@ fill rows end there, satin edges are found there, underlay lies on a contour ins
   (Goldman's patent), preferably 30° apart from touching areas. Underlay: rows turned by 90°, three
   times the spacing, 0.4 mm inside the edge. Between sections the thread travels the shortest way
   inside, under rows not sewn yet (like Ink/Stitch's underpath); where it would lie on sewn rows for
-  more than 2 mm, it jumps instead. The other patterns (gradient, contour fill, spiral, guided) are
-  in `flow.ts` and `spiral.ts`.
+  more than 2 mm, it jumps instead. **Gap rows** on knit (jersey): where two sections meet, the one
+  sewn first sews one row on into the other, under its rows, on the same lines and needle points, so
+  the join does not open where the fabric stretches between them (Wilcom's segment overlap rows,
+  Ink/Stitch's gap fill rows). Where a section's end meets two (the shape splits), the second join
+  gets its row from the later section, on top of the first one's last row. One row keeps the density
+  check quiet on knit; two would reach Caution, so stable fabric gets none, and fleece, terry, light
+  and sheer fabric neither (lower limits). Not for contour fill and curved rows, which have no
+  sections side by side on one lattice. The other patterns (gradient, contour fill, spiral, guided)
+  are in `flow.ts`, `rings.ts` and `spiral.ts`.
+- **Contour fill and spiral** (`src/digitize/rings.ts`): rings are level lines of the distance field,
+  one spacing apart all round; each ring knows the one it lies in, a tree that branches where the
+  shape narrows and has more roots where it has holes. Each ring is shifted along the field's gradient
+  by a share of a spacing that runs from minus a half at its start to plus a half at its end, so it
+  ends exactly where the next ring begins and neighboring turns stay one spacing apart: for the
+  spiral evenly round the turn (ring to ring interpolation as in spiral pocket milling, Held and
+  Spielberger 2009), for the contour fill over a few millimetres at the start of each ring, so no
+  radial seam of steps and doubled needle points. Beside the edge and where branches leave, a spiral
+  turns into rings over four turns. Branches (a dumbbell, a heart's lobes) and the rings round holes
+  get spirals of their own, sewn from their middle out before the line passes them, so the travel
+  lies under rows still to come. The last line before the ridge in the middle moves so that the gap
+  across the ridge and the one to the line before come out equal. Each stitch ends at the best of a
+  few lengths, the one furthest from the needle points sewn before (Mitchell's best candidate, a blue
+  noise sampling), so the needle points of neighboring turns show neither spokes nor steps.
 - **Crosshatch** (`crosshatchFill` in `src/digitize/fill.ts`): the tatami machinery twice, at the fill
   angle ±45°, like the diamond crosshatch of commercial software (two layers at right angles). Each
   layer's rows are 1.6 mm apart, four times a usual fill's spacing, so both together lay half its
@@ -422,8 +451,11 @@ fill rows end there, satin edges are found there, underlay lies on a contour ins
   *Fill direction* swaps it for straight rows or a fixed angle.
 - **Satin:** the edges are measured from the centerline at right angles to the border (the "stroke
   normals" of Goldman's patent). 0.4 mm between penetrations on the same side, measured on the side
-  that advances more; on the inside of curves every penetration that comes too close (under 0.25 mm)
-  moves 15 % of the width inwards. Pull compensation by fabric (woven 0.2 mm, knit 0.35, terry 0.4 per
+  that advances more; on the inside of curves every penetration that comes too close (under 0.25 mm,
+  or half the spacing on a looser satin) moves inwards, 15 % and 30 % of the width by turns while
+  they keep coming close (Ink/Stitch's multi-level short stitch inset), so a tight curve spreads its
+  needle points over three lines.
+  Pull compensation by fabric (woven 0.2 mm, knit 0.35, terry 0.4 per
   side), stitches over 7 mm are split. A network of columns is sewn in one go: each branch out as
   underlay (center walk, zigzag from 4 mm width) and back as satin, like Ink/Stitch's auto-satin. At
   junctions the first column covers, the others reach 0.3 mm into it. In Design the same
@@ -431,13 +463,21 @@ fill rows end there, satin edges are found there, underlay lies on a contour ins
   start the column afresh at sharp corners, and a fill can become a satin along drawn rungs.
 - **Running stitch** (`run.ts`): stitches of the chosen length along a path, shortened in curves until
   none lies further off the curve than the max. deviation (0.15 mm by default), never under 1 mm.
+- **Redwork** (`redwork.ts`): a line of many paths in one go. The paths become a planar graph (split
+  where they cross or touch, lines up to 0.5 mm apart bridged where they are closest, the snap of
+  joining paths; nodes closer than 0.5 mm along a line merged, so crossings at a shallow angle give no heap of
+  short stitches). Every edge is doubled, one copy each way, so each connected part has an Euler
+  circuit; the one taken is Tarry's depth-first traversal (1895), which leaves an edge back the way
+  it came only after everything beyond it is sewn: the first pass lies below, the way back on top,
+  over the same needle points. Parts that do not touch follow each other, the nearest next. SVG lines
+  in running stitch whose paths touch are sewn this way from the start.
 - **Order:** colors by area, the largest first; within a color fills before satin and lines, each time
   the nearest object. Objects sewn earlier reach 0.2 mm under later neighbors. Up to 1 mm apart a
   stitch, up to 3 mm a jump, beyond that a tie-off (0, 0.5, 1, 0.5, 0 mm along the thread), trim, jump
   and tie-in; the same at color changes.
 - **Defaults** by material (`digitizeDefaults`): spacing from the profile's recommendation (woven
   40 wt: 0.40 mm between neighboring rows, as measured in the example cat), pull compensation by
-  fabric (Wilcom table). Everything can be overridden in the *Stitches* panel.
+  fabric (Wilcom table), gap rows on knit. Everything can be overridden in the *Stitches* panel.
 
 The generated stitches go through the same check as loaded files. *Take over* adds them
 to the open designs as a new design, where their objects keep shape and settings and can be edited,

@@ -72,7 +72,9 @@ describe('a fringe read from a file', () => {
     const was = edges(p);
     const frayedNear = spread(was.near) > spread(was.far);
     const { kinds, objs, s } = read(p);
-    const r = restitch(p, objs, [0], { kind: 'satin', s: { ...s, spacing: 0.5 } }, kinds, 3);
+    // Without short stitches: on the frayed side, read from uneven points, they would take some
+    // points past the middle, where this test tells the sides apart.
+    const r = restitch(p, objs, [0], { kind: 'satin', s: { ...s, spacing: 0.5, short: false } }, kinds, 3);
     expect(r.failed).toEqual([]);
     const now = edges(r.pattern);
     const [frayed, smooth] = frayedNear ? [now.near, now.far] : [now.far, now.near];

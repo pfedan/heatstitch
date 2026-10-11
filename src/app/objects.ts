@@ -134,11 +134,11 @@ export function bindObjects(app: ObjectsApp) {
     loose: (o) => app.offerShapeBack(o),
   });
 
-  /** Name of an object as the list shows it: kind and number within its color. */
-  function objectName(q: Sequence, i: number): string {
+  /** Name of an object as the list shows it: kind and number within its color (an appliqué by name, given its design `p`). */
+  function objectName(q: Sequence, i: number, p?: Pattern): string {
     const o = q.objects[i];
     const k = numberInColor(q.objects, o);
-    return `${kindLabel(o.kind)} ${k} (${blockName({ index: o.block, color: o.color })})`;
+    return `${p && remembered(p, o)?.applique ? t('applique.name') : kindLabel(o.kind)} ${k} (${blockName({ index: o.block, color: o.color })})`;
   }
 
   /**
@@ -394,7 +394,7 @@ export function bindObjects(app: ObjectsApp) {
     const selected = [...ui.selectedObjects].sort((a, b) => a - b);
     // Lines are turned by their curve (in place, so the others keep their numbers), the rest sewn from the other side.
     const lines = selected.filter((o) => sewnAlong(p, q.objects[o]));
-    const which = selected.filter((o) => !lines.includes(o) && reversible(q.objects[o]));
+    const which = selected.filter((o) => !lines.includes(o) && reversible(q.objects[o]) && !remembered(p, q.objects[o])?.applique);
     if (!which.length && !lines.length) return;
     const turned = reverseLines(p, lines, app.settings.trimMm);
     // Shadows and echo copies in threads of their own follow their lines.
@@ -429,6 +429,8 @@ export function bindObjects(app: ObjectsApp) {
     // A border, a blend's second thread or a shadow belongs to its fill, also in a thread of its own.
     const p = app.files.active?.pattern;
     if (p && objs.some((o) => o.block !== objs[0].block) && objs.some((o) => threadOfAFill(p, o))) return 'object.merge.part';
+    // An appliqué's parts and stops belong together: it is not sewn as one with others.
+    if (p && objs.some((o) => remembered(p, o)?.applique)) return 'applique.merge';
     const together = objs.every((o, k) => !k || o.index === objs[k - 1].index + 1);
     if (!together && objs.some((o) => o.kind !== 'fill')) return 'object.merge.kind';
     return null;

@@ -70,9 +70,10 @@ export function initStitchArea(app: StitchAreaApp): { refresh: () => void } {
   const undoAction = () => ({ label: t('edit.undo'), run: () => void runCommand('edit.undo') });
 
   // Stitch types -------------------------------------------------------------------------------------
-  for (const [k, label] of [['fill', 'stitches.cmd.kindFill'], ['satin', 'stitches.cmd.kindSatin'], ['line', 'stitches.cmd.kindLine']] as const) {
+  for (const [k, label] of [['fill', 'stitches.cmd.kindFill'], ['satin', 'stitches.cmd.kindSatin'], ['line', 'stitches.cmd.kindLine'], ['applique', 'applique.cmd.kind']] as const) {
     command({ id: `stitch.kind.${k}`, label, group: G, when: () => flow() && panel.canConvert(k), run: () => panel.convert(k) });
   }
+  command({ id: 'stitch.cutLine', label: 'applique.cmd.cut', group: G, when: () => flow() && !!info()?.applique, run: () => panel.cutLine() });
   command({ id: 'stitch.reroll', label: 'stitches.cmd.reroll', group: G, when: () => flow() && panel.canReroll(), run: () => panel.reroll() });
 
   // Direction, guide lines, points ----------------------------------------------------------------------

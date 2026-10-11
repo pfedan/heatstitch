@@ -41,8 +41,14 @@ export function geoUse(m: Remembered | null | undefined): GeoUse | null {
 /** The form an object was given (not guessed), or null. */
 export const geoOf = (m: Remembered | null | undefined): Form | null => m?.geo ?? null;
 
-/** The form of an object whose closed paths are filled, or null. */
-export const areaOf = (m: Remembered | null | undefined): Form | null => (geoUse(m) === 'area' ? m!.geo! : null);
+/**
+ * The form of an object whose closed paths are filled, or null. An appliqué's form is a piece of
+ * fabric, not sewn as a fill: none (see appliqueArea).
+ */
+export const areaOf = (m: Remembered | null | undefined): Form | null => (geoUse(m) === 'area' && !m!.applique ? m!.geo! : null);
+
+/** The form of an appliqué: the outline of its piece of fabric. */
+export const appliqueArea = (m: Remembered | null | undefined): Form | null => (geoUse(m) === 'area' && m!.applique ? m!.geo! : null);
 
 /** The form of an object sewn along its paths, or null. */
 export const lineGeoOf = (m: Remembered | null | undefined): Form | null => (geoUse(m) === 'line' ? m!.geo! : null);

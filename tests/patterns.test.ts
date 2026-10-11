@@ -157,12 +157,13 @@ describe('fill patterns', () => {
     expect(coverage(disk, res.runs, 0.3)).toBeGreaterThan(0.95);
   });
 
-  it('winds a spiral at the row spacing into round shapes only', () => {
-    const res = spiralFill(disk, params, [5, 15])!;
-    expect(res.runs).toHaveLength(1);
-    expect(thread(res.runs) / disk.areaMm2).toBeCloseTo(1 / 0.4, 0);
-    expect(coverage(disk, res.runs, 0.3)).toBeGreaterThan(0.95);
-    expect(spiralFill(ell, params, [5, 5])).toBeNull();
+  it('winds a spiral at the row spacing, also into a corner', () => {
+    for (const r of [disk, ell]) {
+      const res = spiralFill(r, params, [5, 15])!;
+      expect(res.runs).toHaveLength(1);
+      expect(thread(res.runs) / r.areaMm2).toBeCloseTo(1 / 0.4, 0);
+      expect(coverage(r, res.runs, 0.3)).toBeGreaterThan(0.95);
+    }
   });
 
   it('outlines a region as one closed line along its edge', () => {

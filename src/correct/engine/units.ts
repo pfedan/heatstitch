@@ -59,6 +59,8 @@ export function unitOf(p: Pattern, objs: SewObject[], o: SewObject, kinds: Uint8
     return { kind: 'border', owner: fill.index, objects: [o.index], settings: r.settings as Settings & { kind: 'fill' }, line };
   }
   if (known?.blendOf || known?.shadowOf || known?.echoOf) return { why: 'derived' };
+  // An appliqué: fabric laid on, its edge set in its own panel; nothing for the engine to tune.
+  if (known?.applique) return { why: 'applique' };
   const r = roleOf(p, objs, o, kinds, allowHand);
   if (r.role !== 'settings' || !r.settings) return { why: r.why ?? 'unknown' };
   return { kind: 'object', owner: o.index, objects: [o.index], settings: r.settings };
