@@ -114,10 +114,10 @@ export default {
   part: 8,
   voice: {
     model: 'google/gemini-3.1-flash-tts',
-    voice: 'Aoede',
+    voice: 'Gacrux',
     language: 'de-DE',
     prompt:
-      'Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.',
+      'Speak German like a seasoned embroidery master teaching a workshop: mature, composed, precise, quietly authoritative but kind. Every word placed with care, with understated pride.',
   },
   lead: 0.4,
   tail: 0.6,
@@ -188,9 +188,9 @@ export default {
       },
     },
     {
-      say: '[delighted] Ein Klick, und aus Riskant wird Mit Vorsicht. Oben bei Prüfen stehen statt sechzehn nur noch sieben offene Stellen.',
-      text: 'Ein Klick, und aus Riskant wird Mit Vorsicht. Oben bei Prüfen stehen statt sechzehn nur noch sieben offene Stellen.',
-      textEn: 'One click, and Risky becomes With care. Up at Check there are only seven open spots instead of sixteen.',
+      say: '[delighted] Ein Klick, und aus Riskant wird Mit Vorsicht. Oben bei Prüfen stehen statt sechzehn nur noch sechs offene Stellen.',
+      text: 'Ein Klick, und aus Riskant wird Mit Vorsicht. Oben bei Prüfen stehen statt sechzehn nur noch sechs offene Stellen.',
+      textEn: 'One click, and Risky becomes With care. Up at Check there are only six open spots instead of sixteen.',
       run: async (s) => {
         const fix = s.page.locator('.ampel-fix').first();
         await s.zoom([1760, 250, 0, 0], 1.6);
@@ -283,9 +283,9 @@ export default {
       },
     },
     {
-      say: 'Rechts unter Vergleich stehen die Zahlen. [proud and warm] Die kritische Fläche schrumpft von 36 auf 8 Quadratmillimeter, und das mit 226 Stichen weniger.',
-      text: 'Rechts unter Vergleich stehen die Zahlen. Die kritische Fläche schrumpft von 36 auf 8 Quadratmillimeter, und das mit 226 Stichen weniger.',
-      textEn: 'On the right under Compare you find the figures. The critical area shrinks from 36 to 8 square millimetres, and with 226 fewer stitches.',
+      say: 'Rechts unter Vergleich stehen die Zahlen. [proud and warm] Die kritische Fläche schrumpft von 36 auf 7 Quadratmillimeter, und das mit 252 Stichen weniger.',
+      text: 'Rechts unter Vergleich stehen die Zahlen. Die kritische Fläche schrumpft von 36 auf 7 Quadratmillimeter, und das mit 252 Stichen weniger.',
+      textEn: 'On the right under Compare you find the figures. The critical area shrinks from 36 to 7 square millimetres, and with 252 fewer stitches.',
       run: async (s) => {
         await s.move([1760, 600], 0.8);
         const title = s.page.getByText('Vergleich', { exact: true }).first();
