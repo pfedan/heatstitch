@@ -96,11 +96,11 @@ export const VIDEOS: Video[] = [
     key: '03-vom-bild-zum-stickmuster',
     part: 3,
     title: { de: 'Vom Bild zum Stickmuster', en: 'From a picture to a design' },
-    length: '2:43',
+    length: '3:14',
     group: 'design',
     goal: { de: 'Du machst aus einem Foto oder einer Grafik ein Stickmuster: Farben wählen, Flächen aufräumen, Stil festlegen.', en: 'You turn a photo or a graphic into a design: pick the colors, tidy the areas, choose a style.' },
     files: ['fliegenpilz.jpg'],
-    published: '2026-10-08T21:32:32+02:00',
+    published: '2026-10-11T14:16:58+02:00',
   },
   {
     key: '05-objekte-und-reihenfolge',

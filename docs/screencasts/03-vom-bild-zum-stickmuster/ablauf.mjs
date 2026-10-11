@@ -92,6 +92,10 @@ const dragFileIn = async (s, from, to) => {
 const REST = [700, 290];
 // In Gestalten the pointer rests off the motif, so the stage shows no stitch readout next to it.
 const REST_DESIGN = [420, 140];
+// Stretches the waits and glides of a scene to the pace of its take, so labels keep up with
+// the words (the timings were set for a faster voice).
+const paced = (r, run) => (s) =>
+  run({ ...s, wait: (sec) => s.wait(sec * r), move: (target, sec = 0.8) => s.move(target, sec * r) });
 const glide = async (s, points, sec = 0.5) => {
   for (const p of points) await s.move(p, sec);
 };
@@ -101,10 +105,10 @@ export default {
   part: 3,
   voice: {
     model: 'google/gemini-3.1-flash-tts',
-    voice: 'Aoede',
+    voice: 'Gacrux',
     language: 'de-DE',
     prompt:
-      'Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.',
+      'Speak German like a seasoned embroidery master teaching a workshop: mature, composed, precise, quietly authoritative but kind. Every word placed with care, with understated pride.',
   },
   lead: 0.4,
   tail: 0.6,
@@ -113,7 +117,7 @@ export default {
       say: '[warm] Aus einem Foto oder einer Grafik wird in heatstitch ein Stickmuster. Auf der Startseite klickst du dafür auf „Bild umwandeln“, oder du drückst die Taste 3.',
       text: 'Aus einem Foto oder einer Grafik wird in heatstitch ein Stickmuster. Auf der Startseite klickst du dafür auf „Bild umwandeln“, oder du drückst die Taste 3.',
       textEn: 'In heatstitch, a photo or a graphic becomes an embroidery design. On the start page you click “Convert image”, or you press the 3 key.',
-      run: async (s) => {
+      run: paced(1.29, async (s) => {
         await s.move([960, 300], 0.1);
         await s.wait(4.2);
         const start = btn(s, /^Bild umwandeln/);
@@ -125,13 +129,13 @@ export default {
         await s.click(null, { before: 0.4, after: 0.6 });
         await s.wait(1.2);
         s.keyCap(null);
-      },
+      }),
     },
     {
       say: 'Ein Assistent führt dich in drei Schritten: Bild wählen, Farben und Flächen, Stiche und Ergebnis.',
       text: 'Ein Assistent führt dich in drei Schritten: Bild wählen, Farben und Flächen, Stiche und Ergebnis.',
       textEn: 'An assistant guides you in three steps: Choose image, Colors and areas, Stitches and result.',
-      run: async (s) => {
+      run: paced(1.05, async (s) => {
         const steps = s.page.getByRole('list', { name: 'Schritte' }).getByRole('button');
         await s.zoom([570, 78, 0, 0], 1.8);
         await s.move([560, 160], 1.0);
@@ -143,13 +147,13 @@ export default {
         s.unlabel();
         s.zoomOut();
         await s.wait(0.4);
-      },
+      }),
     },
     {
       say: 'Zieh dein Bild einfach aus deinem Ordner ins Fenster und lass es los. Ich nehme diesen Fliegenpilz. Mit „Weiter“ geht es zum zweiten Schritt.',
       text: 'Zieh dein Bild einfach aus deinem Ordner ins Fenster und lass es los. Ich nehme diesen Fliegenpilz. Mit „Weiter“ geht es zum zweiten Schritt.',
       textEn: 'Simply drag your image from your folder into the window and let go. I take this fly agaric. “Next” takes you to the second step.',
-      run: async (s) => {
+      run: paced(1.1, async (s) => {
         await dragFileIn(s, [1912, 760], [1110, 560]);
         await settle(s, async () => (await s.page.getByText(/^fliegenpilz, /).count()) > 0);
         await s.move([1250, 640], 1.2);
@@ -160,14 +164,14 @@ export default {
         await s.wait(0.6);
         await s.click(null);
         s.unlabel();
-        await settle(s, async () => (await colorNames(s)).includes('Warm Gray'));
-      },
+        await settle(s, async () => (await colorNames(s)).includes('Dark Fuchsia'));
+      }),
     },
     {
       say: '[curious] Jetzt zerlegt heatstitch das Bild in Flächen. Den weißen Hintergrund lässt es gleich weg. Rechts unter Farben steht jede Farbe als Garn.',
       text: 'Jetzt zerlegt heatstitch das Bild in Flächen. Den weißen Hintergrund lässt es gleich weg. Rechts unter Farben steht jede Farbe als Garn.',
       textEn: 'Now heatstitch splits the image into areas. It leaves out the white background right away. On the right under Colors, every color is listed as a thread.',
-      run: async (s) => {
+      run: paced(1.1, async (s) => {
         await s.move([960, 520], 1.0);
         await s.wait(1.6);
         const bg = choice(s, 'Hintergrund weglassen', 'checkbox');
@@ -183,13 +187,13 @@ export default {
         await s.label('Farben', [1626, 76, 60, 20], 'above');
         await s.wait(2.6);
         s.unlabel();
-      },
+      }),
     },
     {
-      say: 'Links legst du mit „Höchstens Farben“ fest, wie viele Garne es werden. Bei sechs teilen sich Stiel und Schatten ein Grau. Ich stelle zehn ein. [pleased] Jetzt hat der Stiel sein eigenes Beige.',
-      text: 'Links legst du mit „Höchstens Farben“ fest, wie viele Garne es werden. Bei sechs teilen sich Stiel und Schatten ein Grau. Ich stelle zehn ein. Jetzt hat der Stiel sein eigenes Beige.',
-      textEn: 'On the left, “Max colors” sets how many threads you get. At six, the stem and the shadow share one gray. I set it to ten. Now the stem has its own beige.',
-      run: async (s) => {
+      say: 'Links legst du mit „Höchstens Farben“ fest, wie viele Garne es werden. Bei sechs teilen sich Stiel und Schatten ein Beige. Ich stelle zehn ein. [pleased] Jetzt hat der Schatten sein eigenes Grau, Warm Gray.',
+      text: 'Links legst du mit „Höchstens Farben“ fest, wie viele Garne es werden. Bei sechs teilen sich Stiel und Schatten ein Beige. Ich stelle zehn ein. Jetzt hat der Schatten sein eigenes Grau, Warm Gray.',
+      textEn: 'On the left, “Max colors” sets how many threads you get. At six, the stem and the shadow share one beige. I set it to ten. Now the shadow has its own gray, Warm Gray.',
+      run: paced(1.22, async (s) => {
         s.zoomOut();
         const slider = s.page.getByRole('slider').first();
         const b = await s.box(slider);
@@ -206,17 +210,21 @@ export default {
         await s.zoom([150, 160, 0, 0], 1.8);
         await s.drag([at(6), at(10)], { sec: 1.0 });
         if ((await slider.inputValue()) !== '10') await slider.fill('10');
-        await settle(s, async () => (await colorNames(s)).includes('Beige'));
+        await settle(s, async () => (await colorNames(s)).includes('Warm Gray'));
         s.zoomOut();
-        await s.move([960, 780], 1.0);
+        await s.move([960, 920], 1.0);
+        await s.wait(0.8);
+        const gray = (await colorRow(s, 'Warm Gray')).getByText('Warm Gray');
+        await s.label('Warm Gray', gray, 'below');
         await s.wait(2.0);
-      },
+        s.unlabel();
+      }),
     },
     {
-      say: 'Dafür ist am Hutrand ein dunkles Rot dazugekommen, Dark Fuchsia. Über den Pfeil daneben legst du eine Farbe mit einer anderen zusammen. Ich nehme Red.',
-      text: 'Dafür ist am Hutrand ein dunkles Rot dazugekommen, Dark Fuchsia. Über den Pfeil daneben legst du eine Farbe mit einer anderen zusammen. Ich nehme Red.',
-      textEn: 'In return, a dark red appeared at the edge of the cap, Dark Fuchsia. With the arrow next to it you merge one color into another. I pick Red.',
-      run: async (s) => {
+      say: 'Am Hutrand liegt ein dunkles Rot, Dark Fuchsia. Über den Pfeil daneben legst du eine Farbe mit einer anderen zusammen. Ich nehme Red.',
+      text: 'Am Hutrand liegt ein dunkles Rot, Dark Fuchsia. Über den Pfeil daneben legst du eine Farbe mit einer anderen zusammen. Ich nehme Red.',
+      textEn: 'A dark red lies along the edge of the cap, Dark Fuchsia. With the arrow next to it you merge one color into another. I pick Red.',
+      run: paced(1.12, async (s) => {
         await settle(s, async () => (await colorNames(s)).includes('Dark Fuchsia'));
         await s.move([1000, 600], 1.0);
         await s.wait(1.6);
@@ -237,13 +245,13 @@ export default {
         s.zoomOut();
         await s.move([1000, 560], 1.0);
         await s.wait(1.0);
-      },
+      }),
     },
     {
       say: 'Den grauen Schatten unter dem Pilz brauche ich nicht. Ohne Häkchen lässt heatstitch eine Farbe weg.',
       text: 'Den grauen Schatten unter dem Pilz brauche ich nicht. Ohne Häkchen lässt heatstitch eine Farbe weg.',
       textEn: 'I don’t need the gray shadow under the mushroom. Without a check mark, heatstitch leaves a color out.',
-      run: async (s) => {
+      run: paced(1.3, async (s) => {
         await s.move([960, 930], 1.0);
         await s.wait(1.2);
         const box = (await colorRow(s, 'Warm Gray')).getByRole('checkbox');
@@ -257,13 +265,13 @@ export default {
         s.zoomOut();
         await s.move([960, 900], 1.0);
         await s.wait(1.0);
-      },
+      }),
     },
     {
       say: 'Bleibt der rote Punkt oben rechts. Unter Pinsel wähle ich Radieren und wische ihn einfach weg. Mit Malen färbst du Flächen von Hand um.',
       text: 'Bleibt der rote Punkt oben rechts. Unter Pinsel wähle ich Radieren und wische ihn einfach weg. Mit Malen färbst du Flächen von Hand um.',
       textEn: 'That leaves the red dot at the top right. Under Brush I choose Erase and simply wipe it away. With Paint you recolor areas by hand.',
-      run: async (s) => {
+      run: paced(1.2, async (s) => {
         await s.zoom([1280, 290, 0, 0], 1.6);
         await s.move([1282, 290], 1.2);
         await s.wait(1.0);
@@ -302,13 +310,13 @@ export default {
         await s.wait(1.8);
         s.unlabel();
         s.zoomOut();
-      },
+      }),
     },
     {
       say: 'Weiter geht es zum dritten Schritt, Stiche und Ergebnis. Die Vorschau zeigt dein Motiv schon mit realistischen Fäden.',
       text: 'Weiter geht es zum dritten Schritt, Stiche und Ergebnis. Die Vorschau zeigt dein Motiv schon mit realistischen Fäden.',
       textEn: 'On to the third step, Stitches and result. The preview already shows your design with realistic threads.',
-      run: async (s) => {
+      run: paced(1.21, async (s) => {
         const next = btn(s, 'Weiter');
         await s.move(next, 1.2);
         await s.label('Weiter', next, 'above');
@@ -319,13 +327,13 @@ export default {
         await s.zoom([960, 560, 0, 0], 1.4);
         await s.wait(3.0);
         s.zoomOut();
-      },
+      }),
     },
     {
       say: 'Unter Stil wählst du, wie die Stiche laufen. Bei Dynamisch folgen die Reihen der Form und dem Bild. [thoughtful] Für den Fliegenpilz nehme ich Flach, mit geraden Reihen.',
       text: 'Unter Stil wählst du, wie die Stiche laufen. Bei Dynamisch folgen die Reihen der Form und dem Bild. Für den Fliegenpilz nehme ich Flach, mit geraden Reihen.',
       textEn: 'Under Style you choose how the stitches run. With Dynamic, the rows follow the shape and the image. For the fly agaric I take Flat, with straight rows.',
-      run: async (s) => {
+      run: paced(1.27, async (s) => {
         const stats = s.page.getByRole('complementary').filter({ has: s.page.getByRole('heading', { name: 'Ergebnis' }) });
         const count = () => stats.getByRole('definition').first().innerText();
         await s.zoom([150, 210, 0, 0], 1.8);
@@ -358,13 +366,13 @@ export default {
         await s.zoom([960, 470, 0, 0], 1.5);
         await s.wait(2.0);
         s.zoomOut();
-      },
+      }),
     },
     {
-      say: 'Rechts im Ergebnis stehen Stiche, Größe, Farben und Nähzeit. [pleased] Unauffällig heißt: keine Bereiche über den Grenzwerten für dieses Material.',
-      text: 'Rechts im Ergebnis stehen Stiche, Größe, Farben und Nähzeit. Unauffällig heißt: keine Bereiche über den Grenzwerten für dieses Material.',
-      textEn: 'On the right, Result shows stitches, size, colors and sewing time. Inconspicuous means: no areas above the limits for this material.',
-      run: async (s) => {
+      say: 'Rechts im Ergebnis stehen Stiche, Größe, Farben und Nähzeit: 3.270 Stiche, fünf Farben, etwa sieben Minuten. [pleased] Unauffällig heißt: keine Bereiche über den Grenzwerten für dieses Material.',
+      text: 'Rechts im Ergebnis stehen Stiche, Größe, Farben und Nähzeit: 3.270 Stiche, fünf Farben, etwa sieben Minuten. Unauffällig heißt: keine Bereiche über den Grenzwerten für dieses Material.',
+      textEn: 'On the right, Result shows stitches, size, colors and sewing time: 3,270 stitches, five colors, about seven minutes. Inconspicuous means: no areas above the limits for this material.',
+      run: paced(1.35, async (s) => {
         const stats = s.page.getByRole('complementary').filter({ has: s.page.getByRole('heading', { name: 'Ergebnis' }) });
         await glide(s, [[REST[0], 22], [1760, 22]], 0.6);
         await s.zoom([1760, 220, 0, 0], 1.7);
@@ -376,19 +384,25 @@ export default {
           await s.move(stats.getByRole('term').filter({ hasText: new RegExp(`^${word}$`) }), 0.6);
           await s.wait(0.3);
         }
+        // The values as the voice reads them out.
+        for (const [word, sec] of [['Stiche', 1.2], ['Farben', 0.9], ['Nähzeit', 1.0]]) {
+          const value = stats.getByRole('term').filter({ hasText: new RegExp(`^${word}$`) }).locator('xpath=following-sibling::dd[1]');
+          await s.move(value, 0.5);
+          await s.wait(sec);
+        }
         const ok = stats.getByText('Unauffällig', { exact: true });
         await s.move(ok, 0.9);
         await s.label('Unauffällig', ok, 'left');
         await s.wait(3.8);
         s.unlabel();
         s.zoomOut();
-      },
+      }),
     },
     {
       say: 'Mit „Übernehmen“ wird daraus ein neues Stickmuster. [delighted] Da ist er, dein Fliegenpilz, fertig zum Gestalten, Prüfen und Speichern.',
       text: 'Mit „Übernehmen“ wird daraus ein neues Stickmuster. Da ist er, dein Fliegenpilz, fertig zum Gestalten, Prüfen und Speichern.',
       textEn: '“Apply” turns it into a new embroidery design. There it is, your fly agaric, ready to design, check and save.',
-      run: async (s) => {
+      run: paced(1.03, async (s) => {
         const apply = btn(s, 'Übernehmen');
         await glide(s, [[1760, 22], [150, 22]], 0.6);
         await s.move(apply, 1.0);
@@ -402,19 +416,19 @@ export default {
         await s.wait(0.6);
         await s.move(REST_DESIGN, 1.2);
         await s.wait(4.0);
-      },
+      }),
     },
     {
       say: 'Mit der Leertaste siehst du, wie die Maschine ihn Stich für Stich stickt. [warm] Viel Spaß beim Sticken!',
       text: 'Mit der Leertaste siehst du, wie die Maschine ihn Stich für Stich stickt. Viel Spaß beim Sticken!',
       textEn: 'With the space bar you see the machine stitch it, stitch by stitch. Have fun embroidering!',
-      run: async (s) => {
+      run: paced(1.1, async (s) => {
         await s.page.evaluate(() => document.activeElement?.blur());
         await s.press('Home', { label: 'Pos1', show: 0.3 });
         await s.press(' ', { label: 'Leertaste', show: 1.0 });
         await s.move(REST_DESIGN, 1.4);
         await s.wait(7.0);
-      },
+      }),
     },
   ],
 };
