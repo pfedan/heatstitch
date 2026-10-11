@@ -156,11 +156,11 @@ export const VIDEOS: Video[] = [
     key: '09-spruenge-und-schnitte',
     part: 9,
     title: { de: 'Sprünge und Schnitte', en: 'Jumps and trims' },
-    length: '2:07',
+    length: '2:21',
     group: 'file',
     goal: { de: 'Du sorgst dafür, dass lange Sprünge geschnitten werden, und kürzt die Wege mit einer besseren Reihenfolge.', en: 'You make sure long jumps are trimmed and shorten the travel with a better order.' },
     files: ['konfetti.pes'],
-    published: '2026-10-08T21:32:32+02:00',
+    published: '2026-10-11T21:01:29+02:00',
   },
   {
     key: '10-vorschau-und-speichern',

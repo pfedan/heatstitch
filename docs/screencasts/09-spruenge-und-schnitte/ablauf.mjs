@@ -111,10 +111,10 @@ export default {
   part: 9,
   voice: {
     model: 'google/gemini-3.1-flash-tts',
-    voice: 'Aoede',
+    voice: 'Gacrux',
     language: 'de-DE',
     prompt:
-      'Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.',
+      'Speak German like a seasoned embroidery master teaching a workshop: mature, composed, precise, quietly authoritative but kind. Every word placed with care, with understated pride.',
   },
   lead: 0.4,
   tail: 0.6,
@@ -125,7 +125,7 @@ export default {
       textEn: 'Between two parts of one color, the needle jumps. Whether the machine trims the thread there, heatstitch shows you at a glance. I drag this confetti into the window.',
       run: async (s) => {
         await s.move([960, 300], 0.1);
-        await s.wait(4.6);
+        await s.wait(9.0);
         await dragFileIn(s, [1915, 560], [960, 560]);
         await until(s, async () => (await btn(s, 'konfetti.pes').count()) > 0, 'konfetti.pes opens');
         await s.move(REST, 1.2);
