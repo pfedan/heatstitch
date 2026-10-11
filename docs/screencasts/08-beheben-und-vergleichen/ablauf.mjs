@@ -109,6 +109,11 @@ const SPLIT = [800, 563];
 // The lettering on the whole stage (300 %).
 const TEXT = [640, 690];
 
+// Stretches the waits and glides of a scene to the pace of its take, so labels keep up with
+// the words (the timings were set for a faster voice).
+const paced = (r, run) => (s) =>
+  run({ ...s, wait: (sec) => s.wait(sec * r), move: (target, sec = 0.8) => s.move(target, sec * r) });
+
 export default {
   title: 'Beheben und vergleichen',
   part: 8,
@@ -126,20 +131,20 @@ export default {
       say: '[warm] Dieser Aufnäher soll auf ein T-Shirt. Die Schrift liegt in Satin auf einer vollen Füllung, auf dünnem Strick wird das schnell zu dicht. Ich ziehe ihn ins Fenster.',
       text: 'Dieser Aufnäher soll auf ein T-Shirt. Die Schrift liegt in Satin auf einer vollen Füllung, auf dünnem Strick wird das schnell zu dicht. Ich ziehe ihn ins Fenster.',
       textEn: 'This patch is going on a T-shirt. The lettering is satin on top of a full fill, and on thin knit that quickly gets too dense. I drag it into the window.',
-      run: async (s) => {
+      run: paced(1.06, async (s) => {
         await s.move([960, 300], 0.1);
         await s.wait(5.0);
         await dragFileIn(s, [1915, 560], [960, 560]);
         await until(s, async () => (await btn(s, 'patch.pes').count()) > 0, 'patch.pes opens');
         await s.move(REST, 1.2);
         await s.wait(1.4);
-      },
+      }),
     },
     {
       say: 'Oben klickst du auf Prüfen, oder du drückst die Taste 2. Rechts wähle ich den Stoff Strick. [concerned] Die Ampel sagt: Riskant auf Strick. Auf der Bühne leuchten die Buchstaben, dort liegt zu viel Garn.',
       text: 'Oben klickst du auf Prüfen, oder du drückst die Taste 2. Rechts wähle ich den Stoff Strick. Die Ampel sagt: Riskant auf Strick. Auf der Bühne leuchten die Buchstaben, dort liegt zu viel Garn.',
       textEn: 'At the top you click Check, or you press the 2 key. On the right I choose the fabric Knit. The traffic light says: Risky on knit. On the stage the letters glow, that is where too much thread lies.',
-      run: async (s) => {
+      run: paced(1.14, async (s) => {
         const check = mode(s, /^Prüfen/);
         await s.move(check, 0.9);
         await s.label('Prüfen', check, 'below');
@@ -164,13 +169,13 @@ export default {
         await s.move([850, 830], 1.6);
         await s.move(REST, 1.0);
         await readout(s, true);
-      },
+      }),
     },
     {
       say: 'heatstitch sucht dabei schon nach Lösungen. Unter Dichte steht jetzt Beheben. Beheben ändert nur, was man kaum sieht. [pleased] Und hier schafft es alle dreißig Quadratmillimeter.',
       text: 'heatstitch sucht dabei schon nach Lösungen. Unter Dichte steht jetzt Beheben. Beheben ändert nur, was man kaum sieht. Und hier schafft es alle dreißig Quadratmillimeter.',
       textEn: 'Meanwhile heatstitch is already looking for solutions. Under Density there is now Fix. Fix only changes what you can hardly see. And here it manages all thirty square millimetres.',
-      run: async (s) => {
+      run: paced(1.04, async (s) => {
         const fix = s.page.locator('.ampel-fix').first();
         await s.zoom(reason(s, 'Dichte'), 1.8);
         await s.move(reason(s, 'Dichte').locator('.name'), 0.9);
@@ -185,13 +190,13 @@ export default {
         await s.label('30 von 30 mm²', fig, 'below');
         await s.wait(2.4);
         s.unlabel();
-      },
+      }),
     },
     {
       say: '[delighted] Ein Klick, und aus Riskant wird Mit Vorsicht. Oben bei Prüfen stehen statt sechzehn nur noch sechs offene Stellen.',
       text: 'Ein Klick, und aus Riskant wird Mit Vorsicht. Oben bei Prüfen stehen statt sechzehn nur noch sechs offene Stellen.',
       textEn: 'One click, and Risky becomes With care. Up at Check there are only six open spots instead of sixteen.',
-      run: async (s) => {
+      run: paced(1.11, async (s) => {
         const fix = s.page.locator('.ampel-fix').first();
         await s.zoom([1760, 250, 0, 0], 1.6);
         await s.click(fix, { move: 0.8, before: 0.3, after: 0.3 });
@@ -211,13 +216,13 @@ export default {
         s.unlabel();
         s.zoomOut();
         await s.move(REST, 0.8);
-      },
+      }),
     },
     {
       say: 'Was hat heatstitch gemacht? In Gestalten zeigt die Karte Objekt bei jedem Buchstaben: Von der Korrektur geändert. Beim S ist die Unterlage weg. Beim T liegt sie nur noch in der Mitte. [focused] Und beim E rücken die Satinstiche je nach Breite von 0,41 auf 0,43 Millimeter auseinander.',
       text: 'Was hat heatstitch gemacht? In Gestalten zeigt die Karte Objekt bei jedem Buchstaben: Von der Korrektur geändert. Beim S ist die Unterlage weg. Beim T liegt sie nur noch in der Mitte. Und beim E rücken die Satinstiche je nach Breite von 0,41 auf 0,43 Millimeter auseinander.',
       textEn: 'What did heatstitch do? In Design, the Object card shows on every letter: Changed by the correction. On the S the underlay is gone. On the T it only runs down the middle. And on the E the satin stitches move apart from 0.41 to 0.43 millimetres, depending on the width.',
-      run: async (s) => {
+      run: paced(1.1, async (s) => {
         await readout(s, false);
         const design = mode(s, /^Gestalten/);
         await s.move(design, 0.9);
@@ -250,13 +255,13 @@ export default {
         await s.tips(false);
         await s.move(REST, 0.8);
         await readout(s, true);
-      },
+      }),
     },
     {
       say: 'Zurück in Prüfen vergleichst du mit der Taste C mit dem Original. Ich ziehe die Trennlinie über die Schrift. [curious] Links glüht das Original, rechts ist die Korrektur viel ruhiger.',
       text: 'Zurück in Prüfen vergleichst du mit der Taste C mit dem Original. Ich ziehe die Trennlinie über die Schrift. Links glüht das Original, rechts ist die Korrektur viel ruhiger.',
       textEn: 'Back in Check, the C key compares with the original. I drag the dividing line across the lettering. On the left the original glows, on the right the correction is much calmer.',
-      run: async (s) => {
+      run: paced(1.0, async (s) => {
         // The keys go to the stage, not to a button that still has the focus.
         await s.page.evaluate(() => document.activeElement?.blur());
         await s.press('2', { label: '2', show: 0.8 });
@@ -280,13 +285,13 @@ export default {
         s.zoomOut();
         await s.move(REST, 0.8);
         await readout(s, true);
-      },
+      }),
     },
     {
       say: 'Rechts unter Vergleich stehen die Zahlen. [proud and warm] Die kritische Fläche schrumpft von 36 auf 7 Quadratmillimeter, und das mit 252 Stichen weniger.',
       text: 'Rechts unter Vergleich stehen die Zahlen. Die kritische Fläche schrumpft von 36 auf 7 Quadratmillimeter, und das mit 252 Stichen weniger.',
       textEn: 'On the right under Compare you find the figures. The critical area shrinks from 36 to 7 square millimetres, and with 252 fewer stitches.',
-      run: async (s) => {
+      run: paced(1.04, async (s) => {
         await s.move([1760, 600], 0.8);
         const title = s.page.getByText('Vergleich', { exact: true }).first();
         const top = await aside(s).evaluate((el) => el.getBoundingClientRect().top);
@@ -303,13 +308,13 @@ export default {
         await s.wait(2.4);
         s.unlabel();
         s.zoomOut();
-      },
+      }),
     },
     {
       say: 'Gefällt dir das Ergebnis nicht, klickst du auf Korrektur zurücknehmen. Dann ist alles wieder wie vorher. [warm] So probierst du ohne Risiko. Viel Spaß beim Sticken!',
       text: 'Gefällt dir das Ergebnis nicht, klickst du auf Korrektur zurücknehmen. Dann ist alles wieder wie vorher. So probierst du ohne Risiko. Viel Spaß beim Sticken!',
       textEn: 'If you do not like the result, you click Undo correction. Then everything is back to how it was. That way you can try things without risk. Have fun embroidering!',
-      run: async (s) => {
+      run: paced(1.05, async (s) => {
         await s.page.evaluate(() => document.activeElement?.blur());
         await s.press('c', { label: 'C', show: 0.8 });
         await scrollAside(s, -4000, 0.8);
@@ -326,7 +331,7 @@ export default {
         s.zoomOut();
         await s.move(REST, 1.0);
         await s.wait(3.0);
-      },
+      }),
     },
   ],
 };
