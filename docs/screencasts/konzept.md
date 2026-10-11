@@ -325,9 +325,12 @@ screencasts/
   Abspielen.
 - Hilfeseite: Jedes fertige Video gehört ins Handbuch. Alle Angaben zu einem Video stehen an
   einer Stelle, in `src/videos/catalog.ts` (Teil, Titel, Länge, Gruppe, Ziel in einem Satz,
-  Dateien zum Mitmachen); der Build schreibt daraus die Karten oben in der Anleitung, die Links
-  neben ihren Abschnitten, die Videoseite (`videos.html`, nach Gruppen) und das „Weiter mit“
-  im Player. Ein neues Video braucht drei Schritte: Eintrag im Katalog; Kartenbild aus dem
+  Dateien zum Mitmachen, Datum der Veröffentlichung); der Build schreibt daraus die Karten oben
+  in der Anleitung, die Links neben ihren Abschnitten, die Videoseite (`videos.html`, nach
+  Gruppen), das „Weiter mit“ im Player, die eigene Seite jedes Videos (`videos/<key>.html` und
+  `de/videos/<key>.html`, mit schema.org-VideoObject, `src/build/watchPage.ts`) und die
+  `sitemap.xml` mit Google-Video-Einträgen (`src/build/sitemap.ts`). Google indexiert ein Video
+  nur auf einer Seite, auf der es der Hauptinhalt ist; der Player über der Seite zählt nicht. Ein neues Video braucht drei Schritte: Eintrag im Katalog; Kartenbild aus dem
   Poster mit `python3 tools/screencast/karte.py <key>.jpg --out public/guide/videos` (die
   Bühne des Posters in 4:3, ein Zehntel der Größe); und in `docs.html` neben jedem passenden
   Abschnitt ein `<!-- video:ref de <key> -->` (und `en`). `tests/videos.test.ts` prüft, dass

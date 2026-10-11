@@ -4,6 +4,9 @@ import { VitePWA } from 'vite-plugin-pwa';
 import { readFileSync } from 'node:fs';
 import { langPage, type Page } from './src/build/langPages';
 import { expandVideos } from './src/build/videoHtml';
+import { watchPage } from './src/build/watchPage';
+import { sitemap } from './src/build/sitemap';
+import { videoByKey, VIDEOS, watchPath } from './src/videos/catalog';
 import { APP_NAVIGATION, APP_PAGES } from './src/build/pageCache';
 
 // The site lives at the root of heatstitch.app; pull request previews get their own address
@@ -31,6 +34,14 @@ const langPages: Plugin = {
         this.emitFile({ type: 'asset', fileName: `de/${file}`, source: langPage(html, pageOf(file), 'de') });
         asset.source = langPage(html, pageOf(file), 'en');
       }
+      // The page of each video in both languages, from the template, which is not served itself.
+      const template = bundle['video.html'];
+      if (template?.type !== 'asset') throw new Error('lang-pages: video.html is not in the build');
+      for (const v of VIDEOS)
+        for (const lang of ['en', 'de'] as const)
+          this.emitFile({ type: 'asset', fileName: watchPath(v.key, lang), source: watchPage(String(template.source), v, lang) });
+      delete bundle['video.html'];
+      this.emitFile({ type: 'asset', fileName: 'sitemap.xml', source: sitemap() });
     },
   },
   transformIndexHtml(html, ctx) {
@@ -40,7 +51,21 @@ const langPages: Plugin = {
   configureServer(server) {
     server.middlewares.use(async (request, res, next) => {
       const req = request as { url?: string; originalUrl?: string };
-      const m = /^\/de\/(index\.html|docs\.html|videos\.html)?(?:[?#]|$)/.exec((req.url ?? '').replace(base, '/'));
+      const path = (req.url ?? '').replace(base, '/');
+      const watch = /^\/(de\/)?videos\/([\w-]+)\.html(?:[?#]|$)/.exec(path);
+      const video = watch && videoByKey(watch[2]);
+      if (video) {
+        const html = await server.transformIndexHtml('/video.html', new TextDecoder().decode(readFileSync(new URL('video.html', import.meta.url))), req.originalUrl);
+        res.setHeader('Content-Type', 'text/html');
+        res.end(watchPage(html, video, watch[1] ? 'de' : 'en'));
+        return;
+      }
+      if (path === '/sitemap.xml') {
+        res.setHeader('Content-Type', 'application/xml');
+        res.end(sitemap());
+        return;
+      }
+      const m = /^\/de\/(index\.html|docs\.html|videos\.html)?(?:[?#]|$)/.exec(path);
       if (!m) return next();
       const file = m[1] ?? 'index.html';
       const html = await server.transformIndexHtml(`/${file}`, new TextDecoder().decode(readFileSync(new URL(file, import.meta.url))), req.originalUrl);
@@ -130,7 +155,7 @@ export default defineConfig({
   ],
   build: {
     rollupOptions: {
-      input: { main: 'index.html', docs: 'docs.html', videos: 'videos.html' },
+      input: { main: 'index.html', docs: 'docs.html', videos: 'videos.html', watch: 'video.html' },
     },
   },
   worker: { format: 'es' },

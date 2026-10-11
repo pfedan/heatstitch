@@ -294,9 +294,50 @@ export function initVideos(): void {
     const v = videoByKey(key);
     if (!v) continue;
     el.addEventListener('click', (e) => {
+      // A click with a modifier (a new tab or window) goes to the video's own page as usual.
+      if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || (e instanceof MouseEvent && e.button !== 0)) return;
       e.preventDefault();
       open(v);
     });
   }
   for (const img of document.querySelectorAll<HTMLImageElement>('img[data-poster]')) fallBackToPoster(img);
+}
+
+/**
+ * The page of one video (src/build/watchPage.ts): the video is in the page as it is, so it plays
+ * without the script too. The script adds the subtitles where their host allows it (as in the
+ * player), in the language chosen last time or, on the English page, in English.
+ */
+export function initWatch(): void {
+  for (const img of document.querySelectorAll<HTMLImageElement>('img[data-poster]')) fallBackToPoster(img);
+  const video = document.getElementById('video-watch') as HTMLVideoElement | null;
+  if (!video) return;
+  const base = video.dataset.base ?? '';
+  const key = video.dataset.key ?? '';
+  let cc = storedCc() ?? (lang() === 'en' ? 'en' : 'off');
+  void fetch(`${base}${key}.de.vtt`, { mode: 'cors' })
+    .then((r) => r.ok)
+    .catch(() => false)
+    .then((ok) => {
+      // Subtitles need the video loaded again with CORS; once it plays, it stays as it is.
+      if (!ok || !video.paused || video.currentTime > 0) return;
+      video.crossOrigin = 'anonymous';
+      for (const l of ['de', 'en']) {
+        const track = document.createElement('track');
+        track.kind = 'subtitles';
+        track.srclang = l;
+        track.label = l === 'de' ? 'Deutsch' : 'English';
+        track.src = `${base}${key}.${l}.vtt`;
+        if (l === cc) track.default = true;
+        video.append(track);
+      }
+      video.load();
+      video.textTracks.addEventListener('change', () => {
+        // Only a choice is kept, not the start with the default.
+        const showing = Array.from(video.textTracks).find((t) => t.mode === 'showing')?.language ?? 'off';
+        if (showing === cc) return;
+        cc = showing;
+        storeCc(cc);
+      });
+    });
 }

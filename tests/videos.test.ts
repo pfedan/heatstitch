@@ -37,7 +37,7 @@ describe('the tutorial videos', () => {
       expect(count(a, '<li class="video"'), `${l} cards at the top`).toBe(0);
       expect(a, `${l} link to the video page`).toContain('href="videos.html"');
       for (const v of VIDEOS) {
-        expect(a, `${l} section link ${v.key}`).toContain(`class="video-ref" href="videos.html#video-${v.key}"`);
+        expect(a, `${l} section link ${v.key}`).toContain(`class="video-ref" href="videos/${v.key}.html"`);
       }
     }
   });
@@ -62,7 +62,8 @@ describe('the tutorial videos', () => {
     expect(de).toMatch(/<title>heatstitch Videos/);
     expect(de).toContain('href="docs.html"');
     const docs = langPage(expandVideos(read('docs.html')), 'docs', 'de');
-    expect(docs).toContain('href="videos.html#video-02-schrift"');
+    expect(docs).toContain('href="videos/02-schrift.html"');
+    expect(de).toContain('<a class="video-play" href="videos/02-schrift.html"');
   });
 
   it('a placeholder naming an unknown video stops the build', () => {
