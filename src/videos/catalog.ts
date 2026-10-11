@@ -166,11 +166,11 @@ export const VIDEOS: Video[] = [
     key: '10-vorschau-und-speichern',
     part: 10,
     title: { de: 'Vorschau und Speichern', en: 'Preview and saving' },
-    length: '2:40',
+    length: '2:46',
     group: 'file',
     goal: { de: 'Du siehst dein Stickmuster wie echt auf dem Stoff, legst Vlies und Nadel bereit und speicherst für deine Maschine.', en: 'You see your design as if real on the fabric, get stabilizer and needle ready and save for your machine.' },
     files: ['aufnaeher-67.dst'],
-    published: '2026-10-08T21:32:32+02:00',
+    published: '2026-10-11T21:06:20+02:00',
   },
   {
     key: '11-fuellungen',
