@@ -14,8 +14,8 @@ import { TOLERANCE } from '../digitize/run';
 import type { ThreadColor } from '../model/pattern';
 import { newLink } from '../model/border';
 import { SATIN_SHARE } from '../model/covers';
-import { autoUnder, coverOf, E_SPACING, hasPhase, isRedwork, isRunType, layersOf, passesOf, REPEAT, spacingOf, timesOf, ZIGZAG_SPACING, type PathStitch } from '../model/along';
-import { HAND_WIDTH, isHandStitch, LINE_MOTIFS, MOTIF_PERIOD, MOTIF_STITCH, MOTIF_WIDTH, motifMaxSize, SIDED_MOTIFS, type LineMotif } from '../digitize/motif';
+import { autoUnder, coverOf, E_SPACING, hasPhase, isCord, isRedwork, isRunType, layersOf, passesOf, REPEAT, spacingOf, timesOf, ZIGZAG_SPACING, type PathStitch } from '../model/along';
+import { CORD_STEP, CORD_STEP_RANGE, HAND_WIDTH, isHandStitch, LINE_MOTIFS, MOTIF_PERIOD, MOTIF_STITCH, MOTIF_WIDTH, motifMaxSize, SIDED_MOTIFS, type LineMotif } from '../digitize/motif';
 import { ECHO_COUNT, ECHO_DEFAULT, ECHO_GAP, ECHO_PHASE, ECHO_SIDES, type EchoSide } from '../digitize/echo';
 import { SHADOW_COLOR, SHADOW_DEFAULT_ANGLE, SHADOW_DEFAULT_DIST, SHADOW_DIST, SHADOW_UNDER } from '../model/shadow';
 import { cssColor, hexColor, ThreadPicker } from './threadPicker';
@@ -2035,6 +2035,7 @@ export class StitchPanel {
         }
         st.motif = v;
         delete st.spacing;
+        delete st.cord;
         set(st);
       }, true);
       // Four figures, then four hand stitches: two rows of four.
@@ -2053,6 +2054,23 @@ export class StitchPanel {
           // Where the spacing caps the size, only the part below the cap makes a difference.
           ...(fits < 8 ? { band: [1, fits] as [number, number], bandHint: 'stitch.lineMotifSize.band' as Key } : {}),
         }),
+      );
+      // A stem stitch by hand, or as a dense cord: the cord covers like a satin, so its step is small.
+      if (motif === 'stem')
+        out.look.push(
+          this.choice<'hand' | 'cord'>('stitch.stemLook', ['hand', 'cord'], isCord(st) ? 'cord' : 'hand', (v) => `stitch.stemLook.${v}` as Key, (v) => {
+            if (v === 'cord') st.cord = true;
+            else delete st.cord;
+            delete st.spacing;
+            delete st.repeat;
+            set(st);
+          }, true),
+        );
+      if (isCord(st)) {
+        out.look.push(this.slider({ label: 'stitch.gap', hint: 'stitch.cordSpacing.hint', min: CORD_STEP_RANGE[0], max: CORD_STEP_RANGE[1], step: 0.05, get: () => spacingOf(st), set: (v) => change((s) => (s.spacing = v === CORD_STEP ? undefined : v))(v), fmt: mm(2), auto: unset('spacing') }));
+        return out;
+      }
+      out.look.push(
         this.slider({ label: 'stitch.gap', hint: 'stitch.motifSpacing.hint', min: 1.5, max: 15, step: 0.1, get: () => spacingOf(st), set: (v) => change((s) => (s.spacing = v === MOTIF_PERIOD[motif] ? undefined : v))(v), fmt: mm(1), auto: unset('spacing') }),
       );
       // A hand stitch's stitches are its figure: straight from point to point, no length to set.

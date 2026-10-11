@@ -8,7 +8,7 @@ import { WorkerClient } from './density/client';
 import { detectLang, docsUrl, formatNumber, getLang, onLangChange, pageLang, setLang, t, type Lang } from './i18n';
 import { gridToCanvas } from './render/heatmap';
 import { drawLegend } from './render/legend';
-import { hoopRect } from './render/hoop';
+import { HoopGlide, hoopRect } from './render/hoop';
 import { drawScene, type Scene } from './render/scene';
 import { validationToCanvas } from './render/validationOverlay';
 import { Viewport } from './render/viewport';
@@ -154,8 +154,20 @@ function activeValidationImg(): HTMLCanvasElement | null {
   return validationImg.img;
 }
 
+const hoopGlide = new HoopGlide();
+
+/** The hoop around the made design, not around a preview being dragged; it glides after a change. */
+function hoopAt(): [number, number] | null {
+  const f = files.active;
+  if (!f?.pattern || !settings.hoop) return null;
+  const g = hoopGlide.at(f.pattern.bounds, f, performance.now(), matchMedia('(prefers-reduced-motion: reduce)').matches);
+  if (g.moving) redraw();
+  return g.at;
+}
+
 const scene = (): Scene => ({
   pattern: (settings.mode === 'flow' ? ui.flowPreview : null) ?? editor.preview ?? files.active?.pattern ?? null,
+  hoopAt: hoopAt(),
   flow: flowScene(),
   markers: settings.mode === 'density' && files.active?.pattern && !editor.preview ? seq(files.active.pattern).markers : null,
   grid: ui.grid,
@@ -1489,7 +1501,7 @@ const profile = bindProfile(settings, () => {
   // Classification is cheap: the design is re-checked instantly against the new limits.
   storeMaterial();
   // Another fabric: what suits it better is offered, never changed silently.
-  tuneToFabric(true);
+  void tuneToFabric(true);
   imageMode.profileChanged();
   controls.refresh();
   ui.hoverZone = ui.selectedZone = null;
@@ -1977,4 +1989,4 @@ void loadCatalogs()
   })
   .catch((err) => console.warn('No thread catalogs', err));
 
-$('fabric-tune').addEventListener('click', () => tuneToFabric());
+$('fabric-tune').addEventListener('click', () => void tuneToFabric());

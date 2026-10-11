@@ -369,7 +369,7 @@ export function initStitchArea(app: StitchAreaApp): { refresh: () => void } {
       if (rt.chained) items.push(cmdButton('stitch.rungs.order', 'stitches.bar.order', { hint: 'stitch.order.best.hint', more: 7 }));
       items.push(cmdButton('stitch.rungs.follow', 'stitch.direction.follow.button', { hint: 'stitch.direction.follow.hint', more: 9 }));
       if (d?.spacingHere !== undefined) items.push(sep(), spacingHere(d.spacingHere));
-      items.push(help(d?.chain ? 'stitch.direction.chain' : 'stitch.direction.help'), cmdButton('stitch.tool.done', 'stitch.direction.done', { primary: true }));
+      items.push(help(d?.chain ? 'stitch.direction.chain' : rt.sectioned && rt.cutLines.length ? 'stitch.direction.bend' : 'stitch.direction.help'), cmdButton('stitch.tool.done', 'stitch.direction.done', { primary: true }));
     } else if (tool === 'fill') {
       items.push(
         title('stitches.bar.toSatin'),

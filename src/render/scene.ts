@@ -90,6 +90,8 @@ export interface Scene {
    * underlay marked (records set in `under`).
    */
   focus?: FocusStitches[] | null;
+  /** Where the hoop's middle is drawn (mm); the middle of `pattern` when not set. */
+  hoopAt?: readonly [number, number] | null;
 }
 
 /**
@@ -116,7 +118,7 @@ export function drawScene(ctx: CanvasRenderingContext2D, w: number, h: number, s
     const marks = shownMarks(s);
     if (marks.jumps) drawJumps(ctx, vp, pattern, st.limit, st.alpha, st.carried?.jumps);
     drawMarkers(ctx, vp, pattern, { markers: flow.markers, marks, limit: st.limit, alpha: st.alpha }, w, h);
-    if (s.hoop) drawHoop(ctx, vp, pattern.bounds, s.hoop);
+    if (s.hoop) drawHoop(ctx, vp, pattern.bounds, s.hoop, scene.hoopAt);
     if (flow.trace) drawTraceFrame(ctx, vp, flow.trace);
     if (flow.hover && flow.hover !== flow.selected) drawTransition(ctx, vp, pattern, flow.hover, false);
     if (flow.selected) drawTransition(ctx, vp, pattern, flow.selected, true);
@@ -160,7 +162,7 @@ export function drawScene(ctx: CanvasRenderingContext2D, w: number, h: number, s
       drawPoints(ctx, vp, f.pattern);
     }
   }
-  if (pattern && s.hoop) drawHoop(ctx, vp, pattern.bounds, s.hoop);
+  if (pattern && s.hoop) drawHoop(ctx, vp, pattern.bounds, s.hoop, scene.hoopAt);
   if (scene.highlight) drawZoneHighlight(ctx, vp, scene.highlight);
   if (pattern && edit) drawEditOverlay(ctx, vp, pattern, edit, w, h);
 }

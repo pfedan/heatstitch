@@ -81,10 +81,10 @@ export default {
   part: 6,
   voice: {
     model: 'google/gemini-3.1-flash-tts',
-    voice: 'Aoede',
+    voice: 'Gacrux',
     language: 'de-DE',
     prompt:
-      'Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.',
+      'Speak German like a seasoned embroidery master teaching a workshop: mature, composed, precise, quietly authoritative but kind. Every word placed with care, with understated pride.',
   },
   lead: 0.4,
   tail: 0.6,
@@ -179,12 +179,12 @@ export default {
       },
     },
     {
-      say: 'Mit dem Mausrad zoomst du hinein. [focused] Zeigst du auf einen Stich, steht daneben, der wievielte er ist, welche Stichart und wie lang. Ziehen verschiebt das Bild, „Einpassen“ zeigt wieder alles.',
-      text: 'Mit dem Mausrad zoomst du hinein. Zeigst du auf einen Stich, steht daneben, der wievielte er ist, welche Stichart und wie lang. Ziehen verschiebt das Bild, „Einpassen“ zeigt wieder alles.',
-      textEn: 'Zoom in with the mouse wheel. Point at a stitch and it tells you which number it is, its stitch type and its length. Dragging moves the view, “Fit” shows everything again.',
+      say: 'Mit Strg und Mausrad zoomst du hinein. [focused] Zeigst du auf einen Stich, steht daneben, der wievielte er ist, welche Stichart und wie lang. Ziehen oder das Mausrad allein verschiebt das Bild, „Einpassen“ zeigt wieder alles.',
+      text: 'Mit Strg und Mausrad zoomst du hinein. Zeigst du auf einen Stich, steht daneben, der wievielte er ist, welche Stichart und wie lang. Ziehen oder das Mausrad allein verschiebt das Bild, „Einpassen“ zeigt wieder alles.',
+      textEn: 'Zoom in with Ctrl and the mouse wheel. Point at a stitch and it tells you which number it is, its stitch type and its length. Dragging or the mouse wheel alone moves the view, “Fit” shows everything again.',
       run: async (s) => {
         await s.move([960, 470], 1.0);
-        s.keyCap('Mausrad');
+        s.keyCap('Strg + Mausrad');
         await wheel(s, -500, 24);
         s.keyCap(null);
         await s.wait(0.6);
@@ -266,9 +266,9 @@ export default {
       },
     },
     {
-      say: '[proud and warm] Im Ansicht-Menü, unter dem Auge unten rechts, schaltest du „Realistische Fäden“ ein. So siehst du schon vorher, wie die Katze auf dem Stoff wirkt. Jetzt kennst du deine Datei, bevor du etwas an ihr änderst.',
-      text: 'Im Ansicht-Menü, unter dem Auge unten rechts, schaltest du „Realistische Fäden“ ein. So siehst du schon vorher, wie die Katze auf dem Stoff wirkt. Jetzt kennst du deine Datei, bevor du etwas an ihr änderst.',
-      textEn: 'In the view menu, under the eye at the bottom right, you turn on “Realistic threads”. So you see in advance how the cat looks on the fabric. Now you know your file before you change anything in it.',
+      say: 'Zum Schluss schalte ich unter dem Auge unten rechts noch „Realistische Fäden“ ein. [proud and warm] Jetzt kennst du deine Datei, bevor du etwas an ihr änderst.',
+      text: 'Zum Schluss schalte ich unter dem Auge unten rechts noch „Realistische Fäden“ ein. Jetzt kennst du deine Datei, bevor du etwas an ihr änderst.',
+      textEn: 'Finally, under the eye at the bottom right, I turn on “Realistic threads”. Now you know your file before you change anything in it.',
       run: async (s) => {
         // The eye button is named after the look that is on (Stiche, Realistisch …).
         const eye = s.page.getByRole('toolbar', { name: 'Ansicht' }).getByRole('button').first();
@@ -287,7 +287,7 @@ export default {
         // The light follows the pointer; from the upper left the threads look deep and shiny.
         await s.move([620, 260], 1.6);
         await s.zoom([975, 560, 0, 0], 1.4);
-        await s.wait(7.0);
+        await s.wait(3.0);
         s.zoomOut();
         await s.wait(1.0);
       },

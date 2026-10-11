@@ -12,7 +12,7 @@ import { runStitch, TOLERANCE } from './run';
 import { column, pairs, satinStitches, underlay, type Column, type SatinParams } from './satin';
 import { reverse, skeleton, type Branch, type Graph, type Pt } from './skeleton';
 import { bestChain, satinRuns, type BorderSettings, type FillSettings, type Rails, type SatinSettings } from '../model/restitch';
-import { stripsOfAreas } from './rungs';
+import { cutPieces, stripsOfAreas } from './rungs';
 import { easePiles, SATIN_PEAK } from './satinEase';
 import { areaLoops, classify as shapeClass, offersSections, suggestSatin, type SatinSuggestion, type ShapeClass } from './satinSuggest';
 import type { Orientation } from '../image/orientation';
@@ -477,7 +477,7 @@ function sewOne(obj: Obj, pos: Pt, o: DigitizeOptions, satin: SatinParams, angle
     const runs = sewSections(obj, o, satin, graph);
     if (!graph && obj.plan) tried.add(JSON.stringify(obj.plan));
     const cuts = obj.info.columns?.[0]?.split?.cuts ?? [];
-    const seam = (x: number, y: number) => cuts.some(([a, b]) => toSegment([x, y], a, b) < 0.9);
+    const seam = (x: number, y: number) => cuts.some((c) => cutPieces(c).some(([a, b]) => toSegment([x, y], a, b) < 0.9));
     if (runs.length && satinOk(runs, obj.region, o, seam)) return runs;
     // Piled up somewhere: cut through the spot, as long as that eases it (a few spots at most).
     if (runs.length && !graph && obj.plan?.ok && eased < EASE_SPOTS) {
@@ -861,7 +861,7 @@ function keepSections(obj: Obj, imgW: number, imgH: number): void {
     ...c,
     left: mvAll(c.left),
     right: mvAll(c.right),
-    ...(c.split ? { split: { outlines: c.split.outlines.map(mvAll), holes: c.split.holes.map(mvAll), cuts: c.split.cuts.map(([a, b]) => [mv(a), mv(b)] as [Pt, Pt]) } } : {}),
+    ...(c.split ? { split: { outlines: c.split.outlines.map(mvAll), holes: c.split.holes.map(mvAll), cuts: c.split.cuts.map((f) => f.map(mv)) } } : {}),
   }));
   keepSatinArea(obj, imgW, imgH);
 }

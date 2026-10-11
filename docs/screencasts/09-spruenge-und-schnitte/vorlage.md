@@ -1,8 +1,10 @@
 # Teil 9: Sprünge und Schnitte
 
 Schlüssel `09-spruenge-und-schnitte`, Demodatei `tests/fixtures/pingpong-confetti.pes` (61 × 33 mm,
-15 Punkte, oben und unten je fünf in Red, in der Mitte fünf in Electric Blue, 798 Stiche),
-etwa 2 Minuten, 230 Wörter.
+15 Punkte, oben und unten je fünf in Red, in der Mitte fünf in Blue (früher Electric Blue), 798 Stiche),
+2:21 lang mit der Stimme Gacrux, 230 Wörter.
+
+Neu aufgenommen im Oktober 2026 (main 6f0ea17): gleicher Ablauf und Sprechtext, neues Bild. Stimme abweichend von der Serie: Gacrux.
 
 Die Demodatei ist ein Konfetti in absichtlich dummer Reihenfolge, wie bei mancher Datei aus dem
 Netz: Je Farbe springt die Nadel immer vom einen Ende zum anderen, und kein Sprung ist
@@ -62,7 +64,7 @@ schneidet die Maschine und setzt am nächsten Punkt neu an.
 ## Szene 6
 
 **Bild:** Heranzoomen auf Schneiden ab, Etikett 3 mm. Klick auf Ab Grenze schneiden (18): Der
-gelbe Hinweis verschwindet, Ohne Schnitt steht auf 0. Etikett an Darunter nicht schneiden, ohne
+gelbe Hinweis verschwindet, Ohne Schnitt zählt nur noch die neun kurzen Sprünge. Etikett an Darunter nicht schneiden, ohne
 Klick.
 
 **Sprechtext:** Alle auf einmal geht nach Länge. Unter Schneiden ab steht die Grenze, drei
@@ -73,7 +75,7 @@ Faden mehr lose. Darunter nicht schneiden macht das Gegenteil für kurze Sprüng
 
 **Bild:** Tastenkappe 1, Gestalten. Ein Klick auf Einpassen unten rechts zeigt wieder das ganze Konfetti. Die Sprünge sind jetzt gestrichelt mit Scheren, kreuzen sich
 aber quer über das Muster. Heranzoomen links oben, Klick auf Reihenfolge optimieren: die Karte
-„Eine bessere Reihenfolge“, Etikett an Wege 20,9 cm → 12,5 cm. Klick auf Übernehmen: Die
+„Eine bessere Reihenfolge“, Etikett an Wege 58,3 cm → 25,7 cm. Klick auf Übernehmen: Die
 Kreuzungen verschwinden.
 
 **Sprechtext:** Mit der Taste 1 geht es zurück zu Gestalten. Die Schnitte sitzen, aber die Wege

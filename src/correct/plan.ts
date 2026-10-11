@@ -2,7 +2,9 @@ import { coversOver } from '../model/covers';
 import { setKnockout, isCovered, takeOver } from '../model/knockout';
 import { sewObjects, type ObjectKind, type SewObject } from '../model/objects';
 import { STITCH, TRIM, type Pattern } from '../model/pattern';
-import { analyze, holdMemory, measureFill, measureRun, measureSatin, objectKey, isGradient, isOpenPattern, openOnPurpose, remember, remembered, restitch, shapeTrust, SATIN_SPLIT, type Fixed, type Remembered, type Settings } from '../model/restitch';
+import { analyze, holdMemory, measureFill, measureRun, measureSatin, objectKey, isGradient, isOpenPattern, openOnPurpose, remember, remembered, restitch, shapeTrust, SATIN_SPLIT, type Fixed, type Remembered, type SatinSettings, type Settings } from '../model/restitch';
+import { spacingOf } from '../model/along';
+import { TOLERANCE } from '../digitize/run';
 import { stitchKinds } from '../model/sequence';
 import { digitizeDefaults, fillUnder, pullFor } from '../digitize/digitize';
 import { withRecords } from '../model/edit';
@@ -11,7 +13,7 @@ import { measurePattern } from '../validation/measure';
 import { fabricOf, recommendedSpacing, type Profile } from '../validation/profiles';
 import { classify, CRITICAL, type Checks, type Reason, type ValidationResult, type Zone } from '../validation/validate';
 import type { CorrectionFocus } from './auto';
-import { areaOf, geoOf } from '../model/geo';
+import { areaOf, geoOf, lineGeoOf } from '../model/geo';
 
 /**
  * Korrektur 2.0: the correction as a digitizer would do it. Instead of moving stitches it changes
@@ -200,8 +202,26 @@ export function currentSettings(p: Pattern, o: SewObject, kinds: Uint8Array): Se
   const part = an.parts.find((pt) => pt.kind === o.kind && !pt.border);
   if (!part) return null;
   if (o.kind === 'fill') return { kind: 'fill', s: structuredClone(known?.fill ?? measureFill(p, an)) };
-  if (o.kind === 'satin') return { kind: 'satin', s: structuredClone(known?.satin ?? measureSatin(p, part, kinds)) };
+  if (o.kind === 'satin') return { kind: 'satin', s: structuredClone(known?.satin ?? lineSatin(known) ?? measureSatin(p, part, kinds)) };
   return { kind: 'run', s: measureRun(p, part) };
+}
+
+/**
+ * A drawn satin line's settings as a satin (sewn again through them, see asLine in restitch): read
+ * from the line, not measured from its stitches, which curves make look far more open than they are.
+ */
+function lineSatin(m: Remembered | undefined): SatinSettings | null {
+  const l = m?.line;
+  if (!lineGeoOf(m) || !l || l.type !== 'satin') return null;
+  return {
+    spacing: spacingOf(l),
+    edge: l.pull ?? 0,
+    short: true,
+    underlay: l.under !== 'off',
+    ...(l.under && l.under !== 'off' ? { under: l.under } : {}),
+    tolerance: l.tolerance ?? TOLERANCE,
+    ...(l.fringe ? { fringe: l.fringe, ...(l.fringeSide ? { fringeSide: l.fringeSide } : {}) } : {}),
+  };
 }
 
 /** Settings with `changes` made (field by field). */
@@ -466,13 +486,41 @@ async function plan(p: Pattern, v: ValidationResult, profile: Profile, checks: C
   return { proposals, fine, locked, pattern: cur };
 }
 
+/** Rule changes for the fabric left out, by setting: on how many objects. */
+export type Held = Partial<Record<string, number>>;
+
+export interface FabricPlan {
+  proposals: Proposal[];
+  /** Changes the rules call for that the check would count against: left out, so the user is told. */
+  held: Held;
+  /** The pattern with all proposals taken over (for the before and after figures). */
+  pattern: Pattern;
+}
+
 /**
- * "Auf Stoff abstimmen": the settings that suit the material better, by the rules alone (no
- * finding needed): spacing into the recommended range, underlay by size and fabric, satins split
- * where they would snag, pull compensation for objects that follow the fabric, gap rows in fills by
- * the fabric. Locked objects and objects whose shape is not certain are left out.
+ * "Auf Stoff abstimmen": the settings that suit the material better, by the digitizing rules
+ * (spacing into the recommended range, underlay by size and fabric, satins split where they would
+ * snag, pull compensation by the fabric, gap rows in fills by the fabric), each checked on its
+ * object before it is offered. The rules look at one object on bare fabric; where objects lie on
+ * each other, double underlay or a doubled row on top of a fill below adds thread the fabric has to
+ * carry (layered objects should add up to about one normal fill, Melco). So every object's changes
+ * are sewn and measured in its area, in sewing order: when the check would report more there, the
+ * underlay is first left out under later objects (the stitch card's own setting), and what still
+ * makes it worse is left out and named in `held`. Spacing is only made denser where the check finds
+ * the fabric showing through: a fill or satin sewn more open than the range is light on purpose.
+ * Locked objects and objects whose shape is not certain are left out. Memory is put back
+ * afterwards: planning changes nothing.
  */
-export function planFabric(p: Pattern, profile: Profile): Proposal[] {
+export async function planFabric(p: Pattern, profile: Profile, checks: Checks, opt: Pick<PlanOptions, 'trimMm' | 'progress' | 'stale'>): Promise<FabricPlan> {
+  const release = holdMemory();
+  try {
+    return await tune(p, profile, checks, opt);
+  } finally {
+    release();
+  }
+}
+
+async function tune(p: Pattern, profile: Profile, checks: Checks, opt: Pick<PlanOptions, 'trimMm' | 'progress' | 'stale'>): Promise<FabricPlan> {
   const kinds = stitchKinds(p);
   const objs = sewObjects(p, kinds);
   const [recMin, recMax] = recommendedSpacing(profile);
@@ -480,47 +528,97 @@ export function planFabric(p: Pattern, profile: Profile): Proposal[] {
   const gapRows = fabricOf(profile).gapRows;
   const under = digitizeDefaults(profile);
   const out: Proposal[] = [];
+  const held: Held = {};
   let id = 0;
-  const into = (v: number) => round2(Math.min(recMax, Math.max(recMin, v)));
-  for (const o of objs) {
+  // Where the fabric shows through now: only there is spacing made denser.
+  const open = openOnPurpose(p, objs);
+  const thin = classify(measurePattern(p, open ?? undefined), profile, checks).zones.filter((z) => z.reasons.includes('sparse') || z.reasons.includes('gap')).map((z) => z.bbox);
+  const into = (v: number, b: Box) => round2(Math.max(recMin, v > recMax && thin.some((z) => overlaps(z, b)) ? recMax : v));
+  let cur = p;
+  for (const [done, o] of objs.entries()) {
+    await opt.progress?.(done, objs.length);
+    if (opt.stale?.()) break;
     const known = remembered(p, o);
     if (known?.lock || known?.free || known?.outline || known?.blendOf || known?.shadowOf || known?.echoOf || known?.lettering || known?.read || known?.applique) continue;
     const s = currentSettings(p, o, kinds);
     if (!s || s.kind === 'run') continue;
+    const box = boxOf(o);
     const changes: Fixed[] = [];
     let vis: Visibility = 'invisible';
-    const slight = () => (vis = 'slight');
+    let covered = false;
     if (s.kind === 'fill') {
       const f = s.s;
       const an = analyze(p, o, kinds, known);
       if (shapeTrust(p, o, an, f.spacing) === 'approximate') continue;
       const area = an.fill?.areaMm2 ?? 0;
-      if (!isGradient(f) && Math.abs(into(f.spacing) - f.spacing) > 0.005) changes.push(fix('spacing', f.spacing, into(f.spacing))), slight();
+      if (!isGradient(f) && !isOpenPattern(f.pattern) && Math.abs(into(f.spacing, box) - f.spacing) > 0.005) changes.push(fix('spacing', f.spacing, into(f.spacing, box)));
       const u = fillUnder(under, area);
       if (u.underlay !== f.underlay) changes.push(fix('underlay', f.underlay, u.underlay));
       else if (u.underlay && !!u.underCross !== !!f.underCross) changes.push(fix('underCross', !!f.underCross, !!u.underCross));
       if (f.edgeAuto) {
         const e = pullFor(profile, 'fill', area).edge;
-        if (Math.abs(e - f.edge) > 0.005) changes.push(fix('edge', f.edge, e)), slight();
+        if (Math.abs(e - f.edge) > 0.005) changes.push(fix('edge', f.edge, e));
       }
       // Gap rows by the fabric, where rows can be straight (they lie under the rows sewn later).
       if (GAP_PATTERNS.includes(f.pattern) && (f.gapRows ?? 0) !== gapRows) changes.push(fix('gapRows', f.gapRows ?? 0, gapRows));
+      covered = u.underlay && !f.underCover && coversOver(p, objs, o, 0.1).length > 0;
     } else {
       const t = s.s;
-      if (Math.abs(into(t.spacing) - t.spacing) > 0.005) changes.push(fix('spacing', t.spacing, into(t.spacing))), slight();
-      if ((t.split ?? SATIN_SPLIT) > longMm && longest(p, o) > longMm) changes.push(fix('split', t.split ?? SATIN_SPLIT, longMm)), slight();
+      if (Math.abs(into(t.spacing, box) - t.spacing) > 0.005) changes.push(fix('spacing', t.spacing, into(t.spacing, box)));
+      if ((t.split ?? SATIN_SPLIT) > longMm && longest(p, o) > longMm) changes.push(fix('split', t.split ?? SATIN_SPLIT, longMm));
       if (t.edgeAuto) {
         const e = pullFor(profile, 'satin');
-        if (Math.abs(e.edge - t.edge) > 0.005) changes.push(fix('edge', t.edge, e.edge)), slight();
-        if (Math.abs((e.edgeShare ?? 0) - (t.edgeShare ?? 0)) > 0.005) changes.push(fix('edgeShare', t.edgeShare ?? 0, e.edgeShare ?? 0)), slight();
+        if (Math.abs(e.edge - t.edge) > 0.005) changes.push(fix('edge', t.edge, e.edge));
+        if (Math.abs((e.edgeShare ?? 0) - (t.edgeShare ?? 0)) > 0.005) changes.push(fix('edgeShare', t.edgeShare ?? 0, e.edgeShare ?? 0));
       }
     }
     if (!changes.length) continue;
+    // Sewn and measured in its area: taken when the check reports no more there than now.
+    const where = grow(box, 1);
+    const now = score(cur, where, profile, checks);
+    const tryOn = (list: Fixed[]) => {
+      const next = sewWith(cur, o.index, changed(s, list), false, opt.trimMm);
+      if (!next || sewObjects(next).length !== objs.length) return null;
+      return { list, next, sc: score(next, where, profile, checks) };
+    };
+    const fine = (t: ReturnType<typeof tryOn>) => !!t && t.sc.critical <= now.critical && t.sc.total <= now.total;
+    let best = tryOn(changes);
+    // Underlay first left out under later objects (they are its foundation there), then the rule
+    // change that does the most harm, until the rest is no worse than now.
+    if (!fine(best) && covered) {
+      const t = tryOn([...changes, fix('underCover', false, true)]);
+      if (t && (fine(t) || !best || better(t.sc, best.sc))) best = t;
+    }
+    let list = best?.list ?? changes;
+    while (!fine(best) && list.length) {
+      let pick: ReturnType<typeof tryOn> = null;
+      let drop: Fixed | null = null;
+      for (const c of list) {
+        if (c.field === 'underCover') continue;
+        const t = tryOn(list.filter((x) => x !== c));
+        if (t && (!pick || better(t.sc, pick.sc))) [pick, drop] = [t, c];
+      }
+      if (!drop) break;
+      held[drop.field] = (held[drop.field] ?? 0) + 1;
+      list = list.filter((x) => x !== drop);
+      best = list.some((c) => c.field !== 'underCover') ? pick : null;
+    }
+    if (!best || !fine(best)) continue;
+    cur = best.next;
+    const taken = best.list;
+    if (taken.some((c) => SLIGHT.has(c.field))) vis = 'slight';
     const hand = known?.hand ?? 0;
-    out.push({ id: id++, index: o.index, key: objectKey(p, o), kind: o.kind, changes, visibility: vis, reasons: [], hand, checked: !hand, box: boxOf(o) });
+    out.push({ id: id++, index: o.index, key: objectKey(p, o), kind: o.kind, changes: taken, visibility: vis, reasons: [], hand, checked: !hand, box });
   }
-  return out;
+  await opt.progress?.(objs.length, objs.length);
+  return { proposals: out, held, pattern: cur };
 }
+
+/** Fewer critical cells, else less reported in all. */
+const better = (a: Score, b: Score) => a.critical < b.critical || (a.critical === b.critical && a.total < b.total);
+
+/** Changes one can see a little on the fabric (spacing, edges, splits). */
+const SLIGHT = new Set(['spacing', 'edge', 'edgeShare', 'split']);
 
 /** Fill patterns sewn in straight rows (follow and guided where their rows run straight), which gap rows apply to. */
 const GAP_PATTERNS: readonly string[] = ['tatami', 'follow', 'guided'];

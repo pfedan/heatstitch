@@ -17,7 +17,7 @@ import { expandRegion, outline, sample, signedField, type Region } from '../digi
 import { withSplit } from '../digitize/satinSuggest';
 import { runStitch, TOLERANCE } from '../digitize/run';
 import { eStitches, fringedColumn, pairs, ROUGH_IN, satinStitches, underlayOf, type Column, type SatinParams, type UnderInset, type UnderlayKind } from '../digitize/satin';
-import { columnFromRungs, cumulative, inside, insideOf, pointAt, project, reversedRungs, stripOfLoop, tidyRungs, type Arc, type Rung } from '../digitize/rungs';
+import { columnFromRungs, cumulative, inside, insideOf, pointAt, project, reversedRungs, stripOfLoop, tidyRungs, type Arc, type Cut, type Rung } from '../digitize/rungs';
 import type { Pt } from '../digitize/skeleton';
 import { flatten, formFrom, storeForm, type Form, type StoredPath } from '../shape/path';
 import { FIT_TOLERANCE, READ_TOLERANCE, vectorize } from '../shape/vectorize';
@@ -352,7 +352,8 @@ export interface Split {
   /** The outsides of its areas (more than one when they lie apart, as the dot and stem of an i). */
   outlines: Pt[][];
   holes: Pt[][];
-  cuts: [Pt, Pt][];
+  /** The cut lines (Trennlinien), each through two points or, bent, more (see Cut). */
+  cuts: Cut[];
 }
 
 /** One section of a column in the order its satin is sewn: which, turned round, trimmed before. */
@@ -745,8 +746,11 @@ export interface StoredRails {
   /** Plan: section, turned round (0/1), trimmed before (1) and mirrored (2) as bits, for each step. */
   plan?: number[];
   mirror?: 1;
-  /** Split: flat x, y of each outline and of each hole; the cut lines as x, y of both ends. */
-  split?: { outlines: number[][]; holes: number[][]; cuts: number[] };
+  /**
+   * Split: flat x, y of each outline and of each hole; the cut lines as x, y of their points, both
+   * ends of each unless `points` says how many each has (some bent).
+   */
+  split?: { outlines: number[][]; holes: number[][]; cuts: number[]; points?: number[] };
 }
 
 const storeRails = (c: Rails): StoredRails => ({
@@ -759,7 +763,7 @@ const storeRails = (c: Rails): StoredRails => ({
   ...(c.chain !== undefined ? { chain: c.chain } : {}),
   ...(c.plan?.length ? { plan: c.plan.flatMap((x) => [x.sec, +x.flip, +x.trim | (x.mirror ? 2 : 0)]) } : {}),
   ...(c.mirror ? { mirror: 1 as const } : {}),
-  ...(c.split ? { split: { outlines: c.split.outlines.map((o) => o.flat()), holes: c.split.holes.map((h) => h.flat()), cuts: c.split.cuts.flat(2) } } : {}),
+  ...(c.split ? { split: { outlines: c.split.outlines.map((o) => o.flat()), holes: c.split.holes.map((h) => h.flat()), cuts: c.split.cuts.flat(2), ...(c.split.cuts.some((x) => x.length !== 2) ? { points: c.split.cuts.map((x) => x.length) } : {}) } } : {}),
 });
 
 const storeLine = (l: PathStitch): PathStitch => ({ ...l, ...(l.echo ? { echo: { ...structuredClone(l.echo), overlap: true } } : {}), ...(l.shadow ? { shadow: { ...l.shadow, color: { ...l.shadow.color } } } : {}) });
@@ -1116,8 +1120,12 @@ function railsFrom(list: unknown): Rails[][] | undefined {
         const outlines = Array.isArray(split?.outlines) ? split.outlines.map(pts) : null;
         const holes = Array.isArray(split?.holes) ? split.holes.map(pts) : null;
         const cuts = split?.cuts;
-        if (!outlines?.length || outlines.some((o: Pt[] | null) => !o) || !holes || holes.some((h: Pt[] | null) => !h) || !Array.isArray(cuts) || cuts.length % 4 || !cuts.every(finite)) return undefined;
-        rails.split = { outlines: outlines as Pt[][], holes: holes as Pt[][], cuts: Array.from({ length: cuts.length / 4 }, (_, k) => [[cuts[4 * k], cuts[4 * k + 1]], [cuts[4 * k + 2], cuts[4 * k + 3]]] as [Pt, Pt]) };
+        const points = split?.points ?? (Array.isArray(cuts) ? Array.from({ length: cuts.length / 4 }, () => 2) : null);
+        if (!outlines?.length || outlines.some((o: Pt[] | null) => !o) || !holes || holes.some((h: Pt[] | null) => !h) || !Array.isArray(cuts) || !cuts.every(finite)) return undefined;
+        if (!Array.isArray(points) || !points.every((n) => Number.isInteger(n) && n >= 2) || 2 * points.reduce((a: number, n: number) => a + n, 0) !== cuts.length) return undefined;
+        let at = 0;
+        const lines = points.map((n: number) => Array.from({ length: n }, () => [cuts[at++], cuts[at++]] as Pt));
+        rails.split = { outlines: outlines as Pt[][], holes: holes as Pt[][], cuts: lines };
       }
       cols.push(rails);
     }
@@ -3939,7 +3947,7 @@ function asLine(given: Settings, known?: PathStitch): PathStitch | null {
   if (given.kind === 'run') return { ...runAsLine(given.s, known?.width), ...(known?.echo ? { echo: { ...known.echo } } : {}), ...(known?.shadow ? { shadow: known.shadow } : {}) };
   if (given.kind !== 'satin') return null;
   const s = given.s;
-  return { ...(known ?? { width: 2 }), type: 'satin', spacing: s.spacing, pull: s.edge || undefined, under: s.underlay ? (s.under ?? 'center') : 'off', tolerance: s.tolerance ?? known?.tolerance };
+  return { ...(known ?? { width: 2 }), type: 'satin', spacing: s.spacing, pull: s.edge || undefined, under: s.underlay ? (s.under ?? (known?.under !== 'off' && known ? known.under : 'center')) : 'off', tolerance: s.tolerance ?? known?.tolerance };
 }
 
 export function restitch(

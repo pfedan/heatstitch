@@ -1,4 +1,4 @@
-import { pointAt } from '../digitize/rungs';
+import { cutLine, pointAt } from '../digitize/rungs';
 import { sectionsOf } from '../model/restitch';
 import type { Pt } from '../digitize/skeleton';
 import { BADGE, type RungPick, type RungView } from '../ui/rungTool';
@@ -65,16 +65,22 @@ export function drawRungOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, vie
     }
     ctx.setLineDash([]);
   }
-  const rung = (a: Pt, b: Pt, col: number, i: number, suggested: boolean, cut = false, label = '', free = false) => {
+  // `bends`: the points a bent cut line goes through between its ends, drawn along its curve.
+  const rung = (a: Pt, b: Pt, col: number, i: number, suggested: boolean, cut = false, label = '', free = false, bends: Pt[] = []) => {
     const sel = same(view.selected, col, i, cut, free);
     const hov = same(view.hover, col, i, cut, free);
     const [ax, ay] = S(a);
     const [bx, by] = S(b);
     // Each kind keeps its color in every state (selected: an accent halo, hovered: wider), so a
     // cut line and a rung never look alike while one is picked or dragged.
-    ctx.beginPath();
-    ctx.moveTo(ax, ay);
-    ctx.lineTo(bx, by);
+    if (bends.length) {
+      path(cutLine([a, ...bends, b]));
+      ctx.lineJoin = 'round';
+    } else {
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(bx, by);
+    }
     if (sel) {
       ctx.strokeStyle = ACCENT;
       ctx.lineWidth = 8;
@@ -98,6 +104,23 @@ export function drawRungOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, vie
       ctx.fillStyle = '#ffffff';
       ctx.fillText(label, tx, ty);
     }
+    // The points it bends at: small diamonds, dragged to bend it further (Entf straightens it there).
+    bends.forEach((p, k) => {
+      const [x, y] = S(p);
+      const on = (v: typeof view.hover) => same(v, col, i, cut, free) && v!.node === k + 1;
+      const r = on(view.hover) ? 6 : 4.5;
+      ctx.beginPath();
+      ctx.moveTo(x, y - r);
+      ctx.lineTo(x + r, y);
+      ctx.lineTo(x, y + r);
+      ctx.lineTo(x - r, y);
+      ctx.closePath();
+      ctx.fillStyle = on(view.selected) ? ACCENT : CUT;
+      ctx.strokeStyle = sel ? ACCENT : 'rgba(0, 0, 0, 0.75)';
+      ctx.lineWidth = 1.5;
+      ctx.fill();
+      ctx.stroke();
+    });
     for (const [end, x, y] of [[0, ax, ay], [1, bx, by]] as const) {
       const big = hov && view.hover?.end === end;
       const r = big ? 6.5 : 5;
@@ -124,7 +147,7 @@ export function drawRungOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, vie
   view.columns.forEach((c, k) => c.spans.forEach(([a, b], i) => rung(a, b, k, i, false, false, '', true)));
   view.columns.forEach((c, k) => c.cuts.forEach((r, i) => rung(pointAt(c.left, c.cl, r[0]), pointAt(c.right, c.cr, r[1]), k, i, false, true)));
   view.lines.forEach(([a, b], i) => rung(a, b, -1, i, false));
-  view.cutLines.forEach(([a, b], i) => rung(a, b, -1, i, false, true));
+  view.cutLines.forEach((c, i) => rung(c[0], c[c.length - 1], -1, i, false, true, '', false, c.slice(1, -1)));
   // Sections that cannot be sewn yet (a part no rung crosses, a hole still closed): outlined in red until fixed.
   view.problems.forEach((pr, k) => {
     path(pr.ring);

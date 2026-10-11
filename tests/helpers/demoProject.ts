@@ -417,10 +417,11 @@ export function lineStitches(): Design {
     ['Federstich', { type: 'motif', motif: 'feather', width: 4 }, lime],
     ['Kretastich', { type: 'motif', motif: 'cretan', width: 4 }, sky],
     ['Chevron', { type: 'motif', motif: 'chevron', width: 4 }, gold],
+    ['Kordel', { type: 'motif', motif: 'stem', cord: true, width: 2.5 }, red],
     ['Satinlinie', { type: 'satin', width: 3 }, navy, 3],
   ];
   // The names say which stitch each row shows, as the stitch panel calls it.
-  rows.forEach(([, st, c, w], k) => d.line(wave(10, 10 + k * 11.5, 110, 2, 3), c, st, w ?? 0));
+  rows.forEach(([, st, c, w], k) => d.line(wave(10, 9 + k * 11, 110, 2, 3), c, st, w ?? 0));
   d.cutJumps();
   return d;
 }
@@ -523,17 +524,21 @@ export function openSampler(): Design {
   return d;
 }
 
-/** Handstiche: each hand stitch sewn once, three and five times (Wiederholung), one row per stitch. */
+/**
+ * Handstiche: each hand stitch sewn once, three and five times (Wiederholung), one row per stitch;
+ * below, the stem stitch as a cord (Kordel) 1.5, 2.5 and 3.5 mm wide.
+ */
 export function handStitches(): Design {
   const d = new Design('Handstiche');
-  const { darkGreen, lime, sky, gold } = THREADS;
+  const { darkGreen, lime, sky, gold, red } = THREADS;
   const rows: [Partial<PathStitch>, ThreadColor][] = [
     [{ type: 'motif', motif: 'stem', width: 2 }, darkGreen],
     [{ type: 'motif', motif: 'feather', width: 4.5 }, lime],
     [{ type: 'motif', motif: 'cretan', width: 4.5 }, sky],
     [{ type: 'motif', motif: 'chevron', width: 4.5 }, gold],
   ];
-  rows.forEach(([st, color], r) => [1, 3, 5].forEach((repeat, c) => d.line(wave(6 + c * 31, 16 + r * 22, 26, 1.4, 1), color, { ...st, repeat })));
+  rows.forEach(([st, color], r) => [1, 3, 5].forEach((repeat, c) => d.line(wave(6 + c * 31, 12 + r * 18, 26, 1.4, 1), color, { ...st, repeat })));
+  [1.5, 2.5, 3.5].forEach((width, c) => d.line(wave(6 + c * 31, 12 + 4 * 18, 26, 1.4, 1), red, { type: 'motif', motif: 'stem', cord: true, width }));
   d.cutJumps();
   return d;
 }
