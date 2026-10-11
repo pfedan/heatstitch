@@ -30,7 +30,7 @@ python3 -m pip install Pillow
   zeigt auf den Ordner mit `Inter-Regular.otf` (im Paket `extras/otf`). Unter Linux mit dem
   Paket `fonts-inter` ist nichts zu tun.
 - **Replicate:** Token von <https://replicate.com/account/api-tokens> als
-  `REPLICATE_API_TOKEN` setzen. Die Stimme ist dieselbe wie bisher (Gemini TTS, Aoede); jede
+  `REPLICATE_API_TOKEN` setzen. Die Stimme ist Gemini TTS, Gacrux; jede
   Sprachaufnahme wird nur einmal bezahlt und liegt danach unter `ton/`.
 
 Dann in einem eigenen Terminal die App bauen und bereitstellen:

@@ -66,11 +66,11 @@ export const VIDEOS: Video[] = [
     key: '00-oberflaeche',
     part: 0,
     title: { de: 'Die heatstitch Oberfläche', en: 'The heatstitch interface' },
-    length: '2:58',
+    length: '3:52',
     group: 'start',
     goal: { de: 'Du weißt, wo was liegt: Kopfleiste, Werkzeuge, Farben und Objekte, Bühne, Karten und Player.', en: 'You know where everything is: header, tools, colors and objects, stage, cards and player.' },
     files: ['cat-60mm.pes'],
-    published: '2026-10-08T21:32:32+02:00',
+    published: '2026-10-11T12:55:22+02:00',
   },
   {
     key: '01-neues-stickmuster',
