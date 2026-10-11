@@ -20,18 +20,16 @@ const REST = [1500, 120];
 const DIVIDER = [968, 222, 14, 156];
 const RUNG = [950, 278, 40, 16];
 const ORDER = [962, 198, 24, 24];
-const RUNG_DRAG = [[940, 330], [922, 368]];
+const RUNG_DRAG = [[933, 333], [919, 372]];
 // Fransen an: the side of the ring path that lies outside.
 const OUTSIDE = 'Links';
 
 const btn = (s, name, exact = true) => s.page.getByRole('button', { name, exact }).first();
 const radio = (s, group, name) => s.page.getByRole('radiogroup', { name: group, exact: true }).getByRole('radio', { name, exact: true });
-const card = (s) => s.page.getByRole('complementary');
+const card = (s) => s.page.locator('#inspector');
 const field = (s, name) =>
   s.page.locator('label.field').filter({ has: s.page.locator('.name', { hasText: new RegExp(`^${name}$`) }) }).first();
 const slider = (s, name) => field(s, name).locator('input[type=range]');
-const eye = (s) => s.page.getByRole('toolbar', { name: 'Ansicht' }).getByRole('button').first();
-const viewMenu = (s) => s.page.locator('#view-pop');
 const row = (s, name) => s.page.getByText(name, { exact: true }).first();
 
 /** Waits in frames until `ready` holds. */
@@ -142,10 +140,15 @@ export default {
   part: 12,
   voice: {
     model: 'google/gemini-3.1-flash-tts',
-    voice: 'Aoede',
+    voice: 'Gacrux',
     language: 'de-DE',
     prompt:
-      'Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.',
+      'Speak German like a seasoned embroidery master teaching a workshop: mature, composed, precise, quietly authoritative but kind. Every word placed with care, with understated pride.',
+  },
+  // The whole video shows the stitches in the realistic view, switched on before the app loads
+  // (record.mjs writes these settings to localStorage), so no scene has to mention it.
+  storage: {
+    'settings.v3': JSON.stringify({ mode: 'flow', realistic: true }),
   },
   lead: 0.4,
   tail: 0.6,
@@ -192,9 +195,9 @@ export default {
       },
     },
     {
-      say: '[curious] Ein Klick auf Vorschlagen, und der Stern ist zerlegt. Trennlinien teilen ihn in Abschnitte, hier jede Zacke in zwei Hälften. Querlinien zeigen die Richtung der Stiche. Dazwischen dreht sie sich weich mit.',
-      text: 'Ein Klick auf Vorschlagen, und der Stern ist zerlegt. Trennlinien teilen ihn in Abschnitte, hier jede Zacke in zwei Hälften. Querlinien zeigen die Richtung der Stiche. Dazwischen dreht sie sich weich mit.',
-      textEn: 'One click on Suggest, and the star is split up. Dividers cut it into sections, here every point into two halves. Rungs show the direction of the stitches. In between, it turns smoothly.',
+      say: '[curious] Ein Klick auf Vorschlagen, und der Stern ist in zwölf Abschnitte zerlegt. Trennlinien teilen ihn, hier jede Zacke in zwei Hälften. Querlinien zeigen die Richtung der Stiche. Dazwischen dreht sie sich weich mit.',
+      text: 'Ein Klick auf Vorschlagen, und der Stern ist in zwölf Abschnitte zerlegt. Trennlinien teilen ihn, hier jede Zacke in zwei Hälften. Querlinien zeigen die Richtung der Stiche. Dazwischen dreht sie sich weich mit.',
+      textEn: 'One click on Suggest, and the star is split into twelve sections. Dividers cut it, here every point into two halves. Rungs show the direction of the stitches. In between, it turns smoothly.',
       run: async (s) => {
         await s.click(btn(s, 'Vorschlagen'), { move: 0.9, before: 0.3, after: 0.6 });
         await until(s, async () => (await s.page.getByText(/zerlegt: \d+ Abschnitte/).count()) > 0, 'suggestion');
@@ -309,12 +312,12 @@ export default {
       },
     },
     {
-      say: 'Die Welle ist eine Linie im Steppstich. Unter Wiederholung wähle ich dreifach. Jeder Stich läuft dann dreimal, und die Linie wird kräftig.',
-      text: 'Die Welle ist eine Linie im Steppstich. Unter Wiederholung wähle ich dreifach. Jeder Stich läuft dann dreimal, und die Linie wird kräftig.',
-      textEn: 'The wave is a running stitch line. Under Repeat I choose triple. Every stitch then runs three times, and the line becomes bold.',
+      say: 'Die Welle ist eine Linie im Steppstich. Unter Wiederholung klicke ich auf dreimal. Das ist ein Bohnenstich: Jeder Stich läuft hin, zurück und wieder hin, und die Linie wird kräftig.',
+      text: 'Die Welle ist eine Linie im Steppstich. Unter Wiederholung klicke ich auf dreimal. Das ist ein Bohnenstich: Jeder Stich läuft hin, zurück und wieder hin, und die Linie wird kräftig.',
+      textEn: 'The wave is a running stitch line. Under Repeat I click three times. That is a bean stitch: every stitch runs there, back and there again, and the line becomes bold.',
       run: async (s) => {
         await pickOnStage(s, WAVE, '3. Cornflower Blue');
-        const triple = radio(s, 'Wiederholung', '3-fach');
+        const triple = radio(s, 'Wiederholung', '3×');
         await scrollCard(s, triple, 560);
         await s.zoom(triple, 1.7);
         await s.move(radio(s, 'Art', 'Steppstich'), 1.0);
@@ -325,9 +328,15 @@ export default {
         await s.wait(0.8);
         await s.click(null, { before: 0.2, after: 0.4 });
         s.unlabel();
+        // 3× ticks Bohnenstich by itself.
+        const bean = s.page.locator('label.check', { hasText: 'Bohnenstich' }).first();
+        await s.move(bean, 0.7);
+        await s.label('Bohnenstich', bean, 'below');
+        await s.wait(2.4);
+        s.unlabel();
         s.zoomOut();
         await s.zoom([921, 820, 0, 0], 1.6);
-        await s.wait(2.4);
+        await s.wait(2.0);
         s.zoomOut();
       },
     },
@@ -358,16 +367,21 @@ export default {
       },
     },
     {
-      say: 'Schatten legt eine versetzte Kopie darunter. Sie bekommt links in der Liste eine eigene Farbe, dunkelgrau. So hebt sich die Welle vom Stoff ab.',
-      text: 'Schatten legt eine versetzte Kopie darunter. Sie bekommt links in der Liste eine eigene Farbe, dunkelgrau. So hebt sich die Welle vom Stoff ab.',
-      textEn: 'Shadow puts an offset copy underneath. It gets its own colour in the list on the left, dark grey. That makes the wave stand out from the fabric.',
+      say: 'Schatten legt eine versetzte Kopie darunter. Die Richtung ziehe ich auf hundertfünfunddreißig Grad, nach links unten. Der Schatten bekommt in der Liste eine eigene Farbe, dunkelgrau. So hebt sich die Welle vom Stoff ab.',
+      text: 'Schatten legt eine versetzte Kopie darunter. Die Richtung ziehe ich auf 135 Grad, nach links unten. Der Schatten bekommt in der Liste eine eigene Farbe, dunkelgrau. So hebt sich die Welle vom Stoff ab.',
+      textEn: 'Shadow puts an offset copy underneath. I drag the direction to 135 degrees, down to the left. The shadow gets its own colour in the list, dark grey. That makes the wave stand out from the fabric.',
       run: async (s) => {
-        const se = radio(s, 'Schatten', '↘');
-        await scrollCard(s, se, 560);
-        await s.zoom(se, 1.6);
-        await s.move(se, 1.0);
-        await s.label('Schatten', se, 'above');
+        const on = radio(s, 'Schatten', 'An');
+        await scrollCard(s, on, 420);
+        await s.zoom(on, 1.6);
+        await s.move(on, 1.0);
+        await s.label('Schatten', on, 'above');
         await s.click(null, { before: 0.4, after: 0.6 });
+        s.unlabel();
+        await until(s, async () => (await field(s, 'Richtung').count()) > 0, 'shadow options');
+        await s.label('Richtung', field(s, 'Richtung'), 'above');
+        await slide(s, 'Richtung', 135, 1.8);
+        await s.wait(0.6);
         s.unlabel();
         s.zoomOut();
         const shade = s.page.locator('.layer-name', { hasText: /Farbe 3$/ }).first();
@@ -389,10 +403,8 @@ export default {
       text: 'Satin für die glänzenden Flächen, Linien für Ränder und Wellen, und das Abzeichen ist fertig. Viel Spaß beim Sticken!',
       textEn: 'Satin for the shiny areas, lines for edges and waves, and the badge is done. Have fun embroidering!',
       run: async (s) => {
-        await s.press('Escape', { show: 0 });
-        await s.click(eye(s), { move: 1.0, before: 0.3, after: 0.4 });
-        const real = viewMenu(s).getByText('Realistische Fäden', { exact: true }).first();
-        await s.click(real, { move: 0.8, before: 0.3, after: 0.5 });
+        // The Richtung slider still has the focus and would keep the Escape for itself.
+        await s.page.evaluate(() => document.activeElement?.blur());
         await s.press('Escape', { show: 0 });
         await s.move(REST, 1.2);
         await s.wait(4.0);
