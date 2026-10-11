@@ -26,6 +26,18 @@ describe('heatstitch.app routing', () => {
     expect(res.headers.get('Location')).toBe('https://heatstitch.app/de/?x=1');
   });
 
+  it('sends plain http to https, keeping path and query', async () => {
+    const res = (await worker.fetch(new Request('http://heatstitch.app/de/?x=1'), env)) as Response;
+    expect(res.status).toBe(301);
+    expect(res.headers.get('Location')).toBe('https://heatstitch.app/de/?x=1');
+  });
+
+  it('tells browsers to stay on https', async () => {
+    expect((await get('/')).headers.get('Strict-Transport-Security')).toBe('max-age=31536000');
+    expect((await get('/de?x=1')).headers.get('Strict-Transport-Security')).toBe('max-age=31536000');
+    expect((await get('/nope')).headers.get('Strict-Transport-Security')).toBe('max-age=31536000');
+  });
+
   it('answers anything else with a page back to the app, in its language', async () => {
     const en = await get('/nope.pes');
     expect(en.status).toBe(404);

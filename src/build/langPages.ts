@@ -23,7 +23,7 @@ const DE: Record<Page, { title: string; description: string; ogTitle: string; og
   app: {
     title: 'heatstitch: kostenlose Sticksoftware im Browser (PES, DST, JEF)',
     description:
-      'Stickmuster kostenlos im Browser erstellen und bearbeiten: Bilder in Stiche umwandeln, Schrift setzen, PES-, DST-, JEF-, VP3-, EXP- oder XXX-Dateien bearbeiten und die Stichdichte prüfen.',
+      'Kostenlose Open-Source-Sticksoftware im Browser: Bilder in Stiche umwandeln, Schrift setzen, PES-, DST-, JEF-, VP3-, EXP- oder XXX-Dateien bearbeiten und die Stichdichte prüfen.',
     ogTitle: 'heatstitch: kostenlose Sticksoftware im Browser',
     ogDescription:
       'Macht aus Bildern und SVG Stiche, setzt Schrift in 41 Stickschriften, bearbeitet Objekte und einzelne Stiche, und eine Dichteprüfung behebt, was zu dicht ist. Speichert PES, DST, JEF, VP3, EXP und XXX. Deine Dateien verlassen nie dein Gerät.',
