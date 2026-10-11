@@ -73,10 +73,10 @@ export default {
   part: 2,
   voice: {
     model: 'google/gemini-3.1-flash-tts',
-    voice: 'Aoede',
+    voice: 'Gacrux',
     language: 'de-DE',
     prompt:
-      'Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.',
+      'Speak German like a seasoned embroidery master teaching a workshop: mature, composed, precise, quietly authoritative but kind. Every word placed with care, with understated pride.',
   },
   lead: 0.4,
   tail: 0.6,
@@ -288,31 +288,24 @@ export default {
       },
     },
     {
-      say: 'Unten rechts auf der Bühne öffnet das Auge das Ansicht-Menü. Ich schalte Realistische Fäden ein. [delighted] So sieht dein Schriftzug fertig gestickt aus. Mit der Leertaste siehst du, wie die Maschine ihn Stich für Stich stickt. [warm] Viel Spaß beim Sticken!',
-      text: 'Unten rechts auf der Bühne öffnet das Auge das Ansicht-Menü. Ich schalte Realistische Fäden ein. So sieht dein Schriftzug fertig gestickt aus. Mit der Leertaste siehst du, wie die Maschine ihn Stich für Stich stickt. Viel Spaß beim Sticken!',
-      textEn: 'At the bottom right of the stage, the eye opens the view menu. I turn on Realistic threads. This is how your lettering looks when it is stitched. The space bar shows you how the machine stitches it, stitch by stitch. Have fun embroidering!',
+      say: 'Zum Schluss schalte ich die realistische Ansicht ein und drücke die Leertaste: So siehst du, wie die Maschine deinen Schriftzug Stich für Stich stickt. [warm] Viel Spaß beim Sticken!',
+      text: 'Zum Schluss schalte ich die realistische Ansicht ein und drücke die Leertaste: So siehst du, wie die Maschine deinen Schriftzug Stich für Stich stickt. Viel Spaß beim Sticken!',
+      textEn: 'Finally I turn on the realistic view and press the space bar: this is how you see the machine stitch your lettering, stitch by stitch. Have fun embroidering!',
       run: async (s) => {
         await s.page.evaluate(() => document.activeElement?.blur());
         await quietKey(s, 'Escape');
         // Measured in the flat stitch view, before the threads get their sheen.
         const { box } = await stitches(s);
         const eye = s.page.getByRole('toolbar', { name: 'Ansicht' }).getByRole('button').first();
-        await s.zoom([1430, 800, 0, 0], 1.4);
-        await s.move(eye, 1.0);
-        await s.wait(1.2);
-        await s.label('Ansicht-Menü', eye, 'above');
-        await s.wait(1.4);
-        await s.click(null, { before: 0.2, after: 0.4 });
-        s.unlabel();
+        // The switch to the realistic threads is shown without labels and quick, as the voice only
+        // mentions it in passing; then the space bar.
+        await s.move(eye, 0.6);
+        await s.click(null, { before: 0.1, after: 0.3 });
         const real = s.page.getByRole('checkbox', { name: 'Realistische Fäden' });
-        await s.move(real, 1.0);
-        await s.label('Realistische Fäden', real, 'above');
-        await s.click(null, { before: 0.6, after: 0.6 });
-        s.unlabel();
+        await s.click(real, { move: 0.5, before: 0.1, after: 0.3 });
         await quietKey(s, 'Escape');
-        await s.move([1300, 900], 1.0);
+        await s.move([1300, 900], 0.5);
         await s.zoom(box, 1.5);
-        await s.wait(2.4);
         await s.press('Home', { label: 'Pos1', show: 0.4 });
         await s.press(' ', { label: 'Leertaste', show: 1.0 });
         await s.wait(4.4);

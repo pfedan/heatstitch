@@ -86,11 +86,11 @@ export const VIDEOS: Video[] = [
     key: '02-schrift',
     part: 2,
     title: { de: 'Schrift', en: 'Lettering' },
-    length: '2:30',
+    length: '2:44',
     group: 'design',
     goal: { de: 'Du setzt einen Namen in Stickschrift, im Bogen und in deiner Garnfarbe, und änderst ihn später jederzeit.', en: 'You set a name in an embroidery font, on an arc and in your thread color, and change it any time later.' },
     files: [],
-    published: '2026-10-08T21:32:32+02:00',
+    published: '2026-10-11T20:29:37+02:00',
   },
   {
     key: '03-vom-bild-zum-stickmuster',
