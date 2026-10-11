@@ -102,9 +102,9 @@ export default {
       },
     },
     {
-      say: 'Ich klicke auf den grünen Kreis und zoome mit Strg und Mausrad heran. Im Ansicht-Menü schalte ich Realistische Fäden ein. So siehst du jede Änderung, wie sie gestickt aussieht.',
-      text: 'Ich klicke auf den grünen Kreis und zoome mit Strg und Mausrad heran. Im Ansicht-Menü schalte ich Realistische Fäden ein. So siehst du jede Änderung, wie sie gestickt aussieht.',
-      textEn: 'I click the green circle and zoom in with Ctrl and the mouse wheel. In the View menu I turn on Realistic threads. That way you see every change as it will look stitched.',
+      say: 'Ich klicke auf den grünen Kreis und zoome mit Strg und Mausrad heran. Im Ansicht-Menü schalte ich Realistische Fäden ein.',
+      text: 'Ich klicke auf den grünen Kreis und zoome mit Strg und Mausrad heran. Im Ansicht-Menü schalte ich Realistische Fäden ein.',
+      textEn: 'I click the green circle and zoom in with Ctrl and the mouse wheel. In the View menu I turn on Realistic threads.',
       run: async (s) => {
         await s.click(CIRCLE, { move: 1.0, before: 0.3, after: 0.4 });
         // Off the shapes, a drag moves the stage; the circle comes to the middle.
@@ -190,9 +190,9 @@ export default {
       },
     },
     {
-      say: 'Unter Gestaltung stellst du Abstand, Winkel und Stichlänge ein. Ich drehe die Reihen auf 90 Grad. Unter Prägung zeichnen die Einstiche ein Muster in die Fläche. [enthusiastic] Mit Herzen siehst du sie im Licht.',
-      text: 'Unter Gestaltung stellst du Abstand, Winkel und Stichlänge ein. Ich drehe die Reihen auf 90 Grad. Unter Prägung zeichnen die Einstiche ein Muster in die Fläche. Mit Herzen siehst du sie im Licht.',
-      textEn: 'Under Design you set spacing, angle and stitch length. I turn the rows to 90 degrees. Under Embossing the needle points draw a pattern into the area. With hearts you see them in the light.',
+      say: 'Unter Gestaltung stellst du Abstand, Winkel und Stichlänge ein. Ich drehe die Reihen auf 90 Grad. Unter Prägung zeichnen die Einstiche ein Muster in die Fläche. Ich nehme Herzen.',
+      text: 'Unter Gestaltung stellst du Abstand, Winkel und Stichlänge ein. Ich drehe die Reihen auf 90 Grad. Unter Prägung zeichnen die Einstiche ein Muster in die Fläche. Ich nehme Herzen.',
+      textEn: 'Under Design you set spacing, angle and stitch length. I turn the rows to 90 degrees. Under Embossing the needle points draw a pattern into the area. I take hearts.',
       run: async (s) => {
         const heading = card(s).getByText('Gestaltung', { exact: true }).first();
         await s.move([1760, 600], 0.8);
@@ -301,9 +301,9 @@ export default {
       },
     },
     {
-      say: 'Mit der Taste X zerteilst du eine Füllung. Ich ziehe eine Linie quer durch den Kreis. Jetzt sind es zwei Teile, jeder mit eigener Richtung. Ich drehe die rechte Hälfte, [delighted] und schon fängt jede Hälfte das Licht anders.',
-      text: 'Mit der Taste X zerteilst du eine Füllung. Ich ziehe eine Linie quer durch den Kreis. Jetzt sind es zwei Teile, jeder mit eigener Richtung. Ich drehe die rechte Hälfte, und schon fängt jede Hälfte das Licht anders.',
-      textEn: 'With the X key you split a fill. I drag a line right through the circle. Now there are two parts, each with its own direction. I turn the right half, and each half catches the light differently.',
+      say: 'Mit der Taste X zerteilst du eine Füllung. Ich ziehe eine Linie quer durch den Kreis. Jetzt sind es zwei Teile, jeder mit eigener Richtung. Ich drehe die rechte Hälfte, und schon laufen die Reihen der beiden Hälften verschieden.',
+      text: 'Mit der Taste X zerteilst du eine Füllung. Ich ziehe eine Linie quer durch den Kreis. Jetzt sind es zwei Teile, jeder mit eigener Richtung. Ich drehe die rechte Hälfte, und schon laufen die Reihen der beiden Hälften verschieden.',
+      textEn: 'With the X key you split a fill. I drag a line right through the circle. Now there are two parts, each with its own direction. I turn the right half, and the rows of the two halves run differently.',
       run: async (s) => {
         await s.move([950, 150], 1.0);
         await s.press('x', { label: 'X', show: 1.4 });

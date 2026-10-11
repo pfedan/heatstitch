@@ -1,6 +1,6 @@
 # Teil 11: Füllungen
 
-Schlüssel `11-fuellungen`, Demodatei `shapes-benchmark.svg` (Startseite, Weitere Beispiele, „Formen-Benchmark“), etwa 3 Minuten 40, 365 Wörter. Stimme Gacrux.
+Schlüssel `11-fuellungen`, Demodatei `shapes-benchmark.svg` (Startseite, Weitere Beispiele, „Formen-Benchmark“), etwa 3 Minuten 40, 353 Wörter. Stimme Gacrux.
 
 Gezeigt wird fast alles am grünen Kreis oben links, herangezoomt und mit Realistischen Fäden, damit jede Änderung so aussieht, wie sie gestickt wird. Die Leitlinien zeigt das Blatt rechts, weil seine Reihen einer geschwungenen Linie gut folgen.
 
@@ -16,7 +16,7 @@ Stand: Zeigt der Zeiger auf eine Musterkachel, zeigt die Bühne das Muster vorab
 
 **Bild:** Klick auf den grünen Kreis oben links. Die Bühne wird zum Kreis geschoben, Strg und Mausrad zoomen heran (Tastenkappe „Strg + Mausrad“). Klick auf das Auge unten rechts, Realistische Fäden, Menü zu.
 
-**Sprechtext:** Ich klicke auf den grünen Kreis und zoome mit Strg und Mausrad heran. Im Ansicht-Menü schalte ich Realistische Fäden ein. So siehst du jede Änderung, wie sie gestickt aussieht.
+**Sprechtext:** Ich klicke auf den grünen Kreis und zoome mit Strg und Mausrad heran. Im Ansicht-Menü schalte ich Realistische Fäden ein.
 
 ## Szene 3
 
@@ -32,9 +32,9 @@ Stand: Zeigt der Zeiger auf eine Musterkachel, zeigt die Bühne das Muster vorab
 
 ## Szene 5
 
-**Bild:** Die Karte rollt zu Gestaltung. Etikett Winkel, der Regler wird von 45 auf 90 Grad gezogen, die Reihen drehen sich. Etikett Prägung, Klick auf Herzen: Herzen erscheinen im Licht der Fläche.
+**Bild:** Die Karte rollt zu Gestaltung. Etikett Winkel, der Regler wird von 45 auf 90 Grad gezogen, die Reihen drehen sich. Etikett Prägung, Klick auf Herzen: Herzen erscheinen in der Fläche.
 
-**Sprechtext:** Unter Gestaltung stellst du Abstand, Winkel und Stichlänge ein. Ich drehe die Reihen auf 90 Grad. Unter Prägung zeichnen die Einstiche ein Muster in die Fläche. [enthusiastic] Mit Herzen siehst du sie im Licht.
+**Sprechtext:** Unter Gestaltung stellst du Abstand, Winkel und Stichlänge ein. Ich drehe die Reihen auf 90 Grad. Unter Prägung zeichnen die Einstiche ein Muster in die Fläche. Ich nehme Herzen.
 
 ## Szene 6
 
@@ -50,9 +50,9 @@ Stand: Zeigt der Zeiger auf eine Musterkachel, zeigt die Bühne das Muster vorab
 
 ## Szene 8
 
-**Bild:** Tastenkappe X. Eine Linie wird von oben nach unten durch den Kreis gezogen. Meldung „In 2 Teile zerteilt, jeder mit eigener Richtung.“ Klick auf die rechte Hälfte, Winkel auf 135 Grad: Die beiden Hälften glänzen verschieden.
+**Bild:** Tastenkappe X. Eine Linie wird von oben nach unten durch den Kreis gezogen. Meldung „In 2 Teile zerteilt, jeder mit eigener Richtung.“ Klick auf die rechte Hälfte, Winkel auf 135 Grad: Die Reihen der beiden Hälften laufen verschieden.
 
-**Sprechtext:** Mit der Taste X zerteilst du eine Füllung. Ich ziehe eine Linie quer durch den Kreis. Jetzt sind es zwei Teile, jeder mit eigener Richtung. Ich drehe die rechte Hälfte, [delighted] und schon fängt jede Hälfte das Licht anders.
+**Sprechtext:** Mit der Taste X zerteilst du eine Füllung. Ich ziehe eine Linie quer durch den Kreis. Jetzt sind es zwei Teile, jeder mit eigener Richtung. Ich drehe die rechte Hälfte, und schon laufen die Reihen der beiden Hälften verschieden.
 
 ## Szene 9
 
