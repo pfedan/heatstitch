@@ -103,6 +103,16 @@ export const VIDEOS: Video[] = [
     published: '2026-10-08T21:32:32+02:00',
   },
   {
+    key: '04-vom-svg-zum-stickmuster',
+    part: 4,
+    title: { de: 'Vom SVG zum Stickmuster', en: 'From SVG to a design' },
+    length: '2:41',
+    group: 'design',
+    goal: { de: 'Du machst aus einer SVG ein Stickmuster mit sauberen Satin-Konturen und legst ihre Abschnitte im Werkzeug Richtung neu an.', en: 'You turn an SVG into a design with clean satin outlines and lay out their sections anew in the Direction tool.' },
+    files: ['katze-im-karton.svg'],
+    published: '2026-10-11T14:09:10+02:00',
+  },
+  {
     key: '05-objekte-und-reihenfolge',
     part: 5,
     title: { de: 'Objekte und Reihenfolge', en: 'Objects and sequence' },
