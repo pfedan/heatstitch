@@ -1119,7 +1119,7 @@ export const deBase = {
   'player.pos': 'Position im Nähablauf',
   'player.speed': 'Tempo, als Vielfaches des Maschinentempos',
   'player.info': 'Stich {i} / {n} · {time}',
-  'canvas.hint.flow': 'Strg+Mausrad/Pinch: Zoom · Mausrad/Ziehen: Verschieben · Umschalt+Ziehen: Objekte im Rahmen wählen · Doppelklick: Form oder Stiche bearbeiten · Leertaste: Abspielen · n: nächster Sprung',
+  'canvas.hint.flow': 'Strg+Mausrad/Pinch: Zoom · Mausrad, Ziehen daneben: Ansicht verschieben · Objekt ziehen: verschieben · Umschalt+Ziehen: Objekte im Rahmen wählen · Doppelklick: Form oder Stiche bearbeiten · Leertaste: Abspielen · n: nächster Sprung',
   'stitch.hand': 'Neue Einstellungen ersetzen {n} Änderungen von Hand.',
   'stitch.hand.one': 'Neue Einstellungen ersetzen 1 Änderung von Hand.',
   'edit.split.hint': 'Den Stich zum gewählten Einstich in der Mitte teilen (i)',

@@ -164,12 +164,21 @@ export class FrameTool implements FrameView {
   down(x: number, y: number, scale: number): FramePart | null {
     const part = this.pickAt(x, y, scale);
     if (part === null) return null;
+    this.start(part, x, y);
+    return part;
+  }
+
+  /** Starts moving the objects from a press anywhere on them, whatever part of the frame lies there. */
+  grab(x: number, y: number): void {
+    if (this.active) this.start('move', x, y);
+  }
+
+  private start(part: FramePart, x: number, y: number): void {
     this.dragging = part;
     this.from = [x, y];
     this.moved = false;
     this.m = IDENTITY;
     this.turn = 0;
-    return part;
   }
 
   /** `free` (Alt) moves without snapping. */

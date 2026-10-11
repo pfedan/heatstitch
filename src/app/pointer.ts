@@ -53,6 +53,7 @@ export interface PointerApp {
   readonly showCompare: () => boolean;
   readonly stage: HTMLElement;
   readonly styleFor: (p: Pattern) => StitchStyle;
+  readonly syncFrame: () => void;
   readonly threadsShown: () => boolean;
   readonly tooltip: HTMLElement;
   readonly traceTool: TraceTool;
@@ -227,6 +228,20 @@ export function bindPointer(app: PointerApp) {
       if (mode === 'pan' && e.shiftKey && bandAllowed()) {
         ui.objectBand = { x0: wx, y0: wy, x1: wx, y1: wy };
         mode = 'band';
+      }
+      // A press on an object that is not selected selects it, and a drag moves it right away, as in
+      // Figma; beside the objects a drag still moves the view. A finger keeps moving the view, as a
+      // design on a phone fills the stage. Ctrl or Cmd adds to the selection on the click instead.
+      if (mode === 'pan' && e.pointerType !== 'touch' && !e.ctrlKey && !e.metaKey && !ui.formLevel && bandAllowed()) {
+        const o = objectAt(pos);
+        if (o >= 0 && !ui.selectedObjects.has(o)) {
+          app.selectObjects([o], false);
+          app.syncFrame();
+          if (app.frameTool.active) {
+            app.frameTool.grab(wx, wy);
+            mode = 'frame';
+          }
+        }
       }
     }
     pressMode = mode;

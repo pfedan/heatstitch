@@ -1122,7 +1122,7 @@ const enBase: Record<keyof typeof deBase, string> = {
   'player.pos': 'Position in the sewing sequence',
   'player.speed': 'Speed, as a multiple of the machine speed',
   'player.info': 'Stitch {i} / {n} · {time}',
-  'canvas.hint.flow': 'Ctrl+wheel/pinch: zoom · Wheel/drag: pan · Shift+drag: select objects in a box · Double-click: edit shape or stitches · Space: play · n: next jump',
+  'canvas.hint.flow': 'Ctrl+wheel/pinch: zoom · Wheel, drag beside: pan · Drag an object: move · Shift+drag: select objects in a box · Double-click: edit shape or stitches · Space: play · n: next jump',
   'stitch.hand': 'New settings replace {n} changes made by hand.',
   'stitch.hand.one': 'New settings replace 1 change made by hand.',
   'edit.split.hint': 'Split the stitch to the selected needle point in the middle (i)',
