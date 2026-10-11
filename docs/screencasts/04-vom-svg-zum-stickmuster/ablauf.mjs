@@ -79,9 +79,9 @@ const REST = [420, 140];
 // Where box flaps and rim meet in the middle of the box, as the design opens (fitted).
 const BOX_MIDDLE = [1022, 650];
 // After Vorschlagen: a cut line where paw, flap and rim meet, a rung on the rim next to it, and
-// the markers of section 7 at the left front corner of the box (scissors, number, arrow).
+// the markers of section 5 at the left front corner of the box (scissors, number, arrow).
 const CUT = [1006, 630, 40, 40];
-const RUNG = [1060, 615, 16, 16];
+const RUNG = [1054, 622, 16, 24];
 const MARKERS = [547, 718];
 const SCISSORS = [519, 702, 16, 16];
 const NUMBER = [539, 702, 16, 16];
@@ -92,10 +92,15 @@ export default {
   part: 4,
   voice: {
     model: 'google/gemini-3.1-flash-tts',
-    voice: 'Aoede',
+    voice: 'Gacrux',
     language: 'de-DE',
     prompt:
-      'Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.',
+      'Speak German like a seasoned embroidery master teaching a workshop: mature, composed, precise, quietly authoritative but kind. Every word placed with care, with understated pride.',
+  },
+  // Gestalten shows the stitches in the realistic view throughout, switched on before the app
+  // loads (record.mjs writes these settings to localStorage), so no scene has to mention it.
+  storage: {
+    'settings.v3': JSON.stringify({ mode: 'flow', realistic: true }),
   },
   lead: 0.4,
   tail: 0.6,
@@ -237,9 +242,9 @@ export default {
       },
     },
     {
-      say: '„Leeren“ nimmt alle Trennlinien und Querlinien weg. So fängst du neu an.',
-      text: '„Leeren“ nimmt alle Trennlinien und Querlinien weg. So fängst du neu an.',
-      textEn: '“Clear” removes all cut lines and rungs. That is how you start over.',
+      say: '„Leeren“ nimmt alle Trennlinien und Querlinien weg. Übrig bleibt nur der Umriss, ohne Stiche, bis neue Linien da sind. So fängst du neu an.',
+      text: '„Leeren“ nimmt alle Trennlinien und Querlinien weg. Übrig bleibt nur der Umriss, ohne Stiche, bis neue Linien da sind. So fängst du neu an.',
+      textEn: '“Clear” removes all cut lines and rungs. Only the outline stays, without stitches, until there are new lines. That is how you start over.',
       run: async (s) => {
         const clear = btn(s, 'Leeren');
         await s.zoom([700, 114, 0, 0], 1.8);
