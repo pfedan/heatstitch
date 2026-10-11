@@ -118,8 +118,31 @@ describe('redwork', () => {
     // Sewn the other way round: the same stitches backwards.
     const rev = lineStitches(form, { type: 'run', width: 0.4, length: 2.5, redwork: true }, true);
     expect(rev[0].slice().reverse()).toEqual(red[0]);
-    // Only running stitch once: a triple stitch or satin stays path by path.
-    expect(lineStitches(form, { type: 'triple', width: 0.4, redwork: true }).length).toBe(6);
+    // Only running stitch: a satin stays path by path.
+    expect(lineStitches(form, { type: 'satin', width: 2, redwork: true }).length).toBe(6);
+  });
+
+  it('in triple stitch sews the way back on top as a bean stitch: one thread below, three above', () => {
+    const lines = [open([0, 3], [12, 3]), open([3, 0], [3, 12]), ring(6, 6, 4)];
+    const [plain] = redworkRuns(lines, asIs);
+    const [bean] = redworkRuns(lines, asIs, undefined, undefined, true);
+    expect(same(bean[0], plain[0]) && same(bean[bean.length - 1], plain[plain.length - 1])).toBe(true);
+    for (const c of passes(bean).values()) expect(c.there + c.back).toBe(4);
+    // Twice each way: once along below, then forward, back, forward on top.
+    for (const c of passes(bean).values()) expect(c).toEqual({ there: 2, back: 2 });
+    // Through the paths of a line: a triple stitch in redwork is one run.
+    const form = parsePath(flower(), ID);
+    const red = lineStitches(form, { type: 'triple', width: 0.4, length: 2.5, redwork: true });
+    expect(red.length).toBe(1);
+    for (const c of passes(red[0]).values()) expect(c.there + c.back).toBe(4);
+  });
+
+  it('in bean stitch stays one object without a dense zone the checks call critical', () => {
+    const empty = { x: new Int32Array(0), y: new Int32Array(0), cmd: new Uint8Array(0), colors: [] } as unknown as Pattern;
+    const work = addLine(empty, parsePath(flower(), ID), { type: 'triple', width: 0.4, length: 2.5, redwork: true }, { r: 200, g: 30, b: 30 }, null, digitizeDefaults(DEFAULT_PROFILE))!.pattern;
+    expect(sewObjects(work)).toHaveLength(1);
+    expect(work.cmd.reduce((n, x) => n + (x === TRIM ? 1 : 0), 0)).toBe(1);
+    expect(validatePattern(work, DEFAULT_PROFILE).criticalCells).toBe(0);
   });
 
   it('helps only where paths touch', () => {

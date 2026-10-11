@@ -771,6 +771,8 @@ const enBase: Record<keyof typeof deBase, string> = {
   'stitch.bean.even': 'Bean stitch needs an odd number',
   'stitch.redwork': 'Continuous (redwork)',
   'stitch.redwork.hint': 'All lines in one go, each there and back: no trim where lines touch',
+  'stitch.redworkBean': 'Bean stitch on top',
+  'stitch.redworkBean.hint': 'The way back of each line three times: bolder, as with a thicker thread',
   'stitch.shadow.dist': 'Distance',
   'stitch.shadow.dist.hint': 'How far the shadow lies beside the line, in its direction',
   'stitch.shadow.dist.under': 'Lies right under the line and is not sewn',

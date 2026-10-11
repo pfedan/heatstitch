@@ -418,21 +418,33 @@ export function redworkWalks(g: RedworkGraph, from?: Pt): { edge: number; back: 
 /**
  * Redwork stitches along `lines` (see the top of this file): one run per connected part, each edge
  * stitched once by `stitch` (needle points at both ends) and sewn there and back over the same
- * needle points.
+ * needle points. With `bean` the second pass over each edge, the one on top, is a bean stitch (each
+ * stitch forward, back, forward): one thread below and three on top, as a thick redwork line is sewn.
  */
-export function redworkRuns(lines: RedworkLine[], stitch: (pts: Pt[]) => Pt[], from?: Pt, snap = REDWORK_GAP): Pt[][] {
+export function redworkRuns(lines: RedworkLine[], stitch: (pts: Pt[]) => Pt[], from?: Pt, snap = REDWORK_GAP, bean = false): Pt[][] {
   const g = redworkGraph(lines, snap);
   const sewn = g.edges.map((e) => stitch(e.pts));
+  const passed = new Set<number>();
   return redworkWalks(g, from)
     .map((walk) => {
       const run: Pt[] = [];
       for (const { edge, back } of walk) {
         const s = sewn[edge];
         if (s.length < 2) continue;
-        const pts = back ? s.slice().reverse() : s;
+        const dir = back ? s.slice().reverse() : s;
+        const top = passed.has(edge);
+        passed.add(edge);
+        const pts = bean && top ? beaned(dir) : dir;
         for (const q of pts) if (!run.length || dist(run[run.length - 1], q) > 1e-6) run.push(q);
       }
       return run;
     })
     .filter((r) => r.length > 1);
+}
+
+/** Bean stitch along `pts`: each stitch forward, back, forward over the same two needle points. */
+function beaned(pts: Pt[]): Pt[] {
+  const out: Pt[] = [pts[0]];
+  for (let i = 1; i < pts.length; i++) out.push(pts[i], pts[i - 1], pts[i]);
+  return out;
 }

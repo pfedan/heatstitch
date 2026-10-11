@@ -1991,7 +1991,12 @@ export class StitchPanel {
       // A line of many paths in one go (redwork): each there and back, so it has no count of its own.
       const red = line && !st.echo ? this.redworkCheck(st, set) : null;
       if (red && isRedwork(st)) {
-        out.look.push(red, this.slider({ label: 'stitch.length', hint: 'stitch.runLength.hint', min: 1, max: 6, step: 0.1, get: () => st.length ?? BORDER_STITCH, set: (v) => change((s) => (s.length = v))(v), fmt: mm(1), auto: unset('length') }));
+        const bean = this.check('stitch.redworkBean', 'stitch.redworkBean.hint', () => st.type === 'triple', (v) => {
+          st.type = v ? 'triple' : 'run';
+          set(st);
+          this.render();
+        });
+        out.look.push(red, bean, this.slider({ label: 'stitch.length', hint: 'stitch.runLength.hint', min: 1, max: 6, step: 0.1, get: () => st.length ?? BORDER_STITCH, set: (v) => change((s) => (s.length = v))(v), fmt: mm(1), auto: unset('length') }));
         return out;
       }
       if (red) out.look.push(red);
@@ -2136,11 +2141,11 @@ export class StitchPanel {
     return h('div', { class: 'repeat-field' }, field, check);
   }
 
-  /** Redwork for a line in running stitch: all its paths in one go, each there and back (see PathStitch.redwork). */
+  /** Redwork for a line in running or triple stitch: all its paths in one go, each there and back (see PathStitch.redwork). */
   private redworkCheck(st: PathStitch, set: (v: PathStitch) => void): HTMLElement {
     return this.check('stitch.redwork', 'stitch.redwork.hint', () => isRedwork(st), (v) => {
       if (v) {
-        st.type = 'run';
+        if (st.type !== 'triple') st.type = 'run';
         st.redwork = true;
         delete st.repeat;
         delete st.whole;

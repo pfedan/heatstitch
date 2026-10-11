@@ -42,8 +42,9 @@ export const runAsLine = (s: RunSettings, width = BORDER_WIDTH): PathStitch => (
 export function lineStitches(form: Form, st: PathStitch, reverse = false, from?: Pt): Pt[][] {
   let paths = form.paths.map((p) => ({ pts: flatten(p), closed: p.closed })).filter((x) => x.pts.length >= 2);
   if (isRedwork(st)) {
-    // All paths in one go where they touch, each line there and back over the same needle points.
-    const runs = redworkRuns(paths, (pts) => borderRun(pts, 1, st.tolerance ?? TOLERANCE, st.length), from);
+    // All paths in one go where they touch, each line there and back over the same needle points
+    // (in triple stitch the way back, on top, as a bean stitch).
+    const runs = redworkRuns(paths, (pts) => borderRun(pts, 1, st.tolerance ?? TOLERANCE, st.length), from, undefined, st.type === 'triple');
     return reverse ? runs.reverse().map((r) => r.slice().reverse()) : runs;
   }
   if (reverse) paths = paths.reverse().map((x) => ({ ...x, pts: x.pts.slice().reverse() }));

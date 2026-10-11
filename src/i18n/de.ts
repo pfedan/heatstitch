@@ -769,6 +769,8 @@ export const deBase = {
   'stitch.bean.even': 'Bohnenstich geht nur bei ungerader Zahl',
   'stitch.redwork': 'Durchgehend (Redwork)',
   'stitch.redwork.hint': 'Alle Linien in einem Zug, jede hin und zurück: kein Fadenschnitt, wo Linien sich berühren',
+  'stitch.redworkBean': 'Bohnenstich obenauf',
+  'stitch.redworkBean.hint': 'Der Rückweg jeder Linie dreifach: kräftiger, wie mit dickerem Garn',
   'stitch.shadow.dist': 'Abstand',
   'stitch.shadow.dist.hint': 'So weit liegt der Schatten in seiner Richtung neben der Linie',
   'stitch.shadow.dist.under': 'Liegt ganz unter der Linie und wird nicht gestickt',

@@ -1351,7 +1351,7 @@ export const REDWORK_OPS: Op[] = [
       const st = { ...m.line! };
       if (isRedwork(st)) delete st.redwork;
       else {
-        st.type = 'run';
+        st.type = r() < 0.3 ? 'triple' : 'run';
         st.redwork = true;
         delete st.repeat;
         delete st.whole;
