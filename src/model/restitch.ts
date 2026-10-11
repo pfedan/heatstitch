@@ -3939,7 +3939,7 @@ function asLine(given: Settings, known?: PathStitch): PathStitch | null {
   if (given.kind === 'run') return { ...runAsLine(given.s, known?.width), ...(known?.echo ? { echo: { ...known.echo } } : {}), ...(known?.shadow ? { shadow: known.shadow } : {}) };
   if (given.kind !== 'satin') return null;
   const s = given.s;
-  return { ...(known ?? { width: 2 }), type: 'satin', spacing: s.spacing, pull: s.edge || undefined, under: s.underlay ? (s.under ?? 'center') : 'off', tolerance: s.tolerance ?? known?.tolerance };
+  return { ...(known ?? { width: 2 }), type: 'satin', spacing: s.spacing, pull: s.edge || undefined, under: s.underlay ? (s.under ?? (known?.under !== 'off' && known ? known.under : 'center')) : 'off', tolerance: s.tolerance ?? known?.tolerance };
 }
 
 export function restitch(

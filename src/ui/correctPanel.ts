@@ -86,6 +86,8 @@ export interface PlanView {
   before: Cells;
   /** With the ticked-by-default proposals (null while measured). */
   after: Cells | null;
+  /** A hint below the list (tuning: what was left out because the check would report more). */
+  note?: string;
 }
 
 export interface CorrectState {
@@ -366,6 +368,7 @@ export class CorrectPanel {
       li.append(l);
       list.append(li);
     }
+    if (v.note) out.push(p(v.note, 'muted small'));
     out.push(list);
     if (v.locked) out.push(p(t('plan.locked', { n: v.locked }), 'muted small'));
     const buttons = document.createElement('div');

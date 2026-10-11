@@ -10,7 +10,7 @@ import { duplicateObject, mirrorMatrix } from '../src/model/shapeOps';
 import { autoCorrect, DEFAULT_CORRECTION } from '../src/correct/auto';
 import { planFabric } from '../src/correct/plan';
 import { FABRIC, FABRICS, type Profile } from '../src/validation/profiles';
-import { validatePattern } from '../src/validation/validate';
+import { ALL_CHECKS, validatePattern } from '../src/validation/validate';
 import { rasterize } from '../src/shape/rasterize';
 import { ellipsePath, parsePath } from '../src/shape/svgPath';
 import { boxOf, COLORS, Doc, empty, ID, saveAndOpen, shapes, T, transform } from './helpers/torture';
@@ -140,19 +140,19 @@ describe('gap rows by fabric', () => {
     }
   });
 
-  it('the automatic correction neither removes them nor finds anything to correct', () => {
+  it('the automatic correction neither removes them nor finds anything to correct', async () => {
     const p = drawn(STAR, KNIT);
     const r = autoCorrect(p, KNIT, DEFAULT_CORRECTION);
     expect(r.report.after.criticalCells).toBe(0);
     expect(Array.from(r.pattern.x)).toEqual(Array.from(p.x));
-    expect(planFabric(p, KNIT).flatMap((x) => x.changes).filter((c) => c.field === 'gapRows'), 'tuned to knit already').toEqual([]);
+    expect((await planFabric(p, KNIT, ALL_CHECKS, { trimMm: T })).proposals.flatMap((x) => x.changes).filter((c) => c.field === 'gapRows'), 'tuned to knit already').toEqual([]);
   });
 
-  it('"Tune to fabric" adds them for knit and takes them out for woven fabric', () => {
+  it('"Tune to fabric" adds them for knit and takes them out for woven fabric', async () => {
     const woven = drawn(RING, WOVEN);
-    expect(planFabric(woven, KNIT).flatMap((x) => x.changes).filter((c) => c.field === 'gapRows')).toEqual([{ field: 'gapRows', from: 0, to: 1 }]);
+    expect((await planFabric(woven, KNIT, ALL_CHECKS, { trimMm: T })).proposals.flatMap((x) => x.changes).filter((c) => c.field === 'gapRows')).toEqual([{ field: 'gapRows', from: 0, to: 1 }]);
     const knit = drawn(RING, KNIT);
-    expect(planFabric(knit, WOVEN).flatMap((x) => x.changes).filter((c) => c.field === 'gapRows')).toEqual([{ field: 'gapRows', from: 1, to: 0 }]);
+    expect((await planFabric(knit, WOVEN, ALL_CHECKS, { trimMm: T })).proposals.flatMap((x) => x.changes).filter((c) => c.field === 'gapRows')).toEqual([{ field: 'gapRows', from: 1, to: 0 }]);
   });
 });
 
