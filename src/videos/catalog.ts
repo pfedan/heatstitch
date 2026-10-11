@@ -136,11 +136,11 @@ export const VIDEOS: Video[] = [
     key: '07-stickdatei-pruefen',
     part: 7,
     title: { de: 'Stickdatei prüfen', en: 'Checking an embroidery file' },
-    length: '2:27',
+    length: '2:43',
     group: 'file',
     goal: { de: 'Du siehst vor dem ersten Stich, ob eine Datei auf deinem Stoff gut wird und wo nicht.', en: 'Before the first stitch, you see whether a file works on your fabric and where it does not.' },
     files: ['patch.pes'],
-    published: '2026-10-08T21:32:32+02:00',
+    published: '2026-10-11T20:50:06+02:00',
   },
   {
     key: '08-beheben-und-vergleichen',

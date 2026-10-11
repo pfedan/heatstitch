@@ -115,10 +115,10 @@ export default {
   part: 7,
   voice: {
     model: 'google/gemini-3.1-flash-tts',
-    voice: 'Aoede',
+    voice: 'Gacrux',
     language: 'de-DE',
     prompt:
-      'Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.',
+      'Speak German like a seasoned embroidery master teaching a workshop: mature, composed, precise, quietly authoritative but kind. Every word placed with care, with understated pride.',
   },
   lead: 0.4,
   tail: 0.6,
@@ -129,7 +129,7 @@ export default {
       textEn: 'Before you stitch a finished embroidery file, check whether it will turn out well on your fabric. I drag this patch into the window: a star and the lettering Heat Stitch.',
       run: async (s) => {
         await s.move([960, 300], 0.1);
-        await s.wait(4.4);
+        await s.wait(6.6);
         await dragFileIn(s, [1915, 560], [960, 560]);
         await until(s, async () => (await btn(s, 'patch.pes').count()) > 0, 'patch.pes opens');
         await s.move(REST, 1.2);
@@ -234,9 +234,9 @@ export default {
       },
     },
     {
-      say: 'Die Zeile Dichte nennt die betroffene Fläche und die Zahl der Stellen. Ein Klick springt zur schlimmsten. Mit dem Mausrad zoome ich etwas heraus: Es ist der Querbalken im A.',
-      text: 'Die Zeile Dichte nennt die betroffene Fläche und die Zahl der Stellen. Ein Klick springt zur schlimmsten. Mit dem Mausrad zoome ich etwas heraus: Es ist der Querbalken im A.',
-      textEn: 'The Density row names the affected area and the number of spots. A click jumps to the worst one. With the mouse wheel I zoom out a little: it is the crossbar of the A.',
+      say: 'Die Zeile Dichte nennt die betroffene Fläche und die Zahl der Stellen. Ein Klick springt zur schlimmsten. Mit Strg und dem Mausrad zoome ich etwas heraus: Es ist der Querbalken im A.',
+      text: 'Die Zeile Dichte nennt die betroffene Fläche und die Zahl der Stellen. Ein Klick springt zur schlimmsten. Mit Strg und dem Mausrad zoome ich etwas heraus: Es ist der Querbalken im A.',
+      textEn: 'The Density row names the affected area and the number of spots. A click jumps to the worst one. With Ctrl and the mouse wheel I zoom out a little: it is the crossbar of the A.',
       run: async (s) => {
         const row = btn(s, /^Dichte /);
         await s.zoom([1760, 280, 0, 0], 1.8);
@@ -248,8 +248,10 @@ export default {
         await s.click(null, { before: 0.4, after: 0.8 });
         await s.wait(2.2);
         await s.move([800, 470], 1.0);
+        s.keyCap('Strg + Mausrad');
         await wheelZoom(s, 6, 0.3);
         await s.wait(0.6);
+        s.keyCap(null);
         await s.label('Querbalken im A', [700, 500, 200, 60], 'above');
         await s.wait(2.2);
         s.unlabel();

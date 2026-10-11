@@ -1,12 +1,14 @@
 # Teil 7: Stickdatei prüfen
 
-Schlüssel `07-stickdatei-pruefen`, Demodatei `public/examples/demos/patch.pes` (Aufnäher 84 × 84 mm: Rand in Tangerine, dunkle Füllung, Stern in Harvest Gold, Satinschrift HEAT STITCH in Weiß, 9.135 Stiche), etwa 2 Minuten, 270 Wörter.
+Schlüssel `07-stickdatei-pruefen`, Demodatei `public/examples/demos/patch.pes` (Aufnäher 84 × 84 mm: Rand in Tangerine, dunkle Füllung, Stern in Harvest Gold, Satinschrift HEAT STITCH in Weiß, 9.135 Stiche), 2:43 lang mit der Stimme Gacrux, 272 Wörter.
+
+Neu aufgenommen im Oktober 2026 (main 270d30b): gleicher Ablauf, neues Bild, in Szene 6 „Mit Strg und dem Mausrad“. Stimme abweichend von der Serie: Gacrux.
 
 Prüfen zeigt, ob eine fertige Stickdatei auf dem gewählten Stoff gut wird. Stand mit patch.pes: auf Webware gelb „Mit Vorsicht auf Webware“, Dichte 68 mm² Vorsicht an 10 Stellen, 20 Zonen (10 Vorsicht, 10 praxisüblich); auf Strick rot „Riskant auf Strick“ mit 11 kritischen Zonen. Die schlimmste Zone #1 liegt im Querbalken des A. Nach dem Quittieren einer Zone zeigt Prüfen 9 statt 10.
 
 Die Datei steht nicht unter „Weitere Beispiele“; sie wird wie im Ordner ins Fenster gezogen (eine Dateikarte „patch.pes“ fährt mit dem Zeiger herein).
 
-Ein Klick auf eine Zone zoomt bis über 2.000 %, dort ist nur noch Farbe zu sehen. Das Video zoomt danach mit dem Mausrad ein Stück heraus, damit man sieht, wo die Stelle liegt.
+Ein Klick auf eine Zone zoomt bis über 2.000 %, dort ist nur noch Farbe zu sehen. Das Video zoomt danach mit Strg und dem Mausrad ein Stück heraus (seit #287 verschiebt das Mausrad allein die Bühne), damit man sieht, wo die Stelle liegt.
 
 ## Szene 1
 
@@ -40,13 +42,13 @@ Ein Klick auf eine Zone zoomt bis über 2.000 %, dort ist nur noch Farbe zu sehe
 
 ## Szene 6
 
-**Bild:** Spalte zurück nach oben. Heranzoomen auf die Zeile Dichte, Etikett Dichte. Klick: die Bühne springt ganz nah an Zone #1. Mausrad sechs Rasten heraus, Etikett Querbalken im A.
+**Bild:** Spalte zurück nach oben. Heranzoomen auf die Zeile Dichte, Etikett Dichte. Klick: die Bühne springt ganz nah an Zone #1. Tastenkappe „Strg + Mausrad“, sechs Rasten heraus, Etikett Querbalken im A.
 
-**Sprechtext:** Die Zeile Dichte nennt die betroffene Fläche und die Zahl der Stellen. Ein Klick springt zur schlimmsten. Mit dem Mausrad zoome ich etwas heraus: Es ist der Querbalken im A.
+**Sprechtext:** Die Zeile Dichte nennt die betroffene Fläche und die Zahl der Stellen. Ein Klick springt zur schlimmsten. Mit Strg und dem Mausrad zoome ich etwas heraus: Es ist der Querbalken im A.
 
 ## Szene 7
 
-**Bild:** Der Zeiger ruht auf der Zone, der Hinweis zeigt Prüfwert und Grenzen („Vorsicht ab 11,1, Kritisch ab 14,9“). Heranzoomen rechts, Etikett Befunde. Tastenkappe N, zweimal; jedes Mal springt die Bühne zur nächsten Zone und zoomt ein Stück heraus.
+**Bild:** Der Zeiger ruht auf der Zone, der Hinweis zeigt Prüfwert und Grenzen („Vorsicht ab 11,3, Kritisch ab 14,9“). Heranzoomen rechts, Etikett Befunde. Tastenkappe N, zweimal; jedes Mal springt die Bühne zur nächsten Zone und zoomt ein Stück heraus.
 
 **Sprechtext:** Zeigst du auf eine Stelle, nennt der Hinweis ihren Prüfwert und die Grenzen für deinen Stoff. Unter Befunde steht jede Zone als Karte. Mit N gehst du sie der Reihe nach durch.
 
