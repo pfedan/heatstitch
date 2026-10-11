@@ -5,6 +5,10 @@
 const btn = (s, name) => s.page.getByRole('button', { name }).first();
 // Gestalten and Prüfen are radio buttons inside their labels.
 const mode = (s, name) => s.page.locator('label', { has: s.page.getByRole('radio', { name }) }).first();
+// Stretches the waits and glides of a scene to the pace of its take, so labels keep up with
+// the words (the timings were set for a faster voice).
+const paced = (r, run) => (s) =>
+  run({ ...s, wait: (sec) => s.wait(sec * r), move: (target, sec = 0.8) => s.move(target, sec * r) });
 
 export default {
   title: 'Die heatstitch Oberfläche',
@@ -23,7 +27,7 @@ export default {
       say: '[warm, inviting] Das ist heatstitch, dein Stickprogramm im Browser. Ein frischer Start fragt: Was möchtest du sticken? Du kannst eine Stickdatei öffnen, ein Bild umwandeln, leer anfangen oder ein Beispiel ansehen.',
       text: 'Das ist heatstitch, dein Stickprogramm im Browser. Ein frischer Start fragt: Was möchtest du sticken? Du kannst eine Stickdatei öffnen, ein Bild umwandeln, leer anfangen oder ein Beispiel ansehen.',
       textEn: 'This is heatstitch, your embroidery program in the browser. A fresh start asks: What would you like to embroider? You can open an embroidery file, convert an image, start empty or look at an example.',
-      run: async (s) => {
+      run: paced(1.14, async (s) => {
         await s.move([960, 300], 0.1);
         await s.wait(5.2);
         for (const [name, word, sec] of [
@@ -37,23 +41,23 @@ export default {
           await s.wait(sec);
         }
         s.unlabel();
-      },
+      }),
     },
     {
       say: 'Unter „Weitere Beispiele“ öffne ich die Katze, eine fertige Stickdatei.',
       text: 'Unter „Weitere Beispiele“ öffne ich die Katze, eine fertige Stickdatei.',
       textEn: 'Under “More examples” I open the cat, a finished embroidery file.',
-      run: async (s) => {
+      run: paced(1.23, async (s) => {
         await s.click(btn(s, /^Katze/), { move: 1.0, before: 0.8 });
         await s.move([980, 620], 1.0);
         await s.wait(1.6);
-      },
+      }),
     },
     {
       say: 'Oben links steht ihr Name. Ein Klick darauf öffnet das Stickmuster-Menü: Neu, Öffnen und deine offenen Stickmuster. Daneben liegen Rückgängig und Wiederholen.',
       text: 'Oben links steht ihr Name. Ein Klick darauf öffnet das Stickmuster-Menü: Neu, Öffnen und deine offenen Stickmuster. Daneben liegen Rückgängig und Wiederholen.',
       textEn: 'Its name is at the top left. A click on it opens the design menu: New, Open and your open designs. Next to it are Undo and Redo.',
-      run: async (s) => {
+      run: paced(1.15, async (s) => {
         const name = btn(s, /cat-60mm/);
         await s.zoom([0, 0, 640, 360], 1.8);
         await s.move(name, 1.0);
@@ -71,13 +75,13 @@ export default {
         await s.wait(1.0);
         s.unlabel();
         s.zoomOut();
-      },
+      }),
     },
     {
       say: 'In der Mitte wechselst du zwischen Gestalten und Prüfen. [curious] Prüfen sucht Stellen, an denen es beim Sticken haken könnte.',
       text: 'In der Mitte wechselst du zwischen Gestalten und Prüfen. Prüfen sucht Stellen, an denen es beim Sticken haken könnte.',
       textEn: 'In the middle you switch between Design and Check. Check looks for spots where stitching could go wrong.',
-      run: async (s) => {
+      run: paced(1.14, async (s) => {
         await s.zoom([960, 24, 0, 0], 1.6);
         await s.move(mode(s, 'Gestalten'), 1.0);
         await s.label('Gestalten', mode(s, 'Gestalten'), 'below');
@@ -86,13 +90,13 @@ export default {
         await s.label('Prüfen', mode(s, /^Prüfen/), 'below');
         await s.wait(4.5);
         s.unlabel();
-      },
+      }),
     },
     {
       say: 'Oben rechts findet „Suchen“ jeden Befehl, schneller geht es mit Strg K. Ich schalte so die realistischen Fäden ein. [delighted] Jetzt sieht die Katze aus wie gestickt. Daneben ist Speichern. Im Menü mit den drei Punkten wählst du die Sprache und findest die Anleitung und die Tastenkürzel.',
       text: 'Oben rechts findet „Suchen“ jeden Befehl, schneller geht es mit Strg+K. Ich schalte so die realistischen Fäden ein. Jetzt sieht die Katze aus wie gestickt. Daneben ist Speichern. Im Menü mit den drei Punkten wählst du die Sprache und findest die Anleitung und die Tastenkürzel.',
       textEn: 'At the top right, “Search” finds every command, even quicker with Ctrl+K. This is how I turn on realistic threads. Now the cat looks truly embroidered. Next to it is Save. In the menu with the three dots you choose the language and find the guide and the keyboard shortcuts.',
-      run: async (s) => {
+      run: paced(1.12, async (s) => {
         s.zoomOut();
         await s.move(btn(s, /^Suchen/), 1.0);
         await s.label('Suchen', btn(s, /^Suchen/), 'below');
@@ -118,13 +122,13 @@ export default {
         await s.wait(4.0);
         await s.press('Escape', { show: 0 });
         s.zoomOut();
-      },
+      }),
     },
     {
       say: 'Links an der Bühne liegt die Werkzeugleiste. Damit zeichnest du Rechtecke, Ellipsen, Pfade, Freihandlinien und Text.',
       text: 'Links an der Bühne liegt die Werkzeugleiste. Damit zeichnest du Rechtecke, Ellipsen, Pfade, Freihandlinien und Text.',
       textEn: 'On the left of the stage is the toolbar. With it you draw rectangles, ellipses, paths, freehand lines and text.',
-      run: async (s) => {
+      run: paced(1.1, async (s) => {
         await s.zoom([24, 260, 0, 0], 1.8);
         await s.move(btn(s, 'Wählen'), 1.2);
         await s.label('Werkzeugleiste', [8, 60, 32, 400], 'right');
@@ -132,13 +136,13 @@ export default {
         for (const name of ['Rechteck', 'Ellipse', 'Pfad', 'Freihand', 'Text']) await s.move(btn(s, name), 0.9);
         await s.wait(0.6);
         s.unlabel();
-      },
+      }),
     },
     {
       say: 'Daneben stehen „Farben und Objekte“. Jede Farbe ist ein Garn. Klappst du sie auf, siehst du ihre Objekte, in der Reihenfolge, in der die Maschine stickt.',
       text: 'Daneben stehen „Farben und Objekte“. Jede Farbe ist ein Garn. Klappst du sie auf, siehst du ihre Objekte, in der Reihenfolge, in der die Maschine stickt.',
       textEn: 'Next to it are “Colors and objects”. Each color is a thread. Expand it and you see its objects, in the order the machine stitches them.',
-      run: async (s) => {
+      run: paced(1.11, async (s) => {
         await s.zoom([200, 300, 0, 0], 1.6);
         await s.move([200, 160], 1.0);
         await s.label('Farben und Objekte', [70, 70, 260, 0], 'below');
@@ -147,13 +151,13 @@ export default {
         await s.click(btn(s, /^Die 18 Objekte zeigen/), { move: 0.8 });
         await s.move([200, 420], 1.2);
         await s.wait(1.0);
-      },
+      }),
     },
     {
       say: '[focused] In der Mitte liegt die Bühne. Ein Klick wählt ein Objekt. Oben zeigt der Breadcrumb, wo du gerade bist. Darunter erscheint die Aktionsleiste. Hier liegt, was du mit dem gewählten Objekt tun kannst, etwa duplizieren, spiegeln oder die Form bearbeiten.',
       text: 'In der Mitte liegt die Bühne. Ein Klick wählt ein Objekt. Oben zeigt der Breadcrumb, wo du gerade bist. Darunter erscheint die Aktionsleiste. Hier liegt, was du mit dem gewählten Objekt tun kannst, etwa duplizieren, spiegeln oder die Form bearbeiten.',
       textEn: 'In the middle is the stage. A click selects an object. At the top, the breadcrumb shows where you are. Below it the action bar appears. It holds what you can do with the selected object, such as duplicate, mirror or edit the shape.',
-      run: async (s) => {
+      run: paced(1.35, async (s) => {
         s.zoomOut();
         await s.move([975, 400], 1.2);
         await s.wait(1.2);
@@ -180,13 +184,13 @@ export default {
         s.unlabel();
         await s.wait(1.6);
         s.zoomOut();
-      },
+      }),
     },
     {
       say: 'Unten rechts ist die Ansichtsleiste: das Auge für das Ansicht-Menü, daneben Hervorheben, Messen, Zoom und Einpassen. Unten links zeigt der Maßstab, wie groß alles wirklich ist.',
       text: 'Unten rechts ist die Ansichtsleiste: das Auge für das Ansicht-Menü, daneben Hervorheben, Messen, Zoom und Einpassen. Unten links zeigt der Maßstab, wie groß alles wirklich ist.',
       textEn: 'At the bottom right is the view bar: the eye for the view menu, next to it highlight, measure, zoom and fit. At the bottom left, the scale shows how big everything really is.',
-      run: async (s) => {
+      run: paced(1.45, async (s) => {
         const view = s.page.getByRole('toolbar', { name: 'Ansicht' });
         // The eye button is named after the look that is on (Stiche, Realistisch …).
         const eye = view.getByRole('button').first();
@@ -214,13 +218,13 @@ export default {
         await s.wait(2.8);
         s.unlabel();
         s.zoomOut();
-      },
+      }),
     },
     {
       say: 'Rechts liegen die Karten. Die Karte Objekt zeigt die Eigenschaften des gewählten Objekts, etwa Größe, Mitte und Stichart. Die Karte Stickmuster gilt für das ganze Muster: Stickrahmen, Vorlage, Stoff und Garn.',
       text: 'Rechts liegen die Karten. Die Karte Objekt zeigt die Eigenschaften des gewählten Objekts, etwa Größe, Mitte und Stichart. Die Karte Stickmuster gilt für das ganze Muster: Stickrahmen, Vorlage, Stoff und Garn.',
       textEn: 'On the right are the cards. The Object card shows the properties of the selected object, such as size, center and stitch type. The Design card covers the whole design: hoop, template, fabric and thread.',
-      run: async (s) => {
+      run: paced(1.1, async (s) => {
         await s.zoom([1760, 380, 0, 0], 1.7);
         await s.move(s.page.getByRole('tab', { name: 'Objekt' }), 1.0);
         await s.label('Karte Objekt', [1610, 60, 150, 26], 'below');
@@ -254,13 +258,13 @@ export default {
         await s.move([1650, 496], 0.5);
         await s.wait(1.2);
         s.zoomOut();
-      },
+      }),
     },
     {
       say: 'Unten ist der Player. [delighted] Mit der Leertaste siehst du, wie die Maschine Stich für Stich stickt.',
       text: 'Unten ist der Player. Mit der Leertaste siehst du, wie die Maschine Stich für Stich stickt.',
       textEn: 'At the bottom is the player. The space bar shows you how the machine stitches, stitch by stitch.',
-      run: async (s) => {
+      run: paced(1.13, async (s) => {
         await s.press('Escape', { show: 0 });
         await s.page.evaluate(() => document.activeElement?.blur());
         await s.move(btn(s, /^Abspielen/), 1.0);
@@ -271,13 +275,13 @@ export default {
         await s.press('Home', { label: 'Pos1', show: 0.5 });
         await s.press(' ', { label: 'Leertaste', show: 1.0 });
         await s.wait(4.5);
-      },
+      }),
     },
     {
       say: 'Fährst du mit der Maus über einen Knopf, erklärt ein Hinweis, was er tut, und nennt die passende Taste.',
       text: 'Fährst du mit der Maus über einen Knopf, erklärt ein Hinweis, was er tut, und nennt die passende Taste.',
       textEn: 'Hover over a button and a hint explains what it does and names the matching key.',
-      run: async (s) => {
+      run: paced(1.16, async (s) => {
         await s.tips(true);
         await s.zoom([24, 170, 0, 0], 1.8);
         await s.move(btn(s, 'Ellipse'), 1.2);
@@ -287,13 +291,13 @@ export default {
         await s.move([200, 600], 0.8);
         await s.tips(false);
         s.zoomOut();
-      },
+      }),
     },
     {
       say: 'Und keine Angst vor Fehlern. Ist etwas weg, holt Rückgängig es zurück, Schritt für Schritt.',
       text: 'Und keine Angst vor Fehlern. Ist etwas weg, holt Rückgängig es zurück, Schritt für Schritt.',
       textEn: 'And no fear of mistakes. If something is gone, Undo brings it back, step by step.',
-      run: async (s) => {
+      run: paced(1.44, async (s) => {
         // The player of scene 10 may still run; Ende shows all stitches again.
         await s.page.keyboard.press('End');
         await s.move([1000, 700], 1.0);
@@ -302,17 +306,17 @@ export default {
         await s.click(btn(s, 'Rückgängig'), { move: 1.2, before: 0.4 });
         await s.move([960, 700], 1.0);
         await s.wait(1.0);
-      },
+      }),
     },
     {
       say: '[warm] Alles bleibt in deinem Browser. Deine Dateien verlassen nie dein Gerät, und beim nächsten Besuch ist alles noch da. [proud, warm] Viel Spaß beim Sticken!',
       text: 'Alles bleibt in deinem Browser. Deine Dateien verlassen nie dein Gerät, und beim nächsten Besuch ist alles noch da. Viel Spaß beim Sticken!',
       textEn: 'Everything stays in your browser. Your files never leave your device, and on your next visit everything is still there. Have fun embroidering!',
-      run: async (s) => {
+      run: paced(1.3, async (s) => {
         await s.press('Escape', { show: 0 });
         await s.move([1300, 760], 1.4);
         await s.wait(4.0);
-      },
+      }),
     },
   ],
 };
