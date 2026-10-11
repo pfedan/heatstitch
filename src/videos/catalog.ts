@@ -186,11 +186,11 @@ export const VIDEOS: Video[] = [
     key: '13-form-und-einzelne-stiche',
     part: 13,
     title: { de: 'Form und einzelne Stiche', en: 'Shape and single stitches' },
-    length: '2:38',
+    length: '3:20',
     group: 'detail',
-    goal: { de: 'Du änderst die Form eines Objekts an seinen Knoten und setzt, verschiebst und dünnst einzelne Stiche aus.', en: "You change an object's shape at its nodes and add, move and thin out single stitches." },
+    goal: { de: 'Du änderst die Form eines Objekts an seinen Knoten und setzt, verschiebst, ergänzt und dünnst einzelne Stiche aus.', en: "You change an object's shape at its nodes and add, move, extend and thin out single stitches." },
     files: ['cat-60mm.pes'],
-    published: '2026-10-09T12:22:19+02:00',
+    published: '2026-10-11T13:04:55+02:00',
   },
 ];
 
