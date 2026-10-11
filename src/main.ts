@@ -1489,7 +1489,7 @@ const profile = bindProfile(settings, () => {
   // Classification is cheap: the design is re-checked instantly against the new limits.
   storeMaterial();
   // Another fabric: what suits it better is offered, never changed silently.
-  tuneToFabric(true);
+  void tuneToFabric(true);
   imageMode.profileChanged();
   controls.refresh();
   ui.hoverZone = ui.selectedZone = null;
@@ -1977,4 +1977,4 @@ void loadCatalogs()
   })
   .catch((err) => console.warn('No thread catalogs', err));
 
-$('fabric-tune').addEventListener('click', () => tuneToFabric());
+$('fabric-tune').addEventListener('click', () => void tuneToFabric());

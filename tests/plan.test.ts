@@ -2,11 +2,14 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { applyProposals, crop, fineZones, planCorrection } from '../src/correct/plan';
 import { sewObjects } from '../src/model/objects';
-import { STITCH, TRIM } from '../src/model/pattern';
-import { forget, objectKey, remember, remembered, rememberedIn } from '../src/model/restitch';
+import { STITCH, TRIM, type Pattern } from '../src/model/pattern';
+import { forget, objectKey, openOnPurpose, remember, remembered, rememberedIn, restoreRemembered } from '../src/model/restitch';
+import { fromStored } from '../src/storage/fileStore';
+import { decodeProject } from '../src/storage/project';
+import { measurePattern } from '../src/validation/measure';
 import { parsePattern } from '../src/parsers';
 import type { Profile } from '../src/validation/profiles';
-import { ALL_CHECKS, validatePattern } from '../src/validation/validate';
+import { ALL_CHECKS, classify, validatePattern } from '../src/validation/validate';
 
 const load = (f: string) => parsePattern(readFileSync(new URL(`../public/examples/${f}`, import.meta.url)), f);
 const KNIT: Profile = { fabric: 'knit', thread: '40' };
@@ -102,7 +105,7 @@ describe('tuning to the fabric', () => {
     const { planFabric } = await import('../src/correct/plan');
     const p = load('demos/overlap.pes');
     const loose: Profile = { fabric: 'terry', thread: '40' };
-    const list = planFabric(p, loose);
+    const list = (await planFabric(p, loose, ALL_CHECKS, { trimMm: 2 })).proposals;
     expect(list.length).toBeGreaterThan(0);
     for (const x of list) {
       const sp = x.changes.find((c) => c.field === 'spacing');
@@ -111,12 +114,53 @@ describe('tuning to the fabric', () => {
     const objs = sewObjects(p);
     for (const o of objs) remember(p, o, { region: null, lock: true });
     try {
-      expect(planFabric(p, loose)).toEqual([]);
+      expect((await planFabric(p, loose, ALL_CHECKS, { trimMm: 2 })).proposals).toEqual([]);
     } finally {
       for (const o of objs) forget(p, o);
     }
   });
+
+  // Tuning to knit once doubled the underlay and the rows at section joins of fills lying on other
+  // fills, and the check rightly counted the thread: the cat went from 28 to 33 mm² critical, the
+  // shapes benchmark from 44 to 74 (found while making video 18).
+  it.each([
+    ['cat-60mm.pes', () => load('cat-60mm.pes')],
+    ['shapes-benchmark.pes', () => wild('shapes-benchmark.pes')],
+  ])('never makes the check of %s worse, and says what it left out', async (_, open) => {
+    const { planFabric } = await import('../src/correct/plan');
+    const p = await open();
+    const plan = await planFabric(p, KNIT, ALL_CHECKS, { trimMm: 2 });
+    const done = applyProposals(p, plan.proposals, 2)!.pattern;
+    const before = checked(p);
+    const after = checked(done);
+    expect(after.criticalCells).toBeLessThanOrEqual(before.criticalCells);
+    expect(after.cautionCells + after.criticalCells).toBeLessThanOrEqual(before.cautionCells + before.criticalCells);
+    expect(Object.keys(plan.held).length).toBeGreaterThan(0);
+  }, 60_000);
+
+  it('makes spacing denser only where the fabric shows through', async () => {
+    const { planFabric } = await import('../src/correct/plan');
+    const p = load('cat-60mm.pes');
+    for (const x of (await planFabric(p, KNIT, ALL_CHECKS, { trimMm: 2 })).proposals) {
+      const sp = x.changes.find((c) => c.field === 'spacing');
+      // The cat's light fills (1.44 and 0.6 mm) stay light: nothing shows through there.
+      if (sp && Number(sp.from) > 0.55) expect(Number(sp.to)).toBeGreaterThanOrEqual(Number(sp.from));
+    }
+  }, 60_000);
 });
+
+/** The check as the app runs it: fills light on purpose are not counted as gaps. */
+function checked(p: Pattern) {
+  return classify(measurePattern(p, openOnPurpose(p, sewObjects(p)) ?? undefined), KNIT, ALL_CHECKS);
+}
+
+/** A design of the project with wild stitches (tests/fixtures), with what its objects remember. */
+async function wild(name: string): Promise<Pattern> {
+  const file = (await decodeProject(new Uint8Array(readFileSync(new URL('./fixtures/wild-stitches.heatstitch', import.meta.url))))).files.find((f) => f.name === name)!;
+  const p = fromStored(parsePattern(file.data, file.name), file.working)!;
+  restoreRemembered(p, file.objects);
+  return p;
+}
 
 describe('rules as defaults for what is made here', () => {
   it('gives small fills no underlay and large fills on stretchy fabric crossing layers', async () => {

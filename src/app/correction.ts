@@ -19,7 +19,7 @@ import { syncBorders } from '../model/border';
 import { t, type Key, formatNumber } from '../i18n';
 import { type Cells, type PlanRow, type PlanView, CorrectPanel } from '../ui/correctPanel';
 import { type Pattern, computeBounds } from '../model/pattern';
-import { type Plan, planFabric, planCorrection, fineZones, applyProposals, type Box, wanted } from '../correct/plan';
+import { type Plan, type Held, planFabric, planCorrection, fineZones, applyProposals, type Box, wanted } from '../correct/plan';
 import { type ValidationResult, classify } from '../validation/validate';
 import { ui } from './state';
 
@@ -95,37 +95,91 @@ export function bindCorrection(app: CorrectionApp) {
     return rows;
   }
 
+  /** Counts the runs of tuneToFabric: only the latest one shows its result. */
+  let tuneRun = 0;
+
   /**
    * "Auf Stoff abstimmen": the settings that suit the material better, as proposals in the
-   * correction card (nothing changes before they are taken over). `quiet`: say nothing when none.
+   * correction card (nothing changes before they are taken over), each checked on its object
+   * first; what the check would count against is left out and said. `quiet`: say nothing when none,
+   * and show no progress (it follows a change of fabric).
    */
-  function tuneToFabric(quiet = false): void {
+  async function tuneToFabric(quiet = false): Promise<void> {
     const f = app.files.active;
     const p = f?.pattern;
-    if (!f || !p || ui.correctMessage?.kind === 'busy' || ui.correctMessage?.kind === 'progress') return;
-    const proposals = planFabric(p, app.settings.profile);
-    const name = t(`fabric.${app.settings.profile.fabric}` as Key);
-    if (!proposals.length) {
-      if (quiet) return;
+    if (!f || !p || busy()) return;
+    const profile = { ...app.settings.profile };
+    const run = ++tuneRun;
+    // A later run takes over; a quiet one also gives way to whatever the card shows meanwhile.
+    const shown = ui.correctMessage;
+    const stale = () => run !== tuneRun || app.files.active !== f || f.pattern !== p || JSON.stringify(app.settings.profile) !== JSON.stringify(profile) || (quiet && ui.correctMessage !== shown);
+    if (!quiet) {
       ui.planState = null;
-      ui.correctMessage = { kind: 'text', text: t('tune.none', { fabric: name }) };
-      return app.redraw();
+      ui.correctMessage = { kind: 'progress', done: 0, total: 0 };
+      app.redraw();
     }
-    const plan: Plan = { proposals, fine: [], locked: 0, pattern: p };
-    const v = f.validation;
-    const view: PlanView = {
-      title: t(proposals.length === 1 ? 'tune.head.one' : 'tune.head', { n: formatNumber(proposals.length), fabric: name }),
-      rows: planRows(p, proposals),
-      fine: 0,
-      fineChecked: false,
-      locked: 0,
-      before: v ? cellsOf(v) : { critical: 0, caution: 0 },
-      after: null,
-    };
-    ui.planState = { file: f, pattern: p, plan, checked: new Set(), fine: [], fineOn: false, view };
-    planMessage();
+    try {
+      const plan = await planFabric(p, profile, app.settings.checks, {
+        trimMm: app.settings.trimMm,
+        stale,
+        progress: async (done, total) => {
+          if (!quiet && (ui.correctMessage?.kind !== 'progress' || ui.correctMessage.done !== done || ui.correctMessage.total !== total)) {
+            ui.correctMessage = { kind: 'progress', done, total };
+            app.redraw();
+          }
+          await new Promise((r) => setTimeout(r, 0));
+        },
+      });
+      if (stale()) return;
+      const name = t(`fabric.${profile.fabric}` as Key);
+      const held = heldText(plan.held);
+      const { proposals } = plan;
+      if (!proposals.length) {
+        if (quiet) return;
+        ui.planState = null;
+        ui.correctMessage = { kind: 'text', text: [t('tune.none', { fabric: name }), held].filter(Boolean).join(' ') };
+        return app.redraw();
+      }
+      const v = f.validation;
+      const after = await measured(plan.pattern);
+      if (stale()) return;
+      const view: PlanView = {
+        title: t(proposals.length === 1 ? 'tune.head.one' : 'tune.head', { n: formatNumber(proposals.length), fabric: name }),
+        rows: planRows(p, proposals),
+        fine: 0,
+        fineChecked: false,
+        locked: 0,
+        before: v ? cellsOf(v) : { critical: 0, caution: 0 },
+        after: v ? cellsOf(after) : null,
+        ...(held ? { note: held } : {}),
+      };
+      ui.planState = { file: f, pattern: p, plan: { proposals, fine: [], locked: 0, pattern: plan.pattern }, checked: new Set(), fine: [], fineOn: false, view };
+      planMessage();
+    } catch (err) {
+      console.error(err);
+      if (!quiet) ui.correctMessage = { kind: 'text', text: t('correct.error', { msg: err instanceof Error ? err.message : String(err) }) };
+    }
     app.redraw();
   }
+
+  /** What tuning left out because the check would report more there, as one sentence (empty when nothing). */
+  function heldText(held: Held): string {
+    const list = Object.entries(held)
+      .filter(([, n]) => n)
+      .map(([field, n]) => t(n === 1 ? 'tune.held.item.one' : 'tune.held.item', { what: t(HELD_NAME[field] ?? 'tune.held.other'), n: formatNumber(n!) }));
+    return list.length ? t('tune.held', { list: list.join(', ') }) : '';
+  }
+
+  /** The settings tuning may leave out, by name. */
+  const HELD_NAME: Record<string, Key> = {
+    spacing: 'tune.held.spacing',
+    underlay: 'tune.held.underlay',
+    underCross: 'tune.held.underCross',
+    edge: 'tune.held.edge',
+    edgeShare: 'tune.held.edge',
+    gapRows: 'tune.held.gapRows',
+    split: 'tune.held.split',
+  };
 
   /**
    * Shows proposals worked out elsewhere (the traffic light's visible rest) in the correction card,
@@ -390,7 +444,7 @@ export function bindCorrection(app: CorrectionApp) {
 
   const correctPanel = new CorrectPanel(app.settings, {
     plan: (scope) => void planFix(scope),
-    tune: () => tuneToFabric(),
+    tune: () => void tuneToFabric(),
     check: (ids, on) => {
       const st = ui.planState;
       if (!st) return;
