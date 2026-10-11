@@ -211,6 +211,16 @@ export const VIDEOS: Video[] = [
     files: ['apfel.svg'],
     published: '2026-10-11T21:20:05+02:00',
   },
+  {
+    key: '18-garn-stoff-und-farbliste',
+    part: 18,
+    title: { de: 'Garn, Stoff und Farbliste', en: 'Thread, fabric and color list' },
+    length: '2:24',
+    group: 'detail',
+    goal: { de: 'Du stellst ein Stickmuster auf deine Garnmarke und deinen Stoff ein, tauschst ein einzelnes Garn, stimmst die Einstellungen auf den Stoff ab und druckst die Farbliste.', en: 'You set a design to your thread brand and fabric, swap a single thread, tune the settings to the fabric and print the color list.' },
+    files: ['cat-60mm.pes'],
+    published: '2026-10-11T21:55:35+02:00',
+  },
 ];
 
 /** The video's own page (its watch page), relative to the site's base. */
