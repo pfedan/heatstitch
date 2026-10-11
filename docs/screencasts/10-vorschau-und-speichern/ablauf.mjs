@@ -127,18 +127,18 @@ export default {
   part: 10,
   voice: {
     model: 'google/gemini-3.1-flash-tts',
-    voice: 'Aoede',
+    voice: 'Gacrux',
     language: 'de-DE',
     prompt:
-      'Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.',
+      'Speak German like a seasoned embroidery master teaching a workshop: mature, composed, precise, quietly authoritative but kind. Every word placed with care, with understated pride.',
   },
   lead: 0.4,
   tail: 0.6,
   scenes: [
     {
-      say: '[warm] Bevor die Maschine losläuft, willst du sehen, wie dein Stickmuster wirklich wirkt, und alles bereitlegen. Ich ziehe diesen Aufnäher ins Fenster: [playful] eine Sechs und eine Sieben. [short pause] Du weißt schon.',
-      text: 'Bevor die Maschine losläuft, willst du sehen, wie dein Stickmuster wirklich wirkt, und alles bereitlegen. Ich ziehe diesen Aufnäher ins Fenster: eine Sechs und eine Sieben. Du weißt schon.',
-      textEn: 'Before the machine starts, you want to see how your design really looks, and get everything ready. I drag this patch into the window: a six and a seven. You know.',
+      say: '[warm] Bevor die Maschine losläuft, willst du dein Stickmuster in Ruhe ansehen und alles bereitlegen. Ich ziehe diesen Aufnäher ins Fenster: [playful] eine Sechs und eine Sieben. [short pause] Du weißt schon.',
+      text: 'Bevor die Maschine losläuft, willst du dein Stickmuster in Ruhe ansehen und alles bereitlegen. Ich ziehe diesen Aufnäher ins Fenster: eine Sechs und eine Sieben. Du weißt schon.',
+      textEn: 'Before the machine starts, you want to take a calm look at your design and get everything ready. I drag this patch into the window: a six and a seven. You know.',
       run: async (s) => {
         await s.move([960, 300], 0.1);
         await s.wait(4.6);
@@ -149,9 +149,9 @@ export default {
       },
     },
     {
-      say: 'Unten rechts auf der Bühne öffnet das Auge das Ansicht-Menü. Ich schalte Realistische Fäden ein. [delighted] Jetzt siehst du jeden Faden mit Glanz und Schatten.',
-      text: 'Unten rechts auf der Bühne öffnet das Auge das Ansicht-Menü. Ich schalte Realistische Fäden ein. Jetzt siehst du jeden Faden mit Glanz und Schatten.',
-      textEn: 'At the bottom right of the stage, the eye opens the View menu. I turn on Realistic threads. Now you see every thread with sheen and shadow.',
+      say: 'Unten rechts auf der Bühne öffnet das Auge das Ansicht-Menü. Dort schalte ich Realistische Fäden ein.',
+      text: 'Unten rechts auf der Bühne öffnet das Auge das Ansicht-Menü. Dort schalte ich Realistische Fäden ein.',
+      textEn: 'At the bottom right of the stage, the eye opens the View menu. There I turn on Realistic threads.',
       run: async (s) => {
         await s.zoom([1420, 900, 0, 0], 1.6);
         await s.move(eye(s), 1.0);
@@ -168,13 +168,13 @@ export default {
         s.unlabel();
         s.zoomOut();
         await s.move([1000, 140], 1.2);
-        await s.wait(3.0);
+        await s.wait(1.0);
       },
     },
     {
-      say: 'Darunter wählst du Hintergrund und Stoff. Mein Aufnäher kommt auf schwarzes Leder. [enthusiastic] Schon liegt er darauf, fast wie echt.',
-      text: 'Darunter wählst du Hintergrund und Stoff. Mein Aufnäher kommt auf schwarzes Leder. Schon liegt er darauf, fast wie echt.',
-      textEn: 'Below that, you choose background and fabric. My patch goes on black leather. And there it is, almost like the real thing.',
+      say: 'Darunter wählst du Hintergrund und Stoff. Mein Aufnäher kommt auf schwarzes Leder.',
+      text: 'Darunter wählst du Hintergrund und Stoff. Mein Aufnäher kommt auf schwarzes Leder.',
+      textEn: 'Below that, you choose background and fabric. My patch goes on black leather.',
       run: async (s) => {
         await s.zoom([1430, 790, 0, 0], 1.7);
         const black = viewMenu(s).getByRole('button', { name: 'Schwarz' });
@@ -189,7 +189,7 @@ export default {
         s.unlabel();
         s.zoomOut();
         await s.move([1000, 140], 1.0);
-        await s.wait(3.2);
+        await s.wait(1.0);
       },
     },
     {

@@ -12,19 +12,19 @@ Das Stickblatt öffnet die App in einem neuen Tab. Die Aufnahme zeigt nur ein Fe
 
 **Bild:** Startseite „Was möchtest du sticken?“. Eine Dateikarte „aufnaeher-67.dst“ kommt mit dem Zeiger vom rechten Rand, Loslassen in der Mitte. Gestalten öffnet den Aufnäher.
 
-**Sprechtext:** [warm] Bevor die Maschine losläuft, willst du sehen, wie dein Stickmuster wirklich wirkt, und alles bereitlegen. Ich ziehe diesen Aufnäher ins Fenster: [playful] eine Sechs und eine Sieben. [short pause] Du weißt schon.
+**Sprechtext:** [warm] Bevor die Maschine losläuft, willst du dein Stickmuster in Ruhe ansehen und alles bereitlegen. Ich ziehe diesen Aufnäher ins Fenster: [playful] eine Sechs und eine Sieben. [short pause] Du weißt schon.
 
 ## Szene 2
 
 **Bild:** Der Zeiger fährt zum Auge unten rechts auf der Bühne, Etikett Ansicht-Menü, Klick. Heranzoomen auf das Menü, Etikett Realistische Fäden, Klick. Herauszoomen: Der Aufnäher zeigt Fäden mit Glanz und Schatten.
 
-**Sprechtext:** Unten rechts auf der Bühne öffnet das Auge das Ansicht-Menü. Ich schalte Realistische Fäden ein. [delighted] Jetzt siehst du jeden Faden mit Glanz und Schatten.
+**Sprechtext:** Unten rechts auf der Bühne öffnet das Auge das Ansicht-Menü. Dort schalte ich Realistische Fäden ein.
 
 ## Szene 3
 
 **Bild:** Heranzoomen auf Hintergrund und Stoff. Etikett Hintergrund, Klick auf Schwarz. Etikett Stoff, Klick, Leder wird gewählt. Herauszoomen: Der Aufnäher liegt auf schwarzem Leder.
 
-**Sprechtext:** Darunter wählst du Hintergrund und Stoff. Mein Aufnäher kommt auf schwarzes Leder. [enthusiastic] Schon liegt er darauf, fast wie echt.
+**Sprechtext:** Darunter wählst du Hintergrund und Stoff. Mein Aufnäher kommt auf schwarzes Leder.
 
 ## Szene 4
 
