@@ -4,6 +4,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 import { readFileSync } from 'node:fs';
 import { langPage, type Page } from './src/build/langPages';
 import { expandVideos } from './src/build/videoHtml';
+import { APP_NAVIGATION, APP_PAGES } from './src/build/pageCache';
 
 // The site lives at the root of heatstitch.app; pull request previews get their own address
 // (see .github/workflows/deploy.yml), so every build uses the same base. PREVIEW=1 marks a preview build.
@@ -102,9 +103,10 @@ export default defineConfig({
       workbox: {
         // A first visit is controlled right away, so the reload button can swap versions in it too.
         clientsClaim: true,
-        // The font list and the thread catalogs come along; a font (some 100 KB to 2 MB) only once it is used, then it
-        // works offline too. The tooltip pictures are small and come along.
-        globPatterns: ['**/*.{js,css,html,svg,png,webmanifest,pes}', 'tips/*.webp', 'fonts/index.json', 'threads/catalogs.json'],
+        // Only the app's own pages are installed; the guide, the video page and the moving page always come
+        // from the server (src/build/pageCache.ts). The font list and the thread catalogs come along; a font
+        // (some 100 KB to 2 MB) only once it is used, then it works offline too. The tooltip pictures are small and come along.
+        globPatterns: [...APP_PAGES, '**/*.{js,css,svg,png,webmanifest,pes}', 'tips/*.webp', 'fonts/index.json', 'threads/catalogs.json'],
         runtimeCaching: [
           // The demo project is not part of the install (some 500 KB); it is kept once it was opened.
           {
@@ -118,11 +120,11 @@ export default defineConfig({
             options: { cacheName: 'fonts', expiration: { maxEntries: 120 } },
           },
         ],
-        // Only crawlers and link previews fetch the social image; the moving page only opens once.
-        globIgnores: ['og-image.jpg', 'umzug.html'],
-        // A file opened on its own, such as a guide picture in a new tab, must reach the network, not the
-        // cached app shell: everything with an extension but .html. So must the moving page (public/umzug.html).
-        navigateFallbackDenylist: [/\/umzug\.html(?:\?|$)/, /\/[^/?]*\.(?!html(?:\?|$))[^/?]*(?:\?.*)?$/],
+        // Only crawlers and link previews fetch the social image.
+        globIgnores: ['og-image.jpg'],
+        // The cached app answers only the app's own addresses. Any other page or file opened on its own (the
+        // guide, sitemap.xml, a guide picture in a new tab) reaches the server untouched.
+        navigateFallbackAllowlist: [APP_NAVIGATION],
       },
     }),
   ],

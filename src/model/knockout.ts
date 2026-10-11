@@ -4,8 +4,8 @@ import { storeForm, type Form } from '../shape/path';
 import { coversOver, cutAway, SATIN_SHARE, type Cover } from './covers';
 import { rememberObjects, sewObjects, type SewObject } from './objects';
 import type { Pattern } from './pattern';
-import { remember, remembered, rememberRange, type Remembered, type RestitchResult } from './restitch';
-import { reshapeFill } from './reshape';
+import { knownKind, remember, remembered, rememberRange, type Remembered, type RestitchResult } from './restitch';
+import { reshapeFill, reshapeSatin } from './reshape';
 import { stitchKinds } from './sequence';
 import { stitchesBefore } from './transform';
 import { areaOf, grownForm } from './geo';
@@ -121,9 +121,11 @@ function sewAgain(p: Pattern, index: number, knockout: boolean, trimMm: number):
   const kinds = stitchKinds(p);
   const objs = sewObjects(p, kinds);
   const o = objs[index];
-  const form = o && areaOf(remembered(p, o));
+  const known = o && remembered(p, o);
+  const form = areaOf(known);
   if (!form) return null;
-  const r = reshapeFill(p, objs, o, kinds, form, trimMm, knockout);
+  // A drawn area sewn as satin (narrow enough when it was made) leaves out as a satin, over the area left.
+  const r = (knownKind(known) ?? o.kind) === 'satin' ? reshapeSatin(p, objs, o, kinds, form, trimMm, knockout) : reshapeFill(p, objs, o, kinds, form, trimMm, knockout);
   return r && takeOver(r);
 }
 
@@ -151,8 +153,8 @@ function sewCut(p: Pattern, index: number, trimMm: number): Pattern | null {
 }
 
 /**
- * Turns leaving out on or off for the objects `which` (indices in sewing order); only fills with
- * curves take part. Null when nothing changed.
+ * Turns leaving out on or off for the objects `which` (indices in sewing order); only objects with
+ * a drawn area take part (fills, and satins made from a drawn area). Null when nothing changed.
  */
 export function setKnockout(p: Pattern, which: number[], on: boolean, trimMm: number): { pattern: Pattern; changed: number } | null {
   let cur = p;
