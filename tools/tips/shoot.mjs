@@ -124,6 +124,17 @@ const SHOTS = {
   'border-motif': [bordered(5), [572, 518, 224, 140]],
 };
 
+/** Picks a tool of the tool rail by its command. */
+const rail = (command) => (page) => page.evaluate((c) => document.querySelector(`.toolrail [data-command="${c}"]`).click(), command);
+
+/** Takes back what a loop made, so the next shot starts from the demo design as it was. */
+const undo = async (page) => {
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(800);
+  await rail('tool.select')(page);
+};
+
 /**
  * name: [how to get there, crop, pointer path, how to leave]. The path is [x, y, seconds to glide
  * there, seconds to rest, what to do there] in page pixels: 'click', 'down' and 'up' of the mouse
@@ -156,6 +167,57 @@ const MOVES = {
       [1050, 455, 0.5, 0.6, 'Escape'],
     ],
     (page) => page.evaluate(() => document.getElementById('measure-toggle').click()),
+  ],
+  // Pfad: two clicks set corners, a drag pulls a rounding, a click on the first node closes the area.
+  pen: [
+    async (page) => (await design('Blume')(page), rail('draw.pen')(page)),
+    [960, 650, 256, 160],
+    [
+      [1200, 860, 0, 0.5],
+      [1000, 690, 0.6, 0.5, 'click'],
+      [1150, 680, 0.6, 0.5, 'click'],
+      [1160, 820, 0.6, 0.2, 'down'],
+      [1100, 850, 0.5, 0.6, 'up'],
+      [1000, 690, 0.7, 2.0, 'click'],
+      [1200, 860, 0.5, 0.3],
+    ],
+    undo,
+  ],
+  // Freihand: a shaky stroke, smoothed when the mouse is let go.
+  free: [
+    async (page) => (await design('Blume')(page), rail('draw.free')(page)),
+    [960, 690, 256, 160],
+    [
+      [1200, 870, 0, 0.5],
+      [995, 800, 0.6, 0.2, 'down'],
+      [1012, 784, 0.12, 0],
+      [1024, 790, 0.1, 0],
+      [1040, 768, 0.12, 0],
+      [1052, 762, 0.1, 0],
+      [1066, 774, 0.12, 0],
+      [1081, 769, 0.1, 0],
+      [1093, 752, 0.12, 0],
+      [1108, 749, 0.1, 0],
+      [1119, 760, 0.12, 0],
+      [1136, 757, 0.1, 0],
+      [1150, 740, 0.12, 0],
+      [1172, 735, 0.15, 0.3],
+      [1173, 735, 0.05, 2.0, 'up'],
+      [1200, 870, 0.5, 0.3],
+    ],
+    undo,
+  ],
+  // Zerteilen: a line dragged across the picked petal; it becomes two objects, each sewn on its own.
+  cut: [
+    async (page) => (await design('Blume')(page), await page.mouse.click(950, 388), await page.waitForTimeout(800), rail('draw.cut')(page)),
+    [830, 300, 256, 160],
+    [
+      [1060, 440, 0, 0.5],
+      [935, 325, 0.6, 0.2, 'down'],
+      [962, 445, 1.0, 1.5, 'up'],
+      [1050, 430, 0.6, 2.0],
+    ],
+    undo,
   ],
 };
 const FPS = 12;
