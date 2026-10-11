@@ -230,6 +230,16 @@ export const VIDEOS: Video[] = [
     files: [],
     published: '2026-10-11T21:32:30+02:00',
   },
+  {
+    key: '17-logo-nachsticken',
+    part: 17,
+    title: { de: 'Logo nachsticken', en: 'Tracing a logo' },
+    length: '2:35',
+    group: 'design',
+    goal: { de: 'Du legst ein Bild als Vorlage unter, misst es aus und zeichnest es als Stickmuster nach: Füllung mit Richtung, Linien, Schrift.', en: 'You lay a picture underneath as a template, measure it and trace it as a design: fill with direction, lines, lettering.' },
+    files: ['vorlage.png', 'heatstitch-logo.heatstitch'],
+    published: '2026-10-11T21:36:06+02:00',
+  },
 ];
 
 /** The video's own page (its watch page), relative to the site's base. */
