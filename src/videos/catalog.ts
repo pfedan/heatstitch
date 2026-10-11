@@ -201,6 +201,15 @@ export const VIDEOS: Video[] = [
     goal: { de: 'Du änderst die Form eines Objekts an seinen Knoten und setzt, verschiebst, ergänzt und dünnst einzelne Stiche aus.', en: "You change an object's shape at its nodes and add, move, extend and thin out single stitches." },
     files: ['cat-60mm.pes'],
     published: '2026-10-11T13:04:55+02:00',
+  },  {
+    key: '14-applikation',
+    part: 14,
+    title: { de: 'Applikation', en: 'Appliqué' },
+    length: '2:00',
+    group: 'detail',
+    goal: { de: 'Du stickst eine Applikation: Platzierungslinie, Stoff auflegen, Heftlinie, zuschneiden, Kante.', en: 'You stitch an appliqué: placement line, lay the fabric on, tack-down, trim, edge.' },
+    files: ['apfel.svg'],
+    published: '2026-10-11T21:20:05+02:00',
   },
 ];
 
