@@ -1,29 +1,35 @@
 import { describe, expect, it } from 'vitest';
-import { pagePath } from '../src/build/langPages';
-import { READING_PAGES, READING_PAGE_URL, readingPageCache } from '../src/build/pageCache';
+import { APP_NAVIGATION, APP_PAGES } from '../src/build/pageCache';
 
-const url = (path: string) => `https://heatstitch.app/${path}`;
+/** Workbox matches the navigation allowlist against path and query. */
+const answered = (pathAndQuery: string) => APP_NAVIGATION.test(pathAndQuery);
 
-/** The guide and the video page must show their newest version without the app's update click. */
-describe('service worker: guide and video pages', () => {
-  it('keeps every guide and video page out of the precache', () => {
-    for (const lang of ['en', 'de'] as const) {
-      expect(READING_PAGES).toContain(pagePath('docs', lang));
-      expect(READING_PAGES).toContain(pagePath('videos', lang));
+/** The service worker serves only the app; every other page and file comes from the server as it is. */
+describe('service worker scope', () => {
+  it('installs the app page in each language', () => {
+    expect(APP_PAGES).toEqual(['index.html', 'de/index.html']);
+  });
+
+  it('answers the app at its addresses, with a query too', () => {
+    for (const path of ['/', '/index.html', '/de/', '/de/index.html', '/?lang=de', '/de/?file=x']) {
+      expect(answered(path), path).toBe(true);
     }
   });
 
-  it('fetches them from the network first', () => {
-    expect(readingPageCache.handler).toBe('NetworkFirst');
-    for (const page of READING_PAGES) {
-      expect(READING_PAGE_URL.test(url(page))).toBe(true);
-      expect(READING_PAGE_URL.test(url(`${page}?lang=de`))).toBe(true);
-    }
-  });
-
-  it('leaves the app itself to the precache and its update notice', () => {
-    for (const path of ['', 'index.html', 'de/', 'de/index.html', 'umzug.html', 'guide/cat-de.jpg']) {
-      expect(READING_PAGE_URL.test(url(path))).toBe(false);
+  it('leaves the guide, the video page, the sitemap and every other file to the server', () => {
+    for (const path of [
+      '/docs.html',
+      '/de/docs.html',
+      '/videos.html',
+      '/de/videos.html?x=1',
+      '/umzug.html',
+      '/sitemap.xml',
+      '/robots.txt',
+      '/guide/cat-de.jpg',
+      '/de/docs',
+      '/nope',
+    ]) {
+      expect(answered(path), path).toBe(false);
     }
   });
 });
