@@ -54,6 +54,6 @@ Ein Name entsteht von Grund auf: Werkzeug Text, Schrift aus der Liste, Größe, 
 
 ## Szene 9
 
-**Bild:** Zügig Klick auf das Auge unten rechts, Klick auf Realistische Fäden (ohne Etiketten und ohne Zoom, die Stimme nennt es nicht). Esc schließt das Menü, Heranzoomen auf den Schriftzug mit Fäden. Tastenkappen Pos1 und Leertaste: Jonas wird Stich für Stich gestickt. Dann Abspann.
+**Bild:** Zügig Klick auf das Auge unten rechts, Klick auf Realistische Fäden (ohne Etiketten und ohne Zoom, die Stimme nennt es nur kurz). Esc schließt das Menü, Heranzoomen auf den Schriftzug mit Fäden. Tastenkappen Pos1 und Leertaste: Jonas wird Stich für Stich gestickt. Dann Abspann.
 
-**Sprechtext:** Zum Schluss drücke ich die Leertaste: So siehst du, wie die Maschine deinen Schriftzug Stich für Stich stickt. [warm] Viel Spaß beim Sticken!
+**Sprechtext:** Zum Schluss schalte ich die realistische Ansicht ein und drücke die Leertaste: So siehst du, wie die Maschine deinen Schriftzug Stich für Stich stickt. [warm] Viel Spaß beim Sticken!

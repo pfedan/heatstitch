@@ -288,17 +288,17 @@ export default {
       },
     },
     {
-      say: 'Zum Schluss drücke ich die Leertaste: So siehst du, wie die Maschine deinen Schriftzug Stich für Stich stickt. [warm] Viel Spaß beim Sticken!',
-      text: 'Zum Schluss drücke ich die Leertaste: So siehst du, wie die Maschine deinen Schriftzug Stich für Stich stickt. Viel Spaß beim Sticken!',
-      textEn: 'Finally I press the space bar: this is how you see the machine stitch your lettering, stitch by stitch. Have fun embroidering!',
+      say: 'Zum Schluss schalte ich die realistische Ansicht ein und drücke die Leertaste: So siehst du, wie die Maschine deinen Schriftzug Stich für Stich stickt. [warm] Viel Spaß beim Sticken!',
+      text: 'Zum Schluss schalte ich die realistische Ansicht ein und drücke die Leertaste: So siehst du, wie die Maschine deinen Schriftzug Stich für Stich stickt. Viel Spaß beim Sticken!',
+      textEn: 'Finally I turn on the realistic view and press the space bar: this is how you see the machine stitch your lettering, stitch by stitch. Have fun embroidering!',
       run: async (s) => {
         await s.page.evaluate(() => document.activeElement?.blur());
         await quietKey(s, 'Escape');
         // Measured in the flat stitch view, before the threads get their sheen.
         const { box } = await stitches(s);
         const eye = s.page.getByRole('toolbar', { name: 'Ansicht' }).getByRole('button').first();
-        // The switch to the realistic threads is shown, not named and not labelled, and quick, so
-        // the space bar comes as the voice names it.
+        // The switch to the realistic threads is shown without labels and quick, as the voice only
+        // mentions it in passing; then the space bar.
         await s.move(eye, 0.6);
         await s.click(null, { before: 0.1, after: 0.3 });
         const real = s.page.getByRole('checkbox', { name: 'Realistische Fäden' });
