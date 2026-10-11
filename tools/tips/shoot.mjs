@@ -125,9 +125,10 @@ const SHOTS = {
 };
 
 /**
- * name: [how to get there, crop, pointer path]. The path is [x, y, seconds to glide there, seconds to
- * rest, click there] in page pixels; the real mouse follows, so hover effects show. The loop starts
- * and ends at the same spot, so it joins up without a jump.
+ * name: [how to get there, crop, pointer path, how to leave]. The path is [x, y, seconds to glide
+ * there, seconds to rest, what to do there] in page pixels: 'click', 'down' and 'up' of the mouse
+ * (a glide between them drags), or a key such as 'Escape'. The real mouse follows, so hover effects
+ * show. The loop starts and ends at the same spot, so it joins up without a jump.
  */
 const MOVES = {
   // Auto-Hervorheben: a click picks an object, it stands out and the rest goes pale; a click beside
@@ -137,11 +138,24 @@ const MOVES = {
     [463, 165, 704, 440],
     [
       [1060, 480, 0, 0.5],
-      [910, 285, 0.7, 1.3, true],
-      [815, 395, 0.6, 1.3, true],
-      [665, 395, 0.6, 1.3, true],
-      [1060, 480, 0.7, 0.9, true],
+      [910, 285, 0.7, 1.3, 'click'],
+      [815, 395, 0.6, 1.3, 'click'],
+      [665, 395, 0.6, 1.3, 'click'],
+      [1060, 480, 0.7, 0.9, 'click'],
     ],
+  ],
+  // Messen: a drag along a petal, from the center to its tip; the length shows on the line. Close in,
+  // so the label can still be read at the tooltip's size.
+  measure: [
+    async (page) => (await design('Blume')(page), page.evaluate(() => document.getElementById('measure-toggle').click())),
+    [790, 280, 304, 190],
+    [
+      [1050, 455, 0, 0.5],
+      [878, 388, 0.7, 0.3, 'down'],
+      [1022, 388, 1.0, 2.2, 'up'],
+      [1050, 455, 0.5, 0.6, 'Escape'],
+    ],
+    (page) => page.evaluate(() => document.getElementById('measure-toggle').click()),
   ],
 };
 const FPS = 12;
@@ -218,7 +232,7 @@ for (const [name, [setup, [x, y, w, h]]] of Object.entries(SHOTS)) {
 }
 const ease = (t) => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);
 
-for (const [name, [setup, [x, y, w, h], moves]] of Object.entries(MOVES)) {
+for (const [name, [setup, [x, y, w, h], moves, leave]] of Object.entries(MOVES)) {
   if (wanted.length && !wanted.includes(name)) continue;
   await toggle('live-light', false)(page);
   await setup(page);
@@ -254,7 +268,7 @@ for (const [name, [setup, [x, y, w, h], moves]] of Object.entries(MOVES)) {
   };
   await page.mouse.move(...at);
   await page.waitForTimeout(1500);
-  for (const [tx, ty, glide, rest, click] of moves) {
+  for (const [tx, ty, glide, rest, act] of moves) {
     const from = at;
     const steps = Math.round(glide * FPS);
     for (let i = 1; i <= steps; i++) {
@@ -265,10 +279,14 @@ for (const [name, [setup, [x, y, w, h], moves]] of Object.entries(MOVES)) {
     }
     at = [tx, ty];
     await page.mouse.move(tx, ty);
-    if (click) await page.mouse.click(tx, ty);
+    if (act === 'click') await page.mouse.click(tx, ty);
+    else if (act === 'down') await page.mouse.down();
+    else if (act === 'up') await page.mouse.up();
+    else if (act) await page.keyboard.press(act);
+    const pressed = act === 'click' || act === 'down';
     const still = Math.round(rest * FPS);
     for (let i = 0; i < still; i++) {
-      ring = click && i < 5 ? i / 5 : null;
+      ring = pressed && i < 5 ? i / 5 : null;
       await frame();
     }
     ring = null;
@@ -277,6 +295,7 @@ for (const [name, [setup, [x, y, w, h], moves]] of Object.entries(MOVES)) {
   execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-framerate', String(FPS), '-i', path.join(dir, '%04d.png'), '-c:v', 'libwebp_anim', '-lossless', '0', '-quality', '70', '-loop', '0', path.join(OUT, `${name}.webp`)]);
   fs.rmSync(dir, { recursive: true });
   await quiet.evaluate((el) => el.remove());
+  await leave?.(page);
   console.log(`${name}.webp (${n} frames)`);
 }
 await browser.close();
