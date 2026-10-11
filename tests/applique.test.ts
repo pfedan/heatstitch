@@ -113,6 +113,34 @@ describe('appliqué', () => {
     expect(appliqueStops(p).size).toBe(2);
   });
 
+  it('can have a running edge over its tack-down, repeated or in bean stitch, kept on save', async () => {
+    const d = design();
+    const p0 = d.cur.p;
+    const blocks = colorBlocks(p0);
+    const stitchesIn = (p: Pattern, b: number) => {
+      const bl = colorBlocks(p)[b];
+      const out: number[] = [];
+      for (let i = bl.first; i <= bl.last; i++) if (p.cmd[i] === STITCH) out.push(Math.hypot(p.x[i] / 10 - 15, p.y[i] / 10 - 15));
+      return out;
+    };
+    expect(blocks.length).toBe(4);
+    expect(shapes(d, setApplique(p0, [1], { edge: 'run' }, T))).toBe(true);
+    const once = stitchesIn(d.cur.p, 2);
+    // On the tack-down, inside the cut edge: nothing over the outline, nothing deep inside.
+    expect(once.every((r) => r > 13.8 && r < 14.8)).toBe(true);
+    expect(appliqueStops(d.cur.p).size).toBe(2);
+    expect(shapes(d, setApplique(d.cur.p, [1], { run: { type: 'triple', width: 0 } }, T))).toBe(true);
+    const bean = stitchesIn(d.cur.p, 2);
+    expect(bean.length / once.length).toBeGreaterThan(2.5);
+    expect(bean.length / once.length).toBeLessThan(3.5);
+    checkWellFormed(d.cur.p);
+    checkExport(d.cur.p);
+    await saveAndOpen(d);
+    const a = sewObjects(d.cur.p)[1];
+    expect(remembered(d.cur.p, a)?.applique).toMatchObject({ edge: 'run', run: { type: 'triple' } });
+    expect(stitchesIn(d.cur.p, 2).length).toBe(bean.length);
+  });
+
   it('a recolor takes the stops along, and back to a fill it is sewn as before', () => {
     const d = design();
     const q = recolor(d.cur.p, 0, { r: 1, g: 2, b: 3 });

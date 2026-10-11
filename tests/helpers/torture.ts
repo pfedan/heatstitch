@@ -1033,7 +1033,7 @@ export const APPLIQUE_OPS: Op[] = [
     run: (d, r) => {
       const as = appliquesOf(d.cur.p).filter((o) => !remembered(d.cur.p, o)?.free);
       if (!as.length) return false;
-      const change = pick(r, [{ edge: 'e' as const }, { edge: 'satin' as const }, { width: between(r, 2, 4.5) }, { fabric: pick(r, APPLIQUE_FABRICS), color: pick(r, COLORS) }]);
+      const change = pick(r, [{ edge: 'e' as const }, { edge: 'satin' as const }, { edge: 'run' as const, run: pick(r, [{ type: 'run' as const, width: 0 }, { type: 'run' as const, width: 0, repeat: 2 }, { type: 'triple' as const, width: 0 }, { type: 'triple' as const, width: 0, repeat: 5 }]) }, { width: between(r, 2, 4.5) }, { fabric: pick(r, APPLIQUE_FABRICS), color: pick(r, COLORS) }]);
       return shapes(d, setApplique(d.cur.p, [pick(r, as).index], change, T));
     },
   },
