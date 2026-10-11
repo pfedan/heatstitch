@@ -103,13 +103,13 @@ export default defineConfig({
         name: 'heatstitch',
         short_name: 'heatstitch',
         description: 'View, edit and check DST and PES embroidery files, and turn pictures into stitches',
-        theme_color: '#1b1026',
+        theme_color: '#0b1424',
         background_color: '#141118',
         display: 'standalone',
         icons: [
           { src: 'pwa-192.png', sizes: '192x192', type: 'image/png' },
           { src: 'pwa-512.png', sizes: '512x512', type: 'image/png' },
-          { src: 'pwa-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+          { src: 'pwa-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
         file_handlers: [
           {

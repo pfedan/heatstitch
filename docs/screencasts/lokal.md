@@ -6,10 +6,10 @@ Claude-Thread, der dort arbeitet. Was ein Video zeigt und wie es aussieht, steht
 
 ## Branches
 
-`claude/project-thread-xszfzs` ist die gemeinsame Basis: Konzept und Werkzeuge. Jede Aufnahme
-bekommt einen eigenen Branch davon, benannt nach dem Schlüssel des Videos, zum Beispiel
-`screencast/01-neues-stickmuster`. Ändert eine Aufnahme ein Werkzeug, kommt die Änderung
-zurück in die Basis, damit die nächste Aufnahme sie hat.
+`main` ist die Basis: Konzept und Werkzeuge. Jede Aufnahme bekommt einen eigenen Branch davon,
+benannt nach dem Schlüssel des Videos, zum Beispiel `screencast/01-neues-stickmuster`, und
+einen eigenen Pull Request gegen main. Ändert eine Aufnahme ein Werkzeug, kommt die Änderung
+mit diesem Pull Request nach main, damit die nächste Aufnahme sie hat.
 
 ## Einmal einrichten
 
@@ -19,7 +19,6 @@ Schrift Inter.
 ```sh
 git clone https://github.com/pfedan/heatstitch.git
 cd heatstitch
-git switch claude/project-thread-xszfzs
 npm install
 npx playwright install chromium
 python3 -m pip install Pillow
@@ -97,7 +96,7 @@ Jede Zeile muss `ok` zeigen. Für eine fehlende Sache steht darunter, was zu tun
 6. **Abnahme.** Video ansehen, Daniel schickt Änderungen. Geänderte Sätze kosten nur ihre
    eigene Sprachaufnahme neu.
 7. **Ablegen.** Nur Vorlage, Ablauf und `material/` in den Branch des Videos, Pull Request
-   gegen die Basis. `ton/` und die fertigen Dateien bleiben draußen (`ton/` steht in
+   gegen main. `ton/` und die fertigen Dateien bleiben draußen (`ton/` steht in
    `.gitignore`); wohin sie kommen, regelt das Konzept unter „Fertige Dateien“.
 
 ## Gut zu wissen
