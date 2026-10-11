@@ -1884,6 +1884,9 @@ const { showObjectMenu } = bindPointer({
   get styleFor() {
     return styleFor;
   },
+  get syncFrame() {
+    return syncFrame;
+  },
   get threadsShown() {
     return threadsShown;
   },

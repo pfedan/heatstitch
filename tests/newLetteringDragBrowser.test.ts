@@ -24,11 +24,14 @@ describe.skipIf(!on)('a new lettering on a new design', () => {
       const k = c.width / c.clientWidth;
       const d = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data;
       let x0 = Infinity, y0 = Infinity, x1 = -1, y1 = -1;
+      let on: [number, number] = [-1, -1];
       for (let y = 0; y < c.height; y += 2)
         for (let x = 0; x < c.width; x += 2) {
           const i = (y * c.width + x) * 4;
           if (!(d[i] > 180 && d[i + 1] < 80 && d[i + 2] < 80)) continue;
           x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y);
+          // A point on the thread with thread all round it.
+          if (on[0] < 0 && [[-4, 0], [4, 0], [0, -4], [0, 4]].every(([dx, dy]) => d[((y + dy) * c.width + x + dx) * 4] > 180)) on = [x / k, y / k];
         }
       // The hoop's line is the first light pixel from the left in that row.
       let hoop = -1;
@@ -40,7 +43,7 @@ describe.skipIf(!on)('a new lettering on a new design', () => {
           break;
         }
       }
-      return { x: (x0 + x1) / 2 / k, y: (y0 + y1) / 2 / k, top: y0 / k, hoop };
+      return { x: (x0 + x1) / 2 / k, y: (y0 + y1) / 2 / k, top: y0 / k, hoop, on };
     }, row);
 
   beforeAll(async () => {
@@ -91,5 +94,36 @@ describe.skipIf(!on)('a new lettering on a new design', () => {
     expect(e.x - a.x).toBeCloseTo(100, -1);
     expect(e.y - a.y).toBeCloseTo(50, -1);
     expect(e.hoop - a.hoop).toBeCloseTo(100, -1);
+  });
+
+  it('selects and moves an object that is not selected yet; beside it a drag pans', { timeout: 60_000 }, async () => {
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+    await expect.poll(() => page.locator('.stage-top').getByText('Buchstaben einzeln', { exact: true }).count()).toBe(0);
+    const c = (await page.locator('#canvas').boundingBox())!;
+    const a = await look(c.height * 0.25);
+    await page.mouse.move(c.x + a.on[0], c.y + a.on[1]);
+    await page.mouse.down();
+    await page.mouse.move(c.x + a.on[0] - 80, c.y + a.on[1] - 40, { steps: 10 });
+    await page.waitForTimeout(400);
+    // The lettering moves under the pointer, the hoop stays: no pan.
+    const b = await look(c.height * 0.25);
+    expect(b.top - a.top).toBeCloseTo(-40, -1);
+    expect(b.hoop).toBeCloseTo(a.hoop, 0);
+    await page.mouse.up();
+    await page.waitForTimeout(800);
+    // It is selected now.
+    expect(await page.locator('.stage-top').getByText('Buchstaben einzeln', { exact: true }).count()).toBeGreaterThan(0);
+    // A drag beside the objects still moves the view, hoop and all.
+    const d = await look(c.height * 0.25);
+    await page.mouse.move(c.x + 40, c.y + c.height * 0.5);
+    await page.mouse.down();
+    await page.mouse.move(c.x + 100, c.y + c.height * 0.5, { steps: 10 });
+    await page.mouse.up();
+    await page.waitForTimeout(300);
+    const f = await look(c.height * 0.25);
+    expect(f.hoop - d.hoop).toBeCloseTo(60, -1);
+    expect(f.x - d.x).toBeCloseTo(60, -1);
   });
 });
