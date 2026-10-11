@@ -1,4 +1,9 @@
 import { readFileSync } from 'node:fs';
+import { pullFor } from '../../src/digitize/digitize';
+import { columnsAlong, suggestSatin } from '../../src/digitize/satinSuggest';
+import type { AppliqueSettings } from '../../src/model/applique';
+import { toApplique } from '../../src/model/appliqueOps';
+import { inChainOrder } from '../../src/model/reshape';
 import { digitizeDefaults, type DigitizeOptions } from '../../src/digitize/digitize';
 import { addFont, type Font } from '../../src/lettering/font';
 import { LETTERING_DEFAULTS, type Lettering } from '../../src/lettering/layout';
@@ -12,7 +17,7 @@ import { refreshKnockouts, setKnockout } from '../../src/model/knockout';
 import { rememberObjects, sewObjects } from '../../src/model/objects';
 import type { PathStitch } from '../../src/model/along';
 import type { Pattern, ThreadColor } from '../../src/model/pattern';
-import { keepVersion, remember, remembered, rememberedIn, restitch, restoreRemembered, type BorderSettings, type FillSettings, type StoredObjects } from '../../src/model/restitch';
+import { analyze, keepVersion, measureSatin, remember, remembered, rememberedIn, restitch, restoreRemembered, type BorderSettings, type FillSettings, type Rails, type SatinSettings, type Settings, type StoredObjects } from '../../src/model/restitch';
 import { stitchKinds } from '../../src/model/sequence';
 import { stitchesBefore } from '../../src/model/transform';
 import { parsePattern } from '../../src/parsers';
@@ -158,10 +163,43 @@ export class Design {
 
   /** The fill `index` sewn anew with the settings `s` (the stitch panel). */
   restitchFill(index: number, s: FillSettings, drop = new Set<string>(), line?: BorderSettings | null): void {
+    this.sewAnew(index, { kind: 'fill', s, line }, drop);
+  }
+
+  /**
+   * The fill `index` sewn as satin, as R, Vorschlagen and Als Satin sticken do it: cut into columns
+   * where the suggestion cuts it, in the order that hides the ways between them best; `s` changes the satin from what
+   * a fill turned satin gets.
+   */
+  satin(index: number, s: Partial<SatinSettings> = {}): void {
+    const kinds = stitchKinds(this.p);
+    const o = sewObjects(this.p, kinds)[index];
+    if (o.kind === 'satin') {
+      // A narrow area is sewn as satin when it is drawn: only its settings change.
+      const part = analyze(this.p, o, kinds).parts.find((pt) => pt.kind === 'satin')!;
+      const base = remembered(this.p, o)?.satin ?? measureSatin(this.p, part, kinds);
+      return this.sewAnew(index, { kind: 'satin', s: { ...base, ...s } }, new Set());
+    }
+    const f = this.settingsOf(index);
+    const pull = pullFor(this.profile, 'satin');
+    const satin: SatinSettings = { spacing: f.spacing, edge: pull.edge, edgeShare: pull.edgeShare, edgeAuto: true, short: true, underlay: f.underlay, tolerance: f.tolerance, ...s };
+    const area = remembered(this.p, o)?.shape ?? analyze(this.p, o, kinds).fill;
+    const found = area && suggestSatin(area);
+    const made = area && found && found.kind !== 'wide' && found.ok ? columnsAlong(area, found.lines, found.cuts) : null;
+    const columns = made && 'columns' in made ? new Map([[index, inChainOrder(made.columns, satin)]]) : undefined;
+    this.sewAnew(index, { kind: 'satin', s: satin }, new Set(), 'fill', columns);
+  }
+
+  /** The fill `index` made an appliqué, with `s` over what a new one gets. */
+  applique(index: number, s: Partial<AppliqueSettings> = {}): void {
+    this.take(toApplique(this.p, [index], this.T, s));
+  }
+
+  private sewAnew(index: number, settings: Settings, drop: Set<string>, from?: 'fill', columns?: Map<number, Rails[]>): void {
     const kinds = stitchKinds(this.p);
     const objs = sewObjects(this.p, kinds);
-    const r = restitch(this.p, objs, [index], { kind: 'fill', s, line }, kinds, this.T);
-    if (!r.starts.length) throw new Error(`${this.title}: fill ${index} not sewn anew`);
+    const r = restitch(this.p, objs, [index], settings, kinds, this.T, from, false, columns);
+    if (!r.starts.length || r.failed.length) throw new Error(`${this.title}: object ${index} not sewn anew`);
     r.starts.forEach((a, k) => rememberObjects(r.pattern, [a], r.ends[k]));
     const now = sewObjects(r.pattern);
     r.starts.forEach((a, k) => {
@@ -271,6 +309,25 @@ const wave = (x0: number, y: number, len: number, amp: number, waves: number) =>
   return d;
 };
 
+/** A band `w` wide along a wave from x0 to x0 + len (the wave as `wave` draws it, sampled). */
+function band(x0: number, y: number, len: number, amp: number, waves: number, w: number): string {
+  const n = 60;
+  const mid = Array.from({ length: n + 1 }, (_, k) => {
+    const x = x0 + (len * k) / n;
+    return [x, y + amp * Math.sin((2 * Math.PI * waves * (x - x0)) / len)] as [number, number];
+  });
+  const side = (sign: number) =>
+    mid.map(([x, yy], k) => {
+      const [ax, ay] = mid[Math.max(0, k - 1)];
+      const [bx, by] = mid[Math.min(n, k + 1)];
+      const l = Math.hypot(bx - ax, by - ay);
+      return [x - (sign * (by - ay) * w) / 2 / l, yy + (sign * (bx - ax) * w) / 2 / l] as [number, number];
+    });
+  return poly([...side(1), ...side(-1).reverse()]);
+}
+/** The outline of a petal as an open loop from (cx, cy) and back, for line drawings. */
+const loop = (cx: number, cy: number, deg: number, len: number, w: number, r0 = 0) => petal(cx, cy, deg, len, w, r0).replace(/ Z$/, '');
+
 /** The designs' names in English: the list shows them in the app's language. */
 const ENGLISH: Record<string, string> = {
   Blume: 'Flower',
@@ -281,6 +338,11 @@ const ENGLISH: Record<string, string> = {
   Schriftzug: 'Lettering',
   Aufnäher: 'Patch',
   Handtuch: 'Towel',
+  'Musterkarte Offen': 'Open sampler',
+  Handstiche: 'Hand stitches',
+  Redwork: 'Redwork',
+  Satinflächen: 'Satin areas',
+  Applikation: 'Appliqué',
 };
 
 // The designs ----------------------------------------------------------------------------------
@@ -308,7 +370,7 @@ export function flower(): Design {
   return d;
 }
 
-/** Musterkarte Dekor: decorative and open fills, embossing and a two-thread blend, one per field. */
+/** Musterkarte Dekor: decorative dense fills, embossing and a two-thread blend, one per field (the tab Deckend). */
 export function decoSampler(): Design {
   const d = new Design('Musterkarte Dekor', { fabric: 'woven', thread: '40' }, { w: 130, h: 180 }, '#f4f2ee');
   const { blue, teal, purple, red, orange, green, navy, pink, gold, sky } = THREADS;
@@ -319,9 +381,9 @@ export function decoSampler(): Design {
     [{ pattern: 'swirl', deco: { seed: 2 } }, purple],
     [{ pattern: 'tatami', deco: { emboss: 'hearts', embossSize: 9, embossStrong: true } }, red],
     [{ pattern: 'tatami', deco: { emboss: 'stars', embossSize: 9, embossStrong: true } }, navy],
-    [{ pattern: 'meander', deco: { seed: 4, size: 2.5 } }, teal],
-    [{ pattern: 'maze', deco: { seed: 5, size: 3 } }, green],
-    [{ pattern: 'cross', deco: { cross: 'full', size: 3 } }, pink],
+    [{ pattern: 'circles', deco: { focus: [0.3, 0.3] } }, teal],
+    [{ pattern: 'tatami', deco: { emboss: 'diamonds', embossSize: 8, embossStrong: true } }, green],
+    [{ pattern: 'tatami', deco: { emboss: 'waves', embossSize: 9 } }, pink],
   ];
   const size = 34;
   const gap = 6;
@@ -340,7 +402,7 @@ export function decoSampler(): Design {
 /** Linienstiche: every line stitch on the same wave, one under the other. */
 export function lineStitches(): Design {
   const d = new Design('Linienstiche', { fabric: 'woven', thread: '40' }, { w: 130, h: 180 });
-  const { black, red, blue, green, purple, orange, pink, teal, navy, brown } = THREADS;
+  const { black, red, blue, green, purple, orange, pink, teal, navy, brown, darkGreen, lime, sky, gold } = THREADS;
   const rows: [string, Partial<PathStitch>, ThreadColor, number?][] = [
     ['Steppstich', { type: 'run' }, black],
     ['Bohnenstich 3-fach', { type: 'triple', repeat: 3 }, brown],
@@ -351,10 +413,14 @@ export function lineStitches(): Design {
     ['Motivstich Bögen', { type: 'motif', motif: 'scallops', width: 3.5 }, blue],
     ['Motivstich Herzen', { type: 'motif', motif: 'hearts', width: 4 }, pink],
     ['Motivstich Kette', { type: 'motif', motif: 'chain', width: 3 }, purple],
+    ['Stielstich', { type: 'motif', motif: 'stem', width: 2 }, darkGreen],
+    ['Federstich', { type: 'motif', motif: 'feather', width: 4 }, lime],
+    ['Kretastich', { type: 'motif', motif: 'cretan', width: 4 }, sky],
+    ['Chevron', { type: 'motif', motif: 'chevron', width: 4 }, gold],
     ['Satinlinie', { type: 'satin', width: 3 }, navy, 3],
   ];
   // The names say which stitch each row shows, as the stitch panel calls it.
-  rows.forEach(([, st, c, w], k) => d.line(wave(10, 12 + k * 16, 110, 2.2, 3), c, st, w ?? 0));
+  rows.forEach(([, st, c, w], k) => d.line(wave(10, 10 + k * 11.5, 110, 2, 3), c, st, w ?? 0));
   d.cutJumps();
   return d;
 }
@@ -429,6 +495,106 @@ export function lineEffects(): Design {
   return d;
 }
 
+/** Musterkarte Offen: the open fills the fabric shows through (the tab Offen), one per field. */
+export function openSampler(): Design {
+  const d = new Design('Musterkarte Offen', { fabric: 'woven', thread: '40' }, { w: 130, h: 180 }, '#f4f2ee');
+  const { teal, green, pink, blue, orange, purple, navy, red, brown } = THREADS;
+  const fields: [Partial<FillSettings>, ThreadColor][] = [
+    [{ pattern: 'meander', deco: { seed: 4, size: 2.5 } }, teal],
+    [{ pattern: 'maze', deco: { seed: 5, size: 3 } }, green],
+    [{ pattern: 'echo', deco: { size: 3 } }, orange],
+    [{ pattern: 'grid', deco: { grid: 'hex', size: 6 } }, blue],
+    [{ pattern: 'grid', deco: { grid: 'diamond', size: 6 } }, purple],
+    [{ pattern: 'grid', deco: { grid: 'brick', size: 6 } }, brown],
+    [{ pattern: 'cross', deco: { cross: 'full', size: 3 } }, pink],
+    [{ pattern: 'cross', deco: { cross: 'half', size: 3 } }, red],
+    [{ pattern: 'crosshatch', angle: 0 }, navy],
+  ];
+  const size = 34;
+  const gap = 6;
+  fields.forEach(([s, c], k) => {
+    const x = 6 + (k % 3) * (size + gap);
+    const y = 6 + Math.floor(k / 3) * (size + gap);
+    d.fill(rectPath(x, y, size, size, 3, 3), c, s);
+  });
+  // Below: a meander in triple stitch, the open fill for a bolder line.
+  d.fill(rectPath(6, 6 + 3 * (size + gap), 3 * size + 2 * gap, 24, 3, 3), teal, { pattern: 'meander', deco: { seed: 7, size: 4, triple: true } });
+  d.cutJumps();
+  return d;
+}
+
+/** Handstiche: each hand stitch sewn once, three and five times (Wiederholung), one row per stitch. */
+export function handStitches(): Design {
+  const d = new Design('Handstiche');
+  const { darkGreen, lime, sky, gold } = THREADS;
+  const rows: [Partial<PathStitch>, ThreadColor][] = [
+    [{ type: 'motif', motif: 'stem', width: 2 }, darkGreen],
+    [{ type: 'motif', motif: 'feather', width: 4.5 }, lime],
+    [{ type: 'motif', motif: 'cretan', width: 4.5 }, sky],
+    [{ type: 'motif', motif: 'chevron', width: 4.5 }, gold],
+  ];
+  rows.forEach(([st, color], r) => [1, 3, 5].forEach((repeat, c) => d.line(wave(6 + c * 31, 16 + r * 22, 26, 1.4, 1), color, { ...st, repeat })));
+  d.cutJumps();
+  return d;
+}
+
+/**
+ * Redwork: a flower drawn as touching outlines, sewn in one go (Durchgehend): on the left in
+ * running stitch, on the right in triple stitch, the way back a bean stitch on top.
+ */
+export function redwork(): Design {
+  const d = new Design('Redwork');
+  const { red, navy } = THREADS;
+  const flowerAt = (cx: number) => {
+    const cy = 34;
+    const center = ellipsePath(cx, cy, 5, 5);
+    // Five petals, none pointing down where the stem starts.
+    const petals = Array.from({ length: 5 }, (_, k) => loop(cx, cy, k * 72 - 90, 15, 8, 5)).join(' ');
+    const stem = `M${cx} ${cy + 5} C${cx - 3} ${cy + 25} ${cx + 3} ${cy + 40} ${cx} ${cy + 58}`;
+    const leaves = `${loop(cx - 0.6, cy + 36, 200, 15, 5)} ${loop(cx + 0.6, cy + 28, -20, 15, 5)}`;
+    return `${center} ${petals} ${stem} ${leaves}`;
+  };
+  d.line(flowerAt(27), red, { type: 'run', redwork: true });
+  d.line(flowerAt(73), navy, { type: 'triple', repeat: 3, redwork: true });
+  d.cutJumps();
+  return d;
+}
+
+/**
+ * Satinflächen: areas sewn as satin. Four bands (plain, irregular, a ragged edge, as E stitch), and
+ * a star and a leaf the Stichart Satin cuts into columns.
+ */
+export function satinAreas(): Design {
+  const d = new Design('Satinflächen');
+  const { navy, brown, orange, teal, yellow, green } = THREADS;
+  const bands: [Partial<SatinSettings>, ThreadColor][] = [
+    [{}, navy],
+    [{ rough: 0.6, roughSeed: 3 }, brown],
+    [{ fringe: 1.5 }, orange],
+    [{ type: 'e', spacing: 1.2 }, teal],
+  ];
+  bands.forEach(([s, c], k) => d.satin(d.fill(band(8, 12 + k * 13, 84, 2, 1.5, 6), c), s));
+  d.satin(d.fill(star(28, 76, 13, 0.4), yellow, { angle: 90 }));
+  d.satin(d.fill(petal(56, 90, -35, 40, 9), green));
+  d.cutJumps();
+  return d;
+}
+
+/** Applikation: four hearts of fabric laid on, each with another edge: satin, E stitch, running stitch, bean stitch. */
+export function applique(): Design {
+  const d = new Design('Applikation', undefined, undefined, '#e9e4da');
+  const { red, navy, green, purple } = THREADS;
+  const hearts: [number, number, ThreadColor, Partial<AppliqueSettings>][] = [
+    [27, 28, red, { fabric: 'felt' }],
+    [73, 28, navy, { edge: 'e', fabric: 'woven' }],
+    [27, 74, green, { edge: 'run', fabric: 'felt' }],
+    [73, 74, purple, { edge: 'run', run: { type: 'triple', width: 0, repeat: 3 }, fabric: 'woven' }],
+  ];
+  for (const [x, y, c, s] of hearts) d.applique(d.fill(heart(x, y, 15), c), s);
+  d.cutJumps();
+  return d;
+}
+
 /** Schriftzug: lettering in several fonts, straight and on an arc. */
 export function lettering(): Design {
   const d = new Design('Schriftzug', undefined, undefined, '#f6efe4');
@@ -468,7 +634,7 @@ export function towel(): Design {
   return d;
 }
 
-export const DEMO_DESIGNS = [flower, decoSampler, lineStitches, lineVariants, lineEffects, lettering, patch, towel];
+export const DEMO_DESIGNS = [flower, decoSampler, openSampler, lineStitches, lineVariants, handStitches, lineEffects, redwork, satinAreas, applique, lettering, patch, towel];
 
 /** Builds every design afresh (object memory starts empty). */
 export function buildDemos(): Design[] {
