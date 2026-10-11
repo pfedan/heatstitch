@@ -157,6 +157,12 @@ export function motifStitches(line: Pt[], closed: boolean, motif: LineMotif, wid
 
 /** Longest stitch of a hand stitch (mm): longer arms are split, the same holes in every pass. */
 export const HAND_STITCH_MAX = 4.5;
+/**
+ * Longest stitch of a cord (mm): it covers like a satin column, so it splits where a satin would
+ * (SATIN_MAX). Split at the hand stitch's 4.5 mm, a cord over 3 mm wide got a seam of holes down
+ * its middle.
+ */
+export const CORD_STITCH_MAX = 7;
 /** A line turns at least this much at one point (degrees) to count as a corner the figures start afresh at. */
 const CORNER = 50;
 
@@ -227,7 +233,7 @@ function handStitches(f: ReturnType<typeof frame>, line: Pt[], closed: boolean, 
     if (!q) return void out.push(p);
     const l = Math.hypot(p[0] - q[0], p[1] - q[1]);
     if (l < 1e-6) return;
-    const k = Math.ceil(l / HAND_STITCH_MAX - 1e-9);
+    const k = Math.ceil(l / (cord ? CORD_STITCH_MAX : HAND_STITCH_MAX) - 1e-9);
     for (let i = 1; i <= k; i++) out.push([q[0] + ((p[0] - q[0]) * i) / k, q[1] + ((p[1] - q[1]) * i) / k]);
   };
   /** From `a` (where the needle is) to `b` and back, `times` stitches in all: ends at b when odd. */

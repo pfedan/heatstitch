@@ -174,6 +174,14 @@ describe('hand stitches', () => {
       expect(Math.max(...gaps)).toBeLessThanOrEqual(CORD_STEP + 0.05);
     });
 
+    it('has no holes down its middle when it is wide', () => {
+      // Split like a hand stitch (4.5 mm), a cord 3.5 mm wide had a seam of needle points along the line.
+      for (const width of [3.5, 4.5]) {
+        const pts = flat(lineStitches(straight, cord({ width })));
+        expect(pts.filter(([, y]) => Math.abs(y) < width / 4).length, `cord ${width} mm`).toBe(0);
+      }
+    });
+
     it('is remembered with the line and makes no critical density, in tight bends too', () => {
       const options = digitizeDefaults(DEFAULT_PROFILE);
       const empty = { x: new Int32Array(0), y: new Int32Array(0), cmd: new Uint8Array(0), colors: [] } as never;
