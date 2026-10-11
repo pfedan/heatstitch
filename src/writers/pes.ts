@@ -1,9 +1,10 @@
 import type { Hoop } from '../model/hoop';
 import { COLOR_CHANGE, END, JUMP, STITCH, TRIM, type Pattern } from '../model/pattern';
 import { PEC_STITCH_OFFSET } from '../parsers/pes';
-import { pecIndexOf } from '../parsers/pecPalette';
-import { ByteWriter, extents, headerLabel, splitMove } from './bytes';
+import { pecColor, pecOwnSlot, PEC_APPLIQUE } from '../parsers/pecPalette';
+import { ByteWriter, extents, headerLabel, splitMove, stitchExtents } from './bytes';
 import { ICON_H, ICON_STRIDE, pecIcons } from './pecGraphics';
+import { uniqueSlots } from './threadSlots';
 
 /** Largest move per PEC record and axis (12-bit long form). */
 export const PEC_MAX_DELTA = 2047;
@@ -17,8 +18,16 @@ function blockCount(p: Pattern): number {
   return n;
 }
 
-const colorOfBlock = (p: Pattern, block: number) =>
-  pecIndexOf(p.colors[block] ?? p.colors[p.colors.length - 1] ?? { r: 0, g: 0, b: 0 });
+/**
+ * PEC palette slot per color block (never 0, "unknown"): each distinct color its own. The appliqué
+ * slots (62 to 64) only for a color read from one.
+ */
+function pecSlots(p: Pattern): number[] {
+  const colors = Array.from({ length: blockCount(p) }, (_, k) => p.colors[k] ?? p.colors[p.colors.length - 1] ?? { r: 0, g: 0, b: 0 });
+  const kept = new Set(colors.map(pecOwnSlot).filter((s): s is number => s !== undefined && s >= PEC_APPLIQUE));
+  const slots = Array.from({ length: PEC_APPLIQUE - 1 }, (_, i) => i + 1).concat([...kept].sort((a, b) => a - b));
+  return uniqueSlots(colors, slots, pecColor, pecOwnSlot);
+}
 
 function longValue(out: ByteWriter, v: number, flag: number): void {
   const code = (v & 0xfff) | 0x8000 | (flag << 8);
@@ -82,14 +91,17 @@ function encodeStitches(out: ByteWriter, p: Pattern): void {
 export function writePec(out: ByteWriter, p: Pattern): void {
   const start = out.length;
   const blocks = Math.min(256, blockCount(p));
-  const b = extents(p);
+  // As Brother writes it: the size is that of the stitches, and the first record moves from their
+  // top left corner to the origin, where the stitch records start.
+  const b = stitchExtents(p);
 
   out.ascii(`LA:${headerLabel(p.name, 16).padEnd(16, ' ')}\r`);
   out.fill(0x20, 12);
   out.bytes([0xff, 0x00, ICON_STRIDE, ICON_H]);
   out.fill(0x20, 12);
   out.u8(blocks - 1);
-  for (let k = 0; k < blocks; k++) out.u8(colorOfBlock(p, k));
+  const slots = pecSlots(p);
+  for (let k = 0; k < blocks; k++) out.u8(slots[k]);
   out.fill(0x20, start + 512 - out.length);
 
   out.bytes([0x00, 0x00]);
@@ -100,10 +112,11 @@ export function writePec(out: ByteWriter, p: Pattern): void {
   out.u16(b.maxY - b.minY);
   out.u16(0x1e0);
   out.u16(0x1b0);
-  // Bytes 528 to 531 are a long-form jump. heatstitch's reader skips them, other readers
-  // (pyembroidery, machines) execute it, so it must not move.
-  longValue(out, 0, JUMP_FLAG);
-  longValue(out, 0, JUMP_FLAG);
+  // Bytes 528 to 531: that opening move, a long-form jump. heatstitch's reader (like pystitch)
+  // leaves it out, pyembroidery executes it. Beyond the 12-bit range it stays at the origin.
+  const reach = (v: number) => (Math.abs(v) <= PEC_MAX_DELTA ? v : 0);
+  longValue(out, reach(-b.minX), JUMP_FLAG);
+  longValue(out, reach(-b.minY), JUMP_FLAG);
   if (out.length !== start + PEC_STITCH_OFFSET) throw new Error('PEC header size mismatch');
   encodeStitches(out, p);
   out.patch(lengthAt, out.length - (start + 512), 3);
@@ -145,7 +158,8 @@ function writeEmbObjects(out: ByteWriter, p: Pattern, field: Hoop): void {
   let sections = 0;
   const colorLog: [number, number][] = [];
   let block = 0;
-  let code = colorOfBlock(p, 0);
+  const slots = pecSlots(p);
+  let code = slots[0];
   let stitchedX = 0;
   let stitchedY = 0;
   const segment = (flag: number, pts: [number, number][]) => {
@@ -176,7 +190,7 @@ function writeEmbObjects(out: ByteWriter, p: Pattern, field: Hoop): void {
       ]);
       i = j;
     } else {
-      if (c === COLOR_CHANGE) code = colorOfBlock(p, ++block);
+      if (c === COLOR_CHANGE) code = slots[++block];
       i++;
     }
   }

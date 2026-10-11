@@ -272,6 +272,52 @@ function plainLine(p: Pattern, o: SewObject): boolean {
   return sewnAlong(p, o) && !m?.outline && !m?.blendOf && !partOf(m) && !m?.lettering;
 }
 
+/** Whether `o` belongs to a fill in a thread of its own: a border, a blend's second thread or a shadow part. */
+export function threadOfAFill(p: Pattern, o: SewObject): boolean {
+  const m = remembered(p, o);
+  return !!(m?.outline || m?.blendOf || partOf(m));
+}
+
+/**
+ * The color Zusammenfassen gives objects of several colors, as the object that leads: the color
+ * with the most thread on the fabric among them (it changes the least of what one sees), and in
+ * it the object with the most thread, whose settings the whole takes. The other colors follow,
+ * most thread first, each with its lead: what the message offers instead.
+ */
+export function mergeLeads(objs: readonly SewObject[]): number[] {
+  const byColor = new Map<string, SewObject[]>();
+  for (const o of objs) {
+    const key = `${o.color.r},${o.color.g},${o.color.b}`;
+    byColor.set(key, [...(byColor.get(key) ?? []), o]);
+  }
+  const thread = (list: SewObject[]) => list.reduce((s, o) => s + o.threadMm, 0);
+  return [...byColor.values()]
+    .sort((a, b) => thread(b) - thread(a) || a[0].index - b[0].index)
+    .map((list) => list.reduce((best, o) => (o.threadMm > best.threadMm ? o : best)).index);
+}
+
+/**
+ * The objects `which` sewn one after the other where `lead` is sewn, all in its thread, the lead
+ * first: what Zusammenfassen does first with objects of several colors (or of one thread sewn
+ * apart). The others keep their order and thread. Gives the objects' indices now, the lead first;
+ * null when one of them got lost.
+ */
+export function gatherObjects(p: Pattern, which: number[], lead: number, trimMm: number): { pattern: Pattern; which: number[] } | null {
+  const objs = sewObjects(p);
+  const set = new Set(which);
+  if (!objs[lead] || !set.has(lead) || [...set].some((o) => !objs[o])) return null;
+  const rest = [...set].filter((o) => o !== lead).sort((a, b) => a - b);
+  const others = objs.flatMap((o) => (set.has(o.index) ? [] : [o.index]));
+  const at = others.filter((o) => o < lead).length;
+  const order = [...others.slice(0, at), lead, ...rest, ...others.slice(at)];
+  const into = new Map(rest.filter((o) => objs[o].block !== objs[lead].block).map((o) => [o, objs[lead].block]));
+  // Borders in threads of their own follow their fills to where they are sewn now.
+  const pattern = syncBorders(reorder(p, objs, order, trimMm, undefined, { into, whole: true }), trimMm);
+  const now = sewObjects(pattern);
+  const found = [lead, ...rest].map((o) => now.findIndex((x) => x.id === objs[o].id));
+  return found.some((k) => k < 0) ? null : { pattern, which: found };
+}
+
 /**
  * The lines `which` (one after the other, in one thread) as one line with all their paths, sewn
  * with the settings of the first: ends within 0.5 mm are joined into one node, a chain whose ends

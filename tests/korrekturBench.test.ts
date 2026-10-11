@@ -32,10 +32,10 @@ const movesOf = (p: Pattern) => {
   return { moves: list.length, cut: list.filter((x) => x.trimmed).length };
 };
 /**
- * A fix sews nothing apart that was one: at most this many more moves than before (and a share of
- * them), and at most one more trim.
+ * A fix sews nothing apart that was one: at most two more moves per object it changes (the way to
+ * it and back) plus a share of the moves before, and at most one more trim.
  */
-const MORE_MOVES = (n: number) => 2 + Math.ceil(n * 0.05);
+const MORE_MOVES = (n: number, objects: number) => 2 * Math.max(1, objects) + Math.ceil(n * 0.05);
 
 run('correction benchmark', () => {
   it('fixes the test set', async () => {
@@ -80,7 +80,7 @@ run('correction benchmark', () => {
       for (const r of rows) {
         expect(r.newCrit, `${r.name}: new critical cells`).toBe(0);
         expect(r.cutAfter, `${r.name}: trims after`).toBeLessThanOrEqual(r.cut + 1);
-        expect(r.movesAfter, `${r.name}: moves after`).toBeLessThanOrEqual(r.moves + MORE_MOVES(r.moves));
+        expect(r.movesAfter, `${r.name}: moves after`).toBeLessThanOrEqual(r.moves + MORE_MOVES(r.moves, r.objects));
         const was = ref.get(r.name);
         if (was) expect(r.critAfter, `${r.name}: critical after`).toBeLessThanOrEqual(was.critAfter + 1);
       }

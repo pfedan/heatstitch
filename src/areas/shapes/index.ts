@@ -544,7 +544,7 @@ export function initShapes(app: ShapesAreaApp): void {
       : [['object.openShape', 'objects.openShape'], ['object.split', 'objects.bar.split'], ['object.contour', 'objects.bar.contour']];
     const cmd = (id: string, words?: Key): Item => {
       const c = getCommand(id)!;
-      // Not possible now: the tooltip says why (two colors cannot be combined, ...).
+      // Not possible now: the tooltip says why (lines with others in between cannot be combined, ...).
       const need = canRun(c) ? undefined : c.need?.();
       return { kind: 'cmd', id, icon: spriteIcon(c.icon!), text: words && !phone ? t(words) : undefined, words: !!words && !phone, tip: need ? t(need) : undefined };
     };

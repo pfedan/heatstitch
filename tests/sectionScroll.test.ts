@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Browser, Page } from 'playwright';
 import type { ViteDevServer } from 'vite';
+import { launchChromium } from './helpers/browser';
 
 /**
  * Opening or closing a section of the right column, scrolled down, leaves its heading where it was:
@@ -53,10 +54,9 @@ describe.skipIf(!on)('opening a section in the right column', () => {
 
   beforeAll(async () => {
     const { createServer } = await import('vite');
-    const { chromium } = await import('playwright');
     server = await createServer({ server: { port: 0, strictPort: false }, logLevel: 'error' });
     await server.listen();
-    browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
+    browser = await launchChromium();
     page = await browser.newPage({ viewport: { width: 1600, height: 1000 } });
     await page.goto(server.resolvedUrls!.local[0]);
     await page.evaluate(() => document.querySelector<HTMLButtonElement>('#load-example [data-example="examples/demos/confetti.pes"]')!.click());

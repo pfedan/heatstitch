@@ -184,7 +184,7 @@ type Tile = FillPattern | 'none';
 type TileGroup = 'cover' | 'open';
 const GROUPS: Record<TileGroup, Tile[]> = {
   cover: ['tatami', 'gradient', 'contour', 'spiral', 'follow', 'guided', 'waves', 'rays', 'swirl', 'grain', 'circles'],
-  open: ['none', 'meander', 'maze', 'grid', 'echo', 'cross'],
+  open: ['none', 'meander', 'maze', 'grid', 'echo', 'cross', 'crosshatch'],
 };
 const TILE_GROUPS: TileGroup[] = ['cover', 'open'];
 const tileOf = (s: FillSettings): Tile => s.pattern;
@@ -215,6 +215,7 @@ const PATTERN_ICON: Record<Tile, string> = {
   grid: SVG('<path d="M7 2.8l4 2.3v4.6l-4 2.3-4-2.3V5.1zM17 2.8l4 2.3v4.6l-4 2.3-4-2.3V5.1zM12 11.6l4 2.3v4.6L12 20.8l-4-2.3v-4.6z"/>', 1.4),
   echo: SVG('<path d="M12 20.5S3 15 3 9.3a4.6 4.6 0 0 1 9-1.4 4.6 4.6 0 0 1 9 1.4C21 15 12 20.5 12 20.5z"/><path d="M12 15.6s-4.4-2.8-4.4-5.6a2.2 2.2 0 0 1 4.4-.7 2.2 2.2 0 0 1 4.4.7c0 2.8-4.4 5.6-4.4 5.6z"/>', 1.4),
   cross: SVG('<path d="M4 4l6 6M10 4l-6 6M14 4l6 6M20 4l-6 6M4 14l6 6M10 14l-6 6M14 14l6 6M20 14l-6 6"/>'),
+  crosshatch: SVG('<path d="M3 9l6-6M3 15L15 3M3 21L21 3M9 21l12-12M15 21l6-6M3 15l6 6M3 9l12 12M3 3l18 18M9 3l12 12M15 3l6 6"/>', 1.2),
   none: SVG('<rect x="3.5" y="3.5" width="17" height="17" rx="3"/>', 2),
 };
 
@@ -1385,6 +1386,15 @@ export class StitchPanel {
     const [lo, hi] = OPEN_SIZE_RANGE[pat];
     const cells = pat === 'grid' || pat === 'cross';
     const out: HTMLElement[] = [];
+    // Crosshatch: two layers of straight rows, turned together; the spacing is that of each layer.
+    if (pat === 'crosshatch') {
+      out.push(
+        this.dial({ label: 'stitch.angle', hint: 'stitch.crosshatch.angle.hint', turn: 180, get: () => s.angle, set: (v) => (s.angle = v), fmt: (v) => `${Math.round(Number.isFinite(v) ? v : 0)}°` }),
+        this.slider({ label: 'stitch.density', hint: 'stitch.crosshatch.size.hint', min: lo, max: hi, step: 0.1, get: () => Math.min(hi, Math.max(lo, d.size ?? OPEN_SIZE[pat])), set: (v) => (d.size = v), fmt: (v) => `${formatNumber(v, 1)} mm`, auto: this.unset(d, 'size') }),
+        this.slider({ label: 'stitch.length', hint: 'stitch.length.hint', min: 1, max: 3, step: 0.1, get: () => Math.min(3, s.stitch), set: (v) => (s.stitch = v), fmt: (v) => `${formatNumber(v, 1)} mm` }),
+      );
+      return out;
+    }
     if (pat === 'grid') out.push(this.choice<GridKind>('stitch.grid', GRID_KINDS, d.grid ?? DECO_DEFAULTS.grid, (v) => `stitch.grid.${v}` as Key, (v) => (d.grid = v)));
     if (pat === 'cross') out.push(this.choice<CrossKind>('stitch.cross', CROSS_KINDS, d.cross ?? DECO_DEFAULTS.cross, (v) => `stitch.cross.${v}` as Key, (v) => (d.cross = v)));
     out.push(

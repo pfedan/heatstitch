@@ -20,7 +20,7 @@ export interface ThreadColor {
 }
 
 /** Embroidery file formats heatstitch reads (and writes). */
-export type FileFormat = 'dst' | 'pes' | 'pec' | 'jef' | 'exp' | 'vp3';
+export type FileFormat = 'dst' | 'pes' | 'pec' | 'jef' | 'exp' | 'vp3' | 'xxx' | 'sew';
 
 export interface Bounds {
   minX: number;

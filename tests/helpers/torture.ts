@@ -9,7 +9,7 @@ import { partOf, type LinePart } from '../../src/model/shadow';
 import { fillToLine, lineStitches, lineToFill, resewLine } from '../../src/model/line';
 import { refreshKnockouts, setKnockout } from '../../src/model/knockout';
 import { rememberObjects, sewObjects, tableOf, type SewObject } from '../../src/model/objects';
-import { COLOR_CHANGE, END, STITCH, type Pattern, type ThreadColor } from '../../src/model/pattern';
+import { COLOR_CHANGE, END, STITCH, TRIM, type Pattern, type ThreadColor } from '../../src/model/pattern';
 import { sameColor } from '../../src/model/recolor';
 import { fillsToLines, lineToSatin, reshapeFill, reshapeObject, transformSewObject } from '../../src/model/reshape';
 import { canSplit, splitFill } from '../../src/model/splitFill';
@@ -21,7 +21,7 @@ import { backToVersion, edgeAlong, keepVersion, objectKey, remember, remembered,
 import { reorder } from '../../src/model/order';
 import { stitchKinds } from '../../src/model/sequence';
 import { addContour, behindCovered, gapReader } from '../../src/model/contour';
-import { combineLines, deleteObjects, duplicateObject, duplicateObjects, mirrorMatrix, recolorObjects, subtractTop } from '../../src/model/shapeOps';
+import { combineLines, deleteObjects, duplicateObject, duplicateObjects, gatherObjects, mergeLeads, mirrorMatrix, recolorObjects, subtractTop, threadOfAFill } from '../../src/model/shapeOps';
 import { stitchesBefore } from '../../src/model/transform';
 import { sewDesign, specOf } from '../../src/model/sew';
 import { parsePattern } from '../../src/parsers';
@@ -38,8 +38,14 @@ import { Editor } from '../../src/ui/editor';
 import { stitchBefore } from '../../src/model/edit';
 import { THIN_SHARES } from '../../src/areas/stitches/state';
 import { writePattern } from '../../src/writers';
+import { pecOwnSlot, PEC_APPLIQUE } from '../../src/parsers/pecPalette';
 import { loadedOriginal, originalOf } from '../../src/model/original';
 import { rng } from './images';
+import { readFileSync } from 'node:fs';
+import { addFont, type Font } from '../../src/lettering/font';
+import { layout, LETTERING_DEFAULTS, type Lettering } from '../../src/lettering/layout';
+import { letteringObjects, placeLettering } from '../../src/lettering/place';
+import { letteringRuns, sewLettering } from '../../src/lettering/sew';
 import { inheritTrace, movedTrace, readTrace, setTraceOf, sizedTrace, storeTrace, traceFrom, traceOf, withTrace, type Trace } from '../../src/model/trace';
 import { areaLoops, suggestSatin } from '../../src/digitize/satinSuggest';
 import { stripsOfAreas } from '../../src/digitize/rungs';
@@ -427,6 +433,43 @@ export const OPS: Op[] = [
       expect(count(after!), 'combined lines: nodes less joined ends').toBe(count(before) - (c.joined ? c.joined.joints.filter((x) => !x.bridged).length + c.joined.closed : 0));
       expect(c.joined?.joints.every((x) => !x.bridged) ?? true, 'Zusammenfassen bridges no gap').toBe(true);
       return shapes(d, c.pattern);
+    },
+  },
+  {
+    name: 'combine across colors',
+    run: (d, r) => {
+      // Zusammenfassen of objects in several threads: first all of them into the thread with the
+      // most of them, where its biggest object is sewn (the rest as in the app, by the same calls).
+      const p = d.cur.p;
+      const free = d.objects.filter((o) => !threadOfAFill(p, o));
+      if (new Set(free.map((o) => o.block)).size < 2) return false;
+      const a = pick(r, free);
+      const b = pick(r, free.filter((o) => o.block !== a.block));
+      const more = free.filter((o) => o !== a && o !== b && r() < 0.2);
+      const objs = [a, b, ...more].sort((x, y) => x.index - y.index);
+      // Now and then the next color, as the message offers (two blocks can have one thread).
+      const leads = mergeLeads(objs);
+      const lead = leads[r() < 0.7 ? 0 : leads.length - 1];
+      const g = gatherObjects(p, objs.map((o) => o.index), lead, T);
+      expect(g, 'gathered objects stay objects').toBeTruthy();
+      const now = sewObjects(g!.pattern);
+      const was = new Map(d.objects.map((o) => [o.id, o]));
+      // The gathered: one after the other from the lead on, all in its thread, each with its stitches.
+      expect(g!.which, 'gathered one after the other, the lead first').toEqual(g!.which.map((_, k) => g!.which[0] + k));
+      expect(now[g!.which[0]].id, 'the lead first').toBe(d.objects[lead].id);
+      for (const k of g!.which) {
+        expect(now[k].block, 'gathered into one color block').toBe(now[g!.which[0]].block);
+        expect(sameColor(now[k].color, d.objects[lead].color), 'in the lead\'s thread').toBe(true);
+        expect(now[k].stitches, 'a gathered object keeps its stitches').toBe(was.get(now[k].id)!.stitches);
+        expect(remembered(g!.pattern, now[k]), 'a gathered object keeps what it knows').toEqual(remembered(p, was.get(now[k].id)!));
+      }
+      // The others keep their order and thread.
+      const ids = new Set(objs.map((o) => o.id));
+      const rest = (list: SewObject[]) => list.filter((o) => !ids.has(o.id) && !threadOfAFill(p, was.get(o.id) ?? o));
+      expect(rest(now).map((o) => o.id), 'the others keep their order').toEqual(rest(d.objects).map((o) => o.id));
+      for (const o of rest(now)) expect(sameColor(o.color, was.get(o.id)!.color), 'the others keep their thread').toBe(true);
+      expect(now.length, 'no object lost or made').toBe(d.objects.length);
+      return shapes(d, g!.pattern);
     },
   },
   {
@@ -909,6 +952,146 @@ export const OPS: Op[] = [
  * Satins over an area made lines along their edge and satins again (the kind switch). Drawn from a
  * stream of their own, so the chains of the other ops stay as they were for the seeds above.
  */
+/** A script font whose letters run into each other (loaded from the app's fonts). */
+const SCRIPT = JSON.parse(readFileSync(new URL('../../public/fonts/pacificlo.json', import.meta.url), 'utf8')) as Font;
+addFont(SCRIPT);
+
+/** The letterings of a design, each once. */
+function letteringsIn(p: Pattern): Lettering[] {
+  const out = new Map<string, Lettering>();
+  for (const o of sewObjects(p)) {
+    const l = remembered(p, o)?.lettering;
+    if (l && !out.has(l.id)) out.set(l.id, l);
+  }
+  return [...out.values()];
+}
+
+/**
+ * Letterings in a script, set close so the letters run into each other, and set anew (as the app
+ * does when the text, spacing or place changes). Drawn from a stream of their own, so the chains of
+ * the other ops stay as they were for the seeds above.
+ */
+export const LETTERING_OPS: Op[] = [
+  {
+    name: 'add lettering',
+    run: (d, r) => {
+      const l: Lettering = {
+        ...LETTERING_DEFAULTS,
+        id: `L${Math.floor(r() * 1e6)}`,
+        text: pick(r, ['Herz', 'Lisa', 'Anna', 'Ma\nOma']),
+        font: SCRIPT.id,
+        height: between(r, 8, 14),
+        spacing: pick(r, [0, -1, -2.5]),
+        x: between(r, 0, 40),
+        y: between(r, 10, 60),
+        angle: pick(r, [0, 0, 30]),
+        color: pick(r, COLORS),
+      };
+      const placed = placeLettering(blank(d.cur.p) ? null : d.cur.p, [], sewLettering(SCRIPT, l, T), l);
+      return shapes(d, placed?.pattern);
+    },
+  },
+  {
+    name: 'edit lettering',
+    run: (d, r) => {
+      const ls = letteringsIn(d.cur.p);
+      if (!ls.length) return false;
+      const old = pick(r, ls);
+      const l = { ...old, text: pick(r, ['Herz', 'Lisa', 'Oma']), spacing: pick(r, [0, -1.5, -3]), x: old.x + between(r, -5, 5) };
+      const placed = placeLettering(d.cur.p, letteringObjects(d.cur.p, d.objects, old.id), sewLettering(SCRIPT, l, T), l);
+      return shapes(d, placed?.pattern);
+    },
+  },
+];
+
+/**
+ * Letters that overlap are sewn there once: as each lettering of the design is sewn from its text,
+ * a letter under one sewn after it leaves out only stitches that do not show (wholly under the
+ * satin on top), has no more thread under it than before, and every piece still starts and ends
+ * where the font has it (the joins and trims are the font's). What lies on top is read from the
+ * stitches of the letters on top (as Embrilliance does), not from the outlines the code under test uses.
+ */
+export function checkLetterings(p: Pattern): void {
+  expect(letteringProblems(p).join('; '), 'overlapping letters').toBe('');
+}
+
+/** What checkLetterings finds wrong. */
+export function letteringProblems(p: Pattern): string[] {
+  const problems: string[] = [];
+  for (const l of letteringsIn(p)) {
+    if (l.font !== SCRIPT.id) continue;
+    const lay = layout(SCRIPT, l);
+    const runs = letteringRuns(SCRIPT, l, lay);
+    const whole = letteringRuns(SCRIPT, l, lay, true);
+    if (runs.length !== whole.length) problems.push(`${l.id}: ${whole.length} pieces became ${runs.length}`);
+    runs.forEach((run, k) => {
+      const w = whole[k].pts;
+      const [a, z] = [run.pts[0], run.pts[run.pts.length - 1]];
+      if (a[0] !== w[0][0] || a[1] !== w[0][1] || z[0] !== w[w.length - 1][0] || z[1] !== w[w.length - 1][1]) problems.push(`${l.id}: piece ${k} starts or ends elsewhere`);
+    });
+    // Where the satin and fill stitches of each letter lie, as the font sews them: thread 0.4 mm
+    // thick, the gaps between neighbouring stitches (their spacing) closed.
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const run of whole) for (const [x, y] of run.pts) [minX, minY, maxX, maxY] = [Math.min(minX, x), Math.min(minY, y), Math.max(maxX, x), Math.max(maxY, y)];
+    const PX = 0.1;
+    const W = Math.ceil((maxX - minX) / PX) + 8;
+    const H = Math.ceil((maxY - minY) / PX) + 8;
+    const cell = (x: number, y: number) => Math.floor((y - minY) / PX + 4) * W + Math.floor((x - minX) / PX + 4);
+    const sewnBy = lay.letters.map(() => new Uint8Array(W * H));
+    for (const run of whole) {
+      if (!run.leaves) continue;
+      const m = sewnBy[run.letter];
+      for (let i = 1; i < run.pts.length; i++) {
+        const [a, b] = [run.pts[i - 1], run.pts[i]];
+        const n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / (PX / 2)));
+        for (let t = 0; t <= n; t++) {
+          const x = a[0] + ((b[0] - a[0]) * t) / n;
+          const y = a[1] + ((b[1] - a[1]) * t) / n;
+          for (let dy = -0.2; dy <= 0.2; dy += PX) for (let dx = -0.2; dx <= 0.2; dx += PX) m[cell(x + dx, y + dy)] = 1;
+        }
+      }
+    }
+    // The letters in sewing order: those after a run's letter lie on top of it.
+    const order: number[] = [];
+    for (const run of runs) if (order[order.length - 1] !== run.letter) order.push(run.letter);
+    const wholly = (later: Uint8Array[], a: [number, number], b: [number, number]) => {
+      const n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / PX));
+      for (let t = 0; t <= n; t++) {
+        const k = cell(a[0] + ((b[0] - a[0]) * t) / n, a[1] + ((b[1] - a[1]) * t) / n);
+        if (!later.some((m) => m[k])) return false;
+      }
+      return true;
+    };
+    runs.forEach((run, k) => {
+      if (!run.leaves) return;
+      const later = order.slice(order.lastIndexOf(run.letter) + 1).map((li) => sewnBy[li]);
+      const kept = new Set(run.pts.slice(1).map((q, i) => `${run.pts[i]} ${q}`));
+      const w = whole[k].pts;
+      let before = 0;
+      let after = 0;
+      for (let i = 1; i < w.length; i++) {
+        const under = later.length > 0 && wholly(later, w[i - 1], w[i]);
+        // A stitch that shows is never left out.
+        if (!under && !kept.has(`${w[i - 1]} ${w[i]}`)) {
+          problems.push(`${l.id}: letter ${run.letter} lost the stitch (${w[i - 1][0].toFixed(1)}, ${w[i - 1][1].toFixed(1)}) to (${w[i][0].toFixed(1)}, ${w[i][1].toFixed(1)}), which shows`);
+          break;
+        }
+        if (under) before += Math.hypot(w[i][0] - w[i - 1][0], w[i][1] - w[i - 1][1]);
+      }
+      for (let i = 1; i < run.pts.length; i++) {
+        const [a, b] = [run.pts[i - 1], run.pts[i]];
+        if (later.length && wholly(later, a, b)) after += Math.hypot(b[0] - a[0], b[1] - a[1]);
+      }
+      // Under later letters there is less thread than before, never more.
+      if (after > before + 1e-6) problems.push(`${l.id}: letter ${run.letter} has ${after.toFixed(1)} mm of thread under later letters, ${before.toFixed(1)} mm before`);
+    });
+  }
+  return problems;
+}
+
 export const SATIN_OPS: Op[] = [
   {
     name: 'satin there and back',
@@ -1204,6 +1387,17 @@ const sortedJson = (v: unknown): string =>
   JSON.stringify(v, (_k, x) => (ArrayBuffer.isView(x) ? Array.from(x as Uint8Array) : x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => (a < b ? -1 : 1))) : x));
 
 /**
+ * Whether `n` holds what `m` holds: the same fields, each the same value (compared as JSON where it
+ * is not the same object; a large area is not turned into JSON when it is the same one).
+ */
+function samePutBack(m: Remembered, n: Remembered): boolean {
+  const a = Object.keys(m).filter((k) => m[k as keyof Remembered] !== undefined).sort();
+  const b = Object.keys(n).filter((k) => n[k as keyof Remembered] !== undefined).sort();
+  if (a.join() !== b.join()) return false;
+  return a.every((k) => m[k as keyof Remembered] === n[k as keyof Remembered] || sortedJson(m[k as keyof Remembered]) === sortedJson(n[k as keyof Remembered]));
+}
+
+/**
  * One form per object (vector model rule 1): never two of its places used at once, and taking its
  * form and putting it back changes nothing.
  */
@@ -1227,7 +1421,7 @@ export function checkOneGeo(p: Pattern): void {
     // Known and guessed apart (rule 6): a form only read from the stitches is never kept as curves.
     if (m.read && m.geo) problems.push(`${o.index}: a form read from its stitches kept as known`);
     const geo = geoOf(m);
-    if (geo && sortedJson(withGeo(m, geo)) !== sortedJson(m)) problems.push(`${o.index}: its form put back changes it`);
+    if (geo && !samePutBack(m, withGeo(m, geo))) problems.push(`${o.index}: its form put back changes it`);
   }
   expect(problems.join('; '), 'one form').toBe('');
 }
@@ -1255,6 +1449,41 @@ export function checkEmptyFills(p: Pattern): void {
     if ((m?.fill?.pattern as string) === 'none' || (m?.kept?.fill?.pattern as string) === 'none') problems.push(`${o.index}: an empty fill`);
   }
   expect(problems.join('; '), 'empty fills').toBe('');
+}
+
+/**
+ * A crosshatch fill (sewn from its shape, not changed by hand) is its two layers: its rows' full
+ * stitches lie at its angle ±45 degrees, both directions about as much, through duplicate, mirror,
+ * knockout, undo and saving (see crosshatchFill).
+ */
+export function checkCrosshatch(p: Pattern): void {
+  const problems: string[] = [];
+  for (const o of sewObjects(p)) {
+    const m = remembered(p, o);
+    const f = m?.fill;
+    if (f?.pattern !== 'crosshatch' || m!.hand || m!.free || m!.read) continue;
+    const angle = Number.isFinite(f.angle) ? f.angle : 0;
+    const len = Math.min(f.stitch, 3);
+    const layer = [0, 0];
+    let all = 0;
+    for (let i = o.first + 1; i <= o.last; i++) {
+      if (p.cmd[i] !== STITCH || p.cmd[i - 1] !== STITCH) continue;
+      const dx = (p.x[i] - p.x[i - 1]) / 10;
+      const dy = (p.y[i] - p.y[i - 1]) / 10;
+      // A full stitch of a row: travel and the steps from row to row are shorter.
+      if (Math.abs(Math.hypot(dx, dy) - len) > 0.06) continue;
+      all++;
+      const d = (((Math.atan2(dy, dx) * 180) / Math.PI) % 180 + 180) % 180;
+      [angle - 45, angle + 45].forEach((a, k) => {
+        const off = Math.abs(d - a) % 180;
+        if (Math.min(off, 180 - off) < 4) layer[k]++;
+      });
+    }
+    if (all < 40) continue;
+    if (layer[0] + layer[1] < all * 0.9) problems.push(`${o.index}: rows off the layers (${layer[0] + layer[1]} of ${all})`);
+    if (Math.min(...layer) < all * 0.25) problems.push(`${o.index}: one layer only (${layer.join(' and ')} of ${all})`);
+  }
+  expect(problems.join('; '), 'crosshatch layers').toBe('');
 }
 
 /** Each blending fill has one second thread in its blend thread, and every second thread its fill. */
@@ -1479,6 +1708,67 @@ export function checkExport(p: Pattern): void {
   const oy = Number(b[0]?.split(',')[1]) - Number(a[0]?.split(',')[1]);
   const moved = a.map((s) => s.split(',').map(Number)).map(([x, y]) => `${x + ox},${y + oy}`);
   expect(b, 'stitches read back from PES').toEqual(moved);
+
+  // Different threads get different PEC and Janome slots, the same thread the same slot.
+  const blocks = 1 + p.cmd.filter((c) => c === COLOR_CHANGE).length;
+  const threadKey = (c: ThreadColor | undefined) => (c ? `${c.r},${c.g},${c.b},${c.pecIndex ?? ''}` : '');
+  const groups = (key: (k: number) => string) => {
+    const first = new Map<string, number>();
+    return Array.from({ length: blocks }, (_, k) => {
+      if (!first.has(key(k))) first.set(key(k), k);
+      return first.get(key(k));
+    });
+  };
+  const meant = groups((k) => threadKey(p.colors[k] ?? p.colors[p.colors.length - 1]));
+  const jef = parsePattern(writePattern(p, 'jef'), 'torture.jef');
+  expect(groups((k) => String(back.colors[k]?.pecIndex)), 'PEC slots').toEqual(meant);
+  // Brother's appliqué steps (62 to 64) only for a color that was one.
+  const applique = Array.from({ length: blocks }, (_, k) => back.colors[k]?.pecIndex ?? 0).filter(
+    (s, k) => s >= PEC_APPLIQUE && pecOwnSlot(p.colors[k] ?? p.colors[p.colors.length - 1]) !== s,
+  );
+  expect(applique, 'threads on appliqué slots').toEqual([]);
+  expect(groups((k) => threadKey(jef.colors[k])), 'Janome slots').toEqual(meant);
+
+  // Every cut survives JEF, however short the move after it (the format cuts on zero-length jumps).
+  const cuts = (q: Pattern, x0: number, y0: number) => {
+    const out: string[] = [];
+    let sewn = false;
+    let pending = false;
+    for (let i = 0; i < q.cmd.length; i++) {
+      if (q.cmd[i] === TRIM && sewn) {
+        pending = true;
+        sewn = false;
+      } else if (q.cmd[i] === COLOR_CHANGE) {
+        sewn = false;
+      } else if (q.cmd[i] === STITCH) {
+        if (pending) out.push(`${q.x[i] - x0},${q.y[i] - y0}`);
+        pending = false;
+        sewn = true;
+      }
+    }
+    return out;
+  };
+  const firstStitch = (q: Pattern) => q.cmd.indexOf(STITCH);
+  const meantCuts = cuts(p, p.x[firstStitch(p)], p.y[firstStitch(p)]);
+  const readCuts = cuts(jef, jef.x[firstStitch(jef)], jef.y[firstStitch(jef)]);
+  let k = 0;
+  for (const c of readCuts) if (c === meantCuts[k]) k++;
+  expect(meantCuts.slice(k)[0], 'cut lost in JEF').toBeUndefined();
+
+  // DST keeps every cut too, and never writes a jump that does not move (some machines skip those).
+  const dstData = writePattern(p, 'dst');
+  const zero: number[] = [];
+  for (let i = 512; i + 2 < dstData.length; i += 3) {
+    const [b0, b1, b2] = [dstData[i], dstData[i + 1], dstData[i + 2]];
+    if ((b2 & 0xf3) === 0xf3) break;
+    if ((b2 & 0xc3) === 0x83 && !b0 && !b1 && !(b2 & 0x3c)) zero.push((i - 512) / 3);
+  }
+  expect(zero.slice(0, 5), 'zero-length jumps in DST').toEqual([]);
+  const dst = parsePattern(dstData, 'torture.dst');
+  const dstCuts = cuts(dst, dst.x[firstStitch(dst)], dst.y[firstStitch(dst)]);
+  k = 0;
+  for (const c of dstCuts) if (c === meantCuts[k]) k++;
+  expect(meantCuts.slice(k)[0], 'cut lost in DST').toBeUndefined();
 }
 
 /** The objects of `p` in a line each, to follow a chain (TORTURE_TRACE=1). */
@@ -1531,6 +1821,7 @@ export async function chain(seed: number, steps = STEPS, opts: { trace?: boolean
   const rl = rng(seed + 104729);
   const rs = rng(seed + 15485863);
   const rsat = rng(seed + 32452843);
+  const rlet = rng(seed + 49979687);
   const d = new Doc();
   const log: string[] = [];
   const at = () => `seed ${seed}: ${log.join(' > ')}`;
@@ -1574,6 +1865,19 @@ export async function chain(seed: number, steps = STEPS, opts: { trace?: boolean
         }
       }
     }
+    // Now and then a lettering set or set anew, beside the chain.
+    if (rlet() < 0.15) {
+      const lop = blank(d.cur.p) ? LETTERING_OPS[0] : pick(rlet, LETTERING_OPS);
+      if (await lop.run(d, rlet)) {
+        log.push(lop.name);
+        if (process.env.TORTURE_TRACE) console.log(lop.name, describeObjects(d.cur.p));
+        try {
+          checkStep(d, false);
+        } catch (e) {
+          throw new Error(`${at()}\n${(e as Error).message}`);
+        }
+      }
+    }
     // Now and then an outline edited on the level Form, beside the chain.
     if (!blank(d.cur.p) && rs() < 0.25) {
       const sop = pick(rs, SHAPE_OPS);
@@ -1605,11 +1909,28 @@ export async function chain(seed: number, steps = STEPS, opts: { trace?: boolean
 }
 
 
+function bytesOf(b: Uint8Array): string {
+  let out = '';
+  for (let i = 0; i < b.length; i += 8192) out += String.fromCharCode(...b.subarray(i, i + 8192));
+  return out;
+}
+/** A value as text, typed arrays as their bytes, keys in order. */
+const asText = (v: unknown): string =>
+  JSON.stringify(v, (_k, x) =>
+    ArrayBuffer.isView(x)
+      ? `${x.constructor.name}:${bytesOf(new Uint8Array(x.buffer, x.byteOffset, x.byteLength))}`
+      : x && typeof x === 'object' && !Array.isArray(x)
+        ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => (a < b ? -1 : 1)))
+        : x,
+  );
+
 /** All the invariants, after a step; `full`: also the export and sewing the design. */
 function checkStep(d: Doc, full: boolean): void {
   const p = d.cur.p;
   checkWellFormed(p);
-  expect(knowledge(p), 'knowledge as stored with this version').toEqual(d.cur.known);
+  // Compared as text first (areas are large typed arrays, slow to compare one by one); the full diff only when they differ.
+  const known = knowledge(p);
+  if (asText(known) !== asText(d.cur.known)) expect(known, 'knowledge as stored with this version').toEqual(d.cur.known);
   checkAllKnown(p);
   checkKeys(p);
   checkObjectList(p);
@@ -1619,12 +1940,14 @@ function checkStep(d: Doc, full: boolean): void {
   checkOneGeo(p);
   checkFits(p);
   checkBlends(p);
+  checkCrosshatch(p);
   checkEchoes(p);
   checkLineParts(p);
   checkKnockouts(p);
   checkAreas(p);
   checkFollowers(p);
   checkSatinSections(p);
+  checkLetterings(p);
   checkTrace(d);
   if (full) {
     checkExport(p);

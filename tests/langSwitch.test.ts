@@ -3,6 +3,7 @@ import type { Browser, Page } from 'playwright';
 import type { ViteDevServer } from 'vite';
 import { de } from '../src/i18n/de';
 import { en } from '../src/i18n/en';
+import { launchChromium } from './helpers/browser';
 
 /**
  * Switching the language changes every text at once, without a reload: the app is opened in a
@@ -175,11 +176,10 @@ describe.skipIf(!on)('switching the language', () => {
 
   beforeAll(async () => {
     const { createServer } = await import('vite');
-    const { chromium } = await import('playwright');
     server = await createServer({ server: { port: 0, strictPort: false }, logLevel: 'error' });
     await server.listen();
     url = server.resolvedUrls!.local[0];
-    browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
+    browser = await launchChromium();
   }, 60_000);
 
   afterAll(async () => {

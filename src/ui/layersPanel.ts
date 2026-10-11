@@ -660,6 +660,6 @@ export class LayersPanel {
 /** What the open file's format does with a thread color. */
 function colorNote(format: FileFormat): string {
   if (format === 'pes' || format === 'pec') return t('layers.colorNote.pes');
-  if (format === 'jef' || format === 'vp3') return t(`layers.colorNote.${format}`);
+  if (format === 'jef' || format === 'vp3' || format === 'xxx' || format === 'sew') return t(`layers.colorNote.${format}`);
   return t('layers.colorNote.none', { format: format.toUpperCase() });
 }

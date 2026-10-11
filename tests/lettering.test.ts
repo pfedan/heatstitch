@@ -6,7 +6,9 @@ import { letteringObjects, placeLettering, withoutObjects } from '../src/letteri
 import { letteringRuns, sewLettering } from '../src/lettering/sew';
 import { letteringFrom } from '../src/lettering/stored';
 import { sewObjects } from '../src/model/objects';
-import { COLOR_CHANGE, END, STITCH, TRIM } from '../src/model/pattern';
+import { COLOR_CHANGE, END, JUMP, STITCH, TRIM } from '../src/model/pattern';
+import { CRITICAL, validatePattern } from '../src/validation/validate';
+import { DEFAULT_PROFILE } from '../src/validation/profiles';
 import { rememberedIn, restoreRemembered } from '../src/model/restitch';
 import { parsePattern } from '../src/parsers';
 import { panelKey, type LetteringInfo } from '../src/ui/letteringPanel';
@@ -30,6 +32,13 @@ const spec = (over: Partial<Lettering> = {}): Lettering => ({
   color: { r: 200, g: 20, b: 40 },
   ...over,
 });
+
+/** Records of runs sewn one after the other (no locks or trims: enough to measure density). */
+const recsOf = (runs: ReturnType<typeof letteringRuns>) => [
+  { x: Math.round(runs[0].pts[0][0] * 10), y: Math.round(runs[0].pts[0][1] * 10), cmd: JUMP },
+  ...runs.flatMap((r) => r.pts.map((q) => ({ x: Math.round(q[0] * 10), y: Math.round(q[1] * 10), cmd: STITCH }))),
+  { x: 0, y: 0, cmd: TRIM },
+];
 
 const stitchCount = (cmd: Uint8Array) => cmd.reduce((a, c) => a + (c === STITCH ? 1 : 0), 0);
 
@@ -95,6 +104,17 @@ describe('layout', () => {
     expect(Math.atan2(last.m[1], last.m[0])).toBeGreaterThan(0);
   });
 
+  it('sews a line back only when its letters do not run into each other', () => {
+    // Magnolia is a script that may be sewn back and forth: its letters join, so every line runs as written.
+    const script = font('magnolia_KOR');
+    expect(sewLettering(script, spec({ font: 'magnolia_KOR', text: 'Anna\nLisa', height: 20 }), 3).layout.letters.some((p) => p.back)).toBe(false);
+    const roman = font('roman_ags');
+    const apart = sewLettering(roman, spec({ font: 'roman_ags', text: 'ANNA\nLISA', height: 25 }), 3).layout;
+    expect(apart.letters.filter((p) => p.line === 1).every((p) => p.back)).toBe(true);
+    const close = sewLettering(roman, spec({ font: 'roman_ags', text: 'ANNA\nLISA', height: 25, spacing: -6 }), 3).layout;
+    expect(close.letters.some((p) => p.back)).toBe(false);
+  });
+
   it('knows which letters are missing', () => {
     const tt = font('tt_masters');
     expect(missingIn(tt, 'Anna ß')).toEqual(missingIn(tt, 'ß'));
@@ -140,6 +160,34 @@ describe('sewing', () => {
     const runs = letteringRuns(roman, spec({ font: 'roman_ags', text: 'A', height: 15 }));
     const gaps = runs.slice(1).map((r, k) => Math.hypot(r.pts[0][0] - runs[k].pts[runs[k].pts.length - 1][0], r.pts[0][1] - runs[k].pts[runs[k].pts.length - 1][1]));
     expect(Math.max(...gaps)).toBeLessThan(3);
+  });
+
+  it('sews letters that overlap there once: the dense spots at the joins of a script go', () => {
+    const script = font('auberge_marif');
+    const l = spec({ font: 'auberge_marif', text: 'Herzlichen', height: 36 });
+    const lay = layout(script, l);
+    const runs = letteringRuns(script, l, lay);
+    const all = letteringRuns(script, l, lay, true);
+    const count = (rs: typeof runs) => rs.reduce((n, r) => n + r.pts.length, 0);
+    expect(count(runs)).toBeLessThan(count(all) * 0.99);
+    // Every piece starts and ends where the font has it, so joins and trims stay as they were.
+    expect(runs.map((r) => [r.pts[0], r.pts[r.pts.length - 1]])).toEqual(all.map((r) => [r.pts[0], r.pts[r.pts.length - 1]]));
+    // What Prüfen finds: far fewer critical cells, none of the dense spots left open.
+    const check = (recs: ReturnType<typeof sewLettering>['recs']) => {
+      const p = placeLettering(null, [], { ...sewLettering(script, l, 3), recs }, l)!.pattern;
+      return validatePattern(p, DEFAULT_PROFILE);
+    };
+    const now = check(sewLettering(script, l, 3).recs);
+    const before = check(recsOf(all));
+    expect(now.criticalCells).toBeLessThan(before.criticalCells / 3);
+    expect(now.zones.filter((z) => !z.practice && z.reasons.includes('density') && z.level === CRITICAL)).toEqual([]);
+  });
+
+  it('leaves letters that do not overlap as the font has them', () => {
+    const sans = font('barstitch_regular');
+    const l = spec({ text: 'Anna Lisa', height: 15 });
+    const lay = layout(sans, l);
+    expect(letteringRuns(sans, l, lay)).toEqual(letteringRuns(sans, l, lay, true));
   });
 
   it('sews every font that is shipped', () => {

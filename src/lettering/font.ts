@@ -11,7 +11,11 @@ export interface SatinEl {
   r: number[];
   g: number[];
   /** spacing, pull per side, underlay, pull as share of the width, split length, E stitch */
-  p: { sp: number; pc: number; u: 'none' | 'center' | 'contour' | 'zigzag' | 'both'; ps?: number; sl?: number; e?: 1 };
+  /**
+   * Pull compensation as Ink/Stitch means it, for each side: `pc` mm and `ps` share of the width
+   * (0.1 = 10 %); `pcb` and `psb` for the second rail when it differs.
+   */
+  p: { sp: number; pc: number; u: 'none' | 'center' | 'contour' | 'zigzag' | 'both'; ps?: number; pcb?: number; psb?: number; sl?: number; e?: 1 };
 }
 
 /** Running stitch along a path (flat x, y list); manual: the points are the stitches. */

@@ -64,10 +64,25 @@ const PEC: [number, number, number, string][] = [
   [9, 91, 166, 'Electric Blue'],
   [240, 249, 112, 'Lemon Yellow'],
   [227, 243, 91, 'Fresh Green'],
-  [255, 153, 0, 'Orange'],
-  [255, 240, 141, 'Cream Yellow'],
+  // 62 to 64 are no threads: Brother machines show them as appliqué steps (libpes, checked on an
+  // Innov-is 955; pystitch leaves them out too). The colors are only how they are drawn.
+  [255, 153, 0, 'Applique Material'],
+  [255, 240, 141, 'Applique Position'],
   [255, 200, 200, 'Applique'],
 ];
+
+/** First of the appliqué slots (62 to 64), which no thread may take. */
+export const PEC_APPLIQUE = 62;
+
+/**
+ * The PEC slot a color may keep when saved: its own, unless that is an appliqué slot it does not
+ * carry as one (a color read from such a file keeps the step, one merely drawn alike does not).
+ */
+export function pecOwnSlot(c: ThreadColor): number | undefined {
+  const i = c.pecIndex;
+  if (i === undefined || i < 1 || i >= PEC.length) return undefined;
+  return i < PEC_APPLIQUE || c.name === PEC[i][3] ? i : undefined;
+}
 
 export function pecColor(index: number): ThreadColor {
   const i = index >= 0 && index < PEC.length ? index : 0;
@@ -75,11 +90,11 @@ export function pecColor(index: number): ThreadColor {
   return { r, g, b, name, pecIndex: i };
 }
 
-/** The palette as thread colors (without "unknown"), each color once, for choosing a thread. */
+/** The palette as thread colors (without "unknown" and the appliqué steps), each color once, for choosing a thread. */
 export function pecThreads(): ThreadColor[] {
   const seen = new Set<string>();
   const out: ThreadColor[] = [];
-  for (let i = 1; i < PEC.length; i++) {
+  for (let i = 1; i < PEC_APPLIQUE; i++) {
     const key = PEC[i].slice(0, 3).join(',');
     if (seen.has(key)) continue;
     seen.add(key);
@@ -88,29 +103,6 @@ export function pecThreads(): ThreadColor[] {
   return out;
 }
 
-/** Perceptual color distance ("red mean", compuphase.com/cmetric.htm), as pyembroidery uses. */
-function distance(r1: number, g1: number, b1: number, r2: number, g2: number, b2: number): number {
-  const rm = (r1 + r2) / 2;
-  const r = r1 - r2;
-  const g = g1 - g2;
-  const b = b1 - b2;
-  return ((512 + rm) * r * r) / 256 + 4 * g * g + ((767 - rm) * b * b) / 256;
-}
-
-/** The color's own PEC index if it has one, otherwise the nearest palette entry (never 0, "unknown"). */
-export function pecIndexOf(c: ThreadColor): number {
-  if (c.pecIndex !== undefined && c.pecIndex >= 0 && c.pecIndex < PEC.length) return c.pecIndex;
-  let best = 1;
-  let bestD = Infinity;
-  for (let i = 1; i < PEC.length; i++) {
-    const d = distance(c.r, c.g, c.b, PEC[i][0], PEC[i][1], PEC[i][2]);
-    if (d < bestD) {
-      bestD = d;
-      best = i;
-    }
-  }
-  return best;
-}
 
 /** Distinct colors for formats without color info (DST). */
 const DEFAULTS = [2, 5, 14, 13, 7, 12, 32, 20, 25, 37, 55, 33];

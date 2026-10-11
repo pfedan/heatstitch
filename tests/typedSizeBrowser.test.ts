@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Browser, Page } from 'playwright';
 import type { ViteDevServer } from 'vite';
+import { launchChromium } from './helpers/browser';
 
 /**
  * A circle drawn freehand and typed 60 mm wide in the Objekt card comes out 60,0 × 60,0 mm, and
@@ -19,10 +20,9 @@ describe.skipIf(!on)('typing a size in the Objekt card', () => {
 
   beforeAll(async () => {
     const { createServer } = await import('vite');
-    const { chromium } = await import('playwright');
     server = await createServer({ server: { port: 0, strictPort: false }, logLevel: 'error' });
     await server.listen();
-    browser = await chromium.launch(process.env.PW_CHROMIUM ? { executablePath: process.env.PW_CHROMIUM } : {});
+    browser = await launchChromium();
     page = await browser.newPage({ viewport: { width: 1600, height: 1000 }, locale: 'de-DE' });
     await page.goto(server.resolvedUrls!.local[0]);
     await page.getByText('Leer anfangen').click();

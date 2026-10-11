@@ -5,11 +5,12 @@ import { writeExp } from './exp';
 import { writeJef } from './jef';
 import { writePecFile, writePes } from './pes';
 import { writeVp3 } from './vp3';
+import { writeXxx } from './xxx';
 
-export type OutputFormat = 'pes' | 'dst' | 'jef' | 'exp' | 'vp3' | 'pec';
+export type OutputFormat = 'pes' | 'dst' | 'jef' | 'exp' | 'vp3' | 'xxx' | 'pec';
 
 /** Save formats in menu order. */
-export const OUTPUT_FORMATS: OutputFormat[] = ['pes', 'dst', 'jef', 'vp3', 'exp', 'pec'];
+export const OUTPUT_FORMATS: OutputFormat[] = ['pes', 'dst', 'jef', 'vp3', 'exp', 'xxx', 'pec'];
 
 export function isOutputFormat(v: unknown): v is OutputFormat {
   return OUTPUT_FORMATS.includes(v as OutputFormat);
@@ -27,6 +28,7 @@ const WRITERS: Record<OutputFormat, (p: Pattern, o: WriteOptions) => Uint8Array>
   jef: (p, o) => writeJef(p, new Date(), o.hoop ?? null),
   exp: writeExp,
   vp3: writeVp3,
+  xxx: writeXxx,
   pec: writePecFile,
 };
 
@@ -39,7 +41,7 @@ export function cleanName(name: string): string {
   return name
     .replace(/[\\/:*?"<>|\x00-\x1f]/g, '')
     .trim()
-    .replace(/\.(pes|pec|dst|jef|exp|vp3)$/i, '')
+    .replace(/\.(pes|pec|dst|jef|exp|vp3|xxx|sew)$/i, '')
     .trim();
 }
 

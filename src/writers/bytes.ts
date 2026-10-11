@@ -1,4 +1,4 @@
-import type { Bounds, Pattern } from '../model/pattern';
+import { STITCH, type Bounds, type Pattern } from '../model/pattern';
 
 /** Growable little-endian byte buffer for the writers. */
 export class ByteWriter {
@@ -92,6 +92,24 @@ export function headerLabel(name: string, max: number): string {
     .normalize('NFKD')
     .replace(/[^\x20-\x7e]/g, '')
     .slice(0, max);
+}
+
+/** Bounds of the stitches alone (of every record when there are none): the design as sewn. */
+export function stitchExtents(p: Pattern): Bounds {
+  let b: Bounds | null = null;
+  for (let i = 0; i < p.cmd.length; i++) {
+    if (p.cmd[i] !== STITCH) continue;
+    const x = p.x[i];
+    const y = p.y[i];
+    if (!b) b = { minX: x, minY: y, maxX: x, maxY: y };
+    else {
+      if (x < b.minX) b.minX = x;
+      if (x > b.maxX) b.maxX = x;
+      if (y < b.minY) b.minY = y;
+      if (y > b.maxY) b.maxY = y;
+    }
+  }
+  return b ?? extents(p);
 }
 
 /** Bounds of every record (jumps included), which the headers describe. */

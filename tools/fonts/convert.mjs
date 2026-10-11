@@ -44,6 +44,13 @@ const numOr = (v, d) => {
   return v === undefined || v === '' || !Number.isFinite(n) ? d : n;
 };
 
+/** The one or two values of a split parameter ("0.2" or "0.2 0.4"), as Ink/Stitch reads it: one counts for both. */
+function sides(v) {
+  const parts = String(v ?? '').trim().split(/\s+/).filter(Boolean);
+  const a = numOr(parts[0], 0);
+  return [a, parts.length > 1 ? numOr(parts[1], a) : a];
+}
+
 /** Ramer-Douglas-Peucker on a polyline. */
 function simplify(pts, tol) {
   if (pts.length < 3) return pts;
@@ -235,13 +242,14 @@ function glyphElements(layer, parent, base, mm, problems) {
       if (!['satin_column', 'e_stitch', 'zigzag'].includes(method)) problems.add(`satin ${method}`);
       const sat = satinFrom(subs, a);
       if (!sat) return problems.add('satin without rails');
-      const p = {
-        sp: R(numOr(a['inkstitch:zigzag_spacing_mm'], 0.4)),
-        pc: R(numOr(String(a['inkstitch:pull_compensation_mm'] ?? '').split(/\s+/)[0], 0) / 2),
-        u: underOf(a),
-      };
-      const pct = numOr(String(a['inkstitch:pull_compensation_percent'] ?? '').split(/\s+/)[0], 0);
-      if (pct) p.ps = R(pct / 200);
+      // Ink/Stitch's pull compensation is for each side, as ours is; a second value is for the
+      // second rail (lib/elements/satin_column/satin_column.py, lib/utils/geometry.py offset_points).
+      const [pc, pcb] = sides(a['inkstitch:pull_compensation_mm']);
+      const [pct, pctb] = sides(a['inkstitch:pull_compensation_percent']);
+      const p = { sp: R(numOr(a['inkstitch:zigzag_spacing_mm'], 0.4)), pc: R(pc), u: underOf(a) };
+      if (pcb !== pc) p.pcb = R(pcb);
+      if (pct) p.ps = Math.round(pct * 10) / 1000;
+      if (pctb !== pct) p.psb = Math.round(pctb * 10) / 1000;
       const split = numOr(a['inkstitch:max_stitch_length_mm'], 0);
       if (split > 0) p.sl = R(split);
       if (isTrue(a['inkstitch:e_stitch']) || method === 'e_stitch') p.e = 1;
