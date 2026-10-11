@@ -1,5 +1,5 @@
 import type { Pt } from '../digitize/skeleton';
-import { apply, IDENTITY, rotation, scaling, translation, type Mat } from '../shape/path';
+import { IDENTITY, rotation, scaling, translation, type Mat } from '../shape/path';
 
 /** Pick radius of the handles, CSS pixels. */
 const PICK_PX = 10;
@@ -17,6 +17,8 @@ export interface Box {
 
 export interface FrameView {
   box: Box;
+  /** The frame as drawn and picked at this zoom (pixels per mm): the box, widened by the gap (see FrameHooks.pad). */
+  shown(scale: number): Box;
   /** The map while dragging (identity otherwise). */
   m: Mat;
   canScale: boolean;
@@ -77,6 +79,11 @@ export interface FrameHooks {
   change: (m: Mat, final: boolean) => void;
   /** The contour at distance `d` (mm) by its grip: shown, or taken over when `final`; NaN: back as it was. */
   gap?: (d: number, final: boolean) => void;
+  /**
+   * Gap between the objects and their frame, CSS pixels (none when left out): on the level Form the
+   * frame stands off the outline, so its corners never cover a node on it (a rectangle's corners).
+   */
+  pad?: () => number;
 }
 
 /** Corners in the order top left, top right, bottom right, bottom left. */
@@ -130,10 +137,16 @@ export class FrameTool implements FrameView {
     this.m = IDENTITY;
   }
 
+  shown(scale: number): Box {
+    const d = (this.hooks.pad?.() ?? 0) / scale;
+    const b = this.box;
+    return d ? { minX: b.minX - d, minY: b.minY - d, maxX: b.maxX + d, maxY: b.maxY + d } : b;
+  }
+
   pickAt(x: number, y: number, scale: number): FramePart | null {
     if (!this.active) return null;
     const r = PICK_PX / scale;
-    const b = this.box;
+    const b = this.shown(scale);
     // The grip lies on the contour, on the frame's side: it goes first.
     if (this.gap && Math.hypot(x - this.gap.at[0], y - this.gap.at[1]) < r) return 'gap';
     const cx = (b.minX + b.maxX) / 2;
@@ -210,6 +223,9 @@ export class FrameTool implements FrameView {
       const c = corners(b);
       const [gx, gy] = c[part];
       const [ax, ay] = c[(part + 2) % 4];
+      // The grip follows the pointer from where it was pressed (the drawn corner may stand off the box).
+      x = gx + (x - fx);
+      y = gy + (y - fy);
       const w = gx - ax;
       const h = gy - ay;
       let sx = Math.abs(w) > 1e-6 ? (x - ax) / w : 1;
@@ -253,15 +269,12 @@ export class FrameTool implements FrameView {
     this.turn = 0;
   }
 
-  hoverAt(x: number, y: number, scale: number): boolean {
-    const h = this.pickAt(x, y, scale);
+  /** `covered`: something on top (a node of the outline) takes the pointer, the frame shows no hover. */
+  hoverAt(x: number, y: number, scale: number, covered = false): boolean {
+    const h = covered ? null : this.pickAt(x, y, scale);
     if (h === this.hover) return false;
     this.hover = h;
     return true;
   }
 
-  /** The frame's corners after the current map. */
-  mappedCorners(): Pt[] {
-    return corners(this.box).map((q) => apply(this.m, q));
-  }
 }

@@ -28,6 +28,9 @@ import { t, formatNumber } from '../i18n';
 import { type NewShape, addShape } from '../model/addShape';
 import { ui } from './state';
 
+/** Gap between the frame and the outline on the level Form, CSS pixels: its corner handles beside a node, not on it. */
+const FORM_FRAME_PAD_PX = 12;
+
 /** The map undoing `m`. */
 const invert = (m: Mat): Mat => {
   const d = m[0] * m[3] - m[1] * m[2];
@@ -271,6 +274,7 @@ export function bindDrawing(app: DrawingApp) {
 
   const frameTool = new FrameTool({
     gap: (d, final) => void app.setContourGap(d, final),
+    pad: () => (app.shapeTool.active ? FORM_FRAME_PAD_PX : 0),
     change: (m, final) => {
       if (final) {
         pendingFrame = null;

@@ -242,6 +242,42 @@ export function removeNode(f: Form, path: number, i: number): Form | null {
   return g;
 }
 
+/** A node of a form: its path and its place in that path. */
+export interface NodeRef {
+  path: number;
+  i: number;
+}
+
+/** All nodes of path `path` (a loop selected as a whole). */
+export const nodesOf = (f: Form, path: number): NodeRef[] => (f.paths[path]?.nodes ?? []).map((_, i) => ({ path, i }));
+
+/**
+ * The form without nodes `refs`. A path left with too few nodes to keep (a closed one under three,
+ * an open one under two) goes as a whole, as removeNode does; null when no path would be left.
+ */
+export function removeNodes(f: Form, refs: readonly NodeRef[]): Form | null {
+  const gone = new Set(refs.map((r) => `${r.path}:${r.i}`));
+  const g = cloneForm(f);
+  g.paths = g.paths
+    .map((p, k) => ({ closed: p.closed, nodes: p.nodes.filter((_, i) => !gone.has(`${k}:${i}`)) }))
+    .filter((p, k) => p.nodes.length === f.paths[k].nodes.length || p.nodes.length >= (p.closed ? 3 : 2));
+  return g.paths.length ? g : null;
+}
+
+/** Moves nodes `refs` by (dx, dy) mm, each with its handles (the curves between them keep their shape). */
+export function moveNodes(f: Form, refs: readonly NodeRef[], dx: number, dy: number): Form {
+  const g = cloneForm(f);
+  for (const r of refs) {
+    const n = g.paths[r.path]?.nodes[r.i];
+    if (!n) continue;
+    for (const q of [n.p, n.a, n.b]) {
+      q[0] += dx;
+      q[1] += dy;
+    }
+  }
+  return g;
+}
+
 /** Moves a node with its handles. */
 export function moveNode(f: Form, path: number, i: number, to: Pt): Form {
   const g = cloneForm(f);

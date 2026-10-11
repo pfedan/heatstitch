@@ -3,13 +3,18 @@ import { joinEnd, joinOpenPaths, splitPathAt, type Joined } from '../shape/join'
 import { withCrossingNodes } from '../shape/ops';
 import { bandGrip, draggedWidth } from '../shape/band';
 import type { Pt } from '../digitize/skeleton';
-import { bezier, cloneForm, endDirection, extendPath, insertNode, moveHandle, moveNode, nearestOnForm, removeNode, segment, segments, setSmooth, type Form } from '../shape/path';
+import { bezier, cloneForm, endDirection, extendPath, insertNode, moveHandle, moveNodes, nearestOnForm, nodesOf, removeNodes, segment, segments, setSmooth, type Form, type NodeRef } from '../shape/path';
 
 /** Pick radius around the pointer for nodes and handles, CSS pixels; curves a little more. */
 const PICK_PX = 9;
 const PICK_CURVE_PX = 7;
-/** A double-click this close to the outline puts a node there. */
+/** A double-click this close to the outline selects its loop (with Alt: puts a node there). */
 const INSERT_PX = 14;
+/**
+ * How long a click on a hollow dot waits before its new node is sewn: a second press on it within
+ * this time is a double-click, which selects the loop instead (and puts no node in).
+ */
+export const DOUBLE_MS = 500;
 /** New nodes to drag out: a hollow dot in the middle of each curve this long on screen (CSS pixels), and one this far beyond each end of a line. */
 const GHOST_MIN_PX = 40;
 const GHOST_END_PX = 28;
@@ -31,7 +36,8 @@ export type Ghost = ({ path: number; seg: number; part: 'mid' } | { path: number
 
 export interface ShapeView {
   form: Form;
-  selected: { path: number; i: number } | null;
+  /** Whether node `i` of path `path` is selected. */
+  isSelected(path: number, i: number): boolean;
   hover: ShapePick | null;
   /** The form was changed and is not sewn yet (while dragging). */
   dirty: boolean;
@@ -55,30 +61,128 @@ export interface ShapeHooks {
   width: (w: number) => void;
 }
 
-/** `added`: a new node was put in on the press (its form and selection before, for cancel). */
-type Drag = { pick: ShapePick; from: Pt; start: Form; band: number | null; added?: { form: Form; selected: { path: number; i: number } | null } } | null;
+/**
+ * `added`: a new node was put in on the press (its form and selection before, for cancel).
+ * `collapse`: a press on a node of several selected; released without moving, only it stays selected.
+ */
+type Drag = { pick: ShapePick; from: Pt; start: Form; band: number | null; added?: { form: Form; sel: NodeRef[] }; collapse?: boolean } | null;
 
 /**
  * The outline of a fill on the canvas, as curves with nodes: nodes and their handles are dragged,
- * a curve dragged bends, a double-click on it puts a node there, Delete removes the selected node
- * and C makes it round or a corner. New nodes are dragged out of hollow dots (as in map editors and
+ * a curve dragged bends. Several nodes are selected with Shift+click, a frame (Shift+drag) or a
+ * double-click on a loop (all its nodes, as in vector programs), and then move, go (Delete) or turn
+ * round or corners (C) together; Alt+double-click puts a node on the outline. New nodes are dragged out of hollow dots (as in map editors and
  * QGIS's vertex tool): one in the middle of each curve, one beyond each end of a line. Every change ends in `change`; while dragging only the
  * outline moves. Coordinates are world millimetres.
  */
 export class ShapeTool implements ShapeView {
   active = false;
   form: Form = { paths: [] };
-  selected: { path: number; i: number } | null = null;
+  /** The selected nodes, in the order they were picked. */
+  sel: NodeRef[] = [];
   hover: ShapePick | null = null;
   dirty = false;
   band: number | null = null;
   bandOffset = 0;
   private drag: Drag = null;
   private moved = false;
+  /** A click on a hollow dot whose node is not sewn yet (see DOUBLE_MS): the form and selection before. */
+  private pending: { timer: ReturnType<typeof setTimeout>; node: NodeRef; form: Form; sel: NodeRef[] } | null = null;
 
   constructor(private hooks: ShapeHooks) {}
 
+  /** The one selected node; null when none or several are selected. */
+  get selected(): NodeRef | null {
+    return this.sel.length === 1 ? this.sel[0] : null;
+  }
+
+  set selected(s: NodeRef | null) {
+    this.sel = s ? [s] : [];
+  }
+
+  isSelected(path: number, i: number): boolean {
+    return this.sel.some((s) => s.path === path && s.i === i);
+  }
+
+  /** How many nodes are selected. */
+  get selCount(): number {
+    return this.sel.length;
+  }
+
+  /** Lets go of the selected nodes; false when none were. */
+  clearSelection(): boolean {
+    if (!this.sel.length) return false;
+    this.sel = [];
+    return true;
+  }
+
+  /** All nodes selected (Mod+A). */
+  selectAll(): void {
+    this.flush();
+    this.sel = this.form.paths.flatMap((_, k) => nodesOf(this.form, k));
+  }
+
+  /** The loop (path) under the pointer selected as a whole (double-click); false when none is near. */
+  selectLoopAt(x: number, y: number, scale: number): boolean {
+    this.flush();
+    const pick = this.pickAt(x, y, scale);
+    const path = pick && 'path' in pick ? pick.path : nearLoop(this.form, x, y, INSERT_PX / scale);
+    if (path === null) return false;
+    this.sel = nodesOf(this.form, path);
+    this.hooks.redraw();
+    return true;
+  }
+
+  /** The nodes inside the frame (world mm) added to the selection (Shift+drag). */
+  selectInRect(x0: number, y0: number, x1: number, y1: number): number {
+    this.flush();
+    const [ax, bx] = [Math.min(x0, x1), Math.max(x0, x1)];
+    const [ay, by] = [Math.min(y0, y1), Math.max(y0, y1)];
+    const inside = this.form.paths.flatMap((p, path) => p.nodes.flatMap((n, i) => (n.p[0] >= ax && n.p[0] <= bx && n.p[1] >= ay && n.p[1] <= by && !this.isSelected(path, i) ? [{ path, i }] : [])));
+    this.sel = [...this.sel, ...inside];
+    return inside.length;
+  }
+
+  /**
+   * A node put in by a click on a hollow dot sewn now, before any other input is handled; on the
+   * canvas not for a press on that node (the second press of a double-click, see down).
+   */
+  settle(at?: { x: number; y: number; scale: number }): void {
+    const p = this.pending;
+    if (!p) return;
+    const h = at && this.pickAt(at.x, at.y, at.scale);
+    if (h?.part === 'p' && h.path === p.node.path && h.i === p.node.i) return;
+    this.flush();
+  }
+
+  /** A pending node's timer stopped; the form is being replaced or left. */
+  private drop(): void {
+    if (this.pending) clearTimeout(this.pending.timer);
+    this.pending = null;
+  }
+
+  /** A node put in by a click on a hollow dot sewn now, before anything else happens. */
+  private flush(): void {
+    const p = this.pending;
+    if (!p) return;
+    clearTimeout(p.timer);
+    this.pending = null;
+    if (this.active) this.hooks.change(this.form);
+  }
+
+  /** The node of a clicked hollow dot dropped again (it was the first click of a double-click). */
+  private unpend(): void {
+    const p = this.pending;
+    if (!p) return;
+    clearTimeout(p.timer);
+    this.pending = null;
+    this.form = p.form;
+    this.sel = p.sel;
+    this.dirty = false;
+  }
+
   open(form: Form): void {
+    this.drop();
     this.active = true;
     this.form = cloneForm(form);
     this.selected = null;
@@ -88,6 +192,7 @@ export class ShapeTool implements ShapeView {
   }
 
   close(): void {
+    this.drop();
     this.active = false;
     this.form = { paths: [] };
     this.selected = this.hover = null;
@@ -97,8 +202,9 @@ export class ShapeTool implements ShapeView {
     this.bandOffset = 0;
   }
 
-  /** The form anew (after new stitches); the selected node stays while it is still there. */
+  /** The form anew (after new stitches); the selected nodes stay while they are still there. */
   setForm(form: Form): void {
+    this.drop();
     const same = form.paths.length === this.form.paths.length && form.paths.every((p, k) => p.nodes.length === this.form.paths[k].nodes.length);
     this.form = cloneForm(form);
     if (!same) this.selected = null;
@@ -201,8 +307,24 @@ export class ShapeTool implements ShapeView {
     return null;
   }
 
-  /** Starts dragging what is under the pointer; 'pan' when nothing is there. */
-  down(x: number, y: number, scale: number): 'move' | 'pan' {
+  /**
+   * Starts dragging what is under the pointer; 'pan' when nothing is there. With `add` (Shift) a
+   * node joins the selection or leaves it.
+   */
+  down(x: number, y: number, scale: number, add = false): 'move' | 'pan' {
+    const p = this.pending;
+    if (p) {
+      const again = this.pickAt(x, y, scale);
+      if (again?.part === 'p' && again.path === p.node.path && again.i === p.node.i) {
+        // The second press of a double-click on a hollow dot: no new node, the loop is selected.
+        this.unpend();
+        this.sel = nodesOf(this.form, p.node.path);
+        this.drag = null;
+        this.hooks.redraw();
+        return 'move';
+      }
+      this.flush();
+    }
     const pick = this.pickAt(x, y, scale);
     if (!pick) {
       return 'pan';
@@ -211,7 +333,7 @@ export class ShapeTool implements ShapeView {
       // A new node put in where the dot is, selected and dragged on from there; taken over on release.
       const ghost = this.ghosts(scale).find((g) => g.path === pick.path && (g.part === 'mid' ? pick.part === 'mid' && g.seg === pick.seg : pick.part === 'end' && g.end === pick.end));
       if (!ghost) return 'pan';
-      const was = { form: this.form, selected: this.selected };
+      const was = { form: this.form, sel: this.sel };
       const { form, node } = pick.part === 'mid' ? insertNode(this.form, pick.path, pick.seg, 0.5) : extendPath(this.form, pick.path, pick.end, ghost.at);
       this.form = form;
       this.selected = { path: pick.path, i: node };
@@ -221,8 +343,19 @@ export class ShapeTool implements ShapeView {
       this.hooks.redraw();
       return 'move';
     }
-    if (pick.part === 'p') this.selected = { path: pick.path, i: pick.i };
-    this.drag = { pick, from: [x, y], start: this.form, band: this.band };
+    let collapse = false;
+    if (pick.part === 'p') {
+      const has = this.isSelected(pick.path, pick.i);
+      if (add && has) {
+        this.sel = this.sel.filter((s) => s.path !== pick.path || s.i !== pick.i);
+        this.hooks.redraw();
+        return 'move';
+      }
+      if (add) this.sel = [...this.sel, { path: pick.path, i: pick.i }];
+      else if (!has) this.selected = { path: pick.path, i: pick.i };
+      else collapse = this.sel.length > 1;
+    }
+    this.drag = { pick, from: [x, y], start: this.form, band: this.band, collapse };
     this.moved = false;
     this.hooks.redraw();
     return 'move';
@@ -243,8 +376,8 @@ export class ShapeTool implements ShapeView {
       return true;
     }
     if (k.part === 'p') {
-      const n = d.start.paths[k.path].nodes[k.i];
-      this.form = moveNode(d.start, k.path, k.i, [n.p[0] + dx, n.p[1] + dy]);
+      // A selected node takes the others along.
+      this.form = moveNodes(d.start, this.isSelected(k.path, k.i) ? this.sel : [k], dx, dy);
     } else if (k.part === 'a' || k.part === 'b') {
       const q = d.start.paths[k.path].nodes[k.i][k.part];
       this.form = moveHandle(d.start, k.path, k.i, k.part, [q[0] + dx, q[1] + dy]);
@@ -266,9 +399,18 @@ export class ShapeTool implements ShapeView {
       else this.hooks.redraw();
       return;
     }
-    if (this.moved || d.added) this.hooks.change(this.form);
+    if (d.added && !this.moved) {
+      // A click on a hollow dot: the node shows now and is sewn a moment later, unless the click
+      // was the first of a double-click.
+      const k = d.pick as NodeRef;
+      this.pending = { timer: setTimeout(() => this.flush(), DOUBLE_MS), node: { path: k.path, i: k.i }, form: d.added.form, sel: d.added.sel };
+      this.hooks.redraw();
+    } else if (this.moved || d.added) this.hooks.change(this.form);
     else if (d.pick.part === 'curve') {
       this.selected = null;
+      this.hooks.redraw();
+    } else if (d.collapse && d.pick.part === 'p') {
+      this.selected = { path: d.pick.path, i: d.pick.i };
       this.hooks.redraw();
     }
   }
@@ -276,7 +418,7 @@ export class ShapeTool implements ShapeView {
   cancel(): void {
     if (this.drag) {
       this.form = this.drag.added?.form ?? this.drag.start;
-      if (this.drag.added) this.selected = this.drag.added.selected;
+      if (this.drag.added) this.sel = this.drag.added.sel;
       this.band = this.drag.band;
     }
     this.drag = null;
@@ -297,14 +439,15 @@ export class ShapeTool implements ShapeView {
     return true;
   }
 
-  /** Whether the pointer is close to the outline (a double-click there puts in a node). */
+  /** Whether the pointer is close to the outline (a double-click there selects its loop). */
   near(x: number, y: number, scale: number): boolean {
     const n = nearestOnForm(this.form, [x, y]);
     return !!n && n.d <= INSERT_PX / scale;
   }
 
-  /** A node where the pointer is on a curve (double-click); true when one was put in. */
+  /** A node where the pointer is on a curve (Alt+double-click); true when one was put in. */
   insertAt(x: number, y: number, scale: number): boolean {
+    this.flush();
     const near = nearestOnForm(this.form, [x, y]);
     if (!near || near.d > INSERT_PX / scale) return false;
     const { form, node } = insertNode(this.form, near.path, near.seg, near.t);
@@ -314,11 +457,11 @@ export class ShapeTool implements ShapeView {
     return true;
   }
 
-  /** Removes the selected node; a path too small to keep goes as a whole (a hole, a piece). */
+  /** Removes the selected nodes; a path too small to keep goes as a whole (a hole, a piece). */
   deleteSelected(): boolean {
-    const s = this.selected;
-    if (!s) return false;
-    const next = removeNode(this.form, s.path, s.i);
+    this.flush();
+    if (!this.sel.length) return false;
+    const next = removeNodes(this.form, this.sel);
     if (!next) {
       this.hooks.say('shape.minNodes');
       return true;
@@ -329,19 +472,20 @@ export class ShapeTool implements ShapeView {
     return true;
   }
 
-  /** The selected node round or a corner (key C). */
+  /** The selected nodes round or corners (key C): all round unless they all are already. */
   toggleSmooth(): boolean {
-    const s = this.selected;
-    if (!s) return false;
-    const n = this.form.paths[s.path].nodes[s.i];
-    this.form = setSmooth(this.form, s.path, s.i, !n.smooth);
+    this.flush();
+    const round = !this.selectedSmooth;
+    if (!this.sel.length) return false;
+    // Each made round from its neighbours as they are (setSmooth moves no node).
+    for (const s of this.sel) this.form = setSmooth(this.form, s.path, s.i, round);
     this.hooks.change(this.form);
     return true;
   }
 
-  /** Whether the path of the selected node (else the first one) is closed. */
+  /** Whether the path of the (first) selected node, else the first path, is closed. */
   get closed(): boolean {
-    return !!this.form.paths[this.selected?.path ?? 0]?.closed;
+    return !!this.form.paths[this.sel[0]?.path ?? 0]?.closed;
   }
 
   /**
@@ -349,7 +493,8 @@ export class ShapeTool implements ShapeView {
    * where it was closed. A fill whose last closed path opens is sewn as a line (see reshapeObject).
    */
   toggleClosed(): boolean {
-    const k = this.selected?.path ?? 0;
+    this.flush();
+    const k = this.sel[0]?.path ?? 0;
     const path = this.form.paths[k];
     if (!path || path.nodes.length < 2) return false;
     let nodes = path.nodes.map((n) => ({ ...n }));
@@ -397,6 +542,7 @@ export class ShapeTool implements ShapeView {
    * ones get a straight piece. Null when nothing joins.
    */
   join(): Joined | null {
+    this.flush();
     const s = this.selected;
     const end = this.selectedEnd;
     const j = s && end !== null ? joinEnd(this.form, s.path, end) : joinOpenPaths(this.form, true);
@@ -416,6 +562,7 @@ export class ShapeTool implements ShapeView {
 
   /** The open path split at the selected node into two. */
   splitHere(): boolean {
+    this.flush();
     const s = this.selected;
     const f = s && splitPathAt(this.form, s.path, s.i);
     if (!s || !f) return false;
@@ -428,6 +575,7 @@ export class ShapeTool implements ShapeView {
 
   /** A node wherever the paths cross, the outline unchanged (needs loadOps); how many were put in. */
   crossingNodes(): number {
+    this.flush();
     const r = withCrossingNodes(this.form);
     if (!r) return 0;
     this.form = r.form;
@@ -436,20 +584,19 @@ export class ShapeTool implements ShapeView {
     return r.added;
   }
 
-  /** The selected node moved by (dx, dy) mm. */
+  /** The selected nodes moved by (dx, dy) mm. */
   nudge(dx: number, dy: number): boolean {
-    const s = this.selected;
-    if (!s) return false;
-    const n = this.form.paths[s.path].nodes[s.i];
-    this.form = moveNode(this.form, s.path, s.i, [n.p[0] + dx, n.p[1] + dy]);
+    this.flush();
+    if (!this.sel.length) return false;
+    this.form = moveNodes(this.form, this.sel, dx, dy);
     this.hooks.change(this.form);
     return true;
   }
 
-  /** Whether the selected node is round. */
+  /** Whether the selected nodes are all round; null when none is selected. */
   get selectedSmooth(): boolean | null {
-    const s = this.selected;
-    return s ? (this.form.paths[s.path]?.nodes[s.i]?.smooth ?? null) : null;
+    if (!this.sel.length) return null;
+    return this.sel.every((s) => !!this.form.paths[s.path]?.nodes[s.i]?.smooth);
   }
 
   /**
@@ -457,6 +604,7 @@ export class ShapeTool implements ShapeView {
    * it over with `commit`.
    */
   simplify(): { before: number; after: number } | null {
+    this.flush();
     const s = simplifyMore(this.form);
     if (!s) return null;
     const before = this.count;
@@ -511,4 +659,10 @@ export function bend(f: Form, path: number, seg: number, t: number, dx: number, 
     if (len > 1e-9 && d > 1e-9) n[other] = [n.p[0] - (vx / d) * len, n.p[1] - (vy / d) * len];
   }
   return g;
+}
+
+/** The path whose outline passes within `r` mm of (x, y), or null. */
+function nearLoop(f: Form, x: number, y: number, r: number): number | null {
+  const near = nearestOnForm(f, [x, y]);
+  return near && near.d <= r ? near.path : null;
 }

@@ -26,7 +26,7 @@ export interface ObjectInfo {
   /** The one selected object has a fill whose outline can be edited. */
   shapeable: boolean;
   /** Its outline is being edited: nodes, and whether the selected one is round (null: none selected). */
-  shaping: { nodes: number; smooth: boolean | null; line?: { closed: boolean }; kind?: 'band' } | null;
+  shaping: { nodes: number; smooth: boolean | null; picked?: number; line?: { closed: boolean }; kind?: 'band' } | null;
   /** The frame is on the one selected object; whether it can be scaled. */
   frame: { canScale: boolean } | null;
   /** Why the selected objects cannot be sewn as one (several selected), or null. */
@@ -103,7 +103,7 @@ export class ObjectPanel {
 
   update(info: ObjectInfo | null, lang: string): void {
     this.info = info;
-    const key = [info?.objects, info?.selected.join(), info?.hand.join(), info?.editing?.selection ?? -1, info?.shapeable, info?.shaping?.nodes ?? -1, info?.shaping?.smooth, info?.shaping?.line?.closed, info?.shaping?.kind, info?.frame?.canScale, !!info?.frame, info?.blend, info?.mergeBlocked, info?.reversible, info?.contour, lang];
+    const key = [info?.objects, info?.selected.join(), info?.hand.join(), info?.editing?.selection ?? -1, info?.shapeable, info?.shaping?.nodes ?? -1, info?.shaping?.smooth, info?.shaping?.picked, info?.shaping?.line?.closed, info?.shaping?.kind, info?.frame?.canScale, !!info?.frame, info?.blend, info?.mergeBlocked, info?.reversible, info?.contour, lang];
     if (key.every((k, i) => k === this.key[i])) return;
     this.key = key;
     this.msg.hidden = true;

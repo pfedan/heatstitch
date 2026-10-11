@@ -154,9 +154,18 @@ export function bindPointer(app: PointerApp) {
   /** How near the frame of the cut a press grabs it (screen pixels). */
   const cropReach = (e: PointerEvent) => (e.pointerType === 'mouse' ? 10 : 22) / app.vp.scale;
 
+  // A node put in by a click on a hollow dot waits a moment (it may be a double-click on the loop):
+  // any other input sews it first, so it never lands in the middle of something else.
+  window.addEventListener('pointerdown', (e) => e.target !== app.canvas && app.shapeTool.settle(), { capture: true });
+  window.addEventListener('keydown', () => app.shapeTool.settle(), { capture: true });
+
   app.canvas.addEventListener('pointerdown', (e) => {
     app.canvas.setPointerCapture(e.pointerId);
     const pos = local(e);
+    if (app.shapeTool.active) {
+      const [x, y] = app.vp.toWorld(pos[0], pos[1]);
+      app.shapeTool.settle({ x, y, scale: app.vp.scale });
+    }
     pointers.set(e.pointerId, pos);
     pressAt = pointers.size === 1 ? pos : null;
     let mode: 'move' | 'band' | 'pan' | 'frame' | 'trace' = 'pan';
@@ -203,7 +212,12 @@ export function bindPointer(app: PointerApp) {
       } else if (ui.letterMode && flow) mode = app.letterDown(wx, wy) ? 'move' : 'pan';
       else if (app.rungTool.active && flow) mode = app.rungTool.down(wx, wy, app.vp.scale, e.shiftKey);
       // Level Form: nodes, handles and curves first, the frame around them takes the rest.
-      else if (app.shapeTool.active && flow && app.shapeTool.pickAt(wx, wy, app.vp.scale)) mode = app.shapeTool.down(wx, wy, app.vp.scale);
+      else if (app.shapeTool.active && flow && app.shapeTool.pickAt(wx, wy, app.vp.scale)) mode = app.shapeTool.down(wx, wy, app.vp.scale, e.shiftKey);
+      // Shift+drag beside the nodes, also within the frame: a rubber band adds the nodes inside it.
+      else if (app.shapeTool.active && flow && e.shiftKey) {
+        ui.objectBand = { x0: wx, y0: wy, x1: wx, y1: wy };
+        mode = 'band';
+      }
       else if (app.frameTool.active && flow && app.frameTool.down(wx, wy, app.vp.scale) !== null) mode = 'frame';
       else if (app.shapeTool.active && flow) mode = 'pan';
       // The tracing image, while it is not locked: its corners, and its inside where no object lies.
@@ -226,8 +240,11 @@ export function bindPointer(app: PointerApp) {
           longPress = null;
           if (objectMenu.isOpen || !pointers.size) return;
           if (!openObjectMenu(at, clientX, clientY)) {
-            // A long press beside the objects starts a rubber band, the finger drags it open.
-            if (pressMode !== 'pan' || !bandAllowed() || objectAt(at) >= 0) return;
+            // A long press beside the objects starts a rubber band, the finger drags it open; on the
+            // level Form one beside the nodes, also within the frame (for the nodes).
+            const nodes = app.shapeTool.active && app.settings.mode === 'flow' && (pressMode === 'pan' || pressMode === 'frame');
+            if (!nodes && (pressMode !== 'pan' || !bandAllowed() || objectAt(at) >= 0)) return;
+            if (pressMode === 'frame') app.frameTool.cancel();
             const [wx, wy] = app.vp.toWorld(at[0], at[1]);
             ui.objectBand = { x0: wx, y0: wy, x1: wx, y1: wy };
             pressMode = 'band';
@@ -333,7 +350,7 @@ export function bindPointer(app: PointerApp) {
         : app.rungTool.active
         ? app.rungTool.hoverAt(wx, wy, app.vp.scale)
         : app.shapeTool.active
-          ? [app.shapeTool.hoverAt(wx, wy, app.vp.scale), app.frameTool.active && app.frameTool.hoverAt(wx, wy, app.vp.scale)].some(Boolean)
+          ? [app.shapeTool.hoverAt(wx, wy, app.vp.scale), app.frameTool.active && app.frameTool.hoverAt(wx, wy, app.vp.scale, !!app.shapeTool.hover)].some(Boolean)
           : (app.frameTool.active && app.frameTool.hoverAt(wx, wy, app.vp.scale)) ||
             [app.traceTool.hoverAt(wx, wy, app.vp.scale, () => objectAt(pos) >= 0), app.editor.hoverAt(wx, wy, app.vp.scale)].some(Boolean)
     )
@@ -403,11 +420,8 @@ export function bindPointer(app: PointerApp) {
         const add = e.shiftKey || e.ctrlKey || e.metaKey;
         if (o >= 0 && o !== ui.shapeObject && add) app.selectObjects([o], true);
         else if (o >= 0 && o !== ui.shapeObject && !app.shapeTool.near(x, y, app.vp.scale)) app.enterShape(o, false);
-        else if (o < 0 && !app.shapeTool.selected && !app.shapeTool.near(x, y, app.vp.scale) && !add) app.selectObjects([], false);
-        else if (app.shapeTool.selected) {
-          app.shapeTool.selected = null;
-          app.redraw();
-        }
+        else if (o < 0 && !app.shapeTool.selCount && !app.shapeTool.near(x, y, app.vp.scale) && !add) app.selectObjects([], false);
+        else if (!add && app.shapeTool.clearSelection()) app.redraw();
       } else if (p && app.editor.active) {
         // Editing stitches: a click on another object goes on with that one, a click beside the
         // stitches (with no point selected) goes back to the objects.
@@ -499,8 +513,12 @@ export function bindPointer(app: PointerApp) {
     return i >= 0 ? app.seq(p).objectAt[i] : -1;
   }
 
-  /** Adds the shown objects lying wholly inside the band to the selection. */
+  /** Adds the shown objects lying wholly inside the band to the selection (on the level Form: the nodes). */
   function selectInBand(b: { x0: number; y0: number; x1: number; y1: number }): void {
+    if (app.shapeTool.active) {
+      app.shapeTool.selectInRect(b.x0, b.y0, b.x1, b.y1);
+      return app.redraw();
+    }
     const p = app.files.active?.pattern;
     if (!p) return app.redraw();
     const st = app.styleFor(p);
@@ -560,7 +578,9 @@ export function bindPointer(app: PointerApp) {
     }
     if (app.rungTool.active) return;
     if (app.shapeTool.active) {
-      app.shapeTool.insertAt(x, y, app.vp.scale);
+      // A double-click on a loop selects all its nodes (as in vector programs); with Alt it puts a node there.
+      if (e.altKey) app.shapeTool.insertAt(x, y, app.vp.scale);
+      else app.shapeTool.selectLoopAt(x, y, app.vp.scale);
       return;
     }
     if (app.editor.active) {

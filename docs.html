@@ -376,8 +376,11 @@
           sind Ecken, Kreise runde Knoten. Einen Knoten ziehen oder einen Griff des gewählten Knotens; den Umriss
           zwischen zwei Knoten ziehen biegt ihn. Neue Knoten ziehst du aus den hohlen Punkten: In der Mitte jedes
           Stücks liegt einer, und hinter jedem Ende einer offenen Linie ein Punkt mit Plus, der sie verlängert; ein
-          Klick setzt den Knoten an Ort und Stelle. Auch ein Doppelklick auf den Umriss setzt dort einen Knoten, <kbd>Entf</kbd>
-          löscht den gewählten, <kbd>C</kbd> macht ihn zur Ecke oder rund, die Pfeiltasten schieben ihn. Beim
+          Klick setzt den Knoten an Ort und Stelle (<kbd>Alt</kbd>+Doppelklick auf den Umriss setzt ihn genau dort). Ein
+          Doppelklick auf eine Schleife wählt alle ihre Knoten, etwa ein ganzes Loch; <kbd>Umschalt</kbd>+Klick nimmt einzelne
+          Knoten hinzu oder weg, <kbd>Umschalt</kbd>+Ziehen wählt die Knoten im Rahmen (auf dem Handy: lange drücken und
+          ziehen), <kbd>Strg</kbd>+<kbd>A</kbd> alle. Gewählte Knoten wandern beim Ziehen zusammen, <kbd>Entf</kbd>
+          löscht sie (eine ganze Schleife verschwindet so), <kbd>C</kbd> macht sie zur Ecke oder rund, die Pfeiltasten schieben sie. Beim
           Loslassen wird das Objekt in der neuen Form mit seinen Einstellungen neu gestickt. Der Umriss wird einmal
           aus den Stichen gelesen (oder so übernommen, wie ihn das Bild, ein SVG oder das Zeichnen gemacht hat) und
           danach als Kurven behalten, auch im Projekt; er wandert also nicht. Um den Umriss bleibt der Rahmen: Abseits
@@ -941,14 +944,14 @@
             <tr><td><kbd>Leertaste</kbd>, <kbd>,</kbd> <kbd>.</kbd>, <kbd>Pos1</kbd> <kbd>Ende</kbd></td><td>Player: abspielen oder anhalten, ein Stich zurück oder vor (mit <kbd>Umschalt</kbd> 100), zum Anfang oder Ende</td></tr>
             <tr><td><kbd>V</kbd>, <kbd>M</kbd> <kbd>O</kbd> <kbd>B</kbd> <kbd>P</kbd></td><td>Wählen; Rechteck, Ellipse, Pfad, Freihand</td></tr>
             <tr><td><kbd>X</kbd>, <kbd>T</kbd>, <kbd>R</kbd>, <kbd>G</kbd>, <kbd>E</kbd></td><td>Zerteilen, Text, Richtung (Querlinien), Leitlinien, Stiche von Hand</td></tr>
-            <tr><td><kbd>Umschalt</kbd> / <kbd>Strg</kbd>+Klick, <kbd>Strg</kbd>+<kbd>A</kbd></td><td>Objekte zur Auswahl hinzufügen, alle wählen</td></tr>
-            <tr><td>Pfeiltasten</td><td>Gewählte Objekte um 0,1 mm schieben (mit <kbd>Umschalt</kbd> 1 mm), auf der Ebene Form den Knoten, auf der Ebene Stiche den Einstich</td></tr>
+            <tr><td><kbd>Umschalt</kbd> / <kbd>Strg</kbd>+Klick, <kbd>Strg</kbd>+<kbd>A</kbd></td><td>Objekte zur Auswahl hinzufügen, alle wählen; auf der Ebene Form ebenso die Knoten (<kbd>Umschalt</kbd>+Klick)</td></tr>
+            <tr><td>Pfeiltasten</td><td>Gewählte Objekte um 0,1 mm schieben (mit <kbd>Umschalt</kbd> 1 mm), auf der Ebene Form die gewählten Knoten, auf der Ebene Stiche den Einstich</td></tr>
             <tr><td><kbd>Alt</kbd>+<kbd>↑</kbd> <kbd>↓</kbd></td><td>Früher / später sticken (mit <kbd>Umschalt</kbd> zuerst / zuletzt)</td></tr>
             <tr><td><kbd>Strg</kbd>+<kbd>C</kbd>, <kbd>Strg</kbd>+<kbd>V</kbd></td><td>Gewählte Objekte kopieren, 2 mm daneben einfügen</td></tr>
             <tr><td><kbd>Strg</kbd>+<kbd>D</kbd>, <kbd>Entf</kbd></td><td>Gewählte Objekte genau an derselben Stelle duplizieren, gewählte Objekte löschen</td></tr>
             <tr><td><kbd>Enter</kbd></td><td>Form öffnen, von der Form weiter zu den Stichen; auf einem Schriftzug einzelne Buchstaben</td></tr>
-            <tr><td>Doppelklick</td><td>Form oder Stiche öffnen; auf der Ebene Form einen Knoten setzen; auf der Ebene Stiche einen Einstich setzen</td></tr>
-            <tr><td><kbd>C</kbd>, <kbd>Entf</kbd></td><td>Auf der Ebene Form: Knoten zur Ecke oder rund machen, löschen</td></tr>
+            <tr><td>Doppelklick</td><td>Form oder Stiche öffnen; auf der Ebene Form die ganze Schleife wählen (mit <kbd>Alt</kbd> einen Knoten setzen); auf der Ebene Stiche einen Einstich setzen</td></tr>
+            <tr><td><kbd>C</kbd>, <kbd>Entf</kbd></td><td>Auf der Ebene Form: gewählte Knoten zur Ecke oder rund machen, löschen</td></tr>
             <tr><td><kbd>,</kbd> <kbd>.</kbd>, <kbd>I</kbd>, <kbd>Entf</kbd></td><td>Auf der Ebene Stiche: voriger / nächster Einstich, Stich teilen, löschen</td></tr>
             <tr><td><kbd>W</kbd>, <kbd>Pos1</kbd> <kbd>Ende</kbd></td><td>Auf der Ebene Stiche: Weitersticken (Einstiche per Klick setzen), zum Anfang / Fadenende des Objekts</td></tr>
             <tr><td><kbd>T</kbd></td><td>Im Werkzeug Richtung: Querlinie oder Trennlinie ziehen</td></tr>
@@ -1328,9 +1331,12 @@
           shape</i> in the bar above the stage to show its outline as curves with nodes: squares are corners, circles smooth nodes.
           Drag a node or a handle of the selected node; dragging the outline between two nodes bends it. New nodes are
           dragged out of the hollow dots: one sits in the middle of each piece, and beyond each end of an open line a
-          dot with a plus that makes it longer; a click puts the node right there. A double click on the outline sets
-          a node there too, <kbd>Del</kbd> deletes the selected one, <kbd>C</kbd> makes it a corner
-          or smooth, the arrow keys nudge it. On release the object is sewn anew in the new shape with its settings.
+          dot with a plus that makes it longer; a click puts the node right there (<kbd>Alt</kbd>+double click on the
+          outline puts it exactly there). A double click on a loop selects all its nodes, a whole hole for example;
+          <kbd>Shift</kbd>+click adds or removes single nodes, <kbd>Shift</kbd>+drag selects the nodes in a box (on a phone:
+          long press and drag), <kbd>Ctrl</kbd>+<kbd>A</kbd> all of them. Selected nodes move together when dragged,
+          <kbd>Del</kbd> deletes them (a whole loop goes this way), <kbd>C</kbd> makes them corners or smooth, the arrow
+          keys nudge them. On release the object is sewn anew in the new shape with its settings.
           The outline is read from the stitches once (or taken over as the picture, an SVG or drawing made it) and
           kept as curves from then on, also in the project; so it does not drift. Around the outline stays the frame:
           drag inside it, away from the nodes, to move the shape. A satin from an embroidery file shows its two rails
@@ -1886,14 +1892,14 @@
             <tr><td><kbd>Space</kbd>, <kbd>,</kbd> <kbd>.</kbd>, <kbd>Home</kbd> <kbd>End</kbd></td><td>Player: play or pause, one stitch back or forward (with <kbd>Shift</kbd> 100), to the start or end</td></tr>
             <tr><td><kbd>V</kbd>, <kbd>M</kbd> <kbd>O</kbd> <kbd>B</kbd> <kbd>P</kbd></td><td>Select; rectangle, ellipse, path, freehand</td></tr>
             <tr><td><kbd>X</kbd>, <kbd>T</kbd>, <kbd>R</kbd>, <kbd>G</kbd>, <kbd>E</kbd></td><td>Cut apart, text, direction (rungs), guide lines, stitches by hand</td></tr>
-            <tr><td><kbd>Shift</kbd> / <kbd>Ctrl</kbd>+click, <kbd>Ctrl</kbd>+<kbd>A</kbd></td><td>Add objects to the selection, select all</td></tr>
-            <tr><td>Arrow keys</td><td>Nudge the selected objects by 0.1 mm (with <kbd>Shift</kbd> 1 mm), on the Shape level the node, on the Stitches level the needle point</td></tr>
+            <tr><td><kbd>Shift</kbd> / <kbd>Ctrl</kbd>+click, <kbd>Ctrl</kbd>+<kbd>A</kbd></td><td>Add objects to the selection, select all; on the Shape level the same for nodes (<kbd>Shift</kbd>+click)</td></tr>
+            <tr><td>Arrow keys</td><td>Nudge the selected objects by 0.1 mm (with <kbd>Shift</kbd> 1 mm), on the Shape level the selected nodes, on the Stitches level the needle point</td></tr>
             <tr><td><kbd>Alt</kbd>+<kbd>↑</kbd> <kbd>↓</kbd></td><td>Sew earlier / later (with <kbd>Shift</kbd> first / last)</td></tr>
             <tr><td><kbd>Ctrl</kbd>+<kbd>C</kbd>, <kbd>Ctrl</kbd>+<kbd>V</kbd></td><td>Copy the selected objects, paste them 2 mm beside</td></tr>
             <tr><td><kbd>Ctrl</kbd>+<kbd>D</kbd>, <kbd>Del</kbd></td><td>Duplicate the selected objects exactly in place, delete the selected objects</td></tr>
             <tr><td><kbd>Enter</kbd></td><td>Open the shape, from the shape on to the stitches; on a lettering single letters</td></tr>
-            <tr><td>Double click</td><td>Open shape or stitches; on the Shape level set a node; on the Stitches level set a needle point</td></tr>
-            <tr><td><kbd>C</kbd>, <kbd>Del</kbd></td><td>On the Shape level: make the node a corner or smooth, delete it</td></tr>
+            <tr><td>Double click</td><td>Open shape or stitches; on the Shape level select the whole loop (with <kbd>Alt</kbd> set a node); on the Stitches level set a needle point</td></tr>
+            <tr><td><kbd>C</kbd>, <kbd>Del</kbd></td><td>On the Shape level: make the selected nodes corners or smooth, delete them</td></tr>
             <tr><td><kbd>,</kbd> <kbd>.</kbd>, <kbd>I</kbd>, <kbd>Del</kbd></td><td>On the Stitches level: previous / next needle point, split the stitch, delete</td></tr>
             <tr><td><kbd>W</kbd>, <kbd>Home</kbd> <kbd>End</kbd></td><td>On the Stitches level: stitch on (set needle points by clicking), to the start / thread end of the object</td></tr>
             <tr><td><kbd>T</kbd></td><td>In the Direction tool: draw a rung or a cut line</td></tr>

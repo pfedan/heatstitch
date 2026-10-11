@@ -51,7 +51,7 @@ export interface FlowScene {
   /** The outline of the fill being reshaped (level Form), with the handles shown. */
   shape?: { view: ShapeView; handles: { path: number; i: number; part: 'a' | 'b' }[] } | null;
   /** The frame around the one selected object (level Objects), with its corners as dragged. */
-  frame?: { view: FrameView; mapped: Pt[] } | null;
+  frame?: FrameView | null;
   /** Objects drawn as flat areas instead of their stitches (their stitches have alpha 0). */
   areas?: FlatArea[] | null;
   /** Rubber band (mm) selecting the objects inside it, while it is dragged. */
@@ -126,7 +126,7 @@ export function drawScene(ctx: CanvasRenderingContext2D, w: number, h: number, s
     if (flow.contour) drawContour(ctx, vp, flow.contour);
     if (flow.under) drawUnderlay(ctx, vp, pattern, flow.under);
     if (flow.rungs) drawRungOverlay(ctx, vp, flow.rungs);
-    if (flow.frame) drawFrame(ctx, vp, flow.frame.view, flow.frame.mapped);
+    if (flow.frame) drawFrame(ctx, vp, flow.frame);
     if (flow.shape) drawShapeOverlay(ctx, vp, flow.shape.view, flow.shape.handles);
     if (flow.needle >= 0) drawNeedle(ctx, vp, pattern, flow.needle);
     if (flow.band) drawBand(ctx, vp, flow.band);

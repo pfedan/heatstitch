@@ -363,7 +363,7 @@ export function bindScene(app: SceneApp) {
       contour: ui.hoverObject === null && ui.highlight === 'border' && app.settings.autoHighlight ? contourLines(p) : null,
       rungs: app.rungTool.active ? app.rungTool : null,
       shape: app.shapeTool.active && app.frameTool.dragging === null ? { view: app.shapeTool, handles: app.shapeTool.handles() } : null,
-      frame: app.frameTool.active ? { view: app.frameTool, mapped: app.frameTool.mappedCorners() } : null,
+      frame: app.frameTool.active ? app.frameTool : null,
       band: ui.objectBand,
       trace: app.traceScene(),
     };

@@ -87,6 +87,12 @@ export function bindKeys(app: KeysApp) {
       app.editor.selectAll();
       return;
     }
+    if (mod && e.key === 'a' && app.shapeTool.active && app.settings.mode === 'flow') {
+      e.preventDefault();
+      app.shapeTool.selectAll();
+      app.redraw();
+      return;
+    }
     if (mod || e.altKey) return;
     // Stitching on: Enter and Esc end it (the level stays Stiche).
     if (app.editor.active && app.editor.penOn && (e.key === 'Escape' || e.key === 'Enter')) {
@@ -123,7 +129,7 @@ export function bindKeys(app: KeysApp) {
     if (app.shapeTool.active && app.settings.mode === 'flow') {
       const step = e.shiftKey ? 0.5 : 0.1;
       const arrows: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
-      if (e.key in arrows && app.shapeTool.selected) {
+      if (e.key in arrows && app.shapeTool.selCount) {
         e.preventDefault();
         app.shapeTool.nudge(...arrows[e.key]);
         return;
@@ -133,12 +139,10 @@ export function bindKeys(app: KeysApp) {
         return;
       }
       if (e.key === 'c' && app.shapeTool.toggleSmooth()) return;
-      // Esc: first the node, then one level back to the objects (the selection stays).
+      // Esc: first the nodes, then one level back to the objects (the selection stays).
       if (e.key === 'Escape') {
-        if (app.shapeTool.selected) {
-          app.shapeTool.selected = null;
-          app.redraw();
-        } else app.setFormLevel(false);
+        if (app.shapeTool.clearSelection()) app.redraw();
+        else app.setFormLevel(false);
         return;
       }
       if (e.key === 'Enter' && ui.shapeObject !== null) return app.enterObject(ui.shapeObject, false);

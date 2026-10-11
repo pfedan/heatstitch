@@ -1,6 +1,6 @@
 import { formatNumber, t } from '../i18n';
 import type { Pt } from '../digitize/skeleton';
-import { segment, segments, type Form } from '../shape/path';
+import { apply, segment, segments, type Form } from '../shape/path';
 import { corners, TURN_PX, type FrameView } from '../ui/frameTool';
 import type { ShapePick, ShapeView } from '../ui/shapeTool';
 import type { Viewport } from './viewport';
@@ -14,8 +14,8 @@ const isNode = (h: ShapePick | null, path: number, i: number, part: 'p' | 'a' | 
 
 /**
  * A fill's outline as curves: the curves dark under light (amber while changed and not sewn yet),
- * nodes as squares (corners) or circles (round), the selected node in the accent color with its
- * handles.
+ * nodes as squares (corners) or circles (round), the selected nodes in the accent color (one alone
+ * with its handles).
  */
 export function drawShapeOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, view: ShapeView, handles: { path: number; i: number; part: 'a' | 'b' }[]): void {
   const S = (p: Pt) => vp.toScreen(p[0], p[1]);
@@ -89,7 +89,7 @@ export function drawShapeOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, vi
   view.form.paths.forEach((p, path) =>
     p.nodes.forEach((n, i) => {
       const [x, y] = S(n.p);
-      const sel = view.selected?.path === path && view.selected.i === i;
+      const sel = view.isSelected(path, i);
       const r = sel || isNode(h, path, i, 'p') ? 5.5 : 4.5;
       ctx.beginPath();
       if (n.smooth) ctx.arc(x, y, r, 0, Math.PI * 2);
@@ -189,10 +189,11 @@ function drawWidthGrip(ctx: CanvasRenderingContext2D, vp: Viewport, view: ShapeV
  * be scaled) and a round turn handle above it; while dragging, the frame as it will be and a
  * label with the new size, the turn or the distance moved.
  */
-export function drawFrame(ctx: CanvasRenderingContext2D, vp: Viewport, f: FrameView, mapped: Pt[]): void {
+export function drawFrame(ctx: CanvasRenderingContext2D, vp: Viewport, f: FrameView): void {
   const S = (p: Pt) => vp.toScreen(p[0], p[1]);
   ctx.save();
-  const pts = (f.dragging !== null ? mapped : corners(f.box)).map(S);
+  // As it will be while dragging (the map is the identity otherwise).
+  const pts = corners(f.shown(vp.scale)).map((q) => S(apply(f.m, q)));
   ctx.beginPath();
   pts.forEach(([x, y], k) => (k ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
   ctx.closePath();
