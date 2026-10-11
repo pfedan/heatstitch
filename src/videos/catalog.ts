@@ -210,6 +210,15 @@ export const VIDEOS: Video[] = [
     goal: { de: 'Du stickst eine Applikation: Platzierungslinie, Stoff auflegen, Heftlinie, zuschneiden, Kante.', en: 'You stitch an appliqué: placement line, lay the fabric on, tack-down, trim, edge.' },
     files: ['apfel.svg'],
     published: '2026-10-11T21:20:05+02:00',
+  },  {
+    key: '15-handstiche-und-redwork',
+    part: 15,
+    title: { de: 'Handstiche und Redwork', en: 'Hand stitches and redwork' },
+    length: '1:52',
+    group: 'detail',
+    goal: { de: 'Du gibst Linien den Look von Handarbeit: Stielstich, Federstich, Kretastich, Chevron, Redwork ohne Sprünge und Bohnenstich obenauf.', en: 'You give lines the look of handwork: stem stitch, feather stitch, cretan stitch, chevron, redwork without jumps and bean stitch on top.' },
+    files: ['blumenzweig.svg'],
+    published: '2026-10-11T21:37:34+02:00',
   },
   {
     key: '16-formen-verbinden-und-schneiden',
