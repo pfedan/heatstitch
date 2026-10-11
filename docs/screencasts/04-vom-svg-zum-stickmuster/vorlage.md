@@ -7,11 +7,12 @@ Linien mit ihrer Breite, Pupillen als schwarze Flächen), 100 mm breit, etwa 2:2
 Eine SVG mit dunklen Konturen geht durch denselben Assistenten wie ein Foto, aber heatstitch muss
 nichts raten: Jede Farbe der Datei wird ein Garn, Linien werden nach ihrer Breite Steppstich oder
 Satin. Die Konturen der Katze (etwa 1,3 mm breit) werden Satin; alle, die sich berühren, sind ein
-Objekt, Satin 1 unter Black. Im Werkzeug Richtung (R) liegt dieser Satin in Abschnitten; Leeren
-nimmt alle Linien weg, Vorschlagen zerlegt die Kontur neu in 25 Abschnitte.
+Objekt, Satin 1 unter Black (dazu Satin 2 bis 7 für kleine, freie Linien). Im Werkzeug Richtung (R) liegt dieser Satin in Abschnitten; Leeren
+nimmt alle Linien weg und lässt nur den Umriss ohne Stiche stehen, Vorschlagen zerlegt die Kontur neu in 25 Abschnitte.
 
-Der Zeiger ruht auf der Bühne oben links, damit die realistischen Fäden ihr
-Licht von dort bekommen.
+Gestalten zeigt die Stiche das ganze Video über in der realistischen Ansicht, schon vor dem Start
+eingeschaltet und ohne Kommentar. Der Zeiger ruht auf der Bühne oben links, damit die realistischen
+Fäden ihr Licht von dort bekommen.
 
 ## Szene 1
 
@@ -30,8 +31,8 @@ Farben“ und die Breite 100 mm, Etiketten.
 ## Szene 3
 
 **Bild:** Etikett Weiter, Klick. Schritt Farben und Flächen. Heranzoomen links auf den Text „Farben und
-Formen kommen direkt aus der SVG …“, dann rechts auf die Liste Farben (Khaki, Tangerine, Light Brown,
-Clay Brown, Applique, Mint Green, Black, White).
+Formen kommen direkt aus der SVG …“, dann rechts auf die Liste Farben (Orange, Light Brown, Tangerine,
+Clay Brown, Salmon Pink, Mint Green, Black, White).
 
 **Sprechtext:** Im zweiten Schritt muss heatstitch nichts raten. Jede Farbe der Datei wird ein Garn. Und die schwarzen Konturen sind Linien mit einer Breite: Je nach Breite werden sie Steppstich oder Satin.
 
@@ -58,9 +59,9 @@ auf die Mitte des Kartons: die Kontur in Abschnitten, wie sie gerade gestickt wi
 
 ## Szene 7
 
-**Bild:** Etikett Leeren, Klick: alle Trennlinien und Querlinien verschwinden.
+**Bild:** Etikett Leeren, Klick: alle Trennlinien und Querlinien verschwinden, die schwarzen Säulen auch. Übrig bleibt nur der weiße Umriss der Kontur, nichts gestickt, nichts rot.
 
-**Sprechtext:** „Leeren“ nimmt alle Trennlinien und Querlinien weg. So fängst du neu an.
+**Sprechtext:** „Leeren“ nimmt alle Trennlinien und Querlinien weg. Übrig bleibt nur der Umriss, ohne Stiche, bis neue Linien da sind. So fängst du neu an.
 
 ## Szene 8
 
@@ -72,7 +73,7 @@ Etikett Trennlinie an einer blauen Linie, Etikett Querlinie an einer gelben.
 
 ## Szene 9
 
-**Bild:** Nah an der linken vorderen Ecke des Kartons, Abschnitt 7: Etiketten Nummer, Pfeil und Schere.
+**Bild:** Nah an der linken vorderen Ecke des Kartons, Abschnitt 5: Etiketten Nummer, Pfeil und Schere.
 Kein Klick (ein umgedrehter Abschnitt ergäbe hier neue Befunde in Prüfen).
 
 **Sprechtext:** An jedem Abschnitt steht seine Nummer in der Reihenfolge, ein Pfeil für die Richtung und eine Schere für einen Garnschnitt davor. Ein Klick darauf ändert es.
