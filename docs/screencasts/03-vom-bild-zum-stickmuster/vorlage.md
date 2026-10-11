@@ -2,7 +2,7 @@
 
 Schlüssel `03-vom-bild-zum-stickmuster`, Demodatei `material/fliegenpilz.jpg` (1000 × 1000 Pixel, Fliegenpilz mit Verlauf im Hut, Schatten, Marienkäfer und einem einzelnen roten Punkt oben rechts), etwa 2 Minuten 30, 290 Wörter. Stimme Gacrux.
 
-Ein Foto oder PNG wird mit dem Assistenten „Bild umwandeln“ in drei Schritten zum Stickmuster. Der Assistent wählt die Garne seit #270 für alle Farben gemeinsam. Bei Höchstens Farben 6 erscheinen White, Red, Leaf Green, Black, Dark Fuchsia und Beige; Stiel und Schatten sind beide Beige. Bei 10 bekommt der Schatten sein eigenes Warm Gray, Dark Fuchsia bleibt am Hutrand. Einstellungen, die einen sauberen Pilz ergeben: Höchstens Farben 10, Dark Fuchsia mit Red zusammengelegt, Warm Gray (Schatten) weggelassen, roter Punkt wegradiert, Stil Flach. Ergebnis: 3.266 Stiche, 57,4 × 55,8 mm, 5 Farben (Red, Beige, White, Leaf Green, Black), Nähzeit ca. 7 min, Unauffällig.
+Ein Foto oder PNG wird mit dem Assistenten „Bild umwandeln“ in drei Schritten zum Stickmuster. Der Assistent wählt die Garne seit #270 für alle Farben gemeinsam. Bei Höchstens Farben 6 erscheinen White, Red, Leaf Green, Black, Dark Fuchsia und Beige; Stiel und Schatten sind beide Beige. Bei 10 bekommt der Schatten sein eigenes Warm Gray, Dark Fuchsia bleibt am Hutrand. Einstellungen, die einen sauberen Pilz ergeben: Höchstens Farben 10, Dark Fuchsia mit Red zusammengelegt, Warm Gray (Schatten) weggelassen, roter Punkt wegradiert, Stil Flach. Ergebnis: 3.270 Stiche, 57,4 × 55,8 mm, 5 Farben (Red, Beige, White, Leaf Green, Black), Nähzeit ca. 7 min, Unauffällig.
 
 Die realistische Ansicht nimmt ihr Licht von der Seite, auf der der Zeiger über der Bühne steht. Von oben links ist der Hut tiefrot und glänzend, von rechts oder aus der Mitte blass. Der Zeiger ruht deshalb oben links auf der Bühne und wechselt über die Kopfleiste zur rechten Spalte.
 
@@ -68,9 +68,9 @@ Die realistische Ansicht nimmt ihr Licht von der Seite, auf der der Zeiger über
 
 ## Szene 11
 
-**Bild:** Heranzoomen rechts, Etikett Ergebnis, der Zeiger fährt Stiche, Größe, Farben, Nähzeit ab, dann die Werte 3.266, 5 und ca. 7 min. Etikett Unauffällig am grünen Kasten.
+**Bild:** Heranzoomen rechts, Etikett Ergebnis, der Zeiger fährt Stiche, Größe, Farben, Nähzeit ab, dann die Werte 3.270, 5 und ca. 7 min. Etikett Unauffällig am grünen Kasten.
 
-**Sprechtext:** Rechts im Ergebnis stehen Stiche, Größe, Farben und Nähzeit: 3.266 Stiche, fünf Farben, etwa sieben Minuten. [pleased] Unauffällig heißt: keine Bereiche über den Grenzwerten für dieses Material.
+**Sprechtext:** Rechts im Ergebnis stehen Stiche, Größe, Farben und Nähzeit: 3.270 Stiche, fünf Farben, etwa sieben Minuten. [pleased] Unauffällig heißt: keine Bereiche über den Grenzwerten für dieses Material.
 
 ## Szene 12
 
