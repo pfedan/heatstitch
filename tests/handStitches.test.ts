@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { HAND_STITCHES, HAND_WIDTH, MOTIF_PERIOD, motifStitches, type HandStitch } from '../src/digitize/motif';
+import { CORD_STEP, HAND_STITCHES, HAND_WIDTH, MOTIF_PERIOD, motifStitches, type HandStitch } from '../src/digitize/motif';
 import { lineStitches, resewLine } from '../src/model/line';
-import { borderStitches, layersOf, passesOf, timesOf, type PathStitch } from '../src/model/along';
+import { borderStitches, layersOf, passesOf, spacingOf, timesOf, type PathStitch } from '../src/model/along';
 import { addShape } from '../src/model/addShape';
 import { sewObjects } from '../src/model/objects';
 import { remembered } from '../src/model/restitch';
@@ -139,5 +139,71 @@ describe('hand stitches', () => {
         }
       }
     }
+  });
+
+  describe('stem stitch as a cord', () => {
+    const cord = (more: Partial<PathStitch> = {}) => line('stem', { width: 2, cord: true, ...more });
+
+    it('sews each stitch once, at 45°, at the cord step', () => {
+      const st = cord();
+      expect(layersOf(st)).toBe(1);
+      expect(spacingOf(st)).toBe(CORD_STEP);
+      const pts = flat(lineStitches(straight, st));
+      // The slanted stitches go from one side to the other: about as long along the line as across.
+      const slants = pts.slice(1).map((q, i) => [q[0] - pts[i][0], q[1] - pts[i][1]]).filter(([, dy]) => Math.abs(dy) > 1.9);
+      expect(slants.length).toBeGreaterThan(60);
+      for (const [dx, dy] of slants) expect(Math.abs(Math.abs(dx) - Math.abs(dy))).toBeLessThan(0.25);
+      // All the same way: parallel threads, the twist of a cord.
+      expect(new Set(slants.map(([dx, dy]) => Math.sign(dx) === Math.sign(dy))).size).toBe(1);
+      // Within its width, from end to end of the line.
+      expect(pts.every(([x, y]) => Math.abs(y) <= 1.01 && x > -0.01 && x < 30.01)).toBe(true);
+    });
+
+    it('covers: no gap along the cord wider than a thread', () => {
+      // Across the middle of the cord, where each slanted stitch crosses the line y = 0.
+      const pts = flat(lineStitches(straight, cord()));
+      const xs: number[] = [];
+      for (let i = 1; i < pts.length; i++) {
+        const [a, b] = [pts[i - 1], pts[i]];
+        if ((a[1] < 0) !== (b[1] < 0)) xs.push(a[0] + ((b[0] - a[0]) * -a[1]) / (b[1] - a[1]));
+      }
+      xs.sort((u, v) => u - v);
+      const inner = xs.filter((x) => x > 3 && x < 27);
+      const gaps = inner.slice(1).map((x, i) => x - inner[i]);
+      // Parallel threads 0.4 mm apart along the line, 0.28 mm apart across them.
+      expect(Math.max(...gaps)).toBeLessThanOrEqual(CORD_STEP + 0.05);
+    });
+
+    it('has no holes down its middle when it is wide', () => {
+      // Split like a hand stitch (4.5 mm), a cord 3.5 mm wide had a seam of needle points along the line.
+      for (const width of [3.5, 4.5]) {
+        const pts = flat(lineStitches(straight, cord({ width })));
+        expect(pts.filter(([, y]) => Math.abs(y) < width / 4).length, `cord ${width} mm`).toBe(0);
+      }
+    });
+
+    it('is remembered with the line and makes no critical density, in tight bends too', () => {
+      const options = digitizeDefaults(DEFAULT_PROFILE);
+      const empty = { x: new Int32Array(0), y: new Int32Array(0), cmd: new Uint8Array(0), colors: [] } as never;
+      const curve = parsePath('M0 0 C 15 -20, 30 20, 45 0 L 45 25 C 35 35, 25 15, 15 30', ID);
+      for (const width of [1, 2, 3]) {
+        for (const spacing of [undefined, 0.25]) {
+          const a = addShape(empty, { form: curve, kind: 'stroke', width: 0.4 }, { r: 200, g: 30, b: 30 }, null, options)!;
+          const st = cord({ width, ...(spacing ? { spacing } : {}) });
+          const r = resewLine(a.pattern, 0, curve, st, 7)!;
+          const [o] = sewObjects(r.pattern);
+          expect(remembered(r.pattern, o)?.line).toEqual(st);
+          const v = validatePattern(r.pattern, DEFAULT_PROFILE);
+          expect(v.worst, `cord ${width} mm, step ${spacing ?? CORD_STEP}`).toBeLessThan(CRITICAL);
+        }
+      }
+    });
+
+    it('leaves the stem stitch by hand as it was', () => {
+      const l: Pt[] = [[0, 0], [31, 0]];
+      expect(motifStitches(l, false, 'stem', 1.4, MOTIF_PERIOD.stem, 1, 0, 1, 1, false)).toEqual(motifStitches(l, false, 'stem', 1.4, MOTIF_PERIOD.stem, 1, 0, 1, 1));
+      // Other hand stitches ignore it.
+      expect(motifStitches(l, false, 'feather', 5, 3, 1, 0, 1, 1, true)).toEqual(motifStitches(l, false, 'feather', 5, 3, 1, 0, 1, 1));
+    });
   });
 });

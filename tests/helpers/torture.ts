@@ -982,7 +982,11 @@ export const HAND_OPS: Op[] = [
       const hand = (HAND_STITCHES as string[]).includes(motif);
       const width = hand && r() < 0.5 ? HAND_WIDTH[motif as keyof typeof HAND_WIDTH] : between(r, 1, 6);
       const repeat = r() < 0.4 ? pick(r, [1, 5]) : undefined;
-      const st = { ...m.line!, type: 'motif' as const, motif, width, ...(r() < 0.3 ? { spacing: between(r, 1.5, 8) } : {}) };
+      // A stem stitch now and then as a dense cord, at its own step.
+      const cord = motif === 'stem' && r() < 0.4;
+      const st = { ...m.line!, type: 'motif' as const, motif, width, ...(r() < 0.3 ? { spacing: cord ? between(r, 0.25, 1.2) : between(r, 1.5, 8) } : {}) };
+      delete st.cord;
+      if (cord) st.cord = true;
       delete st.repeat;
       delete st.whole;
       if (repeat) st.repeat = repeat;
