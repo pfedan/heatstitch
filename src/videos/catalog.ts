@@ -176,11 +176,11 @@ export const VIDEOS: Video[] = [
     key: '11-fuellungen',
     part: 11,
     title: { de: 'Füllungen', en: 'Fills' },
-    length: '3:05',
+    length: '3:35',
     group: 'detail',
     goal: { de: 'Du stellst Muster, Umrandung und Halt einer Füllung ein, zerteilst sie und lenkst ihre Reihen mit Leitlinien.', en: 'You set the pattern, border and hold of a fill, split it and steer its rows with guide lines.' },
     files: ['shapes-benchmark.svg'],
-    published: '2026-10-09T12:22:19+02:00',
+    published: '2026-10-11T20:42:34+02:00',
   },
   {
     key: '12-satin-und-linien',
