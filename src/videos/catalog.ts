@@ -176,11 +176,11 @@ export const VIDEOS: Video[] = [
     key: '12-satin-und-linien',
     part: 12,
     title: { de: 'Satin und Linien', en: 'Satin and lines' },
-    length: '2:58',
+    length: '3:27',
     group: 'detail',
     goal: { de: 'Du machst aus einer Füllung glänzenden Satin und gibst Linien Fransen, Wiederholung, Echo und Schatten.', en: 'You turn a fill into shiny satin and give lines fringe, repeats, echo and shadow.' },
     files: ['abzeichen.svg'],
-    published: '2026-10-08T21:32:32+02:00',
+    published: '2026-10-11T12:48:05+02:00',
   },
   {
     key: '13-form-und-einzelne-stiche',
