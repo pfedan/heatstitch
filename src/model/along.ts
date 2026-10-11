@@ -7,7 +7,7 @@ import { sample, type Region } from '../digitize/region';
 import { TOLERANCE } from '../digitize/run';
 import type { Pt } from '../digitize/skeleton';
 import type { UnderlayKind } from '../digitize/satin';
-import { HAND_LAYERS, isHandStitch, MOTIF_PERIOD, motifStitches, type LineMotif } from '../digitize/motif';
+import { CORD_STEP, HAND_LAYERS, isHandStitch, MOTIF_PERIOD, motifStitches, type LineMotif } from '../digitize/motif';
 import { satinRuns, type FringeSide, type SatinSettings } from './restitch';
 
 /**
@@ -33,6 +33,11 @@ export interface PathStitch {
   whole?: boolean;
   /** Motif stitch: the figure repeated along the line (waves by default); `width` is its size across. */
   motif?: LineMotif;
+  /**
+   * Stem stitch only: sewn as a dense cord, each stitch once at 45° over the next ones, `spacing`
+   * the step (CORD_STEP by default); like stranded floss by hand otherwise.
+   */
+  cord?: boolean;
   /** Motif stitch: its longest stitch (mm), shorter where the figure bends; MOTIF_STITCH by default. */
   stitch?: number;
   /** Curves keep this close to the line (mm); TOLERANCE by default. */
@@ -81,7 +86,10 @@ export const isHand = (s: PathStitch): boolean => s.type === 'motif' && isHandSt
  * of a bean stitch or the whole line again: the bundles meet in shared holes, and five layers is
  * what the density check still takes.
  */
-export const layersOf = (s: PathStitch): number => (s.repeat === 1 ? 1 : s.repeat === 5 ? 5 : HAND_LAYERS);
+export const layersOf = (s: PathStitch): number => (isCord(s) || s.repeat === 1 ? 1 : s.repeat === 5 ? 5 : HAND_LAYERS);
+
+/** A stem stitch sewn as a dense cord (PathStitch.cord). */
+export const isCord = (s: PathStitch): boolean => s.type === 'motif' && s.motif === 'stem' && !!s.cord;
 
 /** How often each stitch of a running stitch is sewn (bean stitch): an odd number. */
 export const timesOf = (s: PathStitch): number => (s.type === 'triple' ? (s.repeat === 5 ? 5 : 3) : s.type === 'motif' && !isHand(s) && !s.whole && repeatOf(s) % 2 ? repeatOf(s) : 1);
@@ -119,7 +127,7 @@ function repeated(pts: Pt[], times: number): Pt[] {
 /** Distance between penetrations on one side by default (mm): a zigzag and an E stitch are open. */
 export const ZIGZAG_SPACING = 1.5;
 export const E_SPACING = 2.5;
-export const spacingOf = (s: PathStitch): number => s.spacing ?? (s.type === 'zigzag' ? ZIGZAG_SPACING : s.type === 'e' ? E_SPACING : s.type === 'motif' ? MOTIF_PERIOD[s.motif ?? 'waves'] : 0.4);
+export const spacingOf = (s: PathStitch): number => s.spacing ?? (s.type === 'zigzag' ? ZIGZAG_SPACING : s.type === 'e' ? E_SPACING : s.type === 'motif' ? (isCord(s) ? CORD_STEP : MOTIF_PERIOD[s.motif ?? 'waves']) : 0.4);
 
 /** The satin's underlay when none is chosen (a zigzag and an E stitch have none): by width as any satin (see SATIN_UNDER_MIN). */
 export const autoUnder = (s: PathStitch): UnderlayKind | 'off' => (s.type !== 'satin' ? 'off' : (s.under ?? (s.width >= SATIN_UNDER_MIN ? 'auto' : 'off')));
@@ -220,7 +228,7 @@ function sewOnce(line: Pt[], closed: boolean, s: PathStitch, start?: Pt, area?: 
   if (s.type === 'motif') {
     // Like the prongs of an E stitch: on a border inward (outward with flip), on a line to its right.
     const right = area ? rightInside(area, l) !== !!s.flip : back === !!s.flip;
-    const run = repeated(motifStitches(l, closed, s.motif ?? 'waves', s.width, spacingOf(s), right ? 1 : -1, shift, s.stitch, layersOf(s)), timesOf(s));
+    const run = repeated(motifStitches(l, closed, s.motif ?? 'waves', s.width, spacingOf(s), right ? 1 : -1, shift, s.stitch, layersOf(s), isCord(s)), timesOf(s));
     return run.length > 1 ? [run] : [];
   }
   if (area && closed) return satinRuns([onEdge(area, borderRails(area, l, s.width, s.offset ?? 0), s)], satinOf(s));

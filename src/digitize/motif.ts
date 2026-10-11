@@ -27,6 +27,14 @@ export const MOTIF_WIDTH = 3;
 export const HAND_WIDTH: Record<HandStitch, number> = { stem: 1, feather: 5, cretan: 5, chevron: 4 };
 /** How often each stitch of a hand stitch is sewn when nothing is set: thick like embroidery floss. */
 export const HAND_LAYERS = 3;
+/**
+ * A stem stitch as a cord (PathStitch.cord): the step from one stitch to the next when none is set
+ * (mm). Each stitch lies at 45° over the next ones, so the parallel threads are 0.28 mm apart, less
+ * than a 40 wt thread is wide: the cord covers, at the density of a satin.
+ */
+export const CORD_STEP = 0.4;
+/** The step of a cord lies in this range (mm): denser crowds the holes, more open shows the fabric. */
+export const CORD_STEP_RANGE: [number, number] = [0.25, 1.2];
 
 /**
  * The largest size a motif takes with figures `period` mm apart: hearts stay apart (no wider than
@@ -85,10 +93,10 @@ function frame(line: Pt[], closed: boolean) {
  * `shift`: the figures start this share of a period later (0 to 1; an open line then begins and
  * ends with part of a figure).
  */
-export function motifStitches(line: Pt[], closed: boolean, motif: LineMotif, width: number, period: number, side: 1 | -1 = 1, shift = 0, stitch = MOTIF_STITCH, layers = HAND_LAYERS): Pt[] {
+export function motifStitches(line: Pt[], closed: boolean, motif: LineMotif, width: number, period: number, side: 1 | -1 = 1, shift = 0, stitch = MOTIF_STITCH, layers = HAND_LAYERS, cord = false): Pt[] {
   const f = frame(line, closed);
   if (f.total < 0.5) return [];
-  if (isHandStitch(motif)) return handStitches(f, line, closed, motif, width, period, side, shift, layers);
+  if (isHandStitch(motif)) return handStitches(f, line, closed, motif, width, period, side, shift, layers, cord && motif === 'stem');
   const count = Math.max(1, Math.round(f.total / Math.max(0.5, period)));
   const d = f.total / count;
   const o = (((shift % 1) + 1) % 1) * d;
@@ -200,6 +208,7 @@ function bows(f: ReturnType<typeof frame>, s0: number, d: number, m: number, spa
  * the TRC Leiden stitch pages); the idea of bundled straight stitches after stitch_generator (MIT,
  * collection/stitch_effects/decorative_stitches.py), written anew here:
  * - stem: slanted stitches, each twice as long as the step, every one half over the last: a cord.
+ *   As a dense cord (`cord`): each once, at 45°, over as many steps as the cord is wide.
  * - feather: V's opening backwards, alternately left and right, the bottom of one the top of the next.
  * - cretan: a zigzag near the middle, from each of its points a straight stitch out to the side.
  * - chevron: a zigzag with a short bar along the line at each point, the diagonals meeting its middle.
@@ -208,7 +217,7 @@ function bows(f: ReturnType<typeof frame>, s0: number, d: number, m: number, spa
  * all round. In tight curves the figures get closer, so no straight stitch strays from the curve
  * (stem stitch by hand is worked with shorter stitches around curves).
  */
-function handStitches(f: ReturnType<typeof frame>, line: Pt[], closed: boolean, motif: HandStitch, width: number, period: number, side: 1 | -1, shift: number, layers: number): Pt[] {
+function handStitches(f: ReturnType<typeof frame>, line: Pt[], closed: boolean, motif: HandStitch, width: number, period: number, side: 1 | -1, shift: number, layers: number, cord = false): Pt[] {
   const n = Math.max(1, Math.round(layers));
   const w = width * side;
   const out: Pt[] = [];
@@ -240,19 +249,23 @@ function handStitches(f: ReturnType<typeof frame>, line: Pt[], closed: boolean, 
   }
   for (const [s0, s1] of pieces) {
     const len = s1 - s0;
-    let m = Math.max(1, Math.round(len / Math.max(0.5, period)));
+    let m = Math.max(1, Math.round(len / Math.max(cord ? CORD_STEP_RANGE[0] : 0.5, period)));
     const step = ring && motif !== 'stem' ? 2 : 1;
     if (step === 2) m = Math.max(2, 2 * Math.round(m / 2));
     const lead = (k: number) => (ring ? (((shift % 1) + 1) % 1) * (len / k) : 0);
+    // How many steps a stem stitch spans: two by hand (each half over the last); as a cord as many
+    // as make it as long along the line as the cord is wide, so it lies at 45° (Wilcom's stemstitch
+    // and the couched-cord look of Threads magazine: short stitches at an angle, high overlap).
+    const steps = cord ? Math.max(2, Math.round(width / (len / m))) : 2;
     // Shorter stitches in tight curves, as by hand: more figures until no stitch bows from the line.
-    while (m + step <= len / 0.8 && bows(f, s0 + lead(m), len / m, m, motif === 'stem' && m > 1 ? 2 : 1, ring)) m += step;
+    while (m + step <= len / 0.8 && bows(f, s0 + lead(m), len / m, m, motif === 'stem' && m > 1 ? steps : 1, ring)) m += step;
     const d = len / m;
     const o = lead(m);
     const at = (u: number, v: number): Pt => f.at(s0 + o + u, v);
     if (motif === 'stem') {
-      // Stitch k from (k d, -w/2) to ((k + 2) d, w/2): each one half over the one before.
-      const k1 = ring ? m : Math.max(1, m - 1);
-      const span = ring || m > 1 ? 2 * d : len;
+      // Stitch k from (k d, -w/2) to ((k + steps) d, w/2): by hand each one half over the one before.
+      const k1 = ring ? m : Math.max(1, m - steps + 1);
+      const span = ring || m >= steps ? steps * d : len;
       let fromStart = true;
       for (let k = 0; k < k1; k++) {
         const a = at(k * d, -w / 2);
