@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { biggerHoop, hoopFit, normalizeHoop } from '../src/model/hoop';
 import type { Bounds } from '../src/model/pattern';
 import { parsePattern } from '../src/parsers';
-import { hoopRect } from '../src/render/hoop';
+import { HoopGlide, hoopRect } from '../src/render/hoop';
 import { DEFAULTS, materialOf, normalizeMaterial } from '../src/settings';
 import { decodeProject, encodeProject, projectSettings } from '../src/storage/project';
 import { writePattern } from '../src/writers';
@@ -29,6 +29,23 @@ describe('hoop fit', () => {
   it('centers the field on the design and turns it when the design only fits that way', () => {
     expect(hoopRect(box(20, 10, 100, 200), { w: 100, h: 100 })).toEqual({ x: -30, y: -25, w: 100, h: 100, fits: true });
     expect(hoopRect(box(170, 120), { w: 130, h: 180 })).toMatchObject({ w: 180, h: 130, fits: true });
+    expect(hoopRect(box(20, 10, 100, 200), { w: 100, h: 100 }, [0, 0])).toEqual({ x: -50, y: -50, w: 100, h: 100, fits: true });
+  });
+
+  it('glides the drawn hoop to the middle of the changed design, at once for another design', () => {
+    const g = new HoopGlide();
+    const a = {};
+    expect(g.at(box(20, 10), a, 0, false)).toEqual({ at: [10, 5], moving: false });
+    // The design moved 40 mm to the right: the hoop starts where it was and arrives later.
+    expect(g.at(box(20, 10, 400), a, 1000, false)).toEqual({ at: [10, 5], moving: true });
+    const half = g.at(box(20, 10, 400), a, 1100, false);
+    expect(half.moving).toBe(true);
+    expect(half.at[0]).toBeGreaterThan(10);
+    expect(half.at[0]).toBeLessThan(50);
+    expect(g.at(box(20, 10, 400), a, 2000, false)).toEqual({ at: [50, 5], moving: false });
+    // Another design, or reduced motion: no glide.
+    expect(g.at(box(20, 10), {}, 2000, false)).toEqual({ at: [10, 5], moving: false });
+    expect(g.at(box(20, 10, 400), a, 3000, true)).toEqual({ at: [50, 5], moving: false });
   });
 
   it('accepts own sizes within limits only', () => {
