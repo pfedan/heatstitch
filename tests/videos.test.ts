@@ -20,7 +20,7 @@ describe('the tutorial videos', () => {
         expect(v.title[l].trim()).not.toBe('');
         expect(v.goal[l]).toMatch(/\.$/);
       }
-      for (const f of v.files) expect(f).toMatch(/^[\w.-]+\.(pes|dst|svg|jpg|png)$/);
+      for (const f of v.files) expect(f).toMatch(/^[\w.-]+\.(pes|dst|svg|jpg|png|heatstitch)$/);
     });
   });
 

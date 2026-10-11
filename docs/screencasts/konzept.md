@@ -52,6 +52,7 @@ brauchen, nennen sie ihn kurz selbst.
 | 3 | Vom Bild zum Stickmuster | Ein Foto oder PNG: Bild umwandeln (Startseite oder Taste 3), Assistent in drei Schritten: Bild wählen, Farben und Flächen (Höchstens Farben, zusammenlegen, weglassen, Pinsel), Stiche und Ergebnis (Stil, Ergebnis), Übernehmen | `fliegenpilz.jpg` (eigene) | 2 bis 3 min |
 | 4 | Vom SVG zum Stickmuster | Eine SVG mit dunklen Konturen: Bild umwandeln liest Form für Form, jede Farbe wird ein Garn, Konturen werden nach ihrer Breite Satin; dann die Satin-Konturen im Werkzeug Richtung (R): jeder Satin in Abschnitten seiner Fläche, Vorschlagen (Zauberstab) setzt Trenn- und Querlinien, Abschnitte vorgezeichnet wie gestickt, Problemstellen rot umrandet, Reihenfolge, Richtung und Schere je Abschnitt, Leeren, Realistische Fäden | `katze-im-karton.svg` (eigene) | 2 bis 3 min |
 | 5 | Objekte und Reihenfolge | Farben und Objekte, Reihenfolge per Ziehen, Aussparen (Karte über der Liste), Rechtsklick-Menü, Duplizieren und Spiegeln, Einrasten, Garn eines Objekts | `kirschen.svg` (eigene) | 2 min |
+| 17 | Logo nachsticken | Bild umwandeln mit „Nur abpausen“: Vorlage unter einem neuen Stickmuster, Messen (L), Breite der Vorlage und Stickrahmen, Pfad mit Zur Fläche schließen (Füllung, Winkel, Garn), Freihand als Satin, Schrift (T) mit Umschalt+Pfeiltasten an ihren Platz, Vorlage ausblenden (Umschalt+B), fertiges Projekt öffnen, realistische Ansicht | `vorlage.png`, `heatstitch-logo.heatstitch` (eigene) | 3 min |
 
 ### Stufe 2: Stickdatei ansehen und verbessern
 
