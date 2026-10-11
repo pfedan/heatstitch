@@ -1,5 +1,5 @@
 import { outline, type Region } from './region';
-import { columnFromRungs, cutLinesBetween, inside, insideOf, railsFromOutline, stripsOfAreas, type Rung } from './rungs';
+import { columnFromRungs, cutLinesBetween, cutPieces, inside, insideOf, railsFromOutline, stripsOfAreas, type Cut, type Rung } from './rungs';
 import type { Rails } from '../model/restitch';
 import { cornerCuts, planParts } from './satinForms';
 import { blobShape, filled, materialOf, planShape, smallHoles, splitBlobs, wholeShape } from './satinShapes';
@@ -840,7 +840,7 @@ function openHole(g: Graph, hole: Pt[]): [Pt, Pt] | null {
 interface SplitColumn {
   left: Pt[];
   right: Pt[];
-  split?: { outlines: Pt[][]; holes: Pt[][]; cuts: [Pt, Pt][] };
+  split?: { outlines: Pt[][]; holes: Pt[][]; cuts: Cut[] };
 }
 
 /**
@@ -892,10 +892,12 @@ const SAME_CUT_MM = 2;
  * or comes near it goes, as does a line across that crosses one. When the parts then make no
  * columns, the cut lines by hand alone with the lines across, if they do.
  */
-export function aroundCuts(s: { lines: [Pt, Pt][]; cuts: [Pt, Pt][] }, own: [Pt, Pt][], outsides: Pt[][], holes: Pt[][]): { lines: [Pt, Pt][]; cuts: [Pt, Pt][]; ok: boolean } {
-  const lines = s.lines.filter((l) => !own.some((c) => segGap(l, c) === 0));
-  const merged = [...own, ...s.cuts.filter((c) => !own.some((o) => segGap(c, o) < SAME_CUT_MM))];
-  const fits = (cuts: [Pt, Pt][]) => {
+export function aroundCuts(s: { lines: [Pt, Pt][]; cuts: [Pt, Pt][] }, own: Cut[], outsides: Pt[][], holes: Pt[][]): { lines: [Pt, Pt][]; cuts: Cut[]; ok: boolean } {
+  // A cut line by hand may bend: as near as its nearest piece.
+  const gap = (l: [Pt, Pt], c: Cut) => Math.min(...cutPieces(c).map((p) => segGap(l, p)));
+  const lines = s.lines.filter((l) => !own.some((c) => gap(l, c) === 0));
+  const merged: Cut[] = [...own, ...s.cuts.filter((c) => !own.some((o) => gap(c, o) < SAME_CUT_MM))];
+  const fits = (cuts: Cut[]) => {
     const made = stripsOfAreas(outsides, lines, cuts, holes);
     return made.hole < 0 && !made.bad;
   };
@@ -909,7 +911,7 @@ export function aroundCuts(s: { lines: [Pt, Pt][]; cuts: [Pt, Pt][] }, own: [Pt,
  * apart each a column, sewn on one into the next; areas apart each a chain of their own. Or what
  * stops it: a hole no cut line opens, a part no line crosses, lines that make no strip.
  */
-export function columnsAlong(area: Region, lines: [Pt, Pt][], cuts: [Pt, Pt][]): { columns: Rails[] } | { hole: Pt[] } | { bad: Pt[] } | { notStrip: true } | null {
+export function columnsAlong(area: Region, lines: [Pt, Pt][], cuts: Cut[]): { columns: Rails[] } | { hole: Pt[] } | { bad: Pt[] } | { notStrip: true } | null {
   const { outsides, holes } = areaLoops(area);
   if (!outsides.length) return null;
   if (cuts.length || holes.length || outsides.length > 1) {
@@ -918,7 +920,7 @@ export function columnsAlong(area: Region, lines: [Pt, Pt][], cuts: [Pt, Pt][]):
     if (made.bad) return { bad: made.bad };
     const columns: Rails[] = made.areas.flatMap((strips, a) => strips.map((r) => ({ ...r, chain: a })));
     // The fill and its cut lines kept: the cut lines can be moved later (see Rails.split).
-    columns[0].split = { outlines: outsides, holes, cuts: cuts.map(([a, b]) => [a, b] as [Pt, Pt]) };
+    columns[0].split = { outlines: outsides, holes, cuts: cuts.map((c) => c.map((p) => [p[0], p[1]] as Pt)) };
     return { columns };
   }
   const rails = railsFromOutline(outsides[0], lines);

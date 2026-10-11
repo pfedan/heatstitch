@@ -1,3 +1,4 @@
+import { flatten, setSmooth, type Path } from '../shape/path';
 import type { Column } from './satin';
 import type { Pt } from './skeleton';
 
@@ -11,6 +12,59 @@ import type { Pt } from './skeleton';
  * The ends of the rails are rungs too, without being listed.
  */
 export type Rung = [number, number];
+
+/**
+ * A cut line (Trennlinie) drawn across an area: the points it goes through, two for a straight
+ * line. Between them it bends smoothly, as a path of the vector model whose middle nodes are round
+ * (see cutPath); its ends are taken on to the outline straight.
+ */
+export type Cut = Pt[];
+
+/**
+ * A cut line as a path: through its points, the ones between its ends round (as setSmooth makes
+ * them). At an end the curve leaves as it arrives at the next point, mirrored about the line
+ * between them, so three points on a circle give about that circle.
+ */
+export function cutPath(c: Cut): Path {
+  let f = { paths: [{ closed: false, nodes: c.map((p) => ({ p: [p[0], p[1]] as Pt, a: [p[0], p[1]] as Pt, b: [p[0], p[1]] as Pt, smooth: false })) }] };
+  for (let i = 1; i + 1 < c.length; i++) f = setSmooth(f, 0, i, true);
+  const nodes = f.paths[0].nodes;
+  const n = nodes.length;
+  if (n > 2) {
+    // The handle of end `e`, with `q` the next node and `h` its handle towards the end.
+    const end = (e: Pt, q: Pt, h: Pt): Pt => {
+      const l = dist(e, q);
+      const u = norm(sub(e, q));
+      const t = norm(sub(h, q));
+      const k = 2 * (t[0] * u[0] + t[1] * u[1]);
+      // t mirrored about the line from q to e, then seen from e (the way back).
+      const m: Pt = [k * u[0] - t[0], k * u[1] - t[1]];
+      return [e[0] - m[0] * (l / 3), e[1] - m[1] * (l / 3)];
+    };
+    nodes[0].b = end(nodes[0].p, nodes[1].p, nodes[1].a);
+    nodes[n - 1].a = end(nodes[n - 1].p, nodes[n - 2].p, nodes[n - 2].b);
+  }
+  return f.paths[0];
+}
+
+/** The straight pieces a cut line cuts along (one for a straight line). */
+export function cutPieces(c: Cut): [Pt, Pt][] {
+  const l = cutLine(c);
+  return l.slice(1).map((p, i) => [l[i], p]);
+}
+
+/** The curves of cut lines worked out before, with the points they were worked out from (a cut line being dragged changes in place). */
+const cutLines = new WeakMap<Cut, { from: Pt[]; line: Pt[] }>();
+
+/** The line a cut line cuts along: itself when straight, else its curve in points about 0.1 mm apart. */
+export function cutLine(c: Cut): Pt[] {
+  if (c.length <= 2) return c;
+  const was = cutLines.get(c);
+  if (was && was.from.length === c.length && was.from.every((p, i) => p[0] === c[i][0] && p[1] === c[i][1])) return was.line;
+  const line = flatten(cutPath(c), 0.1);
+  cutLines.set(c, { from: c.map((p) => [p[0], p[1]] as Pt), line });
+  return line;
+}
 
 const dist = (a: Pt, b: Pt) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 const lerp = (a: Pt, b: Pt, t: number): Pt => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
@@ -627,37 +681,109 @@ function rotated(ring: Pt[], u: number, cum = cumulative(ring)): Pt[] {
 /**
  * A cut line from the edge of a part into a hole: going out from the line's middle both ways, the
  * first crossing one side on the part's outline and the other on a hole's. The part (k) and the
- * place on it (u), the hole (h) and the place on it (v).
+ * place on it (u), the hole (h) and the place on it (v), and the points of a bent line between
+ * them (from the edge to the hole).
  */
-function bridgeOf(parts: Pt[][], holes: Pt[][], a: Pt, b: Pt, known: Known): { k: number; u: number; h: number; v: number } | null {
-  const m = lerp(a, b, 0.5);
-  const d = sub(b, a);
-  const len = Math.hypot(d[0], d[1]);
-  if (len < 1e-9 || holes.some((h) => inside(h, m))) return null;
+function bridgeOf(parts: Pt[][], holes: Pt[][], line: Pt[], known: Known): { k: number; u: number; h: number; v: number; inner: Pt[] } | null {
+  const m = midOf(line);
+  if (!m || holes.some((h) => inside(h, m))) return null;
   const k = parts.findIndex((r) => inside(r, m));
   if (k < 0) return null;
-  const ext = Math.max(0.25, 10 / len);
-  const from: Pt = [a[0] - d[0] * ext, a[1] - d[1] * ext];
-  const to: Pt = [b[0] + d[0] * ext, b[1] + d[1] * ext];
-  type Hit = { ring: number; s: number; t: number };
-  const hits: Hit[] = [];
-  [parts[k], ...holes].forEach((r, i) => crossings(r, known.cum(r), from, to).forEach((x) => hits.push({ ring: i - 1, ...x })));
-  let lo: Hit | null = null;
-  let hi: Hit | null = null;
-  for (const x of hits) {
-    if (x.t < 0.5 && (!lo || x.t > lo.t)) lo = x;
-    if (x.t > 0.5 && (!hi || x.t < hi.t)) hi = x;
-  }
-  if (!lo || !hi) return null;
-  const [edge, hole] = lo.ring < 0 && hi.ring >= 0 ? [lo, hi] : hi.ring < 0 && lo.ring >= 0 ? [hi, lo] : [null, null];
-  return edge && hole ? { k, u: edge.s, h: hole.ring, v: hole.s } : null;
+  const hit = outward(line, [parts[k], ...holes], known);
+  if (!hit) return null;
+  const { lo, hi } = hit;
+  if (lo.ring === 0 && hi.ring > 0) return { k, u: lo.s, h: hi.ring - 1, v: hi.s, inner: hit.inner };
+  if (hi.ring === 0 && lo.ring > 0) return { k, u: hi.s, h: lo.ring - 1, v: lo.s, inner: hit.inner.slice().reverse() };
+  return null;
 }
 
-/** A closed outline cut in two by the chord from distance u to v along it (both closed again). */
-function splitRing(ring: Pt[], u: number, v: number, cum = cumulative(ring)): [Pt[], Pt[]] {
+/**
+ * A line drawn across outlines (`rings`) taken on beyond its ends (straight on, as far as a
+ * straight line, see chordOf): going out from its middle both ways, the first crossing each side
+ * (`ring` its index in `rings`, `s` the distance along it), and the line's own points between them.
+ */
+function outward(line: Pt[], rings: Pt[][], known: Known): { lo: { ring: number; s: number }; hi: { ring: number; s: number }; inner: Pt[] } | null {
+  const path = reachOf(line);
+  if (!path) return null;
+  const pc = cumulative(path);
+  const middle = pc[pc.length - 1] / 2;
+  type Hit = { ring: number; s: number; at: number };
+  let lo: Hit | null = null;
+  let hi: Hit | null = null;
+  rings.forEach((r, ring) => {
+    const rc = known.cum(r);
+    for (let i = 1; i < path.length; i++) {
+      for (const x of crossings(r, rc, path[i - 1], path[i])) {
+        const at = pc[i - 1] + x.t * (pc[i] - pc[i - 1]);
+        if (at < middle && (!lo || at > lo.at)) lo = { ring, s: x.s, at };
+        if (at > middle && (!hi || at < hi.at)) hi = { ring, s: x.s, at };
+      }
+    }
+  });
+  if (!lo || !hi) return null;
+  const [l, h] = [lo as Hit, hi as Hit];
+  // The points of the line strictly between the two crossings (not on them).
+  const inner = path.filter((_, i) => pc[i] > l.at + 1e-6 && pc[i] < h.at - 1e-6);
+  return { lo: { ring: l.ring, s: l.s }, hi: { ring: h.ring, s: h.s }, inner };
+}
+
+/**
+ * A line as far as it reaches when it cuts: taken on straight beyond both ends, a quarter of its
+ * length or 10 mm, whichever is more (see chordOf). Null for a line without length.
+ */
+export function reachOf(line: Pt[]): Pt[] | null {
+  const n = line.length;
+  const lc = cumulative(line);
+  const len = lc[n - 1];
+  if (n < 2 || len < 1e-9) return null;
+  // A straight line as one piece from end to end, so it cuts exactly as before bent lines were known.
+  if (n === 2) {
+    const [a, b] = line;
+    const d = sub(b, a);
+    const ext = Math.max(0.25, 10 / len);
+    return [
+      [a[0] - d[0] * ext, a[1] - d[1] * ext],
+      [b[0] + d[0] * ext, b[1] + d[1] * ext],
+    ];
+  }
+  const e = Math.max(0.25 * len, 10);
+  const d0 = norm(sub(line[0], line[1]));
+  const d1 = norm(sub(line[n - 1], line[n - 2]));
+  return [[line[0][0] + d0[0] * e, line[0][1] + d0[1] * e], ...line, [line[n - 1][0] + d1[0] * e, line[n - 1][1] + d1[1] * e]];
+}
+
+/** Where a cut line (straight or bent) drawn inside a closed outline meets it, as chordOf, and its points in between. */
+function cutOf(ring: Pt[], line: Pt[], known: Known): { u: number; v: number; inner: Pt[] } | null {
+  if (line.length === 2) {
+    const c = chordOf(ring, line[0], line[1], known);
+    return c && { u: c[0], v: c[1], inner: [] };
+  }
+  const m = midOf(line);
+  if (!m || !known.inside(ring)(m)) return null;
+  const hit = outward(line, [ring], known);
+  return hit && { u: hit.lo.s, v: hit.hi.s, inner: hit.inner };
+}
+
+/** Whether a cut line (straight or bent) is drawn across a closed outline (its middle inside, both ways out of it). */
+export function cutAcross(ring: Pt[], c: Cut): boolean {
+  return !!cutOf(ring, cutLine(c), knownOf());
+}
+
+/** The point halfway along a line; null for one without length. */
+export function midOf(line: Pt[]): Pt | null {
+  const c = cumulative(line);
+  const len = c[c.length - 1];
+  return line.length >= 2 && len > 1e-9 ? pointAt(line, c, len / 2) : null;
+}
+
+/**
+ * A closed outline cut in two by the line from distance u to v along it (both closed again):
+ * straight across, or through `inner`, the points of a bent line from u to v.
+ */
+function splitRing(ring: Pt[], u: number, v: number, cum = cumulative(ring), inner: Pt[] = []): [Pt[], Pt[]] {
   const total = cum[cum.length - 1];
   const fwd = (a: number, b: number) => (((b - a) % total) + total) % total;
-  const arc = (u0: number, u1: number): Pt[] => {
+  const arc = (u0: number, u1: number, via: Pt[]): Pt[] => {
     const len = fwd(u0, u1);
     const inner: { u: number; p: Pt }[] = [];
     for (let i = 0; i + 1 < ring.length; i++) {
@@ -667,9 +793,9 @@ function splitRing(ring: Pt[], u: number, v: number, cum = cumulative(ring)): [P
     inner.sort((a, b) => a.u - b.u);
     const out = [pointAt(ring, cum, u0), ...inner.map((x) => x.p), pointAt(ring, cum, u1)];
     const kept = out.filter((p, i) => !i || dist(p, out[i - 1]) > 1e-6);
-    return [...kept, kept[0]];
+    return [...kept, ...via, kept[0]];
   };
-  return [arc(u, v), arc(v, u)];
+  return [arc(u, v, inner.slice().reverse()), arc(v, u, inner)];
 }
 
 type Strip = { left: Pt[]; right: Pt[]; rungs: Rung[] };
@@ -712,19 +838,19 @@ function knownOf(): Known {
 export interface Parts {
   /** The outlines of the parts (closed). */
   parts: Pt[][];
-  /** The cut lines as drawn: each an edge of the parts it made. */
-  edges: [Pt, Pt][];
+  /** The cut lines as they cut: each an edge of the parts it made (two points, or more where it bends). */
+  edges: Pt[][];
   /** Holes no cut line from the edge has opened yet, and which of the holes given each is. */
   open: Pt[][];
   which: number[];
   known: Known;
 }
 
-/** A cut line from the edge into a hole, when `[a, b]` is one: the hole opened, its outline now part of the edge (see partsOf). */
-function openHole(p: Parts, a: Pt, b: Pt): boolean {
-  const bridge = bridgeOf(p.parts, p.open, a, b, p.known);
+/** A cut line from the edge into a hole, when `line` is one: the hole opened, its outline now part of the edge (see partsOf). */
+function openHole(p: Parts, line: Pt[]): boolean {
+  const bridge = bridgeOf(p.parts, p.open, line, p.known);
   if (!bridge) return false;
-  const { k, u, h, v } = bridge;
+  const { k, u, h, v, inner } = bridge;
   const ring = p.parts[k];
   const hole = p.open[h];
   const P = pointAt(ring, p.known.cum(ring), u);
@@ -732,22 +858,24 @@ function openHole(p: Parts, a: Pt, b: Pt): boolean {
   let around = rotated(hole, v, p.known.cum(hole));
   // Round the hole the other way than round the edge, so the outline stays one simple loop.
   if (Math.sign(signedArea(around)) === Math.sign(signedArea(ring))) around = around.slice().reverse();
-  p.parts[k] = [...rotated(ring, u, p.known.cum(ring)), ...around, P];
-  p.edges.push([P, Q]);
+  p.parts[k] = [...rotated(ring, u, p.known.cum(ring)), ...inner, ...around, ...inner.slice().reverse(), P];
+  p.edges.push([P, ...inner, Q]);
   p.open.splice(h, 1);
   p.which.splice(h, 1);
   return true;
 }
 
-/** The part the line from a to b is drawn across cut in two there; false when it is drawn across none. */
-function cutPart(p: Parts, a: Pt, b: Pt): boolean {
-  const k = p.parts.findIndex((r) => chordOf(r, a, b, p.known));
-  if (k < 0) return false;
-  const [u, v] = chordOf(p.parts[k], a, b, p.known)!;
-  const cum = p.known.cum(p.parts[k]);
-  p.edges.push([pointAt(p.parts[k], cum, u), pointAt(p.parts[k], cum, v)]);
-  p.parts.splice(k, 1, ...splitRing(p.parts[k], u, v, cum));
-  return true;
+/** The part the line is drawn across cut in two along it; false when it is drawn across none. */
+function cutPart(p: Parts, line: Pt[]): boolean {
+  for (let k = 0; k < p.parts.length; k++) {
+    const c = cutOf(p.parts[k], line, p.known);
+    if (!c) continue;
+    const cum = p.known.cum(p.parts[k]);
+    p.edges.push([pointAt(p.parts[k], cum, c.u), ...c.inner, pointAt(p.parts[k], cum, c.v)]);
+    p.parts.splice(k, 1, ...splitRing(p.parts[k], c.u, c.v, cum, c.inner));
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -756,19 +884,23 @@ function cutPart(p: Parts, a: Pt, b: Pt): boolean {
  * the edge (an o cut once is a C); then the other cut lines, each cutting the part it is drawn
  * across in two. A cut line drawn across no part is left out.
  */
-export function partsOf(loop: Pt[], cuts: [Pt, Pt][], holes: Pt[][] = []): Parts {
+export function partsOf(loop: Pt[], cuts: Cut[], holes: Pt[][] = []): Parts {
   const closed = (r: Pt[]) => (dist(r[0], r[r.length - 1]) < 1e-9 ? r : [...r, r[0]]);
   const p: Parts = { parts: [closed(loop)], edges: [], open: holes.map(closed), which: holes.map((_, j) => j), known: knownOf() };
-  const rest: [Pt, Pt][] = [];
-  for (const [a, b] of cuts) if (!openHole(p, a, b)) rest.push([a, b]);
-  for (const [a, b] of rest) cutPart(p, a, b);
+  const rest: Pt[][] = [];
+  for (const c of cuts) {
+    const line = cutLine(c);
+    if (!openHole(p, line)) rest.push(line);
+  }
+  for (const line of rest) cutPart(p, line);
   return p;
 }
 
 /** The parts with one cut line more (the parts as they were left as they are); null when it cuts none of them. */
-export function cutParts(p: Parts, cut: [Pt, Pt]): Parts | null {
+export function cutParts(p: Parts, cut: Cut): Parts | null {
   const next: Parts = { parts: p.parts.slice(), edges: p.edges.slice(), open: p.open.slice(), which: p.which.slice(), known: p.known };
-  return openHole(next, cut[0], cut[1]) || cutPart(next, cut[0], cut[1]) ? next : null;
+  const line = cutLine(cut);
+  return openHole(next, line) || cutPart(next, line) ? next : null;
 }
 
 /**
@@ -780,7 +912,7 @@ export function cutParts(p: Parts, cut: [Pt, Pt]): Parts | null {
  * all do). `holes` are the outlines of holes in the area: each needs a cut line from the edge into
  * it (see bridgeOf); `hole` is one that has none (-1 when all are opened).
  */
-export function stripsOfOutline(loop: Pt[], lines: [Pt, Pt][], cuts: [Pt, Pt][], holes: Pt[][] = []): { strips: Strip[]; parts: Pt[][]; bad: number; hole: number; made?: (Strip | null)[]; open?: number[] } {
+export function stripsOfOutline(loop: Pt[], lines: [Pt, Pt][], cuts: Cut[], holes: Pt[][] = []): { strips: Strip[]; parts: Pt[][]; bad: number; hole: number; made?: (Strip | null)[]; open?: number[] } {
   return stripsOfParts(partsOf(loop, cuts, holes), lines);
 }
 
@@ -792,12 +924,24 @@ export function stripsOfParts(p: Parts, lines: [Pt, Pt][]): { strips: Strip[]; p
   // Near in both directions first: most points are far apart, and that is quick to tell.
   const same = (p: Pt, q: Pt) => Math.abs(p[0] - q[0]) < 1e-6 && Math.abs(p[1] - q[1]) < 1e-6 && dist(p, q) < 1e-6;
   // The cut lines each part has as an edge (by index in `edges`), as stretches of its outline.
+  // A bent cut line is a run of the outline's points, in its order or the other way round.
+  const runs = (ring: Pt[], i: number, e: Pt[]) => {
+    const n = e.length;
+    if (i + n > ring.length) return false;
+    let fwd = true;
+    let back = true;
+    for (let j = 0; j < n && (fwd || back); j++) {
+      fwd &&= same(ring[i + j], e[j]);
+      back &&= same(ring[i + j], e[n - 1 - j]);
+    }
+    return fwd || back;
+  };
   const capsOf = parts.map((ring) => {
     const cum = known.cum(ring);
     const out: { arc: Arc; edge: number }[] = [];
     for (let i = 0; i + 1 < ring.length; i++) {
-      const e = edges.findIndex(([p, q]) => (same(ring[i], p) && same(ring[i + 1], q)) || (same(ring[i], q) && same(ring[i + 1], p)));
-      if (e >= 0) out.push({ arc: [cum[i], cum[i + 1]], edge: e });
+      const e = edges.findIndex((x) => runs(ring, i, x));
+      if (e >= 0) out.push({ arc: [cum[i], cum[i + edges[e].length - 1]], edge: e });
     }
     return out;
   });
@@ -820,7 +964,7 @@ export function stripsOfParts(p: Parts, lines: [Pt, Pt][]): { strips: Strip[]; p
   }
   // Each part starts at the cut line to its parent (the root away from its first child): sewn
   // after the parts beyond it, it ends there, back where the way came in.
-  const mid = (e: number) => lerp(edges[e][0], edges[e][1], 0.5);
+  const mid = (e: number) => midOf(edges[e])!;
   const startOf = (s: Strip) => lerp(s.left[0], s.right[0], 0.5);
   const endOf = (s: Strip) => lerp(s.left[s.left.length - 1], s.right[s.right.length - 1], 0.5);
   const flip = (s: Strip): Strip => ({
@@ -858,7 +1002,7 @@ export function stripsOfParts(p: Parts, lines: [Pt, Pt][]): { strips: Strip[]; p
  * stripsOfOutline does, with the holes that lie in it. The first part that makes no column, or the
  * first hole not opened (by index in `holes`), is said instead.
  */
-export function stripsOfAreas(outlines: Pt[][], lines: [Pt, Pt][], cuts: [Pt, Pt][], holes: Pt[][] = []): { areas: Strip[][]; bad: Pt[] | null; hole: number } {
+export function stripsOfAreas(outlines: Pt[][], lines: [Pt, Pt][], cuts: Cut[], holes: Pt[][] = []): { areas: Strip[][]; bad: Pt[] | null; hole: number } {
   const areas: Strip[][] = [];
   for (const o of outlines) {
     const mine = holes.map((_, j) => j).filter((j) => inside(o, holes[j][0]));
@@ -884,7 +1028,7 @@ export interface SectionCheck {
  * All that is wrong with a fill cut into parts at once (stripsOfAreas says only the first), with
  * the strips of the parts that are fine, so each part can be shown as it would be sewn.
  */
-export function checkSections(outlines: Pt[][], lines: [Pt, Pt][], cuts: [Pt, Pt][], holes: Pt[][] = []): SectionCheck {
+export function checkSections(outlines: Pt[][], lines: [Pt, Pt][], cuts: Cut[], holes: Pt[][] = []): SectionCheck {
   const out: SectionCheck = { strips: [], parts: [], holes: [] };
   for (const o of outlines) {
     const mine = holes.map((_, j) => j).filter((j) => inside(o, holes[j][0]));

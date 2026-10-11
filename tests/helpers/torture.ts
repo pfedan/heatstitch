@@ -22,7 +22,7 @@ import { APPLIQUE_FABRICS, innerStops } from '../../src/model/applique';
 import { appliquesOf, canApplique, fromApplique, setApplique, toApplique } from '../../src/model/appliqueOps';
 import type { Region } from '../../src/digitize/region';
 import { GAP_ROWS_MAX } from '../../src/digitize/fill';
-import { backToVersion, edgeAlong, keepVersion, objectKey, remember, remembered, rememberedIn, restitch, restoreRemembered, DECO_PATTERNS, OPEN_PATTERNS, type BorderSettings, type FillSettings, type Rails, type Remembered, type StoredObjects } from '../../src/model/restitch';
+import { backToVersion, edgeAlong, forget, keepShape, keepVersion, objectKey, remember, remembered, rememberedIn, restitch, restoreRemembered, DECO_PATTERNS, OPEN_PATTERNS, type BorderSettings, type FillSettings, type Rails, type Remembered, type StoredObjects } from '../../src/model/restitch';
 import { reorder } from '../../src/model/order';
 import { stitchKinds } from '../../src/model/sequence';
 import { addContour, behindCovered, gapReader } from '../../src/model/contour';
@@ -53,7 +53,9 @@ import { letteringObjects, placeLettering } from '../../src/lettering/place';
 import { letteringRuns, sewLettering } from '../../src/lettering/sew';
 import { inheritTrace, movedTrace, readTrace, setTraceOf, sizedTrace, storeTrace, traceFrom, traceOf, withTrace, type Trace } from '../../src/model/trace';
 import { areaLoops, suggestSatin } from '../../src/digitize/satinSuggest';
-import { stripsOfAreas } from '../../src/digitize/rungs';
+import { cutLine, reachOf, stripsOfAreas } from '../../src/digitize/rungs';
+import { RungTool } from '../../src/ui/rungTool';
+import type { Pt } from '../../src/digitize/skeleton';
 import { areaOfForm, loadOps, subtractForm, withCrossingNodes } from '../../src/shape/ops';
 import { joinEnd, joinOpenPaths, splitPathAt, JOIN_SNAP_MM, type Joined } from '../../src/shape/join';
 import { areaOf, fillArea, fits, formKey, geoOf, geoUse, guessArea, guessGeo, guessLine, lineGeoOf, openOf, withGeo } from '../../src/model/geo';
@@ -65,6 +67,7 @@ await loadOps();
  * The torture test: random chains of the operations the app offers on objects (add, duplicate (also
  * several, and in place),
  * move, turn, mirror, scale, thin out by hand, delete, cut out, cut a fill apart, recolor, leave out, border in its own thread, empty fill, echo and shadow of a line,
+ * a cut line of a satin in sections bent in the satin tool,
  * a line's nodes edited (put in, added at an end, closed, opened), a closed line filled inside, undo,
  * redo, save and open the project, export), done the way the app does them, with the design's
  * invariants checked after every step. A failing chain names its seed and steps, so it can be
@@ -1216,6 +1219,68 @@ export function letteringProblems(p: Pattern): string[] {
   return problems;
 }
 
+/** A cut line of a satin in sections bent in the satin tool (beside the chain, on satins the chain cut into sections). */
+export const CUT_OPS: Op[] = [
+  {
+    name: 'bend a cut line',
+    run: async (d, r) => {
+      // On a satin in sections (see above) a cut line dragged in its middle, as in the satin tool:
+      // it bends there, the area is cut anew along the curve and the satin sewn from it.
+      const sectioned = (q: Pattern) => sewObjects(q, stitchKinds(q)).filter((o) => remembered(q, o)?.columns?.some((part) => part.some((c) => c.split?.cuts.length)) && remembered(q, o)?.satin);
+      // None yet: a fill made one first, as the chain does (see 'satin in sections').
+      if (!sectioned(d.cur.p).length && !(await OPS.find((x) => x.name === 'satin in sections')!.run(d, r))) return false;
+      const p = d.cur.p;
+      const kinds = stitchKinds(p);
+      const objs = sewObjects(p, kinds);
+      const cut = sectioned(p);
+      if (!cut.length) return false;
+      const o = pick(r, cut);
+      const before = remembered(p, o)!;
+      const changes: Rails[][][] = [];
+      const tool = new RungTool({ change: (c, final) => final && changes.push(c), lines: () => {}, guides: () => {}, redraw: () => {}, say: () => {} });
+      tool.openSatin(before.columns!);
+      if (!tool.cutLines.length) return false;
+      const i = Math.floor(r() * tool.cutLines.length);
+      const line = cutLine(tool.cutLines[i]);
+      // Zoomed in, as one would to bend a cut line on a narrow satin.
+      const scale = 100;
+      const cum = [0];
+      for (let k = 1; k < line.length; k++) cum.push(cum[k - 1] + Math.hypot(line[k][0] - line[k - 1][0], line[k][1] - line[k - 1][1]));
+      // Grabbed where the cut line itself is under the pointer (a rung of a part whose side the cut
+      // line is ends on it), from its middle outward.
+      let grab: { at: Pt; t: Pt } | null = null;
+      for (const share of [0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8]) {
+        const s = cum[cum.length - 1] * share;
+        const k = Math.max(1, cum.findIndex((c) => c >= s));
+        const f = cum[k] > cum[k - 1] ? (s - cum[k - 1]) / (cum[k] - cum[k - 1]) : 0;
+        const at: Pt = [line[k - 1][0] + (line[k][0] - line[k - 1][0]) * f, line[k - 1][1] + (line[k][1] - line[k - 1][1]) * f];
+        const hit = tool.pick(at[0], at[1], scale);
+        if (!hit?.cut || hit.col >= 0 || hit.end !== -1 || hit.i !== i || tool.badgeAt(at[0], at[1], scale)) continue;
+        grab = { at, t: [line[k][0] - line[k - 1][0], line[k][1] - line[k - 1][1]] };
+        break;
+      }
+      if (!grab) return false;
+      const { at, t } = grab;
+      const l = Math.hypot(t[0], t[1]) || 1;
+      const off = between(r, 0.5, 2) * (r() < 0.5 ? -1 : 1);
+      const to: Pt = [at[0] - (t[1] / l) * off, at[1] + (t[0] / l) * off];
+      tool.down(at[0], at[1], scale);
+      tool.dragTo(to[0], to[1]);
+      tool.up();
+      if (!changes.length) return false;
+      const columns = changes[changes.length - 1];
+      // Invariant: the cut line as bent is kept with the satin, through the point it was dragged to.
+      const kept = columns.flatMap((part) => part.flatMap((c) => c.split?.cuts ?? []));
+      expect(kept.some((c) => c.length > 2 && c.some((q) => Math.hypot(q[0] - to[0], q[1] - to[1]) < 1e-9)), 'the bent cut line is kept').toBe(true);
+      const satin = before.satin!;
+      remember(p, o, { ...keepShape(p, o, kinds), columns, read: false });
+      const res = restitch(p, objs, [o.index], { kind: 'satin', s: satin }, kinds, T);
+      forget(p, o, before);
+      return !res.failed.length && took(d, res);
+    },
+  },
+];
+
 export const SATIN_OPS: Op[] = [
   {
     name: 'satin there and back',
@@ -1824,7 +1889,11 @@ export function strayRails(part: Rails[]): number {
   if (!sp || !edgeAlong([...sp.outlines, ...sp.holes], part)) return 0;
   const segs: [number, number, number, number][] = [];
   for (const ring of [...sp.outlines, ...sp.holes]) ring.forEach((a, i) => segs.push([...a, ...ring[(i + 1) % ring.length]] as [number, number, number, number]));
-  for (const [a, b] of sp.cuts) segs.push([a[0], a[1], b[0], b[1]]);
+  // A cut line as far as it cuts (bent ones along their curve, taken on straight to the edge).
+  for (const c of sp.cuts) {
+    const l = c.length === 2 ? c : (reachOf(cutLine(c)) ?? c);
+    for (let i = 1; i < l.length; i++) segs.push([l[i - 1][0], l[i - 1][1], l[i][0], l[i][1]]);
+  }
   const off = (x: number, y: number) =>
     segs.every(([ax, ay, bx, by]) => {
       const dx = bx - ax;
@@ -2042,6 +2111,7 @@ export async function chain(seed: number, steps = STEPS, opts: { trace?: boolean
   const rhand = rng(seed + 86028121);
   const rknit = rng(seed + 104395301);
   const rapp = rng(seed + 122949823);
+  const rcut = rng(seed + 141650939);
   const d = new Doc();
   const log: string[] = [];
   const at = () => `seed ${seed}: ${log.join(' > ')}`;
@@ -2091,6 +2161,19 @@ export async function chain(seed: number, steps = STEPS, opts: { trace?: boolean
       if (await sat.run(d, rsat)) {
         log.push(sat.name);
         if (process.env.TORTURE_TRACE) console.log(sat.name, describeObjects(d.cur.p));
+        try {
+          checkStep(d, false);
+        } catch (e) {
+          throw new Error(`${at()}\n${(e as Error).message}`);
+        }
+      }
+    }
+    // Now and then a cut line of a satin in sections bent, beside the chain.
+    if (!blank(d.cur.p) && rcut() < 0.5) {
+      const cop = pick(rcut, CUT_OPS);
+      if (await cop.run(d, rcut)) {
+        log.push(cop.name);
+        if (process.env.TORTURE_TRACE) console.log(cop.name, describeObjects(d.cur.p));
         try {
           checkStep(d, false);
         } catch (e) {
