@@ -689,6 +689,7 @@ docs.html        Guide EN/DE (src/docs.ts, src/docs.css)
 videos.html      Video page EN/DE; video.html is the template of each video's own page (src/build/watchPage.ts)
 src/build/       Build steps: pages per language, videos, sitemap.xml with the videos (src/build/sitemap.ts)
 public/og-image.jpg, robots.txt  Social media preview image, crawlers
+public/favicon.svg  The logo mark (H, thread, needle); app icons from it with tools/brand/icons.mjs
 ```
 
 ## Contributing

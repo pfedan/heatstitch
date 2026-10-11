@@ -115,12 +115,13 @@ Karten fest neben der Bühne; die Schubladen für kleine Bildschirme kommen nich
 leeren Bühne. Szene 1 jedes Videos ruht auf diesem Bild; der erste Klick ist einer der vier Wege
 oder ein Beispiel. So beginnt jedes Video an derselben Stelle, wie bei den Nutzern.
 
-**Vorspann (3 s).** Dunkler Grund (`#141118`), heatstitch-Logo, Titel in Weiß, darunter
-„Teil 3“ in der Akzentfarbe (`#e0559e`), eine feine Stichlinie als Linie unter dem
-Titel. Ruhige Blende in die App.
+**Vorspann (3 s).** Das gestickte heatstitch-Logo (H mit Faden und Nadel, Schriftzug
+HEATSTITCH; `tools/screencast/logo.jpg`, aus Daniels Vorlage) auf dem Nachtblau dieser Vorlage
+(`#030913`, zur Mitte heller), darunter „Teil 3“ in der Akzentfarbe (`#e0559e`) und der Titel
+in Weiß mit einer feinen Stichlinie darunter. Ruhige Blende in die App.
 
-**Abspann (3 s).** Gleicher Grund, Logo und die Adresse der App. Kein Verweis auf andere
-Teile, kein Logo-Feuerwerk.
+**Abspann (3 s).** Gleicher Grund, das Logo größer und die Adresse der App. Kein Verweis auf
+andere Teile, kein Logo-Feuerwerk.
 
 **Maus.** Ein eingeblendeter Zeiger (weißer Pfeil mit dunklem Rand, etwas größer als normal),
 der sich weich bewegt und nie springt. Ein Klick zeigt einen kurzen Ring in der Akzentfarbe.
