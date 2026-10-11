@@ -101,10 +101,10 @@ export default {
   part: 3,
   voice: {
     model: 'google/gemini-3.1-flash-tts',
-    voice: 'Aoede',
+    voice: 'Gacrux',
     language: 'de-DE',
     prompt:
-      'Speak German in a calm, friendly and clear voice, like an experienced embroiderer showing a friend something on the computer. Natural pace, small pauses between thoughts. Let real enthusiasm show when something nice happens.',
+      'Speak German like a seasoned embroidery master teaching a workshop: mature, composed, precise, quietly authoritative but kind. Every word placed with care, with understated pride.',
   },
   lead: 0.4,
   tail: 0.6,
@@ -160,7 +160,7 @@ export default {
         await s.wait(0.6);
         await s.click(null);
         s.unlabel();
-        await settle(s, async () => (await colorNames(s)).includes('Warm Gray'));
+        await settle(s, async () => (await colorNames(s)).includes('Dark Fuchsia'));
       },
     },
     {
@@ -186,9 +186,9 @@ export default {
       },
     },
     {
-      say: 'Links legst du mit „Höchstens Farben“ fest, wie viele Garne es werden. Bei sechs teilen sich Stiel und Schatten ein Grau. Ich stelle zehn ein. [pleased] Jetzt hat der Stiel sein eigenes Beige.',
-      text: 'Links legst du mit „Höchstens Farben“ fest, wie viele Garne es werden. Bei sechs teilen sich Stiel und Schatten ein Grau. Ich stelle zehn ein. Jetzt hat der Stiel sein eigenes Beige.',
-      textEn: 'On the left, “Max colors” sets how many threads you get. At six, the stem and the shadow share one gray. I set it to ten. Now the stem has its own beige.',
+      say: 'Links legst du mit „Höchstens Farben“ fest, wie viele Garne es werden. Bei sechs teilen sich Stiel und Schatten ein Beige. Ich stelle zehn ein. [pleased] Jetzt hat der Schatten sein eigenes Grau, Warm Gray.',
+      text: 'Links legst du mit „Höchstens Farben“ fest, wie viele Garne es werden. Bei sechs teilen sich Stiel und Schatten ein Beige. Ich stelle zehn ein. Jetzt hat der Schatten sein eigenes Grau, Warm Gray.',
+      textEn: 'On the left, “Max colors” sets how many threads you get. At six, the stem and the shadow share one beige. I set it to ten. Now the shadow has its own gray, Warm Gray.',
       run: async (s) => {
         s.zoomOut();
         const slider = s.page.getByRole('slider').first();
@@ -206,16 +206,20 @@ export default {
         await s.zoom([150, 160, 0, 0], 1.8);
         await s.drag([at(6), at(10)], { sec: 1.0 });
         if ((await slider.inputValue()) !== '10') await slider.fill('10');
-        await settle(s, async () => (await colorNames(s)).includes('Beige'));
+        await settle(s, async () => (await colorNames(s)).includes('Warm Gray'));
         s.zoomOut();
-        await s.move([960, 780], 1.0);
+        await s.move([960, 920], 1.0);
+        await s.wait(0.8);
+        const gray = (await colorRow(s, 'Warm Gray')).getByText('Warm Gray');
+        await s.label('Warm Gray', gray, 'below');
         await s.wait(2.0);
+        s.unlabel();
       },
     },
     {
-      say: 'Dafür ist am Hutrand ein dunkles Rot dazugekommen, Dark Fuchsia. Über den Pfeil daneben legst du eine Farbe mit einer anderen zusammen. Ich nehme Red.',
-      text: 'Dafür ist am Hutrand ein dunkles Rot dazugekommen, Dark Fuchsia. Über den Pfeil daneben legst du eine Farbe mit einer anderen zusammen. Ich nehme Red.',
-      textEn: 'In return, a dark red appeared at the edge of the cap, Dark Fuchsia. With the arrow next to it you merge one color into another. I pick Red.',
+      say: 'Am Hutrand liegt ein dunkles Rot, Dark Fuchsia. Über den Pfeil daneben legst du eine Farbe mit einer anderen zusammen. Ich nehme Red.',
+      text: 'Am Hutrand liegt ein dunkles Rot, Dark Fuchsia. Über den Pfeil daneben legst du eine Farbe mit einer anderen zusammen. Ich nehme Red.',
+      textEn: 'A dark red lies along the edge of the cap, Dark Fuchsia. With the arrow next to it you merge one color into another. I pick Red.',
       run: async (s) => {
         await settle(s, async () => (await colorNames(s)).includes('Dark Fuchsia'));
         await s.move([1000, 600], 1.0);
@@ -361,9 +365,9 @@ export default {
       },
     },
     {
-      say: 'Rechts im Ergebnis stehen Stiche, Größe, Farben und Nähzeit. [pleased] Unauffällig heißt: keine Bereiche über den Grenzwerten für dieses Material.',
-      text: 'Rechts im Ergebnis stehen Stiche, Größe, Farben und Nähzeit. Unauffällig heißt: keine Bereiche über den Grenzwerten für dieses Material.',
-      textEn: 'On the right, Result shows stitches, size, colors and sewing time. Inconspicuous means: no areas above the limits for this material.',
+      say: 'Rechts im Ergebnis stehen Stiche, Größe, Farben und Nähzeit: 3.266 Stiche, fünf Farben, etwa sieben Minuten. [pleased] Unauffällig heißt: keine Bereiche über den Grenzwerten für dieses Material.',
+      text: 'Rechts im Ergebnis stehen Stiche, Größe, Farben und Nähzeit: 3.266 Stiche, fünf Farben, etwa sieben Minuten. Unauffällig heißt: keine Bereiche über den Grenzwerten für dieses Material.',
+      textEn: 'On the right, Result shows stitches, size, colors and sewing time: 3,266 stitches, five colors, about seven minutes. Inconspicuous means: no areas above the limits for this material.',
       run: async (s) => {
         const stats = s.page.getByRole('complementary').filter({ has: s.page.getByRole('heading', { name: 'Ergebnis' }) });
         await glide(s, [[REST[0], 22], [1760, 22]], 0.6);
@@ -375,6 +379,12 @@ export default {
         for (const word of ['Stiche', 'Größe', 'Farben', 'Nähzeit']) {
           await s.move(stats.getByRole('term').filter({ hasText: new RegExp(`^${word}$`) }), 0.6);
           await s.wait(0.3);
+        }
+        // The values as the voice reads them out.
+        for (const [word, sec] of [['Stiche', 1.2], ['Farben', 0.9], ['Nähzeit', 1.0]]) {
+          const value = stats.getByRole('term').filter({ hasText: new RegExp(`^${word}$`) }).locator('xpath=following-sibling::dd[1]');
+          await s.move(value, 0.5);
+          await s.wait(sec);
         }
         const ok = stats.getByText('Unauffällig', { exact: true });
         await s.move(ok, 0.9);

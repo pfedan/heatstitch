@@ -1,8 +1,8 @@
 # Teil 3: Vom Bild zum Stickmuster
 
-Schlüssel `03-vom-bild-zum-stickmuster`, Demodatei `material/fliegenpilz.jpg` (1000 × 1000 Pixel, Fliegenpilz mit Verlauf im Hut, Schatten, Marienkäfer und einem einzelnen roten Punkt oben rechts), etwa 2 Minuten, 283 Wörter.
+Schlüssel `03-vom-bild-zum-stickmuster`, Demodatei `material/fliegenpilz.jpg` (1000 × 1000 Pixel, Fliegenpilz mit Verlauf im Hut, Schatten, Marienkäfer und einem einzelnen roten Punkt oben rechts), etwa 2 Minuten 30, 290 Wörter. Stimme Gacrux.
 
-Ein Foto oder PNG wird mit dem Assistenten „Bild umwandeln“ in drei Schritten zum Stickmuster. Einstellungen, die einen sauberen Pilz ergeben: Höchstens Farben 10, Dark Fuchsia mit Red zusammengelegt, Warm Gray (Schatten) weggelassen, roter Punkt wegradiert, Stil Flach. Ergebnis: 3.275 Stiche, 57,4 × 55,8 mm, 5 Farben, Unauffällig.
+Ein Foto oder PNG wird mit dem Assistenten „Bild umwandeln“ in drei Schritten zum Stickmuster. Der Assistent wählt die Garne seit #270 für alle Farben gemeinsam. Bei Höchstens Farben 6 erscheinen White, Red, Leaf Green, Black, Dark Fuchsia und Beige; Stiel und Schatten sind beide Beige. Bei 10 bekommt der Schatten sein eigenes Warm Gray, Dark Fuchsia bleibt am Hutrand. Einstellungen, die einen sauberen Pilz ergeben: Höchstens Farben 10, Dark Fuchsia mit Red zusammengelegt, Warm Gray (Schatten) weggelassen, roter Punkt wegradiert, Stil Flach. Ergebnis: 3.266 Stiche, 57,4 × 55,8 mm, 5 Farben (Red, Beige, White, Leaf Green, Black), Nähzeit ca. 7 min, Unauffällig.
 
 Die realistische Ansicht nimmt ihr Licht von der Seite, auf der der Zeiger über der Bühne steht. Von oben links ist der Hut tiefrot und glänzend, von rechts oder aus der Mitte blass. Der Zeiger ruht deshalb oben links auf der Bühne und wechselt über die Kopfleiste zur rechten Spalte.
 
@@ -26,21 +26,21 @@ Die realistische Ansicht nimmt ihr Licht von der Seite, auf der der Zeiger über
 
 ## Szene 4
 
-**Bild:** Das vorbereitete Bild in Farbflächen, ohne Hintergrund. Heranzoomen links, Etikett Hintergrund weglassen. Heranzoomen rechts, Etikett Farben über der Liste (White, Red, Leaf Green, Dark Gray, Warm Gray).
+**Bild:** Das vorbereitete Bild in Farbflächen, ohne Hintergrund. Heranzoomen links, Etikett Hintergrund weglassen. Heranzoomen rechts, Etikett Farben über der Liste (White, Red, Leaf Green, Black, Dark Fuchsia, Beige).
 
 **Sprechtext:** [curious] Jetzt zerlegt heatstitch das Bild in Flächen. Den weißen Hintergrund lässt es gleich weg. Rechts unter Farben steht jede Farbe als Garn.
 
 ## Szene 5
 
-**Bild:** Heranzoomen links, Etikett Höchstens Farben (6). Kurz auf den grauen Stiel mit dem grauen Schatten. Der Regler wird auf 10 gezogen; der Stiel wird Beige, der Schatten bleibt Warm Gray, neu kommt Dark Fuchsia am Hutrand.
+**Bild:** Heranzoomen links, Etikett Höchstens Farben (6). Kurz auf den beigen Stiel mit dem ebenso beigen Schatten. Der Regler wird auf 10 gezogen; der Schatten wird Warm Gray, Etikett Warm Gray an der neuen Zeile.
 
-**Sprechtext:** Links legst du mit „Höchstens Farben“ fest, wie viele Garne es werden. Bei sechs teilen sich Stiel und Schatten ein Grau. Ich stelle zehn ein. [pleased] Jetzt hat der Stiel sein eigenes Beige.
+**Sprechtext:** Links legst du mit „Höchstens Farben“ fest, wie viele Garne es werden. Bei sechs teilen sich Stiel und Schatten ein Beige. Ich stelle zehn ein. [pleased] Jetzt hat der Schatten sein eigenes Grau, Warm Gray.
 
 ## Szene 6
 
 **Bild:** Der dunkle Streifen am Hutrand. Heranzoomen rechts, Etiketten Dark Fuchsia und zusammenlegen am Pfeil daneben. Klick, Red gewählt: der Hut ist wieder einfarbig rot.
 
-**Sprechtext:** Dafür ist am Hutrand ein dunkles Rot dazugekommen, Dark Fuchsia. Über den Pfeil daneben legst du eine Farbe mit einer anderen zusammen. Ich nehme Red.
+**Sprechtext:** Am Hutrand liegt ein dunkles Rot, Dark Fuchsia. Über den Pfeil daneben legst du eine Farbe mit einer anderen zusammen. Ich nehme Red.
 
 ## Szene 7
 
@@ -62,15 +62,15 @@ Die realistische Ansicht nimmt ihr Licht von der Seite, auf der der Zeiger über
 
 ## Szene 10
 
-**Bild:** Heranzoomen links, Etikett Stil. Klick auf Dynamisch, der Hut bekommt Reihen, die Form und Verlauf folgen; Blick auf die Bühne. Klick zurück auf Flach, Etikett, der Hut wird wieder ruhig und gleichmäßig; Blick auf die Bühne.
+**Bild:** Heranzoomen links, Etikett Stil. Klick auf Dynamisch (beim Rechnen trägt die Kachel einen Ring), der Hut bekommt Reihen, die Form und Verlauf folgen; Blick auf die Bühne. Klick zurück auf Flach, Etikett, der Hut wird wieder ruhig und gleichmäßig; Blick auf die Bühne.
 
 **Sprechtext:** Unter Stil wählst du, wie die Stiche laufen. Bei Dynamisch folgen die Reihen der Form und dem Bild. [thoughtful] Für den Fliegenpilz nehme ich Flach, mit geraden Reihen.
 
 ## Szene 11
 
-**Bild:** Heranzoomen rechts, Etikett Ergebnis, der Zeiger fährt Stiche, Größe, Farben, Nähzeit ab. Etikett Unauffällig am grünen Kasten.
+**Bild:** Heranzoomen rechts, Etikett Ergebnis, der Zeiger fährt Stiche, Größe, Farben, Nähzeit ab, dann die Werte 3.266, 5 und ca. 7 min. Etikett Unauffällig am grünen Kasten.
 
-**Sprechtext:** Rechts im Ergebnis stehen Stiche, Größe, Farben und Nähzeit. [pleased] Unauffällig heißt: keine Bereiche über den Grenzwerten für dieses Material.
+**Sprechtext:** Rechts im Ergebnis stehen Stiche, Größe, Farben und Nähzeit: 3.266 Stiche, fünf Farben, etwa sieben Minuten. [pleased] Unauffällig heißt: keine Bereiche über den Grenzwerten für dieses Material.
 
 ## Szene 12
 
