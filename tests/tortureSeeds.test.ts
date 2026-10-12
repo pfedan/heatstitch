@@ -20,8 +20,8 @@ describe('found by the torture test', () => {
   // jump that does not move written to DST; a fill's border kept right after it when gathered; a
   // fill's border in its thread left in the old one when an appliqué's thread was recolored; a
   // closed line cut out as if it were a fill; a line made from a bordered fill keeping the motif of
-  // a line it was before.
-  it.each([31, 33, 53, 58, 70, 80, 513, 538, 563, 569, 582, 612])('chain %i with fills on knit still holds', async (seed) => {
+  // a line it was before; a contour round a speck that looped for ever.
+  it.each([31, 33, 53, 58, 70, 80, 513, 538, 563, 569, 582, 612, 1011])('chain %i with fills on knit still holds', async (seed) => {
     await chain(seed, 14, { knit: true });
   }, 60_000);
 });
