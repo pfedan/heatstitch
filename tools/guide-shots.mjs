@@ -147,7 +147,8 @@ async function wheelAt(page, x, y, steps, delta = -120) {
 }
 
 /** Move the mouse off the canvas so no tooltip stays in the shot. */
-const mouseAway = (page) => page.mouse.move(640, 30);
+// an empty spot in the header: the tab bar with its badge now reaches the middle
+const mouseAway = (page) => page.mouse.move(830, 24);
 /**
  * Zoom in by `steps` wheel clicks at page point (px, py) and then bring that point to the stage
  * center. The pan uses zoom-in at P followed by zoom-out at Q, which shifts the view by
