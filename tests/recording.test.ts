@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { hashPattern } from '../src/dev/console';
+import { hashPattern, startProject } from '../src/dev/console';
 import { decodeProject, encodeProject, projectSettings, type Project } from '../src/storage/project';
 import { DEFAULTS } from '../src/settings';
 import { STITCH, type Pattern } from '../src/model/pattern';
@@ -56,6 +56,20 @@ describe('session recording', () => {
     expect(hashPattern(a)).toBe(hashPattern(pattern([0, 10, 20])));
     expect(hashPattern(a)).not.toBe(hashPattern(pattern([0, 10, 21])));
     expect(hashPattern(a)).not.toBe(hashPattern({ ...a, colors: [{ r: 10, g: 20, b: 31 }] }));
+  });
+
+  it('starts from the active design alone, else the picture, else nothing', () => {
+    const file = (name: string) => ({ name, data: new Uint8Array([1]), acks: [], objects: {} as Project['files'][number]['objects'] });
+    const image = { name: 'b.png', type: 'image/png', data: new Uint8Array([2]), work: {} as NonNullable<Project['image']>['work'] };
+    const base: Project = { files: [file('a.pes'), file('b.pes'), file('c.pes')], active: 1, image, settings: projectSettings(DEFAULTS), recording: recording() };
+    const start = startProject(base)!;
+    expect(start.files.map((f) => f.name)).toEqual(['b.pes']);
+    expect(start.active).toBe(0);
+    expect(start.image).toBeNull();
+    expect(start.recording).toBeUndefined();
+    expect(base.files).toHaveLength(3);
+    expect(startProject({ ...base, active: null })).toMatchObject({ files: [], active: null, image });
+    expect(startProject({ ...base, active: null, image: null })).toBeNull();
   });
 
   it('travels in the project file and the app still opens the project', async () => {
