@@ -1,9 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { hreflangLinks, langPage, SITE, type Page } from '../src/build/langPages';
+import { email } from '../src/privacyContact';
 
 const read = (f: string) => new TextDecoder().decode(readFileSync(new URL(`../${f}`, import.meta.url)));
-const source: Record<Page, string> = { app: read('index.html'), docs: read('docs.html'), videos: read('videos.html') };
+const source: Record<Page, string> = { app: read('index.html'), docs: read('docs.html'), videos: read('videos.html'), privacy: read('privacy.html') };
 const head = (html: string) => html.slice(0, html.indexOf('</head>'));
 const meta = (html: string, key: string) => new RegExp(`<meta (?:name|property)="${key}" content="([^"]*)"`).exec(html)?.[1];
 
@@ -49,6 +50,32 @@ describe('one address per language', () => {
       for (const lang of ['de', 'en'] as const) expect(langPage(source[page], page, lang)).toContain(hreflangLinks(page));
     }
     expect(hreflangLinks('docs')).toContain(`hreflang="x-default" href="${SITE}docs.html"`);
+  });
+
+  it('the privacy page stays in its language and out of search results', () => {
+    const de = langPage(source.privacy, 'privacy', 'de');
+    expect(de).toContain('<article lang="de">');
+    expect(de).not.toContain('<article lang="en">');
+    expect(head(de)).toMatch(/<title>heatstitch: Datenschutz/);
+    expect(de).toContain(`<link rel="canonical" href="${SITE}de/privacy.html" />`);
+    expect(de).toContain('href="docs.html#de-lettering"');
+    expect(langPage(source.privacy, 'privacy', 'en')).toContain('<h1>Privacy</h1>');
+    expect(source.privacy).toContain('<meta name="robots" content="noindex, follow" />');
+    expect(read('public/_headers')).toMatch(/\/privacy\.html\n  X-Robots-Tag: noindex\n\/de\/privacy\.html\n  X-Robots-Tag: noindex/);
+  });
+
+  it('the email is only written in by the page script, never in the HTML', () => {
+    expect(email()).toMatch(/^[^@\s]+@[^@\s]+\.[a-z]+$/);
+    expect(source.privacy).not.toContain(email());
+    expect(source.privacy).not.toMatch(/mailto:|@heatstitch/);
+    expect(source.privacy.match(/<span data-email>/g)).toHaveLength(2);
+  });
+
+  it('every page of the guide and the videos leads to the privacy page of its language', () => {
+    for (const page of ['docs', 'videos'] as const) {
+      expect(langPage(source[page], page, 'de')).toContain('<a href="privacy.html"><span lang="de">Datenschutz</span>');
+    }
+    expect(langPage(source.app, 'app', 'de')).toContain('href="privacy.html"');
   });
 
   it('a head tag that is gone stops the build instead of leaving English under de/', () => {

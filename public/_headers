@@ -6,3 +6,9 @@
 # A browser that once reached the site over https stays on https (the Worker sends the same).
 /*
   Strict-Transport-Security: max-age=31536000
+
+# The privacy page stays out of search results (its head says so too; the header also covers crawlers that skip the head).
+/privacy.html
+  X-Robots-Tag: noindex
+/de/privacy.html
+  X-Robots-Tag: noindex

@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>heatstitch: privacy</title>
+    <meta name="description" content="What happens to your data in heatstitch: your files stay in your browser, no tracking, no cookies." />
+    <meta name="robots" content="noindex, follow" />
+    <link rel="canonical" href="https://heatstitch.app/privacy.html" />
+    <meta name="theme-color" content="#0b1424" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="heatstitch" />
+    <meta property="og:url" content="https://heatstitch.app/privacy.html" />
+    <meta property="og:title" content="heatstitch: privacy" />
+    <meta property="og:description" content="What happens to your data in heatstitch." />
+    <meta property="og:image" content="https://heatstitch.app/og-image.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="An embroidered cat in heatstitch, shown three ways: realistic threads, sewing order and density heatmap" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:locale:alternate" content="de_DE" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="https://heatstitch.app/og-image.jpg" />
+    <meta name="twitter:image:alt" content="An embroidered cat in heatstitch, shown three ways: realistic threads, sewing order and density heatmap" />
+  </head>
+  <body>
+    <header class="doc-top" id="top">
+      <a class="doc-brand" href="./">
+        <img src="/favicon.svg" alt="" width="26" height="26" />
+        <span>heatstitch</span>
+      </a>
+      <nav>
+        <a class="doc-link" href="docs.html"><span lang="de">Anleitung</span><span lang="en">Guide</span></a>
+        <a class="doc-open" href="./"><span lang="de">App öffnen</span><span lang="en">Open the app</span></a>
+        <select id="lang" aria-label="Language">
+          <option value="de">Deutsch</option>
+          <option value="en">English</option>
+        </select>
+      </nav>
+    </header>
+
+    <main class="doc privacy">
+      <!-- Both languages are written here; the build makes privacy.html (English) and de/privacy.html (German) with one each. -->
+      <p class="lang-hint" id="lang-hint" hidden></p>
+      <article lang="de">
+        <h1>Datenschutz</h1>
+        <p class="lead">
+          heatstitch ist ein kostenloses Hobbyprojekt ohne Werbung und ohne Konto. Deine Stickdateien und Bilder bleiben in deinem Browser;
+          es gibt kein Tracking und keine Cookies.
+        </p>
+
+
+        <h3>Verantwortlich</h3>
+        <p>Verantwortlich für die Datenverarbeitung auf dieser Website ist Daniel Pfeffer, E-Mail:
+          <!-- The address is written in by src/privacyPage.ts, so crawlers without JavaScript don't find it. -->
+          <span data-email><noscript>(die Seite zeigt sie mit JavaScript an)</noscript></span>.</p>
+
+        <h3>Deine Dateien bleiben bei dir</h3>
+        <p>
+          heatstitch liest, prüft, bearbeitet und speichert Stickdateien, Projekte und Bilder mit JavaScript in deinem Browser. Sie werden
+          nirgendwohin hochgeladen. Damit sie nach einem Neuladen noch da sind, legt die App sie im Speicher deines Browsers ab (IndexedDB),
+          dazu Einstellungen wie Sprache, Stoff und Stickrahmen (localStorage) und die App selbst, damit sie auch ohne Netz geht (Service
+          Worker). Das alles bleibt auf deinem Gerät und wird nie an mich übertragen. Es dient nur dazu, dass die App tut, was du von ihr
+          willst (§ 25 Abs. 2 Nr. 2 TDDDG). Eine Datei entfernst du in der Dateiliste; alles zusammen löschst du in den Einstellungen deines
+          Browsers für heatstitch.app.
+        </p>
+
+        <h3>Hosting bei Cloudflare</h3>
+        <p>
+          Die Website und die Anleitungsvideos (media.heatstitch.app) liefert Cloudflare aus (Cloudflare, Inc., 101 Townsend St., San Francisco,
+          CA 94107, USA). Bei jedem Aufruf sendet dein Browser technisch nötige Angaben mit: IP-Adresse, Zeitpunkt, die angefragte Adresse,
+          Browser und Betriebssystem. Cloudflare braucht sie, um die Seite auszuliefern und vor Angriffen zu schützen. Rechtsgrundlage ist
+          mein berechtigtes Interesse an einer sicheren und erreichbaren Website (Art. 6 Abs. 1 lit. f DSGVO).
+        </p>
+        <p>
+          Cloudflare verarbeitet die Daten in meinem Auftrag nach einem Vertrag zur Auftragsverarbeitung (Art. 28 DSGVO). Dabei können Daten in
+          die USA gelangen; Cloudflare ist nach dem EU-US Data Privacy Framework zertifiziert (Art. 45 DSGVO). Ich sehe davon nur
+          zusammengefasste Zahlen wie die Anzahl der Aufrufe, keine einzelnen Besucher, und führe keine eigenen Zugriffsprotokolle. Mehr bei
+          Cloudflare: <a href="https://www.cloudflare.com/privacypolicy/">Datenschutzerklärung von Cloudflare</a>.
+        </p>
+
+        <h3>Was nur auf deinen Klick passiert</h3>
+        <ul>
+          <li>
+            <b>Bild aus der Zwischenablage:</b> Fügst du die Adresse eines Bildes von einer anderen Website ein, lädt dein Browser das Bild direkt von
+            dort. Diese Website sieht dann deine IP-Adresse, wie bei jedem Besuch.
+          </li>
+          <li>
+            <b>Über WLAN senden:</b> heatstitch gibt die Stickdatei an die App Ember Bridge auf deinem eigenen Rechner weiter, die sie an die
+            Maschine in deinem Heimnetz schickt. Nichts davon geht über das Internet an mich.
+          </li>
+          <li>
+            <b>Bild mit KI vorbereiten:</b> heatstitch schlägt nur einen Text für einen KI-Chat deiner Wahl vor und schickt selbst nichts weg. Was
+            du dort hochlädst, unterliegt den Regeln dieses Anbieters.
+          </li>
+          <li><b>Links zu anderen Seiten</b> (GitHub, Hersteller, Händler) werden erst beim Anklicken geöffnet; dann gilt deren Datenschutz.</li>
+        </ul>
+
+        <h3>Wenn du mir schreibst</h3>
+        <p>
+          Schreibst du mir eine E-Mail, nutze ich deine Angaben nur, um dir zu antworten, und lösche die E-Mail, wenn sie erledigt ist (Art. 6
+          Abs. 1 lit. f DSGVO).
+        </p>
+
+        <h3>Deine Rechte</h3>
+        <p>
+          Du hast das Recht auf Auskunft, Berichtigung, Löschung und Einschränkung der Verarbeitung, auf Datenübertragbarkeit und auf Widerspruch
+          gegen eine Verarbeitung nach Art. 6 Abs. 1 lit. f DSGVO (Art. 15 bis 21 DSGVO). Schreib mir dafür einfach eine E-Mail. Außerdem kannst du dich bei
+          einer Datenschutz-Aufsichtsbehörde beschweren (Art. 77 DSGVO).
+        </p>
+
+        <h2 id="lizenzen">Lizenzen</h2>
+        <p>
+          heatstitch ist Open Source unter der <a href="https://github.com/pfedan/heatstitch/blob/main/LICENSE">MIT-Lizenz</a>. Die Motive stammen aus
+          <a href="https://github.com/jdecked/twemoji">Twemoji</a> (© Twitter, Inc. und andere, Lizenz
+          <a href="https://creativecommons.org/licenses/by/4.0/deed.de">CC BY 4.0</a>), ihre Namen aus Unicode CLDR. Die Schriften und ihre Lizenzen
+          stehen in der <a href="docs.html#de-lettering">Anleitung</a>.
+        </p>
+        <p>
+          heatstitch gibt es kostenlos und ohne Gewähr. Prüfen und Korrektur helfen, ersetzen aber kein Probestück: Stick ein neues Stickmuster
+          zuerst auf einem Rest des gleichen Stoffs.
+        </p>
+        <p class="more">Stand: Oktober 2026</p>
+      </article>
+      <article lang="en">
+        <h1>Privacy</h1>
+        <p class="lead">
+          heatstitch is a free hobby project without ads and without accounts. Your embroidery files and pictures stay in your browser; there is
+          no tracking and there are no cookies.
+        </p>
+
+
+        <h3>Controller</h3>
+        <p>The controller for data processing on this website is Daniel Pfeffer, email:
+          <span data-email><noscript>(the page shows it with JavaScript)</noscript></span>.</p>
+
+        <h3>Your files stay with you</h3>
+        <p>
+          heatstitch reads, checks, edits and saves embroidery files, projects and pictures with JavaScript in your browser. They are never
+          uploaded. So that they are still there after a reload, the app keeps them in your browser's storage (IndexedDB), together with settings
+          like language, fabric and hoop (localStorage), and keeps the app itself so it works offline (service worker). All of this stays on your
+          device and is never sent to me. It only serves to make the app do what you ask of it (§ 25 (2) no. 2 TDDDG). You remove a file in the
+          file list; you delete everything at once in your browser's settings for heatstitch.app.
+        </p>
+
+        <h3>Hosting at Cloudflare</h3>
+        <p>
+          The website and the tutorial videos (media.heatstitch.app) are served by Cloudflare (Cloudflare, Inc., 101 Townsend St., San Francisco,
+          CA 94107, USA). With every request your browser sends technically necessary data: IP address, time, the requested address, browser and
+          operating system. Cloudflare needs them to deliver the site and protect it from attacks. The legal basis is my legitimate interest in a
+          secure and reachable website (Art. 6 (1) (f) GDPR).
+        </p>
+        <p>
+          Cloudflare processes the data on my behalf under a data processing agreement (Art. 28 GDPR). Data may reach the USA; Cloudflare is
+          certified under the EU-US Data Privacy Framework (Art. 45 GDPR). I only see aggregated numbers such as the number of requests, no
+          individual visitors, and keep no access logs of my own. More at Cloudflare:
+          <a href="https://www.cloudflare.com/privacypolicy/">Cloudflare's privacy policy</a>.
+        </p>
+
+        <h3>What only happens when you click</h3>
+        <ul>
+          <li>
+            <b>Picture from the clipboard:</b> if you paste the address of a picture on another website, your browser loads the picture directly
+            from there. That website then sees your IP address, as with any visit.
+          </li>
+          <li>
+            <b>Send over Wi-Fi:</b> heatstitch hands the embroidery file to the Ember Bridge app on your own computer, which passes it on to the
+            machine in your home network. None of it goes to me over the internet.
+          </li>
+          <li>
+            <b>Prepare the image with AI:</b> heatstitch only suggests a prompt for an AI chat of your choice and sends nothing itself. What you
+            upload there is subject to that provider's terms.
+          </li>
+          <li><b>Links to other sites</b> (GitHub, manufacturers, shops) open only when you click them; their privacy policy applies then.</li>
+        </ul>
+
+        <h3>If you write to me</h3>
+        <p>
+          If you send me an email, I use what you send only to answer you, and delete the email once it is settled (Art. 6 (1) (f) GDPR).
+        </p>
+
+        <h3>Your rights</h3>
+        <p>
+          You have the right to access, rectification, erasure and restriction of processing, to data portability and to object to processing
+          based on Art. 6 (1) (f) GDPR (Art. 15 to 21 GDPR). Just send me an email. You can also lodge a complaint with a data protection supervisory
+          authority (Art. 77 GDPR).
+        </p>
+
+        <h2 id="licenses">Licenses</h2>
+        <p>
+          heatstitch is open source under the <a href="https://github.com/pfedan/heatstitch/blob/main/LICENSE">MIT License</a>. The motifs come from
+          <a href="https://github.com/jdecked/twemoji">Twemoji</a> (© Twitter, Inc. and other contributors, license
+          <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>), their names from Unicode CLDR. The fonts and their licenses are
+          listed in the <a href="docs.html#en-lettering">guide</a>.
+        </p>
+        <p>
+          heatstitch is free and comes without warranty. The check and the correction help, but they do not replace a test piece: sew a new
+          design on a scrap of the same fabric first.
+        </p>
+        <p class="more">As of October 2026</p>
+      </article>
+    </main>
+    <footer class="doc-foot">
+      <a href="privacy.html"><span lang="de">Datenschutz</span><span lang="en">Privacy</span></a>
+    </footer>
+    <script type="module" src="/src/privacyPage.ts"></script>
+  </body>
+</html>

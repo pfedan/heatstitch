@@ -43,10 +43,12 @@ fill, satin and running stitches in the style *Flat*, *Dynamic* or *Smart* (see
 
 Embroidery files never leave your computer. heatstitch parses, checks, corrects and writes them with
 JavaScript in your browser; there is no backend, no account, no analytics and no third-party script.
-The site is a set of static files served by GitHub Pages, and the only requests it makes go back to
-that same site (the app itself, the example files, the fonts and the check for a new version).
-The one exception is a request you start yourself: *Send over Wi-Fi* talks to the Ember Bridge app on
-your own computer, which passes the file on to the machine in your home network.
+The site is a set of static files served by Cloudflare, and the only requests it makes go back to
+that same site (the app itself, the example files, the fonts, the motifs and the check for a new version)
+and to `media.heatstitch.app` for the tutorial videos.
+The exceptions are requests you start yourself: pasting the address of a picture on another site loads
+it from there, and *Send over Wi-Fi* talks to the Ember Bridge app on your own computer, which passes
+the file on to the machine in your home network.
 Loaded files and edits are kept in the browser's IndexedDB so they survive a reload, and removing a
 file from the list deletes it there. After the first visit the app also works offline.
 
@@ -54,6 +56,11 @@ The same holds for converted pictures: they are decoded, prepared and converted 
 and kept in IndexedDB together with your color edits and brush strokes. The optional *Prepare the
 image with AI* workflow only suggests a prompt for an AI chat of your choice; heatstitch itself never
 sends the picture anywhere.
+
+The privacy policy is at [heatstitch.app/privacy.html](https://heatstitch.app/privacy.html)
+(German: `de/privacy.html`), linked from
+the app's *More* menu and at the end of every page of the guide and the videos. Keep them in step
+with this section when the site starts sending anything new.
 
 ## Features
 

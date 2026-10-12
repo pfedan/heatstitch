@@ -29,6 +29,11 @@ export function videosUrl(l: Lang, hash = ''): string {
   return `${import.meta.env.BASE_URL}${l === 'de' ? 'de/' : ''}videos.html${hash.replace(/^#(de|en)-/, `#${l}-`)}`;
 }
 
+/** Where the privacy page is in this language. */
+export function privacyUrl(l: Lang): string {
+  return `${import.meta.env.BASE_URL}${l === 'de' ? 'de/' : ''}privacy.html`;
+}
+
 /**
  * Switches the language at once, without a reload: the static texts (data-i18n) here, everything
  * drawn with t() by whoever listens (see onLangChange).
