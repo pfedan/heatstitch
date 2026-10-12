@@ -1364,6 +1364,8 @@ function updateHint(): void {
               : flow
                 ? 'canvas.hint.flow'
                 : 'canvas.hint',
+    // Which of the wheel and Ctrl+wheel zooms follows the choice in the view menu.
+    settings.wheelZooms ? { zoom: t('canvas.wheel.plain'), pan: t('canvas.wheel.mod') } : { zoom: t('canvas.wheel.mod'), pan: t('canvas.wheel.plain') },
   ));
 }
 
@@ -1462,6 +1464,7 @@ const controls = bindControls(settings, (kind: ChangeKind) => {
     rebuildGridImage();
     redraw();
   }
+  updateHint();
 });
 
 const hoopPanel = bindHoop(

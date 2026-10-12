@@ -103,6 +103,8 @@ export interface Settings {
   shapesView: boolean;
   /** A scale bar of round millimetres at the foot of the stage. */
   scaleBar: boolean;
+  /** The plain mouse wheel zooms and Ctrl/Cmd with the wheel pans (as in CAD and other embroidery software). */
+  wheelZooms: boolean;
   /** Color behind the stitches (the fabric), as #rrggbb; null follows the light or dark theme. */
   background: string | null;
   /** In the realistic view the background shows the profile's fabric (weave, knit, leather) in that color. */
@@ -157,6 +159,7 @@ export const DEFAULTS: Settings = {
   realistic: false,
   shapesView: false,
   scaleBar: true,
+  wheelZooms: false,
   background: null,
   fabricLook: true,
   threadMm: threadWidthMm(DEFAULT_PROFILE),
@@ -219,6 +222,7 @@ export function loadSettings(): Settings {
       liveLight: typeof s.liveLight === 'boolean' ? s.liveLight : DEFAULTS.liveLight,
       fabricLook: typeof s.fabricLook === 'boolean' ? s.fabricLook : DEFAULTS.fabricLook,
       scaleBar: typeof s.scaleBar === 'boolean' ? s.scaleBar : DEFAULTS.scaleBar,
+      wheelZooms: typeof s.wheelZooms === 'boolean' ? s.wheelZooms : DEFAULTS.wheelZooms,
       panels: { side: width(s.panels?.side), inspector: width(s.panels?.inspector) },
       checks: normalizeChecks(s.checks),
       correction: normalizeCorrection(s.correction),

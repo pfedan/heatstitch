@@ -53,6 +53,7 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
   const shapesView = $<HTMLInputElement>('shapes-view');
   const scaleBar = $<HTMLInputElement>('scale-bar-show');
   const hoverPreview = $<HTMLInputElement>('hover-preview');
+  const wheelZooms = $<HTMLInputElement>('wheel-zooms');
   const threadWidth = $<HTMLInputElement>('thread-width');
   const liveLight = $<HTMLInputElement>('live-light');
   const fabricLook = $<HTMLSelectElement>('fabric-look');
@@ -156,6 +157,7 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
     shapesView.checked = s.shapesView;
     scaleBar.checked = s.scaleBar;
     hoverPreview.checked = s.hoverPreview;
+    wheelZooms.checked = s.wheelZooms;
     threadWidth.value = String(s.threadMm);
     threadWidth.disabled = !s.realistic;
     liveLight.checked = s.liveLight;
@@ -231,6 +233,7 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
   on(shapesView, 'change', () => ((s.shapesView = shapesView.checked), 'render'));
   on(scaleBar, 'change', () => ((s.scaleBar = scaleBar.checked), 'render'));
   on(hoverPreview, 'change', () => ((s.hoverPreview = hoverPreview.checked), 'render'));
+  on(wheelZooms, 'change', () => ((s.wheelZooms = wheelZooms.checked), 'render'));
   on(threadWidth, 'input', () => ((s.threadMm = Number(threadWidth.value)), 'render'));
   on(liveLight, 'change', () => ((s.liveLight = liveLight.checked), 'render'));
   fabricLook.addEventListener('change', () => {
