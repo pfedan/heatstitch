@@ -1,5 +1,6 @@
 import { JUMP, STITCH, type Pattern, type ThreadColor } from '../model/pattern';
 import { innerStops } from '../model/applique';
+import { pieceAt } from './applique';
 import { blockIndex, FILL, RUNNING, SATIN, stitchKinds, TIE_STITCH, type CarriedJumps, type Markers, type Transition } from '../model/sequence';
 import type { ColorBy, Marks } from '../settings';
 import { SHORT_STITCH_MM } from '../validation/thresholds';
@@ -405,6 +406,18 @@ export function stitchAt(p: Pattern, x: number, y: number, maxDist: number, limi
     }
   }
   return best;
+}
+
+/**
+ * The object shown at (x, y) (0.1 mm), or -1: the one of the stitch nearest within `maxDist`, else
+ * the appliqué whose piece of fabric lies there. The fabric is drawn under all threads, so a stitch
+ * near the pointer wins over it; inside the piece, away from its edge, the fabric is what is seen.
+ */
+export function objectAtPoint(p: Pattern, objectAt: Int32Array, x: number, y: number, maxDist: number, limit: number, alpha?: Float32Array): number {
+  const i = stitchAt(p, x, y, maxDist, limit, alpha);
+  if (i >= 0) return objectAt[i];
+  const k = pieceAt(p, x / 10, y / 10, limit, alpha);
+  return k >= 0 ? objectAt[k] : -1;
 }
 
 /** The shown needle point nearest to (x, y) within `maxDist` (all in 0.1 mm), or -1; later ones win ties. */

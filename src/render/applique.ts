@@ -1,6 +1,7 @@
 import { appliquePieces, type Piece } from '../model/applique';
 import type { Pattern } from '../model/pattern';
-import { segment, segments, type Form } from '../shape/path';
+import type { Pt } from '../digitize/skeleton';
+import { flatten, insidePoly, segment, segments, type Form } from '../shape/path';
 import { drawFabricIn } from './fabricGl';
 import type { Viewport } from './viewport';
 
@@ -16,6 +17,8 @@ interface Shown extends Piece {
   rough: Form;
   /** Bounding box of the rough piece (mm). */
   box: [number, number, number, number];
+  /** The outlines as cut and as laid on, flattened for hit tests (made when first asked). */
+  polys?: { cut: Pt[][]; rough: Pt[][] };
 }
 
 const cache = new WeakMap<Pattern, Shown[]>();
@@ -108,6 +111,26 @@ export function drawPieces(ctx: CanvasRenderingContext2D, vp: Viewport, p: Patte
     }
     ctx.restore();
   }
+}
+
+/** Whether (x, y) (mm) lies on the cloth of `form` (even-odd, as it is drawn). */
+const onCloth = (polys: Pt[][], x: number, y: number): boolean => polys.reduce((n, pts) => (insidePoly(pts, [x, y]) ? n + 1 : n), 0) % 2 === 1;
+
+/**
+ * Record of the first stitch of the appliqué whose piece of fabric is shown at (x, y) (mm) by record
+ * `limit` (`alpha`: hidden colors 0, as drawn by drawPieces), or -1. Of pieces lying on each other
+ * the one laid on last is on top.
+ */
+export function pieceAt(p: Pattern, x: number, y: number, limit: number, alpha?: Float32Array | null): number {
+  const list = piecesOf(p);
+  for (let k = list.length - 1; k >= 0; k--) {
+    const s = list[k];
+    if (limit < s.place || (alpha && alpha[s.first] <= 0)) continue;
+    if (x < s.box[0] || x > s.box[2] || y < s.box[1] || y > s.box[3]) continue;
+    s.polys ??= { cut: s.form.paths.map((path) => flatten(path, 0.2)), rough: s.rough.paths.map((path) => flatten(path, 0.2)) };
+    if (onCloth(limit >= s.trim ? s.polys.cut : s.polys.rough, x, y)) return s.first;
+  }
+  return -1;
 }
 
 let hidden: { p: Pattern; from: Float32Array; key: string; a: Float32Array } | null = null;

@@ -13,7 +13,10 @@ import { remember, remembered } from '../src/model/restitch';
 import { reorder } from '../src/model/order';
 import { recolor } from '../src/model/recolor';
 import { ellipsePath, parsePath, rectPath } from '../src/shape/svgPath';
-import { COLORS, Doc, ID, T, empty, options, saveAndOpen, shapes, transform, checkWellFormed, checkSewDesign, checkExport, checkAppliques, restitchFill } from './helpers/torture';
+import { COLORS, Doc, ID, T, empty, options, saveAndOpen, shapes, transform, checkWellFormed, checkSewDesign, checkExport, checkAppliques, restitchFill, pointOnCloth } from './helpers/torture';
+import { objectAtPoint } from '../src/render/flow';
+import { setKnockout } from '../src/model/knockout';
+import { backToVersion } from '../src/model/restitch';
 import { mirrorMatrix, duplicateObject } from '../src/model/shapeOps';
 import { rotation, translation } from '../src/shape/path';
 import { measurePattern } from '../src/validation/measure';
@@ -184,6 +187,75 @@ describe('appliqué', () => {
     expect(p.cmd[x.trim]).toBe(COLOR_CHANGE);
     expect(x.first < x.place && x.place < x.trim && x.trim < x.last).toBe(true);
     expect(x.form.paths.every((path) => path.closed)).toBe(true);
+  });
+
+  it('is picked by a click on its fabric, not only on its edge; threads on top win', async () => {
+    /** The object a click at (x, y) mm picks with the whole design shown (reach 0.3 mm, as zoomed in). */
+    const pick = (p: Pattern, x: number, y: number, limit = p.cmd.length - 1) => {
+      const at = new Int32Array(p.cmd.length).fill(-1);
+      for (const o of sewObjects(p)) at.fill(o.index, o.first, o.last + 1);
+      return objectAtPoint(p, at, x * 10, y * 10, 3, limit, undefined);
+    };
+    /** Every piece of fabric picks its own appliqué on its cloth (2.5 mm in: past its edge, beside the disc). */
+    const ownCloth = (p: Pattern) => {
+      const pieces = appliquePieces(p);
+      expect(pieces.length).toBeGreaterThan(0);
+      for (const x of pieces) {
+        const at = pointOnCloth(x, 2.5)!;
+        expect(sewObjects(p)[pick(p, ...at)]?.first, `cloth at ${at}`).toBe(x.first);
+      }
+    };
+    const d = design();
+    let p = d.cur.p;
+    // The middle of the circle: no stitch within reach, only the cloth.
+    expect(pick(p, 15, 15)).toBe(1);
+    expect(pick(p, 15, 0)).toBe(1);
+    expect(pick(p, 45, 15)).toBe(-1);
+    // Not laid on yet: nothing there. Laid on, not cut yet: the rough piece, 6 mm of room around.
+    const [x] = appliquePieces(p);
+    expect(pick(p, 15, 15, x.place - 1)).toBe(-1);
+    expect(pick(p, 33, 15, x.place)).toBe(1);
+    expect(pick(p, 33, 15)).toBe(-1);
+    // A disc sewn on top of it is found on its own stitches, the cloth around it still picks the appliqué.
+    expect(shapes(d, addShape(d.cur.p, { form: parsePath(ellipsePath(15, 15, 4, 4), ID), kind: 'fill' }, COLORS[1], null, options)!.pattern)).toBe(true);
+    p = d.cur.p;
+    expect(sewObjects(p)[pick(p, 15, 15)].first).toBeGreaterThan(x.last);
+    expect(pick(p, 15, 6)).toBe(1);
+    checkAppliques(p);
+
+    // Duplicated, mirrored, left out under the disc, undone, saved and opened: each finds its own cloth.
+    expect(shapes(d, duplicateObject(d.cur.p, 1, T, 50)?.pattern)).toBe(true);
+    ownCloth(d.cur.p);
+    const dup = sewObjects(d.cur.p).filter((o) => remembered(d.cur.p, o)?.applique).at(-1)!.index;
+    expect(transform(d, [dup], mirrorMatrix('x', { minX: 50, minY: 50, maxX: 80, maxY: 80 }))).toBe(true);
+    ownCloth(d.cur.p);
+    checkAppliques(d.cur.p);
+    // A fill sewn before it, under its cloth: left out there, the cloth picks the appliqué again.
+    expect(shapes(d, addShape(d.cur.p, { form: parsePath(rectPath(-2, 2, 34, 26, 0, 0), ID), kind: 'fill' }, COLORS[0], 0, options)!.pattern)).toBe(true);
+    const under = sewObjects(d.cur.p).findIndex((o) => !remembered(d.cur.p, o)?.applique && o.first < appliquePieces(d.cur.p)[0].first && o.index > 0);
+    expect(under).toBe(1);
+    const k = setKnockout(d.cur.p, [under], true, T);
+    expect(k).toBeTruthy();
+    d.commit(k!.pattern);
+    expect(remembered(d.cur.p, sewObjects(d.cur.p)[under])?.knockout).toBe(true);
+    ownCloth(d.cur.p);
+    // Undone, the fill is sewn there again, over the cloth as drawn; redone, the cloth is free again.
+    const at = pointOnCloth(appliquePieces(d.cur.p)[0], 2.5)!;
+    const prev = d.undo.pop()!;
+    const now = d.cur;
+    d.redo.push(now);
+    d.cur = prev;
+    backToVersion(prev.p);
+    expect(pick(d.cur.p, ...at)).toBe(under);
+    checkAppliques(d.cur.p);
+    d.redo.pop();
+    d.undo.push(prev);
+    d.cur = now;
+    backToVersion(now.p);
+    ownCloth(d.cur.p);
+    await saveAndOpen(d);
+    ownCloth(d.cur.p);
+    checkAppliques(d.cur.p);
   });
 
   it('a border put after a fill before it goes after its edge, not between its parts', () => {
