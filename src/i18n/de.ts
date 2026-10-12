@@ -1204,6 +1204,8 @@ export const deBase = {
   'knockout.share.hint': 'Wie weit die Füllung unter einen späteren Satin reicht',
   'stitch.underCover': 'Unter späteren Objekten weglassen',
   'stitch.underCover.hint': 'Keine Unterlage, wo spätere Objekte die Füllung bedecken',
+  'stitch.saveTrims': 'Schnitte sparen',
+  'stitch.saveTrims.hint': 'Wo kein versteckter Weg zur nächsten Reihe bleibt, ein paar mm am Rand entlang statt schneiden',
   'plan.change.underCover': 'Unterlage unter späteren Objekten weglassen',
   'knockout.nothingOnTop': 'Zurzeit liegt nichts darüber.',
   'knockout.card': '{n} Füllungen liegen teilweise unter anderen und würden dort doppelt gestickt.',

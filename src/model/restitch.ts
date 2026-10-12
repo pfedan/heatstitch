@@ -179,6 +179,8 @@ export interface FillSettings {
   underInset?: number;
   /** No underlay where objects sewn later cover the fill completely. */
   underCover?: boolean;
+  /** Fewer trims: a few mm along the outline where no hidden way is left (see FillParams.saveTrims). */
+  saveTrims?: boolean;
   /** Underlay inset by this share of the width where it is (0.1 = 10 %), in place of `underInset`. */
   underInsetShare?: number;
   /** Distance between the underlay rows (mm); three times the spacing, at least 1.2 mm, when not set. */
@@ -2425,6 +2427,7 @@ export function fillRuns(area: Region, s: FillSettings, way: FillWay): NewFill |
     if (left !== r) fp.underArea = left ?? undefined;
     if (!left) fp.underlay = false;
   }
+  if (s.saveTrims) fp.saveTrims = true;
   if (way.end) fp.end = way.end;
   let res;
   if (s.pattern === 'gradient') {

@@ -1206,6 +1206,8 @@ const enBase: Record<keyof typeof deBase, string> = {
   'knockout.share.hint': 'How far the fill reaches under a satin sewn later',
   'stitch.underCover': 'Leave out under later objects',
   'stitch.underCover.hint': 'No underlay where later objects cover the fill',
+  'stitch.saveTrims': 'Save trims',
+  'stitch.saveTrims.hint': 'Where no hidden way to the next rows is left, run a few mm along the edge instead of trimming',
   'plan.change.underCover': 'Underlay left out under later objects',
   'knockout.nothingOnTop': 'Nothing lies on top right now.',
   'knockout.card': '{n} fills lie partly under others and would be sewn twice there.',

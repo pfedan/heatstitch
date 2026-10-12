@@ -37,6 +37,12 @@ const movesOf = (p: Pattern) => {
  */
 const MORE_MOVES = (n: number, objects: number) => 2 * Math.max(1, objects) + Math.ceil(n * 0.05);
 
+/**
+ * Trims a fix may add beyond the one of the hard rule, by case. cat-60mm.pes (knit): a fill re-sewn
+ * from the file's rows leaves a sliver at its tip that only a walk along the edge would reach; a
+ * trim there instead, as Daniel chose (no travel along the outline where rows to come are known).
+ */
+const MORE_TRIMS: Record<string, number> = { 'cat-60mm.pes (knit)': 1 };
 /** The reference run: what no case may fall behind, and how long each case took. */
 const reference = () => JSON.parse(new TextDecoder().decode(readFileSync(new URL('./bench/korrektur.json', import.meta.url)))) as { name: string; critAfter: number; ms: number }[];
 
@@ -108,7 +114,7 @@ run('correction benchmark', () => {
       const ref = new Map(reference().map((r) => [r.name, r]));
       for (const r of rows) {
         expect(r.newCrit, `${r.name}: new critical cells`).toBe(0);
-        expect(r.cutAfter, `${r.name}: trims after`).toBeLessThanOrEqual(r.cut + 1);
+        expect(r.cutAfter, `${r.name}: trims after`).toBeLessThanOrEqual(r.cut + 1 + (MORE_TRIMS[r.name] ?? 0));
         expect(r.movesAfter, `${r.name}: moves after`).toBeLessThanOrEqual(r.moves + MORE_MOVES(r.moves, r.objects));
         const was = ref.get(r.name);
         if (was) expect(r.critAfter, `${r.name}: critical after`).toBeLessThanOrEqual(was.critAfter + 1);

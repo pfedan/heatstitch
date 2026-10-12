@@ -919,6 +919,8 @@ export class StitchPanel {
     );
     // Straight rows cannot stray from their line; curved ones get shorter stitches in tight bends.
     if (CURVED.includes(s.pattern)) out.push(this.toleranceSlider(s));
+    // Rings and spirals travel along their own rings; the other fills plan their travel under rows to come.
+    if (s.pattern !== 'contour' && s.pattern !== 'spiral') out.push(this.check('stitch.saveTrims', 'stitch.saveTrims.hint', () => !!s.saveTrims, (v) => (v ? (s.saveTrims = true) : delete s.saveTrims)));
     return out;
   }
 
