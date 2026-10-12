@@ -262,6 +262,8 @@ export class GlThreadRenderer {
   private built: unknown[] = [];
   private u: Record<string, WebGLUniformLocation | null>;
   private count = 0;
+  /** The instance the attributes begin at (see draw). */
+  private start = 0;
 
   /** Throws when WebGL2 is not available. */
   constructor(canvas: HTMLCanvasElement | OffscreenCanvas) {
@@ -331,11 +333,13 @@ export class GlThreadRenderer {
       this.canvas.height = h;
     }
     this.setPattern(p, style);
-    const count = style ? countUpTo(this.records, style.limit) : this.count;
+    // From `style.from` on: the instances begin that far into the buffers.
+    const start = style?.from ? countUpTo(this.records, style.from - 1) : 0;
+    const count = (style ? countUpTo(this.records, style.limit) : this.count) - start;
     gl.viewport(0, 0, w, h);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
-    if (!count) return;
+    if (count <= 0) return;
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.useProgram(this.prog);
@@ -349,6 +353,15 @@ export class GlThreadRenderer {
     gl.uniform1f(this.u.u_gloss, GLOSS);
     gl.uniform1f(this.u.u_fibers, FIBERS);
     gl.bindVertexArray(this.vao);
+    if (start !== this.start) {
+      this.start = start;
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.segBuf);
+      gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 0, start * 16);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.colBuf);
+      gl.vertexAttribPointer(2, 4, gl.FLOAT, false, 0, start * 16);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.alphaBuf);
+      gl.vertexAttribPointer(3, 1, gl.FLOAT, false, 0, start * 4);
+    }
     gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, count * 2);
     gl.bindVertexArray(null);
   }

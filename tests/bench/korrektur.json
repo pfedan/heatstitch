@@ -688,9 +688,9 @@
   "ampel": "red",
   "ampelAfter": "red",
   "crit": 26,
-  "critAfter": 11,
+  "critAfter": 15,
   "newCrit": 0,
-  "newCaution": 33,
+  "newCaution": 85,
   "newGapSparse": 1,
   "open": {
    "density": [
@@ -699,11 +699,11 @@
    ],
    "holes": [
     26,
-    11
+    15
    ],
    "gap": [
     0,
-    0
+    1
    ],
    "sparse": [
     0,
@@ -715,11 +715,11 @@
    ]
   },
   "moves": 35,
-  "movesAfter": 38,
+  "movesAfter": 37,
   "cut": 35,
   "cutAfter": 36,
-  "objects": 12,
-  "ms": 19220
+  "objects": 10,
+  "ms": 19977
  },
  {
   "name": "demos/overlap.pes (woven)",

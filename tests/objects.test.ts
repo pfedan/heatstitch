@@ -67,7 +67,9 @@ describe('objects made of several sections', () => {
   it('keeps what the Image mode sewed as one object one, through a PES file', () => {
     const d = uShape();
     const p = parsePattern(writePattern(d.pattern, 'pes'), 'u.pes');
-    expect(trimsIn(p, 0, p.cmd.length - 1)).toBeGreaterThan(2);
+    // Trimmed within: the U's legs (sewn without visible travel between them since its order is
+    // planned on the travel grid, so with fewer trims than before).
+    expect(trimsIn(p, 0, p.cmd.length - 1)).toBeGreaterThan(1);
     rememberObjects(p, d.starts);
     const objs = sewObjects(p);
     expect(objs.length).toBe(1);

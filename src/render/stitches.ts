@@ -10,6 +10,8 @@ export function drawStitches(
   p: Pattern,
   opacity: number,
   showJumps: boolean,
+  from = 0,
+  to = p.cmd.length - 1,
 ): void {
   if (opacity <= 0 && !showJumps) return;
   ctx.save();
@@ -34,8 +36,13 @@ export function drawStitches(
   ctx.globalAlpha = opacity;
   ctx.lineWidth = width;
   let prevStitch = false;
-  for (let i = 0; i < p.cmd.length; i++) {
+  for (let i = 0; i <= to; i++) {
     const c = p.cmd[i];
+    // Before `from` only the color is followed.
+    if (i < from) {
+      if (c === COLOR_CHANGE) block++;
+      continue;
+    }
     const x = p.x[i] * s + ox;
     const y = p.y[i] * s + oy;
     if (c === STITCH) {

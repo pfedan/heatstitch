@@ -18,7 +18,8 @@ import { menuAt, objectMenu } from '../ui/objectMenu';
 import { colorMenuItems, registerObjectCommands, type Shift } from '../areas/objects/commands';
 import { addObjectIcons } from '../areas/objects/icons';
 import '../areas/objects/objects.css';
-import { numberInColor, rememberObjects, type SewObject, splitObject } from '../model/objects';
+import { innerStops } from '../model/applique';
+import { colorBlockOf, numberInColor, rememberObjects, type SewObject, splitObject } from '../model/objects';
 import { sameColor } from '../model/recolor';
 import { recordOfStitch } from '../model/sequence';
 import { remembered, rememberedIn, measureFill, analyze, unionRegion, remember, restitch, type RestitchResult } from '../model/restitch';
@@ -137,8 +138,10 @@ export function bindObjects(app: ObjectsApp) {
   /** Name of an object as the list shows it: kind and number within its color (an appliqué by name, given its design `p`). */
   function objectName(q: Sequence, i: number, p?: Pattern): string {
     const o = q.objects[i];
-    const k = numberInColor(q.objects, o);
-    return `${p && remembered(p, o)?.applique ? t('applique.name') : kindLabel(o.kind)} ${k} (${blockName({ index: o.block, color: o.color })})`;
+    const appliques = p ? new Set(q.objects.filter((x) => remembered(p, x)?.applique).map((x) => x.index)) : undefined;
+    const inner = p && innerStops(p);
+    const k = numberInColor(q.objects, o, inner, appliques);
+    return `${appliques?.has(o.index) ? t('applique.name') : kindLabel(o.kind)} ${k} (${blockName({ index: colorBlockOf(o.block, inner), color: o.color })})`;
   }
 
   /**

@@ -18,7 +18,7 @@ import { LONG_PRESS_MS } from '../ui/layersPanel';
 import { objectMenu } from '../ui/objectMenu';
 import { lightFromPointer } from '../render/light';
 import { objectsInRect } from '../model/edit';
-import { stitchAt, transitionAt, transitionShown, type StitchStyle } from '../render/flow';
+import { objectAtPoint, transitionAt, transitionShown, type StitchStyle } from '../render/flow';
 import { ui } from './state';
 import { updateTooltip } from '../ui/tooltip';
 
@@ -386,12 +386,10 @@ export function bindPointer(app: PointerApp) {
     if (e.pointerType === 'mouse' || pointers.size <= 1) showTooltip(pos[0], pos[1]);
   });
 
-  /** Whether a click at `pos` (on the stage) hits stitches outside the selection. */
-  function clickedOther(p: Pattern, pos: [number, number]): boolean {
-    const st = app.styleFor(p);
-    const [x, y] = app.vp.toWorld(pos[0], pos[1]);
-    const i = stitchAt(p, x * 10, y * 10, Math.max(3, 60 / app.vp.scale), st.limit, st.alpha);
-    return i >= 0 && !ui.selectedObjects.has(app.seq(p).objectAt[i]);
+  /** Whether a click at `pos` (on the stage) hits an object outside the selection. */
+  function clickedOther(pos: [number, number]): boolean {
+    const o = objectAt(pos);
+    return o >= 0 && !ui.selectedObjects.has(o);
   }
 
   const endPointer = (e: PointerEvent) => {
@@ -430,7 +428,7 @@ export function bindPointer(app: PointerApp) {
     if (pressMode === 'frame' && !frameClick) pressMode = 'move';
     if (pressAt && e.type === 'pointerup' && e.button === 0 && app.settings.mode === 'flow' && (pressMode === 'pan' || frameClick) && !app.rungTool.active && Math.hypot(pos[0] - pressAt[0], pos[1] - pressAt[1]) < 4) {
       const p = app.files.active?.pattern;
-      if (p && ui.letterMode && !clickedOther(p, pos)) {
+      if (p && ui.letterMode && !clickedOther(pos)) {
         // Moving single letters: a click beside the letters lets go of the chosen one.
         if (ui.letterAt !== null) {
           ui.letterAt = null;
@@ -439,10 +437,8 @@ export function bindPointer(app: PointerApp) {
       } else if (p && app.shapeTool.active) {
         // Editing an outline: a click on another object goes on with its outline (Shift or Ctrl adds
         // it), a click beside it lets go of the object; the level stays Form.
-        const st = app.styleFor(p);
         const [x, y] = app.vp.toWorld(pos[0], pos[1]);
-        const i = stitchAt(p, x * 10, y * 10, Math.max(3, 60 / app.vp.scale), st.limit, st.alpha);
-        const o = i >= 0 ? app.seq(p).objectAt[i] : -1;
+        const o = objectAt(pos);
         const add = e.shiftKey || e.ctrlKey || e.metaKey;
         if (o >= 0 && o !== ui.shapeObject && add) app.selectObjects([o], true);
         else if (o >= 0 && o !== ui.shapeObject && !app.shapeTool.near(x, y, app.vp.scale)) app.enterShape(o, false);
@@ -451,10 +447,7 @@ export function bindPointer(app: PointerApp) {
       } else if (p && app.editor.active) {
         // Editing stitches: a click on another object goes on with that one, a click beside the
         // stitches (with no point selected) goes back to the objects.
-        const st = app.styleFor(p);
-        const [x, y] = app.vp.toWorld(pos[0], pos[1]);
-        const i = stitchAt(p, x * 10, y * 10, Math.max(3, 60 / app.vp.scale), st.limit, st.alpha);
-        const o = i >= 0 ? app.seq(p).objectAt[i] : -1;
+        const o = objectAt(pos);
         if (o >= 0 && o !== ui.editObject) app.enterObject(o, ui.editObject === null);
         else if (o < 0 && !app.editor.selection.size) app.setEditing(false);
       } else if (p) {
@@ -464,9 +457,7 @@ export function bindPointer(app: PointerApp) {
         // A finger is wide: within its reach an object wins over a dashed jump line across it, and
         // both are found a little further away than under the mouse.
         const touch = e.pointerType === 'touch';
-        const [x, y] = app.vp.toWorld(pos[0], pos[1]);
-        const i = stitchAt(p, x * 10, y * 10, Math.max(3, (touch ? 140 : 60) / app.vp.scale), st.limit, st.alpha);
-        const o = i >= 0 ? q.objectAt[i] : -1;
+        const o = objectAt(pos, touch ? 14 : 6);
         const k = touch && o >= 0 ? -1 : transitionAt(p, q.transitions, app.vp, pos[0], pos[1], touch ? 12 : 8, (t) => transitionShown(p, t, jumps, st));
         if (k >= 0 || ui.selectedJump !== null) {
           ui.selectedJump = k >= 0 ? k : null;
@@ -529,14 +520,13 @@ export function bindPointer(app: PointerApp) {
     return app.settings.mode === 'flow' && !!app.files.active?.pattern && !app.measure.active && !app.editor.active && !app.shapeTool.active && !app.rungTool.active && !app.drawTool.active && !app.orderCard.isOpen && !ui.letterMode;
   }
 
-  /** The object under `pos` (on the stage), or -1. */
-  function objectAt(pos: [number, number]): number {
+  /** The object under `pos` (on the stage), or -1: its stitches within `reach` px, or an appliqué's fabric. */
+  function objectAt(pos: [number, number], reach = 6): number {
     const p = app.files.active?.pattern;
     if (!p) return -1;
     const st = app.styleFor(p);
     const [x, y] = app.vp.toWorld(pos[0], pos[1]);
-    const i = stitchAt(p, x * 10, y * 10, Math.max(3, 60 / app.vp.scale), st.limit, st.alpha);
-    return i >= 0 ? app.seq(p).objectAt[i] : -1;
+    return objectAtPoint(p, app.seq(p).objectAt, x * 10, y * 10, Math.max(3, (reach * 10) / app.vp.scale), st.limit, st.alpha);
   }
 
   /** Adds the shown objects lying wholly inside the band to the selection (on the level Form: the nodes). */
@@ -565,10 +555,7 @@ export function bindPointer(app: PointerApp) {
   function openObjectMenu(pos: [number, number], clientX: number, clientY: number): boolean {
     const p = app.files.active?.pattern;
     if (!p || app.settings.mode !== 'flow' || app.measure.active || app.editor.active || app.shapeTool.active || app.rungTool.active || app.drawTool.active || app.orderCard.isOpen || ui.letterMode) return false;
-    const st = app.styleFor(p);
-    const [x, y] = app.vp.toWorld(pos[0], pos[1]);
-    const i = stitchAt(p, x * 10, y * 10, Math.max(3, 60 / app.vp.scale), st.limit, st.alpha);
-    const o = i >= 0 ? app.seq(p).objectAt[i] : -1;
+    const o = objectAt(pos);
     return o >= 0 && showObjectMenu(o, clientX, clientY);
   }
 
@@ -617,9 +604,7 @@ export function bindPointer(app: PointerApp) {
     const p = app.files.active?.pattern;
     if (app.settings.mode === 'flow' && p) {
       // A double-click on an object opens its outline (a fill) or its stitches.
-      const st = app.styleFor(p);
-      const i = stitchAt(p, x * 10, y * 10, Math.max(3, 60 / app.vp.scale), st.limit, st.alpha);
-      const o = i >= 0 ? app.seq(p).objectAt[i] : -1;
+      const o = objectAt(pos);
       // A lettering opens its text; one of its letters, while they are moved, nothing more.
       if (o >= 0 && app.letteringsOf(p, app.seq(p))[o]) {
         if (!ui.letterMode) {

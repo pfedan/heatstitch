@@ -27,14 +27,15 @@ export const PROJECT_EXT = '.heatstitch';
 export const PROJECT_MIME = 'application/x-heatstitch-project';
 /**
  * Raised whenever the content changes in a way older versions would misread. 3: the vector model
- * (each object's form in one place, no pixel mask next to the curves it is rastered from).
+ * (each object's form in one place, no pixel mask next to the curves it is rastered from). 4: designs
+ * made in the app are kept in heatstitch's own records (parsers/records.ts), not as PES.
  */
-export const PROJECT_VERSION = 3;
+export const PROJECT_VERSION = 4;
 const MAGIC = 'heatstitch-project';
 
 export interface ProjectFile {
   name: string;
-  /** The file as it was loaded (DST or PES bytes). */
+  /** The file as it was loaded (DST or PES bytes), or heatstitch's own records for a design made here. */
   data: Uint8Array;
   /** The edited version; absent while the file is unchanged. */
   working?: StoredPattern;
