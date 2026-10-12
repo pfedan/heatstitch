@@ -428,8 +428,11 @@ export function fillToLine(p: Pattern, index: number, trimMm: number, geo?: Form
   let st: PathStitch;
   if (fill.lineWidth !== undefined) st = { ...(was ?? lineStitchFor(fill.lineWidth)), width: fill.lineWidth };
   else if (edge) {
+    // The line is sewn as the border is: nothing of a line it was before (a motif, repeats) is
+    // mixed in, else it comes back as part of the border when filled again. Only the side of a
+    // fringe is the drawn line's, where the border names none.
     const { color: _c, link: _l, seams: _s, ...border } = edge;
-    st = { ...was, ...border };
+    st = { ...border, ...(was?.fringeSide && !border.fringeSide ? { fringeSide: was.fringeSide } : {}) };
   } else st = was ? { ...was } : runAsLine(LINE_RUN);
   const r = resewLine(p, index, geo, st, trimMm);
   if (!r) return null;

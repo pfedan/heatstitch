@@ -1970,9 +1970,9 @@ export function strayRails(part: Rails[]): number {
   if (!sp || !edgeAlong([...sp.outlines, ...sp.holes], part)) return 0;
   const segs: [number, number, number, number][] = [];
   for (const ring of [...sp.outlines, ...sp.holes]) ring.forEach((a, i) => segs.push([...a, ...ring[(i + 1) % ring.length]] as [number, number, number, number]));
-  // A cut line as far as it cuts (bent ones along their curve, taken on straight to the edge).
+  // A cut line as far as it cuts: taken on straight to the edge (chordOf), bent ones along their curve.
   for (const c of sp.cuts) {
-    const l = c.length === 2 ? c : (reachOf(cutLine(c)) ?? c);
+    const l = reachOf(cutLine(c)) ?? c;
     for (let i = 1; i < l.length; i++) segs.push([l[i - 1][0], l[i - 1][1], l[i][0], l[i][1]]);
   }
   // Each segment filed under the grid cells its box (grown by the 0.05 mm asked) covers: a point is

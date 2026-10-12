@@ -370,7 +370,9 @@ export function subtractTop(p: Pattern, which: number[], trimMm: number): Subtra
   if (!cutter || areaOfForm(cutter) < NO_AREA) return null;
   const gone = [top];
   const cut: number[] = [];
-  for (const o of sorted.filter((x) => !isBorder(x))) {
+  // A line is not cut, even round a closed path: it would come out as a fill.
+  const isLine = (o: number) => !!objs[o] && !!lineGeoOf(remembered(cur, objs[o]));
+  for (const o of sorted.filter((x) => !isBorder(x) && !isLine(x))) {
     const obj = objs[o];
     const form = obj && guessArea(cur, obj, kinds);
     if (!form) continue;

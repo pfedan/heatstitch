@@ -437,7 +437,7 @@ export function bandForm(f: Form, w: number, fit = true): Form | null {
 function fitRing(ring: Pt[]): Path {
   // Points on top of each other (Clipper rounds to its grid) would read as corners.
   const raw = ring.filter((q, i) => dist(q, ring[(i + 1) % ring.length]) > MIN_EDGE);
-  // The fit checks its error only at the points: long straight edges get points in between.
+  // The fit checks its error at the points and halfway between them: long straight edges get points in between.
   const pts: Pt[] = [];
   for (let i = 0; i < raw.length; i++) {
     const a = raw[i];
@@ -491,7 +491,7 @@ function fitRing(ring: Pt[]): Path {
       if (i === e && run.length > 1) break;
     }
     const t2 = tangent(e, 'in');
-    fitCubic(run, tangent(s, 'out'), [-t2[0], -t2[1]], FIT).forEach((c, k) => {
+    fitCubic(run, tangent(s, 'out'), [-t2[0], -t2[1]], FIT, 0, true).forEach((c, k) => {
       curves.push(c as [Pt, Pt, Pt, Pt]);
       sharp.push(k === 0 && corner.has(s));
     });

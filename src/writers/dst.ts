@@ -157,10 +157,11 @@ export function writeDst(p: Pattern): Uint8Array {
       const j = runEnd(i);
       if (trimmed || runRecords(i, j, cx, cy) < DST_TRIM_JUMP_COUNT) {
         for (let k = i; k < j; k++) {
-          // A jump to where the needle already is, first in the design or in a color (a design that
-          // starts at the origin, a color that starts where the last one ended), is left out: some
-          // machines skip zero-length jumps.
-          if (afterColor && p.x[k] === cx && p.y[k] === cy) continue;
+          // A jump to where the needle already is, first in the design or in a color, or alone between
+          // stitches (a design that starts at the origin, a color that starts where the last one ended,
+          // an object led to where the one before ended), is left out: some machines skip zero-length
+          // jumps. Within a run of jumps read from a file it stays, so the file is written as it was.
+          if ((afterColor || (!trimmed && j - i === 1)) && p.x[k] === cx && p.y[k] === cy) continue;
           for (const [dx, dy] of splitMove(p.x[k] - cx, p.y[k] - cy, DST_MAX_DELTA)) emit(dx, dy, 'jump');
         }
       } else {

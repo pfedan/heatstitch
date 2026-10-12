@@ -25,6 +25,22 @@ const straight: Pt[] = [
 const lineForm = (pts: Pt[]): Form => ({ paths: [{ closed: false, nodes: pts.map((p) => ({ p, a: p, b: p, smooth: false })) }] });
 
 describe('echo copies, nearer and further', () => {
+  it('move with their line: moved, a line has the very copies moved along, each from the same point', () => {
+    // A loop moved by 37.3 mm and -81.7 mm (not a whole number of the pixels the copies are found
+    // on) once had its copies start elsewhere: the stitches kept in the move parted from its echo.
+    const loop: Pt[] = [[5, 5], [40, 20], [55, 8], [60, 30], [10, 40], [5, 5]];
+    for (const [dx, dy] of [[37.3, -81.7], [0.013, 0.071], [-412.6, 233.3]]) {
+      for (const side of ['out', 'in', 'both'] as const) {
+        const e = { side, count: 2, gap: 4 };
+        const here = echoLines(loop, true, e);
+        const there = echoLines(loop.map(([x, y]): Pt => [x + dx, y + dy]), true, e);
+        expect(there.map((l) => l.line.length), `${side} by ${dx}, ${dy}`).toEqual(here.map((l) => l.line.length));
+        const off = Math.max(...there.flatMap((l, k) => l.line.map((q, i) => Math.hypot(q[0] - dx - here[k].line[i][0], q[1] - dy - here[k].line[i][1]))));
+        expect(off, `${side} by ${dx}, ${dy}`).toBeLessThan(1e-6);
+      }
+    }
+  });
+
   it('lies on the line at no distance, and overlaps below the stitch width', () => {
     const lines = echoLines(straight, false, { side: 'out', count: 2, gap: 0 });
     expect(lines).toHaveLength(3);
