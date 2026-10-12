@@ -33,7 +33,7 @@ import { reorder } from '../../src/model/order';
 import { stitchKinds } from '../../src/model/sequence';
 import { addContour, behindCovered, gapReader } from '../../src/model/contour';
 import { combineLines, deleteObjects, duplicateObject, duplicateObjects, gatherObjects, mergeLeads, mirrorMatrix, recolorObjects, subtractTop, threadOfAFill } from '../../src/model/shapeOps';
-import { stitchesBefore } from '../../src/model/transform';
+import { isRigid, stitchesBefore } from '../../src/model/transform';
 import { sewDesign, specOf } from '../../src/model/sew';
 import { parsePattern } from '../../src/parsers';
 import { bounds as boundsOf, extendPath, flatten, insertNode, moveNodes, nodesOf, removeNodes, rotation, segments, setSmooth, storeForm, translation, type Form, type Mat } from '../../src/shape/path';
@@ -215,6 +215,8 @@ export function transform(d: Doc, sel: number[], m: Mat): boolean {
     const kinds = stitchKinds(cur);
     const objs = sewObjects(cur, kinds);
     const r = objs[o] && transformSewObject(cur, objs, objs[o], kinds, m, T);
+    // Scaling holds back no object: one that cannot be sewn anew takes its stitches along scaled.
+    if (objs[o] && !isRigid(m)) expect(r, 'scaled: every object goes along').toBeTruthy();
     if (!r) return false;
     cur = r.pattern;
   }
