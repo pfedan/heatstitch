@@ -542,10 +542,7 @@ function entries(f: Frame, s: Section, pull: number): Entry[] {
 const ROW_END_STRIP = 0.35;
 /** How far travel may run along those strips (mm); crossing one takes a cell or two. */
 const ROW_END_RUN = 4;
-/**
- * How far travel may show where parts are left out (mm): crossing the strip at a row end. Elsewhere
- * a few mm along row ends (ROW_END_RUN) show less than a trim, also where rows to come are known.
- */
+/** How far travel may show where rows to come are known (mm): crossing the strip at a row end. */
 const BARE_RUN = 1.5;
 
 /** Grid over the region for travel paths: passable cells and cells covered by sewn rows. */
@@ -740,7 +737,7 @@ export class TravelGrid {
     const s = this.snap(a);
     const t = this.snap(b);
     if (s < 0 || t < 0) return null;
-    const ok = (x: ReturnType<TravelGrid['walk']>) => !!x && x.onTop <= SEWN_CROSSING && x.alongEnds <= (this.ahead && this.gone ? BARE_RUN : ROW_END_RUN);
+    const ok = (x: ReturnType<TravelGrid['walk']>) => !!x && x.onTop <= SEWN_CROSSING && x.alongEnds <= (this.ahead ? BARE_RUN : ROW_END_RUN);
     if (avoidSewn && this.ahead) {
       const w = this.walk(this.search(s, a, b, true, t, true, limit), s, t, a, b, true);
       if (w && ok(w) && w.length < this.way(dist(a, b))) return w;
@@ -820,7 +817,7 @@ export class TravelGrid {
   length(a: Pt, b: Pt): number | null {
     // Planning asks often: a search that has to look far and wide counts as no way.
     const w = this.route(a, b, true, (SEARCH_SPREAD * this.way(dist(a, b))) / this.cell);
-    return w && w.length + SHOWN_COST * (w.onTop + w.alongEnds);
+    return w && w.length + SHOWN_COST * w.onTop + EDGE_COST * w.alongEnds;
   }
 
   /** A* from cell s to t (Dijkstra everywhere with t < 0), at most `limit` cells: the predecessor of each cell. */
@@ -1074,6 +1071,12 @@ const TRIES = 8;
 const SEARCH_SPREAD = 80;
 /** What a millimetre of travel that shows costs when choosing the order of sections (mm of travel). */
 const SHOWN_COST = 4;
+/**
+ * What a millimetre of travel along the outline beside sewn row ends costs (mm of travel): the eye
+ * follows an edge, so a millimetre there costs about a trim. The order then sews parts that would
+ * leave such a way (lobes, undercuts) first, from their far end, and travels on under rows to come.
+ */
+const EDGE_COST = 25;
 /** Ending this close to where the next object starts costs only the distance (mm). */
 const END_NEAR = 3;
 
