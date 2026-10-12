@@ -1935,8 +1935,22 @@ export function strayRails(part: Rails[]): number {
     const l = c.length === 2 ? c : (reachOf(cutLine(c)) ?? c);
     for (let i = 1; i < l.length; i++) segs.push([l[i - 1][0], l[i - 1][1], l[i][0], l[i][1]]);
   }
+  // Each segment filed under the grid cells its box (grown by the 0.05 mm asked) covers: a point is
+  // measured only against the segments of its own cell, the same answer as against all of them.
+  const CELL = 1;
+  const grid = new Map<string, number[]>();
+  segs.forEach(([ax, ay, bx, by], k) => {
+    for (let gx = Math.floor((Math.min(ax, bx) - 0.05) / CELL); gx <= Math.floor((Math.max(ax, bx) + 0.05) / CELL); gx++)
+      for (let gy = Math.floor((Math.min(ay, by) - 0.05) / CELL); gy <= Math.floor((Math.max(ay, by) + 0.05) / CELL); gy++) {
+        const key = `${gx},${gy}`;
+        const list = grid.get(key);
+        if (list) list.push(k);
+        else grid.set(key, [k]);
+      }
+  });
   const off = (x: number, y: number) =>
-    segs.every(([ax, ay, bx, by]) => {
+    (grid.get(`${Math.floor(x / CELL)},${Math.floor(y / CELL)}`) ?? []).every((k) => {
+      const [ax, ay, bx, by] = segs[k];
       const dx = bx - ax;
       const dy = by - ay;
       const t = dx || dy ? Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy))) : 0;
@@ -2319,28 +2333,42 @@ export async function chain(seed: number, steps = STEPS, opts: { trace?: boolean
 }
 
 
-function bytesOf(b: Uint8Array): string {
-  let out = '';
-  for (let i = 0; i < b.length; i += 8192) out += String.fromCharCode(...b.subarray(i, i + 8192));
-  return out;
+/**
+ * Whether two values are the same, typed arrays byte for byte, keys in any order, keys holding
+ * undefined left out. Stricter than toEqual, never looser: where it says no, toEqual decides.
+ */
+function same(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true;
+  if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
+  if (ArrayBuffer.isView(a) || ArrayBuffer.isView(b)) {
+    if (!ArrayBuffer.isView(a) || !ArrayBuffer.isView(b) || a.constructor !== b.constructor || a.byteLength !== b.byteLength) return false;
+    const x = new Uint8Array(a.buffer, a.byteOffset, a.byteLength);
+    const y = new Uint8Array(b.buffer, b.byteOffset, b.byteLength);
+    for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return false;
+    return true;
+  }
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) if (!same(a[i], b[i])) return false;
+    return true;
+  }
+  // Plain objects only (a Map or a class keeps what it holds out of its keys): anything else goes to toEqual.
+  const plain = (v: object) => [Object.prototype, null].includes(Object.getPrototypeOf(v));
+  if (!plain(a) || !plain(b)) return false;
+  const ka = Object.keys(a).filter((k) => (a as Record<string, unknown>)[k] !== undefined);
+  const kb = Object.keys(b).filter((k) => (b as Record<string, unknown>)[k] !== undefined);
+  if (ka.length !== kb.length) return false;
+  for (const k of ka) if (!same((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k])) return false;
+  return true;
 }
-/** A value as text, typed arrays as their bytes, keys in order. */
-const asText = (v: unknown): string =>
-  JSON.stringify(v, (_k, x) =>
-    ArrayBuffer.isView(x)
-      ? `${x.constructor.name}:${bytesOf(new Uint8Array(x.buffer, x.byteOffset, x.byteLength))}`
-      : x && typeof x === 'object' && !Array.isArray(x)
-        ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => (a < b ? -1 : 1)))
-        : x,
-  );
 
 /** All the invariants, after a step; `full`: also the export and sewing the design. */
 function checkStep(d: Doc, full: boolean): void {
   const p = d.cur.p;
   checkWellFormed(p);
-  // Compared as text first (areas are large typed arrays, slow to compare one by one); the full diff only when they differ.
+  // Compared byte for byte first (areas are large typed arrays, slow for toEqual); the full diff only when they differ.
   const known = knowledge(p);
-  if (asText(known) !== asText(d.cur.known)) expect(known, 'knowledge as stored with this version').toEqual(d.cur.known);
+  if (!same(known, d.cur.known)) expect(known, 'knowledge as stored with this version').toEqual(d.cur.known);
   checkAllKnown(p);
   checkKeys(p);
   checkObjectList(p);
