@@ -20,7 +20,8 @@ import { cutKey, sewnArea, wholeArea, wholeOf } from '../../src/model/knockout';
 import { unionOf } from '../../src/shape/rasterize';
 import { borderStitches, isRedwork, isRunType } from '../../src/model/along';
 import { redworkGraph, redworkWalks } from '../../src/digitize/redwork';
-import { APPLIQUE_FABRICS, innerStops } from '../../src/model/applique';
+import { APPLIQUE_FABRICS, appliquePieces, innerStops, type Piece } from '../../src/model/applique';
+import { pieceAt } from '../../src/render/applique';
 import { appliquesOf, canApplique, fromApplique, setApplique, toApplique } from '../../src/model/appliqueOps';
 import type { Region } from '../../src/digitize/region';
 import { GAP_ROWS_MAX } from '../../src/digitize/fill';
@@ -1122,7 +1123,35 @@ export function checkAppliques(p: Pattern): void {
     const b = blockAt(o.first);
     for (let k = 1; k <= stops.length; k++) if (!sameColor(p.colors[b + k], p.colors[b])) problems.push(`${o.index}: block ${b + k} in another thread`);
   }
+  // A click on the cloth finds its appliqué (or a piece laid on later, over it).
+  const end = p.cmd.length - 1;
+  for (const x of appliquePieces(p)) {
+    const at = pointOnCloth(x);
+    if (at && (pieceAt(p, at[0], at[1], end)?.first ?? -1) < x.first) problems.push(`${x.first}: its cloth at ${at.map((v) => v.toFixed(1))} is not found`);
+  }
   expect(problems.join('; '), 'appliqués').toBe('');
+}
+
+/**
+ * A point on the cloth of piece `x` (mm, even-odd as drawn), across its middle on the first span
+ * inside: halfway along it, or `inset` mm in from its start when the span is wide enough.
+ */
+export function pointOnCloth(x: Piece, inset?: number): [number, number] | null {
+  const polys = x.form.paths.map((path) => flatten(path, 0.2));
+  const ys = polys.flat().map((q) => q[1]);
+  if (!ys.length) return null;
+  const y = (Math.min(...ys) + Math.max(...ys)) / 2 + 1e-3;
+  const xs: number[] = [];
+  for (const pts of polys) {
+    for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+      const [xi, yi] = pts[i];
+      const [xj, yj] = pts[j];
+      if (yi > y !== yj > y) xs.push(((xj - xi) * (y - yi)) / (yj - yi) + xi);
+    }
+  }
+  xs.sort((a, b) => a - b);
+  for (let k = 0; k + 1 < xs.length; k += 2) if (xs[k + 1] - xs[k] > 1e-6) return [inset !== undefined && xs[k + 1] - xs[k] > 2 * inset ? xs[k] + inset : (xs[k] + xs[k + 1]) / 2, y];
+  return null;
 }
 
 /** A script font whose letters run into each other (loaded from the app's fonts). */
