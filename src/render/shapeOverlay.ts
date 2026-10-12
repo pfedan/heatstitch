@@ -106,7 +106,7 @@ export function drawShapeOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, vi
 }
 
 /**
- * New nodes to drag out: small hollow dots in the middle of the curves, and beyond each end of a
+ * New nodes to drag out: small hollow rings (no fill) in the middle of the curves, and beyond each end of a
  * line a dot with a plus, joined to its end by a dashed stub. The hovered one in the accent color.
  */
 function drawGhosts(ctx: CanvasRenderingContext2D, vp: Viewport, view: ShapeView, h: ShapePick | null): void {
@@ -130,18 +130,33 @@ function drawGhosts(ctx: CanvasRenderingContext2D, vp: Viewport, view: ShapeView
     const r = g.part === 'end' ? (on ? 7.5 : 6.5) : on ? 5.5 : 4;
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.fillStyle = on ? ACCENT : 'rgba(255, 255, 255, 0.85)';
-    ctx.strokeStyle = on ? 'rgba(0, 0, 0, 0.8)' : 'rgba(0, 0, 0, 0.55)';
-    ctx.lineWidth = 1.2;
-    ctx.fill();
-    ctx.stroke();
+    if (on) {
+      ctx.fillStyle = ACCENT;
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
+      ctx.lineWidth = 1.2;
+      ctx.fill();
+      ctx.stroke();
+    } else {
+      // Truly hollow, so they read apart from the filled nodes: a light ring on a dark halo, the stitches show through.
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
+      ctx.lineWidth = 3.5;
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
     if (g.part !== 'end') continue;
     ctx.beginPath();
     ctx.moveTo(x - 3, y);
     ctx.lineTo(x + 3, y);
     ctx.moveTo(x, y - 3);
     ctx.lineTo(x, y + 3);
-    ctx.strokeStyle = on ? '#ffffff' : 'rgba(0, 0, 0, 0.75)';
+    if (!on) {
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
+      ctx.lineWidth = 3.5;
+      ctx.stroke();
+    }
+    ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 1.5;
     ctx.stroke();
   }
