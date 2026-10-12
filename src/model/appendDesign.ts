@@ -3,7 +3,8 @@ import { newLink, syncBorders } from './border';
 import { recs } from './jumps';
 import { sewObjects, type SewObject } from './objects';
 import { JUMP, STITCH, type Pattern } from './pattern';
-import { objectKey, remember, remembered, type Remembered } from './restitch';
+import { refreshKnockouts } from './knockout';
+import { remember, remembered, type Remembered } from './restitch';
 import { stitchesBefore } from './transform';
 import { transformSewObject } from './reshape';
 import { stitchKinds } from './sequence';
@@ -45,11 +46,14 @@ export function appendDesign(p: Pattern, add: Pattern, x: number, y: number, tri
   const sewn = sewObjects(cur);
   const put = starts.map((s) => sewn.find((o) => stitchesBefore(cur, o.first) === s));
   if (put.some((o) => !o) || sewn.length !== sewObjects(p).length + starts.length) return null;
-  // As after a move: a border whose fill came out otherwise is sewn anew (found again by its stitches).
-  const keys = put.map((o) => objectKey(cur, o!));
-  const next = syncBorders(cur, trimMm);
-  const after = sewObjects(next).map((o) => objectKey(next, o));
-  const objects = keys.map((k) => after.indexOf(k)).filter((i) => i >= 0);
+  // As after a move: a border whose fill came out otherwise is sewn anew, and what leaves out the
+  // shapes on top follows their new place, here, so putting it in is all that happens (found again
+  // by their ids).
+  const ids = put.map((o) => o!.id);
+  const synced = syncBorders(cur, trimMm);
+  const next = refreshKnockouts(synced, trimMm)?.pattern ?? synced;
+  const after = sewObjects(next).map((o) => o.id);
+  const objects = ids.map((id) => after.indexOf(id)).filter((i) => i >= 0);
   return { pattern: next, objects };
 }
 

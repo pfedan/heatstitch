@@ -23,10 +23,18 @@ export function sized(svg: string, widthMm: number): string {
  * A motif of the library sewn as a design of its own, its middle at the origin: each shape of
  * the file one object, like an opened SVG, with what lies under later shapes left out (the
  * library's motifs are flat pictures, layered: sewn whole they would be twice as thick there).
+ * `progress` hears how many of its shapes are sewn.
  */
-export async function sewMotif(svg: string, name: string, widthMm: number, prepare: PrepareOptions, options: DigitizeOptions & { trimMm: number }): Promise<Pattern> {
+export async function sewMotif(
+  svg: string,
+  name: string,
+  widthMm: number,
+  prepare: PrepareOptions,
+  options: DigitizeOptions & { trimMm: number },
+  progress?: (done: number, total: number) => void,
+): Promise<Pattern> {
   const file = new File([sized(svg, widthMm)], `${name}.svg`, { type: 'image/svg+xml' });
-  const d = await digitizeSvg(file, prepare, options, false);
+  const d = await digitizeSvg(file, prepare, options, false, progress);
   const { pattern } = digitizedFile(d, name, options.trimMm);
   const over = overlapsIn(pattern);
   return (over.length && setKnockout(pattern, over, true, options.trimMm)?.pattern) || pattern;

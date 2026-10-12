@@ -1912,7 +1912,7 @@ initResponsive();
 const stitchArea = initStitchArea({ files, settings, editor, rungTool, stitchPanel, closeRungs, toggleRungs, toggleGuides, togglePoints, sewAlongLines, suggestLines, setEditing, enterObject, revealRecord, pointsVisible: () => vp.scale >= POINTS_MIN_SCALE, redraw });
 const design = initDesign({ files, settings, player, vp, stage, fitView, fitToHoop, redraw, applyEdit, trace });
 measureArea = initMeasure({ settings, vp, stage, measure: measureTool, stopDrawing: () => drawTool.active && setDrawing(null), redraw });
-library = initLibrary({ settings, setMode, files, vp, stage, stopDrawing: () => drawTool.active && setDrawing(null), takeShapes, redraw });
+library = initLibrary({ settings, setMode, files, vp, stage, stopDrawing: () => drawTool.active && setDrawing(null), takeShapes, redraw, newDesign: () => newDesign(), setFormLevel, fitView: () => fitView() });
 const ready = initReady({
   files,
   settings,

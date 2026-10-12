@@ -22,6 +22,8 @@ export interface ImageResponse {
   photo?: boolean;
   prepared?: Prepared;
   digitized?: Digitized;
+  /** Not the answer yet: how far the request is (shapes sewn of all). */
+  progress?: { done: number; total: number };
   error?: string;
 }
 
@@ -45,7 +47,8 @@ ctx.onmessage = (e: MessageEvent<ImageRequest>) => {
       const copy = { ...rest, labels: prepared.labels.slice() };
       ctx.postMessage({ id: req.id, prepared: copy } satisfies ImageResponse, [copy.labels.buffer]);
     } else if (req.type === 'shapes') {
-      ctx.postMessage({ id: req.id, digitized: digitizeShapes(req.shapes, req.threads, req.options, req.size, req.knockout, req.name) } satisfies ImageResponse);
+      const progress = (done: number, total: number) => ctx.postMessage({ id: req.id, progress: { done, total } } satisfies ImageResponse);
+      ctx.postMessage({ id: req.id, digitized: digitizeShapes(req.shapes, req.threads, req.options, req.size, req.knockout, req.name, undefined, progress) } satisfies ImageResponse);
     } else {
       if (!prepared) throw new Error('No prepared image');
       ctx.postMessage({ id: req.id, digitized: digitize(prepared, req.options, req.name) } satisfies ImageResponse);

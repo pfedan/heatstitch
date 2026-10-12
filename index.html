@@ -402,8 +402,14 @@
           <div class="panel-head">
             <h2 id="library-title" data-i18n="library.title"></h2>
             <span class="library-count" id="library-count" aria-live="polite"></span>
+            <button type="button" class="icon library-close" id="library-close"><svg class="i" aria-hidden="true"><use href="#i-obj-close"></use></svg></button>
           </div>
           <input type="search" id="library-search" class="library-search" autocomplete="off" spellcheck="false" data-i18n-aria="library.search.label" />
+          <label class="library-size" data-i18n-title="library.size.hint">
+            <span data-i18n="library.size"></span>
+            <input type="range" id="library-size" min="20" max="200" step="5" />
+            <output id="library-size-out" for="library-size"></output>
+          </label>
           <div class="library-chips" id="library-chips" role="group" data-i18n-aria="library.categories"></div>
           <div class="library-grid" id="library-grid"></div>
           <p class="library-note" id="library-note" role="status" hidden></p>

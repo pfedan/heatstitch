@@ -10,8 +10,6 @@ import { ui } from '../../app/state';
 import { digitizeDefaults } from '../../digitize/digitize';
 import { appendDesign } from '../../model/appendDesign';
 import { sewObjects } from '../../model/objects';
-import { rememberedIn } from '../../model/restitch';
-import { writePattern } from '../../writers';
 import { type Library, type Motif, type Source, loadLibrary, loadPack, motifFile, searchMotifs } from '../../library/catalog';
 import { MOTIF_MM, sewMotif } from '../../library/sew';
 
@@ -27,6 +25,11 @@ export interface LibraryApp {
   /** Takes a changed design as one undo step, with these objects selected. */
   readonly takeShapes: (next: Pattern, select: number[]) => void;
   readonly redraw: () => void;
+  /** Starts an empty design, as "Leer anfangen" does (with a hoop). */
+  readonly newDesign: () => Promise<void>;
+  readonly setFormLevel: (on: boolean) => void;
+  /** Fits the view to the design and its hoop ("Einpassen"). */
+  readonly fitView: () => void;
 }
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -39,6 +42,15 @@ const DRAG_TYPE = 'application/x-heatstitch-motif';
 
 /** Room between the design and a motif put in beside it (mm). */
 const GAP_MM = 5;
+
+/** Room at the edges of the stage where bars float over it (px): a motif under them is out of view. */
+const VIEW_INSET = 64;
+
+/** The widths the slider offers (mm); without a hoop up to this. */
+const SIZE_MIN_MM = 20;
+const SIZE_MAX_MM = 200;
+/** Where the width chosen is kept (this browser only). */
+const SIZE_KEY = 'heatstitch.library.size';
 
 /**
  * Motive: ready-made motifs, found by name or category and put into the design with a click (in
@@ -56,6 +68,9 @@ export function initLibrary(app: LibraryApp): { draw: (ctx: CanvasRenderingConte
   const note = $('library-note');
   const count = $('library-count');
   const credit = $('library-credit');
+  const sizeInput = $<HTMLInputElement>('library-size');
+  const sizeOut = $<HTMLOutputElement>('library-size-out');
+  const closeButton = $<HTMLButtonElement>('library-close');
 
   let lib: Library | null = null;
   let category = '';
@@ -63,6 +78,12 @@ export function initLibrary(app: LibraryApp): { draw: (ctx: CanvasRenderingConte
   let drawn = 0;
   /** The motif under the pointer or keyboard focus: its place is shown on the stage. */
   let hover: { source: Source; m: Motif; img: HTMLImageElement } | null = null;
+  /** The last motif shown so, for the preview while the size is changed. */
+  let shown: { source: Source; m: Motif; img: HTMLImageElement } | null = null;
+  /** The size slider is being moved: the preview shows the new size. */
+  let sizing = false;
+  /** The motif being sewn: its tile, picture and place, and how far it is (0 to 1). */
+  let sewing: { el: HTMLElement; img: HTMLImageElement; at: [number, number] | null; mm: number; share: number } | null = null;
   let busy = false;
 
   const isOpen = () => !panel.hidden;
@@ -90,6 +111,7 @@ export function initLibrary(app: LibraryApp): { draw: (ctx: CanvasRenderingConte
     button.setAttribute('aria-pressed', String(on));
     hover = null;
     if (on) {
+      renderSize();
       void show();
       // Not on touch: the keyboard would cover the motifs before anyone wants to type.
       if (!matchMedia('(pointer: coarse)').matches) search.focus();
@@ -193,7 +215,7 @@ export function initLibrary(app: LibraryApp): { draw: (ctx: CanvasRenderingConte
         draggable: true,
         title: t('library.tile.hint', { name: name(m) }),
         'aria-label': name(m),
-        onclick: () => void put(source, m),
+        onclick: () => void put(source, m, undefined, { el, img }),
         onmouseenter: () => setHover({ source, m, img }),
         onmouseleave: () => setHover(null),
         onfocus: () => setHover({ source, m, img }),
@@ -222,6 +244,7 @@ export function initLibrary(app: LibraryApp): { draw: (ctx: CanvasRenderingConte
   function setHover(next: typeof hover): void {
     if (hover?.m === next?.m) return;
     hover = next;
+    if (next) shown = next;
     app.redraw();
   }
 
@@ -258,16 +281,69 @@ export function initLibrary(app: LibraryApp): { draw: (ctx: CanvasRenderingConte
     button.focus();
   });
 
-  /** Size of a new motif (mm): the usual width, smaller in a small hoop. */
+  /** The widest a motif can be chosen (mm): what the hoop holds, else a large hoop's worth. */
+  function maxMm(): number {
+    const hoop = app.settings.hoop;
+    return hoop ? Math.max(SIZE_MIN_MM, Math.floor(Math.min(hoop.w, hoop.h) / 5) * 5) : SIZE_MAX_MM;
+  }
+
+  /** The width chosen with the slider (mm), kept for the next visit; null: the default. */
+  let chosen: number | null = null;
+  try {
+    const v = Number(localStorage.getItem(SIZE_KEY));
+    if (v >= SIZE_MIN_MM && v <= SIZE_MAX_MM) chosen = v;
+  } catch {
+    // Storage blocked: the default size it is.
+  }
+
+  /** Size of a new motif (mm): the width chosen, else the usual one, smaller in a small hoop; never wider than the hoop. */
   function motifMm(): number {
     const hoop = app.settings.hoop;
-    return hoop ? Math.min(MOTIF_MM, Math.floor(Math.min(hoop.w, hoop.h) * 0.8)) : MOTIF_MM;
+    const auto = hoop ? Math.min(MOTIF_MM, Math.floor(Math.min(hoop.w, hoop.h) * 0.8)) : MOTIF_MM;
+    return Math.min(chosen ?? auto, maxMm());
   }
+
+  function renderSize(): void {
+    sizeInput.min = String(SIZE_MIN_MM);
+    sizeInput.max = String(maxMm());
+    sizeInput.value = String(motifMm());
+    sizeOut.textContent = `${formatNumber(motifMm())} mm`;
+  }
+
+  sizeInput.addEventListener('input', () => {
+    chosen = Number(sizeInput.value);
+    try {
+      localStorage.setItem(SIZE_KEY, String(chosen));
+    } catch {
+      // Not kept for the next visit, still used now.
+    }
+    sizeOut.textContent = `${formatNumber(motifMm())} mm`;
+    sizing = true;
+    app.redraw();
+  });
+  const sized = () => {
+    if (!sizing) return;
+    sizing = false;
+    app.redraw();
+  };
+  sizeInput.addEventListener('change', sized);
+  sizeInput.addEventListener('pointerup', sized);
+  sizeInput.addEventListener('blur', sized);
+  closeButton.addEventListener('click', () => {
+    open(false);
+    button.focus();
+  });
 
   /** The middle of what the stage shows (mm). */
   function viewMiddle(): [number, number] {
     return app.vp.toWorld(ui.stageW / 2, ui.stageH / 2);
   }
+
+  /** Whether the design has no stitches yet. */
+  const blank = (p: Pattern) => !p.cmd.some((c) => c === 0);
+
+  /** The middle of the hoop drawn around the design, which is centred on the origin (mm). */
+  const hoopMiddle = (): [number, number] => [0, 0];
 
   /** The stitches of the open design (mm), if it has any. */
   function designBox(): { x0: number; y0: number; x1: number; y1: number } | null {
@@ -279,53 +355,96 @@ export function initLibrary(app: LibraryApp): { draw: (ctx: CanvasRenderingConte
 
   /**
    * Where a click puts a motif `w` x `h` mm: the middle of the view, or beside the design when it
-   * would land on it there (sewn over other stitches it would be too thick). Dropped, it goes where
-   * it is let go.
+   * would land on it there (sewn over other stitches it would be too thick): to the right, below,
+   * left or above, the first side where both still fit the hoop. Dropped, it goes where it is let go.
    */
   function spot(w: number, h: number): [number, number] {
     const at = viewMiddle();
     const d = designBox();
     if (!d || at[0] + w / 2 <= d.x0 || at[0] - w / 2 >= d.x1 || at[1] + h / 2 <= d.y0 || at[1] - h / 2 >= d.y1) return at;
-    return [d.x1 + GAP_MM + w / 2, (d.y0 + d.y1) / 2];
+    const mx = (d.x0 + d.x1) / 2;
+    const my = (d.y0 + d.y1) / 2;
+    const sides: [number, number][] = [
+      [d.x1 + GAP_MM + w / 2, my],
+      [mx, d.y1 + GAP_MM + h / 2],
+      [d.x0 - GAP_MM - w / 2, my],
+      [mx, d.y0 - GAP_MM - h / 2],
+    ];
+    const hoop = app.settings.hoop;
+    const fits = ([x, y]: [number, number]) => {
+      if (!hoop) return true;
+      const bw = Math.max(d.x1, x + w / 2) - Math.min(d.x0, x - w / 2);
+      const bh = Math.max(d.y1, y + h / 2) - Math.min(d.y0, y - h / 2);
+      return bw <= hoop.w && bh <= hoop.h;
+    };
+    return sides.find(fits) ?? sides[0];
   }
 
-  /** The view moved out to show all of the design when the motif put in lies outside it. */
-  function keepInView(): void {
-    const d = designBox();
+  /**
+   * The view fitted to the design (with its hoop, as "Einpassen" does) when some of it, or `also`
+   * (mm, where a motif is about to go), lies outside it or under the bars over the stage's edges.
+   */
+  function keepInView(also?: { x0: number; y0: number; x1: number; y1: number }): void {
+    const own = designBox();
+    const d = own && also ? { x0: Math.min(own.x0, also.x0), y0: Math.min(own.y0, also.y0), x1: Math.max(own.x1, also.x1), y1: Math.max(own.y1, also.y1) } : own ?? also;
     if (!d) return;
     const [sx0, sy0] = app.vp.toScreen(d.x0, d.y0);
     const [sx1, sy1] = app.vp.toScreen(d.x1, d.y1);
-    if (sx0 >= 0 && sy0 >= 0 && sx1 <= ui.stageW && sy1 <= ui.stageH) return;
-    app.vp.fit(d.x0, d.y0, d.x1, d.y1, ui.stageW, ui.stageH, 48);
+    if (sx0 >= VIEW_INSET && sy0 >= VIEW_INSET && sx1 <= ui.stageW - VIEW_INSET && sy1 <= ui.stageH - VIEW_INSET) return;
+    app.fitView();
+  }
+
+  /** Shows how far sewing the motif is: the ring on its tile and on the stage, and the note. */
+  function progress(label: string, share: number, done?: number, total?: number): void {
+    if (!sewing) return;
+    sewing.share = share;
+    sewing.el.style.setProperty('--sewn', String(share));
+    say(done !== undefined && total ? t('library.sewing.shapes', { name: label, done: formatNumber(Math.min(done + 1, total)), total: formatNumber(total) }) : t('library.sewing', { name: label }));
     app.redraw();
   }
 
-  /** Sews the motif and puts it in the open design, its middle at `at` (mm, else see spot); a new design without one. */
-  async function put(source: Source, m: Motif, at?: [number, number]): Promise<void> {
+  /**
+   * Sews the motif and puts it in the open design, its middle at `at` (mm, else see spot); a new
+   * design without one. `from`: the tile clicked, which shows how far it is.
+   */
+  async function put(source: Source, m: Motif, at?: [number, number], from?: { el: HTMLElement; img: HTMLImageElement }): Promise<void> {
     if (busy) return;
     busy = true;
     const label = name(m);
+    const mm = motifMm();
+    if (from) {
+      const aspect = from.img.naturalHeight / from.img.naturalWidth || 1;
+      const where = at ?? (designBox() ? spot(mm, mm * aspect) : null);
+      sewing = { el: from.el, img: from.img, at: where, mm, share: 0 };
+      // Where it will go is in view while it is sewn, with its ring.
+      if (where) keepInView({ x0: where[0] - mm / 2, y0: where[1] - (mm * aspect) / 2, x1: where[0] + mm / 2, y1: where[1] + (mm * aspect) / 2 });
+      from.el.classList.add('sewing');
+      from.el.setAttribute('aria-busy', 'true');
+    }
+    progress(label, 0);
     say(t('library.sewing', { name: label }));
     try {
       const svg = await motifFile(source, m);
       const options = { ...digitizeDefaults(app.settings.profile), trimMm: app.settings.trimMm };
-      const motif = await sewMotif(svg, m.en, motifMm(), app.settings.image.prepare, options);
-      const f = app.files.active;
-      const p = f?.pattern;
-      const n = sewObjects(motif).length;
-      if (!f || !p) {
-        const data = writePattern(motif, 'pes');
-        await app.files.addWithObjects(`${label}.pes`, data.slice().buffer, rememberedIn(motif, sewObjects(motif)), [], undefined, true);
-        const np = app.files.active?.pattern;
-        if (np) app.takeShapes(np, sewObjects(np).map((o) => o.index));
-      } else {
-        const b = motif.bounds;
-        const [x, y] = at ?? spot((b.maxX - b.minX) / 10, (b.maxY - b.minY) / 10);
-        const r = appendDesign(p, motif, x, y, app.settings.trimMm);
-        if (!r) throw new Error('not placed');
-        app.takeShapes(r.pattern, r.objects);
-        keepInView();
+      // The shapes are most of the work; leaving out what lies under others and putting it in, the rest.
+      const motif = await sewMotif(svg, m.en, mm, app.settings.image.prepare, options, (done, total) => progress(label, total ? (0.9 * done) / total : 0, done, total));
+      progress(label, 0.95);
+      // No design open (the welcome sheet): an empty one first, as "Leer anfangen" makes it, with
+      // the motif in the middle of its hoop.
+      if (!app.files.active?.pattern) {
+        await app.newDesign();
+        app.setFormLevel(false);
+        at = undefined;
       }
+      const p = app.files.active?.pattern;
+      const n = sewObjects(motif).length;
+      if (!p) throw new Error('no design');
+      const b = motif.bounds;
+      const [x, y] = at ?? (blank(p) ? hoopMiddle() : spot((b.maxX - b.minX) / 10, (b.maxY - b.minY) / 10));
+      const r = appendDesign(p, motif, x, y, app.settings.trimMm);
+      if (!r) throw new Error('not placed');
+      app.takeShapes(r.pattern, r.objects);
+      keepInView();
       // In a drawer the panel covers the stage: it steps aside to show the motif put in.
       if (narrow() && drawerOpen()) runCommand('layout.objects');
       say(n === 1 ? t('library.added.one', { name: label }) : t('library.added', { name: label, n: formatNumber(n) }));
@@ -334,6 +453,13 @@ export function initLibrary(app: LibraryApp): { draw: (ctx: CanvasRenderingConte
       say(t('library.failed', { name: label }), true);
     } finally {
       busy = false;
+      if (sewing) {
+        sewing.el.classList.remove('sewing');
+        sewing.el.removeAttribute('aria-busy');
+        sewing.el.style.removeProperty('--sewn');
+      }
+      sewing = null;
+      app.redraw();
     }
   }
 
@@ -366,6 +492,8 @@ export function initLibrary(app: LibraryApp): { draw: (ctx: CanvasRenderingConte
 
   const texts = () => {
     search.placeholder = t('library.search');
+    closeButton.title = t('library.close');
+    closeButton.setAttribute('aria-label', t('library.close'));
     button.title = commandTitle({ ...getCommand('library.open')!, label: 'library.tool.hint' });
     button.setAttribute('aria-label', t('library.tool'));
     if (isOpen() && lib) {
@@ -377,23 +505,69 @@ export function initLibrary(app: LibraryApp): { draw: (ctx: CanvasRenderingConte
   texts();
   onLangChange(texts);
 
-  /** Where the motif under the pointer would go (see spot): its picture, faint. */
-  function draw(ctx: CanvasRenderingContext2D): void {
-    if (!hover || !isOpen() || !hover.img.complete || !hover.img.naturalWidth) return;
-    const size = motifMm();
-    const aspect = hover.img.naturalHeight / hover.img.naturalWidth || 1;
-    const [cx, cy] = spot(size, size * aspect);
-    const [x0, y0] = app.vp.toScreen(cx - size / 2, cy - (size * aspect) / 2);
-    const [x1, y1] = app.vp.toScreen(cx + size / 2, cy + (size * aspect) / 2);
+  /** A motif's picture, faint, `size` mm wide with its middle at `at`, in a dashed frame; its corners on screen. */
+  function ghost(ctx: CanvasRenderingContext2D, img: HTMLImageElement, at: [number, number], size: number): [number, number, number, number] {
+    const aspect = img.naturalHeight / img.naturalWidth || 1;
+    const [x0, y0] = app.vp.toScreen(at[0] - size / 2, at[1] - (size * aspect) / 2);
+    const [x1, y1] = app.vp.toScreen(at[0] + size / 2, at[1] + (size * aspect) / 2);
     ctx.save();
     ctx.globalAlpha = 0.45;
-    ctx.drawImage(hover.img, x0, y0, x1 - x0, y1 - y0);
+    ctx.drawImage(img, x0, y0, x1 - x0, y1 - y0);
     ctx.globalAlpha = 1;
     ctx.setLineDash([5, 4]);
     ctx.strokeStyle = 'rgba(255,255,255,.8)';
     ctx.lineWidth = 1;
     ctx.strokeRect(x0 - 0.5, y0 - 0.5, x1 - x0 + 1, y1 - y0 + 1);
     ctx.restore();
+    return [x0, y0, x1, y1];
+  }
+
+  /** How far the motif is sewn, as a ring in the middle of `box` with the share in it. */
+  function ring(ctx: CanvasRenderingContext2D, box: [number, number, number, number], share: number): void {
+    const cx = (box[0] + box[2]) / 2;
+    const cy = (box[1] + box[3]) / 2;
+    const r = Math.max(14, Math.min(28, (box[2] - box[0]) / 6));
+    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#c0347a';
+    ctx.save();
+    ctx.fillStyle = 'rgba(20,18,28,.72)';
+    ctx.beginPath();
+    ctx.arc(cx, cy, r + 7, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = 'rgba(255,255,255,.22)';
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, 2 * Math.PI);
+    ctx.stroke();
+    ctx.strokeStyle = accent;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + 2 * Math.PI * Math.max(0.02, share));
+    ctx.stroke();
+    ctx.fillStyle = '#fff';
+    ctx.font = `600 ${Math.round(r * 0.62)}px system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`${Math.round(share * 100)} %`, cx, cy + 0.5);
+    ctx.restore();
+  }
+
+  /**
+   * Where the motif under the pointer would go (see spot), its picture faint; while the size is
+   * changed, the one shown last at the new size; while a motif is sewn, it with a ring of how far.
+   */
+  function draw(ctx: CanvasRenderingContext2D): void {
+    if (!isOpen()) return;
+    // The hoop may have changed: the slider offers what it holds.
+    if (sizeInput.max !== String(maxMm()) && !sizing) renderSize();
+    if (sewing?.at && sewing.img.naturalWidth) {
+      ring(ctx, ghost(ctx, sewing.img, sewing.at, sewing.mm), sewing.share);
+      return;
+    }
+    const show = hover ?? (sizing ? shown : null);
+    if (!show || !show.img.complete || !show.img.naturalWidth) return;
+    const size = motifMm();
+    const aspect = show.img.naturalHeight / show.img.naturalWidth || 1;
+    ghost(ctx, show.img, spot(size, size * aspect), size);
   }
 
   return { draw, close: () => open(false) };

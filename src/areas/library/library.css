@@ -104,3 +104,78 @@
 .library-credit a {
   color: var(--accent);
 }
+
+/* The head: title, the count of a search, and the button that closes the panel. */
+.library .panel-head {
+  align-items: center;
+  gap: 6px;
+}
+
+.library .panel-head h2 {
+  margin-right: auto;
+}
+
+.library-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 32px;
+  margin: -6px -6px -6px 0;
+  border-radius: 6px;
+}
+
+.library-close .i {
+  width: 18px;
+  height: 18px;
+}
+
+/* Width of the next motif: label, slider, value. */
+.library-size {
+  display: grid;
+  grid-template-columns: auto 1fr 4.5em;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.library-size input {
+  width: 100%;
+  margin: 0;
+}
+
+.library-size output {
+  text-align: right;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A motif being sewn: a ring around its tile fills as its shapes are sewn. */
+.library-tile {
+  position: relative;
+}
+
+.library-tile.sewing {
+  cursor: progress;
+  border-color: transparent;
+}
+
+.library-tile.sewing::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  padding: 3px;
+  background: conic-gradient(var(--accent) calc(var(--sewn, 0) * 360deg), color-mix(in srgb, var(--accent) 18%, transparent) 0);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.library-tile.sewing img {
+  opacity: 0.6;
+}

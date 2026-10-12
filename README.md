@@ -345,9 +345,9 @@ No Ink/Stitch code is used, only the fonts' data.
 *Motifs* in the tool rail (key `U`) shows 933 ready-made motifs in place of the object list: animals,
 plants, food, sky, celebrations, leisure, travel, things, faces and symbols, found by name or keyword
 in English and German (folded case and accents, parts of German compound words). A click sews one
-into the middle of the view (beside the design when that lies there), dragging puts it where it is dropped, with no design open it starts a
-new one. Each motif is an SVG from Twemoji (CC BY 4.0, names from Unicode CLDR), sewn 60 mm wide
-(smaller in a small hoop) like an opened SVG, each area an object with its shape and what lies under
+into the middle of the view (beside the design when that lies there, on the side where both fit the hoop), dragging puts it where it is dropped, with no design open (also from the welcome sheet) it starts a
+new, empty design. A ring on the tile and the stage shows the shapes sewn so far. Each motif is an SVG from Twemoji (CC BY 4.0, names from Unicode CLDR), sewn at the *Width* the panel's slider sets
+(60 mm by default, smaller in a small hoop) like an opened SVG, each area an object with its shape and what lies under
 later areas left out; it comes in selected, as one undo step (`src/library/`, `src/model/appendDesign.ts`).
 Every motif was sewn and checked once by `tools/library/check.mjs`; the ones Check shows red for are
 left out. The library comes with the app (index precached, categories cached when first opened).

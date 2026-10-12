@@ -1201,7 +1201,16 @@ export function shapesOrigin(sizeMm: { w: number; h: number }, pxMm = 0.1): [num
   return [Math.round(sizeMm.w / 2 / pxMm) * pxMm, Math.round(sizeMm.h / 2 / pxMm) * pxMm];
 }
 
-export function digitizeShapes(shapes: ShapeInput[], threads: ThreadColor[], o: DigitizeOptions, sizeMm: { w: number; h: number }, knockout: boolean, name = 'image', pxMm = 0.1): Digitized {
+export function digitizeShapes(
+  shapes: ShapeInput[],
+  threads: ThreadColor[],
+  o: DigitizeOptions,
+  sizeMm: { w: number; h: number },
+  knockout: boolean,
+  name = 'image',
+  pxMm = 0.1,
+  progress?: (done: number, total: number) => void,
+): Digitized {
   // Pattern coordinates: the middle of the design at 0, on the pixel grid.
   const [cx, cy] = shapesOrigin(sizeMm, pxMm);
   const items: { sh: ShapeInput; form: Form; whole: Region }[] = [];
@@ -1256,10 +1265,14 @@ export function digitizeShapes(shapes: ShapeInput[], threads: ThreadColor[], o: 
   const objects: DigitizedObject[] = [];
   const angles: { obj: Obj; angle: number }[] = [];
   let pos: Pt = [0, 0];
+  // How far it is, shape by shape (a shape sewn as the border of the one before counts with it).
+  let done = 0;
+  progress?.(0, items.length);
   for (const b of blocks) {
     const runs: Pt[][] = [];
     const owners: number[] = [];
     for (const k of b.items) {
+      progress?.(done++, items.length);
       const it = items[k];
       let region = it.whole;
       const isFill = it.sh.kind === 'fill';
@@ -1310,6 +1323,7 @@ export function digitizeShapes(shapes: ShapeInput[], threads: ThreadColor[], o: 
     }
     if (runs.length) out.push({ color: threads[b.color], runs, owners });
   }
+  progress?.(items.length, items.length);
   const starts: number[] = [];
   return { pattern: assemble(out, 0, 0, o.trimMm, name, starts), objects, starts };
 }
