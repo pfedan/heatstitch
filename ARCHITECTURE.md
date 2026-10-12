@@ -249,6 +249,42 @@ pull request gets a preview at its own address; see CONTRIBUTING.
 - **Demos** (`tests/demos.test.ts`): the guide's demo files are generated and must stay current.
 - **Benchmarks**: `tests/korrekturBench.test.ts` and `tests/bench/` measure the correction.
 
+## Quick reference
+
+Entry points worth knowing by name:
+
+| What | Where |
+|---|---|
+| Read a file into a design | `parsePattern(data, fileName)` in `src/parsers/index.ts` |
+| Write a design to a format | `writePattern(p, format)` in `src/writers/index.ts` |
+| New version from new records | `withRecords(p, x, y, cmd)` in `src/model/edit.ts`, `nextVersion(p, changes)` in `src/model/pattern.ts` |
+| Objects of a version | `sewObjects(p)` in `src/model/objects.ts` |
+| What an object knows, guessed or not | `remembered(p, o)`, `isGuessed(p, o)` in `src/model/restitch.ts` |
+| Sew objects anew with new settings | `restitch(...)` in `src/model/restitch.ts` |
+| Sew one object, or a design from its object list | `sewOne(spec, way)`, `sewDesign(p, trimMm)` in `src/model/sew.ts` |
+| Add a drawn or imported shape | `addShape(p, shape, color, after, options)` in `src/model/addShape.ts` |
+| Move, rotate, scale | `transformObjects(p, sel, m, trimMm)` in `src/model/reshape.ts` |
+| Duplicate, mirror, delete, cut out, recolor | `src/model/shapeOps.ts` |
+| Borders and knockouts follow their objects | `syncBorders(p, trimMm)` in `src/model/border.ts`, `setKnockout(...)` in `src/model/knockout.ts` |
+| Project file | `encodeProject(project)`, `decodeProject(bytes)` in `src/storage/project.ts` |
+| Measure and classify | `measurePattern(p)` in `src/validation/measure.ts`, `classify(m, profile, checks)` in `src/validation/validate.ts` |
+| A user-facing text | `t('key', vars)` in `src/i18n/index.ts`, keys defined in `src/i18n/de.ts` |
+| A command (button, key, search) | `command({...})` in `src/shell/commands.ts` |
+
+Running only what a change touches (the full suite takes a while):
+
+```sh
+npx vitest run tests/writers.test.ts          # one file
+npx vitest run -t "keeps the design"          # tests whose name matches
+npx vitest run tests/torture.test.ts          # the torture chains
+TORTURE_CHAINS=200 npx vitest run tests/torture.test.ts tests/tortureChains.test.ts
+npm run typecheck                             # tsc only
+```
+
+Tests are named after the module or feature they cover (`border.test.ts`, `knockout`, `applique`,
+`lettering`, ...): `ls tests | grep <name>` finds them. Many modules explain themselves in a doc
+comment at the top or above their main export; read it before changing the module.
+
 ## Rules that keep the parts together
 
 - **New versions, never in-place edits.** Go through `nextVersion`, so undo, the object table and
