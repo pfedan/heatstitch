@@ -1,5 +1,5 @@
 import { contourFill, type DirField, Grid, sewRows } from './flow';
-import type { FillParams, FillResult } from './fill';
+import { fillRegion, type FillParams, type FillResult } from './fill';
 import { outline, sample, type Region } from './region';
 import { runStitch } from './run';
 import type { Pt } from './skeleton';
@@ -346,41 +346,11 @@ function fieldOf(r: Region, dir: (p: Pt) => number | null): DirField {
  * Wave rows: every row is the same wave, `height` mm from crest to middle and `length` mm long,
  * one spacing below the last, running at `angle` degrees. The crests drift a little from row to
  * row, so the bands look woven, not ruled; on the flanks the rows lie a little closer, which
- * shades the waves.
+ * shades the waves. Neighbouring rows never cross, so they are sewn as tatami rows are: in
+ * sections back and forth, with travel under rows still to come (see fillRegion).
  */
 export function waveFill(r: Region, p: FillParams, angle: number, height: number, length: number, start: Pt): FillResult | null {
-  const a = (angle * Math.PI) / 180;
-  const e: Pt = [Math.cos(a), Math.sin(a)];
-  const n: Pt = [-e[1], e[0]];
-  const k = (2 * Math.PI) / Math.max(1, length);
-  const [x0, y0, x1, y1] = regionBox(r);
-  const corners: Pt[] = [
-    [x0, y0],
-    [x1, y0],
-    [x0, y1],
-    [x1, y1],
-  ];
-  const us = corners.map((q) => q[0] * e[0] + q[1] * e[1]);
-  const vs = corners.map((q) => q[0] * n[0] + q[1] * n[1]);
-  const step = 0.2;
-  const reach = Math.max(0, p.pull);
-  const rows: Pt[][] = [];
-  const v0 = Math.floor((Math.min(...vs) - height) / p.spacing) * p.spacing + p.spacing / 2;
-  for (let v = v0; v < Math.max(...vs) + height; v += p.spacing) {
-    let row: Pt[] = [];
-    const end = () => {
-      if (row.length > 1 && dist(row[0], row[row.length - 1]) > 1) rows.push(row);
-      row = [];
-    };
-    for (let u = Math.min(...us) - 1; u <= Math.max(...us) + 1; u += step) {
-      const w = v + height * Math.sin(k * u + 0.3 * Math.sin(v / 6));
-      const q: Pt = [e[0] * u + n[0] * w, e[1] * u + n[1] * w];
-      if (sample(r, r.sdf, q[0], q[1]) < reach) row.push(q);
-      else end();
-    }
-    end();
-  }
-  return rows.length ? sewRows(r, rows, p, start, angle) : null;
+  return fillRegion(r, { ...p, angle, wave: { height, length } }, start);
 }
 
 /** Zigzag rows (see model/zigzag): their course, from low to high peak, and where the peaks lie. */

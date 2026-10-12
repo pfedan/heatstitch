@@ -1,5 +1,5 @@
 import { expandRegion, sample, signedField, type Region } from './region';
-import { runStitch, simplify } from './run';
+import { MIN_CURVE_STITCH, runStitch, simplify, TOLERANCE } from './run';
 import type { Pt } from './skeleton';
 import { embossPoints, motifCrossings, motifInside, texturePoints, type Motif, type Texture } from './deco';
 
@@ -74,6 +74,11 @@ export interface FillParams {
   /** Straight rows shift their needle points into a texture (see texturePoints in deco.ts), in place of `offset`. */
   texture?: { kind: Texture; size: number };
   /**
+   * Wave rows (see Frame.wave): every row is the same wave, `height` mm from crest to middle and
+   * `length` mm long, sewn in sections like straight rows. Not with emboss, texture or a gradient.
+   */
+  wave?: { height: number; length: number };
+  /**
    * Rows that fade out across the shape (`out`, dense where the rows start) or in (`in`): the
    * density falls evenly to nearly nothing, so a second color fading the other way on the same
    * area makes a color blend as dense as one fill (see blend.ts in model).
@@ -119,6 +124,8 @@ export const TRAVEL_TOLERANCE = 0.4;
 /** Travel may run on top of sewn rows for this long (mm); a longer way becomes a jump. */
 const SEWN_CROSSING = 2;
 const RAD = Math.PI / 180;
+/** Wave rows count as straight pieces this long (mm) where they cover the travel grid. */
+const WAVE_PIECE = 1;
 /** How far the step between two sparse rows may cut outside the outline (mm). */
 const SPARSE_SLACK = 0.25;
 
@@ -146,6 +153,12 @@ class Frame {
   lane?: number;
   /** Sparse rows: travel laid onto the lines thread lies on (see crosshatchFill), not cut across them. */
   onLines?: (path: Pt[]) => Pt[];
+  /**
+   * Wave rows: row v runs at v + height · sin(k u + 0.3 sin(v / 6)) across, k = 2 pi / length. The
+   * crests drift a little from row to row, so the bands look woven, not ruled; neighbouring rows
+   * never cross, so the rows split into sections exactly as straight ones do.
+   */
+  wave?: { height: number; k: number; tol: number };
   constructor(
     angleDeg: number,
     public spacing: number,
@@ -157,7 +170,19 @@ class Frame {
     this.n = [-Math.sin(a), Math.cos(a)];
   }
   at(u: number, v: number): Pt {
-    return [u * this.e[0] + v * this.n[0], u * this.e[1] + v * this.n[1]];
+    const w = this.wave ? v + this.wave.height * Math.sin(this.wave.k * u + 0.3 * Math.sin(v / 6)) : v;
+    return [u * this.e[0] + w * this.n[0], u * this.e[1] + w * this.n[1]];
+  }
+  /** How far rows reach across beyond their v (wave rows swing out by their height). */
+  get swing(): number {
+    return this.wave?.height ?? 0;
+  }
+  /** The row from u0 to u1 at v as straight pieces (one for straight rows), for what it covers. */
+  pieces(u0: number, u1: number, v: number): [Pt, Pt][] {
+    const n = this.wave ? Math.max(1, Math.ceil(Math.abs(u1 - u0) / WAVE_PIECE)) : 1;
+    const out: [Pt, Pt][] = [];
+    for (let i = 0; i < n; i++) out.push([this.at(u0 + ((u1 - u0) * i) / n, v), this.at(u0 + ((u1 - u0) * (i + 1)) / n, v)]);
+    return out;
   }
   get gradient(): boolean {
     return !!this.fade || Math.abs(this.end - this.spacing) >= 1e-3;
@@ -244,7 +269,7 @@ function rows(r: Region, field: Float32Array, f: Frame, inset: number): Seg[][] 
     }
     if (!Number.isFinite(lo)) [lo, hi] = [vmin, vmax];
   }
-  const [k0, k1] = f.layout(lo, hi);
+  const [k0, k1] = f.layout(lo - f.swing, hi + f.swing);
   for (let k = k0; k <= k1; k++) {
     const v = f.v(k);
     const segs: Seg[] = [];
@@ -416,7 +441,39 @@ function rowStitches(f: Frame, k: number, v: number, from: number, to: number, l
     }
   }
   if (dir < 0) pts.reverse();
+  if (f.wave) return waveStitches(f, f.wave.tol, v, [from, ...pts, to]);
   return [f.at(from, v), ...pts.map((u) => f.at(u, v)), f.at(to, v)];
+}
+
+/**
+ * Needle points of a wave row at v on the given u: where a stitch would cut the curve by more than
+ * `tol`, it is divided into shorter ones until each keeps within `tol` (not shorter than
+ * MIN_CURVE_STITCH), as on other curved rows.
+ */
+function waveStitches(f: Frame, tol: number, v: number, us: number[]): Pt[] {
+  const out: Pt[] = [f.at(us[0], v)];
+  const off = (u0: number, u1: number) => {
+    const a = f.at(u0, v);
+    const b = f.at(u1, v);
+    const l = dist(a, b) || 1;
+    let d = 0;
+    for (let i = 1; i < 8; i++) {
+      const q = f.at(u0 + ((u1 - u0) * i) / 8, v);
+      d = Math.max(d, Math.abs((q[0] - a[0]) * (b[1] - a[1]) - (q[1] - a[1]) * (b[0] - a[0])) / l);
+    }
+    return d;
+  };
+  for (let i = 1; i < us.length; i++) {
+    const [u0, u1] = [us[i - 1], us[i]];
+    let n = 1;
+    const fits = (n: number) => {
+      for (let q = 0; q < n; q++) if (off(u0 + ((u1 - u0) * q) / n, u0 + ((u1 - u0) * (q + 1)) / n) > tol) return false;
+      return true;
+    };
+    while (!fits(n) && Math.abs(u1 - u0) / (n + 1) >= MIN_CURVE_STITCH) n++;
+    for (let q = 1; q <= n; q++) out.push(f.at(u0 + ((u1 - u0) * q) / n, v));
+  }
+  return out;
 }
 
 /**
@@ -1032,7 +1089,7 @@ function planning(f: Frame, grid: TravelGrid) {
   const prints = new Map<Section, { under: number[]; ends: number[] }[]>();
   const cover = (s: Section) => {
     let fp = prints.get(s);
-    if (!fp) prints.set(s, (fp = s.map((seg) => grid.footprint(f.at(seg.u0, f.v(seg.k)), f.at(seg.u1, f.v(seg.k)), f.half))));
+    if (!fp) prints.set(s, (fp = s.flatMap((seg) => f.pieces(seg.u0, seg.u1, f.v(seg.k)).map(([a, b]) => grid.footprint(a, b, f.half)))));
     for (const p of fp) grid.apply(p);
   };
   const stepCost = (from: Pt, to: Pt) => {
@@ -1245,8 +1302,9 @@ function entriesFor(f: Frame, secs: Section[], planned: Entry[], pull: number, s
 /**
  * Sews the sections greedily nearest first, connected by travel paths or jumps. With `end`, the
  * section that leaves the needle nearest to it is sewn last, when that makes the ways in between
- * and on to `end` shorter. Where parts are left out (the grid knows them), the order and the ends
- * the sections are entered at are planned on the grid instead (beamPlan, planOnGrid).
+ * and on to `end` shorter. Where parts are left out (the grid knows them) and for wave rows, the
+ * order and the ends the sections are entered at are planned on the grid instead (beamPlan,
+ * planOnGrid).
  */
 function sewAll(
   f: Frame,
@@ -1262,9 +1320,11 @@ function sewAll(
   joins?: Joins,
 ): Pt {
   // Where parts are left out, the order and ends of the sections are planned on the grid, so travel
-  // keeps under rows still to come (and the parts left out) rather than beside the outline.
-  const smart = avoidSewn && !!grid.gone;
-  if (smart) for (const s of secs) for (const seg of s) grid.expect(f.at(seg.u0, f.v(seg.k)), f.at(seg.u1, f.v(seg.k)), f.half);
+  // keeps under rows still to come (and the parts left out) rather than beside the outline. Wave
+  // rows split into more sections than straight ones at the same angle (their crests reach into
+  // corners), and the nearest one next would often leave travel along the outline on top.
+  const smart = avoidSewn && (!!grid.gone || !!f.wave);
+  if (smart) for (const s of secs) for (const seg of s) for (const [a, b] of f.pieces(seg.u0, seg.u1, f.v(seg.k))) grid.expect(a, b, f.half);
   const order = (secs: Section[]) => {
     const planner = (l?: { s: Section; e: Entry }) => (smart ? planOnGrid(f, secs, pull, start, grid, l, end) : plan(f, secs, pull, start, l, end));
     let best = smart && secs.length <= BEAM_SECTIONS ? beamPlan(f, secs, pull, start, grid, end) : planner(undefined);
@@ -1311,7 +1371,7 @@ function sewAll(
       cur = pts;
       runs.push(cur);
     }
-    for (const seg of s) grid.cover(f.at(seg.u0, f.v(seg.k)), f.at(seg.u1, f.v(seg.k)), f.half);
+    for (const seg of s) for (const [a, b] of f.pieces(seg.u0, seg.u1, f.v(seg.k))) grid.cover(a, b, f.half);
     pos = pts[pts.length - 1];
   }
   return pos;
@@ -1329,7 +1389,8 @@ export function pathLength(p: Pt[]): number {
 export function fillRegion(r: Region, p: FillParams, start: Pt, neighbours: number[] = []): FillResult | null {
   const angle = p.angle ?? chooseAngle(r, p.spacing, neighbours);
   const f = new Frame(angle, p.spacing, p.spacingEnd ?? p.spacing, p.offset ?? 1 / STAGGERS);
-  if (p.emboss) f.emboss = p.emboss;
+  if (p.wave) f.wave = { height: p.wave.height, k: (2 * Math.PI) / Math.max(1, p.wave.length), tol: p.tolerance ?? TOLERANCE };
+  else if (p.emboss) f.emboss = p.emboss;
   else if (p.texture) f.texture = p.texture;
   if (p.fade) f.fade = p.fade;
   const top = rows(r, r.sdf, f, 0);
