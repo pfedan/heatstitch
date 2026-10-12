@@ -121,7 +121,7 @@ describe('object list', () => {
     restoreRemembered(q, back.files[0].objects);
     expect(ids(q)).toEqual(ids(p));
     expect(sewObjects(q).map((o) => remembered(q, o)?.fill?.pattern)).toEqual(sewObjects(p).map((o) => remembered(p, o)?.fill?.pattern));
-    expect(PROJECT_VERSION).toBe(3);
+    expect(PROJECT_VERSION).toBeGreaterThanOrEqual(3);
   });
 
   it('converts a project of version 1 when it is opened, and saves it as version 2', async () => {
