@@ -45,6 +45,9 @@ Embroidery files never leave your computer. heatstitch parses, checks, corrects 
 JavaScript in your browser; there is no backend, no account, no analytics and no third-party script.
 The site is a set of static files served by GitHub Pages, and the only requests it makes go back to
 that same site (the app itself, the example files, the fonts and the check for a new version).
+The one exception is a request you start yourself: *Send over Wi-Fi* talks to the Ember Bridge app on
+your own computer (`http://127.0.0.1:17831`), which passes the file on to the machine in your home
+network.
 Loaded files and edits are kept in the browser's IndexedDB so they survive a reload, and removing a
 file from the list deletes it there. After the first visit the app also works offline.
 
@@ -557,6 +560,31 @@ saved in embroidery files: objects of the original software are lost. With a hoo
   format. `tests/fixtures/pyembroidery/` holds files written by pyembroidery 1.5.1 and what it reads
   back; heatstitch's readers must agree. CI also reads every written file back with pystitch (see
   Development).
+
+### To the machine
+
+The save menu also takes the file straight to the machine (`src/send/`, `src/areas/files/machine.ts`).
+Each way shows only where the browser and the chosen format allow it:
+
+- *Write to USB stick*: the File System Access API (`showDirectoryPicker`, Chrome and Edge on a
+  computer) writes onto a stick, or onto a machine that shows up as a drive on its USB cable. The
+  folder handle is kept in IndexedDB. Names are cut down to what Brother's manuals allow (A to Z,
+  digits, `-`, `_`; umlauts spelled out), the file goes into the root, a JEF into `EMB/Embf` when a
+  Janome machine made that folder. WebUSB cannot do this: mass storage is a protected class there.
+  Other browsers get a line on where to copy the saved file.
+- *Send over Wi-Fi* (PES, DST): Brother and Baby Lock Wi-Fi machines speak HTTPS with a self-signed
+  certificate and a static-RSA TLS 1.2 key exchange, which no browser accepts. The MIT-licensed
+  [Ember Bridge](https://github.com/EmberSoftwareInc/ember-bridge) desktop app speaks it and offers a
+  local API on `127.0.0.1:17831`. heatstitch checks `/api/health` only when the user opens this entry
+  (so Chrome's local network prompt comes with a reason), pairs once (`/api/pair`, the user clicks
+  Approve in Bridge; the site's address must be on Bridge's allowed web origins), lists machines,
+  sends, and follows the job. The token is kept in localStorage.
+- *Share …*: Web Share with a file (`navigator.share`). Chromium shares only an allowlist of types
+  without embroidery files, so this shows in Safari (iPad, iPhone, Mac), for Artspira, mySewnet or Files.
+
+Not offered, after research: Bluetooth (no home embroidery machine takes designs over it; Web
+Bluetooth is BLE only), WebSerial and memory cards (old, undocumented protocols), Wi-Fi SD cards and
+direct requests to machines (HTTP from an HTTPS page, no CORS), vendor clouds (no public API).
 
 ### Project files
 

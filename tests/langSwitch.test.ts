@@ -146,6 +146,13 @@ const STATES: Record<string, (page: Page) => Promise<void>> = {
     await page.click('#color-list');
     await page.locator('dialog.color-list[open]').waitFor();
   },
+  'the save menu with the Wi-Fi help': async (page) => {
+    await loadCat(page);
+    await page.click('#save-button');
+    // No Ember Bridge runs here: the panel says how to get it.
+    await page.locator('#send-machine .save-row', { hasText: /WLAN|Wi-Fi/ }).click();
+    await page.locator('.send-wlan .send-status').waitFor();
+  },
   'Dichte with findings': async (page) => {
     await loadCat(page);
     await mode(page, 'density');
