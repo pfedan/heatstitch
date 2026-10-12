@@ -71,17 +71,28 @@ export function bindPointer(app: PointerApp) {
   // wheel) pans, a pinch zooms around the pointer. Browsers report a trackpad pinch as a wheel with
   // ctrlKey set; Ctrl or Cmd with the mouse wheel zooms the same way. Safari reports the pinch as
   // gesture events instead (on a touch screen besides the pointers). The page never scrolls.
+  // With "Mausrad zoomt" in the view menu the plain wheel zooms and Ctrl/Cmd with the wheel pans,
+  // as in CAD and most embroidery software; a pinch still zooms. A pinch is told from Ctrl+wheel by
+  // the keyboard: the browser sets its ctrlKey without Ctrl being held.
   /** Pixels per wheel line, and the steepest zoom step one wheel event may take. */
   const LINE_PX = 16;
   const ZOOM_STEP = 18;
   let gestureScale = 0;
+  /** Ctrl or Cmd held on the keyboard, as the last key event said. */
+  let modHeld = false;
+  const trackMod = (e: KeyboardEvent) => (modHeld = e.ctrlKey || e.metaKey);
+  window.addEventListener('keydown', trackMod, true);
+  window.addEventListener('keyup', trackMod, true);
+  window.addEventListener('blur', () => (modHeld = false));
   app.canvas.addEventListener(
     'wheel',
     (e) => {
       e.preventDefault();
       const [sx, sy] = local(e);
       const unit = e.deltaMode === 1 ? LINE_PX : e.deltaMode === 2 ? app.canvas.clientHeight : 1;
-      if (e.ctrlKey || e.metaKey) {
+      const mod = e.ctrlKey || e.metaKey;
+      const pinch = e.ctrlKey && !e.metaKey && !modHeld;
+      if (pinch || (app.settings.wheelZooms ? !mod && !e.shiftKey : mod)) {
         if (gestureScale) return;
         // A pinch sends many small deltas, a mouse wheel notch one large one: the cap keeps a notch
         // a gentle step while the pinch follows the fingers.
