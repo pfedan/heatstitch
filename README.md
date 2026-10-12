@@ -42,7 +42,10 @@ fill, satin and running stitches in the style *Flat*, *Dynamic* or *Smart* (see
 ## Privacy
 
 Embroidery files never leave your computer. heatstitch parses, checks, corrects and writes them with
-JavaScript in your browser; there is no backend, no account, no analytics and no third-party script.
+JavaScript in your browser; there is no backend, no account, no analytics in the code and no third-party
+script. The one exception is set at the host, not in the code: visitors from outside the EU get
+Cloudflare Web Analytics' small, cookieless beacon (page views and load times, aggregated); visitors
+from the EU don't.
 The site is a set of static files served by Cloudflare, and the only requests it makes go back to
 that same site (the app itself, the example files, the fonts, the motifs and the check for a new version)
 and to `media.heatstitch.app` for the tutorial videos.
