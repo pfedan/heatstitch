@@ -1,4 +1,4 @@
-import { pathLength, pointCount, sewUnderlay, TRAVEL_STITCH, TRAVEL_TOLERANCE, TravelGrid, type FillParams, type FillResult } from './fill';
+import { noteTravel, pathLength, pointCount, sewUnderlay, TRAVEL_STITCH, TRAVEL_TOLERANCE, TravelGrid, type FillParams, type FillResult } from './fill';
 import { outline, sample, type Region } from './region';
 import { MIN_CURVE_STITCH, Path, runStitch, simplify, TOLERANCE } from './run';
 import type { Pt } from './skeleton';
@@ -114,6 +114,7 @@ export function ringFill(r: Region, p: FillParams, start: Pt, mode: RingMode, an
   while (todo.length) sew(todo.splice(nearestRing(todo, at), 1)[0], true);
 
   let cur: Pt[] | null = runs.length ? runs[runs.length - 1] : null;
+  const trail: [number, number][] = [];
   let turn = 0;
   const needles = new Needles();
   for (const line of lines) {
@@ -126,6 +127,7 @@ export function ringFill(r: Region, p: FillParams, start: Pt, mode: RingMode, an
       const path = grid.path(pos, pts[0], true);
       if (path && pathLength(path) < 2 * bd + 6) travel = runStitch(path, TRAVEL_STITCH, TRAVEL_TOLERANCE);
     } else if (cur) travel = [pos, pts[0]];
+    if (cur && travel && travel.length > 2) noteTravel(trail, runs, travel.length);
     if (cur && travel) cur.push(...travel.slice(1), ...pts.slice(1));
     else {
       cur = pts;
@@ -135,7 +137,7 @@ export function ringFill(r: Region, p: FillParams, start: Pt, mode: RingMode, an
     pos = pts[pts.length - 1];
   }
   if (!runs.length) return null;
-  return { runs, angle, under };
+  return { runs, angle, under, travel: trail };
 }
 
 /** Needle points sewn so far, to find the nearest one to a point. */

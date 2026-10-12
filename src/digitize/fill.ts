@@ -97,6 +97,17 @@ export interface FillResult {
   angle: number;
   /** The first this many points of `runs` are the underlay. */
   under?: number;
+  /**
+   * Travel between rows or sections along a way (not a straight step): first and last point
+   * (indices into the points of `runs` in order), from the end of one row to the start of the next.
+   */
+  travel?: [number, number][];
+}
+
+/** Notes travel of `n` points about to be added to the last run of `runs` (see FillResult.travel). */
+export function noteTravel(list: [number, number][], runs: Pt[][], n: number): void {
+  const at = pointCount(runs) - 1;
+  list.push([at, at + n - 1]);
 }
 
 interface Seg {
@@ -1077,7 +1088,7 @@ const endCost = (p: Pt, end: Pt) => {
  * section marked sewn, and what the way from one point to another costs: its length when hidden
  * enough (and not much of a detour, as sewAll takes it), else a trim.
  */
-function planning(f: Frame, grid: TravelGrid) {
+function planning<S>(grid: TravelGrid, printsOf: (s: S) => Footprint[], straight?: (a: Pt, b: Pt) => boolean) {
   // Sewn rows of layered rows are ways (see TravelGrid.layered): `gone` changes too.
   const keep = (): [Uint8Array, Uint8Array, Uint16Array | undefined, Uint8Array | undefined] => [grid.covered.slice(), grid.rowEnds.slice(), grid.ahead?.slice(), grid.layered ? grid.gone?.slice() : undefined];
   const back = (k: ReturnType<typeof keep>) => {
@@ -1086,36 +1097,61 @@ function planning(f: Frame, grid: TravelGrid) {
     if (k[2]) grid.ahead!.set(k[2]);
     if (k[3]) grid.gone!.set(k[3]);
   };
-  const prints = new Map<Section, { under: number[]; ends: number[] }[]>();
-  const cover = (s: Section) => {
+  const prints = new Map<S, Footprint[]>();
+  const cover = (s: S) => {
     let fp = prints.get(s);
-    if (!fp) prints.set(s, (fp = s.flatMap((seg) => f.pieces(seg.u0, seg.u1, f.v(seg.k)).map(([a, b]) => grid.footprint(a, b, f.half)))));
+    if (!fp) prints.set(s, (fp = printsOf(s)));
     for (const p of fp) grid.apply(p);
   };
   const stepCost = (from: Pt, to: Pt) => {
     const d = dist(from, to);
-    if (d <= 1 || grid.clear(from, to)) return d;
+    if (d <= 1 || straight?.(from, to) || grid.clear(from, to)) return d;
     const l = grid.length(from, to);
     return l != null && l < grid.way(d) ? l : grid.trimCost + d;
   };
   return { keep, back, cover, stepCost };
 }
 
+/** The cells a sewn row covers (see TravelGrid.footprint). */
+type Footprint = { under: number[]; ends: number[] };
+
 /**
- * Order of the sections on the travel grid: the next section is the one reached by the shortest
- * hidden way (under rows still to come), entered at the end that leaves a hidden way on, too; a
- * section only reached by a jump costs TRIM_COST. The grid is left as it was.
+ * What planning needs of the pieces sewn in one go (sections of straight or wave rows, curved
+ * rows): the ways into a piece (each with its entry point), where it leaves the needle entered
+ * that way, and the cells it covers once sewn.
  */
-function planOnGrid(f: Frame, secs: Section[], pull: number, start: Pt, grid: TravelGrid, last?: { s: Section; e: Entry }, end?: Pt): { order: { s: Section; e: Entry }[]; cost: number } {
-  const { keep, back, cover, stepCost } = planning(f, grid);
+export interface Pieces<S, W extends { p: Pt }> {
+  ways(s: S): W[];
+  exit(s: S, w: W): Pt;
+  prints(s: S): Footprint[];
+  /** From a to b the needle goes straight, at the cost of the distance (rows close by). */
+  straight?(a: Pt, b: Pt): boolean;
+}
+
+/** Sections of the frame's rows as pieces to plan. */
+function sectionPieces(f: Frame, grid: TravelGrid, pull: number): Pieces<Section, Entry> {
+  return {
+    ways: (s) => entries(f, s, pull),
+    exit: (s, e) => exitOf(f, s, e, pull),
+    prints: (s) => s.flatMap((seg) => f.pieces(seg.u0, seg.u1, f.v(seg.k)).map(([a, b]) => grid.footprint(a, b, f.half))),
+  };
+}
+
+/**
+ * Order of the pieces on the travel grid: the next piece is the one reached by the shortest
+ * hidden way (under rows still to come), entered at the end that leaves a hidden way on, too; a
+ * piece only reached by a jump costs TRIM_COST. The grid is left as it was.
+ */
+export function planOnGrid<S, W extends { p: Pt }>(u: Pieces<S, W>, secs: S[], start: Pt, grid: TravelGrid, last?: { s: S; e: W }, end?: Pt): { order: { s: S; e: W }[]; cost: number } {
+  const { keep, back, cover, stepCost } = planning(grid, u.prints, u.straight);
   const kept = keep();
-  type Cand = { i: number; e: Entry; d: number; c: number };
-  // The `n` cheapest ways from `from` into the sections in `todo` (but `skip`): nearest first, as
+  type Cand = { i: number; e: W; d: number; c: number };
+  // The `n` cheapest ways from `from` into the pieces in `todo` (but `skip`): nearest first, as
   // no way is shorter than the straight line.
-  const cheapest = (from: Pt, todo: Section[], n: number, skip = -1): Cand[] => {
+  const cheapest = (from: Pt, todo: S[], n: number, skip = -1): Cand[] => {
     const all: Cand[] = [];
     todo.forEach((s, i) => {
-      if (i !== skip) for (const e of entries(f, s, pull)) all.push({ i, e, d: dist(from, e.p), c: Infinity });
+      if (i !== skip) for (const e of u.ways(s)) all.push({ i, e, d: dist(from, e.p), c: Infinity });
     });
     all.sort((x, y) => x.d - y.d);
     const best: Cand[] = [];
@@ -1128,7 +1164,7 @@ function planOnGrid(f: Frame, secs: Section[], pull: number, start: Pt, grid: Tr
     return best.slice(0, n);
   };
   const todo = secs.filter((s) => s !== last?.s);
-  const order: { s: Section; e: Entry }[] = [];
+  const order: { s: S; e: W }[] = [];
   let pos = start;
   let cost = 0;
   while (todo.length) {
@@ -1142,7 +1178,7 @@ function planOnGrid(f: Frame, secs: Section[], pull: number, start: Pt, grid: Tr
         if (c.c >= bs) break;
         const s = todo[c.i];
         cover(s);
-        const out = exitOf(f, s, c.e, pull);
+        const out = u.exit(s, c.e);
         const next = todo.length > 1 ? cheapest(out, todo, 1, c.i)[0].c : last ? stepCost(out, last.e.p) : end ? endCost(out, end) : 0;
         if (c.c + next < bs) {
           bs = c.c + next;
@@ -1155,12 +1191,12 @@ function planOnGrid(f: Frame, secs: Section[], pull: number, start: Pt, grid: Tr
     order.push({ s, e: best.e });
     cost += best.c;
     cover(s);
-    pos = exitOf(f, s, best.e, pull);
+    pos = u.exit(s, best.e);
   }
   if (last) {
     cost += stepCost(pos, last.e.p);
     order.push(last);
-    pos = exitOf(f, last.s, last.e, pull);
+    pos = u.exit(last.s, last.e);
   }
   if (end) cost += endCost(pos, end);
   back(kept);
@@ -1172,7 +1208,7 @@ function planOnGrid(f: Frame, secs: Section[], pull: number, start: Pt, grid: Tr
  * fills with parts left out, 8 plans for up to 8 sections left 16 trims in 72 fills, 16 for up to 16
  * left 8 (at about 150 ms a fill), 32 left 3 but took 250 ms: too slow for every edit.
  */
-const BEAM_SECTIONS = 16;
+export const BEAM_PIECES = 16;
 const BEAM = 16;
 
 /**
@@ -1180,21 +1216,21 @@ const BEAM = 16;
  * the BEAM cheapest plans so far each go on into every section left at each of its ends, and the
  * cheapest of them go on. With `end`, the way there counts too.
  */
-function beamPlan(f: Frame, secs: Section[], pull: number, start: Pt, grid: TravelGrid, end?: Pt): { order: { s: Section; e: Entry }[]; cost: number } {
-  const { keep, back, cover, stepCost } = planning(f, grid);
-  type Plan = { order: { s: Section; e: Entry }[]; cost: number; pos: Pt; state: ReturnType<typeof keep> };
+export function beamOnGrid<S, W extends { p: Pt }>(u: Pieces<S, W>, secs: S[], start: Pt, grid: TravelGrid, end?: Pt): { order: { s: S; e: W }[]; cost: number } {
+  const { keep, back, cover, stepCost } = planning(grid, u.prints, u.straight);
+  type Plan = { order: { s: S; e: W }[]; cost: number; pos: Pt; state: ReturnType<typeof keep> };
   const kept = keep();
   let beam: Plan[] = [{ order: [], cost: 0, pos: start, state: kept }];
   for (let depth = 0; depth < secs.length; depth++) {
     // Every way on, cheapest first by the straight line (no way is shorter); the actual cost is
     // worked out only while it may still get into the beam.
-    const next: { from: Plan; s: Section; e: Entry; lb: number; cost: number }[] = [];
+    const next: { from: Plan; s: S; e: W; lb: number; cost: number }[] = [];
     const lastStep = depth === secs.length - 1;
     for (const b of beam) {
       for (const s of secs) {
         if (b.order.some((o) => o.s === s)) continue;
-        for (const e of entries(f, s, pull)) {
-          const tail = end && lastStep ? endCost(exitOf(f, s, e, pull), end) : 0;
+        for (const e of u.ways(s)) {
+          const tail = end && lastStep ? endCost(u.exit(s, e), end) : 0;
           next.push({ from: b, s, e, lb: b.cost + dist(b.pos, e.p) + tail, cost: Infinity });
         }
       }
@@ -1215,12 +1251,12 @@ function beamPlan(f: Frame, secs: Section[], pull: number, start: Pt, grid: Trav
       back(n.from.state);
       cover(n.s);
       const order = [...n.from.order, { s: n.s, e: n.e }];
-      const pos = exitOf(f, n.s, n.e, pull);
+      const pos = u.exit(n.s, n.e);
       // Sections left that no hidden way reaches any more will each need a trim.
       let stranded = 0;
       if (!lastStep) {
         const seen = grid.flood(pos);
-        for (const o of secs) if (!order.some((x) => x.s === o) && !entries(f, o, pull).some((e) => grid.reaches(seen, e.p))) stranded++;
+        for (const o of secs) if (!order.some((x) => x.s === o) && !u.ways(o).some((e) => grid.reaches(seen, e.p))) stranded++;
       }
       return { order, cost: n.cost, pos, state: keep(), rank: n.cost + grid.trimCost * stranded };
     });
@@ -1268,7 +1304,7 @@ function turnCost(s: Section, e: Entry): number {
  * trim), else its straight length; with `end`, the way there counts too.
  */
 function entriesFor(f: Frame, secs: Section[], planned: Entry[], pull: number, start: Pt, grid: TravelGrid | null, end?: Pt): { s: Section; e: Entry }[] {
-  const plan = grid ? planning(f, grid) : null;
+  const plan = grid ? planning(grid, sectionPieces(f, grid, pull).prints) : null;
   const kept = plan?.keep();
   const step = plan ? plan.stepCost : dist;
   type State = { e: Entry; cost: number; from: number };
@@ -1302,9 +1338,9 @@ function entriesFor(f: Frame, secs: Section[], planned: Entry[], pull: number, s
 /**
  * Sews the sections greedily nearest first, connected by travel paths or jumps. With `end`, the
  * section that leaves the needle nearest to it is sewn last, when that makes the ways in between
- * and on to `end` shorter. Where parts are left out (the grid knows them) and for wave rows, the
- * order and the ends the sections are entered at are planned on the grid instead (beamPlan,
- * planOnGrid).
+ * and on to `end` shorter. With `hidden` (covering fills) or where parts are left out (the grid
+ * knows them), the order and the ends the sections are entered at are planned on the grid instead
+ * (beamOnGrid, planOnGrid).
  */
 function sewAll(
   f: Frame,
@@ -1318,17 +1354,19 @@ function sewAll(
   end?: Pt,
   outer?: TravelGrid,
   joins?: Joins,
+  trail: [number, number][] = [],
+  hidden = false,
 ): Pt {
-  // Where parts are left out, the order and ends of the sections are planned on the grid, so travel
-  // keeps under rows still to come (and the parts left out) rather than beside the outline. Wave
-  // rows split into more sections than straight ones at the same angle (their crests reach into
-  // corners), and the nearest one next would often leave travel along the outline on top.
-  const smart = avoidSewn && (!!grid.gone || !!f.wave);
+  // With `hidden` or where parts are left out, the order and ends of the sections are planned on
+  // the grid, so travel keeps under rows still to come (and the parts left out) rather than
+  // beside the outline: the nearest section next often leaves the way back along the outline, on
+  // top of rows sewn already.
+  const smart = avoidSewn && (!!grid.gone || hidden);
   if (smart) for (const s of secs) for (const seg of s) for (const [a, b] of f.pieces(seg.u0, seg.u1, f.v(seg.k))) grid.expect(a, b, f.half);
   const order = (secs: Section[]) => {
-    const planner = (l?: { s: Section; e: Entry }) => (smart ? planOnGrid(f, secs, pull, start, grid, l, end) : plan(f, secs, pull, start, l, end));
-    let best = smart && secs.length <= BEAM_SECTIONS ? beamPlan(f, secs, pull, start, grid, end) : planner(undefined);
-    if (end && secs.length && !(smart && secs.length <= BEAM_SECTIONS)) {
+    const planner = (l?: { s: Section; e: Entry }) => (smart ? planOnGrid(sectionPieces(f, grid, pull), secs, start, grid, l, end) : plan(f, secs, pull, start, l, end));
+    let best = smart && secs.length <= BEAM_PIECES ? beamOnGrid(sectionPieces(f, grid, pull), secs, start, grid, end) : planner(undefined);
+    if (end && secs.length && !(smart && secs.length <= BEAM_PIECES)) {
       let close: { s: Section; e: Entry } | null = null;
       let cd = Infinity;
       for (const s of secs) {
@@ -1366,6 +1404,7 @@ function sewAll(
       const path = grid.path(pos, pts[0], avoidSewn) ?? outer?.path(pos, pts[0], avoidSewn);
       if (path && pathLength(path) < grid.way(bd)) travel = f.onLines ? runStitch(f.onLines(path), TRAVEL_STITCH, LINE_TOLERANCE) : runStitch(path, TRAVEL_STITCH, TRAVEL_TOLERANCE);
     } else if (cur) travel = [pos, pts[0]];
+    if (cur && travel && travel.length > 2) noteTravel(trail, runs, travel.length);
     if (cur && travel) cur.push(...travel.slice(1), ...pts.slice(1));
     else {
       cur = pts;
@@ -1401,8 +1440,9 @@ export function fillRegion(r: Region, p: FillParams, start: Pt, neighbours: numb
   const under = pointCount(runs);
   const secs = sections(r, r.sdf, f, top);
   const gap = f.gradient ? 0 : Math.min(GAP_ROWS_MAX, Math.max(0, Math.round(p.gapRows ?? 0)));
-  sewAll(f, secs, p.stitch, p.pull, pos, grid, true, runs, p.end, undefined, gap && secs.length > 1 ? sectionJoins(r, f, secs, gap) : undefined);
-  return { runs, angle, under };
+  const travel: [number, number][] = [];
+  sewAll(f, secs, p.stitch, p.pull, pos, grid, true, runs, p.end, undefined, gap && secs.length > 1 ? sectionJoins(r, f, secs, gap) : undefined, travel, true);
+  return { runs, angle, under, travel };
 }
 
 /** Crosshatch: the two layers cross at this angle each side of the fill angle (degrees), at right angles to each other. */

@@ -4,6 +4,7 @@ import { grownForm } from '../src/model/geo';
 import { fillRuns, TRAVEL_REACH, type FillSettings } from '../src/model/restitch';
 import { formFrom } from '../src/shape/path';
 import type { Pt } from '../src/digitize/skeleton';
+import { shownTravel as shownBetween } from './helpers/travel';
 
 /** The cat of the bug report (20 mm): its outline as the app keeps it, grown 0.2 mm as its fill was. */
 const CAT = [
@@ -97,5 +98,23 @@ describe('wave rows', () => {
       expect(top.length).toBeGreaterThan(100);
       expect(missed).toBe(0);
     }
+  }, 60_000);
+});
+
+describe('travel between rows, all covering fills', () => {
+  // Rows were chained nearest end first (tatami: sections in a fixed order) and travel ran back
+  // along the outline on top of sewn rows: on this cat 27 to 41 mm on average per fill, depending
+  // on the pattern. Now planned under rows still to come; the bound each pattern keeps on average.
+  const MEAN: Record<string, number> = { tatami: 4, gradient: 6, grain: 5, rays: 10, circles: 9, swirl: 8, waves: 3 };
+  const travel = expandRegion(cat, TRAVEL_REACH)!;
+  const base: FillSettings = { pattern: 'tatami', spacing: 0.37, spacingEnd: 1, offset: 0.25, angle: 179, stitch: 4, underlay: true, edge: 0, tolerance: 0.15 };
+  it.each(Object.keys(MEAN))('%s', (pattern) => {
+    const shown = Array.from({ length: 12 }, (_, i) => {
+      const s: FillSettings = { ...base, pattern: pattern as FillSettings['pattern'], angle: 150 + i * 5, spacingEnd: pattern === 'gradient' ? 0.8 : 1, deco: { height: 0.7, seed: i + 1, focus: [0.2 + 0.05 * i, 0.3 + 0.04 * i] } };
+      const r = fillRuns(cat, s, { start: START, travel })!;
+      return shownBetween(r.runs, r.travel ?? [], s.spacing);
+    });
+    for (const x of shown) expect(x).toBeLessThan(20);
+    expect(shown.reduce((a, b) => a + b, 0) / shown.length).toBeLessThan(MEAN[pattern]);
   }, 60_000);
 });

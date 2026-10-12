@@ -24,6 +24,9 @@ import { APPLIQUE_FABRICS, innerStops } from '../../src/model/applique';
 import { appliquesOf, canApplique, fromApplique, setApplique, toApplique } from '../../src/model/appliqueOps';
 import type { Region } from '../../src/digitize/region';
 import { GAP_ROWS_MAX } from '../../src/digitize/fill';
+import { fillRuns, TRAVEL_REACH } from '../../src/model/restitch';
+import { expandRegion, outline as outlineOf } from '../../src/digitize/region';
+import { shownTravel } from './travel';
 import { backToVersion, edgeAlong, forget, keepShape, keepVersion, objectKey, remember, remembered, rememberedIn, restitch, restoreRemembered, DECO_PATTERNS, OPEN_PATTERNS, type BorderSettings, type FillSettings, type Rails, type Remembered, type StoredObjects } from '../../src/model/restitch';
 import { reorder } from '../../src/model/order';
 import { stitchKinds } from '../../src/model/sequence';
@@ -2220,6 +2223,28 @@ export function checkSewDesign(p: Pattern): void {
   expect(moved.map(what).join(' '), 'sewn again from the new list: objects that changed').toBe('');
 }
 
+/** Fills that cover their area row by row: travel between their rows is planned under rows to come. */
+const COVERING = ['tatami', 'gradient', 'waves', 'grain', 'rays', 'swirl', 'circles'];
+
+/**
+ * Travel planned hidden: a covering fill sewn from its shape again leaves at most a few mm of its
+ * travel between rows uncovered by stitches sewn after it (Daniel's wild stitches: travel back
+ * along the outline on top of rows sewn). On the torture shapes now at most about 3 mm; travel
+ * along the outline as before showed 16 to 36 mm on one fill in seven. Parts of a fill cut apart
+ * are left out: their travel runs under what lies on top, which this does not see.
+ */
+export function checkHiddenTravel(p: Pattern): void {
+  for (const o of sewObjects(p)) {
+    const spec = specOf(p, o);
+    if (spec?.kind !== 'fill' || !COVERING.includes(spec.fill.pattern) || wholeOf(spec.area)) continue;
+    const ring = outlineOf(spec.area)[0];
+    if (!ring?.length) continue;
+    const res = fillRuns(spec.area, spec.fill, { start: ring[0], travel: expandRegion(spec.area, TRAVEL_REACH) ?? undefined });
+    if (!res?.travel) continue;
+    expect(shownTravel(res.runs, res.travel, spec.fill.spacing), `travel on top of rows: object ${o.index} (${spec.fill.pattern})`).toBeLessThan(10);
+  }
+}
+
 export function describeObjects(p: Pattern): string {
   return sewObjects(p)
     .map((o) => {
@@ -2489,6 +2514,7 @@ function checkStep(d: Doc, full: boolean): void {
   if (full) {
     checkExport(p);
     checkSewDesign(p);
+    checkHiddenTravel(p);
   }
 }
 
