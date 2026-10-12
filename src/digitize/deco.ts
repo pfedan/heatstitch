@@ -27,6 +27,9 @@ export const MOTIFS: Motif[] = ['diamonds', 'waves', 'stars', 'hearts'];
 export type GridKind = 'hex' | 'diamond' | 'brick';
 export const GRID_KINDS: GridKind[] = ['hex', 'diamond', 'brick'];
 export type CrossKind = 'full' | 'half' | 'double';
+/** Figures of a motif fill. */
+export type Figure = 'hearts' | 'stars' | 'flowers' | 'circles';
+export const FIGURES: Figure[] = ['hearts', 'stars', 'flowers', 'circles'];
 export const CROSS_KINDS: CrossKind[] = ['full', 'half', 'double'];
 
 const dist = (p: Pt, q: Pt) => Math.hypot(p[0] - q[0], p[1] - q[1]);
@@ -103,16 +106,22 @@ const TILES: Record<Motif, Tile> = (() => {
 
 /**
  * A row of a fill: the point at u along it is o + u · e (mm). Motifs stand upright on the design
- * whatever the direction of the rows, tiled from the design origin.
+ * (or turned by their own angle) whatever the direction of the rows, tiled from the design origin.
  */
 export interface MotifRow {
   o: Pt;
   e: Pt;
 }
 
-/** Where the row crosses the motif lines between u = lo and hi, sorted; `size` is the tile width (mm). */
-export function motifCrossings(m: Motif, size: number, row: MotifRow, lo: number, hi: number): number[] {
-  const { o, e } = row;
+/**
+ * Where the row crosses the motif lines between u = lo and hi, sorted; `size` is the tile width
+ * (mm), and the motif is turned by `angle` degrees (see turning).
+ */
+export function motifCrossings(m: Motif, size: number, row: MotifRow, lo: number, hi: number, angle = 0): number[] {
+  // In the motif's own frame the row is turned back; distances along it stay the same.
+  const { from } = turning(angle);
+  const o = from(row.o);
+  const e = from(row.e);
   const tile = TILES[m];
   const tw = tile.w * size;
   const th = tile.h * size;
@@ -153,11 +162,12 @@ export function motifCrossings(m: Motif, size: number, row: MotifRow, lo: number
 }
 
 /**
- * Whether point `q` (mm) lies inside the motif: between the two lines of a wave, or within a
- * diamond, star or heart. Counts the lines crossed on the way to the corner of its tile, which is
+ * Whether point `at` (mm) lies inside the motif turned by `angle` degrees: between the two lines
+ * of a wave, or within a diamond, star or heart. Counts the lines crossed on the way to the corner of its tile, which is
  * outside every motif.
  */
-export function motifInside(m: Motif, size: number, q: Pt): boolean {
+export function motifInside(m: Motif, size: number, at: Pt, angle = 0): boolean {
+  const q = turning(angle).from(at);
   const tile = TILES[m];
   const tw = tile.w * size;
   const th = tile.h * size;
@@ -219,6 +229,87 @@ export function embossPoints(cross: number[], regular: number[], len: number, lo
     prev = u;
   }
   return out;
+}
+
+// ------------------------------------------------------------------------------------------------
+// Textures
+
+/**
+ * Textures on tatami: every needle point of a row is shifted along it by a function of where the
+ * row lies (v, across the rows), so the points of neighbouring rows line up into lines that zigzag,
+ * swell, step or form a herringbone (what professional software calls program split; Ember's
+ * offset fills). Unlike embossing no needle point is added: stitch count, stitch length and
+ * density stay those of plain tatami, and the lines show only by where the stitches end.
+ */
+export type Texture = 'zigzag' | 'swell' | 'steps' | 'herringbone';
+export const TEXTURES: Texture[] = ['zigzag', 'swell', 'steps', 'herringbone'];
+/** Size of a texture when none is set (mm): from crest to crest, or the width of a herringbone column. */
+export const TEXTURE_SIZE = 12;
+export const TEXTURE_SIZE_RANGE: [number, number] = [4, 40];
+/** Steps of a staircase from bottom to top. */
+const STEPS = 2;
+/** No two needle points of a textured row closer than this share of a stitch (where herringbone columns meet). */
+const TEXTURE_NEAR = 0.3;
+/** No stitch of a textured row longer than this many stitch lengths. */
+const TEXTURE_LONG = 1.4;
+
+/** 0 at 0, 1 at 1/2, 0 at 1: a triangle wave of period 1. */
+const tri = (t: number) => 1 - Math.abs(2 * (t - Math.floor(t)) - 1);
+
+/**
+ * Shift of the needle points of a row at v (in stitch lengths), in column `col` of a herringbone.
+ * Zigzag and steps go P/2 along the row on P across it (lines at 45 degrees), the swell a third.
+ */
+function textureShift(t: Texture, size: number, len: number, v: number, col: number): number {
+  const a = size / 2 / len;
+  if (t === 'zigzag') return a * tri(v / size);
+  if (t === 'swell') return ((2 * a) / 3) * 0.5 * (1 - Math.cos((2 * Math.PI * v) / size));
+  if (t === 'steps') return (a * Math.floor(tri(v / size) * STEPS + 0.5)) / STEPS;
+  // Herringbone: lines at 45 degrees, the other way in every second column.
+  return ((col % 2 === 0 ? 1 : -1) * v) / len;
+}
+
+/**
+ * Needle points of a textured row from lo to hi (u along the row, sorted), its first and last
+ * `margin` mm left free as for plain rows. Herringbone columns are `size` wide along the rows,
+ * from u = 0; where two columns meet, a point too close to the one before is left out, and no
+ * stitch gets longer than TEXTURE_LONG stitch lengths.
+ */
+export function texturePoints(t: Texture, size: number, len: number, v: number, lo: number, hi: number, margin: number): number[] {
+  const a = lo + margin;
+  const b = hi - margin;
+  if (b <= a) return [];
+  const w = t === 'herringbone' ? size : Infinity;
+  const raw: number[] = [];
+  const c0 = Number.isFinite(w) ? Math.floor(a / w) : 0;
+  const c1 = Number.isFinite(w) ? Math.floor(b / w) : 0;
+  for (let c = c0; c <= c1; c++) {
+    const from = Number.isFinite(w) ? Math.max(a, c * w) : a;
+    const to = Number.isFinite(w) ? Math.min(b, (c + 1) * w) : b;
+    const s = textureShift(t, size, len, v, ((c % 2) + 2) % 2);
+    const ph = s - Math.floor(s);
+    for (let j = Math.ceil(from / len - ph); (j + ph) * len < to + 1e-9; j++) {
+      const u = (j + ph) * len;
+      if (u >= from - 1e-9) raw.push(u);
+    }
+  }
+  const near = len * TEXTURE_NEAR;
+  const out: number[] = [];
+  let prev = lo;
+  for (const u of raw) if (u - prev >= near) (out.push(u), (prev = u));
+  if (out.length && hi - out[out.length - 1] < near) out.pop();
+  const full: number[] = [];
+  prev = lo;
+  for (const u of [...out, hi]) {
+    const g = u - prev;
+    if (g > len * TEXTURE_LONG) {
+      const n = Math.ceil(g / len);
+      for (let i = 1; i < n; i++) full.push(prev + (g * i) / n);
+    }
+    if (u < hi) full.push(u);
+    prev = u;
+  }
+  return full;
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -456,6 +547,27 @@ export function regionBox(r: Region): [number, number, number, number] {
   return [(r.x0 + x0) * r.pxMm, (r.y0 + y0) * r.pxMm, (r.x0 + x1) * r.pxMm, (r.y0 + y1) * r.pxMm];
 }
 
+/**
+ * A pattern turned by `angle` degrees (clockwise on screen) about the design origin: `to` takes a
+ * point of the upright pattern onto the design, `from` back. At 0 both leave every point exactly
+ * as it is.
+ */
+export function turning(angle = 0): { to: (q: Pt) => Pt; from: (q: Pt) => Pt } {
+  const a = (angle * Math.PI) / 180;
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  return { to: (q) => [c * q[0] - s * q[1], s * q[0] + c * q[1]], from: (q) => [c * q[0] + s * q[1], c * q[1] - s * q[0]] };
+}
+
+/** The region's box in the frame of a pattern turned by `angle` degrees (see turning). */
+function turnedBox(r: Region, angle = 0): [number, number, number, number] {
+  const [x0, y0, x1, y1] = regionBox(r);
+  if (!angle) return [x0, y0, x1, y1];
+  const { from } = turning(angle);
+  const qs = ([[x0, y0], [x1, y0], [x1, y1], [x0, y1]] as Pt[]).map(from);
+  return [Math.min(...qs.map((q) => q[0])), Math.min(...qs.map((q) => q[1])), Math.max(...qs.map((q) => q[0])), Math.max(...qs.map((q) => q[1]))];
+}
+
 /** One to three points well inside the region, far enough apart, picked by `seed`. */
 export function swirlCenters(r: Region, seed: number): Pt[] {
   const rnd = random(seed * 7919 + 13);
@@ -490,6 +602,8 @@ export interface OpenParams {
   seed: number;
   /** Every stitch three times (bean stitch). */
   triple: boolean;
+  /** Grids, motifs, cross stitch, meander and maze: the pattern turned by this many degrees (see turning). */
+  angle?: number;
 }
 
 /** Bean stitch: forward, back, forward. */
@@ -538,11 +652,13 @@ const DIRS: Pt[] = [
 /**
  * The outline of a random spanning tree on a grid of `cell` mm inside the region, one closed loop
  * per connected part. `maze` grows the tree depth first (long corridors, a labyrinth), else from a
- * random edge of all grown so far (short branches, a meander).
+ * random edge of all grown so far (short branches, a meander). The grid is turned by `angle`
+ * degrees (see turning).
  */
-function treeLoops(r: Region, cell: number, seed: number, maze: boolean, margin: number): Pt[][] {
+function treeLoops(r: Region, cell: number, seed: number, maze: boolean, margin: number, angle = 0): Pt[][] {
   const rnd = random(seed);
-  const [bx0, by0, bx1, by1] = regionBox(r);
+  const [bx0, by0, bx1, by1] = turnedBox(r, angle);
+  const { to } = turning(angle);
   // Anchored to the design origin, like tatami rows.
   const i0 = Math.floor(bx0 / cell);
   const j0 = Math.floor(by0 / cell);
@@ -554,7 +670,8 @@ function treeLoops(r: Region, cell: number, seed: number, maze: boolean, margin:
   const q = cell / 4;
   const free = (i: number, j: number, dx: number, dy: number) => {
     const [x, y] = at(i, j);
-    return sample(r, r.sdf, x + dx * q, y + dy * q) < -(margin - q);
+    const [sx, sy] = to([x + dx * q, y + dy * q]);
+    return sample(r, r.sdf, sx, sy) < -(margin - q);
   };
   // Free quarters per cell, bit (dx > 0) + 2 (dy > 0); a cell with all four free joins the tree.
   const quarters = new Uint8Array(gw * gh);
@@ -650,7 +767,7 @@ function treeLoops(r: Region, cell: number, seed: number, maze: boolean, margin:
       break;
     }
   }
-  return grown.map((root) => outlineOfTree(root, gw, links, at, q, half));
+  return grown.map((root) => outlineOfTree(root, gw, links, at, q, half).map(to));
 }
 
 /** The numbers 0 to n - 1 in a random order. */
@@ -786,7 +903,7 @@ export function meanderFill(r: Region, p: OpenParams, start: Pt): FillResult | n
     const f = amp * 0.6 * Math.min(1, Math.max(0, (-sample(r, r.sdf, x, y) - 0.2) / (2 * amp)));
     return [x + f * nx(x, y), y + f * ny(x, y)];
   };
-  const loops = treeLoops(r, cell, p.seed, false, cell / 4 + 0.2).map((l) => densify(rounded(l, cell / 4), cell / 8).map(warp));
+  const loops = treeLoops(r, cell, p.seed, false, cell / 4 + 0.2, p.angle).map((l) => densify(rounded(l, cell / 4), cell / 8).map(warp));
   const runs = sewLoops(loops, start, p);
   return runs.length ? { runs, angle: 0, under: 0 } : null;
 }
@@ -794,7 +911,7 @@ export function meanderFill(r: Region, p: OpenParams, start: Pt): FillResult | n
 /** Maze: the tree outline with straight corridors and sharp corners. Lines are `size` mm apart. */
 export function mazeFill(r: Region, p: OpenParams, start: Pt): FillResult | null {
   const cell = 2 * p.size;
-  const runs = sewLoops(treeLoops(r, cell, p.seed, true, cell / 4 + 0.2), start, p);
+  const runs = sewLoops(treeLoops(r, cell, p.seed, true, cell / 4 + 0.2, p.angle), start, p);
   return runs.length ? { runs, angle: 0, under: 0 } : null;
 }
 
@@ -897,12 +1014,18 @@ class Graph {
   }
 }
 
-/** A grid of honeycombs, diamonds or bricks `size` mm wide, sewn in one go per connected part. */
+/**
+ * A grid of honeycombs, diamonds or bricks `size` mm wide, turned by `p.angle`, sewn in one go per
+ * connected part.
+ */
 export function gridFill(r: Region, p: OpenParams, kind: GridKind, start: Pt): FillResult | null {
-  const [x0, y0, x1, y1] = regionBox(r);
+  const [x0, y0, x1, y1] = turnedBox(r, p.angle);
+  const { to } = turning(p.angle);
   const s = p.size;
   const pieces: Piece[] = [];
-  const add = (a: Pt, b: Pt) => {
+  const add = (a0: Pt, b0: Pt) => {
+    const a = to(a0);
+    const b = to(b0);
     // Each lattice line once, the same way round from either cell it borders.
     pieces.push(...clipped(r, a[0] < b[0] || (a[0] === b[0] && a[1] < b[1]) ? [a, b] : [b, a], GRID_MARGIN));
   };
@@ -947,6 +1070,95 @@ export function gridFill(r: Region, p: OpenParams, kind: GridKind, start: Pt): F
   return runs.length ? { runs, angle: 0, under: 0 } : null;
 }
 
+/**
+ * Motif fill: small figures (hearts, stars, flowers, circles) `size` mm apart in rows shifted by
+ * half a figure, each row strung on one line from figure to figure, sewn in one go like the grids
+ * (the motif fill of Hatch, Wilcom and PE-Design). Figures and links the edge cuts end on the line
+ * along the edge, which joins the rows; every line is sewn there and back, so the figures come out
+ * as a double line.
+ */
+export function motifFill(r: Region, p: OpenParams, figure: Figure, start: Pt): FillResult | null {
+  const [x0, y0, x1, y1] = turnedBox(r, p.angle);
+  const { to } = turning(p.angle);
+  const s = p.size;
+  const hy = s * FIGURE_ROW;
+  const shape = figureOutline(figure, s * FIGURE_SHARE);
+  // The points where a figure is strung: its leftmost and rightmost.
+  let li = 0;
+  let ri = 0;
+  shape.forEach((q, i) => {
+    if (q[0] < shape[li][0]) li = i;
+    if (q[0] > shape[ri][0]) ri = i;
+  });
+  const pieces: Piece[] = [];
+  const inside = (q: Pt) => sample(r, r.sdf, q[0], q[1]) < -GRID_MARGIN;
+  const add = (a0: Pt, b0: Pt) => {
+    const a = to(a0);
+    const b = to(b0);
+    // The short pieces of a curve are all kept (a grid drops pieces under MIN_PIECE where the edge
+    // cuts them), so a figure the edge cuts stays one line from edge to edge.
+    const m: Pt = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    if (inside(a) && inside(b) && inside(m)) pieces.push({ a, b, cutA: false, cutB: false });
+    else pieces.push(...clipped(r, a[0] < b[0] || (a[0] === b[0] && a[1] < b[1]) ? [a, b] : [b, a], GRID_MARGIN, 0));
+  };
+  for (let j = Math.floor(y0 / hy) - 1; j <= Math.ceil(y1 / hy) + 1; j++) {
+    const dx = ((j % 2) + 2) % 2 ? s / 2 : 0;
+    let prev: Pt | null = null;
+    for (let i = Math.floor(x0 / s) - 1; i <= Math.ceil(x1 / s) + 1; i++) {
+      const c: Pt = [i * s + dx, j * hy];
+      const at = shape.map((q) => [c[0] + q[0], c[1] + q[1]] as Pt);
+      for (let k = 1; k < at.length; k++) add(at[k - 1], at[k]);
+      if (prev) add(prev, at[li]);
+      prev = at[ri];
+    }
+  }
+  const g = latticeGraph(r, pieces, GRID_MARGIN);
+  g.prune();
+  let runs = g.walk(start).map((run) => runStitch(run, p.stitch, 0.05));
+  if (p.triple) runs = runs.map(tripled);
+  return runs.length ? { runs, angle: 0, under: 0 } : null;
+}
+
+/** A figure's width as a share of the distance between figures: the rest is the link between them. */
+const FIGURE_SHARE = 0.62;
+/** Rows of figures this share of their distance apart. */
+const FIGURE_ROW = 0.9;
+
+/** The outline of a figure `w` mm wide around 0, closed (the last point is the first), upright. */
+export function figureOutline(f: Figure, w: number): Pt[] {
+  const r = w / 2;
+  const out: Pt[] = [];
+  if (f === 'hearts') {
+    // The heart curve is 32 units wide (x from -16 to 16).
+    for (let i = 0; i < 48; i++) {
+      const t = (2 * Math.PI * i) / 48;
+      const x = 16 * Math.sin(t) ** 3;
+      const y = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
+      out.push([(x / 16) * r, (-(y + 2.5) / 16) * r]);
+    }
+  } else if (f === 'stars') {
+    for (let i = 0; i < 10; i++) {
+      const rr = i % 2 ? r * 0.45 : r;
+      const a = -Math.PI / 2 + (i * Math.PI) / 5;
+      out.push([rr * Math.cos(a), rr * Math.sin(a) + r * 0.1]);
+    }
+  } else if (f === 'flowers') {
+    // Five round petals, one pointing up, with narrow notches between them.
+    for (let i = 0; i < 80; i++) {
+      const a = (2 * Math.PI * i) / 80;
+      const rr = r * (0.3 + 0.7 * Math.sqrt(Math.abs(Math.cos(2.5 * (a + Math.PI / 2)))));
+      out.push([rr * Math.cos(a), rr * Math.sin(a)]);
+    }
+  } else {
+    for (let i = 0; i < 36; i++) {
+      const a = (2 * Math.PI * i) / 36;
+      out.push([r * 0.9 * Math.cos(a), r * 0.9 * Math.sin(a)]);
+    }
+  }
+  out.push(out[0]);
+  return out;
+}
+
 /** How far inside the edge a grid stays (mm). */
 const GRID_MARGIN = 0.3;
 /** Lattice pieces shorter than this where the edge cuts them are left out (mm). */
@@ -956,7 +1168,7 @@ const MIN_PIECE = 0.4;
  * The parts of segment ab more than `margin` inside the region: sampled every 0.1 mm, each end
  * where it crosses that line found by bisection.
  */
-function clipped(r: Region, [a, b]: [Pt, Pt], margin: number): Piece[] {
+function clipped(r: Region, [a, b]: [Pt, Pt], margin: number, minPiece = MIN_PIECE): Piece[] {
   const len = dist(a, b);
   const at = (t: number): Pt => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
   const inside = (t: number) => sample(r, r.sdf, ...at(t)) < -margin;
@@ -980,11 +1192,11 @@ function clipped(r: Region, [a, b]: [Pt, Pt], margin: number): Piece[] {
     if (from === null && now) from = cross(t0, t1);
     else if (from !== null && !now) {
       const to = cross(t0, t1);
-      if ((to - from) * len >= MIN_PIECE) out.push(piece(from, to));
+      if ((to - from) * len >= minPiece) out.push(piece(from, to));
       from = null;
     }
   }
-  if (from !== null && (1 - from) * len >= MIN_PIECE) out.push(piece(from, 1));
+  if (from !== null && (1 - from) * len >= minPiece) out.push(piece(from, 1));
   return out;
 
   function piece(t0: number, t1: number): Piece {
@@ -1042,14 +1254,16 @@ function latticeGraph(r: Region, pieces: Piece[], margin: number): Graph {
 }
 
 /**
- * Cross stitch on a grid of `size` mm cells anchored at the design origin, over the cells wholly
- * inside. Only the diagonals are sewn (each there and back, like Ink/Stitch's even cross
+ * Cross stitch on a grid of `size` mm cells anchored at the design origin and turned by `p.angle`,
+ * over the cells wholly inside. Only the diagonals are sewn (each there and back, like Ink/Stitch's even cross
  * stitch), so no thread runs along the cells' sides.
  */
 export function crossFill(r: Region, p: OpenParams, kind: CrossKind, start: Pt): FillResult | null {
-  const [x0, y0, x1, y1] = regionBox(r);
+  const [x0, y0, x1, y1] = turnedBox(r, p.angle);
+  const { to } = turning(p.angle);
   const c = p.size;
   const g = new Graph();
+  const add = (a: Pt, b: Pt) => g.add(to(a), to(b));
   const inset = 0.1;
   for (let j = Math.floor(y0 / c); j <= Math.ceil(y1 / c); j++) {
     for (let i = Math.floor(x0 / c); i <= Math.ceil(x1 / c); i++) {
@@ -1061,14 +1275,14 @@ export function crossFill(r: Region, p: OpenParams, kind: CrossKind, start: Pt):
         [L + c, T + c],
         [L, T + c],
       ];
-      if (!corners.every((q) => sample(r, r.sdf, q[0], q[1]) < -inset)) continue;
+      if (!corners.map(to).every((q) => sample(r, r.sdf, q[0], q[1]) < -inset)) continue;
       const [tl, tr, br, bl] = corners;
       if (kind === 'double') {
         const m: Pt = [L + c / 2, T + c / 2];
-        for (const q of [tl, tr, br, bl, [L + c / 2, T], [L + c, T + c / 2], [L + c / 2, T + c], [L, T + c / 2]] as Pt[]) g.add(q, m);
+        for (const q of [tl, tr, br, bl, [L + c / 2, T], [L + c, T + c / 2], [L + c / 2, T + c], [L, T + c / 2]] as Pt[]) add(q, m);
       } else {
-        g.add(bl, tr);
-        if (kind === 'full') g.add(tl, br);
+        add(bl, tr);
+        if (kind === 'full') add(tl, br);
       }
     }
   }

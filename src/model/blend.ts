@@ -21,7 +21,7 @@ export function blendObject(p: Pattern, o: number, color: ThreadColor, trimMm: n
   const m = objs[o] && remembered(p, objs[o]);
   // The second thread of a blend follows its fill: it blends with nothing of its own.
   if (!m?.fill || !m.region || m.blendOf || m.outline) return null;
-  const { emboss: _e, focus: _f, centers: _c, blend: was, ...deco } = m.fill.deco ?? {};
+  const { emboss: _e, texture: _t, textureSize: _ts, focus: _f, centers: _c, blend: was, ...deco } = m.fill.deco ?? {};
   const s: FillSettings = { ...structuredClone(m.fill), pattern: 'gradient',
     // One angle for both, so their rows lie on each other.
     angle: Number.isFinite(m.fill.angle) ? m.fill.angle : chooseAngle(m.region, m.fill.spacing, []),

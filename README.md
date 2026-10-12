@@ -98,9 +98,11 @@ sends the picture anywhere.
   parts with their own direction (one border around all parts), **contour around** the selection
   at a set distance (a patch edge as satin, a patch ground as fill)
 - **Stitch settings** with live preview: fill patterns in three tabs (classic: tatami with offset,
-  gradient, contour fill without a seam, spiral for any shape, as sewn, guided by drawn lines; decor: embossed motifs, waves,
-  grain, rays, swirl, color fade with a second color; open: meander, maze, grid, echo, cross
-  stitch, crosshatch), spacing, angle, stitch length, edges, expand, underlay
+  gradient, contour fill without a seam, spiral for any shape, as sewn, guided by drawn lines; decor: textures in the
+  tatami (zigzag, swell, steps, herringbone: needle points shifted, no stitch more), embossed motifs, waves,
+  grain, rays, swirl, color fade with a second color; open: meander, maze, grid, motifs (hearts, stars, flowers,
+  circles strung in rows), echo, cross stitch, crosshatch), irregular rows for a hand-sewn look,
+  spacing, angle, stitch length, edges, expand, underlay
   (off, across, cross, inset, left out under later objects), **border** (running, triple or satin,
   offset, own thread); satin pattern or E stitch, spacing (also by width and per rung), width per
   side (by fabric: free ends also shortened against push), fringe, irregular (width and spacing varying from stitch to stitch, kept by a seed), short stitches in curves, split, underlay kind (the zigzag sewn out and back, crossing), **rungs** for the direction and **sections**

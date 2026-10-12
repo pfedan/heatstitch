@@ -1,7 +1,7 @@
 import { expandRegion, sample, signedField, type Region } from './region';
 import { runStitch, simplify } from './run';
 import type { Pt } from './skeleton';
-import { embossPoints, motifCrossings, motifInside, type Motif } from './deco';
+import { embossPoints, motifCrossings, motifInside, texturePoints, type Motif, type Texture } from './deco';
 
 /**
  * Tatami fill of a region (with holes) from its signed distance field.
@@ -70,7 +70,9 @@ export interface FillParams {
   /** Curved rows keep this close to their line (mm); TOLERANCE by default. */
   tolerance?: number;
   /** Straight rows put their needle points on the lines of this motif (embossing, see deco.ts). */
-  emboss?: { motif: Motif; size: number; strong?: boolean };
+  emboss?: { motif: Motif; size: number; strong?: boolean; angle?: number };
+  /** Straight rows shift their needle points into a texture (see texturePoints in deco.ts), in place of `offset`. */
+  texture?: { kind: Texture; size: number };
   /**
    * Rows that fade out across the shape (`out`, dense where the rows start) or in (`in`): the
    * density falls evenly to nearly nothing, so a second color fading the other way on the same
@@ -132,7 +134,9 @@ class Frame {
   private vs: number[] | null = null;
   private k0 = 0;
   /** Needle points on the lines of a motif (embossing). */
-  emboss?: { motif: Motif; size: number; strong?: boolean };
+  emboss?: { motif: Motif; size: number; strong?: boolean; angle?: number };
+  /** Needle points shifted into a texture (see FillParams.texture). */
+  texture?: { kind: Texture; size: number };
   /** Density falling evenly across the shape (out) or rising (in); see FillParams.fade. */
   fade?: 'out' | 'in';
   /**
@@ -399,14 +403,15 @@ function rowStitches(f: Frame, k: number, v: number, from: number, to: number, l
   const hi = Math.max(from, to);
   const margin = Math.min(0.6, len / 4);
   const pts: number[] = [];
-  for (let j = Math.ceil((lo + margin) / len - phase); (j + phase) * len <= hi - margin; j++) pts.push((j + phase) * len);
+  if (f.texture) pts.push(...texturePoints(f.texture.kind, f.texture.size, len, v, lo, hi, margin));
+  else for (let j = Math.ceil((lo + margin) / len - phase); (j + phase) * len <= hi - margin; j++) pts.push((j + phase) * len);
   if (f.emboss) {
-    const { motif, size } = f.emboss;
-    const cross = motifCrossings(motif, size, { o: f.at(0, v), e: f.e }, lo + 0.3, hi - 0.3);
+    const { motif, size, angle } = f.emboss;
+    const cross = motifCrossings(motif, size, { o: f.at(0, v), e: f.e }, lo + 0.3, hi - 0.3, angle);
     pts.splice(0, pts.length, ...embossPoints(cross, pts, len, lo, hi));
     if (f.emboss.strong) {
       const v0 = f.at(0, v);
-      const inside = (u: number) => motifInside(motif, size, [v0[0] + f.e[0] * u, v0[1] + f.e[1] * u]);
+      const inside = (u: number) => motifInside(motif, size, [v0[0] + f.e[0] * u, v0[1] + f.e[1] * u], angle);
       pts.splice(0, pts.length, ...shortInside(pts, inside, len, lo, hi));
     }
   }
@@ -1325,6 +1330,7 @@ export function fillRegion(r: Region, p: FillParams, start: Pt, neighbours: numb
   const angle = p.angle ?? chooseAngle(r, p.spacing, neighbours);
   const f = new Frame(angle, p.spacing, p.spacingEnd ?? p.spacing, p.offset ?? 1 / STAGGERS);
   if (p.emboss) f.emboss = p.emboss;
+  else if (p.texture) f.texture = p.texture;
   if (p.fade) f.fade = p.fade;
   const top = rows(r, r.sdf, f, 0);
   if (!top.length) return null;

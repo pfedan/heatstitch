@@ -8,7 +8,7 @@ import { LINE_MOTIFS } from '../digitize/motif';
 import { lineStitches, runAsLine, runWays } from './line';
 import { chooseAngle, CROSSHATCH_HALF, crosshatchFill, fillRegion, type FillParams } from '../digitize/fill';
 import { contourFill, fieldFill, guideField, stitchField } from '../digitize/flow';
-import { atShare, crossFill, CROSS_KINDS, echoFill, circleField, grainField, GRID_KINDS, gridFill, mazeFill, meanderFill, MOTIFS, rayField, regionBox, swirlField, waveFill, zigzagFill, type CrossKind, type GridKind, type Motif, type OpenParams } from '../digitize/deco';
+import { atShare, crossFill, CROSS_KINDS, FIGURES, motifFill, TEXTURES, TEXTURE_SIZE, TEXTURE_SIZE_RANGE, echoFill, circleField, grainField, GRID_KINDS, gridFill, mazeFill, meanderFill, MOTIFS, rayField, regionBox, swirlField, waveFill, zigzagFill, type CrossKind, type Figure, type GridKind, type Motif, type OpenParams, type Texture } from '../digitize/deco';
 import { spiralFill } from '../digitize/spiral';
 import { ECHO_GAP, isEcho } from '../digitize/echo';
 import { shadowFrom } from './shadow';
@@ -60,11 +60,12 @@ export type FillPattern = 'tatami' | 'gradient' | 'contour' | 'spiral' | 'follow
 /** Dense fills with curved rows laid on a field drawn from a few numbers (see deco.ts). */
 export type DecoPattern = 'waves' | 'grain' | 'rays' | 'swirl' | 'circles';
 /**
- * Light on purpose, the fabric showing between: one line through the area (see deco.ts), or two
+ * Light on purpose, the fabric showing between: one line through the area (see deco.ts; motifs:
+ * small figures strung in rows), or two
  * sparse layers of rows crossing (crosshatch, see crosshatchFill).
  */
-export type OpenPattern = 'meander' | 'maze' | 'grid' | 'echo' | 'cross' | 'crosshatch';
-export const OPEN_PATTERNS: OpenPattern[] = ['meander', 'maze', 'grid', 'echo', 'cross', 'crosshatch'];
+export type OpenPattern = 'meander' | 'maze' | 'grid' | 'motifs' | 'echo' | 'cross' | 'crosshatch';
+export const OPEN_PATTERNS: OpenPattern[] = ['meander', 'maze', 'grid', 'motifs', 'echo', 'cross', 'crosshatch'];
 export const DECO_PATTERNS: DecoPattern[] = ['waves', 'grain', 'rays', 'swirl', 'circles'];
 export const isOpenPattern = (p: FillPattern): p is OpenPattern => (OPEN_PATTERNS as FillPattern[]).includes(p);
 
@@ -76,6 +77,15 @@ export interface DecoSettings {
   embossSize?: number;
   /** Embossing that shows clearly: shorter stitches inside the motif as well (see motifInside). */
   embossStrong?: boolean;
+  /** The embossed motif turned by this many degrees, clockwise on screen; upright when not set. */
+  embossAngle?: number;
+  /**
+   * Tatami: needle points shifted into a texture (see texturePoints), in place of the offset; not
+   * with `emboss`, which wins when both are set.
+   */
+  texture?: Texture;
+  /** Size of the texture (mm); TEXTURE_SIZE when not set. */
+  textureSize?: number;
   /** Waves: from the middle to a crest, and from crest to crest (mm). */
   height?: number;
   length?: number;
@@ -91,8 +101,12 @@ export interface DecoSettings {
   size?: number;
   /** Open patterns: every stitch three times. */
   triple?: boolean;
+  /** Grids, motifs, cross stitch, meander and maze: the pattern turned by this many degrees; upright when not set. */
+  angle?: number;
   grid?: GridKind;
   cross?: CrossKind;
+  /** Motif fill: its figure; hearts when not set. */
+  figure?: Figure;
   /** Gradient: the density falls evenly to nearly nothing (out) or rises from it (in), for color blends. */
   fade?: 'out' | 'in';
   /**
@@ -113,6 +127,7 @@ export const DECO_DEFAULTS = {
   triple: false,
   grid: 'hex' as GridKind,
   cross: 'full' as CrossKind,
+  figure: 'hearts' as Figure,
 };
 
 /** At most this many swirls in one fill. */
@@ -124,9 +139,9 @@ const CIRCLES_FOCUS: Pt = [0.5, 0.5];
 /** Open patterns: distance between lines or cell size when none is set (mm). */
 // Crosshatch: rows 1.6 mm apart in each layer, four times a usual fill's 0.4 mm: the two layers
 // together lay half its thread, as a light fill (0.8 mm), and leave diamonds of fabric between.
-export const OPEN_SIZE: Record<OpenPattern, number> = { meander: 2.5, maze: 2.5, grid: 6, echo: 3, cross: 2.5, crosshatch: 1.6 };
+export const OPEN_SIZE: Record<OpenPattern, number> = { meander: 2.5, maze: 2.5, grid: 6, motifs: 8, echo: 3, cross: 2.5, crosshatch: 1.6 };
 /** Open patterns: the range of `size` (mm). */
-export const OPEN_SIZE_RANGE: Record<OpenPattern, [number, number]> = { meander: [1.2, 8], maze: [1.2, 8], grid: [3, 20], echo: [1.2, 10], cross: [1.5, 6], crosshatch: [1, 4] };
+export const OPEN_SIZE_RANGE: Record<OpenPattern, [number, number]> = { meander: [1.2, 8], maze: [1.2, 8], grid: [3, 20], motifs: [5, 25], echo: [1.2, 10], cross: [1.5, 6], crosshatch: [1, 4] };
 /**
  * Decorative fields may crowd rows more than a plain curved fill before they give up (in times the
  * nominal density): rows meet at the start of rays and wind tight at the eye of a swirl, as in the
@@ -182,6 +197,14 @@ export interface FillSettings {
   areaGrow?: number;
   /** Settings of the decorative patterns and of embossing. */
   deco?: DecoSettings;
+  /**
+   * Irregular rows (a hand-sewn look), 0 to 1: the needle points of covering fills move along
+   * their rows by up to ROUGH_FILL of a stitch, each a different way (see roughenRuns); none when
+   * not set.
+   */
+  rough?: number;
+  /** Which irregular fill: set once when it is turned on, kept by copies and the project file. */
+  roughSeed?: number;
   /**
    * Gap rows where sections of straight rows meet (see FillParams.gapRows): by the fabric the fill
    * was made for (Fabric.gapRows), none when not set. Not a setting of the panel.
@@ -1016,6 +1039,8 @@ function isFill(f: unknown): f is FillSettings {
     (s.gapRows === undefined || (Number.isInteger(s.gapRows) && s.gapRows >= 0)) &&
     ((s as { border?: unknown }).border === undefined || isBorder((s as { border?: unknown }).border)) &&
     (s.deco === undefined || isDeco(s.deco)) &&
+    (s.rough === undefined || finite(s.rough)) &&
+    (s.roughSeed === undefined || finite(s.roughSeed)) &&
     typeof s.underlay === 'boolean'
   );
 }
@@ -1028,13 +1053,15 @@ function isDeco(d: unknown): d is DecoSettings {
     !!s &&
     typeof s === 'object' &&
     (s.emboss === undefined || MOTIFS.includes(s.emboss)) &&
-    [s.embossSize, s.height, s.length, s.strength, s.seed, s.size].every((v) => v === undefined || finite(v)) &&
+    (s.texture === undefined || TEXTURES.includes(s.texture)) &&
+    [s.textureSize, s.embossSize, s.embossAngle, s.angle, s.height, s.length, s.strength, s.seed, s.size].every((v) => v === undefined || finite(v)) &&
     (s.focus === undefined || isShare(s.focus)) &&
     (s.centers === undefined || (Array.isArray(s.centers) && s.centers.length >= 1 && s.centers.length <= MAX_SWIRLS && s.centers.every(isShare))) &&
     (s.triple === undefined || typeof s.triple === 'boolean') &&
     (s.embossStrong === undefined || typeof s.embossStrong === 'boolean') &&
     (s.grid === undefined || GRID_KINDS.includes(s.grid)) &&
     (s.cross === undefined || CROSS_KINDS.includes(s.cross)) &&
+    (s.figure === undefined || FIGURES.includes(s.figure)) &&
     (s.fade === undefined || s.fade === 'out' || s.fade === 'in') &&
     (s.blend === undefined || (isColor(s.blend.color) && typeof s.blend.link === 'string'))
   );
@@ -2419,9 +2446,12 @@ export function fillRuns(area: Region, s: FillSettings, way: FillWay): NewFill |
     res = openFill(r, s, fp, start);
   } else {
     const d = s.deco;
-    res = fillRegion(r, { ...fp, offset: s.offset, ...(s.pattern === 'tatami' && d?.emboss ? { emboss: { motif: d.emboss, size: d.embossSize ?? DECO_DEFAULTS.embossSize, strong: !!d.embossStrong } } : {}) }, start);
+    res = fillRegion(r, { ...fp, offset: s.offset, ...(s.pattern === 'tatami' ? looks(d) : {}) }, start);
   }
   if (!res) return null;
+  // Irregular rows: the needle points of the top stitches move along them, the underlay stays.
+  const rough = Math.min(1, Math.max(0, s.rough ?? 0));
+  if (rough && !isOpenPattern(s.pattern)) roughenRuns(res.runs, res.under ?? 0, rough, s.roughSeed ?? 0, s.stitch * ROUGH_LONG);
   // Underlay points in runs too short to sew are not sewn either.
   let under = 0;
   let seen = 0;
@@ -2434,6 +2464,70 @@ export function fillRuns(area: Region, s: FillSettings, way: FillWay): NewFill |
   // The border is an object of its own, sewn after the fill (see syncBorders).
   const border = runs.reduce((n, run) => n + run.length, 0);
   return { runs, under, border };
+}
+
+/** Embossing or a texture of a tatami (embossing wins when both are set). */
+function looks(d: DecoSettings | undefined): Pick<FillParams, 'emboss' | 'texture'> {
+  if (d?.emboss) return { emboss: { motif: d.emboss, size: d.embossSize ?? DECO_DEFAULTS.embossSize, strong: !!d.embossStrong, angle: d.embossAngle ?? 0 } };
+  if (d?.texture) {
+    const [lo, hi] = TEXTURE_SIZE_RANGE;
+    return { texture: { kind: d.texture, size: Math.min(hi, Math.max(lo, d.textureSize ?? TEXTURE_SIZE)) } };
+  }
+  return {};
+}
+
+/**
+ * Irregular fill at full strength: a needle point moves along its row by up to this share of the
+ * shorter stitch beside it, each way (Ember's hand stitch, Ink/Stitch's random stitch length).
+ */
+export const ROUGH_FILL = 0.3;
+/** Only points where the row runs on nearly straight move: corners and row ends stay (cos of 20 degrees). */
+const ROUGH_STRAIGHT = Math.cos((20 * Math.PI) / 180);
+/** Only points between stitches at least this long move (mm): short steps between rows stay. */
+const ROUGH_MIN = 0.8;
+/** No stitch of an irregular fill gets longer than this many stitch lengths. */
+export const ROUGH_LONG = 1.5;
+
+/**
+ * Moves the needle points of the runs, from point `from` on (the underlay before stays), along
+ * their row by a random share of the shorter stitch beside them, up to `k` · ROUGH_FILL. Uniform
+ * and independent from point to point, from a hash of its number and the seed, so it comes out
+ * the same each time. Row ends, corners and short steps keep their place, so the edge and the
+ * density stay; no stitch gets shorter than ROUGH_MIN / 2 nor longer than `long` (mm) or than it was.
+ */
+export function roughenRuns(runs: Pt[][], from: number, k: number, seed: number, long: number): void {
+  let n = 0;
+  for (const run of runs) {
+    for (let i = 1; i < run.length - 1; i++) {
+      const no = n + i;
+      if (no < from) continue;
+      // The point before has moved already: the stitch to it is measured as it is now.
+      const a = run[i - 1];
+      const q = run[i];
+      const b = run[i + 1];
+      const la = Math.hypot(q[0] - a[0], q[1] - a[1]);
+      const lb = Math.hypot(b[0] - q[0], b[1] - q[1]);
+      if (la < ROUGH_MIN || lb < ROUGH_MIN) continue;
+      const cos = ((q[0] - a[0]) * (b[0] - q[0]) + (q[1] - a[1]) * (b[1] - q[1])) / (la * lb);
+      if (cos < ROUGH_STRAIGHT) continue;
+      const top = Math.max(long, la, lb);
+      const lo = Math.max(ROUGH_MIN / 2 - la, lb - top);
+      const hi = Math.min(lb - ROUGH_MIN / 2, top - la);
+      const d = Math.min(hi, Math.max(lo, k * ROUGH_FILL * Math.min(la, lb) * (2 * roughHash(no, seed) - 1)));
+      const ex = (b[0] - a[0]) / Math.hypot(b[0] - a[0], b[1] - a[1]);
+      const ey = (b[1] - a[1]) / Math.hypot(b[0] - a[0], b[1] - a[1]);
+      run[i] = [q[0] + ex * d, q[1] + ey * d];
+    }
+    n += run.length;
+  }
+}
+
+/** A repeatable number from 0 to 1 for point `i` and `seed`. */
+function roughHash(i: number, seed: number): number {
+  let h = Math.imul(i ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(seed + 0x27d4eb2f, 0xc2b2ae35);
+  h = Math.imul(h ^ (h >>> 16), 0x7feb352d);
+  h = Math.imul(h ^ (h >>> 15), 0x846ca68b);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }
 
 /** A dense fill with curved rows: wave rows, or rows on one of the decorative fields. */
@@ -2458,12 +2552,13 @@ function openFill(r: Region, s: FillSettings, fp: FillParams, start: Pt) {
   const pat = s.pattern as OpenPattern;
   const d = { ...DECO_DEFAULTS, ...s.deco };
   const [lo, hi] = OPEN_SIZE_RANGE[pat];
-  const p: OpenParams = { size: Math.min(hi, Math.max(lo, d.size ?? OPEN_SIZE[pat])), stitch: Math.min(s.stitch, 3), seed: d.seed, triple: d.triple };
+  const p: OpenParams = { size: Math.min(hi, Math.max(lo, d.size ?? OPEN_SIZE[pat])), stitch: Math.min(s.stitch, 3), seed: d.seed, triple: d.triple, angle: d.angle ?? 0 };
   if (pat === 'crosshatch') return crosshatchFill(r, { ...fp, spacing: p.size, stitch: p.stitch, angle: Number.isFinite(s.angle) ? s.angle : 0, pull: 0, underlay: false }, start);
   if (pat === 'meander') return meanderFill(r, p, start);
   if (pat === 'maze') return mazeFill(r, p, start);
   if (pat === 'echo') return echoFill(r, p, start);
   if (pat === 'grid') return gridFill(r, p, d.grid, start);
+  if (pat === 'motifs') return motifFill(r, p, d.figure, start);
   return crossFill(r, p, d.cross, start);
 }
 

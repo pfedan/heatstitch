@@ -5,7 +5,7 @@ import { digitizedFile } from '../../src/model/digitized';
 import { addShape } from '../../src/model/addShape';
 import { followerLinks, partHolders, recolorBlock, sameRegion, shareBorders, syncBorders } from '../../src/model/border';
 import { blendObject } from '../../src/model/blend';
-import { MOTIFS } from '../../src/digitize/deco';
+import { FIGURES, MOTIFS, TEXTURES } from '../../src/digitize/deco';
 import { ECHO_SIDES } from '../../src/digitize/echo';
 import { HAND_STITCHES, HAND_WIDTH, LINE_MOTIFS } from '../../src/digitize/motif';
 import { partOf, type LinePart } from '../../src/model/shadow';
@@ -877,14 +877,18 @@ export const OPS: Op[] = [
       if (!fills.length) return false;
       const o = pick(r, fills);
       const fill = remembered(d.cur.p, o)!.fill!;
-      const kind = pick(r, ['emboss', 'fade', ...DECO_PATTERNS, ...OPEN_PATTERNS] as const);
-      const deco = { seed: 1 + Math.floor(r() * 9), focus: [r(), r()] as [number, number] };
+      const kind = pick(r, ['emboss', 'texture', 'fade', ...DECO_PATTERNS, ...OPEN_PATTERNS] as const);
+      const deco = { seed: 1 + Math.floor(r() * 9), focus: [r(), r()] as [number, number], ...(kind === 'motifs' ? { figure: pick(r, FIGURES) } : {}), ...(r() < 0.5 ? { angle: Math.floor(r() * 360) } : {}) };
+      // Irregular rows on any covering fill, now and then (as the slider Unregelmäßig).
+      const rough = r() < 0.3 ? { rough: 0.2 + 0.8 * r(), roughSeed: 1 + Math.floor(r() * 99) } : {};
       const s: FillSettings =
         kind === 'emboss'
-          ? { ...fill, pattern: 'tatami', deco: { ...deco, emboss: pick(r, MOTIFS) } }
-          : kind === 'fade'
-            ? { ...fill, pattern: 'gradient', deco: { ...deco, fade: pick(r, ['out', 'in'] as const) } }
-            : { ...fill, pattern: kind, deco };
+          ? { ...fill, pattern: 'tatami', deco: { ...deco, emboss: pick(r, MOTIFS), ...(r() < 0.5 ? { embossAngle: Math.floor(r() * 360) } : {}) } }
+          : kind === 'texture'
+            ? { ...fill, ...rough, pattern: 'tatami', deco: { ...deco, texture: pick(r, TEXTURES), ...(r() < 0.5 ? { textureSize: 4 + 30 * r() } : {}) } }
+            : kind === 'fade'
+              ? { ...fill, ...rough, pattern: 'gradient', deco: { ...deco, fade: pick(r, ['out', 'in'] as const) } }
+              : { ...fill, ...rough, pattern: kind, deco };
       if (process.env.TORTURE_TRACE) console.log('decorate', o.index, kind);
       // As the app: another pattern takes a blend's second thread out.
       const blend = fill.deco?.blend?.link;
@@ -2074,6 +2078,42 @@ export function checkGapRows(p: Pattern): void {
   expect(problems.join('; '), 'gap rows').toBe('');
 }
 
+/**
+ * Textures, irregular rows and motif figures belong to a fill's settings (see texturePoints,
+ * roughenRuns, motifFill): what is set is valid, an irregular fill has its seed (so a copy, the
+ * project file and undo give the same stitches), and a textured or irregular tatami sewn from its
+ * settings has no stitch longer than its stitch length allows, through duplicate, mirror, knockout,
+ * undo and saving.
+ */
+export function checkFillLooks(p: Pattern): void {
+  const problems: string[] = [];
+  const objs = sewObjects(p);
+  for (const o of objs) {
+    const m = remembered(p, o);
+    for (const [what, f] of [['fill', m?.fill], ['kept fill', m?.kept?.fill]] as const) {
+      if (!f) continue;
+      const d = f.deco;
+      if (d?.texture !== undefined && !TEXTURES.includes(d.texture)) problems.push(`${o.index}: ${what} texture ${d.texture}`);
+      if (d?.figure !== undefined && !FIGURES.includes(d.figure)) problems.push(`${o.index}: ${what} figure ${d.figure}`);
+      for (const a of [d?.angle, d?.embossAngle]) if (a !== undefined && !Number.isFinite(a)) problems.push(`${o.index}: ${what} pattern angle ${a}`);
+      if (f.rough !== undefined && !(f.rough >= 0 && f.rough <= 1 && Number.isFinite(f.roughSeed))) problems.push(`${o.index}: ${what} rough ${f.rough} seed ${f.roughSeed}`);
+    }
+    const f = m?.fill;
+    if (!f || f.pattern !== 'tatami' || (!f.deco?.texture && !f.rough) || f.deco?.emboss || m!.hand || m!.free || m!.read || m!.columns?.length) continue;
+    // Rows, underlay (3 mm) and travel (2.5 mm); a jump or trim between is no stitch.
+    const most = Math.max(f.stitch * 1.5, 3) + 0.15;
+    for (let i = o.first + 1; i <= o.last; i++) {
+      if (p.cmd[i] !== STITCH || p.cmd[i - 1] !== STITCH) continue;
+      const l = Math.hypot(p.x[i] - p.x[i - 1], p.y[i] - p.y[i - 1]) / 10;
+      if (l > most) {
+        problems.push(`${o.index}: a stitch of ${l.toFixed(2)} mm in a ${f.deco?.texture ?? 'irregular'} tatami of ${f.stitch} mm`);
+        break;
+      }
+    }
+  }
+  expect(problems.join('; '), 'textures and irregular fills').toBe('');
+}
+
 /** Exported and read back, the stitches are the same. */
 export function checkExport(p: Pattern): void {
   const stitches = (q: Pattern) => {
@@ -2443,6 +2483,7 @@ function checkStep(d: Doc, full: boolean): void {
   checkSatinSections(p);
   checkLetterings(p);
   checkGapRows(p);
+  checkFillLooks(p);
   checkAppliques(p);
   checkTrace(d);
   if (full) {

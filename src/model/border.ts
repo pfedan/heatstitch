@@ -625,7 +625,7 @@ export function borderRanges(p: Pattern, objs: readonly SewObject[], o: SewObjec
  * border.
  */
 export function blendSettings(f: FillSettings): FillSettings {
-  const { blend: _b, emboss: _e, focus: _f, centers: _c, ...deco } = f.deco ?? {};
+  const { blend: _b, emboss: _e, texture: _t, textureSize: _ts, focus: _f, centers: _c, ...deco } = f.deco ?? {};
   return { ...f, pattern: 'gradient', underlay: false, deco: { ...deco, fade: f.deco?.fade === 'in' ? 'out' : 'in' } };
 }
 
