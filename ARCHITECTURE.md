@@ -11,17 +11,20 @@ heatstitch is a static web app. There is no backend: everything (reading files, 
 stitches, checking, correcting, writing files) runs as TypeScript in the browser. There is no UI
 framework either; the interface is plain DOM and canvas, built by small modules.
 
-```
-  picture ----------> image ----+
-  SVG --------------> shape ----+--> digitize --+
-                                                |
-  embroidery file --> parsers ------------------+
-                                                v
-                  edits (model) <-------> Pattern versions + objects
-                        ^                       |
-                        |                       +--> render -------------> canvas
-     ui / areas / shell +                       +--> density, validation, correct
-                                                +--> writers, storage ---> DST, PES, ..., .heatstitch
+```mermaid
+flowchart LR
+  picture[Picture] --> image
+  svg[SVG] --> shape
+  image --> digitize
+  shape --> digitize
+  file[Embroidery file] --> parsers
+  digitize --> P["Pattern versions + objects"]
+  parsers --> P
+  ui["ui / areas / shell"] --> edits["edits (model)"]
+  edits <--> P
+  P --> render --> canvas[Canvas]
+  P --> check["density, validation, correct"]
+  P --> out["writers, storage"] --> files["DST, PES, ..., .heatstitch"]
 ```
 
 The code falls into three layers:
@@ -104,10 +107,10 @@ The model keeps **known** and **guessed** structure apart:
 
 When settings or a form change, the object is sewn anew from what it remembers:
 
-```
-Remembered --> model/sew.ts (Spec: line, fill, satin, ...) --> digitize/* --> stitches
-                                                                                 |
-                      new Pattern version with the stitches put in its place <---+
+```mermaid
+flowchart LR
+  R[Remembered] --> S["model/sew.ts<br/>Spec: line, fill, satin, ..."] --> D["digitize/*"] --> St[stitches]
+  St --> V["new Pattern version<br/>with the stitches put in place"]
 ```
 
 `src/model/restitch.ts` (settings changes), `src/model/sew.ts` (sewing one object or a whole design
@@ -157,12 +160,11 @@ whose objects remember what they were made as.
 
 ## Checking and correcting
 
-```
-Pattern --+--> density worker --> grid --> render/heatmap.ts
-          |
-          +--> measure (worker, independent of the material)
-                 |
-                 +--> classify (main thread, per profile) --> zones, findings --> correct
+```mermaid
+flowchart LR
+  P[Pattern] --> DW[density worker] --> G[grid] --> H[render/heatmap.ts]
+  P --> M["measure<br/>(worker, independent of the material)"]
+  M --> C["classify<br/>(main thread, per profile)"] --> Z["zones, findings"] --> K[correct]
 ```
 
 - **`src/density/`**: the density grid (thread length or needle points per mm²) and its blur.
