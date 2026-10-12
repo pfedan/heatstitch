@@ -705,7 +705,8 @@ shots.fabric = async () => {
 
 // 17. save: the Speichern menu with hoop 100 × 100 and PES
 shots.save = async (lang) => {
-  const { page, close } = await boot(lang);
+  // Taller than the rest, so the whole menu fits without scrolling.
+  const { page, close } = await boot(lang, { width: 1280, height: 1020 });
   await example(page, 'cat');
   await setControl(page, '#hoop', '100x100');
   await page.waitForTimeout(600);

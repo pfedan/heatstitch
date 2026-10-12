@@ -192,6 +192,11 @@
               <button type="button" id="save-file" class="primary save-go">
                 <svg class="i" aria-hidden="true"><use href="#i-save" /></svg><span data-i18n="save.file"></span>
               </button>
+              <!-- "An die Maschine": USB stick and share, closed until wanted; filled by src/areas/files/machine.ts. -->
+              <details class="send-machine" id="send-machine" data-section="sendMachine">
+                <summary><svg class="i" aria-hidden="true"><use href="#i-chevron-down" /></svg><span data-i18n="files.send.title"></span></summary>
+                <div class="send-body" id="send-body"></div>
+              </details>
               <div class="save-more">
                 <!-- A split button: the row saves everything, the arrow offers the active design on its own. -->
                 <div class="save-split">

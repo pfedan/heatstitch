@@ -163,15 +163,20 @@ export class CorrectPanel {
       if (f) this.names.set(f, this.saveName.value);
     });
     const save = () => {
-      const f = this.last?.file;
-      if (!f || !isOutputFormat(this.saveFormat.value)) return;
-      const name = cleanName(this.saveName.value) || cleanName(FileList.saveName(f)) || 'design';
-      hooks.save(this.saveFormat.value, name);
+      const c = this.chosen();
+      if (c) hooks.save(c.format, c.name);
     };
     this.saveFile.addEventListener('click', save);
     this.saveName.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') save();
     });
+  }
+
+  /** The format and name the design would be saved with now; null with nothing to save. */
+  chosen(): { format: OutputFormat; name: string } | null {
+    const f = this.last?.file;
+    if (!f?.pattern || !isOutputFormat(this.saveFormat.value)) return null;
+    return { format: this.saveFormat.value, name: cleanName(this.saveName.value) || cleanName(FileList.saveName(f)) || 'design' };
   }
 
   /** Drops a name typed for saving `f`, so the field offers the design's new name. */

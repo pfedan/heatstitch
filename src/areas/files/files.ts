@@ -6,6 +6,8 @@ import { h, icon } from '../../shell/h';
 import { toast } from '../../shell/ui';
 import { FileList, type LoadedFile } from '../../ui/fileList';
 import { hoopLabel, hoopMessage } from '../../ui/hoopPanel';
+import { initSendToMachine, type DesignFile } from './machine';
+import { stickSupported } from '../../send/stick';
 
 /** What the area "Dateien" needs from the app: the file list and the ways to open and save. */
 export interface FilesAreaApp {
@@ -16,6 +18,8 @@ export interface FilesAreaApp {
   loadExample(path: string): Promise<void>;
   /** Saves everything open, or with `only` just that design. */
   saveProject(only?: LoadedFile): Promise<void>;
+  /** The active design as it would be saved now, for sending it to the machine. */
+  designFile(): DesignFile | null;
   /** Whether Bild umwandeln holds a picture, which a whole project takes along. */
   hasImage(): boolean;
 }
@@ -36,6 +40,9 @@ const SPRITE = `
 <symbol id="i-files-hoop" viewBox="0 0 20 20"><rect x="3" y="3" width="14" height="14" rx="4" /><rect x="5.5" y="5.5" width="9" height="9" rx="2" stroke-dasharray="2 1.6" /></symbol>
 <symbol id="i-files-x" viewBox="0 0 20 20"><path d="m6 6 8 8M14 6l-8 8" /></symbol>
 <symbol id="i-files-lock" viewBox="0 0 20 20"><path d="M6.5 9V6.5a3.5 3.5 0 0 1 7 0V9" /><rect x="4.5" y="9" width="11" height="8" rx="1.5" /></symbol>
+<symbol id="i-files-usb" viewBox="0 0 20 20"><path d="M7 2.5h6v5H7z" /><path d="M5.5 7.5h9v7a3 3 0 0 1-3 3h-3a3 3 0 0 1-3-3z" /><path d="M8.7 4.5h.01M11.3 4.5h.01" /></symbol>
+<symbol id="i-files-wifi" viewBox="0 0 20 20"><path d="M2.5 7.5a11 11 0 0 1 15 0" /><path d="M5 10.5a7.2 7.2 0 0 1 10 0" /><path d="M7.6 13.4a3.4 3.4 0 0 1 4.8 0" /><circle cx="10" cy="16" r=".6" class="fill" /></symbol>
+<symbol id="i-files-share" viewBox="0 0 20 20"><path d="M10 12.5V3m-3.5 3.5L10 3l3.5 3.5" /><path d="M6.5 9H5a1.5 1.5 0 0 0-1.5 1.5v5A1.5 1.5 0 0 0 5 17h10a1.5 1.5 0 0 0 1.5-1.5v-5A1.5 1.5 0 0 0 15 9h-1.5" /></symbol>
 <symbol id="i-files-recent" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7" /><path d="M10 6v4l2.5 1.5" /></symbol>`;
 
 function addSprite(): void {
@@ -239,10 +246,15 @@ export function initFilesArea(app: FilesAreaApp): void {
     if (f?.pattern) void app.saveProject(f);
   });
 
+  const send = initSendToMachine($('send-body'), () => app.designFile());
+  command({ id: 'save.stick', label: 'files.cmd.stick', group: G, icon: 'files-usb', when: () => !!active()?.pattern && notImage() && stickSupported() && !saveBtn.disabled, run: () => send.toStick() });
+  formatSelect.addEventListener('change', () => send.refresh());
+
   const showSave = () => {
     showFormat();
     showHoop();
     showSplit();
+    send.refresh();
   };
   new MutationObserver(() => savePop.isOpen() && showSave()).observe($('save-pop'), { attributes: true, attributeFilter: ['hidden'] });
   // Once something is saved or opened elsewhere, the popover has done its job.

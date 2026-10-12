@@ -734,3 +734,186 @@ body.dragging::after {
 .save-split-item .i {
   color: var(--muted);
 }
+
+/* "An die Maschine": closed until wanted, then quiet rows like the ones below and a status line. */
+.send-machine {
+  margin: 0 -6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+}
+
+.send-machine summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  list-style: none;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.send-machine summary::-webkit-details-marker {
+  display: none;
+}
+
+.send-machine summary .i {
+  width: 14px;
+  height: 14px;
+  transform: rotate(-90deg);
+  transition: transform 120ms;
+}
+
+.send-machine[open] summary .i {
+  transform: none;
+}
+
+.send-machine summary:hover {
+  color: var(--ink);
+}
+
+.send-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 2px;
+}
+
+.send-hint,
+.send-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 2px 8px 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.send-status .i {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+.send-status[data-kind='ok'] .i {
+  color: var(--accent);
+}
+
+.send-status[data-kind='warn'] {
+  color: var(--ink);
+}
+
+.send-status[hidden] {
+  display: none;
+}
+
+.send-wlan {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 2px 6px 4px 36px;
+}
+
+.send-wlan[hidden] {
+  display: none;
+}
+
+.send-wlan .send-hint {
+  margin: 0;
+  font-size: 11px;
+}
+
+.send-wlan .send-status {
+  margin: 0;
+}
+
+.send-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.send-btn {
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.send-btn:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+}
+
+.send-btn.send-go {
+  border-color: var(--accent);
+}
+
+.send-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.send-targets {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.send-target {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr;
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.send-target input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.send-target b {
+  font-size: 13px;
+}
+
+.send-target small {
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.send-target:has(input:checked) {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.send-target:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.send-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.send-progress progress {
+  flex: 1;
+  accent-color: var(--accent);
+}

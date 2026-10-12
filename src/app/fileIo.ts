@@ -276,7 +276,15 @@ export function bindFileIo(app: FileIoApp) {
     if (params.files.length) void openFiles(await Promise.all(params.files.map((h) => h.getFile())));
   });
 
-  initFilesArea({ files: app.files, settings: app.settings, setMode: (m) => app.setMode(m), newDesign, loadExample, saveProject, hasImage: () => !!app.imageMode.snapshot() });
+  /** The active design as the save popover would write it now. */
+  const designFile = () => {
+    const f = app.files.active;
+    const c = app.correctPanel.chosen();
+    if (!f?.pattern || !c) return null;
+    const pattern = { ...f.pattern, name: c.name };
+    return { ...c, data: () => writePattern(pattern, c.format, { hoop: f.material.hoop }) };
+  };
+  initFilesArea({ files: app.files, settings: app.settings, setMode: (m) => app.setMode(m), newDesign, loadExample, saveProject, designFile, hasImage: () => !!app.imageMode.snapshot() });
 
   return { openFiles, openProject, adoptMaterial, storeMaterial, newDesign, currentProject, saveProject };
 }

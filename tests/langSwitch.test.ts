@@ -146,6 +146,15 @@ const STATES: Record<string, (page: Page) => Promise<void>> = {
     await page.click('#color-list');
     await page.locator('dialog.color-list[open]').waitFor();
   },
+  'the save menu with To the machine open': async (page) => {
+    await loadCat(page);
+    await page.click('#save-button');
+    await page.click('#send-machine > summary');
+    // As if Ember Bridge were not there (a refused connection would log an error): the Wi-Fi help shows.
+    await page.route('http://127.0.0.1:17831/**', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '{}', headers: { 'access-control-allow-origin': '*' } }));
+    await page.locator('#send-body .save-row', { hasText: /WLAN|Wi-Fi/ }).click();
+    await page.locator('.send-wlan .send-status').waitFor();
+  },
   'Dichte with findings': async (page) => {
     await loadCat(page);
     await mode(page, 'density');
