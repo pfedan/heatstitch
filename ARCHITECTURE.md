@@ -73,11 +73,14 @@ consumes it. Screen and shape code works in millimetres (`records / 10`).
 Undo and redo are lists of earlier and undone versions per file (`src/ui/fileList.ts`), trimmed by
 count and memory (`trimUndo`).
 
-What a version knows about its objects (see below) is kept beside it in a `WeakMap` and *can*
-change after the version was made (`remember`, `setMemory`). So the file list snapshots it when a
-version becomes current (`keepVersion`) and puts the snapshot back on undo, redo or switching
-designs (`backToVersion` in `src/model/objects.ts`); `hold()` does the same for tries that must
-leave no trace. Undo restores records and knowledge together, all or nothing.
+What a version knows about its objects (see below) is kept beside it in a `WeakMap`. While a
+version is being made it can still learn (`remember`, `setMemory`); once the file list keeps it
+(`keepVersion`), its knowledge is settled, and writing to it throws in development. To learn
+something about a kept version, make a new one with `relearn(p, learn)`: it copies the knowledge,
+lets `learn` change it and returns the new version for undo. `backToVersion` puts the kept
+knowledge back on undo, redo or switching designs, and `hold()` does the same for tries that must
+leave no trace (all in `src/model/objects.ts`). Undo restores records and knowledge together, all
+or nothing.
 
 ### Objects
 
@@ -294,8 +297,8 @@ comment at the top or above their main export; read it before changing the modul
 
 ## Rules that keep the parts together
 
-- **New versions, never in-place edits.** Go through `nextVersion`, so undo, the object table and
-  remembered knowledge stay consistent. Undo restores everything or nothing.
+- **New versions, never in-place edits.** Go through `nextVersion` (or `relearn` when only the
+  knowledge changes), so undo, the object table and remembered knowledge stay consistent. Undo restores everything or nothing.
 - **Keep known and guessed apart.** Don't store guesses as if they were forms; `geo` is only set
   for shapes that were given.
 - **Every new relationship between objects gets an invariant** in the torture test, and a feature
