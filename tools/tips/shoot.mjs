@@ -80,6 +80,8 @@ const toggle = (id, on) => (page) =>
  */
 const pressed = (x, y, buttons, index) => async (page) => {
   await page.mouse.click(x, y);
+  // The panel of the picked object builds after the click; waiting on it alone timed out at times.
+  await page.waitForTimeout(1000);
   await page.waitForFunction(([sel, i]) => document.querySelectorAll(sel).length > i, [buttons, index], { timeout: 10_000 });
   await page.evaluate(([sel, i]) => document.querySelectorAll(sel)[i].click(), [buttons, index]);
   await page.waitForTimeout(3000);
@@ -87,7 +89,10 @@ const pressed = (x, y, buttons, index) => async (page) => {
   await page.waitForTimeout(500);
 };
 
-/** The embossing motif `index` (1 to 4, see deco.ts) on the red tatami of the Musterkarte, in the live light. */
+/**
+ * Pattern `index` of a tatami (1 to 4 the textures, 5 to 8 the embossing motifs, see deco.ts) on
+ * the red tatami of the Musterkarte, in the live light.
+ */
 const embossed = (index) => async (page) => {
   await design('Musterkarte')(page);
   await pressed(814, 455, '.motif-row button', index)(page);
@@ -110,10 +115,14 @@ const SHOTS = {
   'view-stitches': [design('Blume'), [640, 260, 320, 200]],
   'view-shapes': [async (page) => (await design('Blume')(page), shapesView(page)), [640, 260, 320, 200]],
   light: [async (page) => (await design('Schriftzug')(page), toggle('live-light', true)(page)), [520, 590, 320, 200]],
-  'motif-diamonds': [embossed(1), [754, 418, 120, 75]],
-  'motif-waves': [embossed(2), [754, 418, 120, 75]],
-  'motif-stars': [embossed(3), [754, 418, 120, 75]],
-  'motif-hearts': [embossed(4), [754, 418, 120, 75]],
+  'texture-zigzag': [embossed(1), [754, 418, 120, 75]],
+  'texture-swell': [embossed(2), [754, 418, 120, 75]],
+  'texture-steps': [embossed(3), [754, 418, 120, 75]],
+  'texture-herringbone': [embossed(4), [754, 418, 120, 75]],
+  'motif-diamonds': [embossed(5), [754, 418, 120, 75]],
+  'motif-waves': [embossed(6), [754, 418, 120, 75]],
+  'motif-stars': [embossed(7), [754, 418, 120, 75]],
+  'motif-hearts': [embossed(8), [754, 418, 120, 75]],
   'echo-one': [design('Linieneffekte'), [470, 136, 368, 230]],
   'echo-both': [design('Linieneffekte'), [836, 362, 320, 200]],
   shadow: [design('Linien mit Parametern'), [720, 793, 180, 112.5]],

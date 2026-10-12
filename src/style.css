@@ -3738,3 +3738,13 @@ button.mini-sw.thread-sw {
     break-inside: avoid;
   }
 }
+
+/* The patterns of a tatami: textures in the first line, embossed motifs in the second. */
+.motif-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+}
+
+.motif-grid button {
+  min-height: 44px;
+}
