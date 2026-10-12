@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { hreflangLinks, langPage, SITE, type Page } from '../src/build/langPages';
 
 const read = (f: string) => new TextDecoder().decode(readFileSync(new URL(`../${f}`, import.meta.url)));
-const source: Record<Page, string> = { app: read('index.html'), docs: read('docs.html'), videos: read('videos.html') };
+const source: Record<Page, string> = { app: read('index.html'), docs: read('docs.html'), videos: read('videos.html'), legal: read('legal.html') };
 const head = (html: string) => html.slice(0, html.indexOf('</head>'));
 const meta = (html: string, key: string) => new RegExp(`<meta (?:name|property)="${key}" content="([^"]*)"`).exec(html)?.[1];
 
@@ -49,6 +49,28 @@ describe('one address per language', () => {
       for (const lang of ['de', 'en'] as const) expect(langPage(source[page], page, lang)).toContain(hreflangLinks(page));
     }
     expect(hreflangLinks('docs')).toContain(`hreflang="x-default" href="${SITE}docs.html"`);
+  });
+
+  it('the legal page stays in its language: its own article, the guide and its sections in de/', () => {
+    const de = langPage(source.legal, 'legal', 'de');
+    expect(de).toContain('<article lang="de">');
+    expect(de).not.toContain('<article lang="en">');
+    expect(head(de)).toMatch(/<title>heatstitch: Impressum und Datenschutz/);
+    expect(de).toContain(`<link rel="canonical" href="${SITE}de/legal.html" />`);
+    expect(de).toContain('href="docs.html#de-lettering"');
+    expect(de).toContain('id="impressum"');
+    expect(de).toContain('id="datenschutz"');
+    const en = langPage(source.legal, 'legal', 'en');
+    expect(en).toContain('id="imprint"');
+    expect(en).toContain('id="privacy"');
+  });
+
+  it('every page of the guide and the videos leads to the legal page of its language', () => {
+    for (const page of ['docs', 'videos'] as const) {
+      expect(langPage(source[page], page, 'de')).toContain('<a href="legal.html#impressum">Impressum</a>');
+      expect(langPage(source[page], page, 'en')).toContain('<a href="legal.html#privacy">Privacy</a>');
+    }
+    expect(langPage(source.app, 'app', 'de')).toContain('href="legal.html#imprint"');
   });
 
   it('a head tag that is gone stops the build instead of leaving English under de/', () => {

@@ -16,6 +16,7 @@ import { de as library } from './areas/library';
 
 export const deBase = {
   'app.docs': 'Anleitung',
+  'app.legal': 'Impressum und Datenschutz',
   'files.title': 'Dateien',
   'files.privacy': 'Deine Dateien verlassen nie dein Gerät.',
   'files.privacy.detail': 'Alles bleibt in deinem Browser. Kein Server, kein Tracking.',

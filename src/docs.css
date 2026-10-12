@@ -339,6 +339,25 @@ code {
   color: var(--muted);
 }
 
+/* Legal notice and privacy, at the end of every page of the site. */
+.doc-foot {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 16px 16px 32px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.doc-foot a {
+  color: inherit;
+}
+
+.legal-contact {
+  font-style: normal;
+}
+
 figure {
   margin: 20px 0;
 }
