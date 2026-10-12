@@ -12,9 +12,9 @@
  */
 
 export const BRIDGE_URL = 'http://127.0.0.1:17831';
-export const BRIDGE_DOWNLOAD = 'https://github.com/EmberSoftwareInc/ember-bridge/releases/latest';
-/** Opens Bridge on its settings page, where the allowed web origins are. */
-export const BRIDGE_SETTINGS = 'ember-bridge://connect';
+/** Ember Bridge's own guides: installing, and letting a web page send. We point there and give no support for it. */
+export const BRIDGE_GUIDE = 'https://github.com/EmberSoftwareInc/ember-bridge/blob/main/docs/getting-started.md';
+export const BRIDGE_ALLOW_GUIDE = 'https://github.com/EmberSoftwareInc/ember-bridge/blob/main/docs/connecting-ember.md#allowed-web-origins';
 /** Formats Bridge sends (PES and DST of ours; PHC and PHX are Brother's own). */
 export const BRIDGE_FORMATS = ['pes', 'dst'] as const;
 

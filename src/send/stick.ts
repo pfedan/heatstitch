@@ -4,6 +4,11 @@
  * Access API (Chrome and Edge on the desktop). The chosen folder is remembered in IndexedDB, so the
  * next time one click is enough; the browser asks again for permission once per visit.
  *
+ * A file already on the stick is never replaced (the new one becomes Rose-2.PES), and the files macOS
+ * leaves on FAT sticks are removed after writing: `._Rose.PES` carries the design's extension, so
+ * machines list it as a second design that will not open. Bastidor (MIT,
+ * github.com/diogobernini/bastidor, src/main/drives.js) cleans sticks the same way.
+ *
  * WebUSB cannot do this: mass storage is a protected interface class there.
  */
 
@@ -16,6 +21,8 @@ interface DirHandle {
   readonly name: string;
   getDirectoryHandle(name: string, o?: { create?: boolean }): Promise<DirHandle>;
   getFileHandle(name: string, o?: { create?: boolean }): Promise<{ createWritable(): Promise<{ write(d: BlobPart): Promise<void>; close(): Promise<void> }> }>;
+  entries(): AsyncIterable<[string, { kind: 'file' | 'directory' }]>;
+  removeEntry(name: string): Promise<void>;
   queryPermission?(o: { mode: 'readwrite' }): Promise<PermissionState>;
   requestPermission?(o: { mode: 'readwrite' }): Promise<PermissionState>;
 }
@@ -33,6 +40,10 @@ export function stickSupported(): boolean {
  * machines show the first characters only. Umlauts are spelled out, other accents dropped.
  */
 export function stickFileName(name: string, format: OutputFormat): string {
+  return `${stickBase(name)}.${format.toUpperCase()}`;
+}
+
+function stickBase(name: string): string {
   const base = name
     .replace(/Ä/g, 'Ae').replace(/Ö/g, 'Oe').replace(/Ü/g, 'Ue')
     .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
@@ -43,7 +54,7 @@ export function stickFileName(name: string, format: OutputFormat): string {
     .replace(/_+/g, '_')
     .replace(/^[_-]+|[_-]+$/g, '')
     .slice(0, 32);
-  return `${base || 'design'}.${format.toUpperCase()}`;
+  return base || 'design';
 }
 
 /**
@@ -63,7 +74,7 @@ export async function stickFolder(root: DirHandle, format: OutputFormat): Promis
   return { dir: root, path: [] };
 }
 
-/** Whether a file of that name is there already (it is then replaced). */
+/** Whether a file of that name is there already. */
 async function exists(dir: DirHandle, name: string): Promise<boolean> {
   try {
     await dir.getFileHandle(name);
@@ -73,11 +84,49 @@ async function exists(dir: DirHandle, name: string): Promise<boolean> {
   }
 }
 
+/** `Rose.PES`, or `Rose-2.PES`, `Rose-3.PES` ... when the folder has it already: nothing on the stick is replaced. */
+export async function freeStickName(dir: DirHandle, name: string, format: OutputFormat): Promise<string> {
+  const base = stickBase(name);
+  const ext = format.toUpperCase();
+  let file = `${base}.${ext}`;
+  for (let k = 2; await exists(dir, file); k++) file = `${base}-${k}.${ext}`;
+  return file;
+}
+
+/** The macOS files that do not belong on a stick. */
+export const isMacLeftover = (name: string): boolean => name === '.DS_Store' || name.startsWith('._');
+
+/**
+ * Removes macOS leftovers from `dir` and the folders in it (not from hidden folders such as
+ * .Trashes, which machines do not show), at most `depth` folders deep. Returns how many went.
+ */
+export async function cleanStick(dir: DirHandle, depth = 3): Promise<number> {
+  let removed = 0;
+  const sub: string[] = [];
+  try {
+    for await (const [name, entry] of dir.entries()) {
+      if (entry.kind === 'file' && isMacLeftover(name)) {
+        try {
+          await dir.removeEntry(name);
+          removed++;
+        } catch {
+          // Gone already or not ours to remove: leave it.
+        }
+      } else if (entry.kind === 'directory' && !name.startsWith('.') && depth > 1) sub.push(name);
+    }
+  } catch {
+    return removed;
+  }
+  for (const name of sub) removed += await cleanStick(await dir.getDirectoryHandle(name), depth - 1).catch(() => 0);
+  return removed;
+}
+
 export interface StickWritten {
   name: string;
   /** Folders below the stick's root; empty for the root. */
   path: string[];
-  replaced: boolean;
+  /** macOS files removed from the stick. */
+  cleaned: number;
 }
 
 /** Writes the file onto the stick. Throws when permission is refused or the stick is gone. */
@@ -86,13 +135,15 @@ export async function writeToStick(root: DirHandle, format: OutputFormat, name: 
     if (!root.requestPermission || (await root.requestPermission({ mode: 'readwrite' })) !== 'granted') throw new StickError('denied');
   }
   const { dir, path } = await stickFolder(root, format);
-  const fileName = stickFileName(name, format);
-  const replaced = await exists(dir, fileName);
+  const fileName = await freeStickName(dir, name, format);
   const file = await dir.getFileHandle(fileName, { create: true });
   const w = await file.createWritable();
   await w.write(data as BlobPart);
   await w.close();
-  return { name: fileName, path, replaced };
+  // macOS writes the ._ file as the file is closed; a second look a moment later catches a late one.
+  const cleaned = await cleanStick(root);
+  setTimeout(() => void cleanStick(root), 2000);
+  return { name: fileName, path, cleaned };
 }
 
 export class StickError extends Error {

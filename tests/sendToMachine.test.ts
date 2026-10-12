@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { BRIDGE_URL, BridgeError, bridgeHealth, bridgeMachines, bridgePair, bridgeSend } from '../src/send/emberBridge';
-import { stickFileName, stickFolder, writeToStick, type StickHandle } from '../src/send/stick';
+import { cleanStick, isMacLeftover, stickFileName, stickFolder, writeToStick, type StickHandle } from '../src/send/stick';
 
 /** A folder of a stick in memory, as far as the File System Access API is used. */
 class Dir {
   files = new Map<string, Uint8Array<ArrayBufferLike>>();
   dirs = new Map<string, Dir>();
   readonly kind = 'directory' as const;
+  /** Adds the AppleDouble file macOS writes when a file is closed on a FAT stick. */
+  macOS = false;
   constructor(readonly name: string, private permission: PermissionState = 'granted') {}
   async getDirectoryHandle(name: string): Promise<Dir> {
     const d = this.dirs.get(name);
@@ -18,9 +20,20 @@ class Dir {
     return {
       createWritable: async () => {
         let data: Uint8Array<ArrayBufferLike> = new Uint8Array();
-        return { write: async (d: BlobPart) => void (data = d as Uint8Array), close: async () => void this.files.set(name, data) };
+        return { write: async (d: BlobPart) => void (data = d as Uint8Array), close: async () => {
+            this.files.set(name, data);
+            if (this.macOS) this.files.set(`._${name}`, new Uint8Array(4096));
+          },
+        };
       },
     };
+  }
+  async *entries(): AsyncIterable<[string, { kind: 'file' | 'directory' }]> {
+    for (const n of [...this.files.keys()]) yield [n, { kind: 'file' }];
+    for (const [n, d] of [...this.dirs]) yield [n, d];
+  }
+  async removeEntry(name: string): Promise<void> {
+    if (!this.files.delete(name)) throw new DOMException('missing', 'NotFoundError');
   }
   async queryPermission() {
     return this.permission;
@@ -50,14 +63,39 @@ describe('USB stick', () => {
     expect((await stickFolder(asHandle(new Dir('STICK')), 'jef')).path).toEqual([]);
   });
 
-  it('writes the bytes and says when it replaced a file', async () => {
+  it('never replaces a design already on the stick', async () => {
     const stick = new Dir('STICK');
-    const first = await writeToStick(asHandle(stick), 'pes', 'Rose', new Uint8Array([1, 2]));
-    expect(first).toEqual({ name: 'Rose.PES', path: [], replaced: false });
-    expect([...stick.files.get('Rose.PES')!]).toEqual([1, 2]);
-    const again = await writeToStick(asHandle(stick), 'pes', 'Rose', new Uint8Array([3]));
-    expect(again.replaced).toBe(true);
-    expect([...stick.files.get('Rose.PES')!]).toEqual([3]);
+    stick.files.set('Rose.PES', new Uint8Array([9]));
+    const w = await writeToStick(asHandle(stick), 'pes', 'Rose', new Uint8Array([1, 2]));
+    expect(w).toEqual({ name: 'Rose-2.PES', path: [], cleaned: 0 });
+    expect([...stick.files.get('Rose-2.PES')!]).toEqual([1, 2]);
+    expect([...stick.files.get('Rose.PES')!]).toEqual([9]);
+    expect((await writeToStick(asHandle(stick), 'pes', 'Rose', new Uint8Array([3]))).name).toBe('Rose-3.PES');
+  });
+
+  it('takes away the ._ file macOS adds, and earlier ones in folders, never designs or hidden folders', async () => {
+    const stick = new Dir('STICK');
+    stick.macOS = true;
+    stick.files.set('.DS_Store', new Uint8Array());
+    const sub = new Dir('Blumen');
+    for (const n of ['rose.jef', '._rose.jef']) sub.files.set(n, new Uint8Array());
+    const trash = new Dir('.Trashes');
+    trash.files.set('._alt.pes', new Uint8Array());
+    stick.dirs.set('Blumen', sub);
+    stick.dirs.set('.Trashes', trash);
+    const w = await writeToStick(asHandle(stick), 'pes', 'Katze', new Uint8Array([1]));
+    expect(w.cleaned).toBe(3);
+    expect([...stick.files.keys()]).toEqual(['Katze.PES']);
+    expect([...sub.files.keys()]).toEqual(['rose.jef']);
+    expect(trash.files.size).toBe(1);
+  });
+
+  it('knows the files macOS leaves', async () => {
+    expect(isMacLeftover('._katze.pes')).toBe(true);
+    expect(isMacLeftover('.DS_Store')).toBe(true);
+    expect(isMacLeftover('katze.pes')).toBe(false);
+    expect(isMacLeftover('.Trashes')).toBe(false);
+    expect(await cleanStick(asHandle(new Dir('EMPTY')))).toBe(0);
   });
 
   it('writes nothing without permission', async () => {

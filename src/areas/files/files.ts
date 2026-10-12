@@ -7,6 +7,7 @@ import { toast } from '../../shell/ui';
 import { FileList, type LoadedFile } from '../../ui/fileList';
 import { hoopLabel, hoopMessage } from '../../ui/hoopPanel';
 import { initSendToMachine, type DesignFile } from './machine';
+import { stickSupported } from '../../send/stick';
 
 /** What the area "Dateien" needs from the app: the file list and the ways to open and save. */
 export interface FilesAreaApp {
@@ -245,7 +246,8 @@ export function initFilesArea(app: FilesAreaApp): void {
     if (f?.pattern) void app.saveProject(f);
   });
 
-  const send = initSendToMachine($('send-machine'), () => app.designFile());
+  const send = initSendToMachine($('send-body'), () => app.designFile());
+  command({ id: 'save.stick', label: 'files.cmd.stick', group: G, icon: 'files-usb', when: () => !!active()?.pattern && notImage() && stickSupported() && !saveBtn.disabled, run: () => send.toStick() });
   formatSelect.addEventListener('change', () => send.refresh());
 
   const showSave = () => {

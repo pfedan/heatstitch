@@ -1,11 +1,11 @@
 import { onLangChange, t, type Key } from '../../i18n';
 import { h, icon } from '../../shell/h';
-import { STORAGE_NS } from '../../storage/namespace';
 import type { OutputFormat } from '../../writers';
+import { STORAGE_NS } from '../../storage/namespace';
 import {
-  BRIDGE_DOWNLOAD,
+  BRIDGE_ALLOW_GUIDE,
   BRIDGE_FORMATS,
-  BRIDGE_SETTINGS,
+  BRIDGE_GUIDE,
   BridgeError,
   bridgeDiscover,
   bridgeHealth,
@@ -42,18 +42,27 @@ const store = (k: string, v: string | null) => {
   }
 };
 
-/** What the WLAN part shows; one state at a time, drawn by `wlanView`. */
+/** Ember Bridge runs on Windows, macOS and Linux only: no Wi-Fi entry on a phone or tablet. */
+function onComputer(): boolean {
+  const n = navigator as Navigator & { userAgentData?: { mobile?: boolean } };
+  if (n.userAgentData?.mobile) return false;
+  // An iPad says it is a Mac; it has touch points, a Mac has none.
+  return !/Android|iPhone|iPad/i.test(n.userAgent) && !(/Macintosh/.test(n.userAgent) && n.maxTouchPoints > 1);
+}
+
+/** What the Wi-Fi part shows; one state at a time, drawn by `wlanView`. */
 type Wlan =
   | { s: 'closed' }
   | { s: 'checking' }
   | { s: 'missing' }
-  | { s: 'origin' }
+  | { s: 'allow'; copied: boolean }
   | { s: 'pairing' }
   | { s: 'refused'; key: Key }
   | { s: 'searching' }
   | { s: 'machines'; list: BridgeMachine[]; note?: { kind: 'ok' | 'warn'; text: string } }
   | { s: 'sending'; list: BridgeMachine[]; pct: number };
 
+/** What to tell the user when the machine or Bridge said no; anything else gets a plain "try again". */
 const ERRORS: Record<string, Key> = {
   device_busy: 'files.send.wlan.err.busy',
   machine_unreachable: 'files.send.wlan.err.unreachable',
@@ -66,32 +75,30 @@ const ERRORS: Record<string, Key> = {
 };
 
 /**
- * "An die Maschine" in the save popover: write onto a USB stick (or a machine on the cable that
- * shows up as a drive), send over WLAN through Ember Bridge (Brother, Baby Lock), or share to an
- * app. Each way shows only where the browser and the chosen format allow it; where none does, a
- * line says how to get the file onto the stick by hand.
+ * "An die Maschine" in the save popover, a section that opens on demand: write onto a USB stick (or
+ * a machine on the cable that shows up as a drive), send over Wi-Fi through Ember Bridge (Brother,
+ * Babylock), or share to an app. Each way shows only where the browser and the chosen format allow
+ * it; where the stick cannot be written, a line says how to get the file there by hand. The Wi-Fi
+ * steps speak of the machine and the app, never of addresses, ports or tokens.
  */
-export function initSendToMachine(root: HTMLElement, design: () => DesignFile | null): { refresh(): void } {
+export function initSendToMachine(body: HTMLElement, design: () => DesignFile | null): { refresh(): void; toStick(): void } {
   const rows = h('div', { class: 'send-rows' });
-  const stickStatus = h('p', { class: 'send-status', role: 'status', hidden: true });
+  const status = h('p', { class: 'send-status', role: 'status', hidden: true });
   const wlanBox = h('div', { class: 'send-wlan', hidden: true });
-  root.replaceChildren(h('h3', { class: 'send-title' }, t('files.send.title')), rows, wlanBox);
-  const title = root.firstElementChild as HTMLElement;
+  body.replaceChildren(rows, wlanBox);
+  let wlan: Wlan = { s: 'closed' };
+  let selected = load(MACHINE_KEY);
 
   let stick: StickHandle | null = null;
   void rememberedStick().then((s) => {
     stick = s;
     draw();
   });
-  let wlan: Wlan = { s: 'closed' };
-  let selected = load(MACHINE_KEY);
-
-  // USB stick ----------------------------------------------------------------------------------
 
   const say = (text: string, kind: 'ok' | 'warn' = 'ok') => {
-    stickStatus.hidden = false;
-    stickStatus.dataset.kind = kind;
-    stickStatus.replaceChildren(icon(kind === 'ok' ? 'files-check' : 'files-alert'), h('span', null, text));
+    status.hidden = false;
+    status.dataset.kind = kind;
+    status.replaceChildren(icon(kind === 'ok' ? 'files-check' : 'files-alert'), h('span', null, text));
   };
 
   async function toStick(pickNew: boolean): Promise<void> {
@@ -101,8 +108,8 @@ export function initSendToMachine(root: HTMLElement, design: () => DesignFile | 
     try {
       if (pickNew || !stick) stick = await pickStick();
       const w = await writeToStick(stick, d.format, d.name, d.data());
-      const where = w.path.length ? t('files.send.stick.where', { path: w.path.join('/') }) : '';
-      say(t(w.replaced ? 'files.send.stick.replaced' : 'files.send.stick.done', { file: w.name, stick: stick.name, where }));
+      const vars = { file: w.name, stick: stick.name, where: w.path.length ? t('files.send.stick.where', { path: w.path.join('/') }) : '', n: w.cleaned };
+      say(t(w.cleaned === 0 ? 'files.send.stick.done' : w.cleaned === 1 ? 'files.send.stick.cleaned.one' : 'files.send.stick.cleaned', vars));
     } catch (err) {
       if (err instanceof StickError && err.code === 'cancelled') return;
       console.warn('Writing to the stick failed', err);
@@ -111,14 +118,14 @@ export function initSendToMachine(root: HTMLElement, design: () => DesignFile | 
     draw();
   }
 
-  // WLAN through Ember Bridge -------------------------------------------------------------------
+  // Wi-Fi through Ember Bridge -----------------------------------------------------------------
 
   const setWlan = (w: Wlan) => {
     wlan = w;
     draw();
   };
 
-  /** Finds Bridge, pairs once, then lists the machines. Every step that waits on the user says what to do. */
+  /** Finds Bridge, asks once whether heatstitch may send, then lists the machines. */
   async function connect(): Promise<void> {
     setWlan({ s: 'checking' });
     if (!(await bridgeHealth())) return setWlan({ s: 'missing' });
@@ -127,7 +134,7 @@ export function initSendToMachine(root: HTMLElement, design: () => DesignFile | 
       try {
         if (token) return setWlan({ s: 'machines', list: await bridgeMachines(fetch, token) });
       } catch (err) {
-        // A token renewed in Bridge since: pair anew.
+        // Allowed once, but no longer (renewed in Bridge): ask again.
         if (!(err instanceof BridgeError && err.code === 'unauthorized')) throw err;
         store(TOKEN_KEY, null);
       }
@@ -142,17 +149,16 @@ export function initSendToMachine(root: HTMLElement, design: () => DesignFile | 
   function fail(err: unknown): void {
     const code = err instanceof BridgeError ? err.code : 'unknown';
     if (code === 'unauthorized') {
-      // The token was renewed in Bridge while the panel was open: pair again.
       store(TOKEN_KEY, null);
       return void connect();
     }
     if (code === 'not_running') return setWlan({ s: 'missing' });
-    if (code === 'origin_not_allowed') return setWlan({ s: 'origin' });
+    if (code === 'origin_not_allowed') return setWlan({ s: 'allow', copied: false });
     if (code === 'pairing_denied') return setWlan({ s: 'refused', key: 'files.send.wlan.denied' });
     if (code === 'pairing_expired') return setWlan({ s: 'refused', key: 'files.send.wlan.expired' });
+    console.warn('Sending over Wi-Fi failed', err);
     const list = 'list' in wlan ? wlan.list : [];
-    const text = ERRORS[code] ? t(ERRORS[code]) : t('files.send.wlan.err.other', { msg: err instanceof Error ? err.message : String(err) });
-    setWlan({ s: 'machines', list, note: { kind: 'warn', text } });
+    setWlan({ s: 'machines', list, note: { kind: 'warn', text: t(ERRORS[code] ?? 'files.send.wlan.err.other') } });
   }
 
   async function search(): Promise<void> {
@@ -172,8 +178,8 @@ export function initSendToMachine(root: HTMLElement, design: () => DesignFile | 
     if (!d || !token) return;
     setWlan({ s: 'sending', list, pct: 0 });
     try {
-      const job = await bridgeSend(fetch, token, m.ip, stickFileName(d.name, d.format), d.data(), (p) => setWlan({ s: 'sending', list, pct: Math.round(p * 100) }));
-      setWlan({ s: 'machines', list, note: { kind: 'ok', text: t('files.send.wlan.done', { file: job.storedAs || stickFileName(d.name, d.format), machine: m.label }) } });
+      await bridgeSend(fetch, token, m.ip, stickFileName(d.name, d.format), d.data(), (p) => setWlan({ s: 'sending', list, pct: Math.round(p * 100) }));
+      setWlan({ s: 'machines', list, note: { kind: 'ok', text: t('files.send.wlan.done', { machine: m.label }) } });
     } catch (err) {
       fail(err);
     }
@@ -183,6 +189,7 @@ export function initSendToMachine(root: HTMLElement, design: () => DesignFile | 
   const link = (key: Key, href: string) => h('a', { class: 'send-btn', href, target: href.startsWith('http') ? '_blank' : null, rel: 'noopener' }, t(key));
   const line = (text: string, kind?: 'ok' | 'warn' | 'busy') =>
     h('p', { class: 'send-status', 'data-kind': kind ?? null, role: 'status' }, kind && kind !== 'busy' ? icon(kind === 'ok' ? 'files-check' : 'files-alert') : null, h('span', null, text));
+  const actions = (...items: Node[]) => h('div', { class: 'send-actions' }, ...items);
 
   function wlanView(): Node[] {
     switch (wlan.s) {
@@ -191,29 +198,35 @@ export function initSendToMachine(root: HTMLElement, design: () => DesignFile | 
       case 'checking':
         return [line(t('files.send.wlan.checking'), 'busy')];
       case 'missing':
-        return [line(t('files.send.wlan.missing')), h('div', { class: 'send-actions' }, link('files.send.wlan.download', BRIDGE_DOWNLOAD), button('files.send.wlan.retry', () => void connect(), 'link'))];
-      case 'origin':
         return [
-          line(t('files.send.wlan.origin', { origin: location.origin })),
-          h(
-            'div',
-            { class: 'send-actions' },
-            link('files.send.wlan.open', BRIDGE_SETTINGS),
-            button('files.send.wlan.copy', () => void navigator.clipboard?.writeText(location.origin), 'link'),
-            button('files.send.wlan.retry', () => void connect(), 'link'),
-          ),
+          line(t('files.send.wlan.missing')),
+          actions(link('files.send.wlan.guide', BRIDGE_GUIDE), button('files.send.wlan.retry', () => void connect(), 'link')),
+          h('p', { class: 'send-hint' }, t('files.send.wlan.nosupport')),
         ];
+      case 'allow': {
+        // Bridge lets only pages it knows ask; the address goes to the clipboard, not on the screen.
+        const copy = () =>
+          void navigator.clipboard?.writeText(location.origin).then(
+            () => setWlan({ s: 'allow', copied: true }),
+            () => {},
+          );
+        return [
+          line(t('files.send.wlan.allow')),
+          actions(button(wlan.copied ? 'files.send.wlan.copied' : 'files.send.wlan.copy', copy), link('files.send.wlan.guide', BRIDGE_ALLOW_GUIDE), button('files.send.wlan.next', () => void connect(), 'link')),
+          h('p', { class: 'send-hint' }, t('files.send.wlan.nosupport')),
+        ];
+      }
       case 'pairing':
         return [line(t('files.send.wlan.pairing'), 'busy')];
       case 'refused':
-        return [line(t(wlan.key), 'warn'), h('div', { class: 'send-actions' }, button('files.send.wlan.retry', () => void connect(), 'link'))];
+        return [line(t(wlan.key), 'warn'), actions(button('files.send.wlan.retry', () => void connect(), 'link'))];
       case 'searching':
         return [line(t('files.send.wlan.searching'), 'busy')];
       case 'machines':
       case 'sending': {
         const { list } = wlan;
         const sending = wlan.s === 'sending';
-        if (!list.length) return [line(t('files.send.wlan.none')), h('div', { class: 'send-actions' }, button('files.send.wlan.search', () => void search()))];
+        if (!list.length) return [line(t('files.send.wlan.none')), actions(button('files.send.wlan.search', () => void search()))];
         const target = list.find((m) => m.ip === selected) ?? list[0];
         const opts = list.map((m) =>
           h(
@@ -222,7 +235,6 @@ export function initSendToMachine(root: HTMLElement, design: () => DesignFile | 
             h('input', {
               type: 'radio',
               name: 'send-target',
-              value: m.ip,
               checked: m === target,
               disabled: sending,
               onchange: () => {
@@ -232,15 +244,15 @@ export function initSendToMachine(root: HTMLElement, design: () => DesignFile | 
               },
             }),
             h('b', null, m.label),
-            h('small', null, [m.model, m.ip].filter(Boolean).join(' · ')),
+            m.model && m.model !== m.label ? h('small', null, m.model) : null,
           ),
         );
         const go = h('button', { type: 'button', class: 'send-btn send-go', disabled: sending, onclick: () => void send(target, list) }, t('files.send.wlan.send', { machine: target.label }));
         return [
           h('div', { class: 'send-targets', role: 'radiogroup', 'aria-label': t('files.send.wlan') }, opts),
-          h('div', { class: 'send-actions' }, go, h('button', { type: 'button', class: 'link', disabled: sending, onclick: () => void search() }, t('files.send.wlan.search'))),
+          actions(go, h('button', { type: 'button', class: 'link', disabled: sending, onclick: () => void search() }, t('files.send.wlan.search.again'))),
           ...(wlan.s === 'sending'
-            ? [h('div', { class: 'send-progress' }, h('progress', { max: 100, value: wlan.pct }), h('span', null, t('files.send.wlan.sending', { pct: wlan.pct })))]
+            ? [h('div', { class: 'send-progress' }, h('progress', { max: 100, value: wlan.pct, 'aria-label': t('files.send.wlan.sending') }), h('span', null, t('files.send.wlan.sending')))]
             : wlan.note
               ? [line(wlan.note.text, wlan.note.kind)]
               : []),
@@ -249,15 +261,11 @@ export function initSendToMachine(root: HTMLElement, design: () => DesignFile | 
     }
   }
 
-  // Rows ---------------------------------------------------------------------------------------
-
   const row = (ic: string, label: string, sub: string, hint: Key, onclick: () => void, extra: Record<string, unknown> = {}) =>
     h('button', { type: 'button', class: 'pop-row save-row', title: t(hint), onclick, ...extra }, icon(ic), h('span', null, h('span', null, label), h('small', null, sub)));
 
   function draw(): void {
-    title.textContent = t('files.send.title');
-    const d = design();
-    const format = d?.format ?? 'pes';
+    const format = design()?.format ?? 'pes';
     const out: Node[] = [];
     if (stickSupported()) {
       const main = row('files-usb', t('files.send.stick'), stick ? t('files.send.stick.on', { name: stick.name }) : t('files.send.stick.pick'), 'files.send.stick.hint', () => void toStick(false));
@@ -271,20 +279,21 @@ export function initSendToMachine(root: HTMLElement, design: () => DesignFile | 
             )
           : main,
         // The news of the last write, right under it.
-        stickStatus,
+        status,
       );
+    } else {
+      // Without a direct way to the stick: how to do it by hand.
+      out.push(h('p', { class: 'send-hint' }, t(format === 'jef' ? 'files.send.stick.copy.jef' : 'files.send.stick.copy')));
     }
-    const wlanOk = (BRIDGE_FORMATS as readonly string[]).includes(format);
+    const wlanOk = onComputer() && (BRIDGE_FORMATS as readonly string[]).includes(format);
     if (wlanOk) {
       out.push(
         row('files-wifi', t('files.send.wlan'), t('files.send.wlan.sub'), 'files.send.wlan.hint', () => {
           // One piece of news at a time.
-          stickStatus.hidden = true;
+          status.hidden = true;
           if (wlan.s === 'closed') void connect();
           else setWlan({ s: 'closed' });
-        }, {
-          'aria-expanded': String(wlan.s !== 'closed'),
-        }),
+        }, { 'aria-expanded': String(wlan.s !== 'closed') }),
       );
     }
     if (shareSupported(format)) {
@@ -296,8 +305,6 @@ export function initSendToMachine(root: HTMLElement, design: () => DesignFile | 
       );
     }
     rows.replaceChildren(...out);
-    // Without a direct way to the stick: how to do it by hand.
-    if (!stickSupported()) rows.append(h('p', { class: 'send-hint' }, t(format === 'jef' ? 'files.send.stick.copy.jef' : 'files.send.stick.copy')));
     wlanBox.hidden = !wlanOk || wlan.s === 'closed';
     wlanBox.replaceChildren(...(wlanOk ? wlanView() : []));
   }
@@ -307,9 +314,10 @@ export function initSendToMachine(root: HTMLElement, design: () => DesignFile | 
   return {
     refresh: () => {
       // A new look at the popover starts without old news.
-      stickStatus.hidden = true;
+      status.hidden = true;
       if (wlan.s === 'machines') wlan = { ...wlan, note: undefined };
       draw();
     },
+    toStick: () => void toStick(false),
   };
 }
