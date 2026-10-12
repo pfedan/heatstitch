@@ -16,7 +16,7 @@ import { STORAGE_NS } from '../storage/namespace';
 import { isMac } from '../shell/commands';
 import { getLang } from '../i18n';
 import { tapInput } from './tap';
-import { designState, viewState, type DesignState, type DevApp, type ViewState } from './console';
+import { designState, startProject, viewState, type DesignState, type DevApp, type ViewState } from './console';
 
 /** A button, field or other element: how a replay finds it, and where in it the pointer was (0..1). */
 export interface Target {
@@ -69,7 +69,10 @@ export interface Recording {
   viewport: { w: number; h: number };
   /** The app's localStorage at the start, keys without the storage prefix (settings, view choices). */
   storage: Record<string, string>;
-  /** What was open at the start, as a .heatstitch file; null when nothing was. */
+  /**
+   * The design the recording belongs to, as it was at the start, as a .heatstitch file of that design alone
+   * (other open designs stay out); the picture of Bild instead when no design was active; null when nothing was.
+   */
   start: Uint8Array | null;
   startState: DesignState;
   view: ViewState;
@@ -78,6 +81,8 @@ export interface Recording {
 
 export interface Recorder {
   readonly running: boolean;
+  /** Why the recording ended by itself, when it did: another design became active. */
+  readonly ended: string | null;
   stop(): void;
   recording(): Recording;
 }
@@ -252,10 +257,8 @@ function storageNow(): Record<string, string> {
   return out;
 }
 
-export async function startRecorder(app: DevApp): Promise<Recorder> {
-  const project = app.project();
-  delete project.recording;
-  const somethingOpen = project.files.length > 0 || !!project.image;
+export async function startRecorder(app: DevApp, onEnd: (why: string) => void): Promise<Recorder> {
+  const project = startProject(app.project());
   const t0 = performance.now();
   const rec: Recording = {
     format: 'heatstitch-recording',
@@ -266,7 +269,7 @@ export async function startRecorder(app: DevApp): Promise<Recorder> {
     mac: isMac,
     viewport: { w: innerWidth, h: innerHeight },
     storage: storageNow(),
-    start: somethingOpen ? await encodeProject(project) : null,
+    start: project ? await encodeProject(project) : null,
     startState: designState(app.files),
     view: viewState(app),
     events: [],
@@ -466,11 +469,26 @@ export async function startRecorder(app: DevApp): Promise<Recorder> {
 
   // The design after each change ----------------------------------------------------------------
 
+  // A recording belongs to one design: the one active at the start, or the first one made or opened when none was.
+  // Once another becomes active (picked, opened, made or the own one closed), it ends: a replay starts from that design alone.
+  let own = app.files.active?.id ?? null;
   let seen = app.files.active?.pattern ?? null;
   let seenFile = app.files.active ?? null;
+  let seenAt = 0;
+  let ended: string | null = null;
   const timer = setInterval(() => {
     const f = app.files.active ?? null;
     const p = f?.pattern ?? null;
+    if (own === null && f) own = f.id;
+    if (own !== null && f?.id !== own) {
+      // The step that left the design came after its last look; without that design it would not replay.
+      while (ev.length && last()!.t > seenAt) ev.pop();
+      ended = 'Aufzeichnung beendet: ein anderes Stickmuster ist aktiv; eine Aufzeichnung gehört zu einem. / Recording ended: another design is active; a recording belongs to one.';
+      stop();
+      onEnd(ended);
+      return;
+    }
+    seenAt = now();
     if (p === seen && f === seenFile) return;
     seen = p;
     seenFile = f;
@@ -489,17 +507,21 @@ export async function startRecorder(app: DevApp): Promise<Recorder> {
   tapInput((e) => handlers.get(e.type)?.(e));
 
   let running = true;
+  function stop(): void {
+    if (!running) return;
+    running = false;
+    clearInterval(timer);
+    tapInput(null);
+    mark.remove();
+  }
   return {
     get running() {
       return running;
     },
-    stop() {
-      if (!running) return;
-      running = false;
-      clearInterval(timer);
-      tapInput(null);
-      mark.remove();
+    get ended() {
+      return ended;
     },
+    stop,
     recording: () => rec,
   };
 }

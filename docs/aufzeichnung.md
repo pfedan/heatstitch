@@ -14,15 +14,20 @@ In der App die Konsole des Browsers öffnen (Mac: Wahltaste + Cmd + J) und einge
 heatstitch.record()
 ```
 
-Unten links erscheint **● REC**. Die Aufzeichnung läuft bis zum Neuladen der Seite oder bis
-`heatstitch.stop()`. Dann wie gewohnt **Speichern** (Projekt); die Datei enthält die
+Unten links erscheint **● REC**. Die Aufzeichnung läuft bis zum Neuladen der Seite, bis
+`heatstitch.stop()` oder bis ein anderes Stickmuster aktiv wird. Dann wie gewohnt **Speichern** (Projekt); die Datei enthält die
 Aufzeichnung. `heatstitch.save()` speichert auch, wenn kein Stickmuster offen ist.
 
 Verwerfen: `heatstitch.discard()` beendet die Aufzeichnung und wirft sie weg; danach speichert
 das Projekt keine mehr, und `heatstitch.record()` beginnt eine neue. Neuladen verwirft sie auch.
 
-Was beim Start offen war (Stickmuster, Bild, Einstellungen), kommt mit in die Aufzeichnung.
-Man kann also mitten in der Arbeit anfangen, kurz bevor man den Fehler auslöst.
+Eine Aufzeichnung gehört zu einem Stickmuster: dem, das beim Start aktiv ist (war keins offen,
+dem ersten, das man öffnet oder anlegt). Es kommt so, wie es beim Start war, mit Einstellungen
+in die Aufzeichnung; die anderen offenen Stickmuster bleiben draußen. Man kann also mitten in
+der Arbeit anfangen, kurz bevor man den Fehler auslöst. Wird ein anderes Stickmuster aktiv
+(gewählt, geöffnet, angelegt oder das eigene geschlossen), endet die Aufzeichnung von selbst
+und sagt das in der Konsole; der Schritt, der hinausführte, bleibt weg. Ist kein Stickmuster
+aktiv, aber ein Bild offen, kommt das Bild mit.
 
 ## Was mitgeschrieben wird
 

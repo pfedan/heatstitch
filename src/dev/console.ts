@@ -3,14 +3,15 @@
  * and tutorial drafts (src/dev/recorder.ts, loaded only when asked for), and what a replay needs
  * to drive and check the app (tools/recording). Nothing here shows for a normal user.
  *
- *   heatstitch.record()  starts recording, until the page is reloaded or stop() is called
+ *   heatstitch.record()  starts recording in the active design, until the page is reloaded, stop() is
+ *                        called or another design becomes active
  *   heatstitch.stop()    ends it; saving the project still writes what was recorded
  *   heatstitch.discard() ends it and throws it away; saving writes no recording
  *   heatstitch.save()    saves the project with the recording (also when no design is open)
  */
 import type { FileList } from '../ui/fileList';
 import type { Viewport } from '../render/viewport';
-import type { Project } from '../storage/project';
+import { onlyDesign, type Project } from '../storage/project';
 import type { Pattern } from '../model/pattern';
 import type { Recorder, Recording } from './recorder';
 
@@ -72,6 +73,13 @@ export function hashPattern(p: Pattern): string {
   return (h >>> 0).toString(16).padStart(8, '0');
 }
 
+/** What a recording starts from: the active design alone, else the picture, else nothing. */
+export function startProject(p: Project): Project | null {
+  const { recording: _, ...project } = p;
+  if (project.active !== null && project.files[project.active]) return onlyDesign(project, project.active);
+  return project.image ? { ...project, files: [], active: null } : null;
+}
+
 export function designState(files: FileList): DesignState {
   const f = files.active;
   const p = f?.pattern;
@@ -90,11 +98,11 @@ export function installDevConsole(app: DevApp): void {
     async record(): Promise<string> {
       if (recorder?.running) return 'Aufzeichnung läuft schon. / Already recording.';
       const { startRecorder } = await import('./recorder');
-      recorder = await startRecorder(app);
-      return 'Aufzeichnung läuft bis zum Neuladen; Projekt speichern schreibt sie in die Datei. / Recording until reload; saving the project stores it.';
+      recorder = await startRecorder(app, (why) => console.warn(why));
+      return 'Aufzeichnung läuft im aktiven Stickmuster, bis zum Neuladen oder bis ein anderes aktiv wird; Projekt speichern schreibt sie in die Datei. / Recording in the active design, until reload or until another one becomes active; saving the project stores it.';
     },
     stop(): string {
-      if (!recorder?.running) return 'Keine Aufzeichnung. / Not recording.';
+      if (!recorder?.running) return recorder?.ended ?? 'Keine Aufzeichnung. / Not recording.';
       recorder.stop();
       return `Aufzeichnung beendet: ${recorder.recording().events.length} Schritte. Projekt speichern oder heatstitch.save(). / Stopped.`;
     },
