@@ -9,6 +9,7 @@ import { END, STITCH, TRIM, type Pattern } from '../src/model/pattern';
 import { sameColor } from '../src/model/recolor';
 import { backToVersion, lockAt, remember, remembered, restitch, withShortLocks, type SatinSettings } from '../src/model/restitch';
 import { stitchKinds } from '../src/model/sequence';
+import { isRedwork } from '../src/model/along';
 import { currentSettings } from '../src/correct/plan';
 import { deleteObjects, duplicateObject, duplicateObjects, mirrorMatrix, recolorObjects, subtractTop } from '../src/model/shapeOps';
 import { ellipsePath, parsePath, rectPath } from '../src/shape/svgPath';
@@ -98,6 +99,24 @@ describe('found by the torture test', () => {
     expect(remembered(d.cur.p, copies[0])?.free).toBe(true);
     checkEchoes(d.cur.p);
     checkKeys(d.cur.p);
+  });
+
+  it('a copy in place of a line, both sewn as redwork, still remembers its own', () => {
+    // A ring as redwork runs there and back: sewn from the other end it has the very same
+    // stitches, so only the short locks tell the copy apart.
+    const d = new Doc();
+    shapes(d, addShape(empty, { form: parsePath(ellipsePath(10, 20, 9, 10), ID), kind: 'stroke', width: 0 }, COLORS[0], null, options)!.pattern);
+    shapes(d, duplicateObjects(d.cur.p, [0], T, 0)?.pattern);
+    shapes(d, recolorObjects(d.cur.p, [1], COLORS[1], T));
+    expect(d.objects).toHaveLength(2);
+    // Both sewn along the very same form, as in the chain that found it.
+    const form = remembered(d.cur.p, d.objects[0])!.geo!;
+    for (const k of [0, 1]) {
+      const m = remembered(d.cur.p, d.objects[k])!;
+      expect(shapes(d, resewLine(d.cur.p, k, form, { ...m.line!, redwork: true }, T)!.pattern)).toBe(true);
+      checkKeys(d.cur.p);
+    }
+    expect(d.objects.map((o) => isRedwork(remembered(d.cur.p, o)!.line!))).toEqual([true, true]);
   });
 
   it('recoloring a border gives its fill that border thread', () => {
