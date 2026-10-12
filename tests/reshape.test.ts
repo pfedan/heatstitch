@@ -3,13 +3,14 @@ import { describe, expect, it } from 'vitest';
 import { sample } from '../src/digitize/region';
 import { sewObjects, type SewObject } from '../src/model/objects';
 import { STITCH, type Pattern } from '../src/model/pattern';
-import { reshapeFill, scaleBlocked, transformSewObject } from '../src/model/reshape';
+import { reshapeFill, scaleBlocked, transformObjects, transformSewObject } from '../src/model/reshape';
 import { analyze, measureFill, remember, remembered, rememberedIn, restoreRemembered } from '../src/model/restitch';
 import { stitchKinds } from '../src/model/sequence';
 import { parsePattern } from '../src/parsers';
 import { formArea, rotation, scaling, transformForm, translation } from '../src/shape/path';
 import { rasterize } from '../src/shape/rasterize';
 import { guessArea } from '../src/model/geo';
+import { Writer } from './helpers/designs';
 
 const load = (f: string) => parsePattern(readFileSync(new URL(`../public/examples/${f}`, import.meta.url)), f);
 
@@ -93,6 +94,42 @@ describe('moving, turning and scaling objects', () => {
     expect(known.region!.areaMm2 / an.fill!.areaMm2).toBeGreaterThan(2.1);
     expect(known.region!.areaMm2 / an.fill!.areaMm2).toBeLessThan(2.4);
     expect(measureFill(r.pattern, analyze(r.pattern, no, nk, known)).spacing).toBeCloseTo(spacing, 1);
+  });
+});
+
+describe('scaling a satin too narrow for rails', () => {
+  // As the Image mode leaves a satin in a tiny area (an eye of a 2 cm cat): one line there and back,
+  // remembered as satin, with no columns and none to read from its stitches.
+  function design() {
+    const w = new Writer();
+    w.start([0, 0]);
+    for (let y = 0; y <= 10; y += 0.4) {
+      w.to([0, y]);
+      w.to([10, y]);
+    }
+    w.color();
+    w.start([20, 5]);
+    for (const dx of [-0.3, -0.6, -0.3, 0, -0.6, 0, -0.3, -0.6, -0.3, 0]) w.to([20 + dx, 5]);
+    const p = w.b.build('dot', 'pes', [{ r: 250, g: 160, b: 50 }, { r: 40, g: 50, b: 50 }]);
+    const objs = sewObjects(p, stitchKinds(p));
+    const dot = objs[objs.length - 1];
+    remember(p, dot, { region: null, parts: [{ kind: 'satin', end: stitches(p, dot.first, dot.last) }] });
+    return { p, objs, dot };
+  }
+
+  it('scales it with its stitches as they are, and the objects scaled with it too', () => {
+    const { p, objs, dot } = design();
+    const r = transformObjects(p, objs.map((o) => o.index), scaling(2, 2, 0, 0), 3);
+    expect(r, 'the scaling goes through').toBeTruthy();
+    const after = sewObjects(r!.pattern);
+    expect(after.map((o) => o.id)).toEqual(objs.map((o) => o.id));
+    const now = after[after.length - 1];
+    // Twice as long, as many stitches, in its place scaled.
+    expect((now.maxX - now.minX) / 10).toBeCloseTo(1.2, 5);
+    expect(stitches(r!.pattern, now.first, now.last)).toBe(stitches(p, dot.first, dot.last));
+    expect(center(r!.pattern, now)[1]).toBeCloseTo(10, 5);
+    // The fill beside it was sewn anew, twice as wide.
+    expect((after[0].maxX - after[0].minX) / 10).toBeGreaterThan(19);
   });
 });
 

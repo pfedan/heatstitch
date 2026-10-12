@@ -485,14 +485,7 @@ export function transformSewObject(p: Pattern, objs: SewObject[], o: SewObject, 
     return { pattern: r.pattern, first: fresh.first, last: fresh.last, restitched: true };
   }
   // Moved, turned or mirrored: the stitches go along in the object list, with what it remembers.
-  if (rigid) {
-    const list = listOf(p);
-    const k = list.findIndex((e) => e.obj.index === o.index);
-    list[k] = { ...list[k], map: m, memory: known ? transformRemembered(known, m) : null };
-    const next = sewList(p, list, trimMm);
-    const now = sewObjects(next).find((x) => x.id === o.id);
-    return now ? { pattern: next, first: now.first, last: now.last, restitched: false } : null;
-  }
+  if (rigid) return stitchesAlong(p, o, m, trimMm);
   // Scaled: what it remembers is scaled in the object list, and it is sewn anew from that.
   const scaled = known && transformRemembered(known, m);
   if (scaled && specOf(p, o, scaled)) {
@@ -503,6 +496,25 @@ export function transformSewObject(p: Pattern, objs: SewObject[], o: SewObject, 
     const now = sewObjects(next).find((x) => x.id === o.id);
     return now ? { pattern: next, first: now.first, last: now.last, restitched: true } : null;
   }
+  // Nothing to sew it anew from (a satin made too narrow for rails is one line there and back, its
+  // shape unknown and none to read from its stitches): its stitches are scaled as they are, rather
+  // than holding back the objects scaled with it.
+  return resewScaled(p, objs, o, kinds, m, trimMm) ?? stitchesAlong(p, o, m, trimMm);
+}
+
+/** The stitches of `o` taken along by `m` as they are, in the object list, with what it remembers. */
+function stitchesAlong(p: Pattern, o: SewObject, m: Mat, trimMm: number): Transformed | null {
+  const known = remembered(p, o);
+  const list = listOf(p);
+  const k = list.findIndex((e) => e.obj.index === o.index);
+  list[k] = { ...list[k], map: m, memory: known ? transformRemembered(known, m) : null };
+  const next = sewList(p, list, trimMm);
+  const now = sewObjects(next).find((x) => x.id === o.id);
+  return now ? { pattern: next, first: now.first, last: now.last, restitched: false } : null;
+}
+
+/** Object `o` scaled by `m` and sewn anew from its stitches with the settings it has; null when it cannot be. */
+function resewScaled(p: Pattern, objs: SewObject[], o: SewObject, kinds: Uint8Array, m: Mat, trimMm: number): Transformed | null {
   const kept = keepShape(p, o, kinds);
   // Settings as the object has them now (measured after scaling, the rows would be wider apart).
   const given = settingsOf(p, o, kinds);
