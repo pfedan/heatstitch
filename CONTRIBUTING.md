@@ -34,6 +34,9 @@ npm run preview    # serve the build: http://localhost:4173/
 
 There is no backend and no separate lint step; `tsc` in strict mode is the gate.
 
+For a map of the codebase (layers, data model, data flow, workers, tests) read
+[ARCHITECTURE.md](ARCHITECTURE.md) first.
+
 ## Making a change
 
 1. Fork the repository (or create a branch if you have write access) and branch off `main`.

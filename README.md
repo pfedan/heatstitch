@@ -696,6 +696,9 @@ and `CLOUDFLARE_ACCOUNT_ID`. The first deploy creates the Worker and connects he
 
 ## Structure
 
+How the parts work together (data model, data flow, workers, tests) is described in
+[ARCHITECTURE.md](ARCHITECTURE.md).
+
 ```
 src/main.ts      App start; wires the modules in src/app/ together
 src/app/         State, pointer input, keyboard, drawing, shapes, rungs, lettering, order,
