@@ -119,13 +119,29 @@ export function echoLines(line: Pt[], closed: boolean, e: LineEcho, minGap = 0, 
   for (let k = 1; k <= n; k++) if (rings.has(k)) levels.push(e.side === 'in' ? -k : k);
   if (!levels.length) return [];
   if (e.reverse) levels.reverse();
-  const field = gap >= ON_LINE ? distanceField(line, n * gap + 1, gap) : null;
+  // The copies are found on pixels laid from the line's own corner, not from the origin: moved, the
+  // line gets the same copies moved with it (the same stitches, also where a copy starts). The corner
+  // a quarter pixel off the line, so points of the design grid fall between pixel borders, where
+  // rounding does not flip with the last bit of a coordinate.
+  const reach = n * gap + 1;
+  const px = pixelOf(line, reach, gap);
+  const [ox, oy] = line.reduce<Pt>((m, q) => [Math.min(m[0], q[0] - px / 4), Math.min(m[1], q[1] - px / 4)], [Infinity, Infinity]);
+  const local = line.map((q): Pt => [q[0] - ox, q[1] - oy]);
+  const field = gap >= ON_LINE ? distanceField(local, reach, px) : null;
   const out: EchoLine[] = [];
   const turn = closed ? Math.sign(area(line)) : 0;
   let at: Pt | null = null;
   for (const k of levels) {
     // No gap: each copy lies on the line.
-    const pieces = k === 0 ? [base] : !field ? [{ ...base, k }] : copiesAt(field, line, closed, k * gap).map((pc) => ({ ...pc, back: pc.closed && Math.sign(area(pc.line)) !== turn, k }));
+    const pieces =
+      k === 0
+        ? [base]
+        : !field
+          ? [{ ...base, k }]
+          : copiesAt(field, local, closed, k * gap).map((pc) => {
+              const l = pc.line.map((q): Pt => [q[0] + ox, q[1] + oy]);
+              return { line: l, closed: pc.closed, back: pc.closed && Math.sign(area(l)) !== turn, k };
+            });
     for (const pc of order(pieces, at, returns)) {
       out.push(pc);
       at = returns && !pc.closed ? pc.line[0] : pc.line[pc.line.length - 1];
@@ -158,8 +174,8 @@ interface Field {
   d: Float32Array;
 }
 
-/** Distance (mm) of each pixel to the line, out to `reach` mm around it; pixels fine enough for copies `gap` apart. */
-function distanceField(line: Pt[], reach: number, gap: number): Field {
+/** The box around the points of `line`. */
+function boxOf(line: Pt[]): { minX: number; minY: number; maxX: number; maxY: number } {
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
@@ -170,9 +186,20 @@ function distanceField(line: Pt[], reach: number, gap: number): Field {
     maxX = Math.max(maxX, x);
     maxY = Math.max(maxY, y);
   }
+  return { minX, minY, maxX, maxY };
+}
+
+/** The pixel size (mm) of the distance field out to `reach` mm around the line: fine enough for copies `gap` apart. */
+function pixelOf(line: Pt[], reach: number, gap: number): number {
+  const { minX, minY, maxX, maxY } = boxOf(line);
   const span = (maxX - minX + 2 * reach) * (maxY - minY + 2 * reach);
   // A few pixels from copy to copy at least, so near copies stay smooth.
-  const px = Math.max(Math.min(0.1, Math.max(0.02, gap / 4)), Math.sqrt(span / MAX_PIXELS));
+  return Math.max(Math.min(0.1, Math.max(0.02, gap / 4)), Math.sqrt(span / MAX_PIXELS));
+}
+
+/** Distance (mm) of each pixel `px` mm wide to the line, out to `reach` mm around it (see pixelOf). */
+function distanceField(line: Pt[], reach: number, px: number): Field {
+  const { minX, minY, maxX, maxY } = boxOf(line);
   const x0 = Math.floor((minX - reach) / px) - 2;
   const y0 = Math.floor((minY - reach) / px) - 2;
   const w = Math.ceil((maxX + reach) / px) + 2 - x0;

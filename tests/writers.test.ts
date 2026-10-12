@@ -91,6 +91,13 @@ describe('DST writer', () => {
     }
   });
 
+  it('leaves out a jump alone between stitches that does not move (an object led to where the one before ended)', () => {
+    const p = new Shape().to(0, 0).to(1, 0).jump(1, 0).to(2, 0).build();
+    const q = parseDst(writeDst(p));
+    expect(count(q, JUMP)).toBe(0);
+    expect(stitches(q)).toEqual(stitches(p));
+  });
+
   it('writes a color change that moves nothing, the jump after it on its own', () => {
     const p = new Shape().to(0, 0).to(1, 0).color().jump(4, 0).to(4, 1).build();
     const data = writeDst(p);

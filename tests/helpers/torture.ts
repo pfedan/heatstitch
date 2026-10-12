@@ -464,8 +464,13 @@ export const OPS: Op[] = [
       expect(g, 'gathered objects stay objects').toBeTruthy();
       const now = sewObjects(g!.pattern);
       const was = new Map(d.objects.map((o) => [o.id, o]));
-      // The gathered: one after the other from the lead on, all in its thread, each with its stitches.
-      expect(g!.which, 'gathered one after the other, the lead first').toEqual(g!.which.map((_, k) => g!.which[0] + k));
+      // The gathered: one after the other from the lead on, all in its thread, each with its stitches
+      // (a fill's border in its thread right after it, as always).
+      const nowMem = now.map((o) => remembered(g!.pattern, o));
+      const links = new Set(g!.which.map((k) => nowMem[k]?.line?.link).filter(Boolean));
+      const follows = (k: number) => !!nowMem[k]?.outline && links.has(nowMem[k]!.outline);
+      const run = now.slice(g!.which[0]).map((o) => o.index).filter((k) => !follows(k)).slice(0, g!.which.length);
+      expect(g!.which, 'gathered one after the other, the lead first').toEqual(run);
       expect(now[g!.which[0]].id, 'the lead first').toBe(d.objects[lead].id);
       // An appliqué's stops are no change of thread: the blocks after them count as the one before.
       const inner = innerStops(g!.pattern);
@@ -1930,9 +1935,9 @@ export function strayRails(part: Rails[]): number {
   if (!sp || !edgeAlong([...sp.outlines, ...sp.holes], part)) return 0;
   const segs: [number, number, number, number][] = [];
   for (const ring of [...sp.outlines, ...sp.holes]) ring.forEach((a, i) => segs.push([...a, ...ring[(i + 1) % ring.length]] as [number, number, number, number]));
-  // A cut line as far as it cuts (bent ones along their curve, taken on straight to the edge).
+  // A cut line as far as it cuts: taken on straight to the edge (chordOf), bent ones along their curve.
   for (const c of sp.cuts) {
-    const l = c.length === 2 ? c : (reachOf(cutLine(c)) ?? c);
+    const l = reachOf(cutLine(c)) ?? c;
     for (let i = 1; i < l.length; i++) segs.push([l[i - 1][0], l[i - 1][1], l[i][0], l[i][1]]);
   }
   // Each segment filed under the grid cells its box (grown by the 0.05 mm asked) covers: a point is

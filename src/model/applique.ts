@@ -88,8 +88,11 @@ export function appliqueFrom(v: unknown): AppliqueSettings | null {
   return { edge: s.edge, width: Math.min(APPLIQUE_WIDTHS[1], Math.max(APPLIQUE_WIDTHS[0], s.width)), ...(run ? { run } : {}), fabric: s.fabric, color: { r: c.r, g: c.g, b: c.b } };
 }
 
-/** The settings as stored (a copy). */
-export const storeApplique = (s: AppliqueSettings): AppliqueSettings => ({ ...s, ...(s.run ? { run: { ...s.run } } : {}), color: { r: s.color.r, g: s.color.g, b: s.color.b } });
+/**
+ * The settings as stored (a copy), a running edge's stitch as it is sewn (runEdgeOf): what
+ * appliqueFrom reads back from the project file, so a design is the same after save and open.
+ */
+export const storeApplique = (s: AppliqueSettings): AppliqueSettings => ({ ...s, ...(s.run ? { run: runEdgeOf(s) } : {}), color: { r: s.color.r, g: s.color.g, b: s.color.b } });
 
 /** Runs the machine stops before (the fabric laid on, cut off): see objectRecords. */
 export const stopBefore = new WeakSet<Pt[]>();

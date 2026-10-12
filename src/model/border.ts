@@ -322,7 +322,11 @@ export function syncShadows(p: Pattern, trimMm: number): Pattern {
       const partGeo = lineGeoOf(part.memory)!;
       if (same && curGeo && JSON.stringify(storeForm(curGeo)) === JSON.stringify(storeForm(partGeo)) && JSON.stringify(cur!.line) === JSON.stringify(part.memory.line)) continue;
       const runs = lineStitches(partGeo, part.memory.line!);
-      if (!runs.length) continue;
+      // Nothing to sew (no room for the copy beside the line any more): its object goes, it comes back once there is room.
+      if (!runs.length) {
+        if (target) changes.push({ a: leadOf(p, target), b: target.last, recs: [] });
+        continue;
+      }
       let recs = runRecords(runs, trimMm);
       // The very stitches of another object (a shadow landing on a line, say): sewn the other way
       // round, so each remembers its own (memory is keyed by stitches).

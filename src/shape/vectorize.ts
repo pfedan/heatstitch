@@ -133,22 +133,24 @@ type Cubic = [Pt, Pt, Pt, Pt];
 /**
  * Cubic curves through `pts` (Schneider's algorithm, Graphics Gems 1990): one curve fitted by
  * least squares with the given end directions, split at the worst point until every point lies
- * within `tol`.
+ * within `tol`. With `between`, also the curve between two points lies within `tol` of the straight
+ * piece joining them: Schneider measures at the points only, and a curve over few points can bulge
+ * out between them (a short piece next to a corner, say).
  */
-export function fitCubic(pts: Pt[], t1: V, t2: V, tol: number, depth = 0): Cubic[] {
+export function fitCubic(pts: Pt[], t1: V, t2: V, tol: number, depth = 0, between = false): Cubic[] {
   if (pts.length === 2) {
     const d = dist(pts[0], pts[1]) / 3;
     return [[pts[0], add(pts[0], mul(t1, d)), add(pts[1], mul(t2, d)), pts[1]]];
   }
   let u = chordParams(pts);
   let curve = generate(pts, u, t1, t2);
-  let { max, at } = maxError(pts, curve, u);
+  let { max, at } = maxError(pts, curve, u, between);
   if (max < tol) return [curve];
   if (max < tol * 4) {
     for (let it = 0; it < 6; it++) {
       u = reparameterize(pts, u, curve);
       curve = generate(pts, u, t1, t2);
-      ({ max, at } = maxError(pts, curve, u));
+      ({ max, at } = maxError(pts, curve, u, between));
       if (max < tol) return [curve];
     }
   }
@@ -156,7 +158,7 @@ export function fitCubic(pts: Pt[], t1: V, t2: V, tol: number, depth = 0): Cubic
   if (depth > 12 || pts.length < 3) return [curve];
   at = Math.max(1, Math.min(pts.length - 2, at));
   const center = unit(sub(pts[at - 1], pts[at + 1]));
-  return [...fitCubic(pts.slice(0, at + 1), t1, center, tol, depth + 1), ...fitCubic(pts.slice(at), mul(center, -1), t2, tol, depth + 1)];
+  return [...fitCubic(pts.slice(0, at + 1), t1, center, tol, depth + 1, between), ...fitCubic(pts.slice(at), mul(center, -1), t2, tol, depth + 1, between)];
 }
 
 function chordParams(pts: Pt[]): number[] {
@@ -204,7 +206,7 @@ function generate(pts: Pt[], u: number[], t1: V, t2: V): Cubic {
   return [first, add(first, mul(t1, al)), add(last, mul(t2, ar)), last];
 }
 
-function maxError(pts: Pt[], c: Cubic, u: number[]): { max: number; at: number } {
+function maxError(pts: Pt[], c: Cubic, u: number[], between = false): { max: number; at: number } {
   let max = 0;
   let idx = Math.floor(pts.length / 2);
   for (let i = 1; i < pts.length - 1; i++) {
@@ -214,7 +216,26 @@ function maxError(pts: Pt[], c: Cubic, u: number[]): { max: number; at: number }
       idx = i;
     }
   }
+  if (!between) return { max, at: idx };
+  // Halfway between two points: how far the curve lies from the straight piece joining them,
+  // split at the nearer inner point of the two.
+  for (let i = 0; i + 1 < pts.length; i++) {
+    const d = toSegment(at(c, (u[i] + u[i + 1]) / 2), pts[i], pts[i + 1]);
+    if (d > max) {
+      max = d;
+      idx = i === 0 ? 1 : i;
+    }
+  }
   return { max, at: idx };
+}
+
+/** Distance from `q` to the segment from `a` to `b`. */
+function toSegment(q: Pt, a: Pt, b: Pt): number {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const l2 = dx * dx + dy * dy;
+  const t = l2 ? Math.max(0, Math.min(1, ((q[0] - a[0]) * dx + (q[1] - a[1]) * dy) / l2)) : 0;
+  return Math.hypot(q[0] - a[0] - t * dx, q[1] - a[1] - t * dy);
 }
 
 function reparameterize(pts: Pt[], u: number[], c: Cubic): number[] {
