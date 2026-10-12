@@ -68,11 +68,16 @@ arrays, one entry per record.
 This is close to what the machine formats store, so every parser produces it and every writer
 consumes it. Screen and shape code works in millimetres (`records / 10`).
 
-**Patterns are immutable.** An edit never changes a pattern in place; it makes a new *version*
-with `nextVersion(p, changes)` (or `withRecords`). Each version remembers its parent (`parentOf`).
-Undo and redo are simply lists of earlier and undone versions per file (`src/ui/fileList.ts`),
-trimmed by count and memory (`trimUndo`). Because everything a version knows is attached to the
-version itself, undo restores all of it at once or nothing.
+**The records of a pattern are never changed in place.** An edit makes a new *version* with
+`nextVersion(p, changes)` (or `withRecords`). Each version remembers its parent (`parentOf`).
+Undo and redo are lists of earlier and undone versions per file (`src/ui/fileList.ts`), trimmed by
+count and memory (`trimUndo`).
+
+What a version knows about its objects (see below) is kept beside it in a `WeakMap` and *can*
+change after the version was made (`remember`, `setMemory`). So the file list snapshots it when a
+version becomes current (`keepVersion`) and puts the snapshot back on undo, redo or switching
+designs (`backToVersion` in `src/model/objects.ts`); `hold()` does the same for tries that must
+leave no trace. Undo restores records and knowledge together, all or nothing.
 
 ### Objects
 
