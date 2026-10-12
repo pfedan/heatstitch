@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FIGURES, motifFill, TEXTURES, texturePoints } from '../src/digitize/deco';
+import { crossFill, FIGURES, gridFill, motifCrossings, motifFill, TEXTURES, texturePoints } from '../src/digitize/deco';
 import { digitizeDefaults } from '../src/digitize/digitize';
 import { fillRegion } from '../src/digitize/fill';
 import { buildRegion, sample, type Region } from '../src/digitize/region';
@@ -125,6 +125,57 @@ describe('motif fill', () => {
   });
 });
 
+describe('turned patterns', () => {
+  const open = { size: 6, stitch: 2.5, seed: 1, triple: false };
+  // The two directions most thread runs in (degrees, 0 to 175 in steps of 5): the lattice lines,
+  // not the line along the edge, which runs every way.
+  const dirs = (runs: Pt[][]) => {
+    const along = new Map<number, number>();
+    for (const r of runs)
+      for (let i = 1; i < r.length; i++) {
+        const dx = r[i][0] - r[i - 1][0];
+        const dy = r[i][1] - r[i - 1][1];
+        const k = (Math.round((((Math.atan2(dy, dx) * 180) / Math.PI + 360) % 180) / 5) * 5) % 180;
+        along.set(k, (along.get(k) ?? 0) + Math.hypot(dx, dy));
+      }
+    return [...along].sort((x, y) => y[1] - x[1]).slice(0, 2).map(([k]) => k).sort((x, y) => x - y);
+  };
+
+  it('turn a grid, its lines with it, and keep it inside the area', () => {
+    const up = gridFill(disk, open, 'brick', [6, 20])!;
+    const turned = gridFill(disk, { ...open, angle: 30 }, 'brick', [6, 20])!;
+    expect(dirs(up.runs)).toEqual([0, 90]);
+    expect(dirs(turned.runs)).toEqual([30, 120]);
+    for (const q of turned.runs.flat()) expect(sample(disk, disk.sdf, q[0], q[1])).toBeLessThan(0.05);
+  });
+
+  it('leave every needle point where it was at 0 degrees', () => {
+    expect(gridFill(disk, { ...open, angle: 0 }, 'hex', [6, 20])).toEqual(gridFill(disk, open, 'hex', [6, 20]));
+    expect(crossFill(disk, { ...open, angle: 0 }, 'full', [6, 20])).toEqual(crossFill(disk, open, 'full', [6, 20]));
+  });
+
+  it('turn cross stitch and motifs, still one run inside the area', () => {
+    const cr = crossFill(square, { ...open, size: 2.5, angle: 20 }, 'full', [6, 6])!;
+    // Upright the diagonals run at 45 and 135 degrees.
+    expect(dirs(cr.runs)).toEqual([65, 155]);
+    for (const f of FIGURES) {
+      const res = motifFill(disk, { ...open, size: 8, angle: 135 }, f, [6, 20])!;
+      expect(res.runs.length, f).toBe(1);
+      for (const q of res.runs[0]) expect(sample(disk, disk.sdf, q[0], q[1]), f).toBeLessThan(0.05);
+    }
+  });
+
+  it('turn an embossed motif: a row crosses it as the row turned back crosses the upright one', () => {
+    const a = (30 * Math.PI) / 180;
+    // The row along x turned by -30 degrees about the origin, against the motif turned by 30.
+    const back = { o: [5 * Math.sin(a), 5 * Math.cos(a)] as Pt, e: [Math.cos(a), -Math.sin(a)] as Pt };
+    const upright = motifCrossings('hearts', 8, back, 0, 40);
+    const turned = motifCrossings('hearts', 8, { o: [0, 5], e: [1, 0] }, 0, 40, 30);
+    expect(turned.length).toBe(upright.length);
+    turned.forEach((u, i) => expect(u).toBeCloseTo(upright[i], 6));
+  });
+});
+
 const options = digitizeDefaults(DEFAULT_PROFILE);
 const ID = [1, 0, 0, 1, 0, 0] as const;
 const empty = { x: new Int32Array(0), y: new Int32Array(0), cmd: new Uint8Array(0), colors: [] } as never;
@@ -144,7 +195,8 @@ describe('in the design', () => {
     const cases: [string, (f: FillSettings) => FillSettings][] = [
       ['texture', (f) => ({ ...f, pattern: 'tatami', deco: { texture: 'herringbone', textureSize: 9 } })],
       ['rough', (f) => ({ ...f, pattern: 'contour', rough: 0.6, roughSeed: 42 })],
-      ['motifs', (f) => ({ ...f, pattern: 'motifs', deco: { figure: 'flowers' } })],
+      ['motifs', (f) => ({ ...f, pattern: 'motifs', deco: { figure: 'flowers', angle: 20 } })],
+      ['emboss', (f) => ({ ...f, pattern: 'tatami', deco: { emboss: 'stars', embossAngle: 45 } })],
     ];
     for (const [name, s] of cases) {
       const q = sewAs(p, s);

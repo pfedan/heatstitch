@@ -871,12 +871,12 @@ export const OPS: Op[] = [
       const o = pick(r, fills);
       const fill = remembered(d.cur.p, o)!.fill!;
       const kind = pick(r, ['emboss', 'texture', 'fade', ...DECO_PATTERNS, ...OPEN_PATTERNS] as const);
-      const deco = { seed: 1 + Math.floor(r() * 9), focus: [r(), r()] as [number, number], ...(kind === 'motifs' ? { figure: pick(r, FIGURES) } : {}) };
+      const deco = { seed: 1 + Math.floor(r() * 9), focus: [r(), r()] as [number, number], ...(kind === 'motifs' ? { figure: pick(r, FIGURES) } : {}), ...(r() < 0.5 ? { angle: Math.floor(r() * 360) } : {}) };
       // Irregular rows on any covering fill, now and then (as the slider Unregelmäßig).
       const rough = r() < 0.3 ? { rough: 0.2 + 0.8 * r(), roughSeed: 1 + Math.floor(r() * 99) } : {};
       const s: FillSettings =
         kind === 'emboss'
-          ? { ...fill, pattern: 'tatami', deco: { ...deco, emboss: pick(r, MOTIFS) } }
+          ? { ...fill, pattern: 'tatami', deco: { ...deco, emboss: pick(r, MOTIFS), ...(r() < 0.5 ? { embossAngle: Math.floor(r() * 360) } : {}) } }
           : kind === 'texture'
             ? { ...fill, ...rough, pattern: 'tatami', deco: { ...deco, texture: pick(r, TEXTURES), ...(r() < 0.5 ? { textureSize: 4 + 30 * r() } : {}) } }
             : kind === 'fade'
@@ -2041,6 +2041,7 @@ export function checkFillLooks(p: Pattern): void {
       const d = f.deco;
       if (d?.texture !== undefined && !TEXTURES.includes(d.texture)) problems.push(`${o.index}: ${what} texture ${d.texture}`);
       if (d?.figure !== undefined && !FIGURES.includes(d.figure)) problems.push(`${o.index}: ${what} figure ${d.figure}`);
+      for (const a of [d?.angle, d?.embossAngle]) if (a !== undefined && !Number.isFinite(a)) problems.push(`${o.index}: ${what} pattern angle ${a}`);
       if (f.rough !== undefined && !(f.rough >= 0 && f.rough <= 1 && Number.isFinite(f.roughSeed))) problems.push(`${o.index}: ${what} rough ${f.rough} seed ${f.roughSeed}`);
     }
     const f = m?.fill;

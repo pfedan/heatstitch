@@ -70,7 +70,7 @@ export interface FillParams {
   /** Curved rows keep this close to their line (mm); TOLERANCE by default. */
   tolerance?: number;
   /** Straight rows put their needle points on the lines of this motif (embossing, see deco.ts). */
-  emboss?: { motif: Motif; size: number; strong?: boolean };
+  emboss?: { motif: Motif; size: number; strong?: boolean; angle?: number };
   /** Straight rows shift their needle points into a texture (see texturePoints in deco.ts), in place of `offset`. */
   texture?: { kind: Texture; size: number };
   /**
@@ -134,7 +134,7 @@ class Frame {
   private vs: number[] | null = null;
   private k0 = 0;
   /** Needle points on the lines of a motif (embossing). */
-  emboss?: { motif: Motif; size: number; strong?: boolean };
+  emboss?: { motif: Motif; size: number; strong?: boolean; angle?: number };
   /** Needle points shifted into a texture (see FillParams.texture). */
   texture?: { kind: Texture; size: number };
   /** Density falling evenly across the shape (out) or rising (in); see FillParams.fade. */
@@ -406,12 +406,12 @@ function rowStitches(f: Frame, k: number, v: number, from: number, to: number, l
   if (f.texture) pts.push(...texturePoints(f.texture.kind, f.texture.size, len, v, lo, hi, margin));
   else for (let j = Math.ceil((lo + margin) / len - phase); (j + phase) * len <= hi - margin; j++) pts.push((j + phase) * len);
   if (f.emboss) {
-    const { motif, size } = f.emboss;
-    const cross = motifCrossings(motif, size, { o: f.at(0, v), e: f.e }, lo + 0.3, hi - 0.3);
+    const { motif, size, angle } = f.emboss;
+    const cross = motifCrossings(motif, size, { o: f.at(0, v), e: f.e }, lo + 0.3, hi - 0.3, angle);
     pts.splice(0, pts.length, ...embossPoints(cross, pts, len, lo, hi));
     if (f.emboss.strong) {
       const v0 = f.at(0, v);
-      const inside = (u: number) => motifInside(motif, size, [v0[0] + f.e[0] * u, v0[1] + f.e[1] * u]);
+      const inside = (u: number) => motifInside(motif, size, [v0[0] + f.e[0] * u, v0[1] + f.e[1] * u], angle);
       pts.splice(0, pts.length, ...shortInside(pts, inside, len, lo, hi));
     }
   }

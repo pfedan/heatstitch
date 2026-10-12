@@ -77,6 +77,8 @@ export interface DecoSettings {
   embossSize?: number;
   /** Embossing that shows clearly: shorter stitches inside the motif as well (see motifInside). */
   embossStrong?: boolean;
+  /** The embossed motif turned by this many degrees, clockwise on screen; upright when not set. */
+  embossAngle?: number;
   /**
    * Tatami: needle points shifted into a texture (see texturePoints), in place of the offset; not
    * with `emboss`, which wins when both are set.
@@ -99,6 +101,8 @@ export interface DecoSettings {
   size?: number;
   /** Open patterns: every stitch three times. */
   triple?: boolean;
+  /** Grids, motifs and cross stitch: the pattern turned by this many degrees; upright when not set. */
+  angle?: number;
   grid?: GridKind;
   cross?: CrossKind;
   /** Motif fill: its figure; hearts when not set. */
@@ -1050,7 +1054,7 @@ function isDeco(d: unknown): d is DecoSettings {
     typeof s === 'object' &&
     (s.emboss === undefined || MOTIFS.includes(s.emboss)) &&
     (s.texture === undefined || TEXTURES.includes(s.texture)) &&
-    [s.textureSize, s.embossSize, s.height, s.length, s.strength, s.seed, s.size].every((v) => v === undefined || finite(v)) &&
+    [s.textureSize, s.embossSize, s.embossAngle, s.angle, s.height, s.length, s.strength, s.seed, s.size].every((v) => v === undefined || finite(v)) &&
     (s.focus === undefined || isShare(s.focus)) &&
     (s.centers === undefined || (Array.isArray(s.centers) && s.centers.length >= 1 && s.centers.length <= MAX_SWIRLS && s.centers.every(isShare))) &&
     (s.triple === undefined || typeof s.triple === 'boolean') &&
@@ -2464,7 +2468,7 @@ export function fillRuns(area: Region, s: FillSettings, way: FillWay): NewFill |
 
 /** Embossing or a texture of a tatami (embossing wins when both are set). */
 function looks(d: DecoSettings | undefined): Pick<FillParams, 'emboss' | 'texture'> {
-  if (d?.emboss) return { emboss: { motif: d.emboss, size: d.embossSize ?? DECO_DEFAULTS.embossSize, strong: !!d.embossStrong } };
+  if (d?.emboss) return { emboss: { motif: d.emboss, size: d.embossSize ?? DECO_DEFAULTS.embossSize, strong: !!d.embossStrong, angle: d.embossAngle ?? 0 } };
   if (d?.texture) {
     const [lo, hi] = TEXTURE_SIZE_RANGE;
     return { texture: { kind: d.texture, size: Math.min(hi, Math.max(lo, d.textureSize ?? TEXTURE_SIZE)) } };
@@ -2548,7 +2552,7 @@ function openFill(r: Region, s: FillSettings, fp: FillParams, start: Pt) {
   const pat = s.pattern as OpenPattern;
   const d = { ...DECO_DEFAULTS, ...s.deco };
   const [lo, hi] = OPEN_SIZE_RANGE[pat];
-  const p: OpenParams = { size: Math.min(hi, Math.max(lo, d.size ?? OPEN_SIZE[pat])), stitch: Math.min(s.stitch, 3), seed: d.seed, triple: d.triple };
+  const p: OpenParams = { size: Math.min(hi, Math.max(lo, d.size ?? OPEN_SIZE[pat])), stitch: Math.min(s.stitch, 3), seed: d.seed, triple: d.triple, angle: d.angle ?? 0 };
   if (pat === 'crosshatch') return crosshatchFill(r, { ...fp, spacing: p.size, stitch: p.stitch, angle: Number.isFinite(s.angle) ? s.angle : 0, pull: 0, underlay: false }, start);
   if (pat === 'meander') return meanderFill(r, p, start);
   if (pat === 'maze') return mazeFill(r, p, start);

@@ -106,16 +106,22 @@ const TILES: Record<Motif, Tile> = (() => {
 
 /**
  * A row of a fill: the point at u along it is o + u · e (mm). Motifs stand upright on the design
- * whatever the direction of the rows, tiled from the design origin.
+ * (or turned by their own angle) whatever the direction of the rows, tiled from the design origin.
  */
 export interface MotifRow {
   o: Pt;
   e: Pt;
 }
 
-/** Where the row crosses the motif lines between u = lo and hi, sorted; `size` is the tile width (mm). */
-export function motifCrossings(m: Motif, size: number, row: MotifRow, lo: number, hi: number): number[] {
-  const { o, e } = row;
+/**
+ * Where the row crosses the motif lines between u = lo and hi, sorted; `size` is the tile width
+ * (mm), and the motif is turned by `angle` degrees (see turning).
+ */
+export function motifCrossings(m: Motif, size: number, row: MotifRow, lo: number, hi: number, angle = 0): number[] {
+  // In the motif's own frame the row is turned back; distances along it stay the same.
+  const { from } = turning(angle);
+  const o = from(row.o);
+  const e = from(row.e);
   const tile = TILES[m];
   const tw = tile.w * size;
   const th = tile.h * size;
@@ -156,11 +162,12 @@ export function motifCrossings(m: Motif, size: number, row: MotifRow, lo: number
 }
 
 /**
- * Whether point `q` (mm) lies inside the motif: between the two lines of a wave, or within a
- * diamond, star or heart. Counts the lines crossed on the way to the corner of its tile, which is
+ * Whether point `at` (mm) lies inside the motif turned by `angle` degrees: between the two lines
+ * of a wave, or within a diamond, star or heart. Counts the lines crossed on the way to the corner of its tile, which is
  * outside every motif.
  */
-export function motifInside(m: Motif, size: number, q: Pt): boolean {
+export function motifInside(m: Motif, size: number, at: Pt, angle = 0): boolean {
+  const q = turning(angle).from(at);
   const tile = TILES[m];
   const tw = tile.w * size;
   const th = tile.h * size;
@@ -540,6 +547,27 @@ export function regionBox(r: Region): [number, number, number, number] {
   return [(r.x0 + x0) * r.pxMm, (r.y0 + y0) * r.pxMm, (r.x0 + x1) * r.pxMm, (r.y0 + y1) * r.pxMm];
 }
 
+/**
+ * A pattern turned by `angle` degrees (clockwise on screen) about the design origin: `to` takes a
+ * point of the upright pattern onto the design, `from` back. At 0 both leave every point exactly
+ * as it is.
+ */
+export function turning(angle = 0): { to: (q: Pt) => Pt; from: (q: Pt) => Pt } {
+  const a = (angle * Math.PI) / 180;
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  return { to: (q) => [c * q[0] - s * q[1], s * q[0] + c * q[1]], from: (q) => [c * q[0] + s * q[1], c * q[1] - s * q[0]] };
+}
+
+/** The region's box in the frame of a pattern turned by `angle` degrees (see turning). */
+function turnedBox(r: Region, angle = 0): [number, number, number, number] {
+  const [x0, y0, x1, y1] = regionBox(r);
+  if (!angle) return [x0, y0, x1, y1];
+  const { from } = turning(angle);
+  const qs = ([[x0, y0], [x1, y0], [x1, y1], [x0, y1]] as Pt[]).map(from);
+  return [Math.min(...qs.map((q) => q[0])), Math.min(...qs.map((q) => q[1])), Math.max(...qs.map((q) => q[0])), Math.max(...qs.map((q) => q[1]))];
+}
+
 /** One to three points well inside the region, far enough apart, picked by `seed`. */
 export function swirlCenters(r: Region, seed: number): Pt[] {
   const rnd = random(seed * 7919 + 13);
@@ -574,6 +602,8 @@ export interface OpenParams {
   seed: number;
   /** Every stitch three times (bean stitch). */
   triple: boolean;
+  /** Grids, motifs and cross stitch: the pattern turned by this many degrees (see turning). */
+  angle?: number;
 }
 
 /** Bean stitch: forward, back, forward. */
@@ -981,12 +1011,18 @@ class Graph {
   }
 }
 
-/** A grid of honeycombs, diamonds or bricks `size` mm wide, sewn in one go per connected part. */
+/**
+ * A grid of honeycombs, diamonds or bricks `size` mm wide, turned by `p.angle`, sewn in one go per
+ * connected part.
+ */
 export function gridFill(r: Region, p: OpenParams, kind: GridKind, start: Pt): FillResult | null {
-  const [x0, y0, x1, y1] = regionBox(r);
+  const [x0, y0, x1, y1] = turnedBox(r, p.angle);
+  const { to } = turning(p.angle);
   const s = p.size;
   const pieces: Piece[] = [];
-  const add = (a: Pt, b: Pt) => {
+  const add = (a0: Pt, b0: Pt) => {
+    const a = to(a0);
+    const b = to(b0);
     // Each lattice line once, the same way round from either cell it borders.
     pieces.push(...clipped(r, a[0] < b[0] || (a[0] === b[0] && a[1] < b[1]) ? [a, b] : [b, a], GRID_MARGIN));
   };
@@ -1039,7 +1075,8 @@ export function gridFill(r: Region, p: OpenParams, kind: GridKind, start: Pt): F
  * as a double line.
  */
 export function motifFill(r: Region, p: OpenParams, figure: Figure, start: Pt): FillResult | null {
-  const [x0, y0, x1, y1] = regionBox(r);
+  const [x0, y0, x1, y1] = turnedBox(r, p.angle);
+  const { to } = turning(p.angle);
   const s = p.size;
   const hy = s * FIGURE_ROW;
   const shape = figureOutline(figure, s * FIGURE_SHARE);
@@ -1052,7 +1089,9 @@ export function motifFill(r: Region, p: OpenParams, figure: Figure, start: Pt): 
   });
   const pieces: Piece[] = [];
   const inside = (q: Pt) => sample(r, r.sdf, q[0], q[1]) < -GRID_MARGIN;
-  const add = (a: Pt, b: Pt) => {
+  const add = (a0: Pt, b0: Pt) => {
+    const a = to(a0);
+    const b = to(b0);
     // The short pieces of a curve are all kept (a grid drops pieces under MIN_PIECE where the edge
     // cuts them), so a figure the edge cuts stays one line from edge to edge.
     const m: Pt = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
@@ -1212,14 +1251,16 @@ function latticeGraph(r: Region, pieces: Piece[], margin: number): Graph {
 }
 
 /**
- * Cross stitch on a grid of `size` mm cells anchored at the design origin, over the cells wholly
- * inside. Only the diagonals are sewn (each there and back, like Ink/Stitch's even cross
+ * Cross stitch on a grid of `size` mm cells anchored at the design origin and turned by `p.angle`,
+ * over the cells wholly inside. Only the diagonals are sewn (each there and back, like Ink/Stitch's even cross
  * stitch), so no thread runs along the cells' sides.
  */
 export function crossFill(r: Region, p: OpenParams, kind: CrossKind, start: Pt): FillResult | null {
-  const [x0, y0, x1, y1] = regionBox(r);
+  const [x0, y0, x1, y1] = turnedBox(r, p.angle);
+  const { to } = turning(p.angle);
   const c = p.size;
   const g = new Graph();
+  const add = (a: Pt, b: Pt) => g.add(to(a), to(b));
   const inset = 0.1;
   for (let j = Math.floor(y0 / c); j <= Math.ceil(y1 / c); j++) {
     for (let i = Math.floor(x0 / c); i <= Math.ceil(x1 / c); i++) {
@@ -1231,14 +1272,14 @@ export function crossFill(r: Region, p: OpenParams, kind: CrossKind, start: Pt):
         [L + c, T + c],
         [L, T + c],
       ];
-      if (!corners.every((q) => sample(r, r.sdf, q[0], q[1]) < -inset)) continue;
+      if (!corners.map(to).every((q) => sample(r, r.sdf, q[0], q[1]) < -inset)) continue;
       const [tl, tr, br, bl] = corners;
       if (kind === 'double') {
         const m: Pt = [L + c / 2, T + c / 2];
-        for (const q of [tl, tr, br, bl, [L + c / 2, T], [L + c, T + c / 2], [L + c / 2, T + c], [L, T + c / 2]] as Pt[]) g.add(q, m);
+        for (const q of [tl, tr, br, bl, [L + c / 2, T], [L + c, T + c / 2], [L + c / 2, T + c], [L, T + c / 2]] as Pt[]) add(q, m);
       } else {
-        g.add(bl, tr);
-        if (kind === 'full') g.add(tl, br);
+        add(bl, tr);
+        if (kind === 'full') add(tl, br);
       }
     }
   }
