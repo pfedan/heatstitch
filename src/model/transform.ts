@@ -118,6 +118,10 @@ export function transformRemembered(r: Remembered, m: Mat): Remembered {
     if (r.region) out.region = shiftRegion(r.region, m) ?? rasterize(transformForm(vectorize(r.region), m), r.region.pxMm);
   } else if (use === 'area') out.region = fillArea(out, r.region?.pxMm ?? 0.1);
   else if (use === 'band' && r.region) out.region = shiftRegion(r.region, m) ?? bandArea(out.geo!, out.fill!, r.region.pxMm);
+  // Where it leaves out what lies on top, the area it was sewn on stays behind: its area is whole
+  // again. Still naming that area, `cut` would keep it from being sewn anew on what is left where
+  // the moved form leaves the same pixels (a round form turned about its middle).
+  delete out.cut;
   if (r.shape) out.shape = shiftRegion(r.shape, m) ?? rasterize(transformForm(vectorize(r.shape), m), r.shape.pxMm) ?? undefined;
   if (r.columns) {
     out.columns = r.columns.map((part) =>

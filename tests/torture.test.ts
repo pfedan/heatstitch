@@ -14,7 +14,7 @@ import { currentSettings } from '../src/correct/plan';
 import { deleteObjects, duplicateObject, duplicateObjects, mirrorMatrix, recolorObjects, subtractTop } from '../src/model/shapeOps';
 import { ellipsePath, parsePath, rectPath } from '../src/shape/svgPath';
 import { loadOps } from '../src/shape/ops';
-import { chainSeeds, ID, options, T, COLORS, empty, knowledge, Doc, shapes, transform, boxOf, saveAndOpen, checkWellFormed, checkAllKnown, checkPartsFit, checkBorders, checkObjectList, checkKeys, checkKnockouts, checkCrosshatch, checkExport, checkSewDesign, checkFollowers, checkEchoes, checkRedwork, chain, borderedSquare, borderOf, restitchFill, squareOf, took, type Version } from './helpers/torture';
+import { chainSeeds, ID, options, T, COLORS, empty, knowledge, Doc, shapes, transform, boxOf, saveAndOpen, checkWellFormed, checkAllKnown, checkPartsFit, checkBorders, checkObjectList, checkKeys, checkKnockouts, checkAreas, checkCrosshatch, checkExport, checkSewDesign, checkFollowers, checkEchoes, checkRedwork, chain, borderedSquare, borderOf, restitchFill, squareOf, took, type Version } from './helpers/torture';
 import { motifStitches } from '../src/digitize/motif';
 import type { Pt } from '../src/digitize/skeleton';
 import { analyze, measureFill } from '../src/model/restitch';
@@ -145,6 +145,20 @@ describe('found by the torture test', () => {
       const pts = motifStitches(line, false, 'chevron', 2.3, 6.6, side);
       expect(Math.max(...pts.map(off))).toBeLessThan(2.3 / 2 + 0.01);
     }
+  });
+
+  it('a fill leaving out what lies on top, mirrored onto the same pixels, is sewn anew on what is left', () => {
+    const d = new Doc();
+    shapes(d, addShape(empty, { form: parsePath(rectPath(10, 10, 20, 20, 0, 0), ID), kind: 'fill' }, COLORS[0], null, options)!.pattern);
+    // A disc over one corner only: the square's stitches mirrored along leave out the other corner.
+    shapes(d, addShape(d.cur.p, { form: parsePath(ellipsePath(28, 12, 5, 5), ID), kind: 'fill' }, COLORS[1], null, options)!.pattern);
+    shapes(d, setKnockout(d.cur.p, [0], true, T)!.pattern);
+    const left = remembered(d.cur.p, d.objects[0])!.region!.areaMm2;
+    // Mirrored about its middle, the square covers the very pixels it did, so the same is left of it.
+    expect(transform(d, [0], [-1, 0, 0, 1, 40, 0])).toBe(true);
+    expect(remembered(d.cur.p, d.objects[0])!.region!.areaMm2).toBeCloseTo(left, 6);
+    checkAreas(d.cur.p);
+    checkKnockouts(d.cur.p);
   });
 });
 
