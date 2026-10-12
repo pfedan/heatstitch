@@ -18,6 +18,8 @@ export interface StitchStyle {
   alpha: Float32Array;
   /** Last record that is sewn; later records are not drawn (player). */
   limit: number;
+  /** First record drawn (1 when not set): the threads under a piece of fabric are drawn apart from those on it. */
+  from?: number;
   /** Jumps without a trim to draw as thread; without it they are left out. */
   carried?: CarriedJumps | null;
 }
@@ -142,7 +144,7 @@ export function drawFlatStitches(ctx: CanvasRenderingContext2D, vp: Viewport, p:
   };
   const end = Math.min(st.limit, p.cmd.length - 1);
   const carried = st.carried?.from;
-  for (let i = 1; i <= end; i++) {
+  for (let i = Math.max(1, st.from ?? 1); i <= end; i++) {
     const jumpFrom = carried ? carried[i] : -1;
     if (p.cmd[i] !== STITCH || (p.cmd[i - 1] !== STITCH && jumpFrom < 0)) continue;
     const a = st.alpha[i];
@@ -384,12 +386,12 @@ export function transitionAt(p: Pattern, list: Transition[], vp: Viewport, sx: n
   return best;
 }
 
-/** Record of the stitch whose segment lies nearest to (x, y) (0.1 mm) within `maxDist`, or -1. */
-export function stitchAt(p: Pattern, x: number, y: number, maxDist: number, limit: number, alpha?: Float32Array): number {
+/** Record of the stitch (from record `from` on) whose segment lies nearest to (x, y) (0.1 mm) within `maxDist`, or -1. */
+export function stitchAt(p: Pattern, x: number, y: number, maxDist: number, limit: number, alpha?: Float32Array, from = 1): number {
   let best = -1;
   let bestD = maxDist;
   const end = Math.min(limit, p.cmd.length - 1);
-  for (let i = 1; i <= end; i++) {
+  for (let i = Math.max(1, from); i <= end; i++) {
     if (p.cmd[i] !== STITCH || p.cmd[i - 1] !== STITCH || (alpha && alpha[i] <= 0)) continue;
     const ax = p.x[i - 1];
     const ay = p.y[i - 1];
@@ -409,15 +411,14 @@ export function stitchAt(p: Pattern, x: number, y: number, maxDist: number, limi
 }
 
 /**
- * The object shown at (x, y) (0.1 mm), or -1: the one of the stitch nearest within `maxDist`, else
- * the appliqué whose piece of fabric lies there. The fabric is drawn under all threads, so a stitch
- * near the pointer wins over it; inside the piece, away from its edge, the fabric is what is seen.
+ * The object shown at (x, y) (0.1 mm), or -1: on an appliqué's piece of fabric the one of the
+ * nearest stitch within `maxDist` sewn after it was laid on (on top of it), else that appliqué;
+ * elsewhere the one of the nearest stitch. What lies under the fabric is not seen there.
  */
 export function objectAtPoint(p: Pattern, objectAt: Int32Array, x: number, y: number, maxDist: number, limit: number, alpha?: Float32Array): number {
-  const i = stitchAt(p, x, y, maxDist, limit, alpha);
-  if (i >= 0) return objectAt[i];
-  const k = pieceAt(p, x / 10, y / 10, limit, alpha);
-  return k >= 0 ? objectAt[k] : -1;
+  const piece = pieceAt(p, x / 10, y / 10, limit, alpha);
+  const i = stitchAt(p, x, y, maxDist, limit, alpha, piece ? piece.place + 1 : 1);
+  return i >= 0 ? objectAt[i] : piece ? objectAt[piece.first] : -1;
 }
 
 /** The shown needle point nearest to (x, y) within `maxDist` (all in 0.1 mm), or -1; later ones win ties. */

@@ -76,61 +76,79 @@ function trace(ctx: CanvasRenderingContext2D, vp: Viewport, form: Form): void {
   }
 }
 
+/** Draws piece `x` as far as it is sewn by record `limit`, `a` opaque; `fabric`: as cloth, else flat. */
+function drawPiece(ctx: CanvasRenderingContext2D, vp: Viewport, x: Shown, limit: number, a: number, fabric: boolean): void {
+  const form = limit >= x.trim ? x.form : x.rough;
+  const { r, g, b } = x.color;
+  ctx.save();
+  ctx.globalAlpha = a;
+  trace(ctx, vp, form);
+  // The cloth lies on the ground: a soft shadow along its edge shows its thickness.
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
+  ctx.shadowBlur = Math.max(1, Math.min(6, vp.scale * 0.5));
+  ctx.shadowOffsetY = Math.max(0.5, Math.min(2, vp.scale * 0.15));
+  ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+  ctx.fill('evenodd');
+  ctx.shadowColor = 'transparent';
+  if (fabric) {
+    ctx.clip('evenodd');
+    const [x0, y0] = vp.toScreen(x.box[0], x.box[1]);
+    const [x1, y1] = vp.toScreen(x.box[2], x.box[3]);
+    drawFabricIn(ctx, vp, x.fabric, [r, g, b], [x0, y0, x1, y1]);
+  } else {
+    ctx.strokeStyle = `rgb(${Math.round(r * 0.6)}, ${Math.round(g * 0.6)}, ${Math.round(b * 0.6)})`;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 /**
- * Draws the pieces of `p` that are laid on by record `limit` (all of them, cut, at the end), each
- * as faint as the first stitch of its appliqué (`alpha`, hidden colors 0) times `opacity`.
+ * Draws the threads of `p` sewn by record `limit` with the pieces of fabric of its appliqués in
+ * between, as they come on the machine: each piece over all that was sewn before its stop to lay it
+ * on, under all after it. `threads(from, to)` draws the stitches of records from..to. Each piece is
+ * as faint as the first stitch of its appliqué (`alpha`, hidden colors 0) times `opacity`;
  * `fabric`: drawn as cloth (realistic view with the fabric look), else flat.
  */
-export function drawPieces(ctx: CanvasRenderingContext2D, vp: Viewport, p: Pattern, limit: number, alpha: Float32Array | null, opacity: number, fabric: boolean): void {
-  const list = piecesOf(p);
-  if (!list.length) return;
-  for (const x of list) {
+export function drawWithPieces(
+  ctx: CanvasRenderingContext2D,
+  vp: Viewport,
+  p: Pattern,
+  limit: number,
+  alpha: Float32Array | null,
+  opacity: number,
+  fabric: boolean,
+  threads: (from: number, to: number) => void,
+): void {
+  let from = 0;
+  for (const x of piecesOf(p)) {
+    if (limit < x.place) break;
     const a = opacity * (alpha ? alpha[x.first] : 1);
-    if (a <= 0 || limit < x.place) continue;
-    const form = limit >= x.trim ? x.form : x.rough;
-    const { r, g, b } = x.color;
-    ctx.save();
-    ctx.globalAlpha = a;
-    trace(ctx, vp, form);
-    // The cloth lies on the ground: a soft shadow along its edge shows its thickness.
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
-    ctx.shadowBlur = Math.max(1, Math.min(6, vp.scale * 0.5));
-    ctx.shadowOffsetY = Math.max(0.5, Math.min(2, vp.scale * 0.15));
-    ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
-    ctx.fill('evenodd');
-    ctx.shadowColor = 'transparent';
-    if (fabric) {
-      ctx.clip('evenodd');
-      const [x0, y0] = vp.toScreen(x.box[0], x.box[1]);
-      const [x1, y1] = vp.toScreen(x.box[2], x.box[3]);
-      drawFabricIn(ctx, vp, x.fabric, [r, g, b], [x0, y0, x1, y1]);
-    } else {
-      ctx.strokeStyle = `rgb(${Math.round(r * 0.6)}, ${Math.round(g * 0.6)}, ${Math.round(b * 0.6)})`;
-      ctx.lineWidth = 1;
-      ctx.stroke();
-    }
-    ctx.restore();
+    if (a <= 0) continue;
+    threads(from, x.place);
+    drawPiece(ctx, vp, x, limit, a, fabric);
+    from = x.place + 1;
   }
+  threads(from, limit);
 }
 
 /** Whether (x, y) (mm) lies on the cloth of `form` (even-odd, as it is drawn). */
 const onCloth = (polys: Pt[][], x: number, y: number): boolean => polys.reduce((n, pts) => (insidePoly(pts, [x, y]) ? n + 1 : n), 0) % 2 === 1;
 
 /**
- * Record of the first stitch of the appliqué whose piece of fabric is shown at (x, y) (mm) by record
- * `limit` (`alpha`: hidden colors 0, as drawn by drawPieces), or -1. Of pieces lying on each other
- * the one laid on last is on top.
+ * The piece of fabric shown at (x, y) (mm) by record `limit` (`alpha`: hidden colors 0, as drawn by
+ * drawWithPieces), or null. Of pieces lying on each other the one laid on last is on top.
  */
-export function pieceAt(p: Pattern, x: number, y: number, limit: number, alpha?: Float32Array | null): number {
+export function pieceAt(p: Pattern, x: number, y: number, limit: number, alpha?: Float32Array | null): Piece | null {
   const list = piecesOf(p);
   for (let k = list.length - 1; k >= 0; k--) {
     const s = list[k];
     if (limit < s.place || (alpha && alpha[s.first] <= 0)) continue;
     if (x < s.box[0] || x > s.box[2] || y < s.box[1] || y > s.box[3]) continue;
     s.polys ??= { cut: s.form.paths.map((path) => flatten(path, 0.2)), rough: s.rough.paths.map((path) => flatten(path, 0.2)) };
-    if (onCloth(limit >= s.trim ? s.polys.cut : s.polys.rough, x, y)) return s.first;
+    if (onCloth(limit >= s.trim ? s.polys.cut : s.polys.rough, x, y)) return s;
   }
-  return -1;
+  return null;
 }
 
 let hidden: { p: Pattern; from: Float32Array; key: string; a: Float32Array } | null = null;

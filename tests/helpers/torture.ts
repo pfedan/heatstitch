@@ -1127,7 +1127,7 @@ export function checkAppliques(p: Pattern): void {
   const end = p.cmd.length - 1;
   for (const x of appliquePieces(p)) {
     const at = pointOnCloth(x);
-    if (at && pieceAt(p, at[0], at[1], end) < x.first) problems.push(`${x.first}: its cloth at ${at.map((v) => v.toFixed(1))} is not found`);
+    if (at && (pieceAt(p, at[0], at[1], end)?.first ?? -1) < x.first) problems.push(`${x.first}: its cloth at ${at.map((v) => v.toFixed(1))} is not found`);
   }
   expect(problems.join('; '), 'appliqués').toBe('');
 }
