@@ -17,8 +17,11 @@ describe('found by the torture test', () => {
   // Found by long runs of the regular chains (with fills on knit): an appliqué's running edge read
   // back from the project with its stitch length filled in; a satin's sections along a straight cut
   // line that reaches to the edge; a contour bulging out between the points it was fitted to; a
-  // jump that does not move written to DST; a fill's border kept right after it when gathered.
-  it.each([31, 53, 70, 80, 513, 563, 569, 582, 612])('chain %i with fills on knit still holds', async (seed) => {
+  // jump that does not move written to DST; a fill's border kept right after it when gathered; a
+  // fill's border in its thread left in the old one when an appliqué's thread was recolored; a
+  // closed line cut out as if it were a fill; a line made from a bordered fill keeping the motif of
+  // a line it was before.
+  it.each([31, 33, 53, 58, 70, 80, 513, 538, 563, 569, 582, 612])('chain %i with fills on knit still holds', async (seed) => {
     await chain(seed, 14, { knit: true });
   }, 60_000);
 });

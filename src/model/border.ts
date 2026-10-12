@@ -32,7 +32,7 @@ import { echoCopyLines, lineStitches } from './line';
 import { ownCopies } from '../digitize/echo';
 import { unionOf } from '../shape/rasterize';
 import { readBorder } from './readBorder';
-import { recolor } from './recolor';
+import { recolor, threadBlocks } from './recolor';
 import { areaOf as formArea, formKey, lineGeoOf, openOf } from './geo';
 
 /**
@@ -717,20 +717,22 @@ function blendRuns(region: Region, s: FillSettings, start: Pt): Pt[][] | null {
 export function recolorBlock(p: Pattern, block: number, color: ThreadColor): Pattern {
   const next = recolor(p, block, color);
   const objs = sewObjects(next);
+  // The blocks that take the thread (with the ones an appliqué goes on in after its stops).
+  const blocks = new Set(threadBlocks(p, block));
   // A fill in it whose border (in the fill's thread) is sewn in another block: the border keeps
   // its thread, only this block changes.
   const old = p.colors[block];
   objs.forEach((o) => {
-    const m = o.block === block ? remembered(next, o) : undefined;
+    const m = blocks.has(o.block) ? remembered(next, o) : undefined;
     const b = borderOf(m);
     if (!b?.link || b.color || !old) return;
     const border = objs.find((x) => remembered(next, x)?.outline === b.link);
-    if (!border || border.block === block) return;
+    if (!border || blocks.has(border.block)) return;
     // The thread it is sewn in (for parts of a fill cut apart, that of the first part); all parts take it.
     remember(next, o, withLine(m!, { ...b, color: { ...border.color } }));
     shareBorders(next, [o]);
   });
-  return takeThreads(next, objs.filter((o) => o.block === block).map((o) => o.index));
+  return takeThreads(next, objs.filter((o) => blocks.has(o.block)).map((o) => o.index));
 }
 
 /**

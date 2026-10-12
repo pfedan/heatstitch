@@ -8,13 +8,22 @@ import { nextVersion, type Pattern, type ThreadColor } from './pattern';
 export function recolor(p: Pattern, block: number, color: ThreadColor): Pattern {
   const last = p.colors[p.colors.length - 1] ?? { r: 128, g: 128, b: 128 };
   const colors = Array.from({ length: Math.max(p.colors.length, block + 1) }, (_, i) => p.colors[i] ?? last);
-  // An appliqué stops inside, in its own thread: the blocks it goes on in take the thread with it.
+  for (const b of threadBlocks(p, block, colors.length)) colors[b] = { ...color };
+  return nextVersion(p, { colors });
+}
+
+/**
+ * The color blocks that change with block `block` when it is recolored: an appliqué stops inside,
+ * in its own thread, and the blocks it goes on in take the thread with it.
+ */
+export function threadBlocks(p: Pattern, block: number, count = Math.max(p.colors.length, block + 1)): number[] {
   const inner = innerStops(p);
   let b = block;
   while (b > 0 && inner.has(b)) b--;
-  do colors[b++] = { ...color };
-  while (inner.has(b) && b < colors.length);
-  return nextVersion(p, { colors });
+  const out: number[] = [];
+  do out.push(b++);
+  while (inner.has(b) && b < count);
+  return out;
 }
 
 export const sameColor = (a: ThreadColor | undefined, b: ThreadColor | undefined): boolean =>
