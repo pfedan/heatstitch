@@ -24,7 +24,7 @@ import { APPLIQUE_FABRICS, innerStops } from '../../src/model/applique';
 import { appliquesOf, canApplique, fromApplique, setApplique, toApplique } from '../../src/model/appliqueOps';
 import type { Region } from '../../src/digitize/region';
 import { GAP_ROWS_MAX } from '../../src/digitize/fill';
-import { backToVersion, edgeAlong, forget, keepShape, keepVersion, objectKey, remember, remembered, rememberedIn, restitch, restoreRemembered, DECO_PATTERNS, OPEN_PATTERNS, type BorderSettings, type FillSettings, type Rails, type Remembered, type StoredObjects } from '../../src/model/restitch';
+import { backToVersion, edgeAlong, keepShape, keepVersion, relearn, objectKey, remember, remembered, rememberedIn, restitch, restoreRemembered, DECO_PATTERNS, OPEN_PATTERNS, type BorderSettings, type FillSettings, type Rails, type Remembered, type StoredObjects } from '../../src/model/restitch';
 import { reorder } from '../../src/model/order';
 import { stitchKinds } from '../../src/model/sequence';
 import { addContour, behindCovered, gapReader } from '../../src/model/contour';
@@ -1319,9 +1319,9 @@ export const CUT_OPS: Op[] = [
       const kept = columns.flatMap((part) => part.flatMap((c) => c.split?.cuts ?? []));
       expect(kept.some((c) => c.length > 2 && c.some((q) => Math.hypot(q[0] - to[0], q[1] - to[1]) < 1e-9)), 'the bent cut line is kept').toBe(true);
       const satin = before.satin!;
-      remember(p, o, { ...keepShape(p, o, kinds), columns, read: false });
-      const res = restitch(p, objs, [o.index], { kind: 'satin', s: satin }, kinds, T);
-      forget(p, o, before);
+      // As the app's rung tool does: sewn from a try that knows the bent cut line.
+      const tried = relearn(p, (v) => remember(v, o, { ...keepShape(p, o, kinds), columns, read: false }));
+      const res = restitch(tried, objs, [o.index], { kind: 'satin', s: satin }, kinds, T);
       return !res.failed.length && took(d, res);
     },
   },

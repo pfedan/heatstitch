@@ -24,7 +24,7 @@ import { backToOriginal, loadedOriginal, originalOf } from '../model/original';
 import { newLink, shareBorders, syncBorders } from '../model/border';
 import { readBorder } from '../model/readBorder';
 import { t, type Key } from '../i18n';
-import { type ShapeTrust, analyze, borderOf, withLine, remembered, measureFill, measureSatin, measureRun, shapeTrust, type Remembered, remember, rememberedIn, restitch, restitchedPieces, type Settings as RestitchSettings, type RestitchResult, objectKey } from '../model/restitch';
+import { type ShapeTrust, analyze, borderOf, withLine, remembered, measureFill, measureSatin, measureRun, shapeTrust, type Remembered, remember, rememberedIn, restitch, restitchedPieces, type Settings as RestitchSettings, type RestitchResult, objectKey, relearn } from '../model/restitch';
 import { type StitchInfo, StitchPanel } from '../ui/stitchPanel';
 import { LivePreview } from '../resew/client';
 import { ui } from './state';
@@ -189,6 +189,14 @@ export function bindStitches(app: StitchesApp) {
         ? fill?.fill?.deco?.blend?.link === own.blendOf
         : !!partOf(own) && hasPart(fill, partOf(own)!);
 
+  /** Takes over a version that only knows something else about its objects (relearn): one undo step, nothing to measure. */
+  function takeKnowledge(next: Pattern): void {
+    const f = app.files.active;
+    if (!f) return;
+    app.applyEdit(next, f.measurement);
+    app.files.setObjects(f, rememberedIn(next, app.seq(next).objects));
+  }
+
   /**
    * The selected objects loosed from their shape (`on`), or sewn from their resting shape again with
    * their own settings. The stitches loosed stay loosed for undo.
@@ -201,15 +209,17 @@ export function bindStitches(app: StitchesApp) {
     const objs = [...ui.selectedObjects].sort((a, b) => a - b).flatMap((o) => (q.objects[o] ? [q.objects[o]] : []));
     if (on) {
       let n = 0;
-      for (const obj of objs) {
-        const mem = remembered(p, obj);
-        if (!mem || mem.free || !loosable(mem)) continue;
-        remember(p, obj, { ...mem, free: true });
-        n++;
-      }
+      const next = relearn(p, (v) => {
+        for (const obj of objs) {
+          const mem = remembered(p, obj);
+          if (!mem || mem.free || !loosable(mem)) continue;
+          remember(v, obj, { ...mem, free: true });
+          n++;
+        }
+      });
       if (!n) return;
       app.closeRungs();
-      app.files.setObjects(f, rememberedIn(p, q.objects));
+      takeKnowledge(next);
       ui.selectionKey++;
       ui.stitchCache = null;
       app.layers.say(t('free.done', { n }));
@@ -220,10 +230,11 @@ export function bindStitches(app: StitchesApp) {
       return mem?.free ? [{ obj, mem }] : [];
     });
     if (!freed.length) return;
-    for (const { obj, mem } of freed) remember(p, obj, { ...mem, free: undefined });
-    const r = restitch(p, q.objects, freed.map((x) => x.obj.index), (o) => currentSettings(p, o, q.kinds), q.kinds, app.settings.trimMm);
-    // The loosed stitches stay loosed: undo brings them back as they were.
-    for (const { obj, mem } of freed) remember(p, obj, mem);
+    // Sewn from a try that is bound to its shape again: the loosed stitches stay loosed for undo.
+    const bound = relearn(p, (v) => {
+      for (const { obj, mem } of freed) remember(v, obj, { ...mem, free: undefined });
+    });
+    const r = restitch(bound, q.objects, freed.map((x) => x.obj.index), (o) => currentSettings(bound, o, q.kinds), q.kinds, app.settings.trimMm);
     applyRestitched(r, 'free.failed', true);
   }
 
@@ -582,14 +593,16 @@ export function bindStitches(app: StitchesApp) {
       const p = app.files.active?.pattern;
       if (!p) return;
       const q = app.seq(p);
-      for (const o of ui.selectedObjects) {
-        const obj = q.objects[o];
-        if (!obj) continue;
-        const mem = remembered(p, obj);
-        if (!mem && !on) continue;
-        remember(p, obj, { ...(mem ?? { region: null }), lock: on || undefined });
-      }
-      if (app.files.active) app.files.setObjects(app.files.active, rememberedIn(p, q.objects));
+      const next = relearn(p, (v) => {
+        for (const o of ui.selectedObjects) {
+          const obj = q.objects[o];
+          if (!obj) continue;
+          const mem = remembered(p, obj);
+          if (!mem && !on) continue;
+          remember(v, obj, { ...(mem ?? { region: null }), lock: on || undefined });
+        }
+      });
+      takeKnowledge(next);
       ui.selectionKey++;
       ui.stitchCache = null;
       app.redraw();
@@ -617,15 +630,17 @@ export function bindStitches(app: StitchesApp) {
       }
       // Its own object from now on: the fill forgets its border (or second thread), and it its fill.
       const fm = fill >= 0 ? remembered(p, q.objects[fill]) : undefined;
-      if (shadow) {
-        if (fm?.line) remember(p, q.objects[fill], withoutPart(fm, part!));
-        remember(p, own, { ...mem, shadowOf: undefined, echoOf: undefined });
-      } else {
-        if (fm?.fill && blend) remember(p, q.objects[fill], { ...fm, fill: { ...fm.fill, deco: { ...fm.fill.deco, blend: undefined } } });
-        else if (fm?.fill) remember(p, q.objects[fill], withLine(fm, undefined));
-        remember(p, own, blend ? { ...mem, blendOf: undefined } : { ...mem, outline: undefined, border: undefined, along: undefined });
-      }
-      if (app.files.active) app.files.setObjects(app.files.active, rememberedIn(p, q.objects));
+      const next = relearn(p, (v) => {
+        if (shadow) {
+          if (fm?.line) remember(v, q.objects[fill], withoutPart(fm, part!));
+          remember(v, own, { ...mem, shadowOf: undefined, echoOf: undefined });
+        } else {
+          if (fm?.fill && blend) remember(v, q.objects[fill], { ...fm, fill: { ...fm.fill, deco: { ...fm.fill.deco, blend: undefined } } });
+          else if (fm?.fill) remember(v, q.objects[fill], withLine(fm, undefined));
+          remember(v, own, blend ? { ...mem, blendOf: undefined } : { ...mem, outline: undefined, border: undefined, along: undefined });
+        }
+      });
+      takeKnowledge(next);
       ui.selectionKey++;
       ui.stitchCache = null;
       app.layers.say(t(shadow ? (mem.echoOf ? 'stitch.echoOf.detached' : 'stitch.shadowOf.detached') : blend ? 'stitch.blendOf.detached' : 'stitch.outline.detached'));

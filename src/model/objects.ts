@@ -1,5 +1,5 @@
 import { tagShortStitches, TIE } from '../validation/shortStitches';
-import { COLOR_CHANGE, dropParent, isReadFromFile, JUMP, parentOf, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
+import { COLOR_CHANGE, dropParent, isReadFromFile, JUMP, nextVersion, parentOf, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
 import type { Remembered } from './restitch';
 import { FILL, SATIN, stitchKinds } from './sequence';
 import { continues, rowPatches } from './rows';
@@ -385,11 +385,35 @@ function derive(p: Pattern, from?: { p: Pattern; t: Table }, hint?: { joins: Rea
 const journals: Map<Table, Table>[] = [];
 /** What versions knew when they were kept (see keepVersion). */
 const kept = new WeakMap<Pattern, Table>();
+/**
+ * Lists of versions the app holds (current, undo, redo): what they know is settled. A change of what
+ * objects know is a new version (relearn), so undo brings back the one before, all of it.
+ */
+const settled = new WeakSet<Table>();
 
 const copyTable = (t: Table): Table => ({ entries: t.entries.map((e) => ({ ...e })), next: t.next });
 
 function changing(t: Table): void {
+  if (settled.has(t) && !journals.length) {
+    const msg = 'A version in use learned something about its objects: make a new version with relearn instead';
+    // A mistake in the code, never in the design: loud while developing; in use, keepVersion keeps undo right.
+    if (import.meta.env.DEV) throw new Error(msg);
+    console.error(msg);
+  }
   for (const j of journals) if (!j.has(t)) j.set(t, copyTable(t));
+}
+
+/**
+ * A new version of `p` with the same stitches whose objects learn what `learn` tells them, while
+ * `p` keeps what it knew. Taken over, it is an undo step of its own; not taken over, it is a try
+ * with other knowledge (sewn from without changing `p`).
+ */
+export function relearn(p: Pattern, learn: (q: Pattern) => void): Pattern {
+  const q = nextVersion(p, {});
+  tables.set(q, copyTable(tableOf(p)));
+  dropParent(q);
+  learn(q);
+  return q;
 }
 
 function setTable(t: Table, to: Table): void {
@@ -411,17 +435,23 @@ export function hold(): () => void {
   };
 }
 
-/** Keeps what `p` knows now as its own: undo and redo bring back all of it (see backToVersion). */
+/** Keeps what `p` knows now as its own and settles it: from now on `p` learns nothing more (see relearn). */
 export function keepVersion(p: Pattern): void {
-  kept.set(p, copyTable(tableOf(p)));
+  const t = tableOf(p);
+  kept.set(p, copyTable(t));
+  settled.add(t);
 }
 
-/** Brings back what version `p` knew when it was kept (undo, redo, another file). False when it never was. */
+/**
+ * Brings back what version `p` knew when it was kept (undo, redo, another file). A settled version
+ * does not change, so this only matters after a mistake reported by `changing`. False when it never was.
+ */
 export function backToVersion(p: Pattern): boolean {
   const v = kept.get(p);
   if (!v) return false;
   const t = tableOf(p);
-  changing(t);
+  // Only puts back what a mistake changed (see changing): nothing to report again.
+  for (const j of journals) if (!j.has(t)) j.set(t, copyTable(t));
   setTable(t, v);
   return true;
 }
@@ -456,6 +486,8 @@ export function setMemory(p: Pattern, first: number, last: number, r: Remembered
     e = entryOf(p, first, last);
     if (!e) return;
   }
+  // Told again what it knows: nothing changes.
+  if (r === e.memory || (!r && !e.memory)) return;
   const t = tableOf(p);
   changing(t);
   if (r?.id !== undefined && r.id !== e.id && r.id > 0 && !t.entries.some((x) => x.id === r.id)) {

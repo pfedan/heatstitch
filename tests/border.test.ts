@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { rememberObjects, sewObjects, type SewObject } from '../src/model/objects';
 import { STITCH, type Pattern } from '../src/model/pattern';
-import { analyze, measureFill, remember, remembered, restitch, underlayRanges, withLine, type BorderSettings, type FillSettings } from '../src/model/restitch';
+import { analyze, measureFill, relearn, remember, remembered, restitch, underlayRanges, withLine, type BorderSettings, type FillSettings } from '../src/model/restitch';
 import { stitchKinds } from '../src/model/sequence';
 import { parsePattern } from '../src/parsers';
 import { sample } from '../src/digitize/region';
@@ -360,9 +360,9 @@ describe('a border sewn anew', () => {
     // Its fill's border gets wider: the border is sewn anew.
     const fill = sewObjects(d.p).find((o) => remembered(d.p, o)?.fill && remembered(d.p, o)?.line?.link)!;
     const m = remembered(d.p, fill)!;
-    remember(d.p, fill, { ...m, line: { ...m.line!, width: m.line!.width + 1 } });
-    const q = syncBorders(d.p, d.T);
-    expect(q).not.toBe(d.p);
+    const wider = relearn(d.p, (v) => remember(v, fill, { ...m, line: { ...m.line!, width: m.line!.width + 1 } }));
+    const q = syncBorders(wider, d.T);
+    expect(q).not.toBe(wider);
     const ids = (p: Pattern) => sewObjects(p).map((o) => o.id);
     expect(ids(q)).toEqual(ids(d.p));
     // And its fill still finds it by its link.

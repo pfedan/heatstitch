@@ -26,7 +26,7 @@ import { rasterize, type LineCap } from '../shape/rasterize';
 import { distanceInside, distanceToSeeds } from '../image/edt';
 import { tidy, withRecords } from './edit';
 import { coversOver, cutAway, type Cover } from './covers';
-import { backToVersion, entryOf, hasTable, sewObjects, hold, keepVersion, knowKinds, rememberObjects, setMemory, setObjects, setObjectsFromKeys, stitchIndex, stitchKey, tableOf, type ObjectKind, type PlacedEntry, type SewObject } from './objects';
+import { backToVersion, entryOf, hasTable, sewObjects, hold, keepVersion, knowKinds, relearn, rememberObjects, setMemory, setObjects, setObjectsFromKeys, stitchIndex, stitchKey, tableOf, type ObjectKind, type PlacedEntry, type SewObject } from './objects';
 import { END, JUMP, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
 import { partFringe } from './fringe';
 import { recordOfStitch, SATIN, stitchKinds, TIE_STITCH } from './sequence';
@@ -576,7 +576,7 @@ export function forget(p: Pattern, o: SewObject, r?: Remembered): void {
   setMemory(p, o.first, o.last, r);
 }
 
-export { backToVersion, keepVersion };
+export { backToVersion, keepVersion, relearn };
 
 /** The object's shape and stitch type are only guessed from its stitches (a file from elsewhere), not known. */
 export function isGuessed(p: Pattern, o: SewObject): boolean {

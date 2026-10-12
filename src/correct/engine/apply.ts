@@ -1,7 +1,7 @@
 import { withRecords } from '../../model/edit';
 import { setMemory, sewObjects } from '../../model/objects';
 import type { Pattern } from '../../model/pattern';
-import { forget, holdMemory, remembered, rememberedIn, restoreRemembered, type ObjectsAsStored, type Remembered } from '../../model/restitch';
+import { forget, holdMemory, relearn, remembered, rememberedIn, restoreRemembered, type ObjectsAsStored, type Remembered } from '../../model/restitch';
 import type { Profile } from '../../validation/profiles';
 import type { FixTarget } from './cells';
 import { planFix, type FixOptions, type FixResult } from './solve';
@@ -45,22 +45,23 @@ export function applyFix(p: Pattern, f: PlannedFix): Pattern | null {
   if (!f.objects.length) return p;
   const before = sewObjects(p);
   // What the fix's objects remember first: it includes how its new stitches group into objects,
-  // and the indices of the fix count in that grouping.
-  restoreRemembered(f.pattern, f.memory);
-  const after = sewObjects(f.pattern);
+  // and the indices of the fix count in that grouping. On a version of its own each time: the same
+  // fix taken again after undo leaves the version it made the first time as it was.
+  const fixed = relearn(f.pattern, (v) => restoreRemembered(v, f.memory));
+  const after = sewObjects(fixed);
   for (const x of f.objects) {
     const o = before[x.index];
     const was = remembered(p, o);
-    const now = remembered(f.pattern, after[x.index]) ?? { region: null };
+    const now = remembered(fixed, after[x.index]) ?? { region: null };
     // A fix on a fix: the first "before" stays, so taking it back goes to the original.
     // With the travel to it and from it: sewing anew also moves where the jumps around it go.
     const from = x.index ? before[x.index - 1].last + 1 : 0;
     const end = before[x.index + 1]?.first ?? p.cmd.length;
     const undo = was?.undo ?? { x: p.x.slice(from, end), y: p.y.slice(from, end), cmd: p.cmd.slice(from, end), lead: o.first - from, trail: end - o.last - 1, ...(was ? { memory: was } : {}) };
-    const fixed = [...x.changes, ...(x.knockout ? [{ field: 'knockout', from: false, to: true }] : []), ...x.tools.filter((t) => t.startsWith('fine.')).map((t) => ({ field: t, from: '', to: true }))];
-    forget(f.pattern, after[x.index], { ...now, fixed, undo });
+    const changes = [...x.changes, ...(x.knockout ? [{ field: 'knockout', from: false, to: true }] : []), ...x.tools.filter((t) => t.startsWith('fine.')).map((t) => ({ field: t, from: '', to: true }))];
+    forget(fixed, after[x.index], { ...now, fixed: changes, undo });
   }
-  return f.pattern;
+  return fixed;
 }
 
 /** Objects of `p` a fix changed that can be taken back. */
