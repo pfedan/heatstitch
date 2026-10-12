@@ -27,10 +27,7 @@ const T = {
     de: 'Deutsch gesprochen, mit Untertiteln auf Deutsch und Englisch.',
     en: 'Spoken in German, with English and German subtitles.',
   },
-  legal: {
-    de: [['impressum', 'Impressum'], ['datenschutz', 'Datenschutz']],
-    en: [['imprint', 'Legal notice'], ['privacy', 'Privacy']],
-  },
+  privacy: { de: 'Datenschutz', en: 'Privacy' },
   more: {
     de: ['Lieber lesen? ', 'Die Anleitung', ' erklärt alles Schritt für Schritt.'],
     en: ['Rather read? ', 'The guide', ' explains everything step by step.'],
@@ -177,7 +174,7 @@ export function watchBody(v: Video, lang: Lang, pad = '    '): string {
     `  </article>`,
     `</main>`,
     `<footer class="doc-foot">`,
-    `  ${T.legal[lang].map(([id, text]) => `<a href="${local(pagePath('legal', lang))}#${id}">${text}</a>`).join(' · ')}`,
+    `  <a href="${local(pagePath('privacy', lang))}">${T.privacy[lang]}</a>`,
     `</footer>`,
   );
   return lines.map((l, j) => (j && l ? pad + l : l)).join('\n');

@@ -57,8 +57,8 @@ and kept in IndexedDB together with your color edits and brush strokes. The opti
 image with AI* workflow only suggests a prompt for an AI chat of your choice; heatstitch itself never
 sends the picture anywhere.
 
-The legal notice and the privacy policy required in Germany are at
-[heatstitch.app/legal.html](https://heatstitch.app/legal.html) (German: `de/legal.html`), linked from
+The privacy policy is at [heatstitch.app/privacy.html](https://heatstitch.app/privacy.html)
+(German: `de/privacy.html`), linked from
 the app's *More* menu and at the end of every page of the guide and the videos. Keep them in step
 with this section when the site starts sending anything new.
 

@@ -235,9 +235,9 @@ shapes, rungs, editing, validation zones, the hoop, measuring and the compare vi
 
 ## Guide, videos and build
 
-`docs.html` (guide), `videos.html`, `video.html` and `legal.html` (legal notice and privacy) are
+`docs.html` (guide), `videos.html`, `video.html` and `privacy.html` (privacy policy) are
 separate pages with their own entry scripts (`src/docs.ts`, `src/videosPage.ts`, `src/videoWatch.ts`,
-`src/legalPage.ts`). The Vite build
+`src/privacyPage.ts`). The Vite build
 (`vite.config.ts`) writes every page once per language: English at the root, German under `de/`
 (`src/build/langPages.ts`), plus one page per video and `sitemap.xml`. `vite-plugin-pwa` makes the
 app installable and offline capable.

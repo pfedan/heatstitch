@@ -10,7 +10,7 @@
  */
 
 export type Lang = 'de' | 'en';
-export type Page = 'app' | 'docs' | 'videos' | 'legal';
+export type Page = 'app' | 'docs' | 'videos' | 'privacy';
 
 export const SITE = 'https://heatstitch.app/';
 
@@ -43,11 +43,11 @@ const DE: Record<Page, { title: string; description: string; ogTitle: string; og
     ogTitle: 'heatstitch in Videos: kurze Anleitungen zum Sticken',
     ogDescription: 'Kurze Videos von zwei bis drei Minuten, mit den Dateien zum Mitmachen: vom ersten Stickmuster bis zur fertigen Stickdatei.',
   },
-  legal: {
-    title: 'heatstitch: Impressum und Datenschutz',
-    description: 'Wer heatstitch anbietet und was mit deinen Daten passiert: Deine Dateien bleiben in deinem Browser, kein Tracking, keine Cookies.',
-    ogTitle: 'heatstitch: Impressum und Datenschutz',
-    ogDescription: 'Wer heatstitch anbietet und was mit deinen Daten passiert.',
+  privacy: {
+    title: 'heatstitch: Datenschutz',
+    description: 'Was mit deinen Daten in heatstitch passiert: Deine Dateien bleiben in deinem Browser, kein Tracking, keine Cookies.',
+    ogTitle: 'heatstitch: Datenschutz',
+    ogDescription: 'Was mit deinen Daten in heatstitch passiert.',
   },
 };
 
@@ -113,7 +113,7 @@ function german(html: string, page: Page): string {
     out = setMeta(out, 'twitter:title', t.ogTitle);
     out = setMeta(out, 'twitter:description', t.ogDescription);
   }
-  // "./" (the app), "docs.html" (the guide), "videos.html", "legal.html" and the pages of the videos
+  // "./" (the app), "docs.html" (the guide), "videos.html", "privacy.html" and the pages of the videos
   // ("videos/<key>.html") stay in de/; files of the site are one folder up.
-  return out.replace(/(\s(?:href|src)=")(?!https?:|\/|#|data:|mailto:|\.\/|(?:docs|videos|legal)\.html|videos\/)([^"]+")/g, '$1../$2');
+  return out.replace(/(\s(?:href|src)=")(?!https?:|\/|#|data:|mailto:|\.\/|(?:docs|videos|privacy)\.html|videos\/)([^"]+")/g, '$1../$2');
 }

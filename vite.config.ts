@@ -15,7 +15,7 @@ const base = '/';
 const isPreview = !!process.env.PREVIEW;
 
 const pageOf = (file: string): Page =>
-  file.endsWith('docs.html') ? 'docs' : file.endsWith('videos.html') ? 'videos' : file.endsWith('legal.html') ? 'legal' : 'app';
+  file.endsWith('docs.html') ? 'docs' : file.endsWith('videos.html') ? 'videos' : file.endsWith('privacy.html') ? 'privacy' : 'app';
 
 /**
  * The app and the guide once per language: English at their address, German under de/ (see
@@ -28,7 +28,7 @@ const langPages: Plugin = {
   generateBundle: {
     order: 'post',
     handler(_, bundle) {
-      for (const file of ['index.html', 'docs.html', 'videos.html', 'legal.html']) {
+      for (const file of ['index.html', 'docs.html', 'videos.html', 'privacy.html']) {
         const asset = bundle[file];
         if (asset?.type !== 'asset') throw new Error(`lang-pages: ${file} is not in the build`);
         const html = String(asset.source);
@@ -66,7 +66,7 @@ const langPages: Plugin = {
         res.end(sitemap());
         return;
       }
-      const m = /^\/de\/(index\.html|docs\.html|videos\.html|legal\.html)?(?:[?#]|$)/.exec(path);
+      const m = /^\/de\/(index\.html|docs\.html|videos\.html|privacy\.html)?(?:[?#]|$)/.exec(path);
       if (!m) return next();
       const file = m[1] ?? 'index.html';
       const html = await server.transformIndexHtml(`/${file}`, new TextDecoder().decode(readFileSync(new URL(file, import.meta.url))), req.originalUrl);
@@ -162,7 +162,7 @@ export default defineConfig({
   ],
   build: {
     rollupOptions: {
-      input: { main: 'index.html', docs: 'docs.html', videos: 'videos.html', legal: 'legal.html', watch: 'video.html' },
+      input: { main: 'index.html', docs: 'docs.html', videos: 'videos.html', privacy: 'privacy.html', watch: 'video.html' },
     },
   },
   worker: { format: 'es' },

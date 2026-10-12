@@ -29,13 +29,9 @@ export function videosUrl(l: Lang, hash = ''): string {
   return `${import.meta.env.BASE_URL}${l === 'de' ? 'de/' : ''}videos.html${hash.replace(/^#(de|en)-/, `#${l}-`)}`;
 }
 
-/** The sections of the legal page in each language, in the same order (legal.html). */
-const LEGAL_SECTIONS: Record<Lang, string[]> = { de: ['impressum', 'datenschutz', 'lizenzen'], en: ['imprint', 'privacy', 'licenses'] };
-
-/** Where the legal notice and privacy page is in this language, with the section carried over. */
-export function legalUrl(l: Lang, hash = ''): string {
-  const i = Math.max(LEGAL_SECTIONS.de.indexOf(hash.slice(1)), LEGAL_SECTIONS.en.indexOf(hash.slice(1)));
-  return `${import.meta.env.BASE_URL}${l === 'de' ? 'de/' : ''}legal.html${i < 0 ? '' : `#${LEGAL_SECTIONS[l][i]}`}`;
+/** Where the privacy page is in this language. */
+export function privacyUrl(l: Lang): string {
+  return `${import.meta.env.BASE_URL}${l === 'de' ? 'de/' : ''}privacy.html`;
 }
 
 /**

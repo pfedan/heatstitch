@@ -18,7 +18,7 @@ import { en as library } from './areas/library';
 
 const enBase: Record<keyof typeof deBase, string> = {
   'app.docs': 'Guide',
-  'app.legal': 'Legal notice and privacy',
+  'app.privacy': 'Privacy',
   'files.title': 'Files',
   'files.privacy': 'Your files never leave your device.',
   'files.privacy.detail': 'Everything stays in your browser. No server, no tracking.',

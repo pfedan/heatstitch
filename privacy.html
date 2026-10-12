@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>heatstitch: legal notice and privacy</title>
-    <meta name="description" content="Who offers heatstitch and what happens to your data: your files stay in your browser, no tracking, no cookies." />
+    <title>heatstitch: privacy</title>
+    <meta name="description" content="What happens to your data in heatstitch: your files stay in your browser, no tracking, no cookies." />
     <meta name="robots" content="noindex, follow" />
-    <link rel="canonical" href="https://heatstitch.app/legal.html" />
+    <link rel="canonical" href="https://heatstitch.app/privacy.html" />
     <meta name="theme-color" content="#0b1424" />
     <meta name="color-scheme" content="light dark" />
     <link rel="icon" href="/favicon.ico" sizes="48x48" />
@@ -15,9 +15,9 @@
 
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="heatstitch" />
-    <meta property="og:url" content="https://heatstitch.app/legal.html" />
-    <meta property="og:title" content="heatstitch: legal notice and privacy" />
-    <meta property="og:description" content="Who offers heatstitch and what happens to your data." />
+    <meta property="og:url" content="https://heatstitch.app/privacy.html" />
+    <meta property="og:title" content="heatstitch: privacy" />
+    <meta property="og:description" content="What happens to your data in heatstitch." />
     <meta property="og:image" content="https://heatstitch.app/og-image.jpg" />
     <meta property="og:image:type" content="image/jpeg" />
     <meta property="og:image:width" content="1200" />
@@ -45,27 +45,21 @@
       </nav>
     </header>
 
-    <main class="doc legal">
-      <!-- Both languages are written here; the build makes legal.html (English) and de/legal.html (German) with one each. -->
+    <main class="doc privacy">
+      <!-- Both languages are written here; the build makes privacy.html (English) and de/privacy.html (German) with one each. -->
       <p class="lang-hint" id="lang-hint" hidden></p>
       <article lang="de">
-        <h1>Impressum und Datenschutz</h1>
+        <h1>Datenschutz</h1>
         <p class="lead">
           heatstitch ist ein kostenloses Hobbyprojekt ohne Werbung und ohne Konto. Deine Stickdateien und Bilder bleiben in deinem Browser;
           es gibt kein Tracking und keine Cookies.
         </p>
 
-        <h2 id="impressum">Impressum</h2>
-        <p>Angaben nach § 5 DDG und verantwortlich für den Inhalt nach § 18 Abs. 2 MStV:</p>
-        <address class="legal-contact">
-          Daniel Pfeffer<br />
-          c/o ANSCHRIFT FOLGT<br />
-          E-Mail: <a href="mailto:EMAIL@FOLGT">EMAIL@FOLGT</a>
-        </address>
 
-        <h2 id="datenschutz">Datenschutz</h2>
         <h3>Verantwortlich</h3>
-        <p>Verantwortlich für die Datenverarbeitung auf dieser Website ist Daniel Pfeffer, erreichbar wie im <a href="#impressum">Impressum</a> angegeben.</p>
+        <p>Verantwortlich für die Datenverarbeitung auf dieser Website ist Daniel Pfeffer, E-Mail:
+          <!-- The address is written in by src/privacyPage.ts, so crawlers without JavaScript don't find it. -->
+          <span data-email><noscript>(die Seite zeigt sie mit JavaScript an)</noscript></span>.</p>
 
         <h3>Deine Dateien bleiben bei dir</h3>
         <p>
@@ -110,14 +104,14 @@
 
         <h3>Wenn du mir schreibst</h3>
         <p>
-          Schreibst du mir eine E-Mail oder auf GitHub, nutze ich deine Angaben nur, um dir zu antworten, und lösche die E-Mail, wenn sie erledigt
-          ist (Art. 6 Abs. 1 lit. f DSGVO).
+          Schreibst du mir eine E-Mail, nutze ich deine Angaben nur, um dir zu antworten, und lösche die E-Mail, wenn sie erledigt ist (Art. 6
+          Abs. 1 lit. f DSGVO).
         </p>
 
         <h3>Deine Rechte</h3>
         <p>
           Du hast das Recht auf Auskunft, Berichtigung, Löschung und Einschränkung der Verarbeitung, auf Datenübertragbarkeit und auf Widerspruch
-          gegen eine Verarbeitung nach Art. 6 Abs. 1 lit. f DSGVO (Art. 15 bis 21 DSGVO). Schreib mir dafür einfach. Außerdem kannst du dich bei
+          gegen eine Verarbeitung nach Art. 6 Abs. 1 lit. f DSGVO (Art. 15 bis 21 DSGVO). Schreib mir dafür einfach eine E-Mail. Außerdem kannst du dich bei
           einer Datenschutz-Aufsichtsbehörde beschweren (Art. 77 DSGVO).
         </p>
 
@@ -135,23 +129,16 @@
         <p class="more">Stand: Oktober 2026</p>
       </article>
       <article lang="en">
-        <h1>Legal notice and privacy</h1>
+        <h1>Privacy</h1>
         <p class="lead">
           heatstitch is a free hobby project without ads and without accounts. Your embroidery files and pictures stay in your browser; there is
           no tracking and there are no cookies.
         </p>
 
-        <h2 id="imprint">Legal notice</h2>
-        <p>Information according to § 5 DDG and responsible for the content according to § 18 (2) MStV (German law):</p>
-        <address class="legal-contact">
-          Daniel Pfeffer<br />
-          c/o ANSCHRIFT FOLGT<br />
-          E-Mail: <a href="mailto:EMAIL@FOLGT">EMAIL@FOLGT</a>
-        </address>
 
-        <h2 id="privacy">Privacy</h2>
         <h3>Controller</h3>
-        <p>The controller for data processing on this website is Daniel Pfeffer, reachable as given in the <a href="#imprint">legal notice</a>.</p>
+        <p>The controller for data processing on this website is Daniel Pfeffer, email:
+          <span data-email><noscript>(the page shows it with JavaScript)</noscript></span>.</p>
 
         <h3>Your files stay with you</h3>
         <p>
@@ -195,14 +182,13 @@
 
         <h3>If you write to me</h3>
         <p>
-          If you write me an email or on GitHub, I use what you send only to answer you, and delete the email once it is settled (Art. 6 (1) (f)
-          GDPR).
+          If you send me an email, I use what you send only to answer you, and delete the email once it is settled (Art. 6 (1) (f) GDPR).
         </p>
 
         <h3>Your rights</h3>
         <p>
           You have the right to access, rectification, erasure and restriction of processing, to data portability and to object to processing
-          based on Art. 6 (1) (f) GDPR (Art. 15 to 21 GDPR). Just write to me. You can also lodge a complaint with a data protection supervisory
+          based on Art. 6 (1) (f) GDPR (Art. 15 to 21 GDPR). Just send me an email. You can also lodge a complaint with a data protection supervisory
           authority (Art. 77 GDPR).
         </p>
 
@@ -221,9 +207,8 @@
       </article>
     </main>
     <footer class="doc-foot">
-      <span lang="de"><a href="legal.html#impressum">Impressum</a> · <a href="legal.html#datenschutz">Datenschutz</a></span>
-      <span lang="en"><a href="legal.html#imprint">Legal notice</a> · <a href="legal.html#privacy">Privacy</a></span>
+      <a href="privacy.html"><span lang="de">Datenschutz</span><span lang="en">Privacy</span></a>
     </footer>
-    <script type="module" src="/src/legalPage.ts"></script>
+    <script type="module" src="/src/privacyPage.ts"></script>
   </body>
 </html>
