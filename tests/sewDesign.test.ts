@@ -41,7 +41,9 @@ describe('sewing a design from its object list', () => {
     expect(made.length).toBeGreaterThan(objs.length / 2);
     // No worse than now.
     expect(Math.abs(count(q, STITCH) - count(p, STITCH)) / count(p, STITCH)).toBeLessThan(0.02);
-    expect(count(q, TRIM)).toBeLessThanOrEqual(count(p, TRIM) + 1);
+    // Covering fills plan their order on the travel grid from where they start, and the curved ones
+    // of the deco sampler end with a trim or two more or less from another start (rays 4 to 6).
+    expect(count(q, TRIM)).toBeLessThanOrEqual(count(p, TRIM) + 4);
     // Fills with parts left out plan their order on the travel grid, which may end them elsewhere
     // than where the next object of the list starts: the flower jumps 252 mm built, 307 mm sewn
     // from its list (both less than before the plan, 317 and 340 mm).
