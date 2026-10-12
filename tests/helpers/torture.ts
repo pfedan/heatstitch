@@ -75,8 +75,8 @@ await loadOps();
  *
  * TORTURE_CHAINS and TORTURE_STEPS run more of them (e.g. TORTURE_CHAINS=10000 for a long run).
  *
- * The chains live here; torture.test.ts, tortureSeeds, tortureLong and tortureRead run them, as
- * four files so they run side by side instead of one after another.
+ * The chains live here; torture.test.ts, tortureChains, tortureSeeds, tortureLong and tortureRead run
+ * them, as five files so they run side by side instead of one after another.
  */
 
 /** The stitches of object `o` (0.1 mm), its tie-in left out. */
@@ -89,6 +89,8 @@ export const ownStitches = (p: Pattern, o: SewObject) => {
 export const CHAINS = Number(process.env.TORTURE_CHAINS ?? 24);
 export const STEPS = Number(process.env.TORTURE_STEPS ?? 14);
 export const FIRST_SEED = Number(process.env.TORTURE_SEED ?? 1);
+/** The seeds of the regular chains, every other one: half in torture.test.ts, half in tortureChains.test.ts. */
+export const chainSeeds = (half: 0 | 1) => Array.from({ length: CHAINS }, (_, k) => FIRST_SEED + k).filter((_, k) => k % 2 === half);
 
 export const ID: Mat = [1, 0, 0, 1, 0, 0];
 export const options = digitizeDefaults(DEFAULT_PROFILE);

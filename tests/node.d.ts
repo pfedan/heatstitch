@@ -4,6 +4,7 @@ declare module 'node:fs' {
   export function mkdirSync(path: URL | string, opts?: { recursive?: boolean }): void;
   export function mkdtempSync(prefix: string): string;
   export function readdirSync(path: URL | string): string[];
+  export function statSync(path: URL | string): { size: number };
   export function readFileSync(path: URL | string): Uint8Array;
   export function readFileSync(path: URL | string, encoding: 'utf8'): string;
   export function writeFileSync(path: URL | string, data: Uint8Array | string): void;
@@ -12,7 +13,7 @@ declare module 'node:os' {
   export function tmpdir(): string;
 }
 declare module 'node:path' {
-  const path: { join(...parts: string[]): string };
+  const path: { join(...parts: string[]): string; relative(from: string, to: string): string };
   export default path;
 }
 declare module 'node:url' {

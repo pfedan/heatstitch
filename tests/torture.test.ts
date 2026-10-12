@@ -13,14 +13,14 @@ import { currentSettings } from '../src/correct/plan';
 import { deleteObjects, duplicateObject, duplicateObjects, mirrorMatrix, recolorObjects, subtractTop } from '../src/model/shapeOps';
 import { ellipsePath, parsePath, rectPath } from '../src/shape/svgPath';
 import { loadOps } from '../src/shape/ops';
-import { CHAINS, FIRST_SEED, ID, options, T, COLORS, empty, knowledge, Doc, shapes, transform, boxOf, saveAndOpen, checkWellFormed, checkAllKnown, checkPartsFit, checkBorders, checkObjectList, checkKeys, checkKnockouts, checkCrosshatch, checkExport, checkSewDesign, checkFollowers, checkEchoes, checkRedwork, chain, borderedSquare, borderOf, restitchFill, squareOf, took, type Version } from './helpers/torture';
+import { chainSeeds, ID, options, T, COLORS, empty, knowledge, Doc, shapes, transform, boxOf, saveAndOpen, checkWellFormed, checkAllKnown, checkPartsFit, checkBorders, checkObjectList, checkKeys, checkKnockouts, checkCrosshatch, checkExport, checkSewDesign, checkFollowers, checkEchoes, checkRedwork, chain, borderedSquare, borderOf, restitchFill, squareOf, took, type Version } from './helpers/torture';
 import { analyze, measureFill } from '../src/model/restitch';
 import { parsePattern } from '../src/parsers';
 import { writePattern } from '../src/writers';
 
+// The other half of the chains is in tortureChains.test.ts, so both halves run side by side.
 describe('torture test', () => {
-  const seeds = Array.from({ length: CHAINS }, (_, k) => FIRST_SEED + k);
-  it.each(seeds)('chain %i keeps the design consistent', async (seed) => {
+  it.each(chainSeeds(0))('chain %i keeps the design consistent', async (seed) => {
     await chain(seed, undefined, { knit: true });
     // Some chains build large designs (a contour filled as the ground, scaled up, left out under
     // others, a contour around a lettering): slower runners need more than the 30 s default.
