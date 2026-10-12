@@ -1143,11 +1143,24 @@ function workOutCoverShare(p: Pattern, a: number, b: number): number {
   return inner >= 4 ? inner / seen.size : 0;
 }
 
-/** Number of an object among the objects of its kind in its color block (1-based), for its name. */
-export function numberInColor(objs: SewObject[], o: SewObject): number {
+/** The block that opens the color of block `b`: the blocks after an appliqué's stops (`inner`) go on in its thread. */
+export function colorBlockOf(b: number, inner?: ReadonlySet<number>): number {
+  while (b > 0 && inner?.has(b)) b--;
+  return b;
+}
+
+/**
+ * Number of an object among the objects named alike in its color (1-based), for its name: of its
+ * kind, or appliqués (`appliques`) among appliqués. Blocks opened by an appliqué's stops (`inner`,
+ * see innerStops) count to the color before them.
+ */
+export function numberInColor(objs: SewObject[], o: SewObject, inner?: ReadonlySet<number>, appliques?: ReadonlySet<number>): number {
+  const head = (b: number) => colorBlockOf(b, inner);
+  const isApplique = (x: SewObject) => !!appliques?.has(x.index);
+  const color = head(o.block);
   let n = 0;
   for (const x of objs) {
-    if (x.block === o.block && x.kind === o.kind) n++;
+    if (head(x.block) === color && isApplique(x) === isApplique(o) && (isApplique(o) || x.kind === o.kind)) n++;
     if (x === o) break;
   }
   return n;

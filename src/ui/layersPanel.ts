@@ -436,7 +436,7 @@ export class LayersPanel {
         },
       },
       kind,
-      h('span', { class: 'layer-name' }, st.names?.get(o.index) ?? `${applique ? t('applique.name') : kindLabel(o.kind)} ${numberInColor(siblings, o)}`),
+      h('span', { class: 'layer-name' }, st.names?.get(o.index) ?? `${applique ? t('applique.name') : kindLabel(o.kind)} ${numberInColor(siblings, o, st.inner, st.appliques)}`),
       guessed,
       loose,
       more,

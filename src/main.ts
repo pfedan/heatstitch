@@ -50,7 +50,7 @@ import { drawAside, drawDrawing } from './render/shapeOverlay';
 import type { LeftOut, SewnFrom } from './ui/imageMode';
 import { asideOf, storeAside, type AsideShape } from './model/aside';
 import { type Digitized } from './digitize/digitize';
-import { numberInColor, sewObjects } from './model/objects';
+import { colorBlockOf, numberInColor, sewObjects } from './model/objects';
 import { reversible } from './model/reverse';
 import { Player } from './ui/player';
 import { installPanelResize } from './ui/panelResize';
@@ -833,11 +833,13 @@ document.querySelectorAll<HTMLInputElement>('input[name="mode"]').forEach((i) =>
 function objectInfo(p: Pattern, q: Sequence) {
   const over = overOf(q, p);
   const selected = [...ui.selectedObjects].sort((a, b) => a - b);
+  const rows = appliqueRows(p, q);
   return {
     objects: q.objects,
     selected,
     layering: selected.map((o) => ({ below: over[o].length, above: over.filter((l) => l.includes(o)).length })),
-    numbers: selected.map((o) => numberInColor(q.objects, q.objects[o])),
+    numbers: selected.map((o) => numberInColor(q.objects, q.objects[o], rows.inner, rows.appliques)),
+    colorBlocks: selected.map((o) => colorBlockOf(q.objects[o].block, rows.inner)),
     hand: selected.map((o) => remembered(p, q.objects[o])?.hand ?? 0),
     threadMm: selected.reduce((a, o) => a + (q.objects[o] ? threadOfRange(p, settings.profile.fabric, q.objects[o].first, q.objects[o].last) : 0), 0),
     editing: editor.active && ui.editObject !== null && selected.length === 1 && selected[0] === ui.editObject ? { selection: editor.selection.size } : null,

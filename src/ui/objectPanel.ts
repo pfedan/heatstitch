@@ -15,8 +15,10 @@ export interface ObjectInfo {
   selected: number[];
   /** Per selected object: how many objects it lies on, and how many lie on it. */
   layering: { below: number; above: number }[];
-  /** Number of each selected object within its color block (1-based). */
+  /** Number of each selected object among those named alike in its color (1-based). */
   numbers: number[];
+  /** The block opening the color of each selected object (the blocks after an appliqué's stops go on in its thread). */
+  colorBlocks?: number[];
   /** Per selected object: points changed by hand since it was last given new stitches. */
   hand: number[];
   /** Top thread of the selected objects, estimated (see threadUse; mm). */
@@ -128,7 +130,8 @@ export class ObjectPanel {
     // The thread: one swatch per thread of the selection, a click chooses another for all of them.
     const colors: ThreadColor[] = [];
     for (const o of sel) if (!colors.some((c) => sameColor(c, o.color))) colors.push(o.color);
-    const colorName = one ? `${one.block + 1}. ${one.color.name || t('layers.unnamed', { n: one.block + 1 })}` : colors.length === 1 ? (colors[0].name ?? '') : '';
+    const head = info.colorBlocks?.[0] ?? one?.block ?? 0;
+    const colorName = one ? `${head + 1}. ${one.color.name || t('layers.unnamed', { n: head + 1 })}` : colors.length === 1 ? (colors[0].name ?? '') : '';
     const chip = h(
       'button',
       {

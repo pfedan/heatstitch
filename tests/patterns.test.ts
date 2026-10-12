@@ -218,12 +218,17 @@ describe('guided fill, underlay and end', () => {
     expect(res.curved).toBe(true);
     // Where the rows cross the middle of the square (they run nearly across it there).
     const ys: number[] = [];
+    // Rows only: travel between them (planned under rows to come, across the middle too) is left out.
+    const travel = res.travel ?? [];
+    let n = 0;
     for (const run of res.runs) {
       for (let i = 1; i < run.length; i++) {
         const [a, b] = [run[i - 1], run[i]];
+        if (travel.some(([s, e]) => n + i > s && n + i <= e)) continue;
         if ((a[0] - 15) * (b[0] - 15) > 0 || a[0] === b[0] || Math.abs(b[1] - a[1]) > Math.abs(b[0] - a[0])) continue;
         ys.push(a[1] + ((b[1] - a[1]) * (15 - a[0])) / (b[0] - a[0]));
       }
+      n += run.length;
     }
     ys.sort((a, b) => a - b);
     const gaps = ys.slice(1).map((y, i) => ({ y: (y + ys[i]) / 2, d: y - ys[i] }));
@@ -233,7 +238,9 @@ describe('guided fill, underlay and end', () => {
     };
     expect(median(5, 8)).toBeGreaterThan(0.3);
     expect(median(5, 8)).toBeLessThan(0.45);
-    expect(median(12, 15)).toBeGreaterThan(median(5, 8) + 0.05);
+    // Halfway the rows are further apart already (the gaps are measured between stitches, so they
+    // vary a little with where the stitches of a row fall: by the middle of the band, not its start).
+    expect(median(14, 17)).toBeGreaterThan(median(5, 8) + 0.05);
     expect(median(20, 24)).toBeGreaterThan(0.8);
     expect(median(20, 24)).toBeLessThan(1.15);
     // Without a gradient the rows stay as they were.

@@ -12,12 +12,12 @@ import { drawAreas, drawFrame, drawShapeOverlay, type FlatArea } from './shapeOv
 import type { ShapeView } from '../ui/shapeTool';
 import type { FrameView } from '../ui/frameTool';
 import type { Pt } from '../digitize/skeleton';
-import { drawFlatStitches, drawJumps, drawMarkers, drawNeedle, drawOutlines, drawTransition, drawContour, drawUnderlay, type StitchStyle } from './flow';
+import { stitchColors, drawFlatStitches, drawJumps, drawMarkers, drawNeedle, drawOutlines, drawTransition, drawContour, drawUnderlay, type StitchStyle } from './flow';
 import { drawHeatmap } from './heatmap';
 import { drawStitches } from './stitches';
 import { drawThreads } from './threads';
 import { drawFabric } from './fabricGl';
-import { drawPieces, hasPieces, underPieces } from './applique';
+import { drawWithPieces, hasPieces, underPieces } from './applique';
 import { drawHoop } from './hoop';
 import { drawValidation, drawZoneHighlight, type Counted } from './validationOverlay';
 import type { Viewport } from './viewport';
@@ -94,6 +94,15 @@ export interface Scene {
   hoopAt?: readonly [number, number] | null;
 }
 
+const plain = new WeakMap<Pattern, Pick<StitchStyle, 'rgb' | 'alpha'>>();
+
+/** All stitches of `p` in their thread colors, none dimmed (as drawThreads without a style). */
+function threadStyle(p: Pattern): Pick<StitchStyle, 'rgb' | 'alpha'> {
+  let s = plain.get(p);
+  if (!s) plain.set(p, (s = { rgb: stitchColors(p, 'thread'), alpha: new Float32Array(p.cmd.length).fill(1) }));
+  return s;
+}
+
 /**
  * Draws the scene in CSS pixel coordinates. Density mode: heatmap, validation overlay and the
  * optional stitch plan on top. Ablauf mode: the stitch plan in full with its symbols.
@@ -108,13 +117,18 @@ export function drawScene(ctx: CanvasRenderingContext2D, w: number, h: number, s
     let st = flow.style;
     if (flow.trace) drawTrace(ctx, vp, flow.trace);
     if (flow.areas?.length) drawAreas(ctx, vp, flow.areas);
-    // Appliqués: their fabric under the threads from the stop it is laid on; in the realistic view
-    // their placement lines lie under it.
+    // Appliqués: their fabric over what was sewn before the stop it is laid on, under what comes
+    // after; in the realistic view their placement lines lie under it.
     if (hasPieces(pattern)) {
-      drawPieces(ctx, vp, pattern, st.limit, st.alpha, 1, s.realistic && s.fabricLook);
+      const shown = st.alpha;
       if (s.realistic) st = { ...st, alpha: underPieces(pattern, st.alpha, st.limit) };
-    }
-    if (!s.realistic || !drawThreads(ctx, vp, pattern, 1, s.threadMm, st)) drawFlatStitches(ctx, vp, pattern, st, 1);
+      const all = st;
+      const threads = (from: number, to: number) => {
+        const part = { ...all, from, limit: to };
+        if (!s.realistic || !drawThreads(ctx, vp, pattern, 1, s.threadMm, part)) drawFlatStitches(ctx, vp, pattern, part, 1);
+      };
+      drawWithPieces(ctx, vp, pattern, st.limit, shown, 1, s.realistic && s.fabricLook, threads);
+    } else if (!s.realistic || !drawThreads(ctx, vp, pattern, 1, s.threadMm, st)) drawFlatStitches(ctx, vp, pattern, st, 1);
     const marks = shownMarks(s);
     if (marks.jumps) drawJumps(ctx, vp, pattern, st.limit, st.alpha, st.carried?.jumps);
     drawMarkers(ctx, vp, pattern, { markers: flow.markers, marks, limit: st.limit, alpha: st.alpha }, w, h);
@@ -141,8 +155,11 @@ export function drawScene(ctx: CanvasRenderingContext2D, w: number, h: number, s
   const edit = scene.edit;
   const opacity = edit ? Math.max(0.85, s.overlay ? s.opacity : 0) : s.overlay ? s.opacity : 0;
   if (pattern && opacity > 0) {
-    if (hasPieces(pattern)) drawPieces(ctx, vp, pattern, pattern.cmd.length - 1, null, opacity, s.realistic && s.fabricLook);
-    if (!s.realistic || !drawThreads(ctx, vp, pattern, opacity, s.threadMm)) drawStitches(ctx, vp, pattern, opacity, false);
+    const threads = (from: number, to: number) => {
+      if (!s.realistic || !drawThreads(ctx, vp, pattern, opacity, s.threadMm, from > 0 || to < pattern.cmd.length - 1 ? { ...threadStyle(pattern), limit: to, from } : undefined)) drawStitches(ctx, vp, pattern, opacity, false, from, to);
+    };
+    if (hasPieces(pattern)) drawWithPieces(ctx, vp, pattern, pattern.cmd.length - 1, null, opacity, s.realistic && s.fabricLook, threads);
+    else threads(0, pattern.cmd.length - 1);
   }
   // Markers belong to the stitch plan: shown with it, not on the bare heatmap.
   if (pattern && opacity > 0) {
