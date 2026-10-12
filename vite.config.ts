@@ -131,7 +131,8 @@ export default defineConfig({
         // Only the app's own pages are installed; the guide, the video page and the moving page always come
         // from the server (src/build/pageCache.ts). The font list and the thread catalogs come along; a font
         // (some 100 KB to 2 MB) only once it is used, then it works offline too. The tooltip pictures are small and come along.
-        globPatterns: [...APP_PAGES, '**/*.{js,css,svg,png,webmanifest,pes}', 'tips/*.webp', 'fonts/index.json', 'threads/catalogs.json'],
+        // So does the list of motifs; a category of motifs (up to some 300 KB) once it was opened.
+        globPatterns: [...APP_PAGES, '**/*.{js,css,svg,png,webmanifest,pes}', 'tips/*.webp', 'fonts/index.json', 'threads/catalogs.json', 'library/index.json'],
         runtimeCaching: [
           // The demo project is not part of the install (some 500 KB); it is kept once it was opened.
           {
@@ -143,6 +144,11 @@ export default defineConfig({
             urlPattern: /\/fonts\/.+\.(json|txt)$/,
             handler: 'StaleWhileRevalidate',
             options: { cacheName: 'fonts', expiration: { maxEntries: 120 } },
+          },
+          {
+            urlPattern: /\/library\/.+\/[\w-]+\.json$/,
+            handler: 'StaleWhileRevalidate',
+            options: { cacheName: 'library', expiration: { maxEntries: 40 } },
           },
         ],
         // Only crawlers and link previews fetch the social image.

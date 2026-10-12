@@ -1,5 +1,7 @@
 import { expect } from 'vitest';
-import { digitizeDefaults } from '../../src/digitize/digitize';
+import { digitizeDefaults, digitizeShapes } from '../../src/digitize/digitize';
+import { appendDesign } from '../../src/model/appendDesign';
+import { digitizedFile } from '../../src/model/digitized';
 import { addShape } from '../../src/model/addShape';
 import { followerLinks, partHolders, recolorBlock, sameRegion, shareBorders, syncBorders } from '../../src/model/border';
 import { blendObject } from '../../src/model/blend';
@@ -8,7 +10,7 @@ import { ECHO_SIDES } from '../../src/digitize/echo';
 import { HAND_STITCHES, HAND_WIDTH, LINE_MOTIFS } from '../../src/digitize/motif';
 import { partOf, type LinePart } from '../../src/model/shadow';
 import { fillToLine, lineStitches, lineToFill, resewLine } from '../../src/model/line';
-import { refreshKnockouts, setKnockout } from '../../src/model/knockout';
+import { overlapsIn, refreshKnockouts, setKnockout } from '../../src/model/knockout';
 import { rememberObjects, sewObjects, tableOf, type SewObject } from '../../src/model/objects';
 import { COLOR_CHANGE, END, STITCH, TRIM, type Pattern, type ThreadColor } from '../../src/model/pattern';
 import { sameColor } from '../../src/model/recolor';
@@ -69,7 +71,7 @@ await loadOps();
  * move, turn, mirror, scale, thin out by hand, delete, cut out, cut a fill apart, recolor, leave out, border in its own thread, empty fill, echo and shadow of a line,
  * a cut line of a satin in sections bent in the satin tool,
  * a line's nodes edited (put in, added at an end, closed, opened), a closed line filled inside, undo,
- * redo, save and open the project, export), done the way the app does them, with the design's
+ * redo, save and open the project, export, a motif of the library put in), done the way the app does them, with the design's
  * invariants checked after every step. A failing chain names its seed and steps, so it can be
  * replayed and turned into a fixed regression test.
  *
@@ -464,8 +466,13 @@ export const OPS: Op[] = [
       expect(g, 'gathered objects stay objects').toBeTruthy();
       const now = sewObjects(g!.pattern);
       const was = new Map(d.objects.map((o) => [o.id, o]));
-      // The gathered: one after the other from the lead on, all in its thread, each with its stitches.
-      expect(g!.which, 'gathered one after the other, the lead first').toEqual(g!.which.map((_, k) => g!.which[0] + k));
+      // The gathered: one after the other from the lead on, all in its thread, each with its stitches
+      // (a fill's border in its thread right after it, as always).
+      const nowMem = now.map((o) => remembered(g!.pattern, o));
+      const links = new Set(g!.which.map((k) => nowMem[k]?.line?.link).filter(Boolean));
+      const follows = (k: number) => !!nowMem[k]?.outline && links.has(nowMem[k]!.outline);
+      const run = now.slice(g!.which[0]).map((o) => o.index).filter((k) => !follows(k)).slice(0, g!.which.length);
+      expect(g!.which, 'gathered one after the other, the lead first').toEqual(run);
       expect(now[g!.which[0]].id, 'the lead first').toBe(d.objects[lead].id);
       // An appliqué's stops are no change of thread: the blocks after them count as the one before.
       const inner = innerStops(g!.pattern);
@@ -1053,6 +1060,39 @@ export const APPLIQUE_OPS: Op[] = [
       const as = appliquesOf(d.cur.p).filter((o) => !remembered(d.cur.p, o)?.free);
       if (!as.length) return false;
       return shapes(d, fromApplique(d.cur.p, [pick(r, as).index], { pattern: 'tatami', spacing: 0.4, spacingEnd: 1, offset: 0.25, angle: NaN, stitch: 4, underlay: true, edge: 0, tolerance: 0.15 }, T));
+    },
+  },
+];
+
+/** A motif as the library sews one (src/library/sew.ts): a face with two eyes, left out under them. */
+function libraryMotif(r: Rand): Pattern {
+  const eye = between(r, 2, 4);
+  const shapes = [
+    { color: 0, kind: 'fill' as const, form: parsePath(ellipsePath(0, 0, 12, 12), ID) },
+    { color: 1, kind: 'fill' as const, form: parsePath(ellipsePath(-4, -3, eye, eye), ID) },
+    { color: 1, kind: 'fill' as const, form: parsePath(ellipsePath(4, -3, eye, eye), ID) },
+    { color: 1, kind: 'stroke' as const, width: 0, form: parsePath('M-6 5 L0 8 L6 5', ID) },
+  ];
+  const made = digitizeShapes(shapes, [pick(r, COLORS), COLORS[0]], options, { w: 24, h: 24 }, false, 'motif');
+  const { pattern } = digitizedFile(made, 'motif', T);
+  return setKnockout(pattern, overlapsIn(pattern), true, T)?.pattern ?? pattern;
+}
+
+/** Putting in from the motif library (appendDesign): a motif, or a whole design with what its objects know. */
+export const MOTIF_OPS: Op[] = [
+  {
+    name: 'put in a motif',
+    run: (d, r) => {
+      const a = appendDesign(d.cur.p, libraryMotif(r), between(r, 0, 60), between(r, 0, 60), T);
+      return shapes(d, a?.pattern);
+    },
+  },
+  {
+    name: 'put the design in again',
+    run: (d, r) => {
+      if (blank(d.cur.p)) return false;
+      const a = appendDesign(d.cur.p, d.cur.p, between(r, 0, 80), between(r, 0, 80), T);
+      return shapes(d, a?.pattern);
     },
   },
 ];
@@ -2144,7 +2184,7 @@ export function describeObjects(p: Pattern): string {
   return sewObjects(p)
     .map((o) => {
       const m = remembered(p, o);
-      const what = !m ? 'UNKNOWN' : [m.applique && `applique:${m.applique.edge}`, m.geo && `geo:${geoUse(m)}`, m.fill && 'fill', m.line && 'line', m.kept && `kept:${Object.keys(m.kept).join('+')}`, m.knockout && 'knockout', m.line?.link && `border->${m.line.link}`, m.outline && `outline=${m.outline}`, m.blendOf && `blendOf=${m.blendOf}`, m.fill?.deco?.blend && `blend->${m.fill.deco.blend.link}`].filter(Boolean).join(' ');
+      const what = !m ? 'UNKNOWN' : [m.applique && `applique:${m.applique.edge}`, m.geo && `geo:${geoUse(m)}`, m.fill && 'fill', m.line && 'line', m.kept && `kept:${Object.keys(m.kept).join('+')}`, m.knockout && 'knockout', m.line?.link && `border->${m.line.link}`, m.outline && `outline=${m.outline}`, m.blendOf && `blendOf=${m.blendOf}`, m.fill?.deco?.blend && `blend->${m.fill.deco.blend.link}`, m.line?.shadow?.link && `shadow->${m.line.shadow.link}`, m.line?.echo?.link && `echo->${m.line.echo.link}`, m.shadowOf && `shadowOf=${m.shadowOf}`, m.echoOf && `echoOf=${m.echoOf}`].filter(Boolean).join(' ');
       return `\n  ${o.index} ${objectKey(p, o)} ${o.kind} block ${o.block} rgb(${o.color.r},${o.color.g},${o.color.b}) ${what}`;
     })
     .join('');
@@ -2155,7 +2195,7 @@ export function describeObjects(p: Pattern): string {
  * moved, sized and removed in between, from a random stream of its own (the ops of a seed stay the
  * ones it always had).
  */
-export async function chain(seed: number, steps = STEPS, opts: { trace?: boolean; knit?: boolean } = {}): Promise<void> {
+export async function chain(seed: number, steps = STEPS, opts: { trace?: boolean; knit?: boolean; motif?: boolean } = {}): Promise<void> {
   const r = rng(seed);
   const rt = rng(seed + 7919);
   const rl = rng(seed + 104729);
@@ -2168,6 +2208,7 @@ export async function chain(seed: number, steps = STEPS, opts: { trace?: boolean
   const rapp = rng(seed + 122949823);
   const rcut = rng(seed + 141650939);
   const rloop = rng(seed + 160481183);
+  const rmot = rng(seed + 179424673);
   const d = new Doc();
   const log: string[] = [];
   const at = () => `seed ${seed}: ${log.join(' > ')}`;
@@ -2308,6 +2349,20 @@ export async function chain(seed: number, steps = STEPS, opts: { trace?: boolean
       if (await lop.run(d, rloop)) {
         log.push(lop.name);
         if (process.env.TORTURE_TRACE) console.log(lop.name, describeObjects(d.cur.p));
+        try {
+          checkStep(d, false);
+        } catch (e) {
+          throw new Error(`${at()}\n${(e as Error).message}`);
+        }
+      }
+    }
+    // Now and then a motif of the library put in, beside the chain (not in chains replayed by seed,
+    // which stay as they were found).
+    if (opts.motif && rmot() < 0.1) {
+      const mop = blank(d.cur.p) ? MOTIF_OPS[0] : pick(rmot, MOTIF_OPS);
+      if (await mop.run(d, rmot)) {
+        log.push(mop.name);
+        if (process.env.TORTURE_TRACE) console.log(mop.name, describeObjects(d.cur.p));
         try {
           checkStep(d, false);
         } catch (e) {

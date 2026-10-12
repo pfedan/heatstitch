@@ -77,6 +77,7 @@ import { initDesign } from './areas/design';
 import { initReady } from './areas/ready';
 import { initShapes, refreshShapes } from './areas/shapes';
 import { initMeasure } from './areas/measure';
+import { initLibrary } from './areas/library';
 import { runCommand } from './shell/commands';
 import { initCheck } from './areas/check/check';
 import { initAmpel } from './areas/ampel/ampel';
@@ -869,6 +870,8 @@ let checkArea: { draw: (ctx: CanvasRenderingContext2D) => void } | null = null;
 let measureArea: { render: () => void } | null = null;
 /** The traffic light "Klappt das?" (src/areas/ampel). */
 let ampel: { update: () => void } | null = null;
+/** The motif library (src/areas/library): where the motif under the pointer would go. */
+let library: { draw: (ctx: CanvasRenderingContext2D) => void; close: () => void } | null = null;
 function redraw(): void {
   if (frame) return;
   frame = requestAnimationFrame(() => {
@@ -898,6 +901,7 @@ function redraw(): void {
     if (measureTool.active) drawMeasure(ctx, vp, measureTool, ui.stageW, ui.stageH);
     drawPlanCompare();
     checkArea?.draw(ctx);
+    library?.draw(ctx);
     ampel?.update();
     if (showCompare()) {
       const x = Math.round(ui.split * ui.stageW);
@@ -1908,6 +1912,7 @@ initResponsive();
 const stitchArea = initStitchArea({ files, settings, editor, rungTool, stitchPanel, closeRungs, toggleRungs, toggleGuides, togglePoints, sewAlongLines, suggestLines, setEditing, enterObject, revealRecord, pointsVisible: () => vp.scale >= POINTS_MIN_SCALE, redraw });
 const design = initDesign({ files, settings, player, vp, stage, fitView, fitToHoop, redraw, applyEdit, trace });
 measureArea = initMeasure({ settings, vp, stage, measure: measureTool, stopDrawing: () => drawTool.active && setDrawing(null), redraw });
+library = initLibrary({ settings, setMode, files, vp, stage, stopDrawing: () => drawTool.active && setDrawing(null), takeShapes, redraw, newDesign: () => newDesign(), setFormLevel, fitView: () => fitView() });
 const ready = initReady({
   files,
   settings,

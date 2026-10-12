@@ -1,0 +1,181 @@
+/* Motive: the motif library in the left column (src/areas/library). */
+
+.sidebar .library {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sidebar .library[hidden] {
+  display: none;
+}
+
+.library .panel-head {
+  margin-bottom: 0;
+}
+
+.library-count {
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.library-search {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  color: inherit;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
+.library-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.library-chip {
+  font-size: 12px;
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+
+.library-chip[aria-pressed='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.library-grid {
+  flex: 1 1 auto;
+  min-height: 120px;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+  grid-auto-rows: max-content;
+  gap: 6px;
+  /* Room for the focus ring of the tiles at the edge. */
+  padding: 2px;
+}
+
+.library-tile {
+  aspect-ratio: 1;
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+}
+
+.library-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.library-tile:hover {
+  border-color: var(--accent);
+}
+
+.library-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.library-note.error {
+  color: #d9534f;
+}
+
+.library-credit {
+  margin: 0;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.library-credit a {
+  color: var(--accent);
+}
+
+/* The head: title, the count of a search, and the button that closes the panel. */
+.library .panel-head {
+  align-items: center;
+  gap: 6px;
+}
+
+.library .panel-head h2 {
+  margin-right: auto;
+}
+
+.library-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 32px;
+  margin: -6px -6px -6px 0;
+  border-radius: 6px;
+}
+
+.library-close .i {
+  width: 18px;
+  height: 18px;
+}
+
+/* Width of the next motif: label, slider, value. */
+.library-size {
+  display: grid;
+  grid-template-columns: auto 1fr 4.5em;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.library-size input {
+  width: 100%;
+  margin: 0;
+}
+
+.library-size output {
+  text-align: right;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A motif being sewn: a ring around its tile fills as its shapes are sewn. */
+.library-tile {
+  position: relative;
+}
+
+.library-tile.sewing {
+  cursor: progress;
+  border-color: transparent;
+}
+
+.library-tile.sewing::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  padding: 3px;
+  background: conic-gradient(var(--accent) calc(var(--sewn, 0) * 360deg), color-mix(in srgb, var(--accent) 18%, transparent) 0);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.library-tile.sewing img {
+  opacity: 0.6;
+}

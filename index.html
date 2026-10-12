@@ -256,6 +256,7 @@
         <button type="button" class="tool" data-draw="cut" data-command="draw.cut" data-tip-img="cut" aria-pressed="false" disabled><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="5.5" cy="14.5" r="2.4" /><circle cx="14.5" cy="14.5" r="2.4" /><path d="M7.3 12.9 13.5 3M12.7 12.9 6.5 3" /></svg></button>
         <span class="rail-sep" aria-hidden="true"></span>
         <button type="button" id="lettering-new" class="tool rail-text" data-command="lettering.new"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4.5 5.5V4h11v1.5M10 4v12.5M7.5 16.5h5" /></svg></button>
+        <button type="button" id="library-open" class="tool" data-command="library.open" aria-pressed="false" aria-controls="library-panel"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="3" width="6" height="6" rx="1" /><rect x="11" y="3" width="6" height="6" rx="1" /><rect x="3" y="11" width="6" height="6" rx="1" /><circle cx="14" cy="14" r="3" /></svg></button>
       </nav>
 
       <aside class="sidebar">
@@ -400,6 +401,25 @@
             <button type="button" id="image-take" class="primary" data-i18n="image.takeShort" data-i18n-title="image.take.hint" hidden></button>
           </nav>
         </div>
+
+        <!-- Motive: the motif library, in place of the object list while it is open (src/areas/library) -->
+        <section class="panel library" id="library-panel" data-mode="flow" aria-labelledby="library-title" hidden>
+          <div class="panel-head">
+            <h2 id="library-title" data-i18n="library.title"></h2>
+            <span class="library-count" id="library-count" aria-live="polite"></span>
+            <button type="button" class="icon library-close" id="library-close"><svg class="i" aria-hidden="true"><use href="#i-obj-close"></use></svg></button>
+          </div>
+          <input type="search" id="library-search" class="library-search" autocomplete="off" spellcheck="false" data-i18n-aria="library.search.label" />
+          <label class="library-size" data-i18n-title="library.size.hint">
+            <span data-i18n="library.size"></span>
+            <input type="range" id="library-size" min="20" max="200" step="5" />
+            <output id="library-size-out" for="library-size"></output>
+          </label>
+          <div class="library-chips" id="library-chips" role="group" data-i18n-aria="library.categories"></div>
+          <div class="library-grid" id="library-grid"></div>
+          <p class="library-note" id="library-note" role="status" hidden></p>
+          <p class="library-credit" id="library-credit"></p>
+        </section>
 
         <section class="panel layers" id="layers-panel" data-mode="flow">
           <div class="panel-head">

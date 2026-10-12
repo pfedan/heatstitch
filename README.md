@@ -342,6 +342,18 @@ text) and loaded when first used. Only fonts under the SIL Open Font License, CC
 domain are included; those under CC BY-SA, non-commercial, no-derivatives or GPL terms are left out.
 No Ink/Stitch code is used, only the fonts' data.
 
+## Motifs
+
+*Motifs* in the tool rail (key `U`) shows 933 ready-made motifs in place of the object list: animals,
+plants, food, sky, celebrations, leisure, travel, things, faces and symbols, found by name or keyword
+in English and German (folded case and accents, parts of German compound words). A click sews one
+into the middle of the view (beside the design when that lies there, on the side where both fit the hoop), dragging puts it where it is dropped, with no design open (also from the welcome sheet) it starts a
+new, empty design. A ring on the tile and the stage shows the shapes sewn so far. Each motif is an SVG from Twemoji (CC BY 4.0, names from Unicode CLDR), sewn at the *Width* the panel's slider sets
+(60 mm by default, smaller in a small hoop) like an opened SVG, each area an object with its shape and what lies under
+later areas left out; it comes in selected, as one undo step (`src/library/`, `src/model/appendDesign.ts`).
+Every motif was sewn and checked once by `tools/library/check.mjs`; the ones Check shows red for are
+left out. The library comes with the app (index precached, categories cached when first opened).
+
 ## Image to embroidery
 
 *Convert a picture* (key `3`) turns a picture into a design in three steps, the computing in two, both in a Web Worker
@@ -715,6 +727,7 @@ src/i18n/        Translations EN/DE
 public/examples/ Example embroidery files and SVGs (loadable from the dropdown), guide demos
 public/guide/    Screenshots for the guide (tools/guide-shots.mjs)
 public/fonts/    Embroidery fonts from Ink/Stitch with their licenses (tools/fonts/convert.mjs)
+public/library/  Motifs from Twemoji with their license (tools/library/build.mjs, check.mjs)
 docs.html        Guide EN/DE (src/docs.ts, src/docs.css)
 videos.html      Video page EN/DE; video.html is the template of each video's own page (src/build/watchPage.ts)
 src/build/       Build steps: pages per language, videos, sitemap.xml with the videos (src/build/sitemap.ts)
@@ -729,4 +742,5 @@ setup, tests, pull request previews and the English/German conventions.
 
 ## License
 
-[MIT](LICENSE) © Daniel Pfeffer
+[MIT](LICENSE) © Daniel Pfeffer. The motifs in `public/library/` are Twemoji graphics under CC BY 4.0, see
+[public/library/LICENSE.md](public/library/LICENSE.md).
