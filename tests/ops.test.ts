@@ -15,6 +15,13 @@ function along(f: Form, per = 40): [number, number][] {
 }
 
 describe('shape operations on curves', () => {
+  it('leaves out a speck as an offset, with no outline to fit (once looped for ever)', () => {
+    // A square 0.003 mm wide: its edges are all shorter than what the fit keeps apart.
+    const speck = parsePath('M10 10 L10.003 10 L10.003 10.003 L10 10.003 Z', ID);
+    expect(offsetForm({ paths: [...rect(0, 0, 5, 5).paths, ...speck.paths] }, 0)?.paths).toHaveLength(1);
+    expect(offsetForm(speck, 0)).toBeNull();
+  });
+
   it('joins overlapping areas exactly and keeps their nodes', () => {
     const a = rect(0, 0, 10, 10);
     const b = disc(10, 5, 4);

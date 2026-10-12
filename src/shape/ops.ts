@@ -320,7 +320,7 @@ function stripAlong(lines: Pt[][], w: number): Form | null {
   for (const l of lines) o.addPath(toInt(l), C.JoinType.Round, C.EndType.Butt);
   const sol: Paths64 = [];
   o.execute(w * SCALE, sol);
-  const paths = sol.filter((r) => r.length > 2).map((r) => fitRing(r.map((q) => [q.x / SCALE, q.y / SCALE] as Pt)));
+  const paths = sol.filter((r) => r.length > 2).flatMap((r) => fitRing(r.map((q) => [q.x / SCALE, q.y / SCALE] as Pt)) ?? []);
   return paths.length ? { paths } : null;
 }
 
@@ -403,7 +403,7 @@ function formOf(rings: Paths64, fit: boolean): Form | null {
   // arc at every point, and the round joins of this one are points 0.01 mm apart.
   const kept = fit ? rings : needClipper().simplifyPaths(rings, SIMPLE * SCALE, true);
   const pts = kept.filter((r) => r.length > 2).map((r) => r.map((q) => [q.x / SCALE, q.y / SCALE] as Pt));
-  const paths = pts.map((r) => (fit ? fitRing(r) : { closed: true, nodes: r.map((q) => ({ p: q, a: q, b: q, smooth: false })) }));
+  const paths = pts.flatMap((r) => (fit ? (fitRing(r) ?? []) : [{ closed: true, nodes: r.map((q) => ({ p: q, a: q, b: q, smooth: false })) }]));
   // Clipper turns holes the other way round: read nonzero they stay holes, also next to other forms.
   return paths.length ? (fit ? { paths } : { paths, nonzero: true }) : null;
 }
@@ -433,10 +433,14 @@ export function bandForm(f: Form, w: number, fit = true): Form | null {
   return formOf(sol, fit);
 }
 
-/** A closed polygon as curves: sharp turns stay corners, the rest is fitted within FIT. */
-function fitRing(ring: Pt[]): Path {
+/**
+ * A closed polygon as curves: sharp turns stay corners, the rest is fitted within FIT. Null for a
+ * speck (fewer than three points apart), which has no outline to fit.
+ */
+function fitRing(ring: Pt[]): Path | null {
   // Points on top of each other (Clipper rounds to its grid) would read as corners.
   const raw = ring.filter((q, i) => dist(q, ring[(i + 1) % ring.length]) > MIN_EDGE);
+  if (raw.length < 3) return null;
   // The fit checks its error at the points and halfway between them: long straight edges get points in between.
   const pts: Pt[] = [];
   for (let i = 0; i < raw.length; i++) {
