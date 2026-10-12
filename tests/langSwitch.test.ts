@@ -149,7 +149,8 @@ const STATES: Record<string, (page: Page) => Promise<void>> = {
   'the save menu with the Wi-Fi help': async (page) => {
     await loadCat(page);
     await page.click('#save-button');
-    // No Ember Bridge runs here: the panel says how to get it.
+    // As if no Ember Bridge ran here (a refused connection would log an error): the panel says how to get it.
+    await page.route('http://127.0.0.1:17831/**', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '{}', headers: { 'access-control-allow-origin': '*' } }));
     await page.locator('#send-machine .save-row', { hasText: /WLAN|Wi-Fi/ }).click();
     await page.locator('.send-wlan .send-status').waitFor();
   },
