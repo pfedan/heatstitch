@@ -15,6 +15,8 @@ import { deleteObjects, duplicateObject, duplicateObjects, mirrorMatrix, recolor
 import { ellipsePath, parsePath, rectPath } from '../src/shape/svgPath';
 import { loadOps } from '../src/shape/ops';
 import { chainSeeds, ID, options, T, COLORS, empty, knowledge, Doc, shapes, transform, boxOf, saveAndOpen, checkWellFormed, checkAllKnown, checkPartsFit, checkBorders, checkObjectList, checkKeys, checkKnockouts, checkCrosshatch, checkExport, checkSewDesign, checkFollowers, checkEchoes, checkRedwork, chain, borderedSquare, borderOf, restitchFill, squareOf, took, type Version } from './helpers/torture';
+import { motifStitches } from '../src/digitize/motif';
+import type { Pt } from '../src/digitize/skeleton';
 import { analyze, measureFill } from '../src/model/restitch';
 import { parsePattern } from '../src/parsers';
 import { writePattern } from '../src/writers';
@@ -125,6 +127,24 @@ describe('found by the torture test', () => {
     expect(sameColor(squareOf(d)!.color, COLORS[0])).toBe(true);
     expect(sameColor(remembered(d.cur.p, squareOf(d)!)!.line!.color, COLORS[2])).toBe(true);
     checkBorders(d.cur.p);
+  });
+
+  it('a chevron goes from one piece to the next over the corner, not across its inside', () => {
+    // Two sharp corners, a chevron figure each piece: the step between them cut the corner.
+    const line: Pt[] = [[12.9, 41.3], [6.8, 45.7], [0.7, 41.3], [7.8, 36.1]];
+    const off = ([x, y]: Pt) =>
+      Math.min(
+        ...line.slice(1).map((b, i) => {
+          const a = line[i];
+          const dx = b[0] - a[0], dy = b[1] - a[1];
+          const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (y - a[1]) * dy) / (dx * dx + dy * dy)));
+          return Math.hypot(x - a[0] - dx * t, y - a[1] - dy * t);
+        }),
+      );
+    for (const side of [1, -1] as const) {
+      const pts = motifStitches(line, false, 'chevron', 2.3, 6.6, side);
+      expect(Math.max(...pts.map(off))).toBeLessThan(2.3 / 2 + 0.01);
+    }
   });
 });
 
