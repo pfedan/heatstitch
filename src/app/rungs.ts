@@ -17,7 +17,7 @@ import { aroundCuts, areaLoops, columnsAlong, suggestSatin } from '../digitize/s
 import { easePiles } from '../digitize/satinEase';
 import { SATIN_MAX } from '../digitize/digitize';
 import { t, type Key } from '../i18n';
-import { edgeAlong, railsArea, sectionView, DECO_DEFAULTS, MAX_SWIRLS, type FillSettings, type Rails, type SatinSettings, analyze, remembered, keepShape, remember, restitch, measureSatin, forget, type RestitchResult, type Settings as RestitchSettings } from '../model/restitch';
+import { edgeAlong, railsArea, sectionView, DECO_DEFAULTS, MAX_SWIRLS, type FillSettings, type Rails, type SatinSettings, analyze, remembered, keepShape, remember, restitch, measureSatin, relearn, type RestitchResult, type Settings as RestitchSettings } from '../model/restitch';
 import { inChainOrder } from '../model/reshape';
 import { ui } from './state';
 
@@ -284,22 +284,20 @@ export function bindRungs(app: RungsApp) {
     const q = app.seq(p);
     const obj = q.objects[ui.rungObject];
     if (!obj) return null;
-    const before = remembered(p, obj);
     const shape = keepShape(p, obj, q.kinds);
-    remember(p, obj, { ...shape, columns, read: false });
-    const r = restitch(
-      p,
+    // Sewn from a try that knows the new rungs; the design itself learns them when it is taken over.
+    const tried = relearn(p, (v) => remember(v, obj, { ...shape, columns, read: false }));
+    return restitch(
+      tried,
       q.objects,
       [ui.rungObject],
       (_o, an, known) => {
         const part = an.parts.find((pt) => pt.kind === 'satin');
-        return part ? { kind: 'satin', s: known?.satin ?? measureSatin(p, part, q.kinds) } : null;
+        return part ? { kind: 'satin', s: known?.satin ?? measureSatin(tried, part, q.kinds) } : null;
       },
       q.kinds,
       app.settings.trimMm,
     );
-    forget(p, obj, before);
-    return r;
   }
 
   function applyRungs(columns: Rails[][]): void {

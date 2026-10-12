@@ -16,7 +16,7 @@ import { loadOps, opsReady } from '../shape/ops';
 import { fillsToLines, lineToSatin, reshapeObject } from '../model/reshape';
 import { resewLine, lineSettings, lineToFill, reshapeLineFill } from '../model/line';
 import { refreshKnockouts } from '../model/knockout';
-import { borderOf, objectKey, remember, remembered, rememberedIn, restitch, type Remembered, type RestitchResult } from '../model/restitch';
+import { borderOf, objectKey, remember, remembered, rememberedIn, relearn, restitch, type Remembered, type RestitchResult } from '../model/restitch';
 import { followerLinks, syncBorders } from '../model/border';
 import { partOf } from '../model/shadow';
 import { stitchKey } from '../model/objects';
@@ -301,9 +301,10 @@ export function bindShapes(app: ShapesApp) {
   }
 
   /** Object `o` sewn anew in `form` (one undo step), or only shown with `preview`. False when it could not be. */
-  function sewShape(o: number, form: Form, preview = false): boolean {
+  function sewShape(o: number, form: Form, preview = false, from?: Pattern): boolean {
     const f = app.files.active;
-    const p = f?.pattern;
+    // `from`: a try of the design with other knowledge (relearn), sewn from instead of the design.
+    const p = f?.pattern && (from ?? f.pattern);
     if (!f || !p) return false;
     const q = app.seq(p);
     const obj = q.objects[o];
@@ -370,10 +371,9 @@ export function bindShapes(app: ShapesApp) {
       const at = cq?.objects[o];
       const m = at && remembered(cur!, at);
       if (!cur || !cq || !at || !m?.free) return false;
-      remember(cur, at, { ...m, free: undefined });
-      const shape = shapeTarget(cur, cq, o);
-      const ok = !!shape && sewShape(o, shape, preview);
-      remember(cur, at, m);
+      const bound = relearn(cur, (v) => remember(v, at, { ...m, free: undefined }));
+      const shape = shapeTarget(bound, cq, o);
+      const ok = !!shape && sewShape(o, shape, preview, bound);
       if (ok && !preview) app.selectObjects([app.seq(app.files.active!.pattern!).objects.findIndex((x) => x.id === id)].filter((k) => k >= 0), false);
       return ok;
     };

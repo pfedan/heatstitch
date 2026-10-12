@@ -9,7 +9,7 @@ import { cutForms, fromApplique, setApplique, toApplique } from '../src/model/ap
 import { colorBlocks } from '../src/model/sequence';
 import { colorBlockOf, numberInColor, sewObjects } from '../src/model/objects';
 import { COLOR_CHANGE, STITCH, type Pattern } from '../src/model/pattern';
-import { remember, remembered } from '../src/model/restitch';
+import { relearn, remember, remembered } from '../src/model/restitch';
 import { reorder } from '../src/model/order';
 import { recolor } from '../src/model/recolor';
 import { ellipsePath, parsePath, rectPath } from '../src/shape/svgPath';
@@ -158,10 +158,9 @@ describe('appliqué', () => {
     // As an appliqué made of a satin's area keeps no fill: the rows get a direction of their own,
     // else nothing could be sewn and its stitches kept the stops of the appliqué it no longer is.
     const d = design();
-    const p = d.cur.p;
-    const a = sewObjects(p)[1];
-    const { kept: _k, ...m } = remembered(p, a)!;
-    remember(p, a, m);
+    const a = sewObjects(d.cur.p)[1];
+    const { kept: _k, ...m } = remembered(d.cur.p, a)!;
+    const p = relearn(d.cur.p, (v) => remember(v, a, m));
     const f = { ...remembered(p, sewObjects(p)[0])!.fill!, angle: NaN };
     const q = fromApplique(p, [1], f, T)!;
     expect(q).toBeTruthy();
