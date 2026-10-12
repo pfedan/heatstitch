@@ -611,6 +611,7 @@ export function fieldFill(
 export function sewRows(r: Region, rows: Pt[][], p: FillParams, start: Pt, mean: number, widest = p.spacing, stitched = false): FlowResult {
   const runs: Pt[][] = [];
   const grid = new TravelGrid(p.travel ?? r, p.offRowEnds);
+  grid.walks = !!p.saveTrims;
   let pos = p.underlay ? sewUnderlay(r, mean, p, start, grid, runs) : start;
   const under = pointCount(runs);
   let cur: Pt[] | null = runs.length ? runs[runs.length - 1] : null;

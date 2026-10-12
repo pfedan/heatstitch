@@ -118,3 +118,22 @@ describe('travel between rows, all covering fills', () => {
     expect(shown.reduce((a, b) => a + b, 0) / shown.length).toBeLessThan(MEAN[pattern]);
   }, 60_000);
 });
+
+describe('Schnitte sparen', () => {
+  // Off (as by default), the needle trims where no hidden way is left; on, it may run a few mm
+  // along the outline instead: never more trims than off, and on the cat fewer in all.
+  const travel = expandRegion(cat, TRAVEL_REACH)!;
+  const base: FillSettings = { pattern: 'tatami', spacing: 0.37, spacingEnd: 1, offset: 0.25, angle: 179, stitch: 4, underlay: true, edge: 0, tolerance: 0.15 };
+  it('trims less where travel may run along the edge', () => {
+    let off = 0;
+    let on = 0;
+    for (const pattern of ['rays', 'circles', 'swirl'] as const) {
+      for (let i = 0; i < 6; i++) {
+        const s: FillSettings = { ...base, pattern, angle: 150 + i * 10, deco: { height: 0.7, seed: i + 1, focus: [0.2 + 0.1 * i, 0.3 + 0.08 * i] } };
+        off += fillRuns(cat, s, { start: START, travel })!.runs.length - 1;
+        on += fillRuns(cat, { ...s, saveTrims: true }, { start: START, travel })!.runs.length - 1;
+      }
+    }
+    expect(on).toBeLessThan(off);
+  }, 60_000);
+});

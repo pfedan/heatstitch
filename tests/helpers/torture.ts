@@ -885,14 +885,16 @@ export const OPS: Op[] = [
       const deco = { seed: 1 + Math.floor(r() * 9), focus: [r(), r()] as [number, number], ...(kind === 'motifs' ? { figure: pick(r, FIGURES) } : {}), ...(r() < 0.5 ? { angle: Math.floor(r() * 360) } : {}) };
       // Irregular rows on any covering fill, now and then (as the slider Unregelmäßig).
       const rough = r() < 0.3 ? { rough: 0.2 + 0.8 * r(), roughSeed: 1 + Math.floor(r() * 99) } : {};
+      // Schnitte sparen now and then: from the seed drawn already, so the ops of a chain stay as they were.
+      const save = deco.seed % 3 === 0 ? { saveTrims: true } : {};
       const s: FillSettings =
         kind === 'emboss'
           ? { ...fill, pattern: 'tatami', deco: { ...deco, emboss: pick(r, MOTIFS), ...(r() < 0.5 ? { embossAngle: Math.floor(r() * 360) } : {}) } }
           : kind === 'texture'
-            ? { ...fill, ...rough, pattern: 'tatami', deco: { ...deco, texture: pick(r, TEXTURES), ...(r() < 0.5 ? { textureSize: 4 + 30 * r() } : {}) } }
+            ? { ...fill, ...rough, ...save, pattern: 'tatami', deco: { ...deco, texture: pick(r, TEXTURES), ...(r() < 0.5 ? { textureSize: 4 + 30 * r() } : {}) } }
             : kind === 'fade'
-              ? { ...fill, ...rough, pattern: 'gradient', deco: { ...deco, fade: pick(r, ['out', 'in'] as const) } }
-              : { ...fill, ...rough, pattern: kind, deco };
+              ? { ...fill, ...rough, ...save, pattern: 'gradient', deco: { ...deco, fade: pick(r, ['out', 'in'] as const) } }
+              : { ...fill, ...rough, ...save, pattern: kind, deco };
       if (process.env.TORTURE_TRACE) console.log('decorate', o.index, kind);
       // As the app: another pattern takes a blend's second thread out.
       const blend = fill.deco?.blend?.link;

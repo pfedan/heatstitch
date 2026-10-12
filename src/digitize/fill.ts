@@ -65,6 +65,11 @@ export interface FillParams {
    * more sections, and its travel would run round the outline beside them, where it shows.
    */
   offRowEnds?: boolean;
+  /**
+   * Fewer trims (Schnitte sparen): where no hidden way is left between rows, travel may run a few mm
+   * along the outline beside sewn row ends (ROW_END_RUN) rather than trim. Off: it trims there.
+   */
+  saveTrims?: boolean;
   /** The whole area this one was cut from (parts left out under what lies on top): travel there is hidden. */
   whole?: Region;
   /** Curved rows keep this close to their line (mm); TOLERANCE by default. */
@@ -542,7 +547,7 @@ function entries(f: Frame, s: Section, pull: number): Entry[] {
 const ROW_END_STRIP = 0.35;
 /** How far travel may run along those strips (mm); crossing one takes a cell or two. */
 const ROW_END_RUN = 4;
-/** How far travel may show where rows to come are known (mm): crossing the strip at a row end. */
+/** How far travel may show where rows to come are known (mm): crossing the strip at a row end (see FillParams.saveTrims). */
 const BARE_RUN = 1.5;
 
 /** Grid over the region for travel paths: passable cells and cells covered by sewn rows. */
@@ -573,6 +578,8 @@ export class TravelGrid {
   detour = 2;
   /** What a jump costs against travel when planning the order of sections (mm of travel). */
   trimCost = TRIM_COST;
+  /** Where rows to come are known, travel may still run a few mm along row ends (see FillParams.saveTrims). */
+  walks = false;
 
   constructor(r: Region, offRowEnds = false, cut?: { whole: Region; area: Region }) {
     this.offRowEnds = offRowEnds;
@@ -737,7 +744,7 @@ export class TravelGrid {
     const s = this.snap(a);
     const t = this.snap(b);
     if (s < 0 || t < 0) return null;
-    const ok = (x: ReturnType<TravelGrid['walk']>) => !!x && x.onTop <= SEWN_CROSSING && x.alongEnds <= (this.ahead ? BARE_RUN : ROW_END_RUN);
+    const ok = (x: ReturnType<TravelGrid['walk']>) => !!x && x.onTop <= SEWN_CROSSING && x.alongEnds <= (this.ahead && (this.gone || !this.walks) ? BARE_RUN : ROW_END_RUN);
     if (avoidSewn && this.ahead) {
       const w = this.walk(this.search(s, a, b, true, t, true, limit), s, t, a, b, true);
       if (w && ok(w) && w.length < this.way(dist(a, b))) return w;
@@ -817,7 +824,7 @@ export class TravelGrid {
   length(a: Pt, b: Pt): number | null {
     // Planning asks often: a search that has to look far and wide counts as no way.
     const w = this.route(a, b, true, (SEARCH_SPREAD * this.way(dist(a, b))) / this.cell);
-    return w && w.length + SHOWN_COST * w.onTop + EDGE_COST * w.alongEnds;
+    return w && w.length + SHOWN_COST * w.onTop + (this.walks ? SHOWN_COST : EDGE_COST) * w.alongEnds;
   }
 
   /** A* from cell s to t (Dijkstra everywhere with t < 0), at most `limit` cells: the predecessor of each cell. */
@@ -1450,6 +1457,7 @@ export function fillRegion(r: Region, p: FillParams, start: Pt, neighbours: numb
   if (!top.length) return null;
   const runs: Pt[][] = [];
   const grid = new TravelGrid(p.travel ?? r, p.offRowEnds, p.whole ? { whole: p.whole, area: r } : undefined);
+  grid.walks = !!p.saveTrims;
   const pos = p.underlay ? sewUnderlay(r, angle, p, start, grid, runs) : start;
   const under = pointCount(runs);
   const secs = sections(r, r.sdf, f, top);
