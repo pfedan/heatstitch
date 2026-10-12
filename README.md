@@ -607,7 +607,9 @@ and memory cards, Wi-Fi SD cards (HTTP from an HTTPS page, no CORS).
 *As project (.heatstitch)* saves the whole workspace in one file (`src/storage/project.ts`), and
 dropping it on the app opens it again. It holds what embroidery files cannot:
 
-- every loaded file as its original bytes plus the working copy (records and exact RGB thread colors),
+- every loaded file as its original bytes plus the working copy (records and exact RGB thread colors);
+  a design made in the app (from a picture, an SVG or the motif library) starts as heatstitch's own
+  lossless records (`src/parsers/records.ts`) instead of a PES file, so its thread colors stay exact,
 - acknowledged and reopened findings,
 - the objects' shapes, stitch settings, rungs, guide lines, borders and knock-outs, letterings as
   text, objects not sewn or kept as guides,
@@ -615,7 +617,7 @@ dropping it on the app opens it again. It holds what embroidery files cannot:
 - material profile, fabric color, hoop, checks, correction and order options, trim length, machine
   speed and the image preparation and stitch options.
 
-The file is gzip-compressed JSON (`{"format": "heatstitch-project", "version": 1, ...}`); binary data
+The file is gzip-compressed JSON (`{"format": "heatstitch-project", "version": 4, ...}`); binary data
 is base64 of little-endian bytes tagged with its array type. A project from a newer version is
 refused with a message instead of being misread. Undo history and view settings are not saved. The
 same object state is kept in IndexedDB with the file, so it survives a reload.

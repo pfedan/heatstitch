@@ -34,8 +34,8 @@ const summary = (p: ReturnType<typeof opened>[number]['p']) =>
 const saved = async (project: Project) => decodeProject(await encodeProject({ ...project, files: project.files.map((f, k) => ({ ...f, objects: rememberedIn(opened(project)[k].p) })) }));
 
 describe('project version 3', () => {
-  it('is the version written now, and an app of version 2 would not open it', () => {
-    expect(PROJECT_VERSION).toBe(3);
+  it('is the version written now or older than it, so an app of version 2 would not open it', () => {
+    expect(PROJECT_VERSION).toBeGreaterThanOrEqual(3);
   });
 
   it('opens a project of version 2 with the same objects, and saving it again changes nothing more', async () => {
