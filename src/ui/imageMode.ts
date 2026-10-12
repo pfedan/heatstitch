@@ -215,7 +215,7 @@ export function backgroundOf(shapes: SvgShape[]): number {
   return area >= BACKGROUND_SOLID * size(own) ? 0 : -1;
 }
 
-export async function digitizeSvg(file: File, prepare: PrepareOptions, options: DigitizeOptions): Promise<Digitized & { leftOut?: LeftOut[]; source?: SewnFrom }> {
+export async function digitizeSvg(file: File, prepare: PrepareOptions, options: DigitizeOptions, background = true): Promise<Digitized & { leftOut?: LeftOut[]; source?: SewnFrom }> {
   const vector = await decodeSvg(file);
   if (!vector) throw new Error('not an SVG of shapes');
   const { canvas, svg } = vector;
@@ -229,8 +229,9 @@ export async function digitizeSvg(file: File, prepare: PrepareOptions, options: 
     const all = svg.shapes(widthMm);
     if (all?.length) {
       const { threads, index } = threadsFor(svg.colors, prepare.threads);
-      // A background is kept aside, not sewn (it can be sewn from the list "Not sewn").
-      const bg = backgroundOf(all);
+      // A background is kept aside, not sewn (it can be sewn from the list "Not sewn"); a motif
+      // of the library has none (`background` false): a big first shape is part of it.
+      const bg = background ? backgroundOf(all) : -1;
       const shapes = bg >= 0 ? all.filter((_, k) => k !== bg) : all;
       const mapped = shapes.map((s) => ({ ...s, color: index[s.color] }));
       const size = { w: widthMm, h: widthMm * svg.aspect };

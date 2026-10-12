@@ -106,6 +106,21 @@ node tools/fonts/convert.mjs /tmp/embroidery-fonts/src <commit>
 
 Ink/Stitch's code is GPL: read it to understand the font format, but never copy from it.
 
+### Motifs
+
+The motif library in `public/library/` is built from Twemoji (CC BY 4.0) with the CLDR names of
+emojibase-data (MIT) by `tools/library/build.mjs`; `tools/library/check.mjs` then sews every motif in
+the app's own code and leaves out the ones Prüfen shows red for (listed in
+`tools/library/excluded.json`, which the next build leaves out too). Sources go in only under CC0,
+CC BY, OFL or a license like MIT, never GPL or non-commercial. To update:
+
+```sh
+git clone --depth 1 https://github.com/jdecked/twemoji /tmp/twemoji
+npm pack emojibase-data@17.0.0 && tar xzf emojibase-data-17.0.0.tgz -C /tmp
+node tools/library/build.mjs /tmp/twemoji /tmp/package <commit>
+node tools/library/check.mjs        # takes a while; PAGES=4 sews four at a time
+```
+
 ## Pull request previews
 
 Every pull request is built and uploaded as a preview version of the site, at

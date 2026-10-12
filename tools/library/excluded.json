@@ -1,0 +1,302 @@
+[
+ {
+  "source": "twemoji",
+  "id": "1f30b",
+  "name": "Vulkan",
+  "light": "red",
+  "reasons": [
+   "density"
+  ]
+ },
+ {
+  "source": "twemoji",
+  "id": "1f34c",
+  "name": "Banane",
+  "light": "red",
+  "reasons": [
+   "density"
+  ]
+ },
+ {
+  "source": "twemoji",
+  "id": "1f384",
+  "name": "Weihnachtsbaum",
+  "light": "red",
+  "reasons": [
+   "density"
+  ]
+ },
+ {
+  "source": "twemoji",
+  "id": "1f3a0",
+  "name": "Karussellpferd",
+  "light": "red",
+  "reasons": [
+   "density"
+  ]
+ },
+ {
+  "source": "twemoji",
+  "id": "1f3db",
+  "name": "antikes Gebäude",
+  "light": "red",
+  "reasons": [
+   "density"
+  ]
+ },
+ {
+  "source": "twemoji",
+  "id": "1f3e3",
+  "name": "japanisches Postgebäude",
+  "light": "red",
+  "reasons": [
+   "density"
+  ]
+ },
+ {
+  "source": "twemoji",
+  "id": "1f3e5",
+  "name": "Krankenhaus",
+  "light": "red",
+  "reasons": [
+   "density"
+  ]
+ },
+ {
+  "source": "twemoji",
+  "id": "1f3ea",
+  "name": "Minimarkt",
+  "light": "red",
+  "reasons": [
+   "density"
+  ]
+ },
+ {
+  "source": "twemoji",
+  "id": "1f3eb",
+  "name": "Schule",
+  "light": "red",
+  "reasons": [
+   "density"
+  ]
+ },
+ {
+  "source": "twemoji",
+  "id": "1f43b-200d-2744-fe0f",
+  "name": "Eisbär",
+  "light": "red",
+  "reasons": [
+   "density"
+  ]
+ },
+ {
+  "source": "twemoji",
+  "id": "1f48d",
+  "name": "Ring",
+  "light": "red",
+  "reasons": [
+   "density"
+  ]
+ },
+ {
+  "source": "twemoji",
+  "id": "1f4d6",
+  "name": "offenes Buch",
+  "light": "red",
+  "reasons": [
+   "density"
+  ]
+ },
+ {
+  "source": "twemoji",
+  "id": "1f64a",
+  "name": "sich den Mund zuhaltendes Affengesicht",
+  "light": "red",
+  "reasons": [
+   "density"
+  ]
+ },
+ {
+  "source": "twemoji",
+  "id": "1f69d",
+  "name": "Einschienenbahn",
+  "light": "red",
+  "reasons": [
+   "density"
+  ]
+ },
+ {
+  "source": "twemoji",
+  "id": "1f6e4",
+  "name": "Bahngleis",
+  "light": "red",
+  "reasons": [
+   "density",
+   "penetrations"
+  ]
+ },
+ {
+  "source": "twemoji",
+  "id": "1f943",
+  "name": "Trinkglas",
+  "light": "red",
+  "reasons": [
+   "density"
+  ]
+ },
+ {
+  "source": "twemoji",
+  "id": "1f960",
+  "name": "Glückskeks",
+  "light": "red",
+  "reasons": [
+   "density"
+  ]
+ },
+ {
+  "source": "twemoji",
+  "id": "1f964",
+  "name": "Becher mit Strohhalm",
+  "light": "red",
+  "reasons": [
+   "density"
+  ]
+ },
+ {
+  "source": "twemoji",
+  "id": "1f967",
+  "name": "Kuchen",
+  "light": "red",
+  "reasons": [
+   "density",
+   "penetrations"
+  ]
+ },
+ {
+  "source": "twemoji",
+  "id": "1f997",
+  "name": "Grille",
+  "light": "red",
+  "reasons": [
+   "density"
+  ]
+ },
+ {
+  "source": "twemoji",
+  "id": "1f9a9",
+  "name": "Flamingo",
+  "light": "red",
+  "reasons": [
+   "density"
+  ]
+ },
+ {
+  "source": "twemoji",
+  "id": "1f9af",
+  "name": "Blindenstock",
+  "light": "red",
+  "reasons": [
+   "density"
+  ]
+ },
+ {
+  "source": "twemoji",
+  "id": "1f9c9",
+  "name": "Mate-Tee",
+  "light": "red",
+  "reasons": [
+   "density"
+  ]
+ },
+ {
+  "source": "twemoji",
+  "id": "1f9ec",
+  "name": "DNA",
+  "light": "red",
+  "reasons": [
+   "density"
+  ]
+ },
+ {
+  "source": "twemoji",
+  "id": "1fa85",
+  "name": "Piñata",
+  "light": "red",
+  "reasons": [
+   "density"
+  ]
+ },
+ {
+  "source": "twemoji",
+  "id": "1fa89",
+  "name": "Harfe",
+  "light": "red",
+  "reasons": [
+   "density"
+  ]
+ },
+ {
+  "source": "twemoji",
+  "id": "1fa91",
+  "name": "Stuhl",
+  "light": "red",
+  "reasons": [
+   "density"
+  ]
+ },
+ {
+  "source": "twemoji",
+  "id": "1fa96",
+  "name": "Militärhelm",
+  "light": "red",
+  "reasons": [
+   "density",
+   "penetrations"
+  ]
+ },
+ {
+  "source": "twemoji",
+  "id": "1fab5",
+  "name": "Holz",
+  "light": "red",
+  "reasons": [
+   "density"
+  ]
+ },
+ {
+  "source": "twemoji",
+  "id": "1fabb",
+  "name": "Hyazinthe",
+  "light": "red",
+  "reasons": [
+   "density"
+  ]
+ },
+ {
+  "source": "twemoji",
+  "id": "1fad5",
+  "name": "Fondue",
+  "light": "red",
+  "reasons": [
+   "density"
+  ]
+ },
+ {
+  "source": "twemoji",
+  "id": "26d3",
+  "name": "Ketten",
+  "light": "red",
+  "reasons": [
+   "density"
+  ]
+ },
+ {
+  "source": "twemoji",
+  "id": "2744",
+  "name": "Schneeflocke",
+  "light": "red",
+  "reasons": [
+   "density"
+  ]
+ }
+]
