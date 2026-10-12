@@ -98,7 +98,7 @@ export default defineConfig({
       selfDestroying: isPreview,
       // The app asks before switching to a new version (see src/ui/updateNotice.ts).
       registerType: 'prompt',
-      includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
+      includeAssets: ['favicon.ico', 'favicon.svg', 'apple-touch-icon.png'],
       manifest: {
         name: 'heatstitch',
         short_name: 'heatstitch',
