@@ -1,5 +1,5 @@
-// The app icons from the logo mark (public/favicon.svg): PWA icons, the maskable icon and the
-// Apple touch icon, drawn by Chromium so they look exactly like the SVG.
+// The app icons from the logo mark (public/favicon.svg): PWA icons, the maskable icon, the
+// Apple touch icon and favicon.ico, drawn by Chromium so they look exactly like the SVG.
 //
 //   node tools/brand/icons.mjs
 //
@@ -43,14 +43,45 @@ const icons = [
   { file: 'apple-touch-icon.png', size: 180, svg: fullSquare(0.78) },
 ];
 
+// favicon.ico: what search engines and old browsers ask for without reading the page. Google wants
+// a square of a multiple of 48 px, so 48 is in it, next to the 16 and 32 a browser tab picks.
+const ICO_SIZES = [16, 32, 48];
+
 const browser = await chromium.launch();
-for (const { file, size, svg } of icons) {
+async function draw(svg, size) {
   const page = await browser.newPage({ viewport: { width: size, height: size } });
   const src = `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
   await page.setContent(`<body style="margin:0"><img src="${src}" width="${size}" height="${size}" style="display:block"></body>`);
   await page.locator('img').evaluate((img) => img.decode());
-  await page.screenshot({ path: pub(file), omitBackground: true });
+  const png = await page.screenshot({ omitBackground: true });
   await page.close();
+  return png;
+}
+for (const { file, size, svg } of icons) {
+  fs.writeFileSync(pub(file), await draw(svg, size));
   console.log(file);
 }
+const pngs = [];
+for (const size of ICO_SIZES) pngs.push(await draw(mark, size));
+fs.writeFileSync(pub('favicon.ico'), ico(ICO_SIZES, pngs));
+console.log('favicon.ico');
 await browser.close();
+
+/** An ICO file holding the PNGs as they are (every browser since IE Vista reads PNG entries). */
+function ico(sizes, pngs) {
+  const head = Buffer.alloc(6 + 16 * pngs.length);
+  head.writeUInt16LE(1, 2);
+  head.writeUInt16LE(pngs.length, 4);
+  let offset = head.length;
+  pngs.forEach((png, i) => {
+    const e = 6 + 16 * i;
+    head.writeUInt8(sizes[i] % 256, e);
+    head.writeUInt8(sizes[i] % 256, e + 1);
+    head.writeUInt16LE(1, e + 4);
+    head.writeUInt16LE(32, e + 6);
+    head.writeUInt32LE(png.length, e + 8);
+    head.writeUInt32LE(offset, e + 12);
+    offset += png.length;
+  });
+  return Buffer.concat([head, ...pngs]);
+}
