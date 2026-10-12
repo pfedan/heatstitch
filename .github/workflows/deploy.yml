@@ -42,7 +42,8 @@ jobs:
           path: dist
           include-hidden-files: true
 
-  # All test files, a third on each machine (vitest --shard: every file runs on exactly one of them).
+  # All test files, a third on each machine (vitest --shard: every file runs on exactly one of them), split
+  # by how long each file runs (tests/sequencer.ts, tests/timings.json) so the machines finish together.
   test:
     if: github.event.action != 'closed'
     runs-on: ubuntu-latest
@@ -153,12 +154,17 @@ jobs:
       - run: python scripts/oracle.py
 
   # The correction engine on its fixed test set (tests/korrekturBench.test.ts): never a new critical cell, and
-  # no case fixes less than the reference in tests/bench/korrektur.json.
+  # no case fixes less than the reference in tests/bench/korrektur.json. A third of the cases on each machine
+  # (BENCH_SHARD, split by the reference's times); each case gives the same result as in one run.
   korrektur:
     if: github.event.action != 'closed'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     concurrency:
-      group: korrektur-${{ github.ref }}
+      group: korrektur-${{ github.ref }}-${{ matrix.shard }}
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
@@ -171,12 +177,13 @@ jobs:
         env:
           BENCH: '1'
           BENCH_CHECK: '1'
-          BENCH_OUT: korrektur-ci.json
+          BENCH_SHARD: ${{ matrix.shard }}/3
+          BENCH_OUT: korrektur-ci-${{ matrix.shard }}.json
       - if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: korrektur-benchmark
-          path: tests/bench/korrektur-ci.json
+          name: korrektur-benchmark-${{ matrix.shard }}
+          path: tests/bench/korrektur-ci-${{ matrix.shard }}.json
 
   deploy:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'

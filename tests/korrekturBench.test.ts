@@ -37,11 +37,40 @@ const movesOf = (p: Pattern) => {
  */
 const MORE_MOVES = (n: number, objects: number) => 2 * Math.max(1, objects) + Math.ceil(n * 0.05);
 
+/** The reference run: what no case may fall behind, and how long each case took. */
+const reference = () => JSON.parse(new TextDecoder().decode(readFileSync(new URL('./bench/korrektur.json', import.meta.url)))) as { name: string; critAfter: number; ms: number }[];
+
+/**
+ * BENCH_SHARD=i/n: only this machine's share of the cases, so CI runs them on n machines side by side.
+ * Longest first to the machine with the least time so far (the reference's times), the same split on
+ * every machine; a case not in the reference counts as long as the median one.
+ */
+const SHARD = process.env.BENCH_SHARD?.split('/').map(Number);
+const mine = (names: string[]): Set<string> => {
+  if (!SHARD) return new Set(names);
+  const [index, count] = SHARD;
+  const ms = new Map(reference().map((r) => [r.name, r.ms]));
+  const known = [...ms.values()].sort((a, b) => a - b);
+  const median = known.length ? known[known.length >> 1] : 1;
+  const load = new Array<number>(count).fill(0);
+  const out = new Set<string>();
+  for (const name of [...names].sort((a, b) => (ms.get(b) ?? median) - (ms.get(a) ?? median) || (a < b ? -1 : 1))) {
+    let least = 0;
+    for (let i = 1; i < count; i++) if (load[i] < load[least]) least = i;
+    load[least] += ms.get(name) ?? median;
+    if (least === index - 1) out.add(name);
+  }
+  return out;
+};
+
 run('correction benchmark', () => {
   it('fixes the test set', async () => {
     const rows = [];
-    for (const c of corpus()) {
+    const cases = corpus();
+    const share = mine(cases.map((c) => c.name));
+    for (const c of cases) {
       if (ONLY && !c.name.includes(ONLY)) continue;
+      if (!share.has(c.name)) continue;
       const v = validateDesign(c.pattern, c.profile);
       const t0 = performance.now();
       let after = c.pattern;
@@ -76,7 +105,7 @@ run('correction benchmark', () => {
     if (process.env.BENCH_CHECK) {
       // The hard rule everywhere, and no case left with more critical cells than the reference (1 cell slack:
       // sewing differs by a hair between machines' floating point).
-      const ref = new Map<string, { critAfter: number }>((JSON.parse(new TextDecoder().decode(readFileSync(new URL('./bench/korrektur.json', import.meta.url)))) as { name: string; critAfter: number }[]).map((r) => [r.name, r]));
+      const ref = new Map(reference().map((r) => [r.name, r]));
       for (const r of rows) {
         expect(r.newCrit, `${r.name}: new critical cells`).toBe(0);
         expect(r.cutAfter, `${r.name}: trims after`).toBeLessThanOrEqual(r.cut + 1);
