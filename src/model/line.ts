@@ -10,7 +10,7 @@ import { runRecords } from './border';
 import { tidy, withRecords } from './edit';
 import { rememberObjects, sewObjects, stitchKey, type SewObject } from './objects';
 import { JUMP, STITCH, type Pattern } from './pattern';
-import { analyze, borderOf, measureFill, measureSatin, objectKey, remember, remembered, restitch, trimBefore, type Analysis, type BorderSettings, type FillSettings, type Rec, type Remembered, type RestitchResult, type RunSettings } from './restitch';
+import { analyze, borderOf, measureFill, measureSatin, objectKey, remember, remembered, restitch, trimBefore, withShortLocks, type Analysis, type BorderSettings, type FillSettings, type Rec, type Remembered, type RestitchResult, type RunSettings } from './restitch';
 import { stitchKinds, TIE_STITCH } from './sequence';
 import { bandArea, fits, geoOf, geoUse, grownForm, guessArea, lineGeoOf, satinOutline } from './geo';
 import { partOf } from './shadow';
@@ -292,10 +292,18 @@ export function resewLine(p: Pattern, index: number, path: Form, st: PathStitch,
   const r = resewOnce(p, index, path, st, trimMm, reverse);
   if (!r) return r;
   // New stitches that are the very stitches of another object (a copy lying exactly on its
-  // original): sewn from the other end, so each remembers its own (memory is keyed by stitches).
-  const keys = sewObjects(r.pattern).filter((x) => x.first !== r.first).map((x) => objectKey(r.pattern, x));
-  if (!keys.includes(stitchKey(r.pattern, r.first, r.last))) return r;
-  return resewOnce(p, index, path, st, trimMm, !reverse) ?? r;
+  // original): sewn from the other end, else with the locks a little shorter (a line sewn there and
+  // back, as redwork, is the same from either end), so each remembers its own (memory is keyed by
+  // stitches).
+  const unique = (x: { pattern: Pattern; first: number; last: number }) =>
+    !sewObjects(x.pattern)
+      .filter((o) => o.first !== x.first)
+      .some((o) => objectKey(x.pattern, o) === stitchKey(x.pattern, x.first, x.last));
+  if (unique(r)) return r;
+  const back = resewOnce(p, index, path, st, trimMm, !reverse);
+  if (back && unique(back)) return back;
+  const short = withShortLocks(() => resewOnce(p, index, path, st, trimMm, reverse));
+  return short && unique(short) ? short : r;
 }
 
 function resewOnce(p: Pattern, index: number, path: Form, st: PathStitch, trimMm: number, reverse: boolean): { pattern: Pattern; first: number; last: number } | null {

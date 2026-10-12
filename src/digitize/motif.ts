@@ -253,7 +253,7 @@ function handStitches(f: ReturnType<typeof frame>, line: Pt[], closed: boolean, 
     const cuts = closed ? [...cs, cs[0] + f.total] : [0, ...cs, f.total];
     for (let i = 1; i < cuts.length; i++) if (cuts[i] - cuts[i - 1] > 1e-6) pieces.push([cuts[i - 1], cuts[i]]);
   }
-  for (const [s0, s1] of pieces) {
+  for (const [piece, [s0, s1]] of pieces.entries()) {
     const len = s1 - s0;
     let m = Math.max(1, Math.round(len / Math.max(cord ? CORD_STEP_RANGE[0] : 0.5, period)));
     const step = ring && motif !== 'stem' ? 2 : 1;
@@ -306,21 +306,24 @@ function handStitches(f: ReturnType<typeof frame>, line: Pt[], closed: boolean, 
       const sg = (j: number) => (j % 2 ? -1 : 1);
       const off = ring ? 0 : d / 2;
       const mid = (j: number) => at(off + j * d, (sg(j) * w) / 2);
+      const end = (j: number, e: 1 | -1) => at(off + j * d + (e * d) / 2, (sg(j) * w) / 2);
       const bar = (j: number) => {
         const c = mid(j);
-        const e = at(off + j * d + d / 2, (sg(j) * w) / 2);
-        const b = at(off + j * d - d / 2, (sg(j) * w) / 2);
         for (let i = 0; i < even / 2; i++) {
-          bundle(c, e, 2);
-          bundle(c, b, 2);
+          bundle(c, end(j, 1), 2);
+          bundle(c, end(j, -1), 2);
         }
       };
+      // From the piece before (cut at a corner): over the bars that end at the corner, not straight
+      // from point to point, which cut across the inside of the corner far from the line.
+      if (out.length) go(end(0, -1));
       go(mid(0));
       bar(0);
       for (let j = 1; j < m + (ring ? 1 : 0); j++) {
         bundle(mid(j - 1), mid(j), odd);
         if (j < m) bar(j);
       }
+      if (piece < pieces.length - 1) go(end(m - 1, 1));
     }
   }
   return out;

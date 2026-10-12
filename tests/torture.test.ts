@@ -9,11 +9,14 @@ import { END, STITCH, TRIM, type Pattern } from '../src/model/pattern';
 import { sameColor } from '../src/model/recolor';
 import { backToVersion, lockAt, remember, remembered, restitch, withShortLocks, type SatinSettings } from '../src/model/restitch';
 import { stitchKinds } from '../src/model/sequence';
+import { isRedwork } from '../src/model/along';
 import { currentSettings } from '../src/correct/plan';
 import { deleteObjects, duplicateObject, duplicateObjects, mirrorMatrix, recolorObjects, subtractTop } from '../src/model/shapeOps';
 import { ellipsePath, parsePath, rectPath } from '../src/shape/svgPath';
 import { loadOps } from '../src/shape/ops';
-import { chainSeeds, ID, options, T, COLORS, empty, knowledge, Doc, shapes, transform, boxOf, saveAndOpen, checkWellFormed, checkAllKnown, checkPartsFit, checkBorders, checkObjectList, checkKeys, checkKnockouts, checkCrosshatch, checkExport, checkSewDesign, checkFollowers, checkEchoes, checkRedwork, chain, borderedSquare, borderOf, restitchFill, squareOf, took, type Version } from './helpers/torture';
+import { chainSeeds, ID, options, T, COLORS, empty, knowledge, Doc, shapes, transform, boxOf, saveAndOpen, checkWellFormed, checkAllKnown, checkPartsFit, checkBorders, checkObjectList, checkKeys, checkKnockouts, checkAreas, checkCrosshatch, checkExport, checkSewDesign, checkFollowers, checkEchoes, checkRedwork, chain, borderedSquare, borderOf, restitchFill, squareOf, took, type Version } from './helpers/torture';
+import { motifStitches } from '../src/digitize/motif';
+import type { Pt } from '../src/digitize/skeleton';
 import { analyze, measureFill } from '../src/model/restitch';
 import { parsePattern } from '../src/parsers';
 import { writePattern } from '../src/writers';
@@ -100,12 +103,62 @@ describe('found by the torture test', () => {
     checkKeys(d.cur.p);
   });
 
+  it('a copy in place of a line, both sewn as redwork, still remembers its own', () => {
+    // A ring as redwork runs there and back: sewn from the other end it has the very same
+    // stitches, so only the short locks tell the copy apart.
+    const d = new Doc();
+    shapes(d, addShape(empty, { form: parsePath(ellipsePath(10, 20, 9, 10), ID), kind: 'stroke', width: 0 }, COLORS[0], null, options)!.pattern);
+    shapes(d, duplicateObjects(d.cur.p, [0], T, 0)?.pattern);
+    shapes(d, recolorObjects(d.cur.p, [1], COLORS[1], T));
+    expect(d.objects).toHaveLength(2);
+    // Both sewn along the very same form, as in the chain that found it.
+    const form = remembered(d.cur.p, d.objects[0])!.geo!;
+    for (const k of [0, 1]) {
+      const m = remembered(d.cur.p, d.objects[k])!;
+      expect(shapes(d, resewLine(d.cur.p, k, form, { ...m.line!, redwork: true }, T)!.pattern)).toBe(true);
+      checkKeys(d.cur.p);
+    }
+    expect(d.objects.map((o) => isRedwork(remembered(d.cur.p, o)!.line!))).toEqual([true, true]);
+  });
+
   it('recoloring a border gives its fill that border thread', () => {
     const d = borderedSquare();
     shapes(d, recolorObjects(d.cur.p, [borderOf(d)], COLORS[2], T));
     expect(sameColor(squareOf(d)!.color, COLORS[0])).toBe(true);
     expect(sameColor(remembered(d.cur.p, squareOf(d)!)!.line!.color, COLORS[2])).toBe(true);
     checkBorders(d.cur.p);
+  });
+
+  it('a chevron goes from one piece to the next over the corner, not across its inside', () => {
+    // Two sharp corners, a chevron figure each piece: the step between them cut the corner.
+    const line: Pt[] = [[12.9, 41.3], [6.8, 45.7], [0.7, 41.3], [7.8, 36.1]];
+    const off = ([x, y]: Pt) =>
+      Math.min(
+        ...line.slice(1).map((b, i) => {
+          const a = line[i];
+          const dx = b[0] - a[0], dy = b[1] - a[1];
+          const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (y - a[1]) * dy) / (dx * dx + dy * dy)));
+          return Math.hypot(x - a[0] - dx * t, y - a[1] - dy * t);
+        }),
+      );
+    for (const side of [1, -1] as const) {
+      const pts = motifStitches(line, false, 'chevron', 2.3, 6.6, side);
+      expect(Math.max(...pts.map(off))).toBeLessThan(2.3 / 2 + 0.01);
+    }
+  });
+
+  it('a fill leaving out what lies on top, mirrored onto the same pixels, is sewn anew on what is left', () => {
+    const d = new Doc();
+    shapes(d, addShape(empty, { form: parsePath(rectPath(10, 10, 20, 20, 0, 0), ID), kind: 'fill' }, COLORS[0], null, options)!.pattern);
+    // A disc over one corner only: the square's stitches mirrored along leave out the other corner.
+    shapes(d, addShape(d.cur.p, { form: parsePath(ellipsePath(28, 12, 5, 5), ID), kind: 'fill' }, COLORS[1], null, options)!.pattern);
+    shapes(d, setKnockout(d.cur.p, [0], true, T)!.pattern);
+    const left = remembered(d.cur.p, d.objects[0])!.region!.areaMm2;
+    // Mirrored about its middle, the square covers the very pixels it did, so the same is left of it.
+    expect(transform(d, [0], [-1, 0, 0, 1, 40, 0])).toBe(true);
+    expect(remembered(d.cur.p, d.objects[0])!.region!.areaMm2).toBeCloseTo(left, 6);
+    checkAreas(d.cur.p);
+    checkKnockouts(d.cur.p);
   });
 });
 
