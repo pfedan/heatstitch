@@ -602,7 +602,7 @@ export interface OpenParams {
   seed: number;
   /** Every stitch three times (bean stitch). */
   triple: boolean;
-  /** Grids, motifs and cross stitch: the pattern turned by this many degrees (see turning). */
+  /** Grids, motifs, cross stitch, meander and maze: the pattern turned by this many degrees (see turning). */
   angle?: number;
 }
 
@@ -652,11 +652,13 @@ const DIRS: Pt[] = [
 /**
  * The outline of a random spanning tree on a grid of `cell` mm inside the region, one closed loop
  * per connected part. `maze` grows the tree depth first (long corridors, a labyrinth), else from a
- * random edge of all grown so far (short branches, a meander).
+ * random edge of all grown so far (short branches, a meander). The grid is turned by `angle`
+ * degrees (see turning).
  */
-function treeLoops(r: Region, cell: number, seed: number, maze: boolean, margin: number): Pt[][] {
+function treeLoops(r: Region, cell: number, seed: number, maze: boolean, margin: number, angle = 0): Pt[][] {
   const rnd = random(seed);
-  const [bx0, by0, bx1, by1] = regionBox(r);
+  const [bx0, by0, bx1, by1] = turnedBox(r, angle);
+  const { to } = turning(angle);
   // Anchored to the design origin, like tatami rows.
   const i0 = Math.floor(bx0 / cell);
   const j0 = Math.floor(by0 / cell);
@@ -668,7 +670,8 @@ function treeLoops(r: Region, cell: number, seed: number, maze: boolean, margin:
   const q = cell / 4;
   const free = (i: number, j: number, dx: number, dy: number) => {
     const [x, y] = at(i, j);
-    return sample(r, r.sdf, x + dx * q, y + dy * q) < -(margin - q);
+    const [sx, sy] = to([x + dx * q, y + dy * q]);
+    return sample(r, r.sdf, sx, sy) < -(margin - q);
   };
   // Free quarters per cell, bit (dx > 0) + 2 (dy > 0); a cell with all four free joins the tree.
   const quarters = new Uint8Array(gw * gh);
@@ -764,7 +767,7 @@ function treeLoops(r: Region, cell: number, seed: number, maze: boolean, margin:
       break;
     }
   }
-  return grown.map((root) => outlineOfTree(root, gw, links, at, q, half));
+  return grown.map((root) => outlineOfTree(root, gw, links, at, q, half).map(to));
 }
 
 /** The numbers 0 to n - 1 in a random order. */
@@ -900,7 +903,7 @@ export function meanderFill(r: Region, p: OpenParams, start: Pt): FillResult | n
     const f = amp * 0.6 * Math.min(1, Math.max(0, (-sample(r, r.sdf, x, y) - 0.2) / (2 * amp)));
     return [x + f * nx(x, y), y + f * ny(x, y)];
   };
-  const loops = treeLoops(r, cell, p.seed, false, cell / 4 + 0.2).map((l) => densify(rounded(l, cell / 4), cell / 8).map(warp));
+  const loops = treeLoops(r, cell, p.seed, false, cell / 4 + 0.2, p.angle).map((l) => densify(rounded(l, cell / 4), cell / 8).map(warp));
   const runs = sewLoops(loops, start, p);
   return runs.length ? { runs, angle: 0, under: 0 } : null;
 }
@@ -908,7 +911,7 @@ export function meanderFill(r: Region, p: OpenParams, start: Pt): FillResult | n
 /** Maze: the tree outline with straight corridors and sharp corners. Lines are `size` mm apart. */
 export function mazeFill(r: Region, p: OpenParams, start: Pt): FillResult | null {
   const cell = 2 * p.size;
-  const runs = sewLoops(treeLoops(r, cell, p.seed, true, cell / 4 + 0.2), start, p);
+  const runs = sewLoops(treeLoops(r, cell, p.seed, true, cell / 4 + 0.2, p.angle), start, p);
   return runs.length ? { runs, angle: 0, under: 0 } : null;
 }
 

@@ -101,7 +101,7 @@ export interface DecoSettings {
   size?: number;
   /** Open patterns: every stitch three times. */
   triple?: boolean;
-  /** Grids, motifs and cross stitch: the pattern turned by this many degrees; upright when not set. */
+  /** Grids, motifs, cross stitch, meander and maze: the pattern turned by this many degrees; upright when not set. */
   angle?: number;
   grid?: GridKind;
   cross?: CrossKind;

@@ -1633,8 +1633,8 @@ export class StitchPanel {
         auto: this.unset(d, 'size'),
       }),
     );
-    // Turned half round a grid or a cross stitch is the same again; figures need the whole turn.
-    if (cells) out.push(this.dial({ label: 'stitch.openAngle', hint: 'stitch.openAngle.hint', turn: pat === 'motifs' ? 360 : 180, get: () => d.angle ?? 0, set: (v) => (v ? (d.angle = v) : delete d.angle), fmt: (v) => `${Math.round(v)}°` }));
+    // Turned half round a grid, cross stitch, meander or maze is the same kind again; figures need the whole turn.
+    if (pat !== 'echo') out.push(this.dial({ label: 'stitch.openAngle', hint: 'stitch.openAngle.hint', turn: pat === 'motifs' ? 360 : 180, get: () => d.angle ?? 0, set: (v) => (v ? (d.angle = v) : delete d.angle), fmt: (v) => `${Math.round(v)}°` }));
     if (pat !== 'cross') out.push(this.slider({ label: 'stitch.length', hint: 'stitch.openLength.hint', min: 1, max: 3, step: 0.1, get: () => Math.min(3, s.stitch), set: (v) => (s.stitch = v), fmt: (v) => `${formatNumber(v, 1)} mm` }));
     out.push(this.check('stitch.triple', 'stitch.openTriple.hint', () => !!d.triple, (v) => (d.triple = v)));
     if (pat === 'meander' || pat === 'maze') out.push(this.rerollRow());

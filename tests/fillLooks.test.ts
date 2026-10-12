@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { crossFill, FIGURES, gridFill, motifCrossings, motifFill, TEXTURES, texturePoints } from '../src/digitize/deco';
+import { crossFill, FIGURES, gridFill, mazeFill, meanderFill, motifCrossings, motifFill, TEXTURES, texturePoints } from '../src/digitize/deco';
 import { digitizeDefaults } from '../src/digitize/digitize';
 import { fillRegion } from '../src/digitize/fill';
 import { buildRegion, sample, type Region } from '../src/digitize/region';
@@ -163,6 +163,16 @@ describe('turned patterns', () => {
       expect(res.runs.length, f).toBe(1);
       for (const q of res.runs[0]) expect(sample(disk, disk.sdf, q[0], q[1]), f).toBeLessThan(0.05);
     }
+  });
+
+  it('turn a maze and a meander, inside the area, and leave them as they were at 0 degrees', () => {
+    const p = { ...open, size: 2.5 };
+    expect(dirs(mazeFill(disk, p, [6, 20])!.runs)).toEqual([0, 90]);
+    expect(dirs(mazeFill(disk, { ...p, angle: 30 }, [6, 20])!.runs)).toEqual([30, 120]);
+    expect(mazeFill(disk, { ...p, angle: 0 }, [6, 20])).toEqual(mazeFill(disk, p, [6, 20]));
+    expect(meanderFill(disk, { ...p, angle: 0 }, [6, 20])).toEqual(meanderFill(disk, p, [6, 20]));
+    for (const res of [mazeFill(disk, { ...p, angle: 30 }, [6, 20])!, meanderFill(disk, { ...p, angle: 75 }, [6, 20])!])
+      for (const q of res.runs.flat()) expect(sample(disk, disk.sdf, q[0], q[1])).toBeLessThan(0.05);
   });
 
   it('turn an embossed motif: a row crosses it as the row turned back crosses the upright one', () => {
