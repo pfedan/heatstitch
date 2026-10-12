@@ -1,5 +1,5 @@
 import type { Orientation } from '../image/orientation';
-import { chooseAngle, fillRegion, pathLength, pointCount, sewUnderlay, TRAVEL_STITCH, TRAVEL_TOLERANCE, TravelGrid, type FillParams, type FillResult } from './fill';
+import { BEAM_PIECES, beamOnGrid, chooseAngle, fillRegion, noteTravel, pathLength, planOnGrid, type Pieces, pointCount, sewUnderlay, TRAVEL_STITCH, TRAVEL_TOLERANCE, TravelGrid, type FillParams, type FillResult } from './fill';
 import { coverage, peakDensity } from './measure';
 import { sample, type Region } from './region';
 import { ringFill } from './rings';
@@ -600,9 +600,13 @@ export function fieldFill(
 
 /**
  * Curved rows (each a line through the area) sewn one after the other: underlay at `mean` degrees
- * first when asked, then row after row while the next one starts close by, with travel under rows
- * not sewn yet between groups. `stitched` rows are needle points already (else they are cut into
- * stitches here).
+ * first when asked, then the rows joined into chains (rowChains: rows whose ends lie close by,
+ * within `widest` rows with the step inside the area, are joined straight), the chains in the order
+ * planned on the travel grid as sections of straight rows are (beamOnGrid, planOnGrid): the next is
+ * the one reached by the shortest way hidden under rows still to come, so the needle does not run
+ * back along the outline on top of sewn rows. Between chains travel runs under rows not sewn yet,
+ * else the needle jumps. `stitched` rows are needle
+ * points already (else they are cut into stitches here).
  */
 export function sewRows(r: Region, rows: Pt[][], p: FillParams, start: Pt, mean: number, widest = p.spacing, stitched = false): FlowResult {
   const runs: Pt[][] = [];
@@ -610,68 +614,117 @@ export function sewRows(r: Region, rows: Pt[][], p: FillParams, start: Pt, mean:
   let pos = p.underlay ? sewUnderlay(r, mean, p, start, grid, runs) : start;
   const under = pointCount(runs);
   let cur: Pt[] | null = runs.length ? runs[runs.length - 1] : null;
-  const todo = rows.slice();
   const reach = 2.5 * widest + 0.3;
-  let count = 0;
-  /** Takes row i out of the list, oriented to start at the given end. */
-  const take = (i: number, fromEnd: boolean): Pt[] => {
-    const row = todo.splice(i, 1)[0];
-    return fromEnd ? row.slice().reverse() : row;
+  const half = p.spacing / 2;
+  const trail: [number, number][] = [];
+  // A row starting this close is joined straight, while the step stays inside the area.
+  const straight = (a: Pt, b: Pt) => {
+    const d = dist(a, b);
+    return d <= 1 || (d < reach && sample(r, r.sdf, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2) < half);
   };
-  while (todo.length) {
-    // The nearest row end, then row after row while the next one starts close by.
-    let bi = 0;
-    let rev = false;
-    let bd = Infinity;
-    todo.forEach((row, i) => {
-      for (const end of [false, true]) {
-        const d = dist(pos, end ? row[row.length - 1] : row[0]);
-        if (d < bd) {
-          bd = d;
-          bi = i;
-          rev = end;
-        }
-      }
-    });
-    const group: Pt[][] = [take(bi, rev)];
-    for (;;) {
-      const last = group[group.length - 1];
-      const e = last[last.length - 1];
-      let ni = -1;
-      let nrev = false;
-      let nd = reach;
-      todo.forEach((row, i) => {
-        for (const end of [false, true]) {
-          const q = end ? row[row.length - 1] : row[0];
-          const d = dist(e, q);
-          if (d >= nd) continue;
-          const mid: Pt = [(e[0] + q[0]) / 2, (e[1] + q[1]) / 2];
-          if (sample(r, r.sdf, mid[0], mid[1]) >= p.spacing / 2) continue;
-          nd = d;
-          ni = i;
-          nrev = end;
-        }
-      });
-      if (ni < 0) break;
-      group.push(take(ni, nrev));
-    }
+  const chains = rowChains(rows, straight, reach);
+  const ends = (c: Pt[][]): [Pt, Pt] => [c[0][0], c[c.length - 1][c[c.length - 1].length - 1]];
+  const pieces: Pieces<Pt[][], { p: Pt; rev: boolean }> = {
+    ways: (c) => [
+      { p: ends(c)[0], rev: false },
+      { p: ends(c)[1], rev: true },
+    ],
+    exit: (c, w) => ends(c)[w.rev ? 0 : 1],
+    prints: (c) => c.flatMap((row) => row.slice(1).map((q, i) => grid.footprint(row[i], q, half))),
+    straight,
+  };
+  for (const row of rows) for (let i = 1; i < row.length; i++) grid.expect(row[i - 1], row[i], half);
+  const { order } = chains.length <= BEAM_PIECES ? beamOnGrid(pieces, chains, pos, grid) : planOnGrid(pieces, chains, pos, grid);
+  let count = 0;
+  for (const { s: chain, e } of order) {
+    const lines = e.rev ? chain.slice().reverse().map((row) => row.slice().reverse()) : chain;
     const pts: Pt[] = [];
-    for (const row of group) pts.push(...(stitched ? row : rowStitches({ k: count++, pts: row }, p.stitch, p.tolerance ?? TOLERANCE)));
+    for (const line of lines) pts.push(...(stitched ? line : rowStitches({ k: count++, pts: line }, p.stitch, p.tolerance ?? TOLERANCE)));
+    const bd = dist(pos, pts[0]);
     let travel: Pt[] | null = null;
-    if (cur && bd > 1) {
+    if (cur && straight(pos, pts[0])) travel = [pos, pts[0]];
+    else if (cur) {
       const path = grid.path(pos, pts[0], true);
-      if (path && pathLength(path) < 2 * bd + 6) travel = runStitch(path, TRAVEL_STITCH, TRAVEL_TOLERANCE);
-    } else if (cur) travel = [pos, pts[0]];
+      if (path && pathLength(path) < grid.way(bd)) travel = runStitch(path, TRAVEL_STITCH, TRAVEL_TOLERANCE);
+    }
+    if (cur && travel && travel.length > 2) noteTravel(trail, runs, travel.length);
     if (cur && travel) cur.push(...travel.slice(1), ...pts.slice(1));
     else {
       cur = pts;
       runs.push(cur);
     }
-    for (const row of group) for (let i = 1; i < row.length; i++) grid.cover(row[i - 1], row[i], p.spacing / 2);
+    for (const row of chain) for (let i = 1; i < row.length; i++) grid.cover(row[i - 1], row[i], half);
     pos = pts[pts.length - 1];
   }
 
-  return { runs, angle: mean, curved: true, under };
+  return { runs, angle: mean, curved: true, under, travel: trail };
+}
+
+/**
+ * The rows joined into chains sewn back and forth in one go, independent of where sewing starts:
+ * row ends close enough to step straight (see `straight`) are paired, shortest step first, each end
+ * at most once and never into a loop (a path cover by greedy matching, as Kruskal builds a tree).
+ * `straight` holds only for ends less than `reach` (or 1 mm) apart.
+ * Each chain lists its rows in sewing order, each turned to start where the one before ends.
+ */
+export function rowChains(rows: Pt[][], straight: (a: Pt, b: Pt) => boolean, reach: number): Pt[][][] {
+  const n = rows.length;
+  const endOf = (e: number): Pt => (e % 2 ? rows[e >> 1][rows[e >> 1].length - 1] : rows[e >> 1][0]);
+  const links: { a: number; b: number; d: number }[] = [];
+  // Ends on a grid of cells `reach` wide, so only ends near each other are compared.
+  const cell = Math.max(reach, 1);
+  const grid = new Map<string, number[]>();
+  for (let e = 0; e < 2 * n; e++) {
+    const q = endOf(e);
+    const k = `${Math.floor(q[0] / cell)},${Math.floor(q[1] / cell)}`;
+    (grid.get(k) ?? grid.set(k, []).get(k)!).push(e);
+  }
+  for (let e = 0; e < 2 * n; e++) {
+    const q = endOf(e);
+    const ci = Math.floor(q[0] / cell);
+    const cj = Math.floor(q[1] / cell);
+    for (let dj = -1; dj <= 1; dj++) {
+      for (let di = -1; di <= 1; di++) {
+        for (const f of grid.get(`${ci + di},${cj + dj}`) ?? []) {
+          if (f <= e || f >> 1 === e >> 1) continue;
+          const o = endOf(f);
+          if (straight(q, o)) links.push({ a: e, b: f, d: dist(q, o) });
+        }
+      }
+    }
+  }
+  links.sort((x, y) => x.d - y.d);
+  const mate = new Int32Array(2 * n).fill(-1);
+  const root = Int32Array.from({ length: n }, (_, i) => i);
+  const find = (i: number): number => (root[i] === i ? i : (root[i] = find(root[i])));
+  for (const { a, b } of links) {
+    if (mate[a] >= 0 || mate[b] >= 0) continue;
+    const ra = find(a >> 1);
+    const rb = find(b >> 1);
+    if (ra === rb) continue;
+    mate[a] = b;
+    mate[b] = a;
+    root[ra] = rb;
+  }
+  const chains: Pt[][][] = [];
+  const seen = new Uint8Array(n);
+  for (let i = 0; i < n; i++) {
+    if (seen[i]) continue;
+    // Walk to one end of the chain, then along it.
+    let e = 2 * i;
+    while (mate[e] >= 0) e = mate[e] ^ 1;
+    const chain: Pt[][] = [];
+    for (;;) {
+      const r = e >> 1;
+      seen[r] = 1;
+      chain.push(e % 2 ? rows[r].slice().reverse() : rows[r]);
+      const out = e ^ 1;
+      if (mate[out] < 0) break;
+      e = mate[out];
+    }
+    chains.push(chain);
+  }
+  return chains;
 }
 
 /**

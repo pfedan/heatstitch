@@ -26,7 +26,7 @@ import { rasterize, type LineCap } from '../shape/rasterize';
 import { distanceInside, distanceToSeeds } from '../image/edt';
 import { tidy, withRecords } from './edit';
 import { coversOver, cutAway, type Cover } from './covers';
-import { backToVersion, entryOf, hasTable, sewObjects, hold, keepVersion, knowKinds, rememberObjects, setMemory, setObjects, setObjectsFromKeys, stitchIndex, stitchKey, tableOf, type ObjectKind, type PlacedEntry, type SewObject } from './objects';
+import { backToVersion, entryOf, hasTable, sewObjects, hold, keepVersion, knowKinds, relearn, rememberObjects, setMemory, setObjects, setObjectsFromKeys, stitchIndex, stitchKey, tableOf, type ObjectKind, type PlacedEntry, type SewObject } from './objects';
 import { END, JUMP, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
 import { partFringe } from './fringe';
 import { recordOfStitch, SATIN, stitchKinds, TIE_STITCH } from './sequence';
@@ -576,7 +576,7 @@ export function forget(p: Pattern, o: SewObject, r?: Remembered): void {
   setMemory(p, o.first, o.last, r);
 }
 
-export { backToVersion, keepVersion };
+export { backToVersion, keepVersion, relearn };
 
 /** The object's shape and stitch type are only guessed from its stitches (a file from elsewhere), not known. */
 export function isGuessed(p: Pattern, o: SewObject): boolean {
@@ -2326,6 +2326,8 @@ export interface NewFill {
   under: number;
   /** Points of `runs` before the border (all of them without one). */
   border: number;
+  /** Travel between rows that may show (see FillResult.travel), as point indices into `runs`. */
+  travel?: [number, number][];
 }
 
 function newFill(p: Pattern, o: SewObject, a: Analysis, s: FillSettings, reverse = false, covers?: Cover[]): NewFill | null {
@@ -2463,7 +2465,20 @@ export function fillRuns(area: Region, s: FillSettings, way: FillWay): NewFill |
   const runs = res.runs.filter((run) => run.length > 1);
   // The border is an object of its own, sewn after the fill (see syncBorders).
   const border = runs.reduce((n, run) => n + run.length, 0);
-  return { runs, under, border };
+  // Travel indices as in the runs kept (runs of one point are left out before them).
+  let ways: [number, number][] | undefined;
+  if (res.travel?.length) {
+    const left: number[] = [];
+    let n = 0;
+    let gone = 0;
+    for (const run of res.runs) {
+      for (let i = 0; i < run.length; i++) left[n + i] = gone;
+      if (run.length <= 1) gone += run.length;
+      n += run.length;
+    }
+    ways = res.travel.map(([a, b]) => [a - left[a], b - left[b]]);
+  }
+  return { runs, under, border, ...(ways ? { travel: ways } : {}) };
 }
 
 /** Embossing or a texture of a tatami (embossing wins when both are set). */

@@ -10,7 +10,7 @@ import { newLink, syncBorders } from './border';
 import { reorder } from './order';
 import { recolor, sameColor } from './recolor';
 import type { Pattern, ThreadColor } from './pattern';
-import { borderOf, forget, withLine, objectKey, remember, remembered, restitch, type Remembered } from './restitch';
+import { borderOf, forget, withLine, objectKey, relearn, remember, remembered, restitch, type Remembered } from './restitch';
 import { reshapeFill, transformSewObject } from './reshape';
 import { stitchKinds } from './sequence';
 import { stitchesBefore } from './transform';
@@ -428,7 +428,8 @@ export function recolorObjects(p: Pattern, which: number[], color: ThreadColor, 
   if (!next) return null;
   // A border in its fill's thread goes along into the new one.
   if (!borders.length) return syncBorders(next, trimMm);
-  const cur = next;
+  // Only borders change thread: their fills learn it on a version of their own, `p` stays as it is.
+  const cur = next === p ? relearn(p, () => {}) : next;
   for (const o of borders) {
     const f = fillOf(o);
     const m = mem[f]!;

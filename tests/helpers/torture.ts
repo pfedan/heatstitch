@@ -20,11 +20,15 @@ import { cutKey, sewnArea, wholeArea, wholeOf } from '../../src/model/knockout';
 import { unionOf } from '../../src/shape/rasterize';
 import { borderStitches, isRedwork, isRunType } from '../../src/model/along';
 import { redworkGraph, redworkWalks } from '../../src/digitize/redwork';
-import { APPLIQUE_FABRICS, innerStops } from '../../src/model/applique';
+import { APPLIQUE_FABRICS, appliquePieces, innerStops, type Piece } from '../../src/model/applique';
+import { pieceAt } from '../../src/render/applique';
 import { appliquesOf, canApplique, fromApplique, setApplique, toApplique } from '../../src/model/appliqueOps';
 import type { Region } from '../../src/digitize/region';
 import { GAP_ROWS_MAX } from '../../src/digitize/fill';
-import { backToVersion, edgeAlong, forget, keepShape, keepVersion, objectKey, remember, remembered, rememberedIn, restitch, restoreRemembered, DECO_PATTERNS, OPEN_PATTERNS, type BorderSettings, type FillSettings, type Rails, type Remembered, type StoredObjects } from '../../src/model/restitch';
+import { fillRuns, TRAVEL_REACH } from '../../src/model/restitch';
+import { expandRegion, outline as outlineOf } from '../../src/digitize/region';
+import { shownTravel } from './travel';
+import { backToVersion, edgeAlong, keepShape, keepVersion, relearn, objectKey, remember, remembered, rememberedIn, restitch, restoreRemembered, DECO_PATTERNS, OPEN_PATTERNS, type BorderSettings, type FillSettings, type Rails, type Remembered, type StoredObjects } from '../../src/model/restitch';
 import { reorder } from '../../src/model/order';
 import { stitchKinds } from '../../src/model/sequence';
 import { addContour, behindCovered, gapReader } from '../../src/model/contour';
@@ -1122,7 +1126,35 @@ export function checkAppliques(p: Pattern): void {
     const b = blockAt(o.first);
     for (let k = 1; k <= stops.length; k++) if (!sameColor(p.colors[b + k], p.colors[b])) problems.push(`${o.index}: block ${b + k} in another thread`);
   }
+  // A click on the cloth finds its appliqué (or a piece laid on later, over it).
+  const end = p.cmd.length - 1;
+  for (const x of appliquePieces(p)) {
+    const at = pointOnCloth(x);
+    if (at && (pieceAt(p, at[0], at[1], end)?.first ?? -1) < x.first) problems.push(`${x.first}: its cloth at ${at.map((v) => v.toFixed(1))} is not found`);
+  }
   expect(problems.join('; '), 'appliqués').toBe('');
+}
+
+/**
+ * A point on the cloth of piece `x` (mm, even-odd as drawn), across its middle on the first span
+ * inside: halfway along it, or `inset` mm in from its start when the span is wide enough.
+ */
+export function pointOnCloth(x: Piece, inset?: number): [number, number] | null {
+  const polys = x.form.paths.map((path) => flatten(path, 0.2));
+  const ys = polys.flat().map((q) => q[1]);
+  if (!ys.length) return null;
+  const y = (Math.min(...ys) + Math.max(...ys)) / 2 + 1e-3;
+  const xs: number[] = [];
+  for (const pts of polys) {
+    for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+      const [xi, yi] = pts[i];
+      const [xj, yj] = pts[j];
+      if (yi > y !== yj > y) xs.push(((xj - xi) * (y - yi)) / (yj - yi) + xi);
+    }
+  }
+  xs.sort((a, b) => a - b);
+  for (let k = 0; k + 1 < xs.length; k += 2) if (xs[k + 1] - xs[k] > 1e-6) return [inset !== undefined && xs[k + 1] - xs[k] > 2 * inset ? xs[k] + inset : (xs[k] + xs[k + 1]) / 2, y];
+  return null;
 }
 
 /** A script font whose letters run into each other (loaded from the app's fonts). */
@@ -1319,9 +1351,9 @@ export const CUT_OPS: Op[] = [
       const kept = columns.flatMap((part) => part.flatMap((c) => c.split?.cuts ?? []));
       expect(kept.some((c) => c.length > 2 && c.some((q) => Math.hypot(q[0] - to[0], q[1] - to[1]) < 1e-9)), 'the bent cut line is kept').toBe(true);
       const satin = before.satin!;
-      remember(p, o, { ...keepShape(p, o, kinds), columns, read: false });
-      const res = restitch(p, objs, [o.index], { kind: 'satin', s: satin }, kinds, T);
-      forget(p, o, before);
+      // As the app's rung tool does: sewn from a try that knows the bent cut line.
+      const tried = relearn(p, (v) => remember(v, o, { ...keepShape(p, o, kinds), columns, read: false }));
+      const res = restitch(tried, objs, [o.index], { kind: 'satin', s: satin }, kinds, T);
       return !res.failed.length && took(d, res);
     },
   },
@@ -2220,6 +2252,29 @@ export function checkSewDesign(p: Pattern): void {
   expect(moved.map(what).join(' '), 'sewn again from the new list: objects that changed').toBe('');
 }
 
+/** Fills that cover their area row by row: travel between their rows is planned under rows to come. */
+const COVERING = ['tatami', 'gradient', 'waves', 'grain', 'rays', 'swirl', 'circles'];
+
+/**
+ * Travel planned hidden: a covering fill sewn from its shape again leaves little of its travel
+ * between rows uncovered by stitches sewn after it (Daniel's wild stitches: travel back along the
+ * outline on top of rows sewn). On the torture shapes now at most about 11 mm, mostly under 4 (a few
+ * mm along row ends rather than a trim); travel along the outline as before showed 16 to 36 mm on
+ * one fill in seven. Parts of a fill cut apart are left out: their travel runs under what lies on
+ * top, which this does not see.
+ */
+export function checkHiddenTravel(p: Pattern): void {
+  for (const o of sewObjects(p)) {
+    const spec = specOf(p, o);
+    if (spec?.kind !== 'fill' || !COVERING.includes(spec.fill.pattern) || wholeOf(spec.area)) continue;
+    const ring = outlineOf(spec.area)[0];
+    if (!ring?.length) continue;
+    const res = fillRuns(spec.area, spec.fill, { start: ring[0], travel: expandRegion(spec.area, TRAVEL_REACH) ?? undefined });
+    if (!res?.travel) continue;
+    expect(shownTravel(res.runs, res.travel, spec.fill.spacing), `travel on top of rows: object ${o.index} (${spec.fill.pattern})`).toBeLessThan(15);
+  }
+}
+
 export function describeObjects(p: Pattern): string {
   return sewObjects(p)
     .map((o) => {
@@ -2489,6 +2544,7 @@ function checkStep(d: Doc, full: boolean): void {
   if (full) {
     checkExport(p);
     checkSewDesign(p);
+    checkHiddenTravel(p);
   }
 }
 
