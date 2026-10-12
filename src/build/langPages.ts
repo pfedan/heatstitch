@@ -45,7 +45,7 @@ const DE: Record<Page, { title: string; description: string; ogTitle: string; og
   },
   privacy: {
     title: 'heatstitch: Datenschutz',
-    description: 'Was mit deinen Daten in heatstitch passiert: Deine Dateien bleiben in deinem Browser, kein Tracking, keine Cookies.',
+    description: 'Was mit deinen Daten in heatstitch passiert: Deine Dateien bleiben in deinem Browser, keine Cookies, kein Tracking einzelner Besucher.',
     ogTitle: 'heatstitch: Datenschutz',
     ogDescription: 'Was mit deinen Daten in heatstitch passiert.',
   },
