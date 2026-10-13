@@ -4,7 +4,7 @@ import { followerLinks, syncBorders } from './border';
 import { fillArea, fits, geoUse } from './geo';
 import { sewObjects, type SewObject } from './objects';
 import type { Pattern } from './pattern';
-import { knownKind, remembered, type FillSettings, type Remembered } from './restitch';
+import { knownKind, patternAnew, remembered, type FillSettings, type Remembered } from './restitch';
 import { partOf } from './shadow';
 import { listOf, sewList } from './sew';
 import type { Form } from '../shape/path';
@@ -34,11 +34,15 @@ function asApplique(m: Remembered, s: AppliqueSettings): Remembered {
   return out;
 }
 
-/** The fill an appliqué goes back to: the one it kept, else `fill`. */
-function asFill(m: Remembered, fill: FillSettings): Remembered {
+/** What appliqué memory `m` remembers as a fill again: the fill it kept, else `fill`. */
+export function asFill(m: Remembered, fill: FillSettings): Remembered {
   const { applique: _a, kept, parts: _p, under: _u, underFrom: _f, borderAt: _b, ...rest } = m;
   const { fill: was, ...others } = kept ?? {};
   const out: Remembered = { ...rest, fill: was ?? fill, ...(Object.keys(others).length ? { kept: others } : {}) };
+  // Its old rows are gone (the fill that follows them has nothing to follow): straight rows. The
+  // second thread of its blend went when it became an appliqué: it is one thread again.
+  const { blend: _l, ...deco } = out.fill!.deco ?? {};
+  out.fill = { ...out.fill!, pattern: patternAnew(out.fill!), ...(out.fill!.deco ? { deco } : {}) };
   if (m.geo) out.region = fillArea(out);
   // A fill given without an angle (NaN: the rows' direction left open) gets the one with the
   // fewest sections on its area, as a satin made a fill does: rows need a direction to be sewn.
