@@ -2,11 +2,14 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { Pt } from '../src/digitize/skeleton';
 import { sewObjects } from '../src/model/objects';
-import { forget, keepShape, remember, remembered, rememberedIn, restoreRemembered, reversedRails, satinRuns, sectionPlan, type Rails, type SatinSettings } from '../src/model/restitch';
+import { forget, keepShape, sectionView, remember, remembered, rememberedIn, restoreRemembered, reversedRails, satinRuns, sectionPlan, type Rails, type SatinSettings } from '../src/model/restitch';
 import { stitchKinds } from '../src/model/sequence';
 import { transformRemembered } from '../src/model/transform';
 import { parsePattern } from '../src/parsers';
+import { decodeProject } from '../src/storage/project';
+import { fromStored } from '../src/storage/fileStore';
 import { BADGE, RungTool } from '../src/ui/rungTool';
+import { checkSatinOrder } from './helpers/torture';
 
 const PLAIN: SatinSettings = { spacing: 0.4, edge: 0, short: false, underlay: false, tolerance: 0.15 };
 const UNDER: SatinSettings = { ...PLAIN, underlay: true, under: 'center' };
@@ -103,4 +106,40 @@ describe('order, direction and trims of the sections of a column', () => {
       forget(p, o);
     }
   });
+});
+
+describe('places of the columns of a satin read from stitches', () => {
+  // An L read from a file: two columns, not chained (each sewn as a run of its own), one area.
+  const across = (): Rails => ({ left: line([0, 0], [20, 0]), right: line([0, 4], [16, 4]) });
+  const down = (): Rails => ({ left: line([20, 0], [20, 24]), right: line([16, 4], [16, 24]) });
+
+  it('numbers every column in the order it is sewn, as when the part was chained', () => {
+    const view = sectionView([[across(), down()]], undefined);
+    expect(view[0].length).toBe(2);
+    expect(view[0][0].split).toBeDefined();
+    expect(view[0].every((c) => c.chain === undefined)).toBe(true);
+    const changes: Rails[][][] = [];
+    const tool = new RungTool({ change: (c) => changes.push(c), lines: () => {}, guides: () => {}, redraw: () => {}, say: () => {} });
+    tool.openSatin(view);
+    tool.satin = PLAIN;
+    expect(tool.badges.map((b) => [b.n, b.lone, b.trim])).toEqual([[1, undefined, null], [2, undefined, null]]);
+    // Moved one place earlier: the order of the part changes, its area stays with the first column.
+    const b = tool.badges[1];
+    tool.down(b.at[0] + (b.dir[0] * BADGE.number) / 10, b.at[1] + (b.dir[1] * BADGE.number) / 10, 10);
+    tool.up();
+    const part = changes[0][0];
+    expect(part[0].left).toEqual(down().left);
+    expect(part[0].split).toBeDefined();
+    expect(part[1].split).toBeUndefined();
+    expect(part.some((c) => 'chain' in c)).toBe(false);
+  });
+
+  it('holds for Daniel\'s cat, read from a PES file', async () => {
+    const proj = await decodeProject(new Uint8Array(readFileSync(new URL('./fixtures/cat-outline-sections.heatstitch', import.meta.url))));
+    const f = proj.files[0];
+    const original = parsePattern(f.data, f.name);
+    const p = fromStored(original, f.working) ?? original;
+    restoreRemembered(p, f.objects);
+    checkSatinOrder(p);
+  }, 120_000);
 });
