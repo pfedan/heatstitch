@@ -973,6 +973,20 @@ shots.trace = async (lang) => {
   await close();
 };
 
+// 22. motifs: the motif library in the tool rail (U) beside the cat
+shots.motifs = async (lang) => {
+  const { page, close } = await boot(lang);
+  await example(page, 'cat');
+  await realistic(page, true);
+  await tab(page, 'design');
+  await fit(page);
+  await page.click('#library-open');
+  await page.waitForTimeout(2500);
+  await mouseAway(page);
+  await jpeg(page, `motifs-${lang}`);
+  await close();
+};
+
 // ---- runner
 const names = process.argv.slice(2);
 const list = names.length ? names : Object.keys(shots);
