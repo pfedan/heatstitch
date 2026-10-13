@@ -11,7 +11,7 @@ Teile:
 4. Sticharten, Stiche von Hand, Satin-Querlinien, Korrektur, Befunde, Sprünge und Schnitte
 
 Gleichzeitig in anderen Threads in Arbeit (gehört mit in den Vertrag, sobald gemergt):
-- Kopieren und Einfügen (Strg+C/V versetzt), Duplizieren am Platz (Strg+D), Füllung leer mit nur Umrandung
+- Kopieren und Einfügen (Strg+C/V versetzt, in ein anderes Stickmuster an derselben Stelle mit seinen Farben), Duplizieren am Platz (Strg+D), Füllung leer mit nur Umrandung
   (Thread "Duplizieren und Füllung leer").
 
 

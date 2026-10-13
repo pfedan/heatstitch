@@ -1,9 +1,9 @@
 import { expect } from 'vitest';
 import { digitizeDefaults, digitizeShapes } from '../../src/digitize/digitize';
-import { appendDesign } from '../../src/model/appendDesign';
+import { appendDesign, pasteDesign } from '../../src/model/appendDesign';
 import { digitizedFile } from '../../src/model/digitized';
 import { addShape } from '../../src/model/addShape';
-import { followerLinks, partHolders, recolorBlock, sameRegion, shareBorders, syncBorders } from '../../src/model/border';
+import { blendRuns, blendSettings, followerLinks, partHolders, recolorBlock, sameRegion, shareBorders, syncBorders } from '../../src/model/border';
 import { blendObject } from '../../src/model/blend';
 import { FIGURES, MOTIFS, TEXTURES } from '../../src/digitize/deco';
 import { ECHO_SIDES } from '../../src/digitize/echo';
@@ -32,7 +32,7 @@ import { analyze, backToVersion, edgeAlong, keepShape, measureSatin, sectionsOf,
 import { reorder } from '../../src/model/order';
 import { stitchKinds } from '../../src/model/sequence';
 import { addContour, behindCovered, gapReader } from '../../src/model/contour';
-import { combineLines, deleteObjects, duplicateObject, duplicateObjects, gatherObjects, mergeLeads, mirrorMatrix, recolorObjects, subtractTop, threadOfAFill } from '../../src/model/shapeOps';
+import { combineLines, deleteObjects, duplicateObject, duplicateObjects, extractObjects, gatherObjects, mergeLeads, mirrorMatrix, recolorObjects, subtractTop, threadOfAFill } from '../../src/model/shapeOps';
 import { isRigid, stitchesBefore } from '../../src/model/transform';
 import { sewDesign, specOf } from '../../src/model/sew';
 import { parsePattern } from '../../src/parsers';
@@ -1115,7 +1115,46 @@ export const MOTIF_OPS: Op[] = [
       return shapes(d, a?.pattern);
     },
   },
+  {
+    // Ctrl+V in another design: here this one as it is now, which pastes the same (where the
+    // copies lie on their originals they go a step further).
+    name: 'paste from another design',
+    run: (d, r) => {
+      if (!d.objects.length) return false;
+      const sel = [...new Set([pick(r, d.objects).index, pick(r, d.objects).index])];
+      const add = extractObjects(d.cur.p, sel, T);
+      const a = add && pasteDesign(d.cur.p, add, T);
+      if (a) checkPasted(d.cur.p, a.pattern, a.objects);
+      return shapes(d, a?.pattern);
+    },
+  },
 ];
+
+/** Ties between objects: a fill and its border, blend, shadow or echo, the parts of a cut fill. */
+function tiesOf(m: Remembered | undefined): string[] {
+  if (!m) return [];
+  const echo = m.echoOf?.slice(0, m.echoOf.lastIndexOf(':'));
+  return [m.line?.link, m.outline, m.piece, m.blendOf, m.fill?.deco?.blend?.link, m.line?.shadow?.link, m.shadowOf, m.line?.echo?.link, echo].filter((l): l is string => !!l);
+}
+
+/**
+ * Objects pasted from another design (`objects` of `next`, pasted into `p`): tied to each other
+ * only, never to what was there before, and none on the very stitches of another object (what an
+ * object knows is keyed by its stitches).
+ */
+export function checkPasted(p: Pattern, next: Pattern, objects: number[]): void {
+  const objs = sewObjects(next);
+  const mine = new Set(objects);
+  const before = new Set(sewObjects(p).flatMap((o) => tiesOf(remembered(p, o))));
+  const keys = new Set(sewObjects(p).map((o) => objectKey(p, o)));
+  for (const k of mine) {
+    const o = objs[k];
+    expect(o, `pasted object ${k} is there`).toBeTruthy();
+    const shared = tiesOf(remembered(next, o)).filter((l) => before.has(l));
+    expect(shared, `pasted object ${k} tied to what was there`).toEqual([]);
+    expect(keys.has(objectKey(next, o)), `pasted object ${k} on the stitches of another`).toBe(false);
+  }
+}
 
 /**
  * Each appliqué stops twice inside, in its own thread: the blocks it goes on in have the color of
@@ -1883,7 +1922,9 @@ export function checkBlends(p: Pattern): void {
     if (f === undefined) problems.push(`second thread ${k} has no fill`);
     else if (!sameColor(objs[k].color, mem[f]!.fill!.deco!.blend!.color)) problems.push(`second thread ${k} not in its thread`);
   });
-  for (const [link, k] of fills) if (!seconds.has(link)) problems.push(`fill ${k} lost its second thread`);
+  // Unless fading in on what is left of its area sews nothing (left out under shapes on top).
+  const sewsNothing = (k: number) => !blendRuns(mem[k]!.region!, blendSettings(mem[k]!.fill!), [p.x[objs[k].last] / 10, p.y[objs[k].last] / 10]);
+  for (const [link, k] of fills) if (!seconds.has(link) && !(mem[k]?.region && sewsNothing(k))) problems.push(`fill ${k} lost its second thread`);
   expect(problems.join('; '), 'blend links').toBe('');
 }
 
@@ -2339,7 +2380,7 @@ export function describeObjects(p: Pattern): string {
  * moved, sized and removed in between, from a random stream of its own (the ops of a seed stay the
  * ones it always had).
  */
-export async function chain(seed: number, steps = STEPS, opts: { trace?: boolean; knit?: boolean; motif?: boolean } = {}): Promise<void> {
+export async function chain(seed: number, steps = STEPS, opts: { trace?: boolean; knit?: boolean; motif?: boolean; motifShare?: number; motifOp?: string } = {}): Promise<void> {
   const r = rng(seed);
   const rt = rng(seed + 7919);
   const rl = rng(seed + 104729);
@@ -2501,9 +2542,10 @@ export async function chain(seed: number, steps = STEPS, opts: { trace?: boolean
       }
     }
     // Now and then a motif of the library put in, beside the chain (not in chains replayed by seed,
-    // which stay as they were found).
-    if (opts.motif && rmot() < 0.1) {
-      const mop = blank(d.cur.p) ? MOTIF_OPS[0] : pick(rmot, MOTIF_OPS);
+    // which stay as they were found); a chain can ask for them more often, or for one of them.
+    if (opts.motif && rmot() < (opts.motifShare ?? 0.1)) {
+      const chosen = MOTIF_OPS.find((x) => x.name === opts.motifOp);
+      const mop = blank(d.cur.p) ? MOTIF_OPS[0] : (chosen ?? pick(rmot, MOTIF_OPS));
       if (await mop.run(d, rmot)) {
         log.push(mop.name);
         if (process.env.TORTURE_TRACE) console.log(mop.name, describeObjects(d.cur.p));

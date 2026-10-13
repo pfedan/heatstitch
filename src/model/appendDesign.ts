@@ -4,7 +4,8 @@ import { recs } from './jumps';
 import { sewObjects, type SewObject } from './objects';
 import { JUMP, STITCH, type Pattern } from './pattern';
 import { refreshKnockouts } from './knockout';
-import { remember, remembered, type Remembered } from './restitch';
+import { objectKey, remember, remembered, type Remembered } from './restitch';
+import { DUPLICATE_OFFSET_MM, shiftedKey } from './shapeOps';
 import { stitchesBefore } from './transform';
 import { transformSewObject } from './reshape';
 import { stitchKinds } from './sequence';
@@ -55,6 +56,20 @@ export function appendDesign(p: Pattern, add: Pattern, x: number, y: number, tri
   const after = sewObjects(next).map((o) => o.id);
   const objects = ids.map((id) => after.indexOf(id)).filter((i) => i >= 0);
   return { pattern: next, objects };
+}
+
+/**
+ * Objects copied in another design (see extractObjects) put into `p` where they lay there. Where
+ * the same stitches lie there already (pasted before), a step further right and down each time, as
+ * duplicate does: what an object knows is keyed by its stitches.
+ */
+export function pasteDesign(p: Pattern, add: Pattern, trimMm: number): { pattern: Pattern; objects: number[] } | null {
+  const taken = new Set(sewObjects(p).map((o) => objectKey(p, o)));
+  const objs = sewObjects(add);
+  let step = 0;
+  while (step < 10 && objs.some((o) => taken.has(shiftedKey(add, o, Math.round(DUPLICATE_OFFSET_MM * step * 10))))) step++;
+  const b = add.bounds;
+  return appendDesign(p, add, (b.minX + b.maxX) / 20 + DUPLICATE_OFFSET_MM * step, (b.minY + b.maxY) / 20 + DUPLICATE_OFFSET_MM * step, trimMm);
 }
 
 /**
