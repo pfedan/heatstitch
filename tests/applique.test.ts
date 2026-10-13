@@ -13,7 +13,7 @@ import { relearn, remember, remembered } from '../src/model/restitch';
 import { reorder } from '../src/model/order';
 import { recolor } from '../src/model/recolor';
 import { ellipsePath, parsePath, rectPath } from '../src/shape/svgPath';
-import { COLORS, Doc, ID, T, empty, options, saveAndOpen, shapes, transform, checkWellFormed, checkSewDesign, checkExport, checkAppliques, restitchFill, pointOnCloth } from './helpers/torture';
+import { COLORS, Doc, ID, T, empty, options, saveAndOpen, shapes, transform, checkWellFormed, checkSewDesign, checkExport, checkAppliques, restitchFill, pointOnCloth, checkBlends, checkFollowers } from './helpers/torture';
 import { objectAtPoint } from '../src/render/flow';
 import { setKnockout } from '../src/model/knockout';
 import { backToVersion } from '../src/model/restitch';
@@ -23,6 +23,7 @@ import { measurePattern } from '../src/validation/measure';
 import { openOnPurpose } from '../src/model/restitch';
 import { parsePattern } from '../src/parsers';
 import { writePattern } from '../src/writers';
+import { blendObject } from '../src/model/blend';
 
 /** A circle of 30 mm made an appliqué, after a red square; a blue disc after it. */
 function design(): Doc {
@@ -168,6 +169,41 @@ describe('appliqué', () => {
     expect(Number.isFinite(remembered(q, sewObjects(q)[1])?.fill?.angle)).toBe(true);
     expect(sewObjects(q).map((o) => o.block)).toEqual([0, 0, 1]);
     checkSewDesign(q);
+  });
+
+  it('back to a fill when the fill it kept followed rows that are gone: straight rows in its angle', async () => {
+    // As a fill made from a picture with curved rows (pattern 'follow') made an appliqué: its old
+    // rows are gone, so going back used to fail and the appliqué could not become a fill again.
+    for (const kept of [{ pattern: 'follow' as const }, { pattern: 'follow' as const, gradient: true }, { pattern: 'guided' as const }]) {
+      const d = design();
+      const a = sewObjects(d.cur.p)[1];
+      const m = remembered(d.cur.p, a)!;
+      const fill = { ...m.kept!.fill!, angle: 27, ...kept };
+      const p = relearn(d.cur.p, (v) => remember(v, a, { ...m, kept: { ...m.kept, fill } }));
+      expect(shapes(d, fromApplique(p, [1], remembered(p, sewObjects(p)[0])!.fill!, T)), kept.pattern).toBe(true);
+      const back = remembered(d.cur.p, sewObjects(d.cur.p)[1])!;
+      expect(back.applique).toBeUndefined();
+      expect(back.fill).toMatchObject({ pattern: kept.gradient ? 'gradient' : 'tatami', angle: 27 });
+      expect(changes(d.cur.p)).toBe(1);
+      checkSewDesign(d.cur.p);
+      checkAppliques(d.cur.p);
+      await saveAndOpen(d);
+      expect(remembered(d.cur.p, sewObjects(d.cur.p)[1])?.fill?.pattern).toBe(back.fill!.pattern);
+    }
+  });
+
+  it('a blended fill made an appliqué and a fill again is one thread: its second thread went', async () => {
+    const d = new Doc();
+    shapes(d, addShape(empty, { form: parsePath(ellipsePath(15, 15, 15, 15), ID), kind: 'fill' }, COLORS[0], null, options)!.pattern);
+    expect(shapes(d, blendObject(d.cur.p, 0, COLORS[1], T))).toBe(true);
+    expect(shapes(d, toApplique(d.cur.p, [0], T))).toBe(true);
+    expect(sewObjects(d.cur.p)).toHaveLength(1);
+    expect(shapes(d, fromApplique(d.cur.p, [0], remembered(d.cur.p, sewObjects(d.cur.p)[0])!.kept!.fill!, T))).toBe(true);
+    expect(sewObjects(d.cur.p)).toHaveLength(1);
+    expect(remembered(d.cur.p, sewObjects(d.cur.p)[0])?.fill?.deco?.blend).toBeUndefined();
+    checkBlends(d.cur.p);
+    checkFollowers(d.cur.p);
+    await saveAndOpen(d);
   });
 
   it('counts as covered: no gaps reported inside the piece', () => {

@@ -22,7 +22,7 @@ import { borderStitches, isRedwork, isRunType } from '../../src/model/along';
 import { redworkGraph, redworkWalks } from '../../src/digitize/redwork';
 import { APPLIQUE_FABRICS, appliquePieces, innerStops, type Piece } from '../../src/model/applique';
 import { pieceAt } from '../../src/render/applique';
-import { appliquesOf, canApplique, fromApplique, setApplique, toApplique } from '../../src/model/appliqueOps';
+import { appliquesOf, asFill, canApplique, fromApplique, setApplique, toApplique } from '../../src/model/appliqueOps';
 import type { Region } from '../../src/digitize/region';
 import { GAP_ROWS_MAX } from '../../src/digitize/fill';
 import { fillRuns, TRAVEL_REACH } from '../../src/model/restitch';
@@ -1048,13 +1048,21 @@ export const HAND_OPS: Op[] = [
  * width and fabric changed, and made a fill again. Drawn from a stream of their own, so the chains
  * of the other ops stay as they were for the seeds above.
  */
+/** The fill an appliqué that kept none goes back to (as the app gives one). */
+const TATAMI: FillSettings = { pattern: 'tatami', spacing: 0.4, spacingEnd: 1, offset: 0.25, angle: NaN, stitch: 4, underlay: true, edge: 0, tolerance: 0.15 };
+
 export const APPLIQUE_OPS: Op[] = [
   {
     name: 'make applique',
     run: (d, r) => {
       const can = d.objects.filter((o) => canApplique(d.cur.p, o));
       if (!can.length) return false;
-      return shapes(d, toApplique(d.cur.p, [pick(r, can).index], T, r() < 0.5 ? { fabric: pick(r, APPLIQUE_FABRICS) } : {}));
+      const o = pick(r, can);
+      // Every third one as a fill made from a picture with curved rows is (pattern 'follow', see
+      // digitize.ts): rows that follow its old stitches, gone once it is an appliqué.
+      const m = remembered(d.cur.p, o)!;
+      const p = o.id % 3 === 0 && m.fill ? relearn(d.cur.p, (v) => remember(v, o, { ...m, fill: { ...m.fill!, pattern: 'follow' } })) : d.cur.p;
+      return shapes(d, toApplique(p, [o.index], T, r() < 0.5 ? { fabric: pick(r, APPLIQUE_FABRICS) } : {}));
     },
   },
   {
@@ -1071,7 +1079,7 @@ export const APPLIQUE_OPS: Op[] = [
     run: (d, r) => {
       const as = appliquesOf(d.cur.p).filter((o) => !remembered(d.cur.p, o)?.free);
       if (!as.length) return false;
-      return shapes(d, fromApplique(d.cur.p, [pick(r, as).index], { pattern: 'tatami', spacing: 0.4, spacingEnd: 1, offset: 0.25, angle: NaN, stitch: 4, underlay: true, edge: 0, tolerance: 0.15 }, T));
+      return shapes(d, fromApplique(d.cur.p, [pick(r, as).index], TATAMI, T));
     },
   },
 ];
@@ -1127,6 +1135,8 @@ export function checkAppliques(p: Pattern): void {
     const stops: number[] = [];
     for (let i = o.first; i <= o.last; i++) if (p.cmd[i] === COLOR_CHANGE) stops.push(i);
     if (stops.length !== 2) problems.push(`${o.index}: ${stops.length} stops`);
+    // It can become a fill again: what it remembers as one can be sewn on its area alone.
+    if (!m.free && !specOf(p, { ...o, kind: 'fill' }, asFill(m, TATAMI))) problems.push(`${o.index}: no fill to go back to`);
     const b = blockAt(o.first);
     for (let k = 1; k <= stops.length; k++) if (!sameColor(p.colors[b + k], p.colors[b])) problems.push(`${o.index}: block ${b + k} in another thread`);
   }

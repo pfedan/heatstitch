@@ -1452,6 +1452,16 @@ export function restoreRemembered(p: Pattern, list: unknown): number {
 /** Curved patterns that can grow lighter across the shape (FillSettings.gradient). */
 export const CURVED_GRADIENT: FillPattern[] = ['follow', 'guided'];
 
+/**
+ * The pattern a fill is sewn in on an area alone, without stitches before it: rows that followed
+ * the old stitches ('follow') or guides it has none of ('guided' without guides) cannot be sewn
+ * anew there, so they become straight rows in the angle kept, getting lighter as they did.
+ */
+export function patternAnew(f: FillSettings): FillPattern {
+  if (f.pattern !== 'follow' && (f.pattern !== 'guided' || f.guides?.length)) return f.pattern;
+  return f.gradient ? 'gradient' : 'tatami';
+}
+
 /** A fill whose rows get further apart across the shape: the gradient pattern, or curved rows set so. */
 export const isGradient = (f: FillSettings): boolean => f.pattern === 'gradient' || (!!f.gradient && CURVED_GRADIENT.includes(f.pattern));
 
@@ -4196,7 +4206,7 @@ function restitchOnce(
     // A fill made from satin gets rows across the area in the direction with the fewest sections.
     const settings: Settings =
       converting && given.kind === 'fill' && area
-        ? { ...given, kind: 'fill', s: { ...given.s, pattern: given.s.pattern === 'follow' || (given.s.pattern === 'guided' && !given.s.guides?.length) ? 'tatami' : given.s.pattern, angle: Number.isFinite(given.s.angle) ? given.s.angle : chooseAngle(area, given.s.spacing, []) } }
+        ? { ...given, kind: 'fill', s: { ...given.s, pattern: patternAnew(given.s), angle: Number.isFinite(given.s.angle) ? given.s.angle : chooseAngle(area, given.s.spacing, []) } }
         : given;
     // All fill parts are one area, filled anew where the first of them was sewn; so are the parts
     // changing kind.
