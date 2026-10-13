@@ -28,7 +28,7 @@ import { GAP_ROWS_MAX } from '../../src/digitize/fill';
 import { fillRuns, TRAVEL_REACH } from '../../src/model/restitch';
 import { expandRegion, outline as outlineOf } from '../../src/digitize/region';
 import { shownTravel } from './travel';
-import { backToVersion, edgeAlong, keepShape, keepVersion, relearn, objectKey, remember, remembered, rememberedIn, restitch, restoreRemembered, DECO_PATTERNS, OPEN_PATTERNS, type BorderSettings, type FillSettings, type Rails, type Remembered, type StoredObjects } from '../../src/model/restitch';
+import { analyze, backToVersion, edgeAlong, keepShape, measureSatin, sectionsOf, sectionView, keepVersion, relearn, objectKey, remember, remembered, rememberedIn, restitch, restoreRemembered, DECO_PATTERNS, OPEN_PATTERNS, type BorderSettings, type FillSettings, type Rails, type Remembered, type StoredObjects } from '../../src/model/restitch';
 import { reorder } from '../../src/model/order';
 import { stitchKinds } from '../../src/model/sequence';
 import { addContour, behindCovered, gapReader } from '../../src/model/contour';
@@ -2051,6 +2051,41 @@ export function checkSatinSections(p: Pattern): void {
   expect(problems.join('; '), 'satin sections').toBe('');
 }
 
+/**
+ * In the satin tool, as the app opens it (in sections of its area), every column of a part with
+ * more than one shows its place in the order it is sewn: 1, 2, ... down the part's list, chained
+ * or not (a column cut in sections not chained shows its sections' places instead).
+ */
+export function checkSatinOrder(p: Pattern): void {
+  const problems: string[] = [];
+  const kinds = stitchKinds(p);
+  for (const o of sewObjects(p, kinds)) {
+    // Known satins and satins read from stitches alike, with the settings the app opens them with.
+    const m = remembered(p, o);
+    const read = !m?.satin && o.kind === 'satin' ? analyze(p, o, kinds).parts.find((pt) => pt.kind === 'satin') : undefined;
+    const satin = m?.satin ?? (read ? measureSatin(p, read, kinds) : null);
+    if (!satin) continue;
+    const shape = keepShape(p, o, kinds);
+    if (!shape.columns?.length) continue;
+    const view = sectionView(shape.columns, shape.shape);
+    const tool = new RungTool({ change: () => {}, lines: () => {}, guides: () => {}, redraw: () => {}, say: () => {} });
+    tool.openSatin(view);
+    tool.satin = satin;
+    const badges = tool.badges.filter((b) => b.step === undefined);
+    let col = 0;
+    view.forEach((part, j) => {
+      part.forEach((c, i) => {
+        const k = col + i;
+        if (part.length < 2 || (c.chain === undefined && sectionsOf(c).length > 1)) return;
+        const b = badges.filter((x) => x.col === k);
+        if (b.length !== 1 || b[0].n !== i + 1 || b[0].lone) problems.push(`object ${o.index} part ${j} column ${i}: ${b.map((x) => `${x.n}${x.lone ? ' alone' : ''}`).join(', ') || 'no place'}`);
+      });
+      col += part.length;
+    });
+  }
+  expect(problems.join('; '), 'places of satin columns in the order').toBe('');
+}
+
 /** What leaves out the shapes on top fits the shapes on top now. */
 export function checkKnockouts(p: Pattern): void {
   expect(refreshKnockouts(p, T)?.changed ?? [], 'fills whose left-out parts are out of date').toEqual([]);
@@ -2549,6 +2584,7 @@ function checkStep(d: Doc, full: boolean): void {
     checkExport(p);
     checkSewDesign(p);
     checkHiddenTravel(p);
+    checkSatinOrder(p);
   }
 }
 

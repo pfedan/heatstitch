@@ -117,7 +117,7 @@ export interface RungView {
   draft: [Pt, Pt] | null;
   /** The line being drawn is a cut line. */
   draftCut: boolean;
-  /** Order, direction and trims of the chained columns. */
+  /** Order, direction and trims of the columns of each part. */
   badges: PieceBadge[];
   /** The control under the pointer. */
   badgeHover: BadgeHit | null;
@@ -348,43 +348,47 @@ export class RungTool implements RungView {
   }
 
   /**
-   * The chained columns of each satin part with their place in the order (the satin of a chained
-   * column goes from its end back to its start, see chainRun) and whether a trim comes before.
+   * The columns of each satin part with their place in the order they are sewn (the satin of a
+   * chained column goes from its end back to its start, see chainRun; one not chained is sewn as a
+   * run of its own, see satinRuns) and whether a trim comes before. A part's columns are sewn in
+   * the order of its list, chained or not, so every part of more than one column is numbered.
    */
   get badges(): PieceBadge[] {
     if (this.mode !== 'satin') return [];
     const out: PieceBadge[] = [];
+    const res = this.satin ? this.result().flat() : null;
     const byPart = new Map<number, number[]>();
-    this.parts.forEach((p, k) => this.columns[k].rails.chain !== undefined && byPart.set(p, [...(byPart.get(p) ?? []), k]));
-    const chained = new Set<number>();
+    this.parts.forEach((p, k) => byPart.set(p, [...(byPart.get(p) ?? []), k]));
     for (const ks of byPart.values()) {
-      if (ks.length < 2) continue;
       ks.forEach((k, i) => {
-        chained.add(k);
         const c = this.columns[k];
-        const la = c.cl[c.cl.length - 1];
-        const lb = c.cr[c.cr.length - 1];
-        const at = mid(c.left[c.left.length - 1], c.right[c.right.length - 1]);
-        const inward = mid(pointAt(c.left, c.cl, Math.max(0, la - 1)), pointAt(c.right, c.cr, Math.max(0, lb - 1)));
-        const d = sub(inward, at);
+        const chained = c.rails.chain !== undefined;
+        const lone = ks.length < 2;
+        // Where it starts is known only from how it is sewn; a column cut in sections (not
+        // chained) shows where each of them starts instead (below).
+        if ((!chained || lone) && (!res || sectionsOf(res[k]).length > 1)) return;
+        let at: Pt;
+        let d: Pt;
+        if (chained && !lone) {
+          const la = c.cl[c.cl.length - 1];
+          const lb = c.cr[c.cr.length - 1];
+          at = mid(c.left[c.left.length - 1], c.right[c.right.length - 1]);
+          d = sub(mid(pointAt(c.left, c.cl, Math.max(0, la - 1)), pointAt(c.right, c.cr, Math.max(0, lb - 1))), at);
+        } else {
+          // Where its satin starts, turned round and mirrored there.
+          const back = sewnBack([res![k]], this.satin!);
+          const [a, b] = back ? [c.left.slice().reverse(), c.right.slice().reverse()] : [c.left, c.right];
+          at = mid(a[0], b[0]);
+          const ca = cumulative(a);
+          const cb = cumulative(b);
+          d = sub(mid(pointAt(a, ca, Math.min(1, ca[ca.length - 1])), pointAt(b, cb, Math.min(1, cb[cb.length - 1]))), at);
+        }
         const l = Math.hypot(d[0], d[1]) || 1;
-        out.push({ col: k, n: i + 1, at, dir: [d[0] / l, d[1] / l], trim: i ? this.columns[ks[i - 1]].rails.chain !== c.rails.chain : null, mirror: !!c.rails.mirror });
-      });
-    }
-    // A column on its own (in one section): where its satin starts, turned round and mirrored there.
-    if (this.satin) {
-      const res = this.result().flat();
-      this.columns.forEach((c, k) => {
-        if (chained.has(k) || sectionsOf(res[k]).length > 1) return;
-        const back = sewnBack([res[k]], this.satin!);
-        const [a, b] = back ? [c.left.slice().reverse(), c.right.slice().reverse()] : [c.left, c.right];
-        const at = mid(a[0], b[0]);
-        const ca = cumulative(a);
-        const cb = cumulative(b);
-        const inward = mid(pointAt(a, ca, Math.min(1, ca[ca.length - 1])), pointAt(b, cb, Math.min(1, cb[cb.length - 1])));
-        const d = sub(inward, at);
-        const l = Math.hypot(d[0], d[1]) || 1;
-        out.push({ col: k, n: 1, at, dir: [d[0] / l, d[1] / l], trim: null, mirror: !!c.rails.mirror, lone: true });
+        // Trimmed before it: a chain is always cut apart from what comes before (see satinRuns);
+        // between two columns not chained nothing is set, the way between them decides.
+        const prev = i ? this.columns[ks[i - 1]].rails.chain : undefined;
+        const trim = !i || (prev === undefined && !chained) ? null : prev !== c.rails.chain;
+        out.push({ col: k, n: i + 1, at, dir: [d[0] / l, d[1] / l], trim, mirror: !!c.rails.mirror, ...(lone ? { lone: true } : {}) });
       });
     }
     // Sections of a column: where the satin of each starts, in the order they are sewn.
@@ -443,12 +447,20 @@ export class RungTool implements RungView {
     } else if (h.what === 'number') {
       if (k === 0) return;
       [cols[k - 1], cols[k]] = [cols[k], cols[k - 1]];
+      // The area and its cut lines stay with the part's first column (see Rails.split).
+      if (k === 1 && cols[1].split) {
+        cols[0] = { ...cols[0], split: cols[1].split };
+        delete cols[1].split;
+      }
     } else if (k > 0) {
       const old = ids[k];
       const to = ids[k - 1] === old ? Math.max(...ids.map((x) => x ?? 0)) + 1 : ids[k - 1];
       for (let i = k; i < ids.length && ids[i] === old; i++) ids[i] = to;
     }
-    cols.forEach((c, i) => (c.chain = ids[i]));
+    cols.forEach((c, i) => {
+      if (ids[i] === undefined) delete c.chain;
+      else c.chain = ids[i];
+    });
     this.selected = null;
     this.setColumns(out);
     this.hooks.change(out, true);

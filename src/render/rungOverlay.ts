@@ -194,7 +194,7 @@ export function drawRungOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, vie
     ctx.stroke();
     ctx.setLineDash([]);
   }
-  // Chained columns and sections: their place in the order before where the satin starts, an arrow
+  // Columns of a part and sections: their place in the order before where the satin starts, an arrow
   // the way it goes, scissors for a trim before it and the mirror for the rail it starts on (both
   // bright when set). A column on its own has no place in an order.
   for (const b of view.badges) {
