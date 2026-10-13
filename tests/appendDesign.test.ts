@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { digitizeDefaults, digitizeShapes } from '../src/digitize/digitize';
 import { addShape } from '../src/model/addShape';
-import { appendDesign } from '../src/model/appendDesign';
+import { appendDesign, pasteDesign } from '../src/model/appendDesign';
+import { extractObjects } from '../src/model/shapeOps';
 import { digitizedFile } from '../src/model/digitized';
 import { overlapsIn, setKnockout } from '../src/model/knockout';
 import { sewObjects } from '../src/model/objects';
-import { remembered } from '../src/model/restitch';
-import { borderedSquare } from './helpers/torture';
+import { objectKey, remembered } from '../src/model/restitch';
+import { borderOf, borderedSquare } from './helpers/torture';
 import { JUMP } from '../src/model/pattern';
 import { ellipsePath, parsePath, rectPath } from '../src/shape/svgPath';
 import { DEFAULT_PROFILE } from '../src/validation/profiles';
@@ -82,5 +83,56 @@ describe('appendDesign', () => {
     expect(links).toHaveLength(2);
     expect(new Set(links).size).toBe(2);
     expect(outlines.sort()).toEqual(links.sort());
+  });
+});
+
+describe('pasting into another design (Ctrl+V)', () => {
+  const other = () => addShape(empty, { form: parsePath(rectPath(-60, -10, 20, 20, 0, 0), ID), kind: 'fill' }, red, null, options)!.pattern;
+
+  it('puts a fill with its border in where it lay, in their threads, tied to each other only', () => {
+    const d = borderedSquare();
+    const src = d.cur.p;
+    const square = sewObjects(src).findIndex((o) => remembered(src, o)?.line?.link === 'sq');
+    const add = extractObjects(src, [square], options.trimMm)!;
+    // The fill and its border, without the circle beside them.
+    expect(sewObjects(add)).toHaveLength(2);
+    const r = pasteDesign(other(), add, options.trimMm)!;
+    const objs = sewObjects(r.pattern);
+    expect(objs).toHaveLength(3);
+    const mem = objs.map((o) => remembered(r.pattern, o));
+    const fill = objs.findIndex((o, k) => o.index > 0 && mem[k]?.fill);
+    const border = objs.findIndex((_, k) => !!mem[k]?.outline);
+    expect(mem[border]!.outline).toBe(mem[fill]!.line!.link);
+    expect(mem[border]!.outline).not.toBe('sq');
+    // Where it lay, in its threads.
+    const was = sewObjects(src)[square];
+    expect([objs[fill].minX, objs[fill].minY, objs[fill].maxX, objs[fill].maxY]).toEqual([was.minX, was.minY, was.maxX, was.maxY]);
+    expect(objs[fill].color).toEqual(expect.objectContaining(was.color));
+    expect(objs[border].color).toEqual(expect.objectContaining(sewObjects(src)[borderOf(d)].color));
+  });
+
+  it('makes a border copied without its fill a line of its own', () => {
+    const d = borderedSquare();
+    const add = extractObjects(d.cur.p, [borderOf(d)], options.trimMm)!;
+    const objs = sewObjects(add);
+    expect(objs).toHaveLength(1);
+    const m = remembered(add, objs[0]);
+    expect(m?.outline).toBeUndefined();
+    const r = pasteDesign(other(), add, options.trimMm)!;
+    expect(sewObjects(r.pattern)).toHaveLength(2);
+  });
+
+  it('pastes again a step further, never on the stitches of the copy before', () => {
+    const add = extractObjects(motif(), [0, 1, 2], options.trimMm)!;
+    const once = pasteDesign(other(), add, options.trimMm)!.pattern;
+    const twice = pasteDesign(once, add, options.trimMm)!;
+    const objs = sewObjects(twice.pattern);
+    expect(objs).toHaveLength(7);
+    const keys = objs.map((o) => objectKey(twice.pattern, o));
+    expect(new Set(keys).size).toBe(keys.length);
+    const a = objs[1];
+    const b = objs[twice.objects[0]];
+    expect(b.minX - a.minX).toBe(20);
+    expect(b.minY - a.minY).toBe(20);
   });
 });

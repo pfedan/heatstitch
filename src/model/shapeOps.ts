@@ -6,7 +6,7 @@ import { lineSettings, resewLine } from './line';
 import { takeOver } from './knockout';
 import { rememberObjects, sewObjects, stitchKey, type SewObject } from './objects';
 import { listOf, sewList } from './sew';
-import { newLink, syncBorders } from './border';
+import { newLink, syncBorders, withoutLink } from './border';
 import { reorder } from './order';
 import { recolor, sameColor } from './recolor';
 import type { Pattern, ThreadColor } from './pattern';
@@ -82,6 +82,43 @@ export function deleteObjects(p: Pattern, which: number[], trimMm: number): Patt
 /** The link of a fill's border (an object of its own), if it has one. */
 const ownBorder = (m: Remembered | undefined): string | undefined => borderOf(m)?.link;
 
+/** What belongs to object `o` as objects of their own: its border, a blend's second thread, a line's shadow and echo copies. */
+function partsIn(mem: readonly (Remembered | undefined)[], o: number): number[] {
+  const m = mem[o];
+  const link = ownBorder(m);
+  const blend = m?.fill?.deco?.blend?.link;
+  return mem.flatMap((n, k) => {
+    const l = partOf(n);
+    return (link && n?.outline === link) || (blend && n?.blendOf === blend) || (l && hasPart(m, l)) ? [k] : [];
+  });
+}
+
+/**
+ * The objects `which` alone, as a design of their own (to be put into another one, see
+ * appendDesign): with what belongs to them (their border, a blend's second thread, a line's shadow
+ * and echo copies), each knowing what it knew. A part chosen without what it belongs to is an
+ * object of its own (a border a line, a second thread a fill), as when it is duplicated alone.
+ * Null when none of them is there.
+ */
+export function extractObjects(p: Pattern, which: number[], trimMm: number): Pattern | null {
+  const objs = sewObjects(p);
+  const mem = objs.map((x) => remembered(p, x));
+  const chosen = which.filter((o) => objs[o]);
+  if (!chosen.length) return null;
+  const kept = new Set(chosen.flatMap((o) => [o, ...partsIn(mem, o)]));
+  const held = new Set([...kept].flatMap((o) => partsIn(mem, o).filter((k) => k !== o)));
+  const next = removeObjects(p, objs.flatMap((o) => (kept.has(o.index) ? [] : [o.index])), trimMm);
+  if (!next) return p;
+  for (const k of kept) {
+    const m = mem[k];
+    if (held.has(k) || !m || !(m.outline || m.blendOf || partOf(m))) continue;
+    const at = sewObjects(next).find((x) => objectKey(next, x) === objectKey(p, objs[k]));
+    const { blendOf: _b, shadowOf: _s, echoOf: _e, ...own } = m.outline ? withoutLink(m) : m;
+    if (at) remember(next, at, own);
+  }
+  return next;
+}
+
 /** The pattern without the objects `which`, nothing else changed (with all gone, an empty design); null when none of them is there. */
 function removeObjects(p: Pattern, which: number[], trimMm: number): Pattern | null {
   const gone = new Set(which);
@@ -116,16 +153,7 @@ export function duplicateObjects(p: Pattern, which: number[], trimMm: number, of
   const mem = objs.map((x) => remembered(p, x));
   const chosen = new Set(which.filter((o) => objs[o]));
   // Parts of a chosen object come anew with its copy.
-  const partsOf = (o: number): number[] => {
-    const m = mem[o];
-    const link = ownBorder(m);
-    const blend = m?.fill?.deco?.blend?.link;
-    return objs.flatMap((_, k) => {
-      const n = mem[k];
-      const l = partOf(n);
-      return (link && n?.outline === link) || (blend && n?.blendOf === blend) || (l && hasPart(m, l)) ? [k] : [];
-    });
-  };
+  const partsOf = (o: number) => partsIn(mem, o);
   for (const o of [...chosen]) for (const k of partsOf(o)) if (k !== o && chosen.has(k) && !partsOf(k).includes(o)) chosen.delete(k);
   const list = [...chosen].sort((a, b) => a - b);
   if (!list.length) return null;
@@ -235,7 +263,7 @@ function inPlace(p: Pattern, k: number, trimMm: number): { pattern: Pattern; nud
 }
 
 /** The key the stitches of `o` would have, moved by `d` (0.1 mm) both ways. */
-function shiftedKey(p: Pattern, o: SewObject, d: number): string {
+export function shiftedKey(p: Pattern, o: SewObject, d: number): string {
   const n = o.last - o.first + 1;
   const x = new Int32Array(n);
   const y = new Int32Array(n);

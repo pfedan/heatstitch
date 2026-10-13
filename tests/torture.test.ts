@@ -31,6 +31,13 @@ describe('torture test', () => {
 });
 
 describe('found by the torture test', () => {
+  // Pasted into a design over a fill fading into a second thread and leaving out what lies on
+  // top: what was left of its area gave the second thread nothing to sew, and it stayed where the
+  // area had been.
+  it('a second thread with nothing left to fade in on is taken out', async () => {
+    await chain(141, undefined, { knit: true, motif: true, motifShare: 0.5, motifOp: 'paste from another design' });
+  }, 120_000);
+
   it('cutting out of a fill takes its border in a thread of its own along', async () => {
     await loadOps();
     const d = borderedSquare();

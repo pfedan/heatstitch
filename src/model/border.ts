@@ -115,7 +115,7 @@ function echoRuns(form: Form, b: BorderSettings, from: Pt): Pt[][] {
 }
 
 /** What a border object remembers without its link to the fill (a line of its own then). */
-const withoutLink = ({ outline: _o, border: _b, along: _a, ...rest }: Remembered): Remembered => rest;
+export const withoutLink = ({ outline: _o, border: _b, along: _a, ...rest }: Remembered): Remembered => rest;
 
 /** A new link between a fill and its border object. */
 export const newLink = () => Math.random().toString(36).slice(2, 10);
@@ -675,7 +675,12 @@ export function syncBlends(p: Pattern, trimMm: number, drop: ReadonlySet<string>
     const same = target && sameColor(target.color, b.color);
     if (same && sameRegion(cur!.region, m!.region) && JSON.stringify(cur!.fill) === JSON.stringify(want)) return;
     const runs = blendRuns(m!.region!, want, [p.x[o.last] / 10, p.y[o.last] / 10]);
-    if (!runs) return;
+    // Fading in on what is left of the area (left out under shapes on top) sews nothing: the second
+    // thread is taken out rather than left where the area was, and comes back when there is room.
+    if (!runs) {
+      if (target) changes.push({ a: leadOf(p, target), b: target.last, recs: [] });
+      return;
+    }
     const memory: Remembered = { region: m!.region, fill: want, blendOf: b.link };
     let recs = runRecords(runs, trimMm);
     // The very stitches of another object (a fill copied in place): sewn the other way round.
@@ -703,7 +708,7 @@ export function syncBlends(p: Pattern, trimMm: number, drop: ReadonlySet<string>
 }
 
 /** Stitches of a blend's second thread on `region` (before it is grown or shrunk). */
-function blendRuns(region: Region, s: FillSettings, start: Pt): Pt[][] | null {
+export function blendRuns(region: Region, s: FillSettings, start: Pt): Pt[][] | null {
   const r = expandRegion(region, s.expand ?? 0);
   if (!r) return null;
   const res = fillRegion(r, { spacing: s.spacing, stitch: s.stitch, angle: Number.isFinite(s.angle) ? s.angle : null, pull: s.edge, underlay: false, fade: s.deco?.fade ?? 'in', tolerance: s.tolerance }, start);

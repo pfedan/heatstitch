@@ -11,7 +11,8 @@ import type { Settings } from '../settings';
 import type { SewObject } from '../model/objects';
 import type { Viewport } from '../render/viewport';
 import { ShapeTool } from '../ui/shapeTool';
-import { deleteObjects, duplicateObjects, mirrorMatrix, subtractTop } from '../model/shapeOps';
+import { deleteObjects, duplicateObjects, extractObjects, mirrorMatrix, subtractTop } from '../model/shapeOps';
+import { pasteDesign } from '../model/appendDesign';
 import { loadOps, opsReady } from '../shape/ops';
 import { fillsToLines, lineToSatin, reshapeObject } from '../model/reshape';
 import { resewLine, lineSettings, lineToFill, reshapeLineFill } from '../model/line';
@@ -19,7 +20,7 @@ import { refreshKnockouts } from '../model/knockout';
 import { borderOf, objectKey, remember, remembered, rememberedIn, relearn, restitch, type Remembered, type RestitchResult } from '../model/restitch';
 import { followerLinks, syncBorders } from '../model/border';
 import { partOf } from '../model/shadow';
-import { stitchKey } from '../model/objects';
+import { sewObjects, stitchKey } from '../model/objects';
 import { t, formatNumber, type Key } from '../i18n';
 import { ui } from './state';
 import { bandArea, fillArea, fits, fitsOf, formKey, geoOf, geoUse, guessGeo, guessLine, sewnAlong, withGeo } from '../model/geo';
@@ -460,8 +461,11 @@ export function bindShapes(app: ShapesApp) {
     app.layers.say([said, r.nudged ? t('object.duplicatedHere.nudged') : ''].filter(Boolean).join(' '));
   }
 
-  /** Objects copied with Ctrl+C: their design and their stitches (found again by them for Ctrl+V). */
-  let copied: { file: unknown; keys: string[] } | null = null;
+  /**
+   * Objects copied with Ctrl+C: the design they are in and the version copied (versions never
+   * change, so it holds them as they were), and their stitches (found again by them for Ctrl+V).
+   */
+  let copied: { file: unknown; pattern: Pattern; keys: string[] } | null = null;
 
   /** Ctrl+C: remembers the selected objects; false when none is selected (the page copies text then). */
   function copySelected(): boolean {
@@ -470,28 +474,38 @@ export function bindShapes(app: ShapesApp) {
     const sel = app.frameObjects();
     if (!p || !sel.length) return false;
     const q = app.seq(p);
-    copied = { file: f, keys: sel.flatMap((o) => (q.objects[o] ? [objectKey(p, q.objects[o])] : [])) };
+    copied = { file: f, pattern: p, keys: sel.flatMap((o) => (q.objects[o] ? [objectKey(p, q.objects[o])] : [])) };
     app.layers.say(sel.length === 1 ? t('object.copied.one') : t('object.copied', { n: sel.length }));
     return true;
   }
 
-  /** Ctrl+V: the objects copied last once more, 2 mm beside them (each paste a step further). */
+  /**
+   * Ctrl+V: the objects copied last once more. In their design, 2 mm beside them (each paste a step
+   * further); in another one, or once they are gone, as they were copied, where they lay, with
+   * their threads.
+   */
   function pasteCopied(): boolean {
     const f = app.files.active;
     if (!copied || !f?.pattern) return false;
-    if (copied.file !== f) {
-      app.layers.say(t('object.paste.otherDesign'), true);
-      return true;
-    }
     const p = f.pattern;
     const q = app.seq(p);
     const keys = new Set(copied.keys);
-    const sel = q.objects.flatMap((o, i) => (keys.has(objectKey(p, o)) ? [i] : []));
-    if (!sel.length) {
-      app.layers.say(t('object.paste.gone'), true);
+    const sel = copied.file === f ? q.objects.flatMap((o, i) => (keys.has(objectKey(p, o)) ? [i] : [])) : [];
+    if (sel.length) {
+      duplicate(sel, false);
       return true;
     }
-    duplicate(sel, false);
+    const src = copied.pattern;
+    const from = sewObjects(src).flatMap((o) => (keys.has(objectKey(src, o)) ? [o.index] : []));
+    const add = extractObjects(src, from, app.settings.trimMm);
+    const r = add && pasteDesign(p, add, app.settings.trimMm);
+    if (!r?.objects.length) {
+      app.layers.say(t('frame.failed'), true);
+      return true;
+    }
+    takeShapes(r.pattern, r.objects);
+    const n = r.objects.length;
+    app.layers.say(n === 1 ? t('object.pasted.one') : t('object.pasted', { n }));
     return true;
   }
 
