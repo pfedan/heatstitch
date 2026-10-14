@@ -5,7 +5,9 @@ import { assess, directFix, restFix } from '../src/correct/engine/ampel';
 import { EngineClient, type WorkerLike } from '../src/correct/engine/client';
 import { handleEngine, type EngineRequest } from '../src/correct/engine/worker';
 import { sewObjects } from '../src/model/objects';
-import { rememberedIn, restoreRemembered } from '../src/model/restitch';
+import { remembered, rememberedIn, restitch, restoreRemembered } from '../src/model/restitch';
+import { takeOver } from '../src/model/knockout';
+import { stitchKinds } from '../src/model/sequence';
 import { parsePattern } from '../src/parsers';
 import { fromStored } from '../src/storage/fileStore';
 import { decodeProject } from '../src/storage/project';
@@ -56,14 +58,18 @@ describe('correction engine', () => {
     const o = parsePattern(file.data, file.name);
     const p = fromStored(o, file.working) ?? o;
     restoreRemembered(p, file.objects);
-    const f = (await directFix(p, WOVEN, 'gaps', { trimMm: 3 }))!;
+    // The rays (object 2) a little wider than recommended (0.50 mm), so a gap opens between them.
+    const kinds = stitchKinds(p);
+    const objs = sewObjects(p, kinds);
+    const wide = takeOver(restitch(p, objs, [2], { kind: 'fill', s: { ...remembered(p, objs[2])!.fill!, spacing: 0.5 } }, kinds, 3))!;
+    const f = (await directFix(wide, WOVEN, 'gaps', { trimMm: 3 }))!;
     expect(f).toBeTruthy();
-    const q = applyFix(p, f)!;
+    const q = applyFix(wide, f)!;
     expect(fixedObjects(q).length).toBeGreaterThan(0);
     const back = revertFix(q, fixedObjects(q))!;
     expect(back).toBeTruthy();
-    expect(same(back, p)).toBe(true);
-    expect(sewObjects(back).length).toBe(sewObjects(p).length);
+    expect(same(back, wide)).toBe(true);
+    expect(sewObjects(back).length).toBe(sewObjects(wide).length);
     expect(fixedObjects(back)).toEqual([]);
   }, 300_000);
 

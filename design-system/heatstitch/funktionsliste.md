@@ -956,11 +956,13 @@ Musterwechsel-Automatik: Punkte (focus/centers), Ausblend-Richtung und zweite Ve
 | Prägung (`stitch.motif`) | Bildsegment Keine, Rauten, Wellen, Sterne, Herzen (`stitch.motif.none/diamonds/waves/stars/hearts`), Hover-Vorschau | | Keine | Tatami | SP:916-958 |
 | Stärke (`stitch.motifStrength`) | Segment Zart / Deutlich, Hover-Vorschau | | Zart | Tatami mit Prägung | SP:962-977 |
 | Größe der Prägung (`stitch.motifSize`) | Regler | 4 bis 30, 0,5, mm | 8 | Tatami mit Prägung | SP:978 |
+| Reihenenden (`stitch.rowEnds`) | Segment (klein) Standard / Kante entlang (`stitch.rowEnds.standard/edge`), Hover-Vorschau | | Standard | Tatami, Verlauf | stitchPanel.ts patternControls |
 | Max. Abweichung (`stitch.tolerance`), Notiz `stitch.toleranceNote` | Regler | 0,05 bis 0,5, 0,05, mm | gemessen; zuletzt gewählter Wert wird für die nächsten Auswahlen übernommen | Kontur, Spirale, Wie bisher, Wellen, Maserung, Strahlen, Wirbel, Kreise | SP:165, 520, 754-766, 285 |
 | Kanten (`stitch.edge`) | Regler, Vorzeichenanzeige | -0,4 bis 0,6, 0,05, mm | gemessen | deckend | SP:522 |
 | Nach Stoff (`stitch.edgeAuto`) | Checkbox: setzt Kanten aus Stoff und Flächengröße | | aus; eigener Kanten-Wert schaltet es aus | deckend | SP:523-530; ST:104-107 |
 | Ausdehnen (`stitch.expand`) | Regler, Vorzeichen | -3 bis 3, 0,05, mm | 0 | alle Füllungen (auch offen) | SP:476, 531 |
 | Unterlage (`stitch.underlay`) | Segment Aus / Quer / Kreuz (`stitch.fillUnder.off/single/cross`), Hover-Vorschau | | gemessen | deckend | SP:532-546 |
+| Randlauf zuerst (`stitch.underEdge`) | Checkbox: Steppstich (2 mm) knapp innerhalb des Rands vor der Unterlage | | aus | Unterlage an | stitchPanel.ts underControls |
 | Unter späteren Objekten weglassen (`stitch.underCover`) | Checkbox | | aus | Unterlage an | SP:549 |
 | Einzug der Unterlage (`stitch.underInsetBy`) | Segment Fest (mm) / Anteilig (%) | Wechsel auf Anteilig setzt 10 % | Fest | Unterlage an | SP:551-560 |
 | Abstand zum Rand (`stitch.underInset`) | Regler mit Band „Bis {b} mm bleibt Platz“ (`stitch.underInset.band`, Tiefe minus 0,6) | 0 bis 10, 0,05, mm | 0,4 | Einzug Fest | SP:562-575 |

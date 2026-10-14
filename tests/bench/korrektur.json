@@ -498,7 +498,7 @@
   "ampel": "red",
   "ampelAfter": "yellow",
   "crit": 35,
-  "critAfter": 2,
+  "critAfter": 4,
   "newCrit": 0,
   "newCaution": 2,
   "newGapSparse": 0,

@@ -1,6 +1,8 @@
 import { expandRegion, sample, signedField, type Region } from './region';
 import { MIN_CURVE_STITCH, runStitch, simplify, TOLERANCE } from './run';
 import type { Pt } from './skeleton';
+import { borderLoops, orderLoops } from './border';
+import { tour, type Touch } from './tour';
 import { embossPoints, motifCrossings, motifInside, texturePoints, type Motif, type Texture } from './deco';
 
 /**
@@ -23,6 +25,10 @@ import { embossPoints, motifCrossings, motifInside, texturePoints, type Motif, t
  *   the join (Wilcom's segment overlap rows, Ink/Stitch's gap fill rows).
  */
 
+/** How rows turn at the edge: along the outline (see turn). */
+export type RowEnds = 'edge';
+export const ROW_ENDS: readonly RowEnds[] = ['edge'];
+
 export interface FillParams {
   /** Distance between neighbouring rows (mm). */
   spacing: number;
@@ -37,6 +43,13 @@ export interface FillParams {
   underCross?: boolean;
   /** Underlay stays this far inside the edge (mm); UNDERLAY_INSET by default. */
   underInset?: number;
+  /**
+   * How the rows turn from one to the next at the edge (straight rows): straight across when not
+   * set; 'edge' along the outline, so sparse rows draw a clean edge.
+   */
+  rowEnds?: RowEnds;
+  /** An edge run (Kantenlauf) along the edge of the underlay before its rows (see sewEdgeRun). */
+  underEdge?: boolean;
   /** The underlay only in this part of the area (same pixels as the area); all of it when not set. */
   underArea?: Region;
   /**
@@ -175,6 +188,13 @@ class Frame {
    * never cross, so the rows split into sections exactly as straight ones do.
    */
   wave?: { height: number; k: number; tol: number };
+  /** How rows turn at the edge (see FillParams.rowEnds); straight to the next row when not set. */
+  rowEnds?: RowEnds;
+  /** With rows turning along the edge: the u nearest `u` (within `reach`) where row v meets the outline. */
+  edge?: (u: number, v: number, reach: number) => number;
+  /** The area the rows fill: a tour plans its hidden ways inside it (not on the travel grid, which
+   * may reach beyond it, as over the old thread). */
+  area?: Region;
   constructor(
     angleDeg: number,
     public spacing: number,
@@ -522,12 +542,63 @@ function sewSection(f: Frame, s: Section, len: number, pull: number, reversed: b
     const a = fwd ? seg.u0 - pull : seg.u1 + pull;
     const b = fwd ? seg.u1 + pull : seg.u0 - pull;
     const row = rowStitches(f, seg.k, f.v(seg.k), a, b, len);
-    // The step to the next row: in short stitches where the rows lie far apart (a fading fill).
+    // The step to the next row: in short stitches where the rows lie far apart (a fading fill),
+    // along the outline with row ends on the edge.
     const prev = out[out.length - 1];
-    const gap = prev ? dist(prev, row[0]) : 0;
-    for (let i = 1, n = Math.ceil(gap / len); i < n; i++) out.push([prev[0] + ((row[0][0] - prev[0]) * i) / n, prev[1] + ((row[0][1] - prev[1]) * i) / n]);
+    if (prev) out.push(...turn(f, prev, row[0], fwd ? -1 : 1, pull, len));
     out.push(...row);
   });
+  return merged(out, SHORTEST);
+}
+
+/** Along the outline, the step between rows keeps to it in stitches up to this long (mm). */
+const EDGE_STEP = 1;
+
+/**
+ * The needle points between the end of one row (`a`) and the start of the next (`b`), both left
+ * out: straight in stitches up to `len`, or with row ends along the edge (Frame.rowEnds), on the
+ * outline (`pull` beyond it) in stitches up to EDGE_STEP. `out` is the way the outline lies along
+ * the rows there (+1 past high u, -1 past low u).
+ */
+function turn(f: Frame, a: Pt, b: Pt, out: 1 | -1, pull: number, len: number): Pt[] {
+  const gap = dist(a, b);
+  const pts: Pt[] = [];
+  if (f.rowEnds === 'edge' && f.edge) {
+    const n = Math.ceil(gap / Math.min(len, EDGE_STEP));
+    const [ua, va] = [a[0] * f.e[0] + a[1] * f.e[1], a[0] * f.n[0] + a[1] * f.n[1]];
+    const [ub, vb] = [b[0] * f.e[0] + b[1] * f.e[1], b[0] * f.n[0] + b[1] * f.n[1]];
+    for (let i = 1; i < n; i++) {
+      const v = va + ((vb - va) * i) / n;
+      const u = ua + ((ub - ua) * i) / n;
+      pts.push(f.at(f.edge(u - out * pull, v, Math.max(1, Math.abs(ub - ua))) + out * pull, v));
+    }
+    return pts;
+  }
+  for (let i = 1, n = Math.ceil(gap / len); i < n; i++) pts.push([a[0] + ((b[0] - a[0]) * i) / n, a[1] + ((b[1] - a[1]) * i) / n]);
+  return pts;
+}
+
+/**
+ * Shortest stitch of a fill (mm): a shorter one only sets the needle again beside its last hole
+ * (dense rows turning at the edge, rows cut short by a narrow tip), which punches the fabric
+ * without adding to the look.
+ */
+export const SHORTEST = 0.4;
+
+/**
+ * The needle points without stitches shorter than `min`: such a stitch is merged into the next
+ * by leaving out its end (at a row's turn, the first point of the next row, so the rows end there
+ * alternately). The first and last points stay.
+ */
+export function merged(pts: Pt[], min: number): Pt[] {
+  if (pts.length < 3) return pts;
+  const out: Pt[] = [pts[0]];
+  // Slightly shorter still counts as the length: rows `min` apart turn in stitches of that length.
+  const lim = min - 1e-3;
+  for (let i = 1; i < pts.length - 1; i++) if (dist(out[out.length - 1], pts[i]) >= lim) out.push(pts[i]);
+  const last = pts[pts.length - 1];
+  if (out.length > 1 && dist(out[out.length - 1], last) < lim) out.pop();
+  out.push(last);
   return out;
 }
 
@@ -574,8 +645,16 @@ export class TravelGrid {
    * `covered`.
    */
   layered = false;
-  /** How much longer than the straight way travel may be (times, plus 6 mm); longer ways become jumps. */
+  /** How much longer than the straight way travel may be (times, plus `slack`); longer ways become jumps. */
   detour = 2;
+  /** See detour (mm). */
+  slack = 6;
+  /**
+   * Cells travel ran through already (see tread): another way there costs more, so ways that a
+   * tour leads past one spot again and again (where its branches meet) spread out rather than
+   * pile up thread under the rows.
+   */
+  trodden: Uint8Array | null = null;
   /** What a jump costs against travel when planning the order of sections (mm of travel). */
   trimCost = TRIM_COST;
   /** Where rows to come are known, travel may still run a few mm along row ends (see FillParams.saveTrims). */
@@ -607,7 +686,7 @@ export class TravelGrid {
 
   /** The longest way travel may take between two points `d` apart. */
   way(d: number): number {
-    return this.detour * d + 6;
+    return this.detour * d + this.slack;
   }
 
   center(i: number, j: number): Pt {
@@ -662,6 +741,12 @@ export class TravelGrid {
     }
   }
 
+  /** Marks the cells along a way travel took (see trodden). */
+  tread(path: Pt[]): void {
+    this.trodden ??= new Uint8Array(this.gw * this.gh);
+    for (let i = 1; i < path.length; i++) this.stamp(path[i - 1], path[i], TREAD_HALF, (c) => (this.trodden![c] = 1));
+  }
+
   /** Counts the cells under a row still to come (see ahead). */
   expect(a: Pt, b: Pt, halfWidth: number): void {
     this.ahead ??= new Uint16Array(this.gw * this.gh);
@@ -678,10 +763,13 @@ export class TravelGrid {
     const ny = l > 0 ? (b[0] - a[0]) / l : 0;
     this.seen ??= new Uint32Array(this.gw * this.gh);
     const mark = ++this.marks;
+    // Across the row no more than a cell apart, so sparse rows leave no stripes between them.
+    const m = Math.max(2, Math.ceil((2 * halfWidth) / this.cell));
+    const offs = Array.from({ length: m + 1 }, (_, i) => -halfWidth + (2 * halfWidth * i) / m);
     for (let k = 0; k <= n; k++) {
       const x = a[0] + ((b[0] - a[0]) * k) / n;
       const y = a[1] + ((b[1] - a[1]) * k) / n;
-      for (const o of [-halfWidth, 0, halfWidth]) {
+      for (const o of offs) {
         const c = this.index([x + nx * o, y + ny * o]);
         if (c >= 0 && this.seen[c] !== mark) {
           this.seen[c] = mark;
@@ -869,6 +957,7 @@ export class TravelGrid {
         const w0 = base[q];
         if (w0 === 0 || done[q]) continue;
         let w = STEP_LEN[k] * w0;
+        if (this.trodden?.[q]) w *= TRODDEN_COST;
         const x = ox + (i + 0.5) * cell;
         const y = oy + (j + 0.5) * cell;
         if (reach && Math.sqrt((x - a[0]) ** 2 + (y - a[1]) ** 2) + Math.sqrt((x - bb[0]) ** 2 + (y - bb[1]) ** 2) > reach) continue;
@@ -939,6 +1028,11 @@ export class TravelGrid {
     return { cells, length, onTop, alongEnds };
   }
 }
+
+/** What a step costs on a cell travel ran through already (times; see TravelGrid.trodden). */
+const TRODDEN_COST = 3;
+/** Half the width of the lane a way treads (mm). */
+const TREAD_HALF = 0.4;
 
 const STEP_I = [1, -1, 0, 0, 1, 1, -1, -1];
 const STEP_J = [0, 0, 1, -1, 1, -1, 1, -1];
@@ -1070,6 +1164,18 @@ function plan(f: Frame, secs: Section[], pull: number, start: Pt, last?: { s: Se
 
 /** What a trim costs against travel when choosing the order of sections (mm of travel). */
 const TRIM_COST = 25;
+/** A tour begins at its start this close outside the area too (mm), as where the last object ended on its edge. */
+const START_NEAR = 0.3;
+/**
+ * A tour walks hidden from its start to its first row only this far (mm); farther, it jumps as
+ * before. The walk is a layer of thread under the rows, and where objects overlap densely it can
+ * tip the stack over the density limit (the correction benchmark's overlapping circles on knit).
+ */
+const START_WALK = 3;
+/** The rows plan their tour anew from where the underlay ended when that is farther than this from where they would begin (mm). */
+const REPLAN = 5;
+/** The same when choosing the ways into the sections of a tour (see tourOrder): hidden ways are only thread. */
+const TOUR_TRIM_COST = 100;
 /** How many of the cheapest next steps get a look one step further. */
 const LOOKAHEAD = 3;
 /** How many of the nearest ways on are tried at each step; farther ones would mostly be jumps anyway. */
@@ -1357,6 +1463,111 @@ function entriesFor(f: Frame, secs: Section[], planned: Entry[], pull: number, s
 }
 
 /**
+ * Where sections touch across a row line (see tour.ts): the last row of one and the first row of
+ * the next, as far as both overlap along the rows and the step between them stays inside.
+ */
+function sectionTouches(f: Frame, secs: Section[], grid: TravelGrid): Touch[][] {
+  const byFirst = new Map<number, number[]>();
+  secs.forEach((s, i) => byFirst.set(s[0].k, [...(byFirst.get(s[0].k) ?? []), i]));
+  const touches: Touch[][] = secs.map(() => []);
+  const inside = (u: number, v: number) => {
+    const q = f.at(u, v);
+    if (f.area) return sample(f.area, f.area.sdf, q[0], q[1]) < f.spacing / 2;
+    const c = grid.index(q);
+    return c >= 0 && grid.depth[c] > -f.spacing / 2;
+  };
+  secs.forEach((s, i) => {
+    const last = s[s.length - 1];
+    for (const j of byFirst.get(last.k + 1) ?? []) {
+      const first = secs[j][0];
+      const u0 = Math.max(last.u0, first.u0);
+      const u1 = Math.min(last.u1, first.u1);
+      if (u1 <= u0) continue;
+      const v = (f.v(last.k) + f.v(first.k)) / 2;
+      if (!inside((u0 + u1) / 2, v)) continue;
+      const at = f.at((u0 + u1) / 2, v);
+      touches[i].push({ to: j, side: 1, at, width: u1 - u0 });
+      touches[j].push({ to: i, side: 0, at, width: u1 - u0 });
+    }
+  });
+  return touches;
+}
+
+/** Cell size of the coarse grid that estimates ways for the tour (mm). */
+const TOUR_CELL = 1;
+
+/**
+ * Lengths of ways inside the grid's area, estimated on a coarse grid (Dijkstra, 8 neighbours) for
+ * choosing the tour: the straight line underestimates ways round holes and notches. Points that
+ * no way joins get the straight line.
+ */
+function insideWays(grid: TravelGrid, area?: Region): (p: Pt, q: Pt) => number {
+  const k = Math.max(1, Math.round(TOUR_CELL / grid.cell));
+  const cell = grid.cell * k;
+  const w = Math.ceil(grid.gw / k);
+  const h = Math.ceil(grid.gh / k);
+  const open = new Uint8Array(w * h);
+  const inside = area ? (i: number, j: number) => sample(area, area.sdf, grid.ox + (i + 0.5) * grid.cell, grid.oy + (j + 0.5) * grid.cell) < -0.05 : (i: number, j: number) => grid.depth[j * grid.gw + i] > 0.05;
+  for (let j = 0; j < grid.gh; j++) for (let i = 0; i < grid.gw; i++) if (inside(i, j)) open[Math.floor(j / k) * w + Math.floor(i / k)] = 1;
+  const at = (p: Pt) => {
+    const i = Math.min(w - 1, Math.max(0, Math.floor((p[0] - grid.ox) / cell)));
+    const j = Math.min(h - 1, Math.max(0, Math.floor((p[1] - grid.oy) / cell)));
+    return j * w + i;
+  };
+  const cache = new Map<number, Float32Array>();
+  const from = (s: number) => {
+    let d = cache.get(s);
+    if (d) return d;
+    d = new Float32Array(w * h).fill(Infinity);
+    d[s] = 0;
+    const heap = new MinHeap();
+    heap.push(s, 0);
+    while (heap.size) {
+      const c = heap.pop();
+      const ci = c % w;
+      const cj = (c - ci) / w;
+      for (let m = 0; m < 8; m++) {
+        const i = ci + STEP_I[m];
+        const j = cj + STEP_J[m];
+        if (i < 0 || j < 0 || i >= w || j >= h) continue;
+        const q = j * w + i;
+        if (!open[q]) continue;
+        const nd = d[c] + STEP_LEN[m] * cell;
+        if (nd < d[q]) {
+          d[q] = nd;
+          heap.push(q, nd);
+        }
+      }
+    }
+    cache.set(s, d);
+    return d;
+  };
+  return (p, q) => {
+    const l = from(at(p))[at(q)];
+    const d = dist(p, q);
+    return Number.isFinite(l) ? Math.max(d, l) : d;
+  };
+}
+
+/** The order of the sections as one tour with hidden travel (see tour.ts). */
+function tourOrder(f: Frame, secs: Section[], pull: number, start: Pt, grid: TravelGrid, end?: Pt): { s: Section; e: Entry }[] {
+  const steps = tour<Entry>(
+    {
+      touches: sectionTouches(f, secs, grid),
+      dist: insideWays(grid, f.area),
+      ways: (i, from) =>
+        entries(f, secs[i], pull)
+          .filter((e) => e.reversed === (from === 1))
+          .map((e) => ({ w: e, p: e.p, exit: exitOf(f, secs[i], e, pull) })),
+    },
+    start,
+    end && ((p) => endCost(p, end)),
+    grid.trimCost,
+  );
+  return steps.map((st) => ({ s: secs[st.i], e: st.w }));
+}
+
+/**
  * Sews the sections greedily nearest first, connected by travel paths or jumps. With `end`, the
  * section that leaves the needle nearest to it is sewn last, when that makes the ways in between
  * and on to `end` shorter. With `hidden` (covering fills) or where parts are left out (the grid
@@ -1377,6 +1588,7 @@ function sewAll(
   joins?: Joins,
   trail: [number, number][] = [],
   hidden = false,
+  planned?: { s: Section; e: Entry }[],
 ): Pt {
   // With `hidden` or where parts are left out, the order and ends of the sections are planned on
   // the grid, so travel keeps under rows still to come (and the parts left out) rather than
@@ -1405,7 +1617,20 @@ function sewAll(
     }
     return best.order;
   };
-  let todo = order(secs);
+  // Rows on top keep their travel hidden by a tour; underlay rows are covered anyway, the nearest
+  // section next is shorter for them.
+  const toured = avoidSewn && !grid.layered;
+  // The tour keeps every way hidden; choosing where to enter the sections, a trim must weigh
+  // more than any hidden way round the shape.
+  const [trimCost, slack, outerSlack] = [grid.trimCost, grid.slack, outer?.slack ?? 0];
+  if (!grid.layered) {
+    // A hidden way round the shape is better than a trim as long as it is shorter than a trim is worth.
+    grid.trimCost = Math.max(trimCost, TOUR_TRIM_COST);
+    grid.slack = slack + TOUR_TRIM_COST;
+    if (outer) outer.slack = outerSlack + TOUR_TRIM_COST;
+  }
+  let todo = planned ?? (toured ? tourOrder(f, secs, pull, start, grid, end) : order(secs));
+  if (toured && (secs.length > 1 || end) && !joins) todo = entriesFor(f, todo.map((o) => o.s), todo.map((o) => o.e), pull, start, smart ? grid : null, end);
   if (joins) {
     // Gap rows go with the section sewn first, which only the order tells. The order stays, and
     // each section is entered from the same row; with gap rows its rows may run the other way, so
@@ -1413,8 +1638,23 @@ function sewAll(
     const grown = withGapRows(todo.map((o) => o.s), joins);
     if (grown.some((g, i) => g !== todo[i].s)) todo = entriesFor(f, grown, todo.map((o) => o.e), pull, start, smart ? grid : null, end);
   }
+  grid.trimCost = trimCost;
   let pos = start;
   let cur: Pt[] | null = runs.length ? runs[runs.length - 1] : null;
+  // A tour starts at its far end: from a start inside the area and close by (START_WALK) the
+  // needle walks there hidden, where the last object left it, rather than jumping.
+  const inside = (g: TravelGrid | undefined) => {
+    const at = g ? g.index(start) : -1;
+    return at >= 0 && g!.depth[at] > -START_NEAR;
+  };
+  // When the first row begins right there, that row begins at the start instead: a stitch between
+  // them would be too short to sew (see SHORTEST).
+  let first: Pt | null = null;
+  if (!cur && toured && todo.length && (inside(grid) || inside(outer))) {
+    const d = dist(start, todo[0].e.p);
+    if (d >= SHORTEST && d <= START_WALK) runs.push((cur = [start]));
+    else if (d < SHORTEST) first = start;
+  }
   for (const { s, e } of todo) {
     const bd = dist(pos, e.p);
     const pts = sewSection(f, s, len, pull, e.reversed, e.flip);
@@ -1423,17 +1663,27 @@ function sewAll(
     if (cur && bd > 1) {
       // Where the grid has no way (from outside it, or between its parts), the outer one may.
       const path = grid.path(pos, pts[0], avoidSewn) ?? outer?.path(pos, pts[0], avoidSewn);
+      if (path && toured && pathLength(path) < grid.way(bd)) grid.tread(path);
       if (path && pathLength(path) < grid.way(bd)) travel = f.onLines ? runStitch(f.onLines(path), TRAVEL_STITCH, LINE_TOLERANCE) : runStitch(path, TRAVEL_STITCH, TRAVEL_TOLERANCE);
-    } else if (cur) travel = [pos, pts[0]];
+    } else if (cur) travel = [pos];
     if (cur && travel && travel.length > 2) noteTravel(trail, runs, travel.length);
-    if (cur && travel) cur.push(...travel.slice(1), ...pts.slice(1));
+    if (cur && travel) {
+      cur.push(...travel.slice(1));
+      // Straight on, points closer than a stitch may be (see SHORTEST) go into the next stitch, as
+      // between the single short rows of a narrow tip; such a row may go altogether.
+      let k = travel.length > 1 ? 1 : 0;
+      while (k < pts.length && dist(cur[cur.length - 1], pts[k]) < SHORTEST - 1e-3) k++;
+      cur.push(...pts.slice(k));
+    }
     else {
-      cur = pts;
+      cur = first && pts.length > 2 ? [first, ...pts.slice(1)] : pts;
       runs.push(cur);
     }
     for (const seg of s) for (const [a, b] of f.pieces(seg.u0, seg.u1, f.v(seg.k))) grid.cover(a, b, f.half);
-    pos = pts[pts.length - 1];
+    pos = cur[cur.length - 1];
   }
+  grid.slack = slack;
+  if (outer) outer.slack = outerSlack;
   return pos;
 }
 
@@ -1445,6 +1695,28 @@ export function pathLength(p: Pt[]): number {
   return l;
 }
 
+/** Sets how the frame's rows turn at the edge of `r` (see FillParams.rowEnds). */
+function endRows(f: Frame, r: Region, ends: RowEnds): void {
+  f.rowEnds = ends;
+  const step = r.pxMm / 2;
+  const at = (u: number, v: number) => sample(r, r.sdf, ...f.at(u, v));
+  f.edge = (u, v, reach) => {
+    const in0 = at(u, v) < 0;
+    for (let d = step; d <= reach; d += step) {
+      for (const dir of [1, -1]) {
+        const x = u + dir * d;
+        const val = at(x, v);
+        if (val < 0 !== in0) {
+          // Between this step and the one before it, where the field crosses zero.
+          const prev = at(x - dir * step, v);
+          return x - dir * step + (dir * step * prev) / (prev - val || 1);
+        }
+      }
+    }
+    return u;
+  };
+}
+
 /** Fill stitches for the region, starting near `start`. Null if no row fits into the region. */
 export function fillRegion(r: Region, p: FillParams, start: Pt, neighbours: number[] = []): FillResult | null {
   const angle = p.angle ?? chooseAngle(r, p.spacing, neighbours);
@@ -1453,17 +1725,24 @@ export function fillRegion(r: Region, p: FillParams, start: Pt, neighbours: numb
   else if (p.emboss) f.emboss = p.emboss;
   else if (p.texture) f.texture = p.texture;
   if (p.fade) f.fade = p.fade;
+  if (p.rowEnds && !p.wave) endRows(f, r, p.rowEnds);
+  f.area = r;
   const top = rows(r, r.sdf, f, 0);
   if (!top.length) return null;
   const runs: Pt[][] = [];
   const grid = new TravelGrid(p.travel ?? r, p.offRowEnds, p.whole ? { whole: p.whole, area: r } : undefined);
   grid.walks = !!p.saveTrims;
-  const pos = p.underlay ? sewUnderlay(r, angle, p, start, grid, runs) : start;
-  const under = pointCount(runs);
   const secs = sections(r, r.sdf, f, top);
+  // The underlay ends where the rows on top begin their tour, at the far end of a branch, so the
+  // rows need no way there. Where it cannot end near there, the rows plan their tour anew from
+  // where it did end.
+  let planned = p.underlay ? tourOrder(f, secs, p.pull, start, grid, p.end) : undefined;
+  const pos = p.underlay ? sewUnderlay(r, angle, p, start, grid, runs, planned![0].e.p) : start;
+  if (planned && dist(pos, planned[0].e.p) > REPLAN) planned = undefined;
+  const under = pointCount(runs);
   const gap = f.gradient ? 0 : Math.min(GAP_ROWS_MAX, Math.max(0, Math.round(p.gapRows ?? 0)));
   const travel: [number, number][] = [];
-  sewAll(f, secs, p.stitch, p.pull, pos, grid, true, runs, p.end, undefined, gap && secs.length > 1 ? sectionJoins(r, f, secs, gap) : undefined, travel, true);
+  sewAll(f, secs, p.stitch, p.pull, pos, grid, true, runs, p.end, undefined, gap && secs.length > 1 ? sectionJoins(r, f, secs, gap) : undefined, travel, true, planned);
   return { runs, angle, under, travel };
 }
 
@@ -1718,24 +1997,51 @@ export function underlayArea(r: Region, inset: number, share?: number): Region |
   return shrunk && expandRegion(shrunk, 0.5);
 }
 
+/** Stitch length of the edge run (mm): short enough to follow curves, long enough not to perforate. */
+export const EDGE_RUN_STITCH = 2;
+
+/**
+ * Edge run (Kantenlauf), the first underlay: a running stitch along the edge of the underlay area,
+ * just inside the outline and round every hole. It holds the fabric where the rows end, so they
+ * end on a firm, straight edge, and the rows' pull does not draw the outline in. Each loop starts
+ * nearest where the needle is; between loops the needle travels inside the area (it lies under the
+ * rows), or jumps where no way is short enough. Returns where the needle ends.
+ */
+function sewEdgeRun(area: Region, start: Pt, grid: TravelGrid, runs: Pt[][]): Pt {
+  let pos = start;
+  for (const loop of orderLoops(borderLoops(area), start)) {
+    const pts = runStitch(loop, EDGE_RUN_STITCH, TOLERANCE);
+    const cur = runs[runs.length - 1];
+    const d = dist(pos, pts[0]);
+    const path = cur && d > 1 ? grid.path(pos, pts[0], false) : null;
+    if (cur && d <= 1) cur.push(...pts.slice(1));
+    else if (cur && path && pathLength(path) < grid.way(d)) cur.push(...runStitch(path, TRAVEL_STITCH, TRAVEL_TOLERANCE).slice(1), ...pts.slice(1));
+    else runs.push(pts);
+    pos = pts[pts.length - 1];
+  }
+  return pos;
+}
+
 /**
  * Underlay for top rows at `angle`: rows across them (or two layers crossing at ±45 degrees), three
  * times the top spacing apart (at least 1.2 mm) unless set, inside `underlayArea`; appended to
  * `runs`. Travel between its rows stays inside that area too. Returns where the needle ends.
  */
-export function sewUnderlay(r: Region, angle: number, p: Pick<FillParams, 'spacing' | 'underCross' | 'underInset' | 'underInsetShare' | 'underSpacing' | 'underArea'>, start: Pt, grid: TravelGrid, runs: Pt[][]): Pt {
+export function sewUnderlay(r: Region, angle: number, p: Pick<FillParams, 'spacing' | 'underCross' | 'underInset' | 'underInsetShare' | 'underSpacing' | 'underArea' | 'underEdge'>, start: Pt, grid: TravelGrid, runs: Pt[][], end?: Pt): Pt {
   const us = p.underSpacing ?? Math.max(1.2, 3 * p.spacing);
   let pos = start;
   // Only where it is wanted (not under later objects); travel still goes the whole area's way.
   const base = p.underArea && p.underArea.pxMm === r.pxMm && p.underArea.w === r.w && p.underArea.h === r.h ? p.underArea : r;
   const area = underlayArea(base, p.underInset ?? UNDERLAY_INSET, p.underInsetShare);
+  if (area && p.underEdge) pos = sewEdgeRun(area, pos, grid, runs);
   if (area) {
     const inner = area === r ? grid : new TravelGrid(area, grid.offRowEnds);
-    for (const a of p.underCross ? [angle - 45, angle + 45] : [angle + 90]) {
+    const layers = p.underCross ? [angle - 45, angle + 45] : [angle + 90];
+    layers.forEach((a, i) => {
       const uf = new Frame(a, us);
       const under = rows(area, area.sdf, uf, 0);
-      if (under.length) pos = sewAll(uf, sections(area, area.sdf, uf, under), UNDERLAY_STITCH, 0, pos, inner, false, runs, undefined, inner === grid ? undefined : grid);
-    }
+      if (under.length) pos = sewAll(uf, sections(area, area.sdf, uf, under), UNDERLAY_STITCH, 0, pos, inner, false, runs, i === layers.length - 1 ? end : undefined, inner === grid ? undefined : grid);
+    });
   }
   grid.covered.fill(0);
   grid.rowEnds.fill(0);
