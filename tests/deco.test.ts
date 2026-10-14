@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { crossFill, embossPoints, gridFill, motifInside, mazeFill, meanderFill, motifCrossings, regionBox, type OpenParams } from '../src/digitize/deco';
+import { crossCells, crossFill, crossPasses, embossPoints, onGrid, gridFill, motifInside, mazeFill, meanderFill, motifCrossings, regionBox, type OpenParams } from '../src/digitize/deco';
 import { digitizeDefaults } from '../src/digitize/digitize';
 import { fillRegion } from '../src/digitize/fill';
 import { buildRegion, sample, type Region } from '../src/digitize/region';
+import { crossClaim } from '../src/model/covers';
+import { knockOut } from '../src/shape/rasterize';
 import type { Pt } from '../src/digitize/skeleton';
 import { addShape } from '../src/model/addShape';
 import { blendObject } from '../src/model/blend';
@@ -133,8 +135,8 @@ describe('open patterns', () => {
     expect(c.runs).not.toEqual(a.runs);
   });
 
-  it('sews grids and cross stitch inside the shape, every line there and back at most', () => {
-    for (const res of [gridFill(disk, { ...open, size: 6 }, 'hex', [5, 15]), gridFill(disk, { ...open, size: 6 }, 'brick', [5, 15]), crossFill(disk, open, 'full', [5, 15])]) {
+  it('sews grids inside the shape, every line there and back at most', () => {
+    for (const res of [gridFill(disk, { ...open, size: 6 }, 'hex', [5, 15]), gridFill(disk, { ...open, size: 6 }, 'brick', [5, 15])]) {
       expect(res).not.toBeNull();
       for (const q of allPoints(res!.runs)) expect(sample(disk, disk.sdf, q[0], q[1])).toBeLessThan(0.05);
       const uses = new Map<string, number>();
@@ -186,23 +188,116 @@ describe('open patterns', () => {
     }
   });
 
-  it('crosses every whole cell of the cross stitch on both diagonals', () => {
-    const res = crossFill(square, open, 'full', [5, 5])!;
-    const [x0, y0, x1, y1] = regionBox(square);
-    const inside = (x: number, y: number) => sample(square, square.sdf, x, y) < -0.1;
-    let cells = 0;
-    for (let y = Math.floor(y0 / 2.5) * 2.5; y < y1; y += 2.5) for (let x = Math.floor(x0 / 2.5) * 2.5; x < x1; x += 2.5) if (inside(x, y) && inside(x + 2.5, y) && inside(x, y + 2.5) && inside(x + 2.5, y + 2.5)) cells++;
-    expect(cells).toBeGreaterThan(30);
-    let diagonals = 0;
-    const seen = new Set<string>();
-    for (const run of res.runs) {
-      for (let i = 1; i < run.length; i++) {
-        const k = [run[i - 1], run[i]].map((q) => `${q[0].toFixed(2)},${q[1].toFixed(2)}`).sort().join('|');
-        if (!seen.has(k)) diagonals++;
-        seen.add(k);
+  describe('cross stitch', () => {
+    const grid = { size: 2.5, angle: 0, origin: [0, 0] as Pt };
+    /** The half diagonals sewn, by cell and corner, and how often; and any stitch that is not on one. */
+    const halves = (res: { runs: Pt[][] }, g = grid) => {
+      const at = onGrid(g);
+      const uses = new Map<string, number>();
+      const off: string[] = [];
+      for (const run of res.runs) {
+        for (let i = 1; i < run.length; i++) {
+          const a = at(run[i - 1]);
+          const b = at(run[i]);
+          const dx = b[0] - a[0];
+          const dy = b[1] - a[1];
+          // Along a diagonal: as far across as down, half a cell or a whole one.
+          const len = Math.abs(dx);
+          if (Math.abs(Math.abs(dx) - Math.abs(dy)) > 1e-6 || (Math.abs(len - 0.5) > 1e-6 && Math.abs(len - 1) > 1e-6)) {
+            off.push(`${a} to ${b}`);
+            continue;
+          }
+          for (let k = 0; k < len * 2; k++) {
+            const m: Pt = [a[0] + (dx / len) * 0.5 * (k + 0.5), a[1] + (dy / len) * 0.5 * (k + 0.5)];
+            const key = `${Math.floor(m[0])},${Math.floor(m[1])},${m[0] - Math.floor(m[0]) < 0.5 ? 'l' : 'r'}${m[1] - Math.floor(m[1]) < 0.5 ? 't' : 'b'}`;
+            uses.set(key, (uses.get(key) ?? 0) + 1);
+          }
+        }
       }
-    }
-    expect(diagonals).toBe(cells * 2);
+      return { uses, off };
+    };
+
+    it('crosses the cells the shape covers at least half of, every half diagonal twice, and nothing else', () => {
+      const res = crossFill(disk, { ...open, ...grid }, 'full', [5, 15])!;
+      const cells = crossCells(disk, grid);
+      expect(cells.length).toBeGreaterThan(40);
+      const { uses, off } = halves(res);
+      expect(off).toEqual([]);
+      const want = new Map<string, number>();
+      for (const [i, j] of cells) for (const q of ['lt', 'rt', 'lb', 'rb']) want.set(`${i},${j},${q}`, crossPasses(2.5));
+      expect(new Map([...uses].sort())).toEqual(new Map([...want].sort()));
+      // Each cell is in when the disk covers at least half of it: the crosses reach beyond the edge
+      // by less than half a cell, and leave out less than half of one inside.
+      for (const [i, j] of cells) {
+        let n = 0;
+        for (let y = 0; y < 10; y++) for (let x = 0; x < 10; x++) if (Math.hypot((i + (x + 0.5) / 10) * 2.5 - 15, (j + (y + 0.5) / 10) * 2.5 - 15) < 10) n++;
+        expect(n).toBeGreaterThanOrEqual(45);
+      }
+    });
+
+    it('sews a connected area in one go, every cross with its top diagonal last', () => {
+      const res = crossFill(disk, { ...open, ...grid }, 'full', [5, 15])!;
+      expect(res.runs.length).toBe(1);
+      // The last stitch over each cross's middle runs from top left to bottom right (or back).
+      const at = onGrid(grid);
+      const lastOver = new Map<string, number>();
+      for (const run of res.runs) {
+        for (let i = 1; i < run.length; i++) {
+          const a = at(run[i - 1]);
+          const b = at(run[i]);
+          if (Math.abs(Math.abs(b[0] - a[0]) - 1) > 1e-6) continue;
+          const key = `${Math.min(a[0], b[0])},${Math.min(a[1], b[1])}`;
+          lastOver.set(key, Math.sign((b[0] - a[0]) * (b[1] - a[1])));
+        }
+      }
+      expect(lastOver.size).toBe(crossCells(disk, grid).length);
+      expect([...lastOver.values()].every((v) => v === 1)).toBe(true);
+    });
+
+    it('sews crosses that only touch at a corner together, and apart ones apart', () => {
+      // Two squares of 2 × 2 cells meeting at one corner, and one more far off.
+      const r = region((x, y) => (x > 5 && x < 10 && y > 5 && y < 10) || (x > 10 && x < 15 && y > 10 && y < 15) || (x > 20 && x < 25 && y > 20 && y < 25));
+      const res = crossFill(r, { ...open, ...grid }, 'full', [5, 5])!;
+      expect(res.runs.length).toBe(2);
+      expect(halves(res).off).toEqual([]);
+    });
+
+    it('leaves the cells a later area on the same grid takes, and only those, so their crosses meet without a gap', () => {
+      // A disk below, part of it under a shape on top whose edge is not on the grid.
+      const top = region((x, y) => Math.hypot(x - 15, y - 15) < 10 && x + 0.3 * y >= 18.7);
+      const below = knockOut(disk, [crossClaim(top, grid)!], 0)!;
+      const keys = (r: Region) => crossCells(r, grid).map(([i, j]) => `${i},${j}`);
+      const a = keys(below);
+      const b = keys(top);
+      expect(b.length).toBeGreaterThan(10);
+      expect(a.filter((k) => b.includes(k))).toEqual([]);
+      // Together they cross the disk's cells and those the shape on top reaches into.
+      expect([...a, ...b].sort()).toEqual([...new Set([...keys(disk), ...b])].sort());
+    });
+
+    it('lies on the same grid wherever the shape is, turned or not', () => {
+      for (const angle of [0, 30]) {
+        const g = { size: 2, angle, origin: [0, 0] as Pt };
+        const res = crossFill(square, { ...open, ...g }, 'full', [5, 5])!;
+        const { off } = halves(res, g);
+        expect(off).toEqual([]);
+        for (const q of res.runs.flat()) {
+          const c = onGrid(g)(q);
+          // Every needle point is a corner or a middle of a cell of the one grid.
+          expect(Math.abs(c[0] * 2 - Math.round(c[0] * 2))).toBeLessThan(1e-6);
+          expect(Math.abs(c[1] * 2 - Math.round(c[1] * 2))).toBeLessThan(1e-6);
+        }
+      }
+    });
+
+    it('lays coarse crosses twice as often', () => {
+      expect(crossPasses(2.3)).toBe(2);
+      expect(crossPasses(3)).toBe(4);
+      const g = { size: 3, angle: 0, origin: [0, 0] as Pt };
+      const { uses, off } = halves(crossFill(square, { ...open, ...g }, 'full', [5, 5])!, g);
+      expect(off).toEqual([]);
+      expect(new Set(uses.values())).toEqual(new Set([4]));
+    });
   });
 });
 

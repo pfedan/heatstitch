@@ -5,7 +5,7 @@ import { digitizedFile } from '../../src/model/digitized';
 import { addShape } from '../../src/model/addShape';
 import { blendRuns, blendSettings, followerLinks, partHolders, recolorBlock, sameRegion, shareBorders, syncBorders } from '../../src/model/border';
 import { blendObject } from '../../src/model/blend';
-import { FIGURES, MOTIFS, TEXTURES } from '../../src/digitize/deco';
+import { crossCells, FIGURES, MOTIFS, TEXTURES } from '../../src/digitize/deco';
 import { ECHO_SIDES } from '../../src/digitize/echo';
 import { HAND_STITCHES, HAND_WIDTH, LINE_MOTIFS } from '../../src/digitize/motif';
 import { partOf, type LinePart } from '../../src/model/shadow';
@@ -28,7 +28,7 @@ import { GAP_ROWS_MAX } from '../../src/digitize/fill';
 import { fillRuns, TRAVEL_REACH } from '../../src/model/restitch';
 import { expandRegion, outline as outlineOf } from '../../src/digitize/region';
 import { shownTravel } from './travel';
-import { analyze, backToVersion, edgeAlong, keepShape, measureSatin, sectionsOf, sectionPlan, sectionView, keepVersion, relearn, objectKey, remember, remembered, rememberedIn, restitch, restoreRemembered, DECO_PATTERNS, OPEN_PATTERNS, type BorderSettings, type FillSettings, type Rails, type Remembered, type SatinSettings, type StoredObjects } from '../../src/model/restitch';
+import { analyze, backToVersion, crossGridOf, sameGrid, edgeAlong, keepShape, measureSatin, sectionsOf, sectionPlan, sectionView, keepVersion, relearn, objectKey, remember, remembered, rememberedIn, restitch, restoreRemembered, DECO_PATTERNS, OPEN_PATTERNS, type BorderSettings, type DecoSettings, type FillSettings, type Rails, type Remembered, type SatinSettings, type StoredObjects } from '../../src/model/restitch';
 import { reorder } from '../../src/model/order';
 import { stitchKinds } from '../../src/model/sequence';
 import { addContour, behindCovered, gapReader } from '../../src/model/contour';
@@ -38,7 +38,7 @@ import { sewDesign, specOf } from '../../src/model/sew';
 import { parsePattern } from '../../src/parsers';
 import { bounds as boundsOf, extendPath, flatten, insertNode, moveNodes, nodesOf, removeNodes, rotation, segments, setSmooth, storeForm, translation, type Form, type Mat } from '../../src/shape/path';
 import { ellipsePath, parsePath, rectPath } from '../../src/shape/svgPath';
-import { fromStored, toStored } from '../../src/storage/fileStore';
+import { fromStored, storedVersion, toStored } from '../../src/storage/fileStore';
 import { decodeProject, encodeProject, projectSettings } from '../../src/storage/project';
 import { DEFAULTS } from '../../src/settings';
 import { DEFAULT_PROFILE } from '../../src/validation/profiles';
@@ -886,11 +886,15 @@ export const OPS: Op[] = [
       const o = pick(r, fills);
       const fill = remembered(d.cur.p, o)!.fill!;
       const kind = pick(r, ['emboss', 'texture', 'fade', ...DECO_PATTERNS, ...OPEN_PATTERNS] as const);
-      const deco = { seed: 1 + Math.floor(r() * 9), focus: [r(), r()] as [number, number], ...(kind === 'motifs' ? { figure: pick(r, FIGURES) } : {}), ...(r() < 0.5 ? { angle: Math.floor(r() * 360) } : {}) };
+      const seed = 1 + Math.floor(r() * 9);
+      const deco: DecoSettings = { seed, focus: [r(), r()] as [number, number], ...(kind === 'motifs' ? { figure: pick(r, FIGURES) } : {}), ...(r() < 0.5 ? { angle: Math.floor(r() * 360) } : {}) };
+      // Cross stitch in two sizes, so neighbours often share the design's grid, now and then on a
+      // grid of its own: from the seed drawn already, so the ops of a chain stay as they were.
+      if (kind === 'cross') Object.assign(deco, { size: seed % 2 ? 2.3 : 1.5 }, seed === 7 ? { ownGrid: true } : {});
       // Irregular rows on any covering fill, now and then (as the slider Unregelmäßig).
       const rough = r() < 0.3 ? { rough: 0.2 + 0.8 * r(), roughSeed: 1 + Math.floor(r() * 99) } : {};
       // Schnitte sparen now and then: from the seed drawn already, so the ops of a chain stay as they were.
-      const save = deco.seed % 3 === 0 ? { saveTrims: true } : {};
+      const save = seed % 3 === 0 ? { saveTrims: true } : {};
       const s: FillSettings =
         kind === 'emboss'
           ? { ...fill, pattern: 'tatami', deco: { ...deco, emboss: pick(r, MOTIFS), ...(r() < 0.5 ? { embossAngle: Math.floor(r() * 360) } : {}) } }
@@ -2100,6 +2104,25 @@ export function checkObjectList(p: Pattern): void {
   expect(problems.slice(0, 5).join('; '), 'object list').toBe('');
 }
 
+/**
+ * A reload brings the version back whole: what the browser store keeps of it after every change
+ * (files.setPattern: its records and its object list together, see storedVersion), opened on a
+ * fresh page, is the same objects knowing the same. Objects are found again by their stitches, so
+ * an object list kept from another version (one undone, say) would lose the objects whose stitches
+ * differ: an appliqué fell apart into the running stitches between its stops.
+ */
+export function checkReload(d: Doc): void {
+  const p = d.cur.p;
+  const v = structuredClone(storedVersion(p, d.file?.original));
+  // A fresh page reads the file anew: the original it holds now is another pattern.
+  const back = v.working ? fromStored(d.file?.original ?? empty, v.working) : parsePattern(d.file!.data, d.file!.name);
+  expect(back, 'the stored version opens').toBeTruthy();
+  restoreRemembered(back!, v.objects);
+  const known = knowledge(p);
+  const again = knowledge(back!);
+  if (!same(again, known)) expect(again, 'knowledge after a reload').toEqual(known);
+}
+
 /** Every object has a key of its own, also copies lying exactly on their originals, so none shares what another remembers. */
 export function checkKeys(p: Pattern): void {
   const seen = new Map<string, number>();
@@ -2319,6 +2342,30 @@ export function checkFillLooks(p: Pattern): void {
     }
   }
   expect(problems.join('; '), 'textures and irregular fills').toBe('');
+}
+
+/**
+ * Cross stitch that leaves out what lies on top crosses no cell that a later cross stitch on the
+ * same grid crosses: each cell has one cross, the top one, and the crosses below reach up to it.
+ */
+export function checkCrossCells(p: Pattern): void {
+  const objs = sewObjects(p);
+  const problems: string[] = [];
+  const crosses = objs.flatMap((o) => {
+    const m = remembered(p, o);
+    const g = m?.fill && m.region && !m.free && !m.hand && !m.read ? crossGridOf(m.fill) : null;
+    return g && !m!.fill!.deco?.ownGrid ? [{ o, m: m!, g, cells: new Set(crossCells(m!.region!, g).map((c) => c.join(','))) }] : [];
+  });
+  for (const a of crosses) {
+    // Left out with nothing sewable left, it is sewn whole (see sewCut).
+    if (!a.m.knockout || a.m.cut !== cutKey(a.m.region!)) continue;
+    for (const b of crosses) {
+      if (b.o.index <= a.o.index || !sameGrid(a.g, b.g)) continue;
+      const both = [...a.cells].filter((c) => b.cells.has(c));
+      if (both.length) problems.push(`${a.o.index} and ${b.o.index} both cross ${both.slice(0, 3).join(' ')}`);
+    }
+  }
+  expect(problems.join('; '), 'cells crossed twice').toBe('');
 }
 
 /** Exported and read back, the stitches are the same. */
@@ -2715,8 +2762,10 @@ function checkStep(d: Doc, full: boolean): void {
   checkLetterings(p);
   checkGapRows(p);
   checkFillLooks(p);
+  checkCrossCells(p);
   checkAppliques(p);
   checkTrace(d);
+  checkReload(d);
   if (full) {
     checkExport(p);
     checkSewDesign(p);
