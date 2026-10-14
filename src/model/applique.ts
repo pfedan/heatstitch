@@ -34,8 +34,9 @@ export type AppliqueFabric = FabricId | 'felt';
 
 export interface AppliqueSettings {
   /**
-   * Whether the placement line is sewn (absent: it is). Without it the piece is laid on before the
-   * tack-down (cut to shape before, or ironed on): the machine stops before the appliqué for it.
+   * Whether the placement line is sewn (absent: it is). Without it the fabric is laid on before the
+   * tack-down, cut to shape or a generous patch (on a backing a line is hard to place on, such as
+   * water-soluble stabilizer): the machine stops before the appliqué for it.
    */
   place?: boolean;
   /** The tack-down: a running stitch, its length, how often or as bean stitch (absent: once, TACK_STITCH long). */
@@ -123,7 +124,7 @@ export function appliqueFrom(v: unknown): AppliqueSettings | null {
 export const storeApplique = (s: AppliqueSettings): AppliqueSettings => appliqueFrom(s)!;
 
 /** How many stops lie inside an appliqué sewn with `s`: after the placement line, and before the cover (see appliqueRuns). */
-export const innerStopCount = (s: AppliqueSettings): number => (s.place === false ? 0 : s.edge === 'none' ? 1 : 2);
+export const innerStopCount = (s: AppliqueSettings): number => (s.place === false ? 0 : 1) + (s.edge === 'none' ? 0 : 1);
 
 /** Runs the machine stops before (the fabric laid on, cut off): see objectRecords. */
 export const stopBefore = new WeakSet<Pt[]>();
@@ -158,16 +159,13 @@ export function appliqueParts(area: Region, s: AppliqueSettings, from: Pt, share
 /**
  * The runs of an appliqué in sewing order: the machine stops before the tack-down (the fabric laid
  * on the placement line) and before the cover (the fabric cut off). Without a placement line the
- * piece is cut to shape before: it is laid on before the appliqué, and there is nothing to cut.
- * Without a cover the fabric is cut after it (see stopsAround).
+ * fabric is laid on before the appliqué; without a cover it is cut after it (see stopsAround).
  */
 export function appliqueRuns(area: Region, s: AppliqueSettings, from: Pt, shared?: Region | null): { runs: Pt[][]; under: number } {
   const { place, tack, cover } = appliqueParts(area, s, from, shared);
   if ((s.place !== false && !place.length) || !tack.length || (s.edge !== 'none' && !cover.length)) return { runs: [], under: 0 };
-  if (place.length) {
-    stopBefore.add(tack[0]);
-    if (cover.length) stopBefore.add(cover[0]);
-  }
+  if (place.length) stopBefore.add(tack[0]);
+  if (cover.length) stopBefore.add(cover[0]);
   // Placement line and tack-down lie under the fabric and its edge, as an underlay does (Remembered.under).
   const under = [...place, ...tack].reduce((n, r) => n + (r.length > 1 ? r.length : 0), 0);
   return { runs: [...place, ...tack, ...cover], under };
@@ -175,20 +173,20 @@ export function appliqueRuns(area: Region, s: AppliqueSettings, from: Pt, shared
 
 /**
  * The stops an appliqué sewn with `s` needs between it and its neighbours in the same thread: one
- * before it to lay on a piece cut before (no placement line), one after it to cut the fabric off
- * a raw edge (no cover, after a placement line).
+ * before it to lay the fabric on (no placement line), one after it to cut the fabric off a raw
+ * edge (no cover).
  */
 export function stopsAround(s: AppliqueSettings | undefined): { before: boolean; after: boolean } {
-  return { before: !!s && s.place === false, after: !!s && s.place !== false && s.edge === 'none' };
+  return { before: !!s && s.place === false, after: !!s && s.edge === 'none' };
 }
 
-/** What a stop of the machine is for: laying the fabric on (over its placement line, or a piece cut before), or cutting it off. */
+/** What a stop of the machine is for: laying the fabric on (over its placement line, or before an appliqué without one), or cutting it off. */
 export type Stop = 'place' | 'lay' | 'trim';
 
 /**
  * The stops of appliqués of `p`, by the color block they open: inside each, the first for laying
  * the fabric on, the next for cutting it; between it and its neighbours in the same thread, the
- * one before a piece cut before is laid on, and the one after a raw edge to cut it (stopsAround).
+ * one before the fabric is laid on without a placement line, and the one after a raw edge to cut it (stopsAround).
  * A change of thread there is a stop too, but no block of the appliqué's.
  */
 export function appliqueStops(p: Pattern): Map<number, Stop> {
@@ -312,14 +310,14 @@ export function appliquePieces(p: Pattern): Piece[] {
     const stops = stopsIn(p, e.first, e.last);
     const form = cutForm(m);
     if (!form || stops.length !== innerStopCount(s) + (s.edge === 'none' && stops.length === 2 ? 1 : 0)) continue;
-    // A piece cut before is laid on before the appliqué (at the stop there, if it has one): it is cut already.
+    // Without a placement line the fabric is laid on before the appliqué (at the stop there, if it has one).
     let before = e.first - 1;
     while (before > 0 && p.cmd[before] !== STITCH && p.cmd[before] !== COLOR_CHANGE) before--;
     const place = s.place === false ? Math.max(0, p.cmd[before] === COLOR_CHANGE ? before : e.first - 1) : stops[0];
     // A raw edge is cut after its tack-down (at the stop there, if it has one).
     let after = e.last + 1;
     while (after < p.cmd.length - 1 && p.cmd[after] !== STITCH && p.cmd[after] !== COLOR_CHANGE) after++;
-    const trim = s.place === false ? place : stops.length > 1 ? stops[stops.length - 1] : p.cmd[after] === COLOR_CHANGE ? after : e.last;
+    const trim = s.edge !== 'none' || stops.length === 2 ? stops[stops.length - 1] : p.cmd[after] === COLOR_CHANGE ? after : e.last;
     out.push({ first: e.first, last: e.last, place, trim, form, fabric: s.fabric, color: s.color });
   }
   return out;

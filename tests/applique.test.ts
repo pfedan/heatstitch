@@ -187,18 +187,22 @@ describe('appliqué', () => {
     checkAppliques(d.cur.p);
   });
 
-  it('precut: no placement line, one stop before it to lay the piece on', async () => {
+  it('without a placement line: a stop before it to lay the fabric on, one inside to cut it', async () => {
     const d = design();
     expect(shapes(d, setApplique(d.cur.p, [1], { place: false }, T))).toBe(true);
     let p = d.cur.p;
     const a = sewObjects(p)[1];
     expect(remembered(p, a)?.applique?.place).toBe(false);
-    // The square and the appliqué in one thread: the stop between them opens its block.
-    expect([...appliqueStops(p)]).toEqual([[1, 'lay']]);
-    for (let i = a.first; i <= a.last; i++) expect(p.cmd[i]).not.toBe(COLOR_CHANGE);
+    // The square and the appliqué in one thread: the stop between them opens its block, the one
+    // before the cover cuts the fabric (cut to shape before, the machine just sews on).
+    expect([...appliqueStops(p)].sort((x, y) => x[0] - y[0])).toEqual([
+      [1, 'lay'],
+      [2, 'trim'],
+    ]);
+    expect(stopsIn(p, a.first, a.last)).toHaveLength(1);
     const [x] = appliquePieces(p);
-    expect(x.place).toBe(x.trim);
     expect(x.place).toBeLessThan(x.first);
+    expect(x.trim).toBeGreaterThan(x.first);
     // Nothing on the outline before the tack-down: the first stitches lie inside it.
     expect(Math.hypot(p.x[a.first + 2] / 10 - 15, p.y[a.first + 2] / 10 - 15)).toBeLessThan(14.8);
     const m = measurePattern(p, openOnPurpose(p, sewObjects(p)) ?? undefined);
@@ -216,6 +220,11 @@ describe('appliqué', () => {
     await saveAndOpen(d);
     expect(remembered(d.cur.p, sewObjects(d.cur.p)[1])?.applique?.place).toBe(false);
     checkAppliques(d.cur.p);
+    // A raw edge as well: the stops before and after it, none inside.
+    expect(shapes(d, setApplique(d.cur.p, [1], { edge: 'none' }, T))).toBe(true);
+    expect(stopsIn(d.cur.p, sewObjects(d.cur.p)[1].first, sewObjects(d.cur.p)[1].last)).toHaveLength(0);
+    checkAppliques(d.cur.p);
+    expect(shapes(d, setApplique(d.cur.p, [1], { edge: 'satin' }, T))).toBe(true);
     // Back to a placement line: two stops inside, none before.
     expect(shapes(d, setApplique(d.cur.p, [1], { place: true }, T))).toBe(true);
     expect(remembered(d.cur.p, sewObjects(d.cur.p)[1])?.applique?.place).toBeUndefined();
