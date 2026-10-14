@@ -459,13 +459,19 @@ const { applyRestitched, convertSettings, looseObjects, stitchInfo, stitchPanel 
   get toggleRungs() {
     return toggleRungs;
   },
+  get lineAuto() {
+    return lineAuto;
+  },
 });
 
 // Rungs -------------------------------------------------------------------------------------------
 
-const { closeRungs, convertToSatin, rungInfo, rungTool, sewAlongLines, suggestLines, syncRungs, toggleGuides, togglePoints, toggleRungs } = bindRungs({
+const { closeRungs, convertToSatin, lineAuto, rungInfo, rungTool, sewAlongLines, suggestLines, syncRungs, toggleGuides, togglePoints, toggleRungs } = bindRungs({
   get applyRestitched() {
     return applyRestitched;
+  },
+  get sewLine() {
+    return sewLine;
   },
   get convertSettings() {
     return convertSettings;

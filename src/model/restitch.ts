@@ -4167,8 +4167,8 @@ export type SettingsFor = Settings | ((o: SewObject, a: Analysis, known: Remembe
  */
 /** Settings of running stitch or satin given for a line, as the stitches along it (`known`: as it had them). */
 function asLine(given: Settings, known?: PathStitch): PathStitch | null {
-  // Its echo stays when the stitch changes.
-  if (given.kind === 'run') return { ...runAsLine(given.s, known?.width), ...(known?.echo ? { echo: { ...known.echo } } : {}), ...(known?.shadow ? { shadow: known.shadow } : {}) };
+  // Its echo stays when the stitch changes, and a satin's own order (back with the satin).
+  if (given.kind === 'run') return { ...runAsLine(given.s, known?.width), ...(known?.echo ? { echo: { ...known.echo } } : {}), ...(known?.shadow ? { shadow: known.shadow } : {}), ...(known?.order ? { order: known.order } : {}) };
   if (given.kind !== 'satin') return null;
   const s = given.s;
   return { ...(known ?? { width: 2 }), type: 'satin', spacing: s.spacing, pull: s.edge || undefined, under: s.underlay ? (s.under ?? (known?.under !== 'off' && known ? known.under : 'center')) : 'off', tolerance: s.tolerance ?? known?.tolerance };

@@ -9,6 +9,7 @@ import type { Pt } from '../digitize/skeleton';
 import type { UnderlayKind } from '../digitize/satin';
 import { CORD_STEP, HAND_LAYERS, isHandStitch, MOTIF_PERIOD, motifStitches, type LineMotif } from '../digitize/motif';
 import { satinRuns, type FringeSide, type SatinSettings } from './restitch';
+import { withOrder, type LineOrder } from './lineOrder';
 
 /**
  * Stitches along a line: the border of a fill (on the edge of its area) and, for drawn lines, a
@@ -56,6 +57,13 @@ export interface PathStitch {
   fringe?: number;
   /** The fringe on this side only, both by default: of a line, this side of the drawn line; of a border, left inside and right outside. */
   fringeSide?: FringeSide;
+  /**
+   * Satin lines only: the order set by hand in the satin view over what the line makes by itself,
+   * one for each of its paths (null: that path as it makes itself); see LineOrder. None: Auto.
+   */
+  order?: (LineOrder | null)[];
+  /** The order of the one path being sewn (set by lineStitches from `order`); never stored. */
+  own?: LineOrder | null;
   /** Lines only: copies of the line beside it (see digitize/echo.ts); none by default. */
   echo?: LineEcho;
   /** Lines only: a copy beside it in a thread of its own, sewn before it (see shadow.ts). */
@@ -137,7 +145,7 @@ export const autoUnder = (s: PathStitch): UnderlayKind | 'off' => (s.type !== 's
  * The satin of a line: narrow, underlay along its middle once it is wide enough to need one. A
  * line (not a border) keeps its fringe on its side of the drawn line, also sewn the other way (`back`).
  */
-const satinOf = (s: PathStitch, line = false, back = false): SatinSettings => ({
+export const satinOf = (s: PathStitch, line = false, back = false): SatinSettings => ({
   spacing: spacingOf(s),
   edge: s.type === 'satin' ? (s.pull ?? 0) : 0,
   short: s.type === 'satin',
@@ -233,6 +241,9 @@ function sewOnce(line: Pt[], closed: boolean, s: PathStitch, start?: Pt, area?: 
     return run.length > 1 ? [run] : [];
   }
   if (area && closed) return satinRuns([onEdge(area, borderRails(area, l, s.width, s.offset ?? 0), s)], satinOf(s));
+  // Its own order set by hand: on the line as drawn, from the end it was set to start at (an
+  // override, see LineOrder); turned round, its fringe stays on its side of the line.
+  if (s.type === 'satin' && s.own && !area) return satinRuns([withOrder(lineRails(line, closed, s.width), s.own)], satinOf(s, true, !!s.own.turned));
   const rails = lineRails(l, closed, s.width);
   const lead = shift > 0 && s.type !== 'satin' ? shift * spacingOf(s) : 0;
   // Prongs of an E stitch on the right of the drawn line (the left rail is on the right on screen, y down).

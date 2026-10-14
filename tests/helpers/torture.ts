@@ -59,8 +59,10 @@ import { letteringObjects, placeLettering } from '../../src/lettering/place';
 import { letteringRuns, sewLettering } from '../../src/lettering/sew';
 import { inheritTrace, movedTrace, readTrace, setTraceOf, sizedTrace, storeTrace, traceFrom, traceOf, withTrace, type Trace } from '../../src/model/trace';
 import { areaLoops, suggestSatin } from '../../src/digitize/satinSuggest';
-import { cutLine, reachOf, stripsOfAreas } from '../../src/digitize/rungs';
+import { cumulative, cutLine, pointAt, reachOf, stripsOfAreas } from '../../src/digitize/rungs';
 import { RungTool } from '../../src/ui/rungTool';
+import { lineColumns, ordersOf, satinLineOf, sewLineOrder, type LineOrder } from '../../src/model/lineOrder';
+import { satinOf as lineSatinOf } from '../../src/model/along';
 import { partSteps, type PartStep } from '../../src/model/satinOrder';
 import { clickControl, dragNumber } from './satinView';
 import type { Pt } from '../../src/digitize/skeleton';
@@ -1416,6 +1418,72 @@ export const CUT_OPS: Op[] = [
         return pt ? { kind: 'satin', s: known?.satin ?? measureSatin(tried, pt, kinds) } : null;
       }, kinds, T);
       return !res.failed.length && took(d, res);
+    },
+  },
+  {
+    name: 'order a satin line',
+    run: (d, r) => {
+      // A line sewn as satin in the satin tool, as the app opens it (its rails made from the line):
+      // a cut line drawn across it, a piece dragged, turned or mirrored, or back to Auto. What is
+      // set is kept as the line's own order over its rails (see LineOrder), never as rails of its own.
+      const p = d.cur.p;
+      const kinds = stitchKinds(p);
+      const objs = sewObjects(p, kinds);
+      const lines = objs.filter((o) => satinLineOf(p, o) && !remembered(p, o)?.hand);
+      if (!lines.length) return false;
+      const o = pick(r, lines);
+      const line = satinLineOf(p, o)!;
+      const what = pick(r, ['cut', 'cut', 'drag', 'arrow', 'mirror', 'auto'] as const);
+      let order: (LineOrder | null)[] | undefined;
+      if (what === 'auto') {
+        if (!line.st.order) return false;
+      } else {
+        const changes: Rails[][][] = [];
+        const tool = new RungTool({ change: (c, final) => final && changes.push(c), lines: () => {}, guides: () => {}, redraw: () => {}, say: () => {}, trimMm: () => T });
+        tool.openSatin(lineColumns(line.form, line.st).map((c) => [c]));
+        tool.satin = lineSatinOf(line.st, true);
+        const scale = 40;
+        const j = Math.floor(r() * tool.columns.length);
+        if (what === 'cut') {
+          // Across the column at a place along it, from just outside one rail to just outside the other.
+          const c = tool.columns[j];
+          const f = 0.2 + 0.6 * r();
+          const at = (rail: Pt[]) => pointAt(rail, cumulative(rail), cumulative(rail).pop()! * f);
+          const [a, b] = [at(c.left), at(c.right)];
+          const out = (q: Pt, from: Pt): Pt => [q[0] + (q[0] - from[0]) * 0.3, q[1] + (q[1] - from[1]) * 0.3];
+          tool.setCutMode(true);
+          tool.down(...out(a, b), scale);
+          tool.dragTo(...out(b, a));
+          tool.up();
+        } else {
+          const n = tool.badges.filter((x) => x.part === j).length;
+          if (what === 'drag') {
+            if (n < 2) return false;
+            const from = 1 + Math.floor(r() * n);
+            dragNumber(tool, from, from === 1 ? 2 : from - 1, scale, j);
+          } else clickControl(tool, 1 + Math.floor(r() * n), what, scale, j);
+        }
+        if (changes.length !== 1) return false;
+        order = ordersOf(line.form, line.st, changes[0].map((part) => part[0]));
+        // Invariant: read back on the line, the order is what the tool gave back.
+        lineColumns(line.form, { ...line.st, order }).forEach((col, k) => {
+          const given = changes[0][k][0];
+          expect(col.cuts?.length ?? 0, 'cut lines kept on the line').toBe(given.cuts?.length ?? 0);
+          expect(!!col.mirror, 'its side kept').toBe(!!given.mirror);
+          // In sections, the order they are sewn in is kept with them.
+          expect(col.plan?.length ?? 0, 'its plan kept').toBe(given.cuts?.length ? given.cuts.length + 1 : 0);
+        });
+      }
+      const res = sewLineOrder(p, o.index, line, order, T);
+      if (!res) return false;
+      const sewn = sewObjects(res.pattern).find((x) => x.first === res.first);
+      const now = sewn && remembered(res.pattern, sewn);
+      if (!shapes(d, syncBorders(res.pattern, T))) return false;
+      if (now) {
+        expect(now.columns, 'a satin line keeps no rails of its own').toBeUndefined();
+        expect(JSON.stringify(now.line?.order ?? null), 'its own order as set').toBe(JSON.stringify(order ?? null));
+      }
+      return true;
     },
   },
   {
