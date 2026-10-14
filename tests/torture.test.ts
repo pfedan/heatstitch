@@ -14,6 +14,8 @@ import { currentSettings } from '../src/correct/plan';
 import { deleteObjects, duplicateObject, duplicateObjects, mirrorMatrix, recolorObjects, subtractTop } from '../src/model/shapeOps';
 import { ellipsePath, parsePath, rectPath } from '../src/shape/svgPath';
 import { loadOps } from '../src/shape/ops';
+import { contourAt, gapReader } from '../src/model/contour';
+import { flatten, type Form } from '../src/shape/path';
 import { chainSeeds, ID, options, T, COLORS, empty, knowledge, Doc, shapes, transform, boxOf, saveAndOpen, checkWellFormed, checkAllKnown, checkPartsFit, checkBorders, checkObjectList, checkKeys, checkKnockouts, checkAreas, checkCrosshatch, checkExport, checkSewDesign, checkFollowers, checkEchoes, checkRedwork, chain, borderedSquare, borderOf, restitchFill, squareOf, took, type Version } from './helpers/torture';
 import { motifStitches } from '../src/digitize/motif';
 import type { Pt } from '../src/digitize/skeleton';
@@ -188,6 +190,24 @@ describe('found by the torture test', () => {
     expect(remembered(d.cur.p, d.objects[0])!.region!.areaMm2).toBeCloseTo(left, 6);
     checkAreas(d.cur.p);
     checkKnockouts(d.cur.p);
+  });
+
+  it('a contour around a jagged outline keeps its distance all along', async () => {
+    await loadOps();
+    // The outline of a lettering read from its stitches, cut down (seed 251): on the 0.1 mm grid,
+    // its offset has no corner over a long way and the fit splits it many times, mostly near an end.
+    const pts: Pt[] = [
+      [25.3, 15.9], [25.7, 16.1], [26.1, 16.2], [27.9, 17.2], [28.3, 17.4], [28.6, 17.6], [34.3, 27.8], [17.5, 39.6], [18.5, 39.9],
+      [22.7, 40], [23.4, 39.9], [23.8, 39.8], [24.4, 39.6], [24.8, 39.5], [25.4, 39.3], [25.7, 39.1], [26, 39], [26.4, 38.8],
+      [26.7, 38.6], [27.2, 38.3], [27.8, 37.9], [28.3, 37.4], [28.6, 37.2], [29.8, 35.8], [31.8, 31.8], [33.2, 33.9], [29.4, 39.2],
+      [27.7, 40.4], [27.3, 40.5], [25.8, 41.3], [25, 41.5], [24.3, 41.8], [23.5, 41.9], [23, 42], [22.6, 42.1], [22.2, 42.1],
+      [21.8, 42.2], [20.6, 42.2], [20.1, 42.1], [14.2, 40.2], [13.6, 39.7], [11.2, 37.5], [10.9, 37.2], [10.6, 36.8], [10.2, 36.2],
+      [10, 35.8], [9.8, 35.5], [9.5, 35.1], [9.4, 34.7], [9.2, 34.4], [7.9, 29.6],
+    ];
+    const source: Form = { paths: [{ closed: true, nodes: pts.map((p) => ({ p, a: p, b: p, smooth: false })) }], nonzero: true };
+    const read = gapReader(source);
+    const off = contourAt(source, 0.8)!.paths.flatMap((x) => flatten(x, 0.1)).map((q) => Math.abs(read(q) - 0.8));
+    expect(Math.max(...off)).toBeLessThan(0.05);
   });
 });
 

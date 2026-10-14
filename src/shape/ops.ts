@@ -495,7 +495,7 @@ function fitRing(ring: Pt[]): Path | null {
       if (i === e && run.length > 1) break;
     }
     const t2 = tangent(e, 'in');
-    fitCubic(run, tangent(s, 'out'), [-t2[0], -t2[1]], FIT, 0, true).forEach((c, k) => {
+    fitCubic(run, tangent(s, 'out'), [-t2[0], -t2[1]], FIT, true).forEach((c, k) => {
       curves.push(c as [Pt, Pt, Pt, Pt]);
       sharp.push(k === 0 && corner.has(s));
     });
