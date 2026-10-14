@@ -377,9 +377,11 @@ function resewOnce(p: Pattern, index: number, path: Form, st: PathStitch, trimMm
   if (!fresh) return null;
   const known = remembered(p, o);
   const memory: Remembered = { ...(known ?? { region: null }), region: null, geo: path, line: { ...st }, id: o.id };
-  // Stitches set by hand are gone with the old ones.
+  // Stitches set by hand are gone with the old ones; rails it had as a satin over an area too (a
+  // line's rails are made from the line, see lineColumns).
   delete memory.hand;
   delete memory.free;
+  delete memory.columns;
   remember(next, fresh, memory);
   return { pattern: next, first: fresh.first, last: fresh.last };
 }
