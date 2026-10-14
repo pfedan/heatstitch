@@ -9,6 +9,10 @@ const ACCENT = '#e0559e';
 /** A join that stays in sight (a way across the fabric or over satin sewn before, a jump not covered). */
 const SHOWS = '#ffb547';
 
+/** A section pointed at that can be sewn, or one that cannot (as the red of problems). */
+const GOOD = '#5ee08a';
+const BAD = 'rgb(255, 90, 90)';
+
 /** Cut lines in their own color, so they read apart from the rungs. */
 const CUT = '#6fd3ff';
 
@@ -53,6 +57,30 @@ export function drawRungOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, vie
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
     ctx.lineWidth = 1.2;
     ctx.stroke();
+  }
+  // The section pointed at (or the one its control belongs to) glows: green when it can be sewn, red when not.
+  if (view.glow) {
+    const g = view.glow;
+    const color = g.ok ? GOOD : BAD;
+    ctx.save();
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 12;
+    ctx.strokeStyle = color;
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    for (let k = 0; k < g.pairs.length; k += 3) {
+      ctx.moveTo(...S(g.pairs[k][0]));
+      ctx.lineTo(...S(g.pairs[k][1]));
+    }
+    ctx.globalAlpha = 0.8;
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+    path(g.ring);
+    ctx.closePath();
+    ctx.globalAlpha = 1;
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+    ctx.restore();
   }
   // A column with free rungs: the rails its sections are sewn along, where a cut line became an edge.
   for (const c of view.columns) {

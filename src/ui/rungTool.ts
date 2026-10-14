@@ -2,7 +2,7 @@ import { addRung, checkSections, chordOf, cutAcross, cutLine, cutPieces, midOf, 
 import { pathLength } from '../digitize/fill';
 import { simplify } from '../digitize/run';
 import type { Pt } from '../digitize/skeleton';
-import { bestChain, previewPairs, reversedRails, spanSection, sectionLoops, sectionOfRung, type Rails, type SatinSettings, type SectionLoop, type SectionStep, type Split } from '../model/restitch';
+import { bestChain, previewPairs, reversedRails, spanSection, sectionLoops, sectionOfRung, sectionsOf, type Rails, type SatinSettings, type SectionLoop, type SectionStep, type Split } from '../model/restitch';
 import { cutStep, mirrorStep, moveStep, partSteps, turnStep, SHOWS_MM, type PartStep } from '../model/satinOrder';
 
 /** Pick radius around the pointer for rung ends, CSS pixels; the line itself a little less. */
@@ -166,6 +166,16 @@ export interface RungView {
   problemHover: number;
   /** Each section as it will be sewn (its stitch pairs); none for a part with a problem. */
   readonly previews: [Pt, Pt][][];
+  /** The section under the pointer (or under the control pointed at), lit while it is: green when it can be sewn, red when not. */
+  readonly glow: SectionGlow | null;
+}
+
+/** A section lit while it is pointed at (see RungView.glow). */
+export interface SectionGlow {
+  ring: Pt[];
+  /** Its stitch pairs as it will be sewn; none for a part that cannot be sewn. */
+  pairs: [Pt, Pt][];
+  ok: boolean;
 }
 
 export interface RungHooks {
@@ -232,9 +242,10 @@ export class RungTool implements RungView {
   badgeHover: BadgeHit | null = null;
   linkHover: { part: number; i: number } | null = null;
   problemHover = -1;
+  glow: SectionGlow | null = null;
   /** The fill's outsides and holes (lines drawn on a fill), to check the parts its lines make. */
   private shape: { outlines: Pt[][]; holes: Pt[][] } | null = null;
-  private checked: { key: string; problems: SectionProblem[]; previews: [Pt, Pt][][] } | null = null;
+  private checked: { key: string; problems: SectionProblem[]; previews: [Pt, Pt][][]; sections: SectionGlow[] } | null = null;
   /** The satin settings of the object (how its sections are sewn when no order is set). */
   satin: SatinSettings | null = null;
   /** Lines drawn across a satin or a fill are cut lines (Shift draws the other kind). */
@@ -306,6 +317,7 @@ export class RungTool implements RungView {
     this.shape = null;
     this.checked = null;
     this.problemHover = -1;
+    this.glow = null;
     this.points = [];
     this.columns = [];
     this.cleared = new Map();
@@ -593,13 +605,22 @@ export class RungTool implements RungView {
    * What the lines make now: the parts and holes that do not work, and the stitch pairs of every
    * section that does (as sewn, see previewPairs). Worked out again only when something changed.
    */
-  private check(): { problems: SectionProblem[]; previews: [Pt, Pt][][] } {
-    if (this.mode !== 'satin' && this.mode !== 'fill') return { problems: [], previews: [] };
+  private check(): { problems: SectionProblem[]; previews: [Pt, Pt][][]; sections: SectionGlow[] } {
+    if (this.mode !== 'satin' && this.mode !== 'fill') return { problems: [], previews: [], sections: [] };
     const result = this.mode === 'satin' ? this.result() : null;
     const key = JSON.stringify([this.mode, this.lines, this.cutLines, this.bad, this.satin, result]);
     if (this.checked?.key === key) return this.checked;
     const s = this.satin;
-    const pairsOf = (rails: Rails[]) => (s ? rails.flatMap((r) => previewPairs(r, s)) : []);
+    // Each section that works, with its outline, to light it while it is pointed at (see glow).
+    const sections: SectionGlow[] = [];
+    const pairsOf = (rails: Rails[]) =>
+      s
+        ? rails.flatMap((r) => {
+            const pp = previewPairs(r, s);
+            sectionsOf(r).forEach((sec, j) => sections.push({ ring: [...sec.left, ...sec.right.slice().reverse()], pairs: pp[j] ?? [], ok: true }));
+            return pp;
+          })
+        : [];
     const problems: SectionProblem[] = [];
     let previews: [Pt, Pt][][] = [];
     const found = (c: { parts: Pt[][]; holes: Pt[][] }) => {
@@ -647,7 +668,7 @@ export class RungTool implements RungView {
       previews.push(...pairsOf(result.filter((_, k) => !shown.has(k)).flat()));
     }
     if (!problems.length && this.bad) problems.push({ ring: this.bad, key: 'stitch.problem.part' });
-    this.checked = { key, problems, previews };
+    this.checked = { key, problems, previews, sections };
     return this.checked;
   }
 
@@ -1318,7 +1339,28 @@ export class RungTool implements RungView {
     // A problem says what is missing while the pointer is on it (not on a line or control there).
     const was = this.problemHover;
     this.problemHover = this.active && !b && !h ? this.problems.findIndex((p) => inside(p.ring, [x, y])) : -1;
-    return changed || was !== this.problemHover;
+    const lit = this.glow;
+    this.glow = this.active && !this.linkHover && b?.what !== 'link' ? this.glowAt(b, x, y, scale) : null;
+    return changed || was !== this.problemHover || lit?.ring !== this.glow?.ring;
+  }
+
+  /**
+   * The section to light: the one a number, arrow or mirror belongs to, else the one under the
+   * pointer (or next to it, on a handle at its edge); a part that cannot be sewn in red.
+   */
+  private glowAt(b: BadgeHit | null, x: number, y: number, scale: number): SectionGlow | null {
+    const piece = b ? this.badges.find((p) => p.part === b.part && p.i === b.i) : null;
+    const at: Pt = piece ? piece.middle[Math.floor(piece.middle.length / 2)] : [x, y];
+    const r = 6 / scale;
+    const near: Pt[] = [at, ...Array.from({ length: 8 }, (_, k): Pt => [at[0] + Math.cos((k * Math.PI) / 4) * r, at[1] + Math.sin((k * Math.PI) / 4) * r])];
+    const { problems, sections } = this.check();
+    for (const q of near) {
+      const bad = problems.find((p) => inside(p.ring, q));
+      if (bad) return { ring: bad.ring, pairs: [], ok: false };
+      const sec = sections.find((p) => inside(p.ring, q));
+      if (sec) return sec;
+    }
+    return null;
   }
 
   /** Removes the selected rung or line; false when nothing is selected. */
