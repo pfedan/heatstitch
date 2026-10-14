@@ -17,9 +17,10 @@ button, a key and an entry in the command search (`Ctrl+K`).
 layers (hide, highlight, recolor), stitches can be colored by thread, order, stitch type or length,
 and a player steps through the design with an estimated sewing time. Each color opens to its
 objects (fill with underlay, satin column, running stitch), recognized from the stitches of any
-file. Objects can be reordered, moved, rotated, scaled, duplicated, mirrored, combined, cut out,
-knocked out under later shapes, and sewn anew with other settings: fill pattern, spacing, angle,
-underlay, border, satin width and direction, running stitch length. Their outline is editable as
+file. Objects can be reordered, moved, rotated, scaled, duplicated, copied into another design,
+mirrored, combined, cut out, knocked out under later shapes, and sewn anew with other settings:
+fill pattern, spacing, angle, underlay, border, satin width and direction, running stitch length.
+Their outline is editable as
 curves with nodes, and single needle points can be moved. The drawing tools make new shapes, the
 Text tool sets lettering in 41 embroidery fonts, and the jump list trims or untrims jumps.
 
