@@ -980,7 +980,7 @@ const enBase: Record<keyof typeof deBase, string> = {
   'stitch.pen.rung.hint': 'A line drawn sets the stitch direction (key T switches)',
   'stitch.pen.cut': 'Cut line',
   'stitch.pen.cut.hint': 'A line splits the column into sections (key T switches)',
-  'stitch.direction.chain': 'Number: sew earlier · Arrow: turn round · Scissors: trim · ⇄: mirror',
+  'stitch.direction.chain': 'Drag a number: reorder · Arrow: turn round · Scissors: trim · ⇄: mirror',
   'stitch.direction.needCut': 'This rung does not fit the column. A cut line before it makes a section of its own where it fits.',
   'stitch.suggest.hint': 'Cuts the area up as you would by hand. Everything can be moved afterwards.',
   'stitch.clear.hint': 'Remove all cut lines and rungs to start over',

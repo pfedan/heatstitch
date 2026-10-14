@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { Pt } from '../src/digitize/skeleton';
 import { reversedRails, satinRuns, type Rails, type SatinSettings } from '../src/model/restitch';
-import { BADGE, RungTool } from '../src/ui/rungTool';
+import { RungTool } from '../src/ui/rungTool';
+import { clickControl, controlAt } from './helpers/satinView';
 
 const SATIN: SatinSettings = { spacing: 0.4, edge: 0, short: false, underlay: false, tolerance: 0.15 };
 
@@ -61,17 +62,15 @@ describe('the rung tool on a column on its own', () => {
     expect(b[0].lone).toBe(true);
     expect(b[0].mirror).toBe(false);
     const scale = 10;
-    const at = (along: number, across: number): Pt => [b[0].at[0] + (b[0].dir[0] * along - b[0].dir[1] * across) / scale, b[0].at[1] + (b[0].dir[1] * along + b[0].dir[0] * across) / scale];
-    // No number to click: it has no place in an order.
-    expect(tool.badgeAt(...at(BADGE.number, 0), scale)).toBeNull();
-    expect(tool.badgeAt(...at(BADGE.number, -BADGE.scissors), scale)?.what).toBe('mirror');
-    tool.down(...at(BADGE.number, -BADGE.scissors), scale);
-    tool.up();
+    // No number to click: it has no place in an order, and no join.
+    expect(tool.layout(scale).numbers).toEqual([null]);
+    expect(tool.links).toEqual([]);
+    expect(tool.badgeAt(...controlAt(tool, 1, 'mirror', scale), scale)?.what).toBe('mirror');
+    clickControl(tool, 1, 'mirror', scale);
     expect(changes.length).toBe(1);
     expect(changes[0][0][0].mirror).toBe(true);
     // The arrow turns it round.
-    tool.down(...at(BADGE.arrow, 0), scale);
-    tool.up();
+    clickControl(tool, 1, 'arrow', scale);
     expect(changes[1][0][0].left[0]).toEqual(COLUMN.right[COLUMN.right.length - 1]);
   });
 });

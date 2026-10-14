@@ -274,6 +274,7 @@ Entry points worth knowing by name:
 | Objects of a version | `sewObjects(p)` in `src/model/objects.ts` |
 | What an object knows, guessed or not | `remembered(p, o)`, `isGuessed(p, o)` in `src/model/restitch.ts` |
 | Sew objects anew with new settings | `restitch(...)` in `src/model/restitch.ts` |
+| The order of a satin part (steps, joins; reorder, cut, turn, mirror) | `partSteps(...)`, `moveStep`, `cutStep` in `src/model/satinOrder.ts` |
 | Sew one object, or a design from its object list | `sewOne(spec, way)`, `sewDesign(p, trimMm)` in `src/model/sew.ts` |
 | Add a drawn or imported shape | `addShape(p, shape, color, after, options)` in `src/model/addShape.ts` |
 | Move, rotate, scale | `transformObjects(p, sel, m, trimMm)` in `src/model/reshape.ts` |
