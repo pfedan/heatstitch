@@ -52,9 +52,11 @@ describe('double zigzag underlay', () => {
     expect(nearest(underlayOf(col, 'both').pts)).toBeCloseTo(0.2, 2);
   });
 
-  it('is part of the automatic underlay of wide columns, which then ends at the start', () => {
-    const u = underlayOf(col, 'auto');
+  it('is part of the automatic underlay of wide columns (from 6 mm on stretchy fabric), which then ends at the start', () => {
+    const u = underlayOf(col, 'auto', undefined, undefined, false, true);
     expect(u.atEnd).toBe(false);
+    // On stable fabric a 6 mm column gets one zigzag, out to the far end, where the satin starts back.
+    expect(underlayOf(col, 'auto').atEnd).toBe(true);
     // At the start, on the other rail.
     expect(Math.abs(u.pts[0][0] - u.pts[u.pts.length - 1][0])).toBeLessThan(0.5);
   });

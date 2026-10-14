@@ -39,7 +39,7 @@ function body(p: Pattern): Rec[] {
 }
 
 export function addShape(p: Pattern, shape: NewShape, color: ThreadColor, after: number | null, options: DigitizeOptions): Added | null {
-  if (shape.kind === 'stroke') return addLine(p, shape.form, lineStitchFor(shape.width ?? 0, options.tolerance), color, after, options);
+  if (shape.kind === 'stroke') return addLine(p, shape.form, lineStitchFor(shape.width ?? 0, options.tolerance, { underCross: options.underCross }), color, after, options);
   const d = digitizeShapes([{ color: 0, ...shape }], [color], options, { w: 0, h: 0 }, false, 'shape');
   if (!d.objects.length || !stitches(d.pattern)) return null;
   const r = insertObject(p, body(d.pattern), d.pattern.colors[0], after, options.trimMm);

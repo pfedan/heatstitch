@@ -69,7 +69,7 @@ export function orderLoops(loops: Pt[][], from: Pt): Pt[][] {
 }
 
 /** Evenly spaced points along a line, `step` apart (both ends kept). */
-function resample(pts: Pt[], step: number): Pt[] {
+export function resample(pts: Pt[], step: number): Pt[] {
   const out: Pt[] = [pts[0]];
   let carry = 0;
   for (let i = 1; i < pts.length; i++) {

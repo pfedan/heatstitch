@@ -379,7 +379,7 @@ export function bindStitches(app: StitchesApp) {
       if (!f) return null;
       // Compensation by the fabric as a satin gets it (half fixed, half by width), not a fill's whole.
       const pull = pullFor(app.settings.profile, 'satin');
-      return { kind: 'satin', s: { spacing: f.spacing, edge: pull.edge, edgeShare: pull.edgeShare, edgeAuto: true, short: true, underlay: f.underlay, tolerance: f.tolerance } };
+      return { kind: 'satin', s: { spacing: f.spacing, edge: pull.edge, edgeShare: pull.edgeShare, edgeAuto: true, short: true, underlay: f.underlay, ...(digitizeDefaults(app.settings.profile).underCross ? { underCross: true } : {}), tolerance: f.tolerance } };
     }
     const s = info.measured.satin;
     if (!s) return null;

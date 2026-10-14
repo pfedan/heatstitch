@@ -45,11 +45,16 @@ export function lineClassOf(width: number): LineClass {
   return width <= LINE_WIDTHS.satin ? 'satin' : 'band';
 }
 
-/** How a line of `width` (mm) is sewn along its curves to begin with; a band is a satin as a line. */
-export function lineStitchFor(width: number, tolerance = TOLERANCE): PathStitch {
+/**
+ * How a line of `width` (mm) is sewn along its curves to begin with; a band is a satin as a line.
+ * A satin takes the form of its corners and ends from `look` (an SVG stroke's linejoin and
+ * linecap) and its underlay from the fabric (`underCross`, see SatinSettings.underCross).
+ */
+export function lineStitchFor(width: number, tolerance = TOLERANCE, look: Pick<PathStitch, 'corner' | 'ends' | 'underCross'> = {}): PathStitch {
   const c = lineClassOf(width);
   if (c === 'run' || c === 'bean') return { type: c === 'run' ? 'run' : 'triple', width: BORDER_WIDTH, length: BORDER_STITCH, tolerance };
-  return { type: 'satin', width, tolerance };
+  const { corner, ends, underCross } = look;
+  return { type: 'satin', width, tolerance, ...(corner && corner !== 'miter' ? { corner } : {}), ...(ends && ends !== 'flat' ? { ends } : {}), ...(underCross ? { underCross } : {}) };
 }
 
 /** The settings of running stitch as those of a line. */
@@ -372,9 +377,11 @@ function resewOnce(p: Pattern, index: number, path: Form, st: PathStitch, trimMm
   if (!fresh) return null;
   const known = remembered(p, o);
   const memory: Remembered = { ...(known ?? { region: null }), region: null, geo: path, line: { ...st }, id: o.id };
-  // Stitches set by hand are gone with the old ones.
+  // Stitches set by hand are gone with the old ones; rails it had as a satin over an area too (a
+  // line's rails are made from the line, see lineColumns).
   delete memory.hand;
   delete memory.free;
+  delete memory.columns;
   remember(next, fresh, memory);
   return { pattern: next, first: fresh.first, last: fresh.last };
 }
@@ -402,7 +409,8 @@ export function lineToFill(p: Pattern, index: number, s: FillSettings, trimMm: n
   const was = known.kept?.fill;
   let fill: FillSettings;
   let border: BorderSettings | null = null;
-  if (how === 'band') fill = { ...(was ?? s), lineWidth: was?.lineWidth ?? line.width, lineCap: was?.lineCap ?? 'flat' };
+  // A satin line's ends stay as they are in the band (round, else flat: a band has no square ones).
+  if (how === 'band') fill = { ...(was ?? s), lineWidth: was?.lineWidth ?? line.width, lineCap: line.type === 'satin' ? (line.ends === 'round' ? 'round' : 'flat') : (was?.lineCap ?? 'flat') };
   else {
     if (!fits(geo, 'fill')) return null;
     // The line stays beside the fill as its border, as it is sewn now with its echo, shadow and
@@ -468,7 +476,12 @@ export function fillToLine(p: Pattern, index: number, trimMm: number, geo?: Form
   const was = known?.kept?.line;
   const edge = borderOf(known);
   let st: PathStitch;
-  if (fill.lineWidth !== undefined) st = { ...(was ?? lineStitchFor(fill.lineWidth)), width: fill.lineWidth };
+  if (fill.lineWidth !== undefined) {
+    st = { ...(was ?? lineStitchFor(fill.lineWidth)), width: fill.lineWidth };
+    // The band's ends go back to a satin line: round stays round, flat is flat unless it was square.
+    if (st.type === 'satin' && fill.lineCap === 'round') st.ends = 'round';
+    else if (st.type === 'satin' && st.ends === 'round') delete st.ends;
+  }
   else if (edge) {
     // The line is sewn as the border is: nothing of a line it was before (a motif, repeats) is
     // mixed in, else it comes back as part of the border when filled again. Only the side of a

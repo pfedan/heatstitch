@@ -566,6 +566,8 @@ async function tune(p: Pattern, profile: Profile, checks: Checks, opt: Pick<Plan
       const t = s.s;
       if (Math.abs(into(t.spacing, box) - t.spacing) > 0.005) changes.push(fix('spacing', t.spacing, into(t.spacing, box)));
       if ((t.split ?? SATIN_SPLIT) > longMm && longest(p, o) > longMm) changes.push(fix('split', t.split ?? SATIN_SPLIT, longMm));
+      // Automatic underlay crossed sooner on stretchy fabric (see underTier).
+      if (known?.satin && t.underlay && (t.under ?? 'auto') === 'auto' && !!t.underCross !== !!under.underCross) changes.push(fix('underCross', !!t.underCross, !!under.underCross));
       if (t.edgeAuto) {
         const e = pullFor(profile, 'satin');
         if (Math.abs(e.edge - t.edge) > 0.005) changes.push(fix('edge', t.edge, e.edge));

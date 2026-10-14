@@ -16,6 +16,7 @@ import { coverage } from '../digitize/measure';
 import { expandRegion, outline, sample, signedField, type Region } from '../digitize/region';
 import { withSplit } from '../digitize/satinSuggest';
 import { runStitch, TOLERANCE } from '../digitize/run';
+import { SATIN_CORNERS, SATIN_ENDS } from '../digitize/satinJoins';
 import { eStitches, fringedColumn, pairs, ROUGH_IN, satinStitches, underlayOf, type Column, type SatinParams, type UnderInset, type UnderlayKind } from '../digitize/satin';
 import { columnFromRungs, cumulative, inside, insideOf, pointAt, project, reversedRungs, stripOfLoop, tidyRungs, type Arc, type Cut, type Rung } from '../digitize/rungs';
 import type { Pt } from '../digitize/skeleton';
@@ -251,6 +252,8 @@ export interface SatinSettings {
   type?: SatinType;
   /** Which underlay, when `underlay` is on; by the width when not set. */
   under?: UnderlayKind;
+  /** The automatic underlay as on stretchy fabric: crossed from SATIN_CROSS_STRETCH (see underTier); set from the fabric. */
+  underCross?: boolean;
   /** Contour and zigzag underlay keep this far inside the rails (mm); 0.4 (at most a fourth of the width) when not set. */
   underInset?: number;
   /** Underlay inset by this share of the width from each rail (0.1 = 10 %), in place of `underInset`. */
@@ -1097,7 +1100,7 @@ export function isLineStitch(b: unknown): b is PathStitch {
 
 function isBorder(b: unknown): b is BorderSettings {
   const s = b as BorderSettings | null;
-  return !!s && BORDERS.includes(s.type) && finite(s.width) && [s.length, s.repeat, s.tolerance, s.offset, s.spacing, s.pull, s.stitch].every((v) => v === undefined || finite(v)) && (s.flip === undefined || typeof s.flip === 'boolean') && (s.motif === undefined || LINE_MOTIFS.includes(s.motif)) && (s.under === undefined || s.under === 'off' || UNDERLAYS.includes(s.under)) && (s.color === undefined || isColor(s.color)) && (s.link === undefined || typeof s.link === 'string') && (s.seams === undefined || typeof s.seams === 'boolean') && (s.whole === undefined || typeof s.whole === 'boolean') && (s.redwork === undefined || typeof s.redwork === 'boolean') && (s.fringe === undefined || finite(s.fringe)) && (s.fringeSide === undefined || s.fringeSide === 'left' || s.fringeSide === 'right');
+  return !!s && BORDERS.includes(s.type) && finite(s.width) && [s.length, s.repeat, s.tolerance, s.offset, s.spacing, s.pull, s.stitch].every((v) => v === undefined || finite(v)) && (s.flip === undefined || typeof s.flip === 'boolean') && (s.motif === undefined || LINE_MOTIFS.includes(s.motif)) && (s.under === undefined || s.under === 'off' || UNDERLAYS.includes(s.under)) && (s.color === undefined || isColor(s.color)) && (s.link === undefined || typeof s.link === 'string') && (s.seams === undefined || typeof s.seams === 'boolean') && (s.whole === undefined || typeof s.whole === 'boolean') && (s.redwork === undefined || typeof s.redwork === 'boolean') && (s.fringe === undefined || finite(s.fringe)) && (s.fringeSide === undefined || s.fringeSide === 'left' || s.fringeSide === 'right') && (s.corner === undefined || SATIN_CORNERS.includes(s.corner)) && (s.ends === undefined || SATIN_ENDS.includes(s.ends)) && (s.underCross === undefined || typeof s.underCross === 'boolean');
 }
 
 function isSatin(f: unknown): f is SatinSettings {
@@ -1112,6 +1115,7 @@ function isSatin(f: unknown): f is SatinSettings {
     (s.type === undefined || s.type === 'satin' || s.type === 'e') &&
     (s.under === undefined || UNDERLAYS.includes(s.under)) &&
     (s.stagger === undefined || typeof s.stagger === 'boolean') &&
+    (s.underCross === undefined || typeof s.underCross === 'boolean') &&
     optional(s.fringe) &&
     optional(s.rough) &&
     optional(s.roughSeed) &&
@@ -3519,7 +3523,7 @@ const underOf = (c: Column, s: SatinSettings, oneWay = false) => {
   // An irregular satin falls short of its rails by up to ROUGH_IN of the width: the underlay keeps inside that too.
   const short = (roughParams(s).rough ?? 0) * ROUGH_IN * c.width;
   const [a, b] = fringeOf(s);
-  return underlayOf(fringedColumn(c, a + short, b + short), s.under ?? 'auto', s.tolerance, underInset(s), oneWay);
+  return underlayOf(fringedColumn(c, a + short, b + short), s.under ?? 'auto', s.tolerance, underInset(s), oneWay, !!s.underCross);
 };
 
 /** Longest stitch of the run joining two sections that do not meet (mm). */

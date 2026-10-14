@@ -9,6 +9,7 @@ import { UNDERLAY_INSET, type RowEnds } from '../digitize/fill';
 import type { Pt } from '../digitize/skeleton';
 import { APPLIQUE_ICON, KIND_ICON, kindLabel } from './layersPanel';
 import type { LineCap } from '../shape/rasterize';
+import { SATIN_CORNERS, SATIN_ENDS, type SatinCorner, type SatinEnd } from '../digitize/satinJoins';
 import { BORDER_STITCH, BORDER_WIDTH, type BorderType } from '../digitize/border';
 import { TOLERANCE } from '../digitize/run';
 import type { ThreadColor } from '../model/pattern';
@@ -2254,6 +2255,20 @@ export class StitchPanel {
     );
     // A satin line or border can be frayed (fur, feathers): a border inside, outside or both.
     if (line && !offset) out.look.push(...this.fringeControls(st, () => set(st)), this.repeatRow(st, set));
+    // The form of a satin line's corners and ends (as an SVG stroke's linejoin and linecap).
+    if (line && !offset && st.type === 'satin')
+      out.look.push(
+        this.choice<SatinCorner>('stitch.corner', SATIN_CORNERS, st.corner ?? 'miter', (v) => `stitch.corner.${v}` as Key, (v) => {
+          if (v === 'miter') delete st.corner;
+          else st.corner = v;
+          set(st);
+        }, true),
+        this.choice<SatinEnd>('stitch.ends', SATIN_ENDS, st.ends ?? 'flat', (v) => `stitch.ends.${v}` as Key, (v) => {
+          if (v === 'flat') delete st.ends;
+          else st.ends = v;
+          set(st);
+        }, true),
+      );
     else if (offset) out.look.push(...this.fringeControls(st, () => set(st), undefined, true));
     out.hold.push(
       this.slider({ label: 'stitch.borderPull', hint: 'stitch.borderPull.hint', min: 0, max: 0.6, step: 0.05, get: () => st.pull ?? 0, set: (v) => change((s) => (s.pull = v || undefined))(v), fmt: mm(2), auto: unset('pull') }),

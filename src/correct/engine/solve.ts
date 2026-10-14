@@ -472,12 +472,19 @@ async function upperFix(p: Pattern, v: ValidationResult, counting: Uint8Array, p
     if (!bad.length) break;
     for (const c of bad) c.banned.add(c.chosen);
     if (round === MAX_ROUNDS - 1) {
-      // Still breaking a rule: leave those objects as they are.
-      for (const c of bad) {
-        choose(c, 0);
-        c.variants.forEach((_, k) => k && c.banned.add(k));
+      // Still breaking a rule: leave those objects as they are, until the design checks out (blame
+      // goes by the objects' boxes, so the one to blame may come up only once the others are back).
+      for (let left = bad; left.length; ) {
+        for (const c of left) {
+          choose(c, 0);
+          c.variants.forEach((_, k) => k && c.banned.add(k));
+        }
+        const still = [...unitCand.values()].filter((c) => c.chosen).sort((a, b) => a.o.index - b.o.index);
+        pattern = applyChoice(p, still, opt.trimMm, opt.hand);
+        if (!still.length) break;
+        const check = validateDesign(pattern, v.profile, v.checks);
+        left = blame(p, pattern, still, cellDiff(v, check, opt.acks), check);
       }
-      pattern = applyChoice(p, [...unitCand.values()].filter((c) => c.chosen).sort((a, b) => a.o.index - b.o.index), opt.trimMm, opt.hand);
     }
   }
   const objects = [...unitCand.values()]

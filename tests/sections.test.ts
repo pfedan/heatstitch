@@ -70,9 +70,9 @@ describe('spacing along the column', () => {
 
 describe('automatic underlay along the column', () => {
   it('walks the middle where narrow and zigzags where wide', () => {
-    // 3 mm wide for 15 mm, then 8 mm wide for 15 mm.
-    const left: Pt[] = [...line(0, 0, 15, 0, 16), ...line(15.5, -2.5, 30, -2.5, 16)];
-    const right: Pt[] = [...line(0, 3, 15, 3, 16), ...line(15.5, 5.5, 30, 5.5, 16)];
+    // 2 mm wide for 15 mm, then 8 mm wide for 15 mm.
+    const left: Pt[] = [...line(0, 0.5, 15, 0.5, 16), ...line(15.5, -2.5, 30, -2.5, 16)];
+    const right: Pt[] = [...line(0, 2.5, 15, 2.5, 16), ...line(15.5, 5.5, 30, 5.5, 16)];
     const col = columnOf({ left, right });
     const pts = underlay(col);
     const narrow = pts.filter((p) => p[0] < 13);
