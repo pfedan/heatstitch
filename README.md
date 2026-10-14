@@ -124,7 +124,9 @@ with this section when the site starts sending anything new.
   feather, Cretan and chevron stitch, each stitch sewn 1, 3 or 5 times over the same holes like
   stranded floss, stem stitch also as a dense **cord** of parallel slanted stitches, whole figures per piece between corners
 - **Appliqué** as one object: placement line, stop, tack-down just inside, stop, satin or E stitch
-  edge, all in one thread; the fabric (felt, cotton, denim and more, in any color) shows under the
+  edge, all in one thread; the placement line can be left out (the fabric laid on before, cut to
+  shape or generous), the tack-down is a running or bean stitch, and the edge can stay raw; touching appliqués share their edge, so satin is not sewn
+  twice where a later piece covers it; the fabric (felt, cotton, denim and more, in any color) shows under the
   edge in the realistic view and in the player; cutting template as SVG at 1:1
 - **Shape editing**: the outline of a fill as curves with nodes, kept exactly from then on; close,
   open, join and split paths, nodes at crossings, fill inside; an opened fill or satin is sewn as a
