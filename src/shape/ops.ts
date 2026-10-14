@@ -433,6 +433,39 @@ export function bandForm(f: Form, w: number, fit = true): Form | null {
   return formOf(sol, fit);
 }
 
+/** How a stroke of an SVG ends and turns its corners. */
+export type StrokeCap = 'butt' | 'round' | 'square';
+export type StrokeJoin = 'miter' | 'round' | 'bevel';
+
+/**
+ * The area a stroke `w` mm wide paints along the paths of `f`, as SVG draws it: its ends and
+ * corners as given (`miter` the longest a miter may reach, as a multiple of the half width; a
+ * sharper corner is cut off), closed paths all round and not filled. Null when nothing is left.
+ */
+export function strokeForm(f: Form, w: number, cap: StrokeCap = 'butt', join: StrokeJoin = 'miter', miter = 4): Form | null {
+  const C = needClipper();
+  const ways = f.paths.filter((p) => p.nodes.length > 1);
+  if (!ways.length || !(w > 0)) return null;
+  const joinType = join === 'round' ? C.JoinType.Round : join === 'bevel' ? C.JoinType.Bevel : C.JoinType.Miter;
+  const endType = cap === 'round' ? C.EndType.Round : cap === 'square' ? C.EndType.Square : C.EndType.Butt;
+  const parts: Paths64 = [];
+  for (const closed of [true, false]) {
+    const list = ways.filter((p) => p.closed === closed);
+    if (!list.length) continue;
+    // Clipper measures the limit as SVG does (the miter's reach over the half width); at least 1.
+    const o = new C.ClipperOffset(Math.max(1, miter), FLAT * SCALE);
+    o.addPaths(list.map((p) => toInt(flattened(p, FLAT))), joinType, closed ? C.EndType.Joined : endType);
+    const out: Paths64 = [];
+    o.execute((w / 2) * SCALE, out);
+    parts.push(...out);
+  }
+  const u = new C.Clipper64();
+  u.addSubject(parts);
+  const sol: Paths64 = [];
+  u.execute(C.ClipType.Union, C.FillRule.NonZero, sol);
+  return formOf(sol, true);
+}
+
 /**
  * A closed polygon as curves: sharp turns stay corners, the rest is fitted within FIT. Null for a
  * speck (fewer than three points apart), which has no outline to fit.

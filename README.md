@@ -74,8 +74,9 @@ with this section when the site starts sending anything new.
   Husqvarna Viking), **EXP** (Melco) and **XXX** (Singer), with own writers (no pyembroidery); read
   **SEW** (older Janome); PES reads the thread list of versions 5 to 10 with real colors, names and
   catalog numbers
-- **SVG** import as whole shapes with their curves, colors and size; fine lines as running stitch; a line
-  drawing of touching strokes as redwork, in one go without trims
+- **SVG** import as whole shapes with their curves, colors and size; lines by their width as running
+  stitch, bean stitch, satin or, wider than 7 mm, an area in their shape; a line drawing of touching
+  strokes as redwork, in one go without trims; nearly transparent paint (5 % or less) left out
 - **Project files** (`.heatstitch`) that keep everything embroidery files drop: originals and edits,
   shapes, settings, rungs, guide lines, letterings, acknowledged findings, the image, material
 - **Hoop**: common sewing fields or an own size, drawn around the design, with a note when it does
@@ -417,8 +418,11 @@ copied.
 
 **SVG** files (`src/image/svg.ts`, `src/shape/svgPath.ts`) skip the raster steps: every shape is
 read with its curves and its color, hidden parts are left out when converting a picture and offered for
-knocking out when the SVG is opened as a design, a size in mm, cm or inches becomes the width, and lines become running stitch
-or satin by their width.
+knocking out when the SVG is opened as a design, a size in mm, cm or inches becomes the width, and lines are sewn by
+their width (`lineClassOf` in `src/model/line.ts`): under 0.7 mm running stitch, under 1 mm bean stitch, up to 7 mm
+satin of that width (the satin limit for areas too), wider an area in the shape the line paints, with the file's line
+ends and corners (`strokeForm` in `src/shape/ops.ts`). Satin starts at 1 mm, where digitizing guides put the narrowest
+column that sews cleanly; a wider line as running or bean stitch would come out a third of its width or less.
 
 ### Stitches (`src/digitize/`)
 

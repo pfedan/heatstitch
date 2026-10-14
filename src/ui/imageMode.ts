@@ -1,5 +1,6 @@
 import { ImageClient } from '../digitize/client';
-import { digitizeDefaults, shapesOrigin, type DigitizeOptions, type Digitized } from '../digitize/digitize';
+import { digitizeDefaults, shapesOrigin, wideLinesAsAreas, type DigitizeOptions, type Digitized } from '../digitize/digitize';
+import { loadOps } from '../shape/ops';
 import { areaPixels, boxOf, groupAreas, groupsByColor, TECHNIQUES, type AreaInfo, type Technique } from '../digitize/smart';
 import { formatNumber, onLangChange, t, type Key } from '../i18n';
 import { matchThreads } from '../image/threadMatch';
@@ -228,12 +229,14 @@ export async function digitizeSvg(file: File, prepare: PrepareOptions, options: 
     // A file of plain shapes is sewn shape by shape, each whole; the rest goes the way of pictures.
     const all = svg.shapes(widthMm);
     if (all?.length) {
+      // Lines too wide for a satin are cut out as areas in their shape.
+      await loadOps();
       const { threads, index } = threadsFor(svg.colors, prepare.threads);
       // A background is kept aside, not sewn (it can be sewn from the list "Not sewn"); a motif
       // of the library has none (`background` false): a big first shape is part of it.
       const bg = background ? backgroundOf(all) : -1;
       const shapes = bg >= 0 ? all.filter((_, k) => k !== bg) : all;
-      const mapped = shapes.map((s) => ({ ...s, color: index[s.color] }));
+      const mapped = wideLinesAsAreas(shapes.map((s) => ({ ...s, color: index[s.color] })));
       const size = { w: widthMm, h: widthMm * svg.aspect };
       const source: SewnFrom = { picture: canvas, size: [size.w, size.h] };
       const d = { ...(await client.digitizeShapes(mapped, threads, options, size, false, name, progress)), source };

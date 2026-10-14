@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { digitizeDefaults, digitizeShapes, type ShapeInput } from '../src/digitize/digitize';
+import { digitizeDefaults, digitizeShapes, SATIN_MAX, wideLinesAsAreas, type ShapeInput } from '../src/digitize/digitize';
+import { LINE_WIDTHS, lineClassOf } from '../src/model/line';
+import { loadOps, strokeForm, type StrokeCap, type StrokeJoin } from '../src/shape/ops';
 import { formFrom, storeForm, type Mat } from '../src/shape/path';
 import { knockOut, rasterize, rasterizeStroke } from '../src/shape/rasterize';
 import { ellipsePath, parsePath, pointsPath, rectPath } from '../src/shape/svgPath';
@@ -181,5 +183,62 @@ describe('a filled shape with a stroke', () => {
     expect(d.objects).toHaveLength(2);
     expect(d.objects[0].border).toBeUndefined();
     expect(d.objects[1].path).toBeTruthy();
+  });
+});
+
+describe('lines sewn by their width', () => {
+  const options = digitizeDefaults(DEFAULT_PROFILE);
+  const wave = (width: number, y = 5): ShapeInput => ({ color: 0, kind: 'stroke', width, form: parsePath(`M2 ${y} C12 ${y - 3} 22 ${y + 3} 32 ${y}`, ID) });
+
+  it('as running stitch, bean stitch, satin, and wider than a satin as an area', () => {
+    expect([0.4, 0.69, 0.7, 0.99, 1, 7, 7.01].map(lineClassOf)).toEqual(['run', 'run', 'bean', 'bean', 'satin', 'satin', 'band']);
+    // Satin as wide as an area of the image is sewn as satin, no wider.
+    expect(LINE_WIDTHS.satin).toBe(SATIN_MAX);
+    const types = [0.5, 0.8, 2].map((w) => digitizeShapes([wave(w)], threads, options, { w: 34, h: 10 }, false).objects[0].line?.type);
+    expect(types).toEqual(['run', 'triple', 'satin']);
+  });
+
+  it('a wide line becomes an area in the shape it paints, ends and corners as in SVG', async () => {
+    await loadOps();
+    const corner = parsePath('M5 25 L20 5 L35 25', ID);
+    const area = (cap: StrokeCap, join: StrokeJoin) => rasterize(strokeForm(corner, 8, cap, join)!)!.areaMm2;
+    // Round ends add a half disc each, square ones a half square, flat ones nothing.
+    expect(area('round', 'miter') - area('butt', 'miter')).toBeCloseTo(Math.PI * 16, -1);
+    expect(area('square', 'miter') - area('butt', 'miter')).toBeCloseTo(2 * 8 * 4, -1);
+    expect(area('butt', 'miter')).toBeGreaterThan(area('butt', 'round'));
+    expect(area('butt', 'round')).toBeGreaterThan(area('butt', 'bevel'));
+    // As a shape of the file: a fill, with the curves of its outline, in the line's color.
+    const [thin, wide] = wideLinesAsAreas([wave(3), { ...wave(9, 14), color: 1, cap: 'round', element: 4 }]);
+    expect(thin.kind).toBe('stroke');
+    expect(wide).toMatchObject({ kind: 'fill', color: 1, element: 4 });
+    expect(rasterize(wide.form)!.areaMm2).toBeCloseTo(rasterizeStroke(wave(9, 14).form, 9, 0.1, 'round')!.areaMm2, -1);
+    const d = digitizeShapes([thin, wide], threads, options, { w: 34, h: 20 }, false);
+    expect(d.objects.map((o) => o.kind)).toEqual(['satin', 'fill']);
+    expect(d.objects[1].form!.paths.length).toBe(wide.form.paths.length);
+  });
+
+  it('keeps a wide stroke of a filled shape apart from its fill, not as its border', async () => {
+    await loadOps();
+    const d = 'M5 5 H35 V25 H5 Z';
+    const shapes = wideLinesAsAreas([
+      { color: 0, kind: 'fill', form: parsePath(d, ID), element: 0 },
+      { color: 1, kind: 'stroke', width: 9, form: parsePath(d, ID), element: 0 },
+    ]);
+    const sewn = digitizeShapes(shapes, threads, options, { w: 40, h: 30 }, false);
+    expect(sewn.objects).toHaveLength(2);
+    expect(sewn.objects[0].border).toBeUndefined();
+    // The frame of the square: its outline and the hole inside.
+    expect(sewn.objects[1].form!.paths).toHaveLength(2);
+  });
+
+  it('joins touching lines into one only when they are sewn alike', () => {
+    const cross = (a: number, b: number): ShapeInput[] => [
+      { color: 0, kind: 'stroke', width: a, form: parsePath('M2 10 L38 10', ID) },
+      { color: 0, kind: 'stroke', width: b, form: parsePath('M20 2 L20 18', ID) },
+    ];
+    expect(digitizeShapes(cross(0.4, 0.5), threads, options, { w: 40, h: 20 }, false).objects).toHaveLength(1);
+    expect(digitizeShapes(cross(2, 2), threads, options, { w: 40, h: 20 }, false).objects).toHaveLength(1);
+    expect(digitizeShapes(cross(2, 4), threads, options, { w: 40, h: 20 }, false).objects).toHaveLength(2);
+    expect(digitizeShapes(cross(0.4, 0.8), threads, options, { w: 40, h: 20 }, false).objects).toHaveLength(2);
   });
 });

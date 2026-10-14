@@ -11,8 +11,8 @@ import type { PathStitch } from './along';
 import { runRecords } from './border';
 
 /**
- * New shapes sewn into a design: an area becomes a fill (or satin, when it is a stroke), a line
- * running stitch (satin from 1 mm wide), with the stitch settings of the material. The object is
+ * New shapes sewn into a design: an area becomes a fill (or satin, when it is a stroke), a line is
+ * sewn by its width (see lineClassOf), with the stitch settings of the material. The object is
  * sewn right after object `after` in its thread, or at the end in `color` without one.
  */
 

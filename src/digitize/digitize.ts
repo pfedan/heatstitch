@@ -17,7 +17,8 @@ import { easePiles, SATIN_PEAK } from './satinEase';
 import { areaLoops, classify as shapeClass, offersSections, suggestSatin, type SatinSuggestion, type ShapeClass } from './satinSuggest';
 import type { Orientation } from '../image/orientation';
 import { transformForm, type Form } from '../shape/path';
-import { lineStitchFor, lineStitches, redworkHelps } from '../model/line';
+import { lineClassOf, lineStitchFor, lineStitches, redworkHelps } from '../model/line';
+import { strokeForm, type StrokeCap, type StrokeJoin } from '../shape/ops';
 import type { PathStitch } from '../model/along';
 import { knockOut, rasterize, rasterizeStroke, sharedArea, unionOf } from '../shape/rasterize';
 import { acrossGraph, areaKey, boxOf, groupOf, letterOf, structure, STRUCTURE, STRUCTURE_MIN_MM2, type AreaInfo, type Reason, type Technique } from './smart';
@@ -1297,8 +1298,30 @@ export interface ShapeInput {
   kind: 'fill' | 'stroke';
   form: Form;
   width?: number;
+  /** How a line ends and turns its corners, as in SVG (see strokeForm). */
+  cap?: StrokeCap;
+  join?: StrokeJoin;
+  miter?: number;
   /** The element of the file it was painted by: a fill and the stroke of the same element share it. */
   element?: number;
+}
+
+/**
+ * The shapes with every line too wide for a satin (see lineClassOf) as an area in the shape the
+ * line paints, its ends and corners as in the file. Needs loadOps().
+ */
+export function wideLinesAsAreas(shapes: ShapeInput[]): ShapeInput[] {
+  return shapes.map((sh) => {
+    if (sh.kind !== 'stroke' || lineClassOf(sh.width ?? 0) !== 'band') return sh;
+    const form = strokeForm(sh.form, sh.width!, sh.cap, sh.join, sh.miter);
+    return form ? { color: sh.color, kind: 'fill', form, ...(sh.element === undefined ? {} : { element: sh.element }) } : sh;
+  });
+}
+
+/** Whether two lines are sewn alike: in the same stitch, a satin in the same width. */
+function sameLine(a: ShapeInput, b: ShapeInput): boolean {
+  const [x, y] = [lineStitchFor(a.width ?? 0.4), lineStitchFor(b.width ?? 0.4)];
+  return x.type === y.type && (x.type !== 'satin' || Math.abs(x.width - y.width) < 0.05);
 }
 
 /** Shapes smaller than this (mm²) are left out, as specks. */
@@ -1333,9 +1356,10 @@ export function digitizeShapes(
     const form = transformForm(sh.form, [1, 0, 0, 1, -cx, -cy]);
     const whole = sh.kind === 'fill' ? rasterize(form, pxMm) : rasterizeStroke(form, sh.width ?? 0.4, pxMm);
     if (!whole) continue;
-    // Lines of one color painted one after the other that touch are one network (a star of strokes).
+    // Lines of one color painted one after the other that touch are one network (a star of
+    // strokes), when they are sewn alike: a line of another stitch or satin width is its own.
     const prev = items[items.length - 1];
-    if (prev && sh.kind === 'stroke' && prev.sh.kind === 'stroke' && prev.sh.color === sh.color && sharedArea(prev.whole, whole) > 0) {
+    if (prev && sh.kind === 'stroke' && prev.sh.kind === 'stroke' && prev.sh.color === sh.color && sameLine(prev.sh, sh) && sharedArea(prev.whole, whole) > 0) {
       prev.whole = unionOf([prev.whole, whole])!;
       prev.form = { paths: [...prev.form.paths, ...form.paths] };
       continue;
