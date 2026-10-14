@@ -627,16 +627,16 @@ const DIRS: Pt[] = [
  * random edge of all grown so far (short branches, a meander). The grid is turned by `angle`
  * degrees (see turning).
  */
-function treeLoops(r: Region, cell: number, seed: number, maze: boolean, margin: number, angle = 0): Pt[][] {
+function treeLoops(r: Region, cell: number, seed: number, maze: boolean, margin: number, angle = 0, phase: Pt = [0, 0]): Pt[][] {
   const rnd = random(seed);
   const [bx0, by0, bx1, by1] = turnedBox(r, angle);
   const { to } = turning(angle);
-  // Anchored to the design origin, like tatami rows.
-  const i0 = Math.floor(bx0 / cell);
-  const j0 = Math.floor(by0 / cell);
-  const gw = Math.ceil(bx1 / cell) - i0 + 1;
-  const gh = Math.ceil(by1 / cell) - j0 + 1;
-  const at = (i: number, j: number): Pt => [(i0 + i + 0.5) * cell, (j0 + j + 0.5) * cell];
+  // Anchored to the design origin, like tatami rows (shifted by `phase` mm).
+  const i0 = Math.floor((bx0 - phase[0]) / cell);
+  const j0 = Math.floor((by0 - phase[1]) / cell);
+  const gw = Math.ceil((bx1 - phase[0]) / cell) - i0 + 1;
+  const gh = Math.ceil((by1 - phase[1]) / cell) - j0 + 1;
+  const at = (i: number, j: number): Pt => [(i0 + i + 0.5) * cell + phase[0], (j0 + j + 0.5) * cell + phase[1]];
   // The loop runs through the centers of the cells' quarters (spanning tree coverage, Gabriely and
   // Rimon): a quarter is free where its center keeps the margin left beyond the quarter cell.
   const q = cell / 4;
@@ -740,6 +740,34 @@ function treeLoops(r: Region, cell: number, seed: number, maze: boolean, margin:
     }
   }
   return grown.map((root) => outlineOfTree(root, gw, links, at, q, half).map(to));
+}
+
+/** Shifts of the grid tried when the one anchored at the origin fits no cell, in quarters of a cell. */
+const PHASES = 4;
+
+/**
+ * The loops of treeLoops on the grid anchored at the design origin. Where not one cell of that grid
+ * fits (a narrow shape barely wider than a cell, lying across the grid lines), the grid shifted by
+ * the quarter cells that fit the most of it: whether a shape can be sewn must not depend on where
+ * it lies.
+ */
+function anchoredTreeLoops(r: Region, cell: number, seed: number, maze: boolean, margin: number, angle = 0): Pt[][] {
+  const loops = treeLoops(r, cell, seed, maze, margin, angle);
+  if (loops.length) return loops;
+  let best = loops;
+  let most = 0;
+  for (let j = 0; j < PHASES; j++) {
+    for (let i = 0; i < PHASES; i++) {
+      if (!i && !j) continue;
+      const shifted = treeLoops(r, cell, seed, maze, margin, angle, [(i * cell) / PHASES, (j * cell) / PHASES]);
+      const length = shifted.reduce((n, l) => n + l.reduce((m, q, k) => (k ? m + dist(l[k - 1], q) : m), 0), 0);
+      if (length > most) {
+        most = length;
+        best = shifted;
+      }
+    }
+  }
+  return best;
 }
 
 /** The numbers 0 to n - 1 in a random order. */
@@ -875,7 +903,7 @@ export function meanderFill(r: Region, p: OpenParams, start: Pt): FillResult | n
     const f = amp * 0.6 * Math.min(1, Math.max(0, (-sample(r, r.sdf, x, y) - 0.2) / (2 * amp)));
     return [x + f * nx(x, y), y + f * ny(x, y)];
   };
-  const loops = treeLoops(r, cell, p.seed, false, cell / 4 + 0.2, p.angle).map((l) => densify(rounded(l, cell / 4), cell / 8).map(warp));
+  const loops = anchoredTreeLoops(r, cell, p.seed, false, cell / 4 + 0.2, p.angle).map((l) => densify(rounded(l, cell / 4), cell / 8).map(warp));
   const runs = sewLoops(loops, start, p);
   return runs.length ? { runs, angle: 0, under: 0 } : null;
 }
@@ -883,7 +911,7 @@ export function meanderFill(r: Region, p: OpenParams, start: Pt): FillResult | n
 /** Maze: the tree outline with straight corridors and sharp corners. Lines are `size` mm apart. */
 export function mazeFill(r: Region, p: OpenParams, start: Pt): FillResult | null {
   const cell = 2 * p.size;
-  const runs = sewLoops(treeLoops(r, cell, p.seed, true, cell / 4 + 0.2, p.angle), start, p);
+  const runs = sewLoops(anchoredTreeLoops(r, cell, p.seed, true, cell / 4 + 0.2, p.angle), start, p);
   return runs.length ? { runs, angle: 0, under: 0 } : null;
 }
 

@@ -188,6 +188,20 @@ describe('open patterns', () => {
     }
   });
 
+  it('sews a narrow shape wherever it lies, also across the lines of the grid', () => {
+    // A diagonal band about 5 mm wide, like a leaf: on the grid anchored at the origin no cell of
+    // a 2.5 mm meander fits it at some places, so it was not sewn at all after a move.
+    const band = region((x, y) => Math.abs(x - y) < 3.6 && x + y > 8 && x + y < 52);
+    for (let k = 0; k < 10; k++) {
+      const moved = { ...band, x0: band.x0 + k * 5, y0: band.y0 + k * 2 };
+      for (const fill of [meanderFill, mazeFill]) {
+        const res = fill(moved, open, [0, 0]);
+        expect(res, `${fill.name} moved by ${k * 0.5} mm`).not.toBeNull();
+        for (const q of allPoints(res!.runs)) expect(sample(moved, moved.sdf, q[0], q[1])).toBeLessThan(0.15);
+      }
+    }
+  });
+
   describe('cross stitch', () => {
     const grid = { size: 2.5, angle: 0, origin: [0, 0] as Pt };
     /** The half diagonals sewn, by cell and corner, and how often; and any stitch that is not on one. */

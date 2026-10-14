@@ -38,6 +38,13 @@ describe('found by the torture test', () => {
     await chain(141, undefined, { knit: true, motif: true, motifShare: 0.5, motifOp: 'paste from another design' });
   }, 120_000);
 
+  // A meander on a leaf put into the design again, leaving out what lies on top: at its new place
+  // no cell of the meander's grid fit the leaf, so it could be sewn neither on what was left nor
+  // whole, and kept the area it had before.
+  it('a meander on a narrow shape is sewn wherever the shape lies', async () => {
+    await chain(210, undefined, { knit: true, motif: true });
+  }, 120_000);
+
   it('cutting out of a fill takes its border in a thread of its own along', async () => {
     await loadOps();
     const d = borderedSquare();
