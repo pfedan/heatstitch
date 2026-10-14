@@ -38,7 +38,7 @@ import { sewDesign, specOf } from '../../src/model/sew';
 import { parsePattern } from '../../src/parsers';
 import { bounds as boundsOf, extendPath, flatten, insertNode, moveNodes, nodesOf, removeNodes, rotation, segments, setSmooth, storeForm, translation, type Form, type Mat } from '../../src/shape/path';
 import { ellipsePath, parsePath, rectPath } from '../../src/shape/svgPath';
-import { fromStored, toStored } from '../../src/storage/fileStore';
+import { fromStored, storedVersion, toStored } from '../../src/storage/fileStore';
 import { decodeProject, encodeProject, projectSettings } from '../../src/storage/project';
 import { DEFAULTS } from '../../src/settings';
 import { DEFAULT_PROFILE } from '../../src/validation/profiles';
@@ -2038,6 +2038,25 @@ export function checkObjectList(p: Pattern): void {
   expect(problems.slice(0, 5).join('; '), 'object list').toBe('');
 }
 
+/**
+ * A reload brings the version back whole: what the browser store keeps of it after every change
+ * (files.setPattern: its records and its object list together, see storedVersion), opened on a
+ * fresh page, is the same objects knowing the same. Objects are found again by their stitches, so
+ * an object list kept from another version (one undone, say) would lose the objects whose stitches
+ * differ: an appliqué fell apart into the running stitches between its stops.
+ */
+export function checkReload(d: Doc): void {
+  const p = d.cur.p;
+  const v = structuredClone(storedVersion(p, d.file?.original));
+  // A fresh page reads the file anew: the original it holds now is another pattern.
+  const back = v.working ? fromStored(d.file?.original ?? empty, v.working) : parsePattern(d.file!.data, d.file!.name);
+  expect(back, 'the stored version opens').toBeTruthy();
+  restoreRemembered(back!, v.objects);
+  const known = knowledge(p);
+  const again = knowledge(back!);
+  if (!same(again, known)) expect(again, 'knowledge after a reload').toEqual(known);
+}
+
 /** Every object has a key of its own, also copies lying exactly on their originals, so none shares what another remembers. */
 export function checkKeys(p: Pattern): void {
   const seen = new Map<string, number>();
@@ -2632,6 +2651,7 @@ function checkStep(d: Doc, full: boolean): void {
   checkFillLooks(p);
   checkAppliques(p);
   checkTrace(d);
+  checkReload(d);
   if (full) {
     checkExport(p);
     checkSewDesign(p);

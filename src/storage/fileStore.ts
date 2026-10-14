@@ -9,7 +9,7 @@
 
 import { computeBounds, type Pattern, type ThreadColor } from '../model/pattern';
 import type { StoredAside } from '../model/aside';
-import type { ObjectsAsStored } from '../model/restitch';
+import { rememberedIn, type ObjectsAsStored, type StoredObjects } from '../model/restitch';
 import type { StoredTrace } from '../model/trace';
 import { isAcknowledgement, type Acknowledgement } from '../validation/acks';
 import type { Lang } from '../i18n';
@@ -117,6 +117,26 @@ export function saveWorking(key: number, working: StoredPattern | null): Promise
   return queue(key, (rec) => {
     if (working) rec.working = working;
     else delete rec.working;
+  });
+}
+
+/**
+ * What the store keeps of version `p` of a file read as `original`: its records (none while it is
+ * the original) and what its objects know. The two belong together: objects are found again by
+ * their stitches, so the objects of another version lose every object whose stitches differ, and
+ * an appliqué, say, falls apart into the running stitches recognized between its stops.
+ */
+export function storedVersion(p: Pattern, original: Pattern | undefined): { working: StoredPattern | null; objects: StoredObjects } {
+  return { working: p === original ? null : toStored(p), objects: rememberedIn(p) };
+}
+
+/** Stores version `v` of file `key` (see storedVersion): records and objects in one write, so a reload never finds one without the other. */
+export function saveVersion(key: number, v: ReturnType<typeof storedVersion>): Promise<void> {
+  return queue(key, (rec) => {
+    if (v.working) rec.working = v.working;
+    else delete rec.working;
+    if (v.objects.objects.length) rec.objects = v.objects;
+    else delete rec.objects;
   });
 }
 
