@@ -25,7 +25,7 @@ import { h, swap } from '../shell/h';
 import { section } from '../shell/ui';
 import { setThinShare, THIN_SHARES, thinShare } from '../areas/stitches/state';
 import { kindWay, type KindState, type KindWay } from '../areas/stitches/kindWay';
-import { APPLIQUE_FABRICS, APPLIQUE_TACK, APPLIQUE_WIDTHS, tackOf, TACK_STITCH, type AppliqueFabric, type AppliqueSettings } from '../model/applique';
+import { APPLIQUE_FABRICS, APPLIQUE_INSETS, APPLIQUE_TACK, APPLIQUE_WIDTHS, placeInset, tackInset, tackOf, TACK_STITCH, type AppliqueFabric, type AppliqueSettings } from '../model/applique';
 
 /** The kinds on the kind switch: the three of a design's objects and appliqué. */
 type SwitchKind = 'fill' | 'satin' | 'line' | 'applique';
@@ -1171,10 +1171,15 @@ export class StitchPanel {
     const s = this.appliqueDraft!;
     const steps = h('p', { class: 'muted small applique-steps' }, t(`applique.steps.${s.place === false ? 'free' : 'place'}.${s.edge === 'none' ? 'raw' : 'cover'}` as Key));
     const place = this.check('applique.place', 'applique.place.hint', () => s.place !== false, (v) => (s.place = v));
+    /** How far a line lies inside the outline, 0 to 5 mm. */
+    const inset = (hint: Key, get: () => number, set: (v: number) => void) =>
+      this.slider({ label: 'applique.inset', hint, min: APPLIQUE_INSETS[0], max: APPLIQUE_INSETS[1], step: 0.1, get, set, fmt: (v) => `${formatNumber(v, 1)} mm` });
+    const placeIn = s.place !== false && inset('applique.placeIn.hint', () => placeInset(s), (v) => (s.placeIn = v));
     const tack = (s.tack ??= structuredClone(APPLIQUE_TACK));
     const tackRows = [
       this.repeatRow(tack, (v) => (s.tack = v)),
       this.slider({ label: 'stitch.length', hint: 'stitch.runLength.hint', min: 1, max: 6, step: 0.1, get: () => tack.length ?? TACK_STITCH, set: (v) => (tack.length = v), fmt: (v) => `${formatNumber(v, 1)} mm` }),
+      inset('applique.tackIn.hint', () => tackInset(s), (v) => (s.tackIn = v)),
     ];
     const edge = this.choice<AppliqueSettings['edge']>('applique.edge', ['satin', 'e', 'none'], s.edge, (v) => `applique.edge.${v}` as Key, (v) => (s.edge = v));
     const width = this.slider({
@@ -1194,8 +1199,8 @@ export class StitchPanel {
     const cut = h('div', { class: 'tool-row' }, this.button('applique.cut', 'applique.cut.hint', () => this.hooks.cutLine()));
     const t0 = tackOf(s);
     return [
-      this.sec('kind', 'stitches.sec.kind', [this.kindSwitch(info), steps, place], t('applique.kind')),
-      this.sec('appliqueTack', 'applique.sec.tack', tackRows, `${t('stitch.repeat.n', { n: timesOf(t0) * passesOf(t0) })} · ${formatNumber(t0.length ?? TACK_STITCH, 1)} mm`),
+      this.sec('kind', 'stitches.sec.kind', [this.kindSwitch(info), steps, place, placeIn], t('applique.kind')),
+      this.sec('appliqueTack', 'applique.sec.tack', tackRows, `${t('stitch.repeat.n', { n: timesOf(t0) * passesOf(t0) })} · ${formatNumber(t0.length ?? TACK_STITCH, 1)} mm · ${t('applique.inset.short', { mm: formatNumber(tackInset(s), 1) })}`),
       this.sec('appliqueEdge', 'applique.sec.edge', s.edge === 'none' ? [edge] : [edge, width], s.edge === 'none' ? t('applique.edge.none') : `${t(`applique.edge.${s.edge}` as Key)} ${formatNumber(s.width, 1)} mm`),
       this.sec('appliqueFabric', 'applique.sec.fabric', [fabric, this.fabricColor(s, info.applique!.color)], t(`applique.fabric.${s.fabric}` as Key)),
       this.sec('tools', 'stitches.sec.tools', [cut, this.handRow(), this.lockSwitch(info.lock), info.free?.can ? this.looseRow() : null]),

@@ -39,6 +39,10 @@ export interface AppliqueSettings {
    * water-soluble stabilizer): the machine stops before the appliqué for it.
    */
   place?: boolean;
+  /** How far the placement line lies inside the outline (mm, APPLIQUE_INSETS; absent: on it). */
+  placeIn?: number;
+  /** How far the tack-down lies inside the outline (mm, APPLIQUE_INSETS; absent: as the edge asks, see tackInset). */
+  tackIn?: number;
   /** The tack-down: a running stitch, its length, how often or as bean stitch (absent: once, TACK_STITCH long). */
   tack?: PathStitch;
   /**
@@ -66,12 +70,19 @@ export const TACK_STITCH = 2;
 /** How far the tack-down of a raw edge lies inside the cut edge (mm): it holds the edge without the needle tearing it. */
 export const RAW_INSET = 1.5;
 
+/** How far placement line and tack-down can be set inside the outline (mm). */
+export const APPLIQUE_INSETS: [number, number] = [0, 5];
+
 /**
- * How far the tack-down lies inside the outline (mm). Under a cover: hidden with room to spare on
- * both sides, 0.3 of its width, between 0.5 and 1 mm (the fabric is cut close outside it). A raw
- * edge: RAW_INSET.
+ * How far the tack-down lies inside the outline (mm): as set, else as the edge asks. Under a cover:
+ * hidden with room to spare on both sides, 0.3 of its width, between 0.5 and 1 mm (the fabric is
+ * cut close outside it). A raw edge: RAW_INSET.
  */
-export const tackInset = (s: Pick<AppliqueSettings, 'edge' | 'width'>): number => (s.edge === 'none' ? RAW_INSET : Math.min(1, Math.max(0.5, s.width * 0.3)));
+export const tackInset = (s: Pick<AppliqueSettings, 'edge' | 'width' | 'tackIn'>): number =>
+  s.tackIn ?? (s.edge === 'none' ? RAW_INSET : Math.min(1, Math.max(0.5, s.width * 0.3)));
+
+/** How far the placement line lies inside the outline (mm): as set, else on it. */
+export const placeInset = (s: Pick<AppliqueSettings, 'placeIn'>): number => s.placeIn ?? 0;
 
 /** A tack-down as a new one is: once along, TACK_STITCH long. */
 export const APPLIQUE_TACK: PathStitch = { type: 'run', width: 0, length: TACK_STITCH };
@@ -107,8 +118,12 @@ export function appliqueFrom(v: unknown): AppliqueSettings | null {
   if (!c || ![c.r, c.g, c.b].every(finite)) return null;
   const tack = s.edge === 'run' ? (runFrom(s.run) ?? APPLIQUE_TACK) : runFrom(s.tack);
   const plain = tack && tack.type === 'run' && !tack.repeat && tack.length === TACK_STITCH;
+  const inset = (v: unknown) => (finite(v) ? Math.min(APPLIQUE_INSETS[1], Math.max(APPLIQUE_INSETS[0], v)) : undefined);
+  const [placeIn, tackIn] = [inset(s.placeIn), inset(s.tackIn)];
   return {
     ...(s.place === false ? { place: false } : {}),
+    ...(placeIn !== undefined ? { placeIn } : {}),
+    ...(tackIn !== undefined ? { tackIn } : {}),
     ...(tack && !plain ? { tack } : {}),
     edge: s.edge === 'run' ? 'none' : s.edge,
     width: Math.min(APPLIQUE_WIDTHS[1], Math.max(APPLIQUE_WIDTHS[0], s.width)),
@@ -142,10 +157,13 @@ export interface AppliqueParts {
  * cover leaves out its edge on, as a border leaves out what shapes on top cover.
  */
 export function appliqueParts(area: Region, s: AppliqueSettings, from: Pt, shared?: Region | null): AppliqueParts {
-  const place = s.place === false ? [] : borderStitches(area, { type: 'run', width: 0, length: PLACE_STITCH }, from);
+  const line: PathStitch = { type: 'run', width: 0, length: PLACE_STITCH };
+  // A shape too thin for the placement line as far inside: it is sewn on the outline.
+  const inside = s.place === false || !placeInset(s) ? [] : borderStitches(area, { ...line, offset: -placeInset(s) }, from);
+  const place = s.place === false ? [] : inside.length ? inside : borderStitches(area, line, from);
   const end = (runs: Pt[][], or: Pt) => runs[runs.length - 1]?.[runs[runs.length - 1].length - 1] ?? or;
   const run = tackOf(s);
-  const tack = borderStitches(area, { ...run, offset: -tackInset(s) }, end(place, from));
+  const tack = tackInset(s) ? borderStitches(area, { ...run, offset: -tackInset(s) }, end(place, from)) : [];
   // A shape too thin for the tack-down inside: it is sewn on the outline, over the placement line.
   const held = tack.length ? tack : borderStitches(area, run, end(place, from));
   if (s.edge === 'none') return { place, tack: held, cover: [] };
