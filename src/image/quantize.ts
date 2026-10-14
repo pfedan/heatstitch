@@ -1,5 +1,5 @@
-import { deltaE2000, type Lab } from './color';
-import type { LabImage } from './raster';
+import { deltaE2000, rgbToLab, type Lab, type Rgb } from './color';
+import { ALPHA_MIN, type LabImage, type Raster } from './raster';
 
 /**
  * Color quantization for embroidery: few colors, flat regions, no dithering.
@@ -18,6 +18,8 @@ export const NONE = 255;
 export interface QuantizeOptions {
   /** Upper bound for the number of colors (2 to 16). */
   maxColors: number;
+  /** The exact colors of a graphic (see graphicPalette): taken as they are when there are no more than `maxColors`. */
+  palette?: Lab[];
 }
 
 export interface Quantized {
@@ -252,9 +254,83 @@ export function assign(img: LabImage, centers: Lab[]): Uint8Array {
 }
 
 export function quantize(img: LabImage, o: QuantizeOptions): Quantized {
+  if (o.palette?.length && o.palette.length <= o.maxColors) return { centers: o.palette, labels: assign(img, o.palette) };
   const bins = histogram(img);
   if (!bins.length) return { centers: [], labels: new Uint8Array(img.opaque.length).fill(NONE) };
   const k = Math.max(1, Math.min(16, Math.round(o.maxColors), bins.length));
   const centers = reduce(bins, lloyd(bins, seed(bins, k), 30));
   return { centers, labels: assign(img, centers) };
+}
+
+/** Most colors a graphic can have of its own; with more it is quantized like a photo. */
+export const MAX_OWN_COLORS = 16;
+/** A color covering less of a graphic than this share (or than MIN_OWN_PX pixels) is noise. */
+const MIN_OWN_SHARE = 1e-4;
+const MIN_OWN_PX = 12;
+/** Pixels of a color with all four neighbours the same: from this share on the color fills areas. */
+const SOLID = 0.2;
+/** A color this close (sRGB units) to the line between two others is their blend along an edge. */
+const BLEND_RGB = 3;
+
+/**
+ * The colors a flat graphic (a logo, clip art, a drawing; not a photo) is drawn in, exactly, or
+ * null for a photo. A graphic is made of a few exact colors plus the blends anti-aliasing puts along
+ * its edges. Every color that fills areas of its own counts (it has inner pixels); a color without
+ * any (a fine line, a thin ring) counts unless it lies between two counted colors, as the blends do.
+ * So a fine accent keeps its color, where clustering by area would fold it into its neighbour.
+ */
+export function graphicPalette(src: Raster): Rgb[] | null {
+  const { width: w, height: h, data: d } = src;
+  const stat = new Map<number, { n: number; inner: number }>();
+  let opaque = 0;
+  const keyAt = (i: number) => (d[i * 4 + 3] >= ALPHA_MIN ? (d[i * 4] << 16) | (d[i * 4 + 1] << 8) | d[i * 4 + 2] : -1);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      const k = keyAt(i);
+      if (k < 0) continue;
+      opaque++;
+      let s = stat.get(k);
+      if (!s) stat.set(k, (s = { n: 0, inner: 0 }));
+      s.n++;
+      if (x > 0 && x + 1 < w && y > 0 && y + 1 < h && keyAt(i - 1) === k && keyAt(i + 1) === k && keyAt(i - w) === k && keyAt(i + w) === k) s.inner++;
+    }
+  }
+  if (!opaque) return null;
+  const all = [...stat].sort((a, b) => b[1].n - a[1].n);
+  // A photo: its most frequent colors cover little of it (as looksLikePhoto tells).
+  if (all.slice(0, MAX_OWN_COLORS).reduce((t, [, s]) => t + s.n, 0) < 0.85 * opaque) return null;
+  const rgb = (k: number): Rgb => [(k >> 16) & 255, (k >> 8) & 255, k & 255];
+  const min = Math.max(MIN_OWN_PX, MIN_OWN_SHARE * opaque);
+  const found = all.filter(([, s]) => s.n >= min);
+  const own: Rgb[] = [];
+  const add = (c: Rgb, solid: boolean) => {
+    // Near-identical colors (JPEG noise, a slightly different shade) are one. Of a fine line the
+    // most frequent shade can be a blend that hardly differs from its own color: the line's color,
+    // with the blend between it and its neighbour, takes its place.
+    const lab = rgbToLab(...c);
+    const same = own.findIndex((o) => deltaE2000(rgbToLab(...o), lab) < MERGE_DE);
+    if (same < 0) own.push(c);
+    else if (!solid && isBlend(own[same], [...own.filter((_, k) => k !== same), c])) own[same] = c;
+  };
+  for (const [k, s] of found) if (s.inner >= SOLID * s.n) add(rgb(k), true);
+  for (const [k, s] of found) if (s.inner < SOLID * s.n && !isBlend(rgb(k), own)) add(rgb(k), false);
+  return own.length && own.length <= MAX_OWN_COLORS ? own : null;
+}
+
+/** Whether `c` lies between two of `colors`, as an edge pixel blending them does. */
+function isBlend(c: Rgb, colors: Rgb[]): boolean {
+  for (let i = 0; i < colors.length; i++) {
+    for (let j = i + 1; j < colors.length; j++) {
+      const a = colors[i];
+      const b = colors[j];
+      const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+      const l2 = ab[0] ** 2 + ab[1] ** 2 + ab[2] ** 2;
+      if (!l2) continue;
+      const t = ((c[0] - a[0]) * ab[0] + (c[1] - a[1]) * ab[1] + (c[2] - a[2]) * ab[2]) / l2;
+      if (t <= 0 || t >= 1) continue;
+      if (Math.hypot(c[0] - a[0] - t * ab[0], c[1] - a[1] - t * ab[1], c[2] - a[2] - t * ab[2]) <= BLEND_RGB) return true;
+    }
+  }
+  return false;
 }

@@ -126,15 +126,54 @@ export function modeFilter(labels: Uint8Array, w: number, h: number): Uint8Array
 }
 
 /**
+ * Narrow details that are not specks: a band at least this many times as long as it is wide
+ * (length to width, as for a region kept as a line or a satin column) ...
+ */
+export const BAND_RATIO = 4;
+/** ... at least this wide (mm, about a thread: narrower is a speck) ... */
+export const BAND_MIN_WIDTH = 0.3;
+/** ... and this long (mm). */
+export const BAND_MIN_LENGTH = 2;
+
+/**
+ * Which components are bands (see BAND_RATIO): long and narrow, judged by width and length, not by
+ * area. The width is that of the widest place (twice the largest distance to another region, Blum's
+ * medial axis radius), the length the area over that width; so a vein, a stem or an outline is a
+ * band, a blot of the same area is not. Only sewn regions: a narrow gap of background stays a gap.
+ */
+export function bands(c: Components, labels: Uint8Array, w: number, h: number, pxMm: number): Uint8Array {
+  const edge = new Uint8Array(labels.length);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      const l = labels[i];
+      if ((x > 0 && labels[i - 1] !== l) || (x + 1 < w && labels[i + 1] !== l) || (y > 0 && labels[i - w] !== l) || (y + 1 < h && labels[i + w] !== l)) edge[i] = 1;
+    }
+  }
+  const dist = distanceToSeeds(edge, w, h);
+  const half = new Float32Array(c.label.length);
+  for (let i = 0; i < labels.length; i++) half[c.comp[i]] = Math.max(half[c.comp[i]], dist[i]);
+  return Uint8Array.from(c.label, (l, k) => {
+    if (l === NONE) return 0;
+    // An edge pixel lies half a pixel inside: a line 2r + 1 pixels wide has r at its middle.
+    const width = 2 * half[k] + 1;
+    const length = c.area[k] / width;
+    return length >= BAND_RATIO * width && width * pxMm >= BAND_MIN_WIDTH && length * pxMm >= BAND_MIN_LENGTH ? 1 : 0;
+  });
+}
+
+/**
  * Merges every component smaller than `minArea` pixels into the neighbour it shares the longest
  * border with, smallest first, until none is left. NONE regions take part too, so small holes in a
- * region are closed and stray pixels on the background disappear. Components with the `keep` label
- * set (painted by hand) are not merged away.
+ * region are closed and stray pixels on the background disappear. With `pxMm` given, bands (long
+ * narrow details, see `bands`) stay whatever their area: a vein or a fine ring is a detail, not a
+ * speck.
  */
-export function mergeSmall(labels: Uint8Array, w: number, h: number, minArea: number, keep?: Uint8Array): Uint8Array {
+export function mergeSmall(labels: Uint8Array, w: number, h: number, minArea: number, pxMm?: number): Uint8Array {
   const c = components(labels, w, h);
   const adj = adjacency(c, w, h);
   const count = c.label.length;
+  const keep = pxMm ? bands(c, labels, w, h, pxMm) : null;
   const target = Int32Array.from({ length: count }, (_, i) => i);
   const root = (i: number) => {
     while (target[i] !== i) {

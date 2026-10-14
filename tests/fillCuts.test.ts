@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { checkSections, stripsOfOutline } from '../src/digitize/rungs';
+import { clickControl, joinsOf, type Control } from './helpers/satinView';
 import type { Pt } from '../src/digitize/skeleton';
 import { sewObjects } from '../src/model/objects';
 import { edgeAlong, forget, keepShape, previewPairs, railsArea, sectionView, measureSatin, remember, remembered, rememberedIn, restitch, restoreRemembered, reversedRails, satinRuns, type Rails, type SatinSettings } from '../src/model/restitch';
@@ -8,7 +9,7 @@ import { stitchKinds } from '../src/model/sequence';
 import { transformRemembered } from '../src/model/transform';
 import { parsePattern } from '../src/parsers';
 import { aroundCuts } from '../src/digitize/satinSuggest';
-import { BADGE, RungTool } from '../src/ui/rungTool';
+import { RungTool } from '../src/ui/rungTool';
 
 const SATIN: SatinSettings = { spacing: 0.4, edge: 0, short: false, underlay: true, tolerance: 0.15 };
 
@@ -143,21 +144,17 @@ describe('order, direction and trims of chained columns on the canvas', () => {
     const tool = new RungTool({ change: (c) => changes.push(c), lines: () => {}, guides: () => {}, redraw: () => {}, say: () => {} });
     const { strips } = stripsOfOutline(M, LINES, CUTS);
     tool.openSatin([strips.map((s) => ({ ...s, chain: 0 }))]);
+    tool.satin = SATIN;
     // Clicks on a column's control, 10 px to the mm.
-    const click = (n: number, what: 'number' | 'arrow' | 'scissors') => {
-      const b = tool.badges.find((x) => x.n === n)!;
-      const along = what === 'arrow' ? BADGE.arrow : BADGE.number;
-      const across = what === 'scissors' ? BADGE.scissors : 0;
-      tool.down(b.at[0] + (b.dir[0] * along - b.dir[1] * across) / 10, b.at[1] + (b.dir[1] * along + b.dir[0] * across) / 10, 10);
-      tool.up();
-    };
+    const click = (n: number, what: Control) => clickControl(tool, n, what);
     return { tool, changes, strips, click };
   };
 
-  it('numbers the columns in the order they are sewn, scissors from the second on', () => {
+  it('numbers the columns in the order they are sewn, a way through the satin between them', () => {
     const { tool } = open();
     expect(tool.badges.map((b) => b.n)).toEqual([1, 2, 3, 4]);
-    expect(tool.badges.map((b) => b.trim)).toEqual([null, false, false, false]);
+    expect(joinsOf(tool)).toEqual(['way', 'way', 'way']);
+    expect(tool.links.every((l) => l.cuttable)).toBe(true);
   });
 
   it('sews a column one place earlier, turns it round, sets and takes away a trim', () => {
@@ -170,7 +167,7 @@ describe('order, direction and trims of chained columns on the canvas', () => {
     expect(changes[1][0][0].left).toEqual(strips[1].right.slice().reverse());
     click(3, 'scissors');
     expect(changes[2][0].map((c) => c.chain)).toEqual([0, 0, 1, 1]);
-    expect(tool.badges.map((b) => b.trim)).toEqual([null, false, true, false]);
+    expect(joinsOf(tool)).toEqual(['way', 'trim', 'way']);
     // Sewn as two runs now, the trim between them.
     expect(satinRuns(changes[2][0], SATIN).length).toBe(2);
     click(3, 'scissors');

@@ -8,7 +8,7 @@ import { LINE_MOTIFS } from '../digitize/motif';
 import { lineStitches, runAsLine, runWays } from './line';
 import { chooseAngle, CROSSHATCH_HALF, crosshatchFill, fillRegion, type FillParams } from '../digitize/fill';
 import { contourFill, fieldFill, guideField, stitchField } from '../digitize/flow';
-import { atShare, crossFill, CROSS_KINDS, FIGURES, motifFill, TEXTURES, TEXTURE_SIZE, TEXTURE_SIZE_RANGE, echoFill, circleField, grainField, GRID_KINDS, gridFill, mazeFill, meanderFill, MOTIFS, rayField, regionBox, swirlField, waveFill, zigzagFill, type CrossKind, type Figure, type GridKind, type Motif, type OpenParams, type Texture } from '../digitize/deco';
+import { atShare, crossFill, CROSS_KINDS, FIGURES, motifFill, TEXTURES, TEXTURE_SIZE, TEXTURE_SIZE_RANGE, echoFill, circleField, grainField, GRID_KINDS, gridFill, mazeFill, meanderFill, MOTIFS, rayField, regionBox, swirlField, waveFill, zigzagFill, type CrossGrid, type CrossKind, type Figure, type GridKind, type Motif, type OpenParams, type Texture } from '../digitize/deco';
 import { spiralFill } from '../digitize/spiral';
 import { ECHO_GAP, isEcho } from '../digitize/echo';
 import { shadowFrom } from './shadow';
@@ -105,6 +105,11 @@ export interface DecoSettings {
   angle?: number;
   grid?: GridKind;
   cross?: CrossKind;
+  /**
+   * Cross stitch: on a grid of its own, anchored at its shape, that moves with it; not set, on the
+   * grid of the design, which all cross stitch of the same size and angle shares (see CrossGrid).
+   */
+  ownGrid?: boolean;
   /** Motif fill: its figure; hearts when not set. */
   figure?: Figure;
   /** Gradient: the density falls evenly to nearly nothing (out) or rises from it (in), for color blends. */
@@ -139,9 +144,9 @@ const CIRCLES_FOCUS: Pt = [0.5, 0.5];
 /** Open patterns: distance between lines or cell size when none is set (mm). */
 // Crosshatch: rows 1.6 mm apart in each layer, four times a usual fill's 0.4 mm: the two layers
 // together lay half its thread, as a light fill (0.8 mm), and leave diamonds of fabric between.
-export const OPEN_SIZE: Record<OpenPattern, number> = { meander: 2.5, maze: 2.5, grid: 6, motifs: 8, echo: 3, cross: 2.5, crosshatch: 1.6 };
+export const OPEN_SIZE: Record<OpenPattern, number> = { meander: 2.5, maze: 2.5, grid: 6, motifs: 8, echo: 3, cross: 2.3, crosshatch: 1.6 };
 /** Open patterns: the range of `size` (mm). */
-export const OPEN_SIZE_RANGE: Record<OpenPattern, [number, number]> = { meander: [1.2, 8], maze: [1.2, 8], grid: [3, 20], motifs: [5, 25], echo: [1.2, 10], cross: [1.5, 6], crosshatch: [1, 4] };
+export const OPEN_SIZE_RANGE: Record<OpenPattern, [number, number]> = { meander: [1.2, 8], maze: [1.2, 8], grid: [3, 20], motifs: [5, 25], echo: [1.2, 10], cross: [1, 5], crosshatch: [1, 4] };
 /**
  * Decorative fields may crowd rows more than a plain curved fill before they give up (in times the
  * nominal density): rows meet at the start of rays and wind tight at the eye of a swirl, as in the
@@ -379,6 +384,12 @@ export interface Split {
   holes: Pt[][];
   /** The cut lines (Trennlinien), each through two points or, bent, more (see Cut). */
   cuts: Cut[];
+  /**
+   * Found by sectionView to show the columns in sections, not given with them (read from their
+   * rails, or cut lines read between them on a known shape): a guess, never stored. Gone when its
+   * cut lines are drawn anew (see RungTool.resplit).
+   */
+  read?: true;
 }
 
 /** One section of a column in the order its satin is sewn: which, turned round, trimmed before. */
@@ -429,7 +440,8 @@ export interface Remembered {
   kept?: Kept;
   /**
    * Parts of `form` that fills sewn later cover are left out of the stitches (computed, the form
-   * stays whole). `cut` names the area that was sewn, to see when the shapes on top have changed.
+   * stays whole). `cut` names the area that was sewn, to see when the shapes on top have changed;
+   * of an appliqué, the area its cover left out its edge on (see appliqueShare.ts).
    */
   knockout?: boolean;
   cut?: string;
@@ -1061,6 +1073,7 @@ function isDeco(d: unknown): d is DecoSettings {
     (s.centers === undefined || (Array.isArray(s.centers) && s.centers.length >= 1 && s.centers.length <= MAX_SWIRLS && s.centers.every(isShare))) &&
     (s.triple === undefined || typeof s.triple === 'boolean') &&
     (s.embossStrong === undefined || typeof s.embossStrong === 'boolean') &&
+    (s.ownGrid === undefined || typeof s.ownGrid === 'boolean') &&
     (s.grid === undefined || GRID_KINDS.includes(s.grid)) &&
     (s.cross === undefined || CROSS_KINDS.includes(s.cross)) &&
     (s.figure === undefined || FIGURES.includes(s.figure)) &&
@@ -1467,18 +1480,20 @@ export const isGradient = (f: FillSettings): boolean => f.pattern === 'gradient'
 
 /**
  * Records of the fills sewn open on purpose (gradients), which the coverage check leaves out (1),
- * and of the placement lines of appliqués, whose fabric counts as covered (PATCH); null when there
+ * and of the placement lines (or tack-downs) of appliqués, whose fabric counts as covered (PATCH); null when there
  * are none.
  */
 export function openOnPurpose(p: Pattern, objs: SewObject[]): Uint8Array | null {
   let out: Uint8Array | null = null;
   for (const o of objs) {
-    // An appliqué: its placement line (up to the first stop) encloses the fabric, which covers.
-    if (remembered(p, o)?.applique) {
-      const stop = stopsIn(p, o.first, o.last)[0];
+    // An appliqué: its placement line (up to the first stop) encloses the fabric, which covers;
+    // a piece cut before, its tack-down (what it remembers as sewn under the cover, see appliqueRuns).
+    const m = remembered(p, o);
+    if (m?.applique) {
+      const stop = m.applique.place === false ? (m.under ? underlayRanges(p, o, new Uint8Array(0))[0]?.[1] : undefined) : stopsIn(p, o.first, o.last)[0];
       if (stop === undefined) continue;
       out ??= new Uint8Array(p.cmd.length);
-      out.fill(PATCH, o.first, stop);
+      out.fill(PATCH, o.first, m.applique.place === false ? stop + 1 : stop);
       continue;
     }
     const f = remembered(p, o)?.fill;
@@ -2254,10 +2269,13 @@ export function edgeAlong(rings: Pt[][], columns: Rails[]): boolean {
  * something does. Only a part too small to make an area (a few stitches) stays as it is.
  */
 export function sectionView(columns: Rails[][], shape: Region | undefined): Rails[][] {
+  // An area and cut lines found here, not given with the columns, are a guess (see Split.read).
+  const given = new Set(columns.flatMap((part) => part.flatMap((c) => (c.split ? [c.split] : []))));
+  const read = (part: Rails[]) => part.map((c) => (c.split && !given.has(c.split) ? { ...c, split: { ...c.split, read: true as const } } : c));
   return sectionViewOf(columns, shape).map((part) => {
-    if (part.some((c) => c.split)) return part;
+    if (part.some((c) => c.split)) return read(part);
     const area = railsArea(part);
-    return area ? withSplit([part], area, 0)[0] : part;
+    return area ? read(withSplit([part], area, 0)[0]) : part;
   });
 }
 
@@ -2476,6 +2494,9 @@ export function fillRuns(area: Region, s: FillSettings, way: FillWay): NewFill |
     if (run.length > 1) under += take;
   }
   const runs = res.runs.filter((run) => run.length > 1);
+  // Crosses that meet nowhere: a trim between them, so no thread lies across the fabric beside
+  // the crosses (half crosses go on along the edge of their cells, as they always need to).
+  if (s.pattern === 'cross' && s.deco?.cross !== 'half') runs.forEach((run, k) => k && trimBefore.add(run));
   // The border is an object of its own, sewn after the fill (see syncBorders).
   const border = runs.reduce((n, run) => n + run.length, 0);
   // Travel indices as in the runs kept (runs of one point are left out before them).
@@ -2581,14 +2602,39 @@ function openFill(r: Region, s: FillSettings, fp: FillParams, start: Pt) {
   const d = { ...DECO_DEFAULTS, ...s.deco };
   const [lo, hi] = OPEN_SIZE_RANGE[pat];
   const p: OpenParams = { size: Math.min(hi, Math.max(lo, d.size ?? OPEN_SIZE[pat])), stitch: Math.min(s.stitch, 3), seed: d.seed, triple: d.triple, angle: d.angle ?? 0 };
+  if (pat === 'cross') {
+    // Its own grid is anchored at its whole shape, whatever lies on top of it.
+    const g = crossGridOf(s, fp.whole ?? r);
+    if (!g) return null;
+    return crossFill(r, { ...g, stitch: p.stitch, seed: p.seed, triple: p.triple }, d.cross, start);
+  }
   if (pat === 'crosshatch') return crosshatchFill(r, { ...fp, spacing: p.size, stitch: p.stitch, angle: Number.isFinite(s.angle) ? s.angle : 0, pull: 0, underlay: false }, start);
   if (pat === 'meander') return meanderFill(r, p, start);
   if (pat === 'maze') return mazeFill(r, p, start);
   if (pat === 'echo') return echoFill(r, p, start);
   if (pat === 'grid') return gridFill(r, p, d.grid, start);
-  if (pat === 'motifs') return motifFill(r, p, d.figure, start);
-  return crossFill(r, p, d.cross, start);
+  return motifFill(r, p, d.figure, start);
 }
+
+/**
+ * The grid a cross stitch fill with settings `s` is sewn on (see CrossGrid): the design's, or with
+ * `ownGrid` one anchored at the top left of `whole` (its whole area, before anything on top was
+ * left out of it), which moves with the shape. Null for other fills, and for an own grid without
+ * `whole`.
+ */
+export function crossGridOf(s: FillSettings, whole?: Region): CrossGrid | null {
+  if (s.pattern !== 'cross' || (s.deco?.ownGrid && !whole)) return null;
+  const d = s.deco;
+  const [lo, hi] = OPEN_SIZE_RANGE.cross;
+  const size = Math.min(hi, Math.max(lo, d?.size ?? OPEN_SIZE.cross));
+  const angle = d?.angle ?? 0;
+  if (!d?.ownGrid || !whole) return { size, angle, origin: [0, 0] };
+  const [x0, y0] = regionBox(whole);
+  return { size, angle, origin: [x0, y0] };
+}
+
+/** Whether two grids are the same, so crosses on them meet without a gap. */
+export const sameGrid = (a: CrossGrid, b: CrossGrid) => a.size === b.size && a.angle === b.angle && a.origin[0] === b.origin[0] && a.origin[1] === b.origin[1];
 
 /** Satin of a border: about the density of a satin column, with a walk along the middle under it when wide enough. */
 /**
@@ -2969,7 +3015,7 @@ const columnFor = (r: Rails, s: SatinSettings): Column => pushedColumn(columnOf(
  * Satin along each pair of rails: with underlay, the underlay first (out along the column, or out
  * and back for a contour underlay) and the satin over it the other way.
  */
-export function satinRuns(rails: Rails[], given: SatinSettings): Pt[][] {
+export function satinRuns(rails: Rails[], given: SatinSettings, steps?: SewnStep[]): Pt[][] {
   const ends = pushEnds(rails, given);
   const s = ends.length ? { ...given, push: ends } : given;
   const runs: Pt[][] = [];
@@ -2984,21 +3030,29 @@ export function satinRuns(rails: Rails[], given: SatinSettings): Pt[][] {
       const chain: Rails[] = [];
       for (; k < rails.length && rails[k].chain === whole.chain; k++) chain.push(rails[k]);
       k--;
-      const run = chainRun(chain, s, sew, along, k - chain.length + 1);
+      const first = k - chain.length + 1;
+      const ways: (Pt[] | null)[] = [];
+      const run = chainRun(chain, s, sew, along, first, ways);
       if (run.length) {
         chains.add(run);
+        // Each column's satin from its end back to its start (see columnRun), the way to it through the satin.
+        if (steps) ways.forEach((way, j) => way && steps.push({ col: first + j, run: runs.length, along: backOf(chain[j]), ...(way.length ? { way } : {}) }));
         runs.push(run);
       }
       continue;
     }
     const parts = sectionsOf(whole);
     if (parts.length > 1 && planFits(whole.plan, parts.length)) {
-      runs.push(...plannedRuns(parts, whole.plan, s, sew, seeded(along, k)));
+      const before = runs.length;
+      runs.push(...plannedRuns(parts, whole.plan, s, sew, seeded(along, k), steps && ((step, run) => steps.push({ col: k, step, run: before + run, along: stepAlong(parts, whole.plan![step]) }))));
       continue;
     }
     if (parts.length > 1) {
       const run = sectionRun(parts, s, sew, seeded(along, k));
-      if (run.length) runs.push(run);
+      if (run.length) {
+        if (steps) sectionPlan(whole, s).forEach((x, step) => steps.push({ col: k, step, run: runs.length, along: stepAlong(parts, x) }));
+        runs.push(run);
+      }
       continue;
     }
     const r = parts[0];
@@ -3007,11 +3061,13 @@ export function satinRuns(rails: Rails[], given: SatinSettings): Pt[][] {
     const ps = pairs(col, at(col, r, sp));
     if (ps.length < 2) continue;
     const sewR = sided(whole, sew);
-    if (!s.underlay) {
+    const under = s.underlay ? underOf(col, s) : null;
+    // Its satin from the start, or back from the end after an underlay out.
+    if (steps) steps.push({ col: k, run: runs.length, along: under?.atEnd ? backOf(r) : [r.left, r.right] });
+    if (!under) {
       runs.push(sewR(ps));
       continue;
     }
-    const under = underOf(col, s);
     if (!under.atEnd) {
       runs.push([...under.pts, ...sewR(ps)]);
       continue;
@@ -3037,6 +3093,26 @@ export function previewPairs(r: Rails, s: SatinSettings): [Pt, Pt][][] {
     return pairs(col, along(col, sec, sp));
   });
 }
+
+/**
+ * A piece of a satin part as satinRuns sews it: a column, or a section of a column sewn in
+ * sections (its step in sectionPlan), in the run it is in and with its rails the way its satin
+ * goes (from their start). Pieces of one run after another are joined inside it: through the satin
+ * (`way`, a chain; see chainRun) or straight on (sections).
+ */
+export interface SewnStep {
+  col: number;
+  step?: number;
+  run: number;
+  along: [Pt[], Pt[]];
+  way?: Pt[];
+}
+
+/** Rails walked from their end. */
+const backOf = (r: Rails): [Pt[], Pt[]] => [r.left.slice().reverse(), r.right.slice().reverse()];
+
+/** The rails of a section as its step of a plan sews it (turned round or not). */
+const stepAlong = (secs: Rails[], x: SectionStep): [Pt[], Pt[]] => (x.flip ? backOf(secs[x.sec]) : [secs[x.sec].left, secs[x.sec].right]);
 
 /** Runs of satin with a trim before them wherever they start (asked for, not only for a long way). */
 export const trimBefore = new WeakSet<Pt[]>();
@@ -3348,6 +3424,14 @@ function searchedChain(n: number, travel: (c: number, w: number, d: number, x: n
   return Array.from(best.cs, (c, i) => ({ c, w: best.ws[i] }));
 }
 
+/**
+ * How much of a way between columns of `cols` shows (as wayModel sees it, see shown): `later[j]`
+ * set where column j is still to be sewn.
+ */
+export function shownAmong(cols: Rails[]): (way: Pt[], later: Uint8Array) => { bare: number; over: number } {
+  return wayModel(cols.map(outlineOf), cols.map((r) => columnOf(sectionsOf(r)[0]))).shown;
+}
+
 /** What the ways between the columns of a chain cost in the order given (as bestChain scores them; for measuring). */
 export function chainCost(cols: Rails[], s: SatinSettings): number {
   const { sew, along } = sewing(s);
@@ -3419,8 +3503,10 @@ export function sectionPlan(r: Rails, s: SatinSettings): SectionStep[] {
  * between trims. Each stretch is handed to sectionRun so that what it sews back comes out in
  * the order of the plan.
  */
-function plannedRuns(secs: Rails[], plan: SectionStep[], s: SatinSettings, sew: (ps: [Pt, Pt][]) => Pt[], along: (col: Column, r: Rails, q: SatinParams) => SatinParams): Pt[][] {
+function plannedRuns(secs: Rails[], plan: SectionStep[], s: SatinSettings, sew: (ps: [Pt, Pt][]) => Pt[], along: (col: Column, r: Rails, q: SatinParams) => SatinParams, sewnIn?: (step: number, run: number) => void): Pt[][] {
   const runs: Pt[][] = [];
+  // The steps of the stretch being gathered.
+  let held: number[] = [];
   let group: Rails[] = [];
   // A trim asked for before the stretch.
   let cut = false;
@@ -3430,16 +3516,19 @@ function plannedRuns(secs: Rails[], plan: SectionStep[], s: SatinSettings, sew: 
     const run = sectionRun(feed, s, sew, along);
     if (run.length) {
       if (cut) trimBefore.add(run);
+      for (const i of held) sewnIn?.(i, runs.length);
       runs.push(run);
     }
     cut = false;
     group = [];
+    held = [];
   };
   plan.forEach((x, i) => {
     if (x.trim && i) {
       flush();
       cut = true;
     }
+    held.push(i);
     const sec = x.flip ? reversedRails(secs[x.sec]) : { ...secs[x.sec] };
     if (x.mirror) sec.mirror = true;
     group.push(sec);
@@ -3491,19 +3580,22 @@ function sectionRun(parts: Rails[], s: SatinSettings, sew: (ps: [Pt, Pt][]) => P
  * one column to the next goes through the columns, along the middle of one that is sewn later,
  * not across the fabric.
  */
-function chainRun(cols: Rails[], s: SatinSettings, sew: (ps: [Pt, Pt][]) => Pt[], along: (col: Column, r: Rails, q: SatinParams) => SatinParams, first = 0): Pt[] {
+function chainRun(cols: Rails[], s: SatinSettings, sew: (ps: [Pt, Pt][]) => Pt[], along: (col: Column, r: Rails, q: SatinParams) => SatinParams, first = 0, ways?: (Pt[] | null)[]): Pt[] {
   const columns = cols.map((r) => columnOf(sectionsOf(r)[0]));
   const { between } = wayModel(cols.map(outlineOf), columns);
   const later = new Uint8Array(cols.length);
   const out: Pt[] = [];
   cols.forEach((r, k) => {
     const pts = columnRun(r, s, sew, seeded(along, first + k));
+    if (ways) ways[k] = null;
     if (!pts.length) return;
     const from = out[out.length - 1];
     // As a running stitch along the way: the middle of a column has a point every few tenths, a
     // stitch to each would pile up needle holes.
     later.fill(0, 0, k).fill(1, k);
-    if (from) out.push(...runStitch(between(from, pts[0], later).way, TRAVEL_STEP, s.tolerance).slice(1));
+    const way = from ? runStitch(between(from, pts[0], later).way, TRAVEL_STEP, s.tolerance) : [];
+    if (ways) ways[k] = way;
+    out.push(...way.slice(1));
     out.push(...pts);
   });
   return out;
@@ -3958,9 +4050,21 @@ function wayModel(outlines: Pt[][], columns: Column[]) {
     }
     return best;
   };
+  /** How much of a way shows (mm): across the fabric (`bare`), and over satin sewn before it (`over`); `later` as for between. */
+  const shown = (way: Pt[], later: Uint8Array): { bare: number; over: number } => {
+    const w = walk(way);
+    let bare = 0;
+    let over = 0;
+    for (let q = 0; q < w.len.length; q++) {
+      if (w.at[q] === w.at[q + 1]) bare += w.len[q];
+      else if (!w.over.slice(w.at[q], w.at[q + 1]).some((j) => later[j])) over += w.len[q];
+    }
+    return { bare, over };
+  };
   return {
     /** The best way from one point to another (`later[j]` set where column j is still to be sewn), and what it costs. */
     between: (from: Pt, to: Pt, later: Uint8Array) => pick(ways(from, to), later),
+    shown,
     costed,
     costOf,
   };

@@ -9,6 +9,8 @@ import { reshapeFill, reshapeSatin } from './reshape';
 import { stitchKinds } from './sequence';
 import { stitchesBefore } from './transform';
 import { areaOf, grownForm } from './geo';
+import { sharesAsSewn } from './appliqueShare';
+import { listOf, sewList } from './sew';
 
 /**
  * Leaving out what lies underneath: a fill whose shape is known as curves can leave out the parts
@@ -209,6 +211,16 @@ export function refreshKnockouts(p: Pattern, trimMm: number): { pattern: Pattern
   for (let index = objs.length - 1; index >= 0; index--) {
     const o = objs[index];
     const known = o && remembered(cur, o);
+    // An appliqué leaves its cover out where later ones share its edge (appliqueShare.ts).
+    if (known?.applique) {
+      if (sharesAsSewn(cur, objs, o, known)) continue;
+      const next = resewOne(cur, o, known, trimMm);
+      if (!next) continue;
+      cur = next;
+      objs = sewObjects(cur);
+      changed.unshift(index);
+      continue;
+    }
     const form = areaOf(known);
     if (!known || !form || known.free || !known.knockout) continue;
     const area = sewnArea(cur, objs, o, form, true, known.region?.pxMm ?? 0.1);
@@ -220,6 +232,17 @@ export function refreshKnockouts(p: Pattern, trimMm: number): { pattern: Pattern
     changed.unshift(index);
   }
   return changed.length ? { pattern: cur, changed } : null;
+}
+
+/** Object `o` of `p` sewn anew from what it remembers (`m`), in its place; null when it could not be. */
+function resewOne(p: Pattern, o: SewObject, m: Remembered, trimMm: number): Pattern | null {
+  const list = listOf(p);
+  const k = list.findIndex((e) => e.obj.index === o.index);
+  if (k < 0) return null;
+  list[k] = { ...list[k], sew: true, memory: m };
+  const next = sewList(p, list, trimMm, { fresh: new Set([o.index]) });
+  const now = sewObjects(next).find((x) => x.id === o.id);
+  return now && remembered(next, now)?.applique ? next : null;
 }
 
 /** Whether fills sewn later cover a noticeable part of the shape of `o`. */

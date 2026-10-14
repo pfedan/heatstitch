@@ -574,6 +574,8 @@ export interface OpenParams {
   triple: boolean;
   /** Grids, motifs, cross stitch, meander and maze: the pattern turned by this many degrees (see turning). */
   angle?: number;
+  /** Cross stitch: the corner of its grid (mm); the design origin when not set (see CrossGrid). */
+  origin?: Pt;
 }
 
 /** Bean stitch: forward, back, forward. */
@@ -1224,41 +1226,216 @@ function latticeGraph(r: Region, pieces: Piece[], margin: number): Graph {
 }
 
 /**
- * Cross stitch on a grid of `size` mm cells anchored at the design origin and turned by `p.angle`,
- * over the cells wholly inside. Only the diagonals are sewn (each there and back, like Ink/Stitch's even cross
- * stitch), so no thread runs along the cells' sides.
+ * The grid of a cross stitch: cells `size` mm wide, turned by `angle` degrees (as `turning`) about
+ * `origin`. Fills on the same grid (same size, angle and origin) put their crosses side by side
+ * without a gap, which is why the grid is anchored at the design origin unless an object asks
+ * for one of its own.
  */
-export function crossFill(r: Region, p: OpenParams, kind: CrossKind, start: Pt): FillResult | null {
-  const [x0, y0, x1, y1] = turnedBox(r, p.angle);
-  const { to } = turning(p.angle);
-  const c = p.size;
-  const g = new Graph();
-  const add = (a: Pt, b: Pt) => g.add(to(a), to(b));
-  const inset = 0.1;
-  for (let j = Math.floor(y0 / c); j <= Math.ceil(y1 / c); j++) {
-    for (let i = Math.floor(x0 / c); i <= Math.ceil(x1 / c); i++) {
-      const L = i * c;
-      const T = j * c;
-      const corners: Pt[] = [
-        [L, T],
-        [L + c, T],
-        [L + c, T + c],
-        [L, T + c],
-      ];
-      if (!corners.map(to).every((q) => sample(r, r.sdf, q[0], q[1]) < -inset)) continue;
-      const [tl, tr, br, bl] = corners;
-      if (kind === 'double') {
-        const m: Pt = [L + c / 2, T + c / 2];
-        for (const q of [tl, tr, br, bl, [L + c / 2, T], [L + c, T + c / 2], [L + c / 2, T + c], [L, T + c / 2]] as Pt[]) add(q, m);
-      } else {
-        add(bl, tr);
-        if (kind === 'full') add(tl, br);
-      }
+export interface CrossGrid {
+  size: number;
+  angle: number;
+  origin: Pt;
+}
+
+/** A cell of a cross stitch grid: its column and row. */
+export type Cell = [number, number];
+const cellKey = (i: number, j: number) => `${i},${j}`;
+
+/**
+ * A cell is crossed when the area covers at least this share of it, as Ink/Stitch's fill coverage
+ * (50 % by default) and pixel art: two areas that meet share out the cells along their edge
+ * between them, each cell to the one that covers more of it, so their crosses meet without a gap.
+ */
+export const CROSS_COVERAGE = 0.5;
+
+/** Where a point of the design (mm) lies on the grid, in cells (upright, from the origin). */
+export function onGrid(g: CrossGrid): (q: Pt) => Pt {
+  const { from } = turning(g.angle);
+  return (q) => {
+    const u = from([q[0] - g.origin[0], q[1] - g.origin[1]]);
+    return [u[0] / g.size, u[1] / g.size];
+  };
+}
+
+/** Where a point of the grid (in cells) lies in the design (mm). */
+export function offGrid(g: CrossGrid): (q: Pt) => Pt {
+  const { to } = turning(g.angle);
+  return (q) => {
+    const u = to([q[0] * g.size, q[1] * g.size]);
+    return [u[0] + g.origin[0], u[1] + g.origin[1]];
+  };
+}
+
+/**
+ * The cells of grid `g` the region covers enough of (CROSS_COVERAGE), counted pixel by pixel, in
+ * rows from the top.
+ */
+export function crossCells(r: Region, g: CrossGrid): Cell[] {
+  const at = onGrid(g);
+  const count = new Map<string, { c: Cell; n: number }>();
+  for (let y = 0; y < r.h; y++) {
+    for (let x = 0; x < r.w; x++) {
+      if (!r.mask[y * r.w + x]) continue;
+      const q = at([(x + r.x0 + 0.5) * r.pxMm, (y + r.y0 + 0.5) * r.pxMm]);
+      const i = Math.floor(q[0]);
+      const j = Math.floor(q[1]);
+      const k = cellKey(i, j);
+      const e = count.get(k);
+      if (e) e.n++;
+      else count.set(k, { c: [i, j], n: 1 });
     }
   }
-  let runs = g.walk(start);
+  const need = (CROSS_COVERAGE * g.size * g.size) / (r.pxMm * r.pxMm) - 1e-6;
+  return [...count.values()]
+    .filter((e) => e.n >= need)
+    .map((e) => e.c)
+    .sort((a, b) => a[1] - b[1] || a[0] - b[0]);
+}
+
+/**
+ * How often a cross lays each of its diagonals: there and back on small crosses, twice that on
+ * coarse ones (3 mm and up, about Aida 8 ct), where one pair of threads looks thin. Always even,
+ * so each cross is a closed loop and the next one starts where it ended.
+ */
+export function crossPasses(size: number): number {
+  return size >= CROSS_COARSE ? 4 : 2;
+}
+const CROSS_COARSE = 2.75;
+
+/**
+ * Cross stitch on grid `g` over the cells the region covers (crossCells).
+ *
+ * A full cross is sewn the way Ink/Stitch sews its crosses: the thread only ever runs along the
+ * diagonals of the crosses, never along the sides of a cell. Its two diagonals meet only in the
+ * middle (their ends lie on different corners), so each cross is one closed loop through its
+ * middle: the bottom diagonal (/) there and back, half of it again to the middle, the top
+ * diagonal (\) there and back, half of it back to the middle and on to the corner it started
+ * from. Loops of crosses that share a corner are joined there (as Hierholzer joins cycles into
+ * one tour), so a connected area is sewn in one go; every cross gets its top diagonal last, so all
+ * crosses lie the same way. Areas that only meet nowhere are separate runs (each a trim apart).
+ *
+ * Half and double crosses are graphs walked as the grids are: every line there and back.
+ */
+export function crossFill(r: Region, p: OpenParams, kind: CrossKind, start: Pt): FillResult | null {
+  const g: CrossGrid = { size: p.size, angle: p.angle ?? 0, origin: p.origin ?? [0, 0] };
+  const cells = crossCells(r, g);
+  if (!cells.length) return null;
+  const to = offGrid(g);
+  if (kind === 'full') {
+    const runs = crossLoops(cells, crossPasses(g.size), onGrid(g)(start)).map((run) => run.map(to));
+    return runs.length ? { runs, angle: 0, under: 0 } : null;
+  }
+  const gr = new Graph();
+  const add = (a: Pt, b: Pt) => gr.add(to(a), to(b));
+  for (const [L, T] of cells) {
+    const tl: Pt = [L, T];
+    const tr: Pt = [L + 1, T];
+    const br: Pt = [L + 1, T + 1];
+    const bl: Pt = [L, T + 1];
+    if (kind === 'double') {
+      const m: Pt = [L + 0.5, T + 0.5];
+      for (const q of [tl, tr, br, bl, [L + 0.5, T], [L + 1, T + 0.5], [L + 0.5, T + 1], [L, T + 0.5]] as Pt[]) add(q, m);
+    } else add(bl, tr);
+  }
+  let runs = gr.walk(start);
   if (p.triple) runs = runs.map(tripled);
   return runs.length ? { runs, angle: 0, under: 0 } : null;
+}
+
+/**
+ * The loop of one cross (cell `c`, see crossFill) from its corner `e` back to it, on the grid (in
+ * cells), each diagonal `passes` times; the corner itself first and last.
+ */
+function crossLoop([L, T]: Cell, e: Pt, passes: number): Pt[] {
+  const tl: Pt = [L, T];
+  const br: Pt = [L + 1, T + 1];
+  const bl: Pt = [L, T + 1];
+  const tr: Pt = [L + 1, T];
+  const m: Pt = [L + 0.5, T + 0.5];
+  const same = (a: Pt, b: Pt) => a[0] === b[0] && a[1] === b[1];
+  // Back and forth n times from a, ending on b.
+  const spans = (a: Pt, b: Pt, n: number) => Array.from({ length: n }, (_, k) => (k % 2 ? a : b));
+  const n = passes - 1;
+  if (same(e, bl) || same(e, tr)) {
+    // Entered on the bottom diagonal: it first, then the top one, back to the middle and home.
+    const x = e;
+    const y = same(e, bl) ? tr : bl;
+    return [x, ...spans(x, y, n), m, tl, ...spans(tl, br, n), m, x];
+  }
+  // Entered on the top diagonal: to the middle, the bottom diagonal, the top one home.
+  const a = e;
+  const b = same(e, tl) ? br : tl;
+  return [a, m, bl, ...spans(bl, tr, n), m, b, ...spans(b, a, n)];
+}
+
+/**
+ * The crosses `cells` as runs on the grid (in cells): loops joined at shared corners into one run
+ * per connected group, the groups in the order the needle reaches them from `start` (in cells).
+ */
+function crossLoops(cells: Cell[], passes: number, start: Pt): Pt[][] {
+  const left = new Map(cells.map((c) => [cellKey(c[0], c[1]), c]));
+  // The cells around corner q that are still to sew, the one to the right and below first.
+  const around = (q: Pt): Cell | null => {
+    for (const [di, dj] of [
+      [0, 0],
+      [-1, 0],
+      [0, -1],
+      [-1, -1],
+    ]) {
+      const c = left.get(cellKey(q[0] + di, q[1] + dj));
+      if (c) return c;
+    }
+    return null;
+  };
+  const corners = (c: Cell): Pt[] => [
+    [c[0], c[1]],
+    [c[0] + 1, c[1]],
+    [c[0] + 1, c[1] + 1],
+    [c[0], c[1] + 1],
+  ];
+  const runs: Pt[][] = [];
+  let pos = start;
+  while (left.size) {
+    // The corner nearest the needle of a cross still to sew.
+    let first: Cell | null = null;
+    let entry: Pt = [0, 0];
+    let best = Infinity;
+    for (const c of left.values()) {
+      for (const q of corners(c)) {
+        const d = dist(q, pos);
+        if (d < best) {
+          best = d;
+          first = c;
+          entry = q;
+        }
+      }
+    }
+    left.delete(cellKey(first![0], first![1]));
+    const run: Pt[] = [entry];
+    // Loops being sewn, the innermost last, each with the place reached in it.
+    const stack: { loop: Pt[]; k: number }[] = [{ loop: crossLoop(first!, entry, passes), k: 0 }];
+    while (stack.length) {
+      const f = stack[stack.length - 1];
+      const q = f.loop[f.k];
+      // On a corner: crosses still to sew there are sewn now, their loops ending here again.
+      if (Number.isInteger(q[0]) && Number.isInteger(q[1])) {
+        const c = around(q);
+        if (c) {
+          left.delete(cellKey(c[0], c[1]));
+          stack.push({ loop: crossLoop(c, q, passes), k: 0 });
+          continue;
+        }
+      }
+      if (++f.k >= f.loop.length) {
+        stack.pop();
+        continue;
+      }
+      run.push(f.loop[f.k]);
+    }
+    runs.push(run);
+    pos = run[run.length - 1];
+  }
+  return runs;
 }
 
 /** Remembered and loaded: a point at the share (0 to 1) of a box's width and height. */

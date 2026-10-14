@@ -1,5 +1,5 @@
 import { chooseAngle } from '../digitize/fill';
-import { appliqueDefaults, cutForm, stopsIn, type AppliqueSettings } from './applique';
+import { appliqueDefaults, cutForm, innerStopCount, stopsIn, storeApplique, type AppliqueSettings } from './applique';
 import { followerLinks, syncBorders } from './border';
 import { fillArea, fits, geoUse } from './geo';
 import { sewObjects, type SewObject } from './objects';
@@ -36,7 +36,7 @@ function asApplique(m: Remembered, s: AppliqueSettings): Remembered {
 
 /** What appliqué memory `m` remembers as a fill again: the fill it kept, else `fill`. */
 export function asFill(m: Remembered, fill: FillSettings): Remembered {
-  const { applique: _a, kept, parts: _p, under: _u, underFrom: _f, borderAt: _b, ...rest } = m;
+  const { applique: _a, kept, parts: _p, under: _u, underFrom: _f, borderAt: _b, cut: _c, ...rest } = m;
   const { fill: was, ...others } = kept ?? {};
   const out: Remembered = { ...rest, fill: was ?? fill, ...(Object.keys(others).length ? { kept: others } : {}) };
   // Its old rows are gone (the fill that follows them has nothing to follow): straight rows. The
@@ -79,11 +79,11 @@ function resew(p: Pattern, which: number[], memory: (m: Remembered, o: SewObject
   const objs = sewObjects(q);
   // Each one sewn from what it was given: one that could not be sewn (an appliqué too small, a fill
   // without rows) keeps its old stitches, and with them the stops it had or lacked, so its stops
-  // tell (an appliqué stops twice inside, anything else never).
+  // tell (an appliqué stops inside as innerStopCount says, anything else never).
   for (const k of which) {
     const o = objs.find((x) => x.id === list[k]?.obj.id);
     const m = o && remembered(q, o);
-    if (!o || !m || stopsIn(q, o.first, o.last).length !== (m.applique ? 2 : 0)) return null;
+    if (!o || !m || stopsIn(q, o.first, o.last).length !== (m.applique ? innerStopCount(m.applique) : 0)) return null;
   }
   return syncBorders(q, trimMm, drop);
 }
@@ -107,7 +107,7 @@ export function setApplique(p: Pattern, which: number[], change: Partial<Appliqu
     which,
     (m) => {
       if (!m.applique) return null;
-      const s = { ...m.applique, ...change };
+      const s = storeApplique({ ...m.applique, ...change });
       return JSON.stringify(s) === JSON.stringify(m.applique) ? null : { ...m, applique: s };
     },
     trimMm,

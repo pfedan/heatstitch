@@ -63,6 +63,7 @@ export function bindRungs(app: RungsApp) {
       app.stitchPanel.setPoints(pts.map((q) => [share(q[0], box[0], box[2]), share(q[1], box[1], box[3])] as Pt));
     },
     redraw: () => app.redraw(),
+    trimMm: () => app.settings.trimMm,
     say: (key) => {
       app.layers.say(t(key), true);
       app.redraw();

@@ -136,8 +136,17 @@ function cellsOf(p: Pattern, mark: Uint8Array, ox: number, oy: number, cols: num
   return out;
 }
 
+/** A run of stitches enclosing less than this (mm²) has not come round yet (a triple stitch back to its start). */
+const LOOP_MM2 = 0.5;
+
+function ringArea(pts: [number, number][]): number {
+  let a = 0;
+  for (let k = 0, j = pts.length - 1; k < pts.length; j = k++) a += (pts[j][0] - pts[k][0]) * (pts[j][1] + pts[k][1]);
+  return a / 2;
+}
+
 /**
- * The fabric of the appliqués on the gap raster: per pixel inside a placement line (records marked
+ * The fabric of the appliqués on the gap raster: per pixel inside a placement line or tack-down (records marked
  * PATCH, each run of stitches one loop, even-odd as a scanline fill), an owner of its own (negative:
  * it does not pull), else 0.
  */
@@ -146,14 +155,23 @@ function patchRaster(p: Pattern, skip: Uint8Array, g: Grid): Int32Array | null {
   let cur: [number, number][] | null = null;
   let id = 0;
   let inPatch = false;
+  // A run that came round to where it began is a loop: going round again (a tack-down sewn twice)
+  // would cancel it out, even-odd.
+  let closed = false;
   for (let i = 0; i < p.cmd.length; i++) {
     const on = skip[i] === PATCH;
     if (on && !inPatch) id++;
     inPatch = on || (inPatch && p.cmd[i] !== STITCH);
     if (on && p.cmd[i] === STITCH) {
+      if (closed) continue;
       if (!cur) loops.push({ pts: (cur = []), id: -(0x40000000 + id) });
-      cur.push([p.x[i] / 10, p.y[i] / 10]);
-    } else if (p.cmd[i] !== STITCH || !on) cur = null;
+      const q: [number, number] = [p.x[i] / 10, p.y[i] / 10];
+      cur.push(q);
+      if (cur.length > 3 && Math.hypot(q[0] - cur[0][0], q[1] - cur[0][1]) < 0.05 && Math.abs(ringArea(cur)) > LOOP_MM2) closed = true;
+    } else if (p.cmd[i] !== STITCH || !on) {
+      cur = null;
+      closed = false;
+    }
   }
   const rings = loops.filter((l) => l.pts.length >= 3);
   if (!rings.length) return null;
