@@ -28,10 +28,10 @@ describe('colorRuns', () => {
 });
 
 describe('threadWidthMm', () => {
-  it('scales the 0.36 mm width of flattened 40 wt thread with the thread weight', () => {
-    expect(threadWidthMm({ fabric: 'woven', thread: '40' })).toBeCloseTo(0.36);
-    expect(threadWidthMm({ fabric: 'woven', thread: '12' })).toBeCloseTo(0.72);
-    expect(threadWidthMm({ fabric: 'woven', thread: '60' })).toBeLessThan(0.36);
+  it('scales the 0.4 mm reference width with the thread weight', () => {
+    expect(threadWidthMm({ fabric: 'woven', thread: '40' })).toBeCloseTo(0.4);
+    expect(threadWidthMm({ fabric: 'woven', thread: '12' })).toBeCloseTo(0.8);
+    expect(threadWidthMm({ fabric: 'woven', thread: '60' })).toBeLessThan(0.4);
   });
 });
 

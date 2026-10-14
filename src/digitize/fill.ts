@@ -1166,6 +1166,12 @@ function plan(f: Frame, secs: Section[], pull: number, start: Pt, last?: { s: Se
 const TRIM_COST = 25;
 /** A tour begins at its start this close outside the area too (mm), as where the last object ended on its edge. */
 const START_NEAR = 0.3;
+/**
+ * A tour walks hidden from its start to its first row only this far (mm); farther, it jumps as
+ * before. The walk is a layer of thread under the rows, and where objects overlap densely it can
+ * tip the stack over the density limit (the correction benchmark's overlapping circles on knit).
+ */
+const START_WALK = 3;
 /** The rows plan their tour anew from where the underlay ended when that is farther than this from where they would begin (mm). */
 const REPLAN = 5;
 /** The same when choosing the ways into the sections of a tour (see tourOrder): hidden ways are only thread. */
@@ -1635,8 +1641,8 @@ function sewAll(
   grid.trimCost = trimCost;
   let pos = start;
   let cur: Pt[] | null = runs.length ? runs[runs.length - 1] : null;
-  // A tour starts at its far end: from a start inside the area the needle walks there hidden,
-  // where the last object left it, rather than jumping.
+  // A tour starts at its far end: from a start inside the area and close by (START_WALK) the
+  // needle walks there hidden, where the last object left it, rather than jumping.
   const inside = (g: TravelGrid | undefined) => {
     const at = g ? g.index(start) : -1;
     return at >= 0 && g!.depth[at] > -START_NEAR;
@@ -1645,8 +1651,9 @@ function sewAll(
   // them would be too short to sew (see SHORTEST).
   let first: Pt | null = null;
   if (!cur && toured && todo.length && (inside(grid) || inside(outer))) {
-    if (dist(start, todo[0].e.p) >= SHORTEST) runs.push((cur = [start]));
-    else first = start;
+    const d = dist(start, todo[0].e.p);
+    if (d >= SHORTEST && d <= START_WALK) runs.push((cur = [start]));
+    else if (d < SHORTEST) first = start;
   }
   for (const { s, e } of todo) {
     const bd = dist(pos, e.p);

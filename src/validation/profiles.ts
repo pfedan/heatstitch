@@ -33,12 +33,11 @@ export function normalizeProfile(p: Partial<Profile> | undefined): Profile {
 }
 
 /**
- * Visual thread width in mm for the profile's thread weight: 0.36 mm for 40 wt (flattened on the
- * fabric, as wide as the default woven spacing, see src/material/fabrics.ts), scaled like the
- * recommended stitch spacing. Default for the width slider.
+ * Visual thread width in mm for the profile's thread weight: 0.4 mm for 40 wt, scaled like the
+ * recommended stitch spacing (60 wt 0.35, 30 wt 0.5, 12 wt 0.8 mm). Default for the width slider.
  */
 export function threadWidthMm(p: Profile): number {
-  return 0.36 / threadOf(p).factor;
+  return 0.4 / threadOf(p).factor;
 }
 
 /** Recommended spacing range in mm for the profile (thicker thread needs wider spacing). */
