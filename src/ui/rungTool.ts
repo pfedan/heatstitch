@@ -2,41 +2,70 @@ import { addRung, checkSections, chordOf, cutAcross, cutLine, cutPieces, midOf, 
 import { pathLength } from '../digitize/fill';
 import { simplify } from '../digitize/run';
 import type { Pt } from '../digitize/skeleton';
-import { bestChain, previewPairs, reversedRails, sectionPlan, sectionsOf, sewnBack, spanSection, sectionLoops, sectionOfRung, type Rails, type SatinSettings, type SectionLoop, type SectionStep, type Split } from '../model/restitch';
+import { bestChain, previewPairs, reversedRails, spanSection, sectionLoops, sectionOfRung, sectionsOf, type Rails, type SatinSettings, type SectionLoop, type SectionStep, type Split } from '../model/restitch';
+import { cutStep, mirrorStep, moveStep, partSteps, turnStep, SHOWS_MM, type PartStep } from '../model/satinOrder';
 
 /** Pick radius around the pointer for rung ends, CSS pixels; the line itself a little less. */
 const PICK_END_PX = 10;
 const PICK_LINE_PX = 6;
 
 /**
- * Where a piece's controls sit, CSS pixels from where its satin starts along its direction (`dir`)
- * and across it: the number before the start, the arrow just inside, the scissors beside the number.
+ * Where a piece's controls sit, CSS pixels: the arrow just inside where its satin starts (along its
+ * direction), the mirror just before it; its number in the middle of the piece and the scissors in
+ * the middle of the join before it, each moved aside where it would cover another (see layout).
  */
-export const BADGE = { number: -16, arrow: 9, scissors: 19, r: 8 };
+export const BADGE = { arrow: 9, mirror: -13, r: 8 };
 
-/**
- * A piece sewn on its own as the tool shows it, with its place in the order and its controls: a
- * column of a chain (see Rails.chain) or a section of a column (see Rails.plan).
- */
+/** A piece of a satin part as the tool shows it (see partSteps): a column, or a section of a column. */
 export interface PieceBadge {
-  /** The column (index in `columns`). */
+  /** The satin part, and the piece's step in the order it is sewn. */
+  part: number;
+  i: number;
+  /** The column (index in `columns`) and, for a section, its step in the column's plan. */
   col: number;
-  /** The section's step in the column's plan (a section, not a chained column). */
   step?: number;
-  /** Place in the order the part's columns are sewn, from 1. */
+  /** Place in the order the part is sewn in, from 1. */
   n: number;
   /** Where its satin starts, and the direction it goes from there (unit). */
   at: Pt;
   dir: Pt;
-  /** Trimmed before it (null: the first of the part, nothing before). */
-  trim: boolean | null;
+  /** The middle of the piece from end to end, where its number goes. */
+  middle: Pt[];
   /** Its satin starts on the other rail (see Rails.mirror). */
   mirror: boolean;
-  /** A column on its own: no place in an order to change. */
+  /** The only piece of its part: no place in an order to change. */
   lone?: boolean;
 }
 
-export type BadgeHit = { col: number; step?: number; what: 'number' | 'arrow' | 'scissors' | 'mirror' };
+/** The join from one piece of a satin part to the next (see PartStep). */
+export interface PieceLink {
+  part: number;
+  /** The step it leads to. */
+  i: number;
+  join: 'way' | 'jump' | 'trim';
+  /** The way the thread goes. */
+  way: Pt[];
+  /** It stays in sight (more than SHOWS_MM). */
+  shows: boolean;
+  /** A click on its scissors cuts it or sews it through. */
+  cuttable: boolean;
+}
+
+/** Where the number of each piece and the scissors of each join sit at a scale (world points, see layout). */
+export interface BadgeLayout {
+  numbers: (Pt | null)[];
+  scissors: Pt[];
+}
+
+export type BadgeHit = { part: number; i: number; what: 'number' | 'arrow' | 'mirror' | 'link' };
+
+/** A number dragged onto another: where the pointer is and the number under it. */
+export interface OrderDrag {
+  part: number;
+  i: number;
+  at: Pt;
+  over: number | null;
+}
 
 /**
  * A free rung is taken when the section's two new rails differ in length by at most this much (or
@@ -117,16 +146,36 @@ export interface RungView {
   draft: [Pt, Pt] | null;
   /** The line being drawn is a cut line. */
   draftCut: boolean;
-  /** Order, direction and trims of the columns of each part. */
-  badges: PieceBadge[];
+  /** The pieces of each part in the order they are sewn, with their direction and side. */
+  readonly badges: PieceBadge[];
+  /** The joins between them. */
+  readonly links: PieceLink[];
+  /** Where their numbers and scissors sit at this scale. */
+  layout(scale: number): BadgeLayout;
   /** The control under the pointer. */
   badgeHover: BadgeHit | null;
+  /** The join under the pointer (its way, or its scissors). */
+  linkHover: { part: number; i: number } | null;
+  /** Whether the scissors of a join show and take a click (see RungTool.scissorsOn). */
+  scissorsOn(l: PieceLink): boolean;
+  /** A number being dragged to another place in the order. */
+  readonly orderDrag: OrderDrag | null;
   /** Every part or hole that does not work yet, all at once, for as long as it stays so. */
   readonly problems: SectionProblem[];
   /** The problem under the pointer (index in `problems`, -1 none) and where the pointer is. */
   problemHover: number;
   /** Each section as it will be sewn (its stitch pairs); none for a part with a problem. */
   readonly previews: [Pt, Pt][][];
+  /** The section under the pointer (or under the control pointed at), lit while it is: green when it can be sewn, red when not. */
+  readonly glow: SectionGlow | null;
+}
+
+/** A section lit while it is pointed at (see RungView.glow). */
+export interface SectionGlow {
+  ring: Pt[];
+  /** Its stitch pairs as it will be sewn; none for a part that cannot be sewn. */
+  pairs: [Pt, Pt][];
+  ok: boolean;
 }
 
 export interface RungHooks {
@@ -139,11 +188,13 @@ export interface RungHooks {
   /** Points moved, added or removed: the fill is sewn anew around them. */
   points?: (points: Pt[]) => void;
   redraw: () => void;
+  /** Jumps longer than this are trimmed (mm, see sewDesign); 3 when not given. */
+  trimMm?: () => number;
   /** Says why something did not work. */
   say: (key: 'stitch.direction.miss' | 'stitch.direction.cross' | 'stitch.direction.needCut' | 'stitch.direction.cornersNone' | 'stitch.sections.none' | 'stitch.order.best.none' | 'stitch.draw.openHole' | 'stitch.draw.notStripPart') => void;
 }
 
-type Drag = { kind: 'end'; pick: RungPick; loop?: SectionLoop; moved?: boolean } | { kind: 'bend'; pick: RungPick; from: Pt; still: number; node?: number } | { kind: 'draw'; cut: boolean } | { kind: 'sketch' } | { kind: 'point'; i: number; moved: boolean } | null;
+type Drag = { kind: 'order'; part: number; i: number; from: Pt; at: Pt; scale: number; moved: boolean; over: number | null } | { kind: 'end'; pick: RungPick; loop?: SectionLoop; moved?: boolean } | { kind: 'bend'; pick: RungPick; from: Pt; still: number; node?: number } | { kind: 'draw'; cut: boolean } | { kind: 'sketch' } | { kind: 'point'; i: number; moved: boolean } | null;
 
 /**
  * Rungs on the canvas: lines across a satin column that set the direction of its stitches (dragged
@@ -189,17 +240,24 @@ export class RungTool implements RungView {
   draft: [Pt, Pt] | null = null;
   draftCut = false;
   badgeHover: BadgeHit | null = null;
+  linkHover: { part: number; i: number } | null = null;
   problemHover = -1;
+  glow: SectionGlow | null = null;
   /** The fill's outsides and holes (lines drawn on a fill), to check the parts its lines make. */
   private shape: { outlines: Pt[][]; holes: Pt[][] } | null = null;
-  private checked: { key: string; problems: SectionProblem[]; previews: [Pt, Pt][][] } | null = null;
+  private checked: { key: string; problems: SectionProblem[]; previews: [Pt, Pt][][]; sections: SectionGlow[] } | null = null;
   /** The satin settings of the object (how its sections are sewn when no order is set). */
   satin: SatinSettings | null = null;
   /** Lines drawn across a satin or a fill are cut lines (Shift draws the other kind). */
   cutMode = false;
   private drag: Drag = null;
 
-  constructor(private hooks: RungHooks) {}
+  private hooks: RungHooks;
+
+  constructor(hooks: RungHooks) {
+    // What is given back keeps no area read from the rails only to show them (see Split.read).
+    this.hooks = { ...hooks, change: (columns, final) => hooks.change(columns.map((part) => part?.map(givenBack)), final) };
+  }
 
   /** Starts on the satin columns of an object (rails per satin part). */
   openSatin(columns: Rails[][]): void {
@@ -259,6 +317,7 @@ export class RungTool implements RungView {
     this.shape = null;
     this.checked = null;
     this.problemHover = -1;
+    this.glow = null;
     this.points = [];
     this.columns = [];
     this.cleared = new Map();
@@ -347,145 +406,176 @@ export class RungTool implements RungView {
     return this.columns.reduce((a, c) => a + c.rungs.length + c.spans.length, this.lines.length);
   }
 
+  private stepsMemo: { key: string; steps: PartStep[][] } | null = null;
+
   /**
-   * The columns of each satin part with their place in the order they are sewn (the satin of a
-   * chained column goes from its end back to its start, see chainRun; one not chained is sewn as a
-   * run of its own, see satinRuns) and whether a trim comes before. A part's columns are sewn in
-   * the order of its list, chained or not, so every part of more than one column is numbered.
+   * The steps each satin part is sewn in (see partSteps), worked out again only when something
+   * changed; while a line is dragged the last ones stay (sewing every part each frame is slow).
    */
-  get badges(): PieceBadge[] {
-    if (this.mode !== 'satin') return [];
-    const out: PieceBadge[] = [];
-    const res = this.satin ? this.result().flat() : null;
-    const byPart = new Map<number, number[]>();
-    this.parts.forEach((p, k) => byPart.set(p, [...(byPart.get(p) ?? []), k]));
-    for (const ks of byPart.values()) {
-      ks.forEach((k, i) => {
-        const c = this.columns[k];
-        const chained = c.rails.chain !== undefined;
-        const lone = ks.length < 2;
-        // Where it starts is known only from how it is sewn; a column cut in sections (not
-        // chained) shows where each of them starts instead (below).
-        if ((!chained || lone) && (!res || sectionsOf(res[k]).length > 1)) return;
-        let at: Pt;
-        let d: Pt;
-        if (chained && !lone) {
-          const la = c.cl[c.cl.length - 1];
-          const lb = c.cr[c.cr.length - 1];
-          at = mid(c.left[c.left.length - 1], c.right[c.right.length - 1]);
-          d = sub(mid(pointAt(c.left, c.cl, Math.max(0, la - 1)), pointAt(c.right, c.cr, Math.max(0, lb - 1))), at);
-        } else {
-          // Where its satin starts, turned round and mirrored there.
-          const back = sewnBack([res![k]], this.satin!);
-          const [a, b] = back ? [c.left.slice().reverse(), c.right.slice().reverse()] : [c.left, c.right];
-          at = mid(a[0], b[0]);
-          const ca = cumulative(a);
-          const cb = cumulative(b);
-          d = sub(mid(pointAt(a, ca, Math.min(1, ca[ca.length - 1])), pointAt(b, cb, Math.min(1, cb[cb.length - 1]))), at);
-        }
-        const l = Math.hypot(d[0], d[1]) || 1;
-        // Trimmed before it: a chain is always cut apart from what comes before (see satinRuns);
-        // between two columns not chained nothing is set, the way between them decides.
-        const prev = i ? this.columns[ks[i - 1]].rails.chain : undefined;
-        const trim = !i || (prev === undefined && !chained) ? null : prev !== c.rails.chain;
-        out.push({ col: k, n: i + 1, at, dir: [d[0] / l, d[1] / l], trim, mirror: !!c.rails.mirror, ...(lone ? { lone: true } : {}) });
-      });
+  private steps(): PartStep[][] {
+    if (this.mode !== 'satin' || !this.satin) return [];
+    const dragging = this.drag?.kind === 'end' || this.drag?.kind === 'bend';
+    if (dragging && this.stepsMemo) return this.stepsMemo.steps;
+    const res = this.result();
+    const trimMm = this.hooks.trimMm?.() ?? 3;
+    const key = JSON.stringify([res, this.satin, trimMm]);
+    if (this.stepsMemo?.key !== key) {
+      const satin = this.satin;
+      this.stepsMemo = { key, steps: res.map((part) => (part ? partSteps(part, satin, trimMm) : [])) };
+      this.layoutMemo = null;
     }
-    // Sections of a column: where the satin of each starts, in the order they are sewn.
-    if (this.satin) {
-      const res = this.result().flat();
-      this.columns.forEach((c, k) => {
-        if (c.rails.chain !== undefined || !c.cuts.length) return;
-        const secs = sectionsOf(res[k]);
-        if (secs.length < 2) return;
-        sectionPlan(res[k], this.satin!).forEach((x, i, plan) => {
-          const r = secs[x.sec];
-          if (!r) return;
-          const [a, b] = x.flip ? [r.left.slice().reverse(), r.right.slice().reverse()] : [r.left, r.right];
-          const at = mid(a[0], b[0]);
-          const ca = cumulative(a);
-          const cb = cumulative(b);
-          const inward = mid(pointAt(a, ca, Math.min(1, ca[ca.length - 1])), pointAt(b, cb, Math.min(1, cb[cb.length - 1])));
-          const d = sub(inward, at);
-          const l = Math.hypot(d[0], d[1]) || 1;
-          out.push({ col: k, step: i, n: i + 1, at, dir: [d[0] / l, d[1] / l], trim: i ? plan[i].trim : null, mirror: !!x.mirror });
-        });
-      });
-    }
+    return this.stepsMemo.steps;
+  }
+
+  /** The columns (index in `columns`) of each part, in its order. */
+  private colsOfParts(): number[][] {
+    const out: number[][] = [];
+    this.parts.forEach((p, k) => (out[p] ??= []).push(k));
     return out;
   }
 
-  /** The control of a chained column under the pointer, or null. */
+  /**
+   * Every piece of each satin part in the order it is sewn: a column, or a section of a column sewn
+   * in sections, whatever the part came from (a fill cut into strips, a file, cut lines of its own).
+   */
+  get badges(): PieceBadge[] {
+    const out: PieceBadge[] = [];
+    const cols = this.colsOfParts();
+    this.steps().forEach((steps, p) =>
+      steps.forEach((x, i) => {
+        const [a, b] = x.along;
+        const ca = cumulative(a);
+        const cb = cumulative(b);
+        const [la, lb] = [ca[ca.length - 1], cb[cb.length - 1]];
+        const at = mid(a[0], b[0]);
+        const d = sub(mid(pointAt(a, ca, Math.min(1, la)), pointAt(b, cb, Math.min(1, lb))), at);
+        const l = Math.hypot(d[0], d[1]) || 1;
+        const middle = Array.from({ length: 11 }, (_, j) => mid(pointAt(a, ca, (la * j) / 10), pointAt(b, cb, (lb * j) / 10)));
+        out.push({ part: p, i, col: cols[p][x.col], ...(x.step !== undefined ? { step: x.step } : {}), n: i + 1, at, dir: [d[0] / l, d[1] / l], middle, mirror: x.mirror, ...(steps.length < 2 ? { lone: true } : {}) });
+      }),
+    );
+    return out;
+  }
+
+  get links(): PieceLink[] {
+    return this.steps().flatMap((steps, p) => steps.flatMap((x, i) => (i && x.join !== 'first' ? [{ part: p, i, join: x.join, way: x.way, shows: x.shows > SHOWS_MM, cuttable: x.cuttable }] : [])));
+  }
+
+  get orderDrag(): OrderDrag | null {
+    const d = this.drag;
+    return d?.kind === 'order' && d.moved ? { part: d.part, i: d.i, at: d.at, over: d.over } : null;
+  }
+
+  private layoutMemo: { scale: number; layout: BadgeLayout } | null = null;
+
+  /**
+   * Where the numbers and scissors sit at `scale`: a number in the middle of its piece, the
+   * scissors in the middle of its join. One that would cover a control placed before it moves on:
+   * a number along its piece, the scissors across the join (along the line between two sections).
+   */
+  layout(scale: number): BadgeLayout {
+    const badges = this.badges;
+    this.steps();
+    if (this.layoutMemo?.scale === scale) return this.layoutMemo.layout;
+    const gap = (2 * BADGE.r + 4) / scale;
+    const taken: Pt[] = [];
+    const free = (q: Pt) => taken.every((t) => Math.hypot(t[0] - q[0], t[1] - q[1]) >= gap);
+    const spot = (b: PieceBadge, along: number): Pt => [b.at[0] + (b.dir[0] * along) / scale, b.at[1] + (b.dir[1] * along) / scale];
+    // The arrows and mirrors stay at the start of each piece.
+    for (const b of badges) taken.push(spot(b, BADGE.arrow), spot(b, BADGE.mirror));
+    const numbers = badges.map((b) => {
+      if (b.lone) return null;
+      const cum = cumulative(b.middle);
+      const len = cum[cum.length - 1];
+      const tries = [0.5, 0.65, 0.35, 0.8, 0.2, 0.92, 0.08].map((f) => pointAt(b.middle, cum, len * f));
+      // Where the piece is too short for a free spot: around its middle, a ring further out at a time.
+      const m = tries[0];
+      for (let ring = 1; ring <= 3; ring++)
+        for (let k = 0; k < 8; k++) tries.push([m[0] + Math.cos((k * Math.PI) / 4) * ring * gap, m[1] + Math.sin((k * Math.PI) / 4) * ring * gap]);
+      const q = tries.find(free) ?? m;
+      taken.push(q);
+      return q;
+    });
+    const scissors = this.links.map((k) => {
+      const cum = cumulative(k.way);
+      const m = pointAt(k.way, cum, cum[cum.length - 1] / 2);
+      // Across the next piece where it starts: along the line between two sections.
+      const next = badges.find((b) => b.part === k.part && b.i === k.i);
+      const n: Pt = next ? [-next.dir[1], next.dir[0]] : [0, 1];
+      const tries = [0, 1, -1, 2, -2].map((o): Pt => [m[0] + n[0] * o * gap, m[1] + n[1] * o * gap]);
+      const q = tries.find(free) ?? m;
+      taken.push(q);
+      return q;
+    });
+    const layout = { numbers, scissors };
+    this.layoutMemo = { scale, layout };
+    return layout;
+  }
+
+  /** The control of a piece or join under the pointer, or null. */
   badgeAt(x: number, y: number, scale: number): BadgeHit | null {
     const r = (BADGE.r + 2) / scale;
-    for (const b of this.badges) {
-      const [nx, ny] = [-b.dir[1], b.dir[0]];
-      const spot = (along: number, across: number): Pt => [b.at[0] + (b.dir[0] * along + nx * across) / scale, b.at[1] + (b.dir[1] * along + ny * across) / scale];
-      const near = (p: Pt) => Math.hypot(p[0] - x, p[1] - y) <= r;
-      const at = b.step === undefined ? { col: b.col } : { col: b.col, step: b.step };
-      if (!b.lone && near(spot(BADGE.number, 0))) return { ...at, what: 'number' };
-      if (near(spot(BADGE.number, -BADGE.scissors))) return { ...at, what: 'mirror' };
-      if (near(spot(BADGE.arrow, 0))) return { ...at, what: 'arrow' };
-      if (b.trim !== null && near(spot(BADGE.number, BADGE.scissors))) return { ...at, what: 'scissors' };
+    const near = (p: Pt | null) => !!p && Math.hypot(p[0] - x, p[1] - y) <= r;
+    const { numbers, scissors } = this.layout(scale);
+    const badges = this.badges;
+    const spot = (b: PieceBadge, along: number): Pt => [b.at[0] + (b.dir[0] * along) / scale, b.at[1] + (b.dir[1] * along) / scale];
+    for (const [k, b] of badges.entries()) if (near(numbers[k])) return { part: b.part, i: b.i, what: 'number' };
+    for (const b of badges) {
+      if (near(spot(b, BADGE.mirror))) return { part: b.part, i: b.i, what: 'mirror' };
+      if (near(spot(b, BADGE.arrow))) return { part: b.part, i: b.i, what: 'arrow' };
     }
+    for (const [k, l] of this.links.entries()) if (l.cuttable && this.scissorsOn(l) && near(scissors[k])) return { part: l.part, i: l.i, what: 'link' };
     return null;
   }
 
-  /** A control clicked: the column turned round, sewn one place earlier, or a trim before it set or taken away. */
-  private useBadge(h: BadgeHit): void {
-    if (h.step !== undefined) return this.useSectionBadge(h, h.step);
-    const out = this.sewn();
-    const part = this.parts[h.col];
-    const cols = out[part];
-    const k = this.parts.slice(0, h.col).filter((p) => p === part).length;
-    // Trims stay between the same places in the order: the chain numbers belong to the places.
-    const ids = cols.map((c) => c.chain);
-    if (h.what === 'arrow') cols[k] = reversedRails(cols[k]);
-    else if (h.what === 'mirror') {
-      if (cols[k].mirror) delete cols[k].mirror;
-      else cols[k].mirror = true;
-    } else if (h.what === 'number') {
-      if (k === 0) return;
-      [cols[k - 1], cols[k]] = [cols[k], cols[k - 1]];
-      // The area and its cut lines stay with the part's first column (see Rails.split).
-      if (k === 1 && cols[1].split) {
-        cols[0] = { ...cols[0], split: cols[1].split };
-        delete cols[1].split;
-      }
-    } else if (k > 0) {
-      const old = ids[k];
-      const to = ids[k - 1] === old ? Math.max(...ids.map((x) => x ?? 0)) + 1 : ids[k - 1];
-      for (let i = k; i < ids.length && ids[i] === old; i++) ids[i] = to;
-    }
-    cols.forEach((c, i) => {
-      if (ids[i] === undefined) delete c.chain;
-      else c.chain = ids[i];
+  /**
+   * Whether the scissors of a join show and take a click: on a trim and on a join in sight
+   * always, else only while it is pointed at (its way, or the number before or after it), so a
+   * part of many columns is not strewn with them.
+   */
+  scissorsOn(l: PieceLink): boolean {
+    if (l.join === 'trim' || l.shows) return true;
+    const at = this.linkHover;
+    if (at?.part === l.part && at.i === l.i) return true;
+    const h = this.badgeHover;
+    return !!h && h.part === l.part && (h.what === 'number' ? h.i === l.i || h.i === l.i - 1 : h.what === 'link' && h.i === l.i);
+  }
+
+  /** The join whose way (or scissors) is under the pointer, or null. */
+  private linkAt(x: number, y: number, scale: number): { part: number; i: number } | null {
+    const q: Pt = [x, y];
+    const { scissors } = this.layout(scale);
+    let best: { part: number; i: number; d: number } | null = null;
+    this.links.forEach((l, k) => {
+      let d = Math.hypot(scissors[k][0] - x, scissors[k][1] - y) <= (BADGE.r + 2) / scale ? 0 : Infinity;
+      for (let j = 1; j < l.way.length && d > 0; j++) d = Math.min(d, segDist(q, l.way[j - 1], l.way[j]));
+      if (d <= PICK_LINE_PX / scale && (!best || d < best.d)) best = { part: l.part, i: l.i, d };
     });
+    const b = best as { part: number; i: number } | null;
+    return b && { part: b.part, i: b.i };
+  }
+
+  /**
+   * A control used: the piece turned round, mirrored, sewn one place earlier (a click on its
+   * number) or at another place (`to`, its number dropped there), or the join before it cut or
+   * sewn through. The same for every part (see satinOrder).
+   */
+  private useBadge(h: BadgeHit, to?: number): void {
+    const steps = this.steps()[h.part];
+    const s = this.satin;
+    if (!steps?.[h.i] || !s) return;
+    const out = this.sewn();
+    const part = out[h.part];
+    const next =
+      h.what === 'arrow' ? turnStep(part, steps, h.i, s)
+      : h.what === 'mirror' ? mirrorStep(part, steps, h.i, s)
+      : h.what === 'link' ? cutStep(part, steps, h.i, s)
+      : moveStep(part, steps, h.i, to ?? h.i - 1, s);
+    if (!next) return;
+    out[h.part] = next;
     this.selected = null;
     this.setColumns(out);
     this.hooks.change(out, true);
-  }
-
-  /** A section's control clicked: its step turned round, one place earlier, or trimmed before. */
-  private useSectionBadge(h: BadgeHit, i: number): void {
-    const c = this.columns[h.col];
-    const r = this.result().flat()[h.col];
-    if (!this.satin || !r) return;
-    const plan = sectionPlan(r, this.satin);
-    if (h.what === 'arrow') plan[i].flip = !plan[i].flip;
-    else if (h.what === 'mirror') {
-      if (plan[i].mirror) delete plan[i].mirror;
-      else plan[i].mirror = true;
-    } else if (h.what === 'number') {
-      if (i === 0) return;
-      // The trims stay between the same places in the order.
-      const [a, b] = [plan[i - 1], plan[i]];
-      plan[i - 1] = { ...b, trim: a.trim };
-      plan[i] = { ...a, trim: b.trim };
-    } else if (i > 0) plan[i].trim = !plan[i].trim;
-    c.plan = plan;
-    this.selected = null;
-    this.hooks.change(this.sewn(), true);
   }
 
   /** Lines drawn across a satin from now on are cut lines (true) or rungs. */
@@ -515,13 +605,22 @@ export class RungTool implements RungView {
    * What the lines make now: the parts and holes that do not work, and the stitch pairs of every
    * section that does (as sewn, see previewPairs). Worked out again only when something changed.
    */
-  private check(): { problems: SectionProblem[]; previews: [Pt, Pt][][] } {
-    if (this.mode !== 'satin' && this.mode !== 'fill') return { problems: [], previews: [] };
+  private check(): { problems: SectionProblem[]; previews: [Pt, Pt][][]; sections: SectionGlow[] } {
+    if (this.mode !== 'satin' && this.mode !== 'fill') return { problems: [], previews: [], sections: [] };
     const result = this.mode === 'satin' ? this.result() : null;
     const key = JSON.stringify([this.mode, this.lines, this.cutLines, this.bad, this.satin, result]);
     if (this.checked?.key === key) return this.checked;
     const s = this.satin;
-    const pairsOf = (rails: Rails[]) => (s ? rails.flatMap((r) => previewPairs(r, s)) : []);
+    // Each section that works, with its outline, to light it while it is pointed at (see glow).
+    const sections: SectionGlow[] = [];
+    const pairsOf = (rails: Rails[]) =>
+      s
+        ? rails.flatMap((r) => {
+            const pp = previewPairs(r, s);
+            sectionsOf(r).forEach((sec, j) => sections.push({ ring: [...sec.left, ...sec.right.slice().reverse()], pairs: pp[j] ?? [], ok: true }));
+            return pp;
+          })
+        : [];
     const problems: SectionProblem[] = [];
     let previews: [Pt, Pt][][] = [];
     const found = (c: { parts: Pt[][]; holes: Pt[][] }) => {
@@ -569,7 +668,7 @@ export class RungTool implements RungView {
       previews.push(...pairsOf(result.filter((_, k) => !shown.has(k)).flat()));
     }
     if (!problems.length && this.bad) problems.push({ ring: this.bad, key: 'stitch.problem.part' });
-    this.checked = { key, problems, previews };
+    this.checked = { key, problems, previews, sections };
     return this.checked;
   }
 
@@ -751,6 +850,12 @@ export class RungTool implements RungView {
     if (!this.active) return 'pan';
     const cut = other !== this.cutMode;
     const badge = this.badgeAt(x, y, scale);
+    if (badge?.what === 'number') {
+      // Dragged onto another number it goes to that place; a click sews it one place earlier (see up).
+      this.drag = { kind: 'order', part: badge.part, i: badge.i, from: [x, y], at: [x, y], scale, moved: false, over: null };
+      this.hooks.redraw();
+      return 'move';
+    }
     if (badge) {
       this.useBadge(badge);
       this.hooks.redraw();
@@ -817,7 +922,12 @@ export class RungTool implements RungView {
   dragTo(x: number, y: number): boolean {
     const d = this.drag;
     if (!d) return false;
-    if (d.kind === 'point') {
+    if (d.kind === 'order') {
+      d.at = [x, y];
+      if (Math.hypot(x - d.from[0], y - d.from[1]) * d.scale >= 4) d.moved = true;
+      const h = d.moved ? this.badgeAt(x, y, d.scale) : null;
+      d.over = h?.what === 'number' && h.part === d.part && h.i !== d.i ? h.i : null;
+    } else if (d.kind === 'point') {
       if (this.inside(x, y)) this.points[d.i] = [x, y];
       d.moved = true;
     } else if (d.kind === 'draw' && this.draft) this.draft[1] = [x, y];
@@ -871,7 +981,10 @@ export class RungTool implements RungView {
     const d = this.drag;
     this.drag = null;
     if (!d) return;
-    if (d.kind === 'point') {
+    if (d.kind === 'order') {
+      if (!d.moved) this.useBadge({ part: d.part, i: d.i, what: 'number' });
+      else if (d.over !== null) this.useBadge({ part: d.part, i: d.i, what: 'number' }, d.over);
+    } else if (d.kind === 'point') {
       if (d.moved) this.hooks.points?.(this.points.map((p) => [p[0], p[1]] as Pt));
     } else if (d.kind === 'end') {
       if (d.moved && d.pick.col < 0 && d.pick.cut) this.markOwn(d.pick.i);
@@ -1215,15 +1328,39 @@ export class RungTool implements RungView {
   }
 
   hoverAt(x: number, y: number, scale: number): boolean {
+    const was0 = this.linkHover;
+    // The join first: its scissors show while it is pointed at, and only then take a click.
+    this.linkHover = this.active && this.mode === 'satin' ? this.linkAt(x, y, scale) : null;
     const b = this.active ? this.badgeAt(x, y, scale) : null;
     const h = this.active && !b ? this.pick(x, y, scale) : null;
-    const changed = JSON.stringify(b) !== JSON.stringify(this.badgeHover) || JSON.stringify(h) !== JSON.stringify(this.hover);
+    const changed = JSON.stringify(b) !== JSON.stringify(this.badgeHover) || JSON.stringify(h) !== JSON.stringify(this.hover) || JSON.stringify(was0) !== JSON.stringify(this.linkHover);
     this.badgeHover = b;
     this.hover = h;
     // A problem says what is missing while the pointer is on it (not on a line or control there).
     const was = this.problemHover;
     this.problemHover = this.active && !b && !h ? this.problems.findIndex((p) => inside(p.ring, [x, y])) : -1;
-    return changed || was !== this.problemHover;
+    const lit = this.glow;
+    this.glow = this.active && !this.linkHover && b?.what !== 'link' ? this.glowAt(b, x, y, scale) : null;
+    return changed || was !== this.problemHover || lit?.ring !== this.glow?.ring;
+  }
+
+  /**
+   * The section to light: the one a number, arrow or mirror belongs to, else the one under the
+   * pointer (or next to it, on a handle at its edge); a part that cannot be sewn in red.
+   */
+  private glowAt(b: BadgeHit | null, x: number, y: number, scale: number): SectionGlow | null {
+    const piece = b ? this.badges.find((p) => p.part === b.part && p.i === b.i) : null;
+    const at: Pt = piece ? piece.middle[Math.floor(piece.middle.length / 2)] : [x, y];
+    const r = 6 / scale;
+    const near: Pt[] = [at, ...Array.from({ length: 8 }, (_, k): Pt => [at[0] + Math.cos((k * Math.PI) / 4) * r, at[1] + Math.sin((k * Math.PI) / 4) * r])];
+    const { problems, sections } = this.check();
+    for (const q of near) {
+      const bad = problems.find((p) => inside(p.ring, q));
+      if (bad) return { ring: bad.ring, pairs: [], ok: false };
+      const sec = sections.find((p) => inside(p.ring, q));
+      if (sec) return sec;
+    }
+    return null;
   }
 
   /** Removes the selected rung or line; false when nothing is selected. */
@@ -1414,6 +1551,13 @@ export class RungTool implements RungView {
     this.selected = null;
     this.hooks.change(out, true);
   }
+}
+
+/** A column as given back: without an area read from its rails (see Split.read). */
+function givenBack(r: Rails): Rails {
+  if (!r.split?.read) return r;
+  const { split: _s, ...rest } = r;
+  return rest;
 }
 
 const sub = (a: Pt, b: Pt): [number, number] => [a[0] - b[0], a[1] - b[1]];

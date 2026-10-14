@@ -28,7 +28,7 @@ import { GAP_ROWS_MAX } from '../../src/digitize/fill';
 import { fillRuns, TRAVEL_REACH } from '../../src/model/restitch';
 import { expandRegion, outline as outlineOf } from '../../src/digitize/region';
 import { shownTravel } from './travel';
-import { analyze, backToVersion, crossGridOf, sameGrid, edgeAlong, keepShape, measureSatin, sectionsOf, sectionView, keepVersion, relearn, objectKey, remember, remembered, rememberedIn, restitch, restoreRemembered, DECO_PATTERNS, OPEN_PATTERNS, type BorderSettings, type DecoSettings, type FillSettings, type Rails, type Remembered, type StoredObjects } from '../../src/model/restitch';
+import { analyze, backToVersion, crossGridOf, sameGrid, edgeAlong, keepShape, measureSatin, sectionsOf, sectionPlan, sectionView, keepVersion, relearn, objectKey, remember, remembered, rememberedIn, restitch, restoreRemembered, DECO_PATTERNS, OPEN_PATTERNS, type BorderSettings, type DecoSettings, type FillSettings, type Rails, type Remembered, type SatinSettings, type StoredObjects } from '../../src/model/restitch';
 import { reorder } from '../../src/model/order';
 import { stitchKinds } from '../../src/model/sequence';
 import { addContour, behindCovered, gapReader } from '../../src/model/contour';
@@ -61,6 +61,8 @@ import { inheritTrace, movedTrace, readTrace, setTraceOf, sizedTrace, storeTrace
 import { areaLoops, suggestSatin } from '../../src/digitize/satinSuggest';
 import { cutLine, reachOf, stripsOfAreas } from '../../src/digitize/rungs';
 import { RungTool } from '../../src/ui/rungTool';
+import { partSteps, type PartStep } from '../../src/model/satinOrder';
+import { clickControl, dragNumber } from './satinView';
 import type { Pt } from '../../src/digitize/skeleton';
 import { areaOfForm, loadOps, subtractForm, withCrossingNodes } from '../../src/shape/ops';
 import { joinEnd, joinOpenPaths, splitPathAt, JOIN_SNAP_MM, type Joined } from '../../src/shape/join';
@@ -1377,6 +1379,66 @@ export function letteringProblems(p: Pattern): string[] {
 /** A cut line of a satin in sections bent in the satin tool (beside the chain, on satins the chain cut into sections). */
 export const CUT_OPS: Op[] = [
   {
+    name: 'order a satin',
+    run: (d, r) => {
+      // In the satin tool, as the app opens it: a piece's number dragged to another place, the join
+      // before one cut or sewn through, or a piece turned round or mirrored; then sewn as the app does.
+      const p = d.cur.p;
+      const kinds = stitchKinds(p);
+      const objs = sewObjects(p, kinds);
+      // A satin of its own: not a line or an appliqué edge sewn as satin (those follow their line).
+      const satins = objs.filter((o) => o.kind === 'satin' && !remembered(p, o)?.line && !remembered(p, o)?.applique && keepShape(p, o, kinds).columns?.length);
+      if (!satins.length) return false;
+      const o = pick(r, satins);
+      const opened = openedSatin(p, o, kinds);
+      if (!opened) return false;
+      const { tool, view, satin, changes } = opened;
+      const parts = view.map((_, j) => j).filter((j) => tool.badges.filter((b) => b.part === j).length > 1);
+      if (!parts.length) return false;
+      const j = pick(r, parts);
+      const before = partSteps(view[j], satin, T);
+      const what = pick(r, ['drag', 'drag', 'cut', 'arrow', 'mirror'] as const);
+      // Zoomed in, so the controls of narrow pieces lie apart.
+      const scale = 40;
+      const n = 1 + Math.floor(r() * before.length);
+      let to = 1 + Math.floor(r() * before.length);
+      if (what === 'drag') {
+        if (to === n) to = n === 1 ? 2 : n - 1;
+        dragNumber(tool, n, to, scale, j);
+      } else if (what === 'cut') {
+        if (n === 1 || !before[n - 1].cuttable) return false;
+        clickControl(tool, n, 'scissors', scale, j);
+      } else clickControl(tool, n, what, scale, j);
+      if (changes.length !== 1) return false;
+      const part = changes[0][j];
+      const after = partSteps(part, satin, T);
+      // Invariant: every piece once, before and after (turned or not); the change where it was asked.
+      // Put in chains, a column too short to be sewn on its own is sewn too (out and back, see columnRun).
+      const pieces = (rs: Rails[], st: PartStep[]) => st.map((x) => pieceOf(rs, x, satin));
+      const unsewn = new Set(view[j].map((_, k) => k).filter((k) => !before.some((x) => x.col === k)).map((k) => pieceOf(view[j], { col: k } as PartStep, satin)));
+      const kept = pieces(part, after).filter((x) => what !== 'cut' || !unsewn.has(x));
+      expect(kept.slice().sort(), 'every piece of the part once').toEqual(pieces(view[j], before).slice().sort());
+      if (what === 'drag' && before[n - 1].col !== before[to - 1].col && before.every((x) => x.step === undefined)) {
+        expect(pieces(part, after)[to - 1], 'the piece dragged, at its new place').toBe(pieces(view[j], before)[n - 1]);
+      }
+      if (what === 'cut') {
+        // Each piece found again by what it is (a column too short before may now come between).
+        const joins = new Map(after.map((x) => [pieceOf(part, x, satin), x.join]));
+        const joinOf = (i: number) => joins.get(pieceOf(view[j], before[i], satin));
+        expect(joinOf(n - 1) === 'trim', 'the join cut or sewn through').toBe(before[n - 1].join !== 'trim');
+        // The others as they were: a trim stays one, a jump becomes a way through the satin.
+        before.forEach((x, i) => i && i !== n - 1 && expect(joinOf(i) === 'trim', `join ${i + 1} kept`).toBe(x.join === 'trim'));
+      }
+      // As the app's rung tool does: sewn from a try that knows the new order.
+      const tried = relearn(p, (v) => remember(v, o, { ...keepShape(p, o, kinds), columns: changes[0], read: false }));
+      const res = restitch(tried, objs, [o.index], (_o, an, known) => {
+        const pt = an.parts.find((x) => x.kind === 'satin');
+        return pt ? { kind: 'satin', s: known?.satin ?? measureSatin(tried, pt, kinds) } : null;
+      }, kinds, T);
+      return !res.failed.length && took(d, res);
+    },
+  },
+  {
     name: 'bend a cut line',
     run: async (d, r) => {
       // On a satin in sections (see above) a cut line dragged in its middle, as in the satin tool:
@@ -2145,39 +2207,62 @@ export function checkSatinSections(p: Pattern): void {
   expect(problems.join('; '), 'satin sections').toBe('');
 }
 
+/** A satin as the app's satin tool opens it (in sections of its area), with the settings it opens with; null for no satin. */
+function openedSatin(p: Pattern, o: SewObject, kinds: Uint8Array): { tool: RungTool; view: Rails[][]; satin: SatinSettings; changes: Rails[][][] } | null {
+  // Known satins and satins read from stitches alike.
+  const m = remembered(p, o);
+  const read = !m?.satin && o.kind === 'satin' ? analyze(p, o, kinds).parts.find((pt) => pt.kind === 'satin') : undefined;
+  const satin = m?.satin ?? (read ? measureSatin(p, read, kinds) : null);
+  if (!satin) return null;
+  const shape = keepShape(p, o, kinds);
+  if (!shape.columns?.length) return null;
+  const view = sectionView(shape.columns, shape.shape);
+  const changes: Rails[][][] = [];
+  const tool = new RungTool({ change: (c, final) => final && changes.push(c), lines: () => {}, guides: () => {}, redraw: () => {}, say: () => {}, trimMm: () => T });
+  tool.openSatin(view);
+  tool.satin = satin;
+  return { tool, view, satin, changes };
+}
+
+/** Which piece of a part a step is: its column's rails (where they start and end, either way round) and its section. */
+function pieceOf(part: Rails[], x: PartStep, s: SatinSettings): string {
+  const r = part[x.col];
+  const ends = [r.left[0], r.right[0], r.left[r.left.length - 1], r.right[r.right.length - 1]].map((q) => `${q[0].toFixed(3)},${q[1].toFixed(3)}`).sort();
+  return `${ends.join(' ')}${x.step !== undefined ? ` #${sectionPlan(r, s)[x.step].sec}` : ''}`;
+}
+
 /**
- * In the satin tool, as the app opens it (in sections of its area), every column of a part with
- * more than one shows its place in the order it is sewn: 1, 2, ... down the part's list, chained
- * or not (a column cut in sections not chained shows its sections' places instead).
+ * In the satin tool, as the app opens it, every part is one order of steps (see partSteps): each
+ * column it sews there once, whole or each of its sections once, numbered 1, 2, ... as they are
+ * sewn, and a join before every step but the first; the tool shows exactly these.
  */
 export function checkSatinOrder(p: Pattern): void {
   const problems: string[] = [];
   const kinds = stitchKinds(p);
   for (const o of sewObjects(p, kinds)) {
-    // Known satins and satins read from stitches alike, with the settings the app opens them with.
-    const m = remembered(p, o);
-    const read = !m?.satin && o.kind === 'satin' ? analyze(p, o, kinds).parts.find((pt) => pt.kind === 'satin') : undefined;
-    const satin = m?.satin ?? (read ? measureSatin(p, read, kinds) : null);
-    if (!satin) continue;
-    const shape = keepShape(p, o, kinds);
-    if (!shape.columns?.length) continue;
-    const view = sectionView(shape.columns, shape.shape);
-    const tool = new RungTool({ change: () => {}, lines: () => {}, guides: () => {}, redraw: () => {}, say: () => {} });
-    tool.openSatin(view);
-    tool.satin = satin;
-    const badges = tool.badges.filter((b) => b.step === undefined);
-    let col = 0;
+    const opened = openedSatin(p, o, kinds);
+    if (!opened) continue;
+    const { tool, view, satin } = opened;
+    const badges = tool.badges;
+    const links = tool.links;
     view.forEach((part, j) => {
-      part.forEach((c, i) => {
-        const k = col + i;
-        if (part.length < 2 || (c.chain === undefined && sectionsOf(c).length > 1)) return;
-        const b = badges.filter((x) => x.col === k);
-        if (b.length !== 1 || b[0].n !== i + 1 || b[0].lone) problems.push(`object ${o.index} part ${j} column ${i}: ${b.map((x) => `${x.n}${x.lone ? ' alone' : ''}`).join(', ') || 'no place'}`);
-      });
-      col += part.length;
+      const steps = partSteps(part, satin, T);
+      const mine = badges.filter((b) => b.part === j);
+      const at = `object ${o.index} part ${j}`;
+      if (mine.map((b) => b.n).join() !== steps.map((_, i) => i + 1).join()) problems.push(`${at}: numbers ${mine.map((b) => b.n).join()} for ${steps.length} steps`);
+      if (links.filter((l) => l.part === j).length !== Math.max(0, steps.length - 1)) problems.push(`${at}: joins`);
+      const seen = new Map<number, number[]>();
+      for (const x of steps) seen.set(x.col, [...(seen.get(x.col) ?? []), x.step ?? -1]);
+      for (const [col, secs] of seen) {
+        const n = secs[0] === -1 ? 1 : sectionsOf(part[col]).length;
+        if (secs.length !== n || new Set(secs).size !== n) problems.push(`${at} column ${col}: steps ${secs.join()} of ${n}`);
+      }
+      // Steps of one column follow each other (its sections are sewn together).
+      const cols = steps.map((x) => x.col).filter((c, i, a) => !i || a[i - 1] !== c);
+      if (new Set(cols).size !== cols.length) problems.push(`${at}: a column's steps apart`);
     });
   }
-  expect(problems.join('; '), 'places of satin columns in the order').toBe('');
+  expect(problems.join('; '), 'the order of satin parts').toBe('');
 }
 
 /** What leaves out the shapes on top fits the shapes on top now. */
