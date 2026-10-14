@@ -5,7 +5,7 @@ import { looksLikePhoto } from '../src/image/filters';
 import { orientation } from '../src/image/orientation';
 import { components, mergeSmall, removeBackground, removeSeams } from '../src/image/labels';
 import { DEFAULT_PREPARE, NONE, Preparer, type Stroke } from '../src/image/prepare';
-import { quantize } from '../src/image/quantize';
+import { graphicPalette, quantize } from '../src/image/quantize';
 import { toLab } from '../src/image/raster';
 import { BLACK, BLUE, RED, WHITE, YELLOW, raster, rng, shape, type Rgba } from './helpers/images';
 
@@ -76,6 +76,40 @@ describe('quantize', () => {
     }
   });
 
+  it('counts the colors a graphic has of its own, a fine line and a thin ring too', () => {
+    // Anti-aliased on white: a cream disk in a green ring, on it a pink square with a dark diagonal
+    // line about 2 px wide, and a yellow disk with an orange ring: seven colors, the line 0.3 %.
+    const CREAM: Rgba = [244, 228, 188, 255];
+    const PINK: Rgba = [226, 85, 125, 255];
+    const DARK: Rgba = [168, 38, 79, 255];
+    const ORANGE: Rgba = [217, 130, 43, 255];
+    const GREEN: Rgba = [47, 93, 58, 255];
+    const img = shape(
+      300,
+      300,
+      (x, y) => {
+        const d = Math.hypot(x - 150, y - 150);
+        if (d > 140) return null;
+        if (d > 130) return GREEN;
+        const e = Math.hypot(x - 200, y - 200);
+        if (e < 25) return e < 19 ? YELLOW : ORANGE;
+        if (x > 60 && x < 160 && y > 60 && y < 160) return Math.abs(x - y) < 1.5 ? DARK : PINK;
+        return CREAM;
+      },
+      WHITE,
+    );
+    const own = graphicPalette(img)!;
+    expect(own).toHaveLength(7);
+    for (const c of [WHITE, CREAM, PINK, DARK, YELLOW, ORANGE, GREEN]) expect(own).toContainEqual(c.slice(0, 3));
+    // Kept exactly when allowed; clustered by area into fewer, the fine line goes.
+    const lab = own.map((c) => rgbToLab(...c));
+    expect(quantize(toLab(img), { maxColors: 7, palette: lab }).centers).toEqual(lab);
+    expect(quantize(toLab(img), { maxColors: 16 }).centers.some((c) => deltaE2000(c, rgbToLab(...DARK.slice(0, 3) as [number, number, number])) < 5)).toBe(false);
+    // A photo has none.
+    const r = rng(3);
+    expect(graphicPalette(raster(64, 64, () => [r() * 255, r() * 255, r() * 255, 255]))).toBeNull();
+  });
+
   it('tells photos from graphics', () => {
     const r = rng(2);
     expect(looksLikePhoto(raster(64, 64, () => [r() * 255, r() * 255, r() * 255, 255]))).toBe(true);
@@ -94,6 +128,19 @@ describe('label cleanup', () => {
     expect(out[5 * w + 3]).toBe(0);
     expect(new Set(out)).toEqual(new Set([0, 1]));
     expect(components(out, w, w).label.length).toBe(2);
+  });
+
+  it('keeps a long narrow detail below the smallest area, but not a blot of the same area', () => {
+    // 0.1 mm per pixel: a line 4 px (0.4 mm) wide and 50 px long (2 mm²) and a 14 x 14 px blot (about 2 mm²) on 0.
+    const w = 100;
+    const labels = new Uint8Array(w * w);
+    for (let y = 20; y < 24; y++) for (let x = 20; x < 70; x++) labels[y * w + x] = 1;
+    for (let y = 60; y < 74; y++) for (let x = 60; x < 74; x++) labels[y * w + x] = 2;
+    const out = mergeSmall(labels, w, w, 3 / 0.01, 0.1);
+    expect(out[22 * w + 40]).toBe(1);
+    expect(out[66 * w + 66]).toBe(0);
+    // Without the size in mm everything small is a speck, as before.
+    expect(mergeSmall(labels, w, w, 3 / 0.01)[22 * w + 40]).toBe(0);
   });
 
   it('removes a seam that runs into a wide region of its own color', () => {
@@ -151,6 +198,14 @@ describe('prepare', () => {
     expect(ring.areaMm2).toBeCloseTo(Math.PI * (225 - 144), -1);
     // Background (one region around the design), ring and disk.
     expect(components(p.labels, p.width, p.height).label.length).toBe(3);
+  });
+
+  it('measures the smallest area in mm at the size sewn', () => {
+    // A 1/40 wide blot on red: 1 mm (1 mm²) at 40 mm, 2 mm (4 mm²) at 80 mm; the smallest area is 3 mm².
+    const img = raster(400, 400, (x, y) => (Math.abs(x - 200) < 5 && Math.abs(y - 200) < 5 ? BLUE : RED));
+    const blue = (widthMm: number) => new Preparer(img).run({ ...DEFAULT_PREPARE, widthMm, background: false }).palette.some((e) => e.thread.b > 120);
+    expect(blue(40)).toBe(false);
+    expect(blue(80)).toBe(true);
   });
 
   it('enlarges a small image without stair steps along its edges', () => {

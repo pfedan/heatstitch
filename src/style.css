@@ -3748,3 +3748,13 @@ button.mini-sw.thread-sw {
 .motif-grid button {
   min-height: 44px;
 }
+
+.band-track .tick {
+  position: absolute;
+  bottom: -5px;
+  width: 1px;
+  height: 5px;
+  margin-left: -0.5px;
+  background: var(--muted);
+  pointer-events: none;
+}

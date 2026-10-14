@@ -9,11 +9,12 @@ import { cutForms, fromApplique, setApplique, toApplique } from '../src/model/ap
 import { colorBlocks } from '../src/model/sequence';
 import { colorBlockOf, numberInColor, sewObjects } from '../src/model/objects';
 import { COLOR_CHANGE, STITCH, type Pattern } from '../src/model/pattern';
-import { relearn, remember, remembered } from '../src/model/restitch';
+import { relearn, remember, remembered, restoreRemembered } from '../src/model/restitch';
+import { fromStored, storedVersion, toStored } from '../src/storage/fileStore';
 import { reorder } from '../src/model/order';
 import { recolor } from '../src/model/recolor';
 import { ellipsePath, parsePath, rectPath } from '../src/shape/svgPath';
-import { COLORS, Doc, ID, T, empty, options, saveAndOpen, shapes, transform, checkWellFormed, checkSewDesign, checkExport, checkAppliques, restitchFill, pointOnCloth, checkBlends, checkFollowers } from './helpers/torture';
+import { COLORS, Doc, ID, OPS, T, checkReload, empty, options, saveAndOpen, shapes, transform, checkWellFormed, checkSewDesign, checkExport, checkAppliques, restitchFill, pointOnCloth, checkBlends, checkFollowers } from './helpers/torture';
 import { objectAtPoint } from '../src/render/flow';
 import { setKnockout } from '../src/model/knockout';
 import { backToVersion } from '../src/model/restitch';
@@ -115,6 +116,26 @@ describe('appliqué', () => {
     const a = sewObjects(p)[1];
     expect(remembered(p, a)?.applique).toMatchObject({ fabric: 'felt', edge: 'e', width: 2.5 });
     expect(appliqueStops(p).size).toBe(2);
+  });
+
+  it('stays whole after its edge was changed, undone and the page reloaded', () => {
+    const d = design();
+    const before = d.cur.p;
+    expect(shapes(d, setApplique(before, [1], { edge: 'run' }, T))).toBe(true);
+    const changed = d.cur.p;
+    // Undo: the store keeps the version undone to, records and objects together.
+    expect(OPS.find((o) => o.name === 'undo')!.run(d, () => 0)).toBe(true);
+    expect(d.cur.p).toBe(before);
+    const reload = (records: Pattern, objects: ReturnType<typeof storedVersion>['objects']) => {
+      const p = fromStored(before, structuredClone(toStored(records)))!;
+      restoreRemembered(p, structuredClone(objects));
+      return sewObjects(p).map((o) => !!remembered(p, o)?.applique);
+    };
+    expect(reload(before, storedVersion(before, undefined).objects)).toEqual([false, true, false]);
+    checkReload(d);
+    // The objects of the version undone do not fit its stitches: the appliqué fell apart into the
+    // running stitches between its stops, knowing nothing (as the store kept it before).
+    expect(reload(before, storedVersion(changed, undefined).objects)).toEqual([false, false, false, false, false]);
   });
 
   it('can have a running edge over its tack-down, repeated or in bean stitch, kept on save', async () => {
