@@ -57,6 +57,21 @@ describe('found by the torture test', () => {
     }
   });
 
+  // Seed 211: the cutter's shadow, sewn before the cut fill, went with the cutter, and the cut fill
+  // was named by an index off by one. Here the border of a covered fill does the same.
+  it('cutting out names the cut fill, also when parts of what goes lie before it', async () => {
+    await loadOps();
+    const d = borderedSquare();
+    // A fill after the square's border, and on top a fill covering the square and part of it.
+    let p = addShape(d.cur.p, { form: parsePath(rectPath(30, 30, 20, 10, 0, 0), ID), kind: 'fill' }, COLORS[2], null, options)!.pattern;
+    p = addShape(p, { form: parsePath(rectPath(-1, -1, 40, 35, 0, 0), ID), kind: 'fill' }, COLORS[2], null, options)!.pattern;
+    const objs = sewObjects(p);
+    const lower = objs.at(-2)!;
+    const c = subtractTop(p, [squareOf(d)!.index, lower.index, objs.length - 1], T)!;
+    expect(c.covered).toBe(1);
+    expect(c.cut.map((o) => sewObjects(c.pattern)[o]?.id)).toEqual([lower.id]);
+  });
+
   it('deleting a border leaves its fill without one, and undo brings both back', () => {
     const d = borderedSquare();
     const before = d.cur;
