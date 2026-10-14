@@ -10,6 +10,7 @@ import { coverage, peakDensity } from './measure';
 import { buildRegion, maskHash, sameMask, type Region } from './region';
 import { runStitch, TOLERANCE } from './run';
 import { column, pairs, satinStitches, underlay, type Column, type SatinParams } from './satin';
+import type { SatinCorner, SatinEnd } from './satinJoins';
 import { reverse, skeleton, type Branch, type Graph, type Pt } from './skeleton';
 import { bestChain, satinRuns, type BorderSettings, type FillSettings, type Rails, type SatinSettings } from '../model/restitch';
 import { cutPieces, stripsOfAreas } from './rungs';
@@ -324,7 +325,7 @@ function columns(r: Region): (b: Branch, freeFrom: boolean, freeTo: boolean) => 
 /** Satin columns overlap a junction they end at by this much once another column has covered it (mm). */
 const JOIN_OVERLAP = 0.3;
 
-function sewSatin(o: Obj, start: Pt, p: SatinParams, withUnderlay: boolean, tol: number): Pt[][] {
+function sewSatin(o: Obj, start: Pt, p: SatinParams, withUnderlay: boolean, tol: number, stretch = false): Pt[][] {
   const col = columns(o.region);
   const g = o.graph!;
   // The first column to reach a junction covers it; the others stop at its edge.
@@ -335,7 +336,7 @@ function sewSatin(o: Obj, start: Pt, p: SatinParams, withUnderlay: boolean, tol:
     start,
     (b, fa, fb) => {
       const c = col(b, fa, fb);
-      return withUnderlay ? underlay(c, tol) : runStitch(c.center, 2.5, tol);
+      return withUnderlay ? underlay(c, tol, undefined, undefined, stretch) : runStitch(c.center, 2.5, tol);
     },
     (b, fa, fb) => {
       // Back from the far end: the same column reversed.
@@ -428,7 +429,7 @@ function toSegment(q: Pt, a: Pt, b: Pt): number {
  * made in the stitch card; with it come the shortened free ends (see pushEnds).
  */
 function satinSettings(o: DigitizeOptions, p: SatinParams): SatinSettings {
-  return { spacing: p.spacing, edge: round2(p.pull), edgeShare: Math.round((p.pullShare ?? 0) * 1000) / 1000, edgeAuto: true, short: true, underlay: o.underlay, tolerance: o.tolerance, ...(Number.isFinite(p.splitMm) ? { split: p.splitMm } : {}) };
+  return { spacing: p.spacing, edge: round2(p.pull), edgeShare: Math.round((p.pullShare ?? 0) * 1000) / 1000, edgeAuto: true, short: true, underlay: o.underlay, ...(o.underCross ? { underCross: true } : {}), tolerance: o.tolerance, ...(Number.isFinite(p.splitMm) ? { split: p.splitMm } : {}) };
 }
 
 /**
@@ -519,7 +520,7 @@ function sewOne(obj: Obj, pos: Pt, o: DigitizeOptions, satin: SatinParams, angle
   }
   if (obj.info.kind === 'satin' && !obj.sections) {
     used.pos = true;
-    out = sewSatin(obj, pos, satin, o.underlay, o.tolerance);
+    out = sewSatin(obj, pos, satin, o.underlay, o.tolerance, !!o.underCross);
     if (!satinOk(out, obj.region, o)) {
       // A stroke too wide or too bent for one satin along its middle: in columns, else filled.
       const g = skeleton(obj.region);
@@ -1292,6 +1293,12 @@ function assemble(blocks: Block[], cx: number, cy: number, trimMm: number, name:
   return b.build(name, 'pes', colors.length ? colors : [{ r: 0, g: 0, b: 0 }]);
 }
 
+/** A satin line's ends and corners as the file paints its stroke: butt flat, bevel cut off, miter (and none) a miter, capped at the sharpest corners as SVG's miter limit does. */
+const looksOf = (sh: ShapeInput): { ends: SatinEnd; corner: SatinCorner } => ({
+  ends: sh.cap === 'round' ? 'round' : sh.cap === 'square' ? 'square' : 'flat',
+  corner: sh.join === 'round' ? 'round' : sh.join === 'bevel' ? 'cap' : 'miter',
+});
+
 /** A painted part of a vector file (see svg.ts): a fill area or a line of a width, in mm from the top left. */
 export interface ShapeInput {
   color: number;
@@ -1418,7 +1425,7 @@ export function digitizeShapes(
       if (edges.has(k)) continue;
       if (!isFill) {
         // Lines are sewn along their curves, so they stay exact and can be edited as lines.
-        const line = lineStitchFor(it.sh.width ?? 0.4, o.tolerance);
+        const line = lineStitchFor(it.sh.width ?? 0.4, o.tolerance, { ...looksOf(it.sh), underCross: o.underCross });
         // A drawing of touching strokes in running stitch: in one go, without trims (redwork).
         if (line.type === 'run' && redworkHelps(it.form)) line.redwork = true;
         const sewn = lineStitches(it.form, line, false, pos);
@@ -1448,7 +1455,7 @@ export function digitizeShapes(
           const e = edgeOf.get(k);
           if (e !== undefined) {
             // In the fill's thread, or one of its own.
-            const line = lineStitchFor(items[e].sh.width ?? 0.4, o.tolerance);
+            const line = lineStitchFor(items[e].sh.width ?? 0.4, o.tolerance, { ...looksOf(items[e].sh), underCross: o.underCross });
             obj.info.border = { ...line, ...(items[e].sh.color === it.sh.color ? {} : { color: { ...threads[items[e].sh.color] } }) };
             edges.add(e);
           }

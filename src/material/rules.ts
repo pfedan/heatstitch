@@ -11,14 +11,20 @@
 export const LOCK_MM = 0.7;
 
 /**
- * Satin underlay by column width (mm). Narrower than SATIN_UNDER_MIN no underlay (it would only
- * pile up); up to SATIN_CENTER_MAX a walk along the middle; wider contour and zigzag. Ink/Stitch's
- * underlay tutorial: center walk 1 to 2 mm, contour 2 to 3.5 mm, contour and zigzag from 4 mm;
- * Wilcom: center run up to 2 to 3 mm. Disputed between 2 and 4 mm: the center walk stays there,
- * since the satin is sewn back over the underlay and a contour would end where it began.
+ * Satin underlay by column width (mm), in tiers: narrower than SATIN_UNDER_MIN none (it would only
+ * pile up); under SATIN_CENTER_MAX a walk along the middle; under SATIN_CONTOUR_MAX an edge run
+ * inside both rails; under SATIN_ZIGZAG_MAX edge run and one zigzag; from there edge run and a
+ * crossed (double) zigzag. On stretchy fabric (Fabric.pull high) crossed already from
+ * SATIN_CROSS_STRETCH, as the fabric needs holding in both diagonals sooner. Ink/Stitch's underlay
+ * tutorial: center walk 1 to 2 mm, contour 2 to 3.5 mm, contour and zigzag from 4 mm; Wilcom:
+ * center run up to 2 to 3 mm, edge run for wider columns, zigzag or double zigzag for wide ones;
+ * the tiers in mm are a current commercial digitizer's published table.
  */
 export const SATIN_UNDER_MIN = 1;
-export const SATIN_CENTER_MAX = 4;
+export const SATIN_CENTER_MAX = 3;
+export const SATIN_CONTOUR_MAX = 6;
+export const SATIN_ZIGZAG_MAX = 10;
+export const SATIN_CROSS_STRETCH = 6;
 
 /**
  * Satin stitches are split from this length (mm) unless an object says otherwise. Wilcom's auto

@@ -1,8 +1,7 @@
-import { lineRails } from '../digitize/border';
 import { cumulative, type Rung } from '../digitize/rungs';
 import type { Pt } from '../digitize/skeleton';
 import { flatten, type Form } from '../shape/path';
-import { satinOf, type PathStitch } from './along';
+import { lineRailsOf, satinOf, type PathStitch } from './along';
 import { lineGeoOf } from './geo';
 import { resewLine } from './line';
 import type { SewObject } from './objects';
@@ -43,7 +42,7 @@ export function linePaths(form: Form): { pts: Pt[]; closed: boolean }[] {
 
 /** The rails of a satin line along one of its paths, with its own order on them when it has one. */
 export function lineColumn(pts: Pt[], closed: boolean, st: PathStitch, order?: LineOrder | null): Rails {
-  return withOrder(lineRails(pts, closed, st.width), order);
+  return withOrder(lineRailsOf(pts, closed, st), order);
 }
 
 /** The columns of a satin line, one for each of its paths (see lineColumn). */
@@ -94,7 +93,7 @@ export function orderOf(base: Rails, edited: Rails, s?: SatinSettings): LineOrde
 export function ordersOf(form: Form, st: PathStitch, columns: Rails[]): (LineOrder | null)[] | undefined {
   const paths = linePaths(form);
   const s = satinOf(st, true);
-  const out = paths.map((x, k) => (columns[k] ? orderOf(lineRails(x.pts, x.closed, st.width), columns[k], s) : (st.order?.[k] ?? null)));
+  const out = paths.map((x, k) => (columns[k] ? orderOf(lineRailsOf(x.pts, x.closed, st), columns[k], s) : (st.order?.[k] ?? null)));
   return out.some((o) => o) ? out : undefined;
 }
 

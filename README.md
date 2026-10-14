@@ -501,7 +501,8 @@ fill rows end there, satin edges are found there, underlay lies on a contour ins
   needle points over three lines.
   Pull compensation by fabric (woven 0.2 mm, knit 0.35, terry 0.4 per
   side), stitches over 7 mm are split. A network of columns is sewn in one go: each branch out as
-  underlay (center walk, zigzag from 4 mm width) and back as satin, like Ink/Stitch's auto-satin. At
+  underlay (by width: none under 1 mm, center walk under 3, edge run under 6, edge run and zigzag
+  under 10, crossed from 10 or from 6 on stretchy fabric) and back as satin, like Ink/Stitch's auto-satin. At
   junctions the first column covers, the others reach 0.3 mm into it. In Design the same
   column model is driven by rungs (`rungs.ts`): the direction turns evenly between rungs, sections
   start the column afresh at sharp corners, and a fill can become a satin along drawn rungs.

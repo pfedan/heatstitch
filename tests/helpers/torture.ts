@@ -18,7 +18,8 @@ import { fillsToLines, lineToSatin, reshapeFill, reshapeObject, transformSewObje
 import { canSplit, splitFill } from '../../src/model/splitFill';
 import { cutKey, sewnArea, wholeArea, wholeOf } from '../../src/model/knockout';
 import { unionOf } from '../../src/shape/rasterize';
-import { borderStitches, isRedwork, isRunType } from '../../src/model/along';
+import { borderStitches, isRedwork, isRunType, type PathStitch } from '../../src/model/along';
+import { CAP_DEG, SATIN_CORNERS, SATIN_ENDS } from '../../src/digitize/satinJoins';
 import { redworkGraph, redworkWalks } from '../../src/digitize/redwork';
 import { APPLIQUE_FABRICS, appliquePieces, innerStopCount, innerStops, stopsAround, type Piece } from '../../src/model/applique';
 import { pieceAt } from '../../src/render/applique';
@@ -1059,6 +1060,43 @@ export const HAND_OPS: Op[] = [
         let far = 0;
         for (let i = next.first; i <= next.last; i++) if (next.pattern.cmd[i] === STITCH) far = Math.max(far, off(next.pattern.x[i] / 10, next.pattern.y[i] / 10));
         expect(far, `${motif} within its size of the line`).toBeLessThan(width / 2 + 0.6);
+      }
+      return shapes(d, syncBorders(next.pattern, T));
+    },
+  },  {
+    name: 'satin corners and ends',
+    run: (d, r) => {
+      // As the line panel: a satin line's corners and ends set (see satinJoins.ts), often at a sharp turn.
+      const lines = d.objects.filter((o) => lineGeoOf(remembered(d.cur.p, o)) && remembered(d.cur.p, o)?.line && !partOf(remembered(d.cur.p, o)));
+      if (!lines.length) return false;
+      const o = pick(r, lines);
+      const m = remembered(d.cur.p, o)!;
+      const width = between(r, 1, 6);
+      const st: PathStitch = { ...m.line!, type: 'satin', width, corner: pick(r, SATIN_CORNERS), ends: pick(r, SATIN_ENDS) };
+      delete st.motif;
+      const next = resewLine(d.cur.p, o.index, m.geo!, st, T);
+      if (!next) return false;
+      // Invariant: the satin stays near its line: no rail folds or flies off at a corner. A miter
+      // reaches at most 1 / cos(CAP_DEG / 2) half widths out, a lapped corner one width, an end half one.
+      if (!st.echo && !st.shadow) {
+        const path = m.geo!.paths.flatMap((q) => {
+          const f = flatten(q);
+          return q.closed && f.length ? [f, [f[f.length - 1], f[0]]] : [f];
+        });
+        const off = (x: number, y: number) =>
+          Math.min(
+            ...path.flatMap((f) =>
+              f.slice(1).map((b, i) => {
+                const a = f[i];
+                const dx = b[0] - a[0], dy = b[1] - a[1];
+                const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (y - a[1]) * dy) / (dx * dx + dy * dy || 1)));
+                return Math.hypot(x - a[0] - dx * t, y - a[1] - dy * t);
+              }),
+            ),
+          );
+        let far = 0;
+        for (let i = next.first; i <= next.last; i++) if (next.pattern.cmd[i] === STITCH) far = Math.max(far, off(next.pattern.x[i] / 10, next.pattern.y[i] / 10));
+        expect(far, `${st.corner} corners, ${st.ends} ends within reach of the line`).toBeLessThan((width / 2) / Math.cos(((CAP_DEG / 2) * Math.PI) / 180) + (st.pull ?? 0) + 0.6);
       }
       return shapes(d, syncBorders(next.pattern, T));
     },

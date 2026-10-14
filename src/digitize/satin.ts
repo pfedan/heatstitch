@@ -1,4 +1,4 @@
-import { SATIN_CENTER_MAX } from '../material/rules';
+import { SATIN_CENTER_MAX, SATIN_CONTOUR_MAX, SATIN_CROSS_STRETCH, SATIN_UNDER_MIN, SATIN_ZIGZAG_MAX } from '../material/rules';
 import { sample, type Region } from './region';
 import { runStitch, TOLERANCE } from './run';
 import type { Branch, Pt } from './skeleton';
@@ -371,43 +371,73 @@ export type UnderlayKind = 'auto' | 'center' | 'contour' | 'zigzag' | 'both';
 const INSET = 0.4;
 
 /**
- * Underlay sewn on the way out along the column, ending at its far end (the satin follows on the
- * way back), by width (see SATIN_CENTER_MAX): a center walk for columns up to 4 mm; for wider ones
- * a contour inset 0.4 mm from both rails, then one zigzag with 3 mm between penetrations on the
- * same side (Ink/Stitch's underlay tutorial). The center walk keeps within `tol` of the centerline,
- * so it stays under the satin in tight curves. The image conversion walks its columns this way;
- * objects get underlayOf, whose zigzag goes out and back.
+ * Tiers of the automatic underlay, from narrow to wide (see SATIN_UNDER_MIN): none, a walk along
+ * the middle, an edge run inside both rails, edge run and one zigzag, edge run and a crossed
+ * (double) zigzag.
  */
-export function underlay(c: Column, tol = TOLERANCE, inset = insetOf(undefined), zig = insetOf(undefined, true)): Pt[] {
-  const parts = byWidth(c);
-  if (parts.length === 1) return c.width <= WIDE ? centerWalk(c, tol) : wideUnder(c, tol, inset, zig);
-  // Along the column by its width there: a centre walk where narrow, a zigzag where wide.
-  const out: Pt[] = [];
-  for (const { a, b, wide } of parts) {
-    const part = sliceColumn(c, a, b);
-    out.push(...(wide ? wideUnder(part, tol, inset, zig) : centerWalk(part, tol)));
-  }
-  return out;
+export type UnderTier = 'none' | 'center' | 'contour' | 'zigzag' | 'cross';
+const TIERS: UnderTier[] = ['none', 'center', 'contour', 'zigzag', 'cross'];
+
+/** The tier of a column `w` mm wide; `stretch`: on stretchy fabric, crossed from SATIN_CROSS_STRETCH. */
+export function underTier(w: number, stretch = false): UnderTier {
+  if (w < SATIN_UNDER_MIN) return 'none';
+  if (w < SATIN_CENTER_MAX) return 'center';
+  if (stretch && w >= SATIN_CROSS_STRETCH) return 'cross';
+  if (w < SATIN_CONTOUR_MAX) return 'contour';
+  return w < SATIN_ZIGZAG_MAX ? 'zigzag' : 'cross';
 }
 
 /**
- * The underlay by width with a double zigzag where the column is wide (German underlay: edge run
- * and zigzag out and back). It ends back at the start where any stretch is wide: there the narrow
- * stretches walk their centre out and back on the same holes, the wide ones get edge run and the
- * first zigzag on the way out and the second zigzag on the way back.
+ * Underlay sewn on the way out along the column, ending at its far end (the satin follows on the
+ * way back), by width in tiers (see underTier), stretch by stretch where the width changes along
+ * the column. An edge run comes back to where it started, so in this one-way form it is followed by
+ * a walk out along the middle; a zigzag is sewn out only. The center walk keeps within `tol` of the
+ * centerline, so it stays under the satin in tight curves. The image conversion walks its columns
+ * this way; objects get underlayOf, whose zigzag goes out and back.
  */
-function autoUnder(c: Column, tol: number, inset: Inset, zig: Inset): { pts: Pt[]; atEnd: boolean } {
-  const parts = byWidth(c);
-  if (parts.length === 1) return c.width <= WIDE ? { pts: centerWalk(c, tol), atEnd: true } : { pts: [...contour(c, tol, inset), ...doubleZigzag(c, zig)], atEnd: false };
+export function underlay(c: Column, tol = TOLERANCE, inset = insetOf(undefined), zig = insetOf(undefined, true), stretch = false): Pt[] {
+  const parts = byWidth(c, stretch);
+  const one = (part: Column, tier: UnderTier): Pt[] => {
+    if (tier === 'none' || tier === 'center') return centerWalk(part, tol);
+    if (tier === 'contour') return [...contour(part, tol, inset), ...centerWalk(part, tol)];
+    return [...contour(part, tol, inset), ...zigzags(part, zig)[0]];
+  };
+  if (parts.length === 1) return one(c, underTier(c.width, stretch));
+  return parts.flatMap(({ a, b, tier }) => one(sliceColumn(c, a, b), tier));
+}
+
+/**
+ * The automatic underlay by width (see underTier), and whether it ends at the column's far end. A
+ * column of one tier: a center walk out (ends at the far end), an edge run out and back, edge run
+ * and a zigzag out (far end), edge run and the zigzag out and back (crossed). Where the width
+ * changes along the column it ends back at the start: each stretch goes out and comes back in its
+ * own tier (a walk out and back, an edge run out on one rail and back on the other, a zigzag out
+ * and back for the crossed, a single zigzag out with the edge run back on the other rail).
+ */
+function autoUnder(c: Column, tol: number, inset: Inset, zig: Inset, stretch: boolean): { pts: Pt[]; atEnd: boolean } {
+  const parts = byWidth(c, stretch);
+  if (parts.length === 1) {
+    const tier = underTier(c.width, stretch);
+    if (tier === 'none') return { pts: [], atEnd: false };
+    if (tier === 'center') return { pts: centerWalk(c, tol), atEnd: true };
+    if (tier === 'contour') return { pts: contour(c, tol, inset), atEnd: false };
+    if (tier === 'zigzag') return { pts: [...contour(c, tol, inset), ...zigzags(c, zig)[0]], atEnd: true };
+    return { pts: [...contour(c, tol, inset), ...doubleZigzag(c, zig)], atEnd: false };
+  }
   const out: Pt[] = [];
   const back: Pt[][] = [];
-  for (const { a, b, wide } of parts) {
+  for (const { a, b, tier } of parts) {
     const part = sliceColumn(c, a, b);
-    if (wide) {
+    if (tier === 'cross') {
       const [there, home] = zigzags(part, zig);
       out.push(...contour(part, tol, inset), ...there);
       back.push(home);
+    } else if (tier === 'zigzag' || tier === 'contour') {
+      const [l, r] = edgeRuns(part, tol, inset);
+      out.push(...l, ...(tier === 'zigzag' ? zigzags(part, zig)[0] : []));
+      back.push(r);
     } else {
+      // Also where narrower than SATIN_UNDER_MIN between wider stretches: the way on to them.
       const walk = centerWalk(part, tol);
       out.push(...walk);
       back.push(walk.slice().reverse());
@@ -419,28 +449,28 @@ function autoUnder(c: Column, tol: number, inset: Inset, zig: Inset): { pts: Pt[
 /** How far underlay keeps inside a rung from a to b, as a fraction of its length. */
 type Inset = (a: Pt, b: Pt) => number;
 
-/** Wider than this (mm), a column gets contour and zigzag underlay; up to it a centre walk. */
-const WIDE = SATIN_CENTER_MAX;
-
-/** Contour (out and back along the rails) then zigzag to the far end, where the satin starts back. */
-const wideUnder = (c: Column, tol: number, inset: Inset, zig: Inset): Pt[] => [...contour(c, tol, inset), ...zigzags(c, zig)[0]];
-/** Along a column a stretch counts as wide only this much over WIDE (mm), so a column about 4 mm wide is not cut up. */
-const WIDE_MARGIN = 0.5;
+/** Along a column a stretch changes its tier only this much past a tier's limit (mm), so a column about at a limit is not cut up. */
+const TIER_MARGIN = 0.3;
 /** Stretches shorter than this (mm along the middle) go with their neighbours. */
 const MIN_STRETCH = 5;
 
-/** The column in stretches of about even width class: from index a to b, wide or not. */
-function byWidth(c: Column): { a: number; b: number; wide: boolean }[] {
+/** The column in stretches of one underlay tier each (see underTier): from index a to b. */
+function byWidth(c: Column, stretch: boolean): { a: number; b: number; tier: UnderTier }[] {
   const n = c.center.length;
-  const parts: { a: number; b: number; wide: boolean; len: number }[] = [];
+  const rank = (w: number) => TIERS.indexOf(underTier(w, stretch));
+  const parts: { a: number; b: number; tier: number; len: number }[] = [];
   for (let i = 0; i < n; i++) {
-    const wide = dist(c.left[i], c.right[i]) > WIDE + WIDE_MARGIN;
-    const step = i ? dist(c.center[i - 1], c.center[i]) : 0;
+    const w = dist(c.left[i], c.right[i]);
     const last = parts[parts.length - 1];
-    if (last && last.wide === wide) {
+    // Into another tier only once clearly past its limit.
+    let tier = rank(w);
+    if (last && tier > last.tier && rank(w - TIER_MARGIN) <= last.tier) tier = last.tier;
+    if (last && tier < last.tier && rank(w + TIER_MARGIN) >= last.tier) tier = last.tier;
+    const step = i ? dist(c.center[i - 1], c.center[i]) : 0;
+    if (last && last.tier === tier) {
       last.b = i;
       last.len += step;
-    } else parts.push({ a: last ? last.b : 0, b: i, wide, len: step });
+    } else parts.push({ a: last ? last.b : 0, b: i, tier, len: step });
   }
   // The shortest stretch under MIN_STRETCH goes to its longer neighbour, until none is left.
   for (;;) {
@@ -451,16 +481,16 @@ function byWidth(c: Column): { a: number; b: number; wide: boolean }[] {
     const next = parts[k + 1];
     const into = !next || (prev && prev.len >= next.len) ? k - 1 : k + 1;
     const lo = Math.min(k, into);
-    const merged = { a: parts[lo].a, b: parts[lo + 1].b, wide: parts[into].wide, len: parts[lo].len + parts[lo + 1].len };
+    const merged = { a: parts[lo].a, b: parts[lo + 1].b, tier: parts[into].tier, len: parts[lo].len + parts[lo + 1].len };
     parts.splice(lo, 2, merged);
-    // Neighbours of the same kind become one.
+    // Neighbours of the same tier become one.
     for (let j = parts.length - 1; j > 0; j--) {
-      if (parts[j].wide !== parts[j - 1].wide) continue;
-      parts[j - 1] = { a: parts[j - 1].a, b: parts[j].b, wide: parts[j].wide, len: parts[j - 1].len + parts[j].len };
+      if (parts[j].tier !== parts[j - 1].tier) continue;
+      parts[j - 1] = { a: parts[j - 1].a, b: parts[j].b, tier: parts[j].tier, len: parts[j - 1].len + parts[j].len };
       parts.splice(j, 1);
     }
   }
-  return parts.map(({ a, b, wide }) => ({ a, b, wide }));
+  return parts.map(({ a, b, tier }) => ({ a, b, tier: TIERS[tier] }));
 }
 
 const sliceColumn = (c: Column, a: number, b: number): Column => ({ center: c.center.slice(a, b + 1), left: c.left.slice(a, b + 1), right: c.right.slice(a, b + 1), width: c.width });
@@ -577,11 +607,16 @@ function doubleZigzag(c: Column, inset = insetOf(undefined, true)): Pt[] {
   return [...out, ...back];
 }
 
-/** Out along the left rail and back along the right one, both inset. */
-function contour(c: Column, tol: number, inset = insetOf(undefined)): Pt[] {
+/** The edge runs inside both rails: out along the left one and back along the right one. */
+function edgeRuns(c: Column, tol: number, inset = insetOf(undefined)): [Pt[], Pt[]] {
   const l = c.left.map((a, i) => lerp(a, c.right[i], inset(a, c.right[i])));
   const r = c.right.map((b, i) => lerp(b, c.left[i], inset(b, c.left[i])));
-  return [...runStitch(l, 2, tol), ...runStitch(r.reverse(), 2, tol)];
+  return [runStitch(l, 2, tol), runStitch(r.reverse(), 2, tol)];
+}
+
+/** Out along the left rail and back along the right one, both inset. */
+function contour(c: Column, tol: number, inset = insetOf(undefined)): Pt[] {
+  return edgeRuns(c, tol, inset).flat();
 }
 
 /**
@@ -589,17 +624,17 @@ function contour(c: Column, tol: number, inset = insetOf(undefined)): Pt[] {
  * satin comes back over it) or back where it started (then the satin goes out over it). A zigzag
  * is sewn out and back (see zigzags), so it ends where it started; `oneWay` (a column that has to
  * come home, in a chain) sews it out only, so it ends at the far end and needs no run out along
- * the middle on top (more thread where columns meet).
+ * the middle on top (more thread where columns meet). `stretch`: Auto on stretchy fabric (see underTier).
  */
-export function underlayOf(c: Column, kind: UnderlayKind, tol = TOLERANCE, ins?: UnderInset, oneWay = false): { pts: Pt[]; atEnd: boolean } {
+export function underlayOf(c: Column, kind: UnderlayKind, tol = TOLERANCE, ins?: UnderInset, oneWay = false, stretch = false): { pts: Pt[]; atEnd: boolean } {
   const k = insetOf(ins);
   const z = insetOf(ins, true);
   if (kind === 'center') return { pts: centerWalk(c, tol), atEnd: true };
   if (kind === 'contour') return { pts: contour(c, tol, k), atEnd: false };
   if (oneWay && kind === 'zigzag') return { pts: zigzags(c, z)[0], atEnd: true };
   if (oneWay && kind === 'both') return { pts: [...contour(c, tol, k), ...zigzags(c, z)[0]], atEnd: true };
-  if (oneWay) return { pts: underlay(c, tol, k, z), atEnd: true };
+  if (oneWay) return { pts: underlay(c, tol, k, z, stretch), atEnd: true };
   if (kind === 'zigzag') return { pts: doubleZigzag(c, z), atEnd: false };
   if (kind === 'both') return { pts: [...contour(c, tol, k), ...doubleZigzag(c, z)], atEnd: false };
-  return autoUnder(c, tol, k, z);
+  return autoUnder(c, tol, k, z, stretch);
 }

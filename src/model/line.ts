@@ -45,11 +45,16 @@ export function lineClassOf(width: number): LineClass {
   return width <= LINE_WIDTHS.satin ? 'satin' : 'band';
 }
 
-/** How a line of `width` (mm) is sewn along its curves to begin with; a band is a satin as a line. */
-export function lineStitchFor(width: number, tolerance = TOLERANCE): PathStitch {
+/**
+ * How a line of `width` (mm) is sewn along its curves to begin with; a band is a satin as a line.
+ * A satin takes the form of its corners and ends from `look` (an SVG stroke's linejoin and
+ * linecap) and its underlay from the fabric (`underCross`, see SatinSettings.underCross).
+ */
+export function lineStitchFor(width: number, tolerance = TOLERANCE, look: Pick<PathStitch, 'corner' | 'ends' | 'underCross'> = {}): PathStitch {
   const c = lineClassOf(width);
   if (c === 'run' || c === 'bean') return { type: c === 'run' ? 'run' : 'triple', width: BORDER_WIDTH, length: BORDER_STITCH, tolerance };
-  return { type: 'satin', width, tolerance };
+  const { corner, ends, underCross } = look;
+  return { type: 'satin', width, tolerance, ...(corner && corner !== 'miter' ? { corner } : {}), ...(ends && ends !== 'flat' ? { ends } : {}), ...(underCross ? { underCross } : {}) };
 }
 
 /** The settings of running stitch as those of a line. */

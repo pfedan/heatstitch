@@ -7,6 +7,7 @@ import { sample, type Region } from '../digitize/region';
 import { TOLERANCE } from '../digitize/run';
 import type { Pt } from '../digitize/skeleton';
 import type { UnderlayKind } from '../digitize/satin';
+import { strokeRails, type SatinCorner, type SatinEnd } from '../digitize/satinJoins';
 import { CORD_STEP, HAND_LAYERS, isHandStitch, MOTIF_PERIOD, motifStitches, type LineMotif } from '../digitize/motif';
 import { satinRuns, type FringeSide, type SatinSettings } from './restitch';
 import { withOrder, type LineOrder } from './lineOrder';
@@ -51,8 +52,14 @@ export interface PathStitch {
   flip?: boolean;
   /** Satin: wider on each side by this (mm), against the pull of the thread; 0 by default. */
   pull?: number;
-  /** Satin: its underlay; along the middle from 1.5 mm width, none below, by default. */
+  /** Satin: its underlay; by width from 1 mm (see underTier), none below, by default. */
   under?: UnderlayKind | 'off';
+  /** Satin: its automatic underlay as on stretchy fabric (see SatinSettings.underCross); set from the fabric. */
+  underCross?: boolean;
+  /** Satin lines only: the form of its corners (see satinJoins.ts); a miter by default. */
+  corner?: SatinCorner;
+  /** Satin lines only: the form of its ends, as SVG's stroke-linecap (see satinJoins.ts); flat by default. */
+  ends?: SatinEnd;
   /** Satin lines and borders only: a ragged edge, stitches up to this far short of the side (mm); see SatinSettings.fringe. */
   fringe?: number;
   /** The fringe on this side only, both by default: of a line, this side of the drawn line; of a border, left inside and right outside. */
@@ -152,6 +159,7 @@ export const satinOf = (s: PathStitch, line = false, back = false): SatinSetting
   underlay: autoUnder(s) !== 'off',
   tolerance: s.tolerance ?? TOLERANCE,
   under: autoUnder(s) === 'off' ? 'center' : (autoUnder(s) as UnderlayKind),
+  ...(s.type === 'satin' && s.underCross ? { underCross: true } : {}),
   stagger: true,
   edgeShare: 0,
   ...(s.type === 'e' ? { type: 'e' as const } : {}),
@@ -161,6 +169,14 @@ export const satinOf = (s: PathStitch, line = false, back = false): SatinSetting
 const other = (side: FringeSide): FringeSide => (side === 'left' ? 'right' : 'left');
 
 type Band = { left: Pt[]; right: Pt[] };
+
+/**
+ * The rails of a line sewn with `s` along `line` (closed: its first point repeated at the end): a
+ * satin with its corners and ends (see satinJoins.ts), a zigzag or E stitch centered on the line.
+ */
+export function lineRailsOf(line: Pt[], closed: boolean, s: PathStitch): Band {
+  return s.type === 'satin' ? strokeRails(line, closed, s.width, s.corner ?? 'miter', s.ends ?? 'flat') : lineRails(line, closed, s.width);
+}
 
 /**
  * The rails an E stitch is sewn between, from those of a band centered on the line: its edge (the
@@ -243,8 +259,8 @@ function sewOnce(line: Pt[], closed: boolean, s: PathStitch, start?: Pt, area?: 
   if (area && closed) return satinRuns([onEdge(area, borderRails(area, l, s.width, s.offset ?? 0), s)], satinOf(s));
   // Its own order set by hand: on the line as drawn, from the end it was set to start at (an
   // override, see LineOrder); turned round, its fringe stays on its side of the line.
-  if (s.type === 'satin' && s.own && !area) return satinRuns([withOrder(lineRails(line, closed, s.width), s.own)], satinOf(s, true, !!s.own.turned));
-  const rails = lineRails(l, closed, s.width);
+  if (s.type === 'satin' && s.own && !area) return satinRuns([withOrder(lineRailsOf(line, closed, s), s.own)], satinOf(s, true, !!s.own.turned));
+  const rails = lineRailsOf(l, closed, s);
   const lead = shift > 0 && s.type !== 'satin' ? shift * spacingOf(s) : 0;
   // Prongs of an E stitch on the right of the drawn line (the left rail is on the right on screen, y down).
   return satinRuns([s.type === 'e' ? eRails(rails, back === !!s.flip) : rails], { ...satinOf(s, true, back), ...(lead ? { lead } : {}) });
