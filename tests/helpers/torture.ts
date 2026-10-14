@@ -1099,6 +1099,8 @@ export const APPLIQUE_OPS: Op[] = [
         { place: r() < 0.5 },
         { tack: pick(r, [{ type: 'run' as const, width: 0 }, { type: 'run' as const, width: 0, repeat: 2, length: 1.5 }, { type: 'triple' as const, width: 0 }, { type: 'triple' as const, width: 0, repeat: 5 }]) },
         { width: between(r, 2, 4.5) },
+        { tackIn: between(r, 0, 5) },
+        { placeIn: between(r, 0, 5) },
         { fabric: pick(r, APPLIQUE_FABRICS), color: pick(r, COLORS) },
       ]);
       return shapes(d, setApplique(d.cur.p, [pick(r, as).index], change, T));

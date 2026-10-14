@@ -231,6 +231,33 @@ describe('appliqué', () => {
     checkAppliques(d.cur.p);
   });
 
+  it('places placement line and tack-down as far inside as set, 0 to 5 mm, kept on save', async () => {
+    const d = design();
+    /** The median distance from the middle of the stitches of the appliqué in color block `b`. */
+    const radius = (p: Pattern, b: number) => {
+      const bl = colorBlocks(p)[b];
+      const out: number[] = [];
+      for (let i = bl.first; i <= bl.last; i++) if (p.cmd[i] === STITCH && i >= sewObjects(p)[1].first) out.push(Math.hypot(p.x[i] / 10 - 15, p.y[i] / 10 - 15));
+      return out.sort((x, y) => x - y)[out.length >> 1];
+    };
+    expect(shapes(d, setApplique(d.cur.p, [1], { placeIn: 2, tackIn: 3.5 }, T))).toBe(true);
+    expect(radius(d.cur.p, 0)).toBeCloseTo(13, 0);
+    expect(radius(d.cur.p, 1)).toBeCloseTo(11.5, 0);
+    checkAppliques(d.cur.p);
+    checkSewDesign(d.cur.p);
+    // On the outline: the tack-down over the placement line.
+    expect(shapes(d, setApplique(d.cur.p, [1], { placeIn: 0, tackIn: 0 }, T))).toBe(true);
+    expect(radius(d.cur.p, 1)).toBeCloseTo(15, 0);
+    expect(shapes(d, setApplique(d.cur.p, [1], { tackIn: 4.2 }, T))).toBe(true);
+    await saveAndOpen(d);
+    expect(remembered(d.cur.p, sewObjects(d.cur.p)[1])?.applique).toMatchObject({ placeIn: 0, tackIn: 4.2 });
+    expect(radius(d.cur.p, 1)).toBeCloseTo(10.8, 0);
+    // Out of range as stored: held to 0 to 5 mm.
+    const color = { r: 1, g: 2, b: 3 };
+    expect(appliqueFrom({ edge: 'satin', width: 3, fabric: 'felt', color, placeIn: -1, tackIn: 9 })).toMatchObject({ placeIn: 0, tackIn: 5 });
+    expect(appliqueFrom({ edge: 'satin', width: 3, fabric: 'felt', color, tackIn: 'x' })).not.toHaveProperty('tackIn');
+  });
+
   it('reads a running edge stored before as a raw edge with that tack-down', () => {
     const color = { r: 1, g: 2, b: 3 };
     expect(appliqueFrom({ edge: 'run', run: { type: 'triple', width: 0, repeat: 2 }, width: 3, fabric: 'felt', color })).toEqual({ tack: { type: 'triple', width: 0, length: 2, repeat: 2 }, edge: 'none', width: 3, fabric: 'felt', color });
