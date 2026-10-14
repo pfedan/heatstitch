@@ -420,14 +420,16 @@ export function subtractTop(p: Pattern, which: number[], trimMm: number): Subtra
     cur = next;
     kinds = stitchKinds(cur);
     objs = sewObjects(cur, kinds);
-    cut.push(o);
+    cut.push(obj.id);
   }
   if (!cut.length && gone.length === 1) return null;
   const without = deleteObjects(cur, gone, trimMm);
   if (!without) return null;
-  const shift = (o: number) => o - gone.filter((g) => g < o).length;
   // A border in a thread of its own follows its fill's new outline.
-  return { pattern: syncBorders(without, trimMm), cut: cut.map(shift), covered: gone.length - 1 };
+  const pattern = syncBorders(without, trimMm);
+  // Found by id: deleting also takes the parts of what goes (border, shadow, ...), which may lie before a cut fill.
+  const after = sewObjects(pattern);
+  return { pattern, cut: cut.map((id) => after.findIndex((x) => x.id === id)).filter((o) => o >= 0), covered: gone.length - 1 };
 }
 
 /**

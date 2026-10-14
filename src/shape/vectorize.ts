@@ -136,29 +136,48 @@ type Cubic = [Pt, Pt, Pt, Pt];
  * within `tol`. With `between`, also the curve between two points lies within `tol` of the straight
  * piece joining them: Schneider measures at the points only, and a curve over few points can bulge
  * out between them (a short piece next to a corner, say).
+ *
+ * Every split leaves pieces with fewer points, so splitting ends by itself and is not cut off at a
+ * depth: splits at the worst point can be lopsided (a few points off one end each time), and a long
+ * run, such as the offset of a jagged outline, would be given up on far outside `tol`.
  */
-export function fitCubic(pts: Pt[], t1: V, t2: V, tol: number, depth = 0, between = false): Cubic[] {
-  if (pts.length === 2) {
-    const d = dist(pts[0], pts[1]) / 3;
-    return [[pts[0], add(pts[0], mul(t1, d)), add(pts[1], mul(t2, d)), pts[1]]];
+export function fitCubic(pts: Pt[], t1: V, t2: V, tol: number, between = false): Cubic[] {
+  const out: Cubic[] = [];
+  // Pieces still to fit, the next one last: a run peeled a point at a time can need many splits.
+  const todo: [Pt[], V, V][] = [[pts, t1, t2]];
+  while (todo.length) {
+    const [run, a, b] = todo.pop()!;
+    const fit = fitOne(run, a, b, tol, between);
+    if (fit.curve) {
+      out.push(fit.curve);
+      continue;
+    }
+    const at = fit.at;
+    const center = unit(sub(run[at - 1], run[at + 1]));
+    todo.push([run.slice(at), mul(center, -1), b], [run.slice(0, at + 1), a, center]);
+  }
+  return out;
+}
+
+/** One curve through `pts` within `tol`, or the point to split at when there is none. */
+function fitOne(pts: Pt[], t1: V, t2: V, tol: number, between: boolean): { curve: Cubic; at?: undefined } | { curve?: undefined; at: number } {
+  if (pts.length < 3) {
+    const d = dist(pts[0], pts[pts.length - 1]) / 3;
+    return { curve: [pts[0], add(pts[0], mul(t1, d)), add(pts[pts.length - 1], mul(t2, d)), pts[pts.length - 1]] };
   }
   let u = chordParams(pts);
   let curve = generate(pts, u, t1, t2);
   let { max, at } = maxError(pts, curve, u, between);
-  if (max < tol) return [curve];
+  if (max < tol) return { curve };
   if (max < tol * 4) {
     for (let it = 0; it < 6; it++) {
       u = reparameterize(pts, u, curve);
       curve = generate(pts, u, t1, t2);
       ({ max, at } = maxError(pts, curve, u, between));
-      if (max < tol) return [curve];
+      if (max < tol) return { curve };
     }
   }
-  // A straight run gets a straight line, not a split.
-  if (depth > 12 || pts.length < 3) return [curve];
-  at = Math.max(1, Math.min(pts.length - 2, at));
-  const center = unit(sub(pts[at - 1], pts[at + 1]));
-  return [...fitCubic(pts.slice(0, at + 1), t1, center, tol, depth + 1, between), ...fitCubic(pts.slice(at), mul(center, -1), t2, tol, depth + 1, between)];
+  return { at: Math.max(1, Math.min(pts.length - 2, at)) };
 }
 
 function chordParams(pts: Pt[]): number[] {
