@@ -461,7 +461,9 @@ export interface Transformed {
 export function transformSewObject(p: Pattern, objs: SewObject[], o: SewObject, kinds: Uint8Array, m: Mat, trimMm: number): Transformed | null {
   const known = remembered(p, o);
   // Stitches loosed from their shape go along as they are, also scaled (the resting shape with them).
-  const rigid = isRigid(m) || !!known?.free;
+  // Cross stitch on the design's grid stays on that grid: moved or turned, it is sewn anew.
+  const onGrid = known?.fill?.pattern === 'cross' && !known.fill.deco?.ownGrid && !!areaOf(known);
+  const rigid = (isRigid(m) && !onGrid) || !!known?.free;
   // A line with its paths: scaled or mirrored, it is sewn anew along them with its settings
   // (mirrored, its stitches would go round its echo copies and satin the other way than sewing it
   // along the mirrored paths does).
