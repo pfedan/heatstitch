@@ -376,19 +376,27 @@ export function isStroke(r: Region, satinMax = SATIN_MAX): Graph | null {
 }
 
 /**
- * Whether area `r` is a stroke (see isStroke), remembered for the last few areas by their pixels:
- * the stitch panel asks again for the same area after each change of its stitches.
+ * Whether area `r` can be sewn as satin in one go: a stroke (see isStroke), or an area whose
+ * suggested columns cover it whole (arms along its axis, a ring, a frame; see suggestSatin).
+ * Remembered for the last few areas by their pixels: the stitch panel asks again for the same
+ * area after each change of its stitches.
  */
 export function strokeLike(r: Region, satinMax = SATIN_MAX): boolean {
   const key = `${satinMax} ${r.x0} ${r.y0} ${r.w} ${r.h} ${r.pxMm} ${maskHash(r.mask)}`;
   const hit = strokes.find((c) => c.key === key && sameMask(c.mask, r.mask));
   if (hit) return hit.stroke;
-  const stroke = !!isStroke(r, satinMax);
+  const stroke = !!isStroke(r, satinMax) || wholeSatin(r);
   strokes.push({ key, mask: r.mask.slice(), stroke });
   if (strokes.length > 16) strokes.shift();
   return stroke;
 }
 const strokes: { key: string; mask: Uint8Array; stroke: boolean }[] = [];
+
+/** Whether the satin suggested for area `r` covers it whole, so that one click can sew it. */
+function wholeSatin(r: Region): boolean {
+  const s = suggestSatin(r);
+  return !!s && s.kind !== 'wide' && s.ok;
+}
 
 function sewRun(o: Obj, start: Pt, tol: number): Pt[][] {
   const line = (b: Branch, fa: boolean, fb: boolean) => runStitch(column(o.region, b, fa, fb).center, 2, tol);

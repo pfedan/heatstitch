@@ -101,7 +101,7 @@ export function bindStitches(app: StitchesApp) {
         let deep = 0;
         for (const v of an.fill.sdf) if (-v > deep) deep = -v;
         depth = Math.min(depth ?? Infinity, deep);
-        // Satin needs a stroke: narrow, about even in width (the same test as in Image mode).
+        // Satin needs a stroke (narrow, about even in width, the same test as in Image mode) or columns that cover the area whole.
         if (stroke && an.parts.some((pt) => pt.kind === 'fill')) stroke = strokeLike(remembered(p, obj)?.shape ?? an.fill, SATIN_MAX);
       }
     }

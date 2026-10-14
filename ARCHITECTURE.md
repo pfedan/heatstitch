@@ -136,9 +136,11 @@ points), `addShape.ts`, `appendDesign.ts`.
 
 - **`src/shape/`**: vector forms. Paths of nodes with cubic curves (`path.ts`), SVG path data
   (`svgPath.ts`), boolean operations and offsets (`ops.ts`, using paper.js and Clipper2, both
-  loaded on first use with `loadOps()`), rasterizing, vectorizing and simplifying.
+  loaded on first use with `loadOps()`), rasterizing, vectorizing and simplifying, and a
+  constrained Delaunay triangulation with exact predicates (`cdt.ts`).
 - **`src/digitize/`**: stitch generation. Fill variants (`fill.ts`, `flow.ts`, `spiral.ts`,
-  `rings.ts`, `deco.ts`, `echo.ts`), satin (`satin*.ts`, `rungs.ts`, `skeleton.ts`), running
+  `rings.ts`, `deco.ts`, `echo.ts`), satin (`satin*.ts`, `rungs.ts`, `skeleton.ts`; a wide area
+  as arms and hubs along its medial axis on the outline in `medial.ts` and `satinInner.ts`), running
   stitch and hand stitches (`run.ts`, `motif.ts`, `redwork.ts`), borders, and the image pipeline
   entry `digitize.ts` with the *Smart* style in `smart.ts`.
 - **`src/image/`**: preparing a picture for embroidery: color spaces and CIEDE2000, filters,
