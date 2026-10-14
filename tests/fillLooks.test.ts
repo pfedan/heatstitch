@@ -212,8 +212,9 @@ describe('in the design', () => {
       const q = sewAs(p, s);
       const m = remembered(q, sewObjects(q)[0])!;
       expect(m.fill, name).toMatchObject(s(remembered(p, sewObjects(p)[0])!.fill!));
-      // Sewn again from what it remembers, the stitches are the same.
-      expect(stitches(sewAs(q, (f) => f)), name).toBe(stitches(q));
+      // Sewn again from what it remembers, the stitches are the same. The area is rastered anew
+      // and may lie a pixel (0.1 mm) apart, which can tip a row at a corner over the shortest stitch.
+      expect(Math.abs(stitches(sewAs(q, (f) => f)) - stitches(q)), name).toBeLessThanOrEqual(1);
     }
   });
 
