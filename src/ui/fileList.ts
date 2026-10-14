@@ -15,9 +15,10 @@ import {
   saveNaming,
   saveObjects,
   saveTrace,
+  saveVersion,
   saveWorking,
+  storedVersion,
   titlesOf,
-  toStored,
   type StoredPattern,
   type Titles,
 } from '../storage/fileStore';
@@ -320,9 +321,8 @@ export class FileList {
           entry.storeKey = (await putFile(name, data)) ?? undefined;
           const key = entry.storeKey;
           if (key !== undefined) {
-            if (entry.pattern !== original) void saveWorking(key, toStored(entry.pattern));
+            void saveVersion(key, storedVersion(entry.pattern, original));
             if (entry.acks.length) void saveAcks(key, entry.acks);
-            if (objects) void saveObjects(key, rememberedIn(entry.pattern));
             if (aside?.length) void saveAside(key, aside);
             if (stored) void saveTrace(key, stored);
             void saveMaterial(key, entry.material);
@@ -391,9 +391,10 @@ export class FileList {
     if (!backToVersion(p)) keepVersion(p);
     f.pattern = p;
     f.stats = patternStats(p);
-    // The working copy is saved next to the original on every change, so a reload restores it.
+    // The working copy is saved next to the original on every change (undo and redo too), with
+    // what its objects know, so a reload restores both as they are now.
     if (f.storeKey !== undefined) {
-      void saveWorking(f.storeKey, p === f.original ? null : toStored(p));
+      void saveVersion(f.storeKey, storedVersion(p, f.original));
       void saveAside(f.storeKey, storeAside(asideOf(p)));
       // The picture is only written again when it changed, not with every stitch edit.
       if (traceChanged) this.storeTrace(f, p);
