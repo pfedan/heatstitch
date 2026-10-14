@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { cutLinesBetween, stripsOfAreas, stripsOfOutline } from '../src/digitize/rungs';
+import { cutLinesBetween, inside, stripsOfAreas, stripsOfOutline } from '../src/digitize/rungs';
 import type { Pt } from '../src/digitize/skeleton';
 import { sewObjects } from '../src/model/objects';
 import { bestChain, forget, keepShape, remember, remembered, rememberedIn, restoreRemembered, reversedRails, satinRuns, sectionView, type Rails } from '../src/model/restitch';
@@ -170,6 +170,26 @@ describe('Leeren on a satin cut from a fill', () => {
     expect(tool.columns.length).toBe(4);
     expect(tool.lines.length).toBe(0);
     expect(tool.count).toBe(4);
+  });
+
+  it('lights the part pointed at: red while it cannot be sewn, green once it can', () => {
+    const { tool, draw } = open();
+    tool.clear();
+    for (const [a, b] of CUTS) draw(a, b, true);
+    // Somewhere inside a part that has no rung yet.
+    const ring = tool.problems[0].ring;
+    const [x0, y0, x1, y1] = ring.reduce((m, [x, y]) => [Math.min(m[0], x), Math.min(m[1], y), Math.max(m[2], x), Math.max(m[3], y)], [Infinity, Infinity, -Infinity, -Infinity]);
+    const grid = Array.from({ length: 400 }, (_, k): Pt => [x0 + ((x1 - x0) * ((k % 20) + 0.5)) / 20, y0 + ((y1 - y0) * (Math.floor(k / 20) + 0.5)) / 20]);
+    const mid = grid.find((g) => inside(ring, g))!;
+    tool.hoverAt(mid[0], mid[1], 10);
+    expect(tool.glow?.ok).toBe(false);
+    for (const [a, b] of LINES) draw(a, b);
+    tool.hoverAt(mid[0], mid[1], 10);
+    expect(tool.glow?.ok).toBe(true);
+    expect(tool.glow!.pairs.length).toBeGreaterThan(0);
+    // Off the satin: nothing lit.
+    tool.hoverAt(-100, -100, 10);
+    expect(tool.glow).toBeNull();
   });
 
   it('takes Vorschlagen on the area alone', () => {

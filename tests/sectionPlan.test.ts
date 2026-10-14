@@ -8,7 +8,8 @@ import { transformRemembered } from '../src/model/transform';
 import { parsePattern } from '../src/parsers';
 import { decodeProject } from '../src/storage/project';
 import { fromStored } from '../src/storage/fileStore';
-import { BADGE, RungTool } from '../src/ui/rungTool';
+import { RungTool } from '../src/ui/rungTool';
+import { clickControl, joinsOf, type Control } from './helpers/satinView';
 import { checkSatinOrder } from './helpers/torture';
 
 const PLAIN: SatinSettings = { spacing: 0.4, edge: 0, short: false, underlay: false, tolerance: 0.15 };
@@ -65,14 +66,9 @@ describe('order, direction and trims of the sections of a column', () => {
     const tool = new RungTool({ change: (c) => changes.push(c), lines: () => {}, guides: () => {}, redraw: () => {}, say: () => {} });
     tool.openSatin([[bar()]]);
     tool.satin = PLAIN;
-    expect(tool.badges.map((b) => [b.n, b.step, b.trim])).toEqual([[1, 0, null], [2, 1, false], [3, 2, false]]);
-    const click = (n: number, what: 'number' | 'arrow' | 'scissors') => {
-      const b = tool.badges.find((x) => x.n === n)!;
-      const along = what === 'arrow' ? BADGE.arrow : BADGE.number;
-      const across = what === 'scissors' ? BADGE.scissors : 0;
-      tool.down(b.at[0] + (b.dir[0] * along - b.dir[1] * across) / 10, b.at[1] + (b.dir[1] * along + b.dir[0] * across) / 10, 10);
-      tool.up();
-    };
+    expect(tool.badges.map((b) => [b.n, b.step])).toEqual([[1, 0], [2, 1], [3, 2]]);
+    expect(joinsOf(tool)).toEqual(['way', 'way']);
+    const click = (n: number, what: Control) => clickControl(tool, n, what);
     click(2, 'number');
     expect(changes[0][0][0].plan!.map((x) => x.sec)).toEqual([1, 0, 2]);
     tool.setColumns(changes[0]);
@@ -122,15 +118,17 @@ describe('places of the columns of a satin read from stitches', () => {
     const tool = new RungTool({ change: (c) => changes.push(c), lines: () => {}, guides: () => {}, redraw: () => {}, say: () => {} });
     tool.openSatin(view);
     tool.satin = PLAIN;
-    expect(tool.badges.map((b) => [b.n, b.lone, b.trim])).toEqual([[1, undefined, null], [2, undefined, null]]);
+    expect(tool.badges.map((b) => [b.n, b.lone])).toEqual([[1, undefined], [2, undefined]]);
+    // Each sewn as a run of its own: they meet, so the second goes on where the first ends or jumps there.
+    expect(joinsOf(tool).length).toBe(1);
     // Moved one place earlier: the order of the part changes, its area stays with the first column.
-    const b = tool.badges[1];
-    tool.down(b.at[0] + (b.dir[0] * BADGE.number) / 10, b.at[1] + (b.dir[1] * BADGE.number) / 10, 10);
-    tool.up();
+    clickControl(tool, 2, 'number');
     const part = changes[0][0];
     expect(part[0].left).toEqual(down().left);
-    expect(part[0].split).toBeDefined();
-    expect(part[1].split).toBeUndefined();
+    // The area was only read from the rails to show them: not given back as if it were known.
+    expect(view[0][0].split?.read).toBe(true);
+    expect(part.some((c) => c.split)).toBe(false);
+    expect(sectionView([part], undefined)[0][0].split).toBeDefined();
     expect(part.some((c) => 'chain' in c)).toBe(false);
   });
 

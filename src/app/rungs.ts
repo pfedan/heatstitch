@@ -19,6 +19,9 @@ import { SATIN_MAX } from '../digitize/digitize';
 import { t, type Key } from '../i18n';
 import { edgeAlong, railsArea, sectionView, DECO_DEFAULTS, MAX_SWIRLS, type FillSettings, type Rails, type SatinSettings, analyze, remembered, keepShape, remember, restitch, measureSatin, relearn, type RestitchResult, type Settings as RestitchSettings } from '../model/restitch';
 import { inChainOrder } from '../model/reshape';
+import { satinOf as lineSatinOf } from '../model/along';
+import { lineColumns, lineWithOrder, ordersOf, satinLineOf } from '../model/lineOrder';
+import type { PathStitch } from '../model/along';
 import { ui } from './state';
 
 /** What bindRungs needs from the rest of the app. */
@@ -35,6 +38,8 @@ export interface RungsApp {
   readonly stage: HTMLElement;
   readonly stitchInfo: (p: Pattern, q: Sequence) => StitchInfo;
   readonly stitchPanel: StitchPanel;
+  /** Line `o` sewn anew with `st` (shown only while not `final`); see bindShapes. */
+  readonly sewLine: (o: number, path: null, st: PathStitch, final: boolean) => boolean;
 }
 
 /** The rung tool: satin columns drawn and edited by their rungs, and the guides that go with them. */
@@ -43,6 +48,15 @@ export function bindRungs(app: RungsApp) {
 
   const rungTool = new RungTool({
     change: (columns, final) => {
+      // A satin line: sewn as lines are, keeping only its own order over its rails (see LineOrder);
+      // while dragging, once a frame.
+      if (onLine()) {
+        cancelAnimationFrame(rungFrame);
+        rungFrame = 0;
+        if (final) sewLineColumns(columns, true);
+        else rungFrame = requestAnimationFrame(() => ((rungFrame = 0), rungTool.active && sewLineColumns(columns, false)));
+        return;
+      }
       if (final) applyRungs(columns);
       else if (!rungFrame) {
         rungFrame = requestAnimationFrame(() => {
@@ -63,6 +77,7 @@ export function bindRungs(app: RungsApp) {
       app.stitchPanel.setPoints(pts.map((q) => [share(q[0], box[0], box[2]), share(q[1], box[1], box[3])] as Pt));
     },
     redraw: () => app.redraw(),
+    trimMm: () => app.settings.trimMm,
     say: (key) => {
       app.layers.say(t(key), true);
       app.redraw();
@@ -194,7 +209,12 @@ export function bindRungs(app: RungsApp) {
     if (!target) return;
     if (app.editor.active) app.setEditing(false);
     const obj = q.objects[target.o];
-    if (target.mode === 'satin') {
+    const line = target.mode === 'satin' ? satinLine(p, obj) : null;
+    if (line) {
+      // A satin line: its rails follow the line, each path a part of its own; what is set here is its own order over them.
+      rungTool.openSatin(lineColumns(line.form, line.st).map((c) => [c]));
+      rungTool.satin = lineSatinOf(line.st, true);
+    } else if (target.mode === 'satin') {
       const shape = keepShape(p, obj, q.kinds);
       const columns = shape.columns;
       if (!columns?.length) return app.layers.say(t('stitch.direction.miss'), true);
@@ -228,8 +248,39 @@ export function bindRungs(app: RungsApp) {
     app.redraw();
   }
 
+  const satinLine = satinLineOf;
+
+  /** The selected satin line back to Auto: its own order set in the satin view taken away. */
+  function lineAuto(): void {
+    const p = app.files.active?.pattern;
+    if (!p || ui.selectedObjects.size !== 1) return;
+    const o = [...ui.selectedObjects][0];
+    const obj = app.seq(p).objects[o];
+    const line = obj && satinLine(p, obj);
+    if (line?.st.order) app.sewLine(o, null, lineWithOrder(line.st, undefined), true);
+  }
+
+  /** Whether the rung tool is on a satin line. */
+  function onLine(): boolean {
+    const p = app.files.active?.pattern;
+    const obj = p && ui.rungObject !== null ? app.seq(p).objects[ui.rungObject] : null;
+    return !!(p && obj && satinLine(p, obj));
+  }
+
+  /** A satin line in the rung tool sewn with the order its columns have now (shown only while not `final`). */
+  function sewLineColumns(columns: Rails[][], final: boolean): boolean {
+    const p = app.files.active?.pattern;
+    const obj = p && ui.rungObject !== null ? app.seq(p).objects[ui.rungObject] : null;
+    const line = p && obj ? satinLine(p, obj) : null;
+    if (!line) return false;
+    app.sewLine(ui.rungObject!, null, lineWithOrder(line.st, ordersOf(line.form, line.st, columns.map((part) => part[0]))), final);
+    return true;
+  }
+
   /** The satin settings an object is sewn with (as withRungs sews it). */
   function satinOf(p: Pattern, q: Sequence, obj: Sequence['objects'][number]): SatinSettings | null {
+    const line = satinLine(p, obj);
+    if (line) return lineSatinOf(line.st, true);
     const known = remembered(p, obj)?.satin;
     if (known) return known;
     const part = analyze(p, obj, q.kinds).parts.find((pt) => pt.kind === 'satin');
@@ -264,6 +315,14 @@ export function bindRungs(app: RungsApp) {
       return;
     }
     const obj = q.objects[o];
+    const line = obj && rungTool.mode === 'satin' ? satinLine(p, obj) : null;
+    if (line) {
+      rungTool.setColumns(lineColumns(line.form, line.st).map((c) => [c]));
+      rungTool.satin = lineSatinOf(line.st, true);
+      ui.rungObject = o;
+      rungPattern = p;
+      return;
+    }
     const shape = obj && rungTool.mode === 'satin' ? keepShape(p, obj, q.kinds) : null;
     if (!shape?.columns?.length) return closeRungs();
     // As it opened: in sections of its areas (after an undo too, back to columns read from stitches).
@@ -466,5 +525,5 @@ export function bindRungs(app: RungsApp) {
     return true;
   }
 
-  return { closeRungs, convertToSatin, rungInfo, rungTool, sewAlongLines, suggestLines, syncRungs, toggleGuides, togglePoints, toggleRungs };
+  return { closeRungs, convertToSatin, lineAuto, rungInfo, rungTool, sewAlongLines, suggestLines, syncRungs, toggleGuides, togglePoints, toggleRungs };
 }

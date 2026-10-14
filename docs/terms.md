@@ -34,6 +34,7 @@ README; code names (Pattern, SewObject, Region, Block) stay as they are, users n
 | A piece of fabric sewn on as one object | Applikation | appliqué | applique |
 | First part of an appliqué: where its fabric goes | Platzierungslinie | placement line | place |
 | Second part: holds the fabric before it is trimmed | Heftlinie | tack-down | tack |
+| Appliqué edge with no cover, only the tack-down | offene Kante | raw edge | edge 'none' |
 | The machine halting in the same thread | Stopp | stop | COLOR_CHANGE to the same color |
 | Outline of an appliqué's fabric, to cut it out | Zuschnitt | cutting template | cutLinesSvg |
 

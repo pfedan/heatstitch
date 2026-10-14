@@ -17,9 +17,10 @@ button, a key and an entry in the command search (`Ctrl+K`).
 layers (hide, highlight, recolor), stitches can be colored by thread, order, stitch type or length,
 and a player steps through the design with an estimated sewing time. Each color opens to its
 objects (fill with underlay, satin column, running stitch), recognized from the stitches of any
-file. Objects can be reordered, moved, rotated, scaled, duplicated, mirrored, combined, cut out,
-knocked out under later shapes, and sewn anew with other settings: fill pattern, spacing, angle,
-underlay, border, satin width and direction, running stitch length. Their outline is editable as
+file. Objects can be reordered, moved, rotated, scaled, duplicated, copied into another design,
+mirrored, combined, cut out, knocked out under later shapes, and sewn anew with other settings:
+fill pattern, spacing, angle, underlay, border, satin width and direction, running stitch length.
+Their outline is editable as
 curves with nodes, and single needle points can be moved. The drawing tools make new shapes, the
 Text tool sets lettering in 41 embroidery fonts, and the jump list trims or untrims jumps.
 
@@ -111,19 +112,22 @@ with this section when the site starts sending anything new.
   gradient, contour fill without a seam, spiral for any shape, as sewn, guided by drawn lines; decor: textures in the
   tatami (zigzag, swell, steps, herringbone: needle points shifted, no stitch more), embossed motifs, waves,
   grain, rays, swirl, color fade with a second color; open: meander, maze, grid, motifs (hearts, stars, flowers,
-  circles strung in rows), echo, cross stitch, crosshatch), irregular rows for a hand-sewn look,
+  circles strung in rows), echo, cross stitch (only along the slants, on a grid shared by the design, so
+  areas on top of each other meet without a gap; sizes of Aida marked), crosshatch), irregular rows for a hand-sewn look,
   spacing, angle, stitch length, edges, expand, underlay
   (off, across, cross, inset, left out under later objects), **border** (running, triple or satin,
   offset, own thread); satin pattern or E stitch, spacing (also by width and per rung), width per
   side (by fabric: free ends also shortened against push), fringe, irregular (width and spacing varying from stitch to stitch, kept by a seed), short stitches in curves, split, underlay kind (the zigzag sewn out and back, crossing), **rungs** for the direction and **sections**
-  with cut lines (also on a fill: each part a column of its own, order, direction and trims per part);
+  with cut lines (also on a fill: each part a column of its own); one **order view** for every satin, also one from a file: the way between its pieces shown (through the satin, jump or trim, marked where it stays in sight), trims set by a click, pieces reordered by dragging their numbers, turned and mirrored; on a satin line as an override kept along the line (wider, longer or mirrored, it keeps its order), with Auto to go back;
   running stitch length, max. deviation, triple stitch; lines as running stitch, satin or fill;
   **redwork**: a line of many paths in one go, each line out and back, no trims where they touch;
   line motifs (waves, scallops, hearts, chain) and **hand stitches** imitated by machine: stem,
   feather, Cretan and chevron stitch, each stitch sewn 1, 3 or 5 times over the same holes like
   stranded floss, stem stitch also as a dense **cord** of parallel slanted stitches, whole figures per piece between corners
 - **Appliqué** as one object: placement line, stop, tack-down just inside, stop, satin or E stitch
-  edge, all in one thread; the fabric (felt, cotton, denim and more, in any color) shows under the
+  edge, all in one thread; the placement line can be left out (the fabric laid on before, cut to
+  shape or generous), the tack-down is a running or bean stitch, and the edge can stay raw; touching appliqués share their edge, so satin is not sewn
+  twice where a later piece covers it; the fabric (felt, cotton, denim and more, in any color) shows under the
   edge in the realistic view and in the player; cutting template as SVG at 1:1
 - **Shape editing**: the outline of a fill as curves with nodes, kept exactly from then on; close,
   open, join and split paths, nodes at crossings, fill inside; an opened fill or satin is sewn as a
@@ -390,7 +394,12 @@ copied.
    distinct areas such as eyes, where median cut and Wu lose them. A pixel weighs more the more it
    stands out from its surroundings and the more saturated it is. Nearly equal colors (CIEDE2000 under
    6) are merged, tiny inconspicuous ones (under 0.4 % of the area and no further than 22 from any
-   other color) are dropped.
+   other color) are dropped. A **graphic** (not a photo) is drawn in a few exact colors plus the
+   blends anti-aliasing puts along its edges: every color with inner pixels of its own counts, and a
+   color without (a fine line, a thin ring) counts unless it lies on the line between two counted
+   colors, as the blends do. *Most colors* starts at that count, and as long as it is not lowered the
+   picture keeps exactly these colors, so a vein or a ring in a color of its own is not folded into
+   its neighbor by area.
 4. **Thread colors:** the nearest thread of the Brother palette by CIEDE2000 (Sharma, Wu & Dalal 2005,
    tested against their reference data); colors that land on the same thread become one. The color
    list shows ≠ when no thread is close (ΔE over 10).
@@ -398,8 +407,12 @@ copied.
    (paint, erase) are applied before and after the clean-up, so they hold.
 6. **Clean-up:** 3×3 majority filter; anti-aliasing seams (at most 0.5 mm wide, color between the two
    neighbors) go to the neighbors; the background (the color of at least 60 % of the border and three
-   corners) is dropped where it is connected to the border; areas under *Smallest area* merge into the
-   neighbor with the longest shared border (as in Goldman's patent US 6,836,695 and in Wilcom).
+   corners) is dropped where it is connected to the border; areas under *Smallest area* (mm² at the
+   size sewn, so it follows the width) merge into the neighbor with the longest shared border (as in
+   Goldman's patent US 6,836,695 and in Wilcom). Bands are no specks, whatever their area: a region at
+   least 4 times as long as it is wide (width from its widest place, twice the largest distance to its
+   edge; length the area over that), at least 0.3 mm wide and 2 mm long stays, to be sewn as a line or
+   satin.
 
 **SVG** files (`src/image/svg.ts`, `src/shape/svgPath.ts`) skip the raster steps: every shape is
 read with its curves and its color, hidden parts are left out when converting a picture and offered for
@@ -497,8 +510,13 @@ fill rows end there, satin edges are found there, underlay lies on a contour ins
   it came only after everything beyond it is sewn: the first pass lies below, the way back on top,
   over the same needle points. Parts that do not touch follow each other, the nearest next. SVG lines
   in running stitch whose paths touch are sewn this way from the start.
-- **Order:** colors by area, the largest first; within a color fills before satin and lines, each time
-  the nearest object. Objects sewn earlier reach 0.2 mm under later neighbors. Up to 1 mm apart a
+- **Order:** what lies on top is sewn later. Of two regions that touch, the narrower lies on top
+  (mean width 2 × area / perimeter): a vein on its leaf, an outline around its area. Each touching
+  pair votes by the length of its shared edge, weighted by how much the widths differ, and the colors
+  are ordered to agree with as much as they can (a linear ordering problem, solved exactly by dynamic
+  programming over subsets up to 16 colors, else by moving one color at a time to its best place);
+  ties keep areas by size, the largest first, then the line colors. Within a color fills before satin
+  and lines, each time the nearest object. Objects sewn earlier reach 0.2 mm under later neighbors. Up to 1 mm apart a
   stitch, up to 3 mm a jump, beyond that a tie-off (0, 0.5, 1, 0.5, 0 mm along the thread), trim, jump
   and tie-in; the same at color changes.
 - **Defaults** by material (`digitizeDefaults`): spacing from the profile's recommendation (woven

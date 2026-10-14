@@ -4,14 +4,15 @@ import { expandRegion, type Region } from '../digitize/region';
 import { apply, type Form, type Mat } from '../shape/path';
 import { coversFrom, type Cover } from './covers';
 import { tidyKept, withRecords } from './edit';
-import { wholeOf } from './knockout';
+import { cutKey, wholeOf } from './knockout';
 import { lineStitches } from './line';
 import { joinedUncut, setObjects, sewObjects, stitchKey, tableOf, trimmedBetween, type ObjectKind, type PlacedEntry, type SewObject } from './objects';
 import { COLOR_CHANGE, END, JUMP, nextVersion, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
 import { tieIn, tieOff } from './jumps';
 import { blockKeys } from './order';
 import { blockIndex } from './sequence';
-import { appliqueRuns, stopBefore, type AppliqueSettings } from './applique';
+import { appliqueRuns, stopBefore, stopsAround, type AppliqueSettings } from './applique';
+import { sharedArea } from './appliqueShare';
 import { borderOf, fillRuns, knownKind, TRAVEL_REACH, lockAt, remember, remembered, satinRuns, trimBefore, type FillSettings, type Rails, type Remembered, type SatinSettings } from './restitch';
 import { bandArea, fillArea, formKey, geoOf, geoUse, openOf } from './geo';
 
@@ -29,7 +30,7 @@ export type Spec =
   | { kind: 'fill'; area: Region; fill: FillSettings; memory: Remembered }
   | { kind: 'satin'; columns: Rails[][]; satin: SatinSettings }
   | { kind: 'border'; area: Region; border: PathStitch; memory: Remembered; open: Form | null }
-  | { kind: 'applique'; area: Region; applique: AppliqueSettings };
+  | { kind: 'applique'; area: Region; applique: AppliqueSettings; shared: Region | null };
 
 /** Where an object is sewn from and to. */
 export interface Way {
@@ -55,7 +56,7 @@ export function specOf(p: Pattern, o: SewObject, m: Remembered | null | undefine
   if (!m || m.free || m.hand || m.read || m.lettering || m.borderAt !== undefined) return null;
   if (m.applique) {
     const area = m.region ?? fillArea(m);
-    return area ? { kind: 'applique', area, applique: m.applique } : null;
+    return area ? { kind: 'applique', area, applique: m.applique, shared: sharedArea(p, sewObjects(p), o, m) } : null;
   }
   const kind = knownKind(m) ?? o.kind;
   if (kind !== o.kind) return null;
@@ -91,8 +92,10 @@ export function sewOne(spec: Spec, way: Way): { runs: Pt[][]; under: number } | 
       return ok(lineStitches(spec.path, spec.line));
     case 'satin':
       return ok(spec.columns.flatMap((rails) => satinRuns(rails, spec.satin)));
-    case 'applique':
-      return ok(appliqueRuns(spec.area, spec.applique, way.from));
+    case 'applique': {
+      const { runs, under } = appliqueRuns(spec.area, spec.applique, way.from, spec.shared);
+      return ok(runs, under);
+    }
     case 'border': {
       const whole = wholeOf(spec.area, spec.memory);
       const runs = borderStitches(spec.area, spec.border, way.from, whole);
@@ -130,7 +133,8 @@ const idOf = (o: object) => {
 function wayKey(spec: Spec, way: Way): string {
   // A line or a satin is sewn the same from wherever the thread comes.
   if (spec.kind === 'line' || spec.kind === 'satin') return '';
-  return `${way.from[0]},${way.from[1]};${way.to?.[0]},${way.to?.[1]};${(way.covers ?? []).map((c) => `${idOf(c.region)}:${c.overlap}`).join(',')}`;
+  const shared = spec.kind === 'applique' ? `;${cutKey(spec.shared)}` : '';
+  return `${way.from[0]},${way.from[1]};${way.to?.[0]},${way.to?.[1]};${(way.covers ?? []).map((c) => `${idOf(c.region)}:${c.overlap}`).join(',')}${shared}`;
 }
 
 /** Keeps `sewn` as what memory `m` gives along `way`. */
@@ -363,8 +367,11 @@ export function sewList(p: Pattern, list: Entry[], trimMm: number, opts: ListOpt
     const prev = list[k - 1]?.obj;
     const spec = specs[k];
     const mark = out.length;
+    // An appliqué's piece cut before is laid on before it, a raw edge cut after it: the machine
+    // stops between them and their neighbours in the same thread (see stopsAround).
+    const stop = !!prev && (stopsAround(known[k]?.applique).before || stopsAround(known[k - 1]?.applique).after);
     // How the thread comes here: as in `p` between neighbours there, else anew.
-    const asBefore = !!prev && o.index === prev.index + 1 && o.block === blockOf[prev.last] && list[k - 1].thread === e.thread && !fresh?.has(o.index) && !fresh?.has(prev.index);
+    const asBefore = !stop && !!prev && o.index === prev.index + 1 && o.block === blockOf[prev.last] && list[k - 1].thread === e.thread && !fresh?.has(o.index) && !fresh?.has(prev.index);
     // A change of thread between neighbours as in `p` stays as it was there.
     const colorAsBefore =
       !!prev && o.index === prev.index + 1 && o.block === blockOf[prev.last] + 1 && list[k - 1].thread !== e.thread && !fresh?.has(o.index) && !fresh?.has(prev.index) && !apart?.has(k);
@@ -397,12 +404,12 @@ export function sewList(p: Pattern, list: Entry[], trimMm: number, opts: ListOpt
       // Objects without a tie that the thread went between untrimmed in `p` (what lay between them
       // gone, or sewn the other way round) stay joined so: a cut would give them ties.
       const asWent = !asBefore && !whole && keptAt(k - 1) && !spec && joinedUncut(p, prev, o);
-      cut = color || apart?.has(k) || (asBefore ? trimmedBetween(p, prev, o) : !asWent && (far || !!whole || linked(p, prev) || linked(p, o)));
+      cut = color || stop || apart?.has(k) || (asBefore ? trimmedBetween(p, prev, o) : !asWent && (far || !!whole || linked(p, prev) || linked(p, o)));
       if (cut) {
         const end = out[out.length - 1];
         if (keptAt(k - 1) && !prev.tieOff && !cutAfter(prev)) tiedOff(k - 1, prev);
         out.push({ ...end, cmd: TRIM });
-        if (color) {
+        if (color || stop) {
           out.push({ ...end, cmd: COLOR_CHANGE });
           colors.push(e.color);
         }
@@ -433,6 +440,11 @@ export function sewList(p: Pattern, list: Entry[], trimMm: number, opts: ListOpt
       count(sewnFrom);
       stopsFrom(sewnFrom, e.color);
       memory = memoryAfter(m!, spec.kind === 'applique' ? 'satin' : o.kind, stitches - first, under);
+      // An appliqué remembers which edges it shares, to see when the pieces beside it changed.
+      if (spec.kind === 'applique' && (memory.cut ?? '') !== cutKey(spec.shared)) {
+        const { cut: _c, ...rest } = memory;
+        memory = spec.shared ? { ...rest, cut: cutKey(spec.shared) } : rest;
+      }
       // The new memory gives the same stitches the same way.
       if (memory !== m) keepSewn(memory, wayKey(spec, way), sewn);
     } else {

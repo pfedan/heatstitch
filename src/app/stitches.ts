@@ -15,7 +15,7 @@ import { SATIN_SHARE } from '../model/covers';
 import { currentSettings } from '../correct/plan';
 import { isCovered, setOverlapShare } from '../model/knockout';
 import { strokeLike, SATIN_MAX, pullFor, digitizeDefaults, gapOf } from '../digitize/digitize';
-import { fillOfLine, lineSettings, lineToFill } from '../model/line';
+import { fillOfLine, lineGoes, lineSettings, lineToFill } from '../model/line';
 import { outline } from '../digitize/region';
 import { recommendedSpacing } from '../validation/profiles';
 import { rememberObjects, type SewObject } from '../model/objects';
@@ -57,6 +57,8 @@ export interface StitchesApp {
   readonly toggleGuides: () => void;
   readonly togglePoints: () => void;
   readonly toggleRungs: () => void;
+  /** The selected satin line back to Auto: its own order from the satin view taken away. */
+  readonly lineAuto: () => void;
   readonly takeShapes: (next: Pattern, select: number[]) => void;
 }
 
@@ -146,7 +148,7 @@ export function bindStitches(app: StitchesApp) {
     if (one && app.isLineObject(p, one)) {
       const form = guessLine(p, one, q.kinds);
       const m = remembered(p, one);
-      info.path = { st: lineSettings(p, one, q.kinds), traced: !lineGeoOf(m), closed: !!form?.paths.length && form.paths.every((x) => x.closed), fills: fits(form, 'fill'), refill: !!m?.kept?.fill, resatin: !!m?.kept?.satinSettings, color: one.color };
+      info.path = { st: lineSettings(p, one, q.kinds), traced: !lineGeoOf(m), closed: !!form?.paths.length && form.paths.every((x) => x.closed), fills: fits(form, 'fill'), refill: !!m?.kept?.fill, resatin: !!m?.kept?.satinSettings, color: one.color, ...(form && form.paths.length > 1 ? { goes: lineGoes(form) } : {}) };
     }
     if (one && geoUse(remembered(p, one)) === 'band') info.asLine = true;
     const orig = app.files.active?.pattern === p ? loadedOriginal(app.files.active) : undefined;
@@ -490,6 +492,7 @@ export function bindStitches(app: StitchesApp) {
     },
     direction: (a) => {
       if (a === 'tool') return app.toggleRungs();
+      if (a === 'auto') return app.lineAuto();
       if (a === 'rung' || a === 'cut') return app.rungTool.setCutMode(a === 'cut');
       if (!app.rungTool.active || app.rungTool.mode !== 'satin') return;
       if (a === 'corners') app.rungTool.corners();
@@ -513,7 +516,12 @@ export function bindStitches(app: StitchesApp) {
       if (which.length !== 1) return;
       // A shadow or echo is set at its line, and stays selected (gone, its line is).
       const find = final ? dependentFinder() : null;
-      if (!app.sewLine(which[0], null, st, final) || !find) return;
+      // A satin line's own order is set in the satin view (key R), never by the panel's copy of its settings (see LineOrder).
+      const p0 = app.files.active?.pattern;
+      const obj = p0 ? app.seq(p0).objects[which[0]] : undefined;
+      const order = p0 && obj ? remembered(p0, obj)?.line?.order : undefined;
+      const { order: _o, ...rest } = st;
+      if (!app.sewLine(which[0], null, order ? { ...rest, order } : rest, final) || !find) return;
       const p = app.files.active?.pattern;
       const i = p ? find(p) : null;
       if (i === null) return;
