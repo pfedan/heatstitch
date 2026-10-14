@@ -266,7 +266,7 @@ function columnsOfArea(area: Region, cols: Rails[], before: Region | null): Rail
 /** The columns the kind switch suggests for an area (lines across, cut where it branches), in sewing order; null when none fit. */
 function suggestedColumns(area: Region, satin: SatinSettings): Rails[] | null {
   const suggested = suggestSatin(area);
-  const made = suggested?.kind === 'strokes' && suggested.ok ? columnsAlong(area, suggested.lines, suggested.cuts) : null;
+  const made = suggested && suggested.kind !== 'wide' && suggested.ok ? columnsAlong(area, suggested.lines, suggested.cuts) : null;
   return made && 'columns' in made ? inChainOrder(made.columns, satin) : null;
 }
 
@@ -392,7 +392,7 @@ export function lineToSatin(p: Pattern, index: number, trimMm: number): Restitch
   const area = rasterize(geo);
   if (!area) return null;
   const suggested = suggestSatin(area);
-  const made = suggested?.kind === 'strokes' && suggested.ok ? columnsAlong(area, suggested.lines, suggested.cuts) : null;
+  const made = suggested && suggested.kind !== 'wide' && suggested.ok ? columnsAlong(area, suggested.lines, suggested.cuts) : null;
   const guide = made && 'columns' in made ? inChainOrder(made.columns, satin) : null;
   // Columns kept from a satin it was before it was a fill are of another area: not taken.
   let from = p;

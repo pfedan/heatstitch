@@ -118,7 +118,8 @@ with this section when the site starts sending anything new.
   (off, across, cross, inset, left out under later objects), **border** (running, triple or satin,
   offset, own thread); satin pattern or E stitch, spacing (also by width and per rung), width per
   side (by fabric: free ends also shortened against push), fringe, irregular (width and spacing varying from stitch to stitch, kept by a seed), short stitches in curves, split, underlay kind (the zigzag sewn out and back, crossing), **rungs** for the direction and **sections**
-  with cut lines (also on a fill: each part a column of its own); one **order view** for every satin, also one from a file: the way between its pieces shown (through the satin, jump or trim, marked where it stays in sight), trims set by a click, pieces reordered by dragging their numbers, turned and mirrored; on a satin line as an override kept along the line (wider, longer or mirrored, it keeps its order), with Auto to go back;
+  with cut lines (also on a fill: each part a column of its own; a wide shape such as a star, a block letter or a ring is cut along its medial axis into arms and
+  hubs, sewn in one run with the columns overlapping 0.3 mm where they meet); one **order view** for every satin, also one from a file: the way between its pieces shown (through the satin, jump or trim, marked where it stays in sight), trims set by a click, pieces reordered by dragging their numbers, turned and mirrored; on a satin line as an override kept along the line (wider, longer or mirrored, it keeps its order), with Auto to go back;
   running stitch length, max. deviation, triple stitch; lines as running stitch, satin or fill;
   **redwork**: a line of many paths in one go, each line out and back, no trims where they touch;
   line motifs (waves, scallops, hearts, chain) and **hand stitches** imitated by machine: stem,

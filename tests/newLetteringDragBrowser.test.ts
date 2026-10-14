@@ -46,6 +46,23 @@ describe.skipIf(!on)('a new lettering on a new design', () => {
       return { x: (x0 + x1) / 2 / k, y: (y0 + y1) / 2 / k, top: y0 / k, hoop, on };
     }, row);
 
+  /** Until the hoop has come to rest (it glides round the design once that is sewn anew). */
+  const settled = async () => {
+    const c = (await page.locator('#canvas').boundingBox())!;
+    let last = NaN;
+    await expect
+      .poll(
+        async () => {
+          const h = (await look(c.height * 0.25)).hoop;
+          const still = Math.abs(h - last) < 0.5;
+          last = h;
+          return still;
+        },
+        { timeout: 5000, interval: 200 },
+      )
+      .toBe(true);
+  };
+
   beforeAll(async () => {
     const { createServer } = await import('vite');
     server = await createServer({ server: { port: 0, strictPort: false }, logLevel: 'error' });
@@ -88,18 +105,18 @@ describe.skipIf(!on)('a new lettering on a new design', () => {
     expect(b.top - a.top).toBeCloseTo(50, -1);
     expect(b.hoop).toBeCloseTo(a.hoop, 0);
     await page.mouse.up();
-    await page.waitForTimeout(800);
-    // Let go: the lettering stays where it was put, and the hoop goes round it again.
+    // Let go: the lettering stays where it was put, and the hoop goes round it again (it glides
+    // there once the lettering is sewn anew, which takes its time on a slow machine).
+    await expect.poll(async () => (await look(c.height * 0.25)).hoop - a.hoop, { timeout: 5000 }).toBeCloseTo(100, -1);
     const e = await look(c.height * 0.25);
     expect(e.x - a.x).toBeCloseTo(100, -1);
     expect(e.y - a.y).toBeCloseTo(50, -1);
-    expect(e.hoop - a.hoop).toBeCloseTo(100, -1);
   });
 
   it('selects and moves an object that is not selected yet; beside it a drag pans', { timeout: 60_000 }, async () => {
     await page.keyboard.press('Escape');
     await page.keyboard.press('Escape');
-    await page.waitForTimeout(300);
+    await settled();
     await expect.poll(() => page.locator('.stage-top').getByText('Buchstaben einzeln', { exact: true }).count()).toBe(0);
     const c = (await page.locator('#canvas').boundingBox())!;
     const a = await look(c.height * 0.25);
@@ -115,15 +132,15 @@ describe.skipIf(!on)('a new lettering on a new design', () => {
     await page.waitForTimeout(800);
     // It is selected now.
     expect(await page.locator('.stage-top').getByText('Buchstaben einzeln', { exact: true }).count()).toBeGreaterThan(0);
+    await settled();
     // A drag beside the objects still moves the view, hoop and all.
     const d = await look(c.height * 0.25);
     await page.mouse.move(c.x + 40, c.y + c.height * 0.5);
     await page.mouse.down();
     await page.mouse.move(c.x + 100, c.y + c.height * 0.5, { steps: 10 });
     await page.mouse.up();
-    await page.waitForTimeout(300);
+    await expect.poll(async () => (await look(c.height * 0.25)).hoop - d.hoop, { timeout: 5000 }).toBeCloseTo(60, -1);
     const f = await look(c.height * 0.25);
-    expect(f.hoop - d.hoop).toBeCloseTo(60, -1);
     expect(f.x - d.x).toBeCloseTo(60, -1);
   });
 });

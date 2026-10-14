@@ -391,6 +391,16 @@ export function uncovered(area: Region, parts: Region[]): number {
   return all ? open / all : 0;
 }
 
+/** A five-pointed star of outer radius R round (cx, cy), as SVG path data. */
+function starPath(cx: number, cy: number, R: number): string {
+  const pts = Array.from({ length: 10 }, (_, i) => {
+    const a = -Math.PI / 2 + (i * Math.PI) / 5;
+    const rr = i % 2 ? 0.382 * R : R;
+    return `${(cx + rr * Math.cos(a)).toFixed(3)} ${(cy + rr * Math.sin(a)).toFixed(3)}`;
+  });
+  return `M ${pts.join(' L ')} Z`;
+}
+
 export type Op = { name: string; run: (d: Doc, r: Rand) => boolean | Promise<boolean> };
 
 export const OPS: Op[] = [
@@ -401,7 +411,9 @@ export const OPS: Op[] = [
       const y = between(r, 0, 50);
       const w = between(r, 6, 22);
       const h = between(r, 6, 22);
-      const path = r() < 0.5 ? rectPath(x, y, w, h, 0, 0) : ellipsePath(x + w / 2, y + h / 2, w / 2, h / 2);
+      // A rectangle, an ellipse or a star (a star is sewn as satin along its axis, see satinInner).
+      const v = r();
+      const path = v < 0.4 ? rectPath(x, y, w, h, 0, 0) : v < 0.8 ? ellipsePath(x + w / 2, y + h / 2, w / 2, h / 2) : starPath(x + w / 2, y + h / 2, Math.max(w, h) / 2);
       const objs = d.objects;
       const after = objs.length && r() < 0.5 ? pick(r, objs).index : null;
       const a = addShape(d.cur.p, { form: parsePath(path, ID), kind: 'fill' }, pick(r, COLORS), after, options);

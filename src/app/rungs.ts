@@ -497,8 +497,8 @@ export function bindRungs(app: RungsApp) {
 
   /**
    * Stichart Satin on one fill: the same as R and Vorschlagen, then sewn. Where the suggestion
-   * leaves a part open the tool stays open on it, the part outlined in red. False when the shape
-   * is no lines of even width (too wide, a blob): then the fill is sewn as satin as before.
+   * leaves a part open the tool stays open on it, the part outlined in red. False when there is
+   * no suggestion (too wide, a blob): then the fill is sewn as satin as before.
    */
   function convertToSatin(o: number): boolean {
     const p = app.files.active?.pattern;
@@ -512,7 +512,7 @@ export function bindRungs(app: RungsApp) {
     const area = an && (known?.shape ?? an.fill);
     if (!area) return false;
     const s = suggestSatin(area);
-    if (!s || s.kind !== 'strokes') return false;
+    if (!s || s.kind === 'wide') return false;
     const made = s.ok ? columnsAlong(area, s.lines, s.cuts) : null;
     if (made && 'columns' in made) {
       sewColumns(p, q, o, made.columns);

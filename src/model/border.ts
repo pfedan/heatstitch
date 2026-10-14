@@ -9,7 +9,7 @@ import { borderOf, lockAt, objectKey, remember, remembered, trimBefore, withLine
 import { expandRegion } from '../digitize/region';
 import { fillRegion } from '../digitize/fill';
 import { blockIndex, stitchKinds } from './sequence';
-import { innerStops } from './applique';
+import { innerStops, stopsAround } from './applique';
 
 /**
  * The end of the thread's run from record `i` on: the last record before the color change that
@@ -343,6 +343,22 @@ export function syncShadows(p: Pattern, trimMm: number): Pattern {
       const ends: number[] = [];
       for (let i = 0; i < p.cmd.length; i++) if (p.cmd[i] === COLOR_CHANGE) ends.push(i);
       const inner = innerStops(p);
+      // An appliqué that stops before or after it (fabric laid on, a raw edge cut) has no neighbour
+      // in its thread on that side: a part goes into a block of its own there instead.
+      const stopAt = (i: number, side: 'before' | 'after') => {
+        const j = objs.findIndex((x) => (side === 'after' ? x.last === i : x.first === i));
+        return j >= 0 && stopsAround(mem[j]?.applique)[side];
+      };
+      const lastSewn = (end: number) => {
+        let i = end - 1;
+        while (i >= 0 && p.cmd[i] !== STITCH) i--;
+        return i;
+      };
+      const firstSewn = (from: number) => {
+        let i = from;
+        while (i < p.cmd.length && p.cmd[i] !== STITCH) i++;
+        return i;
+      };
       if (part.after) {
         // After the line's block, or after the block of its last copies sewn after it, so nearer
         // copies come first: at the start of the next block when that has the thread.
@@ -354,7 +370,7 @@ export function syncShadows(p: Pattern, trimMm: number): Pattern {
         while (inner.has(after + 1)) after++;
         const end = ends[after] ?? p.cmd.length - 1;
         const next = p.cmd[end] === COLOR_CHANGE ? p.colors[after + 1] : undefined;
-        if (next && sameColor(next, part.color)) changes.push({ a: end + 1, b: end, recs, memory });
+        if (next && sameColor(next, part.color) && !stopAt(firstSewn(end + 1), 'before')) changes.push({ a: end + 1, b: end, recs, memory });
         else changes.push({ a: end, b: end - 1, recs, color: { block: after, c: part.color }, memory });
         continue;
       }
@@ -363,7 +379,7 @@ export function syncShadows(p: Pattern, trimMm: number): Pattern {
       let head = o.block;
       while (head > 0 && inner.has(head)) head--;
       let into = head - 1;
-      while (into >= 0 && (!sameColor(p.colors[into], part.color) || inner.has(into + 1))) into--;
+      while (into >= 0 && (!sameColor(p.colors[into], part.color) || inner.has(into + 1) || stopAt(lastSewn(ends[into]), 'after'))) into--;
       if (into >= 0) changes.push({ a: ends[into], b: ends[into] - 1, recs, memory });
       else {
         const start = head > 0 ? ends[head - 1] + 1 : 0;
