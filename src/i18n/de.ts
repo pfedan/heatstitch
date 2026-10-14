@@ -969,7 +969,7 @@ export const deBase = {
   'stitch.pen.rung.hint': 'Eine gezogene Linie legt die Stichrichtung fest (Taste T wechselt)',
   'stitch.pen.cut': 'Trennlinie',
   'stitch.pen.cut.hint': 'Eine Linie teilt die Säule in Abschnitte (Taste T wechselt)',
-  'stitch.direction.chain': 'Nummer: früher sticken · Pfeil: umdrehen · Schere: Schnitt · ⇄: spiegeln',
+  'stitch.direction.chain': 'Nummer ziehen: umsortieren · Pfeil: umdrehen · Schere: schneiden · ⇄: spiegeln',
   'stitch.direction.needCut': 'Diese Querlinie passt nicht in die Säule. Eine Trennlinie davor macht daraus einen eigenen Abschnitt, in dem sie passt.',
   'stitch.suggest.hint': 'Zerlegt die Fläche wie von Hand. Danach lässt sich alles verschieben.',
   'stitch.clear.hint': 'Alle Trenn- und Querlinien weg, um neu anzufangen',

@@ -6,6 +6,9 @@ import type { Viewport } from './viewport';
 
 const ACCENT = '#e0559e';
 
+/** A join that stays in sight (a way across the fabric or over satin sewn before, a jump not covered). */
+const SHOWS = '#ffb547';
+
 /** Cut lines in their own color, so they read apart from the rungs. */
 const CUT = '#6fd3ff';
 
@@ -194,40 +197,97 @@ export function drawRungOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, vie
     ctx.stroke();
     ctx.setLineDash([]);
   }
-  // Columns of a part and sections: their place in the order before where the satin starts, an arrow
-  // the way it goes, scissors for a trim before it and the mirror for the rail it starts on (both
-  // bright when set). A column on its own has no place in an order.
-  for (const b of view.badges) {
+  drawOrder(ctx, vp, view);
+  if (view.draft) {
+    const [a, b] = view.draft;
+    // The line being drawn already in the color of its kind.
+    ctx.setLineDash([6, 4]);
+    ctx.beginPath();
+    ctx.moveTo(...S(a));
+    ctx.lineTo(...S(b));
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.lineWidth = 4;
+    ctx.stroke();
+    ctx.strokeStyle = view.draftCut ? CUT : RUNG;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/**
+ * The order of each satin part: the joins between its pieces first (a way through the satin
+ * dashed, a jump dotted, both in the warning color where they stay in sight, a trim faint with
+ * its scissors bright), then each piece's arrow where its satin starts, its mirror just before
+ * and its number in its middle. Over a number its joins before and after light up, so one sees
+ * where the thread comes from and goes; a number being dragged follows the pointer.
+ */
+function drawOrder(ctx: CanvasRenderingContext2D, vp: Viewport, view: RungView): void {
+  const badges = view.badges;
+  if (!badges.length) return;
+  const S = (p: Pt) => vp.toScreen(p[0], p[1]);
+  const { numbers, scissors } = view.layout(vp.scale);
+  const h = view.badgeHover;
+  const drag = view.orderDrag;
+  const lit = (part: number, i: number) => {
+    const at = drag ?? (h?.what === 'number' ? h : null);
+    if (at && at.part === part && (at.i === i || at.i === i - 1)) return true;
+    if (view.linkHover?.part === part && view.linkHover.i === i) return true;
+    return h?.what === 'link' && h.part === part && h.i === i;
+  };
+  const disc = (p: Pt, fill: string, ring: string) => {
+    ctx.beginPath();
+    ctx.arc(p[0], p[1], BADGE.r, 0, Math.PI * 2);
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.strokeStyle = ring;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  };
+  const label = (p: Pt, text: string, color: string) => {
+    ctx.font = '700 11px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = color;
+    ctx.fillText(text, p[0], p[1] + 0.5);
+  };
+  const links = view.links;
+  links.forEach((l) => {
+    if (l.way.length < 2) return;
+    const on = lit(l.part, l.i);
+    ctx.beginPath();
+    l.way.forEach((q, k) => (k ? ctx.lineTo(...S(q)) : ctx.moveTo(...S(q))));
+    // Told apart by their dashes too, not by color alone.
+    const dash = l.join === 'jump' ? [1, 4] : l.join === 'trim' ? [1, 6] : l.shows ? [7, 3] : [4, 3];
+    ctx.setLineDash(dash);
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.lineWidth = on ? 5 : 3.5;
+    ctx.stroke();
+    ctx.strokeStyle = on ? ACCENT : l.join === 'trim' ? 'rgba(255, 255, 255, 0.45)' : l.shows ? SHOWS : 'rgba(255, 255, 255, 0.9)';
+    ctx.lineWidth = on ? 2.75 : l.join === 'trim' ? 1.25 : 1.75;
+    ctx.stroke();
+    ctx.setLineDash([]);
+  });
+  links.forEach((l, k) => {
+    const trim = l.join === 'trim';
+    // A trim, and where it can change while it shows (see scissorsOn): the scissors in the middle of the join.
+    if (!trim && !(l.cuttable && view.scissorsOn(l))) return;
+    const sc = S(scissors[k]);
+    const hov = h?.what === 'link' && h.part === l.part && h.i === l.i;
+    disc(sc, hov ? ACCENT : trim ? CUT : 'rgba(20, 20, 24, 0.9)', trim || hov ? '#ffffff' : l.shows ? SHOWS : 'rgba(255, 255, 255, 0.45)');
+    label(sc, '✂', trim && !hov ? '#10141a' : l.shows && !hov ? SHOWS : 'rgba(255, 255, 255, 0.8)');
+  });
+  badges.forEach((b) => {
     const [ax, ay] = S(b.at);
     const [dx, dy] = S([b.at[0] + b.dir[0], b.at[1] + b.dir[1]]);
     const l = Math.hypot(dx - ax, dy - ay) || 1;
     const d: Pt = [(dx - ax) / l, (dy - ay) / l];
     const n: Pt = [-d[1], d[0]];
     const spot = (along: number, across: number): Pt => [ax + d[0] * along + n[0] * across, ay + d[1] * along + n[1] * across];
-    const hov = (what: string) => view.badgeHover?.col === b.col && view.badgeHover.step === b.step && view.badgeHover.what === what;
-    const disc = (p: Pt, fill: string, ring: string) => {
-      ctx.beginPath();
-      ctx.arc(p[0], p[1], BADGE.r, 0, Math.PI * 2);
-      ctx.fillStyle = fill;
-      ctx.fill();
-      ctx.strokeStyle = ring;
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-    };
-    const label = (p: Pt, text: string, color: string) => {
-      ctx.font = '700 11px system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillStyle = color;
-      ctx.fillText(text, p[0], p[1] + 0.5);
-    };
-    if (!b.lone) {
-      const num = spot(BADGE.number, 0);
-      disc(num, hov('number') ? ACCENT : 'rgba(20, 20, 24, 0.9)', '#ffffff');
-      label(num, String(b.n), '#ffffff');
-    }
+    const hov = (what: string) => h?.part === b.part && h.i === b.i && h.what === what;
     // Mirrored: the satin starts on the other rail (bright when set).
-    const mi = spot(BADGE.number, -BADGE.scissors);
+    const mi = spot(BADGE.mirror, 0);
     disc(mi, hov('mirror') ? ACCENT : b.mirror ? CUT : 'rgba(20, 20, 24, 0.9)', b.mirror ? '#ffffff' : 'rgba(255, 255, 255, 0.45)');
     label(mi, '⇄', b.mirror ? '#10141a' : 'rgba(255, 255, 255, 0.7)');
     // The arrow: a triangle pointing the way the satin goes.
@@ -244,25 +304,26 @@ export function drawRungOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, vie
     ctx.lineWidth = 1.5;
     ctx.fill();
     ctx.stroke();
-    if (b.trim !== null) {
-      const sc = spot(BADGE.number, BADGE.scissors);
-      disc(sc, hov('scissors') ? ACCENT : b.trim ? CUT : 'rgba(20, 20, 24, 0.9)', b.trim ? '#ffffff' : 'rgba(255, 255, 255, 0.45)');
-      label(sc, '✂', b.trim ? '#10141a' : 'rgba(255, 255, 255, 0.55)');
+  });
+  badges.forEach((b, k) => {
+    const at = numbers[k];
+    if (!at) return;
+    const p = S(at);
+    const dragged = drag?.part === b.part && drag.i === b.i;
+    const target = drag?.part === b.part && drag.over === b.i;
+    disc(p, (hov(b) && !drag) || target ? ACCENT : 'rgba(20, 20, 24, 0.9)', dragged ? 'rgba(255, 255, 255, 0.4)' : '#ffffff');
+    label(p, String(b.n), dragged ? 'rgba(255, 255, 255, 0.4)' : '#ffffff');
+  });
+  if (drag) {
+    const b = badges.find((x) => x.part === drag.part && x.i === drag.i);
+    if (b) {
+      const p = S(drag.at);
+      disc(p, ACCENT, '#ffffff');
+      label(p, String(b.n), '#ffffff');
     }
   }
-  if (view.draft) {
-    const [a, b] = view.draft;
-    // The line being drawn already in the color of its kind.
-    ctx.setLineDash([6, 4]);
-    ctx.beginPath();
-    ctx.moveTo(...S(a));
-    ctx.lineTo(...S(b));
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
-    ctx.lineWidth = 4;
-    ctx.stroke();
-    ctx.strokeStyle = view.draftCut ? CUT : RUNG;
-    ctx.lineWidth = 2;
-    ctx.stroke();
+
+  function hov(b: { part: number; i: number }): boolean {
+    return h?.what === 'number' && h.part === b.part && h.i === b.i;
   }
-  ctx.restore();
 }
