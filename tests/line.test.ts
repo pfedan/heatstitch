@@ -154,6 +154,29 @@ describe('wide line as a fill', () => {
     expect(remembered(back.pattern, b)?.kept?.fill?.lineWidth).toBe(5);
   });
 
+  it('keeps the round ends of a satin line as a band and back', () => {
+    const form = parsePath('M0 0 C10 10 20 -10 30 0', ID);
+    const p0 = addShape(empty, { form, kind: 'stroke', width: 5 }, red, null, options)!.pattern;
+    const p = resewLine(p0, 0, form, { type: 'satin', width: 5, ends: 'round' }, options.trimMm)!.pattern;
+    const fs: FillSettings = { pattern: 'tatami', spacing: 0.4, spacingEnd: 0.8, offset: 0.25, angle: NaN, stitch: 4, underlay: true, edge: 0, tolerance: 0.15 };
+    const take = (r: ReturnType<typeof lineToFill>) => {
+      rememberObjects(r!.pattern, [r!.starts[0]], r!.ends[0]);
+      const o = sewObjects(r!.pattern)[0];
+      remember(r!.pattern, o, r!.memory[0]);
+      return { q: r!.pattern, o, m: remembered(r!.pattern, o)! };
+    };
+    const a = take(lineToFill(p, 0, fs, options.trimMm, 'band'));
+    expect(a.m.fill).toMatchObject({ lineWidth: 5, lineCap: 'round' });
+    const back = fillToLine(a.q, 0, options.trimMm)!;
+    expect(remembered(back.pattern, sewObjects(back.pattern)[0])?.line).toMatchObject({ type: 'satin', ends: 'round' });
+    // Made flat as a band: flat again as a line.
+    const kinds = stitchKinds(a.q);
+    const flat = take(restitch(a.q, sewObjects(a.q, kinds), [0], { kind: 'fill', s: { ...a.m.fill!, lineCap: 'flat' } }, kinds, options.trimMm));
+    const line = remembered(fillToLine(flat.q, 0, options.trimMm)!.pattern, sewObjects(fillToLine(flat.q, 0, options.trimMm)!.pattern)[0])?.line;
+    expect(line?.type).toBe('satin');
+    expect(line?.ends).toBeUndefined();
+  });
+
   it('makes its area from the line each time: no outline of its own, width and ends from the fill, the line edited', () => {
     const form = parsePath('M0 0 C10 10 20 -10 30 0', ID);
     const p = addShape(empty, { form, kind: 'stroke', width: 5 }, red, null, options)!.pattern;

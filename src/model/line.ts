@@ -409,7 +409,8 @@ export function lineToFill(p: Pattern, index: number, s: FillSettings, trimMm: n
   const was = known.kept?.fill;
   let fill: FillSettings;
   let border: BorderSettings | null = null;
-  if (how === 'band') fill = { ...(was ?? s), lineWidth: was?.lineWidth ?? line.width, lineCap: was?.lineCap ?? 'flat' };
+  // A satin line's ends stay as they are in the band (round, else flat: a band has no square ones).
+  if (how === 'band') fill = { ...(was ?? s), lineWidth: was?.lineWidth ?? line.width, lineCap: line.type === 'satin' ? (line.ends === 'round' ? 'round' : 'flat') : (was?.lineCap ?? 'flat') };
   else {
     if (!fits(geo, 'fill')) return null;
     // The line stays beside the fill as its border, as it is sewn now with its echo, shadow and
@@ -475,7 +476,12 @@ export function fillToLine(p: Pattern, index: number, trimMm: number, geo?: Form
   const was = known?.kept?.line;
   const edge = borderOf(known);
   let st: PathStitch;
-  if (fill.lineWidth !== undefined) st = { ...(was ?? lineStitchFor(fill.lineWidth)), width: fill.lineWidth };
+  if (fill.lineWidth !== undefined) {
+    st = { ...(was ?? lineStitchFor(fill.lineWidth)), width: fill.lineWidth };
+    // The band's ends go back to a satin line: round stays round, flat is flat unless it was square.
+    if (st.type === 'satin' && fill.lineCap === 'round') st.ends = 'round';
+    else if (st.type === 'satin' && st.ends === 'round') delete st.ends;
+  }
   else if (edge) {
     // The line is sewn as the border is: nothing of a line it was before (a motif, repeats) is
     // mixed in, else it comes back as part of the border when filled again. Only the side of a
