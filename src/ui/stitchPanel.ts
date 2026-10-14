@@ -282,6 +282,9 @@ const OFFSETS: [number, string][] = [
   [0.2, '1/5'],
 ];
 
+/** Cross sizes of bought designs and Aida fabric (18, 16, 14 and 11 count among them), mm. */
+const CROSS_SIZES = [1.4, 1.6, 1.8, 2, 2.3, 2.5, 3];
+
 interface SliderDef {
   label: Key;
   hint?: Key;
@@ -295,6 +298,8 @@ interface SliderDef {
   band?: [number, number];
   /** What the band means (its title); the material's recommendation by default. */
   bandHint?: Key;
+  /** Common values, marked on the track. */
+  marks?: number[];
   /** Extra line under the value. */
   note?: (v: number) => string;
   /** Taken over on its own when let go, instead of as a stitch setting (no preview while dragging). */
@@ -1344,6 +1349,16 @@ export class StitchPanel {
       band.style.width = `${Math.max(0, b - a)}%`;
       track.append(input, band);
     }
+    if (d.marks) {
+      // Small ticks under the track at the common values.
+      if (track === input) track = h('span', { class: 'band-track' }, input);
+      for (const v of d.marks) {
+        const tick = h('span', { class: 'tick' });
+        // Under the middle of the thumb (16 px wide) when it sits on the value.
+        tick.style.left = `calc(8px + (100% - 16px) * ${(v - d.min) / (d.max - d.min)})`;
+        track.append(tick);
+      }
+    }
     const note = h('span', { class: 'muted small' });
     let tag: HTMLElement | null = null;
     let dot: HTMLButtonElement | null = null;
@@ -1625,7 +1640,7 @@ export class StitchPanel {
     out.push(
       this.slider({
         label: cells ? 'stitch.openCell' : 'stitch.openSize',
-        hint: cells ? 'stitch.openCell.hint' : 'stitch.openSize.hint',
+        hint: pat === 'cross' ? 'stitch.crossSize.hint' : cells ? 'stitch.openCell.hint' : 'stitch.openSize.hint',
         min: lo,
         max: hi,
         step: 0.1,
@@ -1633,12 +1648,16 @@ export class StitchPanel {
         set: (v) => (d.size = v),
         fmt: (v) => `${formatNumber(v, 1)} mm`,
         auto: this.unset(d, 'size'),
+        // Cross stitch: the sizes of bought designs and Aida fabric, and the Aida count a size matches.
+        ...(pat === 'cross' ? { marks: CROSS_SIZES, note: (v: number) => t(Math.abs(v - OPEN_SIZE.cross) < 1e-6 ? 'stitch.crossSize.usual' : 'stitch.crossSize.count', { ct: formatNumber(Math.round(25.4 / v)) }) } : {}),
       }),
     );
     // Turned half round a grid, cross stitch, meander or maze is the same kind again; figures need the whole turn.
     if (pat !== 'echo') out.push(this.dial({ label: 'stitch.openAngle', hint: 'stitch.openAngle.hint', turn: pat === 'motifs' ? 360 : 180, get: () => d.angle ?? 0, set: (v) => (v ? (d.angle = v) : delete d.angle), fmt: (v) => `${Math.round(v)}°` }));
     if (pat !== 'cross') out.push(this.slider({ label: 'stitch.length', hint: 'stitch.openLength.hint', min: 1, max: 3, step: 0.1, get: () => Math.min(3, s.stitch), set: (v) => (s.stitch = v), fmt: (v) => `${formatNumber(v, 1)} mm` }));
-    out.push(this.check('stitch.triple', 'stitch.openTriple.hint', () => !!d.triple, (v) => (d.triple = v)));
+    // Whole crosses lay each diagonal as often as their size needs (crossPasses).
+    if (pat !== 'cross' || d.cross === 'half' || d.cross === 'double') out.push(this.check('stitch.triple', 'stitch.openTriple.hint', () => !!d.triple, (v) => (d.triple = v)));
+    if (pat === 'cross') out.push(this.check('stitch.crossGrid', 'stitch.crossGrid.hint', () => !d.ownGrid, (v) => (v ? delete d.ownGrid : (d.ownGrid = true))));
     if (pat === 'meander' || pat === 'maze') out.push(this.rerollRow());
     return out;
   }
