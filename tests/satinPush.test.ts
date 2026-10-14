@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Pt } from '../src/digitize/skeleton';
-import { pushEnds, satinRuns, SEAM_OVERLAP, type Rails, type SatinSettings } from '../src/model/restitch';
+import { pushEnds, satinRuns, seamEnds, SEAM_OVERLAP, type Rails, type SatinSettings } from '../src/model/restitch';
 
 /** A straight column from x0 to x1, its rails at y = 0 and y = w, a point every 0.5 mm. */
 const bar = (x0: number, x1: number, w: number, y = 0): Rails => {
@@ -64,6 +64,7 @@ describe('push compensation', () => {
     // A column round a square, its ends meeting.
     const ring: Rails = { left: [[0, 0], [20, 0], [20, 20], [0, 20], [0, 0.01]], right: [[4, 4], [16, 4], [16, 16], [4, 16], [4, 4.01]] };
     expect(pushEnds([ring], AUTO)).toEqual([]);
+    expect(seamEnds([ring], AUTO)).toEqual([]);
     // A bar in two sections: shortened at its two ends only.
     const cut: Rails = { ...bar(0, 20, 4), cuts: [[10, 10]] };
     const run = satinRuns([cut], AUTO)[0];

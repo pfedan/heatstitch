@@ -2925,13 +2925,15 @@ export function pushEnds(rails: Rails[], s: SatinSettings): PushEnd[] {
 
 /**
  * Parts of one satin overlap where they meet (a cut line between sections, an arm ending on a
- * hub, the two ends of a ring opened once): each end that meets another column, or the column's
- * own other end, is taken on by half of SEAM_OVERLAP, so no fabric shows through the seam when
- * the stitches pull in. 0.3 mm in all, as digitizers overlap the parts of a shape.
+ * hub): each end that meets another column is taken on by half of SEAM_OVERLAP, so no fabric shows
+ * through the seam when the stitches pull in. 0.3 mm in all, as digitizers overlap the parts of a
+ * shape. A ring closing on itself (a satin border, a ring opened once) is one column sewn in one go:
+ * its last stitch lies beside its first at the spacing, and an overlap there would only double the
+ * thread (critical on terry in the correction benchmark).
  */
 export const SEAM_OVERLAP = 0.3;
 
-/** The ends of the columns `rails` (one object) that meet another column or close a ring, each lengthened (negative mm, see pushedColumn). */
+/** The ends of the columns `rails` (one object) that meet another column, each lengthened (negative mm, see pushedColumn). */
 export function seamEnds(rails: Rails[], s: SatinSettings): PushEnd[] {
   if (s.type === 'e' || rails.length === 0) return [];
   const outlines = rails.map(outlineOf);
@@ -2947,8 +2949,8 @@ export function seamEnds(rails: Rails[], s: SatinSettings): PushEnd[] {
     if (r.left.length < 2 || r.right.length < 2) return;
     const a = mid(r.left[0], r.right[0]);
     const b = mid(r.left[r.left.length - 1], r.right[r.right.length - 1]);
-    const ring = dist(a, b) < PUSH_TOUCH;
-    for (const at of [a, b]) if (ring || outlines.some((o, j) => j !== k && touches(at, o))) out.push({ at, mm: -SEAM_OVERLAP / 2 });
+    if (dist(a, b) < PUSH_TOUCH) return;
+    for (const at of [a, b]) if (outlines.some((o, j) => j !== k && touches(at, o))) out.push({ at, mm: -SEAM_OVERLAP / 2 });
   });
   return out;
 }
