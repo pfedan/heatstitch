@@ -65,8 +65,18 @@ export function lineStitches(form: Form, st: PathStitch, reverse = false, from?:
  * parts than there are paths. A line of such paths is sewn as redwork to begin with.
  */
 export function redworkHelps(form: Form): boolean {
+  const { apart, redwork } = lineGoes(form);
+  return apart > 1 && redwork < apart;
+}
+
+/**
+ * In how many goes the paths of `form` are sewn: one by one (`apart`), and as redwork (one go per
+ * connected part). Between two goes the needle jumps, or the thread is trimmed when far: the
+ * figure that tells how much redwork saves.
+ */
+export function lineGoes(form: Form): { apart: number; redwork: number } {
   const paths = form.paths.map((p) => ({ pts: flatten(p), closed: p.closed })).filter((x) => x.pts.length >= 2);
-  return paths.length > 1 && redworkWalks(redworkGraph(paths)).length < paths.length;
+  return { apart: paths.length, redwork: paths.length > 1 ? redworkWalks(redworkGraph(paths)).length : paths.length };
 }
 
 /** Running stitch along the paths of `form` (see lineStitches). */

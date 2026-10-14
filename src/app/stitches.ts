@@ -15,7 +15,7 @@ import { SATIN_SHARE } from '../model/covers';
 import { currentSettings } from '../correct/plan';
 import { isCovered, setOverlapShare } from '../model/knockout';
 import { strokeLike, SATIN_MAX, pullFor, digitizeDefaults, gapOf } from '../digitize/digitize';
-import { fillOfLine, lineSettings, lineToFill } from '../model/line';
+import { fillOfLine, lineGoes, lineSettings, lineToFill } from '../model/line';
 import { outline } from '../digitize/region';
 import { recommendedSpacing } from '../validation/profiles';
 import { rememberObjects, type SewObject } from '../model/objects';
@@ -146,7 +146,7 @@ export function bindStitches(app: StitchesApp) {
     if (one && app.isLineObject(p, one)) {
       const form = guessLine(p, one, q.kinds);
       const m = remembered(p, one);
-      info.path = { st: lineSettings(p, one, q.kinds), traced: !lineGeoOf(m), closed: !!form?.paths.length && form.paths.every((x) => x.closed), fills: fits(form, 'fill'), refill: !!m?.kept?.fill, resatin: !!m?.kept?.satinSettings, color: one.color };
+      info.path = { st: lineSettings(p, one, q.kinds), traced: !lineGeoOf(m), closed: !!form?.paths.length && form.paths.every((x) => x.closed), fills: fits(form, 'fill'), refill: !!m?.kept?.fill, resatin: !!m?.kept?.satinSettings, color: one.color, ...(form && form.paths.length > 1 ? { goes: lineGoes(form) } : {}) };
     }
     if (one && geoUse(remembered(p, one)) === 'band') info.asLine = true;
     const orig = app.files.active?.pattern === p ? loadedOriginal(app.files.active) : undefined;

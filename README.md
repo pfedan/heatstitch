@@ -390,7 +390,12 @@ copied.
    distinct areas such as eyes, where median cut and Wu lose them. A pixel weighs more the more it
    stands out from its surroundings and the more saturated it is. Nearly equal colors (CIEDE2000 under
    6) are merged, tiny inconspicuous ones (under 0.4 % of the area and no further than 22 from any
-   other color) are dropped.
+   other color) are dropped. A **graphic** (not a photo) is drawn in a few exact colors plus the
+   blends anti-aliasing puts along its edges: every color with inner pixels of its own counts, and a
+   color without (a fine line, a thin ring) counts unless it lies on the line between two counted
+   colors, as the blends do. *Most colors* starts at that count, and as long as it is not lowered the
+   picture keeps exactly these colors, so a vein or a ring in a color of its own is not folded into
+   its neighbor by area.
 4. **Thread colors:** the nearest thread of the Brother palette by CIEDE2000 (Sharma, Wu & Dalal 2005,
    tested against their reference data); colors that land on the same thread become one. The color
    list shows ≠ when no thread is close (ΔE over 10).
@@ -398,8 +403,12 @@ copied.
    (paint, erase) are applied before and after the clean-up, so they hold.
 6. **Clean-up:** 3×3 majority filter; anti-aliasing seams (at most 0.5 mm wide, color between the two
    neighbors) go to the neighbors; the background (the color of at least 60 % of the border and three
-   corners) is dropped where it is connected to the border; areas under *Smallest area* merge into the
-   neighbor with the longest shared border (as in Goldman's patent US 6,836,695 and in Wilcom).
+   corners) is dropped where it is connected to the border; areas under *Smallest area* (mm² at the
+   size sewn, so it follows the width) merge into the neighbor with the longest shared border (as in
+   Goldman's patent US 6,836,695 and in Wilcom). Bands are no specks, whatever their area: a region at
+   least 4 times as long as it is wide (width from its widest place, twice the largest distance to its
+   edge; length the area over that), at least 0.3 mm wide and 2 mm long stays, to be sewn as a line or
+   satin.
 
 **SVG** files (`src/image/svg.ts`, `src/shape/svgPath.ts`) skip the raster steps: every shape is
 read with its curves and its color, hidden parts are left out when converting a picture and offered for
@@ -497,8 +506,13 @@ fill rows end there, satin edges are found there, underlay lies on a contour ins
   it came only after everything beyond it is sewn: the first pass lies below, the way back on top,
   over the same needle points. Parts that do not touch follow each other, the nearest next. SVG lines
   in running stitch whose paths touch are sewn this way from the start.
-- **Order:** colors by area, the largest first; within a color fills before satin and lines, each time
-  the nearest object. Objects sewn earlier reach 0.2 mm under later neighbors. Up to 1 mm apart a
+- **Order:** what lies on top is sewn later. Of two regions that touch, the narrower lies on top
+  (mean width 2 × area / perimeter): a vein on its leaf, an outline around its area. Each touching
+  pair votes by the length of its shared edge, weighted by how much the widths differ, and the colors
+  are ordered to agree with as much as they can (a linear ordering problem, solved exactly by dynamic
+  programming over subsets up to 16 colors, else by moving one color at a time to its best place);
+  ties keep areas by size, the largest first, then the line colors. Within a color fills before satin
+  and lines, each time the nearest object. Objects sewn earlier reach 0.2 mm under later neighbors. Up to 1 mm apart a
   stitch, up to 3 mm a jump, beyond that a tie-off (0, 0.5, 1, 0.5, 0 mm along the thread), trim, jump
   and tie-in; the same at color changes.
 - **Defaults** by material (`digitizeDefaults`): spacing from the profile's recommendation (woven
