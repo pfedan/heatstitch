@@ -2,6 +2,7 @@ import type { Rgb } from './color';
 import { NONE } from './quantize';
 import type { ExactLabels } from './prepare';
 import type { Form, Mat } from '../shape/path';
+import type { StrokeCap, StrokeJoin } from '../shape/ops';
 import { ellipsePath, parsePath, pointsPath, rectPath } from '../shape/svgPath';
 
 /**
@@ -22,6 +23,8 @@ import { ellipsePath, parsePath, pointsPath, rectPath } from '../shape/svgPath';
 
 /** Lines are drawn at least this wide (mm), so they become running stitch instead of vanishing. */
 export const MIN_LINE_MM = 0.4;
+/** Paint at most this opaque is left out: a hint of a shadow or a guide, not something to sew. */
+export const MIN_OPACITY = 0.05;
 /** More colors than this: the file is an auto-traced photo and is better quantized. */
 export const MAX_COLORS = 48;
 
@@ -152,6 +155,11 @@ export interface SvgShape {
   form: Form;
   /** Stroke width in mm (strokes only), at least MIN_LINE_MM. */
   width?: number;
+  /** How the stroke is drawn at its ends and corners (strokes only), as in SVG. */
+  cap?: StrokeCap;
+  join?: StrokeJoin;
+  /** The longest a miter corner may reach, as a multiple of the half width (SVG's stroke-miterlimit). */
+  miter?: number;
   /** The element it was painted by (its place in the file): the fill and the stroke of one element share it. */
   element?: number;
 }
@@ -245,6 +253,8 @@ function expandUses(root: SVGSVGElement): void {
 function paintColor(root: SVGSVGElement, value: string, opacity: number): Rgb | null | 'unsupported' {
   if (!value || value === 'none') return null;
   const url = value.match(/url\(\s*["']?#([^"')]+)["']?\s*\)/);
+  // Nearly transparent paint is not sewn, whatever it paints with.
+  if (opacity <= MIN_OPACITY) return null;
   if (url) {
     let el: Element | null = root.querySelector(`[id="${CSS.escape(url[1])}"]`);
     if (!el) {
@@ -272,7 +282,7 @@ function paintColor(root: SVGSVGElement, value: string, opacity: number): Rgb | 
     return gradientColor(stops);
   }
   const c = cssRgb(value);
-  if (!c || c.alpha * opacity <= 0.05) return null;
+  if (!c || c.alpha * opacity <= MIN_OPACITY) return null;
   return c.rgb;
 }
 
@@ -371,9 +381,14 @@ export async function readSvg(text: string): Promise<SvgDesign | null> {
       const cs = getComputedStyle(el);
       if (cs.visibility === 'hidden' || cs.visibility === 'collapse') continue;
       let hidden = false;
-      for (let a: Element | null = el; a && a !== root; a = a.parentElement) if (getComputedStyle(a).display === 'none') hidden = true;
+      // Opacity of the groups around it counts too.
+      let opacity = 1;
+      for (let a: Element | null = el; a && a !== root; a = a.parentElement) {
+        const as = getComputedStyle(a);
+        if (as.display === 'none') hidden = true;
+        opacity *= parseFloat(as.opacity || '1');
+      }
       if (hidden) continue;
-      const opacity = parseFloat(cs.opacity || '1');
       const fill = paintColor(root, cs.fill, opacity * parseFloat(cs.fillOpacity || '1'));
       const stroke = paintColor(root, cs.stroke, opacity * parseFloat(cs.strokeOpacity || '1'));
       if (fill === 'unsupported' || stroke === 'unsupported') return dispose(), null;
@@ -432,7 +447,13 @@ export async function readSvg(text: string): Promise<SvgDesign | null> {
             const nonzero = getComputedStyle(q.el).fillRule !== 'evenodd';
             if (closed.paths.length) out.push({ color: q.fill, kind: 'fill', form: nonzero ? { ...closed, nonzero } : closed, element });
           }
-          if (q.stroke >= 0) out.push({ color: q.stroke, kind: 'stroke', form, width: Math.max(MIN_LINE_MM, q.strokePx * s), element });
+          if (q.stroke >= 0) {
+            const cs = getComputedStyle(q.el);
+            const cap = (['butt', 'round', 'square'] as const).find((c) => c === cs.strokeLinecap) ?? 'butt';
+            const join = (['miter', 'round', 'bevel'] as const).find((j) => j === cs.strokeLinejoin) ?? 'miter';
+            const miter = parseFloat(cs.strokeMiterlimit) || 4;
+            out.push({ color: q.stroke, kind: 'stroke', form, width: Math.max(MIN_LINE_MM, q.strokePx * s), cap, join, miter, element });
+          }
         }
         return out;
       },

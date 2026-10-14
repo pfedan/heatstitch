@@ -28,12 +28,28 @@ import { partOf } from './shadow';
 /** Running stitch of a drawn line when nothing else is set. */
 export const LINE_RUN: RunSettings = { stitch: BORDER_STITCH, triple: false, tolerance: TOLERANCE };
 
-/** Lines from this wide (mm) are sewn as satin, thinner ones in running stitch. */
-export const LINE_SATIN = 1;
+/**
+ * How a line of a width is sewn to begin with: in running stitch, in bean stitch (a triple stitch,
+ * which lies bolder), as a satin of that width, or, wider than a satin can be, filled as a band
+ * in the line's shape. The widths (mm) are the upper ends of the first three; satin as wide as
+ * an area is sewn as satin (SATIN_MAX in digitize.ts).
+ */
+export const LINE_WIDTHS = { run: 0.7, bean: 1, satin: 7 };
 
-/** How a line of `width` (mm, as drawn or in an SVG) is sewn to begin with. */
+export type LineClass = 'run' | 'bean' | 'satin' | 'band';
+
+/** Which way a line of `width` (mm, as drawn or in an SVG) is sewn (see LINE_WIDTHS). */
+export function lineClassOf(width: number): LineClass {
+  if (width < LINE_WIDTHS.run) return 'run';
+  if (width < LINE_WIDTHS.bean) return 'bean';
+  return width <= LINE_WIDTHS.satin ? 'satin' : 'band';
+}
+
+/** How a line of `width` (mm) is sewn along its curves to begin with; a band is a satin as a line. */
 export function lineStitchFor(width: number, tolerance = TOLERANCE): PathStitch {
-  return width >= LINE_SATIN ? { type: 'satin', width, tolerance } : { type: 'run', width: BORDER_WIDTH, length: BORDER_STITCH, tolerance };
+  const c = lineClassOf(width);
+  if (c === 'run' || c === 'bean') return { type: c === 'run' ? 'run' : 'triple', width: BORDER_WIDTH, length: BORDER_STITCH, tolerance };
+  return { type: 'satin', width, tolerance };
 }
 
 /** The settings of running stitch as those of a line. */
