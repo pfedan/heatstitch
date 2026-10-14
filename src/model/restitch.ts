@@ -440,7 +440,8 @@ export interface Remembered {
   kept?: Kept;
   /**
    * Parts of `form` that fills sewn later cover are left out of the stitches (computed, the form
-   * stays whole). `cut` names the area that was sewn, to see when the shapes on top have changed.
+   * stays whole). `cut` names the area that was sewn, to see when the shapes on top have changed;
+   * of an appliqué, the area its cover left out its edge on (see appliqueShare.ts).
    */
   knockout?: boolean;
   cut?: string;
@@ -1479,18 +1480,20 @@ export const isGradient = (f: FillSettings): boolean => f.pattern === 'gradient'
 
 /**
  * Records of the fills sewn open on purpose (gradients), which the coverage check leaves out (1),
- * and of the placement lines of appliqués, whose fabric counts as covered (PATCH); null when there
+ * and of the placement lines (or tack-downs) of appliqués, whose fabric counts as covered (PATCH); null when there
  * are none.
  */
 export function openOnPurpose(p: Pattern, objs: SewObject[]): Uint8Array | null {
   let out: Uint8Array | null = null;
   for (const o of objs) {
-    // An appliqué: its placement line (up to the first stop) encloses the fabric, which covers.
-    if (remembered(p, o)?.applique) {
-      const stop = stopsIn(p, o.first, o.last)[0];
+    // An appliqué: its placement line (up to the first stop) encloses the fabric, which covers;
+    // a piece cut before, its tack-down (what it remembers as sewn under the cover, see appliqueRuns).
+    const m = remembered(p, o);
+    if (m?.applique) {
+      const stop = m.applique.place === false ? (m.under ? underlayRanges(p, o, new Uint8Array(0))[0]?.[1] : undefined) : stopsIn(p, o.first, o.last)[0];
       if (stop === undefined) continue;
       out ??= new Uint8Array(p.cmd.length);
-      out.fill(PATCH, o.first, stop);
+      out.fill(PATCH, o.first, m.applique.place === false ? stop + 1 : stop);
       continue;
     }
     const f = remembered(p, o)?.fill;

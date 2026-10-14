@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { addShape } from '../src/model/addShape';
-import { appliquePieces, appliqueStops, cutLinesSvg, innerStops, tackInset } from '../src/model/applique';
+import { appliqueFrom, appliquePieces, appliqueStops, cutLinesSvg, innerStops, stopsIn, tackInset } from '../src/model/applique';
 import { sheetHtml } from '../src/areas/ready/sheet';
 import { cardView } from '../src/areas/ready/card';
 import { recipeCard } from '../src/areas/ready/recipes';
@@ -14,7 +14,7 @@ import { fromStored, storedVersion, toStored } from '../src/storage/fileStore';
 import { reorder } from '../src/model/order';
 import { recolor } from '../src/model/recolor';
 import { ellipsePath, parsePath, rectPath } from '../src/shape/svgPath';
-import { COLORS, Doc, ID, OPS, T, checkReload, empty, options, saveAndOpen, shapes, transform, checkWellFormed, checkSewDesign, checkExport, checkAppliques, restitchFill, pointOnCloth, checkBlends, checkFollowers } from './helpers/torture';
+import { COLORS, Doc, ID, OPS, T, checkReload, empty, options, saveAndOpen, shapes, transform, checkWellFormed, checkSewDesign, checkExport, checkAppliques, restitchFill, pointOnCloth, checkBlends, checkFollowers, checkKnockouts } from './helpers/torture';
 import { objectAtPoint } from '../src/render/flow';
 import { setKnockout } from '../src/model/knockout';
 import { backToVersion } from '../src/model/restitch';
@@ -64,7 +64,7 @@ describe('appliqué', () => {
     };
     const median = (v: number[]) => v.sort((x, y) => x - y)[v.length >> 1];
     expect(median(radii(0))).toBeCloseTo(15, 0);
-    expect(median(radii(1))).toBeCloseTo(15 - tackInset(3), 0);
+    expect(median(radii(1))).toBeCloseTo(15 - tackInset({ edge: 'satin', width: 3 }), 0);
     const cover = radii(2);
     expect(Math.min(...cover)).toBeLessThan(14);
     expect(Math.max(...cover)).toBeGreaterThan(16);
@@ -121,7 +121,7 @@ describe('appliqué', () => {
   it('stays whole after its edge was changed, undone and the page reloaded', () => {
     const d = design();
     const before = d.cur.p;
-    expect(shapes(d, setApplique(before, [1], { edge: 'run' }, T))).toBe(true);
+    expect(shapes(d, setApplique(before, [1], { edge: 'none' }, T))).toBe(true);
     const changed = d.cur.p;
     // Undo: the store keeps the version undone to, records and objects together.
     expect(OPS.find((o) => o.name === 'undo')!.run(d, () => 0)).toBe(true);
@@ -138,32 +138,151 @@ describe('appliqué', () => {
     expect(reload(before, storedVersion(changed, undefined).objects)).toEqual([false, false, false, false, false]);
   });
 
-  it('can have a running edge over its tack-down, repeated or in bean stitch, kept on save', async () => {
+  it('can leave its edge raw: the tack-down further in, repeated or in bean stitch, kept on save', async () => {
     const d = design();
-    const p0 = d.cur.p;
-    const blocks = colorBlocks(p0);
     const stitchesIn = (p: Pattern, b: number) => {
       const bl = colorBlocks(p)[b];
       const out: number[] = [];
       for (let i = bl.first; i <= bl.last; i++) if (p.cmd[i] === STITCH) out.push(Math.hypot(p.x[i] / 10 - 15, p.y[i] / 10 - 15));
       return out;
     };
-    expect(blocks.length).toBe(4);
-    expect(shapes(d, setApplique(p0, [1], { edge: 'run' }, T))).toBe(true);
-    const once = stitchesIn(d.cur.p, 2);
-    // On the tack-down, inside the cut edge: nothing over the outline, nothing deep inside.
-    expect(once.every((r) => r > 13.8 && r < 14.8)).toBe(true);
-    expect(appliqueStops(d.cur.p).size).toBe(2);
-    expect(shapes(d, setApplique(d.cur.p, [1], { run: { type: 'triple', width: 0 } }, T))).toBe(true);
-    const bean = stitchesIn(d.cur.p, 2);
+    expect(shapes(d, setApplique(d.cur.p, [1], { edge: 'none' }, T))).toBe(true);
+    // Placement, stop, tack-down; the change to blue after it is the stop to cut the fabric.
+    expect(colorBlocks(d.cur.p)).toHaveLength(3);
+    expect([...appliqueStops(d.cur.p)]).toEqual([[1, 'place']]);
+    const once = stitchesIn(d.cur.p, 1);
+    // RAW_INSET inside the cut edge: nothing over the outline, nothing deep inside.
+    expect(once.every((r) => r > 13 && r < 14)).toBe(true);
+    const [x] = appliquePieces(d.cur.p);
+    expect(x.trim).toBeGreaterThan(x.last);
+    expect(d.cur.p.cmd[x.trim]).toBe(COLOR_CHANGE);
+    expect(shapes(d, setApplique(d.cur.p, [1], { tack: { type: 'triple', width: 0 } }, T))).toBe(true);
+    const bean = stitchesIn(d.cur.p, 1);
     expect(bean.length / once.length).toBeGreaterThan(2.5);
     expect(bean.length / once.length).toBeLessThan(3.5);
     checkWellFormed(d.cur.p);
+    checkAppliques(d.cur.p);
     checkExport(d.cur.p);
     await saveAndOpen(d);
     const a = sewObjects(d.cur.p)[1];
-    expect(remembered(d.cur.p, a)?.applique).toMatchObject({ edge: 'run', run: { type: 'triple' } });
-    expect(stitchesIn(d.cur.p, 2).length).toBe(bean.length);
+    expect(remembered(d.cur.p, a)?.applique).toMatchObject({ edge: 'none', tack: { type: 'triple' } });
+    expect(stitchesIn(d.cur.p, 1).length).toBe(bean.length);
+  });
+
+  it('a raw edge before more in its thread stops after it to cut the fabric', async () => {
+    const d = design();
+    expect(shapes(d, addShape(d.cur.p, { form: parsePath(ellipsePath(15, 45, 5, 5), ID), kind: 'fill' }, COLORS[0], 1, options)!.pattern)).toBe(true);
+    expect(shapes(d, setApplique(d.cur.p, [1], { edge: 'none' }, T))).toBe(true);
+    const p = d.cur.p;
+    expect([...appliqueStops(p).values()]).toEqual(['place', 'trim']);
+    const [x] = appliquePieces(p);
+    expect(x.trim).toBeGreaterThan(x.last);
+    checkAppliques(p);
+    checkSewDesign(p);
+    // Undone to a satin edge and back: the stop goes and comes with it.
+    expect(OPS.find((o) => o.name === 'undo')!.run(d, () => 0)).toBe(true);
+    expect(appliqueStops(d.cur.p).size).toBe(2);
+    checkAppliques(d.cur.p);
+    await saveAndOpen(d);
+    checkAppliques(d.cur.p);
+  });
+
+  it('without a placement line: a stop before it to lay the fabric on, one inside to cut it', async () => {
+    const d = design();
+    expect(shapes(d, setApplique(d.cur.p, [1], { place: false }, T))).toBe(true);
+    let p = d.cur.p;
+    const a = sewObjects(p)[1];
+    expect(remembered(p, a)?.applique?.place).toBe(false);
+    // The square and the appliqué in one thread: the stop between them opens its block, the one
+    // before the cover cuts the fabric (cut to shape before, the machine just sews on).
+    expect([...appliqueStops(p)].sort((x, y) => x[0] - y[0])).toEqual([
+      [1, 'lay'],
+      [2, 'trim'],
+    ]);
+    expect(stopsIn(p, a.first, a.last)).toHaveLength(1);
+    const [x] = appliquePieces(p);
+    expect(x.place).toBeLessThan(x.first);
+    expect(x.trim).toBeGreaterThan(x.first);
+    // Nothing on the outline before the tack-down: the first stitches lie inside it.
+    expect(Math.hypot(p.x[a.first + 2] / 10 - 15, p.y[a.first + 2] / 10 - 15)).toBeLessThan(14.8);
+    const m = measurePattern(p, openOnPurpose(p, sewObjects(p)) ?? undefined);
+    expect(m.gapsLow.reduce((s, v) => s + v, 0)).toBe(0);
+    expect(t('applique.stop.lay')).not.toBe('applique.stop.lay');
+    checkAppliques(p);
+    checkSewDesign(p);
+    // Duplicated and mirrored: each has its stop before it.
+    expect(shapes(d, duplicateObject(d.cur.p, 1, T, 50)?.pattern)).toBe(true);
+    const dup = sewObjects(d.cur.p).filter((o) => remembered(d.cur.p, o)?.applique).at(-1)!.index;
+    expect(transform(d, [dup], mirrorMatrix('x', { minX: 50, minY: 50, maxX: 80, maxY: 80 }))).toBe(true);
+    p = d.cur.p;
+    expect(appliquePieces(p)).toHaveLength(2);
+    checkAppliques(p);
+    await saveAndOpen(d);
+    expect(remembered(d.cur.p, sewObjects(d.cur.p)[1])?.applique?.place).toBe(false);
+    checkAppliques(d.cur.p);
+    // A raw edge as well: the stops before and after it, none inside.
+    expect(shapes(d, setApplique(d.cur.p, [1], { edge: 'none' }, T))).toBe(true);
+    expect(stopsIn(d.cur.p, sewObjects(d.cur.p)[1].first, sewObjects(d.cur.p)[1].last)).toHaveLength(0);
+    checkAppliques(d.cur.p);
+    expect(shapes(d, setApplique(d.cur.p, [1], { edge: 'satin' }, T))).toBe(true);
+    // Back to a placement line: two stops inside, none before.
+    expect(shapes(d, setApplique(d.cur.p, [1], { place: true }, T))).toBe(true);
+    expect(remembered(d.cur.p, sewObjects(d.cur.p)[1])?.applique?.place).toBeUndefined();
+    checkAppliques(d.cur.p);
+  });
+
+  it('reads a running edge stored before as a raw edge with that tack-down', () => {
+    const color = { r: 1, g: 2, b: 3 };
+    expect(appliqueFrom({ edge: 'run', run: { type: 'triple', width: 0, repeat: 2 }, width: 3, fabric: 'felt', color })).toEqual({ tack: { type: 'triple', width: 0, length: 2, repeat: 2 }, edge: 'none', width: 3, fabric: 'felt', color });
+    expect(appliqueFrom({ edge: 'run', width: 3, fabric: 'felt', color })).toEqual({ edge: 'none', width: 3, fabric: 'felt', color });
+    expect(appliqueFrom({ edge: 'satin', place: true, tack: { type: 'run', width: 0, length: 2 }, width: 3, fabric: 'felt', color })).toEqual({ edge: 'satin', width: 3, fabric: 'felt', color });
+  });
+
+  it('touching ones share their edge: the earlier sews no satin where the later covers it', async () => {
+    const d = new Doc();
+    shapes(d, addShape(empty, { form: parsePath(ellipsePath(15, 15, 15, 15), ID), kind: 'fill' }, COLORS[0], null, options)!.pattern);
+    shapes(d, addShape(d.cur.p, { form: parsePath(ellipsePath(44, 15, 15, 15), ID), kind: 'fill' }, COLORS[1], null, options)!.pattern);
+    expect(shapes(d, toApplique(d.cur.p, [0, 1], T))).toBe(true);
+    /** Stitches of the first appliqué's cover within 3 mm of where the circles meet (29.5, 15). */
+    const atJoint = (p: Pattern) => {
+      const a = sewObjects(p)[0];
+      const trim = stopsIn(p, a.first, a.last)[1];
+      let n = 0;
+      for (let i = trim; i <= a.last; i++) if (p.cmd[i] === STITCH && Math.hypot(p.x[i] / 10 - 29.5, p.y[i] / 10 - 15) < 3) n++;
+      return n;
+    };
+    const covered = (p: Pattern) => !!remembered(p, sewObjects(p)[0])?.cut;
+    expect(covered(d.cur.p)).toBe(true);
+    expect(atJoint(d.cur.p)).toBe(0);
+    expect(remembered(d.cur.p, sewObjects(d.cur.p)[1])?.cut).toBeUndefined();
+    checkAppliques(d.cur.p);
+    checkKnockouts(d.cur.p);
+    const shared = d.cur.p;
+    // Moved apart: the first gets its whole edge back; undone, shared again.
+    expect(transform(d, [1], translation(20, 0))).toBe(true);
+    expect(covered(d.cur.p)).toBe(false);
+    expect(atJoint(d.cur.p)).toBeGreaterThan(0);
+    checkKnockouts(d.cur.p);
+    expect(OPS.find((o) => o.name === 'undo')!.run(d, () => 0)).toBe(true);
+    expect(d.cur.p).toBe(shared);
+    expect(atJoint(d.cur.p)).toBe(0);
+    // The later one with a raw edge hides nothing: the earlier sews its whole satin.
+    expect(shapes(d, setApplique(d.cur.p, [1], { edge: 'none' }, T))).toBe(true);
+    expect(covered(d.cur.p)).toBe(false);
+    checkKnockouts(d.cur.p);
+    expect(shapes(d, setApplique(d.cur.p, [1], { edge: 'satin' }, T))).toBe(true);
+    expect(covered(d.cur.p)).toBe(true);
+    // Duplicated and mirrored, saved and opened: computed again, as sewn.
+    expect(shapes(d, duplicateObject(d.cur.p, 0, T, 80)?.pattern)).toBe(true);
+    const dup = sewObjects(d.cur.p).find((o) => d.cur.p.x[o.first] > 700)!.index;
+    expect(transform(d, [dup], mirrorMatrix('x', { minX: 80, minY: 80, maxX: 110, maxY: 110 }))).toBe(true);
+    expect(covered(d.cur.p)).toBe(true);
+    checkKnockouts(d.cur.p);
+    checkAppliques(d.cur.p);
+    await saveAndOpen(d);
+    expect(covered(d.cur.p)).toBe(true);
+    checkKnockouts(d.cur.p);
+    checkReload(d);
   });
 
   it('a recolor takes the stops along, and back to a fill it is sewn as before', () => {

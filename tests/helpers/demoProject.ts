@@ -585,15 +585,15 @@ export function satinAreas(): Design {
   return d;
 }
 
-/** Applikation: four hearts of fabric laid on, each with another edge: satin, E stitch, running stitch, bean stitch. */
+/** Applikation: four hearts of fabric laid on, each sewn on another way: satin, E stitch, a raw edge, precut with a bean stitch tack-down and a raw edge. */
 export function applique(): Design {
   const d = new Design('Applikation', undefined, undefined, '#e9e4da');
   const { red, navy, green, purple } = THREADS;
   const hearts: [number, number, ThreadColor, Partial<AppliqueSettings>][] = [
     [27, 28, red, { fabric: 'felt' }],
     [73, 28, navy, { edge: 'e', fabric: 'woven' }],
-    [27, 74, green, { edge: 'run', fabric: 'felt' }],
-    [73, 74, purple, { edge: 'run', run: { type: 'triple', width: 0, repeat: 3 }, fabric: 'woven' }],
+    [27, 74, green, { edge: 'none', fabric: 'felt' }],
+    [73, 74, purple, { place: false, edge: 'none', tack: { type: 'triple', width: 0 }, fabric: 'felt' }],
   ];
   for (const [x, y, c, s] of hearts) d.applique(d.fill(heart(x, y, 15), c), s);
   d.cutJumps();
