@@ -1210,8 +1210,6 @@ export const deBase = {
   'stitch.rowEnds.standard.hint': 'Jede Reihe wendet am Rand gerade zur nächsten',
   'stitch.rowEnds.edge': 'Kante entlang',
   'stitch.rowEnds.edge.hint': 'Die Wende folgt dem Rand: eine klare Kante, besonders bei lockeren Reihen',
-  'stitch.rowEnds.diagonal': 'Diagonal',
-  'stitch.rowEnds.diagonal.hint': 'Jede zweite Reihe, zurück geht es schräg: halb so viele Einstiche am Rand, dafür lockerer gedeckt',
   'stitch.underCover': 'Unter späteren Objekten weglassen',
   'stitch.underCover.hint': 'Keine Unterlage, wo spätere Objekte die Füllung bedecken',
   'stitch.saveTrims': 'Schnitte sparen',

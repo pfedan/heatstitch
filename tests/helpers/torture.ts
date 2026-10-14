@@ -889,8 +889,8 @@ export const OPS: Op[] = [
       const rough = r() < 0.3 ? { rough: 0.2 + 0.8 * r(), roughSeed: 1 + Math.floor(r() * 99) } : {};
       // Schnitte sparen now and then: from the seed drawn already, so the ops of a chain stay as they were.
       const save = deco.seed % 3 === 0 ? { saveTrims: true } : {};
-      // Row ends along the edge or diagonal, and an edge run, the same way.
-      const look: Partial<FillSettings> = { ...(deco.seed % 4 === 1 ? { rowEnds: 'edge' as const } : deco.seed % 4 === 2 ? { rowEnds: 'diagonal' as const } : {}), ...(deco.seed % 5 === 0 ? { underEdge: true } : {}) };
+      // Row ends along the edge, and an edge run, the same way.
+      const look: Partial<FillSettings> = { ...(deco.seed % 4 === 1 ? { rowEnds: 'edge' as const } : {}), ...(deco.seed % 5 === 0 ? { underEdge: true } : {}) };
       const s: FillSettings =
         kind === 'emboss'
           ? { ...fill, ...look, pattern: 'tatami', deco: { ...deco, emboss: pick(r, MOTIFS), ...(r() < 0.5 ? { embossAngle: Math.floor(r() * 360) } : {}) } }

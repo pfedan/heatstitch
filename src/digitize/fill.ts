@@ -25,9 +25,9 @@ import { embossPoints, motifCrossings, motifInside, texturePoints, type Motif, t
  *   the join (Wilcom's segment overlap rows, Ink/Stitch's gap fill rows).
  */
 
-/** How rows turn at the edge: along the outline, or back in diagonal rows (see sewSection). */
-export type RowEnds = 'edge' | 'diagonal';
-export const ROW_ENDS: readonly RowEnds[] = ['edge', 'diagonal'];
+/** How rows turn at the edge: along the outline (see turn). */
+export type RowEnds = 'edge';
+export const ROW_ENDS: readonly RowEnds[] = ['edge'];
 
 export interface FillParams {
   /** Distance between neighbouring rows (mm). */
@@ -45,8 +45,7 @@ export interface FillParams {
   underInset?: number;
   /**
    * How the rows turn from one to the next at the edge (straight rows): straight across when not
-   * set; 'edge' along the outline, so sparse rows draw a clean edge; 'diagonal' every second row,
-   * all one way, joined by diagonal rows back (see diagonalSection).
+   * set; 'edge' along the outline, so sparse rows draw a clean edge.
    */
   rowEnds?: RowEnds;
   /** An edge run (Kantenlauf) along the edge of the underlay before its rows (see sewEdgeRun). */
@@ -193,8 +192,6 @@ class Frame {
   rowEnds?: RowEnds;
   /** With rows turning along the edge: the u nearest `u` (within `reach`) where row v meets the outline. */
   edge?: (u: number, v: number, reach: number) => number;
-  /** With diagonal row ends: whether the straight stitch from a to b stays inside. */
-  straightInside?: (a: Pt, b: Pt) => boolean;
   /** The area the rows fill: a tour plans its hidden ways inside it (not on the travel grid, which
    * may reach beyond it, as over the old thread). */
   area?: Region;
@@ -539,7 +536,6 @@ function shortInside(pts: number[], inside: (u: number) => boolean, len: number,
 /** Stitches of a section, entered at its first or last row and at the start or end of that row. */
 function sewSection(f: Frame, s: Section, len: number, pull: number, reversed: boolean, flip: boolean): Pt[] {
   const list = reversed ? s.slice().reverse() : s;
-  if (f.rowEnds === 'diagonal') return merged(diagonalSection(f, list, len, pull, flip), SHORTEST);
   const out: Pt[] = [];
   list.forEach((seg, i) => {
     const fwd = (i % 2 === 0) !== flip;
@@ -580,54 +576,6 @@ function turn(f: Frame, a: Pt, b: Pt, out: 1 | -1, pull: number, len: number): P
   }
   for (let i = 1, n = Math.ceil(gap / len); i < n; i++) pts.push([a[0] + ((b[0] - a[0]) * i) / n, a[1] + ((b[1] - a[1]) * i) / n]);
   return pts;
-}
-
-/**
- * Diagonal row ends (Frame.rowEnds): every second row is sewn, all the same way, and the needle
- * goes back to the start of the next one in a straight diagonal row across the section, so the
- * rows turn nowhere along the edge. Where a diagonal would leave the area (a section curving
- * away), the row between is sewn back as usual instead. The last row is always sewn, so the
- * section ends at its far row, at the high end of it (low with `flip`).
- */
-function diagonalSection(f: Frame, list: Seg[], len: number, pull: number, flip: boolean): Pt[] {
-  const out: Pt[] = [];
-  const fwd = (seg: Seg, there: boolean) => {
-    const lo = seg.u0 - pull;
-    const hi = seg.u1 + pull;
-    return there !== flip ? rowStitches(f, seg.k, f.v(seg.k), lo, hi, len) : rowStitches(f, seg.k, f.v(seg.k), hi, lo, len);
-  };
-  // The diagonal back from row a to row b, its needle points staggered as those of the row between
-  // (row k), so they do not line up across the rows.
-  const ends = (seg: Seg, there: boolean) => (there !== flip ? [seg.u0 - pull, seg.u1 + pull] : [seg.u1 + pull, seg.u0 - pull]);
-  const step = (a: Seg, b: Seg, k: number) => {
-    const ua = ends(a, true)[1];
-    const ub = ends(b, true)[0];
-    const [va, vb] = [f.v(a.k), f.v(b.k)];
-    const phase = f.phase(k);
-    const margin = Math.min(0.6, len / 4);
-    const us: number[] = [];
-    const [lo, hi] = [Math.min(ua, ub), Math.max(ua, ub)];
-    for (let j = Math.ceil((lo + margin) / len - phase); (j + phase) * len <= hi - margin; j++) us.push((j + phase) * len);
-    if (ub < ua) us.reverse();
-    for (const u of us) out.push(f.at(u, va + ((vb - va) * (u - ua)) / (ub - ua || 1)));
-  };
-  let i = 0;
-  out.push(...fwd(list[0], true));
-  while (i < list.length - 1) {
-    const j = Math.min(i + 2, list.length - 1);
-    const next = fwd(list[j], true);
-    if (j > i + 1 && !f.straightInside?.(out[out.length - 1], next[0])) {
-      // Back along the row between, then on as usual.
-      for (let m = i + 1; m < j; m++) {
-        const back = fwd(list[m], false);
-        out.push(...turn(f, out[out.length - 1], back[0], flip ? -1 : 1, pull, len), ...back);
-      }
-      out.push(...turn(f, out[out.length - 1], next[0], flip ? 1 : -1, pull, len));
-    } else step(list[i], list[j], list[i + 1].k);
-    out.push(...next);
-    i = j;
-  }
-  return out;
 }
 
 /**
@@ -1172,8 +1120,7 @@ type Entry = { reversed: boolean; flip: boolean; p: Pt };
 /** Where a section entered this way ends. */
 function exitOf(f: Frame, s: Section, e: Entry, pull: number): Pt {
   const seg = e.reversed ? s[0] : s[s.length - 1];
-  // Diagonal row ends sew every row the same way (see diagonalSection).
-  const fwd = f.rowEnds === 'diagonal' ? !e.flip : ((s.length - 1) % 2 === 0) !== e.flip;
+  const fwd = ((s.length - 1) % 2 === 0) !== e.flip;
   return f.at(fwd ? seg.u1 + pull : seg.u0 - pull, f.v(seg.k));
 }
 
@@ -1761,12 +1708,6 @@ function endRows(f: Frame, r: Region, ends: RowEnds): void {
     }
     return u;
   };
-  // A diagonal may cut a corner by half a row, as the step between rows does.
-  f.straightInside = (a, b) => {
-    const n = Math.ceil(dist(a, b) / 0.25);
-    for (let i = 1; i < n; i++) if (sample(r, r.sdf, a[0] + ((b[0] - a[0]) * i) / n, a[1] + ((b[1] - a[1]) * i) / n) > f.spacing / 2) return false;
-    return true;
-  };
 }
 
 /** Fill stitches for the region, starting near `start`. Null if no row fits into the region. */
@@ -1792,7 +1733,7 @@ export function fillRegion(r: Region, p: FillParams, start: Pt, neighbours: numb
   const pos = p.underlay ? sewUnderlay(r, angle, p, start, grid, runs, planned![0].e.p) : start;
   if (planned && dist(pos, planned[0].e.p) > REPLAN) planned = undefined;
   const under = pointCount(runs);
-  const gap = f.gradient || f.rowEnds === 'diagonal' ? 0 : Math.min(GAP_ROWS_MAX, Math.max(0, Math.round(p.gapRows ?? 0)));
+  const gap = f.gradient ? 0 : Math.min(GAP_ROWS_MAX, Math.max(0, Math.round(p.gapRows ?? 0)));
   const travel: [number, number][] = [];
   sewAll(f, secs, p.stitch, p.pull, pos, grid, true, runs, p.end, undefined, gap && secs.length > 1 ? sectionJoins(r, f, secs, gap) : undefined, travel, true, planned);
   return { runs, angle, under, travel };

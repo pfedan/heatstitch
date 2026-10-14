@@ -1212,8 +1212,6 @@ const enBase: Record<keyof typeof deBase, string> = {
   'stitch.rowEnds.standard.hint': 'Each row turns straight to the next at the edge',
   'stitch.rowEnds.edge': 'Along the edge',
   'stitch.rowEnds.edge.hint': 'The turn follows the outline: a clean edge, above all with open rows',
-  'stitch.rowEnds.diagonal': 'Diagonal',
-  'stitch.rowEnds.diagonal.hint': 'Every second row, back on a slant: half the needle holes at the edge, but lighter cover',
   'stitch.underCover': 'Leave out under later objects',
   'stitch.underCover.hint': 'No underlay where later objects cover the fill',
   'stitch.saveTrims': 'Save trims',

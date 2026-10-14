@@ -38,7 +38,7 @@ type FillUnder = 'off' | 'single' | 'cross';
 const FILL_UNDERS: FillUnder[] = ['off', 'single', 'cross'];
 /** How tatami rows turn at the edge: straight across (FillSettings.rowEnds not set) or one of RowEnds. */
 type RowEndChoice = 'standard' | RowEnds;
-const ROW_END_CHOICES: RowEndChoice[] = ['standard', 'edge', 'diagonal'];
+const ROW_END_CHOICES: RowEndChoice[] = ['standard', 'edge'];
 type BorderChoice = 'off' | BorderType;
 /** What hovering a group of settings shows on the canvas. */
 /** What the canvas shows while its settings are pointed at: the underlay, the border, a line's echo copies (all or copy n), its shadow. */

@@ -71,16 +71,9 @@ describe('row ends', () => {
     expect(edge).toBeGreaterThan(standard * 0.9);
   });
 
-  it('diagonal: about half the needle points at the edge', () => {
-    const standard = turns({});
-    const diagonal = turns({ rowEnds: 'diagonal' });
-    expect(diagonal).toBeLessThan(standard * 0.7);
-    expect(diagonal).toBeGreaterThan(standard * 0.3);
-  });
-
   it('only on tatami and gradient rows', () => {
     const a = fillRuns(r, { ...BASE, pattern: 'contour', underlay: false }, { start: [30, 7] })!;
-    const b = fillRuns(r, { ...BASE, pattern: 'contour', underlay: false, rowEnds: 'diagonal' }, { start: [30, 7] })!;
+    const b = fillRuns(r, { ...BASE, pattern: 'contour', underlay: false, rowEnds: 'edge' }, { start: [30, 7] })!;
     expect(b.runs).toEqual(a.runs);
   });
 });
