@@ -12,7 +12,7 @@ import { areaLoops, columnsAlong, suggestSatin } from '../digitize/satinSuggest'
 import { cumulative, cutLinesBetween, cutPieces, pointAt, railsFromOutline, stripsOfAreas, stripsOfOutline, type Rung } from '../digitize/rungs';
 import { rasterize } from '../shape/rasterize';
 import { stitchKinds } from './sequence';
-import { isRigid, mirroredEcho, scaleOf, stitchesBefore, transformObject, transformRemembered } from './transform';
+import { isRigid, mappedLine, scaleOf, stitchesBefore, transformObject, transformRemembered } from './transform';
 import { areaOf, fillArea, fits, geoOf, geoUse, lineGeoOf, outlinePaths, satinOutline, sewnAlong, withGeo } from './geo';
 
 function totalStitches(p: Pattern): number {
@@ -472,7 +472,7 @@ export function transformSewObject(p: Pattern, objs: SewObject[], o: SewObject, 
   const mirrors = m[0] * m[3] - m[1] * m[2] < 0;
   const turns = m[0] !== 1 || m[1] !== 0 || m[2] !== 0 || m[3] !== 1;
   if (line && (!rigid || ((mirrors || (turns && !!known?.line?.echo)) && !known?.free))) {
-    const r = resewLine(p, o.index, transformForm(line, m), mirroredEcho(lineSettings(p, o, kinds), line, m), trimMm);
+    const r = resewLine(p, o.index, transformForm(line, m), mappedLine(lineSettings(p, o, kinds), line, m), trimMm);
     return r && { ...r, restitched: true };
   }
   // A fill along a line: filled anew along the scaled line, in a width scaled with it.

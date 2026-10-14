@@ -6,6 +6,7 @@ import type { Pt } from '../digitize/skeleton';
 import { flatten, type Form, type Node } from '../shape/path';
 import { fitCubic } from '../shape/vectorize';
 import { hasPhase, isRedwork, isRunType, passesOf, sewAlong, spacingOf, type PathStitch } from './along';
+import { turnedOrder } from './lineOrder';
 import { runRecords } from './border';
 import { tidy, withRecords } from './edit';
 import { rememberObjects, sewObjects, stitchKey, type SewObject } from './objects';
@@ -50,9 +51,16 @@ export function lineStitches(form: Form, st: PathStitch, reverse = false, from?:
   if (reverse) paths = paths.reverse().map((x) => ({ ...x, pts: x.pts.slice().reverse() }));
   const out: Pt[][] = [];
   let at: Pt | undefined = from;
-  for (const x of paths) {
+  for (const [k, x] of paths.entries()) {
     const pts = x.closed && x.pts.length > 2 && !samePt(x.pts[0], x.pts[x.pts.length - 1]) ? [...x.pts, x.pts[0]] : x.pts;
-    const runs = st.echo ? echoStitches(pts, x.closed, st, at, reverse) : sewAlong(pts, x.closed, st, at, undefined, reverse);
+    // A satin line's order set by hand, for this path (counted as drawn): on the path as drawn, sewn
+    // the other way round turned (see LineOrder).
+    const own = st.type === 'satin' && !st.echo ? st.order?.[reverse ? paths.length - 1 - k : k] : null;
+    const runs = own
+      ? sewAlong(reverse ? pts.slice().reverse() : pts, x.closed, { ...st, own: reverse ? turnedOrder(own) : own })
+      : st.echo
+        ? echoStitches(pts, x.closed, st, at, reverse)
+        : sewAlong(pts, x.closed, st, at, undefined, reverse);
     out.push(...runs);
     const last = runs[runs.length - 1];
     if (last) at = last[last.length - 1];

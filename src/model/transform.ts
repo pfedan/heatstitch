@@ -3,6 +3,7 @@ import type { Region } from '../digitize/region';
 import type { Pt } from '../digitize/skeleton';
 import { apply, transformForm, type Form, type Mat } from '../shape/path';
 import type { PathStitch } from './along';
+import { mirroredOrders } from './lineOrder';
 import { rasterize } from '../shape/rasterize';
 import { vectorize } from '../shape/vectorize';
 import { syncMarks, tidy, withRecords } from './edit';
@@ -100,6 +101,13 @@ export function mirroredEcho(st: PathStitch, path: Form, m: Mat): PathStitch {
   return { ...st, echo: { ...e, side: e.side === 'out' ? 'in' : 'out' } };
 }
 
+/** How a line is sewn, mapped with it: its echo (see mirroredEcho) and a satin's own order (see LineOrder), whose sides swap when it is mirrored. */
+export function mappedLine(st: PathStitch, path: Form, m: Mat): PathStitch {
+  const out = mirroredEcho(st, path, m);
+  if (!out.order || m[0] * m[3] - m[1] * m[2] >= 0) return out;
+  return { ...out, order: mirroredOrders(out.order) };
+}
+
 /**
  * What an object remembers, mapped with it: its area (from the curves when it has them, so the
  * shape never drifts), the rails of its satins, its row direction and guide lines.
@@ -111,7 +119,7 @@ export function transformRemembered(r: Remembered, m: Mat): Remembered {
   if (r.fill) out.fill = mapFill(r.fill);
   const use = geoUse(r);
   if (r.geo) out.geo = transformForm(r.geo, m);
-  if (use === 'line' && r.line) out.line = mirroredEcho(r.line, r.geo!, m);
+  if (use === 'line' && r.line) out.line = mappedLine(r.line, r.geo!, m);
   if (!r.geo) {
     // A form read from the stitches stays a guess (no curves are kept): its area moved as pixels where
     // that is exact, else traced, turned and rastered again.
@@ -132,7 +140,7 @@ export function transformRemembered(r: Remembered, m: Mat): Remembered {
     out.kept = { ...r.kept };
     if (r.kept.satin) out.kept.satin = r.kept.satin.map((c) => mapRails(m, s, c));
     if (r.kept.fill) out.kept.fill = mapFill(r.kept.fill);
-    if (r.kept.line && r.geo) out.kept.line = mirroredEcho(r.kept.line, r.geo, m);
+    if (r.kept.line && r.geo) out.kept.line = mappedLine(r.kept.line, r.geo, m);
   }
   // The middle of rays and circles and the eyes of swirls stay on the same spots of the shape:
   // mirrored and turned with it.
