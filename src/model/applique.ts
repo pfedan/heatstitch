@@ -6,7 +6,7 @@ import { FIT_TOLERANCE, vectorize } from '../shape/vectorize';
 import { borderStitches, type PathStitch } from './along';
 import { tableOf } from './objects';
 import { blockIndex } from './sequence';
-import { COLOR_CHANGE, type Pattern, type ThreadColor } from './pattern';
+import { COLOR_CHANGE, STITCH, type Pattern, type ThreadColor } from './pattern';
 
 /**
  * Appliqué as one object: a piece of fabric sewn on instead of a fill. The machine sews it in three
@@ -33,12 +33,21 @@ import { COLOR_CHANGE, type Pattern, type ThreadColor } from './pattern';
 export type AppliqueFabric = FabricId | 'felt';
 
 export interface AppliqueSettings {
-  /** The cover edge: a satin over the cut edge, an E stitch (blanket stitch) along it, or a running stitch over the tack-down. */
-  edge: 'satin' | 'e' | 'run';
-  /** Width of the cover edge (mm); a running edge has none. */
+  /**
+   * Whether the placement line is sewn (absent: it is). Without it the piece is laid on before the
+   * tack-down (cut to shape before, or ironed on): the machine stops before the appliqué for it.
+   */
+  place?: boolean;
+  /** The tack-down: a running stitch, its length, how often or as bean stitch (absent: once, TACK_STITCH long). */
+  tack?: PathStitch;
+  /**
+   * The cover edge: a satin over the cut edge, an E stitch (blanket stitch) along it, or none: a
+   * raw edge, held by the tack-down alone (felt, fabrics that do not fray). Without one the machine
+   * stops after the appliqué to cut the fabric.
+   */
+  edge: 'satin' | 'e' | 'none';
+  /** Width of the cover edge (mm); kept while there is none, so it comes back. */
   width: number;
-  /** A running edge: its stitch length, how often and whether as bean stitch (as a line's, see repeatRow). */
-  run?: PathStitch;
   /** The fabric laid on, and its color. */
   fabric: AppliqueFabric;
   color: ThreadColor;
@@ -53,46 +62,68 @@ export const APPLIQUE_WIDTHS: [number, number] = [1.5, 6];
 /** Stitch length of placement and tack-down (mm): long enough to sew fast, short enough to follow curves. */
 export const PLACE_STITCH = 2.5;
 export const TACK_STITCH = 2;
+/** How far the tack-down of a raw edge lies inside the cut edge (mm): it holds the edge without the needle tearing it. */
+export const RAW_INSET = 1.5;
 
 /**
- * How far the tack-down lies inside the outline (mm): under the cover with room to spare on both
- * sides, 0.3 of its width, between 0.5 and 1 mm (the fabric is cut close outside it).
+ * How far the tack-down lies inside the outline (mm). Under a cover: hidden with room to spare on
+ * both sides, 0.3 of its width, between 0.5 and 1 mm (the fabric is cut close outside it). A raw
+ * edge: RAW_INSET.
  */
-export const tackInset = (width: number): number => Math.min(1, Math.max(0.5, width * 0.3));
+export const tackInset = (s: Pick<AppliqueSettings, 'edge' | 'width'>): number => (s.edge === 'none' ? RAW_INSET : Math.min(1, Math.max(0.5, s.width * 0.3)));
 
-/** An appliqué of `color` as a new one is: cotton in the thread's color, a satin edge. */
-/** A running edge as a new one is: once along, stitches as long as the tack-down's. */
-export const APPLIQUE_RUN: PathStitch = { type: 'run', width: 0, length: TACK_STITCH };
+/** A tack-down as a new one is: once along, TACK_STITCH long. */
+export const APPLIQUE_TACK: PathStitch = { type: 'run', width: 0, length: TACK_STITCH };
 
-/** The running stitch of a running edge, as sewn: a running or triple stitch along its line. */
-export function runEdgeOf(s: AppliqueSettings): PathStitch {
-  const r = s.run ?? APPLIQUE_RUN;
+/** The running stitch of the tack-down, as sewn: a running or triple stitch along its line. */
+export function tackOf(s: Pick<AppliqueSettings, 'tack'>): PathStitch {
+  const r = s.tack ?? APPLIQUE_TACK;
   return { type: r.type === 'triple' ? 'triple' : 'run', width: 0, length: r.length ?? TACK_STITCH, ...(r.repeat ? { repeat: r.repeat } : {}) };
 }
 
+/** An appliqué of `color` as a new one is: cotton in the thread's color, placement line, a satin edge. */
 export const appliqueDefaults = (color: ThreadColor): AppliqueSettings => ({ edge: 'satin', width: APPLIQUE_WIDTH, fabric: 'woven', color: { r: color.r, g: color.g, b: color.b } });
 
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
-/** Settings as stored, back; null when they do not hold. */
+/** A running stitch as stored, back (a running or triple stitch); null when it does not hold. */
+function runFrom(v: unknown): PathStitch | null {
+  const r = v as PathStitch | undefined;
+  return r && typeof r === 'object' && (r.type === 'run' || r.type === 'triple') && finite(r.length ?? 1) && (r.length ?? 1) > 0 && finite(r.repeat ?? 1) ? tackOf({ tack: r }) : null;
+}
+
+/**
+ * Settings as stored, back; null when they do not hold. A running edge over the tack-down (stored
+ * before there was a raw edge) is a raw edge whose tack-down is sewn as that edge was.
+ */
 export function appliqueFrom(v: unknown): AppliqueSettings | null {
-  const s = v as AppliqueSettings | null;
+  const s = v as (Omit<AppliqueSettings, 'edge'> & { edge: AppliqueSettings['edge'] | 'run'; run?: unknown }) | null;
   if (!s || typeof s !== 'object') return null;
-  if (s.edge !== 'satin' && s.edge !== 'e' && s.edge !== 'run') return null;
+  if (s.edge !== 'satin' && s.edge !== 'e' && s.edge !== 'none' && s.edge !== 'run') return null;
   if (!finite(s.width) || s.width <= 0) return null;
   if (s.fabric !== 'felt' && !FABRICS.some((f) => f.id === s.fabric)) return null;
   const c = s.color;
   if (!c || ![c.r, c.g, c.b].every(finite)) return null;
-  const r = s.run as PathStitch | undefined;
-  const run = r && typeof r === 'object' && (r.type === 'run' || r.type === 'triple') && finite(r.length ?? 1) && finite(r.repeat ?? 1) ? runEdgeOf({ ...s, run: r }) : null;
-  return { edge: s.edge, width: Math.min(APPLIQUE_WIDTHS[1], Math.max(APPLIQUE_WIDTHS[0], s.width)), ...(run ? { run } : {}), fabric: s.fabric, color: { r: c.r, g: c.g, b: c.b } };
+  const tack = s.edge === 'run' ? (runFrom(s.run) ?? APPLIQUE_TACK) : runFrom(s.tack);
+  const plain = tack && tack.type === 'run' && !tack.repeat && tack.length === TACK_STITCH;
+  return {
+    ...(s.place === false ? { place: false } : {}),
+    ...(tack && !plain ? { tack } : {}),
+    edge: s.edge === 'run' ? 'none' : s.edge,
+    width: Math.min(APPLIQUE_WIDTHS[1], Math.max(APPLIQUE_WIDTHS[0], s.width)),
+    fabric: s.fabric,
+    color: { r: c.r, g: c.g, b: c.b },
+  };
 }
 
 /**
- * The settings as stored (a copy), a running edge's stitch as it is sewn (runEdgeOf): what
- * appliqueFrom reads back from the project file, so a design is the same after save and open.
+ * The settings as stored (a copy), as appliqueFrom reads them back from the project file, so a
+ * design is the same after save and open.
  */
-export const storeApplique = (s: AppliqueSettings): AppliqueSettings => ({ ...s, ...(s.run ? { run: runEdgeOf(s) } : {}), color: { r: s.color.r, g: s.color.g, b: s.color.b } });
+export const storeApplique = (s: AppliqueSettings): AppliqueSettings => appliqueFrom(s)!;
+
+/** How many stops lie inside an appliqué sewn with `s`: after the placement line, and before the cover (see appliqueRuns). */
+export const innerStopCount = (s: AppliqueSettings): number => (s.place === false ? 0 : s.edge === 'none' ? 1 : 2);
 
 /** Runs the machine stops before (the fabric laid on, cut off): see objectRecords. */
 export const stopBefore = new WeakSet<Pt[]>();
@@ -104,45 +135,90 @@ export interface AppliqueParts {
   cover: Pt[][];
 }
 
-/** The stitches of the three parts of an appliqué on `area` (see the top of this file). */
-export function appliqueParts(area: Region, s: AppliqueSettings, from: Pt): AppliqueParts {
-  const place = borderStitches(area, { type: 'run', width: 0, length: PLACE_STITCH }, from);
+/**
+ * The stitches of the parts of an appliqué on `area` (see the top of this file); a part it is sewn
+ * without has none. `shared`: where later appliqués cover the edge (see sharedEdges), the area the
+ * cover leaves out its edge on, as a border leaves out what shapes on top cover.
+ */
+export function appliqueParts(area: Region, s: AppliqueSettings, from: Pt, shared?: Region | null): AppliqueParts {
+  const place = s.place === false ? [] : borderStitches(area, { type: 'run', width: 0, length: PLACE_STITCH }, from);
   const end = (runs: Pt[][], or: Pt) => runs[runs.length - 1]?.[runs[runs.length - 1].length - 1] ?? or;
-  // A running edge has no width: the tack-down as close inside as for the narrowest cover.
-  const inset = tackInset(s.edge === 'run' ? 0 : s.width);
-  const tack = borderStitches(area, { type: 'run', width: 0, length: TACK_STITCH, offset: -inset }, end(place, from));
+  const run = tackOf(s);
+  const tack = borderStitches(area, { ...run, offset: -tackInset(s) }, end(place, from));
   // A shape too thin for the tack-down inside: it is sewn on the outline, over the placement line.
-  const held = tack.length ? tack : borderStitches(area, { type: 'run', width: 0, length: TACK_STITCH }, end(place, from));
-  // A running edge goes over the tack-down, hiding it.
-  const edge: PathStitch = s.edge === 'run' ? { ...runEdgeOf(s), ...(tack.length ? { offset: -inset } : {}) } : s.edge === 'e' ? { type: 'e', width: s.width } : { type: 'satin', width: s.width };
-  const cover = borderStitches(area, edge, end(held, from));
+  const held = tack.length ? tack : borderStitches(area, run, end(place, from));
+  if (s.edge === 'none') return { place, tack: held, cover: [] };
+  const edge: PathStitch = s.edge === 'e' ? { type: 'e', width: s.width } : { type: 'satin', width: s.width };
+  // Where later appliqués lie on its edge their cover is its, but never on all of it: the fabric is cut before they come.
+  const part = shared ? borderStitches(shared, edge, end(held, from), area) : [];
+  const cover = part.length ? part : borderStitches(area, edge, end(held, from));
   return { place, tack: held, cover };
 }
 
-/** The runs of an appliqué in sewing order, the machine stopping before the tack-down and the cover. */
-export function appliqueRuns(area: Region, s: AppliqueSettings, from: Pt): Pt[][] {
-  const { place, tack, cover } = appliqueParts(area, s, from);
-  if (!place.length || !tack.length || !cover.length) return [];
-  stopBefore.add(tack[0]);
-  stopBefore.add(cover[0]);
-  return [...place, ...tack, ...cover];
+/**
+ * The runs of an appliqué in sewing order: the machine stops before the tack-down (the fabric laid
+ * on the placement line) and before the cover (the fabric cut off). Without a placement line the
+ * piece is cut to shape before: it is laid on before the appliqué, and there is nothing to cut.
+ * Without a cover the fabric is cut after it (see stopsAround).
+ */
+export function appliqueRuns(area: Region, s: AppliqueSettings, from: Pt, shared?: Region | null): { runs: Pt[][]; under: number } {
+  const { place, tack, cover } = appliqueParts(area, s, from, shared);
+  if ((s.place !== false && !place.length) || !tack.length || (s.edge !== 'none' && !cover.length)) return { runs: [], under: 0 };
+  if (place.length) {
+    stopBefore.add(tack[0]);
+    if (cover.length) stopBefore.add(cover[0]);
+  }
+  // Placement line and tack-down lie under the fabric and its edge, as an underlay does (Remembered.under).
+  const under = [...place, ...tack].reduce((n, r) => n + (r.length > 1 ? r.length : 0), 0);
+  return { runs: [...place, ...tack, ...cover], under };
 }
 
-/** What a stop of the machine is for: laying the fabric on, or cutting it off. */
-export type Stop = 'place' | 'trim';
+/**
+ * The stops an appliqué sewn with `s` needs between it and its neighbours in the same thread: one
+ * before it to lay on a piece cut before (no placement line), one after it to cut the fabric off
+ * a raw edge (no cover, after a placement line).
+ */
+export function stopsAround(s: AppliqueSettings | undefined): { before: boolean; after: boolean } {
+  return { before: !!s && s.place === false, after: !!s && s.place !== false && s.edge === 'none' };
+}
+
+/** What a stop of the machine is for: laying the fabric on (over its placement line, or a piece cut before), or cutting it off. */
+export type Stop = 'place' | 'lay' | 'trim';
 
 /**
- * The stops inside appliqués of `p`, by the color block they open: the first of each appliqué is
- * for laying the fabric on, the second for cutting it.
+ * The stops of appliqués of `p`, by the color block they open: inside each, the first for laying
+ * the fabric on, the next for cutting it; between it and its neighbours in the same thread, the
+ * one before a piece cut before is laid on, and the one after a raw edge to cut it (stopsAround).
+ * A change of thread there is a stop too, but no block of the appliqué's.
  */
 export function appliqueStops(p: Pattern): Map<number, Stop> {
   const out = new Map<number, Stop>();
   const entries = tableOf(p).entries.filter((e) => e.memory?.applique);
   if (!entries.length) return out;
   const blocks = blockIndex(p);
+  /** The block a stop at record `i` opens, when it is one in the same thread. */
+  const sameThread = (i: number) => {
+    const b = blocks[i] + 1;
+    const [c, d] = [p.colors[b], p.colors[b - 1]];
+    return c && d && c.r === d.r && c.g === d.g && c.b === d.b && c.name === d.name ? b : -1;
+  };
   for (const e of entries) {
+    const s = e.memory!.applique!;
     let n = 0;
-    for (let i = e.first + 1; i < e.last; i++) if (p.cmd[i] === COLOR_CHANGE) out.set(blocks[i] + 1, n++ === 0 ? 'place' : 'trim');
+    for (let i = e.first + 1; i < e.last; i++) if (p.cmd[i] === COLOR_CHANGE) out.set(blocks[i] + 1, n++ === 0 && s.place !== false ? 'place' : 'trim');
+    const around = stopsAround(s);
+    if (around.before) {
+      let i = e.first - 1;
+      while (i >= 0 && p.cmd[i] !== STITCH && p.cmd[i] !== COLOR_CHANGE) i--;
+      const b = i >= 0 && p.cmd[i] === COLOR_CHANGE ? sameThread(i) : -1;
+      if (b > 0) out.set(b, 'lay');
+    }
+    if (around.after) {
+      let i = e.last + 1;
+      while (i < p.cmd.length && p.cmd[i] !== STITCH && p.cmd[i] !== COLOR_CHANGE) i++;
+      const b = i < p.cmd.length && p.cmd[i] === COLOR_CHANGE ? sameThread(i) : -1;
+      if (b > 0) out.set(b, 'trim');
+    }
   }
   return out;
 }
@@ -232,10 +308,19 @@ export function appliquePieces(p: Pattern): Piece[] {
   for (const e of tableOf(p).entries) {
     const m = e.memory;
     if (!m?.applique) continue;
+    const s = m.applique;
     const stops = stopsIn(p, e.first, e.last);
     const form = cutForm(m);
-    if (stops.length !== 2 || !form) continue;
-    out.push({ first: e.first, last: e.last, place: stops[0], trim: stops[1], form, fabric: m.applique.fabric, color: m.applique.color });
+    if (!form || stops.length !== innerStopCount(s) + (s.edge === 'none' && stops.length === 2 ? 1 : 0)) continue;
+    // A piece cut before is laid on before the appliqué (at the stop there, if it has one): it is cut already.
+    let before = e.first - 1;
+    while (before > 0 && p.cmd[before] !== STITCH && p.cmd[before] !== COLOR_CHANGE) before--;
+    const place = s.place === false ? Math.max(0, p.cmd[before] === COLOR_CHANGE ? before : e.first - 1) : stops[0];
+    // A raw edge is cut after its tack-down (at the stop there, if it has one).
+    let after = e.last + 1;
+    while (after < p.cmd.length - 1 && p.cmd[after] !== STITCH && p.cmd[after] !== COLOR_CHANGE) after++;
+    const trim = s.place === false ? place : stops.length > 1 ? stops[stops.length - 1] : p.cmd[after] === COLOR_CHANGE ? after : e.last;
+    out.push({ first: e.first, last: e.last, place, trim, form, fabric: s.fabric, color: s.color });
   }
   return out;
 }
