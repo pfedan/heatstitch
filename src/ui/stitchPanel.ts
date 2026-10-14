@@ -5,7 +5,7 @@ import { CURVED_GRADIENT, DECO_DEFAULTS, isOpenPattern, OPEN_SIZE, OPEN_SIZE_RAN
 import { fixText } from './fixText';
 import type { UnderlayKind } from '../digitize/satin';
 import type { ShapeOutline } from '../render/scene';
-import { UNDERLAY_INSET } from '../digitize/fill';
+import { UNDERLAY_INSET, type RowEnds } from '../digitize/fill';
 import type { Pt } from '../digitize/skeleton';
 import { APPLIQUE_ICON, KIND_ICON, kindLabel } from './layersPanel';
 import type { LineCap } from '../shape/rasterize';
@@ -36,6 +36,9 @@ const APPLIQUE_BAND: [number, number] = [2.5, 4];
 
 type FillUnder = 'off' | 'single' | 'cross';
 const FILL_UNDERS: FillUnder[] = ['off', 'single', 'cross'];
+/** How tatami rows turn at the edge: straight across (FillSettings.rowEnds not set) or one of RowEnds. */
+type RowEndChoice = 'standard' | RowEnds;
+const ROW_END_CHOICES: RowEndChoice[] = ['standard', 'edge', 'diagonal'];
 type BorderChoice = 'off' | BorderType;
 /** What hovering a group of settings shows on the canvas. */
 /** What the canvas shows while its settings are pointed at: the underlay, the border, a line's echo copies (all or copy n), its shadow. */
@@ -811,6 +814,19 @@ export class StitchPanel {
       }),
     );
     if (s.pattern === 'tatami') out.push(...(s.deco?.texture && !s.deco.emboss ? [] : [this.offsets(s)]), ...this.embossControls(s));
+    if (s.pattern === 'tatami' || s.pattern === 'gradient') {
+      out.push(
+        this.choice<RowEndChoice>(
+          'stitch.rowEnds',
+          ROW_END_CHOICES,
+          s.rowEnds ?? 'standard',
+          (v) => `stitch.rowEnds.${v}` as Key,
+          (v) => (v === 'standard' ? delete s.rowEnds : (s.rowEnds = v)),
+          true,
+          (v) => this.peek(v === null ? null : { kind: 'fill', s: { ...s, rowEnds: v === 'standard' ? undefined : v } }),
+        ),
+      );
+    }
     out.push(this.roughSlider(s));
     return out;
   }
@@ -839,6 +855,7 @@ export class StitchPanel {
     ];
     if (s.underlay) {
       out.push(
+        this.under(this.check('stitch.underEdge', 'stitch.underEdge.hint', () => !!s.underEdge, (v) => (v ? (s.underEdge = true) : delete s.underEdge))),
         this.under(this.check('stitch.underCover', 'stitch.underCover.hint', () => !!s.underCover, (v) => (v ? (s.underCover = true) : delete s.underCover))),
         this.under(
           this.choice<'mm' | 'share'>(

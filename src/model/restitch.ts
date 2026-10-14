@@ -6,7 +6,7 @@ import { isRunType, runLike, type PathStitch } from './along';
 import { wholeOf } from './knockout';
 import { LINE_MOTIFS } from '../digitize/motif';
 import { lineStitches, runAsLine, runWays } from './line';
-import { chooseAngle, CROSSHATCH_HALF, crosshatchFill, fillRegion, type FillParams } from '../digitize/fill';
+import { chooseAngle, CROSSHATCH_HALF, crosshatchFill, fillRegion, ROW_ENDS, type FillParams, type RowEnds } from '../digitize/fill';
 import { contourFill, fieldFill, guideField, stitchField } from '../digitize/flow';
 import { atShare, crossFill, CROSS_KINDS, FIGURES, motifFill, TEXTURES, TEXTURE_SIZE, TEXTURE_SIZE_RANGE, echoFill, circleField, grainField, GRID_KINDS, gridFill, mazeFill, meanderFill, MOTIFS, rayField, regionBox, swirlField, waveFill, zigzagFill, type CrossKind, type Figure, type GridKind, type Motif, type OpenParams, type Texture } from '../digitize/deco';
 import { spiralFill } from '../digitize/spiral';
@@ -175,6 +175,10 @@ export interface FillSettings {
   guides?: Pt[][];
   /** Underlay in two crossing layers instead of one across the rows. */
   underCross?: boolean;
+  /** An edge run (Kantenlauf) just inside the edge before the underlay rows (see sewEdgeRun in fill.ts). */
+  underEdge?: boolean;
+  /** Tatami and gradient: how the rows turn at the edge (see FillParams.rowEnds); straight across when not set. */
+  rowEnds?: RowEnds;
   /** Underlay stays this far inside the edge (mm); 0.4 when not set. */
   underInset?: number;
   /** No underlay where objects sewn later cover the fill completely. */
@@ -1033,6 +1037,8 @@ function isFill(f: unknown): f is FillSettings {
     (s.gradient === undefined || typeof s.gradient === 'boolean') &&
     (s.guides === undefined || (Array.isArray(s.guides) && s.guides.every(isLine))) &&
     (s.underCross === undefined || typeof s.underCross === 'boolean') &&
+    (s.underEdge === undefined || typeof s.underEdge === 'boolean') &&
+    (s.rowEnds === undefined || ROW_ENDS.includes(s.rowEnds)) &&
     (s.underInset === undefined || finite(s.underInset)) &&
     (s.underInsetShare === undefined || finite(s.underInsetShare)) &&
     (s.underSpacing === undefined || (finite(s.underSpacing) && s.underSpacing > 0)) &&
@@ -2424,7 +2430,7 @@ export function fillRuns(area: Region, s: FillSettings, way: FillWay): NewFill |
   // the smaller area (the old thread runs where nothing is sewn now).
   const ex = s.expand ?? 0;
   const tw = ex > 0 && travel ? (unionRegion([travel, r]) ?? travel) : ex < 0 ? r : travel;
-  const fp: FillParams = { spacing: s.spacing, stitch: s.stitch, angle: s.angle, pull: s.edge, underlay: s.underlay, underCross: s.underCross, underInset: s.underInset, underInsetShare: s.underInsetShare, underSpacing: s.underSpacing, travel: tw, tolerance: s.tolerance, ...(s.gapRows ? { gapRows: s.gapRows } : {}) };
+  const fp: FillParams = { spacing: s.spacing, stitch: s.stitch, angle: s.angle, pull: s.edge, underlay: s.underlay, underCross: s.underCross, ...(s.underEdge ? { underEdge: true } : {}), ...(s.rowEnds && (s.pattern === 'tatami' || s.pattern === 'gradient') ? { rowEnds: s.rowEnds } : {}), underInset: s.underInset, underInsetShare: s.underInsetShare, underSpacing: s.underSpacing, travel: tw, tolerance: s.tolerance, ...(s.gapRows ? { gapRows: s.gapRows } : {}) };
   // Parts left out (under what lies on top): travel keeps off the outline beside sewn rows.
   const whole = wholeOf(area);
   if (whole) {
@@ -2464,7 +2470,7 @@ export function fillRuns(area: Region, s: FillSettings, way: FillWay): NewFill |
     res = fillRegion(r, { ...fp, offset: s.offset, ...(s.pattern === 'tatami' ? looks(d) : {}) }, start);
   }
   if (!res) return null;
-  // Irregular rows: the needle points of the top stitches move along them, the underlay stays.
+  if (!res) return null;
   const rough = Math.min(1, Math.max(0, s.rough ?? 0));
   if (rough && !isOpenPattern(s.pattern)) roughenRuns(res.runs, res.under ?? 0, rough, s.roughSeed ?? 0, s.stitch * ROUGH_LONG);
   // Underlay points in runs too short to sew are not sewn either.

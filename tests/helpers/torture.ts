@@ -889,13 +889,15 @@ export const OPS: Op[] = [
       const rough = r() < 0.3 ? { rough: 0.2 + 0.8 * r(), roughSeed: 1 + Math.floor(r() * 99) } : {};
       // Schnitte sparen now and then: from the seed drawn already, so the ops of a chain stay as they were.
       const save = deco.seed % 3 === 0 ? { saveTrims: true } : {};
+      // Row ends along the edge or diagonal, and an edge run, the same way.
+      const look: Partial<FillSettings> = { ...(deco.seed % 4 === 1 ? { rowEnds: 'edge' as const } : deco.seed % 4 === 2 ? { rowEnds: 'diagonal' as const } : {}), ...(deco.seed % 5 === 0 ? { underEdge: true } : {}) };
       const s: FillSettings =
         kind === 'emboss'
-          ? { ...fill, pattern: 'tatami', deco: { ...deco, emboss: pick(r, MOTIFS), ...(r() < 0.5 ? { embossAngle: Math.floor(r() * 360) } : {}) } }
+          ? { ...fill, ...look, pattern: 'tatami', deco: { ...deco, emboss: pick(r, MOTIFS), ...(r() < 0.5 ? { embossAngle: Math.floor(r() * 360) } : {}) } }
           : kind === 'texture'
-            ? { ...fill, ...rough, ...save, pattern: 'tatami', deco: { ...deco, texture: pick(r, TEXTURES), ...(r() < 0.5 ? { textureSize: 4 + 30 * r() } : {}) } }
+            ? { ...fill, ...rough, ...save, ...look, pattern: 'tatami', deco: { ...deco, texture: pick(r, TEXTURES), ...(r() < 0.5 ? { textureSize: 4 + 30 * r() } : {}) } }
             : kind === 'fade'
-              ? { ...fill, ...rough, ...save, pattern: 'gradient', deco: { ...deco, fade: pick(r, ['out', 'in'] as const) } }
+              ? { ...fill, ...rough, ...save, ...look, pattern: 'gradient', deco: { ...deco, fade: pick(r, ['out', 'in'] as const) } }
               : { ...fill, ...rough, ...save, pattern: kind, deco };
       if (process.env.TORTURE_TRACE) console.log('decorate', o.index, kind);
       // As the app: another pattern takes a blend's second thread out.
