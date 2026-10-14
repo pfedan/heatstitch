@@ -8,7 +8,7 @@ import { LINE_MOTIFS } from '../digitize/motif';
 import { lineStitches, runAsLine, runWays } from './line';
 import { chooseAngle, CROSSHATCH_HALF, crosshatchFill, fillRegion, type FillParams } from '../digitize/fill';
 import { contourFill, fieldFill, guideField, stitchField } from '../digitize/flow';
-import { atShare, crossFill, CROSS_KINDS, FIGURES, motifFill, TEXTURES, TEXTURE_SIZE, TEXTURE_SIZE_RANGE, echoFill, circleField, grainField, GRID_KINDS, gridFill, mazeFill, meanderFill, MOTIFS, rayField, regionBox, swirlField, waveFill, zigzagFill, type CrossKind, type Figure, type GridKind, type Motif, type OpenParams, type Texture } from '../digitize/deco';
+import { atShare, crossFill, CROSS_KINDS, FIGURES, motifFill, TEXTURES, TEXTURE_SIZE, TEXTURE_SIZE_RANGE, echoFill, circleField, grainField, GRID_KINDS, gridFill, mazeFill, meanderFill, MOTIFS, rayField, regionBox, swirlField, waveFill, zigzagFill, type CrossGrid, type CrossKind, type Figure, type GridKind, type Motif, type OpenParams, type Texture } from '../digitize/deco';
 import { spiralFill } from '../digitize/spiral';
 import { ECHO_GAP, isEcho } from '../digitize/echo';
 import { shadowFrom } from './shadow';
@@ -105,6 +105,11 @@ export interface DecoSettings {
   angle?: number;
   grid?: GridKind;
   cross?: CrossKind;
+  /**
+   * Cross stitch: on a grid of its own, anchored at its shape, that moves with it; not set, on the
+   * grid of the design, which all cross stitch of the same size and angle shares (see CrossGrid).
+   */
+  ownGrid?: boolean;
   /** Motif fill: its figure; hearts when not set. */
   figure?: Figure;
   /** Gradient: the density falls evenly to nearly nothing (out) or rises from it (in), for color blends. */
@@ -139,9 +144,9 @@ const CIRCLES_FOCUS: Pt = [0.5, 0.5];
 /** Open patterns: distance between lines or cell size when none is set (mm). */
 // Crosshatch: rows 1.6 mm apart in each layer, four times a usual fill's 0.4 mm: the two layers
 // together lay half its thread, as a light fill (0.8 mm), and leave diamonds of fabric between.
-export const OPEN_SIZE: Record<OpenPattern, number> = { meander: 2.5, maze: 2.5, grid: 6, motifs: 8, echo: 3, cross: 2.5, crosshatch: 1.6 };
+export const OPEN_SIZE: Record<OpenPattern, number> = { meander: 2.5, maze: 2.5, grid: 6, motifs: 8, echo: 3, cross: 2.3, crosshatch: 1.6 };
 /** Open patterns: the range of `size` (mm). */
-export const OPEN_SIZE_RANGE: Record<OpenPattern, [number, number]> = { meander: [1.2, 8], maze: [1.2, 8], grid: [3, 20], motifs: [5, 25], echo: [1.2, 10], cross: [1.5, 6], crosshatch: [1, 4] };
+export const OPEN_SIZE_RANGE: Record<OpenPattern, [number, number]> = { meander: [1.2, 8], maze: [1.2, 8], grid: [3, 20], motifs: [5, 25], echo: [1.2, 10], cross: [1, 5], crosshatch: [1, 4] };
 /**
  * Decorative fields may crowd rows more than a plain curved fill before they give up (in times the
  * nominal density): rows meet at the start of rays and wind tight at the eye of a swirl, as in the
@@ -1061,6 +1066,7 @@ function isDeco(d: unknown): d is DecoSettings {
     (s.centers === undefined || (Array.isArray(s.centers) && s.centers.length >= 1 && s.centers.length <= MAX_SWIRLS && s.centers.every(isShare))) &&
     (s.triple === undefined || typeof s.triple === 'boolean') &&
     (s.embossStrong === undefined || typeof s.embossStrong === 'boolean') &&
+    (s.ownGrid === undefined || typeof s.ownGrid === 'boolean') &&
     (s.grid === undefined || GRID_KINDS.includes(s.grid)) &&
     (s.cross === undefined || CROSS_KINDS.includes(s.cross)) &&
     (s.figure === undefined || FIGURES.includes(s.figure)) &&
@@ -2476,6 +2482,9 @@ export function fillRuns(area: Region, s: FillSettings, way: FillWay): NewFill |
     if (run.length > 1) under += take;
   }
   const runs = res.runs.filter((run) => run.length > 1);
+  // Crosses that meet nowhere: a trim between them, so no thread lies across the fabric beside
+  // the crosses (half crosses go on along the edge of their cells, as they always need to).
+  if (s.pattern === 'cross' && s.deco?.cross !== 'half') runs.forEach((run, k) => k && trimBefore.add(run));
   // The border is an object of its own, sewn after the fill (see syncBorders).
   const border = runs.reduce((n, run) => n + run.length, 0);
   // Travel indices as in the runs kept (runs of one point are left out before them).
@@ -2581,14 +2590,39 @@ function openFill(r: Region, s: FillSettings, fp: FillParams, start: Pt) {
   const d = { ...DECO_DEFAULTS, ...s.deco };
   const [lo, hi] = OPEN_SIZE_RANGE[pat];
   const p: OpenParams = { size: Math.min(hi, Math.max(lo, d.size ?? OPEN_SIZE[pat])), stitch: Math.min(s.stitch, 3), seed: d.seed, triple: d.triple, angle: d.angle ?? 0 };
+  if (pat === 'cross') {
+    // Its own grid is anchored at its whole shape, whatever lies on top of it.
+    const g = crossGridOf(s, fp.whole ?? r);
+    if (!g) return null;
+    return crossFill(r, { ...g, stitch: p.stitch, seed: p.seed, triple: p.triple }, d.cross, start);
+  }
   if (pat === 'crosshatch') return crosshatchFill(r, { ...fp, spacing: p.size, stitch: p.stitch, angle: Number.isFinite(s.angle) ? s.angle : 0, pull: 0, underlay: false }, start);
   if (pat === 'meander') return meanderFill(r, p, start);
   if (pat === 'maze') return mazeFill(r, p, start);
   if (pat === 'echo') return echoFill(r, p, start);
   if (pat === 'grid') return gridFill(r, p, d.grid, start);
-  if (pat === 'motifs') return motifFill(r, p, d.figure, start);
-  return crossFill(r, p, d.cross, start);
+  return motifFill(r, p, d.figure, start);
 }
+
+/**
+ * The grid a cross stitch fill with settings `s` is sewn on (see CrossGrid): the design's, or with
+ * `ownGrid` one anchored at the top left of `whole` (its whole area, before anything on top was
+ * left out of it), which moves with the shape. Null for other fills, and for an own grid without
+ * `whole`.
+ */
+export function crossGridOf(s: FillSettings, whole?: Region): CrossGrid | null {
+  if (s.pattern !== 'cross' || (s.deco?.ownGrid && !whole)) return null;
+  const d = s.deco;
+  const [lo, hi] = OPEN_SIZE_RANGE.cross;
+  const size = Math.min(hi, Math.max(lo, d?.size ?? OPEN_SIZE.cross));
+  const angle = d?.angle ?? 0;
+  if (!d?.ownGrid || !whole) return { size, angle, origin: [0, 0] };
+  const [x0, y0] = regionBox(whole);
+  return { size, angle, origin: [x0, y0] };
+}
+
+/** Whether two grids are the same, so crosses on them meet without a gap. */
+export const sameGrid = (a: CrossGrid, b: CrossGrid) => a.size === b.size && a.angle === b.angle && a.origin[0] === b.origin[0] && a.origin[1] === b.origin[1];
 
 /** Satin of a border: about the density of a satin column, with a walk along the middle under it when wide enough. */
 /**

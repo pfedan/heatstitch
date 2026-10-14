@@ -111,7 +111,8 @@ with this section when the site starts sending anything new.
   gradient, contour fill without a seam, spiral for any shape, as sewn, guided by drawn lines; decor: textures in the
   tatami (zigzag, swell, steps, herringbone: needle points shifted, no stitch more), embossed motifs, waves,
   grain, rays, swirl, color fade with a second color; open: meander, maze, grid, motifs (hearts, stars, flowers,
-  circles strung in rows), echo, cross stitch, crosshatch), irregular rows for a hand-sewn look,
+  circles strung in rows), echo, cross stitch (only along the slants, on a grid shared by the design, so
+  areas on top of each other meet without a gap; sizes of Aida marked), crosshatch), irregular rows for a hand-sewn look,
   spacing, angle, stitch length, edges, expand, underlay
   (off, across, cross, inset, left out under later objects), **border** (running, triple or satin,
   offset, own thread); satin pattern or E stitch, spacing (also by width and per rung), width per
