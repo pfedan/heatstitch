@@ -116,7 +116,9 @@ with this section when the site starts sending anything new.
   (off, across, cross, inset, left out under later objects), **border** (running, triple or satin,
   offset, own thread); satin pattern or E stitch, spacing (also by width and per rung), width per
   side (by fabric: free ends also shortened against push), fringe, irregular (width and spacing varying from stitch to stitch, kept by a seed), short stitches in curves, split, underlay kind (the zigzag sewn out and back, crossing), **rungs** for the direction and **sections**
-  with cut lines (also on a fill: each part a column of its own, order, direction and trims per part);
+  with cut lines (also on a fill: each part a column of its own, order, direction and trims per part;
+  a wide shape such as a star, a block letter or a ring is cut along its medial axis into arms and
+  hubs, sewn in one run with the columns overlapping 0.3 mm where they meet);
   running stitch length, max. deviation, triple stitch; lines as running stitch, satin or fill;
   **redwork**: a line of many paths in one go, each line out and back, no trims where they touch;
   line motifs (waves, scallops, hearts, chain) and **hand stitches** imitated by machine: stem,

@@ -3,6 +3,7 @@ import { columnFromRungs, cutLinesBetween, cutPieces, inside, insideOf, railsFro
 import type { Rails } from '../model/restitch';
 import { cornerCuts, planParts } from './satinForms';
 import { blobShape, filled, materialOf, planShape, smallHoles, splitBlobs, wholeShape } from './satinShapes';
+import { planInner } from './satinInner';
 import { skeleton, type Branch, type Graph, type Pt } from './skeleton';
 
 /** Steps along a column checked for running across a hole (mm, see covers). */
@@ -32,10 +33,12 @@ const COVER_MM = 2;
  * - `crescent`: a line pointed at both ends bending round (a moon), sewn as one column turning.
  * - `spikes`: points standing off a body (a star, the bars of an E), each cut off at its base.
  * - `frame`: a band turning corners (a frame, a block letter), cut on the miter (see satinForms).
+ * - `parts`: any other area cut along its medial axis into arms, hubs and bends (a star too wide
+ *   for the spikes planner, a block U, a ring, a blob with holes; see satinInner).
  * - `wide`: too wide or too blotchy for satin; nothing is suggested.
  */
 
-export type ShapeClass = 'strokes' | 'dot' | 'pointed' | 'spikes' | 'frame' | 'leaf' | 'drop' | 'crescent' | 'wide';
+export type ShapeClass = 'strokes' | 'dot' | 'pointed' | 'spikes' | 'frame' | 'leaf' | 'drop' | 'crescent' | 'parts' | 'wide';
 
 export interface SatinSuggestion {
   kind: ShapeClass;
@@ -151,7 +154,9 @@ export function suggestSatin(area: Region, graph?: Graph, max = STROKE_MAX, colu
   if (kind !== 'strokes') {
     // No lines: the area as a whole may be a dot or a pointed shape.
     const plan = outsides.length === 1 ? planShape(wholeShape(outsides, holes, material), material, max, true, columns) : null;
-    return plan ? finish(g, plan.kind, plan.cuts, plan.lines, outsides, holes) : { kind: 'wide', cuts: [], lines: [], ok: false };
+    const made = plan && finish(g, plan.kind, plan.cuts, plan.lines, outsides, holes);
+    if (made?.ok) return made;
+    return alongAxis(outsides, holes, max) ?? made ?? { kind: 'wide', cuts: [], lines: [], ok: false };
   }
   // Thick places in the lines planned on their own, the lines without them.
   const small = smallHoles(g, holes);
@@ -174,7 +179,16 @@ export function suggestSatin(area: Region, graph?: Graph, max = STROKE_MAX, colu
   // Lines round a hole in a compact shape: a shape after all (a dot with a highlight off its middle).
   const whole = planShape(wholeShape(outsides, holes, material), material, max, true, columns);
   const other = whole && finish(g, whole.kind, whole.cuts, whole.lines, outsides, holes);
-  return other?.ok ? other : made;
+  if (other?.ok || made.ok) return other?.ok ? other : made;
+  return alongAxis(outsides, holes, max) ?? made;
+}
+
+/** The area cut along its medial axis (see satinInner), when that makes columns of every part. */
+function alongAxis(outsides: Pt[][], holes: Pt[][], max: number): SatinSuggestion | null {
+  const plan = planInner(outsides, holes, max);
+  if (!plan) return null;
+  const made = finish(plan.axis, 'parts', plan.cuts, plan.lines, outsides, holes);
+  return made.ok ? made : null;
 }
 
 /** The area cut at its corners (see satinForms), or null when it has none to cut at or makes no columns so. */

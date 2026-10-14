@@ -983,6 +983,7 @@ export const deBase = {
   'stitch.suggest.shape.leaf': 'Blatt',
   'stitch.suggest.shape.drop': 'Tropfen',
   'stitch.suggest.shape.crescent': 'Mond',
+  'stitch.suggest.shape.parts': 'Fläche mit Armen',
   'stitch.suggest.partly': 'Vorschlag gesetzt, ein Teil (rot umrandet) ergibt noch keine Säule. Dort eine Querlinie oder Trennlinie ziehen.',
   'stitch.sections.hint': 'Trennlinien an spitzen Ecken: sauber auf Gehrung statt gefächert',
   'stitch.order.best.hint': 'Teile so ordnen, dass die Wege unter Satin verschwinden',

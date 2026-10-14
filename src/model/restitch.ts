@@ -2923,6 +2923,52 @@ export function pushEnds(rails: Rails[], s: SatinSettings): PushEnd[] {
   return out;
 }
 
+/**
+ * Parts of one satin overlap where they meet (a cut line between sections, an arm ending on a
+ * hub, the two ends of a ring opened once): each end that meets another column, or the column's
+ * own other end, is taken on by half of SEAM_OVERLAP, so no fabric shows through the seam when
+ * the stitches pull in. 0.3 mm in all, as digitizers overlap the parts of a shape.
+ */
+export const SEAM_OVERLAP = 0.3;
+
+/** The ends of the columns `rails` (one object) that meet another column or close a ring, each lengthened (negative mm, see pushedColumn). */
+export function seamEnds(rails: Rails[], s: SatinSettings): PushEnd[] {
+  if (s.type === 'e' || rails.length === 0) return [];
+  const outlines = rails.map(outlineOf);
+  const touches = (q: Pt, o: Pt[]) => {
+    const [x0, y0, x1, y1] = boxOf(o);
+    if (q[0] < x0 - PUSH_TOUCH || q[0] > x1 + PUSH_TOUCH || q[1] < y0 - PUSH_TOUCH || q[1] > y1 + PUSH_TOUCH) return false;
+    if (inside(o, q)) return true;
+    for (let i = 1; i < o.length; i++) if (toSegment(q, o[i - 1], o[i]) < PUSH_TOUCH) return true;
+    return false;
+  };
+  const out: PushEnd[] = [];
+  rails.forEach((r, k) => {
+    if (r.left.length < 2 || r.right.length < 2) return;
+    const a = mid(r.left[0], r.right[0]);
+    const b = mid(r.left[r.left.length - 1], r.right[r.right.length - 1]);
+    const ring = dist(a, b) < PUSH_TOUCH;
+    for (const at of [a, b]) if (ring || outlines.some((o, j) => j !== k && touches(at, o))) out.push({ at, mm: -SEAM_OVERLAP / 2 });
+  });
+  return out;
+}
+
+/** A column taken on beyond its ends by `s0` and `s1` (mm), each rail straight on along its last step. */
+function lengthened(col: Column, s0: number, s1: number): Column {
+  // Every line gets its point, so the rails and the middle keep one point each per step.
+  const on = (line: Pt[], atEnd: boolean, mm: number): Pt[] => {
+    if (mm <= 0 || !line.length) return line;
+    const seq = atEnd ? line.slice().reverse() : line;
+    const p = seq[0];
+    const q = seq.find((x) => dist(x, p) > 1e-6);
+    const l = q ? dist(p, q) : 1;
+    const e: Pt = q ? [p[0] + ((p[0] - q[0]) / l) * mm, p[1] + ((p[1] - q[1]) / l) * mm] : [p[0], p[1]];
+    return atEnd ? [...line, e] : [e, ...line];
+  };
+  const both = (line: Pt[]) => on(on(line, false, s0), true, s1);
+  return { ...col, center: both(col.center), left: both(col.left), right: both(col.right) };
+}
+
 /** A column shortest kept by push compensation: never more than a fourth of it at each end. */
 const PUSH_SHARE = 0.25;
 
@@ -2933,9 +2979,13 @@ export function pushedColumn(col: Column, ends: PushEnd[] | undefined): Column {
   const near = (q: Pt) => ends.find((e) => dist(e.at, q) < 1e-3)?.mm ?? 0;
   const cum = cumulative(col.center);
   const len = cum[n - 1];
-  const s0 = Math.min(near(mid(col.left[0], col.right[0])), len * PUSH_SHARE);
-  const s1 = Math.min(near(mid(col.left[n - 1], col.right[n - 1])), len * PUSH_SHARE);
-  if (!s0 && !s1) return col;
+  const m0 = near(mid(col.left[0], col.right[0]));
+  const m1 = near(mid(col.left[n - 1], col.right[n - 1]));
+  // Ends that meet another column are taken on (see seamEnds), free ends shortened.
+  const s0 = Math.min(Math.max(0, m0), len * PUSH_SHARE);
+  const s1 = Math.min(Math.max(0, m1), len * PUSH_SHARE);
+  const on = (c: Column) => (m0 < 0 || m1 < 0 ? lengthened(c, -Math.min(0, m0), -Math.min(0, m1)) : c);
+  if (!s0 && !s1) return on(col);
   const at = (s: number) => {
     let i = 1;
     while (i < n - 1 && cum[i] < s) i++;
@@ -2945,12 +2995,12 @@ export function pushedColumn(col: Column, ends: PushEnd[] | undefined): Column {
   const a = at(s0);
   const b = at(len - s1);
   const keep = (arr: Pt[]) => arr.slice(a.i, b.i);
-  return {
+  return on({
     center: [a.c, ...keep(col.center).filter((_, j) => cum[a.i + j] > s0 && cum[a.i + j] < len - s1), b.c],
     left: [a.l, ...keep(col.left).filter((_, j) => cum[a.i + j] > s0 && cum[a.i + j] < len - s1), b.l],
     right: [a.r, ...keep(col.right).filter((_, j) => cum[a.i + j] > s0 && cum[a.i + j] < len - s1), b.r],
     width: col.width,
-  };
+  });
 }
 
 const mid = (a: Pt, b: Pt): Pt => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
@@ -2962,7 +3012,7 @@ function toSegment(q: Pt, a: Pt, b: Pt): number {
   return Math.hypot(q[0] - a[0] - v[0] * t, q[1] - a[1] - v[1] * t);
 }
 
-/** The column of `r` as satinRuns sews it with `s`: shortened at its free ends (see pushEnds). */
+/** The column of `r` as satinRuns sews it with `s`: shortened at its free ends (see pushEnds), taken on where it meets another (see seamEnds). */
 const columnFor = (r: Rails, s: SatinSettings): Column => pushedColumn(columnOf(r), s.push);
 
 /**
@@ -2970,7 +3020,7 @@ const columnFor = (r: Rails, s: SatinSettings): Column => pushedColumn(columnOf(
  * and back for a contour underlay) and the satin over it the other way.
  */
 export function satinRuns(rails: Rails[], given: SatinSettings): Pt[][] {
-  const ends = pushEnds(rails, given);
+  const ends = [...pushEnds(rails, given), ...seamEnds(rails, given)];
   const s = ends.length ? { ...given, push: ends } : given;
   const runs: Pt[][] = [];
   const chains = new WeakSet<Pt[]>();
@@ -3507,6 +3557,44 @@ function chainRun(cols: Rails[], s: SatinSettings, sew: (ps: [Pt, Pt][]) => Pt[]
     out.push(...pts);
   });
   return out;
+}
+
+/** Steps the ways between the columns of a chain are measured in (mm, see travelOf). */
+const TRAVEL_MEASURE = 0.1;
+
+/**
+ * How the ways between the columns of one chain lie when sewn in this order (as chainRun walks
+ * them): mm hidden under columns sewn later, and mm in sight (on top of columns sewn before, or
+ * off the columns). For tests and comparing plans.
+ */
+export function travelOf(cols: Rails[], s: SatinSettings): { hidden: number; visible: number } {
+  const { sew, along } = sewing(s);
+  const outlines = cols.map(outlineOf);
+  const { between } = wayModel(outlines, cols.map((r) => columnOf(sectionsOf(r)[0])));
+  const later = new Uint8Array(cols.length);
+  let from: Pt | undefined;
+  let hidden = 0;
+  let visible = 0;
+  cols.forEach((r, k) => {
+    const pts = columnRun(r, s, sew, along);
+    if (!pts.length) return;
+    later.fill(0, 0, k).fill(1, k);
+    if (from) {
+      const way = between(from, pts[0], later).way;
+      for (let i = 1; i < way.length; i++) {
+        const l = dist(way[i - 1], way[i]);
+        const n = Math.max(1, Math.ceil(l / TRAVEL_MEASURE));
+        for (let j = 0; j < n; j++) {
+          const q = lerp(way[i - 1], way[i], (j + 0.5) / n);
+          // Under a column sewn later (k itself is sewn right after the way, so it covers it too).
+          if (outlines.some((o, c) => c >= k && inside(o, q))) hidden += l / n;
+          else visible += l / n;
+        }
+      }
+    }
+    from = pts[pts.length - 1];
+  });
+  return { hidden, visible };
 }
 
 /** The outline of a column (both rails, closed). */

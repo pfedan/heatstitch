@@ -985,6 +985,7 @@ const enBase: Record<keyof typeof deBase, string> = {
   'stitch.suggest.shape.leaf': 'leaf',
   'stitch.suggest.shape.drop': 'drop',
   'stitch.suggest.shape.crescent': 'crescent',
+  'stitch.suggest.shape.parts': 'shape with arms',
   'stitch.suggest.partly': 'Suggestion set, one part (outlined red) makes no column yet. Draw a line across or a cut line there.',
   'stitch.sections.hint': 'Cut lines at sharp corners: a clean mitre instead of a fan',
   'stitch.order.best.hint': 'Order the parts so the travel hides under satin',
