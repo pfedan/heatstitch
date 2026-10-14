@@ -154,7 +154,7 @@ export interface StitchHooks {
   /** Sews the selection anew as another kind: fill or satin, a wide line as a fill and back. */
   convert: (to: 'fill' | 'satin' | 'line') => void;
   /** Rungs of a satin: the tool on or off, corners suggested, all removed, back to the stitches' own direction. */
-  direction: (action: 'tool' | 'corners' | 'sections' | 'even' | 'follow' | 'rung' | 'cut' | 'order') => void;
+  direction: (action: 'tool' | 'corners' | 'sections' | 'even' | 'follow' | 'rung' | 'cut' | 'order' | 'auto') => void;
   /** The spacing at the selected rung (null: as the column). */
   spacingHere: (v: number | null) => void;
   /** Rungs drawn across a fill: the tool on or off, sewn as satin along them. */
@@ -1231,8 +1231,23 @@ export class StitchPanel {
       this.sec('look', 'stitches.sec.look', parts.look),
       this.sec('effects', 'stitches.sec.effects', [this.echoGroup(st, info.path!.closed, info.path!.color), info.path!.traced ? null : this.shadowGroup(st, info.path!.color)], fx || t('stitches.sec.off')),
       parts.hold.length ? this.sec('hold', 'stitches.sec.hold', parts.hold) : null,
-      this.sec('tools', 'stitches.sec.tools', [this.handRow(), this.lockSwitch(info.lock), info.free?.can ? this.looseRow() : null, this.originalRow(info)]),
+      this.sec('tools', 'stitches.sec.tools', [st.type === 'satin' ? this.lineOrderRow(st, info) : null, this.handRow(), this.lockSwitch(info.lock), info.free?.can ? this.looseRow() : null, this.originalRow(info)]),
     ].filter((x): x is HTMLDetailsElement => !!x);
+  }
+
+  /**
+   * A satin line's order in the satin view (key R): Auto as the line makes it, or its own, set
+   * there over it (see LineOrder), with the way back to Auto.
+   */
+  private lineOrderRow(st: PathStitch, info: StitchInfo): HTMLElement {
+    const own = !!st.order;
+    const row = this.toolRow('stitch.direction', 'stitches.tool.direction', 'stitch.direction.tool.hint', !!info.direction?.tool, t(own ? 'stitches.lineOrder.own' : 'stitches.auto'));
+    if (own) {
+      const back = h('button', { type: 'button', class: 'small', title: t('stitches.lineOrder.auto.hint') }, t('stitches.auto'));
+      back.addEventListener('click', () => this.hooks.direction('auto'));
+      row.append(back);
+    }
+    return row;
   }
 
   // Building blocks -------------------------------------------------------------------------------
