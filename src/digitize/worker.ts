@@ -12,7 +12,7 @@ import type { ThreadColor } from '../model/pattern';
  */
 
 export type ImageRequest =
-  | { id: number; type: 'load'; raster: Raster }
+  | { id: number; type: 'load'; raster: Raster; count?: boolean }
   | { id: number; type: 'prepare'; options: PrepareOptions; edits: ColorEdit[]; strokes: Stroke[]; exact?: ExactLabels }
   | { id: number; type: 'digitize'; options: DigitizeOptions; name: string }
   | { id: number; type: 'shapes'; shapes: ShapeInput[]; threads: ThreadColor[]; options: DigitizeOptions; size: { w: number; h: number }; knockout: boolean; name: string };
@@ -20,6 +20,8 @@ export type ImageRequest =
 export interface ImageResponse {
   id: number;
   photo?: boolean;
+  /** Of a graphic (not a photo): how many colors it is drawn in (see graphicPalette). */
+  colors?: number;
   prepared?: Prepared;
   digitized?: Digitized;
   /** Not the answer yet: how far the request is (shapes sewn of all). */
@@ -37,7 +39,9 @@ ctx.onmessage = (e: MessageEvent<ImageRequest>) => {
     if (req.type === 'load') {
       preparer = new Preparer(req.raster);
       prepared = null;
-      ctx.postMessage({ id: req.id, photo: looksLikePhoto(req.raster) } satisfies ImageResponse);
+      const photo = looksLikePhoto(req.raster);
+      const own = req.count && !photo ? preparer.palette()?.length : undefined;
+      ctx.postMessage({ id: req.id, photo, ...(own ? { colors: own } : {}) } satisfies ImageResponse);
     } else if (req.type === 'prepare') {
       if (!preparer) throw new Error('No image loaded');
       prepared = preparer.run(req.options, req.edits, req.strokes, req.exact);
@@ -57,3 +61,4 @@ ctx.onmessage = (e: MessageEvent<ImageRequest>) => {
     ctx.postMessage({ id: req.id, error: err instanceof Error ? err.message : String(err) } satisfies ImageResponse);
   }
 };
+

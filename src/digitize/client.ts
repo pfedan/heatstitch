@@ -31,9 +31,13 @@ export class ImageClient {
     });
   }
 
-  /** Hands the image to the worker; tells whether it looks like a photo. */
-  async load(raster: Raster): Promise<boolean> {
-    return (await this.call({ type: 'load', raster })).photo ?? false;
+  /**
+   * Hands the image to the worker; tells whether it looks like a photo and, with `count`, of a
+   * graphic how many colors it has of its own.
+   */
+  async load(raster: Raster, count = false): Promise<{ photo: boolean; colors?: number }> {
+    const r = await this.call({ type: 'load', raster, count });
+    return { photo: r.photo ?? false, colors: r.colors };
   }
 
   /** Prepares the loaded image; `exact` gives the regions and colors of a vector image. */

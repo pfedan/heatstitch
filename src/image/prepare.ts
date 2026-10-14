@@ -4,7 +4,7 @@ import { bilateral } from './filters';
 import { distanceToSeeds } from './edt';
 import { mergeSmall, modeFilter, removeBackground, removeSeams } from './labels';
 import { orientation, type Orientation } from './orientation';
-import { NONE, quantize, type Quantized } from './quantize';
+import { graphicPalette, NONE, quantize, type Quantized } from './quantize';
 import { resizeArea, toLab, type LabImage, type Raster } from './raster';
 import { matchThreads, nearestThread } from './threadMatch';
 
@@ -181,8 +181,15 @@ function paint(labels: Uint8Array, w: number, h: number, strokes: Stroke[], labe
 export class Preparer {
   private smoothed: { key: string; img: LabImage; pxMm: number; orient: Orientation } | null = null;
   private quantized: { key: string; q: Quantized } | null = null;
+  private own: Lab[] | null | undefined;
 
   constructor(private source: Raster) {}
+
+  /** The exact colors of a graphic (see graphicPalette), null for a photo. */
+  palette(): Lab[] | null {
+    if (this.own === undefined) this.own = graphicPalette(this.source)?.map((c) => rgbToLab(...c)) ?? null;
+    return this.own;
+  }
 
   run(o: PrepareOptions, edits: ColorEdit[] = [], strokes: Stroke[] = [], exact?: ExactLabels): Prepared {
     const src = this.source;
@@ -209,7 +216,9 @@ export class Preparer {
       return finish(img, pxMm, centers, exact.labels, o, edits, strokes, exact.colors);
     }
     const qKey = `${o.maxColors}`;
-    if (this.quantized?.key !== qKey) this.quantized = { key: qKey, q: quantize(img, { maxColors: o.maxColors }) };
+    // A graphic in no more colors than allowed keeps exactly those (a fine line or ring in a color of
+    // its own too); else the colors are clustered.
+    if (this.quantized?.key !== qKey) this.quantized = { key: qKey, q: quantize(img, { maxColors: o.maxColors, palette: this.palette() ?? undefined }) };
     const { centers, labels: raw } = this.quantized.q;
     return { ...finish(img, pxMm, centers, raw, o, edits, strokes), orient: this.smoothed.orient };
   }
@@ -291,7 +300,9 @@ function finish(
   }
   // After the seams, so the seams along the background's edge go too.
   if (o.background) labels = removeBackground(labels, w, h);
-  labels = mergeSmall(labels, w, h, Math.max(1, o.minAreaMm2 / (pxMm * pxMm)));
+  // In mm at the size sewn (the image is worked at that size), so it follows the width. Long narrow
+  // details stay whatever their area.
+  labels = mergeSmall(labels, w, h, Math.max(1, o.minAreaMm2 / (pxMm * pxMm)), pxMm);
   if (!exact) labels = modeFilter(labels, w, h);
   if (strokes.length) paint(labels, w, h, strokes, paintLabels);
 

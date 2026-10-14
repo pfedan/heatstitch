@@ -3,7 +3,7 @@ import { digitizeDefaults, shapesOrigin, type DigitizeOptions, type Digitized } 
 import { areaPixels, boxOf, groupAreas, groupsByColor, TECHNIQUES, type AreaInfo, type Technique } from '../digitize/smart';
 import { formatNumber, onLangChange, t, type Key } from '../i18n';
 import { matchThreads } from '../image/threadMatch';
-import { NONE, workingSize, type ColorEdit, type PrepareOptions, type ExactLabels, type Prepared, type Stroke } from '../image/prepare';
+import { DEFAULT_PREPARE, NONE, workingSize, type ColorEdit, type PrepareOptions, type ExactLabels, type Prepared, type Stroke } from '../image/prepare';
 import { readSvg, type SvgDesign, type SvgShape } from '../image/svg';
 import { transformForm, type Form } from '../shape/path';
 import { rasterize } from '../shape/rasterize';
@@ -896,8 +896,9 @@ export class ImageMode {
     this.validation = null;
     this.error = '';
     let photo: boolean;
+    let colors: number | undefined;
     try {
-      photo = await this.client.load(rasterOf(this.picture()!));
+      ({ photo, colors } = await this.client.load(rasterOf(this.picture()!), !work && !svg));
     } catch (err) {
       this.source = null;
       this.svg?.dispose();
@@ -910,6 +911,9 @@ export class ImageMode {
     if (!work) {
       // Photos need smoothing to form regions; graphics keep their edges.
       this.h.settings.image.prepare.smooth = photo && !svg ? 3 : 0;
+      // A graphic keeps every color of its own (a fine accent color too, up to the most the slider
+      // offers); a photo starts from the usual few.
+      if (!svg) this.h.settings.image.prepare.maxColors = Math.max(2, colors ?? DEFAULT_PREPARE.maxColors);
       // An SVG with a size in mm, cm or inches is sewn at that size.
       if (svg?.widthMm) this.h.settings.image.prepare.widthMm = Math.round(Math.min(400, Math.max(10, svg.widthMm)) * 10) / 10;
       this.h.save();

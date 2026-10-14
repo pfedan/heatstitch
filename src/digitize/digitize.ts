@@ -915,12 +915,24 @@ function keep(obj: Obj, o: DigitizeOptions, imgW: number, imgH: number): KeptSha
 const LINE_MM = 1.6;
 
 /**
- * Colors in sewing order: areas first, largest first, then the line colors (outlines and drawn
- * details), as digitizers do: an outline sewn after the areas it encloses covers their edges, and
- * the areas reach under it instead of over it. A color's mean width is 2 × area / perimeter (a
- * strip of width t and length L has area tL and perimeter about 2L).
+ * Colors in sewing order: what lies on top of something else is sewn after it, as digitizers do. Of
+ * two regions that touch, the narrower lies on top (a vein on its leaf, an outline around its area, a
+ * dot in a field): sewn later it covers the shared edge, and the wider one reaches under it instead
+ * of over it. A region's mean width is 2 × area / perimeter (a strip of width t and length L has area
+ * tL and perimeter about 2L).
+ *
+ * Each touching pair votes for its order by the length of the edge they share, the more the clearer
+ * the difference in width. Colors are then ordered to agree with as much of that as they can (a
+ * linear ordering problem: exactly by dynamic programming over subsets for up to ORDER_EXACT colors,
+ * else by moving one color at a time to its best place, Schiavinotto and Stützle 2004). Where the
+ * votes leave a choice, the order is the one used before: areas first, largest first, then the line
+ * colors.
  */
 export function sewingOrder(labels: Uint8Array, w: number, h: number, pxMm: number, colors: number): number[] {
+  const c = components(labels, w, h);
+  const n = c.label.length;
+  const perim = new Float64Array(n);
+  const shared = new Map<number, number>();
   const area = new Array(colors).fill(0);
   const edges = new Array(colors).fill(0);
   for (let y = 0; y < h; y++) {
@@ -928,11 +940,22 @@ export function sewingOrder(labels: Uint8Array, w: number, h: number, pxMm: numb
       const i = y * w + x;
       const l = labels[i];
       if (l === NONE) continue;
+      const k = c.comp[i];
       area[l]++;
-      if (x === 0 || labels[i - 1] !== l) edges[l]++;
-      if (x === w - 1 || labels[i + 1] !== l) edges[l]++;
-      if (y === 0 || labels[i - w] !== l) edges[l]++;
-      if (y === h - 1 || labels[i + w] !== l) edges[l]++;
+      const side = (j: number, out: boolean) => {
+        if (!out && labels[j] === l) return;
+        edges[l]++;
+        perim[k]++;
+        // Each shared edge once, from the pixel with the lower index.
+        if (!out && labels[j] !== NONE && j > i) {
+          const key = k * n + c.comp[j];
+          shared.set(key, (shared.get(key) ?? 0) + 1);
+        }
+      };
+      side(i - 1, x === 0);
+      side(i + 1, x === w - 1);
+      side(i - w, y === 0);
+      side(i + w, y === h - 1);
     }
   }
   const used = area.map((_, i) => i).filter((i) => area[i] > 0);
@@ -940,7 +963,91 @@ export function sewingOrder(labels: Uint8Array, w: number, h: number, pxMm: numb
   const width = (l: number) => ((2 * area[l]) / (edges[l] * (Math.PI / 4))) * pxMm;
   // With areas of other colors only: a design of lines alone keeps the order by area.
   const line = (l: number) => width(l) < LINE_MM && used.some((k) => width(k) >= LINE_MM);
-  return used.sort((a, b) => Number(line(a)) - Number(line(b)) || area[b] - area[a]);
+  const base = used.slice().sort((a, b) => Number(line(a)) - Number(line(b)) || area[b] - area[a]);
+  if (base.length < 2) return base;
+
+  // before[a][b]: how much asks for color a before color b.
+  const before = used.map(() => new Float64Array(used.length));
+  const at = new Map(used.map((l, k) => [l, k]));
+  const compWidth = (k: number) => (2 * c.area[k]) / perim[k];
+  for (const [key, len] of shared) {
+    const a = Math.floor(key / n);
+    const b = key % n;
+    const [wa, wb] = [compWidth(a), compWidth(b)];
+    if (wa === wb) continue;
+    // The narrower one on top: sewn after the wider one.
+    const [under, top] = wa > wb ? [a, b] : [b, a];
+    before[at.get(c.label[under])!][at.get(c.label[top])!] += len * (1 - Math.min(wa, wb) / Math.max(wa, wb));
+  }
+  // The order used before decides where the votes leave a choice: a weight too small to outweigh any of them.
+  const pos = new Map(base.map((l, k) => [l, k]));
+  let least = Infinity;
+  for (const row of before) for (const v of row) if (v > 0) least = Math.min(least, v);
+  const eps = (Number.isFinite(least) ? least : 1) / (used.length * used.length + 1);
+  for (let a = 0; a < used.length; a++) for (let b = 0; b < used.length; b++) if (pos.get(used[a])! < pos.get(used[b])!) before[a][b] += eps;
+  const order = used.length <= ORDER_EXACT ? orderExact(before) : orderByMoves(before, base.map((l) => at.get(l)!));
+  return order.map((k) => used[k]);
+}
+
+/** Colors up to this many are ordered exactly (2^n subsets). */
+const ORDER_EXACT = 16;
+
+/** The order of 0..n-1 with the largest sum of before[a][b] over a placed before b: dynamic programming over the set placed first. */
+function orderExact(before: Float64Array[]): number[] {
+  const n = before.length;
+  const size = 1 << n;
+  const best = new Float64Array(size).fill(-Infinity);
+  const last = new Int8Array(size).fill(-1);
+  best[0] = 0;
+  for (let set = 0; set < size; set++) {
+    if (best[set] === -Infinity) continue;
+    for (let v = 0; v < n; v++) {
+      if (set & (1 << v)) continue;
+      // v after everything in the set.
+      let gain = 0;
+      for (let u = 0; u < n; u++) if (set & (1 << u)) gain += before[u][v];
+      const next = set | (1 << v);
+      if (best[set] + gain > best[next]) {
+        best[next] = best[set] + gain;
+        last[next] = v;
+      }
+    }
+  }
+  const out: number[] = [];
+  for (let set = size - 1; set; set &= ~(1 << last[set])) out.unshift(last[set]);
+  return out;
+}
+
+/** Local search for many colors: each color moved to the place that gains most, until no move gains. */
+function orderByMoves(before: Float64Array[], start: number[]): number[] {
+  const order = start.slice();
+  for (let improved = true, guard = 0; improved && guard < 100; guard++) {
+    improved = false;
+    for (let i = 0; i < order.length; i++) {
+      const v = order[i];
+      const rest = order.filter((_, k) => k !== i);
+      // Gain of placing v at slot s (before rest[s]) against placing it first.
+      let gain = 0;
+      let bestGain = 0;
+      let bestSlot = 0;
+      let here = 0;
+      for (let s = 1; s <= rest.length; s++) {
+        const u = rest[s - 1];
+        gain += before[u][v] - before[v][u];
+        if (s === i) here = gain;
+        if (gain > bestGain + 1e-12) {
+          bestGain = gain;
+          bestSlot = s;
+        }
+      }
+      if (bestGain > here + 1e-12) {
+        rest.splice(bestSlot, 0, v);
+        order.splice(0, order.length, ...rest);
+        improved = true;
+      }
+    }
+  }
+  return order;
 }
 
 /** Pieces of one color apart by no more than this, with only later colors between them, are one area (mm). */

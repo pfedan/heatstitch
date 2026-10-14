@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { redworkGraph, redworkRuns, redworkWalks, type RedworkLine } from '../src/digitize/redwork';
-import { lineStitches, redworkHelps } from '../src/model/line';
+import { lineGoes, lineStitches, redworkHelps } from '../src/model/line';
 import { isLineStitch } from '../src/model/restitch';
 import { parsePath } from '../src/shape/svgPath';
 import { addLine } from '../src/model/addShape';
@@ -149,6 +149,12 @@ describe('redwork', () => {
     expect(redworkHelps(parsePath('M0 0 L10 0 M20 0 L30 0', ID))).toBe(false);
     expect(redworkHelps(parsePath('M0 0 L10 0', ID))).toBe(false);
     expect(redworkHelps(parsePath('M0 0 L10 0 M5 -5 L5 5', ID))).toBe(true);
+  });
+
+  it('counts the goes a line is sewn in, one by one and as redwork', () => {
+    // A cross and a line apart: three paths, two parts.
+    expect(lineGoes(parsePath('M0 0 L10 0 M5 -5 L5 5 M20 0 L30 0', ID))).toEqual({ apart: 3, redwork: 2 });
+    expect(lineGoes(parsePath('M0 0 L10 0', ID))).toEqual({ apart: 1, redwork: 1 });
   });
 
   it('is kept as a setting of a line', () => {

@@ -113,7 +113,7 @@ export interface StitchInfo {
    * A line: how it is sewn, whether its paths are traced from its stitches, all closed (for its
    * echo), whether it can be filled (see fits), and whether it was a fill (kept, to fill it again).
    */
-  path?: { st: PathStitch; traced: boolean; closed: boolean; fills: boolean; refill?: boolean; resatin?: boolean; color: ThreadColor };
+  path?: { st: PathStitch; traced: boolean; closed: boolean; fills: boolean; refill?: boolean; resatin?: boolean; color: ThreadColor; goes?: { apart: number; redwork: number } };
   /** The one selected fill was a wide line, and can be one again. */
   asLine?: boolean;
   /** How deep the selected fills reach at their deepest point (mm; the shallowest of them): an underlay inset beyond it leaves none. */
@@ -1215,6 +1215,8 @@ export class StitchPanel {
     if (isRunType(st.type)) {
       st.tolerance ??= this.tolerance ?? TOLERANCE;
       parts.hold.push(this.toleranceSlider(st as { tolerance: number }));
+      const goes = info.path!.goes;
+      if (goes && !st.echo) parts.look.splice(1, 0, this.goesNote(goes, isRedwork(st)));
     }
     const kindName = t(`stitch.border.${isRunType(st.type) ? 'run' : st.type}` as Key);
     const fx = [st.echo ? t('stitch.echo') : '', st.shadow ? t('stitch.shadow') : ''].filter(Boolean).join(', ');
@@ -2244,6 +2246,14 @@ export class StitchPanel {
     box.addEventListener('change', () => put(n, box.checked));
     const check = h('label', { class: 'check' + (odd ? '' : ' off'), title: t(odd || n === 1 ? 'stitch.bean.hint' : 'stitch.bean.even') }, box, h('span', null, t('stitch.bean')));
     return h('div', { class: 'repeat-field' }, field, check);
+  }
+
+  /** In how many goes the line is sewn (between them a jump or trim), and as redwork when that saves some. */
+  private goesNote(goes: { apart: number; redwork: number }, redwork: boolean): HTMLElement {
+    const n = redwork ? goes.redwork : goes.apart;
+    let text = n === 1 ? t('stitch.goes.one') : t('stitch.goes', { n });
+    if (!redwork && goes.redwork < goes.apart) text += ` ${t('stitch.goes.redwork', { n: goes.redwork })}`;
+    return h('p', { class: 'muted small', title: t('stitch.goes.hint') }, text);
   }
 
   /** Redwork for a line in running or triple stitch: all its paths in one go, each there and back (see PathStitch.redwork). */
