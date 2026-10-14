@@ -46,16 +46,22 @@ export interface Fabric {
 
 type Values = Omit<Fabric, 'id'>;
 
+// On stable fabric (woven, heavy woven, cap) the lower end of the spacing range (the default) is
+// 10 % denser than the sources below give: a stitch-out at 0.40 mm on woven fabric left the fabric
+// showing (Daniel, 2026-10-14), as 40 wt thread lies narrower than 0.4 mm once flattened. Wilcom's
+// tatami default is 0.38 mm, and Embrilliance asks for "4 points or even tighter" for full
+// coverage. Stretchy, pile and thin fabrics keep theirs: denser, their own defaults would reach
+// Caution and Critical in the density check (contour fill on knit), whose factors are not measured.
 const FABRIC_VALUES: Record<FabricId, Values> = {
-  woven: { factor: 1, spacing: [0.4, 0.45], perforation: false, pull: 'low', pullMm: 0.2, longMm: 10, shortsOk: true, redMinMm2: 5, delicate: false, pile: false, stretchyOrThin: false, gapRows: 0 },
+  woven: { factor: 1, spacing: [0.36, 0.45], perforation: false, pull: 'low', pullMm: 0.2, longMm: 10, shortsOk: true, redMinMm2: 5, delicate: false, pile: false, stretchyOrThin: false, gapRows: 0 },
   // Denim, canvas, twill: like woven, but the firm, thick cloth carries more thread before it
   // puckers (a little more tolerance) and pulls in no more than woven; same spacing (twill/canvas
   // 0.40 to 0.45 mm). The stronger needle (90/14) is in the card.
   // Spacing 0.42 to 0.50: Wilcom's auto fabric Denim, "slightly reduced density"
   // (docs.wilcom.com, Digitizing > properties-9).
-  woven_heavy: { factor: 1.1, spacing: [0.42, 0.5], perforation: false, pull: 'low', pullMm: 0.2, longMm: 10, shortsOk: true, redMinMm2: 5, delicate: false, pile: false, stretchyOrThin: false, gapRows: 0 },
+  woven_heavy: { factor: 1.1, spacing: [0.38, 0.5], perforation: false, pull: 'low', pullMm: 0.2, longMm: 10, shortsOk: true, redMinMm2: 5, delicate: false, pile: false, stretchyOrThin: false, gapRows: 0 },
   // Spacing 0.40 to 0.45: Wilcom's auto fabric Cap, "tighter density".
-  cap: { factor: 0.9, spacing: [0.4, 0.45], perforation: false, pull: 'low', pullMm: 0.2, longMm: 7, shortsOk: true, redMinMm2: 5, delicate: false, pile: false, stretchyOrThin: false, gapRows: 0 },
+  cap: { factor: 0.9, spacing: [0.36, 0.45], perforation: false, pull: 'low', pullMm: 0.2, longMm: 7, shortsOk: true, redMinMm2: 5, delicate: false, pile: false, stretchyOrThin: false, gapRows: 0 },
   knit: { factor: 0.85, spacing: [0.42, 0.5], perforation: false, pull: 'high', pullMm: 0.35, longMm: 7, shortsOk: false, redMinMm2: 3, delicate: true, pile: true, stretchyOrThin: true, gapRows: 1 },
   // Fleece, sweat, hoodie: a knit with pile. Stretches like knit (pull high, long stitches snag
   // from 7 mm), stitches sink into the pile like on terry (compensation like terry), so the

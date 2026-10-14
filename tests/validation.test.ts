@@ -84,9 +84,9 @@ describe('thresholds and profiles', () => {
   });
 
   it('widens the recommended spacing for thick thread', () => {
-    expect(recommendedSpacing(WOVEN)).toEqual([0.4, 0.45]);
+    expect(recommendedSpacing(WOVEN)).toEqual([0.36, 0.45]);
     const [a, b] = recommendedSpacing({ fabric: 'woven', thread: '12' });
-    expect(a).toBeCloseTo(0.8);
+    expect(a).toBeCloseTo(0.72);
     expect(b).toBeCloseTo(0.9);
   });
 

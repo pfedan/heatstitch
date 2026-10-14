@@ -188,7 +188,7 @@ describe('spiral and contour fill in any shape', () => {
 describe('spiral and contour fill in the app', () => {
   beforeAll(loadOps);
   const ID: Mat = [1, 0, 0, 1, 0, 0];
-  const options = digitizeDefaults(DEFAULT_PROFILE);
+  const defaults = digitizeDefaults(DEFAULT_PROFILE);
   const empty = { name: 'x', format: 'dst', x: new Int32Array(0), y: new Int32Array(0), cmd: new Uint8Array(0), colors: [], bounds: { minX: 0, minY: 0, maxX: 0, maxY: 0 } } as unknown as Pattern;
   const heart = (() => {
     const pts: string[] = [];
@@ -201,7 +201,7 @@ describe('spiral and contour fill in the app', () => {
   const dumbbell = 'M8 17.4 A8 8 0 1 0 8 22.6 L32 22.6 A8 8 0 1 0 32 17.4 Z';
 
   /** The shapes sewn as fills, then each sewn anew with `pattern` as the stitch panel does. */
-  function sewn(pattern: FillPattern): Pattern {
+  function sewn(pattern: FillPattern, options = defaults): Pattern {
     let p = empty;
     for (const d of [heart, dumbbell]) p = addShape(p, { form: parsePath(d, ID), kind: 'fill' }, { r: 200, g: 30, b: 60 }, null, options)!.pattern;
     const s: FillSettings = { pattern, spacing: options.spacing, spacingEnd: 1, offset: 0.25, angle: NaN, stitch: 4, underlay: true, edge: options.pull, tolerance: options.tolerance };
@@ -223,10 +223,12 @@ describe('spiral and contour fill in the app', () => {
 
   for (const pattern of ['spiral', 'contour'] as FillPattern[]) {
     it(`${pattern}: a heart and a dumbbell stay fills, nothing critical even on knits`, () => {
-      const p = sewn(pattern);
-      expect(sewObjects(p, stitchKinds(p)).map((o) => o.kind)).toEqual(['fill', 'fill']);
       for (const fabric of ['woven', 'knit'] as const) {
-        const v = validatePattern(p, { ...DEFAULT_PROFILE, fabric });
+        // Sewn as the app does for the fabric: with its spacing and compensation.
+        const profile = { ...DEFAULT_PROFILE, fabric };
+        const p = sewn(pattern, digitizeDefaults(profile));
+        expect(sewObjects(p, stitchKinds(p)).map((o) => o.kind)).toEqual(['fill', 'fill']);
+        const v = validatePattern(p, profile);
         expect(v.zones.filter((z) => z.level === CRITICAL), fabric).toEqual([]);
       }
     });
