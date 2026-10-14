@@ -117,9 +117,14 @@ describe('moving through the list', () => {
       const r = transformSewObject(p, objs, o, kinds, [1, 0, 0, 1, 3, -2], d.T);
       expect(r).toBeTruthy();
       const after = sewObjects(r!.pattern);
-      // The same objects; the others keep their stitches, the moved one has them 3 mm right, 2 mm up.
+      // The same objects; the others keep their stitches, the moved one has them 3 mm right, 2 mm up
+      // (cross stitch on the design's grid is sewn anew on that grid instead, see crossStitch.test).
       expect(after.map((x) => x.id)).toEqual(objs.map((x) => x.id));
+      const m = remembered(p, o);
+      const onGrid = m?.fill?.pattern === 'cross' && !m.fill.deco?.ownGrid;
+      expect(r!.restitched).toBe(onGrid);
       after.forEach((x, k) => {
+        if (onGrid && k === o.index) return;
         const want = k === o.index ? stitchesOf(p, objs[k]).split(' ').map((s) => s.split(',').map(Number)).map(([a, b]) => `${a + 30},${b - 20}`).join(' ') : stitchesOf(p, objs[k]);
         expect(stitchesOf(r!.pattern, x)).toBe(want);
       });

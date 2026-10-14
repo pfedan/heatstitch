@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { crossCells, onGrid } from '../src/digitize/deco';
 import { setKnockout } from '../src/model/knockout';
+import { transformObjects } from '../src/model/reshape';
+import { rotation, translation } from '../src/shape/path';
 import { sewObjects } from '../src/model/objects';
 import { JUMP, STITCH, TRIM, type Pattern } from '../src/model/pattern';
 import { crossGridOf, remembered } from '../src/model/restitch';
@@ -63,5 +65,27 @@ describe('cross stitch on the design grid', () => {
     let trims = 0;
     for (let i = o.first; i <= o.last; i++) if (p.cmd[i] === TRIM) trims++;
     expect(trims).toBe(0);
+  });
+
+  it('stays on the grid when its shape is moved or turned', () => {
+    const { d, big } = design();
+    for (const m of [translation(0.7, 0.45), rotation(30, 30, 25)]) {
+      const p = transformObjects(d.p, [big], m, d.T)!.pattern;
+      const o = sewObjects(p)[big];
+      const at = onGrid(crossGridOf(remembered(p, o)!.fill!)!);
+      let off = 0;
+      let long = 0;
+      for (let i = o.first + 1; i <= o.last; i++) {
+        if (p.cmd[i] !== STITCH || p.cmd[i - 1] !== STITCH) continue;
+        const a = at([p.x[i - 1] / 10, p.y[i - 1] / 10]);
+        const b = at([p.x[i] / 10, p.y[i] / 10]);
+        if (Math.abs(b[0] - a[0]) + Math.abs(b[1] - a[1]) < 0.3) continue;
+        long++;
+        // Ends on corners and middles of the design's grid, upright.
+        for (const q of [a, b]) if (Math.abs(q[0] * 2 - Math.round(q[0] * 2)) > 0.05 || Math.abs(q[1] * 2 - Math.round(q[1] * 2)) > 0.05) off++;
+      }
+      expect(long).toBeGreaterThan(100);
+      expect(off).toBe(0);
+    }
   });
 });
