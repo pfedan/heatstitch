@@ -20,7 +20,7 @@ import { cutKey, sewnArea, wholeArea, wholeOf } from '../../src/model/knockout';
 import { unionOf } from '../../src/shape/rasterize';
 import { borderStitches, isRedwork, isRunType } from '../../src/model/along';
 import { redworkGraph, redworkWalks } from '../../src/digitize/redwork';
-import { APPLIQUE_FABRICS, appliquePieces, innerStops, type Piece } from '../../src/model/applique';
+import { APPLIQUE_FABRICS, appliquePieces, innerStopCount, innerStops, stopsAround, type Piece } from '../../src/model/applique';
 import { pieceAt } from '../../src/render/applique';
 import { appliquesOf, asFill, canApplique, fromApplique, setApplique, toApplique } from '../../src/model/appliqueOps';
 import type { Region } from '../../src/digitize/region';
@@ -1076,7 +1076,15 @@ export const APPLIQUE_OPS: Op[] = [
     run: (d, r) => {
       const as = appliquesOf(d.cur.p).filter((o) => !remembered(d.cur.p, o)?.free);
       if (!as.length) return false;
-      const change = pick(r, [{ edge: 'e' as const }, { edge: 'satin' as const }, { edge: 'run' as const, run: pick(r, [{ type: 'run' as const, width: 0 }, { type: 'run' as const, width: 0, repeat: 2 }, { type: 'triple' as const, width: 0 }, { type: 'triple' as const, width: 0, repeat: 5 }]) }, { width: between(r, 2, 4.5) }, { fabric: pick(r, APPLIQUE_FABRICS), color: pick(r, COLORS) }]);
+      const change = pick(r, [
+        { edge: 'e' as const },
+        { edge: 'satin' as const },
+        { edge: 'none' as const },
+        { place: r() < 0.5 },
+        { tack: pick(r, [{ type: 'run' as const, width: 0 }, { type: 'run' as const, width: 0, repeat: 2, length: 1.5 }, { type: 'triple' as const, width: 0 }, { type: 'triple' as const, width: 0, repeat: 5 }]) },
+        { width: between(r, 2, 4.5) },
+        { fabric: pick(r, APPLIQUE_FABRICS), color: pick(r, COLORS) },
+      ]);
       return shapes(d, setApplique(d.cur.p, [pick(r, as).index], change, T));
     },
   },
@@ -1179,7 +1187,19 @@ export function checkAppliques(p: Pattern): void {
     if (!m.region) problems.push(`${o.index}: no area`);
     const stops: number[] = [];
     for (let i = o.first; i <= o.last; i++) if (p.cmd[i] === COLOR_CHANGE) stops.push(i);
-    if (stops.length !== 2) problems.push(`${o.index}: ${stops.length} stops`);
+    if (stops.length !== innerStopCount(m.applique)) problems.push(`${o.index}: ${stops.length} stops`);
+    // The stop before a precut piece to lay it on, after a raw edge to cut the fabric: between it
+    // and the stitches next to it (a change of thread there is that stop too).
+    const around = stopsAround(m.applique);
+    const gap = (from: number, to: number, step: number) => {
+      for (let i = from; i !== to; i += step) {
+        if (p.cmd[i] === COLOR_CHANGE) return true;
+        if (p.cmd[i] === STITCH) return false;
+      }
+      return true;
+    };
+    if (around.before && !gap(o.first - 1, -1, -1)) problems.push(`${o.index}: no stop before to lay it on`);
+    if (around.after && !gap(o.last + 1, p.cmd.length, 1)) problems.push(`${o.index}: no stop after to cut it`);
     // It can become a fill again: what it remembers as one can be sewn on its area alone.
     if (!m.free && !specOf(p, { ...o, kind: 'fill' }, asFill(m, TATAMI))) problems.push(`${o.index}: no fill to go back to`);
     const b = blockAt(o.first);

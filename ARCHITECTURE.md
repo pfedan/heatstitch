@@ -125,7 +125,7 @@ flowchart LR
 from its object list) and `src/model/shapeOps.ts` (duplicate, mirror, delete, cut out, recolor,
 ...) are the main entry points. Related objects follow their leaders in the same step: borders
 (`border.ts`), knockouts under later fills (`knockout.ts`), derived areas (`derived.ts`), appliqué
-(`applique.ts`), echoes and shadows (`shadow.ts`).
+(`applique.ts`, edges shared by touching appliqués in `appliqueShare.ts`), echoes and shadows (`shadow.ts`).
 
 Other model modules: `transform.ts` and `reshape.ts` (move, rotate, scale), `order.ts` and
 `bestOrder.ts` (sewing order), `jumps.ts` (trims and ties), `sequence.ts` (stitch kinds and color
