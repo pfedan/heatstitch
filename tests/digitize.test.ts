@@ -240,4 +240,17 @@ describe('sewing order', () => {
     const lines = labels.map((l) => (l === 2 ? 2 : 255));
     expect(sewingOrder(lines, w, w, 0.1, 3)).toEqual([2]);
   });
+
+  it('sews a line after the area it lies on, even when its color also fills a larger area', () => {
+    // 0.1 mm per pixel: color 0 fills a large disk and draws a 0.4 mm vein across a smaller square of color 1.
+    const w = 500;
+    const labels = new Uint8Array(w * w).fill(255);
+    for (let y = 0; y < w; y++) {
+      for (let x = 0; x < w; x++) {
+        if (Math.hypot(x - 130, y - 250) < 120) labels[y * w + x] = 0;
+        else if (x >= 300 && x < 460 && y >= 170 && y < 330) labels[y * w + x] = Math.abs(y - 250) < 2 ? 0 : 1;
+      }
+    }
+    expect(sewingOrder(labels, w, w, 0.1, 2)).toEqual([1, 0]);
+  });
 });
