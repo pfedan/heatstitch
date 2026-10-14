@@ -50,6 +50,26 @@ describe('tatami in one go', () => {
     }
   });
 
+  it('lets every row reach the edge where rows turn closer than the shortest stitch', () => {
+    // A ring at 45°: where the rows meet the outline square on, they turn in a step as long as they
+    // lie apart (0.36 mm), shorter than SHORTEST. Leaving out a row's end there showed the fabric.
+    const r = area(`${ellipsePath(25, 25, 25, 25)} ${ellipsePath(25, 25, 11, 11)}`);
+    const spacing = 0.36;
+    const res = fillRuns(r, { ...BASE, spacing, angle: 45, edge: 0 }, { start: [0, 25], travel: expandRegion(r, TRAVEL_REACH)! })!;
+    const top = res.runs.flat().slice(res.under);
+    const a = (45 * Math.PI) / 180;
+    const rows = new Map<number, { ends: number; all: number }>();
+    for (const p of top) {
+      const k = Math.round((-Math.sin(a) * p[0] + Math.cos(a) * p[1]) / spacing);
+      const row = rows.get(k) ?? { ends: 0, all: 0 };
+      row.all++;
+      if (Math.abs(sample(r, r.sdf, p[0], p[1])) < spacing) row.ends++;
+      rows.set(k, row);
+    }
+    const short = [...rows].filter(([, row]) => row.all > 3 && row.ends < 2).map(([k]) => k);
+    expect(short).toEqual([]);
+  });
+
   it('merges a short stitch into the next, keeping both ends', () => {
     const pts: Pt[] = [[0, 0], [4, 0], [4.2, 0], [8, 0], [8, 0.3]];
     expect(merged(pts, SHORTEST)).toEqual([[0, 0], [4, 0], [8, 0.3]]);

@@ -541,14 +541,26 @@ function sewSection(f: Frame, s: Section, len: number, pull: number, reversed: b
     const fwd = (i % 2 === 0) !== flip;
     const a = fwd ? seg.u0 - pull : seg.u1 + pull;
     const b = fwd ? seg.u1 + pull : seg.u0 - pull;
-    const row = rowStitches(f, seg.k, f.v(seg.k), a, b, len);
+    const row = shortened(rowStitches(f, seg.k, f.v(seg.k), a, b, len));
     // The step to the next row: in short stitches where the rows lie far apart (a fading fill),
-    // along the outline with row ends on the edge.
+    // along the outline with row ends on the edge. Its ends stay: they are where the rows end.
     const prev = out[out.length - 1];
-    if (prev) out.push(...turn(f, prev, row[0], fwd ? -1 : 1, pull, len));
+    if (prev) out.push(...merged([prev, ...turn(f, prev, row[0], fwd ? -1 : 1, pull, len), row[0]], SHORTEST).slice(1, -1));
     out.push(...row);
   });
-  return merged(out, SHORTEST);
+  return out;
+}
+
+/**
+ * The needle points of one row without stitches shorter than SHORTEST. Both ends stay, so every
+ * row reaches the edge: the turn to the next row is as long as the rows lie apart, and leaving out
+ * a row's end there would leave the fabric showing between the rows. A row shorter than that
+ * (at a narrow tip) is a single point in its middle.
+ */
+function shortened(row: Pt[]): Pt[] {
+  const [a, b] = [row[0], row[row.length - 1]];
+  if (dist(a, b) < SHORTEST - 1e-3) return [[(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]];
+  return merged(row, SHORTEST);
 }
 
 /** Along the outline, the step between rows keeps to it in stitches up to this long (mm). */
@@ -579,16 +591,16 @@ function turn(f: Frame, a: Pt, b: Pt, out: 1 | -1, pull: number, len: number): P
 }
 
 /**
- * Shortest stitch of a fill (mm): a shorter one only sets the needle again beside its last hole
- * (dense rows turning at the edge, rows cut short by a narrow tip), which punches the fabric
- * without adding to the look.
+ * Shortest stitch of a fill (mm) within its rows: a shorter one only sets the needle again beside
+ * its last hole (rows cut short by a narrow tip, staggered points near a row's end), which punches
+ * the fabric without adding to the look. Turns between rows are exempt: they are as long as the
+ * rows lie apart, and the row ends they join are what covers the fabric at the edge.
  */
 export const SHORTEST = 0.4;
 
 /**
  * The needle points without stitches shorter than `min`: such a stitch is merged into the next
- * by leaving out its end (at a row's turn, the first point of the next row, so the rows end there
- * alternately). The first and last points stay.
+ * by leaving out its end. The first and last points stay.
  */
 export function merged(pts: Pt[], min: number): Pt[] {
   if (pts.length < 3) return pts;
@@ -1670,9 +1682,11 @@ function sewAll(
     if (cur && travel) {
       cur.push(...travel.slice(1));
       // Straight on, points closer than a stitch may be (see SHORTEST) go into the next stitch, as
-      // between the single short rows of a narrow tip; such a row may go altogether.
+      // between the single short rows of a narrow tip; such a row may go altogether. A step as
+      // long as the rows lie apart is a turn and stays, so the row it starts reaches the edge.
       let k = travel.length > 1 ? 1 : 0;
-      while (k < pts.length && dist(cur[cur.length - 1], pts[k]) < SHORTEST - 1e-3) k++;
+      const near = Math.min(SHORTEST, f.spacing) - 1e-3;
+      while (k < pts.length && dist(cur[cur.length - 1], pts[k]) < near) k++;
       cur.push(...pts.slice(k));
     }
     else {
