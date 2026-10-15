@@ -72,7 +72,7 @@ export interface ShapeHooks {
  * `added`: a new node was put in on the press (its form and selection before, for cancel).
  * `collapse`: a press on a node of several selected; released without moving, only it stays selected.
  */
-type Drag = { pick: ShapePick; from: Pt; start: Form; band: number | null; added?: { form: Form; sel: NodeRef[] }; collapse?: boolean } | null;
+type Drag = { pick: ShapePick; from: Pt; start: Form; band: number | null; added?: { form: Form; sel: NodeRef[] }; collapse?: boolean; add?: boolean } | null;
 
 /**
  * The outline of a fill on the canvas, as curves with nodes: nodes and their handles are dragged,
@@ -375,8 +375,9 @@ export class ShapeTool implements ShapeView {
       const again = this.pickAt(x, y, scale);
       if (again?.part === 'p' && again.path === p.node.path && again.i === p.node.i) {
         // The second press of a double-click on a hollow dot: no new node, the loop is selected.
+        // With Shift the selection stays as it was; the double-click event adds the loop.
         this.unpend();
-        this.sel = nodesOf(this.form, p.node.path);
+        if (!add) this.sel = nodesOf(this.form, p.node.path);
         this.drag = null;
         this.hooks.redraw();
         return 'move';
@@ -413,7 +414,7 @@ export class ShapeTool implements ShapeView {
       else if (!has) this.selected = { path: pick.path, i: pick.i };
       else collapse = this.sel.length > 1;
     }
-    this.drag = { pick, from: [x, y], start: this.form, band: this.band, collapse };
+    this.drag = { pick, from: [x, y], start: this.form, band: this.band, collapse, add };
     this.moved = false;
     this.hooks.redraw();
     return 'move';
@@ -465,8 +466,9 @@ export class ShapeTool implements ShapeView {
       this.hooks.redraw();
     } else if (this.moved || d.added) this.hooks.change(this.form);
     else if (d.pick.part === 'curve') {
-      // A tap on a curve shows its path, as hovering does (on touch there is no hovering).
-      this.selected = null;
+      // A tap on a curve shows its path, as hovering does (on touch there is no hovering); with Shift
+      // the selection stays, as the press may be the first of a Shift+double-click adding the path.
+      if (!d.add) this.selected = null;
       this.hoverPath = d.pick.path;
       this.hooks.redraw();
     } else if (d.collapse && d.pick.part === 'p') {
