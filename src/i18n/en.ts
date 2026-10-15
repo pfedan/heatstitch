@@ -1295,7 +1295,7 @@ const enBase: Record<keyof typeof deBase, string> = {
   'shape.takeOut': 'As own object',
   'shape.takeOut.hint': 'Take the selected nodes out with the pieces between them: a new object with the same settings, sewn right after. For areas, whole loops go along.',
   'shape.takeOut.none': 'Select at least two nodes next to each other, but not all.',
-  'shape.picked.paths': '{n} selected on {k} paths',
+  'shape.picked.paths': '{n} selected · {k} paths',
   'shape.break': 'Break path',
   'shape.break.hint': 'Cut the path at the selected nodes; the outline stays as it is',
   'shape.broken': 'Cut at {n} nodes.',

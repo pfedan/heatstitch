@@ -67,6 +67,23 @@ export function drawShapeOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, vi
     ctx.lineWidth = 3;
     ctx.stroke();
   }
+  // The curves between two selected neighbours are selected too (as in Inkscape): solid accent.
+  ctx.beginPath();
+  view.form.paths.forEach((p, path) => {
+    const n = p.nodes.length;
+    for (let k = 0; k < segments(p); k++) {
+      if (!view.isSelected(path, k) || !view.isSelected(path, (k + 1) % n)) continue;
+      const [s, b, a, e] = segment(p, k);
+      ctx.moveTo(...S(s));
+      ctx.bezierCurveTo(...S(b), ...S(a), ...S(e));
+    }
+  });
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.7)';
+  ctx.lineWidth = 5;
+  ctx.stroke();
+  ctx.strokeStyle = ACCENT;
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
   // The hovered curve a little thicker.
   const h = view.hover;
   if (h?.part === 'curve') {

@@ -536,7 +536,8 @@ export function initShapes(app: ShapesAreaApp): void {
       const picked = s.selPaths > 1 ? t('shape.picked.paths', { n: formatNumber(s.selCount), k: formatNumber(s.selPaths) }) : t('shape.picked', { n: formatNumber(s.selCount) });
       const items: Item[] = [
         { kind: 'title', text: t('shapes.shape.title'), title: t(s.band !== null ? 'shape.hint.band' : 'shape.hint') },
-        { kind: 'hint', text: `${t('shape.nodes', { n: formatNumber(s.count) })} · ${s.selectedSmooth === null ? t('shape.none') : s.selCount > 1 ? picked : t(s.selectedSmooth ? 'shape.node.smooth' : 'shape.node.corner')}` },
+        // With several nodes selected only how many (the bar has its most buttons then and stays one row).
+        { kind: 'hint', text: s.selCount > 1 ? picked : `${t('shape.nodes', { n: formatNumber(s.count) })} · ${s.selectedSmooth === null ? t('shape.none') : t(s.selectedSmooth ? 'shape.node.smooth' : 'shape.node.corner')}` },
       ];
       // Fixed groups (nodes, paths, object, whole form), so a button keeps its place while the
       // selection changes; what does not apply now is left out, a group left empty goes.

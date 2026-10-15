@@ -1293,7 +1293,7 @@ export const deBase = {
   'shape.takeOut': 'Als eigenes Objekt',
   'shape.takeOut.hint': 'Die gewählten Knoten mit den Stücken zwischen ihnen herauslösen: ein neues Objekt mit denselben Einstellungen, gleich danach gestickt. Bei Flächen gehen ganze Schleifen mit.',
   'shape.takeOut.none': 'Wähle mindestens zwei Knoten nebeneinander, aber nicht alle.',
-  'shape.picked.paths': '{n} gewählt auf {k} Pfaden',
+  'shape.picked.paths': '{n} gewählt · {k} Pfade',
   'shape.break': 'Auftrennen',
   'shape.break.hint': 'Den Pfad an den gewählten Knoten auftrennen; die Form bleibt, wie sie ist',
   'shape.broken': 'An {n} Knoten aufgetrennt.',
