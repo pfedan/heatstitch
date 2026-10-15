@@ -545,16 +545,21 @@ export interface Obstacle {
   /** A line (every path, closed ones too, is a thread): its band. Otherwise the closed paths are an area. */
   line: boolean;
   width: number;
+  /** Which object it stands for (its place in the list it was made from). */
+  of?: number;
 }
 
-/** How far the gap may reach: shapes all round (`closed`), or the convex hull of all shapes (`hull`). */
-export type GapMode = 'closed' | 'hull';
+/**
+ * How far the gap may reach: shapes all round (`closed`), or the convex hull of all shapes (`hull`).
+ * `wrap` fills no gap: it lays the convex hull around the shapes in the clicked area, under them.
+ */
+export type GapMode = 'closed' | 'hull' | 'wrap';
 
 /**
  * The gap at `at`, or why there is none: `outside` (in `closed`, the point is not shut in by shapes),
- * `covered` (on a shape, or the gap is too small to sew).
+ * `covered` (on a shape, or the gap is too small to sew), `empty` (in `wrap`, no shape lies in the area).
  */
-export type GapResult = { form: Form } | { none: 'outside' | 'covered' };
+export type GapResult = { form: Form } | { none: 'outside' | 'covered' | 'empty' };
 
 /** Gaps smaller than this are not worth an object (mm²). */
 const MIN_GAP_MM2 = 1;
@@ -606,8 +611,11 @@ function convexHull(pts: { x: number; y: number }[]): { x: number; y: number }[]
  * the gap `d` mm, is taken away, and of that the part holding `at`, with its holes. The bound is a
  * box well around all shapes (`closed`: a part touching it is not shut in, so there is none) or the
  * convex hull of the shapes (`hull`: bays are bridged straight; a point outside the hull takes every
- * free part in it as one form). Planar boolean operations on the polygons (Clipper2), the result
- * fitted as curves.
+ * free part in it as one form). In `wrap` the bound is the box, and the result is the convex hull of
+ * the shapes lying in the part holding `at` (its holes), grown by `d` and kept inside the part's own
+ * outline: the shapes in it are covered, the ones around it are not (the shapes are not grown here,
+ * so the part is the free space as it is). Planar boolean operations on the
+ * polygons (Clipper2), the result fitted as curves.
  */
 export function gapAt(obstacles: Obstacle[], at: Pt, d: number, mode: GapMode): GapResult {
   return gapFinder(obstacles, d, mode)(at);
@@ -619,7 +627,8 @@ export function gapAt(obstacles: Obstacle[], at: Pt, d: number, mode: GapMode): 
  */
 export function gapFinder(obstacles: Obstacle[], d: number, mode: GapMode): (at: Pt) => GapResult {
   const C = needClipper();
-  const grown: Paths64 = obstacles.flatMap((o) => grownRings(o, Math.max(0, d)));
+  // Wrapped, the distance grows the hull, not the shapes: the area to click is the free space itself.
+  const grown: Paths64 = obstacles.flatMap((o) => grownRings(o, mode === 'wrap' ? 0 : Math.max(0, d)));
   if (!grown.length) return () => ({ none: 'outside' });
   const solid = C.union(grown, C.FillRule.NonZero);
   const b = C.getBoundsPaths(solid);
@@ -666,14 +675,27 @@ export function gapFinder(obstacles: Obstacle[], d: number, mode: GapMode): (at:
     }
     return r;
   };
+  // The hull around the shapes in a part (its holes), clipped to the part's outline.
+  const wrapped = (k: number): GapResult => {
+    const holes = parts[k].slice(1);
+    if (!holes.length) return { none: 'empty' };
+    const hull = convexHull(holes.flat());
+    if (hull.length < 3) return { none: 'empty' };
+    const wide = d > 0 ? C.inflatePaths([hull], d * SCALE, C.JoinType.Round, C.EndType.Polygon, 2, FLAT * SCALE) : [hull];
+    const kept = C.intersect(wide, [parts[k][0]], C.FillRule.NonZero);
+    return Math.abs(C.areaPaths(kept)) / (SCALE * SCALE) >= MIN_GAP_MM2 ? result(k, [kept]) : { none: 'empty' };
+  };
   return (at: Pt): GapResult => {
     const q = { x: Math.round(at[0] * SCALE), y: Math.round(at[1] * SCALE) };
     const holds = (rings: Paths64) => C.pointInPolygon(q, rings[0]) !== C.PointInPolygonResult.IsOutside && rings.slice(1).every((h) => C.pointInPolygon(q, h) !== C.PointInPolygonResult.IsInside);
     const beyond = C.pointInPolygon(q, bound[0]) === C.PointInPolygonResult.IsOutside;
     // Outside the hull: every free part in it, as one form.
     if (mode === 'hull' && beyond) return result(-1, parts.filter(big));
-    const k = parts.findIndex(holds);
+    let k = parts.findIndex(holds);
+    // Beyond the box is the open space around everything.
+    if (k < 0 && mode === 'wrap' && beyond) k = parts.findIndex((rings) => !shut(rings));
     if (k < 0) return { none: mode === 'closed' && beyond ? 'outside' : 'covered' };
+    if (mode === 'wrap') return wrapped(k);
     if (mode === 'closed' && !shut(parts[k])) return { none: 'outside' };
     return big(parts[k]) ? result(k, [parts[k]]) : { none: 'covered' };
   };

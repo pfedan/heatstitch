@@ -61,4 +61,24 @@ describe('gapAt (Flächen-Werkzeug)', () => {
     expect(both.paths).toHaveLength(2);
     expect(areaOfForm(both)).toBeCloseTo(2 * 20 * 7.5, 0);
   });
+
+  it('wraps the shapes in the clicked area in their convex hull, under them and inside the area', () => {
+    // Two squares side by side: clicked beside them, the hull around both.
+    const a = area('M0 0 H10 V10 H0 Z');
+    const b = area('M20 0 H30 V10 H20 Z');
+    const both = formOf(gapAt([a, b], [50, 50], 0, 'wrap'));
+    expect(box(both)).toEqual([0, 0, 30, 10]);
+    expect(areaOfForm(both)).toBeCloseTo(300, 0);
+    // With a distance, the hull keeps it all round.
+    box(formOf(gapAt([a, b], [15, 20], 2, 'wrap'))).forEach((v, i) => expect(v).toBeCloseTo([-2, -2, 32, 12][i], 1));
+    // Inside a frame, only the shapes in its hole; the frame stays uncovered.
+    const frame = area('M-20 -20 H50 V30 H-20 Z M-10 -10 H40 V20 H-10 Z');
+    const inner = formOf(gapAt([frame, a, b], [15, 15], 0, 'wrap'));
+    expect(box(inner)).toEqual([0, 0, 30, 10]);
+    // Outside the frame, the hull of everything: the frame's own outline.
+    expect(box(formOf(gapAt([frame, a, b], [80, 0], 0, 'wrap')))).toEqual([-20, -20, 50, 30]);
+    // An area with no shape in it, and a shape.
+    expect(gapAt([frame], [15, 15], 0, 'wrap')).toEqual({ none: 'empty' });
+    expect(gapAt([frame, a], [5, 5], 0, 'wrap')).toEqual({ none: 'covered' });
+  });
 });

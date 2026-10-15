@@ -1212,6 +1212,7 @@ const enBase: Record<keyof typeof deBase, string> = {
   'canvas.hint.draw.pen': 'Click: corner · Drag: curve · Click the first node: area · Double-click or Enter: line · Del: remove last node · Esc: cancel',
   'canvas.hint.draw.free': 'Drag: freehand line · Esc: put the tool away',
   'canvas.hint.draw.gap': 'Click: the gap under the pointer becomes a new fill · Esc: done',
+  'draw.done.wrap': 'Hull added: a new fill under the shapes in it. Set the stitch type and thread on the right.',
   'draw.done.gap': 'Gap filled: a new fill, sewn before the shapes around it. Set the stitch type and thread on the right.',
   'canvas.hint.draw.cut': 'Drag: cut freehand · Click: path, double-click ends it · Shift: straight · Esc: done',
   'cut.plain': '{n} parts are too small for the pattern and got straight rows.',

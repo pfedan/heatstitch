@@ -1,5 +1,6 @@
 import type { Pt } from '../digitize/skeleton';
 import type { NewShape } from '../model/addShape';
+import type { GapMode } from '../shape/ops';
 import type { Form, Node } from '../shape/path';
 import { ellipsePath, parsePath, rectPath } from '../shape/svgPath';
 import { fitCubic } from '../shape/vectorize';
@@ -7,7 +8,7 @@ import { fitCubic } from '../shape/vectorize';
 export type DrawKind = 'rect' | 'ellipse' | 'pen' | 'free' | 'cut' | 'gap';
 
 /** What a click of the Flächen-Werkzeug would make at a point: the new area, or why there is none. */
-export type GapLook = { form: Form } | { none: 'outside' | 'covered' };
+export type GapLook = { form: Form } | { none: 'outside' | 'covered' | 'empty' };
 
 /** A click this close to the first node closes the pen's path (CSS pixels). */
 const CLOSE_PX = 10;
@@ -51,12 +52,12 @@ export class DrawTool {
   size: [number, number] | null = null;
   /** The pen's first node is under the pointer: a click closes the area. */
   closing = false;
-  /** Flächen-Werkzeug: up to shapes all round, or to the convex hull of them (see gapAt in shape/ops). */
-  gapMode: 'closed' | 'hull' = 'closed';
+  /** Flächen-Werkzeug: up to shapes all round, to the convex hull of them, or the hull around the shapes in the area (see gapAt in shape/ops). */
+  gapMode: GapMode = 'closed';
   /** Flächen-Werkzeug: the gap kept to the shapes around (mm, 0 to 10). */
   gapMm = 0;
   /** Flächen-Werkzeug: why the pointer's place gives no area (shown in the bar), or null. */
-  gapNone: 'outside' | 'covered' | null = null;
+  gapNone: 'outside' | 'covered' | 'empty' | null = null;
   /** Options of the tool bar, as if Shift (a square or circle) or Alt (from the middle) were held. */
   square = false;
   fromCenter = false;

@@ -32,7 +32,7 @@ export interface ShapesAreaApp {
   readonly objectName: (q: Sequence, i: number, p?: Pattern) => string;
   readonly drawTool: DrawTool;
   readonly setDrawing: (kind: DrawKind | null) => void;
-  readonly setGapMode: (mode: 'closed' | 'hull') => void;
+  readonly setGapMode: (mode: 'closed' | 'hull' | 'wrap') => void;
   readonly measure: MeasureTool;
   readonly shapeTool: ShapeTool;
   readonly enterShape: (o: number, fit: boolean) => void;
@@ -84,6 +84,12 @@ const ICON = {
   snap: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4.5 3.5H8v6a2 2 0 0 0 4 0v-6h3.5v6a5.5 5.5 0 0 1-11 0z" /><path d="M4.5 6.5H8M12 6.5h3.5" /></svg>',
   back: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 15l4-7 3.5 4" /><rect x="1.8" y="13.8" width="2.4" height="2.4" rx=".4" class="node" /><rect x="5.8" y="6.8" width="2.4" height="2.4" rx=".4" class="node" /><path d="M17.5 12h-5M14.5 9.5 12 12l2.5 2.5" /></svg>',
   cancel: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5 5 15" /></svg>',
+  // Lücke füllen: the hole of a frame filled.
+  gapClosed: '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2.8" y="2.8" width="14.4" height="14.4" rx="2" /><rect x="7" y="7" width="6" height="6" rx=".8" class="area" /><rect x="7" y="7" width="6" height="6" rx=".8" /></svg>',
+  // The bay of a C filled up to a straight, dashed edge.
+  gapHull: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M17 3H3v14h14v-4.5H7.5v-5H17z" /><rect x="7.5" y="7.5" width="9.5" height="5" class="area" /><path d="M17 7.5v5" stroke-dasharray="1.2 1.4" /></svg>',
+  // Two shapes on the hull around them.
+  gapWrap: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M1.1 6.5A4.9 4.9 0 0 1 8.5 2.3l10.1 6.1v10.2H8.4L2.1 9.5a4.9 4.9 0 0 1-1-3z" class="area" /><circle cx="6" cy="6.5" r="3.3" /><rect x="10" y="10" width="7" height="7" rx=".7" /></svg>',
 };
 const SNAP_KEY = `${STORAGE_NS}.shapes.snap`;
 
@@ -165,6 +171,7 @@ export function initShapes(app: ShapesAreaApp): void {
   // Flächen-Werkzeug: up to shapes all round, or to their convex hull (segment buttons in its bar).
   command({ id: 'draw.gap.closed', label: 'shapes.gap.closed', group: DRAW, when: () => app.drawTool.kind === 'gap', run: () => (app.setGapMode('closed'), refresh()) });
   command({ id: 'draw.gap.hull', label: 'shapes.gap.hull', group: DRAW, when: () => app.drawTool.kind === 'gap', run: () => (app.setGapMode('hull'), refresh()) });
+  command({ id: 'draw.gap.wrap', label: 'shapes.gap.wrap', group: DRAW, when: () => app.drawTool.kind === 'gap', run: () => (app.setGapMode('wrap'), refresh()) });
   command({
     id: 'draw.square',
     label: 'shapes.cmd.square',
@@ -545,8 +552,9 @@ export function initShapes(app: ShapesAreaApp): void {
     if (d.kind === 'gap') {
       return [
         { kind: 'title', text: t('shapes.tool.gap'), title: t('shapes.tool.gap.hint') },
-        { kind: 'cmd', id: 'draw.gap.closed', text: t('shapes.gap.closed'), toggle: true, seg: true, on: d.gapMode === 'closed', tip: t('shapes.gap.closed.hint') },
-        { kind: 'cmd', id: 'draw.gap.hull', text: t('shapes.gap.hull'), toggle: true, seg: true, on: d.gapMode === 'hull', tip: t('shapes.gap.hull.hint') },
+        { kind: 'cmd', id: 'draw.gap.closed', text: t('shapes.gap.closed'), toggle: true, seg: true, on: d.gapMode === 'closed', tip: t('shapes.gap.closed.hint'), icon: ICON.gapClosed, words: true },
+        { kind: 'cmd', id: 'draw.gap.hull', text: t('shapes.gap.hull'), toggle: true, seg: true, on: d.gapMode === 'hull', tip: t('shapes.gap.hull.hint'), icon: ICON.gapHull, words: true },
+        { kind: 'cmd', id: 'draw.gap.wrap', text: t('shapes.gap.wrap'), toggle: true, seg: true, on: d.gapMode === 'wrap', tip: t('shapes.gap.wrap.hint'), icon: ICON.gapWrap, words: true },
         {
           kind: 'num',
           label: t('shapes.gap.distance'),
@@ -562,7 +570,7 @@ export function initShapes(app: ShapesAreaApp): void {
             app.redraw();
           },
         },
-        { kind: 'hint', text: t(d.gapNone === 'outside' ? 'shapes.gap.outside' : d.gapNone === 'covered' ? 'shapes.gap.covered' : 'shapes.gap.pick') },
+        { kind: 'hint', text: t(d.gapNone === 'outside' ? 'shapes.gap.outside' : d.gapNone === 'covered' ? 'shapes.gap.covered' : d.gapNone === 'empty' ? 'shapes.gap.empty' : d.gapMode === 'wrap' ? 'shapes.gap.pickWrap' : 'shapes.gap.pick') },
       ];
     }
     if (d.kind === 'free') return [{ kind: 'title', text: t('shapes.tool.free'), title: t('draw.free.hint') }, { kind: 'hint', text: t('shapes.opt.free') }];

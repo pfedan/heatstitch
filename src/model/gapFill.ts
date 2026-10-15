@@ -17,18 +17,18 @@ const RUN_WIDTH = 0.4;
  */
 export function obstaclesOf(p: Pattern, objs: readonly SewObject[]): Obstacle[] {
   const kinds = stitchKinds(p);
-  return objs.flatMap((o): Obstacle[] => {
+  return objs.flatMap((o, of): Obstacle[] => {
     const m = remembered(p, o);
     const use = geoUse(m);
-    if (use === 'area') return [{ form: m!.geo!, line: false, width: 0 }];
-    if (use === 'band') return [{ form: m!.geo!, line: true, width: m!.fill!.lineWidth ?? RUN_WIDTH }];
+    if (use === 'area') return [{ form: m!.geo!, line: false, width: 0, of }];
+    if (use === 'band') return [{ form: m!.geo!, line: true, width: m!.fill!.lineWidth ?? RUN_WIDTH, of }];
     if (use === 'line') {
       const st = m!.line!;
-      return [{ form: m!.geo!, line: true, width: st.type === 'run' ? RUN_WIDTH : Math.max(RUN_WIDTH, st.width) }];
+      return [{ form: m!.geo!, line: true, width: st.type === 'run' ? RUN_WIDTH : Math.max(RUN_WIDTH, st.width), of }];
     }
     const geo = guessGeo(p, o, kinds);
     if (!geo) return [];
-    return [sewnAlong(p, o) ? { form: geo, line: true, width: RUN_WIDTH } : { form: geo, line: false, width: 0 }];
+    return [sewnAlong(p, o) ? { form: geo, line: true, width: RUN_WIDTH, of } : { form: geo, line: false, width: 0, of }];
   });
 }
 
@@ -41,9 +41,10 @@ const boxOf = (f: Form): [number, number, number, number] | null => {
 };
 
 /**
- * Where a new area `form` goes in the sewing order (insertObject's `after`): just before the first
- * object it borders on, so it lies under the shapes around it and their edges cover the seam; at the
- * end when it borders on none. `reach`: how far away a shape still borders on it (mm).
+ * Where a new area `form` goes in the sewing order: just before the first object it borders on (its
+ * place in the list the obstacles were made from), so it lies under the shapes around it and their
+ * edges cover the seam; null, at the end, when it borders on none. `reach`: how far away a shape
+ * still borders on it (mm).
  */
 export function gapPlace(form: Form, obstacles: readonly Obstacle[], reach: number): number | null {
   const b = boxOf(form);
@@ -53,5 +54,5 @@ export function gapPlace(form: Form, obstacles: readonly Obstacle[], reach: numb
     const r = reach + (o.line ? o.width / 2 : 0);
     return !!c && c[0] - r <= b[2] && c[2] + r >= b[0] && c[1] - r <= b[3] && c[3] + r >= b[1];
   });
-  return k < 0 ? null : k - 1;
+  return k < 0 ? null : (obstacles[k].of ?? k);
 }

@@ -307,6 +307,13 @@
   stroke: none;
 }
 
+/* A filled area in an icon (Lücke füllen): the shape outlines stay in front of it. */
+.tool-options button.opt svg .area {
+  fill: currentColor;
+  stroke: none;
+  opacity: 0.35;
+}
+
 .tool-options button.opt:not(:disabled):hover {
   border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
 }

@@ -23,7 +23,7 @@ import { isRigid, stitchesBefore, transformObject } from '../model/transform';
 import { LiveResew, type LiveResult } from '../resew/client';
 import { syncBorders } from '../model/border';
 import { canSplit, splitFill } from '../model/splitFill';
-import { gapFinder, loadOps, opsReady, type GapResult } from '../shape/ops';
+import { gapFinder, loadOps, opsReady, type GapMode, type GapResult } from '../shape/ops';
 import { gapPlace, obstaclesOf } from '../model/gapFill';
 import type { Obstacle } from '../shape/ops';
 import { t, formatNumber } from '../i18n';
@@ -86,7 +86,7 @@ export function bindDrawing(app: DrawingApp) {
   // Flächen-Werkzeug: the shapes shown, and the free parts between them, worked out once per design,
   // shown blocks, gap and mode; the pointer only looks up the part it is in.
   let obstacleCache: { p: Pattern; hidden: ReadonlySet<number>; list: Obstacle[] } | null = null;
-  let finderCache: { obstacles: Obstacle[]; d: number; mode: 'closed' | 'hull'; at: (q: Pt) => GapResult } | null = null;
+  let finderCache: { obstacles: Obstacle[]; d: number; mode: GapMode; at: (q: Pt) => GapResult } | null = null;
   function shownObstacles(p: Pattern): Obstacle[] {
     if (obstacleCache?.p !== p || obstacleCache.hidden !== ui.hiddenBlocks) {
       const objs = app.seq(p).objects.filter((o) => !ui.hiddenBlocks.has(o.block));
@@ -107,12 +107,12 @@ export function bindDrawing(app: DrawingApp) {
     if (finderCache?.obstacles !== obstacles || finderCache.d !== d || finderCache.mode !== mode) finderCache = { obstacles, d, mode, at: gapFinder(obstacles, d, mode) };
     return finderCache.at([x, y]);
   }
-  /** A click of the Flächen-Werkzeug: the area there a new fill, sewn before the shapes around it. */
+  /** A click of the Flächen-Werkzeug: the area there a new fill, sewn before the shapes around it (or, wrapped, under it). */
   function gapMade(look: GapLook): void {
     if ('none' in look) {
       if (look.none === 'outside' && drawTool.gapMode === 'closed')
         return app.layers.say({ text: t('shapes.gap.outside'), action: { label: t('shapes.gap.hull'), run: () => setGapMode('hull') } });
-      return app.layers.say(t(look.none === 'outside' ? 'shapes.gap.outside' : 'shapes.gap.covered'), true);
+      return app.layers.say(t(look.none === 'outside' ? 'shapes.gap.outside' : look.none === 'empty' ? 'shapes.gap.empty' : 'shapes.gap.covered'), true);
     }
     const p = app.files.active?.pattern;
     if (!p) return;
@@ -120,11 +120,11 @@ export function bindDrawing(app: DrawingApp) {
     const shown = app.seq(p).objects.filter((o) => !ui.hiddenBlocks.has(o.block));
     const k = gapPlace(look.form, obstacles, drawTool.gapMm + 0.5);
     // Before that object in the whole list (hidden blocks count too).
-    const after = k === null ? null : k < 0 ? -1 : shown[k].index - 1;
-    void drawn({ form: look.form, kind: 'fill' }, { after, keepTool: true, done: 'draw.done.gap', fillOnly: true });
+    const after = k === null ? null : shown[k].index - 1;
+    void drawn({ form: look.form, kind: 'fill' }, { after, keepTool: true, done: drawTool.gapMode === 'wrap' ? 'draw.done.wrap' : 'draw.done.gap', fillOnly: true });
   }
-  /** Switches the Flächen-Werkzeug between shapes all round and the convex hull. */
-  function setGapMode(mode: 'closed' | 'hull'): void {
+  /** Switches the Flächen-Werkzeug between shapes all round, the convex hull, and the hull as a shape. */
+  function setGapMode(mode: GapMode): void {
     drawTool.gapMode = mode;
     drawTool.preview = null;
     drawTool.gapNone = null;
@@ -205,7 +205,7 @@ export function bindDrawing(app: DrawingApp) {
     return d.objects.length ? d : null;
   }
 
-  async function drawn(shape: NewShape, how: { after?: number | null; keepTool?: boolean; done?: 'draw.done.gap'; fillOnly?: boolean } = {}): Promise<void> {
+  async function drawn(shape: NewShape, how: { after?: number | null; keepTool?: boolean; done?: 'draw.done.gap' | 'draw.done.wrap'; fillOnly?: boolean } = {}): Promise<void> {
     const f = app.files.active;
     const p = f?.pattern ?? null;
     // A filled gap is a background: a fill, never a satin, however narrow it is.

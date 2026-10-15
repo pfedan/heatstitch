@@ -1837,7 +1837,7 @@ export const PATH_OPS: Op[] = [
       const xs = pts.map((q) => q[0]);
       const ys = pts.map((q) => q[1]);
       const at: Pt = [between(r, Math.min(...xs) - 3, Math.max(...xs) + 3), between(r, Math.min(...ys) - 3, Math.max(...ys) + 3)];
-      const mode = r() < 0.5 ? 'closed' : 'hull';
+      const mode = pick(r, ['closed', 'hull', 'wrap'] as const);
       const gap = pick(r, [0, 0.5, 2]);
       const res = gapAt(obstacles, at, gap, mode);
       if (!('form' in res)) return false;
@@ -1846,14 +1846,25 @@ export const PATH_OPS: Op[] = [
         const f = flatten(q, 0.05);
         return s + f.reduce((t, c, i) => (i ? t + Math.hypot(c[0] - f[i - 1][0], c[1] - f[i - 1][1]) : 0), 0);
       }, 0);
+      // Wrapped, a shape is under it whole or not at all; the fill goes before every shape it covers.
+      const covered: number[] = [];
       for (const o of obstacles) {
         const solid = o.line ? bandForm(o.form, o.width) : o.form;
         const both = solid && intersectForms(res.form, solid);
         const over = both ? areaOfForm(both) : 0;
-        if (over > rim * 0.05 + 0.1) throw new Error(`fill gap: the new area overlaps a shape by ${over.toFixed(2)} mm² (rim ${rim.toFixed(1)} mm, ${mode}, gap ${gap})`);
+        const tol = rim * 0.05 + 0.1;
+        if (over <= tol) continue;
+        const whole = solid ? areaOfForm(solid) : 0;
+        const own = solid ? solid.paths.reduce((s, q) => s + flatten(q, 0.05).reduce((t, c, i, f) => (i ? t + Math.hypot(c[0] - f[i - 1][0], c[1] - f[i - 1][1]) : 0), 0), 0) : 0;
+        if (mode === 'wrap' && over >= whole - tol - own * 0.05) {
+          covered.push(o.of!);
+          continue;
+        }
+        throw new Error(`fill gap: the new area overlaps a shape by ${over.toFixed(2)} mm² (rim ${rim.toFixed(1)} mm, ${mode}, gap ${gap})`);
       }
       const k = gapPlace(res.form, obstacles, gap + 0.5);
-      const after = k === null ? null : k < 0 ? -1 : objs[k].index - 1;
+      if (covered.length && (k === null || k > Math.min(...covered))) throw new Error(`fill gap: the hull is sewn after a shape it covers (${mode}, gap ${gap})`);
+      const after = k === null ? null : objs[k].index - 1;
       const a = addShape(p, { form: res.form, kind: 'fill' }, pick(r, COLORS), after, { ...options, satinMin: 0, satinMax: 0 });
       if (process.env.TORTURE_TRACE) console.log('fill gap', mode, gap, at);
       return shapes(d, a?.pattern);
