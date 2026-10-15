@@ -11,7 +11,7 @@ import { reorder } from './order';
 import { recolor, sameColor } from './recolor';
 import type { Pattern, ThreadColor } from './pattern';
 import { borderOf, forget, withLine, objectKey, relearn, remember, remembered, restitch, type Remembered } from './restitch';
-import { reshapeFill, transformSewObject } from './reshape';
+import { reshapeFill, reshapeObject, transformSewObject } from './reshape';
 import { stitchKinds } from './sequence';
 import { stitchesBefore } from './transform';
 import { autoReversible, ownSettings, reverseLines } from './reverse';
@@ -509,3 +509,26 @@ function recolorStitches(p: Pattern, objs: SewObject[], sel: number[], color: Th
   return sewList(p, list, trimMm, { apart });
 }
 
+
+/**
+ * Part of object `o`'s form taken out as an object of its own ("Als eigenes Objekt", see
+ * takeOutNodes): a copy in place of it, with its settings, thread and what belongs to it, sewn right
+ * after it in `out`; the object itself sewn on in `keep`. Returns the new object's index, or null
+ * when either could not be sewn.
+ */
+export function takeOutShape(p: Pattern, o: number, keep: Form, out: Form, trimMm: number): { pattern: Pattern; part: number } | null {
+  const d = duplicateObjects(p, [o], trimMm, 0);
+  if (!d || d.copies.length !== 1) return null;
+  const sew = (cur: Pattern, k: number, form: Form): Pattern | null => {
+    const kinds = stitchKinds(cur);
+    const objs = sewObjects(cur, kinds);
+    const r = objs[k] && reshapeObject(cur, objs, objs[k], kinds, form, trimMm);
+    return r ? takeOver(r) : null;
+  };
+  // The object first; then its copy, after as many objects more as the object came out as.
+  const kept = sew(d.pattern, o, keep);
+  if (!kept) return null;
+  const part = d.copies[0] + sewObjects(kept).length - sewObjects(d.pattern).length;
+  const cur = sew(kept, part, out);
+  return cur && sewObjects(cur)[part] ? { pattern: cur, part } : null;
+}

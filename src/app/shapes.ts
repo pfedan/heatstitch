@@ -11,7 +11,7 @@ import type { Settings } from '../settings';
 import type { SewObject } from '../model/objects';
 import type { Viewport } from '../render/viewport';
 import { ShapeTool } from '../ui/shapeTool';
-import { deleteObjects, duplicateObjects, extractObjects, mirrorMatrix, subtractTop } from '../model/shapeOps';
+import { deleteObjects, duplicateObjects, extractObjects, mirrorMatrix, subtractTop, takeOutShape } from '../model/shapeOps';
 import { pasteDesign } from '../model/appendDesign';
 import { loadOps, opsReady } from '../shape/ops';
 import { fillsToLines, lineToSatin, reshapeObject } from '../model/reshape';
@@ -22,6 +22,7 @@ import { followerLinks, syncBorders } from '../model/border';
 import { partOf } from '../model/shadow';
 import { sewObjects, stitchKey } from '../model/objects';
 import { t, formatNumber, type Key } from '../i18n';
+import { runCommand } from '../shell/commands';
 import { ui } from './state';
 import { bandArea, fillArea, fits, fitsOf, formKey, geoOf, geoUse, guessGeo, guessLine, sewnAlong, withGeo } from '../model/geo';
 import { addContour, contourAt, CONTOUR_GAP, GAP_MAX, GAP_MIN, gapReader } from '../model/contour';
@@ -260,6 +261,28 @@ export function bindShapes(app: ShapesApp) {
     }
     app.updateLevel();
     app.redraw();
+  }
+
+  /**
+   * The selected nodes of the form taken out as an object of its own (Als eigenes Objekt), sewn right
+   * after it with its settings; the new object is selected, with Garn wählen at hand.
+   */
+  function takeOutSelected(): void {
+    const p = app.files.active?.pattern;
+    const o = ui.shapeObject;
+    if (!p || o === null) return;
+    const obj = app.seq(p).objects[o];
+    if (!obj) return;
+    const split = shapeTool.takeOut(!isLineObject(p, obj));
+    if (!split) return app.layers.say(t('shape.takeOut.none'), true);
+    const r = !remembered(p, obj)?.free && takeOutShape(p, o, split.keep, split.out, app.settings.trimMm);
+    if (!r) {
+      app.layers.say(t('shape.failed'), true);
+      return app.redraw();
+    }
+    closeShape();
+    takeShapes(r.pattern, [r.part]);
+    app.layers.say({ text: t('shape.takenOut'), action: { label: t('objects.color'), run: () => runCommand('object.color') } });
   }
 
   function closeShape(): void {
@@ -628,5 +651,5 @@ export function bindShapes(app: ShapesApp) {
   /** Whether Ctrl+V has something to paste. */
   const canPaste = (): boolean => !!copied;
 
-  return { canPaste, closeShape, contourGap, contourGrip, contourSelected, copySelected, deleteSelected, setContourGap, duplicateSelected, pasteCopied, enterShape, followKnockouts, isLineObject, mirrorSelected, satinLineAgain, sewLine, sewLineAgain, shapeTarget, shapeTool, showBand, subtractSelected, syncShape, takeShapes };
+  return { canPaste, closeShape, takeOutSelected, contourGap, contourGrip, contourSelected, copySelected, deleteSelected, setContourGap, duplicateSelected, pasteCopied, enterShape, followKnockouts, isLineObject, mirrorSelected, satinLineAgain, sewLine, sewLineAgain, shapeTarget, shapeTool, showBand, subtractSelected, syncShape, takeShapes };
 }

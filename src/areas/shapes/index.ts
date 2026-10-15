@@ -35,6 +35,8 @@ export interface ShapesAreaApp {
   readonly measure: MeasureTool;
   readonly shapeTool: ShapeTool;
   readonly enterShape: (o: number, fit: boolean) => void;
+  /** The selected nodes of the form taken out as an object of its own. */
+  readonly takeOutSelected: () => void;
   readonly shapeTarget: (p: Pattern, q: Sequence, o: number) => Form | null;
   readonly isLineObject: (p: Pattern, o: SewObject) => boolean;
   readonly frameTool: FrameTool;
@@ -68,6 +70,7 @@ const ICON = {
   // Two ends, a dashed piece between them.
   join: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 15.5C3.5 10 5 8 7.6 7.6" /><path d="M12.4 7.6C15 8 16.5 10 17.5 15.5" /><path d="M9.6 7.6h.8" stroke-dasharray="1.2 1.2" /><rect x="6.3" y="5.9" width="3.4" height="3.4" rx=".5" class="node" /><rect x="10.3" y="5.9" width="3.4" height="3.4" rx=".5" class="node" /></svg>',
   // A curve cut apart at a node.
+  takeOut: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 16.5C4 13 5.5 11.5 7 11" /><path d="M10.5 8.5C12 6.5 14 5 17.5 3.5" /><rect x="9" y="7" width="3" height="3" rx=".5" class="node" /><rect x="15.5" y="2" width="3" height="3" rx=".5" class="node" /><path d="M12.5 13.5h5M15 11v5" /></svg>',
   split: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 15C4 10 6 8.2 8 7.6" /><path d="M12 7.6C14 8.2 16 10 17.5 15" /><rect x="6.5" y="6" width="3.2" height="3.2" rx=".5" class="node" /><rect x="10.3" y="6" width="3.2" height="3.2" rx=".5" class="node" /><path d="M10 2.5v3M10 10.5v3" /></svg>',
   // Two crossing curves, a node where they cross.
   crossings: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 16C6 6 12 4 17 4" /><path d="M3 4c5 0 11 2 14 12" /><rect x="8.3" y="6.6" width="3.4" height="3.4" rx=".5" class="node" /></svg>',
@@ -314,6 +317,7 @@ export function initShapes(app: ShapesAreaApp): void {
     },
   });
   command({ id: 'shape.split', label: 'shape.split', group: SHAPE, when: () => shaping() && app.shapeTool.canSplit, run: () => void app.shapeTool.splitHere() });
+  command({ id: 'shape.takeOut', label: 'shape.takeOut', group: SHAPE, keys: ['Mod+Shift+K'], when: () => shaping() && app.shapeTool.selCount >= 2 && app.shapeTool.selCount < app.shapeTool.count, run: () => app.takeOutSelected() });
   command({
     id: 'shape.crossings',
     label: 'shape.crossings',
@@ -518,6 +522,7 @@ export function initShapes(app: ShapesAreaApp): void {
       if (canRun('shape.closeLine')) items.push({ kind: 'cmd', id: 'shape.closeLine', icon: ICON.pathClose, tip: t('shape.path.close.hint') });
       if (canRun('shape.openLine')) items.push({ kind: 'cmd', id: 'shape.openLine', icon: ICON.pathOpen, tip: t('shape.path.open.hint') });
       if (canRun('shape.split')) items.push({ kind: 'cmd', id: 'shape.split', icon: ICON.split, tip: t('shape.split.hint') });
+      if (canRun('shape.takeOut')) items.push({ kind: 'cmd', id: 'shape.takeOut', icon: ICON.takeOut, tip: t('shape.takeOut.hint') });
       if (canRun('shape.join')) items.push({ kind: 'cmd', id: 'shape.join', icon: ICON.join, tip: t('shape.join.hint') });
       if (canRun('shape.crossings')) items.push({ kind: 'cmd', id: 'shape.crossings', icon: ICON.crossings, tip: t('shape.crossings.hint') });
       // Fertig as in the bar of the stitches by hand: back to the objects (as Esc). The level Stiche

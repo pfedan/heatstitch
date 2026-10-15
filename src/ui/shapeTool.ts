@@ -1,5 +1,5 @@
 import { simplifyMore } from '../shape/simplify';
-import { joinEnd, joinOpenPaths, splitPathAt, type Joined } from '../shape/join';
+import { joinEnd, joinOpenPaths, splitPathAt, takeOutNodes, type Joined } from '../shape/join';
 import { withCrossingNodes } from '../shape/ops';
 import { bandGrip, draggedWidth } from '../shape/band';
 import type { Pt } from '../digitize/skeleton';
@@ -571,6 +571,15 @@ export class ShapeTool implements ShapeView {
     this.selected = { path: s.path, i: s.i };
     this.hooks.change(this.form);
     return true;
+  }
+
+  /**
+   * The selected nodes taken out as a form of their own, and what stays (see takeOutNodes); the
+   * form is not changed here: the object and its new neighbour are sewn by the app. `whole`: an area.
+   */
+  takeOut(whole: boolean): { keep: Form; out: Form } | null {
+    this.flush();
+    return this.sel.length >= 2 ? takeOutNodes(this.form, this.sel, whole) : null;
   }
 
   /** A node wherever the paths cross, the outline unchanged (needs loadOps); how many were put in. */

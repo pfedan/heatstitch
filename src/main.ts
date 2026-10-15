@@ -510,7 +510,7 @@ const { closeRungs, convertToSatin, lineAuto, rungInfo, rungTool, sewAlongLines,
 
 // Shapes and the frame ---------------------------------------------------------------------------
 
-const { canPaste, closeShape, contourGap, contourGrip, contourSelected, copySelected, deleteSelected, duplicateSelected, pasteCopied, enterShape, followKnockouts, isLineObject, mirrorSelected, satinLineAgain, sewLine, sewLineAgain, shapeTarget, shapeTool, showBand, setContourGap, subtractSelected, syncShape, takeShapes } = bindShapes({
+const { canPaste, closeShape, takeOutSelected, contourGap, contourGrip, contourSelected, copySelected, deleteSelected, duplicateSelected, pasteCopied, enterShape, followKnockouts, isLineObject, mirrorSelected, satinLineAgain, sewLine, sewLineAgain, shapeTarget, shapeTool, showBand, setContourGap, subtractSelected, syncShape, takeShapes } = bindShapes({
   get applyEdit() {
     return applyEdit;
   },
@@ -1933,7 +1933,7 @@ const ready = initReady({
     return hs.length ? Math.min(...hs) : null;
   },
 });
-initShapes({ settings, setMode, files, seq, objectName, drawTool, setDrawing: pickTool, measure: measureTool, shapeTool, enterShape, shapeTarget, isLineObject, frameTool, editor, setEditing, setFormLevel, newLettering, setLetterMode, letteringPanel, selectObjects, redraw });
+initShapes({ settings, setMode, files, seq, objectName, drawTool, setDrawing: pickTool, measure: measureTool, shapeTool, enterShape, takeOutSelected, shapeTarget, isLineObject, frameTool, editor, setEditing, setFormLevel, newLettering, setLetterMode, letteringPanel, selectObjects, redraw });
 checkArea = initCheck({
   settings,
   files,

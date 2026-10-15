@@ -1,5 +1,5 @@
 import type { Pt } from '../digitize/skeleton';
-import type { Form, Node, Path } from './path';
+import type { Form, Node, NodeRef, Path } from './path';
 
 /**
  * Open paths joined at their ends ("Pfade verbinden", as Inkscape's "Endknoten verbinden" and
@@ -188,4 +188,58 @@ export function splitPathAt(f: Form, k: number, i: number): Form | null {
   const paths = [...f.paths];
   paths.splice(k, 1, { closed: false, nodes: head }, { closed: false, nodes: tail });
   return { ...f, paths };
+}
+
+/**
+ * The selected nodes taken out of the form as a form of their own ("Als eigenes Objekt"): `out` and
+ * what is left (`keep`). With `whole` (an area, whose loops make sense only whole) each path with a
+ * selected node goes as a whole. Otherwise a path goes whole when all its nodes are selected, and
+ * one selected in part is cut at the selected nodes: each run of two or more selected nodes in a row
+ * goes with the curves between them, the rest stays (the nodes where they meet in both, so the
+ * drawing stays as it was). Null when nothing would go or nothing stay.
+ */
+export function takeOutNodes(f: Form, sel: NodeRef[], whole: boolean): { keep: Form; out: Form } | null {
+  const keep: Path[] = [];
+  const out: Path[] = [];
+  const piece = (nodes: Node[], i: number, j: number): Path => {
+    const part = nodes.slice(i, j + 1).map(copy);
+    const a = part[0];
+    const b = part[part.length - 1];
+    a.a = [a.p[0], a.p[1]];
+    b.b = [b.p[0], b.p[1]];
+    a.smooth = b.smooth = false;
+    return { closed: false, nodes: part };
+  };
+  f.paths.forEach((p, k) => {
+    const on = p.nodes.map((_, i) => sel.some((s) => s.path === k && s.i === i));
+    if (!on.some(Boolean)) return keep.push(p);
+    if (whole || on.every(Boolean)) return out.push(p);
+    // A closed path read as an open one from the start of a run of selected nodes round to it again.
+    let nodes = p.nodes;
+    let flags = on;
+    if (p.closed) {
+      const n = nodes.length;
+      const s = on.findIndex((x, i) => x && on[(i + 1) % n] && !on[(i + n - 1) % n]);
+      if (s < 0) return keep.push(p);
+      nodes = [...nodes.slice(s), ...nodes.slice(0, s), nodes[s]];
+      flags = [...on.slice(s), ...on.slice(0, s), on[s]];
+    }
+    const last = nodes.length - 1;
+    let start = 0;
+    let went = false;
+    for (let i = 0; i < last; i++) {
+      if (!flags[i] || !flags[i + 1]) continue;
+      let j = i + 1;
+      while (j < last && flags[j + 1]) j++;
+      if (i > start) keep.push(piece(nodes, start, i));
+      out.push(piece(nodes, i, j));
+      went = true;
+      start = j;
+      i = j;
+    }
+    if (!went) return keep.push(p);
+    if (start < last) keep.push(piece(nodes, start, last));
+  });
+  if (!out.length || !keep.length) return null;
+  return { keep: { ...f, paths: keep }, out: { ...f, paths: out } };
 }
