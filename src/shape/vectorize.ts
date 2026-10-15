@@ -159,6 +159,24 @@ export function fitCubic(pts: Pt[], t1: V, t2: V, tol: number, between = false):
   return out;
 }
 
+/**
+ * The one cubic that follows `pts` best with the given end directions, however far off it lies:
+ * Schneider's least squares fit with Newton steps on the parameters, the best of the tries kept.
+ */
+export function fitSingleCubic(pts: Pt[], t1: V, t2: V): Cubic {
+  if (pts.length < 3) return fitOne(pts, t1, t2, Infinity, false).curve!;
+  let u = chordParams(pts);
+  let curve = generate(pts, u, t1, t2);
+  let best = { curve, max: maxError(pts, curve, u).max };
+  for (let it = 0; it < 12; it++) {
+    u = reparameterize(pts, u, curve);
+    curve = generate(pts, u, t1, t2);
+    const max = maxError(pts, curve, u).max;
+    if (max < best.max) best = { curve, max };
+  }
+  return best.curve;
+}
+
 /** One curve through `pts` within `tol`, or the point to split at when there is none. */
 function fitOne(pts: Pt[], t1: V, t2: V, tol: number, between: boolean): { curve: Cubic; at?: undefined } | { curve?: undefined; at: number } {
   if (pts.length < 3) {

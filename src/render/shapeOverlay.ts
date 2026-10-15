@@ -51,6 +51,22 @@ export function drawShapeOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, vi
   ctx.strokeStyle = view.dirty ? '#ffd666' : '#ffffff';
   ctx.lineWidth = 1.5;
   ctx.stroke();
+  // The path a double-click would select: whole, wider and in the accent half through, its nodes
+  // ringed below (selected nodes are filled, so the preview is not told by color alone).
+  const hp = view.hoverPath;
+  const hpath = hp !== null ? view.form.paths[hp] : undefined;
+  if (hpath?.nodes.length) {
+    ctx.beginPath();
+    ctx.moveTo(...S(hpath.nodes[0].p));
+    for (let k = 0; k < segments(hpath); k++) {
+      const [, b, a, e] = segment(hpath, k);
+      ctx.bezierCurveTo(...S(b), ...S(a), ...S(e));
+    }
+    if (hpath.closed) ctx.closePath();
+    ctx.strokeStyle = 'rgba(224, 85, 158, 0.55)';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+  }
   // The hovered curve a little thicker.
   const h = view.hover;
   if (h?.part === 'curve') {
@@ -99,6 +115,15 @@ export function drawShapeOverlay(ctx: CanvasRenderingContext2D, vp: Viewport, vi
       ctx.lineWidth = 1.5;
       ctx.fill();
       ctx.stroke();
+      if (path === hp && !sel) {
+        // A ring around the nodes of the previewed path.
+        ctx.beginPath();
+        if (n.smooth) ctx.arc(x, y, r + 2.5, 0, Math.PI * 2);
+        else ctx.rect(x - r - 2.5, y - r - 2.5, 2 * r + 5, 2 * r + 5);
+        ctx.strokeStyle = ACCENT;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
     }),
   );
   if (view.band !== null) drawWidthGrip(ctx, vp, view, h?.part === 'width');

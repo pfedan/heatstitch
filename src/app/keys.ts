@@ -139,6 +139,14 @@ export function bindKeys(app: KeysApp) {
         return;
       }
       if (e.key === 'c' && app.shapeTool.toggleSmooth()) return;
+      // Tab: from node to node (as Inkscape's node tool), only while no field or button has the
+      // focus, so Tab still goes through the panels.
+      const free = !document.activeElement || document.activeElement === document.body || document.activeElement.tagName === 'CANVAS';
+      if (e.key === 'Tab' && free && app.shapeTool.step(e.shiftKey ? -1 : 1)) {
+        e.preventDefault();
+        app.redraw();
+        return;
+      }
       // Esc: first the nodes, then one level back to the objects (the selection stays).
       if (e.key === 'Escape') {
         if (app.shapeTool.clearSelection()) app.redraw();

@@ -27,7 +27,7 @@ const reversed = (nodes: Node[]): Node[] => nodes.map((n) => ({ p: [n.p[0], n.p[
 const open = (p: Path) => !p.closed && p.nodes.length >= 2;
 
 /** The node where `last` (end of one path) and `first` (start of the next) meet: at their middle, each keeping its handle. */
-function meet(last: Node, first: Node): Node {
+export function meet(last: Node, first: Node): Node {
   const m: Pt = [(last.p[0] + first.p[0]) / 2, (last.p[1] + first.p[1]) / 2];
   const a: Pt = [last.a[0] + m[0] - last.p[0], last.a[1] + m[1] - last.p[1]];
   const b: Pt = [first.b[0] + m[0] - first.p[0], first.b[1] + m[1] - first.p[1]];
