@@ -155,6 +155,12 @@ const STATES: Record<string, (page: Page) => Promise<void>> = {
     await page.locator('#send-body .save-row', { hasText: /WLAN|Wi-Fi/ }).click();
     await page.locator('.send-wlan .send-status').waitFor();
   },
+  'the remove question in the design menu': async (page) => {
+    await loadCat(page);
+    await page.click('#design-button');
+    await page.locator('#design-pop .file-list .remove-btn').first().click();
+    await page.locator('#design-pop .remove-ask').waitFor();
+  },
   'Dichte with findings': async (page) => {
     await loadCat(page);
     await mode(page, 'density');
