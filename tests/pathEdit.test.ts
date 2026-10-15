@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { breakAtNodes, deleteNodesKeepingShape, mergeNodes, removeSegments } from '../src/shape/nodeOps';
+import { breakAtNodes, deleteNodesKeepingShape, mergeNodes, removeSegments, straightenSegments } from '../src/shape/nodeOps';
 import { formParts } from '../src/shape/parts';
 import { flatten, formArea, nearestOnForm, type Form, type Mat } from '../src/shape/path';
 import { parsePath } from '../src/shape/svgPath';
@@ -55,6 +55,30 @@ describe('removeSegments (Stück entfernen)', () => {
       [[0, 0], [10, 0]],
       [[20, 0], [30, 0]],
     ]);
+  });
+});
+
+describe('straightenSegments (Stück gerade)', () => {
+  it('draws back the handles of the piece between two selected neighbours, the others stay', () => {
+    const f = parsePath('M10 0 C10 5.523 5.523 10 0 10 C-5.523 10 -10 5.523 -10 0 C-10 -5.523 -5.523 -10 0 -10 C5.523 -10 10 -5.523 10 0 Z', ID);
+    const r = straightenSegments(f, [{ path: 0, i: 0 }, { path: 0, i: 1 }])!;
+    const [a, b, c] = r.paths[0].nodes;
+    expect(a.b).toEqual(a.p);
+    expect(b.a).toEqual(b.p);
+    expect(a.smooth || b.smooth).toBe(false);
+    // The pieces beside it keep their curves.
+    expect(b.b).toEqual(f.paths[0].nodes[1].b);
+    expect(c).toEqual(f.paths[0].nodes[2]);
+    // The closing piece of a closed path counts too.
+    const last = straightenSegments(f, [{ path: 0, i: 3 }, { path: 0, i: 0 }])!;
+    expect(last.paths[0].nodes[3].b).toEqual(last.paths[0].nodes[3].p);
+    expect(last.paths[0].nodes[0].a).toEqual(last.paths[0].nodes[0].p);
+  });
+
+  it('does nothing where the pieces are straight already or the nodes are no neighbours', () => {
+    expect(straightenSegments(parsePath('M0 0 L10 0 L10 10 Z', ID), [{ path: 0, i: 0 }, { path: 0, i: 1 }])).toBeNull();
+    const wave = parsePath('M0 0 C3 5 7 5 10 0 C13 -5 17 -5 20 0', ID);
+    expect(straightenSegments(wave, [{ path: 0, i: 0 }, { path: 0, i: 2 }])).toBeNull();
   });
 });
 

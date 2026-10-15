@@ -37,7 +37,7 @@ import { combineLines, joinTouchingEnds, deleteObjects, partsOfForm, splitByForm
 import { isRigid, stitchesBefore } from '../../src/model/transform';
 import { sewDesign, specOf } from '../../src/model/sew';
 import { parsePattern } from '../../src/parsers';
-import { breakAtNodes, deleteNodesKeepingShape, mergeNodes, removeSegments } from '../../src/shape/nodeOps';
+import { breakAtNodes, deleteNodesKeepingShape, mergeNodes, removeSegments, straightenSegments } from '../../src/shape/nodeOps';
 import { bounds as boundsOf, extendPath, flatten, formArea, insertNode, moveNodes, nodesOf, removeNodes, rotation, segments, setSmooth, storeForm, translation, type Form, type Mat } from '../../src/shape/path';
 import { ellipsePath, parsePath, rectPath } from '../../src/shape/svgPath';
 import { fromStored, storedVersion, toStored } from '../../src/storage/fileStore';
@@ -1814,7 +1814,7 @@ export const PATH_OPS: Op[] = [
       const i = Math.floor(r() * n);
       const run = [{ path: k, i }, { path: k, i: (i + 1) % n }];
       const how = r();
-      const next = how < 0.3 ? breakAtNodes(geo, [run[0]])?.form : how < 0.6 ? deleteNodesKeepingShape(geo, [run[0]]) : how < 0.8 ? removeSegments(geo, run) : mergeNodes(geo, run);
+      const next = how < 0.25 ? breakAtNodes(geo, [run[0]])?.form : how < 0.5 ? deleteNodesKeepingShape(geo, [run[0]]) : how < 0.7 ? removeSegments(geo, run) : how < 0.85 ? mergeNodes(geo, run) : straightenSegments(geo, run);
       if (!next) return false;
       const before = remembered(p, o);
       const res = reshapeObject(p, objs, o, kinds, next, T);

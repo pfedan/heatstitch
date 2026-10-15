@@ -74,6 +74,7 @@ const ICON = {
   // A gap in a curve between two nodes, a cross over it.
   removeSegment: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 15.5C3.8 11 5 9 6.6 8.4" /><path d="M13.4 8.4C15 9 16.2 11 17.5 15.5" /><rect x="5.4" y="6.8" width="3.2" height="3.2" rx=".5" class="node" /><rect x="11.4" y="6.8" width="3.2" height="3.2" rx=".5" class="node" /><path d="M8.6 2.6l2.8 2.8M11.4 2.6 8.6 5.4" /></svg>',
   // Two nodes drawn into one.
+  straighten: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 9.5C6.5 4 13.5 4 15 9.5" stroke-dasharray="1.6 1.8" /><path d="M3.5 14h13" /><rect x="2" y="12.4" width="3.2" height="3.2" rx=".5" class="node" /><rect x="14.8" y="12.4" width="3.2" height="3.2" rx=".5" class="node" /></svg>',
   merge: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 16C4 11.5 6 9.4 8.3 8.9" /><path d="M11.7 8.9C14 9.4 16 11.5 17.5 16" /><rect x="8.3" y="7.2" width="3.4" height="3.4" rx=".5" class="node" /><path d="M3.5 3.5l3.5 3M16.5 3.5l-3.5 3" /></svg>',
   // A loop with all its nodes.
   selectPath: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4c4 0 6 2.6 6 6s-2.4 6-6 6-6-2.6-6-6 2-6 6-6z" /><rect x="8.4" y="2.4" width="3.2" height="3.2" rx=".5" class="node" /><rect x="14.4" y="8.4" width="3.2" height="3.2" rx=".5" class="node" /><rect x="8.4" y="14.4" width="3.2" height="3.2" rx=".5" class="node" /><rect x="2.4" y="8.4" width="3.2" height="3.2" rx=".5" class="node" /></svg>',
@@ -335,6 +336,9 @@ export function initShapes(app: ShapesAreaApp): void {
       app.shapeTool.breakSelected();
     },
   });
+  command({ id: 'shape.straighten', label: 'shape.straighten', group: SHAPE, when: () => shaping() && app.shapeTool.canStraighten, run: () => void app.shapeTool.straighten() });
+  // Only in the command search, as in Inkscape ("!"); no button.
+  command({ id: 'shape.invert', label: 'shape.invert', group: SHAPE, when: () => shaping() && app.shapeTool.count > 0, run: () => void (app.shapeTool.invertSelection() && app.redraw()) });
   command({ id: 'shape.removeSegment', label: 'shape.removeSegment', group: SHAPE, when: () => shaping() && app.shapeTool.canRemoveSegment, run: () => void app.shapeTool.removeSegment() });
   command({ id: 'shape.merge', label: 'shape.merge', group: SHAPE, when: () => shaping() && app.shapeTool.selCount >= 2, run: () => void (app.shapeTool.mergeSelected() || toast(t('shape.merge.none'))) });
   command({ id: 'shape.selectPath', label: 'shape.selectPath', group: SHAPE, when: () => shaping() && app.shapeTool.partlySelected, run: () => void (app.shapeTool.selectWholePaths() && app.redraw()) });
@@ -556,6 +560,7 @@ export function initShapes(app: ShapesAreaApp): void {
         cmd('shape.selectPath', ICON.selectPath, t('shape.selectPath.hint')),
         cmd('shape.break', ICON.split, t('shape.break.hint')),
         cmd('shape.removeSegment', ICON.removeSegment, t('shape.removeSegment.hint')),
+        cmd('shape.straighten', ICON.straighten, t('shape.straighten.hint')),
         cmd('shape.join', ICON.join, t('shape.join.hint')),
         cmd('shape.closeLine', ICON.pathClose, t('shape.path.close.hint')),
       ]);

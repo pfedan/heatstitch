@@ -52,6 +52,18 @@ describe('several nodes of an outline', () => {
     expect(t.selectLoopAt(20, 20, 4)).toBe(false);
   });
 
+  it('Auswahl umkehren selects the other nodes of the paths in use, or all when none is selected', () => {
+    const { t } = tool(ring());
+    expect(t.invertSelection()).toBe(true);
+    expect(t.selCount).toBe(8);
+    t.clearSelection();
+    t.down(10, 10, 4, true);
+    t.up();
+    t.invertSelection();
+    // The other three nodes of the hole; the outer loop had none selected and stays out.
+    expect(t.sel).toEqual(nodesOf(t.form, 1).filter((r) => r.i !== 0));
+  });
+
   it('Shift+double-click adds a loop to the selection, on its line or on a hollow dot, and takes it out again', () => {
     vi.useFakeTimers();
     const { t } = tool(ring());
