@@ -123,4 +123,13 @@ describe('Zusammenfassen of lines', () => {
     expect(joined.paths).toHaveLength(1);
     expect(j.joined.closed).toBe(1);
   });
+
+  it('stays redwork when one of the lines was', async () => {
+    const { combineLines } = await import('../src/model/shapeOps');
+    const d = new Design('Rot');
+    d.line('M0 0 L10 0', THREADS.navy);
+    d.line('M20 0 L30 0', THREADS.navy, { redwork: true });
+    const c = combineLines(d.p, [0, 1], d.T)!;
+    expect(remembered(c.pattern, sewObjects(c.pattern)[c.index])!.line).toMatchObject({ redwork: true });
+  });
 });

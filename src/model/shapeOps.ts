@@ -348,7 +348,7 @@ export function gatherObjects(p: Pattern, which: number[], lead: number, trimMm:
 
 /**
  * The lines `which` (one after the other, in one thread) as one line with all their paths as they
- * are, sewn with the settings of the first. `touching`: how many pairs of ends lie within 0.5 mm,
+ * are, sewn with the settings of the first (as redwork when one of them was). `touching`: how many pairs of ends lie within 0.5 mm,
  * which joinTouchingEnds would join (offered, never done unasked). Null when they are not all such
  * lines or nothing could be sewn.
  */
@@ -362,7 +362,10 @@ export function combineLines(p: Pattern, which: number[], trimMm: number): { pat
   const all: Form = { paths: forms.flatMap((f) => f!.paths) };
   const j = joinOpenPaths(all, false);
   const touching = j ? j.joints.length + j.closed : 0;
-  const r = resewLine(p, sel[0], all, lineSettings(p, objs[sel[0]], kinds), trimMm);
+  // Sewn as redwork when one of them was: their paths stay one line in one go where they touch.
+  const st = lineSettings(p, objs[sel[0]], kinds);
+  const redwork = st.type === 'run' && sel.some((o) => lineSettings(p, objs[o], kinds).redwork);
+  const r = resewLine(p, sel[0], all, redwork ? { ...st, redwork: true } : st, trimMm);
   const rest = r && deleteObjects(r.pattern, sel.slice(1), trimMm);
   if (!rest) return null;
   // Its shadow and echo copies in threads of their own follow the new paths. The parts of the
