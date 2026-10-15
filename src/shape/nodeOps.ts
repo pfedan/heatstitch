@@ -97,6 +97,34 @@ export function removeSegments(f: Form, sel: readonly NodeRef[]): Form | null {
   return gone && paths.length ? { ...f, paths } : null;
 }
 
+/**
+ * The pieces between two selected neighbouring nodes made straight (Stück gerade, Inkscape "Make
+ * selected segments lines"): their handles drawn back onto the nodes. A node with a straight piece on
+ * one side is a corner then. Null when no such piece is curved.
+ */
+export function straightenSegments(f: Form, sel: readonly NodeRef[]): Form | null {
+  const chosen = byPath(sel);
+  let changed = 0;
+  const paths = f.paths.map((p, k) => {
+    const on = chosen.get(k);
+    const n = p.nodes.length;
+    if (!on) return p;
+    const nodes = p.nodes.map((nd) => ({ ...nd }));
+    for (let s = 0; s < segments(p); s++) {
+      const e = (s + 1) % n;
+      if (!on.has(s) || !on.has(e)) continue;
+      const [l, r] = [nodes[s], nodes[e]];
+      if (l.b[0] === l.p[0] && l.b[1] === l.p[1] && r.a[0] === r.p[0] && r.a[1] === r.p[1]) continue;
+      l.b = l.p;
+      r.a = r.p;
+      l.smooth = r.smooth = false;
+      changed++;
+    }
+    return changed ? { ...p, nodes } : p;
+  });
+  return changed ? { ...f, paths } : null;
+}
+
 /** Points along curves `cs`, about `step` mm apart, the first point once. */
 function sampleCurves(cs: [Pt, Pt, Pt, Pt][], step = 0.05): Pt[] {
   const out: Pt[] = [cs[0][0]];

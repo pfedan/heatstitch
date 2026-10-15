@@ -225,6 +225,35 @@
   padding: 0 6px;
 }
 
+.tool-options .opt-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 4px;
+  white-space: nowrap;
+}
+
+.tool-options .opt-num {
+  width: 52px;
+  height: 26px;
+  padding: 0 4px 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.tool-options .opt-num:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.tool-options .opt-unit {
+  color: var(--muted);
+}
+
 .tool-options .opt-sep {
   width: 1px;
   height: 18px;
@@ -276,6 +305,13 @@
 .tool-options button.opt svg .node {
   fill: currentColor;
   stroke: none;
+}
+
+/* A filled area in an icon (Lücke füllen): the shape outlines stay in front of it. */
+.tool-options button.opt svg .area {
+  fill: currentColor;
+  stroke: none;
+  opacity: 0.35;
 }
 
 .tool-options button.opt:not(:disabled):hover {

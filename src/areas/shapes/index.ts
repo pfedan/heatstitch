@@ -32,6 +32,7 @@ export interface ShapesAreaApp {
   readonly objectName: (q: Sequence, i: number, p?: Pattern) => string;
   readonly drawTool: DrawTool;
   readonly setDrawing: (kind: DrawKind | null) => void;
+  readonly setGapMode: (mode: 'closed' | 'hull' | 'wrap') => void;
   readonly measure: MeasureTool;
   readonly shapeTool: ShapeTool;
   readonly enterShape: (o: number, fit: boolean) => void;
@@ -74,6 +75,7 @@ const ICON = {
   // A gap in a curve between two nodes, a cross over it.
   removeSegment: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 15.5C3.8 11 5 9 6.6 8.4" /><path d="M13.4 8.4C15 9 16.2 11 17.5 15.5" /><rect x="5.4" y="6.8" width="3.2" height="3.2" rx=".5" class="node" /><rect x="11.4" y="6.8" width="3.2" height="3.2" rx=".5" class="node" /><path d="M8.6 2.6l2.8 2.8M11.4 2.6 8.6 5.4" /></svg>',
   // Two nodes drawn into one.
+  straighten: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 9.5C6.5 4 13.5 4 15 9.5" stroke-dasharray="1.6 1.8" /><path d="M3.5 14h13" /><rect x="2" y="12.4" width="3.2" height="3.2" rx=".5" class="node" /><rect x="14.8" y="12.4" width="3.2" height="3.2" rx=".5" class="node" /></svg>',
   merge: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 16C4 11.5 6 9.4 8.3 8.9" /><path d="M11.7 8.9C14 9.4 16 11.5 17.5 16" /><rect x="8.3" y="7.2" width="3.4" height="3.4" rx=".5" class="node" /><path d="M3.5 3.5l3.5 3M16.5 3.5l-3.5 3" /></svg>',
   // A loop with all its nodes.
   selectPath: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4c4 0 6 2.6 6 6s-2.4 6-6 6-6-2.6-6-6 2-6 6-6z" /><rect x="8.4" y="2.4" width="3.2" height="3.2" rx=".5" class="node" /><rect x="14.4" y="8.4" width="3.2" height="3.2" rx=".5" class="node" /><rect x="8.4" y="14.4" width="3.2" height="3.2" rx=".5" class="node" /><rect x="2.4" y="8.4" width="3.2" height="3.2" rx=".5" class="node" /></svg>',
@@ -82,6 +84,12 @@ const ICON = {
   snap: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4.5 3.5H8v6a2 2 0 0 0 4 0v-6h3.5v6a5.5 5.5 0 0 1-11 0z" /><path d="M4.5 6.5H8M12 6.5h3.5" /></svg>',
   back: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 15l4-7 3.5 4" /><rect x="1.8" y="13.8" width="2.4" height="2.4" rx=".4" class="node" /><rect x="5.8" y="6.8" width="2.4" height="2.4" rx=".4" class="node" /><path d="M17.5 12h-5M14.5 9.5 12 12l2.5 2.5" /></svg>',
   cancel: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5 5 15" /></svg>',
+  // Lücke füllen: the hole of a frame filled.
+  gapClosed: '<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2.8" y="2.8" width="14.4" height="14.4" rx="2" /><rect x="7" y="7" width="6" height="6" rx=".8" class="area" /><rect x="7" y="7" width="6" height="6" rx=".8" /></svg>',
+  // The bay of a C filled up to a straight, dashed edge.
+  gapHull: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M17 3H3v14h14v-4.5H7.5v-5H17z" /><rect x="7.5" y="7.5" width="9.5" height="5" class="area" /><path d="M17 7.5v5" stroke-dasharray="1.2 1.4" /></svg>',
+  // Two shapes on the hull around them.
+  gapWrap: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M1.1 6.5A4.9 4.9 0 0 1 8.5 2.3l10.1 6.1v10.2H8.4L2.1 9.5a4.9 4.9 0 0 1-1-3z" class="area" /><circle cx="6" cy="6.5" r="3.3" /><rect x="10" y="10" width="7" height="7" rx=".7" /></svg>',
 };
 const SNAP_KEY = `${STORAGE_NS}.shapes.snap`;
 
@@ -127,6 +135,7 @@ export function initShapes(app: ShapesAreaApp): void {
     ['ellipse', 'shapes.tool.ellipse', 'O'],
     ['pen', 'shapes.tool.pen', 'B'],
     ['free', 'shapes.tool.free', 'P'],
+    ['gap', 'shapes.tool.gap', 'Q'],
   ];
   for (const [kind, label, key] of TOOLS) {
     command({
@@ -159,6 +168,10 @@ export function initShapes(app: ShapesAreaApp): void {
     when: () => flow() && !ui.letterMode && !app.editor.active && (app.drawTool.kind === 'cut' || fillSelected()),
     run: () => app.setDrawing(app.drawTool.kind === 'cut' ? null : 'cut'),
   });
+  // Flächen-Werkzeug: up to shapes all round, or to their convex hull (segment buttons in its bar).
+  command({ id: 'draw.gap.closed', label: 'shapes.gap.closed', group: DRAW, when: () => app.drawTool.kind === 'gap', run: () => (app.setGapMode('closed'), refresh()) });
+  command({ id: 'draw.gap.hull', label: 'shapes.gap.hull', group: DRAW, when: () => app.drawTool.kind === 'gap', run: () => (app.setGapMode('hull'), refresh()) });
+  command({ id: 'draw.gap.wrap', label: 'shapes.gap.wrap', group: DRAW, when: () => app.drawTool.kind === 'gap', run: () => (app.setGapMode('wrap'), refresh()) });
   command({
     id: 'draw.square',
     label: 'shapes.cmd.square',
@@ -335,6 +348,9 @@ export function initShapes(app: ShapesAreaApp): void {
       app.shapeTool.breakSelected();
     },
   });
+  command({ id: 'shape.straighten', label: 'shape.straighten', group: SHAPE, when: () => shaping() && app.shapeTool.canStraighten, run: () => void app.shapeTool.straighten() });
+  // Only in the command search, as in Inkscape ("!"); no button.
+  command({ id: 'shape.invert', label: 'shape.invert', group: SHAPE, when: () => shaping() && app.shapeTool.count > 0, run: () => void (app.shapeTool.invertSelection() && app.redraw()) });
   command({ id: 'shape.removeSegment', label: 'shape.removeSegment', group: SHAPE, when: () => shaping() && app.shapeTool.canRemoveSegment, run: () => void app.shapeTool.removeSegment() });
   command({ id: 'shape.merge', label: 'shape.merge', group: SHAPE, when: () => shaping() && app.shapeTool.selCount >= 2, run: () => void (app.shapeTool.mergeSelected() || toast(t('shape.merge.none'))) });
   command({ id: 'shape.selectPath', label: 'shape.selectPath', group: SHAPE, when: () => shaping() && app.shapeTool.partlySelected, run: () => void (app.shapeTool.selectWholePaths() && app.redraw()) });
@@ -387,6 +403,7 @@ export function initShapes(app: ShapesAreaApp): void {
     'draw.ellipse': 'shapes.tool.ellipse.hint',
     'draw.pen': 'shapes.tool.pen.hint',
     'draw.free': 'shapes.tool.free.hint',
+    'draw.gap': 'shapes.tool.gap.hint',
     'draw.cut': 'shapes.tool.cut.hint',
     'lettering.new': 'shapes.tool.text.hint',
   };
@@ -486,8 +503,11 @@ export function initShapes(app: ShapesAreaApp): void {
     | { kind: 'title'; text: string; title?: string }
     | { kind: 'hint'; text: string }
     // icon alone, or with `words` the icon and the text
-    | { kind: 'cmd'; id: string; text?: string; toggle?: boolean; on?: boolean; primary?: boolean; icon?: string; tip?: string; words?: boolean }
+    // `seg`: one of a set of choices (segment buttons): pressed shows which, without a check box
+    | { kind: 'cmd'; id: string; text?: string; toggle?: boolean; on?: boolean; primary?: boolean; icon?: string; tip?: string; words?: boolean; seg?: boolean }
     | { kind: 'menu'; menu: 'order' | 'more' }
+    // a number field with its label and unit; `set` takes each new value
+    | { kind: 'num'; label: string; title: string; value: number; min: number; max: number; step: number; unit: string; set: (v: number) => void }
     | { kind: 'sep' };
 
   function barItems(): Item[] {
@@ -529,6 +549,30 @@ export function initShapes(app: ShapesAreaApp): void {
           : ([{ kind: 'hint', text: t('shapes.opt.cut') }, { kind: 'sep' }, { kind: 'cmd', id: 'tool.select', text: t('object.editDone'), primary: true }] as Item[])),
       ];
     }
+    if (d.kind === 'gap') {
+      return [
+        { kind: 'title', text: t('shapes.tool.gap'), title: t('shapes.tool.gap.hint') },
+        { kind: 'cmd', id: 'draw.gap.closed', text: t('shapes.gap.closed'), toggle: true, seg: true, on: d.gapMode === 'closed', tip: t('shapes.gap.closed.hint'), icon: ICON.gapClosed, words: true },
+        { kind: 'cmd', id: 'draw.gap.hull', text: t('shapes.gap.hull'), toggle: true, seg: true, on: d.gapMode === 'hull', tip: t('shapes.gap.hull.hint'), icon: ICON.gapHull, words: true },
+        { kind: 'cmd', id: 'draw.gap.wrap', text: t('shapes.gap.wrap'), toggle: true, seg: true, on: d.gapMode === 'wrap', tip: t('shapes.gap.wrap.hint'), icon: ICON.gapWrap, words: true },
+        {
+          kind: 'num',
+          label: t('shapes.gap.distance'),
+          title: t('shapes.gap.distance.hint'),
+          value: d.gapMm,
+          min: 0,
+          max: 10,
+          step: 0.5,
+          unit: 'mm',
+          set: (v) => {
+            d.gapMm = Math.max(0, Math.min(10, v));
+            d.preview = null;
+            app.redraw();
+          },
+        },
+        { kind: 'hint', text: t(d.gapNone === 'outside' ? 'shapes.gap.outside' : d.gapNone === 'covered' ? 'shapes.gap.covered' : d.gapNone === 'empty' ? 'shapes.gap.empty' : d.gapMode === 'wrap' ? 'shapes.gap.pickWrap' : 'shapes.gap.pick') },
+      ];
+    }
     if (d.kind === 'free') return [{ kind: 'title', text: t('shapes.tool.free'), title: t('draw.free.hint') }, { kind: 'hint', text: t('shapes.opt.free') }];
     if (ui.letterMode) return [{ kind: 'title', text: t('shapes.crumb.letters'), title: t('lettering.letters.how') }, { kind: 'hint', text: t('shapes.opt.letters') }, { kind: 'cmd', id: 'lettering.letters', text: t('lettering.letters.done') }];
     const s = app.shapeTool;
@@ -556,6 +600,7 @@ export function initShapes(app: ShapesAreaApp): void {
         cmd('shape.selectPath', ICON.selectPath, t('shape.selectPath.hint')),
         cmd('shape.break', ICON.split, t('shape.break.hint')),
         cmd('shape.removeSegment', ICON.removeSegment, t('shape.removeSegment.hint')),
+        cmd('shape.straighten', ICON.straighten, t('shape.straighten.hint')),
         cmd('shape.join', ICON.join, t('shape.join.hint')),
         cmd('shape.closeLine', ICON.pathClose, t('shape.path.close.hint')),
       ]);
@@ -628,7 +673,8 @@ export function initShapes(app: ShapesAreaApp): void {
 
   function renderBar(): void {
     const items = barItems();
-    const key = JSON.stringify(items.map((i) => (i.kind === 'cmd' ? [i.id, i.text, i.on, i.icon, canRun(i.id)] : i)));
+    // A number field is left out of the key: typing in it must not build the bar anew.
+    const key = JSON.stringify(items.map((i) => (i.kind === 'cmd' ? [i.id, i.text, i.on, i.icon, canRun(i.id)] : i.kind === 'num' ? i.label : i)));
     if (key === barKey) return;
     barKey = key;
     bar.hidden = !items.length;
@@ -640,6 +686,22 @@ export function initShapes(app: ShapesAreaApp): void {
         if (i.kind === 'title') return h('span', { class: 'opt-title', title: i.title ?? '' }, i.text);
         if (i.kind === 'hint') return h('span', { class: 'opt-hint' }, i.text);
         if (i.kind === 'sep') return h('span', { class: 'opt-sep', 'aria-hidden': 'true' });
+        if (i.kind === 'num') {
+          const input: HTMLInputElement = h('input', {
+            type: 'number',
+            class: 'opt-num',
+            min: i.min,
+            max: i.max,
+            step: i.step,
+            value: String(i.value),
+            'aria-label': i.label,
+            oninput: () => {
+              const v = parseFloat(input.value.replace(',', '.'));
+              if (Number.isFinite(v)) i.set(v);
+            },
+          });
+          return h('label', { class: 'opt-field', title: i.title }, h('span', {}, i.label), input, h('span', { class: 'opt-unit' }, i.unit));
+        }
         if (i.kind === 'menu') {
           const label = t(i.menu === 'order' ? 'objects.orderMenu' : 'objects.more');
           const m: HTMLButtonElement = h(
@@ -665,7 +727,7 @@ export function initShapes(app: ShapesAreaApp): void {
             'aria-label': i.icon ? (i.words ? t(c.label) : (i.text ?? t(c.label))) : undefined,
             onclick: () => runCommand(i.id),
           },
-          i.toggle && !i.icon ? h('span', { class: 'opt-check', 'aria-hidden': 'true' }) : null,
+          i.toggle && !i.icon && !i.seg ? h('span', { class: 'opt-check', 'aria-hidden': 'true' }) : null,
         );
         if (i.icon) b.insertAdjacentHTML('beforeend', i.icon);
         if (i.words) b.append(h('span', { class: 'opt-words' }, i.text ?? t(c.label)));

@@ -1,6 +1,6 @@
 import { simplifyMore } from '../shape/simplify';
 import { joinEnd, joinOpenPaths, takeOutNodes, type Joined } from '../shape/join';
-import { breakAtNodes, deleteNodesKeepingShape, mergeNodes, removeSegments } from '../shape/nodeOps';
+import { breakAtNodes, deleteNodesKeepingShape, mergeNodes, removeSegments, straightenSegments } from '../shape/nodeOps';
 import { withCrossingNodes } from '../shape/ops';
 import { bandGrip, draggedWidth } from '../shape/band';
 import type { Pt } from '../digitize/skeleton';
@@ -672,6 +672,37 @@ export class ShapeTool implements ShapeView {
     this.form = f;
     this.selected = null;
     this.hooks.change(this.form);
+    return true;
+  }
+
+  /** Whether a curved piece lies between two selected neighbours (Stück gerade can do something). */
+  get canStraighten(): boolean {
+    return this.sel.length >= 2 && straightenSegments(this.form, this.sel) !== null;
+  }
+
+  /** The pieces between selected neighbours made straight (Stück gerade); the selection stays. */
+  straighten(): boolean {
+    this.flush();
+    const f = straightenSegments(this.form, this.sel);
+    if (!f) return false;
+    this.form = f;
+    this.hooks.change(this.form);
+    return true;
+  }
+
+  /**
+   * Auswahl umkehren (Inkscape "!"): within the paths that have selected nodes, the others selected
+   * instead; with nothing selected, all. False when nothing changes.
+   */
+  invertSelection(): boolean {
+    this.flush();
+    if (!this.sel.length) {
+      if (!this.count) return false;
+      this.selectAll();
+      return true;
+    }
+    const paths = [...new Set(this.sel.map((s) => s.path))].sort((a, b) => a - b);
+    this.sel = paths.flatMap((k) => nodesOf(this.form, k).filter((r) => !this.isSelected(r.path, r.i)));
     return true;
   }
 

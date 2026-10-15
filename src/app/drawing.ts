@@ -11,7 +11,7 @@ import type { Settings } from '../settings';
 import type { ShapeTool } from '../ui/shapeTool';
 import type { ThreadColor, Pattern } from '../model/pattern';
 import type { Pt } from '../digitize/skeleton';
-import { DrawTool, type DrawKind } from '../ui/drawTool';
+import { DrawTool, type DrawKind, type GapLook } from '../ui/drawTool';
 import { FrameTool, type ContourGrip, type SnapTargets } from '../ui/frameTool';
 import { digitizeDefaults, type Digitized, digitizeShapes } from '../digitize/digitize';
 import { nearestThread } from '../image/prepare';
@@ -23,7 +23,9 @@ import { isRigid, stitchesBefore, transformObject } from '../model/transform';
 import { LiveResew, type LiveResult } from '../resew/client';
 import { syncBorders } from '../model/border';
 import { canSplit, splitFill } from '../model/splitFill';
-import { loadOps, opsReady } from '../shape/ops';
+import { gapFinder, loadOps, opsReady, type GapMode, type GapResult } from '../shape/ops';
+import { gapPlace, obstaclesOf } from '../model/gapFill';
+import type { Obstacle } from '../shape/ops';
 import { t, formatNumber } from '../i18n';
 import { type NewShape, addShape } from '../model/addShape';
 import { ui } from './state';
@@ -79,7 +81,55 @@ export function bindDrawing(app: DrawingApp) {
   /** A thread for the first shape of a new design: a Brother orange, clear on dark and light fabric. */
   const FIRST_THREAD: ThreadColor = nearestThread(rgbToLab(240, 140, 40)).thread;
 
-  const drawTool = new DrawTool({ done: (s) => void drawn(s), cut: (line) => cutSelected(line), redraw: app.redraw });
+  const drawTool = new DrawTool({ done: (s) => void drawn(s), cut: (line) => cutSelected(line), gapAt: (x, y) => gapLook(x, y), gap: (look) => gapMade(look), redraw: app.redraw });
+
+  // Flächen-Werkzeug: the shapes shown, and the free parts between them, worked out once per design,
+  // shown blocks, gap and mode; the pointer only looks up the part it is in.
+  let obstacleCache: { p: Pattern; hidden: ReadonlySet<number>; list: Obstacle[] } | null = null;
+  let finderCache: { obstacles: Obstacle[]; d: number; mode: GapMode; at: (q: Pt) => GapResult } | null = null;
+  function shownObstacles(p: Pattern): Obstacle[] {
+    if (obstacleCache?.p !== p || obstacleCache.hidden !== ui.hiddenBlocks) {
+      const objs = app.seq(p).objects.filter((o) => !ui.hiddenBlocks.has(o.block));
+      obstacleCache = { p, hidden: ui.hiddenBlocks, list: obstaclesOf(p, objs) };
+    }
+    return obstacleCache.list;
+  }
+  function gapLook(x: number, y: number): GapLook | null {
+    const p = app.files.active?.pattern;
+    if (!p) return null;
+    if (!opsReady()) {
+      void loadOps().then(() => drawTool.lookAt(x, y) && app.redraw());
+      return null;
+    }
+    const obstacles = shownObstacles(p);
+    const d = drawTool.gapMm;
+    const mode = drawTool.gapMode;
+    if (finderCache?.obstacles !== obstacles || finderCache.d !== d || finderCache.mode !== mode) finderCache = { obstacles, d, mode, at: gapFinder(obstacles, d, mode) };
+    return finderCache.at([x, y]);
+  }
+  /** A click of the Flächen-Werkzeug: the area there a new fill, sewn before the shapes around it (or, wrapped, under it). */
+  function gapMade(look: GapLook): void {
+    if ('none' in look) {
+      if (look.none === 'outside' && drawTool.gapMode === 'closed')
+        return app.layers.say({ text: t('shapes.gap.outside'), action: { label: t('shapes.gap.hull'), run: () => setGapMode('hull') } });
+      return app.layers.say(t(look.none === 'outside' ? 'shapes.gap.outside' : look.none === 'empty' ? 'shapes.gap.empty' : 'shapes.gap.covered'), true);
+    }
+    const p = app.files.active?.pattern;
+    if (!p) return;
+    const obstacles = shownObstacles(p);
+    const shown = app.seq(p).objects.filter((o) => !ui.hiddenBlocks.has(o.block));
+    const k = gapPlace(look.form, obstacles, drawTool.gapMm + 0.5);
+    // Before that object in the whole list (hidden blocks count too).
+    const after = k === null ? null : shown[k].index - 1;
+    void drawn({ form: look.form, kind: 'fill' }, { after, keepTool: true, done: drawTool.gapMode === 'wrap' ? 'draw.done.wrap' : 'draw.done.gap', fillOnly: true });
+  }
+  /** Switches the Flächen-Werkzeug between shapes all round, the convex hull, and the hull as a shape. */
+  function setGapMode(mode: GapMode): void {
+    drawTool.gapMode = mode;
+    drawTool.preview = null;
+    drawTool.gapNone = null;
+    app.redraw();
+  }
 
   /** Picks a drawing tool, or none (the pointer). Drawing belongs to the level Form. The tool rail runs it (src/areas/shapes). */
   function setDrawing(kind: DrawKind | null): void {
@@ -155,10 +205,11 @@ export function bindDrawing(app: DrawingApp) {
     return d.objects.length ? d : null;
   }
 
-  async function drawn(shape: NewShape): Promise<void> {
+  async function drawn(shape: NewShape, how: { after?: number | null; keepTool?: boolean; done?: 'draw.done.gap' | 'draw.done.wrap'; fillOnly?: boolean } = {}): Promise<void> {
     const f = app.files.active;
     const p = f?.pattern ?? null;
-    const options = { ...digitizeDefaults(app.settings.profile), trimMm: app.settings.trimMm };
+    // A filled gap is a background: a fill, never a satin, however narrow it is.
+    const options = { ...digitizeDefaults(app.settings.profile), trimMm: app.settings.trimMm, ...(how.fillOnly ? { satinMin: 0, satinMax: 0 } : {}) };
     if (!f || !p) {
       // Nothing open yet: the shape starts a new design.
       const d = firstShape(shape, options);
@@ -173,8 +224,10 @@ export function bindDrawing(app: DrawingApp) {
     }
     const q = app.seq(p);
     const sel = [...ui.selectedObjects].sort((a, b) => a - b);
-    const after = sel.length ? sel[sel.length - 1] : q.objects.length ? q.objects.length - 1 : null;
-    const color = after !== null ? q.objects[after].color : FIRST_THREAD;
+    const last = sel.length ? sel[sel.length - 1] : q.objects.length ? q.objects.length - 1 : null;
+    const after = how.after !== undefined ? how.after : last;
+    // The thread of the selected object (or the last one); a gap's fill takes it too.
+    const color = last !== null ? q.objects[last].color : FIRST_THREAD;
     const r = addShape(p, shape, color, after, options);
     if (!r) return app.layers.say(t('draw.failed'), true);
     app.applyEdit(r.pattern);
@@ -182,9 +235,10 @@ export function bindDrawing(app: DrawingApp) {
     const nq = app.seq(r.pattern);
     const mine = nq.objects.findIndex((o) => stitchesBefore(r.pattern, o.first) === r.start);
     app.followKnockouts();
-    setDrawing(null);
+    // The Flächen-Werkzeug stays on for the next gap; the new fill is selected all the same.
+    if (!how.keepTool) setDrawing(null);
     if (mine >= 0) app.selectObjects([mine], false);
-    app.layers.say(t(shape.kind === 'fill' ? 'draw.done.fill' : 'draw.done.line'));
+    app.layers.say(t(how.done ?? (shape.kind === 'fill' ? 'draw.done.fill' : 'draw.done.line')));
     app.redraw();
   }
 
@@ -381,5 +435,5 @@ export function bindDrawing(app: DrawingApp) {
     return true;
   }
 
-  return { commitTransform, drawTool, frameObjects, frameTool, knockoutObjects, setDrawing, syncFrame, updateOverlapCard };
+  return { commitTransform, drawTool, frameObjects, frameTool, knockoutObjects, setDrawing, setGapMode, syncFrame, updateOverlapCard };
 }

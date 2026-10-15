@@ -1,10 +1,14 @@
 import type { Pt } from '../digitize/skeleton';
 import type { NewShape } from '../model/addShape';
+import type { GapMode } from '../shape/ops';
 import type { Form, Node } from '../shape/path';
 import { ellipsePath, parsePath, rectPath } from '../shape/svgPath';
 import { fitCubic } from '../shape/vectorize';
 
-export type DrawKind = 'rect' | 'ellipse' | 'pen' | 'free' | 'cut';
+export type DrawKind = 'rect' | 'ellipse' | 'pen' | 'free' | 'cut' | 'gap';
+
+/** What a click of the Flächen-Werkzeug would make at a point: the new area, or why there is none. */
+export type GapLook = { form: Form } | { none: 'outside' | 'covered' | 'empty' };
 
 /** A click this close to the first node closes the pen's path (CSS pixels). */
 const CLOSE_PX = 10;
@@ -22,6 +26,10 @@ export interface DrawHooks {
   done: (shape: NewShape) => void;
   /** A cut is drawn (tool Zerteilen): split the selected fills along it (world mm). */
   cut: (line: Pt[]) => void;
+  /** Flächen-Werkzeug: the area a click at (x, y) would make, or null while it cannot be told yet. */
+  gapAt: (x: number, y: number) => GapLook | null;
+  /** Flächen-Werkzeug: a click at (x, y) with what it found there. */
+  gap: (look: GapLook) => void;
   redraw: () => void;
 }
 
@@ -44,6 +52,12 @@ export class DrawTool {
   size: [number, number] | null = null;
   /** The pen's first node is under the pointer: a click closes the area. */
   closing = false;
+  /** Flächen-Werkzeug: up to shapes all round, to the convex hull of them, or the hull around the shapes in the area (see gapAt in shape/ops). */
+  gapMode: GapMode = 'closed';
+  /** Flächen-Werkzeug: the gap kept to the shapes around (mm, 0 to 10). */
+  gapMm = 0;
+  /** Flächen-Werkzeug: why the pointer's place gives no area (shown in the bar), or null. */
+  gapNone: 'outside' | 'covered' | 'empty' | null = null;
   /** Options of the tool bar, as if Shift (a square or circle) or Alt (from the middle) were held. */
   square = false;
   fromCenter = false;
@@ -83,6 +97,7 @@ export class DrawTool {
     this.size = null;
     this.closing = false;
     this.moved = false;
+    this.gapNone = null;
   }
 
   /** A second finger came: the press was for zooming, not drawing. */
@@ -109,6 +124,7 @@ export class DrawTool {
 
   /** The pointer moved without a press: the pen shows where the next segment would go. */
   hoverAt(x: number, y: number, scale: number, shift = false): boolean {
+    if (this.kind === 'gap') return this.lookAt(x, y);
     if ((this.kind !== 'pen' && this.kind !== 'cut') || this.dragging || !this.nodes.length) return false;
     if (this.kind === 'cut') {
       this.cursor = shift ? snapped(this.nodes[this.nodes.length - 1].p, [x, y]) : [x, y];
@@ -118,6 +134,18 @@ export class DrawTool {
     this.closing = this.closesAt(x, y, scale);
     this.cursor = this.closing ? this.nodes[0].p : [x, y];
     this.update();
+    return true;
+  }
+
+  /** Flächen-Werkzeug: the area under the pointer previewed; whether anything changed. */
+  lookAt(x: number, y: number): boolean {
+    if (this.kind !== 'gap' || this.dragging) return false;
+    const look = this.hooks.gapAt(x, y);
+    const preview = look && 'form' in look ? look.form : null;
+    const none = look && 'none' in look ? look.none : null;
+    if (preview === this.preview && none === this.gapNone) return false;
+    this.preview = preview;
+    this.gapNone = none;
     return true;
   }
 
@@ -149,7 +177,7 @@ export class DrawTool {
       this.update();
       return;
     }
-    if (this.kind === 'cut') this.moved = false;
+    if (this.kind === 'cut' || this.kind === 'gap') this.moved = false;
     if (this.kind === 'pen') {
       if (this.closesAt(x, y, scale)) {
         this.dragging = false;
@@ -181,6 +209,10 @@ export class DrawTool {
       return true;
     }
     if (!this.from) return true;
+    if (this.kind === 'gap') {
+      if (Math.hypot(x - this.from[0], y - this.from[1]) * this.scale >= CLICK_PX) this.moved = true;
+      return true;
+    }
     if (this.kind === 'cut') {
       if (this.nodes.length) return true;
       if (!this.moved && Math.hypot(x - this.from[0], y - this.from[1]) * this.scale < CLICK_PX) return true;
@@ -215,6 +247,16 @@ export class DrawTool {
     const from = this.from;
     this.from = null;
     if (!from) return;
+    if (this.kind === 'gap') {
+      this.free = [];
+      // A click (not a drag) makes the area there, or says why there is none.
+      const look = this.moved ? null : this.hooks.gapAt(from[0], from[1]);
+      this.moved = false;
+      if (look) this.hooks.gap(look);
+      this.preview = null;
+      this.gapNone = null;
+      return this.hooks.redraw();
+    }
     if (this.kind === 'cut') {
       const pts = this.free;
       this.free = [];
