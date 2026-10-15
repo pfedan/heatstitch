@@ -641,6 +641,11 @@ export class ShapeTool implements ShapeView {
     });
   }
 
+  /** How many cuts Auftrennen would make at the selected nodes. */
+  get breakCuts(): number {
+    return breakAtNodes(this.form, this.sel)?.cuts ?? 0;
+  }
+
   /** The paths cut at the selected nodes, the outline unchanged (see breakAtNodes); how many cuts. */
   breakSelected(): number {
     this.flush();

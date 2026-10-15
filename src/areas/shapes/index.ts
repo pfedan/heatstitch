@@ -328,8 +328,11 @@ export function initShapes(app: ShapesAreaApp): void {
     keys: ['Mod+Shift+J'],
     when: () => shaping() && app.shapeTool.canBreak,
     run: () => {
-      const n = app.shapeTool.breakSelected();
-      if (n) toast(n === 1 ? t('shape.broken.one') : t('shape.broken', { n: formatNumber(n) }));
+      // Said before the cut: a notice the cut brings (a fill now sewn as a line) comes after and stays.
+      const n = app.shapeTool.breakCuts;
+      if (!n) return;
+      toast(n === 1 ? t('shape.broken.one') : t('shape.broken', { n: formatNumber(n) }));
+      app.shapeTool.breakSelected();
     },
   });
   command({ id: 'shape.removeSegment', label: 'shape.removeSegment', group: SHAPE, when: () => shaping() && app.shapeTool.canRemoveSegment, run: () => void app.shapeTool.removeSegment() });
