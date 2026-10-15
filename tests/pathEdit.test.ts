@@ -135,3 +135,45 @@ describe('formParts (In Teile trennen)', () => {
     expect(formParts(parsePath('M0 0 L10 0 M0 2.5 L10 2.5', ID), false)).toHaveLength(2);
   });
 });
+
+describe('splitByForm (In Teile trennen on a known form)', () => {
+  it('splits an area into its islands, each with its hole, with the same settings', async () => {
+    const { sewObjects } = await import('../src/model/objects');
+    const { remembered } = await import('../src/model/restitch');
+    const { splitByForm } = await import('../src/model/shapeOps');
+    const { Design, THREADS } = await import('./helpers/demoProject');
+    const d = new Design('Inseln');
+    d.fill('M0 0 H30 V30 H0 Z M10 10 H20 V20 H10 Z M40 0 H60 V30 H40 Z M70 0 H80 V10 H70 Z', THREADS.yellow, { angle: 30 });
+    const r = splitByForm(d.p, 0, d.T)!;
+    expect(r.parts).toEqual([0, 1, 2]);
+    const objs = sewObjects(r.pattern);
+    expect(objs).toHaveLength(3);
+    const geos = objs.map((o) => remembered(r.pattern, o)!);
+    expect(geos.map((m) => m.geo!.paths.length)).toEqual([2, 1, 1]);
+    expect(geos.every((m) => m.fill!.angle === 30)).toBe(true);
+    expect(new Set(objs.map((o) => o.color)).size).toBe(1);
+    expect(formArea(geos[0].geo!) + formArea(geos[1].geo!) + formArea(geos[2].geo!)).toBeCloseTo(900 - 100 + 600 + 100, 3);
+  });
+
+  it('splits a redwork drawing into its connected figures', async () => {
+    const { sewObjects } = await import('../src/model/objects');
+    const { remembered } = await import('../src/model/restitch');
+    const { splitByForm } = await import('../src/model/shapeOps');
+    const { Design, THREADS } = await import('./helpers/demoProject');
+    const d = new Design('Figuren');
+    d.line('M0 0 L10 0 M5 0 L5 10 M30 0 L40 0 M35 0 L35 10', THREADS.navy, { redwork: true });
+    const r = splitByForm(d.p, 0, d.T)!;
+    const objs = sewObjects(r.pattern);
+    expect(objs).toHaveLength(2);
+    expect(objs.map((o) => remembered(r.pattern, o)!.geo!.paths.length)).toEqual([2, 2]);
+    expect(objs.every((o) => remembered(r.pattern, o)!.line?.redwork)).toBe(true);
+  });
+
+  it('leaves a form of one part alone', async () => {
+    const { splitByForm } = await import('../src/model/shapeOps');
+    const { Design, THREADS } = await import('./helpers/demoProject');
+    const d = new Design('Eins');
+    d.fill('M0 0 H30 V30 H0 Z M10 10 H20 V20 H10 Z', THREADS.yellow);
+    expect(splitByForm(d.p, 0, d.T)).toBeNull();
+  });
+});

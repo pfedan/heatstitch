@@ -15,7 +15,8 @@ import { reshapeFill, reshapeObject, transformSewObject } from './reshape';
 import { stitchKinds } from './sequence';
 import { stitchesBefore } from './transform';
 import { autoReversible, ownSettings, reverseLines } from './reverse';
-import { guessArea, guessLine, lineGeoOf, sewnAlong } from './geo';
+import { geoOf, geoUse, guessArea, guessLine, lineGeoOf, sewnAlong } from './geo';
+import { formParts } from '../shape/parts';
 
 /**
  * Working with objects as shapes: deleting, duplicating, mirroring, and combining fills by their
@@ -552,4 +553,44 @@ export function takeOutShape(p: Pattern, o: number, keep: Form, out: Form, trimM
   const part = d.copies[0] + sewObjects(kept).length - sewObjects(d.pattern).length;
   const cur = sew(kept, part, out);
   return cur && sewObjects(cur)[part] ? { pattern: cur, part } : null;
+}
+
+/**
+ * The parts object `o`'s known form falls into (see formParts): each island of an area with its
+ * holes, each connected group of a line drawing. Empty when its form is guessed from stitches, or
+ * it is an appliqué, a lettering, hand stitches or part of another object (those split by sections).
+ */
+export function partsOfForm(p: Pattern, o: SewObject): Form[] {
+  const m = remembered(p, o);
+  const geo = geoOf(m);
+  if (!m || !geo || m.read || m.free || m.applique || m.lettering || m.outline || m.blendOf || partOf(m)) return [];
+  const parts = formParts(geo, geoUse(m) === 'area');
+  return parts.length > 1 ? parts : [];
+}
+
+/**
+ * Object `o` split into the parts of its form ("In Teile trennen" on a known form): each part an
+ * object of its own with the same settings and thread, sewn one after the other where `o` was (one
+ * takeOutShape after the other, so links are handled as for any duplicate). Gives the parts'
+ * indices; null when the form has no parts or one could not be sewn.
+ */
+export function splitByForm(p: Pattern, o: number, trimMm: number): { pattern: Pattern; parts: number[] } | null {
+  const obj = sewObjects(p)[o];
+  const parts = obj ? partsOfForm(p, obj) : [];
+  if (parts.length < 2) return null;
+  let cur = p;
+  let at = o;
+  const ids: number[] = [];
+  for (let k = 0; k + 1 < parts.length; k++) {
+    const rest: Form = { ...parts[k + 1], paths: parts.slice(k + 1).flatMap((f) => f.paths) };
+    const r = takeOutShape(cur, at, parts[k], rest, trimMm);
+    if (!r) return null;
+    ids.push(sewObjects(r.pattern)[at].id);
+    cur = r.pattern;
+    at = r.part;
+  }
+  ids.push(sewObjects(cur)[at].id);
+  const now = sewObjects(cur);
+  const found = ids.map((id) => now.findIndex((x) => x.id === id));
+  return found.some((i) => i < 0) ? null : { pattern: cur, parts: found };
 }
