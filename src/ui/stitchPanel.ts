@@ -1,5 +1,6 @@
 import { SATIN_SPLIT_MAX } from '../material/rules';
 import { formatNumber, onLangChange, t, type Key } from '../i18n';
+import { REDWORK_GAP } from '../digitize/redwork';
 import type { ObjectKind } from '../model/objects';
 import { CURVED_GRADIENT, DECO_DEFAULTS, isOpenPattern, OPEN_SIZE, OPEN_SIZE_RANGE, SATIN_SPLIT, UNDERLAYS, type BorderSettings, type DecoSettings, type FillPattern, type FringeSide, type FillSettings, type OpenPattern, type RunSettings, type SatinSettings, type SatinType, type Settings, type ShapeTrust, type Fixed } from '../model/restitch';
 import { fixText } from './fixText';
@@ -2143,7 +2144,9 @@ export class StitchPanel {
           set(st);
           this.render();
         });
-        out.look.push(red, bean, this.slider({ label: 'stitch.length', hint: 'stitch.runLength.hint', min: 1, max: 6, step: 0.1, get: () => st.length ?? BORDER_STITCH, set: (v) => change((s) => (s.length = v))(v), fmt: mm(1), auto: unset('length') }));
+        // How far apart paths may lie and still be sewn in one go: each gap a stitch there and back.
+        const gap = this.slider({ label: 'stitch.redworkGap', hint: 'stitch.redworkGap.hint', min: 0, max: 3, step: 0.1, get: () => st.redworkGap ?? REDWORK_GAP, set: (v) => change((s) => (s.redworkGap = v === REDWORK_GAP ? undefined : v))(v), fmt: (v) => (v ? `${formatNumber(v, 1)} mm` : t('stitch.redworkGap.off')), auto: unset('redworkGap') });
+        out.look.push(red, bean, gap, this.slider({ label: 'stitch.length', hint: 'stitch.runLength.hint', min: 1, max: 6, step: 0.1, get: () => st.length ?? BORDER_STITCH, set: (v) => change((s) => (s.length = v))(v), fmt: mm(1), auto: unset('length') }));
         return out;
       }
       if (red) out.look.push(red);
