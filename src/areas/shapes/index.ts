@@ -313,7 +313,7 @@ export function initShapes(app: ShapesAreaApp): void {
     run: () => {
       const j = app.shapeTool.join();
       if (j) sayJoined(j);
-      else toast(t('shape.join.none'));
+      else toast(t(app.shapeTool.selCount > 1 ? 'shape.join.noEnds' : 'shape.join.none'));
     },
   });
   command({ id: 'shape.split', label: 'shape.split', group: SHAPE, when: () => shaping() && app.shapeTool.canSplit, run: () => void app.shapeTool.splitHere() });

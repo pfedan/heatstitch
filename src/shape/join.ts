@@ -67,11 +67,12 @@ function closeIfMet(nodes: Node[], snap: number): boolean {
 /**
  * The open paths of `f` joined at their ends, nearest ends first (a greedy matching: each end is
  * used once, no chain is joined to itself). `all`: every open path becomes one, gaps bridged by
- * straight pieces; else only ends within `snap` join. Closed paths stay as they are; paths not
- * joined keep their nodes. Null when nothing joins.
+ * straight pieces; else only ends within `snap` join. `ends` ("path:0" for its first node, "path:1"
+ * for its last): only these ends join, as when several are selected. Closed paths stay as they are;
+ * paths not joined keep their nodes. Null when nothing joins.
  */
-export function joinOpenPaths(f: Form, all: boolean, snap = JOIN_SNAP_MM): Joined | null {
-  const idx = f.paths.flatMap((p, k) => (open(p) ? [k] : []));
+export function joinOpenPaths(f: Form, all: boolean, snap = JOIN_SNAP_MM, ends?: ReadonlySet<string>): Joined | null {
+  const idx = f.paths.flatMap((p, k) => (open(p) && (!ends || ends.has(`${k}:0`) || ends.has(`${k}:1`)) ? [k] : []));
   if (idx.length < 2) return null;
   const end = (k: number, e: 0 | 1): Pt => (e ? f.paths[k].nodes[f.paths[k].nodes.length - 1].p : f.paths[k].nodes[0].p);
   type Cand = { a: number; ea: 0 | 1; b: number; eb: 0 | 1; d: number };
@@ -80,6 +81,7 @@ export function joinOpenPaths(f: Form, all: boolean, snap = JOIN_SNAP_MM): Joine
     for (let j = i + 1; j < idx.length; j++)
       for (const ea of [0, 1] as const)
         for (const eb of [0, 1] as const) {
+          if (ends && (!ends.has(`${idx[i]}:${ea}`) || !ends.has(`${idx[j]}:${eb}`))) continue;
           const d = dist(end(idx[i], ea), end(idx[j], eb));
           if (all || d <= snap) cands.push({ a: idx[i], ea, b: idx[j], eb, d });
         }
@@ -137,7 +139,7 @@ export function joinOpenPaths(f: Form, all: boolean, snap = JOIN_SNAP_MM): Joine
   // In the place of the first path of each chain; the others of the chain go.
   const paths: Path[] = [];
   f.paths.forEach((p, k) => {
-    if (!open(p)) paths.push(p);
+    if (!idx.includes(k)) paths.push(p);
     else if (chains.has(k)) paths.push(chains.get(k)!);
   });
   return { form: { ...f, paths }, joints, closed };

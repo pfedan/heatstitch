@@ -91,3 +91,19 @@ describe('takeOutShape', () => {
     expect(objs[1].minX / 10).toBeGreaterThan(49);
   });
 });
+
+describe('Verbinden with nodes selected', () => {
+  it('joins only the selected ends, leaving the other open paths as they are', async () => {
+    const { joinOpenPaths } = await import('../src/shape/join');
+    const f = parsePath('M0 0 L10 0 M11 0 L20 0 M40 0 L50 0 M51 0 L60 0', ID);
+    const j = joinOpenPaths(f, true, undefined, new Set(['0:1', '1:0']))!;
+    expect(j.form.paths).toHaveLength(3);
+    expect(j.joints).toHaveLength(1);
+    expect(ends(j.form)).toEqual([
+      [[0, 0], [20, 0]],
+      [[40, 0], [50, 0]],
+      [[51, 0], [60, 0]],
+    ]);
+    expect(joinOpenPaths(f, true, undefined, new Set(['0:1']))).toBeNull();
+  });
+});
