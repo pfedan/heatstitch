@@ -54,9 +54,13 @@ export type ImageView = 'original' | 'prepared' | 'stitches';
  */
 export type ImageStyle = 'flat' | 'dynamic' | 'smart';
 export const IMAGE_STYLES: readonly ImageStyle[] = ['flat', 'dynamic', 'smart'];
-/** How the Bild assistant sews the shapes of an SVG: straight rows, or its lines as redwork. */
-export type SvgStyle = 'flat' | 'redwork';
-export const SVG_STYLES: readonly SvgStyle[] = ['flat', 'redwork'];
+/**
+ * How the Bild assistant sews the shapes of an SVG: straight rows, the technique that suits each
+ * area (Smart), or its lines as redwork. Rows that follow the picture (Dynamic) need structure in
+ * the picture, which the flat colors of an SVG do not have.
+ */
+export type SvgStyle = 'flat' | 'smart' | 'redwork';
+export const SVG_STYLES: readonly SvgStyle[] = ['flat', 'smart', 'redwork'];
 
 export interface ImageSettings {
   prepare: PrepareOptions;

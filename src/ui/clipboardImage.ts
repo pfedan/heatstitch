@@ -59,6 +59,18 @@ export function imageAddress(text: string): string | null {
   return /^https?:\/\/\S+$/i.test(s) ? s : null;
 }
 
+/** A name for a design out of a text from the source (a title, an alt text): one line, no characters files cannot have, at most 60 characters; '' when nothing is left. */
+export function nameOf(text: string | null | undefined): string {
+  const decoded = (text ?? '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+  return decoded.replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60).trim();
+}
+
+/** The title an SVG gives itself (its first `<title>`), as a name; '' when it has none. */
+export function svgTitle(svg: string): string {
+  const m = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(svg);
+  return nameOf(m?.[1]);
+}
+
 /** The last part of a web address as a file name ("rose.png"), or '' for a data URL. */
 export function addressName(url: string): string {
   if (url.startsWith('data:')) return '';
@@ -79,24 +91,33 @@ export async function clippedImage(data: ClipData, pasted: string): Promise<Clip
     const ext = EXT[b.type] ?? 'png';
     return new File([b], name ? (IMAGE_NAME.test(name) ? name : `${name}.${ext}`) : `${pasted}.${ext}`, { type: b.type });
   };
+  // A picture copied from a web page comes with its tag: what the page calls the picture (its alt
+  // text or title) names it better than its file does.
+  const tag = /<img\b[^>]*>/i.exec(data.html)?.[0];
+  const attr = (a: string) => {
+    const m = tag ? new RegExp(`\\s${a}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i').exec(tag) : null;
+    return m ? (m[1] ?? m[2] ?? m[3]) : null;
+  };
+  const said = nameOf(attr('alt')) || nameOf(attr('title'));
+
   const images = data.blobs.filter(isImage);
   const blob = images.find(isSvgBlob) ?? images[0];
   if (blob) {
-    // A screenshot comes as "image.png": it gets the name of a pasted picture.
-    const name = blob instanceof File && blob.name && !/^image\.\w+$/i.test(blob.name) ? blob.name : '';
+    // A screenshot comes as "image.png": it gets the name the page gives it, else that of a pasted picture.
+    const name = blob instanceof File && blob.name && !/^image\.\w+$/i.test(blob.name) ? blob.name : said;
     return { file: named(blob, name) };
   }
 
   let address: string | null = null;
   if (data.html) {
     const svg = svgMarkup(data.html);
-    if (svg) return { file: new File([svg], `${pasted}.svg`, { type: 'image/svg+xml' }) };
-    const img = /<img\b[^>]*?\ssrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(data.html);
-    if (img) address = imageAddress((img[1] ?? img[2] ?? img[3]).replace(/&amp;/g, '&'));
+    if (svg) return { file: new File([svg], `${svgTitle(svg) || pasted}.svg`, { type: 'image/svg+xml' }) };
+    const src = attr('src');
+    if (src) address = imageAddress(src.replace(/&amp;/g, '&'));
   }
   if (!address && data.text) {
     const svg = svgMarkup(data.text);
-    if (svg) return { file: new File([svg], `${pasted}.svg`, { type: 'image/svg+xml' }) };
+    if (svg) return { file: new File([svg], `${svgTitle(svg) || pasted}.svg`, { type: 'image/svg+xml' }) };
     address = imageAddress(data.text);
   }
   if (!address) return { hint: data.blobs.length ? 'image.paste.noImageFile' : 'image.paste.none' };
@@ -112,5 +133,5 @@ export async function clippedImage(data: ClipData, pasted: string): Promise<Clip
   }
   if (!isImage(b) && !/\.(png|jpe?g|gif|webp|bmp|svg|avif)$/i.test(address)) return { hint: 'image.paste.web' };
   const type = b.type.startsWith('image/') ? b.type : address.toLowerCase().endsWith('.svg') ? 'image/svg+xml' : b.type;
-  return { file: named(new Blob([b], { type }), addressName(address)) };
+  return { file: named(new Blob([b], { type }), said || addressName(address)) };
 }

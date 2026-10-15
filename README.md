@@ -423,7 +423,11 @@ knocking out when the SVG is opened as a design, a size in mm, cm or inches beco
 their width (`lineClassOf` in `src/model/line.ts`): under 0.7 mm running stitch, under 1 mm bean stitch, up to 7 mm
 satin of that width (the satin limit for areas too), wider an area in the shape the line paints, with the file's line
 ends and corners (`strokeForm` in `src/shape/ops.ts`). Satin starts at 1 mm, where digitizing guides put the narrowest
-column that sews cleanly; a wider line as running or bean stitch would come out a third of its width or less.
+column that sews cleanly; a wider line as running or bean stitch would come out a third of its width or less. An SVG
+has its own style (`svgStyle`: *Flat*, *Smart* or *Redwork*). *Smart* takes the regions drawn from the file's exact
+colors; *Dynamic* stays off, as plain areas carry no structure for rows to follow (prepare computes no orientation
+for exact labels). The design name is a field in step 1, filled in from the file name or, for a pasted picture,
+from the alt text or the SVG's `<title>` (`nameOf` in `src/ui/clipboardImage.ts`).
 
 ### Stitches (`src/digitize/`)
 

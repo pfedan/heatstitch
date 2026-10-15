@@ -254,6 +254,7 @@ function readImage(v: unknown): ProjectImage | null {
       strokes: Array.isArray(w.strokes) ? w.strokes : [],
       ...(w.areas ? { areas: readAreas(w.areas) } : {}),
       ...(readCrop(w.crop) ? { crop: readCrop(w.crop) } : {}),
+      ...(typeof w.name === 'string' ? { name: w.name } : {}),
     },
   };
 }
