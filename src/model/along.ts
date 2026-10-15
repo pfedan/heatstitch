@@ -81,6 +81,8 @@ export interface PathStitch {
    * stitch the way back, which lies on top, is a bean stitch.
    */
   redwork?: boolean;
+  /** Redwork only: gaps between paths up to this (mm) are bridged by a stitch; REDWORK_GAP (0.5 mm) when not set. */
+  redworkGap?: number;
 }
 
 /** Sewn as a running stitch (once or more often), not across a band. */

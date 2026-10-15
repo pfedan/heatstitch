@@ -515,7 +515,7 @@ fill rows end there, satin edges are found there, underlay lies on a contour ins
   none lies further off the curve than the max. deviation (0.15 mm by default), never under 1 mm.
 - **Redwork** (`redwork.ts`): a line of many paths in one go. The paths become a planar graph (split
   where they cross or touch, lines up to 0.5 mm apart bridged where they are closest, the snap of
-  joining paths; nodes closer than 0.5 mm along a line merged, so crossings at a shallow angle give no heap of
+  joining paths, or up to `PathStitch.redworkGap` set with *Bridge gaps up to*, 0 to 3 mm, once per pair of parts; nodes closer than 0.5 mm along a line merged, so crossings at a shallow angle give no heap of
   short stitches). Every edge is doubled, one copy each way, so each connected part has an Euler
   circuit; the one taken is Tarry's depth-first traversal (1895), which leaves an edge back the way
   it came only after everything beyond it is sewn: the first pass lies below, the way back on top,
