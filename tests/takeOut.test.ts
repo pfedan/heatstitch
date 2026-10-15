@@ -107,3 +107,20 @@ describe('Verbinden with nodes selected', () => {
     expect(joinOpenPaths(f, true, undefined, new Set(['0:1']))).toBeNull();
   });
 });
+
+describe('Zusammenfassen of lines', () => {
+  it('keeps the paths as they were and offers to join the ends that touch', async () => {
+    const { combineLines, joinTouchingEnds } = await import('../src/model/shapeOps');
+    const d = new Design('Herz');
+    d.line('M0 0 L10 0 L10 10', THREADS.navy);
+    d.line('M10.2 10 L0 10 L0 0.2', THREADS.navy);
+    const c = combineLines(d.p, [0, 1], d.T)!;
+    const geo = remembered(c.pattern, sewObjects(c.pattern)[c.index])!.geo!;
+    expect(geo.paths).toHaveLength(2);
+    expect(c.touching).toBe(2);
+    const j = joinTouchingEnds(c.pattern, c.index, d.T)!;
+    const joined = remembered(j.pattern, sewObjects(j.pattern)[j.index])!.geo!;
+    expect(joined.paths).toHaveLength(1);
+    expect(j.joined.closed).toBe(1);
+  });
+});

@@ -26,7 +26,7 @@ import { remembered, rememberedIn, measureFill, analyze, unionRegion, remember, 
 import { reverseLines, reversible, reverseObjects } from '../model/reverse';
 import { t, type Key } from '../i18n';
 import { ui } from './state';
-import { combineLines, gatherObjects, mergeLeads, threadOfAFill, unionForm, recolorObjects } from '../model/shapeOps';
+import { combineLines, joinTouchingEnds, gatherObjects, mergeLeads, threadOfAFill, unionForm, recolorObjects } from '../model/shapeOps';
 import { runCommand } from '../shell/commands';
 import { loadOps, opsReady } from '../shape/ops';
 import { blendObject } from '../model/blend';
@@ -339,10 +339,22 @@ export function bindObjects(app: ObjectsApp) {
       app.applyEdit(lines.pattern);
       ui.selectedObjects = new Set([lines.index]);
       ui.selectionKey++;
-      const k = lines.joined?.joints.length ?? 0;
-      const closed = !!lines.joined?.closed;
-      const text = k ? t('object.lines.joinedEnds', { n: sel.length, k }) + (closed ? ' ' + t('shape.joined.closed') : '') : t('object.lines.joined', { n: sel.length });
-      say(text, gatherWarning, undoable(), closed ? { label: t('shape.fillInside'), run: () => void runCommand('stitch.kind.fill') } : instead());
+      // The paths stay as they are; ends that touch are offered to be joined (a heart of two halves).
+      const k = lines.touching;
+      const combined = f.pattern;
+      const joinEnds = () => {
+        if (app.files.active !== f || f.pattern !== combined) return;
+        const j = combined && joinTouchingEnds(combined, lines.index, app.settings.trimMm);
+        if (!j) return;
+        app.applyEdit(j.pattern);
+        ui.selectedObjects = new Set([j.index]);
+        ui.selectionKey++;
+        const text = t('object.lines.endsJoined', { k: j.joined.joints.length + j.joined.closed }) + (j.joined.closed ? ' ' + t('shape.joined.closed') : '');
+        layers.say({ text, ...(j.joined.closed ? { action: { label: t('shape.fillInside'), run: () => void runCommand('stitch.kind.fill') } } : { undo: undoable() }) });
+        app.redraw();
+      };
+      const text = k ? t('object.lines.touching', { n: sel.length, k }) : t('object.lines.joined', { n: sel.length });
+      say(text, gatherWarning, undoable(), k ? { label: t('object.lines.joinEnds'), run: joinEnds } : instead());
       app.redraw();
       return;
     }

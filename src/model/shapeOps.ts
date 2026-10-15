@@ -347,11 +347,12 @@ export function gatherObjects(p: Pattern, which: number[], lead: number, trimMm:
 }
 
 /**
- * The lines `which` (one after the other, in one thread) as one line with all their paths, sewn
- * with the settings of the first: ends within 0.5 mm are joined into one node, a chain whose ends
- * meet is closed (see joinOpenPaths). Null when they are not all such lines or nothing could be sewn.
+ * The lines `which` (one after the other, in one thread) as one line with all their paths as they
+ * are, sewn with the settings of the first. `touching`: how many pairs of ends lie within 0.5 mm,
+ * which joinTouchingEnds would join (offered, never done unasked). Null when they are not all such
+ * lines or nothing could be sewn.
  */
-export function combineLines(p: Pattern, which: number[], trimMm: number): { pattern: Pattern; index: number; joined: Joined | null } | null {
+export function combineLines(p: Pattern, which: number[], trimMm: number): { pattern: Pattern; index: number; touching: number } | null {
   const sel = [...new Set(which)].sort((a, b) => a - b);
   const kinds = stitchKinds(p);
   const objs = sewObjects(p, kinds);
@@ -359,8 +360,9 @@ export function combineLines(p: Pattern, which: number[], trimMm: number): { pat
   const forms = sel.map((o) => lineGeoOf(remembered(p, objs[o])) ?? guessLine(p, objs[o], kinds));
   if (forms.some((f) => !f)) return null;
   const all: Form = { paths: forms.flatMap((f) => f!.paths) };
-  const joined = joinOpenPaths(all, false);
-  const r = resewLine(p, sel[0], joined?.form ?? all, lineSettings(p, objs[sel[0]], kinds), trimMm);
+  const j = joinOpenPaths(all, false);
+  const touching = j ? j.joints.length + j.closed : 0;
+  const r = resewLine(p, sel[0], all, lineSettings(p, objs[sel[0]], kinds), trimMm);
   const rest = r && deleteObjects(r.pattern, sel.slice(1), trimMm);
   if (!rest) return null;
   // Its shadow and echo copies in threads of their own follow the new paths. The parts of the
@@ -368,7 +370,23 @@ export function combineLines(p: Pattern, which: number[], trimMm: number): { pat
   const pattern = syncBorders(rest, trimMm);
   const id = sewObjects(r.pattern)[sel[0]].id;
   const index = sewObjects(pattern).findIndex((o) => o.id === id);
-  return index < 0 ? null : { pattern, index, joined };
+  return index < 0 ? null : { pattern, index, touching };
+}
+
+/**
+ * The ends of line `index` that touch (within 0.5 mm) joined into one node each, a chain whose ends
+ * meet closed (see joinOpenPaths); sewn anew with its settings. Null when nothing joins.
+ */
+export function joinTouchingEnds(p: Pattern, index: number, trimMm: number): { pattern: Pattern; index: number; joined: Joined } | null {
+  const kinds = stitchKinds(p);
+  const obj = sewObjects(p, kinds)[index];
+  const form = obj && (lineGeoOf(remembered(p, obj)) ?? guessLine(p, obj, kinds));
+  const joined = form && joinOpenPaths(form, false);
+  const r = joined && resewLine(p, index, joined.form, lineSettings(p, obj, kinds), trimMm);
+  if (!r || !joined) return null;
+  const pattern = syncBorders(r.pattern, trimMm);
+  const at = sewObjects(pattern).findIndex((o) => o.id === obj.id);
+  return at < 0 ? null : { pattern, index: at, joined };
 }
 
 export interface Subtracted {

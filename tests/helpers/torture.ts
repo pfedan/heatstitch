@@ -33,7 +33,7 @@ import { analyze, backToVersion, crossGridOf, sameGrid, edgeAlong, keepShape, me
 import { reorder } from '../../src/model/order';
 import { stitchKinds } from '../../src/model/sequence';
 import { addContour, behindCovered, gapReader } from '../../src/model/contour';
-import { combineLines, deleteObjects, duplicateObject, duplicateObjects, extractObjects, gatherObjects, mergeLeads, mirrorMatrix, recolorObjects, subtractTop, threadOfAFill } from '../../src/model/shapeOps';
+import { combineLines, joinTouchingEnds, deleteObjects, duplicateObject, duplicateObjects, extractObjects, gatherObjects, mergeLeads, mirrorMatrix, recolorObjects, subtractTop, threadOfAFill } from '../../src/model/shapeOps';
 import { isRigid, stitchesBefore } from '../../src/model/transform';
 import { sewDesign, specOf } from '../../src/model/sew';
 import { parsePattern } from '../../src/parsers';
@@ -464,10 +464,16 @@ export const OPS: Op[] = [
       const before: Form = { paths: which.flatMap((i) => (lineGeoOf(remembered(p, objs[i])) ?? guessLine(p, objs[i], kinds))!.paths) };
       const after = remembered(c.pattern, sewObjects(c.pattern)[c.index])?.geo;
       expect(after, 'combined lines keep a form').toBeTruthy();
-      if (c.joined) checkJoined(before, c.joined);
-      expect(count(after!), 'combined lines: nodes less joined ends').toBe(count(before) - (c.joined ? c.joined.joints.filter((x) => !x.bridged).length + c.joined.closed : 0));
-      expect(c.joined?.joints.every((x) => !x.bridged) ?? true, 'Zusammenfassen bridges no gap').toBe(true);
-      return shapes(d, c.pattern);
+      expect(count(after!), 'combined lines keep their nodes').toBe(count(before));
+      // Joining the ends that touch is offered after: done here, it joins as Verbinden would.
+      const j = c.touching ? joinTouchingEnds(c.pattern, c.index, T) : null;
+      if (c.touching) expect(j, 'touching ends can be joined').toBeTruthy();
+      if (!j) return shapes(d, c.pattern);
+      checkJoined(before, j.joined);
+      const joinedForm = remembered(j.pattern, sewObjects(j.pattern)[j.index])?.geo;
+      expect(count(joinedForm!), 'joined ends: nodes less joined ends').toBe(count(before) - j.joined.joints.filter((x) => !x.bridged).length - j.joined.closed);
+      expect(j.joined.joints.every((x) => !x.bridged), 'joining touching ends bridges no gap').toBe(true);
+      return shapes(d, j.pattern);
     },
   },
   {
