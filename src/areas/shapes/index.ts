@@ -65,13 +65,18 @@ const ICON = {
   corner: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 16.5 10 4.5l6.5 12" /><rect x="8.3" y="2.8" width="3.4" height="3.4" rx=".5" class="node" /></svg>',
   smooth: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 16C4.5 7 15.5 7 16.5 16" /><path d="M4 9.25h12" stroke-dasharray="1.4 1.6" /><rect x="8.3" y="7.55" width="3.4" height="3.4" rx=".5" class="node" /></svg>',
   simplify: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 12l2.5-4 2 3 2.5-5 2 4 2.5-5 3.5 3" opacity=".45" /><path d="M2.5 16C7 9 12.5 9 17.5 12" /></svg>',
-  pathOpen: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10.5 4H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V9.5" /><rect x="9.3" y="2.3" width="3.4" height="3.4" rx=".5" class="node" /><rect x="14.3" y="7.8" width="3.4" height="3.4" rx=".5" class="node" /></svg>',
   pathClose: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10.5 4H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V9.5" /><path d="M12.8 4H14a2 2 0 0 1 2 2v1.6" stroke-dasharray="1.3 1.3" /><rect x="9.3" y="2.3" width="3.4" height="3.4" rx=".5" class="node" /><rect x="14.3" y="7.8" width="3.4" height="3.4" rx=".5" class="node" /></svg>',
   // Two ends, a dashed piece between them.
   join: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 15.5C3.5 10 5 8 7.6 7.6" /><path d="M12.4 7.6C15 8 16.5 10 17.5 15.5" /><path d="M9.6 7.6h.8" stroke-dasharray="1.2 1.2" /><rect x="6.3" y="5.9" width="3.4" height="3.4" rx=".5" class="node" /><rect x="10.3" y="5.9" width="3.4" height="3.4" rx=".5" class="node" /></svg>',
   // A curve cut apart at a node.
   takeOut: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 16.5C4 13 5.5 11.5 7 11" /><path d="M10.5 8.5C12 6.5 14 5 17.5 3.5" /><rect x="9" y="7" width="3" height="3" rx=".5" class="node" /><rect x="15.5" y="2" width="3" height="3" rx=".5" class="node" /><path d="M12.5 13.5h5M15 11v5" /></svg>',
   split: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 15C4 10 6 8.2 8 7.6" /><path d="M12 7.6C14 8.2 16 10 17.5 15" /><rect x="6.5" y="6" width="3.2" height="3.2" rx=".5" class="node" /><rect x="10.3" y="6" width="3.2" height="3.2" rx=".5" class="node" /><path d="M10 2.5v3M10 10.5v3" /></svg>',
+  // A gap in a curve between two nodes, a cross over it.
+  removeSegment: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 15.5C3.8 11 5 9 6.6 8.4" /><path d="M13.4 8.4C15 9 16.2 11 17.5 15.5" /><rect x="5.4" y="6.8" width="3.2" height="3.2" rx=".5" class="node" /><rect x="11.4" y="6.8" width="3.2" height="3.2" rx=".5" class="node" /><path d="M8.6 2.6l2.8 2.8M11.4 2.6 8.6 5.4" /></svg>',
+  // Two nodes drawn into one.
+  merge: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.5 16C4 11.5 6 9.4 8.3 8.9" /><path d="M11.7 8.9C14 9.4 16 11.5 17.5 16" /><rect x="8.3" y="7.2" width="3.4" height="3.4" rx=".5" class="node" /><path d="M3.5 3.5l3.5 3M16.5 3.5l-3.5 3" /></svg>',
+  // A loop with all its nodes.
+  selectPath: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4c4 0 6 2.6 6 6s-2.4 6-6 6-6-2.6-6-6 2-6 6-6z" /><rect x="8.4" y="2.4" width="3.2" height="3.2" rx=".5" class="node" /><rect x="14.4" y="8.4" width="3.2" height="3.2" rx=".5" class="node" /><rect x="8.4" y="14.4" width="3.2" height="3.2" rx=".5" class="node" /><rect x="2.4" y="8.4" width="3.2" height="3.2" rx=".5" class="node" /></svg>',
   // Two crossing curves, a node where they cross.
   crossings: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 16C6 6 12 4 17 4" /><path d="M3 4c5 0 11 2 14 12" /><rect x="8.3" y="6.6" width="3.4" height="3.4" rx=".5" class="node" /></svg>',
   snap: '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4.5 3.5H8v6a2 2 0 0 0 4 0v-6h3.5v6a5.5 5.5 0 0 1-11 0z" /><path d="M4.5 6.5H8M12 6.5h3.5" /></svg>',
@@ -287,7 +292,7 @@ export function initShapes(app: ShapesAreaApp): void {
       const obj = p && ui.shapeObject !== null ? app.seq(p).objects[ui.shapeObject] : undefined;
       const kept = p && obj ? remembered(p, obj)?.kept : undefined;
       const tell = shapedLine() && !kept?.fill && !kept?.satinSettings;
-      if (app.shapeTool.toggleClosed() && tell) toast(t('shape.line.closed'));
+      if (app.shapeTool.closePath() && tell) toast(t('shape.line.closed'));
     },
   });
   /** What a join did, in words; a closed path offers to fill inside when it can be filled. */
@@ -316,7 +321,25 @@ export function initShapes(app: ShapesAreaApp): void {
       else toast(t(app.shapeTool.selCount > 1 ? 'shape.join.noEnds' : 'shape.join.none'));
     },
   });
-  command({ id: 'shape.split', label: 'shape.split', group: SHAPE, when: () => shaping() && app.shapeTool.canSplit, run: () => void app.shapeTool.splitHere() });
+  command({
+    id: 'shape.break',
+    label: 'shape.break',
+    group: SHAPE,
+    keys: ['Mod+Shift+J'],
+    when: () => shaping() && app.shapeTool.canBreak,
+    run: () => {
+      // Said before the cut: a notice the cut brings (a fill now sewn as a line) comes after and stays.
+      const n = app.shapeTool.breakCuts;
+      if (!n) return;
+      toast(n === 1 ? t('shape.broken.one') : t('shape.broken', { n: formatNumber(n) }));
+      app.shapeTool.breakSelected();
+    },
+  });
+  command({ id: 'shape.removeSegment', label: 'shape.removeSegment', group: SHAPE, when: () => shaping() && app.shapeTool.canRemoveSegment, run: () => void app.shapeTool.removeSegment() });
+  command({ id: 'shape.merge', label: 'shape.merge', group: SHAPE, when: () => shaping() && app.shapeTool.selCount >= 2, run: () => void (app.shapeTool.mergeSelected() || toast(t('shape.merge.none'))) });
+  command({ id: 'shape.selectPath', label: 'shape.selectPath', group: SHAPE, when: () => shaping() && app.shapeTool.partlySelected, run: () => void (app.shapeTool.selectWholePaths() && app.redraw()) });
+  command({ id: 'shape.nextNode', label: 'shape.nextNode', group: SHAPE, keys: ['Tab'], bind: false, when: () => shaping() && app.shapeTool.count > 0, run: () => void (app.shapeTool.step(1) && app.redraw()) });
+  command({ id: 'shape.prevNode', label: 'shape.prevNode', group: SHAPE, keys: ['Shift+Tab'], bind: false, when: () => shaping() && app.shapeTool.count > 0, run: () => void (app.shapeTool.step(-1) && app.redraw()) });
   command({ id: 'shape.takeOut', label: 'shape.takeOut', group: SHAPE, keys: ['Mod+Shift+K'], when: () => shaping() && app.shapeTool.selCount >= 2 && app.shapeTool.selCount < app.shapeTool.count, run: () => app.takeOutSelected() });
   command({
     id: 'shape.crossings',
@@ -330,7 +353,6 @@ export function initShapes(app: ShapesAreaApp): void {
       toast(n ? t('shape.crossings.done', { n: formatNumber(n) }) : t('shape.crossings.none'));
     },
   });
-  command({ id: 'shape.openLine', label: 'shape.path.open', group: SHAPE, when: lineOpen(true), run: () => void app.shapeTool.toggleClosed() });
   command({
     id: 'frame.snap',
     label: 'shapes.cmd.snap',
@@ -511,20 +533,34 @@ export function initShapes(app: ShapesAreaApp): void {
     if (ui.letterMode) return [{ kind: 'title', text: t('shapes.crumb.letters'), title: t('lettering.letters.how') }, { kind: 'hint', text: t('shapes.opt.letters') }, { kind: 'cmd', id: 'lettering.letters', text: t('lettering.letters.done') }];
     const s = app.shapeTool;
     if (s.active) {
+      const picked = s.selPaths > 1 ? t('shape.picked.paths', { n: formatNumber(s.selCount), k: formatNumber(s.selPaths) }) : t('shape.picked', { n: formatNumber(s.selCount) });
       const items: Item[] = [
         { kind: 'title', text: t('shapes.shape.title'), title: t(s.band !== null ? 'shape.hint.band' : 'shape.hint') },
-        { kind: 'hint', text: `${t('shape.nodes', { n: formatNumber(s.count) })} · ${s.selectedSmooth === null ? t('shape.none') : s.selCount > 1 ? t('shape.picked', { n: formatNumber(s.selCount) }) : t(s.selectedSmooth ? 'shape.node.smooth' : 'shape.node.corner')}` },
+        // With several nodes selected only how many (the bar has its most buttons then and stays one row).
+        { kind: 'hint', text: s.selCount > 1 ? picked : `${t('shape.nodes', { n: formatNumber(s.count) })} · ${s.selectedSmooth === null ? t('shape.none') : t(s.selectedSmooth ? 'shape.node.smooth' : 'shape.node.corner')}` },
+      ];
+      // Fixed groups (nodes, paths, object, whole form), so a button keeps its place while the
+      // selection changes; what does not apply now is left out, a group left empty goes.
+      const group = (list: (Item | false)[]) => {
+        const shown = list.filter((x): x is Item => !!x);
+        if (shown.length) items.push({ kind: 'sep' }, ...shown);
+      };
+      const cmd = (id: string, icon: string, tip: string): Item | false => canRun(id) && { kind: 'cmd', id, icon, tip };
+      group([
         { kind: 'cmd', id: 'shape.nodeDelete', icon: ICON.nodeDelete },
         // What a tap makes of the selected node.
         s.selectedSmooth ? { kind: 'cmd', id: 'shape.cornerToggle', icon: ICON.corner, tip: t('shape.node.toCorner') } : { kind: 'cmd', id: 'shape.cornerToggle', icon: ICON.smooth, tip: t('shape.node.toSmooth') },
-      ];
-      if (s.count >= SIMPLIFY_FROM) items.push({ kind: 'cmd', id: 'shape.simplify', icon: ICON.simplify, tip: t('shape.simplify.hint') });
-      if (canRun('shape.closeLine')) items.push({ kind: 'cmd', id: 'shape.closeLine', icon: ICON.pathClose, tip: t('shape.path.close.hint') });
-      if (canRun('shape.openLine')) items.push({ kind: 'cmd', id: 'shape.openLine', icon: ICON.pathOpen, tip: t('shape.path.open.hint') });
-      if (canRun('shape.split')) items.push({ kind: 'cmd', id: 'shape.split', icon: ICON.split, tip: t('shape.split.hint') });
-      if (canRun('shape.takeOut')) items.push({ kind: 'cmd', id: 'shape.takeOut', icon: ICON.takeOut, tip: t('shape.takeOut.hint') });
-      if (canRun('shape.join')) items.push({ kind: 'cmd', id: 'shape.join', icon: ICON.join, tip: t('shape.join.hint') });
-      if (canRun('shape.crossings')) items.push({ kind: 'cmd', id: 'shape.crossings', icon: ICON.crossings, tip: t('shape.crossings.hint') });
+        cmd('shape.merge', ICON.merge, t('shape.merge.hint')),
+      ]);
+      group([
+        cmd('shape.selectPath', ICON.selectPath, t('shape.selectPath.hint')),
+        cmd('shape.break', ICON.split, t('shape.break.hint')),
+        cmd('shape.removeSegment', ICON.removeSegment, t('shape.removeSegment.hint')),
+        cmd('shape.join', ICON.join, t('shape.join.hint')),
+        cmd('shape.closeLine', ICON.pathClose, t('shape.path.close.hint')),
+      ]);
+      group([cmd('shape.takeOut', ICON.takeOut, t('shape.takeOut.hint'))]);
+      group([s.count >= SIMPLIFY_FROM && { kind: 'cmd', id: 'shape.simplify', icon: ICON.simplify, tip: t('shape.simplify.hint') }, cmd('shape.crossings', ICON.crossings, t('shape.crossings.hint'))]);
       // Fertig as in the bar of the stitches by hand: back to the objects (as Esc). The level Stiche
       // is in the crumb's menu and on the key E.
       items.push({ kind: 'sep' }, snap, { kind: 'cmd', id: 'level.up', text: t('object.editDone'), primary: true });

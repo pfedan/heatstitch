@@ -26,7 +26,7 @@ import { remembered, rememberedIn, measureFill, analyze, unionRegion, remember, 
 import { reverseLines, reversible, reverseObjects } from '../model/reverse';
 import { t, type Key } from '../i18n';
 import { ui } from './state';
-import { combineLines, joinTouchingEnds, gatherObjects, mergeLeads, threadOfAFill, unionForm, recolorObjects } from '../model/shapeOps';
+import { combineLines, joinTouchingEnds, gatherObjects, mergeLeads, partsOfForm, splitByForm, threadOfAFill, unionForm, recolorObjects } from '../model/shapeOps';
 import { runCommand } from '../shell/commands';
 import { loadOps, opsReady } from '../shape/ops';
 import { blendObject } from '../model/blend';
@@ -457,7 +457,17 @@ export function bindObjects(app: ObjectsApp) {
     const p = f?.pattern;
     if (!f || !p || ui.selectedObjects.size !== 1) return;
     const o = app.seq(p).objects[[...ui.selectedObjects][0]];
-    if (!o || o.sections < 2) return;
+    if (!o) return;
+    // A form that was given splits by its shape: islands with their holes, connected groups of lines.
+    if (formParts() > 1) {
+      const r = splitByForm(p, o.index, app.settings.trimMm);
+      if (!r) return layers.say(t('shape.failed'), true);
+      app.takeShapes(r.pattern, r.parts);
+      layers.reveal(r.parts);
+      layers.say({ text: t('object.splitDone', { n: r.parts.length }), undo: undoable() });
+      return;
+    }
+    if (o.sections < 2) return;
     // A copy of the stitches: undo goes back to the pattern that still shows one object.
     const next: Pattern = { ...p };
     splitObject(next, o);
@@ -468,6 +478,18 @@ export function bindObjects(app: ObjectsApp) {
     layers.reveal([...ui.selectedObjects]);
     layers.say({ text: t('object.splitDone', { n: ui.selectedObjects.size }), undo: undoable() });
     app.redraw();
+  }
+
+  /** How many parts the form of the one selected object falls into (0 when it is guessed or has one), cached per version and selection. */
+  let partsCache: { p: Pattern; key: number; n: number } | null = null;
+  function formParts(): number {
+    const p = app.files.active?.pattern;
+    if (!p || ui.selectedObjects.size !== 1) return 0;
+    if (partsCache?.p === p && partsCache.key === ui.selectionKey) return partsCache.n;
+    const o = app.seq(p).objects[[...ui.selectedObjects][0]];
+    const n = o ? partsOfForm(p, o).length : 0;
+    partsCache = { p, key: ui.selectionKey, n };
+    return n;
   }
 
   /** Takes back the edit just made, if it is still the latest one of the same design. */
@@ -673,6 +695,7 @@ export function bindObjects(app: ObjectsApp) {
     mirror: (axis) => withUndo(() => app.mirrorSelected(axis)),
     reverse: () => reverseSelected(),
     split: () => splitSelected(),
+    formParts,
     combine: () => mergeObjects(),
     subtract: () => withUndo(app.subtractSelected),
     contour: () => withUndo(app.contourSelected),

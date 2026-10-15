@@ -33,11 +33,12 @@ import { analyze, backToVersion, crossGridOf, sameGrid, edgeAlong, keepShape, me
 import { reorder } from '../../src/model/order';
 import { stitchKinds } from '../../src/model/sequence';
 import { addContour, behindCovered, gapReader } from '../../src/model/contour';
-import { combineLines, joinTouchingEnds, deleteObjects, duplicateObject, duplicateObjects, extractObjects, gatherObjects, mergeLeads, mirrorMatrix, recolorObjects, subtractTop, threadOfAFill } from '../../src/model/shapeOps';
+import { combineLines, joinTouchingEnds, deleteObjects, partsOfForm, splitByForm, duplicateObject, duplicateObjects, extractObjects, gatherObjects, mergeLeads, mirrorMatrix, recolorObjects, subtractTop, threadOfAFill } from '../../src/model/shapeOps';
 import { isRigid, stitchesBefore } from '../../src/model/transform';
 import { sewDesign, specOf } from '../../src/model/sew';
 import { parsePattern } from '../../src/parsers';
-import { bounds as boundsOf, extendPath, flatten, insertNode, moveNodes, nodesOf, removeNodes, rotation, segments, setSmooth, storeForm, translation, type Form, type Mat } from '../../src/shape/path';
+import { breakAtNodes, deleteNodesKeepingShape, mergeNodes, removeSegments } from '../../src/shape/nodeOps';
+import { bounds as boundsOf, extendPath, flatten, formArea, insertNode, moveNodes, nodesOf, removeNodes, rotation, segments, setSmooth, storeForm, translation, type Form, type Mat } from '../../src/shape/path';
 import { ellipsePath, parsePath, rectPath } from '../../src/shape/svgPath';
 import { fromStored, storedVersion, toStored } from '../../src/storage/fileStore';
 import { decodeProject, encodeProject, projectSettings } from '../../src/storage/project';
@@ -1788,6 +1789,61 @@ export const LOOP_OPS: Op[] = [
 ];
 
 /**
+ * The node tools of the level Form (Auftrennen, Entf keeping the shape, Stück entfernen, Knoten
+ * zusammenlegen) and "In Teile trennen" on a known form. A stream of its own, so the chains of the
+ * other ops stay as they were for the seeds above.
+ */
+export const PATH_OPS: Op[] = [
+  {
+    name: 'node tool',
+    run: (d, r) => {
+      const p = d.cur.p;
+      const kinds = stitchKinds(p);
+      const objs = sewObjects(p, kinds);
+      const can = objs.filter((o) => {
+        const m = remembered(p, o);
+        return !!m && !m.free && !m.lettering && !m.outline && !m.blendOf && !partOf(m);
+      });
+      if (!can.length) return false;
+      const o = pick(r, can);
+      const geo = guessGeo(p, o, kinds);
+      if (!geo?.paths.length) return false;
+      const k = Math.floor(r() * geo.paths.length);
+      const n = geo.paths[k].nodes.length;
+      if (n < 2) return false;
+      const i = Math.floor(r() * n);
+      const run = [{ path: k, i }, { path: k, i: (i + 1) % n }];
+      const how = r();
+      const next = how < 0.3 ? breakAtNodes(geo, [run[0]])?.form : how < 0.6 ? deleteNodesKeepingShape(geo, [run[0]]) : how < 0.8 ? removeSegments(geo, run) : mergeNodes(geo, run);
+      if (!next) return false;
+      const before = remembered(p, o);
+      const res = reshapeObject(p, objs, o, kinds, next, T);
+      if (process.env.TORTURE_TRACE) console.log('node tool', o.index, how);
+      const opened = !!res && geoUse(res.memory[0]) === 'line' && !!before?.fill;
+      return !!res && took(d, res, opened ? new Set(followerLinks(before)) : undefined);
+    },
+  },
+  {
+    name: 'split by form',
+    run: (d, r) => {
+      const p = d.cur.p;
+      const can = sewObjects(p).filter((o) => partsOfForm(p, o).length > 1);
+      if (!can.length) return false;
+      const o = pick(r, can);
+      const m = remembered(p, o)!;
+      const res = splitByForm(p, o.index, T);
+      if (!res) return false;
+      // The parts are the form: every path once, and an area's parts add up to its area.
+      const geos = res.parts.map((k) => remembered(res.pattern, sewObjects(res.pattern)[k])?.geo);
+      expect(geos.every(Boolean), 'every part knows its form').toBe(true);
+      expect(geos.reduce((s, g) => s + g!.paths.length, 0), 'parts keep every path').toBe(m.geo!.paths.length);
+      if (geoUse(m) === 'area') expect(Math.abs(geos.reduce((s, g) => s + formArea(g!), 0) - formArea(m.geo!)), 'parts add up to the area').toBeLessThan(0.01 * formArea(m.geo!) + 0.05);
+      return shapes(d, res.pattern);
+    },
+  },
+];
+
+/**
  * Redwork switched on or off for a line in running stitch, as the line panel does. Drawn from a
  * stream of its own, so the chains of the other ops stay as they were for the seeds above.
  */
@@ -2674,6 +2730,7 @@ export async function chain(seed: number, steps = STEPS, opts: { trace?: boolean
   const rcut = rng(seed + 141650939);
   const rloop = rng(seed + 160481183);
   const rmot = rng(seed + 179424673);
+  const rpath = rng(seed + 198491317);
   const d = new Doc();
   const log: string[] = [];
   const at = () => `seed ${seed}: ${log.join(' > ')}`;
@@ -2814,6 +2871,19 @@ export async function chain(seed: number, steps = STEPS, opts: { trace?: boolean
       if (await lop.run(d, rloop)) {
         log.push(lop.name);
         if (process.env.TORTURE_TRACE) console.log(lop.name, describeObjects(d.cur.p));
+        try {
+          checkStep(d, false);
+        } catch (e) {
+          throw new Error(`${at()}\n${(e as Error).message}`);
+        }
+      }
+    }
+    // Now and then a node tool or a split by form, beside the chain.
+    if (!blank(d.cur.p) && rpath() < 0.12) {
+      const pop = pick(rpath, PATH_OPS);
+      if (await pop.run(d, rpath)) {
+        log.push(pop.name);
+        if (process.env.TORTURE_TRACE) console.log(pop.name, describeObjects(d.cur.p));
         try {
           checkStep(d, false);
         } catch (e) {

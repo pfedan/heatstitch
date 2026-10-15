@@ -1,15 +1,18 @@
 import { simplifyMore } from '../shape/simplify';
-import { joinEnd, joinOpenPaths, splitPathAt, takeOutNodes, type Joined } from '../shape/join';
+import { joinEnd, joinOpenPaths, takeOutNodes, type Joined } from '../shape/join';
+import { breakAtNodes, deleteNodesKeepingShape, mergeNodes, removeSegments } from '../shape/nodeOps';
 import { withCrossingNodes } from '../shape/ops';
 import { bandGrip, draggedWidth } from '../shape/band';
 import type { Pt } from '../digitize/skeleton';
-import { bezier, cloneForm, endDirection, extendPath, insertNode, moveHandle, moveNodes, nearestOnForm, nodesOf, removeNodes, segment, segments, setSmooth, type Form, type NodeRef } from '../shape/path';
+import { bezier, cloneForm, endDirection, extendPath, insertNode, moveHandle, moveNodes, nearestOnForm, nodesOf, segment, segments, setSmooth, type Form, type NodeRef } from '../shape/path';
 
 /** Pick radius around the pointer for nodes and handles, CSS pixels; curves a little more. */
 const PICK_PX = 9;
 const PICK_CURVE_PX = 7;
 /** A double-click this close to the outline selects its loop (with Alt: puts a node there). */
 const INSERT_PX = 14;
+/** How much nearer (CSS pixels) another path must be than the hovered one to take over its preview: no flicker where paths cross. */
+const PATH_KEEP_PX = 3;
 /**
  * How long a click on a hollow dot waits before its new node is sewn: a second press on it within
  * this time is a double-click, which selects the loop instead (and puts no node in).
@@ -39,6 +42,10 @@ export interface ShapeView {
   /** Whether node `i` of path `path` is selected. */
   isSelected(path: number, i: number): boolean;
   hover: ShapePick | null;
+  /** The path a double-click would select (shown whole while the pointer is near it), or null. */
+  hoverPath: number | null;
+  /** Whether all nodes of path `path` are selected. */
+  pathSelected(path: number): boolean;
   /** The form was changed and is not sewn yet (while dragging). */
   dirty: boolean;
   /** Width of the band (mm): a line covering an area, or an area's satin border; null when there is none. */
@@ -65,7 +72,7 @@ export interface ShapeHooks {
  * `added`: a new node was put in on the press (its form and selection before, for cancel).
  * `collapse`: a press on a node of several selected; released without moving, only it stays selected.
  */
-type Drag = { pick: ShapePick; from: Pt; start: Form; band: number | null; added?: { form: Form; sel: NodeRef[] }; collapse?: boolean } | null;
+type Drag = { pick: ShapePick; from: Pt; start: Form; band: number | null; added?: { form: Form; sel: NodeRef[] }; collapse?: boolean; add?: boolean } | null;
 
 /**
  * The outline of a fill on the canvas, as curves with nodes: nodes and their handles are dragged,
@@ -81,6 +88,7 @@ export class ShapeTool implements ShapeView {
   /** The selected nodes, in the order they were picked. */
   sel: NodeRef[] = [];
   hover: ShapePick | null = null;
+  hoverPath: number | null = null;
   dirty = false;
   band: number | null = null;
   bandOffset = 0;
@@ -122,14 +130,61 @@ export class ShapeTool implements ShapeView {
     this.sel = this.form.paths.flatMap((_, k) => nodesOf(this.form, k));
   }
 
-  /** The loop (path) under the pointer selected as a whole (double-click); false when none is near. */
-  selectLoopAt(x: number, y: number, scale: number): boolean {
+  /**
+   * The path under the pointer selected as a whole (double-click); with `add` (Shift) it joins the
+   * selection, or leaves it when it is selected whole already. False when none is near.
+   */
+  selectLoopAt(x: number, y: number, scale: number, add = false): boolean {
     this.flush();
     const pick = this.pickAt(x, y, scale);
     const path = pick && 'path' in pick ? pick.path : nearLoop(this.form, x, y, INSERT_PX / scale);
     if (path === null) return false;
-    this.sel = nodesOf(this.form, path);
+    this.selectPath(path, add);
     this.hooks.redraw();
+    return true;
+  }
+
+  /** Path `path` selected as a whole; with `add` added to the selection, or taken out when it is in whole. */
+  private selectPath(path: number, add: boolean): void {
+    const all = nodesOf(this.form, path);
+    if (!add) this.sel = all;
+    else if (this.pathSelected(path)) this.sel = this.sel.filter((s) => s.path !== path);
+    else this.sel = [...this.sel, ...all.filter((r) => !this.isSelected(r.path, r.i))];
+  }
+
+  /** Whether all nodes of path `path` are selected. */
+  pathSelected(path: number): boolean {
+    const n = this.form.paths[path]?.nodes.length ?? 0;
+    return n > 0 && this.sel.filter((s) => s.path === path).length === n;
+  }
+
+  /** The selection grown to the whole paths of its nodes ("Ganzen Pfad wählen"); false when it was already. */
+  selectWholePaths(): boolean {
+    this.flush();
+    const paths = [...new Set(this.sel.map((s) => s.path))];
+    if (!paths.length || paths.every((k) => this.pathSelected(k))) return false;
+    this.sel = paths.flatMap((k) => nodesOf(this.form, k));
+    return true;
+  }
+
+  /** Paths with a selected node. */
+  get selPaths(): number {
+    return new Set(this.sel.map((s) => s.path)).size;
+  }
+
+  /** Whether some path has selected nodes but not all (the selection can grow to whole paths). */
+  get partlySelected(): boolean {
+    return [...new Set(this.sel.map((s) => s.path))].some((k) => !this.pathSelected(k));
+  }
+
+  /** The next node selected (Tab; back with `dir` -1), on into the next path after a path's last node. */
+  step(dir: 1 | -1): boolean {
+    this.flush();
+    const all = this.form.paths.flatMap((_, k) => nodesOf(this.form, k));
+    if (!all.length) return false;
+    const last = this.sel[this.sel.length - 1];
+    const at = last ? all.findIndex((r) => r.path === last.path && r.i === last.i) : -1;
+    this.selected = all[at < 0 ? (dir > 0 ? 0 : all.length - 1) : (at + dir + all.length) % all.length];
     return true;
   }
 
@@ -187,6 +242,7 @@ export class ShapeTool implements ShapeView {
     this.form = cloneForm(form);
     this.selected = null;
     this.hover = null;
+    this.hoverPath = null;
     this.dirty = false;
     this.drag = null;
   }
@@ -196,6 +252,7 @@ export class ShapeTool implements ShapeView {
     this.active = false;
     this.form = { paths: [] };
     this.selected = this.hover = null;
+    this.hoverPath = null;
     this.drag = null;
     this.dirty = false;
     this.band = null;
@@ -209,6 +266,7 @@ export class ShapeTool implements ShapeView {
     this.form = cloneForm(form);
     if (!same) this.selected = null;
     this.hover = null;
+    this.hoverPath = null;
     this.dirty = false;
   }
 
@@ -317,8 +375,9 @@ export class ShapeTool implements ShapeView {
       const again = this.pickAt(x, y, scale);
       if (again?.part === 'p' && again.path === p.node.path && again.i === p.node.i) {
         // The second press of a double-click on a hollow dot: no new node, the loop is selected.
+        // With Shift the selection stays as it was; the double-click event adds the loop.
         this.unpend();
-        this.sel = nodesOf(this.form, p.node.path);
+        if (!add) this.sel = nodesOf(this.form, p.node.path);
         this.drag = null;
         this.hooks.redraw();
         return 'move';
@@ -355,7 +414,7 @@ export class ShapeTool implements ShapeView {
       else if (!has) this.selected = { path: pick.path, i: pick.i };
       else collapse = this.sel.length > 1;
     }
-    this.drag = { pick, from: [x, y], start: this.form, band: this.band, collapse };
+    this.drag = { pick, from: [x, y], start: this.form, band: this.band, collapse, add };
     this.moved = false;
     this.hooks.redraw();
     return 'move';
@@ -407,7 +466,10 @@ export class ShapeTool implements ShapeView {
       this.hooks.redraw();
     } else if (this.moved || d.added) this.hooks.change(this.form);
     else if (d.pick.part === 'curve') {
-      this.selected = null;
+      // A tap on a curve shows its path, as hovering does (on touch there is no hovering); with Shift
+      // the selection stays, as the press may be the first of a Shift+double-click adding the path.
+      if (!d.add) this.selected = null;
+      this.hoverPath = d.pick.path;
       this.hooks.redraw();
     } else if (d.collapse && d.pick.part === 'p') {
       this.selected = { path: d.pick.path, i: d.pick.i };
@@ -434,9 +496,26 @@ export class ShapeTool implements ShapeView {
     const h = this.pickAt(x, y, scale);
     const key = (p: ShapePick | null) =>
       !p ? '' : p.part === 'width' ? 'w' : `${p.path}:${p.part === 'curve' ? `c${p.seg}` : p.part === 'mid' ? `m${p.seg}` : p.part === 'end' ? `e${p.end}` : `${p.i}${p.part}`}`;
-    if (key(h) === key(this.hover)) return false;
+    const path = this.drag ? this.hoverPath : this.pathNear(h, x, y, scale);
+    if (key(h) === key(this.hover) && path === this.hoverPath) return false;
     this.hover = h;
+    this.hoverPath = path;
     return true;
+  }
+
+  /**
+   * The path a double-click at (x, y) would select: the one of the node, handle or curve under the
+   * pointer, else the nearest within reach. The path shown already stays until another is clearly
+   * nearer, so the preview does not flicker where paths cross or touch.
+   */
+  private pathNear(h: ShapePick | null, x: number, y: number, scale: number): number | null {
+    if (h && h.part !== 'curve' && 'path' in h) return h.path;
+    const near = nearestOnForm(this.form, [x, y]);
+    if (!near || near.d > INSERT_PX / scale) return null;
+    const was = this.hoverPath;
+    if (was === null || was === near.path || !this.form.paths[was]) return near.path;
+    const kept = nearestOnForm({ paths: [this.form.paths[was]] }, [x, y]);
+    return kept && kept.d <= INSERT_PX / scale && kept.d - near.d < PATH_KEEP_PX / scale ? was : near.path;
   }
 
   /** Whether the pointer is close to the outline (a double-click there selects its loop). */
@@ -461,7 +540,7 @@ export class ShapeTool implements ShapeView {
   deleteSelected(): boolean {
     this.flush();
     if (!this.sel.length) return false;
-    const next = removeNodes(this.form, this.sel);
+    const next = deleteNodesKeepingShape(this.form, this.sel);
     if (!next) {
       this.hooks.say('shape.minNodes');
       return true;
@@ -489,35 +568,24 @@ export class ShapeTool implements ShapeView {
   }
 
   /**
-   * A path closed (its ends joined by a straight piece) or opened: after the selected node, else
-   * where it was closed. A fill whose last closed path opens is sewn as a line (see reshapeObject).
+   * The path of the (first) selected node, else the first path, closed: its ends joined by a straight
+   * piece, one node when they lie on one spot. Opening goes with Auftrennen (breakSelected).
    */
-  toggleClosed(): boolean {
+  closePath(): boolean {
     this.flush();
     const k = this.sel[0]?.path ?? 0;
     const path = this.form.paths[k];
-    if (!path || path.nodes.length < 2) return false;
-    let nodes = path.nodes.map((n) => ({ ...n }));
-    if (path.closed) {
-      // Opened after the selected node: the piece from it to the next one goes.
-      const i = this.selected ? this.selected.i : nodes.length - 1;
-      nodes = [...nodes.slice(i + 1), ...nodes.slice(0, i + 1)];
-      const first = nodes[0];
-      const last = nodes[nodes.length - 1];
-      first.a = first.p;
-      last.b = last.p;
-      first.smooth = last.smooth = false;
-    } else {
-      if (nodes.length < 3 && Math.hypot(nodes[0].p[0] - nodes[1].p[0], nodes[0].p[1] - nodes[1].p[1]) < 0.05) return false;
-      // Ends on the same spot are one node.
-      const a = nodes[0];
-      const b = nodes[nodes.length - 1];
-      if (nodes.length > 2 && Math.hypot(a.p[0] - b.p[0], a.p[1] - b.p[1]) < 0.05) {
-        a.a = b.a;
-        nodes.pop();
-      }
+    if (!path || path.closed || path.nodes.length < 2) return false;
+    const nodes = path.nodes.map((n) => ({ ...n }));
+    if (nodes.length < 3 && Math.hypot(nodes[0].p[0] - nodes[1].p[0], nodes[0].p[1] - nodes[1].p[1]) < 0.05) return false;
+    // Ends on the same spot are one node.
+    const a = nodes[0];
+    const b = nodes[nodes.length - 1];
+    if (nodes.length > 2 && Math.hypot(a.p[0] - b.p[0], a.p[1] - b.p[1]) < 0.05) {
+      a.a = b.a;
+      nodes.pop();
     }
-    this.form = { paths: this.form.paths.map((p, j) => (j === k ? { closed: !path.closed, nodes } : p)) };
+    this.form = { ...this.form, paths: this.form.paths.map((p, j) => (j === k ? { closed: true, nodes } : p)) };
     this.selected = null;
     this.hooks.change(this.form);
     return true;
@@ -567,22 +635,53 @@ export class ShapeTool implements ShapeView {
     return j;
   }
 
-  /** Whether the selected node lies inside an open path (where it can be split). */
-  get canSplit(): boolean {
-    const s = this.selected;
-    const p = s && this.form.paths[s.path];
-    return !!s && !!p && !p.closed && s.i > 0 && s.i < p.nodes.length - 1;
+  /** Whether a selected node can cut its path (Auftrennen): any node of a closed path, an inner one of an open path. */
+  get canBreak(): boolean {
+    return this.sel.some((s) => {
+      const p = this.form.paths[s.path];
+      return !!p && (p.closed ? p.nodes.length >= 2 : s.i > 0 && s.i < p.nodes.length - 1);
+    });
   }
 
-  /** The open path split at the selected node into two. */
-  splitHere(): boolean {
+  /** How many cuts Auftrennen would make at the selected nodes. */
+  get breakCuts(): number {
+    return breakAtNodes(this.form, this.sel)?.cuts ?? 0;
+  }
+
+  /** The paths cut at the selected nodes, the outline unchanged (see breakAtNodes); how many cuts. */
+  breakSelected(): number {
     this.flush();
-    const s = this.selected;
-    const f = s && splitPathAt(this.form, s.path, s.i);
-    if (!s || !f) return false;
+    const r = breakAtNodes(this.form, this.sel);
+    if (!r) return 0;
+    this.form = r.form;
+    this.selected = null;
+    this.hooks.change(this.form);
+    return r.cuts;
+  }
+
+  /** Whether two selected nodes are neighbours on a path (the piece between them can go). */
+  get canRemoveSegment(): boolean {
+    return this.sel.length >= 2 && removeSegments(this.form, this.sel) !== null;
+  }
+
+  /** The pieces between selected neighbours taken away (Stück entfernen). */
+  removeSegment(): boolean {
+    this.flush();
+    const f = removeSegments(this.form, this.sel);
+    if (!f) return false;
     this.form = f;
-    // The node stays selected: the end of the first part.
-    this.selected = { path: s.path, i: s.i };
+    this.selected = null;
+    this.hooks.change(this.form);
+    return true;
+  }
+
+  /** The selected nodes laid together (Knoten zusammenlegen, see mergeNodes); false when they cannot be. */
+  mergeSelected(): boolean {
+    this.flush();
+    const f = this.sel.length >= 2 ? mergeNodes(this.form, this.sel) : null;
+    if (!f) return false;
+    this.form = f;
+    this.selected = null;
     this.hooks.change(this.form);
     return true;
   }

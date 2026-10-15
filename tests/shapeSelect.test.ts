@@ -52,6 +52,28 @@ describe('several nodes of an outline', () => {
     expect(t.selectLoopAt(20, 20, 4)).toBe(false);
   });
 
+  it('Shift+double-click adds a loop to the selection, on its line or on a hollow dot, and takes it out again', () => {
+    vi.useFakeTimers();
+    const { t } = tool(ring());
+    t.selectLoopAt(40, 40, 4);
+    // The browser's events of a Shift+double-click on the line of the hole: two presses, then dblclick.
+    const shiftDouble = (x: number, y: number) => {
+      t.down(x, y, 4, true);
+      t.up();
+      t.down(x, y, 4, true);
+      t.up();
+      t.selectLoopAt(x, y, 4, true);
+    };
+    shiftDouble(14, 10.3);
+    expect(t.sel).toEqual([...nodesOf(t.form, 0), ...nodesOf(t.form, 1)]);
+    shiftDouble(14, 10.3);
+    expect(t.sel).toEqual(nodesOf(t.form, 0));
+    // On the hollow dot in the middle of the hole's top: no node put in, the loop added.
+    shiftDouble(20, 10);
+    expect(t.count).toBe(8);
+    expect(t.sel).toEqual([...nodesOf(t.form, 0), ...nodesOf(t.form, 1)]);
+  });
+
   it('a double-click on a hollow dot selects the loop and puts no node in', () => {
     vi.useFakeTimers();
     const { t, taken } = tool(ring());

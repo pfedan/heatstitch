@@ -509,6 +509,11 @@ export function bindPointer(app: PointerApp) {
       app.imageMode.leave();
       app.redraw();
     }
+    // No path shown as a double-click's target while the pointer is away.
+    if (app.shapeTool.active && app.shapeTool.hoverPath !== null) {
+      app.shapeTool.hoverPath = null;
+      app.redraw();
+    }
     // No preview of the next stitch while the pointer is away.
     if (app.editor.active) {
       app.editor.leave();
@@ -591,9 +596,10 @@ export function bindPointer(app: PointerApp) {
     }
     if (app.rungTool.active) return;
     if (app.shapeTool.active) {
-      // A double-click on a loop selects all its nodes (as in vector programs); with Alt it puts a node there.
+      // A double-click on a path selects all its nodes (as in vector programs), with Shift adds it or
+      // takes it out again; with Alt it puts a node there.
       if (e.altKey) app.shapeTool.insertAt(x, y, app.vp.scale);
-      else app.shapeTool.selectLoopAt(x, y, app.vp.scale);
+      else app.shapeTool.selectLoopAt(x, y, app.vp.scale, e.shiftKey);
       return;
     }
     if (app.editor.active) {

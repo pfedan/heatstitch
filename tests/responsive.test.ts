@@ -139,10 +139,10 @@ describe.skipIf(!on)('narrow screens', () => {
     const [ctx, page] = await open(390, 844);
     // Drawn, the rectangle is on the level Form already.
     await drawRect(page);
-    // A corner tapped (where the drag started): the path opens after it.
+    // A corner tapped (where the drag started): the path is broken open there.
     await page.touchscreen.tap(100, 250);
     await page.waitForTimeout(400);
-    await page.getByRole('button', { name: /^(Pfad öffnen|Open path)$/ }).tap();
+    await page.getByRole('button', { name: /^(Auftrennen|Break path)$/ }).tap();
     await page.waitForTimeout(1200);
     expect(await page.locator('body').innerText()).toMatch(/Offene Form|Open shape/);
     // Closed again with the icon in its place: it says it can be filled again.
