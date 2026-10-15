@@ -66,7 +66,7 @@ export function lineStitches(form: Form, st: PathStitch, reverse = false, from?:
   if (isRedwork(st)) {
     // All paths in one go where they touch, each line there and back over the same needle points
     // (in triple stitch the way back, on top, as a bean stitch).
-    const runs = redworkRuns(paths, (pts) => borderRun(pts, 1, st.tolerance ?? TOLERANCE, st.length), from, undefined, st.type === 'triple');
+    const runs = redworkRuns(paths, (pts) => borderRun(pts, 1, st.tolerance ?? TOLERANCE, st.length), from, st.redworkGap, st.type === 'triple');
     return reverse ? runs.reverse().map((r) => r.slice().reverse()) : runs;
   }
   if (reverse) paths = paths.reverse().map((x) => ({ ...x, pts: x.pts.slice().reverse() }));
@@ -100,12 +100,12 @@ export function redworkHelps(form: Form): boolean {
 
 /**
  * In how many goes the paths of `form` are sewn: one by one (`apart`), and as redwork (one go per
- * connected part). Between two goes the needle jumps, or the thread is trimmed when far: the
- * figure that tells how much redwork saves.
+ * connected part, gaps up to `gap` bridged). Between two goes the needle jumps, or the thread is
+ * trimmed when far: the figure that tells how much redwork saves.
  */
-export function lineGoes(form: Form): { apart: number; redwork: number } {
+export function lineGoes(form: Form, gap?: number): { apart: number; redwork: number } {
   const paths = form.paths.map((p) => ({ pts: flatten(p), closed: p.closed })).filter((x) => x.pts.length >= 2);
-  return { apart: paths.length, redwork: paths.length > 1 ? redworkWalks(redworkGraph(paths)).length : paths.length };
+  return { apart: paths.length, redwork: paths.length > 1 ? redworkWalks(redworkGraph(paths, gap)).length : paths.length };
 }
 
 /** Running stitch along the paths of `form` (see lineStitches). */
