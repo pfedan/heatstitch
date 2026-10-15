@@ -108,6 +108,112 @@ export function flatten(p: Path, step = 0.1): Pt[] {
   return out;
 }
 
+/** The part of curve `c` from `t0` to `t1` (de Casteljau), as exact as the whole; a straight side stays straight. */
+function subCurve(c: [Pt, Pt, Pt, Pt], t0: number, t1: number): [Pt, Pt, Pt, Pt] {
+  if (straight(c)) {
+    const [a, b] = [bezier(c, t0), bezier(c, t1)];
+    return [a, a, b, b];
+  }
+  const split = (q: [Pt, Pt, Pt, Pt], t: number): [[Pt, Pt, Pt, Pt], [Pt, Pt, Pt, Pt]] => {
+    const lerp = (a: Pt, b: Pt): Pt => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+    const [p0, p1, p2, p3] = q;
+    const [q0, q1, q2] = [lerp(p0, p1), lerp(p1, p2), lerp(p2, p3)];
+    const [r0, r1] = [lerp(q0, q1), lerp(q1, q2)];
+    const m = lerp(r0, r1);
+    return [
+      [p0, q0, r0, m],
+      [m, r1, q2, p3],
+    ];
+  };
+  const head = t1 < 1 ? split(c, t1)[0] : c;
+  return t0 > 0 ? split(head, t0 / t1)[1] : head;
+}
+
+export interface Box {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
+/**
+ * The parts of the paths of `f` inside `box`, as lines: each path is cut where it crosses the
+ * box's sides, on its curves (the parts keep the curves exactly), and the parts outside are left
+ * out. A closed path wholly inside stays closed; one that is cut becomes open pieces.
+ */
+export function clipLines(f: Form, box: Box): Form {
+  const inside = ([x, y]: Pt) => x >= box.minX && x <= box.maxX && y >= box.minY && y <= box.maxY;
+  // Where coordinate `axis` of curve `c` passes `v`: sign changes on a fine sampling, refined by bisection.
+  const crossings = (c: [Pt, Pt, Pt, Pt]): number[] => {
+    const ts: number[] = [];
+    const N = 32;
+    for (const [axis, v] of [[0, box.minX], [0, box.maxX], [1, box.minY], [1, box.maxY]] as const) {
+      const g = (t: number) => bezier(c, t)[axis] - v;
+      let a = 0;
+      let ga = g(0);
+      for (let i = 1; i <= N; i++) {
+        const b = i / N;
+        const gb = g(b);
+        // A side (zero counts with the positive side, so a crossing right on a sample counts once).
+        if (ga < 0 !== gb < 0) {
+          let [lo, hi] = [a, b];
+          for (let k = 0; k < 40; k++) {
+            const mid = (lo + hi) / 2;
+            if (g(mid) < 0 === ga < 0) lo = mid;
+            else hi = mid;
+          }
+          ts.push((lo + hi) / 2);
+        }
+        [a, ga] = [b, gb];
+      }
+    }
+    return ts.filter((t) => t > 1e-9 && t < 1 - 1e-9).sort((x, y) => x - y);
+  };
+  const paths: Path[] = [];
+  for (const p of f.paths) {
+    if (p.nodes.length < 2) continue;
+    const smooth = new Map(p.nodes.map((n) => [`${n.p[0]},${n.p[1]}`, n.smooth]));
+    // Pieces of curves inside the box, one after the other along the path.
+    const pieces: [Pt, Pt, Pt, Pt][] = [];
+    let cut = false;
+    for (let k = 0; k < segments(p); k++) {
+      const c = segment(p, k);
+      let done = 0;
+      for (const t of [...crossings(c), 1]) {
+        if (t - done < 1e-12) continue;
+        const part = subCurve(c, done, t);
+        if (inside(bezier(part, 0.5))) pieces.push(part);
+        else cut = true;
+        done = t;
+      }
+    }
+    if (!cut) {
+      paths.push(p);
+      continue;
+    }
+    // The pieces that meet end to start, chained into open paths.
+    const runs: [Pt, Pt, Pt, Pt][][] = [];
+    for (const c of pieces) {
+      const run = runs[runs.length - 1];
+      if (run && dist(run[run.length - 1][3], c[0]) < 1e-9) run.push(c);
+      else runs.push([c]);
+    }
+    // A closed path runs on from its last piece into its first.
+    if (p.closed && runs.length > 1 && dist(runs[runs.length - 1].at(-1)![3], runs[0][0][0]) < 1e-9) runs[0] = [...runs.pop()!, ...runs[0]];
+    for (const run of runs) {
+      const nodes: Node[] = [{ p: run[0][0], a: run[0][0], b: run[0][1], smooth: false }];
+      for (const c of run) {
+        nodes[nodes.length - 1].b = c[1];
+        nodes.push({ p: c[3], a: c[2], b: c[3], smooth: false });
+      }
+      // Nodes of the path keep whether they were smooth; the cut ends are corners.
+      for (let i = 1; i < nodes.length - 1; i++) nodes[i].smooth = smooth.get(`${nodes[i].p[0]},${nodes[i].p[1]}`) ?? false;
+      paths.push({ nodes, closed: false });
+    }
+  }
+  return { paths, ...(f.nonzero ? { nonzero: true } : {}) };
+}
+
 export function bounds(f: Form): { minX: number; minY: number; maxX: number; maxY: number } | null {
   let minX = Infinity;
   let minY = Infinity;

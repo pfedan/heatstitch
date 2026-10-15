@@ -78,6 +78,13 @@ export interface DigitizeOptions {
   smart?: boolean;
   /** Techniques set by hand, by area (AreaInfo.key). */
   areas?: Record<string, Technique>;
+  /**
+   * Redwork (vector files only, see digitizeShapes): the lines of a color, whatever their width and
+   * wherever they are painted, are one line in running stitch, each path there and back.
+   */
+  redwork?: boolean;
+  /** Redwork with the way back as a bean stitch (each stitch three times), for a bolder line. */
+  redworkBean?: boolean;
 }
 
 /** Fills smaller than this (mm²) are sewn without underlay; from LARGE_FILL_MM2 crossing layers where the fabric asks for them. */
@@ -1359,10 +1366,28 @@ export function digitizeShapes(
   // Pattern coordinates: the middle of the design at 0, on the pixel grid.
   const [cx, cy] = shapesOrigin(sizeMm, pxMm);
   const items: { sh: ShapeInput; form: Form; whole: Region }[] = [];
-  for (const sh of shapes) {
+  // Redwork: the lines of a color are one item, sewn where its last line is painted (on top of
+  // the areas painted before), whatever their width.
+  const lastLine = new Map<number, number>();
+  if (o.redwork) shapes.forEach((sh, k) => sh.kind === 'stroke' && lastLine.set(sh.color, k));
+  const gathered = new Map<number, { form: Form; wholes: Region[] }>();
+  for (const [k, sh] of shapes.entries()) {
     const form = transformForm(sh.form, [1, 0, 0, 1, -cx, -cy]);
     const whole = sh.kind === 'fill' ? rasterize(form, pxMm) : rasterizeStroke(form, sh.width ?? 0.4, pxMm);
-    if (!whole) continue;
+    if (!whole) {
+      // The last line of a color too small to draw: its color's line goes where it would have been.
+      const g = o.redwork && sh.kind === 'stroke' && lastLine.get(sh.color) === k ? gathered.get(sh.color) : undefined;
+      if (g) items.push({ sh: { ...sh, element: undefined }, form: g.form, whole: g.wholes.length > 1 ? unionOf(g.wholes)! : g.wholes[0] });
+      continue;
+    }
+    if (o.redwork && sh.kind === 'stroke') {
+      const g = gathered.get(sh.color) ?? { form: { paths: [] }, wholes: [] };
+      gathered.set(sh.color, g);
+      g.form.paths.push(...form.paths);
+      g.wholes.push(whole);
+      if (lastLine.get(sh.color) === k) items.push({ sh: { ...sh, element: undefined }, form: g.form, whole: g.wholes.length > 1 ? unionOf(g.wholes)! : whole });
+      continue;
+    }
     // Lines of one color painted one after the other that touch are one network (a star of
     // strokes), when they are sewn alike: a line of another stitch or satin width is its own.
     const prev = items[items.length - 1];
@@ -1425,7 +1450,11 @@ export function digitizeShapes(
       if (edges.has(k)) continue;
       if (!isFill) {
         // Lines are sewn along their curves, so they stay exact and can be edited as lines.
-        const line = lineStitchFor(it.sh.width ?? 0.4, o.tolerance, { ...looksOf(it.sh), underCross: o.underCross });
+        // Redwork: every line in running stitch (the way back a bean stitch when asked), each path
+        // there and back, in one go where they touch.
+        const line = o.redwork
+          ? { ...lineStitchFor(0, o.tolerance), ...(o.redworkBean ? { type: 'triple' as const } : {}), redwork: true }
+          : lineStitchFor(it.sh.width ?? 0.4, o.tolerance, { ...looksOf(it.sh), underCross: o.underCross });
         // A drawing of touching strokes in running stitch: in one go, without trims (redwork).
         if (line.type === 'run' && redworkHelps(it.form)) line.redwork = true;
         const sewn = lineStitches(it.form, line, false, pos);
