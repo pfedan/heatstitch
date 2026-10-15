@@ -1120,6 +1120,10 @@ function freeArea(): { x: number; y: number; w: number; h: number } {
 function resize(): void {
   const dpr = window.devicePixelRatio || 1;
   const first = ui.stageW === 0;
+  // Switching between Gestalten and Prüfen widens or narrows the stage by the side panel: without
+  // this the design kept its distance from the left edge and sat off center (in the comparison view
+  // mostly left of the divider, so the corrected half looked empty).
+  if (!first) vp.resized(ui.stageW, ui.stageH, stage.clientWidth, stage.clientHeight);
   ui.stageW = stage.clientWidth;
   ui.stageH = stage.clientHeight;
   canvas.width = Math.round(ui.stageW * dpr);
