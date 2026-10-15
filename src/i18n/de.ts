@@ -1208,6 +1208,8 @@ export const deBase = {
   'canvas.hint.draw.ellipse': 'Ziehen: Ellipse · Umschalt: Kreis · Alt: von der Mitte · Esc: Werkzeug weglegen',
   'canvas.hint.draw.pen': 'Klick: Ecke · Ziehen: Rundung · Klick auf den ersten Knoten: Fläche · Doppelklick oder Enter: Linie · Entf: letzter Knoten weg · Esc: abbrechen',
   'canvas.hint.draw.free': 'Ziehen: Linie freihand · Esc: Werkzeug weglegen',
+  'canvas.hint.draw.gap': 'Klicken: die Lücke unter dem Zeiger wird eine neue Füllung · Esc: fertig',
+  'draw.done.gap': 'Lücke gefüllt: eine neue Füllung, gestickt vor den Formen ringsum. Stichart und Farbe stellst du rechts ein.',
   'canvas.hint.draw.cut': 'Ziehen: freihand schneiden · Klicken: Pfad, Doppelklick beendet · Umschalt: gerade · Esc: fertig',
   'cut.plain': '{n} Teile sind für das Muster zu klein und haben gerade Reihen.',
   'cut.plain.one': '1 Teil ist für das Muster zu klein und hat gerade Reihen.',

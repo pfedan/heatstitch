@@ -607,7 +607,7 @@ const { asidePanel, putAside } = bindAside({
 
 // Drawing new shapes ---------------------------------------------------------
 
-const { commitTransform, drawTool, frameObjects, frameTool, knockoutObjects, setDrawing, syncFrame, updateOverlapCard } = bindDrawing({
+const { commitTransform, drawTool, frameObjects, frameTool, knockoutObjects, setDrawing, setGapMode, syncFrame, updateOverlapCard } = bindDrawing({
   get contourGrip() {
     return contourGrip;
   },
@@ -904,7 +904,7 @@ function redraw(): void {
       asidePanel.update(aside);
     }
     if (drawTool.preview && settings.mode === 'flow')
-      drawDrawing(ctx, vp, drawTool.preview, { nodes: drawTool.kind === 'pen' || drawTool.kind === 'cut' ? drawTool.count : 0, closing: drawTool.closing, size: drawTool.size });
+      drawDrawing(ctx, vp, drawTool.preview, { nodes: drawTool.kind === 'pen' || drawTool.kind === 'cut' ? drawTool.count : 0, closing: drawTool.closing, size: drawTool.size, fill: drawTool.kind === 'gap' });
     if (ui.letterMode) drawLetterBoxes();
     if (measureTool.active) drawMeasure(ctx, vp, measureTool, ui.stageW, ui.stageH);
     drawPlanCompare();
@@ -1933,7 +1933,7 @@ const ready = initReady({
     return hs.length ? Math.min(...hs) : null;
   },
 });
-initShapes({ settings, setMode, files, seq, objectName, drawTool, setDrawing: pickTool, measure: measureTool, shapeTool, enterShape, takeOutSelected, shapeTarget, isLineObject, frameTool, editor, setEditing, setFormLevel, newLettering, setLetterMode, letteringPanel, selectObjects, redraw });
+initShapes({ settings, setMode, files, seq, objectName, drawTool, setDrawing: pickTool, setGapMode, measure: measureTool, shapeTool, enterShape, takeOutSelected, shapeTarget, isLineObject, frameTool, editor, setEditing, setFormLevel, newLettering, setLetterMode, letteringPanel, selectObjects, redraw });
 checkArea = initCheck({
   settings,
   files,

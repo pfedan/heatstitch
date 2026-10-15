@@ -536,3 +536,145 @@ function fitRing(ring: Pt[]): Path | null {
   const m = curves.length;
   return { closed: true, nodes: curves.map((c, i) => ({ p: c[0], a: curves[(i - 1 + m) % m][2], b: c[1], smooth: !sharp[i] })) };
 }
+
+// Filling a gap (Flächen-Werkzeug) ------------------------------------------------------------------
+
+/** What stands in the way of a new area: an area of its own, or a line covering a band `width` mm wide. */
+export interface Obstacle {
+  form: Form;
+  /** A line (every path, closed ones too, is a thread): its band. Otherwise the closed paths are an area. */
+  line: boolean;
+  width: number;
+}
+
+/** How far the gap may reach: shapes all round (`closed`), or the convex hull of all shapes (`hull`). */
+export type GapMode = 'closed' | 'hull';
+
+/**
+ * The gap at `at`, or why there is none: `outside` (in `closed`, the point is not shut in by shapes),
+ * `covered` (on a shape, or the gap is too small to sew).
+ */
+export type GapResult = { form: Form } | { none: 'outside' | 'covered' };
+
+/** Gaps smaller than this are not worth an object (mm²). */
+const MIN_GAP_MM2 = 1;
+
+/** The rings an obstacle covers, grown by `d` mm. */
+function grownRings(o: Obstacle, d: number): Paths64 {
+  const C = needClipper();
+  if (!o.line) {
+    const f = offsetForm(o.form, d, 0, false);
+    return f ? f.paths.map((p) => toInt(p.nodes.map((n) => n.p))) : [];
+  }
+  const ways = o.form.paths.filter((p) => p.nodes.length > 1);
+  const half = o.width / 2 + d;
+  if (!ways.length || !(half > 0)) return [];
+  const parts: Paths64 = [];
+  for (const closed of [true, false]) {
+    const list = ways.filter((p) => p.closed === closed);
+    if (!list.length) continue;
+    const off = new C.ClipperOffset(2, FLAT * SCALE);
+    off.addPaths(list.map((p) => toInt(flattened(p, FLAT))), C.JoinType.Round, closed ? C.EndType.Joined : C.EndType.Round);
+    const out: Paths64 = [];
+    off.execute(half * SCALE, out);
+    parts.push(...out);
+  }
+  return parts;
+}
+
+/** The convex hull of points (Andrew's monotone chain), counterclockwise in Clipper's sense. */
+function convexHull(pts: { x: number; y: number }[]): { x: number; y: number }[] {
+  const s = [...pts].sort((a, b) => a.x - b.x || a.y - b.y);
+  if (s.length < 3) return s;
+  const cross = (o: { x: number; y: number }, a: { x: number; y: number }, b: { x: number; y: number }) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+  const lower: { x: number; y: number }[] = [];
+  for (const p of s) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
+    lower.push(p);
+  }
+  const upper: { x: number; y: number }[] = [];
+  for (let i = s.length - 1; i >= 0; i--) {
+    const p = s[i];
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
+    upper.push(p);
+  }
+  return [...lower.slice(0, -1), ...upper.slice(0, -1)];
+}
+
+/**
+ * The free area at `at` (Flächen-Werkzeug): what is left of the bound after every obstacle, grown by
+ * the gap `d` mm, is taken away, and of that the part holding `at`, with its holes. The bound is a
+ * box well around all shapes (`closed`: a part touching it is not shut in, so there is none) or the
+ * convex hull of the shapes (`hull`: bays are bridged straight; a point outside the hull takes every
+ * free part in it as one form). Planar boolean operations on the polygons (Clipper2), the result
+ * fitted as curves.
+ */
+export function gapAt(obstacles: Obstacle[], at: Pt, d: number, mode: GapMode): GapResult {
+  return gapFinder(obstacles, d, mode)(at);
+}
+
+/**
+ * gapAt for many points over the same shapes (the preview while the pointer moves): the free parts
+ * are worked out once, each form fitted on first use.
+ */
+export function gapFinder(obstacles: Obstacle[], d: number, mode: GapMode): (at: Pt) => GapResult {
+  const C = needClipper();
+  const grown: Paths64 = obstacles.flatMap((o) => grownRings(o, Math.max(0, d)));
+  if (!grown.length) return () => ({ none: 'outside' });
+  const solid = C.union(grown, C.FillRule.NonZero);
+  const b = C.getBoundsPaths(solid);
+  const margin = Math.round(5 * SCALE);
+  let bound: Paths64;
+  if (mode === 'hull') {
+    const raw = obstacles.flatMap((o) => grownRings(o, 0)).flat();
+    const hull = convexHull(raw.length ? raw : solid.flat());
+    if (hull.length < 3) return () => ({ none: 'outside' });
+    bound = [hull];
+  } else {
+    bound = [[{ x: b.left - margin, y: b.top - margin }, { x: b.right + margin, y: b.top - margin }, { x: b.right + margin, y: b.bottom + margin }, { x: b.left - margin, y: b.bottom + margin }]];
+  }
+  const tree = new C.PolyTree64();
+  C.booleanOpWithPolyTree(C.ClipType.Difference, bound, solid, tree, C.FillRule.NonZero);
+  // The free parts: each outer ring with the holes right in it.
+  const parts: Paths64[] = [];
+  const walk = (node: InstanceType<typeof C.PolyPath64>) => {
+    for (let i = 0; i < node.count; i++) {
+      const outer = node.child(i);
+      const rings: Paths64 = [outer.poly!];
+      for (let j = 0; j < outer.count; j++) {
+        const hole = outer.child(j);
+        rings.push(hole.poly!);
+        walk(hole);
+      }
+      parts.push(rings);
+    }
+  };
+  walk(tree);
+  const big = (rings: Paths64) => Math.abs(C.areaPaths(rings)) / (SCALE * SCALE) >= MIN_GAP_MM2;
+  // Shut in only when it does not reach the box around everything.
+  const shut = (rings: Paths64) => {
+    const pb = C.getBounds(rings[0]);
+    return pb.left > b.left - margin && pb.top > b.top - margin && pb.right < b.right + margin && pb.bottom < b.bottom + margin;
+  };
+  const fitted = new Map<number, GapResult>();
+  const result = (k: number, rings: Paths64[]): GapResult => {
+    let r = fitted.get(k);
+    if (!r) {
+      const form = rings.length ? formOf(rings.flat(), true) : null;
+      r = form ? { form } : { none: 'covered' };
+      fitted.set(k, r);
+    }
+    return r;
+  };
+  return (at: Pt): GapResult => {
+    const q = { x: Math.round(at[0] * SCALE), y: Math.round(at[1] * SCALE) };
+    const holds = (rings: Paths64) => C.pointInPolygon(q, rings[0]) !== C.PointInPolygonResult.IsOutside && rings.slice(1).every((h) => C.pointInPolygon(q, h) !== C.PointInPolygonResult.IsInside);
+    const beyond = C.pointInPolygon(q, bound[0]) === C.PointInPolygonResult.IsOutside;
+    // Outside the hull: every free part in it, as one form.
+    if (mode === 'hull' && beyond) return result(-1, parts.filter(big));
+    const k = parts.findIndex(holds);
+    if (k < 0) return { none: mode === 'closed' && beyond ? 'outside' : 'covered' };
+    if (mode === 'closed' && !shut(parts[k])) return { none: 'outside' };
+    return big(parts[k]) ? result(k, [parts[k]]) : { none: 'covered' };
+  };
+}

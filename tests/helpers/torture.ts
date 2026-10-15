@@ -68,7 +68,8 @@ import { satinOf as lineSatinOf } from '../../src/model/along';
 import { partSteps, type PartStep } from '../../src/model/satinOrder';
 import { clickControl, dragNumber } from './satinView';
 import type { Pt } from '../../src/digitize/skeleton';
-import { areaOfForm, loadOps, subtractForm, withCrossingNodes } from '../../src/shape/ops';
+import { areaOfForm, bandForm, gapAt, intersectForms, loadOps, subtractForm, withCrossingNodes } from '../../src/shape/ops';
+import { gapPlace, obstaclesOf } from '../../src/model/gapFill';
 import { joinEnd, joinOpenPaths, splitPathAt, JOIN_SNAP_MM, type Joined } from '../../src/shape/join';
 import { areaOf, fillArea, fits, formKey, geoOf, geoUse, guessArea, guessGeo, guessLine, lineGeoOf, openOf, withGeo } from '../../src/model/geo';
 
@@ -1821,6 +1822,41 @@ export const PATH_OPS: Op[] = [
       if (process.env.TORTURE_TRACE) console.log('node tool', o.index, how);
       const opened = !!res && geoUse(res.memory[0]) === 'line' && !!before?.fill;
       return !!res && took(d, res, opened ? new Set(followerLinks(before)) : undefined);
+    },
+  },
+  {
+    // Flächen-Werkzeug: a click somewhere in or beside the design.
+    name: 'fill gap',
+    run: (d, r) => {
+      const p = d.cur.p;
+      const objs = sewObjects(p);
+      if (!objs.length) return false;
+      const obstacles = obstaclesOf(p, objs);
+      const pts = obstacles.flatMap((o) => o.form.paths.flatMap((q) => flatten(q, 0.5)));
+      if (!pts.length) return false;
+      const xs = pts.map((q) => q[0]);
+      const ys = pts.map((q) => q[1]);
+      const at: Pt = [between(r, Math.min(...xs) - 3, Math.max(...xs) + 3), between(r, Math.min(...ys) - 3, Math.max(...ys) + 3)];
+      const mode = r() < 0.5 ? 'closed' : 'hull';
+      const gap = pick(r, [0, 0.5, 2]);
+      const res = gapAt(obstacles, at, gap, mode);
+      if (!('form' in res)) return false;
+      // The new area overlaps no shape by more than the fitting of its curves.
+      const rim = res.form.paths.reduce((s, q) => {
+        const f = flatten(q, 0.05);
+        return s + f.reduce((t, c, i) => (i ? t + Math.hypot(c[0] - f[i - 1][0], c[1] - f[i - 1][1]) : 0), 0);
+      }, 0);
+      for (const o of obstacles) {
+        const solid = o.line ? bandForm(o.form, o.width) : o.form;
+        const both = solid && intersectForms(res.form, solid);
+        const over = both ? areaOfForm(both) : 0;
+        if (over > rim * 0.05 + 0.1) throw new Error(`fill gap: the new area overlaps a shape by ${over.toFixed(2)} mm² (rim ${rim.toFixed(1)} mm, ${mode}, gap ${gap})`);
+      }
+      const k = gapPlace(res.form, obstacles, gap + 0.5);
+      const after = k === null ? null : k < 0 ? -1 : objs[k].index - 1;
+      const a = addShape(p, { form: res.form, kind: 'fill' }, pick(r, COLORS), after, { ...options, satinMin: 0, satinMax: 0 });
+      if (process.env.TORTURE_TRACE) console.log('fill gap', mode, gap, at);
+      return shapes(d, a?.pattern);
     },
   },
   {

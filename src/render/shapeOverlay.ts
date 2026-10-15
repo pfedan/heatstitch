@@ -358,7 +358,7 @@ export function drawFrame(ctx: CanvasRenderingContext2D, vp: Viewport, f: FrameV
  * A shape being drawn: its curves light over dark, the pen's nodes, the first one in the accent
  * color when a click there would close the area, and the size of a rectangle or ellipse.
  */
-export function drawDrawing(ctx: CanvasRenderingContext2D, vp: Viewport, form: Form, o: { nodes: number; closing: boolean; size: [number, number] | null }): void {
+export function drawDrawing(ctx: CanvasRenderingContext2D, vp: Viewport, form: Form, o: { nodes: number; closing: boolean; size: [number, number] | null; fill?: boolean }): void {
   const S = (p: Pt) => vp.toScreen(p[0], p[1]);
   ctx.save();
   ctx.lineJoin = 'round';
@@ -372,6 +372,11 @@ export function drawDrawing(ctx: CanvasRenderingContext2D, vp: Viewport, form: F
       ctx.bezierCurveTo(...S(b), ...S(a), ...S(e));
     }
     if (p.closed) ctx.closePath();
+  }
+  // The area a click of the Flächen-Werkzeug would make: filled half through, holes left open.
+  if (o.fill) {
+    ctx.fillStyle = 'rgba(224, 85, 158, 0.35)';
+    ctx.fill('evenodd');
   }
   ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
   ctx.lineWidth = 3.5;
