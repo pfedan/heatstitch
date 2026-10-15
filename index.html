@@ -294,6 +294,10 @@
               </div>
               <p class="muted small" id="image-crop-note"></p>
             </div>
+            <label class="field" id="image-name-field" data-i18n-title="image.name.hint" hidden>
+              <span class="label" data-i18n="image.name"></span>
+              <input type="text" id="image-name" maxlength="80" spellcheck="false" autocomplete="off" />
+            </label>
             <label class="field image-width" data-i18n-title="image.width.hint">
               <span class="label"><span data-i18n="image.width"></span> <output id="image-height"></output></span>
               <input type="number" id="image-width" min="10" max="400" step="1" />
@@ -352,7 +356,14 @@
                 <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M4 8h11M4 12h11M4 16h11M18 10q5-4 10 0M18 15q5-4 10 0M18 20q5-4 10 0" /><circle cx="9" cy="24" r="3.2" /></svg>
                 <b data-i18n="image.style.smart"></b><span data-i18n="image.style.smart.short"></span>
               </label>
+              <label class="image-style" id="image-style-redwork" data-i18n-title="image.style.redwork.hint">
+                <input type="radio" name="image-style" value="redwork" />
+                <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M6 25 16 7l10 18M11 16h10" /></svg>
+                <b data-i18n="image.style.redwork"></b><span data-i18n="image.style.redwork.short"></span>
+              </label>
             </div>
+            <label class="check" id="image-redwork-bean-field" data-i18n-title="stitch.redworkBean.hint" hidden><input type="checkbox" id="image-redwork-bean" /><span data-i18n="stitch.redworkBean"></span></label>
+            <p class="muted small" id="image-redwork-paint" data-i18n="image.redwork.paint" hidden></p>
             <div class="image-areas" id="image-areas" hidden>
               <span class="label" data-i18n="image.areas" data-i18n-title="image.areas.hint"></span>
               <ul id="image-area-list"></ul>

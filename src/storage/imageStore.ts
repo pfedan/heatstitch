@@ -22,6 +22,8 @@ export interface StoredWork {
   areas?: Record<string, Technique>;
   /** The part of the picture that is sewn; none for the whole picture. */
   crop?: Crop;
+  /** The name of the design made of it, as typed in the first step; none for the file's name. */
+  name?: string;
 }
 
 const STORE = 'image';
@@ -73,7 +75,8 @@ export async function loadImage(): Promise<{ image: StoredImage; work: StoredWor
     const strokes = Array.isArray(work?.strokes) ? work.strokes : [];
     const areas = readAreas(work?.areas);
     const crop = readCrop(work?.crop);
-    return { image, work: { edits, strokes, ...(Object.keys(areas).length ? { areas } : {}), ...(crop ? { crop } : {}) } };
+    const name = typeof work?.name === 'string' ? work.name : undefined;
+    return { image, work: { edits, strokes, ...(Object.keys(areas).length ? { areas } : {}), ...(crop ? { crop } : {}), ...(name !== undefined ? { name } : {}) } };
   } catch (err) {
     console.warn('Could not read the stored image', err);
     return null;

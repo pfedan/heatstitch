@@ -11,7 +11,7 @@ import { reorder } from './order';
 import { recolor, sameColor } from './recolor';
 import type { Pattern, ThreadColor } from './pattern';
 import { borderOf, forget, withLine, objectKey, relearn, remember, remembered, restitch, type Remembered } from './restitch';
-import { reshapeFill, transformSewObject } from './reshape';
+import { reshapeFill, reshapeObject, transformSewObject } from './reshape';
 import { stitchKinds } from './sequence';
 import { stitchesBefore } from './transform';
 import { autoReversible, ownSettings, reverseLines } from './reverse';
@@ -347,11 +347,12 @@ export function gatherObjects(p: Pattern, which: number[], lead: number, trimMm:
 }
 
 /**
- * The lines `which` (one after the other, in one thread) as one line with all their paths, sewn
- * with the settings of the first: ends within 0.5 mm are joined into one node, a chain whose ends
- * meet is closed (see joinOpenPaths). Null when they are not all such lines or nothing could be sewn.
+ * The lines `which` (one after the other, in one thread) as one line with all their paths as they
+ * are, sewn with the settings of the first (as redwork when one of them was). `touching`: how many pairs of ends lie within 0.5 mm,
+ * which joinTouchingEnds would join (offered, never done unasked). Null when they are not all such
+ * lines or nothing could be sewn.
  */
-export function combineLines(p: Pattern, which: number[], trimMm: number): { pattern: Pattern; index: number; joined: Joined | null } | null {
+export function combineLines(p: Pattern, which: number[], trimMm: number): { pattern: Pattern; index: number; touching: number } | null {
   const sel = [...new Set(which)].sort((a, b) => a - b);
   const kinds = stitchKinds(p);
   const objs = sewObjects(p, kinds);
@@ -359,8 +360,12 @@ export function combineLines(p: Pattern, which: number[], trimMm: number): { pat
   const forms = sel.map((o) => lineGeoOf(remembered(p, objs[o])) ?? guessLine(p, objs[o], kinds));
   if (forms.some((f) => !f)) return null;
   const all: Form = { paths: forms.flatMap((f) => f!.paths) };
-  const joined = joinOpenPaths(all, false);
-  const r = resewLine(p, sel[0], joined?.form ?? all, lineSettings(p, objs[sel[0]], kinds), trimMm);
+  const j = joinOpenPaths(all, false);
+  const touching = j ? j.joints.length + j.closed : 0;
+  // Sewn as redwork when one of them was: their paths stay one line in one go where they touch.
+  const st = lineSettings(p, objs[sel[0]], kinds);
+  const redwork = st.type === 'run' && sel.some((o) => lineSettings(p, objs[o], kinds).redwork);
+  const r = resewLine(p, sel[0], all, redwork ? { ...st, redwork: true } : st, trimMm);
   const rest = r && deleteObjects(r.pattern, sel.slice(1), trimMm);
   if (!rest) return null;
   // Its shadow and echo copies in threads of their own follow the new paths. The parts of the
@@ -368,7 +373,23 @@ export function combineLines(p: Pattern, which: number[], trimMm: number): { pat
   const pattern = syncBorders(rest, trimMm);
   const id = sewObjects(r.pattern)[sel[0]].id;
   const index = sewObjects(pattern).findIndex((o) => o.id === id);
-  return index < 0 ? null : { pattern, index, joined };
+  return index < 0 ? null : { pattern, index, touching };
+}
+
+/**
+ * The ends of line `index` that touch (within 0.5 mm) joined into one node each, a chain whose ends
+ * meet closed (see joinOpenPaths); sewn anew with its settings. Null when nothing joins.
+ */
+export function joinTouchingEnds(p: Pattern, index: number, trimMm: number): { pattern: Pattern; index: number; joined: Joined } | null {
+  const kinds = stitchKinds(p);
+  const obj = sewObjects(p, kinds)[index];
+  const form = obj && (lineGeoOf(remembered(p, obj)) ?? guessLine(p, obj, kinds));
+  const joined = form && joinOpenPaths(form, false);
+  const r = joined && resewLine(p, index, joined.form, lineSettings(p, obj, kinds), trimMm);
+  if (!r || !joined) return null;
+  const pattern = syncBorders(r.pattern, trimMm);
+  const at = sewObjects(pattern).findIndex((o) => o.id === obj.id);
+  return at < 0 ? null : { pattern, index: at, joined };
 }
 
 export interface Subtracted {
@@ -509,3 +530,26 @@ function recolorStitches(p: Pattern, objs: SewObject[], sel: number[], color: Th
   return sewList(p, list, trimMm, { apart });
 }
 
+
+/**
+ * Part of object `o`'s form taken out as an object of its own ("Als eigenes Objekt", see
+ * takeOutNodes): a copy in place of it, with its settings, thread and what belongs to it, sewn right
+ * after it in `out`; the object itself sewn on in `keep`. Returns the new object's index, or null
+ * when either could not be sewn.
+ */
+export function takeOutShape(p: Pattern, o: number, keep: Form, out: Form, trimMm: number): { pattern: Pattern; part: number } | null {
+  const d = duplicateObjects(p, [o], trimMm, 0);
+  if (!d || d.copies.length !== 1) return null;
+  const sew = (cur: Pattern, k: number, form: Form): Pattern | null => {
+    const kinds = stitchKinds(cur);
+    const objs = sewObjects(cur, kinds);
+    const r = objs[k] && reshapeObject(cur, objs, objs[k], kinds, form, trimMm);
+    return r ? takeOver(r) : null;
+  };
+  // The object first; then its copy, after as many objects more as the object came out as.
+  const kept = sew(d.pattern, o, keep);
+  if (!kept) return null;
+  const part = d.copies[0] + sewObjects(kept).length - sewObjects(d.pattern).length;
+  const cur = sew(kept, part, out);
+  return cur && sewObjects(cur)[part] ? { pattern: cur, part } : null;
+}

@@ -88,6 +88,11 @@ export interface Prepared {
   palette: PaletteEntry[];
   /** Direction of the image's own structure (fur, strands, strokes), for the stitch direction. */
   orient?: Orientation;
+  /**
+   * For a vector image: the palette entry each of its exact colors went to (after thread matching
+   * and merging), -1 for none. The lines of an SVG take their thread from it (see redwork).
+   */
+  ofSource?: number[];
 }
 
 /** Working resolution: 0.1 mm per pixel, coarser for designs over 120 mm so the image stays near 1200 px. */
@@ -321,7 +326,8 @@ function finish(
     return true;
   });
   for (let i = 0; i < labels.length; i++) if (labels[i] !== NONE) labels[i] = index[labels[i]];
-  return { width: w, height: h, pxMm, labels, palette };
+  const ofSource = sources?.map((_, k) => (map[k] === NONE ? -1 : index[resolve(map[k])] === NONE ? -1 : index[resolve(map[k])]));
+  return { width: w, height: h, pxMm, labels, palette, ...(ofSource ? { ofSource } : {}) };
 }
 
 /** Seams of anti-aliasing: at most 0.5 mm wide, colored between their two neighbours. */

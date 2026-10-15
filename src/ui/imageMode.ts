@@ -16,7 +16,8 @@ import { drawStitches } from '../render/stitches';
 import { drawThreads } from '../render/threads';
 import { drawFabric } from '../render/fabricGl';
 import type { Viewport } from '../render/viewport';
-import { IMAGE_STYLES, shownMarks, type ImageStyle, type ImageView, type Mode, type Settings } from '../settings';
+import { IMAGE_STYLES, shownMarks, SVG_STYLES, type ImageStyle, type ImageView, type Mode, type Settings, type SvgStyle } from '../settings';
+import { redworkShapes } from '../image/redwork';
 import { CAUTION, CRITICAL, type ValidationResult } from '../validation/validate';
 import { clearImage, loadImage, saveImage, saveWork, type StoredImage, type StoredWork } from '../storage/imageStore';
 import { hoopShort } from './hoopPanel';
@@ -77,6 +78,8 @@ interface Work {
   areas?: Record<string, Technique>;
   /** The part of the picture that is sewn; none for the whole picture. */
   crop?: Crop;
+  /** The name of the design made of it, as typed in the first step; none for the file's name. */
+  name?: string;
 }
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -216,6 +219,9 @@ export function backgroundOf(shapes: SvgShape[]): number {
   return area >= BACKGROUND_SOLID * size(own) ? 0 : -1;
 }
 
+/** Whether a vector file is a drawing of lines only (a line drawing, a coloring page): sewn as redwork. */
+export const isLineDrawing = (shapes: Pick<SvgShape, 'kind'>[]): boolean => shapes.length > 0 && shapes.every((s) => s.kind === 'stroke');
+
 export async function digitizeSvg(file: File, prepare: PrepareOptions, options: DigitizeOptions, background = true, progress?: (done: number, total: number) => void): Promise<Digitized & { leftOut?: LeftOut[]; source?: SewnFrom }> {
   const vector = await decodeSvg(file);
   if (!vector) throw new Error('not an SVG of shapes');
@@ -236,10 +242,13 @@ export async function digitizeSvg(file: File, prepare: PrepareOptions, options: 
       // of the library has none (`background` false): a big first shape is part of it.
       const bg = background ? backgroundOf(all) : -1;
       const shapes = bg >= 0 ? all.filter((_, k) => k !== bg) : all;
-      const mapped = wideLinesAsAreas(shapes.map((s) => ({ ...s, color: index[s.color] })));
+      // A drawing of lines only is sewn as redwork: the lines of a color in one go, each there and back.
+      const redwork = isLineDrawing(shapes);
+      const colored = shapes.map((s) => ({ ...s, color: index[s.color] }));
+      const mapped = redwork ? colored : wideLinesAsAreas(colored);
       const size = { w: widthMm, h: widthMm * svg.aspect };
       const source: SewnFrom = { picture: canvas, size: [size.w, size.h] };
-      const d = { ...(await client.digitizeShapes(mapped, threads, options, size, false, name, progress)), source };
+      const d = { ...(await client.digitizeShapes(mapped, threads, { ...options, ...(redwork ? { redwork } : {}) }, size, false, name, progress)), source };
       if (bg < 0) return d;
       const [cx, cy] = shapesOrigin(size);
       // Its threads are only those of the shapes sewn; the background keeps its own color.
@@ -262,6 +271,8 @@ export class ImageMode {
   private source: HTMLCanvasElement | null = null;
   /** The image as shapes and colors, for SVG files. */
   private svg: SvgDesign | null = null;
+  /** The SVG is read as shapes (not only drawn) and has lines: it can be sewn as redwork. */
+  private svgLines = false;
   /** Its regions at the last working size. */
   private exact: ExactLabels | null = null;
   private name = '';
@@ -343,6 +354,20 @@ export class ImageMode {
       });
     };
     num('image-width', (v) => (s.prepare.widthMm = Math.min(400, Math.max(10, v))), 'prepare');
+    // The name of the new design: kept as typed (also over undo of the picture's changes and a reload).
+    const nameField = $<HTMLInputElement>('image-name');
+    nameField.addEventListener('input', () => {
+      this.work = { ...this.work, name: nameField.value };
+      void saveWork(this.work);
+    });
+    nameField.addEventListener('change', () => {
+      // An empty name goes back to the file's.
+      if (nameField.value.trim()) return;
+      const { name: _, ...rest } = this.work;
+      this.work = rest;
+      void saveWork(this.work);
+      this.render();
+    });
     num('image-colors', (v) => (s.prepare.maxColors = v), 'prepare');
     num('image-smooth', (v) => (s.prepare.smooth = v), 'prepare');
     num('image-min-area', (v) => (s.prepare.minAreaMm2 = v), 'prepare');
@@ -360,6 +385,7 @@ export class ImageMode {
     check('image-background', (v) => (s.prepare.background = v), 'prepare');
     check('image-threads', (v) => (s.prepare.threads = v), 'prepare');
     check('image-underlay', (v) => (s.stitch.underlay = v), 'stitches');
+    check('image-redwork-bean', (v) => (v ? (s.stitch.redworkBean = true) : delete s.stitch.redworkBean), 'stitches');
     const angle = $<HTMLSelectElement>('image-angle');
     angle.addEventListener('change', () => {
       // The style lays the rows; a number fixes one angle for all fills.
@@ -369,13 +395,16 @@ export class ImageMode {
     });
     document.querySelectorAll<HTMLInputElement>('input[name="image-style"]').forEach((el) =>
       el.addEventListener('change', () => {
-        if (!el.checked || !IMAGE_STYLES.includes(el.value as ImageStyle)) return;
-        s.style = el.value as ImageStyle;
+        if (!el.checked) return;
+        // An SVG has its own choice (straight rows or redwork), so a picture keeps its style.
+        if (this.svg && SVG_STYLES.includes(el.value as SvgStyle)) s.svgStyle = el.value as SvgStyle;
+        else if (!this.svg && IMAGE_STYLES.includes(el.value as ImageStyle)) s.style = el.value as ImageStyle;
+        else return;
         this.changed('stitches');
       }),
     );
     $('image-stitch-reset').addEventListener('click', () => {
-      s.stitch = {};
+      s.stitch = s.stitch.redworkBean ? { redworkBean: true } : {};
       this.changed('stitches');
     });
 
@@ -488,7 +517,7 @@ export class ImageMode {
     const d = this.result;
     if (!d || this.busy) return;
     this.setTool('none');
-    await this.h.takeOver(d, this.name || 'image');
+    await this.h.takeOver(d, this.designName());
   }
 
   /** The picture goes under the design to trace by hand; no stitches are made from it. */
@@ -496,7 +525,7 @@ export class ImageMode {
     const pic = this.picture();
     if (!pic) return;
     this.setTool('none');
-    await this.h.traceOnly(pic, this.name || 'image', this.sizeMm());
+    await this.h.traceOnly(pic, this.designName(), this.sizeMm());
   }
 
   /** The picture as it is sewn (cut to the crop) with its size in mm, for the tracing image of a design made from it. */
@@ -886,6 +915,8 @@ export class ImageMode {
     this.cropDrag = null;
     this.svg?.dispose();
     this.svg = svg;
+    const shapes = svg?.shapes(this.h.settings.image.prepare.widthMm) ?? null;
+    this.svgLines = !!shapes?.some((sh) => sh.kind === 'stroke');
     this.exact = null;
     this.file = { name: file.name, type: file.type, data: bytes };
     this.revealPending = !work;
@@ -906,6 +937,7 @@ export class ImageMode {
       this.source = null;
       this.svg?.dispose();
       this.svg = null;
+      this.svgLines = false;
       this.error = t('image.error.load', { msg: err instanceof Error ? err.message : String(err) });
       this.render();
       this.h.redraw();
@@ -919,6 +951,8 @@ export class ImageMode {
       if (!svg) this.h.settings.image.prepare.maxColors = Math.max(2, colors ?? DEFAULT_PREPARE.maxColors);
       // An SVG with a size in mm, cm or inches is sewn at that size.
       if (svg?.widthMm) this.h.settings.image.prepare.widthMm = Math.round(Math.min(400, Math.max(10, svg.widthMm)) * 10) / 10;
+      // A drawing of lines only is sewn as redwork; any other SVG with straight rows.
+      if (svg) this.h.settings.image.svgStyle = shapes && isLineDrawing(shapes) ? 'redwork' : 'flat';
       this.h.save();
       void saveImage({ name: file.name, type: file.type, data: bytes });
       // A new picture chosen in step 1 (or brought in from outside) stays in step 1: its size is
@@ -944,6 +978,7 @@ export class ImageMode {
     this.cropDrag = null;
     this.svg?.dispose();
     this.svg = null;
+    this.svgLines = false;
     this.exact = null;
     this.file = null;
     this.name = '';
@@ -977,11 +1012,12 @@ export class ImageMode {
   private options(): DigitizeOptions {
     const image = this.h.settings.image;
     // Shapes of an SVG are flat: their rows run straight in every style.
-    const smart = image.style === 'smart' && !this.svg;
+    const style = this.style();
+    const smart = style === 'smart';
     return {
       ...digitizeDefaults(this.h.settings.profile),
       trimMm: this.h.settings.trimMm,
-      flow: image.style === 'dynamic',
+      flow: style === 'dynamic',
       ...(smart ? { smart, areas: this.work.areas ?? {} } : {}),
       ...image.stitch,
     };
@@ -1022,7 +1058,7 @@ export class ImageMode {
           this.h.redraw();
         }
         this.needStitches = false;
-        const d = await this.client.digitize(this.options(), this.name);
+        const d = this.redwork() ? await this.sewRedwork() : await this.client.digitize(this.options(), this.designName());
         if (stale() || this.needPrepare || this.needStitches) continue;
         this.result = d;
         this.validation = null;
@@ -1048,6 +1084,39 @@ export class ImageMode {
       // A new image arrived while this one was computed.
       if (this.needPrepare || this.needStitches) void this.pump();
     }
+  }
+
+  /** The style the stitches are made in: an SVG has its own (redwork only when it has lines). */
+  private style(): ImageStyle | 'redwork' {
+    const s = this.h.settings.image;
+    if (!this.svg) return s.style;
+    return s.svgStyle === 'redwork' ? (this.svgLines ? 'redwork' : 'flat') : s.svgStyle;
+  }
+
+  /** The SVG is sewn as redwork: its lines from its own curves, each there and back. */
+  private redwork(): boolean {
+    return this.style() === 'redwork';
+  }
+
+  /**
+   * Redwork: the SVG's shapes sewn from its curves (see redworkShapes), in the part cut out, with
+   * the threads its colors got; the lines of a color are one line in one go (DigitizeOptions.redwork).
+   */
+  private async sewRedwork(): Promise<Digitized> {
+    const svg = this.svg!;
+    const s = this.h.settings.image;
+    const k = cropOf(this.work.crop);
+    // The width set is the cut's; the file is read whole at the size that gives it.
+    const full = s.prepare.widthMm / k.w;
+    const all = svg.shapes(full) ?? [];
+    const fullH = full * svg.aspect;
+    const box = { minX: k.x * full, minY: k.y * fullH, maxX: (k.x + k.w) * full, maxY: (k.y + k.h) * fullH };
+    const whole = isFull(this.work.crop);
+    if (!whole) await loadOps();
+    const { shapes, threads } = redworkShapes(all, this.prepared!, box, whole, s.prepare.background ? backgroundOf(all) : -1);
+    const size = { w: box.maxX - box.minX, h: box.maxY - box.minY };
+    // What lies under later areas is left out, as the assistant does for every picture.
+    return this.client.digitizeShapes(shapes, threads, { ...this.options(), redwork: true }, size, true, this.designName());
   }
 
   /** The SVG's regions at the current working size (drawn again when the size changes). */
@@ -1080,7 +1149,14 @@ export class ImageMode {
     this.setWork(next);
   }
 
+  /** The name of the design made of the picture: as typed in the first step, else the file's. */
+  private designName(): string {
+    return this.work.name?.trim() || this.name || 'image';
+  }
+
   private setWork(w: Work): void {
+    // The name is no step to undo: it stays as typed.
+    if (w.name !== this.work.name) w = { ...w, name: this.work.name };
     // Only the techniques of areas changed: the prepared image stays.
     const stitchesOnly = w.edits === this.work.edits && w.strokes === this.work.strokes;
     const recut = !sameCrop(w.crop, this.work.crop);
@@ -1320,7 +1396,7 @@ export class ImageMode {
   private drawVeil(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
     const areas = this.result?.areas;
     const p = this.prepared;
-    if (!areas?.length || !p || this.h.settings.image.style !== 'smart' || (!this.hotGroup && !this.hotArea)) return;
+    if (!areas?.length || !p || this.style() !== 'smart' || (!this.hotGroup && !this.hotArea)) return;
     const keys = areas.filter((a) => a.key === this.hotArea || a.letter === this.hotGroup).map((a) => a.key);
     if (!keys.length) return;
     const key = keys.join(' ');
@@ -1350,7 +1426,7 @@ export class ImageMode {
   private drawLetters(ctx: CanvasRenderingContext2D, vp: Viewport): void {
     const areas = this.result?.areas;
     const prep = this.prepared;
-    if (!areas?.length || !prep || this.h.settings.image.style !== 'smart') return;
+    if (!areas?.length || !prep || this.style() !== 'smart') return;
     const ox = Math.floor(prep.width / 2) * prep.pxMm;
     const oy = Math.floor(prep.height / 2) * prep.pxMm;
     const placed: [number, number][] = [];
@@ -1392,6 +1468,9 @@ export class ImageMode {
     };
     const out = (id: string, text: string) => ($<HTMLOutputElement>(id).textContent = text);
     setVal('image-width', s.prepare.widthMm);
+    $('image-name-field').hidden = !this.source;
+    const nameField = $<HTMLInputElement>('image-name');
+    if (document.activeElement !== nameField) nameField.value = this.work.name ?? this.name;
     this.renderSize();
     setVal('image-colors', s.prepare.maxColors);
     out('image-colors-out', String(s.prepare.maxColors));
@@ -1412,24 +1491,33 @@ export class ImageMode {
     if (!angle.options.length) angle.append(new Option('', 'style'), ...ANGLES.map((a) => new Option(`${a}°`, String(a))));
     angle.options[0].text = t('image.angle.style');
     angle.value = o.angle !== null ? String(o.angle) : 'style';
-    // Shapes of an SVG are flat, without structure to follow: their rows run straight.
-    const style = this.svg ? 'flat' : s.style;
+    // Shapes of an SVG are flat, without structure to follow: their rows run straight, or its lines
+    // are sewn as redwork. Redwork needs the lines of an SVG.
+    const style = this.style();
     document.querySelectorAll<HTMLInputElement>('input[name="image-style"]').forEach((el) => {
       el.checked = el.value === style;
-      el.disabled = el.value !== 'flat' && !!this.svg;
+      el.disabled = this.svg ? el.value === 'dynamic' || (el.value === 'redwork' && !this.svgLines) : el.value === 'redwork';
       // The chosen style shows a small ring while its stitches are computed.
       const tile = el.closest('label')!;
       tile.classList.toggle('busy', el.checked && !!this.busy);
       tile.setAttribute('aria-busy', String(el.checked && !!this.busy));
     });
-    for (const k of ['smart', 'dynamic'] as const) {
-      const el = $(`image-style-${k}`);
-      // Their picture would show what an SVG cannot get.
-      if (this.svg) delete el.dataset.tipImg;
-      else el.dataset.tipImg = `style-${k}`;
-      el.title = t(this.svg ? 'image.style.svg' : `image.style.${k}.hint`);
-    }
-    const own = Object.keys(s.stitch).length > 0;
+    // Dynamic needs structure in the picture, which an SVG's flat areas lack: its tile says why, in
+    // its own line, as long as an SVG is open.
+    const dynamic = $('image-style-dynamic');
+    if (this.svg) delete dynamic.dataset.tipImg;
+    else dynamic.dataset.tipImg = 'style-dynamic';
+    dynamic.title = t(this.svg ? 'image.style.svg' : 'image.style.dynamic.hint');
+    const short = dynamic.querySelector<HTMLElement>('span')!;
+    short.dataset.i18n = this.svg ? 'image.style.dynamic.svg' : 'image.style.dynamic.short';
+    short.textContent = t(short.dataset.i18n as Key);
+    $('image-style-redwork').title = t(this.svg && this.svgLines ? 'image.style.redwork.hint' : 'image.style.redwork.only');
+    $('image-redwork-bean-field').hidden = !this.redwork();
+    $<HTMLInputElement>('image-redwork-bean').checked = !!s.stitch.redworkBean;
+    // Painted changes are regions of the picture; redwork sews the file's lines.
+    $('image-redwork-paint').hidden = !(this.redwork() && this.work.strokes.length);
+    // Bean stitch on top is a choice of the redwork style, not a value of the material.
+    const own = Object.keys(s.stitch).some((k) => k !== 'redworkBean');
     $('image-stitch-reset').hidden = !own;
     $('image-fine-own').hidden = !own;
     this.renderMaterial();
@@ -1610,7 +1698,7 @@ export class ImageMode {
   private renderAreas(): void {
     const box = $('image-areas');
     const d = this.result;
-    const smart = this.h.settings.image.style === 'smart' && !this.svg;
+    const smart = this.style() === 'smart';
     box.hidden = !smart || !d?.areas?.length;
     if (box.hidden || !d?.areas) return;
     const list = $('image-area-list');
@@ -1707,7 +1795,7 @@ export class ImageMode {
   click(x: number, y: number): void {
     const areas = this.result?.areas;
     const p = this.prepared;
-    if (!areas?.length || !p || this.h.settings.image.style !== 'smart' || this.h.settings.image.view !== 'stitches' || this.tool !== 'none') return;
+    if (!areas?.length || !p || this.style() !== 'smart' || this.h.settings.image.view !== 'stitches' || this.tool !== 'none') return;
     const px = Math.floor(x / p.pxMm + Math.floor(p.width / 2));
     const py = Math.floor(y / p.pxMm + Math.floor(p.height / 2));
     if (px < 0 || py < 0 || px >= p.width || py >= p.height) return;

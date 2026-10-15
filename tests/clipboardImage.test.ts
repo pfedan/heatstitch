@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addressName, clippedImage, imageAddress, svgMarkup, type ClipData } from '../src/ui/clipboardImage';
+import { addressName, clippedImage, imageAddress, nameOf, svgMarkup, svgTitle, type ClipData } from '../src/ui/clipboardImage';
 
 const SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10" fill="red"/></svg>';
 const PNG_DATA = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
@@ -46,6 +46,21 @@ describe('Bild aus der Zwischenablage', () => {
     expect(html.type).toBe('image/png');
     expect(html.size).toBeGreaterThan(20);
     expect((await fileOf(clip({ text: PNG_DATA }))).name).toBe('Eingefügtes Bild.png');
+  });
+
+  it('suggests a design name from what the source calls the picture', async () => {
+    expect(nameOf('  Rose &amp; Dorn: rot/weiß?  ')).toBe('Rose & Dorn rot weiß');
+    expect(nameOf('a'.repeat(80))).toHaveLength(60);
+    expect(nameOf(null)).toBe('');
+    expect(svgTitle('<svg><title>Tanzendes Paar</title><path/></svg>')).toBe('Tanzendes Paar');
+    expect(svgTitle(SVG)).toBe('');
+    const titled = SVG.replace('<rect', '<title>Rotes Feld</title><rect');
+    expect((await fileOf(clip({ text: titled }))).name).toBe('Rotes Feld.svg');
+    const png = new File([new Uint8Array([1])], 'image.png', { type: 'image/png' });
+    const shot = await fileOf(clip({ blobs: [png], html: '<img alt="Eine rote Rose" src="https://example.org/x.png">' }));
+    expect(shot.name).toBe('Eine rote Rose.png');
+    const titleOnly = await fileOf(clip({ html: `<img title='Logo' src='${PNG_DATA}'>` }));
+    expect(titleOnly.name).toBe('Logo.png');
   });
 
   it('gives a hint instead of an error', async () => {

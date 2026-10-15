@@ -54,10 +54,19 @@ export type ImageView = 'original' | 'prepared' | 'stitches';
  */
 export type ImageStyle = 'flat' | 'dynamic' | 'smart';
 export const IMAGE_STYLES: readonly ImageStyle[] = ['flat', 'dynamic', 'smart'];
+/**
+ * How the Bild assistant sews the shapes of an SVG: straight rows, the technique that suits each
+ * area (Smart), or its lines as redwork. Rows that follow the picture (Dynamic) need structure in
+ * the picture, which the flat colors of an SVG do not have.
+ */
+export type SvgStyle = 'flat' | 'smart' | 'redwork';
+export const SVG_STYLES: readonly SvgStyle[] = ['flat', 'smart', 'redwork'];
 
 export interface ImageSettings {
   prepare: PrepareOptions;
   style: ImageStyle;
+  /** The style for SVG files, chosen anew for each file opened: redwork for a drawing of lines only. */
+  svgStyle: SvgStyle;
   /** Stitch options the user changed; the others follow the material. */
   stitch: Partial<DigitizeOptions>;
   view: ImageView;
@@ -175,7 +184,7 @@ export const DEFAULTS: Settings = {
     thread: { max: 15 },
     penetrations: { max: 4 },
   },
-  image: { prepare: { ...DEFAULT_PREPARE }, style: 'flat', stitch: {}, view: 'stitches', brushMm: 3, introDone: false },
+  image: { prepare: { ...DEFAULT_PREPARE }, style: 'flat', svgStyle: 'flat', stitch: {}, view: 'stitches', brushMm: 3, introDone: false },
   lang: null,
 };
 
@@ -253,6 +262,7 @@ export function normalizeImage(i: Partial<ImageSettings> | undefined, oldStyle: 
     if (typeof st[k] === 'number' && Number.isFinite(st[k]) && (st[k] as number) >= 0) stitch[k] = st[k] as number;
   }
   if (typeof st.underlay === 'boolean') stitch.underlay = st.underlay;
+  if (typeof st.redworkBean === 'boolean') stitch.redworkBean = st.redworkBean;
   if (typeof st.angle === 'number' && Number.isFinite(st.angle)) stitch.angle = st.angle;
   return {
     prepare: {
@@ -265,6 +275,7 @@ export function normalizeImage(i: Partial<ImageSettings> | undefined, oldStyle: 
     },
     // Before the style switch, "follows the image" was a stitch option of its own.
     style: IMAGE_STYLES.includes(i?.style as ImageStyle) ? i!.style! : typeof st.flow === 'boolean' ? (st.flow ? 'dynamic' : 'flat') : oldStyle,
+    svgStyle: SVG_STYLES.includes(i?.svgStyle as SvgStyle) ? i!.svgStyle! : d.svgStyle,
     stitch,
     view: IMAGE_VIEWS.includes(i?.view as ImageView) ? i!.view! : d.view,
     brushMm: num(i?.brushMm, 0.5, 30, d.brushMm),

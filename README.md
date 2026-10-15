@@ -35,7 +35,7 @@ correction behind it is described below. The **Design** card next to both pages 
 
 **Convert a picture** (key `3`) turns any picture, photo or SVG into a design in three steps: it
 reduces the colors to thread colors, lets you fix them with a color list and a brush, and generates
-fill, satin and running stitches in the style *Flat*, *Dynamic* or *Smart* (see
+fill, satin and running stitches in the style *Flat*, *Dynamic* or *Smart*, or for an SVG *Redwork* (see
 [Image to embroidery](#image-to-embroidery)).
 
 ![Convert a picture with the example flower: fill, satin and running stitches over the prepared image](public/guide/image-en.jpg)
@@ -75,8 +75,9 @@ with this section when the site starts sending anything new.
   **SEW** (older Janome); PES reads the thread list of versions 5 to 10 with real colors, names and
   catalog numbers
 - **SVG** import as whole shapes with their curves, colors and size; lines by their width as running
-  stitch, bean stitch, satin or, wider than 7 mm, an area in their shape; a line drawing of touching
-  strokes as redwork, in one go without trims; nearly transparent paint (5 % or less) left out
+  stitch, bean stitch, satin or, wider than 7 mm, an area in their shape; a drawing of lines only as
+  redwork, all lines of a color one object, each out and back, in one go without trims where they touch;
+  nearly transparent paint (5 % or less) left out
 - **Project files** (`.heatstitch`) that keep everything embroidery files drop: originals and edits,
   shapes, settings, rungs, guide lines, letterings, acknowledged findings, the image, material
 - **Hoop**: common sewing fields or an own size, drawn around the design, with a note when it does
@@ -132,7 +133,7 @@ with this section when the site starts sending anything new.
   twice where a later piece covers it; the fabric (felt, cotton, denim and more, in any color) shows under the
   edge in the realistic view and in the player; cutting template as SVG at 1:1
 - **Shape editing**: the outline of a fill as curves with nodes, kept exactly from then on; close,
-  open, join and split paths, nodes at crossings, fill inside; an opened fill or satin is sewn as a
+  open, join and split paths, nodes at crossings, fill inside, selected nodes taken out as an object of their own (*As own object*, `takeOutNodes` and `takeOutShape`); an opened fill or satin is sewn as a
   line and filled again once a path is closed; the border is the fill's own line, along open paths
   too, with echo, shadow and fringe
 - **Single stitches**: move, insert, split and delete needle points; release an object from its shape
@@ -422,7 +423,11 @@ knocking out when the SVG is opened as a design, a size in mm, cm or inches beco
 their width (`lineClassOf` in `src/model/line.ts`): under 0.7 mm running stitch, under 1 mm bean stitch, up to 7 mm
 satin of that width (the satin limit for areas too), wider an area in the shape the line paints, with the file's line
 ends and corners (`strokeForm` in `src/shape/ops.ts`). Satin starts at 1 mm, where digitizing guides put the narrowest
-column that sews cleanly; a wider line as running or bean stitch would come out a third of its width or less.
+column that sews cleanly; a wider line as running or bean stitch would come out a third of its width or less. An SVG
+has its own style (`svgStyle`: *Flat*, *Smart* or *Redwork*). *Smart* takes the regions drawn from the file's exact
+colors; *Dynamic* stays off, as plain areas carry no structure for rows to follow (prepare computes no orientation
+for exact labels). The design name is a field in step 1, filled in from the file name or, for a pasted picture,
+from the alt text or the SVG's `<title>` (`nameOf` in `src/ui/clipboardImage.ts`).
 
 ### Stitches (`src/digitize/`)
 
@@ -515,7 +520,10 @@ fill rows end there, satin edges are found there, underlay lies on a contour ins
   circuit; the one taken is Tarry's depth-first traversal (1895), which leaves an edge back the way
   it came only after everything beyond it is sewn: the first pass lies below, the way back on top,
   over the same needle points. Parts that do not touch follow each other, the nearest next. SVG lines
-  in running stitch whose paths touch are sewn this way from the start.
+  in running stitch whose paths touch are sewn this way from the start. An SVG of lines only, and the
+  style *Redwork* of Convert a picture for any SVG with lines, sews all lines of a color as one such line,
+  whatever their width and paint order, from the file's curves (cut at the crop on their curves, de
+  Casteljau), on top of the file's areas; *Bean stitch on top* makes the way back a bean stitch.
 - **Order:** what lies on top is sewn later. Of two regions that touch, the narrower lies on top
   (mean width 2 × area / perimeter): a vein on its leaf, an outline around its area. Each touching
   pair votes by the length of its shared edge, weighted by how much the widths differ, and the colors

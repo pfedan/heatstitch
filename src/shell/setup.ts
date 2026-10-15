@@ -43,7 +43,9 @@ export function initShell(app: ShellApp): void {
   const name = $('design-name');
   const showName = () => {
     const f: LoadedFile | null = app.files.active;
-    name.textContent = f ? FileList.displayName(f) : t('shell.designs');
+    // Converting a picture makes a new design (named in its first step): the open one is not what
+    // is worked on there.
+    name.textContent = f && app.mode() !== 'image' ? FileList.displayName(f) : t('shell.designs');
     $('save-empty').hidden = !!f?.pattern;
   };
   let last: LoadedFile | null = null;
@@ -57,6 +59,7 @@ export function initShell(app: ShellApp): void {
     }
   }).observe($('file-list'), { childList: true, subtree: true, characterData: true });
   onLangChange(showName);
+  new MutationObserver(showName).observe(document.body, { attributes: true, attributeFilter: ['data-mode'] });
   showName();
 
   $('image-start').addEventListener('click', () => {

@@ -401,10 +401,15 @@ export async function readSvg(text: string): Promise<SvgDesign | null> {
     }
     if (!colors.length) return dispose(), null;
     const pristine = root.cloneNode(true) as SVGSVGElement;
+    // At the size drawn; the file's own size is put back, since the copy in the page keeps the layout
+    // `shapes` measures in (labels draw the copy itself).
     const serialize = (node: SVGSVGElement, w: number, h: number) => {
+      const own = ['width', 'height'].map((a) => node.getAttribute(a));
       node.setAttribute('width', String(w));
       node.setAttribute('height', String(h));
-      return new XMLSerializer().serializeToString(node);
+      const xml = new XMLSerializer().serializeToString(node);
+      ['width', 'height'].forEach((a, i) => (own[i] === null ? node.removeAttribute(a) : node.setAttribute(a, own[i]!)));
+      return xml;
     };
 
     const draw = async (xml: string, w: number, h: number) => {

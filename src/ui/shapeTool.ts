@@ -1,5 +1,5 @@
 import { simplifyMore } from '../shape/simplify';
-import { joinEnd, joinOpenPaths, splitPathAt, type Joined } from '../shape/join';
+import { joinEnd, joinOpenPaths, splitPathAt, takeOutNodes, type Joined } from '../shape/join';
 import { withCrossingNodes } from '../shape/ops';
 import { bandGrip, draggedWidth } from '../shape/band';
 import type { Pt } from '../digitize/skeleton';
@@ -536,16 +536,30 @@ export class ShapeTool implements ShapeView {
     return s.i === 0 ? 0 : s.i === p.nodes.length - 1 ? 1 : null;
   }
 
+  /** The ends of open paths among the selected nodes, as "path:0" (its first node) and "path:1" (its last). */
+  get selectedEnds(): Set<string> {
+    const ends = new Set<string>();
+    for (const s of this.sel) {
+      const p = this.form.paths[s.path];
+      if (!p || p.closed || p.nodes.length < 2) continue;
+      if (s.i === 0) ends.add(`${s.path}:0`);
+      if (s.i === p.nodes.length - 1) ends.add(`${s.path}:1`);
+    }
+    return ends;
+  }
+
   /**
    * Paths joined at their ends (Verbinden): the selected end with the nearest end of another open
-   * path, else all open paths into one, nearest ends first. Ends within 0.5 mm are one node, farther
+   * path; with several nodes selected, the ends among them with each other, nearest first; else all
+   * open paths into one, nearest ends first. Ends within 0.5 mm are one node, farther
    * ones get a straight piece. Null when nothing joins.
    */
   join(): Joined | null {
     this.flush();
     const s = this.selected;
     const end = this.selectedEnd;
-    const j = s && end !== null ? joinEnd(this.form, s.path, end) : joinOpenPaths(this.form, true);
+    const ends = this.selectedEnds;
+    const j = s && end !== null ? joinEnd(this.form, s.path, end) : this.sel.length > 1 ? (ends.size >= 2 ? joinOpenPaths(this.form, true, undefined, ends) : null) : joinOpenPaths(this.form, true);
     if (!j) return null;
     this.form = j.form;
     this.selected = null;
@@ -571,6 +585,15 @@ export class ShapeTool implements ShapeView {
     this.selected = { path: s.path, i: s.i };
     this.hooks.change(this.form);
     return true;
+  }
+
+  /**
+   * The selected nodes taken out as a form of their own, and what stays (see takeOutNodes); the
+   * form is not changed here: the object and its new neighbour are sewn by the app. `whole`: an area.
+   */
+  takeOut(whole: boolean): { keep: Form; out: Form } | null {
+    this.flush();
+    return this.sel.length >= 2 ? takeOutNodes(this.form, this.sel, whole) : null;
   }
 
   /** A node wherever the paths cross, the outline unchanged (needs loadOps); how many were put in. */
