@@ -133,11 +133,12 @@ with this section when the site starts sending anything new.
   twice where a later piece covers it; the fabric (felt, cotton, denim and more, in any color) shows under the
   edge in the realistic view and in the player; cutting template as SVG at 1:1
 - **Shape editing**: the outline of a fill as curves with nodes, kept exactly from then on; close,
-  open, join and split paths, nodes at crossings, fill inside, selected nodes taken out as an object of their own (*As own object*, `takeOutNodes` and `takeOutShape`); an opened fill or satin is sewn as a
+  break, merge and split paths, remove or straighten pieces, nodes at crossings, fill inside, selected nodes taken out as an object of their own (*As own object*, `takeOutNodes` and `takeOutShape`); an opened fill or satin is sewn as a
   line and filled again once a path is closed; the border is the fill's own line, along open paths
   too, with echo, shadow and fringe
 - **Single stitches**: move, insert, split and delete needle points; release an object from its shape
-- **Drawing**: rectangle, ellipse, pen, freehand, sewn at once with the material's settings
+- **Drawing**: rectangle, ellipse, pen, freehand, sewn at once with the material's settings; *Fill gap*
+  makes a fill of the space shut in between shapes (enclosed, with bays, or a background under them)
 - **Lettering** in 41 fonts from Ink/Stitch: height, alignment, arcs and circle, spacing, single
   letters, stays text
 - **Jumps**: trim and tie, or remove trims, one jump at a time or by length

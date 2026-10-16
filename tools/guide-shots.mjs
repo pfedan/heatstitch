@@ -589,7 +589,8 @@ shots.compare = async (lang) => {
   await page.waitForTimeout(4000);
   await page.click('#compare-toggle');
   await page.locator('#compare-table').waitFor({ state: 'visible', timeout: 30000 });
-  await page.waitForTimeout(2000);
+  // the corrected half is drawn after its heatmap is computed; give it time
+  await page.waitForTimeout(8000);
   await inspectorTo(page, '#compare-table', -120);
   await mouseAway(page);
   await jpeg(page, `compare-${lang}`);
@@ -739,7 +740,9 @@ shots.cut = async (lang) => {
   const { page, close } = await boot(lang);
   // the Aufnäher of the demo project: its disc is a fill the app knows (recognized fills can't be cut)
   await example(page, 'demo');
-  await page.waitForTimeout(1500);
+  // the demo project has grown; wait until its file list shows the patch
+  await page.waitForFunction(() => Array.from(document.querySelectorAll('#file-list li')).some((l) => /Aufnäher|Patch/.test(l.innerText)), null, { timeout: 30000 });
+  await page.waitForTimeout(500);
   await page.evaluate(() => {
     const li = Array.from(document.querySelectorAll('#file-list li')).find((l) => /Aufnäher|Patch/.test(l.innerText));
     (li.querySelector('button, .name, span') ?? li).click();
@@ -984,6 +987,35 @@ shots.motifs = async (lang) => {
   await page.waitForTimeout(2500);
   await mouseAway(page);
   await jpeg(page, `motifs-${lang}`);
+  await close();
+};
+
+// 23. gap: the Fill gap tool (Q) fills the space shut in by three circles
+shots.gap = async (lang) => {
+  const { page, close } = await boot(lang);
+  await cmd(page, T[lang].newDesign, 1500);
+  await level(page, 'shape');
+  const b = await stageBox(page);
+  const cx = b.x + b.width / 2, cy = b.y + b.height / 2;
+  // three circles in a triangle, each overlapping the other two a little, a gap shut in between them
+  const r = 125;
+  for (const [x, y] of [[cx - 120, cy - 75], [cx + 120, cy - 75], [cx, cy + 135]]) {
+    await page.click('[data-draw="ellipse"]');
+    await drag(page, x - r, y - r, x + r, y + r);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(600);
+  }
+  await level(page, 'shape');
+  await page.click('[data-draw="gap"]');
+  await page.waitForTimeout(600);
+  // point into the gap, then click: it becomes a new fill, sewn before the circles
+  await page.mouse.move(cx, cy - 5);
+  await page.waitForTimeout(800);
+  await page.mouse.click(cx, cy - 5);
+  await page.waitForTimeout(1500);
+  await mouseAway(page);
+  await sidebarTop(page);
+  await jpeg(page, `gap-${lang}`);
   await close();
 };
 
