@@ -30,6 +30,8 @@ export function popover(button: HTMLElement, panel: HTMLElement, opts: { onOpen?
   window.addEventListener(
     'keydown',
     (e) => {
+      // A part that leaves a state of its own on Esc (a question in a list row) gets it first.
+      if (e.target instanceof Element && e.target.closest('[data-own-esc]')) return;
       if (isOpen() && e.key === 'Escape') {
         e.stopImmediatePropagation();
         e.preventDefault();

@@ -351,6 +351,37 @@ body.dragging .dropzone {
   line-height: 1;
 }
 
+/* The question a row asks after its ×: the design stays until "Entfernen" is clicked. */
+.file-list li.asking {
+  border-color: var(--line);
+}
+
+.file-list .remove-ask {
+  display: inline-flex;
+  gap: 4px;
+  flex: none;
+}
+
+.file-list .remove-ask button {
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink);
+}
+
+.file-list .remove-ask button.remove-yes {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.file-list .remove-ask button.remove-no:hover {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+}
+
 .field {
   display: flex;
   flex-direction: column;

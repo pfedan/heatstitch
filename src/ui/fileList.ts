@@ -153,6 +153,8 @@ export class FileList {
   private renaming: { id: number; text: string } | null = null;
   /** True while the list is drawn anew: the name field it takes away loses its focus then, which is no real leave. */
   private drawing = false;
+  /** The design whose × was clicked: its row asks "Entfernen | Behalten" in place before it goes. */
+  private asking: number | null = null;
   /** Called after a design got another name (the save field suggests the new one). */
   onRename: (f: LoadedFile) => void = () => {};
   /** Called when the user picks a design (list, keys), not when the app activates one itself. */
@@ -536,6 +538,7 @@ export class FileList {
     const f = this.files.find((x) => x.id === id);
     if (!f?.pattern) return;
     const text = FileList.displayName(f);
+    this.stopAsking();
     this.renaming = { id, text };
     this.render();
     const input = this.list.querySelector<HTMLInputElement>('input.rename-input');
@@ -606,6 +609,33 @@ export class FileList {
     };
   }
 
+  /**
+   * The × of a row: the row asks in place (no dialog), "Entfernen" takes the design away and the
+   * note still offers a way back. A click anywhere else or Esc keeps it.
+   */
+  askRemove(id: number): void {
+    if (!this.files.some((f) => f.id === id)) return;
+    if (this.renaming) this.endRename(true);
+    this.asking = id;
+    document.addEventListener('pointerdown', this.outside, true);
+    this.render();
+    this.list.querySelector<HTMLButtonElement>('.remove-yes')?.focus();
+  }
+
+  /** Leaves the question; with `refocus` the row's × gets the focus back (keyboard). */
+  private stopAsking(refocus = false): void {
+    if (this.asking === null) return;
+    const id = this.asking;
+    this.asking = null;
+    document.removeEventListener('pointerdown', this.outside, true);
+    this.render();
+    if (refocus) this.list.querySelector<HTMLButtonElement>(`.remove-btn[data-id="${id}"]`)?.focus();
+  }
+
+  private outside = (e: PointerEvent): void => {
+    if (!(e.target instanceof Element && e.target.closest('.remove-ask'))) this.stopAsking();
+  };
+
   /** Removes a design and says so, with a way back (no question before). */
   removeWithUndo(id: number): void {
     const f = this.files.find((x) => x.id === id);
@@ -629,6 +659,12 @@ export class FileList {
     const old = typing ? (document.activeElement as HTMLInputElement) : null;
     const sel = old ? [old.selectionStart ?? 0, old.selectionEnd ?? 0] : null;
     if (this.renaming && !this.files.some((f) => f.id === this.renaming!.id)) this.renaming = null;
+    if (this.asking !== null && !this.files.some((f) => f.id === this.asking)) {
+      this.asking = null;
+      document.removeEventListener('pointerdown', this.outside, true);
+    }
+    // A list drawn anew while the question has the focus (a measurement came in) keeps it there.
+    const askFocus = (document.activeElement as HTMLElement | null)?.closest?.('.remove-ask') ? document.activeElement!.className : null;
     this.drawing = true;
     this.list.replaceChildren(
       ...(this.files.length
@@ -642,6 +678,7 @@ export class FileList {
       input?.focus();
       if (sel) input?.setSelectionRange(sel[0], sel[1]);
     }
+    if (askFocus) this.list.querySelector<HTMLButtonElement>(`.remove-ask .${askFocus.split(' ')[0]}`)?.focus();
   }
 
   /** The text field that replaces a name while it is edited; Enter or leaving it takes the name, Escape keeps the old one. */
@@ -717,7 +754,7 @@ export class FileList {
       );
       li.append(dot);
       li.addEventListener('click', () => this.pick(f.id));
-      if (this.renaming?.id !== f.id) {
+      if (this.renaming?.id !== f.id && this.asking !== f.id) {
         const pen = document.createElement('button');
         pen.type = 'button';
         pen.className = 'rename-btn';
@@ -731,18 +768,62 @@ export class FileList {
         li.append(pen);
       }
     }
+    if (this.asking === f.id) {
+      li.classList.add('asking');
+      li.append(this.question(f, shown));
+      return li;
+    }
     const rm = document.createElement('button');
     rm.type = 'button';
     rm.textContent = '×';
     rm.title = t('files.remove');
     rm.setAttribute('aria-label', `${t('files.remove')}: ${shown}`);
     rm.className = 'remove-btn';
+    rm.dataset.id = String(f.id);
     rm.addEventListener('click', (e) => {
       e.stopPropagation();
-      this.removeWithUndo(f.id);
+      this.askRemove(f.id);
     });
     li.append(rm);
     return li;
+  }
+
+  /** "Entfernen | Behalten" in place of the row's buttons. */
+  private question(f: LoadedFile, shown: string): HTMLElement {
+    const ask = document.createElement('span');
+    ask.className = 'remove-ask';
+    ask.setAttribute('role', 'group');
+    ask.dataset.ownEsc = '';
+    ask.setAttribute('aria-label', `${t('files.remove')}: ${shown}`);
+    const yes = document.createElement('button');
+    yes.type = 'button';
+    yes.className = 'remove-yes';
+    yes.textContent = t('files.remove.yes');
+    yes.title = t('files.remove.yes.hint', { name: shown });
+    yes.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.asking = null;
+      document.removeEventListener('pointerdown', this.outside, true);
+      this.removeWithUndo(f.id);
+    });
+    const no = document.createElement('button');
+    no.type = 'button';
+    no.className = 'remove-no';
+    no.textContent = t('files.remove.no');
+    no.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.stopAsking(true);
+    });
+    ask.addEventListener('click', (e) => e.stopPropagation());
+    ask.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      // Esc leaves only the question, not the panel around the list.
+      e.stopPropagation();
+      e.preventDefault();
+      this.stopAsking(true);
+    });
+    ask.append(yes, no);
+    return ask;
   }
 }
 
